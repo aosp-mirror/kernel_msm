@@ -242,7 +242,7 @@ err_no_vma:
 		up_write(&mm->mmap_sem);
 		mmput(mm);
 	}
-	return -ENOMEM;
+	return vma ? -ENOMEM : -ESRCH;
 }
 
 struct binder_buffer *binder_alloc_new_buf(struct binder_alloc *alloc,
@@ -258,11 +258,14 @@ struct binder_buffer *binder_alloc_new_buf(struct binder_alloc *alloc,
 	void *has_page_addr;
 	void *end_page_addr;
 	size_t size, data_offsets_size;
+	struct binder_buffer *eret;
+	int ret;
 
 	mutex_lock(&alloc->mutex);
 	if (alloc->vma == NULL) {
 		pr_err("%d: binder_alloc_buf, no vma\n",
 		       alloc->pid);
+		eret = ERR_PTR(-ESRCH);
 		goto error_unlock;
 	}
 
@@ -273,6 +276,7 @@ struct binder_buffer *binder_alloc_new_buf(struct binder_alloc *alloc,
 		binder_alloc_debug(BINDER_DEBUG_BUFFER_ALLOC,
 				"%d: got transaction with invalid size %zd-%zd\n",
 				alloc->pid, data_size, offsets_size);
+		eret = ERR_PTR(-EINVAL);
 		goto error_unlock;
 	}
 	size = data_offsets_size + ALIGN(extra_buffers_size, sizeof(void *));
@@ -280,6 +284,7 @@ struct binder_buffer *binder_alloc_new_buf(struct binder_alloc *alloc,
 		binder_alloc_debug(BINDER_DEBUG_BUFFER_ALLOC,
 				"%d: got transaction with invalid extra_buffers_size %zd\n",
 				alloc->pid, extra_buffers_size);
+		eret = ERR_PTR(-EINVAL);
 		goto error_unlock;
 	}
 	if (is_async &&
@@ -287,6 +292,7 @@ struct binder_buffer *binder_alloc_new_buf(struct binder_alloc *alloc,
 		binder_alloc_debug(BINDER_DEBUG_BUFFER_ALLOC,
 			     "%d: binder_alloc_buf size %zd failed, no async space left\n",
 			      alloc->pid, size);
+		eret = ERR_PTR(-ENOSPC);
 		goto error_unlock;
 	}
 
@@ -337,6 +343,7 @@ struct binder_buffer *binder_alloc_new_buf(struct binder_alloc *alloc,
 		pr_err("allocated: %zd (num: %zd largest: %zd), free: %zd (num: %zd largest: %zd)\n",
 		       total_alloc_size, allocated_buffers, largest_alloc_size,
 		       total_free_size, free_buffers, largest_free_size);
+		eret = ERR_PTR(-ENOSPC);
 		goto error_unlock;
 	}
 	if (n == NULL) {
@@ -360,9 +367,12 @@ struct binder_buffer *binder_alloc_new_buf(struct binder_alloc *alloc,
 		(void *)PAGE_ALIGN((uintptr_t)buffer->data + buffer_size);
 	if (end_page_addr > has_page_addr)
 		end_page_addr = has_page_addr;
-	if (binder_update_page_range(alloc, 1,
-	    (void *)PAGE_ALIGN((uintptr_t)buffer->data), end_page_addr, NULL))
+	ret = binder_update_page_range(alloc, 1,
+	    (void *)PAGE_ALIGN((uintptr_t)buffer->data), end_page_addr, NULL);
+	if (ret) {
+		eret = ERR_PTR(ret);
 		goto error_unlock;
+	}
 
 	rb_erase(best_fit, &alloc->free_buffers);
 	buffer->free = 0;
@@ -393,7 +403,7 @@ struct binder_buffer *binder_alloc_new_buf(struct binder_alloc *alloc,
 
 error_unlock:
 	mutex_unlock(&alloc->mutex);
-	return NULL;
+	return eret;
 }
 
 static void *buffer_start_page(struct binder_buffer *buffer)
