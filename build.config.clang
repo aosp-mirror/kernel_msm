@@ -1,0 +1,22 @@
+function update_clang_config() {
+  ${KERNEL_DIR}/scripts/config --file ${OUT_DIR}/.config \
+    -d CC_WERROR
+  (cd ${OUT_DIR} && \
+    make O=${OUT_DIR} $archsubarch CROSS_COMPILE=${CROSS_COMPILE} olddefconfig)
+}
+
+ARCH=arm64
+BRANCH=android-msm-wahoo-4.4
+CROSS_COMPILE=aarch64-linux-android-
+DEFCONFIG=wahoo_defconfig
+EXTRA_CMDS=''
+KERNEL_DIR=private/msm-google
+POST_DEFCONFIG_CMDS='update_clang_config'
+LINUX_GCC_CROSS_COMPILE_PREBUILTS_BIN=prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin
+LZ4_PREBUILTS_BIN=prebuilts-master/misc/linux-x86/lz4
+FILES="
+arch/arm64/boot/Image.lz4-dtb
+vmlinux
+System.map
+"
+IN_KERNEL_MODULES=1
