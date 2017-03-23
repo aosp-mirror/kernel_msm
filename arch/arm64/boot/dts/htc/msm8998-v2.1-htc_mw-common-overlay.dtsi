@@ -20,7 +20,6 @@
 #include "msm8998-camera-sensor-muskie-xa.dtsi"
 #include "msm8998-htc-fingerprint-muskie-xa.dtsi"
 #include "msm8998-htc-haptics-xa.dtsi"
-#include "msm8998-htc-led-xa.dtsi"
 #include "msm8998-htc-edge.dtsi"
 
 &firmware_android {

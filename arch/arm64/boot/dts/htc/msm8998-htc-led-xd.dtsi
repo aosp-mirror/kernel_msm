@@ -1,0 +1,43 @@
+&spmi_bus {
+	qcom,pmi8998@3 {
+		qcom,leds@d000 {
+			compatible = "qcom,leds-qpnp";
+			reg = <0xd000 0x100>;
+			label = "rgb";
+			status = "okay";
+
+			qcom,rgb_0 {
+				qcom,mode = "lpg";
+				qcom,start-idx = <0>;
+				qcom,idx-len = <24>;
+				qcom,duty-pcts = [
+					01 02 03 04 05 06 07 08
+					09 0A 0B 0C 0D 0E 0F 10
+					11 12 13 14 15 16 17 18];
+				linux,default-trigger = "none";
+			};
+
+			qcom,rgb_1 {
+				qcom,mode = "lpg";
+				qcom,start-idx = <0>;
+				qcom,idx-len = <24>;
+				qcom,duty-pcts = [
+					01 02 03 04 05 06 07 08
+					09 0A 0B 0C 0D 0E 0F 10
+					11 12 13 14 15 16 17 18];
+				linux,default-trigger = "none";
+			};
+
+			qcom,rgb_2 {
+				qcom,mode = "lpg";
+				qcom,start-idx = <0>;
+				qcom,idx-len = <24>;
+				qcom,duty-pcts = [
+					01 02 03 04 05 06 07 08
+					09 0A 0B 0C 0D 0E 0F 10
+					11 12 13 14 15 16 17 18];
+				linux,default-trigger = "none";
+			};
+		};
+	};
+};

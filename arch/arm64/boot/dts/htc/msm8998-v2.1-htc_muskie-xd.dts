@@ -30,3 +30,4 @@
 #include "msm8998-v2.1-htc_mw-common-overlay.dtsi"
 #include "batterydata-muskie.dtsi"
 #include "msm8998-touch-muskie-xd.dtsi"
+#include "msm8998-htc-led-xd.dtsi"

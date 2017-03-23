@@ -30,3 +30,4 @@
 #include "msm8998-v2.1-htc_mw-common-overlay.dtsi"
 #include "batterydata-walleye.dtsi"
 #include "msm8998-touch-walleye-xa.dtsi"
+#include "msm8998-htc-led-xa.dtsi"
