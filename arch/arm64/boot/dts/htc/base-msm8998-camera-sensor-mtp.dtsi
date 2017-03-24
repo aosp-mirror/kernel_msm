@@ -50,7 +50,6 @@
 		qcom,csiphy-sd-index = <0>;
 		qcom,csid-sd-index = <0>;
 		qcom,mount-angle = <270>;
-		qcom,led-flash-src = <&led_flash0>;
 		qcom,actuator-src = <&actuator0>;
 		qcom,ois-src = <&ois0>;
 		qcom,eeprom-src = <&eeprom0>;

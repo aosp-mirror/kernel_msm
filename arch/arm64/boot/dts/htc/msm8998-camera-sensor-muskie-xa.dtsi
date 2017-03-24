@@ -209,30 +209,16 @@
 		reg = <0x0>;
 		compatible = "qcom,actuator";
 		qcom,cci-master = <0>;
-		/delete-property/ gpios;
-		/delete-property/ qcom,gpio-vaf;
-		/delete-property/ qcom,gpio-req-tbl-num;
-		/delete-property/ qcom,gpio-req-tbl-flags;
-		/delete-property/ qcom,gpio-req-tbl-label;
-		/delete-property/ pinctrl-names;
-		/delete-property/ pinctrl-0;
-		/delete-property/ pinctrl-1;
 	};
+
 	ois10: qcom,ois@10 {
 		cell-index = <0>;
 		reg = <0x0>;
 		compatible = "qcom,ois";
 		qcom,cci-master = <0>;
-		/delete-property/ gpios;
-		/delete-property/ qcom,gpio-vaf;
-		/delete-property/ qcom,gpio-req-tbl-num;
-		/delete-property/ qcom,gpio-req-tbl-flags;
-		/delete-property/ qcom,gpio-req-tbl-label;
-		/delete-property/ pinctrl-names;
-		/delete-property/ pinctrl-0;
-		/delete-property/ pinctrl-1;
 		status = "ok";
 	};
+
 	eeprom0: qcom,eeprom@0 {
 		cell-index = <0>;
 		compatible = "qcom,eeprom";
