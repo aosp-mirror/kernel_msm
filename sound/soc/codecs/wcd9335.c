@@ -14101,7 +14101,7 @@ static void tasha_add_child_devices(struct work_struct *work)
 
 	platdata = &tasha->swr_plat_data;
 
-	for_each_child_of_node(wcd9xxx->dev->of_node, node) {
+	for_each_available_child_of_node(wcd9xxx->dev->of_node, node) {
 		if (!strcmp(node->name, "swr_master"))
 			strlcpy(plat_dev_name, "tasha_swr_ctrl",
 				(WCD9335_STRING_LEN - 1));

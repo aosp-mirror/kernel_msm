@@ -9720,7 +9720,7 @@ static void tavil_add_child_devices(struct work_struct *work)
 
 	platdata = &tavil->swr.plat_data;
 
-	for_each_child_of_node(wcd9xxx->dev->of_node, node) {
+	for_each_available_child_of_node(wcd9xxx->dev->of_node, node) {
 
 		/* Parse and add the SPI device node */
 		if (!strcmp(node->name, "wcd_spi")) {
