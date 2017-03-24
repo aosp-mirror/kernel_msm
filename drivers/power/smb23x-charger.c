@@ -26,6 +26,79 @@
 #include <linux/gpio.h>
 #include <linux/of_gpio.h>
 #include <linux/alarmtimer.h>
+#include <net/sock.h>
+#include <net/netlink.h>
+#include <linux/skbuff.h>
+
+#define NETLINK_LLOBSOCK 27
+static struct sock *netlink_sock;
+
+static void udp_broadcast(int gid,void *payload, unsigned int size)
+{
+	struct sk_buff  *skb;
+	struct nlmsghdr *nlh;
+
+	int len = NLMSG_SPACE(size);
+	void *data;
+	int ret;
+
+	skb = alloc_skb(len, GFP_KERNEL);
+	pr_debug(" send data from kernelspace!!! size=%d, length=%d \n", size, len);
+	if (!skb){
+		pr_err(" alloc_skb() failed!!!!\n");
+		return;
+	}
+	nlh= nlmsg_put(skb, 0, 0, 0, size, 0);
+	nlh->nlmsg_flags = 0;
+	data=NLMSG_DATA(nlh);
+	memcpy(data, payload, size);
+	NETLINK_CB(skb).dst_group = gid;  /* unicast */
+
+	ret=netlink_broadcast(netlink_sock, skb, 0, gid, GFP_KERNEL);
+
+	if (ret <0){
+		pr_err(" send failed\n");
+		return;
+	}
+	return;
+}
+
+static void udp_receive(struct sk_buff  *skb)
+{
+	pr_debug(" receieve data from userspace!!! \n");
+	udp_broadcast(1,"LLOB SOCK READY\n", 15);
+	return;
+}
+
+static void udp_init(void)
+{
+	struct netlink_kernel_cfg cfg = {
+		.input = udp_receive,
+	};
+	netlink_sock = netlink_kernel_create(&init_net, NETLINK_LLOBSOCK, &cfg);
+	pr_debug(" netlink sock init successfully\n");
+}
+
+static void udp_exit(void)
+{
+	sock_release(netlink_sock->sk_socket);
+	pr_debug(" netlink sock remove successfully\n");
+}
+
+static void udp_sendmsg(int power_status)
+{
+	static bool last_status = false;
+	if(power_status != 0 && last_status==false){
+		udp_broadcast(1,"Charging\0", 9);
+		last_status=true;
+		pr_debug(" Discharging to Charging\n");
+	}
+	else if(power_status == 0 && last_status==true){
+		udp_broadcast(1,"Discharging\0", 12);
+		last_status=false;
+		pr_debug(" Charging to Discharging\n");
+	}
+}
 
 struct smb23x_wakeup_source {
 	struct wakeup_source source;
@@ -2688,6 +2761,7 @@ static int smb23x_battery_set_property(struct power_supply *psy,
 
 		pr_info("Charger plug, state=%d\n", chip->charger_plugin);
 		power_supply_changed(chip->usb_psy);
+		udp_sendmsg(chip->charger_plugin);
 		break;
 	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
 		smb23x_charging_enable(chip, val->intval);
@@ -3065,6 +3139,8 @@ static int smb23x_probe(struct i2c_client *client,
 	if (chip == NULL)
 		return (-ENOMEM);
 
+	udp_init();
+
 	pr_err("Enter !\n");
 	chip->client = client;
 	chip->dev = &client->dev;
@@ -3317,6 +3393,7 @@ static int smb23x_remove(struct i2c_client *client)
 	mutex_destroy(&chip->read_write_lock);
 	mutex_destroy(&chip->chg_disable_lock);
 #endif
+	udp_exit();
 	return 0;
 }
 
