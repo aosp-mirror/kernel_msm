@@ -362,6 +362,7 @@ struct binder_proc {
 	struct rb_root nodes;
 	struct rb_root refs_by_desc;
 	struct rb_root refs_by_node;
+	struct list_head waiting_threads;
 	int pid;
 	int active_thread_count;
 	struct task_struct *tsk;
@@ -372,7 +373,6 @@ struct binder_proc {
 	spinlock_t proc_lock;
 	spinlock_t todo_lock;
 	struct binder_worklist todo;
-	wait_queue_head_t wait;
 	struct binder_stats stats;
 	struct binder_worklist delivered_death;
 	int max_threads;
@@ -396,6 +396,7 @@ enum {
 	BINDER_LOOPER_STATE_EXITED      = 0x04,
 	BINDER_LOOPER_STATE_INVALID     = 0x08,
 	BINDER_LOOPER_STATE_WAITING     = 0x10,
+	BINDER_LOOPER_STATE_POLL        = 0x20,
 };
 
 struct binder_thread {
@@ -405,11 +406,11 @@ struct binder_thread {
 		struct hlist_node zombie_thread;
 	};
 	struct binder_seq_node active_node;
+	struct list_head waiting_thread_node;
 
 	int pid;
 	int looper;              /* only modified by this thread */
 	bool looper_need_return; /* can be written by other thread */
-	bool waiting_for_proc_work; /* can be read by other thread */
 	struct binder_transaction *transaction_stack;
 	struct binder_worklist todo;
 	uint32_t return_error; /* Write failed, return error code in read buf */
@@ -595,6 +596,74 @@ static long task_close_fd(struct binder_proc *proc, unsigned int fd)
 		retval = -EINTR;
 
 	return retval;
+}
+
+static inline bool binder_has_work(struct binder_thread *thread,
+				   bool do_proc_work)
+{
+	return !binder_worklist_empty(&thread->todo) ||
+		thread->return_error != BR_OK ||
+		READ_ONCE(thread->looper_need_return) ||
+		(do_proc_work && !binder_worklist_empty(&thread->proc->todo));
+}
+
+static bool binder_available_for_proc_work(struct binder_thread *thread)
+{
+	return !thread->transaction_stack &&
+		binder_worklist_empty(&thread->todo) &&
+		(thread->looper & (BINDER_LOOPER_STATE_ENTERED |
+				   BINDER_LOOPER_STATE_REGISTERED));
+}
+
+static void binder_wakeup_poll_threads(struct binder_proc *proc, bool sync)
+{
+	struct rb_node *n;
+	struct binder_thread *thread;
+
+	for (n = rb_first(&proc->threads); n != NULL; n = rb_next(n)) {
+		thread = rb_entry(n, struct binder_thread, rb_node);
+		if (thread->looper & BINDER_LOOPER_STATE_POLL &&
+		    binder_available_for_proc_work(thread)) {
+			if (sync)
+				wake_up_interruptible_sync(&thread->wait);
+			else
+				wake_up_interruptible(&thread->wait);
+		}
+	}
+}
+
+static void binder_wakeup_thread(struct binder_proc *proc, bool sync)
+{
+	struct binder_thread *thread;
+
+	BUG_ON(!spin_is_locked(&proc->proc_lock));
+	thread = list_first_entry_or_null(&proc->waiting_threads,
+					  struct binder_thread,
+					  waiting_thread_node);
+
+	if (thread) {
+		list_del_init(&thread->waiting_thread_node);
+		if (sync)
+			wake_up_interruptible_sync(&thread->wait);
+		else
+			wake_up_interruptible(&thread->wait);
+		return;
+	}
+
+	/* Didn't find a thread waiting for proc work; this can happen
+	 * in two scenarios:
+	 * 1. All threads are busy handling transactions
+	 *    In that case, one of those threads should call back into
+	 *    the kernel driver soon and pick up this work.
+	 * 2. Threads are using the (e)poll interface, in which case
+	 *    they may be blocked on the waitqueue without having been
+	 *    added to waiting_threads. For this case, we just iterate
+	 *    over all threads not handling transaction work, and
+	 *    wake them all up. We wake all because we don't know whether
+	 *    a thread that called into (e)poll is handling non-binder
+	 *    work currently.
+	 */
+	binder_wakeup_poll_threads(proc, sync);
 }
 
 static void binder_set_nice(long nice)
@@ -873,10 +942,10 @@ static int binder_dec_node(struct binder_node *node, int strong, int internal,
 		}
 	}
 done:
-	binder_proc_unlock(proc, __LINE__);
-
 	if (do_wakeup)
-		wake_up_interruptible(&proc->wait);
+		binder_wakeup_thread(proc, false);
+
+	binder_proc_unlock(proc, __LINE__);
 
 	return 0;
 }
@@ -1237,10 +1306,6 @@ static void binder_send_failed_reply(struct binder_transaction *t,
 				binder_proc_unlock(target_thread->proc,
 						   __LINE__);
 				wake_up_interruptible(&target_thread->wait);
-				if (READ_ONCE(
-					target_thread->waiting_for_proc_work))
-					wake_up_interruptible_all(
-						&target_thread->proc->wait);
 				binder_free_transaction(t);
 			} else {
 				binder_proc_unlock(target_thread->proc,
@@ -1862,6 +1927,7 @@ static void binder_transaction(struct binder_proc *proc,
 	binder_size_t last_fixup_min_off = 0;
 	struct binder_context *context = proc->context;
 	bool oneway;
+	bool wakeup_for_proc_work = false;
 
 	e = binder_transaction_log_add(&binder_transaction_log);
 	e->call_type = reply ? 2 : !!(tr->flags & TF_ONE_WAY);
@@ -1983,7 +2049,8 @@ static void binder_transaction(struct binder_proc *proc,
 		target_wait = &target_thread->wait;
 	} else {
 		target_list = &target_proc->todo;
-		target_wait = &target_proc->wait;
+		target_wait = NULL;
+		wakeup_for_proc_work = true;
 	}
 	e->to_proc = target_proc->pid;
 
@@ -2276,6 +2343,7 @@ static void binder_transaction(struct binder_proc *proc,
 		if (target_node->has_async_transaction) {
 			target_list = &target_node->async_todo;
 			target_wait = NULL;
+			wakeup_for_proc_work = false;
 		} else
 			target_node->has_async_transaction = 1;
 		/*
@@ -2288,19 +2356,11 @@ static void binder_transaction(struct binder_proc *proc,
 	}
 
 	if (target_wait) {
-		/*
-		 * Handle rare case where thread work has been added but
-		 * the thread is waiting on the proc workqueue. Make sure
-		 * it wakes up.
-		 */
-		if (unlikely(target_thread &&
-			     READ_ONCE(target_thread->waiting_for_proc_work)))
-			wake_up_interruptible_all(&target_proc->wait);
-
-		if (reply || !oneway)
-			wake_up_interruptible_sync(target_wait);
-		else
-			wake_up_interruptible(target_wait);
+		wake_up_interruptible_sync(target_wait);
+	} else if (wakeup_for_proc_work) {
+		binder_proc_lock(target_proc, __LINE__);
+		binder_wakeup_thread(target_proc, !oneway /*sync */);
+		binder_proc_unlock(target_proc, __LINE__);
 	}
 	return;
 
@@ -2636,7 +2696,6 @@ static int binder_thread_write(struct binder_proc *proc,
 			binder_uintptr_t cookie;
 			struct binder_ref *ref;
 			struct binder_ref_death *death;
-			bool do_wakeup = false;
 
 			if (get_user(target, (uint32_t __user *)ptr))
 				return -EFAULT;
@@ -2707,7 +2766,8 @@ static int binder_thread_write(struct binder_proc *proc,
 							&ref->death->work,
 							&proc->todo,
 							__LINE__);
-						do_wakeup = true;
+						binder_wakeup_thread(proc,
+								     false);
 					}
 				}
 				binder_proc_unlock(proc, __LINE__);
@@ -2743,7 +2803,8 @@ static int binder_thread_write(struct binder_proc *proc,
 								&death->work,
 								&proc->todo,
 								__LINE__);
-						do_wakeup = true;
+						binder_wakeup_thread(proc,
+								     false);
 					}
 				} else {
 					BUG_ON(death->work.type != BINDER_WORK_DEAD_BINDER);
@@ -2751,15 +2812,12 @@ static int binder_thread_write(struct binder_proc *proc,
 				}
 				binder_proc_unlock(proc, __LINE__);
 			}
-			if (do_wakeup)
-				wake_up_interruptible(&proc->wait);
 			binder_put_ref(ref);
 		} break;
 		case BC_DEAD_BINDER_DONE: {
 			struct binder_work *w;
 			binder_uintptr_t cookie;
 			struct binder_ref_death *death = NULL;
-			bool do_wakeup = false;
 
 			if (get_user(cookie, (binder_uintptr_t __user *)ptr))
 				return -EFAULT;
@@ -2802,12 +2860,10 @@ static int binder_thread_write(struct binder_proc *proc,
 					binder_enqueue_work(&death->work,
 							    &proc->todo,
 							    __LINE__);
-					do_wakeup = true;
+					binder_wakeup_thread(proc, false);
 				}
 			}
 			binder_proc_unlock(proc, __LINE__);
-			if (do_wakeup)
-				wake_up_interruptible(&proc->wait);
 		} break;
 
 		default:
@@ -2831,18 +2887,40 @@ static void binder_stat_br(struct binder_proc *proc,
 	}
 }
 
-static inline int binder_has_thread_work(struct binder_thread *thread)
+static int binder_wait_for_work(struct binder_thread *thread,
+				bool do_proc_work)
 {
-	return !binder_worklist_empty(&thread->todo) ||
-		thread->return_error != BR_OK ||
-		READ_ONCE(thread->looper_need_return);
-}
+	DEFINE_WAIT(wait);
+	struct binder_proc *proc = thread->proc;
+	struct binder_thread *get_thread;
+	int ret = 0;
 
-static inline int binder_has_proc_work(struct binder_proc *proc,
-				struct binder_thread *thread)
-{
-	return !binder_worklist_empty(&proc->todo) ||
-		binder_has_thread_work(thread);
+	binder_put_thread(thread);
+	freezer_do_not_count();
+	binder_proc_lock(proc, __LINE__);
+	for (;;) {
+		prepare_to_wait(&thread->wait, &wait, TASK_INTERRUPTIBLE);
+		if (binder_has_work(thread, do_proc_work))
+			break;
+		if (do_proc_work)
+			list_add(&thread->waiting_thread_node,
+				 &proc->waiting_threads);
+		binder_proc_unlock(proc, __LINE__);
+		schedule();
+		binder_proc_lock(proc, __LINE__);
+		list_del_init(&thread->waiting_thread_node);
+		if (signal_pending(current)) {
+			ret = -ERESTARTSYS;
+			break;
+		}
+	}
+	finish_wait(&thread->wait, &wait);
+	binder_proc_unlock(proc, __LINE__);
+	freezer_count();
+	get_thread = binder_get_thread(proc);
+	BUG_ON(get_thread != thread);
+
+	return ret;
 }
 
 static int binder_thread_read(struct binder_proc *proc,
@@ -2856,7 +2934,7 @@ static int binder_thread_read(struct binder_proc *proc,
 	void __user *end = buffer + size;
 	struct binder_worklist *wlist = NULL;
 	int ret = 0;
-	int wait_for_proc_work;
+	bool wait_for_proc_work;
 	uint32_t return_error;
 
 	if (*consumed == 0) {
@@ -2899,23 +2977,11 @@ retry:
 		goto done;
 	}
 
-	wait_for_proc_work = thread->transaction_stack == NULL &&
-		binder_worklist_empty(&thread->todo) &&
-		(thread->looper &
-			(BINDER_LOOPER_STATE_REGISTERED |
-			 BINDER_LOOPER_STATE_ENTERED));
+	wait_for_proc_work = binder_available_for_proc_work(thread);
 	binder_proc_unlock(proc, __LINE__);
 
 	if (wait_for_proc_work)
 		atomic_inc(&proc->ready_threads);
-	else if (!binder_worklist_empty(&proc->todo) &&
-			atomic_read(&proc->ready_threads)) {
-		/*
-		 * Need to kick the proc wait queue in case
-		 * it was just unfrozen and has work to do
-		 */
-		wake_up_interruptible(&proc->wait);
-	}
 
 	trace_binder_wait_for_work(wait_for_proc_work,
 				   !!thread->transaction_stack,
@@ -2927,31 +2993,13 @@ retry:
 		BUG_ON(!(thread->looper & (BINDER_LOOPER_STATE_REGISTERED |
 					   BINDER_LOOPER_STATE_ENTERED)));
 		binder_set_nice(proc->default_priority);
-		if (non_block) {
-			if (!binder_has_proc_work(proc, thread))
-				ret = -EAGAIN;
-		} else {
-			WRITE_ONCE(thread->waiting_for_proc_work, true);
-			binder_put_thread(thread);
-			ret = wait_event_freezable_exclusive(proc->wait, binder_has_proc_work(proc, thread));
-			*threadp = thread = binder_get_thread(proc);
-			if (thread)
-				WRITE_ONCE(thread->waiting_for_proc_work,
-					   false);
-			else
-				ret = -EINVAL;
-		}
+	}
+
+	if (non_block) {
+		if (!binder_has_work(thread, wait_for_proc_work))
+			ret = -EAGAIN;
 	} else {
-		if (non_block) {
-			if (!binder_has_thread_work(thread))
-				ret = -EAGAIN;
-		} else {
-			binder_put_thread(thread);
-			ret = wait_event_freezable(thread->wait, binder_has_thread_work(thread));
-			*threadp = thread = binder_get_thread(proc);
-			if (!thread)
-				ret = -EINVAL;
-		}
+		ret = binder_wait_for_work(thread, wait_for_proc_work);
 	}
 
 	if (wait_for_proc_work)
@@ -3441,6 +3489,7 @@ static struct binder_thread *binder_get_thread(struct binder_proc *proc)
 		new_thread->return_error = BR_OK;
 		new_thread->return_error2 = BR_OK;
 		INIT_LIST_HEAD(&new_thread->active_node.list_node);
+		INIT_LIST_HEAD(&new_thread->waiting_thread_node);
 
 		binder_proc_lock(proc, __LINE__);
 		/*
@@ -3554,37 +3603,24 @@ static unsigned int binder_poll(struct file *filp,
 {
 	struct binder_proc *proc = filp->private_data;
 	struct binder_thread *thread = NULL;
-	int wait_for_proc_work;
+	bool wait_for_proc_work;
 
 	thread = binder_get_thread(proc);
 
 	binder_proc_lock(thread->proc, __LINE__);
-	wait_for_proc_work = thread->transaction_stack == NULL &&
-		binder_worklist_empty(&thread->todo) &&
-		thread->return_error == BR_OK;
+	thread->looper |= BINDER_LOOPER_STATE_POLL;
+	wait_for_proc_work = binder_available_for_proc_work(thread);
 	binder_proc_unlock(thread->proc, __LINE__);
 
-	if (wait_for_proc_work) {
-		if (binder_has_proc_work(proc, thread))
-			goto ret_pollin;
-		binder_put_thread(thread);
-		poll_wait(filp, &proc->wait, wait);
-		thread = binder_get_thread(proc);
-		if (!thread)
-			return -ENOENT;
-		if (binder_has_proc_work(proc, thread))
-			goto ret_pollin;
-	} else {
-		if (binder_has_thread_work(thread))
-			goto ret_pollin;
-		binder_put_thread(thread);
-		poll_wait(filp, &thread->wait, wait);
-		thread = binder_get_thread(proc);
-		if (!thread)
-			return -ENOENT;
-		if (binder_has_thread_work(thread))
-			goto ret_pollin;
-	}
+	if (binder_has_work(thread, wait_for_proc_work))
+		goto ret_pollin;
+	binder_put_thread(thread);
+	poll_wait(filp, &thread->wait, wait);
+	thread = binder_get_thread(proc);
+	if (!thread)
+		return -ENOENT;
+	if (binder_has_work(thread, wait_for_proc_work))
+		goto ret_pollin;
 	binder_put_thread(thread);
 	return 0;
 
@@ -3638,8 +3674,11 @@ static int binder_ioctl_write_read(struct file *filp,
 					 &bwr.read_consumed,
 					 filp->f_flags & O_NONBLOCK);
 		trace_binder_read_done(ret);
-		if (!binder_worklist_empty(&proc->todo))
-			wake_up_interruptible(&proc->wait);
+		if (!binder_worklist_empty(&proc->todo)) {
+			binder_proc_lock(proc, __LINE__);
+			binder_wakeup_thread(proc, false);
+			binder_proc_unlock(proc, __LINE__);
+		}
 		if (ret < 0) {
 			if (copy_to_user(ubuf, &bwr, sizeof(bwr)))
 				ret = -EFAULT;
@@ -3940,7 +3979,6 @@ static int binder_open(struct inode *nodp, struct file *filp)
 	get_task_struct(current->group_leader);
 	proc->tsk = current->group_leader;
 	binder_init_worklist(&proc->todo);
-	init_waitqueue_head(&proc->wait);
 	proc->default_priority = task_nice(current);
 	binder_dev = container_of(filp->private_data, struct binder_device,
 				  miscdev);
@@ -3962,6 +4000,7 @@ static int binder_open(struct inode *nodp, struct file *filp)
 	INIT_HLIST_HEAD(&proc->zombie_refs);
 	INIT_HLIST_HEAD(&proc->zombie_nodes);
 	INIT_HLIST_HEAD(&proc->zombie_threads);
+	INIT_LIST_HEAD(&proc->waiting_threads);
 	filp->private_data = proc;
 
 	mutex_unlock(&binder_procs_lock);
@@ -4045,8 +4084,6 @@ static void binder_deferred_flush(struct binder_proc *proc)
 		/* if another thread grew the tree, try again */
 	} while (i > count);
 
-	wake_up_interruptible_all(&proc->wait);
-
 	binder_debug(BINDER_DEBUG_OPEN_CLOSE,
 		     "binder_flush: %d woke %d threads\n", proc->pid,
 		     wake_count);
@@ -4108,7 +4145,7 @@ static int binder_node_release(struct binder_node *node, int refs)
 
 	while (!list_empty(&tmplist.list)) {
 		struct binder_ref_death *death;
-		wait_queue_head_t *wait;
+		struct binder_proc *wait_proc;
 
 		w = list_first_entry(&tmplist.list, struct binder_work, entry);
 		death = container_of(w, struct binder_ref_death, work);
@@ -4119,11 +4156,13 @@ static int binder_node_release(struct binder_node *node, int refs)
 		 * enqueuing since it may be processed
 		 * remotely and kfree'd
 		 */
-		wait = &death->wait_proc->wait;
+		wait_proc = death->wait_proc;
 		binder_enqueue_work(w, &death->wait_proc->todo,
 				    __LINE__);
 		binder_proc_unlock(proc, __LINE__);
-		wake_up_interruptible(wait);
+		binder_proc_lock(wait_proc, __LINE__);
+		binder_wakeup_thread(wait_proc, false);
+		binder_proc_unlock(wait_proc, __LINE__);
 	}
 	binder_debug(BINDER_DEBUG_DEAD_BINDER,
 		     "node %d now dead, refs %d, death %d\n",
