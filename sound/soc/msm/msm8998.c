@@ -3474,7 +3474,8 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 			pr_debug("%s: Cannot create codecs module entry\n",
 				 __func__);
 			pdata->codec_root = NULL;
-			goto done;
+			ret = 0;
+			goto err_snd_module;
 		}
 		pdata->codec_root = entry;
 		tavil_codec_info_create_codec_entry(pdata->codec_root, codec);
