@@ -130,7 +130,6 @@
 };
 
 &i2c_5 {
-	/delete-node/ synaptics@20;
 	synaptics_dsx@20 {
 		compatible = "synaptics,dsx-i2c";
 		reg = <0x20>;

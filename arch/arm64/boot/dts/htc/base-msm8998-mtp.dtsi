@@ -173,27 +173,6 @@
 
 &i2c_5 {
 	status = "okay";
-	synaptics@20 {
-		compatible = "synaptics,dsx";
-		reg = <0x20>;
-		interrupt-parent = <&tlmm>;
-		interrupts = <125 0x2008>;
-		vdd-supply = <&pm8998_l6>;
-		avdd-supply = <&pm8998_l28>;
-		synaptics,vdd-voltage = <1808000 1808000>;
-		synaptics,avdd-voltage = <3008000 3008000>;
-		synaptics,vdd-current = <40000>;
-		synaptics,avdd-current = <20000>;
-		pinctrl-names = "pmx_ts_active", "pmx_ts_suspend";
-		pinctrl-0 = <&ts_active>;
-		pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
-		synaptics,display-coords = <0 0 1439 2559>;
-		synaptics,panel-coords = <0 0 1439 2559>;
-		synaptics,reset-gpio = <&tlmm 89 0x00>;
-		synaptics,irq-gpio = <&tlmm 125 0x2008>;
-		synaptics,disable-gpios;
-		synaptics,fw-name = "PR1702898-s3528t_60QHD_00400001.img";
-	};
 };
 
 &i2c_6 { /* BLSP1 QUP6 (NFC) */
