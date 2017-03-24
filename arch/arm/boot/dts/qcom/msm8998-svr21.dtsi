@@ -227,28 +227,6 @@
        };
 };
 
-&i2c_6 { /* BLSP1 QUP6 (NFC) */
-	status = "okay";
-	nq@28 {
-		compatible = "qcom,nq-nci";
-		reg = <0x28>;
-		qcom,nq-irq = <&tlmm 92 0x00>;
-		qcom,nq-ven = <&tlmm 12 0x00>;
-		qcom,nq-firm = <&tlmm 93 0x00>;
-		qcom,nq-clkreq = <&pm8998_gpios 21 0x00>;
-		qcom,nq-esepwr = <&tlmm 116 0x00>;
-		interrupt-parent = <&tlmm>;
-		qcom,clk-src = "BBCLK3";
-		interrupts = <92 0>;
-		interrupt-names = "nfc_irq";
-		pinctrl-names = "nfc_active", "nfc_suspend";
-		pinctrl-0 = <&nfc_int_active &nfc_enable_active>;
-		pinctrl-1 = <&nfc_int_suspend &nfc_enable_suspend>;
-		clocks = <&clock_gcc clk_ln_bb_clk3_pin>;
-		clock-names = "ref_clk";
-	};
-};
-
 &mdss_hdmi_tx {
         status = "disabled";
 	pinctrl-names = "hdmi_hpd_active", "hdmi_ddc_active", "hdmi_cec_active",
@@ -603,9 +581,31 @@
 };
 
 &soc {
-       /delete-node/ sound-tavil;
+	/delete-node/ sound-tavil;
+	/delete-node/ msm_cdc_pinctrl@64;
+	/delete-node/ msm_cdc_pinctrl@75;
+	/delete-node/ qcom,wcd-dsp-mgr;
+
+	sound-9335 {
+		/delete-property/ qcom,us-euro-gpios;
+	};
+
+	wcd_rst_gpio: msm_cdc_pinctrl@116 {
+		compatible = "qcom,msm-cdc-pinctrl";
+		qcom,cdc-rst-n-gpio = <&tlmm 116 0>;
+		pinctrl-names = "aud_active", "aud_sleep";
+		pinctrl-0 = <&cdc_reset_active>;
+		pinctrl-1 = <&cdc_reset_sleep>;
+	};
 };
 
+&slim_aud {
+	/delete-node/ tavil_codec;
+};
+
+&wsa_spkr_sd1 {
+	pinctrl-supply = <&pm8998_l9>;
+};
 
 /{
 	svr21_batterydata: qcom,battery-data {
