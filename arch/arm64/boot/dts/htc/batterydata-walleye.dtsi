@@ -1,5 +1,4 @@
-/ {
-	/delete-node/ qcom,battery-data;
+&soc {
 	walleye_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <20>;
 		#include "batterydata-walleye-id1.dtsi"

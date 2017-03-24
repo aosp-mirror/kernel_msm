@@ -16,6 +16,12 @@
 /* WIP: Device tree overlay: SoC dtbo */
 #include "../qcom/msm8998.dtsi"
 
+/ {
+	aliases: aliases {};
+	ramoops: ramoops {};
+	reserved_memory: reserved-memory {};
+};
+
 /*
  * TODO: Device tree overlay:
  * below part is to be removed and the information will be

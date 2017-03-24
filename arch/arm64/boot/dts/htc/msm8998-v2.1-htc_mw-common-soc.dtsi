@@ -17,3 +17,9 @@
 		firmware_android: android {};
 	};
 };
+
+/ {
+	aliases: aliases {};
+	ramoops: ramoops {};
+	reserved_memory: reserved-memory {};
+};

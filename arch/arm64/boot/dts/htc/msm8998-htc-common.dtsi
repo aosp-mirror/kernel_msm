@@ -86,33 +86,31 @@
 	reg = <0 0x8cc00000 0 0x7800000>;
 };
 
-/ {
-	reserved-memory {
-		htc_reserve_region: htc_reserve_region@0 {
-			compatible = "removed-dma-pool";
-			no-map;
-			reg = <0 0xa1300000 0 0x00500000>;
-		};
-
-		ramoops_mem: ramoops_region {
-			compatible = "removed-dma-pool";
-			no-map;
-			reg = <0 0xa1100000 0 0x00200000>;
-		};
-		htc_rtel_mem: htc_rtel_region@0 {
-			compatible = "shared-dma-pool";
-			reusable;
-			reg = <0 0xa1800000 0 0x2000000>; /* 32 MB */
-		};
+&reserved_memory {
+	htc_reserve_region: htc_reserve_region@0 {
+		compatible = "removed-dma-pool";
+		no-map;
+		reg = <0 0xa1300000 0 0x00500000>;
 	};
 
-	ramoops {
-		compatible = "ramoops";
-		memory-region = <&ramoops_mem>;
-		record-size = <0 0x20000>; /* 128 KB */
-		console-size = <0 0x100000>; /* 1024 KB */
-		pmsg-size = <0 0x80000>; /* 512 KB */
+	ramoops_mem: ramoops_region {
+		compatible = "removed-dma-pool";
+		no-map;
+		reg = <0 0xa1100000 0 0x00200000>;
 	};
+	htc_rtel_mem: htc_rtel_region@0 {
+		compatible = "shared-dma-pool";
+		reusable;
+		reg = <0 0xa1800000 0 0x2000000>; /* 32 MB */
+	};
+};
+
+&ramoops {
+	compatible = "ramoops";
+	memory-region = <&ramoops_mem>;
+	record-size = <0 0x20000>; /* 128 KB */
+	console-size = <0 0x100000>; /* 1024 KB */
+	pmsg-size = <0 0x80000>; /* 512 KB */
 };
 
 &soc {

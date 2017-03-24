@@ -16,6 +16,12 @@
 /* WIP: Device tree overlay: SoC dtbo */
 #include "../qcom/msm8998-v2.1.dtsi"
 
+/ {
+	aliases: aliases {};
+	ramoops: ramoops {};
+	reserved_memory: reserved-memory {};
+};
+
 /*
  * TODO: Device tree overlay:
  * below part is to be removed and the information will be
@@ -30,8 +36,7 @@
 
 /* WIP: Device tree overlay: overlay dtbo */
 #include "msm8998-htc_muskie-evm.dtsi"
-/ {
-	/delete-node/ qcom,battery-data;
+&soc {
 	muskie_evm_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <20>;
 		#include "batterydata-evm-xa.dtsi"
