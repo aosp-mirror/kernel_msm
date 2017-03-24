@@ -15,11 +15,13 @@ endif
 
 ccflags-y += -Idrivers/media/platform/msm/camera_v2/sensor/io
 ccflags-y += -Idrivers/media/platform/msm/camera_v2
+ifeq ($(FEATURE_USE_CCI), true)
 ccflags-y += -Idrivers/media/platform/msm/camera_v2/sensor/cci
+endif
+
 obj-$(CONFIG_STMVL53L0)			+= stmvl53l0.o
 stmvl53l0-objs				:= stmvl53l0_module.o \
 					   stmvl53l0_module-i2c.o \
-					   stmvl53l0_module-cci.o \
 					   src/vl53l0_api_calibration.o \
 					   src/vl53l0_api_core.o \
 					   src/vl53l0_api_histogram.o \
@@ -30,5 +32,8 @@ stmvl53l0-objs				:= stmvl53l0_module.o \
 					   src/vl53l0_i2c_platform.o \
 					   src/vl53l0_port_i2c.o \
 					   src/vl53l010_api.o \
-					   src/vl53l010_tuning.o \
+					   src/vl53l010_tuning.o
 
+ifeq ($(FEATURE_USE_CCI), true)
+stmvl53l0-objs				+= stmvl53l0_module-cci.o
+endif
