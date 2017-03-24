@@ -17,9 +17,15 @@
 &spmi_bus {
 	qcom,pm8998@0 {
 		qcom,power-on@800 {
-			/delete-node/ qcom,pon_1;
-			/delete-node/ qcom,pon_2;
-			/delete-node/ qcom,pon_3;
-                };
+			qcom,pon_1 {
+				status = "disabled";
+			};
+			qcom,pon_2 {
+				status = "disabled";
+			};
+			qcom,pon_3 {
+				status = "disabled";
+			};
+		};
 	};
 };
