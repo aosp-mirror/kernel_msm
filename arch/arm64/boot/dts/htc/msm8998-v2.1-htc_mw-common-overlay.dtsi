@@ -10,8 +10,6 @@
  * GNU General Public License for more details.
  */
 
-
-#include "../qcom/msm8998-v2.1.dtsi"
 #include "../qcom/msm8998-mtp.dtsi"
 #include "msm8998-htc_muskie.dtsi"
 #include "msm8998-htc-nfc.dtsi"
@@ -23,24 +21,16 @@
 #include "msm8998-htc-led-xa.dtsi"
 #include "msm8998-htc-edge.dtsi"
 
-/ {
-	compatible = "qcom,msm8998-mtp", "qcom,msm8998", "qcom,mtp";
-};
-
-/ {
-	firmware {
-		android {
-			compatible = "android,firmware";
-			fstab {
-				compatible = "android,fstab";
-				vendor {
-					compatible = "android,vendor";
-					dev = "/dev/block/platform/soc/1da4000.ufshc/by-name/vendor";
-					type = "ext4";
-					mnt_flags = "ro,barrier=1";
-					fsmgr_flags = "wait,slotselect";
-				};
-			};
+&firmware_android {
+	compatible = "android,firmware";
+	fstab {
+		compatible = "android,fstab";
+		vendor {
+			compatible = "android,vendor";
+			dev = "/dev/block/platform/soc/1da4000.ufshc/by-name/vendor";
+			type = "ext4";
+			mnt_flags = "ro,barrier=1";
+			fsmgr_flags = "wait,slotselect";
 		};
 	};
 };

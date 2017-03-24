@@ -10,22 +10,10 @@
  * GNU General Public License for more details.
  */
 
-/dts-v1/;
-
-/* WIP: Device tree overlay: SoC dtbo */
-#include "msm8998-v2.1-htc_mw-common-soc.dtsi"
-
-/*
- * TODO: Device tree overlay:
- * below part is to be removed and the information will be
- * provided through DTB/DTBO partition dt_table_entry.
- */
-
+#include "../qcom/msm8998-v2.1.dtsi"
 / {
-	model = "HTC Corporation. MSM8998 v2.1 Walleye XA";
-	qcom,board-id = <444 0>;
+	compatible = "qcom,msm8998-mtp", "qcom,msm8998", "qcom,mtp";
+	firmware {
+		firmware_android: android {};
+	};
 };
-
-/* WIP: Device tree overlay: overlay dtbo */
-#include "msm8998-v2.1-htc_mw-common-overlay.dtsi"
-#include "batterydata-walleye.dtsi"

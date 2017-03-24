@@ -10,13 +10,22 @@
  * GNU General Public License for more details.
  */
 
-
 /dts-v1/;
 
-#include "msm8998-v2.1-htc_mw-common.dtsi"
-#include "batterydata-muskie.dtsi"
+/* WIP: Device tree overlay: SoC dtbo */
+#include "msm8998-v2.1-htc_mw-common-soc.dtsi"
+
+/*
+ * TODO: Device tree overlay:
+ * below part is to be removed and the information will be
+ * provided through DTB/DTBO partition dt_table_entry.
+ */
 
 / {
 	model = "HTC Corporation. MSM8998 v2.1 Muskie XD";
 	qcom,board-id = <445 3>;
 };
+
+/* WIP: Device tree overlay: overlay dtbo */
+#include "msm8998-v2.1-htc_mw-common-overlay.dtsi"
+#include "batterydata-muskie.dtsi"
