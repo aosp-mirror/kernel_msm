@@ -348,7 +348,6 @@ unregister_sensors:
 		thermal_zone_of_sensor_unregister(&pdev->dev,
 			mnh_dev->sensors[i]->tzd);
 
-
 	return err;
 }
 

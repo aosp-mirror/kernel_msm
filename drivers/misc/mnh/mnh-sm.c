@@ -122,6 +122,7 @@ struct mnh_sm_device {
 	struct device *chardev;
 	struct class *dev_class;
 	enum fw_image_state image_loaded;
+	int state;
 
 	/* mutex to synchronize state transitions */
 	struct mutex lock;
@@ -130,11 +131,11 @@ struct mnh_sm_device {
 	struct kthread_worker worker;
 	struct kthread_work set_state_work;
 	struct task_struct *thread;
-	int next_mnh_state;
+	int next_state;
 
 	/* completion used for signaling kthread work is complete */
 	struct completion work_complete;
-	int work_error;
+	int work_ret;
 
 	/* pin used for synchronizing with secondary bootloader */
 	struct gpio_desc *ready_gpio;
@@ -162,7 +163,6 @@ struct mnh_sm_device {
 };
 
 static struct mnh_sm_device *mnh_sm_dev;
-static int mnh_state;
 static int mnh_mipi_debug;
 static int mnh_freeze_state;
 
@@ -235,7 +235,7 @@ static ssize_t mnh_sm_state_show(struct device *dev,
 {
 	dev_dbg(dev, "Entering mnh_sm_state_show...\n");
 
-	return scnprintf(buf, MAX_STR_COPY, "%d\n", mnh_state);
+	return scnprintf(buf, MAX_STR_COPY, "%d\n", mnh_sm_dev->state);
 }
 
 static ssize_t mnh_sm_state_store(struct device *dev,
@@ -900,7 +900,10 @@ static int mnh_sm_resume(void)
  */
 int mnh_sm_get_state(void)
 {
-	return mnh_state;
+	if (!mnh_sm_dev)
+		return MNH_STATE_OFF;
+
+	return mnh_sm_dev->state;
 }
 EXPORT_SYMBOL(mnh_sm_get_state);
 
@@ -908,7 +911,7 @@ static int mnh_sm_set_state_locked(int state)
 {
 	int ret = 0;
 
-	if (state == mnh_state) {
+	if (state == mnh_sm_dev->state) {
 		dev_info(mnh_sm_dev->dev,
 			 "%s: already in state %d\n", __func__, state);
 		return 0;
@@ -919,15 +922,15 @@ static int mnh_sm_set_state_locked(int state)
 		ret = mnh_sm_poweroff();
 		break;
 	case MNH_STATE_PENDING:
-		if (mnh_state == MNH_STATE_ACTIVE)
+		if (mnh_sm_dev->state == MNH_STATE_ACTIVE)
 			ret = mnh_sm_set_state_locked(MNH_STATE_OFF);
 		if (!ret)
 			ret = mnh_sm_poweron();
 		break;
 	case MNH_STATE_ACTIVE:
 		/* make sure we are powered */
-		if ((mnh_state == MNH_STATE_OFF) ||
-		    (mnh_state == MNH_STATE_SUSPEND))
+		if ((mnh_sm_dev->state == MNH_STATE_OFF) ||
+		    (mnh_sm_dev->state == MNH_STATE_SUSPEND))
 			ret = mnh_sm_set_state_locked(MNH_STATE_PENDING);
 		if (ret)
 			break;
@@ -965,7 +968,7 @@ static int mnh_sm_set_state_locked(int state)
 		return ret;
 	}
 
-	mnh_state = state;
+	mnh_sm_dev->state = state;
 
 	return 0;
 }
@@ -977,7 +980,7 @@ static int mnh_sm_set_state_locked(int state)
 int mnh_sm_set_state(int state)
 {
 	int ret;
-	int prev_state = mnh_state;
+	int prev_state = mnh_sm_dev->state;
 
 	if (!mnh_sm_dev)
 		return -ENODEV;
@@ -988,7 +991,7 @@ int mnh_sm_set_state(int state)
 	if (mnh_freeze_state) {
 		dev_info(mnh_sm_dev->dev,
 			"%s: ignoring requested state %d because freeze_state is set\n",
-			__func__, mnh_sm_dev->next_mnh_state);
+			__func__, mnh_sm_dev->next_state);
 		return -EBUSY;
 	}
 
@@ -1002,10 +1005,10 @@ int mnh_sm_set_state(int state)
 		return ret;
 
 	dev_info(mnh_sm_dev->dev,
-		 "%s: now in state %d\n", __func__, mnh_state);
+		 "%s: now in state %d\n", __func__, mnh_sm_dev->state);
 
 	/* check for hotplug conditions */
-	if (mnh_hotplug_cb && (mnh_state == MNH_STATE_ACTIVE))
+	if (mnh_hotplug_cb && (mnh_sm_dev->state == MNH_STATE_ACTIVE))
 		mnh_hotplug_cb(MNH_HOTPLUG_IN);
 	else if (mnh_hotplug_cb && (prev_state == MNH_STATE_ACTIVE))
 		mnh_hotplug_cb(MNH_HOTPLUG_OUT);
@@ -1047,13 +1050,19 @@ static int mnh_sm_close(struct inode *inode, struct file *filp)
 static void mnh_sm_set_state_work(struct kthread_work *data)
 {
 	reinit_completion(&mnh_sm_dev->work_complete);
-	mnh_sm_dev->work_error = mnh_sm_set_state(mnh_sm_dev->next_mnh_state);
+	mnh_sm_dev->work_ret = mnh_sm_set_state(mnh_sm_dev->next_state);
 	complete(&mnh_sm_dev->work_complete);
 }
 
 static int mnh_sm_wait_for_state(int state)
 {
 	unsigned long timeout;
+
+	if (mnh_sm_dev->state == state)
+		return 0;
+
+	if (mnh_sm_dev->next_state != state)
+		return -EINVAL;
 
 	timeout = wait_for_completion_timeout(
 		&mnh_sm_dev->work_complete,
@@ -1065,7 +1074,7 @@ static int mnh_sm_wait_for_state(int state)
 		return -ETIMEDOUT;
 	}
 
-	return mnh_sm_dev->work_error;
+	return mnh_sm_dev->work_ret;
 }
 
 static long mnh_sm_ioctl(struct file *file, unsigned int cmd,
@@ -1105,17 +1114,17 @@ static long mnh_sm_ioctl(struct file *file, unsigned int cmd,
 
 	switch (cmd) {
 	case MNH_SM_IOC_GET_STATE:
-		err = copy_to_user((void __user *)arg, &mnh_state,
-				   sizeof(mnh_state));
+		err = copy_to_user((void __user *)arg, &mnh_sm_dev->state,
+				   sizeof(mnh_sm_dev->state));
 		if (err) {
 			dev_err(mnh_sm_dev->dev,
-				"%s: failed to copy mnh_state to userspace (%d)\n",
+				"%s: failed to copy to userspace (%d)\n",
 				__func__, err);
 			return err;
 		}
 		break;
 	case MNH_SM_IOC_SET_STATE:
-		mnh_sm_dev->next_mnh_state = (int)arg;
+		mnh_sm_dev->next_state = (int)arg;
 		queue_kthread_work(&mnh_sm_dev->worker,
 				   &mnh_sm_dev->set_state_work);
 		break;
