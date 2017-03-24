@@ -6131,45 +6131,82 @@ dhd_iovar(dhd_pub_t *pub, int ifidx, char *name, char *param_buf,
 		return BCME_BADARG;
 
 	input_len = strlen(name) + 1 + param_len;
+	if (input_len > WLC_IOCTL_MAXLEN)
+		return BCME_BADARG;
+	buf = NULL;
 	if (set) {
 		if (res_buf || res_len != 0) {
 			DHD_ERROR(("%s: SET wrong arguemnet\n", __FUNCTION__));
 			return BCME_BADARG;
 		}
-		buf = kzalloc(input_len, GFP_ATOMIC);
+		buf = kzalloc(input_len, GFP_KERNEL);
 		if (!buf) {
 			DHD_ERROR(("%s: mem alloc failed\n", __FUNCTION__));
 			return BCME_NOMEM;
 		}
 		ret = bcm_mkiovar(name, param_buf, param_len, buf, input_len);
+		if (!ret) {
+			ret = BCME_NOMEM;
+			goto exit;
+		}
+
+		ioc.cmd = WLC_SET_VAR;
+		ioc.buf = buf;
+		ioc.len = input_len;
+		ioc.set = set;
+
+		ret = dhd_wl_ioctl(pub, ifidx, &ioc, ioc.buf, ioc.len);
+
 	} else {
-		if (!res_buf) {
-			DHD_ERROR(("%s: GET failed. resp_buf NULL\n",
+		if (!res_buf || res_len == 0) {
+			DHD_ERROR(("%s: GET failed. resp_buf NULL or len:0\n",
 				   __FUNCTION__));
 			return BCME_NOMEM;
 		}
 		if (res_len < input_len) {
-			DHD_ERROR(("%s: res_len(%d) < input_len(%d)\n",
-				   __FUNCTION__, res_len, input_len));
-			return BCME_NOMEM;
+			DHD_INFO(("%s: res_len(%d) < input_len(%d)\n",
+				  __FUNCTION__, res_len, input_len));
+			buf = kzalloc(input_len, GFP_KERNEL);
+			if (!buf) {
+				DHD_ERROR(("%s: mem alloc failed\n",
+					   __FUNCTION__));
+				return BCME_NOMEM;
+			}
+			ret = bcm_mkiovar(name, param_buf, param_len, buf,
+					  input_len);
+			if (!ret) {
+				ret = BCME_NOMEM;
+				goto exit;
+			}
+
+			ioc.cmd = WLC_GET_VAR;
+			ioc.buf = buf;
+			ioc.len = input_len;
+			ioc.set = set;
+
+			ret = dhd_wl_ioctl(pub, ifidx, &ioc, ioc.buf, ioc.len);
+
+			if (ret == BCME_OK)
+				memcpy(res_buf, buf, res_len);
+		} else {
+			memset(res_buf, 0, res_len);
+			ret = bcm_mkiovar(name, param_buf, param_len, res_buf,
+					  res_len);
+			if (!ret) {
+				ret = BCME_NOMEM;
+				goto exit;
+			}
+
+			ioc.cmd = WLC_GET_VAR;
+			ioc.buf = res_buf;
+			ioc.len = res_len;
+			ioc.set = set;
+
+			ret = dhd_wl_ioctl(pub, ifidx, &ioc, ioc.buf, ioc.len);
 		}
-		memset(res_buf, 0, res_len);
-		ret = bcm_mkiovar(name, param_buf, param_len, res_buf, res_len);
 	}
-	if (ret == 0) {
-		if (set)
-			kfree(buf);
-		return BCME_NOMEM;
-	}
-
-	ioc.cmd = set ? WLC_SET_VAR : WLC_GET_VAR;
-	ioc.buf = set ? buf : res_buf;
-	ioc.len = set ? ret : res_len;
-	ioc.set = set;
-
-	ret = dhd_wl_ioctl(pub, ifidx, &ioc, ioc.buf, ioc.len);
-	if (set)
-		kfree(buf);
+exit:
+	kfree(buf);
 	return ret;
 }
 
