@@ -203,20 +203,6 @@
 	};
 };
 
-&soc {
-	/delete-node/ qcom,camera-flash@0;
-	/delete-node/ qcom,camera-flash@1;
-};
-
-&cci {
-	/delete-node/ qcom,camera@1;
-	/delete-node/ qcom,camera@2;
-	/delete-node/ qcom,actuator@1;
-	/delete-node/ qcom,eeprom@0;
-	/delete-node/ qcom,eeprom@1;
-	/delete-node/ qcom,eeprom@2;
-};
-
 &cci {
 	actuator10: qcom,actuator@10 {
 		cell-index = <0>;
