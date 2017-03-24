@@ -34,10 +34,6 @@
 			gpio-key,wakeup;
 			debounce-interval = <20>;
 		};
-
-		/delete-node/ home;
-		/delete-node/ cam_snapshot;
-		/delete-node/ cam_focus;
 	};
 };
 
