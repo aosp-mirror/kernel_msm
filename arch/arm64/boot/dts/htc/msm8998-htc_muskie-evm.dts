@@ -21,3 +21,16 @@
 	compatible = "qcom,msm8998-mtp", "qcom,msm8998", "qcom,mtp";
 	qcom,board-id = <0x1D 0>;
 };
+
+/ {
+	/delete-node/ qcom,battery-data;
+	muskie_evm_batterydata: qcom,battery-data {
+		qcom,batt-id-range-pct = <20>;
+		#include "batterydata-evm-xa.dtsi"
+	};
+};
+
+&pmi8998_fg {
+	qcom,battery-data = <&muskie_evm_batterydata>;
+	qcom,fg-force-load-profile;
+};

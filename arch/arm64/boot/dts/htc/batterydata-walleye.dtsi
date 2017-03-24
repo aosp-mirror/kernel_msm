@@ -10,4 +10,5 @@
 
 &pmi8998_fg {
 	qcom,battery-data = <&walleye_batterydata>;
+	qcom,fg-force-load-profile;
 };

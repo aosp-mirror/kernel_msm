@@ -10,4 +10,5 @@
 
 &pmi8998_fg {
 	qcom,battery-data = <&muskie_batterydata>;
+	qcom,fg-force-load-profile;
 };
