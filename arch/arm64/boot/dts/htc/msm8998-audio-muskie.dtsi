@@ -138,15 +138,24 @@
 	audio_ext_clk_lnbb {
 		status = "disabled";
 	};
+};
 
-	/delete-node/ msm_cdc_pinctrl@59;
-	/delete-node/ msm_cdc_pinctrl@60;
+/* msm_cdc_pinctrl@59 */
+&wcd_usbc_analog_en1_gpio {
+	status = "disabled";
+};
+
+/* msm_cdc_pinctrl@60 */
+&wcd_usbc_analog_en2n_gpio {
+	status = "disabled";
 };
 
 &slim_aud {
 	tasha_codec {
 		status = "disabled";
-		/delete-node/ swr_master;
+		swr_master {
+			status = "disabled";
+		};
 	};
 
 	wcd934x_cdc: tavil_codec {
@@ -155,7 +164,9 @@
 		wcd_spi_0: wcd_spi {
 			qcom,master-bus-num = <2>;
 		};
-		/delete-node/ swr_master;
+		swr_master {
+			status = "disabled";
+		};
 	};
 };
 
