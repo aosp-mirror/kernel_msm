@@ -72,7 +72,7 @@
 	};
 
 	i2c_5 {
-		i2c_5_active: i2c_5_active {
+		i2c_5_active {
 			mux {
 				pins = "gpio87", "gpio88";
 				function = "blsp_i2c5";
@@ -85,7 +85,7 @@
 			};
 		};
 
-		i2c_5_sleep: i2c_5_sleep {
+		i2c_5_sleep {
 			mux {
 				pins = "gpio87", "gpio88";
 				function = "blsp_i2c5";
@@ -105,7 +105,7 @@
 };
 
 &soc {
-	i2c_5: i2c@c179000 { /* BLSP1 QUP5 */
+	i2c@c179000 { /* BLSP1 QUP5 */
 		compatible = "qcom,i2c-msm-v2";
 		#address-cells = <1>;
 		#size-cells = <0>;
