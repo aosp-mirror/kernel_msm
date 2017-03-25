@@ -218,7 +218,6 @@
 	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
 	qcom,platform-reset-gpio = <&tlmm 94 0>;
 	qcom,platform-te-gpio = <&tlmm 10 0>;
-	qcom,panel-mode-gpio = <&tlmm 91 0>;
 };
 
 &mdss_dsi1 {
@@ -228,7 +227,6 @@
 	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
 	qcom,platform-reset-gpio = <&tlmm 94 0>;
 	qcom,platform-te-gpio = <&tlmm 10 0>;
-	qcom,panel-mode-gpio = <&tlmm 91 0>;
 };
 
 &labibb {
