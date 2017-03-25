@@ -21,8 +21,8 @@
 		status = "ok";
 	};
 
-	tlmm: pinctrl@03400000 {
-		cci0_active: cci0_active {
+	pinctrl@03400000 {
+		cci0_active {
 			mux {
 				/* CLK, DATA */
 				pins = "gpio17","gpio18"; // Only 2
@@ -36,7 +36,7 @@
 			};
 		};
 
-		cci0_suspend: cci0_suspend {
+		cci0_suspend {
 			mux {
 				/* CLK, DATA */
 				pins = "gpio17","gpio18";
@@ -51,7 +51,7 @@
 			};
 		};
 
-		cci1_active: cci1_active {
+		cci1_active {
 			mux {
 				/* CLK, DATA */
 				pins = "gpio19","gpio20";
@@ -65,7 +65,7 @@
 			};
 		};
 
-		cci1_suspend: cci1_suspend {
+		cci1_suspend {
 			mux {
 				/* CLK, DATA */
 				pins = "gpio19","gpio20";
@@ -80,7 +80,7 @@
 			};
 		};
 
-		cam_sensor_rear_active: cam_sensor_rear_active {
+		cam_sensor_rear_active {
 			/* RESET, STANDBY */
 			mux {
 				pins = "gpio24";	/*HTC modify */
@@ -95,7 +95,7 @@
 			};
 		};
 
-		cam_sensor_rear_suspend: cam_sensor_rear_suspend{
+		cam_sensor_rear_suspend{
 			/* RESET, STANDBY */
 			mux {
 				pins = "gpio24";	/*HTC modify */
@@ -110,7 +110,7 @@
 			};
 		};
 
-		cam_sensor_front_active: cam_sensor_front_active {
+		cam_sensor_front_active {
 			/* RESET, STANDBY */
 			mux {
 				pins = "gpio23";	/*HTC modify */
@@ -125,7 +125,7 @@
 			};
 		};
 
-		cam_sensor_front_suspend: cam_sensor_front_suspend {
+		cam_sensor_front_suspend {
 			/* RESET, STANDBY */
 			mux {
 				pins = "gpio23";	/*HTC modify */
@@ -139,7 +139,7 @@
 			};
 		};
 
-		cam_sensor_mclk0_active: cam_sensor_mclk0_active {
+		cam_sensor_mclk0_active {
 			/* MCLK0 */
 			mux {
 				/* CLK, DATA */
@@ -154,7 +154,7 @@
 			};
 		};
 
-		cam_sensor_mclk0_suspend: cam_sensor_mclk0_suspend {
+		cam_sensor_mclk0_suspend {
 			/* MCLK0 */
 			mux {
 				/* CLK, DATA */
@@ -170,7 +170,7 @@
 			};
 		};
 
-		cam_sensor_mclk1_active: cam_sensor_mclk1_active {
+		cam_sensor_mclk1_active {
 			/* MCLK1 */
 			mux {
 				/* CLK, DATA */
@@ -185,7 +185,7 @@
 			};
 		};
 
-		cam_sensor_mclk1_suspend: cam_sensor_mclk1_suspend {
+		cam_sensor_mclk1_suspend {
 			/* MCLK1 */
 			mux {
 				/* CLK, DATA */

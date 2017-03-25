@@ -12,8 +12,8 @@
  */
 
 &soc {
-	tlmm: pinctrl@03400000 {
-		cci0_active: cci0_active {
+	pinctrl@03400000 {
+		cci0_active {
 			mux {
 				/* CLK, DATA */
 				pins = "gpio17","gpio18"; // Only 2
@@ -27,7 +27,7 @@
 			};
 		};
 
-		cci0_suspend: cci0_suspend {
+		cci0_suspend {
 			mux {
 				/* CLK, DATA */
 				pins = "gpio17","gpio18";
@@ -40,7 +40,7 @@
 				drive-strength = <20>; /* 20 MA */
 			};
 		};
-		cam_sensor_rear_active: cam_sensor_rear_active {
+		cam_sensor_rear_active {
 			/* RESET, STANDBY */
 			mux {
 				pins = "gpio24";	/*HTC modify */
@@ -54,7 +54,7 @@
 				output-low;			/*HTC ADD*/
 			};
 		};
-		cam_sensor_rear_suspend: cam_sensor_rear_suspend{
+		cam_sensor_rear_suspend{
 			/* RESET, STANDBY */
 			mux {
 				pins = "gpio24";	/*HTC modify */
