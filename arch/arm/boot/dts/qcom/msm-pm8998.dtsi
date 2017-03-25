@@ -37,7 +37,7 @@
 			qcom,pon-dbc-delay = <15625>;
 			qcom,system-reset;
 			qcom,store-hard-reset-reason;
-			qcom,report-key;
+			qcom,report-key = <1>;
 
 			qcom,pon_1 {
 				qcom,pon-type = <0>;

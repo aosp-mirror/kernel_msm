@@ -2313,8 +2313,11 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 					"qcom,store-hard-reset-reason");
 
 	/* config whether to report key events */
-	pon->report_key = of_property_read_bool(pdev->dev.of_node,
-						"qcom,report-key");
+	rc = of_property_read_u32(pdev->dev.of_node, "qcom,report-key", &temp);
+	if (rc)
+		pon->report_key = false;
+	else
+		pon->report_key = !!temp;
 
 	dev_info(&pdev->dev, "qcom,report-key:%s\n",
 		 pon->report_key ? "true" : "false");
