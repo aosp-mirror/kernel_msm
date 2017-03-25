@@ -13,7 +13,7 @@
 #include <dt-bindings/interrupt-controller/irq.h>
 
 &aliases {
-	serial1 = &esl_console;
+	serial1 = "/soc/serial@0c16f000";
 };
 
 &tlmm {
