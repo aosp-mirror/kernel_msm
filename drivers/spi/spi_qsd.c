@@ -2156,7 +2156,7 @@ struct msm_spi_platform_data *msm_spi_dt_to_pdata(
 		{"qcom,ver-reg-exists",
 			&pdata->ver_reg_exists,          DT_OPT,  DT_BOOL,  0},
 		{"qcom,use-bam",
-			&pdata->use_bam,                 DT_OPT,  DT_BOOL,  0},
+			&pdata->use_bam,                 DT_OPT,  DT_U32,  0},
 		{"qcom,use-pinctrl",
 			&pdata->use_pinctrl,             DT_OPT,  DT_BOOL,  0},
 		{"qcom,bam-consumer-pipe-index",

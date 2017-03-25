@@ -45,7 +45,7 @@
 			qcom,infinite-mode = <0>;
 			qcom,ver-reg-exists;
 
-			qcom,use-bam;
+			qcom,use-bam = <1>;
 			qcom,bam-consumer-pipe-index = <14>;
 			qcom,bam-producer-pipe-index = <15>;
 

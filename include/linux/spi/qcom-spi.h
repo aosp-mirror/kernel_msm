@@ -47,7 +47,7 @@ struct msm_spi_platform_data {
 	u32  pm_lat;
 	u32  infinite_mode;
 	bool ver_reg_exists;
-	bool use_bam;
+	int use_bam;
 	u32  bam_consumer_pipe_index;
 	u32  bam_producer_pipe_index;
 	bool rt_priority;

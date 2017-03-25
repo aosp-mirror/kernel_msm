@@ -344,7 +344,7 @@
 		interrupt-names = "spi_irq", "spi_bam_irq";
 		interrupts = <0 95 0>, <0 238 0>;
 		spi-max-frequency = <50000000>;
-		qcom,use-bam;
+		qcom,use-bam = <1>;
 		qcom,ver-reg-exists;
 		qcom,bam-consumer-pipe-index = <6>;
 		qcom,bam-producer-pipe-index = <7>;
@@ -369,7 +369,7 @@
 		interrupt-names = "spi_irq", "spi_bam_irq";
 		interrupts = <0 96 0>, <0 238 0>;
 		spi-max-frequency = <50000000>;
-		qcom,use-bam;
+		qcom,use-bam = <1>;
 		qcom,ver-reg-exists;
 		qcom,bam-consumer-pipe-index = <8>;
 		qcom,bam-producer-pipe-index = <9>;
@@ -394,7 +394,7 @@
 		interrupt-names = "spi_irq", "spi_bam_irq";
 		interrupts = <0 97 0>, <0 238 0>;
 		spi-max-frequency = <50000000>;
-		qcom,use-bam;
+		qcom,use-bam = <1>;
 		qcom,ver-reg-exists;
 		qcom,bam-consumer-pipe-index = <10>;
 		qcom,bam-producer-pipe-index = <11>;
@@ -419,7 +419,7 @@
 		interrupt-names = "spi_irq", "spi_bam_irq";
 		interrupts = <0 98 0>, <0 238 0>;
 		spi-max-frequency = <50000000>;
-		qcom,use-bam;
+		qcom,use-bam = <1>;
 		qcom,ver-reg-exists;
 		qcom,bam-consumer-pipe-index = <12>;
 		qcom,bam-producer-pipe-index = <13>;
@@ -444,7 +444,7 @@
 		interrupt-names = "spi_irq", "spi_bam_irq";
 		interrupts = <0 99 0>, <0 238 0>;
 		spi-max-frequency = <50000000>;
-		qcom,use-bam;
+		qcom,use-bam = <1>;
 		qcom,ver-reg-exists;
 		qcom,bam-consumer-pipe-index = <14>;
 		qcom,bam-producer-pipe-index = <15>;
@@ -469,7 +469,7 @@
 		interrupt-names = "spi_irq", "spi_bam_irq";
 		interrupts = <0 100 0>, <0 238 0>;
 		spi-max-frequency = <50000000>;
-		qcom,use-bam;
+		qcom,use-bam = <1>;
 		qcom,ver-reg-exists;
 		qcom,bam-consumer-pipe-index = <16>;
 		qcom,bam-producer-pipe-index = <17>;
@@ -495,7 +495,7 @@
 		interrupt-names = "spi_irq", "spi_bam_irq";
 		interrupts = <0 101 0>, <0 239 0>;
 		spi-max-frequency = <50000000>;
-		qcom,use-bam;
+		qcom,use-bam = <1>;
 		qcom,ver-reg-exists;
 		qcom,bam-consumer-pipe-index = <6>;
 		qcom,bam-producer-pipe-index = <7>;
@@ -520,7 +520,7 @@
 		interrupt-names = "spi_irq", "spi_bam_irq";
 		interrupts = <0 102 0>, <0 239 0>;
 		spi-max-frequency = <50000000>;
-		qcom,use-bam;
+		qcom,use-bam = <1>;
 		qcom,ver-reg-exists;
 		qcom,bam-consumer-pipe-index = <8>;
 		qcom,bam-producer-pipe-index = <9>;
@@ -545,7 +545,7 @@
 		interrupt-names = "spi_irq", "spi_bam_irq";
 		interrupts = <0 103 0>, <0 239 0>;
 		spi-max-frequency = <50000000>;
-		qcom,use-bam;
+		qcom,use-bam = <1>;
 		qcom,ver-reg-exists;
 		qcom,bam-consumer-pipe-index = <10>;
 		qcom,bam-producer-pipe-index = <11>;
@@ -570,7 +570,7 @@
 		interrupt-names = "spi_irq", "spi_bam_irq";
 		interrupts = <0 104 0>, <0 239 0>;
 		spi-max-frequency = <50000000>;
-		qcom,use-bam;
+		qcom,use-bam = <1>;
 		qcom,ver-reg-exists;
 		qcom,bam-consumer-pipe-index = <12>;
 		qcom,bam-producer-pipe-index = <13>;
@@ -595,7 +595,7 @@
 		interrupt-names = "spi_irq", "spi_bam_irq";
 		interrupts = <0 105 0>, <0 239 0>;
 		spi-max-frequency = <50000000>;
-		qcom,use-bam;
+		qcom,use-bam = <1>;
 		qcom,ver-reg-exists;
 
 		qcom,bam-consumer-pipe-index = <14>;
@@ -621,7 +621,7 @@
 		interrupt-names = "spi_irq", "spi_bam_irq";
 		interrupts = <0 106 0>, <0 239 0>;
 		spi-max-frequency = <50000000>;
-		qcom,use-bam;
+		qcom,use-bam = <1>;
 		qcom,ver-reg-exists;
 		qcom,bam-consumer-pipe-index = <16>;
 		qcom,bam-producer-pipe-index = <17>;

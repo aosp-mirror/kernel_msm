@@ -2474,7 +2474,7 @@
 		spi-max-frequency = <19200000>;
 
 		qcom,infinite-mode = <0>;
-		qcom,use-bam;
+		qcom,use-bam = <1>;
 		qcom,ver-reg-exists;
 		qcom,bam-consumer-pipe-index = <12>;
 		qcom,bam-producer-pipe-index = <13>;
