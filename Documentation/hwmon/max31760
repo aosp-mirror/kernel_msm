@@ -1,0 +1,38 @@
+Kernel driver max31760
+======================
+
+Supported chips:
+  * Maxim Integrated MAX31760
+    Prefix: 'max31760'
+    Addresses scanned: none
+    Datasheet: https://datasheets.maximintegrated.com/en/ds/MAX31760.pdf
+
+Author:
+	John Muir <john@jmuir.com>
+
+Description
+-----------
+
+The MAX31760 integrates temperature sensing along with precision PWM fan
+control. Please read the datasheet referenced above for a comprehensive
+description of this device.
+
+This device driver's hwmon integration provides the common sysfs interfaces to
+manage two fans and two temperature sensors, and pwm controls for the fan speed.
+A temperature to pwm lookup table is exposed via a series of 'auto_point'
+configuration files. See Documentation/hwmon/sysfs-interface for more
+information.
+
+The following custom controls are defined (in the custom sub-directory):
+
+config_load	- Load from the EEPROM into registers.
+config_store	- Store register contents into the EEPROM.
+		  Write "0" to these to read or write the entire register
+		  contents. Write a bit-field as per the datasheet to write a
+		  portion of the register contents.
+
+pwm1_fallback	- PWM value in the range of 0 to 255 to be used when a fan is
+		  faulty.
+
+pwm1_ramp_rate	- PWM increment per second when the PWM value is changed.
+		  Accepted values are 8, 16, 32, or 255 (instantaneous).
