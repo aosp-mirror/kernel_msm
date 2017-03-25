@@ -117,7 +117,7 @@
 	};
 
 	qcom,msm-dai-mi2s {
-		dai_mi2s3: qcom,msm-dai-q6-mi2s-quat {
+		qcom,msm-dai-q6-mi2s-quat {
 			qcom,msm-mi2s-rx-lines = <2>; /* SD1 (1 << 1) */
 			qcom,msm-mi2s-tx-lines = <1>; /* SD0 (0 << 0) */
 			qcom,msm-mi2s-slave = <0>;
@@ -154,10 +154,10 @@
 		};
 	};
 
-	wcd934x_cdc: tavil_codec {
+	tavil_codec {
 		clocks = <&clock_audio clk_audio_pmi_clk>;
 		qcom,cdc-dmic-clk-drv-strength = <4>; /* 4mA */
-		wcd_spi_0: wcd_spi {
+		wcd_spi {
 			qcom,master-bus-num = <2>;
 		};
 		swr_master {
