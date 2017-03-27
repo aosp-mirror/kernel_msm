@@ -42,7 +42,9 @@
 #include <linux/irq.h>
 #ifdef HELIUMPLUS
 #include <soc/qcom/irq-helper.h>
+#ifdef CONFIG_SCHED_CORE_CTL
 #include <linux/sched/core_ctl.h>
+#endif
 #include <pld_snoc.h>
 #endif
 #include <linux/pm.h>
@@ -1559,9 +1561,11 @@ int hif_napi_cpu_blacklist(struct qca_napi_data *napid, enum qca_blacklist_op op
 		ref_count++;
 		rc = 0;
 		if (ref_count == 1) {
+#ifdef CONFIG_SCHED_CORE_CTL
 			rc = core_ctl_set_boost(true);
 			NAPI_DEBUG("boost_on() returns %d - refcnt=%d",
 				rc, ref_count);
+#endif
 			hif_napi_bl_irq(napid, true);
 		}
 		break;
@@ -1570,9 +1574,11 @@ int hif_napi_cpu_blacklist(struct qca_napi_data *napid, enum qca_blacklist_op op
 			ref_count--;
 		rc = 0;
 		if (ref_count == 0) {
+#ifdef CONFIG_SCHED_CORE_CTL
 			rc = core_ctl_set_boost(false);
 			NAPI_DEBUG("boost_off() returns %d - refcnt=%d",
 				   rc, ref_count);
+#endif
 			hif_napi_bl_irq(napid, false);
 		}
 		break;
