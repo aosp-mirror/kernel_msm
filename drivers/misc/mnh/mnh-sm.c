@@ -166,6 +166,18 @@ static struct mnh_sm_device *mnh_sm_dev;
 static int mnh_mipi_debug;
 static int mnh_freeze_state;
 
+/*
+ * bit [0] - bootloader console enabled
+ * bit [1] - kernel console enabled
+ * bit [2] - kernel stdout-to-console enabled
+ */
+enum {
+	MNH_BOOTARGS_BL_CONSOLE_ENABLE     = 1 << 0,
+	MNH_BOOTARGS_KERNEL_CONSOLE_ENABLE = 1 << 1,
+	MNH_BOOTARGS_STDOUT_CONSOLE_ENABLE = 1 << 2,
+};
+static unsigned int mnh_boot_args;
+
 /* callback when easel enters and leaves the active state */
 static hotplug_cb_t mnh_hotplug_cb;
 
@@ -702,6 +714,37 @@ static ssize_t mnh_sm_mipi_stop_store(struct device *dev,
 static DEVICE_ATTR(mipi_stop, S_IWUSR,
 		   NULL, mnh_sm_mipi_stop_store);
 
+static ssize_t mnh_sm_boot_args_show(struct device *dev,
+				 struct device_attribute *attr,
+				 char *buf)
+{
+	dev_dbg(mnh_sm_dev->dev, "Entering mnh_sm_boot_args_show...\n");
+
+	return scnprintf(buf, MAX_STR_COPY, "%d\n", mnh_boot_args);
+}
+
+static ssize_t mnh_sm_boot_args_store(struct device *dev,
+				  struct device_attribute *attr,
+				  const char *buf,
+				  size_t count)
+{
+	unsigned long val = 0;
+	int ret;
+
+	dev_dbg(mnh_sm_dev->dev, "Entering mnh_sm_boot_args_store...\n");
+
+	ret = mnh_sm_get_val_from_buf(buf, &val);
+	if (!ret) {
+		mnh_boot_args = val;
+		return count;
+	}
+
+	return -EINVAL;
+}
+
+static DEVICE_ATTR(boot_args, S_IWUSR | S_IRUGO,
+		mnh_sm_boot_args_show, mnh_sm_boot_args_store);
+
 
 static struct attribute *mnh_sm_dev_attributes[] = {
 	&dev_attr_poweron.attr,
@@ -715,6 +758,7 @@ static struct attribute *mnh_sm_dev_attributes[] = {
 	&dev_attr_debug_mipi.attr,
 	&dev_attr_freeze_state.attr,
 	&dev_attr_mipi_stop.attr,
+	&dev_attr_boot_args.attr,
 	NULL
 };
 
@@ -816,6 +860,10 @@ static int mnh_sm_download(void)
 			"%s: firmware download failed\n", __func__);
 		return ret;
 	}
+
+	/* set the boot_args mask */
+	mnh_config_write(HWIO_SCU_GP_ADDR(HWIO_SCU_BASE_ADDR, 2), 4,
+			 mnh_boot_args);
 
 	/*
 	 * Magic number setting to notify MNH that PCIE initialization
