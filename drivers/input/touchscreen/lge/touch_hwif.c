@@ -42,6 +42,7 @@ int touch_gpio_init(int pin, const char *name)
 
 	return ret;
 }
+EXPORT_SYMBOL(touch_gpio_init);
 
 void touch_gpio_direction_input(int pin)
 {
@@ -50,6 +51,7 @@ void touch_gpio_direction_input(int pin)
 	if (gpio_is_valid(pin))
 		gpio_direction_input(pin);
 }
+EXPORT_SYMBOL(touch_gpio_direction_input);
 
 void touch_gpio_direction_output(int pin, int value)
 {
@@ -58,6 +60,7 @@ void touch_gpio_direction_output(int pin, int value)
 	if (gpio_is_valid(pin))
 		gpio_direction_output(pin, value);
 }
+EXPORT_SYMBOL(touch_gpio_direction_output);
 
 /* -- power -- */
 int touch_power_init(struct device *dev)
@@ -84,6 +87,7 @@ int touch_power_init(struct device *dev)
 
 	return 0;
 }
+EXPORT_SYMBOL(touch_power_init);
 
 void touch_power_vdd(struct device *dev, int value)
 {
@@ -102,6 +106,7 @@ void touch_power_vdd(struct device *dev, int value)
 	if (ret)
 		TOUCH_E("ret = %d\n", ret);
 }
+EXPORT_SYMBOL(touch_power_vdd);
 
 void touch_power_vio(struct device *dev, int value)
 {
@@ -120,7 +125,7 @@ void touch_power_vio(struct device *dev, int value)
 	if (ret)
 		TOUCH_E("ret = %d\n", ret);
 }
-
+EXPORT_SYMBOL(touch_power_vio);
 
 int touch_bus_init(struct device *dev, int buf_size)
 {
@@ -185,6 +190,7 @@ int touch_bus_init(struct device *dev, int buf_size)
 
 	return ret;
 }
+EXPORT_SYMBOL(touch_bus_init);
 
 int touch_bus_read(struct device *dev, struct touch_bus_msg *msg)
 {
@@ -198,6 +204,7 @@ int touch_bus_read(struct device *dev, struct touch_bus_msg *msg)
 
 	return ret;
 }
+EXPORT_SYMBOL(touch_bus_read);
 
 int touch_bus_write(struct device *dev, struct touch_bus_msg *msg)
 {
@@ -211,6 +218,7 @@ int touch_bus_write(struct device *dev, struct touch_bus_msg *msg)
 
 	return ret;
 }
+EXPORT_SYMBOL(touch_bus_write);
 
 int touch_bus_xfer(struct device *dev, struct touch_xfer_msg *xfer)
 {
@@ -226,6 +234,7 @@ int touch_bus_xfer(struct device *dev, struct touch_xfer_msg *xfer)
 
 	return ret;
 }
+EXPORT_SYMBOL(touch_bus_xfer);
 
 void touch_enable_irq_wake(unsigned int irq)
 {
@@ -294,6 +303,7 @@ int touch_boot_mode(void)
 */
 	return ret;
 }
+EXPORT_SYMBOL(touch_boot_mode);
 
 int touch_boot_mode_check(struct device *dev)
 {
@@ -326,6 +336,7 @@ int touch_boot_mode_check(struct device *dev)
 
 	return ret;
 }
+EXPORT_SYMBOL(touch_boot_mode_check);
 
 enum touch_device_type touch_get_device_type(void)
 {
@@ -335,6 +346,7 @@ enum touch_device_type touch_get_device_type(void)
 
 	return ret;
 }
+EXPORT_SYMBOL(touch_get_device_type);
 
 int touch_bus_device_init(struct touch_hwif *hwif, void *driver)
 {
@@ -347,6 +359,7 @@ int touch_bus_device_init(struct touch_hwif *hwif, void *driver)
 
 	return -ENODEV;
 }
+EXPORT_SYMBOL(touch_bus_device_init);
 
 void touch_bus_device_exit(struct touch_hwif *hwif)
 {
@@ -355,3 +368,4 @@ void touch_bus_device_exit(struct touch_hwif *hwif)
 	else if (hwif->bus_type == HWIF_SPI)
 		touch_spi_device_exit(hwif);
 }
+EXPORT_SYMBOL(touch_bus_device_exit);

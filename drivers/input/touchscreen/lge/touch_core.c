@@ -33,6 +33,7 @@
 #include <touch_common.h>
 
 u32 touch_debug_mask = BASE_INFO;
+EXPORT_SYMBOL(touch_debug_mask);
 /* Debug mask value
  * usage: echo [debug_mask] > /sys/module/touch_core/parameters/debug_mask
  */
@@ -167,6 +168,7 @@ void touch_report_all_event(struct touch_core_data *ts)
 	}
 	ts->is_cancel = 0;
 }
+EXPORT_SYMBOL(touch_report_all_event);
 
 static void touch_core_initialize(struct touch_core_data *ts)
 {

@@ -39,6 +39,7 @@ void touch_msleep(unsigned int msecs)
 	else
 		usleep_range(msecs * 1000, msecs * 1000);
 }
+EXPORT_SYMBOL(touch_msleep);
 
 void touch_interrupt_control(struct device *dev, int on_off)
 {
@@ -60,3 +61,4 @@ void touch_interrupt_control(struct device *dev, int on_off)
 		}
 	}
 }
+EXPORT_SYMBOL(touch_interrupt_control);

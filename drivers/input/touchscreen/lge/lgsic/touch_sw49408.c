@@ -3104,7 +3104,6 @@ static ssize_t show_te_test(struct device *dev, char *buf)
 
 static ssize_t show_te_result(struct device *dev, char *buf)
 {
-	struct touch_core_data *ts = to_touch_core(dev);
 	struct sw49408_data *d = to_sw49408_data(dev);
 	int ret = 0;
 
@@ -3112,12 +3111,16 @@ static ssize_t show_te_result(struct device *dev, char *buf)
 	ret = snprintf(buf + ret, PAGE_SIZE, "DDIC Test result : %s\n",
 			d->te_ret ? "Fail" : "Pass");
 
+#ifdef CONFIG_LGE_TOUCH_LGSIC_SW49408_PRD
 	if (d->te_write_log == DO_WRITE_LOG) {
+		struct touch_core_data *ts = to_touch_core(dev);
+
 		mutex_lock(&ts->lock);
 		sw49408_te_test_logging(d->dev, buf);
 		mutex_unlock(&ts->lock);
 		d->te_write_log = LOG_WRITE_DONE;
 	}
+#endif
 
 	return ret;
 }
@@ -3234,7 +3237,7 @@ static int sw49408_register_sysfs(struct device *dev)
 	if (ret < 0)
 		TOUCH_E("sw49408 sysfs register failed\n");
 
-	sw49408_prd_register_sysfs(dev);
+	//sw49408_prd_register_sysfs(dev);
 	sw49408_sic_abt_register_sysfs(&ts->kobj);
 
 	return 0;
