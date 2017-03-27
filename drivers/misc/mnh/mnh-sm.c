@@ -943,6 +943,9 @@ static int mnh_sm_set_state_locked(int state)
 		if (ret)
 			break;
 
+		/* use max CPU frequency for fast boot */
+		mnh_cpu_freq_change(CPU_FREQ_950);
+
 		/* have we downloaded firmware already? */
 		if (mnh_sm_dev->firmware_downloaded)
 			ret = mnh_sm_resume();
