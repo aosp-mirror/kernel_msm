@@ -167,6 +167,9 @@ struct stmvl53l0_data {
     int offset_kvalue;
     FixPoint1616_t xtalk_kvalue;
 #endif
+    int offset_count;
+    int xtalk_count;
+    const char *calib_file;
 
     /* Custom values set by app */
     FixPoint1616_t signalRateLimit;
@@ -246,5 +249,6 @@ struct stmvl53l0_module_fn_t {
 
 int stmvl53l0_setup(struct stmvl53l0_data *data);
 void stmvl53l0_cleanup(struct stmvl53l0_data *data);
+int stmvl53l0_read_calibration(struct stmvl53l0_data *vl53l0_data);
 
 #endif /* STMVL53L0_H */

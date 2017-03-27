@@ -95,6 +95,16 @@ static int Laser_parse_dt(struct device *dev, struct stmvl53l0_data *data)
     int sensor_cali_size = 0;
     int i = 0;
 
+    if (of_property_read_string(dt, "laser,calib-file", &data->calib_file))
+        data->calib_file = NULL;
+    else
+        vl53l0_errmsg("calib_file = %s\n", data->calib_file);
+
+    if (!gpio_is_valid(data->pwdn_gpio))
+        vl53l0_errmsg("pwdn_gpio value is not valid\n");
+    else
+        vl53l0_dbgmsg("pwdn_gpio = %d\n", data->pwdn_gpio);
+
     data->pwdn_gpio = of_get_named_gpio(dt, "laser,pwdn-gpio", 0);
     if (!gpio_is_valid(data->pwdn_gpio))
         vl53l0_errmsg("pwdn_gpio value is not valid\n");
@@ -209,6 +219,7 @@ static int Laser_pinctrl_init(struct stmvl53l0_data *laser_data)
     return 0;
 }
 #endif
+
 // HTC ADD //
 static int stmvl53l0_probe(struct i2c_client *client,
         const struct i2c_device_id *id)
@@ -240,6 +251,8 @@ static int stmvl53l0_probe(struct i2c_client *client,
     if (client->dev.of_node) {
         Laser_parse_dt(&client->dev, vl53l0_data);
     }
+    if (vl53l0_data->calib_file)
+        stmvl53l0_read_calibration(vl53l0_data);
 #endif
     /* setup bus type */
     vl53l0_data->bus_type = I2C_BUS;

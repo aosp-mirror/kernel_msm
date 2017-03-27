@@ -107,6 +107,7 @@ static uint8_t g_PhaseCal = 0;
 static FixPoint1616_t g_XTalkCompensationRateMegaCps = 0;
 
 struct timeval start_tv, stop_tv;
+#define CALIB_MAX_SIZE 32
 #endif //HTC
 
 /*
@@ -475,6 +476,83 @@ static int stmvl53l0_start(struct stmvl53l0_data *data, uint8_t scaling,
         init_mode_e mode);
 static int stmvl53l0_stop(struct stmvl53l0_data *data);
 static int stmvl53l0_config_use_case(struct stmvl53l0_data *data);
+
+/* +Taimen */
+int stmvl53l0_read_calibration(struct stmvl53l0_data *data) {
+    struct file *f;
+    char buf[CALIB_MAX_SIZE];
+    mm_segment_t fs;
+    int ptr;
+    int i;
+    ssize_t rc;
+
+    f = filp_open(data->calib_file, O_RDONLY, 0);
+    if (f == NULL || IS_ERR(f)) {
+        vl53l0_errmsg("Could not read calibration from %s\n",
+                data->calib_file);
+        return -1;
+    }
+
+    vl53l0_errmsg("Reading calibration from %s\n", data->calib_file);
+
+    fs = get_fs();
+    set_fs(get_ds());
+
+    rc = vfs_read(f, buf, sizeof(buf), &f->f_pos);
+    if (!rc) {
+        vl53l0_errmsg("Failed to read calibration from %s\n",
+                data->calib_file);
+        return -1;
+    }
+
+    /* init buffer*/
+    data->VhvSettings     = 0xFF;
+    data->PhaseCal        = 0xFF;
+    data->refSpadCount    = 0xFF;
+    data->isApertureSpads = 0xFF;
+    data->offset_kvalue   = 0xFF;
+    data->xtalk_kvalue    = 0xFFFF;
+
+    vl53l0_errmsg("========== read data ==========\n");
+    for (i = 0; i < CALIB_MAX_SIZE; i += 2)
+        vl53l0_errmsg("%d=%02x%02x\n", i, buf[i], buf[i+1]);
+
+    vl53l0_errmsg("===== read (%02d) byte =====\n", (int)rc);
+
+    ptr = 0;
+    data->VhvSettings =
+        (buf[ptr] << 0x08) | buf[ptr+1];  ptr=ptr+2;
+    data->PhaseCal =
+        (buf[ptr] << 0x08) | buf[ptr+1];  ptr=ptr+2;
+    data->refSpadCount =
+        (buf[ptr] << 0x08) | buf[ptr+1];  ptr=ptr+2;
+    data->isApertureSpads =
+        (buf[ptr] << 0x08) | buf[ptr+1];  ptr=ptr+2;
+    data->offset_kvalue =
+        (buf[ptr] << 0x08) | buf[ptr+1];  ptr=ptr+2;
+    data->xtalk_kvalue =
+        (buf[ptr] << 0x08) | buf[ptr+1];  ptr=ptr+2;
+    data->offset_count =
+        (buf[ptr] << 0x08) | buf[ptr+1];  ptr=ptr+2;
+    data->xtalk_count =
+        (buf[ptr] << 0x08) | buf[ptr+1];  ptr=ptr+2;
+
+    vl53l0_errmsg("VhvSettings = %u\n", data->VhvSettings);
+    vl53l0_errmsg("PhaseCal = %u\n", data->PhaseCal);
+    vl53l0_errmsg("refSpadCount = %u\n", data->refSpadCount);
+    vl53l0_errmsg("isApertureSpads = %u\n", data->isApertureSpads);
+    vl53l0_errmsg("offset_kvalue = %u\n", data->offset_kvalue);
+    vl53l0_errmsg("xtalk_kvalue = %u\n", data->xtalk_kvalue);
+    vl53l0_errmsg("offset_count = %u\n", data->offset_count);
+    vl53l0_errmsg("xtalk_count = %u\n", data->xtalk_count);
+    vl53l0_errmsg("========== read done ==========\n");
+
+    set_fs(fs);
+    filp_close(f, NULL);
+    data->cali_status = 0x31;
+    return 0;
+}
+/* -Taimen */
 
 #ifdef CALIBRATION_FILE
 static void stmvl53l0_read_calibration_file(struct stmvl53l0_data *data)
@@ -2253,7 +2331,9 @@ static int stmvl53l0_ioctl_handler(struct file *file,
             break;
             /* Get all range data */
         case VL53L0_IOCTL_GETDATAS:
-            vl53l0_dbgmsg("VL53L0_IOCTL_GETDATAS\n");
+            vl53l0_dbgmsg("VL53L0_IOCTL_GETDATAS=%4d, status=0x%x\n",
+                    data->rangeData.RangeMilliMeter,
+                    data->rangeData.RangeStatus);
             if (copy_to_user((VL53L0_RangingMeasurementData_t *)p,
                         &(data->rangeData),
                         sizeof(VL53L0_RangingMeasurementData_t))) {
@@ -2751,6 +2831,17 @@ static int stmvl53l0_init_client(struct stmvl53l0_data *data)
         /* Device Initialization */
     }
 
+    /* +Taimen */
+    if (data->calib_file) {
+        if (stmvl53l0_read_calibration(data) == 0) {
+            g_VhvSettings = data->VhvSettings;
+            g_PhaseCal = data->PhaseCal;
+            g_refSpadCount = data->refSpadCount;
+            g_isApertureSpads = data->isApertureSpads;
+        }
+    }
+    /* -Taimen */
+
     /* Ref calibration */
     if (Status == VL53L0_ERROR_NONE && data->reset) {
         if(g_VhvSettings == 0 && g_PhaseCal == 0) {
@@ -3070,6 +3161,8 @@ static int stmvl53l0_start(struct stmvl53l0_data *data,
     if (data->deviceMode == VL53L0_DEVICEMODE_CONTINUOUS_TIMED_RANGING )
         papi_func_tbl->SetInterMeasurementPeriodMilliSeconds(vl53l0_dev,
                                                     data->interMeasurems);
+
+    papi_func_tbl->SetDeviceMode(vl53l0_dev, data->deviceMode);
 
     papi_func_tbl->ClearInterruptMask(vl53l0_dev, 0);
 
