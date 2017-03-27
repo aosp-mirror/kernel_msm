@@ -43,6 +43,9 @@
 
 #include <linux/notifier.h>
 #include <linux/reboot.h>
+#if defined(CONFIG_FB)
+#include <linux/fb.h>
+#endif
 
 static int pat9127_init_input_data(void);
 
@@ -76,6 +79,9 @@ struct pat9127_linux_data_t {
 	struct pinctrl_state *pinctrl_state_active;
 	struct pinctrl_state *pinctrl_state_suspend;
 	struct pinctrl_state *pinctrl_state_release;
+#if defined(CONFIG_FB)
+	struct notifier_block fb_notif;
+#endif
 };
 
 static struct pat9127_linux_data_t pat9127data;
@@ -93,8 +99,16 @@ uint8_t shutter_c = 0, shutter_f = 0;
 int16_t Calib_res_x = 0;
 
 struct mutex irq_mutex;
+int en_irq_cnt = 0; /*Calculate times of enable irq*/
+int dis_irq_cnt = 0;/*Calculate times of disable irq*/
 
 static void pat9127_stop(void);
+static int pat9127_suspend(struct device *dev);
+static int pat9127_resume(struct device *dev);
+#if defined(CONFIG_FB)
+static int fb_notifier_callback(struct notifier_block *self,
+				 unsigned long event, void *data);
+#endif
 
 /*notify_sys: for solving current leaking problem during devices power off*/
 static int pat9127_notify_sys(struct notifier_block *this,
@@ -262,14 +276,16 @@ static irqreturn_t pixart_pat9127_irq(int irq, void *handle)
 static void pat9127_stop(void)
 {
 	int err = 0;
-	uint8_t tmp_1 = 0;
+	int ret = 0;
+
 	pr_debug(">>> %s (%d)\n", __func__, __LINE__);
 	disable_irq(pat9127data.client->irq);
 
-	OTS_WriteRead_Reg(PIXART_PAT9127_SENSOR_MODE_SELECT_REG,
-		PIXART_PAT9127_SENSOR_DEFAULT_MODE); // Set btn, motion to non-open drain
-	tmp_1 = OTS_Read_Reg(PIXART_PAT9127_SENSOR_MODE_SELECT_REG);
-	pr_debug("[PAT9127]: pat9127 open drain mode motion: 0x%2x. \n", tmp_1);
+	/*Write Register for Shut Down Mode*/
+	ret = pat9127_disable_mot(PIXART_PAT9127_SLEEP_MODE_DETECT_FREQ);
+	if (ret != 0){
+		pr_err("[PAT9127]: Disable Motion FAIL.");
+	}
 
 	/*Setting Motion Interrupt to pull down*/
 
@@ -355,8 +371,8 @@ void pat9127_get_calib_data(void) {
 	char* ptr;
 	int idx = 0;
 	ptr = strstr(saved_command_line, "androidboot.ots=");
-	ptr += strlen("androidboot.ots=");
 	if (ptr != NULL) {
+		ptr += strlen("androidboot.ots=");
 		pr_debug("[PAT9127]: %s \n", ptr);
 
 		idx = 0;
@@ -704,6 +720,15 @@ static int pat9127_i2c_probe(struct i2c_client *client,
 	}
 
 	pat9127data.last_jiffies = jiffies;
+
+#if defined(CONFIG_FB)
+	pat9127data.fb_notif.notifier_call = fb_notifier_callback;
+
+	err = fb_register_client(&pat9127data.fb_notif);
+	if (err)
+		dev_err(&client->dev, "Unable to register fb_notifier: %d\n", err);
+#endif
+
 	return 0;
 
 error_return:
@@ -712,20 +737,96 @@ error_return:
 
 static int pat9127_i2c_remove(struct i2c_client *client)
 {
+#if defined(CONFIG_FB)
+	if (fb_unregister_client(&pat9127data.fb_notif))
+		dev_err(&client->dev, "Error occurred while unregistering fb_notifier.\n");
+#endif
 	return 0;
 }
 
 static int pat9127_suspend(struct device *dev)
 {
-	pr_debug("%s (%d) : pat9127 suspend\n", __func__, __LINE__);
+	int ret = 0;
+	printk(KERN_ERR "[PAT9127]%s, start\n", __func__);
+	if (dis_irq_cnt == 0){
+		disable_irq(pat9127data.client->irq);
+		dis_irq_cnt++;
+	}
+	else {
+		dev_info(dev, "Already in suspend state\n");
+		return 0;
+	}
+	en_irq_cnt = 0;
+
+	/*Write Register for Suspend Mode*/
+	ret = pat9127_disable_mot(PIXART_PAT9127_SLEEP_MODE_DETECT_FREQ_DEFAULT);
+	if (ret != 0){
+		pr_err("[PAT9127]: Disable Motion FAIL.");
+	}
 	return 0;
 }
 
 static int pat9127_resume(struct device *dev)
 {
-	pr_debug("%s (%d) : pat9127 resume\n", __func__, __LINE__);
+	int ret = 0;
+	printk(KERN_ERR "[PAT9127]%s, start\n", __func__);
+
+	ret = pat9127_enable_mot();
+	if (ret != 0){
+		pr_err("[PAT9127]: Enable Motion FAIL.");
+		return 0;
+	}
+
+	if (en_irq_cnt == 0){
+		enable_irq(pat9127data.client->irq);
+		en_irq_cnt++;
+	}
+	else {
+		dev_info(dev, "Already in wake state\n");
+		return 0;
+	}
+	dis_irq_cnt = 0;
+
 	return 0;
 }
+
+#if defined(CONFIG_FB)
+/*******************************************************************************
+*  Name: fb_notifier_callback
+*  Brief:
+*  Input:
+*  Output:
+*  Return:
+*******************************************************************************/
+static int fb_notifier_callback(struct notifier_block *self,
+				 unsigned long event, void *data)
+{
+	struct fb_event *evdata = data;
+	int *blank;
+	struct pat9127_linux_data_t *pat9127_data =
+		container_of(self, struct pat9127_linux_data_t, fb_notif);
+
+	if (evdata && evdata->data && event == FB_EVENT_BLANK &&
+			pat9127_data && pat9127_data->client) {
+		blank = evdata->data;
+		switch (*blank) {
+		case FB_BLANK_UNBLANK:
+			pat9127_resume(&pat9127_data->client->dev);
+		break;
+
+		case FB_BLANK_POWERDOWN:
+		case FB_BLANK_VSYNC_SUSPEND:
+			pat9127_suspend(&pat9127_data->client->dev);
+		break;
+
+		default:
+		break;
+		}
+	}
+
+	return 0;
+}
+#endif
 
 static const struct i2c_device_id pat9127_device_id[] = {
 	{PAT9127_DEV_NAME, 0},
@@ -735,8 +836,10 @@ static const struct i2c_device_id pat9127_device_id[] = {
 MODULE_DEVICE_TABLE(i2c, pat9127_device_id);
 
 static const struct dev_pm_ops pat9127_pm_ops = {
+#if (!defined(CONFIG_FB))
 	.suspend = pat9127_suspend,
 	.resume = pat9127_resume
+#endif
 };
 
 static struct of_device_id pixart_pat9127_match_table[] = {

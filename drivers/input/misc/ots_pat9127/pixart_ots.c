@@ -57,11 +57,14 @@ bool OTS_Sensor_Init(int check_calib, uint8_t s_c, uint8_t s_f, uint8_t btn_hi,
 {
 	uint8_t sensor_pid = 0;
 	bool read_id_ok = false;
-	uint8_t tmp_1 = 0;
+	uint8_t frame_avg = 0;
+	int ret = 0;
+	int btn_dis_val = 35; /*For check reboot issue*/
+
 	/* Read sensor_pid in address 0x00 to check if
 	the serial link is valid, PID should be 0x31 */
 	sensor_pid = OTS_Read_Reg(PIXART_PAT9127_PRODUCT_ID1_REG);
-	pr_debug("[PAT9127]: sensor_pid = 0x%02x. \n", sensor_pid);
+	pr_debug("[PAT9127]: Sensor_pid = 0x%02x. \n", sensor_pid);
 
 	if (sensor_pid == PIXART_PAT9127_SENSOR_ID) {
 		read_id_ok = true;
@@ -74,11 +77,10 @@ bool OTS_Sensor_Init(int check_calib, uint8_t s_c, uint8_t s_f, uint8_t btn_hi,
 		/* sleep1 mode frequency and enter time */
 		/* OTS_WriteRead_Reg(0x0A, 0x77); */
 
-		/* Set sensor to drive mode*/
-		OTS_WriteRead_Reg(PIXART_PAT9127_SENSOR_MODE_SELECT_REG,
-			PIXART_PAT9127_SENSOR_SET_MODE);
-		tmp_1 = OTS_Read_Reg(PIXART_PAT9127_SENSOR_MODE_SELECT_REG);
-		pr_debug("[PAT9127]: pat9127 non-open drain mode motion: 0x%2x. \n", tmp_1);
+		ret = pat9127_enable_mot();
+		if (ret != 0){
+			pr_err("[PAT9127]: Enable Motion FAIL.");
+		}
 
 		OTS_WriteRead_Reg(PIXART_PAT9127_SET_CPI_RES_Y_REG,
 			PIXART_PAT9127_CPI_RESOLUTION_Y);/* y-axis resolution */
@@ -92,22 +94,137 @@ bool OTS_Sensor_Init(int check_calib, uint8_t s_c, uint8_t s_f, uint8_t btn_hi,
 		and save them to EEPROM. */
 		/* These settings need be read from EEPROM and
 		written to PAT9127 whenever sensor be reset or powered on. */
+
+		/*Read frame average for judging reboot issue*/
+		frame_avg = OTS_Read_Reg(PIXART_PAT9127_FRAME_AVG_REG);
+		pr_err("[PAT9127]: Before Change, FA: %d, HiTh: %d, LoTh: %d, s_c: %d.\n",
+			frame_avg, btn_hi, btn_lo, s_c);
 		if (check_calib == 1) {
-			OTS_WriteRead_Reg(PIXART_PAT9127_SHUTTER_C_REG, s_c);	/* btndet_hith */
-			OTS_WriteRead_Reg(PIXART_PAT9127_SHUTTER_F_REG, s_f);	/* btndet_loth */
-			OTS_WriteRead_Reg(PIXART_PAT9127_BTN_HITHD_REG, btn_hi);	/* btndet_hith */
-			OTS_WriteRead_Reg(PIXART_PAT9127_BTN_LOTHD_REG, btn_lo);	/* btndet_loth */
-			OTS_WriteRead_Reg(PIXART_PAT9127_SET_CPI_RES_X_REG, res_x);	/* x-axis resolution */
+			if (frame_avg < btn_lo) {
+				pr_err("[PAT9127]:Be4 tuning,FA: %d,HiTh: %d,LoTh: %d,s_c: %d.\n",
+					frame_avg, btn_hi, btn_lo, s_c);
+                                while(frame_avg < btn_lo) {
+					s_c--;
+					if(s_c == 0xff) {
+						s_c = 0x00;
+						break;
+					}
+					OTS_WriteRead_Reg(PIXART_PAT9127_SHUTTER_C_REG, s_c);
+					delay(150);
+					frame_avg = OTS_Read_Reg(PIXART_PAT9127_FRAME_AVG_REG);
+				}
+				pr_err("[PAT9127]:After tuning,FA: %d,HiTh: %d,LoTh: %d,s_c: %d.\n",
+					frame_avg, btn_hi, btn_lo, s_c);
+				if (frame_avg <= btn_dis_val) {
+					btn_hi = 0x00;
+					btn_lo = 0x00;
+				}
+				else {
+					btn_hi = frame_avg - 10;
+					btn_lo = frame_avg - 20;
+				}
+			}
+			pr_err("[PAT9127]:After Change Hi/LoTh,FA: %d,HiTh: %d,LoTh: %d,s_c: %d.\n",
+				frame_avg, btn_hi, btn_lo, s_c);
+			OTS_WriteRead_Reg(PIXART_PAT9127_SHUTTER_C_REG, s_c);
+			OTS_WriteRead_Reg(PIXART_PAT9127_SHUTTER_F_REG, s_f);
+			OTS_WriteRead_Reg(PIXART_PAT9127_BTN_HITHD_REG, btn_hi);
+			OTS_WriteRead_Reg(PIXART_PAT9127_BTN_LOTHD_REG, btn_lo);
+			OTS_WriteRead_Reg(PIXART_PAT9127_SET_CPI_RES_X_REG, res_x);
 		}
 		else {
-			OTS_WriteRead_Reg(PIXART_PAT9127_BTN_HITHD_REG, 0x00);	/* btndet_hith */
-			OTS_WriteRead_Reg(PIXART_PAT9127_BTN_LOTHD_REG, 0x00);	/* btndet_loth */
+			OTS_WriteRead_Reg(PIXART_PAT9127_BTN_HITHD_REG, 0x00);
+			OTS_WriteRead_Reg(PIXART_PAT9127_BTN_LOTHD_REG, 0x00);
 		}
-		/*default frame average */
-		tmp_1 = OTS_Read_Reg(PIXART_PAT9127_FRAME_AVG_REG);
-		pr_err("[PAT9127]: frame Avg: 0x%2x\n", tmp_1);
 	}
 	return read_id_ok;
+}
+
+int pat9127_disable_mot(int16_t detect_freq)
+{
+	uint8_t tmp_1 = 0;
+	uint8_t sensor_pid = 0;
+
+	sensor_pid = OTS_Read_Reg(PIXART_PAT9127_PRODUCT_ID1_REG);
+	if (sensor_pid == PIXART_PAT9127_SENSOR_ID) {
+		OTS_WriteRead_Reg(PIXART_PAT9127_SENSOR_MODE_SELECT_REG,
+			PIXART_PAT9127_SENSOR_DEFAULT_MODE); // Set motion to open drain
+		tmp_1 = OTS_Read_Reg(PIXART_PAT9127_SENSOR_MODE_SELECT_REG);
+		pr_debug("[PAT9127]: Open drain mode motion: 0x%2x. \n", tmp_1);
+
+		OTS_Write_Reg(PIXART_PAT9127_SELECT_BANK_REG,
+			PIXART_PAT9127_SELECT_BANK_VAL2);
+
+		OTS_WriteRead_Reg(PIXART_PAT9127_BANK_FTWK,
+			PIXART_PAT9127_BANK_FTWK_VAL1);
+
+		OTS_WriteRead_Reg(PIXART_PAT9127_BANK_FTWK_D2,
+			PIXART_PAT9127_BANK_FTWK_D2_VAL1);
+
+		OTS_WriteRead_Reg(PIXART_PAT9127_BANK_CTB,
+			PIXART_PAT9127_BANK_CTB_VAL1);
+
+		OTS_WriteRead_Reg(PIXART_PAT9127_BANK_HI_SAD_K,
+			PIXART_PAT9127_BANK_HI_SAD_K_VAL1);
+
+		OTS_Write_Reg(PIXART_PAT9127_SELECT_BANK_REG,
+			PIXART_PAT9127_SELECT_BANK_VAL1);
+
+		delay(1);				  /* delay 1ms */
+
+		OTS_WriteRead_Reg(PIXART_PAT9127_SLEEP2_MODE_FREQ_REG,
+			detect_freq);
+
+		OTS_Write_Reg(PIXART_PAT9127_SLEEP_MODE_SELECT_REG,
+			PIXART_PAT9127_FORCE_ENTER_SLEEP2_MODE);
+		return 0;
+	}
+	else
+		return (-1);
+}
+
+int pat9127_enable_mot(void)
+{
+	uint8_t tmp_1 = 0;
+	uint8_t sensor_pid = 0;
+
+	sensor_pid = OTS_Read_Reg(PIXART_PAT9127_PRODUCT_ID1_REG);
+	if (sensor_pid == PIXART_PAT9127_SENSOR_ID) {
+
+		OTS_WriteRead_Reg(PIXART_PAT9127_SENSOR_MODE_SELECT_REG,
+				PIXART_PAT9127_SENSOR_SET_MODE); // Set motion to drive mode
+		tmp_1 = OTS_Read_Reg(PIXART_PAT9127_SENSOR_MODE_SELECT_REG);
+		pr_debug("[PAT9127]: Drive mode motion: 0x%2x. \n", tmp_1);
+
+		/*Write Register for Active Mode*/
+		OTS_Write_Reg(PIXART_PAT9127_SELECT_BANK_REG,
+			PIXART_PAT9127_SELECT_BANK_VAL2);
+
+		OTS_WriteRead_Reg(PIXART_PAT9127_BANK_FTWK,
+			PIXART_PAT9127_BANK_FTWK_DEFAULT_VAL);
+
+		OTS_WriteRead_Reg(PIXART_PAT9127_BANK_FTWK_D2,
+			PIXART_PAT9127_BANK_FTWK_D2_DEFAULT_VAL);
+
+		OTS_WriteRead_Reg(PIXART_PAT9127_BANK_CTB,
+			PIXART_PAT9127_BANK_CTB_DEFAULT_VAL);
+
+		OTS_WriteRead_Reg(PIXART_PAT9127_BANK_HI_SAD_K,
+			PIXART_PAT9127_BANK_HI_SAD_K_DEFAULT_VAL);
+
+		OTS_Write_Reg(PIXART_PAT9127_SELECT_BANK_REG,
+			PIXART_PAT9127_SELECT_BANK_VAL1);
+
+		delay(1);				  /* delay 1ms */
+
+		OTS_WriteRead_Reg(PIXART_PAT9127_SLEEP_MODE_SELECT_REG,
+			PIXART_PAT9127_WAKEUP_MODE);
+		tmp_1 = OTS_Read_Reg(PIXART_PAT9127_SLEEP_MODE_SELECT_REG);
+		pr_debug("[PAT9127]: Enable sleep1 and disable sleep2 mode: 0x%2x. \n", tmp_1);
+		return 0;
+	}
+	else
+		return (-1);
 }
 
 /* Read motion */
