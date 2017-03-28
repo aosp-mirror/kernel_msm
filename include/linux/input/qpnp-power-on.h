@@ -58,6 +58,8 @@ enum pon_restart_reason {
 	PON_RESTART_REASON_DMVERITY_CORRUPTED	= 0x04,
 	PON_RESTART_REASON_DMVERITY_ENFORCE	= 0x05,
 	PON_RESTART_REASON_KEYS_CLEAR		= 0x06,
+	PON_RESTART_REASON_PANIC                = 0x07,
+	PON_RESTART_REASON_WDT                  = 0x08,
 	/* Added by HTC; Available range of PMIC SPARE is 0x0 ~ 0x7f.
 	 * Using 0x6f ~ 0x06 backward to avoid conflict with QCOM's usage.
 	 */
