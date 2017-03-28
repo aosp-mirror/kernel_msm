@@ -188,7 +188,6 @@ void register_shrinker(struct shrinker *shrinker)
 EXPORT_SYMBOL(register_shrinker);
 
 
-late_initcall(add_shrinker_debug);
 
 /*
  * Remove one
