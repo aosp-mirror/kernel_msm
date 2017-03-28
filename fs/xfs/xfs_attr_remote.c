@@ -338,7 +338,7 @@ xfs_attr_rmtval_get(
 	struct xfs_buf		*bp;
 	xfs_dablk_t		lblkno = args->rmtblkno;
 	char			*dst = args->value;
-	int			valuelen = args->valuelen;
+	int			valuelen;
 	int			nmap;
 	int			error;
 	int			blkcnt = args->rmtblkcnt;
@@ -348,7 +348,9 @@ xfs_attr_rmtval_get(
 	trace_xfs_attr_rmtval_get(args);
 
 	ASSERT(!(args->flags & ATTR_KERNOVAL));
+	ASSERT(args->rmtvaluelen == args->valuelen);
 
+	valuelen = args->rmtvaluelen;
 	while (valuelen > 0) {
 		nmap = ATTR_RMTVALUE_MAPSIZE;
 		error = xfs_bmapi_read(args->dp, (xfs_fileoff_t)lblkno,
@@ -416,7 +418,7 @@ xfs_attr_rmtval_set(
 	 * attributes have headers, we can't just do a straight byte to FSB
 	 * conversion and have to take the header space into account.
 	 */
-	blkcnt = xfs_attr3_rmt_blocks(mp, args->valuelen);
+	blkcnt = xfs_attr3_rmt_blocks(mp, args->rmtvaluelen);
 	error = xfs_bmap_first_unused(args->trans, args->dp, blkcnt, &lfileoff,
 						   XFS_ATTR_FORK);
 	if (error)
@@ -481,7 +483,7 @@ xfs_attr_rmtval_set(
 	 */
 	lblkno = args->rmtblkno;
 	blkcnt = args->rmtblkcnt;
-	valuelen = args->valuelen;
+	valuelen = args->rmtvaluelen;
 	while (valuelen > 0) {
 		struct xfs_buf	*bp;
 		xfs_daddr_t	dblkno;
