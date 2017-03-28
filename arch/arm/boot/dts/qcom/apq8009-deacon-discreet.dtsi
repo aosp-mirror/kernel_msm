@@ -135,9 +135,15 @@
 &pm8916_chg {
         status = "ok";
         qcom,btc-disabled;
-	/delete-property/ qcom,charging-disabled;
 };
 
+/{
+	mtp_batterydata: qcom,battery-data {
+		qcom,rpull-up-kohm = <100>;
+                qcom,vref-batt-therm = <1800000>;
+		#include "batterydata-deacon-3v8-360mah.dtsi"
+	};
+};
 
 &pm8916_bms {
         status = "ok";
