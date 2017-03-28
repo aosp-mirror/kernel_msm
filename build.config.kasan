@@ -18,10 +18,12 @@ function update_kasan_config() {
 ARCH=arm64
 BRANCH=android-msm-marlin-3.18
 CROSS_COMPILE=aarch64-linux-android-
+CROSS_COMPILE_ARM32=arm-linux-androideabi-
 DEFCONFIG=marlin_defconfig
 KERNEL_DIR=private/msm-google
 POST_DEFCONFIG_CMDS="update_kasan_config"
 LINUX_GCC_CROSS_COMPILE_PREBUILTS_BIN=prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin
+LINUX_GCC_CROSS_COMPILE_ARM32_PREBUILTS_BIN=prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9/bin
 FILES="
 arch/arm64/boot/Image.gz-dtb
 vmlinux
