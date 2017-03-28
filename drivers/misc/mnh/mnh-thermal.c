@@ -14,7 +14,7 @@
 *
 */
 
-#define DEBUG
+/* #define DEBUG */
 
 #include <linux/clk.h>
 #include <linux/delay.h>
