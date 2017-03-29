@@ -92,7 +92,7 @@ HW_OUTx(HWIO_PCIE_SS_BASE_ADDR, PCIE_SS, reg, inst, val)
 #define HW_MNH_DT_DOWNLOAD		0x40880000
 #define HW_MNH_RAMDISK_DOWNLOAD		0x40890000
 /* Firmware download related definitions */
-#define IMG_DOWNLOAD_MAX_SIZE		(2000 * 1024)
+#define IMG_DOWNLOAD_MAX_SIZE		(4000 * 1024)
 #define FIP_IMG_SBL_SIZE_OFFSET		0x28
 #define FIP_IMG_SBL_ADDR_OFFSET		0x20
 
@@ -121,6 +121,8 @@ struct mnh_sm_device {
 	dev_t dev_num;
 	struct device *chardev;
 	struct class *dev_class;
+	uint32_t *firmware_buf[2];
+	size_t firmware_buf_size[2];
 	enum fw_image_state image_loaded;
 	int state;
 
@@ -311,10 +313,27 @@ static int mnh_firmware_waitdownloaded(void)
 	return -EIO;
 }
 
-int mnh_transfer_firmware(size_t fw_size, const uint8_t *fw_data,
+static size_t mnh_get_firmware_buf(struct device *dev, uint32_t **buf)
+{
+	size_t size = IMG_DOWNLOAD_MAX_SIZE;
+
+	while (size > 0) {
+		*buf = devm_kmalloc(dev, size, GFP_KERNEL);
+		if (*buf)
+			break;
+
+		size >>= 1;
+	}
+
+	return size;
+}
+
+static int mnh_transfer_firmware(size_t fw_size, const uint8_t *fw_data,
 	uint64_t dst_addr)
 {
-	uint32_t *buf = NULL;
+	uint32_t *buf;
+	size_t buf_size;
+	int buf_index = 0;
 	struct mnh_dma_element_t dma_blk;
 	int err = -EINVAL;
 	size_t sent = 0, size, remaining;
@@ -322,12 +341,19 @@ int mnh_transfer_firmware(size_t fw_size, const uint8_t *fw_data,
 	remaining = fw_size;
 
 	while (remaining > 0) {
-		size = MIN(remaining, IMG_DOWNLOAD_MAX_SIZE);
+		buf = mnh_sm_dev->firmware_buf[buf_index];
+		buf_size = mnh_sm_dev->firmware_buf_size[buf_index];
 
-		buf = kmalloc(size, GFP_KERNEL);
-		if (!buf)
-			return -ENOMEM;
+		size = MIN(remaining, buf_size);
+
 		memcpy(buf, fw_data + sent, size);
+
+		if (mnh_sm_dev->image_loaded == FW_IMAGE_DOWNLOADING) {
+			err = mnh_firmware_waitdownloaded();
+			mnh_unmap_mem(dma_blk.src_addr, size, DMA_TO_DEVICE);
+			if (err)
+				break;
+		}
 
 		dma_blk.dst_addr = dst_addr + sent;
 		dma_blk.len = size;
@@ -336,7 +362,6 @@ int mnh_transfer_firmware(size_t fw_size, const uint8_t *fw_data,
 		if (!dma_blk.src_addr) {
 			dev_err(mnh_sm_dev->dev,
 				"Could not map dma buffer for FW download\n");
-			kfree(buf);
 			return -ENOMEM;
 		}
 
@@ -348,19 +373,17 @@ int mnh_transfer_firmware(size_t fw_size, const uint8_t *fw_data,
 
 		sent += size;
 		remaining -= size;
+		buf_index = (buf_index + 1) & 0x1;
 		dev_dbg(mnh_sm_dev->dev, "Sent:%zd, Remaining:%zd\n",
 			 sent, remaining);
+	}
 
+	if (mnh_sm_dev->image_loaded == FW_IMAGE_DOWNLOADING) {
 		err = mnh_firmware_waitdownloaded();
 		mnh_unmap_mem(dma_blk.src_addr, size, DMA_TO_DEVICE);
-		kfree(buf);
-
-		if (err)
-			break;
 	}
 
 	return err;
-
 }
 
 int mnh_download_firmware(void)
@@ -1257,7 +1280,7 @@ static int mnh_sm_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct sched_param param = { .sched_priority = 5 };
-	int error = 0;
+	int error = 0, i;
 
 	dev_dbg(dev, "MNH SM initializing...\n");
 
@@ -1289,6 +1312,18 @@ static int mnh_sm_probe(struct platform_device *pdev)
 	mutex_init(&mnh_sm_dev->lock);
 	init_completion(&mnh_sm_dev->work_complete);
 	init_completion(&mnh_sm_dev->suspend_complete);
+
+	/* get double buffers for transferring firmware */
+	for (i = 0; i < 2; i++) {
+		mnh_sm_dev->firmware_buf_size[i] =
+			mnh_get_firmware_buf(dev, &mnh_sm_dev->firmware_buf[i]);
+		if (!mnh_sm_dev->firmware_buf_size[i]) {
+			dev_err(dev,
+				"%s: could not allocate a buffer for firmware transfers\n",
+				__func__);
+			return -ENOMEM;
+		}
+	}
 
 	/* allocate character device region */
 	error = alloc_chrdev_region(&mnh_sm_dev->dev_num, 0, 1, DEVICE_NAME);
