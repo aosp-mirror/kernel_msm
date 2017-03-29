@@ -23,3 +23,8 @@
 	/* Board-Id GPIOs: 0: 100, 1: 99, 2: 119, 3: 118, and 4: 96. */
 	goog,board-id = <100 0 99 0 119 0 118 0 96 0>;
 };
+
+&ssc_sensors {
+   /* SLPI firmware files are spli.* */
+   qcom,firmware-name = "slpi";
+};
