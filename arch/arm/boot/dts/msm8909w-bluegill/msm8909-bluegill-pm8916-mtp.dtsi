@@ -32,8 +32,8 @@
 			pinctrl-0 = <&ts_int_active &ts_reset_active>;
 			pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
 			pinctrl-2 = <&ts_release>;
-			focaltech,display-coords = <0 0 400 400>;       //for android wear
-			focaltech,panel-coords = <0 0 400 400>;
+			focaltech,display-coords = <0 0 454 454>;       //for android wear
+			focaltech,panel-coords = <0 0 454 454>;
 			focaltech,button-map= <70 150 907>;
 			focaltech,no-force-update;
 			focaltech,i2c-pull-up;
