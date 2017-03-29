@@ -3567,6 +3567,13 @@ cleanup:
 	}
 	return ret;
 err:
+	for (i = 0; i < MAX_ION_FD; i++)
+		if (data->client.sec_buf_fd[i].is_sec_buf_fd &&
+			data->client.sec_buf_fd[i].vbase)
+			dma_free_coherent(qseecom.pdev,
+				data->client.sec_buf_fd[i].size,
+				data->client.sec_buf_fd[i].vbase,
+				data->client.sec_buf_fd[i].pbase);
 	if (!IS_ERR_OR_NULL(ihandle))
 		ion_free(qseecom.ion_clnt, ihandle);
 	return -ENOMEM;
@@ -6887,7 +6894,11 @@ long qseecom_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 			break;
 		}
 		pr_debug("SET_MEM_PARAM: qseecom addr = 0x%pK\n", data);
+		mutex_lock(&app_access_lock);
+		atomic_inc(&data->ioctl_count);
 		ret = qseecom_set_client_mem_param(data, argp);
+		atomic_dec(&data->ioctl_count);
+		mutex_unlock(&app_access_lock);
 		if (ret)
 			pr_err("failed Qqseecom_set_mem_param request: %d\n",
 								ret);
