@@ -14,6 +14,10 @@
 	status = "ok";
 };
 
+&mdss_hdmi_tx {
+	status = "disabled";
+};
+
 &soc {
 	sound-9335 {
 		status = "disabled";
@@ -225,12 +229,9 @@
 
 	tavil_codec {
 		clocks = <&clock_audio clk_audio_pmi_clk>;
-	/*
-	 * b/35391122: Disable SPI since it is not working yet.
 		wcd_spi {
 			qcom,master-bus-num = <2>;
 		};
-	 */
 		swr_master {
 			status = "disabled";
 		};
