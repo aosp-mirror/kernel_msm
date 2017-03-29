@@ -57,14 +57,10 @@
 #ifdef CONFIG_OF
 #ifndef USE_OPEN_CLOSE
 #define USE_OPEN_CLOSE
-#undef CONFIG_HAS_EARLYSUSPEND
 #undef CONFIG_PM
 #endif
 #endif
 
-#ifdef CONFIG_HAS_EARLYSUSPEND
-#include <linux/earlysuspend.h>
-#endif
 #include <linux/input/mt.h>
 #include "ftm4_ts.h"
 
@@ -91,42 +87,29 @@ void fts_recovery_cx(struct fts_ts_info *info);
 void fts_release_all_finger(struct fts_ts_info *info);
 static int fts_suspend(struct i2c_client *client, pm_message_t mesg);
 static int fts_resume(struct i2c_client *client);
+
 #if defined(CONFIG_FB)
 static int touch_fb_notifier_callback(struct notifier_block *self,
 		unsigned long event, void *data);
-#endif
-
-#ifdef CONFIG_HAS_EARLYSUSPEND
-static void fts_early_suspend(struct early_suspend *h)
-{
-	struct fts_ts_info *info;
-	info = container_of(h, struct fts_ts_info, early_suspend);
-	fts_suspend(info->client, PMSG_SUSPEND);
-}
-
-static void fts_late_resume(struct early_suspend *h)
-{
-	struct fts_ts_info *info;
-	info = container_of(h, struct fts_ts_info, early_suspend);
-	fts_resume(info->client);
-}
 #endif
 
 int fts_write_reg(struct fts_ts_info *info,
 		  unsigned char *reg, unsigned short num_com)
 {
 	struct i2c_msg xfer_msg[2];
-	int ret;
+	int ret = 0;
 
 	if (info->touch_stopped) {
-		tsp_debug_err(true, &info->client->dev, "%s: Sensor stopped\n", __func__);
+		tsp_debug_err(&info->client->dev,
+			"%s: Sensor stopped\n", __func__);
 		goto exit;
 	}
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
 	if (TRUSTEDUI_MODE_INPUT_SECURED & trustedui_get_current_mode()) {
-		tsp_debug_err(true, &info->client->dev,
-			"%s TSP no accessible from Linux, TUI is enabled!\n", __func__);
+		tsp_debug_err(&info->client->dev,
+			"%s TSP no accessible from Linux,"
+			"TUI is enabled!\n", __func__);
 		return -EIO;
 	}
 #endif
@@ -144,24 +127,26 @@ int fts_write_reg(struct fts_ts_info *info,
 	return ret;
 
  exit:
-	return 0;
+	return -EIO;
 }
 
 int fts_read_reg(struct fts_ts_info *info, unsigned char *reg, int cnum,
 		 unsigned char *buf, int num)
 {
 	struct i2c_msg xfer_msg[2];
-	int ret;
+	int ret = 0;
 
 	if (info->touch_stopped) {
-		tsp_debug_err(true, &info->client->dev, "%s: Sensor stopped\n", __func__);
+		tsp_debug_err(&info->client->dev,
+			"%s: Sensor stopped\n", __func__);
 		goto exit;
 	}
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
 	if (TRUSTEDUI_MODE_INPUT_SECURED & trustedui_get_current_mode()) {
-		tsp_debug_err(true, &info->client->dev,
-			"%s TSP no accessible from Linux, TUI is enabled!\n", __func__);
+		tsp_debug_err(&info->client->dev,
+			"%s TSP no accessible from Linux,"
+			" TUI is enabled!\n", __func__);
 		return -EIO;
 	}
 #endif
@@ -181,13 +166,14 @@ int fts_read_reg(struct fts_ts_info *info, unsigned char *reg, int cnum,
 	ret = i2c_transfer(info->client->adapter, xfer_msg, 2);
 
 	mutex_unlock(&info->i2c_mutex);
+
 	return ret;
 
  exit:
-	return 0;
+	return -EIO;
 }
 
-static void fts_delay(unsigned int ms)
+void fts_delay(unsigned int ms)
 {
 	if (ms < 20)
 		usleep_range(ms * 1000, ms * 1000);
@@ -202,7 +188,9 @@ void fts_command(struct fts_ts_info *info, unsigned char cmd)
 
 	regAdd = cmd;
 	ret = fts_write_reg(info, &regAdd, 1);
-	tsp_debug_info(true, &info->client->dev, "FTS Command (%02X) , ret = %d \n", cmd, ret);
+	tsp_debug_info(&info->client->dev,
+		"FTS Command (%02X) , "
+		"ret = %d\n", cmd, ret);
 }
 
 void fts_change_scan_rate(struct fts_ts_info *info, unsigned char cmd)
@@ -213,8 +201,10 @@ void fts_change_scan_rate(struct fts_ts_info *info, unsigned char cmd)
 	regAdd[1] = cmd;
 	ret = fts_write_reg(info, &regAdd[0], 2);
 
-	tsp_debug_dbg(true, &info->client->dev, "FTS %s Scan Rate (%02X %02X) , ret = %d \n",
-		(cmd == FTS_CMD_FAST_SCAN) ? "90Hz" : (cmd == FTS_CMD_SLOW_SCAN) ? "60Hz" : "30Hz",
+	tsp_debug_dbg(&info->client->dev,
+		"FTS %s Scan Rate (%02X %02X) , ret = %d\n",
+		(cmd == FTS_CMD_FAST_SCAN) ? "90Hz" :
+		(cmd == FTS_CMD_SLOW_SCAN) ? "60Hz" : "30Hz",
 		regAdd[0], regAdd[1], ret);
 }
 
@@ -223,7 +213,7 @@ int fts_systemreset(struct fts_ts_info *info)
 	int ret = 0;
 	unsigned char regAdd[4] = { 0xB6, 0x00, 0x28, 0x80 };
 
-	tsp_debug_info(true, &info->client->dev, "FTS SystemReset\n");
+	tsp_debug_info(&info->client->dev, "FTS SystemReset\n");
 	ret = fts_write_reg(info, &regAdd[0], 4);
 	fts_delay(10);
 
@@ -236,42 +226,144 @@ static void fts_interrupt_set(struct fts_ts_info *info, int enable)
 	unsigned char regAdd[4] = { 0xB6, 0x00, 0x2C, enable };
 
 	if (enable)
-		tsp_debug_info(true, &info->client->dev, "FTS INT Enable\n");
+		tsp_debug_info(&info->client->dev, "FTS INT Enable\n");
 	else
-		tsp_debug_info(true, &info->client->dev, "FTS INT Disable\n");
+		tsp_debug_info(&info->client->dev, "FTS INT Disable\n");
 
 	fts_write_reg(info, &regAdd[0], 4);
 }
 
-static int fts_read_chip_id(struct fts_ts_info *info) {
+void fts_get_afe_info(struct fts_ts_info *info)
+{
+	int rc = 0;
+	unsigned char regAdd[3];
+	unsigned char data[FTS_EVENT_SIZE];
+
+	/* Reading the final AFE version */
+	regAdd[0] = 0xd0;
+	regAdd[1] = 0x00;
+	regAdd[2] = 0x52;
+
+	rc = fts_read_reg(info, regAdd, 3, (unsigned char *)data, 3);
+	if (rc < 0) {
+		info->afe_ver = 0;
+		tsp_debug_info(info->dev,
+					"%s: Read Fail - Final AFE [Data : "
+					"%2X] AFE Ver [Data : %2X] \n",
+					__func__,
+					data[1],
+					data[2]);
+	} else
+		info->afe_ver = data[2];
+}
+
+int fts_get_version_info(struct fts_ts_info *info)
+{
+	int rc;
+	unsigned char regAdd[3];
+	unsigned char data[FTS_EVENT_SIZE];
+	int retry = 0;
+
+	char str[16] = {0};
+	int str_ret = 0;
+
+	fts_command(info, FTS_CMD_RELEASEINFO);
+
+	memset(data, 0x0, FTS_EVENT_SIZE);
+
+	regAdd[0] = READ_ONE_EVENT;
+
+	rc = -1;
+	while (fts_read_reg(info, &regAdd[0], 1,
+				(unsigned char *)data, FTS_EVENT_SIZE)) {
+		if (data[0] == EVENTID_INTERNAL_RELEASE_INFO) {
+			/*  Internal release Information */
+			info->fw_version_of_ic = (data[3] << 8) + data[4];
+			info->config_version_of_ic = (data[6] << 8) + data[5];
+		} else if (data[0] == EVENTID_EXTERNAL_RELEASE_INFO) {
+			/* External release Information */
+			info->fw_main_version_of_ic = (data[1] << 8) + data[2];
+			info->ic_fw_ver.build = ((data[1] >> 4) & 0x0F);
+			info->ic_fw_ver.major = (data[1] & 0x0F);
+			info->ic_fw_ver.minor =  data[2];
+			rc = 0;
+			break;
+		}
+
+		if (retry++ > FTS_RETRY_COUNT) {
+			rc = -FTS_ERROR_TIMEOUT;
+			tsp_debug_err(&info->client->dev,
+						"%s: Time Over\n", __func__);
+			break;
+		}
+	}
+	if (retry >= FTS_RETRY_COUNT) {
+		tsp_debug_info(&info->client->dev,
+						"failed to read IC Info\n");
+		rc = -EACCES;
+		goto error;
+	}
+	str_ret += snprintf(str + str_ret, sizeof(str) - str_ret,
+						"v%d.%02d",
+						info->ic_fw_ver.major,
+						info->ic_fw_ver.minor);
+
+	if (info->ic_fw_ver.build) {
+		str_ret += snprintf(str + str_ret, sizeof(str) - str_ret,
+							".%d",
+							info->ic_fw_ver.build);
+	}
+	tsp_debug_info(&info->client->dev,
+		"IC Firmware version [%s]\n", str);
+
+	fts_get_afe_info(info);
+
+	tsp_debug_info(&info->client->dev,
+			"IC product id : 0x%02X "
+			"IC Firmware Version : 0x%04X "
+			"IC Config Version : 0x%04X "
+			"IC Main Version : 0x%04X\n",
+			info->ic_product_id,
+			info->fw_version_of_ic,
+			info->config_version_of_ic,
+			info->fw_main_version_of_ic);
+	tsp_debug_info(&info->client->dev,
+		"AFE Version : 0x%02X\n", info->afe_ver);
+
+error:
+	return rc;
+}
+
+static int fts_read_chip_id(struct fts_ts_info *info)
+{
 	unsigned char regAdd[3] = {0xB6, 0x00, 0x04};
 	unsigned char val[7] = {0};
-	int ret;
+	int ret = 0;
 
 	ret = fts_read_reg(info, regAdd, 3, (unsigned char *)val, 7);
 	if (ret < 0) {
-		tsp_debug_err(true, &info->client->dev, "%s failed. ret: %d\n",
+		tsp_debug_err(&info->client->dev, "%s failed. ret: %d\n",
 			__func__, ret);
 		return ret;
 	}
 
-	tsp_debug_info(true, &info->client->dev, "FTS %02X%02X%02X =  %02X %02X %02X %02X %02X %02X\n",
-	       regAdd[0], regAdd[1], regAdd[2], val[1], val[2], val[3], val[4], val[5], val[6]);
+	tsp_debug_info(&info->client->dev,
+		"FTS %02X%02X%02X =  %02X %02X %02X %02X %02X %02X\n",
+	       regAdd[0], regAdd[1], regAdd[2],
+	       val[1], val[2], val[3], val[4],
+	       val[5], val[6]);
 
-	if(val[1] == FTS_ID0 && val[2] == FTS_ID1)
-	{
-		if((val[5] == 0x00) && (val[6] == 0x00))
-		{
-			tsp_debug_info(true, &info->client->dev,"\n\r[fts_read_chip_id] Error - No FW : %02X %02X", val[5], val[6]);
-			// Cx Corruption
-			//fts_recovery_cx(info); //blocking
+	if ((val[1] == FTS_ID0) && (val[2] == FTS_ID1)) {
+		if ((val[5] == 0x00) && (val[6] == 0x00)) {
+			tsp_debug_info(&info->client->dev,
+				"\n\r[fts_read_chip_id] Error - No FW : %02X %02X",
+				val[5], val[6]);
+		}  else {
+			tsp_debug_info(&info->client->dev,
+				"FTS Chip ID : %02X %02X\n",
+				val[1], val[2]);
 		}
-		else
-		{
-			tsp_debug_info(true, &info->client->dev,"FTS Chip ID : %02X %02X\n", val[1], val[2]);
-		}
-	}
-	else
+	} else
 		return -FTS_ERROR_INVALID_CHIP_ID;
 
 	return ret;
@@ -279,23 +371,34 @@ static int fts_read_chip_id(struct fts_ts_info *info) {
 
 static int fts_wait_for_ready(struct fts_ts_info *info)
 {
-	int rc;
+	int rc = 0;
 	unsigned char regAdd;
 	unsigned char data[FTS_EVENT_SIZE];
 	int retry = 0;
-	int err_cnt=0;
+	int err_cnt = 0;
 
 	memset(data, 0x0, FTS_EVENT_SIZE);
 
 	regAdd = READ_ONE_EVENT;
-	rc = -1;
-	while (fts_read_reg(info, &regAdd, 1, (unsigned char *)data, FTS_EVENT_SIZE)) {
+
+	while (fts_read_reg(info, &regAdd, 1,
+				(unsigned char *)data, FTS_EVENT_SIZE)) {
 		if (data[0] == EVENTID_CONTROLLER_READY) {
 			rc = 0;
 			break;
 		}
 
 		if (data[0] == EVENTID_ERROR) {
+			if (data[1] == EVENTID_ERROR_FLASH_CORRUPTION) {
+				rc = -FTS_ERROR_EVENT_ID;
+				info->checksum_error = 1;
+				tsp_debug_err(&info->client->dev,
+					"%s: flash corruption:%02X,%02X,%02X\n",
+						__func__, data[0],
+						data[1], data[2]);
+				break;
+			}
+
 			if (err_cnt++ > 32) {
 				rc = -FTS_ERROR_EVENT_ID;
 				break;
@@ -305,16 +408,19 @@ static int fts_wait_for_ready(struct fts_ts_info *info)
 
 		if (retry++ > FTS_RETRY_COUNT) {
 			rc = -FTS_ERROR_TIMEOUT;
-			tsp_debug_err(true, &info->client->dev, "%s: Time Over\n", __func__);
+			tsp_debug_err(&info->client->dev, "%s: Time Over\n",
+					__func__);
+
 			if (info->lowpower_mode) {
-				schedule_delayed_work(&info->reset_work, msecs_to_jiffies(10));
+				schedule_delayed_work(&info->reset_work,
+					msecs_to_jiffies(10));
 			}
 			break;
 		}
 		fts_delay(20);
 	}
 
-	tsp_debug_info(true, &info->client->dev,
+	tsp_debug_info(&info->client->dev,
 		"%s: %02X, %02X, %02X, %02X, %02X, %02X, %02X, %02X\n",
 		__func__, data[0], data[1], data[2], data[3],
 		data[4], data[5], data[6], data[7]);
@@ -324,20 +430,19 @@ static int fts_wait_for_ready(struct fts_ts_info *info)
 
 int fts_get_channel_info(struct fts_ts_info *info)
 {
-	int rc;
-	unsigned char cmd[4] =
-		{ 0xB2, 0x00, 0x14, 0x02 };
+	int rc = 0;
+	unsigned char cmd[4] = { 0xB2, 0x00, 0x14, 0x02 };
 	unsigned char data[FTS_EVENT_SIZE];
 	int retry = 0;
+
 	memset(data, 0x0, FTS_EVENT_SIZE);
-	rc = -1;
+
 	fts_write_reg(info, &cmd[0], 4);
-	cmd[0]=READ_ONE_EVENT;
+	cmd[0] = READ_ONE_EVENT;
 	while (fts_read_reg
 	       (info, &cmd[0], 1, (unsigned char *)data, FTS_EVENT_SIZE)) {
 		if (data[0] == EVENTID_RESULT_READ_REGISTER) {
-			if ((data[1] == cmd[1]) && (data[2] == cmd[2]))
-			{
+			if ((data[1] == cmd[1]) && (data[2] == cmd[2])) {
 				info->SenseChannelLength = data[3];
 				info->ForceChannelLength = data[4];
 				rc = 0;
@@ -346,63 +451,19 @@ int fts_get_channel_info(struct fts_ts_info *info)
 		}
 		if (retry++ > 30) {
 			rc = -1;
-			tsp_debug_info(true, &info->client->dev, "Time over - wait for channel info\n");
+			tsp_debug_info(&info->client->dev,
+					"Time over - wait for channel info\n");
 			break;
 		}
-		mdelay(5);
+		fts_delay(5);
 	}
-	return rc;
-}
-int fts_get_version_info(struct fts_ts_info *info)
-{
-	int rc;
-	unsigned char regAdd[3];
-	unsigned char data[FTS_EVENT_SIZE];
-	int retry = 0;
-
-	fts_command(info, FTS_CMD_RELEASEINFO);
-
-	memset(data, 0x0, FTS_EVENT_SIZE);
-
-	regAdd[0] = READ_ONE_EVENT;
-	rc = -1;
-	while (fts_read_reg(info, &regAdd[0], 1, (unsigned char *)data, FTS_EVENT_SIZE)) {
-		if (data[0] == EVENTID_INTERNAL_RELEASE_INFO) {
-			// Internal release Information
-			info->fw_version_of_ic = (data[3] << 8) + data[4];
-			info->config_version_of_ic = (data[6] << 8) + data[5];
-			info->ic_product_id = data[2];
-		} else if (data[0] == EVENTID_EXTERNAL_RELEASE_INFO) {
-			// External release Information
-			info->fw_main_version_of_ic = (data[1] << 8) + data[2];
-			rc = 0;
-			break;
-		}
-
-		if (retry++ > FTS_RETRY_COUNT) {
-			rc = -FTS_ERROR_TIMEOUT;
-			tsp_debug_err(true, &info->client->dev, "%s: Time Over\n", __func__);
-			break;
-		}
-	}
-
-	tsp_debug_info(true, &info->client->dev,
-			"IC product id : 0x%02X "
-			"IC Firmware Version : 0x%04X "
-			"IC Config Version : 0x%04X "
-			"IC Main Version : 0x%04X\n",
-			info->ic_product_id,
-			info->fw_version_of_ic,
-			info->config_version_of_ic,
-			info->fw_main_version_of_ic);
-
 	return rc;
 }
 
 #ifdef FTS_SUPPORT_NOISE_PARAM
 int fts_get_noise_param_address(struct fts_ts_info *info)
 {
-	int rc;
+	int rc = 0;
 	unsigned char regAdd[3];
 	unsigned char rData[3];
 	struct fts_noise_param *noise_param;
@@ -415,27 +476,27 @@ int fts_get_noise_param_address(struct fts_ts_info *info)
 	regAdd[2] = 32 * 2;
 
 	if (info->digital_rev == FTS_DIGITAL_REV_1)
-		rc = fts_read_reg(info, regAdd, 3, (unsigned char *)noise_param->pAddr, 2);
+		rc = fts_read_reg(info, regAdd, 3,
+				(unsigned char *)noise_param->pAddr, 2);
 	else {
 		rc = fts_read_reg(info, regAdd, 3, (unsigned char *)rData, 3);
 		noise_param->pAddr[0] = rData[1] + (rData[2]<<8);
 	}
 
-	for (i = 1; i < MAX_NOISE_PARAM; i++) {
+	for (i = 1; i < MAX_NOISE_PARAM; i++)
 		noise_param->pAddr[i] = noise_param->pAddr[0] + i * 2;
-	}
 
-	for (i = 0; i < MAX_NOISE_PARAM; i++) {
-		tsp_debug_dbg(true, &info->client->dev, "Get Noise Param%d Address = 0x%4x\n", i,
-		       noise_param->pAddr[i]);
-	}
+	for (i = 0; i < MAX_NOISE_PARAM; i++)
+		tsp_debug_dbg(&info->client->dev,
+				"Get Noise Param%d Address = 0x%4x\n",
+				i, noise_param->pAddr[i]);
 
 	return rc;
 }
 
 static int fts_get_noise_param(struct fts_ts_info *info)
 {
-	int rc;
+	int rc = 0;
 	unsigned char regAdd[3];
 	unsigned char data[MAX_NOISE_PARAM * 2];
 	struct fts_noise_param *noise_param;
@@ -457,12 +518,23 @@ static int fts_get_noise_param(struct fts_ts_info *info)
 		rc = fts_read_reg(info, regAdd, 3, &buf[0], 3);
 
 		noise_param->pData[i] = buf[1]+(buf[2]<<8);
-		//tsp_debug_info(true, &info->client->dev, "0x%2x%2x%2x 0x%2x 0x%2x\n", regAdd[0],regAdd[1],regAdd[2], buf[1], buf[2]);
+		/*
+		tsp_debug_info(&info->client->dev,
+				"0x%2x%2x%2x 0x%2x 0x%2x\n",
+				regAdd[0],
+				regAdd[1],
+				regAdd[2],
+				buf[1],
+				buf[2]);
+		*/
 	}
 
 	for (i = 0; i < MAX_NOISE_PARAM; i++) {
-		tsp_debug_dbg(true, &info->client->dev, "Get Noise Param%d Address [ 0x%04x ] = 0x%04x\n", i,
-		       noise_param->pAddr[i], noise_param->pData[i]);
+		tsp_debug_dbg(&info->client->dev,
+				"Get Noise Param%d Address "
+				"[ 0x%04x ] = 0x%04x\n", i,
+				noise_param->pAddr[i],
+				noise_param->pData[i]);
 	}
 
 	return rc;
@@ -491,25 +563,56 @@ static int fts_set_noise_param(struct fts_ts_info *info)
 	}
 
 	for (i = 0; i < MAX_NOISE_PARAM; i++) {
-		tsp_debug_dbg(true, &info->client->dev, "Set Noise Param%d Address [ 0x%04x ] = 0x%04x\n", i,
-		       noise_param->pAddr[i], noise_param->pData[i]);
+		tsp_debug_dbg(&info->client->dev,
+			"Set Noise Param%d Address "
+			"[ 0x%04x ] = 0x%04x\n",
+			i,
+			noise_param->pAddr[i],
+			noise_param->pData[i]);
 	}
 
 	return 0;
 }
 #endif
 
+int fts_cmd_completion_check(struct fts_ts_info *info, uint8_t event1, uint8_t event2, uint8_t event3)
+{
+	unsigned char val[8];
+	unsigned char reg[2] = {0x85, 0};
+	int retry = 100;
+	int rc = 0;
+
+	while (retry--) {
+		fts_delay(10);
+		info->fts_read_reg(info, &reg[0], 1, &val[0], FTS_EVENT_SIZE);
+		if ((val[0] == event1) && (val[1] == event2) && (val[2] == event3)) {
+			tsp_debug_info(&info->client->dev,
+						"\n\r[fts_cmd_completion_check] OK [%02x][%02x][%02x]", val[0], val[1], val[2]);
+			return rc;
+		} else if (val[0] == 0x0F) {
+			tsp_debug_info(&info->client->dev,
+						"\n\r[fts_cmd_completion_check] Error - [%02x][%02x][%02x]", val[0], val[1], val[2]);
+		}
+	}
+
+	rc = -1;
+	if (retry <= 0)
+		tsp_debug_info(&info->client->dev,
+						"\n\r[fts_cmd_completion_check] Error - Time Over [%02x][%02x][%02x]", event1, event2, event3);
+	return rc;
+}
+
 static int fts_init(struct fts_ts_info *info)
 {
 	unsigned char val[16];
 	unsigned char regAdd[8];
-	int rc;
+	int rc = 0;
 
 	rc = fts_systemreset(info);
-	if(rc < 0){
-		tsp_debug_err(true, &info->client->dev, "%s: Failed to i2c(rc = %d)\n",
+	if (rc < 0) {
+		tsp_debug_err(&info->client->dev, "%s: Failed to i2c(rc = %d)\n",
 				__func__, rc);
-		return 1;
+		return rc;
 	}
 
 	rc = fts_wait_for_ready(info);
@@ -517,36 +620,48 @@ static int fts_init(struct fts_ts_info *info)
 		info->fw_version_of_ic = 0;
 		info->config_version_of_ic = 0;
 		info->fw_main_version_of_ic = 0;
-	} else
+	} else {
 		fts_get_version_info(info);
+	}
 
 	rc = fts_read_chip_id(info);
-
 	if (rc < 0)
-		return 1;
+		return rc;
+/*
+	rc  = fts_fw_update(info);
+	if (rc  < 0)
+		tsp_debug_err(&info->client->dev, "%s: Failed to firmware update\n",
+				__func__);
+*/
 
-	fts_command(info, SLEEPOUT);
 #ifdef FEATURE_FTS_PRODUCTION_CODE
 		info->digital_rev = FTS_DIGITAL_REV_2;
 		rc = info->fts_get_channel_info(info);
-		if (rc >= 0) {
-			tsp_debug_info(true, &info->client->dev, "FTS Sense(%02d) Force(%02d)\n",
-				   info->SenseChannelLength, info->ForceChannelLength);
+		if (rc == 0) {
+			tsp_debug_info(&info->client->dev,
+						"FTS Sense(%02d) Force(%02d)\n",
+						info->SenseChannelLength,
+						info->ForceChannelLength);
 		} else {
-			tsp_debug_info(true, &info->client->dev, "FTS read failed rc = %d\n", rc);
-			tsp_debug_info(true, &info->client->dev, "FTS Initialise Failed\n");
-			return 1;
+			tsp_debug_info(&info->client->dev,
+						"FTS read failed rc = %d\n", rc);
+			tsp_debug_info(&info->client->dev,
+						"FTS Initialise Failed\n");
+			return rc;
 		}
 		info->pFrame =
 			kzalloc(info->SenseChannelLength * info->ForceChannelLength * 2,
 				GFP_KERNEL);
 		if (info->pFrame == NULL) {
-			tsp_debug_info(true, &info->client->dev, "FTS pFrame kzalloc Failed\n");
-			return 1;
+			tsp_debug_info(&info->client->dev,
+						"FTS pFrame kzalloc Failed\n");
+			return -ENOMEM;
 		}
-		info->cx_data = kzalloc(info->SenseChannelLength * info->ForceChannelLength, GFP_KERNEL);
+		info->cx_data = kzalloc(info->SenseChannelLength *
+						info->ForceChannelLength, GFP_KERNEL);
 		if (!info->cx_data)
-			tsp_debug_err(true, &info->client->dev, "%s: cx_data kzalloc Failed\n", __func__);
+			tsp_debug_err(&info->client->dev,
+					"%s: cx_data kzalloc Failed\n", __func__);
 #endif
 	fts_command(info, SENSEON);
 
@@ -555,26 +670,30 @@ static int fts_init(struct fts_ts_info *info)
 #endif
 	/* fts driver set functional feature */
 	info->touch_count = 0;
+	info->palm_pressed = false;
 	info->flip_enable = false;
 	info->mainscr_disable = false;
 
 	info->deepsleep_mode = false;
+	info->wirelesscharger_mode = false;
 	info->lowpower_mode = true;
 	info->lowpower_flag = 0x00;
 	info->fts_power_state = 0;
 
 	fts_command(info, FORCECALIBRATION);
-	fts_command(info, FLUSHBUFFER);
 
 	fts_interrupt_set(info, INT_ENABLE);
 
 	memset(val, 0x0, 4);
 	regAdd[0] = READ_STATUS;
 	fts_read_reg(info, regAdd, 1, (unsigned char *)val, 4);
-	tsp_debug_info(true, &info->client->dev, "FTS ReadStatus(0x84) : %02X %02X %02X %02X\n", val[0],
-	       val[1], val[2], val[3]);
+	tsp_debug_info(&info->client->dev,
+				"FTS ReadStatus(0x84) : "
+				"%02X %02X %02X %02X\n",
+				val[0], val[1], val[2], val[3]);
 
-	tsp_debug_info(true, &info->client->dev, "FTS Initialized\n");
+	tsp_debug_info(&info->client->dev,
+				"FTS Initialized\n");
 
 	return 0;
 }
@@ -582,9 +701,11 @@ static int fts_init(struct fts_ts_info *info)
 static void fts_debug_msg_event_handler(struct fts_ts_info *info,
 				      unsigned char data[])
 {
-	tsp_debug_dbg(true, &info->client->dev,
-	       "%s: %02X %02X %02X %02X %02X %02X %02X %02X\n", __func__,
-	       data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7]);
+	tsp_debug_dbg(&info->client->dev,
+	       "%s: %02X %02X %02X %02X "
+	       "%02X %02X %02X %02X\n", __func__,
+	       data[0], data[1], data[2], data[3],
+	       data[4], data[5], data[6], data[7]);
 }
 
 static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
@@ -599,13 +720,14 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 	int bw = 0, bh = 0, palm = 0;
 	int orient = 0;
 
-#if defined (CONFIG_INPUT_BOOSTER)
+#if defined(CONFIG_INPUT_BOOSTER)
 	bool booster_restart = false;
 #endif
 
 	for (EventNum = 0; EventNum < LeftEvent; EventNum++) {
-#if 0
-		tsp_debug_info(true, &info->client->dev, "%d %2x %2x %2x %2x %2x %2x %2x %2x\n",
+#ifdef DEBUG
+		tsp_debug_info(&info->client->dev,
+			"%d %2x %2x %2x %2x %2x %2x %2x %2x\n",
 			EventNum,
 			data[EventNum * FTS_EVENT_SIZE],
 			data[EventNum * FTS_EVENT_SIZE+1],
@@ -617,9 +739,9 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 			data[EventNum * FTS_EVENT_SIZE+7]);
 #endif
 
-	//tsp_debug_info(true, &info->client->dev, "fts_power_state ( %d )\n",info->fts_power_state );
+	/* tsp_debug_info(&info->client->dev, "fts_power_state ( %d )\n",info->fts_power_state ); */
 
-	if(	info->fts_power_state == FTS_POWER_STATE_LOWPOWER)
+	if (info->fts_power_state == FTS_POWER_STATE_LOWPOWER)
 		EventID = data[EventNum * FTS_EVENT_SIZE] & 0xFF;
 	else
 		EventID = data[EventNum * FTS_EVENT_SIZE] & 0x0F;
@@ -643,15 +765,23 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 			break;
 
 		case EVENTID_ERROR:
-			if (data[1 + EventNum * FTS_EVENT_SIZE] == 0x08) { // Get Auto tune fail event
-				if (data[2 + EventNum * FTS_EVENT_SIZE] == 0x00) {
-					tsp_debug_info(true, &info->client->dev, "[FTS] Fail Mutual Auto tune\n");
+			if (data[1 + EventNum *
+					FTS_EVENT_SIZE] == 0x08) {
+				/* Get Auto tune fail event */
+				if (data[2 + EventNum *
+						FTS_EVENT_SIZE] == 0x00) {
+					tsp_debug_info(&info->client->dev,
+							"[FTS] Fail Mutual Auto tune\n");
+				} else if (data[2 + EventNum *
+							FTS_EVENT_SIZE] == 0x01) {
+					tsp_debug_info(&info->client->dev,
+							"[FTS] Fail Self Auto tune\n");
 				}
-				else if (data[2 + EventNum * FTS_EVENT_SIZE] == 0x01) {
-					tsp_debug_info(true, &info->client->dev, "[FTS] Fail Self Auto tune\n");
-				}
-			} else if (data[1 + EventNum * FTS_EVENT_SIZE] == 0x09) // Get detect SYNC fail event
-				tsp_debug_info(true, &info->client->dev, "[FTS] Fail detect SYNC\n");
+			} else if (data[1 + EventNum *
+							FTS_EVENT_SIZE] == 0x09)
+				/*  Get detect SYNC fail event */
+				tsp_debug_info(&info->client->dev,
+						"[FTS] Fail detect SYNC\n");
 			break;
 
 		case EVENTID_HOVER_ENTER_POINTER:
@@ -686,35 +816,43 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 				break;
 
 			info->touch_count++;
-#if defined (CONFIG_INPUT_BOOSTER)
+#if defined(CONFIG_INPUT_BOOSTER)
 			booster_restart = true;
 #endif
 		case EVENTID_MOTION_POINTER:
 			if (info->fts_power_state == FTS_POWER_STATE_LOWPOWER) {
-				tsp_debug_info(true, &info->client->dev, "%s: low power mode\n", __func__);
+				tsp_debug_info(&info->client->dev,
+						"%s: low power mode\n", __func__);
 				fts_release_all_finger(info);
 				break;
 			}
 
 			if (info->touch_count == 0) {
-				tsp_debug_info(true, &info->client->dev, "%s: count 0\n", __func__);
+				tsp_debug_info(&info->client->dev,
+						"%s: count 0\n", __func__);
 				fts_release_all_finger(info);
 				break;
 			}
 
 			if ((EventID == EVENTID_MOTION_POINTER) &&
-				(info->finger[TouchID].state == EVENTID_LEAVE_POINTER)) {
-				tsp_debug_info(true, &info->client->dev, "%s: state leave but point is moved.\n", __func__);
+				(info->finger[TouchID].state ==
+						EVENTID_LEAVE_POINTER)) {
+				tsp_debug_info(&info->client->dev,
+						"%s: state leave but point is moved.\n", __func__);
 				break;
 			}
 
 			if (info->fts_power_state == FTS_POWER_STATE_LOWPOWER)
 				break;
 
-			x = ((data[1 + EventNum * FTS_EVENT_SIZE] & 0xFF) << 4) +
-						((data[3 + EventNum * FTS_EVENT_SIZE] & 0xF0) >> 4);
-			y = ((data[2 + EventNum * FTS_EVENT_SIZE] & 0xFF) << 4 )+
-				(data[3 + EventNum * FTS_EVENT_SIZE] & 0xF );
+			x = ((data[1 + EventNum * FTS_EVENT_SIZE]
+						& 0xFF) << 4) +
+						((data[3 + EventNum * FTS_EVENT_SIZE]
+								& 0xF0) >> 4);
+			y = ((data[2 + EventNum * FTS_EVENT_SIZE]
+						& 0xFF) << 4) +
+				(data[3 + EventNum * FTS_EVENT_SIZE]
+						& 0xF);
 
 			z = data[4 + EventNum * FTS_EVENT_SIZE];
 
@@ -722,6 +860,21 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 			bh = data[7 + EventNum * FTS_EVENT_SIZE];
 
 			orient = data[5 + EventNum * FTS_EVENT_SIZE];
+
+			if (z == 255) {
+				tsp_debug_info(&info->client->dev,
+						"%s: Palm Detected\n", __func__);
+				tsp_debug_info(&info->client->dev, "%s: "
+						"[ID:%2d  X:%4d  Y:%4d  Z:%4d "
+						" WM:%4d  Wm:%4d  Orient:%2d  "
+						"tc:%2d]\n", __func__,
+						TouchID, x, y, z,
+						max(bw, bh), min(bw, bh),
+						orient, info->touch_count);
+				info->palm_pressed = true;
+				fts_release_all_finger(info);
+				return 0;
+			}
 
 			input_mt_slot(info->input_dev, TouchID);
 			input_mt_report_slot_state(info->input_dev,
@@ -759,8 +912,16 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 			if (info->fts_power_state == FTS_POWER_STATE_LOWPOWER)
 				break;
 
+			if (info->palm_pressed) {
+				tsp_debug_info(&info->client->dev,
+						"%s: Palm Released\n", __func__);
+				info->palm_pressed = false;
+				return 0;
+			}
+
 			if (info->touch_count <= 0) {
-				tsp_debug_info(true, &info->client->dev, "%s: count 0\n", __func__);
+				tsp_debug_info(&info->client->dev,
+							"%s: count 0\n", __func__);
 				fts_release_all_finger(info);
 				break;
 			}
@@ -784,21 +945,22 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 
 			} else if (status == STATUS_EVENT_RAW_DATA_READY) {
 				unsigned char regAdd[4] = {0xB0, 0x01, 0x29, 0x01};
+
 				fts_write_reg(info, &regAdd[0], 4);
 
-				tsp_debug_info(true, &info->client->dev, "[FTS] Received the Raw Data Ready Event\n");
+				tsp_debug_info(&info->client->dev, "[FTS] Received the Raw Data Ready Event\n");
 			} else if (status == STATUS_EVENT_FORCE_CAL_MUTUAL) {
-				tsp_debug_dbg(true, &info->client->dev, "[FTS] Received Force Calibration Mutual only Event\n");
+				tsp_debug_dbg(&info->client->dev, "[FTS] Received Force Calibration Mutual only Event\n");
 			} else if (status == STATUS_EVENT_FORCE_CAL_SELF) {
-				tsp_debug_dbg(true, &info->client->dev, "[FTS] Received Force Calibration Self only Event\n");
+				tsp_debug_dbg(&info->client->dev, "[FTS] Received Force Calibration Self only Event\n");
 			} else if (status == STATUS_EVENT_WATERMODE_ON) {
-				tsp_debug_info(true, &info->client->dev, "[FTS] Received Water Mode On Event\n");
+				tsp_debug_info(&info->client->dev, "[FTS] Received Water Mode On Event\n");
 			} else if (status == STATUS_EVENT_WATERMODE_OFF) {
-				tsp_debug_info(true, &info->client->dev, "[FTS] Received Water Mode Off Event\n");
+				tsp_debug_info(&info->client->dev, "[FTS] Received Water Mode Off Event\n");
 			} else if (status == STATUS_EVENT_MUTUAL_CAL_FRAME_CHECK) {
-				tsp_debug_info(true, &info->client->dev, "[FTS] Received Mutual Calib Frame Check Event\n");
+				tsp_debug_info(&info->client->dev, "[FTS] Received Mutual Calib Frame Check Event\n");
 			} else if (status == STATUS_EVENT_SELF_CAL_FRAME_CHECK) {
-				tsp_debug_info(true, &info->client->dev, "[FTS] Received Self Calib Frame Check Event\n");
+				tsp_debug_info(&info->client->dev, "[FTS] Received Self Calib Frame Check Event\n");
 			} else {
 				fts_debug_msg_event_handler(info,
 						  &data[EventNum *
@@ -820,28 +982,35 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 		}
 
 		if (EventID == EVENTID_ENTER_POINTER)
-			tsp_debug_info(true, &info->client->dev,
-				"[P] tID:%d x:%d y:%d w:%d h:%d z:%d p:%d tc:%d tm:%d\n",
-				TouchID, x, y, bw, bh, z, palm, info->touch_count, info->touch_mode);
+			tsp_debug_info(&info->client->dev,
+				"[P] tID:%d x:%d y:%d w:%d "
+				"h:%d z:%d p:%d tc:%d tm:%d\n",
+				TouchID, x, y, bw,
+				bh, z, palm, info->touch_count, info->touch_mode);
 		else if (EventID == EVENTID_HOVER_ENTER_POINTER)
-			tsp_debug_dbg(true, &info->client->dev,
+			tsp_debug_dbg(&info->client->dev,
 				"[HP] tID:%d x:%d y:%d z:%d\n",
 				TouchID, x, y, z);
 
 		else if (EventID == EVENTID_LEAVE_POINTER) {
-			tsp_debug_info(true, &info->client->dev,
-				"[R] tID:%d mc: %d tc:%d lx: %d ly: %d Ver[%02X%04X%01X%01X]\n",
+			tsp_debug_info(&info->client->dev,
+				"[R] tID:%d mc: %d tc:%d lx: %d ly: %d "
+				"Ver[%02X%04X%01X%01X]\n",
 				TouchID, info->finger[TouchID].mcount, info->touch_count,
-				info->finger[TouchID].lx, info->finger[TouchID].ly,
-				info->panel_revision, info->fw_main_version_of_ic,
-				info->flip_enable, info->mainscr_disable);
+				info->finger[TouchID].lx,
+				info->finger[TouchID].ly,
+				info->panel_revision,
+				info->fw_main_version_of_ic,
+				info->flip_enable,
+				info->mainscr_disable);
 
 			info->finger[TouchID].mcount = 0;
 		} else if (EventID == EVENTID_HOVER_LEAVE_POINTER) {
-			tsp_debug_dbg(true, &info->client->dev,
+			tsp_debug_dbg(&info->client->dev,
 				"[HR] tID:%d Ver[%02X%04X%01X]\n",
 				TouchID,
-				info->panel_revision, info->fw_main_version_of_ic,
+				info->panel_revision,
+				info->fw_main_version_of_ic,
 				info->flip_enable);
 			info->finger[TouchID].mcount = 0;
 		} else if (EventID == EVENTID_MOTION_POINTER)
@@ -855,7 +1024,7 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 
 	input_sync(info->input_dev);
 
-#if defined (CONFIG_INPUT_BOOSTER)
+#if defined(CONFIG_INPUT_BOOSTER)
 	if ((EventID == EVENTID_ENTER_POINTER)
 			|| (EventID == EVENTID_LEAVE_POINTER)) {
 		if (booster_restart)
@@ -877,13 +1046,13 @@ static void fts_ta_cb(struct fts_callbacks *cb, int ta_status)
 	if (ta_status == 0x01 || ta_status == 0x03) {
 		fts_command(info, FTS_CMD_CHARGER_PLUGGED);
 		info->TA_Pluged = true;
-		tsp_debug_info(true, &info->client->dev,
+		tsp_debug_info(&info->client->dev,
 			 "%s: device_control : CHARGER CONNECTED, ta_status : %x\n",
 			 __func__, ta_status);
 	} else {
 		fts_command(info, FTS_CMD_CHARGER_UNPLUGGED);
 		info->TA_Pluged = false;
-		tsp_debug_info(true, &info->client->dev,
+		tsp_debug_info(&info->client->dev,
 			 "%s: device_control : CHARGER DISCONNECTED, ta_status : %x\n",
 			 __func__, ta_status);
 	}
@@ -903,8 +1072,9 @@ static void fts_ta_cb(struct fts_callbacks *cb, int ta_status)
 static irqreturn_t fts_interrupt_handler(int irq, void *handle)
 {
 	struct fts_ts_info *info = handle;
-	unsigned char regAdd[4] = {0xB6,0x00, 0x23, READ_ALL_EVENT};
+	unsigned char regAdd[4] = {0xB6, 0x00, 0x23, READ_ALL_EVENT};
 	unsigned short evtcount = 0;
+
 	evtcount = 0;
 
 	fts_read_reg(info, &regAdd[0], 3, (unsigned char *)&evtcount, 2);
@@ -936,7 +1106,7 @@ static int fts_irq_enable(struct fts_ts_info *info,
 				fts_interrupt_handler, info->board->irq_type,
 				FTS_TS_DRV_NAME, info);
 		if (retval < 0) {
-			tsp_debug_info(true, &info->client->dev,
+			tsp_debug_info(&info->client->dev,
 					"%s: Failed to create irq thread %d\n",
 					__func__, retval);
 			return retval;
@@ -959,7 +1129,6 @@ static int fts_irq_enable(struct fts_ts_info *info,
 struct fts_callbacks *fts_charger_callbacks;
 void tsp_charger_infom(bool en)
 {
-
 	pr_err("[TSP]%s: ta:%d\n",	__func__, en);
 
 	if (fts_charger_callbacks && fts_charger_callbacks->inform_charger)
@@ -983,14 +1152,15 @@ static int fts_power_ctrl(void *data, bool on)
 	if (enabled == on)
 		return retval;
 
-	//touch power init
+	/* touch power init */
 	if (gpio_is_valid(pdata->vdd_gpio)) {
 		gpio_request(pdata->vdd_gpio, "touch-vdd");
 	} else {
 		regulator_avdd = regulator_get(NULL, pdata->regulator_avdd);
 		if (IS_ERR_OR_NULL(regulator_avdd)) {
-			tsp_debug_err(true, dev, "%s: Failed to get %s regulator.\n",
-				 __func__, pdata->regulator_avdd);
+			tsp_debug_err(dev, "%s: "
+					"Failed to get %s regulator.\n",
+					__func__, pdata->regulator_avdd);
 			goto out;
 		}
 	}
@@ -999,76 +1169,95 @@ static int fts_power_ctrl(void *data, bool on)
 	} else {
 		regulator_dvdd = regulator_get(NULL, pdata->regulator_dvdd);
 		if (IS_ERR_OR_NULL(regulator_dvdd)) {
-			tsp_debug_err(true, dev, "%s: Failed to get %s regulator.\n",
-				 __func__, pdata->regulator_dvdd);
+			tsp_debug_err(dev, "%s: "
+					"Failed to get %s regulator.\n",
+					__func__, pdata->regulator_dvdd);
 			goto out;
 		}
 	}
 
-	tsp_debug_info(true, dev, "%s: %s\n", __func__, on ? "on" : "off");
+	tsp_debug_info(dev, "%s: %s\n", __func__, on ? "on" : "off");
 
 	if (on) {
-		if (gpio_is_valid(pdata->vdd_gpio)){
+		if (gpio_is_valid(pdata->vdd_gpio)) {
 			retval = gpio_direction_output(pdata->vdd_gpio, 1);
 			if (retval) {
-				tsp_debug_err(true, dev, "%s: Failed to enable vdd: %d\n", __func__, retval);
+				tsp_debug_err(dev, "%s: "
+						"Failed to enable vdd: %d\n",
+						__func__, retval);
 			}
-		} else if(!IS_ERR_OR_NULL(regulator_avdd)) {
+		} else if (!IS_ERR_OR_NULL(regulator_avdd)) {
 			retval = regulator_enable(regulator_avdd);
 			if (retval) {
-				tsp_debug_err(true, dev, "%s: Failed to enable avdd: %d\n", __func__, retval);
+				tsp_debug_err(dev, "%s: "
+						"Failed to enable avdd: %d\n",
+						__func__, retval);
 				goto out;
 			}
 		}
 
-		if (gpio_is_valid(pdata->vio_gpio)){
+		if (gpio_is_valid(pdata->vio_gpio)) {
 			retval = gpio_direction_output(pdata->vio_gpio, 1);
 			if (retval) {
-				tsp_debug_err(true, dev, "%s: Failed to enable vio: %d\n", __func__, retval);
+				tsp_debug_err(dev, "%s: "
+						"Failed to enable vio: %d\n",
+						__func__, retval);
 			}
-		} else if(!IS_ERR_OR_NULL(regulator_dvdd)) {
+		} else if (!IS_ERR_OR_NULL(regulator_dvdd)) {
 			retval = regulator_enable(regulator_dvdd);
 			if (retval) {
-				tsp_debug_err(true, dev, "%s: Failed to enable dvdd: %d\n", __func__, retval);
+				tsp_debug_err(dev, "%s: "
+					"Failed to enable dvdd: %d\n",
+					__func__, retval);
 				goto out;
 			}
 		}
 
 		retval = pinctrl_select_state(pdata->pinctrl, pdata->pins_default);
 		if (retval < 0)
-			tsp_debug_err(true, dev, "%s: Failed to configure tsp_attn pin\n", __func__);
+			tsp_debug_err(dev, "%s: "
+					"Failed to configure tsp_attn pin\n",
+					__func__);
 
 		fts_delay(5);
 	} else {
-		if (gpio_is_valid(pdata->vio_gpio)){
+		if (gpio_is_valid(pdata->vio_gpio)) {
 			retval = gpio_direction_output(pdata->vio_gpio, 0);
 			if (retval) {
-				tsp_debug_err(true, dev, "%s: Failed to enable vio: %d\n", __func__, retval);
+				tsp_debug_err(dev, "%s: "
+						"Failed to enable vio: %d\n",
+						__func__, retval);
 			}
-		} else if(!IS_ERR_OR_NULL(regulator_dvdd)) {
+		} else if (!IS_ERR_OR_NULL(regulator_dvdd)) {
 			retval = regulator_disable(regulator_dvdd);
 			if (retval) {
-				tsp_debug_err(true, dev, "%s: Failed to enable dvdd: %d\n", __func__, retval);
+				tsp_debug_err(dev, "%s: "
+						"Failed to enable dvdd: %d\n",
+						__func__, retval);
 				goto out;
 			}
 		}
 
-		if (gpio_is_valid(pdata->vdd_gpio)){
+		if (gpio_is_valid(pdata->vdd_gpio)) {
 			retval = gpio_direction_output(pdata->vdd_gpio, 0);
-			if (retval) {
-				tsp_debug_err(true, dev, "%s: Failed to enable vdd: %d\n", __func__, retval);
-			}
-		} else if(!IS_ERR_OR_NULL(regulator_avdd)) {
+			if (retval)
+				tsp_debug_err(dev, "%s: "
+						"Failed to enable vdd: %d\n",
+						__func__, retval);
+		} else if (!IS_ERR_OR_NULL(regulator_avdd)) {
 			retval = regulator_disable(regulator_avdd);
 			if (retval) {
-				tsp_debug_err(true, dev, "%s: Failed to enable avdd: %d\n", __func__, retval);
+				tsp_debug_err(dev, "%s: "
+						"Failed to enable avdd: %d\n",
+						__func__, retval);
 				goto out;
 			}
 		}
 
 		retval = pinctrl_select_state(pdata->pinctrl, pdata->pins_sleep);
 		if (retval < 0)
-			tsp_debug_err(true, dev, "%s: Failed to configure tsp_attn pin\n", __func__);
+			tsp_debug_err(dev, "%s: Failed to "
+					"configure tsp_attn pin\n", __func__);
 	}
 
 	enabled = on;
@@ -1090,71 +1279,85 @@ static int fts_parse_dt(struct i2c_client *client)
 
 	pdata->tspid = of_get_named_gpio(np, "stm,tspid_gpio", 0);
 	if (gpio_is_valid(pdata->tspid))
-		tsp_debug_info(true, dev, "TSP_ID : %d\n", gpio_get_value(pdata->tspid));
+		tsp_debug_info(dev,
+				"TSP_ID : %d\n",
+				gpio_get_value(pdata->tspid));
 	else
-		tsp_debug_err(true, dev, "Failed to get tspid gpio\n");
+		tsp_debug_err(dev,
+				"Failed to get tspid gpio\n");
 
 	pdata->tspid2 = of_get_named_gpio(np, "stm,tspid2_gpio", 0);
 	if (gpio_is_valid(pdata->tspid2))
-		tsp_debug_info(true, dev, "TSP_ID2 : %d\n", gpio_get_value(pdata->tspid2));
+		tsp_debug_info(dev,
+				"TSP_ID2 : %d\n",
+				gpio_get_value(pdata->tspid2));
 	else
-		tsp_debug_err(true, dev, "Failed to get tspid2 gpio\n");
+		tsp_debug_err(dev,
+				"Failed to get tspid2 gpio\n");
 
 	pdata->gpio = of_get_named_gpio(np, "stm,irq_gpio", 0);
 	if (gpio_is_valid(pdata->gpio)) {
-		retval = gpio_request_one(pdata->gpio, GPIOF_DIR_IN, "stm,tsp_int");
+		retval = gpio_request_one(pdata->gpio,
+					GPIOF_DIR_IN, "stm,tsp_int");
 		if (retval) {
-			tsp_debug_err(true, dev, "Unable to request tsp_int [%d]\n", pdata->gpio);
+			tsp_debug_err(dev,
+						"Unable to request tsp_int [%d]\n",
+						pdata->gpio);
 			return -EINVAL;
 		}
 	} else {
-		tsp_debug_err(true, dev, "Failed to get irq gpio\n");
+		tsp_debug_err(dev,
+				"Failed to get irq gpio\n");
 		return -EINVAL;
 	}
 	client->irq = gpio_to_irq(pdata->gpio);
 
 	if (of_property_read_u32(np, "stm,irq_type", &pdata->irq_type)) {
-		tsp_debug_err(true, dev, "Failed to get irq_type property\n");
+		tsp_debug_err(dev, "Failed to get irq_type property\n");
 		return -EINVAL;
 	}
 
 	if (of_property_read_u32(np, "stm,grip_area", &pdata->grip_area))
-		tsp_debug_err(true, dev, "Failed to get grip_area property\n");
+		tsp_debug_err(dev, "Failed to get grip_area property\n");
 
 	if (of_property_read_u32_array(np, "stm,max_coords", coords, 2)) {
-		tsp_debug_err(true, dev, "Failed to get max_coords property\n");
+		tsp_debug_err(dev, "Failed to get max_coords property\n");
 		return -EINVAL;
 	}
 	pdata->max_x = coords[0];
 	pdata->max_y = coords[1];
 
 	if (of_property_read_u32_array(np, "stm,num_lines", lines, 2))
-		tsp_debug_dbg(true, dev, "skipped to get num_lines property\n");
+		tsp_debug_dbg(dev, "skipped to get num_lines property\n");
 	else {
 		pdata->SenseChannelLength = lines[0];
 		pdata->ForceChannelLength = lines[1];
-		tsp_debug_info(true, dev, "num_of[rx,tx]: [%d,%d]\n",
+		tsp_debug_info(dev, "num_of[rx,tx]: [%d,%d]\n",
 			pdata->SenseChannelLength, pdata->ForceChannelLength);
 	}
 
 	if (of_property_read_string(np, "stm,regulator_dvdd", &pdata->regulator_dvdd)) {
-		tsp_debug_err(true, dev, "Failed to get regulator_dvdd name property\n");
+		tsp_debug_err(dev,
+				"Failed to get regulator_dvdd name property\n");
 	}
 	if (of_property_read_string(np, "stm,regulator_avdd", &pdata->regulator_avdd)) {
-		tsp_debug_err(true, dev, "Failed to get regulator_avdd name property\n");
+		tsp_debug_err(dev,
+				"Failed to get regulator_avdd name property\n");
 	}
 
 	pdata->vdd_gpio = of_get_named_gpio(np, "stm,vdd-gpio", 0);
 	if (gpio_is_valid(pdata->vdd_gpio))
-		tsp_debug_info(true, dev, "vdd_gpio : %d\n", gpio_get_value(pdata->vdd_gpio));
+		tsp_debug_info(dev, "vdd_gpio : %d\n",
+				gpio_get_value(pdata->vdd_gpio));
 	else
-		tsp_debug_err(true, dev, "Failed to get vdd_gpio gpio\n");
+		tsp_debug_err(dev, "Failed to get vdd_gpio gpio\n");
 
 	pdata->vio_gpio = of_get_named_gpio(np, "stm,vio-gpio", 0);
 	if (gpio_is_valid(pdata->vio_gpio))
-		tsp_debug_info(true, dev, "vio_gpio : %d\n", gpio_get_value(pdata->vio_gpio));
+		tsp_debug_info(dev, "vio_gpio :"
+				"%d\n", gpio_get_value(pdata->vio_gpio));
 	else
-		tsp_debug_err(true, dev, "Failed to get vio_gpio gpio\n");
+		tsp_debug_err(dev, "Failed to get vio_gpio gpio\n");
 
 	pdata->power = fts_power_ctrl;
 
@@ -1164,9 +1367,11 @@ static int fts_parse_dt(struct i2c_client *client)
 	of_property_read_string(np, "stm,firmware_name", &pdata->firmware_name);
 
 	if (of_property_read_string_index(np, "stm,project_name", 0, &pdata->project_name))
-		tsp_debug_dbg(true, dev, "skipped to get project_name property\n");
+		tsp_debug_dbg(dev,
+				"skipped to get project_name property\n");
 	if (of_property_read_string_index(np, "stm,project_name", 1, &pdata->model_name))
-		tsp_debug_dbg(true, dev, "skipped to get model_name property\n");
+		tsp_debug_dbg(dev,
+				"skipped to get model_name property\n");
 
 	pdata->max_width = 28;
 	pdata->support_hover = true;
@@ -1174,13 +1379,6 @@ static int fts_parse_dt(struct i2c_client *client)
 #ifdef FTS_SUPPORT_TA_MODE
 	pdata->register_cb = fts_tsp_register_callback;
 #endif
-
-	//pdata->panel_revision = (lcdtype & 0xF000) >> 12;
-	//tsp_debug_info(true, dev,
-	//	"irq :%d, irq_type: 0x%04x, max[x,y]: [%d,%d], grip_area :%d, project/model_name: %s/%s, panel_revision: %d, lcdtype: 0x%06X\n",
-	//		pdata->gpio, pdata->irq_type, pdata->max_x, pdata->max_y, pdata->grip_area,
-	//	pdata->project_name, pdata->model_name,
-	//pdata->panel_revision, lcdtype);
 
 	return retval;
 }
@@ -1198,14 +1396,14 @@ static int fts_setup_drv_data(struct i2c_client *client)
 			sizeof(struct fts_i2c_platform_data), GFP_KERNEL);
 
 		if (!pdata) {
-			tsp_debug_err(true, &client->dev, "Failed to allocate platform data\n");
+			tsp_debug_err(&client->dev, "Failed to allocate platform data\n");
 			return -ENOMEM;
 		}
 
 		client->dev.platform_data = pdata;
 		retval = fts_parse_dt(client);
 		if (retval) {
-			tsp_debug_err(true, &client->dev, "Failed to parse dt\n");
+			tsp_debug_err(&client->dev, "Failed to parse dt\n");
 			return retval;
 		}
 	} else {
@@ -1213,31 +1411,31 @@ static int fts_setup_drv_data(struct i2c_client *client)
 	}
 
 	if (!pdata) {
-		tsp_debug_err(true, &client->dev, "No platform data found\n");
+		tsp_debug_err(&client->dev, "No platform data found\n");
 			return -EINVAL;
 	}
 	if (!pdata->power) {
-		tsp_debug_err(true, &client->dev, "No power contorl found\n");
+		tsp_debug_err(&client->dev, "No power contorl found\n");
 			return -EINVAL;
 	}
 
 	pdata->pinctrl = devm_pinctrl_get(&client->dev);
 	if (IS_ERR(pdata->pinctrl)) {
-		tsp_debug_err(true, &client->dev, "could not get pinctrl\n");
+		tsp_debug_err(&client->dev, "could not get pinctrl\n");
 		return PTR_ERR(pdata->pinctrl);
 	}
 
 	pdata->pins_default = pinctrl_lookup_state(pdata->pinctrl, "on_state");
 	if (IS_ERR(pdata->pins_default))
-		tsp_debug_err(true, &client->dev, "could not get default pinstate\n");
+		tsp_debug_err(&client->dev, "could not get default pinstate\n");
 
 	pdata->pins_sleep = pinctrl_lookup_state(pdata->pinctrl, "off_state");
 	if (IS_ERR(pdata->pins_sleep))
-		tsp_debug_err(true, &client->dev, "could not get sleep pinstate\n");
+		tsp_debug_err(&client->dev, "could not get sleep pinstate\n");
 
 	info = kzalloc(sizeof(struct fts_ts_info), GFP_KERNEL);
 	if (!info) {
-		tsp_debug_err(true, &client->dev,
+		tsp_debug_err(&client->dev,
 				"%s: Failed to alloc mem for info\n",
 				__func__);
 		return -ENOMEM;
@@ -1276,16 +1474,18 @@ static int fts_setup_drv_data(struct i2c_client *client)
 	INIT_DELAYED_WORK(&info->reset_work, fts_reset_work);
 
 	if (info->board->support_hover)
-		tsp_debug_info(true, &info->client->dev, "FTS Support Hover Event \n");
+		tsp_debug_info(&info->client->dev, "FTS Support Hover Event\n");
 	else
-		tsp_debug_info(true, &info->client->dev, "FTS Not support Hover Event \n");
+		tsp_debug_info(&info->client->dev, "FTS Not support Hover Event\n");
 
 	i2c_set_clientdata(client, info);
 
 	if (pdata->get_ddi_type) {
 		info->ddi_type = pdata->get_ddi_type();
-		tsp_debug_info(true, &client->dev, "%s: DDI Type is %s[%d]\n",
-			__func__, info->ddi_type ? "MAGNA" : "SDC", info->ddi_type);
+		tsp_debug_info(&client->dev,
+			"%s: DDI Type is %s[%d]\n",
+			__func__, info->ddi_type ?
+			"MAGNA" : "SDC", info->ddi_type);
 	}
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
@@ -1296,29 +1496,34 @@ static int fts_setup_drv_data(struct i2c_client *client)
 
 static int fts_probe(struct i2c_client *client, const struct i2c_device_id *idp)
 {
-	int retval;
+	int retval = 0;
 	struct fts_ts_info *info = NULL;
 	static char fts_ts_phys[64] = { 0 };
 	int i = 0;
 
-	//tsp_debug_info(true, &client->dev, "FTS Driver [12%s] %s %s\n",
-	 //      FTS_TS_DRV_VERSION, __DATE__, __TIME__);
+/*
+	tsp_debug_info(&client->dev, "FTS Driver [12%s] %s %s\n",
+	       FTS_TS_DRV_VERSION, __DATE__, __TIME__);
+*/
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
-		tsp_debug_err(true, &client->dev, "FTS err = EIO!\n");
+		tsp_debug_err(&client->dev, "FTS err = EIO!\n");
 		return -EIO;
 	}
 
 	/* Build up driver data */
 	retval = fts_setup_drv_data(client);
 	if (retval < 0) {
-		tsp_debug_err(true, &client->dev, "%s: Failed to set up driver data\n", __func__);
+		tsp_debug_err(&client->dev,
+				"%s: Failed to set up driver data\n",
+				__func__);
 		goto err_setup_drv_data;
 	}
 
 	info = (struct fts_ts_info *)i2c_get_clientdata(client);
 	if (!info) {
-		tsp_debug_err(true, &client->dev, "%s: Failed to get driver data\n", __func__);
+		tsp_debug_err(&client->dev,
+				"%s: Failed to get driver data\n", __func__);
 		retval = -ENODEV;
 		goto err_get_drv_data;
 	}
@@ -1329,7 +1534,7 @@ static int fts_probe(struct i2c_client *client, const struct i2c_device_id *idp)
 	info->dev = &info->client->dev;
 	info->input_dev = input_allocate_device();
 	if (!info->input_dev) {
-		tsp_debug_info(true, &info->client->dev, "FTS err = ENOMEM!\n");
+		tsp_debug_info(&info->client->dev, "FTS err = ENOMEM!\n");
 		retval = -ENOMEM;
 		goto err_input_allocate_device;
 	}
@@ -1372,8 +1577,8 @@ static int fts_probe(struct i2c_client *client, const struct i2c_device_id *idp)
 	retval = fts_init(info);
 	info->reinit_done = true;
 	mutex_unlock(&info->lock);
-	if (retval) {
-		tsp_debug_err(true, &info->client->dev, "FTS fts_init fail!\n");
+	if (retval < 0) {
+		tsp_debug_err(&info->client->dev, "FTS fts_init fail!\n");
 		goto err_fts_init;
 	}
 
@@ -1391,7 +1596,7 @@ static int fts_probe(struct i2c_client *client, const struct i2c_device_id *idp)
 
 	retval = input_register_device(info->input_dev);
 	if (retval) {
-		tsp_debug_err(true, &info->client->dev, "FTS input_register_device fail!\n");
+		tsp_debug_err(&info->client->dev, "FTS input_register_device fail!\n");
 		goto err_register_input;
 	}
 
@@ -1404,7 +1609,7 @@ static int fts_probe(struct i2c_client *client, const struct i2c_device_id *idp)
 
 	retval = fts_irq_enable(info, true);
 	if (retval < 0) {
-		tsp_debug_info(true, &info->client->dev,
+		tsp_debug_info(&info->client->dev,
 						"%s: Failed to enable attention interrupt\n",
 						__func__);
 		goto err_enable_irq;
@@ -1412,16 +1617,11 @@ static int fts_probe(struct i2c_client *client, const struct i2c_device_id *idp)
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
 	trustedui_set_tsp_irq(info->irq);
-	tsp_debug_info(true, &client->dev, "%s[%d] called!\n",
+	tsp_debug_info(&client->dev, "%s[%d] called!\n",
 		__func__, info->irq);
 #endif
 
-#if defined(CONFIG_HAS_EARLYSUSPEND)
-	info->early_suspend.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN + 1;
-	info->early_suspend.suspend = fts_early_suspend;
-	info->early_sfts_start_deviceuspend.resume = fts_late_resume;
-	register_early_suspend(&info->early_suspend);
-#elif defined(CONFIG_FB)
+#if defined(CONFIG_FB)
 	info->fb_notif.notifier_call = touch_fb_notifier_callback;
 	retval = fb_register_client(&info->fb_notif);
 #endif
@@ -1468,13 +1668,11 @@ static int fts_remove(struct i2c_client *client)
 {
 	struct fts_ts_info *info = i2c_get_clientdata(client);
 
-	tsp_debug_info(true, &info->client->dev, "FTS removed \n");
+	tsp_debug_info(&info->client->dev, "FTS removed\n");
 
-#if defined(CONFIG_HAS_EARLYSUSPEND)
-	unregister_early_suspend(&info->early_suspend);
-#elif defined(CONFIG_FB)
-	if(fb_unregister_client(&info->fb_notif))
-		tsp_debug_err(true, &info->client->dev,
+#if defined(CONFIG_FB)
+	if (fb_unregister_client(&info->fb_notif))
+		tsp_debug_err(&info->client->dev,
 			"%s: Error occured while unregistering fb_notifier.\n", __func__);
 #endif
 
@@ -1501,41 +1699,43 @@ static int fts_remove(struct i2c_client *client)
 #ifdef USE_OPEN_DWORK
 static void fts_open_work(struct work_struct *work)
 {
-	int retval;
+	int retval = 0;
 	struct fts_ts_info *info = container_of(work, struct fts_ts_info,
 						open_work.work);
 
-	tsp_debug_info(true, &info->client->dev, "%s\n", __func__);
+	tsp_debug_info(&info->client->dev, "%s\n", __func__);
 
 	retval = fts_start_device(info);
 	if (retval < 0)
-		tsp_debug_err(true, &info->client->dev,
+		tsp_debug_err(&info->client->dev,
 			"%s: Failed to start device\n", __func__);
 }
 #endif
 static int fts_input_open(struct input_dev *dev)
 {
 	struct fts_ts_info *info = input_get_drvdata(dev);
-	int retval;
+	unsigned char regAdd[4] = {0xB0, 0x01, 0x29, 0x41};
+	int retval = 0;
 
-	tsp_debug_dbg(false, &info->client->dev, "%s\n", __func__);
+	tsp_debug_dbg(&info->client->dev, "%s\n", __func__);
 
 #ifdef USE_OPEN_DWORK
 	schedule_delayed_work(&info->open_work,
 			      msecs_to_jiffies(TOUCH_OPEN_DWORK_TIME));
 #else
 	retval = fts_start_device(info);
-	if (retval < 0){
-		tsp_debug_err(true, &info->client->dev,
+	if (retval < 0) {
+		tsp_debug_err(&info->client->dev,
 			"%s: Failed to start device\n", __func__);
 		goto out;
 	}
 #endif
 
-	tsp_debug_err(true, &info->client->dev, "FTS cmd after wakeup : h%d \n", info->retry_hover_enable_after_wakeup);
+	tsp_debug_err(&info->client->dev,
+			"FTS cmd after wakeup : h%d\n",
+			info->retry_hover_enable_after_wakeup);
 
-	if(info->retry_hover_enable_after_wakeup == 1){
-		unsigned char regAdd[4] = {0xB0, 0x01, 0x29, 0x41};
+	if (info->retry_hover_enable_after_wakeup == 1) {
 		fts_write_reg(info, &regAdd[0], 4);
 		fts_command(info, FTS_CMD_HOVER_ON);
 	}
@@ -1548,7 +1748,7 @@ static void fts_input_close(struct input_dev *dev)
 {
 	struct fts_ts_info *info = input_get_drvdata(dev);
 
-	tsp_debug_dbg(false, &info->client->dev, "%s\n", __func__);
+	tsp_debug_dbg(&info->client->dev, "%s\n", __func__);
 
 #ifdef USE_OPEN_DWORK
 	cancel_delayed_work(&info->open_work);
@@ -1575,9 +1775,6 @@ static void fts_reinit(struct fts_ts_info *info)
 	fts_set_noise_param(info);
 #endif
 
-	fts_command(info, SLEEPOUT);
-	fts_delay(50);
-
 	fts_command(info, SENSEON);
 	fts_delay(50);
 
@@ -1587,6 +1784,7 @@ static void fts_reinit(struct fts_ts_info *info)
 #endif
 
 	info->touch_count = 0;
+	info->palm_pressed = false;
 
 	fts_command(info, FLUSHBUFFER);
 	fts_interrupt_set(info, INT_ENABLE);
@@ -1606,7 +1804,7 @@ void fts_release_all_finger(struct fts_ts_info *info)
 			if (info->touch_count < 0)
 				info->touch_count = 0;
 
-			tsp_debug_info(true, &info->client->dev,
+			tsp_debug_info(&info->client->dev,
 				"[RA] tID:%d mc: %d tc:%d Ver[%02X%04X%01X%01X]\n",
 				i, info->finger[i].mcount, info->touch_count,
 				info->panel_revision, info->fw_main_version_of_ic,
@@ -1628,8 +1826,10 @@ void fts_release_all_finger(struct fts_ts_info *info)
 }
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
-void trustedui_mode_on(void){
-	tsp_debug_info(true, &tui_tsp_info->client->dev, "%s, release all finger..", __func__);
+void trustedui_mode_on(void)
+{
+	tsp_debug_info(&tui_tsp_info->client->dev,
+				"%s, release all finger..", __func__);
 	fts_release_all_finger(tui_tsp_info);
 }
 #endif
@@ -1644,13 +1844,12 @@ static void fts_reset_work(struct work_struct *work)
 	/* Reset-routine must go to power off state  */
 	info->lowpower_mode = 0;
 
-	tsp_debug_info(true, &info->client->dev,"%s, Call Power-Off to recover IC, lpm:%d\n", __func__, temp_lpm);
+	tsp_debug_info(&info->client->dev, "%s, Call Power-Off to recover IC, lpm:%d\n", __func__, temp_lpm);
 	fts_stop_device(info);
 
-	msleep(100);	/* Delay to discharge the IC from ESD or On-state.*/
-	if (fts_start_device(info) < 0) {
-		tsp_debug_err(true, &info->client->dev, "%s: Failed to start device\n", __func__);
-	}
+	fts_delay(100);	/* Delay to discharge the IC from ESD or On-state.*/
+	if (fts_start_device(info) < 0)
+		tsp_debug_err(&info->client->dev, "%s: Failed to start device\n", __func__);
 
 	info->lowpower_mode = temp_lpm;
 }
@@ -1658,19 +1857,20 @@ static void fts_reset_work(struct work_struct *work)
 
 static int fts_stop_device(struct fts_ts_info *info)
 {
-	tsp_debug_info(true, &info->client->dev, "%s\n", __func__);
+	tsp_debug_info(&info->client->dev, "%s\n", __func__);
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
-	if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){
-		tsp_debug_err(true, &info->client->dev,
+	if (TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()) {
+		tsp_debug_err(&info->client->dev,
 			"%s TUI cancel event call!\n", __func__);
 		fts_delay(100);
 		tui_force_close(1);
 		fts_delay(200);
-		if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){
-			tsp_debug_err(true, &info->client->dev,
+		if (TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()) {
+			tsp_debug_err(&info->client->dev,
 				"%s TUI flag force clear!\n", __func__);
-			trustedui_clear_mask(TRUSTEDUI_MODE_VIDEO_SECURED|TRUSTEDUI_MODE_INPUT_SECURED);
+			trustedui_clear_mask(TRUSTEDUI_MODE_VIDEO_SECURED|
+						TRUSTEDUI_MODE_INPUT_SECURED);
 			trustedui_set_mode(TRUSTEDUI_MODE_OFF);
 		}
 	}
@@ -1679,12 +1879,15 @@ static int fts_stop_device(struct fts_ts_info *info)
 	mutex_lock(&info->device_mutex);
 
 	if (info->touch_stopped) {
-		tsp_debug_err(true, &info->client->dev, "%s already power off\n", __func__);
+		tsp_debug_err(&info->client->dev,
+					"%s already power off\n", __func__);
 		goto out;
 	}
 
 	if (info->lowpower_mode) {
-		tsp_debug_info(true, &info->client->dev, "%s lowpower flag:%d\n", __func__, info->lowpower_flag);
+		tsp_debug_info(&info->client->dev,
+					"%s lowpower flag:%d\n",
+					__func__, info->lowpower_flag);
 
 		info->fts_power_state = FTS_POWER_STATE_LOWPOWER;
 
@@ -1707,7 +1910,6 @@ static int fts_stop_device(struct fts_ts_info *info)
 		disable_irq(info->irq);
 
 		fts_command(info, FLUSHBUFFER);
-		fts_command(info, SLEEPIN);
 		fts_release_all_finger(info);
 #ifdef FTS_SUPPORT_NOISE_PARAM
 		fts_get_noise_param(info);
@@ -1726,20 +1928,23 @@ static int fts_stop_device(struct fts_ts_info *info)
 
 static int fts_start_device(struct fts_ts_info *info)
 {
-	tsp_debug_info(true, &info->client->dev, "%s %s\n",
-			__func__, info->lowpower_mode ? "exit low power mode" : "");
+	tsp_debug_info(&info->client->dev, "%s %s\n",
+			__func__,
+			info->lowpower_mode ?
+			"exit low power mode" : "");
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
-	if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){
-		tsp_debug_err(true, &info->client->dev,
+	if (TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()) {
+		tsp_debug_err(&info->client->dev,
 			"%s TUI cancel event call!\n", __func__);
 		fts_delay(100);
 		tui_force_close(1);
 		fts_delay(200);
-		if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){
-			tsp_debug_err(true, &info->client->dev,
+		if (TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()) {
+			tsp_debug_err(&info->client->dev,
 				"%s TUI flag force clear!\n", __func__);
-			trustedui_clear_mask(TRUSTEDUI_MODE_VIDEO_SECURED|TRUSTEDUI_MODE_INPUT_SECURED);
+			trustedui_clear_mask(TRUSTEDUI_MODE_VIDEO_SECURED|
+						TRUSTEDUI_MODE_INPUT_SECURED);
 			trustedui_set_mode(TRUSTEDUI_MODE_OFF);
 		}
 	}
@@ -1748,13 +1953,15 @@ static int fts_start_device(struct fts_ts_info *info)
 	mutex_lock(&info->device_mutex);
 
 	if (!info->touch_stopped && !info->lowpower_mode) {
-		tsp_debug_err(true, &info->client->dev, "%s already power on\n", __func__);
+		tsp_debug_err(&info->client->dev,
+				"%s already power on\n", __func__);
 		goto out;
 	}
 
 	fts_release_all_finger(info);
 	if (info->lowpower_mode) {
-		/* low power mode command is sent after LCD OFF. turn on touch power @ LCD ON */
+		/* low power mode command is sent after LCD OFF. */
+		/* turn on touch power @ LCD ON */
 		if (info->touch_stopped)
 			goto tsp_power_on;
 
@@ -1793,11 +2000,11 @@ static void fts_shutdown(struct i2c_client *client)
 {
 	struct fts_ts_info *info = i2c_get_clientdata(client);
 
-	tsp_debug_info(true, &info->client->dev, "FTS %s called!\n", __func__);
+	tsp_debug_info(&info->client->dev, "FTS %s called!\n", __func__);
 
 	if (info->lowpower_mode) {
 		info->lowpower_mode = 0;
-		tsp_debug_info(true, &info->client->dev, "FTS lowpower_mode off!\n");
+		tsp_debug_info(&info->client->dev, "FTS lowpower_mode off!\n");
 	}
 
 	fts_stop_device(info);
@@ -1808,34 +2015,31 @@ void fts_recovery_cx(struct fts_ts_info *info)
 	unsigned char regAdd[4] = {0};
 	unsigned char buf[8] = {0};
 	unsigned char cnt = 100;
+	int ret = 0;
 
 	regAdd[0] = 0xB6;
 	regAdd[1] = 0x00;
 	regAdd[2] = 0x1E;
 	regAdd[3] = 0x08;
-	fts_write_reg(info,&regAdd[0], 4);		// Loading FW to PRAM  without CRC Check
+	fts_write_reg(info, &regAdd[0], 4);		/* Loading FW to PRAM  without CRC Check */
 	fts_delay(30);
 
 
-	fts_command(info,CX_TUNNING);
+	fts_command(info, CX_TUNNING);
 	fts_delay(300);
 
-	fts_command(info,FTS_CMD_SAVE_CX_TUNING);
+	fts_command(info, FTS_CMD_SAVE_CX_TUNING);
 	fts_delay(200);
 
-	do
-	{
-		int ret;
+	do {
 		regAdd[0] = READ_ONE_EVENT;
 		ret = fts_read_reg(info, regAdd, 1, &buf[0], FTS_EVENT_SIZE);
 
 		fts_delay(10);
-		if(cnt-- == 0) break;
-	}while(buf[0] != 0x16 || buf[1] != 0x04);
 
-
-	fts_command(info, SLEEPOUT);
-	fts_delay(50);
+		if (cnt-- == 0)
+				break;
+	} while (buf[0] != 0x16 || buf[1] != 0x04);
 
 	fts_command(info, SENSEON);
 	fts_delay(50);
@@ -1848,7 +2052,7 @@ static int fts_pm_suspend(struct device *dev)
 {
 	struct fts_ts_info *info = dev_get_drvdata(dev);
 
-	tsp_debug_err(true, &info->client->dev, "%s\n", __func__);;
+	tsp_debug_err(&info->client->dev, "%s\n", __func__);
 
 	mutex_lock(&info->input_dev->mutex);
 
@@ -1864,7 +2068,7 @@ static int fts_pm_resume(struct device *dev)
 {
 	struct fts_ts_info *info = dev_get_drvdata(dev);
 
-	tsp_debug_err(true, &info->client->dev, "%s\n", __func__);
+	tsp_debug_err(&info->client->dev, "%s\n", __func__);
 
 	mutex_lock(&info->input_dev->mutex);
 
@@ -1881,7 +2085,7 @@ static int fts_suspend(struct i2c_client *client, pm_message_t mesg)
 {
 	struct fts_ts_info *info = i2c_get_clientdata(client);
 
-	tsp_debug_info(true, &info->client->dev, "%s\n", __func__);
+	tsp_debug_info(&info->client->dev, "%s\n", __func__);
 
 	fts_stop_device(info);
 
@@ -1893,7 +2097,7 @@ static int fts_resume(struct i2c_client *client)
 
 	struct fts_ts_info *info = i2c_get_clientdata(client);
 
-	tsp_debug_info(true, &info->client->dev, "%s\n", __func__);
+	tsp_debug_info(&info->client->dev, "%s\n", __func__);
 
 	fts_start_device(info);
 
@@ -1911,12 +2115,10 @@ static int touch_fb_notifier_callback(struct notifier_block *self,
 	if (ev && ev->data && event == FB_EVENT_BLANK) {
 		int *blank = (int *)ev->data;
 
-		if (*blank == FB_BLANK_UNBLANK) {
+		if (*blank == FB_BLANK_UNBLANK)
 			fts_resume(info->client);
-		}
-		else if (*blank == FB_BLANK_POWERDOWN) {
+		else if (*blank == FB_BLANK_POWERDOWN)
 			fts_suspend(info->client, PMSG_SUSPEND);
-		}
 	}
 
 	return 0;

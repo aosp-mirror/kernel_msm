@@ -6,7 +6,7 @@ config TOUCHSCREEN_FTM4
 	tristate "STMicroelectronics i2c multitouch touchscreen - FTM4 with FingerTipS"
 	depends on I2C
 	help
-		Say Y here to enable STMicroelectronics touchscreen support.
-		If unsure, say N.
-		To compile this driver as a module, choose M here: the
-		module will be called STM_ts.
+	  Say Y here to enable STMicroelectronics touchscreen support.
+	  If unsure, say N.
+	  To compile this driver as a module, choose M here: the module
+	  will be called fts_touch.
