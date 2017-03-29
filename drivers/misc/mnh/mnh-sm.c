@@ -304,7 +304,7 @@ static int mnh_firmware_waitdownloaded(void)
 			dev_err(mnh_sm_dev->dev, "Firmware load fail!\n");
 			return -EIO;
 		}
-		msleep(20);
+		udelay(500);
 	} while (time_before(jiffies, timeout));
 
 	dev_err(mnh_sm_dev->dev, "Fail to Download Firmware, timeout!!\n");
