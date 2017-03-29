@@ -87,22 +87,6 @@
 	};
 };
 
-&spmi_bus {
-	qcom,pmi8998@3 {
-		qcom,leds@d000 {
-			compatible = "qcom,leds-qpnp";
-			reg = <0xd000 0x100>;
-			label = "rgb";
-			status = "disabled";
-		};
-
-		pmi8998_wled: qcom,leds@d800 {
-			compatible = "qcom,qpnp-wled";
-			status = "disabled";
-		};
-	};
-};
-
 &pm8998_vadc {
 	chan@85 {
 		label = "vcoin";
