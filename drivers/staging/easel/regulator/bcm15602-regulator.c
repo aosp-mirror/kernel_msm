@@ -798,31 +798,27 @@ static int bcm15602_regulator_enable(struct regulator_dev *rdev)
 
 	switch (rid) {
 	case BCM15602_ID_SDLDO:
-		ret = bcm15602_update_bits(ddata,
-					   BCM15602_REG_LDO_SDLDO_ENCTRL,
-					   0x1, 0x1);
+		ret = bcm15602_write_byte(ddata, BCM15602_REG_LDO_SDLDO_ENCTRL,
+					  0x3);
 		break;
 	case BCM15602_ID_IOLDO:
-		ret = bcm15602_update_bits(ddata,
-					   BCM15602_REG_LDO_IOLDO_ENCTRL,
-					   0x1, 0x1);
+		ret = bcm15602_write_byte(ddata, BCM15602_REG_LDO_IOLDO_ENCTRL,
+					  0x3);
 		break;
 	case BCM15602_ID_ASR:
-		ret = bcm15602_update_bits(ddata,
-					   BCM15602_REG_BUCK_ASR_CTRL0,
-					   0x1, 0x1);
+		ret = bcm15602_write_byte(ddata, BCM15602_REG_BUCK_ASR_CTRL0,
+					  0xC5);
 		break;
 	case BCM15602_ID_SDSR:
-		ret = bcm15602_update_bits(ddata,
-					   BCM15602_REG_BUCK_SDSR_CTRL0,
-					   0x1, 0x1);
+		ret = bcm15602_write_byte(ddata, BCM15602_REG_BUCK_SDSR_CTRL0,
+					  0xDB);
 		break;
 	default:
 		return -EINVAL;
 	}
 
 	if (!ret) {
-		atomic_inc(&ddata->reg_enabled_cnt);
+		set_bit(rid, &ddata->reg_enabled_mask);
 		bcm15602_enable_wdt(ddata);
 	}
 
@@ -835,36 +831,31 @@ static int bcm15602_regulator_disable(struct regulator_dev *rdev)
 	struct bcm15602_chip *ddata = rdev_get_drvdata(rdev);
 	enum bcm15602_regulator_ids rid = rdev_get_id(rdev);
 	int ret;
-	bool cnt_is_zero;
 
 	switch (rid) {
 	case BCM15602_ID_SDLDO:
-		ret = bcm15602_update_bits(ddata,
-					   BCM15602_REG_LDO_SDLDO_ENCTRL,
-					   0x1, 0x0);
+		ret = bcm15602_write_byte(ddata, BCM15602_REG_LDO_SDLDO_ENCTRL,
+					  0x2);
 		break;
 	case BCM15602_ID_IOLDO:
-		ret = bcm15602_update_bits(ddata,
-					   BCM15602_REG_LDO_IOLDO_ENCTRL,
-					   0x1, 0x0);
+		ret = bcm15602_write_byte(ddata, BCM15602_REG_LDO_IOLDO_ENCTRL,
+					  0x2);
 		break;
 	case BCM15602_ID_ASR:
-		ret = bcm15602_update_bits(ddata,
-					   BCM15602_REG_BUCK_ASR_CTRL0,
-					   0x1, 0x0);
+		ret = bcm15602_write_byte(ddata, BCM15602_REG_BUCK_ASR_CTRL0,
+					  0xC4);
 		break;
 	case BCM15602_ID_SDSR:
-		ret = bcm15602_update_bits(ddata,
-					   BCM15602_REG_BUCK_SDSR_CTRL0,
-					   0x1, 0x0);
+		ret = bcm15602_write_byte(ddata, BCM15602_REG_BUCK_SDSR_CTRL0,
+					  0xDA);
 		break;
 	default:
 		return -EINVAL;
 	}
 
 	if (!ret) {
-		cnt_is_zero = atomic_dec_and_test(&ddata->reg_enabled_cnt);
-		if (cnt_is_zero)
+		clear_bit(rid, &ddata->reg_enabled_mask);
+		if (!ddata->reg_enabled_mask)
 			bcm15602_disable_wdt(ddata);
 	}
 
@@ -876,38 +867,11 @@ static int bcm15602_regulator_is_enabled(struct regulator_dev *rdev)
 {
 	struct bcm15602_chip *ddata = rdev_get_drvdata(rdev);
 	enum bcm15602_regulator_ids rid = rdev_get_id(rdev);
-	u8 byte;
-	int ret;
 
-	switch (rid) {
-	case BCM15602_ID_SDLDO:
-		ret = bcm15602_read_byte(ddata,
-					 BCM15602_REG_LDO_SDLDO_ENCTRL,
-					 &byte);
-		break;
-	case BCM15602_ID_IOLDO:
-		ret = bcm15602_read_byte(ddata,
-					 BCM15602_REG_LDO_IOLDO_ENCTRL,
-					 &byte);
-		break;
-	case BCM15602_ID_ASR:
-		ret = bcm15602_read_byte(ddata,
-					 BCM15602_REG_BUCK_ASR_CTRL0,
-					 &byte);
-		break;
-	case BCM15602_ID_SDSR:
-		ret = bcm15602_read_byte(ddata,
-					 BCM15602_REG_BUCK_SDSR_CTRL0,
-					 &byte);
-		break;
-	default:
-		return -EINVAL;
-	}
-
-	if (ret)
-		return ret;
+	if ((rid >= 0) && (rid < BCM15602_NUM_REGULATORS))
+		return !!(ddata->reg_enabled_mask & (1 << rid));
 	else
-		return (byte & 0x1);
+		return -EINVAL;
 }
 
 /* get platform data from the device tree */

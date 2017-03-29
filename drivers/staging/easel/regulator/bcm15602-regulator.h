@@ -301,12 +301,12 @@ struct bcm15602_chip {
 	/* completion used for initialization */
 	struct completion reset_complete;
 
-	/* counter for enabled regulators */
-	atomic_t reg_enabled_cnt;
+	/* bitmask for tracking enabled regulators */
+	unsigned long reg_enabled_mask;
 
-	/* volatiles used for serialization */
-	volatile unsigned long adc_conv_busy;
-	volatile unsigned long hk_read_busy;
+	/* flags used for serialization */
+	unsigned long adc_conv_busy;
+	unsigned long hk_read_busy;
 
 	/* completion used for signaling end of adc conversion */
 	struct completion adc_conv_complete;
