@@ -84,5 +84,6 @@
 		qcom,mdss-dsi-mdp-trigger = "none";
 		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 		qcom,mdss-dsi-reset-sequence = <0 10>, <1 10>;
+                qcom,mdss-dsi-panel-clockrate = <229213440>;
 	};
 };
