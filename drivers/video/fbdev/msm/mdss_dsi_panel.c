@@ -2107,10 +2107,10 @@ static int mdss_dsi_parse_panel_features(struct device_node *np,
 	}
 
 	mdss_dsi_parse_dcs_cmds(np, &ctrl->lp_on_cmds,
-			"qcom,mdss-dsi-lp-mode-on", NULL);
+			"qcom,mdss-dsi-lp-mode-on", "qcom,mdss-dsi-lp-change-state");
 
 	mdss_dsi_parse_dcs_cmds(np, &ctrl->lp_off_cmds,
-			"qcom,mdss-dsi-lp-mode-off", NULL);
+			"qcom,mdss-dsi-lp-mode-off", "qcom,mdss-dsi-lp-change-state");
 
 	return 0;
 }
