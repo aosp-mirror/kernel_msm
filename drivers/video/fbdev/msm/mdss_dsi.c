@@ -288,16 +288,6 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 				panel_data);
 	pinfo = &ctrl_pdata->panel_data.panel_info;
 
-	if (gpio_is_valid(ctrl_pdata->extra_ldo_vpnl_gpio)) {
-		gpio_set_value(ctrl_pdata->extra_ldo_vpnl_gpio, 0);
-		usleep_range(10000,10000);
-	}
-	if (gpio_is_valid(ctrl_pdata->extra_ldo_vddio_gpio) &&
-			!ctrl_pdata->extra_ldo_vddio_always_on) {
-		gpio_set_value(ctrl_pdata->extra_ldo_vddio_gpio, 0);
-		usleep_range(10000,10000);
-	}
-
 	ret = mdss_dsi_panel_reset(pdata, 0);
 	if (ret) {
 		pr_warn("%s: Panel reset failed. rc=%d\n", __func__, ret);
@@ -313,6 +303,20 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 	if (ret)
 		pr_err("%s: failed to disable vregs for %s\n",
 			__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
+
+	if (gpio_is_valid(ctrl_pdata->extra_ldo_lcd_vcl_gpio)) {
+		usleep_range(5000, 6000);
+		gpio_set_value(ctrl_pdata->extra_ldo_lcd_vcl_gpio, 0);
+	}
+	if (gpio_is_valid(ctrl_pdata->extra_ldo_vpnl_gpio)) {
+		usleep_range(2000, 3000);
+		gpio_set_value(ctrl_pdata->extra_ldo_vpnl_gpio, 0);
+	}
+	if (gpio_is_valid(ctrl_pdata->extra_ldo_vddio_gpio) &&
+			!ctrl_pdata->extra_ldo_vddio_always_on) {
+		usleep_range(2000, 3000);
+		gpio_set_value(ctrl_pdata->extra_ldo_vddio_gpio, 0);
+	}
 
 end:
 	return ret;
@@ -336,14 +340,16 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 
 	if (gpio_is_valid(ctrl_pdata->extra_ldo_vddio_gpio)) {
 		gpio_set_value(ctrl_pdata->extra_ldo_vddio_gpio, 1);
-		usleep_range(10000,10000);
+		usleep_range(2000, 3000);
 	}
 	if (gpio_is_valid(ctrl_pdata->extra_ldo_vpnl_gpio)) {
 		gpio_set_value(ctrl_pdata->extra_ldo_vpnl_gpio, 1);
-		usleep_range(10000,10000);
+		usleep_range(2000, 3000);
 	}
-	if (gpio_is_valid(ctrl_pdata->extra_ldo_lcd_vcl_gpio))
+	if (gpio_is_valid(ctrl_pdata->extra_ldo_lcd_vcl_gpio)) {
 		gpio_set_value(ctrl_pdata->extra_ldo_lcd_vcl_gpio, 1);
+		usleep_range(5000, 6000);
+	}
 
 	ret = msm_dss_enable_vreg(
 		ctrl_pdata->panel_power_data.vreg_config,
