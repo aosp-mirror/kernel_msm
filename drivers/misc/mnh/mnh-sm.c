@@ -807,6 +807,143 @@ int mnh_sm_reg_hotplug_callback(hotplug_cb_t hotplug_cb)
 }
 EXPORT_SYMBOL(mnh_sm_reg_hotplug_callback);
 
+static int mnh_sm_disable_unused_gpio(void)
+{
+	MNH_SCU_OUT(PIN00_CFG, 0x0); /* SPIM_MOSI */
+	MNH_SCU_OUT(PIN01_CFG, 0x0); /* SPIM_MISO */
+	MNH_SCU_OUT(PIN02_CFG, 0x0); /* SPIM_CLK */
+	MNH_SCU_OUT(PIN03_CFG, 0x0); /* SPI_CS0_N */
+	MNH_SCU_OUT(PIN04_CFG, 0x0); /* SPI_CS1_N */
+	MNH_SCU_OUT(PIN05_CFG, 0x0); /* SPI_CS2_N */
+	MNH_SCU_OUT(PIN06_CFG, 0x0); /* SPI_CS3_N */
+	MNH_SCU_OUT(PIN07_CFG, 0x0); /* I2C0_DATA */
+	MNH_SCU_OUT(PIN08_CFG, 0x0); /* I2C0_CLK */
+	MNH_SCU_OUT(PIN09_CFG, 0x0); /* I2C1_DATA */
+	MNH_SCU_OUT(PIN10_CFG, 0x0); /* I2C1_CLK */
+	MNH_SCU_OUT(PIN11_CFG, 0x0); /* I2C2_DATA */
+	MNH_SCU_OUT(PIN12_CFG, 0x0); /* I2C2_CLK */
+	MNH_SCU_OUT(PIN13_CFG, 0x0); /* I2C3_DATA */
+	MNH_SCU_OUT(PIN14_CFG, 0x0); /* I2C3_CLK */
+	/* MNH_SCU_OUT(PIN15_CFG, 0x0); -- UART0_TX */
+	/* MNH_SCU_OUT(PIN16_CFG, 0x0); -- UART0_RX */
+	MNH_SCU_OUT(PIN17_CFG, 0x0); /* UART0_CTS_N */
+	MNH_SCU_OUT(PIN18_CFG, 0x0); /* UART0_RTS_N */
+	MNH_SCU_OUT(PIN19_CFG, 0x0); /* UART1_TX */
+	MNH_SCU_OUT(PIN20_CFG, 0x0); /* UART1_RX */
+	MNH_SCU_OUT(PIN21_CFG, 0x0); /* UART1_CTS_N */
+	MNH_SCU_OUT(PIN22_CFG, 0x0); /* UART1_RTS_N */
+	/* MNH_SCU_OUT(PIN23_CFG, 0x0); -- GPIO8 */
+	MNH_SCU_OUT(PIN24_CFG, 0x0); /* GPIO9 */
+	/* MNH_SCU_OUT(PIN25_CFG, 0x0); -- GPIO10 */
+	MNH_SCU_OUT(PIN26_CFG, 0x0); /* GPIO11 */
+	MNH_SCU_OUT(PIN27_CFG, 0x0); /* GPIO12 */
+	MNH_SCU_OUT(PIN28_CFG, 0x0); /* GPIO13 */
+	MNH_SCU_OUT(PIN29_CFG, 0x0); /* GPIO14 */
+	MNH_SCU_OUT(PIN30_CFG, 0x0); /* GPIO15 */
+	MNH_SCU_OUT(PIN31_CFG, 0x0); /* CLK_32K_STOP */
+	MNH_SCU_OUT(PIN32_CFG, 0x0); /* SPIS_MOSI */
+	MNH_SCU_OUT(PIN33_CFG, 0x0); /* SPIS_MISO */
+	MNH_SCU_OUT(PIN34_CFG, 0x0); /* SPIS_CLK */
+	MNH_SCU_OUT(PIN35_CFG, 0x0); /* SPIS_SS_N */
+	MNH_SCU_OUT(PIN36_CFG, 0x0); /* GPIO0 */
+	MNH_SCU_OUT(PIN37_CFG, 0x0); /* GPIO1 */
+	MNH_SCU_OUT(PIN38_CFG, 0x0); /* GPIO2 */
+	MNH_SCU_OUT(PIN39_CFG, 0x0); /* GPIO3 */
+	MNH_SCU_OUT(PIN40_CFG, 0x0); /* GPIO4 */
+	MNH_SCU_OUT(PIN41_CFG, 0x0); /* GPIO5 */
+	MNH_SCU_OUT(PIN42_CFG, 0x0); /* GPIO6 */
+	MNH_SCU_OUT(PIN43_CFG, 0x0); /* GPIO7 */
+	/* MNH_SCU_OUT(PIN44_CFG, 0x0); -- RESET_N */
+	/* MNH_SCU_OUT(PIN45_CFG, 0x0); -- SOCPWR_GOOD */
+	/* MNH_SCU_OUT(PIN46_CFG, 0x0); -- THERM_TRIP */
+	/* MNH_SCU_OUT(PIN47_CFG, 0x0); -- REFCLK_19P2 */
+	/* MNH_SCU_OUT(PIN48_CFG, 0x0); -- CLK_32K */
+	MNH_SCU_OUT(PIN49_CFG, 0x0); /* TCK */
+	MNH_SCU_OUT(PIN50_CFG, 0x0); /* TDI */
+	MNH_SCU_OUT(PIN51_CFG, 0x0); /* TDO */
+	MNH_SCU_OUT(PIN52_CFG, 0x0); /* TMS */
+	MNH_SCU_OUT(PIN53_CFG, 0x0); /* TRST_N */
+	/* MNH_SCU_OUT(PIN54_CFG, 0x0); -- PCIE_CLKREQ_N */
+
+	return 0;
+}
+
+static int mnh_sm_disable_unused_peripherals(void)
+{
+	/* performance monitor */
+	MNH_SCU_OUTf(RSTC, PMON_RST, 1);
+	MNH_SCU_OUTf(CCU_CLK_CTL, PMON_CLKEN, 0);
+
+	/* mipi subsystem */
+	mnh_mipi_stop_device(mnh_sm_dev->dev, 0);
+	mnh_mipi_stop_device(mnh_sm_dev->dev, 1);
+	mnh_mipi_stop_host(mnh_sm_dev->dev, 0);
+	mnh_mipi_stop_host(mnh_sm_dev->dev, 1);
+	mnh_mipi_stop_host(mnh_sm_dev->dev, 2);
+
+	/* i2c masters */
+	MNH_SCU_OUTf(RSTC, I2C0_RST, 1);
+	MNH_SCU_OUTf(RSTC, I2C1_RST, 1);
+	MNH_SCU_OUTf(RSTC, I2C2_RST, 1);
+	MNH_SCU_OUTf(RSTC, I2C3_RST, 1);
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, I2C0_CLKEN_SW, 0);
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, I2C1_CLKEN_SW, 0);
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, I2C2_CLKEN_SW, 0);
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, I2C3_CLKEN_SW, 0);
+
+	/* pcie internal refclk */
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, PCIE_REFCLKEN, 0);
+
+	/* uart1 */
+	MNH_SCU_OUTf(RSTC, UART1_RST, 1);
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, UART1_CLKEN_SW, 0);
+
+	/* spi slave and spi master */
+	MNH_SCU_OUTf(RSTC, SPIS_RST, 1);
+	MNH_SCU_OUTf(RSTC, SPIM_RST, 1);
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, SPIS_CLKEN_SW, 0);
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, SPIM_CLKEN_SW, 0);
+
+	/* peripheral dma */
+	MNH_SCU_OUTf(RSTC, PERI_DMA_RST, 1);
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, PERI_DMA_CLKEN_SW, 0);
+
+	/* timer */
+	MNH_SCU_OUTf(RSTC, TIMER_RST, 1);
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, TIMER_CLKEN_SW, 0);
+
+	/* WDT */
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, WDT_CLKEN_SW, 0);
+
+	return 0;
+}
+
+static int mnh_sm_enable_clock_gating(void)
+{
+	/* enable wakeup */
+	MNH_SCU_OUT(GLOBAL_WAKE_EN_SET0, 0x0FFE2000);
+	MNH_SCU_OUT(GLOBAL_WAKE_EN_SET1, 0x00020000);
+
+	/* cpu */
+	MNH_SCU_OUTf(CCU_CLK_CTL, HALT_CPUCG_EN, 1);
+
+	/* buses */
+	MNH_SCU_OUTf(CCU_CLK_CTL, HALT_AXICG_EN, 1);
+	MNH_SCU_OUTf(CCU_CLK_CTL, HALT_AHBCG_EN, 1);
+
+	/* memory */
+	MNH_SCU_OUTf(CCU_CLK_CTL, HALT_BTSRAMCG_EN, 1);
+	MNH_SCU_OUTf(CCU_CLK_CTL, HALT_BTROMCG_EN, 1);
+	MNH_SCU_OUTf(CCU_CLK_CTL, HALT_LP4CG_EN, 1);
+	MNH_SCU_OUTf(CCU_CLK_CTL, HALT_LP4_PLL_BYPCLK_CG_EN, 1);
+	MNH_SCU_OUTf(MEM_PWR_MGMNT, HALT_CPUMEM_PD_EN, 1);
+	MNH_SCU_OUTf(MEM_PWR_MGMNT, HALT_LP4CMEM_PD_EN, 1);
+	MNH_SCU_OUTf(MEM_PWR_MGMNT, HALT_BTROM_PD_EN, 1);
+	MNH_SCU_OUTf(MEM_PWR_MGMNT, HALT_BTSRAM_PD_EN, 1);
+
+	return 0;
+}
+
 /**
  * API to initialize Power and clocks to MNH.
  * @param[in] Structure argument to configure power and clock component.
@@ -825,6 +962,15 @@ static int mnh_sm_poweron(void)
 			__func__, ret);
 		return ret;
 	}
+
+	/* disable unused GPIOs */
+	mnh_sm_disable_unused_gpio();
+
+	/* disable unused peripherals */
+	mnh_sm_disable_unused_peripherals();
+
+	/* enable clock gating */
+	mnh_sm_enable_clock_gating();
 
 	return 0;
 }
