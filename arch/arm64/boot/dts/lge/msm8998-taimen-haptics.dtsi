@@ -1,0 +1,34 @@
+/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&pmi8998_haptics {
+	status = "disabled";
+};
+
+&i2c_6 {
+	status = "okay";
+	drv2624@5a {
+		compatible = "ti,drv2624";
+		reg = <0x5a>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <86 0>;
+		interrupt-names = "drv2624_irq";
+		ti,reset-gpio = <&tlmm 95 0>;
+		ti,irq-gpio = <&tlmm 96 0>; /* FIXME: GND */
+		ti,smart-loop = <0>; /* 0-closeloop, 1-openloop */
+		ti,actuator = <1>; /* 0-ERM, 1-LRA */
+		ti,rated-voltage = <83>;
+		ti,odclamp-voltage = <155>;
+		ti,lra-frequency = <175>; /* DON'T Care if ERM */
+		status = "ok";
+	};
+};

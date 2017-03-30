@@ -24,6 +24,7 @@
 #include "msm8998-taimen-camera.dtsi"
 #include "msm8998-taimen-easel.dtsi"
 #include "msm8998-taimen-led.dtsi"
+#include "msm8998-taimen-haptics.dtsi"
 
 / {
 	reserved-memory {
