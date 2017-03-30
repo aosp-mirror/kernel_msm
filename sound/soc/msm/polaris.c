@@ -5641,7 +5641,7 @@ err_pcm_runtime:
 }
 
 struct snd_soc_card snd_soc_card_polaris = {
-	.name		= "polaris-snd-card",
+	.name		= "msm8998-polaris-snd-card",
 	.late_probe	= msm_snd_card_late_probe,
 };
 
