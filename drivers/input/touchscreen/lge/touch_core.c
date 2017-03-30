@@ -186,7 +186,7 @@ irqreturn_t touch_irq_handler(int irq, void *dev_id)
 		atomic_set(&ts->state.pm, DEV_PM_SUSPEND_IRQ);
 		wake_lock_timeout(&ts->lpwg_wake_lock, msecs_to_jiffies(1000));
 		return IRQ_HANDLED;
-    }
+	}
 	return IRQ_WAKE_THREAD;
 }
 

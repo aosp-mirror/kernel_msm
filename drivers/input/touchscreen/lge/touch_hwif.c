@@ -269,7 +269,6 @@ void touch_resend_irq(unsigned int irq)
 	if (desc) {
 		if (desc->istate & IRQS_PENDING)
 			TOUCH_D(BASE_INFO, "irq(%d) pending\n", irq);
-		check_irq_resend(desc);
 	}
 }
 
