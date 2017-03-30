@@ -2,7 +2,6 @@
  * msm8998-htc-common: common configs of msm8998 HTC projects
  */
 
-#include "msm8998-touch-muskie.dtsi"
 #include "msm8998-key-muskie.dtsi"
 #include "msm8998-audio-muskie.dtsi"
 

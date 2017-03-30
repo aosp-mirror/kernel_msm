@@ -1,0 +1,15 @@
+#include "msm8998-touch-mw-common.dtsi"
+
+&pmi8998_gpios {
+	gpio@c100 {
+		status = "okay";
+	};
+};
+
+&i2c_5 {
+	synaptics_dsx@20 {
+		synaptics,power-gpio = <&pmi8998_gpios 2 0>;
+		synaptics,power-on-state = <1>;
+		synaptics,display-coords = <0 1440 0 2560>;
+	};
+};

@@ -1,0 +1,16 @@
+#include "msm8998-touch-mw-common.dtsi"
+
+&pm8998_l6 {
+	regulator-min-microvolt = <1800000>;
+	regulator-max-microvolt = <1900000>;
+	qcom,init-voltage = <1800000>;
+	status = "okay";
+	regulator-boot-on;
+	regulator-always-on;
+};
+
+&i2c_5 {
+	synaptics_dsx@20 {
+		synaptics,display-coords = <0 1080 0 1920>;
+	};
+};
