@@ -15,10 +15,21 @@
 };
 
 &soc {
-	/delete-node/ sound-9335;
-	/delete-node/ msm_cdc_pinctrl@59;
-	/delete-node/ msm_cdc_pinctrl@60;
-	/delete-node/ msm_cdc_pinctrl@75;
+	sound-9335 {
+		status = "disabled";
+	};
+
+	msm_cdc_pinctrl@59 {
+		status = "disabled";
+	};
+
+	msm_cdc_pinctrl@60 {
+		status = "disabled";
+	};
+
+	msm_cdc_pinctrl@75 {
+		status = "disabled";
+	};
 
 	sound-tavil {
 		compatible = "qcom,msm8998-asoc-snd-tavil";
@@ -209,8 +220,13 @@
 };
 
 &slim_aud {
-	/delete-node/ tasha_codec;
-	/delete-node/ swr_master;
+	tasha_codec {
+		status = "disabled";
+	};
+
+	swr_master {
+		status = "disabled";
+	};
 
 	wcd934x_cdc: tavil_codec {
 		clocks = <&clock_audio clk_audio_pmi_clk>;
@@ -220,7 +236,9 @@
 			qcom,master-bus-num = <2>;
 		};
 	 */
-		/delete-node/ swr_master;
+		swr_master {
+			status = "disabled";
+		};
 	};
 };
 
