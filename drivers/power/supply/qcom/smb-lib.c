@@ -2171,40 +2171,12 @@ int smblib_get_prop_use_external_vbus_output(struct smb_charger *chg,
 int smblib_get_prop_usb_port_temp(struct smb_charger *chg,
 				  union power_supply_propval *val)
 {
-	int rc = 0;
-	int temp = 250;
-
 	if (chg->fake_port_temp >= 0) {
 		val->intval = chg->fake_port_temp;
-		return 0;
+	} else {
+		/* XXX: read form the thermistor */
+		val->intval = 250;
 	}
-
-	if (!chg->usb_port_tz_name)
-		return -ENODEV;
-
-	/* lazily get the usb port thermal zone */
-	if (!chg->usb_port_tz) {
-		chg->usb_port_tz = thermal_zone_get_zone_by_name(
-						chg->usb_port_tz_name);
-		if (IS_ERR(chg->usb_port_tz)) {
-			rc = PTR_ERR(chg->usb_port_tz);
-			chg->usb_port_tz = NULL;
-			smblib_err(chg,
-				   "Couldn't get USB thermal zone rc=%d\n",
-				   rc);
-			return rc;
-		}
-	}
-
-	rc = thermal_zone_get_temp(chg->usb_port_tz, &temp);
-	if (rc < 0) {
-		smblib_err(chg,
-			   "Couldn't get temp USB thermal zone rc=%d\n",
-			   rc);
-		return rc;
-	}
-
-	val->intval = temp;
 
 	return 0;
 }
@@ -3011,9 +2983,6 @@ static void smblib_port_overheat_handle_chg_state_change(
 						struct smb_charger *chg,
 						u8 stat)
 {
-	if (!chg->port_overheat_mitigation_enabled)
-		return;
-
 	cancel_delayed_work_sync(&chg->port_overheat_work);
 	schedule_delayed_work(&chg->port_overheat_work, 0);
 }
@@ -3873,6 +3842,10 @@ rerun:
 	schedule_work(&chg->rdstd_cc2_detach_work);
 }
 
+/* XXX: move the below parameters to device tree */
+#define PORT_OVERHEAT_BEGIN_TEMP	700
+#define PORT_OVERHEAT_TERMINATE_TEMP	600
+#define PORT_OVERHEAT_WORK_DELAY_MS	1000
 static void port_overheat_work(struct work_struct *work)
 {
 	struct smb_charger *chg = container_of(work, struct smb_charger,
@@ -3894,8 +3867,7 @@ static void port_overheat_work(struct work_struct *work)
 	}
 	temp = pval.intval;
 
-	if (chg->port_overheat &&
-	    temp < chg->port_overheat_mitigation_end_temp) {
+	if (chg->port_overheat && temp < PORT_OVERHEAT_TERMINATE_TEMP) {
 		smblib_err(chg, "Port overheat mitigation ends.\n");
 		/* resume USB */
 		rc = vote(chg->usb_suspend_votable, OVERHEAT_MITIGATION_VOTER,
@@ -3921,8 +3893,7 @@ static void port_overheat_work(struct work_struct *work)
 			goto rerun;
 		}
 		chg->port_overheat = false;
-	} else if (!chg->port_overheat &&
-		   temp > chg->port_overheat_mitigation_begin_temp) {
+	} else if (!chg->port_overheat && temp > PORT_OVERHEAT_BEGIN_TEMP) {
 		smblib_err(chg, "Port overheat mitigation begins.\n");
 		/* disable Type-C */
 		mutex_lock(&chg->typec_pr_lock);
@@ -3966,10 +3937,9 @@ static void port_overheat_work(struct work_struct *work)
 
 rerun:
 	if (rerun_work)
-		schedule_delayed_work(
-			&chg->port_overheat_work,
-			msecs_to_jiffies(
-				chg->port_overheat_mitigation_work_interval));
+		schedule_delayed_work(&chg->port_overheat_work,
+				      msecs_to_jiffies(
+						PORT_OVERHEAT_WORK_DELAY_MS));
 }
 
 static int smblib_create_votables(struct smb_charger *chg)
@@ -4106,52 +4076,6 @@ static int smblib_create_votables(struct smb_charger *chg)
 	return rc;
 }
 
-static int smblib_init_port_overheat_mitigation(struct smb_charger *chg)
-{
-	int rc = 0;
-	int value;
-	struct device_node *node = chg->dev->of_node;
-
-	chg->port_overheat_mitigation_enabled =
-			of_property_read_bool(
-					node, "goog,port-overheat-mitigation");
-
-	rc = of_property_read_u32(node, "goog,port-overheat-begin-temp",
-				  &value);
-	if (rc < 0)
-		chg->port_overheat_mitigation_enabled = false;
-	else
-		chg->port_overheat_mitigation_begin_temp = value;
-
-	rc = of_property_read_u32(node, "goog,port-overheat-end-temp",
-				  &value);
-	if (rc < 0)
-		chg->port_overheat_mitigation_enabled = false;
-	else
-		chg->port_overheat_mitigation_end_temp = value;
-
-	rc = of_property_read_u32(node,
-				  "goog,port-overheat-work-interval",
-				  &value);
-	if ((rc < 0) || (value < 0))
-		chg->port_overheat_mitigation_enabled = false;
-	else
-		chg->port_overheat_mitigation_work_interval = value;
-
-	rc = of_property_read_string(
-			node, "goog,port-overheat-usb-port-tz-name",
-			&chg->usb_port_tz_name);
-	/*
-	 * of_property_read_string() modifies chg->usb_port_tz_name
-	 * only if a valid string can be decoded. Therfore, no need
-	 * to reset chg->usb_port_tz_name when things failed
-	 */
-	if (rc < 0)
-		chg->port_overheat_mitigation_enabled = false;
-
-	return rc;
-}
-
 static void smblib_destroy_votables(struct smb_charger *chg)
 {
 	if (chg->usb_suspend_votable)
@@ -4243,8 +4167,6 @@ int smblib_init(struct smb_charger *chg)
 		}
 		if (rc < 0)
 			return rc;
-
-		smblib_init_port_overheat_mitigation(chg);
 
 		chg->bms_psy = power_supply_get_by_name("bms");
 		chg->pl.psy = power_supply_get_by_name("parallel");

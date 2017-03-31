@@ -12,12 +12,11 @@
 
 #ifndef __SMB2_CHARGER_H
 #define __SMB2_CHARGER_H
-#include <linux/extcon.h>
+#include <linux/types.h>
 #include <linux/irqreturn.h>
 #include <linux/regulator/driver.h>
 #include <linux/regulator/consumer.h>
-#include <linux/thermal.h>
-#include <linux/types.h>
+#include <linux/extcon.h>
 #include "storm-watch.h"
 
 enum print_reason {
@@ -199,9 +198,6 @@ struct smb_charger {
 	struct regulator	*dpdm_reg;
 	struct regulator	*external_vbus_reg;
 
-	/* thermal zones */
-	struct thermal_zone_device	*usb_port_tz;
-
 	/* votables */
 	struct votable		*usb_suspend_votable;
 	struct votable		*dc_suspend_votable;
@@ -254,11 +250,6 @@ struct smb_charger {
 	bool			use_external_vbus_reg;
 	int			fake_port_temp;
 	bool			port_overheat;
-	const char		*usb_port_tz_name;
-	bool			port_overheat_mitigation_enabled;
-	int			port_overheat_mitigation_begin_temp;
-	int			port_overheat_mitigation_end_temp;
-	int			port_overheat_mitigation_work_interval;
 
 	/*
 	 * flag set to keep typec power role in disabled state during port
