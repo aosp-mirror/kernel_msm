@@ -14,7 +14,7 @@
 &spi_1 {
 	status = "ok";
 	/* DMA is only working intermittently - disable. */
-	/delete-property/qcom,use-bam;
+	qcom,use-bam = <0>;
 
 	ese@0 {
 		compatible = "nxp,pn81a";
