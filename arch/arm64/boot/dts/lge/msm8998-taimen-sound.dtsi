@@ -78,7 +78,7 @@
 		qcom,msm-mbhc-hphl-swh = <1>;
 		qcom,msm-mbhc-gnd-swh = <0>;
 		qcom,mbhc-audio-jack-type = "4-pole-jack";
-		/delete-property/ qcom,us-euro-gpios;
+		qcom,us-euro-gpios = <>;
 		qcom,tavil-mclk-clk-freq = <9600000>;
 		asoc-platform = <&pcm0>, <&pcm1>, <&pcm2>, <&voip>, <&voice>,
 				<&loopback>, <&compress>, <&hostless>,
@@ -137,9 +137,6 @@
 		asoc-codec-names = "msm-stub-codec.1",
 				   "msm-ext-disp-audio-codec-rx";
 		qcom,wsa-max-devs = <0>;
-		/delete-property/ qcom,wsa-devs;
-		/delete-property/ qcom,usbc-analog-en1_gpio;
-		/delete-property/ qcom,usbc-analog-en2_n_gpio;
 
 		wahoo,use-external-amp;
 		wahoo,external-amp-be-sname = "Quaternary MI2S Playback";
