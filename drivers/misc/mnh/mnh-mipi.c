@@ -287,8 +287,6 @@ static void mnh_mipi_gen3_host(struct device *dev, uint32_t device,
 			       uint32_t rate)
 {
 	uint32_t code_index, freq_range_code, osc_freq_code;
-	uint32_t i = 0;
-	unsigned long data;
 
 	/* only support devices 0-2 */
 	if (device > 2)
@@ -368,18 +366,6 @@ static void mnh_mipi_gen3_host(struct device *dev, uint32_t device,
 		0x1);
 	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, CSI2_RESETN,
 		CSI2_RESETN, 0x1);
-
-	dev_dbg(dev, "%s: waiting for host controller %d\n", __func__, device);
-	do {
-		data = HW_IN(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX,
-			PHY_STOPSTATE);
-		udelay(10);
-		i++;
-	} while ((i < 40) && ((data & 0x1000F) != 0x1000F));
-
-	if ((i >= 40) && ((data & 0x1000F) != 0x1000F))
-		dev_err(dev, "%d status check failed for gen3 host data: 0x%lx\n",
-			device, data);
 }
 
 static uint8_t mnh_mipi_get_vco_cntrl(uint32_t rate)
