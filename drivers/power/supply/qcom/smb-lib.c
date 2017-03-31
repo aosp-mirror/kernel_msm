@@ -3873,103 +3873,16 @@ rerun:
 	schedule_work(&chg->rdstd_cc2_detach_work);
 }
 
-#define PORT_OVERHEAT_PROBE_CC_DELAY_MS	200
-/* require the caller to hold chg->typec_pr_lock */
-static int port_overheat_probe_cc_status_locked(struct smb_charger *chg,
-						bool *attached)
-{
-	int rc = 0;
-	u8 stat;
-
-	rc = smblib_set_prop_typec_power_role_locked(
-					chg, POWER_SUPPLY_TYPEC_PR_SINK);
-	if (rc < 0) {
-		smblib_err(chg, "Couldn't enable type-c block rc=%d\n", rc);
-		return rc;
-	}
-
-	msleep(PORT_OVERHEAT_PROBE_CC_DELAY_MS);
-
-	rc = smblib_read(chg, TYPE_C_STATUS_4_REG, &stat);
-	if (rc < 0) {
-		smblib_err(chg, "Couldn't read Type-C status 4 rc=%d\n", rc);
-		return rc;
-	}
-
-	*attached = stat & CC_ATTACHED_BIT ? true : false;
-
-	rc = smblib_set_prop_typec_power_role_locked(
-					chg, POWER_SUPPLY_TYPEC_PR_NONE);
-	if (rc < 0) {
-		smblib_err(chg, "Couldn't disable type-c block rc=%d\n", rc);
-		return rc;
-	}
-
-	return 0;
-}
-
-static int port_overheat_mitigation_end(struct smb_charger *chg)
-{
-	int rc;
-	enum power_supply_typec_power_role pr_role;
-
-	/* resume USB */
-	rc = vote(chg->usb_suspend_votable, OVERHEAT_MITIGATION_VOTER,
-		  false, 0);
-	if (rc < 0) {
-		smblib_err(chg, "Couldn't vote usb suspend: false rc=%d\n", rc);
-		return rc;
-	}
-	/* enable Type-C */
-	mutex_lock(&chg->typec_pr_lock);
-	chg->typec_pr_disabled = false;
-	pr_role = chg->typec_pr_pd_vote;
-	rc = smblib_set_prop_typec_power_role_locked(chg, pr_role);
-	if (rc < 0)
-		chg->typec_pr_disabled = true; /* enable Type-C failed */
-	mutex_unlock(&chg->typec_pr_lock);
-	if (rc < 0)
-		smblib_err(chg, "Couldn't enable type-c pr %d rc=%d\n",
-			   pr_role, rc);
-
-	return rc;
-}
-
-static int port_overheat_mitigation_begin(struct smb_charger *chg)
-{
-	int rc;
-	enum power_supply_typec_power_role pr_role;
-
-	/* disable Type-C */
-	mutex_lock(&chg->typec_pr_lock);
-	chg->typec_pr_disabled = true;
-	pr_role = POWER_SUPPLY_TYPEC_PR_NONE;
-	rc = smblib_set_prop_typec_power_role_locked(chg, pr_role);
-	if (rc < 0)
-		chg->typec_pr_disabled = false; /* disable Type-C failed */
-	mutex_unlock(&chg->typec_pr_lock);
-	if (rc < 0) {
-		smblib_err(chg, "Couldn't disable type-c rc=%d\n", rc);
-		return rc;
-	}
-	/* suspend USB */
-	rc = vote(chg->usb_suspend_votable, OVERHEAT_MITIGATION_VOTER,
-		  true, 0);
-	if (rc < 0)
-		smblib_err(chg, "Couldn't vote usb suspend: true rc=%d\n", rc);
-
-	return rc;
-}
-
 static void port_overheat_work(struct work_struct *work)
 {
 	struct smb_charger *chg = container_of(work, struct smb_charger,
 					       port_overheat_work.work);
 	int rc = 0;
 	u8 stat;
-	int temp;
-	bool rerun_work, attached;
 	union power_supply_propval pval = {0, };
+	int temp;
+	enum power_supply_typec_power_role pr_role;
+	bool rerun_work;
 
 	smblib_dbg(chg, PR_MISC, "Port overheat work running...\n");
 
@@ -3983,34 +3896,51 @@ static void port_overheat_work(struct work_struct *work)
 
 	if (chg->port_overheat &&
 	    temp < chg->port_overheat_mitigation_end_temp) {
-		/* check if the cable is still there */
-		mutex_lock(&chg->typec_pr_lock);
-		rc = port_overheat_probe_cc_status_locked(chg, &attached);
-		mutex_unlock(&chg->typec_pr_lock);
+		smblib_err(chg, "Port overheat mitigation ends.\n");
+		/* resume USB */
+		rc = vote(chg->usb_suspend_votable, OVERHEAT_MITIGATION_VOTER,
+			  false, 0);
 		if (rc < 0) {
-			smblib_err(chg, "Probe cc status failed rc=%d\n", rc);
+			smblib_err(chg,
+				   "Couldn't vote usb suspend: false rc=%d\n",
+				   rc);
 			rerun_work = true;
 			goto rerun;
 		}
-		/* temperature drops and cable unplugged */
-		if (!attached) {
-			smblib_err(chg, "Port overheat mitigation ends.\n");
-			rc = port_overheat_mitigation_end(chg);
-			if (rc < 0) {
-				smblib_err(chg,
-					   "Couldn't end mitigation rc=%d\n",
-					   rc);
-				rerun_work = true;
-				goto rerun;
-			}
-			chg->port_overheat = false;
+		/* enable Type-C */
+		mutex_lock(&chg->typec_pr_lock);
+		chg->typec_pr_disabled = false;
+		pr_role = chg->typec_pr_pd_vote;
+		rc = smblib_set_prop_typec_power_role_locked(chg, pr_role);
+		mutex_unlock(&chg->typec_pr_lock);
+		if (rc < 0) {
+			smblib_err(chg,
+				   "Couldn't enable type-c pr %d rc=%d\n",
+				   pr_role, rc);
+			rerun_work = true;
+			goto rerun;
 		}
+		chg->port_overheat = false;
 	} else if (!chg->port_overheat &&
 		   temp > chg->port_overheat_mitigation_begin_temp) {
 		smblib_err(chg, "Port overheat mitigation begins.\n");
-		rc = port_overheat_mitigation_begin(chg);
+		/* disable Type-C */
+		mutex_lock(&chg->typec_pr_lock);
+		chg->typec_pr_disabled = true;
+		pr_role = POWER_SUPPLY_TYPEC_PR_NONE;
+		rc = smblib_set_prop_typec_power_role_locked(chg, pr_role);
+		mutex_unlock(&chg->typec_pr_lock);
 		if (rc < 0) {
-			smblib_err(chg, "Couldn't begin mitigation rc=%d\n",
+			smblib_err(chg, "Couldn't disable type-c rc=%d\n", rc);
+			rerun_work = true;
+			goto rerun;
+		}
+		/* suspend USB */
+		rc = vote(chg->usb_suspend_votable, OVERHEAT_MITIGATION_VOTER,
+			  true, 0);
+		if (rc < 0) {
+			smblib_err(chg,
+				   "Couldn't vote usb suspend: true rc=%d\n",
 				   rc);
 			rerun_work = true;
 			goto rerun;

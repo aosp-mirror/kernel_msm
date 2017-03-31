@@ -259,7 +259,6 @@ struct smb_charger {
 	int			port_overheat_mitigation_begin_temp;
 	int			port_overheat_mitigation_end_temp;
 	int			port_overheat_mitigation_work_interval;
-	u8			port_overheat_mitigation_typec_irq;
 
 	/*
 	 * flag set to keep typec power role in disabled state during port
