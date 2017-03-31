@@ -781,13 +781,9 @@ static void STC311x_SetParam(void)
 		STC31xx_WriteByte(STC311x_REG_CURRENT_THRES, value);
 }
 
-	/* set parameters if different from default, only if a restart is done
-	 * (battery change)*/
-	if (GG_Ram.reg.CC_cnf != 0)
-		STC31xx_WriteWord(STC311x_REG_CC_CNF, GG_Ram.reg.CC_cnf);
-
-	if (GG_Ram.reg.VM_cnf != 0)
-		STC31xx_WriteWord(STC311x_REG_VM_CNF, GG_Ram.reg.VM_cnf);
+	/* CC_CNF, VM_CNF */
+	STC31xx_WriteWord(STC311x_REG_CC_CNF, BattData.CC_cnf);
+	STC31xx_WriteWord(STC311x_REG_VM_CNF, BattData.VM_cnf);
 
 	/*   clear PORDET, BATFAIL, free ALM pin, reset conv counter */
 	STC31xx_WriteByte(STC311x_REG_CTRL, 0x83);
@@ -851,10 +847,12 @@ static int STC311x_Startup(void)
  * Input          : None
  * Return         :
  *****************************************************************************/
+#define SOC_DIFF 3
 static int STC311x_Restore(void)
 {
 	int res;
 	int ocv;
+	int ram_soc, reg_soc;
 
 	/* check STC310x status */
 	res = STC311x_Status();
@@ -869,6 +867,15 @@ static int STC311x_Restore(void)
 	/* if restore from unexpected reset, restore SOC (system dependent) */
 	if (GG_Ram.reg.GG_Status == GG_RUNNING) {
 		if (GG_Ram.reg.SOC != 0) {
+			//compare the ram SOC with register SOC.
+			reg_soc = (STC31xx_ReadWord(STC311x_REG_SOC)/512);
+			ram_soc = (GG_Ram.reg.HRSOC/512);
+			pr_info("reg_soc:%d, ram_HRSOC:%d \n", reg_soc, ram_soc);
+			if (reg_soc <= STC311x_SOC_LOW_THRESHOLD)
+				pr_err("Battery is low, skip restore SOC from ram \n");
+			else if (((reg_soc > ram_soc) && (reg_soc - ram_soc > SOC_DIFF)) || ((ram_soc > reg_soc) && (ram_soc - reg_soc > SOC_DIFF)))
+				pr_err("SOC not match, skip restore SOC from ram \n");
+			else
 			/*   restore SOC */
 			STC31xx_WriteWord(STC311x_REG_SOC, GG_Ram.reg.HRSOC);
 		}
@@ -1575,6 +1582,8 @@ int GasGauge_Start(struct GasGauge_DataTypeDef *GG)
 
 
 	GG_Ram.reg.GG_Status = GG_INIT;
+	GG_Ram.reg.CC_cnf = BattData.CC_cnf;
+	GG_Ram.reg.VM_cnf = BattData.VM_cnf;
 	/* update the crc */
 	UpdateRamCrc();
 	STC311x_WriteRamData(GG_Ram.db);
@@ -2074,6 +2083,8 @@ int GasGauge_Task(struct GasGauge_DataTypeDef *GG)
 			BattData.SOC = MAX_SOC;
 			STC311x_SetSOC(MAX_HRSOC+512);
 		}
+		if (BattData.SOC <= 0)
+			BattData.SOC = 0;
 
 		/* -------- APPLICATION RESULTS ------------ */
 
