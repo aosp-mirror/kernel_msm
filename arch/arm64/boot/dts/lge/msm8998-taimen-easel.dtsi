@@ -29,14 +29,14 @@
 		 <0x02000000 0x0 0x1b100000 0x1b100000 0x0 0xf00000>; /* bars */
 
 	/* QCOM's GICM implementation is not compatible with Easel */
-	/delete-property/ qcom,msi-gicm-addr;
-	/delete-property/ qcom,msi-gicm-base;
+	qcom,msi-gicm-addr = <>;
+	qcom,msi-gicm-base = <>;
 
 	/* reduce endpoint reset latency */
 	qcom,ep-latency = <1>;
 
 	/* WAKE# optional sideband signal not connected */
-	/delete-property/ wake-gpio;
+	wake-gpio = <>;
 	/* Remove pcie0_wake_default from pin muxing */
 	pinctrl-0 = <&pcie0_clkreq_default &pcie0_perst_default>;
 };
