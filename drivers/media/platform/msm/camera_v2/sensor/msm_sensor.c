@@ -18,11 +18,34 @@
 #include <linux/regulator/rpm-smd-regulator.h>
 #include <linux/regulator/consumer.h>
 
+/*fw update start*/
+#ifdef CONFIG_OIS_FW_UPDATE
+#include "fw_update.h"
+#endif
+/*fw update end*/
+
 #undef CDBG
 #define CDBG(fmt, args...) pr_debug(fmt, ##args)
 
 static struct msm_camera_i2c_fn_t msm_sensor_cci_func_tbl;
 static struct msm_camera_i2c_fn_t msm_sensor_secure_func_tbl;
+
+/*fw update start*/
+#ifdef CONFIG_OIS_FW_UPDATE
+int msm_sensor_checkfw(struct msm_sensor_ctrl_t *s_ctrl)
+{
+	pr_info("[OISFW]:%s \n", __func__);
+	if (!s_ctrl) {
+		pr_err("[OISFW]:%s:%d failed: %pK\n",
+			__func__, __LINE__, s_ctrl);
+		return -EINVAL;
+	}
+
+	return checkFWUpdate(s_ctrl);
+}
+#endif
+/*fw update end*/
+
 
 static void msm_sensor_adjust_mclk(struct msm_camera_power_ctrl_t *ctrl)
 {
@@ -894,7 +917,14 @@ static int msm_sensor_config32(struct msm_sensor_ctrl_t *s_ctrl,
 		}
 		break;
 	}
-
+	/*fw update start*/
+#ifdef CONFIG_OIS_FW_UPDATE
+	case CFG_FW_UPDATE: {
+		rc = msm_sensor_checkfw(s_ctrl);
+		break;
+	}
+#endif
+	/*fw update end*/
 	default:
 		rc = -EFAULT;
 		break;
@@ -1376,7 +1406,14 @@ int msm_sensor_config(struct msm_sensor_ctrl_t *s_ctrl, void __user *argp)
 		}
 		break;
 	}
-
+	/*fw update start*/
+#ifdef CONFIG_OIS_FW_UPDATE
+	case CFG_FW_UPDATE: {
+		rc = msm_sensor_checkfw(s_ctrl);
+		break;
+	}
+#endif
+	/*fw update end*/
 	default:
 		rc = -EFAULT;
 		break;
@@ -1435,6 +1472,11 @@ static struct msm_camera_i2c_fn_t msm_sensor_cci_func_tbl = {
 	.i2c_read = msm_camera_cci_i2c_read,
 	.i2c_read_seq = msm_camera_cci_i2c_read_seq,
 	.i2c_write = msm_camera_cci_i2c_write,
+	/* fw update start */
+#ifdef CONFIG_OIS_FW_UPDATE
+	.i2c_write_seq = msm_camera_cci_i2c_write_seq,
+#endif
+	/* fw update end */
 	.i2c_write_table = msm_camera_cci_i2c_write_table,
 	.i2c_write_seq_table = msm_camera_cci_i2c_write_seq_table,
 	.i2c_write_table_w_microdelay =
