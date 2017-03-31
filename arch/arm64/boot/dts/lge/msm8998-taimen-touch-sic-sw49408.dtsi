@@ -61,7 +61,7 @@
 
 			pinctrl-names = "touch_pin_active", "touch_pin_sleep";
 			pinctrl-0 = <&ts_reset_active &ts_int_active>;
-			pinctrl-1 = <&ts_reset_suspend &ts_int_suspend>;
+			pinctrl-1 = <&ts_reset_suspend1 &ts_int_suspend1>;
 
 			reset-gpio = <&tlmm 89 0x00>;
 			irq-gpio = <&tlmm 125 0x2008>;

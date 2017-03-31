@@ -1377,17 +1377,6 @@
 			};
 		};
 
-		/delete-node/ mdss_dp_hpd_active;
-		/delete-node/ mdss_dp_hpd_suspend;
-		/delete-node/ mdss_hdmi_5v_active;
-		/delete-node/ mdss_hdmi_5v_suspend;
-		/delete-node/ mdss_hdmi_cec_active;
-		/delete-node/ mdss_hdmi_cec_suspend;
-		/delete-node/ mdss_hdmi_ddc_active;
-		/delete-node/ mdss_hdmi_ddc_suspend;
-		/delete-node/ mdss_hdmi_hpd_active;
-		/delete-node/ mdss_hdmi_hpd_suspend;
-
 		/* pin set for Hall IC */
 		hallic_gpio {
 			label = "hallic_gpio";
@@ -1434,8 +1423,6 @@
 		};
 
 		ts_mux {
-			/delete-node/ ts_reset_suspend;
-			/delete-node/ ts_int_suspend;
 			ts_active: ts_active {
 				mux {
 					pins = "gpio89", "gpio125";
@@ -1602,8 +1589,10 @@
 					bias-pull-up;
 				};
 			};
+		};
 
-			ts_reset_suspend: ts_reset_suspend {
+		pmx_ts_reset_suspend {
+			ts_reset_suspend1: ts_reset_suspend1 {
 				mux {
 					pins = "gpio89";
 					function = "gpio";
@@ -1628,8 +1617,10 @@
 					bias-pull-up;
 				};
 			};
+		};
 
-			ts_int_suspend: ts_int_suspend {
+		pmx_ts_int_suspend {
+			ts_int_suspend1: ts_int_suspend1 {
 				mux {
 					pins = "gpio125";
 					function = "gpio";
