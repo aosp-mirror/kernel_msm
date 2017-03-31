@@ -190,10 +190,9 @@
 };
 
 &soc {
-	dsi_panel_pwr_supply: dsi_panel_pwr_supply {
+	sw49408_dsc_qhd_panel_pwr_supply: sw49408_dsc_qhd_panel_pwr_supply {
 		#address-cells = <1>;
 		#size-cells = <0>;
-		/delete-node/qcom,panel-supply-entry@2;
 
 		qcom,panel-supply-entry@0 {
 			reg = <0>;
@@ -235,7 +234,9 @@
 };
 
 &mdss_fb0 {
-	/delete-node/ qcom,cont-splash-memory;
+	qcom,cont-splash-memory {
+		linux,contiguous-region = <>;
+	};
 };
 
 /* End of overriding parameters in msm-pmi8998.dtsi */
