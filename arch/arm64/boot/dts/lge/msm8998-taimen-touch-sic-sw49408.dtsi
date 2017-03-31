@@ -11,7 +11,7 @@
  */
 
 &aliases {
-	spi5 = &spi_5;
+	spi5 = "/soc/spi@c179000";
 };
 
 &soc {
