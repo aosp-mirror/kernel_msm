@@ -39,6 +39,16 @@
 			reg = <0 0xb0100000 0 0xc00000>;
 			label = "crash_fb_mem";
 		};
+
+		easel_mem: easel_mem@96000000 {
+			linux,contiguous-region;
+			reg = <0 0x96000000 0 0x8000000>;
+			label = "easel_mem";
+		};
+
+		cont_splash_mem: splash_region@9d600000 {
+			status = "disabled";
+		};
 	};
 };
 
