@@ -2168,19 +2168,6 @@ int smblib_get_prop_use_external_vbus_output(struct smb_charger *chg,
 	return 0;
 }
 
-int smblib_get_prop_usb_port_temp(struct smb_charger *chg,
-				  union power_supply_propval *val)
-{
-	if (chg->fake_port_temp >= 0) {
-		val->intval = chg->fake_port_temp;
-	} else {
-		/* XXX: read form the thermistor */
-		val->intval = 250;
-	}
-
-	return 0;
-}
-
 /*******************
  * USB PSY SETTERS *
  * *****************/
@@ -2248,14 +2235,13 @@ int smblib_set_prop_boost_current(struct smb_charger *chg,
 	return rc;
 }
 
-static int smblib_set_prop_typec_power_role_locked(
-				struct smb_charger *chg,
-				enum power_supply_typec_power_role pr_role)
+int smblib_set_prop_typec_power_role(struct smb_charger *chg,
+				     const union power_supply_propval *val)
 {
 	int rc = 0;
 	u8 reg;
 
-	switch (pr_role) {
+	switch (val->intval) {
 	case POWER_SUPPLY_TYPEC_PR_NONE:
 		reg = TYPEC_DISABLE_CMD_BIT;
 		break;
@@ -2269,7 +2255,7 @@ static int smblib_set_prop_typec_power_role_locked(
 		reg = DFP_EN_CMD_BIT;
 		break;
 	default:
-		smblib_err(chg, "power role %d not supported\n", pr_role);
+		smblib_err(chg, "power role %d not supported\n", val->intval);
 		return -EINVAL;
 	}
 
@@ -2283,23 +2269,6 @@ static int smblib_set_prop_typec_power_role_locked(
 		return rc;
 	}
 
-	return rc;
-}
-
-int smblib_set_prop_typec_power_role(struct smb_charger *chg,
-				     const union power_supply_propval *val)
-{
-	int rc = 0;
-	enum power_supply_typec_power_role pr_role = val->intval;
-
-	mutex_lock(&chg->typec_pr_lock);
-
-	chg->typec_pr_pd_vote = pr_role;
-	if (chg->typec_pr_disabled)
-		pr_role = POWER_SUPPLY_TYPEC_PR_NONE;
-	rc = smblib_set_prop_typec_power_role_locked(chg, pr_role);
-
-	mutex_unlock(&chg->typec_pr_lock);
 	return rc;
 }
 
@@ -2874,14 +2843,6 @@ unlock:
 	return rc;
 }
 
-int smblib_set_prop_usb_port_temp(struct smb_charger *chg,
-				  const union power_supply_propval *val)
-{
-	chg->fake_port_temp = val->intval;
-
-	return 0;
-}
-
 /************************
  * PARALLEL PSY GETTERS *
  ************************/
@@ -2979,14 +2940,6 @@ unlock:
 	return IRQ_HANDLED;
 }
 
-static void smblib_port_overheat_handle_chg_state_change(
-						struct smb_charger *chg,
-						u8 stat)
-{
-	cancel_delayed_work_sync(&chg->port_overheat_work);
-	schedule_delayed_work(&chg->port_overheat_work, 0);
-}
-
 irqreturn_t smblib_handle_chg_state_change(int irq, void *data)
 {
 	struct smb_irq_data *irq_data = data;
@@ -3004,7 +2957,6 @@ irqreturn_t smblib_handle_chg_state_change(int irq, void *data)
 	}
 
 	stat = stat & BATTERY_CHARGER_STATUS_MASK;
-	smblib_port_overheat_handle_chg_state_change(chg, stat);
 	power_supply_changed(chg->batt_psy);
 	return IRQ_HANDLED;
 }
@@ -3842,106 +3794,6 @@ rerun:
 	schedule_work(&chg->rdstd_cc2_detach_work);
 }
 
-/* XXX: move the below parameters to device tree */
-#define PORT_OVERHEAT_BEGIN_TEMP	700
-#define PORT_OVERHEAT_TERMINATE_TEMP	600
-#define PORT_OVERHEAT_WORK_DELAY_MS	1000
-static void port_overheat_work(struct work_struct *work)
-{
-	struct smb_charger *chg = container_of(work, struct smb_charger,
-					       port_overheat_work.work);
-	int rc = 0;
-	u8 stat;
-	union power_supply_propval pval = {0, };
-	int temp;
-	enum power_supply_typec_power_role pr_role;
-	bool rerun_work;
-
-	smblib_dbg(chg, PR_MISC, "Port overheat work running...\n");
-
-	rc = smblib_get_prop_usb_port_temp(chg, &pval);
-	if (rc < 0) {
-		smblib_err(chg, "Couldn't get USB port temp rc=%d\n", rc);
-		rerun_work = true;
-		goto rerun;
-	}
-	temp = pval.intval;
-
-	if (chg->port_overheat && temp < PORT_OVERHEAT_TERMINATE_TEMP) {
-		smblib_err(chg, "Port overheat mitigation ends.\n");
-		/* resume USB */
-		rc = vote(chg->usb_suspend_votable, OVERHEAT_MITIGATION_VOTER,
-			  false, 0);
-		if (rc < 0) {
-			smblib_err(chg,
-				   "Couldn't vote usb suspend: false rc=%d\n",
-				   rc);
-			rerun_work = true;
-			goto rerun;
-		}
-		/* enable Type-C */
-		mutex_lock(&chg->typec_pr_lock);
-		chg->typec_pr_disabled = false;
-		pr_role = chg->typec_pr_pd_vote;
-		rc = smblib_set_prop_typec_power_role_locked(chg, pr_role);
-		mutex_unlock(&chg->typec_pr_lock);
-		if (rc < 0) {
-			smblib_err(chg,
-				   "Couldn't enable type-c pr %d rc=%d\n",
-				   pr_role, rc);
-			rerun_work = true;
-			goto rerun;
-		}
-		chg->port_overheat = false;
-	} else if (!chg->port_overheat && temp > PORT_OVERHEAT_BEGIN_TEMP) {
-		smblib_err(chg, "Port overheat mitigation begins.\n");
-		/* disable Type-C */
-		mutex_lock(&chg->typec_pr_lock);
-		chg->typec_pr_disabled = true;
-		pr_role = POWER_SUPPLY_TYPEC_PR_NONE;
-		rc = smblib_set_prop_typec_power_role_locked(chg, pr_role);
-		mutex_unlock(&chg->typec_pr_lock);
-		if (rc < 0) {
-			smblib_err(chg, "Couldn't disable type-c rc=%d\n", rc);
-			rerun_work = true;
-			goto rerun;
-		}
-		/* suspend USB */
-		rc = vote(chg->usb_suspend_votable, OVERHEAT_MITIGATION_VOTER,
-			  true, 0);
-		if (rc < 0) {
-			smblib_err(chg,
-				   "Couldn't vote usb suspend: true rc=%d\n",
-				   rc);
-			rerun_work = true;
-			goto rerun;
-		}
-		chg->port_overheat = true;
-	}
-
-	rerun_work = chg->port_overheat;
-
-	if (!rerun_work) {
-		rc = smblib_read(chg, BATTERY_CHARGER_STATUS_1_REG, &stat);
-		if (rc < 0) {
-			smblib_err(chg,
-				   "Couldn't read BATTERY_CHARGER_STATUS_1 rc=%d\n",
-				   rc);
-			rerun_work = true;
-		} else {
-			stat = stat & BATTERY_CHARGER_STATUS_MASK;
-			if (stat != DISABLE_CHARGE)
-				rerun_work = true;
-		}
-	}
-
-rerun:
-	if (rerun_work)
-		schedule_delayed_work(&chg->port_overheat_work,
-				      msecs_to_jiffies(
-						PORT_OVERHEAT_WORK_DELAY_MS));
-}
-
 static int smblib_create_votables(struct smb_charger *chg)
 {
 	int rc = 0;
@@ -4127,15 +3979,12 @@ int smblib_init(struct smb_charger *chg)
 	mutex_init(&chg->write_lock);
 	mutex_init(&chg->vbus_output_lock);
 	mutex_init(&chg->otg_overcurrent_lock);
-	mutex_init(&chg->typec_pr_lock);
 	INIT_WORK(&chg->bms_update_work, bms_update_work);
 	INIT_WORK(&chg->rdstd_cc2_detach_work, rdstd_cc2_detach_work);
 	INIT_DELAYED_WORK(&chg->hvdcp_detect_work, smblib_hvdcp_detect_work);
 	INIT_DELAYED_WORK(&chg->step_soc_req_work, step_soc_req_work);
 	INIT_DELAYED_WORK(&chg->clear_hdc_work, clear_hdc_work);
-	INIT_DELAYED_WORK(&chg->port_overheat_work, port_overheat_work);
 	chg->fake_capacity = -EINVAL;
-	chg->fake_port_temp = -EINVAL;
 
 	switch (chg->mode) {
 	case PARALLEL_MASTER:
