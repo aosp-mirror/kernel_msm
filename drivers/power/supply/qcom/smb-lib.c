@@ -19,7 +19,6 @@
 #include <linux/regulator/driver.h>
 #include <linux/input/qpnp-power-on.h>
 #include <linux/irq.h>
-#include <linux/wakelock.h>
 #include "smb-lib.h"
 #include "smb-reg.h"
 #include "storm-watch.h"
@@ -3974,11 +3973,6 @@ static void port_overheat_work(struct work_struct *work)
 
 	smblib_dbg(chg, PR_MISC, "Port overheat work running...\n");
 
-	if (!chg->port_overheat_mitigation_running) {
-		chg->port_overheat_mitigation_running = true;
-		wake_lock(&chg->port_overheat_mitigation_work_wakelock);
-	}
-
 	rc = smblib_get_prop_usb_port_temp(chg, &pval);
 	if (rc < 0) {
 		smblib_err(chg, "Couldn't get USB port temp rc=%d\n", rc);
@@ -4041,16 +4035,11 @@ static void port_overheat_work(struct work_struct *work)
 	}
 
 rerun:
-	if (rerun_work) {
+	if (rerun_work)
 		schedule_delayed_work(
 			&chg->port_overheat_work,
 			msecs_to_jiffies(
 				chg->port_overheat_mitigation_work_interval));
-	} else {
-		chg->port_overheat_mitigation_running = false;
-		wake_unlock(&chg->port_overheat_mitigation_work_wakelock);
-	}
-
 }
 
 static int smblib_create_votables(struct smb_charger *chg)
@@ -4192,11 +4181,6 @@ static int smblib_init_port_overheat_mitigation(struct smb_charger *chg)
 	int rc = 0;
 	int value;
 	struct device_node *node = chg->dev->of_node;
-
-	chg->port_overheat_mitigation_running = false;
-	wake_lock_init(&chg->port_overheat_mitigation_work_wakelock,
-		       WAKE_LOCK_SUSPEND,
-		       "port-overheat-monitor");
 
 	chg->port_overheat_mitigation_enabled =
 			of_property_read_bool(
