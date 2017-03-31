@@ -601,6 +601,19 @@
 
 &slim_aud {
 	/delete-node/ tavil_codec;
+
+	tasha_codec {
+		cdc-vdd-mic-bias-supply = <&pmi8998_bob>;
+		qcom,cdc-vdd-mic-bias-voltage = <3312000 3312000>;
+		qcom,cdc-vdd-mic-bias-current = <30400>;
+
+		qcom,cdc-static-supplies = "cdc-vdd-mic-bias",
+					   "cdc-vdd-buck",
+					   "cdc-buck-sido",
+					   "cdc-vdd-tx-h",
+					   "cdc-vdd-rx-h",
+					   "cdc-vddpx-1";
+	};
 };
 
 &wsa_spkr_sd1 {
