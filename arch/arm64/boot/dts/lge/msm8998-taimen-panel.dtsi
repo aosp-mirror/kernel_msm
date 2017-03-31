@@ -22,7 +22,7 @@
 };
 
 &mdss_dsi0 {
-	/delete-property/qcom,dsi-pref-prim-pan;
+	qcom,dsi-pref-prim-pan = <>;
 	pinctrl-names = "mdss_default", "mdss_sleep";
 	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
 	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
@@ -30,11 +30,11 @@
 	qcom,platform-te-gpio = <&tlmm 10 0>;
 	qcom,platform-extra-ldo-vddio-gpio = <&tlmm 133 0>;
 	qcom,platform-extra-ldo-vpnl-gpio = <&tlmm 21 0>;
-	/delete-property/wqhd-vddio-supply;
+	wqhd-vddio-supply = <>;
 };
 
 &mdss_dsi1 {
-	/delete-property/cell-index;
+	cell-index = <>;
 };
 
 &dsi_sw43402_dsc_qhd_cmd {
