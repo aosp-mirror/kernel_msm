@@ -630,20 +630,8 @@ int32_t qpnp_vadc_hc_read(struct qpnp_vadc_chip *vadc,
 	}
 
 	/* Note: Scaling functions for VADC_HC do not need offset/gain */
-	if (vadc->adc->adc_channels[dt_index].custom_map)
-		qpnp_adc_scale_custom(
-			vadc, result->adc_code,
-			vadc->adc->adc_prop,
-			vadc->adc->amux_prop->chan_prop,
-			vadc->adc->adc_channels[dt_index].custom_map_size,
-			vadc->adc->adc_channels[dt_index].custom_map,
-			result);
-	else
-		vadc_scale_fn[scale_type].chan(
-				vadc, result->adc_code,
-				vadc->adc->adc_prop,
-				vadc->adc->amux_prop->chan_prop,
-				result);
+	vadc_scale_fn[scale_type].chan(vadc, result->adc_code,
+		vadc->adc->adc_prop, vadc->adc->amux_prop->chan_prop, result);
 
 	pr_debug("channel=0x%x, adc_code=0x%x adc_result=%lld\n",
 			channel, result->adc_code, result->physical);
@@ -2123,20 +2111,8 @@ recalibrate:
 	if ((qpnp_vadc_channel_post_scaling_calib_check(vadc, channel)) < 0)
 		pr_debug("Post scaling calib type not updated\n");
 
-	if (vadc->adc->adc_channels[dt_index].custom_map)
-		qpnp_adc_scale_custom(
-			vadc, result->adc_code,
-			vadc->adc->adc_prop,
-			vadc->adc->amux_prop->chan_prop,
-			vadc->adc->adc_channels[dt_index].custom_map_size,
-			vadc->adc->adc_channels[dt_index].custom_map,
-			result);
-	else
-		vadc_scale_fn[scale_type].chan(
-				vadc, result->adc_code,
-				vadc->adc->adc_prop,
-				vadc->adc->amux_prop->chan_prop,
-				result);
+	vadc_scale_fn[scale_type].chan(vadc, result->adc_code,
+		vadc->adc->adc_prop, vadc->adc->amux_prop->chan_prop, result);
 
 	pr_debug("channel=%d, adc_code=%d adc_result=%lld\n",
 			channel, result->adc_code, result->physical);
@@ -2340,20 +2316,8 @@ int32_t qpnp_vadc_iadc_sync_complete_request(struct qpnp_vadc_chip *vadc,
 		goto fail;
 	}
 
-	if (vadc->adc->adc_channels[dt_index].custom_map)
-		qpnp_adc_scale_custom(
-			vadc, result->adc_code,
-			vadc->adc->adc_prop,
-			vadc->adc->amux_prop->chan_prop,
-			vadc->adc->adc_channels[dt_index].custom_map_size,
-			vadc->adc->adc_channels[dt_index].custom_map,
-			result);
-	else
-		vadc_scale_fn[scale_type].chan(
-				vadc, result->adc_code,
-				vadc->adc->adc_prop,
-				vadc->adc->amux_prop->chan_prop,
-				result);
+	vadc_scale_fn[scale_type].chan(vadc, result->adc_code,
+		vadc->adc->adc_prop, vadc->adc->amux_prop->chan_prop, result);
 
 fail:
 	vadc->vadc_iadc_sync_lock = false;

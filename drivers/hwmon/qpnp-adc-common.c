@@ -629,46 +629,6 @@ static const struct qpnp_vadc_map_pt adcmap_100k_104ef_104fb_1875_vref[] = {
 	{ 46,	125 },
 };
 
-static int32_t qpnp_adc_map_custom(const struct qpnp_vadc_map_pt *pts,
-				   u32 tablesize, u32 input,
-				   s64 *output)
-{
-	bool descending = 1;
-	u32 i = 0;
-
-	if (!pts)
-		return -EINVAL;
-
-	/* Check if table is descending or ascending */
-	if (tablesize > 1) {
-		if (pts[0].y < pts[1].y)
-			descending = 0;
-	}
-
-	while (i < tablesize) {
-		if ((descending == 1) && (pts[i].y < input))
-			break;
-		else if ((descending == 0) && (pts[i].y > input))
-			break;
-		i++;
-	}
-
-	if (i == 0) {
-		*output = pts[0].x;
-	} else if (i == tablesize) {
-		*output = pts[tablesize - 1].x;
-	} else {
-		/* result is between search_index and search_index-1 */
-		/* interpolate linearly */
-		*output = (((int32_t)((pts[i].x - pts[i - 1].x) *
-			(input - pts[i - 1].y)) /
-			(pts[i].y - pts[i - 1].y)) +
-			pts[i - 1].x);
-	}
-
-	return 0;
-}
-
 static int32_t qpnp_adc_map_voltage_temp(const struct qpnp_vadc_map_pt *pts,
 		uint32_t tablesize, int32_t input, int64_t *output)
 {
@@ -1308,51 +1268,6 @@ int32_t qpnp_adc_scale_default(struct qpnp_vadc_chip *vadc,
 }
 EXPORT_SYMBOL(qpnp_adc_scale_default);
 
-int32_t qpnp_adc_scale_custom(
-		struct qpnp_vadc_chip *vadc,
-		s32 adc_code,
-		const struct qpnp_adc_properties *adc_properties,
-		const struct qpnp_vadc_chan_properties *chan_properties,
-		int custom_map_size,
-		const struct qpnp_vadc_map_pt *custom_map,
-		struct qpnp_vadc_result *adc_chan_result)
-{
-	s64 scale_voltage = 0;
-
-	if (!chan_properties || !chan_properties->offset_gain_numerator ||
-	    !chan_properties->offset_gain_denominator || !adc_properties ||
-	    !adc_chan_result)
-		return -EINVAL;
-
-	if (adc_properties->adc_hc) {
-		/* (ADC code * vref_vadc (1.875V)) / 0x4000 */
-		if (adc_code > QPNP_VADC_HC_MAX_CODE)
-			adc_code = 0;
-		scale_voltage = (s64)adc_code;
-		scale_voltage *= (adc_properties->adc_vdd_reference * 1000);
-		scale_voltage = div64_s64(scale_voltage,
-					  QPNP_VADC_HC_VREF_CODE);
-	} else {
-		qpnp_adc_scale_with_calib_param(adc_code, adc_properties,
-						chan_properties,
-						&scale_voltage);
-		if (!chan_properties->calib_type == CALIB_ABSOLUTE)
-			scale_voltage *= 1000;
-	}
-
-	scale_voltage *= chan_properties->offset_gain_denominator;
-	scale_voltage = div64_s64(scale_voltage,
-				  chan_properties->offset_gain_numerator);
-	adc_chan_result->measurement = scale_voltage;
-
-	return qpnp_adc_map_custom(
-		custom_map,
-		custom_map_size,
-		scale_voltage,
-		&adc_chan_result->physical);
-}
-EXPORT_SYMBOL(qpnp_adc_scale_custom);
-
 int32_t qpnp_adc_usb_scaler(struct qpnp_vadc_chip *chip,
 		struct qpnp_adc_tm_btm_param *param,
 		uint32_t *low_threshold, uint32_t *high_threshold)
@@ -1908,38 +1823,6 @@ int qpnp_adc_get_revid_version(struct device *dev)
 }
 EXPORT_SYMBOL(qpnp_adc_get_revid_version);
 
-static int qpnp_adc_dt_parse_custom_map(struct device_node *child,
-					struct qpnp_vadc_map_pt *custom_map,
-					int custom_map_size)
-{
-	int elem_idx = 0;
-	int elem_cnt = custom_map_size * 2;
-	struct property *prop;
-	const __be32 *p;
-	u32 u;
-
-	if (!custom_map)
-		return -EINVAL;
-
-	if (!child)
-		return -EINVAL;
-
-	of_property_for_each_u32(child, "goog,custom-map", prop, p, u) {
-		if (elem_idx == elem_cnt)
-			return -EINVAL;
-		if (elem_idx % 2 == 0)
-			custom_map[elem_idx / 2].x = u;
-		else
-			custom_map[elem_idx / 2].y = u;
-		elem_idx++;
-	}
-
-	if (elem_idx != elem_cnt)
-		return -EINVAL;
-
-	return 0;
-}
-
 int32_t qpnp_adc_get_devicetree_data(struct platform_device *pdev,
 			struct qpnp_adc_drv *adc_qpnp)
 {
@@ -2015,8 +1898,6 @@ int32_t qpnp_adc_get_devicetree_data(struct platform_device *pdev,
 	for_each_child_of_node(node, child) {
 		int channel_num, scaling = 0, post_scaling = 0;
 		int fast_avg_setup, calib_type = 0, rc, hw_settle_time = 0;
-		int custom_map_size = 0;
-		struct qpnp_vadc_map_pt *custom_map = NULL;
 		const char *calibration_param, *channel_name;
 
 		channel_name = of_get_property(child,
@@ -2116,33 +1997,6 @@ int32_t qpnp_adc_get_devicetree_data(struct platform_device *pdev,
 			} else {
 				adc_channel_list[i].cal_val = cal_val_hc;
 			}
-
-			custom_map_size = of_property_count_u32_elems(
-							child,
-							"goog,custom-map");
-			if (custom_map_size > 0 && custom_map_size % 2 == 0) {
-				custom_map_size /= 2;
-				custom_map = devm_kzalloc(
-						&pdev->dev,
-						sizeof(struct qpnp_vadc_map_pt)
-							* custom_map_size,
-						GFP_KERNEL);
-				if (!custom_map)
-					return -ENOMEM;
-				rc = qpnp_adc_dt_parse_custom_map(
-							child,
-							custom_map,
-							custom_map_size);
-				if (rc) {
-					pr_err("Parse custom map failed\n");
-					return -EINVAL;
-				}
-				pr_info("Loaded custom map for %s\n",
-					channel_name);
-			} else {
-				custom_map_size = 0;
-				custom_map = NULL;
-			}
 		}
 
 		/* Individual channel properties */
@@ -2150,8 +2004,6 @@ int32_t qpnp_adc_get_devicetree_data(struct platform_device *pdev,
 		adc_channel_list[i].channel_num = channel_num;
 		adc_channel_list[i].adc_decimation = decimation;
 		adc_channel_list[i].fast_avg_setup = fast_avg_setup;
-		adc_channel_list[i].custom_map_size = custom_map_size;
-		adc_channel_list[i].custom_map = custom_map;
 		if (!of_device_is_compatible(node, "qcom,qpnp-iadc")) {
 			adc_channel_list[i].chan_path_prescaling = scaling;
 			adc_channel_list[i].adc_scale_fn = post_scaling;

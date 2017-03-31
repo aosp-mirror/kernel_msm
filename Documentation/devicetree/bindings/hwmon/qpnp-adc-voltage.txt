@@ -46,10 +46,6 @@ Optional properties:
 		    0 : The calibration values used for measurement are from a timer.
 		    1 : Forces a fresh measurement for calibration values at the same time
 			measurement is taken.
-- goog,custom-map: Provides a customized mapping from raw value to output physics value (e.g. temperature).
-		   The mapping is represented by a u32 array of < output_0 input_0 output_1 input_1 ...>.
-		   The input/output series of the mapping must be sorted. Providing a customized mapping
-		   overrides the scale function configured by qcom,scale-function.
 
 Client required property:
 - qcom,<consumer name>-vadc : The phandle to the corresponding vadc device.

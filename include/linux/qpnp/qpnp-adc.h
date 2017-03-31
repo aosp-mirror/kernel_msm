@@ -1110,8 +1110,6 @@ struct qpnp_adc_amux {
 	enum qpnp_adc_hw_settle_time		hw_settle_time;
 	enum qpnp_adc_calib_type		calib_type;
 	enum qpnp_adc_cal_val			cal_val;
-	int					custom_map_size;
-	struct qpnp_vadc_map_pt			*custom_map;
 };
 
 /**
@@ -1329,30 +1327,6 @@ int32_t qpnp_vadc_conv_seq_request(struct qpnp_vadc_chip *dev,
  */
 int32_t qpnp_adc_get_devicetree_data(struct platform_device *pdev,
 					struct qpnp_adc_drv *adc_qpnp);
-
-/**
- * qpnp_adc_scale_custom() - Scales the pre-calibrated digital output
- *		of an ADC to the ADC reference and compensates for the
- *		gain and offset. The value is scaled based on the custom
- *		map.
- * @dev:	Structure device for qpnp vadc
- * @adc_code:	pre-calibrated digital output of the ADC.
- * @adc_prop:	adc properties of the qpnp adc such as bit resolution,
- *		reference voltage.
- * @chan_prop:	Individual channel properties to compensate the i/p scaling,
- *		slope and offset.
- * @custom_map_size: Size of the custom map used for scaling.
- * @custom_map:	The custom map used for scaling.
- * @chan_rslt:	Physical result to be stored.
- */
-int32_t qpnp_adc_scale_custom(
-			struct qpnp_vadc_chip *dev,
-			s32 adc_code,
-			const struct qpnp_adc_properties *adc_prop,
-			const struct qpnp_vadc_chan_properties *chan_prop,
-			int custom_map_size,
-			const struct qpnp_vadc_map_pt *custom_map,
-			struct qpnp_vadc_result *chan_rslt);
 
 /**
  * qpnp_adc_scale_default() - Scales the pre-calibrated digital output
