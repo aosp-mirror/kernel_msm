@@ -21,6 +21,11 @@
 	};
 };
 
+/ {
+	aliases: aliases {};
+	reserved_memory: reserved-memory {};
+};
+
 /*
  * TODO: Device tree overlay:
  * below part is to be removed and the information will be

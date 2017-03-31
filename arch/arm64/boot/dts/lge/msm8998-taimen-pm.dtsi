@@ -10,11 +10,11 @@
  * GNU General Public License for more details.
  */
 
-/{
+&soc {
 	taimen_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <15>;
-#include "batterydata-lge-blt32-lgc-3300mah.dtsi"
-#include "batterydata-lge-blt32-tocad-3300mah.dtsi"
+		#include "batterydata-lge-blt32-lgc-3300mah.dtsi"
+		#include "batterydata-lge-blt32-tocad-3300mah.dtsi"
 	};
 };
 
