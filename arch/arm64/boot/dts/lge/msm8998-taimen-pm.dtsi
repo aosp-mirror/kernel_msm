@@ -32,7 +32,7 @@
 	};
 
 	qcom,bcl {
-		/delete-property/ qcom,bcl-soc-hotplug-list;
+		qcom,bcl-soc-hotplug-list = <>;
 		qcom,ibat-monitor {
 			qcom,soc-low-threshold = <0>;
 		};
