@@ -28,10 +28,6 @@
 	};
 };
 
-&i2c_6 {
-	/delete-node/ nq@28;
-};
-
 &i2c_8 { /* BLSP1 QUP8 (NFC) */
 	status = "okay";
 	qcom,nack-as-normal = <0x28>;
