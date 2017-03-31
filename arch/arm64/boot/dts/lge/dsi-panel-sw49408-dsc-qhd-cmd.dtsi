@@ -220,14 +220,14 @@
 	status = "okay";
 	qcom,qpnp-labibb-mode = "lcd";
 
-	ibb_regulator: qcom,ibb@dc00 {
+	qcom,ibb@dc00 {
 		qcom,qpnp-ibb-init-voltage = <5500000>;
 		qcom,qpnp-ibb-init-lcd-voltage = <5500000>;
 		qcom,qpnp-ibb-discharge-resistor = <300>;
 		qcom,qpnp-ibb-lab-pwrup-delay = <1000>;
 		qcom,qpnp-ibb-lab-pwrdn-delay = <2000>;
 	};
-	lab_regulator: qcom,lab@de00 {
+	qcom,lab@de00 {
 		qcom,qpnp-lab-init-voltage = <5400000>;
 		qcom,qpnp-lab-init-lcd-voltage = <5400000>;
 	};

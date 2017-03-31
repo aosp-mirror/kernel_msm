@@ -57,29 +57,29 @@
 	qcom,sensor-information {
 		compatible = "qcom,sensor-information";
 
-		sensor_information30: qcom,sensor-information-30 {
+		qcom,sensor-information-30 {
 			qcom,sensor-type = "adc";
 			qcom,sensor-name = "xo_therm";
 		};
 
-		sensor_information31: qcom,sensor-information-31 {
+		qcom,sensor-information-31 {
 			qcom,sensor-type = "adc";
 			qcom,sensor-name = "amux5_quiet_therm";
 		};
 
-		sensor_information32: qcom,sensor-information-32 {
+		qcom,sensor-information-32 {
 			qcom,sensor-type = "adc";
 			qcom,sensor-name = "vts";
 			qcom,scaling-factor = <10>;
 		};
 
-		sensor_information33: qcom,sensor-information-33 {
+		qcom,sensor-information-33 {
 			qcom,sensor-type = "adc";
 			qcom,sensor-name = "led_sensor";
 			qcom,scaling-factor = <10>;
 		};
 
-		sensor_information34: qcom,sensor-information-34 {
+		qcom,sensor-information-34 {
 			qcom,sensor-type = "adc";
 			qcom,sensor-name = "battery";
 			qcom,scaling-factor = <1000>;

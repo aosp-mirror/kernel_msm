@@ -15,7 +15,7 @@
 };
 
 &soc {
-	spi_5: spi@c179000{    /* BLSP1 QUP5 */
+	spi@c179000{    /* BLSP1 QUP5 */
 		status = "ok";
 		compatible = "qcom,spi-qup-v2";
 

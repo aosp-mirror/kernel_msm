@@ -52,7 +52,7 @@
 			};
 		};
 
-		pmi8998_wled: qcom,leds@d800 {
+		qcom,leds@d800 {
 			compatible = "qcom,qpnp-wled";
 			status = "disabled";
 		};

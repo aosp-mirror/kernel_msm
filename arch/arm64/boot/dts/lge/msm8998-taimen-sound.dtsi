@@ -147,7 +147,7 @@
 	};
 
 	qcom,msm-dai-mi2s {
-		dai_mi2s3: qcom,msm-dai-q6-mi2s-quat {
+		qcom,msm-dai-q6-mi2s-quat {
 			qcom,msm-mi2s-rx-lines = <2>; /* SD1 used as output */
 			qcom,msm-mi2s-tx-lines = <1>; /* SD0 used as input */
 			pinctrl-names = "default", "idle";
@@ -164,17 +164,17 @@
 		status = "disabled";
 	};
 
-	cpe: qcom,msm-cpe-lsm {
+	qcom,msm-cpe-lsm {
 		compatible = "qcom,msm-cpe-lsm";
 		qcom,msm-cpe-lsm-id = <1>;
 	};
 
-	cpe3: qcom,msm-cpe-lsm@3 {
+	qcom,msm-cpe-lsm@3 {
 		compatible = "qcom,msm-cpe-lsm";
 		qcom,msm-cpe-lsm-id = <3>;
 	};
 
-	i2c_7: i2c@c1b5000 { /* BLSP2 QUP1 */
+	i2c@c1b5000 { /* BLSP2 QUP1 */
 		tfa98xx@34 {
 			compatible = "nxp,tfa98xx";
 			status = "ok";
@@ -183,7 +183,7 @@
 	};
 
 	i2c@c1b5000 { /* i2c_7 */
-		nxp_tfa98xx_34: nxp_tfa98xx_amp@34 {
+		nxp_tfa98xx_amp@34 {
 				compatible = "nxp,tfa98xx";
 				reg = <0x34>;
 				reset-gpio = <&pm8998_gpios 6 0x1>;
@@ -191,7 +191,7 @@
 				status = "disabled";
 		};
 
-		nxp_tfa98xx_35: nxp_tfa98xx_amp@35 {
+		nxp_tfa98xx_amp@35 {
 				compatible = "nxp,tfa98xx";
 				reg = <0x35>;
 				reset-gpio = <&pm8998_gpios 7 0x1>;
@@ -225,11 +225,11 @@
 		status = "disabled";
 	};
 
-	wcd934x_cdc: tavil_codec {
+	tavil_codec {
 		clocks = <&clock_audio clk_audio_pmi_clk>;
 	/*
 	 * b/35391122: Disable SPI since it is not working yet.
-		wcd_spi_0: wcd_spi {
+		wcd_spi {
 			qcom,master-bus-num = <2>;
 		};
 	 */
@@ -304,7 +304,7 @@
 &rpm_bus {
 	rpm-regulator-ldoa19 {
 		status = "okay";
-		pm8998_l19: regulator-l19 {
+		regulator-l19 {
 			regulator-min-microvolt = <3008000>;
 			regulator-max-microvolt = <3008000>;
 			qcom,init-voltage = <3008000>;

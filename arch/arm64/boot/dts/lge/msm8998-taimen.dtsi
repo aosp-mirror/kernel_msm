@@ -33,7 +33,7 @@
 		reg = <0 0xb0000000 0 0x100000>;
 	};
 
-	crash_fb_mem: crash_fb_mem@b0100000 {
+	crash_fb_mem@b0100000 {
 		linux,contiguous-region;
 		reg = <0 0xb0100000 0 0xc00000>;
 		label = "crash_fb_mem";
@@ -51,7 +51,7 @@
 };
 
 &soc {
-	wdog: qcom,wdt@17817000 {
+	qcom,wdt@17817000 {
 		qcom,bark-time = <16000>;
 	};
 
