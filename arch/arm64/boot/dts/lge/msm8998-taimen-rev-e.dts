@@ -41,3 +41,9 @@
 &spi_5 {
 	status = "disabled";
 };
+
+&i2c_5 {
+	ftm4_fts@49 {
+		stm,firmware_name = "ftm4_fw_lb.ftb";
+	};
+};
