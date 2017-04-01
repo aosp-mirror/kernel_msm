@@ -694,6 +694,10 @@ limStartBssReqSerDes(tpAniSirGlobal pMac, tpSirSmeStartBssReq pStartBssReq, tANI
     pStartBssReq->sap_dot11mc = *pBuf++;
     len--;
 
+    /* extract vendor_vht_for_24ghz_sap */
+    pStartBssReq->vendor_vht_for_24ghz_sap = *pBuf++;
+    len--;
+
     if (len)
     {
         limLog(pMac, LOGW, FL("Extra bytes left in SME_START_BSS_REQ, len=%d"), len);

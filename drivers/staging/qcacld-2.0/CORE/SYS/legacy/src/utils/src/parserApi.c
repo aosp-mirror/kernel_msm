@@ -2724,6 +2724,22 @@ sirConvertAssocReqFrame2Struct(tpAniSirGlobal pMac,
                p_ext_cap->timingMeas, p_ext_cap->fine_time_meas_initiator,
                p_ext_cap->fine_time_meas_responder);
     }
+
+    pAssocReq->vendor2_ie.present = ar->vendor2_ie.present;
+    if (ar->vendor2_ie.present) {
+            pAssocReq->vendor2_ie.type = ar->vendor2_ie.type;
+            pAssocReq->vendor2_ie.sub_type = ar->vendor2_ie.sub_type;
+
+            if (ar->vendor2_ie.VHTCaps.present) {
+                vos_mem_copy(&pAssocReq->vendor2_ie.VHTCaps,
+                                &ar->vendor2_ie.VHTCaps,
+                                sizeof(tDot11fIEVHTCaps));
+                limLog(pMac, LOG1,
+                    FL("Received Assoc Request with Vendor specific VHT Cap"));
+                limLogVHTCap(pMac, &pAssocReq->VHTCaps);
+            }
+    }
+
     vos_mem_free(ar);
     return eSIR_SUCCESS;
 
