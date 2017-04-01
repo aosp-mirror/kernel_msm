@@ -255,6 +255,7 @@ typedef struct sSirAssocReq
     tDot11fIEOperatingMode    operMode;
 #endif
     tDot11fIEExtCap           ExtCap;
+    tDot11fIEvendor2_ie       vendor2_ie;
 } tSirAssocReq, *tpSirAssocReq;
 
 

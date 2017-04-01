@@ -1342,6 +1342,23 @@ limSendAssocRspMgmtFrame(tpAniSirGlobal pMac,
             PopulateDot11fVHTOperation( pMac, psessionEntry, &frm.VHTOperation);
             isVHTEnabled = eANI_BOOLEAN_TRUE;
         }
+
+        if (psessionEntry->vhtCapability &&
+            psessionEntry->vendor_vht_for_24ghz_sap &&
+            (pAssocReq != NULL) && pAssocReq->vendor2_ie.VHTCaps.present) {
+            limLog(pMac, LOG1,
+                        FL("Populate Vendor VHT IEs in Assoc Response"));
+            frm.vendor2_ie.present = 1;
+            frm.vendor2_ie.type =
+                     psessionEntry->vendor_specific_vht_ie_type;
+            frm.vendor2_ie.sub_type =
+                     psessionEntry->vendor_specific_vht_ie_sub_type;
+
+            frm.vendor2_ie.VHTCaps.present = 1;
+            PopulateDot11fVHTCaps(pMac, psessionEntry,
+                                    &frm.vendor2_ie.VHTCaps);
+            isVHTEnabled = true;
+        }
 #endif
 
         PopulateDot11fExtCap(pMac, isVHTEnabled, &frm.ExtCap, psessionEntry);

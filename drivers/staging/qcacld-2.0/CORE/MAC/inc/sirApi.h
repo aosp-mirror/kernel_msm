@@ -692,6 +692,7 @@ typedef struct sSirSmeStartBssReq
 
     tANI_BOOLEAN            obssEnabled;
     uint8_t                 sap_dot11mc;
+    bool                    vendor_vht_for_24ghz_sap;
 
 } tSirSmeStartBssReq, *tpSirSmeStartBssReq;
 
