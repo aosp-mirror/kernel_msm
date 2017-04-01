@@ -14250,6 +14250,14 @@ eHalStatus csrSendJoinReqMsg( tpAniSirGlobal pMac, tANI_U32 sessionId, tSirBssDe
 			txBFCsnValue = MIN(txBFCsnValue,
 					pIes->VHTCaps.numSoundingDim);
         }
+        else if (IS_BSS_VHT_CAPABLE(pIes->vendor2_ie.VHTCaps) &&
+                       pMac->roam.configParam.txBFEnable) {
+               txBFCsnValue = (tANI_U8)pMac->roam.configParam.txBFCsnValue;
+               if (pIes->vendor2_ie.VHTCaps.numSoundingDim)
+                       txBFCsnValue = MIN(txBFCsnValue,
+                                       pIes->vendor2_ie.VHTCaps.numSoundingDim);
+        }
+
         *pBuf = txBFCsnValue;
         pBuf++;
 

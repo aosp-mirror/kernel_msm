@@ -2227,6 +2227,23 @@ limSendAssocReqMgmtFrame(tpAniSirGlobal   pMac,
         PopulateDot11fVHTCaps( pMac, psessionEntry, &pFrm->VHTCaps );
         isVHTEnabled = eANI_BOOLEAN_TRUE;
     }
+    if (!isVHTEnabled &&
+                    psessionEntry->is_vendor_specific_vhtcaps) {
+        limLog(pMac, LOG1,
+                    FL("Populate Vendor VHT IEs in Assoc Request"));
+        pFrm->vendor2_ie.present = 1;
+        pFrm->vendor2_ie.type =
+                 psessionEntry->vendor_specific_vht_ie_type;
+        pFrm->vendor2_ie.sub_type =
+                 psessionEntry->vendor_specific_vht_ie_sub_type;
+
+        pFrm->vendor2_ie.VHTCaps.present = 1;
+        PopulateDot11fVHTCaps(pMac, psessionEntry,
+                                &pFrm->vendor2_ie.VHTCaps);
+        isVHTEnabled = true;
+    }
+
+
 #endif
     if (psessionEntry->is_ext_caps_present)
         PopulateDot11fExtCap( pMac, isVHTEnabled, &pFrm->ExtCap, psessionEntry);
@@ -2702,6 +2719,20 @@ limSendReassocReqWithFTIEsMgmtFrame(tpAniSirGlobal     pMac,
     }
     if (psessionEntry->is_ext_caps_present)
         PopulateDot11fExtCap(pMac, isVHTEnabled, &frm.ExtCap, psessionEntry);
+
+    if (!isVHTEnabled && psessionEntry->is_vendor_specific_vhtcaps) {
+        limLog(pMac, LOG1,
+                        FL("Populate Vendor VHT IEs in Re-Assoc Request"));
+        frm.vendor2_ie.present = 1;
+        frm.vendor2_ie.type =
+                        psessionEntry->vendor_specific_vht_ie_type;
+        frm.vendor2_ie.sub_type =
+                        psessionEntry->vendor_specific_vht_ie_sub_type;
+        frm.vendor2_ie.VHTCaps.present = 1;
+        PopulateDot11fVHTCaps(pMac, psessionEntry,
+                                &frm.vendor2_ie.VHTCaps);
+        isVHTEnabled = true;
+    }
 #endif
 
     nStatus = dot11fGetPackedReAssocRequestSize( pMac, &frm, &nPayload );
