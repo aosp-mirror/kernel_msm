@@ -6073,11 +6073,14 @@ static int synaptics_rmi4_fb_notifier_cb(struct notifier_block *self,
 		transition = evdata->data;
 		dev_info(rmi4_data->pdev->dev.parent, "%s, event = %ld blank = %d\n",
 				__func__, event, *transition);
-		if (*transition == FB_BLANK_POWERDOWN) {
+		if ((*transition == FB_BLANK_POWERDOWN ||
+		     *transition == FB_BLANK_NORMAL ||
+		     *transition == FB_BLANK_VSYNC_SUSPEND) &&
+		    rmi4_data->fb_ready) {
 			synaptics_rmi4_suspend(&rmi4_data->pdev->dev);
 			rmi4_data->fb_ready = false;
-		} else if ((*transition == FB_BLANK_NORMAL || *transition == FB_BLANK_UNBLANK)
-				&& (rmi4_data->fb_ready == false)) {
+		} else if (*transition == FB_BLANK_UNBLANK &&
+			   !rmi4_data->fb_ready) {
 			synaptics_rmi4_resume(&rmi4_data->pdev->dev);
 			rmi4_data->fb_ready = true;
 		}
