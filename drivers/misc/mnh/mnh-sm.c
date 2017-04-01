@@ -27,6 +27,7 @@
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
 #include <linux/kobject.h>
+#include <linux/ktime.h>
 #include <linux/kthread.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
@@ -87,17 +88,6 @@ HW_OUTx(HWIO_PCIE_SS_BASE_ADDR, PCIE_SS, reg, inst, val)
 
 /* Timeout for waiting for MNH set_state to complete */
 #define STATE_CHANGE_COMPLETE_TIMEOUT msecs_to_jiffies(5000)
-
-/* Firmware download address */
-#define HW_MNH_SBL_DOWNLOAD		0x40000000
-#define HW_MNH_SBL_DOWNLOAD_EXE		0x00101000
-#define HW_MNH_KERNEL_DOWNLOAD		0x40080000
-#define HW_MNH_DT_DOWNLOAD		0x40880000
-#define HW_MNH_RAMDISK_DOWNLOAD		0x40890000
-/* Firmware download related definitions */
-#define IMG_DOWNLOAD_MAX_SIZE		(4000 * 1024)
-#define FIP_IMG_SBL_SIZE_OFFSET		0x28
-#define FIP_IMG_SBL_ADDR_OFFSET		0x20
 
 /* PCIe */
 #define MNH_PCIE_CHAN_0 0
@@ -169,6 +159,9 @@ struct mnh_sm_device {
 
 	/* flag to know if firmware has already been downloaded */
 	bool firmware_downloaded;
+
+	/* node to carveout memory, owned by mnh_sm_device */
+	struct mnh_ion *ion;
 };
 
 static struct mnh_sm_device *mnh_sm_dev;
@@ -204,6 +197,44 @@ static int mnh_sm_get_val_from_buf(const char *buf, unsigned long *val)
 	else
 		return -EINVAL;
 }
+
+static ssize_t mnh_sm_stage_fw_show(struct device *dev,
+			     struct device_attribute *attr,
+			     char *buf)
+{
+	dev_dbg(mnh_sm_dev->dev, "Entering mnh_sm_stage_fw_show...\n");
+
+	return scnprintf(buf, MAX_STR_COPY, "%s\n",
+			 mnh_sm_dev->ion->is_fw_ready
+			 ? "Firmware staged to ION"
+			 : "Firmware not staged");
+
+	return 0;
+}
+
+static ssize_t mnh_sm_stage_fw_store(struct device *dev,
+			      struct device_attribute *attr,
+			      const char *buf,
+			      size_t count)
+{
+
+	unsigned long val = 0;
+	int ret;
+
+	dev_dbg(mnh_sm_dev->dev, "Entering mnh_sm_stage_fw_store...\n");
+
+	ret = mnh_sm_get_val_from_buf(buf, &val);
+	if (!ret) {
+		if (val)
+			mnh_ion_stage_firmware(mnh_sm_dev->ion);
+		return count;
+	}
+
+	return -EINVAL;
+}
+
+static DEVICE_ATTR(stage_fw, S_IWUSR | S_IRUSR | S_IRGRP,
+		mnh_sm_stage_fw_show, mnh_sm_stage_fw_store);
 
 static ssize_t mnh_sm_poweron_show(struct device *dev,
 			     struct device_attribute *attr,
@@ -338,6 +369,28 @@ static size_t mnh_get_firmware_buf(struct device *dev, uint32_t **buf)
 	return size;
 }
 
+static int mnh_transfer_firmware_contig(size_t fw_size, dma_addr_t src_addr,
+	uint64_t dst_addr)
+{
+	struct mnh_dma_element_t dma_blk;
+	int err = -EINVAL;
+
+	dma_blk.dst_addr = dst_addr;
+	dma_blk.len = fw_size;
+	dma_blk.src_addr = src_addr;
+
+	dev_dbg(mnh_sm_dev->dev,
+		"FW download - AP(:0x%llx) to EP(:0x%llx), size(%d)\n",
+		dma_blk.src_addr, dma_blk.dst_addr, dma_blk.len);
+
+	mnh_sm_dev->image_loaded = FW_IMAGE_DOWNLOADING;
+	mnh_dma_sblk_start(MNH_PCIE_CHAN_0, DMA_AP2EP, &dma_blk);
+
+	err = mnh_firmware_waitdownloaded();
+
+	return err;
+}
+
 static int mnh_transfer_firmware(size_t fw_size, const uint8_t *fw_data,
 	uint64_t dst_addr)
 {
@@ -396,7 +449,63 @@ static int mnh_transfer_firmware(size_t fw_size, const uint8_t *fw_data,
 	return err;
 }
 
-int mnh_download_firmware(void)
+int mnh_download_firmware_ion(struct mnh_ion *ion)
+{
+	int err;
+	int i;
+
+	if (!ion)
+		return -ENODEV;
+
+	if (!ion->is_fw_ready)
+		return -EAGAIN;
+
+	mnh_sm_dev->image_loaded = FW_IMAGE_NONE;
+
+	/* Register DMA callback */
+	err = mnh_reg_irq_callback(0, 0, dma_callback);
+	if (err) {
+		dev_err(ion->device, "register irq callback failed - %d\n",
+			err);
+		return err;
+	}
+
+	for (i = 0; i < MAX_NR_MNH_FW_SLOTS; i++) {
+		dev_dbg(mnh_sm_dev->dev, "ION downloading fw[%d]...\n", i);
+		err = mnh_transfer_firmware_contig(ion->fw_array[i].size,
+						   ion->fw_array[i].ap_addr,
+						   ion->fw_array[i].ep_addr);
+		if (err) {
+			/* Unregister DMA callback */
+			mnh_reg_irq_callback(NULL, NULL, NULL);
+			return err;
+		}
+	}
+
+	/* Configure sbl addresses and size */
+	mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_4, 4,
+		HW_MNH_SBL_DOWNLOAD);
+	mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_5, 4,
+		HW_MNH_SBL_DOWNLOAD_EXE);
+	mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_6, 4,
+		ion->fw_array[MNH_FW_SLOT_SBL].size);
+
+	/* Configure post sbl entry address */
+	mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_7, 4,
+			 HW_MNH_KERNEL_DOWNLOAD);
+
+	/* sbl needs this for its own operation and arg0 for kernel */
+	mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_3, 4,
+			 HW_MNH_DT_DOWNLOAD);
+	/* Unregister DMA callback */
+	mnh_reg_irq_callback(NULL, NULL, NULL);
+
+	mnh_sm_dev->firmware_downloaded = true;
+
+	return 0;
+}
+
+int mnh_download_firmware_legacy(void)
 {
 	const struct firmware *dt_img, *kernel_img, *ram_img;
 	const struct firmware *fip_img;
@@ -439,8 +548,10 @@ int mnh_download_firmware(void)
 	}
 
 	/* DMA transfer for SBL */
-	memcpy(&size, (uint8_t *)(fip_img->data + FIP_IMG_SBL_SIZE_OFFSET), 4);
-	memcpy(&addr, (uint8_t *)(fip_img->data + FIP_IMG_SBL_ADDR_OFFSET), 4);
+	memcpy(&size, (uint8_t *)(fip_img->data + FIP_IMG_SBL_SIZE_OFFSET),
+		sizeof(size));
+	memcpy(&addr, (uint8_t *)(fip_img->data + FIP_IMG_SBL_ADDR_OFFSET),
+		sizeof(addr));
 	mnh_sm_dev->sbl_size = size;
 
 	dev_dbg(mnh_sm_dev->dev, "sbl data addr :0x%x", addr);
@@ -511,6 +622,23 @@ free_fip:
 	/* Unregister DMA callback */
 	mnh_reg_irq_callback(NULL, NULL, NULL);
 	return -EIO;
+}
+
+int mnh_download_firmware(void)
+{
+	int err;
+
+	/* Prefer to download from ION buffer if it's ready */
+	err = mnh_download_firmware_ion(mnh_sm_dev->ion);
+	if (!err) {
+		dev_dbg(mnh_sm_dev->dev,
+			"%s: ION download successful\n", __func__);
+		return 0;
+	}
+
+	/* Otherwise fall back to legacy mode */
+	dev_err(mnh_sm_dev->dev, "%s: Fallback to legacy mode\n", __func__);
+	return mnh_download_firmware_legacy();
 }
 
 static ssize_t mnh_sm_download_show(struct device *dev,
@@ -809,6 +937,7 @@ static DEVICE_ATTR(enable_uart, S_IWUSR | S_IRUGO,
 		mnh_sm_enable_uart_show, mnh_sm_enable_uart_store);
 
 static struct attribute *mnh_sm_dev_attributes[] = {
+	&dev_attr_stage_fw.attr,
 	&dev_attr_poweron.attr,
 	&dev_attr_poweroff.attr,
 	&dev_attr_state.attr,
@@ -915,8 +1044,15 @@ static int mnh_sm_download(void)
 {
 	uint32_t  magic;
 	int ret;
+	ktime_t start, end;
+	static int iter;
 
+	iter++;
+	start = ktime_get();
 	ret = mnh_download_firmware();
+	end = ktime_get();
+	dev_dbg(mnh_sm_dev->dev, "iter:%d took %d ms to download firmware\n",
+		 iter, (unsigned)ktime_to_ms(ktime_sub(end, start)));
 
 	if (ret) {
 		dev_err(mnh_sm_dev->dev,
@@ -1149,6 +1285,12 @@ static int mnh_sm_open(struct inode *inode, struct file *filp)
 	dev_dbg(data->dev, "%s: opening mnh_sm\n", __func__);
 
 	filp->private_data = data; /* for other methods */
+
+	if (mnh_sm_dev->ion && !mnh_sm_dev->ion->is_fw_ready) {
+		/* Request firmware and stage them to carveout buffer */
+		dev_dbg(data->dev, "%s: staging firmware\n", __func__);
+		mnh_ion_stage_firmware(mnh_sm_dev->ion);
+	}
 
 	return 0;
 }
@@ -1398,6 +1540,16 @@ static int mnh_sm_probe(struct platform_device *pdev)
 		return error;
 	}
 
+	/* Get ION buffer */
+	mnh_sm_dev->ion = devm_kzalloc(dev, sizeof(struct mnh_ion),
+					   GFP_KERNEL);
+	if (mnh_sm_dev->ion) {
+		mnh_sm_dev->ion->device = dev;
+		if (mnh_ion_create_buffer(mnh_sm_dev->ion, MNH_ION_BUFFER_SIZE))
+			dev_warn(dev, "%s: cannot claim ION buffer\n",
+				 __func__);
+	}
+
 	/* initialize cdev */
 	cdev_init(&mnh_sm_dev->cdev, &mnh_sm_fops);
 
@@ -1495,6 +1647,9 @@ fail_device_create:
 fail_create_class:
 	cdev_del(&mnh_sm_dev->cdev);
 fail_cdev_add:
+	mnh_ion_destroy_buffer(mnh_sm_dev->ion);
+	devm_kfree(dev, mnh_sm_dev->ion);
+	mnh_sm_dev->ion = NULL;
 	unregister_chrdev_region(mnh_sm_dev->dev_num, 1);
 	devm_kfree(dev, mnh_sm_dev);
 	mnh_sm_dev = NULL;
