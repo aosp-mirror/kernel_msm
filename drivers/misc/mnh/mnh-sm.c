@@ -178,6 +178,9 @@ enum {
 	MNH_BOOTARGS_KERNEL_CONSOLE_ENABLE = 1 << 1,
 	MNH_BOOTARGS_STDOUT_CONSOLE_ENABLE = 1 << 2,
 };
+#define MNH_UART_ENABLE (MNH_BOOTARGS_BL_CONSOLE_ENABLE | \
+			 MNH_BOOTARGS_KERNEL_CONSOLE_ENABLE | \
+			 MNH_BOOTARGS_STDOUT_CONSOLE_ENABLE)
 static unsigned int mnh_boot_args;
 
 /* callback when easel enters and leaves the active state */
@@ -768,6 +771,36 @@ static ssize_t mnh_sm_boot_args_store(struct device *dev,
 static DEVICE_ATTR(boot_args, S_IWUSR | S_IRUGO,
 		mnh_sm_boot_args_show, mnh_sm_boot_args_store);
 
+static ssize_t mnh_sm_enable_uart_show(struct device *dev,
+				 struct device_attribute *attr,
+				 char *buf)
+{
+	return scnprintf(buf, MAX_STR_COPY, "%d\n", mnh_boot_args &
+			 MNH_UART_ENABLE);
+}
+
+static ssize_t mnh_sm_enable_uart_store(struct device *dev,
+				  struct device_attribute *attr,
+				  const char *buf,
+				  size_t count)
+{
+	unsigned long val = 0;
+	int ret;
+
+	ret = mnh_sm_get_val_from_buf(buf, &val);
+	if (!ret) {
+		if (val)
+			mnh_boot_args |= MNH_UART_ENABLE;
+		else
+			mnh_boot_args &= ~MNH_UART_ENABLE;
+		return count;
+	}
+
+	return -EINVAL;
+}
+
+static DEVICE_ATTR(enable_uart, S_IWUSR | S_IRUGO,
+		mnh_sm_enable_uart_show, mnh_sm_enable_uart_store);
 
 static struct attribute *mnh_sm_dev_attributes[] = {
 	&dev_attr_poweron.attr,
@@ -782,6 +815,7 @@ static struct attribute *mnh_sm_dev_attributes[] = {
 	&dev_attr_freeze_state.attr,
 	&dev_attr_mipi_stop.attr,
 	&dev_attr_boot_args.attr,
+	&dev_attr_enable_uart.attr,
 	NULL
 };
 
