@@ -96,6 +96,9 @@
 			05 01 00 00 64 00 01 10
 		];
 		qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
+		qcom,mdss-dsi-lp-mode-on = [15 01 00 00 00 00 02 53 08];
+		qcom,mdss-dsi-lp-mode-off = [15 01 00 00 00 00 02 53 00];
+		qcom,mdss-dsi-lp-change-state = "dsi_hs_mode";
 		qcom,mode-control-dsi-state = "dsi_lp_mode";
 		qcom,mdss-pan-physical-width-dimension = <68>;
 		qcom,mdss-pan-physical-height-dimension = <121>;
