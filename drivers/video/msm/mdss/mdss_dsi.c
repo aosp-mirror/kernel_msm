@@ -3128,6 +3128,10 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 	}
 
 	pinfo = &(ctrl_pdata->panel_data.panel_info);
+
+	/* copy bklt_ctrl into pinfo for mdss_fb */
+	pinfo->bklt_ctrl = ctrl_pdata->bklt_ctrl;
+
 	if (!(mdss_dsi_is_hw_config_split(ctrl_pdata->shared_data) &&
 		mdss_dsi_is_ctrl_clk_slave(ctrl_pdata)) &&
 		pinfo->dynamic_fps) {
