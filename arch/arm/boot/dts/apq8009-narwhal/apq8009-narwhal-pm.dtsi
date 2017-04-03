@@ -108,6 +108,48 @@
 	};
 };
 
+&soc {
+	i2c@78b8000 {
+		fan5451x_chg: fan5451x@6b {
+			status = "ok";
+			compatible = "fcs,fan5451x";
+			reg = <0x6b>;
+			interrupt-parent = <&msm_gpio>;
+			interrupts = <92 0>;
+
+			qcom,chg-vadc = <&pm8916_vadc>;
+			qcom,chg-adc_tm = <&pm8916_adc_tm>;
+			stat-gpio = <&msm_gpio 85 0x00>;
+			disable-gpio = <&msm_gpio 84 0x00>;
+
+			vbatmin = <3000>;    //CC start voltage 3.0V
+			vfloat = <4400>;     //vbatmax
+			vrechg-hyst = <100>; //rechg = vfloat - (vrechg-hyst)
+			ibus = <500>;        //iusb for vbus
+			iin = <325>;         //iusb for wlc
+			iochrg = <200>;      //CC current
+			iterm = <40>;        //term current
+			prechg = <200>;      //pre charge current
+			topoff-enable = <0>; //post charging flag
+			vbusovp = <10500>;   //ovd for usb
+			vbuslim = <4560>;    //uvd for usb
+			vinovp = <10500>;    //ovd for wireless
+			vinlim = <4560>;     //uvd for wireless
+			fctmr = <0>;         //fast charge timer off
+			fcs,embedded-battery;
+			support-sw-eoc;
+		};
+	};
+};
+
+&pm8916_chg {
+	status = "disabled";
+};
+
+&pm8916_l6{
+	regulator-always-on;
+};
+
 &pm8916_vadc {
 	chan@13 {
 		label = "usb_id";
