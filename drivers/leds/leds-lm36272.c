@@ -31,20 +31,19 @@
 #define LM36272_BRT_MSB_SHIFT	3
 #define MAX_BRIGHTNESS_LM36272	255
 #define MIN_BRIGHTNESS_LM36272	0
-#define DEFAULT_BRIGHTNESS	189
 #define BL_ON	1
 #define BL_OFF	0
 
 struct lm36272_device {
 	struct led_classdev led_dev;
 	struct i2c_client *client;
-	struct backlight_device *bl_dev;
 	int bl_gpio;
 	int dsv_p_gpio;
 	int dsv_n_gpio;
 	int min_brightness;
 	int max_brightness;
 	int default_brightness;
+	int status;
 	struct mutex bl_mutex;
 	int blmap_size;
 	u16 *blmap;
@@ -58,11 +57,6 @@ static const struct i2c_device_id lm36272_bl_id[] = {
 static int lm36272_write_reg(struct i2c_client *client,
 		unsigned char reg, unsigned char val);
 
-static int cur_main_lcd_level = DEFAULT_BRIGHTNESS;
-static int saved_main_lcd_level = DEFAULT_BRIGHTNESS;
-static int backlight_status = BL_OFF;
-static int cal_value;
-static int store_level_used = 0;
 
 static int lm36272_dsv_ctrl(struct lm36272_device *dev, int dsv_en)
 {
@@ -125,14 +119,9 @@ static void lm36272_set_main_current_level(struct i2c_client *client, int level)
 	struct lm36272_device *dev = i2c_get_clientdata(client);
 	int min_brightness = dev->min_brightness;
 	int max_brightness = dev->max_brightness;
+	int cal_value;
 	u8 data;
 
-	cal_value = level;
-	cur_main_lcd_level = level;
-
-	store_level_used = 0;
-
-	mutex_lock(&dev->bl_mutex);
 	if (level != 0) {
 		if (level > 0 && level <= min_brightness)
 			level = min_brightness;
@@ -157,45 +146,13 @@ static void lm36272_set_main_current_level(struct i2c_client *client, int level)
 			lm36272_write_reg(client, 0x05, 0x00);
 	}
 
-	mutex_unlock(&dev->bl_mutex);
-
 	pr_debug("%s: level=%d, cal_value=%d \n",
 				__func__, level, cal_value);
 }
 
-static void lm36272_set_main_current_level_no_mapping(
-		struct i2c_client *client, int level)
-{
-	struct lm36272_device *dev = i2c_get_clientdata(client);
-	u8 bl_level;
-
-	if (level > 2047)
-		level = 2047;
-	else if (level < 0)
-		level = 0;
-
-	cal_value = level;
-
-	store_level_used = 1;
-
-	mutex_lock(&dev->bl_mutex);
-	if (level != 0) {
-		bl_level = level & LM36272_BRT_LSB_MASK;
-		lm36272_write_reg(client, 0x04, bl_level);
-		bl_level = (level >> LM36272_BRT_MSB_SHIFT) & 0xFF;
-		lm36272_write_reg(client, 0x05, bl_level);
-	} else {
-		lm36272_write_reg(client, 0x00, 0x00);
-	}
-	mutex_unlock(&dev->bl_mutex);
-
-	pr_debug("%s : cal_value=%d \n",
-				__func__, cal_value);
-}
-
 static void lm36272_backlight_on(struct lm36272_device *dev, int level)
 {
-	if (backlight_status == BL_OFF) {
+	if (dev->status == BL_OFF) {
 		lm36272_dsv_ctrl(dev, 1);
 		lm36272_write_reg(dev->client, 0x02, 0x60);
 		lm36272_write_reg(dev->client, 0x08, 0x13);
@@ -203,18 +160,17 @@ static void lm36272_backlight_on(struct lm36272_device *dev, int level)
 	usleep_range(1000, 1000);
 
 	lm36272_set_main_current_level(dev->client, level);
-	backlight_status = BL_ON;
+	dev->status = BL_ON;
 }
 
 static void lm36272_backlight_off(struct lm36272_device *dev)
 {
-	if (backlight_status == BL_OFF)
+	if (dev->status == BL_OFF)
 		return;
 
-	saved_main_lcd_level = cur_main_lcd_level;
 	lm36272_set_main_current_level(dev->client, 0);
 	lm36272_write_reg(dev->client, 0x08, 0x00);
-	backlight_status = BL_OFF;
+	dev->status = BL_OFF;
 	lm36272_dsv_ctrl(dev, 0);
 }
 
@@ -227,6 +183,7 @@ static void lm36272_lcd_backlight_set_level(struct led_classdev *led_cdev,
 	if (!dev)
 		return;
 
+	mutex_lock(&dev->bl_mutex);
 	if (level > MAX_BRIGHTNESS_LM36272)
 		level = MAX_BRIGHTNESS_LM36272;
 
@@ -234,105 +191,8 @@ static void lm36272_lcd_backlight_set_level(struct led_classdev *led_cdev,
 		lm36272_backlight_off(dev);
 	else
 		lm36272_backlight_on(dev, level);
+	mutex_unlock(&dev->bl_mutex);
 }
-
-static ssize_t lcd_backlight_show_level(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	int r = 0;
-
-	if(store_level_used == 0)
-		r = snprintf(buf, PAGE_SIZE, "Backlight level is : %d\n",
-				cur_main_lcd_level);
-	else if(store_level_used == 1)
-		r = snprintf(buf, PAGE_SIZE, "Backlight cal value is : %d\n",
-				cal_value);
-
-	return r;
-}
-
-static ssize_t lcd_backlight_store_level(struct device *dev,
-		struct device_attribute *attr,
-		const char *buf, size_t count)
-{
-	int level;
-	struct i2c_client *client = to_i2c_client(dev);
-
-	if (!count)
-		return -EINVAL;
-
-	level = simple_strtoul(buf, NULL, 10);
-
-	lm36272_set_main_current_level_no_mapping(client, level);
-	pr_info("Writed %d direct to "
-			"backlight register\n", level);
-
-	return count;
-}
-
-static int lm36272_bl_resume(struct i2c_client *client)
-{
-	struct lm36272_device *dev = i2c_get_clientdata(client);
-
-	lm36272_backlight_on(dev,saved_main_lcd_level);
-
-	return 0;
-}
-
-static int lm36272_bl_suspend(struct i2c_client *client, pm_message_t state)
-{
-	struct lm36272_device *dev = i2c_get_clientdata(client);
-
-	lm36272_backlight_off(dev);
-
-	return 0;
-}
-
-static ssize_t lcd_backlight_show_on_off(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	int r = 0;
-
-	pr_info("Backlight_status : %s\n",
-			backlight_status ? "ON" : "OFF");
-
-	return r;
-}
-
-static ssize_t lcd_backlight_store_on_off(struct device *dev,
-		struct device_attribute *attr,
-		const char *buf, size_t count)
-{
-	int on_off;
-	struct i2c_client *client = to_i2c_client(dev);
-
-	if (!count)
-		return -EINVAL;
-
-	on_off = simple_strtoul(buf, NULL, 10);
-
-	pr_info("Backlight_status : %s, on_off : %d\n",
-			backlight_status ? "ON" : "OFF", on_off);
-
-	if (on_off == backlight_status) {
-		pr_info("Backlight is aready %s\n",
-				backlight_status ? "on" : "off");
-		return -EINVAL;
-	}
-
-	if (on_off == 1)
-		lm36272_bl_resume(client);
-	else if (on_off == 0)
-		lm36272_bl_suspend(client, PMSG_SUSPEND);
-
-	return count;
-
-}
-
-DEVICE_ATTR(lm36272_level, 0644, lcd_backlight_show_level,
-		lcd_backlight_store_level);
-DEVICE_ATTR(lm36272_backlight_on_off, 0644, lcd_backlight_show_on_off,
-		lcd_backlight_store_on_off);
 
 static int lm36272_parse_dt(struct device *dev,
 		struct lm36272_platform_data *pdata)
@@ -444,8 +304,12 @@ static int lm36272_probe(struct i2c_client *client,
 	dev->dsv_p_gpio = pdata->dsv_p_gpio;
 	dev->dsv_n_gpio = pdata->dsv_n_gpio;
 	dev->min_brightness = pdata->min_brightness;
-	dev->default_brightness = pdata->default_brightness;
+	if (dev->min_brightness < MIN_BRIGHTNESS_LM36272)
+		dev->min_brightness = dev->min_brightness;
 	dev->max_brightness = pdata->max_brightness;
+	if (dev->max_brightness > MAX_BRIGHTNESS_LM36272)
+		dev->max_brightness = MAX_BRIGHTNESS_LM36272;
+	dev->default_brightness = pdata->default_brightness;
 	dev->blmap_size = pdata->blmap_size;
 
 	dev->led_dev.name= LM36272_BL_DEV;
@@ -474,11 +338,10 @@ static int lm36272_probe(struct i2c_client *client,
 		return err;
 	}
 
-	err = device_create_file(&client->dev,
-			&dev_attr_lm36272_level);
-	err = device_create_file(&client->dev,
-			&dev_attr_lm36272_backlight_on_off);
-	pr_info("%s: i2c probe done\n", __func__);
+	/* set the default brightness */
+	lm36272_lcd_backlight_set_level(&dev->led_dev, dev->default_brightness);
+
+	dev_info(&client->dev, "probe done\n");
 
 	return 0;
 }
@@ -488,8 +351,6 @@ static int lm36272_remove(struct i2c_client *client)
 	struct lm36272_device *dev = i2c_get_clientdata(client);
 
 	led_classdev_unregister(&dev->led_dev);
-	device_remove_file(&client->dev, &dev_attr_lm36272_level);
-	device_remove_file(&client->dev, &dev_attr_lm36272_backlight_on_off);
 
 	if (gpio_is_valid(dev->dsv_n_gpio))
 		gpio_free(dev->dsv_n_gpio);
