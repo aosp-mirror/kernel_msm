@@ -19,11 +19,7 @@
 	drv2624@5a {
 		compatible = "ti,drv2624";
 		reg = <0x5a>;
-		interrupt-parent = <&tlmm>;
-		interrupts = <86 0>;
-		interrupt-names = "drv2624_irq";
 		ti,reset-gpio = <&tlmm 95 0>;
-		ti,irq-gpio = <&tlmm 41 0>; /* FIXME: GND */
 		ti,smart-loop = <0>; /* 0-closeloop, 1-openloop */
 		ti,actuator = <1>; /* 0-ERM, 1-LRA */
 		ti,rated-voltage = <83>;
