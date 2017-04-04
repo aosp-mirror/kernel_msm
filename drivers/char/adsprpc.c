@@ -1592,6 +1592,7 @@ static int fastrpc_init_process(struct fastrpc_file *fl,
 	struct fastrpc_ioctl_init *init = &uproc->init;
 	struct smq_phy_page pages[1];
 	struct fastrpc_mmap *file = 0, *mem = 0;
+	char *proc_name = NULL;
 	int srcVM[1] = {VMID_HLOS};
 	int destVM[1] = {VMID_ADSP_Q6};
 	int destVMperm[1] = {PERM_READ | PERM_WRITE | PERM_EXEC};
@@ -1687,7 +1688,6 @@ static int fastrpc_init_process(struct fastrpc_file *fl,
 		uint64_t phys = 0;
 		ssize_t size = 0;
 		int fds[3];
-		char *proc_name;
 		struct {
 			int pgid;
 			int namelen;
@@ -1697,8 +1697,12 @@ static int fastrpc_init_process(struct fastrpc_file *fl,
 		if (!init->filelen)
 			goto bail;
 		VERIFY(err, proc_name = kzalloc(init->filelen, GFP_KERNEL));
+		if (err)
+			goto bail;
 		VERIFY(err, 0 == copy_from_user(proc_name,
 			(unsigned char *)init->file, init->filelen));
+		if (err)
+			goto bail;
 		inbuf.pgid = current->tgid;
 		inbuf.namelen = init->filelen;
 		inbuf.pageslen = 0;
@@ -1714,8 +1718,10 @@ static int fastrpc_init_process(struct fastrpc_file *fl,
 			VERIFY(err, !hyp_assign_phys(phys, (uint64_t)size,
 					srcVM, 1, destVM, destVMperm, 1));
 			if (err) {
-				pr_err("ADSPRPC: hyp_assign_phys fail err %d, map->phys %llx, map->size %d\n",
-					err, phys, (int)size);
+				pr_err("ADSPRPC: hyp_assign_phys fail err %d",
+							 err);
+				pr_err("map->phys %llx, map->size %d\n",
+							 phys, (int)size);
 				goto bail;
 			}
 			me->staticpd_flags = 1;
@@ -1749,6 +1755,7 @@ static int fastrpc_init_process(struct fastrpc_file *fl,
 		err = -ENOTTY;
 	}
 bail:
+	kfree(proc_name);
 	if (err && (init->flags == FASTRPC_INIT_CREATE_STATIC))
 		me->staticpd_flags = 0;
 	if (mem && err) {
