@@ -1023,6 +1023,13 @@ config TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_EXTRA_SYSFS
 	  Say Y here to enable support for extra sysfs attributes
 	  supporting firmware update in a development environment.
 	  This does not affect the core or other subsystem attributes.
+config BEZEL_SUPPORT
+	default y
+	tristate "Bezel support in Touch driver"
+	depends on TOUCHSCREEN_IT7260_I2C
+	help
+	  Say Y here if you have a Bezel with IT7259 Touchscreen
+	  Driver connected to your system.
 
 	  If unsure, say N.
 
