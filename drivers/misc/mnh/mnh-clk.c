@@ -1,7 +1,7 @@
 /*
  *
  * MNH Clock Driver
- * Copyright (c) 2016, Intel Corporation.
+ * Copyright (c) 2016-2017, Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -25,6 +25,7 @@
 #include "mnh-hwio-bases.h"
 #include "mnh-hwio-scu.h"
 #include "mnh-clk.h"
+#include "mnh-ddr.h"
 
 
 #define PLL_UNLOCK 0x4CD9
@@ -399,7 +400,7 @@ int mnh_lpddr_freq_change(int index)
 	}
 
 	mnh_dev->ddr_freq = index;
-
+	mnh_ddr_clr_int_status(mnh_dev->dev);
 	return 0;
 }
 EXPORT_SYMBOL(mnh_lpddr_freq_change);
