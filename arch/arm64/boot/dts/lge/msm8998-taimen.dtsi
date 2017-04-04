@@ -179,22 +179,6 @@
 	};
 };
 
-&i2c_7 {
-	status = "okay";
-	bq25898s@6B{
-		compatible = "ti,bq25898s";
-		reg = <0x6B>;
-		interrupt-parent = <&tlmm>;
-		interrupts = <119 0x2002>;
-		irq-gpio = <&tlmm 119 0x2002>;
-		ti,bq2589x,charge-voltage = <4200>;
-		ti,bq2589x,charge-current = <2250>;
-		ti,bq2589x,term-current = <512>;
-		ti,bq2589x,input-current-limit = <2000>;
-		ti,bq2589x,input-voltage-limit = <4600>;
-	};
-};
-
 &mdss_dp_ctrl {
 	status = "disabled";
 	pinctrl-names = "mdss_dp_active", "mdss_dp_sleep";

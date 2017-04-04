@@ -236,8 +236,6 @@
 &pmi8998_charger {
 	qcom,usb-icl-ua = <1800000>;
 	qcom,fcc-max-ua = <3300000>;
-	qcom,dc-icl-ua = <1000000>;
-	qcom,dc-psy-type = "Wireless";
 };
 
 &pmi8998_fg {

@@ -94,16 +94,6 @@
 		status = "disabled";
 	};
 
-	qcom,msm-cpe-lsm {
-		compatible = "qcom,msm-cpe-lsm";
-		qcom,msm-cpe-lsm-id = <1>;
-	};
-
-	qcom,msm-cpe-lsm@3 {
-		compatible = "qcom,msm-cpe-lsm";
-		qcom,msm-cpe-lsm-id = <3>;
-	};
-
 	i2c@c1b5000 { /* i2c_7 & BLSP2 QUP1 */
 		tfa98xx@34 {
 			compatible = "nxp,tfa98xx";
