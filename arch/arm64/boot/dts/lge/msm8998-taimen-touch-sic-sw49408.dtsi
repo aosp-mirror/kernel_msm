@@ -10,10 +10,6 @@
  * GNU General Public License for more details.
  */
 
-&aliases {
-	spi5 = "/soc/spi@c179000";
-};
-
 &soc {
 	spi@c179000{    /* BLSP1 QUP5 */
 		status = "ok";
