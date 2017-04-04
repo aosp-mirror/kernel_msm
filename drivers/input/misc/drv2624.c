@@ -155,7 +155,12 @@ static int drv2624_set_bits(struct drv2624_data *drv2624,
 
 static void drv2624_enable_irq(struct drv2624_data *drv2624, bool rtp)
 {
-	unsigned char mask = INT_ENABLE_CRITICAL;
+	unsigned char mask;
+
+	if (!drv2624->irq)
+		return;
+
+	mask = INT_ENABLE_CRITICAL;
 
 	if (rtp)
 		mask = INT_ENABLE_ALL;
@@ -168,8 +173,12 @@ static void drv2624_enable_irq(struct drv2624_data *drv2624, bool rtp)
 
 static void drv2624_disable_irq(struct drv2624_data *drv2624)
 {
+	if (!drv2624->irq)
+		return;
+
 	disable_irq(drv2624->irq);
-	drv2624_reg_write(drv2624, DRV2624_REG_INT_ENABLE, INT_MASK_ALL);
+	drv2624_reg_write(drv2624,
+			  DRV2624_REG_INT_ENABLE, INT_MASK_ALL);
 }
 
 static int drv2624_set_go_bit(struct drv2624_data *drv2624, unsigned char val)
@@ -1223,100 +1232,85 @@ static int drv2624_parse_dt(struct device *dev, struct drv2624_data *drv2624)
 {
 	struct device_node *np = dev->of_node;
 	struct drv2624_platform_data *pdata = &drv2624->plat_data;
-	int rc = 0, ret = 0;
+	int ret = 0;
 	unsigned int value;
 
 	pdata->gpio_nrst = of_get_named_gpio(np, "ti,reset-gpio", 0);
-	if (pdata->gpio_nrst < 0) {
+	if (!gpio_is_valid(pdata->gpio_nrst)) {
 		dev_err(drv2624->dev,
 			"Looking up %s property in node %s failed %d\n",
 			"ti,reset-gpio", np->full_name, pdata->gpio_nrst);
-		ret = -1;
-	} else {
-		dev_dbg(drv2624->dev, "ti,reset-gpio=%d\n",
-			pdata->gpio_nrst);
+		ret = -EINVAL;
+		goto drv2624_parse_dt_out;
 	}
 
-	if (ret >= 0) {
-		pdata->gpio_int = of_get_named_gpio(np, "ti,irq-gpio", 0);
-		if (pdata->gpio_int < 0) {
-			dev_err(drv2624->dev,
-				"Looking up %s property in node %s failed %d\n",
-				"ti,irq-gpio", np->full_name,
-				pdata->gpio_int);
-			ret = -1;
-		} else {
-			dev_dbg(drv2624->dev, "ti,irq-gpio=%d\n",
-				pdata->gpio_int);
-		}
+	/* irq-gpio is optional */
+	pdata->gpio_int = of_get_named_gpio(np, "ti,irq-gpio", 0);
+	if (!gpio_is_valid(pdata->gpio_int)) {
+		dev_warn(drv2624->dev,
+			 "Looking up %s property in node %s failed %d\n",
+			 "ti,irq-gpio", np->full_name, pdata->gpio_int);
 	}
 
-	if (ret >= 0) {
-		rc = of_property_read_u32(np, "ti,smart-loop", &value);
-		if (rc) {
-			dev_err(drv2624->dev,
-				"Looking up %s property in node %s failed %d\n",
-				"ti,smart-loop", np->full_name, rc);
-			ret = -2;
-		} else {
-			pdata->loop = value & 0x01;
-			dev_dbg(drv2624->dev,
-				"ti,smart-loop=%d\n", pdata->loop);
-		}
+	ret = of_property_read_u32(np, "ti,smart-loop", &value);
+	if (ret) {
+		dev_err(drv2624->dev,
+			"Looking up %s property in node %s failed %d\n",
+			"ti,smart-loop", np->full_name, ret);
+			ret = -EINVAL;
+			goto drv2624_parse_dt_out;
 	}
 
-	if (ret >= 0) {
-		rc = of_property_read_u32(np, "ti,actuator", &value);
-		if (rc) {
-			dev_err(drv2624->dev,
-				"Looking up %s property in node %s failed %d\n",
-				"ti,actuator", np->full_name, rc);
-			ret = -2;
-		} else {
-			pdata->actuator.actuator_type = value & 0x01;
-			dev_dbg(drv2624->dev,
-				"ti,actuator=%d\n",
-				pdata->actuator.actuator_type);
-		}
+	pdata->loop = value & 0x01;
+	dev_dbg(drv2624->dev, "ti,smart-loop=%d\n", pdata->loop);
+
+	ret = of_property_read_u32(np, "ti,actuator", &value);
+	if (ret) {
+		dev_err(drv2624->dev,
+			"Looking up %s property in node %s failed %d\n",
+			"ti,actuator", np->full_name, ret);
+		ret = -EINVAL;
+		goto drv2624_parse_dt_out;
 	}
 
-	if (ret >= 0) {
-		rc = of_property_read_u32(np, "ti,rated-voltage", &value);
-		if (rc) {
-			dev_err(drv2624->dev,
-				"Looking up %s property in node %s failed %d\n",
-				"ti,rated-voltage", np->full_name, rc);
-			ret = -2;
-		} else {
-			pdata->actuator.rated_voltage = value;
-			dev_dbg(drv2624->dev,
-				"ti,rated-voltage=0x%x\n",
-				pdata->actuator.rated_voltage);
-		}
+	pdata->actuator.actuator_type = value & 0x01;
+	dev_dbg(drv2624->dev, "ti,actuator=%d\n",
+		pdata->actuator.actuator_type);
+
+	ret = of_property_read_u32(np, "ti,rated-voltage", &value);
+	if (ret) {
+		dev_err(drv2624->dev,
+			"Looking up %s property in node %s failed %d\n",
+			"ti,rated-voltage", np->full_name, ret);
+		ret = -EINVAL;
+		goto drv2624_parse_dt_out;
 	}
 
-	if (ret >= 0) {
-		rc = of_property_read_u32(np, "ti,odclamp-voltage", &value);
-		if (rc) {
-			dev_err(drv2624->dev,
-				"Looking up %s property in node %s failed %d\n",
-				"ti,odclamp-voltage", np->full_name, rc);
-			ret = -2;
-		} else {
-			pdata->actuator.over_drive_clamp_voltage = value;
-			dev_dbg(drv2624->dev,
-				"ti,odclamp-voltage=0x%x\n",
-				pdata->actuator.over_drive_clamp_voltage);
-		}
+	pdata->actuator.rated_voltage = value;
+	dev_dbg(drv2624->dev, "ti,rated-voltage=0x%x\n",
+		pdata->actuator.rated_voltage);
+
+	ret = of_property_read_u32(np, "ti,odclamp-voltage", &value);
+	if (ret) {
+		dev_err(drv2624->dev,
+			"Looking up %s property in node %s failed %d\n",
+			"ti,odclamp-voltage", np->full_name, ret);
+		ret = -EINVAL;
+		goto drv2624_parse_dt_out;
 	}
 
-	if ((ret >= 0) && (pdata->actuator.actuator_type == LRA)) {
-		rc = of_property_read_u32(np, "ti,lra-frequency", &value);
-		if (rc) {
+	pdata->actuator.over_drive_clamp_voltage = value;
+	dev_dbg(drv2624->dev, "ti,odclamp-voltage=0x%x\n",
+		pdata->actuator.over_drive_clamp_voltage);
+
+	if (pdata->actuator.actuator_type == LRA) {
+		ret = of_property_read_u32(np, "ti,lra-frequency", &value);
+		if (ret) {
 			dev_err(drv2624->dev,
 				"Looking up %s property in node %s failed %d\n",
-				"ti,lra-frequency", np->full_name, rc);
-			ret = -3;
+				"ti,lra-frequency", np->full_name, ret);
+			ret = -EINVAL;
+			goto drv2624_parse_dt_out;
 		} else {
 			if ((value >= 45) && (value <= 300)) {
 				pdata->actuator.lra_freq = value;
@@ -1324,20 +1318,27 @@ static int drv2624_parse_dt(struct device *dev, struct drv2624_data *drv2624)
 					"ti,lra-frequency=%d\n",
 					pdata->actuator.lra_freq);
 			} else {
-				ret = -1;
 				dev_err(drv2624->dev,
 					"ERROR, ti,lra-frequency=%d, out of range\n",
 					pdata->actuator.lra_freq);
+				ret = -EINVAL;
+				goto drv2624_parse_dt_out;
 			}
 		}
 	}
 
+drv2624_parse_dt_out:
 	return ret;
 }
+
+static const struct reg_default drv2624_reg_defaults[] = {
+	{ DRV2624_REG_INT_ENABLE, INT_MASK_ALL },
+};
 
 static struct regmap_config drv2624_i2c_regmap = {
 	.reg_bits = 8,
 	.val_bits = 8,
+	.reg_defaults = drv2624_reg_defaults,
 	.cache_type = REGCACHE_NONE,
 };
 
@@ -1707,24 +1708,25 @@ static int drv2624_i2c_probe(struct i2c_client *client,
 	if (client->dev.of_node) {
 		dev_dbg(drv2624->dev, "of node parse\n");
 		err = drv2624_parse_dt(&client->dev, drv2624);
+		if (err) {
+			dev_err(drv2624->dev,
+				"%s: platform data error\n", __func__);
+			return -ENODEV;
+		}
 	} else if (client->dev.platform_data) {
 		dev_dbg(drv2624->dev, "platform data parse\n");
 		memcpy(&drv2624->plat_data,
 		       client->dev.platform_data,
-		       sizeof(struct drv2624_platform_data));
+		       sizeof(drv2624->plat_data));
 	} else {
 		dev_err(drv2624->dev, "%s: ERROR no platform data\n", __func__);
 		return -ENODEV;
 	}
 
-	if ((err < 0) || (drv2624->plat_data.gpio_nrst <= 0) ||
-	    (drv2624->plat_data.gpio_int <= 0)) {
-		dev_err(drv2624->dev, "%s: platform data error\n", __func__);
-		return -ENODEV;
-	}
-
-	if (drv2624->plat_data.gpio_nrst) {
-		err = gpio_request(drv2624->plat_data.gpio_nrst, "DRV2624-NRST");
+	if (gpio_is_valid(drv2624->plat_data.gpio_nrst)) {
+		err = devm_gpio_request(&client->dev,
+					drv2624->plat_data.gpio_nrst,
+					"DRV2624-NRST");
 		if (err < 0) {
 			dev_err(drv2624->dev,
 				"%s: GPIO %d request NRST error\n",
@@ -1742,7 +1744,7 @@ static int drv2624_i2c_probe(struct i2c_client *client,
 	err = drv2624_reg_read(drv2624, DRV2624_REG_ID);
 	if (err < 0) {
 		dev_err(drv2624->dev, "%s, i2c bus fail (%d)\n", __func__, err);
-		goto exit_gpio_request_failed1;
+		goto drv2624_i2c_probe_err;
 	} else {
 		dev_info(drv2624->dev, "%s, ID status (0x%x)\n", __func__, err);
 		drv2624->device_id = err;
@@ -1751,18 +1753,20 @@ static int drv2624_i2c_probe(struct i2c_client *client,
 	if ((drv2624->device_id & 0xf0) != DRV2624_ID) {
 		dev_err(drv2624->dev, "%s, device_id(0x%x) fail\n",
 			__func__, drv2624->device_id);
-		goto exit_gpio_request_failed1;
+		goto drv2624_i2c_probe_err;
 	}
 
 	dev_init_platform_data(drv2624);
 
-	if (drv2624->plat_data.gpio_int) {
-		err = gpio_request(drv2624->plat_data.gpio_int, "DRV2624-IRQ");
+	if (gpio_is_valid(drv2624->plat_data.gpio_int)) {
+		err = devm_gpio_request(&client->dev,
+					drv2624->plat_data.gpio_int,
+					"DRV2624-IRQ");
 		if (err < 0) {
 			dev_err(drv2624->dev,
 				"%s: GPIO %d request INT error\n",
 				__func__, drv2624->plat_data.gpio_int);
-			goto exit_gpio_request_failed1;
+			goto drv2624_i2c_probe_err;
 		}
 
 		gpio_direction_input(drv2624->plat_data.gpio_int);
@@ -1770,14 +1774,15 @@ static int drv2624_i2c_probe(struct i2c_client *client,
 		drv2624->irq = gpio_to_irq(drv2624->plat_data.gpio_int);
 		dev_dbg(drv2624->dev, "irq = %d\n", drv2624->irq);
 
-		err = request_threaded_irq(drv2624->irq, drv2624_irq_handler,
-					   NULL,
-					   IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
-					   client->name, drv2624);
+		err = devm_request_threaded_irq(&client->dev, drv2624->irq,
+						drv2624_irq_handler, NULL,
+						IRQF_TRIGGER_FALLING |
+						IRQF_ONESHOT,
+						client->name, drv2624);
 
 		if (err < 0) {
 			dev_err(drv2624->dev, "request_irq failed, %d\n", err);
-			goto exit_gpio_request_failed2;
+			goto drv2624_i2c_probe_err;
 		}
 		drv2624_disable_irq(drv2624);
 	}
@@ -1786,11 +1791,11 @@ static int drv2624_i2c_probe(struct i2c_client *client,
 
 	err = haptics_init(drv2624);
 	if (err)
-		goto exit_gpio_request_failed2;
+		goto drv2624_i2c_probe_err;
 
 	err = sysfs_create_group(&drv2624->dev->kobj, &drv2624_fs_attr_group);
 	if (err)
-		goto exit_gpio_request_failed2;
+		goto drv2624_i2c_probe_err;
 
 	request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG, "drv2624.bin",
 				&client->dev, GFP_KERNEL, drv2624,
@@ -1800,16 +1805,7 @@ static int drv2624_i2c_probe(struct i2c_client *client,
 
 	return 0;
 
-exit_gpio_request_failed2:
-	if (drv2624->plat_data.gpio_int > 0)
-		gpio_free(drv2624->plat_data.gpio_int);
-
-exit_gpio_request_failed1:
-	if (drv2624->plat_data.gpio_nrst > 0) {
-		gpio_direction_output(drv2624->plat_data.gpio_nrst, 0);
-		gpio_free(drv2624->plat_data.gpio_nrst);
-	}
-
+drv2624_i2c_probe_err:
 	mutex_destroy(&drv2624->dev_lock);
 
 	dev_err(drv2624->dev, "%s failed, err=%d\n", __func__, err);
@@ -1822,14 +1818,6 @@ static int drv2624_i2c_remove(struct i2c_client *client)
 
 	cancel_work_sync(&drv2624->vibrator_work);
 	cancel_work_sync(&drv2624->work);
-
-	if (drv2624->plat_data.gpio_nrst) {
-		gpio_direction_output(drv2624->plat_data.gpio_nrst, 0);
-		gpio_free(drv2624->plat_data.gpio_nrst);
-	}
-
-	if (drv2624->plat_data.gpio_int)
-		gpio_free(drv2624->plat_data.gpio_int);
 
 	misc_deregister(&drv2624_misc);
 	led_classdev_unregister(&drv2624->led_dev);
