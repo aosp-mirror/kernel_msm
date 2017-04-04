@@ -35,3 +35,12 @@
 	};
 };
 
+&rpm_bus {
+	rpm-regulator-ldoa18 {
+		regulator-l18 {
+			qcom,init-voltage = <2704000>;
+			qcom,vdd-voltage-level = <2704000 2704000>;
+			regulator-always-on;
+		};
+	};
+};

@@ -73,3 +73,9 @@
 		status = "disabled";
 	};
 };
+
+&rpm_bus {
+	rpm-regulator-ldoa18 {
+		status = "disabled";
+	};
+};

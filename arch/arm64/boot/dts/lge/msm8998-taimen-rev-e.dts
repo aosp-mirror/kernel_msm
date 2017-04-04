@@ -66,3 +66,9 @@
 		stm,firmware_name = "ftm4_fw_lb.ftb";
 	};
 };
+
+&rpm_bus {
+	rpm-regulator-ldoa18 {
+		status = "disabled";
+	};
+};
