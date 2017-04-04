@@ -6,6 +6,8 @@
 #include "../cci/msm_cci.h"
 #include "fw_update.h"
 
+#define OIS_CUR_FW_VERSION 0x11
+
 #define OIS_COMPONENT_I2C_ADDR_WRITE 0x7C
 static struct msm_camera_i2c_client *g_i2c_client = NULL;
 bool g_first = true;
@@ -136,7 +138,7 @@ int checkHWFWversion(void)
     pr_info("[OISFW]:%s FW_version =  0x%02x", __func__, FW_version);
     pr_info("[OISFW]:%s IT_version =  0x%02x", __func__, IT_version);
 
-    if (FW_version >= 0x0F)
+    if (FW_version >= OIS_CUR_FW_VERSION)
     {
         pr_info("[OISFW]%s: No need to update.", __func__);
         return 0;
@@ -178,7 +180,7 @@ int checkHWFWversion(void)
     pr_info("[OISFW]:%s CM_version =  0x%02x", __func__, CM_version);
 
 
-    if(FW_version < 0x0F && IT_version == LGIT){
+    if(FW_version < OIS_CUR_FW_VERSION && IT_version == LGIT){
         if(CM_version < 2 )
             rc = CM1_LG;
         else if (CM_version == 2)
