@@ -10,6 +10,7 @@
  * GNU General Public License for more details.
  */
 
+#include <dt-bindings/clock/msm-clocks-8998.h>
 #include <dt-bindings/interrupt-controller/irq.h>
 #include "msm8998-taimen-pinctrl.dtsi"
 #include "msm8998-taimen-misc.dtsi"
