@@ -587,6 +587,11 @@ config LOAD_SW_CONTROL
 	help
 	  This program is for reducing the power off leakage current.
 
+config MOVEMENT_SOP716
+	tristate "Movement driver for SOP716"
+	help
+	  This supports SOP716 movement driver.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
