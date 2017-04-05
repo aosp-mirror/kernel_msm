@@ -227,6 +227,11 @@ static int wil_suspend_radio_off(struct wil6210_priv *wil)
 
 	wil_dbg_pm(wil, "suspend radio off\n");
 
+	if (test_bit(wil_status_suspended, wil->status)) {
+		wil_dbg_pm(wil, "trying to suspend while suspended\n");
+		return 0;
+	}
+
 	/* if netif up, hardware is alive, shut it down */
 	if (ndev->flags & IFF_UP) {
 		rc = wil_down(wil);
