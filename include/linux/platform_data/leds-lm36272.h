@@ -25,4 +25,13 @@ struct lm36272_platform_data {
 	u16 *blmap;
 };
 
+#ifdef CONFIG_LEDS_LM36272
+int lm36272_dsv_ctrl(int dsv_en);
+#else
+static inline int lm36272_dsv_ctrl(int dsv_en)
+{
+	return 0;
+}
+#endif
+
 #endif /* __LEDS_LM36272_H */

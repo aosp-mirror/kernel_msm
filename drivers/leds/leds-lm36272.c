@@ -57,12 +57,15 @@ static const struct i2c_device_id lm36272_bl_id[] = {
 static int lm36272_write_reg(struct i2c_client *client,
 		unsigned char reg, unsigned char val);
 
+static struct lm36272_device *this;
 
-static int lm36272_dsv_ctrl(struct lm36272_device *dev, int dsv_en)
+int lm36272_dsv_ctrl(int dsv_en)
 {
-	if (dev == NULL) {
-		pr_err("%s : lm36272_dev is null ", __func__);
-		return -1;
+	struct lm36272_device *dev = this;
+
+	if (!dev) {
+		pr_err("%s : lm36272 is not ready\n", __func__);
+		return -ENODEV;
 	}
 
 	if (dsv_en) {
@@ -91,6 +94,7 @@ static int lm36272_dsv_ctrl(struct lm36272_device *dev, int dsv_en)
 	}
 	return 0;
 }
+EXPORT_SYMBOL_GPL(lm36272_dsv_ctrl);
 
 static int lm36272_write_reg(struct i2c_client *client,
 		unsigned char reg, unsigned char val)
@@ -153,7 +157,6 @@ static void lm36272_set_main_current_level(struct i2c_client *client, int level)
 static void lm36272_backlight_on(struct lm36272_device *dev, int level)
 {
 	if (dev->status == BL_OFF) {
-		lm36272_dsv_ctrl(dev, 1);
 		lm36272_write_reg(dev->client, 0x02, 0x60);
 		lm36272_write_reg(dev->client, 0x08, 0x13);
 	}
@@ -171,7 +174,6 @@ static void lm36272_backlight_off(struct lm36272_device *dev)
 	lm36272_set_main_current_level(dev->client, 0);
 	lm36272_write_reg(dev->client, 0x08, 0x00);
 	dev->status = BL_OFF;
-	lm36272_dsv_ctrl(dev, 0);
 }
 
 static void lm36272_lcd_backlight_set_level(struct led_classdev *led_cdev,
@@ -299,6 +301,7 @@ static int lm36272_probe(struct i2c_client *client,
 		return 0;
 	}
 
+	this = dev;
 	dev->client = client;
 
 	dev->dsv_p_gpio = pdata->dsv_p_gpio;
@@ -350,6 +353,7 @@ static int lm36272_remove(struct i2c_client *client)
 {
 	struct lm36272_device *dev = i2c_get_clientdata(client);
 
+	this = NULL;
 	led_classdev_unregister(&dev->led_dev);
 
 	if (gpio_is_valid(dev->dsv_n_gpio))
