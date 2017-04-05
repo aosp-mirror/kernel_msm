@@ -333,14 +333,14 @@
 /* LDAF */
 &tlmm {
 	laser_sensor {
-		laser_pwdn:laser_pwdn {
+		laser_pwdn: laser_pwdn {
 			config {
 				pins = "gpio39";
 				drive-strength = <2>;
 				bias-disable;
 			};
 		};
-		laser_int:laser_int {
+		laser_int: laser_int {
 			config {
 				pins = "gpio62";
 				drive-strength = <2>;

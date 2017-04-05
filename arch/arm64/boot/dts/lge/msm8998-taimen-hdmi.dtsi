@@ -11,7 +11,7 @@
  */
 
 &soc {
-	vibrator:vibrator@fd8c3420 {
+	vibrator: vibrator@fd8c3420 {
 		status = "disabled";
 		compatible = "dongwoon,dw7800";
 		vpwr-on = <0>;
