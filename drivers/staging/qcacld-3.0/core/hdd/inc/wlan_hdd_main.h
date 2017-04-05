@@ -300,7 +300,7 @@ typedef enum {
  * Maximum no.of random mac addresses supported by firmware
  * for transmitting management action frames
  */
-#define MAX_RANDOM_MAC_ADDRS 16
+#define MAX_RANDOM_MAC_ADDRS 4
 
 /*
  * Generic asynchronous request/response support
@@ -441,15 +441,14 @@ typedef struct hdd_pmf_stats_s {
 #endif
 
 struct hdd_arp_stats_s {
-	uint16_t tx_count;
-	uint16_t rx_count;
+	uint16_t tx_arp_req_count;
+	uint16_t rx_arp_rsp_count;
 	uint16_t tx_dropped;
 	uint16_t rx_dropped;
 	uint16_t rx_delivered;
 	uint16_t rx_refused;
 	uint16_t tx_host_fw_sent;
 	uint16_t rx_host_drop_reorder;
-	uint16_t tx_fw_cnt;
 	uint16_t rx_fw_cnt;
 	uint16_t tx_ack_cnt;
 };
@@ -457,10 +456,7 @@ struct hdd_arp_stats_s {
 typedef struct hdd_stats_s {
 	tCsrSummaryStatsInfo summary_stat;
 	tCsrGlobalClassAStatsInfo ClassA_stat;
-	tCsrGlobalClassBStatsInfo ClassB_stat;
-	tCsrGlobalClassCStatsInfo ClassC_stat;
 	tCsrGlobalClassDStatsInfo ClassD_stat;
-	tCsrPerStaStatsInfo perStaStats;
 	struct csr_per_chain_rssi_stats_info  per_chain_rssi_stats;
 	hdd_tx_rx_stats_t hddTxRxStats;
 	struct hdd_arp_stats_s hdd_arp_stats;
@@ -729,11 +725,13 @@ struct action_frame_cookie {
  * related attrs
  * @in_use: Checks whether random mac is in use
  * @addr: Contains random mac addr
+ * @freq: Channel frequency
  * @cookie_list: List of cookies tied with random mac
  */
 struct action_frame_random_mac {
 	bool in_use;
 	uint8_t addr[QDF_MAC_ADDR_SIZE];
+	uint32_t freq;
 	struct list_head cookie_list;
 };
 
@@ -1260,11 +1258,11 @@ struct hdd_adapter_s {
 	 */
 	uint8_t cfg80211_disconnect_reason;
 	struct lfr_firmware_status lfr_fw_status;
+	bool con_status;
+	bool dad;
 	/* random address management for management action frames */
 	spinlock_t random_mac_lock;
 	struct action_frame_random_mac random_mac[MAX_RANDOM_MAC_ADDRS];
-	bool con_status;
-	bool dad;
 };
 
 /*
@@ -1739,12 +1737,14 @@ struct hdd_context_s {
 	uint8_t beacon_probe_rsp_cnt_per_scan;
 	bool rcpi_enabled;
 	bool imps_enabled;
+	int user_configured_pkt_filter_rules;
 
 	uint32_t no_of_probe_req_ouis;
 	struct vendor_oui *probe_req_voui;
-	int user_configured_pkt_filter_rules;
-
 	struct hdd_nud_stats_context nud_stats_context;
+	uint32_t track_arp_ip;
+	uint8_t bt_a2dp_active:1;
+	uint8_t bt_vo_active:1;
 };
 
 /*---------------------------------------------------------------------------
@@ -2274,4 +2274,16 @@ static inline void hdd_init_nud_stats_ctx(hdd_context_t *hdd_ctx)
 	init_completion(&hdd_ctx->nud_stats_context.response_event);
 	return;
 }
+
+/**
+ * hdd_start_complete()- complete the start event
+ * @ret: return value for complete event.
+ *
+ * complete the startup event and set the return in
+ * global variable
+ *
+ * Return: void
+ */
+
+void hdd_start_complete(int ret);
 #endif /* end #if !defined(WLAN_HDD_MAIN_H) */

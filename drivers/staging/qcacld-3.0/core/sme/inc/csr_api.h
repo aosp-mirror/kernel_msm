@@ -63,10 +63,8 @@ typedef enum {
 #endif /* FEATURE_WLAN_WAPI */
 	eCSR_AUTH_TYPE_CCKM_WPA,
 	eCSR_AUTH_TYPE_CCKM_RSN,
-#ifdef WLAN_FEATURE_11W
 	eCSR_AUTH_TYPE_RSN_PSK_SHA256,
 	eCSR_AUTH_TYPE_RSN_8021X_SHA256,
-#endif
 	eCSR_NUM_OF_SUPPORT_AUTH_TYPE,
 	eCSR_AUTH_TYPE_FAILED = 0xff,
 	eCSR_AUTH_TYPE_UNKNOWN = eCSR_AUTH_TYPE_FAILED,
@@ -1323,6 +1321,7 @@ typedef struct tagCsrConfigParam {
 	bool enable_bcast_probe_rsp;
 	bool qcn_ie_support;
 	uint8_t fils_max_chan_guard_time;
+	uint16_t pkt_err_disconn_th;
 } tCsrConfigParam;
 
 /* Tush */
@@ -1501,54 +1500,16 @@ typedef struct tagCsrSummaryStatsInfo {
 } tCsrSummaryStatsInfo;
 
 typedef struct tagCsrGlobalClassAStatsInfo {
-	uint32_t rx_frag_cnt;
-	uint32_t promiscuous_rx_frag_cnt;
-	/* uint32_t rx_fcs_err; */
-	uint32_t rx_input_sensitivity;
+	uint32_t nss;
 	uint32_t max_pwr;
-	/* uint32_t default_pwr; */
-	uint32_t sync_fail_cnt;
 	uint32_t tx_rate;
 	/* mcs index for HT20 and HT40 rates */
 	uint32_t mcs_index;
+	uint32_t mcs_rate_flags;
 	/* to diff between HT20 & HT40 rates;short & long guard interval */
 	uint32_t tx_rate_flags;
 
 } tCsrGlobalClassAStatsInfo;
-
-typedef struct tagCsrGlobalClassBStatsInfo {
-	uint32_t uc_rx_wep_unencrypted_frm_cnt;
-	uint32_t uc_rx_mic_fail_cnt;
-	uint32_t uc_tkip_icv_err;
-	uint32_t uc_aes_ccmp_format_err;
-	uint32_t uc_aes_ccmp_replay_cnt;
-	uint32_t uc_aes_ccmp_decrpt_err;
-	uint32_t uc_wep_undecryptable_cnt;
-	uint32_t uc_wep_icv_err;
-	uint32_t uc_rx_decrypt_succ_cnt;
-	uint32_t uc_rx_decrypt_fail_cnt;
-	uint32_t mcbc_rx_wep_unencrypted_frm_cnt;
-	uint32_t mcbc_rx_mic_fail_cnt;
-	uint32_t mcbc_tkip_icv_err;
-	uint32_t mcbc_aes_ccmp_format_err;
-	uint32_t mcbc_aes_ccmp_replay_cnt;
-	uint32_t mcbc_aes_ccmp_decrpt_err;
-	uint32_t mcbc_wep_undecryptable_cnt;
-	uint32_t mcbc_wep_icv_err;
-	uint32_t mcbc_rx_decrypt_succ_cnt;
-	uint32_t mcbc_rx_decrypt_fail_cnt;
-
-} tCsrGlobalClassBStatsInfo;
-
-typedef struct tagCsrGlobalClassCStatsInfo {
-	uint32_t rx_amsdu_cnt;
-	uint32_t rx_ampdu_cnt;
-	uint32_t tx_20_frm_cnt;
-	uint32_t rx_20_frm_cnt;
-	uint32_t rx_mpdu_in_ampdu_cnt;
-	uint32_t ampdu_delimiter_crc_err;
-
-} tCsrGlobalClassCStatsInfo;
 
 typedef struct tagCsrGlobalClassDStatsInfo {
 	uint32_t tx_uc_frm_cnt;
@@ -1568,12 +1529,6 @@ typedef struct tagCsrGlobalClassDStatsInfo {
 	uint32_t rx_rate;
 
 } tCsrGlobalClassDStatsInfo;
-
-typedef struct tagCsrPerStaStatsInfo {
-	uint32_t tx_frag_cnt[4];
-	uint32_t tx_ampdu_cnt;
-	uint32_t tx_mpdu_in_ampdu_cnt;
-} tCsrPerStaStatsInfo;
 
 /**
  * struct csr_per_chain_rssi_stats_info - stores chain rssi

@@ -8590,68 +8590,6 @@ QDF_STATUS wma_set_sar_limit(WMA_HANDLE handle,
 	return ret;
 }
 
-/**
- * wma_get_arp_stats_handler() - handle arp stats data
- * indicated by FW
- * @handle: wma context
- * @data: event buffer
- * @data len: length of event buffer
- *
- * Return: 0 on success
- */
-int wma_get_arp_stats_handler(void *handle, uint8_t *data,
-			uint32_t data_len)
-{
-	WMI_VDEV_GET_ARP_STAT_EVENTID_param_tlvs *param_buf;
-	wmi_vdev_get_arp_stats_event_fixed_param *data_event;
-	struct rsp_stats rsp;
-	tpAniSirGlobal mac = cds_get_context(QDF_MODULE_ID_PE);
-
-	ENTER();
-
-	if (!mac) {
-		WMA_LOGE("%s: Invalid mac context", __func__);
-		return -EINVAL;
-	}
-
-	if (!mac->sme.get_arp_stats_cb) {
-		WMA_LOGE("%s: Callback not registered", __func__);
-		return -EINVAL;
-	}
-
-	if (data == NULL) {
-		WMA_LOGE("%s: invalid pointer", __func__);
-		return -EINVAL;
-	}
-	param_buf = (WMI_VDEV_GET_ARP_STAT_EVENTID_param_tlvs *)data;
-	if (!param_buf) {
-		WMA_LOGE("%s: Invalid get arp stats event", __func__);
-		return -EINVAL;
-	}
-	data_event = param_buf->fixed_param;
-	if (!data_event) {
-		WMA_LOGE("%s: Invalid get arp stats data event", __func__);
-		return -EINVAL;
-	}
-	rsp.arp_req_enqueue = data_event->arp_req_enqueue;
-	rsp.vdev_id = data_event->vdev_id;
-	rsp.arp_req_tx_success = data_event->arp_req_tx_success;
-	rsp.arp_req_tx_failure = data_event->arp_req_tx_failure;
-	rsp.arp_rsp_recvd = data_event->arp_rsp_recvd;
-	rsp.out_of_order_arp_rsp_drop_cnt =
-		data_event->out_of_order_arp_rsp_drop_cnt;
-	rsp.dad_detected = data_event->dad_detected;
-	rsp.connect_status = data_event->connect_status;
-	rsp.ba_session_establishment_status =
-		data_event->ba_session_establishment_status;
-
-	mac->sme.get_arp_stats_cb(mac->hHdd, &rsp);
-
-	EXIT();
-
-	return 0;
-}
-
 #ifdef WLAN_FEATURE_DISA
 /**
  * wma_encrypt_decrypt_msg() -
@@ -8758,6 +8696,68 @@ int wma_encrypt_decrypt_msg_handler(void *handle, uint8_t *data,
 	return 0;
 }
 #endif
+
+/**
+ * wma_get_arp_stats_handler() - handle arp stats data
+ * indicated by FW
+ * @handle: wma context
+ * @data: event buffer
+ * @data len: length of event buffer
+ *
+ * Return: 0 on success
+ */
+int wma_get_arp_stats_handler(void *handle, uint8_t *data,
+			uint32_t data_len)
+{
+	WMI_VDEV_GET_ARP_STAT_EVENTID_param_tlvs *param_buf;
+	wmi_vdev_get_arp_stats_event_fixed_param *data_event;
+	struct rsp_stats rsp;
+	tpAniSirGlobal mac = cds_get_context(QDF_MODULE_ID_PE);
+
+	ENTER();
+
+	if (!mac) {
+		WMA_LOGE("%s: Invalid mac context", __func__);
+		return -EINVAL;
+	}
+
+	if (!mac->sme.get_arp_stats_cb) {
+		WMA_LOGE("%s: Callback not registered", __func__);
+		return -EINVAL;
+	}
+
+	if (data == NULL) {
+		WMA_LOGE("%s: invalid pointer", __func__);
+		return -EINVAL;
+	}
+	param_buf = (WMI_VDEV_GET_ARP_STAT_EVENTID_param_tlvs *)data;
+	if (!param_buf) {
+		WMA_LOGE("%s: Invalid get arp stats event", __func__);
+		return -EINVAL;
+	}
+	data_event = param_buf->fixed_param;
+	if (!data_event) {
+		WMA_LOGE("%s: Invalid get arp stats data event", __func__);
+		return -EINVAL;
+	}
+	rsp.arp_req_enqueue = data_event->arp_req_enqueue;
+	rsp.vdev_id = data_event->vdev_id;
+	rsp.arp_req_tx_success = data_event->arp_req_tx_success;
+	rsp.arp_req_tx_failure = data_event->arp_req_tx_failure;
+	rsp.arp_rsp_recvd = data_event->arp_rsp_recvd;
+	rsp.out_of_order_arp_rsp_drop_cnt =
+		data_event->out_of_order_arp_rsp_drop_cnt;
+	rsp.dad_detected = data_event->dad_detected;
+	rsp.connect_status = data_event->connect_status;
+	rsp.ba_session_establishment_status =
+		data_event->ba_session_establishment_status;
+
+	mac->sme.get_arp_stats_cb(mac->hHdd, &rsp);
+
+	EXIT();
+
+	return 0;
+}
 
 /**
  * wma_unified_power_debug_stats_event_handler() - WMA handler function to
@@ -8935,3 +8935,38 @@ inline QDF_STATUS wma_send_udp_resp_offload_cmd(tp_wma_handle wma_handle,
 	return QDF_STATUS_E_FAILURE;
 }
 #endif
+
+int wma_wlan_bt_activity_evt_handler(void *handle, uint8_t *event, uint32_t len)
+{
+	wmi_coex_bt_activity_event_fixed_param *fixed_param;
+	WMI_WLAN_COEX_BT_ACTIVITY_EVENTID_param_tlvs *param_buf =
+		(WMI_WLAN_COEX_BT_ACTIVITY_EVENTID_param_tlvs *)event;
+	cds_msg_t sme_msg = {0};
+	QDF_STATUS qdf_status;
+
+	if (!param_buf) {
+		WMA_LOGE(FL("Invalid BT activity event buffer"));
+		return -EINVAL;
+	}
+
+	fixed_param = param_buf->fixed_param;
+	if (!fixed_param) {
+		WMA_LOGE(FL("Invalid BT activity event fixed param buffer"));
+		return -EINVAL;
+	}
+
+	WMA_LOGI(FL("Received BT activity event %u"),
+		    fixed_param->coex_profile_evt);
+
+	sme_msg.type = eWNI_SME_BT_ACTIVITY_INFO_IND;
+	sme_msg.bodyptr = NULL;
+	sme_msg.bodyval = fixed_param->coex_profile_evt;
+
+	qdf_status = cds_mq_post_message(QDF_MODULE_ID_SME, &sme_msg);
+	if (QDF_IS_STATUS_ERROR(qdf_status)) {
+		WMA_LOGE(FL("Failed to post msg to SME"));
+		return -EINVAL;
+	}
+
+	return 0;
+}

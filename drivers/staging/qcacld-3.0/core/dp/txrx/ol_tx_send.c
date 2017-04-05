@@ -274,7 +274,7 @@ ol_tx_send_nonstd(struct ol_txrx_pdev_t *pdev,
 	QDF_NBUF_UPDATE_TX_PKT_COUNT(msdu, QDF_NBUF_TX_PKT_TXRX);
 	failed = htt_tx_send_nonstd(pdev->htt_pdev, msdu, id, pkt_type);
 	if (failed) {
-		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+		ol_txrx_err(
 			   "Error: freeing tx frame after htt_tx failed");
 		ol_tx_target_credit_incr_int(pdev, msdu_credit_consumed);
 		ol_tx_desc_frame_free_nonstd(pdev, tx_desc, 1 /* had error */);
@@ -516,7 +516,7 @@ void ol_tx_discard_target_frms(ol_txrx_pdev_handle pdev)
 		 * target has never provided a response.
 		 */
 		if (qdf_atomic_read(&tx_desc->ref_cnt)) {
-			TXRX_PRINT(TXRX_PRINT_LEVEL_WARN,
+			ol_txrx_dbg(
 				   "Warning: freeing tx desc %d", tx_desc->id);
 			ol_tx_desc_frame_free_nonstd(pdev,
 						     tx_desc, 1);
@@ -540,6 +540,27 @@ void ol_tx_credit_completion_handler(ol_txrx_pdev_handle pdev, int credits)
 
 	/* UNPAUSE OS Q */
 	ol_tx_flow_ct_unpause_os_q(pdev);
+}
+
+
+/**
+ * ol_tx_update_arp_stats() - update ARP packet TX stats
+ * @netbuf:  buffer
+ *
+ *
+ * Return: none
+ */
+static void ol_tx_update_arp_stats(qdf_nbuf_t netbuf,
+					enum htt_tx_status status)
+{
+	uint32_t tgt_ip = cds_get_arp_stats_gw_ip();
+
+	if (tgt_ip == qdf_nbuf_get_arp_tgt_ip(netbuf)) {
+		if (status != htt_tx_status_download_fail)
+			cds_incr_arp_stats_tx_tgt_delivered();
+		if (status == htt_tx_status_ok)
+			cds_incr_arp_stats_tx_tgt_acked();
+	}
 }
 
 /* WARNING: ol_tx_inspect_handler()'s bahavior is similar to that of
@@ -574,6 +595,12 @@ ol_tx_completion_handler(ol_txrx_pdev_handle pdev,
 		tx_desc->status = status;
 		netbuf = tx_desc->netbuf;
 		QDF_NBUF_UPDATE_TX_PKT_COUNT(netbuf, QDF_NBUF_TX_PKT_FREE);
+
+		if (QDF_NBUF_CB_GET_PACKET_TYPE(netbuf) ==
+		    QDF_NBUF_CB_PACKET_TYPE_ARP) {
+			if (qdf_nbuf_data_is_arp_req(netbuf))
+				ol_tx_update_arp_stats(netbuf, status);
+		}
 
 		if (tx_desc->pkt_type != OL_TX_FRM_TSO) {
 			packetdump_cb = pdev->ol_tx_packetdump_cb;
@@ -795,7 +822,7 @@ ol_tx_single_completion_handler(ol_txrx_pdev_handle pdev,
 
 	tx_desc = ol_tx_desc_find_check(pdev, tx_desc_id);
 	if (tx_desc == NULL) {
-		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+		ol_txrx_err(
 				"%s: invalid desc_id(%u), ignore it.\n",
 				__func__,
 				tx_desc_id);
@@ -1249,7 +1276,7 @@ void ol_register_packetdump_callback(tp_ol_packetdump_cb ol_tx_packetdump_cb,
 	ol_txrx_pdev_handle pdev = cds_get_context(QDF_MODULE_ID_TXRX);
 
 	if (!pdev) {
-		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+		ol_txrx_err(
 				"%s: pdev is NULL", __func__);
 		return;
 	}
@@ -1274,7 +1301,7 @@ void ol_deregister_packetdump_callback(void)
 	ol_txrx_pdev_handle pdev = cds_get_context(QDF_MODULE_ID_TXRX);
 
 	if (!pdev) {
-		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+		ol_txrx_err(
 				"%s: pdev is NULL", __func__);
 		return;
 	}

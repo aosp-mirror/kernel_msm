@@ -1560,6 +1560,29 @@ typedef enum {
 
 /*
  * <ini>
+ * gDroppedPktDisconnectTh - Sets dropped packet threshold in firmware
+ * @Min: 0
+ * @Max: 512
+ * @Default: 512
+ *
+ * This INI is the packet drop threshold will trigger disconnect from remote
+ * peer.
+ *
+ * Related: None
+ *
+ * Supported Feature: connection
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_DROPPED_PKT_DISCONNECT_TH_NAME      "gDroppedPktDisconnectTh"
+#define CFG_DROPPED_PKT_DISCONNECT_TH_MIN       (0)
+#define CFG_DROPPED_PKT_DISCONNECT_TH_MAX       (512)
+#define CFG_DROPPED_PKT_DISCONNECT_TH_DEFAULT   (512)
+
+/*
+ * <ini>
  * gEnableFastRoamInConcurrency - Enable LFR roaming on STA during concurrency
  * @Min: 0
  * @Max: 1
@@ -9925,259 +9948,6 @@ enum dot11p_mode {
 
 /*
  * <ini>
- * g_enable_probereq_whitelist_ies - Enable IE white listing
- * @Min: 0
- * @Max: 1
- * @Default: 0
- *
- * This ini is used to enable/disable probe request IE white listing feature.
- * Values 0 and 1 are used to disable and enable respectively, by default this
- * feature is disabled.
- *
- * Related: None
- *
- * Supported Feature: Probe request IE whitelisting
- *
- * Usage: Internal/External
- *
- * </ini>
- */
-#define CFG_PRB_REQ_IE_WHITELIST_NAME    "g_enable_probereq_whitelist_ies"
-#define CFG_PRB_REQ_IE_WHITELIST_MIN     (0)
-#define CFG_PRB_REQ_IE_WHITELIST_MAX     (1)
-#define CFG_PRB_REQ_IE_WHITELIST_DEFAULT (0)
-
-/*
- * For IE white listing in Probe Req, following ini parameters from
- * g_probe_req_ie_bitmap_0 to g_probe_req_ie_bitmap_7 are used. User needs to
- * input this values in hexa decimal format, when bit is set in bitmap,
- * corresponding IE needs to be included in probe request.
- *
- * Example:
- * ========
- * If IE 221 needs to be in the probe request, set the corresponding bit
- * as follows:
- * a= IE/32 = 221/32 = 6 = g_probe_req_ie_bitmap_6
- * b = IE modulo 32 = 29,
- * means set the bth bit in g_probe_req_ie_bitmap_a,
- * therefore set 29th bit in g_probe_req_ie_bitmap_6,
- * as a result, g_probe_req_ie_bitmap_6=20000000
- *
- * Note: For IE 221, its mandatory to set the gProbeReqOUIs.
- */
-
-/*
- * <ini>
- * g_probe_req_ie_bitmap_0 - Used to set the bitmap of IEs from 0 to 31
- * @Min: 0x00000000
- * @Max: 0xFFFFFFFF
- * @Default: 0x00000000
- *
- * This ini is used to include the IEs from 0 to 31 in probe request,
- * when corresponding bit is set.
- *
- * Related: Need to enable g_enable_probereq_whitelist_ies.
- *
- * Supported Feature: Probe request ie whitelisting
- *
- * Usage: Internal/External
- *
- * </ini>
- */
-#define CFG_PRB_REQ_IE_BIT_MAP0_NAME    "g_probe_req_ie_bitmap_0"
-#define CFG_PRB_REQ_IE_BIT_MAP0_MIN     (0x00000000)
-#define CFG_PRB_REQ_IE_BIT_MAP0_MAX     (0xFFFFFFFF)
-#define CFG_PRB_REQ_IE_BIT_MAP0_DEFAULT (0x00000000)
-
-/*
- * <ini>
- * g_probe_req_ie_bitmap_1 - Used to set the bitmap of IEs from 32 to 63
- * @Min: 0x00000000
- * @Max: 0xFFFFFFFF
- * @Default: 0x00000000
- *
- * This ini is used to include the IEs from 32 to 63 in probe request,
- * when corresponding bit is set.
- *
- * Related: Need to enable g_enable_probereq_whitelist_ies.
- *
- * Supported Feature: Probe request ie whitelisting
- *
- * Usage: Internal/External
- *
- * </ini>
- */
-#define CFG_PRB_REQ_IE_BIT_MAP1_NAME    "g_probe_req_ie_bitmap_1"
-#define CFG_PRB_REQ_IE_BIT_MAP1_MIN     (0x00000000)
-#define CFG_PRB_REQ_IE_BIT_MAP1_MAX     (0xFFFFFFFF)
-#define CFG_PRB_REQ_IE_BIT_MAP1_DEFAULT (0x00000000)
-
-/*
- * <ini>
- * g_probe_req_ie_bitmap_2 - Used to set the bitmap of IEs from 64 to 95
- * @Min: 0x00000000
- * @Max: 0xFFFFFFFF
- * @Default: 0x00000000
- *
- * This ini is used to include the IEs from 64 to 95 in probe request,
- * when corresponding bit is set.
- *
- * Related: Need to enable g_enable_probereq_whitelist_ies.
- *
- * Supported Feature: Probe request ie whitelisting
- *
- * Usage: Internal/External
- *
- * </ini>
- */
-#define CFG_PRB_REQ_IE_BIT_MAP2_NAME    "g_probe_req_ie_bitmap_2"
-#define CFG_PRB_REQ_IE_BIT_MAP2_MIN     (0x00000000)
-#define CFG_PRB_REQ_IE_BIT_MAP2_MAX     (0xFFFFFFFF)
-#define CFG_PRB_REQ_IE_BIT_MAP2_DEFAULT (0x00000000)
-
-/*
- * <ini>
- * g_probe_req_ie_bitmap_3 - Used to set the bitmap of IEs from 96 to 127
- * @Min: 0x00000000
- * @Max: 0xFFFFFFFF
- * @Default: 0x00000000
- *
- * This ini is used to include the IEs from 96 to 127 in probe request,
- * when corresponding bit is set.
- *
- * Related: Need to enable g_enable_probereq_whitelist_ies.
- *
- * Supported Feature: Probe request ie whitelisting
- *
- * Usage: Internal/External
- *
- * </ini>
- */
-#define CFG_PRB_REQ_IE_BIT_MAP3_NAME    "g_probe_req_ie_bitmap_3"
-#define CFG_PRB_REQ_IE_BIT_MAP3_MIN     (0x00000000)
-#define CFG_PRB_REQ_IE_BIT_MAP3_MAX     (0xFFFFFFFF)
-#define CFG_PRB_REQ_IE_BIT_MAP3_DEFAULT (0x00000000)
-
-/*
- * <ini>
- * g_probe_req_ie_bitmap_4 - Used to set the bitmap of IEs from 128 to 159
- * @Min: 0x00000000
- * @Max: 0xFFFFFFFF
- * @Default: 0x00000000
- *
- * This ini is used to include the IEs from 128 to 159 in probe request,
- * when corresponding bit is set.
- *
- * Related: Need to enable g_enable_probereq_whitelist_ies.
- *
- * Supported Feature: Probe request ie whitelisting
- *
- * Usage: Internal/External
- *
- * </ini>
- */
-#define CFG_PRB_REQ_IE_BIT_MAP4_NAME    "g_probe_req_ie_bitmap_4"
-#define CFG_PRB_REQ_IE_BIT_MAP4_MIN     (0x00000000)
-#define CFG_PRB_REQ_IE_BIT_MAP4_MAX     (0xFFFFFFFF)
-#define CFG_PRB_REQ_IE_BIT_MAP4_DEFAULT (0x00000000)
-
-/*
- * <ini>
- * g_probe_req_ie_bitmap_5 - Used to set the bitmap of IEs from 160 to 191
- * @Min: 0x00000000
- * @Max: 0xFFFFFFFF
- * @Default: 0x00000000
- *
- * This ini is used to include the IEs from 160 to 191 in probe request,
- * when corresponding bit is set.
- *
- * Related: Need to enable g_enable_probereq_whitelist_ies.
- *
- * Supported Feature: Probe request ie whitelisting
- *
- * Usage: Internal/External
- *
- * </ini>
- */
-#define CFG_PRB_REQ_IE_BIT_MAP5_NAME    "g_probe_req_ie_bitmap_5"
-#define CFG_PRB_REQ_IE_BIT_MAP5_MIN     (0x00000000)
-#define CFG_PRB_REQ_IE_BIT_MAP5_MAX     (0xFFFFFFFF)
-#define CFG_PRB_REQ_IE_BIT_MAP5_DEFAULT (0x00000000)
-
-/*
- * <ini>
- * g_probe_req_ie_bitmap_6 - Used to set the bitmap of IEs from 192 to 223
- * @Min: 0x00000000
- * @Max: 0xFFFFFFFF
- * @Default: 0x00000000
- *
- * This ini is used to include the IEs from 192 to 223 in probe request,
- * when corresponding bit is set.
- *
- * Related: Need to enable g_enable_probereq_whitelist_ies.
- *
- * Supported Feature: Probe request ie whitelisting
- *
- * Usage: Internal/External
- *
- * </ini>
- */
-#define CFG_PRB_REQ_IE_BIT_MAP6_NAME    "g_probe_req_ie_bitmap_6"
-#define CFG_PRB_REQ_IE_BIT_MAP6_MIN     (0x00000000)
-#define CFG_PRB_REQ_IE_BIT_MAP6_MAX     (0xFFFFFFFF)
-#define CFG_PRB_REQ_IE_BIT_MAP6_DEFAULT (0x00000000)
-
-/*
- * <ini>
- * g_probe_req_ie_bitmap_7 - Used to set the bitmap of IEs from 224 to 255
- * @Min: 0x00000000
- * @Max: 0xFFFFFFFF
- * @Default: 0x00000000
- *
- * This ini is used to include the IEs from 224 to 255 in probe request,
- * when corresponding bit is set.
- *
- * Related: Need to enable g_enable_probereq_whitelist_ies.
- *
- * Supported Feature: Probe request ie whitelisting
- *
- * Usage: Internal/External
- *
- * </ini>
- */
-#define CFG_PRB_REQ_IE_BIT_MAP7_NAME    "g_probe_req_ie_bitmap_7"
-#define CFG_PRB_REQ_IE_BIT_MAP7_MIN     (0x00000000)
-#define CFG_PRB_REQ_IE_BIT_MAP7_MAX     (0xFFFFFFFF)
-#define CFG_PRB_REQ_IE_BIT_MAP7_DEFAULT (0x00000000)
-
-/*
- * For vendor specific IE, Probe Req OUI types and sub types which are
- * to be white listed are specified in gProbeReqOUIs in the following
- * example format - gProbeReqOUIs=AABBCCDD EEFF1122
- */
-
-/*
- * <ini>
- * gProbeReqOUIs - Used to specify vendor specific OUIs
- * @Default: Empty string
- *
- * This ini is used to include the specified OUIs in vendor specific IE
- * of probe request.
- *
- * Related: Need to enable g_enable_probereq_whitelist_ies and
- * vendor specific IE should be set in g_probe_req_ie_bitmap_6.
- *
- * Supported Feature: Probe request ie whitelisting
- *
- * Usage: External
- *
- * </ini>
- */
-#define CFG_PROBE_REQ_OUI_NAME    "gProbeReqOUIs"
-#define CFG_PROBE_REQ_OUI_DEFAULT ""
-
-/*
- * <ini>
  * g_enable_bcast_probe_rsp - Enable Broadcast probe response.
  * @Min: 0
  * @Max: 1
@@ -10197,7 +9967,6 @@ enum dot11p_mode {
 #define CFG_ENABLE_BCAST_PROBE_RESP_MIN     (0)
 #define CFG_ENABLE_BCAST_PROBE_RESP_MAX     (1)
 #define CFG_ENABLE_BCAST_PROBE_RESP_DEFAULT (1)
-
 
 /*
  * <ini>
@@ -10559,6 +10328,100 @@ enum dot11p_mode {
 #define CFG_PROBE_REQ_OUI_NAME    "gProbeReqOUIs"
 #define CFG_PROBE_REQ_OUI_DEFAULT ""
 
+/*
+ * <ini>
+ * g_mbo_candidate_rssi_thres - Candidate AP's minimum RSSI to accept
+ * @Min: -120
+ * @Max: 0
+ * @Default: -72
+ *
+ * This ini specifies the minimum RSSI value a candidate should have to accept
+ * it as a target for transition.
+ *
+ * Related: N/A
+ *
+ * Supported Feature: MBO
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
+#define CFG_MBO_CANDIDATE_RSSI_THRESHOLD_NAME   "g_mbo_candidate_rssi_thres"
+#define CFG_CANDIDATE_RSSI_THRESHOLD_DEFAULT    (-72)
+#define CFG_CANDIDATE_RSSI_THRESHOLD_MIN        (-120)
+#define CFG_CANDIDATE_RSSI_THRESHOLD_MAX        (0)
+
+/*
+ * <ini>
+ * g_mbo_current_rssi_thres - Connected AP's RSSI threshold to consider a
+ * transition
+ * @Min: -120
+ * @Max: 0
+ * @Default: -65
+ *
+ * This ini is used to configure connected AP's RSSI threshold value to consider
+ * a transition.
+ *
+ * Related: N/A
+ *
+ * Supported Feature: MBO
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
+#define CFG_MBO_CURRENT_RSSI_THRESHOLD_NAME     "g_mbo_current_rssi_thres"
+#define CFG_CURRENT_RSSI_THRESHOLD_DEFAULT      (-65)
+#define CFG_CURRENT_RSSI_THRESHOLD_MIN          (-120)
+#define CFG_CURRENT_RSSI_THRESHOLD_MAX          (0)
+
+/*
+ * <ini>
+ * g_mbo_current_rssi_mcc_thres - connected AP's RSSI threshold value to prefer
+ * against a MCC
+ * @Min: -120
+ * @Max: 0
+ * @Default: -75
+ *
+ * This ini is used to configure connected AP's minimum RSSI threshold that is
+ * preferred against a MCC case, if the candidate can cause MCC.
+ *
+ * Related: N/A
+ *
+ * Supported Feature: MBO
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
+#define CFG_MBO_CUR_RSSI_MCC_THRESHOLD_NAME       "g_mbo_current_rssi_mcc_thres"
+#define CFG_MBO_CUR_RSSI_MCC_THRESHOLD_DEFAULT    (-75)
+#define CFG_MBO_CUR_RSSI_MCC_THRESHOLD_MIN        (-120)
+#define CFG_MBO_CUR_RSSI_MCC_THRESHOLD_MAX        (0)
+
+/*
+ * <ini>
+ * g_mbo_candidate_rssi_btc_thres -  Candidate AP's minimum RSSI threshold to
+ * prefer it even in case of BT coex
+ * @Min: -120
+ * @Max: 0
+ * @Default: -70
+ *
+ * This ini is used to configure candidate AP's minimum RSSI threshold to prefer
+ * it for transition even in case of BT coex.
+ *
+ * Related: N/A
+ *
+ * Supported Feature: MBO
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
+#define CFG_MBO_CAND_RSSI_BTC_THRESHOLD_NAME    "g_mbo_candidate_rssi_btc_thres"
+#define CFG_MBO_CAND_RSSI_BTC_THRESHOLD_DEFAULT (-70)
+#define CFG_MBO_CAND_RSSI_BTC_THRESHOLD_MIN     (-120)
+#define CFG_MBO_CAND_RSSI_BTC_THRESHOLD_MAX     (0)
 
 /*---------------------------------------------------------------------------
    Type declarations
@@ -11275,7 +11138,6 @@ struct hdd_config {
 	enum active_bpf_mode active_bpf_mode;
 	bool hw_broadcast_filter;
 	bool sap_internal_restart;
-
 	bool enable_bcast_probe_rsp;
 	bool qcn_ie_support;
 	uint8_t fils_max_chan_guard_time;
@@ -11305,6 +11167,13 @@ struct hdd_config {
 
 	/* Probe Request multiple vendor OUIs */
 	uint8_t probe_req_ouis[MAX_PRB_REQ_VENDOR_OUI_INI_LEN];
+
+	int8_t mbo_candidate_rssi_thres;
+	int8_t mbo_current_rssi_thres;
+	int8_t mbo_current_rssi_mcc_thres;
+	int8_t mbo_candidate_rssi_btc_thres;
+	/* threshold of packet drops at which FW initiates disconnect */
+	uint16_t pkt_err_disconn_th;
 };
 
 #define VAR_OFFSET(_Struct, _Var) (offsetof(_Struct, _Var))

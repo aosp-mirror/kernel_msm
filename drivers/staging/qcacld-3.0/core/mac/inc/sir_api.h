@@ -5251,6 +5251,9 @@ typedef struct {
 	/* tx time (in milliseconds) per TPC level (0.5 dBm) */
 	uint32_t tx_time_per_tpc[MAX_TPC_LEVELS];
 
+	uint32_t on_time_host_scan;
+	uint32_t on_time_lpi_scan;
+
 	/* channel statistics tSirWifiChannelStats */
 	tSirWifiChannelStats *channels;
 } tSirWifiRadioStat, *tpSirWifiRadioStat;
@@ -5310,6 +5313,22 @@ typedef struct {
 	/* per rate statistics, number of entries  = num_rate */
 	tSirWifiRateStat rateStats[0];
 } tSirWifiPeerInfo, *tpSirWifiPeerInfo;
+
+/**
+ * struct wifi_iface_offload_stat - Wifi Iface offload statistics
+ * @type: type of offload stats (enum wmi_offload_stats_type)
+ * @rx_count: Number of (MSDUs) frames Received
+ * @drp_count: Number of frames Dropped
+ * @fwd_count:
+ *  Number of frames for which FW Responded (Valid for ARP and NS only).(or)
+ *  Number of frames forwarded to Host (Valid for stats type except ARP and NS).
+ */
+struct wifi_iface_offload_stat {
+	wmi_offload_stats_type type;
+	uint32_t rx_count;
+	uint32_t drp_count;
+	uint32_t fwd_count;
+};
 
 /* per access category statistics */
 typedef struct {
@@ -5405,8 +5424,27 @@ typedef struct {
 	 *  a data frame with PM bit set.
 	 */
 	uint32_t rx_leak_window;
+
+	uint32_t tx_rts_succ_cnt;
+	uint32_t tx_rts_fail_cnt;
+	uint32_t tx_ppdu_succ_cnt;
+	uint32_t tx_ppdu_fail_cnt;
+	uint32_t connected_duration;
+	uint32_t disconnected_duration;
+	uint32_t rtt_ranging_duration;
+	uint32_t rtt_responder_duration;
+	uint32_t num_probes_tx;
+	uint32_t num_beacon_miss;
+
+	uint32_t rts_succ_cnt;
+	uint32_t rts_fail_cnt;
+	uint32_t ppdu_succ_cnt;
+	uint32_t ppdu_fail_cnt;
 	/* per ac data packet statistics */
 	tSirWifiWmmAcStat AccessclassStats[WIFI_AC_MAX];
+
+	uint32_t num_offload_stats;
+	struct wifi_iface_offload_stat offload_stat[WMI_OFFLOAD_STATS_TYPE_MAX];
 } tSirWifiIfaceStat, *tpSirWifiIfaceStat;
 
 /* Peer statistics - corresponding to 3rd most LSB in
@@ -6544,6 +6582,28 @@ struct ndp_pmk {
 };
 
 /**
+ * struct ndp_passphrase - structure to hold passphrase
+ * @passphrase_len: length of passphrase
+ * @passphrase: buffer containing passphrase
+ *
+ */
+struct ndp_passphrase {
+	uint32_t passphrase_len;
+	uint8_t *passphrase;
+};
+
+/**
+ * struct ndp_service_name - structure to hold service_name
+ * @service_name_len: length of service_name
+ * @service_name: buffer containing service_name
+ *
+ */
+struct ndp_service_name {
+	uint32_t service_name_len;
+	uint8_t *service_name;
+};
+
+/**
  * struct ndi_create_req - ndi create request params
  * @transaction_id: unique identifier
  * @iface_name: interface name
@@ -6604,6 +6664,8 @@ struct ndp_initiator_req {
 	struct ndp_app_info ndp_info;
 	uint32_t ncs_sk_type;
 	struct ndp_pmk pmk;
+	struct ndp_passphrase passphrase;
+	struct ndp_service_name service_name;
 };
 
 /**
@@ -6674,6 +6736,8 @@ struct ndp_responder_req {
 	struct ndp_app_info ndp_info;
 	struct ndp_pmk pmk;
 	uint32_t ncs_sk_type;
+	struct ndp_passphrase passphrase;
+	struct ndp_service_name service_name;
 };
 
 /**
@@ -7030,34 +7094,6 @@ struct sme_rcpi_req {
 };
 
 /**
- * enum action_filter_type - Type of action frame filter
- * @SME_ACTION_FRAME_RANDOM_MAC_SET: Set filter
- * @SME_ACTION_FRAME_RANDOM_MAC_CLEAR: Clear filter
- */
-enum action_filter_type {
-	SME_ACTION_FRAME_RANDOM_MAC_SET,
-	SME_ACTION_FRAME_RANDOM_MAC_CLEAR,
-};
-
-typedef void (*action_frame_random_filter_callback)(bool set_random_addr,
-						    void *context);
-/**
- * struct action_frame_random_filter - Random mac filter attrs for set/clear
- * @session_id: Session interface
- * @filter_type: Type of filter from action_filter_type
- * @callback: Invoked from wmi
- * @context: Parameter to be used with callback
- * @mac_addr: Random mac addr for which filter is to be set
- */
-struct action_frame_random_filter {
-	uint32_t session_id;
-	enum action_filter_type filter_type;
-	action_frame_random_filter_callback callback;
-	void *context;
-	uint8_t mac_addr[QDF_MAC_ADDR_SIZE];
-};
-
-/**
  * struct rsp_stats - arp packet stats
  * @arp_req_enqueue: fw tx count
  * @arp_req_tx_success: tx ack count
@@ -7102,5 +7138,47 @@ struct set_arp_stats_params {
 struct get_arp_stats_params {
 	uint8_t pkt_type;
 	uint32_t vdev_id;
+};
+
+/**
+ * struct sir_del_all_tdls_peers - delete all tdls peers
+ * @msg_type: type of message
+ * @msg_len: length of message
+ * @bssid: bssid of peer device
+ */
+struct sir_del_all_tdls_peers {
+	uint16_t msg_type;
+	uint16_t msg_len;
+	struct qdf_mac_addr bssid;
+};
+
+/**
+ * enum action_filter_type - Type of action frame filter
+ * @SME_ACTION_FRAME_RANDOM_MAC_SET: Set filter
+ * @SME_ACTION_FRAME_RANDOM_MAC_CLEAR: Clear filter
+ */
+enum action_filter_type {
+	SME_ACTION_FRAME_RANDOM_MAC_SET,
+	SME_ACTION_FRAME_RANDOM_MAC_CLEAR,
+};
+
+typedef void (*action_frame_random_filter_callback)(bool set_random_addr,
+						    void *context);
+/**
+ * struct action_frame_random_filter - Random mac filter attrs for set/clear
+ * @session_id: Session interface
+ * @filter_type: Type of filter from action_filter_type
+ * @callback: Invoked from wmi
+ * @context: Parameter to be used with callback
+ * @mac_addr: Random mac addr for which filter is to be set
+ * @freq: Channel frequency
+ */
+struct action_frame_random_filter {
+	uint32_t session_id;
+	enum action_filter_type filter_type;
+	action_frame_random_filter_callback callback;
+	void *context;
+	uint8_t mac_addr[QDF_MAC_ADDR_SIZE];
+	uint32_t freq;
 };
 #endif /* __SIR_API_H */

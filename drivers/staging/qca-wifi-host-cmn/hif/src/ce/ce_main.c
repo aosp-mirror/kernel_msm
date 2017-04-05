@@ -1685,11 +1685,9 @@ static void hif_post_recv_buffers_failure(struct HIF_CE_pipe_info *pipe_info,
 	 *	there is no trigger to refill the ce and we will
 	 *	eventually crash
 	 */
-	if (bufs_needed_tmp == CE_state->dest_ring->nentries - 1) {
-
-		QDF_ASSERT(0);
+	if (bufs_needed_tmp == CE_state->dest_ring->nentries - 1)
 		qdf_sched_work(scn->qdf_dev, &CE_state->oom_allocation_work);
-	}
+
 }
 
 
@@ -2745,10 +2743,10 @@ int hif_map_service_to_pipe(struct hif_opaque_softc *hif_hdl, uint16_t svc_id,
 		}
 	}
 	if (ul_updated == false)
-		HIF_WARN("%s: ul pipe is NOT updated for service %d",
+		HIF_INFO("%s: ul pipe is NOT updated for service %d",
 			 __func__, svc_id);
 	if (dl_updated == false)
-		HIF_WARN("%s: dl pipe is NOT updated for service %d",
+		HIF_INFO("%s: dl pipe is NOT updated for service %d",
 			 __func__, svc_id);
 
 	return status;

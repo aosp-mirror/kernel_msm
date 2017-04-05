@@ -48,7 +48,11 @@
 #endif
 #endif /* QCA_TX_HTT2_SUPPORT */
 
-#define HTT_HTC_PKT_MISCLIST_SIZE           32
+/* Set the base misclist size to the size of the htt tx copy engine
+ * to guarantee that a packet on the misclist wont be freed while it
+ * is sitting in the copy engine.
+ */
+#define HTT_HTC_PKT_MISCLIST_SIZE          2048
 
 struct htt_htc_pkt {
 	void *pdev_ctxt;
@@ -98,7 +102,7 @@ struct htt_list_node {
 };
 
 struct htt_rx_hash_entry {
-	A_UINT32 paddr;
+	qdf_dma_addr_t paddr;
 	qdf_nbuf_t netbuf;
 	A_UINT8 fromlist;
 	struct htt_list_node listnode;

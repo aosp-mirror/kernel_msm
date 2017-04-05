@@ -1836,13 +1836,6 @@ REG_TABLE_ENTRY g_registry_table[] = {
 		     CFG_TELE_BCN_MAX_LI_NUM_IDLE_BCNS_MIN,
 		     CFG_TELE_BCN_MAX_LI_NUM_IDLE_BCNS_MAX),
 
-	REG_VARIABLE(CFG_AP_DATA_AVAIL_POLL_PERIOD_NAME, WLAN_PARAM_Integer,
-		     struct hdd_config, apDataAvailPollPeriodInMs,
-		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
-		     CFG_AP_DATA_AVAIL_POLL_PERIOD_DEFAULT,
-		     CFG_AP_DATA_AVAIL_POLL_PERIOD_MIN,
-		     CFG_AP_DATA_AVAIL_POLL_PERIOD_MAX),
-
 	REG_VARIABLE(CFG_ENABLE_BYPASS_11D_NAME, WLAN_PARAM_Integer,
 		     struct hdd_config, enableBypass11d,
 		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
@@ -2070,7 +2063,7 @@ REG_TABLE_ENTRY g_registry_table[] = {
 		     CFG_VHT_ENABLE_2x2_CAP_FEATURE_MIN,
 		     CFG_VHT_ENABLE_2x2_CAP_FEATURE_MAX),
 
-	REG_VARIABLE(CFG_VDEV_TYPE_NSS_2G, WLAN_PARAM_HexInteger,
+	REG_VARIABLE(CFG_VDEV_TYPE_NSS_2G, WLAN_PARAM_Integer,
 		     struct hdd_config, vdev_type_nss_2g,
 		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
 		     CFG_VDEV_TYPE_NSS_2G_DEFAULT,
@@ -2084,7 +2077,7 @@ REG_TABLE_ENTRY g_registry_table[] = {
 		     CFG_STA_PREFER_80MHZ_OVER_160MHZ_MIN,
 		     CFG_STA_PREFER_80MHZ_OVER_160MHZ_MAX),
 
-	REG_VARIABLE(CFG_VDEV_TYPE_NSS_5G, WLAN_PARAM_HexInteger,
+	REG_VARIABLE(CFG_VDEV_TYPE_NSS_5G, WLAN_PARAM_Integer,
 		     struct hdd_config, vdev_type_nss_5g,
 		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
 		     CFG_VDEV_TYPE_NSS_5G_DEFAULT,
@@ -4328,75 +4321,6 @@ REG_TABLE_ENTRY g_registry_table[] = {
 		CFG_SAP_INTERNAL_RESTART_DEFAULT,
 		CFG_SAP_INTERNAL_RESTART_MIN,
 		CFG_SAP_INTERNAL_RESTART_MAX),
-
-	REG_VARIABLE(CFG_PRB_REQ_IE_WHITELIST_NAME, WLAN_PARAM_Integer,
-		     struct hdd_config, probe_req_ie_whitelist,
-		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
-		     CFG_PRB_REQ_IE_WHITELIST_DEFAULT,
-		     CFG_PRB_REQ_IE_WHITELIST_MIN,
-		     CFG_PRB_REQ_IE_WHITELIST_MAX),
-
-	REG_VARIABLE(CFG_PRB_REQ_IE_BIT_MAP0_NAME, WLAN_PARAM_HexInteger,
-		     struct hdd_config, probe_req_ie_bitmap_0,
-		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
-		     CFG_PRB_REQ_IE_BIT_MAP0_DEFAULT,
-		     CFG_PRB_REQ_IE_BIT_MAP0_MIN,
-		     CFG_PRB_REQ_IE_BIT_MAP0_MAX),
-
-	REG_VARIABLE(CFG_PRB_REQ_IE_BIT_MAP1_NAME, WLAN_PARAM_HexInteger,
-		     struct hdd_config, probe_req_ie_bitmap_1,
-		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
-		     CFG_PRB_REQ_IE_BIT_MAP1_DEFAULT,
-		     CFG_PRB_REQ_IE_BIT_MAP1_MIN,
-		     CFG_PRB_REQ_IE_BIT_MAP1_MAX),
-
-	REG_VARIABLE(CFG_PRB_REQ_IE_BIT_MAP2_NAME, WLAN_PARAM_HexInteger,
-		     struct hdd_config, probe_req_ie_bitmap_2,
-		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
-		     CFG_PRB_REQ_IE_BIT_MAP2_DEFAULT,
-		     CFG_PRB_REQ_IE_BIT_MAP2_MIN,
-		     CFG_PRB_REQ_IE_BIT_MAP2_MAX),
-
-	REG_VARIABLE(CFG_PRB_REQ_IE_BIT_MAP3_NAME, WLAN_PARAM_HexInteger,
-		     struct hdd_config, probe_req_ie_bitmap_3,
-		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
-		     CFG_PRB_REQ_IE_BIT_MAP3_DEFAULT,
-		     CFG_PRB_REQ_IE_BIT_MAP3_MIN,
-		     CFG_PRB_REQ_IE_BIT_MAP3_MAX),
-
-	REG_VARIABLE(CFG_PRB_REQ_IE_BIT_MAP4_NAME, WLAN_PARAM_HexInteger,
-		     struct hdd_config, probe_req_ie_bitmap_4,
-		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
-		     CFG_PRB_REQ_IE_BIT_MAP4_DEFAULT,
-		     CFG_PRB_REQ_IE_BIT_MAP4_MIN,
-		     CFG_PRB_REQ_IE_BIT_MAP4_MAX),
-
-	REG_VARIABLE(CFG_PRB_REQ_IE_BIT_MAP5_NAME, WLAN_PARAM_HexInteger,
-		     struct hdd_config, probe_req_ie_bitmap_5,
-		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
-		     CFG_PRB_REQ_IE_BIT_MAP5_DEFAULT,
-		     CFG_PRB_REQ_IE_BIT_MAP5_MIN,
-		     CFG_PRB_REQ_IE_BIT_MAP5_MAX),
-
-	REG_VARIABLE(CFG_PRB_REQ_IE_BIT_MAP6_NAME, WLAN_PARAM_HexInteger,
-		     struct hdd_config, probe_req_ie_bitmap_6,
-		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
-		     CFG_PRB_REQ_IE_BIT_MAP6_DEFAULT,
-		     CFG_PRB_REQ_IE_BIT_MAP6_MIN,
-		     CFG_PRB_REQ_IE_BIT_MAP6_MAX),
-
-	REG_VARIABLE(CFG_PRB_REQ_IE_BIT_MAP7_NAME, WLAN_PARAM_HexInteger,
-		     struct hdd_config, probe_req_ie_bitmap_7,
-		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
-		     CFG_PRB_REQ_IE_BIT_MAP7_DEFAULT,
-		     CFG_PRB_REQ_IE_BIT_MAP7_MIN,
-		     CFG_PRB_REQ_IE_BIT_MAP7_MAX),
-
-	REG_VARIABLE_STRING(CFG_PROBE_REQ_OUI_NAME, WLAN_PARAM_String,
-			    struct hdd_config, probe_req_ouis,
-			    VAR_FLAGS_OPTIONAL,
-			    (void *)CFG_PROBE_REQ_OUI_DEFAULT),
-
 	REG_VARIABLE(CFG_ENABLE_BCAST_PROBE_RESP_NAME, WLAN_PARAM_Integer,
 		struct hdd_config, enable_bcast_probe_rsp,
 		VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
@@ -4545,6 +4469,45 @@ REG_TABLE_ENTRY g_registry_table[] = {
 			    struct hdd_config, probe_req_ouis,
 			    VAR_FLAGS_OPTIONAL,
 			    (void *)CFG_PROBE_REQ_OUI_DEFAULT),
+
+	REG_VARIABLE(CFG_MBO_CANDIDATE_RSSI_THRESHOLD_NAME,
+		WLAN_PARAM_SignedInteger, struct hdd_config,
+		mbo_candidate_rssi_thres,
+		VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		CFG_CANDIDATE_RSSI_THRESHOLD_DEFAULT,
+		CFG_CANDIDATE_RSSI_THRESHOLD_MIN,
+		CFG_CANDIDATE_RSSI_THRESHOLD_MAX),
+
+	REG_VARIABLE(CFG_MBO_CURRENT_RSSI_THRESHOLD_NAME,
+		WLAN_PARAM_SignedInteger, struct hdd_config,
+		mbo_current_rssi_thres,
+		VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		CFG_CURRENT_RSSI_THRESHOLD_DEFAULT,
+		CFG_CURRENT_RSSI_THRESHOLD_MIN,
+		CFG_CURRENT_RSSI_THRESHOLD_MAX),
+
+	REG_VARIABLE(CFG_MBO_CUR_RSSI_MCC_THRESHOLD_NAME,
+		WLAN_PARAM_SignedInteger, struct hdd_config,
+		mbo_current_rssi_mcc_thres,
+		VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		CFG_MBO_CUR_RSSI_MCC_THRESHOLD_DEFAULT,
+		CFG_MBO_CUR_RSSI_MCC_THRESHOLD_MIN,
+		CFG_MBO_CUR_RSSI_MCC_THRESHOLD_MAX),
+
+	REG_VARIABLE(CFG_MBO_CAND_RSSI_BTC_THRESHOLD_NAME,
+		WLAN_PARAM_SignedInteger, struct hdd_config,
+		mbo_candidate_rssi_btc_thres,
+		VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		CFG_MBO_CAND_RSSI_BTC_THRESHOLD_DEFAULT,
+		CFG_MBO_CAND_RSSI_BTC_THRESHOLD_MIN,
+		CFG_MBO_CAND_RSSI_BTC_THRESHOLD_MAX),
+
+	REG_VARIABLE(CFG_DROPPED_PKT_DISCONNECT_TH_NAME, WLAN_PARAM_Integer,
+		struct hdd_config, pkt_err_disconn_th,
+		VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		CFG_DROPPED_PKT_DISCONNECT_TH_DEFAULT,
+		CFG_DROPPED_PKT_DISCONNECT_TH_MIN,
+		CFG_DROPPED_PKT_DISCONNECT_TH_MAX),
 };
 
 /**
@@ -4902,8 +4865,9 @@ static QDF_STATUS hdd_apply_cfg_ini(hdd_context_t *pHddCtx,
 				value = pRegEntry->VarDefault;
 			}
 
-			/* If this parameter needs range checking, do it here. */
-			if (pRegEntry->Flags & VAR_FLAGS_RANGE_CHECK) {
+			/* Only if the parameter is set in the ini file, do the range check here */
+			if (match_status == QDF_STATUS_SUCCESS &&
+			    pRegEntry->Flags & VAR_FLAGS_RANGE_CHECK) {
 				if (value > pRegEntry->VarMax) {
 					hdd_warn("Reg Parameter %s > allowed Maximum [%u > %lu]. Enforcing Maximum", pRegEntry->RegName,
 					       value, pRegEntry->VarMax);
@@ -4916,9 +4880,10 @@ static QDF_STATUS hdd_apply_cfg_ini(hdd_context_t *pHddCtx,
 					value = pRegEntry->VarMin;
 				}
 			}
-			/* If this parameter needs range checking, do it here. */
-			else if (pRegEntry->
-				 Flags & VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT) {
+			/* Only if the parameter is set in the ini file, do the range check here */
+			else if (match_status == QDF_STATUS_SUCCESS &&
+				 pRegEntry->Flags &
+					VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT) {
 				if (value > pRegEntry->VarMax) {
 					hdd_warn("Reg Parameter %s > allowed Maximum [%u > %lu]. Enforcing Default: %lu", pRegEntry->RegName,
 					       value, pRegEntry->VarMax,
@@ -4950,8 +4915,9 @@ static QDF_STATUS hdd_apply_cfg_ini(hdd_context_t *pHddCtx,
 				svalue = (int32_t) pRegEntry->VarDefault;
 			}
 
-			/* If this parameter needs range checking, do it here. */
-			if (pRegEntry->Flags & VAR_FLAGS_RANGE_CHECK) {
+			/* Only if the parameter is set in the ini file, do the range check here */
+			if (match_status == QDF_STATUS_SUCCESS &&
+			    pRegEntry->Flags & VAR_FLAGS_RANGE_CHECK) {
 				if (svalue > (int32_t) pRegEntry->VarMax) {
 					hdd_warn("Reg Parameter %s > allowed Maximum "
 					       "[%d > %d]. Enforcing Maximum", pRegEntry->RegName,
@@ -4966,9 +4932,10 @@ static QDF_STATUS hdd_apply_cfg_ini(hdd_context_t *pHddCtx,
 					svalue = (int32_t) pRegEntry->VarMin;
 				}
 			}
-			/* If this parameter needs range checking, do it here. */
-			else if (pRegEntry->
-				 Flags & VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT) {
+			/* Only if the parameter is set in the ini file, do the range check here */
+			else if (match_status == QDF_STATUS_SUCCESS &&
+				 pRegEntry->Flags &
+					VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT) {
 				if (svalue > (int32_t) pRegEntry->VarMax) {
 					hdd_warn("Reg Parameter %s > allowed Maximum "
 					       "[%d > %d]. Enforcing Default: %d", pRegEntry->RegName,
@@ -5615,8 +5582,6 @@ void hdd_cfg_print(hdd_context_t *pHddCtx)
 		  pHddCtx->config->nTeleBcnMaxListenInterval);
 	hdd_debug("Name = [maxLiNumIdleBeacons] Value = [%u] ",
 		  pHddCtx->config->nTeleBcnMaxLiNumIdleBeacons);
-	hdd_debug("Name = [gApDataAvailPollInterVal] Value = [%u] ",
-		  pHddCtx->config->apDataAvailPollPeriodInMs);
 	hdd_debug("Name = [gEnableBypass11d] Value = [%u] ",
 		  pHddCtx->config->enableBypass11d);
 	hdd_debug("Name = [gEnableDFSChnlScan] Value = [%u] ",
@@ -6032,37 +5997,6 @@ void hdd_cfg_print(hdd_context_t *pHddCtx)
 	hdd_debug("Name = [%s] Value = [%d]",
 		CFG_SAP_INTERNAL_RESTART_NAME,
 		pHddCtx->config->sap_internal_restart);
-
-	hdd_info("Name = [%s] Value = [%x] ",
-		 CFG_PRB_REQ_IE_WHITELIST_NAME,
-		 pHddCtx->config->probe_req_ie_whitelist);
-	hdd_info("Name = [%s] Value = [%x] ",
-		 CFG_PRB_REQ_IE_BIT_MAP0_NAME,
-		 pHddCtx->config->probe_req_ie_bitmap_0);
-	hdd_info("Name = [%s] Value = [%x] ",
-		 CFG_PRB_REQ_IE_BIT_MAP1_NAME,
-		 pHddCtx->config->probe_req_ie_bitmap_1);
-	hdd_info("Name = [%s] Value = [%x] ",
-		 CFG_PRB_REQ_IE_BIT_MAP2_NAME,
-		 pHddCtx->config->probe_req_ie_bitmap_2);
-	hdd_info("Name = [%s] Value = [%x] ",
-		 CFG_PRB_REQ_IE_BIT_MAP3_NAME,
-		 pHddCtx->config->probe_req_ie_bitmap_3);
-	hdd_info("Name = [%s] Value = [%x] ",
-		 CFG_PRB_REQ_IE_BIT_MAP4_NAME,
-		 pHddCtx->config->probe_req_ie_bitmap_4);
-	hdd_info("Name = [%s] Value = [%x] ",
-		 CFG_PRB_REQ_IE_BIT_MAP5_NAME,
-		 pHddCtx->config->probe_req_ie_bitmap_5);
-	hdd_info("Name = [%s] Value = [%x] ",
-		 CFG_PRB_REQ_IE_BIT_MAP6_NAME,
-		 pHddCtx->config->probe_req_ie_bitmap_6);
-	hdd_info("Name = [%s] Value = [%x] ",
-		 CFG_PRB_REQ_IE_BIT_MAP7_NAME,
-		 pHddCtx->config->probe_req_ie_bitmap_7);
-	hdd_info("Name = [%s] Value =[%s]",
-		 CFG_PROBE_REQ_OUI_NAME,
-		 pHddCtx->config->probe_req_ouis);
 	hdd_debug("Name = [%s] Value = [%d]",
 		CFG_ARP_AC_CATEGORY,
 		pHddCtx->config->arp_ac_category);
@@ -6097,6 +6031,9 @@ void hdd_cfg_print(hdd_context_t *pHddCtx)
 	hdd_info("Name = [%s] Value =[%s]",
 		 CFG_PROBE_REQ_OUI_NAME,
 		 pHddCtx->config->probe_req_ouis);
+	hdd_info("Name = [%s] value = [%u]",
+		 CFG_DROPPED_PKT_DISCONNECT_TH_NAME,
+		 pHddCtx->config->pkt_err_disconn_th);
 }
 
 /**
@@ -7039,13 +6976,6 @@ bool hdd_update_config_cfg(hdd_context_t *hdd_ctx)
 		hdd_err("Couldn't pass on WNI_CFG_HEART_BEAT_THRESHOLD to CFG");
 	}
 
-	if (sme_cfg_set_int(hdd_ctx->hHal, WNI_CFG_AP_DATA_AVAIL_POLL_PERIOD,
-		    config->apDataAvailPollPeriodInMs) ==
-		    QDF_STATUS_E_FAILURE) {
-		status = false;
-		hdd_err("Couldn't pass on WNI_CFG_AP_DATA_AVAIL_POLL_PERIOD to CFG");
-	}
-
 	if (sme_cfg_set_int(hdd_ctx->hHal, WNI_CFG_ENABLE_MC_ADDR_LIST,
 		    config->fEnableMCAddrList) == QDF_STATUS_E_FAILURE) {
 		status = false;
@@ -7670,7 +7600,8 @@ QDF_STATUS hdd_set_sme_config(hdd_context_t *pHddCtx)
 			pHddCtx->config->qcn_ie_support;
 	smeConfig->csrConfig.fils_max_chan_guard_time =
 			pHddCtx->config->fils_max_chan_guard_time;
-
+	smeConfig->csrConfig.pkt_err_disconn_th =
+			pHddCtx->config->pkt_err_disconn_th;
 	status = sme_update_config(pHddCtx->hHal, smeConfig);
 	if (!QDF_IS_STATUS_SUCCESS(status))
 		hdd_err("sme_update_config() failure: %d", status);

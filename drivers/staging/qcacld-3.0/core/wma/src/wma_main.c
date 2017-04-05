@@ -86,7 +86,6 @@
 
 static uint32_t g_fw_wlan_feat_caps;
 
-
 /**
  * wma_get_fw_wlan_feat_caps() - get fw feature capablity
  * @featEnumValue: feature enum value
@@ -2560,6 +2559,7 @@ QDF_STATUS wma_open(void *cds_context,
 				WMI_DEBUG_MESG_FLUSH_COMPLETE_EVENTID,
 				wma_flush_complete_evt_handler,
 				WMA_RX_WORK_CTX);
+
 	wmi_unified_register_event_handler(wma_handle->wmi_handle,
 			WMI_VDEV_ADD_MAC_ADDR_TO_RX_FILTER_STATUS_EVENTID,
 			wma_action_frame_filter_mac_event_handler,
@@ -3304,6 +3304,16 @@ QDF_STATUS wma_start(void *cds_ctx)
 			WMA_RX_SERIALIZER_CTX);
 	if (!QDF_IS_STATUS_SUCCESS(status)) {
 		WMA_LOGE("Failed to register p2p lo event cb");
+		qdf_status = QDF_STATUS_E_FAILURE;
+		goto end;
+	}
+
+	status = wmi_unified_register_event_handler(wma_handle->wmi_handle,
+			WMI_WLAN_COEX_BT_ACTIVITY_EVENTID,
+			wma_wlan_bt_activity_evt_handler,
+			WMA_RX_SERIALIZER_CTX);
+	if (!QDF_IS_STATUS_SUCCESS(status)) {
+		WMA_LOGE("Failed to register coex bt activity event handler");
 		qdf_status = QDF_STATUS_E_FAILURE;
 		goto end;
 	}
@@ -6476,11 +6486,11 @@ wma_process_action_frame_random_mac(tp_wma_handle wma_handle,
 				return QDF_STATUS_E_FAILURE;
 			}
 
-		qdf_mem_set(filter_bkup, 0, sizeof(*filter));
 		filter_bkup->session_id = filter->session_id;
 		filter_bkup->callback = filter->callback;
 		filter_bkup->filter_type = filter->filter_type;
 		filter_bkup->context = filter->context;
+		filter_bkup->freq = filter->freq;
 
 		qdf_mem_copy(filter_bkup->mac_addr, filter->mac_addr,
 			     QDF_MAC_ADDR_SIZE);
@@ -6503,6 +6513,7 @@ wma_process_action_frame_random_mac(tp_wma_handle wma_handle,
 			wmi_vdev_add_mac_addr_to_rx_filter_cmd_fixed_param));
 
 	cmd->vdev_id = filter->session_id;
+	cmd->freq = filter->freq;
 	WMI_CHAR_ARRAY_TO_MAC_ADDR(filter->mac_addr, &cmd->mac_addr);
 	if (filter->filter_type == SME_ACTION_FRAME_RANDOM_MAC_SET)
 		cmd->enable = 1;
@@ -7378,11 +7389,6 @@ QDF_STATUS wma_mc_process_msg(void *cds_context, cds_msg_t *msg)
 		wma_configure_non_arp_broadcast_filter(wma_handle,
 			(struct broadcast_filter_request *) msg->bodyptr);
 		break;
-	case WDA_ACTION_FRAME_RANDOM_MAC:
-		wma_process_action_frame_random_mac(wma_handle,
-		     (struct action_frame_random_filter *)msg->bodyptr);
-		qdf_mem_free(msg->bodyptr);
-		break;
 	case WMA_SET_ARP_STATS_REQ:
 		wma_set_arp_req_stats(wma_handle,
 			(struct set_arp_stats_params *)msg->bodyptr);
@@ -7391,6 +7397,11 @@ QDF_STATUS wma_mc_process_msg(void *cds_context, cds_msg_t *msg)
 	case WMA_GET_ARP_STATS_REQ:
 		wma_get_arp_req_stats(wma_handle,
 			(struct get_arp_stats_params *)msg->bodyptr);
+		qdf_mem_free(msg->bodyptr);
+		break;
+	case WDA_ACTION_FRAME_RANDOM_MAC:
+		wma_process_action_frame_random_mac(wma_handle,
+		     (struct action_frame_random_filter *)msg->bodyptr);
 		qdf_mem_free(msg->bodyptr);
 		break;
 	default:

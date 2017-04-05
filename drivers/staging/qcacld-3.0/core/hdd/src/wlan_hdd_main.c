@@ -131,6 +131,12 @@
 #define MEMORY_DEBUG_STR ""
 #endif
 
+int wlan_start_ret_val;
+static DECLARE_COMPLETION(wlan_start_comp);
+static unsigned int dev_num = 1;
+static struct cdev wlan_hdd_state_cdev;
+static struct class *class;
+static dev_t device;
 #ifndef MODULE
 static struct gwlan_loader *wlan_loader;
 static ssize_t wlan_boot_cb(struct kobject *kobj,
@@ -199,10 +205,16 @@ static const struct wiphy_wowlan_support wowlan_support_reg_init = {
 /* internal function declaration */
 
 struct sock *cesium_nl_srv_sock;
-
 #ifdef FEATURE_WLAN_AUTO_SHUTDOWN
 void wlan_hdd_auto_shutdown_cb(void);
 #endif
+
+void hdd_start_complete(int ret)
+{
+	wlan_start_ret_val = ret;
+
+	complete(&wlan_start_comp);
+}
 
 /**
  * hdd_set_rps_cpu_mask - set RPS CPU mask for interfaces
@@ -820,6 +832,26 @@ static void hdd_update_vdev_nss(hdd_context_t *hdd_ctx)
 			cfg_ini->vdev_type_nss_5g, eCSR_BAND_5G);
 }
 
+/**
+ * hdd_update_hw_dbs_capable() - sets the dbs capability of the device
+ * @hdd_ctx: HDD context
+ *
+ * Sets the DBS capability as per INI and firmware capability
+ *
+ * Return: None
+ */
+static void hdd_update_hw_dbs_capable(hdd_context_t *hdd_ctx)
+{
+	struct hdd_config *cfg_ini = hdd_ctx->config;
+	uint8_t hw_dbs_capable = 0;
+
+	if ((!cfg_ini->dual_mac_feature_disable)
+	    && wma_is_hw_dbs_capable())
+		hw_dbs_capable = 1;
+
+	sme_update_hw_dbs_capable(hdd_ctx->hHal, hw_dbs_capable);
+}
+
 static void hdd_update_tgt_ht_cap(hdd_context_t *hdd_ctx,
 				  struct wma_tgt_ht_cap *cfg)
 {
@@ -1429,6 +1461,8 @@ void hdd_update_tgt_cfg(void *context, void *param)
 	hdd_update_tgt_vht_cap(hdd_ctx, &cfg->vht_cap);
 
 	hdd_update_vdev_nss(hdd_ctx);
+
+	hdd_update_hw_dbs_capable(hdd_ctx);
 
 	hdd_ctx->config->fine_time_meas_cap &= cfg->fine_time_measurement_cap;
 	hdd_ctx->fine_time_meas_cap_target = cfg->fine_time_measurement_cap;
@@ -6893,21 +6927,6 @@ static hdd_context_t *hdd_context_create(struct device *dev)
 		goto err_free_config;
 	}
 
-	if (hdd_ctx->config->probe_req_ie_whitelist) {
-		if (hdd_validate_prb_req_ie_bitmap(hdd_ctx)) {
-			/* parse ini string probe req oui */
-			if (hdd_parse_probe_req_ouis(hdd_ctx)) {
-				hdd_err("Error parsing probe req ouis");
-				hdd_err("disable probe req ie whitelisting");
-				hdd_ctx->config->probe_req_ie_whitelist = false;
-			}
-		} else {
-			hdd_err("invalid probe req ie bitmap and ouis");
-			hdd_err("disable probe req ie whitelisting");
-			hdd_ctx->config->probe_req_ie_whitelist = false;
-		}
-	}
-
 	hdd_debug("Setting configuredMcastBcastFilter: %d",
 		   hdd_ctx->config->mcastBcastFilterSetting);
 
@@ -8447,6 +8466,16 @@ int hdd_wlan_stop_modules(hdd_context_t *hdd_ctx)
 	mutex_lock(&hdd_ctx->iface_change_lock);
 	hdd_ctx->stop_modules_in_progress = true;
 
+	if (cds_return_external_threads_count() || hdd_ctx->isWiphySuspended) {
+		mutex_unlock(&hdd_ctx->iface_change_lock);
+		hdd_warn("External threads %d wiphy suspend %d",
+			cds_return_external_threads_count(),
+			hdd_ctx->isWiphySuspended);
+		qdf_mc_timer_start(&hdd_ctx->iface_change_timer,
+				   hdd_ctx->config->iface_change_wait_time);
+		return 0;
+	}
+
 	hdd_info("Present Driver Status: %d", hdd_ctx->driver_status);
 
 	switch (hdd_ctx->driver_status) {
@@ -8770,12 +8799,7 @@ int hdd_wlan_startup(struct device *dev)
 	qdf_mc_timer_start(&hdd_ctx->iface_change_timer,
 			   hdd_ctx->config->iface_change_wait_time);
 
-	if (hdd_ctx->config->goptimize_chan_avoid_event) {
-		status = sme_enable_disable_chanavoidind_event(
-							hdd_ctx->hHal, 0);
-		if (!QDF_IS_STATUS_SUCCESS(status))
-			hdd_err("Failed to disable Chan Avoidance Indication");
-	}
+	hdd_start_complete(0);
 	goto success;
 
 err_close_adapters:
@@ -8794,10 +8818,12 @@ err_stop_modules:
 	hdd_wlan_stop_modules(hdd_ctx);
 
 err_exit_nl_srv:
-	status = cds_sched_close(hdd_ctx->pcds_context);
-	if (!QDF_IS_STATUS_SUCCESS(status)) {
-		hdd_err("Failed to close CDS Scheduler");
-		QDF_ASSERT(QDF_IS_STATUS_SUCCESS(status));
+	if (DRIVER_MODULES_CLOSED == hdd_ctx->driver_status) {
+		status = cds_sched_close(hdd_ctx->pcds_context);
+		if (!QDF_IS_STATUS_SUCCESS(status)) {
+			hdd_err("Failed to close CDS Scheduler");
+			QDF_ASSERT(QDF_IS_STATUS_SUCCESS(status));
+		}
 	}
 
 	hdd_green_ap_deinit(hdd_ctx);
@@ -8805,11 +8831,11 @@ err_exit_nl_srv:
 
 	cds_deinit_ini_config();
 err_hdd_free_context:
+	hdd_start_complete(ret);
 	qdf_mc_timer_destroy(&hdd_ctx->iface_change_timer);
 	mutex_destroy(&hdd_ctx->iface_change_lock);
 	hdd_context_destroy(hdd_ctx);
 	QDF_BUG(1);
-
 	return -EIO;
 
 success:
@@ -8882,9 +8908,7 @@ static void hdd_get_nud_stats_cb(void *data, struct rsp_stats *rsp)
 	hdd_notice("rsp->ba_session_establishment_status :%x",
 		   rsp->ba_session_establishment_status);
 
-	adapter->hdd_stats.hdd_arp_stats.tx_fw_cnt = rsp->arp_req_enqueue;
 	adapter->hdd_stats.hdd_arp_stats.rx_fw_cnt = rsp->arp_rsp_recvd;
-	adapter->hdd_stats.hdd_arp_stats.tx_ack_cnt = rsp->arp_req_tx_success;
 	adapter->dad |= rsp->dad_detected;
 	adapter->con_status = rsp->connect_status;
 
@@ -8973,6 +8997,11 @@ int hdd_register_cb(hdd_context_t *hdd_ctx)
 		hdd_err("set lost link info callback failed");
 
 	wlan_hdd_dcc_register_for_dcc_stats_event(hdd_ctx);
+
+	status = sme_set_bt_activity_info_cb(hdd_ctx->hHal,
+					     hdd_bt_activity_cb);
+	if (!QDF_IS_STATUS_SUCCESS(status))
+		hdd_err("set bt activity info callback failed");
 
 	EXIT();
 
@@ -9818,11 +9847,127 @@ void hdd_deinit(void)
 #endif
 }
 
-#ifdef QCA_WIFI_3_0_ADRASTEA
-#define HDD_WLAN_START_WAIT_TIME (3600 * 1000)
-#else
 #define HDD_WLAN_START_WAIT_TIME (CDS_WMA_TIMEOUT + 5000)
-#endif
+
+static int wlan_hdd_state_ctrl_param_open(struct inode *inode,
+					  struct file *file)
+{
+	return 0;
+}
+
+static ssize_t wlan_hdd_state_ctrl_param_write(struct file *filp,
+						const char __user *user_buf,
+						size_t count,
+						loff_t *f_pos)
+{
+	char buf;
+	static const char wlan_off_str[] = "OFF";
+	static const char wlan_on_str[] = "ON";
+	int ret;
+	unsigned long rc;
+
+	pr_info("wlan_hdd_state_ctrl_param_write called\n");
+
+	if (copy_from_user(&buf, user_buf, 3)) {
+		pr_err("Failed to read buffer\n");
+		return -EINVAL;
+	}
+
+	if (strncmp(&buf, wlan_off_str, strlen(wlan_off_str)) == 0) {
+		pr_debug("Wifi turning off from UI\n");
+		goto exit;
+	}
+
+	if (strncmp(&buf, wlan_on_str, strlen(wlan_on_str)) != 0) {
+		pr_err("Invalid value received from framework");
+		goto exit;
+	}
+
+	if (!cds_is_driver_loaded()) {
+		pr_info("wlan_hdd_state_ctrl_param_write waiting on timeout\n");
+		rc = wait_for_completion_timeout(&wlan_start_comp,
+				msecs_to_jiffies(HDD_WLAN_START_WAIT_TIME));
+		if (!rc) {
+			hdd_alert("Timed-out waiting in wlan_hdd_state_ctrl_param_write");
+			pr_err("Timed-out waiting in wlan_hdd_state_ctrl_param_write");
+			ret = -EINVAL;
+			hdd_start_complete(ret);
+			return ret;
+		}
+
+		hdd_start_complete(0);
+	}
+
+exit:
+	pr_info("wlan_hdd_state_ctrl_param_write exit\n");
+	return count;
+}
+
+
+const struct file_operations wlan_hdd_state_fops = {
+	.owner = THIS_MODULE,
+	.open = wlan_hdd_state_ctrl_param_open,
+	.write = wlan_hdd_state_ctrl_param_write,
+};
+
+static int  wlan_hdd_state_ctrl_param_create(void)
+{
+	unsigned int wlan_hdd_state_major = 0;
+	int ret;
+	struct device *dev;
+
+	device = MKDEV(wlan_hdd_state_major, 0);
+
+	ret = alloc_chrdev_region(&device, 0, dev_num, "qcwlanstate");
+	if (ret) {
+		pr_err("Failed to register qcwlanstate");
+		goto dev_alloc_err;
+	}
+	wlan_hdd_state_major = MAJOR(device);
+
+	class = class_create(THIS_MODULE, WLAN_MODULE_NAME);
+	if (IS_ERR(class)) {
+		pr_err("wlan_hdd_state class_create error");
+		goto class_err;
+	}
+
+	dev = device_create(class, NULL, device, NULL, WLAN_MODULE_NAME);
+	if (IS_ERR(dev)) {
+		pr_err("wlan_hdd_statedevice_create error");
+		goto err_class_destroy;
+	}
+
+	cdev_init(&wlan_hdd_state_cdev, &wlan_hdd_state_fops);
+	ret = cdev_add(&wlan_hdd_state_cdev, device, dev_num);
+	if (ret) {
+		pr_err("Failed to add cdev error");
+		goto cdev_add_err;
+	}
+
+	pr_info("wlan_hdd_state %s major(%d) initialized",
+		WLAN_MODULE_NAME, wlan_hdd_state_major);
+
+	return 0;
+
+cdev_add_err:
+	device_destroy(class, device);
+err_class_destroy:
+	class_destroy(class);
+class_err:
+	unregister_chrdev_region(device, dev_num);
+dev_alloc_err:
+	return -ENODEV;
+}
+
+static void wlan_hdd_state_ctrl_param_destroy(void)
+{
+	cdev_del(&wlan_hdd_state_cdev);
+	device_destroy(class, device);
+	class_destroy(class);
+	unregister_chrdev_region(device, dev_num);
+
+	pr_info("Device node unregistered");
+}
 
 /**
  * __hdd_module_init - Module init helper
@@ -9837,6 +9982,12 @@ static int __hdd_module_init(void)
 
 	pr_err("%s: Loading driver v%s\n", WLAN_MODULE_NAME,
 		QWLAN_VERSIONSTR TIMER_MANAGER_STR MEMORY_DEBUG_STR);
+
+	ret = wlan_hdd_state_ctrl_param_create();
+	if (ret) {
+		pr_err("wlan_hdd_state_create:%x\n", ret);
+		goto err_dev_state;
+	}
 
 	pld_init();
 
@@ -9865,6 +10016,8 @@ out:
 	hdd_deinit();
 err_hdd_init:
 	pld_deinit();
+	wlan_hdd_state_ctrl_param_destroy();
+err_dev_state:
 	return ret;
 }
 
@@ -9908,7 +10061,7 @@ static void __hdd_module_exit(void)
 
 	hdd_deinit();
 	pld_deinit();
-
+	wlan_hdd_state_ctrl_param_destroy();
 	return;
 }
 

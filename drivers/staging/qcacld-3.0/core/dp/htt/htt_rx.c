@@ -260,16 +260,16 @@ htt_rx_mpdu_desc_pn_hl(
 			*(word_ptr + 0) = rx_desc->pn_31_0;
 			break;
 		default:
-			qdf_print(
-				"Error: invalid length spec (%d bits) for PN\n",
-				pn_len_bits);
+			QDF_TRACE(QDF_MODULE_ID_HTT, QDF_TRACE_LEVEL_ERROR,
+				  "Error: invalid length spec (%d bits) for PN",
+				  pn_len_bits);
 			qdf_assert(0);
 			break;
 		};
 	} else {
 		/* not first msdu, no pn info */
-		qdf_print(
-			"Error: get pn from a not-first msdu.\n");
+		QDF_TRACE(QDF_MODULE_ID_HTT, QDF_TRACE_LEVEL_ERROR,
+			  "Error: get pn from a not-first msdu.");
 		qdf_assert(0);
 	}
 }
@@ -361,6 +361,22 @@ htt_rx_paddr_mark_high_bits(qdf_dma_addr_t paddr)
 	return paddr;
 }
 
+#ifdef HTT_PADDR64
+static inline qdf_dma_addr_t htt_paddr_trim_to_37(qdf_dma_addr_t paddr)
+{
+	qdf_dma_addr_t ret = paddr;
+
+	if (sizeof(paddr) > 4)
+		ret &= 0x1fffffffff;
+	return ret;
+}
+#else /* not 64 bits */
+static inline qdf_dma_addr_t htt_paddr_trim_to_37(qdf_dma_addr_t paddr)
+{
+	return paddr;
+}
+#endif /* HTT_PADDR64 */
+
 #ifdef ENABLE_DEBUG_ADDRESS_MARKING
 static qdf_dma_addr_t
 htt_rx_paddr_unmark_high_bits(qdf_dma_addr_t paddr)
@@ -377,13 +393,14 @@ htt_rx_paddr_unmark_high_bits(qdf_dma_addr_t paddr)
 		 * padded (with 0b0) to 8 bits
 		 */
 		if ((markings & 0xFFFF0000) != RX_PADDR_MAGIC_PATTERN) {
-			qdf_print("%s: paddr not marked correctly: 0x%p!\n",
+			QDF_TRACE(QDF_MODULE_ID_HTT, QDF_TRACE_LEVEL_ERROR,
+				  "%s: paddr not marked correctly: 0x%p!",
 				  __func__, (void *)paddr);
 			HTT_ASSERT_ALWAYS(0);
 		}
 
 		/* clear markings  for further use */
-		paddr &= (uint64_t)0x1ffffffff; /* LS 37 bits */
+		paddr = htt_paddr_trim_to_37(paddr);
 	}
 	return paddr;
 }
@@ -490,9 +507,10 @@ moretofill:
 		paddr = htt_rx_paddr_mark_high_bits(paddr);
 		if (pdev->cfg.is_full_reorder_offload) {
 			if (qdf_unlikely(htt_rx_hash_list_insert(
-					pdev, (uint32_t)paddr, rx_netbuf))) {
-				qdf_print("%s: hash insert failed!\n",
-					  __func__);
+					pdev, paddr, rx_netbuf))) {
+				QDF_TRACE(QDF_MODULE_ID_HTT,
+					  QDF_TRACE_LEVEL_ERROR,
+					  "%s: hash insert failed!", __func__);
 #ifdef DEBUG_DMA_DONE
 				qdf_nbuf_unmap(pdev->osdev, rx_netbuf,
 					       QDF_DMA_BIDIRECTIONAL);
@@ -780,7 +798,8 @@ htt_rx_mpdu_desc_pn_ll(htt_pdev_handle pdev,
 			((uint64_t) rx_desc->msdu_end.ext_wapi_pn_127_96) << 32;
 		break;
 	default:
-		qdf_print("Error: invalid length spec (%d bits) for PN\n",
+		QDF_TRACE(QDF_MODULE_ID_HTT, QDF_TRACE_LEVEL_ERROR,
+			  "Error: invalid length spec (%d bits) for PN",
 			  pn_len_bits);
 	};
 }
@@ -946,7 +965,8 @@ htt_rx_in_order_netbuf_pop(htt_pdev_handle pdev, qdf_dma_addr_t paddr)
 {
 	HTT_ASSERT1(htt_rx_in_order_ring_elems(pdev) != 0);
 	pdev->rx_ring.fill_cnt--;
-	return htt_rx_hash_list_lookup(pdev, (uint32_t)(paddr & 0xffffffff));
+	paddr = htt_paddr_trim_to_37(paddr);
+	return htt_rx_hash_list_lookup(pdev, paddr);
 }
 
 /* FIX ME: this function applies only to LL rx descs.
@@ -1159,7 +1179,8 @@ htt_rx_amsdu_pop_ll(htt_pdev_handle pdev,
 
 			int dbg_iter = MAX_DONE_BIT_CHECK_ITER;
 
-			qdf_print("malformed frame\n");
+			QDF_TRACE(QDF_MODULE_ID_HTT, QDF_TRACE_LEVEL_ERROR,
+				  "malformed frame");
 
 			while (dbg_iter &&
 			       (!((*(uint32_t *) &rx_desc->attention) &
@@ -1170,8 +1191,9 @@ htt_rx_amsdu_pop_ll(htt_pdev_handle pdev,
 						     (void *)((char *)rx_desc +
 						 HTT_RX_STD_DESC_RESERVATION));
 
-				qdf_print("debug iter %d success %d\n",
-					  dbg_iter,
+				QDF_TRACE(QDF_MODULE_ID_HTT,
+					  QDF_TRACE_LEVEL_INFO,
+					  "debug iter %d success %d", dbg_iter,
 					  pdev->rx_ring.dbg_sync_success);
 
 				dbg_iter--;
@@ -1181,7 +1203,10 @@ htt_rx_amsdu_pop_ll(htt_pdev_handle pdev,
 					   & RX_ATTENTION_0_MSDU_DONE_MASK))) {
 
 #ifdef HTT_RX_RESTORE
-				qdf_print("RX done bit error detected!\n");
+				QDF_TRACE(QDF_MODULE_ID_HTT,
+					  QDF_TRACE_LEVEL_ERROR,
+					  "RX done bit error detected!");
+
 				qdf_nbuf_set_next(msdu, NULL);
 				*tail_msdu = msdu;
 				pdev->rx_ring.rx_reset = 1;
@@ -1193,7 +1218,8 @@ htt_rx_amsdu_pop_ll(htt_pdev_handle pdev,
 #endif
 			}
 			pdev->rx_ring.dbg_sync_success++;
-			qdf_print("debug iter %d success %d\n", dbg_iter,
+			QDF_TRACE(QDF_MODULE_ID_HTT, QDF_TRACE_LEVEL_INFO,
+				  "debug iter %d success %d", dbg_iter,
 				  pdev->rx_ring.dbg_sync_success);
 		}
 #else
@@ -1435,8 +1461,9 @@ htt_rx_offload_msdu_pop_hl(htt_pdev_handle pdev,
 	if (msdu_len <= qdf_nbuf_len(buf)) {
 		qdf_nbuf_set_pktlen(buf, msdu_len);
 	} else {
-		qdf_print("%s: drop frame with invalid msdu len %d %d\n",
-				__FUNCTION__, msdu_len, (int)qdf_nbuf_len(buf));
+		QDF_TRACE(QDF_MODULE_ID_HTT, QDF_TRACE_LEVEL_ERROR,
+			  "%s: drop frame with invalid msdu len %d %d",
+			  __func__, msdu_len, (int)qdf_nbuf_len(buf));
 		qdf_nbuf_free(offload_deliver_msg);
 		ret = -1;
 	}
@@ -1519,8 +1546,9 @@ htt_rx_offload_paddr_msdu_pop_ll(htt_pdev_handle pdev,
 		if (HTT_RX_IN_ORD_PADDR_IND_MSDU_INFO_GET(*(curr_msdu + 1)) &
 			   FW_MSDU_INFO_FIRST_WAKEUP_M) {
 			qdf_nbuf_mark_wakeup_frame(buf);
-			qdf_print("%s: First packet after WOW Wakeup rcvd\n",
-				__func__);
+			QDF_TRACE(QDF_MODULE_ID_HTT, QDF_TRACE_LEVEL_INFO,
+				  "%s: First packet after WOW Wakeup rcvd",
+				  __func__);
 		}
 	}
 
@@ -1592,7 +1620,7 @@ int htt_mon_rx_handle_amsdu_packet(qdf_nbuf_t msdu, htt_pdev_handle pdev,
 	qdf_nbuf_trim_tail(frag_nbuf, HTT_RX_BUF_SIZE - len);
 
 	HTT_PKT_DUMP(qdf_trace_hex_dump(QDF_MODULE_ID_TXRX,
-					QDF_TRACE_LEVEL_DEBUG,
+					QDF_TRACE_LEVEL_INFO_HIGH,
 					qdf_nbuf_data(frag_nbuf),
 					qdf_nbuf_len(frag_nbuf)));
 	prev_frag_nbuf = frag_nbuf;
@@ -1615,7 +1643,7 @@ int htt_mon_rx_handle_amsdu_packet(qdf_nbuf_t msdu, htt_pdev_handle pdev,
 		amsdu_len -= len;
 		qdf_nbuf_trim_tail(frag_nbuf, HTT_RX_BUF_SIZE - len);
 		HTT_PKT_DUMP(qdf_trace_hex_dump(QDF_MODULE_ID_TXRX,
-						QDF_TRACE_LEVEL_DEBUG,
+						QDF_TRACE_LEVEL_INFO_HIGH,
 						qdf_nbuf_data(frag_nbuf),
 						qdf_nbuf_len(frag_nbuf)));
 
@@ -1896,7 +1924,7 @@ static int htt_rx_mon_amsdu_rx_in_order_pop_ll(htt_pdev_handle pdev,
 	msg_word = (uint32_t *)rx_ind_data;
 
 	HTT_PKT_DUMP(qdf_trace_hex_dump(QDF_MODULE_ID_TXRX,
-					QDF_TRACE_LEVEL_DEBUG,
+					QDF_TRACE_LEVEL_INFO_HIGH,
 					(void *)rx_ind_data,
 					(int)qdf_nbuf_len(rx_ind_msg)));
 
@@ -1956,7 +1984,7 @@ static int htt_rx_mon_amsdu_rx_in_order_pop_ll(htt_pdev_handle pdev,
 
 
 		HTT_PKT_DUMP(qdf_trace_hex_dump(QDF_MODULE_ID_TXRX,
-						QDF_TRACE_LEVEL_DEBUG,
+						QDF_TRACE_LEVEL_INFO_HIGH,
 						qdf_nbuf_data(msdu),
 						qdf_nbuf_len(msdu)));
 		last_frag = ((struct htt_rx_in_ord_paddr_ind_msdu_t *)
@@ -2107,6 +2135,9 @@ htt_rx_amsdu_rx_in_order_pop_ll(htt_pdev_handle pdev,
 		QDF_NBUF_CB_TX_PACKET_TRACK(msdu) = QDF_NBUF_TX_PKT_DATA_TRACK;
 		QDF_NBUF_CB_RX_CTX_ID(msdu) = rx_ctx_id;
 		ol_rx_log_packet(pdev, peer_id, msdu);
+		if (qdf_nbuf_is_ipv4_arp_pkt(msdu))
+			QDF_NBUF_CB_GET_PACKET_TYPE(msdu) =
+				QDF_NBUF_CB_PACKET_TYPE_ARP;
 		DPTRACE(qdf_dp_trace(msdu,
 			QDF_DP_TRACE_RX_HTT_PACKET_PTR_RECORD,
 			qdf_nbuf_data_addr(msdu),
@@ -3052,7 +3083,8 @@ static inline void htt_list_remove(struct htt_list_node *node)
    Note: this function is not thread-safe
    Returns 0 - success, 1 - failure */
 int
-htt_rx_hash_list_insert(struct htt_pdev_t *pdev, uint32_t paddr,
+htt_rx_hash_list_insert(struct htt_pdev_t *pdev,
+			qdf_dma_addr_t paddr,
 			qdf_nbuf_t netbuf)
 {
 	int i;
@@ -3060,6 +3092,9 @@ htt_rx_hash_list_insert(struct htt_pdev_t *pdev, uint32_t paddr,
 	struct htt_rx_hash_entry *hash_element = NULL;
 
 	qdf_spin_lock_bh(&(pdev->rx_ring.rx_hash_lock));
+
+	/* get rid of the marking bits if they are available */
+	paddr = htt_paddr_trim_to_37(paddr);
 
 	i = RX_HASH_FUNCTION(paddr);
 
@@ -3107,10 +3142,13 @@ hli_end:
 	return rc;
 }
 
-/* Given a physical address this function will find the corresponding network
-   buffer from the hash table.
-   Note: this function is not thread-safe */
-qdf_nbuf_t htt_rx_hash_list_lookup(struct htt_pdev_t *pdev, uint32_t paddr)
+/*
+ * Given a physical address this function will find the corresponding network
+ *  buffer from the hash table.
+ *  paddr is already stripped off of higher marking bits.
+ */
+qdf_nbuf_t htt_rx_hash_list_lookup(struct htt_pdev_t *pdev,
+				   qdf_dma_addr_t     paddr)
 {
 	uint32_t i;
 	struct htt_list_node *list_iter = NULL;
@@ -3153,8 +3191,8 @@ qdf_nbuf_t htt_rx_hash_list_lookup(struct htt_pdev_t *pdev, uint32_t paddr)
 	qdf_spin_unlock_bh(&(pdev->rx_ring.rx_hash_lock));
 
 	if (netbuf == NULL) {
-		qdf_print("rx hash: %s: no entry found for 0x%x!!!\n",
-			  __func__, paddr);
+		qdf_print("rx hash: %s: no entry found for %p!\n",
+			  __func__, (void *)paddr);
 		HTT_ASSERT_ALWAYS(0);
 	}
 
@@ -3387,7 +3425,8 @@ int htt_rx_attach(struct htt_pdev_t *pdev)
 	htt_rx_ring_fill_n(pdev, pdev->rx_ring.fill_level);
 
 	if (pdev->cfg.is_full_reorder_offload) {
-		qdf_print("HTT: full reorder offload enabled\n");
+		QDF_TRACE(QDF_MODULE_ID_HTT, QDF_TRACE_LEVEL_INFO,
+			"HTT: full reorder offload enabled");
 		htt_rx_amsdu_pop = htt_rx_amsdu_rx_in_order_pop_ll;
 		htt_rx_frag_pop = htt_rx_amsdu_rx_in_order_pop_ll;
 		htt_rx_mpdu_desc_list_next =

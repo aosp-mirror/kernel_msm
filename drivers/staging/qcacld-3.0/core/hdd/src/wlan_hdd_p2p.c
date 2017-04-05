@@ -204,11 +204,13 @@ static void hdd_random_mac_callback(bool set_random_addr, void *context)
  * hdd_set_random_mac() - Invoke sme api to set random mac filter
  * @adapter: Pointer to adapter
  * @random_mac_addr: Mac addr filter to be set
+ * @freq: Channel frequency
  *
  * Return: If set is successful return true else return false
  */
 static bool hdd_set_random_mac(hdd_adapter_t *adapter,
-				uint8_t *random_mac_addr)
+			       uint8_t *random_mac_addr,
+			       uint32_t freq)
 {
 	struct random_mac_context context;
 	hdd_context_t *hdd_ctx;
@@ -229,7 +231,7 @@ static bool hdd_set_random_mac(hdd_adapter_t *adapter,
 	context.set_random_addr = false;
 
 	sme_status = sme_set_random_mac(hdd_ctx->hHal, hdd_random_mac_callback,
-				     adapter->sessionId, random_mac_addr,
+				     adapter->sessionId, random_mac_addr, freq,
 				     &context);
 
 	if (sme_status != QDF_STATUS_SUCCESS) {
@@ -254,11 +256,13 @@ static bool hdd_set_random_mac(hdd_adapter_t *adapter,
  * hdd_clear_random_mac() - Invoke sme api to clear random mac filter
  * @adapter: Pointer to adapter
  * @random_mac_addr: Mac addr filter to be cleared
+ * @freq: Channel frequency
  *
  * Return: If clear is successful return true else return false
  */
 static bool hdd_clear_random_mac(hdd_adapter_t *adapter,
-				 uint8_t *random_mac_addr)
+				 uint8_t *random_mac_addr,
+				 uint32_t freq)
 {
 	hdd_context_t *hdd_ctx;
 	QDF_STATUS status;
@@ -271,7 +275,7 @@ static bool hdd_clear_random_mac(hdd_adapter_t *adapter,
 	}
 
 	status = sme_clear_random_mac(hdd_ctx->hHal, adapter->sessionId,
-				      random_mac_addr);
+				      random_mac_addr, freq);
 
 	if (status != QDF_STATUS_SUCCESS) {
 		hdd_err("Unable to clear random mac");
@@ -405,6 +409,7 @@ static int32_t append_action_frame_cookie(struct list_head *cookie_list,
  * @adapter: Pointer to adapter
  * @random_mac_addr: Mac addr for cookie
  * @cookie: Cookie to be stored
+ * @freq: Channel frequency
  *
  * This function is used to create cookie list and append the cookies
  * to same for corresponding random mac addr. If this cookie is the first
@@ -414,7 +419,7 @@ static int32_t append_action_frame_cookie(struct list_head *cookie_list,
  */
 static int32_t hdd_set_action_frame_random_mac(hdd_adapter_t *adapter,
 					       uint8_t *random_mac_addr,
-					       uint64_t cookie)
+					       uint64_t cookie, uint32_t freq)
 {
 	uint32_t i = 0;
 	uint32_t in_use_cnt = 0;
@@ -426,8 +431,8 @@ static int32_t hdd_set_action_frame_random_mac(hdd_adapter_t *adapter,
 		return -EINVAL;
 	}
 
-	hdd_info("mac_addr: " MAC_ADDRESS_STR " && cookie = %llu",
-			MAC_ADDR_ARRAY(random_mac_addr), cookie);
+	hdd_info("mac_addr: " MAC_ADDRESS_STR " && cookie = %llu && freq = %u",
+			MAC_ADDR_ARRAY(random_mac_addr), cookie, freq);
 
 	spin_lock(&adapter->random_mac_lock);
 	for (i = 0; i < MAX_RANDOM_MAC_ADDRS; i++) {
@@ -477,9 +482,10 @@ static int32_t hdd_set_action_frame_random_mac(hdd_adapter_t *adapter,
 	qdf_mem_copy(adapter->random_mac[i].addr, random_mac_addr,
 		     QDF_MAC_ADDR_SIZE);
 	adapter->random_mac[i].in_use = true;
+	adapter->random_mac[i].freq = freq;
 	spin_unlock(&adapter->random_mac_lock);
 	/* Program random mac_addr */
-	if (!hdd_set_random_mac(adapter, adapter->random_mac[i].addr)) {
+	if (!hdd_set_random_mac(adapter, adapter->random_mac[i].addr, freq)) {
 		spin_lock(&adapter->random_mac_lock);
 		/* clear the cookie */
 		delete_action_frame_cookie(action_cookie);
@@ -511,6 +517,7 @@ static int32_t hdd_reset_action_frame_random_mac(hdd_adapter_t *adapter,
 						 uint64_t cookie)
 {
 	uint32_t i = 0;
+	uint32_t freq = 0;
 	struct action_frame_cookie *action_cookie = NULL;
 
 	if (!cookie) {
@@ -530,8 +537,11 @@ static int32_t hdd_reset_action_frame_random_mac(hdd_adapter_t *adapter,
 	}
 
 	if (i == MAX_RANDOM_MAC_ADDRS) {
+		/*
+		 * trying to delete cookie of random mac-addr
+		 * for which entry is not present
+		 */
 		spin_unlock(&adapter->random_mac_lock);
-		hdd_err("trying to delete cookie of random mac-addr for which entry is not present");
 		return -EINVAL;
 	}
 
@@ -548,12 +558,12 @@ static int32_t hdd_reset_action_frame_random_mac(hdd_adapter_t *adapter,
 	delete_action_frame_cookie(action_cookie);
 	if (list_empty(&adapter->random_mac[i].cookie_list)) {
 		adapter->random_mac[i].in_use = false;
+		freq = adapter->random_mac[i].freq;
 		spin_unlock(&adapter->random_mac_lock);
-		hdd_clear_random_mac(adapter, random_mac_addr);
-		hdd_err(FL("Deleted random mac_addr:"
-				MAC_ADDRESS_STR),
-				MAC_ADDR_ARRAY(random_mac_addr));
-		hdd_info("Deleted random mac_addr");
+		hdd_clear_random_mac(adapter, random_mac_addr,
+				     freq);
+		hdd_info("Deleted random mac_addr: "MAC_ADDRESS_STR,
+			 MAC_ADDR_ARRAY(random_mac_addr));
 		return 0;
 	}
 
@@ -577,6 +587,7 @@ static int32_t hdd_delete_action_frame_cookie(hdd_adapter_t *adapter,
 {
 	uint32_t i = 0;
 	struct action_frame_cookie *action_cookie = NULL;
+	uint32_t freq = 0;
 
 	hdd_info("Delete cookie = %llu", cookie);
 
@@ -596,12 +607,13 @@ static int32_t hdd_delete_action_frame_cookie(hdd_adapter_t *adapter,
 
 		if (list_empty(&adapter->random_mac[i].cookie_list)) {
 			adapter->random_mac[i].in_use = false;
+			freq = adapter->random_mac[i].freq;
 			spin_unlock(&adapter->random_mac_lock);
 			hdd_clear_random_mac(adapter,
-					     adapter->random_mac[i].addr);
-			hdd_err(FL("Deleted random addr "MAC_ADDRESS_STR),
-				MAC_ADDR_ARRAY(adapter->random_mac[i].addr));
-			hdd_info("Deleted random addr");
+					     adapter->random_mac[i].addr,
+					     freq);
+			hdd_info("Deleted random addr "MAC_ADDRESS_STR,
+				 MAC_ADDR_ARRAY(adapter->random_mac[i].addr));
 			return 0;
 		}
 		spin_unlock(&adapter->random_mac_lock);
@@ -609,8 +621,7 @@ static int32_t hdd_delete_action_frame_cookie(hdd_adapter_t *adapter,
 	}
 
 	spin_unlock(&adapter->random_mac_lock);
-	hdd_info("Invalid cookie");
-	return -EINVAL;
+	return 0;
 }
 
 /**
@@ -628,6 +639,7 @@ static void hdd_delete_all_action_frame_cookies(hdd_adapter_t *adapter)
 	struct action_frame_cookie *action_cookie = NULL;
 	struct list_head *n;
 	struct list_head *temp;
+	uint32_t freq = 0;
 
 	spin_lock(&adapter->random_mac_lock);
 
@@ -646,11 +658,12 @@ static void hdd_delete_all_action_frame_cookies(hdd_adapter_t *adapter)
 		}
 
 		adapter->random_mac[i].in_use = false;
+		freq = adapter->random_mac[i].freq;
 		spin_unlock(&adapter->random_mac_lock);
-		hdd_clear_random_mac(adapter, adapter->random_mac[i].addr);
-		hdd_err(FL("Deleted random addr " MAC_ADDRESS_STR),
-				MAC_ADDR_ARRAY(adapter->random_mac[i].addr));
-		hdd_info("Deleted random addr ");
+		hdd_clear_random_mac(adapter, adapter->random_mac[i].addr,
+				     freq);
+		hdd_info("Deleted random addr " MAC_ADDRESS_STR,
+			 MAC_ADDR_ARRAY(adapter->random_mac[i].addr));
 		spin_lock(&adapter->random_mac_lock);
 	}
 
@@ -731,6 +744,7 @@ QDF_STATUS wlan_hdd_remain_on_channel_callback(tHalHandle hHal, void *pCtx,
 						  (SIR_MAC_MGMT_PROBE_REQ << 4),
 						  NULL, 0);
 		}
+		hdd_delete_all_action_frame_cookies(pAdapter);
 	} else if ((QDF_SAP_MODE == pAdapter->device_mode) ||
 		   (QDF_P2P_GO_MODE == pAdapter->device_mode)
 		   ) {
@@ -776,6 +790,7 @@ void wlan_hdd_cancel_existing_remain_on_channel(hdd_adapter_t *pAdapter)
 	hdd_remain_on_chan_ctx_t *pRemainChanCtx;
 	hdd_context_t *hdd_ctx = WLAN_HDD_GET_CTX(pAdapter);
 	unsigned long rc;
+	uint32_t roc_scan_id;
 
 	mutex_lock(&cfgState->remain_on_chan_ctx_lock);
 	if (cfgState->remain_on_chan_ctx != NULL) {
@@ -803,6 +818,7 @@ void wlan_hdd_cancel_existing_remain_on_channel(hdd_adapter_t *pAdapter)
 			return;
 		}
 		pRemainChanCtx->hdd_remain_on_chan_cancel_in_progress = true;
+		roc_scan_id = pRemainChanCtx->scan_id;
 		mutex_unlock(&cfgState->remain_on_chan_ctx_lock);
 		/* Wait till remain on channel ready indication before issuing cancel
 		 * remain on channel request, otherwise if remain on channel not
@@ -834,14 +850,12 @@ void wlan_hdd_cancel_existing_remain_on_channel(hdd_adapter_t *pAdapter)
 			hdd_delete_all_action_frame_cookies(pAdapter);
 			sme_cancel_remain_on_channel(WLAN_HDD_GET_HAL_CTX
 							     (pAdapter),
-				pAdapter->sessionId,
-				pRemainChanCtx->scan_id);
+				pAdapter->sessionId, roc_scan_id);
 		} else if ((QDF_SAP_MODE == pAdapter->device_mode)
 			   || (QDF_P2P_GO_MODE == pAdapter->device_mode)
 			   ) {
 			wlansap_cancel_remain_on_channel(
-				WLAN_HDD_GET_SAP_CTX_PTR(pAdapter),
-				pRemainChanCtx->scan_id);
+				WLAN_HDD_GET_SAP_CTX_PTR(pAdapter), roc_scan_id);
 		}
 
 		rc = wait_for_completion_timeout(&pAdapter->
@@ -893,6 +907,7 @@ static void wlan_hdd_cancel_pending_roc(hdd_adapter_t *adapter)
 	hdd_remain_on_chan_ctx_t *roc_ctx;
 	unsigned long rc;
 	hdd_cfg80211_state_t *cfg_state = WLAN_HDD_GET_CFG_STATE_PTR(adapter);
+	uint32_t roc_scan_id;
 
 	hdd_debug("ROC completion is not received !!!");
 
@@ -910,20 +925,19 @@ static void wlan_hdd_cancel_pending_roc(hdd_adapter_t *adapter)
 		 */
 		goto wait;
 	}
+	roc_scan_id = roc_ctx->scan_id;
 	mutex_unlock(&cfg_state->remain_on_chan_ctx_lock);
 
 	if (adapter->device_mode == QDF_P2P_GO_MODE) {
 		wlansap_cancel_remain_on_channel((WLAN_HDD_GET_CTX
-					(adapter))->pcds_context,
-					cfg_state->remain_on_chan_ctx->scan_id);
+					(adapter))->pcds_context, roc_scan_id);
 	} else if (adapter->device_mode == QDF_P2P_CLIENT_MODE
 			|| adapter->device_mode ==
 			QDF_P2P_DEVICE_MODE) {
 		hdd_delete_all_action_frame_cookies(adapter);
 		sme_cancel_remain_on_channel(WLAN_HDD_GET_HAL_CTX
 				(adapter),
-				adapter->sessionId,
-				cfg_state->remain_on_chan_ctx->scan_id);
+				adapter->sessionId, roc_scan_id);
 	}
 
 wait:
@@ -1659,7 +1673,7 @@ __wlan_hdd_cfg80211_cancel_remain_on_channel(struct wiphy *wiphy,
 					if (REMAIN_ON_CHANNEL_REQUEST ==
 							pRemainChanCtx->
 							rem_on_chan_request) {
-						cfg80211_remain_on_channel_expired(
+					cfg80211_remain_on_channel_expired(
 							pRemainChanCtx->dev->
 							ieee80211_ptr,
 							pRemainChanCtx->cookie,
@@ -2181,20 +2195,19 @@ send_frame:
 			}
 		}
 
-	if (qdf_mem_cmp((uint8_t *)(&buf[WLAN_HDD_80211_FRM_SA_OFFSET]),
-			&pAdapter->macAddressCurrent, QDF_MAC_ADDR_SIZE)) {
-		hdd_info("%s: sa of action frame is randomized with mac-addr: "
-			MAC_ADDRESS_STR, __func__,
-			MAC_ADDR_ARRAY((uint8_t *)
-			(&buf[WLAN_HDD_80211_FRM_SA_OFFSET])));
-		hdd_info("sa of action frame is randomized with mac-addr: ");
-		enb_random_mac = true;
-	}
+		if (qdf_mem_cmp((uint8_t *)(&buf[WLAN_HDD_80211_FRM_SA_OFFSET]),
+		    &pAdapter->macAddressCurrent, QDF_MAC_ADDR_SIZE)) {
+			hdd_info("%s: action frame sa is randomized with mac: "
+				 MAC_ADDRESS_STR, __func__,
+				 MAC_ADDR_ARRAY((uint8_t *)
+				 (&buf[WLAN_HDD_80211_FRM_SA_OFFSET])));
+			enb_random_mac = true;
+		}
 
-	if (enb_random_mac && !noack)
-		hdd_set_action_frame_random_mac(pAdapter,
-			(uint8_t *)(&buf[WLAN_HDD_80211_FRM_SA_OFFSET]),
-			*cookie);
+		if (enb_random_mac && !noack)
+			hdd_set_action_frame_random_mac(pAdapter,
+				(uint8_t *)(&buf[WLAN_HDD_80211_FRM_SA_OFFSET]),
+				*cookie, chan->center_freq);
 
 		if (QDF_STATUS_SUCCESS !=
 		    sme_send_action(WLAN_HDD_GET_HAL_CTX(pAdapter),
@@ -2219,7 +2232,7 @@ err:
 		if (enb_random_mac &&
 			((pAdapter->device_mode == QDF_STA_MODE) ||
 			(pAdapter->device_mode == QDF_P2P_CLIENT_MODE) ||
-			(pAdapter->device_mode == QDF_P2P_GO_MODE)))
+			(pAdapter->device_mode == QDF_P2P_DEVICE_MODE)))
 			hdd_reset_action_frame_random_mac(pAdapter,
 				(uint8_t *)(&buf[WLAN_HDD_80211_FRM_SA_OFFSET]),
 				*cookie);
@@ -2282,9 +2295,9 @@ static int hdd_wlan_delete_mgmt_tx_cookie(struct wireless_dev *wdev,
 	struct net_device *dev = wdev->netdev;
 	hdd_adapter_t *adapter = WLAN_HDD_GET_PRIV_PTR(dev);
 
-	if ((adapter->device_mode == QDF_P2P_GO_MODE) ||
+	if ((adapter->device_mode == QDF_STA_MODE) ||
 	    (adapter->device_mode == QDF_P2P_CLIENT_MODE) ||
-	    (adapter->device_mode == QDF_P2P_GO_MODE)) {
+	    (adapter->device_mode == QDF_P2P_DEVICE_MODE)) {
 		hdd_delete_action_frame_cookie(adapter, cookie);
 	}
 
@@ -3004,7 +3017,9 @@ void __hdd_indicate_mgmt_frame(hdd_adapter_t *pAdapter,
 				*/
 			return;
 			}
+
 		 broadcast = 1;
+
 		}
 	}
 

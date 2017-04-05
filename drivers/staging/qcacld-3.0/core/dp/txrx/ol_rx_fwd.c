@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, 2014-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011, 2014-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -79,11 +79,8 @@ static inline void ol_ap_fwd_check(struct ol_txrx_vdev_t *vdev, qdf_nbuf_t msdu)
 	    qdf_mem_cmp
 		     (mac_header->i_addr3, vdev->mac_addr.raw,
 		     IEEE80211_ADDR_LEN)) {
-#ifdef DEBUG_HOST_RC
-		TXRX_PRINT(TXRX_PRINT_LEVEL_INFO1,
-			   "Exit: %s | Unnecessary to adjust mac header\n",
+		ol_txrx_dbg("Exit: %s | Unnecessary to adjust mac header\n",
 			   __func__);
-#endif
 	} else {
 		/* Flip the ToDs bit to FromDs */
 		mac_header->i_fc[1] &= 0xfe;
@@ -237,6 +234,13 @@ ol_rx_fwd_check(struct ol_txrx_vdev_t *vdev,
 
 				copy = qdf_nbuf_copy(msdu);
 				if (copy) {
+					/* Since this is a private copy of skb
+					 * and part of skb tracking table, so
+					 * mark it to make sure that this skb
+					 * is getting deleted from tracking
+					 * table on receiving tx completion.
+					 */
+					QDF_NBUF_CB_TX_IS_PACKET_PRIV(copy) = 1;
 					ol_rx_fwd_to_tx(tx_vdev, copy);
 					tx_vdev->fwd_tx_packets++;
 				}

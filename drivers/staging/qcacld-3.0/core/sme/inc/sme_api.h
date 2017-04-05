@@ -54,13 +54,27 @@
   Preprocessor definitions and constants
   ------------------------------------------------------------------------*/
 
-#define SME_SUMMARY_STATS         1
-#define SME_GLOBAL_CLASSA_STATS   2
-#define SME_GLOBAL_CLASSB_STATS   4
-#define SME_GLOBAL_CLASSC_STATS   8
-#define SME_GLOBAL_CLASSD_STATS  16
-#define SME_PER_STA_STATS        32
-#define SME_PER_CHAIN_RSSI_STATS 64
+#define SME_SUMMARY_STATS         (1 << eCsrSummaryStats)
+#define SME_GLOBAL_CLASSA_STATS   (1 << eCsrGlobalClassAStats)
+#define SME_GLOBAL_CLASSD_STATS   (1 << eCsrGlobalClassDStats)
+#define SME_PER_CHAIN_RSSI_STATS  (1 << csr_per_chain_rssi_stats)
+
+#define sme_log(level, args...) QDF_TRACE(QDF_MODULE_ID_SME, level, ## args)
+#define sme_logfl(level, format, args...) sme_log(level, FL(format), ## args)
+
+#define sme_alert(format, args...) \
+		sme_logfl(QDF_TRACE_LEVEL_FATAL, format, ## args)
+#define sme_err(format, args...) \
+		sme_logfl(QDF_TRACE_LEVEL_ERROR, format, ## args)
+#define sme_warn(format, args...) \
+		sme_logfl(QDF_TRACE_LEVEL_WARN, format, ## args)
+#define sme_info(format, args...) \
+		sme_logfl(QDF_TRACE_LEVEL_INFO, format, ## args)
+#define sme_debug(format, args...) \
+		sme_logfl(QDF_TRACE_LEVEL_DEBUG, format, ## args)
+
+#define SME_ENTER() sme_logfl(QDF_TRACE_LEVEL_DEBUG, "enter")
+#define SME_EXIT() sme_logfl(QDF_TRACE_LEVEL_DEBUG, "exit")
 
 #define SME_SESSION_ID_ANY        50
 
@@ -1284,6 +1298,7 @@ void sme_set_pdev_ht_vht_ies(tHalHandle hHal, bool enable2x2);
 
 void sme_update_vdev_type_nss(tHalHandle hal, uint8_t max_supp_nss,
 		uint32_t vdev_type_nss, eCsrBand band);
+void sme_update_hw_dbs_capable(tHalHandle hal, uint8_t hw_dbs_capable);
 void sme_register_p2p_lo_event(tHalHandle hHal, void *context,
 					p2p_lo_callback callback);
 
@@ -1511,12 +1526,39 @@ QDF_STATUS sme_get_beacon_frm(tHalHandle hal, tCsrRoamProfile *profile,
 QDF_STATUS sme_rso_cmd_status_cb(tHalHandle hal,
 		void (*cb)(void *, struct rso_cmd_status *));
 
+void sme_set_5g_band_pref(tHalHandle hal_handle,
+			  struct sme_5g_band_pref_params *pref_params);
+
+/**
+ * sme_set_bt_activity_info_cb - set the callback handler for bt events
+ * @hal: handle returned by mac_open
+ * @cb: callback handler
+ *
+ * Return: QDF_STATUS
+ */
+QDF_STATUS sme_set_bt_activity_info_cb(tHalHandle hal,
+				void (*cb)(void *, uint32_t profile_info));
+
+/**
+ * sme_scan_get_result_for_bssid - gets the scan result from scan cache for the
+ *	bssid specified
+ * @hal: handle returned by mac_open
+ * @bssid: bssid to get the scan result for
+ *
+ * Return: tCsrScanResultInfo * or NULL if no result
+ */
+tCsrScanResultInfo *sme_scan_get_result_for_bssid(tHalHandle hal_handle,
+						  struct qdf_mac_addr *bssid);
+
+QDF_STATUS sme_delete_all_tdls_peers(tHalHandle hal, uint8_t session_id);
+
 /**
  * sme_set_random_mac() - Set random mac address filter
  * @hal: hal handle for getting global mac struct
  * @callback: callback to be invoked for response from firmware
  * @session_id: interface id
  * @random_mac: random mac address to be set
+ * @freq: Channel frequency
  * @context: parameter to callback
  *
  * This function is used to set random mac address filter for action frames
@@ -1528,13 +1570,14 @@ QDF_STATUS sme_rso_cmd_status_cb(tHalHandle hal,
 QDF_STATUS sme_set_random_mac(tHalHandle hal,
 			      action_frame_random_filter_callback callback,
 			      uint32_t session_id, uint8_t *random_mac,
-			      void *context);
+			      uint32_t freq, void *context);
 
 /**
  * sme_clear_random_mac() - clear random mac address filter
  * @hal: HAL handle
  * @session_id: interface id
  * @random_mac: random mac address to be cleared
+ * @freq: Channel frequency
  *
  * This function is used to clear the randmom mac address filters
  * which are set with sme_set_random_mac
@@ -1542,9 +1585,6 @@ QDF_STATUS sme_set_random_mac(tHalHandle hal,
  * Return: QDF_STATUS enumeration.
  */
 QDF_STATUS sme_clear_random_mac(tHalHandle hal, uint32_t session_id,
-				uint8_t *random_mac);
-
-void sme_set_5g_band_pref(tHalHandle hal_handle,
-			  struct sme_5g_band_pref_params *pref_params);
+				uint8_t *random_mac, uint32_t freq);
 
 #endif /* #if !defined( __SME_API_H ) */
