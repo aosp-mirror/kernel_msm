@@ -1662,7 +1662,12 @@ static struct platform_driver mnh_sm = {
 	},
 };
 
-module_platform_driver(mnh_sm);
+/* Make sure mnh_sm driver is initialized after bcm15602-gpio */
+static int __init mnh_sm_init(void)
+{
+	return platform_driver_register(&mnh_sm);
+}
+late_initcall(mnh_sm_init);
 
 MODULE_AUTHOR("Intel Corporation");
 MODULE_DESCRIPTION("MNH State Manager HOST DRIVER");
