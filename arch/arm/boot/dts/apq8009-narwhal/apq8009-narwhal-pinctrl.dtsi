@@ -174,6 +174,31 @@
 			};
 		};
 
+		pmx_i2c_6 {
+			i2c_6_active: i2c_6_active {
+				mux {
+					pins = "gpio11", "gpio10";
+					function = "blsp_i2c6";
+				};
+				config {
+					pins = "gpio11", "gpio10";
+					drive-strength = <2>; /* 2 MA */
+					bias-disable; /* No PULL */
+				};
+			};
+			i2c_6_sleep: i2c_6_sleep {
+				mux {
+					pins = "gpio11", "gpio10";
+					function = "blsp_i2c6";
+				};
+				config {
+					pins = "gpio11", "gpio10";
+					drive-strength = <2>; /* 2 MA */
+					bias-disable; /* No PULL */
+				};
+			};
+		};
+
 		fuel_int_pin {
 			fuel_int_default: fuel_int_default {
 				mux {

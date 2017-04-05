@@ -1,0 +1,52 @@
+/* Copyright (c) 2017, LGE Inc. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&soc {
+	i2c_6: i2c@78ba000 { /* BLSP1 QUP6 */
+		status = "ok";
+		compatible = "qcom,i2c-msm-v2";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg-names = "qup_phys_addr";
+		reg = <0x78ba000 0x1000>;
+		interrupt-names = "qup_irq";
+		interrupts = <0 100 0>;
+		qcom,clk-freq-out = <100000>; //100Khz
+		qcom,clk-freq-in  = <19200000>;
+		clock-names = "iface_clk", "core_clk";
+		clocks = <&clock_gcc clk_gcc_blsp1_ahb_clk>,
+			<&clock_gcc clk_gcc_blsp1_qup6_i2c_apps_clk>;
+
+		pinctrl-names = "i2c_active", "i2c_sleep";
+		pinctrl-0 = <&i2c_6_active>;
+		pinctrl-1 = <&i2c_6_sleep>;
+		qcom,noise-rjct-scl = <0>;
+		qcom,noise-rjct-sda = <0>;
+		dmas = <&dma_blsp1 14 64 0x20000020 0x20>,
+			<&dma_blsp1 15 32 0x20000020 0x20>;
+		dma-names = "tx", "rx";
+		qcom,master-id = <86>;
+	};
+};
+
+&i2c_6 {
+	lge,soprod_movement@40 {
+		compatible = "lge,soprod_movement";
+		reg = <0x48>;
+		status = "ok";
+		soprod,i2c_ldo = <&msm_gpio 24 0x0>;
+		soprod,reset = <&msm_gpio 21 0x0>;
+		soprod,interrupt = <&msm_gpio 20 0x0>;
+		soprod,bslen = <&msm_gpio 16 0x0>;
+		soprod,gpio_temp_1 = <&msm_gpio 22 0x0>;
+	};
+};

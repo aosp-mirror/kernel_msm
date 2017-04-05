@@ -11,6 +11,7 @@
  */
 
 #include "apq8009-narwhal-pm.dtsi"
+#include "apq8009-narwhal-movement.dtsi"
 
 / {
 	reserved-memory {

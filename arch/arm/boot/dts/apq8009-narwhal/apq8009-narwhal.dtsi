@@ -25,6 +25,7 @@
 		/delete-property/i2c1;
 		/delete-property/i2c3;
 		/delete-property/spi0;
+		i2c6 = &i2c_6; /* I2C6 controller device */
 	};
 };
 
