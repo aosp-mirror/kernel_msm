@@ -82,6 +82,9 @@ config BOARD_MSMCORTEX
 	depends on ARCH_QCOM
 	select ARCH_MSMCOBALT
 
+config BOARD_MSM8998_SOC
+	bool "Enable Support for MSM8998 SoC"
+
 config BOARD_MUSKIE
         bool "Enable Support for Muskie boards"
 	depends on ARCH_QCOM

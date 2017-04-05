@@ -218,6 +218,12 @@ dtb-$(CONFIG_ARCH_SDM630) += sdm630-rumi.dtb \
 	sdm630-pm660a-headset-jacktype-no-cdp.dtb \
 	sdm630-pm660a-headset-jacktype-no-rcm.dtb
 
+dtb-$(CONFIG_BOARD_MSM8998_SOC) += msm8998-v2.1-soc.dtb
+
+ifeq ($(CONFIG_BOARD_MSM8998_SOC),y)
+always          := $(dtb-y)
+endif
+
 ifeq ($(CONFIG_ARM64),y)
 always          := $(dtb-y)
 subdir-y        := $(dts-dirs)
