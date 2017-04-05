@@ -1073,11 +1073,11 @@ static ssize_t diag_result_show(struct device *dev,
 	return snprintf(buf, PAGE_SIZE, "z=%d k=%d\n", diag_z, diag_k);
 }
 
-static ssize_t autocal_result_show(struct device *dev,
-				   struct device_attribute *attr, char *buf)
+static ssize_t autocal_show(struct device *dev,
+			    struct device_attribute *attr, char *buf)
 {
 	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
-	int autocal_comp, autocal_bemf, autocal_gain;
+	u32 autocal_comp, autocal_bemf, autocal_gain;
 
 	autocal_comp = drv2624_reg_read(drv2624, DRV2624_REG_CAL_COMP);
 	autocal_bemf = drv2624_reg_read(drv2624, DRV2624_REG_CAL_BEMF);
@@ -1085,8 +1085,90 @@ static ssize_t autocal_result_show(struct device *dev,
 		drv2624_reg_read(drv2624, DRV2624_REG_LOOP_CONTROL) &
 		BEMFGAIN_MASK;
 
-	return snprintf(buf, PAGE_SIZE, "comp=%d bemf=%d gain=%d\n",
+	return snprintf(buf, PAGE_SIZE, "%d %d %d\n",
 			autocal_comp, autocal_bemf, autocal_gain);
+}
+
+static ssize_t autocal_store(struct device *dev,
+			     struct device_attribute *attr, const char *buf,
+			     size_t count)
+{
+	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
+	int n;
+	unsigned char comp, bemf, bemfgain;
+
+	n = sscanf(buf, "%hhu %hhu %hhu", &comp, &bemf, &bemfgain);
+	if (n != 3)
+		return -EINVAL;
+
+	drv2624_reg_write(drv2624, DRV2624_REG_CAL_COMP, comp);
+	drv2624_reg_write(drv2624, DRV2624_REG_CAL_BEMF, bemf);
+	drv2624_set_bits(drv2624, DRV2624_REG_LOOP_CONTROL,
+			 BEMFGAIN_MASK, bemfgain);
+
+	return count;
+}
+
+static ssize_t lra_period_show(struct device *dev,
+			       struct device_attribute *attr, char *buf)
+{
+	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
+	u32 lra_period;
+
+	lra_period = drv2624_reg_read(drv2624, DRV2624_REG_LRA_PERIOD_H) & 0x03;
+	lra_period = (lra_period << 8) |
+		drv2624_reg_read(drv2624, DRV2624_REG_LRA_PERIOD_L);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", lra_period);
+}
+
+static ssize_t status_show(struct device *dev,
+			   struct device_attribute *attr, char *buf)
+{
+	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
+	u32 status;
+
+	status = drv2624_reg_read(drv2624, DRV2624_REG_STATUS);
+	/* Ignore Bit 6-5 reserved, Bit 4 PRG_ERR and BIT 3 PROC_DONE */
+	status &= ~((1 << 6) | (1 << 5) | (1 << 4) | (1 << 3));
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", status);
+}
+
+static ssize_t ol_lra_period_show(struct device *dev,
+				  struct device_attribute *attr, char *buf)
+{
+	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
+	u32 ol_lra_period;
+
+	ol_lra_period =
+		drv2624_reg_read(drv2624, DRV2624_REG_OL_PERIOD_H) & 0x03;
+	ol_lra_period = (ol_lra_period << 8) |
+		drv2624_reg_read(drv2624, DRV2624_REG_OL_PERIOD_L);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", ol_lra_period);
+}
+
+static ssize_t ol_lra_period_store(struct device *dev,
+				   struct device_attribute *attr,
+				   const char *buf, size_t count)
+{
+	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
+	int ret;
+	u32 ol_lra_period;
+
+	ret = kstrtou32(buf, 10, &ol_lra_period);
+	if (ret) {
+		pr_err("Invalid input for ol_lra_period: ret = %d\n", ret);
+		return ret;
+	}
+
+	drv2624_reg_write(drv2624, DRV2624_REG_OL_PERIOD_H,
+			  (ol_lra_period >> 8) & 0x03);
+	drv2624_reg_write(drv2624, DRV2624_REG_OL_PERIOD_L,
+			  ol_lra_period & 0xFF);
+
+	return count;
 }
 
 static DEVICE_ATTR(rtp_input, 0660, rtp_input_show, rtp_input_store);
@@ -1098,7 +1180,11 @@ static DEVICE_ATTR(ctrl_loop, 0660, ctrl_loop_show, ctrl_loop_store);
 static DEVICE_ATTR(set_sequencer, 0660, NULL, set_sequencer_store);
 static DEVICE_ATTR(od_clamp, 0660, od_clamp_show, od_clamp_store);
 static DEVICE_ATTR(diag_result, 0600, diag_result_show, NULL);
-static DEVICE_ATTR(autocal_result, 0600, autocal_result_show, NULL);
+static DEVICE_ATTR(autocal, 0660, autocal_show, autocal_store);
+static DEVICE_ATTR(lra_period, 0600, lra_period_show, NULL);
+static DEVICE_ATTR(status, 0600, status_show, NULL);
+static DEVICE_ATTR(ol_lra_period, 0660, ol_lra_period_show,
+		   ol_lra_period_store);
 
 static struct attribute *drv2624_fs_attrs[] = {
 	&dev_attr_rtp_input.attr,
@@ -1110,7 +1196,10 @@ static struct attribute *drv2624_fs_attrs[] = {
 	&dev_attr_set_sequencer.attr,
 	&dev_attr_od_clamp.attr,
 	&dev_attr_diag_result.attr,
-	&dev_attr_autocal_result.attr,
+	&dev_attr_autocal.attr,
+	&dev_attr_lra_period.attr,
+	&dev_attr_status.attr,
+	&dev_attr_ol_lra_period.attr,
 	NULL,
 };
 
