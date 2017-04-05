@@ -80,6 +80,8 @@
 #define TAS2557_SAFE_GUARD_REG			TAS2557_REG(0, 0, 37)
 #define TAS2557_ASI_CTL1_REG			TAS2557_REG(0, 0, 42)
 #define TAS2557_CLK_ERR_CTRL			TAS2557_REG(0, 0, 44)
+#define TAS2557_CLK_ERR_CTRL2			TAS2557_REG(0, 0, 45)	/* B0_P0_R0x2d*/
+#define TAS2557_CLK_ERR_CTRL3			TAS2557_REG(0, 0, 46)	/* B0_P0_R0x2e*/
 #define TAS2557_DBOOST_CFG_REG			TAS2557_REG(0, 0, 52)
 #define TAS2557_POWER_UP_FLAG_REG		TAS2557_REG(0, 0, 100)
 #define TAS2557_FLAGS_1				TAS2557_REG(0, 0, 104)	/* B0_P0_R0x68*/
@@ -100,7 +102,6 @@
 #define TAS2557_ASI1_WDIV_CLK_RATIO_REG		TAS2557_REG(0, 1, 15)
 #define TAS2557_ASI1_DAC_CLKOUT_REG		TAS2557_REG(0, 1, 16)
 #define TAS2557_ASI1_ADC_CLKOUT_REG		TAS2557_REG(0, 1, 17)
-
 #define TAS2557_ASI2_DAC_FORMAT_REG		TAS2557_REG(0, 1, 21)
 #define TAS2557_ASI2_ADC_FORMAT_REG		TAS2557_REG(0, 1, 22)
 #define TAS2557_ASI2_OFFSET1_REG		TAS2557_REG(0, 1, 23)
@@ -115,7 +116,6 @@
 #define TAS2557_ASI2_WDIV_CLK_RATIO_REG		TAS2557_REG(0, 1, 35)
 #define TAS2557_ASI2_DAC_CLKOUT_REG		TAS2557_REG(0, 1, 36)
 #define TAS2557_ASI2_ADC_CLKOUT_REG		TAS2557_REG(0, 1, 37)
-
 #define TAS2557_GPIO1_PIN_REG			TAS2557_REG(0, 1, 61)	/*B0_P1_R0x3d */
 #define TAS2557_GPIO2_PIN_REG			TAS2557_REG(0, 1, 62)	/*B0_P1_R0x3e */
 #define TAS2557_GPIO3_PIN_REG			TAS2557_REG(0, 1, 63)	/*B0_P1_R0x3f */
@@ -126,24 +126,20 @@
 #define TAS2557_GPIO8_PIN_REG			TAS2557_REG(0, 1, 68)
 #define TAS2557_GPIO9_PIN_REG			TAS2557_REG(0, 1, 69)
 #define TAS2557_GPIO10_PIN_REG			TAS2557_REG(0, 1, 70)
-
 #define TAS2557_GPI_PIN_REG				TAS2557_REG(0, 1, 77)	/*B0_P1_R0x4d */
 #define TAS2557_GPIO_HIZ_CTRL1_REG		TAS2557_REG(0, 1, 79)
 #define TAS2557_GPIO_HIZ_CTRL2_REG		TAS2557_REG(0, 1, 80)
 #define TAS2557_GPIO_HIZ_CTRL3_REG		TAS2557_REG(0, 1, 81)
 #define TAS2557_GPIO_HIZ_CTRL4_REG		TAS2557_REG(0, 1, 82)
 #define TAS2557_GPIO_HIZ_CTRL5_REG		TAS2557_REG(0, 1, 83)
-
 #define TAS2557_BIT_BANG_CTRL_REG		TAS2557_REG(0, 1, 87)
 #define TAS2557_BIT_BANG_OUT1_REG		TAS2557_REG(0, 1, 88)
 #define TAS2557_BIT_BANG_OUT2_REG		TAS2557_REG(0, 1, 89)
 #define TAS2557_BIT_BANG_IN1_REG		TAS2557_REG(0, 1, 90)
 #define TAS2557_BIT_BANG_IN2_REG		TAS2557_REG(0, 1, 91)
 #define TAS2557_BIT_BANG_IN3_REG		TAS2557_REG(0, 1, 92)
-
 #define TAS2557_PDM_IN_CLK_REG			TAS2557_REG(0, 1, 94)
 #define TAS2557_PDM_IN_PIN_REG			TAS2557_REG(0, 1, 95)
-
 #define TAS2557_ASIM_IFACE1_REG			TAS2557_REG(0, 1, 98)
 #define TAS2557_ASIM_FORMAT_REG			TAS2557_REG(0, 1, 99)
 #define TAS2557_ASIM_IFACE3_REG			TAS2557_REG(0, 1, 100)
@@ -152,19 +148,16 @@
 #define TAS2557_ASIM_IFACE6_REG			TAS2557_REG(0, 1, 103)
 #define TAS2557_ASIM_IFACE7_REG			TAS2557_REG(0, 1, 104)
 #define TAS2557_ASIM_IFACE8_REG			TAS2557_REG(0, 1, 105)
-#define TAS2557_ASIM_IFACE9_REG			TAS2557_REG(0, 1, 106)
-
+#define TAS2557_CLK_HALT_REG			TAS2557_REG(0, 1, 106)	/* B0_P1_R0x6a */
 #define TAS2557_INT_GEN1_REG			TAS2557_REG(0, 1, 108)	/* B0_P1_R0x6c */
-#define TAS2557_INT_GEN2_REG			TAS2557_REG(0, 1, 109)
+#define TAS2557_INT_GEN2_REG			TAS2557_REG(0, 1, 109)	/* B0_P1_R0x6d */
 #define TAS2557_INT_GEN3_REG			TAS2557_REG(0, 1, 110)	/* B0_P1_R0x6e */
 #define TAS2557_INT_GEN4_REG			TAS2557_REG(0, 1, 111)	/* B0_P1_R0x6f */
 #define TAS2557_INT_MODE_REG			TAS2557_REG(0, 1, 114)	/* B0_P1_R0x72 */
-
 #define TAS2557_MAIN_CLKIN_REG			TAS2557_REG(0, 1, 115)
 #define TAS2557_PLL_CLKIN_REG			TAS2557_REG(0, 1, 116)
 #define TAS2557_CLKOUT_MUX_REG			TAS2557_REG(0, 1, 117)
 #define TAS2557_CLKOUT_CDIV_REG			TAS2557_REG(0, 1, 118)
-
 #define TAS2557_HACK_GP01_REG			TAS2557_REG(0, 1, 122)
 
 #define TAS2557_HACK01_REG			TAS2557_REG(0, 2, 10)
@@ -180,10 +173,14 @@
 
 #define TAS2557_SA_PG1P0_CHL_CTRL_REG	TAS2557_REG(0, 58, 120)	/* B0_P0x3a_R0x78 */
 
-
 #define TAS2557_TEST_MODE_REG			TAS2557_REG(0, 253, 13)
 #define TAS2557_BROADCAST_REG			TAS2557_REG(0, 253, 54)
 #define TAS2557_CRYPTIC_REG			TAS2557_REG(0, 253, 71)
+
+#define TAS2557_XMEM_687_REG				TAS2557_REG(78, 23, 116)	/* B0x78_P0x23_R0x40 */
+
+#define TAS2557_PG2P1_CALI_R0_REG		TAS2557_REG(0x8c, 0x2f, 0x40)
+#define TAS2557_PG1P0_CALI_R0_REG		TAS2557_REG(0x8c, 0x2f, 0x28)
 
 #define TAS2557_DAC_INTERPOL_REG		TAS2557_REG(100, 0, 1)
 #define TAS2557_SOFT_MUTE_REG			TAS2557_REG(100, 0, 7)
@@ -198,7 +195,6 @@
 #define TAS2557_RAMP_CLK_DIV_MSB_REG		TAS2557_REG(100, 0, 43)
 #define TAS2557_RAMP_CLK_DIV_LSB_REG		TAS2557_REG(100, 0, 44)
 
-#define TAS2557_XMEM_44_REG				TAS2557_REG(130, 2, 64)	/* B0x82_P0x02_R0x40 */
 #define TAS2557_DIE_TEMP_REG			TAS2557_REG(130, 2, 124)	/* B0x82_P0x02_R0x7C */
 
 /* Bits */
@@ -298,9 +294,42 @@
 
 #define TAS2557_BROADCAST_ADDR	0x4c
 
-#define TAS2557_APP_ROM1MODE	0
-#define TAS2557_APP_ROM2MODE	1
-#define TAS2557_APP_TUNINGMODE	2
+#define	TAS2557_APP_ROM1MODE	0
+#define	TAS2557_APP_ROM2MODE	1
+#define	TAS2557_APP_TUNINGMODE	2
+#define	TAS2557_APP_ROM1_96KHZ	3
+#define	TAS2557_APP_ROM2_96KHZ	4
+#define	TAS2557_APP_RAMMODE		5
+
+#define	TAS2557_BOOST_OFF		0
+#define	TAS2557_BOOST_DEVA		1
+#define	TAS2557_BOOST_DEVB		2
+#define	TAS2557_BOOST_BOTH		3
+
+#define	TAS2557_DM_AD_BD		0	/* DevA default, DevB default */
+#define	TAS2557_DM_AM_BM		1	/* DevA mute, DevB mute */
+#define	TAS2557_DM_AL_BR		2	/* DevA left channel, DevB right channel */
+#define	TAS2557_DM_AR_BL		3	/* DevA right channel, DevB left channel */
+#define	TAS2557_DM_AH_BH		4	/* DevA (L+R)/2, DevB (L+R)/2 */
+
+#define	ERROR_NONE			0x00000000
+#define	ERROR_PLL_ABSENT	0x00000001
+#define	ERROR_DEVA_I2C_COMM	0x00000002
+#define	ERROR_DEVB_I2C_COMM	0x00000004
+#define	ERROR_PRAM_CRCCHK	0x00000008
+#define	ERROR_YRAM_CRCCHK	0x00000010
+#define	ERROR_CLK_DET2		0x00000020
+#define	ERROR_CLK_DET1		0x00000040
+#define	ERROR_CLK_LOST		0x00000080
+#define	ERROR_BROWNOUT		0x00000100
+#define	ERROR_DIE_OVERTEMP	0x00000200
+#define	ERROR_CLK_HALT		0x00000400
+#define	ERROR_UNDER_VOLTAGE	0x00000800
+#define	ERROR_OVER_CURRENT	0x00001000
+#define	ERROR_CLASSD_PWR	0x00002000
+#define	ERROR_FAILSAFE		0x40000000
+
+#define	FLAG_CHECK_COUNTER	25
 
 struct TBlock {
 	unsigned int mnType;
@@ -336,6 +365,7 @@ struct TPLL {
 struct TConfiguration {
 	char mpName[64];
 	char *mpDescription;
+	unsigned int mnDevices;
 	unsigned int mnProgram;
 	unsigned int mnPLL;
 	unsigned int mnSamplingRate;
@@ -394,15 +424,16 @@ struct tas2557_priv {
 	struct device *dev;
 	struct regmap *mpRegmap;
 	struct i2c_client *client;
-	int mnLoad;
 	int mnLPGID;
 	int mnRPGID;
-	int mnResetGPIO;
+	int mnLeftChlGpioRst;
+	int mnRightChlGpioRst;
 	struct mutex dev_lock;
 	struct TFirmware *mpFirmware;
 	struct TFirmware *mpCalFirmware;
 	unsigned int mnCurrentProgram;
 	unsigned int mnCurrentSampleRate;
+	unsigned int mnNewConfiguration;
 	unsigned int mnCurrentConfiguration;
 	unsigned int mnCurrentCalibration;
 	enum channel mnCurrentChannel;
@@ -414,7 +445,7 @@ struct tas2557_priv {
 	unsigned char mnRCurrentPage;
 	bool mbTILoadActive;
 	bool mbPowerUp;
-	bool mbLoadConfigurationPostPowerUp;
+	bool mbLoadConfigurationPrePowerUp;
 	bool mbLoadCalibrationPostPowerUp;
 	bool mbCalibrationLoaded;
 	int (*read)(struct tas2557_priv *pTAS2557,
@@ -444,7 +475,9 @@ struct tas2557_priv {
 		int config);
 	int (*set_calibration)(struct tas2557_priv *pTAS2557,
 		int calibration);
-	int (*enableIRQ)(struct tas2557_priv *pTAS2557, bool enable, bool clear);
+	void (*clearIRQ)(struct tas2557_priv *pTAS2557);
+	void (*enableIRQ)(struct tas2557_priv *pTAS2557,
+		enum channel chl, bool enable);
 	void (*hw_reset)(struct tas2557_priv *pTAS2557);
 
 	int mnLeftChlGpioINT;
@@ -456,15 +489,22 @@ struct tas2557_priv {
 	enum echo_reference mnEchoRef;
 	unsigned char mnI2SBits;
 
-	bool mnChannelSwap;	/* 0, default; 1, swapped */
-	enum channel mnROMChlDev;
-	unsigned int mnROMChlCtrl;
+	unsigned int mnChannelState;
+	unsigned char mnDevAChlData[16];
+	unsigned char mnDevBChlData[16];
 
 	/* for low temperature check */
 	unsigned int mnDevGain;
 	unsigned int mnDevCurrentGain;
+	unsigned int mnDieTvReadCounter;
 	struct hrtimer mtimer;
 	struct work_struct mtimerwork;
+
+	unsigned int mnErrCode;
+#ifdef CONFIG_TAS2557_CODEC_STEREO
+	struct mutex codec_lock;
+#endif
+
 #ifdef CONFIG_TAS2557_MISC_STEREO
 	int mnDBGCmd;
 	int mnCurrentReg;

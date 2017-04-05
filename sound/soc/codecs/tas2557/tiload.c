@@ -243,54 +243,123 @@ static long tiload_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	int val;
 	struct BPR bpr;
 
-	dev_info(pTAS2557->dev, "%s, cmd=0x%x\n", __func__, cmd);
 /*  if (_IOC_TYPE(cmd) != TILOAD_IOC_MAGIC)
  *      return -ENOTTY;
  */
 
 	switch (cmd) {
 	case TILOAD_IOMAGICNUM_GET:
+		dev_info(pTAS2557->dev, "TILOAD_IOMAGICNUM_GET=0x%x\n", cmd);
 		num = copy_to_user(argp, &magic_num, sizeof(int));
 		break;
 	case TILOAD_IOMAGICNUM_SET:
+		dev_info(pTAS2557->dev, "TILOAD_IOMAGICNUM_SET=0x%x\n", cmd);
 		num = copy_from_user(&magic_num, argp, sizeof(int));
-		dev_info(pTAS2557->dev, "TILOAD_IOMAGICNUM_SET\n");
 		tiload_route_IO(pTAS2557, magic_num);
 		break;
 	case TILOAD_BPR_READ:
+		dev_info(pTAS2557->dev, "TILOAD_BPR_READ=0x%x\n", cmd);
 		break;
 	case TILOAD_BPR_WRITE:
+		dev_info(pTAS2557->dev, "TILOAD_BPR_WRITE=0x%x\n", cmd);
 		num = copy_from_user(&bpr, argp, sizeof(struct BPR));
-		dev_info(pTAS2557->dev, "TILOAD_BPR_WRITE: 0x%02X, 0x%02X, 0x%02X\n\r", bpr.nBook,
-			bpr.nPage, bpr.nRegister);
 		break;
 	case TILOAD_IOCTL_SET_CHL:
 		num = copy_from_user(&val, argp, sizeof(int));
 		addr = (unsigned char)(val>>1);
 		if (addr == pTAS2557->mnLAddr) {
-			dev_info(pTAS2557->dev, "TILOAD_IOCTL_SET_CHL left\n");
+			dev_info(pTAS2557->dev, "TILOAD_IOCTL_SET_CHL left=0x%x\n", cmd);
 			pTAS2557->mnCurrentChannel = channel_left;
 		} else if (addr == pTAS2557->mnRAddr) {
-			dev_info(pTAS2557->dev, "TILOAD_IOCTL_SET_CHL right\n");
+			dev_info(pTAS2557->dev, "TILOAD_IOCTL_SET_CHL right=0x%x\n", cmd);
 			pTAS2557->mnCurrentChannel = channel_right;
 		} else {
-			dev_err(pTAS2557->dev, "TILOAD_IOCTL_SET_CHL error L(0x%x) R(0x%x) 0x%x,\n",
-				pTAS2557->mnLAddr, pTAS2557->mnRAddr, addr);
+			dev_err(pTAS2557->dev, "TILOAD_IOCTL_SET_CHL error L(0x%x) R(0x%x) 0x%x, cmd=0x%x\n",
+				pTAS2557->mnLAddr, pTAS2557->mnRAddr, addr, cmd);
 		}
 		break;
 	case TILOAD_IOCTL_SET_CONFIG:
+		dev_info(pTAS2557->dev, "TILOAD_IOCTL_SET_CONFIG=0x%x\n", cmd);
 		num = copy_from_user(&val, argp, sizeof(val));
 		pTAS2557->set_config(pTAS2557, val);
 		break;
 	case TILOAD_IOCTL_SET_CALIBRATION:
+		dev_info(pTAS2557->dev, "TILOAD_IOCTL_SET_CALIBRATION=0x%x\n", cmd);
 		num = copy_from_user(&val, argp, sizeof(val));
 		pTAS2557->set_calibration(pTAS2557, val);
 		break;
 	default:
+		dev_info(pTAS2557->dev, "%s, unsupport cmd=0x%x\n", __func__, cmd);
 		break;
 	}
 	return num;
 }
+
+#ifdef CONFIG_COMPAT
+static long tiload_compat_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+{
+	struct tas2557_priv *pTAS2557 = (struct tas2557_priv *)filp->private_data;
+	long nResult = 0;
+
+	switch (cmd) {
+	case TILOAD_COMPAT_IOMAGICNUM_GET:
+		dev_info(pTAS2557->dev, "%s, TILOAD_COMPAT_IOMAGICNUM_GET=0x%x\n",
+			__func__, cmd);
+		nResult = tiload_ioctl(filp, TILOAD_IOMAGICNUM_GET,
+			(unsigned long) compat_ptr(arg));
+		break;
+
+	case TILOAD_COMPAT_IOMAGICNUM_SET:
+		dev_info(pTAS2557->dev, "%s, TILOAD_COMPAT_IOMAGICNUM_SET=0x%x\n",
+			__func__, cmd);
+		nResult = tiload_ioctl(filp, TILOAD_IOMAGICNUM_SET,
+			(unsigned long) compat_ptr(arg));
+		break;
+
+	case TILOAD_COMPAT_BPR_READ:
+		dev_info(pTAS2557->dev, "%s, TILOAD_COMPAT_BPR_READ=0x%x\n",
+			__func__, cmd);
+		nResult = tiload_ioctl(filp, TILOAD_BPR_READ,
+			(unsigned long) compat_ptr(arg));
+		break;
+
+	case TILOAD_COMPAT_BPR_WRITE:
+		dev_info(pTAS2557->dev, "%s, TILOAD_COMPAT_BPR_WRITE=0x%x\n",
+			__func__, cmd);
+		nResult = tiload_ioctl(filp, TILOAD_BPR_WRITE,
+			(unsigned long) compat_ptr(arg));
+		break;
+
+	case TILOAD_COMPAT_IOCTL_SET_CHL:
+		dev_info(pTAS2557->dev, "%s, TILOAD_COMPAT_IOCTL_SET_CHL=0x%x\n",
+			__func__, cmd);
+		nResult = tiload_ioctl(filp, TILOAD_IOCTL_SET_CHL,
+			(unsigned long) compat_ptr(arg));
+		break;
+
+	case TILOAD_COMPAT_IOCTL_SET_CONFIG:
+		dev_info(pTAS2557->dev, "%s, TILOAD_COMPAT_IOCTL_SET_CONFIG=0x%x\n",
+			__func__, cmd);
+		nResult = tiload_ioctl(filp, TILOAD_IOCTL_SET_CONFIG,
+			(unsigned long) compat_ptr(arg));
+		break;
+
+	case TILOAD_COMPAT_IOCTL_SET_CALIBRATION:
+		dev_info(pTAS2557->dev, "%s, TILOAD_COMPAT_IOCTL_SET_CALIBRATION=0x%x\n",
+			__func__, cmd);
+		nResult = tiload_ioctl(filp, TILOAD_IOCTL_SET_CALIBRATION,
+			(unsigned long) compat_ptr(arg));
+		break;
+
+	default:
+		dev_err(pTAS2557->dev, "%s, unsupport compat ioctl=0x%x\n",
+			__func__, cmd);
+		break;
+	}
+
+	return nResult;
+}
+#endif
 
 /*********** File operations structure for tiload *************/
 static const struct file_operations tiload_fops = {
@@ -300,6 +369,9 @@ static const struct file_operations tiload_fops = {
 	.read = tiload_read,
 	.write = tiload_write,
 	.unlocked_ioctl = tiload_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl = tiload_compat_ioctl,
+#endif
 };
 
 /*----------------------------------------------------------------------------
