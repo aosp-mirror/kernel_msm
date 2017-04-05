@@ -2236,13 +2236,6 @@ REG_TABLE_ENTRY g_registry_table[] = {
 		     CFG_ENABLE_TX_STBC_MIN,
 		     CFG_ENABLE_TX_STBC_MAX),
 
-	REG_VARIABLE(CFG_ENABLE_RX_LDPC, WLAN_PARAM_Integer,
-		     struct hdd_config, enableRxLDPC,
-		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
-		     CFG_ENABLE_RX_LDPC_DEFAULT,
-		     CFG_ENABLE_RX_LDPC_MIN,
-		     CFG_ENABLE_RX_LDPC_MAX),
-
 	REG_VARIABLE(CFG_PPS_ENABLE_5G_EBT, WLAN_PARAM_Integer,
 		     struct hdd_config, enable5gEBT,
 		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
@@ -2445,11 +2438,25 @@ REG_TABLE_ENTRY g_registry_table[] = {
 		     CFG_SCAN_AGING_PARAM_MAX),
 
 	REG_VARIABLE(CFG_TX_LDPC_ENABLE_FEATURE, WLAN_PARAM_Integer,
-		     struct hdd_config, enableTxLdpc,
+		     struct hdd_config, enable_tx_ldpc,
 		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
 		     CFG_TX_LDPC_ENABLE_FEATURE_DEFAULT,
 		     CFG_TX_LDPC_ENABLE_FEATURE_MIN,
 		     CFG_TX_LDPC_ENABLE_FEATURE_MAX),
+
+	REG_VARIABLE(CFG_ENABLE_RX_LDPC, WLAN_PARAM_Integer,
+		     struct hdd_config, enable_rx_ldpc,
+		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		     CFG_ENABLE_RX_LDPC_DEFAULT,
+		     CFG_ENABLE_RX_LDPC_MIN,
+		     CFG_ENABLE_RX_LDPC_MAX),
+
+	REG_VARIABLE(CFG_2G_BAND_RX_LDPC_SUPPORT_FEATURE, WLAN_PARAM_Integer,
+		     struct hdd_config, rx_ldpc_support_for_2g,
+		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		     CFG_2G_BAND_RX_LDPC_SUPPORT_FEATURE_DEFAULT,
+		     CFG_2G_BAND_RX_LDPC_SUPPORT_FEATURE_MIN,
+		     CFG_2G_BAND_RX_LDPC_SUPPORT_FEATURE_MAX),
 
 	REG_VARIABLE(CFG_ENABLE_MCC_ADATIVE_SCHEDULER_ENABLED_NAME,
 		     WLAN_PARAM_Integer,
@@ -4456,12 +4463,88 @@ REG_TABLE_ENTRY g_registry_table[] = {
 		CFG_5G_MAX_RSSI_PENALIZE_DEFAULT,
 		CFG_5G_MAX_RSSI_PENALIZE_MIN,
 		CFG_5G_MAX_RSSI_PENALIZE_MAX),
+
 	REG_VARIABLE(CFG_ENABLE_PACKET_FILTERS_NAME, WLAN_PARAM_Integer,
 		struct hdd_config, packet_filters_bitmap,
 		VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
 		CFG_ENABLE_PACKET_FILTERS_DEFAULT,
 		CFG_ENABLE_PACKET_FILTERS_MIN,
 		CFG_ENABLE_PACKET_FILTERS_MAX),
+
+	REG_VARIABLE(CFG_ARP_AC_CATEGORY, WLAN_PARAM_Integer,
+		struct hdd_config, arp_ac_category,
+		VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		CFG_ARP_AC_CATEGORY_DEFAULT,
+		CFG_ARP_AC_CATEGORY_MIN,
+		CFG_ARP_AC_CATEGORY_MAX),
+
+	REG_VARIABLE(CFG_PRB_REQ_IE_WHITELIST_NAME, WLAN_PARAM_Integer,
+		     struct hdd_config, probe_req_ie_whitelist,
+		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		     CFG_PRB_REQ_IE_WHITELIST_DEFAULT,
+		     CFG_PRB_REQ_IE_WHITELIST_MIN,
+		     CFG_PRB_REQ_IE_WHITELIST_MAX),
+
+	REG_VARIABLE(CFG_PRB_REQ_IE_BIT_MAP0_NAME, WLAN_PARAM_HexInteger,
+		     struct hdd_config, probe_req_ie_bitmap_0,
+		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		     CFG_PRB_REQ_IE_BIT_MAP0_DEFAULT,
+		     CFG_PRB_REQ_IE_BIT_MAP0_MIN,
+		     CFG_PRB_REQ_IE_BIT_MAP0_MAX),
+
+	REG_VARIABLE(CFG_PRB_REQ_IE_BIT_MAP1_NAME, WLAN_PARAM_HexInteger,
+		     struct hdd_config, probe_req_ie_bitmap_1,
+		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		     CFG_PRB_REQ_IE_BIT_MAP1_DEFAULT,
+		     CFG_PRB_REQ_IE_BIT_MAP1_MIN,
+		     CFG_PRB_REQ_IE_BIT_MAP1_MAX),
+
+	REG_VARIABLE(CFG_PRB_REQ_IE_BIT_MAP2_NAME, WLAN_PARAM_HexInteger,
+		     struct hdd_config, probe_req_ie_bitmap_2,
+		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		     CFG_PRB_REQ_IE_BIT_MAP2_DEFAULT,
+		     CFG_PRB_REQ_IE_BIT_MAP2_MIN,
+		     CFG_PRB_REQ_IE_BIT_MAP2_MAX),
+
+	REG_VARIABLE(CFG_PRB_REQ_IE_BIT_MAP3_NAME, WLAN_PARAM_HexInteger,
+		     struct hdd_config, probe_req_ie_bitmap_3,
+		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		     CFG_PRB_REQ_IE_BIT_MAP3_DEFAULT,
+		     CFG_PRB_REQ_IE_BIT_MAP3_MIN,
+		     CFG_PRB_REQ_IE_BIT_MAP3_MAX),
+
+	REG_VARIABLE(CFG_PRB_REQ_IE_BIT_MAP4_NAME, WLAN_PARAM_HexInteger,
+		     struct hdd_config, probe_req_ie_bitmap_4,
+		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		     CFG_PRB_REQ_IE_BIT_MAP4_DEFAULT,
+		     CFG_PRB_REQ_IE_BIT_MAP4_MIN,
+		     CFG_PRB_REQ_IE_BIT_MAP4_MAX),
+
+	REG_VARIABLE(CFG_PRB_REQ_IE_BIT_MAP5_NAME, WLAN_PARAM_HexInteger,
+		     struct hdd_config, probe_req_ie_bitmap_5,
+		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		     CFG_PRB_REQ_IE_BIT_MAP5_DEFAULT,
+		     CFG_PRB_REQ_IE_BIT_MAP5_MIN,
+		     CFG_PRB_REQ_IE_BIT_MAP5_MAX),
+
+	REG_VARIABLE(CFG_PRB_REQ_IE_BIT_MAP6_NAME, WLAN_PARAM_HexInteger,
+		     struct hdd_config, probe_req_ie_bitmap_6,
+		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		     CFG_PRB_REQ_IE_BIT_MAP6_DEFAULT,
+		     CFG_PRB_REQ_IE_BIT_MAP6_MIN,
+		     CFG_PRB_REQ_IE_BIT_MAP6_MAX),
+
+	REG_VARIABLE(CFG_PRB_REQ_IE_BIT_MAP7_NAME, WLAN_PARAM_HexInteger,
+		     struct hdd_config, probe_req_ie_bitmap_7,
+		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		     CFG_PRB_REQ_IE_BIT_MAP7_DEFAULT,
+		     CFG_PRB_REQ_IE_BIT_MAP7_MIN,
+		     CFG_PRB_REQ_IE_BIT_MAP7_MAX),
+
+	REG_VARIABLE_STRING(CFG_PROBE_REQ_OUI_NAME, WLAN_PARAM_String,
+			    struct hdd_config, probe_req_ouis,
+			    VAR_FLAGS_OPTIONAL,
+			    (void *)CFG_PROBE_REQ_OUI_DEFAULT),
 };
 
 /**
@@ -5980,6 +6063,40 @@ void hdd_cfg_print(hdd_context_t *pHddCtx)
 	hdd_info("Name = [%s] Value =[%s]",
 		 CFG_PROBE_REQ_OUI_NAME,
 		 pHddCtx->config->probe_req_ouis);
+	hdd_debug("Name = [%s] Value = [%d]",
+		CFG_ARP_AC_CATEGORY,
+		pHddCtx->config->arp_ac_category);
+
+	hdd_info("Name = [%s] Value = [%x] ",
+		 CFG_PRB_REQ_IE_WHITELIST_NAME,
+		 pHddCtx->config->probe_req_ie_whitelist);
+	hdd_info("Name = [%s] Value = [%x] ",
+		 CFG_PRB_REQ_IE_BIT_MAP0_NAME,
+		 pHddCtx->config->probe_req_ie_bitmap_0);
+	hdd_info("Name = [%s] Value = [%x] ",
+		 CFG_PRB_REQ_IE_BIT_MAP1_NAME,
+		 pHddCtx->config->probe_req_ie_bitmap_1);
+	hdd_info("Name = [%s] Value = [%x] ",
+		 CFG_PRB_REQ_IE_BIT_MAP2_NAME,
+		 pHddCtx->config->probe_req_ie_bitmap_2);
+	hdd_info("Name = [%s] Value = [%x] ",
+		 CFG_PRB_REQ_IE_BIT_MAP3_NAME,
+		 pHddCtx->config->probe_req_ie_bitmap_3);
+	hdd_info("Name = [%s] Value = [%x] ",
+		 CFG_PRB_REQ_IE_BIT_MAP4_NAME,
+		 pHddCtx->config->probe_req_ie_bitmap_4);
+	hdd_info("Name = [%s] Value = [%x] ",
+		 CFG_PRB_REQ_IE_BIT_MAP5_NAME,
+		 pHddCtx->config->probe_req_ie_bitmap_5);
+	hdd_info("Name = [%s] Value = [%x] ",
+		 CFG_PRB_REQ_IE_BIT_MAP6_NAME,
+		 pHddCtx->config->probe_req_ie_bitmap_6);
+	hdd_info("Name = [%s] Value = [%x] ",
+		 CFG_PRB_REQ_IE_BIT_MAP7_NAME,
+		 pHddCtx->config->probe_req_ie_bitmap_7);
+	hdd_info("Name = [%s] Value =[%s]",
+		 CFG_PROBE_REQ_OUI_NAME,
+		 pHddCtx->config->probe_req_ouis);
 }
 
 /**
@@ -6524,7 +6641,7 @@ static bool hdd_update_ht_cap_in_cfg(hdd_context_t *hdd_ctx)
 	}
 	val16 = (uint16_t) val32;
 	ht_cap_info = (tSirMacHTCapabilityInfo *) &val16;
-	ht_cap_info->advCodingCap &= hdd_ctx->config->enableRxLDPC;
+	ht_cap_info->advCodingCap &= hdd_ctx->config->enable_rx_ldpc;
 	ht_cap_info->rxSTBC = QDF_MIN(ht_cap_info->rxSTBC,
 			hdd_ctx->config->enableRxSTBC);
 	ht_cap_info->txSTBC &= hdd_ctx->config->enableTxSTBC;
@@ -6640,7 +6757,7 @@ static bool hdd_update_vht_cap_in_cfg(hdd_context_t *hdd_ctx)
 		hdd_err("Could not get WNI_CFG_VHT_LDPC_CODING_CAP");
 	}
 	if (sme_cfg_set_int(hdd_ctx->hHal, WNI_CFG_VHT_LDPC_CODING_CAP,
-			config->enableRxLDPC & val) == QDF_STATUS_E_FAILURE) {
+			config->enable_rx_ldpc & val) == QDF_STATUS_E_FAILURE) {
 		status = false;
 		hdd_err("Couldn't pass on WNI_CFG_VHT_LDPC_CODING_CAP to CFG");
 	}
@@ -7406,8 +7523,10 @@ QDF_STATUS hdd_set_sme_config(hdd_context_t *pHddCtx)
 	/* Scan Results Aging Time out value */
 	smeConfig->csrConfig.scanCfgAgingTime = pConfig->scanAgingTimeout;
 
-	smeConfig->csrConfig.enableTxLdpc = pConfig->enableTxLdpc;
-	smeConfig->csrConfig.enableRxLDPC = pConfig->enableRxLDPC;
+	smeConfig->csrConfig.enable_tx_ldpc = pConfig->enable_tx_ldpc;
+	smeConfig->csrConfig.enable_rx_ldpc = pConfig->enable_rx_ldpc;
+	smeConfig->csrConfig.rx_ldpc_support_for_2g =
+					pConfig->rx_ldpc_support_for_2g;
 #ifdef FEATURE_WLAN_MCC_TO_SCC_SWITCH
 	smeConfig->csrConfig.cc_switch_mode = pConfig->WlanMccToSccSwitchMode;
 #endif

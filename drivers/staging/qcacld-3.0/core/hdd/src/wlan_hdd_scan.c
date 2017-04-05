@@ -1570,6 +1570,7 @@ static int __wlan_hdd_cfg80211_scan(struct wiphy *wiphy,
 	bool is_p2p_scan = false;
 	uint8_t curr_session_id;
 	scan_reject_states curr_reason;
+	static uint32_t scan_ebusy_cnt;
 
 	ENTER();
 
@@ -1635,9 +1636,11 @@ static int __wlan_hdd_cfg80211_scan(struct wiphy *wiphy,
 	}
 	if (!wma_is_hw_dbs_capable()) {
 		if (true == pScanInfo->mScanPending) {
+			scan_ebusy_cnt++;
 			if (MAX_PENDING_LOG >
 				pScanInfo->mScanPendingCounter++) {
-				hdd_warn("mScanPending is true");
+				hdd_err("mScanPending is true. scan_ebusy_cnt: %d",
+					scan_ebusy_cnt);
 			}
 			return -EBUSY;
 		}
@@ -1648,7 +1651,9 @@ static int __wlan_hdd_cfg80211_scan(struct wiphy *wiphy,
 		 * If no action frame pending
 		 */
 		if (0 != wlan_hdd_check_remain_on_channel(pAdapter)) {
-			hdd_warn("Remain On Channel Pending");
+			scan_ebusy_cnt++;
+			hdd_err("Remain On Channel Pending. scan_ebusy_cnt: %d",
+				scan_ebusy_cnt);
 			return -EBUSY;
 		}
 	}
@@ -1674,13 +1679,16 @@ static int __wlan_hdd_cfg80211_scan(struct wiphy *wiphy,
 #endif
 
 	if (pHddCtx->btCoexModeSet) {
-		cds_info("BTCoex Mode operation in progress");
+		scan_ebusy_cnt++;
+		cds_info("BTCoex Mode operation in progress. scan_ebusy_cnt: %d",
+			 scan_ebusy_cnt);
 		return -EBUSY;
 	}
 
 	/* Check if scan is allowed at this point of time */
 	if (cds_is_connection_in_progress(&curr_session_id, &curr_reason)) {
-		hdd_err("Scan not allowed");
+		scan_ebusy_cnt++;
+		hdd_err("Scan not allowed. scan_ebusy_cnt: %d", scan_ebusy_cnt);
 		if (pHddCtx->last_scan_reject_session_id != curr_session_id ||
 		    pHddCtx->last_scan_reject_reason != curr_reason ||
 		    !pHddCtx->last_scan_reject_timestamp) {
@@ -1992,7 +2000,9 @@ static int __wlan_hdd_cfg80211_scan(struct wiphy *wiphy,
 	if (QDF_STATUS_SUCCESS != status) {
 		hdd_err("sme_scan_request returned error %d", status);
 		if (QDF_STATUS_E_RESOURCES == status) {
-			hdd_warn("HO is in progress. Defer the scan by informing busy");
+			scan_ebusy_cnt++;
+			hdd_err("HO is in progress. Defer scan scan_ebusy_cnt: %d",
+				scan_ebusy_cnt);
 			status = -EBUSY;
 		} else {
 			status = -EIO;
@@ -2013,6 +2023,9 @@ free_mem:
 
 	if (channelList)
 		qdf_mem_free(channelList);
+
+	if (status == 0)
+		scan_ebusy_cnt = 0;
 
 	if (scan_req.voui)
 		qdf_mem_free(scan_req.voui);
@@ -2702,6 +2715,7 @@ static void hdd_config_sched_scan_plan(tpSirPNOScanReq pno_req,
 			       struct cfg80211_sched_scan_request *request,
 			       hdd_context_t *hdd_ctx)
 {
+	pno_req->delay_start_time = request->delay;
 	/*
 	 * As of now max 2 scan plans were supported by firmware
 	 * if number of scan plan supported by firmware increased below logic
@@ -3300,7 +3314,7 @@ void hdd_cleanup_scan_queue(hdd_context_t *hdd_ctx)
 			return;
 		}
 		qdf_spin_unlock(&hdd_ctx->hdd_scan_req_q_lock);
-		hdd_scan_req = (struct hdd_scan_req *)node;
+		hdd_scan_req = container_of(node, struct hdd_scan_req, node);
 		req = hdd_scan_req->scan_request;
 		source = hdd_scan_req->source;
 		adapter = hdd_scan_req->adapter;
@@ -3333,6 +3347,7 @@ void hdd_cleanup_scan_queue(hdd_context_t *hdd_ctx)
 void hdd_scan_context_destroy(hdd_context_t *hdd_ctx)
 {
 	qdf_list_destroy(&hdd_ctx->hdd_scan_req_q);
+	qdf_spinlock_destroy(&hdd_ctx->hdd_scan_req_q_lock);
 	qdf_spinlock_destroy(&hdd_ctx->sched_scan_lock);
 }
 
@@ -3347,7 +3362,6 @@ void hdd_scan_context_destroy(hdd_context_t *hdd_ctx)
 int hdd_scan_context_init(hdd_context_t *hdd_ctx)
 {
 	qdf_spinlock_create(&hdd_ctx->sched_scan_lock);
-
 	qdf_spinlock_create(&hdd_ctx->hdd_scan_req_q_lock);
 	qdf_list_create(&hdd_ctx->hdd_scan_req_q, CFG_MAX_SCAN_COUNT_MAX);
 

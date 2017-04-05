@@ -2913,7 +2913,7 @@ sme_QosStatusType sme_qos_setup(tpAniSirGlobal pMac,
 QDF_STATUS sme_qos_process_set_key_success_ind(tpAniSirGlobal pMac,
 					       uint8_t sessionId, void *pEvent_info)
 {
-	QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_WARN,
+	QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_INFO,
 		  "########### Set Key Complete #############");
 	(void)sme_qos_process_buffered_cmd(sessionId);
 	return QDF_STATUS_SUCCESS;
@@ -4261,6 +4261,7 @@ QDF_STATUS sme_qos_process_del_ts_ind(tpAniSirGlobal pMac, void *pMsgBuf)
 	uint8_t sessionId = pdeltsind->sessionId;
 	sme_QosEdcaAcType ac;
 	sme_QosSearchInfo search_key;
+	tSirMacTSInfo *tsinfo;
 	sme_QosWmmUpType up =
 		(sme_QosWmmUpType) pdeltsind->rsp.tspec.tsinfo.traffic.userPrio;
 #ifdef FEATURE_WLAN_DIAG_SUPPORT
@@ -4269,6 +4270,7 @@ QDF_STATUS sme_qos_process_del_ts_ind(tpAniSirGlobal pMac, void *pMsgBuf)
 	QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
 		  "%s: %d: Invoked on session %d for UP %d",
 		  __func__, __LINE__, sessionId, up);
+	tsinfo = &pdeltsind->rsp.tspec.tsinfo;
 	ac = sme_qos_up_to_ac(up);
 	if (SME_QOS_EDCA_AC_MAX == ac) {
 		/* err msg */
@@ -4295,6 +4297,7 @@ QDF_STATUS sme_qos_process_del_ts_ind(tpAniSirGlobal pMac, void *pMsgBuf)
 		QDF_ASSERT(0);
 		return QDF_STATUS_E_FAILURE;
 	}
+	sme_set_tspec_uapsd_mask_per_session(pMac, tsinfo, sessionId);
 /* event: EVENT_WLAN_QOS */
 #ifdef FEATURE_WLAN_DIAG_SUPPORT
 	qos.eventId = SME_QOS_DIAG_DELTS;
@@ -6361,7 +6364,7 @@ static QDF_STATUS sme_qos_delete_existing_flows(tpAniSirGlobal pMac,
 	sme_QosFlowInfoEntry *flow_info = NULL;
 	pEntry = csr_ll_peek_head(&sme_qos_cb.flow_list, true);
 	if (!pEntry) {
-		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_WARN,
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
 			  "%s: %d: Flow List empty, nothing to delete",
 			  __func__, __LINE__);
 		return QDF_STATUS_E_FAILURE;
@@ -6568,7 +6571,7 @@ static QDF_STATUS sme_qos_delete_buffered_requests(tpAniSirGlobal pMac,
 	pSession = &sme_qos_cb.sessionInfo[sessionId];
 	pEntry = csr_ll_peek_head(&pSession->bufferedCommandList, true);
 	if (!pEntry) {
-		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_WARN,
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
 			  "%s: %d: Buffered List empty, nothing to delete on session %d",
 			  __func__, __LINE__, sessionId);
 		return QDF_STATUS_E_FAILURE;
