@@ -305,6 +305,11 @@ config BATTERY_RX51
 	  Say Y here to enable support for battery information on Nokia
 	  RX-51, also known as N900 tablet.
 
+config HTC_BATTERY
+        tristate "htc battery feature"
+        help
+          Say Y to enable htc battery feature.
+
 config CHARGER_ISP1704
 	tristate "ISP1704 USB Charger Detection"
 	depends on USB_PHY
