@@ -2624,7 +2624,7 @@ static enum flash_area fwu_go_nogo(void)
 		config_id_size = V5V6_CONFIG_ID_SIZE;
 
 	for (ii = 0; ii < config_id_size; ii++) {
-		if (fwu->img.ui_config.data[ii] > fwu->config_id[ii]) {
+		if (fwu->img.ui_config.data[ii] != fwu->config_id[ii]) {
 			/* Reflash the entire firmware to fix improperly flashed
 			   devices. These devices have the same firmware ID, but
 			   the config within the firmware is incorrect.
