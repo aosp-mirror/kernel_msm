@@ -20,6 +20,7 @@
 #include <linux/msm_ion.h>
 #include <uapi/linux/mnh-sm.h>
 #include "mnh-pcie.h"
+#include "mnh-crypto.h"
 
 /* Firmware download address */
 #define HW_MNH_DRAM_BASE		0x40000000
@@ -43,6 +44,8 @@ struct mnh_ion_fw_conf {
 	unsigned long ap_offs;  /* Slot's offset in the ion buffer */
 	uint64_t ep_addr;	/* EP side addr (phys) */
 	size_t size;		/* size of firmware */
+	enum cert_state cert;   /* signature status */
+	size_t cert_size;       /* length of the signature */
 };
 
 struct mnh_ion {

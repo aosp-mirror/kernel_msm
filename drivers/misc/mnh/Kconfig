@@ -34,3 +34,24 @@ config MNH_PCIE_MULTIPLE_MSI
     default "n"
     ---help---
        Include support for multiple MSIs in MNH PCIe Host driver
+
+config MNH_SIG
+    tristate "MNH signing engine"
+    depends on MNH_SM_HOST
+    default "n"
+    ---help---
+       Adds support for authentication of MNH images
+
+config MNH_SIG_FORCE_OTA
+    tristate "MNH signature enforcement - OTA"
+    depends on MNH_SIG
+    default "n"
+    ---help---
+       Enforce firmware signing for images delivered through an OTA
+
+config MNH_SIG_FORCE_PS
+    tristate "MNH signature enforcement - Play Store"
+    depends on MNH_SIG
+    default "y"
+    ---help---
+       Enforce firmware signing for images delivered through the Play Store
