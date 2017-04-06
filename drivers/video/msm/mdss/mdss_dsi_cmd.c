@@ -701,29 +701,53 @@ static char set_pre_idle_mode2[2] = {0x14, 0xa0};
 static struct dsi_cmd_desc dsi_pre_idle_cmd2 = {
           {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_pre_idle_mode2)}, set_pre_idle_mode2};
 
-static char set_pre_idle_mode3[2] = {0xfe, 0x0a};
+static char set_pre_idle_mode3[2] = {0xfe, 0x04};
 static struct dsi_cmd_desc dsi_pre_idle_cmd3 = {
           {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_pre_idle_mode3)}, set_pre_idle_mode3};
 
-static char set_pre_idle_mode4[2] = {0x29, 0x90};
+static char set_pre_idle_mode4[2] = {0x1b, 0x8d};
 static struct dsi_cmd_desc dsi_pre_idle_cmd4 = {
           {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_pre_idle_mode4)}, set_pre_idle_mode4};
+
+static char set_pre_idle_mode5[2] = {0xfe, 0x02};
+static struct dsi_cmd_desc dsi_pre_idle_cmd5 = {
+          {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_pre_idle_mode5)}, set_pre_idle_mode5};
+
+static char set_pre_idle_mode6[2] = {0x00, 0x03};
+static struct dsi_cmd_desc dsi_pre_idle_cmd6 = {
+          {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_pre_idle_mode6)}, set_pre_idle_mode6};
+
+static char set_pre_idle_mode7[2] = {0x01, 0xff};
+static struct dsi_cmd_desc dsi_pre_idle_cmd7 = {
+          {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_pre_idle_mode7)}, set_pre_idle_mode7};		  
+
+static char set_pre_idle_mode8[2] = {0x34, 0x03};
+static struct dsi_cmd_desc dsi_pre_idle_cmd8 = {
+          {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_pre_idle_mode8)}, set_pre_idle_mode8};	
+
+static char set_pre_idle_mode9[2] = {0x35, 0xff};
+static struct dsi_cmd_desc dsi_pre_idle_cmd9 = {
+          {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_pre_idle_mode9)}, set_pre_idle_mode9};	
+
+static char set_pre_idle_mode10[2] = {0x69, 0x03};
+static struct dsi_cmd_desc dsi_pre_idle_cmd10 = {
+          {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_pre_idle_mode10)}, set_pre_idle_mode10};	
+
+static char set_pre_idle_mode11[2] = {0x6a, 0xff};
+static struct dsi_cmd_desc dsi_pre_idle_cmd11 = {
+          {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_pre_idle_mode11)}, set_pre_idle_mode11};	
 
 static char set_idle_mode[2] = {0x39, 0x00};
 static struct dsi_cmd_desc dsi_into_idle_cmd = {
           {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_idle_mode)}, set_idle_mode};
 
-static char set_pre_non_idle_mode1[2] = {0x36, 0x22};
+static char set_pre_non_idle_mode1[2] = {0xfe, 0x01};
 static struct dsi_cmd_desc dsi_pre_exit_idle_cmd1 = {
           {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_pre_non_idle_mode1)}, set_pre_non_idle_mode1};
 
-static char set_pre_non_idle_mode2[2] = {0xfe, 0x0a};
+static char set_pre_non_idle_mode2[2] = {0x36, 0x22};
 static struct dsi_cmd_desc dsi_pre_exit_idle_cmd2 = {
           {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_pre_non_idle_mode2)}, set_pre_non_idle_mode2};
-
-static char set_pre_non_idle_mode3[2] = {0x29, 0x10};
-static struct dsi_cmd_desc dsi_pre_exit_idle_cmd3 = {
-          {DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(set_pre_non_idle_mode3)}, set_pre_non_idle_mode3};
 
 static char set_non_idle_mode[2] = {0x38, 0x00};
 static struct dsi_cmd_desc dsi_exit_idle_cmd = {
@@ -822,6 +846,13 @@ void mdss_dsi_3bit_mode_enable(struct mdss_dsi_ctrl_pdata *ctrl, int enable)
 		mdss_dsi_send_cmd(ctrl, &dsi_pre_idle_cmd2);
 		mdss_dsi_send_cmd(ctrl, &dsi_pre_idle_cmd3);
 		mdss_dsi_send_cmd(ctrl, &dsi_pre_idle_cmd4);
+		mdss_dsi_send_cmd(ctrl, &dsi_pre_idle_cmd5);
+		mdss_dsi_send_cmd(ctrl, &dsi_pre_idle_cmd6);
+		mdss_dsi_send_cmd(ctrl, &dsi_pre_idle_cmd7);
+		mdss_dsi_send_cmd(ctrl, &dsi_pre_idle_cmd8);
+		mdss_dsi_send_cmd(ctrl, &dsi_pre_idle_cmd9);
+		mdss_dsi_send_cmd(ctrl, &dsi_pre_idle_cmd10);
+		mdss_dsi_send_cmd(ctrl, &dsi_pre_idle_cmd11);
 		mdss_dsi_send_cmd(ctrl, &dsi_ucs_cmd);
 		mdss_dsi_send_cmd(ctrl, &dsi_into_idle_cmd);
 	}
@@ -831,10 +862,8 @@ void mdss_dsi_3bit_mode_enable(struct mdss_dsi_ctrl_pdata *ctrl, int enable)
 
 		pr_debug("[Debug] set 3-bit color mode disable\n");
 	
-		mdss_dsi_send_cmd(ctrl, &dsi_3bit_pre_cmd);
 		mdss_dsi_send_cmd(ctrl, &dsi_pre_exit_idle_cmd1);
 		mdss_dsi_send_cmd(ctrl, &dsi_pre_exit_idle_cmd2);
-		mdss_dsi_send_cmd(ctrl, &dsi_pre_exit_idle_cmd3);
 		mdss_dsi_send_cmd(ctrl, &dsi_ucs_cmd);
 		mdss_dsi_send_cmd(ctrl, &dsi_exit_idle_cmd);
 	}
