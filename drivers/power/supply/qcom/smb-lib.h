@@ -19,6 +19,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/thermal.h>
 #include <linux/types.h>
+#include <linux/wakelock.h>
 #include "storm-watch.h"
 
 enum print_reason {
@@ -343,10 +344,12 @@ struct smb_charger {
 	bool			port_overheat;
 	const char		*usb_port_tz_name;
 	bool			port_overheat_mitigation_enabled;
+	bool			port_overheat_mitigation_running;
 	int			port_overheat_mitigation_begin_temp;
 	int			port_overheat_mitigation_end_temp;
-	int			port_overheat_mitigation_work_interval;
 	u8			port_overheat_mitigation_typec_irq;
+	int			port_overheat_mitigation_work_interval;
+	struct wake_lock	port_overheat_mitigation_work_wakelock;
 
 	/*
 	 * flag set to keep typec power role in disabled state during port
