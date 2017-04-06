@@ -608,12 +608,7 @@ static int fts_init(struct fts_ts_info *info)
 	unsigned char regAdd[8];
 	int rc = 0;
 
-	rc = fts_systemreset(info);
-	if (rc < 0) {
-		tsp_debug_err(&info->client->dev, "%s: Failed to i2c(rc = %d)\n",
-				__func__, rc);
-		return rc;
-	}
+	fts_systemreset(info);
 
 	rc = fts_wait_for_ready(info);
 	if (rc == -FTS_ERROR_EVENT_ID) {
@@ -625,8 +620,9 @@ static int fts_init(struct fts_ts_info *info)
 	}
 
 	rc = fts_read_chip_id(info);
-	if (rc < 0)
-		return rc;
+	tsp_debug_err(&info->client->dev, "%s: Failed to fts_read_chip_id\n",
+				__func__);
+
 /*
 	rc  = fts_fw_update(info);
 	if (rc  < 0)
@@ -647,7 +643,6 @@ static int fts_init(struct fts_ts_info *info)
 						"FTS read failed rc = %d\n", rc);
 			tsp_debug_info(&info->client->dev,
 						"FTS Initialise Failed\n");
-			return rc;
 		}
 		info->pFrame =
 			kzalloc(info->SenseChannelLength * info->ForceChannelLength * 2,

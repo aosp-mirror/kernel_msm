@@ -180,8 +180,13 @@ static ssize_t store_check_fw(struct device *dev, struct device_attribute *devat
 		return -EBUSY;
 	}
 
-	if (input)
+	if (input) {
+		mutex_lock(&info->device_mutex);
+
 		fts_fw_update(info);
+
+		mutex_unlock(&info->device_mutex);
+	}
 
 	return count;
 }
@@ -194,11 +199,15 @@ static ssize_t store_upgrade(struct device *dev,
 	if (sscanf(buf, "%255s", &info->test_fwpath[0]) <= 0)
 		return count;
 
+	mutex_lock(&info->device_mutex);
+
 	info->force_fwup = 1;
 
 	fts_fw_update(info);
 
 	info->force_fwup = 0;
+
+	mutex_unlock(&info->device_mutex);
 
 	return count;
 }
@@ -208,11 +217,15 @@ static ssize_t show_upgrade(struct device *dev,
 {
 	struct fts_ts_info *info = dev_get_drvdata(dev);
 
+	mutex_lock(&info->device_mutex);
+
 	info->force_fwup = 1;
 
 	fts_fw_update(info);
 
 	info->force_fwup = 0;
+
+	mutex_unlock(&info->device_mutex);
 
 	return 0;
 }
@@ -225,8 +238,14 @@ static ssize_t show_version_info(struct device *dev,
 	char str[16] = {0};
 	int ret = 0;
 
-	if (fts_get_version_info(info) < 0)
+	mutex_lock(&info->device_mutex);
+
+	if (fts_get_version_info(info) < 0) {
+		mutex_unlock(&info->device_mutex);
 		return -EINVAL;
+	}
+
+	mutex_unlock(&info->device_mutex);
 
 	ret += snprintf(str + ret, sizeof(str) - ret,
 		"v%d.%02d", info->ic_fw_ver.major, info->ic_fw_ver.minor);
