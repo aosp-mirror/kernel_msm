@@ -387,8 +387,7 @@ int Temperature_fn(void)
 		pr_err("stc311x - Error reading pm8916 mpp3: %d\n", res);
 		goto Error;
 	} else {
-		//pr_debug("stc311x - pm8916 mpp3,  temperature = %lld \n", result.physical);
-		pr_err("stc311x - pm8916 mpp3,  temperature = %lld \n", result.physical);
+		pr_debug("stc311x - pm8916 mpp3,  temperature = %lld \n", result.physical);
 		return (int)(result.physical * 10);
 	}
 
@@ -798,11 +797,11 @@ static void STC311x_SetParam(void)
 	STC31xx_WriteByte(STC311x_REG_CTRL, 0x83);
 
 	if (BattData.Vmode) {
-		/*   set GG_RUN=1, voltage mode, alm enabled */
-		STC31xx_WriteByte(STC311x_REG_MODE, 0x19);
+		/*   set GG_RUN=1, voltage mode, alm disabled */
+		STC31xx_WriteByte(STC311x_REG_MODE, 0x11);
 	} else {
-		/*   set GG_RUN=1, mixed mode, alm enabled */
-		STC31xx_WriteByte(STC311x_REG_MODE, 0x18);
+		/*   set GG_RUN=1, mixed mode, alm disabled */
+		STC31xx_WriteByte(STC311x_REG_MODE, 0x10);
 	}
 }
 
@@ -856,10 +855,12 @@ static int STC311x_Startup(void)
  * Input          : None
  * Return         :
  *****************************************************************************/
+#define SOC_DIFF 3
 static int STC311x_Restore(void)
 {
 	int res;
 	int ocv;
+	int ram_soc, reg_soc;
 
 	/* check STC310x status */
 	res = STC311x_Status();
@@ -874,8 +875,17 @@ static int STC311x_Restore(void)
 	/* if restore from unexpected reset, restore SOC (system dependent) */
 	if (GG_Ram.reg.GG_Status == GG_RUNNING) {
 		if (GG_Ram.reg.SOC != 0) {
-			/*   restore SOC */
-			STC31xx_WriteWord(STC311x_REG_SOC, GG_Ram.reg.HRSOC);
+			//compare the ram SOC with register SOC.
+			reg_soc = (STC31xx_ReadWord(STC311x_REG_SOC)/512);
+			ram_soc = (GG_Ram.reg.HRSOC/512);
+			pr_info("reg_soc:%d, ram_HRSOC:%d \n", reg_soc, ram_soc);
+			if (reg_soc <= STC311x_SOC_THRESHOLD)
+				pr_err("Battery is low, skip restore SOC from ram \n");
+			else if (((reg_soc > ram_soc) && (reg_soc - ram_soc > SOC_DIFF)) || ((ram_soc > reg_soc) && (ram_soc - reg_soc > SOC_DIFF)))
+				pr_err("SOC not match, skip restore SOC from ram \n");
+			else
+				/*   restore SOC */
+				STC31xx_WriteWord(STC311x_REG_SOC, GG_Ram.reg.HRSOC);
 		}
 	}
 
@@ -954,17 +964,17 @@ static int STC311x_SaveVMCnf(void)
 	STC31xx_WriteWord(STC311x_REG_VM_CNF, GG_Ram.reg.VM_cnf);
 
 	if (BattData.Vmode) {
-		/*   set GG_RUN=1, voltage mode, alm enabled */
-		STC31xx_WriteByte(STC311x_REG_MODE, 0x19);
+		/*   set GG_RUN=1, voltage mode, alm disabled */
+		STC31xx_WriteByte(STC311x_REG_MODE, 0x11);
 	} else {
-		/*   set GG_RUN=1, mixed mode, alm enabled */
-		STC31xx_WriteByte(STC311x_REG_MODE, 0x18);
+		/*   set GG_RUN=1, mixed mode, alm disabled */
+		STC31xx_WriteByte(STC311x_REG_MODE, 0x10);
 		if (BattData.GG_Mode == CC_MODE) {
 			/*   force CC mode */
-			STC31xx_WriteByte(STC311x_REG_MODE, 0x38);
+			STC31xx_WriteByte(STC311x_REG_MODE, 0x30);
 		} else {
 			/*   force VM mode */
-			STC31xx_WriteByte(STC311x_REG_MODE, 0x58);
+			STC31xx_WriteByte(STC311x_REG_MODE, 0x50);
 		}
 	}
 
@@ -1831,7 +1841,7 @@ static void STC311x_Rewrite_OCV(void)
 
 	pr_info("Rewrite OCV due to standby mode, reg_mode = 0x%x \n", mode);
 	//set operation mode to get current
-	STC31xx_WriteByte(STC311x_REG_MODE, 0x18);
+	STC31xx_WriteByte(STC311x_REG_MODE, 0x10);
 	mdelay(200);
 
 	/* read OCV */
@@ -1959,6 +1969,8 @@ int GasGauge_Task(struct GasGauge_DataTypeDef *GG)
 		//If read PMIC NTC success, update the temperature. Else, use stc3117 temperature
 		if (batt_temp != BATTERY_NTC_ERROR_TEMP)
 			BattData.Temperature = batt_temp;
+		else
+			pr_err("stc3117 temp = %d, NTC temp error = %d \n", BattData.Temperature, batt_temp);
 	}
 
 	/* check INIT state */
@@ -2075,7 +2087,8 @@ int GasGauge_Task(struct GasGauge_DataTypeDef *GG)
 		if (BattData.HRSOC > (MAX_HRSOC+512)) {
 			BattData.SOC = MAX_SOC;
 			STC311x_SetSOC(MAX_HRSOC+512);
-		}
+		} else if (BattData.SOC <= 0)
+			BattData.SOC = 0;
 
 		/* -------- APPLICATION RESULTS ------------ */
 
