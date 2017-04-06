@@ -79,6 +79,9 @@ HW_OUTx(HWIO_PCIE_SS_BASE_ADDR, PCIE_SS, reg, inst, val)
 #define INIT_DONE 0x1
 #define INIT_RESUME 0x2
 
+/* Timeout for waiting for MNH to be powered */
+#define POWERED_COMPLETE_TIMEOUT msecs_to_jiffies(5000)
+
 /* Timeout for waiting for MNH to suspend after issuing request */
 #define SUSPEND_COMPLETE_TIMEOUT msecs_to_jiffies(5000)
 
@@ -134,6 +137,10 @@ struct mnh_sm_device {
 	struct kthread_work set_state_work;
 	struct task_struct *thread;
 	int next_state;
+
+	/* completion used to signal when mnh is powered */
+	struct completion powered_complete;
+	bool powered;
 
 	/* completion used for signaling kthread work is complete */
 	struct completion work_complete;
@@ -205,7 +212,7 @@ static ssize_t mnh_sm_poweron_show(struct device *dev,
 	ssize_t strlen = 0;
 
 	dev_dbg(dev, "Entering mnh_sm_poweron_show...\n");
-	mnh_sm_set_state(MNH_STATE_PENDING);
+	mnh_sm_set_state(MNH_STATE_ACTIVE);
 	return strlen;
 }
 
@@ -521,7 +528,6 @@ static ssize_t mnh_sm_download_show(struct device *dev,
 
 static DEVICE_ATTR(download, S_IRUSR | S_IRGRP,
 		mnh_sm_download_show, NULL);
-
 
 static ssize_t mnh_sm_suspend_show(struct device *dev,
 			     struct device_attribute *attr,
@@ -1170,21 +1176,20 @@ static int mnh_sm_set_state_locked(int state)
 
 	switch (state) {
 	case MNH_STATE_OFF:
+		/* toggle powered flag and clear completion */
+		mnh_sm_dev->powered = false;
+		reinit_completion(&mnh_sm_dev->powered_complete);
+
 		ret = mnh_sm_poweroff();
 		break;
-	case MNH_STATE_PENDING:
-		if (mnh_sm_dev->state == MNH_STATE_ACTIVE)
-			ret = mnh_sm_set_state_locked(MNH_STATE_OFF);
-		if (!ret)
-			ret = mnh_sm_poweron();
-		break;
 	case MNH_STATE_ACTIVE:
-		/* make sure we are powered */
-		if ((mnh_sm_dev->state == MNH_STATE_OFF) ||
-		    (mnh_sm_dev->state == MNH_STATE_SUSPEND))
-			ret = mnh_sm_set_state_locked(MNH_STATE_PENDING);
+		ret = mnh_sm_poweron();
 		if (ret)
 			break;
+
+		/* toggle powered flag and notify any waiting threads */
+		mnh_sm_dev->powered = true;
+		complete(&mnh_sm_dev->powered_complete);
 
 		/* make sure ddr is configured */
 		if (mnh_sm_dev->ddr_status == MNH_DDR_OFF)
@@ -1205,8 +1210,13 @@ static int mnh_sm_set_state_locked(int state)
 		break;
 	case MNH_STATE_SUSPEND:
 		ret = mnh_sm_set_state_locked(MNH_STATE_ACTIVE);
-		if (!ret)
+		if (!ret) {
+			/* toggle powered flag and clear completion */
+			mnh_sm_dev->powered = false;
+			reinit_completion(&mnh_sm_dev->powered_complete);
+
 			ret = mnh_sm_suspend();
+		}
 		break;
 	default:
 		dev_err(mnh_sm_dev->dev,
@@ -1310,6 +1320,25 @@ static void mnh_sm_set_state_work(struct kthread_work *data)
 	complete(&mnh_sm_dev->work_complete);
 }
 
+static int mnh_sm_wait_for_power(void)
+{
+	unsigned long timeout;
+
+	if (mnh_sm_dev->powered)
+		return 0;
+
+	timeout = wait_for_completion_timeout(&mnh_sm_dev->powered_complete,
+		POWERED_COMPLETE_TIMEOUT);
+	if (!timeout) {
+		dev_err(mnh_sm_dev->dev,
+			"%s: timeout waiting for mnh to power on\n",
+			__func__);
+		return -ETIMEDOUT;
+	}
+
+	return 0;
+}
+
 static int mnh_sm_wait_for_state(int state)
 {
 	unsigned long timeout;
@@ -1320,8 +1349,7 @@ static int mnh_sm_wait_for_state(int state)
 	if (mnh_sm_dev->next_state != state)
 		return -EINVAL;
 
-	timeout = wait_for_completion_timeout(
-		&mnh_sm_dev->work_complete,
+	timeout = wait_for_completion_timeout(&mnh_sm_dev->work_complete,
 		STATE_CHANGE_COMPLETE_TIMEOUT);
 	if (!timeout) {
 		dev_err(mnh_sm_dev->dev,
@@ -1383,6 +1411,9 @@ static long mnh_sm_ioctl(struct file *file, unsigned int cmd,
 		mnh_sm_dev->next_state = (int)arg;
 		queue_kthread_work(&mnh_sm_dev->worker,
 				   &mnh_sm_dev->set_state_work);
+		break;
+	case MNH_SM_IOC_WAIT_FOR_POWER:
+		err = mnh_sm_wait_for_power();
 		break;
 	case MNH_SM_IOC_WAIT_FOR_STATE:
 		err = mnh_sm_wait_for_state((int)arg);
@@ -1490,6 +1521,7 @@ static int mnh_sm_probe(struct platform_device *pdev)
 
 	/* initialize driver structures */
 	mutex_init(&mnh_sm_dev->lock);
+	init_completion(&mnh_sm_dev->powered_complete);
 	init_completion(&mnh_sm_dev->work_complete);
 	init_completion(&mnh_sm_dev->suspend_complete);
 

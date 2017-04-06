@@ -48,10 +48,11 @@
 	_IOW(MNH_SM_IOC_MAGIC, 4, struct mnh_mipi_config *)
 #define MNH_SM_IOC_STOP_MIPI \
 	_IOW(MNH_SM_IOC_MAGIC, 5, struct mnh_mipi_config *)
+#define MNH_SM_IOC_WAIT_FOR_POWER \
+	_IO(MNH_SM_IOC_MAGIC, 6)
 
 enum mnh_sm_state {
 	MNH_STATE_OFF, /* powered off */
-	MNH_STATE_PENDING, /* powered on, pcie ready, CPU in PBL */
 	MNH_STATE_ACTIVE, /* powered on and booted */
 	MNH_STATE_SUSPEND, /* suspended, ddr in self-refresh */
 	MNH_STATE_MAX,
