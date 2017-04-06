@@ -1,4 +1,4 @@
-/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -11,22 +11,8 @@
  */
 
 /dts-v1/;
+/plugin/;
 
-/* WIP: Device tree overlay: SoC dtbo */
-#include "msm8998-v2.1-htc_mw-common-soc.dtsi"
-
-/*
- * TODO: Device tree overlay:
- * below part is to be removed and the information will be
- * provided through DTB/DTBO partition dt_table_entry.
- */
-
-/ {
-	model = "HTC Corporation. MSM8998 v2.1 Walleye XB";
-	qcom,board-id = <444 1>;
-};
-
-/* WIP: Device tree overlay: overlay dtbo */
 #include "msm8998-v2.1-htc_mw-common-overlay.dtsi"
 #include "batterydata-walleye.dtsi"
 #include "msm8998-touch-walleye-xa.dtsi"

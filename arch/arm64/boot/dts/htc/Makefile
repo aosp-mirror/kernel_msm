@@ -1,17 +1,9 @@
-dtb-$(CONFIG_BOARD_MUSKIE) += \
-	msm8998-v2.1-htc_walleye-xe.dtb \
-	msm8998-v2.1-htc_walleye-xd.dtb \
-	msm8998-v2.1-htc_walleye-xc.dtb \
-	msm8998-v2.1-htc_walleye-xb.dtb \
-	msm8998-v2.1-htc_walleye-xa.dtb \
-	msm8998-v2.1-htc_muskie-xe.dtb \
-	msm8998-v2.1-htc_muskie-xd.dtb \
-	msm8998-v2.1-htc_muskie-xc.dtb \
-	msm8998-v2.1-htc_muskie-xb.dtb \
-	msm8998-v2.1-htc_muskie-xa.dtb \
-	msm8998-v2.1-htc_muskie-evm.dtb \
-	msm8998-htc_muskie-evm.dtb \
+dtbo-$(CONFIG_BOARD_MUSKIE) += \
+	overlay-muskie-xa_xb_xc.dtbo \
+	overlay-muskie-xd_xe.dtbo \
+	overlay-walleye-xa_xb_xc.dtbo \
+	overlay-walleye-xd_xe.dtbo
 
-always		:= $(dtb-y)
+always		:= $(dtb-y) $(dtbo-y)
 subdir-y	:= $(dts-dirs)
-clean-files	:= *.dtb
+clean-files	:= *.dtb *.dtbo

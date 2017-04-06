@@ -1,8 +1,8 @@
-dtb-$(CONFIG_BOARD_TAIMEN) += \
-	msm8998-taimen-rev-a.dtb \
-	msm8998-taimen-rev-0.dtb \
-	msm8998-taimen-rev-e.dtb
+dtbo-$(CONFIG_BOARD_TAIMEN) += \
+	overlay-taimen-rev-0.dtbo \
+	overlay-taimen-rev-a.dtbo \
+	overlay-taimen-rev-e.dtbo
 
-always		:= $(dtb-y)
+always		:= $(dtb-y) $(dtbo-y)
 subdir-y	:= $(dts-dirs)
-clean-files	:= *.dtb
+clean-files	:= *.dtb *.dtbo

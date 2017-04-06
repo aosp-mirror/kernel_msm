@@ -11,33 +11,8 @@
  */
 
 /dts-v1/;
+/plugin/;
 
-/* WIP: Device tree overlay: SoC dtbo */
-#include "../qcom/msm8998-v2.1.dtsi"
-/ {
-	compatible = "qcom,msm8998-mtp", "qcom,msm8998", "qcom,mtp";
-	firmware {
-		firmware_android: android {};
-	};
-};
-
-/ {
-	aliases: aliases {};
-	reserved_memory: reserved-memory {};
-};
-
-/*
- * TODO: Device tree overlay:
- * below part is to be removed and the information will be
- * provided through DTB/DTBO partition dt_table_entry.
- */
-
-/ {
-	model = "LGE Inc. MSM8998 v2.1 TAIMEN Rev.A";
-	qcom,board-id = <0x490 0>;
-};
-
-/* WIP: Device tree overlay: overlay dtbo */
 #include "msm8998-taimen.dtsi"
 
 &i2c_5 {
@@ -59,4 +34,16 @@
 
 &spi_5 {
 	status = "disabled";
+};
+
+&i2c_5 {
+	ftm4_fts@49 {
+		stm,firmware_name = "ftm4_fw_lb.ftb";
+	};
+};
+
+&rpm_bus {
+	rpm-regulator-ldoa18 {
+		status = "disabled";
+	};
 };
