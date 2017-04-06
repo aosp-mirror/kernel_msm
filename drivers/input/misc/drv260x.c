@@ -28,6 +28,7 @@
 
 #include <dt-bindings/input/ti-drv260x.h>
 #include <linux/platform_data/drv260x-pdata.h>
+#include "../../staging/android/timed_output.h"
 
 #define DRV260X_STATUS		0x0
 #define DRV260X_MODE		0x1
@@ -194,6 +195,12 @@ struct drv260x_data {
 	struct input_dev *input_dev;
 	struct i2c_client *client;
 	struct regmap *regmap;
+	struct hrtimer vib_timer;
+	struct timed_output_dev timed_dev;
+	int state;
+	int schedule_time;
+	struct mutex lock;
+	struct work_struct work_sim;
 	struct work_struct work;
 	struct gpio_desc *enable_gpio;
 	struct regulator *regulator;
@@ -256,6 +263,7 @@ static int drv260x_calculate_voltage(unsigned int voltage)
 	return (voltage * 255 / 5600);
 }
 
+
 static void drv260x_worker(struct work_struct *work)
 {
 	struct drv260x_data *haptics = container_of(work, struct drv260x_data, work);
@@ -311,6 +319,7 @@ static void drv260x_close(struct input_dev *input)
 			"Failed to enter standby mode: %d\n", error);
 
 	gpiod_set_value(haptics->enable_gpio, 0);
+	mutex_destroy(&haptics->lock);
 }
 
 static const struct reg_default drv260x_lra_cal_regs[] = {
@@ -510,6 +519,87 @@ static inline int drv260x_parse_dt(struct device *dev,
 }
 #endif
 
+static void drv260x_worker_sim(struct work_struct *work_sim)
+{
+	struct drv260x_data *haptics = container_of(work_sim, struct drv260x_data, work_sim);
+	int error;
+	unsigned int cal_buf;
+
+	if(0 == haptics->state) {
+		gpiod_set_value(haptics->enable_gpio, 0);
+		return;
+	}
+
+	gpiod_set_value(haptics->enable_gpio, 1);
+        /* Data sheet says to wait 250us before trying to communicate */
+        udelay(250);
+
+	error = regmap_write(haptics->regmap, DRV260X_GO, DRV260X_GO_BIT);
+	if (error) {
+		dev_err(&haptics->client->dev,
+			"Failed to write GO register: %d\n",
+			error);
+		return;
+	}
+
+	do {
+		error = regmap_read(haptics->regmap, DRV260X_GO, &cal_buf);
+		if (error) {
+			dev_err(&haptics->client->dev,
+				"Failed to read GO register: %d\n",
+				error);
+			return;
+		}
+	} while (cal_buf == DRV260X_GO_BIT);
+
+}
+
+static void drv260x_vib_enable(struct timed_output_dev *dev, int value)
+{
+	struct drv260x_data *haptics = container_of(dev, struct drv260x_data,
+			timed_dev);
+
+	mutex_lock(&haptics->lock);
+	hrtimer_cancel(&haptics->vib_timer);
+
+	if (value == 0) {
+		haptics->state = 0;
+	} else {
+		value = (value > 2000 ?
+				2000 : value);
+		haptics->state = 1;
+		hrtimer_start(&haptics->vib_timer,
+				ktime_set(value / 1000, (value % 1000) * 1000000),
+				HRTIMER_MODE_REL);
+	}
+	mutex_unlock(&haptics->lock);
+	schedule_work(&haptics->work_sim);
+}
+
+
+static int drv260x_vib_get_time(struct timed_output_dev *dev)
+{
+	struct drv260x_data *haptics = container_of(dev, struct drv260x_data,
+								  timed_dev);
+
+	if (hrtimer_active(&haptics->vib_timer)) {
+		ktime_t r = hrtimer_get_remaining(&haptics->vib_timer);
+
+		return (int)ktime_to_us(r);
+	} else
+		return 0;
+}
+
+static enum hrtimer_restart drv260x_vib_timer_func(struct hrtimer *timer)
+{
+	struct drv260x_data *haptics = container_of(timer, struct drv260x_data,
+								  vib_timer);
+	haptics->state = 0;
+	schedule_work(&haptics->work_sim);
+
+	return HRTIMER_NORESTART;
+}
+
 static int drv260x_probe(struct i2c_client *client,
 			 const struct i2c_device_id *id)
 {
@@ -611,6 +701,16 @@ static int drv260x_probe(struct i2c_client *client,
 	}
 
 	INIT_WORK(&haptics->work, drv260x_worker);
+	INIT_WORK(&haptics->work_sim, drv260x_worker_sim);
+	mutex_init(&haptics->lock);
+	hrtimer_init(&haptics->vib_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	haptics->vib_timer.function = drv260x_vib_timer_func;
+	haptics->timed_dev.name = "vibrator";
+	haptics->timed_dev.get_time = drv260x_vib_get_time;
+        haptics->timed_dev.enable = drv260x_vib_enable;
+	if (timed_output_dev_register(&haptics->timed_dev) < 0)
+		dev_err(&client->dev, "Failed to register as TIME_OUT_SUPPORT\n");
+
 
 	haptics->client = client;
 	i2c_set_clientdata(client, haptics);
