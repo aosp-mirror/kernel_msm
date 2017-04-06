@@ -57,6 +57,8 @@ enum print_reason {
 #define DEBUG_BOARD_VOTER		"DEBUG_BOARD_VOTER"
 /* voter identity held to suspend VBUS when the external booster is enabled. */
 #define EXTERNAL_BOOSTER_VOTER	"EXTERNAL_BOOSTER_VOTER"
+/* voter identity held by the port overheat mitigation. */
+#define OVERHEAT_MITIGATION_VOTER       "OVERHEAT_MITIGATION_VOTER"
 #define PD_SUSPEND_SUPPORTED_VOTER	"PD_SUSPEND_SUPPORTED_VOTER"
 #define PL_DELAY_VOTER			"PL_DELAY_VOTER"
 #define CTM_VOTER			"CTM_VOTER"
@@ -240,13 +242,22 @@ struct smb_charger {
 	/* locks */
 	struct mutex		write_lock;
 	struct mutex		ps_change_lock;
-	struct mutex		vbus_output_lock; /* for vbus output src sel */
 	/*
 	 * vbus_output_lock and otg_oc_lock can sometimes be held
 	 * at the same time. vbus_output_lock should be locked before
 	 * otg_oc_lock.
 	 */
 	struct mutex		otg_oc_lock;
+	struct mutex		vbus_output_lock; /* for vbus output src sel */
+	struct mutex		otg_overcurrent_lock;
+
+	/*
+	 * mutex for type-c power role config. Access to typec_pr_disabled,
+	 * typec_pr_pd_vote and the actual hardware register
+	 * TYPE_C_INTRPT_ENB_SOFTWARE_CTRL_REG's field POWER_ROLE_CMD_MASK, and
+	 * EXIT_SNK_BASED_ON_CC_BIT is protected by this mutex.
+	 */
+	struct mutex		typec_pr_lock;
 
 	/* power supplies */
 	struct power_supply		*batt_psy;
@@ -298,6 +309,7 @@ struct smb_charger {
 	struct delayed_work	otg_ss_done_work;
 	struct delayed_work	icl_change_work;
 	struct delayed_work	pl_enable_work;
+	struct delayed_work	port_overheat_work;
 
 	/* cached status */
 	int			voltage_min_uv;
@@ -323,6 +335,20 @@ struct smb_charger {
 	int			otg_cl_ua;
 
 	bool			use_external_vbus_reg;
+	int			fake_port_temp;
+	bool			port_overheat;
+
+	/*
+	 * flag set to keep typec power role in disabled state during port
+	 * overheat
+	 */
+	bool			typec_pr_disabled;
+	/*
+	 * saved type-c power role queried by the overheat mitigation work
+	 * to recover the original power role configuration.
+	 */
+	enum power_supply_typec_power_role	typec_pr_pd_vote;
+
 	/* workaround flag */
 	u32			wa_flags;
 	enum cc2_sink_type	cc2_sink_detach_flag;
@@ -468,6 +494,8 @@ int smblib_get_pe_start(struct smb_charger *chg,
 			       union power_supply_propval *val);
 int smblib_get_prop_use_external_vbus_output(struct smb_charger *chg,
 				union power_supply_propval *val);
+int smblib_get_prop_usb_port_temp(struct smb_charger *chg,
+				union power_supply_propval *val);
 int smblib_get_prop_charger_temp(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_get_prop_charger_temp_max(struct smb_charger *chg,
@@ -495,6 +523,8 @@ int smblib_set_prop_pd_cc_override(struct smb_charger *chg,
 int smblib_set_prop_pd_in_hard_reset(struct smb_charger *chg,
 				const union power_supply_propval *val);
 int smblib_set_prop_use_external_vbus_output(struct smb_charger *chg,
+				const union power_supply_propval *val);
+int smblib_set_prop_usb_port_temp(struct smb_charger *chg,
 				const union power_supply_propval *val);
 int smblib_get_prop_slave_current_now(struct smb_charger *chg,
 				union power_supply_propval *val);
