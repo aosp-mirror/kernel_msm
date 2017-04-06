@@ -91,8 +91,8 @@ struct battery_info_previous {
 };
 
 struct htc_thermal_stage {
-	int nextTemp;
-	int recoverTemp;
+	int next_temp;
+	int recover_temp;
 };
 
 struct htc_battery_info {
@@ -211,6 +211,22 @@ static int get_property(struct power_supply *psy,
 	return ret.intval;
 }
 
+static int set_batt_psy_property(enum power_supply_property prop, int value)
+{
+	union power_supply_propval ret = {0, };
+	int rc = -1;
+
+	if (htc_batt_info.batt_psy) {
+		BATT_EMBEDDED("set_batt_psy_property. value(%d) prop(%d)",
+			      value, prop);
+		ret.intval = value;
+		rc = power_supply_set_property(htc_batt_info.batt_psy,
+					       prop, &ret);
+	}
+
+	return rc;
+}
+
 static void batt_update_info_from_charger(void)
 {
 	htc_batt_info.prev.batt_temp = htc_batt_info.rep.batt_temp;
@@ -287,6 +303,110 @@ void update_htc_chg_src(void)
 	htc_batt_info.rep.chg_src = chg_src;
 }
 
+#define IBAT_LIMIT_VOL_RECOVER_MV	4000
+#define MAX_IDX		4
+#define HEALTH_LEVELS	5
+static int ibat_map_ac[MAX_IDX][HEALTH_LEVELS] = {
+/* IBAT_IDX =  < VOLTAGE-LIMITED, DISPLAY-ON > */
+/*  #0 (00) */ {    7,    10,    8,    5,    5},
+/*  #1 (01) */ {    7,    10,    5, 1000, 1000},
+/*  #2 (10) */ {    3,     5,    5,    5,    0},
+/*  #3 (11) */ {    3,     5,    5, 1000,    0},
+};
+
+static struct htc_thermal_stage thermal_stage[] = {
+	{	-INT_MAX,	170},
+	{	420,		150},	/* Good */
+	{	450,		400},
+	{	480,		430},
+	{	INT_MAX,	460}
+};
+
+enum {
+	HEALTH_COOL = 0,
+	HEALTH_GOOD,
+	HEALTH_WARM1,
+	HEALTH_WARM2,
+	HEALTH_WARM3,
+};
+
+int update_ibat_setting(void)
+{
+	static int batt_thermal = HEALTH_GOOD;
+	static bool is_vol_limited;
+	int idx = 0;
+	bool is_screen_on = true;
+	int batt_temp = htc_batt_info.rep.batt_temp;
+	int batt_vol = htc_batt_info.rep.batt_vol;
+	int chg_type = htc_batt_info.rep.charging_source;
+	int ibat_ma = 0;
+
+	/* Step 1: Update Health status*/
+	while (1) {
+		if (batt_thermal >= HEALTH_GOOD) {	/* normal & warm */
+			if (batt_temp >= thermal_stage[batt_thermal].next_temp)
+				batt_thermal++;
+			else if (batt_temp <=
+				 thermal_stage[batt_thermal].recover_temp)
+				batt_thermal--;
+			else
+				break;
+		} else {				/* cool */
+			if (batt_temp <= thermal_stage[batt_thermal].next_temp)
+				batt_thermal--;
+			else if (batt_temp >=
+				 thermal_stage[batt_thermal].recover_temp)
+				batt_thermal++;
+			else
+				break;
+		}
+	}
+	/* Step 2: Update Voltage status */
+	if (is_vol_limited || batt_vol > htc_batt_info.batt_thermal_limit_vol)
+		is_vol_limited = true;
+	if (!is_vol_limited || batt_vol < IBAT_LIMIT_VOL_RECOVER_MV)
+		is_vol_limited = false;
+
+	/* Step 3: Apply Screen ON configuartion */
+	is_screen_on = !(htc_batt_info.state & STATE_SCREEN_OFF);
+
+	/* Step 4: Get mapping index */
+	idx = ((2 * (is_vol_limited ? 1 : 0)) +
+		(1 * (is_screen_on ? 1 : 0)));
+
+	switch (chg_type) {
+	case POWER_SUPPLY_TYPE_USB_HVDCP_3:
+	case POWER_SUPPLY_TYPE_USB_HVDCP:
+	case POWER_SUPPLY_TYPE_USB_DCP:
+	case POWER_SUPPLY_TYPE_USB_PD:
+		if (ibat_map_ac[idx][batt_thermal] <= 10)
+			ibat_ma = htc_batt_info.batt_fcc_ma *
+					ibat_map_ac[idx][batt_thermal] / 10;
+		else
+			ibat_ma = ibat_map_ac[idx][batt_thermal];
+		break;
+	default:
+		ibat_ma = htc_batt_info.batt_fcc_ma;
+		break;
+	}
+
+	ibat_ma = (ibat_ma / 25) * 25;
+
+	if (ibat_ma * 1000 !=
+		get_property(
+			htc_batt_info.batt_psy,
+			POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX)) {
+		BATT_LOG(
+			"%s: thermal=%d,temp=%d,fcc=%d,is_vol_limited(>%dmV)=%d,is_screen_on=%d,idx=%d,ibat_ma=%d.\n",
+			__func__, batt_thermal, batt_temp,
+			htc_batt_info.batt_fcc_ma,
+			htc_batt_info.batt_thermal_limit_vol, is_vol_limited,
+			is_screen_on, idx, ibat_ma);
+	}
+
+	return ibat_ma * 1000;
+}
+
 int htc_batt_schedule_batt_info_update(void)
 {
 	if (!g_htc_battery_probe_done)
@@ -335,6 +455,8 @@ static void batt_worker(struct work_struct *work)
 	int pwrsrc_enabled = s_prev_pwrsrc_enabled;
 	int charging_enabled = gs_prev_charging_enabled;
 	int src = 0, present = 0;
+	int ibat = 0;
+	int ibat_new = 0;
 	unsigned long time_since_last_update_ms;
 	unsigned long cur_jiffies;
 
@@ -391,6 +513,18 @@ static void batt_worker(struct work_struct *work)
 		else
 			pwrsrc_enabled = 1;
 
+		/* STEP 5.3 check ibat setting */
+		ibat = get_property(
+				htc_batt_info.batt_psy,
+				POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX);
+		ibat_new = update_ibat_setting();
+
+		if (ibat != ibat_new) {
+			BATT_EMBEDDED("set ibat(%d)", ibat_new);
+			set_batt_psy_property(
+				POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
+				ibat_new);
+		}
 	} else {
 		if ((htc_batt_info.prev.charging_source !=
 		     htc_batt_info.rep.charging_source) ||
@@ -526,7 +660,9 @@ static int htc_notifier_batt_callback(struct notifier_block *nb,
 static int htc_battery_probe_process(void)
 {
 	union power_supply_propval ret = {0, };
-	int rc = 0;
+	int rc = 0, id_kohms = 0;
+	struct device_node *node;
+	struct device_node *profile_node;
 
 	htc_batt_info.batt_psy = power_supply_get_by_name("battery");
 	if (!htc_batt_info.batt_psy)
@@ -569,6 +705,61 @@ static int htc_battery_probe_process(void)
 		else
 			htc_batt_info.rep.batt_id = BATT_ID_UNKNOWN;
 	}
+
+	id_kohms = get_property(
+			htc_batt_info.bms_psy,
+			POWER_SUPPLY_PROP_RESISTANCE_ID) / 1000;
+	node = of_find_node_by_name(NULL, "qcom,battery-data");
+	if (!node) {
+		BATT_LOG("%s: No batterydata available\n", __func__);
+	} else {
+		profile_node = of_batterydata_get_best_profile(
+					node, id_kohms, NULL);
+		if (!profile_node) {
+			BATT_LOG(
+				"%s: couldn't find profile handle\n",
+				__func__);
+		} else {
+			rc = of_property_read_u32(
+					profile_node,
+					"qcom,fastchg-current-ma",
+					&htc_batt_info.batt_fcc_ma);
+			if (rc < 0) {
+				BATT_LOG(
+					"%s: error reading qcom,fastchg-current-ma. %d\n",
+					__func__, rc);
+				htc_batt_info.batt_fcc_ma = 2600;
+			}
+			/* read battery design capacity from DT, unit is mAh */
+			rc = of_property_read_u32(
+					profile_node,
+					"qcom,nom-batt-capacity-mah",
+					&htc_batt_info.batt_capacity_mah);
+			if (rc < 0) {
+				BATT_LOG(
+					"%s: error reading qcom,nom-batt-capacity-mah. %d\n",
+					__func__, rc);
+				htc_batt_info.batt_capacity_mah = 2600;
+			}
+			/*
+			 * read battery thermal limit threshold voltage from DT,
+			 * unit is mV
+			 */
+			rc = of_property_read_u32(
+					profile_node,
+					"qcom,batt-thermal-limit-vol",
+					&htc_batt_info.batt_thermal_limit_vol);
+			if (rc < 0) {
+				BATT_LOG(
+					"%s: error reading qcom,batt-thermal-limit-vol. %d\n",
+					__func__, rc);
+				htc_batt_info.batt_thermal_limit_vol = 4200;
+			}
+		}
+	}
+	BATT_LOG("%s: catch name %s, set batt id=%d, fcc_ma=%d, capacity=%d\n",
+		 __func__, ret.strval, htc_batt_info.rep.batt_id,
+		 htc_batt_info.batt_fcc_ma, htc_batt_info.batt_capacity_mah);
 
 	BATT_LOG("Probe process done.\n");
 
