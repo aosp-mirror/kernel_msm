@@ -10,6 +10,7 @@
 #include <linux/module.h>
 #include <linux/fs.h>
 
+#include <linux/delay.h>
 #include <linux/gpio.h>
 #include <linux/of_gpio.h>
 #include <linux/of_device.h>
@@ -38,6 +39,28 @@ struct ese_dev {
 	const char		*nfcc_name;
 };
 
+static long ese_clear_gpio(struct ese_dev *ese_dev, unsigned long arg)
+{
+	long r = 0;
+	int val = arg ? 1 : 0;
+	if (ese_dev->gpio_clear_n == -EINVAL) {
+		r = -ENODEV;
+	} else {
+		gpio_set_value(ese_dev->gpio_clear_n, val);
+		usleep_range(1000, 1100);
+		if (gpio_get_value(ese_dev->gpio_clear_n) != val) {
+			dev_err(&ese_dev->spi->dev,
+				"gpio_clear_n won't change to %d\n", val);
+			r = -EBUSY;
+		} else {
+			dev_info(&ese_dev->spi->dev,
+					"%s: gpio_clear_n changed: %d\n",
+					__func__, val);
+		}
+	}
+	return r;
+}
+
 #ifdef CONFIG_COMPAT
 static long ese_compat_ioctl(struct file *filp, unsigned int cmd,
 				unsigned long arg)
@@ -53,6 +76,9 @@ static long ese_compat_ioctl(struct file *filp, unsigned int cmd,
 		break;
 	case ESE_GET_PWR:
 		nqx_ese_pwr(ese_dev->nfcc_data, 3);
+		break;
+	case ESE_CLEAR_GPIO:
+		r = ese_clear_gpio(ese_dev, arg);
 		break;
 	default:
 		r = -ENOTTY;
@@ -75,6 +101,9 @@ static long ese_ioctl(struct file *filp, unsigned int cmd,
 		break;
 	case ESE_GET_PWR:
 		r = nqx_ese_pwr(ese_dev->nfcc_data, 3);
+		break;
+	case ESE_CLEAR_GPIO:
+		r = ese_clear_gpio(ese_dev, arg);
 		break;
 	default:
 		r = -ENOIOCTLCMD;
@@ -273,7 +302,7 @@ static int pn81a_probe(struct spi_device *spi)
 			ese_dev->gpio_clear_n = -EINVAL;
 			goto skip_gpio;
 		}
-		ret = gpio_direction_output(ese_dev->gpio_clear_n, 0);
+		ret = gpio_direction_output(ese_dev->gpio_clear_n, 1);
 		if (ret) {
 			dev_warn(&spi->dev,
 				"%s: failed to set direction for ese clear n[%d]\n",
