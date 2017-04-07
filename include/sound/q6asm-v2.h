@@ -54,6 +54,7 @@
 #define FORMAT_DTS          0x001c
 #define FORMAT_DSD          0x001d
 #define FORMAT_APTX         0x001e
+#define FORMAT_GEN_COMPR    0x001f
 
 #define ENCDEC_SBCBITRATE   0x0001
 #define ENCDEC_IMMEDIATE_DECODE 0x0002
@@ -210,6 +211,7 @@ struct audio_client {
 	int                    session;
 	app_cb		       cb;
 	atomic_t	       cmd_state;
+	atomic_t	       cmd_state_pp;
 	/* Relative or absolute TS */
 	atomic_t	       time_flag;
 	atomic_t	       nowait_cmd_cnt;
@@ -500,6 +502,11 @@ int q6asm_media_format_block_multi_ch_pcm_v2(
 			uint32_t rate, uint32_t channels,
 			bool use_default_chmap, char *channel_map,
 			uint16_t bits_per_sample);
+int q6asm_media_format_block_gen_compr(
+			struct audio_client *ac,
+			uint32_t rate, uint32_t channels,
+			bool use_default_chmap, char *channel_map,
+			uint16_t bits_per_sample);
 
 int q6asm_media_format_block_multi_ch_pcm_v3(struct audio_client *ac,
 					     uint32_t rate, uint32_t channels,
@@ -611,6 +618,9 @@ int q6asm_get_session_time_legacy(struct audio_client *ac, uint64_t *tstamp);
 int q6asm_send_audio_effects_params(struct audio_client *ac, char *params,
 				    uint32_t params_length);
 
+int q6asm_send_stream_cmd(struct audio_client *ac, uint32_t opcode,
+			void *param, uint32_t params_length);
+
 /* Client can set the IO mode to either AIO/SIO mode */
 int q6asm_set_io_mode(struct audio_client *ac, uint32_t mode);
 
@@ -635,6 +645,14 @@ int q6asm_get_asm_app_type(int session_id);
 int q6asm_send_mtmx_strtr_window(struct audio_client *ac,
 		struct asm_session_mtmx_strtr_param_window_v2_t *window_param,
 		uint32_t param_id);
+
+/* Configure DSP render mode */
+int q6asm_send_mtmx_strtr_render_mode(struct audio_client *ac,
+		uint32_t render_mode);
+
+/* Configure DSP clock recovery mode */
+int q6asm_send_mtmx_strtr_clk_rec_mode(struct audio_client *ac,
+		uint32_t clk_rec_mode);
 
 /* Retrieve the current DSP path delay */
 int q6asm_get_path_delay(struct audio_client *ac);

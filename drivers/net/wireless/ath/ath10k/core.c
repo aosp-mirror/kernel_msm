@@ -1298,6 +1298,14 @@ err:
 static int ath10k_core_fetch_firmware_files(struct ath10k *ar)
 {
 	int ret;
+	struct ath10k_fw_file *fw_file;
+
+	if (!ar->is_bmi && QCA_REV_WCN3990(ar)) {
+		fw_file = &ar->normal_mode_fw.fw_file;
+		fw_file->wmi_op_version = ATH10K_FW_WMI_OP_VERSION_TLV;
+		fw_file->htt_op_version = ATH10K_FW_HTT_OP_VERSION_TLV;
+		return 0;
+	}
 
 	if (ar->is_bmi) {
 		/* calibration file is optional, don't check for any errors */
@@ -1579,16 +1587,6 @@ static void ath10k_core_restart(struct work_struct *work)
 	mutex_unlock(&ar->conf_mutex);
 }
 
-/* WAR: WCN3990 fw loading is done by PIL, assign WMI/HTT version */
-static inline void init_fw_param(struct ath10k *ar,
-				 struct ath10k_fw_file *fw_file)
-{
-	if (QCA_REV_WCN3990(ar)) {
-		fw_file->wmi_op_version = ATH10K_FW_WMI_OP_VERSION_HL_1_0;
-		fw_file->htt_op_version = ATH10K_FW_HTT_OP_VERSION_TLV;
-	}
-}
-
 static int ath10k_core_init_firmware_features(struct ath10k *ar)
 {
 	struct ath10k_fw_file *fw_file = &ar->normal_mode_fw.fw_file;
@@ -1695,7 +1693,6 @@ static int ath10k_core_init_firmware_features(struct ath10k *ar)
 		ar->max_spatial_stream = WMI_MAX_SPATIAL_STREAM;
 		break;
 	case ATH10K_FW_WMI_OP_VERSION_TLV:
-	case ATH10K_FW_WMI_OP_VERSION_HL_1_0:
 		ar->max_num_peers = TARGET_TLV_NUM_PEERS;
 		ar->max_num_stations = TARGET_TLV_NUM_STATIONS;
 		ar->max_num_vdevs = TARGET_TLV_NUM_VDEVS;
@@ -1742,7 +1739,6 @@ static int ath10k_core_init_firmware_features(struct ath10k *ar)
 			fw_file->htt_op_version = ATH10K_FW_HTT_OP_VERSION_10_1;
 			break;
 		case ATH10K_FW_WMI_OP_VERSION_TLV:
-		case ATH10K_FW_WMI_OP_VERSION_HL_1_0:
 			fw_file->htt_op_version = ATH10K_FW_HTT_OP_VERSION_TLV;
 			break;
 		case ATH10K_FW_WMI_OP_VERSION_10_4:
@@ -2327,32 +2323,40 @@ struct ath10k *ath10k_core_create(size_t priv_size, struct device *dev,
 	case ATH10K_HW_QCA988X:
 	case ATH10K_HW_QCA9887:
 		ar->regs = &qca988x_regs;
+		ar->hw_ce_regs = &qcax_ce_regs;
 		ar->hw_values = &qca988x_values;
 		break;
 	case ATH10K_HW_QCA6174:
 	case ATH10K_HW_QCA9377:
 		ar->regs = &qca6174_regs;
+		ar->hw_ce_regs = &qcax_ce_regs;
 		ar->hw_values = &qca6174_values;
 		break;
 	case ATH10K_HW_QCA99X0:
 	case ATH10K_HW_QCA9984:
 		ar->regs = &qca99x0_regs;
+		ar->hw_ce_regs = &qcax_ce_regs;
 		ar->hw_values = &qca99x0_values;
 		break;
 	case ATH10K_HW_QCA9888:
 		ar->regs = &qca99x0_regs;
+		ar->hw_ce_regs = &qcax_ce_regs;
 		ar->hw_values = &qca9888_values;
 		break;
 	case ATH10K_HW_QCA4019:
 		ar->regs = &qca4019_regs;
+		ar->hw_ce_regs = &qcax_ce_regs;
 		ar->hw_values = &qca4019_values;
 		break;
 	case ATH10K_HW_WCN3990:
 		ar->regs = &wcn3990_regs;
+		ar->hw_ce_regs = &wcn3990_ce_regs;
 		ar->hw_values = &wcn3990_values;
 		/* WCN3990 chip set is non bmi based */
 		ar->is_bmi = false;
 		ar->fw_flags = &wcn3990_fw_flags;
+		ar->shadow_reg_value = &wcn3990_shadow_reg_value;
+		ar->shadow_reg_address = &wcn3990_shadow_reg_address;
 		break;
 	default:
 		ath10k_err(ar, "unsupported core hardware revision %d\n",
@@ -2385,6 +2389,7 @@ struct ath10k *ath10k_core_create(size_t priv_size, struct device *dev,
 	mutex_init(&ar->conf_mutex);
 	spin_lock_init(&ar->data_lock);
 	spin_lock_init(&ar->txqs_lock);
+	spin_lock_init(&ar->datapath_rx_stat_lock);
 
 	INIT_LIST_HEAD(&ar->txqs);
 	INIT_LIST_HEAD(&ar->peers);

@@ -113,6 +113,14 @@ struct phy *ufs_qcom_phy_generic_probe(struct platform_device *pdev,
 		goto out;
 	}
 
+	/*
+	 * UFS PHY power management is managed by its parent (UFS host
+	 * controller) hence set the no the no runtime PM callbacks flag
+	 * on UFS PHY device to avoid any accidental attempt to call the
+	 * PM callbacks for PHY device.
+	 */
+	pm_runtime_no_callbacks(&generic_phy->dev);
+
 	common_cfg->phy_spec_ops = phy_spec_ops;
 	common_cfg->dev = dev;
 
@@ -266,6 +274,14 @@ static int __ufs_qcom_phy_init_vreg(struct phy *phy,
 	struct device *dev = ufs_qcom_phy->dev;
 
 	char prop_name[MAX_PROP_NAME];
+
+	if (dev->of_node) {
+		snprintf(prop_name, MAX_PROP_NAME, "%s-supply", name);
+		if (!of_parse_phandle(dev->of_node, prop_name, 0)) {
+			dev_dbg(dev, "No vreg data found for %s\n", prop_name);
+			return optional ? err : -ENODATA;
+		}
+	}
 
 	vreg->name = kstrdup(name, GFP_KERNEL);
 	if (!vreg->name) {

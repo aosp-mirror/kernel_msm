@@ -97,11 +97,6 @@
  */
 #define SLEEP_SET_HW_KEY_MS 220
 
-#define QSEECOM_ALIGN_SIZE    0x40
-#define QSEECOM_ALIGN_MASK    (QSEECOM_ALIGN_SIZE - 1)
-#define QSEECOM_ALIGN(x)\
-	((x + QSEECOM_ALIGN_SIZE) & (~QSEECOM_ALIGN_MASK))
-
 /* hdcp command status */
 #define HDCP_SUCCESS      0
 
@@ -2103,7 +2098,8 @@ static void hdcp_lib_msg_recvd(struct hdcp_lib_handle *handle)
 	    (rc == 0) && (rsp_buf->status == 0)) {
 		pr_debug("Got Auth_Stream_Ready, nothing sent to rx\n");
 
-		if (!hdcp_lib_enable_encryption(handle)) {
+		if (!handle->authenticated &&
+		    !hdcp_lib_enable_encryption(handle)) {
 			handle->authenticated = true;
 
 			cdata.cmd = HDMI_HDCP_WKUP_CMD_STATUS_SUCCESS;

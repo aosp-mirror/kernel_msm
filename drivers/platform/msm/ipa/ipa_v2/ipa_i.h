@@ -841,6 +841,7 @@ struct ipa_active_clients {
 struct ipa_wakelock_ref_cnt {
 	spinlock_t spinlock;
 	u32 cnt;
+	bool wakelock_acquired;
 };
 
 struct ipa_tag_completion {
@@ -1803,6 +1804,9 @@ void ipa_delete_dflt_flt_rules(u32 ipa_ep_idx);
 
 int ipa_enable_data_path(u32 clnt_hdl);
 int ipa_disable_data_path(u32 clnt_hdl);
+int ipa2_enable_force_clear(u32 request_id, bool throttle_source,
+	u32 source_pipe_bitmask);
+int ipa2_disable_force_clear(u32 request_id);
 int ipa_id_alloc(void *ptr);
 void *ipa_id_find(u32 id);
 void ipa_id_remove(u32 id);

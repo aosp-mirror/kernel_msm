@@ -21,7 +21,9 @@
 #include <linux/regmap.h>
 
 #include "clk-branch.h"
+#include "clk-debug.h"
 #include "clk-regmap.h"
+#include "common.h"
 
 static bool clk_branch_in_hwcg_mode(const struct clk_branch *br)
 {
@@ -77,7 +79,8 @@ static int clk_branch_wait(const struct clk_branch *br, bool enabling,
 		bool (check_halt)(const struct clk_branch *, bool))
 {
 	bool voted = br->halt_check & BRANCH_VOTED;
-	const char *name = clk_hw_get_name(&br->clkr.hw);
+	const struct clk_hw *hw = &br->clkr.hw;
+	const char *name = clk_hw_get_name(hw);
 
 	/* Skip checking halt bit if the clock is in hardware gated mode */
 	if (clk_branch_in_hwcg_mode(br))
@@ -104,8 +107,10 @@ static int clk_branch_wait(const struct clk_branch *br, bool enabling,
 				return 0;
 			udelay(1);
 		}
-		WARN(1, "%s status stuck at 'o%s'", name,
-				enabling ? "ff" : "n");
+
+		WARN_CLK(hw->core, name, 1, "status stuck at 'o%s'",
+						enabling ? "ff" : "n");
+
 		return -EBUSY;
 	}
 	return 0;
@@ -212,7 +217,8 @@ static void clk_branch2_list_registers(struct seq_file *f, struct clk_hw *hw)
 	for (i = 0; i < size; i++) {
 		regmap_read(br->clkr.regmap, br->halt_reg + data[i].offset,
 					&val);
-		seq_printf(f, "%20s: 0x%.8x\n", data[i].name, val);
+		clock_debug_output(f, false, "%20s: 0x%.8x\n",
+							data[i].name, val);
 	}
 
 	if ((br->halt_check & BRANCH_HALT_VOTED) &&
@@ -222,7 +228,7 @@ static void clk_branch2_list_registers(struct seq_file *f, struct clk_hw *hw)
 			for (i = 0; i < size; i++) {
 				regmap_read(br->clkr.regmap, rclk->enable_reg +
 						data1[i].offset, &val);
-				seq_printf(f, "%20s: 0x%.8x\n",
+				clock_debug_output(f, false, "%20s: 0x%.8x\n",
 						data1[i].name, val);
 			}
 		}
@@ -245,6 +251,7 @@ const struct clk_ops clk_branch2_ops = {
 	.is_enabled = clk_is_enabled_regmap,
 	.set_flags = clk_branch_set_flags,
 	.list_registers = clk_branch2_list_registers,
+	.debug_init = clk_debug_measure_add,
 };
 EXPORT_SYMBOL_GPL(clk_branch2_ops);
 
@@ -360,7 +367,8 @@ static void clk_gate2_list_registers(struct seq_file *f, struct clk_hw *hw)
 	for (i = 0; i < size; i++) {
 		regmap_read(gt->clkr.regmap, gt->clkr.enable_reg +
 					data[i].offset, &val);
-		seq_printf(f, "%20s: 0x%.8x\n", data[i].name, val);
+		clock_debug_output(f, false, "%20s: 0x%.8x\n",
+						data[i].name, val);
 	}
 }
 
@@ -378,6 +386,7 @@ const struct clk_ops clk_gate2_ops = {
 	.is_enabled = clk_is_enabled_regmap,
 	.list_registers = clk_gate2_list_registers,
 	.set_flags = clk_gate2_set_flags,
+	.debug_init = clk_debug_measure_add,
 };
 EXPORT_SYMBOL_GPL(clk_gate2_ops);
 

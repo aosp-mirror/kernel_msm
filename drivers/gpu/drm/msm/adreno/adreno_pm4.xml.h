@@ -8,17 +8,19 @@ http://github.com/freedreno/envytools/
 git clone https://github.com/freedreno/envytools.git
 
 The rules-ng-ng source files this header was generated from are:
-- /home/robclark/src/freedreno/envytools/rnndb/adreno.xml               (    398 bytes, from 2015-09-24 17:25:31)
-- /home/robclark/src/freedreno/envytools/rnndb/freedreno_copyright.xml  (   1453 bytes, from 2015-05-20 20:03:07)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a2xx.xml          (  32901 bytes, from 2015-05-20 20:03:14)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_common.xml (  10755 bytes, from 2015-09-14 20:46:55)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_pm4.xml    (  14968 bytes, from 2015-05-20 20:12:27)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a3xx.xml          (  67771 bytes, from 2015-09-14 20:46:55)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a4xx.xml          (  63970 bytes, from 2015-09-14 20:50:12)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/ocmem.xml         (   1773 bytes, from 2015-09-24 17:30:00)
+- ./adreno.xml               (    431 bytes, from 2016-10-24 21:12:27)
+- ./freedreno_copyright.xml  (   1572 bytes, from 2016-10-24 21:12:27)
+- ./adreno/a2xx.xml          (  32901 bytes, from 2016-10-24 21:12:27)
+- ./adreno/adreno_common.xml (  12025 bytes, from 2016-10-24 21:12:27)
+- ./adreno/adreno_pm4.xml    (  19684 bytes, from 2016-10-24 21:12:27)
+- ./adreno/a3xx.xml          (  83840 bytes, from 2016-10-24 21:12:27)
+- ./adreno/a4xx.xml          ( 110708 bytes, from 2016-10-24 21:12:27)
+- ./adreno/a5xx.xml          (  81207 bytes, from 2016-10-26 19:36:59)
+- ./adreno/ocmem.xml         (   1773 bytes, from 2016-10-24 21:12:27)
 
-Copyright (C) 2013-2015 by the following authors:
+Copyright (C) 2013-2016 by the following authors:
 - Rob Clark <robdclark@gmail.com> (robclark)
+- Ilia Mirkin <imirkin@alum.mit.edu> (imirkin)
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the
@@ -57,6 +59,7 @@ enum vgt_event_type {
 	RST_PIX_CNT = 13,
 	RST_VTX_CNT = 14,
 	TILE_FLUSH = 15,
+	STAT_EVENT = 16,
 	CACHE_FLUSH_AND_INV_TS_EVENT = 20,
 	ZPASS_DONE = 21,
 	CACHE_FLUSH_AND_INV_EVENT = 22,
@@ -81,7 +84,6 @@ enum pc_di_primtype {
 	DI_PT_LINESTRIP_ADJ = 11,
 	DI_PT_TRI_ADJ = 12,
 	DI_PT_TRISTRIP_ADJ = 13,
-	DI_PT_PATCHES = 34,
 };
 
 enum pc_di_src_sel {
@@ -109,11 +111,15 @@ enum adreno_pm4_packet_type {
 	CP_TYPE1_PKT = 0x40000000,
 	CP_TYPE2_PKT = 0x80000000,
 	CP_TYPE3_PKT = 0xc0000000,
+	CP_TYPE4_PKT = 0x40000000,
+	CP_TYPE7_PKT = 0x70000000,
 };
 
 enum adreno_pm4_type3_packets {
 	CP_ME_INIT = 72,
 	CP_NOP = 16,
+	CP_PREEMPT_ENABLE = 28,
+	CP_PREEMPT_TOKEN = 30,
 	CP_INDIRECT_BUFFER = 63,
 	CP_INDIRECT_BUFFER_PFD = 55,
 	CP_WAIT_FOR_IDLE = 38,
@@ -162,6 +168,7 @@ enum adreno_pm4_type3_packets {
 	CP_TEST_TWO_MEMS = 113,
 	CP_REG_WR_NO_CTXT = 120,
 	CP_RECORD_PFP_TIMESTAMP = 17,
+	CP_SET_SECURE_MODE = 102,
 	CP_WAIT_FOR_ME = 19,
 	CP_SET_DRAW_STATE = 67,
 	CP_DRAW_INDX_OFFSET = 56,
@@ -172,6 +179,26 @@ enum adreno_pm4_type3_packets {
 	CP_UNKNOWN_1A = 26,
 	CP_UNKNOWN_4E = 78,
 	CP_WIDE_REG_WRITE = 116,
+	CP_SCRATCH_TO_REG = 77,
+	CP_REG_TO_SCRATCH = 74,
+	CP_WAIT_MEM_WRITES = 18,
+	CP_COND_REG_EXEC = 71,
+	CP_MEM_TO_REG = 66,
+	CP_EXEC_CS = 51,
+	CP_PERFCOUNTER_ACTION = 80,
+	CP_SMMU_TABLE_UPDATE = 83,
+	CP_CONTEXT_REG_BUNCH = 92,
+	CP_YIELD_ENABLE = 28,
+	CP_SKIP_IB2_ENABLE_GLOBAL = 29,
+	CP_SKIP_IB2_ENABLE_LOCAL = 35,
+	CP_SET_SUBDRAW_SIZE = 53,
+	CP_SET_VISIBILITY_OVERRIDE = 100,
+	CP_PREEMPT_ENABLE_GLOBAL = 105,
+	CP_PREEMPT_ENABLE_LOCAL = 106,
+	CP_CONTEXT_SWITCH_YIELD = 107,
+	CP_SET_RENDER_MODE = 108,
+	CP_COMPUTE_CHECKPOINT = 110,
+	CP_MEM_TO_MEM = 115,
 	IN_IB_PREFETCH_END = 23,
 	IN_SUBBLK_PREFETCH = 31,
 	IN_INSTR_PREFETCH = 32,
@@ -190,6 +217,7 @@ enum adreno_state_block {
 	SB_VERT_SHADER = 4,
 	SB_GEOM_SHADER = 5,
 	SB_FRAG_SHADER = 6,
+	SB_COMPUTE_SHADER = 7,
 };
 
 enum adreno_state_type {
@@ -199,7 +227,11 @@ enum adreno_state_type {
 
 enum adreno_state_src {
 	SS_DIRECT = 0,
+	SS_INVALID_ALL_IC = 2,
+	SS_INVALID_PART_IC = 3,
 	SS_INDIRECT = 4,
+	SS_INDIRECT_TCM = 5,
+	SS_INDIRECT_STM = 6,
 };
 
 enum a4xx_index_size {
@@ -227,7 +259,7 @@ static inline uint32_t CP_LOAD_STATE_0_STATE_BLOCK(enum adreno_state_block val)
 {
 	return ((val) << CP_LOAD_STATE_0_STATE_BLOCK__SHIFT) & CP_LOAD_STATE_0_STATE_BLOCK__MASK;
 }
-#define CP_LOAD_STATE_0_NUM_UNIT__MASK				0x7fc00000
+#define CP_LOAD_STATE_0_NUM_UNIT__MASK				0xffc00000
 #define CP_LOAD_STATE_0_NUM_UNIT__SHIFT				22
 static inline uint32_t CP_LOAD_STATE_0_NUM_UNIT(uint32_t val)
 {
@@ -379,7 +411,12 @@ static inline uint32_t CP_DRAW_INDX_OFFSET_0_SOURCE_SELECT(enum pc_di_src_sel va
 {
 	return ((val) << CP_DRAW_INDX_OFFSET_0_SOURCE_SELECT__SHIFT) & CP_DRAW_INDX_OFFSET_0_SOURCE_SELECT__MASK;
 }
-#define CP_DRAW_INDX_OFFSET_0_TESSELLATE			0x00000100
+#define CP_DRAW_INDX_OFFSET_0_VIS_CULL__MASK			0x00000300
+#define CP_DRAW_INDX_OFFSET_0_VIS_CULL__SHIFT			8
+static inline uint32_t CP_DRAW_INDX_OFFSET_0_VIS_CULL(enum pc_di_vis_cull_mode val)
+{
+	return ((val) << CP_DRAW_INDX_OFFSET_0_VIS_CULL__SHIFT) & CP_DRAW_INDX_OFFSET_0_VIS_CULL__MASK;
+}
 #define CP_DRAW_INDX_OFFSET_0_INDEX_SIZE__MASK			0x00000c00
 #define CP_DRAW_INDX_OFFSET_0_INDEX_SIZE__SHIFT			10
 static inline uint32_t CP_DRAW_INDX_OFFSET_0_INDEX_SIZE(enum a4xx_index_size val)
@@ -497,6 +534,103 @@ static inline uint32_t CP_SET_BIN_DATA_0_BIN_DATA_ADDR(uint32_t val)
 static inline uint32_t CP_SET_BIN_DATA_1_BIN_SIZE_ADDRESS(uint32_t val)
 {
 	return ((val) << CP_SET_BIN_DATA_1_BIN_SIZE_ADDRESS__SHIFT) & CP_SET_BIN_DATA_1_BIN_SIZE_ADDRESS__MASK;
+}
+
+#define REG_CP_REG_TO_MEM_0					0x00000000
+#define CP_REG_TO_MEM_0_REG__MASK				0x0000ffff
+#define CP_REG_TO_MEM_0_REG__SHIFT				0
+static inline uint32_t CP_REG_TO_MEM_0_REG(uint32_t val)
+{
+	return ((val) << CP_REG_TO_MEM_0_REG__SHIFT) & CP_REG_TO_MEM_0_REG__MASK;
+}
+#define CP_REG_TO_MEM_0_CNT__MASK				0x3ff80000
+#define CP_REG_TO_MEM_0_CNT__SHIFT				19
+static inline uint32_t CP_REG_TO_MEM_0_CNT(uint32_t val)
+{
+	return ((val) << CP_REG_TO_MEM_0_CNT__SHIFT) & CP_REG_TO_MEM_0_CNT__MASK;
+}
+#define CP_REG_TO_MEM_0_64B					0x40000000
+#define CP_REG_TO_MEM_0_ACCUMULATE				0x80000000
+
+#define REG_CP_REG_TO_MEM_1					0x00000001
+#define CP_REG_TO_MEM_1_DEST__MASK				0xffffffff
+#define CP_REG_TO_MEM_1_DEST__SHIFT				0
+static inline uint32_t CP_REG_TO_MEM_1_DEST(uint32_t val)
+{
+	return ((val) << CP_REG_TO_MEM_1_DEST__SHIFT) & CP_REG_TO_MEM_1_DEST__MASK;
+}
+
+#define REG_CP_DISPATCH_COMPUTE_0				0x00000000
+
+#define REG_CP_DISPATCH_COMPUTE_1				0x00000001
+#define CP_DISPATCH_COMPUTE_1_X__MASK				0xffffffff
+#define CP_DISPATCH_COMPUTE_1_X__SHIFT				0
+static inline uint32_t CP_DISPATCH_COMPUTE_1_X(uint32_t val)
+{
+	return ((val) << CP_DISPATCH_COMPUTE_1_X__SHIFT) & CP_DISPATCH_COMPUTE_1_X__MASK;
+}
+
+#define REG_CP_DISPATCH_COMPUTE_2				0x00000002
+#define CP_DISPATCH_COMPUTE_2_Y__MASK				0xffffffff
+#define CP_DISPATCH_COMPUTE_2_Y__SHIFT				0
+static inline uint32_t CP_DISPATCH_COMPUTE_2_Y(uint32_t val)
+{
+	return ((val) << CP_DISPATCH_COMPUTE_2_Y__SHIFT) & CP_DISPATCH_COMPUTE_2_Y__MASK;
+}
+
+#define REG_CP_DISPATCH_COMPUTE_3				0x00000003
+#define CP_DISPATCH_COMPUTE_3_Z__MASK				0xffffffff
+#define CP_DISPATCH_COMPUTE_3_Z__SHIFT				0
+static inline uint32_t CP_DISPATCH_COMPUTE_3_Z(uint32_t val)
+{
+	return ((val) << CP_DISPATCH_COMPUTE_3_Z__SHIFT) & CP_DISPATCH_COMPUTE_3_Z__MASK;
+}
+
+#define REG_CP_SET_RENDER_MODE_0				0x00000000
+
+#define REG_CP_SET_RENDER_MODE_1				0x00000001
+#define CP_SET_RENDER_MODE_1_ADDR_0_LO__MASK			0xffffffff
+#define CP_SET_RENDER_MODE_1_ADDR_0_LO__SHIFT			0
+static inline uint32_t CP_SET_RENDER_MODE_1_ADDR_0_LO(uint32_t val)
+{
+	return ((val) << CP_SET_RENDER_MODE_1_ADDR_0_LO__SHIFT) & CP_SET_RENDER_MODE_1_ADDR_0_LO__MASK;
+}
+
+#define REG_CP_SET_RENDER_MODE_2				0x00000002
+#define CP_SET_RENDER_MODE_2_ADDR_0_HI__MASK			0xffffffff
+#define CP_SET_RENDER_MODE_2_ADDR_0_HI__SHIFT			0
+static inline uint32_t CP_SET_RENDER_MODE_2_ADDR_0_HI(uint32_t val)
+{
+	return ((val) << CP_SET_RENDER_MODE_2_ADDR_0_HI__SHIFT) & CP_SET_RENDER_MODE_2_ADDR_0_HI__MASK;
+}
+
+#define REG_CP_SET_RENDER_MODE_3				0x00000003
+#define CP_SET_RENDER_MODE_3_GMEM_ENABLE			0x00000010
+
+#define REG_CP_SET_RENDER_MODE_4				0x00000004
+
+#define REG_CP_SET_RENDER_MODE_5				0x00000005
+#define CP_SET_RENDER_MODE_5_ADDR_1_LEN__MASK			0xffffffff
+#define CP_SET_RENDER_MODE_5_ADDR_1_LEN__SHIFT			0
+static inline uint32_t CP_SET_RENDER_MODE_5_ADDR_1_LEN(uint32_t val)
+{
+	return ((val) << CP_SET_RENDER_MODE_5_ADDR_1_LEN__SHIFT) & CP_SET_RENDER_MODE_5_ADDR_1_LEN__MASK;
+}
+
+#define REG_CP_SET_RENDER_MODE_6				0x00000006
+#define CP_SET_RENDER_MODE_6_ADDR_1_LO__MASK			0xffffffff
+#define CP_SET_RENDER_MODE_6_ADDR_1_LO__SHIFT			0
+static inline uint32_t CP_SET_RENDER_MODE_6_ADDR_1_LO(uint32_t val)
+{
+	return ((val) << CP_SET_RENDER_MODE_6_ADDR_1_LO__SHIFT) & CP_SET_RENDER_MODE_6_ADDR_1_LO__MASK;
+}
+
+#define REG_CP_SET_RENDER_MODE_7				0x00000007
+#define CP_SET_RENDER_MODE_7_ADDR_1_HI__MASK			0xffffffff
+#define CP_SET_RENDER_MODE_7_ADDR_1_HI__SHIFT			0
+static inline uint32_t CP_SET_RENDER_MODE_7_ADDR_1_HI(uint32_t val)
+{
+	return ((val) << CP_SET_RENDER_MODE_7_ADDR_1_HI__SHIFT) & CP_SET_RENDER_MODE_7_ADDR_1_HI__MASK;
 }
 
 

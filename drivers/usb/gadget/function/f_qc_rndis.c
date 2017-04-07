@@ -153,6 +153,7 @@ static unsigned int rndis_qc_bitrate(struct usb_gadget *g)
 
 /* interface descriptor: */
 
+/* interface descriptor: Supports "Wireless" RNDIS; auto-detected by Windows*/
 static struct usb_interface_descriptor rndis_qc_control_intf = {
 	.bLength =		sizeof(rndis_qc_control_intf),
 	.bDescriptorType =	USB_DT_INTERFACE,
@@ -160,9 +161,9 @@ static struct usb_interface_descriptor rndis_qc_control_intf = {
 	/* .bInterfaceNumber = DYNAMIC */
 	/* status endpoint is optional; this could be patched later */
 	.bNumEndpoints =	1,
-	.bInterfaceClass =	USB_CLASS_COMM,
-	.bInterfaceSubClass =   USB_CDC_SUBCLASS_ACM,
-	.bInterfaceProtocol =   USB_CDC_ACM_PROTO_VENDOR,
+	.bInterfaceClass =	USB_CLASS_WIRELESS_CONTROLLER,
+	.bInterfaceSubClass =   0x01,
+	.bInterfaceProtocol =   0x03,
 	/* .iInterface = DYNAMIC */
 };
 
@@ -214,15 +215,16 @@ static struct usb_interface_descriptor rndis_qc_data_intf = {
 };
 
 
+/*  Supports "Wireless" RNDIS; auto-detected by Windows */
 static struct usb_interface_assoc_descriptor
 rndis_qc_iad_descriptor = {
 	.bLength =		sizeof(rndis_qc_iad_descriptor),
 	.bDescriptorType =	USB_DT_INTERFACE_ASSOCIATION,
 	.bFirstInterface =	0, /* XXX, hardcoded */
 	.bInterfaceCount =	2, /* control + data */
-	.bFunctionClass =	USB_CLASS_COMM,
-	.bFunctionSubClass =	USB_CDC_SUBCLASS_ETHERNET,
-	.bFunctionProtocol =	USB_CDC_PROTO_NONE,
+	.bFunctionClass =	USB_CLASS_WIRELESS_CONTROLLER,
+	.bFunctionSubClass =	0x01,
+	.bFunctionProtocol =	0x03,
 	/* .iFunction = DYNAMIC */
 };
 
@@ -1198,7 +1200,7 @@ usb_function *rndis_qc_bind_config_vendor(struct usb_function_instance *fi,
 	/* export host's Ethernet address in CDC format */
 	random_ether_addr(rndis_ipa_params.host_ethaddr);
 	random_ether_addr(rndis_ipa_params.device_ethaddr);
-	pr_debug("setting host_ethaddr=%pKM, device_ethaddr=%pKM\n",
+	pr_debug("setting host_ethaddr=%pM, device_ethaddr=%pM\n",
 		rndis_ipa_params.host_ethaddr,
 		rndis_ipa_params.device_ethaddr);
 	rndis_ipa_supported = true;
@@ -1257,7 +1259,7 @@ usb_function *rndis_qc_bind_config_vendor(struct usb_function_instance *fi,
 
 static struct usb_function *qcrndis_alloc(struct usb_function_instance *fi)
 {
-	return rndis_qc_bind_config_vendor(fi, 0, NULL, 1, 0);
+	return rndis_qc_bind_config_vendor(fi, 0, NULL, 0, 0);
 }
 
 static int rndis_qc_open_dev(struct inode *ip, struct file *fp)

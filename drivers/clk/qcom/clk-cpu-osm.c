@@ -39,6 +39,7 @@
 #include "common.h"
 #include "clk-regmap.h"
 #include "clk-rcg.h"
+#include "clk-debug.h"
 
 enum {
 	LMH_LITE_CLK_SRC,
@@ -757,6 +758,7 @@ static struct clk_ops clk_ops_cpu_osm = {
 	.round_rate = clk_osm_round_rate,
 	.list_rate = clk_osm_list_rate,
 	.recalc_rate = clk_osm_recalc_rate,
+	.debug_init = clk_debug_measure_add,
 };
 
 static const struct parent_map gcc_parent_map_1[] = {
@@ -1952,16 +1954,21 @@ static void clk_osm_program_mem_acc_regs(struct clk_osm *c)
 		}
 	}
 
+	threshold_vc[0] = mem_acc_level_map[0];
+	threshold_vc[1] = mem_acc_level_map[0] + 1;
+	threshold_vc[2] = mem_acc_level_map[1];
+	threshold_vc[3] = mem_acc_level_map[1] + 1;
+
 	if (c->secure_init) {
 		clk_osm_write_reg(c, MEM_ACC_SEQ_CONST(1), SEQ_REG(51));
 		clk_osm_write_reg(c, MEM_ACC_SEQ_CONST(2), SEQ_REG(52));
 		clk_osm_write_reg(c, MEM_ACC_SEQ_CONST(3), SEQ_REG(53));
 		clk_osm_write_reg(c, MEM_ACC_SEQ_CONST(4), SEQ_REG(54));
 		clk_osm_write_reg(c, MEM_ACC_APM_READ_MASK, SEQ_REG(59));
-		clk_osm_write_reg(c, mem_acc_level_map[0], SEQ_REG(55));
-		clk_osm_write_reg(c, mem_acc_level_map[0] + 1, SEQ_REG(56));
-		clk_osm_write_reg(c, mem_acc_level_map[1], SEQ_REG(57));
-		clk_osm_write_reg(c, mem_acc_level_map[1] + 1, SEQ_REG(58));
+		clk_osm_write_reg(c, threshold_vc[0], SEQ_REG(55));
+		clk_osm_write_reg(c, threshold_vc[1], SEQ_REG(56));
+		clk_osm_write_reg(c, threshold_vc[2], SEQ_REG(57));
+		clk_osm_write_reg(c, threshold_vc[3], SEQ_REG(58));
 		clk_osm_write_reg(c, c->pbases[OSM_BASE] + SEQ_REG(28),
 				  SEQ_REG(49));
 
@@ -1976,11 +1983,6 @@ static void clk_osm_program_mem_acc_regs(struct clk_osm *c)
 		if (c->mem_acc_crossover_vc)
 			scm_io_write(c->pbases[OSM_BASE] + SEQ_REG(88),
 					c->mem_acc_crossover_vc);
-
-		threshold_vc[0] = mem_acc_level_map[0];
-		threshold_vc[1] = mem_acc_level_map[0] + 1;
-		threshold_vc[2] = mem_acc_level_map[1];
-		threshold_vc[3] = mem_acc_level_map[1] + 1;
 
 		/*
 		 * Use dynamic MEM ACC threshold voltage based value for the
@@ -2011,11 +2013,10 @@ static void clk_osm_program_mem_acc_regs(struct clk_osm *c)
 	 * Program L_VAL corresponding to the first virtual
 	 * corner with MEM ACC level 3.
 	 */
-	if (c->mem_acc_threshold_vc)
-		for (i = 0; i < c->num_entries; i++)
-			if (c->mem_acc_threshold_vc == table[i].virtual_corner)
-				scm_io_write(c->pbases[OSM_BASE] + SEQ_REG(32),
-						L_VAL(table[i].freq_data));
+	for (i = 0; i < c->num_entries; i++)
+		if (threshold_vc[3] == table[i].virtual_corner)
+			scm_io_write(c->pbases[OSM_BASE] + SEQ_REG(32),
+					L_VAL(table[i].freq_data));
 }
 
 void clk_osm_setup_sequencer(struct clk_osm *c)
