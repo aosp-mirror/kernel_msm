@@ -395,28 +395,6 @@ static struct attribute_group gpio_keys_attr_group = {
 	.attrs = gpio_keys_attrs,
 };
 
-#include <linux/sched.h>
-static int debug_key_bits = 0x0;
-static DEFINE_SPINLOCK(debug_key_lock);
-static void debug_combine_key(unsigned int code, int value)
-{
-	unsigned long flags;
-	int bits;
-
-	value = !!value;
-	code -= 0x72;
-	if (code > 2)
-		return;
-
-	spin_lock_irqsave(&debug_key_lock, flags);
-	bits = debug_key_bits =
-		(debug_key_bits & ~(1 << code)) | value << code;
-	spin_unlock_irqrestore(&debug_key_lock, flags);
-
-	if (bits == 0b111)
-		show_state_filter(TASK_UNINTERRUPTIBLE);
-}
-
 static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 {
 	const struct gpio_keys_button *button = bdata->button;
@@ -431,14 +409,12 @@ static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 			pr_debug("[KEY] %s: key %x-%x, (%d) changed to %d\n",
 				__func__, type, button->code, button->gpio, button->value);
 
-					debug_combine_key(button->code, button->value);
 					input_event(input, type, button->code, button->value);
 		}
 	} else {
 		pr_debug("[KEY] %s: key %x-%x, (%d) changed to %d\n",
 			__func__, type, button->code, button->gpio, !!state);
 
-		debug_combine_key(button->code, !!state);
 		input_event(input, type, button->code, !!state);
 	}
 	input_sync(input);
