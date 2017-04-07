@@ -525,7 +525,7 @@ static int fg_get_sram_prop(struct fg_chip *chip, enum fg_sram_param_id id,
 }
 
 #define CC_SOC_30BIT	GENMASK(29, 0)
-static int fg_get_cc_soc(struct fg_chip *chip, int *val)
+static int fg_get_charge_raw(struct fg_chip *chip, int *val)
 {
 	int rc, cc_soc;
 
@@ -539,7 +539,7 @@ static int fg_get_cc_soc(struct fg_chip *chip, int *val)
 	return 0;
 }
 
-static int fg_get_cc_soc_sw(struct fg_chip *chip, int *val)
+static int fg_get_charge_counter(struct fg_chip *chip, int *val)
 {
 	int rc, cc_soc;
 
@@ -1054,6 +1054,25 @@ static void fg_notify_charger(struct fg_chip *chip)
 	fg_dbg(chip, FG_STATUS, "Notified charger on float voltage and FCC\n");
 }
 
+static int fg_delta_bsoc_irq_en_cb(struct votable *votable, void *data,
+					int enable, const char *client)
+{
+	struct fg_chip *chip = data;
+
+	if (!chip->irqs[BSOC_DELTA_IRQ].irq)
+		return 0;
+
+	if (enable) {
+		enable_irq(chip->irqs[BSOC_DELTA_IRQ].irq);
+		enable_irq_wake(chip->irqs[BSOC_DELTA_IRQ].irq);
+	} else {
+		disable_irq_wake(chip->irqs[BSOC_DELTA_IRQ].irq);
+		disable_irq(chip->irqs[BSOC_DELTA_IRQ].irq);
+	}
+
+	return 0;
+}
+
 static int fg_awake_cb(struct votable *votable, void *data, int awake,
 			const char *client)
 {
@@ -1241,7 +1260,7 @@ static void fg_cap_learning_post_process(struct fg_chip *chip)
 		chip->cl.final_cc_uah, old_cap, chip->cl.learned_cc_uah);
 }
 
-static int  fg_cap_learning_process_full_data(struct fg_chip *chip)
+static int fg_cap_learning_process_full_data(struct fg_chip *chip)
 {
 	int rc, cc_soc_sw, cc_soc_delta_pct;
 	int64_t delta_cc_uah;
@@ -1263,30 +1282,39 @@ static int  fg_cap_learning_process_full_data(struct fg_chip *chip)
 	return 0;
 }
 
-static int fg_cap_learning_begin(struct fg_chip *chip, int batt_soc)
+#define BATT_SOC_32BIT	GENMASK(31, 0)
+static int fg_cap_learning_begin(struct fg_chip *chip, u32 batt_soc)
 {
-	int rc, cc_soc_sw;
+	int rc, cc_soc_sw, batt_soc_msb;
 
-	if (DIV_ROUND_CLOSEST(batt_soc * 100, FULL_SOC_RAW) >
+	batt_soc_msb = batt_soc >> 24;
+	if (DIV_ROUND_CLOSEST(batt_soc_msb * 100, FULL_SOC_RAW) >
 		chip->dt.cl_start_soc) {
 		fg_dbg(chip, FG_CAP_LEARN, "Battery SOC %d is high!, not starting\n",
-			batt_soc);
+			batt_soc_msb);
 		return -EINVAL;
 	}
 
-	chip->cl.init_cc_uah = div64_s64(chip->cl.learned_cc_uah * batt_soc,
+	chip->cl.init_cc_uah = div64_s64(chip->cl.learned_cc_uah * batt_soc_msb,
 					FULL_SOC_RAW);
-	rc = fg_get_sram_prop(chip, FG_SRAM_CC_SOC_SW, &cc_soc_sw);
+
+	/* Prime cc_soc_sw with battery SOC when capacity learning begins */
+	cc_soc_sw = div64_s64((int64_t)batt_soc * CC_SOC_30BIT,
+				BATT_SOC_32BIT);
+	rc = fg_sram_write(chip, chip->sp[FG_SRAM_CC_SOC_SW].addr_word,
+		chip->sp[FG_SRAM_CC_SOC_SW].addr_byte, (u8 *)&cc_soc_sw,
+		chip->sp[FG_SRAM_CC_SOC_SW].len, FG_IMA_ATOMIC);
 	if (rc < 0) {
-		pr_err("Error in getting CC_SOC_SW, rc=%d\n", rc);
-		return rc;
+		pr_err("Error in writing cc_soc_sw, rc=%d\n", rc);
+		goto out;
 	}
 
 	chip->cl.init_cc_soc_sw = cc_soc_sw;
 	chip->cl.active = true;
 	fg_dbg(chip, FG_CAP_LEARN, "Capacity learning started @ battery SOC %d init_cc_soc_sw:%d\n",
-		batt_soc, chip->cl.init_cc_soc_sw);
-	return 0;
+		batt_soc_msb, chip->cl.init_cc_soc_sw);
+out:
+	return rc;
 }
 
 static int fg_cap_learning_done(struct fg_chip *chip)
@@ -1318,7 +1346,7 @@ out:
 #define FULL_SOC_RAW	255
 static void fg_cap_learning_update(struct fg_chip *chip)
 {
-	int rc, batt_soc;
+	int rc, batt_soc, batt_soc_msb;
 
 	mutex_lock(&chip->cl.lock);
 
@@ -1337,11 +1365,9 @@ static void fg_cap_learning_update(struct fg_chip *chip)
 		goto out;
 	}
 
-	/* We need only the most significant byte here */
-	batt_soc = (u32)batt_soc >> 24;
-
+	batt_soc_msb = (u32)batt_soc >> 24;
 	fg_dbg(chip, FG_CAP_LEARN, "Chg_status: %d cl_active: %d batt_soc: %d\n",
-		chip->charge_status, chip->cl.active, batt_soc);
+		chip->charge_status, chip->cl.active, batt_soc_msb);
 
 	/* Initialize the starting point of learning capacity */
 	if (!chip->cl.active) {
@@ -1363,7 +1389,7 @@ static void fg_cap_learning_update(struct fg_chip *chip)
 
 		if (chip->charge_status == POWER_SUPPLY_STATUS_NOT_CHARGING) {
 			fg_dbg(chip, FG_CAP_LEARN, "Capacity learning aborted @ battery SOC %d\n",
-				batt_soc);
+				batt_soc_msb);
 			chip->cl.active = false;
 			chip->cl.init_cc_uah = 0;
 		}
@@ -1470,16 +1496,8 @@ static int fg_charge_full_update(struct fg_chip *chip)
 		return 0;
 
 	mutex_lock(&chip->charge_full_lock);
-	if (!chip->charge_done && chip->bsoc_delta_irq_en) {
-		disable_irq_wake(fg_irqs[BSOC_DELTA_IRQ].irq);
-		disable_irq_nosync(fg_irqs[BSOC_DELTA_IRQ].irq);
-		chip->bsoc_delta_irq_en = false;
-	} else if (chip->charge_done && !chip->bsoc_delta_irq_en) {
-		enable_irq(fg_irqs[BSOC_DELTA_IRQ].irq);
-		enable_irq_wake(fg_irqs[BSOC_DELTA_IRQ].irq);
-		chip->bsoc_delta_irq_en = true;
-	}
-
+	vote(chip->delta_bsoc_irq_en_votable, DELTA_BSOC_IRQ_VOTER,
+		chip->charge_done, 0);
 	rc = power_supply_get_property(chip->batt_psy, POWER_SUPPLY_PROP_HEALTH,
 		&prop);
 	if (rc < 0) {
@@ -1597,6 +1615,9 @@ static int fg_rconn_config(struct fg_chip *chip)
 	int rc, esr_uohms;
 	u64 scaling_factor;
 	u32 val = 0;
+
+	if (!chip->dt.rconn_mohms)
+		return 0;
 
 	rc = fg_sram_read(chip, PROFILE_INTEGRITY_WORD,
 			SW_CONFIG_OFFSET, (u8 *)&val, 1, FG_IMA_DEFAULT);
@@ -2188,6 +2209,17 @@ static bool is_profile_load_required(struct fg_chip *chip)
 	/* Check if integrity bit is set */
 	if (val & PROFILE_LOAD_BIT) {
 		fg_dbg(chip, FG_STATUS, "Battery profile integrity bit is set\n");
+
+		/* Whitelist the values */
+		val &= ~PROFILE_LOAD_BIT;
+		if (val != HLOS_RESTART_BIT && val != BOOTLOADER_LOAD_BIT &&
+			val != (BOOTLOADER_LOAD_BIT | BOOTLOADER_RESTART_BIT)) {
+			val |= PROFILE_LOAD_BIT;
+			pr_warn("Garbage value in profile integrity word: 0x%x\n",
+				val);
+			return true;
+		}
+
 		rc = fg_sram_read(chip, PROFILE_LOAD_WORD, PROFILE_LOAD_OFFSET,
 				buf, PROFILE_COMP_LEN, FG_IMA_DEFAULT);
 		if (rc < 0) {
@@ -2818,7 +2850,7 @@ static int fg_psy_get_property(struct power_supply *psy,
 		pval->intval = chip->cyc_ctr.id;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_NOW_RAW:
-		rc = fg_get_cc_soc(chip, &pval->intval);
+		rc = fg_get_charge_raw(chip, &pval->intval);
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_NOW:
 		pval->intval = chip->cl.init_cc_uah;
@@ -2827,7 +2859,7 @@ static int fg_psy_get_property(struct power_supply *psy,
 		pval->intval = chip->cl.learned_cc_uah;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
-		rc = fg_get_cc_soc_sw(chip, &pval->intval);
+		rc = fg_get_charge_counter(chip, &pval->intval);
 		break;
 	case POWER_SUPPLY_PROP_TIME_TO_FULL_AVG:
 		rc = fg_get_time_to_full(chip, &pval->intval);
@@ -3176,12 +3208,10 @@ static int fg_hw_init(struct fg_chip *chip)
 		return rc;
 	}
 
-	if (chip->dt.rconn_mohms > 0) {
-		rc = fg_rconn_config(chip);
-		if (rc < 0) {
-			pr_err("Error in configuring Rconn, rc=%d\n", rc);
-			return rc;
-		}
+	rc = fg_rconn_config(chip);
+	if (rc < 0) {
+		pr_err("Error in configuring Rconn, rc=%d\n", rc);
+		return rc;
 	}
 
 	fg_encode(chip->sp, FG_SRAM_ESR_TIGHT_FILTER,
@@ -3228,20 +3258,19 @@ static irqreturn_t fg_mem_xcp_irq_handler(int irq, void *data)
 	}
 
 	fg_dbg(chip, FG_IRQ, "irq %d triggered, status:%d\n", irq, status);
-	if (status & MEM_XCP_BIT) {
-		rc = fg_clear_dma_errors_if_any(chip);
-		if (rc < 0) {
-			pr_err("Error in clearing DMA error, rc=%d\n", rc);
-			return IRQ_HANDLED;
-		}
 
-		mutex_lock(&chip->sram_rw_lock);
+	mutex_lock(&chip->sram_rw_lock);
+	rc = fg_clear_dma_errors_if_any(chip);
+	if (rc < 0)
+		pr_err("Error in clearing DMA error, rc=%d\n", rc);
+
+	if (status & MEM_XCP_BIT) {
 		rc = fg_clear_ima_errors_if_any(chip, true);
 		if (rc < 0 && rc != -EAGAIN)
 			pr_err("Error in checking IMA errors rc:%d\n", rc);
-		mutex_unlock(&chip->sram_rw_lock);
 	}
 
+	mutex_unlock(&chip->sram_rw_lock);
 	return IRQ_HANDLED;
 }
 
@@ -3737,6 +3766,7 @@ static int fg_parse_dt(struct fg_chip *chip)
 	case PM660_SUBTYPE:
 		chip->sp = pmi8998_v2_sram_params;
 		chip->alg_flags = pmi8998_v2_alg_flags;
+		chip->use_ima_single_mode = true;
 		break;
 	default:
 		return -EINVAL;
@@ -3957,9 +3987,7 @@ static int fg_parse_dt(struct fg_chip *chip)
 		pr_err("Error in parsing Ki coefficients, rc=%d\n", rc);
 
 	rc = of_property_read_u32(node, "qcom,fg-rconn-mohms", &temp);
-	if (rc < 0)
-		chip->dt.rconn_mohms = -EINVAL;
-	else
+	if (!rc)
 		chip->dt.rconn_mohms = temp;
 
 	rc = of_property_read_u32(node, "qcom,fg-esr-filter-switch-temp",
@@ -4017,6 +4045,9 @@ static void fg_cleanup(struct fg_chip *chip)
 	if (chip->awake_votable)
 		destroy_votable(chip->awake_votable);
 
+	if (chip->delta_bsoc_irq_en_votable)
+		destroy_votable(chip->delta_bsoc_irq_en_votable);
+
 	if (chip->batt_id_chan)
 		iio_channel_release(chip->batt_id_chan);
 
@@ -4058,7 +4089,15 @@ static int fg_gen3_probe(struct platform_device *pdev)
 					chip);
 	if (IS_ERR(chip->awake_votable)) {
 		rc = PTR_ERR(chip->awake_votable);
-		return rc;
+		goto exit;
+	}
+
+	chip->delta_bsoc_irq_en_votable = create_votable("FG_DELTA_BSOC_IRQ",
+						VOTE_SET_ANY,
+						fg_delta_bsoc_irq_en_cb, chip);
+	if (IS_ERR(chip->delta_bsoc_irq_en_votable)) {
+		rc = PTR_ERR(chip->delta_bsoc_irq_en_votable);
+		goto exit;
 	}
 
 	rc = fg_parse_dt(chip);
@@ -4085,7 +4124,7 @@ static int fg_gen3_probe(struct platform_device *pdev)
 	rc = fg_get_batt_id(chip);
 	if (rc < 0) {
 		pr_err("Error in getting battery id, rc:%d\n", rc);
-		return rc;
+		goto exit;
 	}
 
 	rc = fg_get_batt_profile(chip);
@@ -4143,11 +4182,7 @@ static int fg_gen3_probe(struct platform_device *pdev)
 		disable_irq_nosync(fg_irqs[SOC_UPDATE_IRQ].irq);
 
 	/* Keep BSOC_DELTA_IRQ irq disabled until we require it */
-	if (fg_irqs[BSOC_DELTA_IRQ].irq) {
-		disable_irq_wake(fg_irqs[BSOC_DELTA_IRQ].irq);
-		disable_irq_nosync(fg_irqs[BSOC_DELTA_IRQ].irq);
-		chip->bsoc_delta_irq_en = false;
-	}
+	rerun_election(chip->delta_bsoc_irq_en_votable);
 
 	rc = fg_debugfs_create(chip);
 	if (rc < 0) {
