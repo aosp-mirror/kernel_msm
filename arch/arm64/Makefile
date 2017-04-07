@@ -157,6 +157,8 @@ endif
 
 KBUILD_DTBS	:= dtbs
 
+KBUILD_DTBO_IMG := dtbo.img
+
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
 export DTC_FLAGS := -@
 endif
@@ -202,6 +204,9 @@ dtbs_install:
 Image-dtb Image.gz-dtb Image.lz4-dtb: vmlinux scripts dtbs
 	$(Q)$(MAKE) $(build)=$(boot) $(boot)/$@
 
+dtbo.img: $(boot)/dts/dtboimg.cfg dtbs
+	$(Q)$(MAKE) $(build)=$(boot) $(boot)/$@
+
 
 PHONY += apply_dtbo
 dtboapply := -f $(if $(KBUILD_SRC),$(srctree)/)scripts/Makefile.dtboapply obj
@@ -215,6 +220,9 @@ vdso_install:
 archclean:
 	$(Q)$(MAKE) $(clean)=$(boot)
 	$(Q)$(MAKE) $(clean)=$(boot)/dts
+
+CLEAN_FILES += $(boot)/Image $(boot)/Image-dtb $(boot)/Image.* $(boot)/dtbo.img
+MRPROPER_FILES += $(boot)/Image $(boot)/Image-dtb $(boot)/Image.* $(boot)/dtbo.img
 
 # We need to generate vdso-offsets.h before compiling certain files in kernel/.
 # In order to do that, we should use the archprepare target, but we can't since
