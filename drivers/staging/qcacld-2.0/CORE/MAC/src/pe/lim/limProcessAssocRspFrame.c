@@ -84,8 +84,6 @@ void limUpdateAssocStaDatas(tpAniSirGlobal pMac, tpDphHashNode pStaDs, tpSirAsso
     tANI_U16        rxHighestRate = 0;
     uint32_t        shortgi_20mhz_support;
     uint32_t        shortgi_40mhz_support;
-    tDot11fIEVHTCaps *vht_caps = NULL;
-    tDot11fIEVHTOperation *vht_oper = NULL;
 
     limGetPhyMode(pMac, &phyMode, psessionEntry);
 
@@ -165,48 +163,33 @@ void limUpdateAssocStaDatas(tpAniSirGlobal pMac, tpDphHashNode pStaDs, tpSirAsso
        }
 
 #ifdef WLAN_FEATURE_11AC
-       if (pAssocRsp->VHTCaps.present)
-           vht_caps = &pAssocRsp->VHTCaps;
-       else if (pAssocRsp->vendor2_ie.VHTCaps.present)
-            vht_caps = &pAssocRsp->vendor2_ie.VHTCaps;
-       if (pAssocRsp->VHTOperation.present)
-           vht_oper = &pAssocRsp->VHTOperation;
-       else if (pAssocRsp->vendor2_ie.VHTCaps.present)
-            vht_oper = &pAssocRsp->vendor2_ie.VHTOperation;
-       if ((vht_oper != NULL) &&
-		       (IS_DOT11_MODE_VHT(psessionEntry->dot11mode)) &&
-                                       vht_oper->present &&
-                                    psessionEntry->htSupportedChannelWidthSet)
-            pStaDs->vhtSupportedChannelWidthSet = vht_oper->chanWidth;
+       if(IS_DOT11_MODE_VHT(psessionEntry->dot11mode))
+       {
+           pStaDs->mlmStaContext.vhtCapability = pAssocRsp->VHTCaps.present;
+           if (pAssocRsp->VHTCaps.present &&
+               psessionEntry->htSupportedChannelWidthSet)
+               pStaDs->vhtSupportedChannelWidthSet =
+                                   pAssocRsp->VHTOperation.chanWidth;
+       }
 
-       if ((vht_caps != NULL) && vht_caps->present) {
-           if (IS_DOT11_MODE_VHT(psessionEntry->dot11mode))
-                        pStaDs->mlmStaContext.vhtCapability =
-                                vht_caps->present;
-           /*
-            * If 11ac is supported and if the peer is
-            * sending VHT capabilities,
-            * then htMaxRxAMpduFactor should be
-            * overloaded with VHT maxAMPDULenExp
-            */
-            pStaDs->htMaxRxAMpduFactor = vht_caps->maxAMPDULenExp;
+       // If 11ac is supported and if the peer is sending VHT capabilities,
+       // then htMaxRxAMpduFactor should be overloaded with VHT maxAMPDULenExp
+       if (pAssocRsp->VHTCaps.present)
+       {
+          pStaDs->htMaxRxAMpduFactor = pAssocRsp->VHTCaps.maxAMPDULenExp;
+       }
+
        if (limPopulatePeerRateSet(pMac, &pStaDs->supportedRates,
                                 pAssocRsp->HTCaps.supportedMCSSet,
-                    false, psessionEntry,
-                    vht_caps) != eSIR_SUCCESS) {
-                    limLog(pMac, LOGP,
-                    FL("could not get rateset and extended rate set"));
-                    return;
-           }
-       }
+                                false,psessionEntry , &pAssocRsp->VHTCaps) != eSIR_SUCCESS)
 #else
        if (limPopulatePeerRateSet(pMac, &pStaDs->supportedRates, pAssocRsp->HTCaps.supportedMCSSet, false,psessionEntry) != eSIR_SUCCESS)
+#endif
        {
            limLog(pMac, LOGP, FL("could not get rateset and extended rate set"));
            return;
        }
 
-#endif
 #ifdef WLAN_FEATURE_11AC
         pStaDs->vhtSupportedRxNss = ((pStaDs->supportedRates.vhtRxMCSMap & MCSMAPMASK2x2)
                                                                 == MCSMAPMASK2x2) ? 1 : 2;

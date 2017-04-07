@@ -153,7 +153,7 @@ limExtractApCapability(tpAniSirGlobal pMac, tANI_U8 *pIE, tANI_U16 ieLen,
             psessionEntry->vhtTxChannelWidthSet = vht_ch_wd;
 
             if (pBeaconStruct->Vendor1IEPresent &&
-                pBeaconStruct->vendor2_ie.present &&
+                pBeaconStruct->Vendor2IEPresent &&
                 pBeaconStruct->Vendor3IEPresent)
             {
                 if (((pBeaconStruct->VHTCaps.txMCSMap & VHT_MCS_3x3_MASK) ==
