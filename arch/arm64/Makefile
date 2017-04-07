@@ -161,6 +161,10 @@ ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
 export DTC_FLAGS := -@
 endif
 
+ifeq ($(CONFIG_BUILD_ARM64_APPLY_DTBO),y)
+	KBUILD_APPLY_DTBO := apply_dtbo
+endif
+
 BUILD_DTC_PATH = $(subst $\",,$(CONFIG_BUILD_ARM64_DTC))
 ifneq ($(BUILD_DTC_PATH),)
 	DTC = $(BUILD_DTC_PATH)
@@ -171,7 +175,7 @@ ifneq ($(BUILD_DTC_FLAGS),)
 	DTC_FLAGS += $(BUILD_DTC_FLAGS)
 endif
 
-all:	$(KBUILD_IMAGE) $(KBUILD_DTBS)
+all:	$(KBUILD_IMAGE) $(KBUILD_DTBS) $(KBUILD_DTBO_IMG) $(KBUILD_APPLY_DTBO)
 
 boot := arch/arm64/boot
 
@@ -198,6 +202,11 @@ dtbs_install:
 Image-dtb Image.gz-dtb Image.lz4-dtb: vmlinux scripts dtbs
 	$(Q)$(MAKE) $(build)=$(boot) $(boot)/$@
 
+
+PHONY += apply_dtbo
+dtboapply := -f $(if $(KBUILD_SRC),$(srctree)/)scripts/Makefile.dtboapply obj
+apply_dtbo: Image.lz4-dtb dtbo.img
+	$(Q)$(MAKE) $(dtboapply)=$(boot) KERNEL_DTB=Image.lz4-dtb DTBO=dtbo.img
 PHONY += vdso_install
 vdso_install:
 	$(Q)$(MAKE) $(build)=arch/arm64/kernel/vdso $@

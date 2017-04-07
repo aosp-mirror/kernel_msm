@@ -1139,6 +1139,9 @@ config BUILD_ARM64_DTC
 config BUILD_ARM64_DTC_FLAGS
 	string "extra dtc flags"
 
+config BUILD_ARM64_APPLY_DTBO
+	bool "apply device tree overlay"
+
 config BUILD_ARM64_DT_OVERLAY
 	bool "enable DT overlay compilation support"
 	depends on OF
