@@ -275,14 +275,8 @@ __limExtScanForwardBcnProbeRsp(tpAniSirGlobal pmac, uint8_t *rx_pkt_info,
 	vos_mem_copy((uint8_t *) &result->ap.ieData,
 			body + SIR_MAC_B_PR_SSID_OFFSET, ie_len);
 
-	/* bss_description points to ap.ieData as ap.ieData is flexible arrary
-	 * member.
-	 * Fill result->bss_description by leaving ie_len bytes after ap.ieData
-	 * manually.
-	 */
-	limCollectBssDescription(pmac,
-							(tSirBssDescription *)((uint8_t *)&result->bss_description +
-							ie_len), frame, rx_pkt_info, eANI_BOOLEAN_FALSE);
+	limCollectBssDescription(pmac, &result->bss_description,
+			frame, rx_pkt_info, eANI_BOOLEAN_FALSE);
 
 	mmh_msg.type = msg_type;
 	mmh_msg.bodyptr = result;
