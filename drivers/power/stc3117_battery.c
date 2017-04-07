@@ -789,11 +789,11 @@ static void STC311x_SetParam(void)
 	STC31xx_WriteByte(STC311x_REG_CTRL, 0x83);
 
 	if (BattData.Vmode) {
-		/*   set GG_RUN=1, voltage mode, alm enabled */
-		STC31xx_WriteByte(STC311x_REG_MODE, 0x19);
+		/*   set GG_RUN=1, voltage mode, alm disabled */
+		STC31xx_WriteByte(STC311x_REG_MODE, 0x11);
 	} else {
-		/*   set GG_RUN=1, mixed mode, alm enabled */
-		STC31xx_WriteByte(STC311x_REG_MODE, 0x18);
+		/*   set GG_RUN=1, mixed mode, alm disabled */
+		STC31xx_WriteByte(STC311x_REG_MODE, 0x10);
 	}
 }
 
@@ -956,17 +956,17 @@ static int STC311x_SaveVMCnf(void)
 	STC31xx_WriteWord(STC311x_REG_VM_CNF, GG_Ram.reg.VM_cnf);
 
 	if (BattData.Vmode) {
-		/*   set GG_RUN=1, voltage mode, alm enabled */
-		STC31xx_WriteByte(STC311x_REG_MODE, 0x19);
+		/*   set GG_RUN=1, voltage mode, alm disabled */
+		STC31xx_WriteByte(STC311x_REG_MODE, 0x11);
 	} else {
-		/*   set GG_RUN=1, mixed mode, alm enabled */
-		STC31xx_WriteByte(STC311x_REG_MODE, 0x18);
+		/*   set GG_RUN=1, mixed mode, alm disabled */
+		STC31xx_WriteByte(STC311x_REG_MODE, 0x10);
 		if (BattData.GG_Mode == CC_MODE) {
 			/*   force CC mode */
-			STC31xx_WriteByte(STC311x_REG_MODE, 0x38);
+			STC31xx_WriteByte(STC311x_REG_MODE, 0x30);
 		} else {
 			/*   force VM mode */
-			STC31xx_WriteByte(STC311x_REG_MODE, 0x58);
+			STC31xx_WriteByte(STC311x_REG_MODE, 0x50);
 	}
 	}
 
@@ -1835,7 +1835,7 @@ static void STC311x_Rewrite_OCV(void)
 
 	pr_info("Rewrite OCV due to standby mode, reg_mode = 0x%x \n", mode);
 	//set operation mode to get current	
-	STC31xx_WriteByte(STC311x_REG_MODE, 0x18);
+	STC31xx_WriteByte(STC311x_REG_MODE, 0x10);
 	mdelay(200);
 
 	/* read OCV */
