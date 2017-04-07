@@ -6324,18 +6324,6 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 	if (ret)
 		dev_dbg(&pdev->dev, "msm_prepare_hifi failed (%d)\n",
 			ret);
-	ret = devm_snd_soc_register_card(&pdev->dev, card);
-	if (ret == -EPROBE_DEFER) {
-		if (codec_reg_done)
-			ret = -EINVAL;
-		goto err;
-	} else if (ret) {
-		dev_err(&pdev->dev, "snd_soc_register_card failed (%d)\n",
-			ret);
-		goto err;
-	}
-	dev_info(&pdev->dev, "Sound card %s registered\n", card->name);
-	spdev = pdev;
 
 	/* By default we are using the WCD headset jack. */
 	pdata->wcd_mbhc_enabled = 1;
@@ -6360,6 +6348,20 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 			dev_dbg(&pdev->dev, "Unknown value, set to default");
 		}
 	}
+
+	ret = devm_snd_soc_register_card(&pdev->dev, card);
+	if (ret == -EPROBE_DEFER) {
+		if (codec_reg_done)
+			ret = -EINVAL;
+		goto err;
+	} else if (ret) {
+		dev_err(&pdev->dev, "snd_soc_register_card failed (%d)\n",
+			ret);
+		goto err;
+	}
+	dev_info(&pdev->dev, "Sound card %s registered\n", card->name);
+	spdev = pdev;
+
 	/*
 	 * Parse US-Euro gpio info from DT. Report no error if us-euro
 	 * entry is not found in DT file as some targets do not support
