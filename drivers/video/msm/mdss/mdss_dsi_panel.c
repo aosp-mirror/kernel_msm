@@ -22,6 +22,7 @@
 #include <linux/qpnp/pwm.h>
 #include <linux/err.h>
 #include <linux/string.h>
+#include <linux/platform_data/leds-lm36272.h>
 
 #include "mdss_dsi.h"
 #ifdef TARGET_HW_MDSS_HDMI
@@ -470,6 +471,9 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 			if (gpio_is_valid(ctrl_pdata->disp_en_gpio))
 				gpio_set_value((ctrl_pdata->disp_en_gpio), 1);
 
+			if (pinfo->use_dsv)
+				lm36272_dsv_ctrl(1);
+
 			for (i = 0; i < pdata->panel_info.rst_seq_len; ++i) {
 				gpio_set_value((ctrl_pdata->rst_gpio),
 					pdata->panel_info.rst_seq[i]);
@@ -502,6 +506,9 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 			gpio_set_value((ctrl_pdata->disp_en_gpio), 0);
 			gpio_free(ctrl_pdata->disp_en_gpio);
 		}
+
+			if (pinfo->use_dsv)
+				lm36272_dsv_ctrl(0);
 
 		if (pinfo->off_pre_rst_delay) {
 			pr_debug("%s: off_pre_rst_delay:%d\n",
@@ -2260,7 +2267,8 @@ static int  mdss_dsi_panel_config_res_properties(struct device_node *np,
 		"qcom,mdss-dsi-on-command-state");
 
 	mdss_dsi_parse_dcs_cmds(np, &pt->post_panel_on_cmds,
-		"qcom,mdss-dsi-post-panel-on-command", NULL);
+		"qcom,mdss-dsi-post-panel-on-command",
+		"qcom,mdss-dsi-post-panel-on-command-state");
 
 	mdss_dsi_parse_dcs_cmds(np, &pt->switch_cmds,
 		"qcom,mdss-dsi-timing-switch-command",
@@ -2605,6 +2613,8 @@ static int mdss_panel_parse_dt(struct device_node *np,
 
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-off-post-reset-delay", &tmp);
 	pinfo->off_post_rst_delay = (!rc ? tmp : 0);
+
+	pinfo->use_dsv = of_property_read_bool(np,"qcom,use-dsv");
 
 	mdss_dsi_parse_panel_horizintal_line_idle(np, ctrl_pdata);
 

@@ -672,6 +672,8 @@ struct mdss_panel_info {
 
 	/* debugfs structure for the panel */
 	struct mdss_panel_debugfs_info *debugfs_info;
+
+	bool use_dsv;
 };
 
 struct mdss_panel_timing {
