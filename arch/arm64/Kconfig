@@ -1039,6 +1039,9 @@ config BUILD_ARM64_DTC
 config BUILD_ARM64_DTC_FLAGS
 	string "extra dtc flags"
 
+config BUILD_ARM64_APPLY_DTBO
+	bool "apply device tree overlay"
+
 endmenu
 
 menu "Userspace binary formats"

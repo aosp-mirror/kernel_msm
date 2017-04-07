@@ -1,0 +1,9 @@
+# Treble kerenl requires the SoC device tree and the device specific
+# device tree overlay to be built separately. Before the bootloader
+# supports applying overlay, the overlay step to form the dtb passed
+# to the linux kernel is done on the host side with this target.
+
+.PHONY: all
+
+all:
+	$(if $(KBUILD_SRC),$(srctree)/)scripts/dtbo_apply_overlay.sh $(obj)/${KERNEL_DTB} $(obj)/${DTBO}
