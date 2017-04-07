@@ -100,6 +100,8 @@ endif
 
 KBUILD_DTBS	:= dtbs
 
+KBUILD_DTBO_IMG := dtbo.img
+
 BUILD_DTC_PATH = $(subst $\",,$(CONFIG_BUILD_ARM64_DTC))
 ifneq ($(BUILD_DTC_PATH),)
 	DTC = $(BUILD_DTC_PATH)
@@ -110,7 +112,7 @@ ifneq ($(BUILD_DTC_FLAGS),)
 	DTC_FLAGS += $(BUILD_DTC_FLAGS)
 endif
 
-all:	$(KBUILD_IMAGE) $(KBUILD_DTBS)
+all:	$(KBUILD_IMAGE) $(KBUILD_DTBS) $(KBUILD_DTBO_IMG)
 
 boot := arch/arm64/boot
 
@@ -137,6 +139,9 @@ dtbs_install:
 Image-dtb Image.gz-dtb Image.lz4-dtb: vmlinux scripts dtbs
 	$(Q)$(MAKE) $(build)=$(boot) $(boot)/$@
 
+dtbo.img: $(boot)/dts/dtboimg.cfg dtbs
+	$(Q)$(MAKE) $(build)=$(boot) $(boot)/$@
+
 PHONY += vdso_install
 vdso_install:
 	$(Q)$(MAKE) $(build)=arch/arm64/kernel/vdso $@
@@ -145,6 +150,9 @@ vdso_install:
 archclean:
 	$(Q)$(MAKE) $(clean)=$(boot)
 	$(Q)$(MAKE) $(clean)=$(boot)/dts
+
+CLEAN_FILES += $(boot)/Image $(boot)/Image-dtb $(boot)/Image.* $(boot)/dtbo.img
+MRPROPER_FILES += $(boot)/Image $(boot)/Image-dtb $(boot)/Image.* $(boot)/dtbo.img
 
 define archhelp
   echo  '* Image.gz      - Compressed kernel image (arch/$(ARCH)/boot/Image.gz)'

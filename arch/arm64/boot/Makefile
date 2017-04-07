@@ -51,6 +51,9 @@ $(obj)/Image.gz-dtb: $(obj)/Image.gz $(DTB_OBJS) FORCE
 $(obj)/Image.lz4-dtb: $(obj)/Image.lz4 $(DTB_OBJS) FORCE
 	$(call if_changed,cat)
 
+$(obj)/dtbo.img: $(obj)/dts/dtboimg.cfg FORCE
+	$(call if_changed,mkdtimg)
+
 install: $(obj)/Image
 	$(CONFIG_SHELL) $(srctree)/$(src)/install.sh $(KERNELRELEASE) \
 	$(obj)/Image System.map "$(INSTALL_PATH)"

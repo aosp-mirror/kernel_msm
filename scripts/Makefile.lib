@@ -321,6 +321,11 @@ _dtbinst_pre_:
 %.dtb_dtbinst_: $(obj)/%.dtb _dtbinst_pre_
 	$(call cmd,dtb_install,$(INSTALL_DTBS_PATH))
 
+# mkdtimg
+#----------------------------------------------------------------------------
+quiet_cmd_mkdtimg = DTBOIMG $@
+cmd_mkdtimg = mkdtimg cfg_create $@ $<
+
 # cat
 # ---------------------------------------------------------------------------
 # Concatentate multiple files together
