@@ -103,3 +103,4 @@ obj-$(CONFIG_TOUCHSCREEN_MSTAR21XX)	+= msg21xx_ts.o
 obj-$(CONFIG_TOUCHSCREEN_GT9XX)		+= gt9xx/
 obj-$(CONFIG_LGE_TOUCH_CORE)		+= lge/
 obj-$(CONFIG_TOUCHSCREEN_FTM4)		+= stm/
+obj-$(CONFIG_TOUCHSCREEN_ST)		+= st/

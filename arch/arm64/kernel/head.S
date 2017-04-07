@@ -50,9 +50,6 @@
 #error TEXT_OFFSET must be less than 2MB
 #endif
 
-#define KERNEL_START	_text
-#define KERNEL_END	_end
-
 /*
  * Kernel startup entry point.
  * ---------------------------
@@ -551,8 +548,9 @@ CPU_LE(	movk	x0, #0x30d0, lsl #16	)	// Clear EE and E0E on LE systems
 	b.lt	4f				// Skip if no PMU present
 	mrs	x0, pmcr_el0			// Disable debug access traps
 	ubfx	x0, x0, #11, #5			// to EL2 and allow access to
-	msr	mdcr_el2, x0			// all PMU counters from EL1
 4:
+	csel	x0, xzr, x0, lt			// all PMU counters from EL1
+	msr	mdcr_el2, x0			// (if they exist)
 
 	/* Stage-2 translation */
 	msr	vttbr_el2, xzr
@@ -665,8 +663,8 @@ ENDPROC(__secondary_switched)
  * If it isn't, park the CPU
  */
 	.section	".idmap.text", "ax"
-__enable_mmu:
-	mrs	x18, sctlr_el1			// preserve old SCTLR_EL1 value
+ENTRY(__enable_mmu)
+	mrs	x22, sctlr_el1			// preserve old SCTLR_EL1 value
 	mrs	x1, ID_AA64MMFR0_EL1
 	ubfx	x2, x1, #ID_AA64MMFR0_TGRAN_SHIFT, 4
 	cmp	x2, #ID_AA64MMFR0_TGRAN_SUPPORTED
@@ -693,7 +691,7 @@ __enable_mmu:
 	 * to take into account by discarding the current kernel mapping and
 	 * creating a new one.
 	 */
-	msr	sctlr_el1, x18			// disable the MMU
+	msr	sctlr_el1, x22			// disable the MMU
 	isb
 	bl	__create_page_tables		// recreate kernel mapping
 

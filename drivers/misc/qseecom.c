@@ -562,7 +562,6 @@ static int qseecom_scm_call2(uint32_t svc_id, uint32_t tz_cmd_id,
 		case QSEOS_REGISTER_LISTENER: {
 			struct qseecom_register_listener_ireq *req;
 			struct qseecom_register_listener_64bit_ireq *req_64bit;
-			smc_id = TZ_OS_REGISTER_LISTENER_ID;
 			desc.arginfo =
 				TZ_OS_REGISTER_LISTENER_ID_PARAM_ID;
 			if (qseecom.qsee_version < QSEE_VERSION_40) {
@@ -579,8 +578,15 @@ static int qseecom_scm_call2(uint32_t svc_id, uint32_t tz_cmd_id,
 				desc.args[1] = req_64bit->sb_ptr;
 				desc.args[2] = req_64bit->sb_len;
 			}
+			smc_id = TZ_OS_REGISTER_LISTENER_SMCINVOKE_ID;
 			__qseecom_reentrancy_check_if_no_app_blocked(smc_id);
 			ret = scm_call2(smc_id, &desc);
+			if (ret) {
+				smc_id = TZ_OS_REGISTER_LISTENER_ID;
+				__qseecom_reentrancy_check_if_no_app_blocked(
+					smc_id);
+				ret = scm_call2(smc_id, &desc);
+			}
 			break;
 		}
 		case QSEOS_DEREGISTER_LISTENER: {
@@ -2135,22 +2141,24 @@ static void __qseecom_reentrancy_check_if_no_app_blocked(uint32_t smc_id)
 }
 
 /*
- * scm_call send command to a blocked TZ app will fail
- * So, first check and then wait until this apps is unblocked
+ * scm_call of send data will fail if this TA is blocked or there are more
+ * than one TA requesting listener services; So, first check to see if need
+ * to wait.
  */
 static void __qseecom_reentrancy_check_if_this_app_blocked(
 			struct qseecom_registered_app_list *ptr_app)
 {
 	sigset_t new_sigset, old_sigset;
 	if (qseecom.qsee_reentrancy_support) {
-		while (ptr_app->app_blocked) {
+		while (ptr_app->app_blocked || qseecom.app_block_ref_cnt > 1) {
 			/* thread sleep until this app unblocked */
 			sigfillset(&new_sigset);
 			sigprocmask(SIG_SETMASK, &new_sigset, &old_sigset);
 			mutex_unlock(&app_access_lock);
 			do {
 				if (!wait_event_freezable(qseecom.app_block_wq,
-						!ptr_app->app_blocked))
+					(!ptr_app->app_blocked &&
+					qseecom.app_block_ref_cnt <= 1)))
 					break;
 			} while (1);
 			mutex_lock(&app_access_lock);
@@ -2159,13 +2167,20 @@ static void __qseecom_reentrancy_check_if_this_app_blocked(
 	}
 }
 
-static int __qseecom_check_app_exists(struct qseecom_check_app_ireq req)
+static int __qseecom_check_app_exists(struct qseecom_check_app_ireq req,
+					uint32_t *app_id)
 {
 	int32_t ret;
 	struct qseecom_command_scm_resp resp;
 	bool found_app = false;
 	struct qseecom_registered_app_list *entry = NULL;
 	unsigned long flags = 0;
+
+	if (!app_id) {
+		pr_err("Null pointer to app_id\n");
+		return -EINVAL;
+	}
+	*app_id = 0;
 
 	/* check if app exists and has been registered locally */
 	spin_lock_irqsave(&qseecom.registered_app_list_lock, flags);
@@ -2179,7 +2194,8 @@ static int __qseecom_check_app_exists(struct qseecom_check_app_ireq req)
 	spin_unlock_irqrestore(&qseecom.registered_app_list_lock, flags);
 	if (found_app) {
 		pr_debug("Found app with id %d\n", entry->app_id);
-		return entry->app_id;
+		*app_id = entry->app_id;
+		return 0;
 	}
 
 	memset((void *)&resp, 0, sizeof(resp));
@@ -2202,7 +2218,8 @@ static int __qseecom_check_app_exists(struct qseecom_check_app_ireq req)
 		pr_err("resp type is of listener type instead of app");
 		return -EINVAL;
 	case QSEOS_APP_ID:
-		return resp.data;
+		*app_id = resp.data;
+		return 0;
 	default:
 		pr_err("invalid resp type (%d) from qsee",
 				resp.resp_type);
@@ -2278,11 +2295,10 @@ static int qseecom_load_app(struct qseecom_dev_handle *data, void __user *argp)
 	load_img_req.img_name[MAX_APP_NAME_SIZE-1] = '\0';
 	strlcpy(req.app_name, load_img_req.img_name, MAX_APP_NAME_SIZE);
 
-	ret = __qseecom_check_app_exists(req);
+	ret = __qseecom_check_app_exists(req, &app_id);
 	if (ret < 0)
 		goto loadapp_err;
 
-	app_id = ret;
 	if (app_id) {
 		pr_debug("App id %d (%s) already exists\n", app_id,
 			(char *)(req.app_name));
@@ -2317,7 +2333,13 @@ static int qseecom_load_app(struct qseecom_dev_handle *data, void __user *argp)
 				ret);
 			goto loadapp_err;
 		}
-
+		if (load_img_req.mdt_len > len || load_img_req.img_len > len) {
+			pr_err("ion len %zu is smaller than mdt_len %u or img_len %u\n",
+					len, load_img_req.mdt_len,
+					load_img_req.img_len);
+			ret = -EINVAL;
+			goto loadapp_err;
+		}
 		/* Populate the structure for sending scm call to load image */
 		if (qseecom.qsee_version < QSEE_VERSION_40) {
 			load_req.qsee_cmd_id = QSEOS_APP_START_COMMAND;
@@ -4030,7 +4052,8 @@ static void __qseecom_free_img_data(struct ion_handle **ihandle)
 	*ihandle = NULL;
 }
 
-static int __qseecom_load_fw(struct qseecom_dev_handle *data, char *appname)
+static int __qseecom_load_fw(struct qseecom_dev_handle *data, char *appname,
+				uint32_t *app_id)
 {
 	int ret = -1;
 	uint32_t fw_size = 0;
@@ -4044,6 +4067,11 @@ static int __qseecom_load_fw(struct qseecom_dev_handle *data, char *appname)
 	size_t cmd_len;
 	uint32_t app_arch = 0;
 
+	if (!data || !appname || !app_id) {
+		pr_err("Null pointer to data or appname or appid\n");
+		return -EINVAL;
+	}
+	*app_id = 0;
 	if (__qseecom_get_fw_size(appname, &fw_size, &app_arch))
 		return -EIO;
 	data->client.app_arch = app_arch;
@@ -4135,14 +4163,14 @@ static int __qseecom_load_fw(struct qseecom_dev_handle *data, char *appname)
 
 	switch (resp.result) {
 	case QSEOS_RESULT_SUCCESS:
-		ret = resp.data;
+		*app_id = resp.data;
 		break;
 	case QSEOS_RESULT_INCOMPLETE:
 		ret = __qseecom_process_incomplete_cmd(data, &resp);
 		if (ret)
 			pr_err("process_incomplete_cmd FAILED\n");
 		else
-			ret = resp.data;
+			*app_id = resp.data;
 		break;
 	case QSEOS_RESULT_FAILURE:
 		pr_err("scm call failed with response QSEOS_RESULT FAILURE\n");
@@ -4335,6 +4363,7 @@ int qseecom_start_app(struct qseecom_handle **handle,
 	size_t len;
 	ion_phys_addr_t pa;
 	uint32_t fw_size, app_arch;
+	uint32_t app_id = 0;
 
 	if (atomic_read(&qseecom.qseecom_state) != QSEECOM_STATE_READY) {
 		pr_err("Not allowed to be called in %d state\n",
@@ -4389,18 +4418,18 @@ int qseecom_start_app(struct qseecom_handle **handle,
 
 	app_ireq.qsee_cmd_id = QSEOS_APP_LOOKUP_COMMAND;
 	strlcpy(app_ireq.app_name, app_name, MAX_APP_NAME_SIZE);
-	ret = __qseecom_check_app_exists(app_ireq);
-	if (ret < 0)
+	ret = __qseecom_check_app_exists(app_ireq, &app_id);
+	if (ret)
 		goto err;
 
 	strlcpy(data->client.app_name, app_name, MAX_APP_NAME_SIZE);
-	if (ret > 0) {
-		pr_warn("App id %d for [%s] app exists\n", ret,
+	if (app_id) {
+		pr_warn("App id %d for [%s] app exists\n", app_id,
 			(char *)app_ireq.app_name);
 		spin_lock_irqsave(&qseecom.registered_app_list_lock, flags);
 		list_for_each_entry(entry,
 				&qseecom.registered_app_list_head, list){
-			if (entry->app_id == ret) {
+			if (entry->app_id == app_id) {
 				entry->ref_cnt++;
 				found_app = true;
 				break;
@@ -4415,11 +4444,11 @@ int qseecom_start_app(struct qseecom_handle **handle,
 		/* load the app and get the app_id  */
 		pr_debug("%s: Loading app for the first time'\n",
 				qseecom.pdev->init_name);
-		ret = __qseecom_load_fw(data, app_name);
+		ret = __qseecom_load_fw(data, app_name, &app_id);
 		if (ret < 0)
 			goto err;
 	}
-	data->client.app_id = ret;
+	data->client.app_id = app_id;
 	if (!found_app) {
 		entry = kmalloc(sizeof(*entry), GFP_KERNEL);
 		if (!entry) {
@@ -4427,7 +4456,7 @@ int qseecom_start_app(struct qseecom_handle **handle,
 			ret =  -ENOMEM;
 			goto err;
 		}
-		entry->app_id = ret;
+		entry->app_id = app_id;
 		entry->ref_cnt = 1;
 		strlcpy(entry->app_name, app_name, MAX_APP_NAME_SIZE);
 		if (__qseecom_get_fw_size(app_name, &fw_size, &app_arch)) {
@@ -5126,6 +5155,12 @@ static int qseecom_load_external_elf(struct qseecom_dev_handle *data,
 			ret);
 		return ret;
 	}
+	if (load_img_req.mdt_len > len || load_img_req.img_len > len) {
+		pr_err("ion len %zu is smaller than mdt_len %u or img_len %u\n",
+				len, load_img_req.mdt_len,
+				load_img_req.img_len);
+		return ret;
+	}
 	/* Populate the structure for sending scm call to load image */
 	if (qseecom.qsee_version < QSEE_VERSION_40) {
 		load_req.qsee_cmd_id = QSEOS_LOAD_EXTERNAL_ELF_COMMAND;
@@ -5264,7 +5299,7 @@ static int qseecom_query_app_loaded(struct qseecom_dev_handle *data,
 	struct qseecom_check_app_ireq req;
 	struct qseecom_registered_app_list *entry = NULL;
 	unsigned long flags = 0;
-	uint32_t app_arch = 0;
+	uint32_t app_arch = 0, app_id = 0;
 	bool found_app = false;
 
 	/* Copy the relevant information needed for loading the image */
@@ -5279,18 +5314,18 @@ static int qseecom_query_app_loaded(struct qseecom_dev_handle *data,
 	query_req.app_name[MAX_APP_NAME_SIZE-1] = '\0';
 	strlcpy(req.app_name, query_req.app_name, MAX_APP_NAME_SIZE);
 
-	ret = __qseecom_check_app_exists(req);
-
-	if ((ret == -EINVAL) || (ret == -ENODEV)) {
+	ret = __qseecom_check_app_exists(req, &app_id);
+	if (ret) {
 		pr_err(" scm call to check if app is loaded failed");
 		return ret;	/* scm call failed */
-	} else if (ret > 0) {
-		pr_debug("App id %d (%s) already exists\n", ret,
+	}
+	if (app_id) {
+		pr_debug("App id %d (%s) already exists\n", app_id,
 			(char *)(req.app_name));
 		spin_lock_irqsave(&qseecom.registered_app_list_lock, flags);
 		list_for_each_entry(entry,
 				&qseecom.registered_app_list_head, list){
-			if (entry->app_id == ret) {
+			if (entry->app_id == app_id) {
 				app_arch = entry->app_arch;
 				entry->ref_cnt++;
 				found_app = true;
@@ -5299,8 +5334,8 @@ static int qseecom_query_app_loaded(struct qseecom_dev_handle *data,
 		}
 		spin_unlock_irqrestore(
 				&qseecom.registered_app_list_lock, flags);
-		data->client.app_id = ret;
-		query_req.app_id = ret;
+		data->client.app_id = app_id;
+		query_req.app_id = app_id;
 		if (app_arch) {
 			data->client.app_arch = app_arch;
 			query_req.app_arch = app_arch;
@@ -5322,7 +5357,7 @@ static int qseecom_query_app_loaded(struct qseecom_dev_handle *data,
 				pr_err("kmalloc for app entry failed\n");
 				return  -ENOMEM;
 			}
-			entry->app_id = ret;
+			entry->app_id = app_id;
 			entry->ref_cnt = 1;
 			entry->app_arch = data->client.app_arch;
 			strlcpy(entry->app_name, data->client.app_name,
@@ -7035,7 +7070,11 @@ long qseecom_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 			break;
 		}
 		pr_debug("SET_MEM_PARAM: qseecom addr = 0x%pK\n", data);
+		mutex_lock(&app_access_lock);
+		atomic_inc(&data->ioctl_count);
 		ret = qseecom_set_client_mem_param(data, argp);
+		atomic_dec(&data->ioctl_count);
+		mutex_unlock(&app_access_lock);
 		if (ret)
 			pr_err("failed Qqseecom_set_mem_param request: %d\n",
 								ret);

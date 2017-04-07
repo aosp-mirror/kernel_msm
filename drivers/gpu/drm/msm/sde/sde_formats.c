@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -102,169 +102,169 @@ flg, fm, np)                                                      \
 static const struct sde_format sde_format_map[] = {
 	INTERLEAVED_RGB_FMT(ARGB8888,
 		COLOR_8BIT, COLOR_8BIT, COLOR_8BIT, COLOR_8BIT,
-		C3_ALPHA, C2_R_Cr, C0_G_Y, C1_B_Cb, 4,
+		C1_B_Cb, C0_G_Y, C2_R_Cr, C3_ALPHA, 4,
 		true, 4, 0,
 		SDE_FETCH_LINEAR, 1),
 
 	INTERLEAVED_RGB_FMT(ABGR8888,
 		COLOR_8BIT, COLOR_8BIT, COLOR_8BIT, COLOR_8BIT,
-		C3_ALPHA, C1_B_Cb, C0_G_Y, C2_R_Cr, 4,
+		C2_R_Cr, C0_G_Y, C1_B_Cb, C3_ALPHA, 4,
 		true, 4, 0,
 		SDE_FETCH_LINEAR, 1),
 
 	INTERLEAVED_RGB_FMT(XBGR8888,
 		COLOR_8BIT, COLOR_8BIT, COLOR_8BIT, COLOR_8BIT,
-		C3_ALPHA, C1_B_Cb, C0_G_Y, C2_R_Cr, 4,
+		C2_R_Cr, C0_G_Y, C1_B_Cb, C3_ALPHA, 4,
 		true, 4, 0,
 		SDE_FETCH_LINEAR, 1),
 
 	INTERLEAVED_RGB_FMT(RGBA8888,
 		COLOR_8BIT, COLOR_8BIT, COLOR_8BIT, COLOR_8BIT,
-		C2_R_Cr, C0_G_Y, C1_B_Cb, C3_ALPHA, 4,
+		C3_ALPHA, C1_B_Cb, C0_G_Y, C2_R_Cr, 4,
 		true, 4, 0,
 		SDE_FETCH_LINEAR, 1),
 
 	INTERLEAVED_RGB_FMT(BGRA8888,
 		COLOR_8BIT, COLOR_8BIT, COLOR_8BIT, COLOR_8BIT,
-		C1_B_Cb, C0_G_Y, C2_R_Cr, C3_ALPHA, 4,
+		C3_ALPHA, C2_R_Cr, C0_G_Y, C1_B_Cb, 4,
 		true, 4, 0,
 		SDE_FETCH_LINEAR, 1),
 
 	INTERLEAVED_RGB_FMT(BGRX8888,
 		COLOR_8BIT, COLOR_8BIT, COLOR_8BIT, COLOR_8BIT,
-		C1_B_Cb, C0_G_Y, C2_R_Cr, C3_ALPHA, 4,
+		C3_ALPHA, C2_R_Cr, C0_G_Y, C1_B_Cb, 4,
 		false, 4, 0,
 		SDE_FETCH_LINEAR, 1),
 
 	INTERLEAVED_RGB_FMT(XRGB8888,
 		COLOR_8BIT, COLOR_8BIT, COLOR_8BIT, COLOR_8BIT,
-		C3_ALPHA, C2_R_Cr, C0_G_Y, C1_B_Cb, 4,
+		C1_B_Cb, C0_G_Y, C2_R_Cr, C3_ALPHA, 4,
 		false, 4, 0,
 		SDE_FETCH_LINEAR, 1),
 
 	INTERLEAVED_RGB_FMT(RGBX8888,
 		COLOR_8BIT, COLOR_8BIT, COLOR_8BIT, COLOR_8BIT,
-		C2_R_Cr, C0_G_Y, C1_B_Cb, C3_ALPHA, 4,
+		C3_ALPHA, C1_B_Cb, C0_G_Y, C2_R_Cr, 4,
 		false, 4, 0,
 		SDE_FETCH_LINEAR, 1),
 
 	INTERLEAVED_RGB_FMT(RGB888,
 		0, COLOR_8BIT, COLOR_8BIT, COLOR_8BIT,
-		C2_R_Cr, C0_G_Y, C1_B_Cb, 0, 3,
+		C1_B_Cb, C0_G_Y, C2_R_Cr, 0, 3,
 		false, 3, 0,
 		SDE_FETCH_LINEAR, 1),
 
 	INTERLEAVED_RGB_FMT(BGR888,
 		0, COLOR_8BIT, COLOR_8BIT, COLOR_8BIT,
-		C1_B_Cb, C0_G_Y, C2_R_Cr, 0, 3,
+		C2_R_Cr, C0_G_Y, C1_B_Cb, 0, 3,
 		false, 3, 0,
 		SDE_FETCH_LINEAR, 1),
 
 	INTERLEAVED_RGB_FMT(RGB565,
 		0, COLOR_5BIT, COLOR_6BIT, COLOR_5BIT,
-		C2_R_Cr, C0_G_Y, C1_B_Cb, 0, 3,
+		C1_B_Cb, C0_G_Y, C2_R_Cr, 0, 3,
 		false, 2, 0,
 		SDE_FETCH_LINEAR, 1),
 
 	INTERLEAVED_RGB_FMT(BGR565,
 		0, COLOR_5BIT, COLOR_6BIT, COLOR_5BIT,
-		C1_B_Cb, C0_G_Y, C2_R_Cr, 0, 3,
+		C2_R_Cr, C0_G_Y, C1_B_Cb, 0, 3,
 		false, 2, 0,
 		SDE_FETCH_LINEAR, 1),
 
 	INTERLEAVED_RGB_FMT(ARGB1555,
 		COLOR_ALPHA_1BIT, COLOR_5BIT, COLOR_5BIT, COLOR_5BIT,
-		C3_ALPHA, C2_R_Cr, C0_G_Y, C1_B_Cb, 4,
+		C1_B_Cb, C0_G_Y, C2_R_Cr, C3_ALPHA, 4,
 		true, 2, 0,
 		SDE_FETCH_LINEAR, 1),
 
 	INTERLEAVED_RGB_FMT(ABGR1555,
 		COLOR_ALPHA_1BIT, COLOR_5BIT, COLOR_5BIT, COLOR_5BIT,
-		C3_ALPHA, C1_B_Cb, C0_G_Y, C2_R_Cr, 4,
+		C2_R_Cr, C0_G_Y, C1_B_Cb, C3_ALPHA, 4,
 		true, 2, 0,
 		SDE_FETCH_LINEAR, 1),
 
 	INTERLEAVED_RGB_FMT(RGBA5551,
 		COLOR_ALPHA_1BIT, COLOR_5BIT, COLOR_5BIT, COLOR_5BIT,
-		C2_R_Cr, C0_G_Y, C1_B_Cb, C3_ALPHA, 4,
+		C3_ALPHA, C1_B_Cb, C0_G_Y, C2_R_Cr, 4,
 		true, 2, 0,
 		SDE_FETCH_LINEAR, 1),
 
 	INTERLEAVED_RGB_FMT(BGRA5551,
 		COLOR_ALPHA_1BIT, COLOR_5BIT, COLOR_5BIT, COLOR_5BIT,
-		C1_B_Cb, C0_G_Y, C2_R_Cr, C3_ALPHA, 4,
+		C3_ALPHA, C2_R_Cr, C0_G_Y, C1_B_Cb, 4,
 		true, 2, 0,
 		SDE_FETCH_LINEAR, 1),
 
 	INTERLEAVED_RGB_FMT(XRGB1555,
 		COLOR_ALPHA_1BIT, COLOR_5BIT, COLOR_5BIT, COLOR_5BIT,
-		C3_ALPHA, C2_R_Cr, C0_G_Y, C1_B_Cb, 4,
+		C1_B_Cb, C0_G_Y, C2_R_Cr, C3_ALPHA, 4,
 		false, 2, 0,
 		SDE_FETCH_LINEAR, 1),
 
 	INTERLEAVED_RGB_FMT(XBGR1555,
 		COLOR_ALPHA_1BIT, COLOR_5BIT, COLOR_5BIT, COLOR_5BIT,
-		C3_ALPHA, C1_B_Cb, C0_G_Y, C2_R_Cr, 4,
+		C2_R_Cr, C0_G_Y, C1_B_Cb, C3_ALPHA, 4,
 		false, 2, 0,
 		SDE_FETCH_LINEAR, 1),
 
 	INTERLEAVED_RGB_FMT(RGBX5551,
 		COLOR_ALPHA_1BIT, COLOR_5BIT, COLOR_5BIT, COLOR_5BIT,
-		C2_R_Cr, C0_G_Y, C1_B_Cb, C3_ALPHA, 4,
+		C3_ALPHA, C1_B_Cb, C0_G_Y, C2_R_Cr, 4,
 		false, 2, 0,
 		SDE_FETCH_LINEAR, 1),
 
 	INTERLEAVED_RGB_FMT(BGRX5551,
 		COLOR_ALPHA_1BIT, COLOR_5BIT, COLOR_5BIT, COLOR_5BIT,
-		C1_B_Cb, C0_G_Y, C2_R_Cr, C3_ALPHA, 4,
+		C3_ALPHA, C2_R_Cr, C0_G_Y, C1_B_Cb, 4,
 		false, 2, 0,
 		SDE_FETCH_LINEAR, 1),
 
 	INTERLEAVED_RGB_FMT(ARGB4444,
 		COLOR_ALPHA_4BIT, COLOR_4BIT, COLOR_4BIT, COLOR_4BIT,
-		C3_ALPHA, C2_R_Cr, C0_G_Y, C1_B_Cb, 4,
+		C1_B_Cb, C0_G_Y, C2_R_Cr, C3_ALPHA, 4,
 		true, 2, 0,
 		SDE_FETCH_LINEAR, 1),
 
 	INTERLEAVED_RGB_FMT(ABGR4444,
 		COLOR_ALPHA_4BIT, COLOR_4BIT, COLOR_4BIT, COLOR_4BIT,
-		C3_ALPHA, C1_B_Cb, C0_G_Y, C2_R_Cr, 4,
+		C2_R_Cr, C0_G_Y, C1_B_Cb, C3_ALPHA, 4,
 		true, 2, 0,
 		SDE_FETCH_LINEAR, 1),
 
 	INTERLEAVED_RGB_FMT(RGBA4444,
 		COLOR_ALPHA_4BIT, COLOR_4BIT, COLOR_4BIT, COLOR_4BIT,
-		C2_R_Cr, C0_G_Y, C1_B_Cb, C3_ALPHA, 4,
+		C3_ALPHA, C1_B_Cb, C0_G_Y, C2_R_Cr, 4,
 		true, 2, 0,
 		SDE_FETCH_LINEAR, 1),
 
 	INTERLEAVED_RGB_FMT(BGRA4444,
 		COLOR_ALPHA_4BIT, COLOR_4BIT, COLOR_4BIT, COLOR_4BIT,
-		C1_B_Cb, C0_G_Y, C2_R_Cr, C3_ALPHA, 4,
+		C3_ALPHA, C2_R_Cr, C0_G_Y, C1_B_Cb, 4,
 		true, 2, 0,
 		SDE_FETCH_LINEAR, 1),
 
 	INTERLEAVED_RGB_FMT(XRGB4444,
 		COLOR_ALPHA_4BIT, COLOR_4BIT, COLOR_4BIT, COLOR_4BIT,
-		C3_ALPHA, C2_R_Cr, C0_G_Y, C1_B_Cb, 4,
+		C1_B_Cb, C0_G_Y, C2_R_Cr, C3_ALPHA, 4,
 		false, 2, 0,
 		SDE_FETCH_LINEAR, 1),
 
 	INTERLEAVED_RGB_FMT(XBGR4444,
 		COLOR_ALPHA_4BIT, COLOR_4BIT, COLOR_4BIT, COLOR_4BIT,
-		C3_ALPHA, C1_B_Cb, C0_G_Y, C2_R_Cr, 4,
+		C2_R_Cr, C0_G_Y, C1_B_Cb, C3_ALPHA, 4,
 		false, 2, 0,
 		SDE_FETCH_LINEAR, 1),
 
 	INTERLEAVED_RGB_FMT(RGBX4444,
 		COLOR_ALPHA_4BIT, COLOR_4BIT, COLOR_4BIT, COLOR_4BIT,
-		C2_R_Cr, C0_G_Y, C1_B_Cb, C3_ALPHA, 4,
+		C3_ALPHA, C1_B_Cb, C0_G_Y, C2_R_Cr, 4,
 		false, 2, 0,
 		SDE_FETCH_LINEAR, 1),
 
 	INTERLEAVED_RGB_FMT(BGRX4444,
 		COLOR_ALPHA_4BIT, COLOR_4BIT, COLOR_4BIT, COLOR_4BIT,
-		C1_B_Cb, C0_G_Y, C2_R_Cr, C3_ALPHA, 4,
+		C3_ALPHA, C2_R_Cr, C0_G_Y, C1_B_Cb, 4,
 		false, 2, 0,
 		SDE_FETCH_LINEAR, 1),
 
@@ -366,13 +366,13 @@ static const struct sde_format sde_format_map[] = {
 
 	PLANAR_YUV_FMT(YUV420,
 		0, COLOR_8BIT, COLOR_8BIT, COLOR_8BIT,
-		C0_G_Y, C1_B_Cb, C2_R_Cr,
+		C2_R_Cr, C1_B_Cb, C0_G_Y,
 		false, SDE_CHROMA_420, 1, SDE_FORMAT_FLAG_YUV,
 		SDE_FETCH_LINEAR, 3),
 
 	PLANAR_YUV_FMT(YVU420,
 		0, COLOR_8BIT, COLOR_8BIT, COLOR_8BIT,
-		C0_G_Y, C2_R_Cr, C1_B_Cb,
+		C1_B_Cb, C2_R_Cr, C0_G_Y,
 		false, SDE_CHROMA_420, 1, SDE_FORMAT_FLAG_YUV,
 		SDE_FETCH_LINEAR, 3),
 };
@@ -513,14 +513,15 @@ static int _sde_format_get_plane_sizes_ubwc(
 			ALIGN(DIV_ROUND_UP(height / 2, uv_tile_height), 16),
 			4096);
 
-	} else if (fmt->base.pixel_format == DRM_FORMAT_RGBA8888 ||
-		fmt->base.pixel_format == DRM_FORMAT_RGBX8888    ||
-		fmt->base.pixel_format == DRM_FORMAT_RGBA1010102 ||
-		fmt->base.pixel_format == DRM_FORMAT_RGBX1010102 ||
-		fmt->base.pixel_format == DRM_FORMAT_RGB565) {
+	} else if (fmt->base.pixel_format == DRM_FORMAT_ABGR8888 ||
+		fmt->base.pixel_format == DRM_FORMAT_XBGR8888    ||
+		fmt->base.pixel_format == DRM_FORMAT_BGRA1010102 ||
+		fmt->base.pixel_format == DRM_FORMAT_BGRX1010102 ||
+		fmt->base.pixel_format == DRM_FORMAT_BGR565) {
+
 		uint32_t stride_alignment, aligned_bitstream_width;
 
-		if (fmt->base.pixel_format == DRM_FORMAT_RGB565)
+		if (fmt->base.pixel_format == DRM_FORMAT_BGR565)
 			stride_alignment = 128;
 		else
 			stride_alignment = 64;
@@ -630,7 +631,7 @@ static int _sde_format_get_plane_sizes(
 }
 
 static int _sde_format_populate_addrs_ubwc(
-		int mmu_id,
+		struct msm_gem_address_space *aspace,
 		struct drm_framebuffer *fb,
 		struct sde_hw_fmt_layout *layout)
 {
@@ -641,7 +642,7 @@ static int _sde_format_populate_addrs_ubwc(
 		return -EINVAL;
 	}
 
-	base_addr = msm_framebuffer_iova(fb, mmu_id, 0);
+	base_addr = msm_framebuffer_iova(fb, aspace, 0);
 	if (!base_addr) {
 		DRM_ERROR("failed to retrieve base addr\n");
 		return -EFAULT;
@@ -711,7 +712,7 @@ static int _sde_format_populate_addrs_ubwc(
 }
 
 static int _sde_format_populate_addrs_linear(
-		int mmu_id,
+		struct msm_gem_address_space *aspace,
 		struct drm_framebuffer *fb,
 		struct sde_hw_fmt_layout *layout)
 {
@@ -728,7 +729,7 @@ static int _sde_format_populate_addrs_linear(
 
 	/* Populate addresses for simple formats here */
 	for (i = 0; i < layout->num_planes; ++i) {
-		layout->plane_addr[i] = msm_framebuffer_iova(fb, mmu_id, i);
+		layout->plane_addr[i] = msm_framebuffer_iova(fb, aspace, i);
 		if (!layout->plane_addr[i]) {
 			DRM_ERROR("failed to retrieve base addr\n");
 			return -EFAULT;
@@ -739,7 +740,7 @@ static int _sde_format_populate_addrs_linear(
 }
 
 int sde_format_populate_layout(
-		int mmu_id,
+		struct msm_gem_address_space *aspace,
 		struct drm_framebuffer *fb,
 		struct sde_hw_fmt_layout *layout)
 {
@@ -770,9 +771,9 @@ int sde_format_populate_layout(
 
 	/* Populate the addresses given the fb */
 	if (SDE_FORMAT_IS_UBWC(layout->format))
-		ret = _sde_format_populate_addrs_ubwc(mmu_id, fb, layout);
+		ret = _sde_format_populate_addrs_ubwc(aspace, fb, layout);
 	else
-		ret = _sde_format_populate_addrs_linear(mmu_id, fb, layout);
+		ret = _sde_format_populate_addrs_linear(aspace, fb, layout);
 
 	/* check if anything changed */
 	if (!ret && !memcmp(plane_addr, layout->plane_addr, sizeof(plane_addr)))
@@ -814,14 +815,14 @@ static void _sde_format_calc_offset_linear(struct sde_hw_fmt_layout *source,
 }
 
 int sde_format_populate_layout_with_roi(
-		int mmu_id,
+		struct msm_gem_address_space *aspace,
 		struct drm_framebuffer *fb,
 		struct sde_rect *roi,
 		struct sde_hw_fmt_layout *layout)
 {
 	int ret;
 
-	ret = sde_format_populate_layout(mmu_id, fb, layout);
+	ret = sde_format_populate_layout(aspace, fb, layout);
 	if (ret || !roi)
 		return ret;
 

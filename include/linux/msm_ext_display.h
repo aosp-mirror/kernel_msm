@@ -91,7 +91,7 @@ enum msm_ext_disp_power_state {
 /**
  * struct msm_ext_disp_intf_ops - operations exposed to display interface
  * @hpd: updates external display interface state
- * @notify: updates audio framework with interface state
+ * @notify: acknowledgment to power on or off
  */
 struct msm_ext_disp_intf_ops {
 	int (*hpd)(struct platform_device *pdev,
@@ -100,8 +100,7 @@ struct msm_ext_disp_intf_ops {
 			u32 flags);
 	int (*notify)(struct platform_device *pdev,
 			enum msm_ext_disp_cable_state state);
-	int (*ack)(struct platform_device *pdev,
-			u32 ack);
+	int (*ack)(struct platform_device *pdev, u32 ack);
 };
 
 /**
@@ -110,6 +109,7 @@ struct msm_ext_disp_intf_ops {
  * @get_audio_edid_blk: retrieve audio edid block
  * @cable_status: cable connected/disconnected
  * @get_intf_id: id of connected interface
+ * @acknowledge: acknowledge audio status
  */
 struct msm_ext_disp_audio_codec_ops {
 	int (*audio_info_setup)(struct platform_device *pdev,
@@ -119,6 +119,7 @@ struct msm_ext_disp_audio_codec_ops {
 	int (*cable_status)(struct platform_device *pdev, u32 vote);
 	int (*get_intf_id)(struct platform_device *pdev);
 	void (*teardown_done)(struct platform_device *pdev);
+	int (*acknowledge)(struct platform_device *pdev, u32 ack);
 };
 
 /*

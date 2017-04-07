@@ -429,9 +429,8 @@ static int ath10k_htt_rx_pop_paddr_list(struct ath10k_htt *htt,
 
 	while (msdu_count--) {
 #ifdef CONFIG_ATH10K_SNOC
-		paddr = __le32_to_cpu(msdu_desc->msdu_paddr_lo);
-		paddr |= ((u64)(msdu_desc->msdu_paddr_hi &
-				HTT_WCN3990_PADDR_MASK) << 32);
+		paddr = __le64_to_cpu(msdu_desc->msdu_paddr);
+		paddr &= HTT_WCN3990_ARCH_PADDR_MASK;
 #else
 		paddr = __le32_to_cpu(msdu_desc->msdu_paddr);
 #endif
@@ -941,7 +940,7 @@ static void ath10k_process_rx(struct ath10k *ar,
 
 	status = IEEE80211_SKB_RXCB(skb);
 	*status = *rx_status;
-
+	fill_datapath_stats(ar, status);
 	ath10k_dbg(ar, ATH10K_DBG_DATA,
 		   "rx skb %pK len %u peer %pM %s %s sn %u %s%s%s%s%s %srate_idx %u vht_nss %u freq %u band %u flag 0x%x fcs-err %i mic-err %i amsdu-more %i\n",
 		   skb,
@@ -1734,7 +1733,8 @@ static void ath10k_htt_rx_delba(struct ath10k *ar, struct htt_resp *resp)
 	spin_unlock_bh(&ar->data_lock);
 }
 
-static int ath10k_htt_rx_extract_amsdu(struct sk_buff_head *list,
+static int ath10k_htt_rx_extract_amsdu(struct ath10k *ar,
+				       struct sk_buff_head *list,
 				       struct sk_buff_head *amsdu)
 {
 	struct sk_buff *msdu;
@@ -1754,6 +1754,9 @@ static int ath10k_htt_rx_extract_amsdu(struct sk_buff_head *list,
 		    __cpu_to_le32(RX_MSDU_END_INFO0_LAST_MSDU))
 			break;
 	}
+
+	if (QCA_REV_WCN3990(ar))
+		return 0;
 
 	msdu = skb_peek_tail(amsdu);
 	rxd = (void *)msdu->data - sizeof(*rxd);
@@ -1897,7 +1900,7 @@ static int ath10k_htt_rx_in_ord_ind(struct ath10k *ar, struct sk_buff *skb)
 
 	while (!skb_queue_empty(&list)) {
 		__skb_queue_head_init(&amsdu);
-		ret = ath10k_htt_rx_extract_amsdu(&list, &amsdu);
+		ret = ath10k_htt_rx_extract_amsdu(ar, &list, &amsdu);
 		switch (ret) {
 		case 0:
 			/* Note: The in-order indication may report interleaved

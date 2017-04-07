@@ -29,7 +29,7 @@
 #include <linux/string_helpers.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
-#include "pmic-voter.h"
+#include <linux/pmic-voter.h>
 
 #define fg_dbg(chip, reason, fmt, ...)			\
 	do {							\
@@ -46,10 +46,13 @@
 			&& (value) <= (right)))
 
 /* Awake votable reasons */
-#define SRAM_READ	"fg_sram_read"
-#define SRAM_WRITE	"fg_sram_write"
-#define PROFILE_LOAD	"fg_profile_load"
-#define DELTA_SOC	"fg_delta_soc"
+#define SRAM_READ		"fg_sram_read"
+#define SRAM_WRITE		"fg_sram_write"
+#define PROFILE_LOAD		"fg_profile_load"
+#define DELTA_SOC		"fg_delta_soc"
+
+/* Delta BSOC votable reasons */
+#define DELTA_BSOC_IRQ_VOTER	"fg_delta_bsoc_irq"
 
 #define DEBUG_PRINT_BUFFER_SIZE		64
 /* 3 byte address + 1 space character */
@@ -70,6 +73,10 @@
 
 #define KI_COEFF_MAX			62200
 #define KI_COEFF_SOC_LEVELS		3
+
+#define SLOPE_LIMIT_COEFF_MAX		31
+
+#define BATT_THERM_NUM_COEFFS		3
 
 /* Debug flag definitions */
 enum fg_debug_flag {
@@ -139,6 +146,7 @@ enum fg_sram_param_id {
 	FG_SRAM_FULL_SOC,
 	FG_SRAM_VOLTAGE_PRED,
 	FG_SRAM_OCV,
+	FG_SRAM_ESR,
 	FG_SRAM_RSLOW,
 	FG_SRAM_ALG_FLAGS,
 	FG_SRAM_CC_SOC,
@@ -164,6 +172,7 @@ enum fg_sram_param_id {
 	FG_SRAM_KI_COEFF_HI_DISCHG,
 	FG_SRAM_ESR_TIGHT_FILTER,
 	FG_SRAM_ESR_BROAD_FILTER,
+	FG_SRAM_SLOPE_LIMIT,
 	FG_SRAM_MAX,
 };
 
@@ -202,6 +211,14 @@ enum wa_flags {
 	PMI8998_V1_REV_WA = BIT(0),
 };
 
+enum slope_limit_status {
+	LOW_TEMP_DISCHARGE = 0,
+	LOW_TEMP_CHARGE,
+	HIGH_TEMP_DISCHARGE,
+	HIGH_TEMP_CHARGE,
+	SLOPE_LIMIT_NUM_COEFFS,
+};
+
 /* DT parameters for FG device */
 struct fg_dt_props {
 	bool	force_load_profile;
@@ -220,6 +237,7 @@ struct fg_dt_props {
 	int	esr_timer_awake;
 	int	esr_timer_asleep;
 	int	rconn_mohms;
+	int	esr_clamp_mohms;
 	int	cl_start_soc;
 	int	cl_max_temp;
 	int	cl_min_temp;
@@ -234,10 +252,13 @@ struct fg_dt_props {
 	int	esr_broad_flt_upct;
 	int	esr_tight_lt_flt_upct;
 	int	esr_broad_lt_flt_upct;
+	int	slope_limit_temp;
 	int	jeita_thresholds[NUM_JEITA_LEVELS];
 	int	ki_coeff_soc[KI_COEFF_SOC_LEVELS];
 	int	ki_coeff_med_dischg[KI_COEFF_SOC_LEVELS];
 	int	ki_coeff_hi_dischg[KI_COEFF_SOC_LEVELS];
+	int	slope_limit_coeffs[SLOPE_LIMIT_NUM_COEFFS];
+	u8	batt_therm_coeffs[BATT_THERM_NUM_COEFFS];
 };
 
 /* parameters from battery profile */
@@ -312,6 +333,7 @@ struct fg_chip {
 	struct fg_memif		*sram;
 	struct fg_irq_info	*irqs;
 	struct votable		*awake_votable;
+	struct votable		*delta_bsoc_irq_en_votable;
 	struct fg_sram_param	*sp;
 	struct fg_alg_flag	*alg_flags;
 	int			*debug_mask;
@@ -341,6 +363,7 @@ struct fg_chip {
 	int			maint_soc;
 	int			delta_soc;
 	int			last_msoc;
+	enum slope_limit_status	slope_limit_sts;
 	bool			profile_available;
 	bool			profile_loaded;
 	bool			battery_missing;
@@ -351,7 +374,8 @@ struct fg_chip {
 	bool			esr_fcc_ctrl_en;
 	bool			soc_reporting_ready;
 	bool			esr_flt_cold_temp_en;
-	bool			bsoc_delta_irq_en;
+	bool			slope_limit_en;
+	bool			use_ima_single_mode;
 	struct completion	soc_update;
 	struct completion	soc_ready;
 	struct delayed_work	profile_load_work;

@@ -443,6 +443,11 @@ struct adm_param_data_v5 {
 	 */
 } __packed;
 
+#define ASM_STREAM_CMD_REGISTER_PP_EVENTS 0x00013213
+#define ASM_STREAM_PP_EVENT 0x00013214
+#define DSP_STREAM_CMD "ADSP Stream Cmd"
+#define DSP_STREAM_CALLBACK "ADSP Stream Callback Event"
+
 /* set customized mixing on matrix mixer */
 #define ADM_CMD_SET_PSPD_MTMX_STRTR_PARAMS_V5                        0x00010344
 struct adm_cmd_set_pspd_mtmx_strtr_params_v5 {
@@ -933,7 +938,6 @@ struct adm_cmd_connect_afe_port_v5 {
 #define SLIMBUS_3_TX		0x4007
 #define SLIMBUS_4_RX		0x4008
 #define SLIMBUS_4_TX		0x4009
-#define SLIMBUS_TX_VI		0x4f09
 #define SLIMBUS_5_RX		0x400a
 #define SLIMBUS_5_TX		0x400b
 #define SLIMBUS_6_RX		0x400c
@@ -1818,11 +1822,14 @@ struct afe_port_data_cmd_rt_proxy_port_read_v2 {
 #define AFE_PORT_SAMPLE_RATE_16K          16000
 #define AFE_PORT_SAMPLE_RATE_48K          48000
 #define AFE_PORT_SAMPLE_RATE_96K          96000
+#define AFE_PORT_SAMPLE_RATE_176P4K       176400
 #define AFE_PORT_SAMPLE_RATE_192K         192000
+#define AFE_PORT_SAMPLE_RATE_352P8K       352800
 #define AFE_LINEAR_PCM_DATA				0x0
 #define AFE_NON_LINEAR_DATA				0x1
 #define AFE_LINEAR_PCM_DATA_PACKED_60958 0x2
 #define AFE_NON_LINEAR_DATA_PACKED_60958 0x3
+#define AFE_GENERIC_COMPRESSED           0x8
 
 /* This param id is used to configure I2S interface */
 #define AFE_PARAM_ID_I2S_CONFIG	0x0001020D
@@ -2755,25 +2762,31 @@ struct afe_param_id_tdm_cfg {
 	- #AFE_PORT_SAMPLE_RATE_16K
 	- #AFE_PORT_SAMPLE_RATE_24K
 	- #AFE_PORT_SAMPLE_RATE_32K
-	- #AFE_PORT_SAMPLE_RATE_48K @tablebulletend */
+	- #AFE_PORT_SAMPLE_RATE_48K
+	- #AFE_PORT_SAMPLE_RATE_176P4K
+	- #AFE_PORT_SAMPLE_RATE_352P8K @tablebulletend
+	*/
 
 	u32	bit_width;
 	/**< Bit width of the sample.
-	@values 16, 24 */
+	* @values 16, 24, 32
+	*/
 
 	u16	data_format;
-	/**< Data format: linear and compressed
-
+	/**< Data format: linear ,compressed, generic compresssed
 	@values
 	- #AFE_LINEAR_PCM_DATA
-	- #AFE_NON_LINEAR_DATA @tablebulletend */
+	- #AFE_NON_LINEAR_DATA
+	- #AFE_GENERIC_COMPRESSED
+	*/
 
 	u16	sync_mode;
 	/**< TDM synchronization setting.
 	@values (short, long, slot) sync mode
 	- #AFE_PORT_TDM_SHORT_SYNC_BIT_MODE
 	- #AFE_PORT_TDM_LONG_SYNC_MODE
-	- #AFE_PORT_TDM_SHORT_SYNC_SLOT_MODE @tablebulletend */
+	- #AFE_PORT_TDM_SHORT_SYNC_SLOT_MODE @tablebulletend
+	*/
 
 	u16	sync_src;
 	/**< Synchronization source.
@@ -3629,7 +3642,7 @@ struct afe_lpass_core_shared_clk_config_command {
 #define DEFAULT_COPP_TOPOLOGY				0x00010314
 #define DEFAULT_POPP_TOPOLOGY				0x00010BE4
 #define COMPRESSED_PASSTHROUGH_DEFAULT_TOPOLOGY         0x0001076B
-#define COMPRESS_PASSTHROUGH_NONE_TOPOLOGY      0x00010774
+#define COMPRESSED_PASSTHROUGH_NONE_TOPOLOGY            0x00010774
 #define VPM_TX_SM_ECNS_COPP_TOPOLOGY			0x00010F71
 #define VPM_TX_DM_FLUENCE_COPP_TOPOLOGY			0x00010F72
 #define VPM_TX_QMIC_FLUENCE_COPP_TOPOLOGY		0x00010F75
@@ -3935,6 +3948,8 @@ struct asm_softvolume_params {
 
 #define ASM_MEDIA_FMT_EVRCWB_FS 0x00010BF0
 
+#define ASM_MEDIA_FMT_GENERIC_COMPRESSED  0x00013212
+
 #define ASM_MAX_EQ_BANDS 12
 
 #define ASM_DATA_CMD_MEDIA_FMT_UPDATE_V2 0x00010D98
@@ -3943,6 +3958,40 @@ struct asm_data_cmd_media_fmt_update_v2 {
 u32                    fmt_blk_size;
 	/* Media format block size in bytes.*/
 }  __packed;
+
+struct asm_generic_compressed_fmt_blk_t {
+	struct apr_hdr hdr;
+	struct asm_data_cmd_media_fmt_update_v2 fmt_blk;
+
+	/*
+	 * Channel mapping array of bitstream output.
+	 * Channel[i] mapping describes channel i inside the buffer, where
+	 * i < num_channels. All valid used channels must be
+	 * present at the beginning of the array.
+	 */
+	uint8_t channel_mapping[8];
+
+	/*
+	 * Number of channels of the incoming bitstream.
+	 * Supported values: 1,2,3,4,5,6,7,8
+	 */
+	uint16_t num_channels;
+
+	/*
+	 * Nominal bits per sample value of the incoming bitstream.
+	 * Supported values: 16, 32
+	 */
+	uint16_t bits_per_sample;
+
+	/*
+	 * Nominal sampling rate of the incoming bitstream.
+	 * Supported values: 8000, 11025, 16000, 22050, 24000, 32000,
+	 *                   44100, 48000, 88200, 96000, 176400, 192000,
+	 *                   352800, 384000
+	 */
+	uint32_t sampling_rate;
+
+} __packed;
 
 struct asm_multi_channel_pcm_fmt_blk_v2 {
 	struct apr_hdr hdr;
@@ -9992,6 +10041,108 @@ struct afe_port_group_create {
 	union afe_port_group_config data;
 } __packed;
 
+/* ID of the parameter used by #AFE_MODULE_AUDIO_DEV_INTERFACE to specify
+ * the timing statistics of the corresponding device interface.
+ * Client can periodically query for the device time statistics to help adjust
+ * the PLL based on the drift value. The get param command must be sent to
+ * AFE port ID corresponding to device interface
+
+ * This parameter ID supports following get param commands:
+ * #AFE_PORT_CMD_GET_PARAM_V2 and
+ * #AFE_PORT_CMD_GET_PARAM_V3.
+ */
+#define AFE_PARAM_ID_DEV_TIMING_STATS           0x000102AD
+
+/* Version information used to handle future additions to AFE device
+ * interface timing statistics (for backward compatibility).
+ */
+#define AFE_API_VERSION_DEV_TIMING_STATS        0x1
+
+/* Enumeration for specifying a sink(Rx) device */
+#define AFE_SINK_DEVICE                         0x0
+
+/* Enumeration for specifying a source(Tx) device */
+#define AFE_SOURCE_DEVICE                       0x1
+
+/* Enumeration for specifying the drift reference is of type AV Timer */
+#define AFE_REF_TIMER_TYPE_AVTIMER              0x0
+
+/* Message payload structure for the
+ * AFE_PARAM_ID_DEV_TIMING_STATS parameter.
+ */
+struct afe_param_id_dev_timing_stats {
+	/* Minor version used to track the version of device interface timing
+	 * statistics. Currently, the supported version is 1.
+	 * @values #AFE_API_VERSION_DEV_TIMING_STATS
+	 */
+	u32       minor_version;
+
+	/* Indicates the device interface direction as either
+	 * source (Tx) or sink (Rx).
+	 * @values
+	 * #AFE_SINK_DEVICE
+	 * #AFE_SOURCE_DEVICE
+	 */
+	u16        device_direction;
+
+	/* Reference timer for drift accumulation and time stamp information.
+	 * @values
+	 * #AFE_REF_TIMER_TYPE_AVTIMER @tablebulletend
+	 */
+	u16        reference_timer;
+
+	/*
+	 * Flag to indicate if resync is required on the client side for
+	 * drift correction. Flag is set to TRUE for the first get_param
+	 * response after device interface starts. This flag value can be
+	 * used by client to identify if device interface restart has
+	 * happened and if any re-sync is required at their end for drift
+	 * correction.
+	 * @values
+	 * 0: FALSE (Resync not required)
+	 * 1: TRUE (Resync required) @tablebulletend
+	 */
+	u32        resync_flag;
+
+	/* Accumulated drift value in microseconds. This value is updated
+	 * every 100th ms.
+	 * Positive drift value indicates AV timer is running faster than device
+	 * Negative drift value indicates AV timer is running slower than device
+	 * @values Any valid int32 number
+	 */
+	s32         acc_drift_value;
+
+	/* Lower 32 bits of the 64-bit absolute timestamp of reference
+	 * timer in microseconds.
+
+	 * This timestamp corresponds to the time when the drift values
+	 * are accumlated for every 100th ms.
+	 * @values Any valid uint32 number
+	 */
+	u32        ref_timer_abs_ts_lsw;
+
+	/* Upper 32 bits of the 64-bit absolute timestamp of reference
+	 * timer in microseconds.
+	 * This timestamp corresponds to the time when the drift values
+	 * are accumlated for every 100th ms.
+	 * @values Any valid uint32 number
+	 */
+	u32        ref_timer_abs_ts_msw;
+} __packed;
+
+struct afe_av_dev_drift_get_param {
+	struct apr_hdr hdr;
+	struct afe_port_cmd_get_param_v2 get_param;
+	struct afe_port_param_data_v2 pdata;
+	struct afe_param_id_dev_timing_stats timing_stats;
+} __packed;
+
+struct afe_av_dev_drift_get_param_resp {
+	uint32_t status;
+	struct afe_port_param_data_v2 pdata;
+	struct afe_param_id_dev_timing_stats timing_stats;
+} __packed;
+
 /* Command for Matrix or Stream Router */
 #define ASM_SESSION_CMD_SET_MTMX_STRTR_PARAMS_V2    0x00010DCE
 /* Module for AVSYNC */
@@ -10077,12 +10228,108 @@ struct asm_session_cmd_set_mtmx_strstr_params_v2 {
 	 */
 };
 
+/* Parameter used by #ASM_SESSION_MTMX_STRTR_MODULE_ID_AVSYNC which allows the
+ * audio client choose the rendering decision that the audio DSP should use.
+ */
+#define ASM_SESSION_MTMX_STRTR_PARAM_RENDER_MODE_CMD  0x00012F0D
+
+/* Indicates that rendering decision will be based on default rate
+ * (session clock based rendering, device driven).
+ * 1. The default session clock based rendering is inherently driven
+ *    by the timing of the device.
+ * 2. After the initial decision is made (first buffer after a run
+ *    command), subsequent data rendering decisions are made with
+ *    respect to the rate at which the device is rendering, thus deriving
+ *    its timing from the device.
+ * 3. While this decision making is simple, it has some inherent limitations
+ *    (mentioned in the next section).
+ * 4. If this API is not set, the session clock based rendering will be assumed
+ *    and this will ensure that the DSP is backward compatible.
+ */
+#define ASM_SESSION_MTMX_STRTR_PARAM_RENDER_DEFAULT 0
+
+/* Indicates that rendering decision will be based on local clock rate.
+ * 1. In the DSP loopback/client loopback use cases (frame based
+ *    inputs), the incoming data into audio DSP is time-stamped at the
+ *    local clock rate (STC).
+ * 2. This TS rate may match the incoming data rate or maybe different
+ *    from the incoming data rate.
+ * 3. Regardless, the data will be time-stamped with local STC and
+ *    therefore, the client is recommended to set this mode for these
+ *    use cases. This method is inherently more robust to sequencing
+ *    (AFE Start/Stop) and device switches, among other benefits.
+ * 4. This API will inform the DSP to compare every incoming buffer TS
+ *    against local STC.
+ * 5. DSP will continue to honor render windows APIs, as before.
+ */
+#define ASM_SESSION_MTMX_STRTR_PARAM_RENDER_LOCAL_STC 1
+
+/* Structure for rendering decision parameter */
+struct asm_session_mtmx_strtr_param_render_mode_t {
+	/* Specifies the type of rendering decision the audio DSP should use.
+	 *
+	 * @values
+	 * - #ASM_SESSION_MTMX_STRTR_PARAM_RENDER_DEFAULT
+	 * - #ASM_SESSION_MTMX_STRTR_PARAM_RENDER_LOCAL_STC
+	 */
+	u32                  flags;
+} __packed;
+
+/* Parameter used by #ASM_SESSION_MTMX_STRTR_MODULE_ID_AVSYNC which allows the
+ * audio client to specify the clock recovery mechanism that the audio DSP
+ * should use.
+ */
+
+#define ASM_SESSION_MTMX_STRTR_PARAM_CLK_REC_CMD 0x00012F0E
+
+/* Indicates that default clock recovery will be used (no clock recovery).
+ * If the client wishes that no clock recovery be done, the client can
+ * choose this. This means that no attempt will made by the DSP to try and
+ * match the rates of the input and output audio.
+ */
+#define ASM_SESSION_MTMX_STRTR_PARAM_CLK_REC_NONE 0
+
+/* Indicates that independent clock recovery needs to be used.
+ * 1. In the DSP loopback/client loopback use cases (frame based inputs),
+ *    the client should choose the independent clock recovery option.
+ * 2. This basically de-couples the audio and video from knowing each others
+ *    clock sources and lets the audio DSP independently rate match the input
+ *    and output rates.
+ * 3. After drift detection, the drift correction is achieved by either pulling
+ *    the PLLs (if applicable) or by stream to device rate matching
+ *    (for PCM use cases) by comparing drift with respect to STC.
+ * 4. For passthrough use cases, since the PLL pulling is the only option,
+ *    a best effort will be made.
+ *    If PLL pulling is not possible / available, the rendering will be
+ *    done without rate matching.
+ */
+#define ASM_SESSION_MTMX_STRTR_PARAM_CLK_REC_AUTO 1
+
+/* Payload of the #ASM_SESSION_MTMX_STRTR_PARAM_CLK_REC parameter.
+ */
+struct asm_session_mtmx_strtr_param_clk_rec_t {
+	/* Specifies the type of clock recovery that the audio DSP should
+	 * use for rate matching.
+	 */
+
+	/* @values
+	 * #ASM_SESSION_MTMX_STRTR_PARAM_CLK_REC_DEFAULT
+	 * #ASM_SESSION_MTMX_STRTR_PARAM_CLK_REC_INDEPENDENT
+	 */
+	u32                  flags;
+} __packed;
+
+union asm_session_mtmx_strtr_param_config {
+	struct asm_session_mtmx_strtr_param_window_v2_t window_param;
+	struct asm_session_mtmx_strtr_param_render_mode_t render_param;
+	struct asm_session_mtmx_strtr_param_clk_rec_t clk_rec_param;
+} __packed;
+
 struct asm_mtmx_strtr_params {
 	struct apr_hdr  hdr;
 	struct asm_session_cmd_set_mtmx_strstr_params_v2 param;
 	struct asm_stream_param_data_v2 data;
-	u32 window_lsw;
-	u32 window_msw;
+	union asm_session_mtmx_strtr_param_config config;
 } __packed;
 
 #define ASM_SESSION_CMD_GET_MTMX_STRTR_PARAMS_V2 0x00010DCF
@@ -10203,6 +10450,7 @@ enum {
 	COMPRESSED_PASSTHROUGH_CONVERT,
 	COMPRESSED_PASSTHROUGH_DSD,
 	LISTEN,
+	COMPRESSED_PASSTHROUGH_GEN,
 };
 
 #define AUDPROC_MODULE_ID_COMPRESSED_MUTE                0x00010770

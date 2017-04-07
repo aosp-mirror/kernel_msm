@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -111,6 +111,7 @@ static void service_locator_svc_arrive(struct work_struct *work)
 			qmi_handle_create(service_locator_clnt_notify, NULL);
 	if (!service_locator.clnt_handle) {
 		service_locator.clnt_handle = NULL;
+		complete_all(&service_locator.service_available);
 		mutex_unlock(&service_locator.service_mutex);
 		pr_err("Service locator QMI client handle alloc failed!\n");
 		return;
@@ -123,6 +124,7 @@ static void service_locator_svc_arrive(struct work_struct *work)
 	if (rc) {
 		qmi_handle_destroy(service_locator.clnt_handle);
 		service_locator.clnt_handle = NULL;
+		complete_all(&service_locator.service_available);
 		mutex_unlock(&service_locator.service_mutex);
 		pr_err("Unable to connnect to service rc:%d\n", rc);
 		return;
@@ -138,6 +140,7 @@ static void service_locator_svc_exit(struct work_struct *work)
 	mutex_lock(&service_locator.service_mutex);
 	qmi_handle_destroy(service_locator.clnt_handle);
 	service_locator.clnt_handle = NULL;
+	complete_all(&service_locator.service_available);
 	mutex_unlock(&service_locator.service_mutex);
 	pr_info("Connection with service locator lost\n");
 }
@@ -263,10 +266,9 @@ static int service_locator_send_msg(struct pd_qmi_client_data *pd)
 		if (!domains_read) {
 			db_rev_count = pd->db_rev_count = resp->db_rev_count;
 			pd->total_domains = resp->total_domains;
-			if (!pd->total_domains && resp->domain_list_len) {
-				pr_err("total domains not set\n");
-				pd->total_domains = resp->domain_list_len;
-			}
+			if (!resp->total_domains)
+				pr_info("No matching domains found\n");
+
 			pd->domain_list = kmalloc(
 					sizeof(struct servreg_loc_entry_v01) *
 					resp->total_domains, GFP_KERNEL);
@@ -282,6 +284,10 @@ static int service_locator_send_msg(struct pd_qmi_client_data *pd)
 			kfree(pd->domain_list);
 			rc = -EAGAIN;
 			goto out;
+		}
+		if (resp->domain_list_len >  resp->total_domains) {
+			/* Always read total_domains from the response msg */
+			resp->domain_list_len = resp->total_domains;
 		}
 		/* Copy the response*/
 		store_get_domain_list_response(pd, resp, domains_read);
@@ -369,6 +375,7 @@ int get_service_location(char *client_name, char *service_name,
 	if (!pqw) {
 		rc = -ENOMEM;
 		pr_err("Allocation failed\n");
+		kfree(pqcd);
 		goto err;
 	}
 	pqw->notifier = locator_nb;

@@ -29,7 +29,9 @@
 #include <linux/sched.h>
 #include <linux/highmem.h>
 #include <linux/perf_event.h>
+#include <linux/preempt.h>
 
+#include <asm/bug.h>
 #include <asm/cpufeature.h>
 #include <asm/exception.h>
 #include <asm/debug-monitors.h>
@@ -44,6 +46,28 @@
 #include <trace/events/exception.h>
 
 static const char *fault_name(unsigned int esr);
+
+#ifdef CONFIG_KPROBES
+static inline int notify_page_fault(struct pt_regs *regs, unsigned int esr)
+{
+	int ret = 0;
+
+	/* kprobe_running() needs smp_processor_id() */
+	if (!user_mode(regs)) {
+		preempt_disable();
+		if (kprobe_running() && kprobe_fault_handler(regs, esr))
+			ret = 1;
+		preempt_enable();
+	}
+
+	return ret;
+}
+#else
+static inline int notify_page_fault(struct pt_regs *regs, unsigned int esr)
+{
+	return 0;
+}
+#endif
 
 /*
  * Dump out the page tables associated with 'addr' in mm 'mm'.
@@ -281,6 +305,9 @@ static int __kprobes do_page_fault(unsigned long addr, unsigned int esr,
 	unsigned long vm_flags = VM_READ | VM_WRITE | VM_EXEC;
 	unsigned int mm_flags = FAULT_FLAG_ALLOW_RETRY | FAULT_FLAG_KILLABLE;
 
+	if (notify_page_fault(regs, esr))
+		return 0;
+
 	tsk = current;
 	mm  = tsk->mm;
 
@@ -429,23 +456,19 @@ no_context:
 	return 0;
 }
 
+/*
+ * TLB conflict is already handled in EL2. This rourtine should return zero
+ * so that, do_mem_abort would not crash kernel thinking TLB conflict not
+ * handled.
+*/
+#ifdef CONFIG_QCOM_TLB_EL2_HANDLER
 static int do_tlb_conf_fault(unsigned long addr,
 				unsigned int esr,
 				struct pt_regs *regs)
 {
-#define SCM_TLB_CONFLICT_CMD	0x1B
-	struct scm_desc desc = {
-		.args[0] = addr,
-		.arginfo = SCM_ARGS(1),
-	};
-
-	if (scm_call2_atomic(SCM_SIP_FNID(SCM_SVC_MP, SCM_TLB_CONFLICT_CMD),
-						&desc))
-		return 1;
-
 	return 0;
 }
-
+#endif
 /*
  * First Level Translation Fault Handler
  *
@@ -537,7 +560,11 @@ static const struct fault_info {
 	{ do_bad,		SIGBUS,  0,		"unknown 45"			},
 	{ do_bad,		SIGBUS,  0,		"unknown 46"			},
 	{ do_bad,		SIGBUS,  0,		"unknown 47"			},
+#ifdef CONFIG_QCOM_TLB_EL2_HANDLER
 	{ do_tlb_conf_fault,	SIGBUS,  0,		"TLB conflict abort"		},
+#else
+	{ do_bad,		SIGBUS,  0,		"TLB conflict abort"		},
+#endif
 	{ do_bad,		SIGBUS,  0,		"unknown 49"			},
 	{ do_bad,		SIGBUS,  0,		"unknown 50"			},
 	{ do_bad,		SIGBUS,  0,		"unknown 51"			},
@@ -658,11 +685,20 @@ asmlinkage int __exception do_debug_exception(unsigned long addr,
 
 	return 0;
 }
+NOKPROBE_SYMBOL(do_debug_exception);
 
 #ifdef CONFIG_ARM64_PAN
-void cpu_enable_pan(void *__unused)
+int cpu_enable_pan(void *__unused)
 {
+	/*
+	 * We modify PSTATE. This won't work from irq context as the PSTATE
+	 * is discarded once we return from the exception.
+	 */
+	WARN_ON_ONCE(in_interrupt());
+
 	config_sctlr_el1(SCTLR_EL1_SPAN, 0);
+	asm(SET_PSTATE_PAN(1));
+	return 0;
 }
 #endif /* CONFIG_ARM64_PAN */
 
@@ -673,7 +709,7 @@ void cpu_enable_pan(void *__unused)
  * We need to enable the feature at runtime (instead of adding it to
  * PSR_MODE_EL1h) as the feature may not be implemented by the cpu.
  */
-void cpu_enable_uao(void *__unused)
+int cpu_enable_uao(void *__unused)
 {
 	asm(SET_PSTATE_UAO(1));
 }

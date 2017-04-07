@@ -188,7 +188,6 @@ enum ath10k_fw_wmi_op_version {
 	ATH10K_FW_WMI_OP_VERSION_TLV = 4,
 	ATH10K_FW_WMI_OP_VERSION_10_2_4 = 5,
 	ATH10K_FW_WMI_OP_VERSION_10_4 = 6,
-	ATH10K_FW_WMI_OP_VERSION_HL_1_0 = 7,
 
 	/* keep last */
 	ATH10K_FW_WMI_OP_VERSION_MAX,
@@ -268,6 +267,98 @@ extern const struct ath10k_hw_regs qca6174_regs;
 extern const struct ath10k_hw_regs qca99x0_regs;
 extern const struct ath10k_hw_regs qca4019_regs;
 extern const struct ath10k_hw_regs wcn3990_regs;
+
+struct ath10k_hw_ce_regs_addr_map {
+	u32 msb;
+	u32 lsb;
+	u32 mask;
+	unsigned int (*set)(unsigned int offset,
+			    struct ath10k_hw_ce_regs_addr_map *addr_map);
+	unsigned int (*get)(unsigned int offset,
+			    struct ath10k_hw_ce_regs_addr_map *addr_map);
+};
+
+struct ath10k_hw_ce_ctrl1 {
+	u32 addr;
+	u32 hw_mask;
+	u32 sw_mask;
+	u32 hw_wr_mask;
+	u32 sw_wr_mask;
+	u32 reset_mask;
+	u32 reset;
+	struct ath10k_hw_ce_regs_addr_map *src_ring;
+	struct ath10k_hw_ce_regs_addr_map *dst_ring;
+	struct ath10k_hw_ce_regs_addr_map *dmax;
+};
+
+struct ath10k_hw_ce_cmd_halt {
+	u32 status_reset;
+	u32 msb;
+	u32 mask;
+	struct ath10k_hw_ce_regs_addr_map *status;
+};
+
+struct ath10k_hw_ce_host_ie {
+	u32 copy_complete_reset;
+	struct ath10k_hw_ce_regs_addr_map *copy_complete;
+};
+
+struct ath10k_hw_ce_host_wm_regs {
+	u32 dstr_lmask;
+	u32 dstr_hmask;
+	u32 srcr_lmask;
+	u32 srcr_hmask;
+	u32 cc_mask;
+	u32 wm_mask;
+	u32 addr;
+};
+
+struct ath10k_hw_ce_misc_regs {
+	u32 axi_err;
+	u32 dstr_add_err;
+	u32 srcr_len_err;
+	u32 dstr_mlen_vio;
+	u32 dstr_overflow;
+	u32 srcr_overflow;
+	u32 err_mask;
+	u32 addr;
+};
+
+struct ath10k_hw_ce_dst_src_wm_regs {
+	u32 addr;
+	u32 low_rst;
+	u32 high_rst;
+	struct ath10k_hw_ce_regs_addr_map *wm_low;
+	struct ath10k_hw_ce_regs_addr_map *wm_high;
+};
+
+struct ath10k_hw_ce_regs {
+	u32 sr_base_addr;
+	u32 sr_size_addr;
+	u32 dr_base_addr;
+	u32 dr_size_addr;
+	u32 ce_cmd_addr;
+	u32 misc_ie_addr;
+	u32 sr_wr_index_addr;
+	u32 dst_wr_index_addr;
+	u32 current_srri_addr;
+	u32 current_drri_addr;
+	u32 ddr_addr_for_rri_low;
+	u32 ddr_addr_for_rri_high;
+	u32 ce_rri_low;
+	u32 ce_rri_high;
+	u32 host_ie_addr;
+	struct ath10k_hw_ce_host_wm_regs *wm_regs;
+	struct ath10k_hw_ce_misc_regs *misc_regs;
+	struct ath10k_hw_ce_ctrl1 *ctrl1_regs;
+	struct ath10k_hw_ce_cmd_halt *cmd_halt;
+	struct ath10k_hw_ce_host_ie *host_ie;
+	struct ath10k_hw_ce_dst_src_wm_regs *wm_srcr;
+	struct ath10k_hw_ce_dst_src_wm_regs *wm_dstr;
+};
+
+extern struct ath10k_hw_ce_regs wcn3990_ce_regs;
+extern struct ath10k_hw_ce_regs qcax_ce_regs;
 
 extern struct fw_flag wcn3990_fw_flags;
 
@@ -835,5 +926,62 @@ ath10k_rx_desc_get_l3_pad_bytes(struct ath10k_hw_params *hw,
 #define QCA9887_EEPROM_ADDR_LO_LSB		16
 
 #define RTC_STATE_V_GET(x) (((x) & RTC_STATE_V_MASK) >> RTC_STATE_V_LSB)
+
+struct ath10k_shadow_reg_value {
+	u32 shadow_reg_value_0;
+	u32 shadow_reg_value_1;
+	u32 shadow_reg_value_2;
+	u32 shadow_reg_value_3;
+	u32 shadow_reg_value_4;
+	u32 shadow_reg_value_5;
+	u32 shadow_reg_value_6;
+	u32 shadow_reg_value_7;
+	u32 shadow_reg_value_8;
+	u32 shadow_reg_value_9;
+	u32 shadow_reg_value_10;
+	u32 shadow_reg_value_11;
+	u32 shadow_reg_value_12;
+	u32 shadow_reg_value_13;
+	u32 shadow_reg_value_14;
+	u32 shadow_reg_value_15;
+	u32 shadow_reg_value_16;
+	u32 shadow_reg_value_17;
+	u32 shadow_reg_value_18;
+	u32 shadow_reg_value_19;
+	u32 shadow_reg_value_20;
+	u32 shadow_reg_value_21;
+	u32 shadow_reg_value_22;
+	u32 shadow_reg_value_23;
+};
+
+struct ath10k_shadow_reg_address {
+	u32 shadow_reg_address_0;
+	u32 shadow_reg_address_1;
+	u32 shadow_reg_address_2;
+	u32 shadow_reg_address_3;
+	u32 shadow_reg_address_4;
+	u32 shadow_reg_address_5;
+	u32 shadow_reg_address_6;
+	u32 shadow_reg_address_7;
+	u32 shadow_reg_address_8;
+	u32 shadow_reg_address_9;
+	u32 shadow_reg_address_10;
+	u32 shadow_reg_address_11;
+	u32 shadow_reg_address_12;
+	u32 shadow_reg_address_13;
+	u32 shadow_reg_address_14;
+	u32 shadow_reg_address_15;
+	u32 shadow_reg_address_16;
+	u32 shadow_reg_address_17;
+	u32 shadow_reg_address_18;
+	u32 shadow_reg_address_19;
+	u32 shadow_reg_address_20;
+	u32 shadow_reg_address_21;
+	u32 shadow_reg_address_22;
+	u32 shadow_reg_address_23;
+};
+
+extern struct ath10k_shadow_reg_value wcn3990_shadow_reg_value;
+extern struct ath10k_shadow_reg_address wcn3990_shadow_reg_address;
 
 #endif /* _HW_H_ */

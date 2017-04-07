@@ -310,6 +310,9 @@ void sdhci_msm_writel_relaxed(u32 val, struct sdhci_host *host, u32 offset)
 	writel_relaxed(val, base_addr + offset);
 }
 
+/* Timeout value to avoid infinite waiting for pwr_irq */
+#define MSM_PWR_IRQ_TIMEOUT_MS 5000
+
 static const u32 tuning_block_64[] = {
 	0x00FF0FFF, 0xCCC3CCFF, 0xFFCC3CC3, 0xEFFEFFFE,
 	0xDDFFDFFF, 0xFBFFFBFF, 0xFF7FFFBF, 0xEFBDF777,
@@ -334,6 +337,9 @@ static struct sdhci_msm_host *sdhci_slot[2];
 static int disable_slots;
 /* root can write, others read */
 module_param(disable_slots, int, S_IRUGO|S_IWUSR);
+
+static bool nocmdq;
+module_param(nocmdq, bool, S_IRUGO|S_IWUSR);
 
 enum vdd_io_level {
 	/* set vdd_io_data->low_vol_level */
@@ -2730,14 +2736,15 @@ static void sdhci_msm_check_power_status(struct sdhci_host *host, u32 req_type)
 					msm_host->offset;
 	unsigned long flags;
 	bool done = false;
-	u32 io_sig_sts;
+	u32 io_sig_sts = SWITCHABLE_SIGNALLING_VOL;
 
 	spin_lock_irqsave(&host->lock, flags);
 	pr_debug("%s: %s: request %d curr_pwr_state %x curr_io_level %x\n",
 			mmc_hostname(host->mmc), __func__, req_type,
 			msm_host->curr_pwr_state, msm_host->curr_io_level);
-	io_sig_sts = sdhci_msm_readl_relaxed(host,
-			msm_host_offset->CORE_GENERICS);
+	if (!msm_host->mci_removed)
+		io_sig_sts = sdhci_msm_readl_relaxed(host,
+				msm_host_offset->CORE_GENERICS);
 
 	/*
 	 * The IRQ for request type IO High/Low will be generated when -
@@ -2776,8 +2783,10 @@ static void sdhci_msm_check_power_status(struct sdhci_host *host, u32 req_type)
 	 */
 	if (done)
 		init_completion(&msm_host->pwr_irq_completion);
-	else
-		wait_for_completion(&msm_host->pwr_irq_completion);
+	else if (!wait_for_completion_timeout(&msm_host->pwr_irq_completion,
+				msecs_to_jiffies(MSM_PWR_IRQ_TIMEOUT_MS)))
+		__WARN_printf("%s: request(%d) timed out waiting for pwr_irq\n",
+					mmc_hostname(host->mmc), req_type);
 
 	pr_debug("%s: %s: request %d done\n", mmc_hostname(host->mmc),
 			__func__, req_type);
@@ -3281,6 +3290,8 @@ static void sdhci_msm_cmdq_dump_debug_ram(struct sdhci_host *host)
 	/* registers offset changed starting from 4.2.0 */
 	int offset = minor >= SDHCI_MSM_VER_420 ? 0 : 0x48;
 
+	if (cq_host->offset_changed)
+		offset += CQ_V5_VENDOR_CFG;
 	pr_err("---- Debug RAM dump ----\n");
 	pr_err(DRV_NAME ": Debug RAM wrap-around: 0x%08x | Debug RAM overlap: 0x%08x\n",
 	       cmdq_readl(cq_host, CQ_CMD_DBG_RAM_WA + offset),
@@ -3292,6 +3303,21 @@ static void sdhci_msm_cmdq_dump_debug_ram(struct sdhci_host *host)
 		i++;
 	}
 	pr_err("-------------------------\n");
+}
+
+static void sdhci_msm_cache_debug_data(struct sdhci_host *host)
+{
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct sdhci_msm_host *msm_host = pltfm_host->priv;
+	struct sdhci_msm_debug_data *cached_data = &msm_host->cached_data;
+
+	memcpy(&cached_data->copy_mmc, msm_host->mmc,
+		sizeof(struct mmc_host));
+	if (msm_host->mmc->card)
+		memcpy(&cached_data->copy_card, msm_host->mmc->card,
+			sizeof(struct mmc_card));
+	memcpy(&cached_data->copy_host, host,
+		sizeof(struct sdhci_host));
 }
 
 void sdhci_msm_dump_vendor_regs(struct sdhci_host *host)
@@ -3306,6 +3332,7 @@ void sdhci_msm_dump_vendor_regs(struct sdhci_host *host)
 	u32 debug_reg[MAX_TEST_BUS] = {0};
 	u32 sts = 0;
 
+	sdhci_msm_cache_debug_data(host);
 	pr_info("----------- VENDOR REGISTER DUMP -----------\n");
 	if (host->cq_host)
 		sdhci_msm_cmdq_dump_debug_ram(host);
@@ -3887,8 +3914,8 @@ void sdhci_msm_pm_qos_cpu_init(struct sdhci_host *host,
 		group->req.type = PM_QOS_REQ_AFFINE_CORES;
 		cpumask_copy(&group->req.cpus_affine,
 			&msm_host->pdata->pm_qos_data.cpu_group_map.mask[i]);
-		/* For initialization phase, set the performance mode latency */
-		group->latency = latency[i].latency[SDHCI_PERFORMANCE_MODE];
+		/* We set default latency here for all pm_qos cpu groups. */
+		group->latency = PM_QOS_DEFAULT_VALUE;
 		pm_qos_add_request(&group->req, PM_QOS_CPU_DMA_LATENCY,
 			group->latency);
 		pr_info("%s (): voted for group #%d (mask=0x%lx) latency=%d (0x%p)\n",
@@ -3998,6 +4025,7 @@ static unsigned int sdhci_msm_get_current_limit(struct sdhci_host *host)
 static struct sdhci_ops sdhci_msm_ops = {
 	.crypto_engine_cfg = sdhci_msm_ice_cfg,
 	.crypto_engine_cmdq_cfg = sdhci_msm_ice_cmdq_cfg,
+	.crypto_engine_cfg_end = sdhci_msm_ice_cfg_end,
 	.crypto_cfg_reset = sdhci_msm_ice_cfg_reset,
 	.crypto_engine_reset = sdhci_msm_ice_reset,
 	.set_uhs_signaling = sdhci_msm_set_uhs_signaling,
@@ -4134,6 +4162,11 @@ static void sdhci_msm_cmdq_init(struct sdhci_host *host,
 {
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
 	struct sdhci_msm_host *msm_host = pltfm_host->priv;
+
+	if (nocmdq) {
+		dev_dbg(&pdev->dev, "CMDQ disabled via cmdline\n");
+		return;
+	}
 
 	host->cq_host = cmdq_pltfm_init(pdev);
 	if (IS_ERR(host->cq_host)) {

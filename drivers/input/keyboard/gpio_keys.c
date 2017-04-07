@@ -3,8 +3,7 @@
  *
  * Copyright 2005 Phil Blundell
  * Copyright 2010, 2011 David Jander <david@protonic.nl>
- * Copyright (c) 2015, The Linux Foundation. All rights reserved.
- * Copyright (C) 2014-2017 HTC Corporation. All rights reserved.
+ * Copyright (c) 2015, 2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -34,6 +33,7 @@
 #include <linux/pinctrl/consumer.h>
 #include <linux/of_irq.h>
 #include <linux/spinlock.h>
+#include <linux/pinctrl/consumer.h>
 #include <linux/syscore_ops.h>
 
 enum {
@@ -361,14 +361,14 @@ static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 	const struct gpio_keys_button *button = bdata->button;
 	struct input_dev *input = bdata->input;
 	unsigned int type = button->type ?: EV_KEY;
-	int state = gpio_get_value_cansleep(button->gpio);
+	int state;
 
+	state = (__gpio_get_value(button->gpio) ? 1 : 0) ^ button->active_low;
 	if (state < 0) {
 		dev_err(input->dev.parent, "failed to get gpio state\n");
 		return;
 	}
 
-	state = (state ? 1 : 0) ^ button->active_low;
 	if (type == EV_ABS) {
 		if (state) {
 			KEY_LOGD("%s: key %x-%x, (%d) changed to %d\n",
@@ -869,6 +869,7 @@ static int gpio_keys_probe(struct platform_device *pdev)
 	size_t size;
 	int i, error;
 	int wakeup = 0;
+	struct pinctrl_state *set_state;
 
 	if (!pdata) {
 		pdata = gpio_keys_get_devtree_pdata(dev);
@@ -937,7 +938,7 @@ static int gpio_keys_probe(struct platform_device *pdev)
 
 		error = gpio_keys_setup_key(pdev, input, bdata, button);
 		if (error)
-			return error;
+			goto err_setup_key;
 
 		if (button->wakeup)
 			wakeup = 1;
@@ -947,7 +948,7 @@ static int gpio_keys_probe(struct platform_device *pdev)
 	if (error) {
 		dev_err(dev, "Unable to export keys/switches, error: %d\n",
 			error);
-		return error;
+		goto err_create_sysfs;
 	}
 
 	/* Link /sys/keyboard to platform device */
@@ -976,6 +977,18 @@ static int gpio_keys_probe(struct platform_device *pdev)
 
 err_remove_group:
 	sysfs_remove_group(&pdev->dev.kobj, &gpio_keys_attr_group);
+err_create_sysfs:
+err_setup_key:
+	if (ddata->key_pinctrl) {
+		set_state =
+		pinctrl_lookup_state(ddata->key_pinctrl,
+						"tlmm_gpio_key_suspend");
+		if (IS_ERR(set_state))
+			dev_err(dev, "cannot get gpiokey pinctrl sleep state\n");
+		else
+			pinctrl_select_state(ddata->key_pinctrl, set_state);
+	}
+
 	return error;
 }
 
@@ -1029,7 +1042,15 @@ static int gpio_keys_suspend(struct device *dev)
 {
 	struct gpio_keys_drvdata *ddata = dev_get_drvdata(dev);
 	struct input_dev *input = ddata->input;
-	int i;
+	int i, ret;
+
+	if (ddata->key_pinctrl) {
+		ret = gpio_keys_pinctrl_configure(ddata, false);
+		if (ret) {
+			dev_err(dev, "failed to put the pin in suspend state\n");
+			return ret;
+		}
+	}
 
 	if (device_may_wakeup(dev)) {
 		for (i = 0; i < ddata->pdata->nbuttons; i++) {

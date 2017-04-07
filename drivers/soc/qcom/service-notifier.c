@@ -99,7 +99,7 @@ struct ind_req_resp {
  */
 struct qmi_client_info {
 	int instance_id;
-	int subsys_state;
+	enum pd_subsys_state subsys_state;
 	struct work_struct svc_arrive;
 	struct work_struct svc_exit;
 	struct work_struct svc_rcv_msg;
@@ -646,7 +646,13 @@ static int send_pd_restart_req(const char *service_path,
 		return rc;
 	}
 
-	/* Check the response */
+	/* Check response if PDR is disabled */
+	if (QMI_RESP_BIT_SHIFT(resp.resp.result) == QMI_ERR_DISABLED_V01) {
+		pr_err("PD restart is disabled 0x%x\n",
+					QMI_RESP_BIT_SHIFT(resp.resp.error));
+		return -EOPNOTSUPP;
+	}
+	/* Check the response for other error case*/
 	if (QMI_RESP_BIT_SHIFT(resp.resp.result) != QMI_RESULT_SUCCESS_V01) {
 		pr_err("QMI request for PD restart failed 0x%x\n",
 					QMI_RESP_BIT_SHIFT(resp.resp.error));

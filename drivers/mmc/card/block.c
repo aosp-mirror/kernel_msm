@@ -875,6 +875,14 @@ static int __mmc_blk_ioctl_cmd(struct mmc_card *card, struct mmc_blk_data *md,
 	cmd.arg = idata->ic.arg;
 	cmd.flags = idata->ic.flags;
 
+	if (idata->ic.postsleep_max_us < idata->ic.postsleep_min_us) {
+		pr_err("%s: min value: %u must not be greater than max value: %u\n",
+			__func__, idata->ic.postsleep_min_us,
+			idata->ic.postsleep_max_us);
+		WARN_ON(1);
+		return -EPERM;
+	}
+
 	if (idata->buf_bytes) {
 		data.sg = &sg;
 		data.sg_len = 1;
@@ -2848,7 +2856,7 @@ static void mmc_blk_packed_hdr_wrq_prep(struct mmc_queue_req *mqrq,
 	struct mmc_blk_data *md = mq->data;
 	struct mmc_packed *packed = mqrq->packed;
 	bool do_rel_wr, do_data_tag;
-	u32 *packed_cmd_hdr;
+	__le32 *packed_cmd_hdr;
 	u8 hdr_blocks;
 	u8 i = 1;
 
@@ -3482,15 +3490,23 @@ static void mmc_blk_cmdq_err(struct mmc_queue *mq)
 	/* RED error - Fatal: requires reset */
 	if (mrq->cmdq_req->resp_err) {
 		err = mrq->cmdq_req->resp_err;
+		goto reset;
+	}
+
+	/*
+	 * TIMEOUT errrors can happen because of execution error
+	 * in the last command. So send cmd 13 to get device status
+	 */
+	if ((mrq->cmd && (mrq->cmd->error == -ETIMEDOUT)) ||
+			(mrq->data && (mrq->data->error == -ETIMEDOUT))) {
 		if (mmc_host_halt(host) || mmc_host_cq_disable(host)) {
 			ret = get_card_status(host->card, &status, 0);
 			if (ret)
 				pr_err("%s: CMD13 failed with err %d\n",
 						mmc_hostname(host), ret);
 		}
-		pr_err("%s: Response error detected with device status 0x%08x\n",
+		pr_err("%s: Timeout error detected with device status 0x%08x\n",
 			mmc_hostname(host), status);
-		goto reset;
 	}
 
 	/*
@@ -3536,7 +3552,7 @@ void mmc_blk_cmdq_complete_rq(struct request *rq)
 	else if (mrq->data && mrq->data->error)
 		err = mrq->data->error;
 
-	if (err || cmdq_req->resp_err) {
+	if ((err || cmdq_req->resp_err) && !cmdq_req->skip_err_handling) {
 		pr_err("%s: %s: txfr error(%d)/resp_err(%d)\n",
 				mmc_hostname(mrq->host), __func__, err,
 				cmdq_req->resp_err);
@@ -3570,6 +3586,17 @@ void mmc_blk_cmdq_complete_rq(struct request *rq)
 		mmc_cmdq_post_req(host, cmdq_req->tag, err);
 	if (cmdq_req->cmdq_req_flags & DCMD) {
 		clear_bit(CMDQ_STATE_DCMD_ACTIVE, &ctx_info->curr_state);
+		blk_end_request_all(rq, err);
+		goto out;
+	}
+	/*
+	 * In case of error, cmdq_req->data.bytes_xfered is set to 0.
+	 * If we call blk_end_request() with nr_bytes as 0 then the request
+	 * never gets completed. So in case of error, to complete a request
+	 * with error we should use blk_end_request_all().
+	 */
+	if (err && cmdq_req->skip_err_handling) {
+		cmdq_req->skip_err_handling = false;
 		blk_end_request_all(rq, err);
 		goto out;
 	}
@@ -3855,10 +3882,6 @@ static int mmc_blk_cmdq_issue_rq(struct mmc_queue *mq, struct request *req)
 
 	mmc_get_card(card);
 
-#ifdef CONFIG_MMC_BLOCK_DEFERRED_RESUME
-	if (mmc_bus_needs_resume(card->host))
-		mmc_resume_bus(card->host);
-#endif
 	if (!card->host->cmdq_ctx.active_reqs && mmc_card_doing_bkops(card)) {
 		ret = mmc_cmdq_halt(card->host, true);
 		if (ret)
@@ -4110,7 +4133,8 @@ static struct mmc_blk_data *mmc_blk_alloc_req(struct mmc_card *card,
 	set_capacity(md->disk, size);
 
 	if (mmc_host_cmd23(card->host)) {
-		if (mmc_card_mmc(card) ||
+		if ((mmc_card_mmc(card) &&
+		     card->csd.mmca_vsn >= CSD_SPEC_VER_3) ||
 		    (mmc_card_sd(card) &&
 		     card->scr.cmds & SD_SCR_CMD23_SUPPORT))
 			md->flags |= MMC_BLK_CMD23;

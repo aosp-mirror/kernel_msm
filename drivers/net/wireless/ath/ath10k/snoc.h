@@ -16,8 +16,11 @@
 #include "hw.h"
 #include "ce.h"
 #include "pci.h"
+#include <soc/qcom/service-locator.h>
 #define ATH10K_SNOC_RX_POST_RETRY_MS 50
 #define CE_POLL_PIPE 4
+#define ATH10K_SERVICE_LOCATION_CLIENT_NAME			"ATH10K-WLAN"
+#define ATH10K_WLAN_SERVICE_NAME					"wlan/fw"
 
 /* struct snoc_state: SNOC target state
  * @pipe_cfg_addr: pipe configuration address
@@ -35,7 +38,6 @@ struct snoc_state {
  * @buf_sz: buffer size
  * @pipe_lock: pipe lock
  * @ar_snoc: snoc private structure
- * @intr: tasklet structure
  */
 
 struct ath10k_snoc_pipe {
@@ -46,7 +48,6 @@ struct ath10k_snoc_pipe {
 	/* protect ce info */
 	spinlock_t pipe_lock;
 	struct ath10k_snoc *ar_snoc;
-	struct tasklet_struct intr;
 };
 
 /* struct ath10k_snoc_supp_chip: supported chip set
@@ -90,6 +91,17 @@ struct ath10k_target_info {
 	u32 soc_version;
 };
 
+/* struct ath10k_service_notifier_context: service notification context
+ * @handle: notifier handle
+ * @instance_id: domain instance id
+ * @name: domain name
+ */
+struct ath10k_service_notifier_context {
+	void *handle;
+	u32 instance_id;
+	char name[QMI_SERVREG_LOC_NAME_LENGTH_V01 + 1];
+};
+
 /* struct ath10k_snoc: SNOC info struct
  * @dev: device structure
  * @ar:ath10k base structure
@@ -97,30 +109,40 @@ struct ath10k_target_info {
  * @mem_pa: mem base physical address
  * @target_info: snoc target info
  * @mem_len: mempry map length
- * @intr_tq: rx tasklet handle
  * @pipe_info: pipe info struct
  * @ce_lock: protect ce structures
  * @ce_states: maps ce id to ce state
  * @rx_post_retry: rx buffer post processing timer
  * @vaddr_rri_on_ddr: virtual address for RRI
  * @is_driver_probed: flag to indicate driver state
+ * @modem_ssr_nb: notifier callback for modem notification
+ * @modem_notify_handler: modem notification handler
+ * @service_notifier: notifier context for service notification
+ * @service_notifier_nb: notifier callback for service notification
+ * @total_domains: no of service domains
+ * @get_service_nb: notifier callback for service discovery
+ * @fw_crashed: fw state flag
  */
 struct ath10k_snoc {
+	struct bus_opaque opaque_ctx;
 	struct platform_device *dev;
 	struct ath10k *ar;
 	void __iomem *mem;
 	dma_addr_t mem_pa;
 	struct ath10k_target_info target_info;
 	size_t mem_len;
-	struct tasklet_struct intr_tq;
 	struct ath10k_snoc_pipe pipe_info[CE_COUNT_MAX];
-	/* protects CE info */
-	spinlock_t ce_lock;
-	struct ath10k_ce_pipe ce_states[CE_COUNT_MAX];
 	struct timer_list rx_post_retry;
 	u32 ce_irqs[CE_COUNT_MAX];
 	u32 *vaddr_rri_on_ddr;
 	bool is_driver_probed;
+	struct notifier_block modem_ssr_nb;
+	void *modem_notify_handler;
+	struct ath10k_service_notifier_context *service_notifier;
+	struct notifier_block service_notifier_nb;
+	int total_domains;
+	struct notifier_block get_service_nb;
+	atomic_t fw_crashed;
 };
 
 /* struct ath10k_ce_tgt_pipe_cfg: target pipe configuration
@@ -177,6 +199,11 @@ struct ath10k_wlan_enable_cfg {
 	struct ath10k_shadow_reg_cfg *shadow_reg_cfg;
 };
 
+struct ath10k_event_pd_down_data {
+	bool crashed;
+	bool fw_rejuvenate;
+};
+
 /* enum ath10k_driver_mode: ath10k driver mode
  * @ATH10K_MISSION: mission mode
  * @ATH10K_FTM: ftm mode
@@ -195,10 +222,10 @@ static inline struct ath10k_snoc *ath10k_snoc_priv(struct ath10k *ar)
 	return (struct ath10k_snoc *)ar->drv_priv;
 }
 
-void ath10k_snoc_write32(void *ar, u32 offset, u32 value);
+void ath10k_snoc_write32(struct ath10k *ar, u32 offset, u32 value);
 void ath10k_snoc_soc_write32(struct ath10k *ar, u32 addr, u32 val);
 void ath10k_snoc_reg_write32(struct ath10k *ar, u32 addr, u32 val);
-u32 ath10k_snoc_read32(void *ar, u32 offset);
+u32 ath10k_snoc_read32(struct ath10k *ar, u32 offset);
 u32 ath10k_snoc_soc_read32(struct ath10k *ar, u32 addr);
 u32 ath10k_snoc_reg_read32(struct ath10k *ar, u32 addr);
 
