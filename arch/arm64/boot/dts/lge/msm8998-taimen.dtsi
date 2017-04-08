@@ -77,6 +77,14 @@
 	bootlog {
 		compatible = "bootlog";
 	};
+
+	qcom,ion {
+		qcom,ion-heap@30 {
+			reg = <30>;
+			memory-region = <&easel_mem>;
+			qcom,ion-heap-type = "CARVEOUT";
+		};
+	};
 };
 
 &blsp1_uart3_hs {
