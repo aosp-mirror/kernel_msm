@@ -1262,11 +1262,13 @@ err:
 	return ret;
 }
 
+#ifndef USB_FUNC_LIST_WEAR
 static void acc_disconnect(void)
 {
 	/* unregister all HID devices if USB is disconnected */
 	kill_all_hid_devices(_acc_dev);
 }
+#endif
 
 static void acc_cleanup(void)
 {
