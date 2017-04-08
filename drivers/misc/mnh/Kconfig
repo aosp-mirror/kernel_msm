@@ -22,7 +22,7 @@ config MNH_SM_HOST
 config MNH_THERMAL_HOST
     tristate "MNH Easel Thermal Sensor Device Host-side driver"
     depends on MNH_SM_HOST
-    default "y"
+    default "n"
     ---help---
       Include support for MNH Thermal Sensor Device Host-side driver. This
       driver adds support for all thermal zone sensors on the Easel device and
