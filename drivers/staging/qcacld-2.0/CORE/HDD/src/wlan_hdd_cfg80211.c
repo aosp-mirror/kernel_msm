@@ -21463,8 +21463,8 @@ static int __wlan_hdd_cfg80211_sched_scan_start(struct wiphy *wiphy,
 
     VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
               "request->ie_len = %zu", request->ie_len);
-    if ((0 < request->ie_len) && (NULL != request->ie))
-    {
+    if ((request->ie_len > 0 && request->ie_len <= SIR_PNO_MAX_PB_REQ_SIZE) &&
+       (NULL != request->ie)) {
         pPnoRequest->us24GProbeTemplateLen = request->ie_len;
         memcpy(&pPnoRequest->p24GProbeTemplate, request->ie,
                 pPnoRequest->us24GProbeTemplateLen);
