@@ -29,6 +29,9 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/iio/iio.h>
+#include <linux/input.h>
+#include <linux/sensors.h>
+#include <linux/workqueue.h>
 
 #define TSL258X_MAX_DEVICE_REGS		32
 
@@ -65,6 +68,13 @@
 /* Lux calculation constants */
 #define	TSL258X_LUX_CALC_OVER_FLOW		65535
 
+/* tsl258x polling rate in ms */
+#define TSL258X_LS_MIN_POLL_DELAY       1
+#define TSL258X_LS_MAX_POLL_DELAY       1000
+#define TSL258X_LS_DEFAULT_POLL_DELAY   100
+
+
+
 enum {
 	TSL258X_CHIP_UNKNOWN = 0,
 	TSL258X_CHIP_WORKING = 1,
@@ -85,6 +95,11 @@ struct taos_settings {
 	int als_cal_target;
 };
 
+struct tsl258x_info {
+	bool enabled;
+        int poll_delay;
+};
+
 struct tsl2584_chip {
 	struct mutex als_mutex;
 	struct i2c_client *client;
@@ -94,7 +109,34 @@ struct tsl2584_chip {
 	int als_saturation;
 	int taos_chip_status;
 	u8 taos_config[8];
+        struct sensors_classdev als_cdev;
+        struct input_dev *ls_input_dev;
+	struct tsl258x_info *pdata;
+	struct hrtimer als_timer;
+	struct work_struct als_work;
+	struct workqueue_struct *als_wq;
+	struct mutex io_lock;
 };
+
+static struct sensors_classdev sensors_light_cdev = {
+        .name = "tsl258x-light",
+        .vendor = "CMS",
+        .version = 1,
+        .handle = SENSORS_LIGHT_HANDLE,
+        .type = SENSOR_TYPE_LIGHT,
+        .max_range = "800",
+        .resolution = "0.0125",
+        .sensor_power = "0.15",
+        .min_delay = 0,
+        .fifo_reserved_event_count = 0,
+        .fifo_max_event_count = 0,
+        .enabled = 0,
+        .delay_msec = TSL258X_LS_DEFAULT_POLL_DELAY,
+        .sensors_enable = NULL,
+        .sensors_poll_delay = NULL,
+};
+
+
 
 /*
  * Initial values for device - this values can/will be changed by driver.
@@ -818,6 +860,99 @@ static const struct iio_info tsl2584_info = {
 	.driver_module = THIS_MODULE,
 };
 
+
+static int tsl258x_als_set_enable(struct sensors_classdev *sensors_cdev,
+		unsigned int enable)
+{
+	struct tsl2584_chip *als_data = container_of(sensors_cdev,
+						struct tsl2584_chip, als_cdev);
+	if ((enable != 0) && (enable != 1)) {
+		pr_err("%s: invalid value(%d)\n", __func__, enable);
+		return -EINVAL;
+	}
+
+	mutex_lock(&als_data->io_lock);
+	if (enable)
+	{
+		als_data->pdata->enabled = true;
+		hrtimer_start(&als_data->als_timer, ns_to_ktime(als_data->pdata->poll_delay * NSEC_PER_MSEC), HRTIMER_MODE_REL);
+	}
+	else
+	{
+		als_data->pdata->enabled = false;
+		hrtimer_cancel(&als_data->als_timer);
+	}
+	mutex_unlock(&als_data->io_lock);
+
+	return 0;
+}
+
+
+static int tsl258x_als_poll_delay_set(struct sensors_classdev *sensors_cdev,
+                unsigned int delay_msec)
+{
+	struct tsl2584_chip *als_data = container_of(sensors_cdev,
+						struct tsl2584_chip, als_cdev);
+
+        if ((delay_msec < TSL258X_LS_MIN_POLL_DELAY) ||
+                        (delay_msec > TSL258X_LS_MAX_POLL_DELAY))
+                return -EINVAL;
+	als_data->pdata->poll_delay = delay_msec;
+
+        return 0;
+}
+
+
+static int lightsensor_setup(struct tsl2584_chip *chip)
+{
+        int ret;
+
+        chip->ls_input_dev = devm_input_allocate_device(&chip->client->dev);
+        if (!chip->ls_input_dev) {
+                pr_err(
+                        "%s: could not allocate ls input device\n",
+                        __func__);
+                return -ENOMEM;
+        }
+        chip->ls_input_dev->name = "tsl258x-light";
+        chip->ls_input_dev->id.bustype = BUS_I2C;
+        set_bit(EV_ABS, chip->ls_input_dev->evbit);
+
+        input_set_abs_params(chip->ls_input_dev, ABS_MISC, 0, 65535, 0, 0);
+
+        ret = input_register_device(chip->ls_input_dev);
+        if (ret < 0) {
+                pr_err("%s: can not register ls input device\n",
+                                __func__);
+                goto err_free_ls_input_device;
+        }
+
+	input_set_drvdata(chip->ls_input_dev, chip);
+
+err_free_ls_input_device:
+        return ret;
+}
+
+static enum hrtimer_restart tsl258x_als_timer_func(struct hrtimer *timer)
+{
+	struct tsl2584_chip *ps_data = container_of(timer, struct tsl2584_chip, als_timer);
+	queue_work(ps_data->als_wq, &ps_data->als_work);
+	hrtimer_forward_now(&ps_data->als_timer, ns_to_ktime(ps_data->pdata->poll_delay * NSEC_PER_MSEC));
+	return HRTIMER_RESTART;
+}
+
+static void tsl258x_als_work_func(struct work_struct *work)
+{
+	struct tsl2584_chip *ps_data = container_of(work, struct tsl2584_chip, als_work);
+	struct iio_dev *indio_dev = i2c_get_clientdata(ps_data->client);
+	int als_lux_last = 0;
+	mutex_lock(&ps_data->io_lock);
+	als_lux_last = taos_get_lux(indio_dev);
+	input_report_abs(ps_data->ls_input_dev, ABS_MISC, als_lux_last);
+	input_sync(ps_data->ls_input_dev);
+	mutex_unlock(&ps_data->io_lock);
+}
+
 /*
  * Client probe function - When a valid device is found, the driver's device
  * data structure is updated, and initialization completes successfully.
@@ -828,6 +963,7 @@ static int taos_probe(struct i2c_client *clientp,
 	int ret;
 	struct iio_dev *indio_dev;
 	struct tsl2584_chip *chip;
+	struct tsl258x_info *plat_data;
 
 	indio_dev = devm_iio_device_alloc(&clientp->dev, sizeof(*chip));
 	if (!indio_dev){
@@ -857,6 +993,45 @@ static int taos_probe(struct i2c_client *clientp,
 
 	/* Make sure the chip is on */
 	taos_chip_on(indio_dev);
+
+
+	plat_data = devm_kzalloc(&clientp->dev,
+			sizeof(struct tsl258x_info), GFP_KERNEL);
+	if (!plat_data) {
+		dev_err(&clientp->dev, "Failed to allocate memory\n");
+		return -ENOMEM;
+	}
+
+	plat_data->enabled = 0;
+	plat_data->poll_delay = TSL258X_LS_DEFAULT_POLL_DELAY;
+
+	chip->pdata = plat_data;
+
+	mutex_init(&chip->io_lock);
+
+	ret = lightsensor_setup(chip);
+	if (ret < 0) {
+		pr_err("%s: lightsensor_setup error!!\n",
+				__func__);
+		//goto err_lightsensor_setup;
+		return -1;
+	}
+
+
+	chip->als_cdev = sensors_light_cdev;
+	chip->als_cdev.sensors_enable = tsl258x_als_set_enable;
+	chip->als_cdev.sensors_poll_delay = tsl258x_als_poll_delay_set;
+	chip->als_wq = create_singlethread_workqueue("als_wq");
+	INIT_WORK(&chip->als_work, tsl258x_als_work_func);
+	hrtimer_init(&chip->als_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	chip->als_timer.function = tsl258x_als_timer_func;
+
+	ret = sensors_classdev_register(&chip->ls_input_dev->dev,
+			&chip->als_cdev);
+	if (ret) {
+		pr_err("%s: ERROR: Failed to register sensor class\n", __func__);
+		return -1;
+	}
 
 	dev_info(&clientp->dev, "Light sensor found.\n");
 	return 0;
@@ -902,6 +1077,19 @@ static SIMPLE_DEV_PM_OPS(taos_pm_ops, taos_suspend, taos_resume);
 #define TAOS_PM_OPS NULL
 #endif
 
+static int taos_remove(struct i2c_client *client)
+{
+	struct iio_dev *indio_dev = i2c_get_clientdata(client);
+	struct tsl2584_chip *chip = iio_priv(indio_dev);
+
+	hrtimer_try_to_cancel(&chip->als_timer);
+	destroy_workqueue(chip->als_wq);
+
+    	mutex_destroy(&chip->io_lock);
+	kfree(chip);
+
+    return 0;
+}
 static struct i2c_device_id taos_idtable[] = {
 	{ "tsl2580", 0 },
 	{ "tsl2581", 1 },
@@ -918,6 +1106,7 @@ static struct i2c_driver taos_driver = {
 	},
 	.id_table = taos_idtable,
 	.probe = taos_probe,
+    	.remove = taos_remove,
 };
 module_i2c_driver(taos_driver);
 

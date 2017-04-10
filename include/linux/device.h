@@ -354,7 +354,8 @@ struct class {
 	struct module		*owner;
 
 	struct class_attribute		*class_attrs;
-	const struct attribute_group	**dev_groups;
+	const struct attribute_group    **dev_groups;
+	struct bin_attribute		*dev_bin_attrs;
 	struct kobject			*dev_kobj;
 
 	int (*dev_uevent)(struct device *dev, struct kobj_uevent_env *env);
@@ -421,6 +422,8 @@ struct class_attribute {
 			char *buf);
 	ssize_t (*store)(struct class *class, struct class_attribute *attr,
 			const char *buf, size_t count);
+	const void *(*namespace)(struct class *class,
+				 const struct class_attribute *attr);
 };
 
 #define CLASS_ATTR(_name, _mode, _show, _store) \
