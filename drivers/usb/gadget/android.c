@@ -42,6 +42,8 @@
 #endif
 #include "f_mass_storage.c"
 #define USB_ETH_RNDIS y
+#define USB_FUNC_LIST_WEAR TRUE
+
 #include "f_diag.c"
 #include "f_qdss.c"
 #include "f_rmnet_smd.c"
@@ -2592,7 +2594,6 @@ static struct android_usb_function mass_storage_function = {
 	.enable		= mass_storage_function_enable,
 };
 
-
 static int accessory_function_init(struct android_usb_function *f,
 					struct usb_composite_dev *cdev)
 {
@@ -2735,7 +2736,7 @@ static struct android_usb_function uasp_function = {
 	.bind_config	= uasp_function_bind_config,
 };
 
-static struct android_usb_function *supported_functions[] = {
+static struct android_usb_function *default_functions[] = {
 	&ffs_function,
 	&mbim_function,
 	&ecm_qc_function,
@@ -2763,6 +2764,17 @@ static struct android_usb_function *supported_functions[] = {
 #endif
 	&uasp_function,
 	&charger_function,
+	NULL
+};
+
+/*on android wear platform ,we don't need so much more usb function device , so
+   just keep usb device which we want*/
+static struct android_usb_function *supported_functions_wear[] = {
+	&ffs_function,
+	&rmnet_function,
+	&diag_function,
+	&serial_function,
+	&mtp_function,
 	NULL
 };
 
@@ -3522,8 +3534,10 @@ android_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *c)
 	/* Special case the accessory function.
 	 * It needs to handle control requests before it is enabled.
 	 */
+#ifndef USB_FUNC_LIST_WEAR
 	if (value < 0)
 		value = acc_ctrlrequest(cdev, c);
+#endif
 
 	if (value < 0)
 		value = composite_setup_func(gadget, c);
@@ -3551,7 +3565,9 @@ static void android_disconnect(struct usb_composite_dev *cdev)
 	   accessory function is not actually enabled,
 	   so we need to inform it when we are disconnected.
 	 */
+#ifndef USB_FUNC_LIST_WEAR
 	acc_disconnect();
+#endif
 
 	dev->connected = 0;
 	schedule_work(&dev->work);
@@ -3727,6 +3743,7 @@ static int android_probe(struct platform_device *pdev)
 {
 	struct android_usb_platform_data *pdata;
 	struct android_dev *android_dev;
+	struct android_usb_function **supported_list = supported_functions_wear;
 	struct resource *res;
 	int ret = 0, i, len = 0, prop_len = 0;
 	u32 usb_core_id = 0;
@@ -3809,7 +3826,8 @@ static int android_probe(struct platform_device *pdev)
 
 	android_dev->name = pdev->name;
 	android_dev->disable_depth = 1;
-	android_dev->functions = supported_functions;
+	android_dev->functions =
+		supported_list ? supported_functions_wear : default_functions;
 	android_dev->configs_num = 0;
 	INIT_LIST_HEAD(&android_dev->configs);
 	INIT_WORK(&android_dev->work, android_work);
