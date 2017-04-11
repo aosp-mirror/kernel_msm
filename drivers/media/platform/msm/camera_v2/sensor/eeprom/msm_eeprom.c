@@ -387,7 +387,14 @@ static int eeprom_parse_memory_map(struct msm_eeprom_ctrl_t *e_ctrl,
 						reg_setting->reg_addr,
 						reg_setting->reg_data,
 						reg_setting->reg_data_size);
-
+					if (eeprom_map->
+						mem_settings[i].delay > 0)
+						usleep_range(eeprom_map->
+							mem_settings[i].delay
+							* 1000,
+							eeprom_map->
+							mem_settings[i].delay
+							* 1000 + 10);
 					kfree(reg_setting);
 					reg_setting = NULL;
 				}else{
