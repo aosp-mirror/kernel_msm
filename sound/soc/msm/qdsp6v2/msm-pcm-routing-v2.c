@@ -80,6 +80,7 @@ static uint32_t voc_session_id = ALL_SESSION_VSID;
 static int msm_route_ext_ec_ref;
 static bool is_custom_stereo_on;
 static bool is_ds2_on;
+static bool swap_ch;
 
 enum {
 	MADNONE,
@@ -1048,7 +1049,7 @@ int msm_pcm_routing_reg_phy_compr_stream(int fe_id, int perf_mode,
 					  uint32_t passthr_mode)
 {
 	int i, j, session_type, path_type, port_type, topology;
-	int num_copps = 0;
+	int num_copps = 0, ret = 0;
 	struct route_payload payload;
 	u32 channels, sample_rate;
 	u16 bit_width = 16;
@@ -1172,6 +1173,18 @@ int msm_pcm_routing_reg_phy_compr_stream(int fe_id, int perf_mode,
 					msm_bedais[i].port_id, copp_idx,
 					msm_bedais[i].sample_rate);
 
+			pr_debug("%s: swap channel of portid:%d, coppid:%d\n",
+				__func__, msm_bedais[i].port_id, copp_idx);
+			ret = adm_swap_speaker_channels(
+				msm_bedais[i].port_id, copp_idx,
+				msm_bedais[i].sample_rate, swap_ch);
+			if (ret) {
+				pr_err("%s:Swap_channel failed, err=%d\n",
+					__func__, ret);
+				mutex_unlock(&routing_lock);
+				return -EINVAL;
+			}
+
 			for (j = 0; j < MAX_COPPS_PER_PORT; j++) {
 				unsigned long copp =
 				session_copp_map[fe_id][session_type][i];
@@ -1254,6 +1267,7 @@ int msm_pcm_routing_reg_phy_stream(int fedai_id, int perf_mode,
 					int dspst_id, int stream_type)
 {
 	int i, j, session_type, path_type, port_type, topology, num_copps = 0;
+	int ret = 0;
 	struct route_payload payload;
 	u32 channels, sample_rate;
 	uint16_t bits_per_sample = 16;
@@ -1344,6 +1358,18 @@ int msm_pcm_routing_reg_phy_stream(int fedai_id, int perf_mode,
 				adm_copp_mfc_cfg(
 					msm_bedais[i].port_id, copp_idx,
 					msm_bedais[i].sample_rate);
+
+			pr_debug("%s: swap channel of portid:%d, coppid:%d\n",
+				__func__, msm_bedais[i].port_id, copp_idx);
+			ret = adm_swap_speaker_channels(
+				msm_bedais[i].port_id, copp_idx,
+				msm_bedais[i].sample_rate, swap_ch);
+			if (ret) {
+				pr_err("%s:Swap_channel failed, err=%d\n",
+					__func__, ret);
+				mutex_unlock(&routing_lock);
+				return -EINVAL;
+			}
 
 			for (j = 0; j < MAX_COPPS_PER_PORT; j++) {
 				unsigned long copp =
@@ -1486,6 +1512,7 @@ static void msm_pcm_routing_process_audio(u16 reg, u16 val, int set)
 {
 	int session_type, path_type, topology;
 	u32 channels, sample_rate;
+	int ret = 0;
 	uint16_t bits_per_sample = 16;
 	struct msm_pcm_routing_fdai_data *fdai;
 	uint32_t passthr_mode = msm_bedais[reg].passthr_mode;
@@ -1602,6 +1629,18 @@ static void msm_pcm_routing_process_audio(u16 reg, u16 val, int set)
 				adm_copp_mfc_cfg(
 					msm_bedais[reg].port_id, copp_idx,
 					msm_bedais[reg].sample_rate);
+
+			pr_debug("%s: swap channel of portid:%d, coppid:%d\n",
+				__func__, msm_bedais[reg].port_id, copp_idx);
+			ret = adm_swap_speaker_channels(
+				msm_bedais[reg].port_id, copp_idx,
+				msm_bedais[reg].sample_rate, swap_ch);
+			if (ret) {
+				pr_err("%s:Swap_channel failed, err=%d\n",
+					__func__, ret);
+				mutex_unlock(&routing_lock);
+				return;
+			}
 
 			if (session_type == SESSION_TYPE_RX &&
 			    fdai->event_info.event_func)
@@ -14046,6 +14085,7 @@ static int msm_pcm_routing_prepare(struct snd_pcm_substream *substream)
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	unsigned int be_id = rtd->dai_link->be_id;
 	int i, path_type, session_type, topology;
+	int ret = 0;
 	struct msm_pcm_routing_bdai_data *bedai;
 	u32 channels, sample_rate;
 	uint16_t bits_per_sample = 16, voc_path_type;
@@ -14163,8 +14203,20 @@ static int msm_pcm_routing_prepare(struct snd_pcm_substream *substream)
 				sample_rate,
 				bedai->sample_rate))
 				adm_copp_mfc_cfg(
-					bedai->port_id, copp_idx,
-					bedai->sample_rate);
+				bedai->port_id, copp_idx,
+				bedai->sample_rate);
+
+			pr_debug("%s: swap channel of portid:%d, coppid:%d\n",
+				__func__, bedai->port_id, copp_idx);
+			ret = adm_swap_speaker_channels(
+				bedai->port_id, copp_idx,
+				bedai->sample_rate, swap_ch);
+			if (ret) {
+				pr_err("%s:Swap_channel failed, err=%d\n",
+					__func__, ret);
+				mutex_unlock(&routing_lock);
+				return -EINVAL;
+			}
 
 			msm_pcm_routing_build_matrix(i, session_type, path_type,
 						     fdai->perf_mode,
@@ -14488,6 +14540,67 @@ static const struct snd_kcontrol_new
 	},
 };
 
+static int msm_routing_stereo_channel_reverse_control_get(
+			struct snd_kcontrol *kcontrol,
+			struct snd_ctl_elem_value *ucontrol)
+{
+	ucontrol->value.integer.value[0] = swap_ch;
+	pr_debug("%s: Swap channel value: %ld\n", __func__,
+				ucontrol->value.integer.value[0]);
+	return 0;
+}
+
+static int msm_routing_stereo_channel_reverse_control_put(
+			struct snd_kcontrol *kcontrol,
+			struct snd_ctl_elem_value *ucontrol)
+{
+	int i, idx, be_index, port_id;
+	int ret = 0;
+	unsigned long copp;
+
+	pr_debug("%s Swap channel value:%ld\n", __func__,
+				ucontrol->value.integer.value[0]);
+
+	swap_ch = ucontrol->value.integer.value[0];
+	mutex_lock(&routing_lock);
+
+	for (be_index = 0; be_index < MSM_BACKEND_DAI_MAX; be_index++) {
+		port_id = msm_bedais[be_index].port_id;
+		if (!msm_bedais[be_index].active)
+			continue;
+
+		for_each_set_bit(i, &msm_bedais[be_index].fe_sessions[0],
+				MSM_FRONTEND_DAI_MM_SIZE) {
+			copp = session_copp_map[i][SESSION_TYPE_RX][be_index];
+			for (idx = 0; idx < MAX_COPPS_PER_PORT; idx++) {
+				if (!test_bit(idx, &copp))
+					continue;
+
+				pr_debug("%s: swap channel of portid:%d, coppid:%d\n",
+					 __func__, port_id, idx);
+				ret = adm_swap_speaker_channels(
+					port_id, idx,
+					msm_bedais[be_index].sample_rate,
+					swap_ch);
+				if (ret) {
+					pr_err("%s:Swap_channel failed, err=%d\n",
+						__func__, ret);
+					goto done;
+				}
+			}
+		}
+	}
+done:
+	mutex_unlock(&routing_lock);
+	return ret;
+}
+
+static const struct snd_kcontrol_new stereo_channel_reverse_control[] = {
+	SOC_SINGLE_EXT("Swap channel", SND_SOC_NOPM, 0,
+	1, 0, msm_routing_stereo_channel_reverse_control_get,
+	msm_routing_stereo_channel_reverse_control_put),
+};
+
 static struct snd_pcm_ops msm_routing_pcm_ops = {
 	.hw_params	= msm_pcm_routing_hw_params,
 	.close          = msm_pcm_routing_close,
@@ -14553,6 +14666,8 @@ static int msm_routing_probe(struct snd_soc_platform *platform)
 
 	snd_soc_add_platform_controls(platform, aptx_dec_license_controls,
 					ARRAY_SIZE(aptx_dec_license_controls));
+	snd_soc_add_platform_controls(platform, stereo_channel_reverse_control,
+				ARRAY_SIZE(stereo_channel_reverse_control));
 	return 0;
 }
 
