@@ -38,8 +38,8 @@
 #define DEBUGFS_DIR_NAME		"ts_debug"
 #define FW_NAME				"it7259_fw.bin"
 #define CFG_NAME			"it7259_cfg.bin"
-#define IT7259_CFG_PATH                 "/persist/it7259.cfg"
-#define IT7259_FW_PATH                  "/persist/it7259.fw"
+#define IT7259_CFG_PATH                 "/system/etc/firmware/it7259.cfg"
+#define IT7259_FW_PATH                  "/system/etc/firmware/it7259.fw"
 #define VER_BUFFER_SIZE			4
 #define IT_FW_CHECK(x, y) \
 	(((x)[0] < (y)->data[8]) || ((x)[1] < (y)->data[9]) || \
