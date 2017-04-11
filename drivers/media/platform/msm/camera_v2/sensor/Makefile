@@ -7,7 +7,7 @@ ccflags-y += -Idrivers/media/platform/msm/camera_v2/sensor/cci
 
 #FW_UPDATE+
 ccflags-y += -Idrivers/media/platform/msm/camera_v2/sensor/fw_update
-obj-$(CONFIG_OIS_FW_UPDATE) += fw_update/
+obj-$(CONFIG_FW_UPDATE) += fw_update/
 #FW_UPDATE-
 
 obj-$(CONFIG_MSMB_CAMERA) += cci/ io/ csiphy/ csid/ actuator/ eeprom/ ois/ flash/ ir_led/ ir_cut/

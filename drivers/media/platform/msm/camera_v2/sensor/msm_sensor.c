@@ -19,7 +19,7 @@
 #include <linux/regulator/consumer.h>
 
 /*fw update start*/
-#ifdef CONFIG_OIS_FW_UPDATE
+#ifdef CONFIG_FW_UPDATE
 #include "fw_update.h"
 #endif
 /*fw update end*/
@@ -31,7 +31,7 @@ static struct msm_camera_i2c_fn_t msm_sensor_cci_func_tbl;
 static struct msm_camera_i2c_fn_t msm_sensor_secure_func_tbl;
 
 /*fw update start*/
-#ifdef CONFIG_OIS_FW_UPDATE
+#ifdef CONFIG_FW_UPDATE
 int msm_sensor_checkfw(struct msm_sensor_ctrl_t *s_ctrl)
 {
 	pr_info("[OISFW]:%s \n", __func__);
@@ -43,6 +43,46 @@ int msm_sensor_checkfw(struct msm_sensor_ctrl_t *s_ctrl)
 
 	return checkFWUpdate(s_ctrl);
 }
+
+int msm_sensor_checkvcmfw(struct msm_sensor_ctrl_t *s_ctrl)
+{
+	int rc = 0;
+	int addr_type_backop = 0;
+	uint16_t cci_client_sid_backup;
+
+	/*Backup I2C slave address and addr type*/
+	cci_client_sid_backup = s_ctrl->sensor_i2c_client->cci_client->sid;
+	addr_type_backop = s_ctrl->sensor_i2c_client->addr_type;
+
+
+	pr_info("[VCMFW]: %s:E sid = %d\n", __func__,
+			s_ctrl->sensor_i2c_client->cci_client->sid);
+	pr_info("[VCMFW]: %s:E addr_type = %d\n", __func__,
+			s_ctrl->sensor_i2c_client->addr_type);
+	if (!s_ctrl) {
+		pr_err("[VCMFW]:%s:%d failed: %pK\n",
+			__func__, __LINE__, s_ctrl);
+
+		pr_err("[VCMFW]: %s:X sid = %d\n", __func__,
+			   s_ctrl->sensor_i2c_client->cci_client->sid);
+		return -EINVAL;
+	}
+	rc = checkVCMFWUpdate(s_ctrl);
+	if (rc != 0)
+		pr_err("[VCMFW]:%s checkVCMFWUpdate failed rc = %d\n",
+			   __func__, rc);
+	/*Restore the I2C slave address and addr type*/
+	s_ctrl->sensor_i2c_client->cci_client->sid = cci_client_sid_backup;
+	s_ctrl->sensor_i2c_client->addr_type = addr_type_backop;
+
+	pr_info("[VCMFW]: %s:X sid = %d\n", __func__,
+			s_ctrl->sensor_i2c_client->cci_client->sid);
+	pr_info("[VCMFW]: %s:X addr_type = %d\n", __func__,
+			s_ctrl->sensor_i2c_client->addr_type);
+
+	return rc;
+}
+
 #endif
 /*fw update end*/
 
@@ -918,9 +958,13 @@ static int msm_sensor_config32(struct msm_sensor_ctrl_t *s_ctrl,
 		break;
 	}
 	/*fw update start*/
-#ifdef CONFIG_OIS_FW_UPDATE
+#ifdef CONFIG_FW_UPDATE
 	case CFG_FW_UPDATE: {
 		rc = msm_sensor_checkfw(s_ctrl);
+		break;
+	}
+	case CFG_VCM_FW_UPDATE: {
+		rc = msm_sensor_checkvcmfw(s_ctrl);
 		break;
 	}
 #endif
@@ -1407,9 +1451,13 @@ int msm_sensor_config(struct msm_sensor_ctrl_t *s_ctrl, void __user *argp)
 		break;
 	}
 	/*fw update start*/
-#ifdef CONFIG_OIS_FW_UPDATE
+#ifdef CONFIG_FW_UPDATE
 	case CFG_FW_UPDATE: {
 		rc = msm_sensor_checkfw(s_ctrl);
+		break;
+	}
+	case CFG_VCM_FW_UPDATE: {
+		rc = msm_sensor_checkvcmfw(s_ctrl);
 		break;
 	}
 #endif
@@ -1473,8 +1521,9 @@ static struct msm_camera_i2c_fn_t msm_sensor_cci_func_tbl = {
 	.i2c_read_seq = msm_camera_cci_i2c_read_seq,
 	.i2c_write = msm_camera_cci_i2c_write,
 	/* fw update start */
-#ifdef CONFIG_OIS_FW_UPDATE
+#ifdef CONFIG_FW_UPDATE
 	.i2c_write_seq = msm_camera_cci_i2c_write_seq,
+	.i2c_poll =  msm_camera_cci_i2c_poll,
 #endif
 	/* fw update end */
 	.i2c_write_table = msm_camera_cci_i2c_write_table,

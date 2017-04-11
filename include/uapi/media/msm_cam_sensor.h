@@ -347,6 +347,7 @@ enum msm_sensor_cfg_type_t {
 	CFG_WRITE_I2C_ARRAY_SYNC_BLOCK,
 	/*fw update start*/
 	CFG_FW_UPDATE,
+	CFG_VCM_FW_UPDATE,
 	/*fw update end*/
 };
 

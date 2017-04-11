@@ -2,13 +2,15 @@
  *
  */
 
-#include "msm_sensor.h"
 #include "../cci/msm_cci.h"
 #include "fw_update.h"
 
 #define OIS_CUR_FW_VERSION 0x16
 
 #define OIS_COMPONENT_I2C_ADDR_WRITE 0x7C
+#define AF_EEPROM_I2C_ADDR_WRITE_STEP1 0xE4
+#define AF_EEPROM_I2C_ADDR_WRITE_STEP2 0xE6
+
 static struct msm_camera_i2c_client *g_i2c_client = NULL;
 bool g_first = true;
 
@@ -145,13 +147,14 @@ int checkHWFWversion(void)
     }
 
     rc = checkHighLevelCommand(100);
-    if(rc != 0)
+	if (rc != 0)
     {
-        pr_err("[OISFW]:%s checkHighLevelCommand failed = %d \n", __func__, rc);
+		pr_err("[OISFW]:%s checkHighLevelCommand failed = %d\n",
+			__func__, rc);
         return -1;
     }
     else
-	pr_info("[OISFW]:%s checkHighLevelCommand = %d \n", __func__, rc);
+	pr_info("[OISFW]:%s checkHighLevelCommand = %d\n", __func__, rc);
 
     RamAddr = 0xF01B;
     RamData = 0x1A00;
@@ -172,26 +175,25 @@ int checkHWFWversion(void)
     RamRead32A(RamAddr, &UlReadVal);//Read EEPROM
     pr_info("[OISFW]:%s UlReadVal =  0x%08x", __func__, UlReadVal);
 
-    if(EVT_version == 0x0)
+	if (EVT_version == 0x0)
         CM_version = UlReadVal & 0xFF; // LG EVT1
     else
         CM_version = UlReadVal >> 24; //LG EVT2 and SHARP
 
     pr_info("[OISFW]:%s CM_version =  0x%02x", __func__, CM_version);
 
-
-    if(FW_version < OIS_CUR_FW_VERSION && IT_version == LGIT){
-        if(CM_version < 2 )
-            rc = CM1_LG;
-        else if (CM_version == 2)
-            rc = CM2_LG;
-        else
-            rc = NOUPDATE;
+	if (FW_version < OIS_CUR_FW_VERSION && IT_version == LGIT) {
+		if (CM_version < 2)
+			rc = CM1_LG;
+		else if (CM_version == 2)
+			rc = CM2_LG;
+		else
+			rc = NOUPDATE;
 	} else if (FW_version < OIS_CUR_FW_VERSION && IT_version == SHARPIT) {
-        if(CM_version < 2 )
-            rc = CM1_SHARP;
-        else if (CM_version == 2)
-            rc = CM2_SHARP;
+		if (CM_version < 2)
+			rc = CM1_SHARP;
+		else if (CM_version == 2)
+			rc = CM2_SHARP;
         else
             rc = NOUPDATE;
     }else{
@@ -218,11 +220,13 @@ int checkFWUpdate(struct msm_sensor_ctrl_t *s_ctrl)
     }
     g_first = false;
 
-    pr_info("[OISFW]: %s 1. sid = %d \n", __func__, s_ctrl->sensor_i2c_client->cci_client->sid);
-    /* Bcakup the I2C slave address */
-    cci_client_sid_backup = s_ctrl->sensor_i2c_client->cci_client->sid;
-    /* Replace the I2C slave address with OIS component */
-    s_ctrl->sensor_i2c_client->cci_client->sid = OIS_COMPONENT_I2C_ADDR_WRITE >> 1;
+	pr_info("[OISFW]: %s 1. sid = %d\n", __func__,
+		s_ctrl->sensor_i2c_client->cci_client->sid);
+	/* Bcakup the I2C slave address */
+	cci_client_sid_backup = s_ctrl->sensor_i2c_client->cci_client->sid;
+	/* Replace the I2C slave address with OIS component */
+	s_ctrl->sensor_i2c_client->cci_client->sid =
+		OIS_COMPONENT_I2C_ADDR_WRITE >> 1;
 
     g_i2c_client = s_ctrl->sensor_i2c_client;
     WitTim(100);
@@ -231,26 +235,35 @@ int checkFWUpdate(struct msm_sensor_ctrl_t *s_ctrl)
 
     if (HWVer == CM1_LG)
     {
-        pr_info("[OISFW]%s: F40_FlashDownload(0, 9, 6 )_LGCM1.", __func__);
+		pr_info("[OISFW]%s: F40_FlashDownload(0, 9, 6 )_LGCM1.",
+				__func__);
         rc = F40_FlashDownload(0, 9, 6 );
-    }
-    else if (HWVer == CM1_SHARP)
-    {
-        pr_info("[OISFW]%s: F40_FlashDownload(0, 4, 6 )_SHARPCM1.", __func__);
-		rc = F40_FlashDownload(0, 4, 6 );
+	} else if (HWVer == CM1_SHARP) {
+		pr_info("[OISFW]%s: F40_FlashDownload(0, 4, 6 )_SHARPCM1.",
+				__func__);
+		rc = F40_FlashDownload(0, 4, 6);
+	} else if (HWVer == CM2_LG) {
+		pr_info("[OISFW]%s: F40_FlashDownload(0, 9, 8 )_LGCM2.",
+				__func__);
+		rc = F40_FlashDownload(0, 9, 8);
+	} else if (HWVer == CM2_SHARP) {
+		pr_info("[OISFW]%s: F40_FlashDownload(0, 4, 8 )_SHARPCM2.",
+				__func__);
+		rc = F40_FlashDownload(0, 4, 8);
     }
     else
-        pr_info("[OISFW]%s: no need to update.", __func__);
+		pr_info("[OISFW]%s: no need to update.", __func__);
 
-    if(rc != 0)
-    {
-        pr_err("[OISFW]%s: OIS FW update failed rc = %d.", __func__, rc);
-        /* Restore the I2C slave address */
-        s_ctrl->sensor_i2c_client->cci_client->sid = cci_client_sid_backup;
-        return rc;
-    }
+	if (rc != 0) {
+		pr_err("[OISFW]%s: OIS FW update failed rc = %d.",
+			__func__, rc);
+		/* Restore the I2C slave address */
+		s_ctrl->sensor_i2c_client->cci_client->sid =
+			cci_client_sid_backup;
+		return rc;
+	}
     //Wait for FW update finish.
-    if(HWVer == CM1_LG || HWVer == CM1_SHARP)
+	if (HWVer != NOUPDATE)
     {
         for(i = 0; i < 20; i++)
         {
@@ -273,9 +286,144 @@ int checkFWUpdate(struct msm_sensor_ctrl_t *s_ctrl)
     RamRead32A(0x8000, &FWRead);
     pr_info("[OISFW]:%s 0x8000 =  0x%08x", __func__, FWRead);
     /* Restore the I2C slave address */
-    s_ctrl->sensor_i2c_client->cci_client->sid = cci_client_sid_backup;
-    pr_info("[OISFW]: %s 2. sid = %d \n", __func__, s_ctrl->sensor_i2c_client->cci_client->sid);
-    pr_info("[OISFW]%s rc = %d\n", __func__, rc);
+	s_ctrl->sensor_i2c_client->cci_client->sid =
+		cci_client_sid_backup;
+	pr_info("[OISFW]: %s 2. sid = %d\n", __func__,
+		s_ctrl->sensor_i2c_client->cci_client->sid);
+	pr_info("[OISFW]%s rc = %d\n", __func__, rc);
 
     return rc;
 }
+
+/*fw update start*/
+int checkVCMFWUpdate(struct msm_sensor_ctrl_t *s_ctrl)
+{
+	int32_t rc = 0;
+	uint16_t reg_data = 0;
+
+	pr_info("[VCMFW]:%s :E\n", __func__);
+
+	s_ctrl->sensor_i2c_client->addr_type = MSM_CAMERA_I2C_BYTE_ADDR;
+	s_ctrl->sensor_i2c_client->cci_client->sid =
+		AF_EEPROM_I2C_ADDR_WRITE_STEP1 >> 1;
+
+	pr_info("[VCMFW]:%s addr_type = %d\n", __func__,
+		s_ctrl->sensor_i2c_client->addr_type);
+	pr_info("[VCMFW]:%s sid = %d\n", __func__,
+		s_ctrl->sensor_i2c_client->cci_client->sid);
+
+	rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_read(
+		s_ctrl->sensor_i2c_client, 0xAB, &reg_data,
+		MSM_CAMERA_I2C_BYTE_DATA);
+	if (rc < 0) {
+		pr_err("[VCMFW]:%s: i2c read 0xAB error:%d\n", __func__, rc);
+		return rc;
+	}
+	pr_info("[VCMFW]: reg_data = %d\n", reg_data);
+	if (reg_data != 0x0) {
+		pr_err("[VCMFW]%s: Update AF FW...\n", __func__);
+		s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
+			s_ctrl->sensor_i2c_client, 0x84, 0x0,
+			MSM_CAMERA_I2C_BYTE_DATA);
+		s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
+			s_ctrl->sensor_i2c_client, 0x87, 0x0,
+			MSM_CAMERA_I2C_BYTE_DATA);
+		s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
+			s_ctrl->sensor_i2c_client, 0x8E, 0x0,
+			MSM_CAMERA_I2C_BYTE_DATA);
+		usleep_range(10000, 11000);
+		s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
+			s_ctrl->sensor_i2c_client, 0x9C, 0xAF,
+			MSM_CAMERA_I2C_BYTE_DATA);
+		s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
+			s_ctrl->sensor_i2c_client, 0x9D, 0x80,
+			MSM_CAMERA_I2C_BYTE_DATA);
+
+		/* Replace the I2C slave address with AF EEPROM */
+		s_ctrl->sensor_i2c_client->cci_client->sid =
+			AF_EEPROM_I2C_ADDR_WRITE_STEP2 >> 1;
+		s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
+			s_ctrl->sensor_i2c_client, 0x1E, 0x0,
+			MSM_CAMERA_I2C_BYTE_DATA);
+		usleep_range(3000, 4000);
+		rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_poll(
+			s_ctrl->sensor_i2c_client, 0xED, 0x0,
+			MSM_CAMERA_I2C_BYTE_DATA, 10);
+		if (rc < 0) {
+			pr_err("[VCMFW]%s: i2c poll failed after wrtie 0x1E\n",
+				__func__);
+			return rc;
+		}
+		s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
+			s_ctrl->sensor_i2c_client, 0x1A, 0x30,
+			MSM_CAMERA_I2C_BYTE_DATA);
+		usleep_range(3000, 4000);
+		rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_poll(
+			s_ctrl->sensor_i2c_client, 0xED, 0x0,
+			MSM_CAMERA_I2C_BYTE_DATA, 10);
+		if (rc < 0) {
+			pr_err("[VCMFW]%s: i2c poll failed after wrtie 0x1A\n",
+				__func__);
+			return rc;
+		}
+		s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
+			s_ctrl->sensor_i2c_client, 0x2D, 0x60,
+			MSM_CAMERA_I2C_BYTE_DATA);
+		usleep_range(3000, 4000);
+		rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_poll(
+			s_ctrl->sensor_i2c_client, 0xED, 0x0,
+			MSM_CAMERA_I2C_BYTE_DATA, 10);
+		if (rc < 0) {
+			pr_err("[VCMFW]%s: i2c poll failed after wrtie 0x2D\n",
+				__func__);
+			return rc;
+		}
+		s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
+			s_ctrl->sensor_i2c_client, 0x2F, 0x78,
+			MSM_CAMERA_I2C_BYTE_DATA);
+		usleep_range(3000, 4000);
+		rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_poll(
+			s_ctrl->sensor_i2c_client, 0xED, 0x0,
+			MSM_CAMERA_I2C_BYTE_DATA, 10);
+		if (rc < 0) {
+			pr_err("[VCMFW]%s: i2c poll failed after wrtie 0x2F\n",
+				__func__);
+			return rc;
+		}
+		/* Restore the I2C slave address */
+		s_ctrl->sensor_i2c_client->cci_client->sid =
+			AF_EEPROM_I2C_ADDR_WRITE_STEP1 >> 1;
+		s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
+			s_ctrl->sensor_i2c_client, 0x9C, 0x0,
+			MSM_CAMERA_I2C_BYTE_DATA);
+		s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
+			s_ctrl->sensor_i2c_client, 0x9D, 0x0,
+			MSM_CAMERA_I2C_BYTE_DATA);
+		s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
+			s_ctrl->sensor_i2c_client, 0x87, 0x0,
+			MSM_CAMERA_I2C_BYTE_DATA);
+		s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
+			s_ctrl->sensor_i2c_client, 0xE0, 0x01,
+			MSM_CAMERA_I2C_BYTE_DATA);
+		rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_poll(
+			s_ctrl->sensor_i2c_client, 0xE0, 0x0,
+			MSM_CAMERA_I2C_BYTE_DATA, 10);
+		if (rc < 0) {
+			pr_err("[VCMFW]%s: i2c poll failed after wrtie 0xE0\n",
+				__func__);
+			return rc;
+		}
+
+		pr_err("[VCMFW]%s: Update AF FW successfully\n", __func__);
+	} else
+		pr_info("[VCMFW]:%s No need to update\n", __func__);
+
+	rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_read(
+		s_ctrl->sensor_i2c_client, 0xAB, &reg_data,
+		MSM_CAMERA_I2C_BYTE_DATA);
+	pr_info("[VCMFW]: reg_data = %d\n", reg_data);
+
+	pr_info("[VCMFW]:%s :X\n", __func__);
+	return rc;
+}
+/*fw update end*/

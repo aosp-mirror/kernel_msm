@@ -204,7 +204,7 @@ config OV12830
 		2 lanes max fps is 18, 4 lanes max fps is 24.
 
 
-config OIS_FW_UPDATE
+config FW_UPDATE
 	bool "FW update"
 	depends on MSMB_CAMERA
 	---help---
