@@ -47,6 +47,7 @@
 #ifdef GSCAN_SUPPORT
 #include <linux/gcd.h>
 #endif /* GSCAN_SUPPORT */
+#include <wl_cfg80211.h>
 
 #ifdef __BIG_ENDIAN
 #include <bcmendian.h>
@@ -77,8 +78,14 @@
 #define PNO_BESTNET_LEN 2048
 #define PNO_ON 1
 #define PNO_OFF 0
+#define CHANNEL_2G_MIN 1
 #define CHANNEL_2G_MAX 14
-#define CHANNEL_5G_MAX 165
+#define CHANNEL_5G_MIN 34
+#define CHANNEL_5G_MAX 169
+#define IS_2G_CHANNEL(ch) (ch >= CHANNEL_2G_MIN) && \
+            (ch <= CHANNEL_2G_MAX)
+#define IS_5G_CHANNEL(ch) (ch >= CHANNEL_5G_MIN) && \
+            (ch <= CHANNEL_5G_MAX)
 #define MAX_NODE_CNT 5
 #define WLS_SUPPORTED(pno_state) (pno_state->wls_supported == TRUE)
 #define TIME_DIFF(timestamp1, timestamp2) (abs((uint32)(timestamp1/1000)  \
@@ -100,16 +107,28 @@ uint16 *chan_list, uint32 *num_buckets, uint32 *num_buckets_to_fw);
 static int dhd_pno_set_legacy_pno(dhd_pub_t *dhd, uint16  scan_fr, int pno_repeat,
 	int pno_freq_expo_max, uint16 *channel_list, int nchan);
 
-static inline bool
-is_dfs(uint16 channel)
+static bool
+is_dfs(dhd_pub_t *dhd, uint16 channel)
 {
-	if (channel >= 52 && channel <= 64)			/* class 2 */
-		return TRUE;
-	else if (channel >= 100 && channel <= 144)	/* class 4 */
-		return TRUE;
-	else
+	u32 ch;
+	s32 err;
+	u8 buf[32];
+
+	ch = wl_ch_host_to_driver(channel);
+	err = dhd_iovar(dhd, 0, "per_chan_info", (char *)&ch,
+			sizeof(u32), buf, sizeof(buf), FALSE);
+	if (unlikely(err)) {
+		DHD_ERROR(("get per chan info failed:%d\n", err));
 		return FALSE;
+	}
+
+	/* Check the channel flags returned by fw */
+	if (*((u32 *)buf) & WL_CHAN_PASSIVE)
+		return TRUE;
+
+	return FALSE;
 }
+
 int
 dhd_pno_clean(dhd_pub_t *dhd)
 {
@@ -697,37 +716,42 @@ _dhd_pno_get_channels(dhd_pub_t *dhd, uint16 *d_chan_list,
 	err = dhd_wl_ioctl_cmd(dhd, WLC_GET_VALID_CHANNELS, chan_buf, sizeof(chan_buf), FALSE, 0);
 	if (err < 0) {
 		DHD_ERROR(("failed to get channel list (err: %d)\n", err));
-		goto exit;
+		return err;
 	}
 	for (i = 0, j = 0; i < dtoh32(list->count) && i < *nchan; i++) {
-		if (band == WLC_BAND_2G) {
-			if (dtoh32(list->element[i]) > CHANNEL_2G_MAX)
-				continue;
-		} else if (band == WLC_BAND_5G) {
-			if (dtoh32(list->element[i]) <= CHANNEL_2G_MAX)
-				continue;
-			if (skip_dfs && is_dfs(dtoh32(list->element[i])))
-				continue;
 
-		} else if (band == WLC_BAND_AUTO) {
-			if (skip_dfs || !is_dfs(dtoh32(list->element[i])))
+		if (IS_2G_CHANNEL(dtoh32(list->element[i]))) {
+			if (!(band & WLC_BAND_2G)) {
+				/* Skip, if not 2g */
 				continue;
+			}
+			/* fall through to include the channel */
+		} else if (IS_5G_CHANNEL(dtoh32(list->element[i]))) {
+			bool dfs_channel = is_dfs(dhd, dtoh32(list->element[i]));
 
-		} else { /* All channels */
-			if (skip_dfs && is_dfs(dtoh32(list->element[i])))
+			if ((skip_dfs && dfs_channel) || (!(band & WLC_BAND_5G) && !dfs_channel)) {
+				/* Skip the channel if:
+				 * the DFS bit is NOT set and the channel is a dfs channel
+				 * the band 5G is not set and the channel is a non DFS 5G channel.
+				 */
 				continue;
-		}
-		if (dtoh32(list->element[i]) <= CHANNEL_5G_MAX) {
-			d_chan_list[j++] = (uint16) dtoh32(list->element[i]);
+			}
+			/* fall through to include the channel */
 		} else {
-			err = BCME_BADCHAN;
-			goto exit;
+			/* Not in range. Bad channel */
+			DHD_ERROR(("Not in range. bad channel\n"));
+			*nchan = 0;
+			return BCME_BADCHAN;
 		}
+
+		/* Include the channel */
+		d_chan_list[j++] = (uint16) dtoh32(list->element[i]);
 	}
+
 	*nchan = j;
-exit:
 	return err;
 }
+
 static int
 _dhd_pno_convert_format(dhd_pub_t *dhd, struct dhd_pno_batch_params *params_batch,
 	char *buf, int nbufsize)
