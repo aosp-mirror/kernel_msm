@@ -13,7 +13,7 @@ TOP=${PWD}
 KERNEL_DTB=${TOP}/$1
 DTBO=${TOP}/$2
 
-trap "rm -rf ${overlay_dir}; set +x; exit" SIGINT
+trap "rm -rf ${overlay_dir}; set +x; exit" 1 SIGINT
 
 cd ${overlay_dir}
 
