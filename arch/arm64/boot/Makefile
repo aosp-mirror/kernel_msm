@@ -23,6 +23,7 @@ DTB_OBJS := $(addprefix $(obj)/dts/,$(DTB_LIST))
 else
 DTB_OBJS := $(shell find -L $(obj)/dts/ -name \*.dtb)
 endif
+DTBO_OBJS := $(shell find -L $(obj)/dts/ -name \*.dtbo)
 
 $(obj)/Image: vmlinux FORCE
 	$(call if_changed,objcopy)
@@ -51,7 +52,7 @@ $(obj)/Image.gz-dtb: $(obj)/Image.gz $(DTB_OBJS) FORCE
 $(obj)/Image.lz4-dtb: $(obj)/Image.lz4 $(DTB_OBJS) FORCE
 	$(call if_changed,cat)
 
-$(obj)/dtbo.img: $(obj)/dts/dtboimg.cfg FORCE
+$(obj)/dtbo.img: $(obj)/dts/dtboimg.cfg $(DTBO_OBJS) FORCE
 	$(call if_changed,mkdtimg)
 
 install: $(obj)/Image
