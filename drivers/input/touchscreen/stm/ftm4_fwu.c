@@ -11,7 +11,6 @@
 
 #include "ftm4_ts.h"
 
-#define FTS_DEFAULT_FW "/sdcard/stm.fw"
 #define FTS64FILE_SIGNATURE 0xaaaa5555
 
 enum {
@@ -49,7 +48,7 @@ bool get_pure_autotune_status(struct fts_ts_info *info)
 
 	rc = info->fts_read_reg(info, addrs, 3, buf, 4);
 	if (rc < 0) {
-		tsp_debug_info(info->dev,
+		tsp_debug_err(info->dev,
 			"%s: PureAutotune Information Read Fail!!"
 			"[Data : %2X%2X]\n",
 			__func__, buf[0 + doffset],
@@ -84,7 +83,7 @@ static bool get_afe_status(struct fts_ts_info *info)
 
 	rc = info->fts_read_reg(info, addrs, 3, buf, 4);
 	if (rc < 0) {
-		tsp_debug_info(info->dev,
+		tsp_debug_err(info->dev,
 			"%s: Read Fail - Final AFE [Data :"
 			" %2X] AFE Ver [Data : %2X]\n",
 			__func__,
@@ -126,7 +125,7 @@ int fts_fw_wait_for_specific_event(struct fts_ts_info *info,
 				rc = 0;
 				break;
 			} else {
-				tsp_debug_info(info->dev,
+				tsp_debug_dbg(info->dev,
 					"%s: %2X, %2X, %2X, %2X\n",
 					__func__, data[0], data[1],
 					data[2], data[3]);
@@ -134,7 +133,7 @@ int fts_fw_wait_for_specific_event(struct fts_ts_info *info,
 		}
 		if (retry++ > FTS_RETRY_COUNT * 15) {
 			rc = -1;
-			tsp_debug_info(info->dev,
+			tsp_debug_err(info->dev,
 				"%s: Time Over ( %2X, %2X, %2X, %2X )\n",
 				__func__, data[0], data[1],
 				data[2], data[3]);
@@ -169,7 +168,7 @@ int fts_fw_wait_for_event(struct fts_ts_info *info, unsigned char eid0,
 				 (data[1] == STATUS_EVENT_FORCE_CAL_DONE)) {
 				break;
 			} else {
-				tsp_debug_info(info->dev,
+				tsp_debug_dbg(info->dev,
 					"%s: %2X,%2X,%2X,%2X\n",
 					__func__,
 					data[0],
@@ -181,7 +180,7 @@ int fts_fw_wait_for_event(struct fts_ts_info *info, unsigned char eid0,
 
 		if (retry++ > FTS_RETRY_COUNT * 15) {
 			rc = -1;
-			tsp_debug_info(info->dev,
+			tsp_debug_err(info->dev,
 				"%s: Time Over (%2X,%2X,%2X,%2X)\n",
 				__func__,
 				data[0],
@@ -232,7 +231,7 @@ void fts_execute_autotune(struct fts_ts_info *info)
 			regData[1] = 0x01;
 			ret = info->fts_write_reg(info, regData, 2);
 			if (ret < 0) {
-				tsp_debug_info(info->dev,
+				tsp_debug_err(info->dev,
 				"%s: Flash Back up PureAutotune"
 				"Fail (Clear)\n", __func__);
 			}
@@ -291,7 +290,7 @@ int wait_for_flash_ready(struct fts_ts_info *info, uint8_t type)
 	}
 
 	if (i >= 1000 && res != 0) {
-		tsp_debug_info(info->dev, "[wait_for_flash_ready]"
+		tsp_debug_err(info->dev, "[wait_for_flash_ready]"
 			" Wait for flash TIMEOUT! ERROR\n");
 		return 0;
 	}
@@ -315,7 +314,7 @@ int start_flash_dma(struct fts_ts_info *info)
 	status = wait_for_flash_ready(info, FLASH_DMA_CODE0);
 
 	if (status != true) {
-		tsp_debug_info(info->dev,
+		tsp_debug_err(info->dev,
 				"[start_flash_dma] start_flash_dma: ERROR\n");
 		return false;
 	}
@@ -404,7 +403,7 @@ int fillFlash(struct fts_ts_info *info, uint32_t address, uint8_t *data,
 				"[fillFlash] [%d] Start flash DMA\n", wheel);
 		res = start_flash_dma(info);
 		if (res < true) {
-			tsp_debug_info(info->dev,
+			tsp_debug_err(info->dev,
 				"[fillFlash] Error during flashing DMA! ERROR\n");
 			return false;
 		}
@@ -456,7 +455,7 @@ int parseBinFile(struct fts_ts_info *info, uint8_t *data,
 #ifdef FTS_USE_FTB_1
 	fw_header->ftb_ver = convU8toU32(&data[index]);
 	if (fw_header->ftb_ver != FW_FTB_VER) {
-		 tsp_debug_info(info->dev,
+		 tsp_debug_err(info->dev,
 			 "[parseBinFile] Wrong" " ftb_version %08X ... ERROR\n",
 			 fw_header->ftb_ver);
 		return false;
@@ -466,7 +465,7 @@ int parseBinFile(struct fts_ts_info *info, uint8_t *data,
 	index += FW_BYTES_ALLIGN;
 	fw_header->target = convU8toU32(&data[index]);
 	if (fw_header->target != 0x00007036) {
-		tsp_debug_info(info->dev,
+		tsp_debug_err(info->dev,
 			"[parseBinFile] Wrong target version %08X ... ERROR\n",
 			fw_header->target);
 		return false;
@@ -645,7 +644,7 @@ int fw_download(struct fts_ts_info *info, uint8_t *pFilename,
 			fw_Header->sec0_size);
 
 		if (res != true) {
-			tsp_debug_info(info->dev,
+			tsp_debug_err(info->dev,
 				"[fw_download] Error - load sec0 program\n");
 			return false;
 		}
@@ -661,7 +660,7 @@ int fw_download(struct fts_ts_info *info, uint8_t *pFilename,
 			fw_Header->sec1_size);
 
 		if (res != true) {
-			tsp_debug_info(info->dev,
+			tsp_debug_err(info->dev,
 				"[fw_download] Error - load sec1 program\n");
 			return false;
 		}
@@ -676,7 +675,7 @@ int fw_download(struct fts_ts_info *info, uint8_t *pFilename,
 		res = fillFlash(info, FLASH_ADDR_CODE,
 				&pFilename[HEADER_DATA_SIZE], FTS_TOTAL_SIZE);
 		if (res != true) {
-			tsp_debug_info(info->dev,
+			tsp_debug_err(info->dev,
 				"[fw_download] Error - load sec0 program\n");
 			return false;
 		}
@@ -688,7 +687,7 @@ int fw_download(struct fts_ts_info *info, uint8_t *pFilename,
 	addrs[2] = 0x34;
 	info->fts_write_reg(info, &addrs[0], 3);
 	if (fts_cmd_completion_check(info, 0x10, 0x00, 0x00) < 0) {
-		tsp_debug_info(info->dev,
+		tsp_debug_err(info->dev,
 			"[fw_download] Error - System Reset FAILED\n");
 		return false;
 	}
@@ -707,7 +706,7 @@ static int fts_fw_compare(struct fts_ts_info *info, const struct firmware *fw)
 	int update = 0;
 
 	if ((u32)fw->size < bin_fw_ver_offset) {
-		tsp_debug_info(info->dev,
+		tsp_debug_err(info->dev,
 			" fw->size(0x%08X) < bin_fw_ver_offset(0x%08X)\n",
 			(u32)fw->size, bin_fw_ver_offset);
 		update = 0;
@@ -722,7 +721,7 @@ static int fts_fw_compare(struct fts_ts_info *info, const struct firmware *fw)
 
 	binary = kzalloc(sizeof(struct fts_version), GFP_KERNEL);
 	if (binary == NULL) {
-		tsp_debug_info(info->dev, "failed to kzalloc binary\n");
+		tsp_debug_err(info->dev, "failed to kzalloc binary\n");
 		update = 0;
 		goto error;
 	}
@@ -734,9 +733,7 @@ static int fts_fw_compare(struct fts_ts_info *info, const struct firmware *fw)
 	binary->major = buf[0] & 0x0F;
 	binary->minor = buf[1];
 
-	if (info->force_fwup) {
-		update = 1;
-	} else if (binary->major != device->major) {
+	if (binary->major != device->major) {
 		update = 1;
 	} else {
 		if (binary->minor != device->minor)
@@ -747,10 +744,10 @@ static int fts_fw_compare(struct fts_ts_info *info, const struct firmware *fw)
 
 	tsp_debug_info(info->dev,
 			"%s : binary[%d.%02d.%d] device[%d.%02d.%d]"
-			" -> update: %d, force: %d\n", __func__,
+			" -> update: %d\n", __func__,
 			binary->major, binary->minor, binary->build,
 			device->major, device->minor, device->build,
-			update, info->force_fwup);
+			update);
 
 error:
 	if (binary)
@@ -793,27 +790,27 @@ int fts_fw_update(struct fts_ts_info *info)
 	struct FW_FTB_HEADER fw_ftbHeader;
 
 	if (info->fts_power_state != FTS_POWER_STATE_ACTIVE) {
-		tsp_debug_info(info->dev,
+		tsp_debug_err(info->dev,
 			"%s : FTS_POWER_STATE is not ACTIVE\n", __func__);
 		return -EPERM;
 	}
-	if (info->force_fwup) {
-		info->firmware_name = info->test_fwpath;
-	} else {
+
+	if (info->test_fwpath[0]) {
+		strlcpy(fw_path, &info->test_fwpath[0], sizeof(fw_path));
+	} else if(info->board->firmware_name) {
 		/* A pointer and size of buffer for binary file */
-		if (info->board->firmware_name)
-			info->firmware_name = info->board->firmware_name;
-		else
-			info->firmware_name = FTS_DEFAULT_FW;
+		strlcpy(fw_path, &info->board->firmware_name[0], sizeof(fw_path));
+	} else {
+		tsp_debug_err(info->dev, "%s : no firmware file\n", __func__);
+		return -EPERM;
 	}
 
-	snprintf(fw_path, FTS_MAX_FW_PATH, "%s", info->firmware_name);
 	tsp_debug_info(info->dev,
-		" %s : firmware name : %s\n", __func__, info->firmware_name);
+		"%s : firmware name : %s\n", __func__, fw_path);
 
 	retval = request_firmware(&fw_entry, fw_path, info->dev);
 	if (retval) {
-		tsp_debug_info(info->dev,
+		tsp_debug_err(info->dev,
 			"%s : Firmware image %s not available\n", __func__,
 			fw_path);
 		return retval;
@@ -861,7 +858,7 @@ int fts_fw_update(struct fts_ts_info *info)
 
 	fw_type = parseBinFile(info, fw_data, fw_size, &fw_ftbHeader, keep_cx);
 	if (fw_type == false) {
-		tsp_debug_info(info->dev,
+		tsp_debug_err(info->dev,
 			"[flashProcedure] Error - FW is not appreciate\n");
 		retval = -EINVAL;
 		goto out;
@@ -869,7 +866,7 @@ int fts_fw_update(struct fts_ts_info *info)
 
 	retval = fw_download(info, fw_data, &fw_ftbHeader, fw_type);
 	if (retval == 0) {
-		tsp_debug_info(info->dev,
+		tsp_debug_err(info->dev,
 			"[flashProcedure] Error - Firmware update is not completed.\n");
 		retval = -EIO;
 		goto out;

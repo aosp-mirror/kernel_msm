@@ -389,9 +389,7 @@ struct fts_ts_info {
 	unsigned char data[FTS_EVENT_SIZE * FTS_FIFO_MAX];
 	unsigned char ddi_type;
 
-	const char *firmware_name;
 	char test_fwpath[256];
-	u8 force_fwup;
 	struct fts_version ic_fw_ver;
 
 	unsigned char o_afe_ver;
