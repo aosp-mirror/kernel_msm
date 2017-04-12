@@ -1820,6 +1820,7 @@ static bool gfnIT7259_FirmwareDownload(struct it7259_ts_data *ts_data, unsigned 
 	}
 
 
+	disable_irq(ts_data->client->irq);
 	//trun off CPU data clock
 	if (!gfnIT7259_SwitchCPUClock(ts_data, 0x01))
 	{
@@ -2043,6 +2044,7 @@ static bool gfnIT7259_FirmwareDownload(struct it7259_ts_data *ts_data, unsigned 
 
 	printk("###gfnIT7259_FirmwareDownload() end.\n");
 
+	enable_irq(ts_data->client->irq);
 	return true;
 }
 
