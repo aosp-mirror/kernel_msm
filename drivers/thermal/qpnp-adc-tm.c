@@ -308,6 +308,18 @@ static struct qpnp_adc_tm_reverse_scale_fn adc_tm_rscale_fn[] = {
 	[SCALE_QRD_SKUT1_RBATT_THERM] = {qpnp_adc_qrd_skut1_btm_scaler},
 };
 
+struct adc_tm_enable_debug_reg_info {
+       u8 status_low_debug_reg;
+       u8 status_high_debug_reg;
+       u8 qpnp_adc_tm_meas_en_debug_reg;
+       u8 adc_tm_low_thr_set_debug_reg;
+       u8 adc_tm_high_thr_set_debug_reg;
+       u8 adc_tm_low_enable_debug_reg;
+       u8 adc_tm_high_enable_debug_reg;
+};
+
+struct adc_tm_enable_debug_reg_info debug_reg_info;
+
 static int32_t qpnp_adc_tm_read_reg(struct qpnp_adc_tm_chip *chip,
 						int16_t reg, u8 *data)
 {
@@ -1911,10 +1923,19 @@ static int qpnp_adc_tm_read_status(struct qpnp_adc_tm_chip *chip)
 		}
 	}
 
+	debug_reg_info.status_low_debug_reg = chip->th_info.status_low;
+	debug_reg_info.status_high_debug_reg = chip->th_info.status_high;
+	debug_reg_info.qpnp_adc_tm_meas_en_debug_reg = chip->th_info.qpnp_adc_tm_meas_en;
+	debug_reg_info.adc_tm_low_thr_set_debug_reg = chip->th_info.adc_tm_low_thr_set;
+	debug_reg_info.adc_tm_high_thr_set_debug_reg = chip->th_info.adc_tm_high_thr_set;
+	debug_reg_info.adc_tm_low_enable_debug_reg = chip->th_info.adc_tm_low_enable;
+	debug_reg_info.adc_tm_high_enable_debug_reg = chip->th_info.adc_tm_high_enable;
+
 fail:
 	mutex_unlock(&chip->adc->adc_lock);
-	if (rc < 0)
+	if ((rc < 0) || ((chip->th_info.adc_tm_high_enable) && (chip->th_info.adc_tm_low_enable))) {
 		atomic_dec(&chip->wq_cnt);
+	}
 
 	return rc;
 }
@@ -2694,6 +2715,17 @@ static int qpnp_adc_tm_suspend_noirq(struct device *dev)
 	if (0 != atomic_read(&chip->wq_cnt)) {
 		pr_err(
 			"Aborting suspend, adc_tm notification running while suspending\n");
+
+		pr_err("Debug info : wq_cnt.counter %d + adc_tm_enable_debug_reg_info {%d, %d, %d, %d, %d, %d, %d}\n",
+                               chip->wq_cnt.counter,
+                               debug_reg_info.status_low_debug_reg,
+                               debug_reg_info.status_high_debug_reg,
+                               debug_reg_info.qpnp_adc_tm_meas_en_debug_reg,
+                               debug_reg_info.adc_tm_low_thr_set_debug_reg,
+                               debug_reg_info.adc_tm_high_thr_set_debug_reg,
+                               debug_reg_info.adc_tm_low_enable_debug_reg,
+                               debug_reg_info.adc_tm_high_enable_debug_reg
+                               );
 		return -EBUSY;
 	}
 	return 0;
