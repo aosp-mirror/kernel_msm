@@ -239,6 +239,12 @@ config PREEMPT_TRACER
 	  enabled. This option and the irqs-off timing option can be
 	  used together or separately.)
 
+config TRACE_CRITICAL_SECTION_EVENTS
+	bool "Trace critical sections as trace events"
+	default n
+	select IRQSOFF_TRACER
+	select PREEMPT_TRACER
+
 config SCHED_TRACER
 	bool "Scheduling Latency Tracer"
 	select GENERIC_TRACER
