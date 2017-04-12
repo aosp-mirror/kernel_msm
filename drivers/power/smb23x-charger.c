@@ -289,7 +289,8 @@ static int hot_bat_decidegc_table[] = {
 enum BattStatus
 {
     STATUS_NORMAL   = 0,
-    STATUS_OV       = 1
+    STATUS_OV       = 1,
+    STATUS_OT       = 2
 };
 
 static int g_BattStatus = STATUS_NORMAL;
@@ -301,6 +302,7 @@ static int g_BattStatus = STATUS_NORMAL;
 
 #define BATT_NO_OVER_VOLT   4240000
 #define BATT_OVER_VOLT      4500000
+#define BATT_OVER_TEMP      510
 #define TRIM_PERIOD_NS      (1LL * NSEC_PER_SEC)
 
 #define REG0_DEFAULT        0x54
@@ -573,6 +575,41 @@ static void smb23x_check_batt_ov(struct smb23x_chip *chip)
 
 
         kt = ns_to_ktime(TRIM_PERIOD_NS * 60 * 1);
+        alarm_start_relative(&chip->wpc_check_alarm, kt);
+    }
+
+    return;
+}
+
+static void smb23x_check_batt_ot(struct smb23x_chip *chip)
+{
+    int battery_temp = 0;
+    ktime_t kt = {0};
+
+    battery_temp = smb23x_get_prop_batt_temp(chip);
+
+    pr_debug("[smb23x] current battery temperature = %d, status = %d\n", battery_temp, g_BattStatus);
+
+
+    if(g_BattStatus != STATUS_NORMAL)
+    {
+        return;
+    }
+
+    if(battery_temp >= BATT_OVER_TEMP)
+    {
+        g_BattStatus = STATUS_OT;
+
+        pr_info("[smb23x] OT, attempt to turn off the WPC\n");
+
+        if(gpio_is_valid(chip->eoc_gpio))
+        {
+            gpio_direction_output(chip->eoc_gpio, 1);
+            pr_info("[smb23x] eoc pin (%d)\n", gpio_get_value(chip->eoc_gpio));
+        }
+
+
+        kt = ns_to_ktime(TRIM_PERIOD_NS * 90 * 1);
         alarm_start_relative(&chip->wpc_check_alarm, kt);
     }
 
@@ -2124,7 +2161,7 @@ static void smb23x_irq_polling_work_fn(struct work_struct *work)
 
     //check status
     smb23x_check_batt_ov(chip);
-
+    smb23x_check_batt_ot(chip);
 
     if(chip->charger_plugin)
     {
@@ -2185,40 +2222,62 @@ static void smb23x_wpc_check_work(struct work_struct *work)
 
     bool bVal = gpio_is_valid(chip->eoc_gpio);
 
-    int battery_voltage = smb23x_get_prop_batt_voltage(chip);
-    pr_info("[smb23x] current battery voltage = %d, status = %d\n", battery_voltage, g_BattStatus);
+    int battery_voltage     = smb23x_get_prop_batt_voltage(chip);
+    int battery_temperature = smb23x_get_prop_batt_temp(chip);
 
+    pr_info("[smb23x] battery voltage = %d, temperature = %d, status = %d\n", battery_voltage, battery_temperature, g_BattStatus);
+
+
+    if(!bVal)
+    {
+        pr_err("[smb23x] eoc gpio is invalid\n");
+
+        kt = ns_to_ktime(TRIM_PERIOD_NS * 30 * 1);
+        alarm_start_relative(&chip->wpc_check_alarm, kt);
+
+        return;
+    }
+
+
+    pr_info("[smb23x] eoc pin+(%d)\n", gpio_get_value(chip->eoc_gpio));
+
+    if(g_BattStatus == STATUS_OT)
+    {
+        if (battery_temperature <= (BATT_OVER_TEMP - 30))
+        {
+            pr_info("[smb23x] No OT, attempt to turn on the WPC\n");
+
+            gpio_direction_output(chip->eoc_gpio, 0);
+            g_BattStatus = STATUS_NORMAL;
+        }
+        else
+        {
+            gpio_direction_output(chip->eoc_gpio, 1);
+
+            kt = ns_to_ktime(TRIM_PERIOD_NS * 90 * 1);
+            alarm_start_relative(&chip->wpc_check_alarm, kt);
+        }
+    }
 
     if(g_BattStatus == STATUS_OV)
     {
         if (battery_voltage <= BATT_NO_OVER_VOLT)
         {
-            g_BattStatus = STATUS_NORMAL;
-
             pr_info("[smb23x] No OV, attempt to turn on the WPC\n");
 
-            if(bVal)
-            {
-                gpio_direction_output(chip->eoc_gpio, 0);
-                pr_info("[smb23x] eoc pin-(%d)\n", gpio_get_value(chip->eoc_gpio));
-            }
-
-            return;
+            gpio_direction_output(chip->eoc_gpio, 0);
+            g_BattStatus = STATUS_NORMAL;
         }
         else
         {
-            if(bVal)
-            {
-                gpio_direction_output(chip->eoc_gpio, 1);
-                pr_info("[smb23x] eoc pin+(%d)\n", gpio_get_value(chip->eoc_gpio));
-            }
+            gpio_direction_output(chip->eoc_gpio, 1);
 
             kt = ns_to_ktime(TRIM_PERIOD_NS * 60 * 1);
             alarm_start_relative(&chip->wpc_check_alarm, kt);
-
-            return;
         }
     }
+
+    pr_info("[smb23x] eoc pin-(%d)\n", gpio_get_value(chip->eoc_gpio));
 
     return;
 }
@@ -2671,6 +2730,13 @@ static int smb23x_battery_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
 		val->intval = smb23x_get_prop_batt_temp(chip);
+		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN:
+		val->intval = chip->reg_addr;
+		smb23x_print_register(chip);
+		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN:
+		val->intval = val->intval;
 		break;
 default:
 		return (-EINVAL);
