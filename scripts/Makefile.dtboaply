@@ -6,4 +6,4 @@
 .PHONY: all
 
 all:
-	$(if $(KBUILD_SRC),$(srctree)/)scripts/dtbo_apply_overlay.sh $(obj)/${KERNEL_DTB} $(obj)/${DTBO}
+	$(if $(KBUILD_SRC),$(srctree)/)scripts/dtbo_apply_overlay.sh $(obj) ${KERNEL_DTB} ${DTBO}

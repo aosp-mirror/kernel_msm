@@ -10,8 +10,10 @@ set -x
 # prepare overlay workspace
 overlay_dir=`mktemp -d -t overlay.XXXXXXXXXX`
 TOP=${PWD}
-KERNEL_DTB=${TOP}/$1
-DTBO=${TOP}/$2
+OBJ=$1
+KERNEL_DTB=${TOP}/${OBJ}/$2
+DTBO=${TOP}/${OBJ}/$3
+DTBC_DIR=${TOP}/${OBJ}
 
 trap "rm -rf ${overlay_dir}; set +x; exit" 1 SIGINT
 
@@ -43,6 +45,7 @@ for idx in ${!id_arr[*]}; do
   echo "/{qcom,board-id=<0x${id_arr[$idx]} 0x${rev_arr[$idx]}>;};" >> \
     combined-${idx}.dts
   dtc -q -O dtb -o combined-${idx}.dtb combined-${idx}.dts
+  cp combined-${idx}.dtb ${DTBC_DIR}/combined-${idx}.dtbc
 done
 
 # ls -v is used to make sure dtb is combined as the order specified in
