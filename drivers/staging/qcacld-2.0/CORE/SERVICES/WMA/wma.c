@@ -8941,18 +8941,6 @@ VOS_STATUS wma_get_buf_start_scan_cmd(tp_wma_handle wma_handle,
 		WMI_CHAR_ARRAY_TO_MAC_ADDR(scan_req->mac_addr_mask,
 						&cmd->mac_mask);
 	}
-	if (scan_req->ie_whitelist)
-		cmd->scan_ctrl_flags |=
-				WMI_SCAN_ENABLE_IE_WHTELIST_IN_PROBE_REQ;
-
-	WMA_LOGI("scan_ctrl_flags = %x", cmd->scan_ctrl_flags);
-
-	if (scan_req->ie_whitelist) {
-		for (i = 0; i < PROBE_REQ_BITMAP_LEN; i++)
-			cmd->ie_bitmap[i] = scan_req->probe_req_ie_bitmap[i];
-	}
-
-	cmd->num_vendor_oui = scan_req->num_vendor_oui;
 
 	if (!scan_req->p2pScanType) {
 		WMA_LOGD("Normal Scan request");
@@ -8965,6 +8953,15 @@ VOS_STATUS wma_get_buf_start_scan_cmd(tp_wma_handle wma_handle,
 		cmd->scan_ctrl_flags |= WMI_SCAN_ADD_TPC_IE_IN_PROBE_REQ;
 		cmd->scan_ctrl_flags |= WMI_SCAN_FILTER_PROBE_REQ;
 
+		if (scan_req->ie_whitelist) {
+			cmd->scan_ctrl_flags |=
+			WMI_SCAN_ENABLE_IE_WHITELIST_IN_PROBE_REQ;
+			for (i = 0; i < PROBE_REQ_BITMAP_LEN; i++)
+					cmd->ie_bitmap[i] =
+					scan_req->probe_req_ie_bitmap[i];
+		}
+
+		cmd->num_vendor_oui = scan_req->num_vendor_oui;
 		/*
 		 * Decide burst_duration and dwell_time_active based on
 		 * what type of devices are active.
