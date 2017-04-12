@@ -347,6 +347,7 @@ struct smb_charger {
 	bool			typec_legacy_valid;
 	int			fake_input_current_limited;
 	bool			pr_swap_in_progress;
+	int			typec_mode;
 
 	int			fake_port_temp;
 	bool			port_overheat;
@@ -503,8 +504,6 @@ int smblib_get_prop_usb_current_max(struct smb_charger *chg,
 int smblib_get_prop_usb_current_now(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_get_prop_typec_cc_orientation(struct smb_charger *chg,
-				union power_supply_propval *val);
-int smblib_get_prop_typec_mode(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_get_prop_typec_power_role(struct smb_charger *chg,
 				union power_supply_propval *val);
