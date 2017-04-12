@@ -127,7 +127,16 @@
 		};
 	};
 
+	spkr_i2s_clk_pin {
+		spkr_i2s_clk_sleep {
+			config {
+				bias-disable;
+				input-enable;
+			};
+		};
+	};
 };
+
 &pmi8998_gpios {
 	gpio@cd00 { /* GPIO 14 - ERR_FG */
 		reg = <0xcd00 0x100>;

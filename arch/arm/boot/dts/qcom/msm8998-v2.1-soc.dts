@@ -25,3 +25,9 @@
 	ramoops: ramoops {};
 	reserved_memory: reserved-memory {};
 };
+
+&spkr_i2s_clk_sleep {
+	config {
+		/delete-property/ bias-pull-down;
+	};
+};

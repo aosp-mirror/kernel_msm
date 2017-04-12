@@ -12,6 +12,15 @@
 
 &soc {
 	pinctrl@03400000 {
+		spkr_i2s_clk_pin {
+			spkr_i2s_clk_sleep {
+				config {
+					bias-disable;
+					input-enable;
+				};
+			};
+		};
+
 		i2c_5 {
 			i2c_5_sleep {
 				config {
