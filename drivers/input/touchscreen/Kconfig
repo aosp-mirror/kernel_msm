@@ -1027,6 +1027,16 @@ config TOUCHSCREEN_IT7260_I2C
 	  To compile this driver as a module, choose M here: the
 	  module will be called it7258_ts_i2c.
 
+config BEZEL_SUPPORT
+	default y
+	tristate "Bezel support in Touch driver"
+	depends on TOUCHSCREEN_IT7260_I2C
+	help
+	  Say Y here if you have a Bezel with IT7259 Touchscreen
+	  Driver connected to your system.
+
+	  If unsure, say N.
+
 config TOUCHSCREEN_GEN_VKEYS
        tristate "Touchscreen Virtual Keys Driver"
        help
