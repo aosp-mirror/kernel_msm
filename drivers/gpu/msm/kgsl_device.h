@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2007-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2002,2007-2015,2017 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -87,6 +87,7 @@ enum kgsl_event_results {
 	{ KGSL_CONTEXT_PER_CONTEXT_TS, "PER_CONTEXT_TS" }, \
 	{ KGSL_CONTEXT_USER_GENERATED_TS, "USER_TS" }, \
 	{ KGSL_CONTEXT_NO_FAULT_TOLERANCE, "NO_FT" }, \
+	{ KGSL_CONTEXT_INVALIDATE_ON_FAULT, "INVALIDATE_ON_FAULT" }, \
 	{ KGSL_CONTEXT_PWR_CONSTRAINT, "PWR" }, \
 	{ KGSL_CONTEXT_SAVE_GMEM, "SAVE_GMEM" }
 
