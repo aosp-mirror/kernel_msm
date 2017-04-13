@@ -41,18 +41,6 @@
 //HTC_AUD_START
 #include <sound/htc_acoustic_alsa.h>
 #include <linux/qdsp6v2/apr.h>
-
-#define	ADAP_CONF_FILE_SIZE 4096
-#define	ADAP_ONE_CHANNEL_SIZE (ADAP_CONF_FILE_SIZE/2)
-
-#define	ADAP_ONE_CHANNEL_CONF_NUM          (ADAP_ONE_CHANNEL_SIZE/sizeof(short))
-#define	ADAP_ONE_CHANNEL_CONF_NUM_BY_DWORD (ADAP_ONE_CHANNEL_SIZE/sizeof(int32_t))
-
-int32_t g_AdapConfLchannel[ADAP_ONE_CHANNEL_CONF_NUM_BY_DWORD] = {0};
-int32_t g_AdapConfRchannel[ADAP_ONE_CHANNEL_CONF_NUM_BY_DWORD] = {0};
-
-char g_AdapConfFilePath[128]={0}, g_AdapGainFilePath[128]={0};;
-int g_gain = 0;
 //HTC_AUD_END
 
 #define DRV_NAME "msm8996-asoc-snd"
@@ -228,9 +216,6 @@ enum {
 	MI2S_AMP_PATH_HANDSET,
 };
 
-static struct mutex htc_adaptivesound_enable_mutex;
-int htc_adaptivesound_enable = 0;
-int htc_onedotone_enable = 0;
 static int htc_mi2s_amp_path = AMP_SPEAKER;
 //HTC_AUD_END
 
@@ -3036,295 +3021,6 @@ static int msm8996_config_hph_en0_gpio(struct snd_soc_codec *codec, bool high)
 }
 #endif
 
-static int htc_set_adaptivesound_effect(uint32_t value)
-{
-	int rc, i;
-	char *params_value = NULL;
-	int *update_params_value = NULL;
-	uint32_t params_length = 0;
-
-	mutex_lock(&htc_adaptivesound_enable_mutex);
-
-	params_length = 4*sizeof(uint32_t) //payload size for M1 enable
-		+ 3*sizeof(uint32_t) + sizeof(uint) + ADAP_ONE_CHANNEL_SIZE //payload size for M1 - L channel only
-		+ 4*sizeof(uint32_t) //payload size for M2 Enable
-		+ 3*sizeof(uint32_t) + sizeof(short) + sizeof(ushort); //payload size for M2 Gain
-	pr_info("%s: value = %d, params_length = %d\n", __func__, value, params_length);
-
-	params_value = kzalloc(params_length, GFP_KERNEL);
-	if (!params_value) {
-		pr_err("%s, params memory alloc failed", __func__);
-		mutex_unlock(&htc_adaptivesound_enable_mutex);
-		return -ENOMEM;
-	}
-	htc_adaptivesound_enable = value;
-
-	update_params_value = (int *)params_value;
-	pr_info("%s: update_params_value 0x%p, length=%d\n", __func__, ( void * )update_params_value, params_length);
-
-	/*update config of adaptive sound: Module_1_Enable*/
-	*update_params_value++ = AFE_MODULE_ADAPTIVE_AUDIO_M1;
-	*update_params_value++ = AFE_PARAM_ID_ADAPTIVE_AUDIO_M1_EN;
-	*update_params_value++ = sizeof(uint32_t);
-	*update_params_value++ = value;
-
-	/*update config of adaptive sound: Module_1_L_Channel*/
-	*update_params_value++ = AFE_MODULE_ADAPTIVE_AUDIO_M1;
-	*update_params_value++ = AFE_PARAM_ID_ADAPTIVE_AUDIO_M1_CONF_L;
-	*update_params_value++ = sizeof(uint) + ADAP_ONE_CHANNEL_SIZE;//size
-	*update_params_value++ = ADAP_ONE_CHANNEL_CONF_NUM;//amount of L channel
-	for (i = 0; i < ADAP_ONE_CHANNEL_CONF_NUM_BY_DWORD; i++) {
-		*update_params_value++ = g_AdapConfLchannel[i];
-		if (i == 0 || i == ADAP_ONE_CHANNEL_CONF_NUM_BY_DWORD-1)
-			pr_info("%s: g_AdapConfLchannel[%d]=0x%x update_params_value=0x%x\n",
-				__func__, i, g_AdapConfLchannel[i], *(update_params_value-1));
-	}
-
-	/*update config of adaptive sound: Module_2_Enable*/
-	*update_params_value++ = AFE_MODULE_ADAPTIVE_AUDIO_M2;
-	*update_params_value++ = AFE_PARAM_ID_ADAPTIVE_AUDIO_M2_EN;
-	*update_params_value++ = sizeof(uint32_t);
-	*update_params_value++ = value;
-
-	/*update config of adaptive sound: Module_2_Gain*/
-	pr_info("%s, gain=%d\n", __func__, g_gain);
-	*update_params_value++ = AFE_MODULE_ADAPTIVE_AUDIO_M2;
-	*update_params_value++ = AFE_PARAM_ID_ADAPTIVE_AUDIO_M2_CONF;
-	*update_params_value++ = sizeof(short) + sizeof(ushort);
-	*update_params_value++ = (g_gain&0xFFFF)<<16 | 0;
-
-
-	rc = htc_adm_effect_control(HTC_ADM_EFFECT_ADAPTIVEAUDIO_DATA1,
-				AFE_PORT_ID_SLIMBUS_MULTI_CHAN_0_RX,
-				AFE_COPP_ID_ADAPTIVE_AUDIO,
-				params_length,
-				params_value);
-
-	if (rc)
-		pr_err("%s: call q6adm_enable_effect to port 0x%x, rc %d\n",
-			__func__,AFE_PORT_ID_SLIMBUS_MULTI_CHAN_0_RX,rc);
-
-	memset(params_value, 0x0, params_length);
-	update_params_value = (int *)params_value;
-	params_length= 3*sizeof(uint32_t)+sizeof(uint) + ADAP_ONE_CHANNEL_SIZE;//payload size for M1 - R channel
-	pr_info("%s: update_params_value 0x%p, length=%d\n", __func__, (void *)update_params_value, params_length);
-
-	/*update config of adaptive sound: Module_1_R_Channel*/
-	*update_params_value++ = AFE_MODULE_ADAPTIVE_AUDIO_M1;
-	*update_params_value++ = AFE_PARAM_ID_ADAPTIVE_AUDIO_M1_CONF_R;
-	*update_params_value++ = sizeof(uint) + ADAP_ONE_CHANNEL_SIZE;
-	*update_params_value++ = ADAP_ONE_CHANNEL_CONF_NUM;//amount of R channel
-	for (i = 0; i < ADAP_ONE_CHANNEL_CONF_NUM_BY_DWORD; i++) {
-		*update_params_value++ = g_AdapConfRchannel[i];
-		if (i == 0 || i == ADAP_ONE_CHANNEL_CONF_NUM_BY_DWORD-1)
-			pr_info("%s: g_AdapConfRchannel[%d]=0x%x update_params_value=0x%x\n",
-				__func__, i, g_AdapConfRchannel[i], *(update_params_value-1));
-	}
-
-	rc = htc_adm_effect_control(HTC_ADM_EFFECT_ADAPTIVEAUDIO_DATA2,
-				AFE_PORT_ID_SLIMBUS_MULTI_CHAN_0_RX,
-				AFE_COPP_ID_ADAPTIVE_AUDIO,
-				params_length,
-				params_value);
-
-	if (rc)
-		pr_err("%s: call q6adm_enable_effect to port 0x%x, rc %d\n",
-			__func__, AFE_PORT_ID_SLIMBUS_MULTI_CHAN_0_RX, rc);
-
-	kfree(params_value);
-	mutex_unlock(&htc_adaptivesound_enable_mutex);
-
-	return rc;
-}
-
-static int msm_adaptivesound_Conf_Path(struct snd_kcontrol *kcontrol,
-				struct snd_ctl_elem_value *ucontrol)
-{
-	int i = 0, sz = 0;
-	struct file *file = NULL;
-	loff_t lofft = 0;
-
-	for (i = 0; i < ((struct soc_multi_mixer_control *)kcontrol->private_value)->count; i++) {
-		g_AdapConfFilePath[i] = ucontrol->value.integer.value[i];
-	}
-	g_AdapConfFilePath[((struct soc_multi_mixer_control *)kcontrol->private_value)->count-1] = '\0';
-	pr_info("[%s]path = %s\n", __func__, g_AdapConfFilePath);
-
-	mutex_lock(&htc_adaptivesound_enable_mutex);
-
-	if (*g_AdapConfFilePath)
-		file = filp_open(g_AdapConfFilePath, O_RDONLY, 0);
-
-	if (IS_ERR_OR_NULL(file)) { //HTC_AUD klockwork
-		pr_err("[%s]file %s open failed\n err=%ld", __func__, g_AdapConfFilePath, PTR_ERR(file));
-		mutex_unlock(&htc_adaptivesound_enable_mutex);
-		return -ENOENT;
-	} else {
-		sz = kernel_read(file, lofft, (char *)g_AdapConfLchannel, ADAP_ONE_CHANNEL_SIZE);
-		lofft += ADAP_ONE_CHANNEL_SIZE;
-		sz += kernel_read(file, lofft, (char *)g_AdapConfRchannel, ADAP_ONE_CHANNEL_SIZE);
-		pr_info("[%s]g_AdapConfLchannel[0] = 0x%x\n", __func__, g_AdapConfLchannel[0]);
-		pr_info("[%s]g_AdapConfRchannel[0] = 0x%x\n", __func__, g_AdapConfRchannel[0]);
-		pr_info("[%s]file %s size = %d\n", __func__, g_AdapConfFilePath, sz);
-		filp_close(file, NULL);
-	}
-
-	mutex_unlock(&htc_adaptivesound_enable_mutex);
-
-	return 0;
-}
-
-static int msm_adaptivesound_Conf_Gain_Path(struct snd_kcontrol *kcontrol,
-				struct snd_ctl_elem_value *ucontrol)
-{
-	int i = 0;
-	struct file *file = NULL;
-	loff_t lofft=0;
-
-	for (i = 0; i < ((struct soc_multi_mixer_control *)kcontrol->private_value)->count; i++)
-		g_AdapGainFilePath[i] = ucontrol->value.integer.value[i];
-	g_AdapGainFilePath[((struct soc_multi_mixer_control *)kcontrol->private_value)->count-1] = '\0';
-	pr_info("[%s]path = %s", __func__, g_AdapGainFilePath);
-
-	mutex_lock(&htc_adaptivesound_enable_mutex);
-
-	if (*g_AdapGainFilePath)
-		file = filp_open(g_AdapGainFilePath, O_RDONLY, 0);
-
-	if (IS_ERR_OR_NULL(file)) { //HTC_AUD klockwork
-		pr_err("[%s]file %s open failed err=%ld\n", __func__, g_AdapGainFilePath, PTR_ERR(file));
-		mutex_unlock(&htc_adaptivesound_enable_mutex);
-		return -ENOENT;
-	} else {
-		kernel_read(file, lofft, (char *)&g_gain, 1);
-		pr_info("[%s]g_gain = %d\n", __func__, g_gain);
-		filp_close(file, NULL);
-	}
-
-	mutex_unlock(&htc_adaptivesound_enable_mutex);
-	return 0;
-}
-
-static int htc_set_onedotone_effect(uint32_t value)
-{
-    int rc;
-    char *params_value;
-    int *update_params_value;
-    uint32_t params_length = 4*sizeof(uint32_t);
-
-    pr_info("%s: value = %d, params_length = %d\n", __func__, value, params_length);
-
-    params_value = kzalloc(params_length, GFP_KERNEL);
-    if (!params_value) {
-        pr_err("%s, params memory alloc failed", __func__);
-        return -ENOMEM;
-    }
-
-    htc_onedotone_enable = value;
-
-    update_params_value = (int *)params_value;
-    *update_params_value++ = AFE_MODULE_ONEDOTONE_AUDIO;
-    *update_params_value++ = AFE_PARAM_ID_ONEDOTONE_AUDIO_EN;
-    *update_params_value++ = sizeof(uint32_t);
-    *update_params_value = value;
-
-    rc = htc_adm_effect_control(HTC_ADM_EFFECT_ONEDOTONE,
-                AFE_PORT_ID_QUATERNARY_MI2S_RX,
-                AFE_COPP_ID_ONEDOTONE_AUDIO,
-                params_length,
-                params_value);
-    if (rc) {
-        pr_err("%s: call htc_adm_effect_control to port 0x%x, rc %d\n",
-                __func__, AFE_PORT_ID_QUATERNARY_MI2S_RX, rc);
-    }
-
-    kfree(params_value);
-
-    return rc;
-}
-
-static int msm_adaptivesound_enable_put(struct snd_kcontrol *kcontrol,
-				struct snd_ctl_elem_value *ucontrol)
-{
-	unsigned int enable_flag = 0;
-	int rc = 0;
-
-	pr_info("%s, ucontrol->value.integer.value[0]=%d\n", __func__ ,(unsigned int)ucontrol->value.integer.value[0]);
-
-	if ((ucontrol->value.integer.value[0] == 0) || (ucontrol->value.integer.value[0] == 1))
-		enable_flag = ucontrol->value.integer.value[0];
-	else
-		return -EINVAL;
-
-	rc = htc_set_adaptivesound_effect(enable_flag);
-
-	return 0;
-}
-
-static int msm_adaptivesound_enable_get(struct snd_kcontrol *kcontrol,
-				struct snd_ctl_elem_value *ucontrol)
-{
-	ushort usEffect = get_adm_custom_effect_status();
-
-	if ((usEffect & 0x1<<HTC_ADM_EFFECT_ADAPTIVEAUDIO_DATA1) &&
-	    (usEffect & 0x1<<HTC_ADM_EFFECT_ADAPTIVEAUDIO_DATA2))
-		ucontrol->value.integer.value[0] = 1;
-	else
-		ucontrol->value.integer.value[0] = 0;
-
-	pr_info("%s: adaptivesound_enable = %d 0x%x\n", __func__, htc_adaptivesound_enable, usEffect);
-	return 0;
-}
-
-static int msm_onedotone_enable_put(struct snd_kcontrol *kcontrol,
-                                            struct snd_ctl_elem_value *ucontrol)
-{
-    unsigned int enable_flag = 0;
-    int rc = 0;
-
-    pr_info("%s, ucontrol->value.integer.value[0]=%d\n", __func__ ,(unsigned int)ucontrol->value.integer.value[0]);
-
-    if ((ucontrol->value.integer.value[0] == 0) || (ucontrol->value.integer.value[0] == 1))
-        enable_flag = ucontrol->value.integer.value[0];
-    else
-        return -EINVAL;
-
-    rc = htc_set_onedotone_effect(enable_flag);
-
-    return 0;
-}
-
-static int msm_onedotone_get(struct snd_kcontrol *kcontrol,
-                                   struct snd_ctl_elem_value *ucontrol)
-{
-    ushort usEffect = get_adm_custom_effect_status();
-
-    if (usEffect & (0x1<<HTC_ADM_EFFECT_ONEDOTONE))
-        ucontrol->value.integer.value[0] = 1;
-    else
-        ucontrol->value.integer.value[0] = 0;
-
-    pr_info("%s: htc_onedotone_enable = %d 0x%x\n", __func__, htc_onedotone_enable, usEffect);
-    return 0;
-}
-
-
-static const struct snd_kcontrol_new htc_adaptivesound_params_control[] = {
-    SOC_SINGLE_MULTI_EXT("AdaptiveSound CONFIG PATH", SND_SOC_NOPM,
-    0, 0xFFFFFFFF, 0, 128, NULL, msm_adaptivesound_Conf_Path),
-
-    SOC_SINGLE_MULTI_EXT("AdaptiveSound GAIN PATH", SND_SOC_NOPM,
-    0, 0xFFFFFFFF, 0, 128, NULL, msm_adaptivesound_Conf_Gain_Path),
-
-    SOC_SINGLE_EXT("AdaptiveSound Enable", SND_SOC_NOPM,
-    0, 1, 0, msm_adaptivesound_enable_get, msm_adaptivesound_enable_put),
-};
-
-static const struct snd_kcontrol_new htc_onedotone_params_control[] = {
-    SOC_SINGLE_EXT("OneDotOne Enable", SND_SOC_NOPM,
-    0, 1, 0, msm_onedotone_get, msm_onedotone_enable_put),
-};
-
 static int mi2s_amp_path_put(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
 {
@@ -3461,25 +3157,6 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 			__func__, err);
 		return err;
 	}
-
-//HTC_AUD_START
-	err = snd_soc_add_codec_controls(codec, htc_adaptivesound_params_control,
-					 ARRAY_SIZE(htc_adaptivesound_params_control));
-	if (err < 0) {
-		pr_err("%s: add_codec_controls htc_adaptivesound_params_control failed, err %d\n",
-			__func__, err);
-		return err;
-	}
-
-	err = snd_soc_add_codec_controls(codec, htc_onedotone_params_control,
-					 ARRAY_SIZE(htc_onedotone_params_control));
-	if (err < 0) {
-		pr_err("%s: add_codec_controls htc_onedotone_params_control failed, err %d\n",
-			__func__, err);
-		return err;
-	}
-//HTC_AUD_END
-
 
 	err = msm8996_liquid_init_docking();
 	if (err) {
@@ -6154,8 +5831,6 @@ static int msm8996_asoc_machine_probe(struct platform_device *pdev)
 			ret);
 
 //HTC_AUD_START
-	mutex_init(&htc_adaptivesound_enable_mutex);
-
 	htc_acoustic_register_ops(&acoustic);
 //HTC_AUD_END
 	pr_info("%s: probe successfully\n", __func__);
@@ -6195,10 +5870,6 @@ static int msm8996_asoc_machine_remove(struct platform_device *pdev)
 	struct snd_soc_card *card = platform_get_drvdata(pdev);
 	struct msm8996_asoc_mach_data *pdata =
 				snd_soc_card_get_drvdata(card);
-
-//HTC_AUD_START
-	mutex_destroy(&htc_adaptivesound_enable_mutex);
-//HTC_AUD_END
 
 	if (gpio_is_valid(ext_us_amp_gpio))
 		gpio_free(ext_us_amp_gpio);
