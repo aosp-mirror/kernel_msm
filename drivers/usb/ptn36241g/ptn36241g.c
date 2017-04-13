@@ -20,6 +20,9 @@
 #include <linux/pinctrl/pinctrl.h>
 #include <linux/power_supply.h>
 #include <linux/workqueue.h>
+#include <linux/init.h>
+
+static char boot_mode[9] = {0};
 
 /* must align with smblib's integer representation of cc orientation. */
 enum cc_orientation {
@@ -210,6 +213,12 @@ static int ptn36241g_probe(struct platform_device *pdev)
 	struct pinctrl_state *nxp_cc2_active_state;
 	struct pinctrl_state *nxp_cc2_sleep_state;
 
+	if (!strncmp(boot_mode, "usbradio", 8)) {
+		dev_info(&pdev->dev,
+			 "Do not probe re-driver in usbradio mode\n");
+		return ret;
+	}
+
 	pinctrl = devm_pinctrl_get(&pdev->dev);
 	if (IS_ERR(pinctrl)) {
 		ret = PTR_ERR(pinctrl);
@@ -351,6 +360,13 @@ static void ptn36241g_shutdown(struct platform_device *pdev)
 	dev_info(&pdev->dev,
 		 "%s - shutdown ptn36241g\n", __func__);
 }
+
+static int __init get_boot_mode(char *str)
+{
+	strlcpy(boot_mode, str, sizeof(boot_mode));
+	pr_info("androidboot.mode:[%s], str:[%s]\n", boot_mode, str);
+	return 0;
+} early_param("androidboot.mode", get_boot_mode);
 
 static const struct of_device_id ptn36241g_match_table[] = {
 	{.compatible = "nxp,ptn36241g"},
