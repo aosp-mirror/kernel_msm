@@ -972,6 +972,11 @@ static int tcpm_pd_svdm(struct tcpm_port *port, const __le32 *payload, int cnt,
 		}
 		break;
 	case CMDT_RSP_ACK:
+		if (!port->partner) {
+			tcpm_log(port,
+				 "port partner is NULL, ignore stray CMDT_RSP_ACK");
+			break;
+		}
 		switch (cmd) {
 		case CMD_DISCOVER_IDENT:
 			/* 6.4.4.3.1 */
