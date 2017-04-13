@@ -846,6 +846,15 @@ static int smblib_usb_icl_vote_callback(struct votable *votable, void *data,
 	u8 icl_options;
 	u8 apsd_stat;
 
+	if (client && icl_ua == 0) {
+		rc = smblib_set_usb_suspend(chg, true);
+		if (rc < 0)
+			smblib_err(chg, "Couldn't suspend usb, rc=%d\n", rc);
+		return rc;
+	}
+
+	disable_irq_nosync(chg->irq_info[USBIN_ICL_CHANGE_IRQ].irq);
+
 	pd_icl_ua = get_client_vote_locked(votable, PD_VOTER);
 	default_icl_ua = get_client_vote_locked(votable, DEFAULT_VOTER);
 	usb_icl_ua = get_client_vote_locked(votable, USB_PSY_VOTER);
@@ -856,18 +865,18 @@ static int smblib_usb_icl_vote_callback(struct votable *votable, void *data,
 		rc = smblib_set_charge_param(chg, &chg->param.usb_icl,
 					     pd_icl_ua);
 		if (rc < 0)
-			return rc;
+			goto enable_irq;
 		/* switch to High-Current mode */
 		rc = smblib_masked_write(chg, USBIN_ICL_OPTIONS_REG,
 					 USBIN_MODE_CHG_BIT,
 					 USBIN_MODE_CHG_BIT);
 		if (rc < 0)
-			return rc;
+			goto enable_irq;
 
 		rc = smblib_read(chg, APSD_RESULT_STATUS_REG, &apsd_stat);
 		if (rc < 0) {
 			smblib_err(chg, "Couldn't get APSD status rc=%d\n", rc);
-			return rc;
+			goto enable_irq;
 		}
 
 		if (!(apsd_stat & ICL_OVERRIDE_LATCH_BIT)) {
@@ -879,14 +888,14 @@ static int smblib_usb_icl_vote_callback(struct votable *votable, void *data,
 				smblib_err(chg,
 					   "Couldn't set ICL_OVERRIDE_BIT rc=%d\n",
 					   rc);
-				return rc;
+				goto enable_irq;
 			}
 		} else {
 			smblib_dbg(chg, PR_MISC, "ICL is already overridden\n");
 		}
 
 		chg->current_max_ua = pd_icl_ua;
-		return rc;
+		goto enable_irq;
 	}
 
 	if (pd_icl_ua == 0) {
@@ -894,7 +903,7 @@ static int smblib_usb_icl_vote_callback(struct votable *votable, void *data,
 					 USBIN_MODE_CHG_BIT,
 					 0);
 		if (rc < 0)
-			return rc;
+			goto enable_irq;
 	}
 
 	/* Type-C default, i.e. APSD result */
@@ -902,7 +911,7 @@ static int smblib_usb_icl_vote_callback(struct votable *votable, void *data,
 		rc = smblib_set_charge_param(chg, &chg->param.usb_icl,
 					     default_icl_ua);
 		if (rc < 0)
-			return rc;
+			goto enable_irq;
 	}
 
 	switch (chg->usb_psy_desc.type) {
@@ -945,6 +954,12 @@ static int smblib_usb_icl_vote_callback(struct votable *votable, void *data,
 		break;
 	}
 
+	rc = smblib_set_usb_suspend(chg, false);
+	if (rc < 0)
+		smblib_err(chg, "Couldn't resume usb, rc=%d\n", rc);
+
+enable_irq:
+	enable_irq(chg->irq_info[USBIN_ICL_CHANGE_IRQ].irq);
 	return rc;
 }
 
@@ -2573,7 +2588,10 @@ int smblib_set_prop_pd_current_max(struct smb_charger *chg,
 	if (icl_ua < 0)
 		return -EINVAL;
 
-	rc = vote(chg->usb_icl_votable, PD_VOTER, true, icl_ua);
+	if (icl_ua == 0)
+		rc = vote(chg->usb_icl_votable, PD_VOTER, false, icl_ua);
+	else
+		rc = vote(chg->usb_icl_votable, PD_VOTER, true, icl_ua);
 	if (rc < 0) {
 		smblib_err(chg, "Couldn't vote PD ICL %d, rc=%d\n",
 			   icl_ua, rc);
@@ -2595,7 +2613,10 @@ int smblib_set_prop_usb_current_max(struct smb_charger *chg,
 	if (icl_ua < 0)
 		return -EINVAL;
 
-	rc = vote(chg->usb_icl_votable, USB_PSY_VOTER, true, icl_ua);
+	if (icl_ua == 0)
+		rc = vote(chg->usb_icl_votable, USB_PSY_VOTER, false, icl_ua);
+	else
+		rc = vote(chg->usb_icl_votable, USB_PSY_VOTER, true, icl_ua);
 	if (rc < 0) {
 		smblib_err(chg, "Couldn't vote USB ICL %d, rc=%d\n",
 			   icl_ua, rc);
