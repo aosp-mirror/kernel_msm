@@ -1049,7 +1049,7 @@ int msm_pcm_routing_reg_phy_compr_stream(int fe_id, int perf_mode,
 					  uint32_t passthr_mode)
 {
 	int i, j, session_type, path_type, port_type, topology;
-	int num_copps = 0, ret = 0;
+	int num_copps = 0;
 	struct route_payload payload;
 	u32 channels, sample_rate;
 	u16 bit_width = 16;
@@ -1173,18 +1173,6 @@ int msm_pcm_routing_reg_phy_compr_stream(int fe_id, int perf_mode,
 					msm_bedais[i].port_id, copp_idx,
 					msm_bedais[i].sample_rate);
 
-			pr_debug("%s: swap channel of portid:%d, coppid:%d\n",
-				__func__, msm_bedais[i].port_id, copp_idx);
-			ret = adm_swap_speaker_channels(
-				msm_bedais[i].port_id, copp_idx,
-				msm_bedais[i].sample_rate, swap_ch);
-			if (ret) {
-				pr_err("%s:Swap_channel failed, err=%d\n",
-					__func__, ret);
-				mutex_unlock(&routing_lock);
-				return -EINVAL;
-			}
-
 			for (j = 0; j < MAX_COPPS_PER_PORT; j++) {
 				unsigned long copp =
 				session_copp_map[fe_id][session_type][i];
@@ -1267,7 +1255,6 @@ int msm_pcm_routing_reg_phy_stream(int fedai_id, int perf_mode,
 					int dspst_id, int stream_type)
 {
 	int i, j, session_type, path_type, port_type, topology, num_copps = 0;
-	int ret = 0;
 	struct route_payload payload;
 	u32 channels, sample_rate;
 	uint16_t bits_per_sample = 16;
@@ -1358,18 +1345,6 @@ int msm_pcm_routing_reg_phy_stream(int fedai_id, int perf_mode,
 				adm_copp_mfc_cfg(
 					msm_bedais[i].port_id, copp_idx,
 					msm_bedais[i].sample_rate);
-
-			pr_debug("%s: swap channel of portid:%d, coppid:%d\n",
-				__func__, msm_bedais[i].port_id, copp_idx);
-			ret = adm_swap_speaker_channels(
-				msm_bedais[i].port_id, copp_idx,
-				msm_bedais[i].sample_rate, swap_ch);
-			if (ret) {
-				pr_err("%s:Swap_channel failed, err=%d\n",
-					__func__, ret);
-				mutex_unlock(&routing_lock);
-				return -EINVAL;
-			}
 
 			for (j = 0; j < MAX_COPPS_PER_PORT; j++) {
 				unsigned long copp =
@@ -1512,7 +1487,6 @@ static void msm_pcm_routing_process_audio(u16 reg, u16 val, int set)
 {
 	int session_type, path_type, topology;
 	u32 channels, sample_rate;
-	int ret = 0;
 	uint16_t bits_per_sample = 16;
 	struct msm_pcm_routing_fdai_data *fdai;
 	uint32_t passthr_mode = msm_bedais[reg].passthr_mode;
@@ -1629,18 +1603,6 @@ static void msm_pcm_routing_process_audio(u16 reg, u16 val, int set)
 				adm_copp_mfc_cfg(
 					msm_bedais[reg].port_id, copp_idx,
 					msm_bedais[reg].sample_rate);
-
-			pr_debug("%s: swap channel of portid:%d, coppid:%d\n",
-				__func__, msm_bedais[reg].port_id, copp_idx);
-			ret = adm_swap_speaker_channels(
-				msm_bedais[reg].port_id, copp_idx,
-				msm_bedais[reg].sample_rate, swap_ch);
-			if (ret) {
-				pr_err("%s:Swap_channel failed, err=%d\n",
-					__func__, ret);
-				mutex_unlock(&routing_lock);
-				return;
-			}
 
 			if (session_type == SESSION_TYPE_RX &&
 			    fdai->event_info.event_func)
@@ -14085,7 +14047,6 @@ static int msm_pcm_routing_prepare(struct snd_pcm_substream *substream)
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	unsigned int be_id = rtd->dai_link->be_id;
 	int i, path_type, session_type, topology;
-	int ret = 0;
 	struct msm_pcm_routing_bdai_data *bedai;
 	u32 channels, sample_rate;
 	uint16_t bits_per_sample = 16, voc_path_type;
@@ -14205,18 +14166,6 @@ static int msm_pcm_routing_prepare(struct snd_pcm_substream *substream)
 				adm_copp_mfc_cfg(
 				bedai->port_id, copp_idx,
 				bedai->sample_rate);
-
-			pr_debug("%s: swap channel of portid:%d, coppid:%d\n",
-				__func__, bedai->port_id, copp_idx);
-			ret = adm_swap_speaker_channels(
-				bedai->port_id, copp_idx,
-				bedai->sample_rate, swap_ch);
-			if (ret) {
-				pr_err("%s:Swap_channel failed, err=%d\n",
-					__func__, ret);
-				mutex_unlock(&routing_lock);
-				return -EINVAL;
-			}
 
 			msm_pcm_routing_build_matrix(i, session_type, path_type,
 						     fdai->perf_mode,
