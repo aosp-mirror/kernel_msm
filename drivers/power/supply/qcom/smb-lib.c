@@ -2588,10 +2588,9 @@ int smblib_set_prop_pd_current_max(struct smb_charger *chg,
 	if (icl_ua < 0)
 		return -EINVAL;
 
-	if (icl_ua == 0)
-		rc = vote(chg->usb_icl_votable, PD_VOTER, false, icl_ua);
-	else
-		rc = vote(chg->usb_icl_votable, PD_VOTER, true, icl_ua);
+	/* cancel vote when icl_ua is voted 0 */
+	rc = vote(chg->usb_icl_votable, PD_VOTER, icl_ua != 0, icl_ua);
+
 	if (rc < 0) {
 		smblib_err(chg, "Couldn't vote PD ICL %d, rc=%d\n",
 			   icl_ua, rc);
@@ -2613,10 +2612,9 @@ int smblib_set_prop_usb_current_max(struct smb_charger *chg,
 	if (icl_ua < 0)
 		return -EINVAL;
 
-	if (icl_ua == 0)
-		rc = vote(chg->usb_icl_votable, USB_PSY_VOTER, false, icl_ua);
-	else
-		rc = vote(chg->usb_icl_votable, USB_PSY_VOTER, true, icl_ua);
+	/* cancel vote when icl_ua is voted 0 */
+	rc = vote(chg->usb_icl_votable, USB_PSY_VOTER, icl_ua != 0, icl_ua);
+
 	if (rc < 0) {
 		smblib_err(chg, "Couldn't vote USB ICL %d, rc=%d\n",
 			   icl_ua, rc);
