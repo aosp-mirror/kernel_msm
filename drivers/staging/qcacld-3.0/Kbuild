@@ -25,6 +25,15 @@ ifndef CONFIG_ROME_IF
 endif
 endif
 
+#Enable WLAN/Power debugfs feature only if debug_fs is enabled
+ifeq ($(CONFIG_DEBUG_FS), y)
+	# Flag to enable debugfs. Depends on CONFIG_DEBUG_FS in kernel
+	# configuration.
+	CONFIG_WLAN_DEBUGFS := y
+
+	CONFIG_WLAN_POWER_DEBUGFS := y
+endif
+
 ifeq ($(KERNEL_BUILD),1)
 	# These are provided in external module based builds
 	# Need to explicitly define for Kernel-based builds
@@ -92,11 +101,6 @@ ifeq ($(KERNEL_BUILD), 0)
 	#Flag to enable Legacy Fast Roaming3(LFR3)
 	ifneq ($(CONFIG_ARCH_SDX20), y)
 	CONFIG_QCACLD_WLAN_LFR3 := y
-	endif
-
-	#Enable Power debugfs feature only if debug_fs is enabled
-	ifeq ($(CONFIG_DEBUG_FS), y)
-	CONFIG_WLAN_POWER_DEBUGFS := y
 	endif
 
 	# JB kernel has CPU enablement patches, so enable
@@ -229,12 +233,6 @@ endif
 
 	# Flag to enable MCC to SCC switch feature
 	CONFIG_MCC_TO_SCC_SWITCH := y
-
-ifeq ($(CONFIG_DEBUG_FS), y)
-	# Flag to enable debugfs. Depends on CONFIG_DEBUG_FS in kernel
-	# configuration.
-	CONFIG_WLAN_DEBUGFS := y
-endif
 
 endif
 
