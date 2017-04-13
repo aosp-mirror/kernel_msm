@@ -235,12 +235,14 @@
 
 &pmi8998_charger {
 	qcom,usb-icl-ua = <1800000>;
-	qcom,fcc-max-ua = <3300000>;
+	qcom,fcc-max-ua = <2200000>;
 };
 
 &pmi8998_fg {
 	qcom,battery-data = <&taimen_batterydata>;
 	qcom,fg-force-load-profile;
+	qcom,fg-jeita-thresholds = <0 20 45 55>;
+	qcom,fg-jeita-hyst-temp = <2>;
 };
 
 &spmi_bus {
