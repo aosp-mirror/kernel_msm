@@ -1736,9 +1736,12 @@ static irqreturn_t it7259_ts_threaded_handler(int irq, void *devid)
 		}
 	}
 
-	input_report_key(input_dev, BTN_TOUCH, touch_count > 0);
+	if(!ts_data->bdata->bezel_touch_status) {
+		input_report_key(input_dev, BTN_TOUCH, touch_count > 0);
+		input_sync(input_dev);
+	}
 #ifdef	CONFIG_BEZEL_SUPPORT
-        input_report_rel(input_dev, BTN_TOOL_FINGER, bezel_count > 0);
+        /*input_report_rel(input_dev, BTN_TOOL_FINGER, bezel_count > 0);*/
 
 	if(!(bezel_count > 0)) {
 		bezel_reset();
@@ -1746,7 +1749,6 @@ static irqreturn_t it7259_ts_threaded_handler(int irq, void *devid)
 	}
 #endif
 
-	input_sync(input_dev);
 
 	return IRQ_HANDLED;
 }
