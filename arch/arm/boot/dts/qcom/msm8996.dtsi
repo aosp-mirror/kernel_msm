@@ -1856,7 +1856,7 @@
 			label = "dsps";
 		};
 
-		qcom,smd-rpm {
+		qcom,smd-rpm-summary {
 			compatible = "qcom,smd";
 			qcom,smd-edge = <15>;
 			qcom,smd-irq-offset = <0x0>;
