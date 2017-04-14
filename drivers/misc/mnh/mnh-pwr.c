@@ -58,7 +58,6 @@ struct mnh_pwr_data {
 	bool sleep_clk_enabled;
 
 	/* pins */
-	struct gpio_desc *boot_mode_pin;
 	struct gpio_desc *soc_pwr_good_pin;
 
 	/* pcie device */
@@ -356,14 +355,17 @@ static int __mnh_pwr_down(bool pcie_suspend)
 {
 	int ret;
 
-	/* suspend pcie link */
-	if (pcie_suspend) {
+	if (pcie_suspend && (mnh_sm_get_boot_mode() == MNH_BOOT_MODE_PCIE)) {
+		/* suspend pcie link */
 		ret = mnh_pwr_pcie_suspend();
 		if (ret) {
 			dev_err(mnh_pwr->dev, "%s: failed to suspend pcie link (%d)\n",
 				__func__, ret);
 			goto fail_pwr_down_pcie;
 		}
+	} else {
+		/* assert reset */
+		msm_pcie_set_reset(MNH_PCIE_RC_INDEX, true);
 	}
 
 	/* deassert soc_pwr_good */
@@ -456,12 +458,17 @@ static int mnh_pwr_suspend(void)
 {
 	int ret;
 
-	/* suspend pcie link */
-	ret = mnh_pwr_pcie_suspend();
-	if (ret) {
-		dev_err(mnh_pwr->dev, "%s: failed to suspend pcie link (%d)\n",
-			__func__, ret);
-		goto fail_pwr_suspend_pcie;
+	if (mnh_sm_get_boot_mode() == MNH_BOOT_MODE_PCIE) {
+		/* suspend pcie link */
+		ret = mnh_pwr_pcie_suspend();
+		if (ret) {
+			dev_err(mnh_pwr->dev, "%s: failed to suspend pcie link (%d)\n",
+				__func__, ret);
+			goto fail_pwr_suspend_pcie;
+		}
+	} else {
+		/* assert reset */
+		msm_pcie_set_reset(MNH_PCIE_RC_INDEX, true);
 	}
 
 	/* deassert soc_pwr_good */
@@ -594,12 +601,17 @@ static int mnh_pwr_up(enum mnh_pwr_state next_state)
 	/* give the PLLs some time to initialize */
 	udelay(60);
 
-	/* resume pcie link */
-	ret = mnh_pwr_pcie_resume();
-	if (ret) {
-		dev_err(mnh_pwr->dev, "%s: failed to resume pcie link (%d)\n",
-			__func__, ret);
-		goto fail_pwr_up_pcie;
+	if (mnh_sm_get_boot_mode() == MNH_BOOT_MODE_PCIE) {
+		/* resume pcie link */
+		ret = mnh_pwr_pcie_resume();
+		if (ret) {
+			dev_err(mnh_pwr->dev, "%s: failed to resume pcie link (%d)\n",
+				__func__, ret);
+			goto fail_pwr_up_pcie;
+		}
+	} else {
+		/* deassert reset */
+		msm_pcie_set_reset(MNH_PCIE_RC_INDEX, false);
 	}
 
 	mnh_pwr->state = next_state;
@@ -716,14 +728,6 @@ static int mnh_pwr_get_resources(void)
 	}
 
 	/* request gpio descriptors */
-	mnh_pwr->boot_mode_pin = devm_gpiod_get(&pdev->dev, "boot-mode",
-						   GPIOD_OUT_LOW);
-	if (IS_ERR(mnh_pwr->boot_mode_pin)) {
-		dev_err(dev, "%s: could not get boot_mode gpio (%ld)\n",
-			__func__, PTR_ERR(mnh_pwr->boot_mode_pin));
-		return PTR_ERR(mnh_pwr->boot_mode_pin);
-	}
-
 	mnh_pwr->soc_pwr_good_pin = devm_gpiod_get(&pdev->dev, "soc-pwr-good",
 						   GPIOD_OUT_LOW);
 	if (IS_ERR(mnh_pwr->soc_pwr_good_pin)) {

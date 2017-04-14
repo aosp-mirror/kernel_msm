@@ -33,6 +33,11 @@
 #define FIP_IMG_SBL_SIZE_OFFSET		0x28
 #define FIP_IMG_SBL_ADDR_OFFSET		0x20
 
+enum mnh_boot_mode {
+	MNH_BOOT_MODE_PCIE,
+	MNH_BOOT_MODE_SPI,
+};
+
 struct mnh_ion_fw_conf {
 	dma_addr_t ap_addr;	/* AP side addr (dma) */
 	unsigned long ap_offs;  /* Slot's offset in the ion buffer */
@@ -121,6 +126,8 @@ int mnh_ion_stage_firmware_update(struct mnh_ion *ion,
  * @return -errno      on failure
  */
 int mnh_sm_pwr_error_cb(void);
+
+enum mnh_boot_mode mnh_sm_get_boot_mode(void);
 
 #endif /* __MNH_SM_HOST */
 

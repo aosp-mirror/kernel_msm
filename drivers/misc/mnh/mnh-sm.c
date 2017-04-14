@@ -155,7 +155,8 @@ struct mnh_sm_device {
 	struct completion work_complete;
 	int work_ret;
 
-	/* pin used for synchronizing with secondary bootloader */
+	/* pins used for boot and power state transitions */
+	struct gpio_desc *boot_mode_gpio;
 	struct gpio_desc *ready_gpio;
 
 	/* irq for ready_gpio */
@@ -213,6 +214,9 @@ enum {
 };
 static uint32_t mnh_power_mode = MNH_POWER_MODE_CLKPM_ENABLE |
 	MNH_POWER_MODE_L1_2_ENABLE;
+
+/* flag for boot mode options */
+static enum mnh_boot_mode mnh_boot_mode = MNH_BOOT_MODE_PCIE;
 
 /* callback when easel enters and leaves the active state */
 static hotplug_cb_t mnh_hotplug_cb;
@@ -1075,6 +1079,37 @@ static ssize_t mipi_int_show(struct device *dev,
 
 static DEVICE_ATTR_RO(mipi_int);
 
+static ssize_t spi_boot_mode_show(struct device *dev,
+			      struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, MAX_STR_COPY, "%d\n", mnh_boot_mode);
+}
+
+static ssize_t spi_boot_mode_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf, size_t count)
+{
+	int val = 0;
+	int ret;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret || (val < MNH_BOOT_MODE_PCIE) || (val > MNH_BOOT_MODE_SPI))
+		return -EINVAL;
+
+	if (val != mnh_boot_mode) {
+		mnh_pwr_set_state(MNH_PWR_S4);
+		gpiod_set_value(mnh_sm_dev->boot_mode_gpio, val);
+		mnh_boot_mode = val;
+
+		if (val == MNH_BOOT_MODE_SPI)
+			mnh_pwr_set_state(MNH_PWR_S0);
+	}
+
+	return count;
+}
+
+static DEVICE_ATTR_RW(spi_boot_mode);
+
 static struct attribute *mnh_sm_attrs[] = {
 	&dev_attr_stage_fw.attr,
 	&dev_attr_poweron.attr,
@@ -1092,6 +1127,7 @@ static struct attribute *mnh_sm_attrs[] = {
 	&dev_attr_enable_uart.attr,
 	&dev_attr_power_mode.attr,
 	&dev_attr_mipi_int.attr,
+	&dev_attr_spi_boot_mode.attr,
 	NULL
 };
 ATTRIBUTE_GROUPS(mnh_sm);
@@ -1336,7 +1372,8 @@ static int mnh_sm_set_state_locked(int state)
 
 		/* stage firmware copy to ION if valid update was received */
 		if (mnh_sm_dev->pending_update) {
-			dev_dbg(mnh_sm_dev->dev, "%s: staging firmware update",
+			dev_dbg(mnh_sm_dev->dev,
+				"%s: staging firmware update",
 				__func__);
 			mnh_ion_stage_firmware_update(
 				mnh_sm_dev->ion[FW_PART_PRI],
@@ -1473,6 +1510,12 @@ int mnh_sm_pwr_error_cb(void)
 	return mnh_sm_set_state(MNH_STATE_OFF);
 }
 EXPORT_SYMBOL(mnh_sm_pwr_error_cb);
+
+enum mnh_boot_mode mnh_sm_get_boot_mode(void)
+{
+	return mnh_boot_mode;
+}
+EXPORT_SYMBOL(mnh_sm_get_boot_mode);
 
 static int mnh_sm_open(struct inode *inode, struct file *filp)
 {
@@ -1817,6 +1860,16 @@ static int mnh_sm_probe(struct platform_device *pdev)
 						    GFP_KERNEL);
 	if (mnh_sm_dev->ion[FW_PART_SEC])
 		mnh_sm_dev->ion[FW_PART_SEC]->device = dev;
+
+	/* get boot mode gpio */
+	mnh_sm_dev->boot_mode_gpio = devm_gpiod_get(&pdev->dev, "boot-mode",
+						    GPIOD_OUT_LOW);
+	if (IS_ERR(mnh_sm_dev->boot_mode_gpio)) {
+		dev_err(dev, "%s: could not get boot_mode gpio (%ld)\n",
+			__func__, PTR_ERR(mnh_sm_dev->boot_mode_gpio));
+		error = PTR_ERR(mnh_sm_dev->boot_mode_gpio);
+		goto fail_probe_2;
+	}
 
 	/* get ready gpio */
 	mnh_sm_dev->ready_gpio = devm_gpiod_get(&pdev->dev, "ready", GPIOD_IN);
