@@ -632,19 +632,29 @@ wl_android_set_mac_address_filter(struct net_device *dev, const char* str)
 	int macmode = MACLIST_MODE_DISABLED;
 	struct maclist *list;
 	char eabuf[ETHER_ADDR_STR_LEN];
+	char *token;
+	int count = 0;
 
 	/* string should look like below (macmode/macnum/maclist) */
 	/*   1 2 00:11:22:33:44:55 00:11:22:33:44:ff  */
 
 	/* get the MAC filter mode */
-	macmode = bcm_atoi(strsep((char**)&str, " "));
+	token = strsep((char**)&str, " ");
+	if (!token) {
+		return -1;
+	}
+	macmode = bcm_atoi(token);
 
 	if (macmode < MACLIST_MODE_DISABLED || macmode > MACLIST_MODE_ALLOW) {
 		DHD_ERROR(("%s : invalid macmode %d\n", __FUNCTION__, macmode));
 		return -1;
 	}
 
-	macnum = bcm_atoi(strsep((char**)&str, " "));
+	token = strsep((char**)&str, " ");
+	if (!token) {
+		return -1;
+	}
+	macnum = bcm_atoi(token);
 	if (macnum < 0 || macnum > MAX_NUM_MAC_FILT) {
 		DHD_ERROR(("%s : invalid number of MAC address entries %d\n",
 			__FUNCTION__, macnum));
@@ -660,16 +670,32 @@ wl_android_set_mac_address_filter(struct net_device *dev, const char* str)
 	/* prepare the MAC list */
 	list->count = htod32(macnum);
 	bzero((char *)eabuf, ETHER_ADDR_STR_LEN);
-	for (i = 0; i < list->count; i++) {
-		strncpy(eabuf, strsep((char**)&str, " "), ETHER_ADDR_STR_LEN - 1);
+	for (i = 0; i < macnum; i++) {
+		token = strsep((char**)&str, " ");
+
+		if(!token){
+			break;
+		}
+		strncpy(eabuf, token, ETHER_ADDR_STR_LEN - 1);
 		if (!(ret = bcm_ether_atoe(eabuf, &list->ea[i]))) {
 			DHD_ERROR(("%s : mac parsing err index=%d, addr=%s\n",
 				__FUNCTION__, i, eabuf));
-			list->count--;
 			break;
 		}
+
+		count++;
+
 		DHD_INFO(("%s : %d/%d MACADDR=%s", __FUNCTION__, i, list->count, eabuf));
 	}
+
+	if (0 == count)
+	{
+		kfree(list);
+		return -1;
+	}
+
+	list->count = htod32(count);
+
 	/* set the list */
 	if ((ret = wl_android_set_ap_mac_list(dev, macmode, list)) != 0)
 		DHD_ERROR(("%s : Setting MAC list failed error=%d\n", __FUNCTION__, ret));
