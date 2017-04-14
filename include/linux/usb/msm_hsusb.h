@@ -107,7 +107,7 @@ enum msm_usb_phy_type {
 	QUSB_ULPI_PHY,
 };
 
-#define IDEV_CHG_MAX	1500
+#define IDEV_CHG_MAX	300
 #define IUNIT		100
 #define IDEV_HVDCP_CHG_MAX	1800
 
