@@ -1325,8 +1325,8 @@ enqueue_task_rt(struct rq *rq, struct task_struct *p, int flags)
 
 	if (!task_current(rq, p) && p->nr_cpus_allowed > 1) {
 		enqueue_pushable_task(rq, p);
-		schedtune_enqueue_task(p, cpu_of(rq));
 	}
+	schedtune_enqueue_task(p, cpu_of(rq));
 }
 
 static void dequeue_task_rt(struct rq *rq, struct task_struct *p, int flags)
