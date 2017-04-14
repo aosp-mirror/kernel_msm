@@ -351,7 +351,8 @@ int mnh_lpddr_freq_change(int index)
 	mnh_dev->ddr_freq = HW_INf(mnh_dev->regs, SCU, LPDDR4_LOW_POWER_STS,
 		LPDDR4_CUR_FSP);
 	if (mnh_dev->ddr_freq == index) {
-		dev_info(mnh_dev->dev, "requested fsp%d is in use\n", index);
+		dev_dbg(mnh_dev->dev, "%s: requested fsp%d is in use\n",
+			__func__, index);
 		return 0;
 	}
 
@@ -368,8 +369,8 @@ int mnh_lpddr_freq_change(int index)
 		LPC_EXT_CMD, LP4_LPC_FREQ_SWITCH);
 
 	/* Initiate LPC cmd to LPDDR controller */
-	dev_info(mnh_dev->dev, "lpddr freq switching from fsp%d to fsp%d\n",
-		mnh_dev->ddr_freq, index);
+	dev_dbg(mnh_dev->dev, "%s: lpddr freq switching from fsp%d to fsp%d\n",
+		__func__, mnh_dev->ddr_freq, index);
 	HW_OUTf(mnh_dev->regs, SCU, LPDDR4_LOW_POWER_CFG, LPC_EXT_CMD_REQ, 1);
 
 	/* Wait until LPC cmd process is done */
@@ -743,7 +744,7 @@ static void clean_sysfs(struct kobject *sysfs_kobj)
 
 int mnh_clk_init(struct device *dev, uint32_t baseadress)
 {
-	dev_info(dev, "mnh_freq_cooling_init\n");
+	dev_dbg(dev, "%s\n", __func__);
 
 	mnh_dev = devm_kzalloc(dev, sizeof(*mnh_dev),
 			GFP_KERNEL);
