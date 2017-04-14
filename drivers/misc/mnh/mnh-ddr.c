@@ -155,6 +155,21 @@ do { \
 
 static struct mnh_ddr_internal_state *_state;
 
+static u32 mnh_ddr_sanity_check(void)
+{
+	/* just verify comm is actually up */
+	u32 val = MNH_DDR_CTL_IN(00);
+
+	/*
+	 * If above register reads either 0 or all FF, it indicates that
+	 * access to DDR CTL registers are not ready.
+	 */
+	if ((val == 0) || (val == 0xFFFFFFFF))
+		return 0;
+	else
+		return 1;
+}
+
 /* read entire int_status */
 u64 mnh_ddr_int_status(struct device *dev)
 {
@@ -399,6 +414,9 @@ int mnh_ddr_resume(struct device *dev, struct gpio_desc *iso_n)
 
 	mnh_ddr_init_clocks(dev);
 
+	if (!mnh_ddr_sanity_check())
+		return -EIO;
+
 	for (index = 0; index < MNH_DDR_NUM_CTL_REG; index++)
 		WRITE_DDR_REG_CONFIG(ctl, index);
 
@@ -484,13 +502,14 @@ int mnh_ddr_po_init(struct device *dev, struct gpio_desc *iso_n)
 		return -ENOMEM;
 
 	mnh_ddr_init_internal_state(cfg);
-
 	dev_dbg(dev, "%s start.", __func__);
 
 	/* deassert iso_n */
 	gpiod_set_value_cansleep(iso_n, 1);
-
 	mnh_ddr_init_clocks(dev);
+
+	if (!mnh_ddr_sanity_check())
+		return -EIO;
 
 	for (index = 0; index < MNH_DDR_NUM_CTL_REG; index++)
 		WRITE_DDR_REG_CONFIG(ctl, index);
