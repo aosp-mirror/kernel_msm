@@ -3450,11 +3450,11 @@ static int arm_smmu_device_cfg_probe(struct arm_smmu_device *smmu)
 					mask, sid);
 				return -ENODEV;
 			}
-		}
 
-		dev_dbg(smmu->dev,
-			"\tstream matching with %u register groups, mask 0x%x",
-			smmu->num_mapping_groups, mask);
+			dev_dbg(smmu->dev,
+				"\tstream matching with %u register groups, mask 0x%x",
+				smmu->num_mapping_groups, mask);
+		}
 	} else {
 		smmu->num_mapping_groups = (id >> ID0_NUMSIDB_SHIFT) &
 					   ID0_NUMSIDB_MASK;
