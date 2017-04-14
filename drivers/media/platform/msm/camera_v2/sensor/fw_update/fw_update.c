@@ -187,8 +187,7 @@ int checkHWFWversion(void)
             rc = CM2_LG;
         else
             rc = NOUPDATE;
-    }
-    else if(FW_version < 0XF && IT_version == SHARPIT){
+	} else if (FW_version < OIS_CUR_FW_VERSION && IT_version == SHARPIT) {
         if(CM_version < 2 )
             rc = CM1_SHARP;
         else if (CM_version == 2)
