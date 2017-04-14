@@ -601,18 +601,16 @@ void lim_cleanup(tpAniSirGlobal pMac)
 
 	struct mgmt_frm_reg_info *pLimMgmtRegistration = NULL;
 
-	if (QDF_GLOBAL_FTM_MODE != cds_get_conparam()) {
-		qdf_mutex_acquire(&pMac->lim.lim_frame_register_lock);
-		while (qdf_list_remove_front(
+	qdf_mutex_acquire(&pMac->lim.lim_frame_register_lock);
+	while (qdf_list_remove_front(
 			&pMac->lim.gLimMgmtFrameRegistratinQueue,
 			(qdf_list_node_t **) &pLimMgmtRegistration) ==
 			QDF_STATUS_SUCCESS) {
-			qdf_mem_free(pLimMgmtRegistration);
-		}
-		qdf_mutex_release(&pMac->lim.lim_frame_register_lock);
-		qdf_list_destroy(&pMac->lim.gLimMgmtFrameRegistratinQueue);
-		qdf_mutex_destroy(&pMac->lim.lim_frame_register_lock);
+		qdf_mem_free(pLimMgmtRegistration);
 	}
+	qdf_mutex_release(&pMac->lim.lim_frame_register_lock);
+	qdf_list_destroy(&pMac->lim.gLimMgmtFrameRegistratinQueue);
+	qdf_mutex_destroy(&pMac->lim.lim_frame_register_lock);
 
 	lim_cleanup_mlm(pMac);
 
@@ -736,6 +734,7 @@ tSirRetStatus pe_open(tpAniSirGlobal pMac, struct cds_config_info *cds_cfg)
 
 	pMac->lim.maxBssId = cds_cfg->max_bssid;
 	pMac->lim.maxStation = cds_cfg->max_station;
+	qdf_spinlock_create(&pMac->sys.bbt_mgmt_lock);
 
 	if ((pMac->lim.maxBssId == 0) || (pMac->lim.maxStation == 0)) {
 		pe_err("max number of Bssid or Stations cannot be zero!");
@@ -806,6 +805,7 @@ tSirRetStatus pe_close(tpAniSirGlobal pMac)
 	if (ANI_DRIVER_TYPE(pMac) == eDRIVER_TYPE_MFG)
 		return eSIR_SUCCESS;
 
+	qdf_spinlock_destroy(&pMac->sys.bbt_mgmt_lock);
 	for (i = 0; i < pMac->lim.maxBssId; i++) {
 		if (pMac->lim.gpSession[i].valid == true) {
 			pe_delete_session(pMac, &pMac->lim.gpSession[i]);
@@ -971,6 +971,58 @@ tSirRetStatus pe_process_messages(tpAniSirGlobal pMac, tSirMsgQ *pMsg)
 	return eSIR_SUCCESS;
 }
 
+/**
+ * pe_drop_pending_rx_mgmt_frames: To drop pending RX mgmt frames
+ * @mac_ctx: Pointer to global MAC structure
+ * @hdr: Management header
+ * @cds_pkt: Packet
+ *
+ * This function is used to drop RX pending mgmt frames if pe mgmt queue
+ * reaches threshold
+ *
+ * Return: QDF_STATUS_SUCCESS on success or QDF_STATUS_E_FAILURE on failure
+ */
+static QDF_STATUS pe_drop_pending_rx_mgmt_frames(tpAniSirGlobal mac_ctx,
+				tpSirMacMgmtHdr hdr, cds_pkt_t *cds_pkt)
+{
+	qdf_spin_lock(&mac_ctx->sys.bbt_mgmt_lock);
+	if (mac_ctx->sys.sys_bbt_pending_mgmt_count >=
+	     MGMT_RX_PACKETS_THRESHOLD) {
+		qdf_spin_unlock(&mac_ctx->sys.bbt_mgmt_lock);
+		pe_debug("No.of pending RX management frames reaches to threshold, dropping management frames");
+		cds_pkt_return_packet(cds_pkt);
+		cds_pkt = NULL;
+		mac_ctx->rx_packet_drop_counter++;
+		return QDF_STATUS_E_FAILURE;
+	} else if (mac_ctx->sys.sys_bbt_pending_mgmt_count >
+		   (MGMT_RX_PACKETS_THRESHOLD / 2)) {
+		/* drop all probereq, proberesp and beacons */
+		if (hdr->fc.subType == SIR_MAC_MGMT_BEACON ||
+		    hdr->fc.subType == SIR_MAC_MGMT_PROBE_REQ ||
+		    hdr->fc.subType == SIR_MAC_MGMT_PROBE_RSP) {
+			qdf_spin_unlock(&mac_ctx->sys.bbt_mgmt_lock);
+			if (!(mac_ctx->rx_packet_drop_counter % 100))
+				pe_debug("No.of pending RX mgmt frames reaches 1/2 thresh, dropping frame subtype: %d rx_packet_drop_counter: %d",
+					hdr->fc.subType,
+					mac_ctx->rx_packet_drop_counter);
+			mac_ctx->rx_packet_drop_counter++;
+			cds_pkt_return_packet(cds_pkt);
+			cds_pkt = NULL;
+			return QDF_STATUS_E_FAILURE;
+		}
+	}
+	mac_ctx->sys.sys_bbt_pending_mgmt_count++;
+	qdf_spin_unlock(&mac_ctx->sys.bbt_mgmt_lock);
+	if (mac_ctx->sys.sys_bbt_pending_mgmt_count ==
+	    (MGMT_RX_PACKETS_THRESHOLD / 4)) {
+		if (!(mac_ctx->rx_packet_drop_counter % 100))
+			pe_debug("No.of pending RX management frames reaches to 1/4th of threshold, rx_packet_drop_counter: %d",
+				mac_ctx->rx_packet_drop_counter);
+		mac_ctx->rx_packet_drop_counter++;
+	}
+	return QDF_STATUS_SUCCESS;
+}
+
 /* --------------------------------------------------------------------------- */
 /**
  * pe_handle_mgmt_frame
@@ -1045,6 +1097,10 @@ static QDF_STATUS pe_handle_mgmt_frame(void *p_cds_gctx, void *cds_buff)
 				 WMA_GET_OFFLOADSCANLEARN(pRxPacketInfo));
 	}
 
+	if (QDF_STATUS_SUCCESS !=
+	    pe_drop_pending_rx_mgmt_frames(pMac, mHdr, pVosPkt))
+		return QDF_STATUS_E_FAILURE;
+
 	/* Forward to MAC via mesg = SIR_BB_XPORT_MGMT_MSG */
 	msg.type = SIR_BB_XPORT_MGMT_MSG;
 	msg.bodyptr = cds_buff;
@@ -1056,6 +1112,11 @@ static QDF_STATUS pe_handle_mgmt_frame(void *p_cds_gctx, void *cds_buff)
 							 mHdr->fc.subType)) {
 		cds_pkt_return_packet(pVosPkt);
 		pVosPkt = NULL;
+		/*
+		 * Decrement sys_bbt_pending_mgmt_count if packet
+		 * is dropped before posting to LIM
+		 */
+		lim_decrement_pending_mgmt_count(pMac);
 		return QDF_STATUS_E_FAILURE;
 	}
 
@@ -2253,7 +2314,6 @@ QDF_STATUS lim_update_ext_cap_ie(tpAniSirGlobal mac_ctx,
 	uint32_t dot11mode;
 	bool vht_enabled = false;
 	tDot11fIEExtCap default_scan_ext_cap = {0}, driver_ext_cap = {0};
-	uint8_t ext_cap_ie_hdr[EXT_CAP_IE_HDR_LEN] = {0x7f, 0x9};
 	tSirRetStatus status;
 
 	status = lim_strip_extcap_update_struct(mac_ctx, ie_data,
@@ -2263,10 +2323,11 @@ QDF_STATUS lim_update_ext_cap_ie(tpAniSirGlobal mac_ctx,
 		return QDF_STATUS_E_FAILURE;
 	}
 
+	/* copy ie prior to ext cap to local buffer */
 	qdf_mem_copy(local_ie_buf, ie_data, (*local_ie_len));
-	qdf_mem_copy(local_ie_buf + (*local_ie_len),
-			ext_cap_ie_hdr, EXT_CAP_IE_HDR_LEN);
-	(*local_ie_len) += EXT_CAP_IE_HDR_LEN;
+
+	/* from here ext cap ie starts, set EID */
+	local_ie_buf[*local_ie_len] = DOT11F_EID_EXTCAP;
 
 	wlan_cfg_get_int(mac_ctx, WNI_CFG_DOT11_MODE, &dot11mode);
 	if (IS_DOT11_MODE_VHT(dot11mode))
@@ -2277,6 +2338,8 @@ QDF_STATUS lim_update_ext_cap_ie(tpAniSirGlobal mac_ctx,
 	if (eSIR_SUCCESS != status) {
 		pe_err("Failed %d to create ext cap IE. Use default value instead",
 				status);
+		local_ie_buf[*local_ie_len + 1] = DOT11F_IE_EXTCAP_MAX_LEN;
+		(*local_ie_len) += EXT_CAP_IE_HDR_LEN;
 		qdf_mem_copy(local_ie_buf + (*local_ie_len),
 				default_scan_ext_cap.bytes,
 				DOT11F_IE_EXTCAP_MAX_LEN);
@@ -2284,7 +2347,8 @@ QDF_STATUS lim_update_ext_cap_ie(tpAniSirGlobal mac_ctx,
 		return QDF_STATUS_SUCCESS;
 	}
 	lim_merge_extcap_struct(&driver_ext_cap, &default_scan_ext_cap, true);
-
+	local_ie_buf[*local_ie_len + 1] = driver_ext_cap.num_bytes;
+	(*local_ie_len) += EXT_CAP_IE_HDR_LEN;
 	qdf_mem_copy(local_ie_buf + (*local_ie_len),
 			driver_ext_cap.bytes, driver_ext_cap.num_bytes);
 	(*local_ie_len) += driver_ext_cap.num_bytes;
@@ -2325,16 +2389,5 @@ QDF_STATUS lim_add_qcn_ie(tpAniSirGlobal mac_ctx, uint8_t *ie_data,
 			(QCN_IE_VERSION_SUBATTR_LEN));
 	(*ie_len) += (QCN_IE_VERSION_SUBATTR_LEN);
 	return QDF_STATUS_SUCCESS;
-}
-
-void lim_log(tpAniSirGlobal pMac, uint32_t loglevel, const char *pString, ...)
-{
-#ifdef WLAN_DEBUG
-	va_list marker;
-
-	va_start(marker, pString);
-	log_debug(pMac, SIR_LIM_MODULE_ID, loglevel, pString, marker);
-	va_end(marker);
-#endif
 }
 

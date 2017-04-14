@@ -3591,7 +3591,11 @@ void cds_set_concurrency_mode(enum tQDF_ADAPTER_MODE mode)
 		hdd_ctx->concurrency_mode, mode,
 		hdd_ctx->no_of_open_sessions[mode]);
 
-	hdd_green_ap_start_bss(hdd_ctx);
+	/*
+	 * Only toggle the green_ap update when SAP adapter exist.
+	 */
+	if (hdd_get_adapter(hdd_ctx, QDF_SAP_MODE))
+		hdd_green_ap_start_bss(hdd_ctx);
 }
 
 /**
@@ -3630,7 +3634,12 @@ void cds_clear_concurrency_mode(enum tQDF_ADAPTER_MODE mode)
 		hdd_ctx->concurrency_mode, mode,
 		hdd_ctx->no_of_open_sessions[mode]);
 
-	hdd_green_ap_start_bss(hdd_ctx);
+	/*
+	 * Only toggle the green_ap update when SAP adapter exist or
+	 * SAP interface removal.
+	 */
+	if (hdd_get_adapter(hdd_ctx, QDF_SAP_MODE) || (mode == QDF_SAP_MODE))
+		hdd_green_ap_start_bss(hdd_ctx);
 }
 
 /**
@@ -5205,6 +5214,38 @@ bool cds_map_concurrency_mode(enum tQDF_ADAPTER_MODE *old_mode,
 	return status;
 }
 
+static QDF_STATUS cds_modify_pcl_based_on_enabled_channels(
+						uint8_t *pcl_list_org,
+						uint8_t *weight_list_org,
+						uint32_t *pcl_len_org)
+{
+	cds_context_type *cds_ctx;
+	uint32_t i, pcl_len = 0;
+	uint8_t pcl_list[QDF_MAX_NUM_CHAN];
+	uint8_t weight_list[QDF_MAX_NUM_CHAN];
+
+	cds_ctx = cds_get_context(QDF_MODULE_ID_QDF);
+	if (!cds_ctx) {
+		cds_err("Invalid CDS Context");
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	for (i = 0; i < *pcl_len_org; i++) {
+		if (!CDS_IS_PASSIVE_OR_DISABLE_CH(pcl_list_org[i])) {
+			pcl_list[pcl_len] = pcl_list_org[i];
+			weight_list[pcl_len++] = weight_list_org[i];
+		}
+	}
+
+	qdf_mem_zero(pcl_list_org, QDF_ARRAY_SIZE(pcl_list_org));
+	qdf_mem_zero(weight_list_org, QDF_ARRAY_SIZE(weight_list_org));
+	qdf_mem_copy(pcl_list_org, pcl_list, pcl_len);
+	qdf_mem_copy(weight_list_org, weight_list, pcl_len);
+	*pcl_len_org = pcl_len;
+
+	return QDF_STATUS_SUCCESS;
+}
+
 /**
  * cds_get_channel() - provide channel number of given mode and vdevid
  * @mode: given CDS mode
@@ -5379,6 +5420,19 @@ QDF_STATUS cds_get_pcl(enum cds_con_mode mode,
 			cds_debug("chan:%d weight:%d",
 					pcl_channels[i], pcl_weight[i]);
 
+	}
+
+	if (mode == CDS_P2P_GO_MODE) {
+		status = cds_modify_pcl_based_on_enabled_channels(
+		pcl_channels, pcl_weight, len);
+		if (QDF_IS_STATUS_ERROR(status)) {
+			cds_err("failed to get modified pcl for GO");
+			return status;
+		}
+		cds_debug("modified pcl len:%d", *len);
+		for (i = 0; i < *len; i++)
+			cds_debug("chan:%d weight:%d",
+			pcl_channels[i], pcl_weight[i]);
 	}
 
 	return QDF_STATUS_SUCCESS;

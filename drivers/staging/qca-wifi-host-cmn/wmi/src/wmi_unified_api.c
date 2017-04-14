@@ -24,12 +24,6 @@
  * under proprietary terms before Copyright ownership was assigned
  * to the Linux Foundation.
  */
-#include "athdefs.h"
-#include "osapi_linux.h"
-#include "a_types.h"
-#include "a_debug.h"
-#include "ol_if_athvar.h"
-#include "ol_defines.h"
 #include "wmi_unified_priv.h"
 #include "wmi_unified_param.h"
 
@@ -2358,7 +2352,7 @@ QDF_STATUS wmi_unified_pktlog_wmi_send_cmd(void *wmi_hdl,
  */
 QDF_STATUS wmi_unified_add_wow_wakeup_event_cmd(void *wmi_hdl,
 					uint32_t vdev_id,
-					uint32_t bitmap,
+					uint32_t *bitmap,
 					bool enable)
 {
 	wmi_unified_t wmi_handle = (wmi_unified_t) wmi_hdl;

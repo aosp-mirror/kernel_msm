@@ -63,7 +63,6 @@ static void hdd_softap_dump_sk_buff(struct sk_buff *skb)
 {
 	QDF_TRACE(QDF_MODULE_ID_HDD_SAP_DATA, QDF_TRACE_LEVEL_INFO,
 		  "%s: head = %p ", __func__, skb->head);
-	/* QDF_TRACE( QDF_MODULE_ID_HDD_SAP_DATA, QDF_TRACE_LEVEL_ERROR,"%s: data = %p ", __func__, skb->data); */
 	QDF_TRACE(QDF_MODULE_ID_HDD_SAP_DATA, QDF_TRACE_LEVEL_INFO,
 		  "%s: tail = %p ", __func__, skb->tail);
 	QDF_TRACE(QDF_MODULE_ID_HDD_SAP_DATA, QDF_TRACE_LEVEL_INFO,
@@ -113,7 +112,6 @@ void hdd_softap_tx_resume_timer_expired_handler(void *adapter_context)
 	hdd_notice("Enabling queues");
 	wlan_hdd_netif_queue_control(pAdapter, WLAN_WAKE_ALL_NETIF_QUEUE,
 				     WLAN_CONTROL_PATH);
-	return;
 }
 
 #if defined(CONFIG_PER_VDEV_TX_DESC_POOL)
@@ -140,6 +138,7 @@ hdd_softap_tx_resume_false(hdd_adapter_t *pAdapter, bool tx_resume)
 			qdf_mc_timer_get_current_state(&pAdapter->
 						       tx_flow_control_timer)) {
 		QDF_STATUS status;
+
 		status = qdf_mc_timer_start(&pAdapter->tx_flow_control_timer,
 				WLAN_SAP_HDD_TX_FLOW_CONTROL_OS_Q_BLOCK_TIME);
 
@@ -148,14 +147,12 @@ hdd_softap_tx_resume_false(hdd_adapter_t *pAdapter, bool tx_resume)
 		else
 			pAdapter->hdd_stats.hddTxRxStats.txflow_timer_cnt++;
 	}
-	return;
 }
 #else
 
 static inline void
 hdd_softap_tx_resume_false(hdd_adapter_t *pAdapter, bool tx_resume)
 {
-	return;
 }
 #endif
 
@@ -191,8 +188,6 @@ void hdd_softap_tx_resume_cb(void *adapter_context, bool tx_resume)
 					WLAN_DATA_FLOW_CONTROL);
 	}
 	hdd_softap_tx_resume_false(pAdapter, tx_resume);
-
-	return;
 }
 
 static inline struct sk_buff *hdd_skb_orphan(hdd_adapter_t *pAdapter,
@@ -200,9 +195,8 @@ static inline struct sk_buff *hdd_skb_orphan(hdd_adapter_t *pAdapter,
 {
 	if (pAdapter->tx_flow_low_watermark > 0)
 		skb_orphan(skb);
-	else {
+	else
 		skb = skb_unshare(skb, GFP_ATOMIC);
-	}
 
 	return skb;
 }
@@ -219,8 +213,8 @@ static inline struct sk_buff *hdd_skb_orphan(hdd_adapter_t *pAdapter,
 		struct sk_buff *skb) {
 
 	struct sk_buff *nskb;
-	nskb = skb_unshare(skb, GFP_ATOMIC);
 
+	nskb = skb_unshare(skb, GFP_ATOMIC);
 	if (nskb == skb) {
 		/*
 		 * For UDP packets we want to orphan the packet to allow the app
@@ -242,6 +236,8 @@ static inline struct sk_buff *hdd_skb_orphan(hdd_adapter_t *pAdapter,
  * Function registered with the Linux OS for transmitting
  * packets. This version of the function directly passes
  * the packet to Transport Layer.
+ * In case of any packet drop or error, log the error with
+ * INFO HIGH/LOW/MEDIUM to avoid excessive logging in kmsg.
  *
  * Return: Always returns NETDEV_TX_OK
  */
@@ -273,13 +269,12 @@ static int __hdd_softap_hard_start_xmit(struct sk_buff *skb,
 	 * SAP starts Tx only after the BSS START is
 	 * done.
 	 */
-	if (pHddApCtx->dfs_cac_block_tx) {
+	if (pHddApCtx->dfs_cac_block_tx)
 		goto drop_pkt;
-	}
 
 	/*
-	* If a transmit function is not registered, drop packet
-	*/
+	 * If a transmit function is not registered, drop packet
+	 */
 	if (!pAdapter->tx_fn) {
 		QDF_TRACE(QDF_MODULE_ID_HDD_SAP_DATA, QDF_TRACE_LEVEL_INFO_HIGH,
 			 "%s: TX function not registered by the data path",
@@ -303,26 +298,26 @@ static int __hdd_softap_hard_start_xmit(struct sk_buff *skb,
 			 hdd_softap_get_sta_id(pAdapter,
 				 pDestMacAddress, &STAId)) {
 			QDF_TRACE(QDF_MODULE_ID_HDD_SAP_DATA,
-				  QDF_TRACE_LEVEL_WARN,
+				  QDF_TRACE_LEVEL_INFO_HIGH,
 				  "%s: Failed to find right station", __func__);
 			goto drop_pkt;
 		}
 
 		if (STAId >= WLAN_MAX_STA_COUNT) {
 			QDF_TRACE(QDF_MODULE_ID_HDD_SAP_DATA,
-				  QDF_TRACE_LEVEL_WARN,
+				  QDF_TRACE_LEVEL_INFO_HIGH,
 				  "%s: Failed to find right station", __func__);
 			goto drop_pkt;
 		} else if (false == pAdapter->aStaInfo[STAId].isUsed) {
 			QDF_TRACE(QDF_MODULE_ID_HDD_SAP_DATA,
-				  QDF_TRACE_LEVEL_WARN,
+				  QDF_TRACE_LEVEL_INFO_HIGH,
 				  "%s: STA %d is unregistered", __func__,
 				  STAId);
 			goto drop_pkt;
 		} else if (true == pAdapter->aStaInfo[STAId].
 							isDeauthInProgress) {
 			QDF_TRACE(QDF_MODULE_ID_HDD_SAP_DATA,
-				  QDF_TRACE_LEVEL_WARN,
+				  QDF_TRACE_LEVEL_INFO_HIGH,
 				  "%s: STA %d deauth in progress", __func__,
 				  STAId);
 			goto drop_pkt;
@@ -333,14 +328,14 @@ static int __hdd_softap_hard_start_xmit(struct sk_buff *skb,
 		    && (OL_TXRX_PEER_STATE_AUTH !=
 			pAdapter->aStaInfo[STAId].tlSTAState)) {
 			QDF_TRACE(QDF_MODULE_ID_HDD_SAP_DATA,
-				  QDF_TRACE_LEVEL_WARN,
+				  QDF_TRACE_LEVEL_INFO_HIGH,
 				  "%s: Station not connected yet", __func__);
 			goto drop_pkt;
 		} else if (OL_TXRX_PEER_STATE_CONN ==
 			   pAdapter->aStaInfo[STAId].tlSTAState) {
 			if (ntohs(skb->protocol) != HDD_ETHERTYPE_802_1_X) {
 				QDF_TRACE(QDF_MODULE_ID_HDD_SAP_DATA,
-					  QDF_TRACE_LEVEL_WARN,
+					  QDF_TRACE_LEVEL_INFO_HIGH,
 					  "%s: NON-EAPOL packet in non-Authenticated state",
 					  __func__);
 				goto drop_pkt;
@@ -355,24 +350,24 @@ static int __hdd_softap_hard_start_xmit(struct sk_buff *skb,
 	ac = hdd_qdisc_ac_to_tl_ac[skb->queue_mapping];
 	++pAdapter->hdd_stats.hddTxRxStats.txXmitClassifiedAC[ac];
 
-#if defined (IPA_OFFLOAD)
+#if defined(IPA_OFFLOAD)
 	if (!qdf_nbuf_ipa_owned_get(skb)) {
 #endif
 
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(3, 19, 0))
 		/*
-		* The TCP TX throttling logic is changed a little after
-		* 3.19-rc1 kernel, the TCP sending limit will be smaller,
-		* which will throttle the TCP packets to the host driver.
-		* The TCP UP LINK throughput will drop heavily. In order to
-		* fix this issue, need to orphan the socket buffer asap, which
-		* will call skb's destructor to notify the TCP stack that the
-		* SKB buffer is unowned. And then the TCP stack will pump more
-		* packets to host driver.
-		*
-		* The TX packets might be dropped for UDP case in the iperf
-		* testing. So need to be protected by follow control.
-		*/
+		 * The TCP TX throttling logic is changed a little after
+		 * 3.19-rc1 kernel, the TCP sending limit will be smaller,
+		 * which will throttle the TCP packets to the host driver.
+		 * The TCP UP LINK throughput will drop heavily. In order to
+		 * fix this issue, need to orphan the socket buffer asap, which
+		 * will call skb's destructor to notify the TCP stack that the
+		 * SKB buffer is unowned. And then the TCP stack will pump more
+		 * packets to host driver.
+		 *
+		 * The TX packets might be dropped for UDP case in the iperf
+		 * testing. So need to be protected by follow control.
+		 */
 		skb = hdd_skb_orphan(pAdapter, skb);
 #else
 		/* Check if the buffer has enough header room */
@@ -382,7 +377,7 @@ static int __hdd_softap_hard_start_xmit(struct sk_buff *skb,
 		if (!skb)
 			goto drop_pkt_accounting;
 
-#if defined (IPA_OFFLOAD)
+#if defined(IPA_OFFLOAD)
 	}
 #endif
 
@@ -390,9 +385,8 @@ static int __hdd_softap_hard_start_xmit(struct sk_buff *skb,
 
 	if (qdf_nbuf_is_tso(skb))
 		pAdapter->stats.tx_packets += qdf_nbuf_get_tso_num_seg(skb);
-	else {
+	else
 		++pAdapter->stats.tx_packets;
-	}
 
 	hdd_event_eapol_log(skb, QDF_TX);
 	qdf_dp_trace_log_pkt(pAdapter->sessionId, skb, QDF_TX);
@@ -412,7 +406,7 @@ static int __hdd_softap_hard_start_xmit(struct sk_buff *skb,
 
 	if (pAdapter->tx_fn(ol_txrx_get_vdev_by_sta_id(STAId),
 		 (qdf_nbuf_t) skb) != NULL) {
-		QDF_TRACE(QDF_MODULE_ID_HDD_SAP_DATA, QDF_TRACE_LEVEL_WARN,
+		QDF_TRACE(QDF_MODULE_ID_HDD_SAP_DATA, QDF_TRACE_LEVEL_INFO_HIGH,
 			  "%s: Failed to send packet to txrx for staid:%d",
 			  __func__, STAId);
 		++pAdapter->hdd_stats.hddTxRxStats.txXmitDroppedAC[ac];
@@ -739,11 +733,10 @@ QDF_STATUS hdd_softap_rx_packet_cbk(void *context, qdf_nbuf_t rxBuf)
 		rxstat = netif_receive_skb(skb);
 	else
 		rxstat = netif_rx_ni(skb);
-	if (NET_RX_SUCCESS == rxstat) {
+	if (NET_RX_SUCCESS == rxstat)
 		++pAdapter->hdd_stats.hddTxRxStats.rxDelivered[cpu_index];
-	} else {
+	else
 		++pAdapter->hdd_stats.hddTxRxStats.rxRefused[cpu_index];
-	}
 
 	pAdapter->dev->last_rx = jiffies;
 
@@ -953,6 +946,7 @@ QDF_STATUS hdd_softap_stop_bss(hdd_adapter_t *pAdapter)
 	QDF_STATUS qdf_status = QDF_STATUS_E_FAILURE;
 	uint8_t staId = 0;
 	hdd_context_t *pHddCtx;
+
 	pHddCtx = WLAN_HDD_GET_CTX(pAdapter);
 
 	/* bss deregister is not allowed during wlan driver loading or

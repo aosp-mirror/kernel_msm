@@ -66,7 +66,7 @@ ifeq ($(KERNEL_BUILD), 0)
 	# code, below feature WLAN_DISABLE_EXPORT_SYMBOL needs to be
 	# enabled, otherwise when loading the second the driver,
 	# it will hit error of duplicate symbol.
-	ifeq ($(CONFIG_ARCH_SDXHEDGEHOG), y)
+	ifeq ($(CONFIG_ARCH_SDX20), y)
 	CONFIG_WLAN_DISABLE_EXPORT_SYMBOL := y
 	endif
 
@@ -723,7 +723,6 @@ SYS_OBJS :=	$(SYS_COMMON_SRC_DIR)/wlan_qct_sys.o \
 		$(SYS_LEGACY_SRC_DIR)/system/src/mac_init_api.o \
 		$(SYS_LEGACY_SRC_DIR)/system/src/sys_entry_func.o \
 		$(SYS_LEGACY_SRC_DIR)/utils/src/dot11f.o \
-		$(SYS_LEGACY_SRC_DIR)/utils/src/log_api.o \
 		$(SYS_LEGACY_SRC_DIR)/utils/src/mac_trace.o \
 		$(SYS_LEGACY_SRC_DIR)/utils/src/parser_api.o \
 		$(SYS_LEGACY_SRC_DIR)/utils/src/utils_parser.o
@@ -1226,6 +1225,7 @@ endif
 ifeq ($(CONFIG_SLUB_DEBUG_ON),y)
 CDEFINES += -DTIMER_MANAGER
 CDEFINES += -DMEMORY_DEBUG
+CDEFINES += -DCONFIG_HALT_KMEMLEAK
 CDEFINES += -DWLAN_SUSPEND_RESUME_TEST
 endif
 
@@ -1452,6 +1452,10 @@ endif
 
 ifeq ($(CONFIG_ARCH_SDX20), y)
 CDEFINES += -DSYNC_IPA_READY
+endif
+
+ifeq ($(CONFIG_ARCH_MSM8996), y)
+CDEFINES += -DCHANNEL_HOPPING_ALL_BANDS
 endif
 
 #Enable GTK Offload

@@ -28,17 +28,9 @@
 /*
  * Host WMI unified implementation
  */
-#include "athdefs.h"
-#include "osapi_linux.h"
-#include "a_types.h"
-#include "a_debug.h"
-#include "ol_if_athvar.h"
-#include "ol_defines.h"
 #include "htc_api.h"
 #include "htc_api.h"
-#include "dbglog_host.h"
 #include "wmi_unified_priv.h"
-#include "wmi_unified_param.h"
 
 #include <linux/debugfs.h>
 
@@ -1064,7 +1056,7 @@ static uint8_t *wmi_id_to_name(uint32_t wmi_command)
 
 
 #ifndef WMI_NON_TLV_SUPPORT
-static inline void wma_log_cmd_id(uint32_t cmd_id, uint32_t tag)
+static inline void wmi_log_cmd_id(uint32_t cmd_id, uint32_t tag)
 {
 	WMI_LOGD("Send WMI command:%s command_id:%d htc_tag:%d",
 		 wmi_id_to_name(cmd_id), cmd_id, tag);
@@ -1185,7 +1177,7 @@ QDF_STATUS wmi_unified_cmd_send(wmi_unified_t wmi_handle, wmi_buf_t buf,
 
 	SET_HTC_PACKET_NET_BUF_CONTEXT(pkt, buf);
 #ifndef WMI_NON_TLV_SUPPORT
-	wma_log_cmd_id(cmd_id, htc_tag);
+	wmi_log_cmd_id(cmd_id, htc_tag);
 #endif
 
 #ifdef WMI_INTERFACE_EVENT_LOGGING
@@ -1392,7 +1384,9 @@ static void wmi_process_fw_event_worker_thread_ctx
 	qdf_spin_lock_bh(&wmi_handle->eventq_lock);
 	qdf_nbuf_queue_add(&wmi_handle->event_queue, evt_buf);
 	qdf_spin_unlock_bh(&wmi_handle->eventq_lock);
-	schedule_work(&wmi_handle->rx_event_work);
+	qdf_queue_work(0, wmi_handle->wmi_rx_work_queue,
+			&wmi_handle->rx_event_work);
+
 	return;
 }
 
@@ -1535,17 +1529,16 @@ end:
 
 /**
  * wmi_rx_event_work() - process rx event in rx work queue context
- * @work: rx work queue struct
+ * @arg: opaque pointer to wmi handle
  *
  * This function process any fw event to serialize it through rx worker thread.
  *
  * Return: none
  */
-static void wmi_rx_event_work(struct work_struct *work)
+static void wmi_rx_event_work(void *arg)
 {
-	struct wmi_unified *wmi = container_of(work, struct wmi_unified,
-					rx_event_work);
 	wmi_buf_t buf;
+	struct wmi_unified *wmi = arg;
 
 	qdf_spin_lock_bh(&wmi->eventq_lock);
 	buf = qdf_nbuf_queue_remove(&wmi->event_queue);
@@ -1630,7 +1623,14 @@ void *wmi_unified_attach(void *scn_handle,
 	wmi_runtime_pm_init(wmi_handle);
 	qdf_spinlock_create(&wmi_handle->eventq_lock);
 	qdf_nbuf_queue_init(&wmi_handle->event_queue);
-	INIT_WORK(&wmi_handle->rx_event_work, wmi_rx_event_work);
+	qdf_create_work(0, &wmi_handle->rx_event_work,
+			wmi_rx_event_work, wmi_handle);
+	wmi_handle->wmi_rx_work_queue =
+		qdf_create_workqueue("wmi_rx_event_work_queue");
+	if (NULL == wmi_handle->wmi_rx_work_queue) {
+		WMI_LOGE("failed to create wmi_rx_event_work_queue");
+		goto error;
+	}
 #ifdef WMI_INTERFACE_EVENT_LOGGING
 	if (QDF_STATUS_SUCCESS == wmi_log_init(wmi_handle)) {
 		wmi_debugfs_init(wmi_handle);
@@ -1651,6 +1651,11 @@ void *wmi_unified_attach(void *scn_handle,
 	qdf_spinlock_create(&wmi_handle->ctx_lock);
 
 	return wmi_handle;
+
+error:
+	qdf_mem_free(wmi_handle);
+
+	return NULL;
 }
 
 /**
@@ -1664,7 +1669,8 @@ void wmi_unified_detach(struct wmi_unified *wmi_handle)
 {
 	wmi_buf_t buf;
 
-	cancel_work_sync(&wmi_handle->rx_event_work);
+	qdf_flush_workqueue(0, wmi_handle->wmi_rx_work_queue);
+	qdf_destroy_workqueue(0, wmi_handle->wmi_rx_work_queue);
 
 	wmi_debugfs_remove(wmi_handle);
 
@@ -1700,7 +1706,8 @@ wmi_unified_remove_work(struct wmi_unified *wmi_handle)
 {
 	wmi_buf_t buf;
 
-	cancel_work_sync(&wmi_handle->rx_event_work);
+	qdf_flush_workqueue(0, wmi_handle->wmi_rx_work_queue);
+
 	qdf_spin_lock_bh(&wmi_handle->eventq_lock);
 	buf = qdf_nbuf_queue_remove(&wmi_handle->event_queue);
 	while (buf) {

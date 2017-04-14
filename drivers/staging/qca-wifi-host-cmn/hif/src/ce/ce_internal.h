@@ -96,7 +96,7 @@ struct CE_ring_state {
 	unsigned int low_water_mark_nentries;
 	unsigned int high_water_mark_nentries;
 	void **per_transfer_context;
-	OS_DMA_MEM_CONTEXT(ce_dmacontext) /* OS Specific DMA context */
+	OS_DMA_MEM_CONTEXT(ce_dmacontext); /* OS Specific DMA context */
 };
 
 /* Copy Engine internal state */
@@ -151,7 +151,6 @@ struct CE_state {
 	bool htt_rx_data;
 	void (*lro_flush_cb)(void *);
 	void *lro_data;
-	qdf_spinlock_t lro_unloading_lock;
 };
 
 /* Descriptor rings must be aligned to this boundary */

@@ -27,11 +27,9 @@
 #ifndef _WMI_UNIFIED_TLV_H_
 #define _WMI_UNIFIED_TLV_H_
 #include <osdep.h>
-#include "a_types.h"
 #include "wmi_unified_param.h"
 #include "wmi.h"
 #include "wmi_unified.h"
-#include "ol_defines.h" /* Fix Me: wmi_unified_t structure definition */
 
 QDF_STATUS send_vdev_create_cmd_tlv(wmi_unified_t wmi_handle,
 				 uint8_t macaddr[IEEE80211_ADDR_LEN],
@@ -386,7 +384,7 @@ QDF_STATUS send_pktlog_wmi_send_cmd_tlv(wmi_unified_t wmi_handle,
 
 QDF_STATUS send_add_wow_wakeup_event_cmd_tlv(wmi_unified_t wmi_handle,
 					uint32_t vdev_id,
-					uint32_t bitmap,
+					uint32_t *event_bitmap,
 					bool enable);
 
 QDF_STATUS send_wow_patterns_to_fw_cmd_tlv(wmi_unified_t wmi_handle,

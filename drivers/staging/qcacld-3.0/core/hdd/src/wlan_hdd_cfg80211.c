@@ -150,6 +150,12 @@
 #define MAX_TXPOWER_SCALE 4
 #define CDS_MAX_FEATURE_SET   8
 
+/*
+ * Number of DPTRACE records to dump when a cfg80211 disconnect with reason
+ * WLAN_REASON_DEAUTH_LEAVING DEAUTH is received from user-space.
+ */
+#define WLAN_DEAUTH_DPTRACE_DUMP_COUNT 100
+
 static const u32 hdd_cipher_suites[] = {
 	WLAN_CIPHER_SUITE_WEP40,
 	WLAN_CIPHER_SUITE_WEP104,
@@ -1087,6 +1093,11 @@ static const struct nl80211_vendor_cmd_info wlan_hdd_cfg80211_vendor_events[] = 
 		.vendor_id = QCA_NL80211_VENDOR_ID,
 		.subcmd = QCA_NL80211_VENDOR_SUBCMD_NUD_STATS_GET,
 	},
+
+	[QCA_NL80211_VENDOR_SUBCMD_PWR_SAVE_FAIL_DETECTED_INDEX] = {
+		.vendor_id = QCA_NL80211_VENDOR_ID,
+		.subcmd = QCA_NL80211_VENDOR_SUBCMD_CHIP_PWRSAVE_FAILURE
+	}
 };
 
 /**
@@ -2561,6 +2572,10 @@ __wlan_hdd_cfg80211_set_ext_roam_params(struct wiphy *wiphy,
 			goto fail;
 		}
 		hdd_debug("Num of Preferred BSSID (%d)", count);
+		if (!tb[QCA_WLAN_VENDOR_ATTR_ROAMING_PARAM_SET_BSSID_PREFS]) {
+			hdd_err("attr Preferred BSSID failed");
+			goto fail;
+		}
 		i = 0;
 		nla_for_each_nested(curr_attr,
 			tb[QCA_WLAN_VENDOR_ATTR_ROAMING_PARAM_SET_BSSID_PREFS],
@@ -3698,8 +3713,8 @@ __wlan_hdd_cfg80211_get_wifi_info(struct wiphy *wiphy,
 		sub_id = (hdd_ctx->target_fw_vers_ext & 0xf0000000) >> 28;
 		hw_version = hdd_ctx->target_hw_name;
 		snprintf(firmware_version, sizeof(firmware_version),
-			 "FW:%d.%d.%d.%d.%d HW:%s", major_spid, minor_spid,
-			 siid, crmid, sub_id, hw_version);
+			"FW:%d.%d.%d.%d.%d HW:%s", major_spid, minor_spid,
+			siid, crmid, sub_id, hw_version);
 		skb_len += strlen(firmware_version) + 1;
 		count++;
 	}
@@ -4689,7 +4704,7 @@ static int __wlan_hdd_cfg80211_wifi_logger_get_ring_data(struct wiphy *wiphy,
 	} else {
 		wlan_report_log_completion(WLAN_LOG_TYPE_NON_FATAL,
 					   WLAN_LOG_INDICATOR_FRAMEWORK,
-					   WLAN_LOG_REASON_CODE_UNUSED);
+					   WLAN_LOG_REASON_CODE_UNUSED, ring_id);
 	}
 	return 0;
 }
@@ -5320,6 +5335,67 @@ fail:
 	kfree_skb(skb);
 	return;
 }
+
+#define PWR_SAVE_FAIL_CMD_INDEX \
+	QCA_NL80211_VENDOR_SUBCMD_PWR_SAVE_FAIL_DETECTED_INDEX
+/**
+ * hdd_chip_pwr_save_fail_detected_cb() - chip power save failure detected
+ * callback
+ * @hdd_ctx: HDD context
+ * @data: chip power save failure detected data
+ *
+ * This function reads the chip power save failure detected data and fill in
+ * the skb with NL attributes and send up the NL event.
+ * This callback execute in atomic context and must not invoke any
+ * blocking calls.
+ *
+ * Return: none
+ */
+void hdd_chip_pwr_save_fail_detected_cb(void *ctx,
+			struct chip_pwr_save_fail_detected_params
+			*data)
+{
+	hdd_context_t *hdd_ctx = ctx;
+	struct sk_buff *skb;
+	int flags = cds_get_gfp_flags();
+
+	ENTER();
+
+	if (wlan_hdd_validate_context(hdd_ctx))
+		return;
+
+	if (!data) {
+		hdd_notice("data is null");
+		return;
+	}
+
+	skb = cfg80211_vendor_event_alloc(hdd_ctx->wiphy,
+			  NULL, NLMSG_HDRLEN +
+			  sizeof(data->failure_reason_code) +
+			  NLMSG_HDRLEN, PWR_SAVE_FAIL_CMD_INDEX,
+			  flags);
+
+	if (!skb) {
+		hdd_notice("cfg80211_vendor_event_alloc failed");
+		return;
+	}
+
+	hdd_info(FL("failure reason code: %u"),
+		data->failure_reason_code);
+
+	if (nla_put_u32(skb,
+		QCA_ATTR_CHIP_POWER_SAVE_FAILURE_REASON,
+		data->failure_reason_code))
+		goto fail;
+
+	cfg80211_vendor_event(skb, flags);
+	EXIT();
+	return;
+
+fail:
+	kfree_skb(skb);
+}
+#undef PWR_SAVE_FAIL_CMD_INDEX
 
 static const struct nla_policy
 ns_offload_set_policy[QCA_WLAN_VENDOR_ATTR_ND_OFFLOAD_MAX + 1] = {
@@ -9962,6 +10038,7 @@ const struct wiphy_vendor_command hdd_wiphy_vendor_commands[] = {
 		.doit = wlan_hdd_cfg80211_get_bus_size
 	},
 	{
+		.info.vendor_id = QCA_NL80211_VENDOR_ID,
 		.info.subcmd = QCA_NL80211_VENDOR_SUBCMD_SETBAND,
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV |
 					WIPHY_VENDOR_CMD_NEED_NETDEV |
@@ -10959,7 +11036,7 @@ static int wlan_hdd_change_client_iface_to_new_mode(struct net_device *ndev,
 
 	if (test_bit(ACS_IN_PROGRESS, &hdd_ctx->g_event_flags)) {
 		hdd_warn("ACS is in progress, don't change iface!");
-		return 0;
+		return -EBUSY;
 	}
 
 	wdev = ndev->ieee80211_ptr;
@@ -10991,7 +11068,8 @@ static int wlan_hdd_change_client_iface_to_new_mode(struct net_device *ndev,
 			hdd_cfg_xlate_to_csr_phy_mode(config->dot11Mode);
 	}
 	EXIT();
-	return status;
+
+	return qdf_status_to_os_return(status);
 }
 
 static int wlan_hdd_cfg80211_change_bss(struct wiphy *wiphy,
@@ -11039,7 +11117,6 @@ static int __wlan_hdd_cfg80211_change_iface(struct wiphy *wiphy,
 	tCsrRoamProfile *pRoamProfile = NULL;
 	eCsrRoamBssType LastBSSType;
 	struct hdd_config *pConfig = NULL;
-	QDF_STATUS vstatus;
 	int status;
 
 	ENTER();
@@ -11100,10 +11177,13 @@ static int __wlan_hdd_cfg80211_change_iface(struct wiphy *wiphy,
 				hdd_deregister_tx_flow_control(pAdapter);
 				hdd_debug("Setting interface Type to ADHOC");
 			}
-			vstatus = wlan_hdd_change_client_iface_to_new_mode(ndev,
+			status = wlan_hdd_change_client_iface_to_new_mode(ndev,
 					type);
-			if (vstatus != QDF_STATUS_SUCCESS)
-				return -EINVAL;
+			if (status) {
+				hdd_err("Failed to change iface to new mode:%d status %d",
+						type, status);
+				return status;
+			}
 			if (hdd_start_adapter(pAdapter)) {
 				hdd_err("Failed to start adapter :%d",
 						pAdapter->device_mode);
@@ -12737,7 +12817,7 @@ void hdd_select_cbmode(hdd_adapter_t *pAdapter, uint8_t operationChannel,
 	cds_set_channel_params(operationChannel, sec_ch, ch_params);
 
 	if (QDF_GLOBAL_MONITOR_MODE == cds_get_conparam()) {
-		eHddDot11Mode hdd_dot11_mode;
+		enum hdd_dot11_mode hdd_dot11_mode;
 		uint8_t iniDot11Mode =
 			(WLAN_HDD_GET_CTX(pAdapter))->config->dot11Mode;
 
@@ -12971,6 +13051,8 @@ static int wlan_hdd_cfg80211_connect_start(hdd_adapter_t *pAdapter,
 		status = -EINVAL;
 		goto ret_status;
 	}
+
+	wlan_hdd_tdls_disable_offchan_and_teardown_links(pHddCtx);
 
 	pRoamProfile = &pWextState->roamProfile;
 	qdf_mem_zero(&hdd_sta_ctx->conn_info.conn_flag,
@@ -14479,6 +14561,8 @@ static int __wlan_hdd_cfg80211_disconnect(struct wiphy *wiphy,
 				gEnableDeauthToDisassocMap ?
 				eCSR_DISCONNECT_REASON_STA_HAS_LEFT :
 				eCSR_DISCONNECT_REASON_DEAUTH;
+				qdf_dp_trace_dump_all(
+					WLAN_DEAUTH_DPTRACE_DUMP_COUNT);
 			break;
 		case WLAN_REASON_DISASSOC_STA_HAS_LEFT:
 			reasonCode = eCSR_DISCONNECT_REASON_STA_HAS_LEFT;
@@ -14487,8 +14571,6 @@ static int __wlan_hdd_cfg80211_disconnect(struct wiphy *wiphy,
 			reasonCode = eCSR_DISCONNECT_REASON_UNSPECIFIED;
 			break;
 		}
-		hdd_debug("convert to internal reason %d to reasonCode %d",
-			reason, reasonCode);
 		pScanInfo = &pAdapter->scan_info;
 		if (pScanInfo->mScanPending) {
 			hdd_debug("Disconnect is in progress, Aborting Scan");
@@ -14517,10 +14599,8 @@ static int __wlan_hdd_cfg80211_disconnect(struct wiphy *wiphy,
 			}
 		}
 #endif
-		hdd_debug("Disconnecting with reasoncode:%u",
-		       reasonCode);
-		hdd_debug("Disconnect request from user space with reason: %s",
-			hdd_ieee80211_reason_code_to_str(reason));
+		hdd_info("Disconnect request from user space with reason: %d (%s) internal reason code: %d",
+			reason, hdd_ieee80211_reason_code_to_str(reason), reasonCode);
 		status = wlan_hdd_disconnect(pAdapter, reasonCode);
 		if (0 != status) {
 			hdd_err("wlan_hdd_disconnect failed, status: %d", status);
@@ -15236,14 +15316,6 @@ int __wlan_hdd_cfg80211_del_station(struct wiphy *wiphy,
 						pAdapter->aStaInfo[i].
 							macAddrSTA.bytes,
 						QDF_MAC_ADDR_SIZE);
-					if (hdd_ipa_uc_is_enabled(pHddCtx)) {
-						hdd_ipa_wlan_evt(pAdapter,
-							pAdapter->
-								 aStaInfo[i].
-								 ucSTAId,
-							HDD_IPA_CLIENT_DISCONNECT,
-							mac);
-					}
 					hdd_debug("Delete STA with MAC::"
 						  MAC_ADDRESS_STR,
 					       MAC_ADDR_ARRAY(mac));
@@ -15282,11 +15354,6 @@ int __wlan_hdd_cfg80211_del_station(struct wiphy *wiphy,
 					  MAC_ADDRESS_STR,
 				       MAC_ADDR_ARRAY(mac));
 				return -ENOENT;
-			}
-
-			if (hdd_ipa_uc_is_enabled(pHddCtx)) {
-				hdd_ipa_wlan_evt(pAdapter, staId,
-					HDD_IPA_CLIENT_DISCONNECT, mac);
 			}
 
 			if (pAdapter->aStaInfo[staId].isDeauthInProgress ==

@@ -170,8 +170,6 @@ static void hdd_deinit_cds_hif_context(void)
 
 	if (status)
 		hdd_err("Failed to reset CDS HIF Context");
-
-	return;
 }
 
 /**
@@ -198,18 +196,6 @@ static enum qdf_bus_type to_bus_type(enum pld_bus_type bus_type)
 	}
 }
 
-/**
- * hdd_hif_open() - HIF open helper
- * @dev: wlan device structure
- * @bdev: bus device structure
- * @bid: bus identifier for shared busses
- * @bus_type: underlying bus type
- * @reinit: true if we are reinitializing the driver during recovery phase
- *
- * This function brings-up HIF layer during load/recovery phase.
- *
- * Return: 0 on success and errno on failure.
- */
 int hdd_hif_open(struct device *dev, void *bdev, const hif_bus_id *bid,
 			enum qdf_bus_type bus_type, bool reinit)
 {
@@ -272,12 +258,6 @@ err_hif_close:
 	return ret;
 }
 
-/**
- * hdd_hif_close() - HIF close helper
- * @hif_ctx:	HIF context
- *
- * Helper function to close HIF
- */
 void hdd_hif_close(void *hif_ctx)
 {
 	if (hif_ctx == NULL)
@@ -341,11 +321,11 @@ static int wlan_hdd_probe(struct device *dev, void *bdev, const hif_bus_id *bid,
 	hdd_prevent_suspend(WIFI_POWER_EVENT_WAKELOCK_DRIVER_INIT);
 
 	/*
-	* The Krait is going to Idle/Stand Alone Power Save
-	* more aggressively which is resulting in the longer driver load time.
-	* The Fix is to not allow Krait to enter Idle Power Save during driver
-	* load.
-	*/
+	 * The Krait is going to Idle/Stand Alone Power Save
+	 * more aggressively which is resulting in the longer driver load time.
+	 * The Fix is to not allow Krait to enter Idle Power Save during driver
+	 * load.
+	 */
 	hdd_request_pm_qos(dev, DISABLE_KRAIT_IDLE_PS_VAL);
 
 	if (reinit)
@@ -462,6 +442,12 @@ static void wlan_hdd_shutdown(void)
 {
 	void *hif_ctx = cds_get_context(QDF_MODULE_ID_HIF);
 
+	if (hdd_get_conparam() == QDF_GLOBAL_FTM_MODE) {
+		hdd_err("Crash recovery is not allowed in FTM mode");
+		QDF_BUG(0);
+		return;
+	}
+
 	if (cds_is_load_or_unload_in_progress()) {
 		hdd_err("Load/unload in progress, ignore SSR shutdown");
 		return;
@@ -508,23 +494,12 @@ static void wlan_hdd_crash_shutdown(void)
 static void wlan_hdd_notify_handler(int state)
 {
 	if (!QDF_IS_EPPING_ENABLED(cds_get_conparam())) {
-		int ret = 0;
+		int ret;
+
 		ret = hdd_wlan_notify_modem_power_state(state);
 		if (ret < 0)
 			hdd_err("Fail to send notify");
 	}
-}
-
-/**
- * wlan_hdd_update_status() - update driver status
- * @status: driver status
- *
- * Return: void
- */
-static void wlan_hdd_update_status(uint32_t status)
-{
-	if (status == PLD_RECOVERY)
-		cds_set_recovery_in_progress(true);
 }
 
 /**
@@ -1190,15 +1165,17 @@ static void wlan_hdd_pld_notify_handler(struct device *dev,
 }
 
 /**
- * wlan_hdd_pld_update_status() - update driver status
+ * wlan_hdd_pld_uevent() - update driver status
  * @dev: device
- * @status: driver status
+ * @uevent: uevent status
  *
  * Return: void
  */
-static void wlan_hdd_pld_update_status(struct device *dev, uint32_t status)
+static void wlan_hdd_pld_uevent(struct device *dev,
+				struct pld_uevent_data *uevent)
 {
-	wlan_hdd_update_status(status);
+	if (uevent->uevent == PLD_RECOVERY)
+		cds_set_recovery_in_progress(true);
 }
 
 #ifdef FEATURE_RUNTIME_PM
@@ -1241,28 +1218,18 @@ struct pld_driver_ops wlan_drv_ops = {
 	.resume_noirq  = wlan_hdd_pld_resume_noirq,
 	.reset_resume = wlan_hdd_pld_reset_resume,
 	.modem_status = wlan_hdd_pld_notify_handler,
-	.update_status = wlan_hdd_pld_update_status,
+	.uevent = wlan_hdd_pld_uevent,
 #ifdef FEATURE_RUNTIME_PM
 	.runtime_suspend = wlan_hdd_pld_runtime_suspend,
 	.runtime_resume = wlan_hdd_pld_runtime_resume,
 #endif
 };
 
-/**
- * wlan_hdd_register_driver() - wlan_hdd_register_driver
- *
- * Return: int
- */
 int wlan_hdd_register_driver(void)
 {
 	return pld_register_driver(&wlan_drv_ops);
 }
 
-/**
- * wlan_hdd_unregister_driver() - wlan_hdd_unregister_driver
- *
- * Return: void
- */
 void wlan_hdd_unregister_driver(void)
 {
 	pld_unregister_driver();
