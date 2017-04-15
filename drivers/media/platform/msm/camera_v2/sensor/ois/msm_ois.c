@@ -507,6 +507,17 @@ static int32_t msm_ois_config(struct msm_ois_ctrl_t *o_ctrl,
 			read_cnt = 6;
 		}
 
+		if (cdata->cfg.set_info.ois_params.data_size > 0 &&
+			cdata->cfg.set_info.ois_params.data_size < 9 &&
+			cdata->cfg.set_info.ois_params.setting_size > 0) {
+
+			read_cnt = cdata->cfg.set_info.ois_params.data_size;
+
+			if (cdata->cfg.set_info.ois_params.settings != NULL)
+				read_addr = cdata->cfg.set_info.ois_params
+					.settings[0].reg_addr;
+		}
+
 		rc = o_ctrl->i2c_client.i2c_func_tbl->
 			i2c_read_seq(&o_ctrl->i2c_client, read_addr,
 				     &buf[0], read_cnt);
