@@ -26,6 +26,7 @@
 #include "mnh-ddr-33-300-600-400.h"
 #include "mnh-ddr.h"
 #include "mnh-pcie.h"
+#include "mnh-sm.h"
 
 #define MNH_DDR_CTL_IN(reg) \
 	HW_IN(HWIO_DDR_CTL_BASE_ADDR, DDR_CTL, reg)
@@ -50,8 +51,14 @@
 #define MNH_DDR_PHY_OUT(reg, val) \
 	HW_OUT(HWIO_DDR_PHY_BASE_ADDR, DDR_PHY, reg, val)
 
+#define MNH_SCU_IN(reg) \
+	HW_IN(HWIO_SCU_BASE_ADDR, SCU, reg)
 #define MNH_SCU_INf(reg, fld) \
 	HW_INf(HWIO_SCU_BASE_ADDR, SCU, reg, fld)
+#define MNH_SCU_INx(reg, inst) \
+	HW_INx(HWIO_SCU_BASE_ADDR, SCU, reg, inst)
+#define MNH_SCU_INxf(reg, inst, fld) \
+	HW_INxf(HWIO_SCU_BASE_ADDR, SCU, reg, inst, fld)
 #define MNH_SCU_OUTf(reg, fld, val) \
 	HW_OUTf(HWIO_SCU_BASE_ADDR, SCU, reg, fld, val)
 #define MNH_SCU_OUT(reg, val) \
@@ -73,7 +80,35 @@
 		      _state.phy[fsp][regindex])
 
 #define WRITE_SCU_FSP(fsp) \
+	_state.fsps[fsp] &= 0xFFFFFF00;\
+	_state.fsps[fsp] |= 0x7d;\
 	MNH_SCU_OUTx(LPDDR4_FSP_SETTING, fsp, _state.fsps[fsp])
+
+#define SAVE_CURRENT_FSP() \
+	_state.suspend_fsp = \
+		MNH_SCU_INf(LPDDR4_LOW_POWER_STS, LPDDR4_CUR_FSP); \
+	dev_dbg(dev, "%s: saved fsp: %d\n", __func__, _state.suspend_fsp)
+
+#define SAVED_FSP() _state.suspend_fsp
+
+#define WRITE_CLK_FROM_FSP(fsp) \
+do { \
+	if (fsp < (MNH_DDR_NUM_FSPS)) {	     \
+		MNH_SCU_OUTf(CCU_CLK_DIV, LPDDR4_REFCLK_DIV, \
+			MNH_SCU_INxf(LPDDR4_FSP_SETTING, fsp, \
+				FSP_LPDDR4_REFCLK_DIV)); \
+		MNH_SCU_OUTf(CCU_CLK_DIV, AXI_FABRIC_CLK_DIV, \
+			MNH_SCU_INxf(LPDDR4_FSP_SETTING, fsp, \
+				FSP_AXI_FABRIC_CLK_DIV)); \
+		MNH_SCU_OUTf(CCU_CLK_DIV, PCIE_AXI_CLK_DIV, \
+			MNH_SCU_INxf(LPDDR4_FSP_SETTING, fsp, \
+				FSP_PCIE_AXI_CLK_DIV)); \
+		MNH_SCU_OUTf(CCU_CLK_CTL, LP4_AXI_SYS200_MODE, \
+			MNH_SCU_INxf(LPDDR4_FSP_SETTING, fsp, \
+				FSP_SYS200_MODE)); \
+	} else \
+		dev_err(dev, "%s: invalid fsp 0x%x", __func__, fsp); \
+} while (0)
 
 #define SAVE_DDR_REG_CONFIG(ddrblock, regindex) \
 	_state.ddrblock[regindex] = \
@@ -90,6 +125,7 @@
 
 /* INT status bits */
 #define MR_WRITE_SBIT 26
+#define MR_READ_SBIT 23
 #define LP_CMD_SBIT 5
 #define INIT_DONE_SBIT 4
 
@@ -223,12 +259,6 @@ static void mnh_ddr_init_internal_state(struct mnh_ddr_state *state)
 	memcpy(&(_state.phy[0][0]),
 		&(state->config->phy[0]),
 		MNH_DDR_NUM_PHY_REG * sizeof(u32));
-	memcpy(&(_state.phy[1][0]),
-		&(state->config->phy[0]),
-		MNH_DDR_NUM_PHY_REG * sizeof(u32));
-	memcpy(&(_state.phy[2][0]),
-		&(state->config->phy[0]),
-		MNH_DDR_NUM_PHY_REG * sizeof(u32));
 
 	memcpy(&(_state.pi[0]),
 		&(state->config->pi[0]),
@@ -237,6 +267,7 @@ static void mnh_ddr_init_internal_state(struct mnh_ddr_state *state)
 	memcpy(&(_state.fsps[0]),
 		&(state->fsps[0]),
 		MNH_DDR_NUM_FSPS * sizeof(u32));
+	_state.suspend_fsp = 0;
 }
 
 void mnh_ddr_init_clocks(struct device *dev)
@@ -263,39 +294,45 @@ void mnh_ddr_init_clocks(struct device *dev)
 		dev_dbg(dev, "%s lpddr4 pll locked after %d iterations",
 			 __func__, timeout);
 
-	MNH_SCU_OUTf(LPDDR4_LOW_POWER_CFG, LP4_FSP_SW_OVERRIDE, 0);
-
 	WRITE_SCU_FSP(0);
 	WRITE_SCU_FSP(1);
 	WRITE_SCU_FSP(2);
 	WRITE_SCU_FSP(3);
 
+	WRITE_CLK_FROM_FSP(SAVED_FSP());
+	dev_dbg(dev, "%s lpddr4 pll locked", __func__);
+	MNH_SCU_OUTf(LPDDR4_LOW_POWER_CFG, LP4_FSP_SW_OVERRIDE, 0);
 	/* MNH_PLL_PASSCODE_CLR */
 	MNH_SCU_OUTf(PLL_PASSCODE, PASSCODE, 0x0);
 }
 
-int mnh_ddr_suspend(struct device *dev, struct gpio_desc *iso_n)
+static void mnh_ddr_pull_config(void)
 {
 	int index, fsp;
-
-	mnh_ddr_disable_lp(dev);
-
 	for (index = 0; index < MNH_DDR_NUM_CTL_REG; index++)
 		SAVE_DDR_REG_CONFIG(ctl, index);
 	CLR_START(ctl);
 
-	dev_dbg(dev, "%s CTL 162 is: 0x%x",
-		 __func__, MNH_DDR_CTL_IN(162));
 	for (index = 0; index < MNH_DDR_NUM_PI_REG; index++)
 		SAVE_DDR_REG_CONFIG(pi, index);
 	CLR_START(pi);
 
 	for (fsp = 0; fsp < MNH_DDR_PHY_NUM_FSPS; fsp++) {
 		MNH_DDR_PHY_OUTf(1025, PHY_FREQ_SEL_INDEX, fsp);
-
 		for (index = 0; index < MNH_DDR_NUM_PHY_REG; index++)
 			SAVE_DDR_PHY_REG_CONFIG(fsp, index);
 	}
+}
+
+int mnh_ddr_suspend(struct device *dev, struct gpio_desc *iso_n)
+{
+	mnh_ddr_disable_lp(dev);
+
+	/* resume to fsp2 */
+	mnh_lpddr_freq_change(LPDDR_FREQ_FSP2);
+	SAVE_CURRENT_FSP();
+	mnh_ddr_pull_config();
+
 	if (mnh_ddr_send_lp_cmd(dev, LP_CMD_DSRPD))
 		dev_err(dev, "%s: failed to get LP complete\n", __func__);
 
@@ -305,10 +342,9 @@ int mnh_ddr_suspend(struct device *dev, struct gpio_desc *iso_n)
 	MNH_SCU_OUTf(CCU_CLK_CTL, LP4PHY_PLL_BYPASS_CLKEN, 0);
 	MNH_SCU_OUTf(CCU_CLK_CTL, LP4_REFCLKEN, 0);
 
-	udelay(1); /* need to tune */
-
+	udelay(1);
 	gpiod_set_value_cansleep(iso_n, 0);
-	udelay(1);/* need to tune */
+	udelay(1);
 
 	dev_dbg(dev, "%s done.", __func__);
 
@@ -325,6 +361,12 @@ int mnh_ddr_resume(struct device *dev, struct gpio_desc *iso_n)
 
 	for (index = 0; index < MNH_DDR_NUM_CTL_REG; index++)
 		WRITE_DDR_REG_CONFIG(ctl, index);
+
+	MNH_DDR_CTL_OUTf(23, DFIBUS_FREQ_INIT, SAVED_FSP());
+	MNH_DDR_CTL_OUTf(23, DFIBUS_BOOT_FREQ, 0);
+
+	MNH_DDR_CTL_OUTf(23, PHY_INDEP_TRAIN_MODE, 0);
+	MNH_DDR_CTL_OUTf(23, CDNS_INTRL0, 1);
 
 	for (index = 0; index < MNH_DDR_NUM_PI_REG; index++)
 		WRITE_DDR_REG_CONFIG(pi, index);
@@ -351,15 +393,12 @@ int mnh_ddr_resume(struct device *dev, struct gpio_desc *iso_n)
 	if (timeout == 10)
 		dev_err(dev, "%s: failed to see reset valid\n", __func__);
 
-	/*MNH_DDR_PHY_OUTf(1051, PHY_SET_DFI_INPUT_RST_PAD, 1);*/
 	udelay(1000);
 
-	/*MNH_DDR_PI_OUTf(00, PI_START, 1);*/
 	MNH_DDR_CTL_OUTf(00, START, 1);
 
-	/*
-	* INT_STATUS: bit 4 init done
-	*/
+	dev_dbg(dev, "%s waiting for init done.", __func__);
+
 	timeout = 0;
 	while ((timeout < 1000) && (!mnh_ddr_int_status_bit(INIT_DONE_SBIT))) {
 		udelay(1);
@@ -375,15 +414,10 @@ int mnh_ddr_resume(struct device *dev, struct gpio_desc *iso_n)
 	/* need to clear PWRUP_SREFRESH_EXIT to clear interrupt status bit 0 */
 	MNH_DDR_CTL_OUTf(81, PWRUP_SREFRESH_EXIT, 0);
 	dev_dbg(dev, "%s got init done %llx.\n", __func__,
-		 mnh_ddr_int_status(dev));
+		mnh_ddr_int_status(dev));
 	mnh_ddr_clr_int_status(dev);
+	mnh_lpddr_freq_change(SAVED_FSP());
 	mnh_ddr_enable_lp();
-
-#if 0
-	/* TODO: This is broken now */
-	/* Enable FSP2 => 2400 */
-	mnh_lpddr_freq_change(LPDDR_FREQ_FSP2);
-#endif
 
 	return 0;
 }

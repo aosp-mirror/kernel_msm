@@ -26,7 +26,8 @@
 #define MNH_DDR_NUM_PI_REG	(191 + 1)
 
 #define MNH_DDR_NUM_FSPS (4)
-#define MNH_DDR_PHY_NUM_FSPS (MNH_DDR_NUM_FSPS - 1)
+#define MNH_DDR_PHY_NUM_FSPS MNH_DDR_NUM_FSPS
+
 
 struct mnh_ddr_reg_bases {
 	u32 ctl_base;
@@ -54,6 +55,7 @@ struct mnh_ddr_internal_state {
 	u32 pi[MNH_DDR_NUM_PI_REG];
 	u32 phy[MNH_DDR_PHY_NUM_FSPS][MNH_DDR_NUM_PHY_REG];
 	u32 fsps[MNH_DDR_NUM_FSPS];
+	u32 suspend_fsp;
 };
 
 int mnh_ddr_po_init(struct device *dev, struct gpio_desc *iso_n);
