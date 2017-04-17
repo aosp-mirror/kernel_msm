@@ -259,11 +259,17 @@ static void pack_rsp_and_send(unsigned char *buf, int len,
 	}
 
 	if (info && info->peripheral_mask) {
-		for (i = 0; i <= NUM_PERIPHERALS; i++) {
-			if (info->peripheral_mask & (1 << i))
-				break;
+		if (info->peripheral_mask == DIAG_CON_ALL ||
+			(info->peripheral_mask & (1 << APPS_DATA)) ||
+			(info->peripheral_mask & (1 << PERIPHERAL_MODEM))) {
+			rsp_ctxt = SET_BUF_CTXT(APPS_DATA, TYPE_CMD, 1);
+		} else {
+			for (i = 0; i <= NUM_PERIPHERALS; i++) {
+				if (info->peripheral_mask & (1 << i))
+					break;
+			}
+			rsp_ctxt = SET_BUF_CTXT(i, TYPE_CMD, 1);
 		}
-		rsp_ctxt = SET_BUF_CTXT(i, TYPE_CMD, 1);
 	} else
 		rsp_ctxt = driver->rsp_buf_ctxt;
 
@@ -337,11 +343,17 @@ static void encode_rsp_and_send(unsigned char *buf, int len,
 	}
 
 	if (info && info->peripheral_mask) {
-		for (i = 0; i <= NUM_PERIPHERALS; i++) {
-			if (info->peripheral_mask & (1 << i))
-				break;
+		if (info->peripheral_mask == DIAG_CON_ALL ||
+			(info->peripheral_mask & (1 << APPS_DATA)) ||
+			(info->peripheral_mask & (1 << PERIPHERAL_MODEM))) {
+			rsp_ctxt = SET_BUF_CTXT(APPS_DATA, TYPE_CMD, 1);
+		} else {
+			for (i = 0; i <= NUM_PERIPHERALS; i++) {
+				if (info->peripheral_mask & (1 << i))
+					break;
+			}
+			rsp_ctxt = SET_BUF_CTXT(i, TYPE_CMD, 1);
 		}
-		rsp_ctxt = SET_BUF_CTXT(i, TYPE_CMD, 1);
 	} else
 		rsp_ctxt = driver->rsp_buf_ctxt;
 
@@ -1587,6 +1599,7 @@ int diagfwd_init(void)
 		driver->real_time_mode[i] = 1;
 	driver->supports_separate_cmdrsp = 1;
 	driver->supports_apps_hdlc_encoding = 1;
+	driver->supports_apps_header_untagging = 1;
 	mutex_init(&driver->diag_hdlc_mutex);
 	mutex_init(&driver->diag_cntl_mutex);
 	mutex_init(&driver->mode_lock);
@@ -1616,6 +1629,8 @@ int diagfwd_init(void)
 		driver->feature[i].rcvd_feature_mask = 0;
 		driver->feature[i].peripheral_buffering = 0;
 		driver->feature[i].encode_hdlc = 0;
+		driver->feature[i].untag_header =
+			DISABLE_PKT_HEADER_UNTAGGING;
 		driver->feature[i].mask_centralization = 0;
 		driver->feature[i].log_on_demand = 0;
 		driver->feature[i].sent_feature_mask = 0;
