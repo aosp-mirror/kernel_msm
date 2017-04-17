@@ -613,7 +613,7 @@ static int a5xx_hw_init(struct msm_gpu *gpu)
 
 	/* Set the GMEM VA range [0x100000:0x100000 + gpu->gmem - 1] */
 	gpu_write64(gpu, REG_A5XX_UCHE_GMEM_RANGE_MIN_LO,
-		REG_A5XX_UCHE_GMEM_RANGE_MIN_LO, 0x00100000);
+		REG_A5XX_UCHE_GMEM_RANGE_MIN_HI, 0x00100000);
 
 	gpu_write64(gpu, REG_A5XX_UCHE_GMEM_RANGE_MAX_LO,
 		REG_A5XX_UCHE_GMEM_RANGE_MAX_HI,
@@ -1210,6 +1210,9 @@ static const struct adreno_gpu_funcs funcs = {
 		.show = a5xx_show,
 #endif
 		.snapshot = a5xx_snapshot,
+		.get_counter = adreno_get_counter,
+		.read_counter = adreno_read_counter,
+		.put_counter = adreno_put_counter,
 	},
 	.get_timestamp = a5xx_get_timestamp,
 };
@@ -1332,6 +1335,8 @@ struct msm_gpu *a5xx_gpu_init(struct drm_device *dev)
 
 	/* Set up the preemption specific bits and pieces for each ringbuffer */
 	a5xx_preempt_init(gpu);
+
+	a5xx_counters_init(adreno_gpu);
 
 	return gpu;
 }

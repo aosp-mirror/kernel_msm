@@ -58,7 +58,7 @@ enum print_reason {
 /* voter identity held to suspend VBUS when the external booster is enabled. */
 #define EXTERNAL_BOOSTER_VOTER	"EXTERNAL_BOOSTER_VOTER"
 #define PD_SUSPEND_SUPPORTED_VOTER	"PD_SUSPEND_SUPPORTED_VOTER"
-#define PL_DELAY_HVDCP_VOTER		"PL_DELAY_HVDCP_VOTER"
+#define PL_DELAY_VOTER			"PL_DELAY_VOTER"
 #define CTM_VOTER			"CTM_VOTER"
 #define SW_QC3_VOTER			"SW_QC3_VOTER"
 #define AICL_RERUN_VOTER		"AICL_RERUN_VOTER"
@@ -297,6 +297,7 @@ struct smb_charger {
 	struct work_struct	vconn_oc_work;
 	struct delayed_work	otg_ss_done_work;
 	struct delayed_work	icl_change_work;
+	struct delayed_work	pl_enable_work;
 
 	/* cached status */
 	int			voltage_min_uv;
@@ -330,8 +331,6 @@ struct smb_charger {
 
 	/* extcon for VBUS / ID notification to USB for uUSB */
 	struct extcon_dev	*extcon;
-
-	int			icl_reduction_ua;
 
 	/* qnovo */
 	int			qnovo_fcc_ua;
@@ -509,9 +508,10 @@ int smblib_validate_initial_typec_legacy_status(struct smb_charger *chg);
 int smblib_get_prop_fcc_delta(struct smb_charger *chg,
 			       union power_supply_propval *val);
 int smblib_icl_override(struct smb_charger *chg, bool override);
-int smblib_set_icl_reduction(struct smb_charger *chg, int reduction_ua);
 int smblib_dp_dm(struct smb_charger *chg, int val);
 int smblib_rerun_aicl(struct smb_charger *chg);
+int smblib_set_icl_current(struct smb_charger *chg, int icl_ua);
+int smblib_get_charge_current(struct smb_charger *chg, int *total_current_ua);
 
 int smblib_init(struct smb_charger *chg);
 int smblib_deinit(struct smb_charger *chg);

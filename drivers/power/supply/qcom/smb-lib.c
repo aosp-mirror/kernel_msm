@@ -669,7 +669,7 @@ static void smblib_uusb_removal(struct smb_charger *chg)
 	/* reset both usbin current and voltage votes */
 	vote(chg->pl_enable_votable_indirect, USBIN_I_VOTER, false, 0);
 	vote(chg->pl_enable_votable_indirect, USBIN_V_VOTER, false, 0);
-	vote(chg->pl_disable_votable, PL_DELAY_HVDCP_VOTER, true, 0);
+	vote(chg->pl_disable_votable, PL_DELAY_VOTER, true, 0);
 
 	cancel_delayed_work_sync(&chg->hvdcp_detect_work);
 
@@ -2907,11 +2907,11 @@ int smblib_set_prop_pd_active(struct smb_charger *chg,
 		}
 
 		/* pd active set, parallel charger can be enabled now */
-		rc = vote(chg->pl_disable_votable, PL_DELAY_HVDCP_VOTER,
+		rc = vote(chg->pl_disable_votable, PL_DELAY_VOTER,
 				false, 0);
 		if (rc < 0) {
 			smblib_err(chg,
-				"Couldn't unvote PL_DELAY_HVDCP_VOTER rc=%d\n",
+				"Couldn't unvote PL_DELAY_VOTER rc=%d\n",
 				rc);
 			return rc;
 		}
@@ -3246,7 +3246,7 @@ int smblib_get_prop_fcc_delta(struct smb_charger *chg,
 #define TYPEC_DEFAULT_CURRENT_MA	900000
 #define TYPEC_MEDIUM_CURRENT_MA		1500000
 #define TYPEC_HIGH_CURRENT_MA		3000000
-static int smblib_get_charge_current(struct smb_charger *chg,
+int smblib_get_charge_current(struct smb_charger *chg,
 				int *total_current_ua)
 {
 	const struct apsd_result *apsd_result = smblib_update_usb_type(chg);
@@ -3327,33 +3327,6 @@ static int smblib_get_charge_current(struct smb_charger *chg,
 
 	*total_current_ua = max(current_ua, val.intval);
 	return 0;
-}
-
-int smblib_set_icl_reduction(struct smb_charger *chg, int reduction_ua)
-{
-	int current_ua, rc;
-
-	if (reduction_ua == 0) {
-		vote(chg->usb_icl_votable, PL_USBIN_USBIN_VOTER, false, 0);
-	} else {
-		/*
-		 * No usb_icl voter means we are defaulting to hw chosen
-		 * max limit. We need a vote from s/w to enforce the reduction.
-		 */
-		if (get_effective_result(chg->usb_icl_votable) == -EINVAL) {
-			rc = smblib_get_charge_current(chg, &current_ua);
-			if (rc < 0) {
-				pr_err("Failed to get ICL rc=%d\n", rc);
-				return rc;
-			}
-			vote(chg->usb_icl_votable, PL_USBIN_USBIN_VOTER, true,
-					current_ua);
-		}
-	}
-
-	chg->icl_reduction_ua = reduction_ua;
-
-	return rerun_election(chg->usb_icl_votable);
 }
 
 /************************
@@ -3745,7 +3718,7 @@ static void smblib_handle_hvdcp_3p0_auth_done(struct smb_charger *chg,
 	}
 
 	/* QC authentication done, parallel charger can be enabled now */
-	vote(chg->pl_disable_votable, PL_DELAY_HVDCP_VOTER, false, 0);
+	vote(chg->pl_disable_votable, PL_DELAY_VOTER, false, 0);
 
 	smblib_dbg(chg, PR_INTERRUPT, "IRQ: hvdcp-3p0-auth-done rising; %s detected\n",
 		   apsd_result->name);
@@ -3783,7 +3756,7 @@ static void smblib_handle_hvdcp_check_timeout(struct smb_charger *chg,
 		 * to complete.
 		 */
 		if (!qc_charger)
-			vote(chg->pl_disable_votable, PL_DELAY_HVDCP_VOTER,
+			vote(chg->pl_disable_votable, PL_DELAY_VOTER,
 					false, 0);
 	}
 
@@ -3862,7 +3835,7 @@ static void smblib_handle_apsd_done(struct smb_charger *chg, bool rising)
 		 */
 		vote(chg->pd_disallowed_votable_indirect, HVDCP_TIMEOUT_VOTER,
 				false, 0);
-		vote(chg->pl_disable_votable, PL_DELAY_HVDCP_VOTER, false, 0);
+		vote(chg->pl_disable_votable, PL_DELAY_VOTER, false, 0);
 		break;
 	case DCP_CHARGER_BIT:
 		if (chg->wa_flags & QC_CHARGER_DETECTION_WA_BIT)
@@ -4019,7 +3992,7 @@ static void smblib_handle_typec_removal(struct smb_charger *chg)
 
 	vote(chg->pd_disallowed_votable_indirect, CC_DETACHED_VOTER, true, 0);
 	vote(chg->pd_disallowed_votable_indirect, HVDCP_TIMEOUT_VOTER, true, 0);
-	vote(chg->pl_disable_votable, PL_DELAY_HVDCP_VOTER, true, 0);
+	vote(chg->pl_disable_votable, PL_DELAY_VOTER, true, 0);
 	vote(chg->usb_irq_enable_votable, PD_VOTER, false, 0);
 	vote(chg->usb_irq_enable_votable, QC_VOTER, false, 0);
 
@@ -4076,7 +4049,7 @@ static void smblib_handle_typec_insertion(struct smb_charger *chg,
 			|| rp == POWER_SUPPLY_TYPEC_NON_COMPLIANT) {
 		smblib_dbg(chg, PR_MISC, "VBUS & CC could be shorted; keeping HVDCP disabled\n");
 		/* HVDCP is not going to be enabled; enable parallel */
-		vote(chg->pl_disable_votable, PL_DELAY_HVDCP_VOTER, false, 0);
+		vote(chg->pl_disable_votable, PL_DELAY_VOTER, false, 0);
 		vote(chg->hvdcp_disable_votable_indirect, VBUS_CC_SHORT_VOTER,
 								true, 0);
 	} else {
@@ -4601,7 +4574,7 @@ static int smblib_create_votables(struct smb_charger *chg)
 		return rc;
 	}
 	vote(chg->pl_disable_votable, PL_INDIRECT_VOTER, true, 0);
-	vote(chg->pl_disable_votable, PL_DELAY_HVDCP_VOTER, true, 0);
+	vote(chg->pl_disable_votable, PL_DELAY_VOTER, true, 0);
 
 	chg->dc_suspend_votable = create_votable("DC_SUSPEND", VOTE_SET_ANY,
 					smblib_dc_suspend_vote_callback,
