@@ -30,6 +30,9 @@
 #define DT_CMD_HDR 6
 #define DEFAULT_MDP_TRANSFER_TIME 14000
 
+/* backlight level to use as threshold for picking ALPM low/high mode */
+#define ALPM_BL_THRESHOLD 30
+
 #define VSYNC_DELAY msecs_to_jiffies(17)
 
 DEFINE_LED_TRIGGER(bl_led_trigger);
@@ -239,6 +242,46 @@ static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 	cmdreq.cb = NULL;
 
 	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+}
+
+static void mdss_dsi_panel_set_alpm_mode(struct mdss_dsi_ctrl_pdata *ctrl,
+					 enum alpm_mode_type mode,
+					 u32 extra_flags)
+{
+	struct dsi_panel_cmds *pcmds;
+
+	if ((mode < 0) || (mode >= ALPM_MODE_MAX)) {
+		pr_err("Invalid alpm_mode=%d\n", mode);
+		return;
+	}
+
+	pcmds = &ctrl->alpm_mode_cmds[mode];
+	if (pcmds->cmd_cnt == 0) {
+		pr_warn("%s: alpm mode=%d not supported\n", __func__, mode);
+		return;
+	}
+
+	pr_debug("%s: ndx=%d mode=0x%02x\n", __func__, ctrl->ndx, mode);
+	mdss_dsi_panel_cmds_send(ctrl, pcmds, CMD_REQ_COMMIT);
+}
+
+static void mdss_dsi_bl_update_alpm_mode(struct mdss_dsi_ctrl_pdata *ctrl,
+					 u32 bl_level)
+{
+	enum alpm_mode_type alpm_mode;
+
+	if (!bl_level)
+		alpm_mode = ALPM_MODE_OFF;
+	else
+		alpm_mode = bl_level < ALPM_BL_THRESHOLD ?
+				ALPM_MODE_LOW : ALPM_MODE_HIGH;
+
+	if (alpm_mode != ctrl->alpm_mode) {
+		ctrl->alpm_mode = alpm_mode;
+		if (ctrl->ctrl_state & CTRL_STATE_PANEL_LP)
+			mdss_dsi_panel_set_alpm_mode(ctrl, alpm_mode,
+						     CMD_CLK_CTRL);
+	}
 }
 
 static int mdss_dsi_request_gpios(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
@@ -801,6 +844,9 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 	if ((bl_level < pdata->panel_info.bl_min) && (bl_level != 0))
 		bl_level = pdata->panel_info.bl_min;
 
+	if (pdata->panel_info.alpm_feature_enabled)
+		mdss_dsi_bl_update_alpm_mode(ctrl_pdata, bl_level);
+
 	switch (ctrl_pdata->bklt_ctrl) {
 	case BL_WLED:
 		led_trigger_event(bl_led_trigger, bl_level);
@@ -979,7 +1025,12 @@ static int mdss_dsi_panel_low_power_config(struct mdss_panel_data *pdata,
 	pr_debug("%s: ctrl=%pK ndx=%d enable=%d\n", __func__, ctrl, ctrl->ndx,
 		enable);
 
-	/* Any panel specific low power commands/config */
+	if (pinfo->alpm_feature_enabled) {
+		enum alpm_mode_type mode;
+
+		mode = enable ? ctrl->alpm_mode : ALPM_MODE_OFF;
+		mdss_dsi_panel_set_alpm_mode(ctrl, mode, 0);
+	}
 
 	pr_debug("%s:-\n", __func__);
 	return 0;
@@ -1058,7 +1109,7 @@ static int mdss_dsi_parse_dcs_cmds(struct device_node *np,
 
 	data = of_get_property(np, cmd_key, &blen);
 	if (!data) {
-		pr_err("%s: failed, key=%s\n", __func__, cmd_key);
+		pr_debug("%s: failed, key=%s\n", __func__, cmd_key);
 		return -ENOMEM;
 	}
 
@@ -2058,6 +2109,20 @@ static void mdss_dsi_parse_partial_update_caps(struct device_node *np,
 	}
 }
 
+static void mdss_dsi_parse_alpm_modes(struct device_node *np,
+	struct mdss_dsi_ctrl_pdata *ctrl)
+{
+	if (!mdss_dsi_parse_dcs_cmds(np, &ctrl->alpm_mode_cmds[ALPM_MODE_OFF],
+				    "qcom,alpm-off-command", NULL) &&
+	    !mdss_dsi_parse_dcs_cmds(np, &ctrl->alpm_mode_cmds[ALPM_MODE_LOW],
+				    "qcom,alpm-low-command", NULL) &&
+	    !mdss_dsi_parse_dcs_cmds(np, &ctrl->alpm_mode_cmds[ALPM_MODE_HIGH],
+				    "qcom,alpm-high-command", NULL))
+		ctrl->panel_data.panel_info.alpm_feature_enabled = true;
+	else
+		ctrl->panel_data.panel_info.alpm_feature_enabled = false;
+}
+
 static int mdss_dsi_parse_panel_features(struct device_node *np,
 	struct mdss_dsi_ctrl_pdata *ctrl)
 {
@@ -2115,6 +2180,8 @@ static int mdss_dsi_parse_panel_features(struct device_node *np,
 
 	mdss_dsi_parse_dcs_cmds(np, &ctrl->lp_off_cmds,
 			"qcom,mdss-dsi-lp-mode-off", "qcom,mdss-dsi-lp-change-state");
+
+	mdss_dsi_parse_alpm_modes(np, ctrl);
 
 	return 0;
 }
@@ -2888,6 +2955,7 @@ int mdss_dsi_panel_init(struct device_node *node,
 	ctrl_pdata->panel_data.apply_display_setting =
 			mdss_dsi_panel_apply_display_setting;
 	ctrl_pdata->switch_mode = mdss_dsi_panel_switch_mode;
+	ctrl_pdata->alpm_mode = ALPM_MODE_OFF;
 
 	return 0;
 }
