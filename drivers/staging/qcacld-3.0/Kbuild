@@ -1675,6 +1675,8 @@ ifeq ($(cc-name),clang)
 EXTRA_CFLAGS += -Wno-error-enum-conversion
 EXTRA_CFLAGS += -Wno-error-pointer-bool-conversion
 EXTRA_CFLAGS += -Wno-error-typedef-redefinition
+EXTRA_CFLAGS += $(call cc-option,-Wno-error-address-of-packed-member)
+EXTRA_CFLAGS += $(call cc-option,-Wno-error-logical-not-parentheses)
 EXTRA_CFLAGS += -Wno-parentheses-equality
 EXTRA_CFLAGS += -Wframe-larger-than=3072
 endif
