@@ -849,6 +849,16 @@ config SENSORS_MAX6697
 	  This driver can also be built as a module.  If so, the module
 	  will be called max6697.
 
+config SENSORS_MAX31760
+	tristate "Maxim MAX31760 fan controller"
+	depends on I2C
+	help
+	  If you say yes here you get support for the Maxim Integrated
+	  MAX31760 Precision Fan-Speed Controller.
+
+	  This driver can also be built as a module.  If so, the module
+	  will be called max31760.
+
 config SENSORS_MAX31790
 	tristate "Maxim MAX31790 sensor chip"
 	depends on I2C
