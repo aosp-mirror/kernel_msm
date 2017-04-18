@@ -26,6 +26,8 @@
 #define RAMLOG_COMPATIBLE_NAME "htc,bldr_log"
 #define RAMLOG_LAST_RSE_NAME "bl_old_log"
 #define RAMLOG_CUR_RSE_NAME "bl_log"
+#define BLDR_LAST_TZ_LOG_START_TAG "------ TZBSP DIAG RING BUFF, each line for an individual log ------"
+#define BLDR_LAST_TZ_LOG_END_TAG "---------------- END Extracted TZBSP Log --------------------------"
 
 #define BOOT_DEBUG_MAGIC		0xAACCBBDD
 
@@ -37,7 +39,9 @@ struct bldr_log_header {
 };
 
 char *bl_last_log_buf, *bl_cur_log_buf;
+char *bl_last_tz_log_buf;
 unsigned long bl_last_log_buf_size, bl_cur_log_buf_size;
+size_t bl_last_tz_log_buf_size;
 
 static int bldr_log_check_header(struct bldr_log_header *header, unsigned long bldr_log_size)
 {
@@ -117,35 +121,63 @@ ssize_t bldr_log_read_once(char __user *userbuf, ssize_t klog_size)
 	return len;
 }
 
+/**
+ * Read last bootloader logs, current bootloader logs, kernel logs,
+ * last bootloader TZ logs in that order.
+ *
+ * Handle reads that overlap different regions so the file appears like one
+ * file to the reader.
+ */
 ssize_t bldr_log_read(const void *lastk_buf, ssize_t lastk_size, char __user *userbuf,
 						size_t count, loff_t *ppos)
 {
 	loff_t pos;
-	unsigned long total;
+	ssize_t total_len = 0;
 	ssize_t len;
+	int i;
+
+	struct {
+		const char *buf;
+		const ssize_t size;
+	} log_regions[] = {
+		{ .buf = bl_last_log_buf,    .size = bl_last_log_buf_size },
+		{ .buf = bl_cur_log_buf,     .size = bl_cur_log_buf_size, },
+		{ .buf = lastk_buf,	     .size = lastk_size },
+		{ .buf = bl_last_tz_log_buf, .size = bl_last_tz_log_buf_size }
+	};
 
 	pos = *ppos;
-	total = lastk_size + bl_last_log_buf_size + bl_cur_log_buf_size;
-	if (pos < bl_last_log_buf_size) {
-		len = simple_read_from_buffer(userbuf, count, &pos, bl_last_log_buf, bl_last_log_buf_size);
-	} else if (pos < lastk_size + bl_last_log_buf_size) {
-		pos -= bl_last_log_buf_size;
-		len = simple_read_from_buffer(userbuf, count, &pos, lastk_buf, lastk_size);
-	} else {
-		pos -= (bl_last_log_buf_size + lastk_size);
-		len = simple_read_from_buffer(userbuf, count, &pos, bl_cur_log_buf, bl_cur_log_buf_size);
+	if (pos < 0)
+		return -EINVAL;
+
+	if (!count)
+		return 0;
+
+	for (i = 0; i < ARRAY_SIZE(log_regions); ++i) {
+		if (pos < log_regions[i].size && log_regions[i].buf != NULL) {
+			len = simple_read_from_buffer(userbuf, count, &pos,
+				log_regions[i].buf, log_regions[i].size);
+			if (len < 0)
+				return len;
+			count -= len;
+			userbuf += len;
+			total_len += len;
+		}
+		pos -= log_regions[i].size;
+		if (pos < 0)
+			break;
 	}
 
-	if (len > 0)
-		*ppos += len;
-
-	return len;
+	*ppos += total_len;
+	return total_len;
 }
 
 int bldr_log_setup(phys_addr_t bldr_phy_addr, size_t bldr_log_size, bool is_last_bldr)
 {
 	char *bldr_base;
 	int ret = 0;
+	char *bl_last_tz_log_start;
+	char *bl_last_tz_log_end;
 
 	if (!bldr_log_size) {
 		ret = EINVAL;
@@ -169,6 +201,30 @@ int bldr_log_setup(phys_addr_t bldr_phy_addr, size_t bldr_log_size, bool is_last
 		} else {
 			pr_info("bootloader_log: allocate buffer for last bootloader log, size: %zu\n", bldr_log_size);
 			bldr_log_parser(bldr_base, bl_last_log_buf, bldr_log_size, &bl_last_log_buf_size);
+
+			bl_last_tz_log_start = strnstr(bl_last_log_buf,
+				BLDR_LAST_TZ_LOG_START_TAG, bldr_log_size);
+			if (bl_last_tz_log_start == NULL)
+				goto _unmap;
+
+			bl_last_tz_log_end = strnstr(bl_last_log_buf,
+				BLDR_LAST_TZ_LOG_END_TAG, bldr_log_size);
+			if (bl_last_tz_log_end == NULL)
+				goto _unmap;
+
+			bl_last_tz_log_end += strlen(BLDR_LAST_TZ_LOG_END_TAG);
+			if (bl_last_tz_log_start >= bl_last_tz_log_end)
+				goto _unmap;
+
+			bl_last_tz_log_buf_size = bl_last_tz_log_end - bl_last_tz_log_start;
+			bl_last_tz_log_buf = kmalloc(bl_last_tz_log_buf_size, GFP_KERNEL);
+			if (!bl_last_tz_log_buf) {
+				bl_last_tz_log_buf_size = 0;
+				goto _unmap;
+			}
+
+			memcpy(bl_last_tz_log_buf, bl_last_tz_log_start,
+			       bl_last_tz_log_buf_size);
 		}
 	} else {
 		bl_cur_log_buf = kmalloc(bldr_log_size, GFP_KERNEL);
