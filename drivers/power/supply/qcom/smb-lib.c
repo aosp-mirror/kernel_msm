@@ -1415,6 +1415,9 @@ static int _smblib_otg_disable(struct smb_charger *chg)
 		return rc;
 	}
 
+	if (chg->usb_icl_votable)
+		vote(chg->usb_icl_votable, USBIN_USBIN_BOOST_VOTER, false, 0);
+
 	return rc;
 }
 
@@ -1442,10 +1445,6 @@ static int smblib_otg_is_enabled_locked(struct smb_charger *chg)
 	}
 
 	rc = (cmd & OTG_EN_BIT) ? 1 : 0;
-
-	if (chg->usb_icl_votable)
-		vote(chg->usb_icl_votable, USBIN_USBIN_BOOST_VOTER, false, 0);
-
 	return rc;
 }
 
