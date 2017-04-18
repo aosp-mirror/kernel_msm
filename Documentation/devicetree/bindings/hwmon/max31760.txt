@@ -1,0 +1,73 @@
+MAX31760 fan controller
+-----------------------
+
+This device supports I2C only. Fan sub-nodes must be defined in order to enable
+the fan tachometer input. See also the datasheet:
+https://datasheets.maximintegrated.com/en/ds/MAX31760.pdf
+
+Required node properties:
+ - compatible: "maxim,max31760"
+ - reg: The I2C address of the device. This is 0x50 - 0x57 depending on the
+   hardware configuration.
+ - #address-cells: Must be 1.
+ - #size-cells: Must be 0.
+
+Optional node properties:
+ - maxim,fan-fail-full-only: Boolean; Fan failure can be asserted if and only if
+   the PWM is set at 100%.
+ - maxim,fan-rd-signal: Boolean; Fans provide a rotation detection (RD) signal
+   instead of generating square-wave pulses.
+ - maxim,fan-rd-polarity-high: Boolean; If true, RD is high when the fan is
+   running; otherwise, it is low. Only relevant when fan-rd-signal is true.
+ - maxim,fan-signal-enabled: Boolean; Externally driving FF/FS low forces PWM
+   output to 100%.
+ - maxim,fan-spin-up-enabled: Boolean; On fan startup set the PWM to 100% until
+   tach is detected or two seconds have passed before reducing to the target
+   value.
+ - maxim,pwm-polarity-negative: Boolean; If trye, 100% PWM is when PWM is low,
+   not high.
+ - maxim,pwm-pulse-stretch-enabled: Boolean; Enable PWM pulse stretching.
+ - maxim,pwm-zero-fan-can-fail: Boolean; Enable fan failure detection while
+   ramping to 0% PWM.
+
+Fan sub-nodes must be present in order to enable the fan.
+
+Required fan sub-node properties:
+ - reg: Fan address. Must be <0x00> or <0x01>.
+
+Optional fan sub-node properties:
+ - label: String; Assigned to the hwmon fanX_label property.
+
+Temperature sub-nodes are optional.
+
+Required temp sub-node properties:
+ - reg: Temperature sensor address. Must be <0x00> or <0x01>.
+
+Optional temp sub-node properties:
+ - label: String; Assigned to the hwmon tempX_label property.
+ - ideality: For temperature node with reg 1 only: Set ideality factor for the
+   remote temperature sensor. Integer with range 0 to 63, representing a
+   multiplication factor of 0.9844 to 1.0489. Default: 24 (1.0080).
+
+Example:
+	max31760@50 {
+		compatible = "maxim,max31760";
+		reg = <0x50>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		maxim,fan-spin-up-enabled;
+
+		fan@0 {
+			reg = <0x00>;
+			label = "Left";
+		};
+		fan@1 {
+			reg = <0x01>;
+			label = "Right";
+		};
+		temp@1 {
+			reg = <0x01>;
+			label = "CPU";
+		};
+	};
