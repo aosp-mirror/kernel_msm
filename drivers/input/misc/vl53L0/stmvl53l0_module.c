@@ -684,7 +684,7 @@ static void stmvl53l0_DebugTimeDuration(struct timeval *pstart_tv,
 }
 #endif
 
-static void stmvl53l0_setupAPIFunctions(struct stmvl53l0_data *data)
+static int stmvl53l0_setupAPIFunctions(struct stmvl53l0_data *data)
 {
     uint8_t revision = 0;
     VL53L0_DEV vl53l0_dev = data;
@@ -794,119 +794,9 @@ static void stmvl53l0_setupAPIFunctions(struct stmvl53l0_data *data)
     } else if (revision == 0) {
         /*cut 1.0*/
         vl53l0_errmsg("to setup API cut 1.0\n");
-        papi_func_tbl->GetVersion = VL53L010_GetVersion;
-        papi_func_tbl->GetPalSpecVersion = VL53L010_GetPalSpecVersion;
-        //papi_func_tbl->GetProductRevision = NULL;
-        papi_func_tbl->GetDeviceInfo = VL53L010_GetDeviceInfo;
-        papi_func_tbl->GetDeviceErrorStatus = VL53L010_GetDeviceErrorStatus;
-        papi_func_tbl->GetDeviceErrorString = VL53L010_GetDeviceErrorString;
-        papi_func_tbl->GetPalErrorString = VL53L010_GetPalErrorString;
-        papi_func_tbl->GetPalState = VL53L010_GetPalState;
-        papi_func_tbl->SetPowerMode = VL53L010_SetPowerMode;
-        papi_func_tbl->GetPowerMode = VL53L010_GetPowerMode;
-        papi_func_tbl->SetOffsetCalibrationDataMicroMeter =
-            VL53L010_SetOffsetCalibrationDataMicroMeter;
-        papi_func_tbl->GetOffsetCalibrationDataMicroMeter =
-            VL53L010_GetOffsetCalibrationDataMicroMeter;
-        papi_func_tbl->SetGroupParamHold = VL53L010_SetGroupParamHold;
-        papi_func_tbl->GetUpperLimitMilliMeter = VL53L010_GetUpperLimitMilliMeter;
-        papi_func_tbl->SetDeviceAddress = VL53L010_SetDeviceAddress;
-        papi_func_tbl->DataInit = VL53L010_DataInit;
-        /*
-           papi_func_tbl->SetTuningSettingBuffer = NULL;
-           papi_func_tbl->GetTuningSettingBuffer = NULL;
-           */
-        papi_func_tbl->StaticInit = VL53L010_StaticInit;
-        papi_func_tbl->WaitDeviceBooted = VL53L010_WaitDeviceBooted;
-        papi_func_tbl->ResetDevice = VL53L010_ResetDevice;
-        papi_func_tbl->SetDeviceParameters = VL53L010_SetDeviceParameters;
-        papi_func_tbl->SetDeviceMode = VL53L010_SetDeviceMode;
-        papi_func_tbl->GetDeviceMode = VL53L010_GetDeviceMode;
-        papi_func_tbl->SetHistogramMode = VL53L010_SetHistogramMode;
-        papi_func_tbl->GetHistogramMode = VL53L010_GetHistogramMode;
-        papi_func_tbl->SetMeasurementTimingBudgetMicroSeconds =
-            VL53L010_SetMeasurementTimingBudgetMicroSeconds;
-        papi_func_tbl->GetMeasurementTimingBudgetMicroSeconds =
-            VL53L010_GetMeasurementTimingBudgetMicroSeconds;
-        /*
-           papi_func_tbl->GetVcselPulsePeriod = NULL;
-           papi_func_tbl->SetVcselPulsePeriod = NULL;
-           papi_func_tbl->SetSequenceStepEnable = NULL;
-           papi_func_tbl->GetSequenceStepEnable = NULL;
-           papi_func_tbl->GetSequenceStepEnables = NULL;
-           papi_func_tbl->SetSequenceStepTimeout = NULL;
-           papi_func_tbl->GetSequenceStepTimeout = NULL;
-           papi_func_tbl->GetNumberOfSequenceSteps =NULL;
-           papi_func_tbl->GetSequenceStepsInfo = NULL;
-           */
-        papi_func_tbl->SetInterMeasurementPeriodMilliSeconds =
-            VL53L010_SetInterMeasurementPeriodMilliSeconds;
-        papi_func_tbl->GetInterMeasurementPeriodMilliSeconds =
-            VL53L010_GetInterMeasurementPeriodMilliSeconds;
-        papi_func_tbl->SetXTalkCompensationEnable =
-            VL53L010_SetXTalkCompensationEnable;
-        papi_func_tbl->GetXTalkCompensationEnable =
-            VL53L010_GetXTalkCompensationEnable;
-        papi_func_tbl->SetXTalkCompensationRateMegaCps =
-            VL53L010_SetXTalkCompensationRateMegaCps;
-        papi_func_tbl->GetXTalkCompensationRateMegaCps =
-            VL53L010_GetXTalkCompensationRateMegaCps;
-        papi_func_tbl->GetNumberOfLimitCheck = VL53L010_GetNumberOfLimitCheck;
-        papi_func_tbl->GetLimitCheckInfo = VL53L010_GetLimitCheckInfo;
-        papi_func_tbl->SetLimitCheckEnable = VL53L010_SetLimitCheckEnable;
-        papi_func_tbl->GetLimitCheckEnable = VL53L010_GetLimitCheckEnable;
-        papi_func_tbl->SetLimitCheckValue = VL53L010_SetLimitCheckValue;
-        papi_func_tbl->GetLimitCheckValue = VL53L010_GetLimitCheckValue;
-        papi_func_tbl->GetLimitCheckCurrent = VL53L010_GetLimitCheckCurrent;
-        papi_func_tbl->SetWrapAroundCheckEnable =
-            VL53L010_SetWrapAroundCheckEnable;
-        papi_func_tbl->GetWrapAroundCheckEnable =
-            VL53L010_GetWrapAroundCheckEnable;
-        papi_func_tbl->PerformSingleMeasurement =
-            VL53L010_PerformSingleMeasurement;
-        //papi_func_tbl->PerformRefCalibration = VL53L010_PerformRefCalibration;
-        papi_func_tbl->PerformRefCalibration = NULL;
-        papi_func_tbl->SetRefCalibration = NULL;
-        papi_func_tbl->GetRefCalibration = NULL;
-        papi_func_tbl->PerformXTalkCalibration = VL53L010_PerformXTalkCalibration;
-        papi_func_tbl->PerformOffsetCalibration =
-            VL53L010_PerformOffsetCalibration;
-        papi_func_tbl->StartMeasurement = VL53L010_StartMeasurement;
-        papi_func_tbl->StopMeasurement = VL53L010_StopMeasurement;
-        papi_func_tbl->GetMeasurementDataReady = VL53L010_GetMeasurementDataReady;
-        papi_func_tbl->WaitDeviceReadyForNewMeasurement =
-            VL53L010_WaitDeviceReadyForNewMeasurement;
-        papi_func_tbl->GetRangingMeasurementData =
-            VL53L010_GetRangingMeasurementData;
-        papi_func_tbl->GetHistogramMeasurementData =
-            VL53L010_GetHistogramMeasurementData;
-        papi_func_tbl->PerformSingleRangingMeasurement =
-            VL53L010_PerformSingleRangingMeasurement;
-        papi_func_tbl->PerformSingleHistogramMeasurement =
-            VL53L010_PerformSingleHistogramMeasurement;
-        papi_func_tbl->SetNumberOfROIZones = VL53L010_SetNumberOfROIZones;
-        papi_func_tbl->GetNumberOfROIZones = VL53L010_GetNumberOfROIZones;
-        papi_func_tbl->GetMaxNumberOfROIZones = VL53L010_GetMaxNumberOfROIZones;
-        papi_func_tbl->SetGpioConfig = VL53L010_SetGpioConfig;
-        papi_func_tbl->GetGpioConfig = VL53L010_GetGpioConfig;
-        papi_func_tbl->SetInterruptThresholds = VL53L010_SetInterruptThresholds;
-        papi_func_tbl->GetInterruptThresholds = VL53L010_GetInterruptThresholds;
-        papi_func_tbl->ClearInterruptMask = VL53L010_ClearInterruptMask;
-        papi_func_tbl->GetInterruptMaskStatus = VL53L010_GetInterruptMaskStatus;
-        papi_func_tbl->EnableInterruptMask = VL53L010_EnableInterruptMask;
-        papi_func_tbl->SetSpadAmbientDamperThreshold =
-            VL53L010_SetSpadAmbientDamperThreshold;
-        papi_func_tbl->GetSpadAmbientDamperThreshold =
-            VL53L010_GetSpadAmbientDamperThreshold;
-        papi_func_tbl->SetSpadAmbientDamperFactor =
-            VL53L010_SetSpadAmbientDamperFactor;
-        papi_func_tbl->GetSpadAmbientDamperFactor =
-            VL53L010_GetSpadAmbientDamperFactor;
-        papi_func_tbl->PerformRefSpadManagement =NULL;
-        papi_func_tbl->SetReferenceSpads = NULL;
-        papi_func_tbl->GetReferenceSpads = NULL;
+        return -EIO;
     }
-
+    return 0;
 }
 
 static void stmvl53l0_ps_read_measurement(struct stmvl53l0_data *data)
@@ -3521,18 +3411,20 @@ int stmvl53l0_setup(struct stmvl53l0_data *data)
 #endif // HTC
     data->miscdev.fops = &stmvl53l0_ranging_fops;
     vl53l0_errmsg("Misc device registration name:%s\n", data->dev_name);
-    if (misc_register(&data->miscdev) != 0)
+    if (misc_register(&data->miscdev) != 0) {
         vl53l0_errmsg("Could not register misc. dev for stmvl53l0 ranging\n");
+        goto exit_unregister_dev_ps_1;
+    }
 #ifdef HTC
     data->laser_class = class_create(THIS_MODULE,
                                      data->sensor_dev->of_node->name);
     if (IS_ERR(data->laser_class)) {
-        goto exit_unregister_dev_ps_1;
+        goto exit_deregister_misc;
     }
 
     data->laser_dev = device_create(data->laser_class, NULL, 0, "%s", "laser");
     if (IS_ERR(data->laser_dev)) {
-        goto exit_unregister_dev_ps_1;
+        goto exit_deregister_misc;
     }
     dev_set_drvdata(data->laser_dev, data);
 
@@ -3565,7 +3457,11 @@ int stmvl53l0_setup(struct stmvl53l0_data *data)
     data->comms_speed_khz = 400;
 
     /* Setup API functions based on revision */
-    stmvl53l0_setupAPIFunctions(data);
+    rc = stmvl53l0_setupAPIFunctions(data);
+    if(rc < 0) {
+        vl53l0_errmsg("%d error:%d\n", __LINE__, rc);
+        goto exit_err_file_create;
+    }
 
 #ifndef HTC
     /* Perform Ref and RefSpad calibrations and save the values */
@@ -3586,6 +3482,8 @@ exit_err_file_create:
         device_remove_file(data->laser_dev, attributes + attr_cnt);
     device_unregister(data->laser_dev);
 #endif //HTC
+exit_deregister_misc:
+    misc_deregister(&data->miscdev);
 exit_unregister_dev_ps_1:
     kobject_put(data->range_kobj);
 exit_unregister_dev_ps:
