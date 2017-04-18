@@ -94,6 +94,18 @@ enum {
 /*******
  * ICL *
 ********/
+static void find_usb_icl_votable(struct pl_data *chip)
+{
+	if (!chip->usb_icl_votable) {
+		chip->usb_icl_votable = find_votable("USB_ICL");
+
+		if (!chip->usb_icl_votable) {
+			pr_err("Couldn't find USB_ICL votable\n");
+			return;
+		}
+	}
+}
+
 static void split_settled(struct pl_data *chip)
 {
 	int slave_icl_pct, total_current_ua;
@@ -123,6 +135,10 @@ static void split_settled(struct pl_data *chip)
 						* slave_icl_pct) / 100;
 		total_settled_ua = main_settled_ua + chip->pl_settled_ua;
 	}
+
+	find_usb_icl_votable(chip);
+	if (!chip->usb_icl_votable)
+		return;
 
 	total_current_ua = get_effective_result_locked(chip->usb_icl_votable);
 	if (total_current_ua < 0) {
@@ -511,59 +527,6 @@ static int pl_fv_vote_callback(struct votable *votable, void *data,
 	return 0;
 }
 
-#define ICL_STEP_UV	25000
-static int usb_icl_vote_callback(struct votable *votable, void *data,
-			int icl_ua, const char *client)
-{
-	int rc;
-	struct pl_data *chip = data;
-	union power_supply_propval pval = {0, };
-
-	if (!chip->main_psy)
-		return 0;
-
-	if (client == NULL)
-		icl_ua = INT_MAX;
-
-	/*
-	 * Disable parallel for new ICL vote - the call to split_settled will
-	 * ensure that all the input current limit gets assigned to the main
-	 * charger.
-	 */
-	vote(chip->pl_disable_votable, ICL_CHANGE_VOTER, true, 0);
-
-	/* rerun AICL */
-	/* get the settled current */
-	rc = power_supply_get_property(chip->main_psy,
-			       POWER_SUPPLY_PROP_INPUT_CURRENT_SETTLED,
-			       &pval);
-	if (rc < 0) {
-		pr_err("Couldn't get aicl settled value rc=%d\n", rc);
-		return rc;
-	}
-
-	/* rerun AICL if new ICL is above settled ICL */
-	if (icl_ua > pval.intval) {
-		/* set a lower ICL */
-		pval.intval = max(pval.intval - ICL_STEP_UV, ICL_STEP_UV);
-		power_supply_set_property(chip->main_psy,
-				POWER_SUPPLY_PROP_CURRENT_MAX,
-				&pval);
-		/* wait for ICL change */
-		msleep(100);
-
-		pval.intval = icl_ua;
-		power_supply_set_property(chip->main_psy,
-				POWER_SUPPLY_PROP_CURRENT_MAX,
-				&pval);
-		/* wait for ICL change */
-		msleep(100);
-	}
-	vote(chip->pl_disable_votable, ICL_CHANGE_VOTER, false, 0);
-
-	return 0;
-}
-
 static void pl_disable_forever_work(struct work_struct *work)
 {
 	struct pl_data *chip = container_of(work,
@@ -678,8 +641,12 @@ static bool is_main_available(struct pl_data *chip)
 
 	chip->main_psy = power_supply_get_by_name("main");
 
-	if (chip->main_psy)
+	if (chip->main_psy) {
+		find_usb_icl_votable(chip);
+		if (!chip->usb_icl_votable)
+			return false;
 		rerun_election(chip->usb_icl_votable);
+	}
 
 	return !!chip->main_psy;
 }
@@ -941,14 +908,6 @@ static int pl_init(void)
 		goto destroy_votable;
 	}
 
-	chip->usb_icl_votable = create_votable("USB_ICL", VOTE_MIN,
-					usb_icl_vote_callback,
-					chip);
-	if (IS_ERR(chip->usb_icl_votable)) {
-		rc = PTR_ERR(chip->usb_icl_votable);
-		goto destroy_votable;
-	}
-
 	chip->pl_disable_votable = create_votable("PL_DISABLE", VOTE_SET_ANY,
 					pl_disable_vote_callback,
 					chip);
@@ -1003,7 +962,6 @@ destroy_votable:
 	destroy_votable(chip->pl_disable_votable);
 	destroy_votable(chip->fv_votable);
 	destroy_votable(chip->fcc_votable);
-	destroy_votable(chip->usb_icl_votable);
 release_wakeup_source:
 	wakeup_source_unregister(chip->pl_ws);
 cleanup:
