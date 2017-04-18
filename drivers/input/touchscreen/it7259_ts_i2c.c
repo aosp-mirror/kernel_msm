@@ -219,6 +219,7 @@ struct it7259_ts_data {
 	struct pinctrl_state *pinctrl_state_active;
 	struct pinctrl_state *pinctrl_state_suspend;
 	struct pinctrl_state *pinctrl_state_release;
+	bool palm_pressed;
 };
 
 /* Function declarations */
@@ -1662,13 +1663,12 @@ static irqreturn_t it7259_ts_threaded_handler(int irq, void *devid)
 	 * from the DT.
 	 */
 	palm_detected = pt_data.gesture_id & PD_PALM_FLAG_BIT;
-	if (palm_detected && ts_data->pdata->palm_detect_en) {
+	if ((!ts_data->palm_pressed) && palm_detected &&
+			ts_data->pdata->palm_detect_en) {
 		input_report_key(input_dev,
 				ts_data->pdata->palm_detect_keycode, 1);
 		input_sync(input_dev);
-		input_report_key(input_dev,
-				ts_data->pdata->palm_detect_keycode, 0);
-		input_sync(input_dev);
+		ts_data->palm_pressed = true;
 	}
 
 #ifdef	CONFIG_BEZEL_SUPPORT
@@ -1738,6 +1738,12 @@ static irqreturn_t it7259_ts_threaded_handler(int irq, void *devid)
 
 	if(!ts_data->bdata->bezel_touch_status) {
 		input_report_key(input_dev, BTN_TOUCH, touch_count > 0);
+		if (ts_data->palm_pressed && ts_data->pdata->palm_detect_en &&
+				(!palm_detected)) {
+			input_report_key(input_dev,
+					ts_data->pdata->palm_detect_keycode, 0);
+			ts_data->palm_pressed = false;
+		}
 		input_sync(input_dev);
 	}
 #ifdef	CONFIG_BEZEL_SUPPORT
@@ -1748,7 +1754,6 @@ static irqreturn_t it7259_ts_threaded_handler(int irq, void *devid)
 		ts_data->bdata->bezel_touch_status = false;
 	}
 #endif
-
 
 	return IRQ_HANDLED;
 }
@@ -2371,6 +2376,8 @@ static int it7259_ts_probe(struct i2c_client *client,
 		dev_err(&client->dev, "No platform data found\n");
 		return -ENOMEM;
 	}
+
+	ts_data->palm_pressed = false;
 
 #ifdef	CONFIG_BEZEL_SUPPORT
 	bdata = devm_kzalloc(&client->dev, sizeof(*bdata), GFP_KERNEL);
