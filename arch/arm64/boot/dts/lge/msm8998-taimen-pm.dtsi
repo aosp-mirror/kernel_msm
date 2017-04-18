@@ -9,6 +9,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+#include <dt-bindings/msm/power-on.h>
 
 &soc {
 	taimen_batterydata: qcom,battery-data {
@@ -250,6 +251,8 @@
 		qcom,power-on@800 {
 			qcom,s3-debounce = <16>;
 			qcom,s3-src = "kpdpwr";
+			qcom,hard-reset-poweroff-type =
+				<PON_POWER_OFF_WARM_RESET>;
 			qcom,pon_1 {  /* KPD_PWR_N */
 				qcom,support-reset = <1>;
 				qcom,s1-timer = <6720>;
