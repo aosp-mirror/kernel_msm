@@ -49,6 +49,7 @@
 #include <linux/firmware.h>
 #include <linux/regulator/consumer.h>
 #include <linux/of_gpio.h>
+#include <linux/of_irq.h>
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
 #include <linux/trustedui.h>
@@ -65,6 +66,10 @@
 #include "ftm4_ts.h"
 
 static struct i2c_driver fts_i2c_driver;
+
+extern int msm_gpio_install_direct_irq(unsigned int gpio,
+		unsigned int irq,
+		unsigned int input_polarity);
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
 extern int tui_force_close(uint32_t arg);
@@ -1310,7 +1315,10 @@ static int fts_parse_dt(struct i2c_client *client)
 				"Failed to get irq gpio\n");
 		return -EINVAL;
 	}
-	client->irq = gpio_to_irq(pdata->gpio);
+
+	tsp_debug_info(dev, "irq_gpio = %d\n", pdata->gpio);
+	client->irq = of_irq_get_byname(np, "tp_direct_interrupt");
+	tsp_debug_info(dev, "client->irq = %d\n", client->irq);
 
 	if (of_property_read_u32(np, "stm,irq_type", &pdata->irq_type)) {
 		tsp_debug_err(dev, "Failed to get irq_type property\n");
@@ -1488,6 +1496,25 @@ static int fts_setup_drv_data(struct i2c_client *client)
 			"MAGNA" : "SDC", info->ddi_type);
 	}
 
+	info->switch_gpio = of_get_named_gpio(client->dev.of_node,
+					      "stm,switch_gpio", 0);
+	tsp_debug_info(&client->dev, "switch_gpio = %d\n", info->switch_gpio);
+
+	if (!gpio_is_valid(info->switch_gpio)) {
+		tsp_debug_err(&client->dev, "Failed to get switch gpio\n");
+		return -EINVAL;
+	}
+
+	retval = gpio_request_one(info->switch_gpio,
+				  GPIOF_OUT_INIT_LOW,
+				  "stm,tsp_i2c_switch");
+	if (retval) {
+		tsp_debug_err(&client->dev,
+			      "Unable to request tsp_i2c_switch [%d]\n",
+			      info->switch_gpio);
+		return -EINVAL;
+	}
+
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
 	tui_tsp_info = info;
 #endif
@@ -1606,6 +1633,17 @@ static int fts_probe(struct i2c_client *client, const struct i2c_device_id *idp)
 	}
 
 	info->enabled = true;
+
+	tsp_debug_info(&info->client->dev,
+			"installing direct irq on GPIO %d\n",
+			info->board->gpio);
+	retval = msm_gpio_install_direct_irq(info->board->gpio, 0, 0);
+	if (retval) {
+		tsp_debug_info(&info->client->dev,
+				"%s: Failed to install direct irq, ret = %d\n",
+				__func__, retval);
+		goto err_enable_irq;
+	}
 
 	retval = fts_irq_enable(info, true);
 	if (retval < 0) {
@@ -1854,7 +1892,6 @@ static void fts_reset_work(struct work_struct *work)
 	info->lowpower_mode = temp_lpm;
 }
 
-
 static int fts_stop_device(struct fts_ts_info *info)
 {
 	tsp_debug_info(&info->client->dev, "%s\n", __func__);
@@ -1891,13 +1928,10 @@ static int fts_stop_device(struct fts_ts_info *info)
 
 		info->fts_power_state = FTS_POWER_STATE_LOWPOWER;
 
+		disable_irq(info->irq);
+
 		fts_command(info, FLUSHBUFFER);
-
 		fts_command(info, FTS_CMD_LOWPOWER_MODE);
-
-		if (device_may_wakeup(&info->client->dev))
-			enable_irq_wake(info->irq);
-
 		fts_command(info, FLUSHBUFFER);
 
 		fts_release_all_finger(info);
@@ -1965,23 +1999,19 @@ static int fts_start_device(struct fts_ts_info *info)
 		if (info->touch_stopped)
 			goto tsp_power_on;
 
-		disable_irq(info->irq);
-
 		info->reinit_done = false;
 		fts_reinit(info);
 		info->reinit_done = true;
 
 		enable_irq(info->irq);
 
-		if (device_may_wakeup(&info->client->dev))
-			disable_irq_wake(info->irq);
 	} else {
 tsp_power_on:
 		if (info->board->power)
 			info->board->power(info, true);
 		info->touch_stopped = false;
-		info->reinit_done = false;
 
+		info->reinit_done = false;
 		fts_reinit(info);
 		info->reinit_done = true;
 
@@ -2087,7 +2117,24 @@ static int fts_suspend(struct i2c_client *client, pm_message_t mesg)
 
 	tsp_debug_info(&info->client->dev, "%s\n", __func__);
 
+	tsp_debug_info(&info->client->dev, "%s power state : %d\n",
+			__func__, info->fts_power_state);
+	/* if suspend is called from non-active state, the i2c bus is not
+	 * switched to AP, skipping suspend routine */
+	if (info->fts_power_state != FTS_POWER_STATE_ACTIVE) {
+		tsp_debug_info(&info->client->dev,
+				"%s: calling suspend from non-active state, "
+				"skipping\n", __func__);
+		return 0;
+	}
+
 	fts_stop_device(info);
+
+	gpio_set_value(info->switch_gpio, 1);
+	tsp_debug_info(&info->client->dev,
+			"%s: switch i2c to SLPI (set to %d)\n",
+			__func__,
+			gpio_get_value(info->switch_gpio));
 
 	return 0;
 }
@@ -2098,6 +2145,12 @@ static int fts_resume(struct i2c_client *client)
 	struct fts_ts_info *info = i2c_get_clientdata(client);
 
 	tsp_debug_info(&info->client->dev, "%s\n", __func__);
+
+	gpio_set_value(info->switch_gpio, 0);
+	tsp_debug_info(&info->client->dev,
+			"%s: switch i2c to AP (set to %d)\n",
+			__func__,
+			gpio_get_value(info->switch_gpio));
 
 	fts_start_device(info);
 

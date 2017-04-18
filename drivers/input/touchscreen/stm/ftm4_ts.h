@@ -303,6 +303,7 @@ struct fts_ts_info {
 	struct timer_list timer_firmware;
 	struct work_struct work;
 
+	unsigned int switch_gpio;
 	int irq;
 	int irq_type;
 	bool irq_enabled;
