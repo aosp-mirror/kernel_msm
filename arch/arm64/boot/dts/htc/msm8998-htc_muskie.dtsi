@@ -234,3 +234,21 @@
 		qcom,thermal-node;
 	};
 };
+
+&soc {
+	qcom,sensor-information {
+		sensor_information30: qcom,sensor-information-30 {
+			qcom,sensor-type = "adc";
+			qcom,sensor-name = "fpc_therm";
+		};
+		sensor_information31: qcom,sensor-information-31 {
+			qcom,sensor-type = "adc";
+			qcom,sensor-name = "back_therm";
+		};
+		sensor_information32: qcom,sensor-information-32 {
+			qcom,sensor-type = "adc";
+			qcom,sensor-name = "pa_therm";
+		};
+	};
+
+};

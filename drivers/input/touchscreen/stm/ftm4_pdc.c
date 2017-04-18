@@ -103,8 +103,6 @@ static ssize_t cmd_list_show(struct device *dev,
 	struct device_attribute *attr, char *buf);
 static ssize_t store_upgrade(struct device *dev,
 	struct device_attribute *devattr, const char *buf, size_t count);
-static ssize_t show_upgrade(struct device *dev,
-	struct device_attribute *devattr, char *buf);
 static ssize_t store_check_fw(struct device *dev,
 	struct device_attribute *devattr, const char *buf, size_t count);
 static ssize_t show_version_info(struct device *dev,
@@ -146,7 +144,7 @@ static DEVICE_ATTR(cmd, S_IWUSR | S_IWGRP, NULL, store_cmd);
 static DEVICE_ATTR(cmd_status, S_IRUGO, show_cmd_status, NULL);
 static DEVICE_ATTR(cmd_result, S_IRUGO, show_cmd_result, NULL);
 static DEVICE_ATTR(cmd_list, S_IRUGO, cmd_list_show, NULL);
-static DEVICE_ATTR(fw_upgrade, S_IRUGO | S_IWUSR, show_upgrade, store_upgrade);
+static DEVICE_ATTR(fw_upgrade, S_IWUSR | S_IWGRP, NULL, store_upgrade);
 static DEVICE_ATTR(check_fw, S_IWUSR | S_IWGRP, NULL, store_check_fw);
 static DEVICE_ATTR(version, S_IRUGO, show_version_info, NULL);
 
@@ -169,65 +167,50 @@ static ssize_t store_check_fw(struct device *dev, struct device_attribute *devat
 {
 	struct fts_ts_info *info = dev_get_drvdata(dev);
 	unsigned int input = 0;
+	int ret = 0;
 
-	if (sscanf(buf, "%u", &input) != 1)
+	if (sscanf(buf, "%u", &input) != 1) {
+		tsp_debug_err(&info->client->dev, "%s: Invalid argument\n", __func__);
 		return -EINVAL;
-
-	if (info->fts_power_state == FTS_POWER_STATE_LOWPOWER) {
-		tsp_debug_info(&info->client->dev,
-			"%s: Cannot trigger fw check while device is in suspend\n",
-			__func__);
-		return -EBUSY;
 	}
 
 	if (input) {
 		mutex_lock(&info->device_mutex);
 
-		fts_fw_update(info);
+		info->test_fwpath[0] = '\0';
+		ret = fts_fw_update(info);
 
 		mutex_unlock(&info->device_mutex);
 	}
 
-	return count;
+	if (ret)
+		return ret;
+	else
+		return count;
 }
 
 static ssize_t store_upgrade(struct device *dev,
 	struct device_attribute *devattr, const char *buf, size_t count)
 {
 	struct fts_ts_info *info = dev_get_drvdata(dev);
+	int ret = 0;
 
-	if (sscanf(buf, "%255s", &info->test_fwpath[0]) <= 0)
+	if (strlcpy(&info->test_fwpath[0], buf, count) <= 0) {
+		tsp_debug_err(&info->client->dev, "%s: invalid firmware name\n", __func__);
+		return -EINVAL;
+	}
+
+	mutex_lock(&info->device_mutex);
+
+	ret = fts_fw_update(info);
+	info->test_fwpath[0] = '\0';
+
+	mutex_unlock(&info->device_mutex);
+
+	if (ret)
+		return ret;
+	else
 		return count;
-
-	mutex_lock(&info->device_mutex);
-
-	info->force_fwup = 1;
-
-	fts_fw_update(info);
-
-	info->force_fwup = 0;
-
-	mutex_unlock(&info->device_mutex);
-
-	return count;
-}
-
-static ssize_t show_upgrade(struct device *dev,
-	struct device_attribute *devattr, char *buf)
-{
-	struct fts_ts_info *info = dev_get_drvdata(dev);
-
-	mutex_lock(&info->device_mutex);
-
-	info->force_fwup = 1;
-
-	fts_fw_update(info);
-
-	info->force_fwup = 0;
-
-	mutex_unlock(&info->device_mutex);
-
-	return 0;
 }
 
 static ssize_t show_version_info(struct device *dev,

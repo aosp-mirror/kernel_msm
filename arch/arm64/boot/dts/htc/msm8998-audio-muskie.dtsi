@@ -104,14 +104,14 @@
 				#sound-dai-cells = <1>;
 				compatible = "ti,tas2557s";
 				reg = <0x4d>;
-				ti,cdc-reset-gpio = <&pm8998_gpios 6 0>;
+				ti,reset-gpio-left = <&pm8998_gpios 6 0>;
+				ti,reset-gpio-right = <&pm8998_gpios 6 0>;
 				ti,irq-gpio-left = <&pm8998_gpios 7 0>;
 				ti,irq-gpio-right = <&pm8998_gpios 8 0>;
 				ti,left-channel = <0x4c>;
 				ti,right-channel = <0x4d>;
 				ti,echo-ref = <0>;   /* 0, left channel; 1, right channel; 2, both */
 				ti,i2s-bits = <16>;   /* support 16, 24, 32 */
-				ti,load = <0>;   /* 0, 8Ohm; 1, 6Ohm; 2, 4Ohm */
 				status = "ok";
 		};
 	};

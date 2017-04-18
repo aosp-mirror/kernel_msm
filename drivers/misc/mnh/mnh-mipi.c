@@ -309,8 +309,6 @@ static void mnh_mipi_gen3_host(struct device *dev, uint32_t device,
 	       0xFFFFFFFF);
 	HW_OUT(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, INT_MSK_LINE,
 	       0xFFFFFFFF);
-	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_SHUTDOWNZ,
-		PHY_SHUTDOWNZ, 0x0);
 
 	/* enable clock to controller */
 	if (device == 0)
@@ -920,9 +918,17 @@ EXPORT_SYMBOL_GPL(mnh_mipi_stop);
 
 void mnh_mipi_stop_device(struct device *dev, int txdev)
 {
-	/* setup clocks and frequency */
+	/* shut down the PHY */
+	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(txdev), MIPI_TX, PHY_RSTZ,
+		PHY_RSTZ, 0);
+	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(txdev), MIPI_TX, PHY_RSTZ,
+		PHY_SHUTDOWNZ, 0);
+	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(txdev), MIPI_TX, PHY_RSTZ,
+		PHY_ENABLECLK, 0);
+	/* shut down the controller logic */
 	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(txdev), MIPI_TX, CSI2_RESETN,
 		CSI2_RESETN_RW, 0);
+	/* enable clock gating (disable clock) */
 	switch (txdev) {
 	case MIPI_TX0:
 		HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, CSI_CLK_CTRL,
@@ -941,9 +947,18 @@ EXPORT_SYMBOL_GPL(mnh_mipi_stop_device);
 
 void mnh_mipi_stop_host(struct device *dev, int rxdev)
 {
-	/* setup clocks and frequency */
+	/* shut down the PHY */
+	/* see 7.3.1: Rx-DPHY databook */
+	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(rxdev), MIPI_RX, PHY_SHUTDOWNZ,
+		PHY_SHUTDOWNZ, 0x0);
+	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(rxdev), MIPI_RX, DPHY_RSTZ,
+		DPHY_RSTZ, 0x0);
+	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(rxdev), MIPI_RX, PHY_TEST_CTRL0,
+		PHY_TESTCLR, 0x1);
+	/* shut down the controller logic */
 	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(rxdev), MIPI_RX, CSI2_RESETN,
 		CSI2_RESETN, 0x0);
+	/* enable clock gating (disable clock) */
 	switch (rxdev) {
 	case MIPI_RX0:
 		HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, CSI_CLK_CTRL,

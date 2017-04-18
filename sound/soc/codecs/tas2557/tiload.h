@@ -22,6 +22,10 @@
 #ifndef _TILOAD_H
 #define _TILOAD_H
 
+#ifdef CONFIG_COMPAT
+#include <linux/compat.h>
+#endif
+
 #include "tas2557.h"
 
 #define BPR_REG(book, page, reg)		(((book * 256 * 128) + \
@@ -45,6 +49,16 @@ struct BPR {
 #define TILOAD_IOCTL_SET_CHL			_IOW(TILOAD_IOC_MAGIC, 5, int)
 #define TILOAD_IOCTL_SET_CONFIG			_IOW(TILOAD_IOC_MAGIC, 6, int)
 #define TILOAD_IOCTL_SET_CALIBRATION	_IOW(TILOAD_IOC_MAGIC, 7, int)
+
+#ifdef CONFIG_COMPAT
+#define TILOAD_COMPAT_IOMAGICNUM_GET		_IOR(TILOAD_IOC_MAGIC, 1, compat_int_t)
+#define TILOAD_COMPAT_IOMAGICNUM_SET		_IOW(TILOAD_IOC_MAGIC, 2, compat_int_t)
+#define TILOAD_COMPAT_BPR_READ				_IOR(TILOAD_IOC_MAGIC, 3, struct BPR)
+#define TILOAD_COMPAT_BPR_WRITE				_IOW(TILOAD_IOC_MAGIC, 4, struct BPR)
+#define TILOAD_COMPAT_IOCTL_SET_CHL			_IOW(TILOAD_IOC_MAGIC, 5, compat_int_t)
+#define TILOAD_COMPAT_IOCTL_SET_CONFIG		_IOW(TILOAD_IOC_MAGIC, 6, compat_int_t)
+#define TILOAD_COMPAT_IOCTL_SET_CALIBRATION	_IOW(TILOAD_IOC_MAGIC, 7, compat_int_t)
+#endif
 
 int tiload_driver_init(struct tas2557_priv *pTAS2557);
 

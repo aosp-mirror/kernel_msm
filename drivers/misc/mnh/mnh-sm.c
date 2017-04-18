@@ -511,6 +511,7 @@ int mnh_download_firmware_legacy(void)
 	const struct firmware *fip_img;
 	int err;
 	uint32_t size, addr;
+	int i;
 
 	mnh_sm_dev->image_loaded = FW_IMAGE_NONE;
 
@@ -545,6 +546,19 @@ int mnh_download_firmware_legacy(void)
 	if (err) {
 		dev_err(mnh_sm_dev->dev, "request kernel failed - %d\n", err);
 		goto free_dt;
+	}
+
+	/* get double buffers for transferring firmware */
+	for (i = 0; i < 2; i++) {
+		mnh_sm_dev->firmware_buf_size[i] =
+			mnh_get_firmware_buf(mnh_sm_dev->dev,
+					     &mnh_sm_dev->firmware_buf[i]);
+		if (!mnh_sm_dev->firmware_buf_size[i]) {
+			dev_err(mnh_sm_dev->dev,
+				"%s: could not allocate a buffer for firmware transfers\n",
+				__func__);
+			return -ENOMEM;
+		}
 	}
 
 	/* DMA transfer for SBL */
@@ -595,6 +609,9 @@ int mnh_download_firmware_legacy(void)
 	/* sbl needs this for its own operation and arg0 for kernel */
 	mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_3, 4,
 			 HW_MNH_DT_DOWNLOAD);
+
+	for (i = 0; i < 2; i++)
+		devm_kfree(mnh_sm_dev->dev, mnh_sm_dev->firmware_buf[i]);
 
 	release_firmware(fip_img);
 	release_firmware(kernel_img);
@@ -1487,7 +1504,7 @@ static int mnh_sm_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct sched_param param = { .sched_priority = 5 };
-	int error = 0, i;
+	int error = 0;
 
 	dev_dbg(dev, "MNH SM initializing...\n");
 
@@ -1520,18 +1537,6 @@ static int mnh_sm_probe(struct platform_device *pdev)
 	init_completion(&mnh_sm_dev->powered_complete);
 	init_completion(&mnh_sm_dev->work_complete);
 	init_completion(&mnh_sm_dev->suspend_complete);
-
-	/* get double buffers for transferring firmware */
-	for (i = 0; i < 2; i++) {
-		mnh_sm_dev->firmware_buf_size[i] =
-			mnh_get_firmware_buf(dev, &mnh_sm_dev->firmware_buf[i]);
-		if (!mnh_sm_dev->firmware_buf_size[i]) {
-			dev_err(dev,
-				"%s: could not allocate a buffer for firmware transfers\n",
-				__func__);
-			return -ENOMEM;
-		}
-	}
 
 	/* allocate character device region */
 	error = alloc_chrdev_region(&mnh_sm_dev->dev_num, 0, 1, DEVICE_NAME);
