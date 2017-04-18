@@ -16,6 +16,7 @@
 
 /* #define DEBUG */
 
+#include <linux/atomic.h>
 #include <linux/cdev.h>
 #include <linux/device.h>
 #include <linux/delay.h>
@@ -111,6 +112,7 @@ struct mnh_sm_device {
 	struct platform_device *pdev;
 	struct device *dev;
 	struct cdev cdev;
+	atomic_t cdev_ctr;
 	dev_t dev_num;
 	struct device *chardev;
 	struct class *dev_class;
@@ -1296,19 +1298,23 @@ EXPORT_SYMBOL(mnh_sm_is_present);
 
 static int mnh_sm_open(struct inode *inode, struct file *filp)
 {
+	int dev_ctr;
 	struct mnh_sm_device *data = container_of(inode->i_cdev,
 						  struct mnh_sm_device, cdev);
-
-	dev_dbg(data->dev, "%s: opening mnh_sm\n", __func__);
-
 	filp->private_data = data; /* for other methods */
 
-	if (mnh_sm_dev->ion && !mnh_sm_dev->ion->is_fw_ready) {
-		/* Request firmware and stage them to carveout buffer */
-		dev_dbg(data->dev, "%s: staging firmware\n", __func__);
-		mnh_ion_stage_firmware(mnh_sm_dev->ion);
-	}
+	dev_ctr = atomic_inc_return(&mnh_sm_dev->cdev_ctr);
+	dev_dbg(data->dev, "%s: opening mnh_sm: mnh_sm_dev->cdev_ctr %d\n",
+		__func__, dev_ctr);
 
+	/* only stage fw transf. when the first handle to the cdev is opened */
+	if (dev_ctr == 1) {
+		if (mnh_sm_dev->ion && !mnh_sm_dev->ion->is_fw_ready) {
+			/* Request firmware and stage them to carveout buf. */
+			dev_dbg(data->dev, "%s: staging firmware\n", __func__);
+			mnh_ion_stage_firmware(mnh_sm_dev->ion);
+		}
+	}
 	return 0;
 }
 
@@ -1317,12 +1323,11 @@ static int mnh_sm_close(struct inode *inode, struct file *filp)
 	struct mnh_sm_device *data = container_of(inode->i_cdev,
 						  struct mnh_sm_device, cdev);
 
-	filp->private_data = data; /* for other methods */
-
-	mnh_sm_set_state(MNH_STATE_OFF);
-
-	dev_dbg(data->dev, "%s: closing mnh_sm\n", __func__);
-
+	/* Only shut mnh down when there is no active handle to the cdev */
+	if (atomic_dec_and_test(&mnh_sm_dev->cdev_ctr)) {
+		mnh_sm_set_state(MNH_STATE_OFF);
+		dev_dbg(data->dev, "%s: closing mnh_sm\n", __func__);
+	}
 	return 0;
 }
 
