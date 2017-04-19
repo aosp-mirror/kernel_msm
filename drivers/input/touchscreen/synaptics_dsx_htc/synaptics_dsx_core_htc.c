@@ -3029,6 +3029,84 @@ exit:
 	return retval;
 }
 
+static int synaptics_rmi4_configure_long_press_gesture_window(
+		struct synaptics_rmi4_data *rmi4_data,
+		uint16_t x_min,
+		uint16_t x_max,
+		uint16_t y_min,
+		uint16_t y_max)
+{
+	uint8_t reg_page;
+	uint8_t x_min_lsb = x_min & 0xff;
+	uint8_t x_min_msb = x_min >> 8;
+	uint8_t x_max_lsb = x_max & 0xff;
+	uint8_t x_max_msb = x_max >> 8;
+	uint8_t y_min_lsb = y_min & 0xff;
+	uint8_t y_min_msb = y_min >> 8;
+	uint8_t y_max_lsb = y_max & 0xff;
+	uint8_t y_max_msb = y_max >> 8;
+
+#define reg_write_byte_return_if_error(addr, byteptr) \
+	do { \
+		int ret; \
+		ret = synaptics_rmi4_reg_write(rmi4_data, addr, byteptr, 1); \
+		if (ret < 0) \
+			return ret; \
+	} while (0)
+
+#define reg_read_byte_return_if_error(addr, byteptr) \
+	do { \
+		int ret; \
+		ret = synaptics_rmi4_reg_read(rmi4_data, addr, byteptr, 1); \
+		if (ret < 0) \
+			return ret; \
+	} while (0)
+
+	/* switch to register page 4 */
+	reg_page = 0x04;
+	reg_write_byte_return_if_error(0xff, &reg_page);
+
+	reg_write_byte_return_if_error(0x0b, &x_min_lsb);
+	reg_write_byte_return_if_error(0x0c, &x_min_msb);
+	reg_write_byte_return_if_error(0x0d, &x_max_lsb);
+	reg_write_byte_return_if_error(0x0e, &x_max_msb);
+	reg_write_byte_return_if_error(0x0f, &y_min_lsb);
+	reg_write_byte_return_if_error(0x10, &y_min_msb);
+	reg_write_byte_return_if_error(0x11, &y_max_lsb);
+	reg_write_byte_return_if_error(0x12, &y_max_msb);
+
+	/* read back and print config result */
+	reg_read_byte_return_if_error(0x0b, &x_min_lsb);
+	reg_read_byte_return_if_error(0x0c, &x_min_msb);
+	reg_read_byte_return_if_error(0x0d, &x_max_lsb);
+	reg_read_byte_return_if_error(0x0e, &x_max_msb);
+	reg_read_byte_return_if_error(0x0f, &y_min_lsb);
+	reg_read_byte_return_if_error(0x10, &y_min_msb);
+	reg_read_byte_return_if_error(0x11, &y_max_lsb);
+	reg_read_byte_return_if_error(0x12, &y_max_msb);
+
+	/* reset register page */
+	reg_page = 0x00;
+	reg_write_byte_return_if_error(0xff, &reg_page);
+
+#undef reg_write_byte_return_if_error
+#undef reg_read_byte_return_if_error
+
+	x_min = x_min_msb << 8 | x_min_lsb;
+	x_max = x_max_msb << 8 | x_max_lsb;
+	y_min = y_min_msb << 8 | y_min_lsb;
+	y_max = y_max_msb << 8 | y_max_lsb;
+	dev_info(rmi4_data->pdev->dev.parent,
+			"%s: long press gesture window [%hu, %hu, %hu, %hu]\n",
+			__func__,
+			x_min,
+			x_max,
+			y_min,
+			y_max);
+
+	return 0;
+}
+
 static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 		struct synaptics_rmi4_fn *fhandler,
 		struct synaptics_rmi4_fn_desc *fd,
@@ -3509,6 +3587,20 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 
 		printk("[TP]%s:Wakeup Gesture range (%d,%d) -> (%d,%d)\n", __func__,
 				double_tap[0], double_tap[1], double_tap[2], double_tap[3]);
+
+		retval = synaptics_rmi4_configure_long_press_gesture_window(
+				rmi4_data,
+				0,
+				bdata->display_width - 1,
+				0,
+				bdata->display_height - 1);
+		if (retval < 0) {
+			dev_err(rmi4_data->pdev->dev.parent,
+					"%s: failed to configure long press "
+					"gesture window\n",
+					__func__);
+			return retval;
+		}
 	}
 
 	synaptics_rmi4_set_intr_mask(fhandler, fd, intr_count);
