@@ -54,10 +54,7 @@ static int drv2624_reg_read(struct drv2624_data *drv2624, unsigned char reg)
 	unsigned int val;
 	int ret;
 
-	mutex_lock(&drv2624->dev_lock);
 	ret = regmap_read(drv2624->regmap, reg, &val);
-	mutex_unlock(&drv2624->dev_lock);
-
 	if (ret < 0) {
 		dev_err(drv2624->dev,
 			"%s reg=0x%x error %d\n", __func__, reg, ret);
@@ -74,10 +71,7 @@ static int drv2624_reg_write(struct drv2624_data *drv2624,
 {
 	int ret;
 
-	mutex_lock(&drv2624->dev_lock);
 	ret = regmap_write(drv2624->regmap, reg, val);
-	mutex_unlock(&drv2624->dev_lock);
-
 	if (ret < 0) {
 		dev_err(drv2624->dev,
 			"%s reg=0x%x, value=0%x error %d\n",
@@ -96,10 +90,7 @@ static int drv2624_bulk_write(struct drv2624_data *drv2624,
 {
 	int ret, i;
 
-	mutex_lock(&drv2624->dev_lock);
 	ret = regmap_bulk_write(drv2624->regmap, reg, buf, count);
-	mutex_unlock(&drv2624->dev_lock);
-
 	if (ret < 0) {
 		dev_err(drv2624->dev,
 			"%s reg=0%x, count=%d error %d\n",
@@ -118,10 +109,7 @@ static int drv2624_set_bits(struct drv2624_data *drv2624,
 {
 	int ret;
 
-	mutex_lock(&drv2624->dev_lock);
 	ret = regmap_update_bits(drv2624->regmap, reg, mask, val);
-	mutex_unlock(&drv2624->dev_lock);
-
 	if (ret < 0) {
 		dev_err(drv2624->dev,
 			"%s reg=%x, mask=0x%x, value=0x%x error %d\n",
@@ -1275,7 +1263,6 @@ static int drv2624_i2c_probe(struct i2c_client *client,
 		usleep_range(1000, 2000); /* t(on) = 1ms */
 	}
 
-	mutex_init(&drv2624->dev_lock);
 	err = drv2624_reg_read(drv2624, DRV2624_REG_ID);
 	if (err < 0) {
 		dev_err(drv2624->dev, "%s, i2c bus fail (%d)\n", __func__, err);
@@ -1341,7 +1328,6 @@ static int drv2624_i2c_probe(struct i2c_client *client,
 	return 0;
 
 drv2624_i2c_probe_err:
-	mutex_destroy(&drv2624->dev_lock);
 
 	dev_err(drv2624->dev, "%s failed, err=%d\n", __func__, err);
 	return err;
@@ -1358,7 +1344,6 @@ static int drv2624_i2c_remove(struct i2c_client *client)
 
 	wake_lock_destroy(&drv2624->wklock);
 	mutex_destroy(&drv2624->lock);
-	mutex_destroy(&drv2624->dev_lock);
 
 	return 0;
 }

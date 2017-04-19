@@ -270,7 +270,6 @@ static const char * const drv2624_modes[] = {
 
 struct drv2624_data {
 	struct drv2624_platform_data plat_data;
-	struct mutex dev_lock; /* protect register access */
 	unsigned char device_id;
 	struct device *dev;
 	struct regmap *regmap;
