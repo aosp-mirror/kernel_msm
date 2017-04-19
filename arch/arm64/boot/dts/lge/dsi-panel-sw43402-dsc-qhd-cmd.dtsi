@@ -100,6 +100,18 @@
 		qcom,mdss-dsi-lp-mode-off = [15 01 00 00 00 00 02 53 00];
 		qcom,mdss-dsi-lp-change-state = "dsi_hs_mode";
 		qcom,mode-control-dsi-state = "dsi_lp_mode";
+
+		qcom,alpm-off-command = [
+			05 01 00 00 00 00 01 38    /* IDLE off */
+		];
+		qcom,alpm-low-command = [
+			05 01 00 00 00 00 01 39    /* IDLE on */
+			15 01 00 00 00 00 02 51 40 /* brightness control */
+		];
+		qcom,alpm-high-command = [
+			05 01 00 00 00 00 01 39    /* IDLE on */
+			15 01 00 00 00 00 02 51 80 /* brightness control */
+		];
 		qcom,mdss-pan-physical-width-dimension = <68>;
 		qcom,mdss-pan-physical-height-dimension = <136>;
 
