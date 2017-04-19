@@ -18,7 +18,7 @@
 #include <media/msm_cam_sensor.h>
 
 #define I2C_POLL_TIME_MS 5
-#define MAX_POLL_DELAY_MS 100
+#define MAX_POLL_DELAY_MS 500
 
 #define I2C_COMPARE_MATCH 0
 #define I2C_COMPARE_MISMATCH 1
