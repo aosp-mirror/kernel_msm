@@ -17,6 +17,7 @@
 #include <linux/ctype.h>
 #include <linux/device.h>
 #include <linux/err.h>
+#include <linux/gpio/consumer.h>
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>
 #include <linux/i2c.h>
@@ -163,6 +164,8 @@ struct max31760_dev_attr {
  */
 struct max31760 {
 	struct regmap *regmap;
+	struct gpio_desc *fan_enable_gpio[MAX31760_NUM_FANS];
+	bool fan_enabled[MAX31760_NUM_FANS];
 	int fan_pulses[MAX31760_NUM_FANS];
 	const char *fan_label[MAX31760_NUM_FANS];
 	const char *temp_label[MAX31760_NUM_TEMPS];
@@ -1228,14 +1231,88 @@ static int max31760_update_from_registers(struct device *dev)
 				  MAX31760_CR2_STBY, 0);
 }
 
+/* Read properties of a fan node. */
+static int max31760_of_init_fan(struct device *dev,
+				struct device_node *fan_node, u32 reg)
+{
+	struct max31760 *max31760 = dev_get_drvdata(dev);
+	struct gpio_desc *gpiod;
+	const char *label;
+	int err;
+
+	if (reg >= MAX31760_NUM_FANS) {
+		dev_err(dev, "invalid reg on fan: %s", fan_node->name);
+		return -EINVAL;
+	}
+
+	err = of_property_read_string(fan_node, "label", &label);
+	if (!err)
+		max31760->fan_label[reg] = label;
+
+	max31760->fan_enabled[reg] = of_device_is_available(fan_node);
+
+	gpiod = devm_get_gpiod_from_child(dev, "maxim,enable",
+					  &fan_node->fwnode);
+	err = PTR_ERR(gpiod);
+	if (err == -ENOENT || err == -ENODEV) {
+		gpiod = NULL;
+	} else if (err == -EPROBE_DEFER) {
+		dev_dbg(dev, "Defer due to fan enable gpio.");
+		return err;
+	} else if (IS_ERR(gpiod)) {
+		dev_err(dev, "Error getting fan enable gpio: %d", err);
+		return err;
+	}
+
+	if (gpiod) {
+		err = gpiod_direction_output(gpiod, max31760->fan_enabled[reg]);
+		if (err) {
+			dev_err(dev, "Failed to set fan%d gpio output %s.", reg,
+				max31760->fan_enabled[reg] ?
+					"enabled" : "disabled");
+			return err;
+		}
+
+		max31760->fan_enable_gpio[reg] = gpiod;
+	}
+
+	return 0;
+}
+
+/* Read properties of a temp node. */
+static int max31760_of_init_temp(struct device *dev,
+				 struct device_node *temp_node, u32 reg)
+{
+	struct max31760 *max31760 = dev_get_drvdata(dev);
+	const char *label;
+	int err;
+	u32 val;
+
+	if (reg >= MAX31760_NUM_TEMPS) {
+		dev_err(dev, "invalid reg on temp: %s", temp_node->name);
+		return -EINVAL;
+	}
+
+	err = of_property_read_string(temp_node, "label", &label);
+	if (!err)
+		max31760->temp_label[reg] = label;
+
+	err = of_property_read_u32(temp_node, "maxim,ideality", &val);
+	if (!err && reg == 1) {
+		/* Only external temp sensor has ideality. */
+		err = regmap_write(max31760->regmap, MAX31760_REG_IFR,
+				   val & 0x3f);
+	}
+
+	return 0;
+}
+
 /* Configure registers which have associated device properties. */
 static int max31760_of_init(struct device *dev)
 {
 	struct max31760 *max31760 = dev_get_drvdata(dev);
 	struct device_node *node;
-	const char *label;
 	int err;
-	bool fan_enabled[MAX31760_NUM_FANS] = {0};
 	u32 reg;
 	u32 val;
 
@@ -1246,42 +1323,16 @@ static int max31760_of_init(struct device *dev)
 			return err;
 		}
 
-		if (!strcmp(node->name, "fan")) {
-			if (reg >= MAX31760_NUM_FANS) {
-				dev_err(dev, "invalid reg on fan: %s",
-					node->name);
-				return -EINVAL;
-			}
-
-			err = of_property_read_string(node, "label", &label);
-			if (!err)
-				max31760->fan_label[reg] = label;
-
-			fan_enabled[reg] = of_device_is_available(node);
-		} else if (!strcmp(node->name, "temp")) {
-			if (reg >= MAX31760_NUM_TEMPS) {
-				dev_err(dev, "invalid reg on fan: %s",
-					node->name);
-				return -EINVAL;
-			}
-
-			err = of_property_read_string(node, "label", &label);
-			if (!err)
-				max31760->temp_label[reg] = label;
-
-			err = of_property_read_u32(node, "ideality", &val);
-			if (reg == 1 && !err) {
-				/* Only external temp sensor has ideality. */
-				err = regmap_write(max31760->regmap,
-						   MAX31760_REG_IFR,
-						   val & 0x3f);
-				if (err)
-					return err;
-			}
-		} else {
+		if (!strcmp(node->name, "fan"))
+			err = max31760_of_init_fan(dev, node, reg);
+		else if (!strcmp(node->name, "temp"))
+			err = max31760_of_init_temp(dev, node, reg);
+		else
 			dev_err(dev, "invalid subnode with name: %s",
 				node->name);
-			continue;
+		if (err) {
+			dev_err(dev, "child '%s' err: %d", node->name, err);
+			return err;
 		}
 	}
 
@@ -1317,8 +1368,8 @@ static int max31760_of_init(struct device *dev)
 	if (err)
 		return err;
 
-	val = (fan_enabled[0] ? MAX31760_CR3_TACH1E : 0) |
-	      (fan_enabled[1] ? MAX31760_CR3_TACH2E : 0);
+	val = (max31760->fan_enabled[0] ? MAX31760_CR3_TACH1E : 0) |
+	      (max31760->fan_enabled[1] ? MAX31760_CR3_TACH2E : 0);
 	if (of_property_read_bool(dev->of_node, "maxim,fan-fail-full-only"))
 		val |= MAX31760_CR3_TACHFL;
 	if (of_property_read_bool(dev->of_node,
@@ -1375,9 +1426,25 @@ static int max31760_probe(struct i2c_client *client,
 	return PTR_ERR_OR_ZERO(hwmon_dev);
 }
 
+/* Toggle the fan GPIOs to match enable state. */
+static void max31760_update_fan_states(struct device *dev, bool enable)
+{
+	struct max31760 *max31760 = dev_get_drvdata(dev);
+	int i;
+
+	for (i = 0; i < MAX31760_NUM_FANS; i++) {
+		if (!max31760->fan_enable_gpio[i])
+			continue;
+		gpiod_set_value_cansleep(max31760->fan_enable_gpio[i],
+					 enable && max31760->fan_enabled[i]);
+	}
+}
+
 static int __maybe_unused max31760_suspend(struct device *dev)
 {
 	struct max31760 *max31760 = dev_get_drvdata(dev);
+
+	max31760_update_fan_states(dev, 0);
 
 	return regmap_update_bits(max31760->regmap, MAX31760_REG_CR2,
 				  MAX31760_CR2_STBY, MAX31760_CR2_STBY);
@@ -1392,6 +1459,8 @@ static int __maybe_unused max31760_resume(struct device *dev)
 				 MAX31760_CR2_STBY, 0);
 	if (err)
 		dev_err(dev, "Could not clear Standby bit: %d", err);
+
+	max31760_update_fan_states(dev, 1);
 	return err;
 }
 
