@@ -730,8 +730,8 @@ int mnh_pwr_set_state(enum mnh_pwr_state system_state)
 {
 	int ret = 0;
 
-	dev_info(mnh_pwr->dev, "%s req: %d, current: %d\n",
-		 __func__, system_state, mnh_pwr_get_state());
+	dev_dbg(mnh_pwr->dev, "%s req: %d, current: %d\n", __func__,
+		system_state, mnh_pwr_get_state());
 
 	if (system_state != mnh_pwr->state) {
 		switch (system_state) {
@@ -756,11 +756,10 @@ int mnh_pwr_set_state(enum mnh_pwr_state system_state)
 				"%s: state transition failed (%d)\n",
 				__func__, ret);
 		else
-			dev_info(mnh_pwr->dev, "%s done with state: %d\n",
-				 __func__, mnh_pwr_get_state());
+			dev_dbg(mnh_pwr->dev, "%s done with state: %d\n",
+				__func__, mnh_pwr_get_state());
 	} else {
-		dev_info(mnh_pwr->dev, "%s: no state change needed\n",
-			 __func__);
+		dev_dbg(mnh_pwr->dev, "%s: no state change needed\n", __func__);
 	}
 
 	return ret;

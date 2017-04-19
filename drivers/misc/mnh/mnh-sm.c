@@ -700,10 +700,10 @@ static DEVICE_ATTR(suspend, S_IWUSR | S_IRUGO,
 
 int mnh_resume_firmware(void)
 {
-	dev_info(mnh_sm_dev->dev, "%s sbl dl:0x%x ex:0x%x size:0x%x\n",
-		 __func__, HW_MNH_SBL_DOWNLOAD, HW_MNH_SBL_DOWNLOAD_EXE,
-		 mnh_sm_dev->sbl_size);
-	dev_info(mnh_sm_dev->dev, "%s resume:0x%x dt:0x%x\n", __func__,
+	dev_dbg(mnh_sm_dev->dev, "%s sbl dl:0x%x ex:0x%x size:0x%x\n", __func__,
+		HW_MNH_SBL_DOWNLOAD, HW_MNH_SBL_DOWNLOAD_EXE,
+		mnh_sm_dev->sbl_size);
+	dev_dbg(mnh_sm_dev->dev, "%s resume:0x%x dt:0x%x\n", __func__,
 		mnh_sm_dev->resume_addr, HW_MNH_DT_DOWNLOAD);
 
 	/* Configure sbl addresses and size */
@@ -1178,8 +1178,8 @@ static int mnh_sm_set_state_locked(int state)
 	int ret = 0;
 
 	if (state == mnh_sm_dev->state) {
-		dev_info(mnh_sm_dev->dev,
-			 "%s: already in state %d\n", __func__, state);
+		dev_dbg(mnh_sm_dev->dev, "%s: already in state %d\n", __func__,
+			state);
 		return 0;
 	}
 
@@ -1258,8 +1258,7 @@ int mnh_sm_set_state(int state)
 	if (!mnh_sm_dev)
 		return -ENODEV;
 
-	dev_info(mnh_sm_dev->dev,
-		 "%s: request state %d\n", __func__, state);
+	dev_info(mnh_sm_dev->dev, "%s: request state %d\n", __func__, state);
 
 	if (mnh_freeze_state) {
 		dev_info(mnh_sm_dev->dev,
@@ -1277,8 +1276,8 @@ int mnh_sm_set_state(int state)
 	if (ret)
 		return ret;
 
-	dev_info(mnh_sm_dev->dev,
-		 "%s: now in state %d\n", __func__, mnh_sm_dev->state);
+	dev_info(mnh_sm_dev->dev, "%s: finished state %d\n", __func__,
+		 mnh_sm_dev->state);
 
 	/* check for hotplug conditions */
 	if (mnh_hotplug_cb && (mnh_sm_dev->state == MNH_STATE_ACTIVE))
