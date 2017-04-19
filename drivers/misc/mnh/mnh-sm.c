@@ -1333,7 +1333,6 @@ static int mnh_sm_close(struct inode *inode, struct file *filp)
 
 static void mnh_sm_set_state_work(struct kthread_work *data)
 {
-	reinit_completion(&mnh_sm_dev->work_complete);
 	mnh_sm_dev->work_ret = mnh_sm_set_state(mnh_sm_dev->next_state);
 	complete(&mnh_sm_dev->work_complete);
 }
@@ -1427,6 +1426,7 @@ static long mnh_sm_ioctl(struct file *file, unsigned int cmd,
 		break;
 	case MNH_SM_IOC_SET_STATE:
 		mnh_sm_dev->next_state = (int)arg;
+		reinit_completion(&mnh_sm_dev->work_complete);
 		queue_kthread_work(&mnh_sm_dev->worker,
 				   &mnh_sm_dev->set_state_work);
 		break;
