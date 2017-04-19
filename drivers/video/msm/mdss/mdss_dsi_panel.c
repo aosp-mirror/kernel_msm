@@ -306,8 +306,21 @@ static int mdss_dsi_request_gpios(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 			goto mode_gpio_err;
 		}
 	}
+	if (SOURCE_AUO == mdss_dsi_get_lcmSource()){
+		if (gpio_is_valid(ctrl_pdata->disp_avdden_gpio)) {
+			rc = gpio_request(ctrl_pdata->disp_avdden_gpio, "panel_mode");
+			if (rc) {
+				pr_err("request panel avdden gpio failed,rc=%d\n",
+								rc);
+				goto avdden_gpio_err;
+			}
+		}
+	}
 	return rc;
 
+avdden_gpio_err:
+	if (gpio_is_valid(ctrl_pdata->mode_gpio))
+		gpio_free(ctrl_pdata->mode_gpio);
 mode_gpio_err:
 	if (gpio_is_valid(ctrl_pdata->bklt_en_gpio))
 		gpio_free(ctrl_pdata->bklt_en_gpio);
@@ -362,6 +375,14 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 			pr_err("gpio request failed\n");
 			return rc;
 		}
+		if (SOURCE_AUO == mdss_dsi_get_lcmSource()){
+			msleep(1);
+			if (gpio_is_valid(ctrl_pdata->disp_avdden_gpio)){
+				gpio_direction_output(ctrl_pdata->disp_avdden_gpio, 0);
+				gpio_set_value((ctrl_pdata->disp_avdden_gpio), 1);
+			}
+		}
+
 		if (!pinfo->cont_splash_enabled) {
 			if (gpio_is_valid(ctrl_pdata->disp_en_gpio))
 				gpio_set_value((ctrl_pdata->disp_en_gpio), 1);
@@ -390,6 +411,13 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 			pr_debug("%s: Reset panel done\n", __func__);
 		}
 	} else {
+		if (SOURCE_AUO == mdss_dsi_get_lcmSource()){
+			if (gpio_is_valid(ctrl_pdata->disp_avdden_gpio)){
+				gpio_set_value((ctrl_pdata->disp_avdden_gpio), 0);
+				gpio_free(ctrl_pdata->disp_avdden_gpio);
+			}
+			msleep(11);
+		}
 		if (gpio_is_valid(ctrl_pdata->bklt_en_gpio)) {
 			gpio_set_value((ctrl_pdata->bklt_en_gpio), 0);
 			gpio_free(ctrl_pdata->bklt_en_gpio);

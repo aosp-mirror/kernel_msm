@@ -135,6 +135,11 @@ enum dsi_pm_type {
 	DSI_MAX_PM
 };
 
+enum {
+	SOURCE_BOE,
+	SOURCE_AUO,
+};
+
 /*
  * DSI controller states.
  *	CTRL_STATE_UNKNOWN - Unknown state of DSI controller.
@@ -423,6 +428,7 @@ struct mdss_dsi_ctrl_pdata {
 	int panel_mode;
 	int irq_cnt;
 	int disp_te_gpio;
+	int disp_avdden_gpio;
 	int rst_gpio;
 	int disp_en_gpio;
 	int bklt_en_gpio;
@@ -659,6 +665,8 @@ void mdss_dsi_dsc_config(struct mdss_dsi_ctrl_pdata *ctrl,
 void mdss_dsi_dfps_config_8996(struct mdss_dsi_ctrl_pdata *ctrl);
 void mdss_dsi_set_burst_mode(struct mdss_dsi_ctrl_pdata *ctrl);
 int mdss_dsi_panel_power_ctrl(struct mdss_panel_data *pdata, int power_state);
+
+int mdss_dsi_get_lcmSource(void);
 
 static inline const char *__mdss_dsi_pm_name(enum dsi_pm_type module)
 {

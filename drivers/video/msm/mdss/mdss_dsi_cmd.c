@@ -840,20 +840,22 @@ void mdss_dsi_3bit_mode_enable(struct mdss_dsi_ctrl_pdata *ctrl, int enable)
 		is_3bit_mode = true;
 
 		pr_debug("[Debug] set 3-bit color mode enable\n");
-	
-		mdss_dsi_send_cmd(ctrl, &dsi_3bit_pre_cmd);
-		mdss_dsi_send_cmd(ctrl, &dsi_pre_idle_cmd1);
-		mdss_dsi_send_cmd(ctrl, &dsi_pre_idle_cmd2);
-		mdss_dsi_send_cmd(ctrl, &dsi_pre_idle_cmd3);
-		mdss_dsi_send_cmd(ctrl, &dsi_pre_idle_cmd4);
-		mdss_dsi_send_cmd(ctrl, &dsi_pre_idle_cmd5);
-		mdss_dsi_send_cmd(ctrl, &dsi_pre_idle_cmd6);
-		mdss_dsi_send_cmd(ctrl, &dsi_pre_idle_cmd7);
-		mdss_dsi_send_cmd(ctrl, &dsi_pre_idle_cmd8);
-		mdss_dsi_send_cmd(ctrl, &dsi_pre_idle_cmd9);
-		mdss_dsi_send_cmd(ctrl, &dsi_pre_idle_cmd10);
-		mdss_dsi_send_cmd(ctrl, &dsi_pre_idle_cmd11);
-		mdss_dsi_send_cmd(ctrl, &dsi_ucs_cmd);
+
+		if (SOURCE_BOE == mdss_dsi_get_lcmSource()){
+			mdss_dsi_send_cmd(ctrl, &dsi_3bit_pre_cmd);
+			mdss_dsi_send_cmd(ctrl, &dsi_pre_idle_cmd1);
+			mdss_dsi_send_cmd(ctrl, &dsi_pre_idle_cmd2);
+			mdss_dsi_send_cmd(ctrl, &dsi_pre_idle_cmd3);
+			mdss_dsi_send_cmd(ctrl, &dsi_pre_idle_cmd4);
+			mdss_dsi_send_cmd(ctrl, &dsi_pre_idle_cmd5);
+			mdss_dsi_send_cmd(ctrl, &dsi_pre_idle_cmd6);
+			mdss_dsi_send_cmd(ctrl, &dsi_pre_idle_cmd7);
+			mdss_dsi_send_cmd(ctrl, &dsi_pre_idle_cmd8);
+			mdss_dsi_send_cmd(ctrl, &dsi_pre_idle_cmd9);
+			mdss_dsi_send_cmd(ctrl, &dsi_pre_idle_cmd10);
+			mdss_dsi_send_cmd(ctrl, &dsi_pre_idle_cmd11);
+			mdss_dsi_send_cmd(ctrl, &dsi_ucs_cmd);
+		}
 		mdss_dsi_send_cmd(ctrl, &dsi_into_idle_cmd);
 	}
 	else if((!enable) && (is_3bit_mode == true))
@@ -861,10 +863,12 @@ void mdss_dsi_3bit_mode_enable(struct mdss_dsi_ctrl_pdata *ctrl, int enable)
 		is_3bit_mode = false;
 
 		pr_debug("[Debug] set 3-bit color mode disable\n");
-	
-		mdss_dsi_send_cmd(ctrl, &dsi_pre_exit_idle_cmd1);
-		mdss_dsi_send_cmd(ctrl, &dsi_pre_exit_idle_cmd2);
-		mdss_dsi_send_cmd(ctrl, &dsi_ucs_cmd);
+
+		if (SOURCE_BOE == mdss_dsi_get_lcmSource()){
+			mdss_dsi_send_cmd(ctrl, &dsi_pre_exit_idle_cmd1);
+			mdss_dsi_send_cmd(ctrl, &dsi_pre_exit_idle_cmd2);
+			mdss_dsi_send_cmd(ctrl, &dsi_ucs_cmd);
+		}
 		mdss_dsi_send_cmd(ctrl, &dsi_exit_idle_cmd);
 	}
 	else

@@ -45,6 +45,8 @@ static struct mdss_dsi_data *mdss_dsi_res;
 
 static struct pm_qos_request mdss_dsi_pm_qos_request;
 
+static int lcm_source = SOURCE_BOE;
+
 static void mdss_dsi_pm_qos_add_request(void)
 {
 	pr_debug("%s: add request", __func__);
@@ -3918,6 +3920,13 @@ static int mdss_dsi_parse_gpio_params(struct platform_device *ctrl_pdev,
 					__func__, __LINE__);
 	}
 
+	ctrl_pdata->disp_avdden_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
+		"qcom,platform-avdden-gpio", 0);
+
+	if (!gpio_is_valid(ctrl_pdata->disp_avdden_gpio))
+		pr_err("%s:%d, AVDDEN gpio not specified\n",
+						__func__, __LINE__);
+
 	ctrl_pdata->disp_te_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
 		"qcom,platform-te-gpio", 0);
 
@@ -3975,6 +3984,31 @@ static void mdss_dsi_set_prim_panel(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 		}
 	}
 }
+
+int mdss_dsi_get_lcmSource(void)
+{
+	return lcm_source;
+}
+
+static int __init get_lcmSource_cmdline(char *buf)
+{
+	int source_num = 0;
+
+	source_num = simple_strtol(buf, NULL, 10);
+	
+	if (source_num == SOURCE_BOE){
+		pr_err("Lcm Source set to BOE");
+		lcm_source = SOURCE_BOE;
+	}
+	else {
+		pr_err("Lcm Source set to AUO");
+		lcm_source = SOURCE_AUO;
+	}
+
+	return 0;
+}
+
+early_param("LcmSource", get_lcmSource_cmdline);
 
 int dsi_panel_device_register(struct platform_device *ctrl_pdev,
 	struct device_node *pan_node, struct mdss_dsi_ctrl_pdata *ctrl_pdata)
