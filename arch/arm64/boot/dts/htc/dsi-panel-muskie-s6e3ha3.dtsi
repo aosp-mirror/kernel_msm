@@ -91,6 +91,15 @@
 		qcom,esd-check-enabled;
 		qcom,mdss-dsi-panel-status-check-mode = "te_signal_check";
 		qcom,err-flag-check-enabled;
+		qcom,alpm-off-command = [
+			15 01 00 00 00 00 02 53 20 /* ALPM off */
+		];
+		qcom,alpm-low-command = [
+			15 01 00 00 00 00 02 53 23 /* ALPM 10 nits */
+		];
+		qcom,alpm-high-command = [
+			15 01 00 00 00 00 02 53 22 /* ALPM 50 nits */
+		];
 	};
         dsi_panel_pwr_supply_s6e3ha3: dsi_panel_pwr_supply_s6e3ha3 {
                 #address-cells = <1>;
