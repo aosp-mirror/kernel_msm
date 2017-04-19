@@ -79,7 +79,6 @@
 		qcom,cont-splash-enabled;
 		qcom,mdss-dsi-lp11-init;
 		qcom,panel-supply-entries = <&dsi_panel_pwr_supply_s6e3fa5>;
-
 		qcom,alpm-off-command = [
 			15 01 00 00 00 00 02 53 20 /* ALPM off */
 		];
@@ -89,6 +88,31 @@
 		qcom,alpm-high-command = [
 			15 01 00 00 00 00 02 53 22 /* ALPM 50 nits */
 		];
+		qcom,mdss-dsi-lp-mode-on = [
+			29 01 00 00 00 00 03 F0 5A 5A
+			29 01 00 00 00 00 02 B0 0A
+			29 01 00 00 00 00 03 CB 03 0E
+			29 01 00 00 00 00 02 B0 1F
+			29 01 00 00 00 00 02 CB 15
+			29 01 00 00 00 00 02 B0 3B
+			29 01 00 00 00 00 02 CB 80
+			29 01 00 00 00 00 03 B1 00 C0
+			29 01 00 00 00 00 02 F7 03
+			29 01 00 00 00 00 03 F0 A5 A5
+		];
+		qcom,mdss-dsi-lp-mode-off = [
+			29 01 00 00 00 00 03 F0 5A 5A
+			29 01 00 00 00 00 02 B0 0A
+			29 01 00 00 00 00 03 CB 0B 06
+			29 01 00 00 00 00 02 B0 1F
+			29 01 00 00 00 00 02 CB 09
+			29 01 00 00 00 00 02 B0 3B
+			29 01 00 00 00 00 02 CB 00
+			29 01 00 00 00 00 03 B1 80 40
+			29 01 00 00 00 00 02 F7 03
+			29 01 00 00 00 00 03 F0 A5 A5
+		];
+		qcom,mdss-dsi-lp-change-state = "dsi_hs_mode";
 	};
 	dsi_panel_pwr_supply_s6e3fa5: dsi_panel_pwr_supply_s6e3fa5 {
 		#address-cells = <1>;
