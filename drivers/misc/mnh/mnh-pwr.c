@@ -738,6 +738,13 @@ static int mnh_pwr_get_resources(void)
 	return 0;
 }
 
+int mnh_pwr_set_asr_voltage(int voltage_uV)
+{
+	return regulator_set_voltage(mnh_pwr->asr_supply, voltage_uV,
+				     voltage_uV);
+}
+EXPORT_SYMBOL(mnh_pwr_set_asr_voltage);
+
 int mnh_pwr_set_state(enum mnh_pwr_state system_state)
 {
 	int ret = 0;
