@@ -71,13 +71,18 @@ struct mnh_pwr_data {
 
 static struct mnh_pwr_data *mnh_pwr;
 
+static int __mnh_pwr_down(bool pcie_suspend);
+
+static inline int mnh_pwr_down_skip_suspend_pcie(void)
+{
+	return __mnh_pwr_down(false);
+}
+
 static void mnh_pwr_shutdown_work(struct work_struct *data)
 {
 	dev_err(mnh_pwr->dev, "%s: begin emergency power down\n", __func__);
 
-	/* need to do something to save root complex config information */
-
-	mnh_pwr_set_state(MNH_PWR_S4);
+	mnh_pwr_down_skip_suspend_pcie();
 }
 
 static int mnh_pwr_asr_notifier_cb(struct notifier_block *nb,
@@ -338,16 +343,18 @@ fail_pcie_resume_awake:
 	return ret;
 }
 
-static int mnh_pwr_down(void)
+static int __mnh_pwr_down(bool pcie_suspend)
 {
 	int ret;
 
 	/* suspend pcie link */
-	ret = mnh_pwr_pcie_suspend();
-	if (ret) {
-		dev_err(mnh_pwr->dev, "%s: failed to suspend pcie link (%d)\n",
-			__func__, ret);
-		goto fail_pwr_down_pcie;
+	if (pcie_suspend) {
+		ret = mnh_pwr_pcie_suspend();
+		if (ret) {
+			dev_err(mnh_pwr->dev, "%s: failed to suspend pcie link (%d)\n",
+				__func__, ret);
+			goto fail_pwr_down_pcie;
+		}
 	}
 
 	/* deassert soc_pwr_good */
@@ -429,6 +436,11 @@ fail_pwr_down_sdldo:
 	mnh_pwr->state = MNH_PWR_S4;
 
 	return ret;
+}
+
+static inline int mnh_pwr_down(void)
+{
+	return __mnh_pwr_down(true);
 }
 
 static int mnh_pwr_suspend(void)
