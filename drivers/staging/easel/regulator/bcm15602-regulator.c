@@ -44,6 +44,9 @@
 #define BCM15602_ADC_CONV_TIMEOUT  msecs_to_jiffies(25)
 
 static int bcm15602_chip_init(struct bcm15602_chip *ddata);
+static int bcm15602_regulator_set_voltage(struct regulator_dev *rdev,
+					  int min_uV, int max_uV,
+					  unsigned *selector);
 static int bcm15602_regulator_get_voltage(struct regulator_dev *rdev);
 static int bcm15602_regulator_enable(struct regulator_dev *rdev);
 static int bcm15602_regulator_disable(struct regulator_dev *rdev);
@@ -164,6 +167,7 @@ static const struct regmap_config bcm15602_regmap_config = {
 static struct regulator_ops bcm15602_regulator_ops = {
 	.list_voltage = regulator_list_voltage_table,
 	.map_voltage = regulator_map_voltage_ascend,
+	.set_voltage = bcm15602_regulator_set_voltage,
 	.get_voltage = bcm15602_regulator_get_voltage,
 	.enable = bcm15602_regulator_enable,
 	.disable = bcm15602_regulator_disable,
@@ -172,7 +176,7 @@ static struct regulator_ops bcm15602_regulator_ops = {
 
 /* No support for DVS so just a single voltage level */
 static const unsigned int bcm15602_ldo_vtbl[] = { 1800000 };
-static const unsigned int bcm15602_asr_vtbl[] = { 900000 };
+static const unsigned int bcm15602_asr_vtbl[] = { 900000, 1000000 };
 static const unsigned int bcm15602_sdsr_vtbl[] = { 1100000 };
 
 static struct regulator_desc
@@ -240,9 +244,10 @@ static struct regulator_init_data
 	[BCM15602_ID_ASR] = {
 		.constraints = {
 			.name = "bcm15602_asr",
-			.valid_ops_mask = REGULATOR_CHANGE_STATUS,
+			.valid_ops_mask = REGULATOR_CHANGE_STATUS |
+					  REGULATOR_CHANGE_VOLTAGE,
 			.min_uV = 900000,
-			.max_uV = 900000,
+			.max_uV = 1000000,
 		},
 	},
 	[BCM15602_ID_SDSR] = {
@@ -725,6 +730,43 @@ static irqreturn_t bcm15602_intb_irq_handler(int irq, void *cookie)
 	return IRQ_HANDLED;
 }
 
+#define BCM15602_ASR_VOCTRL_VBASE 565000 /* microvolts */
+#define BCM15602_ASR_VOCTRL_VSTEP 5000   /* microvolts */
+
+/* set the current voltage of the regulator in microvolts */
+static int bcm15602_regulator_set_voltage(struct regulator_dev *rdev,
+					  int min_uV, int max_uV,
+					  unsigned *selector)
+{
+	struct bcm15602_chip *ddata = rdev_get_drvdata(rdev);
+	enum bcm15602_regulator_ids rid = rdev_get_id(rdev);
+	int vsel, vout;
+	int i;
+
+	if (rid != BCM15602_ID_ASR)
+		return -EINVAL;
+
+	for (i = 0; i < ARRAY_SIZE(bcm15602_asr_vtbl); i++) {
+		if ((min_uV <= bcm15602_asr_vtbl[i]) &&
+		    (bcm15602_asr_vtbl[i] <= max_uV)) {
+			*selector = i;
+			vout = bcm15602_asr_vtbl[i];
+			break;
+		}
+	}
+
+	if (i == ARRAY_SIZE(bcm15602_asr_vtbl))
+		return -EINVAL;
+
+	vsel = (vout - BCM15602_ASR_VOCTRL_VBASE) / BCM15602_ASR_VOCTRL_VSTEP;
+
+	dev_dbg(ddata->dev, "%s: rid %d, setting vsel to 0x%02x\n", __func__,
+		rid, vsel);
+
+	return bcm15602_write_byte(ddata, BCM15602_REG_BUCK_ASR_VOCTRL,
+				   vsel & 0x7F);
+}
+
 /* get the current voltage of the regulator in microvolts */
 static int bcm15602_regulator_get_voltage(struct regulator_dev *rdev)
 {
@@ -785,6 +827,9 @@ static int bcm15602_regulator_get_voltage(struct regulator_dev *rdev)
 	default:
 		return -EINVAL;
 	}
+
+	dev_dbg(ddata->dev, "%s: rid %d, returning voltage %d\n", __func__, rid,
+		vbase + vsel * vstep);
 
 	return vbase + vsel * vstep;
 }
