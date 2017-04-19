@@ -10,54 +10,54 @@
  * GNU General Public License for more details.
  */
 
-qcom,lge_blt32_tocad_3300mah {
-	qcom, = <22>;
-	/* #2728810_LGE_BLT32tocad_3300mAh_averaged_MasterSlave_Dec12th2016*/
-	qcom,max-voltage-uv = <4350000>;
-	qcom,fastchg-current-ma = <2200>;
+qcom,lge_blt35_tocad_3620mah {
+	qcom, = <24>;
+	/* #2883111_LGE_BLT35tocad_3620mAh_averaged_MasterSlave_Apr18th2017*/
+	qcom,max-voltage-uv = <4400000>;
+	qcom,nom-batt-capacity-mah = <3620>;
 	qcom,batt-id-kohm = <56>;
-	qcom,battery-beta = <4250>;
-	qcom,battery-type = "lge_blt32_tocad_3300mah";
-	qcom,checksum = <0x64AF>;
-	qcom,gui-version = "PMI8998GUI - 2.0.0.53";
+	qcom,battery-beta = <4150>;
+	qcom,battery-type = "lge_blt35_tocad_3620mah";
+	qcom,checksum = <0x54F2>;
+	qcom,gui-version = "PMI8998GUI - 2.0.0.57";
 	qcom,fg-profile-data = [
-		 88 1F A3 05
-		 66 0A A3 FC
-		 48 1D 0D DB
-		 41 0A 14 0C
-		 97 18 D2 22
-		 C3 45 70 52
-		 5B 00 00 00
+		 53 1F C6 05
+		 74 0A 42 06
+		 4B 1D E1 DD
+		 0C 0B 3B 15
+		 6B 18 16 23
+		 66 45 03 53
+		 56 00 00 00
 		 0E 00 00 00
-		 00 00 AC C5
-		 F1 CC 65 CB
-		 20 00 08 00
-		 05 EB 29 E4
-		 9F FC 89 F3
-		 EA F4 AA 12
-		 AB FC ED 32
-		 1F 06 09 20
+		 00 00 4E C3
+		 DF D5 7C AB
+		 23 00 08 00
+		 C9 E2 BA ED
+		 9D 05 5D 01
+		 DD 0C 35 0B
+		 79 CB 91 32
+		 26 06 09 20
 		 27 00 14 00
-		 22 1C A3 FA
-		 39 E4 8E 00
-		 F1 1C 48 02
-		 A1 0D 05 0A
-		 11 1A 72 1B
-		 BE 3D F0 43
-		 7D 00 00 00
-		 11 00 00 00
-		 00 00 A9 CC
-		 86 CA 00 AC
-		 1A 00 00 00
-		 05 EB 29 E4
-		 C5 06 85 00
-		 1C D2 7B 0A
-		 6C 06 54 1A
-		 99 33 CC FF
+		 40 1D 64 DB
+		 63 FB 91 ED
+		 F7 1C 4F 02
+		 96 0D 21 0A
+		 71 19 83 22
+		 F4 45 3D 52
+		 77 00 00 00
+		 0D 00 00 00
+		 00 00 97 D5
+		 10 CB AA AA
+		 19 00 00 00
+		 2A EB BA ED
+		 87 06 6F F2
+		 1A F4 EF 02
+		 A7 FD F7 1A
+		 9E 33 CC FF
 		 07 10 00 00
-		 0A 0D 99 45
-		 1A 00 40 00
-		 E4 01 0A FA
+		 73 0E 66 46
+		 19 00 40 00
+		 10 02 0A FA
 		 FF 00 00 00
 		 00 00 00 00
 		 00 00 00 00
@@ -79,3 +79,4 @@ qcom,lge_blt32_tocad_3300mah {
 		 00 00 00 00
 	];
 };
+

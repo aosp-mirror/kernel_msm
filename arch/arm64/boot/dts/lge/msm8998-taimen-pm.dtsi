@@ -14,8 +14,7 @@
 &soc {
 	taimen_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <15>;
-		#include "batterydata-lge-blt32-lgc-3300mah.dtsi"
-		#include "batterydata-lge-blt32-tocad-3300mah.dtsi"
+		#include "lge_blt35_tocad_3620mah.dtsi"
 	};
 };
 
@@ -241,7 +240,6 @@
 
 &pmi8998_fg {
 	qcom,battery-data = <&taimen_batterydata>;
-	qcom,fg-force-load-profile;
 	qcom,fg-jeita-thresholds = <0 20 45 55>;
 	qcom,fg-jeita-hyst-temp = <2>;
 };
