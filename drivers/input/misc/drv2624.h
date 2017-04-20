@@ -116,6 +116,17 @@
 #define	MINFREQ_SEL_MASK			0x80
 #define	MINFREQ_SEL_SHIFT			0x07
 
+#define DRV2624_REG_BLK_IDISS_TIME		0x28
+#define IDISS_TIME_MASK				0x0f
+#define BLANKING_TIME_MASK			0xf0
+#define BLANKING_TIME_SHIFT			0x04
+
+#define DRV2624_REG_ZC_OD_TIME			0x29
+#define ZC_DET_TIME_MASK			0x03
+
+#define DRV2624_REG_LRA_OL_CTRL			0x2c
+#define LRA_WAVE_SHAPE_MASK			0x01
+
 #define	DRV2624_REG_OL_PERIOD_H			0x2e
 
 #define	DRV2624_REG_OL_PERIOD_L			0x2f
@@ -181,7 +192,15 @@ struct actuator_data {
 	unsigned char actuator_type;
 	unsigned char rated_voltage;
 	unsigned char over_drive_clamp_voltage;
-	unsigned char lra_freq;
+	int lra_freq;
+	int ol_lra_freq;
+	int voltage_comp;
+	int bemf_factor;
+	int bemf_gain;
+	int blanking_time;
+	int idiss_time;
+	int zc_det_time;
+	int lra_wave_shape;
 };
 
 enum wave_seq_loop {

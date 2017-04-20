@@ -636,9 +636,16 @@ static void dev_init_platform_data(struct drv2624_data *drv2624)
 
 		if (actuator.lra_freq < 125)
 			drive_time |= (MINFREQ_SEL_45HZ << MINFREQ_SEL_SHIFT);
+
 		drv2624_set_bits(drv2624,
 				 DRV2624_REG_DRIVE_TIME,
 				 DRIVE_TIME_MASK | MINFREQ_SEL_MASK, drive_time);
+
+		if (actuator.ol_lra_freq > -1)
+			open_loop_period =
+				(unsigned short)((unsigned int)1000000000 /
+				     (24619 * actuator.ol_lra_freq));
+
 		drv2624_set_bits(drv2624,
 				 DRV2624_REG_OL_PERIOD_H, 0x03,
 				 (open_loop_period & 0x0300) >> 8);
@@ -648,7 +655,39 @@ static void dev_init_platform_data(struct drv2624_data *drv2624)
 		dev_info(drv2624->dev,
 			 "%s, LRA = %d, drive_time=0x%x\n",
 			 __func__, actuator.lra_freq, drive_time);
+
+		if (actuator.lra_wave_shape > -1)
+			drv2624_set_bits(drv2624,
+					 DRV2624_REG_LRA_OL_CTRL,
+					 LRA_WAVE_SHAPE_MASK,
+					 actuator.lra_wave_shape);
 	}
+
+	if (actuator.voltage_comp > -1)
+		drv2624_reg_write(drv2624, DRV2624_REG_CAL_COMP,
+				  actuator.voltage_comp);
+
+	if (actuator.bemf_factor > -1)
+		drv2624_reg_write(drv2624, DRV2624_REG_CAL_BEMF,
+				  actuator.bemf_factor);
+
+	if (actuator.bemf_gain > -1)
+		drv2624_set_bits(drv2624, DRV2624_REG_LOOP_CONTROL,
+				 BEMFGAIN_MASK, actuator.bemf_gain);
+
+	if (actuator.blanking_time > -1)
+		drv2624_set_bits(drv2624, DRV2624_REG_BLK_IDISS_TIME,
+				 BLANKING_TIME_MASK,
+				 actuator.blanking_time << BLANKING_TIME_SHIFT);
+
+	if (actuator.idiss_time > -1)
+		drv2624_set_bits(drv2624, DRV2624_REG_BLK_IDISS_TIME,
+				 IDISS_TIME_MASK, actuator.idiss_time);
+
+	if (actuator.zc_det_time > -1)
+		drv2624_set_bits(drv2624, DRV2624_REG_ZC_OD_TIME,
+				 ZC_DET_TIME_MASK, actuator.zc_det_time);
+
 }
 
 static irqreturn_t drv2624_irq_handler(int irq, void *dev_id)
@@ -754,12 +793,86 @@ static int drv2624_parse_dt(struct device *dev, struct drv2624_data *drv2624)
 			} else {
 				dev_err(drv2624->dev,
 					"ERROR, ti,lra-frequency=%d, out of range\n",
-					pdata->actuator.lra_freq);
+					value);
 				ret = -EINVAL;
 				goto drv2624_parse_dt_out;
 			}
 		}
 	}
+
+	/* actuator properties below are optional to have */
+
+	if (!of_property_read_u32(np, "ti,voltage-comp", &value))
+		pdata->actuator.voltage_comp = value;
+	else
+		pdata->actuator.voltage_comp = -1;
+
+	dev_dbg(drv2624->dev, "ti,voltage-comp=%d\n",
+		pdata->actuator.voltage_comp);
+
+	if (!of_property_read_u32(np, "ti,ol-lra-frequency", &value)) {
+		if ((value >= 45) && (value <= 300)) {
+			pdata->actuator.ol_lra_freq = value;
+		} else {
+			pdata->actuator.ol_lra_freq = -1;
+			dev_err(drv2624->dev,
+				"ERROR, ti,ol-lra-frequency=%d, out of range\n",
+				value);
+		}
+	} else {
+		pdata->actuator.ol_lra_freq = -1;
+	}
+
+	dev_dbg(drv2624->dev, "ti,ol-lra-frequency=%d\n",
+		pdata->actuator.ol_lra_freq);
+
+	if (!of_property_read_u32(np, "ti,bemf-factor", &value))
+		pdata->actuator.bemf_factor = value;
+	else
+		pdata->actuator.bemf_factor = -1;
+
+	dev_dbg(drv2624->dev, "ti,bemf-factor=%d\n",
+		pdata->actuator.bemf_factor);
+
+	if (!of_property_read_u32(np, "ti,bemf-gain", &value))
+		pdata->actuator.bemf_gain = value;
+	else
+		pdata->actuator.bemf_gain = -1;
+
+	dev_dbg(drv2624->dev, "ti,bemf-gain=%d\n",
+		pdata->actuator.bemf_gain);
+
+	if (!of_property_read_u32(np, "ti,blanking-time", &value))
+		pdata->actuator.blanking_time = value;
+	else
+		pdata->actuator.blanking_time = -1;
+
+	dev_dbg(drv2624->dev, "ti,blanking-time=%d\n",
+		pdata->actuator.ol_lra_freq);
+
+	if (!of_property_read_u32(np, "ti,idiss-time", &value))
+		pdata->actuator.idiss_time = value;
+	else
+		pdata->actuator.idiss_time = -1;
+
+	dev_dbg(drv2624->dev, "ti,idiss-time=%d\n",
+		pdata->actuator.idiss_time);
+
+	if (!of_property_read_u32(np, "ti,zc-det-time", &value))
+		pdata->actuator.zc_det_time = value;
+	else
+		pdata->actuator.zc_det_time = -1;
+
+	dev_dbg(drv2624->dev, "ti,zc-det-time=%d\n",
+		pdata->actuator.zc_det_time);
+
+	if (!of_property_read_u32(np, "ti,lra-wave-shape", &value))
+		pdata->actuator.lra_wave_shape = value;
+	else
+		pdata->actuator.lra_wave_shape = -1;
+
+	dev_dbg(drv2624->dev, "ti,lra-wave-shape=%d\n",
+		pdata->actuator.lra_wave_shape);
 
 drv2624_parse_dt_out:
 	return ret;
