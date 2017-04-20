@@ -293,6 +293,50 @@ disp_en_gpio_err:
 	return rc;
 }
 
+int mdss_dsi_power_enable(struct mdss_panel_data *pdata, int enable)
+{
+	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
+	int rc = 0;
+
+	if (pdata == NULL) {
+		pr_err("%s: Invalid input data\n", __func__);
+		return -EINVAL;
+	}
+	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+				panel_data);
+
+	if (!gpio_is_valid(ctrl_pdata->disp_pwr_gpio)) {
+		pr_debug("%s:%d, power line not configured\n",
+			   __func__, __LINE__);
+		return 0;
+	}
+
+	if (enable) {
+		rc = gpio_request(ctrl_pdata->disp_pwr_gpio, "disp_power");
+		if (rc) {
+			pr_err("request disp_pwr gpio failed, rc=%d\n", rc);
+			return rc;
+		}
+		rc = gpio_direction_output(
+			ctrl_pdata->disp_pwr_gpio, 1);
+		if (rc) {
+			pr_err("%s: unable to set dir for power gpio\n",
+				__func__);
+			gpio_free(ctrl_pdata->disp_pwr_gpio);
+			return rc;
+		}
+		/* sleep to make sure power is on before continuing. */
+		msleep(WAIT_FOR_PWR_PIN);
+	}
+	else
+	{
+		gpio_set_value((ctrl_pdata->disp_pwr_gpio), 0);
+		gpio_free(ctrl_pdata->disp_pwr_gpio);
+	}
+
+	return 0;
+}
+
 int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 {
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
