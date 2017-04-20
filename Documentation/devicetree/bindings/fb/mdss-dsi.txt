@@ -100,6 +100,7 @@ Optional properties:
 - qcom,mdss-fb-map-sec:			pHandle that specifies the framebuffer to which the
 					secondary interface is mapped.
 - qcom,platform-enable-gpio:		Specifies the panel lcd/display enable gpio.
+- qcom,platform-power-gpio:		Specifies the panel power enable gpio.
 - qcom,platform-reset-gpio:		Specifies the panel reset gpio.
 - qcom,platform-te-gpio:		Specifies the gpio used for TE.
 - qcom,platform-bklight-en-gpio:	Specifies the gpio used to enable display back-light

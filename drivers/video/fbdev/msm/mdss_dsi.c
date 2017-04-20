@@ -302,6 +302,11 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 		pr_err("%s: failed to disable vregs for %s\n",
 			__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
 
+	ret |= mdss_dsi_power_enable(pdata, 0);
+	if (ret)
+		pr_err("%s: Panel enable power pin failed. rc=%d\n",
+				__func__, ret);
+
 end:
 	return ret;
 }
@@ -318,6 +323,13 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
+
+	ret = mdss_dsi_power_enable(pdata, 1);
+	if (ret){
+		pr_err("%s: Panel enable power pin failed. rc=%d\n",
+				__func__, ret);
+		return ret;
+	}
 
 	ret = msm_dss_enable_vreg(
 		ctrl_pdata->panel_power_data.vreg_config,
@@ -4128,6 +4140,19 @@ static int mdss_dsi_parse_gpio_params(struct platform_device *ctrl_pdev,
 
 		if (!gpio_is_valid(ctrl_pdata->disp_en_gpio))
 			pr_debug("%s:%d, Disp_en gpio not specified\n",
+					__func__, __LINE__);
+	}
+	/*
+	 * If disp_pwr_gpio has been set previously (disp_pwr_gpio > 0)
+	 *  while parsing the panel node, then do not override it
+	 */
+	if (ctrl_pdata->disp_pwr_gpio <= 0) {
+		ctrl_pdata->disp_pwr_gpio = of_get_named_gpio(
+			ctrl_pdev->dev.of_node,
+			"qcom,platform-power-gpio", 0);
+
+		if (!gpio_is_valid(ctrl_pdata->disp_pwr_gpio))
+			pr_debug("%s:%d, power gpio not specified\n",
 					__func__, __LINE__);
 	}
 
