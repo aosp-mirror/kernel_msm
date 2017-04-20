@@ -165,7 +165,13 @@ static irqreturn_t pn5xx_dev_irq_handler(int irq, void *dev_id)
 
 static int pn5xx_suspend(struct i2c_client *client, pm_message_t mesg)
 {
+    struct pn5xx_dev *pn5xx_dev = i2c_get_clientdata(client);
     pr_info("%s\n", __func__);
+    if(gpio_get_value(pn5xx_dev->clkreq_gpio))
+    {
+        pr_info("suspend delay %s\n", __func__);
+        wake_lock_timeout(&pn5xx_dev->wake_lock,DATA_TRANSFER_INTERVAL);
+    }
     return 0;
 }
 
