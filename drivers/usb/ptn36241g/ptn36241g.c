@@ -213,12 +213,6 @@ static int ptn36241g_probe(struct platform_device *pdev)
 	struct pinctrl_state *nxp_cc2_active_state;
 	struct pinctrl_state *nxp_cc2_sleep_state;
 
-	if (!strncmp(boot_mode, "usbradio", 8)) {
-		dev_info(&pdev->dev,
-			 "Do not probe re-driver in usbradio mode\n");
-		return ret;
-	}
-
 	pinctrl = devm_pinctrl_get(&pdev->dev);
 	if (IS_ERR(pinctrl)) {
 		ret = PTR_ERR(pinctrl);
@@ -331,6 +325,16 @@ static int ptn36241g_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+	/* Do not enable ptn36241g redriver for 'usbradio' boot mode.
+	 * End probe here after initializing the chip to inactive
+	 * state.
+	 */
+	if (!strncmp(boot_mode, "usbradio", 8)) {
+		dev_info(&pdev->dev,
+			 "Do not register power notifier in usbradio mode\n");
+		return ret;
+	}
+
 	/* Initial Redriver state */
 	psy_changed(&chip->psy_nb, PSY_EVENT_PROP_CHANGED, chip->usb_psy);
 
@@ -384,4 +388,3 @@ static struct platform_driver ptn36241g_driver = {
 	.shutdown	= ptn36241g_shutdown,
 };
 module_platform_driver(ptn36241g_driver);
-
