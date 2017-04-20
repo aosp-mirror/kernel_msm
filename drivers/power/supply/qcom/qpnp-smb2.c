@@ -119,7 +119,7 @@ static struct smb_params v1_params = {
 		.name	= "jeita fcc reduction",
 		.reg	= JEITA_CCCOMP_CFG_REG,
 		.min_u	= 0,
-		.max_u	= 1575000,
+		.max_u	= 4500000,
 		.step_u	= 25000,
 	},
 	.step_soc_threshold[0]		= {
@@ -239,6 +239,7 @@ static struct smb_params pm660_params = {
 #define STEP_CHARGING_MAX_STEPS	5
 struct smb_dt_props {
 	int	fcc_ua;
+	int	jeita_cccomp_ua;
 	int	usb_icl_ua;
 	int	dc_icl_ua;
 	int	boost_threshold_ua;
@@ -313,7 +314,13 @@ static int smb2_parse_dt(struct smb2 *chip)
 		chip->dt.fcc_ua = -EINVAL;
 
 	rc = of_property_read_u32(node,
-				"qcom,fv-max-uv", &chip->dt.fv_uv);
+				"qcom,jeita-cccomp-ua",
+				&chip->dt.jeita_cccomp_ua);
+	if (rc < 0)
+		chip->dt.jeita_cccomp_ua = -EINVAL;
+
+	rc = of_property_read_u32(node,
+				  "qcom,fv-max-uv", &chip->dt.fv_uv);
 	if (rc < 0)
 		chip->dt.fv_uv = -EINVAL;
 
@@ -1449,6 +1456,16 @@ static int smb2_init_hw(struct smb2 *chip)
 
 	if (chip->dt.fcc_ua < 0)
 		smblib_get_charge_param(chg, &chg->param.fcc, &chip->dt.fcc_ua);
+
+	if (chip->dt.jeita_cccomp_ua >= chg->param.jeita_cc_comp.min_u) {
+		rc = smblib_set_charge_param(chg,
+					     &chg->param.jeita_cc_comp,
+					     chip->dt.jeita_cccomp_ua);
+		if (rc < 0) {
+			pr_err("Couldn't set jeita cc comp rc=%d\n", rc);
+			return rc;
+		}
+	}
 
 	if (chip->dt.fv_uv < 0)
 		smblib_get_charge_param(chg, &chg->param.fv, &chip->dt.fv_uv);
