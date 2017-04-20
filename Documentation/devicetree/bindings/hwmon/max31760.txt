@@ -37,6 +37,8 @@ Required fan sub-node properties:
 
 Optional fan sub-node properties:
  - label: String; Assigned to the hwmon fanX_label property.
+ - maxim,enable-gpio: GPIO node reference: Output GPIO that will be enabled for
+   this fan.
 
 Temperature sub-nodes are optional.
 
@@ -45,8 +47,8 @@ Required temp sub-node properties:
 
 Optional temp sub-node properties:
  - label: String; Assigned to the hwmon tempX_label property.
- - ideality: For temperature node with reg 1 only: Set ideality factor for the
-   remote temperature sensor. Integer with range 0 to 63, representing a
+ - maxim,ideality: For temperature node with reg 1 only: Set ideality factor for
+   the remote temperature sensor. Integer with range 0 to 63, representing a
    multiplication factor of 0.9844 to 1.0489. Default: 24 (1.0080).
 
 Example:
