@@ -904,6 +904,11 @@ static int diag_send_raw_data_remote(int proc, void *buf, int len,
 			return -EBADMSG;
 		}
 		payload = *(uint16_t *)(buf + 2);
+		if (payload > DIAG_MAX_HDLC_BUF_SIZE) {
+			pr_err("diag: Dropping packet, payload size is %d\n",
+				payload);
+			return -EBADMSG;
+		}
 		driver->hdlc_encode_buf_len = payload;
 		/*
 		 * Adding 5 bytes for start (1 byte), version (1 byte),
