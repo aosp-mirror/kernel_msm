@@ -90,6 +90,6 @@
 
 &pmi8998_charger {
 	qcom,hvdcp-disable;		/* disable HVDCP */
-
+	qcom,usb-icl-ua = <1500000>;
 	external-vbus-supply = <&tps61099_vbus>;
 };
