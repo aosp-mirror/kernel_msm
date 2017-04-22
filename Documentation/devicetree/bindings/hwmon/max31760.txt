@@ -24,6 +24,8 @@ Optional node properties:
  - maxim,fan-spin-up-enabled: Boolean; On fan startup set the PWM to 100% until
    tach is detected or two seconds have passed before reducing to the target
    value.
+ - maxim,fan0-supply: Regulator that supplies current to fan 0.
+ - maxim,fan1-supply: Regulator that supplies current to fan 1.
  - maxim,pwm-polarity-negative: Boolean; If trye, 100% PWM is when PWM is low,
    not high.
  - maxim,pwm-pulse-stretch-enabled: Boolean; Enable PWM pulse stretching.
