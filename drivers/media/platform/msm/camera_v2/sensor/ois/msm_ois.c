@@ -490,9 +490,21 @@ static int32_t msm_ois_config(struct msm_ois_ctrl_t *o_ctrl,
 		break;
 	}
 	case CFG_OIS_I2C_READ_SEQ_TABLE:{
-		short read_addr = 0xE001;
+		unsigned short read_addr = 0xE001;
 		int read_cnt = 6;
+		struct reg_settings_ois_t *settings = NULL;
 		uint8_t buf[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+#ifdef CONFIG_COMPAT
+		struct msm_ois_cfg_data32 *u32 =
+			(struct msm_ois_cfg_data32 *)cdata;
+
+		cdata->cfg.set_info.ois_params.data_size =
+			u32->cfg.set_info.ois_params.data_size;
+		cdata->cfg.set_info.ois_params.setting_size =
+			u32->cfg.set_info.ois_params.setting_size;
+		cdata->cfg.set_info.ois_params.settings =
+			compat_ptr(u32->cfg.set_info.ois_params.settings);
+#endif
 
 		if (read_E003) {
 			read_addr = 0xE003;
@@ -513,11 +525,27 @@ static int32_t msm_ois_config(struct msm_ois_ctrl_t *o_ctrl,
 
 			read_cnt = cdata->cfg.set_info.ois_params.data_size;
 
-			if (cdata->cfg.set_info.ois_params.settings != NULL)
-				read_addr = cdata->cfg.set_info.ois_params
-					.settings[0].reg_addr;
-		}
+			settings = kmalloc(
+				sizeof(struct reg_settings_ois_t) *
+				(cdata->cfg.set_info.ois_params.setting_size),
+				GFP_KERNEL);
+			if (settings == NULL) {
+				pr_err("Error allocating memory\n");
+				return -EFAULT;
+			}
+			if (copy_from_user(settings,
+				(void *)cdata->cfg.set_info.ois_params.settings,
+				cdata->cfg.set_info.ois_params.setting_size *
+				sizeof(struct reg_settings_ois_t))) {
+				kfree(settings);
+				pr_err("Error copying\n");
+				return -EFAULT;
+			}
 
+			read_addr = settings[0].reg_addr;
+
+			kfree(settings);
+		}
 		rc = o_ctrl->i2c_client.i2c_func_tbl->
 			i2c_read_seq(&o_ctrl->i2c_client, read_addr,
 				     &buf[0], read_cnt);
