@@ -283,8 +283,16 @@ static int easelcomm_hw_ap_pcie_ready(void)
 	uint64_t temp_rb_base_val;
 	int ret;
 
-	local_cmdchan_cpu_addr = mnh_alloc_coherent(
-		EASELCOMM_CMD_CHANNEL_SIZE, &local_cmdchan_dma_addr);
+	/* Only allocate ringbuffer once for AP */
+	if (local_cmdchan_cpu_addr == NULL) {
+		local_cmdchan_cpu_addr = mnh_alloc_coherent(
+						EASELCOMM_CMD_CHANNEL_SIZE,
+						&local_cmdchan_dma_addr);
+		if (IS_ERR_OR_NULL(local_cmdchan_cpu_addr)) {
+			pr_warn("%s: failed to alloc ringbuffer\n", __func__);
+			return -ENOMEM;
+		}
+	}
 
 	ret = easelcomm_init_pcie_ready(local_cmdchan_cpu_addr);
 	WARN_ON(ret);
@@ -335,6 +343,8 @@ int easelcomm_hw_init(void)
 	int ret;
 
 	mutex_init(&app_dma_mutex);
+
+	local_cmdchan_cpu_addr = NULL;
 
 	ret = mnh_sm_reg_hotplug_callback(&easelcomm_hw_ap_hotplug_callback);
 	if (WARN_ON(ret))
