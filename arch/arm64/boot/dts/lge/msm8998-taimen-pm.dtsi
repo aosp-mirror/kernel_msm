@@ -245,6 +245,18 @@
 	qcom,fg-jeita-hyst-temp = <2>;
 };
 
+&pmi8998_pdphy {
+	vbus-supply = <&smb138x_vbus>;
+};
+
+&smb138x_parallel_slave {
+	qcom,parallel-mode = <2>;
+
+	smb138x_vbus: qcom,smb138x-vbus {
+		status = "okay";
+	};
+};
+
 &spmi_bus {
 	qcom,pm8998@0 {
 		qcom,power-on@800 {
