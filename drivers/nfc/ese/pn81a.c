@@ -44,6 +44,7 @@ static long ese_compat_ioctl(struct file *filp, unsigned int cmd,
 {
 	long r = 0;
 	struct ese_dev *ese_dev = filp->private_data;
+	mutex_lock(&ese_dev->mutex);
 
 	arg = (compat_u64)arg;
 	switch (cmd) {
@@ -56,8 +57,8 @@ static long ese_compat_ioctl(struct file *filp, unsigned int cmd,
 	default:
 		r = -ENOTTY;
 	}
+	mutex_unlock(&ese_dev->mutex);
 	return r;
-
 }
 #endif
 
@@ -66,6 +67,7 @@ static long ese_ioctl(struct file *filp, unsigned int cmd,
 {
 	int r = 0;
 	struct ese_dev *ese_dev = filp->private_data;
+	mutex_lock(&ese_dev->mutex);
 
 	switch (cmd) {
 	case ESE_SET_PWR:
@@ -77,12 +79,13 @@ static long ese_ioctl(struct file *filp, unsigned int cmd,
 	default:
 		r = -ENOIOCTLCMD;
 	}
+	mutex_unlock(&ese_dev->mutex);
 	return r;
 }
 
 static int ese_open(struct inode *inode, struct file *filp)
 {
-	int ret = 0;
+	int pwr = 0;
 	struct ese_dev *ese_dev = container_of(filp->private_data,
 				struct ese_dev, device);
 
@@ -118,33 +121,31 @@ static int ese_open(struct inode *inode, struct file *filp)
 			"%s: major,minor: %d,%d\n",
 			__func__, imajor(inode), iminor(inode));
 
-	/* Expect the eSE to be powered off at open. */
+	/* Note, opening and closing is treated wholly independently
+	 * from power management.  This ensures that the eSE can go to
+	 * a deep power down state as dictated by the software stack.
+	 */
+	pwr = ese_ioctl(filp, ESE_GET_PWR, 0);
 	dev_dbg(&ese_dev->spi->dev,
-			"%s: checking power state\n", __func__);
-	if (ese_ioctl(filp, ESE_GET_PWR, 0) == 1) {
-		dev_dbg(&ese_dev->spi->dev,
-			"%s: attempting to unpower ese_pwr\n", __func__);
-		ese_ioctl(filp, ESE_SET_PWR, 1);
-	}
-	dev_dbg(&ese_dev->spi->dev,
-			"%s: eSE opened\n", __func__);
+			"%s: eSE opened (power: %d)\n", __func__, pwr);
 
-	return ret;
+	return 0;
 
 err:
 	mutex_unlock(&ese_dev->mutex);
-	ret = -ENODEV;
-	return ret;
+	return -ENODEV;
 }
 
 static int ese_release(struct inode *ino, struct file *filp)
 {
 	struct ese_dev *ese_dev = filp->private_data;
+	int pwr = 0;
+
+	pwr = ese_ioctl(filp, ESE_GET_PWR, 0);
 
 	mutex_lock(&ese_dev->mutex);
 	dev_dbg(&ese_dev->spi->dev,
-			"%s: attempting to disable ese_pwr\n", __func__);
-	ese_ioctl(filp, ESE_SET_PWR, 1);
+			"%s: power: %d\n", __func__, pwr);
 	mutex_unlock(&ese_dev->mutex);
 	return 0;
 }
