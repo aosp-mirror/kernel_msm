@@ -254,79 +254,45 @@ void fts_get_afe_info(struct fts_ts_info *info)
 	if (rc < 0) {
 		info->afe_ver = 0;
 		tsp_debug_err(info->dev,
-					"%s: Read Fail - Final AFE [Data : "
-					"%2X] AFE Ver [Data : %2X] \n",
-					__func__,
-					data[1],
-					data[2]);
+				"%s: Read Fail - Final AFE [Data : "
+				"%2X] AFE Ver [Data : %2X] \n",
+				__func__,
+				data[1],
+				data[2]);
 	} else
 		info->afe_ver = data[2];
 }
 
 int fts_get_version_info(struct fts_ts_info *info)
 {
-	int rc;
-	unsigned char regAdd[3];
-	unsigned char data[FTS_EVENT_SIZE];
-	int retry = 0;
-
+	int rc = 0;
+	unsigned char addr[3] = {0xD0, 0x00, 0x56};
+	unsigned char buff[7] = {0};
 	char str[16] = {0};
 	int str_ret = 0;
 
-	if (info->fts_power_state != FTS_POWER_STATE_ACTIVE) {
-		tsp_debug_err(info->dev,
-			"%s : FTS_POWER_STATE is not ACTIVE\n", __func__);
-		return -EPERM;
+	rc = fts_read_reg(info, &addr[0], 3, &buff[0], 7);
+	if (rc < 0) {
+		tsp_debug_dbg(&info->client->dev, "FTS get version info fail!\n");
+		goto error;
 	}
 
-	info->fts_interrupt_set(info, INT_DISABLE);
-	info->fts_command(info, SENSEOFF);
-	disable_irq(info->irq);
-	info->fts_release_all_finger(info);
-	fts_delay(50);
-	info->fts_command(info, FLUSHBUFFER); /* Clear FIFO */
-	fts_delay(50);
-
-	fts_command(info, FTS_CMD_RELEASEINFO);
-
-	memset(data, 0x0, FTS_EVENT_SIZE);
-
-	regAdd[0] = READ_ONE_EVENT;
-
-	rc = -1;
-	while (fts_read_reg(info, &regAdd[0], 1,
-				(unsigned char *)data, FTS_EVENT_SIZE)) {
-		if (data[0] == EVENTID_INTERNAL_RELEASE_INFO) {
-			/*  Internal release Information */
-			info->fw_version_of_ic = (data[3] << 8) + data[4];
-			info->config_version_of_ic = (data[6] << 8) + data[5];
-		} else if (data[0] == EVENTID_EXTERNAL_RELEASE_INFO) {
-			/* External release Information */
-			info->fw_main_version_of_ic = (data[1] << 8) + data[2];
-			info->ic_fw_ver.build = ((data[1] >> 4) & 0x0F);
-			info->ic_fw_ver.major = (data[1] & 0x0F);
-			info->ic_fw_ver.minor =  data[2];
-			rc = 0;
-			break;
-		}
-
-		if (retry++ > FTS_RETRY_COUNT) {
-			rc = -ETIMEDOUT;
-			tsp_debug_err(&info->client->dev,
-						"%s: Time Over\n", __func__);
-			goto error;
-		}
-	}
+	info->fw_version_of_ic = buff[1] + (buff[2] << 8);
+	info->config_version_of_ic = buff[3] + (buff[4] << 8);
+	info->fw_main_version_of_ic = buff[6] + (buff[5] << 8);
+	info->ic_fw_ver.build = ((buff[5] >> 4) & 0x0F);
+	info->ic_fw_ver.major = (buff[5] & 0x0F);
+	info->ic_fw_ver.minor = buff[6];
 
 	str_ret += snprintf(str + str_ret, sizeof(str) - str_ret,
-						"v%d.%02d",
-						info->ic_fw_ver.major,
-						info->ic_fw_ver.minor);
+			"v%d.%02d",
+			info->ic_fw_ver.major,
+			info->ic_fw_ver.minor);
 
 	if (info->ic_fw_ver.build) {
 		str_ret += snprintf(str + str_ret, sizeof(str) - str_ret,
-							".%d",
-							info->ic_fw_ver.build);
+				".%d",
+				info->ic_fw_ver.build);
 	}
 
 	fts_get_afe_info(info);
@@ -344,10 +310,6 @@ int fts_get_version_info(struct fts_ts_info *info)
 			info->afe_ver);
 
 error:
-	enable_irq(info->irq);
-	info->fts_command(info, SENSEON);
-	info->fts_interrupt_set(info, INT_ENABLE);
-
 	return rc;
 }
 
