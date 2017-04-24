@@ -47,6 +47,8 @@
 				15 01 00 00 00 00 02 70 55
 				15 01 00 00 00 00 02 FE 0A
 				15 01 00 00 00 00 02 29 10
+				15 01 00 00 00 00 02 FE 05
+				15 01 00 00 00 00 02 05 01
 				15 01 00 00 00 00 02 FE 00
 				15 01 00 00 00 00 02 35 00
 				39 01 00 00 00 00 05 2A 00 0C 01 D1
@@ -63,6 +65,7 @@
 		qcom,mdss-dsi-bllp-eof-power-mode;
 		qcom,mdss-dsi-bllp-power-mode;
 		qcom,mdss-dsi-lane-0-state;
+		qcom,mdss-tear-check-frame-rate = <5700>;
 		qcom,mdss-dsi-te-pin-select = <1>;
 		qcom,mdss-dsi-te-v-sync-rd-ptr-irq-line = <0x2c>;
 		qcom,mdss-dsi-te-dcs-command = <1>;
