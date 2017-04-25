@@ -25,6 +25,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/regmap.h>
+#include <linux/regulator/consumer.h>
 
 #define DRIVER_NAME "max31760"
 
@@ -139,6 +140,7 @@
 #define MAX31760_LUT_AUTO_ATTR_COUNT (MAX31760_LUT_COUNT * \
 				      MAX31760_LUT_AUTO_ATTRS)
 #define MAX31760_LUT_NAME_SIZE 32     /* Fit: pwm1_auto_pointXX_temp_hyst\0. */
+#define MAX31760_SUPPLY_NAME_SIZE 12  /* Fit: maxim,fan1\0. */
 
 /*
  * struct max31760_dev_attr - for generated device attributes
@@ -156,12 +158,14 @@ struct max31760_dev_attr {
  * @enabled:     True when the fan is enabled.
  * @label:       Label if provided in open firmware.
  * @enable_gpio: GPIO that enables this fan.
+ * @supply:      Power supply for this fan.
  */
 struct max31760_fan {
 	const char *label;
 	int pulses;
 	bool enabled;
 	struct gpio_desc *enable_gpio;
+	struct regulator *supply;
 };
 
 /*
@@ -1246,6 +1250,7 @@ static int max31760_of_init_fan(struct device *dev,
 				struct device_node *fan_node, u32 reg)
 {
 	struct max31760 *max31760 = dev_get_drvdata(dev);
+	char supply_name[MAX31760_SUPPLY_NAME_SIZE];
 	struct max31760_fan *fan;
 	int err;
 
@@ -1279,6 +1284,32 @@ static int max31760_of_init_fan(struct device *dev,
 		if (err) {
 			dev_err(dev, "Failed to set fan%d gpio output %s.", reg,
 				fan->enabled ? "enabled" : "disabled");
+			return err;
+		}
+	}
+
+	snprintf(supply_name, MAX31760_SUPPLY_NAME_SIZE, "maxim,fan%u", reg);
+	fan->supply = devm_regulator_get_optional(dev, supply_name);
+	err = PTR_ERR(fan->supply);
+	if (err == -ENODEV) {
+		fan->supply = NULL;
+	} else if (err == -EPROBE_DEFER) {
+		dev_dbg(dev, "Defer due to %s-supply.", supply_name);
+		return err;
+	} else if (err == -ENOENT) {
+		dev_err(dev, "Could not find regulator for %s-supply.",
+			supply_name);
+		return err;
+	} else if (IS_ERR(fan->supply)) {
+		dev_err(dev, "Get '%s-supply' error: %d", supply_name, err);
+		return err;
+	}
+
+	if (fan->supply && fan->enabled) {
+		err = regulator_enable(fan->supply);
+		if (err) {
+			dev_err(dev, "Failed to enable %s-supply: %d",
+				supply_name, err);
 			return err;
 		}
 	}
@@ -1433,12 +1464,13 @@ static int max31760_probe(struct i2c_client *client,
 	return PTR_ERR_OR_ZERO(hwmon_dev);
 }
 
-/* Toggle the fan GPIOs to match enable state. */
-static void max31760_update_fan_states(struct device *dev, bool enable)
+/* Toggle the fan GPIOs and regulators to match enable state. */
+static int max31760_update_fan_states(struct device *dev, bool enable)
 {
 	struct max31760 *max31760 = dev_get_drvdata(dev);
 	struct max31760_fan *fan;
 	bool is_enabled;
+	int err;
 	int i;
 
 	for (i = 0; i < MAX31760_NUM_FANS; i++) {
@@ -1447,14 +1479,29 @@ static void max31760_update_fan_states(struct device *dev, bool enable)
 
 		if (fan->enable_gpio)
 			gpiod_set_value_cansleep(fan->enable_gpio, is_enabled);
+
+		if (fan->supply) {
+			if (is_enabled)
+				err = regulator_enable(fan->supply);
+			else
+				err = regulator_disable(fan->supply);
+			if (err)
+				dev_err(dev, "Failed to %s fan %d vdd-supply",
+					is_enabled ? "enabled" : "disable", i);
+		}
 	}
+
+	return err;
 }
 
 static int __maybe_unused max31760_suspend(struct device *dev)
 {
 	struct max31760 *max31760 = dev_get_drvdata(dev);
+	int err;
 
-	max31760_update_fan_states(dev, 0);
+	err = max31760_update_fan_states(dev, 0);
+	if (err)
+		return err;
 
 	return regmap_update_bits(max31760->regmap, MAX31760_REG_CR2,
 				  MAX31760_CR2_STBY, MAX31760_CR2_STBY);
@@ -1470,7 +1517,7 @@ static int __maybe_unused max31760_resume(struct device *dev)
 	if (err)
 		dev_err(dev, "Could not clear Standby bit: %d", err);
 
-	max31760_update_fan_states(dev, 1);
+	err |= max31760_update_fan_states(dev, 1);
 	return err;
 }
 
