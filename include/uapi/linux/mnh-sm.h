@@ -38,6 +38,8 @@
 #define MNH_SM_IOC_MAGIC 'T'
 #define MNH_SM_MAX 8
 
+#define MNH_ION_BUFFER_SIZE SZ_64M
+
 #define MNH_SM_IOC_GET_STATE \
 	_IOR(MNH_SM_IOC_MAGIC, 1, int *)
 #define MNH_SM_IOC_SET_STATE \
@@ -50,12 +52,24 @@
 	_IOW(MNH_SM_IOC_MAGIC, 5, struct mnh_mipi_config *)
 #define MNH_SM_IOC_WAIT_FOR_POWER \
 	_IO(MNH_SM_IOC_MAGIC, 6)
+#define MNH_SM_IOC_GET_UPDATE_BUF \
+	_IOR(MNH_SM_IOC_MAGIC, 7, int *)
+#define MNH_SM_IOC_POST_UPDATE_BUF \
+	_IOW(MNH_SM_IOC_MAGIC, 8, struct mnh_update_configs *)
 
 enum mnh_sm_state {
 	MNH_STATE_OFF, /* powered off */
 	MNH_STATE_ACTIVE, /* powered on and booted */
 	MNH_STATE_SUSPEND, /* suspended, ddr in self-refresh */
 	MNH_STATE_MAX,
+};
+
+enum mnh_fw_slot {
+	MNH_FW_SLOT_SBL = 0,
+	MNH_FW_SLOT_KERNEL,
+	MNH_FW_SLOT_DTB,
+	MNH_FW_SLOT_RAMDISK,
+	MAX_NR_MNH_FW_SLOTS
 };
 
 struct mnh_mipi_config {
@@ -71,6 +85,19 @@ struct mnh_mipi_config {
 	int mode;
 	/* virtual channel enable mask */
 	int vc_en_mask;
+};
+
+struct mnh_update_config {
+	/* slot type (dtb, kernel, ramdisk) */
+	enum mnh_fw_slot slot_type;
+	/* slot offset in the ion buffer */
+	unsigned long offset;
+	/* slot size */
+	size_t size;
+};
+
+struct mnh_update_configs {
+	struct mnh_update_config config[MAX_NR_MNH_FW_SLOTS];
 };
 
 #endif /* _UAPI__MNH_SM_H */

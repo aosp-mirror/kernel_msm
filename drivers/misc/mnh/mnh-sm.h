@@ -17,6 +17,7 @@
 #ifndef __MNH_SM_HOST
 #define __MNH_SM_HOST
 
+#include <linux/msm_ion.h>
 #include <uapi/linux/mnh-sm.h>
 #include "mnh-pcie.h"
 
@@ -31,16 +32,6 @@
 #define IMG_DOWNLOAD_MAX_SIZE		(4000 * 1024)
 #define FIP_IMG_SBL_SIZE_OFFSET		0x28
 #define FIP_IMG_SBL_ADDR_OFFSET		0x20
-
-#define MNH_ION_BUFFER_SIZE		SZ_128M
-
-enum {
-	MNH_FW_SLOT_SBL = 0,
-	MNH_FW_SLOT_KERNEL,
-	MNH_FW_SLOT_DTB,
-	MNH_FW_SLOT_RAMDISK,
-	MAX_NR_MNH_FW_SLOTS
-};
 
 struct mnh_ion_fw_conf {
 	dma_addr_t ap_addr;	/* AP side addr (dma) */
@@ -85,11 +76,13 @@ int mnh_sm_is_present(void);
  * @param[in] dev       Linux device structure assocatiated with mnh_sm
  * @param[in] ion       Pre-allocated mnh_ion struct
  * @param[in] size      Size of ION buffer to claim (in bytes)
+ * @param[in] heap_id   Heap ID to be used for the allocation
  *
  * @return 0            on success
  * @return -negative    on failure
  */
-long mnh_ion_create_buffer(struct mnh_ion *ion, size_t size);
+long mnh_ion_create_buffer(struct mnh_ion *ion, size_t size,
+			   enum ion_heap_ids heap_id);
 
 /**
  * API to release previously claimed ION buffer.
@@ -107,6 +100,19 @@ void mnh_ion_destroy_buffer(struct mnh_ion *ion);
  * @return -negative    on failure
  */
 int mnh_ion_stage_firmware(struct mnh_ion *ion);
+
+/**
+ * API to stage Play Store firmware update to ION buffer.
+ * @param[in] ion      Pre-allocated mnh_ion struct
+ *                     Caller is responsible for freeing ion.
+ * @param[in] ion_sec  Temporary allocated buffer holding
+ *                     firmware updated from Play Store channel
+ *
+ * @return 0            on success
+ * @return -negative    on failure
+ */
+int mnh_ion_stage_firmware_update(struct mnh_ion *ion,
+				  struct mnh_ion *ion_sec);
 
 /*
  * Callback from mnh-pwr when there is a failure event.

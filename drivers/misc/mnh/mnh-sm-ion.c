@@ -19,8 +19,6 @@
 #include "hw-mnh-regs.h"
 #include "mnh-sm.h"
 
-/* #define DEBUG */
-
 #define MSM_ION_EASEL_MEM_HEAP_NAME	"easel_mem"
 
 /* mnh_ion_fw_copy must be called in slot incrementing order:*/
@@ -50,6 +48,96 @@ static void mnh_ion_fw_copy(struct mnh_ion *ion, int slot,
 	msm_ion_do_cache_op(ion->client, ion->handle, buf, size,
 			    ION_IOC_CLEAN_CACHES);
 }
+
+static int mnh_ion_fw_update_request(struct mnh_ion *ion,
+				     struct mnh_ion *ion_sec)
+{
+	const struct firmware *fip_img, *dt_img, *kernel_img, *ram_img;
+	int err;
+
+	if (ion_sec->fw_array[MNH_FW_SLOT_SBL].size > 0) {
+		dev_dbg(ion->device, "%s: Using update buffer for SBL\n",
+			__func__);
+		mnh_ion_fw_copy(ion, MNH_FW_SLOT_SBL, HW_MNH_SBL_DOWNLOAD,
+				ion_sec->fw_array[MNH_FW_SLOT_SBL].size,
+				ion_sec->vaddr +
+				ion_sec->fw_array[MNH_FW_SLOT_SBL].ap_offs);
+	} else {
+		err = request_firmware(&fip_img, "easel/fip.bin", ion->device);
+		if (err) {
+			dev_err(ion->device, "request fip_image failed - %d\n",
+				err);
+			return -EIO;
+		}
+		mnh_ion_fw_copy(ion, MNH_FW_SLOT_SBL, HW_MNH_SBL_DOWNLOAD,
+				fip_img->size, fip_img->data);
+		release_firmware(fip_img);
+	}
+
+	if (ion_sec->fw_array[MNH_FW_SLOT_KERNEL].size > 0) {
+		dev_dbg(ion->device, "%s: Using update buffer for kernel\n",
+			__func__);
+		mnh_ion_fw_copy(ion, MNH_FW_SLOT_KERNEL, HW_MNH_KERNEL_DOWNLOAD,
+				ion_sec->fw_array[MNH_FW_SLOT_KERNEL].size,
+				ion_sec->vaddr +
+				ion_sec->fw_array[MNH_FW_SLOT_KERNEL].ap_offs);
+	} else {
+		err = request_firmware(&kernel_img, "easel/Image", ion->device);
+		if (err) {
+			dev_err(ion->device, "request kernel failed - %d\n",
+				err);
+			return -EIO;
+		}
+		mnh_ion_fw_copy(ion, MNH_FW_SLOT_KERNEL, HW_MNH_KERNEL_DOWNLOAD,
+				kernel_img->size, kernel_img->data);
+		release_firmware(kernel_img);
+	}
+
+	if (ion_sec->fw_array[MNH_FW_SLOT_DTB].size > 0) {
+		dev_dbg(ion->device, "%s: Using update buffer for DTB\n",
+			__func__);
+		mnh_ion_fw_copy(ion, MNH_FW_SLOT_DTB, HW_MNH_DT_DOWNLOAD,
+				ion_sec->fw_array[MNH_FW_SLOT_DTB].size,
+				ion_sec->vaddr +
+				ion_sec->fw_array[MNH_FW_SLOT_DTB].ap_offs);
+	} else {
+		err = request_firmware(&dt_img, "easel/mnh.dtb", ion->device);
+		if (err) {
+			dev_err(ion->device, "request kernel failed - %d\n",
+				err);
+			return -EIO;
+		}
+		mnh_ion_fw_copy(ion, MNH_FW_SLOT_DTB, HW_MNH_DT_DOWNLOAD,
+				dt_img->size, dt_img->data);
+		release_firmware(dt_img);
+	}
+
+	if (ion_sec->fw_array[MNH_FW_SLOT_RAMDISK].size > 0) {
+		dev_dbg(ion->device, "%s: Using update buffer for ramdisk\n",
+			__func__);
+		mnh_ion_fw_copy(ion, MNH_FW_SLOT_RAMDISK,
+				HW_MNH_RAMDISK_DOWNLOAD,
+				ion_sec->fw_array[MNH_FW_SLOT_RAMDISK].size,
+				ion_sec->vaddr +
+				ion_sec->fw_array[MNH_FW_SLOT_RAMDISK].ap_offs
+			);
+	} else {
+		err = request_firmware(&ram_img, "easel/ramdisk.img",
+				       ion->device);
+		if (err) {
+			dev_err(ion->device, "request kernel failed - %d\n",
+				err);
+			return -EIO;
+		}
+		mnh_ion_fw_copy(ion, MNH_FW_SLOT_RAMDISK,
+				HW_MNH_RAMDISK_DOWNLOAD,
+				ram_img->size, ram_img->data);
+		release_firmware(ram_img);
+	}
+
+	return 0;
+}
+
 
 static int mnh_ion_fw_request(struct mnh_ion *ion)
 {
@@ -114,7 +202,28 @@ int mnh_ion_stage_firmware(struct mnh_ion *ion)
 }
 EXPORT_SYMBOL(mnh_ion_stage_firmware);
 
-long mnh_ion_create_buffer(struct mnh_ion *ion, size_t size)
+int mnh_ion_stage_firmware_update(struct mnh_ion *ion, struct mnh_ion *ion_sec)
+{
+	int err;
+
+	dev_dbg(ion->device, "%s: staging update\n", __func__);
+	if (!ion || !ion_sec || !ion->client ||
+	    !ion_sec->client || !ion_sec->is_fw_ready)
+		return -ENODEV;
+
+	ion->is_fw_ready = false;
+	err = mnh_ion_fw_update_request(ion, ion_sec);
+	if (err)
+		return err;
+
+	ion->is_fw_ready = true;
+
+	return 0;
+}
+EXPORT_SYMBOL(mnh_ion_stage_firmware_update);
+
+long mnh_ion_create_buffer(struct mnh_ion *ion, size_t size,
+			   enum ion_heap_ids heap_id)
 {
 	long err = 0;
 	struct device *dev = ion->device;
@@ -136,7 +245,7 @@ long mnh_ion_create_buffer(struct mnh_ion *ion, size_t size)
 
 	/* Allocate an ION buffer */
 	ion->handle = ion_alloc(ion->client, size, PAGE_SIZE /* align */,
-				    ION_HEAP(ION_GOOGLE_HEAP_ID),
+				    ION_HEAP(heap_id),
 				    ION_FLAG_CACHED);
 	if (IS_ERR(ion->handle)) {
 		err = PTR_ERR(ion->handle);
