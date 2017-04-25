@@ -35,8 +35,15 @@
 /* retry delay in msec for retrying flush of a message being processed */
 #define MSG_FLUSH_RETRY_DELAY 10
 
+/* Service for link status update */
+static struct easelcomm_service link_service;
+
+/* Mutex to guard easelcomm_service_list */
+struct mutex service_mutex;
+
 /* Per-Easel-service state */
-static struct easelcomm_service easelcomm_service[EASELCOMM_SERVICE_COUNT];
+static struct easelcomm_service *easelcomm_service_list[
+		EASELCOMM_SERVICE_COUNT];
 
 /* Local command channel local state */
 struct easelcomm_cmd_channel_local {
@@ -453,9 +460,11 @@ static void easelcomm_stop_local(void)
 	easelcomm_up = false;
 
 	for (i = 0; i < EASELCOMM_SERVICE_COUNT; i++) {
-		struct easelcomm_service *service = &easelcomm_service[i];
+		struct easelcomm_service *service = easelcomm_service_list[i];
 
-		easelcomm_flush_local_service(service);
+		if (service != NULL)
+			easelcomm_flush_local_service(service);
+
 	}
 }
 
@@ -471,7 +480,7 @@ static void easelcomm_stop(bool async)
 		return;
 
 	easelcomm_send_cmd_noargs(
-		&easelcomm_service[EASELCOMM_SERVICE_SYSCTRL],
+		&link_service,
 		EASELCOMM_CMD_LINK_SHUTDOWN);
 	if (!async) {
 		ret = wait_for_completion_interruptible_timeout(
@@ -496,7 +505,7 @@ static void easelcomm_handle_cmd_link_shutdown(void)
 	dev_dbg(easelcomm_miscdev.this_device,
 		"send cmd ACK_SHUTDOWN\n");
 	easelcomm_send_cmd_noargs(
-		&easelcomm_service[EASELCOMM_SERVICE_SYSCTRL],
+		&link_service,
 		EASELCOMM_CMD_ACK_SHUTDOWN);
 }
 
@@ -712,6 +721,43 @@ static void easelcomm_handle_cmd_flush_service_done(
 	complete(&service->flush_done);
 }
 
+static void easelcomm_init_service(struct easelcomm_service *service, int id)
+{
+	if (service == NULL) {
+		dev_err(easelcomm_miscdev.this_device, "service is null\n");
+		return;
+	}
+	service->service_id = id;
+	service->user = NULL;
+	service->shutdown_local = false;
+	service->shutdown_remote = false;
+	spin_lock_init(&service->lock);
+	INIT_LIST_HEAD(&service->local_list);
+	INIT_LIST_HEAD(&service->receivemsg_queue);
+	init_completion(&service->receivemsg_queue_new);
+	INIT_LIST_HEAD(&service->remote_list);
+	init_completion(&service->flush_done);
+}
+
+/* Caller of this function must hold service_mutex. */
+static struct easelcomm_service *easelcomm_create_service(int id)
+{
+	struct easelcomm_service *service;
+
+	if (easelcomm_service_list[id] != NULL)
+		return easelcomm_service_list[id];
+
+	service = kzalloc(sizeof(struct easelcomm_service), GFP_KERNEL);
+	if (service == NULL) {
+		dev_err(easelcomm_miscdev.this_device,
+				"could not allocate service %u\n", id);
+		return NULL;
+	}
+	easelcomm_init_service(service, id);
+	easelcomm_service_list[id] = service;
+	return service;
+}
+
 /* Command received from remote, dispatch. */
 static void easelcomm_handle_command(struct easelcomm_cmd_header *cmdhdr)
 {
@@ -721,19 +767,47 @@ static void easelcomm_handle_command(struct easelcomm_cmd_header *cmdhdr)
 	/* Any command can inform the remote is open for business, not just LINK_INIT. */
 	easelcomm_cmd_channel_remote_set_ready();
 
+	switch(cmdhdr->command_code) {
+	case EASELCOMM_CMD_LINK_INIT:
+		easelcomm_handle_cmd_link_init(
+			cmdargs, cmdhdr->command_arg_len);
+		return;
+	case EASELCOMM_CMD_LINK_SHUTDOWN:
+		easelcomm_handle_cmd_link_shutdown();
+		return;
+	case EASELCOMM_CMD_ACK_SHUTDOWN:
+		easelcomm_handle_cmd_ack_shutdown();
+		return;
+	default:
+		break;
+	}
+
 	if (cmdhdr->service_id >= EASELCOMM_SERVICE_COUNT) {
 		dev_err(easelcomm_miscdev.this_device,
 			"invalid service ID %u received\n",
 			cmdhdr->service_id);
 		return;
 	}
-	service = &easelcomm_service[cmdhdr->service_id];
+	service = easelcomm_service_list[cmdhdr->service_id];
+
+	/*
+	 * If service has not been initialized,
+	 * initialize the service here without userspace ownership.
+	 * Userspace ownership could be claimed later.
+	 */
+	if (service == NULL) {
+		mutex_lock(&service_mutex);
+		service = easelcomm_create_service(cmdhdr->service_id);
+		mutex_unlock(&service_mutex);
+		if (service == NULL) {
+			dev_err(easelcomm_miscdev.this_device,
+				"could not handle cmd %d for service %u\n",
+				cmdhdr->command_code, cmdhdr->service_id);
+			return;
+		}
+	}
 
 	switch (cmdhdr->command_code) {
-	case EASELCOMM_CMD_LINK_INIT:
-		easelcomm_handle_cmd_link_init(
-			cmdargs, cmdhdr->command_arg_len);
-		break;
 	case EASELCOMM_CMD_SEND_MSG:
 		easelcomm_handle_cmd_send_msg(
 			service, cmdargs, cmdhdr->command_arg_len);
@@ -758,12 +832,6 @@ static void easelcomm_handle_command(struct easelcomm_cmd_header *cmdhdr)
 		break;
 	case EASELCOMM_CMD_CLOSE_SERVICE:
 		easelcomm_handle_cmd_close_service(service);
-		break;
-	case EASELCOMM_CMD_LINK_SHUTDOWN:
-		easelcomm_handle_cmd_link_shutdown();
-		break;
-	case EASELCOMM_CMD_ACK_SHUTDOWN:
-		easelcomm_handle_cmd_ack_shutdown();
 		break;
 	default:
 		dev_err(easelcomm_miscdev.this_device,
@@ -1390,7 +1458,20 @@ static int easelcomm_register(struct easelcomm_user_state *user_state,
 
 	if (service_id >= EASELCOMM_SERVICE_COUNT)
 		return -EINVAL;
-	service = &easelcomm_service[service_id];
+
+	mutex_lock(&service_mutex);
+	service = easelcomm_service_list[service_id];
+	if (service == NULL) {
+		service = easelcomm_create_service(service_id);
+		if (service == NULL) {
+			mutex_unlock(&service_mutex);
+			dev_err(easelcomm_miscdev.this_device,
+					"could not create service %u\n",
+					service_id);
+			return -ENOMEM;
+		}
+	}
+	mutex_unlock(&service_mutex);
 
 	spin_lock(&service->lock);
 	if (service->user) {
@@ -1585,7 +1666,7 @@ int easelcomm_client_remote_cmdchan_ready_handler(void)
 	/* Client can now send link init to server */
 	dev_dbg(easelcomm_miscdev.this_device, "send cmd LINK_INIT\n");
 	return easelcomm_send_cmd_noargs(
-		&easelcomm_service[EASELCOMM_SERVICE_SYSCTRL],
+		&link_service,
 		EASELCOMM_CMD_LINK_INIT);
 }
 EXPORT_SYMBOL(easelcomm_client_remote_cmdchan_ready_handler);
@@ -1854,20 +1935,14 @@ static int __init easelcomm_init(void)
 		"registered at misc device minor %d\n",
 		easelcomm_miscdev.minor);
 
-	for (i = 0; i < EASELCOMM_SERVICE_COUNT; i++) {
-		struct easelcomm_service *service = &easelcomm_service[i];
+	mutex_init(&service_mutex);
 
-		service->service_id = i;
-		service->user = NULL;
-		service->shutdown_local = false;
-		service->shutdown_remote = false;
-		spin_lock_init(&service->lock);
-		INIT_LIST_HEAD(&service->local_list);
-		INIT_LIST_HEAD(&service->receivemsg_queue);
-		init_completion(&service->receivemsg_queue_new);
-		INIT_LIST_HEAD(&service->remote_list);
-		init_completion(&service->flush_done);
+	for (i = 0; i < EASELCOMM_SERVICE_COUNT; i++) {
+		easelcomm_service_list[i] = NULL;
 	}
+
+	/* Initializes link_service. */
+	easelcomm_init_service(&link_service, EASELCOMM_SERVICE_COUNT);
 
 	easelcomm_hw_init();
 
@@ -1882,9 +1957,20 @@ static int __init easelcomm_init(void)
 
 static void __exit easelcomm_exit(void)
 {
+	int i;
 	easelcomm_stop(false);
 	kfree(cmd_channel_local.buffer);
 	misc_deregister(&easelcomm_miscdev);
+	/*
+	 * TODO(cjluo): Some of these service struct
+	 * could be freed when unregistered.
+	 */
+	for (i = 0; i < EASELCOMM_SERVICE_COUNT; i++) {
+		if (easelcomm_service_list[i] != NULL) {
+			kfree(easelcomm_service_list[i]);
+			easelcomm_service_list[i] = NULL;
+		}
+	}
 }
 
 module_init(easelcomm_init);

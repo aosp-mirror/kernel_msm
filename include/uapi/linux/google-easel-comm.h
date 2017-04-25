@@ -17,20 +17,8 @@
 /* Maximum message data size 12KB */
 #define EASELCOMM_MAX_MESSAGE_SIZE      (12 * 1024)
 
-/*
- * Easel service identifiers registered by clients and servers to
- * route messages to the corresponding service on the remote side.
- * These identifiers currently match the userspace libeasel definitions of
- * similar symbols.
- */
-
-enum easelcomm_service_id {
-	EASELCOMM_SERVICE_SYSCTRL = 0,   /* Easel system control */
-	EASELCOMM_SERVICE_SHELL,         /* Easel shell */
-	EASELCOMM_SERVICE_TEST,          /* Used by unit tests */
-	EASELCOMM_SERVICE_HDRPLUS,       /* HDR+ Paintbox offload */
-	EASELCOMM_SERVICE_COUNT,         /* number of defined services */
-};
+/* Maximum service count */
+#define EASELCOMM_SERVICE_COUNT 64
 
 /* Easel message identifier.  Compatible with libeasel defines. */
 typedef uint64_t easelcomm_msgid_t;
