@@ -393,9 +393,13 @@ static ssize_t tas2557_file_write(struct file *file, const char *buf, size_t cou
 		if (count == 2) {
 			if ((pTAS2557->mpFirmware->mnConfigurations > 0)
 				&& (pTAS2557->mpFirmware->mnPrograms > 0)) {
+				int config = -1;
+
+				if (p_kBuf[1] == pTAS2557->mnCurrentProgram)
+					config = pTAS2557->mnCurrentConfiguration;
 				if (g_logEnable)
-					dev_info(pTAS2557->dev, "TIAUDIO_CMD_PROGRAM, set to %d\n", p_kBuf[1]);
-				tas2557_set_program(pTAS2557, p_kBuf[1], -1);
+					dev_info(pTAS2557->dev, "TIAUDIO_CMD_PROGRAM, set to %d, cfg=%d\n", p_kBuf[1], config);
+				tas2557_set_program(pTAS2557, p_kBuf[1], config);
 				pTAS2557->mnDBGCmd = 0;
 			} else
 				dev_err(pTAS2557->dev, "%s, firmware not loaded\n", __func__);

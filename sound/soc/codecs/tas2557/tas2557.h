@@ -79,7 +79,7 @@
 #define TAS2557_DSP_MODE_SELECT_REG		TAS2557_REG(0, 0, 34)
 #define TAS2557_SAFE_GUARD_REG			TAS2557_REG(0, 0, 37)
 #define TAS2557_ASI_CTL1_REG			TAS2557_REG(0, 0, 42)
-#define TAS2557_CLK_ERR_CTRL			TAS2557_REG(0, 0, 44)
+#define TAS2557_CLK_ERR_CTRL			TAS2557_REG(0, 0, 44)	/* B0_P0_R0x2c*/
 #define TAS2557_CLK_ERR_CTRL2			TAS2557_REG(0, 0, 45)	/* B0_P0_R0x2d*/
 #define TAS2557_CLK_ERR_CTRL3			TAS2557_REG(0, 0, 46)	/* B0_P0_R0x2e*/
 #define TAS2557_DBOOST_CFG_REG			TAS2557_REG(0, 0, 52)
@@ -160,6 +160,7 @@
 #define TAS2557_CLKOUT_CDIV_REG			TAS2557_REG(0, 1, 118)
 #define TAS2557_HACK_GP01_REG			TAS2557_REG(0, 1, 122)
 
+#define TAS2557_SLEEPMODE_CTL_REG		TAS2557_REG(0, 2, 7)
 #define TAS2557_HACK01_REG			TAS2557_REG(0, 2, 10)
 
 #define TAS2557_ISENSE_THRESHOLD		TAS2557_REG(0, 50, 104)
@@ -173,9 +174,10 @@
 
 #define TAS2557_SA_PG1P0_CHL_CTRL_REG	TAS2557_REG(0, 58, 120)	/* B0_P0x3a_R0x78 */
 
-#define TAS2557_TEST_MODE_REG			TAS2557_REG(0, 253, 13)
-#define TAS2557_BROADCAST_REG			TAS2557_REG(0, 253, 54)
-#define TAS2557_CRYPTIC_REG			TAS2557_REG(0, 253, 71)
+#define TAS2557_TEST_MODE_REG			TAS2557_REG(0, 253, 13)	/* B0_P0xfd_R0x0d */
+#define TAS2557_BROADCAST_REG			TAS2557_REG(0, 253, 54)	/* B0_P0xfd_R0x36 */
+#define TAS2557_VBST_VOLT_REG			TAS2557_REG(0, 253, 58)
+#define TAS2557_CRYPTIC_REG				TAS2557_REG(0, 253, 71)
 
 #define TAS2557_XMEM_687_REG				TAS2557_REG(78, 23, 116)	/* B0x78_P0x23_R0x40 */
 
@@ -194,6 +196,8 @@
 #define TAS2557_ISENSE_DIV_REG			TAS2557_REG(100, 0, 42)
 #define TAS2557_RAMP_CLK_DIV_MSB_REG		TAS2557_REG(100, 0, 43)
 #define TAS2557_RAMP_CLK_DIV_LSB_REG		TAS2557_REG(100, 0, 44)
+
+#define TAS2557_VBOOST_CTL_REG		TAS2557_REG(100, 0, 64)
 
 #define TAS2557_DIE_TEMP_REG			TAS2557_REG(130, 2, 124)	/* B0x82_P0x02_R0x7C */
 
@@ -311,6 +315,18 @@
 #define	TAS2557_DM_AL_BR		2	/* DevA left channel, DevB right channel */
 #define	TAS2557_DM_AR_BL		3	/* DevA right channel, DevB left channel */
 #define	TAS2557_DM_AH_BH		4	/* DevA (L+R)/2, DevB (L+R)/2 */
+
+#define	TAS2557_VBST_DEFAULT		0	/* firmware default */
+#define	TAS2557_VBST_A_ON			1	/* DevA always 8.5V, DevB default */
+#define	TAS2557_VBST_B_ON			2	/* DevA default, DevB always 8.5V */
+#define	TAS2557_VBST_A_ON_B_ON		(TAS2557_VBST_A_ON | TAS2557_VBST_B_ON)	/* both DevA and DevB always 8.5V */
+#define	TAS2557_VBST_NEED_DEFAULT	0xff	/* need default value */
+
+#define	TAS2557_VBST_8P5V	0	/* coresponding PPG 0dB */
+#define	TAS2557_VBST_8P1V	1	/* coresponding PPG -1dB */
+#define	TAS2557_VBST_7P6V	2	/* coresponding PPG -2dB */
+#define	TAS2557_VBST_6P6V	3	/* coresponding PPG -3dB */
+#define	TAS2557_VBST_5P6V	4	/* coresponding PPG -4dB */
 
 #define	ERROR_NONE			0x00000000
 #define	ERROR_PLL_ABSENT	0x00000001
@@ -443,6 +459,8 @@ struct tas2557_priv {
 	unsigned char mnLCurrentPage;
 	unsigned char mnRCurrentBook;
 	unsigned char mnRCurrentPage;
+	unsigned int mnLBroadcastSet;
+	unsigned int mnRBroadcastSet;
 	bool mbTILoadActive;
 	bool mbPowerUp;
 	bool mbLoadConfigurationPrePowerUp;
@@ -492,6 +510,12 @@ struct tas2557_priv {
 	unsigned int mnChannelState;
 	unsigned char mnDevAChlData[16];
 	unsigned char mnDevBChlData[16];
+
+	unsigned int mnVBoostState;
+	bool mbLoadVBoostPrePowerUp;
+	unsigned int mnVBoostVoltage;
+	unsigned int mnVBoostNewState;
+	unsigned int mnVBoostDefaultCfg[4];
 
 	/* for low temperature check */
 	unsigned int mnDevGain;

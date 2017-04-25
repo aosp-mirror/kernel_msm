@@ -100,25 +100,13 @@ static unsigned int p_tas2557_startup_data[] = {
 	TAS2557_POWER_CTRL2_REG, 0xA3,	 /* Class-D, Boost, IV sense power up */
 	TAS2557_POWER_CTRL1_REG, 0xF8,	 /* PLL, DSP, clock dividers power up */
 	TAS2557_UDELAY, 2000,		/* delay */
-	TAS2557_CLK_ERR_CTRL, 0x03,	/* enable clock error detection */
+	TAS2557_CLK_ERR_CTRL, 0x0b,	/* enable clock error detection */
 	0xFFFFFFFF, 0xFFFFFFFF
 };
 
 static unsigned int p_tas2557_unmute_data[] = {
 	TAS2557_MUTE_REG, 0x00,		 /* unmute */
 	TAS2557_SOFT_MUTE_REG, 0x00,	 /* soft unmute */
-	0xFFFFFFFF, 0xFFFFFFFF
-};
-
-static unsigned int p_tas2557_enter_broadcast_data[] = {
-	TAS2557_TEST_MODE_REG, 0x0d,		 /* enter test mode */
-	TAS2557_BROADCAST_REG, 0x81,	 /* enable broadcast */
-	0xFFFFFFFF, 0xFFFFFFFF
-};
-
-static unsigned int p_tas2557_exit_broadcast_data[] = {
-	TAS2557_TEST_MODE_REG, 0x0d,		 /* enter test mode */
-	TAS2557_BROADCAST_REG, 0x01,	 /* disable broadcast */
 	0xFFFFFFFF, 0xFFFFFFFF
 };
 
@@ -166,6 +154,56 @@ static int tas2557_dev_load_data(struct tas2557_priv *pTAS2557,
 int tas2557_configIRQ(struct tas2557_priv *pTAS2557)
 {
 	return tas2557_dev_load_data(pTAS2557, channel_both, p_tas2557_irq_config);
+}
+
+static int tas2557_enter_broadcast_mode(struct tas2557_priv *pTAS2557)
+{
+	int nResult = 0;
+
+	nResult = pTAS2557->write(pTAS2557, channel_both, TAS2557_TEST_MODE_REG, 0x0d);
+	if (nResult < 0)
+		goto end;
+
+	nResult = pTAS2557->write(pTAS2557, channel_left, TAS2557_BROADCAST_REG, (pTAS2557->mnLBroadcastSet & 0x1f) | 0x80);
+	if (nResult < 0)
+		goto end;
+
+	nResult = pTAS2557->write(pTAS2557, channel_right, TAS2557_BROADCAST_REG, (pTAS2557->mnRBroadcastSet & 0x1f) | 0x80);
+	if (nResult < 0)
+		goto end;
+
+end:
+
+	return nResult;
+}
+
+static int tas2557_exit_broadcast_mode(struct tas2557_priv *pTAS2557)
+{
+	int nResult = 0;
+
+	nResult = pTAS2557->write(pTAS2557, channel_broadcast, TAS2557_TEST_MODE_REG, 0x0d);
+	if (nResult < 0)
+		goto end;
+
+	nResult = pTAS2557->write(pTAS2557, channel_broadcast, TAS2557_BROADCAST_REG, 0x01);
+	if (nResult < 0)
+		goto end;
+
+	nResult = pTAS2557->write(pTAS2557, channel_both, TAS2557_TEST_MODE_REG, 0x0d);
+	if (nResult < 0)
+		goto end;
+
+	nResult = pTAS2557->write(pTAS2557, channel_left, TAS2557_BROADCAST_REG, pTAS2557->mnLBroadcastSet & 0x1f);
+	if (nResult < 0)
+		goto end;
+
+	nResult = pTAS2557->write(pTAS2557, channel_right, TAS2557_BROADCAST_REG, pTAS2557->mnRBroadcastSet & 0x1f);
+	if (nResult < 0)
+		goto end;
+
+end:
+
+	return nResult;
 }
 
 /*
@@ -406,6 +444,237 @@ end:
 	return nResult;
 }
 
+int tas2557_update_VBstVolt(struct tas2557_priv *pTAS2557, enum channel chn)
+{
+	int nResult = 0;
+	int nVBstVoltSet = -1;
+
+	switch (pTAS2557->mnVBoostVoltage) {
+	case TAS2557_VBST_8P5V:
+		nVBstVoltSet = 6;
+		dev_warn(pTAS2557->dev, "%s, PPG of this snapshot should be 0dB\n", __func__);
+	break;
+
+	case TAS2557_VBST_8P1V:
+		nVBstVoltSet = 5;
+		dev_warn(pTAS2557->dev, "%s, PPG of this snapshot should be -1dB\n", __func__);
+	break;
+
+	case TAS2557_VBST_7P6V:
+		nVBstVoltSet = 4;
+		dev_warn(pTAS2557->dev, "%s, PPG of this snapshot should be -2dB\n", __func__);
+	break;
+
+	case TAS2557_VBST_6P6V:
+		nVBstVoltSet = 2;
+		dev_warn(pTAS2557->dev, "%s, PPG of this snapshot should be -3dB\n", __func__);
+	break;
+
+	case TAS2557_VBST_5P6V:
+		nVBstVoltSet = 0;
+		dev_warn(pTAS2557->dev, "%s, PPG of this snapshot should be -4dB\n", __func__);
+	break;
+
+	default:
+		dev_err(pTAS2557->dev, "%s, error volt %d\n", __func__, pTAS2557->mnVBoostVoltage);
+	break;
+	}
+
+	if (nVBstVoltSet >= 0) {
+		if (chn & channel_left)
+			nResult = pTAS2557->update_bits(pTAS2557, channel_left, TAS2557_VBST_VOLT_REG, 0xe0, (nVBstVoltSet << 5));
+		if (chn & channel_right)
+			nResult = pTAS2557->update_bits(pTAS2557, channel_right, TAS2557_VBST_VOLT_REG, 0xe0, (nVBstVoltSet << 5));
+		dev_dbg(pTAS2557->dev, "%s, set vbst voltage (%d channel) 0x%x\n", __func__, chn, (nVBstVoltSet << 5));
+	}
+
+	return nResult;
+}
+
+int tas2557_get_VBoost(struct tas2557_priv *pTAS2557, int *pVBoost)
+{
+	int nResult = 0;
+
+	dev_dbg(pTAS2557->dev, "%s, VBoost state %d\n", __func__, pTAS2557->mnVBoostState);
+	switch (pTAS2557->mnVBoostState) {
+	case TAS2557_VBST_NEED_DEFAULT:
+	case TAS2557_VBST_DEFAULT:
+		*pVBoost = 0;
+	break;
+
+	case TAS2557_VBST_A_ON:
+	case TAS2557_VBST_B_ON:
+	case TAS2557_VBST_A_ON_B_ON:
+		*pVBoost = 1;
+	break;
+	default:
+		dev_err(pTAS2557->dev, "%s, error state %d\n", __func__, pTAS2557->mnVBoostState);
+	break;
+	}
+
+	return nResult;
+}
+
+int tas2557_set_VBoost(struct tas2557_priv *pTAS2557, int vboost, bool bPowerOn)
+{
+	int nResult = 0;
+	struct TConfiguration *pConfiguration;
+	unsigned int nDevAVBstCtrl, nDevASlpCtrl;
+	unsigned int nDevBVBstCtrl, nDevBSlpCtrl;
+	unsigned int nConfig;
+
+	if ((!pTAS2557->mpFirmware->mnConfigurations)
+		|| (!pTAS2557->mpFirmware->mnPrograms)) {
+		dev_err(pTAS2557->dev, "%s, firmware not loaded\n", __func__);
+		goto end;
+	}
+
+	if (bPowerOn) {
+		dev_info(pTAS2557->dev, "%s, will load VBoost state next time before power on\n", __func__);
+		pTAS2557->mbLoadVBoostPrePowerUp = true;
+		pTAS2557->mnVBoostNewState = vboost;
+		goto end;
+	}
+
+	if (pTAS2557->mbLoadConfigurationPrePowerUp)
+		nConfig = pTAS2557->mnNewConfiguration;
+	else
+		nConfig = pTAS2557->mnCurrentConfiguration;
+
+	pConfiguration = &(pTAS2557->mpFirmware->mpConfigurations[nConfig]);
+
+	if (pTAS2557->mnVBoostState == TAS2557_VBST_NEED_DEFAULT) {
+		if (pConfiguration->mnDevices & channel_left) {
+			nResult = pTAS2557->read(pTAS2557, channel_left, TAS2557_VBOOST_CTL_REG, &pTAS2557->mnVBoostDefaultCfg[0]);
+			if (nResult < 0)
+				goto end;
+			nResult = pTAS2557->read(pTAS2557, channel_left, TAS2557_SLEEPMODE_CTL_REG, &pTAS2557->mnVBoostDefaultCfg[1]);
+			if (nResult < 0)
+				goto end;
+		}
+		if (pConfiguration->mnDevices & channel_right) {
+			nResult = pTAS2557->read(pTAS2557, channel_right, TAS2557_VBOOST_CTL_REG, &pTAS2557->mnVBoostDefaultCfg[2]);
+			if (nResult < 0)
+				goto end;
+			nResult = pTAS2557->read(pTAS2557, channel_right, TAS2557_SLEEPMODE_CTL_REG, &pTAS2557->mnVBoostDefaultCfg[3]);
+			if (nResult < 0)
+				goto end;
+		}
+		dev_dbg(pTAS2557->dev, "%s, get default VBoost\n", __func__);
+		pTAS2557->mnVBoostState = TAS2557_VBST_DEFAULT;
+		if ((vboost == TAS2557_VBST_DEFAULT)
+			|| (vboost == TAS2557_VBST_NEED_DEFAULT)) {
+			dev_dbg(pTAS2557->dev, "%s, already default, bypass\n", __func__);
+			goto end;
+		}
+	}
+
+	if (vboost) {
+		if (pConfiguration->mnDevices & channel_left) {
+			if (!(pTAS2557->mnVBoostState & TAS2557_VBST_A_ON)) {
+				nResult = tas2557_update_VBstVolt(pTAS2557, channel_left);
+				if (nResult < 0)
+					goto end;
+				nDevAVBstCtrl = 0x40;
+				nDevASlpCtrl = 0xb0;
+				nResult = pTAS2557->write(pTAS2557, channel_left, TAS2557_VBOOST_CTL_REG, nDevAVBstCtrl);
+				if (nResult < 0)
+					goto end;
+				nResult = pTAS2557->write(pTAS2557, channel_left, TAS2557_SLEEPMODE_CTL_REG, nDevASlpCtrl);
+				if (nResult < 0)
+					goto end;
+				pTAS2557->mnVBoostState |= TAS2557_VBST_A_ON;
+				dev_dbg(pTAS2557->dev, "%s, devA Boost On, %d\n", __func__, pTAS2557->mnVBoostState);
+			}
+		} else {
+			if (pTAS2557->mnVBoostState & TAS2557_VBST_A_ON) {
+				nResult = tas2557_update_VBstVolt(pTAS2557, channel_left);
+				if (nResult < 0)
+					goto end;
+				nDevAVBstCtrl = pTAS2557->mnVBoostDefaultCfg[0];
+				nDevASlpCtrl = pTAS2557->mnVBoostDefaultCfg[1];
+				nResult = pTAS2557->write(pTAS2557, channel_left, TAS2557_VBOOST_CTL_REG, nDevAVBstCtrl);
+				if (nResult < 0)
+					goto end;
+				nResult = pTAS2557->write(pTAS2557, channel_left, TAS2557_SLEEPMODE_CTL_REG, nDevASlpCtrl);
+				if (nResult < 0)
+					goto end;
+				pTAS2557->mnVBoostState &= ~TAS2557_VBST_A_ON;
+				dev_dbg(pTAS2557->dev, "%s, devA Boost Off, %d\n", __func__, pTAS2557->mnVBoostState);
+			}
+		}
+
+		if (pConfiguration->mnDevices & channel_right) {
+			if (!(pTAS2557->mnVBoostState & TAS2557_VBST_B_ON)) {
+				nResult = tas2557_update_VBstVolt(pTAS2557, channel_right);
+				if (nResult < 0)
+					goto end;
+				nDevBVBstCtrl = 0x40;
+				nDevBSlpCtrl = 0xb0;
+				nResult = pTAS2557->write(pTAS2557, channel_right, TAS2557_VBOOST_CTL_REG, nDevBVBstCtrl);
+				if (nResult < 0)
+					goto end;
+				nResult = pTAS2557->write(pTAS2557, channel_right, TAS2557_SLEEPMODE_CTL_REG, nDevBSlpCtrl);
+				if (nResult < 0)
+					goto end;
+				pTAS2557->mnVBoostState |= TAS2557_VBST_B_ON;
+				dev_dbg(pTAS2557->dev, "%s, devB Boost On, %d\n", __func__, pTAS2557->mnVBoostState);
+			}
+		}  else {
+			if (pTAS2557->mnVBoostState & TAS2557_VBST_B_ON) {
+				nResult = tas2557_update_VBstVolt(pTAS2557, channel_right);
+				if (nResult < 0)
+					goto end;
+				nDevBVBstCtrl = pTAS2557->mnVBoostDefaultCfg[2];
+				nDevBSlpCtrl = pTAS2557->mnVBoostDefaultCfg[3];
+				nResult = pTAS2557->write(pTAS2557, channel_right, TAS2557_VBOOST_CTL_REG, nDevBVBstCtrl);
+				if (nResult < 0)
+					goto end;
+				nResult = pTAS2557->write(pTAS2557, channel_right, TAS2557_SLEEPMODE_CTL_REG, nDevBSlpCtrl);
+				if (nResult < 0)
+					goto end;
+				pTAS2557->mnVBoostState &= ~TAS2557_VBST_B_ON;
+				dev_dbg(pTAS2557->dev, "%s, devB Boost Off, %d\n", __func__, pTAS2557->mnVBoostState);
+			}
+		}
+	} else {
+		nDevAVBstCtrl = pTAS2557->mnVBoostDefaultCfg[0];
+		nDevASlpCtrl = pTAS2557->mnVBoostDefaultCfg[1];
+		nDevBVBstCtrl = pTAS2557->mnVBoostDefaultCfg[2];
+		nDevBSlpCtrl = pTAS2557->mnVBoostDefaultCfg[3];
+		if (pTAS2557->mnVBoostState & TAS2557_VBST_A_ON) {
+			nResult = tas2557_update_VBstVolt(pTAS2557, channel_left);
+			if (nResult < 0)
+				goto end;
+			nResult = pTAS2557->write(pTAS2557, channel_left, TAS2557_VBOOST_CTL_REG, nDevAVBstCtrl);
+			if (nResult < 0)
+				goto end;
+			nResult = pTAS2557->write(pTAS2557, channel_left, TAS2557_SLEEPMODE_CTL_REG, nDevASlpCtrl);
+			if (nResult < 0)
+				goto end;
+			pTAS2557->mnVBoostState &= ~TAS2557_VBST_A_ON;
+			dev_dbg(pTAS2557->dev, "%s, devA Boost default, %d\n", __func__, pTAS2557->mnVBoostState);
+		}
+		if (pTAS2557->mnVBoostState & TAS2557_VBST_B_ON) {
+			nResult = tas2557_update_VBstVolt(pTAS2557, channel_right);
+			if (nResult < 0)
+				goto end;
+			nResult = pTAS2557->write(pTAS2557, channel_right, TAS2557_VBOOST_CTL_REG, nDevBVBstCtrl);
+			if (nResult < 0)
+				goto end;
+			nResult = pTAS2557->write(pTAS2557, channel_right, TAS2557_SLEEPMODE_CTL_REG, nDevBSlpCtrl);
+			if (nResult < 0)
+				goto end;
+			pTAS2557->mnVBoostState &= ~TAS2557_VBST_B_ON;
+			dev_dbg(pTAS2557->dev, "%s, devB Boost default, %d\n", __func__, pTAS2557->mnVBoostState);
+		}
+	}
+
+end:
+
+	return 0;
+}
+
 int tas2557_load_platdata(struct tas2557_priv *pTAS2557)
 {
 	int nResult = 0;
@@ -433,6 +702,21 @@ end:
 int tas2557_load_default(struct tas2557_priv *pTAS2557)
 {
 	int nResult = 0;
+
+	nResult = pTAS2557->write(pTAS2557, channel_both, TAS2557_TEST_MODE_REG, 0x0d);
+	if (nResult < 0)
+		goto end;
+
+	nResult = pTAS2557->read(pTAS2557, channel_left, TAS2557_BROADCAST_REG, &pTAS2557->mnLBroadcastSet);
+	if (nResult < 0)
+		goto end;
+
+	nResult = pTAS2557->read(pTAS2557, channel_right, TAS2557_BROADCAST_REG, &pTAS2557->mnRBroadcastSet);
+	if (nResult < 0)
+		goto end;
+
+	dev_dbg(pTAS2557->dev, "%s, DevA Trim=0x%x, DevB Trim=0x%x\n",
+		__func__, pTAS2557->mnLBroadcastSet, pTAS2557->mnRBroadcastSet);
 
 	nResult = tas2557_dev_load_data(pTAS2557, channel_both, p_tas2557_default_data);
 	if (nResult < 0)
@@ -506,6 +790,10 @@ static int tas2557_load_coefficient(struct tas2557_priv *pTAS2557,
 	if (nPrevConfig < 0) {
 		pPrevConfiguration = NULL;
 		chl = channel_both;
+	} else if (nPrevConfig == nNewConfig) {
+		dev_dbg(pTAS2557->dev, "%s, config [%d] already loaded\n",
+			__func__, nNewConfig);
+		goto end;
 	} else {
 		pPrevConfiguration = &(pTAS2557->mpFirmware->mpConfigurations[nPrevConfig]);
 		chl = pPrevConfiguration->mnDevices;
@@ -534,11 +822,6 @@ static int tas2557_load_coefficient(struct tas2557_priv *pTAS2557,
 		if (nResult < 0)
 			goto end;
 		bRestorePower = true;
-	}
-
-	if (pPrevConfiguration) {
-		if (pPrevConfiguration->mnPLL == pNewConfiguration->mnPLL)
-			goto prog_coefficient;
 	}
 
 	/* load PLL */
@@ -615,17 +898,25 @@ prog_coefficient:
 	}
 
 	if (bRestorePower) {
+		dev_dbg(pTAS2557->dev, "%s, set vboost, before power on %d\n",
+			__func__, pTAS2557->mnVBoostState);
+		nResult = tas2557_set_VBoost(pTAS2557, pTAS2557->mnVBoostState, false);
+		if (nResult < 0)
+			goto end;
+
 		pTAS2557->clearIRQ(pTAS2557);
 		dev_dbg(pTAS2557->dev, "%s, %s, load startup %d\n",
 			__func__, pNewConfiguration->mpName, pNewConfiguration->mnDevices);
 		nResult = tas2557_dev_load_data(pTAS2557, pNewConfiguration->mnDevices, p_tas2557_startup_data);
 		if (nResult < 0)
 			goto end;
-		nResult = tas2557_checkPLL(pTAS2557);
-		if (nResult < 0) {
-			nResult = tas2557_dev_load_data(pTAS2557, pNewConfiguration->mnDevices, p_tas2557_shutdown_data);
-			pTAS2557->mbPowerUp = false;
-			goto end;
+		if (pProgram->mnAppMode == TAS2557_APP_TUNINGMODE) {
+			nResult = tas2557_checkPLL(pTAS2557);
+			if (nResult < 0) {
+				nResult = tas2557_dev_load_data(pTAS2557, pNewConfiguration->mnDevices, p_tas2557_shutdown_data);
+				pTAS2557->mbPowerUp = false;
+				goto end;
+			}
 		}
 		dev_dbg(pTAS2557->dev,
 			"device powered up, load unmute\n");
@@ -690,6 +981,15 @@ int tas2557_enable(struct tas2557_priv *pTAS2557, bool bEnable)
 				if (nResult < 0)
 					goto end;
 				pTAS2557->mbLoadConfigurationPrePowerUp = false;
+			}
+
+			if (pTAS2557->mbLoadVBoostPrePowerUp) {
+				dev_dbg(pTAS2557->dev, "%s, cfg boost before power on new %d, current=%d\n",
+					__func__, pTAS2557->mnVBoostNewState, pTAS2557->mnVBoostState);
+				nResult = tas2557_set_VBoost(pTAS2557, pTAS2557->mnVBoostNewState, false);
+				if (nResult < 0)
+					goto end;
+				pTAS2557->mbLoadVBoostPrePowerUp = false;
 			}
 
 			pTAS2557->clearIRQ(pTAS2557);
@@ -1474,7 +1774,7 @@ static int doSingleRegCheckSum(struct tas2557_priv *pTAS2557, enum channel chl,
 	nResult = isYRAM(pTAS2557, &sCRCData, nBook, nPage, nReg, 1);
 	if (nResult == 1) {
 		if (chl == channel_broadcast) {
-			nResult = tas2557_dev_load_data(pTAS2557, channel_broadcast, p_tas2557_exit_broadcast_data);
+			nResult = tas2557_exit_broadcast_mode(pTAS2557);
 			if (nResult < 0)
 				goto end;
 		}
@@ -1491,7 +1791,7 @@ static int doSingleRegCheckSum(struct tas2557_priv *pTAS2557, enum channel chl,
 		}
 
 		if (chl == channel_broadcast)
-			nResult = tas2557_dev_load_data(pTAS2557, channel_both, p_tas2557_enter_broadcast_data);
+			nResult = tas2557_enter_broadcast_mode(pTAS2557);
 
 		if ((chl == channel_both) || (chl == channel_broadcast)) {
 			if ((nData1 != nData2) || (nData1 != nValue)) {
@@ -1569,7 +1869,7 @@ static int doMultiRegCheckSum(struct tas2557_priv *pTAS2557, enum channel chl,
 			goto end;
 		} else {
 			if (chl == channel_broadcast) {
-				nResult = tas2557_dev_load_data(pTAS2557, channel_broadcast, p_tas2557_exit_broadcast_data);
+				nResult = tas2557_exit_broadcast_mode(pTAS2557);
 				if (nResult < 0)
 					goto end;
 			}
@@ -1588,7 +1888,7 @@ static int doMultiRegCheckSum(struct tas2557_priv *pTAS2557, enum channel chl,
 			}
 
 			if (chl == channel_broadcast)
-				nResult = tas2557_dev_load_data(pTAS2557, channel_both, p_tas2557_enter_broadcast_data);
+				nResult = tas2557_enter_broadcast_mode(pTAS2557);
 
 			if ((chl == channel_both) || (chl == channel_broadcast)) {
 				if (memcmp(nBuf1, nBuf2, TCRCData.mnLen) != 0) {
@@ -1654,6 +1954,7 @@ static int tas2557_load_block(struct tas2557_priv *pTAS2557, struct TBlock *pBlo
 	if (pBlock->mnType == TAS2557_BLOCK_PLL) {
 		pConfiguration = &(pTAS2557->mpFirmware->mpConfigurations[pTAS2557->mnCurrentConfiguration]);
 		chl = pConfiguration->mnDevices;
+		dev_dbg(pTAS2557->dev, "%s: PLL chl = %d\n", __func__, chl);
 	} else if ((pBlock->mnType == TAS2557_BLOCK_PGM_DEV_A)
 		|| (pBlock->mnType == TAS2557_BLOCK_CFG_COEFF_DEV_A)
 		|| (pBlock->mnType == TAS2557_BLOCK_CFG_PRE_DEV_A)) {
@@ -1688,7 +1989,7 @@ start:
 	nCommand = 0;
 
 	if (chl == channel_broadcast) {
-		nResult = tas2557_dev_load_data(pTAS2557, channel_both, p_tas2557_enter_broadcast_data);
+		nResult = tas2557_enter_broadcast_mode(pTAS2557);
 		if (nResult < 0)
 			goto end;
 	}
@@ -1749,7 +2050,7 @@ start:
 	}
 
 	if (chl == channel_broadcast)
-		nResult = tas2557_dev_load_data(pTAS2557, channel_broadcast, p_tas2557_exit_broadcast_data);
+		nResult = tas2557_exit_broadcast_mode(pTAS2557);
 
 	if (pBlock->mbPChkSumPresent) {
 		if ((chl & channel_left) || (chl == channel_broadcast))
@@ -1859,7 +2160,9 @@ static int tas2557_load_configuration(struct tas2557_priv *pTAS2557,
 		goto end;
 	}
 
-	if ((nConfiguration == pTAS2557->mnCurrentConfiguration) && (!bLoadSame)) {
+	if ((!pTAS2557->mbLoadConfigurationPrePowerUp)
+		&& (nConfiguration == pTAS2557->mnCurrentConfiguration)
+		&& (!bLoadSame)) {
 		dev_info(pTAS2557->dev, "Configuration %d is already loaded\n",
 			nConfiguration);
 		nResult = 0;
@@ -2223,12 +2526,17 @@ int tas2557_set_program(struct tas2557_priv *pTAS2557,
 		goto end;
 	pTAS2557->mnDevGain = nGain;
 	pTAS2557->mnDevCurrentGain = nGain;
+	pTAS2557->mnVBoostState = TAS2557_VBST_NEED_DEFAULT;
 
 	nResult = tas2557_load_coefficient(pTAS2557, -1, nConfiguration, false);
 	if (nResult < 0)
 		goto end;
 
 	if (pTAS2557->mbPowerUp) {
+		dev_info(pTAS2557->dev, "%s, load VBoost before power on %d\n", __func__, pTAS2557->mnVBoostState);
+		nResult = tas2557_set_VBoost(pTAS2557, pTAS2557->mnVBoostState, false);
+		if (nResult < 0)
+			goto end;
 		pTAS2557->clearIRQ(pTAS2557);
 		pConfiguration = &(pTAS2557->mpFirmware->mpConfigurations[pTAS2557->mnCurrentConfiguration]);
 		dev_dbg(pTAS2557->dev, "%s, %s, load startup %d\n",
@@ -2365,7 +2673,7 @@ int tas2557_get_Cali_prm_r0(struct tas2557_priv *pTAS2557, enum channel chl, int
 				if ((nOffset < 0x7f) || (nOffset == 0x81))
 					nn++;
 				else if (nOffset == 0x85) {
-					len = ((int)nBook << 8) | nPage; 
+					len = ((int)nBook << 8) | nPage;
 
 					nBook = pCommands[4 * nn + 4];
 					nPage = pCommands[4 * nn + 5];
@@ -2373,23 +2681,20 @@ int tas2557_get_Cali_prm_r0(struct tas2557_priv *pTAS2557, enum channel chl, int
 					if ((nBook == TAS2557_BOOK_ID(nReg))
 						&& (nPage == TAS2557_PAGE_ID(nReg))
 						&& (nOffset == TAS2557_PAGE_REG(nReg))) {
-							nCali_Re = ((int)pCommands[4 * nn + 7] << 24)
-										| ((int)pCommands[4 * nn + 8] << 16)
-										| ((int)pCommands[4 * nn + 9] << 8)
-										| (int)pCommands[4 * nn + 10];
-							bFound = true;
-							break;
-					} else {
-						nn ++;
-						nn += ((len -1) / 4);
-						if ((len - 1) % 4)
-							nn++;
+						nCali_Re = ((int)pCommands[4 * nn + 7] << 24)
+							| ((int)pCommands[4 * nn + 8] << 16)
+							| ((int)pCommands[4 * nn + 9] << 8)
+							| (int)pCommands[4 * nn + 10];
+						bFound = true;
+						goto end;
 					}
+					nn++;
+					nn += ((len - 1) / 4);
+					if ((len - 1) % 4)
+						nn++;
 				} else
 					dev_err(pTAS2557->dev, "%s, format error %d\n", __func__, nOffset);
 			}
-			if (bFound)
-				break;
 		}
 	}
 

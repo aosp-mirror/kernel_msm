@@ -560,10 +560,10 @@ static int tas2557_dev_update_bits(
 		TAS2557_PAGE_ID(nRegister));
 
 	if (nResult >= 0) {
-		if (chn&channel_left)
+		if (chn & channel_left)
 			tas2557_i2c_update_bits(pTAS2557, pTAS2557->mnLAddr, TAS2557_PAGE_REG(nRegister), nMask, nValue);
 
-		if (chn&channel_right)
+		if (chn & channel_right)
 			tas2557_i2c_update_bits(pTAS2557, pTAS2557->mnRAddr, TAS2557_PAGE_REG(nRegister), nMask, nValue);
 	}
 
@@ -593,7 +593,7 @@ void tas2557_enableIRQ(struct tas2557_priv *pTAS2557, enum channel chl, bool ena
 	if (enable) {
 		if (!pTAS2557->mbIRQEnable) {
 			if (chl & channel_left) {
-				if (pTAS2557->mnLeftChlIRQ != 0) {
+				if (gpio_is_valid(pTAS2557->mnLeftChlGpioINT)) {
 					enable_irq(pTAS2557->mnLeftChlIRQ);
 					bLeftChlEnable = true;
 				} else
@@ -601,27 +601,33 @@ void tas2557_enableIRQ(struct tas2557_priv *pTAS2557, enum channel chl, bool ena
 			}
 
 			if (chl & channel_right) {
-				if (pTAS2557->mnRightChlIRQ != 0) {
+				if (gpio_is_valid(pTAS2557->mnRightChlGpioINT)) {
 					if (pTAS2557->mnRightChlIRQ != pTAS2557->mnLeftChlIRQ) {
 						enable_irq(pTAS2557->mnRightChlIRQ);
 						bRightChlEnable = true;
 					} else if (!bLeftChlEnable) {
 						enable_irq(pTAS2557->mnRightChlIRQ);
 						bRightChlEnable = true;
-					}
-				}
+					} else
+						bRightChlEnable = false;
+				} else
+					bRightChlEnable = false;
+			}
+			if (bLeftChlEnable || bRightChlEnable) {
+				/* check after 10 ms */
+				schedule_delayed_work(&pTAS2557->irq_work, msecs_to_jiffies(10));
 			}
 			pTAS2557->mbIRQEnable = true;
 		}
 	} else {
 		if (pTAS2557->mbIRQEnable) {
-			if (pTAS2557->mnLeftChlIRQ != 0) {
+			if (gpio_is_valid(pTAS2557->mnLeftChlGpioINT)) {
 				if (bLeftChlEnable) {
 					disable_irq_nosync(pTAS2557->mnLeftChlIRQ);
 					bLeftChlEnable = false;
 				}
 			}
-			if (pTAS2557->mnRightChlIRQ != 0) {
+			if (gpio_is_valid(pTAS2557->mnRightChlGpioINT)) {
 				if (bRightChlEnable) {
 					disable_irq_nosync(pTAS2557->mnRightChlIRQ);
 					bRightChlEnable = false;
