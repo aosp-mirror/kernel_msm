@@ -3,12 +3,16 @@ TMP108 temperature sensor
 
 This device supports I2C only.
 
-Requires node properties:
+Required node properties:
 - compatible : "ti,tmp108"
 - reg : the I2C address of the device. This is 0x48, 0x49, 0x4a, or 0x4b.
+
+Optional node properties:
+- label : String; Assigned to the hwmon temp1_label property.
 
 Example:
 	tmp108@48 {
 		compatible = "ti,tmp108";
 		reg = <0x48>;
+		label = "Right Side";
 	};
