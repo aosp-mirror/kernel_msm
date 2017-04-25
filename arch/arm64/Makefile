@@ -148,8 +148,8 @@ dtbo.img: $(boot)/dts/dtboimg.cfg dtbs
 
 PHONY += apply_dtbo
 dtboaply := -f $(if $(KBUILD_SRC),$(srctree)/)scripts/Makefile.dtboaply obj
-apply_dtbo: Image.lz4-dtb dtbo.img
-	$(Q)$(MAKE) $(dtboaply)=$(boot) KERNEL_DTB=Image.lz4-dtb DTBO=dtbo.img
+apply_dtbo: $(KBUILD_IMAGE) dtbo.img
+	$(Q)$(MAKE) $(dtboaply)=$(boot) KERNEL_DTB=$(KBUILD_IMAGE) DTBO=dtbo.img
 
 PHONY += vdso_install
 vdso_install:

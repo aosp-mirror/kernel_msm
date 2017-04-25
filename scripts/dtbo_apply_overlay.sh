@@ -21,11 +21,11 @@ trap "rm -rf ${overlay_dir}" 0
 cd ${overlay_dir}
 
 # extract soc dtb
-extract_dtb ${KERNEL_DTB} soc.dtb Image.lz4
+extract_dtb ${KERNEL_DTB} soc.dtb Image
 
 soc_cnt=$(ls -l soc.dtb* | wc -l)
 if [ ${soc_cnt} -ne 1 ]; then
-  echo "Error: ${soc_cnt} soc.dtb(s) appended to Image.lz4-dtb" >&2
+  echo "Error: ${soc_cnt} soc.dtb(s) appended to ${KERNEL_DTB}" >&2
   exit 1
 fi
 
@@ -53,5 +53,4 @@ done
 # dtboimg.cfg, where muskie/walley dtbs are before taimen dtbs. Otherwise,
 # muskie/walleye's bootloader may give up looking for dtbs once it sees
 # an invalid dtb, i.e. taimen dtb.
-cat Image.lz4 `ls -v combined-*.dtb` > Image.lz4-dtb
-cp Image.lz4-dtb ${KERNEL_DTB}
+cat Image `ls -v combined-*.dtb` > ${KERNEL_DTB}
