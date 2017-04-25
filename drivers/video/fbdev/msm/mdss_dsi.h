@@ -66,6 +66,19 @@
 
 #define NONE_PANEL "none"
 
+/* RGB calibration */
+#define CALIBRATION_DATA_PATH "/calibration_data"
+#define DISP_FLASH_DATA "disp_flash"
+#define DISP_FLASH_DATA_SIZE 1280
+#define LIGHT_CALI_OFFSET 36
+#define LIGHT_CALI_SIZE 8
+#define LIGHT_RATIO_INDEX 0
+#define LIGHT_R_INDEX 1
+#define LIGHT_G_INDEX 2
+#define LIGHT_B_INDEX 3
+#define GAIN_BASE 10000
+#define FORMULA_GAIN(ori,comp) ((uint16_t)((ori)*(comp)/GAIN_BASE))
+
 enum {		/* mipi dsi panel */
 	DSI_VIDEO_MODE,
 	DSI_CMD_MODE,
@@ -399,6 +412,12 @@ struct dsi_err_container {
 	s64 err_time[MAX_ERR_INDEX];
 };
 
+struct dsi_cmd_pos {
+	int line;
+	int offset;
+	int size;
+};
+
 #define DSI_CTRL_LEFT		DSI_CTRL_0
 #define DSI_CTRL_RIGHT		DSI_CTRL_1
 #define DSI_CTRL_CLK_SLAVE	DSI_CTRL_RIGHT
@@ -504,6 +523,7 @@ struct mdss_dsi_ctrl_pdata {
 	struct dsi_panel_cmds off_cmds;
 	struct dsi_panel_cmds lp_on_cmds;
 	struct dsi_panel_cmds lp_off_cmds;
+	struct dsi_panel_cmds gain_cmds;
 	struct dsi_panel_cmds status_cmds;
 	u32 *status_valid_params;
 	u32 *status_cmds_rlen;
@@ -605,6 +625,10 @@ struct mdss_dsi_ctrl_pdata {
 	/* alpm brightness setting */
 	struct dsi_panel_cmds alpm_mode_cmds[ALPM_MODE_MAX];
 	enum alpm_mode_type alpm_mode;
+
+	/* rgb calibration */
+	struct dsi_cmd_pos rgb_gain_pos;
+	struct rgb_gain rgb_gain;
 };
 
 struct te_data {
@@ -980,5 +1004,16 @@ static inline enum dsi_physical_lane_id mdss_dsi_logical_to_physical_lane(
 
 	return i;
 }
+
+static inline void dsi_cmd_data_change_rgb(struct dsi_cmd_desc *cmd,
+			uint32_t offset, uint32_t size, struct rgb_gain *gain) {
+	cmd->payload[offset] = (gain->R >> 8) & 0xff;
+	cmd->payload[offset+1] = gain->R & 0xff;
+	cmd->payload[offset+size] = (gain->G >> 8) & 0xff;
+	cmd->payload[offset+size+1] = gain->G & 0xff;
+	cmd->payload[offset+size+size] = (gain->B >> 8) & 0xff;
+	cmd->payload[offset+size+size+1] = gain->B & 0xff;
+}
+
 
 #endif /* MDSS_DSI_H */

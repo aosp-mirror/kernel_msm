@@ -1629,6 +1629,10 @@ static int mdss_dsi_unblank(struct mdss_panel_data *pdata)
 		}
 	}
 
+	/* display calibration */
+	if (pdata->apply_display_setting)
+		pdata->apply_display_setting(pdata, MDSS_PANEL_CALI_RGB_GAIN);
+
 	ctrl_pdata->ctrl_state |= CTRL_STATE_PANEL_INIT;
 
 error:

@@ -117,6 +117,7 @@ enum {
 enum {
 	MDSS_PANEL_LOW_PERSIST_MODE_OFF = 0,
 	MDSS_PANEL_LOW_PERSIST_MODE_ON,
+	MDSS_PANEL_CALI_RGB_GAIN,
 };
 
 enum {
@@ -142,6 +143,11 @@ enum {
 	SIM_HW_TE_MODE,
 };
 
+struct rgb_gain {
+	uint16_t R;
+	uint16_t G;
+	uint16_t B;
+};
 
 /*
  * enum partial_update_mode - Different modes for partial update feature

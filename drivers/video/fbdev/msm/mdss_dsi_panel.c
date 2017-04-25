@@ -22,6 +22,7 @@
 #include <linux/qpnp/pwm.h>
 #include <linux/err.h>
 #include <linux/string.h>
+#include <linux/uaccess.h>
 
 #include "mdss_dsi.h"
 #include "mdss_dba_utils.h"
@@ -734,6 +735,8 @@ static int mdss_dsi_panel_apply_display_setting(struct mdss_panel_data *pdata,
 	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
 	struct dsi_panel_cmds *lp_on_cmds;
 	struct dsi_panel_cmds *lp_off_cmds;
+	struct dsi_panel_cmds *gain_cmds;
+	struct rgb_gain gain;
 
 	if (pdata == NULL) {
 		pr_err("%s: Invalid input data\n", __func__);
@@ -746,6 +749,10 @@ static int mdss_dsi_panel_apply_display_setting(struct mdss_panel_data *pdata,
 	lp_on_cmds = &ctrl->lp_on_cmds;
 	lp_off_cmds = &ctrl->lp_off_cmds;
 
+	/* Apply display_calibration */
+	gain_cmds = &ctrl->gain_cmds;
+	gain = ctrl->rgb_gain;
+
 	/* Apply display settings for low-persistence mode */
 	if ((mode == MDSS_PANEL_LOW_PERSIST_MODE_ON) &&
 			(lp_on_cmds->cmd_cnt))
@@ -753,10 +760,31 @@ static int mdss_dsi_panel_apply_display_setting(struct mdss_panel_data *pdata,
 	else if ((mode == MDSS_PANEL_LOW_PERSIST_MODE_OFF) &&
 			(lp_on_cmds->cmd_cnt))
 		mdss_dsi_panel_apply_settings(ctrl, lp_off_cmds);
-	else
+	else if ((mode == MDSS_PANEL_CALI_RGB_GAIN) &&
+			(gain_cmds->cmd_cnt)) {
+
+		pr_debug("%s: RGB GAIN (%d, %d, %d)\n",
+			__func__, gain.R, gain.G, gain.B);
+
+		if (!gain.R && !gain.G && !gain.B) {
+			pr_debug("%s: Zero RGB gain data\n", __func__);
+			return 0;
+		} else if (!gain.R || !gain.G || !gain.B) {
+			pr_warn("%s: Invalid RGB gain data\n", __func__);
+			return 0;
+		}
+
+		/* Apply display settings for RGB gain */
+		dsi_cmd_data_change_rgb(
+			&gain_cmds->cmds[ctrl->rgb_gain_pos.line],
+			ctrl->rgb_gain_pos.offset, ctrl->rgb_gain_pos.size,
+			&gain);
+
+		mdss_dsi_panel_apply_settings(ctrl, gain_cmds);
+	} else
 		return -EINVAL;
 
-	pr_debug("%s: Persistence mode %d applied\n", __func__, mode);
+	pr_debug("%s: Panel mode %d applied\n", __func__, mode);
 	return 0;
 }
 
@@ -2123,6 +2151,188 @@ static void mdss_dsi_parse_alpm_modes(struct device_node *np,
 		ctrl->panel_data.panel_info.alpm_feature_enabled = false;
 }
 
+static int mdss_dsi_parse_cmd_pos(struct device_node *np,
+			struct dsi_cmd_pos *pos, const char *name)
+{
+	u32 data[3];
+
+	if (of_property_read_u32_array(np, name, data, 3)) {
+		pr_debug("%s: read %s failed\n", __func__, name);
+		return -EINVAL;
+	}
+
+	pos->line = data[0];
+	pos->offset = data[1];
+	pos->size = data[2];
+
+	return 0;
+}
+
+static void mdss_dsi_parse_rgb_gain(struct rgb_gain *gain)
+{
+	struct device_node *disp_cali_offset;
+	char *disp_cali_data = NULL;
+	int disp_cali_size = 0;
+	int i;
+	uint16_t tmp[LIGHT_CALI_SIZE/2];
+
+	disp_cali_offset = of_find_node_by_path(CALIBRATION_DATA_PATH);
+	if (!disp_cali_offset) {
+		pr_debug("%s: empty of disp_cali data\n", __func__);
+		return;
+	}
+
+	disp_cali_data = (char *) of_get_property(disp_cali_offset,
+					DISP_FLASH_DATA, &disp_cali_size);
+	pr_debug("%s: disp_cali_size = %d\n", __func__, disp_cali_size);
+
+	if (!disp_cali_data || (disp_cali_size != DISP_FLASH_DATA_SIZE)) {
+		pr_info("%s: wrong size of disp_cali data=%d\n", __func__,
+			disp_cali_size);
+		return;
+	}
+
+	/* RGB brightness calibration data */
+	for (i = 0; i < LIGHT_CALI_SIZE/2; i++) {
+		tmp[i] = disp_cali_data[LIGHT_CALI_OFFSET+(i*2)] +
+			(disp_cali_data[LIGHT_CALI_OFFSET+(i*2)+1] << 8);
+		pr_debug("%s: PA[%d] = 0x%x\n", __func__, i, tmp[i]);
+	}
+	gain->R = FORMULA_GAIN(tmp[LIGHT_R_INDEX],tmp[LIGHT_RATIO_INDEX]);
+	gain->G = FORMULA_GAIN(tmp[LIGHT_G_INDEX],tmp[LIGHT_RATIO_INDEX]);
+	gain->B = FORMULA_GAIN(tmp[LIGHT_B_INDEX],tmp[LIGHT_RATIO_INDEX]);
+	pr_info("%s: R = 0x%x, G = 0x%x B = 0x%x \n", __func__, gain->R,
+		gain->G, gain->B);
+}
+
+#define DEBUG_BUF   64
+#define DEF_COUNT   4
+#define RGB_GAIN_CHECK(x) ((x)>0 && (x)<=9999)
+#define RGB_CHECK(x) ((x)>0 && (x)<512)
+
+static struct mdss_dsi_ctrl_pdata *ctrl_instance;
+static bool debugfs_inti;
+
+static char debug_buf[DEBUG_BUF];
+
+static ssize_t panel_rgb_cali_write(
+	struct file *file,
+	const char __user *buff,
+	size_t count,
+	loff_t *ppos)
+{
+	u32 user_gain = 0, user_r = 0, user_g = 0, user_b = 0;
+	struct dsi_panel_cmds *gain_cmds;
+	struct dsi_cmd_pos pos;
+
+	if (count >= sizeof(debug_buf))
+		return -EFAULT;
+
+	if (copy_from_user(debug_buf, buff, count))
+		return -EFAULT;
+
+	if (!ctrl_instance)
+		return count;
+
+	debug_buf[count] = 0;
+
+	if (sscanf(debug_buf, "-%u %x %x %x", &user_gain, &user_r, &user_g,
+		   &user_b) == DEF_COUNT) {
+		if (RGB_GAIN_CHECK(user_gain) && RGB_CHECK(user_r) &&
+		    RGB_CHECK(user_g) && RGB_CHECK(user_b)) {
+			pr_info("%s: gain=-%d, 0x%x, 0x%x, 0x%x\n",__func__,
+				user_gain, user_r, user_g, user_b);
+		} else
+			return -EFAULT;
+	} else if (sscanf(debug_buf, "%u %x %x %x", &user_gain, &user_r,
+			  &user_g, &user_b) == DEF_COUNT) {
+		if (RGB_GAIN_CHECK(user_gain) && RGB_CHECK(user_r) &&
+		    RGB_CHECK(user_g) && RGB_CHECK(user_b)) {
+			pr_info("%s: gain=%d, 0x%x, 0x%x, 0x%x\n",__func__,
+				user_gain, user_r, user_g, user_b);
+			user_gain = user_gain + GAIN_BASE;
+		} else
+			return -EFAULT;
+	} else
+		return -EFAULT;
+
+	gain_cmds = &ctrl_instance->gain_cmds;
+	pos = ctrl_instance->rgb_gain_pos;
+
+	ctrl_instance->rgb_gain.R = FORMULA_GAIN(user_r, user_gain);
+	ctrl_instance->rgb_gain.G = FORMULA_GAIN(user_g, user_gain);
+	ctrl_instance->rgb_gain.B = FORMULA_GAIN(user_b, user_gain);
+	pr_info("%s: 0x%x, 0x%x, 0x%x\n", __func__, ctrl_instance->rgb_gain.R,
+						    ctrl_instance->rgb_gain.G,
+						    ctrl_instance->rgb_gain.B);
+
+	dsi_cmd_data_change_rgb(&gain_cmds->cmds[pos.line], pos.offset,
+				pos.size, &ctrl_instance->rgb_gain);
+
+	mdss_dsi_panel_apply_settings(ctrl_instance, gain_cmds);
+	return count;
+}
+
+static ssize_t panel_rgb_cali_read(struct file *file,
+			char __user *buff, size_t count, loff_t *ppos)
+{
+	int len = 0;
+
+	if (*ppos)
+		return 0;	/* the end */
+
+	if (!ctrl_instance)
+		return len;
+
+	len = snprintf(debug_buf, sizeof(debug_buf),
+			"cali:R=0x%x, G=0x%x, B=0x%x\n",
+			ctrl_instance->rgb_gain.R,
+			ctrl_instance->rgb_gain.G,
+			ctrl_instance->rgb_gain.B);
+
+	if (len < 0 || len >= sizeof(debug_buf))
+		return 0;
+
+	if ((count < sizeof(debug_buf)) || copy_to_user(buff, debug_buf, len))
+		return -EFAULT;
+
+	*ppos += len;	/* increase offset */
+	return len;
+}
+
+static const struct file_operations rgb_cali_fops = {
+	.write = panel_rgb_cali_write,
+	.read = panel_rgb_cali_read,
+};
+
+void disp_cali_debugfs(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
+{
+	struct dentry *dent = NULL;
+
+	if (debugfs_inti == true)
+		return;
+
+	debugfs_inti = true;
+
+	ctrl_instance = ctrl_pdata;
+	dent = debugfs_create_dir("disp_cali", NULL);
+
+	if (IS_ERR(dent)) {
+		pr_err("%s(%d): debugfs_create_dir fail, error %ld\n",
+			__FILE__, __LINE__, PTR_ERR(dent));
+		return;
+	}
+
+	if (debugfs_create_file("rgb_cali", 0644, dent, 0, &rgb_cali_fops)
+			== NULL) {
+		pr_err("%s(%d): debugfs_create_file: index fail\n",
+			__FILE__, __LINE__);
+		return;
+	}
+	pr_info("%s\n", __func__);
+	return;
+}
+
 static int mdss_dsi_parse_panel_features(struct device_node *np,
 	struct mdss_dsi_ctrl_pdata *ctrl)
 {
@@ -2182,6 +2392,14 @@ static int mdss_dsi_parse_panel_features(struct device_node *np,
 			"qcom,mdss-dsi-lp-mode-off", "qcom,mdss-dsi-lp-change-state");
 
 	mdss_dsi_parse_alpm_modes(np, ctrl);
+
+	if (!mdss_dsi_parse_dcs_cmds(np, &ctrl->gain_cmds,
+		"qcom,mdss-dsi-gain-on-command", NULL) &&
+		!mdss_dsi_parse_cmd_pos(np, &ctrl->rgb_gain_pos,
+		"qcom,mdss-dsi-rgb-gain-offset")) {
+		mdss_dsi_parse_rgb_gain(&ctrl->rgb_gain);
+		disp_cali_debugfs(ctrl);
+	}
 
 	return 0;
 }
