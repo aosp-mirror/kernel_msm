@@ -1928,10 +1928,11 @@ static int fts_stop_device(struct fts_ts_info *info)
 
 		info->fts_power_state = FTS_POWER_STATE_LOWPOWER;
 
+		fts_interrupt_set(info, INT_DISABLE);
 		disable_irq(info->irq);
 
 		fts_command(info, FLUSHBUFFER);
-		fts_command(info, FTS_CMD_LOWPOWER_MODE);
+		fts_command(info, SENSEOFF);
 		fts_command(info, FLUSHBUFFER);
 
 		fts_release_all_finger(info);
