@@ -151,10 +151,23 @@ struct max31760_dev_attr {
 };
 
 /*
+ * struct max31760_fan - fan device data
+ * @pulses:      Number of tach pulses per rotation.
+ * @enabled:     True when the fan is enabled.
+ * @label:       Label if provided in open firmware.
+ * @enable_gpio: GPIO that enables this fan.
+ */
+struct max31760_fan {
+	const char *label;
+	int pulses;
+	bool enabled;
+	struct gpio_desc *enable_gpio;
+};
+
+/*
  * struct max31760 - device data
  * @regmap:	Register map.
- * @fan_pulses:	Quick access to the number of fan tach pulses (per fan).
- * @fan_label:  Labels for the fans if provided in open firmware.
+ * @fan:	Fan data.
  * @temp_label: Labels for the temperature sensors if provided in open firmware.
  * @lut_dev_attrs:
  *		Device attributes for the temperature to PWM lookup table.
@@ -164,10 +177,7 @@ struct max31760_dev_attr {
  */
 struct max31760 {
 	struct regmap *regmap;
-	struct gpio_desc *fan_enable_gpio[MAX31760_NUM_FANS];
-	bool fan_enabled[MAX31760_NUM_FANS];
-	int fan_pulses[MAX31760_NUM_FANS];
-	const char *fan_label[MAX31760_NUM_FANS];
+	struct max31760_fan fan[MAX31760_NUM_FANS];
 	const char *temp_label[MAX31760_NUM_TEMPS];
 	struct max31760_dev_attr lut_dev_attrs[MAX31760_LUT_AUTO_ATTR_COUNT];
 	struct attribute *lut_attrs[MAX31760_LUT_AUTO_ATTR_COUNT + 1];
@@ -408,7 +418,7 @@ static int max31760_read_fan(struct device *dev, u32 attr, int channel,
 		if (err)
 			return err;
 		*val = max31760_rpm_from_tach(tach_count,
-					      max31760->fan_pulses[channel]);
+					      max31760->fan[channel].pulses);
 		break;
 	case hwmon_fan_min_alarm:
 		srflag = channel ? MAX31760_SR_TACH2A : MAX31760_SR_TACH1A;
@@ -516,7 +526,7 @@ static int max31760_read_string(struct device *dev,
 	case hwmon_fan:
 		if (attr != hwmon_fan_label)
 			return -EOPNOTSUPP;
-		*str = max31760->fan_label[channel];
+		*str = max31760->fan[channel].label;
 		break;
 	default:
 		return -EOPNOTSUPP;
@@ -566,7 +576,7 @@ static void max31760_update_fan_pulses(struct max31760 *max31760, int channel,
 		pulses = MAX31760_FAN_PULSES_MAX;
 	else if (pulses <= 0)
 		pulses = MAX31760_FAN_PULSES_DEF;
-	max31760->fan_pulses[channel] = pulses;
+	max31760->fan[channel].pulses = pulses;
 }
 
 static int max31760_write_fan(struct device *dev, u32 attr, int channel,
@@ -580,12 +590,12 @@ static int max31760_write_fan(struct device *dev, u32 attr, int channel,
 	switch (attr) {
 	case hwmon_fan_min:
 		tach = max31760_tach_from_rpm(val,
-					      max31760->fan_pulses[channel]);
+					      max31760->fan[channel].pulses);
 		return max31760_write_word(max31760->regmap, MAX31760_REG_TCTH,
 					   tach);
 	case hwmon_fan_pulses:
 		max31760_update_fan_pulses(max31760, channel, val);
-		regval = (unsigned int)max31760->fan_pulses[channel];
+		regval = (unsigned int)max31760->fan[channel].pulses;
 		if (channel) {
 			regval <<= 3;
 			mask = MAX31760_USER0_PULSE2;
@@ -693,7 +703,7 @@ static umode_t max31760_is_visible(const void *dvrdata,
 		case hwmon_fan_min_alarm:
 			return 0444;
 		case hwmon_fan_label:
-			if (max31760->fan_label[channel])
+			if (max31760->fan[channel].label)
 				return 0444;
 			return 0;
 		case hwmon_fan_min:
@@ -1223,7 +1233,7 @@ static int max31760_update_from_registers(struct device *dev)
 		err = max31760_read_fan(dev, hwmon_fan_pulses, i, &val);
 		if (err)
 			return err;
-		max31760->fan_pulses[i] = val;
+		max31760->fan[i].pulses = val;
 	}
 
 	/* Clear standby bit in case it is set. */
@@ -1236,8 +1246,7 @@ static int max31760_of_init_fan(struct device *dev,
 				struct device_node *fan_node, u32 reg)
 {
 	struct max31760 *max31760 = dev_get_drvdata(dev);
-	struct gpio_desc *gpiod;
-	const char *label;
+	struct max31760_fan *fan;
 	int err;
 
 	if (reg >= MAX31760_NUM_FANS) {
@@ -1245,35 +1254,33 @@ static int max31760_of_init_fan(struct device *dev,
 		return -EINVAL;
 	}
 
-	err = of_property_read_string(fan_node, "label", &label);
-	if (!err)
-		max31760->fan_label[reg] = label;
+	fan = &max31760->fan[reg];
+	err = of_property_read_string(fan_node, "label", &fan->label);
+	if (err)
+		fan->label = NULL;
 
-	max31760->fan_enabled[reg] = of_device_is_available(fan_node);
+	fan->enabled = of_device_is_available(fan_node);
 
-	gpiod = devm_get_gpiod_from_child(dev, "maxim,enable",
-					  &fan_node->fwnode);
-	err = PTR_ERR(gpiod);
+	fan->enable_gpio = devm_get_gpiod_from_child(dev, "maxim,enable",
+						     &fan_node->fwnode);
+	err = PTR_ERR(fan->enable_gpio);
 	if (err == -ENOENT || err == -ENODEV) {
-		gpiod = NULL;
+		fan->enable_gpio = NULL;
 	} else if (err == -EPROBE_DEFER) {
 		dev_dbg(dev, "Defer due to fan enable gpio.");
 		return err;
-	} else if (IS_ERR(gpiod)) {
+	} else if (IS_ERR(fan->enable_gpio)) {
 		dev_err(dev, "Error getting fan enable gpio: %d", err);
 		return err;
 	}
 
-	if (gpiod) {
-		err = gpiod_direction_output(gpiod, max31760->fan_enabled[reg]);
+	if (fan->enable_gpio) {
+		err = gpiod_direction_output(fan->enable_gpio, fan->enabled);
 		if (err) {
 			dev_err(dev, "Failed to set fan%d gpio output %s.", reg,
-				max31760->fan_enabled[reg] ?
-					"enabled" : "disabled");
+				fan->enabled ? "enabled" : "disabled");
 			return err;
 		}
-
-		max31760->fan_enable_gpio[reg] = gpiod;
 	}
 
 	return 0;
@@ -1368,8 +1375,8 @@ static int max31760_of_init(struct device *dev)
 	if (err)
 		return err;
 
-	val = (max31760->fan_enabled[0] ? MAX31760_CR3_TACH1E : 0) |
-	      (max31760->fan_enabled[1] ? MAX31760_CR3_TACH2E : 0);
+	val = (max31760->fan[0].enabled ? MAX31760_CR3_TACH1E : 0) |
+	      (max31760->fan[1].enabled ? MAX31760_CR3_TACH2E : 0);
 	if (of_property_read_bool(dev->of_node, "maxim,fan-fail-full-only"))
 		val |= MAX31760_CR3_TACHFL;
 	if (of_property_read_bool(dev->of_node,
@@ -1430,13 +1437,16 @@ static int max31760_probe(struct i2c_client *client,
 static void max31760_update_fan_states(struct device *dev, bool enable)
 {
 	struct max31760 *max31760 = dev_get_drvdata(dev);
+	struct max31760_fan *fan;
+	bool is_enabled;
 	int i;
 
 	for (i = 0; i < MAX31760_NUM_FANS; i++) {
-		if (!max31760->fan_enable_gpio[i])
-			continue;
-		gpiod_set_value_cansleep(max31760->fan_enable_gpio[i],
-					 enable && max31760->fan_enabled[i]);
+		fan = &max31760->fan[i];
+		is_enabled = enable && fan->enabled;
+
+		if (fan->enable_gpio)
+			gpiod_set_value_cansleep(fan->enable_gpio, is_enabled);
 	}
 }
 
