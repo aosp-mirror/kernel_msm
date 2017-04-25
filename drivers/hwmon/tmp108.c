@@ -1,6 +1,7 @@
 /* Texas Instruments TMP108 SMBus temperature sensor driver
  *
- * Copyright (C) 2016 John Muir <john@jmuir.com>
+ * Copyright (C) 2017 Google, Inc.
+ * Author: muirj
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -81,6 +82,7 @@
 
 struct tmp108 {
 	struct regmap *regmap;
+	const char *label;
 	u16 orig_config;
 	unsigned long ready_time;
 };
@@ -196,6 +198,18 @@ static int tmp108_read(struct device *dev, enum hwmon_sensor_types type,
 	return 0;
 }
 
+static int tmp108_read_string(struct device *dev,
+			      enum hwmon_sensor_types type, u32 attr,
+			      int channel, const char **str)
+{
+	struct tmp108 *tmp108 = dev_get_drvdata(dev);
+
+	if (type != hwmon_temp || attr != hwmon_temp_label)
+		return -EOPNOTSUPP;
+	*str = tmp108->label;
+	return 0;
+}
+
 static int tmp108_write(struct device *dev, enum hwmon_sensor_types type,
 			u32 attr, int channel, long temp)
 {
@@ -260,6 +274,8 @@ static int tmp108_write(struct device *dev, enum hwmon_sensor_types type,
 static umode_t tmp108_is_visible(const void *data, enum hwmon_sensor_types type,
 				 u32 attr, int channel)
 {
+	struct tmp108 *tmp108 = (struct tmp108 *)data;
+
 	if (type == hwmon_chip && attr == hwmon_chip_update_interval)
 		return 0644;
 
@@ -276,6 +292,11 @@ static umode_t tmp108_is_visible(const void *data, enum hwmon_sensor_types type,
 	case hwmon_temp_min_hyst:
 	case hwmon_temp_max_hyst:
 		return 0644;
+	case hwmon_temp_label:
+		if (tmp108->label)
+			return 0444;
+		else
+			return 0;
 	default:
 		return 0;
 	}
@@ -293,7 +314,8 @@ static const struct hwmon_channel_info tmp108_chip = {
 
 static u32 tmp108_temp_config[] = {
 	HWMON_T_INPUT | HWMON_T_MAX | HWMON_T_MIN | HWMON_T_MIN_HYST
-		| HWMON_T_MAX_HYST | HWMON_T_MIN_ALARM | HWMON_T_MAX_ALARM,
+		| HWMON_T_MAX_HYST | HWMON_T_MIN_ALARM | HWMON_T_MAX_ALARM
+		| HWMON_T_LABEL,
 	0
 };
 
@@ -311,6 +333,7 @@ static const struct hwmon_channel_info *tmp108_info[] = {
 static const struct hwmon_ops tmp108_hwmon_ops = {
 	.is_visible = tmp108_is_visible,
 	.read = tmp108_read,
+	.read_string = tmp108_read_string,
 	.write = tmp108_write,
 };
 
@@ -376,6 +399,10 @@ static int tmp108_probe(struct i2c_client *client,
 		dev_err(dev, "regmap init failed: %d", err);
 		return err;
 	}
+
+	err = of_property_read_string(dev->of_node, "label", &tmp108->label);
+	if (err)
+		tmp108->label = NULL;
 
 	err = regmap_read(tmp108->regmap, TMP108_REG_CONF, &config);
 	if (err < 0) {
