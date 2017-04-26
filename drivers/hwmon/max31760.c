@@ -1470,7 +1470,8 @@ static int max31760_update_fan_states(struct device *dev, bool enable)
 	struct max31760 *max31760 = dev_get_drvdata(dev);
 	struct max31760_fan *fan;
 	bool is_enabled;
-	int err;
+	int last_err;
+	int err = 0;
 	int i;
 
 	for (i = 0; i < MAX31760_NUM_FANS; i++) {
@@ -1482,12 +1483,14 @@ static int max31760_update_fan_states(struct device *dev, bool enable)
 
 		if (fan->supply) {
 			if (is_enabled)
-				err = regulator_enable(fan->supply);
+				last_err = regulator_enable(fan->supply);
 			else
-				err = regulator_disable(fan->supply);
-			if (err)
+				last_err = regulator_disable(fan->supply);
+			if (last_err) {
+				err = last_err;
 				dev_err(dev, "Failed to %s fan %d vdd-supply",
 					is_enabled ? "enabled" : "disable", i);
+			}
 		}
 	}
 
@@ -1516,8 +1519,8 @@ static int __maybe_unused max31760_resume(struct device *dev)
 				 MAX31760_CR2_STBY, 0);
 	if (err)
 		dev_err(dev, "Could not clear Standby bit: %d", err);
-
-	err |= max31760_update_fan_states(dev, 1);
+	else
+		err = max31760_update_fan_states(dev, 1);
 	return err;
 }
 
