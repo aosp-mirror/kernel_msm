@@ -41,6 +41,8 @@
 #include "configfs.h"
 
 #define FUNCTIONFS_MAGIC	0xa647361 /* Chosen by a honest dice roll ;) */
+#define ENDPOINT_ALLOC_MAX	(1 << 25) /* Max endpoint buffer size, 32 MB */
+
 
 #define NUM_PAGES	10 /* # of pages for ipc logging */
 
@@ -141,6 +143,11 @@ struct ffs_epfile {
 	struct ffs_ep			*ep;	/* P: ffs->eps_lock */
 
 	struct dentry			*dentry;
+
+	char				*alloc_buffer;
+						/* P: ffs->eps_lock */
+	unsigned			alloc_len;
+						/* P: ffs->eps_lock */
 
 	char				name[5];
 
@@ -836,7 +843,9 @@ static ssize_t ffs_epfile_io(struct file *file, struct ffs_io_data *io_data)
 			data_len = usb_ep_align_maybe(gadget, ep->ep, data_len);
 		spin_unlock_irq(&epfile->ffs->eps_lock);
 
-		data = kmalloc(data_len, GFP_KERNEL);
+		data = (data_len > epfile->alloc_len || io_data->aio)
+			? kmalloc(data_len, GFP_KERNEL)
+			: epfile->alloc_buffer;
 		if (unlikely(!data))
 			return -ENOMEM;
 		if (!io_data->read) {
@@ -982,7 +991,8 @@ static ssize_t ffs_epfile_io(struct file *file, struct ffs_io_data *io_data)
 					}
 				}
 			}
-			kfree(data);
+			if (data_len > epfile->alloc_len || io_data->aio)
+				kfree(data);
 		}
 	}
 
@@ -996,7 +1006,8 @@ error_lock:
 	spin_unlock_irq(&epfile->ffs->eps_lock);
 	mutex_unlock(&epfile->mutex);
 error:
-	kfree(data);
+	if (data_len > epfile->alloc_len || io_data->aio)
+		kfree(data);
 
 	ffs_log("exit: ret %zu", ret);
 
@@ -1169,6 +1180,9 @@ ffs_epfile_release(struct inode *inode, struct file *file)
 	smp_mb__before_atomic();
 	atomic_set(&epfile->opened, 0);
 	atomic_set(&epfile->error, 1);
+	epfile->alloc_len = 0;
+	kfree(epfile->alloc_buffer);
+	epfile->alloc_buffer = NULL;
 	ffs_data_closed(epfile->ffs);
 	file->private_data = NULL;
 
@@ -1229,6 +1243,29 @@ static long ffs_epfile_ioctl(struct file *file, unsigned code,
 			if (ret)
 				ret = -EFAULT;
 			return ret;
+		}
+		case FUNCTIONFS_ENDPOINT_ALLOC:
+		{
+			char *temp = epfile->alloc_buffer;
+			epfile->alloc_len = 0;
+			epfile->alloc_buffer = NULL;
+			spin_unlock_irq(&epfile->ffs->eps_lock);
+
+			kfree(temp);
+			if (!value)
+				return 0;
+			if (value > ENDPOINT_ALLOC_MAX)
+				return -EINVAL;
+
+			temp = kmalloc(value, GFP_KERNEL);
+			if (unlikely(!temp))
+				return -ENOMEM;
+
+			spin_lock_irq(&epfile->ffs->eps_lock);
+			epfile->alloc_buffer = temp;
+			epfile->alloc_len = value;
+			ret = 0;
+			break;
 		}
 		default:
 			ret = -ENOTTY;

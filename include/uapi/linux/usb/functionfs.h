@@ -283,6 +283,13 @@ struct usb_functionfs_event {
 #define	FUNCTIONFS_ENDPOINT_DESC	_IOR('g', 130, \
 					     struct usb_endpoint_descriptor)
 
+/*
+ * Allocates a buffer for which all synchronous i/o that can fit
+ * will use the buffer rather than allocate a new one. Allocating
+ * a buffer frees any previous buffer, as will an argument of 0.
+ * Returns -ENOMEM if out of memory.
+ */
+#define FUNCTIONFS_ENDPOINT_ALLOC _IOR('g', 231, __u32)
 
 
 #endif /* _UAPI__LINUX_FUNCTIONFS_H__ */
