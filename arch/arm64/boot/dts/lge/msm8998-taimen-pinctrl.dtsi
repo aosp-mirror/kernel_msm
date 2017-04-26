@@ -103,32 +103,6 @@
 			};
 		};
 
-		blsp1_uart3_active {
-			mux {
-				pins = "gpio45", "gpio46", "gpio47", "gpio48";
-				function = "blsp_uart3_a";
-			};
-
-			config {
-				pins = "gpio45", "gpio46", "gpio47", "gpio48";
-				drive-strength = <2>;
-				bias-disable;
-			};
-		};
-
-		blsp1_uart3_sleep {
-			mux {
-				pins = "gpio45", "gpio46", "gpio47", "gpio48";
-				function = "gpio";
-			};
-
-			config {
-				pins = "gpio45", "gpio46", "gpio47", "gpio48";
-				drive-strength = <2>;
-				bias-disable;
-			};
-		};
-
 		cam_sensor_front_active {
 			/* RESET */
 			mux {
