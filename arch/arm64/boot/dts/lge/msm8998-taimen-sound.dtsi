@@ -36,6 +36,7 @@
 	};
 
 	sound-tavil {
+		qcom,model = "msm8998-tavil-taimen-snd-card";
 		qcom,audio-routing =
 			"RX_BIAS", "MCLK",
 			"MADINPUT", "MCLK",
