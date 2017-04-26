@@ -1,8 +1,6 @@
 #ifndef _LINUX_FTS_I2C_H_
 #define _LINUX_FTS_I2C_H_
 
-#define FTS_SUPPORT_NOISE_PARAM
-
 extern struct fts_callbacks *fts_charger_callbacks;
 struct fts_callbacks {
 	void (*inform_charger) (struct fts_callbacks *, int);

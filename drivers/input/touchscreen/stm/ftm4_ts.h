@@ -49,6 +49,7 @@
 #define FTS_FIFO_MAX			32
 #define FTS_EVENT_SIZE			8
 #define FTS_FW_UPDATE_RETRY		3
+#define FTS_LOCKDOWNCODE_SIZE		13
 
 #define PRESSURE_MIN			0
 #define PRESSURE_MAX			127
@@ -91,6 +92,9 @@
 #define EVENTID_ERROR_CONFIG_FLASH_CORRUPTION_1	0x01
 #define EVENTID_ERROR_CONFIG_FLASH_CORRUPTION_2	0x02
 #define EVENTID_ERROR_CX_FLASH_CORRUPTION	0x03
+
+#define EVENTID_LOCKDOWN_CODE			0x1E
+#define EVENTID_ERROR_LOCKDOWN			0x0B
 
 #define STATUS_EVENT_MUTUAL_AUTOTUNE_DONE	0x01
 #define STATUS_EVENT_SELF_AUTOTUNE_DONE		0x02
@@ -158,6 +162,8 @@
 
 #define FTS_CMS_ENABLE_FEATURE		0xC1
 #define FTS_CMS_DISABLE_FEATURE		0xC2
+
+#define LOCKDOWN_READ			0xC4
 
 #define FTS_CMD_WRITE_PRAM		0xF0
 #define FTS_CMD_BURN_PROG_FLASH		0xF2
@@ -305,6 +311,16 @@ struct fts_version {
 	u8 minor;
 };
 
+struct fts_prd_info {
+	u8 product_id[3];
+	u8 chip_rev:4;
+	u8 fpc_rev:4;
+	u8 t_sensor_rev;
+	u8 site;
+	u8 inspector_no;
+	u8 date[6];
+};
+
 struct fts_flash_corruption_info {
 	bool fw_broken;
 	bool cfg_broken;
@@ -370,10 +386,8 @@ struct fts_ts_info {
 	int touch_mode;
 	int retry_hover_enable_after_wakeup;
 
-	int ic_product_id;		/* product id of ic */
-	int ic_revision_of_ic;		/* revision of reading from IC */
+	struct fts_prd_info prd_info;
 	int fw_version_of_ic;		/* firmware version of IC */
-	int ic_revision_of_bin;		/* revision of reading from binary */
 	int fw_version_of_bin;		/* firmware version of binary */
 	int config_version_of_ic;	/* Config release data from IC */
 	int config_version_of_bin;	/* Config release data from IC */
