@@ -1082,6 +1082,15 @@ config MFD_PALMAS
 	  If you say yes here you get support for the Palmas
 	  series of PMIC chips from Texas Instruments.
 
+config MP3377
+	bool "MP3377 Boost WLED Driver"
+	depends on I2C
+	select REGMAP_I2C
+	help
+	  This option enables a driver for the MP3377
+	  8-channel, Synchronous Boost, "WLED Driver".
+	  This is used for backlight PWM control.
+
 config TPS6105X
 	tristate "TI TPS61050/61052 Boost Converters"
 	depends on I2C
