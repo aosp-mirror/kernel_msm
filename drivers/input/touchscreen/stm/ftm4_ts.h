@@ -48,6 +48,7 @@
 #define FTS_DIGITAL_REV_2		0x02
 #define FTS_FIFO_MAX			32
 #define FTS_EVENT_SIZE			8
+#define FTS_FW_UPDATE_RETRY		3
 
 #define PRESSURE_MIN			0
 #define PRESSURE_MAX			127
@@ -85,6 +86,11 @@
 #define EVENTID_SIDE_TOUCH			0x0B
 
 #define EVENTID_ERROR_FLASH_CORRUPTION		0x03
+
+/* define flash corruption type */
+#define EVENTID_ERROR_CONFIG_FLASH_CORRUPTION_1	0x01
+#define EVENTID_ERROR_CONFIG_FLASH_CORRUPTION_2	0x02
+#define EVENTID_ERROR_CX_FLASH_CORRUPTION	0x03
 
 #define STATUS_EVENT_MUTUAL_AUTOTUNE_DONE	0x01
 #define STATUS_EVENT_SELF_AUTOTUNE_DONE		0x02
@@ -299,6 +305,12 @@ struct fts_version {
 	u8 minor;
 };
 
+struct fts_flash_corruption_info {
+	bool fw_broken;
+	bool cfg_broken;
+	bool cx_broken;
+};
+
 struct fts_ts_info {
 	struct device *dev;
 	struct i2c_client *client;
@@ -400,6 +412,8 @@ struct fts_ts_info {
 
 	unsigned char o_afe_ver;
 	unsigned char afe_ver;
+
+	struct fts_flash_corruption_info flash_corruption_info;
 
 	unsigned int checksum_error;
 
@@ -523,10 +537,15 @@ enum fts_system_information_address {
 void fts_delay(unsigned int ms);
 int fts_cmd_completion_check(struct fts_ts_info *info, uint8_t event1, uint8_t event2, uint8_t event3);
 int fts_fw_update(struct fts_ts_info *info);
+int fts_fw_verify_update(struct fts_ts_info *info);
 int fts_get_version_info(struct fts_ts_info *info);
 void fts_get_afe_info(struct fts_ts_info *info);
 void fts_execute_autotune(struct fts_ts_info *info);
 int fts_fw_wait_for_event(struct fts_ts_info *info, unsigned char eid1, unsigned char eid2);
+int fts_systemreset(struct fts_ts_info *info);
+int fts_wait_for_ready(struct fts_ts_info *info);
+int fts_read_chip_id(struct fts_ts_info *info);
+
 #ifdef FEATURE_FTS_PRODUCTION_CODE
 int fts_fw_wait_for_specific_event(struct fts_ts_info *info,
 		unsigned char eid0, unsigned char eid1, unsigned char eid2);

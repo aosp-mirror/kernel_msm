@@ -777,6 +777,25 @@ void fts_fw_init(struct fts_ts_info *info)
 	info->fts_interrupt_set(info, INT_ENABLE);
 }
 
+static int fts_fw_check(struct fts_ts_info *info)
+{
+	int retval = 0;
+
+	retval = fts_systemreset(info);
+	if (retval < 0)
+		return retval;
+
+	retval = fts_wait_for_ready(info);
+	if (retval < 0)
+		return retval;
+
+	retval = fts_read_chip_id(info);
+	if (retval < 0)
+		return retval;
+
+	return retval;
+}
+
 int fts_fw_update(struct fts_ts_info *info)
 {
 	const struct firmware *fw_entry = NULL;
@@ -873,18 +892,36 @@ int fts_fw_update(struct fts_ts_info *info)
 	}
 
 	fts_fw_init(info);
+	retval = fts_fw_check(info);
+	if (retval < 0 ||
+		info->flash_corruption_info.fw_broken ||
+		info->flash_corruption_info.cfg_broken ||
+		info->flash_corruption_info.cx_broken) {
+		retval = -EIO;
+		goto out;
+	}
 
 	tsp_debug_info(info->dev,
 			"[flashProcedure] Firmware update is done successfully.\n");
-
 	fts_get_version_info(info);
-
 	retval = 0;
-
 out:
 	if (fw_entry)
 		release_firmware(fw_entry);
-
 	return retval;
 }
 EXPORT_SYMBOL(fts_fw_update);
+
+int fts_fw_verify_update(struct fts_ts_info *info)
+{
+	int retry = 0;
+
+	while (retry++ < FTS_FW_UPDATE_RETRY) {
+		tsp_debug_info(info->dev,
+			"[fw_update] try:%d\n", retry);
+		if (0 == fts_fw_update(info))
+			return 0;
+	}
+	return -EIO;
+}
+EXPORT_SYMBOL(fts_fw_verify_update);

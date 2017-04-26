@@ -216,10 +216,15 @@ void fts_change_scan_rate(struct fts_ts_info *info, unsigned char cmd)
 int fts_systemreset(struct fts_ts_info *info)
 {
 	int ret = 0;
-	unsigned char regAdd[4] = {0xB6, 0x00, 0x28, 0x80};
+	unsigned char addr[4] = {0xB6, 0x00, 0x28, 0x80};
+	unsigned char addr_wbcrc[4] = {0xB6, 0x00, 0x1E, 0x20};
+
+	tsp_debug_info(&info->client->dev, "FTS Enable WBCRC\n");
+	ret = fts_write_reg(info, &addr_wbcrc[0], 4);
+	fts_delay(10);
 
 	tsp_debug_dbg(&info->client->dev, "FTS SystemReset\n");
-	ret = fts_write_reg(info, &regAdd[0], 4);
+	ret = fts_write_reg(info, &addr[0], 4);
 	fts_delay(10);
 
 	return ret;
@@ -313,7 +318,7 @@ error:
 	return rc;
 }
 
-static int fts_read_chip_id(struct fts_ts_info *info)
+int fts_read_chip_id(struct fts_ts_info *info)
 {
 	unsigned char regAdd[3] = {0xB6, 0x00, 0x04};
 	unsigned char val[7] = {0};
@@ -337,6 +342,7 @@ static int fts_read_chip_id(struct fts_ts_info *info)
 			tsp_debug_err(&info->client->dev,
 				"\n\r[fts_read_chip_id] Error - No FW : %02X %02X",
 				val[5], val[6]);
+			info->flash_corruption_info.fw_broken = true;
 		}  else {
 			tsp_debug_info(&info->client->dev,
 				"FTS Chip ID : %02X %02X\n",
@@ -348,19 +354,19 @@ static int fts_read_chip_id(struct fts_ts_info *info)
 	return ret;
 }
 
-static int fts_wait_for_ready(struct fts_ts_info *info)
+int fts_wait_for_ready(struct fts_ts_info *info)
 {
 	int rc = 0;
-	unsigned char regAdd;
+	unsigned char addr;
 	unsigned char data[FTS_EVENT_SIZE];
 	int retry = 0;
 	int err_cnt = 0;
 
 	memset(data, 0x0, FTS_EVENT_SIZE);
 
-	regAdd = READ_ONE_EVENT;
+	addr = READ_ONE_EVENT;
 
-	while (fts_read_reg(info, &regAdd, 1,
+	while (fts_read_reg(info, &addr, 1,
 				(unsigned char *)data, FTS_EVENT_SIZE)) {
 		if (data[0] == EVENTID_CONTROLLER_READY) {
 			rc = 0;
@@ -370,12 +376,25 @@ static int fts_wait_for_ready(struct fts_ts_info *info)
 		if (data[0] == EVENTID_ERROR) {
 			if (data[1] == EVENTID_ERROR_FLASH_CORRUPTION) {
 				rc = -FTS_ERROR_EVENT_ID;
-				info->checksum_error = 1;
+
 				tsp_debug_err(&info->client->dev,
 					"%s: flash corruption:%02X,%02X,%02X\n",
 						__func__, data[0],
 						data[1], data[2]);
-				break;
+
+				switch (data[2]) {
+				case EVENTID_ERROR_CONFIG_FLASH_CORRUPTION_1:
+					info->flash_corruption_info.cfg_broken = true;
+					break;
+				case EVENTID_ERROR_CONFIG_FLASH_CORRUPTION_2:
+					info->flash_corruption_info.cfg_broken = true;
+					break;
+				case EVENTID_ERROR_CX_FLASH_CORRUPTION:
+					info->flash_corruption_info.cx_broken = true;
+					break;
+				default:
+					break;
+				}
 			}
 
 			if (err_cnt++ > 32) {

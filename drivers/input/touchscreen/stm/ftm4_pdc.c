@@ -178,7 +178,7 @@ static ssize_t store_check_fw(struct device *dev, struct device_attribute *devat
 		mutex_lock(&info->device_mutex);
 
 		info->test_fwpath[0] = '\0';
-		ret = fts_fw_update(info);
+		ret = fts_fw_verify_update(info);
 
 		mutex_unlock(&info->device_mutex);
 	}
@@ -202,7 +202,7 @@ static ssize_t store_upgrade(struct device *dev,
 
 	mutex_lock(&info->device_mutex);
 
-	ret = fts_fw_update(info);
+	ret = fts_fw_verify_update(info);
 	info->test_fwpath[0] = '\0';
 
 	mutex_unlock(&info->device_mutex);
