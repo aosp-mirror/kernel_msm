@@ -6,7 +6,7 @@
 #include "../cci/msm_cci.h"
 #include "fw_update.h"
 
-#define OIS_CUR_FW_VERSION 0x12
+#define OIS_CUR_FW_VERSION 0x16
 
 #define OIS_COMPONENT_I2C_ADDR_WRITE 0x7C
 static struct msm_camera_i2c_client *g_i2c_client = NULL;
