@@ -1001,10 +1001,10 @@ static void smb23x_parallel_work(struct work_struct *work)
 				smb23x_masked_write(chip, CFG_REG_0, USBIN_ICL_MASK, 0x00);
 				lbc_set_suspend(0x01);
 
-				pr_info("[BAT][CHG] GPIO_17 set to 0, MPP4_read:%d, USB_TYPE:UNKNOWN\n", MPP4_read);
+				pr_info("[BAT][CHG] GPIO_17 set to 0, MPP4_read:%d, USB_TYPE:MAINS\n", MPP4_read);
 			}
 			gpio_set_value(GPIO_num17,0);
-		} else if (type == POWER_SUPPLY_TYPE_UNKNOWN) {
+		} else if (type == POWER_SUPPLY_TYPE_MAINS) {
 			if (chip->usb_present == 1) {
 				// Set SMB231 input current limit to 100mA
 				smb23x_masked_write(chip, CFG_REG_0, USBIN_ICL_MASK, 0x00);
@@ -1330,7 +1330,7 @@ void adc_notification_set_cool_current(int level)
 				lbc_set_suspend(0x01);
 			g_smb23x_chip->batt_cool = true;
 			smb23x_enable_volatile_writes(g_smb23x_chip);
-			if (type != POWER_SUPPLY_TYPE_UNKNOWN) {
+			if (type != POWER_SUPPLY_TYPE_MAINS) {
 				smb23x_masked_write(g_smb23x_chip, CFG_REG_0, USBIN_ICL_MASK, 0x04);
 				smb23x_masked_write(g_smb23x_chip, CFG_REG_2, FASTCHG_CURR_MASK, 0x01);
 			}
@@ -1340,7 +1340,7 @@ void adc_notification_set_cool_current(int level)
 				lbc_set_suspend(0x01);
 			g_smb23x_chip->batt_cool = true;
 			smb23x_enable_volatile_writes(g_smb23x_chip);
-			if (type != POWER_SUPPLY_TYPE_UNKNOWN) {
+			if (type != POWER_SUPPLY_TYPE_MAINS) {
 				smb23x_masked_write(g_smb23x_chip, CFG_REG_0, USBIN_ICL_MASK, 0x04);
 				smb23x_masked_write(g_smb23x_chip, CFG_REG_2, FASTCHG_CURR_MASK, 0x00);
 			}
@@ -1377,7 +1377,7 @@ void adc_notification_set_warm_current(int level)
 			g_smb23x_chip->batt_warm = true;
 			smb23x_enable_volatile_writes(g_smb23x_chip);
 			smb23x_masked_write(g_smb23x_chip, CFG_REG_3, FLOAT_VOLTAGE_MASK, 0x17);
-			if (type != POWER_SUPPLY_TYPE_UNKNOWN) {
+			if (type != POWER_SUPPLY_TYPE_MAINS) {
 				smb23x_masked_write(g_smb23x_chip, CFG_REG_0, USBIN_ICL_MASK, 0x04);
 				smb23x_masked_write(g_smb23x_chip, CFG_REG_2, FASTCHG_CURR_MASK, 0x07);
 			}
@@ -1388,7 +1388,7 @@ void adc_notification_set_warm_current(int level)
 			g_smb23x_chip->batt_warm = true;
 			smb23x_enable_volatile_writes(g_smb23x_chip);
 			smb23x_masked_write(g_smb23x_chip, CFG_REG_3, FLOAT_VOLTAGE_MASK, 0x0F);
-			if (type != POWER_SUPPLY_TYPE_UNKNOWN) {
+			if (type != POWER_SUPPLY_TYPE_MAINS) {
 				smb23x_masked_write(g_smb23x_chip, CFG_REG_0, USBIN_ICL_MASK, 0x04);
 				smb23x_masked_write(g_smb23x_chip, CFG_REG_2, FASTCHG_CURR_MASK, 0);
 			}
@@ -1531,7 +1531,7 @@ static int iterm_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 
 static const char * const usb_type_str[] = {
 	"SDP",
-	"UNKNOWN",
+	"MAINS",
 	"DCP",
 	"CDP",
 };
@@ -1550,7 +1550,7 @@ static int get_usb_supply_type(struct smb23x_chip *chip)
 
 	if (!tmp) {
 		pr_debug("APSD not completed\n");
-		return POWER_SUPPLY_TYPE_UNKNOWN;
+		return POWER_SUPPLY_TYPE_MAINS;
 	}
 
 	tmp = reg & APSD_RESULT_MASK;
@@ -1564,7 +1564,7 @@ static int get_usb_supply_type(struct smb23x_chip *chip)
 		type = POWER_SUPPLY_TYPE_USB;
 		tmp = 0;
 	} else {
-		type = POWER_SUPPLY_TYPE_UNKNOWN;
+		type = POWER_SUPPLY_TYPE_MAINS;
 		tmp = 1;
 	}
 
@@ -1588,7 +1588,7 @@ static int handle_usb_insertion(struct smb23x_chip *chip)
 static int handle_usb_removal(struct smb23x_chip *chip)
 {
 	power_supply_set_supply_type(chip->usb_psy,
-			POWER_SUPPLY_TYPE_UNKNOWN);
+			POWER_SUPPLY_TYPE_MAINS);
 	power_supply_set_present(chip->usb_psy, chip->usb_present);
 	power_supply_set_online(chip->usb_psy, false);
 
