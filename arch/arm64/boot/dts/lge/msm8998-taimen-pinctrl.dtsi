@@ -199,26 +199,6 @@
 			};
 		};
 
-		mdss_dp_aux_active {
-			mux {
-				pins = "gpio80", "gpio100";
-			};
-
-			config {
-				pins = "gpio80", "gpio100";
-			};
-		};
-
-		mdss_dp_aux_suspend {
-			mux {
-				pins = "gpio80", "gpio100";
-			};
-
-			config {
-				pins = "gpio80", "gpio100";
-			};
-		};
-
 		/* pin set for Hall IC */
 		hallic_gpio {
 			label = "hallic_gpio";
@@ -251,27 +231,6 @@
 					bias-pull-down;
 				};
 			};
-		};
-
-		sdc2_cd_on {
-			mux {
-				pins = "gpio40";
-			};
-
-			config {
-				pins = "gpio40";
-			};
-		};
-
-		sdc2_cd_off {
-			mux {
-				pins = "gpio40";
-			};
-
-			config {
-				pins = "gpio40";
-			};
-
 		};
 
 		pmx_ts_reset {
