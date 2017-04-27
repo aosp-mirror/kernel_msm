@@ -398,22 +398,6 @@ static inline int kptr_restrict_always_cleanse_pointers(void)
 	return kptr_restrict >= 3;
 }
 
-/*
- * Always cleanse physical addresses (%pa* specifiers)
- */
-static inline int kptr_restrict_cleanse_addresses(void)
-{
-	return kptr_restrict >= 4;
-}
-
-/*
- * Always cleanse resource addresses (%p[rR] specifiers)
- */
-static inline int kptr_restrict_cleanse_resources(void)
-{
-	return kptr_restrict >= 4;
-}
-
 static noinline_for_stack
 char *number(char *buf, char *end, unsigned long long num,
 	     struct printf_spec spec)
@@ -726,7 +710,6 @@ char *resource_string(char *buf, char *end, struct resource *res,
 
 	char *p = sym, *pend = sym + sizeof(sym);
 	int decode = (fmt[0] == 'R') ? 1 : 0;
-	int cleanse = kptr_restrict_cleanse_resources();
 	const struct printf_spec *specp;
 
 	*p++ = '[';
@@ -754,11 +737,10 @@ char *resource_string(char *buf, char *end, struct resource *res,
 		p = string(p, pend, "size ", str_spec);
 		p = number(p, pend, resource_size(res), *specp);
 	} else {
-		p = number(p, pend, cleanse ? 0UL : res->start, *specp);
+		p = number(p, pend, res->start, *specp);
 		if (res->start != res->end) {
 			*p++ = '-';
-			p = number(p, pend,
-				   cleanse ? res->end - res->start : res->end, *specp);
+			p = number(p, pend, res->end, *specp);
 		}
 	}
 	if (decode) {
@@ -778,7 +760,6 @@ char *resource_string(char *buf, char *end, struct resource *res,
 	*p = '\0';
 
 	return string(buf, end, sym, spec);
-
 }
 
 static noinline_for_stack
@@ -1363,9 +1344,7 @@ char *address_val(char *buf, char *end, const void *addr,
 		break;
 	}
 
-	return number(buf, end,
-		      kptr_restrict_cleanse_addresses() ? 0UL : num,
-		      spec);
+	return number(buf, end, num, spec);
 }
 
 static noinline_for_stack
@@ -1487,12 +1466,6 @@ char *clock(char *buf, char *end, struct clk *clk, struct printf_spec spec,
  *
  * Note: That for kptr_restrict set to 3, %p and %pK have the same
  * meaning.
- *
- * Note: That for kptr_restrict set to 4, %pa will null out the physical
- * address.
- *
- * Note: That for kptr_restrict set to 4, %p[rR] will null out the memory
- * address.
  */
 static noinline_for_stack
 char *pointer(const char *fmt, char *buf, char *end, void *ptr,
@@ -1648,7 +1621,6 @@ char *pointer(const char *fmt, char *buf, char *end, void *ptr,
 			}
 		case 2: /* restrict only %pK */
 		case 3: /* restrict all non-extensioned %p and %pK */
-		case 4: /* restrict all non-extensioned %p, %pK, %pa*, %p[rR] */
 		default:
 			ptr = NULL;
 			break;
