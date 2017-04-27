@@ -37,6 +37,15 @@ static void *smblib_ipc_log;
 			       __func__, ##__VA_ARGS__);	\
 	} while (0)						\
 
+#define smblib_info(chg, fmt, ...)				\
+	do {							\
+		pr_info("%s: %s: " fmt, chg->name,		\
+			__func__, ##__VA_ARGS__);		\
+		ipc_log_string(smblib_ipc_log, "%s: %s: " fmt,	\
+			       dev_name(chg->dev),		\
+			       __func__, ##__VA_ARGS__);	\
+	} while (0)						\
+
 #define smblib_dbg(chg, reason, fmt, ...)			\
 	do {							\
 		ipc_log_string(smblib_ipc_log, "%s: %s: " fmt,	\
@@ -1313,6 +1322,14 @@ static int _smblib_otg_enable(struct smb_charger *chg)
 		return rc;
 	}
 
+	rc = smblib_masked_write(chg, OTG_CFG_REG,
+				 QUICKSTART_OTG_FASTROLESWAP_BIT,
+				 QUICKSTART_OTG_FASTROLESWAP_BIT);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't set OTG quickstart rc=%d\n", rc);
+		return rc;
+	}
+
 	if (chg->wa_flags & OTG_WA) {
 		/* check for softstart */
 		do {
@@ -1471,8 +1488,7 @@ int smblib_vbus_regulator_enable(struct regulator_dev *rdev)
 			goto unlock;
 
 		if (!regulator_is_enabled(chg->external_vbus_reg)) {
-			smblib_dbg(chg, PR_MISC,
-				   "Enabling external vbus regulator\n");
+			smblib_info(chg, "Enabling external vbus regulator\n");
 			rc = regulator_enable(chg->external_vbus_reg);
 			if (rc < 0)
 				smblib_err(chg,
@@ -1481,7 +1497,12 @@ int smblib_vbus_regulator_enable(struct regulator_dev *rdev)
 		}
 	} else {
 		/* output:off, source:internal -> output:on, source:internal */
+		smblib_info(chg, "Enabling internal vbus regulator\n");
 		rc = smblib_otg_enable(chg);
+		if (rc < 0)
+			smblib_err(chg,
+				   "Couldn't enable internal vbus regulator rc=%d\n",
+				   rc);
 	}
 
 unlock:
@@ -1507,8 +1528,7 @@ int smblib_vbus_regulator_disable(struct regulator_dev *rdev)
 		}
 
 		if (regulator_is_enabled(chg->external_vbus_reg)) {
-			smblib_dbg(chg, PR_MISC,
-				   "Disabling external vbus regulator\n");
+			smblib_info(chg, "Disabling external vbus regulator\n");
 			rc = regulator_disable(chg->external_vbus_reg);
 			if (rc < 0) {
 				smblib_err(chg,
@@ -1519,9 +1539,14 @@ int smblib_vbus_regulator_disable(struct regulator_dev *rdev)
 		}
 	} else {
 		/* output:on, source:internal -> output:off, source:internal */
+		smblib_info(chg, "Disabling internal vbus regulator\n");
 		rc = smblib_otg_disable(chg);
-		if (rc < 0)
+		if (rc < 0) {
+			smblib_err(chg,
+				   "Couldn't disable internal vbus regulator rc=%d\n",
+				   rc);
 			goto unlock;
+		}
 	}
 
 	rc = vote(chg->usb_icl_votable, EXTERNAL_BOOSTER_VOTER,
@@ -3195,7 +3220,7 @@ int smblib_set_prop_pd_in_hard_reset(struct smb_charger *chg,
 	return rc;
 }
 
-#define EXTERNAL_BOOSTER_RAMP_UP_DELAY_MS 50
+#define EXTERNAL_BOOSTER_SWITCH_DELAY_MS 50
 int smblib_set_prop_use_external_vbus_output(struct smb_charger *chg,
 				const union power_supply_propval *val)
 {
@@ -3216,8 +3241,7 @@ int smblib_set_prop_use_external_vbus_output(struct smb_charger *chg,
 
 	/* switch the source while vbus output is on */
 	if (value) {
-		smblib_dbg(chg, PR_MISC,
-			   "VBUS output source: internal -> external\n");
+		smblib_info(chg, "VBUS output source: internal -> external\n");
 
 		if (!chg->external_vbus_reg) {
 			smblib_err(chg,
@@ -3238,24 +3262,23 @@ int smblib_set_prop_use_external_vbus_output(struct smb_charger *chg,
 			goto unlock;
 		}
 
-		msleep(EXTERNAL_BOOSTER_RAMP_UP_DELAY_MS);
+		msleep(EXTERNAL_BOOSTER_SWITCH_DELAY_MS);
 
 		rc = smblib_otg_disable(chg);
-		if (rc < 0)
+		if (rc < 0) {
+			smblib_err(chg, "Couldn't disable otg rc=%d\n", rc);
 			goto unlock;
+		}
 	} else {
-		smblib_dbg(chg, PR_MISC,
-			   "VBUS output source: external -> internal\n");
+		smblib_info(chg, "VBUS output source: external -> internal\n");
 
 		rc = smblib_otg_enable(chg);
-		/*
-		 * The PMIC booster will not turn on until the external booster
-		 * removes the voltage on VBUS, and smblib_otg_enable() will
-		 * return -ETIMEDOUT in this case. Therefore, consider
-		 * -ETIMEDOUT as known issue and proceed.
-		 */
-		if (rc < 0 && rc != -ETIMEDOUT)
+		if (rc < 0) {
+			smblib_err(chg, "Couldn't enable otg rc=%d\n", rc);
 			goto unlock;
+		}
+
+		msleep(EXTERNAL_BOOSTER_SWITCH_DELAY_MS);
 
 		rc = regulator_disable(chg->external_vbus_reg);
 		if (rc < 0) {
