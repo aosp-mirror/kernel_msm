@@ -1564,7 +1564,6 @@ static int android_setup(struct usb_gadget *gadget,
 				break;
 		}
 	}
-
 #ifdef CONFIG_USB_CONFIGFS_F_ACC
 	if (value < 0)
 		value = acc_ctrlrequest(cdev, c);
