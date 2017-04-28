@@ -15,15 +15,13 @@
 /plugin/;
 
 #include <dt-bindings/clock/msm-clocks-8998.h>
-#include <dt-bindings/regulator/qcom,rpm-smd-regulator.h>
-#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/interrupt-controller/irq.h>
 
-#include "msm8998-mtp.dtsi"
-#include "msm8998-audio-overlay.dtsi"
+#include "msm8998-qrd.dtsi"
 
 / {
-	model = "Qualcomm Technologies, Inc. MSM 8998 v1 MTP";
-	compatible = "qcom,msm8998-mtp", "qcom,msm8998", "qcom,mtp";
+	model = "Qualcomm Technologies, Inc. MSM 8998 QRD";
+	compatible = "qcom,msm8998-qrd", "qcom,msm8998", "qcom,qrd";
 	qcom,msm-id = <292 0x0>;
-	qcom,board-id = <8 0>;
+	qcom,board-id = <11 0>;
 };
