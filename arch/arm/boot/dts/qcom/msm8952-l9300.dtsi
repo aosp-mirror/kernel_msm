@@ -37,6 +37,20 @@
         };
 };
 
+&pm8950_mpps {
+	/* MPP_02 for ADC */
+	mpp@a100 {
+		status = "okay";
+	};
+};
+
+&pm8950_vadc {
+	chan@11 {
+		label = "usb_temp";
+		status = "okay";
+	};
+};
+
 &flash_led {
         qcom,follow-otst2-rb-disabled;
 
@@ -120,6 +134,17 @@
 		qcom,pin-func = <0>;
 		label = "fusb-irq-pin";
 		fusb_default: default {
+			drive-strength = <8>;
+			bias-pull-up;
+		};
+	};
+
+	usb-temp-pin {
+		qcom,pins = <&gp 131>;
+		qcom,num-grp-pins = <1>;
+		qcom,pin-func = <0>;
+		label = "usb-temp-pin";
+		usb_temp_default: default {
 			drive-strength = <8>;
 			bias-pull-up;
 		};
@@ -346,6 +371,19 @@
 		vdd-supply = <&pm8950_l6>;
 		interrupt-names = "hall-irq";
 		hall,irq-gpio = <&msm_gpio 46 0x00>;
+	};
+
+	usb_temp {
+		compatible = "qcom,usb_temp_protect";
+		pinctrl-names = "default";
+		pinctrl-0 = <&usb_temp_default>;
+		qcom,gpio_usb_temp_protect = <&msm_gpio 131 0x00>;
+		qcom,open_mosfet_temp = <15>;
+		qcom,close_mosfet_temp = <10>;
+		qcom,interval_switch_temp = <7>;
+		vdd-supply = <&pm8950_l16>;
+		qcom,usb_temp-vadc = <&pm8950_vadc>;
+		status = "okay";
 	};
 
 	gpio_keys {
