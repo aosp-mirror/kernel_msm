@@ -23,11 +23,12 @@
 #include <linux/err.h>
 #include <linux/of.h>
 #include <linux/regmap.h>
+#include <linux/gpio/consumer.h>
+#include <linux/delay.h>
 
 #define DRIVER_NAME "mp3377"
 
 /* MP3377 registers. */
-
 #define MP3377_REG_LED_CURRENT  0x00 /* LED Current Full-Scale and Channel Enable Register */
 #define MP3377_REG_DIM_MODE     0x01 /* Dimming Mode and Parameter Set Register */
 #define MP3377_REG_PROG_ENABLE  0x02 /* One-Time Program Enable and Analog Dimming Register */
@@ -36,9 +37,12 @@
 #define MP3377_REG_ID_FAULT     0x05 /* ID and Fault Register */
 
 /* Constants */
-#define MP3377_CURRENT_PER_STEP     196     /* current increases by .196 mA/step */
-#define MP3377_CURRENT_UPPER_LIMIT  50000   /* 50mA is the max current */
-#define MP3377_CURRENT_DEFAULT      0x19FF  /* 5mA  */
+#define MP3377_CURRENT_PER_STEP         196     /* current increases by .196 mA/step */
+#define MP3377_CURRENT_UPPER_LIMIT      50000   /* 50mA is the max current */
+#define MP3377_CURRENT_DEFAULT          0x19FF  /* 5mA  */
+#define MP3377_ONE_TIME_REG_DEFAULT     0x03FF  /* one time register default value */
+#define MP3377_ENABLE_WAIT_TIME         2       /* wait for EN to stabilize */
+#define MP3377_ENABLE_ALL_CHANNELS      0xFF    /* Enable all 8 channels */
 
 /*
  * struct MP3377 - device data
@@ -46,14 +50,6 @@
  */
 struct mp3377 {
 	struct regmap *regmap;
-};
-
-static struct reg_default mp3377_reg_defaults[] = {
-	{ MP3377_REG_LED_CURRENT, 0xCCFF },
-	{ MP3377_REG_DIM_MODE, 0x00A2 },
-	{ MP3377_REG_PROG_ENABLE, 0x03FF },
-	{ MP3377_REG_SLOP_FREQ, 0x027E },
-	{ MP3377_REG_PWM_DIM, 0x0000 },
 };
 
 static bool mp3377_writeable_reg(struct device *dev, unsigned int reg)
@@ -80,8 +76,6 @@ static const struct regmap_config mp3377_regmap_config = {
 	.reg_bits = 8,
 	.val_bits = 16,
 	.max_register = MP3377_REG_ID_FAULT,
-	.reg_defaults = mp3377_reg_defaults,
-	.num_reg_defaults = ARRAY_SIZE(mp3377_reg_defaults),
 	.writeable_reg = mp3377_writeable_reg,
 	.volatile_reg = mp3377_volatile_reg,
 	.val_format_endian = REGMAP_ENDIAN_LITTLE,
@@ -103,7 +97,7 @@ static int mp3377_of_init(struct device *dev)
 			val = MP3377_CURRENT_UPPER_LIMIT;
 
 		val = val / MP3377_CURRENT_PER_STEP;
-		word = (val << 8) | 0xFF;
+		word = (val << 8) | MP3377_ENABLE_ALL_CHANNELS;
 	}
 	else {
 		word = MP3377_CURRENT_DEFAULT;
@@ -130,6 +124,7 @@ static int mp3377_probe(struct i2c_client *client,
 	struct device *dev = &client->dev;
 	unsigned int regval;
 	struct mp3377 *mp3377;
+	struct gpio_desc *enable_gpio;
 	int err;
 
 	mp3377 = devm_kzalloc(dev, sizeof(*mp3377), GFP_KERNEL);
@@ -145,19 +140,45 @@ static int mp3377_probe(struct i2c_client *client,
 		return err;
 	}
 
+	enable_gpio = gpiod_get(dev, "mps,enable", GPIOD_OUT_HIGH);
+	err = PTR_ERR(enable_gpio);
+	if (err == -ENOENT || err == -ENODEV) {
+		dev_dbg(dev, "No mp3377 enable gpio.");
+		enable_gpio = NULL;
+	} else if (err == -EPROBE_DEFER) {
+		dev_dbg(dev, "Defer due to mp3377 enable gpio.");
+		return err;
+	} else if (IS_ERR(enable_gpio)) {
+		dev_err(dev, "Error getting mp3377 enable gpio: %d", err);
+		return err;
+	}
+
+	if (enable_gpio) {
+		/* wait for enable high before continue */
+		msleep(MP3377_ENABLE_WAIT_TIME);
+	}
+
 	err = regmap_read(mp3377->regmap, MP3377_REG_ID_FAULT, &regval);
 	if (err < 0) {
 		dev_err(dev, "failed to read mp3377 FAULT register: %d", err);
-		return err;
+		goto exit;
 	}
 
 	err = mp3377_of_init(dev);
 	if (err < 0) {
 		dev_err(dev, "failed mp3377 mp3377_of_init %d", err);
-		return err;
+		goto exit;
 	}
 
-	return 0;
+exit:
+	if (enable_gpio) {
+		/* TODO set the GPIO pin low before exit
+		 * gpiod_set_value_cansleep(enable_gpio, 0);
+		 */
+		gpiod_put(enable_gpio);
+	}
+
+	return err;
 }
 
 static const struct i2c_device_id mp3377_i2c_ids[] = {
