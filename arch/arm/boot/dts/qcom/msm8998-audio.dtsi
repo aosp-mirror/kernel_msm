@@ -141,11 +141,6 @@
 		asoc-codec = <&stub_codec>, <&ext_disp_audio_codec>;
 		asoc-codec-names = "msm-stub-codec.1",
 				   "msm-ext-disp-audio-codec-rx";
-		qcom,wsa-max-devs = <2>;
-		qcom,wsa-devs = <&wsa881x_211>, <&wsa881x_212>,
-				<&wsa881x_213>, <&wsa881x_214>;
-		qcom,wsa-aux-dev-prefix = "SpkrLeft", "SpkrRight",
-					  "SpkrLeft", "SpkrRight";
 
 		hph_en0_gpio: msm_cdc_pinctrl@67 {
 			compatible = "qcom,msm-cdc-pinctrl";
@@ -273,11 +268,6 @@
 		asoc-codec = <&stub_codec>, <&ext_disp_audio_codec>;
 		asoc-codec-names = "msm-stub-codec.1",
 				   "msm-ext-disp-audio-codec-rx";
-		qcom,wsa-max-devs = <2>;
-		qcom,wsa-devs = <&wsa881x_0211>, <&wsa881x_0212>,
-				<&wsa881x_0213>, <&wsa881x_0214>;
-		qcom,wsa-aux-dev-prefix = "SpkrLeft", "SpkrRight",
-					  "SpkrLeft", "SpkrRight";
 	};
 
 	cpe: qcom,msm-cpe-lsm {

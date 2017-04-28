@@ -71,13 +71,6 @@ enum smb_mode {
 	NUM_MODES,
 };
 
-enum cc2_sink_type {
-	CC2_SINK_NONE = 0,
-	CC2_SINK_STD,
-	CC2_SINK_MEDIUM_HIGH,
-	CC2_SINK_WA_DONE,
-};
-
 enum {
 	QC_CHARGER_DETECTION_WA_BIT	= BIT(0),
 	BOOST_BACK_WA			= BIT(1),
@@ -236,6 +229,7 @@ struct smb_charger {
 	int			smb_version;
 
 	/* locks */
+	struct mutex		lock;
 	struct mutex		write_lock;
 	struct mutex		ps_change_lock;
 	struct mutex		otg_oc_lock;
@@ -312,10 +306,13 @@ struct smb_charger {
 	int			vconn_attempts;
 	int			default_icl_ua;
 	int			otg_cl_ua;
+	bool			uusb_apsd_rerun_done;
+	bool			pd_hard_reset;
+	bool			typec_present;
 
 	/* workaround flag */
 	u32			wa_flags;
-	enum cc2_sink_type	cc2_sink_detach_flag;
+	bool			cc2_detach_wa_active;
 	int			boost_current_ua;
 	int			temp_speed_reading_count;
 

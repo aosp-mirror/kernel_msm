@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -532,6 +532,7 @@ bail:
 	mutex_unlock(&(q6core_lcl.cmd_lock));
 	return ret;
 }
+EXPORT_SYMBOL(q6core_is_adsp_ready);
 
 
 static int q6core_map_memory_regions(phys_addr_t *buf_add, uint32_t mempool_id,
