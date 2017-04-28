@@ -45,6 +45,8 @@
 
 #define GOODIX_FIRMWARE_FILE_NAME	"goodix_firmware.bin"
 #define GOODIX_CONFIG_FILE_NAME		"goodix_config.cfg"
+#define GOODIX_917D_FIRMWARE_FILE_NAME	"goodix_917D_firmware.bin"
+#define GOODIX_917D_CONFIG_FILE_NAME	       "goodix_917D_config.cfg"
 
 #define FW_HEAD_LENGTH               14
 #define FW_SECTION_LENGTH            0x2000
@@ -71,7 +73,6 @@
 
 #define FAIL    0
 #define SUCCESS 1
-
 struct st_fw_head {
 	u8  hw_info[4];		/* hardware info */
 	u8  pid[8];		/* product id   */
@@ -683,9 +684,14 @@ static u8 gup_check_firmware_name(struct i2c_client *client,
 {
 	u8 len;
 	u8 *fname;
+	struct goodix_ts_data *ts = i2c_get_clientdata(client);
 
 	if (!(*path_p)) {
-		*path_p = GOODIX_FIRMWARE_FILE_NAME;
+		if (ts->product_id_flag == 1)
+			*path_p = GOODIX_917D_FIRMWARE_FILE_NAME;
+		else
+			*path_p = GOODIX_FIRMWARE_FILE_NAME;
+
 		return 0;
 	}
 
@@ -711,20 +717,39 @@ static u8 gup_check_update_file(struct i2c_client *client,
 	s32 fw_checksum = 0;
 	u16 temp;
 	const struct firmware *fw = NULL;
+	struct goodix_ts_data *ts = i2c_get_clientdata(client);
 
-	ret = request_firmware(&fw, GOODIX_CONFIG_FILE_NAME, &client->dev);
-	if (ret < 0) {
-		dev_err(&client->dev, "Cannot get config file - %s (%d)\n",
-						GOODIX_CONFIG_FILE_NAME, ret);
+	if (ts->product_id_flag == 1) {
+		ret = request_firmware(&fw, GOODIX_917D_CONFIG_FILE_NAME,
+								&client->dev);
+		if (ret < 0) {
+			dev_err(&client->dev, "Cannot get cfg file %s (%d)\n",
+					GOODIX_917D_CONFIG_FILE_NAME, ret);
+		} else {
+			dev_dbg(&client->dev,
+				"Update config File: %s",
+						GOODIX_917D_CONFIG_FILE_NAME);
+			ret = gup_update_config(client, fw);
+			if (ret <= 0)
+				dev_err(&client->dev, "Update config failed.");
+			release_firmware(fw);
+		}
 	} else {
-		dev_dbg(&client->dev,
-			"Update config File: %s", GOODIX_CONFIG_FILE_NAME);
-		ret = gup_update_config(client, fw);
-		if (ret <= 0)
-			dev_err(&client->dev, "Update config failed.");
-		release_firmware(fw);
+		ret = request_firmware(&fw, GOODIX_CONFIG_FILE_NAME,
+								&client->dev);
+		if (ret < 0) {
+			dev_err(&client->dev, "Cannot get cfg file - %s (%d)\n",
+						GOODIX_CONFIG_FILE_NAME, ret);
+		} else {
+			dev_dbg(&client->dev,
+				"Update config File: %s",
+						GOODIX_CONFIG_FILE_NAME);
+			ret = gup_update_config(client, fw);
+			if (ret <= 0)
+				dev_err(&client->dev, "Update config failed.");
+			release_firmware(fw);
+		}
 	}
-
 	update_msg.need_free = false;
 	update_msg.fw_len = 0;
 

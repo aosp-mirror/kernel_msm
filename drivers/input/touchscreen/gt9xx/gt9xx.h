@@ -99,6 +99,7 @@ struct goodix_ts_data {
 	u8  fixed_cfg;
 	u8  esd_running;
 	u8  fw_error;
+	u8  product_id_flag;
 	bool power_on;
 	struct mutex lock;
 	bool fw_loading;

@@ -102,6 +102,7 @@ enum doze {
 	DOZE_ENABLED = 1,
 	DOZE_WAKEUP = 2,
 };
+
 static enum doze doze_status = DOZE_DISABLED;
 static s8 gtp_enter_doze(struct goodix_ts_data *ts);
 
@@ -821,9 +822,13 @@ err_retry:
 #endif
 				}
 			}
+
+			gtp_irq_disable(ts);
+			gtp_reset_guitar(ts, 20);
+			gtp_irq_enable(ts);
+
 			return ret;
 		}
-		gtp_reset_guitar(ts, 20);
 		if (retry++ < GTP_I2C_RETRY_10)
 			goto err_retry;
 		dev_err(&ts->client->dev, "GTP wakeup sleep failed.\n");
@@ -877,6 +882,8 @@ static int gtp_init_panel(struct goodix_ts_data *ts)
 			ret = gtp_i2c_read_dbl_check(ts->client,
 					GTP_REG_SENSOR_ID, &sensor_id, 1);
 			if (SUCCESS == ret) {
+				if (ts->product_id_flag == 1)
+					sensor_id = 1;
 				if (sensor_id >= GOODIX_MAX_CFG_GROUP) {
 					dev_err(&client->dev,
 						"Invalid sensor_id(0x%02X), No Config Sent!",
@@ -1047,8 +1054,17 @@ static int gtp_check_product_id(struct i2c_client *client)
 	dev_info(&client->dev, "Goodix Product ID = %s\n", product_id);
 
 	ret = strcmp(product_id, ts->pdata->product_id);
-	if (ret != 0)
+	if (ret != 0) {
+		ret = strcmp(product_id, "917D");
+		if (!ret) {
+			pr_info("goodix product_id:%s\n", product_id);
+			ts->product_id_flag  = 1;
+			return ret;
+		}
+		ts->product_id_flag  = 1;
+
 		return -EINVAL;
+	}
 
 	return ret;
 }
@@ -2085,6 +2101,11 @@ static int goodix_ts_probe(struct i2c_client *client,
 		dev_err(&client->dev, "I2C communication ERROR!\n");
 		goto exit_power_off;
 	}
+	gtp_reset_guitar(ts, 20);
+		msleep(50);
+	ret = gtp_check_product_id(client);
+	if (ret != 0)
+		dev_err(&client->dev, "GTP Product id doesn't match.\n");
 
 	ret = gtp_init_panel(ts);
 	if (ret < 0) {
@@ -2149,11 +2170,6 @@ static int goodix_ts_probe(struct i2c_client *client,
 	else
 		dev_info(&client->dev, "GTP works in interrupt mode.\n");
 
-	ret = gtp_check_product_id(client);
-	if (ret != 0) {
-		dev_err(&client->dev, "GTP Product id doesn't match.\n");
-		goto exit_free_irq;
-	}
 	if (ts->use_irq)
 		gtp_irq_enable(ts);
 
