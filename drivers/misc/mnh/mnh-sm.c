@@ -185,6 +185,15 @@ enum {
 			 MNH_BOOTARGS_STDOUT_CONSOLE_ENABLE)
 static unsigned int mnh_boot_args;
 
+/* 32-bit flag mask to SCU for boot power options */
+enum {
+	MNH_POWER_MODE_CLKPM_ENABLE  = 1 << 0,
+	MNH_POWER_MODE_L1_2_ENABLE   = 1 << 1,
+	MNH_POWER_MODE_AXI_CG_ENABLE = 1 << 2,
+};
+static uint32_t mnh_power_mode = MNH_POWER_MODE_CLKPM_ENABLE |
+	MNH_POWER_MODE_L1_2_ENABLE | MNH_POWER_MODE_AXI_CG_ENABLE;
+
 /* callback when easel enters and leaves the active state */
 static hotplug_cb_t mnh_hotplug_cb;
 
@@ -955,6 +964,33 @@ static ssize_t mnh_sm_enable_uart_store(struct device *dev,
 static DEVICE_ATTR(enable_uart, S_IWUSR | S_IRUGO,
 		mnh_sm_enable_uart_show, mnh_sm_enable_uart_store);
 
+static ssize_t mnh_sm_power_mode_show(struct device *dev,
+				 struct device_attribute *attr,
+				 char *buf)
+{
+	return scnprintf(buf, MAX_STR_COPY, "%d\n", mnh_power_mode);
+}
+
+static ssize_t mnh_sm_power_mode_store(struct device *dev,
+				  struct device_attribute *attr,
+				  const char *buf,
+				  size_t count)
+{
+	int val = 0;
+	int ret;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (!ret) {
+		mnh_power_mode = val;
+		return count;
+	}
+
+	return -EINVAL;
+}
+
+static DEVICE_ATTR(power_mode, S_IWUSR | S_IRUGO,
+		mnh_sm_power_mode_show, mnh_sm_power_mode_store);
+
 static struct attribute *mnh_sm_dev_attributes[] = {
 	&dev_attr_stage_fw.attr,
 	&dev_attr_poweron.attr,
@@ -970,6 +1006,7 @@ static struct attribute *mnh_sm_dev_attributes[] = {
 	&dev_attr_mipi_stop.attr,
 	&dev_attr_boot_args.attr,
 	&dev_attr_enable_uart.attr,
+	&dev_attr_power_mode.attr,
 	NULL
 };
 
@@ -1082,6 +1119,9 @@ static int mnh_sm_download(void)
 	/* set the boot_args mask */
 	mnh_config_write(HWIO_SCU_GP_ADDR(HWIO_SCU_BASE_ADDR, 2), 4,
 			 mnh_boot_args);
+
+	/* set the default power mode */
+	MNH_SCU_OUT(GP_POWER_MODE, mnh_power_mode);
 
 	/*
 	 * Magic number setting to notify MNH that PCIE initialization
