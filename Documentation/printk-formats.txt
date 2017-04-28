@@ -62,18 +62,20 @@ Struct Resources:
 
 Physical addresses types phys_addr_t:
 
-	%pa[p]	0x01234567 or 0x0123456789abcdef
+	%pa[p][P] 0x01234567 or 0x0123456789abcdef
 
 	For printing a phys_addr_t type (and its derivatives, such as
 	resource_size_t) which can vary based on build options, regardless of
-	the width of the CPU data path. Passed by reference.
+	the width of the CPU data path. Passed by reference.  Use the trailing
+	'P' if it needs to be always shown.
 
 DMA addresses types dma_addr_t:
 
-	%pad	0x01234567 or 0x0123456789abcdef
+	%pad[P]	0x01234567 or 0x0123456789abcdef
 
 	For printing a dma_addr_t type which can vary based on build options,
-	regardless of the width of the CPU data path. Passed by reference.
+	regardless of the width of the CPU data path. Passed by reference. Use
+	the trailing 'P' if it needs to be always shown.
 
 Raw buffer as an escaped string:
 

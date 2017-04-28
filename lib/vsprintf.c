@@ -1250,6 +1250,8 @@ char *address_val(char *buf, char *end, const void *addr,
 		  struct printf_spec spec, const char *fmt)
 {
 	unsigned long long num;
+	int cleanse = kptr_restrict_cleanse_addresses();
+	int decleanse_idx = 1;
 
 	spec.flags |= SPECIAL | SMALL | ZEROPAD;
 	spec.base = 16;
@@ -1258,17 +1260,20 @@ char *address_val(char *buf, char *end, const void *addr,
 	case 'd':
 		num = *(const dma_addr_t *)addr;
 		spec.field_width = sizeof(dma_addr_t) * 2 + 2;
+		decleanse_idx = 2;
 		break;
 	case 'p':
+		decleanse_idx = 2;
+		/* fall thru */
 	default:
 		num = *(const phys_addr_t *)addr;
 		spec.field_width = sizeof(phys_addr_t) * 2 + 2;
 		break;
 	}
+	/* 'P' on the tail means don't restrict the pointer. */
+	cleanse = cleanse && (fmt[decleanse_idx] != 'P');
 
-	return number(buf, end,
-		      kptr_restrict_cleanse_addresses() ? 0UL : num,
-		      spec);
+	return number(buf, end, cleanse ? 0UL : num, spec);
 }
 
 /*
