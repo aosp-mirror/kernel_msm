@@ -118,6 +118,12 @@ endif
 
 all:	$(KBUILD_IMAGE) $(KBUILD_DTBS) $(KBUILD_DTBO_IMG) $(KBUILD_APPLY_DTBO)
 
+ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
+export DTC_FLAGS := -@
+endif
+
+all:	$(KBUILD_IMAGE) $(KBUILD_DTBS)
+
 boot := arch/arm64/boot
 
 Image: vmlinux

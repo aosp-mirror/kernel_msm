@@ -5580,7 +5580,7 @@ static irqreturn_t handle_global_irq(int irq, void *data)
 					  dev->rc_idx, i - MSM_PCIE_INT_EVT_MSI_0);
 				break;
 			default:
-				PCIE_ERR(dev,
+				PCIE_DUMP(dev,
 					"PCIe: RC%d: Unexpected event %d is caught!\n",
 					dev->rc_idx, i);
 			}
