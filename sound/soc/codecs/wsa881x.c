@@ -1295,6 +1295,7 @@ static int wsa881x_swr_remove(struct swr_device *pdev)
 		return -EINVAL;
 	}
 	debugfs_remove_recursive(debugfs_wsa881x_dent);
+	debugfs_wsa881x_dent = NULL;
 	snd_soc_unregister_codec(&pdev->dev);
 	if (wsa881x->pd_gpio)
 		gpio_free(wsa881x->pd_gpio);
@@ -1359,6 +1360,7 @@ static int wsa881x_swr_reset(struct swr_device *pdev)
 		/* Retry after 1 msec delay */
 		usleep_range(1000, 1100);
 	}
+	pdev->dev_num = devnum;
 	regcache_mark_dirty(wsa881x->regmap);
 	regcache_sync(wsa881x->regmap);
 	return 0;
