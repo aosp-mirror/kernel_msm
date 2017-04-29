@@ -51,6 +51,13 @@
 };
 
 &spmi_bus {
+	qcom,pm8998@0 {
+		qcom,power-on@800 {
+			qcom,pon_1 {
+				qcom,s2-type = <5>;
+			};
+		};
+	};
         qcom,pmi8998@2 {
                 pmi8998_fg: qpnp,fg {
                         qcom,fg-force-load-profile;
