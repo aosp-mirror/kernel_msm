@@ -21,6 +21,7 @@
 #include <linux/list.h>
 #include <linux/cdev.h>
 #include <linux/platform_device.h>
+#include <linux/vmalloc.h>
 #include <soc/qcom/glink.h>
 #include "sound/wcd-dsp-glink.h"
 
@@ -183,7 +184,7 @@ static void wdsp_glink_notify_tx_done(void *handle, const void *priv,
 		return;
 	}
 	/* Free tx pkt */
-	kfree(pkt_priv);
+	vfree(pkt_priv);
 }
 
 /*
@@ -201,7 +202,7 @@ static void wdsp_glink_notify_tx_abort(void *handle, const void *priv,
 		return;
 	}
 	/* Free tx pkt */
-	kfree(pkt_priv);
+	vfree(pkt_priv);
 }
 
 /*
@@ -658,7 +659,7 @@ static void wdsp_glink_tx_buf_work(struct work_struct *work)
 			 * there won't be any tx_done notification to
 			 * free the buffer.
 			 */
-			kfree(tx_buf);
+			vfree(tx_buf);
 		}
 	} else {
 		mutex_unlock(&tx_buf->ch->mutex);
@@ -668,7 +669,7 @@ static void wdsp_glink_tx_buf_work(struct work_struct *work)
 		 * Free tx_buf here as there won't be any tx_done
 		 * notification in this case also.
 		 */
-		kfree(tx_buf);
+		vfree(tx_buf);
 	}
 }
 
@@ -780,7 +781,8 @@ static ssize_t wdsp_glink_write(struct file *file, const char __user *buf,
 	dev_dbg(wpriv->dev, "%s: count = %zd\n", __func__, count);
 
 	tx_buf_size = WDSP_MAX_WRITE_SIZE + sizeof(struct wdsp_glink_tx_buf);
-	tx_buf = kzalloc(tx_buf_size, GFP_KERNEL);
+	tx_buf = vmalloc(tx_buf_size);
+	memset(tx_buf, 0, tx_buf_size);
 	if (!tx_buf) {
 		ret = -ENOMEM;
 		goto done;
@@ -809,7 +811,7 @@ static ssize_t wdsp_glink_write(struct file *file, const char __user *buf,
 		if (IS_ERR_VALUE(ret))
 			dev_err(wpriv->dev, "%s: glink register failed, ret = %d\n",
 				__func__, ret);
-		kfree(tx_buf);
+		vfree(tx_buf);
 		break;
 	case WDSP_READY_PKT:
 		ret = wait_event_timeout(wpriv->link_state_wait,
@@ -823,7 +825,7 @@ static ssize_t wdsp_glink_write(struct file *file, const char __user *buf,
 			goto free_buf;
 		}
 		ret = 0;
-		kfree(tx_buf);
+		vfree(tx_buf);
 		break;
 	case WDSP_CMD_PKT:
 		if (count <= (sizeof(struct wdsp_write_pkt) +
@@ -881,13 +883,13 @@ static ssize_t wdsp_glink_write(struct file *file, const char __user *buf,
 	default:
 		dev_err(wpriv->dev, "%s: Invalid packet type\n", __func__);
 		ret = -EINVAL;
-		kfree(tx_buf);
+		vfree(tx_buf);
 		break;
 	}
 	goto done;
 
 free_buf:
-	kfree(tx_buf);
+	vfree(tx_buf);
 
 done:
 	return ret;
