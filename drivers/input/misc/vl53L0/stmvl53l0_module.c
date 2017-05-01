@@ -528,8 +528,10 @@ int stmvl53l0_read_calibration(struct stmvl53l0_data *data) {
         (buf[ptr] << 0x08) | buf[ptr+1];  ptr=ptr+2;
     data->isApertureSpads =
         (buf[ptr] << 0x08) | buf[ptr+1];  ptr=ptr+2;
-    data->offset_kvalue =
-        (buf[ptr] << 0x08) | buf[ptr+1];  ptr=ptr+2;
+    data->offset_kvalue = buf[ptr+1];
+    if (buf[ptr] != 0) // negative=1, positive=0
+        data->offset_kvalue *= -1;
+    ptr=ptr+2;
     data->xtalk_kvalue =
         (buf[ptr] << 0x08) | buf[ptr+1];  ptr=ptr+2;
     data->offset_count =
@@ -541,7 +543,7 @@ int stmvl53l0_read_calibration(struct stmvl53l0_data *data) {
     vl53l0_errmsg("PhaseCal = %u\n", data->PhaseCal);
     vl53l0_errmsg("refSpadCount = %u\n", data->refSpadCount);
     vl53l0_errmsg("isApertureSpads = %u\n", data->isApertureSpads);
-    vl53l0_errmsg("offset_kvalue = %u\n", data->offset_kvalue);
+    vl53l0_errmsg("offset_kvalue = %d\n", data->offset_kvalue);
     vl53l0_errmsg("xtalk_kvalue = %u\n", data->xtalk_kvalue);
     vl53l0_errmsg("offset_count = %u\n", data->offset_count);
     vl53l0_errmsg("xtalk_count = %u\n", data->xtalk_count);
