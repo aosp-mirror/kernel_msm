@@ -3107,6 +3107,13 @@ static int stmvl53l0_start(struct stmvl53l0_data *data,
         goto io_error;
     }
 
+    /* Enable power 2v8 */
+    rc = regulator_enable(data->power_2v8);
+    if (rc) {
+        vl53l0_errmsg("Failed to enable power_2v8\n");
+        goto io_error;
+    }
+
     /* Pull high the power-down pin */
     rc = gpio_direction_output(data->pwdn_gpio, 1);
     if (rc) {
@@ -3194,6 +3201,7 @@ static int stmvl53l0_start(struct stmvl53l0_data *data,
 init_error:
     gpio_set_value(data->pwdn_gpio, 0);
 power_error:
+    regulator_disable(data->power_2v8);
     regulator_disable(data->camio_1v8);
 io_error:
     return rc;
@@ -3239,6 +3247,11 @@ static int stmvl53l0_stop(struct stmvl53l0_data *data)
         vl53l0_errmsg("Failed to pull up pwdn_gpio\n");
         return rc;
     }
+
+    /* Disable power_2v8*/
+    rc = regulator_disable(data->power_2v8);
+    if (rc)
+        vl53l0_errmsg("Failed to disable power_2v8\n");
 
     /* Disable io_1v8*/
     rc = regulator_disable(data->camio_1v8);

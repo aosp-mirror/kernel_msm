@@ -279,6 +279,11 @@ static int stmvl53l0_probe(struct i2c_client *client,
     i2c_object->power_up = 0;
 
     gpio_set_value(vl53l0_data->pwdn_gpio, 0);
+
+    rc = regulator_disable(vl53l0_data->power_2v8);
+    if (rc)
+        vl53l0_errmsg("Failed to disable power_2v8\n");
+
     rc = regulator_disable(vl53l0_data->camio_1v8);
     if (rc)
         vl53l0_errmsg("Failed to disable camio_1v8\n");
