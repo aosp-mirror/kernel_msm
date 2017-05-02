@@ -2624,6 +2624,7 @@ int dhd_keep_alive_onoff(dhd_pub_t *dhd)
 /*
  *  data parsing from ComboScan tlv list
 */
+#ifdef WL_WIRELESS_EXT
 int
 wl_iw_parse_data_tlv(char** list_str, void *dst, int dst_size, const char token,
                      int input_size, int *bytes_left)
@@ -2670,5 +2671,6 @@ wl_iw_parse_data_tlv(char** list_str, void *dst, int dst_size, const char token,
 	}
 	return 1;
 }
+#endif /* WL_WIRELESS_EXT */
 
 
