@@ -1225,6 +1225,8 @@ static int mnh_sm_set_state_locked(int state)
 
 	switch (state) {
 	case MNH_STATE_OFF:
+		disable_irq(mnh_sm_dev->ready_irq);
+
 		/* toggle powered flag and clear completion */
 		mnh_sm_dev->powered = false;
 		reinit_completion(&mnh_sm_dev->powered_complete);
@@ -1235,6 +1237,8 @@ static int mnh_sm_set_state_locked(int state)
 		ret = mnh_sm_poweron();
 		if (ret)
 			break;
+
+		enable_irq(mnh_sm_dev->ready_irq);
 
 		/* toggle powered flag and notify any waiting threads */
 		mnh_sm_dev->powered = true;
@@ -1661,6 +1665,7 @@ static int mnh_sm_probe(struct platform_device *pdev)
 			error);
 		goto fail_mnh_pwr_init;
 	}
+	disable_irq(mnh_sm_dev->ready_irq);
 
 	/* request ddr pad isolation pin */
 	mnh_sm_dev->ddr_pad_iso_n_pin = devm_gpiod_get(dev, "ddr-pad-iso-n",
