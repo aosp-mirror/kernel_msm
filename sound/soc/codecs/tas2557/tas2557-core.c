@@ -46,8 +46,10 @@
 #define	PPC_DRIVER_CFGDEV_NONCRC	0x00000101
 
 #define TAS2557_CAL_NAME    "/data/tas2557_cal.bin"
+/* TAS2557_LOAD_FROM_DTS_START */
 #define CALIBRATION_DATA_PATH "/calibration_data"
 #define AUDIO_DATA "aud_cali_data"
+/* TAS2557_LOAD_FROM_DTS_END */
 
 
 static int tas2557_load_calibration(struct tas2557_priv *pTAS2557,
@@ -1040,8 +1042,12 @@ int tas2557_enable(struct tas2557_priv *pTAS2557, bool bEnable)
 
 end:
 	if (nResult < 0) {
+		/* TAS2557_RELOAD_FIRMWARE_START */
 		if (pTAS2557->mnErrCode & (ERROR_DEVA_I2C_COMM | ERROR_DEVB_I2C_COMM | ERROR_PRAM_CRCCHK | ERROR_YRAM_CRCCHK))
-			failsafe(pTAS2557);
+			tas2557_set_program(pTAS2557,
+					    pTAS2557->mnCurrentProgram,
+					    pTAS2557->mnCurrentConfiguration);
+		/* TAS2557_RELOAD_FIRMWARE_END */
 	}
 
 	return nResult;
@@ -2195,8 +2201,12 @@ static int tas2557_load_configuration(struct tas2557_priv *pTAS2557,
 end:
 
 	if (nResult < 0) {
+		/* TAS2557_RELOAD_FIRMWARE_START */
 		if (pTAS2557->mnErrCode & (ERROR_DEVA_I2C_COMM | ERROR_DEVB_I2C_COMM | ERROR_PRAM_CRCCHK | ERROR_YRAM_CRCCHK))
-			failsafe(pTAS2557);
+			tas2557_set_program(pTAS2557,
+					    pTAS2557->mnCurrentProgram,
+					    pTAS2557->mnCurrentConfiguration);
+		/* TAS2557_RELOAD_FIRMWARE_END */
 	}
 
 	return nResult;
@@ -2299,6 +2309,7 @@ void tas2557_clear_firmware(struct TFirmware *pFirmware)
 
 static int tas2557_load_calibration(struct tas2557_priv *pTAS2557,	char *pFileName)
 {
+	/* TAS2557_LOAD_FROM_DTS_START */
 	int nResult = 0;
 	int nSize = 0;
 
@@ -2334,6 +2345,7 @@ static int tas2557_load_calibration(struct tas2557_priv *pTAS2557,	char *pFileNa
 		pTAS2557->mpCalFirmware->mnCalibrations);
 
 	return nResult;
+	/* TAS2557_LOAD_FROM_DTS_END */
 }
 
 void tas2557_fw_ready(const struct firmware *pFW, void *pContext)
@@ -2368,7 +2380,9 @@ void tas2557_fw_ready(const struct firmware *pFW, void *pContext)
 		goto end;
 	}
 
+	/* TAS2557_LOAD_FROM_DTS_START */
 	tas2557_load_calibration(pTAS2557, NULL);
+	/* TAS2557_LOAD_FROM_DTS_END */
 
 	if (pTAS2557->mpFirmware->mpConfigurations) {
 		nProgram = pTAS2557->mnCurrentProgram;
