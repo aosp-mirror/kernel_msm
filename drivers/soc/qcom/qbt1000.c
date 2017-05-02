@@ -58,6 +58,7 @@ enum sensor_connection_types {
  * user space will provide new value upon tz app load
  */
 static uint32_t g_app_buf_size = SZ_256K;
+static char const *const FP_APP_NAME = "fingerpr";
 
 struct qbt1000_drvdata {
 	struct class	*qbt1000_class;
