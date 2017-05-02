@@ -302,7 +302,7 @@ static int g_BattStatus = STATUS_NORMAL;
 
 #define BATT_NO_OVER_VOLT   4240000
 #define BATT_OVER_VOLT      4500000
-#define BATT_OVER_TEMP      510
+#define BATT_OVER_TEMP      470
 #define TRIM_PERIOD_NS      (1LL * NSEC_PER_SEC)
 
 #define REG0_DEFAULT        0x54
