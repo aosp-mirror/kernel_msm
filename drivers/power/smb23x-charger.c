@@ -195,6 +195,7 @@ struct smb23x_chip {
 	struct delayed_work		delaywork_print_register;
 
 	struct delayed_work delaywork_usb_removal;
+	struct delayed_work boot_check_work;
 	struct alarm        wpc_check_alarm;
 	struct work_struct  wpc_check_work;
 
@@ -294,6 +295,7 @@ enum BattStatus
 };
 
 static int g_BattStatus = STATUS_NORMAL;
+static int g_BootPhase = 1;
 
 
 #define MIN_FLOAT_MV	3480
@@ -590,6 +592,10 @@ static void smb23x_check_batt_ot(struct smb23x_chip *chip)
 
     pr_debug("[smb23x] current battery temperature = %d, status = %d\n", battery_temp, g_BattStatus);
 
+    if(g_BootPhase)
+    {
+        return;
+    }
 
     if(g_BattStatus != STATUS_NORMAL)
     {
@@ -2656,6 +2662,13 @@ void smb23x_delaywork_usb_removal(struct work_struct *work)
     return;
 }
 
+static void smb23x_boot_check_work(struct work_struct *work)
+{
+    g_BootPhase = 0;
+
+    pr_info("[smb23x] g_BootPhase(%d)\n", g_BootPhase);
+}
+
 static int smb23x_battery_get_property(struct power_supply *psy,
 				enum power_supply_property prop,
 				union power_supply_propval *val)
@@ -3264,6 +3277,9 @@ static int smb23x_probe(struct i2c_client *client,
 	chip->timer_print_register.function = smb23x_timer_print_register;
 
 	INIT_DELAYED_WORK(&chip->delaywork_usb_removal, smb23x_delaywork_usb_removal);
+
+	INIT_DEFERRABLE_WORK(&chip->boot_check_work, smb23x_boot_check_work);
+	schedule_delayed_work(&chip->boot_check_work, 18000);
 
 	alarm_init(&chip->wpc_check_alarm, ALARM_REALTIME, smb23x_wpc_check_alarm_callback);
 	INIT_WORK(&chip->wpc_check_work, smb23x_wpc_check_work);
