@@ -240,6 +240,9 @@ static void ipa_gsi_release_resource(struct work_struct *work);
 static DECLARE_DELAYED_WORK(ipa_gsi_release_resource_work,
 	ipa_gsi_release_resource);
 
+static void ipa3_post_init_wq(struct work_struct *work);
+static DECLARE_WORK(ipa3_post_init_work, ipa3_post_init_wq);
+
 static struct ipa3_plat_drv_res ipa3_res = {0, };
 struct msm_bus_scale_pdata *ipa3_bus_scale_table;
 
@@ -3917,6 +3920,15 @@ static int ipa3_post_init(const struct ipa3_plat_drv_res *resource_p,
 	struct gsi_per_props gsi_props;
 	struct ipa3_uc_hdlrs uc_hdlrs = { 0 };
 
+	if (ipa3_ctx == NULL) {
+		IPADBG("IPA driver haven't initialized\n");
+		return -ENXIO;
+	}
+
+	/* Prevent consequent calls from trying to load the FW again. */
+	if (ipa3_ctx->ipa_initialization_complete)
+		return 0;
+
 	if (ipa3_ctx->transport_prototype == IPA_TRANSPORT_TYPE_GSI) {
 		memset(&gsi_props, 0, sizeof(gsi_props));
 		gsi_props.ver = ipa3_get_gsi_ver(resource_p->ipa_hw_type);
@@ -3934,6 +3946,12 @@ static int ipa3_post_init(const struct ipa3_plat_drv_res *resource_p,
 		if (result != GSI_STATUS_SUCCESS) {
 			IPAERR(":gsi register error - %d\n", result);
 			result = -ENODEV;
+			/*
+			 * IPA Driver initialization failed,
+			 * without which data transfer will not work.
+			 * BUG_ON for IPA team to analyze the issue
+			 */
+			BUG();
 			goto fail_register_device;
 		}
 		IPADBG("IPA gsi is registered\n");
@@ -3960,6 +3978,12 @@ static int ipa3_post_init(const struct ipa3_plat_drv_res *resource_p,
 		if (result) {
 			IPAERR(":bam register error - %d\n", result);
 			result = -EPROBE_DEFER;
+			/*
+			 * IPA Driver initialization failed,
+			 * without which data transfer will not work.
+			 * BUG_ON for IPA team to analyze the issue
+			 */
+			BUG_ON(result);
 			goto fail_register_device;
 		}
 		IPADBG("IPA BAM is registered\n");
@@ -3969,6 +3993,12 @@ static int ipa3_post_init(const struct ipa3_plat_drv_res *resource_p,
 	if (ipa3_setup_apps_pipes()) {
 		IPAERR(":failed to setup IPA-Apps pipes\n");
 		result = -ENODEV;
+		/*
+		 * IPA Driver initialization failed,
+		 * without which data transfer will not work.
+		 * BUG_ON for IPA team to analyze the issue
+		 */
+		BUG_ON(result);
 		goto fail_setup_apps_pipes;
 	}
 	IPADBG("IPA System2Bam pipes were connected\n");
@@ -3979,6 +4009,12 @@ static int ipa3_post_init(const struct ipa3_plat_drv_res *resource_p,
 		if (result) {
 			IPAERR(":teth_bridge init failed (%d)\n", -result);
 			result = -ENODEV;
+			/*
+			 * IPA Driver initialization failed,
+			 * without which data transfer will not work.
+			 * BUG_ON for IPA team to analyze the issue
+			 */
+			BUG_ON(result);
 			goto fail_teth_bridge_driver_init;
 		}
 		IPADBG("teth_bridge initialized");
@@ -4061,6 +4097,11 @@ fail_register_device:
 	kfree(ipa3_ctx);
 	ipa3_ctx = NULL;
 	return result;
+}
+
+static void ipa3_post_init_wq(struct work_struct *work)
+{
+	ipa3_post_init(&ipa3_res, ipa3_ctx->dev);
 }
 
 static int ipa3_trigger_fw_loading_mdms(void)
@@ -4159,8 +4200,10 @@ static ssize_t ipa3_write(struct file *file, const char __user *buf,
 		if (result) {
 			IPAERR("FW loading process has failed\n");
 			return result;
-		} else
-			ipa3_post_init(&ipa3_res, ipa3_ctx->dev);
+		} else {
+			queue_work(ipa3_ctx->transport_power_mgmt_wq,
+				&ipa3_post_init_work);
+		}
 	}
 	return count;
 }
@@ -4639,20 +4682,6 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
 		goto fail_device_create;
 	}
 
-	cdev_init(&ipa3_ctx->cdev, &ipa3_drv_fops);
-	ipa3_ctx->cdev.owner = THIS_MODULE;
-	ipa3_ctx->cdev.ops = &ipa3_drv_fops;  /* from LDD3 */
-
-	result = cdev_add(&ipa3_ctx->cdev, ipa3_ctx->dev_num, 1);
-	if (result) {
-		IPAERR(":cdev_add err=%d\n", -result);
-		result = -ENODEV;
-		goto fail_cdev_add;
-	}
-	IPADBG("ipa cdev added successful. major:%d minor:%d\n",
-			MAJOR(ipa3_ctx->dev_num),
-			MINOR(ipa3_ctx->dev_num));
-
 	if (ipa3_create_nat_device()) {
 		IPAERR("unable to create nat device\n");
 		result = -ENODEV;
@@ -4712,21 +4741,41 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
 				goto fail_ipa_init_interrupts;
 			}
 		}
+	} else {
+		/*
+		 * For BAM (No other mode),
+		 * we can just carry on with initialization
+		 */
+		 result = ipa3_post_init(resource_p, ipa_dev);
+		if (result) {
+			IPAERR("ipa3_post_init failed\n");
+			goto fail_ipa_post_init;
+		}
 	}
-	/* For BAM (No other mode), we can just carry on with initialization */
-	else
-		return ipa3_post_init(resource_p, ipa_dev);
 
+	cdev_init(&ipa3_ctx->cdev, &ipa3_drv_fops);
+	ipa3_ctx->cdev.owner = THIS_MODULE;
+	ipa3_ctx->cdev.ops = &ipa3_drv_fops;  /* from LDD3 */
+
+	result = cdev_add(&ipa3_ctx->cdev, ipa3_ctx->dev_num, 1);
+	if (result) {
+		IPAERR(":cdev_add err=%d\n", -result);
+		result = -ENODEV;
+		goto fail_cdev_add;
+	}
+	IPADBG("ipa cdev added successful. major:%d minor:%d\n",
+			MAJOR(ipa3_ctx->dev_num),
+			MINOR(ipa3_ctx->dev_num));
 	return 0;
 
+fail_cdev_add:
+fail_ipa_post_init:
 fail_ipa_init_interrupts:
 	ipa_rm_delete_resource(IPA_RM_RESOURCE_APPS_CONS);
 fail_create_apps_resource:
 	ipa_rm_exit();
 fail_ipa_rm_init:
 fail_nat_dev_add:
-	cdev_del(&ipa3_ctx->cdev);
-fail_cdev_add:
 	device_destroy(ipa3_ctx->class, ipa3_ctx->dev_num);
 fail_device_create:
 	unregister_chrdev_region(ipa3_ctx->dev_num, 1);
