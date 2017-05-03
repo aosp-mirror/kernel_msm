@@ -39,17 +39,17 @@ struct led_classdev {
 	int			 flags;
 
 	/* Lower 16 bits reflect status */
-#define LED_SUSPENDED		(1 << 0)
+#define LED_SUSPENDED		BIT(0)
 	/* Upper 16 bits reflect control information */
-#define LED_CORE_SUSPENDRESUME	(1 << 16)
-#define LED_BLINK_ONESHOT	(1 << 17)
-#define LED_BLINK_ONESHOT_STOP	(1 << 18)
-#define LED_BLINK_INVERT	(1 << 19)
-#define LED_SYSFS_DISABLE	(1 << 20)
-#define SET_BRIGHTNESS_ASYNC	(1 << 21)
-#define SET_BRIGHTNESS_SYNC	(1 << 22)
-#define LED_DEV_CAP_FLASH	(1 << 23)
-#define LED_KEEP_TRIGGER	(1 << 24)
+#define LED_CORE_SUSPENDRESUME	BIT(16)
+#define LED_BLINK_ONESHOT	BIT(17)
+#define LED_BLINK_ONESHOT_STOP	BIT(18)
+#define LED_BLINK_INVERT	BIT(19)
+#define LED_SYSFS_DISABLE	BIT(20)
+#define SET_BRIGHTNESS_ASYNC	BIT(21)
+#define SET_BRIGHTNESS_SYNC	BIT(22)
+#define LED_DEV_CAP_FLASH	BIT(23)
+#define LED_KEEP_TRIGGER	BIT(24)
 
 	/* Set LED brightness level */
 	/* Must not sleep, use a workqueue if needed */
