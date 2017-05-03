@@ -302,6 +302,7 @@ struct drv2624_data {
 	unsigned char current_reg;
 	struct wake_lock wklock;
 	struct mutex lock;	/* protect mode switching */
+	struct workqueue_struct *drv2624_wq;
 	struct work_struct vibrator_work;
 	struct work_struct work;
 	struct led_classdev led_dev;

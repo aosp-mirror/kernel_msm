@@ -280,7 +280,7 @@ static void vibrator_enable(struct led_classdev *led_cdev,
 			container_of(led_cdev, struct drv2624_data, led_dev);
 
 	led_cdev->brightness = value;
-	schedule_work(&drv2624->work);
+	queue_work(drv2624->drv2624_wq, &drv2624->work);
 }
 
 static void vibrator_work_routine(struct work_struct *work)
@@ -564,6 +564,15 @@ static int haptics_init(struct drv2624_data *drv2624)
 
 	wake_lock_init(&drv2624->wklock, WAKE_LOCK_SUSPEND, "vibrator");
 	mutex_init(&drv2624->lock);
+
+	drv2624->drv2624_wq =
+		alloc_workqueue("drv2624_wq", WQ_HIGHPRI | WQ_UNBOUND, 1);
+	if (!drv2624->drv2624_wq) {
+		dev_err(drv2624->dev,
+			"drv2624: fail to alloc_workqueue for drv2624_wq\n");
+		return -ENOMEM;
+	}
+
 	INIT_WORK(&drv2624->vibrator_work, vibrator_work_routine);
 	INIT_WORK(&drv2624->work, drv2624_haptics_work);
 
@@ -1453,6 +1462,7 @@ static int drv2624_i2c_remove(struct i2c_client *client)
 
 	cancel_work_sync(&drv2624->vibrator_work);
 	cancel_work_sync(&drv2624->work);
+	destroy_workqueue(drv2624->drv2624_wq);
 
 	led_classdev_unregister(&drv2624->led_dev);
 
