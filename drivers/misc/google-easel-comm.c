@@ -764,8 +764,12 @@ static void easelcomm_handle_command(struct easelcomm_cmd_header *cmdhdr)
 	struct easelcomm_service *service;
 	char *cmdargs = (char *)cmdhdr + sizeof(struct easelcomm_cmd_header);
 
-	/* Any command can inform the remote is open for business, not just LINK_INIT. */
-	easelcomm_cmd_channel_remote_set_ready();
+	/*
+	 * Any command can inform the server that remote is ready, not just
+	 * LINK_INIT.
+	 */
+	if (!easelcomm_is_client())
+		easelcomm_cmd_channel_remote_set_ready();
 
 	switch(cmdhdr->command_code) {
 	case EASELCOMM_CMD_LINK_INIT:
