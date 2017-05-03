@@ -408,9 +408,9 @@ static struct stc311x_platform_data stc3117_data = {
 	.Alm_SOC = 15,/* SOC alm level %*/
 	.Alm_Vbat = 3600,/* Vbat alm level mV*/
 	/* nominal CC_cnf, coming from battery characterisation*/
-	.CC_cnf = 58,
+	.CC_cnf = 60,
 	/* nominal VM cnf , coming from battery characterisation*/
-	.VM_cnf = 301,
+	.VM_cnf = 312,
 	/* nominal internal impedance*/
 	.Rint = 970,
 	/* nominal capacity in mAh, coming from battery characterisation*/
@@ -429,21 +429,21 @@ static struct stc311x_platform_data stc3117_data = {
         .CapDerating[0] = 0,            /* capacity derating in 0.1%, for temp = 60 degC */
 
 	/*OCV curve example for a 4.35V li-ion battery*/
-        .OCVValue[15] = 4227,             /* OCV curve value */
-        .OCVValue[14] = 4125,             /* OCV curve value */
-        .OCVValue[13] = 4039,             /* OCV curve value */
-        .OCVValue[12] = 3945,             /* OCV curve value */
-        .OCVValue[11] = 3911,             /* OCV curve value */
-        .OCVValue[10] = 3867,             /* OCV curve value */
-        .OCVValue[9] = 3822,              /* OCV curve value */
-        .OCVValue[8] = 3790,              /* OCV curve value */
-        .OCVValue[7] = 3761,              /* OCV curve value */
-        .OCVValue[6] = 3746,              /* OCV curve value */
-        .OCVValue[5] = 3730,              /* OCV curve value */
-        .OCVValue[4] = 3703,              /* OCV curve value */
+        .OCVValue[15] = 4275,             /* OCV curve value */
+        .OCVValue[14] = 4167,             /* OCV curve value */
+        .OCVValue[13] = 4080,             /* OCV curve value */
+        .OCVValue[12] = 3958,             /* OCV curve value */
+        .OCVValue[11] = 3923,             /* OCV curve value */
+        .OCVValue[10] = 3888,             /* OCV curve value */
+        .OCVValue[9] = 3831,              /* OCV curve value */
+        .OCVValue[8] = 3796,              /* OCV curve value */
+        .OCVValue[7] = 3766,              /* OCV curve value */
+        .OCVValue[6] = 3750,              /* OCV curve value */
+        .OCVValue[5] = 3734,              /* OCV curve value */
+        .OCVValue[4] = 3707,              /* OCV curve value */
         .OCVValue[3] = 3684,              /* OCV curve value */
-        .OCVValue[2] = 3681,              /* OCV curve value */
-        .OCVValue[1] = 3612,              /* OCV curve value */
+        .OCVValue[2] = 3682,              /* OCV curve value */
+        .OCVValue[1] = 3620,              /* OCV curve value */
         .OCVValue[0] = 3450,              /* OCV curve value */
 
 	/* SOC_TAB data */
