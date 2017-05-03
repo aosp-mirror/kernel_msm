@@ -50,6 +50,7 @@ struct led_classdev {
 #define SET_BRIGHTNESS_SYNC	BIT(22)
 #define LED_DEV_CAP_FLASH	BIT(23)
 #define LED_KEEP_TRIGGER	BIT(24)
+#define LED_BRIGHTNESS_FAST	BIT(25)
 
 	/* Set LED brightness level */
 	/* Must not sleep, use a workqueue if needed */
