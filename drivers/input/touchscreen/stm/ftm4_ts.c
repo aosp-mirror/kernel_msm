@@ -987,18 +987,18 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 		}
 
 		if (EventID == EVENTID_ENTER_POINTER)
-			tsp_debug_info(&info->client->dev,
+			tsp_debug_event(&info->client->dev,
 				"[P] tID:%d x:%d y:%d w:%d "
 				"h:%d z:%d p:%d tc:%d tm:%d\n",
 				TouchID, x, y, bw,
 				bh, z, palm, info->touch_count, info->touch_mode);
 		else if (EventID == EVENTID_HOVER_ENTER_POINTER)
-			tsp_debug_info(&info->client->dev,
+			tsp_debug_event(&info->client->dev,
 				"[HP] tID:%d x:%d y:%d z:%d\n",
 				TouchID, x, y, z);
 
 		else if (EventID == EVENTID_LEAVE_POINTER) {
-			tsp_debug_info(&info->client->dev,
+			tsp_debug_event(&info->client->dev,
 				"[R] tID:%d mc: %d tc:%d lx: %d ly: %d "
 				"Ver[%02X%04X%01X%01X]\n",
 				TouchID, info->finger[TouchID].mcount, info->touch_count,
@@ -1011,7 +1011,7 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 
 			info->finger[TouchID].mcount = 0;
 		} else if (EventID == EVENTID_HOVER_LEAVE_POINTER) {
-			tsp_debug_info(&info->client->dev,
+			tsp_debug_event(&info->client->dev,
 				"[HR] tID:%d Ver[%02X%04X%01X]\n",
 				TouchID,
 				info->panel_revision,

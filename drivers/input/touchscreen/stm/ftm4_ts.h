@@ -16,6 +16,11 @@
 #define tsp_debug_dbg(dev, fmt, ...)	dev_dbg(dev, fmt, ## __VA_ARGS__)
 #define tsp_debug_info(dev, fmt, ...)	dev_info(dev, fmt, ## __VA_ARGS__)
 #define tsp_debug_err(dev, fmt, ...)	dev_err(dev, fmt, ## __VA_ARGS__)
+#ifdef CONFIG_TOUCHSCREEN_FTM4_SHOW_EVENTS
+#define tsp_debug_event(dev, fmt, ...)	dev_dbg(dev, fmt, ## __VA_ARGS__)
+#else
+#define tsp_debug_event(dev, fmt, ...)
+#endif
 
 #define USE_OPEN_CLOSE
 #define FEATURE_FTS_PRODUCTION_CODE	1
