@@ -553,6 +553,7 @@ static int haptics_init(struct drv2624_data *drv2624)
 	drv2624->led_dev.name = "vibrator";
 	drv2624->led_dev.max_brightness = LED_FULL;
 	drv2624->led_dev.brightness_set = vibrator_enable;
+	drv2624->led_dev.flags = LED_BRIGHTNESS_FAST;
 
 	ret = led_classdev_register(drv2624->dev, &drv2624->led_dev);
 	if (ret) {
