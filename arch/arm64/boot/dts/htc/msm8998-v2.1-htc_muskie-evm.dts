@@ -46,7 +46,7 @@
 &pmi8998_fg {
 	qcom,battery-data = <&muskie_evm_batterydata>;
 	qcom,fg-force-load-profile;
-	qcom,fg-jeita-thresholds = <0 15 48 50>;
+	qcom,fg-jeita-thresholds = <0 15 48 55>;
 	qcom,fg-jeita-hyst-temp = <2>;
 	qcom,fg-recharge-soc-thr = <97>;
 	qcom,fg-chg-term-current = <50>;
