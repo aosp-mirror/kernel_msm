@@ -18,6 +18,8 @@ Optional properties:
 	- ti,zc-det-time - Zero crossing detection time
 	- ti,lra-wave-shape - Selects which shape to use for driving the LRA
 	  when in open loop mode. 0 - Square Wave, 1 - Sine Wave.
+	- ti,waveform-interval - Sets the internal memory playback interval to
+	  either 5 ms or 1 ms. 0 - 5 ms, 1 - 1 ms.
 
 Example:
 

@@ -698,6 +698,10 @@ static void dev_init_platform_data(struct drv2624_data *drv2624)
 		drv2624_set_bits(drv2624, DRV2624_REG_ZC_OD_TIME,
 				 ZC_DET_TIME_MASK, actuator.zc_det_time);
 
+	if (actuator.waveform_interval > -1)
+		drv2624_set_bits(drv2624, DRV2624_REG_CONTROL2, INTERVAL_MASK,
+				 actuator.waveform_interval << INTERVAL_SHIFT);
+
 }
 
 static irqreturn_t drv2624_irq_handler(int irq, void *dev_id)
@@ -883,6 +887,14 @@ static int drv2624_parse_dt(struct device *dev, struct drv2624_data *drv2624)
 
 	dev_dbg(drv2624->dev, "ti,lra-wave-shape=%d\n",
 		pdata->actuator.lra_wave_shape);
+
+	if (!of_property_read_u32(np, "ti,waveform-interval", &value))
+		pdata->actuator.waveform_interval = value;
+	else
+		pdata->actuator.waveform_interval = -1;
+
+	dev_dbg(drv2624->dev, "ti,waveform-interval=%d\n",
+		pdata->actuator.waveform_interval);
 
 drv2624_parse_dt_out:
 	return ret;

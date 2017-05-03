@@ -201,6 +201,7 @@ struct actuator_data {
 	int idiss_time;
 	int zc_det_time;
 	int lra_wave_shape;
+	int waveform_interval;
 };
 
 enum wave_seq_loop {
