@@ -1282,6 +1282,40 @@ static ssize_t ol_lra_period_store(struct device *dev,
 	return count;
 }
 
+static ssize_t lra_wave_shape_show(struct device *dev,
+				   struct device_attribute *attr, char *buf)
+{
+	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
+	u32 lra_wave_shape;
+
+	lra_wave_shape =
+		drv2624_reg_read(drv2624,
+				 DRV2624_REG_LRA_OL_CTRL) & LRA_WAVE_SHAPE_MASK;
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", lra_wave_shape);
+}
+
+static ssize_t lra_wave_shape_store(struct device *dev,
+				    struct device_attribute *attr,
+				    const char *buf, size_t count)
+{
+	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
+	int ret;
+	u32 lra_wave_shape;
+
+	ret = kstrtou32(buf, 10, &lra_wave_shape);
+	if (ret) {
+		dev_err(dev,
+			"Invalid input for ol_lra_period: ret = %d\n", ret);
+		return ret;
+	}
+
+	drv2624_set_bits(drv2624, DRV2624_REG_LRA_OL_CTRL,
+			 LRA_WAVE_SHAPE_MASK, lra_wave_shape);
+
+	return count;
+}
+
 static DEVICE_ATTR(rtp_input, 0660, rtp_input_show, rtp_input_store);
 static DEVICE_ATTR(mode, 0660, mode_show, mode_store);
 static DEVICE_ATTR(loop, 0660, loop_show, loop_store);
@@ -1296,6 +1330,8 @@ static DEVICE_ATTR(lra_period, 0600, lra_period_show, NULL);
 static DEVICE_ATTR(status, 0600, status_show, NULL);
 static DEVICE_ATTR(ol_lra_period, 0660, ol_lra_period_show,
 		   ol_lra_period_store);
+static DEVICE_ATTR(lra_wave_shape, 0660, lra_wave_shape_show,
+		   lra_wave_shape_store);
 
 static struct attribute *drv2624_fs_attrs[] = {
 	&dev_attr_rtp_input.attr,
@@ -1311,6 +1347,7 @@ static struct attribute *drv2624_fs_attrs[] = {
 	&dev_attr_lra_period.attr,
 	&dev_attr_status.attr,
 	&dev_attr_ol_lra_period.attr,
+	&dev_attr_lra_wave_shape.attr,
 	NULL,
 };
 

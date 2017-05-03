@@ -158,3 +158,13 @@ Description:
 		This parameter sets and gets the frequency that will be used
 		to drive the LRA in open loop.
 
+What:		/sys/class/leds/vibrator/device/lra_wave_shape
+Date:		May 2017
+KernelVersion:	4.4
+Contact:	David Lin <dtwlin@google.com>
+Description:
+		Selects which shape to use for driving the LRA when in open
+		loop mode.
+
+		0 - Square Wave
+		1 - Sine Wave
