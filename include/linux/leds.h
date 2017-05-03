@@ -53,6 +53,7 @@ struct led_classdev {
 #define LED_HW_PLUGGABLE	(1 << 25)
 #define LED_PANIC_INDICATOR	(1 << 26)
 #define LED_KEEP_TRIGGER	(1 << 27)
+#define LED_BRIGHTNESS_FAST	(1 << 28)
 
 	/* Set LED brightness level
 	 * Must not sleep. Use brightness_set_blocking for drivers
