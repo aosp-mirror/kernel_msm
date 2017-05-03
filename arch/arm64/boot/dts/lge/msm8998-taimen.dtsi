@@ -202,6 +202,11 @@
 
 &firmware_android {
 	compatible = "android,firmware";
+	vbmeta {
+		compatible = "android,vbmeta";
+		parts = "vbmeta,boot,system,vendor,dtbo";
+		by_name_prefix = "/dev/block/platform/soc/1da4000.ufshc/by-name";
+	};
 	fstab {
 		compatible = "android,fstab";
 		vendor {
@@ -209,7 +214,7 @@
 			dev = "/dev/block/platform/soc/1da4000.ufshc/by-name/vendor";
 			type = "ext4";
 			mnt_flags = "ro,barrier=1";
-			fsmgr_flags = "wait,slotselect";
+			fsmgr_flags = "wait,slotselect,avb";
 		};
 	};
 };
