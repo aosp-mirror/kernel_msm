@@ -4132,6 +4132,46 @@ static void fg_cleanup(struct fg_chip *chip)
 	dev_set_drvdata(chip->dev, NULL);
 }
 
+/* TODO(b/37486656): Remove the WAR when bootloader change is
+ * integrated.
+ * WAR: b/37486656#comment17: Set bit(3) FG_SRAM_SP_SAT_CC_CLR_AUTO_BIT
+ * of SRAM address 0x13 FG_SRAM_SP_SAT_CC_CLR_AUTO_ADDR.
+ */
+static int fg_war_set_sp_sat_cc_clr_auto_bit(struct fg_chip *chip)
+{
+	u8 value;
+	int rc;
+
+	/* intentionally high verbosity */
+	dev_err(chip->dev, "Start WAR to set SP_SAT_CC_CLR_AUTO_BIT\n");
+	rc = fg_sram_read(chip, 0x13, 0, &value, 1, 0);
+	if (rc < 0) {
+		dev_err(chip->dev, "WAR: cannot read FG sram 0x13, rc=%d\n",
+			rc);
+		return rc;
+	}
+	dev_err(chip->dev, "WAR: 0x13 reg value: %#4x\n", value);
+	if (value & BIT(3)) {
+		dev_err(chip->dev, "WAR: Bit 3 has been set, no WAR needed\n");
+		return rc;
+	}
+	rc = fg_sram_masked_write(chip, 0x13, 0, BIT(3), BIT(3), 0);
+	if (rc < 0) {
+		dev_err(chip->dev, "WAR: cannot write FG sram 0x13, rc=%d\n",
+			rc);
+		return rc;
+	}
+	rc = fg_sram_read(chip, 0x13, 0, &value, 1, 0);
+	if (rc < 0) {
+		dev_err(chip->dev,
+			"WAR: cannot read after WAR FG sram 0x13, rc=%d\n",
+			rc);
+		return rc;
+	}
+	dev_err(chip->dev, "WAR: after WAR 0x13 reg value: %#4x\n", value);
+	return rc;
+}
+
 static int fg_gen3_probe(struct platform_device *pdev)
 {
 	struct fg_chip *chip;
@@ -4268,6 +4308,18 @@ static int fg_gen3_probe(struct platform_device *pdev)
 			rc);
 		goto exit;
 	}
+
+	/* TODO(b/37486656): Remove the WAR when bootloader change is
+	 * integrated.
+	 * WAR: b/37486656#comment17: Set bit(3) FG_SRAM_SP_SAT_CC_CLR_AUTO_BIT
+	 * of SRAM address 0x13 FG_SRAM_SP_SAT_CC_CLR_AUTO_ADDR.
+	 */
+	rc = fg_war_set_sp_sat_cc_clr_auto_bit(chip);
+	if (rc < 0)
+		dev_err(chip->dev,
+			"WAR to set CC_CLR_AUTO_BIT failed, rc=%d\n",
+			rc);
+	/* end of WAR */
 
 	rc = fg_get_battery_voltage(chip, &volt_uv);
 	if (!rc)
