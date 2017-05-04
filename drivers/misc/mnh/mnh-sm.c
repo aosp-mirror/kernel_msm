@@ -30,6 +30,7 @@
 #include <linux/kobject.h>
 #include <linux/ktime.h>
 #include <linux/kthread.h>
+#include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/platform_device.h>
@@ -1548,6 +1549,12 @@ const struct file_operations mnh_sm_fops = {
 	.release = mnh_sm_close
 };
 
+struct miscdevice mnh_sm_miscdevice = {
+	.minor = MISC_DYNAMIC_MINOR,
+	.name = DEVICE_NAME,
+	.fops = &mnh_sm_fops,
+};
+
 static int mnh_sm_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -1586,13 +1593,6 @@ static int mnh_sm_probe(struct platform_device *pdev)
 	init_completion(&mnh_sm_dev->work_complete);
 	init_completion(&mnh_sm_dev->suspend_complete);
 
-	/* allocate character device region */
-	error = alloc_chrdev_region(&mnh_sm_dev->dev_num, 0, 1, DEVICE_NAME);
-	if (error < 0) {
-		dev_err(dev, "alloc_chrdev_region failed (%d)\n", error);
-		return error;
-	}
-
 	/* Get ION buffer */
 	mnh_sm_dev->ion = devm_kzalloc(dev, sizeof(struct mnh_ion),
 					   GFP_KERNEL);
@@ -1603,54 +1603,13 @@ static int mnh_sm_probe(struct platform_device *pdev)
 				 __func__);
 	}
 
-	/* initialize cdev */
-	cdev_init(&mnh_sm_dev->cdev, &mnh_sm_fops);
-
-	/* add cdev to kernel */
-	error = cdev_add(&mnh_sm_dev->cdev, mnh_sm_dev->dev_num, 1);
-	if (error) {
-		dev_err(dev, "cdev_add failed (%d)\n", error);
-		goto fail_cdev_add;
-	}
-
-	/* Register the device class */
-	mnh_sm_dev->dev_class = class_create(THIS_MODULE, DEVICE_NAME);
-	if (IS_ERR(mnh_sm_dev->dev_class)) {
-		dev_err(mnh_sm_dev->dev,
-			"%s: class_create failed (%ld)\n",
-			__func__, PTR_ERR(mnh_sm_dev->dev_class));
-		error = PTR_ERR(mnh_sm_dev->dev_class);
-		goto fail_create_class;
-	}
-
-	mnh_sm_dev->chardev =
-		device_create(mnh_sm_dev->dev_class, NULL,
-			      MKDEV(MAJOR(mnh_sm_dev->dev_num), 0), NULL,
-			      DEVICE_NAME);
-	if (IS_ERR(mnh_sm_dev->chardev)) {
-		dev_err(mnh_sm_dev->dev,
-			"%s: device_create failed (%ld)\n",
-			__func__, PTR_ERR(mnh_sm_dev->chardev));
-		error = PTR_ERR(mnh_sm_dev->chardev);
-		goto fail_device_create;
-	}
-
-	dev_dbg(dev, "char driver %s added", DEVICE_NAME);
-
-	/* create sysfs group */
-	error = sysfs_create_group(&dev->kobj, &mnh_sm_group);
-	if (error) {
-		dev_err(dev, "failed to create sysfs group\n");
-		goto fail_sysfs_create_group;
-	}
-
 	/* get ready gpio */
 	mnh_sm_dev->ready_gpio = devm_gpiod_get(dev, "ready", GPIOD_IN);
 	if (IS_ERR(mnh_sm_dev->ready_gpio)) {
 		dev_err(dev, "%s: could not get ready gpio (%ld)\n",
 			__func__, PTR_ERR(mnh_sm_dev->ready_gpio));
 		error = PTR_ERR(mnh_sm_dev->ready_gpio);
-		goto fail_mnh_pwr_init;
+		goto fail_probe_0;
 	}
 	mnh_sm_dev->ready_irq = gpiod_to_irq(mnh_sm_dev->ready_gpio);
 
@@ -1663,7 +1622,7 @@ static int mnh_sm_probe(struct platform_device *pdev)
 	if (error) {
 		dev_err(dev, "%s: could not get ready irq (%d)\n", __func__,
 			error);
-		goto fail_mnh_pwr_init;
+		goto fail_probe_0;
 	}
 	disable_irq(mnh_sm_dev->ready_irq);
 
@@ -1674,7 +1633,7 @@ static int mnh_sm_probe(struct platform_device *pdev)
 		dev_err(dev, "%s: could not get ddr_pad_iso_n gpio (%ld)\n",
 			__func__, PTR_ERR(mnh_sm_dev->ddr_pad_iso_n_pin));
 		error = PTR_ERR(mnh_sm_dev->ddr_pad_iso_n_pin);
-		goto fail_mnh_pwr_init;
+		goto fail_probe_0;
 	}
 
 	/* initialize mnh-pwr and get resources there */
@@ -1683,26 +1642,37 @@ static int mnh_sm_probe(struct platform_device *pdev)
 	disable_irq(mnh_sm_dev->ready_irq);
 	if (error) {
 		dev_err(dev, "failed to initialize mnh-pwr (%d)\n", error);
-		goto fail_mnh_pwr_init;
+		goto fail_probe_0;
 	}
 
 	/* initialize mnh-clk driver */
 	mnh_clk_init(dev, HWIO_SCU_BASE_ADDR);
 
+	/* create char driver */
+	error = misc_register(&mnh_sm_miscdevice);
+	if (error) {
+		dev_err(mnh_sm_dev->dev,
+			"%s: failed to create char device (%d)\n",
+			__func__, error);
+		goto fail_probe_0;
+	}
+
+	dev_dbg(dev, "char driver %s added", DEVICE_NAME);
+
+	/* create sysfs group */
+	error = sysfs_create_group(&dev->kobj, &mnh_sm_group);
+	if (error) {
+		dev_err(dev, "failed to create sysfs group\n");
+		goto fail_probe_1;
+	}
+
 	dev_info(dev, "MNH SM initialized successfully\n");
 
 	return 0;
 
-fail_mnh_pwr_init:
-	sysfs_remove_group(&dev->kobj, &mnh_sm_group);
-fail_sysfs_create_group:
-	device_destroy(mnh_sm_dev->dev_class,
-		       MKDEV(MAJOR(mnh_sm_dev->dev_num), 0));
-fail_device_create:
-	class_destroy(mnh_sm_dev->dev_class);
-fail_create_class:
-	cdev_del(&mnh_sm_dev->cdev);
-fail_cdev_add:
+fail_probe_1:
+	misc_deregister(&mnh_sm_miscdevice);
+fail_probe_0:
 	mnh_ion_destroy_buffer(mnh_sm_dev->ion);
 	devm_kfree(dev, mnh_sm_dev->ion);
 	mnh_sm_dev->ion = NULL;
