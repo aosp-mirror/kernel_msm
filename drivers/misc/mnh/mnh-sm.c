@@ -192,7 +192,7 @@ enum {
 	MNH_POWER_MODE_AXI_CG_ENABLE = 1 << 2,
 };
 static uint32_t mnh_power_mode = MNH_POWER_MODE_CLKPM_ENABLE |
-	MNH_POWER_MODE_L1_2_ENABLE | MNH_POWER_MODE_AXI_CG_ENABLE;
+	MNH_POWER_MODE_L1_2_ENABLE;
 
 /* callback when easel enters and leaves the active state */
 static hotplug_cb_t mnh_hotplug_cb;
