@@ -3235,35 +3235,6 @@ static bool dwc3_is_root_hub_direct_child(struct usb_device *udev,
 	       udev->dev.parent->parent == &dwc->xhci->dev;
 }
 
-static bool dwc3_device_has_audio_interface(struct usb_device *udev)
-{
-	struct usb_host_config *conf;
-	int num_configs = udev->descriptor.bNumConfigurations;
-	int i, j, k;
-	struct usb_interface *intf;
-	struct usb_host_interface *altsetting;
-
-	for (i = 0, conf = udev->config; i < num_configs && conf;
-		(i++, conf++)) {
-		for (j = 0; j < USB_MAXINTERFACES; j++) {
-			intf = conf->interface[j];
-			if (!intf)
-				break;
-			for (k = 0, altsetting = intf->altsetting;
-				k < intf->num_altsetting && altsetting;
-				k++, altsetting++) {
-				if (altsetting->desc.bInterfaceClass
-					== USB_CLASS_AUDIO) {
-					dev_info(&udev->dev,
-						"Audio interface found");
-					return true;
-				}
-			}
-		}
-	}
-	return false;
-}
-
 #define USE_EXTERNAL_VBUS_THRESHOLD_MA 600
 static bool dwc3_use_external_vbus_booster(struct usb_device *udev,
 					   struct dwc3 *dwc)
@@ -3279,11 +3250,9 @@ static bool dwc3_use_external_vbus_booster(struct usb_device *udev,
 		max_power = udev->actconfig->desc.bMaxPower * 2;
 
 	if (dwc3_is_root_hub_direct_child(udev, dwc) &&
-		udev->descriptor.bDeviceClass != USB_CLASS_HUB &&
-		max_power < USE_EXTERNAL_VBUS_THRESHOLD_MA &&
-		dwc3_device_has_audio_interface(udev)) {
+	    udev->descriptor.bDeviceClass != USB_CLASS_HUB &&
+	    max_power < USE_EXTERNAL_VBUS_THRESHOLD_MA)
 		return true;
-	}
 
 	return false;
 }
