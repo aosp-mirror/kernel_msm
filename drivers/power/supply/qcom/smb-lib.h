@@ -62,6 +62,8 @@ enum print_reason {
 #define AICL_RERUN_VOTER		"AICL_RERUN_VOTER"
 #define LEGACY_UNKNOWN_VOTER		"LEGACY_UNKNOWN_VOTER"
 #define CC2_WA_VOTER			"CC2_WA_VOTER"
+#define QNOVO_VOTER			"QNOVO_VOTER"
+#define BATT_PROFILE_VOTER		"BATT_PROFILE_VOTER"
 
 #define VCONN_MAX_ATTEMPTS	3
 #define OTG_MAX_ATTEMPTS	3
@@ -242,6 +244,8 @@ struct smb_charger {
 	struct power_supply		*bms_psy;
 	struct power_supply_desc	usb_psy_desc;
 	struct power_supply		*usb_main_psy;
+	struct power_supply		*usb_port_psy;
+	enum power_supply_type		real_charger_type;
 
 	/* notifiers */
 	struct notifier_block	nb;
@@ -314,6 +318,7 @@ struct smb_charger {
 	bool			typec_present;
 	u8			typec_status[5];
 	bool			typec_legacy_valid;
+	int			fake_input_current_limited;
 
 	/* workaround flag */
 	u32			wa_flags;
@@ -325,9 +330,11 @@ struct smb_charger {
 	/* extcon for VBUS / ID notification to USB for uUSB */
 	struct extcon_dev	*extcon;
 
+	/* battery profile */
+	int			batt_profile_fcc_ua;
+	int			batt_profile_fv_uv;
+
 	/* qnovo */
-	int			qnovo_fcc_ua;
-	int			qnovo_fv_uv;
 	int			usb_icl_delta_ua;
 	int			pulse_cnt;
 };
@@ -415,6 +422,8 @@ int smblib_set_prop_batt_capacity(struct smb_charger *chg,
 				const union power_supply_propval *val);
 int smblib_set_prop_system_temp_level(struct smb_charger *chg,
 				const union power_supply_propval *val);
+int smblib_set_prop_input_current_limited(struct smb_charger *chg,
+				const union power_supply_propval *val);
 
 int smblib_get_prop_dc_present(struct smb_charger *chg,
 				union power_supply_propval *val);
@@ -493,6 +502,7 @@ int smblib_icl_override(struct smb_charger *chg, bool override);
 int smblib_dp_dm(struct smb_charger *chg, int val);
 int smblib_rerun_aicl(struct smb_charger *chg);
 int smblib_set_icl_current(struct smb_charger *chg, int icl_ua);
+int smblib_get_icl_current(struct smb_charger *chg, int *icl_ua);
 int smblib_get_charge_current(struct smb_charger *chg, int *total_current_ua);
 
 int smblib_init(struct smb_charger *chg);
