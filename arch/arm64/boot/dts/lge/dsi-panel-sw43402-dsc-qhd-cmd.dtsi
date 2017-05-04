@@ -101,7 +101,7 @@
 		qcom,mdss-dsi-lp-change-state = "dsi_hs_mode";
 		qcom,mode-control-dsi-state = "dsi_lp_mode";
 		qcom,mdss-pan-physical-width-dimension = <68>;
-		qcom,mdss-pan-physical-height-dimension = <121>;
+		qcom,mdss-pan-physical-height-dimension = <136>;
 
 		qcom,compression-mode = "dsc";
 		qcom,config-select = <&dsi_sw43402_dsc_cmd_config0>;
