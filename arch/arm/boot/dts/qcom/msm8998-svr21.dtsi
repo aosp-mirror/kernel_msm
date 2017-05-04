@@ -637,3 +637,25 @@
 &pmi8998_fg {
 	qcom,battery-data = <&svr21_batterydata>;
 };
+
+/ {
+	reserved-memory {
+		ramoops_mem: ramoops_region@0 {
+			compatible = "removed-dma-pool";
+			no-map;
+			reg = <0 0x88f00000 0 0x00100000>;
+		};
+    };
+};
+
+&soc {
+	ramoops {
+		compatible = "ramoops";
+		status = "ok";
+		console-size = <0 0x00080000>;
+		pmsg-size = <0 0x00040000>;
+		record-size = <0 0x00008000>;
+		ftrace-size = <0 0x00020000>;
+		memory-region = <&ramoops_mem>;
+	};
+};
