@@ -1508,8 +1508,8 @@ static long mnh_sm_ioctl(struct file *file, unsigned int cmd,
 static irqreturn_t mnh_sm_ready_irq_handler(int irq, void *cookie)
 {
 	if (gpiod_get_value(mnh_sm_dev->ready_gpio)) {
-		dev_dbg(mnh_sm_dev->dev, "%s: mnh device is ready to boot\n",
-			__func__);
+		dev_info(mnh_sm_dev->dev, "%s: mnh device is ready to boot\n",
+			 __func__);
 		reinit_completion(&mnh_sm_dev->suspend_complete);
 	} else {
 		dev_dbg(mnh_sm_dev->dev, "%s: mnh device is ready to suspend\n",
@@ -1678,7 +1678,9 @@ static int mnh_sm_probe(struct platform_device *pdev)
 	}
 
 	/* initialize mnh-pwr and get resources there */
+	enable_irq(mnh_sm_dev->ready_irq);
 	error = mnh_pwr_init(dev);
+	disable_irq(mnh_sm_dev->ready_irq);
 	if (error) {
 		dev_err(dev, "failed to initialize mnh-pwr (%d)\n", error);
 		goto fail_mnh_pwr_init;
