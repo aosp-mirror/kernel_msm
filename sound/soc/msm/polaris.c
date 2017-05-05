@@ -131,6 +131,7 @@ struct mi2s_aux_pcm_common_conf {
 struct mi2s_conf {
 	struct mutex lock;
 	int clock_owner_stream;
+	int clock_started;
 	u32 msm_is_mi2s_master;
 };
 
@@ -3935,9 +3936,10 @@ static int msm_mi2s_snd_hw_params(struct snd_pcm_substream *substream,
 	int index = cpu_dai->id;
 
 	dev_dbg(rtd->card->dev,
-		"%s: substream = %s  stream = %d, dai name %s, dai ID %d\n",
+		"%s: substream = %s  stream = %d, dai name %s, dai ID %d, clkowner: %d\n",
 		__func__, substream->name, substream->stream,
-		cpu_dai->name, cpu_dai->id);
+		cpu_dai->name, cpu_dai->id,
+		mi2s_intf_conf[index].clock_owner_stream);
 
 	/*
 	 * Mutex protection in case the same MI2S
@@ -3952,6 +3954,7 @@ static int msm_mi2s_snd_hw_params(struct snd_pcm_substream *substream,
 				"%s: afe lpass clock failed to enable MI2S clock, err:%d\n",
 				__func__, ret);
 		}
+		mi2s_intf_conf[index].clock_started = ret == 0;
 	}
 	mutex_unlock(&mi2s_intf_conf[index].lock);
 	return ret;
@@ -3963,8 +3966,10 @@ static void msm_mi2s_snd_shutdown(struct snd_pcm_substream *substream)
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	int index = rtd->cpu_dai->id;
 
-	pr_debug("%s(): substream = %s  stream = %d\n", __func__,
-		 substream->name, substream->stream);
+	pr_debug("%s(): substream = %s  stream = %d  clk ownr: %d  strtd: %d\n",
+		 __func__, substream->name, substream->stream,
+		 mi2s_intf_conf[index].clock_owner_stream,
+		 mi2s_intf_conf[index].clock_started);
 	if (index < PRIM_MI2S || index > QUAT_MI2S) {
 		pr_err("%s:invalid MI2S DAI(%d)\n", __func__, index);
 		return;
@@ -3973,10 +3978,12 @@ static void msm_mi2s_snd_shutdown(struct snd_pcm_substream *substream)
 	mutex_lock(&mi2s_intf_conf[index].lock);
 	if (mi2s_intf_conf[index].clock_owner_stream == substream->stream) {
 		mi2s_intf_conf[index].clock_owner_stream = -1;
-		ret = msm_mi2s_set_sclk(substream, NULL);
-		if (ret < 0) {
-			pr_err("%s:clock disable failed for MI2S (%d); ret=%d\n",
-				__func__, index, ret);
+		if (mi2s_intf_conf[index].clock_started) {
+			mi2s_intf_conf[index].clock_started = 0;
+			ret = msm_mi2s_set_sclk(substream, NULL);
+			if (ret < 0)
+				pr_err("%s:clock disable failed for MI2S (%d); ret=%d\n",
+					__func__, index, ret);
 		}
 	}
 	mutex_unlock(&mi2s_intf_conf[index].lock);
