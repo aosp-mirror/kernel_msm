@@ -1455,8 +1455,14 @@ int check_TP_ID(char *buf, ssize_t buf_len, u8 tp_id) {
 
 	switch(tp_id) {
 		case TP_ID_FNW1_BLACK_ORIGIN:
-		case TP_ID_DLW1:
+		case TP_ID_1:
 			buf_len += sprintf(buf + buf_len, "TP is DLW1\n");
+			break;
+		case TP_ID_2:
+			buf_len += sprintf(buf + buf_len, "TP is DLW2\n");
+			break;
+		case TP_ID_3:
+			buf_len += sprintf(buf + buf_len, "TP is DLW3\n");
 			break;
 		default:
 			buf_len += sprintf(buf + buf_len, "TP isn't correct\n");

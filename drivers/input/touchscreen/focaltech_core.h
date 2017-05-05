@@ -171,7 +171,9 @@
 /* Factory END*/
 
 #define TP_ID_FNW1_BLACK_ORIGIN 0xcb
-#define TP_ID_DLW1 0x73
+#define TP_ID_1 0x73
+#define TP_ID_2 0x7a
+#define TP_ID_3 0x7b
 #define TP_INI_FILE_FNW1 "FT3207_20160613_FNW_HOST_F02_V02_OnlyTest.ini"
 #define FTS_GESTURE_SETTING_ADRESS	0xD0
 #define FTS_GESTURE_OUTPUT_ADRESS	0xD3
