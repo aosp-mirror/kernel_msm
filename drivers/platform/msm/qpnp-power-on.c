@@ -867,6 +867,7 @@ static irqreturn_t qpnp_cblpwr_irq(int irq, void *_pon)
 		if (usb_psy == NULL) {
 			pr_err("qpnp_cblpwr_irq can't find usb device \n");
 		} else {
+			mdelay(1000);
 			power_supply_set_present(usb_psy, vbus);
 			pr_err("qpnp_cblpwr_irq set usb present: %d \n", vbus);
 		}
