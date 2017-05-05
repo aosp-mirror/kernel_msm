@@ -145,6 +145,8 @@ struct msm_ipc_port {
 	unsigned long num_tx_bytes;
 	unsigned long num_rx_bytes;
 	void *priv;
+	uid_t dbg_orig_uid;
+	uint32_t dbg_last_svcid;
 };
 
 #ifdef CONFIG_IPC_ROUTER

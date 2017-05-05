@@ -356,6 +356,12 @@ static void ipc_router_log_msg(void *log_ctx, uint32_t xchng_type,
 			svcId = rport_ptr->server->name.service;
 			svcIns = rport_ptr->server->name.instance;
 			port_type = CLIENT_PORT;
+			port_ptr->dbg_last_svcid = svcId;
+			if (xchng_type == IPC_ROUTER_LOG_EVENT_RX) {
+				port_ptr->num_rx_bytes += hdr->size;
+			} else if (xchng_type == IPC_ROUTER_LOG_EVENT_TX) {
+				port_ptr->num_tx_bytes += hdr->size;
+			}
 		} else if (port_ptr && (port_ptr->type == SERVER_PORT)) {
 			svcId = port_ptr->port_name.service;
 			svcIns = port_ptr->port_name.instance;
@@ -1319,8 +1325,9 @@ struct msm_ipc_port *msm_ipc_router_create_raw_port(void *endpoint,
 	mutex_init(&port_ptr->port_rx_q_lock_lhc3);
 	init_waitqueue_head(&port_ptr->port_rx_wait_q);
 	snprintf(port_ptr->rx_ws_name, MAX_WS_NAME_SZ,
-		 "ipc%08x_%s",
+		 "ipc%08x_%d_%s",
 		 port_ptr->this_port.port_id,
+		 task_pid_nr(current),
 		 current->comm);
 	port_ptr->port_rx_ws = wakeup_source_register(port_ptr->rx_ws_name);
 	if (!port_ptr->port_rx_ws) {
@@ -1333,6 +1340,7 @@ struct msm_ipc_port *msm_ipc_router_create_raw_port(void *endpoint,
 	port_ptr->endpoint = endpoint;
 	port_ptr->notify = notify;
 	port_ptr->priv = priv;
+	port_ptr->dbg_orig_uid = current->cred->uid.val;
 
 	msm_ipc_router_add_local_port(port_ptr);
 	if (endpoint)
@@ -3857,16 +3865,23 @@ static void dump_local_ports(struct seq_file *s)
 	int j;
 	struct msm_ipc_port *port_ptr;
 
-	seq_printf(s, "%-11s|%-11s|\n",
-			"Node_id", "Port_id");
-	seq_puts(s, "------------------------------------------------------------\n");
+	seq_printf(s, "%-11s|%-11s|%-32s|%-11s|%-11s|%-11s|%-11s|\n",
+		   "Node_id", "Port_id", "Wakelock", "Tx", "Rx",
+		   "Last SVCID", "UID");
+	seq_puts(s, "-----------------------------------------------------------");
+	seq_puts(s, "----------------------------------------------\n");
 	down_read(&local_ports_lock_lhc2);
 	for (j = 0; j < LP_HASH_SIZE; j++) {
 		list_for_each_entry(port_ptr, &local_ports[j], list) {
 			mutex_lock(&port_ptr->port_lock_lhc3);
-			seq_printf(s, "0x%08x |0x%08x |\n",
-				       port_ptr->this_port.node_id,
-				       port_ptr->this_port.port_id);
+			seq_printf(s, "0x%08x |0x%08x |%-32s|%10lu |%10lu |0x%08x |%10u |\n",
+				   port_ptr->this_port.node_id,
+				   port_ptr->this_port.port_id,
+				   port_ptr->rx_ws_name,
+				   port_ptr->num_tx_bytes,
+				   port_ptr->num_rx_bytes,
+				   port_ptr->dbg_last_svcid,
+				   port_ptr->dbg_orig_uid);
 			mutex_unlock(&port_ptr->port_lock_lhc3);
 		}
 	}
