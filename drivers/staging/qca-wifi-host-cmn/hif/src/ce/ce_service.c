@@ -128,6 +128,7 @@ struct hif_ce_desc_event hif_ce_desc_history[CE_COUNT_MAX][HIF_CE_HISTORY_MAX];
 static int get_next_record_index(qdf_atomic_t *table_index, int array_size)
 {
 	int record_index = qdf_atomic_inc_return(table_index);
+
 	if (record_index == array_size)
 		qdf_atomic_sub(array_size, table_index);
 
@@ -287,6 +288,7 @@ void war_ce_src_ring_write_idx_set(struct hif_softc *scn,
 				      (CDC_WAR_MAGIC_STR | write_index));
 		} else {
 			unsigned long irq_flags;
+
 			local_irq_save(irq_flags);
 			hif_write32_mb(indicator_addr, 1);
 
@@ -457,6 +459,7 @@ unsigned int ce_sendlist_sizeof(void)
 void ce_sendlist_init(struct ce_sendlist *sendlist)
 {
 	struct ce_sendlist_s *sl = (struct ce_sendlist_s *)sendlist;
+
 	sl->num_items = 0;
 }
 
@@ -618,9 +621,9 @@ int ce_send_fast(struct CE_handle *copyeng, qdf_nbuf_t msdu,
 	uint32_t user_flags;
 	enum hif_ce_event_type type = FAST_TX_SOFTWARE_INDEX_UPDATE;
 
-	qdf_spin_lock_bh(&ce_state->ce_index_lock);
 	Q_TARGET_ACCESS_BEGIN(scn);
 
+	qdf_spin_lock_bh(&ce_state->ce_index_lock);
 	src_ring->sw_index = CE_SRC_RING_READ_IDX_GET_FROM_DDR(scn, ctrl_addr);
 	write_index = src_ring->write_index;
 	sw_index = src_ring->sw_index;
@@ -716,14 +719,9 @@ int ce_send_fast(struct CE_handle *copyeng, qdf_nbuf_t msdu,
 		src_ring->per_transfer_context[write_index] = msdu;
 		write_index = CE_RING_IDX_INCR(nentries_mask, write_index);
 
-		DPTRACE(qdf_dp_trace(msdu,
-			QDF_DP_TRACE_CE_FAST_PACKET_PTR_RECORD,
-			qdf_nbuf_data_addr(msdu),
-			sizeof(qdf_nbuf_data(msdu)), QDF_TX));
 	}
 
 	src_ring->write_index = write_index;
-
 	if (hif_pm_runtime_get(hif_hdl) == 0) {
 		if (qdf_likely(ce_state->state == CE_RUNNING)) {
 			type = FAST_TX_WRITE_INDEX_UPDATE;
@@ -733,11 +731,19 @@ int ce_send_fast(struct CE_handle *copyeng, qdf_nbuf_t msdu,
 			ce_state->state = CE_PENDING;
 		hif_pm_runtime_put(hif_hdl);
 	}
+	qdf_spin_unlock_bh(&ce_state->ce_index_lock);
+
+	DPTRACE(qdf_dp_trace(msdu,
+			QDF_DP_TRACE_CE_FAST_PACKET_PTR_RECORD,
+			qdf_nbuf_data_addr(msdu),
+			sizeof(qdf_nbuf_data(msdu)), QDF_TX));
+
+
 	hif_record_ce_desc_event(scn, ce_state->id, type,
 				 NULL, NULL, write_index);
 
 	Q_TARGET_ACCESS_END(scn);
-	qdf_spin_unlock_bh(&ce_state->ce_index_lock);
+
 
 	/* sent 1 packet */
 	return 1;
@@ -1223,9 +1229,8 @@ ce_completed_recv_next_nolock(struct CE_state *CE_state,
 	*transfer_idp = dest_desc_info.meta_data;
 	*flagsp = (dest_desc_info.byte_swap) ? CE_RECV_FLAG_SWAPPED : 0;
 
-	if (per_CE_contextp) {
+	if (per_CE_contextp)
 		*per_CE_contextp = CE_state->recv_context;
-	}
 
 	if (per_transfer_contextp) {
 		*per_transfer_contextp =
@@ -1279,9 +1284,8 @@ ce_revoke_recv_next(struct CE_handle *copyeng,
 
 	CE_state = (struct CE_state *)copyeng;
 	dest_ring = CE_state->dest_ring;
-	if (!dest_ring) {
+	if (!dest_ring)
 		return QDF_STATUS_E_FAILURE;
-	}
 
 	scn = CE_state->scn;
 	qdf_spin_lock(&CE_state->ce_index_lock);
@@ -1298,9 +1302,8 @@ ce_revoke_recv_next(struct CE_handle *copyeng,
 		/* Return data from completed destination descriptor */
 		*bufferp = HIF_CE_DESC_ADDR_TO_DMA(dest_desc);
 
-		if (per_CE_contextp) {
+		if (per_CE_contextp)
 			*per_CE_contextp = CE_state->recv_context;
-		}
 
 		if (per_transfer_contextp) {
 			*per_transfer_contextp =
@@ -1392,9 +1395,8 @@ ce_completed_send_next_nolock(struct CE_state *CE_state,
 #else
 		*toeplitz_hash_result = 0;
 #endif
-		if (per_CE_contextp) {
+		if (per_CE_contextp)
 			*per_CE_contextp = CE_state->send_context;
-		}
 
 		if (per_transfer_contextp) {
 			*per_transfer_contextp =
@@ -1431,9 +1433,8 @@ ce_cancel_send_next(struct CE_handle *copyeng,
 
 	CE_state = (struct CE_state *)copyeng;
 	src_ring = CE_state->src_ring;
-	if (!src_ring) {
+	if (!src_ring)
 		return QDF_STATUS_E_FAILURE;
-	}
 
 	scn = CE_state->scn;
 	qdf_spin_lock(&CE_state->ce_index_lock);
@@ -1457,9 +1458,8 @@ ce_cancel_send_next(struct CE_handle *copyeng,
 		*toeplitz_hash_result = 0;
 #endif
 
-		if (per_CE_contextp) {
+		if (per_CE_contextp)
 			*per_CE_contextp = CE_state->send_context;
-		}
 
 		if (per_transfer_contextp) {
 			*per_transfer_contextp =
@@ -1642,7 +1642,7 @@ static void ce_fastpath_rx_handle(struct CE_state *ce_state,
 
 #define MSG_FLUSH_NUM 32
 /**
- * ce_per_engine_service_fast() - CE handler routine to service fastpath messages
+ * ce_per_engine_service_fast() - CE handler routine to service fastpath msgs
  * @scn: hif_context
  * @ce_id: Copy engine ID
  * 1) Go through the CE ring, and find the completions
@@ -2024,9 +2024,8 @@ more_watermarks:
 	if (CE_state->misc_cbs) {
 		CE_int_status = CE_ENGINE_INT_STATUS_GET(scn, ctrl_addr);
 		if (CE_int_status & CE_WATERMARK_MASK) {
-			if (CE_state->watermark_cb) {
+			if (CE_state->watermark_cb)
 				goto more_watermarks;
-			}
 		}
 	}
 
@@ -2057,6 +2056,7 @@ void ce_per_engine_service_any(int irq, struct hif_softc *scn)
 	if (!qdf_atomic_read(&scn->tasklet_from_intr)) {
 		for (CE_id = 0; CE_id < scn->ce_count; CE_id++) {
 			struct CE_state *CE_state = scn->ce_id_to_state[CE_id];
+
 			if (qdf_atomic_read(&CE_state->rx_pending)) {
 				qdf_atomic_set(&CE_state->rx_pending, 0);
 				ce_per_engine_service(scn, CE_id);
@@ -2070,11 +2070,10 @@ void ce_per_engine_service_any(int irq, struct hif_softc *scn)
 	intr_summary = CE_INTERRUPT_SUMMARY(scn);
 
 	for (CE_id = 0; intr_summary && (CE_id < scn->ce_count); CE_id++) {
-		if (intr_summary & (1 << CE_id)) {
+		if (intr_summary & (1 << CE_id))
 			intr_summary &= ~(1 << CE_id);
-		} else {
+		else
 			continue;       /* no intr pending on this CE */
-		}
 
 		ce_per_engine_service(scn, CE_id);
 	}
@@ -2102,17 +2101,15 @@ ce_per_engine_handler_adjust(struct CE_state *CE_state,
 		return;
 
 	if ((!disable_copy_compl_intr) &&
-	    (CE_state->send_cb || CE_state->recv_cb)) {
+	    (CE_state->send_cb || CE_state->recv_cb))
 		CE_COPY_COMPLETE_INTR_ENABLE(scn, ctrl_addr);
-	} else {
+	else
 		CE_COPY_COMPLETE_INTR_DISABLE(scn, ctrl_addr);
-	}
 
-	if (CE_state->watermark_cb) {
+	if (CE_state->watermark_cb)
 		CE_WATERMARK_INTR_ENABLE(scn, ctrl_addr);
-	} else {
+	 else
 		CE_WATERMARK_INTR_DISABLE(scn, ctrl_addr);
-	}
 	Q_TARGET_ACCESS_END(scn);
 }
 
@@ -2132,13 +2129,11 @@ void ce_disable_any_copy_compl_intr_nolock(struct hif_softc *scn)
 
 		/* if the interrupt is currently enabled, disable it */
 		if (!CE_state->disable_copy_compl_intr
-		    && (CE_state->send_cb || CE_state->recv_cb)) {
+		    && (CE_state->send_cb || CE_state->recv_cb))
 			CE_COPY_COMPLETE_INTR_DISABLE(scn, ctrl_addr);
-		}
 
-		if (CE_state->watermark_cb) {
+		if (CE_state->watermark_cb)
 			CE_WATERMARK_INTR_DISABLE(scn, ctrl_addr);
-		}
 	}
 	Q_TARGET_ACCESS_END(scn);
 }
@@ -2160,13 +2155,11 @@ void ce_enable_any_copy_compl_intr_nolock(struct hif_softc *scn)
 		 * "disable" flag is not set), then re-enable the interrupt.
 		 */
 		if (!CE_state->disable_copy_compl_intr
-		    && (CE_state->send_cb || CE_state->recv_cb)) {
+		    && (CE_state->send_cb || CE_state->recv_cb))
 			CE_COPY_COMPLETE_INTR_ENABLE(scn, ctrl_addr);
-		}
 
-		if (CE_state->watermark_cb) {
+		if (CE_state->watermark_cb)
 			CE_WATERMARK_INTR_ENABLE(scn, ctrl_addr);
-		}
 	}
 	Q_TARGET_ACCESS_END(scn);
 }
@@ -2246,9 +2239,8 @@ ce_watermark_cb_register(struct CE_handle *copyeng,
 	CE_state->watermark_cb = fn_ptr;
 	CE_state->wm_context = CE_wm_context;
 	ce_per_engine_handler_adjust(CE_state, 0);
-	if (fn_ptr) {
+	if (fn_ptr)
 		CE_state->misc_cbs = 1;
-	}
 }
 
 bool ce_get_rx_pending(struct hif_softc *scn)
@@ -2257,6 +2249,7 @@ bool ce_get_rx_pending(struct hif_softc *scn)
 
 	for (CE_id = 0; CE_id < scn->ce_count; CE_id++) {
 		struct CE_state *CE_state = scn->ce_id_to_state[CE_id];
+
 		if (qdf_atomic_read(&CE_state->rx_pending))
 			return true;
 	}
@@ -2329,7 +2322,6 @@ void ce_ipa_get_resource(struct CE_handle *ce,
 		sizeof(struct CE_src_desc));
 	*ce_reg_paddr = phy_mem_base + CE_BASE_ADDRESS(CE_state->id) +
 			SR_WR_INDEX_ADDRESS;
-	return;
 }
 #endif /* IPA_OFFLOAD */
 

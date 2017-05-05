@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -402,8 +402,8 @@ epping_adapter_t *epping_add_adapter(epping_context_t *pEpping_ctx,
 int epping_connect_service(epping_context_t *pEpping_ctx)
 {
 	int status, i;
-	HTC_SERVICE_CONNECT_REQ connect;
-	HTC_SERVICE_CONNECT_RESP response;
+	struct htc_service_connect_req connect;
+	struct htc_service_connect_resp response;
 
 	qdf_mem_zero(&connect, sizeof(connect));
 	qdf_mem_zero(&response, sizeof(response));
@@ -434,6 +434,10 @@ int epping_connect_service(epping_context_t *pEpping_ctx)
 		EPPING_LOG(QDF_TRACE_LEVEL_FATAL,
 			   "Failed to connect to Endpoint Ping BE service status:%d\n",
 			   status);
+
+		if (!cds_is_fw_down())
+			QDF_BUG(0);
+
 		return status;
 	} else {
 		EPPING_LOG(QDF_TRACE_LEVEL_FATAL,
@@ -448,6 +452,10 @@ int epping_connect_service(epping_context_t *pEpping_ctx)
 		EPPING_LOG(QDF_TRACE_LEVEL_FATAL,
 			   "Failed to connect to Endpoint Ping BK service status:%d\n",
 			   status);
+
+		if (!cds_is_fw_down())
+			QDF_BUG(0);
+
 		return status;
 	} else {
 		EPPING_LOG(QDF_TRACE_LEVEL_FATAL,

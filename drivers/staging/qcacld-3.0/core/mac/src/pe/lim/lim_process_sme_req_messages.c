@@ -64,6 +64,7 @@
 
 #include <lim_ft.h>
 #include "cds_regdomain.h"
+#include "lim_process_fils.h"
 
 /*
  * This overhead is time for sending NOA start to host in case of GO/sending
@@ -458,7 +459,7 @@ static uint16_t __lim_get_sme_join_req_size_for_alloc(uint8_t *pBuf)
 
 	pBuf += sizeof(uint16_t);
 	len = lim_get_u16(pBuf);
-	return len + sizeof(uint16_t);
+	return len;
 }
 
 /**
@@ -546,6 +547,7 @@ static bool __lim_process_sme_sys_ready_ind(tpAniSirGlobal pMac, uint32_t *pMsgB
 		ready_req->pe_roam_synch_cb = pe_roam_synch_callback;
 		pe_register_callbacks_with_wma(pMac, ready_req);
 		pMac->lim.add_bssdescr_callback = ready_req->add_bssdescr_cb;
+		pMac->lim.sme_msg_callback = ready_req->sme_msg_cb;
 	}
 	pe_debug("sending WMA_SYS_READY_IND msg to HAL");
 	MTRACE(mac_trace_msg_tx(pMac, NO_SESSION, msg.type));
@@ -1197,11 +1199,6 @@ static QDF_STATUS lim_send_hal_start_scan_offload_req(tpAniSirGlobal pMac,
 	tSirRetStatus status, rc = eSIR_SUCCESS;
 	tDot11fIEExtCap extracted_extcap = {0};
 	bool extcap_present = true;
-	uint16_t qcn_ie_len = 0;
-
-	/* qcn_ie_len is IE max length + 2(for IE ID, IE length fields) */
-	if (pMac->roam.configParam.qcn_ie_support)
-		qcn_ie_len = DOT11F_IE_QCN_IE_MAX_LEN + 2;
 
 	if (pScanReq->uIEFieldLen) {
 		status = lim_strip_extcap_update_struct(pMac,
@@ -1228,8 +1225,7 @@ static QDF_STATUS lim_send_hal_start_scan_offload_req(tpAniSirGlobal pMac,
 	 */
 	len = sizeof(tSirScanOffloadReq) +
 		(pScanReq->channelList.numChannels - 1) +
-		pScanReq->uIEFieldLen + pScanReq->oui_field_len
-		+ qcn_ie_len;
+		pScanReq->uIEFieldLen + pScanReq->oui_field_len;
 
 	pScanOffloadReq = qdf_mem_malloc(len);
 	if (NULL == pScanOffloadReq) {
@@ -1295,6 +1291,8 @@ static QDF_STATUS lim_send_hal_start_scan_offload_req(tpAniSirGlobal pMac,
 	pScanOffloadReq->scan_requestor_id = USER_SCAN_REQUESTOR_ID;
 	pScanOffloadReq->scan_adaptive_dwell_mode =
 			pScanReq->scan_adaptive_dwell_mode;
+	pScanOffloadReq->scan_ctrl_flags_ext =
+		pScanReq->scan_ctrl_flags_ext;
 
 	if (pScanOffloadReq->sessionId >= pMac->lim.maxBssId)
 		pe_err("Invalid pe sessionID: %d",
@@ -1308,17 +1306,11 @@ static QDF_STATUS lim_send_hal_start_scan_offload_req(tpAniSirGlobal pMac,
 
 	pScanOffloadReq->uIEFieldLen = pScanReq->uIEFieldLen;
 	pScanOffloadReq->uIEFieldOffset = len - pScanOffloadReq->uIEFieldLen -
-						pScanReq->oui_field_len -
-						qcn_ie_len;
+						pScanReq->oui_field_len;
 	qdf_mem_copy((uint8_t *) pScanOffloadReq +
 		     pScanOffloadReq->uIEFieldOffset,
 		     (uint8_t *) pScanReq + pScanReq->uIEFieldOffset,
 		     pScanReq->uIEFieldLen);
-
-	if (pMac->roam.configParam.qcn_ie_support)
-		lim_add_qcn_ie(pMac, (uint8_t *) pScanOffloadReq +
-				pScanOffloadReq->uIEFieldOffset,
-				&pScanOffloadReq->uIEFieldLen);
 
 	pScanOffloadReq->enable_scan_randomization =
 					pScanReq->enable_scan_randomization;
@@ -1795,6 +1787,7 @@ __lim_process_sme_join_req(tpAniSirGlobal mac_ctx, uint32_t *msg_buf)
 		session->txLdpcIniFeatureEnabled =
 			sme_join_req->txLdpcIniFeatureEnabled;
 
+		lim_update_fils_config(session, sme_join_req);
 		if (session->bssType == eSIR_INFRASTRUCTURE_MODE) {
 			session->limSystemRole = eLIM_STA_ROLE;
 		} else {
@@ -1896,6 +1889,12 @@ __lim_process_sme_join_req(tpAniSirGlobal mac_ctx, uint32_t *msg_buf)
 
 		pe_debug("Reg max %d local power con %d max tx pwr %d",
 			reg_max, local_power_constraint, session->maxTxPower);
+
+		if (sme_join_req->powerCap.maxTxPower > session->maxTxPower) {
+			sme_join_req->powerCap.maxTxPower = session->maxTxPower;
+			pe_debug("Update MaxTxPower in join Req to %d",
+				sme_join_req->powerCap.maxTxPower);
+		}
 
 		if (session->gLimCurrentBssUapsd) {
 			session->gUapsdPerAcBitmask =
@@ -3969,6 +3968,7 @@ lim_send_vdev_restart(tpAniSirGlobal pMac,
 
 	pHalHiddenSsidVdevRestart->ssidHidden = psessionEntry->ssidHidden;
 	pHalHiddenSsidVdevRestart->sessionId = sessionId;
+	pHalHiddenSsidVdevRestart->pe_session_id = psessionEntry->peSessionId;
 
 	msgQ.type = WMA_HIDDEN_SSID_VDEV_RESTART;
 	msgQ.bodyptr = pHalHiddenSsidVdevRestart;
@@ -4048,15 +4048,15 @@ static void lim_handle_update_ssid_hidden(tpAniSirGlobal mac_ctx,
 	pe_debug("received HIDE_SSID message old HIDE_SSID: %d new HIDE_SSID: %d",
 			session->ssidHidden, ssid_hidden);
 
-	if (ssid_hidden != session->ssidHidden)
+	if (ssid_hidden != session->ssidHidden) {
 		session->ssidHidden = ssid_hidden;
+	} else {
+		pe_debug("Dont process HIDE_SSID msg with existing setting");
+		return;
+	}
 
 	/* Send vdev restart */
 	lim_send_vdev_restart(mac_ctx, session, session->smeSessionId);
-
-	/* Update beacon */
-	sch_set_fixed_beacon_fields(mac_ctx, session);
-	lim_send_beacon_ind(mac_ctx, session);
 
 	return;
 }
@@ -4875,6 +4875,7 @@ static void lim_process_set_vdev_ies_per_band(tpAniSirGlobal mac_ctx,
 		pe_err("Unable to send HT/VHT Cap to FW");
 }
 
+#ifdef WLAN_FEATURE_ROAM_OFFLOAD
 /**
  * lim_process_roam_invoke() - process the Roam Invoke req
  * @mac_ctx: Pointer to Global MAC structure
@@ -4903,6 +4904,12 @@ static void lim_process_roam_invoke(tpAniSirGlobal mac_ctx,
 
 	return;
 }
+#else
+static void lim_process_roam_invoke(tpAniSirGlobal mac_ctx,
+				uint32_t *msg_buf)
+{
+}
+#endif
 
 /**
  * lim_process_set_pdev_IEs() - process the set pdev IE req
@@ -5778,23 +5785,9 @@ end:
 	update_ie->pAdditionIEBuffer = NULL;
 }
 
-/**
- * send_extended_chan_switch_action_frame()- function to send ECSA
- * action frame for each sta connected to SAP/GO and AP in case of
- * STA .
- * @mac_ctx: pointer to global mac structure
- * @new_channel: new channel to switch to.
- * @ch_bandwidth: BW of channel to calculate op_class
- * @session_entry: pe session
- *
- * This function is called to send ECSA frame for STA/CLI and SAP/GO.
- *
- * Return: void
- */
-
-static void send_extended_chan_switch_action_frame(tpAniSirGlobal mac_ctx,
-				uint16_t new_channel, uint8_t ch_bandwidth,
-						tpPESession session_entry)
+void lim_send_chan_switch_action_frame(tpAniSirGlobal mac_ctx,
+			uint16_t new_channel, uint8_t ch_bandwidth,
+			tpPESession session_entry)
 {
 	uint16_t op_class;
 	uint8_t switch_mode = 0, i;
@@ -5990,7 +5983,7 @@ skip_vht:
 			ch_offset);
 
 	/* Send ECSA/CSA Action frame after updating the beacon */
-	send_extended_chan_switch_action_frame(mac_ctx,
+	lim_send_chan_switch_action_frame(mac_ctx,
 		session_entry->gLimChannelSwitch.primaryChannel,
 		ch_offset, session_entry);
 	session_entry->gLimChannelSwitch.switchCount--;
@@ -6030,7 +6023,7 @@ static void lim_process_ext_change_channel(tpAniSirGlobal mac_ctx,
 		pe_err("not an STA/CLI session");
 		return;
 	}
-	send_extended_chan_switch_action_frame(mac_ctx,
+	lim_send_chan_switch_action_frame(mac_ctx,
 			ext_chng_channel->new_channel,
 				0, session_entry);
 }

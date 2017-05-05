@@ -50,6 +50,7 @@
 #include "cdp_txrx_cmn.h"
 #include "ol_defines.h"
 #include "dbglog.h"
+#include "wma_spectral.h"
 
 /* Platform specific configuration for max. no. of fragments */
 #define QCA_OL_11AC_TX_MAX_FRAGS            2
@@ -60,7 +61,7 @@
 #define WMA_SERVICE_READY_EXT_TIMEOUT      6000
 #define WMA_TGT_SUSPEND_COMPLETE_TIMEOUT   6000
 #define WMA_WAKE_LOCK_TIMEOUT              1000
-#define WMA_RESUME_TIMEOUT                 25000
+#define WMA_RESUME_TIMEOUT                 6000
 #define MAX_MEM_CHUNKS                     32
 
 #define WMA_CRASH_INJECT_TIMEOUT           5000
@@ -224,6 +225,8 @@ enum ds_mode {
 
 #define WMA_MAX_RF_CHAINS(x)    ((1 << x) - 1)
 #define WMA_MIN_RF_CHAINS               (1)
+#define WMA_MAX_NSS               (2)
+
 
 #ifdef FEATURE_WLAN_EXTSCAN
 #define WMA_MAX_EXTSCAN_MSG_SIZE        1536
@@ -259,6 +262,7 @@ enum ds_mode {
 
 #define WMA_DEL_P2P_SELF_STA_RSP_START 0x03
 #define WMA_SET_LINK_PEER_RSP 0x04
+#define WMA_DELETE_PEER_RSP 0x05
 #define WMA_VDEV_START_REQUEST_TIMEOUT (6000)   /* 6 seconds */
 #define WMA_VDEV_STOP_REQUEST_TIMEOUT  (6000)   /* 6 seconds */
 
@@ -290,6 +294,9 @@ enum ds_mode {
 
 /* Default InActivity Time is 200 ms */
 #define POWERSAVE_DEFAULT_INACTIVITY_TIME 200
+
+/* Default WOW InActivity Time is 50 ms */
+#define WOW_POWERSAVE_DEFAULT_INACTIVITY_TIME 50
 
 /* Default Listen Interval */
 #define POWERSAVE_DEFAULT_LISTEN_INTERVAL 1
@@ -1457,12 +1464,16 @@ struct peer_debug_info {
  * handle of other modules.
  * @saved_wmi_init_cmd: Saved WMI INIT command
  * @bpf_packet_filter_enable: BPF filter enabled or not
- * @active_bpf_mode: Setting that determines how BPF is applied in active mode
+ * @active_uc_bpf_mode: Setting that determines how BPF is applied in active
+ * mode for uc packets
+ * @active_mc_bc_bpf_mode: Setting that determines how BPF is applied in
+ * active mode for MC/BC packets
  * @service_ready_ext_evt: Wait event for service ready ext
  * @wmi_cmd_rsp_wake_lock: wmi command response wake lock
  * @wmi_cmd_rsp_runtime_lock: wmi command response bus lock
  * @saved_chan: saved channel list sent as part of WMI_SCAN_CHAN_LIST_CMDID
  * @fw_mem_dump_enabled: Fw memory dump support
+ * @ss_configs: spectral scan config parameters
  */
 typedef struct {
 	void *wmi_handle;
@@ -1641,7 +1652,8 @@ typedef struct {
 	uint32_t fine_time_measurement_cap;
 	bool bpf_enabled;
 	bool bpf_packet_filter_enable;
-	enum active_bpf_mode active_bpf_mode;
+	enum active_bpf_mode active_uc_bpf_mode;
+	enum active_bpf_mode active_mc_bc_bpf_mode;
 	struct wma_ini_config ini_config;
 	struct wma_valid_channels saved_chan;
 	/* NAN datapath support enabled in firmware */
@@ -1659,6 +1671,9 @@ typedef struct {
 	struct peer_debug_info *peer_dbg;
 	bool auto_power_save_enabled;
 	uint8_t in_imps;
+#ifdef FEATURE_SPECTRAL_SCAN
+	struct vdev_spectral_configure_params ss_configs;
+#endif
 } t_wma_handle, *tp_wma_handle;
 
 /**
@@ -2451,5 +2466,119 @@ void wma_set_sap_wow_bitmask(uint32_t *bitmask, uint32_t wow_bitmask_size);
  */
 bool wma_is_wow_bitmask_zero(uint32_t *bitmask,
 			     uint32_t wow_bitmask_size);
+/**
+ * wma_process_roaming_config() - process roam request
+ * @wma_handle: wma handle
+ * @roam_req: roam request parameters
+ *
+ * Main routine to handle ROAM commands coming from CSR module.
+ *
+ * Return: QDF status
+ */
+QDF_STATUS wma_process_roaming_config(tp_wma_handle wma_handle,
+				     tSirRoamOffloadScanReq *roam_req);
+
+/**
+ * wma_register_phy_err_event_handler() - register phy error event handler
+ * @wma_handle: wma handle
+ *
+ * Return: none
+ */
+void wma_register_phy_err_event_handler(tp_wma_handle wma_handle);
+
+#ifdef FEATURE_SPECTRAL_SCAN
+/**
+ * wma_ieee80211_secondary20_channel_offset() - finds the offset for
+ * secondary channel
+ * @chan: channel for which secondary offset to find
+ *
+ * Return: secondary offset
+ */
+int8_t wma_ieee80211_secondary20_channel_offset(
+			struct dfs_ieee80211_channel *chan);
+#else
+static inline int8_t wma_ieee80211_secondary20_channel_offset(
+			struct dfs_ieee80211_channel *chan)
+{
+	return 0;
+}
+#endif
+
+#ifdef WMI_INTERFACE_EVENT_LOGGING
+static inline void wma_print_wmi_cmd_log(uint32_t count,
+					 qdf_abstract_print *print,
+					 void *print_priv)
+{
+	t_wma_handle *wma = cds_get_context(QDF_MODULE_ID_WMA);
+
+	if (wma)
+		wmi_print_cmd_log(wma->wmi_handle, count, print, print_priv);
+}
+
+static inline void wma_print_wmi_cmd_tx_cmp_log(uint32_t count,
+						qdf_abstract_print *print,
+						void *print_priv)
+{
+	t_wma_handle *wma = cds_get_context(QDF_MODULE_ID_WMA);
+
+	if (wma)
+		wmi_print_cmd_tx_cmp_log(wma->wmi_handle, count, print,
+					 print_priv);
+}
+
+static inline void wma_print_wmi_mgmt_cmd_log(uint32_t count,
+					      qdf_abstract_print *print,
+					      void *print_priv)
+{
+	t_wma_handle *wma = cds_get_context(QDF_MODULE_ID_WMA);
+
+	if (wma)
+		wmi_print_mgmt_cmd_log(wma->wmi_handle, count, print,
+				       print_priv);
+}
+
+static inline void wma_print_wmi_mgmt_cmd_tx_cmp_log(uint32_t count,
+						     qdf_abstract_print *print,
+						     void *print_priv)
+{
+	t_wma_handle *wma = cds_get_context(QDF_MODULE_ID_WMA);
+
+	if (wma)
+		wmi_print_mgmt_cmd_tx_cmp_log(wma->wmi_handle, count, print,
+					      print_priv);
+}
+
+static inline void wma_print_wmi_event_log(uint32_t count,
+					   qdf_abstract_print *print,
+					   void *print_priv)
+{
+	t_wma_handle *wma = cds_get_context(QDF_MODULE_ID_WMA);
+
+	if (wma)
+		wmi_print_event_log(wma->wmi_handle, count, print, print_priv);
+}
+
+static inline void wma_print_wmi_rx_event_log(uint32_t count,
+					      qdf_abstract_print *print,
+					      void *print_priv)
+{
+	t_wma_handle *wma = cds_get_context(QDF_MODULE_ID_WMA);
+
+	if (wma)
+		wmi_print_rx_event_log(wma->wmi_handle, count, print,
+				       print_priv);
+}
+
+static inline void wma_print_wmi_mgmt_event_log(uint32_t count,
+						qdf_abstract_print *print,
+						void *print_priv)
+{
+	t_wma_handle *wma = cds_get_context(QDF_MODULE_ID_WMA);
+
+	if (wma)
+		wmi_print_mgmt_event_log(wma->wmi_handle, count, print,
+					 print_priv);
+}
+#endif /* WMI_INTERFACE_EVENT_LOGGING */
 
 #endif

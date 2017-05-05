@@ -389,12 +389,13 @@ static void hdd_get_transmit_sta_id(hdd_adapter_t *adapter,
 			struct sk_buff *skb, uint8_t *station_id)
 {
 	bool mcbc_addr = false;
+	QDF_STATUS status;
 	hdd_station_ctx_t *sta_ctx = WLAN_HDD_GET_STATION_CTX_PTR(adapter);
 	struct qdf_mac_addr *dst_addr = NULL;
 
 	dst_addr = (struct qdf_mac_addr *)skb->data;
-	hdd_get_peer_sta_id(sta_ctx, dst_addr, station_id);
-	if (*station_id == HDD_WLAN_INVALID_STA_ID) {
+	status = hdd_get_peer_sta_id(sta_ctx, dst_addr, station_id);
+	if (QDF_IS_STATUS_ERROR(status)) {
 		if (QDF_NBUF_CB_GET_IS_BCAST(skb) ||
 				QDF_NBUF_CB_GET_IS_MCAST(skb)) {
 			hdd_info("Received MC/BC packet for transmission");
@@ -461,8 +462,9 @@ static int __hdd_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		if (qdf_nbuf_data_is_arp_req(skb) &&
 		    (hdd_ctx->track_arp_ip == qdf_nbuf_get_arp_tgt_ip(skb))) {
 			++pAdapter->hdd_stats.hdd_arp_stats.tx_arp_req_count;
-			QDF_TRACE(QDF_MODULE_ID_HDD_DATA, LOG1,
-					"%s : ARP packet", __func__);
+			QDF_TRACE(QDF_MODULE_ID_HDD_DATA,
+				  QDF_TRACE_LEVEL_INFO_HIGH,
+				  "%s : ARP packet", __func__);
 		}
 	}
 
@@ -511,6 +513,12 @@ static int __hdd_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		if (!skb)
 			goto drop_pkt_accounting;
 	}
+
+	/*
+	 * Add SKB to internal tracking table before further processing
+	 * in WLAN driver.
+	 */
+	qdf_net_buf_debug_acquire_skb(skb, __FILE__, __LINE__);
 
 	/*
 	 * user priority from IP header, which is already extracted and set from
@@ -635,7 +643,7 @@ static int __hdd_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
 				 "%s: station is not connected. drop the pkt",
 				 __func__);
 		++pAdapter->hdd_stats.hddTxRxStats.txXmitDroppedAC[ac];
-		goto drop_pkt;
+		goto drop_pkt_and_release_skb;
 	}
 
 	/*
@@ -646,7 +654,7 @@ static int __hdd_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
 			 "%s: TX function not registered by the data path",
 			 __func__);
 		++pAdapter->hdd_stats.hddTxRxStats.txXmitDroppedAC[ac];
-		goto drop_pkt;
+		goto drop_pkt_and_release_skb;
 	}
 
 	if (pAdapter->tx_fn(ol_txrx_get_vdev_by_sta_id(STAId),
@@ -655,13 +663,15 @@ static int __hdd_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
 			  "%s: Failed to send packet to txrx for staid: %d",
 			  __func__, STAId);
 		++pAdapter->hdd_stats.hddTxRxStats.txXmitDroppedAC[ac];
-		goto drop_pkt;
+		goto drop_pkt_and_release_skb;
 	}
 
 	netif_trans_update(dev);
 
 	return NETDEV_TX_OK;
 
+drop_pkt_and_release_skb:
+	qdf_net_buf_debug_release_skb(skb);
 drop_pkt:
 
 	if (skb) {
@@ -682,14 +692,9 @@ drop_pkt_accounting:
 	++pAdapter->stats.tx_dropped;
 	++pAdapter->hdd_stats.hddTxRxStats.txXmitDropped;
 	if (is_arp) {
-		uint16_t arpdropped;
-
-		arpdropped = ++pAdapter->hdd_stats.hdd_arp_stats.tx_dropped;
-		/* rate limit error messages to 1/64th */
-		if ((arpdropped & 0x3f) == 0)
-			QDF_TRACE(QDF_MODULE_ID_HDD_DATA, LOGE,
-				  "%s : ARP packet dropped; count=%d",
-				  __func__, arpdropped);
+		++pAdapter->hdd_stats.hdd_arp_stats.tx_dropped;
+		QDF_TRACE(QDF_MODULE_ID_HDD_DATA, QDF_TRACE_LEVEL_INFO_HIGH,
+				  "%s : ARP packet dropped", __func__);
 	}
 
 	return NETDEV_TX_OK;
@@ -953,7 +958,7 @@ int hdd_get_peer_idx(hdd_station_ctx_t *sta_ctx, struct qdf_mac_addr *addr)
 	uint8_t idx;
 
 	for (idx = 0; idx < MAX_PEERS; idx++) {
-		if (sta_ctx->conn_info.staId[idx] == 0)
+		if (sta_ctx->conn_info.staId[idx] == HDD_WLAN_INVALID_STA_ID)
 			continue;
 		if (qdf_mem_cmp(&sta_ctx->conn_info.peerMacAddress[idx],
 				addr, sizeof(struct qdf_mac_addr)))
@@ -1232,7 +1237,8 @@ QDF_STATUS hdd_rx_packet_cbk(void *context, qdf_nbuf_t rxBuf)
 	if (HDD_LRO_NO_RX ==
 		 hdd_lro_rx(pHddCtx, pAdapter, skb)) {
 		if (hdd_napi_enabled(HDD_NAPI_ANY) &&
-		    !pHddCtx->enableRxThread)
+		    !pHddCtx->enableRxThread &&
+		    !QDF_NBUF_CB_RX_PEER_CACHED_FRM(skb))
 			rxstat = netif_receive_skb(skb);
 		else
 			rxstat = netif_rx_ni(skb);
@@ -1303,8 +1309,6 @@ const char *hdd_action_type_to_string(enum netif_action_type action)
 	CASE_RETURN_STRING(WLAN_WAKE_ALL_NETIF_QUEUE);
 	CASE_RETURN_STRING(WLAN_STOP_ALL_NETIF_QUEUE_N_CARRIER);
 	CASE_RETURN_STRING(WLAN_START_ALL_NETIF_QUEUE_N_CARRIER);
-	CASE_RETURN_STRING(WLAN_NETIF_TX_DISABLE);
-	CASE_RETURN_STRING(WLAN_NETIF_TX_DISABLE_N_CARRIER);
 	CASE_RETURN_STRING(WLAN_NETIF_CARRIER_ON);
 	CASE_RETURN_STRING(WLAN_NETIF_CARRIER_OFF);
 	default:
@@ -1324,8 +1328,6 @@ static void wlan_hdd_update_queue_oper_stats(hdd_adapter_t *adapter,
 	switch (action) {
 	case WLAN_STOP_ALL_NETIF_QUEUE:
 	case WLAN_STOP_ALL_NETIF_QUEUE_N_CARRIER:
-	case WLAN_NETIF_TX_DISABLE:
-	case WLAN_NETIF_TX_DISABLE_N_CARRIER:
 		adapter->queue_oper_stats[reason].pause_count++;
 		break;
 	case WLAN_START_ALL_NETIF_QUEUE:
@@ -1487,29 +1489,6 @@ void wlan_hdd_netif_queue_control(hdd_adapter_t *adapter,
 			netif_tx_start_all_queues(adapter->dev);
 			wlan_hdd_update_pause_time(adapter, temp_map);
 		}
-		spin_unlock_bh(&adapter->pause_map_lock);
-		break;
-
-	case WLAN_NETIF_TX_DISABLE:
-		spin_lock_bh(&adapter->pause_map_lock);
-		if (!adapter->pause_map) {
-			netif_tx_disable(adapter->dev);
-			wlan_hdd_update_txq_timestamp(adapter->dev);
-			wlan_hdd_update_unpause_time(adapter);
-		}
-		adapter->pause_map |= (1 << reason);
-		spin_unlock_bh(&adapter->pause_map_lock);
-		break;
-
-	case WLAN_NETIF_TX_DISABLE_N_CARRIER:
-		spin_lock_bh(&adapter->pause_map_lock);
-		if (!adapter->pause_map) {
-			netif_tx_disable(adapter->dev);
-			wlan_hdd_update_txq_timestamp(adapter->dev);
-			wlan_hdd_update_unpause_time(adapter);
-		}
-		adapter->pause_map |= (1 << reason);
-		netif_carrier_off(adapter->dev);
 		spin_unlock_bh(&adapter->pause_map_lock);
 		break;
 
@@ -1713,7 +1692,6 @@ void hdd_reset_tcp_delack(hdd_context_t *hdd_ctx)
 	struct wlan_rx_tp_data rx_tp_data = {0};
 
 	rx_tp_data.rx_tp_flags |= TCP_DEL_ACK_IND;
-	rx_tp_data.rx_tp_flags |= TCP_ADV_WIN_SCL;
 	rx_tp_data.level = next_level;
 	hdd_ctx->rx_high_ind_cnt = 0;
 	wlan_hdd_send_svc_nlink_msg(hdd_ctx->radio_index, WLAN_SVC_WLAN_TP_IND,

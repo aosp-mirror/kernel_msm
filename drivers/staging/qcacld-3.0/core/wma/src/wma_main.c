@@ -1496,6 +1496,11 @@ static void wma_process_cli_set_cmd(tp_wma_handle wma,
 				WMA_LOGE("Current band is not 5G");
 			}
 			break;
+		case WMI_PDEV_PARAM_ENA_ANT_DIV:
+		case WMI_PDEV_PARAM_FORCE_CHAIN_ANT:
+		case WMI_PDEV_PARAM_ANT_DIV_SELFTEST:
+		case WMI_PDEV_PARAM_ANT_DIV_SELFTEST_INTVL:
+			break;
 		default:
 			WMA_LOGD("Invalid wma_cli_set pdev command/Not yet implemented 0x%x",
 				 privcmd->param_id);
@@ -1757,7 +1762,6 @@ static void wma_cleanup_vdev_resp_queue(tp_wma_handle wma)
 {
 	struct wma_target_req *req_msg = NULL;
 	qdf_list_node_t *node1 = NULL;
-	QDF_STATUS status;
 
 	qdf_spin_lock_bh(&wma->vdev_respq_lock);
 	if (!qdf_list_size(&wma->vdev_resp_queue)) {
@@ -1766,21 +1770,46 @@ static void wma_cleanup_vdev_resp_queue(tp_wma_handle wma)
 		return;
 	}
 
-	while (qdf_list_peek_front(&wma->vdev_resp_queue, &node1) !=
+	while (qdf_list_peek_front(&wma->vdev_resp_queue, &node1) ==
 				   QDF_STATUS_SUCCESS) {
 		req_msg = qdf_container_of(node1, struct wma_target_req, node);
-		status = qdf_list_remove_node(&wma->vdev_resp_queue, node1);
 		qdf_spin_unlock_bh(&wma->vdev_respq_lock);
-		if (status != QDF_STATUS_SUCCESS) {
-			WMA_LOGE(FL("Failed to remove req vdev_id %d type %d"),
-				 req_msg->vdev_id, req_msg->type);
-			return;
-		}
-		qdf_mc_timer_destroy(&req_msg->event_timeout);
-		qdf_mem_free(req_msg);
+		qdf_mc_timer_stop(&req_msg->event_timeout);
+		wma_vdev_resp_timer(req_msg);
 		qdf_spin_lock_bh(&wma->vdev_respq_lock);
 	}
 	qdf_spin_unlock_bh(&wma->vdev_respq_lock);
+}
+
+/**
+ * wma_cleanup_hold_req() - cleanup hold request queue
+ * @wma: wma handle
+ *
+ * Return: none
+ */
+static void wma_cleanup_hold_req(tp_wma_handle wma)
+{
+	struct wma_target_req *req_msg = NULL;
+	qdf_list_node_t *node1 = NULL;
+
+	qdf_spin_lock_bh(&wma->wma_hold_req_q_lock);
+	if (!qdf_list_size(&wma->wma_hold_req_queue)) {
+		qdf_spin_unlock_bh(&wma->wma_hold_req_q_lock);
+		WMA_LOGD(FL("request queue is empty"));
+		return;
+	}
+
+	while (QDF_STATUS_SUCCESS ==
+			qdf_list_peek_front(&wma->wma_hold_req_queue, &node1)) {
+		req_msg = qdf_container_of(node1, struct wma_target_req, node);
+		qdf_spin_unlock_bh(&wma->wma_hold_req_q_lock);
+		/* Cleanup timeout handler */
+		qdf_mc_timer_stop(&req_msg->event_timeout);
+		qdf_mc_timer_destroy(&req_msg->event_timeout);
+		wma_hold_req_timer(req_msg);
+		qdf_spin_lock_bh(&wma->wma_hold_req_q_lock);
+	}
+	qdf_spin_unlock_bh(&wma->wma_hold_req_q_lock);
 }
 
 /**
@@ -1801,6 +1830,7 @@ static void wma_shutdown_notifier_cb(void *priv)
 
 	qdf_event_set(&wma_handle->wma_resume_event);
 	wma_cleanup_vdev_resp_queue(wma_handle);
+	wma_cleanup_hold_req(wma_handle);
 }
 
 struct wma_version_info g_wmi_version_info;
@@ -2240,7 +2270,8 @@ QDF_STATUS wma_open(void *cds_context,
 	wma_handle->enable_mc_list = cds_cfg->enable_mc_list;
 	wma_handle->bpf_packet_filter_enable =
 		cds_cfg->bpf_packet_filter_enable;
-	wma_handle->active_bpf_mode = cds_cfg->active_bpf_mode;
+	wma_handle->active_uc_bpf_mode = cds_cfg->active_uc_bpf_mode;
+	wma_handle->active_mc_bc_bpf_mode = cds_cfg->active_mc_bc_bpf_mode;
 	wma_handle->link_stats_results = NULL;
 #ifdef FEATURE_WLAN_RA_FILTERING
 	wma_handle->IsRArateLimitEnabled = cds_cfg->is_ra_ratelimit_enabled;
@@ -2415,7 +2446,7 @@ QDF_STATUS wma_open(void *cds_context,
 	 * Phyerror events. Handlers differ for phyerr filtering
 	 * offload enable and disable cases.
 	 */
-	wma_register_dfs_event_handler(wma_handle);
+	wma_register_phy_err_event_handler(wma_handle);
 
 	/* Register peer change event handler */
 	wmi_unified_register_event_handler(wma_handle->wmi_handle,
@@ -2577,6 +2608,16 @@ QDF_STATUS wma_open(void *cds_context,
 
 
 	wma_ndp_register_all_event_handlers(wma_handle);
+	wmi_unified_register_event_handler(wma_handle->wmi_handle,
+				WMI_PEER_ANTDIV_INFO_EVENTID,
+				wma_peer_ant_info_evt_handler,
+				WMA_RX_SERIALIZER_CTX);
+
+	wmi_unified_register_event_handler(wma_handle->wmi_handle,
+				WMI_REPORT_RX_AGGR_FAILURE_EVENTID,
+				wma_rx_aggr_failure_event_handler,
+				WMA_RX_SERIALIZER_CTX);
+
 	wma_register_debug_callback();
 
 	wma_handle->peer_dbg = qdf_mem_malloc(sizeof(*wma_handle->peer_dbg));
@@ -2656,6 +2697,10 @@ QDF_STATUS wma_pre_start(void *cds_ctx)
 						 wma_handle->htc_handle);
 	if (A_OK != status) {
 		WMA_LOGE("%s: wmi_unified_connect_htc_service", __func__);
+
+		if (!cds_is_fw_down())
+			QDF_BUG(0);
+
 		qdf_status = QDF_STATUS_E_FAULT;
 		goto end;
 	}
@@ -3399,41 +3444,6 @@ end:
 }
 
 /**
- * wma_cleanup_hold_req() - cleanup hold request queue
- * @wma: wma handle
- *
- * Return: none
- */
-static void wma_cleanup_hold_req(tp_wma_handle wma)
-{
-	struct wma_target_req *req_msg = NULL;
-	qdf_list_node_t *node1 = NULL;
-	QDF_STATUS status;
-
-	qdf_spin_lock_bh(&wma->wma_hold_req_q_lock);
-	if (!qdf_list_size(&wma->wma_hold_req_queue)) {
-		qdf_spin_unlock_bh(&wma->wma_hold_req_q_lock);
-		WMA_LOGD(FL("request queue is empty"));
-		return;
-	}
-
-	while (QDF_STATUS_SUCCESS !=
-			qdf_list_peek_front(&wma->wma_hold_req_queue, &node1)) {
-		req_msg = qdf_container_of(node1, struct wma_target_req, node);
-		status = qdf_list_remove_node(&wma->wma_hold_req_queue, node1);
-		if (QDF_STATUS_SUCCESS != status) {
-			qdf_spin_unlock_bh(&wma->wma_hold_req_q_lock);
-			WMA_LOGE(FL("Failed to remove request for vdev_id %d type %d"),
-				 req_msg->vdev_id, req_msg->type);
-			return;
-		}
-		qdf_mc_timer_destroy(&req_msg->event_timeout);
-		qdf_mem_free(req_msg);
-	}
-	qdf_spin_unlock_bh(&wma->wma_hold_req_q_lock);
-}
-
-/**
  * wma_wmi_service_close() - close wma wmi service interface.
  * @cds_ctx: cds context
  *
@@ -3497,6 +3507,24 @@ QDF_STATUS wma_wmi_service_close(void *cds_ctx)
 		if (wma_handle->interfaces[i].stats_rsp) {
 			qdf_mem_free(wma_handle->interfaces[i].stats_rsp);
 			wma_handle->interfaces[i].stats_rsp = NULL;
+		}
+
+		if (wma_handle->interfaces[i].psnr_req) {
+			qdf_mem_free(wma_handle->
+				     interfaces[i].psnr_req);
+			wma_handle->interfaces[i].psnr_req = NULL;
+		}
+
+		if (wma_handle->interfaces[i].rcpi_req) {
+			qdf_mem_free(wma_handle->
+				     interfaces[i].rcpi_req);
+			wma_handle->interfaces[i].rcpi_req = NULL;
+		}
+
+		if (wma_handle->interfaces[i].action_frame_filter) {
+			qdf_mem_free(wma_handle->
+				     interfaces[i].action_frame_filter);
+			wma_handle->interfaces[i].action_frame_filter = NULL;
 		}
 	}
 
@@ -4861,6 +4889,9 @@ int wma_rx_service_ready_event(void *handle, uint8_t *cmd_param_info,
 		wma_handle->wlan_resource_config.use_pdev_id = true;
 	else
 		wma_handle->wlan_resource_config.use_pdev_id = false;
+
+	wma_handle->wlan_resource_config.max_num_dbs_scan_duty_cycle =
+		CFG_DBS_SCAN_CLIENTS_MAX;
 
 	/* register the Enhanced Green AP event handler */
 	wma_register_egap_event_handle(wma_handle);
@@ -6546,6 +6577,161 @@ wma_process_action_frame_random_mac(tp_wma_handle wma_handle,
 	return QDF_STATUS_SUCCESS;
 }
 
+static QDF_STATUS wma_get_chain_rssi(tp_wma_handle wma_handle,
+		struct get_chain_rssi_req_params *req_params)
+{
+	wmi_peer_antdiv_info_req_cmd_fixed_param *cmd;
+	wmi_buf_t wmi_buf;
+	uint32_t len = sizeof(wmi_peer_antdiv_info_req_cmd_fixed_param);
+	u_int8_t *buf_ptr;
+
+	if (!wma_handle) {
+		WMA_LOGE(FL("WMA is closed, can not issue cmd"));
+		return QDF_STATUS_E_INVAL;
+	}
+
+	wmi_buf = wmi_buf_alloc(wma_handle->wmi_handle, len);
+	if (!wmi_buf) {
+		WMA_LOGE(FL("wmi_buf_alloc failed"));
+		return QDF_STATUS_E_NOMEM;
+	}
+
+	buf_ptr = (u_int8_t *)wmi_buf_data(wmi_buf);
+
+	cmd = (wmi_peer_antdiv_info_req_cmd_fixed_param *)buf_ptr;
+	WMITLV_SET_HDR(&cmd->tlv_header,
+		WMITLV_TAG_STRUC_wmi_peer_antdiv_info_req_cmd_fixed_param,
+		WMITLV_GET_STRUCT_TLVLEN(wmi_peer_antdiv_info_req_cmd_fixed_param));
+	cmd->vdev_id = req_params->session_id;
+	WMI_CHAR_ARRAY_TO_MAC_ADDR(req_params->peer_macaddr.bytes,
+				&cmd->peer_mac_address);
+
+	if (wmi_unified_cmd_send(wma_handle->wmi_handle, wmi_buf, len,
+		WMI_PEER_ANTDIV_INFO_REQ_CMDID)) {
+			WMA_LOGE(FL("failed to send get chain rssi command"));
+			wmi_buf_free(wmi_buf);
+			return QDF_STATUS_E_FAILURE;
+	}
+
+	return QDF_STATUS_SUCCESS;
+}
+
+/**
+ * wma_set_rx_reorder_timeout_val() - set rx recorder timeout value
+ * @wma_handle: pointer to wma handle
+ * @sir_set_rx_reorder_timeout_val: rx recorder timeout value
+ *
+ * Return: VOS_STATUS_SUCCESS for success or error code.
+ */
+static QDF_STATUS wma_set_rx_reorder_timeout_val(tp_wma_handle wma_handle,
+	struct sir_set_rx_reorder_timeout_val *reorder_timeout)
+{
+	wmi_pdev_set_reorder_timeout_val_cmd_fixed_param *cmd;
+	uint32_t len;
+	wmi_buf_t buf;
+	int ret;
+
+	if (!reorder_timeout) {
+		WMA_LOGE(FL("invalid pointer"));
+		return QDF_STATUS_E_INVAL;
+	}
+
+	if (!wma_handle) {
+		WMA_LOGE(FL("WMA context is invald!"));
+		return QDF_STATUS_E_INVAL;
+	}
+	len = sizeof(*cmd);
+	buf = wmi_buf_alloc(wma_handle->wmi_handle, len);
+
+	if (!buf) {
+		WMA_LOGE(FL("Failed allocate wmi buffer"));
+		return QDF_STATUS_E_NOMEM;
+	}
+	cmd = (wmi_pdev_set_reorder_timeout_val_cmd_fixed_param *)
+		wmi_buf_data(buf);
+
+	WMITLV_SET_HDR(&cmd->tlv_header,
+	WMITLV_TAG_STRUC_wmi_pdev_set_reorder_timeout_val_cmd_fixed_param,
+	WMITLV_GET_STRUCT_TLVLEN(wmi_pdev_set_reorder_timeout_val_cmd_fixed_param));
+
+	memcpy(cmd->rx_timeout_pri, reorder_timeout->rx_timeout_pri,
+		sizeof(reorder_timeout->rx_timeout_pri));
+
+	WMA_LOGD("rx aggr record timeout: VO: %d, VI: %d, BE: %d, BK: %d",
+		cmd->rx_timeout_pri[0], cmd->rx_timeout_pri[1],
+		cmd->rx_timeout_pri[2], cmd->rx_timeout_pri[3]);
+
+	ret = wmi_unified_cmd_send(wma_handle->wmi_handle, buf, len,
+			WMI_PDEV_SET_REORDER_TIMEOUT_VAL_CMDID);
+	if (ret) {
+		WMA_LOGE(FL("Failed to send aggregation timeout"));
+		wmi_buf_free(buf);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	return QDF_STATUS_SUCCESS;
+}
+
+/**
+ * wma_set_rx_blocksize() - set rx blocksize
+ * @wma_handle: pointer to wma handle
+ * @sir_peer_set_rx_blocksize: rx blocksize for peer mac
+ *
+ * Return: QDF_STATUS_SUCCESS for success or error code.
+ */
+static QDF_STATUS wma_set_rx_blocksize(tp_wma_handle wma_handle,
+	struct sir_peer_set_rx_blocksize *peer_rx_blocksize)
+{
+	wmi_peer_set_rx_blocksize_cmd_fixed_param *cmd;
+	int32_t len;
+	wmi_buf_t buf;
+	u_int8_t *buf_ptr;
+	int ret;
+
+	if (!peer_rx_blocksize) {
+		WMA_LOGE(FL("invalid pointer"));
+		return QDF_STATUS_E_INVAL;
+	}
+
+	if (!wma_handle) {
+		WMA_LOGE(FL(" WMA context is invald!"));
+		return QDF_STATUS_E_INVAL;
+	}
+
+	len = sizeof(*cmd);
+	buf = wmi_buf_alloc(wma_handle->wmi_handle, len);
+
+	if (!buf) {
+		WMA_LOGE(FL("Failed allocate wmi buffer"));
+		return QDF_STATUS_E_NOMEM;
+	}
+
+	buf_ptr = (u_int8_t *) wmi_buf_data(buf);
+	cmd = (wmi_peer_set_rx_blocksize_cmd_fixed_param *) buf_ptr;
+
+	WMITLV_SET_HDR(&cmd->tlv_header,
+	WMITLV_TAG_STRUC_wmi_peer_set_rx_blocksize_cmd_fixed_param,
+	WMITLV_GET_STRUCT_TLVLEN(wmi_peer_set_rx_blocksize_cmd_fixed_param));
+
+	cmd->vdev_id = peer_rx_blocksize->vdev_id;
+	cmd->rx_block_ack_win_limit =
+		peer_rx_blocksize->rx_block_ack_win_limit;
+	WMI_CHAR_ARRAY_TO_MAC_ADDR(peer_rx_blocksize->peer_macaddr.bytes,
+		&cmd->peer_macaddr);
+
+	WMA_LOGD("rx aggr blocksize: %d", cmd->rx_block_ack_win_limit);
+
+	ret = wmi_unified_cmd_send(wma_handle->wmi_handle, buf, len,
+			WMI_PEER_SET_RX_BLOCKSIZE_CMDID);
+	if (ret) {
+		WMA_LOGE(FL("Failed to send aggregation size command"));
+		wmi_buf_free(buf);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	return QDF_STATUS_SUCCESS;
+}
+
 /**
  * wma_mc_process_msg() - process wma messages and call appropriate function.
  * @cds_context: cds context
@@ -7016,7 +7202,6 @@ QDF_STATUS wma_mc_process_msg(void *cds_context, cds_msg_t *msg)
 	case WMA_HIDDEN_SSID_VDEV_RESTART:
 		wma_hidden_ssid_vdev_restart(wma_handle,
 				(tHalHiddenSsidVdevRestart *) msg->bodyptr);
-		qdf_mem_free(msg->bodyptr);
 		break;
 #ifdef WLAN_FEATURE_EXTWOW_SUPPORT
 	case WMA_WLAN_EXT_WOW:
@@ -7119,6 +7304,11 @@ QDF_STATUS wma_mc_process_msg(void *cds_context, cds_msg_t *msg)
 	case WMA_LINK_LAYER_STATS_GET_REQ:
 		wma_process_ll_stats_get_req(wma_handle,
 					     (tpSirLLStatsGetReq) msg->bodyptr);
+		qdf_mem_free(msg->bodyptr);
+		break;
+	case WMA_LINK_LAYER_STATS_SET_THRESHOLD:
+		wma_config_stats_ext_threshold(wma_handle,
+			(struct sir_ll_ext_stats_threshold *)msg->bodyptr);
 		qdf_mem_free(msg->bodyptr);
 		break;
 #endif /* WLAN_FEATURE_LINK_LAYER_STATS */
@@ -7392,14 +7582,12 @@ QDF_STATUS wma_mc_process_msg(void *cds_context, cds_msg_t *msg)
 				 (struct sme_rcpi_req *)msg->bodyptr);
 		qdf_mem_free(msg->bodyptr);
 		break;
-	case WMA_ENABLE_BCAST_FILTER:
-		wma_configure_non_arp_broadcast_filter(wma_handle,
-			(struct broadcast_filter_request *) msg->bodyptr);
+	case WMA_CONF_HW_FILTER: {
+		struct hw_filter_request *req = msg->bodyptr;
+
+		qdf_status = wma_conf_hw_filter_mode(wma_handle, req);
 		break;
-	case WMA_DISABLE_HW_BCAST_FILTER:
-		wma_configure_non_arp_broadcast_filter(wma_handle,
-			(struct broadcast_filter_request *) msg->bodyptr);
-		break;
+	}
 	case WMA_SET_ARP_STATS_REQ:
 		wma_set_arp_req_stats(wma_handle,
 			(struct set_arp_stats_params *)msg->bodyptr);
@@ -7415,6 +7603,35 @@ QDF_STATUS wma_mc_process_msg(void *cds_context, cds_msg_t *msg)
 		     (struct action_frame_random_filter *)msg->bodyptr);
 		qdf_mem_free(msg->bodyptr);
 		break;
+	case WMA_SET_DBS_SCAN_SEL_CONF_PARAMS:
+		wma_send_dbs_scan_selection_params(wma_handle,
+			(struct wmi_dbs_scan_sel_params *)msg->bodyptr);
+		qdf_mem_free(msg->bodyptr);
+		break;
+	case SIR_HAL_GET_CHAIN_RSSI_REQ:
+		wma_get_chain_rssi(wma_handle, msg->bodyptr);
+		qdf_mem_free(msg->bodyptr);
+		break;
+	case SIR_HAL_SPECTRAL_SCAN_REQUEST:
+		wma_spectral_scan_req(wma_handle,
+			(struct vdev_spectral_enable_params *) msg->bodyptr);
+		qdf_mem_free(msg->bodyptr);
+		break;
+	case SIR_HAL_SPECTRAL_SCAN_CONFIG:
+		wma_spectral_scan_config(wma_handle,
+			(struct vdev_spectral_configure_params *) msg->bodyptr);
+		qdf_mem_free(msg->bodyptr);
+		break;
+	case SIR_HAL_SET_REORDER_TIMEOUT_CMDID:
+		wma_set_rx_reorder_timeout_val(wma_handle,
+						msg->bodyptr);
+		qdf_mem_free(msg->bodyptr);
+		break;
+	case SIR_HAL_SET_RX_BLOCKSIZE_CMDID:
+		wma_set_rx_blocksize(wma_handle, msg->bodyptr);
+		qdf_mem_free(msg->bodyptr);
+		break;
+
 	default:
 		WMA_LOGE("Unhandled WMA message of type %d", msg->type);
 		if (msg->bodyptr)

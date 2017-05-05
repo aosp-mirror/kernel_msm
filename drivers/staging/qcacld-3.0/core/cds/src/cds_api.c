@@ -252,7 +252,7 @@ QDF_STATUS cds_open(void)
 	tSirRetStatus sirStatus = eSIR_SUCCESS;
 	struct cds_config_info *cds_cfg;
 	qdf_device_t qdf_ctx;
-	HTC_INIT_INFO htcInfo;
+	struct htc_init_info htcInfo;
 	struct ol_context *ol_ctx;
 	struct hif_opaque_softc *scn;
 	void *HTCHandle;
@@ -423,6 +423,10 @@ QDF_STATUS cds_open(void)
 	if (htc_wait_target(HTCHandle)) {
 		QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_FATAL,
 			  "%s: Failed to complete BMI phase", __func__);
+
+		if (!cds_is_fw_down())
+			QDF_BUG(0);
+
 		goto err_wma_close;
 	}
 	bmi_target_ready(scn, gp_cds_context->cfg_ctx);
@@ -560,7 +564,8 @@ QDF_STATUS cds_pre_enable(v_CONTEXT_t cds_context)
 	if (QDF_GLOBAL_FTM_MODE != cds_get_conparam() &&
 	    QDF_GLOBAL_EPPING_MODE != cds_get_conparam()) {
 		htt_pkt_log_init(gp_cds_context->pdev_txrx_ctx, scn);
-		pktlog_htc_attach();
+		if (pktlog_htc_attach())
+			return QDF_STATUS_E_FAILURE;
 	}
 
 	/* Reset wma wait event */
@@ -608,12 +613,13 @@ QDF_STATUS cds_pre_enable(v_CONTEXT_t cds_context)
 	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
 		QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_FATAL,
 			  "Failed to get ready event from target firmware");
+
 		/*
-		 * Panic only if recovery is disabled, else return failure so
-		 * that driver load can fail gracefully. We cannot trigger self
-		 * recovery here because driver is not fully loaded yet.
+		 * Panic when the failure is not because the FW is down,
+		 * fail gracefully if FW is down allowing re-probing from
+		 * from the platform driver
 		 */
-		if (!cds_is_self_recovery_enabled())
+		if (!cds_is_fw_down())
 			QDF_BUG(0);
 
 		htc_stop(gp_cds_context->htc_ctx);
@@ -951,7 +957,6 @@ QDF_STATUS cds_close(v_CONTEXT_t cds_context)
 		QDF_ASSERT(QDF_IS_STATUS_SUCCESS(qdf_status));
 	}
 
-	cds_deinit_log_completion();
 	cds_deinit_ini_config();
 	qdf_timer_module_deinit();
 
@@ -1149,6 +1154,44 @@ void cds_clear_driver_state(enum cds_driver_state state)
 	}
 
 	gp_cds_context->driver_state &= ~state;
+}
+
+enum cds_fw_state cds_get_fw_state(void)
+{
+	if (gp_cds_context == NULL) {
+		QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_ERROR,
+			  "%s: global cds context is NULL", __func__);
+
+		return CDS_FW_STATE_UNINITIALIZED;
+	}
+
+	return gp_cds_context->fw_state;
+}
+
+void cds_set_fw_state(enum cds_fw_state state)
+{
+	if (gp_cds_context == NULL) {
+		QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_ERROR,
+			  "%s: global cds context is NULL: %d", __func__,
+			  state);
+
+		return;
+	}
+
+	qdf_atomic_set_bit(state, &gp_cds_context->fw_state);
+}
+
+void cds_clear_fw_state(enum cds_fw_state state)
+{
+	if (gp_cds_context == NULL) {
+		QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_ERROR,
+			  "%s: global cds context is NULL: %d", __func__,
+			  state);
+
+		return;
+	}
+
+	qdf_atomic_clear_bit(state, &gp_cds_context->fw_state);
 }
 
 /**
@@ -1388,10 +1431,16 @@ QDF_STATUS cds_mq_post_message_by_priority(CDS_MQ_ID msgQueueId,
 	p_cds_msg_wrapper pMsgWrapper = NULL;
 	uint32_t debug_count = 0;
 
-	if ((gp_cds_context == NULL) || (pMsg == NULL)) {
+	if ((gp_cds_context == NULL) || (pMsg == NULL) ||
+	    (gp_cds_sched_context == NULL) ||
+	    (gp_cds_sched_context->McThread == 0)) {
 		QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_ERROR,
 			  "%s: Null params or global cds context is null",
 			  __func__);
+		QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_ERROR,
+			"%s: cds_context[%d] pMsg[%d] cds_sched_context[%d]",
+			__func__, !!gp_cds_context, !!pMsg,
+			!!gp_cds_sched_context);
 		QDF_ASSERT(0);
 		return QDF_STATUS_E_FAILURE;
 	}
@@ -1981,29 +2030,6 @@ void cds_init_log_completion(void)
 	p_cds_context->log_complete.indicator = WLAN_LOG_INDICATOR_UNUSED;
 	p_cds_context->log_complete.reason_code = WLAN_LOG_REASON_CODE_UNUSED;
 	p_cds_context->log_complete.is_report_in_progress = false;
-	qdf_spinlock_create(&p_cds_context->bug_report_lock);
-}
-
-/**
- * cds_deinit_log_completion() - Deinitialize log param structure
- *
- * This function is used to deinitialize the logging related
- * parameters
- *
- * Return: None
- */
-void cds_deinit_log_completion(void)
-{
-	p_cds_contextType p_cds_context;
-
-	p_cds_context = cds_get_global_context();
-	if (!p_cds_context) {
-		QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_ERROR,
-				"%s: cds context is Invalid", __func__);
-		return;
-	}
-
-	qdf_spinlock_destroy(&p_cds_context->bug_report_lock);
 }
 
 /**
@@ -2628,3 +2654,13 @@ void cds_incr_arp_stats_tx_tgt_acked(void)
 	if (adapter)
 		adapter->hdd_stats.hdd_arp_stats.tx_ack_cnt++;
 }
+
+#ifdef WMI_INTERFACE_EVENT_LOGGING
+inline void
+cds_print_htc_credit_history(uint32_t count, qdf_abstract_print *print,
+			     void *print_priv)
+{
+	htc_print_credit_history(gp_cds_context->htc_ctx, count,
+				 print, print_priv);
+}
+#endif

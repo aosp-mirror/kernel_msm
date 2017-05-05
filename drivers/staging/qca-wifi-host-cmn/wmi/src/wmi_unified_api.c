@@ -3171,16 +3171,17 @@ QDF_STATUS wmi_unified_enable_arp_ns_offload_cmd(void *wmi_hdl,
 	return QDF_STATUS_E_FAILURE;
 }
 
-QDF_STATUS wmi_unified_configure_broadcast_filter_cmd(void *wmi_hdl,
-			   uint8_t vdev_id, bool bc_filter)
+QDF_STATUS wmi_unified_conf_hw_filter_mode_cmd(void *wmi_hdl,
+					       uint8_t vdev_id,
+					       uint8_t mode_bitmap)
 {
-	wmi_unified_t wmi_handle = (wmi_unified_t) wmi_hdl;
+	wmi_unified_t wmi = wmi_hdl;
 
-	if (wmi_handle->ops->send_enable_broadcast_filter_cmd)
-		return wmi_handle->ops->send_enable_broadcast_filter_cmd(
-				wmi_handle, vdev_id, bc_filter);
+	if (!wmi->ops->send_conf_hw_filter_mode_cmd)
+		return QDF_STATUS_E_FAILURE;
 
-	return QDF_STATUS_E_FAILURE;
+	return wmi->ops->send_conf_hw_filter_mode_cmd(wmi, vdev_id,
+						      mode_bitmap);
 }
 
 /**
@@ -6258,6 +6259,27 @@ QDF_STATUS wmi_unified_get_rcpi_cmd(void *wmi_hdl,
 	if (wmi_handle->ops->send_get_rcpi_cmd)
 		return wmi_handle->ops->send_get_rcpi_cmd(wmi_handle,
 			   get_rcpi_param);
+
+	return QDF_STATUS_E_FAILURE;
+}
+
+/**
+ * wmi_unified_send_dbs_scan_sel_params_cmd() - send wmi cmd of
+ * DBS scan selection configuration params
+ * @wma_handle:  wma handler
+ * @dbs_scan_params: pointer to wmi_dbs_scan_sel_params
+ *
+ * Return: QDF_STATUS_SUCCESS on success and QDF failure reason code for failure
+ */
+QDF_STATUS wmi_unified_send_dbs_scan_sel_params_cmd(void *wmi_hdl,
+			struct wmi_dbs_scan_sel_params *dbs_scan_params)
+{
+	wmi_unified_t wmi_handle = (wmi_unified_t) wmi_hdl;
+
+	if (wmi_handle->ops->send_dbs_scan_sel_params_cmd)
+		return wmi_handle->ops->
+			send_dbs_scan_sel_params_cmd(wmi_handle,
+				  dbs_scan_params);
 
 	return QDF_STATUS_E_FAILURE;
 }

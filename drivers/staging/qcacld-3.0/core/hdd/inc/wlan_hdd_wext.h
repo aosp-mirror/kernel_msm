@@ -230,6 +230,9 @@ enum hdd_wlan_wmm_ts_info_ack_policy {
 #define MBO_OUI_TYPE   "\x50\x6f\x9a\x16"
 #define MBO_OUI_TYPE_SIZE  4
 
+#define QCN_OUI_TYPE   "\x8c\xfd\xf0\x01"
+#define QCN_OUI_TYPE_SIZE  4
+
 enum hdd_wps_mode {
 	eWEXT_WPS_OFF = 0,
 	eWEXT_WPS_ON = 1,
@@ -365,7 +368,7 @@ extern int hdd_priv_get_data(struct iw_point *p_priv_data,
 
 extern void *mem_alloc_copy_from_user_helper(const void *wrqu_data, size_t len);
 
-extern QDF_STATUS wlan_hdd_get_linkspeed_for_peermac(hdd_adapter_t *pAdapter,
+int wlan_hdd_get_linkspeed_for_peermac(hdd_adapter_t *pAdapter,
 					     struct qdf_mac_addr mac_address);
 void hdd_clear_roam_profile_ie(hdd_adapter_t *pAdapter);
 

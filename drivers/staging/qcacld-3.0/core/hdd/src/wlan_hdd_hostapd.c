@@ -320,8 +320,9 @@ static int __hdd_hostapd_stop(struct net_device *dev)
 	clear_bit(DEVICE_IFACE_OPENED, &adapter->event_flags);
 	/* Stop all tx queues */
 	hdd_notice("Disabling queues");
-	wlan_hdd_netif_queue_control(adapter, WLAN_NETIF_TX_DISABLE_N_CARRIER,
-				   WLAN_CONTROL_PATH);
+	wlan_hdd_netif_queue_control(adapter,
+				     WLAN_STOP_ALL_NETIF_QUEUE_N_CARRIER,
+				     WLAN_CONTROL_PATH);
 
 	EXIT();
 	return 0;
@@ -2170,8 +2171,8 @@ stopbss:
 		 */
 		hdd_notice("Disabling queues");
 		wlan_hdd_netif_queue_control(pHostapdAdapter,
-					     WLAN_NETIF_TX_DISABLE_N_CARRIER,
-					     WLAN_CONTROL_PATH);
+					WLAN_STOP_ALL_NETIF_QUEUE_N_CARRIER,
+					WLAN_CONTROL_PATH);
 
 		/* reclaim all resources allocated to the BSS */
 		qdf_status = hdd_softap_stop_bss(pHostapdAdapter);
@@ -2242,7 +2243,7 @@ int hdd_softap_unpack_ie(tHalHandle halHandle,
 		/* Unpack the RSN IE */
 		memset(&dot11RSNIE, 0, sizeof(tDot11fIERSN));
 		dot11f_unpack_ie_rsn((tpAniSirGlobal) halHandle,
-				     pRsnIe, RSNIeLen, &dot11RSNIE);
+				     pRsnIe, RSNIeLen, &dot11RSNIE, false);
 		/* Copy out the encryption and authentication types */
 		hdd_debug("pairwise cipher suite count: %d",
 		       dot11RSNIE.pwise_cipher_suite_count);
@@ -2278,7 +2279,7 @@ int hdd_softap_unpack_ie(tHalHandle halHandle,
 		/* Unpack the WPA IE */
 		memset(&dot11WPAIE, 0, sizeof(tDot11fIEWPA));
 		dot11f_unpack_ie_wpa((tpAniSirGlobal) halHandle,
-				     pRsnIe, RSNIeLen, &dot11WPAIE);
+				     pRsnIe, RSNIeLen, &dot11WPAIE, false);
 		/* Copy out the encryption and authentication types */
 		hdd_debug("WPA unicast cipher suite count: %d",
 		       dot11WPAIE.unicast_cipher_count);
@@ -5157,14 +5158,14 @@ int __iw_get_softap_linkspeed(struct net_device *dev,
 	struct qdf_mac_addr macAddress;
 	char pmacAddress[MAC_ADDRESS_STR_LEN + 1];
 	QDF_STATUS status = QDF_STATUS_E_FAILURE;
-	int rc, valid, i;
+	int rc, errno, i;
 
 	ENTER_DEV(dev);
 
 	hdd_ctx = WLAN_HDD_GET_CTX(pHostapdAdapter);
-	valid = wlan_hdd_validate_context(hdd_ctx);
-	if (0 != valid)
-		return valid;
+	errno = wlan_hdd_validate_context(hdd_ctx);
+	if (errno)
+		return errno;
 
 	hdd_debug("wrqu->data.length(%d)", wrqu->data.length);
 
@@ -5211,11 +5212,11 @@ int __iw_get_softap_linkspeed(struct net_device *dev,
 		hdd_err("Invalid peer macaddress");
 		return -EINVAL;
 	}
-	status = wlan_hdd_get_linkspeed_for_peermac(pHostapdAdapter,
-						    macAddress);
-	if (!QDF_IS_STATUS_SUCCESS(status)) {
-		hdd_err("Unable to retrieve SME linkspeed");
-		return -EINVAL;
+	errno = wlan_hdd_get_linkspeed_for_peermac(pHostapdAdapter,
+						   macAddress);
+	if (errno) {
+		hdd_err("Unable to retrieve SME linkspeed: %d", errno);
+		return errno;
 	}
 
 	link_speed = pHostapdAdapter->ls_stats.estLinkSpeed;
@@ -6235,7 +6236,8 @@ static bool wlan_hdd_get_sap_obss(hdd_adapter_t *pHostapdAdapter)
 	if (ie && ie[1]) {
 		qdf_mem_copy(ht_cap_ie, &ie[2], DOT11F_IE_HTCAPS_MAX_LEN);
 		dot11f_unpack_ie_ht_caps((tpAniSirGlobal)hdd_ctx->hHal,
-					ht_cap_ie, ie[1], &dot11_ht_cap_ie);
+					ht_cap_ie, ie[1], &dot11_ht_cap_ie,
+					false);
 		return dot11_ht_cap_ie.supportedChannelWidthSet;
 	}
 
@@ -7146,14 +7148,23 @@ static int wlan_hdd_setup_driver_overrides(hdd_adapter_t *ap_adapter)
 		if (sap_cfg->SapHw_mode == eCSR_DOT11_MODE_11n)
 			sap_cfg->SapHw_mode = eCSR_DOT11_MODE_11ac;
 
-		if (sap_cfg->channel >= 36)
+		if (sap_cfg->channel >= 36) {
 			sap_cfg->ch_width_orig =
 					hdd_ctx->config->vhtChannelWidth;
-		else
-			sap_cfg->ch_width_orig =
-				hdd_ctx->config->nChannelBondingMode24GHz ?
-				eHT_CHANNEL_WIDTH_40MHZ :
-				eHT_CHANNEL_WIDTH_20MHZ;
+		} else {
+			/*
+			 * Allow 40 Mhz in 2.4 Ghz only if indicated by
+			 * supplicant after OBSS scan and if 2.4 Ghz channel
+			 * bonding is set in INI
+			 */
+			if (sap_cfg->ch_width_orig >= eHT_CHANNEL_WIDTH_40MHZ &&
+			   hdd_ctx->config->nChannelBondingMode24GHz)
+				sap_cfg->ch_width_orig =
+					eHT_CHANNEL_WIDTH_40MHZ;
+			else
+				sap_cfg->ch_width_orig =
+					eHT_CHANNEL_WIDTH_20MHZ;
+		}
 	}
 	sap_cfg->ch_params.ch_width = sap_cfg->ch_width_orig;
 	cds_set_channel_params(sap_cfg->channel,
@@ -7349,7 +7360,7 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 	int32_t i;
 	struct hdd_config *iniConfig;
 	hdd_context_t *pHddCtx = WLAN_HDD_GET_CTX(pHostapdAdapter);
-	tSmeConfigParams sme_config;
+	tSmeConfigParams *sme_config;
 	bool MFPCapable = false;
 	bool MFPRequired = false;
 	uint16_t prev_rsn_length = 0;
@@ -7373,6 +7384,12 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 		}
 	}
 
+	sme_config = qdf_mem_malloc(sizeof(tSmeConfigParams));
+	if (!sme_config) {
+		hdd_err("failed to allocate memory");
+		return -EINVAL;
+	}
+
 	iniConfig = pHddCtx->config;
 	pHostapdState = WLAN_HDD_GET_HOSTAP_STATE_PTR(pHostapdAdapter);
 
@@ -7394,6 +7411,8 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 
 	pConfig->reduced_beacon_interval =
 			iniConfig->reduced_beacon_interval;
+
+	pConfig->dfs_beacon_tx_enhanced = iniConfig->dfs_beacon_tx_enhanced;
 
 	/* channel is already set in the set_channel Call back */
 	/* pConfig->channel = pCommitConfig->channel; */
@@ -7769,21 +7788,20 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 			pConfig->SapHw_mode = eCSR_DOT11_MODE_11n;
 	}
 
-	qdf_mem_zero(&sme_config, sizeof(tSmeConfigParams));
-	sme_get_config_param(pHddCtx->hHal, &sme_config);
+	sme_get_config_param(pHddCtx->hHal, sme_config);
 	/* Override hostapd.conf wmm_enabled only for 11n and 11AC configs (IOT)
 	 * As per spec 11N/AC STA are QOS STA and may not connect or throughput
 	 * may not be good with non QOS 11N AP
 	 * Default: enable QOS for SAP unless WMM IE not present for 11bga
 	 */
-	sme_config.csrConfig.WMMSupportMode = eCsrRoamWmmAuto;
+	sme_config->csrConfig.WMMSupportMode = eCsrRoamWmmAuto;
 	pIe = wlan_hdd_get_vendor_oui_ie_ptr(WMM_OUI_TYPE, WMM_OUI_TYPE_SIZE,
 					pBeacon->tail, pBeacon->tail_len);
 	if (!pIe && (pConfig->SapHw_mode == eCSR_DOT11_MODE_11a ||
 		pConfig->SapHw_mode == eCSR_DOT11_MODE_11g ||
 		pConfig->SapHw_mode == eCSR_DOT11_MODE_11b))
-		sme_config.csrConfig.WMMSupportMode = eCsrRoamWmmNoQos;
-	sme_update_config(pHddCtx->hHal, &sme_config);
+		sme_config->csrConfig.WMMSupportMode = eCsrRoamWmmNoQos;
+	sme_update_config(pHddCtx->hHal, sme_config);
 
 	if (!pHddCtx->config->sap_force_11n_for_11ac) {
 		pConfig->ch_width_orig =
@@ -7848,6 +7866,8 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 		wlansap_reset_sap_config_add_ie(pConfig, eUPDATE_IE_ALL);
 		/* Bss already started. just return. */
 		/* TODO Probably it should update some beacon params. */
+		if (sme_config)
+			qdf_mem_free(sme_config);
 		hdd_debug("Bss Already started...Ignore the request");
 		EXIT();
 		return 0;
@@ -7933,11 +7953,15 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 
 	cds_set_connection_in_progress(false);
 	pHostapdState->bCommit = true;
+	if (sme_config)
+		qdf_mem_free(sme_config);
 	EXIT();
 
 	return 0;
 
 error:
+	if (sme_config)
+		qdf_mem_free(sme_config);
 	clear_bit(SOFTAP_INIT_DONE, &pHostapdAdapter->event_flags);
 	if (pHostapdAdapter->sessionCtx.ap.sapConfig.acs_cfg.ch_list) {
 		qdf_mem_free(pHostapdAdapter->sessionCtx.ap.sapConfig.
@@ -7969,6 +7993,7 @@ static int __wlan_hdd_cfg80211_stop_ap(struct wiphy *wiphy,
 	unsigned long rc;
 	hdd_adapter_list_node_t *pAdapterNode = NULL;
 	hdd_adapter_list_node_t *pNext = NULL;
+	tsap_Config_t *pConfig;
 
 	ENTER();
 
@@ -8058,13 +8083,21 @@ static int __wlan_hdd_cfg80211_stop_ap(struct wiphy *wiphy,
 		pHddCtx->is_sap_restart_required = false;
 		qdf_spin_unlock(&pHddCtx->sap_update_info_lock);
 	}
-	pAdapter->sessionCtx.ap.sapConfig.acs_cfg.acs_mode = false;
+
+	pConfig = &pAdapter->sessionCtx.ap.sapConfig;
+	pConfig->acs_cfg.acs_mode = false;
 	wlan_hdd_undo_acs(pAdapter);
-	qdf_mem_zero(&pAdapter->sessionCtx.ap.sapConfig.acs_cfg,
-						sizeof(struct sap_acs_cfg));
+	qdf_mem_zero(&pConfig->acs_cfg, sizeof(struct sap_acs_cfg));
+
+	/* Remove the channel no from sap mandatory list if it is a
+	 * 5GHz channel */
+	if (CDS_IS_CHANNEL_5GHZ(pConfig->channel))
+		cds_remove_sap_mandatory_chan(pConfig->channel);
+
 	/* Stop all tx queues */
 	hdd_notice("Disabling queues");
-	wlan_hdd_netif_queue_control(pAdapter, WLAN_NETIF_TX_DISABLE_N_CARRIER,
+	wlan_hdd_netif_queue_control(pAdapter,
+				     WLAN_STOP_ALL_NETIF_QUEUE_N_CARRIER,
 				     WLAN_CONTROL_PATH);
 
 	old = pAdapter->sessionCtx.ap.beacon;
@@ -8270,6 +8303,17 @@ static int __wlan_hdd_cfg80211_start_ap(struct wiphy *wiphy,
 	channel = ieee80211_frequency_to_channel(
 				params->chandef.chan->center_freq);
 
+	if (cds_is_sap_mandatory_chan_list_enabled()) {
+		if (!cds_get_sap_mandatory_chan_list_len())
+			cds_init_sap_mandatory_2g_chan();
+
+		if (CDS_IS_CHANNEL_5GHZ(channel)) {
+			hdd_debug("channel %hu, sap mandatory chan list enabled",
+					channel);
+			cds_add_sap_mandatory_chan(channel);
+		}
+	}
+
 	if (cds_is_sub_20_mhz_enabled()) {
 		enum channel_state ch_state;
 		enum phy_ch_width sub_20_ch_width = CH_WIDTH_INVALID;
@@ -8405,6 +8449,11 @@ static int __wlan_hdd_cfg80211_start_ap(struct wiphy *wiphy,
 				params->ssid, params->ssid_len,
 				params->hidden_ssid, true, false);
 
+		if (status != 0) {
+			hdd_err("Error Start bss Failed");
+			goto err_start_bss;
+		}
+
 		if (pHddCtx->config->sap_max_inactivity_override) {
 			sta_inactivity_timer = qdf_mem_malloc(
 					sizeof(*sta_inactivity_timer));
@@ -8427,6 +8476,13 @@ static int __wlan_hdd_cfg80211_start_ap(struct wiphy *wiphy,
 		}
 	}
 
+	goto success;
+
+err_start_bss:
+	if (pAdapter->sessionCtx.ap.beacon)
+		qdf_mem_free(pAdapter->sessionCtx.ap.beacon);
+	pAdapter->sessionCtx.ap.beacon = NULL;
+success:
 	EXIT();
 	return status;
 }

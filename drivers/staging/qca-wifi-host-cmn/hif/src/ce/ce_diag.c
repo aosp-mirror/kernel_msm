@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -237,17 +237,22 @@ QDF_STATUS hif_diag_read_mem(struct hif_opaque_softc *hif_ctx,
 				goto done;
 		}
 
-		if (Q_TARGET_ACCESS_BEGIN(scn) < 0)
-			return QDF_STATUS_E_FAILURE;
+		if (Q_TARGET_ACCESS_BEGIN(scn) < 0) {
+			status = QDF_STATUS_E_FAILURE;
+			goto done;
+		}
 
 		/* convert soc virtual address to physical address */
 		ce_phy_addr = get_ce_phy_addr(scn, address, target_type);
 
-		if (Q_TARGET_ACCESS_END(scn) < 0)
-			return QDF_STATUS_E_FAILURE;
+		if (Q_TARGET_ACCESS_END(scn) < 0) {
+			status = QDF_STATUS_E_FAILURE;
+			goto done;
+		}
 
 		/* Request CE to send from Target(!)
-		 * address to Host buffer */
+		 * address to Host buffer
+		 */
 		status = ce_send(ce_diag, NULL, ce_phy_addr, nbytes,
 				transaction_id, 0, user_flags);
 		if (status != QDF_STATUS_SUCCESS)
@@ -361,6 +366,7 @@ QDF_STATUS hif_diag_write_mem(struct hif_opaque_softc *hif_ctx,
 	unsigned int toeplitz_hash_result;
 	unsigned int user_flags = 0;
 	unsigned int target_type = 0;
+
 	ce_diag = hif_state->ce_diag;
 	transaction_id = (mux_id & MUX_ID_MASK) |
 		(transaction_id & TRANSACTION_ID_MASK);
@@ -391,14 +397,18 @@ QDF_STATUS hif_diag_write_mem(struct hif_opaque_softc *hif_ctx,
 
 	target_type = (hif_get_target_info_handle(hif_ctx))->target_type;
 
-	if (Q_TARGET_ACCESS_BEGIN(scn) < 0)
-		return QDF_STATUS_E_FAILURE;
+	if (Q_TARGET_ACCESS_BEGIN(scn) < 0) {
+		status = QDF_STATUS_E_FAILURE;
+		goto done;
+	}
 
 	/* convert soc virtual address to physical address */
 	ce_phy_addr = get_ce_phy_addr(scn, address, target_type);
 
-	if (Q_TARGET_ACCESS_END(scn) < 0)
-		return QDF_STATUS_E_FAILURE;
+	if (Q_TARGET_ACCESS_END(scn) < 0) {
+		status = QDF_STATUS_E_FAILURE;
+		goto done;
+	}
 
 	remaining_bytes = orig_nbytes;
 	CE_data = CE_data_base;
@@ -479,7 +489,7 @@ done:
 	}
 
 	if (status != QDF_STATUS_SUCCESS) {
-		HIF_ERROR("%s failure (0x%llu)", __func__,
+		HIF_ERROR("%s failure (0x%llx)", __func__,
 			(uint64_t)ce_phy_addr);
 	}
 

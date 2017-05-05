@@ -273,9 +273,6 @@ QDF_STATUS wma_roam_scan_bmiss_cnt(tp_wma_handle wma_handle,
 QDF_STATUS wma_roam_scan_offload_command(tp_wma_handle wma_handle,
 					 uint32_t command, uint32_t vdev_id);
 
-QDF_STATUS wma_process_roaming_config(tp_wma_handle wma_handle,
-				     tSirRoamOffloadScanReq *roam_req);
-
 QDF_STATUS wma_roam_preauth_chan_set(tp_wma_handle wma_handle,
 				     tpSwitchChannelParams params,
 				     uint8_t vdev_id);
@@ -856,6 +853,8 @@ QDF_STATUS wma_process_ll_stats_get_req
 int wma_unified_link_iface_stats_event_handler(void *handle,
 					       uint8_t *cmd_param_info,
 					       uint32_t len);
+void wma_config_stats_ext_threshold(tp_wma_handle wma,
+				    struct sir_ll_ext_stats_threshold *thresh);
 #endif
 
 void wma_post_link_status(tAniGetLinkStatus *pGetLinkStatus,
@@ -965,8 +964,6 @@ int wma_oem_data_response_handler(void *handle, uint8_t *datap,
 				  uint32_t len);
 #endif
 
-void wma_register_dfs_event_handler(tp_wma_handle wma_handle);
-
 int
 wma_unified_dfs_phyerr_filter_offload_enable(tp_wma_handle wma_handle);
 
@@ -1047,16 +1044,14 @@ QDF_STATUS wma_enable_arp_ns_offload(tp_wma_handle wma,
 				     bool bArpOnly);
 
 /**
- * wma_configure_non_arp_broadcast_filter() - API to Enable/Disable Broadcast
- * filter
- * when target goes to wow suspend/resume mode
+ * wma_conf_hw_filter_mode() - configure hw filter to the given mode
  * @wma: wma handle
- * @bcastFilter: broadcast filter request
+ * @req: hardware filter request
  *
- * Return: QDF Status
+ * Return: QDF_STATUS
  */
-QDF_STATUS wma_configure_non_arp_broadcast_filter(tp_wma_handle wma,
-				struct broadcast_filter_request *bcast_filter);
+QDF_STATUS wma_conf_hw_filter_mode(tp_wma_handle wma,
+				   struct hw_filter_request *req);
 
 QDF_STATUS wma_process_cesium_enable_ind(tp_wma_handle wma);
 
@@ -1187,12 +1182,25 @@ void wma_dfs_detach(struct ieee80211com *dfs_ic);
 
 void wma_dfs_configure(struct ieee80211com *ic);
 
-struct dfs_ieee80211_channel *wma_dfs_configure_channel(
-						struct ieee80211com *dfs_ic,
-						uint32_t band_center_freq1,
-						uint32_t band_center_freq2,
-						struct wma_vdev_start_req
-						*req);
+/**
+ * wma_dfs_configure_channel() - configure DFS channel
+ * @dfs_ic: ieee80211com ptr
+ * @band_center_freq1: center frequency 1
+ * @band_center_freq2: center frequency 2
+ *       (valid only for 11ac vht 80plus80 mode)
+ * @req: vdev start request
+ *
+ * Set the Channel parameters in to DFS module
+ * Also,configure the DFS radar filters for
+ * matching the DFS phyerrors.
+ *
+ * Return: None
+ */
+void wma_dfs_configure_channel(struct ieee80211com *dfs_ic,
+				uint32_t band_center_freq1,
+				uint32_t band_center_freq2,
+				struct wma_vdev_start_req *req);
+
 void wma_set_vdev_mgmt_rate(tp_wma_handle wma, uint8_t vdev_id);
 void wma_set_sap_keepalive(tp_wma_handle wma, uint8_t vdev_id);
 
@@ -1395,4 +1403,65 @@ struct wma_beacon_interval_reset_req {
  */
 int wma_fill_beacon_interval_reset_req(tp_wma_handle wma, uint8_t vdev_id,
 				uint16_t beacon_interval, uint32_t timeout);
+
+/**
+ * wma_peer_ant_info_evt_handler - event handler to handle antenna info
+ * @handle: the wma handle
+ * @event: buffer with event
+ * @len: buffer length
+ *
+ * This function receives antenna info from firmware and passes the event
+ * to upper layer
+ *
+ * Return: 0 on success
+ */
+int wma_peer_ant_info_evt_handler(void *handle, u_int8_t *event,
+	u_int32_t len);
+
+/**
+ * wma_extract_comb_phyerr_spectral() - extract comb phy error from event
+ * @handle: wma handle
+ * @param evt_buf: pointer to event buffer
+ * @param datalen: data length of event buffer
+ * @param buf_offset: Pointer to hold value of current event buffer offset
+ * post extraction
+ * @param phyerr: Pointer to hold phyerr
+ *
+ * Return: QDF_STATUS
+ */
+QDF_STATUS wma_extract_comb_phyerr_spectral(void *handle, void *evt_buf,
+		uint16_t datalen, uint16_t *buf_offset,
+		wmi_host_phyerr_t *phyerr);
+
+#ifdef FEATURE_SPECTRAL_SCAN
+/**
+ * wma_extract_single_phyerr_spectral() - extract single phy error from event
+ * @handle: wma handle
+ * @param evt_buf: pointer to event buffer
+ * @param datalen: data length of event buffer
+ * @param buf_offset: Pointer to hold value of current event buffer offset
+ * post extraction
+ * @param phyerr: Pointer to hold phyerr
+ *
+ * Return: QDF_STATUS
+ */
+QDF_STATUS wma_extract_single_phyerr_spectral(void *handle,
+		void *evt_buf,
+		uint16_t datalen, uint16_t *buf_offset,
+		wmi_host_phyerr_t *phyerr);
+#endif
+
+/*
+ * wma_rx_aggr_failure_event_handler - event handler to handle rx aggr failure
+ * @handle: the wma handle
+ * @event_buf: buffer with event
+ * @len: buffer length
+ *
+ * This function receives rx aggregation failure event and then pass to upper
+ * layer
+ *
+ * Return: 0 on success
+ */
+int wma_rx_aggr_failure_event_handler(void *handle, u_int8_t *event_buf,
+							u_int32_t len);
 #endif

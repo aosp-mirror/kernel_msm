@@ -765,7 +765,6 @@ tSirRetStatus pe_open(tpAniSirGlobal pMac, struct cds_config_info *cds_cfg)
 		status = eSIR_FAILURE;
 		goto pe_open_lock_fail;
 	}
-	pMac->lim.deauthMsgCnt = 0;
 	pMac->lim.retry_packet_cnt = 0;
 	pMac->lim.ibss_retry_cnt = 0;
 
@@ -1247,7 +1246,7 @@ lim_update_overlap_sta_param(tpAniSirGlobal pMac, tSirMacAddr bssId,
 	}
 
 	if (i == LIM_PROT_STA_OVERLAP_CACHE_SIZE) {
-		pe_warn("Overlap cache is full");
+		pe_debug("Overlap cache is full");
 	} else {
 		qdf_mem_copy(pMac->lim.protStaOverlapCache[i].addr,
 			     bssId, sizeof(tSirMacAddr));
@@ -1825,6 +1824,9 @@ lim_roam_fill_bss_descr(tpAniSirGlobal pMac,
 					   ieFields[0]) -
 				sizeof(bss_desc_ptr->length) + ie_len);
 
+	bss_desc_ptr->fProbeRsp = !roam_offload_synch_ind_ptr->isBeacon;
+	/* Copy Timestamp */
+	bss_desc_ptr->scansystimensec = qdf_get_monotonic_boottime_ns();
 	if (parsed_frm_ptr->dsParamsPresent) {
 		bss_desc_ptr->channelId = parsed_frm_ptr->channelNumber;
 	} else if (parsed_frm_ptr->HTInfo.present) {
@@ -2352,42 +2354,6 @@ QDF_STATUS lim_update_ext_cap_ie(tpAniSirGlobal mac_ctx,
 	qdf_mem_copy(local_ie_buf + (*local_ie_len),
 			driver_ext_cap.bytes, driver_ext_cap.num_bytes);
 	(*local_ie_len) += driver_ext_cap.num_bytes;
-	return QDF_STATUS_SUCCESS;
-}
-
-/**
- * lim_add_qcn_ie() - Add QCN IE to a given IE buffer
- *
- * @mac_ctx: Pointer to Global MAC structure
- * @ie_data: IE buffer
- * @ie_len: length of the @ie_data
- *
- * Return: QDF_STATUS
- */
-QDF_STATUS lim_add_qcn_ie(tpAniSirGlobal mac_ctx, uint8_t *ie_data,
-							uint16_t *ie_len)
-{
-	tDot11fIEQCN_IE qcn_ie;
-	uint8_t qcn_ie_hdr[QCN_IE_HDR_LEN]
-		= {IE_EID_VENDOR, DOT11F_IE_QCN_IE_MAX_LEN,
-			0x8C, 0xFD, 0xF0, 0x1};
-
-	if (((*ie_len) + DOT11F_IE_QCN_IE_MAX_LEN) > MAX_DEFAULT_SCAN_IE_LEN) {
-		pe_err("IE buffer not enough for QCN IE");
-		return QDF_STATUS_E_FAILURE;
-	}
-
-	/* Add QCN IE header */
-	qdf_mem_copy(ie_data + (*ie_len), qcn_ie_hdr, QCN_IE_HDR_LEN);
-	(*ie_len) += QCN_IE_HDR_LEN;
-
-	/* Retrieve Version sub-attribute data */
-	populate_dot11f_qcn_ie(&qcn_ie);
-
-	/* Add QCN IE data[version sub attribute] */
-	qdf_mem_copy(ie_data + (*ie_len), qcn_ie.version,
-			(QCN_IE_VERSION_SUBATTR_LEN));
-	(*ie_len) += (QCN_IE_VERSION_SUBATTR_LEN);
 	return QDF_STATUS_SUCCESS;
 }
 
