@@ -14,8 +14,6 @@
  *
  */
 
-/* #define DEBUG */
-
 #include <linux/atomic.h>
 #include <linux/cdev.h>
 #include <linux/device.h>
@@ -1663,6 +1661,13 @@ static int mnh_sm_probe(struct platform_device *pdev)
 	error = sysfs_create_group(&dev->kobj, &mnh_sm_group);
 	if (error) {
 		dev_err(dev, "failed to create sysfs group\n");
+		goto fail_probe_1;
+	}
+
+	/* initialize mnh-mipi */
+	error = mnh_mipi_init(dev);
+	if (error) {
+		dev_err(dev, "failed to initialize mipi (%d)\n", error);
 		goto fail_probe_1;
 	}
 

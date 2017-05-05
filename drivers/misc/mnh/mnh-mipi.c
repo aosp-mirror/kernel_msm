@@ -22,8 +22,18 @@
 #include "mnh-hwio-mipi-top.h"
 #include "mnh-hwio-bases.h"
 #include "mnh-mipi.h"
+#include "mnh-pwr.h"
 
 #define REF_FREQ_KHZ    25000
+
+/* ASR Vboost timeout for MIPI Rx-DPHY fix */
+#define ASR_TIMEOUT_MS  250
+/* ASR Vboost register poll loop delay to detect HS transition */
+#define ASR_POLL_DELAY_US 100
+/* ASR nominal voltage */
+#define ASR_VNOMINAL 900000
+/* ASR boost voltage */
+#define ASR_VBOOST 1000000
 
 struct mipi_rate_config {
 	uint32_t rate;
@@ -163,6 +173,18 @@ static struct mipi_dev_ovr_cfg mipi_dev_ovr_cfgs[] = {
 	{ 2100, 0x9A, 0x9B, 0xD0, 0x0E, 0x50, 0xC0, 0x39, 0xD3, 0x0C, 0x4A, 0xA7, 0x1E, true},
 };
 
+struct mnh_mipi_data {
+	struct device *dev;
+	/* kernel thread for ASR voltage adjustment, MIPI fix */
+	struct work_struct asr_work;
+	/* keep-alive flag for polling thread */
+	atomic_t poll;
+	/* active Rx channel */
+	atomic_t rxdev;
+};
+
+static struct mnh_mipi_data *mnh_mipi;
+
 static int mipi_debug;
 
 static void mnh_sm_mipi_rx_dphy_write_gen3(int command, int data,
@@ -254,6 +276,80 @@ static void mnh_sm_mipi_tx_dphy_write_gen3(int command, int data,
 		PHY0_TESTCLK, 1);
 
 	udelay(1);
+}
+
+static uint8_t mnh_sm_mipi_rx_dphy_read_gen3(uint16_t command, uint32_t device)
+{
+	uint8_t data;
+
+	/* Write 4-bit testcode MSB */
+	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL0,
+		PHY_TESTCLK, 0);
+	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL1,
+		PHY_TESTEN,  0);
+	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL1,
+		PHY_TESTEN, 1);
+	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL0,
+		PHY_TESTCLK, 1);
+	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL1,
+		PHY_TESTDIN, 0);
+	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL0,
+		PHY_TESTCLK, 0);
+	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL1,
+		PHY_TESTEN,  0);
+	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL1,
+		PHY_TESTDIN, ((command & 0xF00) >> 8));
+	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL0,
+		PHY_TESTCLK, 1);
+
+	/* Write 8-bit testcode LSB */
+	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL0,
+		PHY_TESTCLK, 0);
+	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL1,
+		PHY_TESTEN,  1);
+	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL0,
+		PHY_TESTCLK, 1);
+	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL1,
+		PHY_TESTDIN, (command & 0xFF));
+	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL0,
+		PHY_TESTCLK, 0);
+	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL1,
+		PHY_TESTEN,  0);
+
+	/* Read the data */
+	data = (HW_IN(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX,
+		      PHY_TEST_CTRL1)) >> 8;
+
+	return data;
+}
+
+/* kernel thread for ASR voltage increase during MIPI startup */
+static void mnh_mipi_asr_work(struct work_struct *data)
+{
+	uint8_t reg0x32d, reg0x32e;
+	int asr_timeout_ctr = ASR_TIMEOUT_MS * 1000 / ASR_POLL_DELAY_US;
+	int rxdev = atomic_read(&mnh_mipi->rxdev);
+
+	while (asr_timeout_ctr--) {
+		if (atomic_read(&mnh_mipi->poll) == 0)
+			break;
+		/* poll Rx-DPHY reg. to monitor for clk's LP->HS transition */
+		reg0x32d = mnh_sm_mipi_rx_dphy_read_gen3(0x32D, rxdev);
+		reg0x32e = mnh_sm_mipi_rx_dphy_read_gen3(0x32E, rxdev);
+		if ((reg0x32d & (1 << 7)) && /* rxclk_rxhs_rx_enterm_if */
+		    (reg0x32e & (1 << 0))) { /* rxclk_rxhs_rx_pon_if */
+			dev_dbg(mnh_mipi->dev,
+				"%s: Dev %d CLK in HS 0x32d=%d 0x32e=%d\n",
+				__func__, rxdev, reg0x32d, reg0x32e);
+			break;
+		}
+		udelay(ASR_POLL_DELAY_US);
+	}
+
+	dev_dbg(mnh_mipi->dev, "%s: reducing ASR voltage\n", __func__);
+
+	/* ASR voltage back to nominal */
+	mnh_pwr_set_asr_voltage(ASR_VNOMINAL);
 }
 
 static int mnh_mipi_gen3_lookup_freq_code(uint32_t rate)
@@ -856,6 +952,16 @@ int mnh_mipi_config(struct device *dev, struct mnh_mipi_config config)
 	dev_dbg(dev, "%s: init rxdev %d, txdev %d, rx_rate %d, tx_rate %d, vc_en_mask 0x%1x\n",
 		__func__, rxdev, txdev, rx_rate, tx_rate, vc_en_mask);
 
+	/* abort any previously running thread */
+	atomic_set(&mnh_mipi->poll, 0);
+	cancel_work_sync(&mnh_mipi->asr_work);
+	/* boost ASR voltage on startup */
+	atomic_set(&mnh_mipi->poll, 1);
+	dev_dbg(mnh_mipi->dev, "%s: boosting ASR voltage\n", __func__);
+	mnh_pwr_set_asr_voltage(ASR_VBOOST);
+	atomic_set(&mnh_mipi->rxdev, rxdev);
+	schedule_work(&mnh_mipi->asr_work);
+
 	/* configure rx / MIPI-source */
 	switch (rxdev) {
 	case MIPI_RX0:
@@ -978,6 +1084,23 @@ void mnh_mipi_stop_host(struct device *dev, int rxdev)
 	}
 }
 EXPORT_SYMBOL_GPL(mnh_mipi_stop_host);
+
+int mnh_mipi_init(struct device *dev)
+{
+	/* allocate memory for mnh_mipi_data struct */
+	mnh_mipi = devm_kzalloc(dev, sizeof(*mnh_mipi), GFP_KERNEL);
+	if (!mnh_mipi)
+		return -ENOMEM;
+
+	/* save a local copy of the device struct */
+	mnh_mipi->dev = dev;
+
+	/* initialize kernel thread */
+	INIT_WORK(&mnh_mipi->asr_work, mnh_mipi_asr_work);
+
+	return 0;
+}
+EXPORT_SYMBOL(mnh_mipi_init);
 
 void mnh_mipi_set_debug(int val)
 {
