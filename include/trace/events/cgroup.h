@@ -59,15 +59,17 @@ DECLARE_EVENT_CLASS(cgroup,
 	TP_STRUCT__entry(
 		__field(	int,		root			)
 		__field(	int,		id			)
+		__array(	char,		cname,	20		)
 	),
 
 	TP_fast_assign(
 		__entry->root = cgrp->root->hierarchy_id;
 		__entry->id = cgrp->id;
+		cgroup_name(cgrp, __entry->cname, 20);
 	),
 
-	TP_printk("root=%d id=%d",
-		  __entry->root, __entry->id)
+	TP_printk("root=%d id=%d cgroup=%s",
+		  __entry->root, __entry->id, __entry->cname)
 );
 
 DEFINE_EVENT(cgroup, cgroup_mkdir,
@@ -109,6 +111,7 @@ DECLARE_EVENT_CLASS(cgroup_migrate,
 		__field(	int,		dst_id			)
 		__field(	int,		pid			)
 		__string(	comm,		task->comm		)
+		__array(	char,		cname,	20		)
 	),
 
 	TP_fast_assign(
@@ -116,10 +119,11 @@ DECLARE_EVENT_CLASS(cgroup_migrate,
 		__entry->dst_id = dst_cgrp->id;
 		__entry->pid = task->pid;
 		__assign_str(comm, task->comm);
+		cgroup_name(dst_cgrp, __entry->cname, 20);
 	),
 
-	TP_printk("dst_root=%d dst_id=%d  pid=%d comm=%s",
-		  __entry->dst_root, __entry->dst_id,
+	TP_printk("dst_root=%d dst_id=%d cgroup=%s pid=%d comm=%s",
+		  __entry->dst_root, __entry->dst_id, __entry->cname,
 		  __entry->pid, __get_str(comm))
 );
 
