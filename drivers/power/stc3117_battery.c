@@ -191,7 +191,6 @@
 static const int TempTable[NTEMP] = {60, 40, 25, 10, 0, -10, -20};
 static const int DefVMTempTable[NTEMP] = VMTEMPTABLE;
 static const char *charger_name = "battery";
-static int g_low_battery_counter = 0;
 static bool g_debug, g_standby_mode, g_boot_phase;
 static int g_ui_soc, g_last_status, g_ocv, g_reg_soc;
 static const char * const charge_status[] = {
@@ -324,8 +323,10 @@ int Capacity_Adjust;
 #define STC311x_BATTERY_FULL 100
 #define STC311x_DELAY_BOOTUP	 12000 //120 sec
 #define STC311x_DELAY	 3000 //30 sec
-#define STC311x_DELAY_LOW_BATT 500 //5 sec
-#define STC311x_SOC_THRESHOLD 5
+#define STC311x_DELAY_LOW_BATT 2000 //20 sec
+#define STC311x_DELAY_CRITICAL_BATT 500 //5 sec
+#define STC311x_SOC_LOW_THRESHOLD 7
+#define STC311x_SOC_CRITICAL_THRESHOLD 3
 #define BATTERY_NTC_ERROR_TEMP -400 //-40degC
 
 /* ************************************************************************ */
@@ -507,24 +508,18 @@ static int stc311x_get_property(struct power_supply *psy,
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-		pr_info("voltage: %d \n", chip->batt_voltage);
 		val->intval = chip->batt_voltage * 1000;  /* in uV */
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
-		pr_info("current: %d \n", chip->batt_current);
 		val->intval = chip->batt_current * 1000;  /* in uA */
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
-		pr_info("capacity: %d \n", g_ui_soc);
-		//val->intval = chip->batt_soc;
 		val->intval = g_ui_soc;
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
-		pr_info("temp: %d \n", chip->Temperature);
 		val->intval = chip->Temperature;
 		break;
 	case POWER_SUPPLY_PROP_TECHNOLOGY:
-		pr_info("technology: %d \n", g_debug);
 		val->intval = g_debug;
 		break;
 	default:
@@ -879,7 +874,7 @@ static int STC311x_Restore(void)
 			reg_soc = (STC31xx_ReadWord(STC311x_REG_SOC)/512);
 			ram_soc = (GG_Ram.reg.HRSOC/512);
 			pr_info("reg_soc:%d, ram_HRSOC:%d \n", reg_soc, ram_soc);
-			if (reg_soc <= STC311x_SOC_THRESHOLD)
+			if (reg_soc <= STC311x_SOC_LOW_THRESHOLD)
 				pr_err("Battery is low, skip restore SOC from ram \n");
 			else if (((reg_soc > ram_soc) && (reg_soc - ram_soc > SOC_DIFF)) || ((ram_soc > reg_soc) && (ram_soc - reg_soc > SOC_DIFF)))
 				pr_err("SOC not match, skip restore SOC from ram \n");
@@ -2565,27 +2560,7 @@ static void stc311x_work(struct work_struct *work)
 	stc311x_check_charger_state(chip);
 
 	if ((chip->batt_soc ^ g_ui_soc) || (chip->batt_soc == 0))
-	{
-		if(g_ui_soc > STC311x_SOC_THRESHOLD)
-		{
-			g_low_battery_counter = 0;
-
-			UI_soc_adjustment(chip);
-		}
-		else
-		{
-			if(g_low_battery_counter <= 1)
-			{
-				g_low_battery_counter++;
-			}
-			else
-			{
-				g_low_battery_counter = 0;
-
-				UI_soc_adjustment(chip);
-			}
-		}
-	}
+		UI_soc_adjustment(chip);
 
 	//Control SOC between  0 - 100%
 	if (g_ui_soc >= 100)
@@ -2596,11 +2571,15 @@ static void stc311x_work(struct work_struct *work)
 	stc311x_updata();
 	if (g_debug)
 		pr_err("*** ST_SOC = %d, UI_SOC = %d, reg_soc = %d, voltage = %d mv, OCV = %d mv, current = %d mA, Temperature = %d, charging_status = %d *** \n", chip->batt_soc, g_ui_soc, g_reg_soc, chip->batt_voltage, g_ocv, chip->batt_current, chip->Temperature, chip->status);
-
-	if (chip->batt_soc > STC311x_SOC_THRESHOLD)
-		schedule_delayed_work(&chip->work, STC311x_DELAY);
 	else
+		pr_info("*** ST_SOC=%d, UI_SOC=%d, reg_soc=%d, voltage=%d, OCV=%d, charging_status=%d *** \n", chip->batt_soc, g_ui_soc, g_reg_soc, chip->batt_voltage, g_ocv, chip->status);
+
+	if (chip->batt_soc > STC311x_SOC_LOW_THRESHOLD)
+		schedule_delayed_work(&chip->work, STC311x_DELAY);
+	else if ((STC311x_SOC_CRITICAL_THRESHOLD <= chip->batt_soc) && (chip->batt_soc <= STC311x_SOC_LOW_THRESHOLD))
 		schedule_delayed_work(&chip->work, STC311x_DELAY_LOW_BATT);
+	else
+		schedule_delayed_work(&chip->work, STC311x_DELAY_CRITICAL_BATT);
 
 	if (wake_lock_active(&chip->wlock)) {
 		wake_unlock(&chip->wlock);
@@ -2803,6 +2782,8 @@ static int stc311x_probe(struct i2c_client *client,
 
 	if (g_debug)
 		pr_err("SOC = %d, reg_soc = %d, voltage = %d, OCV = %d, temp = %d \n", chip->batt_soc, g_reg_soc, chip->batt_voltage, g_ocv, chip->Temperature);
+	else
+		pr_info("SOC=%d, reg_soc=%d, voltage=%d, OCV=%d, temp=%d \n", chip->batt_soc, g_reg_soc, chip->batt_voltage, g_ocv, chip->Temperature);
 	pr_info("stc311x FG successfully probed\n");
 	return 0;
 }
