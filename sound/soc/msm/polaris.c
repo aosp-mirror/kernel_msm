@@ -3801,18 +3801,27 @@ static u32 get_mi2s_bits_per_sample(u32 bit_format)
 static void update_mi2s_clk_val(int dai_id, int stream, u32 bit_format)
 {
 	u32 bit_per_sample = get_mi2s_bits_per_sample(bit_format);
+	struct dev_config *mi2s_cfg;
+	u32 channels_mult;
+
+	if (!mi2s_intf_conf[dai_id].msm_is_mi2s_master) {
+		mi2s_clk[dai_id].clk_freq_in_hz = 0;
+		return;
+	}
 
 	if (stream == SNDRV_PCM_STREAM_PLAYBACK)
-		mi2s_clk[dai_id].clk_freq_in_hz =
-		    mi2s_rx_cfg[dai_id].sample_rate *
-		    mi2s_rx_cfg[dai_id].channels * bit_per_sample;
+		mi2s_cfg = &mi2s_rx_cfg[dai_id];
 	else
-		mi2s_clk[dai_id].clk_freq_in_hz =
-		    mi2s_tx_cfg[dai_id].sample_rate *
-		    mi2s_tx_cfg[dai_id].channels * bit_per_sample;
+		mi2s_cfg = &mi2s_tx_cfg[dai_id];
 
-	if (!mi2s_intf_conf[dai_id].msm_is_mi2s_master)
-		mi2s_clk[dai_id].clk_freq_in_hz = 0;
+	/* There are a maximum of two channels per transmission line on I2S. */
+	if (mi2s_cfg->channels > 2)
+		channels_mult = 2;
+	else
+		channels_mult = mi2s_cfg->channels;
+
+	mi2s_clk[dai_id].clk_freq_in_hz =
+			mi2s_cfg->sample_rate * channels_mult * bit_per_sample;
 }
 
 static int msm_mi2s_set_sclk(struct snd_pcm_substream *substream,
