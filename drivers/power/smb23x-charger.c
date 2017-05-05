@@ -104,6 +104,7 @@ struct smb23x_chip {
 
 	/* extend */
 	int				cfg_cool_temp_comp_mv;
+	int				cfg_cool_temp_comp_ma;
 	int				index_soft_temp_comp_mv;
 	int				last_temp;
 	int				cfg_en_active;
@@ -704,6 +705,11 @@ static int smb23x_parse_dt(struct smb23x_chip *chip)
 	if (rc < 0)
 		chip->cfg_cool_temp_comp_mv = -EINVAL;
 
+	rc = of_property_read_u32(node, "cei,cool-temp-current-comp-ma",
+					&chip->cfg_cool_temp_comp_ma);
+	if (rc < 0)
+		chip->cfg_cool_temp_comp_ma = -EINVAL;
+
 	return 0;
 }
 
@@ -938,6 +944,46 @@ static int smb23x_vfloat_compensation(struct smb23x_chip *chip, int temp_comp_mv
 	return rc;
 }
 
+static int smb23x_fastchg_current_compensation(struct smb23x_chip *chip, int temp_comp_ma)
+{
+	int rc = 0, i = 0;
+	u8 tmp;
+
+	if (temp_comp_ma != -EINVAL) {
+		i = find_closest_in_ascendant_list(
+			temp_comp_ma, fastchg_current_ma_table,
+			ARRAY_SIZE(fastchg_current_ma_table));
+		tmp = i << FASTCHG_CURR_SOFT_COMP_OFFSET;
+		rc = smb23x_masked_write(chip, CFG_REG_3, FASTCHG_CURR_SOFT_COMP, tmp);
+	}
+
+	return rc;
+}
+
+static int smb23x_soft_temp_behavior(struct smb23x_chip *chip, int temp_comp_mv, int temp_comp_ma)
+{
+	int rc = 0;
+	u8 tmp;
+
+	if (temp_comp_mv == -EINVAL && temp_comp_ma == -EINVAL) {
+		//No response
+		tmp = 0;
+	} else if (temp_comp_mv == -EINVAL && temp_comp_ma != -EINVAL) {
+		//Charge current compensation
+		tmp = BIT(4);
+	} else if (temp_comp_mv != -EINVAL && temp_comp_ma == -EINVAL) {
+		//Float voltage compensation
+		tmp = BIT(5);
+	} else if (temp_comp_mv != -EINVAL && temp_comp_ma != -EINVAL) {
+		//Charge current and float voltage compensation
+		tmp = SOFT_THERM_VFLT_CHG_COMP;
+	}
+
+	rc = smb23x_masked_write(chip, CFG_REG_5, SOFT_THERM_BEHAVIOR_MASK, tmp);
+
+	return rc;
+}
+
 //Change thermal setting by battery temperature
 static int check_charger_thermal_state(struct smb23x_chip *chip, int batt_temp)
 {
@@ -953,11 +999,24 @@ static int check_charger_thermal_state(struct smb23x_chip *chip, int batt_temp)
 			return rc;
 		}
 
-		rc = smb23x_vfloat_compensation(chip, chip->cfg_temp_comp_mv);
+		rc = smb23x_soft_temp_behavior(chip, chip->cfg_temp_comp_mv, chip->cfg_temp_comp_ma);
 		if (rc < 0) {
-			pr_err("Set VFLOAT_COMP failed, rc=%d\n", rc);
+			pr_err("Set soft temp limit behavior failed, rc=%d\n", rc);
 			return rc;
 		}
+
+		rc = smb23x_fastchg_current_compensation(chip, chip->cfg_temp_comp_ma);
+		if (rc < 0) {
+			pr_err("Set fast charge current in soft-limit mode failed, rc=%d\n", rc);
+			return rc;
+		}
+
+		rc = smb23x_vfloat_compensation(chip, chip->cfg_temp_comp_mv);
+		if (rc < 0) {
+			pr_err("Set float voltage compensation failed, rc=%d\n", rc);
+			return rc;
+		}
+
 		chip->index_soft_temp_comp_mv = HIGH;
 	} else if ((LOW != chip->index_soft_temp_comp_mv) && (batt_temp < 250)) {
 		rc = smb23x_enable_volatile_writes(chip);
@@ -966,11 +1025,24 @@ static int check_charger_thermal_state(struct smb23x_chip *chip, int batt_temp)
 			return rc;
 		}
 
-		rc = smb23x_vfloat_compensation(chip, chip->cfg_cool_temp_comp_mv);
+		rc = smb23x_soft_temp_behavior(chip, chip->cfg_cool_temp_comp_mv, chip->cfg_cool_temp_comp_ma);
 		if (rc < 0) {
-			pr_err("Set VFLOAT_COMP failed, rc=%d\n", rc);
+			pr_err("Set soft temp limit behavior failed, rc=%d\n", rc);
 			return rc;
 		}
+
+		rc = smb23x_fastchg_current_compensation(chip, chip->cfg_cool_temp_comp_ma);
+		if (rc < 0) {
+			pr_err("Set fast charge current in soft-limit mode failed, rc=%d\n", rc);
+			return rc;
+		}
+
+		rc = smb23x_vfloat_compensation(chip, chip->cfg_cool_temp_comp_mv);
+		if (rc < 0) {
+			pr_err("Set float voltage compensation failed, rc=%d\n", rc);
+			return rc;
+		}
+
 		chip->index_soft_temp_comp_mv = LOW;
 	}
 
@@ -1112,12 +1184,6 @@ static int smb23x_hw_init(struct smb23x_chip *chip)
 		chip->cfg_warm_bat_decidegc != -EINVAL) {
 		u8 mask = 0;
 
-		rc = smb23x_masked_write(chip, CFG_REG_5,
-			SOFT_THERM_BEHAVIOR_MASK, SOFT_THERM_VFLT_CHG_COMP);
-		if (rc < 0) {
-			pr_err("Set soft JEITA behavior failed, rc=%d\n", rc);
-			return rc;
-		}
 		if (chip->cfg_cool_bat_decidegc != -EINVAL) {
 			i = find_closest_in_descendant_list(
 				chip->cfg_cool_bat_decidegc,
@@ -1145,32 +1211,10 @@ static int smb23x_hw_init(struct smb23x_chip *chip)
 	}
 
 	/* float voltage and fastchg current compensation for soft JEITA */
-	if ((300 > chip->last_temp) && (chip->cfg_cool_temp_comp_mv != -EINVAL)) {
-		rc = smb23x_vfloat_compensation(chip, chip->cfg_cool_temp_comp_mv);
-		if (rc < 0) {
-			pr_err("Set VFLOAT_COMP failed, rc=%d\n", rc);
-			return rc;
-		}
-		chip->index_soft_temp_comp_mv = LOW;
+	if (chip->cfg_cool_temp_comp_mv != -EINVAL || chip->cfg_cool_temp_comp_ma != -EINVAL) {
+		check_charger_thermal_state(chip, chip->last_temp);
 	} else {
-		rc = smb23x_vfloat_compensation(chip, chip->cfg_temp_comp_mv);
-		if (rc < 0) {
-			pr_err("Set VFLOAT_COMP failed, rc=%d\n", rc);
-			return rc;
-		}
-		chip->index_soft_temp_comp_mv = HIGH;
-	}
-	if (chip->cfg_temp_comp_ma != -EINVAL) {
-		i = find_closest_in_ascendant_list(
-			chip->cfg_temp_comp_ma, fastchg_current_ma_table,
-			ARRAY_SIZE(fastchg_current_ma_table));
-		tmp = i << FASTCHG_CURR_SOFT_COMP_OFFSET;
-		rc = smb23x_masked_write(chip, CFG_REG_3,
-				FASTCHG_CURR_SOFT_COMP, tmp);
-		if (rc < 0) {
-			pr_err("Set FASTCHG_COMP failed, rc=%d\n", rc);
-			return rc;
-		}
+		check_charger_thermal_state(chip, 400);
 	}
 
 	/* disable APSD */
@@ -2096,9 +2140,9 @@ static int smb23x_get_prop_batt_temp(struct smb23x_chip *chip)
 		chip->bms_psy->get_property(chip->bms_psy,
 				POWER_SUPPLY_PROP_TEMP, &ret);
 
-		if (chip->cfg_cool_temp_comp_mv != -EINVAL)
-			check_charger_thermal_state(chip, ret.intval);
 		chip->last_temp = ret.intval;
+		if (chip->cfg_cool_temp_comp_mv != -EINVAL || chip->cfg_cool_temp_comp_ma != -EINVAL)
+			check_charger_thermal_state(chip, chip->last_temp);
 
 		return ret.intval;
 	}
@@ -2384,6 +2428,7 @@ static int smb23x_battery_set_property(struct power_supply *psy,
 		del_timer(&chip->timer_init_register);
 		del_timer(&chip->timer_print_register);
 		if (chip->charger_plugin) {
+			chip->index_soft_temp_comp_mv = NORMAL;
 			chip->timer_init_register.expires = jiffies + HZ;
 			add_timer(&chip->timer_init_register); 
 		}
