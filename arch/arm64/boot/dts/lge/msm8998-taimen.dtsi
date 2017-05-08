@@ -51,6 +51,26 @@
 	};
 };
 
+&pil_ipa_gpu_mem {
+	reg = <0 0x95a00000 0 0x100000>;
+};
+
+&pil_slpi_mem {
+	reg = <0 0x94b00000 0 0xf00000>;
+};
+
+&pil_mba_mem {
+	reg = <0 0x94900000 0 0x200000>;
+};
+
+&pil_video_mem {
+	reg = <0 0x94400000 0 0x500000>;
+};
+
+&modem_mem {
+	reg = <0 0x8cc00000 0 0x7800000>;
+};
+
 &soc {
 	qcom,wdt@17817000 {
 		qcom,bark-time = <16000>;
