@@ -1727,12 +1727,13 @@ static void msm_otg_notify_host_mode(struct msm_otg *motg, bool host_mode)
 static int msm_otg_notify_chg_type(struct msm_otg *motg)
 {
 	static int charger_type;
+	static int msm_chg_type;
 
 	/*
 	 * TODO
 	 * Unify OTG driver charger types and power supply charger types
 	 */
-	if (charger_type == motg->chg_type)
+	if (msm_chg_type == motg->chg_type)
 		return 0;
 
 	if (motg->chg_type == USB_SDP_CHARGER)
@@ -1745,6 +1746,8 @@ static int msm_otg_notify_chg_type(struct msm_otg *motg)
 		charger_type = POWER_SUPPLY_TYPE_USB_DCP;
 	else
 		charger_type = POWER_SUPPLY_TYPE_MAINS;
+
+	msm_chg_type = motg->chg_type;
 
 	if (!psy) {
 		pr_err("No USB power supply registered!\n");
