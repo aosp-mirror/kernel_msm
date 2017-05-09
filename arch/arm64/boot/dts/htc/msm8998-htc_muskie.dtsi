@@ -226,4 +226,19 @@
 		};
 	};
 
+	htc,htc-battery {
+		htc_battery: htc,battery-node {
+			htc,v-elvdd-dis-en = <&pmi8998_gpios 11 0>;
+		};
+	};
+};
+
+&pmi8998_gpios {
+	gpio@ca00 {
+		reg = <0xca00 0x100>;
+		qcom,pin-num = <11>;
+		status = "okay";
+		qcom,mode = <1>;
+		qcom,pull = <4>;
+	};
 };
