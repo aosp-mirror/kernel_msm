@@ -643,6 +643,15 @@ static bool is_main_available(struct pl_data *chip)
 		if (!chip->usb_icl_votable)
 			return false;
 		rerun_election(chip->usb_icl_votable);
+		/*
+		 * WAR: b/36651220, rerun election when we first notice
+		 * main_psy is ready. Before that, all callbacks have done
+		 * nothing and returned 0.
+		 */
+		rerun_election(chip->fcc_votable);
+		rerun_election(chip->fv_votable);
+		rerun_election(chip->pl_disable_votable);
+		rerun_election(chip->pl_awake_votable);
 	}
 
 	return !!chip->main_psy;
@@ -650,11 +659,22 @@ static bool is_main_available(struct pl_data *chip)
 
 static bool is_batt_available(struct pl_data *chip)
 {
-	if (!chip->batt_psy)
-		chip->batt_psy = power_supply_get_by_name("battery");
+	if (chip->batt_psy)
+		return true;
+
+	chip->batt_psy = power_supply_get_by_name("battery");
 
 	if (!chip->batt_psy)
 		return false;
+
+	/*
+	 * WAR: b/36651220, rerun election when we first notice main_psy is
+	 * ready. Before that, all callbacks have done nothing and returned 0.
+	 */
+	rerun_election(chip->fcc_votable);
+	rerun_election(chip->fv_votable);
+	rerun_election(chip->pl_disable_votable);
+	rerun_election(chip->pl_awake_votable);
 
 	return true;
 }
