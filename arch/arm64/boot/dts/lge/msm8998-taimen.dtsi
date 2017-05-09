@@ -35,6 +35,12 @@
 		reg = <0 0xb0000000 0 0x100000>;
 	};
 
+	ramoops_meta_mem: ramoops_meta_region@affff000 {
+		compatible = "removed-dma-pool";
+		no-map;
+		reg = <0 0xaffff000 0 0x1000>;
+	};
+
 	crash_fb_mem@b0100000 {
 		linux,contiguous-region;
 		reg = <0 0xb0100000 0 0xc00000>;
@@ -75,6 +81,18 @@
 &soc {
 	qcom,wdt@17817000 {
 		qcom,bark-time = <16000>;
+	};
+
+	access_ramoops@0 {
+		compatible = "access_ramoops";
+		label = "metadata";
+		memory-region = <&ramoops_meta_mem>;
+	};
+
+	access_ramoops@1 {
+		compatible = "access_ramoops";
+		label = "ramoops";
+		memory-region = <&ramoops_mem>;
 	};
 
 	ramoops {
