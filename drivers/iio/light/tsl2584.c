@@ -130,8 +130,8 @@ struct gainadj {
 static const struct gainadj gainadj[] = {
 	{ 1, 1 },
 	{ 8, 8 },
-	{ 16, 16 },
-	{ 107, 115 }
+	{ 1, 1 },
+	{ 1, 1 }
 };
 
 /*
@@ -143,7 +143,7 @@ static void taos_defaults(struct tsl2584_chip *chip)
 	/* Operational parameters */
 	chip->taos_settings.als_time = 100;
 	/* must be a multiple of 50mS */
-	chip->taos_settings.als_gain = 0;
+	chip->taos_settings.als_gain = 3;
 	/* this is actually an index into the gain table */
 	/* assume clear glass as default */
 	chip->taos_settings.als_gain_trim = 1000;
