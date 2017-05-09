@@ -115,6 +115,7 @@ struct htc_battery_info {
 	int batt_fcc_ma;
 	int batt_capacity_mah;
 	int batt_thermal_limit_vol;
+	int v_elvdd_dis_en;
 	struct notifier_block fb_notif;
 	struct notifier_block htc_batt_cb;
 };
@@ -592,6 +593,22 @@ static void batt_worker(struct work_struct *work)
 			      POWER_SUPPLY_PROP_CHARGE_NOW_RAW)
 		);
 
+	/* WA for display flickering */
+	if (htc_batt_info.v_elvdd_dis_en > 0 &&
+	    gpio_is_valid(htc_batt_info.v_elvdd_dis_en)) {
+		if ((int)htc_batt_info.rep.charging_source >
+		    POWER_SUPPLY_TYPE_BATTERY) {
+			if (htc_batt_info.rep.level == 100)
+				gpio_direction_output(htc_batt_info.v_elvdd_dis_en, 1);
+			else
+				gpio_direction_output(htc_batt_info.v_elvdd_dis_en, 0);
+		} else {
+			gpio_direction_output(htc_batt_info.v_elvdd_dis_en, 0);
+		}
+	}
+	BATT_LOG(" v_elvdd_dis_en=%d\n",
+		 gpio_get_value(htc_batt_info.v_elvdd_dis_en));
+
 	wake_unlock(&htc_batt_timer.battery_lock);
 }
 
@@ -760,6 +777,31 @@ static int htc_battery_probe_process(void)
 	BATT_LOG("%s: catch name %s, set batt id=%d, fcc_ma=%d, capacity=%d\n",
 		 __func__, ret.strval, htc_batt_info.rep.batt_id,
 		 htc_batt_info.batt_fcc_ma, htc_batt_info.batt_capacity_mah);
+
+	/* WA for display flickering */
+	node = of_find_node_by_name(NULL, "htc,battery-node");
+	if (!node) {
+		BATT_LOG("%s: No htc,battery-node available\n", __func__);
+	} else {
+		htc_batt_info.v_elvdd_dis_en =
+			of_get_named_gpio(node, "htc,v-elvdd-dis-en", 0);
+		if (!gpio_is_valid(htc_batt_info.v_elvdd_dis_en)) {
+			BATT_LOG(
+				"%s: error to reading htc,v-elvdd-dis-en.\n",
+				__func__);
+			htc_batt_info.v_elvdd_dis_en = 0;
+		} else {
+			BATT_LOG("%s: htc,v-elvdd-dis-en = %d\n",
+				__func__, htc_batt_info.v_elvdd_dis_en);
+			rc = gpio_request(htc_batt_info.v_elvdd_dis_en, "V_ELVDD_DIS_EN");
+			if (rc < 0) {
+				BATT_LOG("%s: fail to request V_ELVDD_DIS_EN, rc=%dn",
+					__func__, rc);
+			} else {
+				gpio_direction_output(htc_batt_info.v_elvdd_dis_en, 0);
+			}
+		}
+	}
 
 	BATT_LOG("Probe process done.\n");
 
