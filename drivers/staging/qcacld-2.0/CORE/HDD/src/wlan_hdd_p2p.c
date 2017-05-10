@@ -3060,7 +3060,9 @@ void __hdd_indicate_mgmt_frame(hdd_adapter_t *pAdapter,
 
     /* Get pAdapter from Destination mac address of the frame */
     if ((type == SIR_MAC_MGMT_FRAME) &&
-            (subType != SIR_MAC_MGMT_PROBE_REQ))
+        (subType != SIR_MAC_MGMT_PROBE_REQ) &&
+        !vos_is_macaddr_broadcast(
+         (v_MACADDR_t *)&pbFrames[WLAN_HDD_80211_FRM_DA_OFFSET]))
     {
          pAdapter = hdd_get_adapter_by_macaddr(pHddCtx,
                             &pbFrames[WLAN_HDD_80211_FRM_DA_OFFSET]);
