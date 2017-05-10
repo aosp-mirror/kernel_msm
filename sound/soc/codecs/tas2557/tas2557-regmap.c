@@ -26,7 +26,7 @@
 #include <linux/moduleparam.h>
 #include <linux/init.h>
 #include <linux/delay.h>
-#include <linux/pm.h>
+#include <linux/pm_runtime.h>
 #include <linux/i2c.h>
 #include <linux/gpio.h>
 #include <linux/regulator/consumer.h>
@@ -696,6 +696,8 @@ static void irq_work_routine(struct work_struct *work)
 	mutex_lock(&pTAS2557->file_lock);
 #endif
 
+	pm_runtime_get_sync(pTAS2557->dev);
+
 	if (!pTAS2557->mbPowerUp) {
 		dev_info(pTAS2557->dev, "%s, device not powered\n", __func__);
 		goto end;
@@ -899,6 +901,7 @@ program:
 
 end:
 
+	pm_runtime_put(pTAS2557->dev);
 #ifdef CONFIG_TAS2557_MISC_STEREO
 	mutex_unlock(&pTAS2557->file_lock);
 #endif
@@ -1006,8 +1009,7 @@ end:
 #endif
 }
 
-#ifdef CONFIG_PM_SLEEP
-static int tas2557_suspend(struct device *dev)
+static int __maybe_unused tas2557_suspend(struct device *dev)
 {
 	struct tas2557_priv *pTAS2557 = dev_get_drvdata(dev);
 
@@ -1020,7 +1022,7 @@ static int tas2557_suspend(struct device *dev)
 	return 0;
 }
 
-static int tas2557_resume(struct device *dev)
+static int __maybe_unused tas2557_resume(struct device *dev)
 {
 	struct tas2557_priv *pTAS2557 = dev_get_drvdata(dev);
 	struct TProgram *pProgram;
@@ -1050,7 +1052,6 @@ end:
 
 	return 0;
 }
-#endif
 
 static bool tas2557_volatile(struct device *pDev, unsigned int nRegister)
 {
@@ -1265,6 +1266,9 @@ static int tas2557_i2c_probe(struct i2c_client *pClient,
 	nResult = request_firmware_nowait(THIS_MODULE, 1, fw_name,
 		pTAS2557->dev, GFP_KERNEL, pTAS2557, tas2557_fw_ready);
 
+	pm_runtime_enable(&pClient->dev);
+	pm_runtime_idle(&pClient->dev);
+
 err:
 
 	return nResult;
@@ -1306,19 +1310,15 @@ static const struct of_device_id tas2557_of_match[] = {
 MODULE_DEVICE_TABLE(of, tas2557_of_match);
 #endif
 
-#ifdef CONFIG_PM_SLEEP
 static const struct dev_pm_ops tas2557_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(tas2557_suspend, tas2557_resume)
+	SET_RUNTIME_PM_OPS(tas2557_suspend, tas2557_resume, NULL)
 };
-#endif
 
 static struct i2c_driver tas2557_i2c_driver = {
 	.driver = {
 			.name = "tas2557s",
 			.owner = THIS_MODULE,
-#ifdef CONFIG_PM_SLEEP
 			.pm = &tas2557_pm_ops,
-#endif
 #if defined(CONFIG_OF)
 			.of_match_table = of_match_ptr(tas2557_of_match),
 #endif
