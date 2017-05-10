@@ -487,12 +487,16 @@ static void bcm15602_print_id(struct bcm15602_chip *ddata)
 
 	ret = bcm15602_read_bytes(ddata, BCM15602_REG_SYS_PMIC_ID_LSB, bytes, 4);
 
-	if (!ret)
+	if (!ret) {
 		dev_info(dev,
-			 "PMIC ID: 0x%02x%02x, Rev: 0x%02x, GID: 0x%02x\n",
-			 bytes[1], bytes[0], bytes[2], bytes[3]);
-	else
+			 "Part: 0x%02x%02x, Rev: %d, Vendor Rev: 0x%02x\n",
+			 bytes[1], bytes[0], bytes[3], bytes[2]);
+
+		/* byte 3 is the customer supplied id */
+		ddata->rev_id = bytes[3];
+	} else {
 		dev_err(dev, "Could not read PMIC ID\n");
+	}
 }
 
 /* print the power state machine status register */
