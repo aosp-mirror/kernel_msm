@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1152,17 +1152,25 @@ static int __msm8x16_wcd_reg_read(struct snd_soc_codec *codec,
 	else if (MSM8X16_WCD_IS_DIGITAL_REG(reg)) {
 		mutex_lock(&pdata->cdc_mclk_mutex);
 		if (atomic_read(&pdata->mclk_enabled) == false) {
-			if (pdata->afe_clk_ver == AFE_CLK_VERSION_V1) {
+			switch (q6core_get_avs_version()) {
+			case (Q6_SUBSYS_AVS2_6):
 				pdata->digital_cdc_clk.clk_val =
 							pdata->mclk_freq;
 				ret = afe_set_digital_codec_core_clock(
 						AFE_PORT_ID_PRIMARY_MI2S_RX,
 						&pdata->digital_cdc_clk);
-			} else {
+				break;
+			case (Q6_SUBSYS_AVS2_7):
+			case (Q6_SUBSYS_AVS2_8):
 				pdata->digital_cdc_core_clk.enable = 1;
 				ret = afe_set_lpass_clock_v2(
 						AFE_PORT_ID_PRIMARY_MI2S_RX,
 						&pdata->digital_cdc_core_clk);
+				break;
+			case (Q6_SUBSYS_INVALID):
+			default:
+				pr_err("%s: INVALID AVS IMAGE\n", __func__);
+				break;
 			}
 			if (ret < 0) {
 				pr_err("failed to enable the MCLK\n");
@@ -1209,17 +1217,25 @@ static int __msm8x16_wcd_reg_write(struct snd_soc_codec *codec,
 		mutex_lock(&pdata->cdc_mclk_mutex);
 		if (atomic_read(&pdata->mclk_enabled) == false) {
 			pr_debug("enable MCLK for AHB write\n");
-			if (pdata->afe_clk_ver == AFE_CLK_VERSION_V1) {
+			switch (q6core_get_avs_version()) {
+			case (Q6_SUBSYS_AVS2_6):
 				pdata->digital_cdc_clk.clk_val =
 							pdata->mclk_freq;
 				ret = afe_set_digital_codec_core_clock(
 						AFE_PORT_ID_PRIMARY_MI2S_RX,
 						&pdata->digital_cdc_clk);
-			} else {
+				break;
+			case (Q6_SUBSYS_AVS2_7):
+			case (Q6_SUBSYS_AVS2_8):
 				pdata->digital_cdc_core_clk.enable = 1;
 				ret = afe_set_lpass_clock_v2(
 						AFE_PORT_ID_PRIMARY_MI2S_RX,
 						&pdata->digital_cdc_core_clk);
+				break;
+			case (Q6_SUBSYS_INVALID):
+			default:
+				pr_err("%s: INVALID AVS IMAGE\n", __func__);
+				break;
 			}
 			if (ret < 0) {
 				pr_err("failed to enable the MCLK\n");
@@ -5666,16 +5682,24 @@ int msm8x16_wcd_suspend(struct snd_soc_codec *codec)
 				&pdata->disable_mclk_work);
 		mutex_lock(&pdata->cdc_mclk_mutex);
 		if (atomic_read(&pdata->mclk_enabled) == true) {
-			if (pdata->afe_clk_ver == AFE_CLK_VERSION_V1) {
+			switch (q6core_get_avs_version()) {
+			case (Q6_SUBSYS_AVS2_6):
 				pdata->digital_cdc_clk.clk_val = 0;
 				afe_set_digital_codec_core_clock(
 						AFE_PORT_ID_PRIMARY_MI2S_RX,
 						&pdata->digital_cdc_clk);
-			} else {
+				break;
+			case (Q6_SUBSYS_AVS2_7):
+			case (Q6_SUBSYS_AVS2_8):
 				pdata->digital_cdc_core_clk.enable = 0;
 				afe_set_lpass_clock_v2(
 						AFE_PORT_ID_PRIMARY_MI2S_RX,
 						&pdata->digital_cdc_core_clk);
+				break;
+			case (Q6_SUBSYS_INVALID):
+			default:
+				pr_err("%s: INVALID AVS IMAGE\n", __func__);
+				break;
 			}
 			atomic_set(&pdata->mclk_enabled, false);
 		}
@@ -5849,7 +5873,7 @@ static int msm8x16_wcd_device_init(struct msm8x16_wcd *msm8x16)
 
 static int msm8x16_wcd_spmi_probe(struct spmi_device *spmi)
 {
-	int ret = 0;
+	int ret = 0, ret1 = 0;
 	struct msm8x16_wcd *msm8x16 = NULL;
 	struct msm8x16_wcd_pdata *pdata;
 	struct resource *wcd_resource;
@@ -5866,6 +5890,13 @@ static int msm8x16_wcd_spmi_probe(struct spmi_device *spmi)
 		return -EPROBE_DEFER;
 	}
 
+	ret1 = core_get_adsp_ver();
+	if (ret1 < 0) {
+		ret = -EPROBE_DEFER;
+		dev_dbg(&spmi->dev, "%s: Get adsp version failed (%d)\n",
+						__func__, ret);
+		goto rtn;
+	}
 	wcd_resource = spmi_get_resource(spmi, NULL, IORESOURCE_MEM, 0);
 	if (!wcd_resource) {
 		dev_err(&spmi->dev, "Unable to get Tombak base address\n");
