@@ -748,9 +748,9 @@ static int fts_init(struct fts_ts_info *info)
 
 	info->deepsleep_mode = false;
 	info->wirelesscharger_mode = false;
-	info->lowpower_mode = true;
+	info->lowpower_mode = false;
 	info->lowpower_flag = 0x00;
-	info->fts_power_state = 0;
+	info->fts_power_state = FTS_POWER_STATE_ACTIVE;
 
 	fts_command(info, FORCECALIBRATION);
 
@@ -1739,6 +1739,7 @@ static int fts_probe(struct i2c_client *client, const struct i2c_device_id *idp)
 	device_init_wakeup(&client->dev, true);
 	if (device_may_wakeup(&info->client->dev))
 		enable_irq_wake(info->irq);
+	info->lowpower_mode = true;
 
 	return 0;
 
@@ -1858,11 +1859,6 @@ static void fts_input_close(struct input_dev *dev)
 
 static void fts_reinit(struct fts_ts_info *info)
 {
-	if (!info->lowpower_mode) {
-		fts_wait_for_ready(info);
-		fts_read_chip_id(info);
-	}
-
 	fts_systemreset(info);
 
 	fts_wait_for_ready(info);
@@ -1952,7 +1948,7 @@ static void fts_reset_work(struct work_struct *work)
 
 static int fts_stop_device(struct fts_ts_info *info)
 {
-	tsp_debug_info(&info->client->dev, "%s\n", __func__);
+	tsp_debug_dbg(&info->client->dev, "%s\n", __func__);
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
 	if (TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()) {
@@ -2021,7 +2017,7 @@ static int fts_stop_device(struct fts_ts_info *info)
 
 static int fts_start_device(struct fts_ts_info *info)
 {
-	tsp_debug_info(&info->client->dev, "%s %s\n",
+	tsp_debug_dbg(&info->client->dev, "%s %s\n",
 			__func__,
 			info->lowpower_mode ?
 			"exit low power mode" : "");
@@ -2174,8 +2170,6 @@ static int fts_suspend(struct i2c_client *client, pm_message_t mesg)
 {
 	struct fts_ts_info *info = i2c_get_clientdata(client);
 
-	tsp_debug_info(&info->client->dev, "%s\n", __func__);
-
 	tsp_debug_info(&info->client->dev, "%s power state : %d\n",
 			__func__, info->fts_power_state);
 	/* if suspend is called from non-active state, the i2c bus is not
@@ -2200,10 +2194,18 @@ static int fts_suspend(struct i2c_client *client, pm_message_t mesg)
 
 static int fts_resume(struct i2c_client *client)
 {
-
 	struct fts_ts_info *info = i2c_get_clientdata(client);
 
-	tsp_debug_info(&info->client->dev, "%s\n", __func__);
+	tsp_debug_info(&info->client->dev, "%s power state : %d\n",
+			__func__, info->fts_power_state);
+	/* if resume is called from active state, the i2c bus is not
+	 * switched to AP, skipping resume routine */
+	if (info->fts_power_state == FTS_POWER_STATE_ACTIVE) {
+		tsp_debug_info(&info->client->dev,
+				"%s: calling resume from active state, "
+				"skipping\n", __func__);
+		return 0;
+	}
 
 	gpio_set_value(info->switch_gpio, 0);
 	tsp_debug_info(&info->client->dev,
