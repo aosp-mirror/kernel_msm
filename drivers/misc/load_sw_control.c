@@ -37,6 +37,7 @@
 struct load_sw_device {
 	int gpio;
 	int need_to_control;
+	int force_high;
 };
 
 static ssize_t lsw_show_control(struct device *dev,
@@ -97,7 +98,7 @@ static int load_sw_probe(struct platform_device *pdev)
 	/* Parse gpio dts */
 	ret = of_get_named_gpio_flags(np, "load-sw-gpio", 0, NULL);
 	if (ret < 0) {
-		pr_err("failed to read GPIO from device tree");
+		pr_err("failed to read GPIO from device tree\n");
 		return -EINVAL;
 	}
 	lsw_dev->gpio = ret;
@@ -109,6 +110,13 @@ static int load_sw_probe(struct platform_device *pdev)
 		pr_err("failed to request GPIO %d\n", lsw_dev->gpio);
 		return ret;
 	}
+
+	/* Parse load switch force high dts */
+	lsw_dev->force_high = of_property_read_bool(np, "load-sw-force-high");
+	pr_info("force-high = %d\n", lsw_dev->force_high);
+
+	if (lsw_dev->force_high)
+		gpio_set_value(lsw_dev->gpio, 1);
 
 	platform_set_drvdata(pdev, lsw_dev);
 
