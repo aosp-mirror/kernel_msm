@@ -15,7 +15,6 @@
  */
 
 #include <linux/atomic.h>
-#include <linux/cdev.h>
 #include <linux/device.h>
 #include <linux/delay.h>
 #include <linux/firmware.h>
@@ -109,16 +108,18 @@ enum mnh_ddr_status {
 
 struct mnh_sm_device {
 	struct platform_device *pdev;
+	struct miscdevice *misc_dev;
 	struct device *dev;
-	struct cdev cdev;
 	atomic_t cdev_ctr;
-	dev_t dev_num;
 	struct device *chardev;
 	struct class *dev_class;
 	uint32_t *firmware_buf[2];
 	size_t firmware_buf_size[2];
 	enum fw_image_state image_loaded;
 	int state;
+
+	/* flag for when driver has completed initialization */
+	bool initialized;
 
 	/* mutex to synchronize state transitions */
 	struct mutex lock;
@@ -990,7 +991,7 @@ static ssize_t mnh_sm_power_mode_store(struct device *dev,
 static DEVICE_ATTR(power_mode, S_IWUSR | S_IRUGO,
 		mnh_sm_power_mode_show, mnh_sm_power_mode_store);
 
-static struct attribute *mnh_sm_dev_attributes[] = {
+static struct attribute *mnh_sm_attrs[] = {
 	&dev_attr_stage_fw.attr,
 	&dev_attr_poweron.attr,
 	&dev_attr_poweroff.attr,
@@ -1008,10 +1009,7 @@ static struct attribute *mnh_sm_dev_attributes[] = {
 	&dev_attr_power_mode.attr,
 	NULL
 };
-
-static struct attribute_group mnh_sm_group = {
-	.attrs = mnh_sm_dev_attributes
-};
+ATTRIBUTE_GROUPS(mnh_sm);
 
 /*******************************************************************************
  *
@@ -1341,19 +1339,25 @@ EXPORT_SYMBOL(mnh_sm_is_present);
 static int mnh_sm_open(struct inode *inode, struct file *filp)
 {
 	int dev_ctr;
-	struct mnh_sm_device *data = container_of(inode->i_cdev,
-						  struct mnh_sm_device, cdev);
-	filp->private_data = data; /* for other methods */
+
+	if (!mnh_sm_dev)
+		return -ENODEV;
+
+	if (!mnh_sm_dev->initialized)
+		return -EBUSY;
+
+	filp->private_data = mnh_sm_dev; /* for other methods */
 
 	dev_ctr = atomic_inc_return(&mnh_sm_dev->cdev_ctr);
-	dev_dbg(data->dev, "%s: opening mnh_sm: mnh_sm_dev->cdev_ctr %d\n",
+	dev_dbg(mnh_sm_dev->dev, "%s: opening mnh_sm: mnh_sm_dev->cdev_ctr %d\n",
 		__func__, dev_ctr);
 
 	/* only stage fw transf. when the first handle to the cdev is opened */
 	if (dev_ctr == 1) {
 		if (mnh_sm_dev->ion && !mnh_sm_dev->ion->is_fw_ready) {
 			/* Request firmware and stage them to carveout buf. */
-			dev_dbg(data->dev, "%s: staging firmware\n", __func__);
+			dev_dbg(mnh_sm_dev->dev, "%s: staging firmware\n",
+				__func__);
 			mnh_ion_stage_firmware(mnh_sm_dev->ion);
 		}
 	}
@@ -1362,14 +1366,18 @@ static int mnh_sm_open(struct inode *inode, struct file *filp)
 
 static int mnh_sm_close(struct inode *inode, struct file *filp)
 {
-	struct mnh_sm_device *data = container_of(inode->i_cdev,
-						  struct mnh_sm_device, cdev);
+	if (!mnh_sm_dev)
+		return -ENODEV;
+
+	if (!mnh_sm_dev->initialized)
+		return -EBUSY;
 
 	/* Only shut mnh down when there is no active handle to the cdev */
 	if (atomic_dec_and_test(&mnh_sm_dev->cdev_ctr)) {
 		mnh_sm_set_state(MNH_STATE_OFF);
-		dev_dbg(data->dev, "%s: closing mnh_sm\n", __func__);
+		dev_dbg(mnh_sm_dev->dev, "%s: closing mnh_sm\n", __func__);
 	}
+
 	return 0;
 }
 
@@ -1540,37 +1548,50 @@ static long mnh_sm_compat_ioctl(struct file *file, unsigned int cmd,
 	return ret;
 }
 
-const struct file_operations mnh_sm_fops = {
+static const struct file_operations mnh_sm_fops = {
 	.open = mnh_sm_open,
 	.unlocked_ioctl = mnh_sm_ioctl,
 	.compat_ioctl = mnh_sm_compat_ioctl,
 	.release = mnh_sm_close
 };
 
-struct miscdevice mnh_sm_miscdevice = {
+static struct miscdevice mnh_sm_miscdevice = {
 	.minor = MISC_DYNAMIC_MINOR,
 	.name = DEVICE_NAME,
 	.fops = &mnh_sm_fops,
+	.groups = mnh_sm_groups,
 };
 
 static int mnh_sm_probe(struct platform_device *pdev)
 {
-	struct device *dev = &pdev->dev;
+	struct device *dev;
 	struct sched_param param = { .sched_priority = 5 };
 	int error = 0;
 
 	dev_dbg(dev, "MNH SM initializing...\n");
 
+	/* create char driver */
+	error = misc_register(&mnh_sm_miscdevice);
+	if (error) {
+		dev_err(mnh_sm_dev->dev,
+			"%s: failed to create char device (%d)\n",
+			__func__, error);
+		return error;
+	}
+	dev = mnh_sm_miscdevice.this_device;
+
 	/* allocate device memory */
 	mnh_sm_dev = devm_kzalloc(dev, sizeof(struct mnh_sm_device),
 				  GFP_KERNEL);
-	if (mnh_sm_dev == NULL)
-		return -ENOMEM;
+	if (mnh_sm_dev == NULL) {
+		error = -ENOMEM;
+		goto fail_probe_0;
+	}
 
 	/* add device data to platform device */
 	mnh_sm_dev->pdev = pdev;
+	mnh_sm_dev->misc_dev = &mnh_sm_miscdevice;
 	mnh_sm_dev->dev = dev;
-	dev_set_drvdata(dev, mnh_sm_dev);
 
 	/* initialize kthread work queue */
 	init_kthread_worker(&mnh_sm_dev->worker);
@@ -1581,7 +1602,8 @@ static int mnh_sm_probe(struct platform_device *pdev)
 	if (IS_ERR(mnh_sm_dev->thread)) {
 		dev_err(dev, "%s: unable to start work thread\n", __func__);
 		mnh_sm_dev->thread = NULL;
-		return -ENOMEM;
+		error = -ENOMEM;
+		goto fail_probe_1;
 	}
 	sched_setscheduler(mnh_sm_dev->thread, SCHED_FIFO, &param);
 
@@ -1602,12 +1624,12 @@ static int mnh_sm_probe(struct platform_device *pdev)
 	}
 
 	/* get ready gpio */
-	mnh_sm_dev->ready_gpio = devm_gpiod_get(dev, "ready", GPIOD_IN);
+	mnh_sm_dev->ready_gpio = devm_gpiod_get(&pdev->dev, "ready", GPIOD_IN);
 	if (IS_ERR(mnh_sm_dev->ready_gpio)) {
 		dev_err(dev, "%s: could not get ready gpio (%ld)\n",
 			__func__, PTR_ERR(mnh_sm_dev->ready_gpio));
 		error = PTR_ERR(mnh_sm_dev->ready_gpio);
-		goto fail_probe_0;
+		goto fail_probe_2;
 	}
 	mnh_sm_dev->ready_irq = gpiod_to_irq(mnh_sm_dev->ready_gpio);
 
@@ -1620,70 +1642,55 @@ static int mnh_sm_probe(struct platform_device *pdev)
 	if (error) {
 		dev_err(dev, "%s: could not get ready irq (%d)\n", __func__,
 			error);
-		goto fail_probe_0;
+		goto fail_probe_2;
 	}
 	disable_irq(mnh_sm_dev->ready_irq);
 
 	/* request ddr pad isolation pin */
-	mnh_sm_dev->ddr_pad_iso_n_pin = devm_gpiod_get(dev, "ddr-pad-iso-n",
+	mnh_sm_dev->ddr_pad_iso_n_pin = devm_gpiod_get(&pdev->dev,
+						       "ddr-pad-iso-n",
 						       GPIOD_OUT_HIGH);
 	if (IS_ERR(mnh_sm_dev->ddr_pad_iso_n_pin)) {
 		dev_err(dev, "%s: could not get ddr_pad_iso_n gpio (%ld)\n",
 			__func__, PTR_ERR(mnh_sm_dev->ddr_pad_iso_n_pin));
 		error = PTR_ERR(mnh_sm_dev->ddr_pad_iso_n_pin);
-		goto fail_probe_0;
+		goto fail_probe_2;
 	}
 
 	/* initialize mnh-pwr and get resources there */
 	enable_irq(mnh_sm_dev->ready_irq);
-	error = mnh_pwr_init(dev);
+	error = mnh_pwr_init(pdev, dev);
 	disable_irq(mnh_sm_dev->ready_irq);
 	if (error) {
 		dev_err(dev, "failed to initialize mnh-pwr (%d)\n", error);
-		goto fail_probe_0;
+		goto fail_probe_2;
 	}
 
 	/* initialize mnh-clk driver */
 	mnh_clk_init(dev, HWIO_SCU_BASE_ADDR);
 
-	/* create char driver */
-	error = misc_register(&mnh_sm_miscdevice);
-	if (error) {
-		dev_err(mnh_sm_dev->dev,
-			"%s: failed to create char device (%d)\n",
-			__func__, error);
-		goto fail_probe_0;
-	}
-
-	dev_dbg(dev, "char driver %s added", DEVICE_NAME);
-
-	/* create sysfs group */
-	error = sysfs_create_group(&dev->kobj, &mnh_sm_group);
-	if (error) {
-		dev_err(dev, "failed to create sysfs group\n");
-		goto fail_probe_1;
-	}
-
 	/* initialize mnh-mipi */
 	error = mnh_mipi_init(dev);
 	if (error) {
 		dev_err(dev, "failed to initialize mipi (%d)\n", error);
-		goto fail_probe_1;
+		goto fail_probe_0;
 	}
+
+	mnh_sm_dev->initialized = true;
 
 	dev_info(dev, "MNH SM initialized successfully\n");
 
 	return 0;
 
-fail_probe_1:
-	misc_deregister(&mnh_sm_miscdevice);
-fail_probe_0:
+fail_probe_2:
 	mnh_ion_destroy_buffer(mnh_sm_dev->ion);
 	devm_kfree(dev, mnh_sm_dev->ion);
 	mnh_sm_dev->ion = NULL;
-	unregister_chrdev_region(mnh_sm_dev->dev_num, 1);
+fail_probe_1:
 	devm_kfree(dev, mnh_sm_dev);
 	mnh_sm_dev = NULL;
+fail_probe_0:
+	misc_deregister(&mnh_sm_miscdevice);
 
 	return error;
 }

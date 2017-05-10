@@ -37,6 +37,7 @@
 #define PM_OPT_RESUME 0
 
 struct mnh_pwr_data {
+	struct platform_device *pdev;
 	struct device *dev;
 
 	/* regulators */
@@ -630,32 +631,35 @@ fail_pwr_up_regulators:
 
 static int mnh_pwr_get_resources(void)
 {
+	struct platform_device *pdev = mnh_pwr->pdev;
 	struct device *dev = mnh_pwr->dev;
 	int ret;
 
 	/* request supplies */
-	mnh_pwr->asr_supply = devm_regulator_get(dev, "bcm15602_asr");
+	mnh_pwr->asr_supply = devm_regulator_get(&pdev->dev, "bcm15602_asr");
 	if (IS_ERR(mnh_pwr->asr_supply)) {
 		dev_err(dev, "%s: failed to get asr supply (%ld)\n",
 			__func__, PTR_ERR(mnh_pwr->asr_supply));
 		return PTR_ERR(mnh_pwr->asr_supply);
 	}
 
-	mnh_pwr->sdsr_supply = devm_regulator_get(dev, "bcm15602_sdsr");
+	mnh_pwr->sdsr_supply = devm_regulator_get(&pdev->dev, "bcm15602_sdsr");
 	if (IS_ERR(mnh_pwr->sdsr_supply)) {
 		dev_err(dev, "%s: failed to get sdsr supply (%ld)\n",
 			__func__, PTR_ERR(mnh_pwr->sdsr_supply));
 		return PTR_ERR(mnh_pwr->sdsr_supply);
 	}
 
-	mnh_pwr->ioldo_supply = devm_regulator_get(dev, "bcm15602_ioldo");
+	mnh_pwr->ioldo_supply = devm_regulator_get(&pdev->dev,
+						   "bcm15602_ioldo");
 	if (IS_ERR(mnh_pwr->ioldo_supply)) {
 		dev_err(dev, "%s: failed to get ioldo supply (%ld)\n",
 			__func__, PTR_ERR(mnh_pwr->ioldo_supply));
 		return PTR_ERR(mnh_pwr->ioldo_supply);
 	}
 
-	mnh_pwr->sdldo_supply = devm_regulator_get(dev, "bcm15602_sdldo");
+	mnh_pwr->sdldo_supply = devm_regulator_get(&pdev->dev,
+						   "bcm15602_sdldo");
 	if (IS_ERR(mnh_pwr->sdldo_supply)) {
 		dev_err(dev, "%s: failed to get sdldo supply (%ld)\n",
 			__func__, PTR_ERR(mnh_pwr->sdldo_supply));
@@ -704,7 +708,7 @@ static int mnh_pwr_get_resources(void)
 	}
 
 	/* request gpio descriptors */
-	mnh_pwr->boot_mode_pin = devm_gpiod_get(dev, "boot-mode",
+	mnh_pwr->boot_mode_pin = devm_gpiod_get(&pdev->dev, "boot-mode",
 						   GPIOD_OUT_LOW);
 	if (IS_ERR(mnh_pwr->boot_mode_pin)) {
 		dev_err(dev, "%s: could not get boot_mode gpio (%ld)\n",
@@ -712,7 +716,7 @@ static int mnh_pwr_get_resources(void)
 		return PTR_ERR(mnh_pwr->boot_mode_pin);
 	}
 
-	mnh_pwr->soc_pwr_good_pin = devm_gpiod_get(dev, "soc-pwr-good",
+	mnh_pwr->soc_pwr_good_pin = devm_gpiod_get(&pdev->dev, "soc-pwr-good",
 						   GPIOD_OUT_LOW);
 	if (IS_ERR(mnh_pwr->soc_pwr_good_pin)) {
 		dev_err(dev, "%s: could not get soc_pwr_good gpio (%ld)\n",
@@ -721,14 +725,14 @@ static int mnh_pwr_get_resources(void)
 	}
 
 	/* request clocks */
-	mnh_pwr->ref_clk = devm_clk_get(dev, "ref_clk");
+	mnh_pwr->ref_clk = devm_clk_get(&pdev->dev, "ref_clk");
 	if (IS_ERR(mnh_pwr->ref_clk)) {
 		dev_err(dev, "%s: could not get ref clk (%ld)\n", __func__,
 			PTR_ERR(mnh_pwr->ref_clk));
 		return PTR_ERR(mnh_pwr->ref_clk);
 	}
 
-	mnh_pwr->sleep_clk = devm_clk_get(dev, "sleep_clk");
+	mnh_pwr->sleep_clk = devm_clk_get(&pdev->dev, "sleep_clk");
 	if (IS_ERR(mnh_pwr->sleep_clk)) {
 		dev_err(dev, "%s: could not get sleep clk (%ld)\n", __func__,
 			PTR_ERR(mnh_pwr->sleep_clk));
@@ -791,7 +795,7 @@ enum mnh_pwr_state mnh_pwr_get_state(void)
 }
 EXPORT_SYMBOL_GPL(mnh_pwr_get_state);
 
-int mnh_pwr_init(struct device *dev)
+int mnh_pwr_init(struct platform_device *pdev, struct device *dev)
 {
 	int ret;
 
@@ -801,6 +805,7 @@ int mnh_pwr_init(struct device *dev)
 		return -ENOMEM;
 
 	/* save a local copy of the device struct */
+	mnh_pwr->pdev = pdev;
 	mnh_pwr->dev = dev;
 
 	/* initialize power state to powered down */
