@@ -26,6 +26,7 @@
 
 #include "mnh-pcie.h"
 #include "mnh-pwr.h"
+#include "mnh-sm.h"
 
 #define MNH_PCIE_RC_INDEX 0
 #define MNH_PCIE_VENDOR_ID  0x8086
@@ -84,6 +85,7 @@ static void mnh_pwr_shutdown_work(struct work_struct *data)
 	dev_err(mnh_pwr->dev, "%s: begin emergency power down\n", __func__);
 
 	mnh_pwr_down_skip_suspend_pcie();
+	mnh_sm_pwr_error_cb();
 }
 
 static int mnh_pwr_asr_notifier_cb(struct notifier_block *nb,

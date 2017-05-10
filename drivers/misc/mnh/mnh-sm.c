@@ -1336,6 +1336,15 @@ int mnh_sm_is_present(void)
 }
 EXPORT_SYMBOL(mnh_sm_is_present);
 
+int mnh_sm_pwr_error_cb(void)
+{
+	dev_err(mnh_sm_dev->dev,
+		"%s: observed mnh-pwr error, switching state to off\n",
+		__func__);
+	return mnh_sm_set_state(MNH_STATE_OFF);
+}
+EXPORT_SYMBOL(mnh_sm_pwr_error_cb);
+
 static int mnh_sm_open(struct inode *inode, struct file *filp)
 {
 	int dev_ctr;

@@ -107,5 +107,13 @@ void mnh_ion_destroy_buffer(struct mnh_ion *ion);
  */
 int mnh_ion_stage_firmware(struct mnh_ion *ion);
 
+/*
+ * Callback from mnh-pwr when there is a failure event.
+ *
+ * @return 0           on success
+ * @return -errno      on failure
+ */
+int mnh_sm_pwr_error_cb(void);
+
 #endif /* __MNH_SM_HOST */
 
