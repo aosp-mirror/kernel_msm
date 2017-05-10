@@ -1061,6 +1061,10 @@ static int bcm15602_chip_fixup(struct bcm15602_chip *ddata)
 	/* set ASR rail to 0.9V */
 	bcm15602_write_byte(ddata, BCM15602_REG_BUCK_ASR_VOCTRL, 0x43);
 
+	/* set ASR to single phase */
+	bcm15602_update_bits(ddata, BCM15602_REG_BUCK_ASR_TSET_CTRL2, 0x10,
+			     0x00);
+
 	return 0;
 }
 
