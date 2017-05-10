@@ -14918,10 +14918,12 @@ static int __wlan_hdd_cfg80211_sched_scan_start(struct wiphy *wiphy,
     else
         pnoRequest.scanTimers.ucScanTimersCount =
                                                HDD_PNO_SCAN_TIMERS_SET_MULTIPLE;
-//ASUS_BSP+++ "Update PNO scan interval to 300s"
+//ASUS_BSP+++ "Update PNO scan interval to 30->30->60->60->120->120->240->240"
 //    tempInterval = (request->interval)/1000;
-    tempInterval = 300;
-//ASUS_BSP--- "Update PNO scan interval to 300s"
+    tempInterval = 30;
+    pHddCtx->cfg_ini->configPNOScanTimerRepeatValue = 2;
+    pnoRequest.scanTimers.ucScanTimersCount = 4;
+//ASUS_BSP--- "Update PNO scan interval to 30->30->60->60->120->120->240->240"
     VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
               "Base scan interval = %d PNOScanTimerRepeatValue = %d",
               tempInterval, pHddCtx->cfg_ini->configPNOScanTimerRepeatValue);
