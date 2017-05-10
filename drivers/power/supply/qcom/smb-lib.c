@@ -1549,8 +1549,9 @@ int smblib_vbus_regulator_disable(struct regulator_dev *rdev)
 		}
 	}
 
-	rc = vote(chg->usb_icl_votable, EXTERNAL_BOOSTER_VOTER,
-		  false, 0);
+	if (chg->mode == PARALLEL_MASTER)
+		rc = vote(chg->usb_icl_votable, EXTERNAL_BOOSTER_VOTER,
+			  false, 0);
 
 unlock:
 	mutex_unlock(&chg->vbus_output_lock);
@@ -3228,6 +3229,12 @@ int smblib_set_prop_use_external_vbus_output(struct smb_charger *chg,
 	int rc = 0;
 
 	value = !!val->intval;
+
+	if (chg->mode == PARALLEL_SLAVE) {
+		smblib_err(chg,
+			   "slave charger doesn't support external vbus output\n");
+		return -ENODEV;
+	}
 
 	mutex_lock(&chg->vbus_output_lock);
 
