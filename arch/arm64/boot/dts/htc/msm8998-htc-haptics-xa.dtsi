@@ -11,7 +11,7 @@
 		ti,reset-gpio = <&tlmm 95 0>;
 		ti,smart-loop = <0>; /* 0-closeloop, 1-openloop */
 		ti,actuator = <1>; /* 0-ERM, 1-LRA */
-		ti,rated-voltage = <83>; /* 1.83 Vrms */
+		ti,rated-voltage = <77>; /* 1.8 Vrms */
 		ti,odclamp-voltage = <165>; /* 3.5 Vpeak */
 		ti,lra-frequency = <155>; /* f0 = 155Hz */
 		ti,ol-lra-frequency = <155>; /* off-f0 in OL */
