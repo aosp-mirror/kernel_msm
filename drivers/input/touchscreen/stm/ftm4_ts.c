@@ -86,7 +86,7 @@ static void fts_open_work(struct work_struct *work);
 
 static int fts_stop_device(struct fts_ts_info *info);
 static int fts_start_device(struct fts_ts_info *info);
-static int fts_irq_enable(struct fts_ts_info *info, bool enable);
+static void fts_irq_enable(struct fts_ts_info *info, bool enable);
 static void fts_reset_work(struct work_struct *work);
 void fts_recovery_cx(struct fts_ts_info *info);
 void fts_release_all_finger(struct fts_ts_info *info);
@@ -662,7 +662,7 @@ int fts_cmd_completion_check(struct fts_ts_info *info, uint8_t event1, uint8_t e
 		fts_delay(10);
 		info->fts_read_reg(info, &reg[0], 1, &val[0], FTS_EVENT_SIZE);
 		if ((val[0] == event1) && (val[1] == event2) && (val[2] == event3)) {
-			tsp_debug_dbg(&info->client->dev,
+			tsp_debug_info(&info->client->dev,
 						"\n\r[fts_cmd_completion_check] OK [%02x][%02x][%02x]", val[0], val[1], val[2]);
 			return rc;
 		} else if (val[0] == 0x0F) {
@@ -1166,35 +1166,24 @@ static irqreturn_t fts_interrupt_handler(int irq, void *handle)
 	return IRQ_HANDLED;
 }
 
-static int fts_irq_enable(struct fts_ts_info *info,
+static void fts_irq_enable(struct fts_ts_info *info,
 		bool enable)
 {
-	int retval = 0;
+	spin_lock(&info->lock);
 
 	if (enable) {
-		if (info->irq_enabled)
-			return retval;
-
-		retval = request_threaded_irq(info->irq, NULL,
-				fts_interrupt_handler, info->board->irq_type,
-				FTS_TS_DRV_NAME, info);
-		if (retval < 0) {
-			tsp_debug_err(&info->client->dev,
-					"%s: Failed to create irq thread %d\n",
-					__func__, retval);
-			return retval;
+		if (atomic_cmpxchg(&info->irq_enabled, 0, 1) == 0) {
+			tsp_debug_dbg(info->dev, "enable_irq\n");
+			enable_irq(info->irq);
 		}
-
-		info->irq_enabled = true;
 	} else {
-		if (info->irq_enabled) {
+		if (atomic_cmpxchg(&info->irq_enabled, 1, 0) == 1) {
+			tsp_debug_dbg(info->dev, "disable_irq\n");
 			disable_irq(info->irq);
-			free_irq(info->irq, info);
-			info->irq_enabled = false;
 		}
 	}
 
-	return retval;
+	spin_unlock(&info->lock);
 }
 
 #ifdef CONFIG_OF
@@ -1521,7 +1510,7 @@ static int fts_setup_drv_data(struct i2c_client *client)
 	info->board = pdata;
 	info->irq = client->irq;
 	info->irq_type = info->board->irq_type;
-	info->irq_enabled = false;
+	atomic_set(&info->irq_enabled, 0);
 	info->touch_stopped = false;
 	info->panel_revision = info->board->panel_revision;
 	info->stop_device = fts_stop_device;
@@ -1663,15 +1652,15 @@ static int fts_probe(struct i2c_client *client, const struct i2c_device_id *idp)
 	input_set_abs_params(info->input_dev, ABS_MT_PRESSURE,
 			     0, 255, 0, 0);
 
-	mutex_init(&info->lock);
 	mutex_init(&info->device_mutex);
 	mutex_init(&info->i2c_mutex);
+	spin_lock_init(&info->lock);
 
 	info->enabled = false;
-	mutex_lock(&info->lock);
+	mutex_lock(&info->device_mutex);
 	retval = fts_init(info);
 	info->reinit_done = true;
-	mutex_unlock(&info->lock);
+	mutex_unlock(&info->device_mutex);
 	if (retval < 0) {
 		tsp_debug_err(&info->client->dev, "FTS fts_init fail!\n");
 		goto err_fts_init;
@@ -1713,13 +1702,16 @@ static int fts_probe(struct i2c_client *client, const struct i2c_device_id *idp)
 		goto err_enable_irq;
 	}
 
-	retval = fts_irq_enable(info, true);
+	retval = request_threaded_irq(info->irq, NULL,
+			fts_interrupt_handler, info->board->irq_type,
+			FTS_TS_DRV_NAME, info);
 	if (retval < 0) {
 		tsp_debug_err(&info->client->dev,
 						"%s: Failed to enable attention interrupt\n",
 						__func__);
 		goto err_enable_irq;
 	}
+	atomic_set(&info->irq_enabled, 1);
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
 	trustedui_set_tsp_irq(info->irq);
@@ -1759,7 +1751,6 @@ err_register_input:
 		input_free_device(info->input_dev);
 
 err_fts_init:
-	mutex_destroy(&info->lock);
 	mutex_destroy(&info->device_mutex);
 	mutex_destroy(&info->i2c_mutex);
 err_input_allocate_device:
@@ -1786,10 +1777,9 @@ static int fts_remove(struct i2c_client *client)
 	fts_command(info, FLUSHBUFFER);
 
 	fts_irq_enable(info, false);
+	free_irq(info->irq, info);
 
 	input_mt_destroy_slots(info->input_dev);
-
-	mutex_destroy(&info->lock);
 
 	input_unregister_device(info->input_dev);
 	info->input_dev = NULL;
@@ -1997,7 +1987,7 @@ static int fts_stop_device(struct fts_ts_info *info)
 		info->fts_power_state = FTS_POWER_STATE_LOWPOWER;
 
 		fts_interrupt_set(info, INT_DISABLE);
-		disable_irq(info->irq);
+		fts_irq_enable(info, false);
 
 		fts_command(info, FLUSHBUFFER);
 		fts_command(info, SENSEOFF);
@@ -2010,7 +2000,7 @@ static int fts_stop_device(struct fts_ts_info *info)
 
 	} else {
 		fts_interrupt_set(info, INT_DISABLE);
-		disable_irq(info->irq);
+		fts_irq_enable(info, false);
 
 		fts_command(info, FLUSHBUFFER);
 		fts_release_all_finger(info);
@@ -2072,7 +2062,7 @@ static int fts_start_device(struct fts_ts_info *info)
 		fts_reinit(info);
 		info->reinit_done = true;
 
-		enable_irq(info->irq);
+		fts_irq_enable(info, true);
 
 	} else {
 tsp_power_on:
@@ -2084,7 +2074,7 @@ tsp_power_on:
 		fts_reinit(info);
 		info->reinit_done = true;
 
-		enable_irq(info->irq);
+		fts_irq_enable(info, true);
 	}
 
  out:

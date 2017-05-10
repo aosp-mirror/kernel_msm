@@ -11,6 +11,7 @@
 #ifdef CONFIG_INPUT_BOOSTER
 #include <linux/input/input_booster.h>
 #endif
+#include <linux/atomic.h>
 
 #include <linux/printk.h>
 #define tsp_debug_dbg(dev, fmt, ...)	dev_dbg(dev, fmt, ## __VA_ARGS__)
@@ -339,11 +340,10 @@ struct fts_ts_info {
 	unsigned int switch_gpio;
 	int irq;
 	int irq_type;
-	bool irq_enabled;
+	atomic_t irq_enabled;
 	struct fts_i2c_platform_data *board;
 	void (*register_cb)(void *);
 	struct fts_callbacks callbacks;
-	struct mutex lock;
 	bool enabled;
 #if defined(CONFIG_FB)
 	struct notifier_block fb_notif;
@@ -415,6 +415,7 @@ struct fts_ts_info {
 
 	struct mutex i2c_mutex;
 	struct mutex device_mutex;
+	spinlock_t lock;
 	bool touch_stopped;
 	bool reinit_done;
 
@@ -447,7 +448,7 @@ struct fts_ts_info {
 	int (*fts_get_channel_info)(struct fts_ts_info *info);
 	int (*fts_get_version_info)(struct fts_ts_info *info);
 	void (*fts_interrupt_set)(struct fts_ts_info *info, int enable);
-	int (*fts_irq_enable)(struct fts_ts_info *info, bool enable);
+	void (*fts_irq_enable)(struct fts_ts_info *info, bool enable);
 	void (*fts_release_all_finger)(struct fts_ts_info *info);
 #endif /* FEATURE_FTS_PRODUCTION_CODE */
 };

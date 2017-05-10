@@ -1,3 +1,26 @@
+/******************** (C) COPYRIGHT 2012 STMicroelectronics ********************
+*
+* File Name                   : ftm4_pdc.c
+* Authors                      : AMS(Analog Mems Sensor) Team
+* Description     : FTS Capacitive touch screen controller (FingerTipS)
+*
+********************************************************************************
+*
+* This program is free software; you can redistribute it and/or modify
+* it under the terms of the GNU General Public License version 2 as
+* published by the Free Software Foundation.
+*
+* THE PRESENT SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES
+* OR CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, FOR THE SOLE
+* PURPOSE TO SUPPORT YOUR APPLICATION DEVELOPMENT.
+* AS A RESULT, STMICROELECTRONICS SHALL NOT BE HELD LIABLE FOR ANY DIRECT,
+* INDIRECT OR CONSEQUENTIAL DAMAGES WITH RESPECT TO ANY CLAIMS ARISING FROM THE
+* CONTENT OF SUCH SOFTWARE AND/OR THE USE MADE BY CUSTOMERS OF THE CODING
+* INFORMATION CONTAINED HEREIN IN CONNECTION WITH THEIR PRODUCTS.
+*
+* THIS SOFTWARE IS SPECIFICALLY DESIGNED FOR EXCLUSIVE USE WITH ST PARTS.
+*******************************************************************************/
+
 #include <linux/init.h>
 #include <linux/errno.h>
 #include <linux/platform_device.h>
@@ -651,7 +674,7 @@ static int fts_panel_ito_test(struct fts_ts_info *info)
 
 	info->fts_systemreset(info);
 	info->fts_wait_for_ready(info);
-	disable_irq(info->irq);
+	info->fts_irq_enable(info, false);
 	info->fts_interrupt_set(info, INT_DISABLE);
 	info->fts_write_reg(info, &regAdd[0], 4);
 	info->fts_command(info, FLUSHBUFFER);
@@ -708,7 +731,7 @@ static int fts_panel_ito_test(struct fts_ts_info *info)
 	info->touch_count = 0;
 	info->fts_command(info, FLUSHBUFFER);
 	info->fts_interrupt_set(info, INT_ENABLE);
-	enable_irq(info->irq);
+	info->fts_irq_enable(info, true);
 	return result;
 }
 int fts_read_frame(struct fts_ts_info *info, unsigned char type, short *min,
@@ -1212,7 +1235,7 @@ static void fts_read_ix_data(struct fts_ts_info *info, bool allnode)
 		return;
 	}
 
-	disable_irq(info->irq);
+	info->fts_irq_enable(info, false);
 	info->fts_interrupt_set(info, INT_DISABLE);
 
 	info->fts_command(info, SENSEOFF);
@@ -1294,7 +1317,7 @@ static void fts_read_ix_data(struct fts_ts_info *info, bool allnode)
 
 	info->fts_command(info, SENSEON);
 
-	enable_irq(info->irq);
+	info->fts_irq_enable(info, true);
 	info->fts_interrupt_set(info, INT_ENABLE);
 
 	if (allnode == true) {
@@ -1412,7 +1435,7 @@ static void fts_read_self_raw_frame(struct fts_ts_info *info,
 		return;
 	}
 
-	disable_irq(info->irq);
+	info->fts_irq_enable(info, false);
 	info->fts_interrupt_set(info, INT_DISABLE);
 	info->fts_command(info, SENSEOFF);
 
@@ -1474,7 +1497,7 @@ static void fts_read_self_raw_frame(struct fts_ts_info *info,
 	fts_delay(1);
 	info->fts_command(info, SENSEON);
 
-	enable_irq(info->irq);
+	info->fts_irq_enable(info, true);
 	info->fts_interrupt_set(info, INT_ENABLE);
 
 	if (allnode == true) {
@@ -1637,7 +1660,7 @@ static void run_cx_data_read(void *device_data)
 
 	tsp_debug_info(&info->client->dev, "%s: start\n", __func__);
 
-	disable_irq(info->irq);
+	info->fts_irq_enable(info, false);
 	tsp_debug_info(&info->client->dev, "%s: disable_irq\n", __func__);
 	info->fts_interrupt_set(info, INT_DISABLE);
 	tsp_debug_info(&info->client->dev,
@@ -1773,7 +1796,7 @@ static void run_cx_data_read(void *device_data)
 	kfree(pStr);
 
 	snprintf(buff, sizeof(buff), "%s", "OK");
-	enable_irq(info->irq);
+	info->fts_irq_enable(info, true);
 	info->fts_interrupt_set(info, INT_ENABLE);
 	info->fts_command(info, SENSEON);
 	info->cmd_state = CMD_STATUS_OK;
@@ -1813,7 +1836,7 @@ static void get_cx_all_data(void *device_data)
 	tsp_debug_info(&info->client->dev, "%s: start\n", __func__);
 
 	info->fts_command(info, SENSEOFF);
-	disable_irq(info->irq);
+	info->fts_irq_enable(info, false);
 	info->fts_command(info, FLUSHBUFFER);
 	fts_delay(50);
 
@@ -1889,7 +1912,7 @@ static void get_cx_all_data(void *device_data)
 	kfree(pStr);
 
 out:
-	enable_irq(info->irq);
+	info->fts_irq_enable(info, true);
 	info->fts_command(info, SENSEON);
 	info->cmd_state = CMD_STATUS_OK;
 	set_cmd_result(info, all_strbuff,
@@ -1926,7 +1949,7 @@ static void set_tsp_test_result(void *device_data)
 		return;
 	}
 
-	disable_irq(info->irq);
+	info->fts_irq_enable(info, false);
 	info->fts_interrupt_set(info, INT_DISABLE);
 
 	regAdd[3] = info->cmd_param[0];
@@ -1937,7 +1960,7 @@ static void set_tsp_test_result(void *device_data)
 	fts_delay(230);
 	fts_fw_wait_for_event(info, STATUS_EVENT_FLASH_WRITE_CONFIG, 0x00);
 
-	enable_irq(info->irq);
+	info->fts_irq_enable(info, true);
 	info->fts_interrupt_set(info, INT_ENABLE);
 
 	snprintf(buff, sizeof(buff), "%s", "OK");
@@ -1994,13 +2017,13 @@ static void run_trx_short_test(void *device_data)
 		info->cmd_state = CMD_STATUS_NOT_APPLICABLE;
 		return;
 	}
-	disable_irq(info->irq);
+	info->fts_irq_enable(info, false);
 	ret = fts_panel_ito_test(info);
 	if (ret == 1)
 		snprintf(buff, sizeof(buff), "%s", "OK");
 	else
 		snprintf(buff, sizeof(buff), "%s", "FAIL");
-	enable_irq(info->irq);
+	info->fts_irq_enable(info, true);
 	info->cmd_state = CMD_STATUS_OK;
 	set_cmd_result(info, buff, strnlen(buff, sizeof(buff)));
 	tsp_debug_info(&info->client->dev, "%s: %s\n", __func__, buff);
@@ -2137,7 +2160,7 @@ static void run_autotune(void *device_data)
 		goto autotune_fail;
 	}
 
-	disable_irq(info->irq);
+	info->fts_irq_enable(info, false);
 
 	if (info->digital_rev == FTS_DIGITAL_REV_2) {
 		info->fts_interrupt_set(info, INT_DISABLE);
@@ -2163,7 +2186,7 @@ static void run_autotune(void *device_data)
 		goto autotune_fail;
 	}
 
-	enable_irq(info->irq);
+	info->fts_irq_enable(info, true);
 	snprintf(buff, sizeof(buff), "%s", "OK");
 	info->cmd_state = CMD_STATUS_OK;
 	set_cmd_result(info, buff, strnlen(buff, sizeof(buff)));
