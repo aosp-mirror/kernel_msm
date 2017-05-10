@@ -19,6 +19,7 @@
 #include "apq8009-pm8916-narwhal.dtsi"
 #include "apq8009-narwhal-panel.dtsi"
 #include "apq8009-narwhal-sound.dtsi"
+#include "apq8009-narwhal-misc.dtsi"
 
 /{
 	aliases {

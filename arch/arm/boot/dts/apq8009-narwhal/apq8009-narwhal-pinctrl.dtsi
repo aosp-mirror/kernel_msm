@@ -507,5 +507,31 @@
 				};
 			};
 		};
+
+		load_sw {
+			load_sw_active: load_sw_active {
+				mux {
+					pins = "gpio28";
+					function = "gpio";
+				};
+				config {
+					pins = "gpio28";
+					drive-strength = <4>;
+					bias-pull-down;
+				};
+			};
+
+			load_sw_suspend: load_sw_suspend {
+				mux {
+					pins = "gpio28";
+					function = "gpio";
+				};
+				config {
+					pins = "gpio28";
+					drive-strength = <4>;
+					bias-pull-down;
+				};
+			};
+		};
 	};
 };
