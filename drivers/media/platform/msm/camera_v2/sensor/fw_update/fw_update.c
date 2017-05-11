@@ -296,10 +296,42 @@ int checkFWUpdate(struct msm_sensor_ctrl_t *s_ctrl)
 }
 
 /*fw update start*/
+static struct msm_camera_i2c_reg_array lc898214xd_fw_setting[] = {
+	{0x42, 0x02, 0x00},
+	{0x43, 0x90, 0x00},
+	{0x44, 0x7A, 0x00},
+	{0x48, 0x40, 0x00},
+	{0x49, 0x30, 0x00},
+	{0x4C, 0x8C, 0x00},
+	{0x4D, 0xB0, 0x00},
+	{0x4E, 0x73, 0x00},
+	{0x4F, 0xF0, 0x00},
+	{0x50, 0x67, 0x00},
+	{0x51, 0x30, 0x00},
+	{0x52, 0x2D, 0x00},
+	{0x53, 0x70, 0x00},
+	{0x58, 0x39, 0x00},
+	{0x59, 0x30, 0x00},
+	{0x5A, 0xC6, 0x00},
+	{0x5B, 0xD5, 0x00},
+	{0x60, 0x04, 0x00},
+	{0x61, 0xA0, 0x00},
+	{0x62, 0x76, 0x00},
+	{0x63, 0xB0, 0x00},
+	{0x6E, 0x40, 0x00},
+	{0x6F, 0x30, 0x00},
+	{0x54, 0x1B, 0x00},
+	{0x1E, 0x00, 0x00},
+	{0x1A, 0x30, 0x00},
+	{0x2D, 0x60, 0x00},
+	{0x2F, 0x78, 0x00},
+};
+
 int checkVCMFWUpdate(struct msm_sensor_ctrl_t *s_ctrl)
 {
 	int32_t rc = 0;
-	uint16_t reg_data = 0;
+	int32_t i = 0;
+	uint16_t reg_data = 0, reg_data2 = 0, reg_data3 = 0;
 
 	pr_info("[VCMFW]:%s :E\n", __func__);
 
@@ -312,26 +344,36 @@ int checkVCMFWUpdate(struct msm_sensor_ctrl_t *s_ctrl)
 	pr_info("[VCMFW]:%s sid = %d\n", __func__,
 		s_ctrl->sensor_i2c_client->cci_client->sid);
 
-	rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_read(
-		s_ctrl->sensor_i2c_client, 0xAB, &reg_data,
+	s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
+		s_ctrl->sensor_i2c_client, 0x84, 0x0,
 		MSM_CAMERA_I2C_BYTE_DATA);
-	if (rc < 0) {
-		pr_err("[VCMFW]:%s: i2c read 0xAB error:%d\n", __func__, rc);
-		return rc;
-	}
-	pr_info("[VCMFW]: reg_data = %d\n", reg_data);
-	if (reg_data != 0x0) {
+	s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
+		s_ctrl->sensor_i2c_client, 0x87, 0x0,
+		MSM_CAMERA_I2C_BYTE_DATA);
+	s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
+		s_ctrl->sensor_i2c_client, 0x8E, 0x0,
+		MSM_CAMERA_I2C_BYTE_DATA);
+	usleep_range(10000, 11000);
+
+	s_ctrl->sensor_i2c_client->cci_client->sid =
+		AF_EEPROM_I2C_ADDR_WRITE_STEP2 >> 1;
+
+	/* Validate fw version and judge if need to update FW */
+	rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_read(
+		s_ctrl->sensor_i2c_client, 0x2F, &reg_data,
+		MSM_CAMERA_I2C_BYTE_DATA);
+	rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_read(
+		s_ctrl->sensor_i2c_client, 0x42, &reg_data2,
+		MSM_CAMERA_I2C_BYTE_DATA);
+	rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_read(
+		s_ctrl->sensor_i2c_client, 0x54, &reg_data3,
+		MSM_CAMERA_I2C_BYTE_DATA);
+	s_ctrl->sensor_i2c_client->cci_client->sid =
+		AF_EEPROM_I2C_ADDR_WRITE_STEP1 >> 1;
+	if (reg_data == 0x78 && reg_data2 == 0x02 && reg_data3 == 0x1B) {
+		pr_err("[VCMFW]%s: No need to update AF FW\n", __func__);
+	} else {
 		pr_err("[VCMFW]%s: Update AF FW...\n", __func__);
-		s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
-			s_ctrl->sensor_i2c_client, 0x84, 0x0,
-			MSM_CAMERA_I2C_BYTE_DATA);
-		s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
-			s_ctrl->sensor_i2c_client, 0x87, 0x0,
-			MSM_CAMERA_I2C_BYTE_DATA);
-		s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
-			s_ctrl->sensor_i2c_client, 0x8E, 0x0,
-			MSM_CAMERA_I2C_BYTE_DATA);
-		usleep_range(10000, 11000);
 		s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
 			s_ctrl->sensor_i2c_client, 0x9C, 0xAF,
 			MSM_CAMERA_I2C_BYTE_DATA);
@@ -342,53 +384,22 @@ int checkVCMFWUpdate(struct msm_sensor_ctrl_t *s_ctrl)
 		/* Replace the I2C slave address with AF EEPROM */
 		s_ctrl->sensor_i2c_client->cci_client->sid =
 			AF_EEPROM_I2C_ADDR_WRITE_STEP2 >> 1;
-		s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
-			s_ctrl->sensor_i2c_client, 0x1E, 0x0,
-			MSM_CAMERA_I2C_BYTE_DATA);
-		usleep_range(3000, 4000);
-		rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_poll(
-			s_ctrl->sensor_i2c_client, 0xED, 0x0,
-			MSM_CAMERA_I2C_BYTE_DATA, 10);
-		if (rc < 0) {
-			pr_err("[VCMFW]%s: i2c poll failed after wrtie 0x1E\n",
-				__func__);
-			return rc;
-		}
-		s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
-			s_ctrl->sensor_i2c_client, 0x1A, 0x30,
-			MSM_CAMERA_I2C_BYTE_DATA);
-		usleep_range(3000, 4000);
-		rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_poll(
-			s_ctrl->sensor_i2c_client, 0xED, 0x0,
-			MSM_CAMERA_I2C_BYTE_DATA, 10);
-		if (rc < 0) {
-			pr_err("[VCMFW]%s: i2c poll failed after wrtie 0x1A\n",
-				__func__);
-			return rc;
-		}
-		s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
-			s_ctrl->sensor_i2c_client, 0x2D, 0x60,
-			MSM_CAMERA_I2C_BYTE_DATA);
-		usleep_range(3000, 4000);
-		rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_poll(
-			s_ctrl->sensor_i2c_client, 0xED, 0x0,
-			MSM_CAMERA_I2C_BYTE_DATA, 10);
-		if (rc < 0) {
-			pr_err("[VCMFW]%s: i2c poll failed after wrtie 0x2D\n",
-				__func__);
-			return rc;
-		}
-		s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
-			s_ctrl->sensor_i2c_client, 0x2F, 0x78,
-			MSM_CAMERA_I2C_BYTE_DATA);
-		usleep_range(3000, 4000);
-		rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_poll(
-			s_ctrl->sensor_i2c_client, 0xED, 0x0,
-			MSM_CAMERA_I2C_BYTE_DATA, 10);
-		if (rc < 0) {
-			pr_err("[VCMFW]%s: i2c poll failed after wrtie 0x2F\n",
-				__func__);
-			return rc;
+		for (i = 0; i < ARRAY_SIZE(lc898214xd_fw_setting); i++) {
+			s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
+				s_ctrl->sensor_i2c_client,
+				lc898214xd_fw_setting[i].reg_addr,
+				lc898214xd_fw_setting[i].reg_data,
+				MSM_CAMERA_I2C_BYTE_DATA);
+			usleep_range(3000, 4000);
+			rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_poll(
+				s_ctrl->sensor_i2c_client, 0xED, 0x0,
+				MSM_CAMERA_I2C_BYTE_DATA, 10);
+			if (rc < 0) {
+				pr_err("%s: i2c poll failed after wrtie 0x%x\n",
+					__func__,
+					lc898214xd_fw_setting[i].reg_addr);
+				return rc;
+			}
 		}
 		/* Restore the I2C slave address */
 		s_ctrl->sensor_i2c_client->cci_client->sid =
@@ -415,13 +426,7 @@ int checkVCMFWUpdate(struct msm_sensor_ctrl_t *s_ctrl)
 		}
 
 		pr_err("[VCMFW]%s: Update AF FW successfully\n", __func__);
-	} else
-		pr_info("[VCMFW]:%s No need to update\n", __func__);
-
-	rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_read(
-		s_ctrl->sensor_i2c_client, 0xAB, &reg_data,
-		MSM_CAMERA_I2C_BYTE_DATA);
-	pr_info("[VCMFW]: reg_data = %d\n", reg_data);
+	}
 
 	pr_info("[VCMFW]:%s :X\n", __func__);
 	return rc;
