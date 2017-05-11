@@ -502,13 +502,9 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 			gpio_set_value((ctrl_pdata->bklt_en_gpio), 0);
 			gpio_free(ctrl_pdata->bklt_en_gpio);
 		}
-		if (gpio_is_valid(ctrl_pdata->disp_en_gpio)) {
-			gpio_set_value((ctrl_pdata->disp_en_gpio), 0);
-			gpio_free(ctrl_pdata->disp_en_gpio);
-		}
 
-			if (pinfo->use_dsv)
-				lm36272_dsv_ctrl(0);
+		if (pinfo->use_dsv)
+			lm36272_dsv_ctrl(0);
 
 		if (pinfo->off_pre_rst_delay) {
 			pr_debug("%s: off_pre_rst_delay:%d\n",
@@ -527,6 +523,11 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 
 		if (gpio_is_valid(ctrl_pdata->mode_gpio))
 			gpio_free(ctrl_pdata->mode_gpio);
+
+		if (gpio_is_valid(ctrl_pdata->disp_en_gpio)) {
+			gpio_set_value((ctrl_pdata->disp_en_gpio), 0);
+			gpio_free(ctrl_pdata->disp_en_gpio);
+		}
 	}
 	return rc;
 }
