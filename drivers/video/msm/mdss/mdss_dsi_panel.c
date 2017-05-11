@@ -875,26 +875,9 @@ static int mdss_dsi_panel_low_power_config(struct mdss_panel_data *pdata,
 
 	mutex_lock(&ctrl->ambientcmd_mutex);
 
-	/* Any panel specific low power commands/config */
-	if (enable) {
-		if (ctrl->idle_on_cmds.cmd_cnt){
-			printk("MDSS:AMB: set idle ON command!\n");
-			mdss_dsi_panel_cmds_send(ctrl, &ctrl->idle_on_cmds, CMD_REQ_COMMIT);
-		} else {
-			printk("MDSS:AMB: idle ON command is not set!\n");
-		}
-	} else {
-		if (ctrl->idle_off_cmds.cmd_cnt){
-			printk("MDSS:AMB: set idle OFF command!\n");
-			mdss_dsi_panel_cmds_send(ctrl, &ctrl->idle_off_cmds, CMD_REQ_COMMIT);
-		} else {
-			printk("MDSS:AMB: idle OFF command is not set!\n");
-		}
-	}
-
-	mutex_unlock(&ctrl->ambientcmd_mutex);
 	/* Control idle mode for panel */
 	mdss_dsi_panel_set_idle_mode(pdata, enable);
+	mutex_unlock(&ctrl->ambientcmd_mutex);
 
 	pr_debug("%s:-\n", __func__);
 	return 0;

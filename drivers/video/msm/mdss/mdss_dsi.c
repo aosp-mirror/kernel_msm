@@ -390,7 +390,7 @@ error:
 int mdss_dsi_panel_power_ctrl(struct mdss_panel_data *pdata,
 	int power_state)
 {
-	int ret = 0;
+	int ret = 0, ret2 = 0;
 	struct mdss_panel_info *pinfo;
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 
@@ -426,6 +426,12 @@ int mdss_dsi_panel_power_ctrl(struct mdss_panel_data *pdata,
 	case MDSS_PANEL_POWER_ON:
 		if (mdss_dsi_is_panel_on_ulp(pdata)) {
 			ret = mdss_dsi_panel_power_ulp(pdata, false);
+			ret2 = mdss_dsi_panel_power_lp(pdata, false);
+			if (ret2 != 0) {
+				ret = ret2;
+				pr_err("%s: failed to mdss_dsi_panel_power_lp, ret: %d\n",
+						__func__, ret);
+			}
 		} else if (mdss_dsi_is_panel_on_lp(pdata)) {
 			ret = mdss_dsi_panel_power_lp(pdata, false);
 		} else {
