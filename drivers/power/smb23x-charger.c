@@ -304,7 +304,7 @@ static int g_BootPhase = 1;
 
 #define BATT_NO_OVER_VOLT   4240000
 #define BATT_OVER_VOLT      4500000
-#define BATT_OVER_TEMP      470
+#define BATT_OVER_TEMP      430
 #define TRIM_PERIOD_NS      (1LL * NSEC_PER_SEC)
 
 #define REG0_DEFAULT        0x54
@@ -2249,7 +2249,7 @@ static void smb23x_wpc_check_work(struct work_struct *work)
 
     if(g_BattStatus == STATUS_OT)
     {
-        if (battery_temperature <= (BATT_OVER_TEMP - 30))
+        if (battery_temperature <= (BATT_OVER_TEMP - 20))
         {
             pr_info("[smb23x] No OT, attempt to turn on the WPC\n");
 
