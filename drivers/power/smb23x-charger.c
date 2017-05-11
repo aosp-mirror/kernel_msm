@@ -3279,7 +3279,7 @@ static int smb23x_probe(struct i2c_client *client,
 	INIT_DELAYED_WORK(&chip->delaywork_usb_removal, smb23x_delaywork_usb_removal);
 
 	INIT_DEFERRABLE_WORK(&chip->boot_check_work, smb23x_boot_check_work);
-	schedule_delayed_work(&chip->boot_check_work, 18000);
+	schedule_delayed_work(&chip->boot_check_work, 8500);
 
 	alarm_init(&chip->wpc_check_alarm, ALARM_REALTIME, smb23x_wpc_check_alarm_callback);
 	INIT_WORK(&chip->wpc_check_work, smb23x_wpc_check_work);
