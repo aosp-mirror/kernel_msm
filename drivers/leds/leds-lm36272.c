@@ -91,6 +91,8 @@ int lm36272_dsv_ctrl(int dsv_en)
 
 		lm36272_write_reg(dev->client, 0x09, 0x99);
 		lm36272_write_reg(dev->client, 0x09, 0x00);
+
+		dev->status = BL_OFF;
 	}
 	return 0;
 }
@@ -123,7 +125,7 @@ static void lm36272_set_main_current_level(struct i2c_client *client, int level)
 	struct lm36272_device *dev = i2c_get_clientdata(client);
 	int min_brightness = dev->min_brightness;
 	int max_brightness = dev->max_brightness;
-	int cal_value;
+	int cal_value = level;
 	u8 data;
 
 	if (level != 0) {
@@ -145,9 +147,9 @@ static void lm36272_set_main_current_level(struct i2c_client *client, int level)
 		} else {
 			lm36272_write_reg(client, 0x05, cal_value);
 		}
-	} else{
-			lm36272_write_reg(client, 0x04, 0x00);
-			lm36272_write_reg(client, 0x05, 0x00);
+	} else {
+		lm36272_write_reg(client, 0x04, cal_value);
+		lm36272_write_reg(client, 0x05, cal_value);
 	}
 
 	pr_debug("%s: level=%d, cal_value=%d \n",
