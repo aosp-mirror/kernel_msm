@@ -525,6 +525,11 @@ config AXP20X_POWER
 	  This driver provides support for the power supply features of
 	  AXP20x PMIC.
 
+config LGE_BATTERY
+	tristate "LGE Battery driver feature"
+	help
+	  Say Y here to enable lge battery driver.
+
 source "drivers/power/reset/Kconfig"
 source "drivers/power/supply/Kconfig"
 

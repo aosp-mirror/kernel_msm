@@ -75,3 +75,4 @@ obj-$(CONFIG_AXP288_CHARGER)	+= axp288_charger.o
 obj-$(CONFIG_ARCH_QCOM)		+= qcom/
 obj-$(CONFIG_POWER_SUPPLY)	+= supply/
 obj-$(CONFIG_HTC_BATTERY)	+= htc_battery.o
+obj-$(CONFIG_LGE_BATTERY)	+= lge_battery.o
