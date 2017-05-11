@@ -1,0 +1,169 @@
+/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include "../qcom/msm8998-pinctrl.dtsi"
+
+&tlmm {
+	/delete-node/ cdc_reset_ctrl;
+
+	cdc_reset_ctrl {
+		cdc_reset_sleep: cdc_reset_sleep {
+			mux {
+				pins = "gpio116";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio116";
+				drive-strength = <16>;
+				bias-disable;
+				output-low;
+			};
+		};
+		cdc_reset_active: cdc_reset_active {
+			mux {
+				pins = "gpio116";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio116";
+				drive-strength = <16>;
+				bias-pull-down;
+				output-high;
+			};
+		};
+	};
+
+	pmx_mdss: pmx_mdss {
+		mdss_dsi_active: mdss_dsi_active {
+			mux {
+				pins = "gpio94", "gpio96", "gpio91", "gpio51","gpio39";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio94", "gpio96","gpio91", "gpio51","gpio39";
+				drive-strength = <16>; /* 8 mA */
+				bias-pull-up;
+			};
+		};
+		mdss_dsi_suspend: mdss_dsi_suspend {
+			mux {
+				pins = "gpio94", "gpio96","gpio91", "gpio51","gpio39";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio94", "gpio96","gpio91", "gpio51","gpio39";
+				drive-strength = <2>; /* 2 mA */
+				bias-pull-down; /* pull down */
+			};
+		};
+	};
+
+
+	external_trigger_active: external_trigger_active {
+		mux {
+			pins = "gpio117";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio117";
+			drive-strength = <8>; /* 8 mA */
+			bias-pull-up;  /* pull up */
+			output-low;
+		};
+	};
+
+	external_trigger_suspend: external_trigger_suspend {
+		mux {
+			pins = "gpio117";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio117";
+			drive-strength = <2>; /* 2 mA */
+			bias-disable;  /* no pull */
+		};
+	};
+
+	cam_sensor_6dofr_active: cam_sensor_6dofr_active {
+		/* RESET, STANDBY */
+		mux {
+			pins = "gpio149","gpio52","gpio93";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio149","gpio52","gpio93";
+			bias-disable; /* No PULL */
+			drive-strength = <2>; /* 2 MA */
+		};
+	};
+
+	cam_sensor_6dofr_suspend: cam_sensor_6dofr_suspend {
+		/* RESET, STANDBY */
+		mux {
+			pins = "gpio149","gpio52","gpio93";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio149","gpio52","gpio93";
+			bias-disable; /* No PULL */
+			drive-strength = <2>; /* 2 MA */
+		};
+	};
+
+	cam_sensor_6dofl_active: cam_sensor_6dofl_active {
+		/* RESET, STANDBY */
+		mux {
+			pins = "gpio148","gpio52","gpio93";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio148","gpio52","gpio93";
+			bias-disable; /* No PULL */
+			drive-strength = <2>; /* 2 MA */
+		};
+	};
+
+	cam_sensor_6dofl_suspend: cam_sensor_6dofl_suspend {
+		/* RESET, STANDBY */
+		mux {
+			pins = "gpio148","gpio52","gpio93";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio148","gpio52","gpio93";
+			bias-disable; /* No PULL */
+			drive-strength = <2>; /* 2 MA */
+		};
+	};
+
+	/delete-node/ cam_sensor_mclk0_active;
+
+	cam_sensor_mclk0_active: cam_sensor_mclk0_active {
+		/* MCLK0 */
+		mux {
+			/* CLK, DATA */
+			pins = "gpio13";
+			function = "cam_mclk";
+		};
+
+		config {
+			pins = "gpio13";
+			bias-disable; /* No PULL */
+			drive-strength = <10>; /* 10 MA */
+		};
+	};
+};
