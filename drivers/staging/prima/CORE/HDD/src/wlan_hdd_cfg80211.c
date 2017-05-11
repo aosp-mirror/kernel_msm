@@ -177,6 +177,12 @@
 #define MAC_ADDR_SPOOFING_FW_HOST_DISABLE           0
 #define MAC_ADDR_SPOOFING_FW_HOST_ENABLE            1
 #define MAC_ADDR_SPOOFING_FW_ENABLE_HOST_DISABLE    2
+#define MAC_ADDR_SPOOFING_DEFER_INTERVAL            10 //in ms
+
+/*
+ * max_sched_scan_plans defined to 10
+ */
+#define MAX_SCHED_SCAN_PLANS 10
 
 static const u32 hdd_cipher_suites[] =
 {
@@ -5616,6 +5622,33 @@ struct wiphy *wlan_hdd_cfg80211_wiphy_alloc(int priv_size)
     return wiphy;
 }
 
+#if (LINUX_VERSION_CODE > KERNEL_VERSION(4,4,0)) || \
+    defined (CFG80211_MULTI_SCAN_PLAN_BACKPORT)
+/**
+ * hdd_config_sched_scan_plans_to_wiphy() - configure sched scan plans to wiphy
+ * @wiphy: pointer to wiphy
+ * @config: pointer to config
+ *
+ * Return: None
+ */
+static void hdd_config_sched_scan_plans_to_wiphy(struct wiphy *wiphy,
+                                                 hdd_config_t *config)
+{
+    wiphy->max_sched_scan_plans = MAX_SCHED_SCAN_PLANS;
+    if (config->max_sched_scan_plan_interval)
+        wiphy->max_sched_scan_plan_interval =
+            config->max_sched_scan_plan_interval;
+    if (config->max_sched_scan_plan_iterations)
+        wiphy->max_sched_scan_plan_iterations =
+               config->max_sched_scan_plan_iterations;
+}
+#else
+static void hdd_config_sched_scan_plans_to_wiphy(struct wiphy *wiphy,
+                                                 hdd_config_t *config)
+{
+}
+#endif
+
 /*
  * FUNCTION: wlan_hdd_cfg80211_update_band
  * This function is called from the supplicant through a
@@ -5903,6 +5936,8 @@ int wlan_hdd_cfg80211_init(struct device *dev,
     wiphy->vendor_commands = hdd_wiphy_vendor_commands;
     wiphy->vendor_events = wlan_hdd_cfg80211_vendor_events;
     wiphy->n_vendor_events = ARRAY_SIZE(wlan_hdd_cfg80211_vendor_events);
+
+    hdd_config_sched_scan_plans_to_wiphy(wiphy, pCfg);
 
     EXIT();
     return 0;
@@ -14510,6 +14545,69 @@ void hdd_cfg80211_sched_scan_start_status_cb(void *callbackContext, VOS_STATUS s
     EXIT();
 }
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,0)) || \
+   defined (CFG80211_MULTI_SCAN_PLAN_BACKPORT)
+/**
+ * hdd_config_sched_scan_plan() - configures the sched scan plans
+ *    from the framework.
+ * @pno_req: pointer to PNO scan request
+ * @request: pointer to scan request from framework
+ *
+ * Return: None
+ */
+static void hdd_config_sched_scan_plan(tpSirPNOScanReq pno_req,
+                                  struct cfg80211_sched_scan_request *request,
+                                  hdd_context_t *hdd_ctx)
+{
+    v_U32_t i = 0;
+
+    pno_req.scanTimers.ucScanTimersCount = n_scan_plans;
+    for (i = 0; i < request->n_scan_plans; i++)
+    {
+        pno_req.scanTimers.aTimerValues[i].uTimerRepeat =
+            request->scan_plans[i]->iterations;
+        pno_req.scanTimers.aTimerValues[i].uTimerValue =
+            request->scan_plans[i]->interval;
+    }
+}
+#else
+static void hdd_config_sched_scan_plan(tSirPNOScanReq pno_req,
+                                  struct cfg80211_sched_scan_request *request,
+                                  hdd_context_t *hdd_ctx)
+{
+    v_U32_t i, temp_int;
+    /* Driver gets only one time interval which is hardcoded in
+     * supplicant for 10000ms. Taking power consumption into account 6
+     * timers will be used, Timervalue is increased exponentially
+     * i.e 10,20,40, 80,160,320 secs. And number of scan cycle for each
+     * timer is configurable through INI param gPNOScanTimerRepeatValue.
+     * If it is set to 0 only one timer will be used and PNO scan cycle
+     * will be repeated after each interval specified by supplicant
+     * till PNO is disabled.
+     */
+    if (0 == hdd_ctx->cfg_ini->configPNOScanTimerRepeatValue)
+        pno_req.scanTimers.ucScanTimersCount =
+            HDD_PNO_SCAN_TIMERS_SET_ONE;
+    else
+        pno_req.scanTimers.ucScanTimersCount =
+            HDD_PNO_SCAN_TIMERS_SET_MULTIPLE;
+
+    temp_int = (request->interval)/1000;
+    VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
+              "Base scan interval = %d PNOScanTimerRepeatValue = %d",
+              temp_int, hdd_ctx->cfg_ini->configPNOScanTimerRepeatValue);
+    for ( i = 0; i < pno_req.scanTimers.ucScanTimersCount; i++)
+    {
+        pno_req.scanTimers.aTimerValues[i].uTimerRepeat =
+            hdd_ctx->cfg_ini->configPNOScanTimerRepeatValue;
+        pno_req.scanTimers.aTimerValues[i].uTimerValue = temp_int;
+        temp_int *= 2;
+    }
+    //Repeat last timer until pno disabled.
+    pno_req.scanTimers.aTimerValues[i-1].uTimerRepeat = 0;
+}
+#endif
+
 /*
  * FUNCTION: __wlan_hdd_cfg80211_sched_scan_start
  * Function to enable PNO
@@ -14521,7 +14619,7 @@ static int __wlan_hdd_cfg80211_sched_scan_start(struct wiphy *wiphy,
     tSirPNOScanReq pnoRequest = {0};
     hdd_context_t *pHddCtx;
     tHalHandle hHal;
-    v_U32_t i, indx, num_ch, tempInterval, j;
+    v_U32_t i, indx, num_ch, j;
     u8 valid_ch[WNI_CFG_VALID_CHANNEL_LIST_LEN] = {0};
     u8 channels_allowed[WNI_CFG_VALID_CHANNEL_LIST_LEN] = {0};
     v_U32_t num_channels_allowed = WNI_CFG_VALID_CHANNEL_LIST_LEN;
@@ -14765,34 +14863,7 @@ static int __wlan_hdd_cfg80211_sched_scan_start(struct wiphy *wiphy,
                 pnoRequest.us5GProbeTemplateLen);
     }
 
-    /* Driver gets only one time interval which is hardcoded in
-     * supplicant for 10000ms. Taking power consumption into account 6 timers
-     * will be used, Timervalue is increased exponentially i.e 10,20,40,
-     * 80,160,320 secs. And number of scan cycle for each timer
-     * is configurable through INI param gPNOScanTimerRepeatValue.
-     * If it is set to 0 only one timer will be used and PNO scan cycle
-     * will be repeated after each interval specified by supplicant
-     * till PNO is disabled.
-     */
-    if (0 == pHddCtx->cfg_ini->configPNOScanTimerRepeatValue)
-        pnoRequest.scanTimers.ucScanTimersCount = HDD_PNO_SCAN_TIMERS_SET_ONE;
-    else
-        pnoRequest.scanTimers.ucScanTimersCount =
-                                               HDD_PNO_SCAN_TIMERS_SET_MULTIPLE;
-
-    tempInterval = (request->interval)/1000;
-    VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
-              "Base scan interval = %d PNOScanTimerRepeatValue = %d",
-              tempInterval, pHddCtx->cfg_ini->configPNOScanTimerRepeatValue);
-    for ( i = 0; i < pnoRequest.scanTimers.ucScanTimersCount; i++)
-    {
-        pnoRequest.scanTimers.aTimerValues[i].uTimerRepeat =
-                                 pHddCtx->cfg_ini->configPNOScanTimerRepeatValue;
-        pnoRequest.scanTimers.aTimerValues[i].uTimerValue = tempInterval;
-        tempInterval *= 2;
-    }
-    //Repeat last timer until pno disabled.
-    pnoRequest.scanTimers.aTimerValues[i-1].uTimerRepeat = 0;
+    hdd_config_sched_scan_plan(pnoRequest, request, pHddCtx);
 
     pnoRequest.modePNO = SIR_PNO_MODE_IMMEDIATE;
 
