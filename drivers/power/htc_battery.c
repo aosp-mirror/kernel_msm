@@ -8,7 +8,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-*/
+ */
 #include <linux/alarmtimer.h>
 #include <linux/delay.h>
 #include <linux/fb.h>
@@ -132,7 +132,6 @@ struct htc_battery_timer {
 	struct work_struct batt_work;
 	struct timer_list batt_timer;
 	struct workqueue_struct *batt_wq;
-	struct wake_lock battery_lock;
 	unsigned int time_out;
 	struct alarm batt_check_wakeup_alarm;
 };
@@ -223,8 +222,8 @@ static int set_batt_psy_property(enum power_supply_property prop, int value)
 	int rc = -1;
 
 	if (htc_batt_info.batt_psy) {
-		BATT_EMBEDDED("set_batt_psy_property. value(%d) prop(%d)",
-			      value, prop);
+		BATT_EMBEDDED("%s value(%d) prop(%d)",
+			      __func__, value, prop);
 		ret.intval = value;
 		rc = power_supply_set_property(htc_batt_info.batt_psy,
 					       prop, &ret);
@@ -414,7 +413,7 @@ int update_ibat_setting(void)
 	if (!is_vol_limited || batt_vol < IBAT_LIMIT_VOL_RECOVER_MV)
 		is_vol_limited = false;
 
-	/* Step 3: Apply Screen ON configuartion */
+	/* Step 3: Apply Screen ON configuration */
 	is_screen_on = !(htc_batt_info.state & STATE_SCREEN_OFF);
 
 	/* Step 4: Get mapping index */
@@ -460,7 +459,7 @@ int htc_batt_schedule_batt_info_update(void)
 		return 1;
 
 	if (!work_pending(&htc_batt_timer.batt_work)) {
-		wake_lock(&htc_batt_timer.battery_lock);
+		flush_work(&htc_batt_timer.batt_work);
 		queue_work(htc_batt_timer.batt_wq, &htc_batt_timer.batt_work);
 	}
 	return 0;
@@ -664,17 +663,17 @@ static void batt_worker(struct work_struct *work)
 		if ((int)htc_batt_info.rep.charging_source >
 		    POWER_SUPPLY_TYPE_BATTERY) {
 			if (htc_batt_info.rep.level == 100)
-				gpio_direction_output(htc_batt_info.v_elvdd_dis_en, 1);
+				gpio_direction_output(
+					htc_batt_info.v_elvdd_dis_en, 1);
 			else
-				gpio_direction_output(htc_batt_info.v_elvdd_dis_en, 0);
+				gpio_direction_output(
+					htc_batt_info.v_elvdd_dis_en, 0);
 		} else {
 			gpio_direction_output(htc_batt_info.v_elvdd_dis_en, 0);
 		}
 	}
 	BATT_LOG(" v_elvdd_dis_en=%d\n",
 		 gpio_get_value(htc_batt_info.v_elvdd_dis_en));
-
-	wake_unlock(&htc_batt_timer.battery_lock);
 }
 
 static void htc_battery_update_work(struct work_struct *work)
@@ -857,13 +856,16 @@ static int htc_battery_probe_process(void)
 			htc_batt_info.v_elvdd_dis_en = 0;
 		} else {
 			BATT_LOG("%s: htc,v-elvdd-dis-en = %d\n",
-				__func__, htc_batt_info.v_elvdd_dis_en);
-			rc = gpio_request(htc_batt_info.v_elvdd_dis_en, "V_ELVDD_DIS_EN");
+				 __func__, htc_batt_info.v_elvdd_dis_en);
+			rc = gpio_request(htc_batt_info.v_elvdd_dis_en,
+					  "V_ELVDD_DIS_EN");
 			if (rc < 0) {
-				BATT_LOG("%s: fail to request V_ELVDD_DIS_EN, rc=%dn",
+				BATT_LOG(
+					"%s: fail to request V_ELVDD_DIS_EN, rc=%dn",
 					__func__, rc);
 			} else {
-				gpio_direction_output(htc_batt_info.v_elvdd_dis_en, 0);
+				gpio_direction_output(
+					htc_batt_info.v_elvdd_dis_en, 0);
 			}
 		}
 	}
@@ -884,86 +886,6 @@ batt_check_alarm_handler(struct alarm *alarm, ktime_t time)
 	/* BATT_LOG("alarm handler, but do nothing."); */
 	return 0;
 }
-
-static int htc_battery_prepare(struct device *dev)
-{
-	ktime_t interval;
-	struct timespec xtime;
-	unsigned long cur_jiffies;
-	s64 next_alarm_sec = 0;
-	int check_time = 0;
-
-	xtime = CURRENT_TIME;
-	cur_jiffies = jiffies;
-	htc_batt_timer.total_time_ms += (cur_jiffies -
-			htc_batt_timer.batt_system_jiffies) * MSEC_PER_SEC / HZ;
-	htc_batt_timer.batt_system_jiffies = cur_jiffies;
-	htc_batt_timer.batt_suspend_ms = xtime.tv_sec * MSEC_PER_SEC +
-					xtime.tv_nsec / NSEC_PER_MSEC;
-
-	check_time = BATT_SUSPEND_CHECK_TIME;
-
-	interval = ktime_set(check_time - htc_batt_timer.total_time_ms / 1000,
-			     0);
-	next_alarm_sec = div_s64(interval.tv64, NSEC_PER_SEC);
-
-	/* check if alarm is over time or in 1 second near future */
-	if (next_alarm_sec <= 1) {
-		BATT_LOG(
-			"%s: passing time:%lu ms, trigger batt_work immediately.\n",
-			__func__, htc_batt_timer.total_time_ms);
-		htc_batt_schedule_batt_info_update();
-
-		return -EBUSY;
-	}
-
-	BATT_EMBEDDED(
-		"%s: passing time:%lu ms, alarm will be triggered after %lld sec\n",
-		__func__, htc_batt_timer.total_time_ms, next_alarm_sec);
-	BATT_LOG("htc_batt_info.state=0x%x\n", htc_batt_info.state);
-
-	return 0;
-}
-
-static void htc_battery_complete(struct device *dev)
-{
-	struct timespec xtime;
-	unsigned long resume_ms;
-	unsigned long sr_time_period_ms;
-	unsigned long check_time;
-	int batt_vol;
-
-	xtime = CURRENT_TIME;
-	htc_batt_timer.batt_system_jiffies = jiffies;
-	resume_ms = xtime.tv_sec * MSEC_PER_SEC + xtime.tv_nsec / NSEC_PER_MSEC;
-	sr_time_period_ms = resume_ms - htc_batt_timer.batt_suspend_ms;
-	htc_batt_timer.total_time_ms += sr_time_period_ms;
-
-	BATT_EMBEDDED("%s: sr_time_period=%lu ms; total passing time=%lu ms.",
-		      __func__,
-		      sr_time_period_ms, htc_batt_timer.total_time_ms);
-
-	check_time = BATT_SUSPEND_CHECK_TIME * MSEC_PER_SEC;
-
-	check_time -= CHECH_TIME_TOLERANCE_MS;
-
-	/*
-	 * When kernel resumes, battery driver should check total time to
-	 * decide if do battery information update or just ignore.
-	 */
-	batt_vol = get_property(htc_batt_info.bms_psy,
-				POWER_SUPPLY_PROP_VOLTAGE_NOW) / 1000;
-	if ((htc_batt_timer.total_time_ms >= check_time) || (batt_vol < 3400)) {
-		BATT_LOG("trigger batt_work while resume. (batt_vol=%d)\n",
-			 batt_vol);
-		htc_batt_schedule_batt_info_update();
-	}
-}
-
-static const struct dev_pm_ops htc_battery_pm_ops = {
-	.prepare = htc_battery_prepare,
-	.complete = htc_battery_complete,
-};
 
 static int htc_battery_fb_register(void)
 {
@@ -1017,14 +939,11 @@ static struct platform_driver htc_battery_driver = {
 	.driver	= {
 		.name	= HTC_BATT_NAME,
 		.owner	= THIS_MODULE,
-		.pm = &htc_battery_pm_ops,
 	},
 };
 
 static int __init htc_battery_init(void)
 {
-	wake_lock_init(&htc_batt_timer.battery_lock,
-		       WAKE_LOCK_SUSPEND, "htc_battery");
 	wake_lock_init(&htc_batt_info.charger_exist_lock,
 		       WAKE_LOCK_SUSPEND, "charger_exist_lock");
 
@@ -1057,7 +976,7 @@ static int __init htc_battery_init(void)
 	platform_device_register(&htc_battery_pdev);
 	platform_driver_register(&htc_battery_driver);
 
-	BATT_LOG("htc_battery_init done.\n");
+	BATT_LOG("%s done.\n", __func__);
 
 	return 0;
 }
