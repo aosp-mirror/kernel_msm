@@ -196,6 +196,7 @@ struct tcpm_port {
 
 	bool attached;
 	bool connected;
+	enum typec_port_type port_type;
 	bool vbus_present;
 	bool vbus_never_low;
 	bool vbus_source;
@@ -333,7 +334,7 @@ struct pd_rx_event {
 
 static enum tcpm_state tcpm_default_state(struct tcpm_port *port)
 {
-	if (port->typec_caps.type == TYPEC_PORT_DRP) {
+	if (port->port_type == TYPEC_PORT_DRP) {
 		if (port->try_role == TYPEC_SINK)
 			return SNK_UNATTACHED;
 		else if (port->try_role == TYPEC_SOURCE)
@@ -341,7 +342,7 @@ static enum tcpm_state tcpm_default_state(struct tcpm_port *port)
 		else if (port->tcpc->config->default_role == TYPEC_SINK)
 			return SNK_UNATTACHED;
 		/* Fall through to return SRC_UNATTACHED */
-	} else if (port->typec_caps.type == TYPEC_PORT_UFP) {
+	} else if (port->port_type == TYPEC_PORT_UFP) {
 		return SNK_UNATTACHED;
 	}
 	return SRC_UNATTACHED;
@@ -1462,7 +1463,7 @@ static void tcpm_pd_ctrl_request(struct tcpm_port *port,
 		tcpm_set_state(port, SOFT_RESET, 0);
 		break;
 	case PD_CTRL_DR_SWAP:
-		if (port->typec_caps.type != TYPEC_PORT_DRP) {
+		if (port->port_type != TYPEC_PORT_DRP) {
 			tcpm_queue_message(port, PD_MSG_CTRL_REJECT);
 			break;
 		}
@@ -1482,7 +1483,7 @@ static void tcpm_pd_ctrl_request(struct tcpm_port *port,
 		}
 		break;
 	case PD_CTRL_PR_SWAP:
-		if (port->typec_caps.type != TYPEC_PORT_DRP) {
+		if (port->port_type != TYPEC_PORT_DRP) {
 			tcpm_queue_message(port, PD_MSG_CTRL_REJECT);
 			break;
 		}
@@ -1857,7 +1858,7 @@ static bool tcpm_start_drp_toggling(struct tcpm_port *port)
 	int ret;
 
 	if (port->tcpc->start_drp_toggling &&
-	    port->typec_caps.type == TYPEC_PORT_DRP) {
+	    port->port_type == TYPEC_PORT_DRP) {
 		tcpm_log_force(port, "Start DRP toggling");
 		ret = port->tcpc->start_drp_toggling(port->tcpc,
 						     tcpm_rp_cc(port));
@@ -2153,7 +2154,7 @@ static void run_state_machine(struct tcpm_port *port)
 			break;
 		}
 		tcpm_set_cc(port, tcpm_rp_cc(port));
-		if (port->typec_caps.type == TYPEC_PORT_DRP)
+		if (port->port_type == TYPEC_PORT_DRP)
 			tcpm_set_state(port, SNK_UNATTACHED, PD_T_DRP_SNK);
 		break;
 	case SRC_ATTACH_WAIT:
@@ -2310,7 +2311,7 @@ static void run_state_machine(struct tcpm_port *port)
 			break;
 		}
 		tcpm_set_cc(port, TYPEC_CC_RD);
-		if (port->typec_caps.type == TYPEC_PORT_DRP)
+		if (port->port_type == TYPEC_PORT_DRP)
 			tcpm_set_state(port, SRC_UNATTACHED, PD_T_DRP_SRC);
 		break;
 	case SNK_ATTACH_WAIT:
@@ -2400,7 +2401,7 @@ static void run_state_machine(struct tcpm_port *port)
 		 * see USB power delivery specification, section 8.3.3.6.1.5.1).
 		 */
 		tcpm_set_state(port, hard_reset_state(port),
-			       port->typec_caps.type == TYPEC_PORT_DRP ?
+			       port->port_type == TYPEC_PORT_DRP ?
 					PD_T_DB_DETECT : PD_T_NO_RESPONSE);
 		break;
 	case SNK_DISCOVERY_DEBOUNCE:
@@ -3156,7 +3157,7 @@ static int tcpm_dr_set(const struct typec_capability *cap,
 	mutex_lock(&port->swap_lock);
 	mutex_lock(&port->lock);
 
-	if (port->typec_caps.type != TYPEC_PORT_DRP) {
+	if (port->port_type != TYPEC_PORT_DRP) {
 		ret = -EINVAL;
 		goto port_unlock;
 	}
@@ -3224,7 +3225,7 @@ static int tcpm_pr_set(const struct typec_capability *cap,
 	mutex_lock(&port->swap_lock);
 	mutex_lock(&port->lock);
 
-	if (port->typec_caps.type != TYPEC_PORT_DRP) {
+	if (port->port_type != TYPEC_PORT_DRP) {
 		ret = -EINVAL;
 		goto port_unlock;
 	}
@@ -3345,6 +3346,35 @@ static void tcpm_init(struct tcpm_port *port)
 	 */
 	tcpm_set_state(port, PORT_RESET, 0);
 }
+
+static int tcpm_port_type_set(const struct typec_capability *cap,
+		enum typec_port_type type)
+{
+	struct tcpm_port *port = typec_cap_to_tcpm(cap);
+
+	mutex_lock(&port->lock);
+	if (type == port->port_type)
+		goto port_unlock;
+
+	port->port_type = type;
+
+	if (!port->connected)
+		tcpm_set_state(port, PORT_RESET, 0);
+	else if (type == TYPEC_PORT_UFP) {
+		if (!(port->pwr_role == TYPEC_SINK &&
+				port->data_role == TYPEC_DEVICE))
+			tcpm_set_state(port, PORT_RESET, 0);
+	} else if (type == TYPEC_PORT_DFP) {
+		if (!(port->pwr_role == TYPEC_SOURCE &&
+				port->data_role == TYPEC_HOST))
+			tcpm_set_state(port, PORT_RESET, 0);
+	}
+
+port_unlock:
+	mutex_unlock(&port->lock);
+	return 0;
+}
+
 
 void tcpm_tcpc_reset(struct tcpm_port *port)
 {
@@ -3493,8 +3523,10 @@ struct tcpm_port *tcpm_register_port(struct device *dev, struct tcpc_dev *tcpc)
 	port->typec_caps.pr_set = tcpm_pr_set;
 	port->typec_caps.vconn_set = tcpm_vconn_set;
 	port->typec_caps.try_role = tcpm_try_role;
+	port->typec_caps.port_type_set = tcpm_port_type_set;
 
 	port->partner_desc.identity = &port->partner_ident;
+	port->port_type = tcpc->config->type;
 
 	/*
 	 * TODO:
