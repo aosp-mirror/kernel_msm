@@ -296,6 +296,7 @@ enum BattStatus
 
 static int g_BattStatus = STATUS_NORMAL;
 static int g_BootPhase = 1;
+static bool g_IsRetailMode = false;
 
 
 #define MIN_FLOAT_MV	3480
@@ -305,6 +306,7 @@ static int g_BootPhase = 1;
 #define BATT_NO_OVER_VOLT   4240000
 #define BATT_OVER_VOLT      4500000
 #define BATT_OVER_TEMP      430
+#define BATT_OVER_TEMP_RE   470
 #define TRIM_PERIOD_NS      (1LL * NSEC_PER_SEC)
 
 #define REG0_DEFAULT        0x54
@@ -585,6 +587,7 @@ static void smb23x_check_batt_ov(struct smb23x_chip *chip)
 
 static void smb23x_check_batt_ot(struct smb23x_chip *chip)
 {
+    int battery_ot = BATT_OVER_TEMP;
     int battery_temp = 0;
     ktime_t kt = {0};
 
@@ -602,11 +605,16 @@ static void smb23x_check_batt_ot(struct smb23x_chip *chip)
         return;
     }
 
-    if(battery_temp >= BATT_OVER_TEMP)
+    if(g_IsRetailMode)
+    {
+        battery_ot = BATT_OVER_TEMP_RE;
+    }
+
+    if(battery_temp >= battery_ot)
     {
         g_BattStatus = STATUS_OT;
 
-        pr_info("[smb23x] OT, attempt to turn off the WPC\n");
+        pr_info("[smb23x] OT(>=%d), attempt to turn off the WPC\n", battery_ot);
 
         if(gpio_is_valid(chip->eoc_gpio))
         {
@@ -2228,6 +2236,8 @@ static void smb23x_wpc_check_work(struct work_struct *work)
 
     bool bVal = gpio_is_valid(chip->eoc_gpio);
 
+    int battery_ot = BATT_OVER_TEMP;
+
     int battery_voltage     = smb23x_get_prop_batt_voltage(chip);
     int battery_temperature = smb23x_get_prop_batt_temp(chip);
 
@@ -2247,11 +2257,16 @@ static void smb23x_wpc_check_work(struct work_struct *work)
 
     pr_info("[smb23x] eoc pin+(%d)\n", gpio_get_value(chip->eoc_gpio));
 
+    if(g_IsRetailMode)
+    {
+        battery_ot = BATT_OVER_TEMP_RE;
+    }
+
     if(g_BattStatus == STATUS_OT)
     {
-        if (battery_temperature <= (BATT_OVER_TEMP - 20))
+        if (battery_temperature <= (battery_ot - 20))
         {
-            pr_info("[smb23x] No OT, attempt to turn on the WPC\n");
+            pr_info("[smb23x] No OT(<=%d), attempt to turn on the WPC\n", battery_ot);
 
             gpio_direction_output(chip->eoc_gpio, 0);
             g_BattStatus = STATUS_NORMAL;
@@ -2312,7 +2327,8 @@ static enum power_supply_property smb23x_battery_properties[] = {
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_TEMP,
-	POWER_SUPPLY_PROP_CHARGE_ENABLED
+	POWER_SUPPLY_PROP_CHARGE_ENABLED,
+	POWER_SUPPLY_PROP_RESTRICTED_CHARGING
 #endif
 };
 
@@ -2751,6 +2767,9 @@ static int smb23x_battery_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN:
 		val->intval = val->intval;
 		break;
+	case POWER_SUPPLY_PROP_RESTRICTED_CHARGING:
+		val->intval = g_IsRetailMode;
+		break;
 default:
 		return (-EINVAL);
 	}
@@ -2871,6 +2890,19 @@ static int smb23x_battery_set_property(struct power_supply *psy,
         break;
     }
 
+    case POWER_SUPPLY_PROP_RESTRICTED_CHARGING:
+    {
+        if(val->intval)
+        {
+            g_IsRetailMode = true;
+        }
+        else
+        {
+            g_IsRetailMode = false;
+        }
+
+        break;
+    }
 #endif //QTI_SMB231
 	default:
 		return (-EINVAL);
@@ -2893,6 +2925,7 @@ static int smb23x_battery_is_writeable(struct power_supply *psy,
 #else
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN:
 	case POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN:
+	case POWER_SUPPLY_PROP_RESTRICTED_CHARGING:
 #endif //QTI_SMB231
 		rc = 1;
 		break;
