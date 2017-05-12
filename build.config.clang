@@ -7,6 +7,9 @@ function update_clang_config() {
 
 ARCH=arm64
 BRANCH=android-msm-wahoo-4.4
+CC=clang
+PATH=../../prebuilts-master/clang/host/linux-x86/clang-3859424/bin/:$PATH
+CLANG_TRIPLE=aarch64-linux-gnu-
 CROSS_COMPILE=aarch64-linux-android-
 DEFCONFIG=wahoo_defconfig
 EXTRA_CMDS=''
