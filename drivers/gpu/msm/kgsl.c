@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -260,9 +260,12 @@ kgsl_mem_entry_create(void)
 {
 	struct kgsl_mem_entry *entry = kzalloc(sizeof(*entry), GFP_KERNEL);
 
-	if (entry != NULL)
+	if (entry != NULL) {
 		kref_init(&entry->refcount);
 
+		/* put this ref in the caller functions after init */
+		kref_get(&entry->refcount);
+	}
 	return entry;
 }
 #ifdef CONFIG_DMA_SHARED_BUFFER
@@ -1764,9 +1767,9 @@ long kgsl_ioctl_drawctxt_create(struct kgsl_device_private *dev_priv,
 	/* Commit the pointer to the context in context_idr */
 	write_lock(&device->context_lock);
 	idr_replace(&device->context_idr, context, context->id);
+	param->drawctxt_id = context->id;
 	write_unlock(&device->context_lock);
 
-	param->drawctxt_id = context->id;
 done:
 	return result;
 }
@@ -2399,6 +2402,9 @@ long kgsl_ioctl_gpuobj_import(struct kgsl_device_private *dev_priv,
 	trace_kgsl_mem_map(entry, fd);
 
 	kgsl_mem_entry_commit_process(entry);
+
+	/* put the extra refcount for kgsl_mem_entry_create() */
+	kgsl_mem_entry_put(entry);
 	return 0;
 
 unmap:
@@ -2705,6 +2711,9 @@ long kgsl_ioctl_map_user_mem(struct kgsl_device_private *dev_priv,
 	trace_kgsl_mem_map(entry, param->fd);
 
 	kgsl_mem_entry_commit_process(entry);
+
+	/* put the extra refcount for kgsl_mem_entry_create() */
+	kgsl_mem_entry_put(entry);
 	return result;
 
 error_attach:
@@ -3143,6 +3152,9 @@ long kgsl_ioctl_gpuobj_alloc(struct kgsl_device_private *dev_priv,
 	param->mmapsize = kgsl_memdesc_footprint(&entry->memdesc);
 	param->id = entry->id;
 
+	/* put the extra refcount for kgsl_mem_entry_create() */
+	kgsl_mem_entry_put(entry);
+
 	return 0;
 }
 
@@ -3166,6 +3178,9 @@ long kgsl_ioctl_gpumem_alloc(struct kgsl_device_private *dev_priv,
 	param->size = (size_t) entry->memdesc.size;
 	param->flags = (unsigned int) entry->memdesc.flags;
 
+	/* put the extra refcount for kgsl_mem_entry_create() */
+	kgsl_mem_entry_put(entry);
+
 	return 0;
 }
 
@@ -3188,6 +3203,9 @@ long kgsl_ioctl_gpumem_alloc_id(struct kgsl_device_private *dev_priv,
 	param->size = (size_t) entry->memdesc.size;
 	param->mmapsize = (size_t) kgsl_memdesc_footprint(&entry->memdesc);
 	param->gpuaddr = (unsigned long) entry->memdesc.gpuaddr;
+
+	/* put the extra refcount for kgsl_mem_entry_create() */
+	kgsl_mem_entry_put(entry);
 
 	return 0;
 }
@@ -3306,6 +3324,9 @@ long kgsl_ioctl_sparse_phys_alloc(struct kgsl_device_private *dev_priv,
 	trace_sparse_phys_alloc(entry->id, param->size, param->pagesize);
 	kgsl_mem_entry_commit_process(entry);
 
+	/* put the extra refcount for kgsl_mem_entry_create() */
+	kgsl_mem_entry_put(entry);
+
 	return 0;
 
 err_invalid_pages:
@@ -3384,6 +3405,9 @@ long kgsl_ioctl_sparse_virt_alloc(struct kgsl_device_private *dev_priv,
 
 	trace_sparse_virt_alloc(entry->id, param->size, param->pagesize);
 	kgsl_mem_entry_commit_process(entry);
+
+	/* put the extra refcount for kgsl_mem_entry_create() */
+	kgsl_mem_entry_put(entry);
 
 	return 0;
 }
@@ -3617,6 +3641,9 @@ static inline bool _is_phys_bindable(struct kgsl_mem_entry *phys_entry,
 	if (!IS_ALIGNED(offset | size, kgsl_memdesc_get_pagesize(memdesc)))
 		return false;
 
+	if (offset + size < offset)
+		return false;
+
 	if (!(flags & KGSL_SPARSE_BIND_MULTIPLE_TO_PHYS) &&
 			offset + size > memdesc->size)
 		return false;
@@ -3744,7 +3771,7 @@ long kgsl_ioctl_sparse_bind(struct kgsl_device_private *dev_priv,
 			break;
 
 		/* Sanity check initial range */
-		if (obj.size == 0 ||
+		if (obj.size == 0 || obj.virtoffset + obj.size < obj.size ||
 			obj.virtoffset + obj.size > virt_entry->memdesc.size ||
 			!(IS_ALIGNED(obj.virtoffset | obj.size, pg_sz))) {
 			ret = -EINVAL;
@@ -4376,8 +4403,9 @@ kgsl_get_unmapped_area(struct file *file, unsigned long addr,
 		 val = _get_svm_area(private, entry, addr, len, flags);
 		 if (IS_ERR_VALUE(val))
 			KGSL_MEM_ERR(device,
-				"_get_svm_area: pid %d addr %lx pgoff %lx len %ld failed error %d\n",
-				private->pid, addr, pgoff, len, (int) val);
+				"_get_svm_area: pid %d mmap_base %lx addr %lx pgoff %lx len %ld failed error %d\n",
+				private->pid, current->mm->mmap_base, addr,
+				pgoff, len, (int) val);
 	}
 
 put:

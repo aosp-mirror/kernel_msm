@@ -42,8 +42,6 @@
 #include <sound/compress_offload.h>
 #include <sound/compress_driver.h>
 #include <sound/msm-audio-effects-q6-v2.h>
-#include <sound/msm-dts-eagle.h>
-
 #include "msm-pcm-routing-v2.h"
 
 #define DSP_PP_BUFFERING_IN_MSEC	25
@@ -79,15 +77,6 @@ const DECLARE_TLV_DB_LINEAR(msm_compr_vol_gain, 0,
 
 #define MAX_NUMBER_OF_STREAMS 2
 
-/*
- * Max size for getting DTS EAGLE Param through kcontrol
- * Safe for both 32 and 64 bit platforms
- * 64 = size of kcontrol value array on 64 bit platform
- * 4 = size of parameters Eagle expects before cast to 64 bits
- * 40 = size of dts_eagle_param_desc + module_id cast to 64 bits
- */
-#define DTS_EAGLE_MAX_PARAM_SIZE_FOR_ALSA ((64 * 4) - 40)
-
 struct msm_compr_gapless_state {
 	bool set_next_stream_id;
 	int32_t stream_opened[MAX_NUMBER_OF_STREAMS];
@@ -100,7 +89,7 @@ struct msm_compr_gapless_state {
 
 static unsigned int supported_sample_rates[] = {
 	8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000, 64000,
-	88200, 96000, 176400, 192000, 352800, 384000, 2822400, 5644800
+	88200, 96000, 128000, 176400, 192000, 352800, 384000, 2822400, 5644800
 };
 
 struct msm_compr_pdata {
@@ -280,11 +269,6 @@ static int msm_compr_set_volume(struct snd_compr_stream *cstream,
 	if (rc < 0)
 		pr_err("%s: Send vol gain command failed rc=%d\n",
 		       __func__, rc);
-	else
-		if (msm_dts_eagle_set_stream_gain(prtd->audio_client,
-						volume_l, volume_r))
-			pr_debug("%s: DTS_EAGLE send stream gain failed\n",
-				__func__);
 
 	return rc;
 }
@@ -1060,26 +1044,6 @@ static int msm_compr_init_pp_params(struct snd_compr_stream *cstream,
 	};
 
 	switch (ac->topology) {
-	case ASM_STREAM_POSTPROC_TOPO_ID_HPX_PLUS: /* HPX + SA+ topology */
-
-		ret = q6asm_set_softvolume_v2(ac, &softvol,
-					      SOFT_VOLUME_INSTANCE_1);
-		if (ret < 0)
-			pr_err("%s: Send SoftVolume Param failed ret=%d\n",
-			__func__, ret);
-
-		ret = q6asm_set_softvolume_v2(ac, &softvol,
-					      SOFT_VOLUME_INSTANCE_2);
-		if (ret < 0)
-			pr_err("%s: Send SoftVolume2 Param failed ret=%d\n",
-			__func__, ret);
-		/*
-		 * HPX module init is trigerred from HAL using ioctl
-		 * DTS_EAGLE_MODULE_ENABLE when stream starts
-		 */
-		break;
-	case ASM_STREAM_POSTPROC_TOPO_ID_DTS_HPX: /* HPX topology */
-		break;
 	default:
 		ret = q6asm_set_softvolume_v2(ac, &softvol,
 					      SOFT_VOLUME_INSTANCE_1);
@@ -1586,6 +1550,7 @@ static int msm_compr_playback_free(struct snd_compr_stream *cstream)
 	kfree(pdata->dec_params[soc_prtd->dai_link->be_id]);
 	pdata->dec_params[soc_prtd->dai_link->be_id] = NULL;
 	kfree(prtd);
+	runtime->private_data = NULL;
 
 	return 0;
 }
@@ -1645,6 +1610,7 @@ static int msm_compr_capture_free(struct snd_compr_stream *cstream)
 	q6asm_audio_client_free(ac);
 
 	kfree(prtd);
+	runtime->private_data = NULL;
 
 	return 0;
 }
@@ -2913,23 +2879,6 @@ static int msm_compr_audio_effects_config_put(struct snd_kcontrol *kcontrol,
 						    &(audio_effects->equalizer),
 						     values);
 		break;
-	case DTS_EAGLE_MODULE:
-		pr_debug("%s: DTS_EAGLE_MODULE\n", __func__);
-		if (!msm_audio_effects_is_effmodule_supp_in_top(effects_module,
-						prtd->audio_client->topology))
-			return 0;
-		msm_dts_eagle_handle_asm(NULL, (void *)values, true,
-					 false, prtd->audio_client, NULL);
-		break;
-	case DTS_EAGLE_MODULE_ENABLE:
-		pr_debug("%s: DTS_EAGLE_MODULE_ENABLE\n", __func__);
-		if (msm_audio_effects_is_effmodule_supp_in_top(effects_module,
-						prtd->audio_client->topology))
-			msm_dts_eagle_enable_asm(prtd->audio_client,
-					(bool)values[0],
-					AUDPROC_MODULE_ID_DTS_HPX_PREMIX);
-
-		break;
 	case SOFT_VOLUME_MODULE:
 		pr_debug("%s: SOFT_VOLUME_MODULE\n", __func__);
 		break;
@@ -2958,7 +2907,6 @@ static int msm_compr_audio_effects_config_get(struct snd_kcontrol *kcontrol,
 	struct msm_compr_audio_effects *audio_effects = NULL;
 	struct snd_compr_stream *cstream = NULL;
 	struct msm_compr_audio *prtd = NULL;
-	long *values = &(ucontrol->value.integer.value[0]);
 
 	pr_debug("%s\n", __func__);
 	if (fe_id >= MSM_FRONTEND_DAI_MAX) {
@@ -2978,28 +2926,6 @@ static int msm_compr_audio_effects_config_get(struct snd_kcontrol *kcontrol,
 		return -EINVAL;
 	}
 
-	switch (audio_effects->query.mod_id) {
-	case DTS_EAGLE_MODULE:
-		pr_debug("%s: DTS_EAGLE_MODULE handling queued get\n",
-			 __func__);
-		values[0] = (long)audio_effects->query.mod_id;
-		values[1] = (long)audio_effects->query.parm_id;
-		values[2] = (long)audio_effects->query.size;
-		values[3] = (long)audio_effects->query.offset;
-		values[4] = (long)audio_effects->query.device;
-		if (values[2] > DTS_EAGLE_MAX_PARAM_SIZE_FOR_ALSA) {
-			pr_err("%s: DTS_EAGLE_MODULE parameter's requested size (%li) too large (max size is %i)\n",
-				__func__, values[2],
-				DTS_EAGLE_MAX_PARAM_SIZE_FOR_ALSA);
-			return -EINVAL;
-		}
-		msm_dts_eagle_handle_asm(NULL, (void *)&values[1],
-					 true, true, prtd->audio_client, NULL);
-		break;
-	default:
-		pr_err("%s: Invalid effects config module\n", __func__);
-		return -EINVAL;
-	}
 	return 0;
 }
 
@@ -3220,48 +3146,45 @@ static int msm_compr_playback_app_type_cfg_put(struct snd_kcontrol *kcontrol,
 				      struct snd_ctl_elem_value *ucontrol)
 {
 	u64 fe_id = kcontrol->private_value;
+	int session_type = SESSION_TYPE_RX;
+	int be_id = ucontrol->value.integer.value[3];
+	int ret = 0;
 	int app_type;
 	int acdb_dev_id;
 	int sample_rate = 48000;
 
-	pr_debug("%s: fe_id- %llu\n", __func__, fe_id);
-	if (fe_id >= MSM_FRONTEND_DAI_MAX) {
-		pr_err("%s Received out of bounds fe_id %llu\n",
-			__func__, fe_id);
-		return -EINVAL;
-	}
-
 	app_type = ucontrol->value.integer.value[0];
 	acdb_dev_id = ucontrol->value.integer.value[1];
-	if (0 != ucontrol->value.integer.value[2])
+	if (ucontrol->value.integer.value[2] != 0)
 		sample_rate = ucontrol->value.integer.value[2];
-	pr_debug("%s: app_type- %d acdb_dev_id- %d sample_rate- %d session_type- %d\n",
-		__func__, app_type, acdb_dev_id, sample_rate, SESSION_TYPE_RX);
-	msm_pcm_routing_reg_stream_app_type_cfg(fe_id, app_type,
-			acdb_dev_id, sample_rate, SESSION_TYPE_RX);
+	pr_debug("%s: fe_id- %llu session_type- %d be_id- %d app_type- %d acdb_dev_id- %d sample_rate- %d\n",
+		__func__, fe_id, session_type, be_id,
+		app_type, acdb_dev_id, sample_rate);
+	ret = msm_pcm_routing_reg_stream_app_type_cfg(fe_id, session_type,
+						      be_id, app_type,
+						      acdb_dev_id, sample_rate);
+	if (ret < 0)
+		pr_err("%s: msm_pcm_routing_reg_stream_app_type_cfg failed returned %d\n",
+			__func__, ret);
 
-	return 0;
+	return ret;
 }
 
 static int msm_compr_playback_app_type_cfg_get(struct snd_kcontrol *kcontrol,
 				      struct snd_ctl_elem_value *ucontrol)
 {
 	u64 fe_id = kcontrol->private_value;
+	int session_type = SESSION_TYPE_RX;
+	int be_id = ucontrol->value.integer.value[3];
 	int ret = 0;
 	int app_type;
 	int acdb_dev_id;
 	int sample_rate;
 
-	pr_debug("%s: fe_id- %llu\n", __func__, fe_id);
-	if (fe_id >= MSM_FRONTEND_DAI_MAX) {
-		pr_err("%s Received out of bounds fe_id %llu\n",
-			__func__, fe_id);
-		ret = -EINVAL;
-		goto done;
-	}
-
-	ret = msm_pcm_routing_get_stream_app_type_cfg(fe_id, SESSION_TYPE_RX,
-		&app_type, &acdb_dev_id, &sample_rate);
+	ret = msm_pcm_routing_get_stream_app_type_cfg(fe_id, session_type,
+						      be_id, &app_type,
+						      &acdb_dev_id,
+						      &sample_rate);
 	if (ret < 0) {
 		pr_err("%s: msm_pcm_routing_get_stream_app_type_cfg failed returned %d\n",
 			__func__, ret);
@@ -3271,8 +3194,8 @@ static int msm_compr_playback_app_type_cfg_get(struct snd_kcontrol *kcontrol,
 	ucontrol->value.integer.value[0] = app_type;
 	ucontrol->value.integer.value[1] = acdb_dev_id;
 	ucontrol->value.integer.value[2] = sample_rate;
-	pr_debug("%s: fedai_id %llu, session_type %d, app_type %d, acdb_dev_id %d, sample_rate %d\n",
-		__func__, fe_id, SESSION_TYPE_RX,
+	pr_debug("%s: fedai_id %llu, session_type %d, be_id %d, app_type %d, acdb_dev_id %d, sample_rate %d\n",
+		__func__, fe_id, session_type, be_id,
 		app_type, acdb_dev_id, sample_rate);
 done:
 	return ret;
@@ -3282,48 +3205,45 @@ static int msm_compr_capture_app_type_cfg_put(struct snd_kcontrol *kcontrol,
 					struct snd_ctl_elem_value *ucontrol)
 {
 	u64 fe_id = kcontrol->private_value;
+	int session_type = SESSION_TYPE_TX;
+	int be_id = ucontrol->value.integer.value[3];
+	int ret = 0;
 	int app_type;
 	int acdb_dev_id;
 	int sample_rate = 48000;
-
-	pr_debug("%s: fe_id- %llu\n", __func__, fe_id);
-	if (fe_id >= MSM_FRONTEND_DAI_MAX) {
-		pr_err("%s Received out of bounds fe_id %llu\n",
-			__func__, fe_id);
-		return -EINVAL;
-	}
 
 	app_type = ucontrol->value.integer.value[0];
 	acdb_dev_id = ucontrol->value.integer.value[1];
 	if (ucontrol->value.integer.value[2] != 0)
 		sample_rate = ucontrol->value.integer.value[2];
-	pr_debug("%s: app_type- %d acdb_dev_id- %d sample_rate- %d session_type- %d\n",
-		__func__, app_type, acdb_dev_id, sample_rate, SESSION_TYPE_TX);
-	msm_pcm_routing_reg_stream_app_type_cfg(fe_id, app_type,
-		acdb_dev_id, sample_rate, SESSION_TYPE_TX);
+	pr_debug("%s: fe_id- %llu session_type- %d be_id- %d app_type- %d acdb_dev_id- %d sample_rate- %d\n",
+		__func__, fe_id, session_type, be_id,
+		app_type, acdb_dev_id, sample_rate);
+	ret = msm_pcm_routing_reg_stream_app_type_cfg(fe_id, session_type,
+						      be_id, app_type,
+						      acdb_dev_id, sample_rate);
+	if (ret < 0)
+		pr_err("%s: msm_pcm_routing_reg_stream_app_type_cfg failed returned %d\n",
+			__func__, ret);
 
-	return 0;
+	return ret;
 }
 
 static int msm_compr_capture_app_type_cfg_get(struct snd_kcontrol *kcontrol,
 					struct snd_ctl_elem_value *ucontrol)
 {
 	u64 fe_id = kcontrol->private_value;
+	int session_type = SESSION_TYPE_TX;
+	int be_id = ucontrol->value.integer.value[3];
 	int ret = 0;
 	int app_type;
 	int acdb_dev_id;
 	int sample_rate;
 
-	pr_debug("%s: fe_id- %llu\n", __func__, fe_id);
-	if (fe_id >= MSM_FRONTEND_DAI_MAX) {
-		pr_err("%s Received out of bounds fe_id %llu\n",
-			__func__, fe_id);
-		ret = -EINVAL;
-		goto done;
-	}
-
-	ret = msm_pcm_routing_get_stream_app_type_cfg(fe_id, SESSION_TYPE_TX,
-		&app_type, &acdb_dev_id, &sample_rate);
+	ret = msm_pcm_routing_get_stream_app_type_cfg(fe_id, session_type,
+						      be_id, &app_type,
+						      &acdb_dev_id,
+						      &sample_rate);
 	if (ret < 0) {
 		pr_err("%s: msm_pcm_routing_get_stream_app_type_cfg failed returned %d\n",
 			__func__, ret);
@@ -3333,8 +3253,8 @@ static int msm_compr_capture_app_type_cfg_get(struct snd_kcontrol *kcontrol,
 	ucontrol->value.integer.value[0] = app_type;
 	ucontrol->value.integer.value[1] = acdb_dev_id;
 	ucontrol->value.integer.value[2] = sample_rate;
-	pr_debug("%s: fedai_id %llu, session_type %d, app_type %d, acdb_dev_id %d, sample_rate %d\n",
-		__func__, fe_id, SESSION_TYPE_TX,
+	pr_debug("%s: fedai_id %llu, session_type %d, be_id %d, app_type %d, acdb_dev_id %d, sample_rate %d\n",
+		__func__, fe_id, session_type, be_id,
 		app_type, acdb_dev_id, sample_rate);
 done:
 	return ret;

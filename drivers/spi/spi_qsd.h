@@ -113,6 +113,8 @@
 #define INPUT_MODE_SHIFT              QSD_REG(10)         QUP_REG(12)
 
 /* SPI_OPERATIONAL fields */
+#define SPI_OP_IN_BLK_RD_REQ_FLAG     0x00002000
+#define SPI_OP_OUT_BLK_WR_REQ_FLAG    0x00001000
 #define SPI_OP_MAX_INPUT_DONE_FLAG    0x00000800
 #define SPI_OP_MAX_OUTPUT_DONE_FLAG   0x00000400
 #define SPI_OP_INPUT_SERVICE_FLAG     0x00000200
@@ -164,6 +166,13 @@ enum msm_spi_state {
 #define DM_BURST_SIZE                 16
 /* Data Mover commands should be aligned to 64 bit(8 bytes) */
 #define DM_BYTE_ALIGN                 8
+
+#if defined(CONFIG_ARM64) || defined(CONFIG_LPAE)
+#define spi_dma_mask(dev)   (dma_set_mask((dev), DMA_BIT_MASK(36)))
+#else
+#define spi_dma_mask(dev)   (dma_set_mask((dev), DMA_BIT_MASK(32)))
+#endif
+
 
 enum msm_spi_qup_version {
 	SPI_QUP_VERSION_NONE    = 0x0,
@@ -314,7 +323,8 @@ struct msm_spi {
 	bool                     transfer_pending;
 	wait_queue_head_t        continue_suspend;
 	/* DMA data */
-	enum msm_spi_mode        mode;
+	enum msm_spi_mode        tx_mode;
+	enum msm_spi_mode        rx_mode;
 	bool                     use_dma;
 	int                      tx_dma_chan;
 	int                      tx_dma_crci;
@@ -346,7 +356,8 @@ struct msm_spi {
 #endif
 	struct msm_spi_platform_data *pdata; /* Platform data */
 	/* When set indicates multiple transfers in a single message */
-	bool                     done;
+	bool                     rx_done;
+	bool                     tx_done;
 	u32                      cur_msg_len;
 	/* Used in FIFO mode to keep track of the transfer being processed */
 	struct spi_transfer     *cur_tx_transfer;
@@ -364,6 +375,7 @@ struct msm_spi {
 	struct pinctrl_state	*pins_active;
 	struct pinctrl_state	*pins_sleep;
 	bool			is_init_complete;
+	bool			pack_words;
 };
 
 /* Forward declaration */
@@ -517,7 +529,8 @@ static inline void msm_spi_set_write_count(struct msm_spi *dd, int val)
 
 static inline void msm_spi_complete(struct msm_spi *dd)
 {
-	dd->done = 1;
+	dd->tx_done = true;
+	dd->rx_done = true;
 }
 
 static inline void msm_spi_enable_error_flags(struct msm_spi *dd)

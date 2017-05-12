@@ -42,9 +42,6 @@
 #define TRAFFIC_SHAPE_CLKTICK_14MS   268800
 #define TRAFFIC_SHAPE_CLKTICK_12MS   230400
 
-/* XIN mapping */
-#define XIN_SSPP		0
-#define XIN_WRITEBACK		1
 
 /* wait for at most 2 vsync for lowest refresh rate (24hz) */
 #define KOFF_TIMEOUT msecs_to_jiffies(42 * 32)
@@ -1248,6 +1245,33 @@ static int sde_hw_rotator_swts_create(struct sde_hw_rotator *rot)
 		goto err_detach;
 	}
 
+	ion_free(rot->iclient, handle);
+
+	sde_smmu_ctrl(0);
+
+	return rc;
+err_detach:
+	dma_buf_detach(data->srcp_dma_buf, data->srcp_attachment);
+err_put:
+	dma_buf_put(data->srcp_dma_buf);
+	data->srcp_dma_buf = NULL;
+imap_err:
+	ion_free(rot->iclient, handle);
+
+	return rc;
+}
+
+/*
+ * sde_hw_rotator_swts_map - map software timestamp buffer
+ * @rot: Pointer to rotator hw
+ *
+ */
+static int sde_hw_rotator_swts_map(struct sde_hw_rotator *rot)
+{
+	int rc = 0;
+	struct sde_mdp_img_data *data = &rot->swts_buf;
+
+	sde_smmu_ctrl(1);
 	rc = sde_smmu_map_dma_buf(data->srcp_dma_buf, data->srcp_table,
 			SDE_IOMMU_DOMAIN_ROT_UNSECURE, &data->addr,
 			&data->len, DMA_BIDIRECTIONAL);
@@ -1267,28 +1291,41 @@ static int sde_hw_rotator_swts_create(struct sde_hw_rotator *rot)
 
 	data->mapped = true;
 	SDEROT_DBG("swts buffer mapped: %pad/%lx va:%p\n", &data->addr,
-			data->len, rot->swts_buffer);
-
-	ion_free(rot->iclient, handle);
-
+		data->len, rot->swts_buffer);
 	sde_smmu_ctrl(0);
-
 	return rc;
+
 kmap_err:
 	sde_smmu_unmap_dma_buf(data->srcp_table, SDE_IOMMU_DOMAIN_ROT_UNSECURE,
 			DMA_FROM_DEVICE, data->srcp_dma_buf);
 err_unmap:
 	dma_buf_unmap_attachment(data->srcp_attachment, data->srcp_table,
 			DMA_FROM_DEVICE);
-err_detach:
-	dma_buf_detach(data->srcp_dma_buf, data->srcp_attachment);
-err_put:
-	dma_buf_put(data->srcp_dma_buf);
-	data->srcp_dma_buf = NULL;
-imap_err:
-	ion_free(rot->iclient, handle);
 
 	return rc;
+}
+
+/*
+ * sde_hw_rotator_swtc_unmap - unmap software timestamp buffer
+ * @rot: Pointer to rotator hw
+ */
+static void sde_hw_rotator_swtc_unmap(struct sde_hw_rotator *rot)
+{
+	struct sde_mdp_img_data *data;
+
+	data = &rot->swts_buf;
+
+	dma_buf_end_cpu_access(data->srcp_dma_buf, 0, data->len,
+			DMA_FROM_DEVICE);
+	dma_buf_kunmap(data->srcp_dma_buf, 0, rot->swts_buffer);
+	rot->swts_buffer = NULL;
+
+	sde_smmu_unmap_dma_buf(data->srcp_table, SDE_IOMMU_DOMAIN_ROT_UNSECURE,
+			DMA_FROM_DEVICE, data->srcp_dma_buf);
+	data->addr = 0x0;
+	data->len = 0;
+
+	data->mapped = false;
 }
 
 /*
@@ -1301,12 +1338,9 @@ static void sde_hw_rotator_swtc_destroy(struct sde_hw_rotator *rot)
 
 	data = &rot->swts_buf;
 
-	dma_buf_end_cpu_access(data->srcp_dma_buf, 0, data->len,
-			DMA_FROM_DEVICE);
-	dma_buf_kunmap(data->srcp_dma_buf, 0, rot->swts_buffer);
+	if (data->mapped)
+		sde_hw_rotator_swtc_unmap(rot);
 
-	sde_smmu_unmap_dma_buf(data->srcp_table, SDE_IOMMU_DOMAIN_ROT_UNSECURE,
-			DMA_FROM_DEVICE, data->srcp_dma_buf);
 	dma_buf_unmap_attachment(data->srcp_attachment, data->srcp_table,
 			DMA_FROM_DEVICE);
 	dma_buf_detach(data->srcp_dma_buf, data->srcp_attachment);
@@ -1439,6 +1473,7 @@ static struct sde_rot_hw_resource *sde_hw_rotator_alloc_ext(
 		struct sde_rot_mgr *mgr, u32 pipe_id, u32 wb_id)
 {
 	struct sde_hw_rotator_resource_info *resinfo;
+	int ret = 0;
 
 	if (!mgr || !mgr->hw_data) {
 		SDEROT_ERR("null parameters\n");
@@ -1466,8 +1501,21 @@ static struct sde_rot_hw_resource *sde_hw_rotator_alloc_ext(
 	else {
 		resinfo->hw.max_active = SDE_HW_ROT_REGDMA_TOTAL_CTX - 1;
 
-		if (resinfo->rot->iclient == NULL)
-			sde_hw_rotator_swts_create(resinfo->rot);
+		if (resinfo->rot->iclient == NULL) {
+			ret = sde_hw_rotator_swts_create(resinfo->rot);
+			if (ret) {
+				SDEROT_ERR("swts buffer create failed\n");
+				goto swts_fail;
+			}
+		}
+
+		if (resinfo->rot->swts_buf.mapped == false) {
+			ret = sde_hw_rotator_swts_map(resinfo->rot);
+			if (ret) {
+				SDEROT_ERR("swts buffer map failed\n");
+				goto swts_fail;
+			}
+		}
 	}
 
 	if (resinfo->rot->irq_num >= 0)
@@ -1477,6 +1525,10 @@ static struct sde_rot_hw_resource *sde_hw_rotator_alloc_ext(
 			resinfo, wb_id);
 
 	return &resinfo->hw;
+
+swts_fail:
+	devm_kfree(&mgr->pdev->dev, resinfo);
+	return NULL;
 }
 
 /*
@@ -1488,6 +1540,7 @@ static void sde_hw_rotator_free_ext(struct sde_rot_mgr *mgr,
 		struct sde_rot_hw_resource *hw)
 {
 	struct sde_hw_rotator_resource_info *resinfo;
+	struct sde_rot_data_type *mdata = sde_rot_get_mdata();
 
 	if (!mgr || !mgr->hw_data)
 		return;
@@ -1501,6 +1554,18 @@ static void sde_hw_rotator_free_ext(struct sde_rot_mgr *mgr,
 
 	if (resinfo->rot->irq_num >= 0)
 		sde_hw_rotator_disable_irq(resinfo->rot);
+
+	/*
+	 * For SDM660 and SDM630, the IOMMU is shared between MDP and rotator.
+	 * If IOMMU is detached from MDP driver, the timestamp buffer will be
+	 * invalidated. It is safer to unmap the timestamp buffer when the
+	 * rotator session ends, so that it will be mapped again when a fresh
+	 * session starts.
+	 */
+	if (((mdata->mdss_version == MDSS_MDP_HW_REV_320) ||
+		(mdata->mdss_version == MDSS_MDP_HW_REV_330)) &&
+			resinfo->rot->swts_buf.mapped)
+		sde_hw_rotator_swtc_unmap(resinfo->rot);
 
 	devm_kfree(&mgr->pdev->dev, resinfo);
 }
@@ -1602,6 +1667,8 @@ static int sde_hw_rotator_config(struct sde_rot_hw_resource *hw,
 	u32 danger_lut = 0;	/* applicable for realtime client only */
 	u32 safe_lut = 0;	/* applicable for realtime client only */
 	u32 flags = 0;
+	u32 rststs = 0;
+	u32 reg = 0;
 	struct sde_rotation_item *item;
 
 	if (!hw || !entry) {
@@ -1619,10 +1686,46 @@ static int sde_hw_rotator_config(struct sde_rot_hw_resource *hw,
 		return -EINVAL;
 	}
 
+	/*
+	 * if Rotator HW is reset, but missing PM event notification, we
+	 * need to init the SW timestamp automatically.
+	 */
+	rststs = SDE_ROTREG_READ(rot->mdss_base, REGDMA_RESET_STATUS_REG);
+	if (!rot->reset_hw_ts && rststs) {
+		u32 l_ts, h_ts, swts;
+
+		swts = SDE_ROTREG_READ(rot->mdss_base, REGDMA_TIMESTAMP_REG);
+		h_ts = atomic_read(&rot->timestamp[ROT_QUEUE_HIGH_PRIORITY]);
+		l_ts = atomic_read(&rot->timestamp[ROT_QUEUE_LOW_PRIORITY]);
+		SDEROT_EVTLOG(0xbad0, rststs, swts, h_ts, l_ts);
+
+		if (ctx->q_id == ROT_QUEUE_HIGH_PRIORITY)
+			h_ts = (h_ts - 1) & SDE_REGDMA_SWTS_MASK;
+		else
+			l_ts = (l_ts - 1) & SDE_REGDMA_SWTS_MASK;
+
+		/* construct the combined timstamp */
+		swts = (h_ts & SDE_REGDMA_SWTS_MASK) |
+			((l_ts & SDE_REGDMA_SWTS_MASK) <<
+			 SDE_REGDMA_SWTS_SHIFT);
+
+		SDEROT_DBG("swts:0x%x, h_ts:0x%x, l_ts;0x%x\n",
+				swts, h_ts, l_ts);
+		SDEROT_EVTLOG(0x900d, swts, h_ts, l_ts);
+		rot->last_hw_ts = swts;
+
+		SDE_ROTREG_WRITE(rot->mdss_base, REGDMA_TIMESTAMP_REG,
+				rot->last_hw_ts);
+		SDE_ROTREG_WRITE(rot->mdss_base, REGDMA_RESET_STATUS_REG, 0);
+		/* ensure write is issued to the rotator HW */
+		wmb();
+	}
+
 	if (rot->reset_hw_ts) {
 		SDEROT_EVTLOG(rot->last_hw_ts);
 		SDE_ROTREG_WRITE(rot->mdss_base, REGDMA_TIMESTAMP_REG,
 				rot->last_hw_ts);
+		SDE_ROTREG_WRITE(rot->mdss_base, REGDMA_RESET_STATUS_REG, 0);
 		/* ensure write is issued to the rotator HW */
 		wmb();
 		rot->reset_hw_ts = false;
@@ -1698,11 +1801,14 @@ static int sde_hw_rotator_config(struct sde_rot_hw_resource *hw,
 			item->input.format, item->output.format,
 			entry->perf->config.frame_rate);
 
+	if (mdata->vbif_reg_lock)
+		mdata->vbif_reg_lock();
+
 	if (mdata->default_ot_rd_limit) {
 		struct sde_mdp_set_ot_params ot_params;
 
 		memset(&ot_params, 0, sizeof(struct sde_mdp_set_ot_params));
-		ot_params.xin_id = XIN_SSPP;
+		ot_params.xin_id = mdata->vbif_xin_id[XIN_SSPP];
 		ot_params.num = 0; /* not used */
 		ot_params.width = entry->perf->config.input.width;
 		ot_params.height = entry->perf->config.input.height;
@@ -1724,7 +1830,7 @@ static int sde_hw_rotator_config(struct sde_rot_hw_resource *hw,
 		struct sde_mdp_set_ot_params ot_params;
 
 		memset(&ot_params, 0, sizeof(struct sde_mdp_set_ot_params));
-		ot_params.xin_id = XIN_WRITEBACK;
+		ot_params.xin_id = mdata->vbif_xin_id[XIN_WRITEBACK];
 		ot_params.num = 0; /* not used */
 		ot_params.width = entry->perf->config.input.width;
 		ot_params.height = entry->perf->config.input.height;
@@ -1745,36 +1851,67 @@ static int sde_hw_rotator_config(struct sde_rot_hw_resource *hw,
 	if (test_bit(SDE_QOS_PER_PIPE_LUT, mdata->sde_qos_map))	{
 		u32 qos_lut = 0; /* low priority for nrt read client */
 
-		trace_rot_perf_set_qos_luts(XIN_SSPP, sspp_cfg.fmt->format,
-			qos_lut, sde_mdp_is_linear_format(sspp_cfg.fmt));
+		trace_rot_perf_set_qos_luts(mdata->vbif_xin_id[XIN_SSPP],
+			sspp_cfg.fmt->format, qos_lut,
+			sde_mdp_is_linear_format(sspp_cfg.fmt));
 
 		SDE_ROTREG_WRITE(rot->mdss_base, ROT_SSPP_CREQ_LUT, qos_lut);
 	}
 
+	/* Set CDP control registers to 0 if CDP is disabled */
+	if (!test_bit(SDE_QOS_CDP, mdata->sde_qos_map)) {
+		SDE_ROTREG_WRITE(rot->mdss_base, ROT_SSPP_CDP_CNTL, 0x0);
+		SDE_ROTREG_WRITE(rot->mdss_base, ROT_WB_CDP_CNTL, 0x0);
+	}
+
 	if (mdata->npriority_lvl > 0) {
-		u32 mask, reg_val, i, vbif_qos;
+		u32 mask, reg_val, i, j, vbif_qos, reg_val_lvl, reg_high;
 
 		for (i = 0; i < mdata->npriority_lvl; i++) {
-			reg_val = SDE_VBIF_READ(mdata,
-					MMSS_VBIF_NRT_VBIF_QOS_REMAP_00 + i*4);
-			mask = 0x3 << (XIN_SSPP * 2);
-			reg_val &= ~(mask);
-			vbif_qos = mdata->vbif_nrt_qos[i];
-			reg_val |= vbif_qos << (XIN_SSPP * 2);
-			/* ensure write is issued after the read operation */
-			mb();
-			SDE_VBIF_WRITE(mdata,
-					MMSS_VBIF_NRT_VBIF_QOS_REMAP_00 + i*4,
-					reg_val);
+
+			for (j = 0; j < mdata->nxid; j++) {
+				reg_high = ((mdata->vbif_xin_id[j] &
+					0x8) >> 3) * 4 + (i * 8);
+
+				reg_val = SDE_VBIF_READ(mdata,
+				  MDSS_VBIF_QOS_RP_REMAP_BASE + reg_high);
+				reg_val_lvl = SDE_VBIF_READ(mdata,
+				  MDSS_VBIF_QOS_LVL_REMAP_BASE + reg_high);
+
+				mask = 0x3 << (mdata->vbif_xin_id[j] * 4);
+				vbif_qos = mdata->vbif_nrt_qos[i];
+
+				reg_val &= ~(mask);
+				reg_val |= vbif_qos <<
+					(mdata->vbif_xin_id[j] * 4);
+
+				reg_val_lvl &= ~(mask);
+				reg_val_lvl |= vbif_qos <<
+					(mdata->vbif_xin_id[j] * 4);
+
+				pr_debug("idx:%d xin:%d reg:0x%x val:0x%x lvl:0x%x\n",
+				   i, mdata->vbif_xin_id[j],
+					reg_high, reg_val, reg_val_lvl);
+				SDE_VBIF_WRITE(mdata,
+				MDSS_VBIF_QOS_RP_REMAP_BASE +
+					reg_high, reg_val);
+				SDE_VBIF_WRITE(mdata,
+					MDSS_VBIF_QOS_LVL_REMAP_BASE +
+					 reg_high, reg_val_lvl);
+			}
 		}
 	}
 
 	/* Enable write gather for writeback to remove write gaps, which
 	 * may hang AXI/BIMC/SDE.
 	 */
-	SDE_VBIF_WRITE(mdata, MMSS_VBIF_NRT_VBIF_WRITE_GATHTER_EN,
-			BIT(XIN_WRITEBACK));
 
+	reg = SDE_VBIF_READ(mdata, MMSS_VBIF_NRT_VBIF_WRITE_GATHTER_EN);
+	SDE_VBIF_WRITE(mdata, MMSS_VBIF_NRT_VBIF_WRITE_GATHTER_EN,
+			reg | BIT(mdata->vbif_xin_id[XIN_WRITEBACK]));
+
+	if (mdata->vbif_reg_unlock)
+		mdata->vbif_reg_unlock();
 	return 0;
 }
 

@@ -26,6 +26,11 @@ First Level Node - LCDB module
 	Value type: <prop-encoded-array>
 	Definition:  Base address of the LCDB SPMI peripheral.
 
+- qcom,pmic-revid
+	Usage:      required
+	Value type: <phandle>
+	Definition:  Phandle to the PMIC's revid node
+
 Touch-to-wake (TTW) properties:
 
 TTW supports 2 modes of operation - HW and SW. In the HW mode the enable/disable
@@ -58,7 +63,6 @@ main node.
 	Value type:  <bool>
 	Definition: ON time (in mS) for the VDISP/VDISN signals.
 		    Possible values are 4, 8, 16, 32.
-
 
 ========================================
 Second Level Nodes - LDO/NCP/BOOST block

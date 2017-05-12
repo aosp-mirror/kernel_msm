@@ -98,8 +98,7 @@ static int __apr_tal_write(struct apr_svc_ch_dev *apr_ch, void *data,
 	unsigned long flags;
 
 	spin_lock_irqsave(&apr_ch->w_lock, flags);
-	rc = glink_tx(apr_ch->handle, pkt_priv, data, len,
-			GLINK_TX_REQ_INTENT | GLINK_TX_ATOMIC);
+	rc = glink_tx(apr_ch->handle, pkt_priv, data, len, GLINK_TX_ATOMIC);
 	spin_unlock_irqrestore(&apr_ch->w_lock, flags);
 
 	if (rc)
@@ -218,6 +217,7 @@ static void apr_tal_notify_remote_rx_intent(void *handle, const void *priv,
 	 */
 	pr_debug("%s: remote queued an intent\n", __func__);
 	apr_ch->if_remote_intent_ready = true;
+	wake_up(&apr_ch->wait);
 }
 
 void apr_tal_notify_state(void *handle, const void *priv, unsigned event)

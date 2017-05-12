@@ -95,7 +95,8 @@
 #define QMB_MASTER_SELECT_PCIE (1)
 
 #define IPA_CLIENT_NOT_USED \
-	{-1, -1, false, IPA_DPS_HPS_SEQ_TYPE_INVALID, QMB_MASTER_SELECT_DDR}
+	{IPA_EP_NOT_ALLOCATED, IPA_EP_NOT_ALLOCATED, false, \
+		IPA_DPS_HPS_SEQ_TYPE_INVALID, QMB_MASTER_SELECT_DDR}
 
 /* Resource Group index*/
 #define IPA_GROUP_UL		(0)
@@ -208,7 +209,12 @@ static const struct ipa_ep_configuration ipa3_ep_mapping
 	[IPA_3_0][IPA_CLIENT_A5_WLAN_AMPDU_PROD]  = IPA_CLIENT_NOT_USED,
 	[IPA_3_0][IPA_CLIENT_A2_EMBEDDED_PROD]    = IPA_CLIENT_NOT_USED,
 	[IPA_3_0][IPA_CLIENT_A2_TETHERED_PROD]    = IPA_CLIENT_NOT_USED,
-	[IPA_3_0][IPA_CLIENT_APPS_LAN_WAN_PROD]   = {14, IPA_GROUP_UL, true,
+	[IPA_3_0][IPA_CLIENT_APPS_LAN_PROD]
+			= {14, IPA_GROUP_DL, false,
+			IPA_DPS_HPS_SEQ_TYPE_PKT_PROCESS_NO_DEC_UCP,
+			QMB_MASTER_SELECT_DDR},
+	[IPA_3_0][IPA_CLIENT_APPS_WAN_PROD]
+			= {3, IPA_GROUP_UL, true,
 			IPA_DPS_HPS_SEQ_TYPE_2ND_PKT_PROCESS_PASS_NO_DEC_UCP,
 			QMB_MASTER_SELECT_DDR},
 	[IPA_3_0][IPA_CLIENT_APPS_CMD_PROD]
@@ -919,12 +925,18 @@ u8 ipa3_get_hw_type_index(void)
  */
 int ipa3_get_ep_mapping(enum ipa_client_type client)
 {
+	int ipa_ep_idx;
+
 	if (client >= IPA_CLIENT_MAX || client < 0) {
 		IPAERR("Bad client number! client =%d\n", client);
 		return -EINVAL;
 	}
 
-	return ipa3_ep_mapping[ipa3_get_hw_type_index()][client].pipe_num;
+	ipa_ep_idx = ipa3_ep_mapping[ipa3_get_hw_type_index()][client].pipe_num;
+	if (ipa_ep_idx < 0 || ipa_ep_idx >= IPA3_MAX_NUM_PIPES)
+		return IPA_EP_NOT_ALLOCATED;
+
+	return ipa_ep_idx;
 }
 
 /**
@@ -3548,11 +3560,6 @@ int ipa3_stop_gsi_channel(u32 clnt_hdl)
 
 	memset(&mem, 0, sizeof(mem));
 
-	if (IPA_CLIENT_IS_PROD(ep->client)) {
-		res = gsi_stop_channel(ep->gsi_chan_hdl);
-		goto end_sequence;
-	}
-
 	for (i = 0; i < IPA_GSI_CHANNEL_STOP_MAX_RETRY; i++) {
 		IPADBG("Calling gsi_stop_channel\n");
 		res = gsi_stop_channel(ep->gsi_chan_hdl);
@@ -3560,12 +3567,14 @@ int ipa3_stop_gsi_channel(u32 clnt_hdl)
 		if (res != -GSI_STATUS_AGAIN && res != -GSI_STATUS_TIMED_OUT)
 			goto end_sequence;
 
-		IPADBG("Inject a DMA_TASK with 1B packet to IPA and retry\n");
-		/* Send a 1B packet DMA_TASK to IPA and try again */
-		res = ipa3_inject_dma_task_for_gsi();
-		if (res) {
-			IPAERR("Failed to inject DMA TASk for GSI\n");
-			goto end_sequence;
+		if (IPA_CLIENT_IS_CONS(ep->client)) {
+			IPADBG("Inject a DMA_TASK with 1B packet to IPA\n");
+			/* Send a 1B packet DMA_TASK to IPA and try again */
+			res = ipa3_inject_dma_task_for_gsi();
+			if (res) {
+				IPAERR("Failed to inject DMA TASk for GSI\n");
+				goto end_sequence;
+			}
 		}
 
 		/* sleep for short period to flush IPA */

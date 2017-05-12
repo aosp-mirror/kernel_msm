@@ -96,6 +96,14 @@ First Level Node - FG Gen3 device
 		    This value has to be specified in negative values for
 		    the charging current.
 
+- qcom,fg-chg-term-base-current
+	Usage:      optional
+	Value type: <u32>
+	Definition: Battery current (in mA) upper boundary at which the fuel
+		    gauge will issue an end of charge during discharging. If
+		    this property is not specified, then the default value used
+		    will be 75mA.
+
 - qcom,fg-delta-soc-thr
 	Usage:      optional
 	Value type: <u32>
@@ -153,6 +161,20 @@ First Level Node - FG Gen3 device
 	Definition: Number of cycles between ESR pulses while the system is
 		    asleep and the battery is discharging. This option requires
 		    qcom,fg-esr-timer-awake to be defined.
+
+- qcom,fg-esr-pulse-thresh-ma
+	Usage:      optional
+	Value type: <u32>
+	Definition: ESR pulse qualification threshold in mA. If this is not
+		    specified, a default value of 110 mA will be configured.
+		    Allowed values are from 1 to 997.
+
+- qcom,fg-esr-meas-curr-ma
+	Usage:      optional
+	Value type: <u32>
+	Definition: ESR measurement current in mA. If this is not specified,
+		    a default value of 120 mA will be configured. Allowed
+		    values are 60, 120, 180 and 240.
 
 - qcom,cycle-counter-en
 	Usage:      optional
@@ -215,6 +237,12 @@ First Level Node - FG Gen3 device
 		    capacity learning cycle. If this is not specified, then
 		    the default value is 0. Unit is in decipercentage.
 
+- qcom,battery-thermal-coefficients
+	Usage:      optional
+	Value type: <u8>
+	Definition: Byte array of battery thermal coefficients.
+		    This should be exactly 3 bytes in length.
+
 - qcom,fg-jeita-hyst-temp
 	Usage:      optional
 	Value type: <u32>
@@ -272,6 +300,14 @@ First Level Node - FG Gen3 device
 		    is specified, then ESR to Rslow scaling factors will be
 		    updated to account it for an accurate ESR.
 
+- qcom,fg-esr-clamp-mohms
+	Usage:      optional
+	Value type: <u32>
+	Definition: Equivalent series resistance (ESR) in milliohms. If this
+		    is specified, then ESR will be clamped to this value when
+		    ESR is found to be dropping below this. Default value is
+		    20.
+
 - qcom,fg-esr-filter-switch-temp
 	Usage:      optional
 	Value type: <u32>
@@ -320,6 +356,27 @@ First Level Node - FG Gen3 device
 		    to be configured in conjunction with the charger side
 		    configuration for proper functionality.
 
+- qcom,slope-limit-temp-threshold
+	Usage:      optional
+	Value type: <u32>
+	Definition: Battery temperature threshold to decide when slope limit
+		    coefficients should be applied along with charging status.
+		    Unit is in decidegC.
+
+- qcom,slope-limit-coeffs
+	Usage:      optional
+	Value type: <prop-encoded-array>
+	Definition: A list of integers which holds the slope limit coefficients
+		    in the following order. Allowed size is 4. Possible values
+		    are from 0 to 31. Unit is in decipercentage.
+		    Element 0 - Low temperature discharging
+		    Element 1 - Low temperature charging
+		    Element 2 - High temperature discharging
+		    Element 3 - High temperature charging
+		    These coefficients have to be specified along with the
+		    property "qcom,slope-limit-temp-threshold" to make dynamic
+		    slope limit adjustment functional.
+
 ==========================================================
 Second Level Nodes - Peripherals managed by FG Gen3 driver
 ==========================================================
@@ -354,6 +411,9 @@ pmi8998_fg: qpnp,fg {
 	qcom,ki-coeff-soc-dischg = <30 60 90>;
 	qcom,ki-coeff-med-dischg = <800 1000 1400>;
 	qcom,ki-coeff-hi-dischg = <1200 1500 2100>;
+	qcom,slope-limit-temp-threshold = <100>;
+	qcom,slope-limit-coeffs = <10 11 12 13>;
+	qcom,battery-thermal-coefficients = [9d 50 ff];
 	status = "okay";
 
 	qcom,fg-batt-soc@4000 {

@@ -301,12 +301,26 @@ static void mdss_fb_set_bl_brightness(struct led_classdev *led_cdev,
 		mdss_fb_set_backlight(mfd, bl_lvl);
 		mutex_unlock(&mfd->bl_lock);
 	}
+	mfd->bl_level_usr = bl_lvl;
+}
+
+static enum led_brightness mdss_fb_get_bl_brightness(
+	struct led_classdev *led_cdev)
+{
+	struct msm_fb_data_type *mfd = dev_get_drvdata(led_cdev->dev->parent);
+	enum led_brightness value;
+
+	MDSS_BL_TO_BRIGHT(value, mfd->bl_level_usr, mfd->panel_info->bl_max,
+			  mfd->panel_info->brightness_max);
+
+	return value;
 }
 
 static struct led_classdev backlight_led = {
 	.name           = "lcd-backlight",
 	.brightness     = MDSS_MAX_BL_BRIGHTNESS / 2,
 	.brightness_set = mdss_fb_set_bl_brightness,
+	.brightness_get = mdss_fb_get_bl_brightness,
 	.max_brightness = MDSS_MAX_BL_BRIGHTNESS,
 };
 
@@ -360,7 +374,8 @@ static int mdss_fb_get_panel_xres(struct mdss_panel_info *pinfo)
 	xres = pinfo->xres;
 	if (pdata->next && pdata->next->active)
 		xres += mdss_fb_get_panel_xres(&pdata->next->panel_info);
-
+	if (pinfo->split_link_enabled)
+		xres = xres * pinfo->mipi.num_of_sublinks;
 	return xres;
 }
 
@@ -892,6 +907,12 @@ static ssize_t mdss_fb_get_persist_mode(struct device *dev,
 	return ret;
 }
 
+static ssize_t mdss_fb_idle_pc_notify(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "idle power collapsed\n");
+}
+
 static DEVICE_ATTR(msm_fb_type, S_IRUGO, mdss_fb_get_type, NULL);
 static DEVICE_ATTR(msm_fb_split, S_IRUGO | S_IWUSR, mdss_fb_show_split,
 					mdss_fb_store_split);
@@ -912,6 +933,8 @@ static DEVICE_ATTR(measured_fps, S_IRUGO | S_IWUSR | S_IWGRP,
 	mdss_fb_get_fps_info, NULL);
 static DEVICE_ATTR(msm_fb_persist_mode, S_IRUGO | S_IWUSR,
 	mdss_fb_get_persist_mode, mdss_fb_change_persist_mode);
+static DEVICE_ATTR(idle_power_collapse, S_IRUGO, mdss_fb_idle_pc_notify, NULL);
+
 static struct attribute *mdss_fb_attrs[] = {
 	&dev_attr_msm_fb_type.attr,
 	&dev_attr_msm_fb_split.attr,
@@ -925,6 +948,7 @@ static struct attribute *mdss_fb_attrs[] = {
 	&dev_attr_msm_fb_dfps_mode.attr,
 	&dev_attr_measured_fps.attr,
 	&dev_attr_msm_fb_persist_mode.attr,
+	&dev_attr_idle_power_collapse.attr,
 	NULL,
 };
 
@@ -1253,6 +1277,8 @@ static int mdss_fb_probe(struct platform_device *pdev)
 	mfd->fb_imgType = MDP_RGBA_8888;
 	mfd->calib_mode_bl = 0;
 	mfd->unset_bl_level = U32_MAX;
+	mfd->bl_extn_level = -1;
+	mfd->bl_level_usr = backlight_led.brightness;
 
 	mfd->pdev = pdev;
 
@@ -3413,6 +3439,14 @@ int mdss_fb_atomic_commit(struct fb_info *info,
 	mfd->msm_fb_backup.disp_commit.l_roi =  commit_v1->left_roi;
 	mfd->msm_fb_backup.disp_commit.r_roi =  commit_v1->right_roi;
 	mfd->msm_fb_backup.disp_commit.flags =  commit_v1->flags;
+	if (commit_v1->flags & MDP_COMMIT_UPDATE_BRIGHTNESS) {
+		MDSS_BRIGHT_TO_BL(mfd->bl_extn_level, commit_v1->bl_level,
+			mfd->panel_info->bl_max,
+			mfd->panel_info->brightness_max);
+		if (!mfd->bl_extn_level && commit_v1->bl_level)
+			mfd->bl_extn_level = 1;
+	} else
+		mfd->bl_extn_level = -1;
 
 	mutex_lock(&mfd->mdp_sync_pt_data.sync_mutex);
 	atomic_inc(&mfd->mdp_sync_pt_data.commit_cnt);
@@ -3548,6 +3582,18 @@ static void mdss_fb_var_to_panelinfo(struct fb_var_screeninfo *var,
 	 */
 	if (pinfo->is_dba_panel)
 		pinfo->mipi.dsi_pclk_rate = pinfo->clk_rate;
+
+	if (var->sync & FB_SYNC_HOR_HIGH_ACT)
+		pinfo->lcdc.h_polarity = 0;
+	else
+		pinfo->lcdc.h_polarity = 1;
+
+	if (var->sync & FB_SYNC_VERT_HIGH_ACT)
+		pinfo->lcdc.v_polarity = 0;
+	else
+		pinfo->lcdc.v_polarity = 1;
+
+	pinfo->clk_rate = var->pixclock;
 }
 
 void mdss_panelinfo_to_fb_var(struct mdss_panel_info *pinfo,
@@ -4276,8 +4322,6 @@ static int mdss_fb_handle_buf_sync_ioctl(struct msm_sync_pt_data *sync_pt_data,
 		goto buf_sync_err_2;
 	}
 
-	sync_fence_install(rel_fence, rel_fen_fd);
-
 	ret = copy_to_user(buf_sync->rel_fen_fd, &rel_fen_fd, sizeof(int));
 	if (ret) {
 		pr_err("%s: copy_to_user failed\n", sync_pt_data->fence_name);
@@ -4314,8 +4358,6 @@ static int mdss_fb_handle_buf_sync_ioctl(struct msm_sync_pt_data *sync_pt_data,
 		goto buf_sync_err_3;
 	}
 
-	sync_fence_install(retire_fence, retire_fen_fd);
-
 	ret = copy_to_user(buf_sync->retire_fen_fd, &retire_fen_fd,
 			sizeof(int));
 	if (ret) {
@@ -4325,6 +4367,9 @@ static int mdss_fb_handle_buf_sync_ioctl(struct msm_sync_pt_data *sync_pt_data,
 		sync_fence_put(retire_fence);
 		goto buf_sync_err_3;
 	}
+
+	sync_fence_install(rel_fence, rel_fen_fd);
+	sync_fence_install(retire_fence, retire_fen_fd);
 
 skip_retire_fence:
 	mutex_unlock(&sync_pt_data->sync_mutex);
@@ -4471,7 +4516,7 @@ err:
 static int __mdss_fb_copy_destscaler_data(struct fb_info *info,
 		struct mdp_layer_commit *commit)
 {
-	int    i;
+	int    i = 0;
 	int    ret = 0;
 	u32    data_size;
 	struct mdp_destination_scaler_data __user *ds_data_user;
@@ -4544,6 +4589,7 @@ static int __mdss_fb_copy_destscaler_data(struct fb_info *info,
 					data_size);
 			if (ret) {
 				pr_err("scale data copy from user failed\n");
+				kfree(scale_data);
 				goto err;
 			}
 		}
@@ -4553,7 +4599,7 @@ static int __mdss_fb_copy_destscaler_data(struct fb_info *info,
 
 err:
 	if (ds_data) {
-		for (i = 0; i < commit->commit_v1.dest_scaler_cnt; i++) {
+		for (i--; i >= 0; i--) {
 			scale_data = to_user_ptr(ds_data[i].scale);
 			kfree(scale_data);
 		}
@@ -5175,5 +5221,18 @@ void mdss_fb_calc_fps(struct msm_fb_data_type *mfd)
 			mfd->index, (unsigned int)fps/10, (unsigned int)fps%10);
 		mfd->fps_info.last_sampled_time_us = current_time_us;
 		mfd->fps_info.frame_count = 0;
+	}
+}
+
+void mdss_fb_idle_pc(struct msm_fb_data_type *mfd)
+{
+	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
+
+	if (mdss_fb_is_power_off(mfd))
+		return;
+
+	if ((mfd->panel_info->type == MIPI_CMD_PANEL) && mdp5_data) {
+		pr_debug("Notify fb%d idle power collapsed\n", mfd->index);
+		sysfs_notify(&mfd->fbi->dev->kobj, NULL, "idle_power_collapse");
 	}
 }

@@ -20,13 +20,13 @@
 		qcom,mdss-dsi-stream = <0>;
 		qcom,mdss-dsi-panel-width = <1080>;
 		qcom,mdss-dsi-panel-height = <1920>;
-		qcom,mdss-dsi-h-front-porch = <96>;
-		qcom,mdss-dsi-h-back-porch = <64>;
-		qcom,mdss-dsi-h-pulse-width = <16>;
+		qcom,mdss-dsi-h-front-porch = <120>;
+		qcom,mdss-dsi-h-back-porch = <60>;
+		qcom,mdss-dsi-h-pulse-width = <12>;
 		qcom,mdss-dsi-h-sync-skew = <0>;
-		qcom,mdss-dsi-v-back-porch = <16>;
-		qcom,mdss-dsi-v-front-porch = <4>;
-		qcom,mdss-dsi-v-pulse-width = <1>;
+		qcom,mdss-dsi-v-back-porch = <2>;
+		qcom,mdss-dsi-v-front-porch = <12>;
+		qcom,mdss-dsi-v-pulse-width = <2>;
 		qcom,mdss-dsi-h-left-border = <0>;
 		qcom,mdss-dsi-h-right-border = <0>;
 		qcom,mdss-dsi-v-top-border = <0>;
@@ -75,7 +75,7 @@
 			15 01 00 00 00 00 02 15 12
 			15 01 00 00 00 00 02 16 12
 			15 01 00 00 00 00 02 30 01
-			15 01 00 00 00 00 02 72 31
+			15 01 00 00 00 00 02 72 11
 			15 01 00 00 00 00 02 58 82
 			15 01 00 00 00 00 02 59 00
 			15 01 00 00 00 00 02 5a 02
@@ -185,5 +185,6 @@
 		qcom,mdss-dsi-reset-sequence = <1 10>, <0 10>, <1 10>;
 		qcom,mdss-dsi-tx-eot-append;
 		qcom,mdss-dsi-post-init-delay = <1>;
+		qcom,ulps-enabled;
 	};
 };

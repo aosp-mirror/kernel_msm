@@ -342,8 +342,14 @@ static void cam_smmu_check_vaddr_in_range(int idx, void *vaddr)
 				mapping->ion_fd);
 		}
 	}
-	pr_err("Cannot find vaddr:%pK in SMMU. %s uses invalid virtual address\n",
-		vaddr, iommu_cb_set.cb_info[idx].name);
+	if (!strcmp(iommu_cb_set.cb_info[idx].name, "vfe"))
+		pr_err_ratelimited("Cannot find vaddr:%pK in SMMU.\n"
+			" %s uses invalid virtual address\n",
+			vaddr, iommu_cb_set.cb_info[idx].name);
+	else
+		pr_err("Cannot find vaddr:%pK in SMMU.\n"
+			" %s uses invalid virtual address\n",
+			vaddr, iommu_cb_set.cb_info[idx].name);
 	return;
 }
 
@@ -878,6 +884,8 @@ static int cam_smmu_detach_device(int idx)
 
 static int cam_smmu_attach_sec_cpp(int idx)
 {
+	int32_t rc = 0;
+
 	/*
 	 * When switching to secure, detach CPP NS, do scm call
 	 * with CPP SID and no need of attach again, because
@@ -889,8 +897,17 @@ static int cam_smmu_attach_sec_cpp(int idx)
 		return -EINVAL;
 	}
 
-	msm_camera_tz_set_mode(MSM_CAMERA_TZ_MODE_SECURE,
+	rc = msm_camera_tz_set_mode(MSM_CAMERA_TZ_MODE_SECURE,
 		MSM_CAMERA_TZ_HW_BLOCK_CPP);
+	if (rc != 0) {
+		pr_err("secure mode TA notification for cpp unsuccessful, rc %d\n",
+			rc);
+		/*
+		 * Although the TA notification failed, the flow should proceed
+		 * without returning an error as at this point cpp had already
+		 * entered the secure mode.
+		 */
+	}
 
 	iommu_cb_set.cb_info[idx].state = CAM_SMMU_ATTACH;
 
@@ -899,8 +916,19 @@ static int cam_smmu_attach_sec_cpp(int idx)
 
 static int cam_smmu_detach_sec_cpp(int idx)
 {
-	msm_camera_tz_set_mode(MSM_CAMERA_TZ_MODE_NON_SECURE,
+	int32_t rc = 0;
+
+	rc = msm_camera_tz_set_mode(MSM_CAMERA_TZ_MODE_NON_SECURE,
 		MSM_CAMERA_TZ_HW_BLOCK_CPP);
+	if (rc != 0) {
+		pr_err("secure mode TA notification for cpp unsuccessful, rc %d\n",
+			rc);
+		/*
+		 * Although the TA notification failed, the flow should proceed
+		 * without returning an error, as at this point cpp is in secure
+		 * mode and should be switched to non-secure regardless
+		 */
+	}
 
 	iommu_cb_set.cb_info[idx].state = CAM_SMMU_DETACH;
 
@@ -917,6 +945,8 @@ static int cam_smmu_detach_sec_cpp(int idx)
 
 static int cam_smmu_attach_sec_vfe_ns_stats(int idx)
 {
+	int32_t rc = 0;
+
 	/*
 	 *When switching to secure, for secure pixel and non-secure stats
 	 *localizing scm/attach of non-secure SID's in attach secure
@@ -933,16 +963,36 @@ static int cam_smmu_attach_sec_vfe_ns_stats(int idx)
 		}
 	}
 
-	msm_camera_tz_set_mode(MSM_CAMERA_TZ_MODE_SECURE,
+	rc = msm_camera_tz_set_mode(MSM_CAMERA_TZ_MODE_SECURE,
 		MSM_CAMERA_TZ_HW_BLOCK_ISP);
+	if (rc != 0) {
+		pr_err("secure mode TA notification for vfe unsuccessful, rc %d\n",
+			rc);
+		/*
+		 * Although the TA notification failed, the flow should proceed
+		 * without returning an error as at this point vfe had already
+		 * entered the secure mode
+		 */
+	}
 
 	return 0;
 }
 
 static int cam_smmu_detach_sec_vfe_ns_stats(int idx)
 {
-	msm_camera_tz_set_mode(MSM_CAMERA_TZ_MODE_NON_SECURE,
+	int32_t rc = 0;
+
+	rc = msm_camera_tz_set_mode(MSM_CAMERA_TZ_MODE_NON_SECURE,
 		MSM_CAMERA_TZ_HW_BLOCK_ISP);
+	if (rc != 0) {
+		pr_err("secure mode TA notification for vfe unsuccessful, rc %d\n",
+			rc);
+		/*
+		 * Although the TA notification failed, the flow should proceed
+		 * without returning an error, as at this point vfe is in secure
+		 * mode and should be switched to non-secure regardless
+		 */
+	}
 
 	/*
 	 *While exiting from secure mode for secure pixel and non-secure stats,

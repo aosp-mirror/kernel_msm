@@ -1,5 +1,5 @@
 
-/* Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -87,6 +87,8 @@ struct hbtp_data {
 	u32 power_on_delay;
 	u32 power_off_delay;
 	bool manage_pin_ctrl;
+	bool afe_force_power_on;
+	bool regulator_enabled;
 };
 
 static struct hbtp_data *hbtp;
@@ -103,10 +105,27 @@ static int fb_notifier_callback(struct notifier_block *self,
 {
 	int blank;
 	struct fb_event *evdata = data;
+	struct fb_info *fbi = NULL;
 	struct hbtp_data *hbtp_data =
 	container_of(self, struct hbtp_data, fb_notif);
 
-	if (evdata && evdata->data && hbtp_data &&
+	if (!evdata) {
+		pr_debug("evdata is NULL");
+		return 0;
+	}
+	fbi = evdata->info;
+
+	/*
+	 * Node 0 is the primary display and others are
+	 * external displays such as HDMI/DP.
+	 * We need to handle only fb event for the primary display.
+	 */
+	if (!fbi || fbi->node != 0) {
+		pr_debug("%s: no need to handle the fb event", __func__);
+		return 0;
+	}
+
+	if (evdata->data && hbtp_data &&
 		(event == FB_EARLY_EVENT_BLANK ||
 		event == FB_R_EARLY_EVENT_BLANK)) {
 		blank = *(int *)(evdata->data);
@@ -135,7 +154,7 @@ static int fb_notifier_callback(struct notifier_block *self,
 		}
 	}
 
-	if (evdata && evdata->data && hbtp_data &&
+	if (evdata->data && hbtp_data &&
 		event == FB_EVENT_BLANK) {
 		blank = *(int *)(evdata->data);
 		if (blank == FB_BLANK_POWERDOWN) {
@@ -329,6 +348,11 @@ static int hbtp_pdev_power_on(struct hbtp_data *hbtp, bool on)
 	if (!on)
 		goto reg_off;
 
+	if (hbtp->regulator_enabled) {
+		pr_debug("%s: regulator already enabled\n", __func__);
+		return 0;
+	}
+
 	if (hbtp->vcc_ana) {
 		ret = reg_set_load_check(hbtp->vcc_ana,
 			hbtp->afe_load_ua);
@@ -372,9 +396,16 @@ static int hbtp_pdev_power_on(struct hbtp_data *hbtp, bool on)
 		}
 	}
 
+	hbtp->regulator_enabled = true;
+
 	return 0;
 
 reg_off:
+	if (!hbtp->regulator_enabled) {
+		pr_debug("%s: regulator not enabled\n", __func__);
+		return 0;
+	}
+
 	if (hbtp->vcc_dig) {
 		reg_set_load_check(hbtp->vcc_dig, 0);
 		regulator_disable(hbtp->vcc_dig);
@@ -391,6 +422,9 @@ reg_off:
 		reg_set_load_check(hbtp->vcc_ana, 0);
 		regulator_disable(hbtp->vcc_ana);
 	}
+
+	hbtp->regulator_enabled = false;
+
 	return 0;
 }
 
@@ -873,6 +907,9 @@ static int hbtp_parse_dt(struct device *dev)
 			hbtp->power_on_delay, hbtp->power_off_delay);
 	}
 
+	hbtp->afe_force_power_on =
+		of_property_read_bool(np, "qcom,afe-force-power-on");
+
 	prop = of_find_property(np, "qcom,display-resolution", NULL);
 	if (prop != NULL) {
 		if (!prop->value)
@@ -1166,13 +1203,19 @@ static int hbtp_fb_early_resume(struct hbtp_data *ts)
 
 	pr_debug("%s: hbtp_fb_early_resume\n", __func__);
 
-	if (ts->pdev && ts->power_sync_enabled) {
+	if (ts->pdev && (ts->power_sync_enabled || ts->afe_force_power_on)) {
 		pr_debug("%s: power_sync is enabled\n", __func__);
-		if (!ts->power_suspended) {
+
+		if (!ts->power_suspended &&
+		   (ts->afe_force_power_on == false)) {
 			pr_err("%s: power is not suspended\n", __func__);
 			mutex_unlock(&hbtp->mutex);
 			return 0;
 		}
+
+		if (ts->afe_force_power_on)
+			ts->afe_force_power_on = false;
+
 		rc = hbtp_pdev_power_on(ts, true);
 		if (rc) {
 			pr_err("%s: failed to enable panel power\n", __func__);

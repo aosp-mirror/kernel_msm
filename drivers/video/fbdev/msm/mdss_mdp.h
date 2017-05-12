@@ -164,6 +164,14 @@ enum mdss_mdp_mixer_mux {
 	MDSS_MDP_MIXER_MUX_RIGHT,
 };
 
+enum mdss_secure_transition {
+	SECURE_TRANSITION_NONE,
+	SD_NON_SECURE_TO_SECURE,
+	SD_SECURE_TO_NON_SECURE,
+	SC_NON_SECURE_TO_SECURE,
+	SC_SECURE_TO_NON_SECURE,
+};
+
 static inline enum mdss_mdp_sspp_index get_pipe_num_from_ndx(u32 ndx)
 {
 	u32 id;
@@ -421,6 +429,9 @@ struct mdss_mdp_ctl_intfs_ops {
 	/* to update lineptr, [1..yres] - enable, 0 - disable */
 	int (*update_lineptr)(struct mdss_mdp_ctl *ctl, bool enable);
 	int (*avr_ctrl_fnc)(struct mdss_mdp_ctl *, bool enable);
+
+	/* to wait for vsync */
+	int (*wait_for_vsync_fnc)(struct mdss_mdp_ctl *ctl);
 };
 
 struct mdss_mdp_cwb {
@@ -556,6 +567,7 @@ struct mdss_mdp_ctl {
 	bool switch_with_handoff;
 	struct mdss_mdp_avr_info avr_info;
 	bool commit_in_progress;
+	struct mutex ds_lock;
 };
 
 struct mdss_mdp_mixer {
@@ -650,6 +662,7 @@ struct mdss_mdp_img_data {
 	struct dma_buf *srcp_dma_buf;
 	struct dma_buf_attachment *srcp_attachment;
 	struct sg_table *srcp_table;
+	struct ion_handle *ihandle;
 };
 
 enum mdss_mdp_data_state {
@@ -691,6 +704,8 @@ struct pp_hist_col_info {
 	char __iomem *base;
 	u32 intr_shift;
 	u32 disp_num;
+	u32 expect_sum;
+	u32 next_sum;
 	struct mdss_mdp_ctl *ctl;
 };
 
@@ -953,6 +968,8 @@ struct mdss_overlay_private {
 	struct kthread_worker worker;
 	struct kthread_work vsync_work;
 	struct task_struct *thread;
+
+	u8 secure_transition_state;
 };
 
 struct mdss_mdp_set_ot_params {
@@ -1251,6 +1268,8 @@ static inline u32 get_panel_width(struct mdss_mdp_ctl *ctl)
 	width = get_panel_xres(&ctl->panel_data->panel_info);
 	if (ctl->panel_data->next && is_pingpong_split(ctl->mfd))
 		width += get_panel_xres(&ctl->panel_data->next->panel_info);
+	else if (is_panel_split_link(ctl->mfd))
+		width *= (ctl->panel_data->panel_info.mipi.num_of_sublinks);
 
 	return width;
 }
@@ -1299,7 +1318,9 @@ static inline int mdss_mdp_panic_signal_support_mode(
 		IS_MDSS_MAJOR_MINOR_SAME(mdata->mdp_rev,
 				MDSS_MDP_HW_REV_300) ||
 		IS_MDSS_MAJOR_MINOR_SAME(mdata->mdp_rev,
-				MDSS_MDP_HW_REV_320))
+				MDSS_MDP_HW_REV_320) ||
+		IS_MDSS_MAJOR_MINOR_SAME(mdata->mdp_rev,
+				MDSS_MDP_HW_REV_330))
 		signal_mode = MDSS_MDP_PANIC_PER_PIPE_CFG;
 
 	return signal_mode;
@@ -1315,10 +1336,13 @@ static inline struct clk *mdss_mdp_get_clk(u32 clk_idx)
 static inline void mdss_update_sd_client(struct mdss_data_type *mdata,
 							bool status)
 {
-	if (status)
+	if (status) {
 		atomic_inc(&mdata->sd_client_count);
-	else
+	} else {
 		atomic_add_unless(&mdss_res->sd_client_count, -1, 0);
+		if (!atomic_read(&mdss_res->sd_client_count))
+			wake_up_all(&mdata->secure_waitq);
+	}
 }
 
 static inline void mdss_update_sc_client(struct mdss_data_type *mdata,
@@ -1837,7 +1861,7 @@ int mdss_mdp_calib_mode(struct msm_fb_data_type *mfd,
 int mdss_mdp_pipe_handoff(struct mdss_mdp_pipe *pipe);
 int mdss_mdp_smp_handoff(struct mdss_data_type *mdata);
 struct mdss_mdp_pipe *mdss_mdp_pipe_alloc(struct mdss_mdp_mixer *mixer,
-	u32 type, struct mdss_mdp_pipe *left_blend_pipe);
+	u32 off, u32 type, struct mdss_mdp_pipe *left_blend_pipe);
 struct mdss_mdp_pipe *mdss_mdp_pipe_get(u32 ndx,
 	enum mdss_mdp_pipe_rect rect_num);
 struct mdss_mdp_pipe *mdss_mdp_pipe_search(struct mdss_data_type *mdata,
@@ -1970,6 +1994,8 @@ void mdss_mdp_enable_hw_irq(struct mdss_data_type *mdata);
 void mdss_mdp_disable_hw_irq(struct mdss_data_type *mdata);
 
 void mdss_mdp_set_supported_formats(struct mdss_data_type *mdata);
+int mdss_mdp_dest_scaler_setup_locked(struct mdss_mdp_mixer *mixer);
+void *mdss_mdp_intf_get_ctx_base(struct mdss_mdp_ctl *ctl, int intf_num);
 
 #ifdef CONFIG_FB_MSM_MDP_NONE
 struct mdss_data_type *mdss_mdp_get_mdata(void)
