@@ -1368,14 +1368,6 @@ static int smb2_init_hw(struct smb2 *chip)
 	vote(chg->hvdcp_enable_votable, MICRO_USB_VOTER,
 			chg->micro_usb_mode, 0);
 
-	rc = smblib_write(chg, USBIN_ADAPTER_ALLOW_CFG_REG,
-			  USBIN_ADAPTER_ALLOW_5V_TO_9V);
-	if (rc < 0) {
-		dev_err(chg->dev, "Couldn't configure allowed voltage rc=%d\n",
-			rc);
-		return rc;
-	}
-
 	/* Configure charge enable for software control; active high */
 	rc = smblib_masked_write(chg, CHGR_CFG2_REG,
 				 CHG_EN_POLARITY_BIT |
