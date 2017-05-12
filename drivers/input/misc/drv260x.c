@@ -534,11 +534,40 @@ static void drv260x_worker_sim(struct work_struct *work_sim)
         /* Data sheet says to wait 250us before trying to communicate */
         udelay(250);
 
+	error = regmap_write(haptics->regmap,
+			DRV260X_RATED_VOLT, haptics->rated_voltage);
+	if (error) {
+		dev_err(&haptics->client->dev,
+				"Failed to write DRV260X_RATED_VOLT register: %d\n",
+				error);
+		return;
+	}
+
+	error = regmap_write(haptics->regmap,
+			DRV260X_OD_CLAMP_VOLT, haptics->overdrive_voltage);
+	if (error) {
+		dev_err(&haptics->client->dev,
+				"Failed to write DRV260X_OD_CLAMP_VOLT register: %d\n",
+				error);
+		return;
+	}
+
+
+	error = regmap_register_patch(haptics->regmap,
+			drv260x_lra_cal_regs,
+			ARRAY_SIZE(drv260x_lra_cal_regs));
+	if (error) {
+		dev_err(&haptics->client->dev,
+				"Failed to write LRA calibration registers: %d\n",
+				error);
+		return;
+	}
+
 	error = regmap_write(haptics->regmap, DRV260X_GO, DRV260X_GO_BIT);
 	if (error) {
 		dev_err(&haptics->client->dev,
-			"Failed to write GO register: %d\n",
-			error);
+				"Failed to write GO register: %d\n",
+				error);
 		return;
 	}
 
@@ -559,20 +588,18 @@ static void drv260x_vib_enable(struct timed_output_dev *dev, int value)
 	struct drv260x_data *haptics = container_of(dev, struct drv260x_data,
 			timed_dev);
 
-	mutex_lock(&haptics->lock);
 	hrtimer_cancel(&haptics->vib_timer);
 
 	if (value == 0) {
 		haptics->state = 0;
 	} else {
-		value = (value > 2000 ?
-				2000 : value);
+		value = (value < 3000 ?
+				3000 : value);
 		haptics->state = 1;
 		hrtimer_start(&haptics->vib_timer,
 				ktime_set(value / 1000, (value % 1000) * 1000000),
 				HRTIMER_MODE_REL);
 	}
-	mutex_unlock(&haptics->lock);
 	schedule_work(&haptics->work_sim);
 }
 
