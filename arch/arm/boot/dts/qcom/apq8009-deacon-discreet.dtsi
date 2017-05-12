@@ -78,8 +78,8 @@
 			enable-gpio = <&msm_gpio 22 0x00>;
 			mode = <0x00>;
 			library-sel = <0x06>;
-			vib-rated-mv = <3000>;
-			vib-overdrive-mv = <3000>;
+			vib-rated-mv = <3200>;
+			vib-overdrive-mv = <3200>;
 		};
 	};
 
