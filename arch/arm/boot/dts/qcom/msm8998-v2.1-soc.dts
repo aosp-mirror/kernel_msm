@@ -31,3 +31,7 @@
 		/delete-property/ bias-pull-down;
 	};
 };
+
+&soc {
+	/delete-node/ qcom,qbt1000;
+};
