@@ -26,7 +26,6 @@
 #include <linux/moduleparam.h>
 #include <linux/init.h>
 #include <linux/delay.h>
-#include <linux/pm_runtime.h>
 #include <linux/i2c.h>
 #include <linux/gpio.h>
 #include <linux/regulator/consumer.h>
@@ -625,10 +624,6 @@ void tas2557_enableIRQ(struct tas2557_priv *pTAS2557, enum channel chl, bool ena
 				} else
 					bRightChlEnable = false;
 			}
-			if (bLeftChlEnable || bRightChlEnable) {
-				/* check after 10 ms */
-				schedule_delayed_work(&pTAS2557->irq_work, msecs_to_jiffies(10));
-			}
 			pTAS2557->mbIRQEnable = true;
 		}
 	} else {
@@ -696,7 +691,8 @@ static void irq_work_routine(struct work_struct *work)
 	mutex_lock(&pTAS2557->file_lock);
 #endif
 
-	pm_runtime_get_sync(pTAS2557->dev);
+	if (pTAS2557->system_suspend)
+		goto end;
 
 	if (!pTAS2557->mbPowerUp) {
 		dev_info(pTAS2557->dev, "%s, device not powered\n", __func__);
@@ -901,7 +897,6 @@ program:
 
 end:
 
-	pm_runtime_put(pTAS2557->dev);
 #ifdef CONFIG_TAS2557_MISC_STEREO
 	mutex_unlock(&pTAS2557->file_lock);
 #endif
@@ -914,7 +909,7 @@ end:
 static irqreturn_t tas2557_irq_handler(int irq, void *dev_id)
 {
 	struct tas2557_priv *pTAS2557 = (struct tas2557_priv *)dev_id;
-
+	dev_dbg(pTAS2557->dev, "%s\n", __func__);
 	tas2557_enableIRQ(pTAS2557, channel_both, false);
 	/* get IRQ status after 100 ms */
 	schedule_delayed_work(&pTAS2557->irq_work, msecs_to_jiffies(100));
@@ -946,6 +941,9 @@ static void timer_work_routine(struct work_struct *work)
 #ifdef CONFIG_TAS2557_MISC_STEREO
 	mutex_lock(&pTAS2557->file_lock);
 #endif
+
+	if (pTAS2557->system_suspend)
+		goto end;
 
 	if (!pTAS2557->mpFirmware->mnConfigurations) {
 		dev_info(pTAS2557->dev, "%s, firmware not loaded\n", __func__);
@@ -993,7 +991,7 @@ static void timer_work_routine(struct work_struct *work)
 			nAvg = 0;
 		}
 
-		if (pTAS2557->mbPowerUp)
+		if (pTAS2557->mbPowerUp && !pTAS2557->system_suspend)
 			hrtimer_start(&pTAS2557->mtimer,
 				ns_to_ktime((u64)LOW_TEMPERATURE_CHECK_PERIOD * NSEC_PER_MSEC), HRTIMER_MODE_REL);
 	}
@@ -1009,31 +1007,69 @@ end:
 #endif
 }
 
-static int __maybe_unused tas2557_suspend(struct device *dev)
+static int tas2557_suspend(struct device *dev)
 {
 	struct tas2557_priv *pTAS2557 = dev_get_drvdata(dev);
 
 	dev_dbg(pTAS2557->dev, "%s\n", __func__);
+
+#ifdef CONFIG_TAS2557_CODEC_STEREO
+	mutex_lock(&pTAS2557->codec_lock);
+#endif
+
+#ifdef CONFIG_TAS2557_MISC_STEREO
+	mutex_lock(&pTAS2557->file_lock);
+#endif
+	pTAS2557->system_suspend = 1;
+
+#ifdef CONFIG_TAS2557_MISC_STEREO
+	mutex_unlock(&pTAS2557->file_lock);
+#endif
+
+#ifdef CONFIG_TAS2557_CODEC_STEREO
+	mutex_unlock(&pTAS2557->codec_lock);
+#endif
+
 	if (hrtimer_active(&pTAS2557->mtimer)) {
 		dev_dbg(pTAS2557->dev, "cancel die temp timer\n");
 		hrtimer_cancel(&pTAS2557->mtimer);
 	}
 
+	cancel_work_sync(&pTAS2557->mtimerwork);
+	cancel_delayed_work_sync(&pTAS2557->irq_work);
 	return 0;
 }
 
-static int __maybe_unused tas2557_resume(struct device *dev)
+static int tas2557_resume(struct device *dev)
 {
 	struct tas2557_priv *pTAS2557 = dev_get_drvdata(dev);
 	struct TProgram *pProgram;
 
 	dev_dbg(pTAS2557->dev, "%s\n", __func__);
+
+#ifdef CONFIG_TAS2557_CODEC_STEREO
+	mutex_lock(&pTAS2557->codec_lock);
+#endif
+
+#ifdef CONFIG_TAS2557_MISC_STEREO
+	mutex_lock(&pTAS2557->file_lock);
+#endif
+	pTAS2557->system_suspend = 0;
+
+#ifdef CONFIG_TAS2557_MISC_STEREO
+	mutex_unlock(&pTAS2557->file_lock);
+#endif
+
+#ifdef CONFIG_TAS2557_CODEC_STEREO
+	mutex_unlock(&pTAS2557->codec_lock);
+#endif
+
 	if (!pTAS2557->mpFirmware->mpPrograms) {
 		dev_dbg(pTAS2557->dev, "%s, firmware not loaded\n", __func__);
 		goto end;
 	}
 
-	if (pTAS2557->mnCurrentProgram >= pTAS2557->mpCalFirmware->mnPrograms) {
+	if (pTAS2557->mnCurrentProgram >= pTAS2557->mpFirmware->mnPrograms) {
 		dev_err(pTAS2557->dev, "%s, firmware corrupted\n", __func__);
 		goto end;
 	}
@@ -1141,6 +1177,8 @@ static int tas2557_i2c_probe(struct i2c_client *pClient,
 	pTAS2557->set_config = tas2557_set_config;
 	pTAS2557->set_calibration = tas2557_set_calibration;
 	pTAS2557->hw_reset = tas2557_hw_reset;
+	pTAS2557->suspend = tas2557_suspend;
+	pTAS2557->resume = tas2557_resume;
 
 	mutex_init(&pTAS2557->dev_lock);
 
@@ -1266,9 +1304,6 @@ static int tas2557_i2c_probe(struct i2c_client *pClient,
 	nResult = request_firmware_nowait(THIS_MODULE, 1, fw_name,
 		pTAS2557->dev, GFP_KERNEL, pTAS2557, tas2557_fw_ready);
 
-	pm_runtime_enable(&pClient->dev);
-	pm_runtime_idle(&pClient->dev);
-
 err:
 
 	return nResult;
@@ -1310,15 +1345,10 @@ static const struct of_device_id tas2557_of_match[] = {
 MODULE_DEVICE_TABLE(of, tas2557_of_match);
 #endif
 
-static const struct dev_pm_ops tas2557_pm_ops = {
-	SET_RUNTIME_PM_OPS(tas2557_suspend, tas2557_resume, NULL)
-};
-
 static struct i2c_driver tas2557_i2c_driver = {
 	.driver = {
 			.name = "tas2557s",
 			.owner = THIS_MODULE,
-			.pm = &tas2557_pm_ops,
 #if defined(CONFIG_OF)
 			.of_match_table = of_match_ptr(tas2557_of_match),
 #endif

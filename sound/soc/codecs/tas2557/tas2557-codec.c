@@ -212,6 +212,32 @@ static int tas2557_codec_remove(struct snd_soc_codec *pCodec)
 	return 0;
 }
 
+static int tas2557_codec_suspend(struct snd_soc_codec *pCodec)
+{
+	struct tas2557_priv *pTAS2557 = snd_soc_codec_get_drvdata(pCodec);
+	int rs;
+
+	if (pTAS2557->suspend)
+		rs = pTAS2557->suspend(pTAS2557->dev);
+	else
+		rs = 0;
+
+	return rs;
+}
+
+static int tas2557_codec_resume(struct snd_soc_codec *pCodec)
+{
+	struct tas2557_priv *pTAS2557 = snd_soc_codec_get_drvdata(pCodec);
+	int rs;
+
+	if (pTAS2557->resume)
+		pTAS2557->resume(pTAS2557->dev);
+	else
+		rs = 0;
+
+	return rs;
+}
+
 static int tas2557_power_ctrl_get(struct snd_kcontrol *pKcontrol,
 	struct snd_ctl_elem_value *pValue)
 {
@@ -832,6 +858,8 @@ static struct snd_soc_codec_driver soc_codec_driver_tas2557 = {
 	.probe = tas2557_codec_probe,
 	.remove = tas2557_codec_remove,
 	.read = tas2557_codec_read,
+	.suspend = tas2557_codec_suspend,
+	.resume = tas2557_codec_resume,
 	.write = tas2557_codec_write,
 	.set_bias_level = tas2557_set_bias_level,
 	.idle_bias_off = true,

@@ -497,6 +497,8 @@ struct tas2557_priv {
 	void (*enableIRQ)(struct tas2557_priv *pTAS2557,
 		enum channel chl, bool enable);
 	void (*hw_reset)(struct tas2557_priv *pTAS2557);
+	int (*suspend)(struct device *dev);
+	int (*resume)(struct device *dev);
 
 	int mnLeftChlGpioINT;
 	int mnRightChlGpioINT;
@@ -521,6 +523,7 @@ struct tas2557_priv {
 	unsigned int mnDevGain;
 	unsigned int mnDevCurrentGain;
 	unsigned int mnDieTvReadCounter;
+	unsigned int system_suspend;
 	struct hrtimer mtimer;
 	struct work_struct mtimerwork;
 
