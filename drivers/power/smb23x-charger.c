@@ -85,7 +85,7 @@ static void udp_exit(void)
 	pr_debug(" netlink sock remove successfully\n");
 }
 
-static void udp_sendmsg(int power_status)
+static void udp_sendmsg_charging(int power_status)
 {
 	static bool last_status = false;
 	if(power_status != 0 && last_status==false){
@@ -97,6 +97,50 @@ static void udp_sendmsg(int power_status)
 		udp_broadcast(1,"Discharging\0", 12);
 		last_status=false;
 		pr_debug(" Charging to Discharging\n");
+	}
+}
+
+static void udp_sendmsg_tempature(int value)
+{
+	const int thresholdTempRaising=2;
+	const int thresholdTempFalling=2;
+	static int compareTemp=0;
+	static int tempStatus=0;
+	int currentTemp=value/10;
+
+	if(compareTemp==0){
+		compareTemp=currentTemp;
+	}
+	else if( currentTemp!=compareTemp ){
+		if( (currentTemp-compareTemp)>=thresholdTempRaising ){
+			//Raising
+			if( (tempStatus&0x03)==0 ){
+				tempStatus=1;
+			}
+			compareTemp=currentTemp;
+		}
+		else if( (compareTemp-currentTemp)>=thresholdTempFalling ){
+			//falling
+			if( (tempStatus&0x0C)==0 ){
+				tempStatus=4;
+			}
+			compareTemp=currentTemp;
+		}
+		else if( ((currentTemp>compareTemp)&&(tempStatus&0x03)) ||
+					((currentTemp<compareTemp)&&(tempStatus&0x0C)) ){
+			compareTemp=currentTemp;
+		}
+	}
+
+	if((tempStatus&0x0F)==1){
+		udp_broadcast(1,"TempRaising\0", 12);
+		tempStatus=tempStatus|0x02;
+		pr_debug("Tempature raising\n");
+	}
+	else if((tempStatus&0x0F)==4){
+		udp_broadcast(1,"TempFalling\0", 12);
+		tempStatus=tempStatus|0x08;
+		pr_debug("Tempature falling\n");
 	}
 }
 
@@ -2759,6 +2803,7 @@ static int smb23x_battery_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
 		val->intval = smb23x_get_prop_batt_temp(chip);
+		udp_sendmsg_tempature(val->intval);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN:
 		val->intval = chip->reg_addr;
@@ -2859,7 +2904,7 @@ static int smb23x_battery_set_property(struct power_supply *psy,
 
 		pr_info("Charger plug, state=%d\n", chip->charger_plugin);
 		power_supply_changed(chip->usb_psy);
-		udp_sendmsg(chip->charger_plugin);
+		udp_sendmsg_charging(chip->charger_plugin);
 		break;
 	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
 		smb23x_charging_enable(chip, val->intval);
