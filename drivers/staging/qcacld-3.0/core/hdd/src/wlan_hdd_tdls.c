@@ -1732,6 +1732,14 @@ static void wlan_hdd_tdls_set_mode(hdd_context_t *pHddCtx,
 				 */
 				pHddCtx->enable_tdls_connection_tracker =
 					true;
+				if  (tdls_mode == eTDLS_SUPPORT_EXTERNAL_CONTROL
+					&& !pHddCtx->tdls_external_peer_count) {
+					/* Disable connection tracker if tdls
+					 * mode is external and no force peers
+					 * were configured by application. */
+					pHddCtx->enable_tdls_connection_tracker
+						= false;
+				}
 			} else if (eTDLS_SUPPORT_DISABLED == tdls_mode) {
 				set_bit((unsigned long)source,
 					&pHddCtx->tdls_source_bitmap);
