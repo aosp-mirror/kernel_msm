@@ -245,20 +245,39 @@ DEFINE_EVENT(sched_process_template, sched_process_free,
 	     TP_PROTO(struct task_struct *p),
 	     TP_ARGS(p));
 
-
-/*
- * Tracepoint for a task exiting:
- */
-DEFINE_EVENT(sched_process_template, sched_process_exit,
-	     TP_PROTO(struct task_struct *p),
-	     TP_ARGS(p));
-
 /*
  * Tracepoint for waiting on task to unschedule:
  */
 DEFINE_EVENT(sched_process_template, sched_wait_task,
 	TP_PROTO(struct task_struct *p),
 	TP_ARGS(p));
+
+/*
+ * Tracepoint for a task exiting:
+ */
+TRACE_EVENT(sched_process_exit,
+
+	TP_PROTO(struct task_struct *p),
+
+	TP_ARGS(p),
+
+	TP_STRUCT__entry(
+		__array(	char,	comm,	TASK_COMM_LEN	)
+		__field(	pid_t,	pid			)
+		__field(	pid_t,	tgid			)
+		__field(	int,	prio			)
+	),
+
+	TP_fast_assign(
+		memcpy(__entry->comm, p->comm, TASK_COMM_LEN);
+		__entry->pid		= p->pid;
+		__entry->tgid		= p->tgid;
+		__entry->prio		= p->prio;
+	),
+
+	TP_printk("comm=%s pid=%d tgid=%d prio=%d",
+		  __entry->comm, __entry->pid, __entry->tgid, __entry->prio)
+);
 
 /*
  * Tracepoint for a waiting task:
