@@ -735,6 +735,70 @@ static void apr_reset_deregister(struct work_struct *work)
 	kfree(apr_reset);
 }
 
+int apr_start_rx_rt(void *handle)
+{
+	int rc = 0;
+	struct apr_svc *svc = handle;
+	uint16_t dest_id;
+	uint16_t client_id;
+
+	if (!handle) {
+		pr_err("%s: Invalid APR handle\n", __func__);
+		return -EINVAL;
+	}
+
+	mutex_lock(&svc->m_lock);
+	dest_id = svc->dest_id;
+	client_id = svc->client_id;
+
+	if ((client_id >= APR_CLIENT_MAX) || (dest_id >= APR_DEST_MAX)) {
+		pr_err("%s: %s invalid. client_id = %u, dest_id = %u\n",
+		       __func__,
+		       client_id >= APR_CLIENT_MAX ? "Client ID" : "Dest ID",
+		       client_id, dest_id);
+		mutex_unlock(&svc->m_lock);
+		return -EINVAL;
+	}
+
+	if (client[dest_id][client_id].handle)
+		rc = apr_tal_start_rx_rt(client[dest_id][client_id].handle);
+
+	mutex_unlock(&svc->m_lock);
+	return rc;
+}
+
+int apr_end_rx_rt(void *handle)
+{
+	int rc = 0;
+	struct apr_svc *svc = handle;
+	uint16_t dest_id;
+	uint16_t client_id;
+
+	if (!handle) {
+		pr_err("%s: Invalid APR handle\n", __func__);
+		return -EINVAL;
+	}
+
+	mutex_lock(&svc->m_lock);
+	dest_id = svc->dest_id;
+	client_id = svc->client_id;
+
+	if ((client_id >= APR_CLIENT_MAX) || (dest_id >= APR_DEST_MAX)) {
+		pr_err("%s: %s invalid. client_id = %u, dest_id = %u\n",
+		       __func__,
+		       client_id >= APR_CLIENT_MAX ? "Client ID" : "Dest ID",
+		       client_id, dest_id);
+		mutex_unlock(&svc->m_lock);
+		return -EINVAL;
+	}
+
+	if (client[dest_id][client_id].handle)
+		rc = apr_tal_end_rx_rt(client[dest_id][client_id].handle);
+
+	mutex_unlock(&svc->m_lock);
+	return rc;
+}
+
 int apr_deregister(void *handle)
 {
 	struct apr_svc *svc = handle;
