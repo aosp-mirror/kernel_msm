@@ -34,7 +34,7 @@
 };
 
 &mdss_dsi1 {
-	cell-index = <>;
+	status = "disabled";
 };
 
 &dsi_sw43402_dsc_qhd_cmd {
