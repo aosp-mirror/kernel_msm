@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -305,6 +305,16 @@ static const struct qwlan_hw qwlan_hw_list[] = {
 		.id = WCN3990_v2_1,
 		.subid = 0x0,
 		.name = "WCN3990_V2.1",
+	},
+	{
+		.id = QCA9379_REV1_VERSION,
+		.subid = 0xC,
+		.name = "QCA9379_REV1",
+	},
+	{
+		.id = QCA9379_REV1_VERSION,
+		.subid = 0xD,
+		.name = "QCA9379_REV1_1",
 	}
 };
 
@@ -393,8 +403,6 @@ struct hif_opaque_softc *hif_open(qdf_device_t qdf_ctx, uint32_t mode,
 		return GET_HIF_OPAQUE_HDL(scn);
 	}
 
-	qdf_mem_zero(scn, bus_context_size);
-
 	scn->qdf_dev = qdf_ctx;
 	scn->hif_con_param = mode;
 	qdf_atomic_init(&scn->active_tasklet_cnt);
@@ -439,6 +447,13 @@ void hif_close(struct hif_opaque_softc *hif_ctx)
 		qdf_mem_free(hw_name);
 	}
 
+	if (scn->vaddr_rri_on_ddr)
+		qdf_mem_free_consistent(scn->qdf_dev, scn->qdf_dev->dev,
+					(CE_COUNT*sizeof(uint32_t)),
+				scn->vaddr_rri_on_ddr, scn->paddr_rri_on_ddr,
+				0);
+
+	scn->vaddr_rri_on_ddr = NULL;
 	hif_bus_close(scn);
 	qdf_mem_free(scn);
 }
@@ -842,10 +857,8 @@ int hif_get_rx_ctx_id(int ctx_id, struct hif_opaque_softc *hif_hdl)
 void hif_lro_flush_cb_deregister(struct hif_opaque_softc *hif_hdl,
 				 void (lro_deinit_cb)(void *))
 {
-	if (hif_napi_enabled(hif_hdl, -1))
-		hif_napi_lro_flush_cb_deregister(hif_hdl, lro_deinit_cb);
-	else
-		ce_lro_flush_cb_deregister(hif_hdl, lro_deinit_cb);
+	hif_napi_lro_flush_cb_deregister(hif_hdl, lro_deinit_cb);
+	ce_lro_flush_cb_deregister(hif_hdl, lro_deinit_cb);
 }
 #else /* !defined(FEATURE_LRO) */
 int hif_get_rx_ctx_id(int ctx_id, struct hif_opaque_softc *hif_hdl)

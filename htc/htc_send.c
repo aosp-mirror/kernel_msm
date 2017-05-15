@@ -97,6 +97,14 @@ void htc_dump_counter_info(HTC_HANDLE HTCHandle)
 			 __func__, target->ce_send_cnt, target->TX_comp_cnt));
 }
 
+int htc_get_tx_queue_depth(HTC_HANDLE *htc_handle, HTC_ENDPOINT_ID endpoint_id)
+{
+	HTC_TARGET *target = GET_HTC_TARGET_FROM_HANDLE(htc_handle);
+	HTC_ENDPOINT *endpoint = &target->endpoint[endpoint_id];
+
+	return HTC_PACKET_QUEUE_DEPTH(&endpoint->TxQueue);
+}
+
 void htc_get_control_endpoint_tx_host_credits(HTC_HANDLE HTCHandle, int *credits)
 {
 	HTC_TARGET *target = GET_HTC_TARGET_FROM_HANDLE(HTCHandle);
@@ -541,6 +549,7 @@ static A_STATUS htc_issue_packets(HTC_TARGET *target,
 	HTC_FRAME_HDR *pHtcHdr;
 	uint32_t data_attr = 0;
 	enum qdf_bus_type bus_type;
+	QDF_STATUS ret;
 
 	bus_type = hif_get_bus_type(target->hif_dev);
 
@@ -610,9 +619,16 @@ static A_STATUS htc_issue_packets(HTC_TARGET *target,
 			 */
 			if (pPacket->PktInfo.AsTx.
 			    Flags & HTC_TX_PACKET_FLAG_FIXUP_NETBUF) {
-				qdf_nbuf_map(target->osdev,
-					     GET_HTC_PACKET_NET_BUF_CONTEXT
-						     (pPacket), QDF_DMA_TO_DEVICE);
+				ret = qdf_nbuf_map(target->osdev,
+					GET_HTC_PACKET_NET_BUF_CONTEXT
+						(pPacket), QDF_DMA_TO_DEVICE);
+				if (ret != QDF_STATUS_SUCCESS) {
+					AR_DEBUG_PRINTF(ATH_DEBUG_ERR,
+					  ("%s: nbuf map failed, endpoint %p\n",
+					   __func__, pEndpoint));
+					status = A_ERROR;
+					break;
+				}
 			}
 		}
 		LOCK_HTC_TX(target);
@@ -623,10 +639,12 @@ static A_STATUS htc_issue_packets(HTC_TARGET *target,
 		UNLOCK_HTC_TX(target);
 
 		hif_send_complete_check(target->hif_dev, pEndpoint->UL_PipeID, false);
+		htc_packet_set_magic_cookie(pPacket, HTC_PACKET_MAGIC_COOKIE);
 		status = hif_send_head(target->hif_dev,
 				       pEndpoint->UL_PipeID, pEndpoint->Id,
 				       HTC_HDR_LENGTH + pPacket->ActualLength,
 				       netbuf, data_attr);
+
 #if DEBUG_BUNDLE
 		qdf_print(" Send single EP%d buffer size:0x%x, total:0x%x.\n",
 			  pEndpoint->Id,
@@ -650,8 +668,9 @@ static A_STATUS htc_issue_packets(HTC_TARGET *target,
 			pEndpoint->ul_outstanding_cnt--;
 			HTC_PACKET_REMOVE(&pEndpoint->TxLookupQueue, pPacket);
 			/* reclaim credits */
-				pEndpoint->TxCredits +=
-					pPacket->PktInfo.AsTx.CreditsUsed;
+			pEndpoint->TxCredits +=
+				pPacket->PktInfo.AsTx.CreditsUsed;
+			htc_packet_set_magic_cookie(pPacket, 0);
 			/* put it back into the callers queue */
 			HTC_PACKET_ENQUEUE_TO_HEAD(pPktQueue, pPacket);
 			UNLOCK_HTC_TX(target);
@@ -1336,6 +1355,7 @@ A_STATUS htc_send_pkts_multiple(HTC_HANDLE HTCHandle, HTC_PACKET_QUEUE *pPktQueu
 	HTC_PACKET *pPacket;
 	qdf_nbuf_t netbuf;
 	HTC_FRAME_HDR *pHtcHdr;
+	QDF_STATUS status;
 
 	AR_DEBUG_PRINTF(ATH_DEBUG_SEND,
 			("+htc_send_pkts_multiple: Queue: %p, Pkts %d \n",
@@ -1393,9 +1413,15 @@ A_STATUS htc_send_pkts_multiple(HTC_HANDLE HTCHandle, HTC_PACKET_QUEUE *pPktQueu
 		 * mapped.  This only applies to non-data frames, since data frames
 		 * were already mapped as they entered into the driver.
 		 */
-		qdf_nbuf_map(target->osdev,
-			     GET_HTC_PACKET_NET_BUF_CONTEXT(pPacket),
-			     QDF_DMA_TO_DEVICE);
+		status = qdf_nbuf_map(target->osdev,
+				GET_HTC_PACKET_NET_BUF_CONTEXT(pPacket),
+				QDF_DMA_TO_DEVICE);
+		if (status != QDF_STATUS_SUCCESS) {
+			AR_DEBUG_PRINTF(ATH_DEBUG_ERR,
+			   ("%s: nbuf map failed, endpoint %p, seq_no. %d\n",
+			   __func__, pEndpoint, pEndpoint->SeqNo));
+			return A_ERROR;
+		}
 
 		pPacket->PktInfo.AsTx.Flags |= HTC_TX_PACKET_FLAG_FIXUP_NETBUF;
 	}

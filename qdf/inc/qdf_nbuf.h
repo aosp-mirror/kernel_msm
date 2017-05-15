@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -83,6 +83,13 @@
 #define EAPOL_M2_BIT_MASK			0x0001
 #define EAPOL_M3_BIT_MASK			0x8013
 #define EAPOL_M4_BIT_MASK			0x0003
+
+/* ARP Related MASK */
+#define QDF_NBUF_PKT_ARP_OPCODE_OFFSET	20
+#define QDF_NBUF_PKT_ARPOP_REQ		1
+#define QDF_NBUF_PKT_ARPOP_REPLY	2
+#define QDF_NBUF_PKT_ARP_SRC_IP_OFFSET	28
+#define QDF_NBUF_PKT_ARP_TGT_IP_OFFSET	38
 
 /* Tracked Packet types */
 #define QDF_NBUF_TX_PKT_INVALID              0
@@ -173,9 +180,11 @@ struct mon_rx_status {
 #define ARP_REQUEST			(1)
 #define ARP_RESPONSE		(2)
 
-/* IPV4 Related Mask */
+/* IPV4 header fields offset values */
 #define IPV4_PKT_LEN_OFFSET           16
 #define IPV4_TCP_SEQ_NUM_OFFSET       38
+#define IPV4_SRC_ADDR_OFFSET          26
+#define IPV4_DST_ADDR_OFFSET          30
 #define IPV4_SRC_PORT_OFFSET          34
 #define IPV4_DST_PORT_OFFSET          36
 
@@ -185,9 +194,14 @@ struct mon_rx_status {
 #define ICMP_REQUEST                  0x08
 #define ICMP_RESPONSE                 0x00
 
-/* IPV6 Related Mask */
+#define IPV6_ADDR_STR "%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:"\
+			"%02x%02x:%02x%02x"
+
+/* IPV6 header fields offset values */
 #define IPV6_PKT_LEN_OFFSET           18
 #define IPV6_TCP_SEQ_NUM_OFFSET       58
+#define IPV6_SRC_ADDR_OFFSET          22
+#define IPV6_DST_ADDR_OFFSET          38
 #define IPV6_SRC_PORT_OFFSET          54
 #define IPV6_DST_PORT_OFFSET          56
 
@@ -196,6 +210,10 @@ struct mon_rx_status {
 #define ICMPV6_SUBTYPE_OFFSET         54
 #define ICMPV6_REQUEST                0x80
 #define ICMPV6_RESPONSE               0x81
+#define ICMPV6_RS                     0x85
+#define ICMPV6_RA                     0x86
+#define ICMPV6_NS                     0x87
+#define ICMPV6_NA                     0x88
 
 #define QDF_NBUF_IPA_CHECK_MASK		0x80000000
 
@@ -236,6 +254,10 @@ enum qdf_proto_type {
  * @QDF_PROTO_ICMP_RES - icmp response
  * @QDF_PROTO_ICMPV6_REQ - icmpv6 request
  * @QDF_PROTO_ICMPV6_RES - icmpv6 response
+ * @QDF_PROTO_ICMPV6_RS - icmpv6 rs packet
+ * @QDF_PROTO_ICMPV6_RA - icmpv6 ra packet
+ * @QDF_PROTO_ICMPV6_NS - icmpv6 ns packet
+ * @QDF_PROTO_ICMPV6_NA - icmpv6 na packet
  * @QDF_PROTO_IPV4_UDP - ipv4 udp
  * @QDF_PROTO_IPV4_TCP - ipv4 tcp
  * @QDF_PROTO_IPV6_UDP - ipv6 udp
@@ -268,6 +290,10 @@ enum qdf_proto_subtype {
 	QDF_PROTO_ICMP_RES,
 	QDF_PROTO_ICMPV6_REQ,
 	QDF_PROTO_ICMPV6_RES,
+	QDF_PROTO_ICMPV6_RS,
+	QDF_PROTO_ICMPV6_RA,
+	QDF_PROTO_ICMPV6_NS,
+	QDF_PROTO_ICMPV6_NA,
 	QDF_PROTO_IPV4_UDP,
 	QDF_PROTO_IPV4_TCP,
 	QDF_PROTO_IPV6_UDP,
@@ -582,7 +608,6 @@ void qdf_net_buf_debug_exit(void);
 void qdf_net_buf_debug_clean(void);
 void qdf_net_buf_debug_add_node(qdf_nbuf_t net_buf, size_t size,
 			uint8_t *file_name, uint32_t line_num);
-void qdf_net_buf_debug_delete_node(qdf_nbuf_t net_buf);
 void qdf_net_buf_debug_release_skb(qdf_nbuf_t net_buf);
 
 /* nbuf allocation rouines */
@@ -613,6 +638,65 @@ static inline void qdf_nbuf_free(qdf_nbuf_t net_buf)
 	__qdf_nbuf_free(net_buf);
 }
 
+#define qdf_nbuf_clone(buf)     \
+	qdf_nbuf_clone_debug(buf, __FILE__, __LINE__)
+
+/**
+ * qdf_nbuf_clone_debug() - clone the nbuf (copy is readonly)
+ * @buf: nbuf to clone from
+ * @file_name: pointer to file name
+ * @line_num: line number
+ *
+ * This function clones the nbuf and creates a memory tracking
+ * node corresponding to that cloned skbuff structure.
+ *
+ * Return: cloned buffer
+ */
+static inline qdf_nbuf_t
+qdf_nbuf_clone_debug(qdf_nbuf_t buf, uint8_t *file_name,
+			uint32_t line_num)
+{
+	qdf_nbuf_t cloned_buf;
+
+	cloned_buf = __qdf_nbuf_clone(buf);
+
+	/* Store SKB in internal QDF tracking table */
+	if (qdf_likely(cloned_buf))
+		qdf_net_buf_debug_add_node(cloned_buf, 0, file_name, line_num);
+
+	return cloned_buf;
+}
+
+#define qdf_nbuf_copy(buf)     \
+	qdf_nbuf_copy_debug(buf, __FILE__, __LINE__)
+
+/**
+ * qdf_nbuf_copy_debug() - returns a private copy of the buf
+ * @buf: nbuf to copy from
+ * @file_name: pointer to file name
+ * @line_num: line number
+ *
+ * This API returns a private copy of the buf, the buf returned is completely
+ * modifiable by callers. It also creates a memory tracking node corresponding
+ * to that new skbuff structure.
+ *
+ * Return: copied buffer
+ */
+static inline qdf_nbuf_t
+qdf_nbuf_copy_debug(qdf_nbuf_t buf, uint8_t *file_name,
+			uint32_t line_num)
+{
+	qdf_nbuf_t copied_buf;
+
+	copied_buf = __qdf_nbuf_copy(buf);
+
+	/* Store SKB in internal QDF tracking table */
+	if (qdf_likely(copied_buf))
+		qdf_net_buf_debug_add_node(copied_buf, 0, file_name, line_num);
+
+	return copied_buf;
+}
+
 #else
 
 static inline void qdf_net_buf_debug_release_skb(qdf_nbuf_t net_buf)
@@ -632,6 +716,34 @@ qdf_nbuf_alloc(qdf_device_t osdev,
 static inline void qdf_nbuf_free(qdf_nbuf_t buf)
 {
 	__qdf_nbuf_free(buf);
+}
+
+/**
+ * qdf_nbuf_clone() - clone the nbuf (copy is readonly)
+ * @buf: Pointer to network buffer
+ *
+ * This function clones the nbuf and returns new sk_buff
+ * structure.
+ *
+ * Return: cloned skb
+ */
+static inline qdf_nbuf_t qdf_nbuf_clone(qdf_nbuf_t buf)
+{
+	return __qdf_nbuf_clone(buf);
+}
+
+/**
+ * qdf_nbuf_copy() - returns a private copy of the buf
+ * @buf: Pointer to network buffer
+ *
+ * This API returns a private copy of the buf, the buf returned is completely
+ *  modifiable by callers
+ *
+ * Return: skb or NULL
+ */
+static inline qdf_nbuf_t qdf_nbuf_copy(qdf_nbuf_t buf)
+{
+	return __qdf_nbuf_copy(buf);
 }
 
 #endif
@@ -668,11 +780,6 @@ static inline int qdf_nbuf_shared(qdf_nbuf_t buf)
 	return __qdf_nbuf_shared(buf);
 }
 
-static inline qdf_nbuf_t qdf_nbuf_copy(qdf_nbuf_t buf)
-{
-	return __qdf_nbuf_copy(buf);
-}
-
 static inline QDF_STATUS qdf_nbuf_cat(qdf_nbuf_t dst, qdf_nbuf_t src)
 {
 	return __qdf_nbuf_cat(dst, src);
@@ -693,16 +800,6 @@ qdf_nbuf_copy_bits(qdf_nbuf_t nbuf, uint32_t offset, uint32_t len, void *to)
 	return __qdf_nbuf_copy_bits(nbuf, offset, len, to);
 }
 
-/**
- * qdf_nbuf_clone() - clone the nbuf (copy is readonly)
- * @buf: nbuf to clone from
- *
- * Return: cloned buffer
- */
-static inline qdf_nbuf_t qdf_nbuf_clone(qdf_nbuf_t buf)
-{
-	return __qdf_nbuf_clone(buf);
-}
 
 /* nbuf manipulation routines */
 
@@ -1527,6 +1624,58 @@ bool qdf_nbuf_data_is_ipv4_arp_pkt(uint8_t *data)
 }
 
 /**
+ * qdf_nbuf_data_is_arp_req() - check if ARP packet is request.
+ * @buf:  buffer
+ *
+ * This func. checks whether it is a ARP request or not.
+ *
+ * Return: true if it is a ARP request or fALSE if not
+ */
+static inline
+bool qdf_nbuf_data_is_arp_req(qdf_nbuf_t buf)
+{
+	return __qdf_nbuf_data_is_arp_req(qdf_nbuf_data(buf));
+}
+
+/**
+ * qdf_nbuf_data_is_arp_rsp() - check if ARP packet is response.
+ * @buf:  buffer
+ *
+ * This func. checks whether it is a ARP response or not.
+ *
+ * Return: true if it is a ARP response or fALSE if not
+ */
+static inline
+bool qdf_nbuf_data_is_arp_rsp(qdf_nbuf_t buf)
+{
+	return __qdf_nbuf_data_is_arp_rsp(qdf_nbuf_data(buf));
+}
+
+/**
+ * qdf_nbuf_data_get_arp_src_ip() - get ARP packet source IP gateway.
+ * @buf:  buffer
+ *
+ * Return: ARP packet source IP value.
+ */
+static inline
+uint32_t qdf_nbuf_get_arp_src_ip(qdf_nbuf_t buf)
+{
+	return __qdf_nbuf_get_arp_src_ip(qdf_nbuf_data(buf));
+}
+
+/**
+ * qdf_nbuf_data_get_arp_tgt_ip() - get ARP packet target IP gateway.
+ * @buf:  buffer
+ *
+ * Return: ARP packet target IP value.
+ */
+static inline
+uint32_t qdf_nbuf_get_arp_tgt_ip(qdf_nbuf_t buf)
+{
+	return __qdf_nbuf_get_arp_tgt_ip(qdf_nbuf_data(buf));
+}
+
+/**
  * qdf_nbuf_is_ipv6_pkt() - check if it is IPV6 packet.
  * @buf: Pointer to IPV6 packet buffer
  *
@@ -1835,6 +1984,22 @@ static inline uint32_t qdf_nbuf_get_tso_info(qdf_device_t osdev,
 }
 
 /**
+ * qdf_nbuf_unmap_tso_segment() - function to dma unmap TSO segment element
+ *
+ * @osdev: qdf device handle
+ * @tso_seg: TSO segment element to be unmapped
+ * @is_last_seg: whether this is last tso seg or not
+ *
+ * Return: none
+ */
+static inline void qdf_nbuf_unmap_tso_segment(qdf_device_t osdev,
+			  struct qdf_tso_seg_elem_t *tso_seg,
+			  bool is_last_seg)
+{
+	return __qdf_nbuf_unmap_tso_segment(osdev, tso_seg, is_last_seg);
+}
+
+/**
  * qdf_nbuf_get_tso_num_seg() - function to calculate the number
  * of TCP segments within the TSO jumbo packet
  * @nbuf:   TSO jumbo network buffer to be segmented
@@ -2102,6 +2267,20 @@ static inline void
 qdf_nbuf_mark_wakeup_frame(qdf_nbuf_t buf)
 {
 	 __qdf_nbuf_mark_wakeup_frame(buf);
+}
+
+/**
+ * qdf_nbuf_reg_free_cb - Registers nbuf free callback
+ * @cb_func_ptr: Callback pointer
+ *
+ * This function registers nbuf free callback
+ *
+ * Return: void
+ */
+static inline void
+qdf_nbuf_reg_free_cb(qdf_nbuf_free_t cb_func_ptr)
+{
+	 __qdf_nbuf_reg_free_cb(cb_func_ptr);
 }
 
 #endif /* _QDF_NBUF_H */
