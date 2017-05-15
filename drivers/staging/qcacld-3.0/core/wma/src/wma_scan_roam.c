@@ -574,7 +574,7 @@ QDF_STATUS wma_start_scan(tp_wma_handle wma_handle,
 
 	wma_inc_pending_scans(wma_handle);
 
-	WMA_LOGI("scan_id 0x%x, vdev_id %d, p2pScanType %d, msg_type 0x%x",
+	WMA_LOGD("scan_id 0x%x, vdev_id %d, p2pScanType %d, msg_type 0x%x",
 		 cmd.scan_id, cmd.vdev_id, scan_req->p2pScanType, msg_type);
 
 	/*
@@ -664,11 +664,11 @@ QDF_STATUS wma_stop_scan(tp_wma_handle wma_handle,
 			qdf_status);
 		goto error;
 	}
-	WMA_LOGI("scan_id 0x%x, scan_requestor_id 0x%x, vdev_id %d",
+	WMA_LOGD("scan_id 0x%x, scan_requestor_id 0x%x, vdev_id %d",
 		 abort_scan_req->scan_id,
 		 abort_scan_req->scan_requestor_id,
 		 abort_scan_req->SessionId);
-	WMA_LOGI("WMA --> WMI_STOP_SCAN_CMDID");
+	WMA_LOGD("WMA --> WMI_STOP_SCAN_CMDID");
 
 	return QDF_STATUS_SUCCESS;
 

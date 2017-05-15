@@ -576,7 +576,7 @@ static QDF_STATUS wma_lphb_conf_hbenable(tp_wma_handle wma_handle,
 	}
 
 	ts_lphb_enable = &(lphb_conf_req->params.lphbEnableReq);
-	WMA_LOGI("%s: WMA --> WMI_HB_SET_ENABLE enable=%d, item=%d, session=%d",
+	WMA_LOGD("%s: WMA --> WMI_HB_SET_ENABLE enable=%d, item=%d, session=%d",
 		 __func__,
 		 ts_lphb_enable->enable,
 		 ts_lphb_enable->item, ts_lphb_enable->session);
@@ -651,14 +651,14 @@ static QDF_STATUS wma_lphb_conf_tcp_params(tp_wma_handle wma_handle,
 	}
 
 	ts_lphb_tcp_param = &(lphb_conf_req->params.lphbTcpParamReq);
-	WMA_LOGI("%s: WMA --> WMI_HB_SET_TCP_PARAMS srv_ip=%08x, "
-		"dev_ip=%08x, src_port=%d, dst_port=%d, timeout=%d, "
-		"session=%d, gateway_mac="MAC_ADDRESS_STR", timePeriodSec=%d, "
-		"tcpSn=%d", __func__, ts_lphb_tcp_param->srv_ip,
-		ts_lphb_tcp_param->dev_ip, ts_lphb_tcp_param->src_port,
+	WMA_LOGD("%s: WMA --> WMI_HB_SET_TCP_PARAMS srv_ip=%08x, dev_ip=%08x",
+		__func__, ts_lphb_tcp_param->srv_ip, ts_lphb_tcp_param->dev_ip);
+	WMA_LOGD("%s: src_port=%d, dst_port=%d, timeout=%d, session=%d",
+		__func__, ts_lphb_tcp_param->src_port,
 		ts_lphb_tcp_param->dst_port, ts_lphb_tcp_param->timeout,
-		ts_lphb_tcp_param->session,
-		MAC_ADDR_ARRAY(ts_lphb_tcp_param->gateway_mac.bytes),
+		ts_lphb_tcp_param->session);
+	WMA_LOGD("%s: gateway_mac="MAC_ADDRESS_STR" timePeriodSec=%d, tcpSn=%d",
+		__func__, MAC_ADDR_ARRAY(ts_lphb_tcp_param->gateway_mac.bytes),
 		ts_lphb_tcp_param->timePeriodSec, ts_lphb_tcp_param->tcpSn);
 
 	/* fill in values */
@@ -707,13 +707,12 @@ static QDF_STATUS wma_lphb_conf_tcp_pkt_filter(tp_wma_handle wma_handle,
 	}
 
 	ts_lphb_tcp_filter = &(lphb_conf_req->params.lphbTcpFilterReq);
-	WMA_LOGI("%s: WMA --> WMI_HB_SET_TCP_PKT_FILTER length=%d, offset=%d, session=%d, "
-		"filter=%2x:%2x:%2x:%2x:%2x:%2x ...", __func__,
-		ts_lphb_tcp_filter->length, ts_lphb_tcp_filter->offset,
-		ts_lphb_tcp_filter->session, ts_lphb_tcp_filter->filter[0],
-		ts_lphb_tcp_filter->filter[1], ts_lphb_tcp_filter->filter[2],
-		ts_lphb_tcp_filter->filter[3], ts_lphb_tcp_filter->filter[4],
-		ts_lphb_tcp_filter->filter[5]);
+	WMA_LOGD("%s: WMA --> WMI_HB_SET_TCP_PKT_FILTER length=%d, offset=%d, session=%d, filter=%2x:%2x:%2x:%2x:%2x:%2x ...",
+		__func__, ts_lphb_tcp_filter->length,
+		ts_lphb_tcp_filter->offset, ts_lphb_tcp_filter->session,
+		ts_lphb_tcp_filter->filter[0], ts_lphb_tcp_filter->filter[1],
+		ts_lphb_tcp_filter->filter[2], ts_lphb_tcp_filter->filter[3],
+		ts_lphb_tcp_filter->filter[4], ts_lphb_tcp_filter->filter[5]);
 
 	/* fill in values */
 	hb_tcp_filter_fp.vdev_id = ts_lphb_tcp_filter->session;
@@ -758,12 +757,13 @@ static QDF_STATUS wma_lphb_conf_udp_params(tp_wma_handle wma_handle,
 	}
 
 	ts_lphb_udp_param = &(lphb_conf_req->params.lphbUdpParamReq);
-	WMA_LOGI("%s: WMA --> WMI_HB_SET_UDP_PARAMS srv_ip=%d, dev_ip=%d, src_port=%d, "
-		"dst_port=%d, interval=%d, timeout=%d, session=%d, "
-		"gateway_mac="MAC_ADDRESS_STR, __func__,
-		ts_lphb_udp_param->srv_ip, ts_lphb_udp_param->dev_ip,
-		ts_lphb_udp_param->src_port, ts_lphb_udp_param->dst_port,
-		ts_lphb_udp_param->interval, ts_lphb_udp_param->timeout,
+	WMA_LOGD("%s: WMA --> WMI_HB_SET_UDP_PARAMS srv_ip=%d, dev_ip=%d",
+		__func__, ts_lphb_udp_param->srv_ip, ts_lphb_udp_param->dev_ip);
+	WMA_LOGD("%s: src_port=%d, dst_port=%d, interval=%d, timeout=%d",
+		__func__, ts_lphb_udp_param->src_port,
+		ts_lphb_udp_param->dst_port, ts_lphb_udp_param->interval,
+		ts_lphb_udp_param->timeout);
+	WMA_LOGD("%s: session=%d, gateway_mac="MAC_ADDRESS_STR, __func__,
 		ts_lphb_udp_param->session,
 		MAC_ADDR_ARRAY(ts_lphb_udp_param->gateway_mac.bytes));
 
@@ -813,14 +813,12 @@ static QDF_STATUS wma_lphb_conf_udp_pkt_filter(tp_wma_handle wma_handle,
 	}
 
 	ts_lphb_udp_filter = &(lphb_conf_req->params.lphbUdpFilterReq);
-	WMA_LOGI("%s: WMA --> WMI_HB_SET_UDP_PKT_FILTER length=%d, offset=%d, session=%d, "
-		"filter=%2x:%2x:%2x:%2x:%2x:%2x ...", __func__,
-		ts_lphb_udp_filter->length, ts_lphb_udp_filter->offset,
-		ts_lphb_udp_filter->session, ts_lphb_udp_filter->filter[0],
-		ts_lphb_udp_filter->filter[1], ts_lphb_udp_filter->filter[2],
-		ts_lphb_udp_filter->filter[3], ts_lphb_udp_filter->filter[4],
-		ts_lphb_udp_filter->filter[5]);
-
+	WMA_LOGD("%s: WMA --> WMI_HB_SET_UDP_PKT_FILTER length=%d, offset=%d, session=%d, filter=%2x:%2x:%2x:%2x:%2x:%2x ...",
+		__func__, ts_lphb_udp_filter->length,
+		ts_lphb_udp_filter->offset, ts_lphb_udp_filter->session,
+		ts_lphb_udp_filter->filter[0], ts_lphb_udp_filter->filter[1],
+		ts_lphb_udp_filter->filter[2], ts_lphb_udp_filter->filter[3],
+		ts_lphb_udp_filter->filter[4], ts_lphb_udp_filter->filter[5]);
 
 	/* fill in values */
 	hb_udp_filter_fp.vdev_id = ts_lphb_udp_filter->session;

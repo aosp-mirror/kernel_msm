@@ -7993,7 +7993,7 @@ static void csr_roam_print_candidate_aps(tpAniSirGlobal pMac,
 	while (pEntry) {
 		pBssDesc = GET_BASE_ADDR(pEntry,
 				struct tag_csrscan_result, Link);
-		sme_info("BSSID "MAC_ADDRESS_STR" score is %d",
+		sme_debug("BSSID "MAC_ADDRESS_STR" score is %d",
 			MAC_ADDR_ARRAY(pBssDesc->Result.BssDescriptor.bssId),
 			pBssDesc->bss_score);
 
