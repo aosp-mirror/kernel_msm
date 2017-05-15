@@ -424,5 +424,35 @@
 				};
 			};
 		};
+
+		cdc-pdm-lines {
+			cdc_pdm_lines_act: pdm_lines_on {
+				mux {
+					pins = "gpio59", "gpio60", "gpio61",
+						"gpio62", "gpio63", "gpio64";
+					function = "cdc_pdm0";
+				};
+
+				config {
+					pins = "gpio59", "gpio60", "gpio61",
+						"gpio62", "gpio63", "gpio64";
+					drive-strength = <8>;
+				};
+			};
+			cdc_pdm_lines_sus: pdm_lines_off {
+				mux {
+					pins = "gpio59", "gpio60", "gpio61",
+						"gpio62", "gpio63", "gpio64";
+					function = "cdc_pdm0";
+				};
+
+				config {
+					pins = "gpio59", "gpio60", "gpio61",
+						"gpio62", "gpio63", "gpio64";
+					drive-strength = <2>;
+					bias-disable;
+				};
+			};
+		};
 	};
 };
