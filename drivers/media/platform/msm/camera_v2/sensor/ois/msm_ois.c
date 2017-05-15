@@ -17,6 +17,9 @@
 #include "msm_sd.h"
 #include "msm_ois.h"
 #include "msm_cci.h"
+#include <linux/kthread.h>
+#include <linux/ktime.h>
+#include <linux/hrtimer.h>
 
 DEFINE_MSM_MUTEX(msm_ois_mutex);
 /*#define MSM_OIS_DEBUG*/
@@ -25,6 +28,15 @@ DEFINE_MSM_MUTEX(msm_ois_mutex);
 #define CDBG(fmt, args...) pr_err(fmt, ##args)
 #else
 #define CDBG(fmt, args...) pr_debug(fmt, ##args)
+#endif
+
+
+/*#define OIS_READ_DBG*/
+#undef ois_pr_dbg
+#ifdef OIS_READ_DBG
+#define ois_pr_dbg(fmt, args...) pr_err(fmt, ##args)
+#else
+#define ois_pr_dbg(fmt, args...) pr_debug(fmt, ##args)
 #endif
 
 /* Decide read witch address from OIS.
@@ -40,6 +52,179 @@ static int32_t msm_ois_power_up(struct msm_ois_ctrl_t *o_ctrl);
 static int32_t msm_ois_power_down(struct msm_ois_ctrl_t *o_ctrl);
 
 static struct i2c_driver msm_ois_i2c_driver;
+static void msm_ois_read_work(struct work_struct *work);
+
+/*ioctl from userspace.
+*Get ois gyro readout data from ring buffer.
+*/
+static int32_t msm_ois_get_gyro(struct msm_ois_ctrl_t *o_ctrl,
+	struct ois_gyro *gyro)
+{
+	struct msm_ois_readout gyro_data[MAX_GYRO_QUERY_SIZE];
+	uint8_t query_size = gyro->query_size <= MAX_GYRO_QUERY_SIZE ?
+		gyro->query_size : MAX_GYRO_QUERY_SIZE;
+	uint8_t data_get_count = 0;
+	uint16_t counter = 0;
+
+	mutex_lock(&ois_gyro_mutex);
+
+	if (o_ctrl->buf.buffer_tail < MSM_OIS_DATA_BUFFER_SIZE &&
+		o_ctrl->buf.buffer_tail != o_ctrl->buf.buffer_head) {
+		for (counter = 0; counter < query_size; counter++) {
+			gyro_data[counter].ois_x_shift =
+				o_ctrl->buf.buffer[o_ctrl->buf.buffer_head]
+				.ois_x_shift;
+			gyro_data[counter].ois_y_shift =
+				o_ctrl->buf.buffer[o_ctrl->buf.buffer_head]
+				.ois_y_shift;
+			gyro_data[counter].readout_time =
+				o_ctrl->buf.buffer[o_ctrl->buf.buffer_head]
+				.readout_time;
+
+			o_ctrl->buf.buffer_head++;
+			data_get_count++;
+
+			if (o_ctrl->buf.buffer_head >=
+				MSM_OIS_DATA_BUFFER_SIZE)
+				o_ctrl->buf.buffer_head -=
+					MSM_OIS_DATA_BUFFER_SIZE;
+
+			if (o_ctrl->buf.buffer_head ==
+				o_ctrl->buf.buffer_tail) {
+				ois_pr_dbg("[OISDBG]:%s head == tail\n",
+					__func__);
+				break;
+			}
+		}
+	}
+	mutex_unlock(&ois_gyro_mutex);
+	if (data_get_count != 0 && data_get_count <
+		MAX_GYRO_QUERY_SIZE + 1) {
+		if (copy_to_user((void *)gyro->gyro_data, gyro_data,
+			data_get_count * sizeof(struct msm_ois_readout))) {
+			kfree(gyro_data);
+			gyro->query_size = 0;
+			pr_err("[OISDBG] Error copying\n");
+			return -EFAULT;
+		}
+	}
+	ois_pr_dbg("[OISDBG]:data_get_count = %d", data_get_count);
+
+	gyro->query_size = data_get_count;
+	return 0;
+}
+
+/*Enqueue ois gyro readout data via i2c command.*/
+bool msm_ois_data_enqueue(int64_t readout_time,
+						int16_t x_shift,
+						int16_t y_shift,
+					struct msm_ois_readout_buffer *o_buf)
+{
+	bool rc;
+
+	mutex_lock(&ois_gyro_mutex);
+
+	if (o_buf->buffer_tail >= 0 && o_buf->buffer_tail <
+		MSM_OIS_DATA_BUFFER_SIZE) {
+		o_buf->buffer[o_buf->buffer_tail].ois_x_shift = x_shift;
+		o_buf->buffer[o_buf->buffer_tail].ois_y_shift = y_shift;
+		o_buf->buffer[o_buf->buffer_tail].readout_time = readout_time;
+
+		o_buf->buffer_tail++;
+		if (o_buf->buffer_tail >= MSM_OIS_DATA_BUFFER_SIZE)
+			o_buf->buffer_tail -= MSM_OIS_DATA_BUFFER_SIZE;
+
+		rc = true;
+	} else {
+		rc = false;
+	}
+	mutex_unlock(&ois_gyro_mutex);
+	return rc;
+}
+
+/*Get OIS gyro data via i2c.*/
+static void msm_ois_read_work(struct work_struct *work)
+{
+	uint8_t buf[8] = { 0 };
+	int32_t rc = 0;
+	int16_t x_shift, y_shift;
+	struct timespec ts;
+	int64_t readout_time;
+	bool result;
+	struct msm_ois_ctrl_t *ois_ctl;
+
+	/*
+	struct sched_param param = { .sched_priority = 75 };
+	sched_setscheduler(current, SCHED_FIFO, &param);
+	*/
+
+	ois_ctl = container_of(work, struct msm_ois_ctrl_t, g_work);
+	get_monotonic_boottime(&ts);
+	rc = ois_ctl->i2c_client.i2c_func_tbl->i2c_read_seq(
+		&ois_ctl->i2c_client, 0xE001, &buf[0], 6);
+	if (rc != 0)
+		pr_err("[OISDBG] %s : i2c_read_seq fail.\n", __func__);
+	else {
+
+		readout_time = (int64_t)ts.tv_sec * 1000000000LL + ts.tv_nsec;
+
+		x_shift = (int16_t)(((uint16_t)buf[0] << 8) + (uint16_t)buf[1]);
+		y_shift = (int16_t)(((uint16_t)buf[2] << 8) + (uint16_t)buf[3]);
+
+		result = msm_ois_data_enqueue(readout_time, x_shift,
+			y_shift, &ois_ctl->buf);
+		if (!result)
+			pr_err("%s %d ois data enqueue ring buffer failed",
+				__func__, __LINE__);
+	}
+}
+
+static enum hrtimer_restart msm_gyro_timer(struct hrtimer *timer)
+{
+	ktime_t currtime, interval;
+	struct msm_ois_ctrl_t *ois_ctl;
+
+	ois_ctl = container_of(timer, struct msm_ois_ctrl_t, hr_timer);
+	queue_work(ois_ctl->ois_wq, &ois_ctl->g_work);
+	currtime  = ktime_get();
+	interval = ktime_set(0, READ_OUT_TIME);
+	hrtimer_forward(timer, currtime, interval);
+
+	return HRTIMER_RESTART;
+}
+
+/*Create a timer for OIS gyro readout*/
+static int msm_startGyroThread(struct msm_ois_ctrl_t *o_ctrl)
+{
+	ktime_t  ktime;
+
+	pr_info("[OISDBG] %s:E\n", __func__);
+	o_ctrl->i2c_client.cci_client->i2c_freq_mode = I2C_FAST_PLUS_MODE;
+	INIT_WORK(&o_ctrl->g_work, msm_ois_read_work);
+	o_ctrl->ois_wq = create_workqueue("ois_wq");
+	if (!o_ctrl->ois_wq) {
+		pr_err("[OISDBG]:%s ois_wq create failed.\n", __func__);
+		return -EFAULT;
+	}
+	ktime = ktime_set(0, READ_OUT_TIME);
+	hrtimer_init(&o_ctrl->hr_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	o_ctrl->hr_timer.function = &msm_gyro_timer;
+	hrtimer_start(&o_ctrl->hr_timer, ktime, HRTIMER_MODE_REL);
+	pr_info("[OISDBG] %s:X\n", __func__);
+	return 0;
+}
+
+static int msm_stopGyroThread(struct msm_ois_ctrl_t *o_ctrl)
+{
+	pr_info("[OISDBG] %s:E\n", __func__);
+	if (o_ctrl->hr_timer.function != NULL) {
+		pr_info("[OISDBG] %s:timer cancel.\n", __func__);
+		hrtimer_cancel(&o_ctrl->hr_timer);
+		destroy_workqueue(o_ctrl->ois_wq);
+	}
+	pr_info("[OISDBG] %s:X\n", __func__);
+	return 0;
+}
 
 static int32_t msm_ois_download(struct msm_ois_ctrl_t *o_ctrl)
 {
@@ -217,7 +402,7 @@ static int32_t msm_ois_write_settings(struct msm_ois_ctrl_t *o_ctrl,
 			}
 			if (settings[i].delay > 20)
 				msleep(settings[i].delay);
-			else if (0 != settings[i].delay)
+			else if (settings[i].delay != 0)
 				usleep_range(settings[i].delay * 1000,
 					(settings[i].delay * 1000) + 1000);
 		}
@@ -572,6 +757,15 @@ static int32_t msm_ois_config(struct msm_ois_ctrl_t *o_ctrl,
 		}
 	break;
 	}
+	case CFG_OIS_READ_TIMER:
+		rc = msm_startGyroThread(o_ctrl);
+		break;
+	case CFG_OIS_READ_TIMER_STOP:
+		rc = msm_stopGyroThread(o_ctrl);
+		break;
+	case CFG_OIS_GET_GYRO:
+		rc = msm_ois_get_gyro(o_ctrl, &cdata->cfg.gyro);
+		break;
 	default:
 		break;
 	}
@@ -909,6 +1103,18 @@ static long msm_ois_subdev_do_ioctl(
 		case CFG_OIS_I2C_READ_SEQ_TABLE:
 			/* Do nothing */
 			break;
+		case CFG_OIS_READ_TIMER:
+			/* Do nothing */
+			break;
+		case CFG_OIS_READ_TIMER_STOP:
+			/* Do nothing */
+			break;
+		case CFG_OIS_GET_GYRO:
+			ois_data.cfg.gyro.query_size = u32->cfg.gyro.query_size;
+			ois_data.cfg.gyro.gyro_data =
+				compat_ptr(u32->cfg.gyro.gyro_data);
+			parg = &ois_data;
+			break;
 		default:
 			parg = &ois_data;
 			break;
@@ -916,6 +1122,17 @@ static long msm_ois_subdev_do_ioctl(
 	}
 	rc = msm_ois_subdev_ioctl(sd, cmd, parg);
 
+	switch (cmd) {
+	case VIDIOC_MSM_OIS_CFG:
+		switch (u32->cfgtype) {
+		case CFG_OIS_GET_GYRO:
+			u32->cfg.gyro.query_size =
+				ois_data.cfg.gyro.query_size;
+			break;
+		default:
+			break;
+		}
+	}
 	return rc;
 }
 

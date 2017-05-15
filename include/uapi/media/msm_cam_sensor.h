@@ -376,6 +376,9 @@ enum msm_ois_cfg_type_t {
 	CFG_OIS_CONTROL,
 	CFG_OIS_I2C_WRITE_SEQ_TABLE,
 	CFG_OIS_I2C_READ_SEQ_TABLE,
+	CFG_OIS_READ_TIMER,
+	CFG_OIS_READ_TIMER_STOP,
+	CFG_OIS_GET_GYRO,
 };
 
 enum msm_ois_cfg_download_type_t {
@@ -498,12 +501,23 @@ struct ois_position {
 	uint8_t data7;
 };
 
+struct msm_ois_readout {
+	int16_t ois_x_shift;
+	int16_t ois_y_shift;
+	int64_t readout_time;
+};
+struct ois_gyro {
+	uint8_t query_size;
+	struct msm_ois_readout *gyro_data;
+};
+
 struct msm_ois_cfg_data {
 	int cfgtype;
 	struct ois_position pos;
 	union {
 		struct msm_ois_set_info_t set_info;
 		struct msm_camera_i2c_seq_reg_setting *settings;
+		struct ois_gyro gyro;
 	} cfg;
 };
 

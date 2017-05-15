@@ -231,12 +231,24 @@ struct ois_position_32 {
 	uint8_t data7;
 };
 
+struct msm_ois_readout32 {
+	int16_t ois_x_shift;
+	int16_t ois_y_shift;
+	int64_t readout_time;
+};
+
+struct ois_gyro32 {
+	uint8_t query_size;
+	compat_uptr_t gyro_data;
+};
+
 struct msm_ois_cfg_data32 {
 	int cfgtype;
 	struct ois_position_32 pos;
 	union {
 		struct msm_ois_set_info_t32 set_info;
 		compat_uptr_t settings;
+		struct ois_gyro32 gyro;
 	} cfg;
 };
 
