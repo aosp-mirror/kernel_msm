@@ -15,6 +15,7 @@
 	taimen_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <15>;
 		#include "lge_blt35_tocad_3620mah.dtsi"
+		#include "lge_blt35_lgc_3620mah.dtsi"
 	};
 };
 

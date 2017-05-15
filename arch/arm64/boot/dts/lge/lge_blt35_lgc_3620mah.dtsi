@@ -10,54 +10,54 @@
  * GNU General Public License for more details.
  */
 
-qcom,lge_blt35_tocad_3620mah {
-	/* #2883111_LGE_BLT35tocad_3620mAh_averaged_MasterSlave_Apr18th2017*/
+qcom,lge_blt35_lgc_3620mah {
+	/* #2917292_LGE_BLT35lgc_3620mAh_averaged_MasterSlave_May12th2017*/
 	qcom,max-voltage-uv = <4400000>;
 	qcom,fastchg-current-ma = <3550>;
 	qcom,fg-cc-cv-threshold-mv = <4390>;
-	qcom,batt-id-kohm = <56>;
+	qcom,batt-id-kohm = <20>;
 	qcom,battery-beta = <4150>;
-	qcom,battery-type = "lge_blt35_tocad_3620mah";
-	qcom,checksum = <0x54F2>;
+	qcom,battery-type = "lge_blt35_lgc_3620mah";
+	qcom,checksum = <0x4719>;
 	qcom,gui-version = "PMI8998GUI - 2.0.0.57";
 	qcom,fg-profile-data = [
-		 53 1F C6 05
-		 74 0A 42 06
-		 4B 1D E1 DD
-		 0C 0B 3B 15
-		 6B 18 16 23
-		 66 45 03 53
-		 56 00 00 00
-		 0E 00 00 00
-		 00 00 4E C3
-		 DF D5 7C AB
-		 23 00 08 00
-		 C9 E2 BA ED
-		 9D 05 5D 01
-		 DD 0C 35 0B
-		 79 CB 91 32
-		 26 06 09 20
+		 9B 1E EF FD
+		 46 02 D3 DC
+		 A6 1D C1 FC
+		 AD 13 BD 1C
+		 A4 18 B9 22
+		 EF 45 1F 52
+		 4D 00 00 00
+		 12 00 00 00
+		 00 00 FC 07
+		 99 C4 58 CA
+		 21 00 08 00
+		 D8 DB 9B ED
+		 94 06 31 EB
+		 B7 E2 B8 0A
+		 7E 02 DB 42
+		 18 06 09 20
 		 27 00 14 00
-		 40 1D 64 DB
-		 63 FB 91 ED
-		 F7 1C 4F 02
-		 96 0D 21 0A
-		 71 19 83 22
-		 F4 45 3D 52
-		 77 00 00 00
+		 43 1F 67 06
+		 10 03 21 EC
+		 4B 1D BF 00
+		 13 03 E7 15
+		 09 19 08 23
+		 49 45 48 53
+		 54 00 00 00
 		 0D 00 00 00
-		 00 00 97 D5
-		 10 CB AA AA
-		 19 00 00 00
-		 2A EB BA ED
-		 87 06 6F F2
-		 1A F4 EF 02
-		 A7 FD F7 1A
-		 9E 33 CC FF
+		 00 00 EB CC
+		 25 D2 8A D5
+		 1D 00 00 00
+		 D6 EB 9B ED
+		 69 FD A2 EA
+		 4B EB 4C 0A
+		 94 D4 68 1A
+		 99 33 CC FF
 		 07 10 00 00
-		 73 0E 66 46
-		 19 00 40 00
-		 10 02 0A FA
+		 B1 0E 66 46
+		 1D 00 40 00
+		 59 01 0A FA
 		 FF 00 00 00
 		 00 00 00 00
 		 00 00 00 00
