@@ -4880,6 +4880,8 @@ error_handling:
 		sme_debug("PNO Scan completion called");
 		csr_save_scan_results(pMac, eCsrScanCandidateFound,
 				      pScanRsp->sessionId);
+		if (pMac->scan.scanResultCfgAgingTime)
+			csr_purge_scan_result_by_age(pMac);
 		return QDF_STATUS_SUCCESS;
 	}
 
