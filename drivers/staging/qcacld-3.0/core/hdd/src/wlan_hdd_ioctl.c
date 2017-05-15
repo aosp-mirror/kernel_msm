@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -26,9 +26,6 @@
  */
 
 /* Include Files */
-
-/* denote that this file does not allow legacy hddLog */
-#define HDD_DISALLOW_LEGACY_HDDLOG 1
 
 #include <wlan_hdd_includes.h>
 #include <wlan_hdd_wowl.h>
@@ -841,9 +838,12 @@ static int hdd_parse_reassoc_command_v1_data(const uint8_t *pValue,
 }
 
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD
-void hdd_wma_send_fastreassoc_cmd(int sessionId, const tSirMacAddr bssid,
-				  int channel)
+void hdd_wma_send_fastreassoc_cmd(hdd_adapter_t *adapter,
+				const tSirMacAddr bssid, int channel)
 {
+	QDF_STATUS status;
+	hdd_wext_state_t *wext_state = WLAN_HDD_GET_WEXT_STATE_PTR(adapter);
+	tCsrRoamProfile *profile = &wext_state->roamProfile;
 	struct wma_roam_invoke_cmd *fastreassoc;
 	cds_msg_t msg = {0};
 
@@ -852,7 +852,7 @@ void hdd_wma_send_fastreassoc_cmd(int sessionId, const tSirMacAddr bssid,
 		hdd_err("qdf_mem_malloc failed for fastreassoc");
 		return;
 	}
-	fastreassoc->vdev_id = sessionId;
+	fastreassoc->vdev_id = adapter->sessionId;
 	fastreassoc->channel = channel;
 	fastreassoc->bssid[0] = bssid[0];
 	fastreassoc->bssid[1] = bssid[1];
@@ -861,13 +861,23 @@ void hdd_wma_send_fastreassoc_cmd(int sessionId, const tSirMacAddr bssid,
 	fastreassoc->bssid[4] = bssid[4];
 	fastreassoc->bssid[5] = bssid[5];
 
+	status = sme_get_beacon_frm(WLAN_HDD_GET_HAL_CTX(adapter), profile,
+						bssid, &fastreassoc->frame_buf,
+						&fastreassoc->frame_len);
+
+	if (QDF_STATUS_SUCCESS != status) {
+		hdd_err("sme_get_beacon_frm failed");
+		fastreassoc->frame_buf = NULL;
+		fastreassoc->frame_len = 0;
+	}
+
 	msg.type = SIR_HAL_ROAM_INVOKE;
 	msg.reserved = 0;
 	msg.bodyptr = fastreassoc;
-	if (QDF_STATUS_SUCCESS != cds_mq_post_message(QDF_MODULE_ID_WMA,
-								&msg)) {
-		qdf_mem_free(fastreassoc);
+	status = cds_mq_post_message(QDF_MODULE_ID_WMA, &msg);
+	if (QDF_STATUS_SUCCESS != status) {
 		hdd_err("Not able to post ROAM_INVOKE_CMD message to WMA");
+		qdf_mem_free(fastreassoc);
 	}
 }
 #endif
@@ -931,7 +941,7 @@ int hdd_reassoc(hdd_adapter_t *adapter, const uint8_t *bssid,
 
 	/* Proceed with reassoc */
 	if (roaming_offload_enabled(hdd_ctx)) {
-		hdd_wma_send_fastreassoc_cmd((int)adapter->sessionId,
+		hdd_wma_send_fastreassoc_cmd(adapter,
 					bssid, (int)channel);
 	} else {
 		tCsrHandoffRequest handoffInfo;
@@ -3284,6 +3294,11 @@ static int drv_cmd_set_roam_mode(hdd_adapter_t *adapter,
 	uint8_t *value = command;
 	uint8_t roamMode = CFG_LFR_FEATURE_ENABLED_DEFAULT;
 
+	if (!adapter->fast_roaming_allowed) {
+		hdd_err("Roaming is always disabled on this interface");
+		goto exit;
+	}
+
 	/* Move pointer to ahead of SETROAMMODE<delimiter> */
 	value = value + SIZE_OF_SETROAMMODE + 1;
 
@@ -3552,15 +3567,17 @@ static int drv_cmd_get_ccx_mode(hdd_adapter_t *adapter,
 	bool eseMode = sme_get_is_ese_feature_enabled(hdd_ctx->hHal);
 	char extra[32];
 	uint8_t len = 0;
+	struct pmkid_mode_bits pmkid_modes;
 
+	hdd_get_pmkid_modes(hdd_ctx, &pmkid_modes);
 	/*
-	 * Check if the features OKC/ESE/11R are supported simultaneously,
+	 * Check if the features PMKID/ESE/11R are supported simultaneously,
 	 * then this operation is not permitted (return FAILURE)
 	 */
 	if (eseMode &&
-	    hdd_is_okc_mode_enabled(hdd_ctx) &&
+	    (pmkid_modes.fw_okc || pmkid_modes.fw_pmksa_cache) &&
 	    sme_get_is_ft_feature_enabled(hdd_ctx->hHal)) {
-		hdd_warn("OKC/ESE/11R are supported simultaneously hence this operation is not permitted!");
+		hdd_warn("PMKID/ESE/11R are supported simultaneously hence this operation is not permitted!");
 		ret = -EPERM;
 		goto exit;
 	}
@@ -3585,24 +3602,25 @@ static int drv_cmd_get_okc_mode(hdd_adapter_t *adapter,
 				hdd_priv_data_t *priv_data)
 {
 	int ret = 0;
-	bool okcMode = hdd_is_okc_mode_enabled(hdd_ctx);
+	struct pmkid_mode_bits pmkid_modes;
 	char extra[32];
 	uint8_t len = 0;
 
+	hdd_get_pmkid_modes(hdd_ctx, &pmkid_modes);
 	/*
 	 * Check if the features OKC/ESE/11R are supported simultaneously,
 	 * then this operation is not permitted (return FAILURE)
 	 */
-	if (okcMode &&
+	if (pmkid_modes.fw_okc &&
 	    sme_get_is_ese_feature_enabled(hdd_ctx->hHal) &&
 	    sme_get_is_ft_feature_enabled(hdd_ctx->hHal)) {
-		hdd_warn("OKC/ESE/11R are supported simultaneously hence this operation is not permitted!");
+		hdd_warn("PMKID/ESE/11R are supported simultaneously hence this operation is not permitted!");
 		ret = -EPERM;
 		goto exit;
 	}
 
 	len = scnprintf(extra, sizeof(extra), "%s %d",
-			"GETOKCMODE", okcMode);
+			"GETOKCMODE", pmkid_modes.fw_okc);
 	len = QDF_MIN(priv_data->total_len, len + 1);
 
 	if (copy_to_user(priv_data->buf, &extra, len)) {
@@ -4318,6 +4336,11 @@ static int drv_cmd_set_fast_roam(hdd_adapter_t *adapter,
 	uint8_t *value = command;
 	uint8_t lfrMode = CFG_LFR_FEATURE_ENABLED_DEFAULT;
 
+	if (!adapter->fast_roaming_allowed) {
+		hdd_err("Roaming is always disabled on this interface");
+		goto exit;
+	}
+
 	/* Move pointer to ahead of SETFASTROAM<delimiter> */
 	value = value + command_len + 1;
 
@@ -4451,7 +4474,7 @@ static int drv_cmd_fast_reassoc(hdd_adapter_t *adapter,
 				    QDF_MAC_ADDR_SIZE)) {
 		hdd_info("Reassoc BSSID is same as currently associated AP bssid");
 		if (roaming_offload_enabled(hdd_ctx)) {
-			hdd_wma_send_fastreassoc_cmd((int)adapter->sessionId,
+			hdd_wma_send_fastreassoc_cmd(adapter,
 				targetApBssid,
 				pHddStaCtx->conn_info.operationChannel);
 		} else {
@@ -4472,7 +4495,7 @@ static int drv_cmd_fast_reassoc(hdd_adapter_t *adapter,
 	}
 
 	if (roaming_offload_enabled(hdd_ctx)) {
-		hdd_wma_send_fastreassoc_cmd((int)adapter->sessionId,
+		hdd_wma_send_fastreassoc_cmd(adapter,
 					targetApBssid, (int)channel);
 		goto exit;
 	}
@@ -4536,16 +4559,19 @@ static int drv_cmd_set_okc_mode(hdd_adapter_t *adapter,
 {
 	int ret = 0;
 	uint8_t *value = command;
-	uint8_t okcMode = CFG_OKC_FEATURE_ENABLED_DEFAULT;
+	uint32_t okc_mode;
+	struct pmkid_mode_bits pmkid_modes;
+
+	hdd_get_pmkid_modes(hdd_ctx, &pmkid_modes);
 
 	/*
-	 * Check if the features OKC/ESE/11R are supported simultaneously,
+	 * Check if the features PMKID/ESE/11R are supported simultaneously,
 	 * then this operation is not permitted (return FAILURE)
 	 */
 	if (sme_get_is_ese_feature_enabled(hdd_ctx->hHal) &&
-	    hdd_is_okc_mode_enabled(hdd_ctx) &&
+	    pmkid_modes.fw_okc &&
 	    sme_get_is_ft_feature_enabled(hdd_ctx->hHal)) {
-		hdd_warn("OKC/ESE/11R are supported simultaneously hence this operation is not permitted!");
+		hdd_warn("PMKID/ESE/11R are supported simultaneously hence this operation is not permitted!");
 		ret = -EPERM;
 		goto exit;
 	}
@@ -4553,33 +4579,35 @@ static int drv_cmd_set_okc_mode(hdd_adapter_t *adapter,
 	/* Move pointer to ahead of SETOKCMODE<delimiter> */
 	value = value + command_len + 1;
 
+	/* get the current configured value */
+	okc_mode = (hdd_ctx->config->pmkid_modes & CFG_PMKID_MODES_OKC) ? 1 : 0;
+
 	/* Convert the value from ascii to integer */
-	ret = kstrtou8(value, 10, &okcMode);
+	ret = kstrtou32(value, 10, &okc_mode);
 	if (ret < 0) {
 		/*
 		 * If the input value is greater than max value of datatype,
 		 * then also kstrtou8 fails
 		 */
-		hdd_err("kstrtou8 failed range [%d - %d]",
-			  CFG_OKC_FEATURE_ENABLED_MIN,
-			  CFG_OKC_FEATURE_ENABLED_MAX);
+		hdd_err("value out of range [0 - 1]");
 		ret = -EINVAL;
 		goto exit;
 	}
 
-	if ((okcMode < CFG_OKC_FEATURE_ENABLED_MIN) ||
-	    (okcMode > CFG_OKC_FEATURE_ENABLED_MAX)) {
-		hdd_err("Okc mode value %d is out of range (Min: %d Max: %d)",
-			  okcMode,
-			  CFG_OKC_FEATURE_ENABLED_MIN,
-			  CFG_OKC_FEATURE_ENABLED_MAX);
+	if ((okc_mode < 0) ||
+	    (okc_mode > 1)) {
+		hdd_err("Okc mode value %d is out of range (Min: 0 Max: 1)",
+			  okc_mode);
 		ret = -EINVAL;
 		goto exit;
 	}
 	hdd_info("Received Command to change okc mode = %d",
-		  okcMode);
+		  okc_mode);
 
-	hdd_ctx->config->isOkcIniFeatureEnabled = okcMode;
+	if (okc_mode)
+		hdd_ctx->config->pmkid_modes |= CFG_PMKID_MODES_OKC;
+	else
+		hdd_ctx->config->pmkid_modes &= ~CFG_PMKID_MODES_OKC;
 
 exit:
 	return ret;
@@ -5048,11 +5076,11 @@ static int drv_cmd_get_ibss_peer_info_all(hdd_adapter_t *adapter,
 		 * exceeds the size of 1024 bytes of default stack size. On
 		 * 64 bit devices, the default max stack size of 2048 bytes
 		 */
-		extra = kmalloc(WLAN_MAX_BUF_SIZE, GFP_KERNEL);
+		extra = qdf_mem_malloc(WLAN_MAX_BUF_SIZE);
 
 		if (NULL == extra) {
-			hdd_err("kmalloc failed");
-			ret = -EINVAL;
+			hdd_err("memory allocation failed");
+			ret = -ENOMEM;
 			goto exit;
 		}
 
@@ -5123,7 +5151,7 @@ static int drv_cmd_get_ibss_peer_info_all(hdd_adapter_t *adapter,
 		}
 
 		/* Free temporary buffer */
-		kfree(extra);
+		qdf_mem_free(extra);
 	} else {
 		/* Command failed, log error */
 		hdd_err("GETIBSSPEERINFOALL command failed with status code %d",
@@ -5634,15 +5662,23 @@ static int drv_cmd_set_ccx_mode(hdd_adapter_t *adapter,
 	int ret = 0;
 	uint8_t *value = command;
 	uint8_t eseMode = CFG_ESE_FEATURE_ENABLED_DEFAULT;
+	struct pmkid_mode_bits pmkid_modes;
 
+	hdd_get_pmkid_modes(hdd_ctx, &pmkid_modes);
 	/*
 	 * Check if the features OKC/ESE/11R are supported simultaneously,
 	 * then this operation is not permitted (return FAILURE)
 	 */
 	if (sme_get_is_ese_feature_enabled(hdd_ctx->hHal) &&
-	    hdd_is_okc_mode_enabled(hdd_ctx) &&
+	    pmkid_modes.fw_okc &&
 	    sme_get_is_ft_feature_enabled(hdd_ctx->hHal)) {
 		hdd_warn("OKC/ESE/11R are supported simultaneously hence this operation is not permitted!");
+		ret = -EPERM;
+		goto exit;
+	}
+
+	if (!adapter->fast_roaming_allowed) {
+		hdd_warn("Fast roaming is not allowed on this device hence this operation is not permitted!");
 		ret = -EPERM;
 		goto exit;
 	}
@@ -6165,6 +6201,11 @@ static int hdd_set_rx_filter(hdd_adapter_t *adapter, bool action,
 		return -EINVAL;
 	}
 
+	if (!hdd_ctx->config->fEnableMCAddrList) {
+		hdd_notice("mc addr ini is disabled");
+		return -EINVAL;
+	}
+
 	/*
 	 * If action is false it means start dropping packets
 	 * Set addr_filter_pattern which will be used when sending
@@ -6200,6 +6241,8 @@ static int hdd_set_rx_filter(hdd_adapter_t *adapter, bool action,
 				    MAC_ADDR_ARRAY(filter->multicastAddr[j].bytes));
 				j++;
 			}
+			if (j == SIR_MAX_NUM_MULTICAST_ADDRESS)
+				break;
 		}
 		filter->ulMulticastAddrCnt = j;
 		/* Set rx filter */
@@ -6901,6 +6944,7 @@ static const hdd_drv_cmd_t hdd_drv_cmds[] = {
 	{"CHANNEL_SWITCH",            drv_cmd_set_channel_switch},
 	{"SETANTENNAMODE",            drv_cmd_set_antenna_mode},
 	{"GETANTENNAMODE",            drv_cmd_get_antenna_mode},
+	{"STOP",                      drv_cmd_dummy},
 };
 
 /**
@@ -6967,11 +7011,21 @@ static int hdd_driver_command(hdd_adapter_t *adapter,
 {
 	uint8_t *command = NULL;
 	int ret = 0;
+	hdd_context_t *hdd_ctx = WLAN_HDD_GET_CTX(adapter);
 
 	ENTER();
 
 	if (QDF_GLOBAL_FTM_MODE == hdd_get_conparam()) {
 		hdd_err("Command not allowed in FTM mode");
+		return -EINVAL;
+	}
+
+	ret = wlan_hdd_validate_context(hdd_ctx);
+	if (ret)
+		return ret;
+
+	if (hdd_ctx->driver_status == DRIVER_MODULES_CLOSED) {
+		hdd_err("Driver module is closed; command can not be processed");
 		return -EINVAL;
 	}
 
@@ -6989,7 +7043,7 @@ static int hdd_driver_command(hdd_adapter_t *adapter,
 	}
 
 	/* Allocate +1 for '\0' */
-	command = kmalloc(priv_data->total_len + 1, GFP_KERNEL);
+	command = qdf_mem_malloc(priv_data->total_len + 1);
 	if (!command) {
 		hdd_err("failed to allocate memory");
 		ret = -ENOMEM;
@@ -7009,7 +7063,7 @@ static int hdd_driver_command(hdd_adapter_t *adapter,
 
 exit:
 	if (command)
-		kfree(command);
+		qdf_mem_free(command);
 	EXIT();
 	return ret;
 }
@@ -7125,7 +7179,7 @@ static int __hdd_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 			ret = hdd_driver_ioctl(adapter, ifr);
 		break;
 	default:
-		hdd_err("unknown ioctl %d", cmd);
+		hdd_warn("unknown ioctl %d", cmd);
 		ret = -EINVAL;
 		break;
 	}

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -186,6 +186,16 @@ int wma_roam_synch_event_handler(void *handle, uint8_t *event,
 					uint32_t len);
 #endif
 
+/**
+ * wma_update_per_roam_config() -per roam config parameter updation to FW
+ * @handle: wma handle
+ * @req_buf: per roam config parameters
+ *
+ * Return: none
+ */
+void wma_update_per_roam_config(WMA_HANDLE handle,
+				 struct wmi_per_roam_config_req *req_buf);
+
 QDF_STATUS wma_get_buf_start_scan_cmd(tp_wma_handle wma_handle,
 				      tSirScanOffloadReq *scan_req,
 				      struct scan_start_params *cmd);
@@ -337,10 +347,6 @@ int wma_passpoint_match_event_handler(void *handle,
 				     uint8_t  *cmd_param_info,
 				     uint32_t len);
 
-int
-wma_extscan_hotlist_ssid_match_event_handler(void *handle,
-					     uint8_t *cmd_param_info,
-					     uint32_t len);
 #endif
 
 void wma_register_extscan_event_handler(tp_wma_handle wma_handle);
@@ -396,9 +402,6 @@ QDF_STATUS wma_set_passpoint_network_list(tp_wma_handle wma,
 
 QDF_STATUS wma_reset_passpoint_network_list(tp_wma_handle wma,
 					struct wifi_passpoint_req *req);
-QDF_STATUS
-wma_set_ssid_hotlist(tp_wma_handle wma,
-		     struct sir_set_ssid_hotlist_request *request);
 #endif
 
 QDF_STATUS  wma_ipa_offload_enable_disable(tp_wma_handle wma,
@@ -860,7 +863,15 @@ void wma_post_link_status(tAniGetLinkStatus *pGetLinkStatus,
 
 int wma_link_status_event_handler(void *handle, uint8_t *cmd_param_info,
 				  uint32_t len);
-
+/**
+ * wma_rso_cmd_status_event_handler() - RSO Command status event handler
+ * @wmi_event: WMI event
+ *
+ * This function is used to send RSO command status to upper layer
+ *
+ * Return: 0 for success
+ */
+int wma_rso_cmd_status_event_handler(wmi_roam_event_fixed_param *wmi_event);
 int wma_stats_event_handler(void *handle, uint8_t *cmd_param_info,
 			    uint32_t len);
 
@@ -1035,6 +1046,18 @@ QDF_STATUS wma_enable_arp_ns_offload(tp_wma_handle wma,
 				     tpSirHostOffloadReq pHostOffloadParams,
 				     bool bArpOnly);
 
+/**
+ * wma_configure_non_arp_broadcast_filter() - API to Enable/Disable Broadcast
+ * filter
+ * when target goes to wow suspend/resume mode
+ * @wma: wma handle
+ * @bcastFilter: broadcast filter request
+ *
+ * Return: QDF Status
+ */
+QDF_STATUS wma_configure_non_arp_broadcast_filter(tp_wma_handle wma,
+				struct broadcast_filter_request *bcast_filter);
+
 QDF_STATUS wma_process_cesium_enable_ind(tp_wma_handle wma);
 
 QDF_STATUS wma_process_get_peer_info_req
@@ -1170,6 +1193,7 @@ struct dfs_ieee80211_channel *wma_dfs_configure_channel(
 						uint32_t band_center_freq2,
 						struct wma_vdev_start_req
 						*req);
+void wma_set_vdev_mgmt_rate(tp_wma_handle wma, uint8_t vdev_id);
 void wma_set_sap_keepalive(tp_wma_handle wma, uint8_t vdev_id);
 
 int wma_rssi_breached_event_handler(void *handle,
@@ -1233,4 +1257,97 @@ void wma_lost_link_info_handler(tp_wma_handle wma, uint32_t vdev_id,
 				int32_t rssi);
 int wma_unified_power_debug_stats_event_handler(void *handle,
 			uint8_t *cmd_param_info, uint32_t len);
+
+/**
+ * wma_get_rcpi_req() - get rcpi request
+ * @handle: wma handle
+ * @rcpi_request: rcpi params
+ *
+ * Return: none
+ */
+QDF_STATUS wma_get_rcpi_req(WMA_HANDLE handle,
+			    struct sme_rcpi_req *rcpi_request);
+
+/**
+ * wma_rcpi_event_handler() - rcpi event handler
+ * @handle: wma handle
+ * @cmd_param_info: data from event
+ * @len: length
+ *
+ * Return: 0 for success or error code
+ */
+int wma_rcpi_event_handler(void *handle, uint8_t *cmd_param_info,
+			   uint32_t len);
+
+#ifdef FEATURE_WLAN_DIAG_SUPPORT
+/**
+ * wma_sta_kickout_event()- send sta kickout event
+ * @kickout_reason - reasoncode for kickout
+ * @macaddr[IEEE80211_ADDR_LEN]: Peer mac address
+ * @vdev_id: Unique id for identifying the VDEV
+ *
+ * This function sends sta kickout diag event
+ *
+ * Return: void.
+ */
+void wma_sta_kickout_event(uint32_t kickout_reason, uint8_t vdev_id,
+							uint8_t *macaddr);
+#else
+static inline void wma_sta_kickout_event(uint32_t kickout_reason,
+					uint8_t vdev_id, uint8_t *macaddr)
+{
+
+};
+#endif /* FEATURE_WLAN_DIAG_SUPPORT */
+
+/**
+ * wma_acquire_wmi_resp_wakelock() - acquire the WMI response wakelock
+ * @wma: the WMA handle containing the wakelock to acquire
+ * @msec: the wakelock duration in milliseconds
+ *
+ * Return: void
+ */
+void wma_acquire_wmi_resp_wakelock(t_wma_handle *wma, uint32_t msec);
+
+/**
+ * wma_release_wmi_resp_wakelock() - release the WMI response wakelock
+ * @wma: the WMA handle containing the wakelock to release
+ *
+ * Return: void
+ */
+void wma_release_wmi_resp_wakelock(t_wma_handle *wma);
+
+/**
+ * wma_send_vdev_start_to_fw() - send the vdev start command to firmware
+ * @wma: the WMA handle containing a reference to the wmi_handle to use
+ * @params: the VDEV_START params to send to firmware
+ *
+ * This is a helper function that acquires the WMI response wakelock before
+ * sending down the VDEV_START command to firmware. This wakelock is
+ * automatically released on failure. Consumers should call
+ * wma_release_wmi_resp_wakelock() upon receipt of the VDEV_START response from
+ * firmware, to avoid power penalties.
+ *
+ * Return: QDF_STATUS
+ */
+QDF_STATUS
+wma_send_vdev_start_to_fw(t_wma_handle *wma, struct vdev_start_params *params);
+
+/**
+ * wma_send_vdev_stop_to_fw() - send the vdev stop command to firmware
+ * @wma: the WMA handle containing a reference to the wmi_handle to use
+ * @vdev_id: the VDEV Id of the VDEV to stop
+ *
+ * This is a helper function that acquires the WMI response wakelock before
+ * sending down the VDEV_STOP command to firmware. This wakelock is
+ * automatically released on failure. Consumers should call
+ * wma_release_wmi_resp_wakelock() upon receipt of the VDEV_STOP response from
+ * firmware, to avoid power penalties.
+ *
+ * Return: QDF_STATUS
+ */
+QDF_STATUS wma_send_vdev_stop_to_fw(t_wma_handle *wma, uint8_t vdev_id);
+
+int wma_get_arp_stats_handler(void *handle, uint8_t *data,
+			      uint32_t data_len);
 #endif

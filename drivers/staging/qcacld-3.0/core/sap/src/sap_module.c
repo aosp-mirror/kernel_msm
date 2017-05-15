@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -297,9 +297,11 @@ void *wlansap_open(void *p_cds_gctx)
  *        control block can be extracted from its context
  *        When MBSSID feature is enabled, SAP context is directly
  *        passed to SAP APIs
+ * @pSapEventCallback: Callback function to register
  * @mode: Device mode
  * @addr: MAC address of the SAP
  * @session_id: Pointer to the session id
+ * @pUsrContext: user context to be used in callback @pSapEventCallback
  *
  * Called as part of the overall start procedure (cds_enable). SAP will
  * use this call to register with TL as the SAP entity for SAP RSN frames.
@@ -309,8 +311,9 @@ void *wlansap_open(void *p_cds_gctx)
  *                             access would cause a page fault.
  *         QDF_STATUS_SUCCESS: Success
  */
-QDF_STATUS wlansap_start(void *pCtx, enum tQDF_ADAPTER_MODE mode,
-			 uint8_t *addr, uint32_t *session_id)
+QDF_STATUS wlansap_start(void *pCtx, tpWLAN_SAPEventCB pSapEventCallback,
+			 enum tQDF_ADAPTER_MODE mode, uint8_t *addr,
+			 uint32_t *session_id, void *pUsrContext)
 {
 	ptSapContext pSapCtx = NULL;
 	QDF_STATUS qdf_ret_status;
@@ -356,6 +359,9 @@ QDF_STATUS wlansap_start(void *pCtx, enum tQDF_ADAPTER_MODE mode,
 
 	/* Now configure the auth type in the roaming profile. To open. */
 	pSapCtx->csr_roamProfile.negotiatedAuthType = eCSR_AUTH_TYPE_OPEN_SYSTEM;        /* open is the default */
+
+	pSapCtx->pfnSapEventCallback = pSapEventCallback;
+	pSapCtx->pUsrContext = pUsrContext;
 
 	if (!QDF_IS_STATUS_SUCCESS(qdf_mutex_create(&pSapCtx->SapGlobalLock))) {
 		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_ERROR,
@@ -507,7 +513,8 @@ QDF_STATUS wlansap_clean_cb(ptSapContext pSapCtx, uint32_t freeFlag      /* 0 / 
 	if (eSAP_TRUE == pSapCtx->isSapSessionOpen && hal) {
 		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO,
 				"close existing SAP session");
-		sap_close_session(hal, pSapCtx, NULL, false);
+		sap_close_session(hal, pSapCtx, sap_roam_session_close_callback,
+					pSapCtx);
 	}
 
 	qdf_mem_zero(pSapCtx, sizeof(tSapContext));
@@ -1192,23 +1199,19 @@ QDF_STATUS wlansap_clear_acl(void *pCtx)
 		return QDF_STATUS_E_RESOURCES;
 	}
 
-	if (pSapCtx->denyMacList != NULL) {
-		for (i = 0; i < (pSapCtx->nDenyMac - 1); i++) {
-			qdf_mem_zero((pSapCtx->denyMacList + i)->bytes,
-				     QDF_MAC_ADDR_SIZE);
-
-		}
+	for (i = 0; i < (pSapCtx->nDenyMac - 1); i++) {
+		qdf_mem_zero((pSapCtx->denyMacList + i)->bytes,
+			     QDF_MAC_ADDR_SIZE);
 	}
+
 	sap_print_acl(pSapCtx->denyMacList, pSapCtx->nDenyMac);
 	pSapCtx->nDenyMac = 0;
 
-	if (pSapCtx->acceptMacList != NULL) {
-		for (i = 0; i < (pSapCtx->nAcceptMac - 1); i++) {
-			qdf_mem_zero((pSapCtx->acceptMacList + i)->bytes,
-				     QDF_MAC_ADDR_SIZE);
-
-		}
+	for (i = 0; i < (pSapCtx->nAcceptMac - 1); i++) {
+		qdf_mem_zero((pSapCtx->acceptMacList + i)->bytes,
+			     QDF_MAC_ADDR_SIZE);
 	}
+
 	sap_print_acl(pSapCtx->acceptMacList, pSapCtx->nAcceptMac);
 	pSapCtx->nAcceptMac = 0;
 
@@ -2615,6 +2618,13 @@ wlansap_channel_change_request(void *pSapCtx, uint8_t target_channel)
 	}
 	mac_ctx = PMAC_STRUCT(hHal);
 	phy_mode = sapContext->csr_roamProfile.phyMode;
+
+	if (sapContext->csr_roamProfile.ChannelInfo.numOfChannels == 0 ||
+	    sapContext->csr_roamProfile.ChannelInfo.ChannelList == NULL) {
+		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_ERROR,
+			FL("Invalid channel list"));
+		return QDF_STATUS_E_FAULT;
+	}
 	sapContext->csr_roamProfile.ChannelInfo.ChannelList[0] = target_channel;
 	/*
 	 * We are getting channel bonding mode from sapDfsInfor structure
@@ -2635,6 +2645,8 @@ wlansap_channel_change_request(void *pSapCtx, uint8_t target_channel)
 						ch_params->center_freq_seg0;
 	sapContext->csr_roamProfile.ch_params.center_freq_seg1 =
 						ch_params->center_freq_seg1;
+	sapContext->csr_roamProfile.supported_rates.numRates = 0;
+	sapContext->csr_roamProfile.extended_rates.numRates = 0;
 
 	qdf_ret_status = sme_roam_channel_change_req(hHal, sapContext->bssid,
 				ch_params, &sapContext->csr_roamProfile);
@@ -2911,6 +2923,18 @@ wlansap_set_dfs_restrict_japan_w53(tHalHandle hHal, uint8_t disable_Dfs_W53)
 	}
 
 	return status;
+}
+
+bool sap_is_auto_channel_select(void *pvos_gctx)
+{
+	ptSapContext sapcontext = CDS_GET_SAP_CB(pvos_gctx);
+
+	if (NULL == sapcontext) {
+		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_ERROR,
+			"%s: Invalid SAP pointer", __func__);
+		return 0;
+	}
+	return sapcontext->channel == AUTO_CHANNEL_SELECT;
 }
 
 #ifdef FEATURE_AP_MCC_CH_AVOIDANCE

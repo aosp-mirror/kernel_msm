@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, 2014-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011, 2014-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -50,6 +50,8 @@
 #include <ol_txrx_htt_api.h>    /* ol_tx_msdu_id_storage */
 #include <ol_txrx_internal.h>
 #include <htt_internal.h>
+
+#include <cds_utils.h>
 
 /* IPA Micro controler TX data packet HTT Header Preset */
 /* 31 | 30  29 | 28 | 27 | 26  22  | 21   16 | 15  13   | 12  8      | 7 0
@@ -623,7 +625,7 @@ void htt_tx_desc_frags_table_set(htt_pdev_handle pdev,
 		((uint32_t *) htt_tx_desc) +
 		HTT_TX_DESC_FRAGS_DESC_PADDR_OFFSET_DWORD;
 	if (reset) {
-#if defined(HELIUMPLUS_PADDR64)
+#if defined(HELIUMPLUS)
 		*fragmentation_descr_field_ptr = frag_desc_paddr;
 #else
 		*fragmentation_descr_field_ptr =
@@ -1065,10 +1067,12 @@ static int htt_tx_ipa_uc_wdi_tx_buf_alloc(struct htt_pdev_t *pdev,
 					  unsigned int uc_tx_partition_base)
 {
 	unsigned int tx_buffer_count;
+	unsigned int  tx_buffer_count_pwr2;
 	void *buffer_vaddr;
 	qdf_dma_addr_t buffer_paddr;
 	uint32_t *header_ptr;
 	qdf_dma_addr_t *ring_vaddr;
+	uint16_t idx;
 
 	ring_vaddr = (qdf_dma_addr_t *)pdev->ipa_uc_tx_rsc.tx_comp_base.vaddr;
 	/* Allocate TX buffers as many as possible */
@@ -1124,7 +1128,38 @@ static int htt_tx_ipa_uc_wdi_tx_buf_alloc(struct htt_pdev_t *pdev,
 
 		ring_vaddr++;
 	}
-	return tx_buffer_count;
+
+	/*
+	 * Tx complete ring buffer count should be power of 2.
+	 * So, allocated Tx buffer count should be one less than ring buffer
+	 * size.
+	 */
+	tx_buffer_count_pwr2 = qdf_rounddown_pow_of_two(tx_buffer_count + 1)
+			       - 1;
+	if (tx_buffer_count > tx_buffer_count_pwr2) {
+		qdf_print(
+		    "%s: Allocated Tx buffer count %d is rounded down to %d",
+		    __func__, tx_buffer_count, tx_buffer_count_pwr2);
+
+		/* Free over allocated buffers below power of 2 */
+		for (idx = tx_buffer_count_pwr2; idx < tx_buffer_count; idx++) {
+			if (pdev->ipa_uc_tx_rsc.tx_buf_pool_vaddr_strg[idx]) {
+			    qdf_mem_free_consistent(
+				pdev->osdev, pdev->osdev->dev,
+				ol_cfg_ipa_uc_tx_buf_size(pdev->ctrl_pdev),
+				pdev->ipa_uc_tx_rsc.tx_buf_pool_vaddr_strg[idx],
+				pdev->ipa_uc_tx_rsc.paddr_strg[idx], 0);
+			}
+		}
+	}
+
+	if (tx_buffer_count_pwr2 < 0) {
+		qdf_print("%s: Failed to round down Tx buffer count %d",
+				__func__, tx_buffer_count_pwr2);
+		tx_buffer_count_pwr2 = 0;
+	}
+
+	return tx_buffer_count_pwr2;
 }
 #else
 static int htt_tx_ipa_uc_wdi_tx_buf_alloc(struct htt_pdev_t *pdev,
@@ -1133,10 +1168,13 @@ static int htt_tx_ipa_uc_wdi_tx_buf_alloc(struct htt_pdev_t *pdev,
 					  unsigned int uc_tx_partition_base)
 {
 	unsigned int tx_buffer_count;
+	unsigned int  tx_buffer_count_pwr2;
 	qdf_nbuf_t buffer_vaddr;
 	qdf_dma_addr_t buffer_paddr;
 	uint32_t *header_ptr;
 	uint32_t *ring_vaddr;
+	uint16_t idx;
+	QDF_STATUS status;
 
 	ring_vaddr = pdev->ipa_uc_tx_rsc.tx_comp_base.vaddr;
 	/* Allocate TX buffers as many as possible */
@@ -1162,7 +1200,16 @@ static int htt_tx_ipa_uc_wdi_tx_buf_alloc(struct htt_pdev_t *pdev,
 		*header_ptr |= ((uint16_t) uc_tx_partition_base +
 				tx_buffer_count) << 16;
 
-		qdf_nbuf_map(pdev->osdev, buffer_vaddr, QDF_DMA_BIDIRECTIONAL);
+		status = qdf_nbuf_map(pdev->osdev, buffer_vaddr,
+				      QDF_DMA_BIDIRECTIONAL);
+		if (status != QDF_STATUS_SUCCESS) {
+			QDF_TRACE(QDF_MODULE_ID_HTT, QDF_TRACE_LEVEL_ERROR,
+			  "%s: nbuf map failed, loop index: %d",
+			  __func__, tx_buffer_count);
+			qdf_nbuf_free(buffer_vaddr);
+			return tx_buffer_count;
+		}
+
 		buffer_paddr = qdf_nbuf_get_frag_paddr(buffer_vaddr, 0);
 		header_ptr++;
 		*header_ptr = (uint32_t) (buffer_paddr +
@@ -1181,7 +1228,38 @@ static int htt_tx_ipa_uc_wdi_tx_buf_alloc(struct htt_pdev_t *pdev,
 
 		ring_vaddr++;
 	}
-	return tx_buffer_count;
+
+	/*
+	 * Tx complete ring buffer count should be power of 2.
+	 * So, allocated Tx buffer count should be one less than ring buffer
+	 * size.
+	 */
+	tx_buffer_count_pwr2 = qdf_rounddown_pow_of_two(tx_buffer_count + 1)
+			       - 1;
+	if (tx_buffer_count > tx_buffer_count_pwr2) {
+		qdf_print(
+		    "%s: Allocated Tx buffer count %d is rounded down to %d",
+		    __func__, tx_buffer_count, tx_buffer_count_pwr2);
+
+		/* Free over allocated buffers below power of 2 */
+		for (idx = tx_buffer_count_pwr2; idx < tx_buffer_count; idx++) {
+			if (pdev->ipa_uc_tx_rsc.tx_buf_pool_vaddr_strg[idx]) {
+			    qdf_mem_free_consistent(
+				pdev->osdev, pdev->osdev->dev,
+				ol_cfg_ipa_uc_tx_buf_size(pdev->ctrl_pdev),
+				pdev->ipa_uc_tx_rsc.tx_buf_pool_vaddr_strg[idx],
+				pdev->ipa_uc_tx_rsc.paddr_strg[idx], 0);
+			}
+		}
+	}
+
+	if (tx_buffer_count_pwr2 < 0) {
+		qdf_print("%s: Failed to round down Tx buffer count %d",
+				__func__, tx_buffer_count_pwr2);
+		tx_buffer_count_pwr2 = 0;
+	}
+
+	return tx_buffer_count_pwr2;
 }
 #endif
 
@@ -1214,7 +1292,7 @@ int htt_tx_ipa_uc_attach(struct htt_pdev_t *pdev,
 	}
 
 	/* Allocate TX COMP Ring */
-	tx_comp_ring_size = uc_tx_buf_cnt * sizeof(qdf_dma_addr_t);
+	tx_comp_ring_size = uc_tx_buf_cnt * sizeof(target_paddr_t);
 	pdev->ipa_uc_tx_rsc.tx_comp_base.vaddr =
 		qdf_mem_alloc_consistent(
 			pdev->osdev, pdev->osdev->dev,
@@ -1560,28 +1638,7 @@ void htt_push_ext_header(qdf_nbuf_t msdu,
 	}
 }
 
-/**
- * htt_tx_desc_init() - Initialize the per packet HTT Tx descriptor
- * @pdev:		  The handle of the physical device sending the
- *			  tx data
- * @htt_tx_desc:	  Abstract handle to the tx descriptor
- * @htt_tx_desc_paddr_lo: Physical address of the HTT tx descriptor
- * @msdu_id:		  ID to tag the descriptor with.
- *			  The FW sends this ID back to host as a cookie
- *			  during Tx completion, which the host uses to
- *			  identify the MSDU.
- *			  This ID is an index into the OL Tx desc. array.
- * @msdu:		  The MSDU that is being prepared for transmission
- * @msdu_info:		  Tx MSDU meta-data
- * @tso_info:		  Storage for TSO meta-data
- * @ext_header_data:      extension header data
- * @type:                 extension header type
- *
- * This function initializes the HTT tx descriptor.
- * HTT Tx descriptor is a host-f/w interface structure, and meta-data
- * accompanying every packet downloaded to f/w via the HTT interface.
- */
-void
+QDF_STATUS
 htt_tx_desc_init(htt_pdev_handle pdev,
 		 void *htt_tx_desc,
 		 qdf_dma_addr_t htt_tx_desc_paddr,
@@ -1611,17 +1668,17 @@ htt_tx_desc_init(htt_pdev_handle pdev,
 	if (qdf_unlikely(!qdf_ctx)) {
 		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
 			"%s: qdf_ctx is NULL", __func__);
-		return;
+		return QDF_STATUS_E_FAILURE;
 	}
 	if (qdf_unlikely(!msdu_info)) {
 		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
 			"%s: bad arg: msdu_info is NULL", __func__);
-		return;
+		return QDF_STATUS_E_FAILURE;
 	}
 	if (qdf_unlikely(!tso_info)) {
 		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
 			"%s: bad arg: tso_info is NULL", __func__);
-		return;
+		return QDF_STATUS_E_FAILURE;
 	}
 
 	word0 = (uint32_t *) htt_tx_desc;
@@ -1648,7 +1705,7 @@ htt_tx_desc_init(htt_pdev_handle pdev,
 		if (0xffffffff == ce_pkt_type) {
 			QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_DEBUG,
 			"Invalid HTT pkt type %d\n", pkt_type);
-			return;
+			return QDF_STATUS_E_INVAL;
 		}
 	}
 
@@ -1735,7 +1792,7 @@ htt_tx_desc_init(htt_pdev_handle pdev,
 		if (qdf_unlikely(status != QDF_STATUS_SUCCESS)) {
 			QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
 				"%s: nbuf map failed", __func__);
-			return;
+			return QDF_STATUS_E_NOMEM;
 		}
 	}
 
@@ -1764,6 +1821,7 @@ htt_tx_desc_init(htt_pdev_handle pdev,
 	}
 
 	qdf_nbuf_data_attr_set(msdu, data_attr);
+	return QDF_STATUS_SUCCESS;
 }
 
 #ifdef FEATURE_HL_GROUP_CREDIT_FLOW_CONTROL

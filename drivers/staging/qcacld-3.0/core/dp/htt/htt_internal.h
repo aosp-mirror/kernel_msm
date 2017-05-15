@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, 2014-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011, 2014-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -131,13 +131,39 @@ struct htt_host_rx_desc_base {
 #define NBUF_MAP_ID(skb) \
 	(((struct qdf_nbuf_cb *)((skb)->cb))->u.rx.map_index)
 
-#define HTT_RX_RING_BUFF_DBG_LIST          1024
+/**
+ * rx_buf_debug: rx_ring history
+ *
+ * There are three types of entries in history:
+ * 1) rx-descriptors posted (and received)
+ *    Both of these events are stored on the same entry
+ *    @paddr : physical address posted on the ring
+ *    @nbuf  : virtual address of nbuf containing data
+ *    @ndata : virual address of data (corresponds to physical address)
+ *    @posted: time-stamp when the buffer is posted to the ring
+ *    @recved: time-stamp when the buffer is received (rx_in_order_ind)
+ *           : or 0, if the buffer has not been received yet
+ * 2) ring alloc-index (fill-index) updates
+ *    @paddr : = 0
+ *    @nbuf  : = 0
+ *    @ndata : = 0
+ *    posted : time-stamp when alloc index was updated
+ *    recved : value of alloc index
+ * 3) htt_rx_in_order_indication reception
+ *    @paddr : = 0
+ *    @nbuf  : = 0
+ *    @ndata : msdu_cnt
+ *    @posted: time-stamp when HTT message is recived
+ *    @recvd : 0x48545452584D5367 ('HTTRXMSG')
+*/
+#define HTT_RX_RING_BUFF_DBG_LIST          (2 * 1024)
 struct rx_buf_debug {
 	qdf_dma_addr_t paddr;
 	qdf_nbuf_t     nbuf;
-	void     *nbuf_data; /* lsb of this field is used for "in_use" */
-			     /* bool     in_use; */
-	uint64_t  ts;        /* timestamp */
+	void          *nbuf_data;
+	uint64_t       posted; /* timetamp */
+	uint64_t       recved; /* timestamp */
+	int            cpu;
 
 };
 #endif
@@ -475,10 +501,10 @@ void htt_h2t_send_complete(void *context, HTC_PACKET *pkt);
 
 A_STATUS htt_h2t_ver_req_msg(struct htt_pdev_t *pdev);
 
-#if defined(HELIUMPLUS_PADDR64)
+#if defined(HELIUMPLUS)
 A_STATUS
 htt_h2t_frag_desc_bank_cfg_msg(struct htt_pdev_t *pdev);
-#endif /* defined(HELIUMPLUS_PADDR64) */
+#endif /* defined(HELIUMPLUS) */
 
 extern QDF_STATUS htt_h2t_rx_ring_cfg_msg_ll(struct htt_pdev_t *pdev);
 
@@ -499,6 +525,8 @@ void htt_htc_pkt_free(struct htt_pdev_t *pdev, struct htt_htc_pkt *pkt);
 void htt_htc_pkt_pool_free(struct htt_pdev_t *pdev);
 
 #ifdef ATH_11AC_TXCOMPACT
+void htt_htc_misc_pkt_list_trim(struct htt_pdev_t *pdev, int level);
+
 void
 htt_htc_misc_pkt_list_add(struct htt_pdev_t *pdev, struct htt_htc_pkt *pkt);
 
@@ -506,10 +534,12 @@ void htt_htc_misc_pkt_pool_free(struct htt_pdev_t *pdev);
 #endif
 
 int
-htt_rx_hash_list_insert(struct htt_pdev_t *pdev, uint32_t paddr,
+htt_rx_hash_list_insert(struct htt_pdev_t *pdev,
+			qdf_dma_addr_t paddr,
 			qdf_nbuf_t netbuf);
 
-qdf_nbuf_t htt_rx_hash_list_lookup(struct htt_pdev_t *pdev, uint32_t paddr);
+qdf_nbuf_t
+htt_rx_hash_list_lookup(struct htt_pdev_t *pdev, qdf_dma_addr_t paddr);
 
 #ifdef IPA_OFFLOAD
 int
@@ -610,20 +640,71 @@ void htt_tx_group_credit_process(struct htt_pdev_t *pdev, u_int32_t *msg_word)
  * htt_rx_dbg_rxbuf_init() - init debug rx buff list
  * @pdev: pdev handle
  *
+ * Allocation is done from bss segment. This uses vmalloc and has a bit
+ * of an overhead compared to kmalloc (which qdf_mem_alloc wraps). The impact
+ * of the overhead to performance will need to be quantified.
+ *
  * Return: none
  */
+static struct rx_buf_debug rx_buff_list_bss[HTT_RX_RING_BUFF_DBG_LIST];
 static inline
 void htt_rx_dbg_rxbuf_init(struct htt_pdev_t *pdev)
 {
-	pdev->rx_buff_list = qdf_mem_malloc(
-				 HTT_RX_RING_BUFF_DBG_LIST *
-				 sizeof(struct rx_buf_debug));
-	if (!pdev->rx_buff_list) {
-		qdf_print("HTT: debug RX buffer allocation failed\n");
-		QDF_ASSERT(0);
-	} else {
-		qdf_spinlock_create(&(pdev->rx_buff_list_lock));
-	}
+	pdev->rx_buff_list = rx_buff_list_bss;
+	qdf_spinlock_create(&(pdev->rx_buff_list_lock));
+	pdev->rx_buff_index = 0;
+	pdev->rx_buff_posted_cum = 0;
+	pdev->rx_buff_recvd_cum  = 0;
+	pdev->rx_buff_recvd_err  = 0;
+	pdev->refill_retry_timer_starts = 0;
+	pdev->refill_retry_timer_calls = 0;
+	pdev->refill_retry_timer_doubles = 0;
+}
+
+/**
+ * htt_display_rx_buf_debug() - display debug rx buff list and some counters
+ * @pdev: pdev handle
+ *
+ * Return: Success
+ */
+static inline int htt_display_rx_buf_debug(struct htt_pdev_t *pdev)
+{
+	int i;
+	struct rx_buf_debug *buf;
+
+	if ((pdev != NULL) &&
+	    (pdev->rx_buff_list != NULL)) {
+		buf = pdev->rx_buff_list;
+		for (i = 0; i < HTT_RX_RING_BUFF_DBG_LIST; i++) {
+			if (buf[i].posted != 0)
+				QDF_TRACE(QDF_MODULE_ID_TXRX,
+					  QDF_TRACE_LEVEL_ERROR,
+					  "[%d][0x%x] %p %lu %p %llu %llu",
+					  i, buf[i].cpu,
+					  buf[i].nbuf_data,
+					  (unsigned long)buf[i].paddr,
+					  buf[i].nbuf,
+					  buf[i].posted,
+					  buf[i].recved);
+		}
+
+		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
+		"rxbuf_idx %d all_posted: %d all_recvd: %d recv_err: %d",
+		pdev->rx_buff_index,
+		pdev->rx_buff_posted_cum,
+		pdev->rx_buff_recvd_cum,
+		pdev->rx_buff_recvd_err);
+
+		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
+		"timer kicks :%d actual  :%d restarts:%d debtors: %d fill_n: %d",
+		pdev->refill_retry_timer_starts,
+		pdev->refill_retry_timer_calls,
+		pdev->refill_retry_timer_doubles,
+		pdev->rx_buff_debt_invoked,
+		pdev->rx_buff_fill_n_invoked);
+	} else
+		return -EINVAL;
+	return 0;
 }
 
 /**
@@ -638,21 +719,20 @@ static inline
 void htt_rx_dbg_rxbuf_set(struct htt_pdev_t *pdev, qdf_dma_addr_t paddr,
 			  qdf_nbuf_t rx_netbuf)
 {
-	void *tmp;
 	if (pdev->rx_buff_list) {
 		qdf_spin_lock_bh(&(pdev->rx_buff_list_lock));
 		pdev->rx_buff_list[pdev->rx_buff_index].paddr = paddr;
+		pdev->rx_buff_list[pdev->rx_buff_index].nbuf  = rx_netbuf;
 		pdev->rx_buff_list[pdev->rx_buff_index].nbuf_data =
 							rx_netbuf->data;
-		/* pdev->rx_buff_list[pdev->rx_buff_index].in_use = true; */
-		tmp = pdev->rx_buff_list[pdev->rx_buff_index].nbuf_data;
-		tmp = (void *)((uintptr_t) tmp | 0x01);
-		pdev->rx_buff_list[pdev->rx_buff_index].nbuf_data = tmp;
-		pdev->rx_buff_list[pdev->rx_buff_index].nbuf = rx_netbuf;
-		pdev->rx_buff_list[pdev->rx_buff_index].ts =
+		pdev->rx_buff_list[pdev->rx_buff_index].posted =
 						qdf_get_log_timestamp();
+		pdev->rx_buff_posted_cum++;
+		pdev->rx_buff_list[pdev->rx_buff_index].recved = 0;
+		pdev->rx_buff_list[pdev->rx_buff_index].cpu =
+				(1 << qdf_get_cpu());
 		NBUF_MAP_ID(rx_netbuf) = pdev->rx_buff_index;
-		if (++pdev->rx_buff_index ==
+		if (++pdev->rx_buff_index >=
 				HTT_RX_RING_BUFF_DBG_LIST)
 			pdev->rx_buff_index = 0;
 		qdf_spin_unlock_bh(&(pdev->rx_buff_list_lock));
@@ -670,22 +750,76 @@ void htt_rx_dbg_rxbuf_reset(struct htt_pdev_t *pdev,
 				qdf_nbuf_t netbuf)
 {
 	uint32_t index;
-	void *tmp;
 
 	if (pdev->rx_buff_list) {
 		qdf_spin_lock_bh(&(pdev->rx_buff_list_lock));
 		index = NBUF_MAP_ID(netbuf);
 		if (index < HTT_RX_RING_BUFF_DBG_LIST) {
-			/* in_use = false */
-			tmp = pdev->rx_buff_list[index].nbuf_data;
-			tmp = (void *)((uintptr_t)tmp & ~((uintptr_t)0x1));
-			pdev->rx_buff_list[index].nbuf_data = tmp;
-			pdev->rx_buff_list[index].ts     =
+			pdev->rx_buff_list[index].recved =
 				qdf_get_log_timestamp();
+			pdev->rx_buff_recvd_cum++;
+		} else {
+			pdev->rx_buff_recvd_err++;
 		}
+		pdev->rx_buff_list[pdev->rx_buff_index].cpu |=
+				(1 << qdf_get_cpu());
 		qdf_spin_unlock_bh(&(pdev->rx_buff_list_lock));
 	}
 }
+/**
+ * htt_rx_dbg_rxbuf_indupd() - add a record for alloc index update
+ * @pdev: pdev handle
+ * @idx : value of the index
+ *
+ * Return: none
+ */
+static inline
+void htt_rx_dbg_rxbuf_indupd(struct htt_pdev_t *pdev, int alloc_index)
+{
+	if (pdev->rx_buff_list) {
+		qdf_spin_lock_bh(&(pdev->rx_buff_list_lock));
+		pdev->rx_buff_list[pdev->rx_buff_index].paddr = 0;
+		pdev->rx_buff_list[pdev->rx_buff_index].nbuf  = 0;
+		pdev->rx_buff_list[pdev->rx_buff_index].nbuf_data = 0;
+		pdev->rx_buff_list[pdev->rx_buff_index].posted =
+						qdf_get_log_timestamp();
+		pdev->rx_buff_list[pdev->rx_buff_index].recved =
+			(uint64_t)alloc_index;
+		pdev->rx_buff_list[pdev->rx_buff_index].cpu =
+				(1 << qdf_get_cpu());
+		if (++pdev->rx_buff_index >=
+				HTT_RX_RING_BUFF_DBG_LIST)
+			pdev->rx_buff_index = 0;
+		qdf_spin_unlock_bh(&(pdev->rx_buff_list_lock));
+	}
+}
+/**
+ * htt_rx_dbg_rxbuf_httrxind() - add a record for recipt of htt rx_ind msg
+ * @pdev: pdev handle
+ *
+ * Return: none
+ */
+static inline
+void htt_rx_dbg_rxbuf_httrxind(struct htt_pdev_t *pdev, unsigned int msdu_cnt)
+{
+	if (pdev->rx_buff_list) {
+		qdf_spin_lock_bh(&(pdev->rx_buff_list_lock));
+		pdev->rx_buff_list[pdev->rx_buff_index].paddr = msdu_cnt;
+		pdev->rx_buff_list[pdev->rx_buff_index].nbuf  = 0;
+		pdev->rx_buff_list[pdev->rx_buff_index].nbuf_data = 0;
+		pdev->rx_buff_list[pdev->rx_buff_index].posted =
+						qdf_get_log_timestamp();
+		pdev->rx_buff_list[pdev->rx_buff_index].recved =
+			(uint64_t)0x48545452584D5347; /* 'HTTRXMSG' */
+		pdev->rx_buff_list[pdev->rx_buff_index].cpu =
+				(1 << qdf_get_cpu());
+		if (++pdev->rx_buff_index >=
+				HTT_RX_RING_BUFF_DBG_LIST)
+			pdev->rx_buff_index = 0;
+		qdf_spin_unlock_bh(&(pdev->rx_buff_list_lock));
+	}
+}
+
 /**
  * htt_rx_dbg_rxbuf_deinit() - deinit debug rx buff list
  * @pdev: pdev handle
@@ -696,7 +830,8 @@ static inline
 void htt_rx_dbg_rxbuf_deinit(struct htt_pdev_t *pdev)
 {
 	if (pdev->rx_buff_list)
-		qdf_mem_free(pdev->rx_buff_list);
+		pdev->rx_buff_list = NULL;
+	qdf_spinlock_destroy(&(pdev->rx_buff_list_lock));
 }
 #else
 static inline
@@ -704,6 +839,11 @@ void htt_rx_dbg_rxbuf_init(struct htt_pdev_t *pdev)
 {
 	return;
 }
+static inline int htt_display_rx_buf_debug(struct htt_pdev_t *pdev)
+{
+	return 0;
+}
+
 static inline
 void htt_rx_dbg_rxbuf_set(struct htt_pdev_t *pdev,
 				uint32_t paddr,
@@ -714,6 +854,18 @@ void htt_rx_dbg_rxbuf_set(struct htt_pdev_t *pdev,
 static inline
 void htt_rx_dbg_rxbuf_reset(struct htt_pdev_t *pdev,
 				qdf_nbuf_t netbuf)
+{
+	return;
+}
+static inline
+void htt_rx_dbg_rxbuf_indupd(struct htt_pdev_t *pdev,
+			     int    alloc_index)
+{
+	return;
+}
+static inline
+void htt_rx_dbg_rxbuf_httrxind(struct htt_pdev_t *pdev,
+			       unsigned int msdu_cnt)
 {
 	return;
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -182,6 +182,7 @@ typedef enum {
 	eSAP_ACS_SCAN_SUCCESS_EVENT,
 	eSAP_ACS_CHANNEL_SELECTED,
 	eSAP_ECSA_CHANGE_CHAN_IND,
+	eSAP_UPDATE_SCAN_RESULT,
 } eSapHddEvent;
 
 typedef enum {
@@ -465,6 +466,7 @@ typedef struct sap_Event_s {
 		struct sap_roc_ready_ind_s sap_roc_ind;
 		struct sap_ch_change_ind sap_chan_cng_ind;
 		struct sap_acs_scan_complete_event sap_acs_scan_comp;
+		tSirBssDescription *bss_desc;
 	} sapevt;
 } tSap_Event, *tpSap_Event;
 
@@ -851,6 +853,15 @@ typedef struct {
 #endif /* FEATURE_WLAN_CH_AVOID */
 void sap_cleanup_channel_list(void *sapContext);
 void sapCleanupAllChannelList(void);
+
+/**
+ * sap_is_auto_channel_select() - is channel AUTO_CHANNEL_SELECT
+ * @pvos_gctx: Pointer to vos global context structure
+ *
+ * Return: true on AUTO_CHANNEL_SELECT, false otherwise
+ */
+bool sap_is_auto_channel_select(void *pvos_gctx);
+
 QDF_STATUS wlansap_set_wps_ie(void *p_cds_gctx, tSap_WPSIE *pWPSIe);
 QDF_STATUS wlansap_update_wps_ie(void *p_cds_gctx);
 QDF_STATUS wlansap_stop_Wps(void *p_cds_gctx);
@@ -858,12 +869,13 @@ QDF_STATUS wlansap_get_wps_state(void *p_cds_gctx, bool *pbWPSState);
 void *wlansap_open(void *p_cds_gctx);
 QDF_STATUS wlansap_global_init(void);
 QDF_STATUS wlansap_global_deinit(void);
-QDF_STATUS wlansap_start(void *p_cds_gctx, enum tQDF_ADAPTER_MODE mode,
-			 uint8_t *addr, uint32_t *session_id);
 QDF_STATUS wlansap_stop(void *p_cds_gctx);
 QDF_STATUS wlansap_close(void *p_cds_gctx);
 typedef QDF_STATUS (*tpWLAN_SAPEventCB)(tpSap_Event pSapEvent,
 					void *pUsrContext);
+QDF_STATUS wlansap_start(void *p_cds_gctx, tpWLAN_SAPEventCB pSapEventCallback,
+			 enum tQDF_ADAPTER_MODE mode, uint8_t *addr,
+			 uint32_t *session_id, void *pUsrContext);
 uint8_t wlansap_get_state(void *p_cds_gctx);
 
 QDF_STATUS wlansap_start_bss(void *p_cds_gctx,
@@ -972,6 +984,7 @@ QDF_STATUS wlansap_set_tx_leakage_threshold(tHalHandle hal,
 			uint16_t tx_leakage_threshold);
 
 QDF_STATUS wlansap_set_invalid_session(void *cds_ctx);
+QDF_STATUS sap_roam_session_close_callback(void *pContext);
 
 #ifdef __cplusplus
 }

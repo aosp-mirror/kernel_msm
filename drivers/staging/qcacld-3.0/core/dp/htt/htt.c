@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, 2014-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011, 2014-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -80,6 +80,11 @@ struct htt_htc_pkt *htt_htc_pkt_alloc(struct htt_pdev_t *pdev)
 	if (pkt == NULL)
 		pkt = qdf_mem_malloc(sizeof(*pkt));
 
+	if (!pkt) {
+		qdf_print("%s: HTC packet allocation failed\n", __func__);
+		return NULL;
+	}
+	htc_packet_set_magic_cookie(&(pkt->u.pkt.htc_pkt), 0);
 	return &pkt->u.pkt;     /* not actually a dereference */
 }
 
@@ -87,7 +92,13 @@ void htt_htc_pkt_free(struct htt_pdev_t *pdev, struct htt_htc_pkt *pkt)
 {
 	struct htt_htc_pkt_union *u_pkt = (struct htt_htc_pkt_union *)pkt;
 
+	if (!u_pkt) {
+		qdf_print("%s: HTC packet is NULL\n", __func__);
+		return;
+	}
+
 	HTT_TX_MUTEX_ACQUIRE(&pdev->htt_tx_mutex);
+	htc_packet_set_magic_cookie(&(u_pkt->u.pkt.htc_pkt), 0);
 	u_pkt->u.next = pdev->htt_htc_pkt_freelist;
 	pdev->htt_htc_pkt_freelist = u_pkt;
 	HTT_TX_MUTEX_RELEASE(&pdev->htt_tx_mutex);
@@ -106,9 +117,40 @@ void htt_htc_pkt_pool_free(struct htt_pdev_t *pdev)
 }
 
 #ifdef ATH_11AC_TXCOMPACT
+
+void
+htt_htc_misc_pkt_list_trim(struct htt_pdev_t *pdev, int level)
+{
+	struct htt_htc_pkt_union *pkt, *next, *prev = NULL;
+	int i = 0;
+	qdf_nbuf_t netbuf;
+
+	HTT_TX_MUTEX_ACQUIRE(&pdev->htt_tx_mutex);
+	pkt = pdev->htt_htc_pkt_misclist;
+	while (pkt) {
+		next = pkt->u.next;
+		/* trim the out grown list*/
+		if (++i > level) {
+			netbuf = (qdf_nbuf_t)(pkt->u.pkt.htc_pkt.pNetBufContext);
+			qdf_nbuf_unmap(pdev->osdev, netbuf, QDF_DMA_TO_DEVICE);
+			qdf_nbuf_free(netbuf);
+			qdf_mem_free(pkt);
+			pkt = NULL;
+			if (prev)
+				prev->u.next = NULL;
+		}
+		prev = pkt;
+		pkt = next;
+	}
+	HTT_TX_MUTEX_RELEASE(&pdev->htt_tx_mutex);
+}
+
 void htt_htc_misc_pkt_list_add(struct htt_pdev_t *pdev, struct htt_htc_pkt *pkt)
 {
 	struct htt_htc_pkt_union *u_pkt = (struct htt_htc_pkt_union *)pkt;
+	int misclist_trim_level = htc_get_tx_queue_depth(pdev->htc_pdev,
+							pkt->htc_pkt.Endpoint)
+				+ HTT_HTC_PKT_MISCLIST_SIZE;
 
 	HTT_TX_MUTEX_ACQUIRE(&pdev->htt_tx_mutex);
 	if (pdev->htt_htc_pkt_misclist) {
@@ -118,6 +160,11 @@ void htt_htc_misc_pkt_list_add(struct htt_pdev_t *pdev, struct htt_htc_pkt *pkt)
 		pdev->htt_htc_pkt_misclist = u_pkt;
 	}
 	HTT_TX_MUTEX_RELEASE(&pdev->htt_tx_mutex);
+
+	/* only ce pipe size + tx_queue_depth could possibly be in use
+	 * free older packets in the msiclist
+	 */
+	htt_htc_misc_pkt_list_trim(pdev, misclist_trim_level);
 }
 
 void htt_htc_misc_pkt_pool_free(struct htt_pdev_t *pdev)
@@ -128,6 +175,12 @@ void htt_htc_misc_pkt_pool_free(struct htt_pdev_t *pdev)
 
 	while (pkt) {
 		next = pkt->u.next;
+		if (htc_packet_get_magic_cookie(&(pkt->u.pkt.htc_pkt)) !=
+				HTC_PACKET_MAGIC_COOKIE) {
+			pkt = next;
+			continue;
+		}
+
 		netbuf = (qdf_nbuf_t) (pkt->u.pkt.htc_pkt.pNetBufContext);
 		qdf_nbuf_unmap(pdev->osdev, netbuf, QDF_DMA_TO_DEVICE);
 		qdf_nbuf_free(netbuf);
@@ -322,10 +375,9 @@ htt_pdev_alloc(ol_txrx_pdev_handle txrx_pdev,
 	}
 
 	pdev->targetdef = htc_get_targetdef(htc_pdev);
-#if defined(HELIUMPLUS_PADDR64)
-	/* TODO: OKA: Remove hard-coding */
+#if defined(HELIUMPLUS)
 	HTT_SET_WIFI_IP(pdev, 2, 0);
-#endif /* defined(HELIUMPLUS_PADDR64) */
+#endif /* defined(HELIUMPLUS) */
 
 	if (NO_HTT_NEEDED)
 		goto success;
@@ -518,12 +570,12 @@ A_STATUS htt_attach_target(htt_pdev_handle pdev)
 	if (status != A_OK)
 		return status;
 
-#if defined(HELIUMPLUS_PADDR64)
+#if defined(HELIUMPLUS)
 	/*
 	 * Send the frag_desc info to target.
 	 */
 	htt_h2t_frag_desc_bank_cfg_msg(pdev);
-#endif /* defined(HELIUMPLUS_PADDR64) */
+#endif /* defined(HELIUMPLUS) */
 
 
 	/*

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -764,11 +764,17 @@ void wma_enable_sta_ps_mode(tp_wma_handle wma, tpEnablePsParams ps_req)
 	enum powersave_qpower_mode qpower_config = wma_get_qpower_config(wma);
 	struct wma_txrx_node *iface = &wma->interfaces[vdev_id];
 
+	wma->ps_setting = ps_req->psSetting;
+
 	if (!iface->handle) {
 		WMA_LOGE("vdev id %d is not active", vdev_id);
 		return;
 	}
 	if (eSIR_ADDON_NOTHING == ps_req->psSetting) {
+		if (qpower_config && iface->uapsd_cached_val) {
+			qpower_config = 0;
+			WMA_LOGD("Qpower is disabled");
+		}
 		WMA_LOGD("Enable Sta Mode Ps vdevId %d", vdev_id);
 		ret = wma_unified_set_sta_ps_param(wma->wmi_handle, vdev_id,
 				WMI_STA_PS_PARAM_UAPSD, 0);
@@ -806,6 +812,10 @@ void wma_enable_sta_ps_mode(tp_wma_handle wma, tpEnablePsParams ps_req)
 					vdev_id, uapsd_val);
 		}
 
+		if (qpower_config && iface->uapsd_cached_val) {
+			qpower_config = 0;
+			WMA_LOGD("Qpower is disabled");
+		}
 		WMA_LOGD("Enable Forced Sleep vdevId %d", vdev_id);
 		ret = wma_set_force_sleep(wma, vdev_id, true,
 				qpower_config, true);
@@ -884,6 +894,12 @@ void wma_enable_uapsd_mode(tp_wma_handle wma, tpEnableUapsdParams ps_req)
 	uint32_t vdev_id = ps_req->sessionid;
 	uint32_t uapsd_val = 0;
 	enum powersave_qpower_mode qpower_config = wma_get_qpower_config(wma);
+	struct wma_txrx_node *iface = &wma->interfaces[vdev_id];
+
+	if (!iface->handle) {
+		WMA_LOGE("vdev id %d is not active", vdev_id);
+		return;
+	}
 
 	/* Disable Sta Mode Power save */
 	ret = wmi_unified_set_sta_ps(wma->wmi_handle, vdev_id, false);
@@ -902,6 +918,11 @@ void wma_enable_uapsd_mode(tp_wma_handle wma, tpEnableUapsdParams ps_req)
 		return;
 	}
 
+	if (qpower_config && uapsd_val) {
+		qpower_config = 0;
+		WMA_LOGD("Disable Qpower %d", vdev_id);
+	}
+	iface->uapsd_cached_val = uapsd_val;
 	WMA_LOGD("Enable Forced Sleep vdevId %d", vdev_id);
 	ret = wma_set_force_sleep(wma, vdev_id, true,
 			qpower_config, ps_req->uapsdParams.enable_ps);
@@ -981,7 +1002,7 @@ static QDF_STATUS wma_set_sta_uapsd_auto_trig_cmd(wmi_unified_t wmi_handle,
 	cmd.num_ac = num_ac;
 
 	qdf_mem_copy((uint8_t *) cmd.peer_addr, (uint8_t *) peer_addr,
-		     sizeof(peer_addr));
+		     sizeof(uint8_t) * IEEE80211_ADDR_LEN);
 	ret = wmi_unified_set_sta_uapsd_auto_trig_cmd(wmi_handle,
 				   &cmd);
 	if (QDF_IS_STATUS_ERROR(ret))
@@ -1739,13 +1760,13 @@ QDF_STATUS wma_set_smps_params(tp_wma_handle wma, uint8_t vdev_id,
 static void wma_set_vdev_suspend_dtim(tp_wma_handle wma, uint8_t vdev_id)
 {
 	struct wma_txrx_node *iface = &wma->interfaces[vdev_id];
-	enum powersave_qpower_mode qpower_config = wma_get_qpower_config(wma);
 
 	if ((iface->type == WMI_VDEV_TYPE_STA) &&
 	    (iface->dtimPeriod != 0)) {
 		QDF_STATUS ret;
 		uint32_t listen_interval;
 		uint32_t max_mod_dtim;
+		uint32_t beacon_interval_mod;
 
 		if (wma->staDynamicDtim) {
 			listen_interval = wma->staDynamicDtim;
@@ -1762,7 +1783,17 @@ static void wma_set_vdev_suspend_dtim(tp_wma_handle wma, uint8_t vdev_id)
 			 * Else
 			 * Set LI to maxModulatedDTIM * AP_DTIM
 			 */
-			max_mod_dtim = wma->staMaxLIModDtim / iface->dtimPeriod;
+
+			beacon_interval_mod = iface->beaconInterval / 100;
+			if (beacon_interval_mod == 0)
+				beacon_interval_mod = 1;
+
+			max_mod_dtim = wma->staMaxLIModDtim
+				/ (iface->dtimPeriod*beacon_interval_mod);
+
+			if (max_mod_dtim <= 0)
+				max_mod_dtim = 1;
+
 			if (max_mod_dtim >= wma->staModDtim) {
 				listen_interval =
 					(wma->staModDtim * iface->dtimPeriod);
@@ -1786,26 +1817,31 @@ static void wma_set_vdev_suspend_dtim(tp_wma_handle wma, uint8_t vdev_id)
 		WMA_LOGD("Set Listen Interval vdevId %d Listen Intv %d",
 			 vdev_id, listen_interval);
 
-		if (qpower_config) {
-			WMA_LOGD("disable Qpower in suspend mode!");
-			ret = wma_unified_set_sta_ps_param(wma->wmi_handle,
-						vdev_id,
-						WMI_STA_PS_ENABLE_QPOWER,
-						0);
-			if (QDF_IS_STATUS_ERROR(ret))
-				WMA_LOGE("Failed to disable Qpower in suspend mode!");
-		}
+		/*
+		 * Set inactivity time to 50ms when DUT is in WoW mode.
+		 * It will be recovered to the cfg value when DUT resumes.
+		 *
+		 * The value 50ms inherits from Pronto. Pronto has different
+		 * inactivity for broadcast frames (worst case inactivity
+		 * is 50ms). 200ms Inactivity timer is applicable only to
+		 * unicast data traffic.
+		 */
+		WMA_LOGD("%s: Set inactivity_time to 50.", __func__);
+		ret = wma_unified_set_sta_ps_param(wma->wmi_handle, vdev_id,
+					WMI_STA_PS_PARAM_INACTIVITY_TIME, 50);
+		if (ret)
+			WMA_LOGE("%s: Setting InActivity time Failed.",
+				__func__);
 
-		ret = wma_vdev_set_param(wma->wmi_handle, vdev_id,
-						      WMI_VDEV_PARAM_DTIM_POLICY,
-						      NORMAL_DTIM);
-		if (QDF_IS_STATUS_ERROR(ret))
-			WMA_LOGE("Failed to Set to Normal DTIM vdevId %d",
-				 vdev_id);
-
-		/* Set it to Normal DTIM */
-		iface->dtim_policy = NORMAL_DTIM;
-		WMA_LOGD("Set DTIM Policy to Normal Dtim vdevId %d", vdev_id);
+		WMA_LOGD("%s: Set the Tx Wake Threshold 0.", __func__);
+		ret = wma_unified_set_sta_ps_param(
+					wma->wmi_handle, vdev_id,
+					WMI_STA_PS_PARAM_TX_WAKE_THRESHOLD,
+					WMI_STA_PS_TX_WAKE_THRESHOLD_NEVER);
+		if (ret)
+			WMA_LOGE("%s: Setting TxWake Threshold Failed.",
+				__func__);
+		iface->restore_dtim_setting = true;
 	}
 }
 
@@ -1842,10 +1878,10 @@ void wma_set_suspend_dtim(tp_wma_handle wma)
 static void wma_set_vdev_resume_dtim(tp_wma_handle wma, uint8_t vdev_id)
 {
 	struct wma_txrx_node *iface = &wma->interfaces[vdev_id];
-	enum powersave_qpower_mode qpower_config = wma_get_qpower_config(wma);
+	u_int32_t inactivity_time;
 
 	if ((iface->type == WMI_VDEV_TYPE_STA) &&
-	    (iface->dtim_policy == NORMAL_DTIM)) {
+	    (iface->restore_dtim_setting)) {
 		QDF_STATUS ret;
 		uint32_t cfg_data_val = 0;
 		/* get mac to acess CFG data base */
@@ -1874,25 +1910,53 @@ static void wma_set_vdev_resume_dtim(tp_wma_handle wma, uint8_t vdev_id)
 		WMA_LOGD("Set Listen Interval vdevId %d Listen Intv %d",
 			 vdev_id, cfg_data_val);
 
-		ret = wma_vdev_set_param(wma->wmi_handle, vdev_id,
-						      WMI_VDEV_PARAM_DTIM_POLICY,
-						      STICK_DTIM);
-		if (QDF_IS_STATUS_ERROR(ret)) {
-			/* Set it back to Stick DTIM */
-			WMA_LOGE("Failed to Set to Stick DTIM vdevId %d",
-				 vdev_id);
+		if (wlan_cfg_get_int(mac, WNI_CFG_PS_DATA_INACTIVITY_TIMEOUT,
+					&cfg_data_val) != eSIR_SUCCESS) {
+			QDF_TRACE(QDF_MODULE_ID_WMA, QDF_TRACE_LEVEL_ERROR,
+				"Failed to get WNI_CFG_PS_DATA_INACTIVITY_TIMEOUT");
+			cfg_data_val = POWERSAVE_DEFAULT_INACTIVITY_TIME;
 		}
-		iface->dtim_policy = STICK_DTIM;
-		WMA_LOGD("Set DTIM Policy to Stick Dtim vdevId %d", vdev_id);
 
-		if (qpower_config) {
-			WMA_LOGD("enable Qpower in resume mode!");
-			ret = wma_unified_set_sta_ps_param(wma->wmi_handle,
-						vdev_id,
-						WMI_STA_PS_ENABLE_QPOWER,
-						qpower_config);
-			if (QDF_IS_STATUS_ERROR(ret))
-				WMA_LOGE("Failed to enable Qpower in resume mode!");
+		iface->restore_dtim_setting = false;
+		inactivity_time = (u_int32_t)cfg_data_val;
+		WMA_LOGD("%s: Setting InActivity time %d.", __func__,
+							inactivity_time);
+		ret = wma_unified_set_sta_ps_param(wma->wmi_handle, vdev_id,
+					WMI_STA_PS_PARAM_INACTIVITY_TIME,
+					inactivity_time);
+		if (ret)
+			WMA_LOGE("%s: Setting InActivity time Failed.",
+				__func__);
+
+		if (wlan_cfg_get_int(mac, WNI_CFG_MAX_PS_POLL,
+				&cfg_data_val) != eSIR_SUCCESS) {
+				QDF_TRACE(QDF_MODULE_ID_WMA,
+				QDF_TRACE_LEVEL_ERROR,
+				"Failed to get value for WNI_CFG_MAX_PS_POLL");
+			cfg_data_val = 0;
+		}
+
+		/*
+		 * Recover the Tx Wake Threshold
+		 * 1, do not recover the value, because driver sets
+		 *    WMI_STA_PS_TX_WAKE_THRESHOLD_NEVER before suspend,
+		 * 2, recover the value, because driver sets
+		 *    WMI_STA_PS_TX_WAKE_THRESHOLD_ALWAYS before suspend,
+		 * 3, recover the value WMI_STA_PS_TX_WAKE_THRESHOLD_ALWAYS,
+		 *    which is defined by fw as default and driver does
+		 *    not set it when psSetting is eSIR_ADDON_DISABLE_UAPSD.
+		 */
+		if ((eSIR_ADDON_DISABLE_UAPSD == wma->ps_setting)
+				|| ((eSIR_ADDON_NOTHING == wma->ps_setting)
+				&& (!cfg_data_val))) {
+			WMA_LOGD("%s: Set the Tx Wake Threshold.", __func__);
+			ret = wma_unified_set_sta_ps_param(
+				wma->wmi_handle, vdev_id,
+				WMI_STA_PS_PARAM_TX_WAKE_THRESHOLD,
+				WMI_STA_PS_TX_WAKE_THRESHOLD_ALWAYS);
+			if (ret)
+				WMA_LOGE("Setting TxWake Threshold vdevId %d",
+					vdev_id);
 		}
 	}
 }

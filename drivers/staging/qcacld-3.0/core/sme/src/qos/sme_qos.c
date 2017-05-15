@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -911,6 +911,28 @@ QDF_STATUS sme_qos_validate_params(tpAniSirGlobal pMac,
 		qdf_mem_free(pIes);
 	}
 	return status;
+}
+
+void sme_qos_remove_addts_delts_cmd(tpAniSirGlobal mac_ctx, uint8_t session_id)
+{
+	tListElem *entry;
+	tSmeCmd *command;
+
+	entry = csr_ll_peek_head(&mac_ctx->sme.smeCmdActiveList,
+				 LL_ACCESS_LOCK);
+	if (NULL == entry)
+		return;
+	command = GET_BASE_ADDR(entry, tSmeCmd, Link);
+	if ((eSmeCommandAddTs   == command->command ||
+	    eSmeCommandDelTs == command->command) &&
+	    command->sessionId == session_id) {
+		if (csr_ll_remove_entry(&mac_ctx->sme.smeCmdActiveList, entry,
+		    LL_ACCESS_LOCK)) {
+		    QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_INFO,
+			      "%s: removed addts/delts command", __func__);
+			qos_release_command(mac_ctx, command);
+		}
+	}
 }
 
 /*--------------------------------------------------------------------------
@@ -3683,6 +3705,9 @@ static QDF_STATUS sme_qos_find_matching_tspec(tpAniSirGlobal mac_ctx,
 	uint8_t tspec_flow_index;
 	QDF_STATUS status = QDF_STATUS_SUCCESS;
 
+	QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_INFO,
+			FL("invoked on session %d"), sessionid);
+
 	for (tspec_flow_index = 0;
 	     tspec_flow_index < SME_QOS_TSPEC_INDEX_MAX; tspec_flow_index++) {
 		/*
@@ -3766,6 +3791,9 @@ static QDF_STATUS sme_qos_find_matching_tspec_lfr3(tpAniSirGlobal mac_ctx,
 	tDot11fIERICDataDesc *ric_data = NULL;
 	uint32_t ric_len;
 	QDF_STATUS status = QDF_STATUS_SUCCESS;
+
+	QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_INFO,
+			FL("invoked on session %d"), sessionid);
 
 	ric_data = ric_data_desc;
 	ric_len = ric_rsplen;
@@ -4255,6 +4283,7 @@ QDF_STATUS sme_qos_process_del_ts_ind(tpAniSirGlobal pMac, void *pMsgBuf)
 	uint8_t sessionId = pdeltsind->sessionId;
 	sme_QosEdcaAcType ac;
 	sme_QosSearchInfo search_key;
+	tSirMacTSInfo *tsinfo;
 	sme_QosWmmUpType up =
 		(sme_QosWmmUpType) pdeltsind->rsp.tspec.tsinfo.traffic.userPrio;
 #ifdef FEATURE_WLAN_DIAG_SUPPORT
@@ -4263,6 +4292,7 @@ QDF_STATUS sme_qos_process_del_ts_ind(tpAniSirGlobal pMac, void *pMsgBuf)
 	QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_INFO_HIGH,
 		  "%s: %d: Invoked on session %d for UP %d",
 		  __func__, __LINE__, sessionId, up);
+	tsinfo = &pdeltsind->rsp.tspec.tsinfo;
 	ac = sme_qos_up_to_ac(up);
 	if (SME_QOS_EDCA_AC_MAX == ac) {
 		/* err msg */
@@ -4289,6 +4319,7 @@ QDF_STATUS sme_qos_process_del_ts_ind(tpAniSirGlobal pMac, void *pMsgBuf)
 		QDF_ASSERT(0);
 		return QDF_STATUS_E_FAILURE;
 	}
+	sme_set_tspec_uapsd_mask_per_session(pMac, tsinfo, sessionId);
 /* event: EVENT_WLAN_QOS */
 #ifdef FEATURE_WLAN_DIAG_SUPPORT
 	qos.eventId = SME_QOS_DIAG_DELTS;
@@ -4415,6 +4446,9 @@ QDF_STATUS sme_qos_process_reassoc_req_ev(tpAniSirGlobal pMac, uint8_t sessionId
 	sme_QosSessionInfo *pSession;
 	sme_QosACInfo *pACInfo;
 	sme_QosEdcaAcType ac;
+	sme_QosFlowInfoEntry *flow_info = NULL;
+	tListElem *entry = NULL;
+
 	QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_INFO_HIGH,
 		  "%s: %d: invoked on session %d",
 		  __func__, __LINE__, sessionId);
@@ -4447,6 +4481,34 @@ QDF_STATUS sme_qos_process_reassoc_req_ev(tpAniSirGlobal pMac, uint8_t sessionId
 			QDF_ASSERT(0);
 			return QDF_STATUS_E_FAILURE;
 		}
+
+		/*
+		 * Now change reason and HO renewal of
+		 * all the flow in this session only
+		 */
+		entry = csr_ll_peek_head(&sme_qos_cb.flow_list, false);
+		if (!entry) {
+			QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_WARN,
+				FL("Flow List empty, nothing to update"));
+			return QDF_STATUS_E_FAILURE;
+		}
+
+		do {
+			flow_info = GET_BASE_ADDR(entry, sme_QosFlowInfoEntry,
+						  link);
+			if (sessionId == flow_info->sessionId) {
+				QDF_TRACE(QDF_MODULE_ID_SME,
+					  QDF_TRACE_LEVEL_INFO_HIGH,
+					  FL("Changing FlowID %d reason to"
+					     " SETUP and HO renewal to true"),
+					  flow_info->QosFlowID);
+				flow_info->reason = SME_QOS_REASON_SETUP;
+				flow_info->hoRenewal = true;
+			}
+			entry = csr_ll_next(&sme_qos_cb.flow_list, entry,
+					    false);
+		} while (entry);
+
 		/* buffer the existing flows to be renewed after handoff is done */
 		sme_qos_buffer_existing_flows(pMac, sessionId);
 		/* clean up the control block partially for handoff */
@@ -5402,6 +5464,7 @@ QDF_STATUS sme_qos_process_add_ts_success_rsp(tpAniSirGlobal pMac,
 	sme_QosEdcaAcType ac, ac_index;
 	sme_QosSearchInfo search_key;
 	sme_QosSearchInfo search_key1;
+	tCsrRoamSession *csr_session;
 	uint8_t tspec_pending;
 	tListElem *pEntry = NULL;
 	sme_QosFlowInfoEntry *flow_info = NULL;
@@ -5500,6 +5563,9 @@ QDF_STATUS sme_qos_process_add_ts_success_rsp(tpAniSirGlobal pMac,
 		pRsp->tspec.surplusBw;
 	pACInfo->curr_QoSInfo[tspec_pending - 1].medium_time =
 		pRsp->tspec.mediumTime;
+
+	sme_set_tspec_uapsd_mask_per_session(pMac,
+			&pRsp->tspec.tsinfo, sessionId);
 
 	QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_INFO_HIGH,
 		  "%s: %d: On session %d AddTspec Medium Time %d",
@@ -5619,12 +5685,17 @@ QDF_STATUS sme_qos_process_add_ts_success_rsp(tpAniSirGlobal pMac,
 
 	sme_qos_state_transition(sessionId, ac, SME_QOS_QOS_ON);
 
-	sme_set_tspec_uapsd_mask_per_session(pMac,
-			&pRsp->tspec.tsinfo, sessionId);
+	/* Inform this TSPEC IE change to FW */
+	csr_session = CSR_GET_SESSION(pMac, sessionId);
+	if (csr_session != NULL &&
+		csr_session->pCurRoamProfile->csrPersona == QDF_STA_MODE) {
+		csr_roam_offload_scan(pMac, sessionId,
+				      ROAM_SCAN_OFFLOAD_UPDATE_CFG,
+				      REASON_CONNECT_IES_CHANGED);
+	}
 
 	(void)sme_qos_process_buffered_cmd(sessionId);
 	return QDF_STATUS_SUCCESS;
-
 }
 
 /*--------------------------------------------------------------------------
@@ -6406,7 +6477,7 @@ static QDF_STATUS sme_qos_process_buffered_cmd(uint8_t session_id)
 	QDF_STATUS qdf_ret_status = QDF_STATUS_SUCCESS;
 	sme_QosCmdInfo *qos_cmd = NULL;
 
-	QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_INFO_HIGH,
+	QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_INFO,
 		  FL("Invoked on session %d"), session_id);
 	qos_session = &sme_qos_cb.sessionInfo[session_id];
 	if (!csr_ll_is_list_empty(&qos_session->bufferedCommandList, false)) {
@@ -6421,6 +6492,9 @@ static QDF_STATUS sme_qos_process_buffered_cmd(uint8_t session_id)
 		}
 		pcmd = GET_BASE_ADDR(list_elt, sme_QosCmdInfoEntry, link);
 		qos_cmd = &pcmd->cmdInfo;
+
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_INFO_HIGH,
+			  FL("Qos cmd %d"), qos_cmd->command);
 		switch (qos_cmd->command) {
 		case SME_QOS_SETUP_REQ:
 			hdd_status = sme_qos_internal_setup_req(
@@ -6692,6 +6766,9 @@ QDF_STATUS sme_qos_modify_fnp(tpAniSirGlobal pMac, tListElem *pEntry)
 		return QDF_STATUS_E_FAILURE;
 	}
 	flow_info = GET_BASE_ADDR(pEntry, sme_QosFlowInfoEntry, link);
+
+	QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_INFO,
+		  FL("reason %d"), flow_info->reason);
 	switch (flow_info->reason) {
 	case SME_QOS_REASON_MODIFY_PENDING:
 		/* set the proper reason code for the new (with modified params) entry */
@@ -7348,6 +7425,10 @@ void sme_qos_cleanup_ctrl_blk_for_handoff(tpAniSirGlobal pMac, uint8_t sessionId
 	sme_QosACInfo *pACInfo;
 	sme_QosEdcaAcType ac;
 	pSession = &sme_qos_cb.sessionInfo[sessionId];
+
+	QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_INFO,
+		  FL("invoked on session %d"), sessionId);
+
 	for (ac = SME_QOS_EDCA_AC_BE; ac < SME_QOS_EDCA_AC_MAX; ac++) {
 		pACInfo = &pSession->ac_info[ac];
 		qdf_mem_zero(pACInfo->curr_QoSInfo,
@@ -7760,6 +7841,9 @@ static uint8_t sme_qos_assign_dialog_token(void)
 	} else {
 		sme_qos_cb.nextDialogToken++;
 	}
+
+	QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_INFO,
+		  FL("token %d"), token);
 	return token;
 }
 #endif /* WLAN_MDM_CODE_REDUCTION_OPT */

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -53,7 +53,7 @@
 /* MAX iteration count to wait for Entry point to exit before
  * we proceed with SSR in WD Thread
  */
-#define MAX_SSR_WAIT_ITERATIONS 200
+#define MAX_SSR_WAIT_ITERATIONS 100
 #define MAX_SSR_PROTECT_LOG (16)
 
 static atomic_t ssr_protect_entry_count;
@@ -577,8 +577,8 @@ QDF_STATUS cds_sched_open(void *p_cds_context,
 #ifdef QCA_CONFIG_SMP
 OL_RX_THREAD_START_FAILURE:
 	/* Try and force the Main thread controller to exit */
-	set_bit(MC_SHUTDOWN_EVENT_MASK, &pSchedContext->mcEventFlag);
-	set_bit(MC_POST_EVENT_MASK, &pSchedContext->mcEventFlag);
+	set_bit(MC_SHUTDOWN_EVENT, &pSchedContext->mcEventFlag);
+	set_bit(MC_POST_EVENT, &pSchedContext->mcEventFlag);
 	wake_up_interruptible(&pSchedContext->mcWaitQueue);
 	/* Wait for MC to exit */
 	wait_for_completion_interruptible(&pSchedContext->McShutdown);
@@ -593,6 +593,7 @@ pkt_freeqalloc_failure:
 #endif
 	/* De-initialize all the message queues */
 	cds_sched_deinit_mqs(pSchedContext);
+	gp_cds_sched_context = NULL;
 
 	return QDF_STATUS_E_RESOURCES;
 
@@ -650,9 +651,9 @@ static int cds_mc_thread(void *Arg)
 		/* This implements the execution model algorithm */
 		retWaitStatus =
 			wait_event_interruptible(pSchedContext->mcWaitQueue,
-						 test_bit(MC_POST_EVENT_MASK,
+						 test_bit(MC_POST_EVENT,
 							  &pSchedContext->mcEventFlag)
-						 || test_bit(MC_SUSPEND_EVENT_MASK,
+						 || test_bit(MC_SUSPEND_EVENT,
 							     &pSchedContext->mcEventFlag));
 
 		if (retWaitStatus == -ERESTARTSYS) {
@@ -661,12 +662,12 @@ static int cds_mc_thread(void *Arg)
 				  __func__);
 			QDF_BUG(0);
 		}
-		clear_bit(MC_POST_EVENT_MASK, &pSchedContext->mcEventFlag);
+		clear_bit(MC_POST_EVENT, &pSchedContext->mcEventFlag);
 
 		while (1) {
 			/* Check if MC needs to shutdown */
 			if (test_bit
-				    (MC_SHUTDOWN_EVENT_MASK,
+				    (MC_SHUTDOWN_EVENT,
 				    &pSchedContext->mcEventFlag)) {
 				QDF_TRACE(QDF_MODULE_ID_QDF,
 					  QDF_TRACE_LEVEL_INFO,
@@ -675,9 +676,9 @@ static int cds_mc_thread(void *Arg)
 				shutdown = true;
 				/* Check for any Suspend Indication */
 				if (test_bit
-					    (MC_SUSPEND_EVENT_MASK,
+					    (MC_SUSPEND_EVENT,
 					    &pSchedContext->mcEventFlag)) {
-					clear_bit(MC_SUSPEND_EVENT_MASK,
+					clear_bit(MC_SUSPEND_EVENT,
 						  &pSchedContext->mcEventFlag);
 
 					/* Unblock anyone waiting on suspend */
@@ -822,9 +823,9 @@ static int cds_mc_thread(void *Arg)
 			}
 			/* Check for any Suspend Indication */
 			if (test_bit
-				    (MC_SUSPEND_EVENT_MASK,
+				    (MC_SUSPEND_EVENT,
 				    &pSchedContext->mcEventFlag)) {
-				clear_bit(MC_SUSPEND_EVENT_MASK,
+				clear_bit(MC_SUSPEND_EVENT,
 					  &pSchedContext->mcEventFlag);
 				spin_lock(&pSchedContext->McThreadLock);
 				INIT_COMPLETION(pSchedContext->ResumeMcEvent);
@@ -974,7 +975,7 @@ cds_indicate_rxpkt(p_cds_sched_context pSchedContext,
 	spin_lock_bh(&pSchedContext->ol_rx_queue_lock);
 	list_add_tail(&pkt->list, &pSchedContext->ol_rx_thread_queue);
 	spin_unlock_bh(&pSchedContext->ol_rx_queue_lock);
-	set_bit(RX_POST_EVENT_MASK, &pSchedContext->ol_rx_event_flag);
+	set_bit(RX_POST_EVENT, &pSchedContext->ol_rx_event_flag);
 	wake_up_interruptible(&pSchedContext->ol_rx_wait_queue);
 }
 
@@ -1093,22 +1094,22 @@ static int cds_ol_rx_thread(void *arg)
 	while (!shutdown) {
 		status =
 			wait_event_interruptible(pSchedContext->ol_rx_wait_queue,
-						 test_bit(RX_POST_EVENT_MASK,
+						 test_bit(RX_POST_EVENT,
 							  &pSchedContext->ol_rx_event_flag)
-						 || test_bit(RX_SUSPEND_EVENT_MASK,
+						 || test_bit(RX_SUSPEND_EVENT,
 							     &pSchedContext->ol_rx_event_flag));
 		if (status == -ERESTARTSYS)
 			break;
 
-		clear_bit(RX_POST_EVENT_MASK, &pSchedContext->ol_rx_event_flag);
+		clear_bit(RX_POST_EVENT, &pSchedContext->ol_rx_event_flag);
 		while (true) {
-			if (test_bit(RX_SHUTDOWN_EVENT_MASK,
+			if (test_bit(RX_SHUTDOWN_EVENT,
 				     &pSchedContext->ol_rx_event_flag)) {
-				clear_bit(RX_SHUTDOWN_EVENT_MASK,
+				clear_bit(RX_SHUTDOWN_EVENT,
 					  &pSchedContext->ol_rx_event_flag);
-				if (test_bit(RX_SUSPEND_EVENT_MASK,
+				if (test_bit(RX_SUSPEND_EVENT,
 					     &pSchedContext->ol_rx_event_flag)) {
-					clear_bit(RX_SUSPEND_EVENT_MASK,
+					clear_bit(RX_SUSPEND_EVENT,
 						  &pSchedContext->ol_rx_event_flag);
 					complete
 						(&pSchedContext->ol_suspend_rx_event);
@@ -1122,9 +1123,9 @@ static int cds_ol_rx_thread(void *arg)
 			}
 			cds_rx_from_queue(pSchedContext);
 
-			if (test_bit(RX_SUSPEND_EVENT_MASK,
+			if (test_bit(RX_SUSPEND_EVENT,
 				     &pSchedContext->ol_rx_event_flag)) {
-				clear_bit(RX_SUSPEND_EVENT_MASK,
+				clear_bit(RX_SUSPEND_EVENT,
 					  &pSchedContext->ol_rx_event_flag);
 				spin_lock(&pSchedContext->ol_rx_thread_lock);
 				INIT_COMPLETION
@@ -1160,14 +1161,19 @@ QDF_STATUS cds_sched_close(void *p_cds_context)
 {
 	QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_INFO_HIGH,
 		  "%s: invoked", __func__);
+
 	if (gp_cds_sched_context == NULL) {
 		QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_ERROR,
 			  "%s: gp_cds_sched_context == NULL", __func__);
 		return QDF_STATUS_E_FAILURE;
 	}
+
+	if (gp_cds_sched_context->McThread == 0)
+		return QDF_STATUS_SUCCESS;
+
 	/* shut down MC Thread */
-	set_bit(MC_SHUTDOWN_EVENT_MASK, &gp_cds_sched_context->mcEventFlag);
-	set_bit(MC_POST_EVENT_MASK, &gp_cds_sched_context->mcEventFlag);
+	set_bit(MC_SHUTDOWN_EVENT, &gp_cds_sched_context->mcEventFlag);
+	set_bit(MC_POST_EVENT, &gp_cds_sched_context->mcEventFlag);
 	wake_up_interruptible(&gp_cds_sched_context->mcWaitQueue);
 	/* Wait for MC to exit */
 	wait_for_completion(&gp_cds_sched_context->McShutdown);
@@ -1181,8 +1187,8 @@ QDF_STATUS cds_sched_close(void *p_cds_context)
 
 #ifdef QCA_CONFIG_SMP
 	/* Shut down Tlshim Rx thread */
-	set_bit(RX_SHUTDOWN_EVENT_MASK, &gp_cds_sched_context->ol_rx_event_flag);
-	set_bit(RX_POST_EVENT_MASK, &gp_cds_sched_context->ol_rx_event_flag);
+	set_bit(RX_SHUTDOWN_EVENT, &gp_cds_sched_context->ol_rx_event_flag);
+	set_bit(RX_POST_EVENT, &gp_cds_sched_context->ol_rx_event_flag);
 	wake_up_interruptible(&gp_cds_sched_context->ol_rx_wait_queue);
 	wait_for_completion(&gp_cds_sched_context->ol_rx_shutdown);
 	gp_cds_sched_context->ol_rx_thread = NULL;
@@ -1191,6 +1197,7 @@ QDF_STATUS cds_sched_close(void *p_cds_context)
 	unregister_hotcpu_notifier(&cds_cpu_hotplug_notifier);
 	gp_cds_sched_context->cpu_hot_plug_notifier = NULL;
 #endif
+	gp_cds_sched_context = NULL;
 	return QDF_STATUS_SUCCESS;
 } /* cds_sched_close() */
 
@@ -1321,14 +1328,8 @@ void cds_sched_flush_mc_mqs(p_cds_sched_context pSchedContext)
 			QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_INFO,
 				  "%s: Freeing MC WMA MSG message type %d",
 				  __func__, pMsgWrapper->pVosMsg->type);
-			if (pMsgWrapper->pVosMsg->bodyptr) {
-				qdf_mem_free((void *)pMsgWrapper->
-					     pVosMsg->bodyptr);
-			}
 
-			pMsgWrapper->pVosMsg->bodyptr = NULL;
-			pMsgWrapper->pVosMsg->bodyval = 0;
-			pMsgWrapper->pVosMsg->type = 0;
+			wma_mc_discard_msg(pMsgWrapper->pVosMsg);
 		}
 		cds_core_return_msg(pSchedContext->pVContext, pMsgWrapper);
 	}
@@ -1397,8 +1398,7 @@ void cds_ssr_protect_init(void)
  * Return:
  *        void
  */
-
-static void cds_print_external_threads(void)
+void cds_print_external_threads(void)
 {
 	int i = 0;
 	unsigned long irq_flags;
@@ -1641,6 +1641,13 @@ bool cds_wait_for_external_threads_completion(const char *caller_func)
 				  "%s: Waiting for %d active entry points to exit",
 				  __func__, r);
 			msleep(SSR_WAIT_SLEEP_TIME);
+			if (count == (MAX_SSR_WAIT_ITERATIONS/2)) {
+				QDF_TRACE(QDF_MODULE_ID_QDF,
+					QDF_TRACE_LEVEL_ERROR,
+					"%s: in middle of waiting for active entry points:",
+					__func__);
+				cds_print_external_threads();
+			}
 		}
 	}
 
@@ -1656,6 +1663,11 @@ bool cds_wait_for_external_threads_completion(const char *caller_func)
 		  "Allowing SSR/Driver unload for %s", caller_func);
 
 	return true;
+}
+
+int cds_return_external_threads_count(void)
+{
+	return  atomic_read(&ssr_protect_entry_count);
 }
 
 /**

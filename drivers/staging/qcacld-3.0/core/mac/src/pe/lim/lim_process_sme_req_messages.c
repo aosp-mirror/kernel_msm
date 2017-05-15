@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -78,6 +78,9 @@
 #define DEFAULT_PASSIVE_MAX_CHANNEL_TIME    110 /* in msecs */
 
 #define CONV_MS_TO_US 1024      /* conversion factor from ms to us */
+
+#define BEACON_INTERVAL_THRESHOLD 50  /* in msecs */
+#define STA_BURST_SCAN_DURATION 120   /* in msecs */
 
 /* SME REQ processing function templates */
 static bool __lim_process_sme_sys_ready_ind(tpAniSirGlobal, uint32_t *);
@@ -637,8 +640,8 @@ __lim_handle_sme_start_bss_request(tpAniSirGlobal mac_ctx, uint32_t *msg_buf)
 	uint32_t auto_gen_bssid = false;
 	uint8_t session_id;
 	tpPESession session = NULL;
-	uint8_t sme_session_id = 0;
-	uint16_t sme_transaction_id = 0;
+	uint8_t sme_session_id = 0xFF;
+	uint16_t sme_transaction_id = 0xFF;
 	uint32_t chanwidth;
 	struct vdev_type_nss *vdev_type_nss;
 	tSirRetStatus cfg_get_wmi_dfs_master_param = eSIR_SUCCESS;
@@ -654,26 +657,21 @@ __lim_handle_sme_start_bss_request(tpAniSirGlobal mac_ctx, uint32_t *msg_buf)
 #endif /* FEATURE_WLAN_DIAG_SUPPORT */
 
 	lim_log(mac_ctx, LOG1, FL("Received START_BSS_REQ"));
+	size = sizeof(tSirSmeStartBssReq);
+	sme_start_bss_req = qdf_mem_malloc(size);
+	if (NULL == sme_start_bss_req) {
+		lim_log(mac_ctx, LOGE,
+			FL("Allocate Memory fail for LimStartBssReq"));
+		/* Send failure response to host */
+		ret_code = eSIR_SME_RESOURCES_UNAVAILABLE;
+		goto free;
+	}
+	qdf_mem_copy(sme_start_bss_req, msg_buf, sizeof(tSirSmeStartBssReq));
+	sme_session_id = sme_start_bss_req->sessionId;
+	sme_transaction_id = sme_start_bss_req->transactionId;
 
-	/*
-	 * Global Sme state and mlm states are not defined yet,
-	 * for BT-AMP Suppoprt . TO BE DONE
-	 */
 	if ((mac_ctx->lim.gLimSmeState == eLIM_SME_OFFLINE_STATE) ||
 	    (mac_ctx->lim.gLimSmeState == eLIM_SME_IDLE_STATE)) {
-		size = sizeof(tSirSmeStartBssReq);
-
-		sme_start_bss_req = qdf_mem_malloc(size);
-		if (NULL == sme_start_bss_req) {
-			lim_log(mac_ctx, LOGE,
-				FL("Allocate Memory fail for LimStartBssReq"));
-			/* Send failure response to host */
-			ret_code = eSIR_SME_RESOURCES_UNAVAILABLE;
-			goto end;
-		}
-
-		qdf_mem_copy(sme_start_bss_req, msg_buf,
-			sizeof(tSirSmeStartBssReq));
 		if (!lim_is_sme_start_bss_req_valid(mac_ctx,
 					sme_start_bss_req)) {
 			lim_log(mac_ctx, LOGW,
@@ -1141,22 +1139,18 @@ __lim_handle_sme_start_bss_request(tpAniSirGlobal mac_ctx, uint32_t *msg_buf)
 			FL("Received unexpected START_BSS_REQ, in state %X"),
 			mac_ctx->lim.gLimSmeState);
 		ret_code = eSIR_SME_BSS_ALREADY_STARTED_OR_JOINED;
-		goto end;
+		goto free;
 	} /* if (mac_ctx->lim.gLimSmeState == eLIM_SME_OFFLINE_STATE) */
 
 free:
 	if ((session != NULL) &&
-		(session->pLimStartBssReq == sme_start_bss_req)) {
+	    (session->pLimStartBssReq == sme_start_bss_req)) {
 		session->pLimStartBssReq = NULL;
 	}
-	qdf_mem_free(sme_start_bss_req);
-	qdf_mem_free(mlm_start_req);
-
-end:
-	if (sme_start_bss_req != NULL) {
-		sme_session_id = sme_start_bss_req->sessionId;
-		sme_transaction_id = sme_start_bss_req->transactionId;
-	}
+	if (NULL != sme_start_bss_req)
+		qdf_mem_free(sme_start_bss_req);
+	if (NULL != mlm_start_req)
+		qdf_mem_free(mlm_start_req);
 	if (NULL != session) {
 		pe_delete_session(mac_ctx, session);
 		session = NULL;
@@ -1305,6 +1299,20 @@ static QDF_STATUS lim_send_hal_start_scan_offload_req(tpAniSirGlobal pMac,
 	pScanOffloadReq->scan_adaptive_dwell_mode =
 			pScanReq->scan_adaptive_dwell_mode;
 
+	for (i = 0; i < pMac->lim.maxBssId; i++) {
+		tpPESession session_entry =
+				pe_find_session_by_sme_session_id(pMac, i);
+		if (session_entry &&
+			(eLIM_MLM_LINK_ESTABLISHED_STATE ==
+				session_entry->limMlmState) &&
+			(session_entry->beaconParams.beaconInterval
+				< BEACON_INTERVAL_THRESHOLD)) {
+			pScanOffloadReq->burst_scan_duration =
+						STA_BURST_SCAN_DURATION;
+			break;
+		}
+	}
+
 	/* for normal scan, the value for p2pScanType should be 0
 	   always */
 	if (pScanReq->p2pSearch)
@@ -1333,6 +1341,15 @@ static QDF_STATUS lim_send_hal_start_scan_offload_req(tpAniSirGlobal pMac,
 		     pScanOffloadReq->uIEFieldOffset,
 		     (uint8_t *) pScanReq + pScanReq->uIEFieldOffset,
 		     pScanReq->uIEFieldLen);
+
+	pScanOffloadReq->enable_scan_randomization =
+					pScanReq->enable_scan_randomization;
+	if (pScanOffloadReq->enable_scan_randomization) {
+		qdf_mem_copy(pScanOffloadReq->mac_addr, pScanReq->mac_addr,
+			     QDF_MAC_ADDR_SIZE);
+		qdf_mem_copy(pScanOffloadReq->mac_addr_mask,
+			     pScanReq->mac_addr_mask, QDF_MAC_ADDR_SIZE);
+	}
 
 	rc = wma_post_ctrl_msg(pMac, &msg);
 	if (rc != eSIR_SUCCESS) {
@@ -1367,6 +1384,7 @@ static void __lim_process_sme_scan_req(tpAniSirGlobal mac_ctx,
 	lim_diag_event_report(mac_ctx, WLAN_PE_DIAG_SCAN_REQ_EVENT, NULL,
 			      eSIR_SUCCESS, eSIR_SUCCESS);
 #endif
+	mac_ctx->lim.beacon_probe_rsp_cnt_per_scan = 0;
 
 	scan_req = (tpSirSmeScanReq) msg_buf;
 	lim_log(mac_ctx, LOG1,
@@ -1614,8 +1632,7 @@ __lim_process_sme_join_req(tpAniSirGlobal mac_ctx, uint32_t *msg_buf)
 					FL("SessionId:%d New session created"),
 					session_id);
 		}
-		session->isAmsduSupportInAMPDU =
-			sme_join_req->isAmsduSupportInAMPDU;
+		session->max_amsdu_num = sme_join_req->max_amsdu_num;
 
 		/*
 		 * Store Session related parameters
@@ -2442,10 +2459,8 @@ static void __lim_process_sme_disassoc_req(tpAniSirGlobal pMac, uint32_t *pMsgBu
 			psessionEntry->limPrevSmeState =
 				psessionEntry->limSmeState;
 			psessionEntry->limSmeState = eLIM_SME_WT_DISASSOC_STATE;
-#ifdef FEATURE_WLAN_TDLS
 			/* Delete all TDLS peers connected before leaving BSS */
 			lim_delete_tdls_peers(pMac, psessionEntry);
-#endif
 			MTRACE(mac_trace(pMac, TRACE_CODE_SME_STATE,
 				psessionEntry->peSessionId,
 				psessionEntry->limSmeState));
@@ -2771,6 +2786,8 @@ static void __lim_process_sme_deauth_req(tpAniSirGlobal mac_ctx,
 		switch (session_entry->limSmeState) {
 		case eLIM_SME_ASSOCIATED_STATE:
 		case eLIM_SME_LINK_EST_STATE:
+			/* Delete all TDLS peers connected before leaving BSS */
+			lim_delete_tdls_peers(mac_ctx, session_entry);
 		case eLIM_SME_WT_ASSOC_STATE:
 		case eLIM_SME_JOIN_FAILURE_STATE:
 		case eLIM_SME_IDLE_STATE:
@@ -3667,6 +3684,9 @@ static void __lim_process_sme_addts_req(tpAniSirGlobal pMac, uint32_t *pMsgBuf)
 						 &sessionId);
 	if (psessionEntry == NULL) {
 		lim_log(pMac, LOGE, "Session Does not exist for given bssId");
+		lim_send_sme_addts_rsp(pMac, pSirAddts->rspReqd, eSIR_FAILURE,
+				       NULL, pSirAddts->req.tspec,
+				       smesessionId, smetransactionId);
 		return;
 	}
 #ifdef FEATURE_WLAN_DIAG_SUPPORT_LIM    /* FEATURE_WLAN_DIAG_SUPPORT */
@@ -3918,8 +3938,7 @@ end:
 			       smesessionId, smetransactionId);
 }
 
-static void lim_process_sme_addts_rsp_timeout(tpAniSirGlobal pMac,
-					      uint32_t param)
+void lim_process_sme_addts_rsp_timeout(tpAniSirGlobal pMac, uint32_t param)
 {
 	/* fetch the sessionEntry based on the sessionId */
 	tpPESession psessionEntry;
@@ -4138,6 +4157,7 @@ static void __lim_process_roam_scan_offload_req(tpAniSirGlobal mac_ctx,
 	if (!local_ie_buf) {
 		lim_log(mac_ctx, LOGE,
 			FL("Mem Alloc failed for local_ie_buf"));
+		qdf_mem_free(req_buffer);
 		return;
 	}
 
@@ -4444,6 +4464,7 @@ static void __lim_process_sme_set_ht2040_mode(tpAniSirGlobal pMac,
 			qdf_mem_copy(pHtOpMode->peer_mac, &pStaDs->staAddr,
 				     sizeof(tSirMacAddr));
 			pHtOpMode->smesessionId = sessionId;
+			pHtOpMode->dot11_mode = psessionEntry->dot11mode;
 
 			msg.type = WMA_UPDATE_OP_MODE;
 			msg.reserved = 0;
