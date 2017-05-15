@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -49,6 +49,8 @@
 #include "mac_trace.h"
 #endif
 
+static tAniSirGlobal global_mac_context;
+
 extern tSirRetStatus halDoCfgInit(tpAniSirGlobal pMac);
 extern tSirRetStatus halProcessStartEvent(tpAniSirGlobal pMac);
 
@@ -66,7 +68,7 @@ tSirRetStatus mac_start(tHalHandle hHal, void *pHalMacStartParams)
 	pMac->gDriverType =
 		((tHalMacStartParameters *) pHalMacStartParams)->driverType;
 
-	sys_log(pMac, LOG2, FL("called\n"));
+	sys_log(pMac, LOG2, FL("called"));
 
 	if (ANI_DRIVER_TYPE(pMac) != eDRIVER_TYPE_MFG) {
 		status = pe_start(pMac);
@@ -106,23 +108,11 @@ tSirRetStatus mac_stop(tHalHandle hHal, tHalStopType stopType)
 tSirRetStatus mac_open(tHalHandle *pHalHandle, tHddHandle hHdd,
 		       struct cds_config_info *cds_cfg)
 {
-	tpAniSirGlobal p_mac = NULL;
+	tpAniSirGlobal p_mac = &global_mac_context;
 	tSirRetStatus status = eSIR_SUCCESS;
 
 	if (pHalHandle == NULL)
 		return eSIR_FAILURE;
-
-	/*
-	 * Make sure this adapter is not already opened. (Compare pAdapter pointer in already
-	 * allocated p_mac structures.)
-	 * If it is opened just return pointer to previously allocated p_mac pointer.
-	 * Or should this result in error?
-	 */
-
-	/* Allocate p_mac */
-	p_mac = qdf_mem_malloc(sizeof(tAniSirGlobal));
-	if (NULL == p_mac)
-		return eSIR_MEM_ALLOC_FAILED;
 
 	/*
 	 * Set various global fields of p_mac here
@@ -133,15 +123,19 @@ tSirRetStatus mac_open(tHalHandle *pHalHandle, tHddHandle hHdd,
 	*pHalHandle = (tHalHandle) p_mac;
 
 	{
+		/*
+		 * For Non-FTM cases this value will be reset during mac_start
+		 */
+		if (cds_cfg->driver_type)
+			p_mac->gDriverType = eDRIVER_TYPE_MFG;
+
 		/* Call various PE (and other layer init here) */
-		if (eSIR_SUCCESS != log_init(p_mac)) {
-			qdf_mem_free(p_mac);
+		if (eSIR_SUCCESS != log_init(p_mac))
 			return eSIR_FAILURE;
-		}
 
 		/* Call routine to initialize CFG data structures */
 		if (eSIR_SUCCESS != cfg_init(p_mac)) {
-			qdf_mem_free(p_mac);
+			log_deinit(p_mac);
 			return eSIR_FAILURE;
 		}
 
@@ -154,8 +148,9 @@ tSirRetStatus mac_open(tHalHandle *pHalHandle, tHddHandle hHdd,
 
 	status =  pe_open(p_mac, cds_cfg);
 	if (eSIR_SUCCESS != status) {
-		sys_log(p_mac, LOGE, FL("mac_open failure\n"));
-		qdf_mem_free(p_mac);
+		sys_log(p_mac, LOGE, FL("pe_open failure"));
+		cfg_de_init(p_mac);
+		log_deinit(p_mac);
 	}
 
 	return status;
@@ -184,8 +179,7 @@ tSirRetStatus mac_close(tHalHandle hHal)
 
 	log_deinit(pMac);
 
-	/* Finally, de-allocate the global MAC datastructure: */
-	qdf_mem_free(pMac);
+	qdf_mem_zero(pMac, sizeof(*pMac));
 
 	return eSIR_SUCCESS;
 }

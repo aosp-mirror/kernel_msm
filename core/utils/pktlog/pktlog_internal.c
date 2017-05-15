@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -362,6 +362,7 @@ A_STATUS process_tx_info(struct ol_txrx_pdev_t *txrx_pdev, void *data)
 	pl_hdr.flags = (*(pl_tgt_hdr + ATH_PKTLOG_HDR_FLAGS_OFFSET) &
 			ATH_PKTLOG_HDR_FLAGS_MASK) >>
 		       ATH_PKTLOG_HDR_FLAGS_SHIFT;
+	pl_hdr.flags |= PKTLOG_HDR_SIZE_16;
 	pl_hdr.missed_cnt = (*(pl_tgt_hdr + ATH_PKTLOG_HDR_MISSED_CNT_OFFSET) &
 			     ATH_PKTLOG_HDR_MISSED_CNT_MASK) >>
 			    ATH_PKTLOG_HDR_MISSED_CNT_SHIFT;
@@ -595,6 +596,7 @@ A_STATUS process_rx_info_remote(void *pdev, void *data)
 #if defined(HELIUMPLUS)
 		pl_hdr.macId = r_data->mac_id;
 		pl_hdr.log_type = PKTLOG_TYPE_RX_STAT;
+		pl_hdr.flags |= PKTLOG_HDR_SIZE_16;
 #else
 		pl_hdr.log_type = PKTLOG_TYPE_RX_STAT;
 #endif
@@ -647,6 +649,7 @@ A_STATUS process_rx_info(void *pdev, void *data)
 	pl_hdr.macId = (*(pl_tgt_hdr + ATH_PKTLOG_HDR_MAC_ID_OFFSET) &
 			   ATH_PKTLOG_HDR_MAC_ID_MASK) >>
 			  ATH_PKTLOG_HDR_MAC_ID_SHIFT;
+	pl_hdr.flags |= PKTLOG_HDR_SIZE_16;
 #else
 	pl_hdr.log_type = (*(pl_tgt_hdr + ATH_PKTLOG_HDR_LOG_TYPE_OFFSET) &
 				   ATH_PKTLOG_HDR_LOG_TYPE_MASK) >>
@@ -656,6 +659,10 @@ A_STATUS process_rx_info(void *pdev, void *data)
 	pl_hdr.size = (*(pl_tgt_hdr + ATH_PKTLOG_HDR_SIZE_OFFSET) &
 		       ATH_PKTLOG_HDR_SIZE_MASK) >> ATH_PKTLOG_HDR_SIZE_SHIFT;
 	pl_hdr.timestamp = *(pl_tgt_hdr + ATH_PKTLOG_HDR_TIMESTAMP_OFFSET);
+#ifdef HELIUMPLUS
+	pl_hdr.type_specific_data =
+		*(pl_tgt_hdr + ATH_PKTLOG_HDR_TYPE_SPECIFIC_DATA_OFFSET);
+#endif
 	log_size = pl_hdr.size;
 	rxstat_log.rx_desc = (void *)pktlog_getbuf(pl_dev, pl_info,
 						   log_size, &pl_hdr);
@@ -709,6 +716,7 @@ A_STATUS process_rate_find(void *pdev, void *data)
 	pl_hdr.macId = (*(pl_tgt_hdr + ATH_PKTLOG_HDR_MAC_ID_OFFSET) &
 			   ATH_PKTLOG_HDR_MAC_ID_MASK) >>
 			  ATH_PKTLOG_HDR_MAC_ID_SHIFT;
+	pl_hdr.flags |= PKTLOG_HDR_SIZE_16;
 #else
 	pl_hdr.log_type = (*(pl_tgt_hdr + ATH_PKTLOG_HDR_LOG_TYPE_OFFSET) &
 			   ATH_PKTLOG_HDR_LOG_TYPE_MASK) >>
@@ -718,6 +726,10 @@ A_STATUS process_rate_find(void *pdev, void *data)
 	pl_hdr.size = (*(pl_tgt_hdr + ATH_PKTLOG_HDR_SIZE_OFFSET) &
 		       ATH_PKTLOG_HDR_SIZE_MASK) >> ATH_PKTLOG_HDR_SIZE_SHIFT;
 	pl_hdr.timestamp = *(pl_tgt_hdr + ATH_PKTLOG_HDR_TIMESTAMP_OFFSET);
+#ifdef HELIUMPLUS
+	pl_hdr.type_specific_data =
+		*(pl_tgt_hdr + ATH_PKTLOG_HDR_TYPE_SPECIFIC_DATA_OFFSET);
+#endif
 	pl_dev = ((struct ol_txrx_pdev_t *)pdev)->pl_dev;
 	pl_info = pl_dev->pl_info;
 	log_size = pl_hdr.size;
@@ -837,6 +849,7 @@ A_STATUS process_rate_update(void *pdev, void *data)
 	pl_hdr.macId = (*(pl_tgt_hdr + ATH_PKTLOG_HDR_MAC_ID_OFFSET) &
 			   ATH_PKTLOG_HDR_MAC_ID_MASK) >>
 			  ATH_PKTLOG_HDR_MAC_ID_SHIFT;
+	pl_hdr.flags |= PKTLOG_HDR_SIZE_16;
 #else
 	pl_hdr.log_type = (*(pl_tgt_hdr + ATH_PKTLOG_HDR_LOG_TYPE_OFFSET) &
 				   ATH_PKTLOG_HDR_LOG_TYPE_MASK) >>
@@ -846,6 +859,10 @@ A_STATUS process_rate_update(void *pdev, void *data)
 	pl_hdr.size = (*(pl_tgt_hdr + ATH_PKTLOG_HDR_SIZE_OFFSET) &
 		       ATH_PKTLOG_HDR_SIZE_MASK) >> ATH_PKTLOG_HDR_SIZE_SHIFT;
 	pl_hdr.timestamp = *(pl_tgt_hdr + ATH_PKTLOG_HDR_TIMESTAMP_OFFSET);
+#ifdef HELIUMPLUS
+	pl_hdr.type_specific_data =
+		*(pl_tgt_hdr + ATH_PKTLOG_HDR_TYPE_SPECIFIC_DATA_OFFSET);
+#endif
 	pl_dev = ((struct ol_txrx_pdev_t *)pdev)->pl_dev;
 	log_size = pl_hdr.size;
 	pl_info = pl_dev->pl_info;

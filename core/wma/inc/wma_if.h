@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -227,6 +227,7 @@ typedef struct sAniProbeRspStruct {
  * @atimIePresent: Peer Atim Info
  * @peerAtimWindowLength: peer ATIM Window length
  * @nss: Return the number of spatial streams supported
+ * @max_amsdu_num: Maximum number of MSDUs in a tx aggregate frame
  *
  * This structure contains parameter required for
  * add sta request of upper layer.
@@ -325,6 +326,7 @@ typedef struct {
 	uint32_t peerAtimWindowLength;
 	uint8_t nonRoamReassoc;
 	uint32_t nss;
+	uint8_t max_amsdu_num;
 } tAddStaParams, *tpAddStaParams;
 
 /**
@@ -800,6 +802,7 @@ typedef struct {
  */
 typedef struct {
 	uint16_t opMode;
+	uint16_t dot11_mode;
 	uint16_t staId;
 	uint16_t smesessionId;
 	tSirMacAddr peer_mac;
@@ -1143,6 +1146,11 @@ typedef struct sMaxTxPowerPerBandParams {
  * @nss_2g: vdev nss in 2.4G
  * @nss_5g: vdev nss in 5G
  * @status: response status code
+ * @tx_aggregation_size: Tx aggregation size
+ * @rx_aggregation_size: Rx aggregation size
+ * @enable_bcast_probe_rsp: enable broadcast probe response
+ * @fils_max_chan_guard_time: FILS max channel guard time
+ * @pkt_err_disconn_th: packet drop threshold
  */
 struct add_sta_self_params {
 	tSirMacAddr self_mac_addr;
@@ -1155,6 +1163,9 @@ struct add_sta_self_params {
 	uint32_t status;
 	uint32_t tx_aggregation_size;
 	uint32_t rx_aggregation_size;
+	bool enable_bcast_probe_rsp;
+	uint8_t fils_max_chan_guard_time;
+	uint16_t pkt_err_disconn_th;
 };
 
 /**
@@ -1238,6 +1249,7 @@ typedef struct sTdlsPeerStateParams {
 	tSirMacAddr peerMacAddr;
 	uint32_t peerState;
 	tTdlsPeerCapParams peerCap;
+	bool resp_reqd;
 } tTdlsPeerStateParams;
 
 /**

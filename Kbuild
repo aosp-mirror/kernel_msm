@@ -78,7 +78,9 @@ ifeq ($(KERNEL_BUILD), 0)
 	#Flag to enable Legacy Fast Roaming2(LFR2)
 	CONFIG_QCACLD_WLAN_LFR2 := y
 	#Flag to enable Legacy Fast Roaming3(LFR3)
+	ifneq ($(CONFIG_ARCH_SDXHEDGEHOG), y)
 	CONFIG_QCACLD_WLAN_LFR3 := y
+	endif
 
 	#Enable Power debugfs feature only if debug_fs is enabled
 	ifeq ($(CONFIG_DEBUG_FS), y)
@@ -106,6 +108,16 @@ ifeq ($(KERNEL_BUILD), 0)
 	endif
 	ifeq ($(CONFIG_ARCH_MSM8998), y)
 	CONFIG_QCACLD_FEATURE_GREEN_AP := y
+	CONFIG_QCACLD_FEATURE_METERING := y
+	endif
+
+	ifeq ($(CONFIG_ARCH_SDM660), y)
+	CONFIG_QCACLD_FEATURE_GREEN_AP := y
+	CONFIG_QCACLD_FEATURE_METERING := y
+	endif
+
+	ifeq ($(CONFIG_ARCH_SDM630), y)
+	CONFIG_QCACLD_FEATURE_METERING := y
 	endif
 
 	#Flag to enable Fast Transition (11r) feature
@@ -167,7 +179,7 @@ ifeq ($(KERNEL_BUILD), 0)
 
 ifneq ($(CONFIG_ROME_IF),sdio)
 	#Flag to enable memdump feature
-	CONFIG_WLAN_FEATURE_MEMDUMP := n
+	CONFIG_WLAN_FEATURE_MEMDUMP := y
 
 	#Flag to enable DISA
 	CONFIG_WLAN_FEATURE_DISA := y
@@ -188,9 +200,11 @@ ifneq ($(CONFIG_ROME_IF),sdio)
 
 	# Flag to enable LRO (Large Receive Offload)
 	ifeq ($(CONFIG_INET_LRO), y)
-		CONFIG_WLAN_LRO := y
-	else
-		CONFIG_WLAN_LRO := n
+		ifeq ($(VERSION), 4)
+			CONFIG_WLAN_LRO := y
+		else
+			CONFIG_WLAN_LRO := n
+		endif
 	endif
 endif
 
@@ -203,10 +217,17 @@ endif
 
 	# Flag to enable MCC to SCC switch feature
 	CONFIG_MCC_TO_SCC_SWITCH := y
+
+ifeq ($(CONFIG_DEBUG_FS), y)
+	# Flag to enable debugfs. Depends on CONFIG_DEBUG_FS in kernel
+	# configuration.
+	CONFIG_WLAN_DEBUGFS := y
+endif
+
 endif
 
 # If not set, assume, Common driver is with in the build tree
-WLAN_COMMON_ROOT ?= qca-wifi-host-cmn
+WLAN_COMMON_ROOT ?= ../qca-wifi-host-cmn
 WLAN_COMMON_INC ?= $(WLAN_ROOT)/$(WLAN_COMMON_ROOT)
 
 ifneq ($(CONFIG_MOBILE_ROUTER), y)
@@ -257,6 +278,11 @@ endif
 ifeq ($(CONFIG_ROME_IF),usb)
 	CONFIG_HIF_USB := 1
 	CONFIG_PLD_USB_CNSS := y
+endif
+
+#Enable SDIO specific APIS
+ifeq ($(CONFIG_ROME_IF),sdio)
+	CONFIG_HIF_SDIO := 1
 endif
 
 #Enable pci read/write config functions
@@ -366,7 +392,6 @@ HDD_INC := 	-I$(WLAN_ROOT)/$(HDD_INC_DIR) \
 
 HDD_OBJS := 	$(HDD_SRC_DIR)/wlan_hdd_assoc.o \
 		$(HDD_SRC_DIR)/wlan_hdd_cfg.o \
-		$(HDD_SRC_DIR)/wlan_hdd_debugfs.o \
 		$(HDD_SRC_DIR)/wlan_hdd_driver_ops.o \
 		$(HDD_SRC_DIR)/wlan_hdd_ftm.o \
 		$(HDD_SRC_DIR)/wlan_hdd_hostapd.o \
@@ -381,7 +406,12 @@ HDD_OBJS := 	$(HDD_SRC_DIR)/wlan_hdd_assoc.o \
 		$(HDD_SRC_DIR)/wlan_hdd_trace.o \
 		$(HDD_SRC_DIR)/wlan_hdd_wext.o \
 		$(HDD_SRC_DIR)/wlan_hdd_wmm.o \
-		$(HDD_SRC_DIR)/wlan_hdd_wowl.o
+		$(HDD_SRC_DIR)/wlan_hdd_wowl.o \
+		$(HDD_SRC_DIR)/wlan_hdd_packet_filter.o
+
+ifeq ($(CONFIG_WLAN_DEBUGFS), y)
+HDD_OBJS += $(HDD_SRC_DIR)/wlan_hdd_debugfs.o
+endif
 
 ifeq ($(CONFIG_WLAN_FEATURE_DSRC), y)
 HDD_OBJS+=	$(HDD_SRC_DIR)/wlan_hdd_ocb.o
@@ -710,6 +740,10 @@ QDF_OBJS := 	$(QDF_OBJ_DIR)/qdf_defer.o \
 		$(QDF_OBJ_DIR)/qdf_threads.o \
 		$(QDF_OBJ_DIR)/qdf_trace.o
 
+ifeq ($(CONFIG_WLAN_DEBUGFS), y)
+QDF_OBJS += $(QDF_OBJ_DIR)/qdf_debugfs.o
+endif
+
 ############ CDS (Connectivity driver services) ############
 CDS_DIR :=	core/cds
 CDS_INC_DIR :=	$(CDS_DIR)/inc
@@ -956,7 +990,7 @@ WMA_OBJS :=	$(WMA_SRC_DIR)/wma_main.o \
 		$(WMA_NDP_OBJS)
 
 ifeq ($(CONFIG_WLAN_FEATURE_DSRC), y)
-WMA_OBJS+=	$(WMA_DIR)/wma_ocb.o
+WMA_OBJS+=	$(WMA_SRC_DIR)/wma_ocb.o
 endif
 ifeq ($(CONFIG_MPC_UT_FRAMEWORK),y)
 WMA_OBJS +=	$(WMA_SRC_DIR)/wma_utils_ut.o
@@ -985,7 +1019,7 @@ ifeq ($(CONFIG_PLD_USB_CNSS), y)
 PLD_OBJS +=	$(PLD_SRC_DIR)/pld_usb.o
 endif
 
-TARGET_INC :=	-I$(WLAN_ROOT)/target/inc
+TARGET_INC := -I$(WLAN_ROOT)/../fw-api/fw
 
 LINUX_INC :=	-Iinclude/linux
 
@@ -1103,7 +1137,8 @@ CDEFINES :=	-DANI_LITTLE_BYTE_ENDIAN \
 		-DFEATURE_WLAN_EXTSCAN \
 		-DWLAN_FEATURE_MBSSID \
 		-DCONFIG_160MHZ_SUPPORT \
-		-DCONFIG_MCL
+		-DCONFIG_MCL \
+		-DWMI_CMD_STRINGS
 
 ifneq ($(CONFIG_HIF_USB), 1)
 CDEFINES += -DWLAN_LOGGING_SOCK_SVC_ENABLE
@@ -1184,6 +1219,7 @@ endif
 ifeq ($(CONFIG_SLUB_DEBUG_ON),y)
 CDEFINES += -DTIMER_MANAGER
 CDEFINES += -DMEMORY_DEBUG
+CDEFINES += -DWLAN_SUSPEND_RESUME_TEST
 endif
 
 ifeq ($(HAVE_CFG80211),1)
@@ -1461,6 +1497,11 @@ ifeq ($(CONFIG_QCACLD_FEATURE_GREEN_AP),y)
 CDEFINES += -DFEATURE_GREEN_AP
 endif
 
+#Stats & Quota Metering feature
+ifeq ($(CONFIG_QCACLD_FEATURE_METERING),y)
+CDEFINES += -DFEATURE_METERING
+endif
+
 #Enable RX Full re-order OL feature only "LL and NON-MDM9630 platform"
 ifneq ($(CONFIG_ARCH_MDM9630), y)
 ifeq ($(CONFIG_HIF_PCI), 1)
@@ -1523,16 +1564,26 @@ CONFIG_HELIUMPLUS := y
 CONFIG_64BIT_PADDR := y
 CONFIG_FEATURE_TSO := y
 CONFIG_FEATURE_TSO_DEBUG := y
+ifeq ($(CONFIG_ARCH_MSM8998), y)
+CONFIG_ENABLE_DEBUG_ADDRESS_MARKING := y
+endif
 ifeq ($(CONFIG_HELIUMPLUS),y)
-CDEFINES += -DHELIUMPLUS_PADDR64
 CDEFINES += -DHELIUMPLUS
 CDEFINES += -DAR900B
 ifeq ($(CONFIG_64BIT_PADDR),y)
 CDEFINES += -DHTT_PADDR64
 endif
+
+ifeq ($(CONFIG_SLUB_DEBUG_ON),y)
+CDEFINES += -DOL_RX_INDICATION_RECORD
+endif
+
 endif
 endif
 
+ifeq ($(CONFIG_ENABLE_DEBUG_ADDRESS_MARKING),y)
+CDEFINES += -DENABLE_DEBUG_ADDRESS_MARKING
+endif
 ifeq ($(CONFIG_FEATURE_TSO),y)
 CDEFINES += -DFEATURE_TSO
 endif
@@ -1576,6 +1627,10 @@ ifeq ($(CONFIG_WLAN_FEATURE_NAN_DATAPATH), y)
 CDEFINES += -DWLAN_FEATURE_NAN_DATAPATH
 endif
 
+ifeq ($(CONFIG_WLAN_DEBUGFS), y)
+CDEFINES += -DWLAN_DEBUGFS
+endif
+
 KBUILD_CPPFLAGS += $(CDEFINES)
 
 # Currently, for versions of gcc which support it, the kernel Makefile
@@ -1584,6 +1639,11 @@ KBUILD_CPPFLAGS += $(CDEFINES)
 # will override the kernel settings.
 ifeq ($(call cc-option-yn, -Wmaybe-uninitialized),y)
 EXTRA_CFLAGS += -Wmaybe-uninitialized
+endif
+EXTRA_CFLAGS += -Wmissing-prototypes
+
+ifeq ($(call cc-option-yn, -Wheader-guard),y)
+EXTRA_CFLAGS += -Wheader-guard
 endif
 
 # If the module name is not "wlan", then the define MULTI_IF_NAME to be the
@@ -1607,4 +1667,3 @@ endif
 # Module information used by KBuild framework
 obj-$(CONFIG_QCA_CLD_WLAN) += $(MODNAME).o
 $(MODNAME)-y := $(OBJS)
-

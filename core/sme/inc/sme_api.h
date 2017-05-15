@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -80,6 +80,9 @@
 #define ROAM_CONFIG_TO_SME_CONFIG 2
 
 #define NUM_OF_BANDS 2
+
+#define SME_ACTIVE_LIST_CMD_TIMEOUT_VALUE (30*1000)
+#define SME_CMD_TIMEOUT_VALUE (SME_ACTIVE_LIST_CMD_TIMEOUT_VALUE + 1000)
 /*--------------------------------------------------------------------------
   Type declarations
   ------------------------------------------------------------------------*/
@@ -197,6 +200,24 @@ struct sme_oem_capability {
 	uint32_t lci_capability:1;
 	uint32_t reserved1:30;
 	uint32_t reserved2;
+};
+
+/**
+ * struct sme_5g_pref_params : 5G preference params to be read from ini
+ * @rssi_boost_threshold_5g: RSSI threshold above which 5 GHz is favored
+ * @rssi_boost_factor_5g: Factor by which 5GHz RSSI is boosted
+ * @max_rssi_boost_5g: Maximum boost that can be applied to 5GHz RSSI
+ * @rssi_penalize_threshold_5g: RSSI threshold below which 5G is not favored
+ * @rssi_penalize_factor_5g: Factor by which 5GHz RSSI is penalized
+ * @max_rssi_penalize_5g: Maximum penalty that can be applied to 5G RSSI
+ */
+struct sme_5g_band_pref_params {
+	int8_t      rssi_boost_threshold_5g;
+	uint8_t     rssi_boost_factor_5g;
+	uint8_t     max_rssi_boost_5g;
+	int8_t      rssi_penalize_threshold_5g;
+	uint8_t     rssi_penalize_factor_5g;
+	uint8_t     max_rssi_penalize_5g;
 };
 
 /*-------------------------------------------------------------------------
@@ -468,6 +489,28 @@ QDF_STATUS sme_roam_update_apwparsni_es(tHalHandle hHal, uint8_t sessionId,
 QDF_STATUS sme_change_mcc_beacon_interval(tHalHandle hHal, uint8_t sessionId);
 QDF_STATUS sme_set_host_offload(tHalHandle hHal, uint8_t sessionId,
 		tpSirHostOffloadReq pRequest);
+
+/**
+ * sme_enable_non_arp_broadcast_filter(): API to enable Broadcast filter
+ * when target goes to wow suspend/resume mode
+ * @hal: The handle returned by mac_open.
+ * @session_id: Session Identifier
+ *
+ * Return QDF_STATUS
+ */
+QDF_STATUS sme_enable_non_arp_broadcast_filter(tHalHandle hal,
+						uint8_t session_id);
+/**
+ * sme_disable_nonarp_broadcast_filter(): API to disable Broadcast filter
+ * when target goes to wow suspend/resume mode
+ * @hal: The handle returned by mac_open.
+ * @session_id: Session Identifier
+ *
+ * Return QDF_STATUS
+ */
+QDF_STATUS sme_disable_nonarp_broadcast_filter(tHalHandle hal,
+						uint8_t session_id);
+
 QDF_STATUS sme_set_keep_alive(tHalHandle hHal, uint8_t sessionId,
 		tpSirKeepAliveReq pRequest);
 QDF_STATUS sme_get_operation_channel(tHalHandle hHal, uint32_t *pChannel,
@@ -478,8 +521,6 @@ QDF_STATUS sme_register_mgmt_frame(tHalHandle hHal, uint8_t sessionId,
 QDF_STATUS sme_deregister_mgmt_frame(tHalHandle hHal, uint8_t sessionId,
 		uint16_t frameType, uint8_t *matchData,
 		uint16_t matchLen);
-QDF_STATUS sme_configure_rxp_filter(tHalHandle hHal,
-		tpSirWlanSetRxpFilters wlanRxpFilterParam);
 QDF_STATUS sme_ConfigureAppsCpuWakeupState(tHalHandle hHal, bool isAppsAwake);
 QDF_STATUS sme_configure_suspend_ind(tHalHandle hHal,
 		uint32_t conn_state_mask,
@@ -505,8 +546,20 @@ uint16_t sme_check_concurrent_channel_overlap(tHalHandle hHal, uint16_t sap_ch,
 		eCsrPhyMode sapPhyMode,
 		uint8_t cc_switch_mode);
 #endif
+/**
+ * sme_abort_mac_scan() - API to cancel MAC scan
+ * @hHal: The handle returned by mac_open
+ * @sessionId: sessionId on which we need to abort scan
+ * @scan_id: scan id on which we need to abort scan
+ * @reason: Reason to abort the scan
+ *
+ * This function aborts MAC scan.
+ *
+ * Return: QDF_STATUS_E_FAILURE for failure, QDF_STATUS_SUCCESS for
+ * success
+ */
 QDF_STATUS sme_abort_mac_scan(tHalHandle hHal, uint8_t sessionId,
-		eCsrAbortReason reason);
+		uint32_t scan_id, eCsrAbortReason reason);
 QDF_STATUS sme_get_cfg_valid_channels(tHalHandle hHal, uint8_t *aValidChannels,
 		uint32_t *len);
 #ifdef FEATURE_WLAN_SCAN_PNO
@@ -729,8 +782,7 @@ QDF_STATUS sme_send_cesium_enable_ind(tHalHandle hHal, uint32_t sessionId);
  * This should be called only if powersave offload
  * is enabled
  */
-QDF_STATUS sme_set_idle_powersave_config(void *cds_context,
-		tHalHandle hHal, uint32_t value);
+QDF_STATUS sme_set_idle_powersave_config(bool value);
 QDF_STATUS sme_notify_modem_power_state(tHalHandle hHal, uint32_t value);
 
 /*SME API to convert convert the ini value to the ENUM used in csr and MAC*/
@@ -859,9 +911,6 @@ QDF_STATUS sme_set_passpoint_list(tHalHandle hal,
 					struct wifi_passpoint_req *req_msg);
 QDF_STATUS sme_reset_passpoint_list(tHalHandle hal,
 					struct wifi_passpoint_req *req_msg);
-QDF_STATUS
-sme_set_ssid_hotlist(tHalHandle hal,
-		     struct sir_set_ssid_hotlist_request *request);
 
 QDF_STATUS sme_ext_scan_register_callback(tHalHandle hHal,
 		void (*pExtScanIndCb)(void *, const uint16_t, void *));
@@ -899,7 +948,7 @@ QDF_STATUS sme_update_roam_offload_enabled(tHalHandle hHal,
 QDF_STATUS sme_update_roam_key_mgmt_offload_enabled(tHalHandle hal_ctx,
 		uint8_t session_id,
 		bool key_mgmt_offload_enabled,
-		bool okc_enabled);
+		struct pmkid_mode_bits *pmkid_modes);
 #endif
 #ifdef WLAN_FEATURE_NAN
 QDF_STATUS sme_nan_event(tHalHandle hHal, void *pMsg);
@@ -1229,6 +1278,7 @@ void sme_set_pdev_ht_vht_ies(tHalHandle hHal, bool enable2x2);
 
 void sme_update_vdev_type_nss(tHalHandle hal, uint8_t max_supp_nss,
 		uint32_t vdev_type_nss, eCsrBand band);
+void sme_update_hw_dbs_capable(tHalHandle hal, uint8_t hw_dbs_capable);
 void sme_register_p2p_lo_event(tHalHandle hHal, void *context,
 					p2p_lo_callback callback);
 
@@ -1255,7 +1305,7 @@ QDF_STATUS sme_update_access_policy_vendor_ie(tHalHandle hal,
 QDF_STATUS sme_update_sta_roam_policy(tHalHandle hal,
 		enum sta_roam_policy_dfs_mode dfs_mode,
 		bool skip_unsafe_channels,
-		uint8_t session_id);
+		uint8_t session_id, uint8_t sap_operating_band);
 QDF_STATUS sme_enable_disable_chanavoidind_event(tHalHandle hal,
 					uint8_t set_value);
 QDF_STATUS sme_set_default_scan_ie(tHalHandle hal, uint16_t session_id,
@@ -1330,7 +1380,28 @@ QDF_STATUS sme_update_short_retry_limit_threshold(tHalHandle hal_handle,
 		struct sme_short_retry_limit *short_retry_limit_th);
 QDF_STATUS sme_update_long_retry_limit_threshold(tHalHandle hal_handle,
 		struct sme_long_retry_limit  *long_retry_limit_th);
-
+/**
+ * sme_roam_is_ese_assoc() - Check if association type is ESE
+ * @roam_info: Pointer to roam info
+ *
+ * Return: true if ESE Association, false otherwise.
+ */
+#ifdef FEATURE_WLAN_ESE
+bool sme_roam_is_ese_assoc(tCsrRoamInfo *roam_info);
+#else
+static inline bool sme_roam_is_ese_assoc(tCsrRoamInfo *roam_info)
+{
+	return false;
+}
+#endif
+/**
+ * sme_neighbor_roam_is11r_assoc() - Check if association type is 11R
+ * @hal_ctx: HAL handle
+ * @session_id: session id
+ *
+ * Return: true if 11r Association, false otherwise.
+ */
+bool sme_neighbor_roam_is11r_assoc(tHalHandle hal_ctx, uint8_t session_id);
 /**
  * sme_update_sta_inactivity_timeout(): Update sta_inactivity_timeout to FW
  * @hal: Handle returned by mac_open
@@ -1355,11 +1426,89 @@ QDF_STATUS sme_update_sta_inactivity_timeout(tHalHandle hal_handle,
  */
 QDF_STATUS sme_set_lost_link_info_cb(tHalHandle hal,
 		void (*cb)(void *, struct sir_lost_link_info *));
+
 #ifdef WLAN_POWER_DEBUGFS
 QDF_STATUS sme_power_debug_stats_req(tHalHandle hal, void (*callback_fn)
 				(struct  power_stats_response *response,
 				void *context), void *power_stats_context);
 #endif
-
+/**
+ * sme_set_sar_power_limits() - set sar limits
+ * @hal: HAL handle
+ * @sar_limit_cmd: struct to send sar limit cmd.
+ *
+ * Return: QDF_STATUS enumeration.
+ */
+QDF_STATUS sme_set_sar_power_limits(tHalHandle hal,
+				    struct sar_limit_cmd_params *sar_limit_cmd);
 void sme_set_cc_src(tHalHandle hal_handle, enum country_src);
+
+
+#ifdef WLAN_FEATURE_WOW_PULSE
+QDF_STATUS sme_set_wow_pulse(struct wow_pulse_mode *wow_pulse_set_info);
+#endif
+/* ARP DEBUG STATS */
+QDF_STATUS sme_set_nud_debug_stats(tHalHandle hal,
+				   struct set_arp_stats_params
+				   *set_stats_param);
+QDF_STATUS sme_get_nud_debug_stats(tHalHandle hal,
+				   struct get_arp_stats_params
+				   *get_stats_param);
+QDF_STATUS sme_set_nud_debug_stats_cb(tHalHandle hal,
+				      void (*cb)(void *, struct rsp_stats *));
+
+
+#ifdef WLAN_FEATURE_UDP_RESPONSE_OFFLOAD
+QDF_STATUS sme_set_udp_resp_offload(struct udp_resp_offload *pudp_resp_cmd);
+#else
+static inline QDF_STATUS sme_set_udp_resp_offload(struct udp_resp_offload
+							*pudp_resp_cmd)
+{
+	return QDF_STATUS_E_FAILURE;
+}
+#endif
+
+/**
+ * sme_get_rcpi() - gets the rcpi value for peer mac addr
+ * @hal: handle returned by mac_open
+ * @rcpi: rcpi request containing peer mac addr, callback and related info
+ *
+ * This function posts the rcpi measurement request message to wma queue
+ *
+ * Return: QDF_STATUS
+ */
+QDF_STATUS sme_get_rcpi(tHalHandle hal, struct sme_rcpi_req *rcpi);
+
+/**
+ * sme_get_beacon_frm() - gets the bss descriptor from scan cache and prepares
+ * beacon frame
+ * @hal: handle returned by mac_open
+ * @profile: current connected profile
+ * @bssid: bssid to look for in scan cache
+ * @frame_buf: frame buffer to populate
+ * @frame_len: length of constructed frame
+ *
+ * Return: QDF_STATUS
+ */
+QDF_STATUS sme_get_beacon_frm(tHalHandle hal, tCsrRoamProfile *profile,
+			    const tSirMacAddr bssid,
+			    uint8_t **frame_buf, uint32_t *frame_len);
+
+/**
+ * sme_rso_cmd_status_cb() - Set RSO cmd status callback
+ * @hal: HAL Handle
+ * @cb: HDD Callback to rso comman status read
+ *
+ * This function is used to save HDD RSO Command status callback in MAC
+ *
+ * Return: QDF_STATUS
+ */
+QDF_STATUS sme_rso_cmd_status_cb(tHalHandle hal,
+		void (*cb)(void *, struct rso_cmd_status *));
+
+void sme_set_5g_band_pref(tHalHandle hal_handle,
+			  struct sme_5g_band_pref_params *pref_params);
+
+QDF_STATUS sme_delete_all_tdls_peers(tHalHandle hal, uint8_t session_id);
+
 #endif /* #if !defined( __SME_API_H ) */

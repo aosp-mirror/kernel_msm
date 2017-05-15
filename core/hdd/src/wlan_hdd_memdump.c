@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -31,9 +31,6 @@
  * WLAN Host Device Driver file for dumping firmware memory
  *
  */
-
-/* denote that this file does not allow legacy hddLog */
-#define HDD_DISALLOW_LEGACY_HDDLOG 1
 
 #include <sme_api.h>
 #include <wlan_hdd_includes.h>
@@ -213,13 +210,19 @@ static int __wlan_hdd_cfg80211_get_fw_mem_dump(struct wiphy *wiphy,
 	if (status)
 		return status;
 
-
+	if (!hdd_ctx->fw_mem_dump_enabled) {
+		hdd_notice("FW memory dump not supported by this FW");
+		return -ENOTSUPP;
+	}
 	qdf_ctx = cds_get_context(QDF_MODULE_ID_QDF_DEVICE);
 	if (!qdf_ctx) {
 		hdd_err("QDF context is NULL");
 		return -EINVAL;
 	}
-
+	if (QDF_GLOBAL_FTM_MODE == hdd_get_conparam()) {
+		hdd_err("memdump not supported in FTM mode");
+		return -EINVAL;
+	}
 	if (hdd_ctx->memdump_in_progress) {
 		hdd_err("Already a memdump req in progress.");
 		return -EBUSY;
@@ -418,7 +421,7 @@ static ssize_t memdump_read(struct file *file, char __user *buf,
 		hdd_err("Invalid start offset for memdump read");
 		return -EINVAL;
 	} else if (*pos >= FW_MEM_DUMP_SIZE || !count) {
-		hdd_err("No more data to copy");
+		hdd_warn("No more data to copy");
 		return 0;
 	} else if (count > FW_MEM_DUMP_SIZE - *pos) {
 		count = FW_MEM_DUMP_SIZE - *pos;
@@ -695,12 +698,15 @@ static ssize_t hdd_driver_memdump_read(struct file *file, char __user *buf,
 	if (status != 0)
 		return -EINVAL;
 
+	mutex_lock(&hdd_ctx->memdump_lock);
 	if (*pos < 0) {
 		hdd_err("Invalid start offset for memdump read");
+		mutex_unlock(&hdd_ctx->memdump_lock);
 		return -EINVAL;
 	} else if (!count || (hdd_ctx->driver_dump_size &&
 				(*pos >= hdd_ctx->driver_dump_size))) {
-		hdd_err("No more data to copy");
+		mutex_unlock(&hdd_ctx->memdump_lock);
+		hdd_warn("No more data to copy");
 		return 0;
 	} else if ((*pos == 0) || (hdd_ctx->driver_dump_mem == NULL)) {
 		/*
@@ -711,6 +717,7 @@ static ssize_t hdd_driver_memdump_read(struct file *file, char __user *buf,
 				qdf_mem_malloc(DRIVER_MEM_DUMP_SIZE);
 			if (!hdd_ctx->driver_dump_mem) {
 				hdd_err("qdf_mem_malloc failed");
+				mutex_unlock(&hdd_ctx->memdump_lock);
 				return -ENOMEM;
 			}
 		}
@@ -739,6 +746,7 @@ static ssize_t hdd_driver_memdump_read(struct file *file, char __user *buf,
 	if (copy_to_user(buf, hdd_ctx->driver_dump_mem + *pos,
 					no_of_bytes_read)) {
 		hdd_err("copy to user space failed");
+		mutex_unlock(&hdd_ctx->memdump_lock);
 		return -EFAULT;
 	}
 
@@ -748,6 +756,8 @@ static ssize_t hdd_driver_memdump_read(struct file *file, char __user *buf,
 	/* Entire driver memory dump copy completed */
 	if (*pos >= hdd_ctx->driver_dump_size)
 		hdd_driver_mem_cleanup();
+
+	mutex_unlock(&hdd_ctx->memdump_lock);
 
 	return no_of_bytes_read;
 }

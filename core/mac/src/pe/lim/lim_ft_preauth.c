@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -150,10 +150,7 @@ int lim_process_ft_pre_auth_req(tpAniSirGlobal mac_ctx, tpSirMsgQ msg)
 		/* Post the FT Pre Auth Response to SME */
 		lim_post_ft_pre_auth_rsp(mac_ctx, eSIR_FAILURE, NULL, 0,
 					 session);
-		/*
-		 * return FALSE, since the Pre-Auth Req will be freed in
-		 * limPostFTPreAuthRsp on failure
-		 */
+		buf_consumed = true;
 		return buf_consumed;
 	}
 
@@ -233,17 +230,23 @@ void lim_perform_ft_pre_auth(tpAniSirGlobal pMac, QDF_STATUS status,
 			     uint32_t *data, tpPESession psessionEntry)
 {
 	tSirMacAuthFrameBody authFrame;
+	unsigned int session_id;
+	eCsrAuthType auth_type;
 
 	if (NULL == psessionEntry) {
 		PELOGE(lim_log(pMac, LOGE, FL("psessionEntry is NULL"));)
 		return;
 	}
+	session_id = psessionEntry->smeSessionId;
+	auth_type =
+		pMac->roam.roamSession[session_id].connectedProfile.AuthType;
 
 	if (psessionEntry->is11Rconnection &&
 	    psessionEntry->ftPEContext.pFTPreAuthReq) {
 		/* Only 11r assoc has FT IEs */
-		if (psessionEntry->ftPEContext.pFTPreAuthReq->ft_ies_length
-									== 0) {
+		if ((auth_type != eCSR_AUTH_TYPE_OPEN_SYSTEM) &&
+			(psessionEntry->ftPEContext.pFTPreAuthReq->ft_ies_length
+									== 0)) {
 			lim_log(pMac, LOGE,
 				FL("FTIEs for Auth Req Seq 1 is absent"));
 			goto preauth_fail;
@@ -299,7 +302,7 @@ void lim_perform_ft_pre_auth(tpAniSirGlobal pMac, QDF_STATUS status,
 
 	lim_send_auth_mgmt_frame(pMac, &authFrame,
 		 psessionEntry->ftPEContext.pFTPreAuthReq->preAuthbssId,
-		 LIM_NO_WEP_IN_FC, psessionEntry, false);
+		 LIM_NO_WEP_IN_FC, psessionEntry);
 
 	return;
 

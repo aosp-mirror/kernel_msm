@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -214,6 +214,56 @@ typedef struct {
 } host_event_wlan_powersave_wow_payload_type;
 
 /*-------------------------------------------------------------------------
+  Event ID: EVENT_WLAN_POWERSAVE_WOW_STATS
+  ------------------------------------------------------------------------*/
+/**
+ * host_event_wlan_powersave_wow_stats - Structure holding wow stats information
+ * @wow_ucast_wake_up_count: wow unicast packet wakeup count
+ * @wow_bcast_wake_up_count: wow broadcast packet wakeup count
+ * @wow_ipv4_mcast_wake_up_count: wow ipv4 multicast packet wakeup count
+ * @wow_ipv6_mcast_wake_up_count: wow ipv6 multicast packet wakeup count
+ * @wow_ipv6_mcast_ra_stats: wow ipv6 multicast router advertisement
+ *                           packet wakeup count
+ * @wow_ipv6_mcast_ns_stats: wow ipv6 multicast Neighbor Solicitation
+ *                           packet wakeup count
+ * @wow_ipv6_mcast_na_stats: wow ipv6 multicast address space
+ *                           packet wakeup count
+ * @wow_pno_match_wake_up_count: wow preferred network offload match
+ *                           packet wakeup count
+ * @wow_pno_complete_wake_up_count: wow preferred network offload complete
+ *                                  packet wakeup count
+ * @wow_gscan_wake_up_count: wow external scan packet wakeup count
+ * @wow_low_rssi_wake_up_count: wow low rssi packet wakeup count
+ * @wow_rssi_breach_wake_up_count: wow rssi breach packet wakeup count
+ * @wow_icmpv4_count: wow icmpv4 packet count
+ * @wow_icmpv6_count: wow icmpv6 packet count
+ * @wow_oem_response_wake_up_count: wow  oem response packet wakeup count
+ *
+ * This structure contains the wow stats information related to diag event
+ */
+struct host_event_wlan_powersave_wow_stats {
+	uint32_t    wow_ucast_wake_up_count;
+	uint32_t    wow_bcast_wake_up_count;
+	uint32_t    wow_ipv4_mcast_wake_up_count;
+	uint32_t    wow_ipv6_mcast_wake_up_count;
+	uint32_t    wow_ipv6_mcast_ra_stats;
+	uint32_t    wow_ipv6_mcast_ns_stats;
+	uint32_t    wow_ipv6_mcast_na_stats;
+	uint32_t    wow_pno_match_wake_up_count;
+	uint32_t    wow_pno_complete_wake_up_count;
+	uint32_t    wow_gscan_wake_up_count;
+	uint32_t    wow_low_rssi_wake_up_count;
+	uint32_t    wow_rssi_breach_wake_up_count;
+	uint32_t    wow_icmpv4_count;
+	uint32_t    wow_icmpv6_count;
+	uint32_t    wow_oem_response_wake_up_count;
+	uint32_t    Reserved_1;
+	uint32_t    Reserved_2;
+	uint32_t    Reserved_3;
+	uint32_t    Reserved_4;
+};
+
+/*-------------------------------------------------------------------------
    Event ID: EVENT_WLAN_BTC
    ------------------------------------------------------------------------*/
 typedef struct {
@@ -322,6 +372,119 @@ struct host_event_wlan_log_complete {
 	uint32_t indicator;
 	uint32_t reason_code;
 	uint32_t reserved;
+};
+
+/*-------------------------------------------------------------------------
+  Event ID: EVENT_WLAN_STA_KICKOUT
+  ------------------------------------------------------------------------*/
+/**
+ * struct host_event_wlan_kickout - Holds diag event details
+ * @reasoncode: Indicates the reasoncode of event
+ * @peer_macaddr: Indicates the peer macaddr
+ * @vdev_id: Indicate unique id for identifying the VDEV
+ *
+ * This structure holds the diag event related information
+ */
+
+struct host_event_wlan_kickout {
+	uint32_t reasoncode;
+	uint8_t peer_mac[QDF_MAC_ADDR_SIZE];
+	uint8_t vdev_id;
+};
+
+/*-------------------------------------------------------------------------
+  Event ID: EVENT_WLAN_SOFTAP_DATASTALL/EVENT_WLAN_STA_DATASTALL
+  ------------------------------------------------------------------------*/
+/**
+ * struct host_event_wlan_softap_datastall - Holds diag event details
+ * @reason: Indicates the reason of event
+ *
+ *This structure holds the host diag event related information
+ */
+
+struct host_event_wlan_datastall {
+	uint32_t reason;
+};
+
+/*-------------------------------------------------------------------------
+  Event ID: EVENT_WLAN_SSR_REINIT_SUBSYSTEM
+  ------------------------------------------------------------------------*/
+/**
+ * struct host_event_wlan_ssr_reinit - Holds diag event details
+ * @status: Indicates the status of event
+ *
+ *This structure holds the host diag event related information
+ */
+
+struct host_event_wlan_ssr_reinit {
+	uint32_t status;
+};
+
+/*-------------------------------------------------------------------------
+  Event ID: EVENT_WLAN_SSR_SHUTDOWN_SUBSYSTEM
+  ------------------------------------------------------------------------*/
+/**
+ * struct host_event_wlan_ssr_shutdown - Holds diag event details
+ * @status: Indicates the status of event
+ *
+ *This structure holds the host diag event related information
+ */
+
+struct host_event_wlan_ssr_shutdown {
+	uint32_t status;
+};
+
+
+/*-------------------------------------------------------------------------
+   Function declarations and documenation
+   ------------------------------------------------------------------------*/
+/**
+ * enum host_sta_kickout_events - Enum containing sta kickout subtype
+ * @HOST_STA_KICKOUT_REASON_BMISS: Indicate sta got disconnected reason
+ * beacon miss
+ * @HOST_STA_KICKOUT_REASON_XRETRY: Indicate sta got disconnected reason xretry
+ * @HOST_STA_KICKOUT_REASON_UNSPECIFIED: Indicate sta disconnection
+ * reason unspecified
+ * @HOST_STA_KICKOUT_REASON_KEEP_ALIVE: Indicate sta is disconnected
+ * because of keep alive
+ *
+ * This enum contains the event subtype
+ */
+enum host_sta_kickout_events {
+	HOST_STA_KICKOUT_REASON_BMISS,
+	HOST_STA_KICKOUT_REASON_XRETRY,
+	HOST_STA_KICKOUT_REASON_UNSPECIFIED,
+	HOST_STA_KICKOUT_REASON_KEEP_ALIVE,
+};
+
+/*-------------------------------------------------------------------------
+   Function declarations and documenation
+   ------------------------------------------------------------------------*/
+/**
+ * enum host_datastall_events - Enum containing datastall subtype
+ * @STA_TX_TIMEOUT: Indicate sta tx timeout
+ * @SOFTAP_TX_TIMEOUT:Indicate softap tx timeout
+ *
+ * This enum contains the event subtype
+ */
+enum host_datastall_events {
+	STA_TX_TIMEOUT,
+	SOFTAP_TX_TIMEOUT,
+};
+
+/*-------------------------------------------------------------------------
+  Function declarations and documenation
+  ------------------------------------------------------------------------*/
+/**
+ * enum host_ssr_events - Enum containing ssr subtype
+ * @SSR_SUB_SYSTEM_REINIT: Indicate ssr reinit state
+ * @SSR_SUB_SYSTEM_SHUTDOWN: Indicate ssr shutdown state
+ *
+ * This enum contains the event subtype
+ */
+enum host_ssr_events {
+	SSR_SUB_SYSTEM_REINIT,
+	SSR_SUB_SYSTEM_SHUTDOWN,
 };
 
 /**

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -185,7 +185,7 @@ enum tdls_peer_capability {
 #define TID_AC_VI                  4
 #define TID_AC_BK                  1
 
-const uint8_t *lim_trace_tdls_action_string(uint8_t tdlsActionCode)
+static const uint8_t *lim_trace_tdls_action_string(uint8_t tdlsActionCode)
 {
 	switch (tdlsActionCode) {
 		CASE_RETURN_STRING(SIR_MAC_TDLS_SETUP_REQ);
@@ -395,8 +395,7 @@ static void populate_dot11f_tdls_ext_capability(tpAniSirGlobal pMac,
 	p_ext_cap->tdls_prohibited = TDLS_PROHIBITED;
 
 	extCapability->present = 1;
-	/* For STA cases we alwasy support 11mc - Allow MAX length */
-	extCapability->num_bytes = DOT11F_IE_EXTCAP_MAX_LEN;
+	extCapability->num_bytes = lim_compute_ext_cap_ie_length(extCapability);
 
 	return;
 }
@@ -509,24 +508,16 @@ static uint32_t lim_prepare_tdls_frame_header(tpAniSirGlobal pMac, uint8_t *pFra
  *
  * return: success: eHAL_STATUS_SUCCESS failure: eHAL_STATUS_FAILURE
  */
-QDF_STATUS lim_mgmt_tdls_tx_complete(tpAniSirGlobal mac_ctx,
-				     uint32_t tx_complete)
+static QDF_STATUS lim_mgmt_tdls_tx_complete(tpAniSirGlobal mac_ctx,
+					    uint32_t tx_complete)
 {
-	tpPESession session_entry = NULL;
-
 	lim_log(mac_ctx, LOG1, FL("tdls_frm_session_id %x tx_complete %x"),
 		mac_ctx->lim.tdls_frm_session_id, tx_complete);
 
 	if (NO_SESSION != mac_ctx->lim.tdls_frm_session_id) {
-		session_entry = pe_find_session_by_session_id(mac_ctx,
-					mac_ctx->lim.tdls_frm_session_id);
-		if (!session_entry) {
-			lim_log(mac_ctx, LOGE, FL("session id %d is not found"),
-				mac_ctx->lim.tdls_frm_session_id);
-			return QDF_STATUS_E_FAILURE;
-		}
-		lim_send_sme_mgmt_tx_completion(mac_ctx, session_entry,
-						tx_complete);
+		lim_send_sme_mgmt_tx_completion(mac_ctx,
+				mac_ctx->lim.tdls_frm_session_id,
+				tx_complete);
 		mac_ctx->lim.tdls_frm_session_id = NO_SESSION;
 	}
 	return QDF_STATUS_SUCCESS;
@@ -536,10 +527,10 @@ QDF_STATUS lim_mgmt_tdls_tx_complete(tpAniSirGlobal mac_ctx,
  * This function can be used for bacst or unicast discovery request
  * We are not differentiating it here, it will all depnds on peer MAC address,
  */
-tSirRetStatus lim_send_tdls_dis_req_frame(tpAniSirGlobal pMac,
-					  struct qdf_mac_addr peer_mac,
-					  uint8_t dialog,
-					  tpPESession psessionEntry)
+static tSirRetStatus lim_send_tdls_dis_req_frame(tpAniSirGlobal pMac,
+						 struct qdf_mac_addr peer_mac,
+						 uint8_t dialog,
+						 tpPESession psessionEntry)
 {
 	tDot11fTDLSDisReq tdlsDisReq;
 	uint32_t status = 0;
@@ -701,7 +692,7 @@ tSirRetStatus lim_send_tdls_dis_req_frame(tpAniSirGlobal pMac,
 		lim_trace_tdls_action_string(SIR_MAC_TDLS_DIS_REQ),
 		MAC_ADDR_ARRAY(peer_mac.bytes));
 
-	pMac->lim.tdls_frm_session_id = psessionEntry->peSessionId;
+	pMac->lim.tdls_frm_session_id = psessionEntry->smeSessionId;
 	qdf_status = wma_tx_frameWithTxComplete(pMac, pPacket,
 					(uint16_t) nBytes,
 					TXRX_FRM_802_11_DATA,
@@ -1021,7 +1012,7 @@ static tSirRetStatus lim_send_tdls_dis_rsp_frame(tpAniSirGlobal pMac,
 		lim_trace_tdls_action_string(SIR_MAC_TDLS_DIS_RSP),
 		MAC_ADDR_ARRAY(peer_mac.bytes));
 
-	pMac->lim.tdls_frm_session_id = psessionEntry->peSessionId;
+	pMac->lim.tdls_frm_session_id = psessionEntry->smeSessionId;
 	/*
 	 * Transmit Discovery response and watch if this is delivered to
 	 * peer STA.
@@ -1157,6 +1148,7 @@ void lim_set_tdls_flags(roam_offload_synch_ind *roam_sync_ind_ptr,
 /*
  * TDLS setup Request frame on AP link
  */
+static
 tSirRetStatus lim_send_tdls_link_setup_req_frame(tpAniSirGlobal pMac,
 						 struct qdf_mac_addr peer_mac,
 						 uint8_t dialog,
@@ -1414,7 +1406,7 @@ tSirRetStatus lim_send_tdls_link_setup_req_frame(tpAniSirGlobal pMac,
 		lim_trace_tdls_action_string(SIR_MAC_TDLS_SETUP_REQ),
 		MAC_ADDR_ARRAY(peer_mac.bytes));
 
-	pMac->lim.tdls_frm_session_id = psessionEntry->peSessionId;
+	pMac->lim.tdls_frm_session_id = psessionEntry->smeSessionId;
 
 	qdf_status = wma_tx_frame_with_tx_complete_send(pMac, pPacket,
 						     (uint16_t) nBytes,
@@ -1436,7 +1428,7 @@ tSirRetStatus lim_send_tdls_link_setup_req_frame(tpAniSirGlobal pMac,
 /*
  * Send TDLS Teardown frame on Direct link or AP link, depends on reason code.
  */
-
+static
 tSirRetStatus lim_send_tdls_teardown_frame(tpAniSirGlobal pMac,
 					   struct qdf_mac_addr peer_mac,
 					   uint16_t reason,
@@ -1624,7 +1616,7 @@ tSirRetStatus lim_send_tdls_teardown_frame(tpAniSirGlobal pMac,
 		    "DIRECT"),
 		MAC_ADDR_ARRAY(peer_mac.bytes));
 
-	pMac->lim.tdls_frm_session_id = psessionEntry->peSessionId;
+	pMac->lim.tdls_frm_session_id = psessionEntry->smeSessionId;
 
 	qdf_status = wma_tx_frame_with_tx_complete_send(pMac, pPacket,
 						     (uint16_t) nBytes,
@@ -1902,7 +1894,7 @@ static tSirRetStatus lim_send_tdls_setup_rsp_frame(tpAniSirGlobal pMac,
 		lim_trace_tdls_action_string(SIR_MAC_TDLS_SETUP_RSP),
 		MAC_ADDR_ARRAY(peer_mac.bytes));
 
-	pMac->lim.tdls_frm_session_id = psessionEntry->peSessionId;
+	pMac->lim.tdls_frm_session_id = psessionEntry->smeSessionId;
 
 	qdf_status = wma_tx_frame_with_tx_complete_send(pMac, pPacket,
 						     (uint16_t) nBytes,
@@ -1923,7 +1915,7 @@ static tSirRetStatus lim_send_tdls_setup_rsp_frame(tpAniSirGlobal pMac,
 /*
  * Send TDLS setup CNF frame on AP link
  */
-
+static
 tSirRetStatus lim_send_tdls_link_setup_cnf_frame(tpAniSirGlobal pMac,
 						 struct qdf_mac_addr peer_mac,
 						 uint8_t dialog,
@@ -2119,7 +2111,7 @@ tSirRetStatus lim_send_tdls_link_setup_cnf_frame(tpAniSirGlobal pMac,
 		lim_trace_tdls_action_string(SIR_MAC_TDLS_SETUP_CNF),
 	       MAC_ADDR_ARRAY(peer_mac.bytes));
 
-	pMac->lim.tdls_frm_session_id = psessionEntry->peSessionId;
+	pMac->lim.tdls_frm_session_id = psessionEntry->smeSessionId;
 
 	qdf_status = wma_tx_frame_with_tx_complete_send(pMac, pPacket,
 						     (uint16_t) nBytes,
@@ -2279,7 +2271,7 @@ static tSirRetStatus lim_tdls_populate_dot11f_ht_caps(tpAniSirGlobal pMac,
 
 }
 
-tSirRetStatus
+static tSirRetStatus
 lim_tdls_populate_dot11f_vht_caps(tpAniSirGlobal pMac,
 				  tSirTdlsAddStaReq *pTdlsAddStaReq,
 				  tDot11fIEVHTCaps *pDot11f)
@@ -2641,15 +2633,21 @@ static void lim_tdls_update_hash_node_info(tpAniSirGlobal pMac,
 		pStaDs->vhtSupportedChannelWidthSet =
 			WNI_CFG_VHT_CHANNEL_WIDTH_20_40MHZ;
 	}
-	/*Calculate the Secondary Coannel Offset */
-	cbMode = lim_select_cb_mode(pStaDs, psessionEntry,
+
+	/*
+	 * Calculate the Secondary Coannel Offset if our
+	 * own channel bonding state is enabled
+	 */
+	if (psessionEntry->htSupportedChannelWidthSet) {
+		cbMode = lim_select_cb_mode(pStaDs, psessionEntry,
 				    psessionEntry->currentOperChannel,
 				    pStaDs->vhtSupportedChannelWidthSet);
 
-	pStaDs->htSecondaryChannelOffset = cbMode;
-
-	if (pStaDs->mlmStaContext.vhtCapability) {
-		pStaDs->htSecondaryChannelOffset = lim_get_htcb_state(cbMode);
+		if (pStaDs->mlmStaContext.vhtCapability)
+			pStaDs->htSecondaryChannelOffset =
+					lim_get_htcb_state(cbMode);
+		else
+			pStaDs->htSecondaryChannelOffset = cbMode;
 	}
 	pSessStaDs = dph_lookup_hash_entry(pMac, psessionEntry->bssId, &aid,
 					   &psessionEntry->dph.dphHashTable);
@@ -2752,7 +2750,8 @@ static tSirRetStatus lim_tdls_setup_add_sta(tpAniSirGlobal pMac,
  */
 static tpDphHashNode lim_tdls_del_sta(tpAniSirGlobal pMac,
 				      struct qdf_mac_addr peerMac,
-				      tpPESession psessionEntry)
+				      tpPESession psessionEntry,
+				      bool resp_reqd)
 {
 	tSirRetStatus status = eSIR_SUCCESS;
 	uint16_t peerIdx = 0;
@@ -2766,11 +2765,13 @@ static tpDphHashNode lim_tdls_del_sta(tpAniSirGlobal pMac,
 		lim_log(pMac, LOG1, FL("DEL STA peer MAC: "MAC_ADDRESS_STR),
 		       MAC_ADDR_ARRAY(pStaDs->staAddr));
 
-		lim_log(pMac, LOG1, FL("STA type = %x, sta idx = %x"),
+		lim_log(pMac, LOG1,
+		       FL("STA type = %x, sta idx = %x resp_reqd %d"),
 		       pStaDs->staType,
-		       pStaDs->staIndex);
+		       pStaDs->staIndex,
+		       resp_reqd);
 
-		status = lim_del_sta(pMac, pStaDs, false, psessionEntry);
+		status = lim_del_sta(pMac, pStaDs, resp_reqd, psessionEntry);
 	}
 
 	return pStaDs;
@@ -3008,6 +3009,7 @@ void lim_send_sme_tdls_link_establish_req_rsp(tpAniSirGlobal pMac,
 		lim_log(pMac, LOGE, FL("Failed to allocate memory"));
 		return;
 	}
+	lim_log(pMac, LOG1, FL("Send Resp to TDL Link Establish Req to SME"));
 	pTdlsLinkEstablishReqRsp->statusCode = status;
 	if (peermac)
 		qdf_copy_macaddr(&pTdlsLinkEstablishReqRsp->peermac, peermac);
@@ -3133,7 +3135,6 @@ tSirRetStatus lim_process_sme_tdls_del_sta_req(tpAniSirGlobal pMac,
 	tSirTdlsDelStaReq *pDelStaReq = (tSirTdlsDelStaReq *) pMsgBuf;
 	tpPESession psessionEntry;
 	uint8_t sessionId;
-	tpDphHashNode pStaDs = NULL;
 
 	lim_log(pMac, LOG1, FL("TDLS Delete STA Request Recieved"));
 	psessionEntry =
@@ -3172,25 +3173,8 @@ tSirRetStatus lim_process_sme_tdls_del_sta_req(tpAniSirGlobal pMac,
 		goto lim_tdls_del_sta_error;
 	}
 
-	pStaDs = lim_tdls_del_sta(pMac, pDelStaReq->peermac, psessionEntry);
-
-	/* now send indication to SME-->HDD->TL to remove STA from TL */
-
-	if (pStaDs) {
-		lim_send_sme_tdls_del_sta_rsp(pMac, psessionEntry->smeSessionId,
-					      pDelStaReq->peermac, pStaDs,
-					      eSIR_SUCCESS);
-		lim_release_peer_idx(pMac, pStaDs->assocId, psessionEntry);
-
-		/* Clear the aid in peerAIDBitmap as this aid is now in freepool */
-		CLEAR_PEER_AID_BITMAP(psessionEntry->peerAIDBitmap,
-				      pStaDs->assocId);
-		lim_delete_dph_hash_entry(pMac, pStaDs->staAddr, pStaDs->assocId,
-					  psessionEntry);
-
-		return eSIR_SUCCESS;
-
-	}
+	lim_tdls_del_sta(pMac, pDelStaReq->peermac, psessionEntry, true);
+	return eSIR_SUCCESS;
 
 lim_tdls_del_sta_error:
 	lim_send_sme_tdls_del_sta_rsp(pMac, psessionEntry->smeSessionId,
@@ -3252,7 +3236,7 @@ tSirRetStatus lim_process_sme_tdls_link_establish_req(tpAniSirGlobal mac_ctx,
 	uint8_t self_supp_chan[WNI_CFG_VALID_CHANNEL_LIST_LEN];
 
 	QDF_TRACE(QDF_MODULE_ID_PE, QDF_TRACE_LEVEL_INFO,
-		  FL("Send Mgmt Recieved"));
+		  FL("Process TDLS Link Establishment Request from SME"));
 
 	session_entry = pe_find_session_by_bssid(mac_ctx, tdls_req->bssid.bytes,
 						 &session_id);
@@ -3365,6 +3349,67 @@ lim_tdls_link_establish_error:
 }
 
 /**
+ * lim_check_aid_and_delete_peer() - Funtion to check aid and delete peer
+ * @p_mac: pointer to mac context
+ * @session_entry: pointer to PE session
+ *
+ * This function verifies aid and delete's peer with that aid from hash table
+ *
+ * Return: None
+ */
+static void lim_check_aid_and_delete_peer(tpAniSirGlobal p_mac,
+					  tpPESession session_entry)
+{
+	tpDphHashNode stads = NULL;
+	int i, aid;
+	size_t aid_bitmap_size = sizeof(session_entry->peerAIDBitmap);
+	struct qdf_mac_addr mac_addr;
+
+	/*
+	 * Check all the set bit in peerAIDBitmap and delete the peer
+	 * (with that aid) entry from the hash table and add the aid
+	 * in free pool
+	 */
+	lim_log(p_mac, LOG1, FL("Delete all the TDLS peer connected"));
+	for (i = 0; i < aid_bitmap_size / sizeof(uint32_t); i++) {
+		for (aid = 0; aid < (sizeof(uint32_t) << 3); aid++) {
+			if (!CHECK_BIT(session_entry->peerAIDBitmap[i], aid))
+				continue;
+			stads = dph_get_hash_entry(p_mac,
+					(aid + i * (sizeof(uint32_t) << 3)),
+					&session_entry->dph.dphHashTable);
+
+			if (NULL == stads)
+				goto skip;
+
+			lim_log(p_mac, LOG1,
+				FL("Deleting "MAC_ADDRESS_STR),
+				MAC_ADDR_ARRAY(stads->staAddr));
+
+			lim_send_deauth_mgmt_frame(p_mac,
+				eSIR_MAC_DEAUTH_LEAVING_BSS_REASON,
+				stads->staAddr, session_entry, false);
+
+			/* Delete TDLS peer */
+			qdf_mem_copy(mac_addr.bytes, stads->staAddr,
+				     QDF_MAC_ADDR_SIZE);
+
+			lim_tdls_del_sta(p_mac, mac_addr,
+					 session_entry, false);
+
+			dph_delete_hash_entry(p_mac,
+				stads->staAddr, stads->assocId,
+				&session_entry->dph.dphHashTable);
+skip:
+			lim_release_peer_idx(p_mac,
+				(aid + i * (sizeof(uint32_t) << 3)),
+				session_entry);
+			CLEAR_BIT(session_entry->peerAIDBitmap[i], aid);
+		}
+	}
+}
+
+/**
  * lim_delete_tdls_peers() - delete tdls peers
  *
  * @mac_ctx - global MAC context
@@ -3377,51 +3422,114 @@ lim_tdls_link_establish_error:
 tSirRetStatus lim_delete_tdls_peers(tpAniSirGlobal mac_ctx,
 				    tpPESession session_entry)
 {
-	tpDphHashNode stads = NULL;
-	int i, aid;
-	size_t aid_bitmap_size = sizeof(session_entry->peerAIDBitmap);
-
 	if (NULL == session_entry) {
 		lim_log(mac_ctx, LOGE, FL("NULL session_entry"));
 		return eSIR_FAILURE;
 	}
 
-	/*
-	 * Check all the set bit in peerAIDBitmap and delete the peer
-	 * (with that aid) entry from the hash table and add the aid
-	 * in free pool
-	 */
-	for (i = 0; i < aid_bitmap_size / sizeof(uint32_t); i++) {
-		for (aid = 0; aid < (sizeof(uint32_t) << 3); aid++) {
-			if (!CHECK_BIT(session_entry->peerAIDBitmap[i], aid))
-				continue;
-			stads = dph_get_hash_entry(mac_ctx,
-					(aid + i * (sizeof(uint32_t) << 3)),
-					&session_entry->dph.dphHashTable);
-
-			if (NULL != stads) {
-				lim_log(mac_ctx, LOGE,
-					FL("Deleting "MAC_ADDRESS_STR),
-					MAC_ADDR_ARRAY(stads->staAddr));
-
-				lim_send_deauth_mgmt_frame(mac_ctx,
-					eSIR_MAC_DEAUTH_LEAVING_BSS_REASON,
-					stads->staAddr, session_entry, false);
-				dph_delete_hash_entry(mac_ctx,
-					stads->staAddr, stads->assocId,
-					&session_entry->dph.dphHashTable);
-			}
-			lim_release_peer_idx(mac_ctx,
-				(aid + i * (sizeof(uint32_t) << 3)),
-				session_entry);
-			CLEAR_BIT(session_entry->peerAIDBitmap[i], aid);
-		}
-	}
+	lim_check_aid_and_delete_peer(mac_ctx, session_entry);
 	if (lim_is_roam_synch_in_progress(session_entry))
 		return eSIR_SUCCESS;
 	lim_send_sme_tdls_delete_all_peer_ind(mac_ctx, session_entry);
 
 	return eSIR_SUCCESS;
 }
+
+/**
+ * lim_process_sme_del_all_tdls_peers(): process delete tdls peers
+ * @p_mac: pointer to mac context
+ * @msg_buf: message buffer
+ *
+ * This function processes request to delete tdls peers
+ *
+ * Return: Success: eSIR_SUCCESS Failure: Error value
+ */
+tSirRetStatus lim_process_sme_del_all_tdls_peers(tpAniSirGlobal p_mac,
+						 uint32_t *msg_buf)
+{
+	struct sir_del_all_tdls_peers *msg;
+	tpPESession session_entry;
+	uint8_t session_id;
+
+	msg = (struct sir_del_all_tdls_peers *)msg_buf;
+	if (msg == NULL) {
+		lim_log(p_mac, LOGE, FL("NULL msg"));
+		return eSIR_FAILURE;
+	}
+
+	session_entry = pe_find_session_by_bssid(p_mac,
+						 msg->bssid.bytes, &session_id);
+	if (NULL == session_entry) {
+		lim_log(p_mac, LOGE, FL("NULL psessionEntry"));
+		return eSIR_FAILURE;
+	}
+
+	lim_check_aid_and_delete_peer(p_mac, session_entry);
+
+	return eSIR_SUCCESS;
+}
+
+/**
+ * lim_process_tdls_del_sta_rsp() - Handle WDA_DELETE_STA_RSP for TDLS
+ * @mac_ctx: Global MAC context
+ * @lim_msg: LIM message
+ * @pe_session: PE session
+ *
+ * Return: None
+ */
+void lim_process_tdls_del_sta_rsp(tpAniSirGlobal mac_ctx, tpSirMsgQ lim_msg,
+						tpPESession session_entry)
+{
+	tpDeleteStaParams del_sta_params = (tpDeleteStaParams) lim_msg->bodyptr;
+	tpDphHashNode sta_ds;
+	uint16_t peer_idx = 0;
+	struct qdf_mac_addr peer_mac;
+
+	if (!del_sta_params) {
+		lim_log(mac_ctx, LOGE,
+			FL("del_sta_params is NULL"));
+		return;
+	}
+
+	sta_ds = dph_lookup_hash_entry(mac_ctx, del_sta_params->staMac,
+			&peer_idx, &session_entry->dph.dphHashTable);
+	if (!sta_ds) {
+		lim_log(mac_ctx, LOGE,
+			FL("DPH Entry for STA %X is missing."),
+			DPH_STA_HASH_INDEX_PEER);
+		goto skip_event;
+	}
+
+	qdf_mem_copy(peer_mac.bytes,
+			del_sta_params->staMac, QDF_MAC_ADDR_SIZE);
+
+	if (QDF_STATUS_SUCCESS != del_sta_params->status) {
+		lim_log(mac_ctx, LOGE, FL("DEL STA failed!"));
+		lim_send_sme_tdls_del_sta_rsp(mac_ctx,
+				      session_entry->smeSessionId,
+				      peer_mac, NULL, eSIR_FAILURE);
+		goto skip_event;
+	}
+
+	lim_log(mac_ctx, LOG1, FL("DEL STA success"));
+
+	/* now send indication to SME-->HDD->TL to remove STA from TL */
+
+	lim_send_sme_tdls_del_sta_rsp(mac_ctx, session_entry->smeSessionId,
+				      peer_mac, sta_ds,
+				      eSIR_SUCCESS);
+	lim_release_peer_idx(mac_ctx, sta_ds->assocId, session_entry);
+
+	/* Clear the aid in peerAIDBitmap as this aid is now in freepool */
+	CLEAR_PEER_AID_BITMAP(session_entry->peerAIDBitmap,
+			      sta_ds->assocId);
+	lim_delete_dph_hash_entry(mac_ctx, sta_ds->staAddr, sta_ds->assocId,
+				  session_entry);
+
+skip_event:
+	qdf_mem_free(del_sta_params);
+	lim_msg->bodyptr = NULL;
+}
+
 
 #endif

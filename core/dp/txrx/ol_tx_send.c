@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -61,7 +61,7 @@
 #endif
 #include <ol_tx_queue.h>
 #include <ol_txrx.h>
-
+#include <pktlog_ac_fmt.h>
 
 #ifdef TX_CREDIT_RECLAIM_SUPPORT
 
@@ -488,10 +488,12 @@ ol_tx_delay_compute(struct ol_txrx_pdev_t *pdev,
 #endif /* !QCA_TX_STD_PATH_ONLY */
 #endif /* QCA_TX_SINGLE_COMPLETIONS */
 
+#if !defined(CONFIG_HL_SUPPORT)
 void ol_tx_discard_target_frms(ol_txrx_pdev_handle pdev)
 {
 	int i = 0;
 	struct ol_tx_desc_t *tx_desc;
+	int num_disarded = 0;
 
 	for (i = 0; i < pdev->tx_desc.pool_size; i++) {
 		tx_desc = ol_tx_desc_find(pdev, i);
@@ -504,13 +506,19 @@ void ol_tx_discard_target_frms(ol_txrx_pdev_handle pdev)
 		 */
 		if (qdf_atomic_read(&tx_desc->ref_cnt)) {
 			TXRX_PRINT(TXRX_PRINT_LEVEL_WARN,
-				   "Warning: freeing tx frame "
-				   "(no tx completion from the target)\n");
+				   "Warning: freeing tx desc %d", tx_desc->id);
 			ol_tx_desc_frame_free_nonstd(pdev,
 						     tx_desc, 1);
+			num_disarded++;
 		}
 	}
+
+	if (num_disarded)
+		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_INFO,
+		"Warning: freed %d tx descs for which"
+		"no tx completion rcvd from the target", num_disarded);
 }
+#endif
 
 void ol_tx_credit_completion_handler(ol_txrx_pdev_handle pdev, int credits)
 {
@@ -521,6 +529,27 @@ void ol_tx_credit_completion_handler(ol_txrx_pdev_handle pdev, int credits)
 
 	/* UNPAUSE OS Q */
 	ol_tx_flow_ct_unpause_os_q(pdev);
+}
+
+
+/**
+ * ol_tx_update_arp_stats() - update ARP packet TX stats
+ * @netbuf:  buffer
+ *
+ *
+ * Return: none
+ */
+static void ol_tx_update_arp_stats(qdf_nbuf_t netbuf,
+					enum htt_tx_status status)
+{
+	uint32_t tgt_ip = cds_get_arp_stats_gw_ip();
+
+	if (tgt_ip == qdf_nbuf_get_arp_tgt_ip(netbuf)) {
+		if (status != htt_tx_status_download_fail)
+			cds_incr_arp_stats_tx_tgt_delivered();
+		if (status == htt_tx_status_ok)
+			cds_incr_arp_stats_tx_tgt_acked();
+	}
 }
 
 /* WARNING: ol_tx_inspect_handler()'s bahavior is similar to that of
@@ -539,6 +568,7 @@ ol_tx_completion_handler(ol_txrx_pdev_handle pdev,
 	struct ol_tx_desc_t *tx_desc;
 	uint32_t byte_cnt = 0;
 	qdf_nbuf_t netbuf;
+	tp_ol_packetdump_cb packetdump_cb;
 
 	union ol_tx_desc_list_elem_t *lcl_freelist = NULL;
 	union ol_tx_desc_list_elem_t *tx_desc_last = NULL;
@@ -553,6 +583,20 @@ ol_tx_completion_handler(ol_txrx_pdev_handle pdev,
 		tx_desc->status = status;
 		netbuf = tx_desc->netbuf;
 		QDF_NBUF_UPDATE_TX_PKT_COUNT(netbuf, QDF_NBUF_TX_PKT_FREE);
+
+		if (QDF_NBUF_CB_GET_PACKET_TYPE(netbuf) ==
+		    QDF_NBUF_CB_PACKET_TYPE_ARP) {
+			if (qdf_nbuf_data_is_arp_req(netbuf))
+				ol_tx_update_arp_stats(netbuf, status);
+		}
+
+		if (tx_desc->pkt_type != OL_TX_FRM_TSO) {
+			packetdump_cb = pdev->ol_tx_packetdump_cb;
+			if (packetdump_cb)
+				packetdump_cb(netbuf, status,
+					tx_desc->vdev->vdev_id, TX_DATA_PKT);
+		}
+
 		DPTRACE(qdf_dp_trace_ptr(netbuf,
 			QDF_DP_TRACE_FREE_PACKET_PTR_RECORD,
 			qdf_nbuf_data_addr(netbuf),
@@ -626,7 +670,7 @@ void ol_tx_desc_update_group_credit(ol_txrx_pdev_handle pdev,
 			OL_TXQ_GROUP_VDEV_ID_MASK_GET(
 					pdev->txq_grps[i].membership);
 		is_member = OL_TXQ_GROUP_VDEV_ID_BIT_MASK_GET(vdev_id_mask,
-				tx_desc->vdev->vdev_id);
+				tx_desc->vdev_id);
 		if (is_member) {
 			ol_txrx_update_group_credit(&pdev->txq_grps[i],
 						    credit, absolute);
@@ -758,6 +802,7 @@ ol_tx_single_completion_handler(ol_txrx_pdev_handle pdev,
 {
 	struct ol_tx_desc_t *tx_desc;
 	qdf_nbuf_t netbuf;
+	tp_ol_packetdump_cb packetdump_cb;
 
 	tx_desc = ol_tx_desc_find_check(pdev, tx_desc_id);
 	if (tx_desc == NULL) {
@@ -774,6 +819,11 @@ ol_tx_single_completion_handler(ol_txrx_pdev_handle pdev,
 	QDF_NBUF_UPDATE_TX_PKT_COUNT(netbuf, QDF_NBUF_TX_PKT_FREE);
 	/* Do one shot statistics */
 	TXRX_STATS_UPDATE_TX_STATS(pdev, status, 1, qdf_nbuf_len(netbuf));
+
+	packetdump_cb = pdev->ol_tx_packetdump_cb;
+	if (packetdump_cb)
+		packetdump_cb(netbuf, status,
+			tx_desc->vdev->vdev_id, TX_MGMT_PKT);
 
 	if (OL_TX_DESC_NO_REFS(tx_desc)) {
 		ol_tx_desc_frame_free_nonstd(pdev, tx_desc,
@@ -1184,3 +1234,57 @@ ol_tx_delay_compute(struct ol_txrx_pdev_t *pdev,
 }
 
 #endif /* QCA_COMPUTE_TX_DELAY */
+
+/**
+ * ol_register_packetdump_callback() - registers
+ *  tx data packet, tx mgmt. packet and rx data packet
+ *  dump callback handler.
+ *
+ * @ol_tx_packetdump_cb: tx packetdump cb
+ * @ol_rx_packetdump_cb: rx packetdump cb
+ *
+ * This function is used to register tx data pkt, tx mgmt.
+ * pkt and rx data pkt dump callback
+ *
+ * Return: None
+ *
+ */
+void ol_register_packetdump_callback(tp_ol_packetdump_cb ol_tx_packetdump_cb,
+					tp_ol_packetdump_cb ol_rx_packetdump_cb)
+{
+	ol_txrx_pdev_handle pdev = cds_get_context(QDF_MODULE_ID_TXRX);
+
+	if (!pdev) {
+		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+				"%s: pdev is NULL", __func__);
+		return;
+	}
+
+	pdev->ol_tx_packetdump_cb = ol_tx_packetdump_cb;
+	pdev->ol_rx_packetdump_cb = ol_rx_packetdump_cb;
+}
+
+/**
+ * ol_deregister_packetdump_callback() - deregidters
+ *  tx data packet, tx mgmt. packet and rx data packet
+ *  dump callback handler
+ *
+ * This function is used to deregidter tx data pkt.,
+ * tx mgmt. pkt and rx data pkt. dump callback
+ *
+ * Return: None
+ *
+ */
+void ol_deregister_packetdump_callback(void)
+{
+	ol_txrx_pdev_handle pdev = cds_get_context(QDF_MODULE_ID_TXRX);
+
+	if (!pdev) {
+		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+				"%s: pdev is NULL", __func__);
+		return;
+	}
+
+	pdev->ol_tx_packetdump_cb = NULL;
+	pdev->ol_rx_packetdump_cb = NULL;
+}
