@@ -2120,6 +2120,7 @@ int afe_set_config(enum afe_config_type config_type, void *config_data, int arg)
 
 	return ret;
 }
+EXPORT_SYMBOL(afe_set_config);
 
 /*
  * afe_clear_config - If SSR happens ADSP loses AFE configs, let AFE driver know
@@ -2130,6 +2131,7 @@ void afe_clear_config(enum afe_config_type config)
 {
 	clear_bit(config, &afe_configured_cmd);
 }
+EXPORT_SYMBOL(afe_clear_config);
 
 bool afe_has_config(enum afe_config_type config)
 {
@@ -5857,6 +5859,7 @@ int afe_set_lpass_clock_v2(u16 port_id, struct afe_clk_set *cfg)
 
 	return ret;
 }
+EXPORT_SYMBOL(afe_set_lpass_clock_v2);
 
 int afe_set_lpass_internal_digital_codec_clock(u16 port_id,
 			struct afe_digital_clk_cfg *cfg)
