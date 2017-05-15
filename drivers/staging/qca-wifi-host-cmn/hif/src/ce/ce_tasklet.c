@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -172,13 +172,11 @@ static void ce_tasklet(unsigned long data)
 		QDF_BUG(0);
 	}
 
-	qdf_spin_lock_bh(&CE_state->lro_unloading_lock);
 	ce_per_engine_service(scn, tasklet_entry->ce_id);
 
 	if (CE_state->lro_flush_cb != NULL) {
 		CE_state->lro_flush_cb(CE_state->lro_data);
 	}
-	qdf_spin_unlock_bh(&CE_state->lro_unloading_lock);
 
 	if (ce_check_rx_pending(CE_state)) {
 		/*
@@ -438,14 +436,14 @@ void hif_display_ce_stats(struct HIF_CE_state *hif_ce_state)
 		size = STR_SIZE;
 		pos = 0;
 		for (j = 0; j < QDF_MAX_AVAILABLE_CPU; j++) {
-			ret = snprintf(str_buffer + pos, size, "[%d]: %d",
+			ret = snprintf(str_buffer + pos, size, "[%d]:%d ",
 				j, hif_ce_state->stats.ce_per_cpu[i][j]);
 			if (ret <= 0 || ret >= size)
 				break;
 			size -= ret;
 			pos += ret;
 		}
-		qdf_print("CE id[%d] - %s", i, str_buffer);
+		qdf_print("CE id[%2d] - %s", i, str_buffer);
 	}
 #undef STR_SIZE
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -273,6 +273,35 @@ typedef enum {
 } QDF_MODULE_ID;
 
 /**
+ * typedef enum QDF_TRACE_LEVEL - Debug Trace level
+ * @QDF_TRACE_LEVEL_NONE: no trace will be logged. This value is in place
+ * for the qdf_trace_setlevel() to allow the user to turn off all traces
+ * @QDF_TRACE_LEVEL_FATAL: enable trace for fatal Error
+ * @QDF_TRACE_LEVEL_ERROR: enable trace for errors
+ * @QDF_TRACE_LEVEL_WARN: enable trace for warnings
+ * @QDF_TRACE_LEVEL_INFO: enable trace for information
+ * @QDF_TRACE_LEVEL_INFO_HIGH: enable high level trace information
+ * @QDF_TRACE_LEVEL_INFO_MED: enable middle level trace information
+ * @QDF_TRACE_LEVEL_INFO_LOW: enable low level trace information
+ * @QDF_TRACE_LEVEL_DEBUG: enable trace for debugging
+ * @QDF_TRACE_LEVEL_ALL: enable all trace
+ * @QDF_TRACE_LEVEL_MAX: enable max level trace
+ */
+typedef enum {
+	QDF_TRACE_LEVEL_NONE = 0,
+	QDF_TRACE_LEVEL_FATAL,
+	QDF_TRACE_LEVEL_ERROR,
+	QDF_TRACE_LEVEL_WARN,
+	QDF_TRACE_LEVEL_INFO,
+	QDF_TRACE_LEVEL_INFO_HIGH,
+	QDF_TRACE_LEVEL_INFO_MED,
+	QDF_TRACE_LEVEL_INFO_LOW,
+	QDF_TRACE_LEVEL_DEBUG,
+	QDF_TRACE_LEVEL_ALL,
+	QDF_TRACE_LEVEL_MAX
+} QDF_TRACE_LEVEL;
+
+/**
  * enum tQDF_ADAPTER_MODE - Concurrency role.
  * @QDF_STA_MODE: STA mode
  * @QDF_SAP_MODE: SAP mode
@@ -331,7 +360,30 @@ enum tQDF_GLOBAL_CON_MODE {
 
 #define  QDF_IS_EPPING_ENABLED(mode) (mode == QDF_GLOBAL_EPPING_MODE)
 
+
 #ifdef CONFIG_MCL
+/**
+ * qdf_trace_msg()- logging API
+ * @module: Module identifier. A member of the QDF_MODULE_ID enumeration that
+ *	    identifies the module issuing the trace message.
+ * @level: Trace level. A member of the QDF_TRACE_LEVEL enumeration indicating
+ *	   the severity of the condition causing the trace message to be issued.
+ *	   More severe conditions are more likely to be logged.
+ * @str_format: Format string. The message to be logged. This format string
+ *	       contains printf-like replacement parameters, which follow this
+ *	       parameter in the variable argument list.
+ *
+ * Users wishing to add tracing information to their code should use
+ * QDF_TRACE.  QDF_TRACE() will compile into a call to qdf_trace_msg() when
+ * tracing is enabled.
+ *
+ * Return: nothing
+ *
+ * implemented in qdf_trace.c
+ */
+void __printf(3, 4) qdf_trace_msg(QDF_MODULE_ID module, QDF_TRACE_LEVEL level,
+		   char *str_format, ...);
+
 #define qdf_print(args...) \
 	QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_ERROR, ## args)
 
@@ -435,6 +487,7 @@ struct qdf_tso_frag_t {
 };
 
 #define FRAG_NUM_MAX 6
+#define TSO_SEG_MAGIC_COOKIE 0x7EED
 
 /**
  * struct qdf_tso_flags_t - TSO specific flags
@@ -511,7 +564,30 @@ struct qdf_tso_seg_t {
  */
 struct qdf_tso_seg_elem_t {
 	struct qdf_tso_seg_t seg;
+	uint16_t cookie:15,
+		on_freelist:1;
 	struct qdf_tso_seg_elem_t *next;
+};
+
+/**
+ * struct qdf_tso_num_seg_t - single element to count for num of seg
+ * @tso_cmn_num_seg: num of seg in a jumbo skb
+ *
+ * This structure holds the information of num of segments of a jumbo
+ * TSO network buffer.
+ */
+struct qdf_tso_num_seg_t {
+	uint32_t tso_cmn_num_seg;
+};
+
+/**
+ * qdf_tso_num_seg_elem_t - num of tso segment element for jumbo skb
+ * @num_seg: instance of num of seg
+ * @next: pointer to the next segment
+ */
+struct qdf_tso_num_seg_elem_t {
+	struct qdf_tso_num_seg_t num_seg;
+	struct qdf_tso_num_seg_elem_t *next;
 };
 
 /**
@@ -520,6 +596,8 @@ struct qdf_tso_seg_elem_t {
  * @num_segs: number of segments
  * @tso_seg_list: list of TSO segments for this jumbo packet
  * @curr_seg: segment that is currently being processed
+ * @tso_num_seg_list: num of tso seg for this jumbo packet
+ * @msdu_stats_idx: msdu index for tso stats
  *
  * This structure holds the TSO information extracted after parsing the TSO
  * jumbo network buffer. It contains a chain of the TSO segments belonging to
@@ -530,6 +608,8 @@ struct qdf_tso_info_t {
 	uint32_t num_segs;
 	struct qdf_tso_seg_elem_t *tso_seg_list;
 	struct qdf_tso_seg_elem_t *curr_seg;
+	struct qdf_tso_num_seg_elem_t *tso_num_seg_list;
+	uint32_t msdu_stats_idx;
 };
 
 /**

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -242,6 +242,30 @@ int wmi_get_pending_cmds(wmi_unified_t wmi_handle);
 void wmi_set_target_suspend(wmi_unified_t wmi_handle, bool val);
 
 /**
+ * WMI API to set bus suspend state
+ * @param wmi_handle:	handle to WMI.
+ * @param val:		suspend state boolean
+ */
+void wmi_set_is_wow_bus_suspended(wmi_unified_t wmi_handle, A_BOOL val);
+
+/**
+ * WMI API to set crash injection state
+ * @param wmi_handle:	handle to WMI.
+ * @param val:		crash injection state boolean
+ */
+void wmi_tag_crash_inject(wmi_unified_t wmi_handle, A_BOOL flag);
+
+/**
+ *  WMI API to set target assert
+ *
+ *  @wmi_handle      : handle to WMI.
+ *  @val             : target assert config value.
+ *
+ *  @Return          : none.
+ */
+void wmi_set_tgt_assert(wmi_unified_t wmi_handle, bool val);
+
+/**
  * generic function to block unified WMI command
  * @param wmi_handle      : handle to WMI.
  * @return 0  on success and -ve on failure.
@@ -280,7 +304,6 @@ static inline bool wmi_get_runtime_pm_inprogress(wmi_unified_t wmi_handle)
 	return false;
 }
 #endif
-
 
 /**
  * UMAC Callback to process fw event.
@@ -641,7 +664,11 @@ QDF_STATUS wmi_unified_get_link_speed_cmd(void *wmi_hdl,
 
 QDF_STATUS wmi_unified_egap_conf_params_cmd(void *wmi_hdl,
 		wmi_ap_ps_egap_param_cmd_fixed_param *egap_params);
+
 #endif
+
+QDF_STATUS wmi_unified_action_frame_patterns_cmd(void *wmi_hdl,
+			struct action_wakeup_set_param *action_params);
 
 QDF_STATUS wmi_unified_fw_profiling_data_cmd(void *wmi_hdl,
 			uint32_t cmd, uint32_t value1, uint32_t value2);
@@ -815,6 +842,20 @@ QDF_STATUS wmi_unified_enable_arp_ns_offload_cmd(void *wmi_hdl,
 			   bool arp_only,
 			   uint8_t vdev_id);
 
+/**
+ * wmi_unified_configure_broadcast_filter_cmd() - Enable/Disable Broadcast
+ * filter
+ * when target goes to wow suspend/resume mode
+ * @wmi_hdl: wmi handle
+ * @vdev_id: device identifier
+ * @bc_filter: enable/disable Broadcast filter
+ *
+ *
+ * Return: QDF_STATUS_SUCCESS on success and QDF_STATUS_E_FAILURE for failure
+ */
+QDF_STATUS wmi_unified_configure_broadcast_filter_cmd(void *wmi_hdl,
+			   uint8_t vdev_id, bool bc_filter);
+
 QDF_STATUS wmi_unified_set_led_flashing_cmd(void *wmi_hdl,
 				struct flashing_req_params *flashing);
 
@@ -859,9 +900,33 @@ QDF_STATUS wmi_unified_roam_scan_offload_rssi_change_cmd(void *wmi_hdl,
 			  uint32_t bcn_rssi_weight,
 			  uint32_t hirssi_delay_btw_scans);
 
+/**
+ * wmi_unified_set_per_roam_config() - set PER roam config in FW
+ * @wmi_hdl: wmi handle
+ * @req_buf: per roam config request buffer
+ *
+ * Return: QDF_STATUS_SUCCESS on success and QDF_STATUS_E_FAILURE for failure
+ */
+QDF_STATUS wmi_unified_set_per_roam_config(void *wmi_hdl,
+		struct wmi_per_roam_config_req *req_buf);
+
 QDF_STATUS wmi_unified_get_buf_extscan_hotlist_cmd(void *wmi_hdl,
 				   struct ext_scan_setbssi_hotlist_params *
 				   photlist, int *buf_len);
+
+/**
+ * wmi_unified_set_active_bpf_mode_cmd() - config active BPF mode in FW
+ * @wmi_hdl: the WMI handle
+ * @vdev_id: the Id of the vdev to apply the configuration to
+ * @ucast_mode: the active BPF mode to configure for unicast packets
+ * @mcast_bcast_mode: the active BPF mode to configure for multicast/broadcast
+ *	packets
+ */
+QDF_STATUS
+wmi_unified_set_active_bpf_mode_cmd(void *wmi_hdl,
+				    uint8_t vdev_id,
+				    FW_ACTIVE_BPF_MODE ucast_mode,
+				    FW_ACTIVE_BPF_MODE mcast_bcast_mode);
 
 QDF_STATUS wmi_unified_stats_request_send(void *wmi_hdl,
 				uint8_t macaddr[IEEE80211_ADDR_LEN],
@@ -1277,10 +1342,26 @@ QDF_STATUS wmi_extract_vdev_extd_stats(void *wmi_hdl, void *evt_buf,
 
 QDF_STATUS wmi_unified_send_power_dbg_cmd(void *wmi_hdl,
 				struct wmi_power_dbg_params *param);
+QDF_STATUS wmi_unified_send_sar_limit_cmd(void *wmi_hdl,
+				struct sar_limit_cmd_params *params);
 QDF_STATUS wmi_unified_send_adapt_dwelltime_params_cmd(void *wmi_hdl,
 				   struct wmi_adaptive_dwelltime_params *
 				   wmi_param);
 QDF_STATUS wmi_unified_fw_test_cmd(void *wmi_hdl,
 				   struct set_fwtest_params *wmi_fwtest);
 
+/**
+ * wmi_unified_get_rcpi_cmd() - get rcpi request
+ * @wmi_hdl: wma handle
+ * @get_rcpi_param: rcpi params
+ *
+ * Return: QDF_STATUS_SUCCESS on success and QDF_STATUS_E_FAILURE for failure
+ */
+QDF_STATUS wmi_unified_get_rcpi_cmd(void *wmi_hdl,
+				    struct rcpi_req *get_rcpi_param);
+
+QDF_STATUS wmi_unified_set_arp_stats_req(void *wmi_hdl,
+					 struct set_arp_stats *req_buf);
+QDF_STATUS wmi_unified_get_arp_stats_req(void *wmi_hdl,
+					 struct get_arp_stats *req_buf);
 #endif /* _WMI_UNIFIED_API_H_ */
