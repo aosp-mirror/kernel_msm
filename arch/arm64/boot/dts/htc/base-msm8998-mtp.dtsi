@@ -12,6 +12,7 @@
 
 #include <dt-bindings/interrupt-controller/irq.h>
 #include "base-msm8998-camera-sensor-mtp.dtsi"
+#include "msm8998-mdss-panels.dtsi"
 
 &soc {
 	bluetooth: bt_wcn3990 {
