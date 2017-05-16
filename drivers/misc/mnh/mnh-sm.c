@@ -1652,7 +1652,10 @@ static int mnh_sm_probe(struct platform_device *pdev)
 	if (IS_ERR(mnh_sm_dev->ddr_pad_iso_n_pin)) {
 		dev_err(dev, "%s: could not get ddr_pad_iso_n gpio (%ld)\n",
 			__func__, PTR_ERR(mnh_sm_dev->ddr_pad_iso_n_pin));
-		error = PTR_ERR(mnh_sm_dev->ddr_pad_iso_n_pin);
+		if (PTR_ERR(mnh_sm_dev->ddr_pad_iso_n_pin) == -EPROBE_DEFER)
+			error = -ENODEV;
+		else
+			error = PTR_ERR(mnh_sm_dev->ddr_pad_iso_n_pin);
 		goto fail_probe_2;
 	}
 
