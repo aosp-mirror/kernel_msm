@@ -584,6 +584,12 @@ config GOOGLE_EASEL_AP
 	  Say 'y' if this kernel is for the AP/Android side of the link.  Say
 	  'n' if this kernel is for the Easel/MonetteHill side of the link.
 
+config ACCESS_RAMOOPS
+	tristate "Driver to allow access for decrypting encrypted ramoops"
+	depends on PSTORE_CONSOLE
+	help
+	  Say 'y' if ramoops is encrypted.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"

@@ -70,3 +70,4 @@ obj-$(CONFIG_GOOGLE_EASEL)   += google-easel.o
 google-easel-objs               += google-easel-comm.o google-easel-comm-dma.o google-easel-comm-hw.o
 obj-$(CONFIG_FPR_FPC)  += fpr_FingerprintCard/
 obj-$(CONFIG_MEMORY_STATE_TIME) += memory_state_time.o
+obj-$(CONFIG_ACCESS_RAMOOPS)	+= access_ramoops.o
