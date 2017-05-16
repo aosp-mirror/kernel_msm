@@ -105,6 +105,7 @@ static int invalidate_vbmeta(dev_t vbmeta_devt)
 		 * we're dealing with 512-byte sectors.
 		 */
 		size_t offset = (1<<SECTOR_SHIFT) - 64;
+
 		access_last_sector = 1;
 		ret = invalidate_vbmeta_submit(bio, bdev, rw,
 					       access_last_sector, page);
@@ -157,7 +158,7 @@ invalid_header:
 	__free_page(page);
 failed_to_submit_read:
 	/* Technically, we'll leak a page with the pending bio, but
-	 *  we're about to reboot anyway.
+	 * we're about to reboot anyway.
 	 */
 failed_to_alloc_page:
 	bio_put(bio);

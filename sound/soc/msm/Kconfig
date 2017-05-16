@@ -188,12 +188,17 @@ config SND_SOC_MSM8996
 	help
 	 To add support for SoC audio on MSM8996.
 	 This will enable sound soc drivers which
-	 interfaces with DSP, also it will enable
-	 the machine driver and the corresponding
-	 DAI-links
+	 interfaces with DSP
+
+config SND_SOC_MACHINE_MSM8998
+	tristate "SoC Machine driver for MSM8998 boards"
+	select SND_SOC_WSA881X
+	help
+	To enable the machine driver and the
+	corresponding DAI-links
 
 config SND_SOC_MSM8998
-	tristate "SoC Machine driver for MSM8998 boards"
+	tristate "Sound SoC drivers to interface with DSP"
 	depends on ARCH_QCOM
 	select SND_SOC_COMPRESS
 	select SND_SOC_QDSP6V2
@@ -207,7 +212,6 @@ config SND_SOC_MSM8998
 	select MSM_QDSP6V2_CODECS
 	select SND_SOC_WCD9335
 	select SND_SOC_WCD934X
-	select SND_SOC_WSA881X
 	select SND_SOC_MSM_HDMI_CODEC_RX
 	select DTS_SRS_TM
 	select QTI_PP

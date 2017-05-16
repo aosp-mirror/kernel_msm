@@ -198,9 +198,6 @@
 
 		qcom,msm-mbhc-hphl-swh = <1>;
 
-		qcom,wsa-max-devs = <1>;
-		qcom,wsa-devs = <&wsa881x_0211>, <&wsa881x_0213>;
-		qcom,wsa-aux-dev-prefix = "SpkrLeft", "SpkrLeft";
 	};
 
 	hbtp {
