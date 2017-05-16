@@ -946,12 +946,16 @@ int fts_fw_verify_update(struct fts_ts_info *info)
 {
 	int retry = 0;
 
+	info->fts_irq_enable(info, false);
 	while (retry++ < FTS_FW_UPDATE_RETRY) {
 		tsp_debug_info(info->dev,
 			"[fw_update] try:%d\n", retry);
-		if (0 == fts_fw_update(info))
+		if (0 == fts_fw_update(info)) {
+			info->fts_irq_enable(info, true);
 			return 0;
+		}
 	}
+	info->fts_irq_enable(info, true);
 	return -EIO;
 }
 EXPORT_SYMBOL(fts_fw_verify_update);
