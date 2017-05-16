@@ -956,8 +956,7 @@ static ssize_t mode_show(struct device *dev,
 		return snprintf(buf, PAGE_SIZE, "%d\n", mode);
 	}
 
-	return snprintf(buf, sizeof(drv2624_modes[mode]) + 1, "%s\n",
-			drv2624_modes[mode]);
+	return sprintf(buf, "%s\n", drv2624_modes[mode]);
 }
 
 static ssize_t mode_store(struct device *dev,
