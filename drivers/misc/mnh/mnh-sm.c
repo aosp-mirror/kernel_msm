@@ -1568,14 +1568,13 @@ static int mnh_sm_probe(struct platform_device *pdev)
 	struct sched_param param = { .sched_priority = 5 };
 	int error = 0;
 
-	dev_dbg(dev, "MNH SM initializing...\n");
+	pr_debug("%s: MNH SM initializing...\n", __func__);
 
 	/* create char driver */
 	error = misc_register(&mnh_sm_miscdevice);
 	if (error) {
-		dev_err(mnh_sm_dev->dev,
-			"%s: failed to create char device (%d)\n",
-			__func__, error);
+		pr_err("%s: failed to create char device (%d)\n",
+		       __func__, error);
 		return error;
 	}
 	dev = mnh_sm_miscdevice.this_device;
@@ -1653,7 +1652,10 @@ static int mnh_sm_probe(struct platform_device *pdev)
 	if (IS_ERR(mnh_sm_dev->ddr_pad_iso_n_pin)) {
 		dev_err(dev, "%s: could not get ddr_pad_iso_n gpio (%ld)\n",
 			__func__, PTR_ERR(mnh_sm_dev->ddr_pad_iso_n_pin));
-		error = PTR_ERR(mnh_sm_dev->ddr_pad_iso_n_pin);
+		if (PTR_ERR(mnh_sm_dev->ddr_pad_iso_n_pin) == -EPROBE_DEFER)
+			error = -ENODEV;
+		else
+			error = PTR_ERR(mnh_sm_dev->ddr_pad_iso_n_pin);
 		goto fail_probe_2;
 	}
 

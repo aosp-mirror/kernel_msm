@@ -274,6 +274,11 @@
 #define BCM15602_REGLTR_NAME_ASR "bcm15602_asr"
 #define BCM15602_REGLTR_NAME_SDSR "bcm15602_sdsr"
 
+/* silicon versions */
+#define BCM15602_REV_ES 0
+#define BCM15602_REV_A0 1
+#define BCM15602_REV_A1 2
+
 #define BCM15602_NUM_GPIOS 2
 
 /* regulator id enum */
@@ -292,6 +297,7 @@ struct bcm15602_chip {
 	struct regmap *regmap;
 	struct regulator_dev **rdevs;
 	struct bcm15602_platform_data *pdata;
+	u8 rev_id;
 	u16 hk_status;
 	bool wdt_enabled;
 

@@ -1179,7 +1179,7 @@ static void fts_irq_enable(struct fts_ts_info *info,
 	} else {
 		if (atomic_cmpxchg(&info->irq_enabled, 1, 0) == 1) {
 			tsp_debug_dbg(info->dev, "disable_irq\n");
-			disable_irq(info->irq);
+			disable_irq_nosync(info->irq);
 		}
 	}
 

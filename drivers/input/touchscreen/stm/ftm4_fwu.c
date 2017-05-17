@@ -924,9 +924,16 @@ int fts_fw_update(struct fts_ts_info *info)
 		goto out;
 	}
 
+	fts_get_version_info(info);
+	if (fts_fw_compare(info, fw_entry)) {
+		tsp_debug_err(info->dev,
+			"[flashProcedure] Firmware update failed\n");
+		retval = -EIO;
+		goto out;
+	}
+
 	tsp_debug_info(info->dev,
 			"[flashProcedure] Firmware update is done successfully.\n");
-	fts_get_version_info(info);
 	retval = 0;
 out:
 	if (fw_entry)
