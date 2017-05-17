@@ -21,6 +21,7 @@
 
 
 &soc {
+	/delete-node/ gpio_keys;
 	i2c@78b9000 { /* BLSP1 QUP5 */
 		/delete-node/ synaptics@20;
 
