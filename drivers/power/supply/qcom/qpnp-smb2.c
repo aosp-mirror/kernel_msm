@@ -30,6 +30,13 @@
 
 #define SMB2_DEFAULT_WPWR_UW	8000000
 
+/*
+ * b/38269215, setting up test override flags upon kernel command
+ * line parameters.
+ */
+static bool smb2_batt_test_thermal_override_flag;
+static bool smb2_batt_test_soc_override_flag;
+
 static struct smb_params v1_params = {
 	.fcc			= {
 		.name	= "fast charge current",
@@ -1745,6 +1752,54 @@ static int smb2_post_init(struct smb2 *chip)
 	return 0;
 }
 
+/*
+ * b/38269215, setting up test overrides upon kernel command line:
+ * - batt_test_thermal_override=1
+ * - - disable JEITA
+ * - - disable charger safety timer
+ * - - set fake batt temperature to 57 degC
+ * - - set fake port temperature to 57 degC
+ * - batt_test_soc_override=1
+ * - - set fake batt capacity to 77%
+ */
+static void smb2_test_override_setup(struct smb2 *chip)
+{
+	struct smb_charger *chg = &chip->chg;
+	int rc;
+
+	if (smb2_batt_test_thermal_override_flag) {
+		/* disable JEITA */
+		rc = smblib_masked_write(chg, JEITA_EN_CFG_REG,
+					 JEITA_EN_FVCOMP_IN_CV_BIT |
+					 JEITA_EN_HARDLIMIT_BIT |
+					 JEITA_EN_HOT_SL_FCV_BIT |
+					 JEITA_EN_COLD_SL_FCV_BIT |
+					 JEITA_EN_HOT_SL_CCC_BIT |
+					 JEITA_EN_COLD_SL_CCC_BIT,
+					 0);
+		if (rc < 0)
+			pr_err("%s: Couldn't disable JEITA rc=%d\n",
+			       __func__, rc);
+		/* disable charger safety timer */
+		rc = smblib_masked_write(chg, CHGR_SAFETY_TIMER_ENABLE_CFG_REG,
+					 FAST_CHARGE_SAFETY_TIMER_EN_BIT, 0);
+		if (rc < 0)
+			pr_err("%s: Couldn't disable safety timer rc=%d\n",
+			       __func__, rc);
+		/* set fake batt temperature to 57 degC */
+		chg->fake_batt_temp = 570;
+		/* set fake port temperature to 57 degC */
+		chg->fake_port_temp = 570;
+		pr_info("%s: batt thermal override finished\n", __func__);
+	}
+
+	if (smb2_batt_test_soc_override_flag) {
+		/* set fake batt capacity to 77% */
+		chg->fake_capacity = 77;
+		pr_info("%s: batt soc override finished\n", __func__);
+	}
+}
+
 static int smb2_chg_config_init(struct smb2 *chip)
 {
 	struct smb_charger *chg = &chip->chg;
@@ -2276,6 +2331,11 @@ static int smb2_probe(struct platform_device *pdev)
 
 	smb2_post_init(chip);
 
+	/*
+	 * b/38269215, set up test overrides upon kernel command line.
+	 */
+	smb2_test_override_setup(chip);
+
 	smb2_create_debugfs(chip);
 
 	rc = smblib_get_prop_usb_present(chg, &val);
@@ -2359,6 +2419,22 @@ static void smb2_shutdown(struct platform_device *pdev)
 	smblib_masked_write(chg, USBIN_OPTIONS_1_CFG_REG,
 				 AUTO_SRC_DETECT_BIT, AUTO_SRC_DETECT_BIT);
 }
+
+static int __init smb2_batt_test_thermal_override(char *str)
+{
+	smb2_batt_test_thermal_override_flag = true;
+	pr_info("battery testing thermal override flag := true\n");
+	return 0;
+}
+__setup("batt_test_thermal_override=1", smb2_batt_test_thermal_override);
+
+static int __init smb2_batt_test_soc_override(char *str)
+{
+	smb2_batt_test_soc_override_flag = true;
+	pr_info("battery testing soc override flag := true\n");
+	return 0;
+}
+__setup("batt_test_soc_override=1", smb2_batt_test_soc_override);
 
 static const struct of_device_id match_table[] = {
 	{ .compatible = "qcom,qpnp-smb2", },

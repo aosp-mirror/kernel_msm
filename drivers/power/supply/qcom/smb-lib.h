@@ -328,6 +328,7 @@ struct smb_charger {
 	int			*thermal_mitigation;
 	int			dcp_icl_ua;
 	int			fake_capacity;
+	int			fake_batt_temp;
 	bool			step_chg_enabled;
 	bool			is_hdc;
 	bool			chg_done;

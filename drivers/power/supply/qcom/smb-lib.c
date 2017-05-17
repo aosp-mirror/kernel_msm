@@ -1851,6 +1851,11 @@ int smblib_get_prop_batt_temp(struct smb_charger *chg,
 {
 	int rc;
 
+	if (chg->fake_batt_temp >= 0) {
+		val->intval = chg->fake_batt_temp;
+		return 0;
+	}
+
 	if (!chg->bms_psy)
 		return -EINVAL;
 
@@ -5103,6 +5108,7 @@ int smblib_init(struct smb_charger *chg)
 	INIT_DELAYED_WORK(&chg->port_overheat_work, port_overheat_work);
 	chg->fake_capacity = -EINVAL;
 	chg->fake_port_temp = -EINVAL;
+	chg->fake_batt_temp = -EINVAL;
 
 	switch (chg->mode) {
 	case PARALLEL_MASTER:
