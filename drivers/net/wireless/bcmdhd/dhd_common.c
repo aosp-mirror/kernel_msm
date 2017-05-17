@@ -2078,7 +2078,7 @@ dhd_aoe_arp_clr(dhd_pub_t *dhd, int idx)
 	if (dhd->arp_version == 1)
 		idx = 0;
 
-	ret = dhd_iovar(dhd, 0, "arp_table_clear", NULL, 0, NULL, 0, TRUE);
+	ret = dhd_iovar(dhd, idx, "arp_table_clear", NULL, 0, NULL, 0, TRUE);
 	if (ret)
 		DHD_ERROR(("%s failed code %d\n", __FUNCTION__, ret));
 }
@@ -2092,7 +2092,7 @@ dhd_aoe_hostip_clr(dhd_pub_t *dhd, int idx)
 	if (dhd->arp_version == 1)
 		idx = 0;
 
-	ret = dhd_iovar(dhd, 0, "arp_hostip_clear", NULL, 0, NULL, 0, TRUE);
+	ret = dhd_iovar(dhd, idx, "arp_hostip_clear", NULL, 0, NULL, 0, TRUE);
 	if (ret)
 		DHD_ERROR(("%s failed code %d\n", __FUNCTION__, ret));
 }
@@ -2106,7 +2106,7 @@ dhd_arp_offload_add_ip(dhd_pub_t *dhd, uint32 ipaddr, int idx)
 	if (dhd->arp_version == 1)
 		idx = 0;
 
-	ret = dhd_iovar(dhd, 0, "arp_hostip", (char *)&ipaddr, sizeof(ipaddr),
+	ret = dhd_iovar(dhd, idx, "arp_hostip", (char *)&ipaddr, sizeof(ipaddr),
 			NULL, 0, TRUE);
 	if (ret)
 		DHD_TRACE(("%s: ARP ip addr add failed, ret = %d\n",
@@ -2129,7 +2129,7 @@ dhd_arp_get_arp_hostip_table(dhd_pub_t *dhd, void *buf, int buflen, int idx)
 	if (dhd->arp_version == 1)
 		idx = 0;
 
-	ret = dhd_iovar(dhd, 0, "arp_hostip", NULL, 0, (char *)buf, buflen,
+	ret = dhd_iovar(dhd, idx, "arp_hostip", NULL, 0, (char *)buf, buflen,
 			FALSE);
 	if (ret) {
 		DHD_TRACE(("%s: ioctl WLC_GET_VAR error %d\n",
@@ -2189,7 +2189,7 @@ dhd_ndo_add_ip(dhd_pub_t *dhd, char* ipv6addr, int idx)
 	if (dhd == NULL)
 		return -1;
 
-	ret = dhd_iovar(dhd, 0, "nd_hostip", (char *)ipv6addr, IPV6_ADDR_LEN,
+	ret = dhd_iovar(dhd, idx, "nd_hostip", (char *)ipv6addr, IPV6_ADDR_LEN,
 			NULL, 0, TRUE);
 
 	if (ret)
@@ -2213,7 +2213,7 @@ dhd_ndo_remove_ip(dhd_pub_t *dhd, int idx)
 	if (dhd == NULL)
 		return -1;
 
-	ret = dhd_iovar(dhd, 0, "nd_hostip_clear", NULL, 0, NULL, 0, TRUE);
+	ret = dhd_iovar(dhd, idx, "nd_hostip_clear", NULL, 0, NULL, 0, TRUE);
 	if (ret)
 		DHD_ERROR(("%s: ndo ip addr remove failed, ret = %d\n",
 			   __FUNCTION__, ret));
