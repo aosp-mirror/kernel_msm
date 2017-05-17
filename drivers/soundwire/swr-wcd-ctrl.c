@@ -1371,6 +1371,7 @@ static int swrm_probe(struct platform_device *pdev)
 {
 	struct swr_mstr_ctrl *swrm;
 	struct swr_ctrl_platform_data *pdata;
+	struct swr_device *swr_dev, *safe;
 	int ret;
 
 	/* Allocate soundwire master driver structure */
@@ -1471,6 +1472,9 @@ static int swrm_probe(struct platform_device *pdev)
 		goto err_mstr_fail;
 	}
 
+	if (pdev->dev.of_node)
+		of_register_swr_devices(&swrm->master);
+
 	/* Add devices registered with board-info as the
 	   controller will be up now
 	 */
@@ -1487,10 +1491,14 @@ static int swrm_probe(struct platform_device *pdev)
 	}
 	swrm->version = swrm->read(swrm->handle, SWRM_COMP_HW_VERSION);
 
+	/* Enumerate slave devices */
+	list_for_each_entry_safe(swr_dev, safe, &swrm->master.devices,
+				 dev_list) {
+		ret = swr_startup_devices(swr_dev);
+		if (ret)
+			list_del(&swr_dev->dev_list);
+	}
 	mutex_unlock(&swrm->mlock);
-
-	if (pdev->dev.of_node)
-		of_register_swr_devices(&swrm->master);
 
 	dbgswrm = swrm;
 	debugfs_swrm_dent = debugfs_create_dir(dev_name(&pdev->dev), 0);
