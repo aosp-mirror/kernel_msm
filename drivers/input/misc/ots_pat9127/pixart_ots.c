@@ -115,11 +115,7 @@ bool OTS_Sensor_Init(int check_calib, uint8_t s_c, uint8_t s_f, uint8_t btn_hi,
 				}
 				pr_err("[PAT9127]:After tuning,FA: %d,HiTh: %d,LoTh: %d,s_c: %d.\n",
 					frame_avg, btn_hi, btn_lo, s_c);
-				if (frame_avg <= btn_dis_val) {
-					btn_hi = 0x00;
-					btn_lo = 0x00;
-				}
-				else {
+				if (frame_avg > btn_dis_val) {
 					btn_hi = frame_avg - 10;
 					btn_lo = frame_avg - 20;
 				}
@@ -282,7 +278,7 @@ void OTS_Reset_Variables(void)
 
 static uint8_t Detect_Rotation(int32_t dsCountX)
 {
-	#define EVENT_NUM_PER_ROUND	10
+	#define EVENT_NUM_PER_ROUND	60
 	#define EVENT_COUNT_TH	(EXPECTED_COUNT_PER_ROUND / EVENT_NUM_PER_ROUND)
 
 	int32_t diff_count = 0;
