@@ -20,6 +20,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/power/htc_battery.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
@@ -1689,7 +1690,8 @@ static int tcpm_pd_check_request(struct tcpm_port *port)
 
 static int tcpm_pd_select_pdo(struct tcpm_port *port)
 {
-	unsigned int i, max_mw = 0, max_mv = 0;
+	unsigned int i, max_mw = 0, max_mv = 0, max_ma = 0;
+	struct htc_pd_data pd_data;
 	int ret = -EINVAL;
 
 	/*
@@ -1708,11 +1710,15 @@ static int tcpm_pd_select_pdo(struct tcpm_port *port)
 
 		if (type == PDO_TYPE_BATT) {
 			mw = pdo_max_power(pdo);
+			ma = 1000 * mw / mv;
 		} else {
 			ma = min(pdo_max_current(pdo),
 				 port->max_snk_ma);
 			mw = ma * mv / 1000;
 		}
+
+		pd_data.pd_list[i][0] = mv;
+		pd_data.pd_list[i][1] = ma;
 
 		/* Perfer higher voltages if available */
 		if ((mw > max_mw || (mw == max_mw && mv > max_mv)) &&
@@ -1722,6 +1728,10 @@ static int tcpm_pd_select_pdo(struct tcpm_port *port)
 			max_mv = mv;
 		}
 	}
+
+	/* overwrite pdo select index */
+	ret = htc_battery_pd_charger_support(port->nr_source_caps,
+					     pd_data, &max_ma);
 
 	return ret;
 }
