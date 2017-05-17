@@ -30,6 +30,11 @@
 static struct htc_battery_info htc_batt_info;
 static struct htc_battery_timer htc_batt_timer;
 
+static int full_level_dis_chg = 100;
+module_param_named(
+	full_level_dis_chg, full_level_dis_chg, int, S_IRUSR | S_IWUSR
+);
+
 #define BATT_LOG(x...) pr_info("[BATT] " x)
 
 #define BATT_DEBUG(x...) do { \
@@ -258,6 +263,47 @@ static void batt_update_info_from_gauge(void)
 {
 	htc_batt_info.rep.level = get_property(htc_batt_info.batt_psy,
 					       POWER_SUPPLY_PROP_CAPACITY);
+}
+
+static int is_bounding_fully_charged_level(void)
+{
+	static int s_pingpong = 1;
+	int is_batt_chg_off_by_bounding = 0;
+	int upperbd = htc_batt_info.rep.full_level;
+	int current_level = htc_batt_info.rep.level;
+	/* Default 5% range */
+	int lowerbd = upperbd - 5;
+
+	if ((htc_batt_info.rep.full_level > 0) &&
+	    (htc_batt_info.rep.full_level < 100)) {
+		if (lowerbd < 0)
+			lowerbd = 0;
+
+		if (s_pingpong == 1 && upperbd <= current_level) {
+			BATT_LOG(
+				"%s: lowerbd=%d, upperbd=%d, current=%d, pingpong:1->0 turn off\n",
+				__func__, lowerbd, upperbd, current_level);
+			is_batt_chg_off_by_bounding = 1;
+			s_pingpong = 0;
+		} else if (s_pingpong == 0 && lowerbd < current_level) {
+			BATT_LOG(
+				"%s: lowerbd=%d, upperbd=%d, current=%d, toward 0, turn off\n",
+				__func__, lowerbd, upperbd, current_level);
+			is_batt_chg_off_by_bounding = 1;
+		} else if (s_pingpong == 0 && current_level <= lowerbd) {
+			BATT_LOG(
+				"%s: lowerbd=%d, upperbd=%d, current=%d, pingpong:0->1 turn on\n",
+				__func__, lowerbd, upperbd, current_level);
+			s_pingpong = 1;
+		} else {
+			BATT_LOG(
+				"%s: lowerbd=%d, upperbd=%d, current=%d, toward %d, turn on\n",
+				__func__, lowerbd, upperbd, current_level,
+				s_pingpong);
+		}
+	}
+
+	return is_batt_chg_off_by_bounding;
 }
 
 void update_htc_chg_src(void)
@@ -502,6 +548,11 @@ static void batt_worker(struct work_struct *work)
 	 */
 	if ((int)htc_batt_info.rep.charging_source >
 	    POWER_SUPPLY_TYPE_BATTERY) {
+		htc_batt_info.rep.full_level = full_level_dis_chg;
+		if (is_bounding_fully_charged_level())
+			g_pwrsrc_dis_reason |= HTC_BATT_PWRSRC_DIS_BIT_MFG;
+		else
+			g_pwrsrc_dis_reason &= ~HTC_BATT_PWRSRC_DIS_BIT_MFG;
 		/* STEP 5.1 determin charging_eanbled for charger control */
 		if (g_chg_dis_reason)
 			charging_enabled = 0;
@@ -525,6 +576,20 @@ static void batt_worker(struct work_struct *work)
 			set_batt_psy_property(
 				POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
 				ibat_new);
+		}
+
+		if (htc_batt_info.rep.full_level != 100) {
+			BATT_EMBEDDED(
+				     "set full level pwrsrc_enable(%d)",
+				     pwrsrc_enabled);
+			set_batt_psy_property(
+					     POWER_SUPPLY_PROP_INPUT_SUSPEND,
+					     !pwrsrc_enabled);
+		} else if (pwrsrc_enabled != s_prev_pwrsrc_enabled) {
+			BATT_EMBEDDED("set pwrsrc_enable(%d)", pwrsrc_enabled);
+			set_batt_psy_property(
+					     POWER_SUPPLY_PROP_INPUT_SUSPEND,
+					     !pwrsrc_enabled);
 		}
 	} else {
 		if ((htc_batt_info.prev.charging_source !=
