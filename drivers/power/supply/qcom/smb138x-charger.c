@@ -733,8 +733,8 @@ static int smb138x_parallel_set_prop(struct power_supply *psy,
 		rc = smb138x_set_parallel_suspend(chip, (bool)val->intval);
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
-		if ((chip->dt.pl_mode == POWER_SUPPLY_PL_USBIN_USBIN)
-		|| (chip->dt.pl_mode == POWER_SUPPLY_PL_USBIN_USBIN_EXT)) {
+		if ((chip->dt.pl_mode == POWER_SUPPLY_PL_USBIN_USBIN) ||
+		    (chip->dt.pl_mode == POWER_SUPPLY_PL_USBIN_USBIN_EXT)) {
 			pr_info("parallel max %d\n", val->intval);
 			rc = smblib_set_charge_param(chg, &chg->param.usb_icl,
 				val->intval);
