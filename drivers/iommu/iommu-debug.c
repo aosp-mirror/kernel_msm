@@ -407,6 +407,7 @@ static int iommu_debug_attach_do_attach(struct iommu_debug_device *ddev,
 		goto out_domain_free;
 	}
 
+	val = VMID_CP_CAMERA;
 	if (is_secure && iommu_domain_set_attr(ddev->domain,
 					       DOMAIN_ATTR_SECURE_VMID,
 					       &val)) {
@@ -552,6 +553,10 @@ static ssize_t iommu_debug_atos_read(struct file *file, char __user *ubuf,
 	ssize_t retval;
 	size_t buflen;
 
+	if (kptr_restrict != 0) {
+		pr_err("kptr_restrict needs to be disabled.\n");
+		return -EPERM;
+	}
 	if (!ddev->domain) {
 		pr_err("No domain. Did you already attach?\n");
 		return -EINVAL;
@@ -823,6 +828,9 @@ err:
 
 static int pass_iommu_devices(struct device *dev, void *ignored)
 {
+	if (!of_device_is_compatible(dev->of_node, "iommu-debug-test"))
+		return 0;
+
 	if (!of_find_property(dev->of_node, "iommus", NULL))
 		return 0;
 
@@ -836,6 +844,9 @@ static int iommu_debug_populate_devices(void)
 	const char *cb_name;
 
 	for_each_compatible_node(np, NULL, "qcom,msm-smmu-v2-ctx") {
+		if (!of_device_is_compatible(np, "iommu-debug-test"))
+			continue;
+
 		ret = of_property_read_string(np, "label", &cb_name);
 		if (ret)
 			return ret;
