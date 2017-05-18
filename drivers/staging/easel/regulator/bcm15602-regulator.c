@@ -34,8 +34,14 @@
 /* defines the number of tries to repeat an I2C transaction */
 #define BCM15602_I2C_RETRY_COUNT 10
 
+/* defines the delay in ms for reset completion */
+#define BCM15602_PON_RESET_DELAY 35
+
 /* defines the timeout in jiffies for reset completion */
-#define BCM15602_PON_RESET_TIMEOUT msecs_to_jiffies(50)
+#define BCM15602_PON_RESET_TIMEOUT msecs_to_jiffies(15)
+
+/* defines the number of retries for powering on */
+#define BCM15602_PON_RETRY_CNT 4
 
 /* defines the timeout in jiffies for reset completion after shutdown */
 #define BCM15602_SHUTDOWN_RESET_TIMEOUT msecs_to_jiffies(10000)
@@ -710,6 +716,7 @@ static irqreturn_t bcm15602_resetb_irq_handler(int irq, void *cookie)
 	struct bcm15602_chip *ddata = (struct bcm15602_chip *)cookie;
 
 	if (gpio_get_value(ddata->pdata->resetb_gpio)) {
+		dev_dbg(ddata->dev, "%s: completing reset\n", __func__);
 		complete(&ddata->reset_complete);
 	} else {
 		dev_err(ddata->dev, "%s: unexpected device reset\n", __func__);
@@ -1094,6 +1101,7 @@ static int bcm15602_probe(struct i2c_client *client,
 	struct bcm15602_platform_data *pdata;
 	unsigned long timeout;
 	int ret;
+	int i;
 
 	/* allocate memory for chip structure */
 	ddata = devm_kzalloc(dev, sizeof(struct bcm15602_chip),
@@ -1138,7 +1146,7 @@ static int bcm15602_probe(struct i2c_client *client,
 	bcm15602_config_sysfs(dev);
 
 	/* request GPIOs and IRQs */
-	devm_gpio_request_one(dev, pdata->pon_gpio, GPIOF_OUT_INIT_HIGH,
+	devm_gpio_request_one(dev, pdata->pon_gpio, GPIOF_OUT_INIT_LOW,
 			      "BCM15602 PON");
 	devm_gpio_request_one(dev, pdata->resetb_gpio, GPIOF_IN,
 			      "BCM15602 RESETB");
@@ -1154,14 +1162,42 @@ static int bcm15602_probe(struct i2c_client *client,
 					IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
 					"bcm15602-intb", ddata);
 
-	/* wait for chip to come out of reset, signaled by resetb interrupt */
-	timeout = wait_for_completion_timeout(&ddata->reset_complete,
-					      BCM15602_PON_RESET_TIMEOUT);
-	if (!timeout) {
+	/* disable the irq while doing initial power on */
+	disable_irq(pdata->resetb_irq);
+
+	for (i = 0; i < BCM15602_PON_RETRY_CNT; i++) {
+		dev_dbg(dev, "%s: powering on bcm15602\n", __func__);
+		gpio_set_value_cansleep(pdata->pon_gpio, 1);
+
+		/* give the chip some time to power on */
+		msleep(BCM15602_PON_RESET_DELAY);
+
+		/* poll on the gpio until it goes high or until we timeout */
+		timeout = jiffies + BCM15602_PON_RESET_TIMEOUT;
+		while (!gpio_get_value(pdata->resetb_gpio) &&
+		       time_before(jiffies, timeout)) {
+			usleep_range(100, 105);
+		}
+
+		if (gpio_get_value(pdata->resetb_gpio))
+			break;
+
+		dev_err(dev, "%s: powering on timed out, try (%d/%d)\n",
+			__func__, i + 1, BCM15602_PON_RETRY_CNT);
+
+		gpio_set_value_cansleep(pdata->pon_gpio, 0);
+		usleep_range(100, 105);
+	}
+
+	/* check for failure */
+	if (i == BCM15602_PON_RETRY_CNT) {
 		ret = -ETIMEDOUT;
-		dev_err(dev, "timeout waiting for device to return from reset\n");
+		dev_err(dev, "%s: powering on failed\n", __func__);
 		goto error_reset;
 	}
+
+	/* enable the irq after power on */
+	enable_irq(pdata->resetb_irq);
 
 	/* initialize chip */
 	bcm15602_chip_init(ddata);
