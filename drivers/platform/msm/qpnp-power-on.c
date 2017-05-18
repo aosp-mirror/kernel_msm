@@ -31,6 +31,7 @@
 #include <linux/qpnp/power-on.h>
 #include <linux/power_supply.h>
 #include <linux/timer.h>
+#include <linux/wakelock.h>
 
 #define CREATE_MASK(NUM_BITS, POS) \
 	((unsigned char) (((1 << (NUM_BITS)) - 1) << (POS)))
@@ -229,6 +230,7 @@ struct qpnp_pon {
 	struct timer_list			timer_cblpwr;	
 	struct delayed_work		delaywork_cblpwr;
 	struct workqueue_struct	*workqueue_cblpwr;
+	struct wake_lock cblpwr_wlock;
 };
 
 static struct qpnp_pon *g_pon;
@@ -862,11 +864,16 @@ static irqreturn_t qpnp_cblpwr_irq(int irq, void *_pon)
 	struct power_supply *usb_psy;
 
 	vbus = !!irq_read_line(irq);
+	pr_info("qpnp_cblpwr_irq: %d \n", vbus);
 	if ((g_pon->timer_cblpwr_running == 0) && (vbus == 1)) {
 		usb_psy = power_supply_get_by_name("usb");
 		if (usb_psy == NULL) {
 			pr_err("qpnp_cblpwr_irq can't find usb device \n");
 		} else {
+			if (!wake_lock_active(&g_pon->cblpwr_wlock)) {
+				wake_lock(&g_pon->cblpwr_wlock);
+				pr_info("cblpwr_wake_lock \n");
+			}		
 			mdelay(1000);
 			power_supply_set_present(usb_psy, vbus);
 			pr_err("qpnp_cblpwr_irq set usb present: %d \n", vbus);
@@ -1975,6 +1982,11 @@ void qpnp_pon_timer_trigger_usb(struct work_struct *work)
 		cblpwr = ((cblpwr & CBLPWR_ON) >> 2);
 
 		power_supply_set_present(usb_psy, cblpwr);
+		
+		if (wake_lock_active(&g_pon->cblpwr_wlock)) {
+			wake_unlock(&g_pon->cblpwr_wlock);
+			pr_info("cblpwr_wake_unlock \n");
+		}
 	}
 
 	rc = qpnp_pon_input_dispatch(g_pon, PON_CBLPWR);
@@ -2025,6 +2037,7 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 
 	g_pon = pon;
 	pon->timer_cblpwr_running = 0;
+	wake_lock_init(&g_pon->cblpwr_wlock, WAKE_LOCK_SUSPEND, "qpnp-power-on");
 	//Init workqueue
 	pon->workqueue_cblpwr = create_singlethread_workqueue("cblpwr-workqueue");
 	if (g_pon->workqueue_cblpwr == NULL) {
@@ -2386,6 +2399,7 @@ static int qpnp_pon_remove(struct spmi_device *spmi)
 		list_del(&pon->list);
 		spin_unlock_irqrestore(&spon_list_slock, flags);
 	}
+	wake_lock_destroy(&g_pon->cblpwr_wlock);	
 	return 0;
 }
 
