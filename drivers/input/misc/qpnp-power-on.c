@@ -811,8 +811,8 @@ qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 		return -EINVAL;
 	}
 
-	pr_debug("PMIC input: code=%d, sts=0x%hhx\n",
-					cfg->key_code, pon_rt_sts);
+	pr_info("PMIC input: code=%d, sts=0x%hhx, bit=0x%hhx, type=%d\n",
+		cfg->key_code, pon_rt_sts, pon_rt_bit, cfg->pon_type);
 	key_status = pon_rt_sts & pon_rt_bit;
 
 	if (pon->report_key) {
