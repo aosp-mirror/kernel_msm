@@ -197,6 +197,12 @@ config SND_SOC_MACHINE_MSM8998
 	To enable the machine driver and the
 	corresponding DAI-links
 
+config SND_SOC_MACHINE_MSM8998_WAHOO
+	tristate "SoC Machine driver for MSM8998 based Wahoo boards"
+	help
+	To enable the machine driver and the
+	corresponding DAI-links
+
 config SND_SOC_MSM8998
 	tristate "Sound SoC drivers to interface with DSP"
 	depends on ARCH_QCOM
