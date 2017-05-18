@@ -207,7 +207,7 @@ struct qpnp_pon {
 	int			pon_power_off_reason;
 	int			num_pon_reg;
 	int			num_pon_config;
-	u32			dbc;
+	u32			dbc_time_us;
 	u32			uvlo;
 	int			warm_reset_poff_type;
 	int			hard_reset_poff_type;
@@ -219,7 +219,8 @@ struct qpnp_pon {
 	u8			warm_reset_reason2;
 	bool			is_spon;
 	bool			store_hard_reset_reason;
-	bool			report_key;
+	bool			kpdpwr_dbc_enable;
+	ktime_t			kpdpwr_last_release_time;
 };
 
 static int pon_ship_mode_en;
@@ -382,7 +383,7 @@ static int qpnp_pon_set_dbc(struct qpnp_pon *pon, u32 delay)
 	int rc = 0;
 	u32 val;
 
-	if (delay == pon->dbc)
+	if (delay == pon->dbc_time_us)
 		goto out;
 
 	if (pon->pon_input)
@@ -410,7 +411,7 @@ static int qpnp_pon_set_dbc(struct qpnp_pon *pon, u32 delay)
 		goto unlock;
 	}
 
-	pon->dbc = delay;
+	pon->dbc_time_us = delay;
 
 unlock:
 	if (pon->pon_input)
@@ -419,12 +420,34 @@ out:
 	return rc;
 }
 
+static int qpnp_pon_get_dbc(struct qpnp_pon *pon, u32 *delay)
+{
+	int rc;
+	unsigned int val;
+
+	rc = regmap_read(pon->regmap, QPNP_PON_DBC_CTL(pon), &val);
+	if (rc) {
+		pr_err("Unable to read pon_dbc_ctl rc=%d\n", rc);
+		return rc;
+	}
+	val &= QPNP_PON_DBC_DELAY_MASK(pon);
+
+	if (is_pon_gen2(pon))
+		*delay = USEC_PER_SEC /
+			(1 << (QPNP_PON_GEN2_DELAY_BIT_SHIFT - val));
+	else
+		*delay = USEC_PER_SEC /
+			(1 << (QPNP_PON_DELAY_BIT_SHIFT - val));
+
+	return rc;
+}
+
 static ssize_t qpnp_pon_dbc_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
 	struct qpnp_pon *pon = dev_get_drvdata(dev);
 
-	return snprintf(buf, QPNP_PON_BUFFER_SIZE, "%d\n", pon->dbc);
+	return snprintf(buf, QPNP_PON_BUFFER_SIZE, "%d\n", pon->dbc_time_us);
 }
 
 static ssize_t qpnp_pon_dbc_store(struct device *dev,
@@ -778,6 +801,7 @@ qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 	u8  pon_rt_bit = 0;
 	u32 key_status;
 	uint pon_rt_sts;
+	u64 elapsed_us;
 
 	cfg = qpnp_get_cfg(pon, pon_type);
 	if (!cfg)
@@ -786,6 +810,15 @@ qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 	/* Check if key reporting is supported */
 	if (!cfg->key_code)
 		return 0;
+
+	if (pon->kpdpwr_dbc_enable && cfg->pon_type == PON_KPDPWR) {
+		elapsed_us = ktime_us_delta(ktime_get(),
+				pon->kpdpwr_last_release_time);
+		if (elapsed_us < pon->dbc_time_us) {
+			pr_debug("Ignoring kpdpwr event - within debounce time\n");
+			return 0;
+		}
+	}
 
 	/* check the RT status to get the current status of the line */
 	rc = regmap_read(pon->regmap, QPNP_PON_RT_STS(pon), &pon_rt_sts);
@@ -815,18 +848,22 @@ qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 					cfg->key_code, pon_rt_sts);
 	key_status = pon_rt_sts & pon_rt_bit;
 
-	if (pon->report_key) {
-		/* simulate press event in case release event occured
-		 * without a press event
-		 */
-		if (!cfg->old_state && !key_status) {
-			input_report_key(pon->pon_input, cfg->key_code, 1);
-			input_sync(pon->pon_input);
-		}
+	if (pon->kpdpwr_dbc_enable && cfg->pon_type == PON_KPDPWR) {
+		if (!key_status)
+			pon->kpdpwr_last_release_time = ktime_get();
+	}
 
-		input_report_key(pon->pon_input, cfg->key_code, key_status);
+	/*
+	 * simulate press event in case release event occurred
+	 * without a press event
+	 */
+	if (!cfg->old_state && !key_status) {
+		input_report_key(pon->pon_input, cfg->key_code, 1);
 		input_sync(pon->pon_input);
 	}
+
+	input_report_key(pon->pon_input, cfg->key_code, key_status);
+	input_sync(pon->pon_input);
 
 	cfg->old_state = !!key_status;
 
@@ -962,11 +999,9 @@ static void bark_work_func(struct work_struct *work)
 	}
 
 	if (!(pon_rt_sts & QPNP_PON_RESIN_BARK_N_SET)) {
-		if (pon->report_key) {
-			/* report the key event and enable the bark IRQ */
-			input_report_key(pon->pon_input, cfg->key_code, 0);
-			input_sync(pon->pon_input);
-		}
+		/* report the key event and enable the bark IRQ */
+		input_report_key(pon->pon_input, cfg->key_code, 0);
+		input_sync(pon->pon_input);
 		enable_irq(cfg->bark_irq);
 	} else {
 		/* disable reset */
@@ -1008,11 +1043,9 @@ static irqreturn_t qpnp_resin_bark_irq(int irq, void *_pon)
 		goto err_exit;
 	}
 
-	if (pon->report_key) {
-		/* report the key event */
-		input_report_key(pon->pon_input, cfg->key_code, 1);
-		input_sync(pon->pon_input);
-	}
+	/* report the key event */
+	input_report_key(pon->pon_input, cfg->key_code, 1);
+	input_sync(pon->pon_input);
 	/* schedule work to check the bark status for key-release */
 	schedule_delayed_work(&pon->bark_work, QPNP_KEY_STATUS_DELAY);
 err_exit:
@@ -2239,7 +2272,21 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 		}
 	} else {
 		rc = qpnp_pon_set_dbc(pon, delay);
+		if (rc) {
+			dev_err(&pdev->dev,
+				"Unable to set PON debounce delay rc=%d\n", rc);
+			return rc;
+		}
 	}
+	rc = qpnp_pon_get_dbc(pon, &pon->dbc_time_us);
+	if (rc) {
+		dev_err(&pdev->dev,
+			"Unable to get PON debounce delay rc=%d\n", rc);
+		return rc;
+	}
+
+	pon->kpdpwr_dbc_enable = of_property_read_bool(pon->pdev->dev.of_node,
+					"qcom,kpdpwr-sw-debounce");
 
 	rc = of_property_read_u32(pon->pdev->dev.of_node,
 				"qcom,warm-reset-poweroff-type",
@@ -2311,13 +2358,6 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 	/* config whether store the hard reset reason */
 	pon->store_hard_reset_reason = of_property_read_bool(pdev->dev.of_node,
 					"qcom,store-hard-reset-reason");
-
-	/* config whether to report key events */
-	pon->report_key = of_property_read_bool(pdev->dev.of_node,
-						"qcom,report-key");
-
-	dev_info(&pdev->dev, "qcom,report-key:%s\n",
-		 pon->report_key ? "true" : "false");
 
 	qpnp_pon_debugfs_init(pdev);
 	return 0;
