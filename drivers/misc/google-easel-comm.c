@@ -652,6 +652,21 @@ static int easelcomm_wait_channel_initialized(
 }
 
 /*
+ * Wake up any message of a service waiting for reply.
+ */
+static void __force_complete_reply_waiter(struct easelcomm_service *service)
+{
+	struct easelcomm_message_metadata *msg_cursor;
+
+	spin_lock(&service->lock);
+	list_for_each_entry(msg_cursor, &service->local_list, list) {
+		if (msg_cursor->msg->desc.need_reply)
+			complete(&msg_cursor->reply_received);
+	}
+	spin_unlock(&service->lock);
+}
+
+/*
  * Handle local-side processing of shutting down an Easel service.  Easel
  * services are shutdown when the local side handling process closes its fd
  * or issues the shutdown ioctl, or the remote side sends a CLOSE_SERVICE
@@ -683,6 +698,9 @@ static void easelcomm_handle_service_shutdown(
 	spin_unlock(&service->lock);
 	/* Wakeup any receiveMessage() waiter so they can return to user */
 	complete(&service->receivemsg_queue_new);
+
+	/* Wakeup any sendMessageReceiveReply() waiter to return to user */
+	__force_complete_reply_waiter(service);
 }
 
 /* CLOSE_SERVICE command received from remote, shut down service. */
@@ -1399,21 +1417,37 @@ static int easelcomm_wait_reply(
 		"WAITREPLY msg %u:l%llu\n",
 		service->service_id, orig_msg_desc.message_id);
 
-	do {
-		ret = wait_for_completion_interruptible(
-			&orig_msg_metadata->reply_received);
-		if (ret)
-			goto out;
-		if (orig_msg_metadata->flushing) {
-			dev_dbg(easelcomm_miscdev.this_device,
-				"WAITREPLY msg %u:l%llu flushed\n",
-				service->service_id, orig_msg_desc.message_id);
-			goto out;
-		}
+	ret = wait_for_completion_interruptible(
+		&orig_msg_metadata->reply_received);
+	if (ret)
+		goto out;
+	if (orig_msg_metadata->flushing) {
+		dev_dbg(easelcomm_miscdev.this_device,
+			"WAITREPLY msg %u:l%llu flushed\n",
+			service->service_id, orig_msg_desc.message_id);
+		goto out;
+	}
 
-		msg_metadata = easelcomm_grab_reply_message(
-			service, orig_msg_metadata);
-	} while (!msg_metadata);
+	msg_metadata = easelcomm_grab_reply_message(
+		service, orig_msg_metadata);
+
+	/*
+	 * If completion was waken up on receiving the reply,
+	 * msg_metadata really shouldn't be null.
+	 * If completion was waken up on receiving shutdown, we should
+	 * return to user immediately.
+	 */
+	if (!msg_metadata) {
+		dev_err(easelcomm_miscdev.this_device,
+			"WAITREPLY msg %u:l%llu no matching reply\n",
+			service->service_id, orig_msg_desc.message_id);
+		/*
+		 * Here we return -ESHUTDOWN.  See above comment and
+		 * easelcomm_handle_service_shutdown().
+		 */
+		ret = -ESHUTDOWN;
+		goto out;
+	}
 
 	/* Copy the reply message descriptor to the caller */
 	if (copy_to_user(pmsg_desc, &msg_metadata->msg->desc,
