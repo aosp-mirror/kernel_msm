@@ -1864,6 +1864,11 @@ int smblib_get_prop_batt_temp(struct smb_charger *chg,
 {
 	int rc;
 
+	if (chg->fake_batt_temp >= 0) {
+		val->intval = chg->fake_batt_temp;
+		return 0;
+	}
+
 	if (!chg->bms_psy)
 		return -EINVAL;
 
