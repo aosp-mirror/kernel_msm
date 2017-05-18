@@ -6305,7 +6305,7 @@ static int wake_cap(struct task_struct *p, int cpu, int prev_cpu)
 	return min_cap * 1024 < task_util(p) * capacity_margin;
 }
 
-static int select_energy_cpu_brute(struct task_struct *p, int prev_cpu, int sync)
+static int select_energy_cpu_brute(struct task_struct *p, int prev_cpu)
 {
 	struct sched_domain *sd;
 	int target_cpu = prev_cpu, tmp_target;
@@ -6313,16 +6313,6 @@ static int select_energy_cpu_brute(struct task_struct *p, int prev_cpu, int sync
 
 	schedstat_inc(p, se.statistics.nr_wakeups_secb_attempts);
 	schedstat_inc(this_rq(), eas_stats.secb_attempts);
-
-	if (sysctl_sched_sync_hint_enable && sync) {
-		int cpu = smp_processor_id();
-
-		if (cpumask_test_cpu(cpu, tsk_cpus_allowed(p))) {
-			schedstat_inc(p, se.statistics.nr_wakeups_secb_sync);
-			schedstat_inc(this_rq(), eas_stats.secb_sync);
-			return cpu;
-		}
-	}
 
 	rcu_read_lock();
 #ifdef CONFIG_CGROUP_SCHEDTUNE
@@ -6414,10 +6404,12 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int sd_flag, int wake_f
 		int _wake_cap = wake_cap(p, cpu, prev_cpu);
 		want_affine = !wake_wide(p) && !_wake_cap
 			      && cpumask_test_cpu(cpu, tsk_cpus_allowed(p));
+		if (want_affine && sysctl_sched_sync_hint_enable && sync)
+			return cpu;
 	}
 
 	if (energy_aware() && !(cpu_rq(prev_cpu)->rd->overutilized))
-		return select_energy_cpu_brute(p, prev_cpu, sync);
+		return select_energy_cpu_brute(p, prev_cpu);
 
 	rcu_read_lock();
 	for_each_domain(cpu, tmp) {
