@@ -2461,11 +2461,25 @@ int wlan_hdd_tdls_get_all_peers(hdd_adapter_t *pAdapter, char *buf, int buflen)
 	hddTdlsPeer_t *curr_peer;
 	tdlsCtx_t *pHddTdlsCtx;
 	hdd_context_t *pHddCtx = WLAN_HDD_GET_CTX(pAdapter);
+	hdd_station_ctx_t *hdd_sta_ctx;
 
 	ENTER();
 
 	if (0 != (wlan_hdd_validate_context(pHddCtx)))
 		return 0;
+
+	if ((QDF_STA_MODE != pAdapter->device_mode)
+	    && (QDF_P2P_CLIENT_MODE != pAdapter->device_mode)) {
+		len = scnprintf(buf, buflen,
+				"\nNo TDLS support for this adapter\n");
+		return len;
+	}
+
+	hdd_sta_ctx = WLAN_HDD_GET_STATION_CTX_PTR(pAdapter);
+	if (eConnectionState_Associated != hdd_sta_ctx->conn_info.connState) {
+		len = scnprintf(buf, buflen, "\nSTA is not associated\n");
+		return len;
+	}
 
 	init_len = buflen;
 	len = scnprintf(buf, buflen, "\n%-18s%-3s%-4s%-3s%-5s\n",
@@ -2571,8 +2585,15 @@ void wlan_hdd_tdls_disconnection_callback(hdd_adapter_t *pAdapter)
 	ENTER();
 
 	pHddCtx = WLAN_HDD_GET_CTX(pAdapter);
-	if (0 != wlan_hdd_validate_context(pHddCtx))
+
+	/*
+	 * Use of wlan_hdd_validate_context is returning failure when
+	 * driver load/unload in progress.so we are directly NULL
+	 * checking context pointer
+	 */
+	if (!pHddCtx)
 		return;
+
 	mutex_lock(&pHddCtx->tdls_lock);
 
 	pHddTdlsCtx = WLAN_HDD_GET_TDLS_CTX_PTR(pAdapter);

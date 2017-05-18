@@ -849,8 +849,9 @@ void lim_reset_deferred_msg_q(tpAniSirGlobal pMac)
 
 uint8_t lim_write_deferred_msg_q(tpAniSirGlobal mac_ctx, tpSirMsgQ lim_msg)
 {
-	lim_log(mac_ctx, LOG1,
-		FL("Queue a deferred message (size %d, write %d) - type 0x%x "),
+	uint8_t type, subtype;
+
+	pe_debug("Queue a deferred message size: %d write: %d - type: 0x%x",
 		mac_ctx->lim.gLimDeferredMsgQ.size,
 		mac_ctx->lim.gLimDeferredMsgQ.write,
 		lim_msg->type);
@@ -886,6 +887,13 @@ uint8_t lim_write_deferred_msg_q(tpAniSirGlobal mac_ctx, tpSirMsgQ lim_msg)
 			mac_ctx->lim.gLimSmeState,
 			mac_ctx->lim.gLimMlmState,
 			mac_ctx->lim.gLimAddtsSent);
+
+	if (SIR_BB_XPORT_MGMT_MSG == lim_msg->type) {
+		lim_util_get_type_subtype(lim_msg->bodyptr,
+					&type, &subtype);
+		pe_debug(" Deferred managment type %d subtype %d ",
+			type, subtype);
+	}
 
 	/*
 	 * To prevent the deferred Q is full of management frames, only give
@@ -6914,6 +6922,7 @@ void lim_update_extcap_struct(tpAniSirGlobal mac_ctx,
 	uint8_t *buf, tDot11fIEExtCap *dst)
 {
 	uint8_t out[DOT11F_IE_EXTCAP_MAX_LEN];
+	uint32_t status;
 
 	if (NULL == buf) {
 		lim_log(mac_ctx, LOGE, FL("Invalid Buffer Address"));
@@ -6934,9 +6943,10 @@ void lim_update_extcap_struct(tpAniSirGlobal mac_ctx,
 	qdf_mem_set((uint8_t *)&out[0], DOT11F_IE_EXTCAP_MAX_LEN, 0);
 	qdf_mem_copy(&out[0], &buf[2], buf[1]);
 
-	if (DOT11F_PARSE_SUCCESS != dot11f_unpack_ie_ext_cap(mac_ctx, &out[0],
-					buf[1], dst))
-		lim_log(mac_ctx, LOGE, FL("dot11f_unpack Parse Error "));
+	status = dot11f_unpack_ie_ext_cap(mac_ctx, &out[0],
+					buf[1], dst);
+	if (DOT11F_PARSE_SUCCESS != status)
+		pe_err("dot11f_unpack Parse Error %d", status);
 }
 
 /**
@@ -7476,4 +7486,38 @@ void lim_decrement_pending_mgmt_count(tpAniSirGlobal mac_ctx)
 	}
 	mac_ctx->sys.sys_bbt_pending_mgmt_count--;
 	qdf_spin_unlock(&mac_ctx->sys.bbt_mgmt_lock);
+}
+
+QDF_STATUS lim_util_get_type_subtype(void *pkt, uint8_t *type,
+						uint8_t *subtype)
+{
+	cds_pkt_t *cds_pkt;
+	QDF_STATUS status;
+	tpSirMacMgmtHdr hdr;
+	uint8_t *rxpktinfor;
+
+	cds_pkt = (cds_pkt_t *) pkt;
+	if (!cds_pkt) {
+		pe_err("NULL packet received");
+		return QDF_STATUS_E_FAILURE;
+	}
+	status =
+		wma_ds_peek_rx_packet_info(cds_pkt, (void *)&rxpktinfor, false);
+	if (!QDF_IS_STATUS_SUCCESS(status)) {
+		pe_err("Failed extract cds packet. status %d", status);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	hdr = WMA_GET_RX_MAC_HEADER(rxpktinfor);
+	if (hdr->fc.type == SIR_MAC_MGMT_FRAME) {
+		pe_debug("RxBd: %p mHdr: %p Type: %d Subtype: %d  SizesFC: %zu",
+		  rxpktinfor, hdr, hdr->fc.type, hdr->fc.subType,
+		  sizeof(tSirMacFrameCtl));
+		*type = hdr->fc.type;
+		*subtype = hdr->fc.subType;
+	} else {
+		pe_err("Not a managment packet type %d", hdr->fc.type);
+		return QDF_STATUS_E_INVAL;
+	}
+	return QDF_STATUS_SUCCESS;
 }

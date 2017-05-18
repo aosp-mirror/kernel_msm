@@ -948,6 +948,13 @@ REG_TABLE_ENTRY g_registry_table[] = {
 		     CFG_DATA_INACTIVITY_TIMEOUT_MIN,
 		     CFG_DATA_INACTIVITY_TIMEOUT_MAX),
 
+	REG_VARIABLE(CFG_WOW_DATA_INACTIVITY_TIMEOUT_NAME, WLAN_PARAM_Integer,
+		     struct hdd_config, wow_data_inactivity_timeout,
+		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		     CFG_WOW_DATA_INACTIVITY_TIMEOUT_DEFAULT,
+		     CFG_WOW_DATA_INACTIVITY_TIMEOUT_MIN,
+		     CFG_WOW_DATA_INACTIVITY_TIMEOUT_MAX),
+
 	REG_VARIABLE(CFG_QOS_WMM_MODE_NAME, WLAN_PARAM_Integer,
 		     struct hdd_config, WmmMode,
 		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
@@ -3065,6 +3072,13 @@ REG_TABLE_ENTRY g_registry_table[] = {
 		     CFG_BUS_BANDWIDTH_COMPUTE_INTERVAL_MIN,
 		     CFG_BUS_BANDWIDTH_COMPUTE_INTERVAL_MAX),
 
+	REG_VARIABLE(CFG_ENABLE_TCP_ADV_WIN_SCALE, WLAN_PARAM_Integer,
+		     struct hdd_config, enable_tcp_adv_win_scale,
+		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		     CFG_ENABLE_TCP_ADV_WIN_SCALE_DEFAULT,
+		     CFG_ENABLE_TCP_ADV_WIN_SCALE_MIN,
+		     CFG_ENABLE_TCP_ADV_WIN_SCALE_MAX),
+
 	REG_VARIABLE(CFG_ENABLE_TCP_DELACK, WLAN_PARAM_Integer,
 		     struct hdd_config, enable_tcp_delack,
 		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
@@ -4380,6 +4394,20 @@ REG_TABLE_ENTRY g_registry_table[] = {
 		CFG_DROPPED_PKT_DISCONNECT_TH_DEFAULT,
 		CFG_DROPPED_PKT_DISCONNECT_TH_MIN,
 		CFG_DROPPED_PKT_DISCONNECT_TH_MAX),
+
+	REG_VARIABLE(CFG_AUTO_DETECT_POWER_FAIL_MODE_NAME, WLAN_PARAM_Integer,
+		struct hdd_config, auto_pwr_save_fail_mode,
+		VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		CFG_AUTO_DETECT_POWER_FAIL_MODE_DEFAULT,
+		CFG_AUTO_DETECT_POWER_FAIL_MODE_MIN,
+		CFG_AUTO_DETECT_POWER_FAIL_MODE_MAX),
+
+	REG_VARIABLE(CFG_IS_BSSID_HINT_PRIORITY_NAME, WLAN_PARAM_Integer,
+		struct hdd_config, is_bssid_hint_priority,
+		VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		CFG_IS_BSSID_HINT_PRIORITY_DEFAULT,
+		CFG_IS_BSSID_HINT_PRIORITY_MIN,
+		CFG_IS_BSSID_HINT_PRIORITY_MAX),
 };
 
 /**
@@ -5547,7 +5575,10 @@ void hdd_cfg_print(hdd_context_t *pHddCtx)
 	hdd_info("Name = [gbusBandwidthComputeInterval] Value = [%u] ",
 		  pHddCtx->config->busBandwidthComputeInterval);
 	hdd_info("Name = [%s] Value = [%u] ",
-		  CFG_ENABLE_TCP_DELACK,
+		  CFG_ENABLE_TCP_ADV_WIN_SCALE,
+		  pHddCtx->config->enable_tcp_adv_win_scale);
+	hdd_info("Name = [%s] Value = [%u] ",
+	CFG_ENABLE_TCP_DELACK,
 		  pHddCtx->config->enable_tcp_delack);
 	hdd_info("Name = [gTcpDelAckThresholdHigh] Value = [%u] ",
 		  pHddCtx->config->tcpDelackThresholdHigh);
@@ -5861,6 +5892,9 @@ void hdd_cfg_print(hdd_context_t *pHddCtx)
 	hdd_err("Name = [%s] Value = [%u]",
 		CFG_HW_BC_FILTER_NAME,
 		pHddCtx->config->hw_broadcast_filter);
+	hdd_err("Name = [%s] Value = [%u]",
+		CFG_AUTO_DETECT_POWER_FAIL_MODE_NAME,
+		pHddCtx->config->auto_pwr_save_fail_mode);
 	hdd_per_roam_print_ini_config(pHddCtx);
 	hdd_info("Name = [%s] Value = [%d]",
 		CFG_SAP_INTERNAL_RESTART_NAME,
@@ -5871,6 +5905,10 @@ void hdd_cfg_print(hdd_context_t *pHddCtx)
 	hdd_info("Name = [%s] value = [%u]",
 		 CFG_DROPPED_PKT_DISCONNECT_TH_NAME,
 		 pHddCtx->config->pkt_err_disconn_th);
+	hdd_info("Name = [%s] Value = [%u]",
+		CFG_IS_BSSID_HINT_PRIORITY_NAME,
+		pHddCtx->config->is_bssid_hint_priority);
+
 }
 
 
@@ -6681,6 +6719,13 @@ bool hdd_update_config_cfg(hdd_context_t *hdd_ctx)
 		hdd_err("Couldn't pass on WNI_CFG_PS_DATA_INACTIVITY_TIMEOUT to CFG");
 	}
 
+	if (sme_cfg_set_int(hdd_ctx->hHal,
+		WNI_CFG_PS_WOW_DATA_INACTIVITY_TIMEOUT,
+		config->wow_data_inactivity_timeout) == QDF_STATUS_E_FAILURE) {
+		status = false;
+		hdd_err("Fail to pass WNI_CFG_PS_WOW_DATA_INACTIVITY_TO CFG");
+	}
+
 	if (sme_cfg_set_int(hdd_ctx->hHal, WNI_CFG_ENABLE_LTE_COEX,
 		     config->enableLTECoex) == QDF_STATUS_E_FAILURE) {
 		status = false;
@@ -7440,6 +7485,9 @@ QDF_STATUS hdd_set_sme_config(hdd_context_t *pHddCtx)
 			pHddCtx->config->fils_max_chan_guard_time;
 	smeConfig->csrConfig.pkt_err_disconn_th =
 			pHddCtx->config->pkt_err_disconn_th;
+	smeConfig->csrConfig.is_bssid_hint_priority =
+			pHddCtx->config->is_bssid_hint_priority;
+
 	status = sme_update_config(pHddCtx->hHal, smeConfig);
 	if (!QDF_IS_STATUS_SUCCESS(status)) {
 		hdd_err("sme_update_config() return failure %d",

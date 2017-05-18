@@ -412,29 +412,37 @@ static ssize_t memdump_read(struct file *file, char __user *buf,
 		return -EINVAL;
 	}
 
+	mutex_lock(&hdd_ctx->memdump_lock);
+
 	if (!hdd_ctx->memdump_in_progress) {
 		hdd_err("Current mem dump request timed out/failed");
-		return -EINVAL;
+		status = -EINVAL;
+		goto memdump_read_fail;
 	}
 
 	if (*pos < 0) {
 		hdd_err("Invalid start offset for memdump read");
-		return -EINVAL;
+		status = -EINVAL;
+		goto memdump_read_fail;
 	} else if (*pos >= FW_MEM_DUMP_SIZE || !count) {
+
 		hdd_warn("No more data to copy");
-		return 0;
+		status = 0;
+		goto memdump_read_fail;
 	} else if (count > FW_MEM_DUMP_SIZE - *pos) {
 		count = FW_MEM_DUMP_SIZE - *pos;
 	}
 
 	if (!hdd_ctx->fw_dump_loc) {
 		hdd_err("Invalid fw mem dump location");
-		return -EINVAL;
+		status = -EINVAL;
+		goto memdump_read_fail;
 	}
 
 	if (copy_to_user(buf, hdd_ctx->fw_dump_loc + *pos, count)) {
 		hdd_err("copy to user space failed");
-		return -EFAULT;
+		status = -EFAULT;
+		goto memdump_read_fail;
 	}
 
 	/* offset(pos) should be updated here based on the copy done*/
@@ -443,7 +451,7 @@ static ssize_t memdump_read(struct file *file, char __user *buf,
 	/* Entire FW memory dump copy completed */
 	if (*pos >= FW_MEM_DUMP_SIZE) {
 		paddr = hdd_ctx->dump_loc_paddr;
-		mutex_lock(&hdd_ctx->memdump_lock);
+
 		qdf_mem_free_consistent(qdf_ctx, qdf_ctx->dev,
 			FW_MEM_DUMP_SIZE, hdd_ctx->fw_dump_loc, paddr, dma_ctx);
 		hdd_ctx->fw_dump_loc = NULL;
@@ -453,10 +461,12 @@ static ssize_t memdump_read(struct file *file, char __user *buf,
 				&hdd_ctx->memdump_cleanup_timer)) {
 			qdf_mc_timer_stop(&hdd_ctx->memdump_cleanup_timer);
 		}
-		mutex_unlock(&hdd_ctx->memdump_lock);
-	}
 
-	return count;
+	}
+	status = count;
+memdump_read_fail:
+	mutex_unlock(&hdd_ctx->memdump_lock);
+	return status;
 }
 
 /**
@@ -548,11 +558,6 @@ int memdump_init(void)
 		return -EINVAL;
 	}
 
-	if (QDF_GLOBAL_FTM_MODE == hdd_get_conparam()) {
-		hdd_err("Not initializing memdump in FTM mode");
-		return -EINVAL;
-	}
-
 	status = memdump_procfs_init();
 	if (status) {
 		hdd_err("Failed to create proc file");
@@ -593,11 +598,6 @@ void memdump_deinit(void)
 	hdd_ctx = cds_get_context(QDF_MODULE_ID_HDD);
 	if (!hdd_ctx) {
 		hdd_err("Invalid HDD context");
-		return;
-	}
-
-	if (QDF_GLOBAL_FTM_MODE == hdd_get_conparam()) {
-		hdd_err("Not deinitializing memdump in FTM mode");
 		return;
 	}
 
