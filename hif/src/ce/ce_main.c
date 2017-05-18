@@ -891,18 +891,7 @@ struct CE_handle *ce_init(struct hif_softc *scn,
 				 */
 				HIF_ERROR("%s: dest ring has no mem",
 					  __func__);
-				if (malloc_src_ring) {
-					qdf_mem_free(CE_state->src_ring);
-					CE_state->src_ring = NULL;
-					malloc_src_ring = false;
-				}
-				if (malloc_CE_state) {
-					/* allocated CE_state locally */
-					scn->ce_id_to_state[CE_id] = NULL;
-					qdf_mem_free(CE_state);
-					malloc_CE_state = false;
-				}
-				return NULL;
+				goto error_no_dma_mem;
 			}
 
 			dest_ring = CE_state->dest_ring =
@@ -1779,9 +1768,10 @@ static int hif_post_recv_buffers_for_pipe(struct HIF_CE_pipe_info *pipe_info)
 
 /*
  * Try to post all desired receive buffers for all pipes.
- * Returns 0 if all desired buffers are posted,
- * non-zero if were were unable to completely
- * replenish receive buffers.
+ * Returns 0 for non fastpath rx copy engine as
+ * oom_allocation_work will be scheduled to recover any
+ * failures, non-zero if unable to completely replenish
+ * receive buffers for fastpath rx Copy engine.
  */
 static int hif_post_recv_buffers(struct hif_softc *scn)
 {
@@ -1800,7 +1790,9 @@ static int hif_post_recv_buffers(struct hif_softc *scn)
 			continue;
 		}
 
-		if (hif_post_recv_buffers_for_pipe(pipe_info)) {
+		if (hif_post_recv_buffers_for_pipe(pipe_info) &&
+			ce_state->htt_rx_data &&
+			scn->fastpath_mode_on) {
 			rv = 1;
 			goto done;
 		}
@@ -1867,9 +1859,11 @@ static void hif_recv_buffer_cleanup_on_pipe(struct HIF_CE_pipe_info *pipe_info)
 	while (ce_revoke_recv_next
 		       (ce_hdl, &per_CE_context, (void **)&netbuf,
 			&CE_data) == QDF_STATUS_SUCCESS) {
-		qdf_nbuf_unmap_single(scn->qdf_dev, netbuf,
-				      QDF_DMA_FROM_DEVICE);
-		qdf_nbuf_free(netbuf);
+		if (netbuf) {
+			qdf_nbuf_unmap_single(scn->qdf_dev, netbuf,
+					      QDF_DMA_FROM_DEVICE);
+			qdf_nbuf_free(netbuf);
+		}
 	}
 }
 
@@ -1988,7 +1982,7 @@ void hif_ce_stop(struct hif_softc *scn)
 	 * before cleaning up any memory, ensure irq &
 	 * bottom half contexts will not be re-entered
 	 */
-	hif_nointrs(scn);
+	hif_disable_isr(&scn->osc);
 	hif_destroy_oom_work(scn);
 	scn->hif_init_done = false;
 

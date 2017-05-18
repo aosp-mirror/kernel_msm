@@ -1614,14 +1614,15 @@ int hif_napi_cpu_blacklist(struct qca_napi_data *napid, enum qca_blacklist_op op
 		}
 		break;
 	case BLACKLIST_OFF:
-		if (ref_count)
+		if (ref_count) {
 			ref_count--;
-		rc = 0;
-		if (ref_count == 0) {
-			rc = core_ctl_set_boost(false);
-			NAPI_DEBUG("boost_off() returns %d - refcnt=%d",
-				   rc, ref_count);
-			hif_napi_bl_irq(napid, false);
+			rc = 0;
+			if (ref_count == 0) {
+				rc = core_ctl_set_boost(false);
+				NAPI_DEBUG("boost_off() returns %d - refcnt=%d",
+					   rc, ref_count);
+				hif_napi_bl_irq(napid, false);
+			}
 		}
 		break;
 	default:
