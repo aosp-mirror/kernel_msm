@@ -257,6 +257,9 @@ typedef struct tagSmeStruct {
 	void (*rso_cmd_status_cb)(void *hdd_context,
 			 struct rso_cmd_status *rso_status);
 	void (*get_arp_stats_cb)(void *, struct rsp_stats *);
+	void (*chip_power_save_fail_cb)(void *,
+			struct chip_pwr_save_fail_detected_params *);
+	void (*congestion_cb)(void *, uint32_t congestion, uint32_t vdev_id);
 } tSmeStruct, *tpSmeStruct;
 
 #endif /* #if !defined( __SMEINTERNAL_H ) */

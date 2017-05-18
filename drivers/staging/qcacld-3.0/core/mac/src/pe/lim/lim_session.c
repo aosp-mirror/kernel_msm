@@ -409,6 +409,8 @@ pe_create_session(tpAniSirGlobal pMac, uint8_t *bssid, uint8_t *sessionId,
 			(void *)&session_ptr->pmfComebackTimerInfo);
 	if (!QDF_IS_STATUS_SUCCESS(status))
 		lim_log(pMac, LOGE, FL("cannot init pmf comeback timer."));
+	session_ptr->deauthmsgcnt = 0;
+	session_ptr->disassocmsgcnt = 0;
 
 	return &pMac->lim.gpSession[i];
 }
@@ -710,6 +712,8 @@ void pe_delete_session(tpAniSirGlobal mac_ctx, tpPESession session)
 
 	if (LIM_IS_AP_ROLE(session))
 		lim_check_and_reset_protection_params(mac_ctx);
+	session->deauthmsgcnt = 0;
+	session->disassocmsgcnt = 0;
 
 	return;
 }

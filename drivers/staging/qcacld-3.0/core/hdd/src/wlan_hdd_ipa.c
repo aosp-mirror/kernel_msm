@@ -2706,7 +2706,7 @@ QDF_STATUS hdd_ipa_uc_ol_init(hdd_context_t *hdd_ctx)
 	/* IPA requires total byte counts of Tx comp ring */
 	pipe_in.u.dl.comp_ring_size =
 		ipa_ctxt->ipa_resource.tx_comp_ring_size *
-		sizeof(qdf_dma_addr_t);
+		sizeof(target_paddr_t);
 	pipe_in.u.dl.ce_ring_base_pa =
 		ipa_ctxt->ipa_resource.ce_sr_base_paddr;
 	pipe_in.u.dl.ce_door_bell_pa = ipa_ctxt->ipa_resource.ce_reg_paddr;
@@ -2741,6 +2741,13 @@ QDF_STATUS hdd_ipa_uc_ol_init(hdd_context_t *hdd_ctx)
 
 		/* WLAN TX PIPE Handle */
 		ipa_ctxt->tx_pipe_handle = pipe_out.clnt_hdl;
+
+		if (ipa_ctxt->tx_pipe_handle == 0) {
+			HDD_IPA_LOG(QDF_TRACE_LEVEL_ERROR,
+				"TX Handle zero");
+			QDF_BUG(0);
+		}
+
 		HDD_IPA_LOG(QDF_TRACE_LEVEL_INFO,
 			"CONS DB pipe out 0x%x TX PIPE Handle 0x%x",
 			(unsigned int)pipe_out.uc_door_bell_pa,
@@ -2800,6 +2807,12 @@ QDF_STATUS hdd_ipa_uc_ol_init(hdd_context_t *hdd_ctx)
 		}
 		ipa_ctxt->rx_ready_doorbell_paddr = pipe_out.uc_door_bell_pa;
 		ipa_ctxt->rx_pipe_handle = pipe_out.clnt_hdl;
+		if (ipa_ctxt->rx_pipe_handle == 0) {
+			HDD_IPA_LOG(QDF_TRACE_LEVEL_ERROR,
+				"RX Handle zero");
+			QDF_BUG(0);
+		}
+
 		HDD_IPA_LOG(QDF_TRACE_LEVEL_INFO,
 			"PROD DB pipe out 0x%x RX PIPE Handle 0x%x",
 			(unsigned int)pipe_out.uc_door_bell_pa,
@@ -2829,6 +2842,34 @@ QDF_STATUS hdd_ipa_uc_ol_init(hdd_context_t *hdd_ctx)
 fail_return:
 	EXIT();
 	return stat;
+}
+
+/**
+ * hdd_ipa_uc_ol_deinit() - Disconnect IPA TX and RX pipes
+ * @hdd_ctx: Global HDD context
+ *
+ * Return: 0 on success, negativer errno on error
+ */
+int hdd_ipa_uc_ol_deinit(hdd_context_t *hdd_ctx)
+{
+	struct hdd_ipa_priv *hdd_ipa = hdd_ctx->hdd_ipa;
+	int ret = 0;
+
+	if (!hdd_ipa_uc_is_enabled(hdd_ctx))
+		return ret;
+
+	if (true == hdd_ipa->uc_loaded) {
+		HDD_IPA_LOG(QDF_TRACE_LEVEL_INFO,
+			    "%s: Disconnect TX PIPE tx_pipe_handle=0x%x",
+			    __func__, hdd_ipa->tx_pipe_handle);
+		ret = ipa_disconnect_wdi_pipe(hdd_ipa->tx_pipe_handle);
+		HDD_IPA_LOG(QDF_TRACE_LEVEL_INFO,
+			    "%s: Disconnect RX PIPE rx_pipe_handle=0x%x",
+			    __func__, hdd_ipa->rx_pipe_handle);
+		ret = ipa_disconnect_wdi_pipe(hdd_ipa->rx_pipe_handle);
+	}
+
+	return ret;
 }
 
 /**
@@ -3103,16 +3144,6 @@ static int __hdd_ipa_uc_ssr_deinit(void)
 		hdd_ipa->assoc_stas_map[idx].sta_id = 0xFF;
 	}
 	qdf_mutex_release(&hdd_ipa->ipa_lock);
-
-	HDD_IPA_LOG(QDF_TRACE_LEVEL_INFO,
-		    "%s: Disconnect TX PIPE tx_pipe_handle=0x%x",
-		    __func__, hdd_ipa->tx_pipe_handle);
-	ipa_disconnect_wdi_pipe(hdd_ipa->tx_pipe_handle);
-
-	HDD_IPA_LOG(QDF_TRACE_LEVEL_INFO,
-		    "%s: Disconnect RX PIPE rx_pipe_handle=0x%x",
-		    __func__, hdd_ipa->rx_pipe_handle);
-	ipa_disconnect_wdi_pipe(hdd_ipa->rx_pipe_handle);
 
 	if (hdd_ipa_uc_sta_is_enabled(hdd_ipa->hdd_ctx))
 		hdd_ipa_uc_sta_reset_sta_connected(hdd_ipa);
@@ -5634,7 +5665,6 @@ static int __hdd_ipa_wlan_evt(hdd_adapter_t *adapter, uint8_t sta_id,
 					msg_ex->name);
 			return 0;
 		}
-
 		qdf_mutex_acquire(&hdd_ipa->event_lock);
 		if (!hdd_ipa_uc_find_add_assoc_sta(hdd_ipa, false, sta_id)) {
 			HDD_IPA_LOG(QDF_TRACE_LEVEL_ERROR,
@@ -5995,16 +6025,6 @@ static QDF_STATUS __hdd_ipa_cleanup(hdd_context_t *hdd_ctx)
 			HDD_IPA_LOG(QDF_TRACE_LEVEL_ERROR,
 					"UC Ready CB deregister fail");
 		hdd_ipa_uc_rt_debug_deinit(hdd_ctx);
-		if (true == hdd_ipa->uc_loaded) {
-			HDD_IPA_LOG(QDF_TRACE_LEVEL_INFO,
-			    "%s: Disconnect TX PIPE tx_pipe_handle=0x%x",
-			    __func__, hdd_ipa->tx_pipe_handle);
-			ipa_disconnect_wdi_pipe(hdd_ipa->tx_pipe_handle);
-			HDD_IPA_LOG(QDF_TRACE_LEVEL_INFO,
-			    "%s: Disconnect RX PIPE rx_pipe_handle=0x%x",
-			    __func__, hdd_ipa->rx_pipe_handle);
-			ipa_disconnect_wdi_pipe(hdd_ipa->rx_pipe_handle);
-		}
 		qdf_mutex_destroy(&hdd_ipa->event_lock);
 		qdf_mutex_destroy(&hdd_ipa->ipa_lock);
 		hdd_ipa_cleanup_pending_event(hdd_ipa);

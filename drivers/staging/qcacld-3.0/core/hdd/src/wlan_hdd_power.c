@@ -1273,7 +1273,7 @@ hdd_suspend_wlan(void (*callback)(void *callbackContext, bool suspended),
 
 		/* stop all TX queues before suspend */
 		hdd_notice("Disabling queues");
-		wlan_hdd_netif_queue_control(pAdapter, WLAN_NETIF_TX_DISABLE,
+		wlan_hdd_netif_queue_control(pAdapter, WLAN_STOP_ALL_NETIF_QUEUE,
 					   WLAN_CONTROL_PATH);
 
 		if (pAdapter->device_mode == QDF_STA_MODE)
@@ -1641,6 +1641,7 @@ QDF_STATUS hdd_wlan_re_init(void)
 	pHddCtx->last_scan_reject_reason = 0;
 	pHddCtx->last_scan_reject_timestamp = 0;
 
+	hdd_set_roaming_in_progress(false);
 	pHddCtx->btCoexModeSet = false;
 
 	/* Allow the phone to go to sleep */
@@ -1653,6 +1654,9 @@ QDF_STATUS hdd_wlan_re_init(void)
 	}
 
 	hdd_lpass_notify_start(pHddCtx);
+	/* set chip power save failure detected callback */
+	sme_set_chip_pwr_save_fail_cb(pHddCtx->hHal,
+				      hdd_chip_pwr_save_fail_detected_cb);
 
 	hdd_err("WLAN host driver reinitiation completed!");
 	goto success;

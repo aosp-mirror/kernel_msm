@@ -520,12 +520,15 @@ static void pktlog_detach(struct hif_opaque_softc *scn)
 	pl_info = pl_dev->pl_info;
 	remove_proc_entry(WLANDEV_BASENAME, g_pktlog_pde);
 	pktlog_sysctl_unregister(pl_dev);
-	pktlog_cleanup(pl_info);
+
+	spin_lock_bh(&pl_info->log_lock);
 
 	if (pl_info->buf) {
 		pktlog_release_buf(scn);
 		pl_dev->tgt_pktlog_alloced = false;
 	}
+	spin_unlock_bh(&pl_info->log_lock);
+	pktlog_cleanup(pl_info);
 
 	if (pl_dev) {
 		kfree(pl_info);
@@ -533,7 +536,7 @@ static void pktlog_detach(struct hif_opaque_softc *scn)
 	}
 }
 
-static int pktlog_open(struct inode *i, struct file *f)
+static int __pktlog_open(struct inode *i, struct file *f)
 {
 	struct hif_opaque_softc *scn;
 	struct ol_pktlog_dev_t *pl_dev;
@@ -553,6 +556,11 @@ static int pktlog_open(struct inode *i, struct file *f)
 		pr_info("%s: plinfo state (%d) != PKTLOG_OPR_NOT_IN_PROGRESS",
 			__func__, pl_info->curr_pkt_state);
 		return -EBUSY;
+	}
+
+	if (cds_is_load_or_unload_in_progress() || cds_is_driver_recovering()) {
+		pr_info("%s: Load/Unload or recovery is in progress", __func__);
+		return -EAGAIN;
 	}
 
 	pl_info->curr_pkt_state = PKTLOG_OPR_IN_PROGRESS_READ_START;
@@ -590,7 +598,18 @@ static int pktlog_open(struct inode *i, struct file *f)
 	return ret;
 }
 
-static int pktlog_release(struct inode *i, struct file *f)
+static int pktlog_open(struct inode *i, struct file *f)
+{
+	int ret;
+
+	cds_ssr_protect(__func__);
+	ret = __pktlog_open(i, f);
+	cds_ssr_unprotect(__func__);
+
+	return ret;
+}
+
+static int __pktlog_release(struct inode *i, struct file *f)
 {
 	struct hif_opaque_softc *scn;
 	struct ol_pktlog_dev_t *pl_dev;
@@ -604,6 +623,11 @@ static int pktlog_release(struct inode *i, struct file *f)
 
 	if (!pl_info)
 		return -EINVAL;
+
+	if (cds_is_load_or_unload_in_progress() || cds_is_driver_recovering()) {
+		pr_info("%s: Load/Unload or recovery is in progress", __func__);
+		return -EAGAIN;
+	}
 
 	scn = cds_get_context(QDF_MODULE_ID_HIF);
 	if (!scn) {
@@ -640,6 +664,17 @@ static int pktlog_release(struct inode *i, struct file *f)
 	return ret;
 }
 
+static int pktlog_release(struct inode *i, struct file *f)
+{
+	int ret;
+
+	cds_ssr_protect(__func__);
+	ret = __pktlog_release(i, f);
+	cds_ssr_unprotect(__func__);
+
+	return ret;
+}
+
 #ifndef MIN
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 #endif
@@ -669,11 +704,16 @@ pktlog_read_proc_entry(char *buf, size_t nbytes, loff_t *ppos,
 	int rem_len;
 	int start_offset, end_offset;
 	int fold_offset, ppos_data, cur_rd_offset, cur_wr_offset;
-	struct ath_pktlog_buf *log_buf = pl_info->buf;
+	struct ath_pktlog_buf *log_buf;
+
+	spin_lock_bh(&pl_info->log_lock);
+	log_buf = pl_info->buf;
+
 	*read_complete = false;
 
 	if (log_buf == NULL) {
 		*read_complete = true;
+		spin_unlock_bh(&pl_info->log_lock);
 		return 0;
 	}
 
@@ -776,7 +816,6 @@ rd_done:
 	*ppos += ret_val;
 
 	if (ret_val == 0) {
-		PKTLOG_LOCK(pl_info);
 		/* Write pointer might have been updated during the read.
 		 * So, if some data is written into, lets not reset the pointers
 		 * We can continue to read from the offset position
@@ -790,14 +829,13 @@ rd_done:
 			pl_info->buf->offset = PKTLOG_READ_OFFSET;
 			*read_complete = true;
 		}
-		PKTLOG_UNLOCK(pl_info);
 	}
-
+	spin_unlock_bh(&pl_info->log_lock);
 	return ret_val;
 }
 
 static ssize_t
-pktlog_read(struct file *file, char *buf, size_t nbytes, loff_t *ppos)
+__pktlog_read(struct file *file, char *buf, size_t nbytes, loff_t *ppos)
 {
 	size_t bufhdr_size;
 	size_t count = 0, ret_val = 0;
@@ -807,21 +845,30 @@ pktlog_read(struct file *file, char *buf, size_t nbytes, loff_t *ppos)
 	struct ath_pktlog_info *pl_info;
 	struct ath_pktlog_buf *log_buf;
 
+	if (cds_is_load_or_unload_in_progress() || cds_is_driver_recovering()) {
+		pr_info("%s: Load/Unload or recovery is in progress", __func__);
+		return -EAGAIN;
+	}
+
 	pl_info = (struct ath_pktlog_info *)
 					PDE_DATA(file->f_path.dentry->d_inode);
 	if (!pl_info)
 		return 0;
 
+	spin_lock_bh(&pl_info->log_lock);
 	log_buf = pl_info->buf;
 
-	if (log_buf == NULL)
+	if (log_buf == NULL) {
+		spin_unlock_bh(&pl_info->log_lock);
 		return 0;
+	}
 
 	if (pl_info->log_state) {
 		/* Read is not allowed when write is going on
 		 * When issuing cat command, ensure to send
 		 * pktlog disable command first.
 		 */
+		spin_unlock_bh(&pl_info->log_lock);
 		return -EINVAL;
 	}
 
@@ -838,11 +885,13 @@ pktlog_read(struct file *file, char *buf, size_t nbytes, loff_t *ppos)
 
 	if (*ppos < bufhdr_size) {
 		count = QDF_MIN((bufhdr_size - *ppos), rem_len);
+		spin_unlock_bh(&pl_info->log_lock);
 		if (copy_to_user(buf, ((char *)&log_buf->bufhdr) + *ppos,
 				 count))
 			return -EFAULT;
 		rem_len -= count;
 		ret_val += count;
+		spin_lock_bh(&pl_info->log_lock);
 	}
 
 	start_offset = log_buf->rd_offset;
@@ -884,19 +933,23 @@ pktlog_read(struct file *file, char *buf, size_t nbytes, loff_t *ppos)
 			goto rd_done;
 
 		count = QDF_MIN(rem_len, (end_offset - ppos_data + 1));
+		spin_unlock_bh(&pl_info->log_lock);
 		if (copy_to_user(buf + ret_val,
 				 log_buf->log_data + ppos_data, count))
 			return -EFAULT;
 		ret_val += count;
 		rem_len -= count;
+		spin_lock_bh(&pl_info->log_lock);
 	} else {
 		if (ppos_data <= fold_offset) {
 			count = QDF_MIN(rem_len, (fold_offset - ppos_data + 1));
+			spin_unlock_bh(&pl_info->log_lock);
 			if (copy_to_user(buf + ret_val,
 					 log_buf->log_data + ppos_data, count))
 				return -EFAULT;
 			ret_val += count;
 			rem_len -= count;
+			spin_lock_bh(&pl_info->log_lock);
 		}
 
 		if (rem_len == 0)
@@ -908,11 +961,13 @@ pktlog_read(struct file *file, char *buf, size_t nbytes, loff_t *ppos)
 
 		if (ppos_data <= end_offset) {
 			count = QDF_MIN(rem_len, (end_offset - ppos_data + 1));
+			spin_unlock_bh(&pl_info->log_lock);
 			if (copy_to_user(buf + ret_val,
 					 log_buf->log_data + ppos_data, count))
 				return -EFAULT;
 			ret_val += count;
 			rem_len -= count;
+			spin_lock_bh(&pl_info->log_lock);
 		}
 	}
 
@@ -923,7 +978,20 @@ rd_done:
 	}
 	*ppos += ret_val;
 
+	spin_unlock_bh(&pl_info->log_lock);
 	return ret_val;
+}
+
+static ssize_t
+pktlog_read(struct file *file, char *buf, size_t nbytes, loff_t *ppos)
+{
+	int ret;
+
+	cds_ssr_protect(__func__);
+	ret = __pktlog_read(file, buf, nbytes, ppos);
+	cds_ssr_unprotect(__func__);
+
+	return ret;
 }
 
 #ifndef VMALLOC_VMADDR
@@ -962,7 +1030,7 @@ static struct vm_operations_struct pktlog_vmops = {
 	fault:pktlog_fault,
 };
 
-static int pktlog_mmap(struct file *file, struct vm_area_struct *vma)
+static int __pktlog_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	struct ath_pktlog_info *pl_info;
 
@@ -979,10 +1047,26 @@ static int pktlog_mmap(struct file *file, struct vm_area_struct *vma)
 		return -ENOMEM;
 	}
 
+	if (cds_is_load_or_unload_in_progress() || cds_is_driver_recovering()) {
+		pr_info("%s: Load/Unload or recovery is in progress", __func__);
+		return -EAGAIN;
+	}
+
 	vma->vm_flags |= VM_LOCKED;
 	vma->vm_ops = &pktlog_vmops;
 	pktlog_vopen(vma);
 	return 0;
+}
+
+static int pktlog_mmap(struct file *file, struct vm_area_struct *vma)
+{
+	int ret;
+
+	cds_ssr_protect(__func__);
+	ret = __pktlog_mmap(file, vma);
+	cds_ssr_unprotect(__func__);
+
+	return ret;
 }
 
 int pktlogmod_init(void *context)

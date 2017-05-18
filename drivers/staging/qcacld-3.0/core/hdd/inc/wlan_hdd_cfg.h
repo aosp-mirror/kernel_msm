@@ -1576,7 +1576,7 @@ typedef enum {
  */
 #define CFG_DROPPED_PKT_DISCONNECT_TH_NAME      "gDroppedPktDisconnectTh"
 #define CFG_DROPPED_PKT_DISCONNECT_TH_MIN       (0)
-#define CFG_DROPPED_PKT_DISCONNECT_TH_MAX       (512)
+#define CFG_DROPPED_PKT_DISCONNECT_TH_MAX       (65535)
 #define CFG_DROPPED_PKT_DISCONNECT_TH_DEFAULT   (512)
 
 /*
@@ -2995,10 +2995,47 @@ typedef enum {
 #define CFG_FW_MCC_BCAST_PROB_RESP_MAX         (1)
 #define CFG_FW_MCC_BCAST_PROB_RESP_DEFAULT     (0)
 
+/*
+ * <ini>
+ * gDataInactivityTimeout - Data activity timeout for non wow mode.
+ * @Min: 1
+ * @Max: 255
+ * @Default: 200
+ *
+ * This ini is used to set data inactivity timeout in non wow mode.
+ *
+ * Supported Feature: inactivity timeout in non wow mode
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
 #define CFG_DATA_INACTIVITY_TIMEOUT_NAME       "gDataInactivityTimeout"
 #define CFG_DATA_INACTIVITY_TIMEOUT_MIN        (1)
 #define CFG_DATA_INACTIVITY_TIMEOUT_MAX        (255)
 #define CFG_DATA_INACTIVITY_TIMEOUT_DEFAULT    (200)
+
+/*
+ * <ini>
+ * g_wow_data_inactivity_timeout - Data activity timeout in wow mode.
+ * @Min: 1
+ * @Max: 255
+ * @Default: 50
+ *
+ * This ini is used to set data inactivity timeout in wow mode.
+ *
+ * Supported Feature: inactivity timeout in wow mode
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_WOW_DATA_INACTIVITY_TIMEOUT_NAME     "g_wow_data_inactivity_timeout"
+#define CFG_WOW_DATA_INACTIVITY_TIMEOUT_MIN      (1)
+#define CFG_WOW_DATA_INACTIVITY_TIMEOUT_MAX      (255)
+#define CFG_WOW_DATA_INACTIVITY_TIMEOUT_DEFAULT  (50)
+
 /*
  * <ini>
  * rfSettlingTimeUs - Settle the TimeUs
@@ -5012,7 +5049,7 @@ typedef enum {
 #define CFG_ENABLE_EGAP_ENABLE_FEATURE             "gEnableEGAP"
 #define CFG_ENABLE_EGAP_ENABLE_FEATURE_MIN         (0)
 #define CFG_ENABLE_EGAP_ENABLE_FEATURE_MAX         (1)
-#define CFG_ENABLE_EGAP_ENABLE_FEATURE_DEFAULT     (0)
+#define CFG_ENABLE_EGAP_ENABLE_FEATURE_DEFAULT     (1)
 
 #define CFG_ENABLE_EGAP_INACT_TIME_FEATURE         "gEGAPInactTime"
 #define CFG_ENABLE_EGAP_INACT_TIME_FEATURE_MIN     (0)
@@ -7137,6 +7174,25 @@ typedef enum {
 #define CFG_BUS_BANDWIDTH_COMPUTE_INTERVAL_DEFAULT (100)
 #define CFG_BUS_BANDWIDTH_COMPUTE_INTERVAL_MIN     (0)
 #define CFG_BUS_BANDWIDTH_COMPUTE_INTERVAL_MAX     (10000)
+/*
+ * <ini>
+ * gTcpAdvWinScaleEnable - Control to enable  TCP adv window scaling
+ * @Min: -0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to enable dynamic configuration of TCP adv window scaling system parameter.
+ *
+ * Supported Feature: Tcp Advance Window Scaling
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
+#define CFG_ENABLE_TCP_ADV_WIN_SCALE                      "gTcpAdvWinScaleEnable"
+#define CFG_ENABLE_TCP_ADV_WIN_SCALE_DEFAULT              (1)
+#define CFG_ENABLE_TCP_ADV_WIN_SCALE_MIN                  (0)
+#define CFG_ENABLE_TCP_ADV_WIN_SCALE_MAX                  (1)
 
 /*
  * <ini>
@@ -9951,9 +10007,51 @@ enum dot11p_mode {
 #define CFG_ENABLE_PACKET_FILTERS_MIN      (0)
 #define CFG_ENABLE_PACKET_FILTERS_MAX      (63)
 
+/*
+ * g_is_bssid_hint_priority - Set priority for connection with bssid_hint
+ * BSSID.
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to give priority to BSS for connection which comes
+ * as part of bssid_hint
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_IS_BSSID_HINT_PRIORITY_NAME    "g_is_bssid_hint_priority"
+#define CFG_IS_BSSID_HINT_PRIORITY_DEFAULT (1)
+#define CFG_IS_BSSID_HINT_PRIORITY_MIN     (0)
+#define CFG_IS_BSSID_HINT_PRIORITY_MAX     (1)
+
 /*---------------------------------------------------------------------------
    Type declarations
    -------------------------------------------------------------------------*/
+
+/*
+ * <ini>
+ * g_auto_detect_power_failure_mode - auto detect power save failure mode
+ * @Min: 0 : Recovery
+ * @Max: 1 : WMI
+ * @Default: 0
+ *
+ * This ini specifies the behavior of FW in case of
+ * CHIP_POWER_SAVE_FAIL_DETECTED event
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_AUTO_DETECT_POWER_FAIL_MODE_NAME "g_auto_detect_power_failure_mode"
+#define CFG_AUTO_DETECT_POWER_FAIL_MODE_MIN             (0)
+#define CFG_AUTO_DETECT_POWER_FAIL_MODE_MAX             (1)
+#define CFG_AUTO_DETECT_POWER_FAIL_MODE_DEFAULT         (0)
 
 struct hdd_config {
 	/* Bitmap to track what is explicitly configured */
@@ -10074,6 +10172,7 @@ struct hdd_config {
 	bool mcc_rts_cts_prot_enable;
 	bool mcc_bcast_prob_resp_enable;
 	uint8_t nDataInactivityTimeout;
+	uint8_t wow_data_inactivity_timeout;
 
 	/* WMM QoS Configuration */
 	hdd_wmm_user_mode_t WmmMode;
@@ -10420,6 +10519,7 @@ struct hdd_config {
 	uint32_t busBandwidthLowThreshold;
 	uint32_t busBandwidthComputeInterval;
 	uint32_t enable_tcp_delack;
+	uint32_t enable_tcp_adv_win_scale;
 	uint32_t tcpDelackThresholdHigh;
 	uint32_t tcpDelackThresholdLow;
 	uint32_t tcp_tx_high_tput_thres;
@@ -10676,9 +10776,11 @@ struct hdd_config {
 	uint8_t                     rssi_penalize_factor_5g;
 	uint8_t                     max_rssi_penalize_5g;
 
+	uint8_t                     auto_pwr_save_fail_mode;
 	uint8_t packet_filters_bitmap;
 	/* threshold of packet drops at which FW initiates disconnect */
 	uint16_t pkt_err_disconn_th;
+	bool is_bssid_hint_priority;
 };
 
 #define VAR_OFFSET(_Struct, _Var) (offsetof(_Struct, _Var))

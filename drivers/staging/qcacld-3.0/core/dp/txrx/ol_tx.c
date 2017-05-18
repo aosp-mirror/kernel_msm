@@ -76,6 +76,13 @@ int ce_send_fast(struct CE_handle *copyeng, qdf_nbuf_t msdu,
 		(msdu_info)->htt.info.frame_type = pdev->htt_pkt_type;	\
 		tx_desc = ol_tx_desc_ll(pdev, vdev, msdu, msdu_info);	\
 		if (qdf_unlikely(!tx_desc)) {				\
+			/*						\
+			 * If TSO packet, free associated		\
+			 * remaining TSO segment descriptors		\
+			 */						\
+			if (qdf_nbuf_is_tso(msdu))			\
+				ol_free_remaining_tso_segs(		\
+					vdev, msdu_info);		\
 			TXRX_STATS_MSDU_LIST_INCR(			\
 				pdev, tx.dropped.host_reject, msdu);	\
 			return msdu; /* the list of unaccepted MSDUs */	\
@@ -83,7 +90,7 @@ int ce_send_fast(struct CE_handle *copyeng, qdf_nbuf_t msdu,
 	} while (0)
 
 #if defined(FEATURE_TSO)
-static void ol_free_remaining_tso_segs(ol_txrx_vdev_handle vdev,
+void ol_free_remaining_tso_segs(ol_txrx_vdev_handle vdev,
 				struct ol_txrx_msdu_info_t *msdu_info)
 {
 	struct qdf_tso_seg_elem_t *next_seg;
@@ -119,6 +126,8 @@ static inline uint8_t ol_tx_prepare_tso(ol_txrx_vdev_handle vdev,
 			struct qdf_tso_seg_elem_t *tso_seg =
 				ol_tso_alloc_segment(vdev->pdev);
 			if (tso_seg) {
+				qdf_tso_seg_dbg_record(tso_seg,
+						       TSOSEG_LOC_PREPARETSO);
 				tso_seg->next =
 					msdu_info->tso_info.tso_seg_list;
 				msdu_info->tso_info.tso_seg_list
@@ -144,8 +153,16 @@ static inline uint8_t ol_tx_prepare_tso(ol_txrx_vdev_handle vdev,
 			ol_free_remaining_tso_segs(vdev, msdu_info);
 			return 1;
 		}
-		qdf_nbuf_get_tso_info(vdev->pdev->osdev,
-			msdu, &(msdu_info->tso_info));
+
+		if (qdf_unlikely(!qdf_nbuf_get_tso_info(vdev->pdev->osdev,
+					msdu, &(msdu_info->tso_info)))) {
+			/* Free the already allocated num of segments */
+			msdu_info->tso_info.curr_seg =
+				msdu_info->tso_info.tso_seg_list;
+			ol_free_remaining_tso_segs(vdev, msdu_info);
+			return 1;
+		}
+
 		msdu_info->tso_info.curr_seg =
 			msdu_info->tso_info.tso_seg_list;
 		num_seg = msdu_info->tso_info.num_segs;
@@ -347,6 +364,8 @@ qdf_nbuf_t ol_tx_ll(ol_txrx_vdev_handle vdev, qdf_nbuf_t msdu_list)
 
 			segments--;
 
+			ol_tx_prepare_ll(tx_desc, vdev, msdu, &msdu_info);
+
 			/**
 			* if this is a jumbo nbuf, then increment the number
 			* of nbuf users for each additional segment of the msdu.
@@ -355,8 +374,6 @@ qdf_nbuf_t ol_tx_ll(ol_txrx_vdev_handle vdev, qdf_nbuf_t msdu_list)
 			*/
 			if (segments)
 				qdf_nbuf_inc_users(msdu);
-
-			ol_tx_prepare_ll(tx_desc, vdev, msdu, &msdu_info);
 
 			TXRX_STATS_MSDU_INCR(vdev->pdev, tx.from_stack, msdu);
 
@@ -466,6 +483,9 @@ ol_tx_prepare_ll_fast(struct ol_txrx_pdev_t *pdev,
 	tx_desc->netbuf = msdu;
 	if (msdu_info->tso_info.is_tso) {
 		tx_desc->tso_desc = msdu_info->tso_info.curr_seg;
+		qdf_tso_seg_dbg_setowner(tx_desc->tso_desc, tx_desc);
+		qdf_tso_seg_dbg_record(tx_desc->tso_desc,
+				       TSOSEG_LOC_TXPREPLLFAST);
 		tx_desc->tso_num_desc = msdu_info->tso_info.tso_num_seg_list;
 		tx_desc->pkt_type = OL_TX_FRM_TSO;
 		TXRX_STATS_MSDU_INCR(pdev, tx.tso.tso_pkts, msdu);
@@ -651,15 +671,6 @@ ol_tx_ll_fast(ol_txrx_vdev_handle vdev, qdf_nbuf_t msdu_list)
 
 			segments--;
 
-			/**
-			* if this is a jumbo nbuf, then increment the number
-			* of nbuf users for each additional segment of the msdu.
-			* This will ensure that the skb is freed only after
-			* receiving tx completion for all segments of an nbuf
-			*/
-			if (segments)
-				qdf_nbuf_inc_users(msdu);
-
 			msdu_info.htt.info.frame_type = pdev->htt_pkt_type;
 			msdu_info.htt.info.vdev_id = vdev->vdev_id;
 			msdu_info.htt.action.cksum_offload =
@@ -687,6 +698,17 @@ ol_tx_ll_fast(ol_txrx_vdev_handle vdev, qdf_nbuf_t msdu_list)
 			TXRX_STATS_MSDU_INCR(pdev, tx.from_stack, msdu);
 
 			if (qdf_likely(tx_desc)) {
+
+				/*
+				 * if this is a jumbo nbuf, then increment the
+				 * number of nbuf users for each additional
+				 * segment of the msdu. This will ensure that
+				 * the skb is freed only after receiving tx
+				 * completion for all segments of an nbuf.
+				 */
+				if (segments)
+					qdf_nbuf_inc_users(msdu);
+
 				DPTRACE(qdf_dp_trace_ptr(msdu,
 				    QDF_DP_TRACE_TXRX_FAST_PACKET_PTR_RECORD,
 				    qdf_nbuf_data_addr(msdu),
@@ -742,6 +764,14 @@ ol_tx_ll_fast(ol_txrx_vdev_handle vdev, qdf_nbuf_t msdu_list)
 						tso_msdu_stats_idx);
 				}
 			} else {
+				/*
+				 * If TSO packet, free associated
+				 * remaining TSO segment descriptors
+				 */
+				if (qdf_nbuf_is_tso(msdu))
+					ol_free_remaining_tso_segs(vdev,
+							&msdu_info);
+
 				TXRX_STATS_MSDU_LIST_INCR(
 					pdev, tx.dropped.host_reject, msdu);
 				/* the list of unaccepted MSDUs */
@@ -2054,6 +2084,11 @@ void ol_tso_seg_list_init(struct ol_txrx_pdev_t *pdev, uint32_t num_seg)
 		/* set the freelist bit and magic cookie*/
 		c_element->on_freelist = 1;
 		c_element->cookie = TSO_SEG_MAGIC_COOKIE;
+#ifdef TSOSEG_DEBUG
+		c_element->dbg.txdesc = NULL;
+		c_element->dbg.cur    = -1; /* history empty */
+		qdf_tso_seg_dbg_record(c_element, TSOSEG_LOC_INIT1);
+#endif /* TSOSEG_DEBUG */
 		c_element->next =
 			qdf_mem_malloc(sizeof(struct qdf_tso_seg_elem_t));
 		c_element = c_element->next;
@@ -2074,6 +2109,11 @@ void ol_tso_seg_list_init(struct ol_txrx_pdev_t *pdev, uint32_t num_seg)
 	}
 	c_element->on_freelist = 1;
 	c_element->cookie = TSO_SEG_MAGIC_COOKIE;
+#ifdef TSOSEG_DEBUG
+	c_element->dbg.txdesc = NULL;
+	c_element->dbg.cur    = -1; /* history empty */
+	qdf_tso_seg_dbg_record(c_element, TSOSEG_LOC_INIT2);
+#endif /* TSOSEG_DEBUG */
 	c_element->next = NULL;
 	pdev->tso_seg_pool.pool_size = num_seg;
 	pdev->tso_seg_pool.num_free = num_seg;
@@ -2111,8 +2151,7 @@ void ol_tso_seg_list_deinit(struct ol_txrx_pdev_t *pdev)
 	while (i-- > 0 && c_element) {
 		temp = c_element->next;
 		if (c_element->on_freelist != 1) {
-			qdf_print("this seg memory is already freed (double free?)");
-			QDF_BUG(0);
+			qdf_tso_seg_dbg_bug("this seg already freed (double?)");
 			return;
 		} else if (c_element->cookie != TSO_SEG_MAGIC_COOKIE) {
 			qdf_print("this seg cookie is bad (memory corruption?)");
