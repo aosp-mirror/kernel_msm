@@ -271,6 +271,8 @@ typedef enum {
     WMI_SCAN_PROB_REQ_OUI_CMDID,
     /** config adaptive dwell scan */
     WMI_SCAN_ADAPTIVE_DWELL_CONFIG_CMDID,
+    /** Only applicable to DBS capable product */
+    WMI_SET_SCAN_DBS_DUTY_CYCLE_CMDID,
 
     /* PDEV(physical device) specific commands */
     /** set regulatorty ctl id used by FW to determine the exact ctl power limits */
@@ -1025,6 +1027,7 @@ typedef enum {
     WMI_SET_CURRENT_COUNTRY_CMDID = WMI_CMD_GRP_START_ID(WMI_GRP_REGULATORY),
     WMI_11D_SCAN_START_CMDID,
     WMI_11D_SCAN_STOP_CMDID,
+    WMI_SET_INIT_COUNTRY_CMDID,
 
     /**
      * Nan Data commands
@@ -2070,6 +2073,7 @@ typedef enum {
     WMI_FW_AP_RTT_RESPR =      0x00000080,
     WMI_FW_NAN_RTT_INITR =     0x00000100,
     WMI_FW_NAN_RTT_RESPR =     0x00000200,
+    WMI_FW_SCAN_DBS_POLICY =   0x00000400,
     /*
      * New fw sub feature capabilites before
      * WMI_FW_MAX_SUB_FEAT_CAP
@@ -2504,6 +2508,9 @@ typedef struct {
      * which is using MAC ID. 1 means PDEV ID, 0 means MAC ID.
      */
     A_UINT32 use_pdev_id;
+
+    /** Maximum number of scan clients whose DBS scan duty cycle can be configured */
+    A_UINT32 max_num_dbs_scan_duty_cycle;
 } wmi_resource_config;
 
 #define WMI_RSRC_CFG_FLAG_SET(word32, flag, value) \
@@ -2732,6 +2739,8 @@ typedef struct {
     A_UINT32 ie_bitmap[WMI_IE_BITMAP_SIZE];
     /** Number of vendor OUIs. In the TLV vendor_oui[] **/
     A_UINT32 num_vendor_oui;
+    /** Scan control flags extended **/
+    A_UINT32 scan_ctrl_flags_ext;
 
 /**
  * TLV (tag length value) parameters follow the scan_cmd
@@ -2826,6 +2835,17 @@ typedef enum {
 #define WMI_SCAN_STOP_ONE       0x00000000
 #define WMI_SCN_STOP_VAP_ALL    0x01000000
 #define WMI_SCAN_STOP_ALL       0x04000000
+
+/** extended Scan ctrl flags **/
+#define WMI_SCAN_FLAG_EXT_DBS_SCAN_POLICY_MASK 0x00000003 /* Bit 0-1 reserved for DBS scan selection policy.*/
+
+#define WMI_SCAN_DBS_POLICY_DEFAULT             0x0 /** Select duty cycle if configured, else fall back to whatever
+                                                        policy scan manager computes */
+#define WMI_SCAN_DBS_POLICY_FORCE_NONDBS        0x1 /** Force to select Non-DBS scan */
+#define WMI_SCAN_DBS_POLICY_IGNORE_DUTY         0x2 /** Ignore duty cycle even if configured and fall back to whatever
+                                                        policy scan manager computes*/
+#define WMI_SCAN_DBS_POLICY_RESERVED            0x3
+#define WMI_SCAN_DBS_POLICY_MAX                 0x3
 
 typedef struct {
     A_UINT32 tlv_header; /* TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_stop_scan_cmd_fixed_param */
@@ -7196,6 +7216,8 @@ typedef enum {
     /* param to specify probe request Tx delay during Fast Initial Link Setup */
     WMI_VDEV_PARAM_FILS_MAX_CHANNEL_GUARD_TIME, /* units = milliseconds */
 
+    /* enable or disable NOA for P2P GO */
+    WMI_VDEV_PARAM_DISABLE_NOA_P2P_GO,
 
     /*=== ADD NEW VDEV PARAM TYPES ABOVE THIS LINE ===
      * The below vdev param types are used for prototyping, and are
@@ -18202,6 +18224,33 @@ typedef struct {
  */
 } wmi_scan_adaptive_dwell_config_fixed_param;
 
+typedef struct {
+    A_UINT32 tlv_header; /* TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_scan_dbs_duty_cycle_param_tlv */
+    /**  module_id **/
+    A_UINT32 module_id;
+   /** number of dbs scans */
+    A_UINT32 num_dbs_scans;
+   /** number of non-dbs scans */
+    A_UINT32 num_non_dbs_scans;
+} wmi_scan_dbs_duty_cycle_tlv_param;
+
+typedef struct {
+    A_UINT32 tlv_header; /* TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_scan_dbs_duty_cycle_fixed_param */
+    /* number of scan client dutycycle param elements */
+    A_UINT32 num_clients;
+    /** pdev_id for identifying the MAC
+     * See macros starting with WMI_PDEV_ID_ for values.
+     * In non-DBDC case host should set it to 0
+     */
+    A_UINT32 pdev_id;
+/**
+ * followed by TLV (tag length value) parameters array
+ * The TLV's are:
+ * wmi_scan_selection_duty_cycle_tlv_param[num_clients];
+ */
+} wmi_scan_dbs_duty_cycle_fixed_param;
+
+
 typedef enum {
     WMI_REG_EXT_FCC_MIDBAND = 0,
     WMI_REG_EXT_JAPAN_MIDBAND = 1,
@@ -18810,6 +18859,8 @@ static INLINE A_UINT8 *wmi_id_to_name(A_UINT32 wmi_command)
         WMI_RETURN_STRING(WMI_VDEV_GET_ARP_STAT_CMDID);
         WMI_RETURN_STRING(WMI_VDEV_GET_TX_POWER_CMDID);
         WMI_RETURN_STRING(WMI_OFFCHAN_DATA_TX_SEND_CMDID);
+        WMI_RETURN_STRING(WMI_SET_INIT_COUNTRY_CMDID);
+        WMI_RETURN_STRING(WMI_SET_SCAN_DBS_DUTY_CYCLE_CMDID);
     }
 
     return "Invalid WMI cmd";
@@ -18821,8 +18872,31 @@ static INLINE A_UINT8 *wmi_id_to_name(A_UINT32 wmi_command)
 /** Host indicating current country code to FW */
 typedef struct {
     A_UINT32  tlv_header; /* TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_set_current_country_cmd_fixed_param */
+    A_UINT32  pdev_id;
     A_UINT32  new_alpha2; /** alpha2 characters representing the country code */
 } wmi_set_current_country_cmd_fixed_param;
+
+typedef enum {
+    WMI_COUNTRYCODE_ALPHA2,
+    WMI_COUNTRYCODE_COUNTRY_ID,
+    WMI_COUNTRYCODE_DOMAIN_CODE,
+} WMI_COUNTRYCODE_TYPE;
+
+typedef struct {
+    A_UINT32 tlv_header; /* TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_set_init_country_cmd_fixed_param */
+    A_UINT32 pdev_id;
+    A_UINT32 countrycode_type; /* WMI_COUNTRYCODE_TYPE */
+    union {
+        struct {
+            /* Three character for alpha2. The first two is ISO name for country the last one
+            present if it is indoor and out door.  First char in bits 7:0 and second char in bits 15:8 ... */
+            A_UINT32  alpha2:24,
+                      unused:8;
+        };
+        A_UINT32 country_id;   /* Country ID */
+        A_UINT32 domain_code;  /* Domain code */
+    } country_code;
+} wmi_set_init_country_cmd_fixed_param;
 
 /* Freq units in MHz */
 #define WMI_REG_RULE_START_FREQ_GET(freq_info)                     WMI_GET_BITS(freq_info, 0, 16)
@@ -18831,11 +18905,14 @@ typedef struct {
 #define WMI_REG_RULE_END_FREQ_SET(freq_info, value)                WMI_SET_BITS(freq_info, 16, 16, value)
 
 /* BW in MHz */
-#define WMI_REG_RULE_MAX_BW_GET(bw_info)                           WMI_GET_BITS(bw_info, 0, 16)
-#define WMI_REG_RULE_MAX_BW_SET(bw_info, value)                    WMI_SET_BITS(bw_info, 0, 16, value)
+#define WMI_REG_RULE_MAX_BW_GET(bw_pwr_info)                       WMI_GET_BITS(bw_pwr_info, 0, 16)
+#define WMI_REG_RULE_MAX_BW_SET(bw_pwr_info, value)                WMI_SET_BITS(bw_pwr_info, 0, 16, value)
 /* regpower in dBm */
-#define WMI_REG_RULE_REG_POWER_GET(bw_info)                        WMI_GET_BITS(bw_info, 16, 8)
-#define WMI_REG_RULE_REG_POWER_SET(bw_info, value)                 WMI_SET_BITS(bw_info, 16, 8, value)
+#define WMI_REG_RULE_REG_POWER_GET(bw_pwr_info)                    WMI_GET_BITS(bw_pwr_info, 16, 8)
+#define WMI_REG_RULE_REG_POWER_SET(bw_pwr_info, value)             WMI_SET_BITS(bw_pwr_info, 16, 8, value)
+/* antenna gain */
+#define WMI_REG_RULE_ANTENNA_GAIN_GET(bw_pwr_info)                 WMI_GET_BITS(bw_pwr_info, 24, 8)
+#define WMI_REG_RULE_ANTENNA_GAIN_SET(bw_pwr_info, value)          WMI_SET_BITS(bw_pwr_info, 24, 8, value)
 
 typedef enum {
     WMI_REG_FLAG_CHAN_NO_IR           = 0x0001, /* passive channel */
@@ -18849,9 +18926,14 @@ typedef enum {
 
 typedef struct {
     A_UINT32  tlv_header; /* TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_regulatory_rule_struct */
-    A_UINT32  freq_info;       /* u16 start_freq, u16 end_freq */
-    A_UINT32  bw_info;         /* u16 max_bw, u8 reg_power, u8 reserved */
-    A_UINT32  power_flag_info; /* u16 flags, u16 reserved */
+    A_UINT32  freq_info;       /* bits 15:0  = u16 start_freq,
+                                * bits 31:16 = u16 end_freq
+                                * (both in MHz units) */
+    A_UINT32  bw_pwr_info;     /* bits 15:0  = u16 max_bw (MHz units),
+                                  bits 23:16 = u8 reg_power (dBm units),
+                                  bits 31:24 = u8 ant_gain (dB units) */
+    A_UINT32  flag_info;       /* bits 15:0  = u16 flags,
+                                  bits 31:16 reserved */
 } wmi_regulatory_rule_struct;
 
 typedef enum {
@@ -18875,9 +18957,23 @@ typedef enum {
     WMI_REGULATORY_PHYMODE_NO11AX   = 0x0020,  /* NO 11AX */
 } WMI_REGULATORY_PHYBITMAP;
 
+typedef enum {
+    WMI_REG_SET_CC_STATUS_PASS = 0,
+    WMI_REG_CURRENT_ALPHA2_NOT_FOUND = 1,
+    WMI_REG_INIT_ALPHA2_NOT_FOUND = 2,
+    WMI_REG_SET_CC_CHANGE_NOT_ALLOWED = 3,
+    WMI_REG_SET_CC_STATUS_NO_MEMORY = 4,
+    WMI_REG_SET_CC_STATUS_FAIL = 5,
+} WMI_REG_SET_CC_STATUS_CODE;
+
 typedef struct {
     A_UINT32 tlv_header; /* TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_reg_chan_list_cc_event_fixed_param */
+    A_UINT32 status_code; /* WMI_REG_SET_CC_STATUS_CODE */
+    A_UINT32 phy_id;
     A_UINT32 alpha2;
+    A_UINT32 num_phy;
+    A_UINT32 country_id;
+    A_UINT32 domain_code;
     A_UINT32 dfs_region;  /* WMI_REG_DFS_REGION */
     A_UINT32 phybitmap;   /* WMI_REGULATORY_PHYBITMAP */
     A_UINT32 min_bw_2g;   /* BW in MHz */
