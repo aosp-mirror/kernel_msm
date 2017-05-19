@@ -27,6 +27,13 @@
 &i2c_5 {
 	status = "disabled";
 	qcom,clk-freq-out = <400000>;
+	qcom,i2c-clk = <&tlmm 88 0>;
+	qcom,i2c-dat = <&tlmm 87 0>;
+
+	pinctrl-names = "i2c_active", "i2c_sleep", "i2c_bitbang";
+	pinctrl-0 = <&i2c_5_active>;
+	pinctrl-1 = <&i2c_5_sleep>;
+	pinctrl-2 = <&i2c_5_bitbang>;
 
 	ftm4_fts@49 {
 		status = "ok";
