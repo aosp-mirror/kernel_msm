@@ -202,7 +202,7 @@ static int __init access_ramoops_probe(struct platform_device *pdev)
 	return ret;
 }
 
-static int access_ramoops_remove(struct platform_device *pdev)
+static int __exit access_ramoops_remove(struct platform_device *pdev)
 {
 	struct access_ramoops_info *info = platform_get_drvdata(pdev);
 
