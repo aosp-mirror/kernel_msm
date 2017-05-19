@@ -10040,7 +10040,9 @@ static void wlan_hdd_state_ctrl_param_destroy(void)
 static int __hdd_module_init(void)
 {
 	int ret = 0;
+	/* Unused when temporarily disabling wait for completion below.
 	unsigned long rc;
+	 */
 
 	pr_err("%s: Loading driver v%s\n", WLAN_MODULE_NAME,
 		QWLAN_VERSIONSTR TIMER_MANAGER_STR MEMORY_DEBUG_STR);
@@ -10074,6 +10076,7 @@ static int __hdd_module_init(void)
 	 * This wait is temporarily introduced till
 	 * boardconfig changes for dev node are merged
 	 */
+	/* Disable this as it is causing WLAN boot failure.
 	rc = wait_for_completion_timeout(&wlan_start_comp,
 				 msecs_to_jiffies(HDD_WLAN_START_WAIT_TIME));
 	if (!rc) {
@@ -10082,6 +10085,7 @@ static int __hdd_module_init(void)
 		wlan_hdd_unregister_driver();
 		goto out;
 	}
+	 */
 	pr_info("%s: driver loaded\n", WLAN_MODULE_NAME);
 
 	return 0;
