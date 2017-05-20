@@ -433,6 +433,10 @@ int mnh_ddr_po_init(struct device *dev, struct gpio_desc *iso_n)
 
 	dev_dbg(dev, "%s start.", __func__);
 
+	/* Gate CPU clock while initializing DDR */
+	MNH_SCU_OUTf(CCU_CLK_CTL, HALT_CPUCG_EN, 0);
+	MNH_SCU_OUTf(CCU_CLK_CTL, CPU_CLKEN, 0);
+
 	/* deassert iso_n */
 	gpiod_set_value_cansleep(iso_n, 1);
 
@@ -536,6 +540,9 @@ int mnh_ddr_po_init(struct device *dev, struct gpio_desc *iso_n)
 
 	/* Enable FSP2 => 2400 */
 	mnh_lpddr_freq_change(LPDDR_FREQ_FSP2);
+
+	/* Enable CPU clock after DDR init is done */
+	MNH_SCU_OUTf(CCU_CLK_CTL, CPU_CLKEN, 1);
 
 	return 0;
 }
