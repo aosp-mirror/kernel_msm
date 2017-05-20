@@ -4261,7 +4261,6 @@ static void msm_mi2s_snd_shutdown(struct snd_pcm_substream *substream)
 			pr_err
 			    ("%s:clock disable failed for MI2S (%d); ret=%d\n",
 			     __func__, index, ret);
-			mi2s_intf_conf[index].ref_cnt++;
 		}
 	}
 	mutex_unlock(&mi2s_intf_conf[index].lock);
