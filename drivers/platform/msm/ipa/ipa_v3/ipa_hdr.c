@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, 2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -503,6 +503,10 @@ static int __ipa_add_hdr(struct ipa_hdr_add *hdr)
 			entry->hdr,
 			entry->hdr_len,
 			DMA_TO_DEVICE);
+		if (dma_mapping_error(ipa3_ctx->pdev, entry->phys_base)) {
+			IPAERR("dma_map_single failure for entry\n");
+			goto fail_dma_mapping;
+		}
 	} else {
 		entry->is_hdr_proc_ctx = false;
 		if (list_empty(&htbl->head_free_offset_list[bin])) {
@@ -587,6 +591,10 @@ ipa_insert_failed:
 	}
 	htbl->hdr_cnt--;
 	list_del(&entry->link);
+
+fail_dma_mapping:
+	entry->is_hdr_proc_ctx = false;
+
 bad_hdr_len:
 	entry->cookie = 0;
 	kmem_cache_free(ipa3_ctx->hdr_cache, entry);
