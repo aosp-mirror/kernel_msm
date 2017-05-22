@@ -17,6 +17,9 @@
 
 &i2c_5 {
 	status = "ok";
+	ftm4_fts@49 {
+		stm,firmware_name = "ftm4_fw_evt1.ftb";
+	};
 };
 
 &pm8998_vadc {
