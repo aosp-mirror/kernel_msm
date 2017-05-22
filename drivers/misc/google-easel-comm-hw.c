@@ -253,6 +253,9 @@ static int easelcomm_hw_ap_msi_callback(uint32_t msi)
 	case MSI_MSG_SEND:
 		schedule_work(&cmdchan_data);
 		break;
+	case MSI_PET_WATCHDOG:
+		pr_debug("easelcomm: ignore MSI_PET_WATCHDOG\n");
+		break;
 	case MSI_APPDEFINED_1:
 		schedule_work(&cmdchan_wrap);
 		break;
