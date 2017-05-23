@@ -901,14 +901,94 @@ drv2624_parse_dt_out:
 }
 
 static const struct reg_default drv2624_reg_defaults[] = {
+	{ DRV2624_REG_ID, 0x03 },
+	{ DRV2624_REG_STATUS, 0x00 },
 	{ DRV2624_REG_INT_ENABLE, INT_MASK_ALL },
+	{ DRV2624_REG_DIAG_Z, 0x00 },
+	{ DRV2624_REG_MODE, 0x44 },
+	{ DRV2624_REG_LRA_PERIOD_H, 0x00 },
+	{ DRV2624_REG_LRA_PERIOD_L, 0x00 },
+	{ DRV2624_REG_CONTROL1, 0x88 },
+	{ DRV2624_REG_GO, 0x00 },
+	{ DRV2624_REG_CONTROL2, 0x00 },
+	{ DRV2624_REG_RTP_INPUT, 0x7F },
+	{ DRV2624_REG_SEQUENCER_1, 0x01 },
+	{ DRV2624_REG_SEQ_LOOP_1, 0x00 },
+	{ DRV2624_REG_SEQ_LOOP_2, 0x00 },
+	{ DRV2624_REG_MAIN_LOOP, 0x00 },
+	{ DRV2624_REG_RATED_VOLTAGE, 0x3F },
+	{ DRV2624_REG_OVERDRIVE_CLAMP, 0x89 },
+	{ DRV2624_REG_CAL_COMP, 0x0D },
+	{ DRV2624_REG_CAL_BEMF, 0x6D },
+	{ DRV2624_REG_LOOP_CONTROL, 0x36 },
+	{ DRV2624_REG_DRIVE_TIME, 0x10 },
+	{ DRV2624_REG_BLK_IDISS_TIME, 0x11 },
+	{ DRV2624_REG_ZC_OD_TIME, 0x0C },
+	{ DRV2624_REG_LRA_OL_CTRL, 0x00 },
+	{ DRV2624_REG_OL_PERIOD_H, 0x00 },
+	{ DRV2624_REG_OL_PERIOD_L, 0xC6 },
+	{ DRV2624_REG_DIAG_K, 0x55 },
+	{ DRV2624_REG_RAM_ADDR_UPPER, 0x00 },
+	{ DRV2624_REG_RAM_ADDR_LOWER, 0x00 },
+	{ DRV2624_REG_RAM_DATA, 0x32 },
 };
+
+static bool drv2624_is_volatile_reg(struct device *dev, unsigned int reg)
+{
+	switch (reg) {
+	case DRV2624_REG_GO:
+	case DRV2624_REG_LRA_PERIOD_H:
+	case DRV2624_REG_LRA_PERIOD_L:
+	case DRV2624_REG_LOOP_CONTROL:
+	case DRV2624_REG_DIAG_Z:
+	case DRV2624_REG_DIAG_K:
+	case DRV2624_REG_CAL_COMP:
+	case DRV2624_REG_CAL_BEMF:
+	case DRV2624_REG_RAM_ADDR_UPPER:
+	case DRV2624_REG_RAM_ADDR_LOWER:
+	case DRV2624_REG_RAM_DATA:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static bool drv2624_is_precious_reg(struct device *dev, unsigned int reg)
+{
+	switch (reg) {
+	case DRV2624_REG_STATUS:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static bool drv2624_is_writeable_reg(struct device *dev, unsigned int reg)
+{
+	switch (reg) {
+	case DRV2624_REG_ID:
+	case DRV2624_REG_STATUS:
+	case DRV2624_REG_DIAG_Z:
+	case DRV2624_REG_DIAG_K:
+	case DRV2624_REG_LRA_PERIOD_H:
+	case DRV2624_REG_LRA_PERIOD_L:
+		return false;
+	default:
+		return true;
+	}
+}
 
 static struct regmap_config drv2624_i2c_regmap = {
 	.reg_bits = 8,
 	.val_bits = 8,
 	.reg_defaults = drv2624_reg_defaults,
-	.cache_type = REGCACHE_NONE,
+	.num_reg_defaults = ARRAY_SIZE(drv2624_reg_defaults),
+	.volatile_reg = drv2624_is_volatile_reg,
+	.precious_reg = drv2624_is_precious_reg,
+	.writeable_reg = drv2624_is_writeable_reg,
+	.max_register = DRV2624_REG_RAM_DATA,
+	.cache_type = REGCACHE_RBTREE,
+	.can_multi_write = true,
 };
 
 static ssize_t rtp_input_show(struct device *dev,
