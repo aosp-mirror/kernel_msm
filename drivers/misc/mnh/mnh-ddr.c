@@ -517,8 +517,8 @@ int mnh_ddr_po_init(struct device *dev, struct gpio_desc *iso_n)
 	MNH_DDR_PI_OUTf(00, PI_START, 1);
 	MNH_DDR_CTL_OUTf(00, START, 1);
 
-	while ((timeout < 1000) && (!mnh_ddr_int_status_bit(INIT_DONE_SBIT))) {
-		udelay(10);
+	while ((timeout < 50) && (!mnh_ddr_int_status_bit(INIT_DONE_SBIT))) {
+		usleep_range(200, 250);
 		timeout++;
 	}
 
