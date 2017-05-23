@@ -988,15 +988,27 @@ static void subsystem_restart_wq_func(struct work_struct *work)
 	 */
 	mutex_lock(&soc_order_reg_lock);
 
-	pr_debug("[%s:%d]: Starting restart sequence for %s\n",
+	pr_info("[%s:%d]: Starting restart sequence for %s\n",
+			current->comm, current->pid, desc->name);
+	pr_info("[%s:%d]: SUBSYS_BEFORE_SHUTDOWN notification start %s\n",
 			current->comm, current->pid, desc->name);
 	notify_each_subsys_device(list, count, SUBSYS_BEFORE_SHUTDOWN, NULL);
+	pr_info("[%s:%d]: SUBSYS_BEFORE_SHUTDOWN notification end %s\n",
+			current->comm, current->pid, desc->name);
 	for_each_subsys_device(list, count, NULL, subsystem_shutdown);
+	pr_info("[%s:%d]: SUBSYS_AFTER_SHUTDOWN notification start %s\n",
+			current->comm, current->pid, desc->name);
 	notify_each_subsys_device(list, count, SUBSYS_AFTER_SHUTDOWN, NULL);
+	pr_info("[%s:%d]: SUBSYS_AFTER_SHUTDOWN notification end %s\n",
+			current->comm, current->pid, desc->name);
+
+	pr_info("[%s:%d]: SUBSYS_RAMDUMP_NOTIFICATION notification start %s\n",
+			current->comm, current->pid, desc->name);
 
 	notify_each_subsys_device(list, count, SUBSYS_RAMDUMP_NOTIFICATION,
 									NULL);
-
+	pr_info("[%s:%d]: SUBSYS_RAMDUMP_NOTIFICATION notification end %s\n",
+			current->comm, current->pid, desc->name);
 	spin_lock_irqsave(&track->s_lock, flags);
 	track->p_state = SUBSYS_RESTARTING;
 	spin_unlock_irqrestore(&track->s_lock, flags);
@@ -1006,9 +1018,18 @@ static void subsystem_restart_wq_func(struct work_struct *work)
 
 	for_each_subsys_device(list, count, NULL, subsystem_free_memory);
 
+	pr_info("[%s:%d]: SUBSYS_BEFORE_POWERUP notification start %s\n",
+			current->comm, current->pid, desc->name);
+
 	notify_each_subsys_device(list, count, SUBSYS_BEFORE_POWERUP, NULL);
+	pr_info("[%s:%d]: SUBSYS_BEFORE_POWERUP notification end %s\n",
+			current->comm, current->pid, desc->name);
 	for_each_subsys_device(list, count, NULL, subsystem_powerup);
+	pr_info("[%s:%d]: SUBSYS_AFTER_POWERUP notification start %s\n",
+			current->comm, current->pid, desc->name);
 	notify_each_subsys_device(list, count, SUBSYS_AFTER_POWERUP, NULL);
+	pr_info("[%s:%d]: SUBSYS_AFTER_POWERUP notification end %s\n",
+			current->comm, current->pid, desc->name);
 
 	pr_info("[%s:%d]: Restart sequence for %s completed.\n",
 			current->comm, current->pid, desc->name);
