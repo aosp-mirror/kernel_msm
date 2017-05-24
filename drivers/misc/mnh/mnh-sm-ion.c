@@ -23,6 +23,9 @@
 
 #define MSM_ION_EASEL_MEM_HEAP_NAME	"easel_mem"
 
+/* mnh_ion_fw_copy must be called in slot incrementing order:*/
+/* 1. MNH_FW_SLOT_SBL, 2. MNH_FW_SLOT_KERNEL,*/
+/* 3. MNH_FW_SLOT_DTB, 4. MNH_FW_SLOT_RAMDISK */
 static void mnh_ion_fw_copy(struct mnh_ion *ion, int slot,
 				uint64_t ep_addr, size_t size,
 				const u8 *data)
@@ -32,12 +35,15 @@ static void mnh_ion_fw_copy(struct mnh_ion *ion, int slot,
 	void *buf;
 
 	ion_addr = ion->sg->sgl->dma_address;
-	offset = (ep_addr - HW_MNH_DRAM_BASE);
+	offset = (slot == 0) ? 0 : ion->fw_array[slot-1].ap_offs +
+		ion->fw_array[slot-1].size;
+
 	buf = ion->vaddr + offset;
 
 	ion->fw_array[slot].ep_addr = ep_addr;
 	ion->fw_array[slot].size = size;
 	ion->fw_array[slot].ap_addr = ion_addr + offset;
+	ion->fw_array[slot].ap_offs = offset;
 
 	memcpy(buf, data, size);
 
@@ -49,7 +55,6 @@ static int mnh_ion_fw_request(struct mnh_ion *ion)
 {
 	const struct firmware *fip_img, *dt_img, *kernel_img, *ram_img;
 	int err;
-	uint32_t size, addr;
 
 	err = request_firmware(&fip_img, "easel/fip.bin", ion->device);
 	if (err) {
@@ -57,12 +62,8 @@ static int mnh_ion_fw_request(struct mnh_ion *ion)
 			err);
 		return -EIO;
 	}
-	memcpy(&size, (uint8_t *)(fip_img->data + FIP_IMG_SBL_SIZE_OFFSET),
-		sizeof(size));
-	memcpy(&addr, (uint8_t *)(fip_img->data + FIP_IMG_SBL_ADDR_OFFSET),
-		sizeof(addr));
-	mnh_ion_fw_copy(ion, MNH_FW_SLOT_SBL, HW_MNH_SBL_DOWNLOAD, size,
-			fip_img->data + addr);
+	mnh_ion_fw_copy(ion, MNH_FW_SLOT_SBL, HW_MNH_SBL_DOWNLOAD,
+			fip_img->size, fip_img->data);
 	release_firmware(fip_img);
 
 	err = request_firmware(&kernel_img, "easel/Image", ion->device);

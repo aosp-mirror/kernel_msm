@@ -464,6 +464,7 @@ int mnh_download_firmware_ion(struct mnh_ion *ion)
 {
 	int err;
 	int i;
+	uint32_t sbl_size, sbl_offset;
 
 	if (!ion)
 		return -ENODEV;
@@ -483,9 +484,32 @@ int mnh_download_firmware_ion(struct mnh_ion *ion)
 
 	for (i = 0; i < MAX_NR_MNH_FW_SLOTS; i++) {
 		dev_dbg(mnh_sm_dev->dev, "ION downloading fw[%d]...\n", i);
-		err = mnh_transfer_firmware_contig(ion->fw_array[i].size,
-						   ion->fw_array[i].ap_addr,
-						   ion->fw_array[i].ep_addr);
+
+		if (i == MNH_FW_SLOT_SBL) {
+			/* extract SBL from fip.bin image */
+			memcpy(&sbl_size, (uint8_t *)(ion->vaddr
+				+ ion->fw_array[i].ap_offs
+				+ FIP_IMG_SBL_SIZE_OFFSET),
+				sizeof(sbl_size));
+			memcpy(&sbl_offset, (uint8_t *)(ion->vaddr
+				+ ion->fw_array[i].ap_offs
+				+ FIP_IMG_SBL_ADDR_OFFSET),
+				sizeof(sbl_offset));
+			dev_dbg(mnh_sm_dev->dev,
+				"SBL offset %d, SBL size %d\n",
+				sbl_offset, sbl_size);
+			mnh_sm_dev->sbl_size = sbl_size;
+
+			err = mnh_transfer_firmware_contig(
+				sbl_size,
+				ion->fw_array[i].ap_addr + sbl_offset,
+				ion->fw_array[i].ep_addr);
+		} else {
+			err = mnh_transfer_firmware_contig(
+				ion->fw_array[i].size,
+				ion->fw_array[i].ap_addr,
+				ion->fw_array[i].ep_addr);
+		}
 		if (err) {
 			/* Unregister DMA callback */
 			mnh_reg_irq_callback(NULL, NULL, NULL);
@@ -499,7 +523,7 @@ int mnh_download_firmware_ion(struct mnh_ion *ion)
 	mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_5, 4,
 		HW_MNH_SBL_DOWNLOAD_EXE);
 	mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_6, 4,
-		ion->fw_array[MNH_FW_SLOT_SBL].size);
+			 mnh_sm_dev->sbl_size);
 
 	/* Configure post sbl entry address */
 	mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_7, 4,

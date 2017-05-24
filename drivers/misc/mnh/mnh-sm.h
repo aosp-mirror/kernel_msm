@@ -44,6 +44,7 @@ enum {
 
 struct mnh_ion_fw_conf {
 	dma_addr_t ap_addr;	/* AP side addr (dma) */
+	unsigned long ap_offs;  /* Slot's offset in the ion buffer */
 	uint64_t ep_addr;	/* EP side addr (phys) */
 	size_t size;		/* size of firmware */
 };
