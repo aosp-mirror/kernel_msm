@@ -872,8 +872,14 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 	if ((bl_level < pdata->panel_info.bl_min) && (bl_level != 0))
 		bl_level = pdata->panel_info.bl_min;
 
-	if (pdata->panel_info.alpm_feature_enabled)
+	if (pdata->panel_info.alpm_feature_enabled) {
 		mdss_dsi_bl_update_alpm_mode(ctrl_pdata, bl_level);
+
+		/* avoid bl updates when in ALPM mode */
+		if ((ctrl_pdata->ctrl_state & CTRL_STATE_PANEL_LP) &&
+		    (ctrl_pdata->alpm_mode != ALPM_MODE_OFF))
+			return;
+	}
 
 	switch (ctrl_pdata->bklt_ctrl) {
 	case BL_WLED:
