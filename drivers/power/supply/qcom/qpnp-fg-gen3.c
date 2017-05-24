@@ -580,11 +580,126 @@ static int fg_get_charge_counter(struct fg_chip *chip, int *val)
 	return 0;
 }
 
+/*
+ * Compensate batt temp by charging current
+ * @fg_temp : original temp reading from fuel gauge hw block
+ * @first_ctemp : 1st compensated temp by pre-defined table (temp_comp[][])
+ * @return 2nd compensated temp by charging current
+ */
+static int comp_temp_by_chg_current(struct fg_chip *chip, int fg_temp,
+				    int first_ctemp)
+{
+	struct power_supply *batt_psy;
+	union power_supply_propval pval = {0, };
+	int cnt = 0;
+	int chg_current = 0;
+	int temp = 0;
+	int rc = 0;
+	int comp_temp = 0;
+	unsigned int comp_delta = 0;
+	bool is_batt_charging;
+	static int chg_curr_data[CHG_CURR_SAMPLE_COUNT];
+
+	temp = first_ctemp;
+	is_batt_charging = false;
+
+	batt_psy = power_supply_get_by_name("battery");
+	if (!batt_psy) {
+		pr_err("battery psy not found\n");
+		return temp;
+	}
+
+	rc = power_supply_get_property(batt_psy,
+				       POWER_SUPPLY_PROP_STATUS, &pval);
+	if (rc < 0)
+		pr_warn("failed to get POWER_SUPPLY_PROP_STATUS rc = %d\n", rc);
+
+	if (pval.intval == POWER_SUPPLY_STATUS_CHARGING)
+		is_batt_charging = true;
+
+	rc = power_supply_get_property(batt_psy,
+				       POWER_SUPPLY_PROP_CURRENT_NOW, &pval);
+	if (rc < 0) {
+		pr_warn("failed to get POWER_SUPPLY_PROP_CURRENT_NOW rc = %d\n",
+			rc);
+		return temp;
+	}
+
+	chg_current = pval.intval;
+
+	 /* sample charging current */
+	if (is_batt_charging)
+		chg_current = -((chg_current) / 1000);
+	else
+		chg_current = 0;   /* assume 0ma for not charging status */
+
+	 /* update sampling data */
+	for (cnt = (CHG_CURR_SAMPLE_COUNT - 1); cnt >= 0; cnt--) {
+		if (cnt == 0) {
+			chg_curr_data[cnt] = chg_current;
+			chg_current = 0;
+		} else {
+			chg_curr_data[cnt] = chg_curr_data[cnt - 1];
+		}
+	}
+
+	/* calculate average charging current */
+	for (cnt = (CHG_CURR_SAMPLE_COUNT - 1); cnt >= 0; cnt--) {
+		/* at charging initial time, use only current data */
+		if (is_batt_charging && cnt != 0) {
+			if (chg_curr_data[cnt] == 0)
+				chg_curr_data[cnt] = chg_curr_data[0];
+		}
+
+		chg_current += chg_curr_data[cnt];
+		pr_debug("chg_curr_data[%d] = %d\n", cnt, chg_curr_data[cnt]);
+	}
+
+	/* assume that temp is proportional to current*current */
+	comp_delta = ((chg_current / CHG_CURR_SAMPLE_COUNT) *
+		      (chg_current / CHG_CURR_SAMPLE_COUNT) *
+		       chip->dt.fg_comp_factor) / 10000000;
+	comp_temp = temp - comp_delta;
+
+	return comp_temp;
+}
+
+static int calc_tuned_temp(struct fg_chip *chip, int temp)
+{
+	int i = 0, j;
+	int delta_temp = 0;
+	int temp_comp[NUMBER_DELTA_TEMP][2];
+
+	for (j = 0; j < NUMBER_DELTA_TEMP; j++) {
+		temp_comp[j][0] = chip->dt.fg_temp_info[j];
+		temp_comp[j][1] = chip->dt.fg_temp_comp_factor[j];
+	}
+
+	while (i < NUMBER_DELTA_TEMP) {
+		if (temp_comp[i][0] > temp)
+			break;
+		i++;
+	}
+
+	if (i == 0)
+		delta_temp = temp_comp[0][1];
+	else if (i == NUMBER_DELTA_TEMP)
+		delta_temp = temp_comp[NUMBER_DELTA_TEMP - 1][1];
+	else
+		delta_temp = (((temp_comp[i][1] - temp_comp[i - 1][1]) *
+			       (temp - temp_comp[i - 1][0]) /
+			       (temp_comp[i][0] - temp_comp[i - 1][0])) +
+			      temp_comp[i - 1][1]);
+
+	return comp_temp_by_chg_current(chip, temp, temp + delta_temp);
+}
+
 #define BATT_TEMP_NUMR		1
 #define BATT_TEMP_DENR		1
 static int fg_get_battery_temp(struct fg_chip *chip, int *val)
 {
 	int rc = 0, temp;
+	int prev_temp = 0, ori_temp = 0;
 	u8 buf[2];
 
 	rc = fg_read(chip, BATT_INFO_BATT_TEMP_LSB(chip), buf, 2);
@@ -600,6 +715,16 @@ static int fg_get_battery_temp(struct fg_chip *chip, int *val)
 
 	/* Value is in Kelvin; Convert it to deciDegC */
 	temp = (temp - 273) * 10;
+	if (chip->batt_temp_comp) {
+		ori_temp = temp;
+		temp = calc_tuned_temp(chip, temp);
+
+		if (prev_temp / 10 != temp / 10) {
+			pr_info("batt temperature original:%d, tuned:%d\n",
+				ori_temp, temp);
+			prev_temp = temp;
+		}
+	}
 	*val = temp;
 	return 0;
 }
@@ -4320,6 +4445,52 @@ static int fg_war_set_sp_sat_cc_clr_auto_bit(struct fg_chip *chip)
 	return rc;
 }
 
+static int fg_parse_dt_temp_comp(struct fg_chip *chip)
+{
+	struct device_node *node = chip->dev->of_node;
+	u32 temp;
+	int rc = 0;
+
+	chip->batt_temp_comp = of_property_read_bool(node,
+			"qcom,fg-batt-temp-compensation");
+
+	if (chip->batt_temp_comp) {
+		rc = of_property_read_u32_array(node, "qcom,fg-temp-info",
+						chip->dt.fg_temp_info,
+						NUMBER_DELTA_TEMP);
+		if (rc < 0) {
+			chip->batt_temp_comp = false;
+			pr_warn("Error reading fg_temp_info, rc:%d\n", rc);
+			return rc;
+		}
+
+		rc = of_property_read_u32_array(node,
+						"qcom,fg-temp-comp-factor",
+						chip->dt.fg_temp_comp_factor,
+						NUMBER_DELTA_TEMP);
+		if (rc < 0) {
+			chip->batt_temp_comp = false;
+			pr_warn("Error reading fg_temp_comp_factor, rc:%d\n",
+				rc);
+			return rc;
+		}
+
+		rc = of_property_read_u32(node,
+					  "qcom,fg-temp-charging-factor",
+					  &temp);
+		if (rc < 0) {
+			chip->batt_temp_comp = false;
+			pr_warn("Error reading fg_temp_charging_factor, rc:%d\n",
+				rc);
+			return rc;
+		}
+
+		chip->dt.fg_comp_factor = temp;
+	}
+
+	return 0;
+}
+
 static int fg_gen3_probe(struct platform_device *pdev)
 {
 	struct fg_chip *chip;
@@ -4429,6 +4600,10 @@ static int fg_gen3_probe(struct platform_device *pdev)
 			rc);
 		goto exit;
 	}
+
+	rc = fg_parse_dt_temp_comp(chip);
+	if (rc < 0)
+		pr_err("Error in getting batt_comp_factor, rc:%d\n", rc);
 
 	platform_set_drvdata(pdev, chip);
 

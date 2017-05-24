@@ -77,6 +77,8 @@
 #define SLOPE_LIMIT_COEFF_MAX		31
 
 #define BATT_THERM_NUM_COEFFS		3
+#define NUMBER_DELTA_TEMP		25
+#define CHG_CURR_SAMPLE_COUNT		3
 
 /* Debug flag definitions */
 enum fg_debug_flag {
@@ -257,11 +259,14 @@ struct fg_dt_props {
 	int	slope_limit_temp;
 	int	esr_pulse_thresh_ma;
 	int	esr_meas_curr_ma;
+	int	fg_comp_factor;
 	int	jeita_thresholds[NUM_JEITA_LEVELS];
 	int	ki_coeff_soc[KI_COEFF_SOC_LEVELS];
 	int	ki_coeff_med_dischg[KI_COEFF_SOC_LEVELS];
 	int	ki_coeff_hi_dischg[KI_COEFF_SOC_LEVELS];
 	int	slope_limit_coeffs[SLOPE_LIMIT_NUM_COEFFS];
+	int	fg_temp_info[NUMBER_DELTA_TEMP];
+	int	fg_temp_comp_factor[NUMBER_DELTA_TEMP];
 	u8	batt_therm_coeffs[BATT_THERM_NUM_COEFFS];
 };
 
@@ -386,6 +391,7 @@ struct fg_chip {
 	int			maint_soc;
 	int			delta_soc;
 	int			last_msoc;
+	int			batt_temp_comp;
 	enum slope_limit_status	slope_limit_sts;
 	bool			profile_available;
 	bool			profile_loaded;
