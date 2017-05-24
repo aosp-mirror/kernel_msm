@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -250,9 +250,9 @@ static void hdd_regulatory_wiphy_init(hdd_context_t *hdd_ctx,
 	 * disable 2.4 Ghz channels that dont have 20 mhz bw
 	 */
 	for (chan_num = 0;
-	     chan_num < wiphy->bands[IEEE80211_BAND_2GHZ]->n_channels;
+	     chan_num < wiphy->bands[NL80211_BAND_2GHZ]->n_channels;
 	     chan_num++) {
-		chan = &(wiphy->bands[IEEE80211_BAND_2GHZ]->channels[chan_num]);
+		chan = &(wiphy->bands[NL80211_BAND_2GHZ]->channels[chan_num]);
 		if (chan->flags & IEEE80211_CHAN_NO_20MHZ)
 			chan->flags |= IEEE80211_CHAN_DISABLED;
 	}
@@ -428,7 +428,7 @@ static void hdd_process_regulatory_data(hdd_context_t *hdd_ctx,
 	}
 
 	if (0 == (hdd_ctx->reg.eeprom_rd_ext &
-		  (1 << WHAL_REG_EXT_FCC_CH_144))) {
+		  (1 << WMI_REG_EXT_FCC_CH_144))) {
 		cds_chan = &(reg_channels[CHAN_ENUM_144]);
 		cds_chan->state = CHANNEL_STATE_DISABLE;
 		if (NULL != wiphy_chan_144)
@@ -525,7 +525,7 @@ void hdd_program_country_code(hdd_context_t *hdd_ctx)
 	struct wiphy *wiphy = hdd_ctx->wiphy;
 	uint8_t *country_alpha2 = hdd_ctx->reg.alpha2;
 
-	if (false == init_by_reg_core) {
+	if (!init_by_reg_core && !init_by_driver) {
 		init_by_driver = true;
 		if (('0' != country_alpha2[0]) ||
 		    ('0' != country_alpha2[1]))
@@ -626,6 +626,11 @@ void hdd_reg_notifier(struct wiphy *wiphy,
 	if (cds_is_driver_unloading() || cds_is_driver_recovering()) {
 		hdd_err("%s: unloading or ssr in progress, ignore",
 			__func__);
+		return;
+	}
+
+	if (hdd_ctx->driver_status == DRIVER_MODULES_CLOSED) {
+		hdd_err("Driver module is closed; dropping request");
 		return;
 	}
 

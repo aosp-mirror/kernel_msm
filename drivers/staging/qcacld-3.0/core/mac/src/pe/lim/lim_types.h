@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -464,7 +464,7 @@ tSirRetStatus lim_send_probe_req_mgmt_frame(tpAniSirGlobal, tSirMacSSid *,
 void lim_send_probe_rsp_mgmt_frame(tpAniSirGlobal, tSirMacAddr, tpAniSSID, short,
 				   uint8_t, tpPESession, uint8_t);
 void lim_send_auth_mgmt_frame(tpAniSirGlobal, tSirMacAuthFrameBody *, tSirMacAddr,
-			      uint8_t, tpPESession, bool wait_for_ack);
+			      uint8_t, tpPESession);
 void lim_send_assoc_req_mgmt_frame(tpAniSirGlobal, tLimMlmAssocReq *, tpPESession);
 #ifdef WLAN_FEATURE_HOST_ROAM
 void lim_send_reassoc_req_with_ft_ies_mgmt_frame(tpAniSirGlobal pMac,
@@ -540,11 +540,15 @@ tSirRetStatus lim_process_sme_tdls_del_sta_req(tpAniSirGlobal pMac,
 					       uint32_t *pMsgBuf);
 void lim_send_sme_tdls_delete_all_peer_ind(tpAniSirGlobal pMac,
 					   tpPESession psessionEntry);
-void lim_send_sme_mgmt_tx_completion(tpAniSirGlobal pMac, tpPESession psessionEntry,
-				     uint32_t txCompleteStatus);
+void lim_send_sme_mgmt_tx_completion(
+		tpAniSirGlobal pMac,
+		uint32_t sme_session_id,
+		uint32_t txCompleteStatus);
 tSirRetStatus lim_delete_tdls_peers(tpAniSirGlobal mac_ctx,
 				    tpPESession session_entry);
 QDF_STATUS lim_process_tdls_add_sta_rsp(tpAniSirGlobal pMac, void *msg, tpPESession);
+void lim_process_tdls_del_sta_rsp(tpAniSirGlobal mac_ctx, tpSirMsgQ lim_msg,
+						tpPESession session_entry);
 #else
 static inline tSirRetStatus lim_delete_tdls_peers(tpAniSirGlobal mac_ctx,
 						tpPESession session_entry)
@@ -842,8 +846,6 @@ void lim_process_remain_on_chn_timeout(tpAniSirGlobal pMac);
 void lim_process_insert_single_shot_noa_timeout(tpAniSirGlobal pMac);
 void lim_convert_active_channel_to_passive_channel(tpAniSirGlobal pMac);
 void lim_send_p2p_action_frame(tpAniSirGlobal pMac, tpSirMsgQ pMsg);
-void lim_abort_remain_on_chan(tpAniSirGlobal pMac, uint8_t sessionId,
-	uint32_t scan_id);
 tSirRetStatus __lim_process_sme_no_a_update(tpAniSirGlobal pMac, uint32_t *pMsgBuf);
 void lim_process_regd_defd_sme_req_after_noa_start(tpAniSirGlobal pMac);
 
@@ -866,7 +868,8 @@ int lim_process_remain_on_chnl_req(tpAniSirGlobal pMac, uint32_t *pMsg);
 void lim_remain_on_chn_rsp(tpAniSirGlobal pMac, QDF_STATUS status, uint32_t *data);
 void lim_send_sme_disassoc_deauth_ntf(tpAniSirGlobal mac_ctx,
 				QDF_STATUS status, uint32_t *ctx);
-
+tSirRetStatus lim_process_sme_del_all_tdls_peers(tpAniSirGlobal p_mac,
+						 uint32_t *msg_buf);
 /* / Bit value data structure */
 typedef enum sHalBitVal         /* For Bit operations */
 {

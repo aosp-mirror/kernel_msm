@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -64,50 +64,6 @@
 /*                          Static Variables */
 /* */
 /* ------------------------------------------------------------------- */
-
-/* -------------------------------------------------------------------- */
-/**
- * sch_get_cfp_count
- *
- * FUNCTION:
- * Function used by other Sirius modules to read CFPcount
- *
- * LOGIC:
- *
- * ASSUMPTIONS:
- *
- * NOTE:
- *
- * @param None
- * @return None
- */
-
-uint8_t sch_get_cfp_count(tpAniSirGlobal pMac)
-{
-	return pMac->sch.schObject.gSchCFPCount;
-}
-
-/* -------------------------------------------------------------------- */
-/**
- * sch_get_cfp_dur_remaining
- *
- * FUNCTION:
- * Function used by other Sirius modules to read CFPDuration remaining
- *
- * LOGIC:
- *
- * ASSUMPTIONS:
- *
- * NOTE:
- *
- * @param None
- * @return None
- */
-
-uint16_t sch_get_cfp_dur_remaining(tpAniSirGlobal pMac)
-{
-	return pMac->sch.schObject.gSchCFPDurRemaining;
-}
 
 /* -------------------------------------------------------------------- */
 /**
@@ -331,10 +287,10 @@ tSirRetStatus sch_send_beacon_req(tpAniSirGlobal pMac, uint8_t *beaconPayload,
 	return retCode;
 }
 
-uint32_t lim_remove_p2p_ie_from_add_ie(tpAniSirGlobal pMac,
-					tpPESession psessionEntry,
-					uint8_t *addIeWoP2pIe,
-					uint32_t *addnIELenWoP2pIe)
+static uint32_t lim_remove_p2p_ie_from_add_ie(tpAniSirGlobal pMac,
+					      tpPESession psessionEntry,
+					      uint8_t *addIeWoP2pIe,
+					      uint32_t *addnIELenWoP2pIe)
 {
 	uint32_t left = psessionEntry->addIeParams.probeRespDataLen;
 	uint8_t *ptr = psessionEntry->addIeParams.probeRespData_buff;
@@ -379,7 +335,7 @@ uint32_t lim_send_probe_rsp_template_to_hal(tpAniSirGlobal pMac,
 	uint8_t *pFrame2Hal = psessionEntry->pSchProbeRspTemplate;
 	tpSendProbeRespParams pprobeRespParams = NULL;
 	uint32_t retCode = eSIR_FAILURE;
-	uint32_t nPayload, nBytes, nStatus;
+	uint32_t nPayload, nBytes = 0, nStatus;
 	tpSirMacMgmtHdr pMacHdr;
 	uint32_t addnIEPresent = false;
 	uint8_t *addIE = NULL;
@@ -391,22 +347,6 @@ uint32_t lim_send_probe_rsp_template_to_hal(tpAniSirGlobal pMac,
 	tDot11fProbeResponse *prb_rsp_frm;
 	tSirRetStatus status;
 	uint16_t addn_ielen = 0;
-
-	nStatus = dot11f_get_packed_probe_response_size(pMac,
-			&psessionEntry->probeRespFrame, &nPayload);
-	if (DOT11F_FAILED(nStatus)) {
-		sch_log(pMac, LOGE, FL("Failed to calculate the packed size f"
-				       "or a Probe Response (0x%08x)."),
-			nStatus);
-		/* We'll fall back on the worst case scenario: */
-		nPayload = sizeof(tDot11fProbeResponse);
-	} else if (DOT11F_WARNED(nStatus)) {
-		sch_log(pMac, LOGE, FL("There were warnings while calculating"
-				       "the packed size for a Probe Response "
-				       "(0x%08x)."), nStatus);
-	}
-
-	nBytes = nPayload + sizeof(tSirMacMgmtHdr);
 
 	/* Check if probe response IE is present or not */
 	addnIEPresent = (psessionEntry->addIeParams.probeRespDataLen != 0);
@@ -470,6 +410,34 @@ uint32_t lim_send_probe_rsp_template_to_hal(tpAniSirGlobal pMac,
 		else
 			addnIEPresent = false;  /* Dont include the IE. */
 	}
+
+	/*
+	 * Extcap IE now support variable length, merge Extcap IE from addn_ie
+	 * may change the frame size. Therefore, MUST merge ExtCap IE before
+	 * dot11f get packed payload size.
+	 */
+	prb_rsp_frm = &psessionEntry->probeRespFrame;
+	if (extcap_present)
+		lim_merge_extcap_struct(&prb_rsp_frm->ExtCap,
+					&extracted_extcap,
+					true);
+
+	nStatus = dot11f_get_packed_probe_response_size(pMac,
+			&psessionEntry->probeRespFrame, &nPayload);
+	if (DOT11F_FAILED(nStatus)) {
+		sch_log(pMac, LOGE,
+			FL("Failed to calculate the packed size for a Probe Response (0x%08x)."),
+			nStatus);
+		/* We'll fall back on the worst case scenario: */
+		nPayload = sizeof(tDot11fProbeResponse);
+	} else if (DOT11F_WARNED(nStatus)) {
+		sch_log(pMac, LOGE,
+			FL("There were warnings while calculating the packed size for a Probe Response (0x%08x)."),
+			nStatus);
+	}
+
+	nBytes += nPayload + sizeof(tSirMacMgmtHdr);
+
 	/* Paranoia: */
 	qdf_mem_set(pFrame2Hal, nBytes, 0);
 
@@ -482,12 +450,6 @@ uint32_t lim_send_probe_rsp_template_to_hal(tpAniSirGlobal pMac,
 	pMacHdr = (tpSirMacMgmtHdr) pFrame2Hal;
 
 	sir_copy_mac_addr(pMacHdr->bssId, psessionEntry->bssId);
-
-	/* merge extcap IE */
-	prb_rsp_frm = &psessionEntry->probeRespFrame;
-	if (extcap_present)
-		lim_merge_extcap_struct(&prb_rsp_frm->ExtCap,
-					&extracted_extcap);
 
 	/* That done, pack the Probe Response: */
 	nStatus =

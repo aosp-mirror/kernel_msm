@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -51,20 +51,20 @@
 #include "qdf_mc_timer.h"
 #include "cds_config.h"
 
-#define TX_POST_EVENT_MASK               0x001
-#define TX_SUSPEND_EVENT_MASK            0x002
-#define MC_POST_EVENT_MASK               0x001
-#define MC_SUSPEND_EVENT_MASK            0x002
-#define RX_POST_EVENT_MASK               0x001
-#define RX_SUSPEND_EVENT_MASK            0x002
-#define TX_SHUTDOWN_EVENT_MASK           0x010
-#define MC_SHUTDOWN_EVENT_MASK           0x010
-#define RX_SHUTDOWN_EVENT_MASK           0x010
-#define WD_POST_EVENT_MASK               0x001
-#define WD_SHUTDOWN_EVENT_MASK           0x002
-#define WD_CHIP_RESET_EVENT_MASK         0x004
-#define WD_WLAN_SHUTDOWN_EVENT_MASK      0x008
-#define WD_WLAN_REINIT_EVENT_MASK        0x010
+#define TX_POST_EVENT               0x001
+#define TX_SUSPEND_EVENT            0x002
+#define MC_POST_EVENT               0x001
+#define MC_SUSPEND_EVENT            0x002
+#define RX_POST_EVENT               0x001
+#define RX_SUSPEND_EVENT            0x002
+#define TX_SHUTDOWN_EVENT           0x010
+#define MC_SHUTDOWN_EVENT           0x010
+#define RX_SHUTDOWN_EVENT           0x010
+#define WD_POST_EVENT               0x001
+#define WD_SHUTDOWN_EVENT           0x002
+#define WD_CHIP_RESET_EVENT         0x004
+#define WD_WLAN_SHUTDOWN_EVENT      0x008
+#define WD_WLAN_REINIT_EVENT        0x010
 
 /*
  * Maximum number of messages in the system
@@ -245,6 +245,8 @@ typedef struct _cds_msg_wrapper {
 
 } cds_msg_wrapper, *p_cds_msg_wrapper;
 
+/* forward-declare hdd_context_s as it is used ina function type */
+struct hdd_context_s;
 typedef struct _cds_context_type {
 	/* Messages buffers */
 	cds_msg_t aMsgBuffers[CDS_CORE_MAX_MESSAGES];
@@ -310,7 +312,11 @@ typedef struct _cds_context_type {
 	void (*sme_get_nss_for_vdev)(void*, enum tQDF_ADAPTER_MODE,
 		uint8_t *, uint8_t *);
 
-	void (*ol_txrx_update_mac_id)(uint8_t , uint8_t);
+	/* Datapath callback functions */
+	void (*ol_txrx_update_mac_id_cb)(uint8_t , uint8_t);
+	void (*hdd_en_lro_in_cc_cb)(struct hdd_context_s *);
+	void (*hdd_disable_lro_in_cc_cb)(struct hdd_context_s *);
+	void (*hdd_set_rx_mode_rps_cb)(struct hdd_context_s *, void *, bool);
 
 	/* This list is not sessionized. This mandatory channel list would be
 	 * as per OEMs preference as per the regulatory/other considerations.
@@ -321,6 +327,9 @@ typedef struct _cds_context_type {
 	bool do_hw_mode_change;
 	bool enable_fatal_event;
 	struct cds_config_info *cds_cfg;
+
+	/* This is to track if HW mode change is in progress */
+	uint32_t hw_mode_change_in_progress;
 } cds_context_type, *p_cds_contextType;
 
 /*---------------------------------------------------------------------------
@@ -547,7 +556,15 @@ void cds_ssr_protect_init(void);
 void cds_ssr_protect(const char *caller_func);
 void cds_ssr_unprotect(const char *caller_func);
 bool cds_wait_for_external_threads_completion(const char *caller_func);
+void cds_print_external_threads(void);
 int cds_get_gfp_flags(void);
+
+/**
+ * cds_return_external_threads_count() - return active external thread calls
+ *
+ * Return: total number of active extrenal threads in driver
+ */
+int cds_return_external_threads_count(void);
 
 /**
  * cds_shutdown_notifier_register() - Register for shutdown notification

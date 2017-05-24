@@ -156,7 +156,11 @@ int hdd_lro_init(hdd_context_t *hdd_ctx);
 int hdd_lro_enable(hdd_context_t *hdd_ctx,
 	 hdd_adapter_t *adapter);
 
+void hdd_lro_create(void);
+
 void hdd_lro_disable(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter);
+
+void hdd_lro_destroy(void);
 
 enum hdd_lro_rx_status hdd_lro_rx(hdd_context_t *hdd_ctx,
 	 hdd_adapter_t *adapter, struct sk_buff *skb);
@@ -165,6 +169,8 @@ void hdd_lro_flush_all(hdd_context_t *hdd_ctx,
 	 hdd_adapter_t *adapter);
 
 void hdd_lro_display_stats(hdd_context_t *hdd_ctx);
+void hdd_enable_lro_in_concurrency(hdd_context_t *hdd_ctx);
+void hdd_disable_lro_in_concurrency(hdd_context_t *hdd_ctx);
 #else
 struct hdd_lro_s {};
 
@@ -172,6 +178,10 @@ static inline int hdd_lro_enable(hdd_context_t *hdd_ctx,
 	 hdd_adapter_t *adapter)
 {
 	return 0;
+}
+
+static inline void hdd_lro_create(void)
+{
 }
 
 static inline enum hdd_lro_rx_status hdd_lro_rx(hdd_context_t *hdd_ctx,
@@ -191,9 +201,21 @@ static inline void hdd_lro_disable(hdd_context_t *hdd_ctx,
 	return;
 }
 
+static inline void hdd_lro_destroy(void)
+{
+}
+
 static inline void hdd_lro_display_stats(hdd_context_t *hdd_ctx)
 {
 	return;
+}
+
+static inline void hdd_enable_lro_in_concurrency(hdd_context_t *hdd_ctx)
+{
+}
+
+static inline void hdd_disable_lro_in_concurrency(hdd_context_t *hdd_ctx)
+{
 }
 #endif /* FEATURE_LRO */
 #endif /* __WLAN_HDD_LRO_H__ */

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -30,9 +30,6 @@
  *
  * WLAN Host Device Driver 802.11p OCB implementation
  */
-
-/* denote that this file does not allow legacy hddLog */
-#define HDD_DISALLOW_LEGACY_HDDLOG 1
 
 #include "cds_sched.h"
 #include "wlan_hdd_assoc.h"
@@ -283,7 +280,7 @@ static int hdd_ocb_register_sta(hdd_adapter_t *adapter)
 
 	if (pHddStaCtx->conn_info.staId[0] != 0 &&
 	     pHddStaCtx->conn_info.staId[0] != peer_id) {
-		hdd_err("The ID for the OCB station has changed.");
+		hdd_warn("The ID for the OCB station has changed.");
 	}
 
 	pHddStaCtx->conn_info.staId[0] = peer_id;
@@ -367,7 +364,7 @@ static void hdd_ocb_set_config_callback(void *context_ptr, void *response_ptr)
 		return;
 
 	if (resp && resp->status)
-		hdd_err("Operation failed: %d", resp->status);
+		hdd_warn("Operation failed: %d", resp->status);
 
 	spin_lock(&hdd_context_lock);
 	if (context->magic == HDD_OCB_MAGIC) {
@@ -838,10 +835,18 @@ static int __wlan_hdd_cfg80211_ocb_set_config(struct wiphy *wiphy,
 		tb[QCA_WLAN_VENDOR_ATTR_OCB_SET_CONFIG_SCHEDULE_SIZE]);
 
 	/* Get the ndl chan array and the ndl active state array. */
+	if (!tb[QCA_WLAN_VENDOR_ATTR_OCB_SET_CONFIG_NDL_CHANNEL_ARRAY]) {
+		hdd_err("NDL_CHANNEL_ARRAY is not present");
+		return -EINVAL;
+	}
 	ndl_chan_list =
 		tb[QCA_WLAN_VENDOR_ATTR_OCB_SET_CONFIG_NDL_CHANNEL_ARRAY];
 	ndl_chan_list_len = (ndl_chan_list ? nla_len(ndl_chan_list) : 0);
 
+	if (!tb[QCA_WLAN_VENDOR_ATTR_OCB_SET_CONFIG_NDL_ACTIVE_STATE_ARRAY]) {
+		hdd_err("NDL_ACTIVE_STATE_ARRAY is not present");
+		return -EINVAL;
+	}
 	ndl_active_state_list =
 		tb[QCA_WLAN_VENDOR_ATTR_OCB_SET_CONFIG_NDL_ACTIVE_STATE_ARRAY];
 	ndl_active_state_list_len = (ndl_active_state_list ?
@@ -874,6 +879,10 @@ static int __wlan_hdd_cfg80211_ocb_set_config(struct wiphy *wiphy,
 	config->def_tx_param_size = def_tx_param_size;
 
 	/* Read the channel array */
+	if (!tb[QCA_WLAN_VENDOR_ATTR_OCB_SET_CONFIG_CHANNEL_ARRAY]) {
+		hdd_err("CHANNEL_ARRAY is not present");
+		return -EINVAL;
+	}
 	channel_array = tb[QCA_WLAN_VENDOR_ATTR_OCB_SET_CONFIG_CHANNEL_ARRAY];
 	if (!channel_array) {
 		hdd_err("No channel present");
@@ -1414,7 +1423,7 @@ __wlan_hdd_cfg80211_ocb_get_tsf_timer(struct wiphy *wiphy,
 		goto end;
 	}
 
-	hdd_err("Got TSF timer response, high=%d, low=%d",
+	hdd_notice("Got TSF timer response, high=%d, low=%d",
 	       adapter->ocb_get_tsf_timer_resp.timer_high,
 	       adapter->ocb_get_tsf_timer_resp.timer_low);
 

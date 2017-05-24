@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -323,6 +323,7 @@ void csr_roam_reset_roam_params(tpAniSirGlobal mac_ptr);
 #define REASON_ROAM_SCAN_HI_RSSI_UB_CHANGED         33
 #define REASON_CONNECT_IES_CHANGED                  34
 #define REASON_ROAM_SCAN_STA_ROAM_POLICY_CHANGED    35
+#define REASON_ROAM_SYNCH_FAILED                    36
 
 
 #if defined(WLAN_FEATURE_HOST_ROAM) || defined(WLAN_FEATURE_ROAM_OFFLOAD)
@@ -350,14 +351,16 @@ QDF_STATUS csr_roam_read_tsf(tpAniSirGlobal pMac, uint8_t *pTimestamp,
 		const uint8_t sessionId);
 #endif /* FEATURE_WLAN_ESE */
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD
-void csr_roam_synch_callback(tpAniSirGlobal mac,
+QDF_STATUS csr_roam_synch_callback(tpAniSirGlobal mac,
 	roam_offload_synch_ind *roam_synch_data,
 	tpSirBssDescription  bss_desc_ptr, enum sir_roam_op_code reason);
 #else
-static inline void csr_roam_synch_callback(tpAniSirGlobal mac,
+static inline QDF_STATUS csr_roam_synch_callback(tpAniSirGlobal mac,
 	roam_offload_synch_ind *roam_synch_data,
 	tpSirBssDescription  bss_desc_ptr, enum sir_roam_op_code reason)
-{}
+{
+	return QDF_STATUS_E_NOSUPPORT;
+}
 #endif
 void csr_neighbor_roam_state_transition(tpAniSirGlobal mac_ctx,
 		uint8_t newstate, uint8_t session);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -62,17 +62,9 @@
 #include "sme_nan_datapath.h"
 #include "csr_api.h"
 
-extern tSirRetStatus u_mac_post_ctrl_msg(void *pSirGlobal, tSirMbMsg *pMb);
-
 #define LOG_SIZE 256
 
 static tSelfRecoveryStats g_self_recovery_stats;
-/* TxMB Functions */
-extern QDF_STATUS pmc_prepare_command(tpAniSirGlobal pMac, uint32_t sessionId,
-				      eSmeCommandType cmdType, void *pvParam,
-				      uint32_t size, tSmeCmd **ppCmd);
-extern void pmc_release_command(tpAniSirGlobal pMac, tSmeCmd *pCommand);
-extern void qos_release_command(tpAniSirGlobal pMac, tSmeCmd *pCommand);
 
 static QDF_STATUS init_sme_cmd_list(tpAniSirGlobal pMac);
 static void sme_abort_command(tpAniSirGlobal pMac, tSmeCmd *pCommand,
@@ -238,9 +230,12 @@ static QDF_STATUS sme_process_set_hw_mode_resp(tpAniSirGlobal mac, uint8_t *msg)
 		if (saved_cmd->u.scanCmd.u.scanRequest.SSIDs.SSIDList)
 			qdf_mem_free(saved_cmd->u.scanCmd.u.
 					scanRequest.SSIDs.SSIDList);
-		if (saved_cmd->u.scanCmd.pToRoamProfile)
-			qdf_mem_free(saved_cmd->u.scanCmd.
-					pToRoamProfile);
+		if (saved_cmd->u.scanCmd.pToRoamProfile) {
+			csr_release_profile(mac, saved_cmd->
+					    u.scanCmd.pToRoamProfile);
+			qdf_mem_free(saved_cmd->u.scanCmd.pToRoamProfile);
+			saved_cmd->u.scanCmd.pToRoamProfile = NULL;
+		}
 		if (saved_cmd) {
 			qdf_mem_free(saved_cmd);
 			saved_cmd = NULL;
@@ -393,7 +388,7 @@ static QDF_STATUS init_sme_cmd_list(tpAniSirGlobal pMac)
 			pMac->sme.smeCmdActiveList.cmdTimeoutTimer = NULL;
 		} else {
 			pMac->sme.smeCmdActiveList.cmdTimeoutDuration =
-				CSR_ACTIVE_LIST_CMD_TIMEOUT_VALUE;
+				SME_ACTIVE_LIST_CMD_TIMEOUT_VALUE;
 		}
 	}
 
@@ -503,32 +498,41 @@ done:
 	return status;
 }
 
-static void dump_csr_command_info(tpAniSirGlobal pMac, tSmeCmd *pCmd)
+static void dump_csr_command_info(tpAniSirGlobal mac_ctx,
+		tSmeCmd *cmd)
 {
-	switch (pCmd->command) {
+	switch (cmd->command) {
 	case eSmeCommandScan:
-		sms_log(pMac, LOGE, " scan command reason is %d",
-			pCmd->u.scanCmd.reason);
+		sms_log(mac_ctx, LOGW, " scan command reason is %d session %d",
+			cmd->u.scanCmd.reason,
+			cmd->sessionId);
 		break;
 
 	case eSmeCommandRoam:
-		sms_log(pMac, LOGE, " roam command reason is %d",
-			pCmd->u.roamCmd.roamReason);
+		sms_log(mac_ctx, LOGW, " roam command reason is %d session %d",
+			cmd->u.roamCmd.roamReason,
+			cmd->sessionId);
 		break;
 
 	case eSmeCommandWmStatusChange:
-		sms_log(pMac, LOGE, " WMStatusChange command type is %d",
-			pCmd->u.wmStatusChangeCmd.Type);
+		sms_log(mac_ctx, LOGW,
+			" WMStatusChange command type is %d session %d",
+			cmd->u.wmStatusChangeCmd.Type,
+			cmd->sessionId);
 		break;
 
 	case eSmeCommandSetKey:
-		sms_log(pMac, LOGE, " setKey command auth(%d) enc(%d)",
-			pCmd->u.setKeyCmd.authType, pCmd->u.setKeyCmd.encType);
+		sms_log(mac_ctx, LOGW,
+			" setKey command auth(%d) enc(%d) session %d",
+			cmd->u.setKeyCmd.authType, cmd->u.setKeyCmd.encType,
+			cmd->sessionId);
 		break;
 
 	default:
-		sms_log(pMac, LOGE, " default: Unhandled command %d",
-			pCmd->command);
+		sms_log(mac_ctx, LOGW,
+			" default: Unhandled command %d session %d",
+			cmd->command,
+			cmd->sessionId);
 		break;
 	}
 }
@@ -836,6 +840,9 @@ static bool sme_process_command(tpAniSirGlobal pMac)
 	csr_ll_lock(&pMac->sme.smeCmdActiveList);
 	if (!csr_ll_is_list_empty(&pMac->sme.smeCmdActiveList,
 				 LL_ACCESS_NOLOCK)) {
+		pEntry = csr_ll_peek_head(&pMac->sme.smeCmdActiveList, false);
+		pCommand = GET_BASE_ADDR(pEntry, tSmeCmd, Link);
+		dump_csr_command_info(pMac, pCommand);
 		csr_ll_unlock(&pMac->sme.smeCmdActiveList);
 		goto process_scan_q;
 	}
@@ -923,6 +930,7 @@ sme_process_cmd:
 	MTRACE(qdf_trace(QDF_MODULE_ID_SME, TRACE_CODE_SME_COMMAND,
 			 pCommand->sessionId, pCommand->command));
 
+	dump_csr_command_info(pMac, pCommand);
 	switch (pCommand->command) {
 	case eSmeCommandScan:
 		csr_ll_unlock(&pMac->sme.smeCmdActiveList);
@@ -1349,13 +1357,22 @@ QDF_STATUS sme_get_soft_ap_domain(tHalHandle hHal, v_REGDOMAIN_t *domainIdSoftAp
 QDF_STATUS sme_set_reg_info(tHalHandle hHal, uint8_t *apCntryCode)
 {
 	QDF_STATUS status = QDF_STATUS_E_FAILURE;
+	int32_t ctry_val;
+
 	tpAniSirGlobal pMac = PMAC_STRUCT(hHal);
 
 	MTRACE(qdf_trace(QDF_MODULE_ID_SME,
 			 TRACE_CODE_SME_RX_HDD_MSG_SET_REGINFO, NO_SESSION, 0));
+
 	if (NULL == apCntryCode) {
 		sms_log(pMac, LOGE, "Empty Country Code, nothing to update");
 		return status;
+	}
+
+	ctry_val = cds_get_country_from_alpha2(apCntryCode);
+	if (ctry_val == CTRY_DEFAULT) {
+		sms_log(pMac, LOGE, "invalid AP alpha2");
+		return  status;
 	}
 
 	status = csr_set_reg_info(hHal, apCntryCode);
@@ -3072,6 +3089,11 @@ QDF_STATUS sme_process_msg(tHalHandle hHal, cds_msg_t *pMsg)
 		if (pMac->sme.lost_link_info_cb)
 			pMac->sme.lost_link_info_cb(pMac->hHdd,
 				(struct sir_lost_link_info *)pMsg->bodyptr);
+		qdf_mem_free(pMsg->bodyptr);
+		break;
+	case eWNI_SME_RSO_CMD_STATUS_IND:
+		if (pMac->sme.rso_cmd_status_cb)
+			pMac->sme.rso_cmd_status_cb(pMac->hHdd, pMsg->bodyptr);
 		qdf_mem_free(pMsg->bodyptr);
 		break;
 	default:
@@ -6148,22 +6170,42 @@ QDF_STATUS sme_open_session(tHalHandle hHal, csr_roam_completeCallback callback,
 			    uint8_t *pSelfMacAddr, uint8_t *pbSessionId,
 			    uint32_t type, uint32_t subType)
 {
-	QDF_STATUS status;
+	QDF_STATUS status = QDF_STATUS_E_INVAL;
 	tpAniSirGlobal pMac = PMAC_STRUCT(hHal);
+	ol_txrx_pdev_handle pdev;
+	ol_txrx_peer_handle peer;
+	uint8_t peer_id;
 
 	QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_HIGH,
 		  "%s: type=%d, subType=%d addr:%pM",
 		  __func__, type, subType, pSelfMacAddr);
 
-	if (NULL == pbSessionId) {
-		status = QDF_STATUS_E_INVAL;
-	} else {
+	pdev = cds_get_context(QDF_MODULE_ID_TXRX);
+
+	if (NULL == pdev) {
+		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_ERROR,
+			  "%s: Failed to get pdev handler", __func__);
+		return status;
+	}
+
+	if (pbSessionId) {
 		status = sme_acquire_global_lock(&pMac->sme);
 		if (QDF_IS_STATUS_SUCCESS(status)) {
-			status = csr_roam_open_session(pMac, callback, pContext,
-						       pSelfMacAddr,
-						       pbSessionId, type,
-						       subType);
+			peer = ol_txrx_find_peer_by_addr(pdev, pSelfMacAddr,
+							 &peer_id);
+			if (peer) {
+
+				QDF_TRACE(QDF_MODULE_ID_SAP,
+					  QDF_TRACE_LEVEL_ERROR,
+					  "%s: Peer=%d exist with same MAC",
+					  __func__, peer_id);
+
+				status = QDF_STATUS_E_INVAL;
+
+			} else {
+				status = csr_roam_open_session(pMac, callback, pContext,
+						pSelfMacAddr, pbSessionId, type, subType);
+			}
 
 			sme_release_global_lock(&pMac->sme);
 		}
@@ -6340,6 +6382,118 @@ QDF_STATUS sme_set_host_offload(tHalHandle hHal, uint8_t sessionId,
 	return status;
 }
 
+QDF_STATUS sme_enable_non_arp_broadcast_filter(tHalHandle hal,
+						uint8_t session_id)
+{
+	struct broadcast_filter_request *request_buf;
+	cds_msg_t msg;
+
+	tpAniSirGlobal pMac = PMAC_STRUCT(hal);
+	QDF_STATUS status = QDF_STATUS_E_FAILURE;
+
+	status = sme_acquire_global_lock(&pMac->sme);
+
+	if (QDF_IS_STATUS_SUCCESS(status)) {
+		tCsrRoamSession *session = CSR_GET_SESSION(pMac, session_id);
+
+		if (NULL == session) {
+			sme_release_global_lock(&pMac->sme);
+			sms_log(pMac, LOGE, FL("Session not found "));
+			return QDF_STATUS_E_FAILURE;
+		}
+
+		request_buf = qdf_mem_malloc(sizeof(*request_buf));
+		if (NULL == request_buf) {
+			sme_release_global_lock(&pMac->sme);
+			QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+				FL("Not able to allocate memory for bc filter request"));
+			return QDF_STATUS_E_NOMEM;
+		}
+
+		qdf_copy_macaddr(&request_buf->bssid,
+					 &session->connectedProfile.bssid);
+
+		request_buf->enable = true;
+
+		msg.type = WMA_ENABLE_BCAST_FILTER;
+		msg.reserved = 0;
+		msg.bodyptr = request_buf;
+		MTRACE(qdf_trace(QDF_MODULE_ID_SME, TRACE_CODE_SME_TX_WMA_MSG,
+				 session_id, msg.type));
+		if (QDF_STATUS_SUCCESS !=
+			cds_mq_post_message(QDF_MODULE_ID_WMA, &msg)) {
+			sme_release_global_lock(&pMac->sme);
+			QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+			FL("Not able to post WMA_ENABLE_BCAST_FILTER message to HAL"));
+			qdf_mem_free(request_buf);
+			return QDF_STATUS_E_FAILURE;
+		}
+
+		sme_release_global_lock(&pMac->sme);
+	} else {
+		sms_log(pMac, LOGE, FL("sme_acquire_global_lock failed"));
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	return status;
+}
+
+QDF_STATUS sme_disable_nonarp_broadcast_filter(tHalHandle hal,
+						uint8_t session_id)
+{
+	struct broadcast_filter_request *request_buf;
+	cds_msg_t msg;
+
+	tpAniSirGlobal pMac = PMAC_STRUCT(hal);
+	QDF_STATUS status = QDF_STATUS_E_FAILURE;
+
+	status = sme_acquire_global_lock(&pMac->sme);
+
+	if (QDF_IS_STATUS_SUCCESS(status)) {
+		tCsrRoamSession *session = CSR_GET_SESSION(pMac, session_id);
+
+		if (NULL == session) {
+			sme_release_global_lock(&pMac->sme);
+			sms_log(pMac, LOGE, FL("Session not found "));
+			return QDF_STATUS_E_FAILURE;
+		}
+
+		request_buf = qdf_mem_malloc(sizeof(*request_buf));
+		if (NULL == request_buf) {
+			sme_release_global_lock(&pMac->sme);
+			QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+				FL("Not able to allocate memory for bc filter request"));
+			return QDF_STATUS_E_NOMEM;
+		}
+
+		qdf_copy_macaddr(&request_buf->bssid,
+					&session->connectedProfile.bssid);
+
+		request_buf->enable = false;
+
+		msg.type = WMA_DISABLE_HW_BCAST_FILTER;
+		msg.reserved = 0;
+		msg.bodyptr = request_buf;
+		MTRACE(qdf_trace(QDF_MODULE_ID_SME, TRACE_CODE_SME_TX_WMA_MSG,
+				 session_id, msg.type));
+		if (QDF_STATUS_SUCCESS !=
+			cds_mq_post_message(QDF_MODULE_ID_WMA, &msg)) {
+			sme_release_global_lock(&pMac->sme);
+			QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+			FL("Not able to post WMA_DISABLE_HW_BCAST_FILTER message to HAL"));
+			qdf_mem_free(request_buf);
+			return QDF_STATUS_E_FAILURE;
+		}
+
+		sme_release_global_lock(&pMac->sme);
+	} else {
+		sms_log(pMac, LOGE, FL("sme_acquire_global_lock failed"));
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	return status;
+}
+
 #ifdef WLAN_FEATURE_GTK_OFFLOAD
 /**
  * sme_set_gtk_offload(): API to set GTK offload information.
@@ -6359,7 +6513,7 @@ QDF_STATUS sme_set_gtk_offload(tHalHandle hHal,
 	tCsrRoamSession *pSession = CSR_GET_SESSION(pMac, sessionId);
 
 	QDF_TRACE(QDF_MODULE_ID_HDD, QDF_TRACE_LEVEL_INFO,
-		  "%s: KeyReplayCounter: %lld", __func__,
+		  "%s: KeyReplayCounter: 0x%llx", __func__,
 		  pGtkOffload->ullKeyReplayCounter);
 
 	if (NULL == pSession) {
@@ -6555,18 +6709,8 @@ QDF_STATUS sme_set_preferred_network_list(tHalHandle hHal,
 
 #endif /* FEATURE_WLAN_SCAN_PNO */
 
-/* ---------------------------------------------------------------------------
-    \fn sme_abort_mac_scan
-    \brief  API to cancel MAC scan.
-    \param  hHal - The handle returned by mac_open.
-    \param  sessionId - sessionId on which we need to abort scan.
-    \param  reason - Reason to abort the scan.
-    \return QDF_STATUS
-	    QDF_STATUS_E_FAILURE - failure
-	    QDF_STATUS_SUCCESS  success
-   ---------------------------------------------------------------------------*/
 QDF_STATUS sme_abort_mac_scan(tHalHandle hHal, uint8_t sessionId,
-			      eCsrAbortReason reason)
+			      uint32_t scan_id, eCsrAbortReason reason)
 {
 	QDF_STATUS status;
 	tpAniSirGlobal pMac = PMAC_STRUCT(hHal);
@@ -6575,7 +6719,8 @@ QDF_STATUS sme_abort_mac_scan(tHalHandle hHal, uint8_t sessionId,
 			 TRACE_CODE_SME_RX_HDD_ABORT_MACSCAN, NO_SESSION, 0));
 	status = sme_acquire_global_lock(&pMac->sme);
 	if (QDF_IS_STATUS_SUCCESS(status)) {
-		status = csr_scan_abort_mac_scan(pMac, sessionId, reason);
+		status = csr_scan_abort_mac_scan(pMac, sessionId,
+						 scan_id, reason);
 
 		sme_release_global_lock(&pMac->sme);
 	}
@@ -6711,8 +6856,6 @@ QDF_STATUS sme_register_mgmt_frame(tHalHandle hHal, uint8_t sessionId,
 	QDF_STATUS status = QDF_STATUS_SUCCESS;
 	tpAniSirGlobal pMac = PMAC_STRUCT(hHal);
 
-	MTRACE(qdf_trace(QDF_MODULE_ID_SME,
-			 TRACE_CODE_SME_RX_HDD_REGISTER_MGMTFR, sessionId, 0));
 	status = sme_acquire_global_lock(&pMac->sme);
 	if (QDF_IS_STATUS_SUCCESS(status)) {
 		tSirRegisterMgmtFrame *pMsg;
@@ -7023,55 +7166,6 @@ QDF_STATUS sme_p2p_set_ps(tHalHandle hHal, tP2pPsConfig *data)
 	status = sme_acquire_global_lock(&pMac->sme);
 	if (QDF_IS_STATUS_SUCCESS(status)) {
 		status = p2p_set_ps(hHal, data);
-		sme_release_global_lock(&pMac->sme);
-	}
-	return status;
-}
-
-/* ---------------------------------------------------------------------------
-
-   \fn    sme_configure_rxp_filter
-
-   \brief
-    SME will pass this request to lower mac to set/reset the filter on RXP for
-    multicast & broadcast traffic.
-
-   \param
-
-    hHal - The handle returned by mac_open.
-
-    filterMask- Currently the API takes a 1 or 0 (set or reset) as filter.
-    Basically to enable/disable the filter (to filter "all" mcbc traffic) based
-    on this param. In future we can use this as a mask to set various types of
-    filters as suggested below:
-    FILTER_ALL_MULTICAST:
-    FILTER_ALL_BROADCAST:
-    FILTER_ALL_MULTICAST_BROADCAST:
-
-   \return QDF_STATUS
-
-   --------------------------------------------------------------------------- */
-QDF_STATUS sme_configure_rxp_filter(tHalHandle hHal,
-				    tpSirWlanSetRxpFilters wlanRxpFilterParam)
-{
-	QDF_STATUS status = QDF_STATUS_SUCCESS;
-	QDF_STATUS qdf_status = QDF_STATUS_SUCCESS;
-	tpAniSirGlobal pMac = PMAC_STRUCT(hHal);
-	cds_msg_t cds_message;
-
-	MTRACE(qdf_trace(QDF_MODULE_ID_SME,
-			 TRACE_CODE_SME_RX_HDD_CONFIG_RXPFIL, NO_SESSION, 0));
-	status = sme_acquire_global_lock(&pMac->sme);
-	if (QDF_IS_STATUS_SUCCESS(status)) {
-		/* serialize the req through MC thread */
-		cds_message.bodyptr = wlanRxpFilterParam;
-		cds_message.type = WMA_CFG_RXP_FILTER_REQ;
-		MTRACE(qdf_trace(QDF_MODULE_ID_SME, TRACE_CODE_SME_TX_WMA_MSG,
-				 NO_SESSION, cds_message.type));
-		qdf_status = cds_mq_post_message(CDS_MQ_ID_WMA, &cds_message);
-		if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
-			status = QDF_STATUS_E_FAILURE;
-		}
 		sme_release_global_lock(&pMac->sme);
 	}
 	return status;
@@ -8993,15 +9087,25 @@ QDF_STATUS sme_config_fast_roaming(tHalHandle hal, uint8_t session_id,
 	tCsrRoamSession *session = CSR_GET_SESSION(mac_ctx, session_id);
 	QDF_STATUS status;
 
+	/* do_not_roam flag is set in wlan_hdd_cfg80211_connect_start
+	 * when supplicant initiate connect request with BSSID.
+	 * This flag reset when supplicant sends vendor command to enable
+	 * roaming after association.
+	 *
+	 * This request from wpa_supplicant will be skipped in this function
+	 * if roaming is disabled using driver command or INI and do_not_roam
+	 * flag remains set. So make sure to set do_not_roam flag as per
+	 * wpa_supplicant even if roam request from wpa_supplicant ignored.
+	 */
+	if (session && session->pCurRoamProfile)
+		session->pCurRoamProfile->do_not_roam = !is_fast_roam_enabled;
+
 	if (!mac_ctx->roam.configParam.isFastRoamIniFeatureEnabled) {
 		sms_log(mac_ctx, LOGE, FL("Fast roam is disabled through ini"));
 		if (!is_fast_roam_enabled)
 			return QDF_STATUS_SUCCESS;
 		return  QDF_STATUS_E_FAILURE;
 	}
-
-	if (is_fast_roam_enabled && session && session->pCurRoamProfile)
-		session->pCurRoamProfile->do_not_roam = false;
 
 	status = csr_neighbor_roam_update_fast_roaming_enabled(mac_ctx,
 					 session_id, is_fast_roam_enabled);
@@ -10501,6 +10605,7 @@ QDF_STATUS sme_update_tdls_peer_state(tHalHandle hHal,
 	case eSME_TDLS_PEER_STATE_TEARDOWN:
 		pTdlsPeerStateParams->peerState =
 			WMA_TDLS_PEER_STATE_TEARDOWN;
+		pTdlsPeerStateParams->resp_reqd = false;
 		break;
 
 	case eSME_TDLS_PEER_ADD_MAC_ADDR:
@@ -12040,7 +12145,8 @@ QDF_STATUS sme_notify_ht2040_mode(tHalHandle hHal, uint16_t staId,
 		return QDF_STATUS_E_FAILURE;
 	}
 
-	pHtOpMode->staId = staId,
+	pHtOpMode->dot11_mode = sme_get_wni_dot11_mode(hHal);
+	pHtOpMode->staId = staId;
 	qdf_mem_copy(pHtOpMode->peer_mac, macAddrSTA.bytes,
 		     sizeof(tSirMacAddr));
 	pHtOpMode->smesessionId = sessionId;
@@ -12119,11 +12225,9 @@ QDF_STATUS sme_set_ht2040_mode(tHalHandle hHal, uint8_t sessionId,
  * This should be called only if powersave offload
  * is enabled
  */
-QDF_STATUS sme_set_idle_powersave_config(void *cds_context,
-				tHalHandle hHal, uint32_t value)
+QDF_STATUS sme_set_idle_powersave_config(bool value)
 {
 	void *wmaContext = cds_get_context(QDF_MODULE_ID_WMA);
-	tpAniSirGlobal pMac = PMAC_STRUCT(hHal);
 
 	if (NULL == wmaContext) {
 		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
@@ -12133,14 +12237,11 @@ QDF_STATUS sme_set_idle_powersave_config(void *cds_context,
 	QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
 		  " Idle Ps Set Value %d", value);
 
-	pMac->imps_enabled = false;
 	if (QDF_STATUS_SUCCESS != wma_set_idle_ps_config(wmaContext, value)) {
 		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
 			  " Failed to Set Idle Ps Value %d", value);
 		return QDF_STATUS_E_FAILURE;
 	}
-	if (value)
-		pMac->imps_enabled = true;
 	return QDF_STATUS_SUCCESS;
 }
 
@@ -14035,50 +14136,6 @@ QDF_STATUS sme_reset_passpoint_list(tHalHandle hal,
 	return status;
 }
 
-/**
- * sme_set_ssid_hotlist() - Set the SSID hotlist
- * @hal: SME handle
- * @request: set ssid hotlist request
- *
- * Return: QDF_STATUS
- */
-QDF_STATUS
-sme_set_ssid_hotlist(tHalHandle hal,
-		     struct sir_set_ssid_hotlist_request *request)
-{
-	QDF_STATUS status   = QDF_STATUS_SUCCESS;
-	tpAniSirGlobal mac = PMAC_STRUCT(hal);
-	cds_msg_t cds_message;
-	struct sir_set_ssid_hotlist_request *set_req;
-
-	set_req = qdf_mem_malloc(sizeof(*set_req));
-	if (!set_req) {
-		sms_log(mac, LOGE, FL("qdf_mem_malloc failed"));
-		return QDF_STATUS_E_FAILURE;
-	}
-
-	*set_req = *request;
-	status = sme_acquire_global_lock(&mac->sme);
-	if (QDF_STATUS_SUCCESS == status) {
-		/* Serialize the req through MC thread */
-		cds_message.bodyptr = set_req;
-		cds_message.type    = WMA_EXTSCAN_SET_SSID_HOTLIST_REQ;
-		status = cds_mq_post_message(CDS_MQ_ID_WMA, &cds_message);
-		sme_release_global_lock(&mac->sme);
-		if (!QDF_IS_STATUS_SUCCESS(status)) {
-			qdf_mem_free(set_req);
-			status = QDF_STATUS_E_FAILURE;
-		}
-	} else {
-		sms_log(mac, LOGE,
-			FL("sme_acquire_global_lock failed!(status=%d)"),
-			status);
-		qdf_mem_free(set_req);
-		status = QDF_STATUS_E_FAILURE;
-	}
-	return status;
-}
-
 QDF_STATUS sme_ext_scan_register_callback(tHalHandle hHal,
 					  void (*pExtScanIndCb)(void *,
 								const uint16_t,
@@ -14481,15 +14538,15 @@ QDF_STATUS sme_update_roam_offload_enabled(tHalHandle hHal,
  * @hal_ctx: The handle returned by mac_open.
  * @session_id: Session Identifier
  * @key_mgmt_offload_enabled: key mgmt enable/disable flag
- * @okc_enabled: Opportunistic key caching enable/disable flag
+ * @pmkid_modes: PMKID modes of PMKSA caching and OKC
  * Return: QDF_STATUS_SUCCESS - SME updated config successfully.
  * Other status means SME is failed to update.
  */
 
 QDF_STATUS sme_update_roam_key_mgmt_offload_enabled(tHalHandle hal_ctx,
-						uint8_t session_id,
-						bool key_mgmt_offload_enabled,
-						bool okc_enabled)
+					uint8_t session_id,
+					bool key_mgmt_offload_enabled,
+					struct pmkid_mode_bits *pmkid_modes)
 {
 	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal_ctx);
 	QDF_STATUS status = QDF_STATUS_SUCCESS;
@@ -14503,7 +14560,7 @@ QDF_STATUS sme_update_roam_key_mgmt_offload_enabled(tHalHandle hal_ctx,
 			status = csr_roam_set_key_mgmt_offload(mac_ctx,
 						session_id,
 						key_mgmt_offload_enabled,
-						okc_enabled);
+						pmkid_modes);
 		} else {
 			status = QDF_STATUS_E_INVAL;
 		}
@@ -14956,6 +15013,7 @@ QDF_STATUS sme_wifi_start_logger(tHalHandle hal,
 	req_msg->ini_triggered = start_log.ini_triggered;
 	req_msg->user_triggered = start_log.user_triggered;
 	req_msg->size = start_log.size;
+	req_msg->is_pktlog_buff_clear = start_log.is_pktlog_buff_clear;
 
 	status = sme_acquire_global_lock(&mac->sme);
 	if (status != QDF_STATUS_SUCCESS) {
@@ -15246,6 +15304,41 @@ QDF_STATUS sme_set_rssi_threshold_breached_cb(tHalHandle h_hal,
 	}
 
 	mac->sme.rssi_threshold_breached_cb = cb;
+	sme_release_global_lock(&mac->sme);
+	return status;
+}
+
+/**
+ * sme_set_nud_debug_stats_cb() - set nud debug stats callback
+ * @hal: global hal handle
+ * @cb: callback function pointer
+ *
+ * This function stores nud debug stats callback function.
+ *
+ * Return: QDF_STATUS enumeration.
+ */
+QDF_STATUS sme_set_nud_debug_stats_cb(tHalHandle hal,
+				void (*cb)(void *, struct rsp_stats *))
+{
+	QDF_STATUS status  = QDF_STATUS_SUCCESS;
+	tpAniSirGlobal mac;
+
+	if (!hal) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+				  FL("hal is not valid"));
+		return QDF_STATUS_E_INVAL;
+	}
+	mac = PMAC_STRUCT(hal);
+
+	status = sme_acquire_global_lock(&mac->sme);
+	if (!QDF_IS_STATUS_SUCCESS(status)) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+			FL("sme_acquire_global_lock failed!(status=%d)"),
+			status);
+		return status;
+	}
+
+	mac->sme.get_arp_stats_cb = cb;
 	sme_release_global_lock(&mac->sme);
 	return status;
 }
@@ -16661,6 +16754,21 @@ void sme_update_vdev_type_nss(tHalHandle hal, uint8_t max_supp_nss,
 }
 
 /**
+ * sme_update_hw_dbs_capable() - sets the HW DBS capability
+ * @hal: Pointer to HAL
+ * @hw_dbs_capable: HW DBS capability
+ *
+ * Sets HW DBS capability based on INI and fw capability.
+ *
+ * Return: None
+ */
+void sme_update_hw_dbs_capable(tHalHandle hal, uint8_t hw_dbs_capable)
+{
+	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal);
+	mac_ctx->hw_dbs_capable = hw_dbs_capable;
+}
+
+/**
  * sme_register_p2p_lo_event() - Register for the p2p lo event
  * @hHal: reference to the HAL
  * @context: the context of the call
@@ -16757,6 +16865,7 @@ void sme_get_vdev_type_nss(tHalHandle hal, enum tQDF_ADAPTER_MODE dev_mode,
  * @skip_unsafe_channels: Param to tell if driver needs to
  * skip unsafe channels or not.
  * @param session_id: sme_session_id
+ * @sap_operating_band: Band on which SAP is operating
  *
  * sme_update_sta_roam_policy update sta rome policies to csr
  * this function will call csrUpdateChannelList as well
@@ -16767,7 +16876,7 @@ void sme_get_vdev_type_nss(tHalHandle hal, enum tQDF_ADAPTER_MODE dev_mode,
 QDF_STATUS sme_update_sta_roam_policy(tHalHandle hal_handle,
 		enum sta_roam_policy_dfs_mode dfs_mode,
 		bool skip_unsafe_channels,
-		uint8_t session_id)
+		uint8_t session_id, uint8_t sap_operating_band)
 {
 	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal_handle);
 	QDF_STATUS status = QDF_STATUS_SUCCESS;
@@ -16785,6 +16894,8 @@ QDF_STATUS sme_update_sta_roam_policy(tHalHandle hal_handle,
 		dfs_mode;
 	sme_config.csrConfig.sta_roam_policy_params.skip_unsafe_channels =
 		skip_unsafe_channels;
+	sme_config.csrConfig.sta_roam_policy_params.sap_operating_band =
+		sap_operating_band;
 
 	sme_update_config(hal_handle, &sme_config);
 
@@ -16862,6 +16973,21 @@ QDF_STATUS sme_set_default_scan_ie(tHalHandle hal, uint16_t session_id,
 	}
 	sms_log(mac_ctx, LOG1, FL("Set default scan IE status %d"), status);
 	return status;
+}
+
+QDF_STATUS sme_set_sar_power_limits(tHalHandle hal,
+				    struct sar_limit_cmd_params *sar_limit_cmd)
+{
+	void *wma_handle;
+
+	wma_handle = cds_get_context(QDF_MODULE_ID_WMA);
+	if (!wma_handle) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+				"wma handle is NULL");
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	return wma_set_sar_limit(wma_handle, sar_limit_cmd);
 }
 
 #ifdef WLAN_FEATURE_DISA
@@ -17016,6 +17142,7 @@ QDF_STATUS sme_set_cts2self_for_p2p_go(tHalHandle hal_handle)
 	}
 	return QDF_STATUS_SUCCESS;
 }
+
 /**
  * sme_update_tx_fail_cnt_threshold() - update tx fail count Threshold
  * @hal: Handle returned by mac_open
@@ -17078,5 +17205,450 @@ QDF_STATUS sme_set_lost_link_info_cb(tHalHandle hal,
 			FL("sme_acquire_global_lock error status %d"),
 			status);
 	}
+	return status;
+}
+#ifdef FEATURE_WLAN_ESE
+bool sme_roam_is_ese_assoc(tCsrRoamInfo *roam_info)
+{
+	return roam_info->isESEAssoc;
+}
+
+/**
+ * sme_set_band_specific_pref(): If 5G preference is enabled,set boost/drop
+ * params from ini.
+ * @hal_handle: Handle returned by mac_open
+ * @5g_pref_params: pref params from ini.
+ *
+ * Returns: None
+ */
+void sme_set_5g_band_pref(tHalHandle hal_handle,
+			  struct sme_5g_band_pref_params *pref_params)
+{
+
+	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal_handle);
+	struct roam_ext_params *roam_params;
+	QDF_STATUS status    = QDF_STATUS_SUCCESS;
+
+	if (!pref_params) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+			  "Invalid 5G pref params!");
+		return;
+	}
+	status = sme_acquire_global_lock(&mac_ctx->sme);
+	if (QDF_STATUS_SUCCESS == status) {
+		roam_params = &mac_ctx->roam.configParam.roam_params;
+		roam_params->raise_rssi_thresh_5g =
+				pref_params->rssi_boost_threshold_5g;
+		roam_params->raise_factor_5g =
+				pref_params->rssi_boost_factor_5g;
+		roam_params->max_raise_rssi_5g =
+				pref_params->max_rssi_boost_5g;
+		roam_params->drop_rssi_thresh_5g =
+				pref_params->rssi_penalize_threshold_5g;
+		roam_params->drop_factor_5g =
+				pref_params->rssi_penalize_factor_5g;
+		roam_params->max_drop_rssi_5g =
+				pref_params->max_rssi_penalize_5g;
+
+		sme_release_global_lock(&mac_ctx->sme);
+	} else
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+			  "Unable to acquire global sme lock");
+}
+
+#endif
+
+bool sme_neighbor_roam_is11r_assoc(tHalHandle hal_ctx,
+			uint8_t session_id)
+{
+	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal_ctx);
+	return csr_neighbor_roam_is11r_assoc(mac_ctx, session_id);
+
+}
+
+#ifdef WLAN_FEATURE_WOW_PULSE
+/**
+ * sme_set_wow_pulse() - set wow pulse info
+ * @wow_pulse_set_info: wow_pulse_mode structure pointer
+ *
+ * Return: QDF_STATUS
+ */
+QDF_STATUS sme_set_wow_pulse(struct wow_pulse_mode *wow_pulse_set_info)
+{
+	cds_msg_t message;
+	QDF_STATUS status;
+	struct wow_pulse_mode *wow_pulse_set_cmd;
+
+	if (!wow_pulse_set_info) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+			"%s: invalid wow_pulse_set_info pointer", __func__);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	wow_pulse_set_cmd = qdf_mem_malloc(sizeof(*wow_pulse_set_cmd));
+	if (NULL == wow_pulse_set_cmd) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+			"%s: fail to alloc wow_pulse_set_cmd", __func__);
+		return QDF_STATUS_E_NOMEM;
+	}
+
+	*wow_pulse_set_cmd = *wow_pulse_set_info;
+
+	message.type = WMA_SET_WOW_PULSE_CMD;
+	message.bodyptr = wow_pulse_set_cmd;
+
+	status = cds_mq_post_message(QDF_MODULE_ID_WMA,
+					&message);
+	if (!QDF_IS_STATUS_SUCCESS(status)) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+			"%s: Not able to post msg to WDA!",
+			__func__);
+		qdf_mem_free(wow_pulse_set_cmd);
+		status = QDF_STATUS_E_FAILURE;
+	}
+
+	return status;
+}
+#endif
+
+#ifdef WLAN_FEATURE_UDP_RESPONSE_OFFLOAD
+/**
+ * sme_set_udp_resp_offload() - set udp response payload.
+ * @pudp_resp_cmd: specific udp and response udp payload struct pointer
+ *
+ * This function set specific udp and response udp payload info
+ * including enable dest_port,udp_payload, resp_payload.
+ *
+ * Return: Return QDF_STATUS.
+ */
+QDF_STATUS sme_set_udp_resp_offload(struct udp_resp_offload *pudp_resp_cmd)
+{
+	cds_msg_t message;
+	QDF_STATUS status;
+	struct udp_resp_offload *udp_resp_cmd;
+
+	if (!pudp_resp_cmd) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+				"%s: invalid pudp_resp_cmd pointer", __func__);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	udp_resp_cmd = qdf_mem_malloc(sizeof(*udp_resp_cmd));
+	if (NULL == udp_resp_cmd) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+				"%s: fail to alloc sudp_cmd", __func__);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	*udp_resp_cmd = *pudp_resp_cmd;
+
+	message.type = WDA_SET_UDP_RESP_OFFLOAD;
+	message.bodyptr = udp_resp_cmd;
+
+	status = cds_mq_post_message(QDF_MODULE_ID_WMA,
+					&message);
+	if (!QDF_IS_STATUS_SUCCESS(status)) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+				"%s: Not able to post msg to WDA!",
+				__func__);
+		qdf_mem_free(udp_resp_cmd);
+		status = QDF_STATUS_E_FAILURE;
+	}
+
+	return status;
+}
+
+#endif
+
+QDF_STATUS sme_get_rcpi(tHalHandle hal, struct sme_rcpi_req *rcpi)
+{
+	QDF_STATUS status = QDF_STATUS_E_FAILURE;
+	tpAniSirGlobal pMac = PMAC_STRUCT(hal);
+	cds_msg_t cds_msg;
+	struct sme_rcpi_req *rcpi_req;
+
+	rcpi_req = qdf_mem_malloc(sizeof(*rcpi_req));
+	if (rcpi_req == NULL) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+			  "%s: Not able to allocate memory for rcpi req",
+			  __func__);
+		return QDF_STATUS_E_NOMEM;
+	}
+	qdf_mem_copy(rcpi_req, rcpi, sizeof(*rcpi_req));
+
+	status = sme_acquire_global_lock(&pMac->sme);
+	if (QDF_IS_STATUS_SUCCESS(status)) {
+		cds_msg.bodyptr = rcpi_req;
+		cds_msg.type = WMA_GET_RCPI_REQ;
+		status = cds_mq_post_message(QDF_MODULE_ID_WMA, &cds_msg);
+		sme_release_global_lock(&pMac->sme);
+		if (!QDF_IS_STATUS_SUCCESS(status)) {
+			QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+				  FL("post get rcpi req failed"));
+			status = QDF_STATUS_E_FAILURE;
+			qdf_mem_free(rcpi_req);
+		}
+	} else {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+			  FL("sme_acquire_global_lock failed"));
+		qdf_mem_free(rcpi_req);
+	}
+	return status;
+}
+
+QDF_STATUS sme_rso_cmd_status_cb(tHalHandle hal,
+		void (*cb)(void *, struct rso_cmd_status *))
+{
+	QDF_STATUS status = QDF_STATUS_SUCCESS;
+	tpAniSirGlobal mac = PMAC_STRUCT(hal);
+
+	mac->sme.rso_cmd_status_cb = cb;
+	sms_log(mac, LOG1, FL("Registered RSO command status callback"));
+	return status;
+}
+
+/**
+ * sme_prepare_beacon_from_bss_descp() - prepares beacon frame by populating
+ * different fields and IEs from bss descriptor.
+ * @frame_buf: frame buffer to populate
+ * @bss_descp: bss descriptor
+ * @bssid: bssid of the beacon frame to populate
+ * @ie_len: length of IE fields
+ *
+ * Return: None
+ */
+static void sme_prepare_beacon_from_bss_descp(uint8_t *frame_buf,
+					      tSirBssDescription *bss_descp,
+					      const tSirMacAddr bssid,
+					      uint32_t ie_len)
+{
+	tDot11fBeacon1 *bcn_fixed;
+	tpSirMacMgmtHdr mac_hdr = (tpSirMacMgmtHdr)frame_buf;
+
+	/* populate mac header first to indicate beacon */
+	mac_hdr->fc.protVer = SIR_MAC_PROTOCOL_VERSION;
+	mac_hdr->fc.type = SIR_MAC_MGMT_FRAME;
+	mac_hdr->fc.subType = SIR_MAC_MGMT_BEACON;
+	qdf_mem_copy((uint8_t *) mac_hdr->da,
+		     (uint8_t *) "\xFF\xFF\xFF\xFF\xFF\xFF",
+		     sizeof(struct qdf_mac_addr));
+	qdf_mem_copy((uint8_t *) mac_hdr->sa, bssid,
+		     sizeof(struct qdf_mac_addr));
+	qdf_mem_copy((uint8_t *) mac_hdr->bssId, bssid,
+		     sizeof(struct qdf_mac_addr));
+
+	/* now populate fixed params */
+	bcn_fixed = (tDot11fBeacon1 *)(frame_buf + SIR_MAC_HDR_LEN_3A);
+	/* populate timestamp */
+	qdf_mem_copy(&bcn_fixed->TimeStamp.timestamp, &bss_descp->timeStamp,
+			sizeof(bss_descp->timeStamp));
+	/* populate beacon interval */
+	bcn_fixed->BeaconInterval.interval = bss_descp->beaconInterval;
+	/* populate capability */
+	qdf_mem_copy(&bcn_fixed->Capabilities, &bss_descp->capabilityInfo,
+			sizeof(bss_descp->capabilityInfo));
+
+	/* copy IEs now */
+	qdf_mem_copy(frame_buf + SIR_MAC_HDR_LEN_3A
+		     + SIR_MAC_B_PR_SSID_OFFSET,
+		     &bss_descp->ieFields, ie_len);
+}
+QDF_STATUS sme_get_beacon_frm(tHalHandle hal, tCsrRoamProfile *profile,
+				const tSirMacAddr bssid,
+				uint8_t **frame_buf, uint32_t *frame_len)
+{
+	QDF_STATUS status = QDF_STATUS_SUCCESS;
+	tScanResultHandle result_handle = NULL;
+	tCsrScanResultFilter *scan_filter;
+	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal);
+	tSirBssDescription *bss_descp;
+	tScanResultList *bss_list;
+	uint32_t ie_len;
+
+	scan_filter = qdf_mem_malloc(sizeof(tCsrScanResultFilter));
+	if (NULL == scan_filter) {
+		sms_log(mac_ctx, LOGE, FL("memory allocation failed"));
+		status = QDF_STATUS_E_NOMEM;
+		goto free_scan_flter;
+	}
+	status = csr_roam_prepare_filter_from_profile(mac_ctx,
+						profile, scan_filter);
+	if (QDF_STATUS_SUCCESS != status) {
+		sms_log(mac_ctx, LOGE, FL("prepare_filter failed"));
+		goto free_scan_flter;
+	}
+
+	/* update filter to get scan result with just target BSSID */
+	if (NULL == scan_filter->BSSIDs.bssid) {
+		scan_filter->BSSIDs.bssid =
+			qdf_mem_malloc(sizeof(struct qdf_mac_addr));
+		if (scan_filter->BSSIDs.bssid == NULL) {
+			sms_log(mac_ctx, LOGE, FL("malloc failed"));
+			status = QDF_STATUS_E_NOMEM;
+			goto free_scan_flter;
+		}
+	}
+	scan_filter->BSSIDs.numOfBSSIDs = 1;
+	qdf_mem_copy(scan_filter->BSSIDs.bssid[0].bytes,
+		     bssid, sizeof(struct qdf_mac_addr));
+
+	status = csr_scan_get_result(mac_ctx, scan_filter, &result_handle);
+	if (QDF_STATUS_SUCCESS != status) {
+		sms_log(mac_ctx, LOGE, FL("parse_scan_result failed"));
+		goto free_scan_flter;
+	}
+
+	bss_list = (tScanResultList *)result_handle;
+	bss_descp = csr_get_fst_bssdescr_ptr(bss_list);
+	if (!bss_descp) {
+		sms_log(mac_ctx, LOGE, FL("unable to fetch bss descriptor"));
+		status = QDF_STATUS_E_FAULT;
+		goto free_scan_flter;
+	}
+
+	/*
+	 * bss_descp->length = sizeof(tSirBssDescription) - sizeof(length_field)
+	 * - sizeof(ieFields) + ie_len;
+	 */
+	ie_len = bss_descp->length - sizeof(tSirBssDescription)
+		+ sizeof(bss_descp->length) + sizeof(bss_descp->ieFields);
+	sms_log(mac_ctx, LOG1, FL("found bss_descriptor ie_len: %d"),
+		ie_len);
+
+	/* include mac header and fixed params along with IEs in frame */
+	*frame_len = SIR_MAC_HDR_LEN_3A + SIR_MAC_B_PR_SSID_OFFSET + ie_len;
+	*frame_buf = qdf_mem_malloc(*frame_len);
+	if (NULL == *frame_buf) {
+		sms_log(mac_ctx, LOGE, FL("memory allocation failed"));
+		status = QDF_STATUS_E_NOMEM;
+		goto free_scan_flter;
+	}
+	qdf_mem_zero(*frame_buf, *frame_len);
+	sme_prepare_beacon_from_bss_descp(*frame_buf, bss_descp, bssid, ie_len);
+
+free_scan_flter:
+	/* free scan filter and exit */
+	if (scan_filter) {
+		csr_free_scan_filter(mac_ctx, scan_filter);
+		qdf_mem_free(scan_filter);
+	}
+	if (result_handle)
+		csr_scan_result_purge(mac_ctx, result_handle);
+
+	return status;
+}
+
+/* ARP DEBUG STATS */
+
+/**
+ * sme_set_nud_debug_stats() - sme api to set nud debug stats
+ * @hal: handle to hal
+ * @set_stats_param: pointer to set stats param
+ *
+ * Return: Return QDF_STATUS.
+ */
+QDF_STATUS sme_set_nud_debug_stats(tHalHandle hal,
+				   struct set_arp_stats_params
+				   *set_stats_param)
+{
+	struct set_arp_stats_params *arp_set_param;
+	cds_msg_t msg;
+
+	arp_set_param = qdf_mem_malloc(sizeof(*arp_set_param));
+	if (arp_set_param == NULL) {
+		hdd_err("Memory allocation failure");
+		return QDF_STATUS_E_NOMEM;
+	}
+
+	qdf_mem_copy(arp_set_param, set_stats_param, sizeof(*arp_set_param));
+
+	msg.type = WMA_SET_ARP_STATS_REQ;
+	msg.reserved = 0;
+	msg.bodyptr = arp_set_param;
+
+	if (QDF_STATUS_SUCCESS !=
+	    cds_mq_post_message(QDF_MODULE_ID_WMA, &msg)) {
+		hdd_err("Not able to post message to WDA");
+		qdf_mem_free(arp_set_param);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	return QDF_STATUS_SUCCESS;
+}
+
+/**
+ * sme_get_nud_debug_stats() - sme api to get nud debug stats
+ * @hal: handle to hal
+ * @get_stats_param: pointer to set stats param
+ *
+ * Return: Return QDF_STATUS.
+ */
+QDF_STATUS sme_get_nud_debug_stats(tHalHandle hal,
+				   struct get_arp_stats_params
+				   *get_stats_param)
+{
+	struct get_arp_stats_params *arp_get_param;
+	cds_msg_t msg;
+
+	arp_get_param = qdf_mem_malloc(sizeof(*arp_get_param));
+	if (arp_get_param == NULL) {
+		hdd_err("Memory allocation failure");
+		return QDF_STATUS_E_NOMEM;
+	}
+
+	qdf_mem_copy(arp_get_param, get_stats_param, sizeof(*arp_get_param));
+
+	msg.type = WMA_GET_ARP_STATS_REQ;
+	msg.reserved = 0;
+	msg.bodyptr = arp_get_param;
+
+	if (QDF_STATUS_SUCCESS !=
+	    cds_mq_post_message(QDF_MODULE_ID_WMA, &msg)) {
+		hdd_err("Not able to post message to WDA");
+		qdf_mem_free(arp_get_param);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	return QDF_STATUS_SUCCESS;
+}
+
+/**
+ * sme_delete_all_tdls_peers(): send request to delete tdls peers
+ * @hal: handler for HAL
+ * @session_id: session id
+ *
+ * This function sends request to lim to delete tdls peers
+ *
+ * Return: QDF_STATUS
+ */
+QDF_STATUS sme_delete_all_tdls_peers(tHalHandle hal, uint8_t session_id)
+{
+	struct sir_del_all_tdls_peers *msg;
+	QDF_STATUS status = QDF_STATUS_SUCCESS;
+	tpAniSirGlobal p_mac = PMAC_STRUCT(hal);
+	tCsrRoamSession *session = CSR_GET_SESSION(p_mac, session_id);
+
+	msg = qdf_mem_malloc(sizeof(*msg));
+	if (NULL == msg) {
+		sms_log(p_mac, LOGE, FL("memory alloc failed"));
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	qdf_mem_zero(msg, sizeof(*msg));
+
+	msg->msg_type = eWNI_SME_DEL_ALL_TDLS_PEERS;
+	msg->msg_len = (uint16_t) sizeof(*msg);
+
+	qdf_mem_copy(msg->bssid.bytes, session->connectedProfile.bssid.bytes,
+		     sizeof(struct qdf_mac_addr));
+
+	status = cds_send_mb_message_to_mac(msg);
+
+	if (status != QDF_STATUS_SUCCESS) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+			  FL("cds_send_mb_message_to_mac Failed"));
+		status = QDF_STATUS_E_FAILURE;
+	}
+
 	return status;
 }

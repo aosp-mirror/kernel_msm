@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -949,6 +949,8 @@ static QDF_STATUS ol_patch_pll_switch(struct ol_context *ol_ctx)
 		break;
 	case AR6320_REV3_VERSION:
 	case AR6320_REV3_2_VERSION:
+	case QCA9379_REV1_VERSION:
+	case QCA9377_REV1_1_VERSION:
 		cmnos_core_clk_div_addr = AR6320V3_CORE_CLK_DIV_ADDR;
 		cmnos_cpu_pll_init_done_addr = AR6320V3_CPU_PLL_INIT_DONE_ADDR;
 		cmnos_cpu_speed_addr = AR6320V3_CPU_SPEED_ADDR;
@@ -1332,6 +1334,7 @@ QDF_STATUS ol_download_firmware(struct ol_context *ol_ctx)
 		case AR6320_REV2_VERSION:
 		case AR6320_REV3_VERSION:
 		case AR6320_REV3_2_VERSION:
+		case QCA9379_REV1_VERSION:
 		case AR6320_REV4_VERSION:
 		case AR6320_DEV_VERSION:
 		if (hif_get_bus_type(scn) == QDF_BUS_TYPE_SDIO)
@@ -1448,6 +1451,7 @@ static int ol_ath_get_reg_table(uint32_t target_version,
 		break;
 	case AR6320_REV3_VERSION:
 	case AR6320_REV3_2_VERSION:
+	case QCA9379_REV1_VERSION:
 		reg_table->section =
 			(tgt_reg_section *) &ar6320v3_reg_table[0];
 		reg_table->section_size = sizeof(ar6320v3_reg_table)
@@ -1529,6 +1533,23 @@ out:
 	return result;
 }
 
+#ifdef CONFIG_HL_SUPPORT
+
+/**
+ * ol_dump_ce_register() - cannot read the section
+ * @scn: ol_softc handler
+ * @memory_block: non-NULL reserved memory location
+ *
+ * Return: -EACCES for LL and not apllicable for HL
+ */
+static inline int
+ol_dump_ce_register(struct hif_opaque_softc *scn, void *memory_block)
+{
+	return 0;
+}
+
+#else
+
 static
 void ol_dump_target_memory(struct hif_opaque_softc *scn, void *memory_block)
 {
@@ -1557,22 +1578,6 @@ void ol_dump_target_memory(struct hif_opaque_softc *scn, void *memory_block)
 		buffer_loc += size;
 	}
 }
-
-#ifdef CONFIG_HL_SUPPORT
-
-/**
- * ol_dump_ce_register() - cannot read the section
- * @scn: ol_softc handler
- * @memory_block: non-NULL reserved memory location
- *
- * Return: -EACCES for LL and not apllicable for HL
- */
-static inline int
-ol_dump_ce_register(struct hif_opaque_softc *scn, void *memory_block)
-{
-	return 0;
-}
-#else
 
 static int
 ol_dump_ce_register(struct hif_opaque_softc *scn, void *memory_block)

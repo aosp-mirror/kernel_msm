@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -25,9 +25,6 @@
  *  WLAN Host Device Driver Green AP implementation
  *
  */
-
-/* denote that this file does not allow legacy hddLog */
-#define HDD_DISALLOW_LEGACY_HDDLOG 1
 
 /* Include Files */
 #include <wlan_hdd_main.h>
@@ -184,7 +181,6 @@ static void hdd_green_ap_mc(struct hdd_context_s *hdd_ctx,
 
 	adapter = hdd_get_adapter(hdd_ctx, QDF_SAP_MODE);
 	if (adapter == NULL) {
-		hdd_err("Green-AP no SAP adapter");
 		goto done;
 	}
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -132,6 +132,13 @@
 #define WMA_GET_RX_RSSI_RAW(pRxMeta) \
 		       (((t_packetmeta *)pRxMeta)->rssi_raw)
 
+/*
+ * the repeat_cnt is reserved by FW team, the current value
+ * is always 0xffffffff
+ */
+#define WMI_WOW_PULSE_REPEAT_CNT 0xffffffff
+
+
 /* WMA Messages */
 #define WMA_MSG_TYPES_BEGIN            SIR_HAL_MSG_TYPES_BEGIN
 #define WMA_ITC_MSG_TYPES_BEGIN        SIR_HAL_ITC_MSG_TYPES_BEGIN
@@ -167,8 +174,6 @@
 
 #define WMA_ENTER_PS_REQ               SIR_HAL_ENTER_PS_REQ
 #define WMA_EXIT_PS_REQ                SIR_HAL_EXIT_PS_REQ
-
-#define WMA_CFG_RXP_FILTER_REQ         SIR_HAL_CFG_RXP_FILTER_REQ
 
 #define WMA_SWITCH_CHANNEL_RSP         SIR_HAL_SWITCH_CHANNEL_RSP
 #define WMA_P2P_NOA_ATTR_IND           SIR_HAL_P2P_NOA_ATTR_IND
@@ -232,7 +237,6 @@
 
 #define WMA_SET_MAX_TX_POWER_REQ       SIR_HAL_SET_MAX_TX_POWER_REQ
 #define WMA_SET_MAX_TX_POWER_RSP       SIR_HAL_SET_MAX_TX_POWER_RSP
-#define WMA_SET_TX_POWER_REQ           SIR_HAL_SET_TX_POWER_REQ
 #define WMA_SET_DTIM_PERIOD            SIR_HAL_SET_DTIM_PERIOD
 
 #define WMA_SET_MAX_TX_POWER_PER_BAND_REQ \
@@ -247,6 +251,11 @@
 #ifdef WLAN_NS_OFFLOAD
 #define WMA_SET_NS_OFFLOAD             SIR_HAL_SET_NS_OFFLOAD
 #endif /* WLAN_NS_OFFLOAD */
+
+#define WMA_ENABLE_BCAST_FILTER        SIR_HAL_ENABLE_BCAST_FILTER
+#define WMA_DISABLE_HW_BCAST_FILTER    SIR_HAL_DISABLE_BCAST_FILTER
+
+
 #define WMA_ADD_STA_SELF_REQ           SIR_HAL_ADD_STA_SELF_REQ
 #define WMA_DEL_STA_SELF_REQ           SIR_HAL_DEL_STA_SELF_REQ
 
@@ -413,7 +422,6 @@
 #define WMA_SET_EPNO_LIST_REQ               SIR_HAL_SET_EPNO_LIST_REQ
 #define WMA_SET_PASSPOINT_LIST_REQ          SIR_HAL_SET_PASSPOINT_LIST_REQ
 #define WMA_RESET_PASSPOINT_LIST_REQ        SIR_HAL_RESET_PASSPOINT_LIST_REQ
-#define WMA_EXTSCAN_SET_SSID_HOTLIST_REQ    SIR_HAL_EXTSCAN_SET_SSID_HOTLIST_REQ
 
 #endif /* FEATURE_WLAN_EXTSCAN */
 
@@ -478,6 +486,15 @@
 #define WMA_SEND_FREQ_RANGE_CONTROL_IND      SIR_HAL_SEND_FREQ_RANGE_CONTROL_IND
 #define WMA_ENCRYPT_DECRYPT_MSG              SIR_HAL_ENCRYPT_DECRYPT_MSG
 #define WMA_POWER_DEBUG_STATS_REQ            SIR_HAL_POWER_DEBUG_STATS_REQ
+#define WMA_GET_RCPI_REQ                     SIR_HAL_GET_RCPI_REQ
+
+#define WMA_SET_WOW_PULSE_CMD                SIR_HAL_SET_WOW_PULSE_CMD
+
+#define WDA_SET_UDP_RESP_OFFLOAD             SIR_HAL_SET_UDP_RESP_OFFLOAD
+
+#define WMA_SET_PER_ROAM_CONFIG_CMD          SIR_HAL_SET_PER_ROAM_CONFIG_CMD
+#define WMA_SET_ARP_STATS_REQ                SIR_HAL_SET_ARP_STATS_REQ
+#define WMA_GET_ARP_STATS_REQ                SIR_HAL_GET_ARP_STATS_REQ
 
 /* Bit 6 will be used to control BD rate for Management frames */
 #define HAL_USE_BD_RATE2_FOR_MANAGEMENT_FRAME 0x40
@@ -714,7 +731,7 @@ QDF_STATUS wma_register_mgmt_frm_client(void *p_cds_gctx,
 QDF_STATUS wma_de_register_mgmt_frm_client(void *p_cds_gctx);
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD
 QDF_STATUS wma_register_roaming_callbacks(void *cds_ctx,
-		void (*csr_roam_synch_cb)(tpAniSirGlobal mac,
+		QDF_STATUS (*csr_roam_synch_cb)(tpAniSirGlobal mac,
 			roam_offload_synch_ind *roam_synch_data,
 			tpSirBssDescription  bss_desc_ptr,
 			enum sir_roam_op_code reason),
@@ -723,7 +740,7 @@ QDF_STATUS wma_register_roaming_callbacks(void *cds_ctx,
 			tpSirBssDescription  bss_desc_ptr));
 #else
 static inline QDF_STATUS wma_register_roaming_callbacks(void *cds_ctx,
-		void (*csr_roam_synch_cb)(tpAniSirGlobal mac,
+		QDF_STATUS (*csr_roam_synch_cb)(tpAniSirGlobal mac,
 			roam_offload_synch_ind *roam_synch_data,
 			tpSirBssDescription  bss_desc_ptr,
 			enum sir_roam_op_code reason),

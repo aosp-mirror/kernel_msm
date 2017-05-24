@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -412,6 +412,9 @@ static void mlm_add_sta(tpAniSirGlobal mac_ctx, tpAddStaParams sta_param,
 		sta_param->maxAmsduSize =
 			lim_get_ht_capability(mac_ctx, eHT_MAX_AMSDU_LENGTH,
 					      session_entry);
+		sta_param->max_amsdu_num =
+			lim_get_ht_capability(mac_ctx, eHT_MAX_AMSDU_NUM,
+					      session_entry);
 		sta_param->fDsssCckMode40Mhz =
 			lim_get_ht_capability(mac_ctx, eHT_DSSS_CCK_MODE_40MHZ,
 					      session_entry);
@@ -740,7 +743,7 @@ static void lim_post_join_set_link_state_callback(tpAniSirGlobal mac,
 	session_entry->channelChangeReasonCode =
 			 LIM_SWITCH_CHANNEL_JOIN;
 	session_entry->pLimMlmReassocRetryReq = NULL;
-	lim_log(mac, LOGE,
+	lim_log(mac, LOG1,
 		FL("[lim_process_mlm_join_req]: suspend link success(%d) "
 		"on sessionid: %d setting channel to: %d with ch_width :%d "
 		"and maxtxPower: %d"), status, session_entry->peSessionId,
@@ -1125,7 +1128,7 @@ static void lim_process_mlm_auth_req(tpAniSirGlobal mac_ctx, uint32_t *msg)
 	mac_ctx->auth_ack_status = LIM_AUTH_ACK_NOT_RCD;
 	lim_send_auth_mgmt_frame(mac_ctx,
 		&auth_frame_body, mac_ctx->lim.gpLimMlmAuthReq->peerMacAddr,
-		LIM_NO_WEP_IN_FC, session, true);
+		LIM_NO_WEP_IN_FC, session);
 
 	/* assign appropriate session_id to the timer object */
 	mac_ctx->lim.limTimers.gLimAuthFailureTimer.sessionId = session_id;
@@ -1512,12 +1515,11 @@ bool lim_check_disassoc_deauth_ack_pending(tpAniSirGlobal mac_ctx,
 	    (deauth_req && (!qdf_mem_cmp((uint8_t *) sta_mac,
 			      (uint8_t *) &deauth_req->peer_macaddr.bytes,
 			       QDF_MAC_ADDR_SIZE)))) {
-		PELOG1(lim_log(mac_ctx, LOG1,
-			       FL("Disassoc/Deauth ack pending"));)
+		lim_log(mac_ctx, LOG1, FL("Disassoc/Deauth ack pending"));
 		return true;
 	} else {
-		PELOG1(lim_log(mac_ctx, LOG1,
-			       FL("Disassoc/Deauth Ack not pending"));)
+		lim_log(mac_ctx, LOG1,
+			FL("Disassoc/Deauth Ack not pending"));
 		return false;
 	}
 }
@@ -2348,7 +2350,7 @@ static void lim_process_auth_retry_timer(tpAniSirGlobal mac_ctx)
 			lim_send_auth_mgmt_frame(mac_ctx,
 				&auth_frame,
 				mac_ctx->lim.gpLimMlmAuthReq->peerMacAddr,
-				LIM_NO_WEP_IN_FC, session_entry, true);
+				LIM_NO_WEP_IN_FC, session_entry);
 		}
 
 		lim_deactivate_and_change_timer(mac_ctx, eLIM_AUTH_RETRY_TIMER);

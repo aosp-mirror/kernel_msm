@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -514,14 +514,6 @@ typedef struct tagCsrConfig {
 	uint8_t fAllowMCCGODiffBI;
 	uint8_t AdHocChannel24;
 	uint8_t AdHocChannel5G;
-	/* scan res agingtime threshold when Not-Connect-No-Power-Save,in sec */
-	uint32_t scanAgeTimeNCNPS;
-	/* scan res aging time threshold when Not-Connect-Power-Save, in sec*/
-	uint32_t scanAgeTimeNCPS;
-	/* scan res aging time threshold when Connect-No-Power-Save, in sec*/
-	uint32_t scanAgeTimeCNPS;
-	/* scan res aging time threshold when Connect-Power-Savein sec */
-	uint32_t scanAgeTimeCPS;
 	/* each RSSI category has one value */
 	uint32_t BssPreferValue[CSR_NUM_RSSI_CAT];
 	int RSSICat[CSR_NUM_RSSI_CAT];
@@ -619,7 +611,7 @@ typedef struct tagCsrConfig {
 	 * Enable/Disable heartbeat offload
 	 */
 	bool enableHeartBeatOffload;
-	uint8_t isAmsduSupportInAMPDU;
+	uint8_t max_amsdu_num;
 	uint8_t nSelect5GHzMargin;
 	uint8_t isCoalesingInIBSSAllowed;
 #ifdef FEATURE_WLAN_MCC_TO_SCC_SWITCH
@@ -670,6 +662,11 @@ typedef struct tagCsrConfig {
 	struct csr_sta_roam_policy_params sta_roam_policy;
 	uint32_t tx_aggregation_size;
 	uint32_t rx_aggregation_size;
+	struct wmi_per_roam_config per_roam_config;
+	bool enable_bcast_probe_rsp;
+	bool qcn_ie_support;
+	uint8_t fils_max_chan_guard_time;
+	uint16_t pkt_err_disconn_th;
 } tCsrConfig;
 
 typedef struct tagCsrChannelPowerInfo {
@@ -990,7 +987,7 @@ typedef struct tagCsrRoamSession {
 	size_t pmk_len;
 	uint8_t RoamKeyMgmtOffloadEnabled;
 	roam_offload_synch_ind *roam_synch_data;
-	bool okc_enabled;
+	struct pmkid_mode_bits pmkid_modes;
 #endif
 	tftSMEContext ftSmeContext;
 	/* This count represents the number of bssid's we try to join. */
@@ -1003,6 +1000,7 @@ typedef struct tagCsrRoamSession {
 	bool dhcp_done;
 	uint8_t disconnect_reason;
 	uint8_t uapsd_mask;
+	qdf_mc_timer_t roaming_offload_timer;
 } tCsrRoamSession;
 
 typedef struct tagCsrRoamStruct {
@@ -1049,6 +1047,7 @@ typedef struct tagCsrRoamStruct {
 	uint32_t deauthRspStatus;
 	uint8_t *pReassocResp;          /* reassociation response from new AP */
 	uint16_t reassocRespLen;        /* length of reassociation response */
+	qdf_mc_timer_t packetdump_timer;
 } tCsrRoamStruct;
 
 #define GET_NEXT_ROAM_ID(pRoamStruct)  (((pRoamStruct)->nextRoamId + 1 == 0) ? \
@@ -1375,6 +1374,7 @@ QDF_STATUS csr_scan_save_roam_offload_ap_to_scan_cache(tpAniSirGlobal pMac,
 		struct sSirSmeRoamOffloadSynchInd *roam_synch_ind_ptr,
 		tpSirBssDescription  bss_desc_ptr);
 void csr_process_ho_fail_ind(tpAniSirGlobal pMac, void *pMsgBuf);
+#endif
 #ifdef FEATURE_WLAN_DIAG_SUPPORT_CSR
 void csr_roaming_report_diag_event(tpAniSirGlobal mac_ctx,
 		roam_offload_synch_ind *roam_synch_ind_ptr,
@@ -1385,7 +1385,7 @@ static inline void csr_roaming_report_diag_event(tpAniSirGlobal mac_ctx,
 		eCsrDiagWlanStatusEventReason reason)
 {}
 #endif
-#endif
+
 bool csr_store_joinreq_param(tpAniSirGlobal mac_ctx,
 		tCsrRoamProfile *profile,
 		tScanResultHandle scan_cache,

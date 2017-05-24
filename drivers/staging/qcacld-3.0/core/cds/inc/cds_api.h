@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -37,6 +37,7 @@
 #include <qdf_types.h>
 #include <qdf_status.h>
 #include <qdf_mem.h>
+#include <qdf_debugfs.h>
 #include <qdf_list.h>
 #include <qdf_trace.h>
 #include <qdf_event.h>
@@ -84,6 +85,20 @@ struct cds_sme_cbacks {
 	QDF_STATUS (*sme_get_valid_channels)(void*, uint8_t *, uint32_t *);
 	void (*sme_get_nss_for_vdev)(void*, enum tQDF_ADAPTER_MODE,
 		uint8_t *, uint8_t *);
+};
+
+/**
+ * struct cds_dp_cbacks - list of datapath functions registered with CDS
+ * @ol_txrx_update_mac_id_cb: updates mac_id for vdev
+ * @hdd_en_lro_in_cc_cb: enables LRO if concurrency is not active
+ * @hdd_disble_lro_in_cc_cb: disables LRO due to concurrency
+ * @hdd_set_rx_mode_rps_cb: enable/disable RPS in SAP mode
+ */
+struct cds_dp_cbacks {
+	void (*ol_txrx_update_mac_id_cb)(uint8_t , uint8_t);
+	void (*hdd_en_lro_in_cc_cb)(struct hdd_context_s *);
+	void (*hdd_disble_lro_in_cc_cb)(struct hdd_context_s *);
+	void (*hdd_set_rx_mode_rps_cb)(struct hdd_context_s *, void *, bool);
 };
 
 void cds_set_driver_state(enum cds_driver_state);
@@ -195,6 +210,18 @@ static inline void cds_set_unload_in_progress(uint8_t value)
 		cds_clear_driver_state(CDS_DRIVER_STATE_UNLOADING);
 }
 
+/**
+ * cds_is_driver_loaded() - Is driver loaded
+ *
+ * Return: true if driver is loaded or false otherwise.
+ */
+static inline bool cds_is_driver_loaded(void)
+{
+	enum cds_driver_state state = cds_get_driver_state();
+
+	return __CDS_IS_DRIVER_STATE(state, CDS_DRIVER_STATE_LOADED);
+}
+
 v_CONTEXT_t cds_init(void);
 void cds_deinit(void);
 
@@ -206,14 +233,7 @@ QDF_STATUS cds_enable(v_CONTEXT_t cds_context);
 
 QDF_STATUS cds_disable(v_CONTEXT_t cds_context);
 
-/**
- * cds_flush_cache_rx_queue() - flush cache rx queue frame
- *
- * Return: None
- */
-void cds_flush_cache_rx_queue(void);
-
-QDF_STATUS cds_post_disable(v_CONTEXT_t cds_context);
+QDF_STATUS cds_post_disable(void);
 
 QDF_STATUS cds_close(v_CONTEXT_t cds_context);
 
@@ -295,4 +315,10 @@ bool cds_is_10_mhz_enabled(void);
 bool cds_is_sub_20_mhz_enabled(void);
 bool cds_is_self_recovery_enabled(void);
 void cds_pkt_stats_to_logger_thread(void *pl_hdr, void *pkt_dump, void *data);
+QDF_STATUS cds_register_dp_cb(struct cds_dp_cbacks *dp_cbs);
+QDF_STATUS cds_deregister_dp_cb(void);
+
+uint32_t cds_get_arp_stats_gw_ip(void);
+void cds_incr_arp_stats_tx_tgt_delivered(void);
+void cds_incr_arp_stats_tx_tgt_acked(void);
 #endif /* if !defined __CDS_API_H */

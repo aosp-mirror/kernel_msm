@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -138,9 +138,13 @@ int nl_srv_ucast(struct sk_buff *skb, int dst_pid, int flag)
 	/* not multicast */
 	NETLINK_CB(skb).dst_group = 0;
 
-	if (nl_srv_is_initialized() == 0)
+	if (nl_srv_is_initialized() == 0) {
 		err = cnss_logger_nl_ucast(skb, dst_pid, flag);
-	else
+		if (err < 0)
+			QDF_TRACE(QDF_MODULE_ID_HDD, QDF_TRACE_LEVEL_WARN,
+				  "NLINK: netlink_unicast to pid[%d] failed, ret[%d]",
+				  dst_pid, err);
+	} else
 		dev_kfree_skb(skb);
 	return err;
 }
@@ -170,9 +174,15 @@ int nl_srv_bcast(struct sk_buff *skb)
 	 /* destination group */
 	NETLINK_CB(skb).dst_group = WLAN_NLINK_MCAST_GRP_ID;
 
-	if (nl_srv_is_initialized() == 0)
+	if (nl_srv_is_initialized() == 0) {
 		err = cnss_logger_nl_bcast(skb, WLAN_NLINK_MCAST_GRP_ID, flags);
-	else
+		if ((err < 0) && (err != -ESRCH)) {
+			QDF_TRACE(QDF_MODULE_ID_HDD, QDF_TRACE_LEVEL_WARN,
+				  "NLINK: netlink_broadcast failed err = %d",
+				   err);
+			dev_kfree_skb(skb);
+		}
+	} else
 		dev_kfree_skb(skb);
 	return err;
 }
@@ -350,19 +360,20 @@ int nl_srv_unregister(tWlanNlModTypes msg_type, nl_srv_msg_callback msg_handler)
  */
 int nl_srv_ucast(struct sk_buff *skb, int dst_pid, int flag)
 {
-	int err = 0;
+	int err = -EINVAL;
 
 	NETLINK_CB(skb).portid = 0;     /* sender's pid */
 	NETLINK_CB(skb).dst_group = 0;  /* not multicast */
 
-	if (nl_srv_sock)
+	if (nl_srv_sock) {
 		err = netlink_unicast(nl_srv_sock, skb, dst_pid, flag);
-
-	if (err < 0)
-		QDF_TRACE(QDF_MODULE_ID_HDD, QDF_TRACE_LEVEL_WARN,
-			  "NLINK: netlink_unicast to pid[%d] failed, ret[%d]",
-			  dst_pid, err);
-
+		if (err < 0) {
+			QDF_TRACE(QDF_MODULE_ID_HDD, QDF_TRACE_LEVEL_WARN,
+				  "NLINK: netlink_unicast to pid[%d] failed, ret[%d]",
+				  dst_pid, err);
+		}
+	} else
+		dev_kfree_skb(skb);
 	return err;
 }
 
@@ -372,7 +383,7 @@ int nl_srv_ucast(struct sk_buff *skb, int dst_pid, int flag)
  */
 int nl_srv_bcast(struct sk_buff *skb)
 {
-	int err = 0;
+	int err = -EINVAL;
 	int flags = GFP_KERNEL;
 
 	if (in_interrupt() || irqs_disabled() || in_atomic())
@@ -381,14 +392,17 @@ int nl_srv_bcast(struct sk_buff *skb)
 	NETLINK_CB(skb).portid = 0;     /* sender's pid */
 	NETLINK_CB(skb).dst_group = WLAN_NLINK_MCAST_GRP_ID;    /* destination group */
 
-	if (nl_srv_sock)
+	if (nl_srv_sock) {
 		err = netlink_broadcast(nl_srv_sock, skb, 0,
 					WLAN_NLINK_MCAST_GRP_ID, flags);
-
-	if ((err < 0) && (err != -ESRCH)) {
-		QDF_TRACE(QDF_MODULE_ID_HDD, QDF_TRACE_LEVEL_WARN,
-			  "NLINK: netlink_broadcast failed err = %d", err);
-	}
+		if ((err < 0) && (err != -ESRCH)) {
+			QDF_TRACE(QDF_MODULE_ID_HDD, QDF_TRACE_LEVEL_WARN,
+				  "NLINK: netlink_broadcast failed err = %d",
+				   err);
+			dev_kfree_skb(skb);
+		}
+	} else
+		dev_kfree_skb(skb);
 	return err;
 }
 
@@ -477,7 +491,7 @@ static void nl_srv_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 	if (nl_srv_msg_handler[type] != NULL) {
 		(nl_srv_msg_handler[type])(skb);
 	} else {
-		QDF_TRACE(QDF_MODULE_ID_HDD, QDF_TRACE_LEVEL_WARN,
+		QDF_TRACE(QDF_MODULE_ID_HDD, QDF_TRACE_LEVEL_INFO,
 			  "NLINK: No handler for Netlink Msg [0x%X]", type);
 	}
 }
@@ -503,12 +517,12 @@ int nl_srv_is_initialized(void)
 
 #include <wlan_nlink_srv.h>
 
-int nl_srv_init(void)
+int nl_srv_init(void *wiphy)
 {
 	return 0;
 }
 
-void nl_srv_exit(int dst_pid)
+void nl_srv_exit(void)
 {
 }
 

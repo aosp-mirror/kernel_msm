@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -170,6 +170,7 @@ enum log_event_indicator {
    @WLAN_LOG_REASON_SME_OUT_OF_CMD_BUFL sme out of cmd buffer
  * @WLAN_LOG_REASON_NO_SCAN_RESULTS: no scan results to report from HDD
  * This enum contains the different reason codes for bug report
+ * @WLAN_LOG_REASON_SCAN_NOT_ALLOWED: scan not allowed due to connection states
  */
 enum log_event_host_reason_code {
 	WLAN_LOG_REASON_CODE_UNUSED,
@@ -183,6 +184,7 @@ enum log_event_host_reason_code {
 	WLAN_LOG_REASON_HDD_TIME_OUT,
 	WLAN_LOG_REASON_SME_OUT_OF_CMD_BUF,
 	WLAN_LOG_REASON_NO_SCAN_RESULTS,
+	WLAN_LOG_REASON_SCAN_NOT_ALLOWED,
 };
 
 
@@ -823,6 +825,7 @@ typedef struct sAniSirLim {
 		uint32_t scan_id, uint32_t flags);
 	uint8_t retry_packet_cnt;
 	uint8_t scan_disabled;
+	uint8_t beacon_probe_rsp_cnt_per_scan;
 } tAniSirLim, *tpAniSirLim;
 
 struct mgmt_frm_reg_info {
@@ -928,8 +931,6 @@ typedef struct sAniSirGlobal {
 
 	uint8_t isCoalesingInIBSSAllowed;
 
-	bool imps_enabled;
-
 	/* PNO offload */
 	bool pnoOffload;
 
@@ -957,6 +958,9 @@ typedef struct sAniSirGlobal {
 	/* 802.11p enable */
 	bool enable_dot11p;
 
+	/* DBS capability based on INI and FW capability */
+	uint8_t hw_dbs_capable;
+	/* Based on INI parameter */
 	uint32_t dual_mac_feature_disable;
 	sir_mgmt_frame_ind_callback mgmt_frame_ind_cb;
 	sir_p2p_ack_ind_callback p2p_ack_ind_cb;
@@ -966,6 +970,7 @@ typedef struct sAniSirGlobal {
 	uint8_t user_configured_nss;
 	bool sta_prefer_80MHz_over_160MHz;
 	enum  country_src reg_hint_src;
+	uint32_t rx_packet_drop_counter;
 } tAniSirGlobal;
 
 typedef enum {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -31,6 +31,35 @@
  * DOC: wlan_hdd_tdls.h
  * WLAN Host Device Driver TDLS include file
  */
+
+/*
+ * enum eTDLSSupportMode - TDLS support modes
+ * @eTDLS_SUPPORT_NOT_ENABLED: TDLS support not enabled
+ * @eTDLS_SUPPORT_DISABLED: suppress implicit trigger and not respond
+ *     to the peer
+ * @eTDLS_SUPPORT_EXPLICIT_TRIGGER_ONLY: suppress implicit trigger,
+ *     but respond to the peer
+ * @eTDLS_SUPPORT_ENABLED: implicit trigger
+ * @eTDLS_SUPPORT_EXTERNAL_CONTROL: implicit trigger but only to a
+ *     peer mac configured by user space.
+ */
+typedef enum {
+	eTDLS_SUPPORT_NOT_ENABLED = 0,
+	eTDLS_SUPPORT_DISABLED,
+	eTDLS_SUPPORT_EXPLICIT_TRIGGER_ONLY,
+	eTDLS_SUPPORT_ENABLED,
+	eTDLS_SUPPORT_EXTERNAL_CONTROL,
+} eTDLSSupportMode;
+
+/**
+ * enum tdls_concerned_external_events - External events that affect TDLS
+ * @P2P_ROC_START: P2P remain on channel starts
+ * @P2P_ROC_END: P2P remain on channel ends
+ */
+enum tdls_concerned_external_events {
+	P2P_ROC_START,
+	P2P_ROC_END,
+};
 
 #ifdef FEATURE_WLAN_TDLS
 
@@ -69,6 +98,25 @@
 
 #define TDLS_CT_MAC_MAX_TABLE_SIZE 8
 
+/* Define the interval for 5 minutes */
+#define TDLS_ENABLE_CDS_FLUSH_INTERVAL      300000000
+
+/**
+ * enum tdls_disable_source - TDLS disable sources
+ * @HDD_SET_TDLS_MODE_SOURCE_USER: disable from user
+ * @HDD_SET_TDLS_MODE_SOURCE_SCAN: disable during scan
+ * @HDD_SET_TDLS_MODE_SOURCE_OFFCHANNEL: disable during offchannel
+ * @HDD_SET_TDLS_MODE_SOURCE_BTC: disable during bluetooth
+ * @HDD_SET_TDLS_MODE_SOURCE_P2P: disable during p2p
+ */
+enum tdls_disable_source {
+	HDD_SET_TDLS_MODE_SOURCE_USER = 0,
+	HDD_SET_TDLS_MODE_SOURCE_SCAN,
+	HDD_SET_TDLS_MODE_SOURCE_OFFCHANNEL,
+	HDD_SET_TDLS_MODE_SOURCE_BTC,
+	HDD_SET_TDLS_MODE_SOURCE_P2P,
+};
+
 /**
  * struct tdls_config_params_t - tdls config params
  *
@@ -103,36 +151,18 @@ typedef struct {
  * @magic: magic
  * @attempt: attempt
  * @reject: reject
+ * @source: scan request source(NL/Vendor scan)
  * @tdls_scan_work: delayed tdls scan work
  */
 typedef struct {
 	struct wiphy *wiphy;
 	struct cfg80211_scan_request *scan_request;
-	int magic;
+	uint32_t magic;
 	int attempt;
 	int reject;
+	uint8_t source;
 	struct delayed_work tdls_scan_work;
 } tdls_scan_context_t;
-
-/**
- * enum eTDLSSupportMode - tdls support mode
- *
- * @eTDLS_SUPPORT_NOT_ENABLED: tdls support not enabled
- * @eTDLS_SUPPORT_DISABLED: suppress implicit trigger and not
- *			respond to the peer
- * @eTDLS_SUPPORT_EXPLICIT_TRIGGER_ONLY: suppress implicit trigger,
- *			but respond to the peer
- * @eTDLS_SUPPORT_ENABLED: implicit trigger
- * @eTDLS_SUPPORT_EXTERNAL_CONTROL: External control means implicit
- *     trigger but only to a peer mac configured by user space.
- */
-typedef enum {
-	eTDLS_SUPPORT_NOT_ENABLED = 0,
-	eTDLS_SUPPORT_DISABLED,
-	eTDLS_SUPPORT_EXPLICIT_TRIGGER_ONLY,
-	eTDLS_SUPPORT_ENABLED,
-	eTDLS_SUPPORT_EXTERNAL_CONTROL,
-} eTDLSSupportMode;
 
 /**
  * enum tdls_spatial_streams - TDLS spatial streams
@@ -350,9 +380,8 @@ struct tdls_set_state_info {
  * @discovery_sent_cnt: discovery sent count
  * @ap_rssi: ap rssi
  * @curr_candidate: current candidate
- * @ct_peer_mac_table: linear mac address table for counting the packets
- * @valid_mac_entries: number of valid mac entry in @ct_peer_mac_table
  * @magic: magic
+ * @last_flush_ts: last timestamp when flush logs was displayed.
  *
  */
 typedef struct {
@@ -365,9 +394,8 @@ typedef struct {
 	uint32_t discovery_sent_cnt;
 	int8_t ap_rssi;
 	struct _hddTdlsPeer_t *curr_candidate;
-	struct tdls_ct_mac_table ct_peer_mac_table[TDLS_CT_MAC_MAX_TABLE_SIZE];
-	uint8_t valid_mac_entries;
 	uint32_t magic;
+	uint64_t last_flush_ts;
 } tdlsCtx_t;
 
 /**
@@ -494,18 +522,13 @@ int wlan_hdd_tdls_init(hdd_adapter_t *pAdapter);
 
 void wlan_hdd_tdls_exit(hdd_adapter_t *pAdapter);
 
-void wlan_hdd_tdls_extract_da(struct sk_buff *skb, uint8_t *mac);
-
 void wlan_hdd_tdls_extract_sa(struct sk_buff *skb, uint8_t *mac);
-
-int wlan_hdd_tdls_increment_pkt_count(hdd_adapter_t *pAdapter,
-				      const uint8_t *mac, uint8_t tx);
 
 int wlan_hdd_tdls_set_sta_id(hdd_adapter_t *pAdapter, const uint8_t *mac,
 			     uint8_t staId);
 
 hddTdlsPeer_t *wlan_hdd_tdls_find_peer(hdd_adapter_t *pAdapter,
-				       const uint8_t *mac, bool mutexLock);
+				       const uint8_t *mac);
 
 hddTdlsPeer_t *wlan_hdd_tdls_find_all_peer(hdd_context_t *pHddCtx,
 					   const uint8_t *mac);
@@ -515,16 +538,14 @@ int wlan_hdd_tdls_get_link_establish_params(hdd_adapter_t *pAdapter,
 					    tCsrTdlsLinkEstablishParams *
 					    tdlsLinkEstablishParams);
 hddTdlsPeer_t *wlan_hdd_tdls_get_peer(hdd_adapter_t *pAdapter,
-				      const uint8_t *mac,
-				      bool need_mutex_lock);
+				      const uint8_t *mac);
 
 int wlan_hdd_tdls_set_cap(hdd_adapter_t *pAdapter, const uint8_t *mac,
 			  tTDLSCapType cap);
 
 void wlan_hdd_tdls_set_peer_link_status(hddTdlsPeer_t *curr_peer,
 					tTDLSLinkStatus status,
-					tTDLSLinkReason reason,
-					bool lock_needed);
+					tTDLSLinkReason reason);
 void wlan_hdd_tdls_set_link_status(hdd_adapter_t *pAdapter,
 				   const uint8_t *mac,
 				   tTDLSLinkStatus linkStatus,
@@ -570,15 +591,15 @@ void wlan_hdd_tdls_increment_peer_count(hdd_adapter_t *pAdapter);
 void wlan_hdd_tdls_decrement_peer_count(hdd_adapter_t *pAdapter);
 
 hddTdlsPeer_t *wlan_hdd_tdls_is_progress(hdd_context_t *pHddCtx,
-					 const uint8_t *mac, uint8_t skip_self,
-					 bool need_lock);
+					 const uint8_t *mac, uint8_t skip_self);
 
 int wlan_hdd_tdls_copy_scan_context(hdd_context_t *pHddCtx,
 				    struct wiphy *wiphy,
 				    struct cfg80211_scan_request *request);
 
 int wlan_hdd_tdls_scan_callback(hdd_adapter_t *pAdapter, struct wiphy *wiphy,
-				struct cfg80211_scan_request *request);
+				struct cfg80211_scan_request *request,
+				uint8_t source);
 
 void wlan_hdd_tdls_scan_done_callback(hdd_adapter_t *pAdapter);
 
@@ -689,8 +710,7 @@ int wlan_hdd_cfg80211_tdls_mgmt(struct wiphy *wiphy,
 #endif
 #endif
 
-void hdd_tdls_notify_mode_change(hdd_adapter_t *adapter,
-				hdd_context_t *hddctx);
+void hdd_update_tdls_ct_and_teardown_links(hdd_context_t *hdd_ctx);
 void wlan_hdd_tdls_disable_offchan_and_teardown_links(hdd_context_t *hddctx);
 
 hddTdlsPeer_t *wlan_hdd_tdls_find_first_connected_peer(hdd_adapter_t *adapter);
@@ -702,7 +722,7 @@ void wlan_hdd_tdls_update_tx_pkt_cnt(hdd_adapter_t *adapter,
 void wlan_hdd_tdls_update_rx_pkt_cnt(hdd_adapter_t *adapter,
 				     struct sk_buff *skb);
 int hdd_set_tdls_scan_type(hdd_context_t *hdd_ctx, int val);
-void hdd_tdls_context_init(hdd_context_t *hdd_ctx);
+void hdd_tdls_context_init(hdd_context_t *hdd_ctx, bool ssr);
 void hdd_tdls_context_destroy(hdd_context_t *hdd_ctx);
 int wlan_hdd_tdls_antenna_switch(hdd_context_t *hdd_ctx,
 				 hdd_adapter_t *adapter,
@@ -726,6 +746,7 @@ void wlan_hdd_tdls_notify_connect(hdd_adapter_t *adapter,
  * wlan_hdd_tdls_notify_disconnect() - Update tdls state for every
  * disconnect event.
  * @adapter: hdd adapter
+ * @lfr_roam: roaming case
  *
  * After every disconnect event in the system, check whether TDLS
  * can be disabled/enabled in the system and update the
@@ -733,7 +754,24 @@ void wlan_hdd_tdls_notify_connect(hdd_adapter_t *adapter,
  *
  * Return: None
  */
-void wlan_hdd_tdls_notify_disconnect(hdd_adapter_t *adapter);
+void wlan_hdd_tdls_notify_disconnect(hdd_adapter_t *adapter, bool lfr_roam);
+void wlan_hdd_change_tdls_mode(void *hdd_ctx);
+
+/**
+ * hdd_tdls_notify_p2p_roc() - Notify p2p roc event to TDLS
+ * @hdd_ctx: ptr to hdd context.
+ * @event: P2P roc event that affect TDLS
+ *
+ * P2P roc events notified to TDLS to avoid overlap between P2P listen
+ * and TDLS operation.
+ * Based on P2P remain on channel event, TDLS mode will be
+ * updated and TDLS source timer started with timer period
+ * equivalent to P2P ROC interval to revert the TDLS mode.
+ *
+ * Return: None
+ */
+void hdd_tdls_notify_p2p_roc(hdd_context_t *hdd_ctx,
+			    enum tdls_concerned_external_events event);
 
 /**
  * wlan_hdd_cfg80211_configure_tdls_mode() - configure tdls mode
@@ -750,8 +788,7 @@ int wlan_hdd_cfg80211_configure_tdls_mode(struct wiphy *wiphy,
 					int data_len);
 
 #else
-static inline void hdd_tdls_notify_mode_change(hdd_adapter_t *adapter,
-				hdd_context_t *hddctx)
+static inline void hdd_update_tdls_ct_and_teardown_links(hdd_context_t *hdd_ctx)
 {
 }
 static inline void
@@ -769,7 +806,7 @@ static inline void wlan_hdd_tdls_update_rx_pkt_cnt(hdd_adapter_t *adapter,
 						   struct sk_buff *skb)
 {
 }
-static inline void hdd_tdls_context_init(hdd_context_t *hdd_ctx) { }
+static inline void hdd_tdls_context_init(hdd_context_t *hdd_ctx, bool ssr) { }
 static inline void hdd_tdls_context_destroy(hdd_context_t *hdd_ctx) { }
 
 static inline int wlan_hdd_tdls_antenna_switch(hdd_context_t *hdd_ctx,
@@ -787,7 +824,8 @@ static inline void wlan_hdd_tdls_notify_connect(hdd_adapter_t *adapter,
 				  tCsrRoamInfo *csr_roam_info)
 {
 }
-static inline void wlan_hdd_tdls_notify_disconnect(hdd_adapter_t *adapter)
+static inline void wlan_hdd_tdls_notify_disconnect(hdd_adapter_t *adapter,
+						   bool lfr_roam)
 {
 }
 
@@ -799,6 +837,14 @@ static inline int wlan_hdd_cfg80211_configure_tdls_mode(struct wiphy *wiphy,
 	return 0;
 }
 
+static inline void wlan_hdd_change_tdls_mode(void *hdd_ctx)
+{
+}
+static inline void
+hdd_tdls_notify_p2p_roc(hdd_context_t *hdd_ctx,
+			enum tdls_concerned_external_events event)
+{
+}
 #endif /* End of FEATURE_WLAN_TDLS */
 
 #ifdef FEATURE_WLAN_DIAG_SUPPORT

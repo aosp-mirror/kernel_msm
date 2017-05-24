@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -119,7 +119,7 @@ HTC_SEND_FULL_ACTION htt_h2t_full(void *context, HTC_PACKET *pkt)
 	return HTC_SEND_FULL_KEEP;
 }
 
-#if defined(HELIUMPLUS_PADDR64)
+#if defined(HELIUMPLUS)
 A_STATUS htt_h2t_frag_desc_bank_cfg_msg(struct htt_pdev_t *pdev)
 {
 	A_STATUS rc = A_OK;
@@ -178,9 +178,10 @@ A_STATUS htt_h2t_frag_desc_bank_cfg_msg(struct htt_pdev_t *pdev)
 
 	/** Bank specific data structure.*/
 #if HTT_PADDR64
-	bank_cfg->bank_base_address[0].lo =
-		pdev->frag_descs.desc_pages.dma_pages->page_p_addr;
-	bank_cfg->bank_base_address[0].hi = 0;
+	bank_cfg->bank_base_address[0].lo = qdf_get_lower_32_bits(
+			pdev->frag_descs.desc_pages.dma_pages->page_p_addr);
+	bank_cfg->bank_base_address[0].hi = qdf_get_upper_32_bits(
+			pdev->frag_descs.desc_pages.dma_pages->page_p_addr);
 #else /* ! HTT_PADDR64 */
 	bank_cfg->bank_base_address[0] =
 		pdev->frag_descs.desc_pages.dma_pages->page_p_addr;
@@ -210,7 +211,7 @@ A_STATUS htt_h2t_frag_desc_bank_cfg_msg(struct htt_pdev_t *pdev)
 	return rc;
 }
 
-#endif /* defined(HELIUMPLUS_PADDR64) */
+#endif /* defined(HELIUMPLUS) */
 
 A_STATUS htt_h2t_ver_req_msg(struct htt_pdev_t *pdev)
 {
@@ -420,10 +421,13 @@ QDF_STATUS htt_h2t_rx_ring_cfg_msg_ll(struct htt_pdev_t *pdev)
 	msg_word++;
 	*msg_word = 0;
 #if HTT_PADDR64
-	HTT_RX_RING_CFG_IDX_SHADOW_REG_PADDR_LO_SET(*msg_word,
-						    pdev->rx_ring.alloc_idx.paddr);
+	HTT_RX_RING_CFG_IDX_SHADOW_REG_PADDR_LO_SET(
+			*msg_word,
+			qdf_get_lower_32_bits(pdev->rx_ring.alloc_idx.paddr));
 	msg_word++;
-	HTT_RX_RING_CFG_IDX_SHADOW_REG_PADDR_HI_SET(*msg_word, 0);
+	HTT_RX_RING_CFG_IDX_SHADOW_REG_PADDR_HI_SET(
+			*msg_word,
+			qdf_get_upper_32_bits(pdev->rx_ring.alloc_idx.paddr));
 #else /* ! HTT_PADDR64 */
 	HTT_RX_RING_CFG_IDX_SHADOW_REG_PADDR_SET(*msg_word,
 						 pdev->rx_ring.alloc_idx.paddr);
@@ -1308,6 +1312,145 @@ int htt_h2t_ipa_uc_get_stats(struct htt_pdev_t *pdev)
 	HTT_WDI_IPA_OP_REQUEST_OP_CODE_SET(*msg_word,
 					   HTT_WDI_IPA_OPCODE_DBG_STATS);
 	HTT_H2T_MSG_TYPE_SET(*msg_word, HTT_H2T_MSG_TYPE_WDI_IPA_OP_REQ);
+
+	SET_HTC_PACKET_INFO_TX(&pkt->htc_pkt,
+			       htt_h2t_send_complete_free_netbuf,
+			       qdf_nbuf_data(msg),
+			       qdf_nbuf_len(msg),
+			       pdev->htc_tx_endpoint,
+			       1); /* tag - not relevant here */
+
+	SET_HTC_PACKET_NET_BUF_CONTEXT(&pkt->htc_pkt, msg);
+	HTT_SEND_HTC_PKT(pdev, pkt);
+	return A_OK;
+}
+
+/**
+ * htt_h2t_ipa_uc_get_share_stats() - WDI UC wifi sharing state request to FW
+ * @pdev: handle to the HTT instance
+ *
+ * Return: A_OK success
+ *         A_NO_MEMORY No memory fail
+ */
+int htt_h2t_ipa_uc_get_share_stats(struct htt_pdev_t *pdev, uint8_t reset_stats)
+{
+	struct htt_htc_pkt *pkt;
+	qdf_nbuf_t msg;
+	uint32_t *msg_word;
+
+	pkt = htt_htc_pkt_alloc(pdev);
+	if (!pkt)
+		return -A_NO_MEMORY;
+
+	/* show that this is not a tx frame download
+	 * (not required, but helpful)
+	 */
+	pkt->msdu_id = HTT_TX_COMPL_INV_MSDU_ID;
+	pkt->pdev_ctxt = NULL;  /* not used during send-done callback */
+
+	/* reserve room for HTC header */
+	msg = qdf_nbuf_alloc(pdev->osdev,
+		HTT_MSG_BUF_SIZE(HTT_WDI_IPA_OP_REQUEST_SZ)+
+		HTT_MSG_BUF_SIZE(HTT_WDI_IPA_OP_REQ_GET_SHARING_STATS_SZ),
+		HTC_HEADER_LEN + HTC_HDR_ALIGNMENT_PADDING, 4, false);
+	if (!msg) {
+		htt_htc_pkt_free(pdev, pkt);
+		return -A_NO_MEMORY;
+	}
+	/* set the length of the message */
+	qdf_nbuf_put_tail(msg, HTT_WDI_IPA_OP_REQUEST_SZ+
+			  HTT_WDI_IPA_OP_REQ_GET_SHARING_STATS_SZ);
+
+	/* fill in the message contents */
+	msg_word = (uint32_t *) qdf_nbuf_data(msg);
+
+	/* rewind beyond alignment pad to get to the HTC header reserved area */
+	qdf_nbuf_push_head(msg, HTC_HDR_ALIGNMENT_PADDING);
+
+	*msg_word = 0;
+	HTT_WDI_IPA_OP_REQUEST_OP_CODE_SET(*msg_word,
+				   HTT_WDI_IPA_OPCODE_GET_SHARING_STATS);
+	HTT_H2T_MSG_TYPE_SET(*msg_word, HTT_H2T_MSG_TYPE_WDI_IPA_OP_REQ);
+
+	msg_word++;
+	*msg_word = 0;
+	HTT_WDI_IPA_OP_REQ_GET_SHARING_STATS_RESET_STATS_SET(*msg_word,
+							     reset_stats);
+
+	SET_HTC_PACKET_INFO_TX(&pkt->htc_pkt,
+			       htt_h2t_send_complete_free_netbuf,
+			       qdf_nbuf_data(msg),
+			       qdf_nbuf_len(msg),
+			       pdev->htc_tx_endpoint,
+			       1); /* tag - not relevant here */
+
+	SET_HTC_PACKET_NET_BUF_CONTEXT(&pkt->htc_pkt, msg);
+	HTT_SEND_HTC_PKT(pdev, pkt);
+	return A_OK;
+}
+
+/**
+ * htt_h2t_ipa_uc_set_quota() - WDI UC state query request to firmware
+ * @pdev: handle to the HTT instance
+ *
+ * Return: A_OK success
+ *         A_NO_MEMORY No memory fail
+ */
+int htt_h2t_ipa_uc_set_quota(struct htt_pdev_t *pdev, uint64_t quota_bytes)
+{
+	struct htt_htc_pkt *pkt;
+	qdf_nbuf_t msg;
+	uint32_t *msg_word;
+
+	pkt = htt_htc_pkt_alloc(pdev);
+	if (!pkt)
+		return -A_NO_MEMORY;
+
+	/* show that this is not a tx frame download
+	 * (not required, but helpful)
+	 */
+	pkt->msdu_id = HTT_TX_COMPL_INV_MSDU_ID;
+	pkt->pdev_ctxt = NULL;  /* not used during send-done callback */
+
+	/* reserve room for HTC header */
+	msg = qdf_nbuf_alloc(pdev->osdev,
+		HTT_MSG_BUF_SIZE(HTT_WDI_IPA_OP_REQUEST_SZ)+
+		HTT_MSG_BUF_SIZE(HTT_WDI_IPA_OP_REQ_SET_QUOTA_SZ),
+		HTC_HEADER_LEN + HTC_HDR_ALIGNMENT_PADDING, 4, false);
+	if (!msg) {
+		htt_htc_pkt_free(pdev, pkt);
+		return -A_NO_MEMORY;
+	}
+	/* set the length of the message */
+	qdf_nbuf_put_tail(msg, HTT_WDI_IPA_OP_REQUEST_SZ+
+			  HTT_WDI_IPA_OP_REQ_SET_QUOTA_SZ);
+
+	/* fill in the message contents */
+	msg_word = (uint32_t *) qdf_nbuf_data(msg);
+
+	/* rewind beyond alignment pad to get to the HTC header reserved area */
+	qdf_nbuf_push_head(msg, HTC_HDR_ALIGNMENT_PADDING);
+
+	*msg_word = 0;
+	HTT_WDI_IPA_OP_REQUEST_OP_CODE_SET(*msg_word,
+					   HTT_WDI_IPA_OPCODE_SET_QUOTA);
+	HTT_H2T_MSG_TYPE_SET(*msg_word, HTT_H2T_MSG_TYPE_WDI_IPA_OP_REQ);
+
+	msg_word++;
+	*msg_word = 0;
+	HTT_WDI_IPA_OP_REQ_SET_QUOTA_SET_QUOTA_SET(*msg_word, quota_bytes > 0);
+
+	msg_word++;
+	*msg_word = 0;
+	HTT_WDI_IPA_OP_REQ_SET_QUOTA_QUOTA_LO_SET(*msg_word,
+			(uint32_t)(quota_bytes &
+				   HTT_WDI_IPA_OP_REQ_SET_QUOTA_QUOTA_LO_M));
+
+	msg_word++;
+	*msg_word = 0;
+	HTT_WDI_IPA_OP_REQ_SET_QUOTA_QUOTA_HI_SET(*msg_word,
+			(uint32_t)(quota_bytes>>32 &
+				   HTT_WDI_IPA_OP_REQ_SET_QUOTA_QUOTA_HI_M));
 
 	SET_HTC_PACKET_INFO_TX(&pkt->htc_pkt,
 			       htt_h2t_send_complete_free_netbuf,

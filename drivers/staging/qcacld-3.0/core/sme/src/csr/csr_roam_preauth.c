@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -91,6 +91,7 @@ void csr_neighbor_roam_tranistion_preauth_done_to_disconnected(
 	csr_neighbor_roam_state_transition(mac_ctx,
 		eCSR_NEIGHBOR_ROAM_STATE_INIT, session_id);
 	pNeighborRoamInfo->roamChannelInfo.IAPPNeighborListReceived = false;
+	pNeighborRoamInfo->uOsRequestedHandoff = 0;
 }
 
 /**
@@ -570,6 +571,7 @@ void csr_roam_ft_pre_auth_rsp_processor(tHalHandle hal,
 	eCsrAuthType conn_Auth_type;
 	uint32_t session_id = preauth_rsp->smeSessionId;
 	tCsrRoamSession *csr_session = CSR_GET_SESSION(mac_ctx, session_id);
+	tDot11fAuthentication *p_auth = NULL;
 
 	if (NULL == csr_session) {
 		sms_log(mac_ctx, LOGE, FL("CSR session is NULL"));
@@ -658,6 +660,22 @@ void csr_roam_ft_pre_auth_rsp_processor(tHalHandle hal,
 			csr_session->ftSmeContext.reassoc_ft_ies_length = 0;
 			csr_session->ftSmeContext.reassoc_ft_ies = NULL;
 		}
+		p_auth = (tDot11fAuthentication *) qdf_mem_malloc(
+						sizeof(tDot11fAuthentication));
+
+		if (p_auth == NULL)
+			return;
+
+		status = dot11f_unpack_authentication(mac_ctx,
+				preauth_rsp->ft_ies,
+				preauth_rsp->ft_ies_length, p_auth);
+		if (DOT11F_FAILED(status))
+			sms_log(mac_ctx, LOGE,
+				FL("Failed to parse an Authentication frame"));
+		else if (p_auth->MobilityDomain.present)
+			csr_session->ftSmeContext.addMDIE = true;
+
+		qdf_mem_free(p_auth);
 
 		if (!ft_ies_length)
 			return;

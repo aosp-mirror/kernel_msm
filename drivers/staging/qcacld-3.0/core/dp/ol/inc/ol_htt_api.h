@@ -242,6 +242,11 @@ htt_h2t_ipa_uc_set_active(struct htt_pdev_t *pdev, bool uc_active, bool is_tx);
 
 int htt_h2t_ipa_uc_get_stats(struct htt_pdev_t *pdev);
 
+int htt_h2t_ipa_uc_get_share_stats(struct htt_pdev_t *pdev,
+				   uint8_t reset_stats);
+
+int htt_h2t_ipa_uc_set_quota(struct htt_pdev_t *pdev, uint64_t quota_bytes);
+
 int htt_ipa_uc_attach(struct htt_pdev_t *pdev);
 
 void htt_ipa_uc_detach(struct htt_pdev_t *pdev);
@@ -340,6 +345,30 @@ static inline int htt_h2t_ipa_uc_get_stats(struct htt_pdev_t *pdev)
 }
 
 /**
+ * htt_h2t_ipa_uc_get_share_stats() - WDI UC wifi sharing state request to FW
+ * @pdev: handle to the HTT instance
+ *
+ * Return: 0 success
+ */
+static inline int htt_h2t_ipa_uc_get_share_stats(struct htt_pdev_t *pdev,
+						uint8_t reset_stats)
+{
+	return 0;
+}
+
+/**
+ * htt_h2t_ipa_uc_set_quota() - WDI UC set quota request to firmware
+ * @pdev: handle to the HTT instance
+ *
+ * Return: 0 success
+ */
+static inline int htt_h2t_ipa_uc_set_quota(struct htt_pdev_t *pdev,
+					   uint64_t quota_bytes)
+{
+	return 0;
+}
+
+/**
  * htt_ipa_uc_attach() - Allocate UC data path resources
  * @pdev: handle to the HTT instance
  *
@@ -384,5 +413,11 @@ static inline void htt_clear_bundle_stats(struct htt_pdev_t *pdev)
 #endif
 
 void htt_mark_first_wakeup_packet(htt_pdev_handle pdev, uint8_t value);
+typedef void (*tp_rx_pkt_dump_cb)(qdf_nbuf_t msdu, uint8_t peer_id,
+			uint8_t status);
+void htt_register_rx_pkt_dump_callback(struct htt_pdev_t *pdev,
+		tp_rx_pkt_dump_cb ol_rx_pkt_dump_call);
+void htt_deregister_rx_pkt_dump_callback(struct htt_pdev_t *pdev);
+void ol_rx_pkt_dump_call(qdf_nbuf_t msdu, uint8_t peer_id, uint8_t status);
 
 #endif /* _OL_HTT_API__H_ */

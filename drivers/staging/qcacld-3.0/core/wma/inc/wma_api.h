@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -47,26 +47,16 @@ typedef void *WMA_HANDLE;
  * enum GEN_PARAM - general parameters
  * @GEN_VDEV_PARAM_AMPDU: Set ampdu size
  * @GEN_VDEV_PARAM_AMSDU: Set amsdu size
- * @GEN_PARAM_DUMP_AGC_START: dump agc start
- * @GEN_PARAM_DUMP_AGC: dump agc
- * @GEN_PARAM_DUMP_CHANINFO_START: dump channel info start
- * @GEN_PARAM_DUMP_CHANINFO: dump channel info
  * @GEN_PARAM_CRASH_INJECT: inject crash
- * @GEN_PARAM_DUMP_PCIE_ACCESS_LOG: dump pcie access log
- * @GEN_PARAM_TX_CHAIN_MASK_CCK: cck tx chain mask
+ * @GEN_PARAM_MODULATED_DTIM: moduled dtim
+ * @GEN_PARAM_CAPTURE_TSF: read tsf
+ * @GEN_PARAM_RESET_TSF_GPIO: reset tsf gpio
+ * @GEN_VDEV_ROAM_SYNCH_DELAY: roam sync delay
  */
 typedef enum {
 	GEN_VDEV_PARAM_AMPDU = 0x1,
 	GEN_VDEV_PARAM_AMSDU,
-	GEN_PARAM_DUMP_AGC_START,
-	GEN_PARAM_DUMP_AGC,
-	GEN_PARAM_DUMP_CHANINFO_START,
-	GEN_PARAM_DUMP_CHANINFO,
-	GEN_PARAM_DUMP_WATCHDOG,
 	GEN_PARAM_CRASH_INJECT,
-#ifdef CONFIG_ATH_PCIE_ACCESS_DEBUG
-	GEN_PARAM_DUMP_PCIE_ACCESS_LOG,
-#endif
 	GEN_PARAM_MODULATED_DTIM,
 	GEN_PARAM_CAPTURE_TSF,
 	GEN_PARAM_RESET_TSF_GPIO,
@@ -100,10 +90,51 @@ struct wma_caps_per_phy {
 #define QPOWER_CMD 6
 #define GTX_CMD  7
 
+/**
+ * @DEBUG_PEER_CREATE_SEND: sent peer_create command to firmware
+ * @DEBUG_PEER_CREATE_RESP: received peer create response
+ * @DEBUG_PEER_DELETE_SEND: sent peer delete command to firmware
+ * @DEBUG_PEER_DELETE_RESP: received peer delete response
+ * @DEBUG_PEER_MAP_EVENT: received peer map event
+ * @DEBUG_PEER_UNMAP_EVENT: received peer unmap event
+ * @DEBUG_PEER_UNREF_DELETE: peer reference is decremented
+ * @DEBUG_DELETING_PEER_OBJ: peer object is deleted
+ * @DEBUG_ROAM_SYNCH_IND: received roam offload sync indication
+ * @DEBUG_ROAM_SYNCH_CNF: sent roam offload sync confirmation
+ * @DEBUG_ROAM_SYNCH_FAIL: received roam sync failure indication
+ * @DEBUG_ROAM_EVENT: received roam event
+ * @DEBUG_BUS_SUSPEND: host going into suspend mode
+ * @DEBUG_BUS_RESUME: host operation resumed
+ */
+
+enum peer_debug_op {
+	DEBUG_PEER_CREATE_SEND = 0,
+	DEBUG_PEER_CREATE_RESP,
+	DEBUG_PEER_DELETE_SEND,
+	DEBUG_PEER_DELETE_RESP,
+	DEBUG_PEER_MAP_EVENT,
+	DEBUG_PEER_UNMAP_EVENT,
+	DEBUG_PEER_UNREF_DELETE,
+	DEBUG_DELETING_PEER_OBJ,
+	DEBUG_ROAM_SYNCH_IND,
+	DEBUG_ROAM_SYNCH_CNF,
+	DEBUG_ROAM_SYNCH_FAIL,
+	DEBUG_ROAM_EVENT,
+	DEBUG_WOW_ROAM_EVENT,
+	DEBUG_BUS_SUSPEND,
+	DEBUG_BUS_RESUME,
+	DEBUG_WOW_REASON,
+};
+
+#define DEBUG_INVALID_PEER_ID 0xffff
+#define DEBUG_INVALID_VDEV_ID 0xff
+
 typedef void (*wma_peer_authorized_fp) (uint32_t vdev_id);
 
 
 QDF_STATUS wma_pre_start(void *cds_context);
+
+void wma_mc_discard_msg(cds_msg_t *msg);
 
 QDF_STATUS wma_mc_process_msg(void *cds_context, cds_msg_t *msg);
 
@@ -182,6 +213,9 @@ void wma_enable_disable_wakeup_event(WMA_HANDLE handle,
 void wma_register_wow_wakeup_events(WMA_HANDLE handle, uint8_t vdev_id,
 					uint8_t vdev_type, uint8_t sub_type);
 void wma_register_wow_default_patterns(WMA_HANDLE handle, uint8_t vdev_id);
+QDF_STATUS wma_register_action_frame_patterns(WMA_HANDLE handle,
+					uint8_t vdev_id);
+
 int8_t wma_get_hw_mode_idx_from_dbs_hw_list(enum hw_mode_ss_config mac0_ss,
 		enum hw_mode_bandwidth mac0_bw,
 		enum hw_mode_ss_config mac1_ss,
@@ -202,6 +236,9 @@ void wma_set_dbs_capability_ut(uint32_t dbs);
 QDF_STATUS wma_get_dbs_hw_modes(bool *one_by_one_dbs, bool *two_by_two_dbs);
 QDF_STATUS wma_get_current_hw_mode(struct sir_hw_mode_params *hw_mode);
 bool wma_is_dbs_enable(void);
+enum cds_hw_mode_change
+wma_get_cds_hw_mode_change_from_hw_mode_index(uint32_t hw_mode_index);
+
 QDF_STATUS wma_get_updated_scan_config(uint32_t *scan_config,
 		bool dbs_scan,
 		bool dbs_plus_agile_scan,
@@ -325,7 +362,17 @@ QDF_STATUS wma_set_cts2self_for_p2p_go(void *wma_handle,
 		uint32_t cts2self_for_p2p_go);
 QDF_STATUS wma_set_tx_rx_aggregation_size
 	(struct sir_set_tx_rx_aggregation_size *tx_rx_aggregation_size);
-
+/**
+ * wma_set_sar_limit() - set sar limits in the target
+ * @handle: wma handle
+ * @sar_limit_cmd_params: sar limit cmd params
+ *
+ *  This function sends WMI command to set SAR limits.
+ *
+ *  Return: QDF_STATUS enumeration
+ */
+QDF_STATUS wma_set_sar_limit(WMA_HANDLE handle,
+		struct sar_limit_cmd_params *sar_limit_params);
 /**
  * wma_set_qpower_config() - update qpower config in wma
  * @vdev_id:	the Id of the vdev to configure
@@ -334,4 +381,22 @@ QDF_STATUS wma_set_tx_rx_aggregation_size
  * Return: QDF_STATUS_SUCCESS on success, error number otherwise
  */
 QDF_STATUS wma_set_qpower_config(uint8_t vdev_id, uint8_t qpower);
+
+/**
+ * wma_peer_debug_log() - Add a debug log entry into peer debug records
+ * @vdev_id: vdev identifier
+ * @op: operation identifier
+ * @peer_id: peer id
+ * @mac_addr: mac address of peer, can be NULL
+ * @peer_obj: peer object address, can be NULL
+ * @arg1: extra argument #1
+ * @arg2: extra argument #2
+ *
+ * Return: none
+ */
+void wma_peer_debug_log(uint8_t vdev_id, uint8_t op,
+			uint16_t peer_id, void *mac_addr,
+			void *peer_obj, uint32_t val1, uint32_t val2);
+void wma_peer_debug_dump(void);
+
 #endif

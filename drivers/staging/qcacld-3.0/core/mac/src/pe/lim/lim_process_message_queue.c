@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -261,6 +261,7 @@ static void lim_process_set_default_scan_ie_request(tpAniSirGlobal mac_ctx,
 	uint16_t local_ie_len;
 	tSirMsgQ msg_q;
 	tSirRetStatus ret_code;
+	QDF_STATUS qdf_status;
 
 	if (!msg_buf) {
 		lim_log(mac_ctx, LOGE, FL("msg_buf is NULL"));
@@ -282,6 +283,13 @@ static void lim_process_set_default_scan_ie_request(tpAniSirGlobal mac_ctx,
 			local_ie_buf, &local_ie_len)) {
 		lim_log(mac_ctx, LOGE, FL("Update ext cap IEs fails"));
 		goto scan_ie_send_fail;
+	}
+
+	if (mac_ctx->roam.configParam.qcn_ie_support) {
+		qdf_status = lim_add_qcn_ie(mac_ctx, local_ie_buf,
+							&local_ie_len);
+		if (QDF_IS_STATUS_ERROR(qdf_status))
+			goto scan_ie_send_fail;
 	}
 
 	wma_ie_params = qdf_mem_malloc(sizeof(*wma_ie_params) + local_ie_len);
@@ -509,6 +517,8 @@ __lim_ext_scan_forward_bcn_probe_rsp(tpAniSirGlobal pmac, uint8_t *rx_pkt_info,
 	uint8_t                     *body;
 	tSirMsgQ                     mmh_msg;
 	tpSirMacMgmtHdr              hdr;
+	uint32_t frame_len;
+	tSirBssDescription *bssdescr;
 
 	result = qdf_mem_malloc(sizeof(*result) + ie_len);
 	if (NULL == result) {
@@ -541,6 +551,32 @@ __lim_ext_scan_forward_bcn_probe_rsp(tpAniSirGlobal pmac, uint8_t *rx_pkt_info,
 	/* Copy IE fields */
 	qdf_mem_copy((uint8_t *) &result->ap.ieData,
 			body + SIR_MAC_B_PR_SSID_OFFSET, ie_len);
+
+
+	frame_len = sizeof(*bssdescr) + ie_len - sizeof(bssdescr->ieFields[1]);
+	bssdescr = (tSirBssDescription *) qdf_mem_malloc(frame_len);
+
+	if (NULL == bssdescr) {
+		lim_log(pmac, LOGE,
+			FL("qdf_mem_malloc(length=%d) failed"), frame_len);
+		return;
+	}
+
+	qdf_mem_zero(bssdescr, frame_len);
+
+	lim_collect_bss_description(pmac, bssdescr, frame, rx_pkt_info, false);
+	/*
+	 * Send the beacon to CSR with registered callback routine.
+	 * scan_id and flags parameters are currently unused and set to 0.
+	 * EXT scan results will also be added to scan cache in SME
+	 */
+	if (pmac->lim.add_bssdescr_callback) {
+		(pmac->lim.add_bssdescr_callback) (pmac, bssdescr, 0, 0);
+	} else {
+		lim_log(pmac, LOGE,
+			FL("No CSR callback routine to send beacon/probe response"));
+	}
+	qdf_mem_free(bssdescr);
 
 	mmh_msg.type = msg_type;
 	mmh_msg.bodyptr = result;
@@ -1138,7 +1174,7 @@ end:
  * @param  pMac      Pointer to Global MAC structure
  * @return QDF_STATUS_SUCCESS or QDF_STATUS_E_FAILURE
  */
-QDF_STATUS lim_send_stop_scan_offload_req(tpAniSirGlobal pMac,
+static QDF_STATUS lim_send_stop_scan_offload_req(tpAniSirGlobal pMac,
 	uint8_t SessionId, uint32_t scan_id, uint32_t scan_requestor_id)
 {
 	tSirMsgQ msg;
@@ -1283,8 +1319,9 @@ static void lim_process_messages(tpAniSirGlobal mac_ctx, tpSirMsgQ msg)
 	 * SME enums (eWNI_SME_START_REQ) starts with 0x16xx.
 	 * Compare received SME events with SIR_SME_MODULE_ID
 	 */
-	if (SIR_SME_MODULE_ID ==
-	    (uint8_t)MAC_TRACE_GET_MODULE_ID(msg->type)) {
+	if ((SIR_SME_MODULE_ID ==
+	    (uint8_t)MAC_TRACE_GET_MODULE_ID(msg->type)) &&
+	    (msg->type != eWNI_SME_REGISTER_MGMT_FRAME_REQ)) {
 		MTRACE(mac_trace(mac_ctx, TRACE_CODE_RX_SME_MSG,
 				 NO_SESSION, msg->type));
 	} else {
@@ -1294,7 +1331,8 @@ static void lim_process_messages(tpAniSirGlobal mac_ctx, tpSirMsgQ msg)
 		 * if these are also logged
 		 */
 		if (msg->type != SIR_CFG_PARAM_UPDATE_IND &&
-		    msg->type != SIR_BB_XPORT_MGMT_MSG)
+		    msg->type != SIR_BB_XPORT_MGMT_MSG &&
+		    msg->type != WMA_RX_SCAN_EVENT)
 			MTRACE(mac_trace_msg_rx(mac_ctx, NO_SESSION,
 				LIM_TRACE_MAKE_RXMSG(msg->type,
 				LIM_MSG_PROCESSED));)
@@ -1356,6 +1394,7 @@ static void lim_process_messages(tpAniSirGlobal mac_ctx, tpSirMsgQ msg)
 			(void **) &new_msg.bodyptr, false);
 
 		if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
+			lim_decrement_pending_mgmt_count(mac_ctx);
 			cds_pkt_return_packet(body_ptr);
 			break;
 		}
@@ -1377,15 +1416,18 @@ static void lim_process_messages(tpAniSirGlobal mac_ctx, tpSirMsgQ msg)
 				QDF_TRACE(QDF_MODULE_ID_PE, LOGE,
 						FL("Unable to Defer Msg"));
 				lim_log_session_states(mac_ctx);
+				lim_decrement_pending_mgmt_count(mac_ctx);
 				cds_pkt_return_packet(body_ptr);
 			}
-		} else
+		} else {
 			/* PE is not deferring this 802.11 frame so we need to
 			 * call cds_pkt_return. Asumption here is when Rx mgmt
 			 * frame processing is done, cds packet could be
 			 * freed here.
 			 */
+			lim_decrement_pending_mgmt_count(mac_ctx);
 			cds_pkt_return_packet(body_ptr);
+		}
 		break;
 	case eWNI_SME_SCAN_REQ:
 	case eWNI_SME_REMAIN_ON_CHANNEL_REQ:
@@ -1932,6 +1974,11 @@ static void lim_process_messages(tpAniSirGlobal mac_ctx, tpSirMsgQ msg)
 		break;
 	case eWNI_SME_DEFAULT_SCAN_IE:
 		lim_process_set_default_scan_ie_request(mac_ctx, msg->bodyptr);
+		qdf_mem_free((void *)msg->bodyptr);
+		msg->bodyptr = NULL;
+		break;
+	case eWNI_SME_DEL_ALL_TDLS_PEERS:
+		lim_process_sme_del_all_tdls_peers(mac_ctx, msg->bodyptr);
 		qdf_mem_free((void *)msg->bodyptr);
 		msg->bodyptr = NULL;
 		break;

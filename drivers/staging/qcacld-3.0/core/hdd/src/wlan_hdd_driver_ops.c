@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -24,9 +24,6 @@
  * under proprietary terms before Copyright ownership was assigned
  * to the Linux Foundation.
  */
-
-/* denote that this file does not allow legacy hddLog */
-#define HDD_DISALLOW_LEGACY_HDDLOG 1
 
 #include <linux/platform_device.h>
 #include <linux/pci.h>
@@ -424,8 +421,34 @@ static void wlan_hdd_remove(struct device *dev)
 		__hdd_wlan_exit();
 	}
 
+	cds_set_unload_in_progress(false);
+
 	pr_info("%s: Driver De-initialized\n", WLAN_MODULE_NAME);
 }
+
+#ifdef FEATURE_WLAN_DIAG_SUPPORT
+/**
+ * hdd_wlan_ssr_shutdown_event()- send ssr shutdown state
+ *
+ * This Function send send ssr shutdown state diag event
+ *
+ * Return: void.
+ */
+static void hdd_wlan_ssr_shutdown_event(void)
+{
+	WLAN_HOST_DIAG_EVENT_DEF(ssr_shutdown,
+					struct host_event_wlan_ssr_shutdown);
+	qdf_mem_zero(&ssr_shutdown, sizeof(ssr_shutdown));
+	ssr_shutdown.status = SSR_SUB_SYSTEM_SHUTDOWN;
+	WLAN_HOST_DIAG_EVENT_REPORT(&ssr_shutdown,
+					EVENT_WLAN_SSR_SHUTDOWN_SUBSYSTEM);
+}
+#else
+static inline void hdd_wlan_ssr_shutdown_event(void)
+{
+
+};
+#endif
 
 /**
  * wlan_hdd_shutdown() - wlan_hdd_shutdown
@@ -440,11 +463,12 @@ static void wlan_hdd_shutdown(void)
 	void *hif_ctx = cds_get_context(QDF_MODULE_ID_HIF);
 
 	if (cds_is_load_or_unload_in_progress()) {
-		hdd_err("Load/unload in progress, ignore SSR shutdown");
+		hdd_warn("Load/unload in progress, ignore SSR shutdown");
 		return;
 	}
 	/* this is for cases, where shutdown invoked from platform */
 	cds_set_recovery_in_progress(true);
+	hdd_wlan_ssr_shutdown_event();
 
 	if (!cds_wait_for_external_threads_completion(__func__))
 		hdd_err("Host is not ready for SSR, attempting anyway");
@@ -492,6 +516,18 @@ static void wlan_hdd_notify_handler(int state)
 }
 
 /**
+ * wlan_hdd_update_status() - update driver status
+ * @status: driver status
+ *
+ * Return: void
+ */
+static void wlan_hdd_update_status(uint32_t status)
+{
+	if (status == PLD_RECOVERY)
+		cds_set_recovery_in_progress(true);
+}
+
+/**
  * __wlan_hdd_bus_suspend() - handles platform supsend
  * @state: suspend message from the kernel
  * @wow_flags: bitmap of WMI WOW flags to pass to FW
@@ -510,42 +546,62 @@ static int __wlan_hdd_bus_suspend(pm_message_t state, uint32_t wow_flags)
 {
 	hdd_context_t *hdd_ctx = cds_get_context(QDF_MODULE_ID_HDD);
 	void *hif_ctx;
-	int err = wlan_hdd_validate_context(hdd_ctx);
+	int err;
 	int status;
 
-	hdd_info("event %d", state.event);
+	hdd_info("starting bus suspend; event:%d, flags:%u",
+		 state.event, wow_flags);
 
-	if (err)
+	err = wlan_hdd_validate_context(hdd_ctx);
+	if (err) {
+		hdd_err("Invalid hdd context");
 		goto done;
+	}
 
 	if (hdd_ctx->driver_status != DRIVER_MODULES_ENABLED) {
-		hdd_info("Driver Module closed return success");
+		hdd_info("Driver Module closed; return success");
 		return 0;
 	}
 
 	hif_ctx = cds_get_context(QDF_MODULE_ID_HIF);
 	if (NULL == hif_ctx) {
+		hdd_err("Failed to get hif context");
 		err = -EINVAL;
 		goto done;
 	}
 
 	err = qdf_status_to_os_return(ol_txrx_bus_suspend());
-	if (err)
+	if (err) {
+		hdd_err("Failed tx/rx bus suspend");
 		goto done;
+	}
+
+	err = hif_bus_early_suspend(hif_ctx);
+	if (err) {
+		hdd_err("Failed hif bus early suspend");
+		goto resume_oltxrx;
+	}
 
 	err = wma_bus_suspend(wow_flags);
-	if (err)
-		goto resume_oltxrx;
+	if (err) {
+		hdd_err("Failed wma bus suspend");
+		goto late_hif_resume;
+	}
 
 	err = hif_bus_suspend(hif_ctx);
-	if (err)
+	if (err) {
+		hdd_err("Failed hif bus suspend");
 		goto resume_wma;
+	}
 
-	hdd_info("suspend done");
+	hdd_info("bus suspend succeeded");
 	return 0;
 
 resume_wma:
 	status = wma_bus_resume();
+	QDF_BUG(!status);
+late_hif_resume:
+	status = hif_bus_late_resume(hif_ctx);
 	QDF_BUG(!status);
 resume_oltxrx:
 	status = ol_txrx_bus_resume();
@@ -622,6 +678,8 @@ static int __wlan_hdd_bus_suspend_noirq(void)
 	if (err)
 		goto resume_hif_noirq;
 
+	hdd_ctx->suspend_resume_stats.suspends++;
+
 	hdd_info("suspend_noirq done");
 	return 0;
 
@@ -674,34 +732,51 @@ static int __wlan_hdd_bus_resume(void)
 	if (cds_is_driver_recovering())
 		return 0;
 
+	hdd_info("starting bus resume");
+
 	status = wlan_hdd_validate_context(hdd_ctx);
-	if (status)
+	if (status) {
+		hdd_err("Invalid hdd context");
 		return status;
+	}
 
 	if (hdd_ctx->driver_status != DRIVER_MODULES_ENABLED) {
-		hdd_info("Driver Module closed return success");
+		hdd_info("Driver Module closed; return success");
 		return 0;
 	}
 
 	hif_ctx = cds_get_context(QDF_MODULE_ID_HIF);
-	if (NULL == hif_ctx)
+	if (NULL == hif_ctx) {
+		hdd_err("Failed to get hif context");
 		return -EINVAL;
+	}
 
 	status = hif_bus_resume(hif_ctx);
-	if (status)
+	if (status) {
+		hdd_err("Failed hif bus resume");
 		goto out;
+	}
 
 	status = wma_bus_resume();
-	if (status)
+	if (status) {
+		hdd_err("Failed wma bus resume");
 		goto out;
+	}
+
+	status = hif_bus_late_resume(hif_ctx);
+	if (status) {
+		hdd_err("Failed hif bus late resume");
+		goto out;
+	}
 
 	qdf_status = ol_txrx_bus_resume();
 	status = qdf_status_to_os_return(qdf_status);
-	if (status)
+	if (status) {
+		hdd_err("Failed tx/rx bus resume");
 		goto out;
+	}
 
-	hdd_info("resume done");
-
+	hdd_info("bus resume succeeded");
 	return 0;
 
 out:
@@ -1114,6 +1189,18 @@ static void wlan_hdd_pld_notify_handler(struct device *dev,
 	wlan_hdd_notify_handler(state);
 }
 
+/**
+ * wlan_hdd_pld_update_status() - update driver status
+ * @dev: device
+ * @status: driver status
+ *
+ * Return: void
+ */
+static void wlan_hdd_pld_update_status(struct device *dev, uint32_t status)
+{
+	wlan_hdd_update_status(status);
+}
+
 #ifdef FEATURE_RUNTIME_PM
 /**
  * wlan_hdd_pld_runtime_suspend() - runtime suspend function registered to PLD
@@ -1154,6 +1241,7 @@ struct pld_driver_ops wlan_drv_ops = {
 	.resume_noirq  = wlan_hdd_pld_resume_noirq,
 	.reset_resume = wlan_hdd_pld_reset_resume,
 	.modem_status = wlan_hdd_pld_notify_handler,
+	.update_status = wlan_hdd_pld_update_status,
 #ifdef FEATURE_RUNTIME_PM
 	.runtime_suspend = wlan_hdd_pld_runtime_suspend,
 	.runtime_resume = wlan_hdd_pld_runtime_resume,

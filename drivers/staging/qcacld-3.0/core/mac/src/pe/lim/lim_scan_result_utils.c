@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -115,7 +115,7 @@ lim_collect_bss_description(tpAniSirGlobal pMac,
 		     (uint8_t *) pHdr->bssId, sizeof(tSirMacAddr));
 
 	/* Copy Timestamp, Beacon Interval and Capability Info */
-	pBssDescr->scanSysTimeMsec = qdf_mc_timer_get_system_time();
+	pBssDescr->scansystimensec = qdf_get_monotonic_boottime_ns();
 
 	pBssDescr->timeStamp[0] = pBPR->timeStamp[0];
 	pBssDescr->timeStamp[1] = pBPR->timeStamp[1];
@@ -228,6 +228,7 @@ lim_collect_bss_description(tpAniSirGlobal pMac,
 	lim_log(pMac, LOG3,
 		FL("Collected BSS Description for Channel(%1d), length(%u), IE Fields(%u)"),
 		pBssDescr->channelId, pBssDescr->length, ieLen);
+	pMac->lim.beacon_probe_rsp_cnt_per_scan++;
 
 	return;
 } /*** end lim_collect_bss_description() ***/

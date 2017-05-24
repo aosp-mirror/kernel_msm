@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -88,6 +88,8 @@
 /* TXRX Histogram defines */
 #define TXRX_DATA_HISTROGRAM_GRANULARITY      1000
 #define TXRX_DATA_HISTROGRAM_NUM_INTERVALS    100
+
+#define OL_TXRX_INVALID_VDEV_ID		(-1)
 
 struct ol_txrx_pdev_t;
 struct ol_txrx_vdev_t;
@@ -188,9 +190,11 @@ struct ol_tx_desc_t {
 	 * This field is filled in with the ol_tx_frm_type enum.
 	 */
 	uint8_t pkt_type;
-#if defined(CONFIG_HL_SUPPORT)
+
+	u_int8_t vdev_id;
+
 	struct ol_txrx_vdev_t *vdev;
-#endif
+
 	void *txq;
 
 #ifdef QCA_SUPPORT_SW_TXRX_ENCAP
@@ -203,6 +207,7 @@ struct ol_tx_desc_t {
 	struct ol_tx_flow_pool_t *pool;
 #endif
 	void *tso_desc;
+	void *tso_num_desc;
 };
 
 typedef TAILQ_HEAD(some_struct_name, ol_tx_desc_t) ol_tx_desc_list;
@@ -470,6 +475,7 @@ struct ol_txrx_pool_stats {
  * @start_th: start threshold
  * @freelist: tx descriptor freelist
  * @pkt_drop_no_desc: drop due to no descriptors
+ * @ref_cnt: pool's ref count
  */
 struct ol_tx_flow_pool_t {
 	TAILQ_ENTRY(ol_tx_flow_pool_t) flow_pool_list_elem;
@@ -485,6 +491,7 @@ struct ol_tx_flow_pool_t {
 	uint16_t start_th;
 	union ol_tx_desc_list_elem_t *freelist;
 	uint16_t pkt_drop_no_desc;
+	qdf_atomic_t ref_cnt;
 };
 
 #endif
@@ -667,6 +674,10 @@ struct ol_txrx_pdev_t {
 			void *ctxt;
 		} callbacks[OL_TXRX_MGMT_NUM_TYPES];
 	} tx_mgmt;
+
+	/* packetdump callback functions */
+	tp_ol_packetdump_cb ol_tx_packetdump_cb;
+	tp_ol_packetdump_cb ol_rx_packetdump_cb;
 
 	struct {
 		uint16_t pool_size;
@@ -914,6 +925,13 @@ struct ol_txrx_pdev_t {
 		/* tso mutex */
 		OL_TX_MUTEX_TYPE tso_mutex;
 	} tso_seg_pool;
+	struct {
+		uint16_t num_seg_pool_size;
+		uint16_t num_free;
+		struct qdf_tso_num_seg_elem_t *freelist;
+		/* tso mutex */
+		OL_TX_MUTEX_TYPE tso_num_seg_mutex;
+	} tso_num_seg_pool;
 #endif
 
 #if defined(CONFIG_HL_SUPPORT) && defined(QCA_BAD_PEER_TX_FLOW_CL)
@@ -950,7 +968,6 @@ struct ol_txrx_pdev_t {
 
 	struct {
 		void (*lro_flush_cb)(void *);
-		qdf_atomic_t lro_dev_cnt;
 	} lro_info;
 	struct ol_txrx_peer_t *self_peer;
 };
@@ -1116,6 +1133,29 @@ typedef A_STATUS (*ol_tx_filter_func)(struct ol_txrx_msdu_info_t *
 #define OL_TXRX_PEER_SECURITY_UNICAST    1
 #define OL_TXRX_PEER_SECURITY_MAX        2
 
+/* Allow 6000 ms to receive peer unmap events after peer is deleted */
+#define OL_TXRX_PEER_UNMAP_TIMEOUT (6000)
+
+struct ol_txrx_cached_bufq_t {
+	/* cached_bufq is used to enqueue the pending RX frames from a peer
+	 * before the peer is registered for data service. The list will be
+	 * flushed to HDD once that station is registered.
+	 */
+	struct list_head cached_bufq;
+	/* mutual exclusion lock to access the cached_bufq queue */
+	qdf_spinlock_t bufq_lock;
+	/* # entries in queue after which  subsequent adds will be dropped */
+	uint32_t thresh;
+	/* # entries in present in cached_bufq */
+	uint32_t curr;
+	/* # max num of entries in the queue if bufq thresh was not in place */
+	uint32_t high_water_mark;
+	/* # max num of entries in the queue if we did not drop packets */
+	uint32_t qdepth_no_thresh;
+	/* # of packes (beyond threshold) dropped from cached_bufq */
+	uint32_t dropped;
+};
+
 struct ol_txrx_peer_t {
 	struct ol_txrx_vdev_t *vdev;
 
@@ -1134,8 +1174,9 @@ struct ol_txrx_peer_t {
 	 */
 	enum ol_txrx_peer_state state;
 	qdf_spinlock_t peer_info_lock;
-	qdf_spinlock_t bufq_lock;
-	struct list_head cached_bufq;
+
+	/* Wrapper around the cached_bufq list */
+	struct ol_txrx_cached_bufq_t bufq_info;
 
 	ol_tx_filter_func tx_filter;
 
@@ -1224,6 +1265,8 @@ struct ol_txrx_peer_t {
 	qdf_time_t last_assoc_rcvd;
 	qdf_time_t last_disassoc_rcvd;
 	qdf_time_t last_deauth_rcvd;
+	qdf_atomic_t fw_create_pending;
+	qdf_timer_t peer_unmap_timer;
 };
 
 enum ol_rx_err_type {

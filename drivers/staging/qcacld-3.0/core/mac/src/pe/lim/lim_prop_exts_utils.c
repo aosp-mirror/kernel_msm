@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -270,7 +270,7 @@ lim_extract_ap_capability(tpAniSirGlobal mac_ctx, uint8_t *p_ie,
 				session->ch_center_freq_seg1 = 0;
 		}
 		session->ch_width = vht_ch_wd + 1;
-		lim_log(mac_ctx, LOGE, FL(
+		lim_log(mac_ctx, LOG1, FL(
 				"cntr_freq0 %d, cntr_freq1 %d, width %d"),
 				session->ch_center_freq_seg0,
 				session->ch_center_freq_seg1,

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2014,2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -411,7 +411,7 @@ QDF_STATUS lim_p2p_action_cnf(tpAniSirGlobal pMac, uint32_t tx_status)
 {
 	QDF_STATUS status;
 	uint32_t mgmt_frame_sessionId;
-	bool tx_complete_ack = (tx_status) ? false : true;
+	bool tx_complete_ack = (tx_status) ? true : false;
 
 	status = pe_acquire_global_lock(&pMac->lim);
 	if (QDF_IS_STATUS_SUCCESS(status)) {
@@ -727,13 +727,6 @@ void lim_send_p2p_action_frame(tpAniSirGlobal mac_ctx,
 
 	lim_tx_action_frame(mac_ctx, mb_msg, msg_len, packet, frame);
 	return;
-}
-
-void lim_abort_remain_on_chan(tpAniSirGlobal pMac, uint8_t sessionId,
-	uint32_t scan_id)
-{
-	lim_process_abort_scan_ind(pMac, sessionId, scan_id,
-		ROC_SCAN_REQUESTOR_ID);
 }
 
 /* Power Save Related Functions */

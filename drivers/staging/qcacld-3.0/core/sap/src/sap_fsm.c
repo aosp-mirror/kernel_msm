@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -1279,6 +1279,37 @@ bool sap_check_in_avoid_ch_list(ptSapContext sap_ctx, uint8_t channel)
 #endif /* FEATURE_AP_MCC_CH_AVOIDANCE */
 
 /**
+ * sap_is_valid_acs_channel() - checks if given channel is in acs channel range
+ * @sap_ctx: sap context.
+ * @channel: channel to be checked in acs range
+ *
+ * Return: true, if channel is valid, false otherwise.
+ */
+static bool sap_is_valid_acs_channel(ptSapContext sap_ctx, uint8_t channel)
+{
+	int i = 0;
+
+	/* Check whether acs is enabled */
+	if (!sap_ctx->acs_cfg->acs_mode)
+		return true;
+
+	if ((channel < sap_ctx->acs_cfg->start_ch) ||
+			(channel > sap_ctx->acs_cfg->end_ch)) {
+		return false;
+	}
+	if (!sap_ctx->acs_cfg->ch_list) {
+		/* List not present, return */
+		return true;
+	} else {
+		for (i = 0; i < sap_ctx->acs_cfg->ch_list_count; i++)
+			if (channel == sap_ctx->acs_cfg->ch_list[i])
+				return true;
+	}
+
+	return false;
+}
+
+/**
  * sap_apply_rules() - validates channels in sap_ctx channel list
  * @sap_ctx: sap context pointer
  *
@@ -1297,7 +1328,7 @@ static uint8_t sap_apply_rules(ptSapContext sap_ctx)
 	uint8_t num_valid_ch, i = 0, ch_id;
 	tAll5GChannelList *sap_all_ch = &sap_ctx->SapAllChnlList;
 	bool is_ch_nol = false;
-	bool is_out_of_range = false;
+	bool is_valid_acs_chan = false;
 	tpAniSirGlobal mac_ctx;
 	tHalHandle hal = CDS_GET_HAL_CB(sap_ctx->p_cds_gctx);
 	uint8_t preferred_location;
@@ -1408,15 +1439,16 @@ static uint8_t sap_apply_rules(ptSapContext sap_ctx)
 #endif /* FEATURE_AP_MCC_CH_AVOIDANCE */
 
 		/* check if the channel is within ACS channel range */
-		is_out_of_range = sap_acs_channel_check(sap_ctx, ch_id);
-		if (true == is_out_of_range) {
+		is_valid_acs_chan = sap_is_valid_acs_channel(sap_ctx, ch_id);
+		if (is_valid_acs_chan == false) {
 			/*
 			 * mark this channel invalid since it is out of ACS
 			 * channel range
 			 */
 			QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_LOW,
-				  FL("index: %d, Channel = %d out of ACS channel range"),
-				  i, ch_id);
+				  FL("index=%d, Channel=%d out of ACS chan range %d-%d"),
+				  i, ch_id, sap_ctx->acs_cfg->start_ch,
+				  sap_ctx->acs_cfg->end_ch);
 			sap_all_ch->channelList[i].valid = false;
 			num_valid_ch--;
 			continue;
@@ -1788,26 +1820,6 @@ static uint8_t sap_random_channel_sel(ptSapContext sap_ctx)
 		FL("sapdfs: target_channel = %d"),
 		target_channel);
 	return target_channel;
-}
-
-bool sap_acs_channel_check(ptSapContext sapContext, uint8_t channelNumber)
-{
-	int i = 0;
-	if (!sapContext->acs_cfg->acs_mode)
-		return false;
-
-	if ((channelNumber >= sapContext->acs_cfg->start_ch) &&
-		(channelNumber <= sapContext->acs_cfg->end_ch)) {
-		if (!sapContext->acs_cfg->ch_list) {
-			return false;
-		} else {
-			for (i = 0; i < sapContext->acs_cfg->ch_list_count; i++)
-				if (channelNumber ==
-						sapContext->acs_cfg->ch_list[i])
-					return false;
-		}
-	}
-	return true;
 }
 
 /**
@@ -2497,8 +2509,6 @@ QDF_STATUS sap_goto_channel_sel(ptSapContext sap_context,
  *
  * Return: QDF_STATUS
  */
-
-#define SAP_OPEN_SESSION_TIMEOUT 2000
 QDF_STATUS sap_open_session(tHalHandle hHal, ptSapContext sapContext,
 			    uint32_t *session_id)
 {
@@ -2535,10 +2545,11 @@ QDF_STATUS sap_open_session(tHalHandle hHal, ptSapContext sapContext,
 	}
 
 	status = qdf_wait_single_event(&sapContext->sap_session_opened_evt,
-				       SAP_OPEN_SESSION_TIMEOUT);
+					SME_CMD_TIMEOUT_VALUE);
 
 	if (!QDF_IS_STATUS_SUCCESS(status)) {
-		cds_err("wait for sap open session event timed out");
+		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_ERROR,
+			"wait for sap open session event timed out");
 		return QDF_STATUS_E_FAILURE;
 	}
 
@@ -2666,7 +2677,7 @@ static QDF_STATUS sap_goto_disconnecting(ptSapContext sapContext)
 	return QDF_STATUS_SUCCESS;
 }
 
-static QDF_STATUS sap_roam_session_close_callback(void *pContext)
+QDF_STATUS sap_roam_session_close_callback(void *pContext)
 {
 	ptSapContext sapContext = (ptSapContext) pContext;
 	QDF_STATUS status;
@@ -3124,6 +3135,15 @@ QDF_STATUS sap_signal_hdd_event(ptSapContext sap_ctx,
 		sap_ap_event.sapHddEventCode = eSAP_ECSA_CHANGE_CHAN_IND;
 		sap_ap_event.sapevt.sap_chan_cng_ind.new_chan =
 					   csr_roaminfo->target_channel;
+		break;
+	case eSAP_UPDATE_SCAN_RESULT:
+		if (!csr_roaminfo) {
+			QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_ERROR,
+				  FL("Invalid CSR Roam Info"));
+			return QDF_STATUS_E_INVAL;
+		}
+		sap_ap_event.sapHddEventCode = eSAP_UPDATE_SCAN_RESULT;
+		sap_ap_event.sapevt.bss_desc = csr_roaminfo->pBssDesc;
 		break;
 	default:
 		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_ERROR,
@@ -3757,6 +3777,8 @@ static QDF_STATUS sap_fsm_state_ch_select(ptSapContext sap_ctx,
 		sap_ctx->sapsMachine = eSAP_DISCONNECTED;
 		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_ERROR,
 		FL("Cannot start BSS, ACS Fail"));
+		sap_signal_hdd_event(sap_ctx, NULL, eSAP_START_BSS_EVENT,
+					(void *)eSAP_STATUS_FAILURE);
 	} else if (msg == eSAP_HDD_STOP_INFRA_BSS) {
 		sap_ctx->sapsMachine = eSAP_DISCONNECTED;
 		sap_signal_hdd_event(sap_ctx, NULL, eSAP_START_BSS_EVENT,
@@ -4481,7 +4503,7 @@ void sap_add_mac_to_acl(struct qdf_mac_addr *macList,
 	QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_HIGH,
 		  "add acl entered");
 
-	if (NULL == macList || *size == 0 || *size > MAX_ACL_MAC_ADDRESS) {
+	if (NULL == macList || *size > MAX_ACL_MAC_ADDRESS) {
 		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_HIGH,
 			FL("either buffer is NULL or size = %d is incorrect."),
 			*size);
@@ -4817,7 +4839,8 @@ static QDF_STATUS sap_get_5ghz_channel_list(ptSapContext sapContext)
 				QDF_ARRAY_SIZE(pcl.weight_list));
 	}
 	if (status != QDF_STATUS_SUCCESS) {
-		cds_err("Get PCL failed");
+		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_ERROR,
+				"Get PCL failed");
 		return status;
 	}
 	for (i = 0; i <= pcl.pcl_len; i++) {

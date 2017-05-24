@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -857,6 +857,7 @@ wlansap_roam_callback(void *ctx, tCsrRoamInfo *csr_roam_info, uint32_t roamId,
 	if (!hal) {
 		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_ERROR,
 			  FL("Invalid handle"));
+		wlansap_context_put(sap_ctx);
 		return QDF_STATUS_E_NOMEM;
 	}
 
@@ -1024,11 +1025,12 @@ wlansap_roam_callback(void *ctx, tCsrRoamInfo *csr_roam_info, uint32_t roamId,
 		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_HIGH,
 				FL("Received set channel Indication"));
 		break;
+	case eCSR_ROAM_UPDATE_SCAN_RESULT:
+		sap_signal_hdd_event(sap_ctx, csr_roam_info,
+				     eSAP_UPDATE_SCAN_RESULT,
+				     (void *) eSAP_STATUS_SUCCESS);
+		break;
 	default:
-		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_ERROR,
-			  FL("CSR roam_status not handled roam_status = %s (%d)"),
-			  get_e_roam_cmd_status_str(roam_status),
-			  roam_status);
 		break;
 	}
 

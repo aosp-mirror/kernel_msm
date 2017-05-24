@@ -82,7 +82,7 @@ ol_tx_register_global_mgmt_pool(struct ol_txrx_pdev_t *pdev)
 static void
 ol_tx_deregister_global_mgmt_pool(struct ol_txrx_pdev_t *pdev)
 {
-	ol_tx_delete_flow_pool(pdev->mgmt_pool, false);
+	ol_tx_dec_pool_ref(pdev->mgmt_pool, false);
 	return;
 }
 #else
@@ -137,11 +137,149 @@ void ol_tx_deregister_flow_control(struct ol_txrx_pdev_t *pdev)
 			"flow pool list is not empty %d!!!\n", i++);
 		if (i == 1)
 			ol_tx_dump_flow_pool_info();
-		ol_tx_delete_flow_pool(pool, true);
+		ol_tx_dec_pool_ref(pool, true);
 		qdf_spin_lock_bh(&pdev->tx_desc.flow_pool_list_lock);
 	}
 	qdf_spin_unlock_bh(&pdev->tx_desc.flow_pool_list_lock);
 	qdf_spinlock_destroy(&pdev->tx_desc.flow_pool_list_lock);
+}
+
+/**
+ * ol_tx_delete_flow_pool() - delete flow pool
+ * @pool: flow pool pointer
+ * @force: free pool forcefully
+ *
+ * Delete flow_pool if all tx descriptors are available.
+ * Otherwise put it in FLOW_POOL_INVALID state.
+ * If force is set then pull all available descriptors to
+ * global pool.
+ *
+ * Return: 0 for success or error
+ */
+static int ol_tx_delete_flow_pool(struct ol_tx_flow_pool_t *pool, bool force)
+{
+	struct ol_txrx_pdev_t *pdev = cds_get_context(QDF_MODULE_ID_TXRX);
+	uint16_t i, size;
+	union ol_tx_desc_list_elem_t *temp_list = NULL;
+	struct ol_tx_desc_t *tx_desc = NULL;
+
+	if (!pool) {
+		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+		   "%s: pool is NULL\n", __func__);
+		QDF_ASSERT(0);
+		return -ENOMEM;
+	}
+	if (!pdev) {
+		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+		   "%s: pdev is NULL\n", __func__);
+		QDF_ASSERT(0);
+		return -ENOMEM;
+	}
+
+	qdf_spin_lock_bh(&pool->flow_pool_lock);
+	if (pool->avail_desc == pool->flow_pool_size || force == true)
+		pool->status = FLOW_POOL_INACTIVE;
+	else
+		pool->status = FLOW_POOL_INVALID;
+
+	/* Take all free descriptors and put it in temp_list */
+	temp_list = pool->freelist;
+	size = pool->avail_desc;
+	pool->freelist = NULL;
+	pool->avail_desc = 0;
+
+	if (pool->status == FLOW_POOL_INACTIVE) {
+		qdf_spin_unlock_bh(&pool->flow_pool_lock);
+		/* Free flow_pool */
+		qdf_spinlock_destroy(&pool->flow_pool_lock);
+		qdf_mem_free(pool);
+	} else { /* FLOW_POOL_INVALID case*/
+		pool->flow_pool_size -= size;
+		pool->flow_pool_id = INVALID_FLOW_ID;
+		qdf_spin_unlock_bh(&pool->flow_pool_lock);
+		ol_tx_inc_pool_ref(pool);
+
+		pdev->tx_desc.num_invalid_bin++;
+		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+			"%s: invalid pool created %d\n",
+			 __func__, pdev->tx_desc.num_invalid_bin);
+		if (pdev->tx_desc.num_invalid_bin > MAX_INVALID_BIN)
+			ASSERT(0);
+
+		qdf_spin_lock_bh(&pdev->tx_desc.flow_pool_list_lock);
+		TAILQ_INSERT_TAIL(&pdev->tx_desc.flow_pool_list, pool,
+				 flow_pool_list_elem);
+		qdf_spin_unlock_bh(&pdev->tx_desc.flow_pool_list_lock);
+	}
+
+	/* put free descriptors to global pool */
+	qdf_spin_lock_bh(&pdev->tx_mutex);
+	for (i = 0; i < size; i++) {
+		tx_desc = &temp_list->tx_desc;
+		temp_list = temp_list->next;
+
+		ol_tx_put_desc_global_pool(pdev, tx_desc);
+	}
+	qdf_spin_unlock_bh(&pdev->tx_mutex);
+
+	return 0;
+}
+
+QDF_STATUS ol_tx_inc_pool_ref(struct ol_tx_flow_pool_t *pool)
+{
+	if (!pool) {
+		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+			   "%s: flow pool is NULL", __func__);
+		return QDF_STATUS_E_INVAL;
+	}
+
+	qdf_spin_lock_bh(&pool->flow_pool_lock);
+	qdf_atomic_inc(&pool->ref_cnt);
+	qdf_spin_unlock_bh(&pool->flow_pool_lock);
+	TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+			"%s: pool %p, ref_cnt %x", __func__,
+			pool, qdf_atomic_read(&pool->ref_cnt));
+
+	return  QDF_STATUS_SUCCESS;
+}
+
+QDF_STATUS ol_tx_dec_pool_ref(struct ol_tx_flow_pool_t *pool, bool force)
+{
+	struct ol_txrx_pdev_t *pdev = cds_get_context(QDF_MODULE_ID_TXRX);
+
+	if (!pool) {
+		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+			"%s: flow pool is NULL", __func__);
+		QDF_ASSERT(0);
+		return QDF_STATUS_E_INVAL;
+	}
+
+	if (!pdev) {
+		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+			"%s: pdev is NULL", __func__);
+		QDF_ASSERT(0);
+		return QDF_STATUS_E_INVAL;
+	}
+
+	qdf_spin_lock_bh(&pdev->tx_desc.flow_pool_list_lock);
+	qdf_spin_lock_bh(&pool->flow_pool_lock);
+	if (qdf_atomic_dec_and_test(&pool->ref_cnt)) {
+		qdf_spin_unlock_bh(&pool->flow_pool_lock);
+		TAILQ_REMOVE(&pdev->tx_desc.flow_pool_list, pool,
+			     flow_pool_list_elem);
+		qdf_spin_unlock_bh(&pdev->tx_desc.flow_pool_list_lock);
+		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+			"%s: Deleting pool %p", __func__, pool);
+		ol_tx_delete_flow_pool(pool, force);
+	} else {
+		qdf_spin_unlock_bh(&pool->flow_pool_lock);
+		qdf_spin_unlock_bh(&pdev->tx_desc.flow_pool_list_lock);
+		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+			"%s: pool %p, ref_cnt %x",
+			__func__, pool, qdf_atomic_read(&pool->ref_cnt));
+	}
+
+	return  QDF_STATUS_SUCCESS;
 }
 
 /**
@@ -152,7 +290,7 @@ void ol_tx_deregister_flow_control(struct ol_txrx_pdev_t *pdev)
 void ol_tx_dump_flow_pool_info(void)
 {
 	struct ol_txrx_pdev_t *pdev = cds_get_context(QDF_MODULE_ID_TXRX);
-	struct ol_tx_flow_pool_t *pool = NULL;
+	struct ol_tx_flow_pool_t *pool = NULL, *pool_prev = NULL;
 	struct ol_tx_flow_pool_t tmp_pool;
 
 
@@ -182,10 +320,15 @@ void ol_tx_dump_flow_pool_info(void)
 	qdf_spin_lock_bh(&pdev->tx_desc.flow_pool_list_lock);
 	TAILQ_FOREACH(pool, &pdev->tx_desc.flow_pool_list,
 					 flow_pool_list_elem) {
+		ol_tx_inc_pool_ref(pool);
 		qdf_spin_lock_bh(&pool->flow_pool_lock);
 		qdf_mem_copy(&tmp_pool, pool, sizeof(tmp_pool));
 		qdf_spin_unlock_bh(&pool->flow_pool_lock);
 		qdf_spin_unlock_bh(&pdev->tx_desc.flow_pool_list_lock);
+
+		if (pool_prev)
+			ol_tx_dec_pool_ref(pool_prev, false);
+
 		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR, "\n");
 		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
 			"Flow_pool_id %d :: status %d",
@@ -203,9 +346,15 @@ void ol_tx_dump_flow_pool_info(void)
 		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
 			"Pkt dropped due to unavailablity of descriptors %d",
 			tmp_pool.pkt_drop_no_desc);
+
+		pool_prev = pool;
 		qdf_spin_lock_bh(&pdev->tx_desc.flow_pool_list_lock);
 	}
 	qdf_spin_unlock_bh(&pdev->tx_desc.flow_pool_list_lock);
+
+	/* decrement ref count for last pool in list */
+	if (pool_prev)
+		ol_tx_dec_pool_ref(pool_prev, false);
 
 	return;
 }
@@ -314,7 +463,17 @@ ol_tx_distribute_descs_to_deficient_pools(struct ol_tx_flow_pool_t *src_pool)
 			desc_move_count = ol_tx_move_desc_n(src_pool,
 						dst_pool, desc_move_count);
 			desc_count -= desc_move_count;
+
 			qdf_spin_lock_bh(&dst_pool->flow_pool_lock);
+			if (dst_pool->status == FLOW_POOL_ACTIVE_PAUSED) {
+				if (dst_pool->avail_desc > dst_pool->start_th) {
+					pdev->pause_cb(dst_pool->member_flow_id,
+						      WLAN_WAKE_ALL_NETIF_QUEUE,
+						      WLAN_DATA_FLOW_CONTROL);
+					dst_pool->status =
+						FLOW_POOL_ACTIVE_UNPAUSED;
+				}
+			}
 		}
 		qdf_spin_unlock_bh(&dst_pool->flow_pool_lock);
 		if (desc_count == 0)
@@ -365,6 +524,8 @@ struct ol_tx_flow_pool_t *ol_tx_create_flow_pool(uint8_t flow_pool_id,
 	pool->start_th = (start_threshold * flow_pool_size)/100;
 	pool->stop_th = (stop_threshold * flow_pool_size)/100;
 	qdf_spinlock_create(&pool->flow_pool_lock);
+	qdf_atomic_init(&pool->ref_cnt);
+	ol_tx_inc_pool_ref(pool);
 
 	/* Take TX descriptor from global_pool and put it in temp_list*/
 	qdf_spin_lock_bh(&pdev->tx_mutex);
@@ -397,91 +558,6 @@ struct ol_tx_flow_pool_t *ol_tx_create_flow_pool(uint8_t flow_pool_id,
 }
 
 /**
- * ol_tx_delete_flow_pool() - delete flow pool
- * @pool: flow pool pointer
- * @force: free pool forcefully
- *
- * Delete flow_pool if all tx descriptors are available.
- * Otherwise put it in FLOW_POOL_INVALID state.
- * If force is set then pull all available descriptors to
- * global pool.
- *
- * Return: 0 for success or error
- */
-int ol_tx_delete_flow_pool(struct ol_tx_flow_pool_t *pool, bool force)
-{
-	struct ol_txrx_pdev_t *pdev = cds_get_context(QDF_MODULE_ID_TXRX);
-	uint16_t i, size;
-	union ol_tx_desc_list_elem_t *temp_list = NULL;
-	struct ol_tx_desc_t *tx_desc = NULL;
-
-	if (!pool) {
-		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
-		   "%s: pool is NULL\n", __func__);
-		QDF_ASSERT(0);
-		return -ENOMEM;
-	}
-	if (!pdev) {
-		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
-		   "%s: pdev is NULL\n", __func__);
-		QDF_ASSERT(0);
-		return -ENOMEM;
-	}
-
-	qdf_spin_lock_bh(&pdev->tx_desc.flow_pool_list_lock);
-	TAILQ_REMOVE(&pdev->tx_desc.flow_pool_list, pool, flow_pool_list_elem);
-	qdf_spin_unlock_bh(&pdev->tx_desc.flow_pool_list_lock);
-
-	qdf_spin_lock_bh(&pool->flow_pool_lock);
-	if (pool->avail_desc == pool->flow_pool_size || force == true)
-		pool->status = FLOW_POOL_INACTIVE;
-	else
-		pool->status = FLOW_POOL_INVALID;
-
-	/* Take all free descriptors and put it in temp_list */
-	temp_list = pool->freelist;
-	size = pool->avail_desc;
-	pool->freelist = NULL;
-	pool->avail_desc = 0;
-
-	if (pool->status == FLOW_POOL_INACTIVE) {
-		qdf_spin_unlock_bh(&pool->flow_pool_lock);
-		/* Free flow_pool */
-		qdf_spinlock_destroy(&pool->flow_pool_lock);
-		qdf_mem_free(pool);
-	} else { /* FLOW_POOL_INVALID case*/
-		pool->flow_pool_size -= size;
-		pool->flow_pool_id = INVALID_FLOW_ID;
-		qdf_spin_unlock_bh(&pool->flow_pool_lock);
-
-		pdev->tx_desc.num_invalid_bin++;
-		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
-			"%s: invalid pool created %d\n",
-			 __func__, pdev->tx_desc.num_invalid_bin);
-		if (pdev->tx_desc.num_invalid_bin > MAX_INVALID_BIN)
-			ASSERT(0);
-
-		qdf_spin_lock_bh(&pdev->tx_desc.flow_pool_list_lock);
-		TAILQ_INSERT_TAIL(&pdev->tx_desc.flow_pool_list, pool,
-				 flow_pool_list_elem);
-		qdf_spin_unlock_bh(&pdev->tx_desc.flow_pool_list_lock);
-	}
-
-	/* put free descriptors to global pool */
-	qdf_spin_lock_bh(&pdev->tx_mutex);
-	for (i = 0; i < size; i++) {
-		tx_desc = &temp_list->tx_desc;
-		temp_list = temp_list->next;
-
-		ol_tx_put_desc_global_pool(pdev, tx_desc);
-	}
-	qdf_spin_unlock_bh(&pdev->tx_mutex);
-
-	return 0;
-}
-
-
-/**
  * ol_tx_free_invalid_flow_pool() - free invalid pool
  * @pool: pool
  *
@@ -509,7 +585,7 @@ int ol_tx_free_invalid_flow_pool(struct ol_tx_flow_pool_t *pool)
 		"%s: invalid pool deleted %d\n",
 		 __func__, pdev->tx_desc.num_invalid_bin);
 
-	return ol_tx_delete_flow_pool(pool, false);
+	return ol_tx_dec_pool_ref(pool, false);
 }
 
 /**
@@ -654,10 +730,15 @@ void ol_tx_flow_pool_map_handler(uint8_t flow_id, uint8_t flow_type,
 
 	case FLOW_TYPE_VDEV:
 		ol_tx_flow_pool_vdev_map(pool, flow_id);
+		qdf_spin_lock_bh(&pool->flow_pool_lock);
+		pdev->pause_cb(flow_id,
+			       WLAN_WAKE_ALL_NETIF_QUEUE,
+			       WLAN_DATA_FLOW_CONTROL);
+		qdf_spin_unlock_bh(&pool->flow_pool_lock);
 		break;
 	default:
 		if (pool_create)
-			ol_tx_delete_flow_pool(pool, false);
+			ol_tx_dec_pool_ref(pool, false);
 		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
 		   "%s: flow type %d not supported !!!\n",
 		   __func__, type);
@@ -716,8 +797,11 @@ void ol_tx_flow_pool_unmap_handler(uint8_t flow_id, uint8_t flow_type,
 		return;
 	}
 
-	/* only delete if all descriptors are available */
-	ol_tx_delete_flow_pool(pool, false);
+	/*
+	 * only delete if all descriptors are available
+	 * and pool ref count becomes 0
+	 */
+	ol_tx_dec_pool_ref(pool, false);
 
 	return;
 }

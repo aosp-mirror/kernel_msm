@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2017 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -27,7 +27,8 @@
 #if !defined(__CDS_CONFIG_H)
 #define __CDS_CONFIG_H
 
-#define TX_WMM_AC_NUM	4
+#include "cdp_txrx_cmn.h"
+#include "cdp_txrx_cfg.h"
 
 /**
  * enum driver_type - Indicate the driver type to the cds, and based on this
@@ -54,34 +55,23 @@ enum cfg_sub_20_channel_width {
 };
 
 /**
- * struct ol_tx_sched_wrr_ac_specs_t - the wrr ac specs params structure
- * @wrr_skip_weight: map to ol_tx_sched_wrr_adv_category_info_t.specs.
- *                            wrr_skip_weight
- * @credit_threshold: map to ol_tx_sched_wrr_adv_category_info_t.specs.
- *                            credit_threshold
- * @send_limit: map to ol_tx_sched_wrr_adv_category_info_t.specs.
- *                            send_limit
- * @credit_reserve: map to ol_tx_sched_wrr_adv_category_info_t.specs.
- *                            credit_reserve
- * @discard_weight: map to ol_tx_sched_wrr_adv_category_info_t.specs.
- *                            discard_weight
- *
- * This structure is for wrr ac specs params set from user, it will update
- * its content corresponding to the ol_tx_sched_wrr_adv_category_info_t.specs.
+ * enum active_bpf_mode - the modes active BPF can operate in
+ * @ACTIVE_BPF_DISABLED: BPF is disabled in active mode
+ * @ACTIVE_BPF_ENABLED: BPF is enabled for all packets
+ * @ACTIVE_BPF_ADAPTIVE: BPF is enabled for packets up to some threshold
+ * @ACTIVE_BPF_MODE_COUNT: The number of active BPF modes
  */
-struct ol_tx_sched_wrr_ac_specs_t {
-	int wrr_skip_weight;
-	uint32_t credit_threshold;
-	uint16_t send_limit;
-	int credit_reserve;
-	int discard_weight;
+enum active_bpf_mode {
+	ACTIVE_BPF_DISABLED = 0,
+	ACTIVE_BPF_ENABLED,
+	ACTIVE_BPF_ADAPTIVE,
+	ACTIVE_BPF_MODE_COUNT
 };
 
 /**
  * struct cds_config_info - Place Holder for cds configuration
  * @max_station: Max station supported
  * @max_bssid: Max Bssid Supported
- * @frame_xln_reqd: frame transmission required
  * @powersave_offload_enabled: Indicate if powersave offload is enabled
  * @sta_maxlimod_dtim: station max listen interval
  * @sta_mod_dtim: station mode DTIM
@@ -123,13 +113,15 @@ struct ol_tx_sched_wrr_ac_specs_t {
  * @sub_20_channel_width: Sub 20 MHz ch width, ini intersected with fw cap
  * @flow_steering_enabled: Receive flow steering.
  * @is_fw_timeout: Indicate whether crash host when fw timesout or not
+ * @force_target_assert_enabled: Indicate whether target assert enabled or not
+ * @active_bpf_mode: Setting that determines how BPF is applied in active mode
+ * @rps_enabled: RPS enabled in SAP mode
  * Structure for holding cds ini parameters.
  */
 
 struct cds_config_info {
 	uint16_t max_station;
 	uint16_t max_bssid;
-	uint32_t frame_xln_reqd;
 	uint8_t powersave_offload_enabled;
 	uint8_t sta_maxlimod_dtim;
 	uint8_t sta_mod_dtim;
@@ -178,5 +170,9 @@ struct cds_config_info {
 	bool fw_timeout_crash;
 
 	struct ol_tx_sched_wrr_ac_specs_t ac_specs[TX_WMM_AC_NUM];
+
+	bool force_target_assert_enabled;
+	enum active_bpf_mode active_bpf_mode;
+	bool rps_enabled;
 };
 #endif /* !defined( __CDS_CONFIG_H ) */

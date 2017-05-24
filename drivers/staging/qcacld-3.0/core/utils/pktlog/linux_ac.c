@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -238,14 +238,16 @@ qdf_sysctl_decl(ath_sysctl_pktlog_enable, ctl, write, filp, buffer, lenp, ppos)
 					(struct hif_opaque_softc *)scn, enable,
 					cds_is_packet_log_enabled(), 0, 1);
 		else
-			printk(PKTLOG_TAG "%s:proc_dointvec failed\n",
-			       __func__);
+			QDF_TRACE(QDF_MODULE_ID_SYS, QDF_TRACE_LEVEL_DEBUG,
+				  "Line:%d %s:proc_dointvec failed reason %d",
+				   __LINE__, __func__, ret);
 	} else {
 		ret = QDF_SYSCTL_PROC_DOINTVEC(ctl, write, filp, buffer,
 					       lenp, ppos);
 		if (ret)
-			printk(PKTLOG_TAG "%s:proc_dointvec failed\n",
-			       __func__);
+			QDF_TRACE(QDF_MODULE_ID_SYS, QDF_TRACE_LEVEL_DEBUG,
+				  "Line:%d %s:proc_dointvec failed reason %d",
+				  __LINE__, __func__, ret);
 	}
 
 	ctl->data = NULL;
@@ -533,14 +535,109 @@ static void pktlog_detach(struct hif_opaque_softc *scn)
 
 static int pktlog_open(struct inode *i, struct file *f)
 {
+	struct hif_opaque_softc *scn;
+	struct ol_pktlog_dev_t *pl_dev;
+	struct ath_pktlog_info *pl_info;
+	int ret = 0;
+
 	PKTLOG_MOD_INC_USE_COUNT;
-	return 0;
+	pl_info = (struct ath_pktlog_info *)
+			PDE_DATA(f->f_path.dentry->d_inode);
+
+	if (!pl_info) {
+		pr_err("%s: pl_info NULL", __func__);
+		return -EINVAL;
+	}
+
+	if (pl_info->curr_pkt_state != PKTLOG_OPR_NOT_IN_PROGRESS) {
+		pr_info("%s: plinfo state (%d) != PKTLOG_OPR_NOT_IN_PROGRESS",
+			__func__, pl_info->curr_pkt_state);
+		return -EBUSY;
+	}
+
+	pl_info->curr_pkt_state = PKTLOG_OPR_IN_PROGRESS_READ_START;
+	scn = cds_get_context(QDF_MODULE_ID_HIF);
+	if (!scn) {
+		pl_info->curr_pkt_state = PKTLOG_OPR_NOT_IN_PROGRESS;
+		qdf_print("%s: Invalid scn context\n", __func__);
+		ASSERT(0);
+		return -EINVAL;
+	}
+
+	pl_dev = get_pl_handle((struct hif_opaque_softc *)scn);
+
+	if (!pl_dev) {
+		pl_info->curr_pkt_state = PKTLOG_OPR_NOT_IN_PROGRESS;
+		qdf_print("%s: Invalid pktlog handle\n", __func__);
+		ASSERT(0);
+		return -ENODEV;
+	}
+
+	pl_info->init_saved_state = pl_info->log_state;
+	if (!pl_info->log_state) {
+		/* Pktlog is already disabled.
+		 * Proceed to read directly.
+		 */
+		pl_info->curr_pkt_state =
+			PKTLOG_OPR_IN_PROGRESS_READ_START_PKTLOG_DISABLED;
+		return ret;
+	}
+	/* Disbable the pktlog internally. */
+	ret = pl_dev->pl_funcs->pktlog_disable(scn);
+	pl_info->log_state = 0;
+	pl_info->curr_pkt_state =
+			PKTLOG_OPR_IN_PROGRESS_READ_START_PKTLOG_DISABLED;
+	return ret;
 }
 
 static int pktlog_release(struct inode *i, struct file *f)
 {
+	struct hif_opaque_softc *scn;
+	struct ol_pktlog_dev_t *pl_dev;
+	struct ath_pktlog_info *pl_info;
+	int ret = 0;
+
 	PKTLOG_MOD_DEC_USE_COUNT;
-	return 0;
+
+	pl_info = (struct ath_pktlog_info *)
+			PDE_DATA(f->f_path.dentry->d_inode);
+
+	if (!pl_info)
+		return -EINVAL;
+
+	scn = cds_get_context(QDF_MODULE_ID_HIF);
+	if (!scn) {
+		pl_info->curr_pkt_state = PKTLOG_OPR_NOT_IN_PROGRESS;
+		qdf_print("%s: Invalid scn context\n", __func__);
+		ASSERT(0);
+		return -EINVAL;
+	}
+
+	pl_dev = get_pl_handle((struct hif_opaque_softc *)scn);
+
+	if (!pl_dev) {
+		pl_info->curr_pkt_state = PKTLOG_OPR_NOT_IN_PROGRESS;
+		qdf_print("%s: Invalid pktlog handle\n", __func__);
+		ASSERT(0);
+		return -ENODEV;
+	}
+
+	pl_info->curr_pkt_state = PKTLOG_OPR_IN_PROGRESS_READ_COMPLETE;
+	/*clear pktlog buffer.*/
+	pktlog_clearbuff(scn, true);
+	pl_info->log_state = pl_info->init_saved_state;
+	pl_info->init_saved_state = 0;
+
+	/*Enable pktlog again*/
+	ret = pl_dev->pl_funcs->pktlog_enable(
+			(struct hif_opaque_softc *)scn, pl_info->log_state,
+			cds_is_packet_log_enabled(), 0, 1);
+	if (ret != 0)
+		pr_warn("%s: pktlog cannot be enabled. ret value %d\n",
+			__func__, ret);
+
+	pl_info->curr_pkt_state = PKTLOG_OPR_NOT_IN_PROGRESS;
+	return ret;
 }
 
 #ifndef MIN

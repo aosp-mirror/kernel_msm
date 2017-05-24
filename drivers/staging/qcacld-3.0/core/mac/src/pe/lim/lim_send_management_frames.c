@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -345,16 +345,8 @@ lim_send_probe_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 		populate_dot11f_ext_cap(mac_ctx, is_vht_enabled, &pr.ExtCap,
 			pesession);
 
-	/* That's it-- now we pack it.  First, how much space are we going to */
-	status = dot11f_get_packed_probe_request_size(mac_ctx, &pr, &payload);
-	if (DOT11F_FAILED(status)) {
-		lim_log(mac_ctx, LOGP, FL("Failed to calculate the packed size for a Probe Request (0x%08x)."), status);
-		/* We'll fall back on the worst case scenario: */
-		payload = sizeof(tDot11fProbeRequest);
-	} else if (DOT11F_WARNED(status)) {
-		lim_log(mac_ctx, LOGW,
-			FL("There were warnings while calculating the packed size for a Probe Request (0x%08x)."), status);
-	}
+	if (mac_ctx->roam.configParam.qcn_ie_support)
+		populate_dot11f_qcn_ie(&pr.QCN_IE);
 
 	if (addn_ielen) {
 		qdf_mem_zero((uint8_t *)&extracted_ext_cap,
@@ -372,9 +364,34 @@ lim_send_probe_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 					extracted_ext_cap.bytes;
 			if (p_ext_cap->interworking_service)
 				p_ext_cap->qos_map = 1;
+			extracted_ext_cap.num_bytes =
+				lim_compute_ext_cap_ie_length
+					(&extracted_ext_cap);
 			extracted_ext_cap_flag =
-				lim_is_ext_cap_ie_present(p_ext_cap);
+				(extracted_ext_cap.num_bytes > 0);
 		}
+	}
+
+	/*
+	 * Extcap IE now support variable length, merge Extcap IE from addn_ie
+	 * may change the frame size. Therefore, MUST merge ExtCap IE before
+	 * dot11f get packed payload size.
+	 */
+	if (extracted_ext_cap_flag)
+		lim_merge_extcap_struct(&pr.ExtCap, &extracted_ext_cap, true);
+
+	/* That's it-- now we pack it.  First, how much space are we going to */
+	status = dot11f_get_packed_probe_request_size(mac_ctx, &pr, &payload);
+	if (DOT11F_FAILED(status)) {
+		lim_log(mac_ctx, LOGE,
+			FL("Failed to calculate the packed size for a Probe Request (0x%08x)."),
+			status);
+		/* We'll fall back on the worst case scenario: */
+		payload = sizeof(tDot11fProbeRequest);
+	} else if (DOT11F_WARNED(status)) {
+		lim_log(mac_ctx, LOGW,
+			FL("There were warnings while calculating the packed size for a Probe Request (0x%08x)."),
+			status);
 	}
 
 	bytes = payload + sizeof(tSirMacMgmtHdr) + addn_ielen;
@@ -392,10 +409,6 @@ lim_send_probe_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 	/* Next, we fill out the buffer descriptor: */
 	lim_populate_mac_header(mac_ctx, frame, SIR_MAC_MGMT_FRAME,
 		SIR_MAC_MGMT_PROBE_REQ, bssid, self_macaddr);
-
-	/* merge the ExtCap struct*/
-	if (extracted_ext_cap_flag)
-		lim_merge_extcap_struct(&pr.ExtCap, &extracted_ext_cap);
 
 	/* That done, pack the Probe Request: */
 	status = dot11f_pack_probe_request(mac_ctx, &pr, frame +
@@ -532,7 +545,7 @@ lim_send_probe_rsp_mgmt_frame(tpAniSirGlobal mac_ctx,
 {
 	tDot11fProbeResponse *frm;
 	tSirRetStatus sir_status;
-	uint32_t cfg, payload, bytes, status;
+	uint32_t cfg, payload, bytes = 0, status;
 	tpSirMacMgmtHdr mac_hdr;
 	uint8_t *frame;
 	void *packet = NULL;
@@ -698,21 +711,6 @@ lim_send_probe_rsp_mgmt_frame(tpAniSirGlobal mac_ctx,
 			&frm->WAPI);
 #endif /* defined(FEATURE_WLAN_WAPI) */
 
-	status = dot11f_get_packed_probe_response_size(mac_ctx, frm, &payload);
-	if (DOT11F_FAILED(status)) {
-		lim_log(mac_ctx, LOGP,
-			FL("Probe Response size error (0x%08x)."),
-			status);
-		/* We'll fall back on the worst case scenario: */
-		payload = sizeof(tDot11fProbeResponse);
-	} else if (DOT11F_WARNED(status)) {
-		lim_log(mac_ctx, LOGW,
-			FL("Probe Response size warning (0x%08x)."),
-			status);
-	}
-
-	bytes = payload + sizeof(tSirMacMgmtHdr);
-
 	if (mac_ctx->lim.gpLimRemainOnChanReq)
 		bytes += (mac_ctx->lim.gpLimRemainOnChanReq->length -
 			 sizeof(tSirRemainOnChnReq));
@@ -776,6 +774,30 @@ lim_send_probe_rsp_mgmt_frame(tpAniSirGlobal mac_ctx,
 		}
 	}
 
+	/*
+	 * Extcap IE now support variable length, merge Extcap IE from addn_ie
+	 * may change the frame size. Therefore, MUST merge ExtCap IE before
+	 * dot11f get packed payload size.
+	 */
+	if (extracted_ext_cap_flag)
+		lim_merge_extcap_struct(&frm->ExtCap, &extracted_ext_cap,
+					true);
+
+	status = dot11f_get_packed_probe_response_size(mac_ctx, frm, &payload);
+	if (DOT11F_FAILED(status)) {
+		lim_log(mac_ctx, LOGE,
+			FL("Probe Response size error (0x%08x)."),
+			status);
+		/* We'll fall back on the worst case scenario: */
+		payload = sizeof(tDot11fProbeResponse);
+	} else if (DOT11F_WARNED(status)) {
+		lim_log(mac_ctx, LOGW,
+			FL("Probe Response size warning (0x%08x)."),
+			status);
+	}
+
+	bytes += payload + sizeof(tSirMacMgmtHdr);
+
 	qdf_status = cds_packet_alloc((uint16_t) bytes, (void **)&frame,
 				      (void **)&packet);
 	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
@@ -793,10 +815,6 @@ lim_send_probe_rsp_mgmt_frame(tpAniSirGlobal mac_ctx,
 	mac_hdr = (tpSirMacMgmtHdr) frame;
 
 	sir_copy_mac_addr(mac_hdr->bssId, pe_session->bssId);
-
-	/* merge ExtCap IE */
-	if (extracted_ext_cap_flag)
-		lim_merge_extcap_struct(&frm->ExtCap, &extracted_ext_cap);
 
 	/* That done, pack the Probe Response: */
 	status =
@@ -1119,7 +1137,7 @@ lim_send_assoc_rsp_mgmt_frame(tpAniSirGlobal mac_ctx,
 	tSirRetStatus sir_status;
 	uint8_t lle_mode = 0, addts;
 	tHalBitVal qos_mode, wme_mode;
-	uint32_t payload, bytes, status;
+	uint32_t payload, bytes = 0, status;
 	void *packet;
 	QDF_STATUS qdf_status;
 	tUpdateBeaconParams beacon_params;
@@ -1243,6 +1261,10 @@ lim_send_assoc_rsp_mgmt_frame(tpAniSirGlobal mac_ctx,
 			populate_dot11f_vht_operation(mac_ctx, pe_session,
 					&frm.VHTOperation);
 			is_vht = true;
+		} else {
+			/* Advertise 1x1 if either is HT-STA */
+			if (frm.HTCaps.present && mac_ctx->hw_dbs_capable)
+				frm.HTCaps.supportedMCSSet[1] = 0;
 		}
 		if (pe_session->vhtCapability &&
 		    pe_session->vendor_vht_sap &&
@@ -1315,20 +1337,6 @@ lim_send_assoc_rsp_mgmt_frame(tpAniSirGlobal mac_ctx,
 		sch_set_fixed_beacon_fields(mac_ctx, pe_session);
 		lim_send_beacon_params(mac_ctx, &beacon_params, pe_session);
 	}
-	/* Allocate a buffer for this frame: */
-	status = dot11f_get_packed_assoc_response_size(mac_ctx, &frm, &payload);
-	if (DOT11F_FAILED(status)) {
-		lim_log(mac_ctx, LOGE,
-			FL("get Association Response size failure (0x%08x)."),
-			status);
-		return;
-	} else if (DOT11F_WARNED(status)) {
-		lim_log(mac_ctx, LOGW,
-			FL("get Association Response size warning (0x%08x)."),
-			status);
-	}
-
-	bytes = sizeof(tSirMacMgmtHdr) + payload;
 
 	if (assoc_req != NULL) {
 		addn_ie_len = pe_session->addIeParams.assocRespDataLen;
@@ -1362,6 +1370,31 @@ lim_send_assoc_rsp_mgmt_frame(tpAniSirGlobal mac_ctx,
 			FL("addn_ie_len = %d for Assoc Resp : %d"),
 			addn_ie_len, assoc_req->addIEPresent);
 	}
+
+	/*
+	 * Extcap IE now support variable length, merge Extcap IE from addn_ie
+	 * may change the frame size. Therefore, MUST merge ExtCap IE before
+	 * dot11f get packed payload size.
+	 */
+	if (extracted_flag)
+		lim_merge_extcap_struct(&(frm.ExtCap), &extracted_ext_cap,
+					true);
+
+	/* Allocate a buffer for this frame: */
+	status = dot11f_get_packed_assoc_response_size(mac_ctx, &frm, &payload);
+	if (DOT11F_FAILED(status)) {
+		lim_log(mac_ctx, LOGE,
+			FL("get Association Response size failure (0x%08x)."),
+			status);
+		return;
+	} else if (DOT11F_WARNED(status)) {
+		lim_log(mac_ctx, LOGW,
+			FL("get Association Response size warning (0x%08x)."),
+			status);
+	}
+
+	bytes += sizeof(tSirMacMgmtHdr) + payload;
+
 	qdf_status = cds_packet_alloc((uint16_t) bytes, (void **)&frame,
 				      (void **)&packet);
 	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
@@ -1381,9 +1414,6 @@ lim_send_assoc_rsp_mgmt_frame(tpAniSirGlobal mac_ctx,
 
 	sir_copy_mac_addr(mac_hdr->bssId, pe_session->bssId);
 
-	/* merge the ExtCap struct */
-	if (extracted_flag)
-		lim_merge_extcap_struct(&(frm.ExtCap), &extracted_ext_cap);
 	status = dot11f_pack_assoc_response(mac_ctx, &frm,
 					     frame + sizeof(tSirMacMgmtHdr),
 					     payload, &payload);
@@ -1601,6 +1631,36 @@ lim_send_delts_req_action_frame(tpAniSirGlobal pMac,
 } /* End lim_send_delts_req_action_frame. */
 
 /**
+ * lim_assoc_tx_complete_cnf()- Confirmation for assoc sent over the air
+ *
+ * @mac_ctx: pointer to global mac
+ * @tx_complete : Sent status
+ *
+ * Return: This returns QDF_STATUS
+ */
+
+static QDF_STATUS lim_assoc_tx_complete_cnf(tpAniSirGlobal mac_ctx,
+					   uint32_t tx_complete)
+{
+	uint16_t assoc_ack_status;
+	uint16_t reason_code;
+
+	lim_log(mac_ctx, LOG1,
+		 FL("tx_complete= %d"), tx_complete);
+	if (tx_complete) {
+		assoc_ack_status = ACKED;
+		reason_code = eSIR_SUCCESS;
+	} else {
+		assoc_ack_status = NOT_ACKED;
+		reason_code = eSIR_FAILURE;
+	}
+
+	lim_diag_event_report(mac_ctx, WLAN_PE_DIAG_ASSOC_ACK_EVENT,
+			NULL, assoc_ack_status, reason_code);
+	return QDF_STATUS_SUCCESS;
+}
+
+/**
  * lim_send_assoc_req_mgmt_frame() - Send association request
  * @mac_ctx: Handle to MAC context
  * @mlm_assoc_req: Association request information
@@ -1621,11 +1681,11 @@ lim_send_assoc_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 	uint8_t *frame;
 	tSirRetStatus sir_status;
 	tLimMlmAssocCnf assoc_cnf;
-	uint32_t bytes, payload, status;
+	uint32_t bytes = 0, payload, status;
 	uint8_t qos_enabled, wme_enabled, wsm_enabled;
 	void *packet;
 	QDF_STATUS qdf_status;
-	uint16_t add_ie_len;
+	uint16_t add_ie_len, assoc_ack_status;
 	uint8_t *add_ie;
 	uint8_t *wps_ie = NULL;
 	uint8_t power_caps = false;
@@ -1635,6 +1695,11 @@ lim_send_assoc_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 	tDot11fIEExtCap extr_ext_cap;
 	bool extr_ext_flag = true;
 	tpSirMacMgmtHdr mac_hdr;
+	uint32_t ie_offset = 0;
+	uint8_t *p_ext_cap = NULL;
+	tDot11fIEExtCap bcn_ext_cap;
+	uint8_t *bcn_ie = NULL;
+	uint32_t bcn_ie_len = 0;
 
 	if (NULL == pe_session) {
 		lim_log(mac_ctx, LOGE, FL("pe_session is NULL"));
@@ -1656,6 +1721,7 @@ lim_send_assoc_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 		lim_log(mac_ctx, LOGE, FL("Unable to allocate memory"));
 		return;
 	}
+	qdf_mem_set((uint8_t *) frm, sizeof(tDot11fAssocRequest), 0);
 
 	if (add_ie_len && pe_session->is_ext_caps_present) {
 		qdf_mem_set((uint8_t *) &extr_ext_cap, sizeof(tDot11fIEExtCap),
@@ -1672,7 +1738,9 @@ lim_send_assoc_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 
 			if (p_ext_cap->interworking_service)
 				p_ext_cap->qos_map = 1;
-			extr_ext_flag = lim_is_ext_cap_ie_present(p_ext_cap);
+			extr_ext_cap.num_bytes =
+				lim_compute_ext_cap_ie_length(&extr_ext_cap);
+			extr_ext_flag = (extr_ext_cap.num_bytes > 0);
 		}
 	} else {
 		lim_log(mac_ctx, LOG1,
@@ -1833,6 +1901,7 @@ lim_send_assoc_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 			pe_session->vendor_specific_vht_ie_sub_type;
 
 		frm->vendor_vht_ie.VHTCaps.present = 1;
+		pe_session->vht_config.su_beam_formee = 0;
 		populate_dot11f_vht_caps(mac_ctx, pe_session,
 				&frm->vendor_vht_ie.VHTCaps);
 		vht_enabled = true;
@@ -1840,6 +1909,9 @@ lim_send_assoc_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 	if (pe_session->is_ext_caps_present)
 		populate_dot11f_ext_cap(mac_ctx, vht_enabled,
 				&frm->ExtCap, pe_session);
+
+	if (mac_ctx->roam.configParam.qcn_ie_support)
+		populate_dot11f_qcn_ie(&frm->QCN_IE);
 
 	if (pe_session->pLimJoinReq->is11Rconnection) {
 		tSirBssDescription *bssdescr;
@@ -1874,6 +1946,41 @@ lim_send_assoc_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 #endif
 	}
 #endif
+
+	/*
+	 * Extcap IE now support variable length, merge Extcap IE from addn_ie
+	 * may change the frame size. Therefore, MUST merge ExtCap IE before
+	 * dot11f get packed payload size.
+	 */
+	if (extr_ext_flag)
+		lim_merge_extcap_struct(&frm->ExtCap, &extr_ext_cap, true);
+
+	/* Clear the bits in EXTCAP IE if AP not advertise it in beacon */
+	if (frm->ExtCap.present && pe_session->is_ext_caps_present) {
+		ie_offset = DOT11F_FF_TIMESTAMP_LEN +
+				DOT11F_FF_BEACONINTERVAL_LEN +
+				DOT11F_FF_CAPABILITIES_LEN;
+
+		qdf_mem_zero((uint8_t *)&bcn_ext_cap, sizeof(tDot11fIEExtCap));
+		if (pe_session->beacon && pe_session->bcnLen > ie_offset) {
+			bcn_ie = pe_session->beacon + ie_offset;
+			bcn_ie_len = pe_session->bcnLen - ie_offset;
+			p_ext_cap = lim_get_ie_ptr_new(mac_ctx,
+							bcn_ie,
+							bcn_ie_len,
+							DOT11F_EID_EXTCAP,
+							ONE_BYTE);
+			lim_update_extcap_struct(mac_ctx, p_ext_cap,
+							&bcn_ext_cap);
+			lim_merge_extcap_struct(&frm->ExtCap, &bcn_ext_cap,
+							false);
+		}
+	}
+
+	if (eSIR_SUCCESS != lim_strip_supp_op_class_update_struct(mac_ctx,
+			add_ie, &add_ie_len, &frm->SuppOperatingClasses))
+		lim_log(mac_ctx, LOG1,
+		FL("Unable to Stripoff supp op classes IE from Assoc Req"));
 
 	status = dot11f_get_packed_assoc_request_size(mac_ctx, frm, &payload);
 	if (DOT11F_FAILED(status)) {
@@ -1921,9 +2028,6 @@ lim_send_assoc_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 	lim_populate_mac_header(mac_ctx, frame, SIR_MAC_MGMT_FRAME,
 		SIR_MAC_MGMT_ASSOC_REQ, pe_session->bssId,
 		pe_session->selfMacAddr);
-	/* merge the ExtCap struct */
-	if (extr_ext_flag)
-		lim_merge_extcap_struct(&frm->ExtCap, &extr_ext_cap);
 	/* That done, pack the Assoc Request: */
 	status = dot11f_pack_assoc_request(mac_ctx, frm,
 			frame + sizeof(tSirMacMgmtHdr), payload, &payload);
@@ -1982,22 +2086,28 @@ lim_send_assoc_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 	mac_hdr = (tpSirMacMgmtHdr) frame;
 	MTRACE(qdf_trace(QDF_MODULE_ID_PE, TRACE_CODE_TX_MGMT,
 			 pe_session->peSessionId, mac_hdr->fc.subType));
-	qdf_status =
-		wma_tx_frame(mac_ctx, packet,
-			   (uint16_t) (sizeof(tSirMacMgmtHdr) + payload),
-			   TXRX_FRM_802_11_MGMT, ANI_TXDIR_TODS, 7,
-			   lim_tx_complete, frame, tx_flag, sme_sessionid, 0);
-	MTRACE(qdf_trace
-		       (QDF_MODULE_ID_PE, TRACE_CODE_TX_COMPLETE,
-		       pe_session->peSessionId, qdf_status));
+
+	qdf_status = wma_tx_frameWithTxComplete(mac_ctx, packet,
+				(uint16_t) (sizeof(tSirMacMgmtHdr) + payload),
+				TXRX_FRM_802_11_MGMT, ANI_TXDIR_TODS, 7,
+				lim_tx_complete, frame,
+				lim_assoc_tx_complete_cnf,
+				tx_flag, sme_sessionid, false, 0);
+	MTRACE(qdf_trace(QDF_MODULE_ID_PE, TRACE_CODE_TX_COMPLETE,
+		pe_session->peSessionId, qdf_status));
+
 	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
 		lim_log(mac_ctx, LOGE,
 			FL("Failed to send Association Request (%X)!"),
 			qdf_status);
+		assoc_ack_status = SENT_FAIL;
+		lim_diag_event_report(mac_ctx, WLAN_PE_DIAG_ASSOC_ACK_EVENT,
+				pe_session, assoc_ack_status, eSIR_FAILURE);
 		/* Pkt will be freed up by the callback */
 		qdf_mem_free(frm);
 		return;
 	}
+
 	/* Free up buffer allocated for mlm_assoc_req */
 	qdf_mem_free(mlm_assoc_req);
 	mlm_assoc_req = NULL;
@@ -2017,15 +2127,25 @@ lim_send_assoc_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 static QDF_STATUS lim_auth_tx_complete_cnf(tpAniSirGlobal mac_ctx,
 					   uint32_t tx_complete)
 {
+	uint16_t auth_ack_status;
+	uint16_t reason_code;
+
 	lim_log(mac_ctx, LOG1,
 		 FL("tx_complete= %d"), tx_complete);
 	if (tx_complete) {
 		mac_ctx->auth_ack_status = LIM_AUTH_ACK_RCD_SUCCESS;
+		auth_ack_status = ACKED;
+		reason_code = eSIR_SUCCESS;
 		/* 'Change' timer for future activations */
 		lim_deactivate_and_change_timer(mac_ctx, eLIM_AUTH_RETRY_TIMER);
 	} else {
 		mac_ctx->auth_ack_status = LIM_AUTH_ACK_RCD_FAILURE;
+		auth_ack_status = NOT_ACKED;
+		reason_code = eSIR_FAILURE;
 	}
+
+	lim_diag_event_report(mac_ctx, WLAN_PE_DIAG_AUTH_ACK_EVENT,
+				NULL, auth_ack_status, reason_code);
 	return QDF_STATUS_SUCCESS;
 }
 
@@ -2049,7 +2169,7 @@ lim_send_auth_mgmt_frame(tpAniSirGlobal mac_ctx,
 			 tpSirMacAuthFrameBody auth_frame,
 			 tSirMacAddr peer_addr,
 			 uint8_t wep_bit,
-			 tpPESession session, bool wait_for_ack)
+			 tpPESession session)
 {
 	uint8_t *frame, *body;
 	uint32_t frame_len = 0, body_len = 0;
@@ -2058,7 +2178,7 @@ lim_send_auth_mgmt_frame(tpAniSirGlobal mac_ctx,
 	QDF_STATUS qdf_status;
 	uint8_t tx_flag = 0;
 	uint8_t sme_sessionid = 0;
-	uint16_t ft_ies_length = 0;
+	uint16_t ft_ies_length = 0, auth_ack_status;
 
 	if (NULL == session) {
 		lim_log(mac_ctx, LOGE, FL("Error: psession Entry is NULL"));
@@ -2078,9 +2198,8 @@ lim_send_auth_mgmt_frame(tpAniSirGlobal mac_ctx,
 		 * 4 bytes each for IV & ICV.
 		 */
 		lim_log(mac_ctx, LOG1,
-			FL("Sending encrypted auth frame to " MAC_ADDRESS_STR
-			   "- wait_for_ack %d"), MAC_ADDR_ARRAY(peer_addr),
-			   wait_for_ack);
+			FL("Sending encrypted auth frame to " MAC_ADDRESS_STR),
+				MAC_ADDR_ARRAY(peer_addr));
 
 		frame_len = sizeof(tSirMacMgmtHdr) + LIM_ENCR_AUTH_BODY_LEN;
 		body_len = LIM_ENCR_AUTH_BODY_LEN;
@@ -2089,12 +2208,11 @@ lim_send_auth_mgmt_frame(tpAniSirGlobal mac_ctx,
 	}
 
 	lim_log(mac_ctx, LOG1,
-		FL("Sending Auth seq# %d status %d (%d) wait_for_ack %d to "
+		FL("Sending Auth seq# %d status %d (%d) to "
 		MAC_ADDRESS_STR),
 		auth_frame->authTransactionSeqNumber,
 		auth_frame->authStatusCode,
 		(auth_frame->authStatusCode == eSIR_MAC_SUCCESS_STATUS),
-		wait_for_ack,
 		MAC_ADDR_ARRAY(peer_addr));
 
 	switch (auth_frame->authTransactionSeqNumber) {
@@ -2307,35 +2425,23 @@ alloc_packet:
 	MTRACE(qdf_trace(QDF_MODULE_ID_PE, TRACE_CODE_TX_MGMT,
 			 session->peSessionId, mac_hdr->fc.subType));
 
-	if (wait_for_ack) {
-		mac_ctx->auth_ack_status = LIM_AUTH_ACK_NOT_RCD;
-		qdf_status = wma_tx_frameWithTxComplete(mac_ctx, packet,
+	mac_ctx->auth_ack_status = LIM_AUTH_ACK_NOT_RCD;
+	qdf_status = wma_tx_frameWithTxComplete(mac_ctx, packet,
 					 (uint16_t)frame_len,
 					 TXRX_FRM_802_11_MGMT, ANI_TXDIR_TODS,
 					 7, lim_tx_complete, frame,
 					 lim_auth_tx_complete_cnf,
 					 tx_flag, sme_sessionid, false, 0);
-		MTRACE(qdf_trace(QDF_MODULE_ID_PE, TRACE_CODE_TX_COMPLETE,
-			session->peSessionId, qdf_status));
-		if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
-			lim_log(mac_ctx, LOGE,
-			  FL("*** Could not send Auth frame, retCode=%X ***"),
-			  qdf_status);
-			mac_ctx->auth_ack_status = LIM_AUTH_ACK_RCD_FAILURE;
-		/* Pkt will be freed up by the callback */
-		}
-	} else {
-		/* Queue Authentication frame in high priority WQ */
-		qdf_status = wma_tx_frame(mac_ctx, packet, (uint16_t) frame_len,
-					TXRX_FRM_802_11_MGMT,
-					ANI_TXDIR_TODS, 7, lim_tx_complete,
-					frame, tx_flag, sme_sessionid, 0);
-		MTRACE(qdf_trace(QDF_MODULE_ID_PE, TRACE_CODE_TX_COMPLETE,
-				 session->peSessionId, qdf_status));
-		if (!QDF_IS_STATUS_SUCCESS(qdf_status))
-			lim_log(mac_ctx, LOGE,
-			  FL("*** Could not send Auth frame, retCode=%X ***"),
-			  qdf_status);
+	MTRACE(qdf_trace(QDF_MODULE_ID_PE, TRACE_CODE_TX_COMPLETE,
+		session->peSessionId, qdf_status));
+	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
+		lim_log(mac_ctx, LOGE,
+			FL("*** Could not send Auth frame, retCode=%X ***"),
+			qdf_status);
+		mac_ctx->auth_ack_status = LIM_AUTH_ACK_RCD_FAILURE;
+		auth_ack_status = SENT_FAIL;
+		lim_diag_event_report(mac_ctx, WLAN_PE_DIAG_AUTH_ACK_EVENT,
+				session, auth_ack_status, eSIR_FAILURE);
 	}
 	return;
 }
@@ -2484,35 +2590,26 @@ QDF_STATUS lim_send_disassoc_cnf(tpAniSirGlobal mac_ctx)
 			lim_log(mac_ctx, LOGE, FL("cleanup_rx_path error"));
 			goto end;
 		}
-		if (LIM_IS_STA_ROLE(pe_session) && (
-#ifdef FEATURE_WLAN_ESE
-			    (pe_session->isESEconnection) ||
-#endif
-			    (pe_session->isFastRoamIniFeatureEnabled) ||
-			    (pe_session->is11Rconnection)) &&
-			    (disassoc_req->reasonCode !=
+		if (LIM_IS_STA_ROLE(pe_session) &&
+			(disassoc_req->reasonCode !=
 				eSIR_MAC_DISASSOC_DUE_TO_FTHANDOFF_REASON)) {
 			lim_log(mac_ctx, LOG1,
-				FL("FT Preauth Session (%p,%d) Clean up"),
-				pe_session, pe_session->peSessionId);
-
-			/* Delete FT session if there exists one */
-			lim_ft_cleanup_pre_auth_info(mac_ctx, pe_session);
-		} else {
-			lim_log(mac_ctx, LOGE,
-				FL("No FT Preauth Session Clean up in role %d"
+				FL("FT Preauth Session (%p,%d) Clean up"
 #ifdef FEATURE_WLAN_ESE
 				" isESE %d"
 #endif
 				" isLFR %d"
 				" is11r %d reason %d"),
-				GET_LIM_SYSTEM_ROLE(pe_session),
+				pe_session, pe_session->peSessionId,
 #ifdef FEATURE_WLAN_ESE
 				pe_session->isESEconnection,
 #endif
 				pe_session->isFastRoamIniFeatureEnabled,
 				pe_session->is11Rconnection,
 				disassoc_req->reasonCode);
+
+			/* Delete FT session if there exists one */
+			lim_ft_cleanup_pre_auth_info(mac_ctx, pe_session);
 		}
 		/* Free up buffer allocated for mlmDisassocReq */
 		qdf_mem_free(disassoc_req);
@@ -4176,6 +4273,9 @@ lim_send_radio_measure_report_action_frame(tpAniSirGlobal pMac,
 		qdf_mem_free(frm);
 		return eSIR_FAILURE;
 	}
+
+	lim_log(pMac, LOG1, FL("dialog_token %d num_report %d"),
+			dialog_token, num_report);
 
 	frm->Category.category = SIR_MAC_ACTION_RRM;
 	frm->Action.action = SIR_MAC_RRM_RADIO_MEASURE_RPT;
