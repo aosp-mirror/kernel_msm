@@ -1777,8 +1777,43 @@ hdd_wlan_get_ibss_mac_addr_from_staid(hdd_adapter_t *pAdapter,
 				      uint8_t staIdx);
 void hdd_checkandupdate_phymode(hdd_context_t *pHddCtx);
 #ifdef MSM_PLATFORM
-void hdd_start_bus_bw_compute_timer(hdd_adapter_t *pAdapter);
-void hdd_stop_bus_bw_compute_timer(hdd_adapter_t *pAdapter);
+/**
+ * hdd_bus_bw_compute_timer_start() - start the bandwidth timer
+ * @hdd_ctx: the global hdd context
+ *
+ * Return: None
+ */
+void hdd_bus_bw_compute_timer_start(hdd_context_t *hdd_ctx);
+
+/**
+ * hdd_bus_bw_compute_timer_try_start() - try to start the bandwidth timer
+ * @hdd_ctx: the global hdd context
+ *
+ * This function ensures there is at least one adapter in the associated state
+ * before starting the bandwidth timer.
+ *
+ * Return: None
+ */
+void hdd_bus_bw_compute_timer_try_start(hdd_context_t *hdd_ctx);
+
+/**
+ * hdd_bus_bw_compute_timer_stop() - stop the bandwidth timer
+ * @hdd_ctx: the global hdd context
+ *
+ * Return: None
+ */
+void hdd_bus_bw_compute_timer_stop(hdd_context_t *hdd_ctx);
+
+/**
+ * hdd_bus_bw_compute_timer_try_stop() - try to stop the bandwidth timer
+ * @hdd_ctx: the global hdd context
+ *
+ * This function ensures there are no adapters in the associated state before
+ * stopping the bandwidth timer.
+ *
+ * Return: None
+ */
+void hdd_bus_bw_compute_timer_try_stop(hdd_context_t *hdd_ctx);
 
 /**
  * hdd_bus_bandwidth_init() - Initialize bus bandwidth data structures.
@@ -1800,7 +1835,23 @@ int hdd_bus_bandwidth_init(hdd_context_t *hdd_ctx);
  */
 void hdd_bus_bandwidth_destroy(hdd_context_t *hdd_ctx);
 #else
-static inline void hdd_start_bus_bw_compute_timer(hdd_adapter_t *pAdapter)
+
+void hdd_bus_bw_compute_timer_start(hdd_context_t *hdd_ctx)
+{
+	return;
+}
+
+void hdd_bus_bw_compute_timer_try_start(hdd_context_t *hdd_ctx)
+{
+	return;
+}
+
+void hdd_bus_bw_compute_timer_stop(hdd_context_t *hdd_ctx)
+{
+	return;
+}
+
+void hdd_bus_bw_compute_timer_try_stop(hdd_context_t *hdd_ctx)
 {
 	return;
 }
@@ -2180,4 +2231,22 @@ void hdd_start_complete(int ret);
  *
  */
 void hdd_unregister_notifiers(hdd_context_t *hdd_ctx);
+
+/**
+ * hdd_chip_pwr_save_fail_detected_cb() - chip power save failure detected
+ * callback
+ * @hdd_ctx: HDD context
+ * @data: chip power save failure detected data
+ *
+ * This function reads the chip power save failure detected data and fill in
+ * the skb with NL attributes and send up the NL event.
+ * This callback execute in atomic context and must not invoke any
+ * blocking calls.
+ *
+ * Return: none
+ */
+void hdd_chip_pwr_save_fail_detected_cb(void *hdd_ctx,
+				struct chip_pwr_save_fail_detected_params
+				*data);
+
 #endif /* end #if !defined(WLAN_HDD_MAIN_H) */

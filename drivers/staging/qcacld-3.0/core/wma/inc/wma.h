@@ -224,6 +224,8 @@ enum ds_mode {
 
 #define WMA_MAX_RF_CHAINS(x)    ((1 << x) - 1)
 #define WMA_MIN_RF_CHAINS               (1)
+#define WMA_MAX_NSS               (2)
+
 
 #ifdef FEATURE_WLAN_EXTSCAN
 #define WMA_MAX_EXTSCAN_MSG_SIZE        1536
@@ -259,6 +261,7 @@ enum ds_mode {
 
 #define WMA_DEL_P2P_SELF_STA_RSP_START 0x03
 #define WMA_SET_LINK_PEER_RSP 0x04
+#define WMA_DELETE_PEER_RSP 0x05
 #define WMA_VDEV_START_REQUEST_TIMEOUT (6000)   /* 6 seconds */
 #define WMA_VDEV_STOP_REQUEST_TIMEOUT  (6000)   /* 6 seconds */
 
@@ -290,6 +293,9 @@ enum ds_mode {
 
 /* Default InActivity Time is 200 ms */
 #define POWERSAVE_DEFAULT_INACTIVITY_TIME 200
+
+/* Default WOW InActivity Time is 50 ms */
+#define WOW_POWERSAVE_DEFAULT_INACTIVITY_TIME 50
 
 /* Default Listen Interval */
 #define POWERSAVE_DEFAULT_LISTEN_INTERVAL 1
@@ -1022,6 +1028,7 @@ typedef struct {
  * @wow_stats: stat counters for WoW related events
  * @rcpi_req: rcpi request
  * It stores parameters per vdev in wma.
+ * @in_bmps : Whether bmps for this interface has been enabled
  */
 struct wma_txrx_node {
 	uint8_t addr[IEEE80211_ADDR_LEN];
@@ -1101,6 +1108,7 @@ struct wma_txrx_node {
 	bool is_vdev_valid;
 	struct sir_vdev_wow_stats wow_stats;
 	struct sme_rcpi_req *rcpi_req;
+	bool in_bmps;
 };
 
 #if defined(QCA_WIFI_FTM)
@@ -1654,6 +1662,8 @@ typedef struct {
 	bool fw_mem_dump_enabled;
 	tSirAddonPsReq ps_setting;
 	struct peer_debug_info *peer_dbg;
+	bool auto_power_save_enabled;
+	uint8_t in_imps;
 } t_wma_handle, *tp_wma_handle;
 
 /**
@@ -2365,12 +2375,22 @@ void wma_remove_peer(tp_wma_handle wma, u_int8_t *bssid,
 
 QDF_STATUS wma_add_wow_wakeup_event(tp_wma_handle wma,
 					uint32_t vdev_id,
-					uint32_t bitmap,
+					uint32_t *bitmap,
 					bool enable);
 QDF_STATUS wma_create_peer(tp_wma_handle wma, ol_txrx_pdev_handle pdev,
 			   ol_txrx_vdev_handle vdev, u8 peer_addr[6],
 			   u_int32_t peer_type, u_int8_t vdev_id,
 			   bool roam_synch_in_progress);
+
+/**
+ * wma_get_cca_stats() - send request to fw to get CCA
+ * @wmi_hdl: wma handle
+ * @vdev_id: vdev id
+ *
+ * Return: QDF status
+ */
+QDF_STATUS wma_get_cca_stats(tp_wma_handle wma_handle,
+				uint8_t vdev_id);
 
 struct wma_ini_config *wma_get_ini_handle(tp_wma_handle wma_handle);
 WLAN_PHY_MODE wma_chan_phy_mode(u8 chan, enum phy_ch_width chan_width,
@@ -2392,4 +2412,58 @@ void wma_update_sta_inactivity_timeout(tp_wma_handle wma,
 
 QDF_STATUS wma_send_udp_resp_offload_cmd(tp_wma_handle wma_handle,
 					struct udp_resp_offload *udp_response);
+
+/**
+ * wma_chip_power_save_failure_detected_handler() - chip pwr save fail detected
+ * event handler
+ * @handle: wma handle
+ * @cmd_param_info: event handler data
+ * @len: length of @cmd_param_info
+ *
+ * Return: QDF_STATUS_SUCCESS on success; error code otherwise
+ */
+int wma_chip_power_save_failure_detected_handler(void *handle,
+						 uint8_t *cmd_param_info,
+						 uint32_t len);
+
+/**
+ * wma_set_event_wow_bitmap() - set wow bitmask given WOW event
+ * @event: wow event
+ * @wow_bitmap_size: WOW bitmap size
+ * @bitmask: pointer to actual bitmask
+ *
+ * Return: none
+ */
+void wma_set_wow_event_bitmap(WOW_WAKE_EVENT_TYPE event,
+			      uint32_t wow_bitmap_size,
+			      uint32_t *bitmask);
+
+/**
+ * wma_set_sta_wow_bitmask() - set predefined bitmask for STA WOW events
+ * @bitmask: pointer to actual bitmask
+ * @wow_bitmap_size: WOW bitmap size
+ *
+ * Return: none
+ */
+void wma_set_sta_wow_bitmask(uint32_t *bitmask, uint32_t wow_bitmask_size);
+
+/**
+ * wma_set_sap_wow_bitmask() - set predefined bitmask for SAP WOW events
+ * @bitmask: pointer to actual bitmask
+ * @wow_bitmap_size: WOW bitmap size
+ *
+ * Return: none
+ */
+void wma_set_sap_wow_bitmask(uint32_t *bitmask, uint32_t wow_bitmask_size);
+
+/**
+ * wma_is_wow_bitmask_zero() - check if given wow bitmask is zero
+ * @bitmask: pointer to actual bitmask
+ * @wow_bitmap_size: WOW bitmap size
+ *
+ * Return: true if zero, false otherwise
+ */
+bool wma_is_wow_bitmask_zero(uint32_t *bitmask,
+			     uint32_t wow_bitmask_size);
+
 #endif

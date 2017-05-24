@@ -2642,6 +2642,9 @@ QDF_STATUS csr_change_default_config_param(tpAniSirGlobal pMac,
 			pParam->qcn_ie_support;
 		pMac->roam.configParam.fils_max_chan_guard_time =
 			pParam->fils_max_chan_guard_time;
+		pMac->roam.configParam.is_bssid_hint_priority =
+			pParam->is_bssid_hint_priority;
+
 
 	}
 	return status;
@@ -2883,6 +2886,8 @@ QDF_STATUS csr_get_config_param(tpAniSirGlobal pMac, tCsrConfigParam *pParam)
 		pMac->roam.configParam.qcn_ie_support;
 	pParam->fils_max_chan_guard_time =
 		pMac->roam.configParam.fils_max_chan_guard_time;
+	pParam->is_bssid_hint_priority =
+		pMac->roam.configParam.is_bssid_hint_priority;
 
 	return QDF_STATUS_SUCCESS;
 }
@@ -7720,6 +7725,37 @@ QDF_STATUS csr_dequeue_roam_command(tpAniSirGlobal pMac, eCsrRoamReason reason)
 	return QDF_STATUS_SUCCESS;
 }
 
+/**
+ * csr_roam_print_candidate_aps() - print all candidate AP in sorted
+ * score.
+ * @pMac: global mac context
+ * @hScanList: Handle for scan list
+ *
+ * Return : void
+ */
+static void csr_roam_print_candidate_aps(tpAniSirGlobal pMac,
+		tScanResultHandle hScanList)
+{
+	tListElem *pEntry;
+	tCsrScanResult *pBssDesc = NULL;
+	tScanResultList *bss_list = NULL;
+
+	bss_list = (tScanResultList *)hScanList;
+	pEntry = csr_ll_peek_head(&bss_list->List, LL_ACCESS_NOLOCK);
+	while (pEntry) {
+		pBssDesc = GET_BASE_ADDR(pEntry,
+				tCsrScanResult, Link);
+		sms_log(pMac, LOG1, FL("BSSID "MAC_ADDRESS_STR" score is %d"),
+			MAC_ADDR_ARRAY(pBssDesc->Result.BssDescriptor.bssId),
+			pBssDesc->bss_score);
+
+		pEntry = csr_ll_next(&bss_list->List, pEntry,
+				LL_ACCESS_NOLOCK);
+	}
+	return;
+
+}
+
 QDF_STATUS csr_roam_connect(tpAniSirGlobal pMac, uint32_t sessionId,
 		tCsrRoamProfile *pProfile,
 		uint32_t *pRoamId)
@@ -7832,6 +7868,7 @@ QDF_STATUS csr_roam_connect(tpAniSirGlobal pMac, uint32_t sessionId,
 	status = csr_scan_get_result(pMac, pScanFilter, &hBSSList);
 	sms_log(pMac, LOG1,
 		FL("******* csr_scan_get_result Status ****** %d"), status);
+	csr_roam_print_candidate_aps(pMac, hBSSList);
 	if (QDF_IS_STATUS_SUCCESS(status)) {
 		/* check if set hw mode needs to be done */
 		if ((pScanFilter->csrPersona == QDF_STA_MODE) ||
@@ -7846,6 +7883,7 @@ QDF_STATUS csr_roam_connect(tpAniSirGlobal pMac, uint32_t sessionId,
 						FL("conn update error"));
 					csr_scan_result_purge(pMac, hBSSList);
 					fCallCallback = true;
+					status = QDF_STATUS_E_TIMEOUT;
 					goto error;
 			} else if (status == QDF_STATUS_E_FAILURE) {
 				sms_log(pMac, LOG1, FL("conn update error"));
@@ -11902,15 +11940,12 @@ QDF_STATUS csr_roam_lost_link(tpAniSirGlobal pMac, uint32_t sessionId,
 	tSirSmeDisassocInd *pDisassocIndMsg = NULL;
 	eCsrRoamResult result = eCSR_ROAM_RESULT_LOSTLINK;
 	tCsrRoamInfo roamInfo;
-	bool fToRoam;
 	tCsrRoamSession *pSession = CSR_GET_SESSION(pMac, sessionId);
 
 	if (!pSession) {
 		sms_log(pMac, LOGE, FL("  session %d not found "), sessionId);
 		return QDF_STATUS_E_FAILURE;
 	}
-	/* Only need to roam for infra station. In this case P2P client will roam as well */
-	fToRoam = CSR_IS_INFRASTRUCTURE(&pSession->connectedProfile);
 	pSession->fCancelRoaming = false;
 	if (eWNI_SME_DISASSOC_IND == type) {
 		result = eCSR_ROAM_RESULT_DISASSOC_IND;
@@ -11941,10 +11976,7 @@ QDF_STATUS csr_roam_lost_link(tpAniSirGlobal pMac, uint32_t sessionId,
 	} else if (eWNI_SME_DEAUTH_IND == type) {
 		status = csr_send_mb_deauth_cnf_msg(pMac, pDeauthIndMsg);
 	}
-	if (!QDF_IS_STATUS_SUCCESS(status)) {
-		/* If fail to send confirmation to PE, not to trigger roaming */
-		fToRoam = false;
-	}
+
 	/* prepare to tell HDD to disconnect */
 	qdf_mem_set(&roamInfo, sizeof(tCsrRoamInfo), 0);
 	roamInfo.statusCode = (tSirResultCodes) pSession->roamingStatusCode;
@@ -11964,21 +11996,6 @@ QDF_STATUS csr_roam_lost_link(tpAniSirGlobal pMac, uint32_t sessionId,
 		roamInfo.rxRssi = pDeauthIndMsg->rssi;
 	}
 	sms_log(pMac, LOGW, FL("roamInfo.staId: %d"), roamInfo.staId);
-
-	/* See if we can possibly roam.  If so, start the roaming process and notify HDD
-	   that we are roaming.  But if we cannot possibly roam, or if we are unable to
-	   currently roam, then notify HDD of the lost link */
-	if (fToRoam) {
-		/* Only remove the connected BSS in infrastructure mode */
-		csr_roam_remove_connected_bss_from_scan_cache(pMac,
-							      &pSession->
-							      connectedProfile);
-		/* Not to do anying for lostlink with WDS */
-		status = csr_roam_start_roaming(pMac, sessionId,
-				(eWNI_SME_DEAUTH_IND == type) ?
-				eCsrLostlinkRoamingDeauth :
-				eCsrLostlinkRoamingDisassoc);
-	}
 
 	return status;
 }
@@ -13314,6 +13331,9 @@ QDF_STATUS csr_roam_set_psk_pmk(tpAniSirGlobal pMac, uint32_t sessionId,
 	}
 	qdf_mem_copy(pSession->psk_pmk, pPSK_PMK, sizeof(pSession->psk_pmk));
 	pSession->pmk_len = pmk_len;
+	csr_roam_offload_scan(pMac, sessionId,
+			      ROAM_SCAN_OFFLOAD_UPDATE_CFG,
+			      REASON_ROAM_PSK_PMK_CHANGED);
 	return QDF_STATUS_SUCCESS;
 }
 #endif /* WLAN_FEATURE_ROAM_OFFLOAD */
@@ -14452,8 +14472,22 @@ QDF_STATUS csr_send_join_req_msg(tpAniSirGlobal pMac, uint32_t sessionId,
 			QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_ERROR,
 				FL("Failed to get CSN beamformee capability"));
 
+		/*
+		 * Set SU Bformee only if SU Bformee is enabled in INI
+		 * and AP is SU Bformer capable
+		 */
+		if (value && !((IS_BSS_VHT_CAPABLE(pIes->VHTCaps) &&
+		   pIes->VHTCaps.suBeamFormerCap) ||
+		   (IS_BSS_VHT_CAPABLE(
+		   pIes->vendor_vht_ie.VHTCaps)
+		   && pIes->vendor_vht_ie.VHTCaps.
+		   suBeamFormerCap)))
+			value = 0;
+
 		csr_join_req->vht_config.su_beam_formee = value;
-		if (value) {
+
+		/* Set BF CSN value only if SU Bformee is enabled */
+		if (csr_join_req->vht_config.su_beam_formee) {
 			txBFCsnValue = (uint8_t)value1;
 			if (IS_BSS_VHT_CAPABLE(pIes->VHTCaps) &&
 			    pIes->VHTCaps.csnofBeamformerAntSup)
@@ -14470,11 +14504,42 @@ QDF_STATUS csr_send_join_req_msg(tpAniSirGlobal pMac, uint32_t sessionId,
 		csr_join_req->vht_config.csnof_beamformer_antSup = txBFCsnValue;
 
 		if (wlan_cfg_get_int(pMac,
-				WNI_CFG_VHT_MU_BEAMFORMEE_CAP, &value)
-				!= eSIR_SUCCESS)
+		   WNI_CFG_VHT_SU_BEAMFORMER_CAP, &value)
+		   != eSIR_SUCCESS)
+			QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_ERROR,
+				FL("Failed to get SU beamformer capability"));
+
+		/*
+		 * Set SU Bformer only if SU Bformer is enabled in INI
+		 * and AP is SU Bformee capable
+		 */
+		if (value && !((IS_BSS_VHT_CAPABLE(pIes->VHTCaps) &&
+		   pIes->VHTCaps.suBeamformeeCap) ||
+		   (IS_BSS_VHT_CAPABLE(
+		   pIes->vendor_vht_ie.VHTCaps)
+		   && pIes->vendor_vht_ie.VHTCaps.
+		   suBeamformeeCap)))
+			value = 0;
+
+		csr_join_req->vht_config.su_beam_former = value;
+
+		/* Set num soundingdim value to 0 if SU Bformer is disabled */
+		if (!csr_join_req->vht_config.su_beam_former)
+			csr_join_req->vht_config.num_soundingdim = 0;
+
+		if (wlan_cfg_get_int(pMac,
+		   WNI_CFG_VHT_MU_BEAMFORMEE_CAP, &value)
+		   != eSIR_SUCCESS)
 			QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_ERROR,
 				FL("Failed to get CSN beamformee capability"));
-		csr_join_req->vht_config.mu_beam_formee = (uint8_t) value;
+		/*
+		 * Set MU Bformee only if SU Bformee is enabled and
+		 * MU Bformee is enabled in INI
+		 */
+		if (value && csr_join_req->vht_config.su_beam_formee)
+			csr_join_req->vht_config.mu_beam_formee = 1;
+		else
+			csr_join_req->vht_config.mu_beam_formee = 0;
 
 		csr_join_req->enableVhtpAid =
 			(uint8_t) pMac->roam.configParam.enableVhtpAid;
@@ -14958,6 +15023,7 @@ QDF_STATUS csr_send_assoc_cnf_msg(tpAniSirGlobal pMac, tpSirSmeAssocInd pAssocIn
 {
 	QDF_STATUS status = QDF_STATUS_SUCCESS;
 	tSirSmeAssocCnf *pMsg;
+	cds_msg_t msg;
 
 	sms_log(pMac, LOG1,
 		FL("Posting eWNI_SME_ASSOC_CNF to LIM.HalStatus :%d"),
@@ -14985,8 +15051,12 @@ QDF_STATUS csr_send_assoc_cnf_msg(tpAniSirGlobal pMac, tpSirSmeAssocInd pAssocIn
 			     QDF_MAC_ADDR_SIZE);
 		/* alternateChannelId */
 		pMsg->alternateChannelId = 11;
+		msg.type = pMsg->messageType;
+		msg.bodyval = 0;
+		msg.bodyptr = pMsg;
 		/* pMsg is freed by cds_send_mb_message_to_mac in anycase*/
-		status = cds_send_mb_message_to_mac(pMsg);
+		status = cds_mq_post_message_by_priority(CDS_MQ_ID_PE,
+					&msg, HIGH_PRIORITY);
 	} while (0);
 	return status;
 }
@@ -18657,6 +18727,13 @@ QDF_STATUS csr_queue_sme_command(tpAniSirGlobal pMac, tSmeCmd *pCommand,
 
 	if ((pCommand->command == eSmeCommandScan)
 	    || (pCommand->command == eSmeCommandRemainOnChannel)) {
+		if (csr_ll_count(&pMac->sme.smeScanCmdActiveList) >=
+		    pMac->scan.max_scan_count) {
+			sms_log(pMac, LOGE, FL("scan pending list count %d"),
+				pMac->sme.smeScanCmdPendingList.Count);
+			csr_scan_call_callback(pMac, pCommand, eCSR_SCAN_ABORT);
+			return QDF_STATUS_E_FAILURE;
+		}
 		sms_log(pMac, LOGW,
 		FL("scan pending list count %d scan_id %d"),
 			pMac->sme.smeScanCmdPendingList.Count,
@@ -19197,6 +19274,11 @@ void csr_process_ho_fail_ind(tpAniSirGlobal pMac, void *pMsgBuf)
 		  "LFR3:Issue Disconnect on session %d", sessionId);
 	csr_roam_disconnect(pMac, sessionId,
 			eCSR_DISCONNECT_REASON_ROAM_HO_FAIL);
+	if (pMac->roam.configParam.enable_fatal_event)
+		cds_flush_logs(WLAN_LOG_TYPE_NON_FATAL,
+				WLAN_LOG_INDICATOR_HOST_DRIVER,
+				WLAN_LOG_REASON_ROAM_HO_FAILURE,
+				true, false);
 }
 #endif /* WLAN_FEATURE_ROAM_OFFLOAD */
 
