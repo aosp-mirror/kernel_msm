@@ -141,6 +141,8 @@
 #define RECHARGE_VBATT_THR_v2_OFFSET	1
 #define FLOAT_VOLT_v2_WORD		16
 #define FLOAT_VOLT_v2_OFFSET		2
+#define SYS_STANDBY_CURR_WORD		4
+#define SYS_STANDBY_CURR_OFFSET		0
 
 static int fg_decode_voltage_15b(struct fg_sram_param *sp,
 	enum fg_sram_param_id id, int val);
@@ -239,6 +241,8 @@ static struct fg_sram_param pmi8998_v1_sram_params[] = {
 		1, 512, 1000000, 0, fg_encode_default, NULL),
 	PARAM(SLOPE_LIMIT, SLOPE_LIMIT_WORD, SLOPE_LIMIT_OFFSET, 1, 8192, 1000,
 		0, fg_encode_default, NULL),
+	PARAM(SYS_STANDBY_CURR, SYS_STANDBY_CURR_WORD, SYS_STANDBY_CURR_OFFSET,
+		3, 1000000, 122070, 0, fg_encode_current, NULL),
 };
 
 static struct fg_sram_param pmi8998_v2_sram_params[] = {
@@ -319,6 +323,8 @@ static struct fg_sram_param pmi8998_v2_sram_params[] = {
 		1, 512, 1000000, 0, fg_encode_default, NULL),
 	PARAM(SLOPE_LIMIT, SLOPE_LIMIT_WORD, SLOPE_LIMIT_OFFSET, 1, 8192, 1000,
 		0, fg_encode_default, NULL),
+	PARAM(SYS_STANDBY_CURR, SYS_STANDBY_CURR_WORD, SYS_STANDBY_CURR_OFFSET,
+		3, 1000000, 122070, 0, fg_encode_current, NULL),
 };
 
 static struct fg_alg_flag pmi8998_v1_alg_flags[] = {
@@ -3155,6 +3161,15 @@ static int fg_hw_init(struct fg_chip *chip)
 			chip->sp[FG_SRAM_SYS_TERM_CURR].len, FG_IMA_DEFAULT);
 	if (rc < 0) {
 		pr_err("Error in writing sys_term_curr, rc=%d\n", rc);
+		return rc;
+	}
+
+	fg_encode(chip->sp, FG_SRAM_SYS_STANDBY_CURR, 200, buf);
+	rc = fg_sram_write(chip, chip->sp[FG_SRAM_SYS_STANDBY_CURR].addr_word,
+			chip->sp[FG_SRAM_SYS_STANDBY_CURR].addr_byte, buf,
+			chip->sp[FG_SRAM_SYS_STANDBY_CURR].len, FG_IMA_DEFAULT);
+	if (rc < 0) {
+		pr_err("Error in writing sys_standby_curr, rc=%d\n", rc);
 		return rc;
 	}
 
