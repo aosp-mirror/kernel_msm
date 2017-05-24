@@ -137,7 +137,7 @@ static struct mnh_ddr_state mnh_ddr_po_config = {
 	},
 	.fsps = {
 		0x100B007D,
-		0x0433007D,
+		0x1000007D,
 		0x0311007D,
 		0x0422007D
 	},
