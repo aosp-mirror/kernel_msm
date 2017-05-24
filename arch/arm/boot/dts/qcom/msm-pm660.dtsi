@@ -23,6 +23,12 @@
 		pm660_revid: qcom,revid@100 {
 			compatible = "qcom,qpnp-revid";
 			reg = <0x100 0x100>;
+			qcom,fab-id-valid;
+		};
+
+		pm660_misc: qcom,misc@900 {
+			compatible = "qcom,qpnp-misc";
+			reg = <0x900 0x100>;
 		};
 
 		qcom,power-on@800 {
@@ -269,6 +275,18 @@
 				qcom,fast-avg-setup = <0>;
 			};
 
+			chan@4e {
+				label = "emmc_therm";
+				reg = <0x4e>;
+				qcom,decimation = <2>;
+				qcom,pre-div-channel-scaling = <0>;
+				qcom,calibration-type = "ratiometric";
+				qcom,scale-function = <2>;
+				qcom,hw-settle-time = <2>;
+				qcom,fast-avg-setup = <0>;
+				qcom,vadc-thermal-node;
+			};
+
 			chan@1d {
 				label = "drax_temp";
 				reg = <0x1d>;
@@ -302,7 +320,8 @@
 			dpdm-supply = <&qusb_phy0>;
 
 			qcom,thermal-mitigation
-					= <3000000 1500000 1000000 500000>;
+					= <3000000 2500000 2000000 1500000
+						1000000 500000>;
 
 			qcom,chgr@1000 {
 				reg = <0x1000 0x100>;
@@ -432,6 +451,9 @@
 					  "msg-tx-failed",
 					  "msg-tx-discarded",
 					  "msg-rx-discarded";
+
+			qcom,default-sink-caps = <5000 3000>, /* 5V @ 3A */
+						 <9000 3000>; /* 9V @ 3A */
 		};
 
 		pm660_adc_tm: vadc@3400 {
@@ -505,8 +527,10 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 			qcom,pmic-revid = <&pm660_revid>;
-			io-channels = <&pm660_rradc 0>;
-			io-channel-names = "rradc_batt_id";
+			io-channels = <&pm660_rradc 0>,
+				      <&pm660_rradc 7>;
+			io-channel-names = "rradc_batt_id",
+					   "rradc_die_temp";
 			qcom,rradc-base = <0x4500>;
 			qcom,fg-esr-timer-awake = <96>;
 			qcom,fg-esr-timer-asleep = <256>;
@@ -588,9 +612,12 @@
 		pm660_haptics: qcom,haptic@c000 {
 			compatible = "qcom,qpnp-haptic";
 			reg = <0xc000 0x100>;
-			interrupts = <0x1 0xc0 0x0 IRQ_TYPE_NONE>,
-				     <0x1 0xc0 0x1 IRQ_TYPE_NONE>;
+			interrupts = <0x1 0xc0 0x0 IRQ_TYPE_EDGE_BOTH>,
+				     <0x1 0xc0 0x1 IRQ_TYPE_EDGE_BOTH>;
 			interrupt-names = "sc-irq", "play-irq";
+			qcom,pmic-revid = <&pm660_revid>;
+			qcom,pmic-misc = <&pm660_misc>;
+			qcom,misc-clk-trim-error-reg = <0xf3>;
 			qcom,actuator-type = "lra";
 			qcom,play-mode = "direct";
 			qcom,vmax-mv = <3200>;
@@ -601,11 +628,10 @@
 			qcom,sc-deb-cycles = <8>;
 			qcom,en-brake;
 			qcom,brake-pattern = [03 03 00 00];
-			qcom,use-play-irq;
-			qcom,use-sc-irq;
-			qcom,lra-high-z = "opt1";
+			qcom,lra-high-z = "opt0";
 			qcom,lra-auto-res-mode = "qwd";
-			qcom,lra-res-cal-period = <4>;
+			qcom,lra-calibrate-at-eop = <0>;
+			qcom,correct-lra-drive-freq;
 		};
 	};
 };

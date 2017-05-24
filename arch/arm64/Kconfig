@@ -207,7 +207,7 @@ if ARM64_DMA_USE_IOMMU
 config ARM64_DMA_IOMMU_ALIGNMENT
 	int "Maximum PAGE_SIZE order of alignment for DMA IOMMU buffers"
 	range 4 9
-	default 8
+	default 9
 	help
 	  DMA mapping framework by default aligns all buffers to the smallest
 	  PAGE_SIZE order which is greater than or equal to the requested buffer
@@ -621,6 +621,11 @@ config ARCH_NR_GPIO
 
           If unsure, leave the default value.
 
+config QCOM_TLB_EL2_HANDLER
+	bool "Raise TLB conflict exception to EL2"
+	help
+	  This option enables TLB conflict to be handled
+	  by EL2.
 
 source kernel/Kconfig.preempt
 source kernel/Kconfig.hz

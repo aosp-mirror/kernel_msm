@@ -1,4 +1,4 @@
-/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -17,7 +17,8 @@
 #include <linux/vmalloc.h>
 #include <asm/cacheflush.h>
 #include <asm/dma-iommu.h>
-
+#include <linux/slab.h>
+#include <linux/vmalloc.h>
 
 /* some redundant definitions... :( TODO: move to io-pgtable-fast.h */
 #define FAST_PAGE_SHIFT		12
@@ -150,7 +151,9 @@ static dma_addr_t __fast_smmu_alloc_iova(struct dma_fast_smmu_mapping *mapping,
 
 		iommu_tlbiall(mapping->domain);
 		mapping->have_stale_tlbs = false;
-		av8l_fast_clear_stale_ptes(mapping->pgtbl_pmds, skip_sync);
+		av8l_fast_clear_stale_ptes(mapping->pgtbl_pmds, mapping->base,
+				mapping->base + mapping->size - 1,
+				skip_sync);
 	}
 
 	return (bit << FAST_PAGE_SHIFT) + mapping->base;
@@ -327,7 +330,7 @@ static dma_addr_t fast_smmu_map_page(struct device *dev, struct page *page,
 	if (unlikely(iova == DMA_ERROR_CODE))
 		goto fail;
 
-	pmd = iopte_pmd_offset(mapping->pgtbl_pmds, iova);
+	pmd = iopte_pmd_offset(mapping->pgtbl_pmds, mapping->base, iova);
 
 	if (unlikely(av8l_fast_map_public(pmd, phys_to_map, len, prot)))
 		goto fail_free_iova;
@@ -350,7 +353,8 @@ static void fast_smmu_unmap_page(struct device *dev, dma_addr_t iova,
 {
 	struct dma_fast_smmu_mapping *mapping = dev->archdata.mapping->fast;
 	unsigned long flags;
-	av8l_fast_iopte *pmd = iopte_pmd_offset(mapping->pgtbl_pmds, iova);
+	av8l_fast_iopte *pmd = iopte_pmd_offset(mapping->pgtbl_pmds,
+					mapping->base, iova);
 	unsigned long offset = iova & ~FAST_PAGE_MASK;
 	size_t len = ALIGN(size + offset, FAST_PAGE_SIZE);
 	int nptes = len >> FAST_PAGE_SHIFT;
@@ -372,7 +376,8 @@ static void fast_smmu_sync_single_for_cpu(struct device *dev,
 		dma_addr_t iova, size_t size, enum dma_data_direction dir)
 {
 	struct dma_fast_smmu_mapping *mapping = dev->archdata.mapping->fast;
-	av8l_fast_iopte *pmd = iopte_pmd_offset(mapping->pgtbl_pmds, iova);
+	av8l_fast_iopte *pmd = iopte_pmd_offset(mapping->pgtbl_pmds,
+					mapping->base, iova);
 	unsigned long offset = iova & ~FAST_PAGE_MASK;
 	struct page *page = phys_to_page((*pmd & FAST_PTE_ADDR_MASK));
 
@@ -384,7 +389,8 @@ static void fast_smmu_sync_single_for_device(struct device *dev,
 		dma_addr_t iova, size_t size, enum dma_data_direction dir)
 {
 	struct dma_fast_smmu_mapping *mapping = dev->archdata.mapping->fast;
-	av8l_fast_iopte *pmd = iopte_pmd_offset(mapping->pgtbl_pmds, iova);
+	av8l_fast_iopte *pmd = iopte_pmd_offset(mapping->pgtbl_pmds,
+					mapping->base, iova);
 	unsigned long offset = iova & ~FAST_PAGE_MASK;
 	struct page *page = phys_to_page((*pmd & FAST_PTE_ADDR_MASK));
 
@@ -512,7 +518,8 @@ static void *fast_smmu_alloc(struct device *dev, size_t size,
 	while (sg_miter_next(&miter)) {
 		int nptes = miter.length >> FAST_PAGE_SHIFT;
 
-		ptep = iopte_pmd_offset(mapping->pgtbl_pmds, iova_iter);
+		ptep = iopte_pmd_offset(mapping->pgtbl_pmds, mapping->base,
+					iova_iter);
 		if (unlikely(av8l_fast_map_public(
 				     ptep, page_to_phys(miter.page),
 				     miter.length, prot))) {
@@ -540,7 +547,7 @@ static void *fast_smmu_alloc(struct device *dev, size_t size,
 out_unmap:
 	/* need to take the lock again for page tables and iova */
 	spin_lock_irqsave(&mapping->lock, flags);
-	ptep = iopte_pmd_offset(mapping->pgtbl_pmds, dma_addr);
+	ptep = iopte_pmd_offset(mapping->pgtbl_pmds, mapping->base, dma_addr);
 	av8l_fast_unmap_public(ptep, size);
 	fast_dmac_clean_range(mapping, ptep, ptep + count);
 out_free_iova:
@@ -572,7 +579,7 @@ static void fast_smmu_free(struct device *dev, size_t size,
 
 	pages = area->pages;
 	dma_common_free_remap(vaddr, size, VM_USERMAP, false);
-	ptep = iopte_pmd_offset(mapping->pgtbl_pmds, dma_handle);
+	ptep = iopte_pmd_offset(mapping->pgtbl_pmds, mapping->base, dma_handle);
 	spin_lock_irqsave(&mapping->lock, flags);
 	av8l_fast_unmap_public(ptep, size);
 	fast_dmac_clean_range(mapping, ptep, ptep + count);
@@ -632,7 +639,7 @@ static void __fast_smmu_mapped_over_stale(struct dma_fast_smmu_mapping *fast,
 	dev_err(fast->dev, "Mapped over stale tlb at %pa\n", &iova);
 	dev_err(fast->dev, "bitmap (failure at idx %lu):\n", bitmap_idx);
 	dev_err(fast->dev, "ptep: %p pmds: %p diff: %lu\n", ptep,
-		fast->pgtbl_pmds, ptep - fast->pgtbl_pmds);
+		fast->pgtbl_pmds, bitmap_idx);
 	print_hex_dump(KERN_ERR, "bmap: ", DUMP_PREFIX_ADDRESS,
 		       32, 8, fast->bitmap, fast->bitmap_size, false);
 }
@@ -682,7 +689,7 @@ static const struct dma_map_ops fast_smmu_dma_ops = {
  * fast_smmu_attach_device function.
  */
 static struct dma_fast_smmu_mapping *__fast_smmu_create_mapping_sized(
-	dma_addr_t base, size_t size)
+	dma_addr_t base, u64 size)
 {
 	struct dma_fast_smmu_mapping *fast;
 
@@ -695,7 +702,11 @@ static struct dma_fast_smmu_mapping *__fast_smmu_create_mapping_sized(
 	fast->num_4k_pages = size >> FAST_PAGE_SHIFT;
 	fast->bitmap_size = BITS_TO_LONGS(fast->num_4k_pages) * sizeof(long);
 
-	fast->bitmap = kzalloc(fast->bitmap_size, GFP_KERNEL);
+	fast->bitmap = kzalloc(fast->bitmap_size, GFP_KERNEL | __GFP_NOWARN |
+								__GFP_NORETRY);
+	if (!fast->bitmap)
+		fast->bitmap = vzalloc(fast->bitmap_size);
+
 	if (!fast->bitmap)
 		goto err2;
 
@@ -725,7 +736,7 @@ int fast_smmu_attach_device(struct device *dev,
 	int atomic_domain = 1;
 	struct iommu_domain *domain = mapping->domain;
 	struct iommu_pgtbl_info info;
-	size_t size = mapping->bits << PAGE_SHIFT;
+	u64 size = (u64)mapping->bits << PAGE_SHIFT;
 
 	if (mapping->base + size > (SZ_1G * 4ULL))
 		return -EINVAL;
@@ -739,6 +750,9 @@ int fast_smmu_attach_device(struct device *dev,
 		return -ENOMEM;
 	mapping->fast->domain = domain;
 	mapping->fast->dev = dev;
+
+	domain->geometry.aperture_start = mapping->base;
+	domain->geometry.aperture_end = mapping->base + size - 1;
 
 	if (iommu_attach_device(domain, dev))
 		return -EINVAL;
@@ -779,7 +793,7 @@ void fast_smmu_detach_device(struct device *dev,
 	dev->archdata.mapping = NULL;
 	set_dma_ops(dev, NULL);
 
-	kfree(mapping->fast->bitmap);
+	kvfree(mapping->fast->bitmap);
 	kfree(mapping->fast);
 }
 EXPORT_SYMBOL(fast_smmu_detach_device);

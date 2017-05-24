@@ -21,7 +21,6 @@
 #include <linux/slab.h>
 #include <linux/of.h>
 #include <linux/err.h>
-#include <linux/debugfs.h>
 #include <linux/uaccess.h>
 
 #include <soc/qcom/subsystem_restart.h>
@@ -99,10 +98,12 @@ struct ind_req_resp {
  */
 struct qmi_client_info {
 	int instance_id;
+	enum pd_subsys_state subsys_state;
 	struct work_struct svc_arrive;
 	struct work_struct svc_exit;
 	struct work_struct svc_rcv_msg;
 	struct work_struct ind_ack;
+	struct work_struct qmi_handle_free;
 	struct workqueue_struct *svc_event_wq;
 	struct qmi_handle *clnt_handle;
 	struct notifier_block notifier;
@@ -121,6 +122,18 @@ static DEFINE_MUTEX(notif_add_lock);
 static void root_service_clnt_recv_msg(struct work_struct *work);
 static void root_service_service_arrive(struct work_struct *work);
 static void root_service_exit_work(struct work_struct *work);
+
+static void free_qmi_handle(struct work_struct *work)
+{
+	struct qmi_client_info *data = container_of(work,
+				struct qmi_client_info, qmi_handle_free);
+
+	mutex_lock(&qmi_client_release_lock);
+	data->service_connected = false;
+	qmi_handle_destroy(data->clnt_handle);
+	data->clnt_handle = NULL;
+	mutex_unlock(&qmi_client_release_lock);
+}
 
 static struct service_notif_info *_find_service_info(const char *service_path)
 {
@@ -174,7 +187,7 @@ static void root_service_clnt_notify(struct qmi_handle *handle,
 
 	switch (event) {
 	case QMI_RECV_MSG:
-		schedule_work(&data->svc_rcv_msg);
+		queue_work(data->svc_event_wq, &data->svc_rcv_msg);
 		break;
 	default:
 		break;
@@ -425,18 +438,14 @@ static void root_service_service_exit(struct qmi_client_info *data,
 	 * Destroy client handle and try connecting when
 	 * service comes up again.
 	 */
-	mutex_lock(&qmi_client_release_lock);
-	data->service_connected = false;
-	qmi_handle_destroy(data->clnt_handle);
-	data->clnt_handle = NULL;
-	mutex_unlock(&qmi_client_release_lock);
+	queue_work(data->svc_event_wq, &data->qmi_handle_free);
 }
 
 static void root_service_exit_work(struct work_struct *work)
 {
 	struct qmi_client_info *data = container_of(work,
 					struct qmi_client_info, svc_exit);
-	root_service_service_exit(data, ROOT_PD_DOWN);
+	root_service_service_exit(data, data->subsys_state);
 }
 
 static int service_event_notify(struct notifier_block *this,
@@ -453,6 +462,7 @@ static int service_event_notify(struct notifier_block *this,
 		break;
 	case QMI_SERVER_EXIT:
 		pr_debug("Root PD service DOWN\n");
+		data->subsys_state = ROOT_PD_DOWN;
 		queue_work(data->svc_event_wq, &data->svc_exit);
 		break;
 	default:
@@ -468,7 +478,6 @@ static int ssr_event_notify(struct notifier_block *this,
 	struct qmi_client_info *info = container_of(this,
 					struct qmi_client_info, ssr_notifier);
 	struct notif_data *notif = data;
-	enum pd_subsys_state state;
 
 	switch (code) {
 	case	SUBSYS_BEFORE_SHUTDOWN:
@@ -476,16 +485,16 @@ static int ssr_event_notify(struct notifier_block *this,
 						notif->crashed);
 		switch (notif->crashed) {
 		case CRASH_STATUS_ERR_FATAL:
-			state = ROOT_PD_ERR_FATAL;
+			info->subsys_state = ROOT_PD_ERR_FATAL;
 			break;
 		case CRASH_STATUS_WDOG_BITE:
-			state = ROOT_PD_WDOG_BITE;
+			info->subsys_state = ROOT_PD_WDOG_BITE;
 			break;
 		default:
-			state = ROOT_PD_SHUTDOWN;
+			info->subsys_state = ROOT_PD_SHUTDOWN;
 			break;
 		}
-		root_service_service_exit(info, state);
+		root_service_service_exit(info, info->subsys_state);
 		break;
 	default:
 		break;
@@ -560,6 +569,7 @@ static void *add_service_notif(const char *service_path, int instance_id,
 	INIT_WORK(&qmi_data->svc_exit, root_service_exit_work);
 	INIT_WORK(&qmi_data->svc_rcv_msg, root_service_clnt_recv_msg);
 	INIT_WORK(&qmi_data->ind_ack, send_ind_ack);
+	INIT_WORK(&qmi_data->qmi_handle_free, free_qmi_handle);
 
 	*curr_state = service_notif->curr_state =
 				SERVREG_NOTIF_SERVICE_STATE_UNINIT_V01;
@@ -635,7 +645,13 @@ static int send_pd_restart_req(const char *service_path,
 		return rc;
 	}
 
-	/* Check the response */
+	/* Check response if PDR is disabled */
+	if (QMI_RESP_BIT_SHIFT(resp.resp.result) == QMI_ERR_DISABLED_V01) {
+		pr_err("PD restart is disabled 0x%x\n",
+					QMI_RESP_BIT_SHIFT(resp.resp.error));
+		return -EOPNOTSUPP;
+	}
+	/* Check the response for other error case*/
 	if (QMI_RESP_BIT_SHIFT(resp.resp.result) != QMI_RESULT_SUCCESS_V01) {
 		pr_err("QMI request for PD restart failed 0x%x\n",
 					QMI_RESP_BIT_SHIFT(resp.resp.error));
@@ -735,179 +751,3 @@ int service_notif_unregister_notifier(void *service_notif_handle,
 				&service_notif->service_notif_rcvr_list, nb);
 }
 EXPORT_SYMBOL(service_notif_unregister_notifier);
-
-struct service_notifier_test_data {
-	char service_path[MAX_STRING_LEN];
-	int instance_id;
-	struct notifier_block nb;
-	void *service_notif_handle;
-};
-
-static struct service_notifier_test_data test_data;
-
-static void print_service_provider_state(int notification, char *type)
-{
-	if (notification == SERVREG_NOTIF_SERVICE_STATE_DOWN_V01)
-		pr_info("%s: Service %s down!\n", type, test_data.service_path);
-	else if (notification == SERVREG_NOTIF_SERVICE_STATE_UP_V01)
-		pr_info("%s: Service %s up!\n", type, test_data.service_path);
-	else if (notification == SERVREG_NOTIF_SERVICE_STATE_UNINIT_V01)
-		pr_info("%s: Service %s state uninit!\n", type,
-						test_data.service_path);
-	else
-		pr_info("%s: Service %s state Unknown 0x%x!\n", type,
-					test_data.service_path, notification);
-}
-
-static int nb_callback(struct notifier_block *nb,
-				  unsigned long notification,
-				  void *data)
-{
-	print_service_provider_state((int)notification, "Notification:");
-	return 0;
-}
-
-static ssize_t show_service_path(struct seq_file *f, void *unused)
-{
-	if (test_data.service_notif_handle)
-		seq_printf(f, "Service Path: %s\n", test_data.service_path);
-	else
-		seq_puts(f, "No existing notifier\n");
-	return 0;
-}
-
-
-static ssize_t set_service_notifier_register(struct file *fp,
-						const char __user *buf,
-						size_t count, loff_t *ppos)
-{
-	int curr_state = INT_MAX, rc;
-
-	if (!buf)
-		return -EIO;
-	if (test_data.service_notif_handle) {
-		service_notif_unregister_notifier(
-						test_data.service_notif_handle,
-						&test_data.nb);
-		test_data.service_notif_handle = NULL;
-		pr_info("Unregistering existing notifier for %s\n",
-							test_data.service_path);
-	}
-	rc = simple_write_to_buffer(test_data.service_path, MAX_STRING_LEN,
-							ppos, buf, count - 1);
-	if (rc != count - 1) {
-		pr_err("Unable to read data into kernel buffer\n");
-		goto err;
-	}
-	test_data.nb.notifier_call = nb_callback;
-	test_data.service_notif_handle = service_notif_register_notifier(
-					test_data.service_path,
-					test_data.instance_id, &test_data.nb,
-					&curr_state);
-	if (!IS_ERR(test_data.service_notif_handle)) {
-		pr_info("Notifier Registered for service %s\n",
-						test_data.service_path);
-		print_service_provider_state(curr_state, "Initial State");
-		return count;
-	}
-err:
-	test_data.service_notif_handle = NULL;
-	pr_err("Unable to register notifier for %s\n", test_data.service_path);
-	return -EIO;
-}
-
-static int open_service_notifier_register(struct inode *inode, struct file *f)
-{
-	return single_open(f, (void *) show_service_path,
-							inode->i_private);
-}
-
-static const struct file_operations service_notifier_register_fops = {
-	.open = open_service_notifier_register,
-	.read = seq_read,
-	.write = set_service_notifier_register,
-	.llseek = seq_lseek,
-	.release = seq_release,
-};
-
-static ssize_t show_service_notifier_id(struct seq_file *f, void *unused)
-{
-	seq_printf(f, "Service instance ID: %d\n", test_data.instance_id);
-	return 0;
-}
-
-static ssize_t set_service_notifier_id(struct file *fp,
-						const char __user *buf,
-						size_t count, loff_t *unused)
-{
-	int val, rc;
-	char kbuf[MAX_STRING_LEN];
-
-	if (count > MAX_STRING_LEN) {
-		rc = -EIO;
-		goto err;
-	}
-	rc = copy_from_user(kbuf, buf, count);
-	if (rc != 0) {
-		rc = -EFAULT;
-		goto err;
-	}
-
-	kbuf[count - 1] = '\0';
-	rc = kstrtoint(kbuf, 0, &val);
-	if (rc < 0)
-		goto err;
-
-	test_data.instance_id = val;
-	return count;
-err:
-	pr_err("Invalid input parameters: rc = %d\n", rc);
-	return rc;
-}
-
-static int open_service_notifier_id(struct inode *inode, struct file *f)
-{
-	return single_open(f, (void *) show_service_notifier_id,
-							inode->i_private);
-}
-
-static const struct file_operations service_notifier_id_fops = {
-	.open = open_service_notifier_id,
-	.read = seq_read,
-	.write = set_service_notifier_id,
-	.llseek = seq_lseek,
-	.release = seq_release,
-};
-
-static struct dentry *service_notifier_dir;
-static struct dentry *service_path_file;
-static struct dentry *service_id_file;
-
-static int __init service_notifier_init(void)
-{
-	service_notifier_dir = debugfs_create_dir("service_notifier", NULL);
-	if (service_notifier_dir) {
-		service_path_file = debugfs_create_file("service_path",
-				S_IRUGO | S_IWUSR, service_notifier_dir, NULL,
-				&service_notifier_register_fops);
-		if (!service_path_file)
-			goto err;
-		service_id_file = debugfs_create_file("service_id",
-				S_IRUGO | S_IWUSR, service_notifier_dir, NULL,
-				&service_notifier_id_fops);
-		if (!service_id_file)
-			goto err;
-	}
-	return 0;
-err:
-	debugfs_remove_recursive(service_notifier_dir);
-	return 0;
-}
-
-static void __exit service_notifier_exit(void)
-{
-	debugfs_remove_recursive(service_notifier_dir);
-	test_data.nb.notifier_call = nb_callback;
-}
-module_init(service_notifier_init);
-module_exit(service_notifier_exit);

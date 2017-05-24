@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -52,6 +52,8 @@ spinlock_t msm_eventq_lock;
 
 static struct pid *msm_pid;
 spinlock_t msm_pid_lock;
+
+static uint32_t gpu_limit;
 
 /*
  * It takes 20 bytes + NULL character to write the
@@ -442,6 +444,14 @@ int msm_create_session(unsigned int session_id, struct video_device *vdev)
 	mutex_init(&session->lock);
 	mutex_init(&session->lock_q);
 	mutex_init(&session->close_lock);
+
+	if (gpu_limit) {
+		session->sysfs_pwr_limit = kgsl_pwr_limits_add(KGSL_DEVICE_3D0);
+		if (session->sysfs_pwr_limit)
+			kgsl_pwr_limits_set_freq(session->sysfs_pwr_limit,
+				gpu_limit);
+	}
+
 	return 0;
 }
 EXPORT_SYMBOL(msm_create_session);
@@ -606,6 +616,11 @@ int msm_destroy_session(unsigned int session_id)
 		list, __msm_queue_find_session, &session_id);
 	if (!session)
 		return -EINVAL;
+
+	if (gpu_limit && session->sysfs_pwr_limit) {
+		kgsl_pwr_limits_set_default(session->sysfs_pwr_limit);
+		kgsl_pwr_limits_del(session->sysfs_pwr_limit);
+	}
 
 	msm_destroy_session_streams(session);
 	msm_remove_session_cmd_ack_q(session);
@@ -1104,17 +1119,21 @@ long msm_copy_camera_private_ioctl_args(unsigned long arg,
 	struct msm_camera_private_ioctl_arg *k_ioctl,
 	void __user **tmp_compat_ioctl_ptr)
 {
-	struct msm_camera_private_ioctl_arg *up_ioctl_ptr =
-		(struct msm_camera_private_ioctl_arg *)arg;
+	struct msm_camera_private_ioctl_arg up_ioctl;
 
 	if (WARN_ON(!arg || !k_ioctl || !tmp_compat_ioctl_ptr))
 		return -EIO;
 
-	k_ioctl->id = up_ioctl_ptr->id;
-	k_ioctl->size = up_ioctl_ptr->size;
-	k_ioctl->result = up_ioctl_ptr->result;
-	k_ioctl->reserved = up_ioctl_ptr->reserved;
-	*tmp_compat_ioctl_ptr = compat_ptr(up_ioctl_ptr->ioctl_ptr);
+	if (copy_from_user(&up_ioctl,
+		(struct msm_camera_private_ioctl_arg *)arg,
+		sizeof(struct msm_camera_private_ioctl_arg)))
+		return -EFAULT;
+
+	k_ioctl->id = up_ioctl.id;
+	k_ioctl->size = up_ioctl.size;
+	k_ioctl->result = up_ioctl.result;
+	k_ioctl->reserved = up_ioctl.reserved;
+	*tmp_compat_ioctl_ptr = compat_ptr(up_ioctl.ioctl_ptr);
 
 	return 0;
 }
@@ -1289,6 +1308,9 @@ static int msm_probe(struct platform_device *pdev)
 		pr_err("%s: failed to register ahb clocks\n", __func__);
 		goto v4l2_fail;
 	}
+
+	of_property_read_u32(pdev->dev.of_node,
+		"qcom,gpu-limit", &gpu_limit);
 
 	goto probe_end;
 

@@ -171,6 +171,19 @@
 	};
 };
 
+&pmi8998_gpios {
+	/* GPIO 6 for the internal QNOVO discharge FET control signal */
+	gpio@c500 {
+		status = "okay";
+		qcom,mode = <1>;
+		qcom,pull = <5>;
+		qcom,vin-sel = <0>;
+		qcom,src-sel = <2>;
+		qcom,out-strength = <1>;
+		qcom,master-en = <1>;
+	};
+};
+
 &i2c_5 {
 	status = "okay";
 	synaptics@20 {
@@ -277,6 +290,19 @@
 
 &pmi8998_wled {
 	qcom,led-strings-list = [00 01];
+};
+
+&red_led {
+	/delete-property/ linux,default-trigger;
+	qcom,start-idx = <0>;
+	qcom,idx-len = <10>;
+	qcom,duty-pcts = [00 19 32 4b 64
+			64 4b 32 19 00];
+	qcom,use-blink;
+};
+
+&green_led {
+	/delete-property/ linux,default-trigger;
 };
 
 &dsi_dual_nt35597_video {
@@ -519,6 +545,10 @@
 
 &wil6210 {
 	status = "ok";
+};
+
+&snd_9335 {
+	qcom,mbhc-audio-jack-type = "6-pole-jack";
 };
 
 &soc {

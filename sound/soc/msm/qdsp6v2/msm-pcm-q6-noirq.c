@@ -1,4 +1,4 @@
-/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -141,8 +141,9 @@ static struct snd_pcm_hw_constraint_list constraints_sample_rates = {
 
 static unsigned long msm_pcm_fe_topology[MSM_FRONTEND_DAI_MAX];
 
+/* default value is DTS (i.e read from device tree) */
 static char const *msm_pcm_fe_topology_text[] = {
-	"DTS", "LL", "ULL", "ULL_PP" };
+	"DTS", "ULL", "ULL_PP", "LL" };
 
 static const struct soc_enum msm_pcm_fe_topology_enum[] = {
 	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(msm_pcm_fe_topology_text),
@@ -289,7 +290,9 @@ static int msm_pcm_hw_params(struct snd_pcm_substream *substream,
 	else if (!strcmp(msm_pcm_fe_topology_text[topology], "LL"))
 		perf_mode = LOW_LATENCY_PCM_MODE;
 	else
+		/* use the default from the device tree */
 		perf_mode = pdata->perf_mode;
+
 
 	/* need to set LOW_LATENCY_PCM_MODE for capture since
 	 * push mode does not support ULL
@@ -567,6 +570,8 @@ static int msm_pcm_close(struct snd_pcm_substream *substream)
 					 SNDRV_PCM_STREAM_PLAYBACK :
 					 SNDRV_PCM_STREAM_CAPTURE);
 	kfree(prtd);
+	runtime->private_data = NULL;
+
 	return 0;
 }
 
@@ -794,11 +799,12 @@ static int msm_pcm_fe_topology_put(struct snd_kcontrol *kcontrol,
 
 static int msm_pcm_add_fe_topology_control(struct snd_soc_pcm_runtime *rtd)
 {
-	const char *mixer_ctl_name = "FE";
+	const char *mixer_ctl_name = "PCM_Dev";
 	const char *deviceNo       = "NN";
-	const char *suffix         = "Topology";
+	const char *topo_text      = "Topology";
 	char *mixer_str = NULL;
 	int ctl_len;
+	int ret;
 	struct snd_kcontrol_new topology_control[1] = {
 		{
 			.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
@@ -812,25 +818,199 @@ static int msm_pcm_add_fe_topology_control(struct snd_soc_pcm_runtime *rtd)
 	};
 
 	ctl_len = strlen(mixer_ctl_name) + 1 + strlen(deviceNo) + 1 +
-		strlen(suffix) + 1;
+		  strlen(topo_text) + 1;
 	mixer_str = kzalloc(ctl_len, GFP_KERNEL);
 
-	if (!mixer_str) {
-		return -1;
-	}
+	if (!mixer_str)
+		return -ENOMEM;
 
 	snprintf(mixer_str, ctl_len, "%s %d %s", mixer_ctl_name,
-		 rtd->pcm->device, suffix);
+		 rtd->pcm->device, topo_text);
 
 	topology_control[0].name = mixer_str;
 	topology_control[0].private_value = rtd->dai_link->be_id;
-	snd_soc_add_platform_controls(rtd->platform, topology_control,
-				      ARRAY_SIZE(topology_control));
+	ret = snd_soc_add_platform_controls(rtd->platform, topology_control,
+					    ARRAY_SIZE(topology_control));
 	msm_pcm_fe_topology[rtd->dai_link->be_id] = 0;
 	kfree(mixer_str);
-	return 0;
-
+	return ret;
 }
+
+static int msm_pcm_playback_app_type_cfg_ctl_put(struct snd_kcontrol *kcontrol,
+				      struct snd_ctl_elem_value *ucontrol)
+{
+	u64 fe_id = kcontrol->private_value;
+	int session_type = SESSION_TYPE_RX;
+	int be_id = ucontrol->value.integer.value[3];
+	int ret = 0;
+	int app_type;
+	int acdb_dev_id;
+	int sample_rate = 48000;
+
+	app_type = ucontrol->value.integer.value[0];
+	acdb_dev_id = ucontrol->value.integer.value[1];
+	if (ucontrol->value.integer.value[2] != 0)
+		sample_rate = ucontrol->value.integer.value[2];
+
+	ret = msm_pcm_routing_reg_stream_app_type_cfg(fe_id, session_type,
+						      be_id, app_type,
+						      acdb_dev_id, sample_rate);
+	if (ret < 0)
+		pr_err("%s: msm_pcm_playback_app_type_cfg_ctl_put failed, err %d\n",
+			__func__, ret);
+
+	pr_debug("%s: fe_id- %llu session_type- %d be_id- %d app_type- %d acdb_dev_id- %d sample_rate- %d\n",
+		__func__, fe_id, session_type, be_id,
+		app_type, acdb_dev_id, sample_rate);
+	return ret;
+}
+
+static int msm_pcm_playback_app_type_cfg_ctl_get(struct snd_kcontrol *kcontrol,
+				      struct snd_ctl_elem_value *ucontrol)
+{
+	u64 fe_id = kcontrol->private_value;
+	int session_type = SESSION_TYPE_RX;
+	int be_id = ucontrol->value.integer.value[3];
+	int ret = 0;
+	int app_type;
+	int acdb_dev_id;
+	int sample_rate;
+
+	ret = msm_pcm_routing_get_stream_app_type_cfg(fe_id, session_type,
+						      be_id, &app_type,
+						      &acdb_dev_id,
+						      &sample_rate);
+	if (ret < 0) {
+		pr_err("%s: msm_pcm_playback_app_type_cfg_ctl_get failed, err: %d\n",
+			__func__, ret);
+		goto done;
+	}
+
+	ucontrol->value.integer.value[0] = app_type;
+	ucontrol->value.integer.value[1] = acdb_dev_id;
+	ucontrol->value.integer.value[2] = sample_rate;
+
+	pr_debug("%s: fedai_id %llu, session_type %d, be_id %d, app_type %d, acdb_dev_id %d, sample_rate %d\n",
+		__func__, fe_id, session_type, be_id,
+		app_type, acdb_dev_id, sample_rate);
+done:
+	return ret;
+}
+
+static int msm_pcm_capture_app_type_cfg_ctl_put(struct snd_kcontrol *kcontrol,
+					struct snd_ctl_elem_value *ucontrol)
+{
+	u64 fe_id = kcontrol->private_value;
+	int session_type = SESSION_TYPE_TX;
+	int be_id = ucontrol->value.integer.value[3];
+	int ret = 0;
+	int app_type;
+	int acdb_dev_id;
+	int sample_rate = 48000;
+
+	app_type = ucontrol->value.integer.value[0];
+	acdb_dev_id = ucontrol->value.integer.value[1];
+	if (ucontrol->value.integer.value[2] != 0)
+		sample_rate = ucontrol->value.integer.value[2];
+
+	ret = msm_pcm_routing_reg_stream_app_type_cfg(fe_id, session_type,
+						      be_id, app_type,
+						      acdb_dev_id, sample_rate);
+	if (ret < 0)
+		pr_err("%s: msm_pcm_capture_app_type_cfg_ctl_put failed, err: %d\n",
+			__func__, ret);
+
+	pr_debug("%s: fe_id- %llu session_type- %d be_id- %d app_type- %d acdb_dev_id- %d sample_rate- %d\n",
+		__func__, fe_id, session_type, be_id,
+		app_type, acdb_dev_id, sample_rate);
+
+	return ret;
+}
+
+static int msm_pcm_capture_app_type_cfg_ctl_get(struct snd_kcontrol *kcontrol,
+					struct snd_ctl_elem_value *ucontrol)
+{
+	u64 fe_id = kcontrol->private_value;
+	int session_type = SESSION_TYPE_TX;
+	int be_id = ucontrol->value.integer.value[3];
+	int ret = 0;
+	int app_type;
+	int acdb_dev_id;
+	int sample_rate;
+
+	ret = msm_pcm_routing_get_stream_app_type_cfg(fe_id, session_type,
+						      be_id, &app_type,
+						      &acdb_dev_id,
+						      &sample_rate);
+	if (ret < 0) {
+		pr_err("%s: msm_pcm_capture_app_type_cfg_ctl_get failed, err: %d\n",
+			__func__, ret);
+		goto done;
+	}
+
+	ucontrol->value.integer.value[0] = app_type;
+	ucontrol->value.integer.value[1] = acdb_dev_id;
+	ucontrol->value.integer.value[2] = sample_rate;
+	pr_debug("%s: fedai_id %llu, session_type %d, be_id %d, app_type %d, acdb_dev_id %d, sample_rate %d\n",
+		__func__, fe_id, session_type, be_id,
+		app_type, acdb_dev_id, sample_rate);
+done:
+	return ret;
+}
+
+static int msm_pcm_add_app_type_controls(struct snd_soc_pcm_runtime *rtd)
+{
+	struct snd_pcm *pcm = rtd->pcm;
+	struct snd_pcm_usr *app_type_info;
+	struct snd_kcontrol *kctl;
+	const char *playback_mixer_ctl_name = "Audio Stream";
+	const char *capture_mixer_ctl_name = "Audio Stream Capture";
+	const char *deviceNo = "NN";
+	const char *suffix = "App Type Cfg";
+	int ctl_len, ret = 0;
+
+	if (pcm->streams[SNDRV_PCM_STREAM_PLAYBACK].substream) {
+		ctl_len = strlen(playback_mixer_ctl_name) + 1 +
+				strlen(deviceNo) + 1 +
+				strlen(suffix) + 1;
+		pr_debug("%s: Playback app type cntrl add\n", __func__);
+		ret = snd_pcm_add_usr_ctls(pcm, SNDRV_PCM_STREAM_PLAYBACK,
+				NULL, 1, ctl_len, rtd->dai_link->be_id,
+				&app_type_info);
+		if (ret < 0) {
+			pr_err("%s: playback app type cntrl add failed, err: %d\n",
+				__func__, ret);
+			return ret;
+		}
+		kctl = app_type_info->kctl;
+		snprintf(kctl->id.name, ctl_len, "%s %d %s",
+			     playback_mixer_ctl_name, rtd->pcm->device, suffix);
+		kctl->put = msm_pcm_playback_app_type_cfg_ctl_put;
+		kctl->get = msm_pcm_playback_app_type_cfg_ctl_get;
+	}
+
+	if (pcm->streams[SNDRV_PCM_STREAM_CAPTURE].substream) {
+		ctl_len = strlen(capture_mixer_ctl_name) + 1 +
+				strlen(deviceNo) + 1 + strlen(suffix) + 1;
+		pr_debug("%s: Capture app type cntrl add\n", __func__);
+		ret = snd_pcm_add_usr_ctls(pcm, SNDRV_PCM_STREAM_CAPTURE,
+				NULL, 1, ctl_len, rtd->dai_link->be_id,
+				&app_type_info);
+		if (ret < 0) {
+			pr_err("%s: capture app type cntrl add failed, err: %d\n",
+				__func__, ret);
+			return ret;
+		}
+		kctl = app_type_info->kctl;
+		snprintf(kctl->id.name, ctl_len, "%s %d %s",
+		 capture_mixer_ctl_name, rtd->pcm->device, suffix);
+		kctl->put = msm_pcm_capture_app_type_cfg_ctl_put;
+		kctl->get = msm_pcm_capture_app_type_cfg_ctl_get;
+	}
+
+	return 0;
+}
+
 
 static int msm_asoc_pcm_new(struct snd_soc_pcm_runtime *rtd)
 {
@@ -853,11 +1033,18 @@ static int msm_asoc_pcm_new(struct snd_soc_pcm_runtime *rtd)
 			__func__, ret);
 	}
 
-	msm_pcm_add_fe_topology_control(rtd);
+	ret = msm_pcm_add_fe_topology_control(rtd);
 	if (ret) {
 		pr_err("%s: Could not add pcm topology control %d\n",
 			__func__, ret);
 	}
+
+	ret = msm_pcm_add_app_type_controls(rtd);
+	if (ret) {
+		pr_err("%s: Could not add app type controls failed %d\n",
+			__func__, ret);
+	}
+
 	pcm->nonatomic = true;
 exit:
 	return ret;

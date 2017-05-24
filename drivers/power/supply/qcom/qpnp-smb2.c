@@ -11,12 +11,12 @@
  */
 
 #include <linux/debugfs.h>
+#include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 #include <linux/power_supply.h>
-#include <linux/interrupt.h>
 #include <linux/of.h>
 #include <linux/of_irq.h>
 #include <linux/qpnp/qpnp-revid.h>
@@ -26,7 +26,7 @@
 #include "smb-reg.h"
 #include "smb-lib.h"
 #include "storm-watch.h"
-#include "pmic-voter.h"
+#include <linux/pmic-voter.h>
 
 #define SMB2_DEFAULT_WPWR_UW	8000000
 
@@ -219,15 +219,33 @@ static struct smb_params v1_params = {
 	},
 };
 
+static struct smb_params pm660_params = {
+	.freq_buck		= {
+		.name	= "buck switching frequency",
+		.reg	= FREQ_CLK_DIV_REG,
+		.min_u	= 600,
+		.max_u	= 1600,
+		.set_proc = smblib_set_chg_freq,
+	},
+	.freq_boost		= {
+		.name	= "boost switching frequency",
+		.reg	= FREQ_CLK_DIV_REG,
+		.min_u	= 600,
+		.max_u	= 1600,
+		.set_proc = smblib_set_chg_freq,
+	},
+};
+
 #define STEP_CHARGING_MAX_STEPS	5
 struct smb_dt_props {
 	int	fcc_ua;
 	int	usb_icl_ua;
-	int	otg_cl_ua;
 	int	dc_icl_ua;
 	int	boost_threshold_ua;
 	int	fv_uv;
 	int	wipower_max_uw;
+	int	min_freq_khz;
+	int	max_freq_khz;
 	u32	step_soc_threshold[STEP_CHARGING_MAX_STEPS - 1];
 	s32	step_cc_delta[STEP_CHARGING_MAX_STEPS];
 	struct	device_node *revid_dev_node;
@@ -314,9 +332,9 @@ static int smb2_parse_dt(struct smb2 *chip)
 		chip->dt.usb_icl_ua = -EINVAL;
 
 	rc = of_property_read_u32(node,
-				"qcom,otg-cl-ua", &chip->dt.otg_cl_ua);
+				"qcom,otg-cl-ua", &chg->otg_cl_ua);
 	if (rc < 0)
-		chip->dt.otg_cl_ua = MICRO_1P5A;
+		chg->otg_cl_ua = MICRO_1P5A;
 
 	rc = of_property_read_u32(node,
 				"qcom,dc-icl-ua", &chip->dt.dc_icl_ua);
@@ -328,6 +346,18 @@ static int smb2_parse_dt(struct smb2 *chip)
 				&chip->dt.boost_threshold_ua);
 	if (rc < 0)
 		chip->dt.boost_threshold_ua = MICRO_P1A;
+
+	rc = of_property_read_u32(node,
+				"qcom,min-freq-khz",
+				&chip->dt.min_freq_khz);
+	if (rc < 0)
+		chip->dt.min_freq_khz = -EINVAL;
+
+	rc = of_property_read_u32(node,
+				"qcom,max-freq-khz",
+				&chip->dt.max_freq_khz);
+	if (rc < 0)
+		chip->dt.max_freq_khz = -EINVAL;
 
 	rc = of_property_read_u32(node, "qcom,wipower-max-uw",
 				&chip->dt.wipower_max_uw);
@@ -375,6 +405,8 @@ static int smb2_parse_dt(struct smb2 *chip)
 
 	chg->micro_usb_mode = of_property_read_bool(node, "qcom,micro-usb");
 
+	chg->dcp_icl_ua = chip->dt.usb_icl_ua;
+
 	chg->suspend_input_on_debug_batt = of_property_read_bool(node,
 					"qcom,suspend-input-on-debug-batt");
 	return 0;
@@ -403,6 +435,8 @@ static enum power_supply_property smb2_usb_props[] = {
 	POWER_SUPPLY_PROP_INPUT_CURRENT_NOW,
 	POWER_SUPPLY_PROP_BOOST_CURRENT,
 	POWER_SUPPLY_PROP_PE_START,
+	POWER_SUPPLY_PROP_CTM_CURRENT_MAX,
+	POWER_SUPPLY_PROP_HW_CURRENT_MAX,
 };
 
 static int smb2_usb_get_prop(struct power_supply *psy,
@@ -491,6 +525,12 @@ static int smb2_usb_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_PE_START:
 		rc = smblib_get_pe_start(chg, val);
 		break;
+	case POWER_SUPPLY_PROP_CTM_CURRENT_MAX:
+		val->intval = get_client_vote(chg->usb_icl_votable, CTM_VOTER);
+		break;
+	case POWER_SUPPLY_PROP_HW_CURRENT_MAX:
+		rc = smblib_get_charge_current(chg, &val->intval);
+		break;
 	default:
 		pr_err("get prop %d is not supported in usb\n", psp);
 		rc = -EINVAL;
@@ -542,6 +582,10 @@ static int smb2_usb_set_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_BOOST_CURRENT:
 		rc = smblib_set_prop_boost_current(chg, val);
 		break;
+	case POWER_SUPPLY_PROP_CTM_CURRENT_MAX:
+		rc = vote(chg->usb_icl_votable, CTM_VOTER,
+						val->intval >= 0, val->intval);
+		break;
 	default:
 		pr_err("set prop %d is not supported\n", psp);
 		rc = -EINVAL;
@@ -555,7 +599,9 @@ static int smb2_usb_prop_is_writeable(struct power_supply *psy,
 		enum power_supply_property psp)
 {
 	switch (psp) {
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
 	case POWER_SUPPLY_PROP_TYPEC_POWER_ROLE:
+	case POWER_SUPPLY_PROP_CTM_CURRENT_MAX:
 		return 1;
 	default:
 		break;
@@ -596,11 +642,12 @@ static int smb2_init_usb_psy(struct smb2 *chip)
 
 static enum power_supply_property smb2_usb_main_props[] = {
 	POWER_SUPPLY_PROP_VOLTAGE_MAX,
-	POWER_SUPPLY_PROP_ICL_REDUCTION,
 	POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
 	POWER_SUPPLY_PROP_TYPE,
 	POWER_SUPPLY_PROP_INPUT_CURRENT_SETTLED,
+	POWER_SUPPLY_PROP_INPUT_VOLTAGE_SETTLED,
 	POWER_SUPPLY_PROP_FCC_DELTA,
+	POWER_SUPPLY_PROP_CURRENT_MAX,
 	/*
 	 * TODO move the TEMP and TEMP_MAX properties here,
 	 * and update the thermal balancer to look here
@@ -619,9 +666,6 @@ static int smb2_usb_main_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 		rc = smblib_get_charge_param(chg, &chg->param.fv, &val->intval);
 		break;
-	case POWER_SUPPLY_PROP_ICL_REDUCTION:
-		val->intval = chg->icl_reduction_ua;
-		break;
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
 		rc = smblib_get_charge_param(chg, &chg->param.fcc,
 							&val->intval);
@@ -632,8 +676,14 @@ static int smb2_usb_main_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_SETTLED:
 		rc = smblib_get_prop_input_current_settled(chg, val);
 		break;
+	case POWER_SUPPLY_PROP_INPUT_VOLTAGE_SETTLED:
+		rc = smblib_get_prop_input_voltage_settled(chg, val);
+		break;
 	case POWER_SUPPLY_PROP_FCC_DELTA:
 		rc = smblib_get_prop_fcc_delta(chg, val);
+		break;
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
+		val->intval = get_effective_result(chg->usb_icl_votable);
 		break;
 	default:
 		pr_debug("get prop %d is not supported in usb-main\n", psp);
@@ -659,12 +709,11 @@ static int smb2_usb_main_set_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 		rc = smblib_set_charge_param(chg, &chg->param.fv, val->intval);
 		break;
-	case POWER_SUPPLY_PROP_ICL_REDUCTION:
-		chg->icl_reduction_ua = val->intval;
-		rc = rerun_election(chg->usb_icl_votable);
-		break;
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
 		rc = smblib_set_charge_param(chg, &chg->param.fcc, val->intval);
+		break;
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
+		rc = smblib_set_icl_current(chg, val->intval);
 		break;
 	default:
 		pr_err("set prop %d is not supported\n", psp);
@@ -821,7 +870,9 @@ static enum power_supply_property smb2_batt_props[] = {
 	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMITED,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_VOLTAGE_MAX,
+	POWER_SUPPLY_PROP_VOLTAGE_QNOVO,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
+	POWER_SUPPLY_PROP_CURRENT_QNOVO,
 	POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
 	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_TECHNOLOGY,
@@ -830,6 +881,9 @@ static enum power_supply_property smb2_batt_props[] = {
 	POWER_SUPPLY_PROP_CHARGE_DONE,
 	POWER_SUPPLY_PROP_PARALLEL_DISABLE,
 	POWER_SUPPLY_PROP_SET_SHIP_MODE,
+	POWER_SUPPLY_PROP_DIE_HEALTH,
+	POWER_SUPPLY_PROP_RERUN_AICL,
+	POWER_SUPPLY_PROP_DP_DM,
 };
 
 static int smb2_batt_get_prop(struct power_supply *psy,
@@ -838,6 +892,7 @@ static int smb2_batt_get_prop(struct power_supply *psy,
 {
 	struct smb_charger *chg = power_supply_get_drvdata(psy);
 	int rc = 0;
+	union power_supply_propval pval = {0, };
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_STATUS:
@@ -862,7 +917,14 @@ static int smb2_batt_get_prop(struct power_supply *psy,
 		rc = smblib_get_prop_system_temp_level(chg, val);
 		break;
 	case POWER_SUPPLY_PROP_CHARGER_TEMP:
-		rc = smblib_get_prop_charger_temp(chg, val);
+		/* do not query RRADC if charger is not present */
+		rc = smblib_get_prop_usb_present(chg, &pval);
+		if (rc < 0)
+			pr_err("Couldn't get usb present rc=%d\n", rc);
+
+		rc = -ENODATA;
+		if (pval.intval)
+			rc = smblib_get_prop_charger_temp(chg, val);
 		break;
 	case POWER_SUPPLY_PROP_CHARGER_TEMP_MAX:
 		rc = smblib_get_prop_charger_temp_max(chg, val);
@@ -882,11 +944,20 @@ static int smb2_batt_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 		val->intval = get_client_vote(chg->fv_votable, DEFAULT_VOTER);
 		break;
+	case POWER_SUPPLY_PROP_CHARGE_QNOVO_ENABLE:
+		rc = smblib_get_prop_charge_qnovo_enable(chg, val);
+		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_QNOVO:
+		val->intval = chg->qnovo_fv_uv;
+		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		rc = smblib_get_prop_batt_current_now(chg, val);
 		break;
+	case POWER_SUPPLY_PROP_CURRENT_QNOVO:
+		val->intval = chg->qnovo_fcc_ua;
+		break;
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
-		val->intval = get_client_vote(chg->fcc_max_votable,
+		val->intval = get_client_vote(chg->fcc_votable,
 					      DEFAULT_VOTER);
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
@@ -904,6 +975,15 @@ static int smb2_batt_get_prop(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_SET_SHIP_MODE:
 		/* Not in ship mode as long as device is active */
+		val->intval = 0;
+		break;
+	case POWER_SUPPLY_PROP_DIE_HEALTH:
+		rc = smblib_get_prop_die_health(chg, val);
+		break;
+	case POWER_SUPPLY_PROP_DP_DM:
+		val->intval = chg->pulse_cnt;
+		break;
+	case POWER_SUPPLY_PROP_RERUN_AICL:
 		val->intval = 0;
 		break;
 	default:
@@ -942,14 +1022,34 @@ static int smb2_batt_set_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 		vote(chg->fv_votable, DEFAULT_VOTER, true, val->intval);
 		break;
+	case POWER_SUPPLY_PROP_CHARGE_QNOVO_ENABLE:
+		rc = smblib_set_prop_charge_qnovo_enable(chg, val);
+		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_QNOVO:
+		chg->qnovo_fv_uv = val->intval;
+		rc = rerun_election(chg->fv_votable);
+		break;
+	case POWER_SUPPLY_PROP_CURRENT_QNOVO:
+		chg->qnovo_fcc_ua = val->intval;
+		rc = rerun_election(chg->fcc_votable);
+		break;
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
-		vote(chg->fcc_max_votable, DEFAULT_VOTER, true, val->intval);
+		vote(chg->fcc_votable, DEFAULT_VOTER, true, val->intval);
 		break;
 	case POWER_SUPPLY_PROP_SET_SHIP_MODE:
 		/* Not in ship mode as long as the device is active */
 		if (!val->intval)
 			break;
+		if (chg->pl.psy)
+			power_supply_set_property(chg->pl.psy,
+				POWER_SUPPLY_PROP_SET_SHIP_MODE, val);
 		rc = smblib_set_prop_ship_mode(chg, val);
+		break;
+	case POWER_SUPPLY_PROP_RERUN_AICL:
+		rc = smblib_rerun_aicl(chg);
+		break;
+	case POWER_SUPPLY_PROP_DP_DM:
+		rc = smblib_dp_dm(chg, val->intval);
 		break;
 	default:
 		rc = -EINVAL;
@@ -966,6 +1066,8 @@ static int smb2_batt_prop_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL:
 	case POWER_SUPPLY_PROP_CAPACITY:
 	case POWER_SUPPLY_PROP_PARALLEL_DISABLE:
+	case POWER_SUPPLY_PROP_DP_DM:
+	case POWER_SUPPLY_PROP_RERUN_AICL:
 		return 1;
 	default:
 		break;
@@ -1060,6 +1162,9 @@ static int smb2_init_vconn_regulator(struct smb2 *chip)
 	struct smb_charger *chg = &chip->chg;
 	struct regulator_config cfg = {};
 	int rc = 0;
+
+	if (chg->micro_usb_mode)
+		return 0;
 
 	chg->vconn_vreg = devm_kzalloc(chg->dev, sizeof(*chg->vconn_vreg),
 				      GFP_KERNEL);
@@ -1271,6 +1376,39 @@ static int smb2_disable_typec(struct smb_charger *chg)
 {
 	int rc;
 
+	/* Move to typeC mode */
+	/* configure FSM in idle state and disable UFP_ENABLE bit */
+	rc = smblib_masked_write(chg, TYPE_C_INTRPT_ENB_SOFTWARE_CTRL_REG,
+			TYPEC_DISABLE_CMD_BIT | UFP_EN_CMD_BIT,
+			TYPEC_DISABLE_CMD_BIT);
+	if (rc < 0) {
+		dev_err(chg->dev, "Couldn't put FSM in idle rc=%d\n", rc);
+		return rc;
+	}
+
+	/* wait for FSM to enter idle state */
+	msleep(200);
+	/* configure TypeC mode */
+	rc = smblib_masked_write(chg, TYPE_C_CFG_REG,
+			TYPE_C_OR_U_USB_BIT, 0);
+	if (rc < 0) {
+		dev_err(chg->dev, "Couldn't enable micro USB mode rc=%d\n", rc);
+		return rc;
+	}
+
+	/* wait for mode change before enabling FSM */
+	usleep_range(10000, 11000);
+	/* release FSM from idle state */
+	rc = smblib_masked_write(chg, TYPE_C_INTRPT_ENB_SOFTWARE_CTRL_REG,
+			TYPEC_DISABLE_CMD_BIT, 0);
+	if (rc < 0) {
+		dev_err(chg->dev, "Couldn't release FSM rc=%d\n", rc);
+		return rc;
+	}
+
+	/* wait for FSM to start */
+	msleep(100);
+	/* move to uUSB mode */
 	/* configure FSM in idle state */
 	rc = smblib_masked_write(chg, TYPE_C_INTRPT_ENB_SOFTWARE_CTRL_REG,
 			TYPEC_DISABLE_CMD_BIT, TYPEC_DISABLE_CMD_BIT);
@@ -1279,6 +1417,8 @@ static int smb2_disable_typec(struct smb_charger *chg)
 		return rc;
 	}
 
+	/* wait for FSM to enter idle state */
+	msleep(200);
 	/* configure micro USB mode */
 	rc = smblib_masked_write(chg, TYPE_C_CFG_REG,
 			TYPE_C_OR_U_USB_BIT, TYPE_C_OR_U_USB_BIT);
@@ -1287,6 +1427,8 @@ static int smb2_disable_typec(struct smb_charger *chg)
 		return rc;
 	}
 
+	/* wait for mode change before enabling FSM */
+	usleep_range(10000, 11000);
 	/* release FSM from idle state */
 	rc = smblib_masked_write(chg, TYPE_C_INTRPT_ENB_SOFTWARE_CTRL_REG,
 			TYPEC_DISABLE_CMD_BIT, 0);
@@ -1313,16 +1455,42 @@ static int smb2_init_hw(struct smb2 *chip)
 	if (chip->dt.fv_uv < 0)
 		smblib_get_charge_param(chg, &chg->param.fv, &chip->dt.fv_uv);
 
+	smblib_get_charge_param(chg, &chg->param.usb_icl,
+				&chg->default_icl_ua);
 	if (chip->dt.usb_icl_ua < 0)
-		smblib_get_charge_param(chg, &chg->param.usb_icl,
-					&chip->dt.usb_icl_ua);
+		chip->dt.usb_icl_ua = chg->default_icl_ua;
 
 	if (chip->dt.dc_icl_ua < 0)
 		smblib_get_charge_param(chg, &chg->param.dc_icl,
 					&chip->dt.dc_icl_ua);
 
-	chg->otg_cl_ua = chip->dt.otg_cl_ua;
-	chg->dcp_icl_ua = chip->dt.usb_icl_ua;
+	if (chip->dt.min_freq_khz > 0) {
+		chg->param.freq_buck.min_u = chip->dt.min_freq_khz;
+		chg->param.freq_boost.min_u = chip->dt.min_freq_khz;
+	}
+
+	if (chip->dt.max_freq_khz > 0) {
+		chg->param.freq_buck.max_u = chip->dt.max_freq_khz;
+		chg->param.freq_boost.max_u = chip->dt.max_freq_khz;
+	}
+
+	/* set a slower soft start setting for OTG */
+	rc = smblib_masked_write(chg, DC_ENG_SSUPPLY_CFG2_REG,
+				ENG_SSUPPLY_IVREF_OTG_SS_MASK, OTG_SS_SLOW);
+	if (rc < 0) {
+		pr_err("Couldn't set otg soft start rc=%d\n", rc);
+		return rc;
+	}
+
+	/* set OTG current limit */
+	rc = smblib_set_charge_param(chg, &chg->param.otg_cl,
+				(chg->wa_flags & OTG_WA) ?
+				chg->param.otg_cl.min_u : chg->otg_cl_ua);
+	if (rc < 0) {
+		pr_err("Couldn't set otg current limit rc=%d\n", rc);
+		return rc;
+	}
+
 	chg->boost_threshold_ua = chip->dt.boost_threshold_ua;
 
 	rc = smblib_read(chg, APSD_RESULT_STATUS_REG, &stat);
@@ -1334,31 +1502,27 @@ static int smb2_init_hw(struct smb2 *chip)
 	smblib_rerun_apsd_if_required(chg);
 
 	/* clear the ICL override if it is set */
-	if (stat & ICL_OVERRIDE_LATCH_BIT) {
-		rc = smblib_write(chg, CMD_APSD_REG, ICL_OVERRIDE_BIT);
-		if (rc < 0) {
-			pr_err("Couldn't disable ICL override rc=%d\n", rc);
-			return rc;
-		}
+	if (smblib_icl_override(chg, false) < 0) {
+		pr_err("Couldn't disable ICL override rc=%d\n", rc);
+		return rc;
 	}
 
 	/* votes must be cast before configuring software control */
-	vote(chg->usb_suspend_votable,
+	/* vote 0mA on usb_icl for non battery platforms */
+	vote(chg->usb_icl_votable,
 		DEFAULT_VOTER, chip->dt.no_battery, 0);
 	vote(chg->dc_suspend_votable,
 		DEFAULT_VOTER, chip->dt.no_battery, 0);
-	vote(chg->fcc_max_votable,
+	vote(chg->fcc_votable,
 		DEFAULT_VOTER, true, chip->dt.fcc_ua);
 	vote(chg->fv_votable,
 		DEFAULT_VOTER, true, chip->dt.fv_uv);
-	vote(chg->usb_icl_votable,
-		DCP_VOTER, true, chip->dt.usb_icl_ua);
 	vote(chg->dc_icl_votable,
 		DEFAULT_VOTER, true, chip->dt.dc_icl_ua);
-	vote(chg->hvdcp_disable_votable_indirect, DEFAULT_VOTER,
-		chip->dt.hvdcp_disable, 0);
 	vote(chg->hvdcp_disable_votable_indirect, PD_INACTIVE_VOTER,
 			true, 0);
+	vote(chg->hvdcp_disable_votable_indirect, DEFAULT_VOTER,
+		chip->dt.hvdcp_disable, 0);
 	vote(chg->pd_disallowed_votable_indirect, CC_DETACHED_VOTER,
 			true, 0);
 	vote(chg->pd_disallowed_votable_indirect, HVDCP_TIMEOUT_VOTER,
@@ -1367,6 +1531,18 @@ static int smb2_init_hw(struct smb2 *chip)
 			chg->micro_usb_mode, 0);
 	vote(chg->hvdcp_enable_votable, MICRO_USB_VOTER,
 			chg->micro_usb_mode, 0);
+
+	/*
+	 * AICL configuration:
+	 * start from min and AICL ADC disable
+	 */
+	rc = smblib_masked_write(chg, USBIN_AICL_OPTIONS_CFG_REG,
+			USBIN_AICL_START_AT_MAX_BIT
+				| USBIN_AICL_ADC_EN_BIT, 0);
+	if (rc < 0) {
+		dev_err(chg->dev, "Couldn't configure AICL rc=%d\n", rc);
+		return rc;
+	}
 
 	/* Configure charge enable for software control; active high */
 	rc = smblib_masked_write(chg, CHGR_CFG2_REG,
@@ -1412,13 +1588,6 @@ static int smb2_init_hw(struct smb2 *chip)
 		return rc;
 	}
 
-	rc = smblib_masked_write(chg, QNOVO_PT_ENABLE_CMD_REG,
-			QNOVO_PT_ENABLE_CMD_BIT, QNOVO_PT_ENABLE_CMD_BIT);
-	if (rc < 0) {
-		dev_err(chg->dev, "Couldn't enable qnovo rc=%d\n", rc);
-		return rc;
-	}
-
 	/* configure step charging */
 	rc = smb2_config_step_charging(chip);
 	if (rc < 0) {
@@ -1439,6 +1608,16 @@ static int smb2_init_hw(struct smb2 *chip)
 				 STAT_SW_OVERRIDE_CFG_BIT, 0);
 	if (rc < 0) {
 		dev_err(chg->dev, "Couldn't disable SW STAT override rc=%d\n",
+			rc);
+		return rc;
+	}
+
+	/* disable h/w autonomous parallel charging control */
+	rc = smblib_masked_write(chg, MISC_CFG_REG,
+				 STAT_PARALLEL_1400MA_EN_CFG_BIT, 0);
+	if (rc < 0) {
+		dev_err(chg->dev,
+			"Couldn't disable h/w autonomous parallel control rc=%d\n",
 			rc);
 		return rc;
 	}
@@ -1531,7 +1710,16 @@ static int smb2_init_hw(struct smb2 *chip)
 	return rc;
 }
 
-static int smb2_setup_wa_flags(struct smb2 *chip)
+static int smb2_post_init(struct smb2 *chip)
+{
+	struct smb_charger *chg = &chip->chg;
+
+	rerun_election(chg->usb_irq_enable_votable);
+
+	return 0;
+}
+
+static int smb2_chg_config_init(struct smb2 *chip)
 {
 	struct smb_charger *chg = &chip->chg;
 	struct pmic_revid_data *pmic_rev_id;
@@ -1556,14 +1744,32 @@ static int smb2_setup_wa_flags(struct smb2 *chip)
 
 	switch (pmic_rev_id->pmic_subtype) {
 	case PMI8998_SUBTYPE:
-		chip->chg.wa_flags |= BOOST_BACK_WA;
+		chip->chg.smb_version = PMI8998_SUBTYPE;
+		chip->chg.wa_flags |= BOOST_BACK_WA | QC_AUTH_INTERRUPT_WA_BIT;
 		if (pmic_rev_id->rev4 == PMI8998_V1P1_REV4) /* PMI rev 1.1 */
 			chg->wa_flags |= QC_CHARGER_DETECTION_WA_BIT;
 		if (pmic_rev_id->rev4 == PMI8998_V2P0_REV4) /* PMI rev 2.0 */
 			chg->wa_flags |= TYPEC_CC2_REMOVAL_WA_BIT;
+		chg->chg_freq.freq_5V		= 600;
+		chg->chg_freq.freq_6V_8V	= 800;
+		chg->chg_freq.freq_9V		= 1000;
+		chg->chg_freq.freq_12V		= 1200;
+		chg->chg_freq.freq_removal	= 1000;
+		chg->chg_freq.freq_below_otg_threshold = 2000;
+		chg->chg_freq.freq_above_otg_threshold = 800;
 		break;
 	case PM660_SUBTYPE:
-		chip->chg.wa_flags |= BOOST_BACK_WA;
+		chip->chg.smb_version = PM660_SUBTYPE;
+		chip->chg.wa_flags |= BOOST_BACK_WA | OTG_WA;
+		chg->param.freq_buck = pm660_params.freq_buck;
+		chg->param.freq_boost = pm660_params.freq_boost;
+		chg->chg_freq.freq_5V		= 600;
+		chg->chg_freq.freq_6V_8V	= 800;
+		chg->chg_freq.freq_9V		= 1050;
+		chg->chg_freq.freq_12V		= 1200;
+		chg->chg_freq.freq_removal	= 1050;
+		chg->chg_freq.freq_below_otg_threshold = 1600;
+		chg->chg_freq.freq_above_otg_threshold = 800;
 		break;
 	default:
 		pr_err("PMIC subtype %d not supported\n",
@@ -1600,180 +1806,172 @@ static int smb2_determine_initial_status(struct smb2 *chip)
  * INTERRUPT REGISTRATION *
  **************************/
 
-struct smb2_irq_info {
-	const char			*name;
-	const irq_handler_t		handler;
-	const bool			wake;
-	const struct storm_watch	storm_data;
-	int				irq;
-};
-
-static struct smb2_irq_info smb2_irqs[] = {
+static struct smb_irq_info smb2_irqs[] = {
 /* CHARGER IRQs */
-	{
+	[CHG_ERROR_IRQ] = {
 		.name		= "chg-error",
 		.handler	= smblib_handle_debug,
 	},
-	{
+	[CHG_STATE_CHANGE_IRQ] = {
 		.name		= "chg-state-change",
 		.handler	= smblib_handle_chg_state_change,
 		.wake		= true,
 	},
-	{
+	[STEP_CHG_STATE_CHANGE_IRQ] = {
 		.name		= "step-chg-state-change",
 		.handler	= smblib_handle_step_chg_state_change,
 		.wake		= true,
 	},
-	{
+	[STEP_CHG_SOC_UPDATE_FAIL_IRQ] = {
 		.name		= "step-chg-soc-update-fail",
 		.handler	= smblib_handle_step_chg_soc_update_fail,
 		.wake		= true,
 	},
-	{
+	[STEP_CHG_SOC_UPDATE_REQ_IRQ] = {
 		.name		= "step-chg-soc-update-request",
 		.handler	= smblib_handle_step_chg_soc_update_request,
 		.wake		= true,
 	},
 /* OTG IRQs */
-	{
+	[OTG_FAIL_IRQ] = {
 		.name		= "otg-fail",
 		.handler	= smblib_handle_debug,
 	},
-	{
+	[OTG_OVERCURRENT_IRQ] = {
 		.name		= "otg-overcurrent",
 		.handler	= smblib_handle_otg_overcurrent,
 	},
-	{
+	[OTG_OC_DIS_SW_STS_IRQ] = {
 		.name		= "otg-oc-dis-sw-sts",
 		.handler	= smblib_handle_debug,
 	},
-	{
+	[TESTMODE_CHANGE_DET_IRQ] = {
 		.name		= "testmode-change-detect",
 		.handler	= smblib_handle_debug,
 	},
 /* BATTERY IRQs */
-	{
+	[BATT_TEMP_IRQ] = {
 		.name		= "bat-temp",
 		.handler	= smblib_handle_batt_temp_changed,
 	},
-	{
+	[BATT_OCP_IRQ] = {
 		.name		= "bat-ocp",
 		.handler	= smblib_handle_batt_psy_changed,
 	},
-	{
+	[BATT_OV_IRQ] = {
 		.name		= "bat-ov",
 		.handler	= smblib_handle_batt_psy_changed,
 	},
-	{
+	[BATT_LOW_IRQ] = {
 		.name		= "bat-low",
 		.handler	= smblib_handle_batt_psy_changed,
 	},
-	{
+	[BATT_THERM_ID_MISS_IRQ] = {
 		.name		= "bat-therm-or-id-missing",
 		.handler	= smblib_handle_batt_psy_changed,
 	},
-	{
+	[BATT_TERM_MISS_IRQ] = {
 		.name		= "bat-terminal-missing",
 		.handler	= smblib_handle_batt_psy_changed,
 	},
 /* USB INPUT IRQs */
-	{
+	[USBIN_COLLAPSE_IRQ] = {
 		.name		= "usbin-collapse",
 		.handler	= smblib_handle_debug,
 	},
-	{
+	[USBIN_LT_3P6V_IRQ] = {
 		.name		= "usbin-lt-3p6v",
 		.handler	= smblib_handle_debug,
 	},
-	{
+	[USBIN_UV_IRQ] = {
 		.name		= "usbin-uv",
-		.handler	= smblib_handle_debug,
+		.handler	= smblib_handle_usbin_uv,
 	},
-	{
+	[USBIN_OV_IRQ] = {
 		.name		= "usbin-ov",
 		.handler	= smblib_handle_debug,
 	},
-	{
+	[USBIN_PLUGIN_IRQ] = {
 		.name		= "usbin-plugin",
 		.handler	= smblib_handle_usb_plugin,
 		.wake		= true,
 	},
-	{
+	[USBIN_SRC_CHANGE_IRQ] = {
 		.name		= "usbin-src-change",
 		.handler	= smblib_handle_usb_source_change,
 		.wake		= true,
 	},
-	{
+	[USBIN_ICL_CHANGE_IRQ] = {
 		.name		= "usbin-icl-change",
 		.handler	= smblib_handle_icl_change,
 		.wake		= true,
 	},
-	{
+	[TYPE_C_CHANGE_IRQ] = {
 		.name		= "type-c-change",
 		.handler	= smblib_handle_usb_typec_change,
 		.wake		= true,
 	},
 /* DC INPUT IRQs */
-	{
+	[DCIN_COLLAPSE_IRQ] = {
 		.name		= "dcin-collapse",
 		.handler	= smblib_handle_debug,
 	},
-	{
+	[DCIN_LT_3P6V_IRQ] = {
 		.name		= "dcin-lt-3p6v",
 		.handler	= smblib_handle_debug,
 	},
-	{
+	[DCIN_UV_IRQ] = {
 		.name		= "dcin-uv",
 		.handler	= smblib_handle_debug,
 	},
-	{
+	[DCIN_OV_IRQ] = {
 		.name		= "dcin-ov",
 		.handler	= smblib_handle_debug,
 	},
-	{
+	[DCIN_PLUGIN_IRQ] = {
 		.name		= "dcin-plugin",
 		.handler	= smblib_handle_dc_plugin,
 		.wake		= true,
 	},
-	{
+	[DIV2_EN_DG_IRQ] = {
 		.name		= "div2-en-dg",
 		.handler	= smblib_handle_debug,
 	},
-	{
+	[DCIN_ICL_CHANGE_IRQ] = {
 		.name		= "dcin-icl-change",
 		.handler	= smblib_handle_debug,
 	},
 /* MISCELLANEOUS IRQs */
-	{
+	[WDOG_SNARL_IRQ] = {
 		.name		= "wdog-snarl",
 		.handler	= NULL,
 	},
-	{
+	[WDOG_BARK_IRQ] = {
 		.name		= "wdog-bark",
 		.handler	= NULL,
 	},
-	{
+	[AICL_FAIL_IRQ] = {
 		.name		= "aicl-fail",
 		.handler	= smblib_handle_debug,
 	},
-	{
+	[AICL_DONE_IRQ] = {
 		.name		= "aicl-done",
 		.handler	= smblib_handle_debug,
 	},
-	{
+	[HIGH_DUTY_CYCLE_IRQ] = {
 		.name		= "high-duty-cycle",
 		.handler	= smblib_handle_high_duty_cycle,
 		.wake		= true,
 	},
-	{
+	[INPUT_CURRENT_LIMIT_IRQ] = {
 		.name		= "input-current-limiting",
 		.handler	= smblib_handle_debug,
 	},
-	{
+	[TEMPERATURE_CHANGE_IRQ] = {
 		.name		= "temperature-change",
 		.handler	= smblib_handle_debug,
 	},
-	{
+	[SWITCH_POWER_OK_IRQ] = {
 		.name		= "switcher-power-ok",
 		.handler	= smblib_handle_switcher_power_ok,
 		.storm_data	= {true, 1000, 3},
@@ -1821,6 +2019,7 @@ static int smb2_request_interrupt(struct smb2 *chip,
 	irq_data->parent_data = chip;
 	irq_data->name = irq_name;
 	irq_data->storm_data = smb2_irqs[irq_index].storm_data;
+	mutex_init(&irq_data->storm_data.storm_lock);
 
 	rc = devm_request_threaded_irq(chg->dev, irq, NULL,
 					smb2_irqs[irq_index].handler,
@@ -1831,6 +2030,7 @@ static int smb2_request_interrupt(struct smb2 *chip,
 	}
 
 	smb2_irqs[irq_index].irq = irq;
+	smb2_irqs[irq_index].irq_data = irq_data;
 	if (smb2_irqs[irq_index].wake)
 		enable_irq_wake(irq);
 
@@ -1856,6 +2056,16 @@ static int smb2_request_interrupts(struct smb2 *chip)
 	}
 
 	return rc;
+}
+
+static void smb2_disable_interrupts(struct smb_charger *chg)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(smb2_irqs); i++) {
+		if (smb2_irqs[i].irq > 0)
+			disable_irq(smb2_irqs[i].irq);
+	}
 }
 
 #if defined(CONFIG_DEBUG_FS)
@@ -1944,6 +2154,7 @@ static int smb2_probe(struct platform_device *pdev)
 	chg->param = v1_params;
 	chg->debug_mask = &__debug_mask;
 	chg->mode = PARALLEL_MASTER;
+	chg->irq_info = smb2_irqs;
 	chg->name = "PMI";
 
 	chg->regmap = dev_get_regmap(chg->dev->parent, NULL);
@@ -1952,10 +2163,10 @@ static int smb2_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	rc = smb2_setup_wa_flags(chip);
+	rc = smb2_chg_config_init(chip);
 	if (rc < 0) {
 		if (rc != -EPROBE_DEFER)
-			pr_err("Couldn't setup wa flags rc=%d\n", rc);
+			pr_err("Couldn't setup chg_config rc=%d\n", rc);
 		return rc;
 	}
 
@@ -1984,7 +2195,7 @@ static int smb2_probe(struct platform_device *pdev)
 	rc = smb2_init_vconn_regulator(chip);
 	if (rc < 0) {
 		pr_err("Couldn't initialize vconn regulator rc=%d\n",
-			rc);
+				rc);
 		goto cleanup;
 	}
 
@@ -2047,6 +2258,8 @@ static int smb2_probe(struct platform_device *pdev)
 		goto cleanup;
 	}
 
+	smb2_post_init(chip);
+
 	smb2_create_debugfs(chip);
 
 	rc = smblib_get_prop_usb_present(chg, &val);
@@ -2066,7 +2279,7 @@ static int smb2_probe(struct platform_device *pdev)
 	rc = smblib_get_prop_batt_health(chg, &val);
 	if (rc < 0) {
 		pr_err("Couldn't get batt health rc=%d\n", rc);
-		goto cleanup;
+		val.intval = POWER_SUPPLY_HEALTH_UNKNOWN;
 	}
 	batt_health = val.intval;
 
@@ -2076,6 +2289,8 @@ static int smb2_probe(struct platform_device *pdev)
 		goto cleanup;
 	}
 	batt_charge_type = val.intval;
+
+	device_init_wakeup(chg->dev, true);
 
 	pr_info("QPNP SMB2 probed successfully usb:present=%d type=%d batt:present = %d health = %d charge = %d\n",
 		usb_present, chg->usb_psy_desc.type,
@@ -2114,6 +2329,9 @@ static void smb2_shutdown(struct platform_device *pdev)
 {
 	struct smb2 *chip = platform_get_drvdata(pdev);
 	struct smb_charger *chg = &chip->chg;
+
+	/* disable all interrupts */
+	smb2_disable_interrupts(chg);
 
 	/* configure power role for UFP */
 	smblib_masked_write(chg, TYPE_C_INTRPT_ENB_SOFTWARE_CTRL_REG,

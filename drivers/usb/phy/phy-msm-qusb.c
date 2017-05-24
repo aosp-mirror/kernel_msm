@@ -72,6 +72,7 @@
 #define QUSB2PHY_PORT_TUNE2             0x84
 #define QUSB2PHY_PORT_TUNE3             0x88
 #define QUSB2PHY_PORT_TUNE4             0x8C
+#define QUSB2PHY_PORT_TUNE5             0x90
 
 /* In case Efuse register shows zero, use this value */
 #define TUNE2_DEFAULT_HIGH_NIBBLE	0xB
@@ -102,9 +103,26 @@
 
 #define QUSB2PHY_REFCLK_ENABLE		BIT(0)
 
+unsigned int tune1;
+module_param(tune1, uint, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(tune1, "QUSB PHY TUNE1");
+
 unsigned int tune2;
 module_param(tune2, uint, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(tune2, "QUSB PHY TUNE2");
+
+unsigned int tune3;
+module_param(tune3, uint, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(tune3, "QUSB PHY TUNE3");
+
+unsigned int tune4;
+module_param(tune4, uint, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(tune4, "QUSB PHY TUNE4");
+
+unsigned int tune5;
+module_param(tune5, uint, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(tune5, "QUSB PHY TUNE5");
+
 
 struct qusb_phy {
 	struct usb_phy		phy;
@@ -151,6 +169,7 @@ struct qusb_phy {
 	int			*emu_dcm_reset_seq;
 	int			emu_dcm_reset_seq_len;
 	bool			put_into_high_z_state;
+	struct mutex		phy_lock;
 };
 
 static void qusb_phy_enable_clocks(struct qusb_phy *qphy, bool on)
@@ -326,6 +345,7 @@ static int qusb_phy_update_dpdm(struct usb_phy *phy, int value)
 	switch (value) {
 	case POWER_SUPPLY_DP_DM_DPF_DMF:
 		dev_dbg(phy->dev, "POWER_SUPPLY_DP_DM_DPF_DMF\n");
+		mutex_lock(&qphy->phy_lock);
 		if (!qphy->rm_pulldown) {
 			ret = qusb_phy_enable_power(qphy, true);
 			if (ret >= 0) {
@@ -372,14 +392,17 @@ static int qusb_phy_update_dpdm(struct usb_phy *phy, int value)
 				/* Make sure that above write is completed */
 				wmb();
 
-				qusb_phy_enable_clocks(qphy, false);
+				if (qphy->suspended)
+					qusb_phy_enable_clocks(qphy, false);
 			}
 		}
+		mutex_unlock(&qphy->phy_lock);
 
 		break;
 
 	case POWER_SUPPLY_DP_DM_DPR_DMR:
 		dev_dbg(phy->dev, "POWER_SUPPLY_DP_DM_DPR_DMR\n");
+		mutex_lock(&qphy->phy_lock);
 		if (qphy->rm_pulldown) {
 			if (!qphy->cable_connected) {
 				if (qphy->tcsr_clamp_dig_n)
@@ -394,6 +417,7 @@ static int qusb_phy_update_dpdm(struct usb_phy *phy, int value)
 						qphy->rm_pulldown);
 			}
 		}
+		mutex_unlock(&qphy->phy_lock);
 		break;
 
 	default:
@@ -556,13 +580,29 @@ static int qusb_phy_init(struct usb_phy *phy)
 				qphy->base + QUSB2PHY_PORT_TUNE2);
 	}
 
-	/* If tune2 modparam set, override tune2 value */
-	if (tune2) {
-		pr_debug("%s(): (modparam) TUNE2 val:0x%02x\n",
-						__func__, tune2);
+	/* If tune modparam set, override tune value */
+
+	pr_debug("%s():userspecified modparams TUNEX val:0x%x %x %x %x %x\n",
+				__func__, tune1, tune2, tune3, tune4, tune5);
+	if (tune1)
+		writel_relaxed(tune1,
+				qphy->base + QUSB2PHY_PORT_TUNE1);
+
+	if (tune2)
 		writel_relaxed(tune2,
 				qphy->base + QUSB2PHY_PORT_TUNE2);
-	}
+
+	if (tune3)
+		writel_relaxed(tune3,
+				qphy->base + QUSB2PHY_PORT_TUNE3);
+
+	if (tune4)
+		writel_relaxed(tune4,
+				qphy->base + QUSB2PHY_PORT_TUNE4);
+
+	if (tune5)
+		writel_relaxed(tune5,
+				qphy->base + QUSB2PHY_PORT_TUNE5);
 
 	/* ensure above writes are completed before re-enabling PHY */
 	wmb();
@@ -707,6 +747,7 @@ static int qusb_phy_set_suspend(struct usb_phy *phy, int suspend)
 
 			qusb_phy_enable_clocks(qphy, false);
 		} else { /* Disconnect case */
+			mutex_lock(&qphy->phy_lock);
 			/* Disable all interrupts */
 			writel_relaxed(0x00,
 				qphy->base + QUSB2PHY_PORT_INTR_CTRL);
@@ -723,6 +764,7 @@ static int qusb_phy_set_suspend(struct usb_phy *phy, int suspend)
 				qusb_phy_enable_power(qphy, false);
 			else
 				dev_dbg(phy->dev, "race with rm_pulldown. Keep ldo ON\n");
+			mutex_unlock(&qphy->phy_lock);
 
 			/*
 			 * Set put_into_high_z_state to true so next USB
@@ -1081,6 +1123,7 @@ static int qusb_phy_probe(struct platform_device *pdev)
 		return PTR_ERR(qphy->vdda18);
 	}
 
+	mutex_init(&qphy->phy_lock);
 	platform_set_drvdata(pdev, qphy);
 
 	qphy->phy.label			= "msm-qusb-phy";

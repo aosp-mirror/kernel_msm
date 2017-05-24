@@ -399,6 +399,7 @@ static int mdss_mdp_validate_destination_scaler(struct msm_fb_data_type *mfd,
 		ctl   = mfd_to_ctl(mfd);
 		sctl  = mdss_mdp_get_split_ctl(ctl);
 
+		mutex_lock(&ctl->ds_lock);
 		if (ctl->mixer_left)
 			ds_left = ctl->mixer_left->ds;
 
@@ -412,6 +413,7 @@ static int mdss_mdp_validate_destination_scaler(struct msm_fb_data_type *mfd,
 		case DS_DUAL_MODE:
 			if (!ds_left || !ds_right) {
 				pr_err("Cannot support DUAL mode dest scaling\n");
+				mutex_unlock(&ctl->ds_lock);
 				return -EINVAL;
 			}
 
@@ -457,6 +459,7 @@ static int mdss_mdp_validate_destination_scaler(struct msm_fb_data_type *mfd,
 		case DS_LEFT:
 			if (!ds_left) {
 				pr_err("LM in ctl does not support Destination Scaler\n");
+				mutex_unlock(&ctl->ds_lock);
 				return -EINVAL;
 			}
 			ds_left->flags &= ~(DS_DUAL_MODE|DS_RIGHT);
@@ -486,6 +489,7 @@ static int mdss_mdp_validate_destination_scaler(struct msm_fb_data_type *mfd,
 		case DS_RIGHT:
 			if (!ds_right) {
 				pr_err("Cannot setup DS_RIGHT because only single DS assigned to ctl\n");
+				mutex_unlock(&ctl->ds_lock);
 				return -EINVAL;
 			}
 
@@ -522,7 +526,6 @@ static int mdss_mdp_validate_destination_scaler(struct msm_fb_data_type *mfd,
 					ds_right->src_height, ds_right->flags);
 			break;
 		}
-
 	} else {
 		pr_err("NULL destionation scaler data\n");
 		return -EFAULT;
@@ -559,6 +562,7 @@ static int mdss_mdp_validate_destination_scaler(struct msm_fb_data_type *mfd,
 		goto reset_mixer;
 	}
 
+	mutex_unlock(&ctl->ds_lock);
 	return ret;
 
 reset_mixer:
@@ -592,6 +596,7 @@ reset_mixer:
 				ctl->mixer_right->height);
 	}
 
+	mutex_unlock(&ctl->ds_lock);
 	return ret;
 }
 
@@ -1118,6 +1123,7 @@ static int __configure_pipe_params(struct msm_fb_data_type *mfd,
 	int ret = 0;
 	u32 left_lm_w = left_lm_w_from_mfd(mfd);
 	u64 flags;
+	bool is_right_blend = false;
 
 	struct mdss_mdp_mixer *mixer = NULL;
 	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
@@ -1216,6 +1222,15 @@ static int __configure_pipe_params(struct msm_fb_data_type *mfd,
 		goto end;
 	}
 
+	/* scaling is not allowed for solid_fill layers */
+	if ((pipe->flags & MDP_SOLID_FILL) &&
+		((pipe->src.w != pipe->dst.w) ||
+			(pipe->src.h != pipe->dst.h))) {
+		pr_err("solid fill pipe:%d cannot have scaling\n", pipe->num);
+		ret = -EINVAL;
+		goto end;
+	}
+
 	/*
 	 * unstage the pipe if it's current z_order does not match with new
 	 * z_order because client may only call the validate.
@@ -1229,6 +1244,7 @@ static int __configure_pipe_params(struct msm_fb_data_type *mfd,
 	 * staging, same pipe will be stagged on both layer mixers.
 	 */
 	if (mdata->has_src_split) {
+		is_right_blend = pipe->is_right_blend;
 		if (left_blend_pipe) {
 			if (__validate_pipe_priorities(left_blend_pipe, pipe)) {
 				pr_err("priority limitation. left:%d rect:%d, right:%d rect:%d\n",
@@ -1240,7 +1256,7 @@ static int __configure_pipe_params(struct msm_fb_data_type *mfd,
 				goto end;
 			} else {
 				pr_debug("pipe%d is a right_pipe\n", pipe->num);
-				pipe->is_right_blend = true;
+				is_right_blend = true;
 			}
 		} else if (pipe->is_right_blend) {
 			/*
@@ -1249,7 +1265,7 @@ static int __configure_pipe_params(struct msm_fb_data_type *mfd,
 			 */
 			mdss_mdp_mixer_pipe_unstage(pipe, pipe->mixer_left);
 			mdss_mdp_mixer_pipe_unstage(pipe, pipe->mixer_right);
-			pipe->is_right_blend = false;
+			is_right_blend = false;
 		}
 
 		if (is_split_lm(mfd) && __layer_needs_src_split(layer)) {
@@ -1275,6 +1291,7 @@ static int __configure_pipe_params(struct msm_fb_data_type *mfd,
 			}
 			pipe->src_split_req = false;
 		}
+		pipe->is_right_blend = is_right_blend;
 	}
 
 	pipe->multirect.mode = vinfo->multirect.mode;
@@ -2256,6 +2273,78 @@ static int __validate_multirect(struct msm_fb_data_type *mfd,
 	return 0;
 }
 
+static int __check_source_split(struct mdp_input_layer *layer_list,
+	struct mdss_mdp_pipe **pipe_list, u32 index,
+	u32 left_lm_w, struct mdss_mdp_pipe **left_blend_pipe)
+{
+	int i = index - 1;
+	struct mdp_input_layer *curr, *prev;
+	struct mdp_rect *left, *right;
+	bool match = false;
+	struct mdss_mdp_pipe *left_pipe = NULL;
+
+	/*
+	 * check if current layer is at same z_order as any of the
+	 * previous layers, and fail if any or both are async layers,
+	 * as async layers should have unique z_order.
+	 *
+	 * If it has same z_order and qualifies as a right blend,
+	 * pass a pointer to the pipe representing previous overlay or
+	 * in other terms left blend layer.
+	 *
+	 * Following logic of selecting left_blend has an inherent
+	 * assumption that layer list is sorted on dst_x within a
+	 * same z_order. Otherwise it will fail based on z_order checks.
+	 */
+	curr = &layer_list[index];
+
+	while (i >= 0) {
+		if (layer_list[i].z_order == curr->z_order) {
+			pr_debug("z=%d found match @ %d of %d\n",
+				curr->z_order, i, index);
+			match = true;
+			break;
+		}
+		i--;
+	}
+
+	if (match) {
+		left_pipe = pipe_list[i];
+		prev = &layer_list[i];
+		left = &prev->dst_rect;
+		right = &curr->dst_rect;
+
+		if ((curr->flags & MDP_LAYER_ASYNC)
+			|| (prev->flags & MDP_LAYER_ASYNC)) {
+			curr->error_code = -EINVAL;
+			pr_err("async curr should have unique z_order\n");
+			return curr->error_code;
+		}
+
+		/*
+		 * check if curr is right blend by checking it's
+		 * directly to the right.
+		 */
+		if (((left->x + left->w) == right->x) &&
+		    (left->y == right->y) && (left->h == right->h)) {
+			*left_blend_pipe = left_pipe;
+			MDSS_XLOG(curr->z_order, i, index);
+		}
+
+		/*
+		 * if the curr is right at the left lm boundary and
+		 * src split is not required then right blend is not
+		 * required as it will lie only on the left mixer
+		 */
+		if (!__layer_needs_src_split(prev) &&
+		    ((left->x + left->w) == left_lm_w))
+			*left_blend_pipe = NULL;
+	}
+
+	return 0;
+}
+
+
 /*
  * __validate_layers() - validate input layers
  * @mfd:	Framebuffer data structure for display
@@ -2286,13 +2375,14 @@ static int __validate_layers(struct msm_fb_data_type *mfd,
 	struct mdss_data_type *mdata = mfd_to_mdata(mfd);
 
 	struct mdss_mdp_mixer *mixer = NULL;
-	struct mdp_input_layer *layer, *prev_layer, *layer_list;
+	struct mdp_input_layer *layer, *layer_list;
 	struct mdss_mdp_validate_info_t *validate_info_list = NULL;
 	bool is_single_layer = false, force_validate;
 	enum layer_pipe_q pipe_q_type;
 	enum layer_zorder_used zorder_used[MDSS_MDP_MAX_STAGE] = {0};
 	enum mdss_mdp_pipe_rect rect_num;
 	struct mdp_destination_scaler_data *ds_data;
+	struct mdss_mdp_pipe *pipe_list[MAX_LAYER_COUNT] = {0};
 
 	ret = mutex_lock_interruptible(&mdp5_data->ov_lock);
 	if (ret)
@@ -2364,49 +2454,10 @@ static int __validate_layers(struct msm_fb_data_type *mfd,
 		dst_x = layer->dst_rect.x;
 		left_blend_pipe = NULL;
 
-		prev_layer = (i > 0) ? &layer_list[i - 1] : NULL;
-		/*
-		 * check if current layer is at same z_order as
-		 * previous one, and fail if any or both are async layers,
-		 * as async layers should have unique z_order.
-		 *
-		 * If it has same z_order and qualifies as a right blend,
-		 * pass a pointer to the pipe representing previous overlay or
-		 * in other terms left blend layer.
-		 *
-		 * Following logic of selecting left_blend has an inherent
-		 * assumption that layer list is sorted on dst_x within a
-		 * same z_order. Otherwise it will fail based on z_order checks.
-		 */
-		if (prev_layer && (prev_layer->z_order == layer->z_order)) {
-			struct mdp_rect *left = &prev_layer->dst_rect;
-			struct mdp_rect *right = &layer->dst_rect;
-
-			if ((layer->flags & MDP_LAYER_ASYNC)
-				|| (prev_layer->flags & MDP_LAYER_ASYNC)) {
-				ret = -EINVAL;
-				layer->error_code = ret;
-				pr_err("async layer should have unique z_order\n");
-				goto validate_exit;
-			}
-
-			/*
-			 * check if layer is right blend by checking it's
-			 * directly to the right.
-			 */
-			if (((left->x + left->w) == right->x) &&
-			    (left->y == right->y) && (left->h == right->h))
-				left_blend_pipe = pipe;
-
-			/*
-			 * if the layer is right at the left lm boundary and
-			 * src split is not required then right blend is not
-			 * required as it will lie only on the left mixer
-			 */
-			if (!__layer_needs_src_split(prev_layer) &&
-			    ((left->x + left->w) == left_lm_w))
-				left_blend_pipe = NULL;
-		}
+		if ((i > 0) &&
+		    __check_source_split(layer_list, pipe_list, i, left_lm_w,
+		    &left_blend_pipe))
+			goto validate_exit;
 
 		if (!is_split_lm(mfd) || __layer_needs_src_split(layer))
 			z = LAYER_ZORDER_BOTH;
@@ -2450,6 +2501,8 @@ static int __validate_layers(struct msm_fb_data_type *mfd,
 				right_plist[right_cnt++] = pipe;
 			else
 				left_plist[left_cnt++] = pipe;
+
+			pipe_list[i] = pipe;
 
 			if (layer->flags & MDP_LAYER_PP) {
 				memcpy(&pipe->pp_cfg, layer->pp_info,
@@ -2543,15 +2596,18 @@ static int __validate_layers(struct msm_fb_data_type *mfd,
 		else
 			left_plist[left_cnt++] = pipe;
 
+		pipe_list[i] = pipe;
+
 		pr_debug("id:0x%x flags:0x%x dst_x:%d\n",
 			layer->pipe_ndx, layer->flags, layer->dst_rect.x);
 		layer->z_order -= MDSS_MDP_STAGE_0;
 	}
 
 	ds_data = commit->dest_scaler;
-	if (test_bit(MDSS_CAPS_DEST_SCALER, mdata->mdss_caps_map) &&
-			ds_data && (ds_data->flags & MDP_DESTSCALER_ENABLE) &&
-			commit->dest_scaler_cnt) {
+
+	if (test_bit(MDSS_CAPS_DEST_SCALER, mdata->mdss_caps_map)
+		&& ds_data && commit->dest_scaler_cnt
+		&& (ds_data->flags & MDP_DESTSCALER_ENABLE)) {
 
 		/*
 		 * Find out which DS block to use based on DS commit info

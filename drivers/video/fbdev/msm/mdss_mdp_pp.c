@@ -1124,6 +1124,7 @@ static int pp_vig_pipe_setup(struct mdss_mdp_pipe *pipe, u32 *op)
 
 	mdata = mdss_mdp_get_mdata();
 	if (IS_MDSS_MAJOR_MINOR_SAME(mdata->mdp_rev, MDSS_MDP_HW_REV_320) ||
+	    IS_MDSS_MAJOR_MINOR_SAME(mdata->mdp_rev, MDSS_MDP_HW_REV_330) ||
 	    IS_MDSS_MAJOR_MINOR_SAME(mdata->mdp_rev, MDSS_MDP_HW_REV_301) ||
 	    IS_MDSS_MAJOR_MINOR_SAME(mdata->mdp_rev, MDSS_MDP_HW_REV_300)) {
 		if (pipe->src_fmt->is_yuv) {
@@ -2145,6 +2146,7 @@ static int pp_hist_setup(u32 *op, u32 block, struct mdss_mdp_mixer *mix,
 	unsigned long flag;
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
 	u32 intr_mask;
+	u32 expected_sum = 0;
 
 	if (!mdata)
 		return -EPERM;
@@ -2155,6 +2157,7 @@ static int pp_hist_setup(u32 *op, u32 block, struct mdss_mdp_mixer *mix,
 		block_type = DSPP;
 		op_flags = BIT(16);
 		hist_info = &mdss_pp_res->dspp_hist[mix->num];
+		expected_sum = mix->width * mix->height;
 		base = mdss_mdp_get_dspp_addr_off(PP_BLOCK(block));
 		if (IS_ERR(base)) {
 			ret = -EPERM;
@@ -2205,6 +2208,15 @@ static int pp_hist_setup(u32 *op, u32 block, struct mdss_mdp_mixer *mix,
 							block_type);
 	else if (hist_info->col_en)
 		*op |= op_flags;
+
+	if (hist_info->col_en) {
+		if (!hist_info->expect_sum) {
+			hist_info->expect_sum = expected_sum;
+		} else if (hist_info->expect_sum != expected_sum) {
+			hist_info->expect_sum = 0;
+			hist_info->next_sum = expected_sum;
+		}
+	}
 
 	spin_unlock_irqrestore(&hist_info->hist_lock, flag);
 	mutex_unlock(&hist_info->hist_mutex);
@@ -2559,7 +2571,7 @@ dspp_exit:
 	return ret;
 }
 
-static int pp_dest_scaler_setup(struct mdss_mdp_mixer *mixer)
+int mdss_mdp_dest_scaler_setup_locked(struct mdss_mdp_mixer *mixer)
 {
 	struct mdss_mdp_ctl *ctl;
 	struct mdss_data_type *mdata;
@@ -2618,7 +2630,8 @@ static int pp_dest_scaler_setup(struct mdss_mdp_mixer *mixer)
 
 	writel_relaxed(op_mode, MDSS_MDP_REG_DEST_SCALER_OP_MODE + ds_offset);
 
-	if (ds->flags & DS_SCALE_UPDATE) {
+	if ((ds->flags & DS_SCALE_UPDATE) ||
+			(ds->flags & DS_ENHANCER_UPDATE)) {
 		ret = mdss_mdp_qseed3_setup(&ds->scaler,
 				ds->scaler_base, ds->lut_base,
 				&dest_scaler_fmt);
@@ -2631,11 +2644,6 @@ static int pp_dest_scaler_setup(struct mdss_mdp_mixer *mixer)
 		 * for each commit if there is no change.
 		 */
 		ds->flags &= ~DS_SCALE_UPDATE;
-	}
-
-	if (ds->flags & DS_ENHANCER_UPDATE) {
-		mdss_mdp_scaler_detail_enhance_cfg(&ds->scaler.detail_enhance,
-						ds->scaler_base);
 		ds->flags &= ~DS_ENHANCER_UPDATE;
 	}
 
@@ -2643,7 +2651,9 @@ static int pp_dest_scaler_setup(struct mdss_mdp_mixer *mixer)
 	if (ds->flags & (DS_ENABLE | DS_VALIDATE)) {
 		pr_debug("FLUSH[%d]: flags:%X, op_mode:%x\n",
 				ds->num, ds->flags, op_mode);
+		mutex_lock(&ctl->flush_lock);
 		ctl->flush_bits |= BIT(13 + ds->num);
+		mutex_unlock(&ctl->flush_lock);
 	}
 
 	ds->flags &= ~DS_VALIDATE;
@@ -2760,13 +2770,11 @@ int mdss_mdp_pp_setup_locked(struct mdss_mdp_ctl *ctl)
 	}
 
 	if (ctl->mixer_left) {
-		pp_dest_scaler_setup(ctl->mixer_left);
 		pp_mixer_setup(ctl->mixer_left);
 		pp_dspp_setup(disp_num, ctl->mixer_left);
 		pp_ppb_setup(ctl->mixer_left);
 	}
 	if (ctl->mixer_right) {
-		pp_dest_scaler_setup(ctl->mixer_right);
 		pp_mixer_setup(ctl->mixer_right);
 		pp_dspp_setup(disp_num, ctl->mixer_right);
 		pp_ppb_setup(ctl->mixer_right);
@@ -5279,8 +5287,7 @@ exit:
 
 static int pp_hist_collect(struct mdp_histogram_data *hist,
 				struct pp_hist_col_info *hist_info,
-				char __iomem *ctl_base, u32 expect_sum,
-				u32 block)
+				char __iomem *ctl_base, u32 block)
 {
 	int ret = 0;
 	int sum = 0;
@@ -5321,10 +5328,15 @@ static int pp_hist_collect(struct mdp_histogram_data *hist,
 	if (sum < 0) {
 		pr_err("failed to get the hist data, sum = %d\n", sum);
 		ret = sum;
-	} else if (expect_sum && sum != expect_sum) {
-		pr_err("hist error: bin sum incorrect! (%d/%d)\n",
-			sum, expect_sum);
+	} else if (hist_info->expect_sum && sum != hist_info->expect_sum) {
+		pr_err_ratelimited("hist error: bin sum incorrect! (%d/%d)\n",
+					sum, hist_info->expect_sum);
 		ret = -EINVAL;
+	}
+
+	if (hist_info->next_sum) {
+		hist_info->expect_sum = hist_info->next_sum;
+		hist_info->next_sum = 0;
 	}
 hist_collect_exit:
 	mutex_unlock(&hist_info->hist_mutex);
@@ -5390,11 +5402,10 @@ int mdss_mdp_hist_collect(struct mdp_histogram_data *hist)
 					mdata->mixer_intf[dspp_num].height);
 			if (ret)
 				temp_ret = ret;
-			ret = pp_hist_collect(hist, hists[i], ctl_base,
-				exp_sum, DSPP);
+			ret = pp_hist_collect(hist, hists[i], ctl_base, DSPP);
 			if (ret)
-				pr_err("hist error: dspp[%d] collect %d\n",
-					dspp_num, ret);
+				pr_err_ratelimited("hist error: dspp[%d] collect %d\n",
+							dspp_num, ret);
 		}
 		/* state of dspp histogram blocks attached to logical display
 		 * should be changed atomically to idle. This will ensure that
@@ -5490,7 +5501,7 @@ int mdss_mdp_hist_collect(struct mdp_histogram_data *hist)
 			if (ret)
 				temp_ret = ret;
 			ret = pp_hist_collect(hist, hist_info, ctl_base,
-				exp_sum, SSPP_VIG);
+				SSPP_VIG);
 			if (ret)
 				pr_debug("hist error: pipe[%d] collect: %d\n",
 					pipe->num, ret);
@@ -7670,6 +7681,7 @@ static int pp_get_driver_ops(struct mdp_pp_driver_ops *ops)
 	case MDSS_MDP_HW_REV_300:
 	case MDSS_MDP_HW_REV_301:
 	case MDSS_MDP_HW_REV_320:
+	case MDSS_MDP_HW_REV_330:
 		/*
 		 * Some of the REV_300 PP features are same as REV_107.
 		 * Get the driver ops for both the versions and update the

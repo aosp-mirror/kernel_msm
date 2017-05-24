@@ -169,6 +169,7 @@ enum adreno_gpurev {
 	ADRENO_REV_A430 = 430,
 	ADRENO_REV_A505 = 505,
 	ADRENO_REV_A506 = 506,
+	ADRENO_REV_A508 = 508,
 	ADRENO_REV_A510 = 510,
 	ADRENO_REV_A512 = 512,
 	ADRENO_REV_A530 = 530,
@@ -788,7 +789,7 @@ struct adreno_gpudev {
 	void (*preemption_schedule)(struct adreno_device *);
 	void (*enable_64bit)(struct adreno_device *);
 	void (*clk_set_options)(struct adreno_device *,
-				const char *, struct clk *);
+				const char *, struct clk *, bool on);
 };
 
 /**
@@ -1002,6 +1003,7 @@ static inline int adreno_is_a5xx(struct adreno_device *adreno_dev)
 
 ADRENO_TARGET(a505, ADRENO_REV_A505)
 ADRENO_TARGET(a506, ADRENO_REV_A506)
+ADRENO_TARGET(a508, ADRENO_REV_A508)
 ADRENO_TARGET(a510, ADRENO_REV_A510)
 ADRENO_TARGET(a512, ADRENO_REV_A512)
 ADRENO_TARGET(a530, ADRENO_REV_A530)

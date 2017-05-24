@@ -26,9 +26,13 @@
  *  interface:
  *  MSM_EXT_DISP_HPD_AUDIO: audio will be routed to external display
  *  MSM_EXT_DISP_HPD_VIDEO: video will be routed to external display
+ *  MSM_EXT_DISP_HPD_ASYNC_AUDIO: don't wait audio notification once wake it up
+ *  MSM_EXT_DISP_HPD_ASYNC_VIDEO: don't wait video notification once wake it up
  */
 #define MSM_EXT_DISP_HPD_AUDIO BIT(0)
 #define MSM_EXT_DISP_HPD_VIDEO BIT(1)
+#define MSM_EXT_DISP_HPD_ASYNC_AUDIO BIT(2)
+#define MSM_EXT_DISP_HPD_ASYNC_VIDEO BIT(3)
 
 /**
  * struct ext_disp_cable_notify - cable notify handler structure
@@ -91,7 +95,7 @@ enum msm_ext_disp_power_state {
 /**
  * struct msm_ext_disp_intf_ops - operations exposed to display interface
  * @hpd: updates external display interface state
- * @notify: updates audio framework with interface state
+ * @notify: acknowledgment to power on or off
  */
 struct msm_ext_disp_intf_ops {
 	int (*hpd)(struct platform_device *pdev,
@@ -100,8 +104,7 @@ struct msm_ext_disp_intf_ops {
 			u32 flags);
 	int (*notify)(struct platform_device *pdev,
 			enum msm_ext_disp_cable_state state);
-	int (*ack)(struct platform_device *pdev,
-			u32 ack);
+	int (*ack)(struct platform_device *pdev, u32 ack);
 };
 
 /**

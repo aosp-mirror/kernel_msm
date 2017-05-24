@@ -1581,6 +1581,8 @@ static int functionfs_init(void)
 		pr_err("failed registering file system (%d)\n", ret);
 
 	ffs_ipc_log = ipc_log_context_create(NUM_PAGES, "f_fs", 0);
+	if (IS_ERR_OR_NULL(ffs_ipc_log))
+		ffs_ipc_log =  NULL;
 
 	return ret;
 }
@@ -1591,6 +1593,11 @@ static void functionfs_cleanup(void)
 
 	pr_info("unloading\n");
 	unregister_filesystem(&ffs_fs_type);
+
+	if (ffs_ipc_log) {
+		ipc_log_context_destroy(ffs_ipc_log);
+		ffs_ipc_log = NULL;
+	}
 }
 
 
@@ -1872,8 +1879,8 @@ static int ffs_epfiles_create(struct ffs_data *ffs)
 
 	ffs->epfiles = epfiles;
 
-	ffs_log("exit: epfile name %s state %d setup_state %d flag %lu",
-		epfile->name, ffs->state, ffs->setup_state, ffs->flags);
+	ffs_log("exit: eps_count %u state %d setup_state %d flag %lu",
+		count, ffs->state, ffs->setup_state, ffs->flags);
 
 	return 0;
 }
@@ -1884,7 +1891,7 @@ static void ffs_epfiles_destroy(struct ffs_epfile *epfiles, unsigned count)
 
 	ENTER();
 
-	ffs_log("enter: epfilename %s", epfile->name);
+	ffs_log("enter: count %u", count);
 
 	for (; count; --count, ++epfile) {
 		BUG_ON(mutex_is_locked(&epfile->mutex) ||

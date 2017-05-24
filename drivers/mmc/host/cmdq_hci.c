@@ -33,8 +33,8 @@
 #define DCMD_SLOT 31
 #define NUM_SLOTS 32
 
-/* 1 sec */
-#define HALT_TIMEOUT_MS 1000
+/* 10 sec */
+#define HALT_TIMEOUT_MS 10000
 
 static int cmdq_halt_poll(struct mmc_host *mmc, bool halt);
 static int cmdq_halt(struct mmc_host *mmc, bool halt);
@@ -145,6 +145,29 @@ static void cmdq_clear_set_irqs(struct cmdq_host *cq_host, u32 clear, u32 set)
 	mb();
 }
 
+static int cmdq_clear_task_poll(struct cmdq_host *cq_host, unsigned int tag)
+{
+	int retries = 100;
+
+	cmdq_clear_set_irqs(cq_host, CQIS_TCL, 0);
+	cmdq_writel(cq_host, 1<<tag, CQTCLR);
+	while (retries) {
+		/*
+		 * Task Clear register and doorbell,
+		 * both should indicate that task is cleared
+		 */
+		if ((cmdq_readl(cq_host, CQTCLR) & 1<<tag) ||
+			(cmdq_readl(cq_host, CQTDBR) & 1<<tag)) {
+			udelay(5);
+			retries--;
+			continue;
+		} else
+			break;
+	}
+
+	cmdq_clear_set_irqs(cq_host, 0, CQIS_TCL);
+	return retries ? 0 : -ETIMEDOUT;
+}
 
 #define DRV_NAME "cmdq-host"
 
@@ -197,6 +220,10 @@ static void cmdq_dump_adma_mem(struct cmdq_host *cq_host)
 static void cmdq_dumpregs(struct cmdq_host *cq_host)
 {
 	struct mmc_host *mmc = cq_host->mmc;
+	int offset = 0;
+
+	if (cq_host->offset_changed)
+		offset = CQ_V5_VENDOR_CFG;
 
 	MMC_TRACE(mmc,
 	"%s: 0x0C=0x%08x 0x10=0x%08x 0x14=0x%08x 0x18=0x%08x 0x28=0x%08x 0x2C=0x%08x 0x30=0x%08x 0x34=0x%08x 0x54=0x%08x 0x58=0x%08x 0x5C=0x%08x 0x48=0x%08x\n",
@@ -243,7 +270,7 @@ static void cmdq_dumpregs(struct cmdq_host *cq_host)
 		cmdq_readl(cq_host, CQCRI),
 		cmdq_readl(cq_host, CQCRA));
 	pr_err(DRV_NAME": Vendor cfg 0x%08x\n",
-	       cmdq_readl(cq_host, CQ_VENDOR_CFG));
+	       cmdq_readl(cq_host, CQ_VENDOR_CFG + offset));
 	pr_err(DRV_NAME ": ===========================================\n");
 
 	cmdq_dump_task_history(cq_host);
@@ -384,6 +411,12 @@ static int cmdq_enable(struct mmc_host *mmc)
 		cq_host->caps |= CMDQ_CAP_CRYPTO_SUPPORT |
 				 CMDQ_TASK_DESC_SZ_128;
 		cqcfg |= CQ_ICE_ENABLE;
+		/*
+		 * For SDHC v5.0 onwards, ICE 3.0 specific registers are added
+		 * in CQ register space, due to which few CQ registers are
+		 * shifted. Set offset_changed boolean to use updated address.
+		 */
+		cq_host->offset_changed = true;
 	}
 
 	cmdq_writel(cq_host, cqcfg, CQCFG);
@@ -818,16 +851,29 @@ static void cmdq_finish_data(struct mmc_host *mmc, unsigned int tag)
 {
 	struct mmc_request *mrq;
 	struct cmdq_host *cq_host = (struct cmdq_host *)mmc_cmdq_private(mmc);
+	int offset = 0;
+	int err = 0;
 
+	if (cq_host->offset_changed)
+		offset = CQ_V5_VENDOR_CFG;
 	mrq = get_req_by_tag(cq_host, tag);
 	if (tag == cq_host->dcmd_slot)
 		mrq->cmd->resp[0] = cmdq_readl(cq_host, CQCRDCT);
 
 	if (mrq->cmdq_req->cmdq_req_flags & DCMD)
-		cmdq_writel(cq_host, cmdq_readl(cq_host, CQ_VENDOR_CFG) |
-			    CMDQ_SEND_STATUS_TRIGGER, CQ_VENDOR_CFG);
+		cmdq_writel(cq_host,
+			cmdq_readl(cq_host, CQ_VENDOR_CFG + offset) |
+			CMDQ_SEND_STATUS_TRIGGER, CQ_VENDOR_CFG + offset);
 
 	cmdq_runtime_pm_put(cq_host);
+
+	if (cq_host->ops->crypto_cfg_end) {
+		err = cq_host->ops->crypto_cfg_end(mmc, mrq);
+		if (err) {
+			pr_err("%s: failed to end ice config: err %d tag %d\n",
+					mmc_hostname(mmc), err, tag);
+		}
+	}
 	if (!(cq_host->caps & CMDQ_CAP_CRYPTO_SUPPORT) &&
 			cq_host->ops->crypto_cfg_reset)
 		cq_host->ops->crypto_cfg_reset(mmc, tag);
@@ -843,16 +889,19 @@ irqreturn_t cmdq_irq(struct mmc_host *mmc, int err)
 	struct mmc_request *mrq;
 	int ret;
 	u32 dbr_set = 0;
+	u32 dev_pend_set = 0;
+	int stat_err = 0;
 
 	status = cmdq_readl(cq_host, CQIS);
-	cmdq_writel(cq_host, status, CQIS);
 
 	if (!status && !err)
 		return IRQ_NONE;
 	MMC_TRACE(mmc, "%s: CQIS: 0x%x err: %d\n",
 		__func__, status, err);
 
-	if (err || (status & CQIS_RED)) {
+	stat_err = status & (CQIS_RED | CQIS_GCE | CQIS_ICCE);
+
+	if (err || stat_err) {
 		err_info = cmdq_readl(cq_host, CQTERRI);
 		pr_err("%s: err: %d status: 0x%08x task-err-info (0x%08lx)\n",
 		       mmc_hostname(mmc), err, status, err_info);
@@ -868,6 +917,17 @@ irqreturn_t cmdq_irq(struct mmc_host *mmc, int err)
 		if (ret)
 			pr_err("%s: %s: halt failed ret=%d\n",
 					mmc_hostname(mmc), __func__, ret);
+
+		/*
+		 * Clear the CQIS after halting incase of error. This is done
+		 * because if CQIS is cleared before halting, the CQ will
+		 * continue with issueing commands for rest of requests with
+		 * Doorbell rung. This will overwrite the Resp Arg register.
+		 * So CQ must be halted first and then CQIS cleared incase
+		 * of error
+		 */
+		cmdq_writel(cq_host, status, CQIS);
+
 		cmdq_dumpregs(cq_host);
 
 		if (!err_info) {
@@ -944,7 +1004,7 @@ skip_cqterri:
 		 * CQE detected a reponse error from device
 		 * In most cases, this would require a reset.
 		 */
-		if (status & CQIS_RED) {
+		if (stat_err & CQIS_RED) {
 			/*
 			 * will check if the RED error is due to a bkops
 			 * exception once the queue is empty
@@ -956,13 +1016,72 @@ skip_cqterri:
 
 			mrq->cmdq_req->resp_err = true;
 			pr_err("%s: Response error (0x%08x) from card !!!",
-				mmc_hostname(mmc), status);
+				mmc_hostname(mmc), cmdq_readl(cq_host, CQCRA));
+
 		} else {
 			mrq->cmdq_req->resp_idx = cmdq_readl(cq_host, CQCRI);
 			mrq->cmdq_req->resp_arg = cmdq_readl(cq_host, CQCRA);
 		}
 
+		/*
+		 * Generic Crypto error detected by CQE.
+		 * Its a fatal, would require cmdq reset.
+		 */
+		if (stat_err & CQIS_GCE) {
+			if (mrq->data)
+				mrq->data->error = -EIO;
+			pr_err("%s: Crypto generic error while processing task %lu!",
+				mmc_hostname(mmc), tag);
+			MMC_TRACE(mmc, "%s: GCE error detected with tag %lu\n",
+					__func__, tag);
+		}
+		/*
+		 * Invalid crypto config error detected by CQE, clear the task.
+		 * Task can be cleared only when CQE is halt state.
+		 */
+		if (stat_err & CQIS_ICCE) {
+			/*
+			 * Invalid Crypto Config Error is detected at the
+			 * beginning of the transfer before the actual execution
+			 * started. So just clear the task in CQE. No need to
+			 * clear in device. Only the task which caused ICCE has
+			 * to be cleared. Other tasks can be continue processing
+			 * The first task which is about to be prepared would
+			 * cause ICCE Error.
+			 */
+			dbr_set = cmdq_readl(cq_host, CQTDBR);
+			dev_pend_set = cmdq_readl(cq_host, CQDPT);
+			if (dbr_set ^ dev_pend_set)
+				tag = ffs(dbr_set ^ dev_pend_set) - 1;
+			mrq = get_req_by_tag(cq_host, tag);
+			pr_err("%s: Crypto config error while processing task %lu!",
+				mmc_hostname(mmc), tag);
+			MMC_TRACE(mmc, "%s: ICCE error with tag %lu\n",
+						__func__, tag);
+			if (mrq->data)
+				mrq->data->error = -EIO;
+			else if (mrq->cmd)
+				mrq->cmd->error = -EIO;
+			/*
+			 * If CQE is halted and tag is valid then clear the task
+			 * then un-halt CQE and set flag to skip error recovery.
+			 * If any of the condtions is not met thene it will
+			 * enter into default error recovery path.
+			 */
+			if (!ret && (dbr_set ^ dev_pend_set)) {
+				ret = cmdq_clear_task_poll(cq_host, tag);
+				if (ret) {
+					pr_err("%s: %s: task[%lu] clear failed ret=%d\n",
+						mmc_hostname(mmc),
+						__func__, tag, ret);
+				} else if (!cmdq_halt_poll(mmc, false)) {
+					mrq->cmdq_req->skip_err_handling = true;
+				}
+			}
+		}
 		cmdq_finish_data(mmc, tag);
+	} else {
+		cmdq_writel(cq_host, status, CQIS);
 	}
 
 	if (status & CQIS_TCC) {
@@ -995,6 +1114,9 @@ skip_cqterri:
 	if (status & CQIS_HAC) {
 		if (cq_host->ops->post_cqe_halt)
 			cq_host->ops->post_cqe_halt(mmc);
+		/* halt done: re-enable legacy interrupts */
+		if (cq_host->ops->clear_set_irqs)
+			cq_host->ops->clear_set_irqs(mmc, false);
 		/* halt is completed, wakeup waiting thread */
 		complete(&cq_host->halt_comp);
 	}
@@ -1022,6 +1144,7 @@ static int cmdq_halt_poll(struct mmc_host *mmc, bool halt)
 			cq_host->ops->clear_set_irqs(mmc, true);
 		cmdq_writel(cq_host, cmdq_readl(cq_host, CQCTL) & ~HALT,
 			    CQCTL);
+		mmc_host_clr_halt(mmc);
 		return 0;
 	}
 
@@ -1052,6 +1175,7 @@ static int cmdq_halt(struct mmc_host *mmc, bool halt)
 {
 	struct cmdq_host *cq_host = (struct cmdq_host *)mmc_cmdq_private(mmc);
 	u32 ret = 0;
+	u32 config = 0;
 	int retries = 3;
 
 	cmdq_runtime_pm_get(cq_host);
@@ -1061,16 +1185,31 @@ static int cmdq_halt(struct mmc_host *mmc, bool halt)
 				    CQCTL);
 			ret = wait_for_completion_timeout(&cq_host->halt_comp,
 					  msecs_to_jiffies(HALT_TIMEOUT_MS));
-			if (!ret && !(cmdq_readl(cq_host, CQCTL) & HALT)) {
-				retries--;
-				continue;
+			if (!ret) {
+				pr_warn("%s: %s: HAC int timeout\n",
+					mmc_hostname(mmc), __func__);
+				if ((cmdq_readl(cq_host, CQCTL) & HALT)) {
+					/*
+					 * Don't retry if CQE is halted but irq
+					 * is not triggered in timeout period.
+					 * And since we are returning error,
+					 * un-halt CQE. Since irq was not fired
+					 * yet, no need to set other params
+					 */
+					retries = 0;
+					config = cmdq_readl(cq_host, CQCTL);
+					config &= ~HALT;
+					cmdq_writel(cq_host, config, CQCTL);
+				} else {
+					pr_warn("%s: %s: retryng halt (%d)\n",
+						mmc_hostname(mmc), __func__,
+						retries);
+					retries--;
+					continue;
+				}
 			} else {
 				MMC_TRACE(mmc, "%s: halt done , retries: %d\n",
 					__func__, retries);
-				/* halt done: re-enable legacy interrupts */
-				if (cq_host->ops->clear_set_irqs)
-					cq_host->ops->clear_set_irqs(mmc,
-								false);
 				break;
 			}
 		}

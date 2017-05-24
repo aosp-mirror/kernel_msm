@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -33,6 +33,7 @@
 
 /* ctrl registers */
 #define QPNP_WLED_FAULT_STATUS(b)	(b + 0x08)
+#define QPNP_WLED_INT_RT_STS(b)		(b + 0x10)
 #define QPNP_WLED_EN_REG(b)		(b + 0x46)
 #define QPNP_WLED_FDBK_OP_REG(b)	(b + 0x48)
 #define QPNP_WLED_VREF_REG(b)		(b + 0x49)
@@ -44,6 +45,7 @@
 #define QPNP_WLED_SOFTSTART_RAMP_DLY(b) (b + 0x53)
 #define QPNP_WLED_VLOOP_COMP_RES_REG(b)	(b + 0x55)
 #define QPNP_WLED_VLOOP_COMP_GM_REG(b)	(b + 0x56)
+#define QPNP_WLED_EN_PSM_REG(b)		(b + 0x5A)
 #define QPNP_WLED_PSM_CTRL_REG(b)	(b + 0x5B)
 #define QPNP_WLED_LCD_AUTO_PFM_REG(b)	(b + 0x5C)
 #define QPNP_WLED_SC_PRO_REG(b)		(b + 0x5E)
@@ -82,12 +84,13 @@
 #define QPNP_WLED_VREF_PSM_MIN_MV			400
 #define QPNP_WLED_VREF_PSM_MAX_MV			750
 #define QPNP_WLED_VREF_PSM_DFLT_AMOLED_MV		450
-#define QPNP_WLED_PSM_CTRL_OVERWRITE			0x80
+#define QPNP_WLED_PSM_OVERWRITE_BIT			BIT(7)
 #define QPNP_WLED_LCD_AUTO_PFM_DFLT_THRESH		1
 #define QPNP_WLED_LCD_AUTO_PFM_THRESH_MAX		0xF
 #define QPNP_WLED_LCD_AUTO_PFM_EN_SHIFT			7
 #define QPNP_WLED_LCD_AUTO_PFM_EN_BIT			BIT(7)
 #define QPNP_WLED_LCD_AUTO_PFM_THRESH_MASK		GENMASK(3, 0)
+#define QPNP_WLED_EN_PSM_BIT				BIT(7)
 
 #define QPNP_WLED_ILIM_MASK		GENMASK(2, 0)
 #define QPNP_WLED_ILIM_OVERWRITE	BIT(7)
@@ -117,6 +120,9 @@
 		QPNP_WLED_TEST4_EN_CLAMP_BIT |		\
 		QPNP_WLED_TEST4_EN_SOFT_START_BIT)
 #define QPNP_WLED_TEST4_EN_IIND_UP	0x1
+#define QPNP_WLED_ILIM_FAULT_BIT	BIT(0)
+#define QPNP_WLED_OVP_FAULT_BIT		BIT(1)
+#define QPNP_WLED_SC_FAULT_BIT		BIT(2)
 
 /* sink registers */
 #define QPNP_WLED_CURR_SINK_REG(b)	(b + 0x46)
@@ -335,6 +341,7 @@ static struct wled_vref_setting vref_setting_pmi8998 = {
  *  @ lcd_auto_pfm_thresh - the threshold for lcd auto pfm mode
  *  @ loop_auto_gm_en - select if auto gm is enabled
  *  @ lcd_auto_pfm_en - select if auto pfm is enabled in lcd mode
+ *  @ lcd_psm_ctrl - select if psm needs to be controlled in lcd mode
  *  @ avdd_mode_spmi - enable avdd programming via spmi
  *  @ en_9b_dim_res - enable or disable 9bit dimming
  *  @ en_phase_stag - enable or disable phase staggering
@@ -380,6 +387,7 @@ struct qpnp_wled {
 	u8			lcd_auto_pfm_thresh;
 	bool			loop_auto_gm_en;
 	bool			lcd_auto_pfm_en;
+	bool			lcd_psm_ctrl;
 	bool			avdd_mode_spmi;
 	bool			en_9b_dim_res;
 	bool			en_phase_stag;
@@ -549,6 +557,30 @@ static int qpnp_wled_set_level(struct qpnp_wled *wled, int level)
 	return 0;
 }
 
+static int qpnp_wled_psm_config(struct qpnp_wled *wled, bool enable)
+{
+	int rc;
+
+	if (!wled->lcd_psm_ctrl)
+		return 0;
+
+	rc = qpnp_wled_masked_write_reg(wled,
+			QPNP_WLED_EN_PSM_REG(wled->ctrl_base),
+			QPNP_WLED_EN_PSM_BIT,
+			enable ? QPNP_WLED_EN_PSM_BIT : 0);
+	if (rc < 0)
+		return rc;
+
+	rc = qpnp_wled_masked_write_reg(wled,
+			QPNP_WLED_PSM_CTRL_REG(wled->ctrl_base),
+			QPNP_WLED_PSM_OVERWRITE_BIT,
+			enable ? QPNP_WLED_PSM_OVERWRITE_BIT : 0);
+	if (rc < 0)
+		return rc;
+
+	return 0;
+}
+
 static int qpnp_wled_module_en(struct qpnp_wled *wled,
 				u16 base_addr, bool state)
 {
@@ -561,21 +593,31 @@ static int qpnp_wled_module_en(struct qpnp_wled *wled,
 	if (rc < 0)
 		return rc;
 
-	if (wled->ovp_irq > 0) {
-		if (state && wled->ovp_irq_disabled) {
-			/*
-			 * Wait for at least 10ms before enabling OVP fault
-			 * interrupt after enabling the module so that soft
-			 * start is completed. Keep OVP interrupt disabled
-			 * when the module is disabled.
-			 */
-			usleep_range(10000, 11000);
+	/*
+	 * Wait for at least 10ms before enabling OVP fault interrupt after
+	 * enabling the module so that soft start is completed. Also, this
+	 * delay can be used to control PSM during enable when required. Keep
+	 * OVP interrupt disabled when the module is disabled.
+	 */
+	if (state) {
+		usleep_range(10000, 11000);
+		rc = qpnp_wled_psm_config(wled, false);
+		if (rc < 0)
+			return rc;
+
+		if (wled->ovp_irq > 0 && wled->ovp_irq_disabled) {
 			enable_irq(wled->ovp_irq);
 			wled->ovp_irq_disabled = false;
-		} else if (!state && !wled->ovp_irq_disabled) {
+		}
+	} else {
+		if (wled->ovp_irq > 0 && !wled->ovp_irq_disabled) {
 			disable_irq(wled->ovp_irq);
 			wled->ovp_irq_disabled = true;
 		}
+
+		rc = qpnp_wled_psm_config(wled, true);
+		if (rc < 0)
+			return rc;
 	}
 
 	return 0;
@@ -721,10 +763,11 @@ static ssize_t qpnp_wled_ramp_ms_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
 	struct qpnp_wled *wled = dev_get_drvdata(dev);
-	int data;
+	int data, rc;
 
-	if (sscanf(buf, "%d", &data) != 1)
-		return -EINVAL;
+	rc = kstrtoint(buf, 10, &data);
+	if (rc)
+		return rc;
 
 	wled->ramp_ms = data;
 	return count;
@@ -744,10 +787,11 @@ static ssize_t qpnp_wled_ramp_step_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
 	struct qpnp_wled *wled = dev_get_drvdata(dev);
-	int data;
+	int data, rc;
 
-	if (sscanf(buf, "%d", &data) != 1)
-		return -EINVAL;
+	rc = kstrtoint(buf, 10, &data);
+	if (rc)
+		return rc;
 
 	wled->ramp_step = data;
 	return count;
@@ -832,8 +876,9 @@ static ssize_t qpnp_wled_fs_curr_ua_store(struct device *dev,
 	int data, i, rc, temp;
 	u8 reg;
 
-	if (sscanf(buf, "%d", &data) != 1)
-		return -EINVAL;
+	rc = kstrtoint(buf, 10, &data);
+	if (rc)
+		return rc;
 
 	for (i = 0; i < wled->num_strings; i++) {
 		if (data < QPNP_WLED_FS_CURR_MIN_UA)
@@ -869,24 +914,15 @@ static ssize_t qpnp_wled_fs_curr_ua_store(struct device *dev,
 
 /* sysfs attributes exported by wled */
 static struct device_attribute qpnp_wled_attrs[] = {
-	__ATTR(dump_regs, (S_IRUGO | S_IWUSR | S_IWGRP),
-			qpnp_wled_dump_regs_show,
-			NULL),
-	__ATTR(dim_mode, (S_IRUGO | S_IWUSR | S_IWGRP),
-			qpnp_wled_dim_mode_show,
-			qpnp_wled_dim_mode_store),
-	__ATTR(fs_curr_ua, (S_IRUGO | S_IWUSR | S_IWGRP),
-			qpnp_wled_fs_curr_ua_show,
-			qpnp_wled_fs_curr_ua_store),
-	__ATTR(start_ramp, (S_IRUGO | S_IWUSR | S_IWGRP),
-			NULL,
-			qpnp_wled_ramp_store),
-	__ATTR(ramp_ms, (S_IRUGO | S_IWUSR | S_IWGRP),
-			qpnp_wled_ramp_ms_show,
-			qpnp_wled_ramp_ms_store),
-	__ATTR(ramp_step, (S_IRUGO | S_IWUSR | S_IWGRP),
-			qpnp_wled_ramp_step_show,
-			qpnp_wled_ramp_step_store),
+	__ATTR(dump_regs, 0664, qpnp_wled_dump_regs_show, NULL),
+	__ATTR(dim_mode, 0664, qpnp_wled_dim_mode_show,
+		qpnp_wled_dim_mode_store),
+	__ATTR(fs_curr_ua, 0664, qpnp_wled_fs_curr_ua_show,
+		qpnp_wled_fs_curr_ua_store),
+	__ATTR(start_ramp, 0664, NULL, qpnp_wled_ramp_store),
+	__ATTR(ramp_ms, 0664, qpnp_wled_ramp_ms_show, qpnp_wled_ramp_ms_store),
+	__ATTR(ramp_step, 0664, qpnp_wled_ramp_step_show,
+		qpnp_wled_ramp_step_store),
 };
 
 /* worker for setting wled brightness */
@@ -996,7 +1032,7 @@ static int qpnp_wled_set_disp(struct qpnp_wled *wled, u16 base_addr)
 		reg &= QPNP_WLED_VREF_PSM_MASK;
 		reg |= ((wled->vref_psm_mv - QPNP_WLED_VREF_PSM_MIN_MV)/
 			QPNP_WLED_VREF_PSM_STEP_MV);
-		reg |= QPNP_WLED_PSM_CTRL_OVERWRITE;
+		reg |= QPNP_WLED_PSM_OVERWRITE_BIT;
 		rc = qpnp_wled_write_reg(wled,
 				QPNP_WLED_PSM_CTRL_REG(wled->ctrl_base), reg);
 		if (rc)
@@ -1059,16 +1095,26 @@ static irqreturn_t qpnp_wled_ovp_irq_handler(int irq, void *_wled)
 {
 	struct qpnp_wled *wled = _wled;
 	int rc;
-	u8 val;
+	u8 fault_sts, int_sts;
 
 	rc = qpnp_wled_read_reg(wled,
-			QPNP_WLED_FAULT_STATUS(wled->ctrl_base), &val);
+			QPNP_WLED_INT_RT_STS(wled->ctrl_base), &int_sts);
+	if (rc < 0) {
+		pr_err("Error in reading WLED_INT_RT_STS rc=%d\n", rc);
+		return IRQ_HANDLED;
+	}
+
+	rc = qpnp_wled_read_reg(wled,
+			QPNP_WLED_FAULT_STATUS(wled->ctrl_base), &fault_sts);
 	if (rc < 0) {
 		pr_err("Error in reading WLED_FAULT_STATUS rc=%d\n", rc);
 		return IRQ_HANDLED;
 	}
 
-	pr_err_ratelimited("WLED OVP fault detected, fault_status= %x\n", val);
+	if (fault_sts & (QPNP_WLED_OVP_FAULT_BIT | QPNP_WLED_ILIM_FAULT_BIT))
+		pr_err_ratelimited(
+			"WLED OVP fault detected, int_sts=%x fault_sts= %x\n",
+			int_sts, fault_sts);
 	return IRQ_HANDLED;
 }
 
@@ -1683,6 +1729,8 @@ static int qpnp_wled_config(struct qpnp_wled *wled)
 				wled->ovp_irq, rc);
 			return rc;
 		}
+		disable_irq(wled->ovp_irq);
+		wled->ovp_irq_disabled = true;
 	}
 
 	if (wled->sc_irq >= 0) {
@@ -2069,6 +2117,8 @@ static int qpnp_wled_parse_dt(struct qpnp_wled *wled)
 	wled->en_ext_pfet_sc_pro = of_property_read_bool(pdev->dev.of_node,
 					"qcom,en-ext-pfet-sc-pro");
 
+	wled->lcd_psm_ctrl = of_property_read_bool(pdev->dev.of_node,
+				"qcom,lcd-psm-ctrl");
 	return 0;
 }
 
@@ -2196,7 +2246,7 @@ static int qpnp_wled_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static struct of_device_id spmi_match_table[] = {
+static const struct of_device_id spmi_match_table[] = {
 	{ .compatible = "qcom,qpnp-wled",},
 	{ },
 };

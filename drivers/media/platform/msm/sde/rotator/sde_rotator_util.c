@@ -1,4 +1,4 @@
-/* Copyright (c) 2012, 2015-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012, 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -730,7 +730,8 @@ static int sde_mdp_put_img(struct sde_mdp_img_data *data, bool rotator,
 		}
 		if (!data->skip_detach) {
 			dma_buf_unmap_attachment(data->srcp_attachment,
-				data->srcp_table, dir);
+				data->srcp_table,
+				sde_smmu_set_dma_direction(dir));
 			dma_buf_detach(data->srcp_dma_buf,
 					data->srcp_attachment);
 			if (!(data->flags & SDE_ROT_EXT_DMA_BUF)) {
@@ -767,10 +768,17 @@ static int sde_mdp_get_img(struct sde_fb_data *img,
 	len = &data->len;
 	data->flags |= img->flags;
 	data->offset = img->offset;
-	if (data->flags & SDE_ROT_EXT_DMA_BUF)
+
+	if ((data->flags & SDE_SECURE_CAMERA_SESSION) &&
+			IS_ERR_OR_NULL(img->handle)) {
+		SDEROT_ERR("error on ion_import_fb\n");
+		ret = PTR_ERR(img->handle);
+		img->handle = NULL;
+		return ret;
+	} else if (data->flags & SDE_ROT_EXT_DMA_BUF) {
 		data->srcp_dma_buf = img->buffer;
-	else if (IS_ERR(data->srcp_dma_buf)) {
-		SDEROT_ERR("error on ion_import_fd\n");
+	} else if (IS_ERR(data->srcp_dma_buf)) {
+		SDEROT_ERR("error on dma_buf\n");
 		ret = PTR_ERR(data->srcp_dma_buf);
 		data->srcp_dma_buf = NULL;
 		return ret;
@@ -792,7 +800,8 @@ static int sde_mdp_get_img(struct sde_fb_data *img,
 
 		SDEROT_DBG("%d attach=%p\n", __LINE__, data->srcp_attachment);
 		data->srcp_table =
-			dma_buf_map_attachment(data->srcp_attachment, dir);
+			dma_buf_map_attachment(data->srcp_attachment,
+			sde_smmu_set_dma_direction(dir));
 		if (IS_ERR(data->srcp_table)) {
 			SDEROT_ERR("%d Failed to map attachment\n", __LINE__);
 			ret = PTR_ERR(data->srcp_table);
@@ -843,8 +852,6 @@ static int sde_mdp_get_img(struct sde_fb_data *img,
 			ret = 0;
 		} while (0);
 
-		if (!IS_ERR_OR_NULL(ihandle))
-			ion_free(iclient, ihandle);
 		return ret;
 	}
 
@@ -919,7 +926,8 @@ static int sde_mdp_map_buffer(struct sde_mdp_img_data *data, bool rotator,
 	return ret;
 
 err_unmap:
-	dma_buf_unmap_attachment(data->srcp_attachment, data->srcp_table, dir);
+	dma_buf_unmap_attachment(data->srcp_attachment, data->srcp_table,
+		sde_smmu_set_dma_direction(dir));
 	dma_buf_detach(data->srcp_dma_buf, data->srcp_attachment);
 	if (!(data->flags & SDE_ROT_EXT_DMA_BUF)) {
 		dma_buf_put(data->srcp_dma_buf);

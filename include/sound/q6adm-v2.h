@@ -34,7 +34,6 @@ enum {
 	ADM_AUDVOL_CAL,
 	ADM_RTAC_INFO_CAL,
 	ADM_RTAC_APR_CAL,
-	ADM_DTS_EAGLE,
 	ADM_SRS_TRUMEDIA,
 	ADM_RTAC_AUDVOL_CAL,
 	ADM_MAX_CAL_TYPES
@@ -58,9 +57,9 @@ enum {
 struct route_payload {
 	unsigned int copp_idx[MAX_COPPS_PER_PORT];
 	unsigned int port_id[MAX_COPPS_PER_PORT];
-	int app_type;
-	int acdb_dev_id;
-	int sample_rate;
+	int app_type[MAX_COPPS_PER_PORT];
+	int acdb_dev_id[MAX_COPPS_PER_PORT];
+	int sample_rate[MAX_COPPS_PER_PORT];
 	unsigned short num_copps;
 	unsigned int session_id;
 };

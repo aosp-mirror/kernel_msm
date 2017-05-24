@@ -29,7 +29,7 @@
 #include <linux/string_helpers.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
-#include "pmic-voter.h"
+#include <linux/pmic-voter.h>
 
 #define fg_dbg(chip, reason, fmt, ...)			\
 	do {							\
@@ -70,6 +70,10 @@
 
 #define KI_COEFF_MAX			62200
 #define KI_COEFF_SOC_LEVELS		3
+
+#define SLOPE_LIMIT_COEFF_MAX		31
+
+#define BATT_THERM_NUM_COEFFS		3
 
 /* Debug flag definitions */
 enum fg_debug_flag {
@@ -121,11 +125,6 @@ enum fg_irq_index {
 	FG_IRQ_MAX,
 };
 
-/* WA flags */
-enum {
-	DELTA_SOC_IRQ_WA = BIT(0),
-};
-
 /*
  * List of FG_SRAM parameters. Please add a parameter only if it is an entry
  * that will be used either to configure an entity (e.g. termination current)
@@ -139,11 +138,13 @@ enum fg_sram_param_id {
 	FG_SRAM_FULL_SOC,
 	FG_SRAM_VOLTAGE_PRED,
 	FG_SRAM_OCV,
+	FG_SRAM_ESR,
 	FG_SRAM_RSLOW,
 	FG_SRAM_ALG_FLAGS,
 	FG_SRAM_CC_SOC,
 	FG_SRAM_CC_SOC_SW,
 	FG_SRAM_ACT_BATT_CAP,
+	FG_SRAM_TIMEBASE,
 	/* Entries below here are configurable during initialization */
 	FG_SRAM_CUTOFF_VOLT,
 	FG_SRAM_EMPTY_VOLT,
@@ -154,16 +155,20 @@ enum fg_sram_param_id {
 	FG_SRAM_ESR_TIMER_DISCHG_INIT,
 	FG_SRAM_ESR_TIMER_CHG_MAX,
 	FG_SRAM_ESR_TIMER_CHG_INIT,
+	FG_SRAM_ESR_PULSE_THRESH,
 	FG_SRAM_SYS_TERM_CURR,
 	FG_SRAM_CHG_TERM_CURR,
+	FG_SRAM_CHG_TERM_BASE_CURR,
 	FG_SRAM_DELTA_MSOC_THR,
 	FG_SRAM_DELTA_BSOC_THR,
 	FG_SRAM_RECHARGE_SOC_THR,
 	FG_SRAM_RECHARGE_VBATT_THR,
 	FG_SRAM_KI_COEFF_MED_DISCHG,
 	FG_SRAM_KI_COEFF_HI_DISCHG,
+	FG_SRAM_KI_COEFF_FULL_SOC,
 	FG_SRAM_ESR_TIGHT_FILTER,
 	FG_SRAM_ESR_BROAD_FILTER,
+	FG_SRAM_SLOPE_LIMIT,
 	FG_SRAM_MAX,
 };
 
@@ -200,6 +205,15 @@ struct fg_alg_flag {
 
 enum wa_flags {
 	PMI8998_V1_REV_WA = BIT(0),
+	PM660_TSMC_OSC_WA = BIT(1),
+};
+
+enum slope_limit_status {
+	LOW_TEMP_DISCHARGE = 0,
+	LOW_TEMP_CHARGE,
+	HIGH_TEMP_DISCHARGE,
+	HIGH_TEMP_CHARGE,
+	SLOPE_LIMIT_NUM_COEFFS,
 };
 
 /* DT parameters for FG device */
@@ -211,6 +225,7 @@ struct fg_dt_props {
 	int	empty_volt_mv;
 	int	vbatt_low_thr_mv;
 	int	chg_term_curr_ma;
+	int	chg_term_base_curr_ma;
 	int	sys_term_curr_ma;
 	int	delta_soc_thr;
 	int	recharge_soc_thr;
@@ -220,6 +235,7 @@ struct fg_dt_props {
 	int	esr_timer_awake;
 	int	esr_timer_asleep;
 	int	rconn_mohms;
+	int	esr_clamp_mohms;
 	int	cl_start_soc;
 	int	cl_max_temp;
 	int	cl_min_temp;
@@ -234,10 +250,15 @@ struct fg_dt_props {
 	int	esr_broad_flt_upct;
 	int	esr_tight_lt_flt_upct;
 	int	esr_broad_lt_flt_upct;
+	int	slope_limit_temp;
+	int	esr_pulse_thresh_ma;
+	int	esr_meas_curr_ma;
 	int	jeita_thresholds[NUM_JEITA_LEVELS];
 	int	ki_coeff_soc[KI_COEFF_SOC_LEVELS];
 	int	ki_coeff_med_dischg[KI_COEFF_SOC_LEVELS];
 	int	ki_coeff_hi_dischg[KI_COEFF_SOC_LEVELS];
+	int	slope_limit_coeffs[SLOPE_LIMIT_NUM_COEFFS];
+	u8	batt_therm_coeffs[BATT_THERM_NUM_COEFFS];
 };
 
 /* parameters from battery profile */
@@ -298,6 +319,23 @@ static const struct fg_pt fg_ln_table[] = {
 	{ 128000,	4852 },
 };
 
+/* each tuple is - <temperature in degC, Timebase> */
+static const struct fg_pt fg_tsmc_osc_table[] = {
+	{ -20,		395064 },
+	{ -10,		398114 },
+	{   0,		401669 },
+	{  10,		404641 },
+	{  20,		408856 },
+	{  25,		412449 },
+	{  30,		416532 },
+	{  40,		420289 },
+	{  50,		425020 },
+	{  60,		430160 },
+	{  70,		434175 },
+	{  80,		439475 },
+	{  90,		444992 },
+};
+
 struct fg_chip {
 	struct device		*dev;
 	struct pmic_revid_data	*pmic_rev_id;
@@ -309,6 +347,7 @@ struct fg_chip {
 	struct power_supply	*dc_psy;
 	struct power_supply	*parallel_psy;
 	struct iio_channel	*batt_id_chan;
+	struct iio_channel	*die_temp_chan;
 	struct fg_memif		*sram;
 	struct fg_irq_info	*irqs;
 	struct votable		*awake_votable;
@@ -331,6 +370,7 @@ struct fg_chip {
 	u32			rradc_base;
 	u32			wa_flags;
 	int			batt_id_ohms;
+	int			ki_coeff_full_soc;
 	int			charge_status;
 	int			prev_charge_status;
 	int			charge_done;
@@ -341,6 +381,7 @@ struct fg_chip {
 	int			maint_soc;
 	int			delta_soc;
 	int			last_msoc;
+	enum slope_limit_status	slope_limit_sts;
 	bool			profile_available;
 	bool			profile_loaded;
 	bool			battery_missing;
@@ -352,6 +393,8 @@ struct fg_chip {
 	bool			soc_reporting_ready;
 	bool			esr_flt_cold_temp_en;
 	bool			bsoc_delta_irq_en;
+	bool			slope_limit_en;
+	bool			use_ima_single_mode;
 	struct completion	soc_update;
 	struct completion	soc_ready;
 	struct delayed_work	profile_load_work;
