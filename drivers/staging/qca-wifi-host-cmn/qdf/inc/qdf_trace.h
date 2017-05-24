@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -44,35 +44,6 @@
 /* Type declarations */
 
 #define FL(x)    "%s: %d: " x, __func__, __LINE__
-
-/**
- * typedef enum QDF_TRACE_LEVEL - Debug Trace level
- * @QDF_TRACE_LEVEL_NONE: no trace will be logged. This value is in place
- * for the qdf_trace_setlevel() to allow the user to turn off all traces
- * @QDF_TRACE_LEVEL_FATAL: enable trace for fatal Error
- * @QDF_TRACE_LEVEL_ERROR: enable trace for errors
- * @QDF_TRACE_LEVEL_WARN: enable trace for warnings
- * @QDF_TRACE_LEVEL_INFO: enable trace for information
- * @QDF_TRACE_LEVEL_INFO_HIGH: enable high level trace information
- * @QDF_TRACE_LEVEL_INFO_MED: enable middle level trace information
- * @QDF_TRACE_LEVEL_INFO_LOW: enable low level trace information
- * @QDF_TRACE_LEVEL_DEBUG: enable trace for debugging
- * @QDF_TRACE_LEVEL_ALL: enable all trace
- * @QDF_TRACE_LEVEL_MAX: enable max level trace
- */
-typedef enum {
-	QDF_TRACE_LEVEL_NONE = 0,
-	QDF_TRACE_LEVEL_FATAL,
-	QDF_TRACE_LEVEL_ERROR,
-	QDF_TRACE_LEVEL_WARN,
-	QDF_TRACE_LEVEL_INFO,
-	QDF_TRACE_LEVEL_INFO_HIGH,
-	QDF_TRACE_LEVEL_INFO_MED,
-	QDF_TRACE_LEVEL_INFO_LOW,
-	QDF_TRACE_LEVEL_DEBUG,
-	QDF_TRACE_LEVEL_ALL,
-	QDF_TRACE_LEVEL_MAX
-} QDF_TRACE_LEVEL;
 
 /*
  * Log levels
@@ -202,7 +173,8 @@ typedef struct s_qdf_trace_data {
  * @QDF_DP_TRACE_HIF_PACKET_PTR_RECORD - hif packet ptr record
  * @QDF_DP_TRACE_RX_TXRX_PACKET_PTR_RECORD - txrx packet ptr record
  * @QDF_DP_TRACE_MED_VERBOSITY - below this are part of med verbosity
- * @QDF_DP_TRACE_HDD_TX_PACKET_RECORD - record 32 bytes at HDD
+ * @QDF_DP_TRACE_HDD_TX_PACKET_RECORD - record 32 bytes of tx pkt at HDD
+ * @QDF_DP_TRACE_HDD_RX_PACKET_RECORD - record 32 bytes of rx pkt at HDD
  * @QDF_DP_TRACE_HIGH_VERBOSITY - below this are part of high verbosity
  */
 enum  QDF_DP_TRACE_ID {
@@ -233,6 +205,7 @@ enum  QDF_DP_TRACE_ID {
 	QDF_DP_TRACE_RX_TXRX_PACKET_PTR_RECORD,
 	QDF_DP_TRACE_MED_VERBOSITY,
 	QDF_DP_TRACE_HDD_TX_PACKET_RECORD,
+	QDF_DP_TRACE_HDD_RX_PACKET_RECORD,
 	QDF_DP_TRACE_HIGH_VERBOSITY,
 	QDF_DP_TRACE_MAX
 };
@@ -312,7 +285,7 @@ struct qdf_dp_trace_event_buf {
  * @pid : process id which stored the data in this record
  */
 struct qdf_dp_trace_record_s {
-	uint64_t time;
+	char time[20];
 	uint8_t code;
 	uint8_t data[QDF_DP_TRACE_RECORD_SIZE];
 	uint8_t size;
@@ -466,27 +439,6 @@ void qdf_dp_trace_clear_buffer(void)
 
 #endif
 
-
-/**
- * qdf_trace_msg()- logging API
- * @module: Module identifier. A member of the QDF_MODULE_ID enumeration that
- *	    identifies the module issuing the trace message.
- * @level: Trace level. A member of the QDF_TRACE_LEVEL enumeration indicating
- *	   the severity of the condition causing the trace message to be issued.
- *	   More severe conditions are more likely to be logged.
- * @str_format: Format string. The message to be logged. This format string
- *	       contains printf-like replacement parameters, which follow this
- *	       parameter in the variable argument list.
- *
- * Users wishing to add tracing information to their code should use
- * QDF_TRACE.  QDF_TRACE() will compile into a call to qdf_trace_msg() when
- * tracing is enabled.
- *
- * Return: nothing
- *
- */
-void __printf(3, 4) qdf_trace_msg(QDF_MODULE_ID module, QDF_TRACE_LEVEL level,
-		   char *str_format, ...);
 
 void qdf_trace_hex_dump(QDF_MODULE_ID module, QDF_TRACE_LEVEL level,
 			void *data, int buf_len);

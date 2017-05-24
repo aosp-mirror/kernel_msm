@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -43,6 +43,9 @@ extern "C" {
 #ifdef HIF_USB
 #include <linux/usb.h>
 #endif /* HIF_USB */
+#ifdef IPA_OFFLOAD
+#include <linux/ipa.h>
+#endif
 #define ENABLE_MBOX_DUMMY_SPACE_FEATURE 1
 
 typedef struct htc_callbacks HTC_CALLBACKS;
@@ -94,6 +97,11 @@ typedef void *hif_handle_t;
 #define TARGET_TYPE_ADRASTEA     19
 #endif
 
+#ifdef IPA_OFFLOAD
+#define DMA_COHERENT_MASK_IPA_VER_3_AND_ABOVE   37
+#define DMA_COHERENT_MASK_BELOW_IPA_VER_3       32
+#endif
+
 struct CE_state;
 #define CE_COUNT_MAX 12
 
@@ -114,6 +122,7 @@ struct qca_napi_stat {
 	uint32_t napi_polls;
 	uint32_t napi_completes;
 	uint32_t napi_workdone;
+	uint32_t cpu_corrected;
 	uint32_t napi_budget_uses[QCA_NAPI_NUM_BUCKETS];
 	uint32_t time_limit_reached;
 	uint32_t rxpkt_thresh_reached;
@@ -132,12 +141,12 @@ struct qca_napi_info {
 	struct napi_struct   napi;
 	uint8_t              scale;   /* currently same on all instances */
 	uint8_t              id;
+	uint8_t              cpu;
 	int                  irq;
 	struct qca_napi_stat stats[NR_CPUS];
 	/* will only be present for data rx CE's */
 	void (*lro_flush_cb)(void *);
 	void                 *lro_ctx;
-	qdf_spinlock_t lro_unloading_lock;
 };
 
 /**
@@ -184,17 +193,18 @@ struct qca_napi_cpu {
  * A variable of this type will be stored in hif module context.
  */
 struct qca_napi_data {
-	spinlock_t           lock;
+	qdf_spinlock_t           lock;
 	uint32_t             state;
 	uint32_t             ce_map; /* bitmap of created/registered NAPI
 					instances, indexed by pipe_id,
 					not used by clients (clients use an
 					id returned by create) */
-	struct qca_napi_info napis[CE_COUNT_MAX];
+	struct qca_napi_info *napis[CE_COUNT_MAX];
 	struct qca_napi_cpu  napi_cpu[NR_CPUS];
 	int                  lilcl_head, bigcl_head;
 	enum qca_napi_tput_state napi_mode;
 	struct notifier_block hnc_cpu_notifier;
+	uint8_t              flags;
 };
 
 /**
@@ -570,7 +580,7 @@ struct hif_pm_runtime_lock;
 int hif_pm_runtime_get(struct hif_opaque_softc *hif_ctx);
 void hif_pm_runtime_get_noresume(struct hif_opaque_softc *hif_ctx);
 int hif_pm_runtime_put(struct hif_opaque_softc *hif_ctx);
-struct hif_pm_runtime_lock *hif_runtime_lock_init(const char *name);
+int hif_runtime_lock_init(qdf_runtime_lock_t *lock, const char *name);
 void hif_runtime_lock_deinit(struct hif_opaque_softc *hif_ctx,
 			struct hif_pm_runtime_lock *lock);
 int hif_pm_runtime_prevent_suspend(struct hif_opaque_softc *ol_sc,
@@ -591,9 +601,9 @@ static inline int hif_pm_runtime_get(struct hif_opaque_softc *hif_ctx)
 { return 0; }
 static inline int hif_pm_runtime_put(struct hif_opaque_softc *hif_ctx)
 { return 0; }
-static inline struct hif_pm_runtime_lock *hif_runtime_lock_init(
-		const char *name)
-{ return NULL; }
+static inline int hif_runtime_lock_init(qdf_runtime_lock_t *lock,
+					const char *name)
+{ return 0; }
 static inline void
 hif_runtime_lock_deinit(struct hif_opaque_softc *hif_ctx,
 			struct hif_pm_runtime_lock *lock) {}
@@ -618,7 +628,32 @@ void hif_vote_link_down(struct hif_opaque_softc *);
 void hif_vote_link_up(struct hif_opaque_softc *);
 bool hif_can_suspend_link(struct hif_opaque_softc *);
 
+#ifdef IPA_OFFLOAD
+/**
+ * hif_get_ipa_hw_type() - get IPA hw type
+ *
+ * This API return the IPA hw type.
+ *
+ * Return: IPA hw type
+ */
+static inline
+enum ipa_hw_type hif_get_ipa_hw_type(void)
+{
+	return ipa_get_hw_type();
+}
+#endif
 int hif_bus_resume(struct hif_opaque_softc *);
+/**
+ * hif_bus_ealry_suspend() - stop non wmi tx traffic
+ * @context: hif context
+ */
+int hif_bus_early_suspend(struct hif_opaque_softc *hif_ctx);
+
+/**
+ * hif_bus_late_resume() - resume non wmi traffic
+ * @context: hif context
+ */
+int hif_bus_late_resume(struct hif_opaque_softc *hif_ctx);
 int hif_bus_suspend(struct hif_opaque_softc *);
 int hif_bus_resume_noirq(struct hif_opaque_softc *);
 int hif_bus_suspend_noirq(struct hif_opaque_softc *);

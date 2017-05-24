@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -924,7 +924,7 @@ static const char *hif_pm_runtime_state_to_string(uint32_t state)
  *
  * Return: void
  */
-void hif_pci_runtime_pm_warn(struct hif_pci_softc *sc, const char *msg)
+static void hif_pci_runtime_pm_warn(struct hif_pci_softc *sc, const char *msg)
 {
 	struct hif_pm_runtime_lock *ctx;
 
@@ -985,7 +985,7 @@ static int hif_pci_pm_runtime_debugfs_show(struct seq_file *s, void *data)
 		"SUSPENDED"};
 	unsigned int msecs_age;
 	int pm_state = atomic_read(&sc->pm_state);
-	unsigned long timer_expires, flags;
+	unsigned long timer_expires;
 	struct hif_pm_runtime_lock *ctx;
 
 	seq_printf(s, "%30s: %s\n", "Runtime PM state",
@@ -1025,9 +1025,9 @@ static int hif_pci_pm_runtime_debugfs_show(struct seq_file *s, void *data)
 				msecs_age / 1000, msecs_age % 1000);
 	}
 
-	spin_lock_irqsave(&sc->runtime_lock, flags);
+	spin_lock_bh(&sc->runtime_lock);
 	if (list_empty(&sc->prevent_suspend_list)) {
-		spin_unlock_irqrestore(&sc->runtime_lock, flags);
+		spin_unlock_bh(&sc->runtime_lock);
 		return 0;
 	}
 
@@ -1039,7 +1039,7 @@ static int hif_pci_pm_runtime_debugfs_show(struct seq_file *s, void *data)
 		seq_puts(s, " ");
 	}
 	seq_puts(s, "\n");
-	spin_unlock_irqrestore(&sc->runtime_lock, flags);
+	spin_unlock_bh(&sc->runtime_lock);
 
 	return 0;
 }
@@ -1180,8 +1180,7 @@ static void hif_pm_runtime_open(struct hif_pci_softc *sc)
 	spin_lock_init(&sc->runtime_lock);
 
 	qdf_atomic_init(&sc->pm_state);
-	sc->prevent_linkdown_lock =
-		hif_runtime_lock_init("linkdown suspend disabled");
+	qdf_runtime_lock_init(&sc->prevent_linkdown_lock);
 	qdf_atomic_set(&sc->pm_state, HIF_PM_RUNTIME_STATE_NONE);
 	INIT_LIST_HEAD(&sc->prevent_suspend_list);
 }
@@ -1200,7 +1199,6 @@ static void hif_pm_runtime_open(struct hif_pci_softc *sc)
  */
 static void hif_pm_runtime_sanitize_on_exit(struct hif_pci_softc *sc)
 {
-	unsigned long flags;
 	struct hif_pm_runtime_lock *ctx, *tmp;
 
 	if (atomic_read(&sc->dev->power.usage_count) != 1)
@@ -1208,13 +1206,13 @@ static void hif_pm_runtime_sanitize_on_exit(struct hif_pci_softc *sc)
 	else
 		return;
 
-	spin_lock_irqsave(&sc->runtime_lock, flags);
+	spin_lock_bh(&sc->runtime_lock);
 	list_for_each_entry_safe(ctx, tmp, &sc->prevent_suspend_list, list) {
-		spin_unlock_irqrestore(&sc->runtime_lock, flags);
+		spin_unlock_bh(&sc->runtime_lock);
 		hif_pm_runtime_allow_suspend(GET_HIF_OPAQUE_HDL(sc), ctx);
-		spin_lock_irqsave(&sc->runtime_lock, flags);
+		spin_lock_bh(&sc->runtime_lock);
 	}
-	spin_unlock_irqrestore(&sc->runtime_lock, flags);
+	spin_unlock_bh(&sc->runtime_lock);
 
 	/* ensure 1 and only 1 usage count so that when the wlan
 	 * driver is re-insmodded runtime pm won't be
@@ -1240,14 +1238,13 @@ static int __hif_pm_runtime_allow_suspend(struct hif_pci_softc *hif_sc,
  */
 static void hif_pm_runtime_sanitize_on_ssr_exit(struct hif_pci_softc *sc)
 {
-	unsigned long flags;
 	struct hif_pm_runtime_lock *ctx, *tmp;
 
-	spin_lock_irqsave(&sc->runtime_lock, flags);
+	spin_lock_bh(&sc->runtime_lock);
 	list_for_each_entry_safe(ctx, tmp, &sc->prevent_suspend_list, list) {
 		 __hif_pm_runtime_allow_suspend(sc, ctx);
 	}
-	spin_unlock_irqrestore(&sc->runtime_lock, flags);
+	spin_unlock_bh(&sc->runtime_lock);
 }
 
 /**
@@ -1262,8 +1259,8 @@ static void hif_pm_runtime_close(struct hif_pci_softc *sc)
 
 	if (qdf_atomic_read(&sc->pm_state) == HIF_PM_RUNTIME_STATE_NONE)
 		return;
-	else
-		hif_pm_runtime_stop(sc);
+
+	hif_pm_runtime_stop(sc);
 
 	hif_is_recovery_in_progress(scn) ?
 		hif_pm_runtime_sanitize_on_ssr_exit(sc) :
@@ -2158,7 +2155,6 @@ static void hif_disable_pci(struct hif_pci_softc *sc)
 		HIF_ERROR("%s: ol_sc = NULL", __func__);
 		return;
 	}
-	pci_set_drvdata(sc->pdev, NULL);
 	hif_pci_device_reset(sc);
 	pci_iounmap(sc->pdev, sc->mem);
 	sc->mem = NULL;
@@ -2515,7 +2511,6 @@ void hif_pci_disable_bus(struct hif_softc *scn)
 			athdiag_procfs_remove();
 			scn->athdiag_procfs_inited = false;
 		}
-		pci_set_drvdata(pdev, NULL);
 		pci_iounmap(pdev, mem);
 		scn->mem = NULL;
 		pci_release_region(pdev, BAR_NUM);
@@ -2541,11 +2536,9 @@ static void hif_runtime_prevent_linkdown(struct hif_softc *scn, bool flag)
 	struct hif_opaque_softc *hif_hdl = GET_HIF_OPAQUE_HDL(scn);
 
 	if (flag)
-		hif_pm_runtime_prevent_suspend(hif_hdl,
-					sc->prevent_linkdown_lock);
+		qdf_runtime_pm_prevent_suspend(&sc->prevent_linkdown_lock);
 	else
-		hif_pm_runtime_allow_suspend(hif_hdl,
-					sc->prevent_linkdown_lock);
+		qdf_runtime_pm_allow_suspend(&sc->prevent_linkdown_lock);
 }
 #else
 static void hif_runtime_prevent_linkdown(struct hif_softc *scn, bool flag)
@@ -3569,9 +3562,6 @@ again:
 	}
 	ol_sc->mem_pa = sc->soc_pcie_bar0;
 
-	BUG_ON(pci_get_drvdata(sc->pdev) != NULL);
-	pci_set_drvdata(sc->pdev, sc);
-
 	hif_target_sync(ol_sc);
 
 	if (ADRASTEA_BU)
@@ -3736,7 +3726,6 @@ int hif_pm_runtime_put(struct hif_opaque_softc *hif_ctx)
 	struct hif_softc *scn = HIF_GET_SOFTC(hif_ctx);
 	struct hif_pci_softc *sc = HIF_GET_PCI_SOFTC(hif_ctx);
 	int pm_state, usage_count;
-	unsigned long flags;
 	char *error = NULL;
 
 	if (NULL == scn) {
@@ -3757,9 +3746,7 @@ int hif_pm_runtime_put(struct hif_opaque_softc *hif_ctx)
 	}
 
 	if (error) {
-		spin_lock_irqsave(&sc->runtime_lock, flags);
 		hif_pci_runtime_pm_warn(sc, error);
-		spin_unlock_irqrestore(&sc->runtime_lock, flags);
 		return -EINVAL;
 	}
 
@@ -3888,11 +3875,10 @@ static int __hif_pm_runtime_allow_suspend(struct hif_pci_softc *hif_sc,
 static void hif_pm_runtime_lock_timeout_fn(unsigned long data)
 {
 	struct hif_pci_softc *hif_sc = (struct hif_pci_softc *)data;
-	unsigned long flags;
 	unsigned long timer_expires;
 	struct hif_pm_runtime_lock *context, *temp;
 
-	spin_lock_irqsave(&hif_sc->runtime_lock, flags);
+	spin_lock_bh(&hif_sc->runtime_lock);
 
 	timer_expires = hif_sc->runtime_timer_expires;
 
@@ -3920,7 +3906,7 @@ static void hif_pm_runtime_lock_timeout_fn(unsigned long data)
 		}
 	}
 
-	spin_unlock_irqrestore(&hif_sc->runtime_lock, flags);
+	spin_unlock_bh(&hif_sc->runtime_lock);
 }
 
 int hif_pm_runtime_prevent_suspend(struct hif_opaque_softc *ol_sc,
@@ -3929,7 +3915,6 @@ int hif_pm_runtime_prevent_suspend(struct hif_opaque_softc *ol_sc,
 	struct hif_softc *sc = HIF_GET_SOFTC(ol_sc);
 	struct hif_pci_softc *hif_sc = HIF_GET_PCI_SOFTC(ol_sc);
 	struct hif_pm_runtime_lock *context = data;
-	unsigned long flags;
 
 	if (!sc->hif_config.enable_runtime_pm)
 		return 0;
@@ -3937,10 +3922,13 @@ int hif_pm_runtime_prevent_suspend(struct hif_opaque_softc *ol_sc,
 	if (!context)
 		return -EINVAL;
 
-	spin_lock_irqsave(&hif_sc->runtime_lock, flags);
+	if (in_irq())
+		WARN_ON(1);
+
+	spin_lock_bh(&hif_sc->runtime_lock);
 	context->timeout = 0;
 	__hif_pm_runtime_prevent_suspend(hif_sc, context);
-	spin_unlock_irqrestore(&hif_sc->runtime_lock, flags);
+	spin_unlock_bh(&hif_sc->runtime_lock);
 
 	return 0;
 }
@@ -3952,15 +3940,16 @@ int hif_pm_runtime_allow_suspend(struct hif_opaque_softc *ol_sc,
 	struct hif_pci_softc *hif_sc = HIF_GET_PCI_SOFTC(ol_sc);
 	struct hif_pm_runtime_lock *context = data;
 
-	unsigned long flags;
-
 	if (!sc->hif_config.enable_runtime_pm)
 		return 0;
 
 	if (!context)
 		return -EINVAL;
 
-	spin_lock_irqsave(&hif_sc->runtime_lock, flags);
+	if (in_irq())
+		WARN_ON(1);
+
+	spin_lock_bh(&hif_sc->runtime_lock);
 
 	__hif_pm_runtime_allow_suspend(hif_sc, context);
 
@@ -3976,7 +3965,7 @@ int hif_pm_runtime_allow_suspend(struct hif_opaque_softc *ol_sc,
 		hif_sc->runtime_timer_expires = 0;
 	}
 
-	spin_unlock_irqrestore(&hif_sc->runtime_lock, flags);
+	spin_unlock_bh(&hif_sc->runtime_lock);
 
 	return 0;
 }
@@ -4005,7 +3994,6 @@ int hif_pm_runtime_prevent_suspend_timeout(struct hif_opaque_softc *ol_sc,
 
 	int ret = 0;
 	unsigned long expires;
-	unsigned long flags;
 	struct hif_pm_runtime_lock *context = lock;
 
 	if (hif_is_load_or_unload_in_progress(sc)) {
@@ -4025,6 +4013,9 @@ int hif_pm_runtime_prevent_suspend_timeout(struct hif_opaque_softc *ol_sc,
 	if (!context)
 		return -EINVAL;
 
+	if (in_irq())
+		WARN_ON(1);
+
 	/*
 	 * Don't use internal timer if the timeout is less than auto suspend
 	 * delay.
@@ -4038,7 +4029,7 @@ int hif_pm_runtime_prevent_suspend_timeout(struct hif_opaque_softc *ol_sc,
 	expires = jiffies + msecs_to_jiffies(delay);
 	expires += !expires;
 
-	spin_lock_irqsave(&hif_sc->runtime_lock, flags);
+	spin_lock_bh(&hif_sc->runtime_lock);
 
 	context->timeout = delay;
 	ret = __hif_pm_runtime_prevent_suspend(hif_sc, context);
@@ -4052,7 +4043,7 @@ int hif_pm_runtime_prevent_suspend_timeout(struct hif_opaque_softc *ol_sc,
 		hif_sc->runtime_timer_expires = expires;
 	}
 
-	spin_unlock_irqrestore(&hif_sc->runtime_lock, flags);
+	spin_unlock_bh(&hif_sc->runtime_lock);
 
 	HIF_ERROR("%s: pm_state: %s delay: %dms ret: %d\n", __func__,
 		hif_pm_runtime_state_to_string(
@@ -4069,21 +4060,23 @@ int hif_pm_runtime_prevent_suspend_timeout(struct hif_opaque_softc *ol_sc,
  * This API initalizes the Runtime PM context of the caller and
  * return the pointer.
  *
- * Return: void *
+ * Return: None
  */
-struct hif_pm_runtime_lock *hif_runtime_lock_init(const char *name)
+int hif_runtime_lock_init(qdf_runtime_lock_t *lock, const char *name)
 {
 	struct hif_pm_runtime_lock *context;
 
 	context = qdf_mem_malloc(sizeof(*context));
 	if (!context) {
 		HIF_ERROR("%s: No memory for Runtime PM wakelock context\n",
-				__func__);
-		return NULL;
+			  __func__);
+		return -ENOMEM;
 	}
 
 	context->name = name ? name : "Default";
-	return context;
+	lock->lock = context;
+
+	return 0;
 }
 
 /**
@@ -4095,7 +4088,6 @@ struct hif_pm_runtime_lock *hif_runtime_lock_init(const char *name)
 void hif_runtime_lock_deinit(struct hif_opaque_softc *hif_ctx,
 			     struct hif_pm_runtime_lock *data)
 {
-	unsigned long flags;
 	struct hif_pm_runtime_lock *context = data;
 	struct hif_pci_softc *sc = HIF_GET_PCI_SOFTC(hif_ctx);
 
@@ -4109,9 +4101,9 @@ void hif_runtime_lock_deinit(struct hif_opaque_softc *hif_ctx,
 	 * Ensure to delete the context list entry and reduce the usage count
 	 * before freeing the context if context is active.
 	 */
-	spin_lock_irqsave(&sc->runtime_lock, flags);
+	spin_lock_bh(&sc->runtime_lock);
 	__hif_pm_runtime_allow_suspend(sc, context);
-	spin_unlock_irqrestore(&sc->runtime_lock, flags);
+	spin_unlock_bh(&sc->runtime_lock);
 
 	qdf_mem_free(context);
 }

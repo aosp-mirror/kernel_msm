@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -166,6 +166,7 @@ EXPORT_SYMBOL(qdf_nbuf_set_state);
 
 /* globals do not need to be initialized to NULL/0 */
 qdf_nbuf_trace_update_t qdf_trace_update_cb;
+qdf_nbuf_free_t nbuf_free_cb;
 
 /**
  * __qdf_nbuf_alloc() - Allocate nbuf
@@ -193,7 +194,7 @@ struct sk_buff *__qdf_nbuf_alloc(qdf_device_t osdev, size_t size, int reserve,
 	skb = dev_alloc_skb(size);
 
 	if (!skb) {
-		pr_err("ERROR:NBUF alloc failed\n");
+		pr_info("ERROR:NBUF alloc failed\n");
 		return NULL;
 	}
 	memset(skb->cb, 0x0, sizeof(skb->cb));
@@ -234,9 +235,8 @@ EXPORT_SYMBOL(__qdf_nbuf_alloc);
  */
 void __qdf_nbuf_free(struct sk_buff *skb)
 {
-	if (qdf_nbuf_ipa_owned_get(skb))
-		/* IPA cleanup function will need to be called here */
-		QDF_BUG(1);
+	if (nbuf_free_cb)
+		nbuf_free_cb(skb);
 	else
 		dev_kfree_skb_any(skb);
 }
@@ -357,8 +357,9 @@ void __qdf_nbuf_unmap_single(qdf_device_t osdev, qdf_nbuf_t buf,
 void __qdf_nbuf_unmap_single(qdf_device_t osdev, qdf_nbuf_t buf,
 					qdf_dma_dir_t dir)
 {
-	dma_unmap_single(osdev->dev, QDF_NBUF_CB_PADDR(buf),
-			 skb_end_pointer(buf) - buf->data, dir);
+	if (QDF_NBUF_CB_PADDR(buf))
+		dma_unmap_single(osdev->dev, QDF_NBUF_CB_PADDR(buf),
+			skb_end_pointer(buf) - buf->data, dir);
 }
 #endif
 EXPORT_SYMBOL(__qdf_nbuf_unmap_single);
@@ -651,6 +652,18 @@ __qdf_nbuf_data_get_icmpv6_subtype(uint8_t *data)
 	case ICMPV6_RESPONSE:
 		proto_subtype = QDF_PROTO_ICMPV6_RES;
 		break;
+	case ICMPV6_RS:
+		proto_subtype = QDF_PROTO_ICMPV6_RS;
+		break;
+	case ICMPV6_RA:
+		proto_subtype = QDF_PROTO_ICMPV6_RA;
+		break;
+	case ICMPV6_NS:
+		proto_subtype = QDF_PROTO_ICMPV6_NS;
+		break;
+	case ICMPV6_NA:
+		proto_subtype = QDF_PROTO_ICMPV6_NA;
+		break;
 	default:
 		break;
 	}
@@ -811,6 +824,86 @@ bool __qdf_nbuf_data_is_ipv4_arp_pkt(uint8_t *data)
 		return true;
 	else
 		return false;
+}
+
+/**
+ * __qdf_nbuf_data_is_arp_req() - check if skb data is a arp request
+ * @data: Pointer to network data buffer
+ *
+ * This api is for ipv4 packet.
+ *
+ * Return: true if packet is ARP request
+ *	   false otherwise.
+ */
+bool __qdf_nbuf_data_is_arp_req(uint8_t *data)
+{
+	uint16_t op_code;
+
+	op_code = (uint16_t)(*(uint16_t *)(data +
+				QDF_NBUF_PKT_ARP_OPCODE_OFFSET));
+
+	if (op_code == QDF_SWAP_U16(QDF_NBUF_PKT_ARPOP_REQ))
+		return true;
+	else
+		return false;
+}
+
+/**
+ * __qdf_nbuf_data_is_arp_rsp() - check if skb data is a arp response
+ * @data: Pointer to network data buffer
+ *
+ * This api is for ipv4 packet.
+ *
+ * Return: true if packet is ARP response
+ *	   false otherwise.
+ */
+bool __qdf_nbuf_data_is_arp_rsp(uint8_t *data)
+{
+	uint16_t op_code;
+
+	op_code = (uint16_t)(*(uint16_t *)(data +
+				QDF_NBUF_PKT_ARP_OPCODE_OFFSET));
+
+	if (op_code == QDF_SWAP_U16(QDF_NBUF_PKT_ARPOP_REPLY))
+		return true;
+	else
+		return false;
+}
+
+/**
+ * __qdf_nbuf_data_get_arp_src_ip() - get arp src IP
+ * @data: Pointer to network data buffer
+ *
+ * This api is for ipv4 packet.
+ *
+ * Return: ARP packet source IP value.
+ */
+uint32_t  __qdf_nbuf_get_arp_src_ip(uint8_t *data)
+{
+	uint32_t src_ip;
+
+	src_ip = (uint32_t)(*(uint32_t *)(data +
+				QDF_NBUF_PKT_ARP_SRC_IP_OFFSET));
+
+	return src_ip;
+}
+
+/**
+ * __qdf_nbuf_data_get_arp_tgt_ip() - get arp target IP
+ * @data: Pointer to network data buffer
+ *
+ * This api is for ipv4 packet.
+ *
+ * Return: ARP packet target IP value.
+ */
+uint32_t  __qdf_nbuf_get_arp_tgt_ip(uint8_t *data)
+{
+	uint32_t tgt_ip;
+
+	tgt_ip = (uint32_t)(*(uint32_t *)(data +
+				QDF_NBUF_PKT_ARP_TGT_IP_OFFSET));
+
+	return tgt_ip;
 }
 
 /**
@@ -1308,6 +1401,7 @@ static void qdf_nbuf_track_memory_manager_destroy(void)
 
 	spin_unlock_irqrestore(&qdf_net_buf_track_free_list_lock, irq_flag);
 	kmem_cache_destroy(nbuf_tracking_cache);
+	qdf_net_buf_track_free_list = NULL;
 }
 
 /**
@@ -1435,9 +1529,7 @@ void qdf_net_buf_debug_add_node(qdf_nbuf_t net_buf, size_t size,
 		qdf_print("Double allocation of skb ! Already allocated from %p %s %d current alloc from %p %s %d",
 			  p_node->net_buf, p_node->file_name, p_node->line_num,
 			  net_buf, file_name, line_num);
-		QDF_ASSERT(0);
 		qdf_nbuf_track_free(new_node);
-		goto done;
 	} else {
 		p_node = new_node;
 		if (p_node) {
@@ -1447,15 +1539,11 @@ void qdf_net_buf_debug_add_node(qdf_nbuf_t net_buf, size_t size,
 			p_node->size = size;
 			p_node->p_next = gp_qdf_net_buf_track_tbl[i];
 			gp_qdf_net_buf_track_tbl[i] = p_node;
-		} else {
+		} else
 			qdf_print(
 				  "Mem alloc failed ! Could not track skb from %s %d of size %zu",
 				  file_name, line_num, size);
-			QDF_ASSERT(0);
-		}
 	}
-
-done:
 	spin_unlock_irqrestore(&g_qdf_net_buf_track_lock[i], irq_flag);
 
 	return;
@@ -1548,15 +1636,41 @@ void qdf_net_buf_debug_release_skb(qdf_nbuf_t net_buf)
 }
 EXPORT_SYMBOL(qdf_net_buf_debug_release_skb);
 
+#else
+void qdf_net_buf_debug_delete_node(qdf_nbuf_t net_buf)
+{
+}
+EXPORT_SYMBOL(qdf_net_buf_debug_delete_node);
 #endif /*MEMORY_DEBUG */
+
 #if defined(FEATURE_TSO)
 
+/**
+ * struct qdf_tso_cmn_seg_info_t - TSO common info structure
+ *
+ * @ethproto: ethernet type of the msdu
+ * @ip_tcp_hdr_len: ip + tcp length for the msdu
+ * @l2_len: L2 length for the msdu
+ * @eit_hdr: pointer to EIT header
+ * @eit_hdr_len: EIT header length for the msdu
+ * @eit_hdr_dma_map_addr: dma addr for EIT header
+ * @tcphdr: pointer to tcp header
+ * @ipv4_csum_en: ipv4 checksum enable
+ * @tcp_ipv4_csum_en: TCP ipv4 checksum enable
+ * @tcp_ipv6_csum_en: TCP ipv6 checksum enable
+ * @ip_id: IP id
+ * @tcp_seq_num: TCP sequence number
+ *
+ * This structure holds the TSO common info that is common
+ * across all the TCP segments of the jumbo packet.
+ */
 struct qdf_tso_cmn_seg_info_t {
 	uint16_t ethproto;
 	uint16_t ip_tcp_hdr_len;
 	uint16_t l2_len;
-	unsigned char *eit_hdr;
-	unsigned int eit_hdr_len;
+	uint8_t *eit_hdr;
+	uint32_t eit_hdr_len;
+	qdf_dma_addr_t eit_hdr_dma_map_addr;
 	struct tcphdr *tcphdr;
 	uint16_t ipv4_csum_en;
 	uint16_t tcp_ipv4_csum_en;
@@ -1568,14 +1682,18 @@ struct qdf_tso_cmn_seg_info_t {
 /**
  * __qdf_nbuf_get_tso_cmn_seg_info() - get TSO common
  * information
+ * @osdev: qdf device handle
+ * @skb: skb buffer
+ * @tso_info: Parameters common to all segements
  *
  * Get the TSO information that is common across all the TCP
  * segments of the jumbo packet
  *
  * Return: 0 - success 1 - failure
  */
-static uint8_t __qdf_nbuf_get_tso_cmn_seg_info(struct sk_buff *skb,
-	struct qdf_tso_cmn_seg_info_t *tso_info)
+static uint8_t __qdf_nbuf_get_tso_cmn_seg_info(qdf_device_t osdev,
+			struct sk_buff *skb,
+			struct qdf_tso_cmn_seg_info_t *tso_info)
 {
 	/* Get ethernet type and ethernet header length */
 	tso_info->ethproto = vlan_get_protocol(skb);
@@ -1608,6 +1726,16 @@ static uint8_t __qdf_nbuf_get_tso_cmn_seg_info(struct sk_buff *skb,
 	tso_info->eit_hdr = skb->data;
 	tso_info->eit_hdr_len = (skb_transport_header(skb)
 		 - skb_mac_header(skb)) + tcp_hdrlen(skb);
+	tso_info->eit_hdr_dma_map_addr = dma_map_single(osdev->dev,
+							tso_info->eit_hdr,
+							tso_info->eit_hdr_len,
+							DMA_TO_DEVICE);
+	if (unlikely(dma_mapping_error(osdev->dev,
+				       tso_info->eit_hdr_dma_map_addr))) {
+		qdf_print("DMA mapping error!\n");
+		qdf_assert(0);
+		return 1;
+	}
 	tso_info->ip_tcp_hdr_len = tso_info->eit_hdr_len - tso_info->l2_len;
 	TSO_DEBUG("%s seq# %u eit hdr len %u l2 len %u  skb len %u\n", __func__,
 		tso_info->tcp_seq_num,
@@ -1640,18 +1768,15 @@ void __qdf_dmaaddr_to_32s(qdf_dma_addr_t dmaaddr,
 /**
  * __qdf_nbuf_fill_tso_cmn_seg_info() - Init function for each TSO nbuf segment
  *
- * @osdev: qdf device handle
  * @curr_seg: Segment whose contents are initialized
  * @tso_cmn_info: Parameters common to all segements
  *
  * Return: None
  */
-static inline void __qdf_nbuf_fill_tso_cmn_seg_info(qdf_device_t osdev,
+static inline void __qdf_nbuf_fill_tso_cmn_seg_info(
 				struct qdf_tso_seg_elem_t *curr_seg,
 				struct qdf_tso_cmn_seg_info_t *tso_cmn_info)
 {
-	qdf_dma_addr_t mapped;
-
 	/* Initialize the flags to 0 */
 	memset(&curr_seg->seg, 0x0, sizeof(curr_seg->seg));
 
@@ -1689,9 +1814,7 @@ static inline void __qdf_nbuf_fill_tso_cmn_seg_info(qdf_device_t osdev,
 	curr_seg->seg.tso_frags[0].vaddr = tso_cmn_info->eit_hdr;
 	curr_seg->seg.tso_frags[0].length = tso_cmn_info->eit_hdr_len;
 	curr_seg->seg.total_len = curr_seg->seg.tso_frags[0].length;
-	mapped = dma_map_single(osdev->dev, tso_cmn_info->eit_hdr,
-				tso_cmn_info->eit_hdr_len, DMA_TO_DEVICE);
-	curr_seg->seg.tso_frags[0].paddr = mapped;
+	curr_seg->seg.tso_frags[0].paddr = tso_cmn_info->eit_hdr_dma_map_addr;
 
 	TSO_DEBUG("%s %d eit hdr %p eit_hdr_len %d tcp_seq_num %u tso_info->total_len %u\n",
 		   __func__, __LINE__, tso_cmn_info->eit_hdr,
@@ -1725,6 +1848,7 @@ uint32_t __qdf_nbuf_get_tso_info(qdf_device_t osdev, struct sk_buff *skb,
 	qdf_dma_addr_t tso_frag_paddr = 0;
 	uint32_t num_seg = 0;
 	struct qdf_tso_seg_elem_t *curr_seg;
+	struct qdf_tso_num_seg_elem_t *total_num_seg;
 	struct skb_frag_struct *frag = NULL;
 	uint32_t tso_frag_len = 0; /* tso segment's fragment length*/
 	uint32_t skb_frag_len = 0; /* skb's fragment length (continous memory)*/
@@ -1734,10 +1858,12 @@ uint32_t __qdf_nbuf_get_tso_info(qdf_device_t osdev, struct sk_buff *skb,
 
 	memset(&tso_cmn_info, 0x0, sizeof(tso_cmn_info));
 
-	if (qdf_unlikely(__qdf_nbuf_get_tso_cmn_seg_info(skb, &tso_cmn_info))) {
+	if (qdf_unlikely(__qdf_nbuf_get_tso_cmn_seg_info(osdev,
+						skb, &tso_cmn_info))) {
 		qdf_print("TSO: error getting common segment info\n");
 		return 0;
 	}
+	total_num_seg = tso_info->tso_num_seg_list;
 	curr_seg = tso_info->tso_seg_list;
 
 	/* length of the first chunk of data in the skb */
@@ -1759,14 +1885,16 @@ uint32_t __qdf_nbuf_get_tso_info(qdf_device_t osdev, struct sk_buff *skb,
 	num_seg = tso_info->num_segs;
 	tso_info->num_segs = 0;
 	tso_info->is_tso = 1;
+	total_num_seg->num_seg.tso_cmn_num_seg = 0;
 
 	while (num_seg && curr_seg) {
 		int i = 1; /* tso fragment index */
 		uint8_t more_tso_frags = 1;
 
 		tso_info->num_segs++;
+		total_num_seg->num_seg.tso_cmn_num_seg++;
 
-		__qdf_nbuf_fill_tso_cmn_seg_info(osdev, curr_seg,
+		__qdf_nbuf_fill_tso_cmn_seg_info(curr_seg,
 						 &tso_cmn_info);
 
 		if (unlikely(skb_proc == 0))
@@ -1860,6 +1988,64 @@ uint32_t __qdf_nbuf_get_tso_info(qdf_device_t osdev, struct sk_buff *skb,
 	return tso_info->num_segs;
 }
 EXPORT_SYMBOL(__qdf_nbuf_get_tso_info);
+
+/**
+ * __qdf_nbuf_unmap_tso_segment() - function to dma unmap TSO segment element
+ *
+ * @osdev: qdf device handle
+ * @tso_seg: TSO segment element to be unmapped
+ * @is_last_seg: whether this is last tso seg or not
+ *
+ * Return: none
+ */
+void __qdf_nbuf_unmap_tso_segment(qdf_device_t osdev,
+			  struct qdf_tso_seg_elem_t *tso_seg,
+			  bool is_last_seg)
+{
+	uint32_t num_frags = 0;
+
+	if (tso_seg->seg.num_frags > 0)
+		num_frags = tso_seg->seg.num_frags - 1;
+
+	/*Num of frags in a tso seg cannot be less than 2 */
+	if (num_frags < 1) {
+		qdf_assert(0);
+		qdf_print("ERROR: num of frags in a tso segment is %d\n",
+				  (num_frags + 1));
+		return;
+	}
+
+	while (num_frags) {
+		/*Do dma unmap the tso seg except the 0th frag */
+		if (0 ==  tso_seg->seg.tso_frags[num_frags].paddr) {
+			qdf_print("ERROR: TSO seg frag %d mapped physical address is NULL\n",
+				  num_frags);
+			qdf_assert(0);
+			return;
+		}
+		dma_unmap_single(osdev->dev,
+				 tso_seg->seg.tso_frags[num_frags].paddr,
+				 tso_seg->seg.tso_frags[num_frags].length,
+				 QDF_DMA_TO_DEVICE);
+		tso_seg->seg.tso_frags[num_frags].paddr = 0;
+		num_frags--;
+	}
+
+	if (is_last_seg) {
+		/*Do dma unmap for the tso seg 0th frag */
+		if (0 ==  tso_seg->seg.tso_frags[0].paddr) {
+			qdf_print("ERROR: TSO seg frag 0 mapped physical address is NULL\n");
+			qdf_assert(0);
+			return;
+		}
+		dma_unmap_single(osdev->dev,
+				 tso_seg->seg.tso_frags[0].paddr,
+				 tso_seg->seg.tso_frags[0].length,
+				 QDF_DMA_TO_DEVICE);
+		tso_seg->seg.tso_frags[0].paddr = 0;
+	}
+}
+EXPORT_SYMBOL(__qdf_nbuf_unmap_tso_segment);
 
 /**
  * __qdf_nbuf_get_tso_num_seg() - function to divide a TSO nbuf
@@ -2461,3 +2647,17 @@ unsigned int qdf_nbuf_update_radiotap(struct mon_rx_status *rx_status,
 	return 0;
 }
 #endif
+
+/**
+ * __qdf_nbuf_reg_free_cb() - register nbuf free callback
+ * @cb_func_ptr: function pointer to the nbuf free callback
+ *
+ * This function registers a callback function for nbuf free.
+ *
+ * Return: none
+ */
+void __qdf_nbuf_reg_free_cb(qdf_nbuf_free_t cb_func_ptr)
+{
+	nbuf_free_cb = cb_func_ptr;
+	return;
+}

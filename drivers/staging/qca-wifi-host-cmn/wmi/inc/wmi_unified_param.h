@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -214,6 +214,8 @@
 #define WMI_HOST_RXG_CAL_CHAN_MAX	4
 #define WMI_HOST_MAX_NUM_CHAINS	4
 #define WMI_MAX_NUM_OF_RATE_THRESH   4
+
+#define PROBE_REQ_BITMAP_LEN 8
 
 #include "qdf_atomic.h"
 
@@ -953,6 +955,16 @@ struct ap_ps_params {
 	uint32_t value;
 };
 
+/**
+ * struct vendor_oui - probe request ie vendor oui information
+ * @oui_type: type of the vendor oui (3 valid octets)
+ * @oui_subtype: subtype of the vendor oui (1 valid octet)
+ */
+struct vendor_oui {
+	uint32_t oui_type;
+	uint32_t oui_subtype;
+};
+
 #define WMI_HOST_SCAN_CHAN_FREQ_SHIFT	0
 #define WMI_HOST_SCAN_CHAN_FREQ_MASK	0xffff
 #define WMI_HOST_SCAN_CHAN_MODE_SHIFT	16
@@ -998,6 +1010,16 @@ struct ap_ps_params {
  * @bssid_list: Lisst of bssid to scan
  * @ie_data: IE data buffer pointer
  * @passive_flag: Is this passive scan
+ * @enable_scan_randomization: enable scan randomization feature
+ * @mac_addr: MAC address used with randomization
+ * @mac_addr_mask: MAC address mask used with randomization, bits that
+ *	are 0 in the mask should be randomized, bits that are 1 should
+ *	be taken from the @mac_addr
+ * @ie_whitelist: set to true for enabling ie whitelisting
+ * @probe_req_ie_bitmap: contains IEs to be included in probe req
+ * @num_vendor_oui: number of vendor OUIs
+ * @oui_field_len: size of total number of OUIs
+ * @voui: pointer to OUI buffer
  */
 struct scan_start_params {
 	uint32_t scan_id;
@@ -1040,6 +1062,17 @@ struct scan_start_params {
 	uint8_t *ie_data;
 	int passive_flag;
 #endif
+	/* mac address randomization attributes */
+	bool enable_scan_randomization;
+	uint8_t mac_addr[QDF_MAC_ADDR_SIZE];
+	uint8_t mac_addr_mask[QDF_MAC_ADDR_SIZE];
+
+	/* probe req ie whitelisting attrs */
+	bool ie_whitelist;
+	uint32_t probe_req_ie_bitmap[PROBE_REQ_BITMAP_LEN];
+	uint32_t num_vendor_oui;
+	uint32_t oui_field_len;
+	uint8_t *voui;
 };
 
 /**
@@ -1610,9 +1643,25 @@ struct rssi_monitor_param {
 /**
  * struct scan_mac_oui - oui paramters
  * @oui: oui parameters
+ * @vdev_id: session id
+ * @enb_probe_req_sno_randomization: set to true for enabling
+ *	seq number randomization of probe req frames
+ * @ie_whitelist: set to true for enabling ie whitelisting
+ * @probe_req_ie_bitmap: contains IEs to be included in probe req
+ * @num_vendor_oui: number of vendor OUIs
+ * @oui_field_len: size of total number of OUIs
+ * @voui: pointer to OUI buffer
  */
 struct scan_mac_oui {
 	uint8_t oui[WMI_WIFI_SCANNING_MAC_OUI_LENGTH];
+	uint32_t vdev_id;
+	bool enb_probe_req_sno_randomization;
+	/* probe req ie whitelisting attrs */
+	bool ie_whitelist;
+	uint32_t probe_req_ie_bitmap[PROBE_REQ_BITMAP_LEN];
+	uint32_t num_vendor_oui;
+	uint32_t oui_field_len;
+	uint8_t *voui;
 };
 
 #define WMI_PASSPOINT_REALM_LEN 256
@@ -1658,7 +1707,7 @@ struct mobility_domain_info {
 #define WMI_HOST_ROAM_OFFLOAD_NUM_MCS_SET     (16)
 
 /* This TLV will be filled only in case roam offload
- * for wpa2-psk/okc/ese/11r is enabled */
+ * for wpa2-psk/pmkid/ese/11r is enabled */
 typedef struct {
 	/*
 	 * TLV tag and len; tag equals
@@ -1701,7 +1750,8 @@ typedef struct {
  * @rokh_id: r0kh id
  * @roam_key_mgmt_offload_enabled: roam offload flag
  * @auth_mode: authentication mode
- * @okc_enabled: enable opportunistic key caching
+ * @fw_okc: use OKC in firmware
+ * @fw_pmksa_cache: use PMKSA cache in firmware
  * @is_ese_assoc: flag to determine ese assoc
  * @mdid: mobility domain info
  * @roam_offload_params: roam offload tlv params
@@ -1724,7 +1774,8 @@ struct roam_offload_scan_params {
 	uint8_t rokh_id[WMI_ROAM_R0KH_ID_MAX_LEN];
 	uint8_t roam_key_mgmt_offload_enabled;
 	int auth_mode;
-	bool okc_enabled;
+	bool fw_okc;
+	bool fw_pmksa_cache;
 #endif
 	bool is_ese_assoc;
 	struct mobility_domain_info mdid;
@@ -2012,10 +2063,12 @@ struct pno_nw_type {
  * @enable: flag to enable or disable
  * @modePNO: PNO Mode
  * @ucNetworksCount: Number of networks
+ * @do_passive_scan: Flag to request passive scan to fw
  * @aNetworks: Preferred network list
  * @sessionId: Session identifier
  * @fast_scan_period: Fast Scan period
  * @slow_scan_period: Slow scan period
+ * @delay_start_time: delay in seconds to use before starting the first scan
  * @fast_scan_max_cycles: Fast scan max cycles
  * @us24GProbeTemplateLen: 2.4G probe template length
  * @p24GProbeTemplate: 2.4G probe template
@@ -2028,15 +2081,27 @@ struct pno_nw_type {
  * @pnoscan_adaptive_dwell_mode: adaptive dwelltime mode for pno scan
  * @channel_prediction_full_scan: periodic timer upon which a full scan needs
  * to be triggered.
+ * @enable_pno_scan_randomization: enable pno scan randomization feature
+ * @mac_addr: MAC address used with randomization
+ * @mac_addr_mask: MAC address mask used with randomization, bits that
+ *	are 0 in the mask should be randomized, bits that are 1 should
+ *	be taken from the @mac_addr
+ * @ie_whitelist: set to true for enabling ie whitelisting
+ * @probe_req_ie_bitmap: contains IEs to be included in probe req
+ * @num_vendor_oui: number of vendor OUIs
+ * @oui_field_len: size of total number of OUIs
+ * @voui: pointer to OUI buffer
  */
 struct pno_scan_req_params {
 	uint8_t enable;
 	enum pno_mode modePNO;
 	uint8_t ucNetworksCount;
+	bool    do_passive_scan;
 	struct pno_nw_type aNetworks[WMI_PNO_MAX_SUPP_NETWORKS];
 	uint8_t sessionId;
 	uint32_t fast_scan_period;
 	uint32_t slow_scan_period;
+	uint32_t delay_start_time;
 	uint8_t fast_scan_max_cycles;
 	uint32_t        active_min_time;
 	uint32_t        active_max_time;
@@ -2053,8 +2118,18 @@ struct pno_scan_req_params {
 	enum wmi_dwelltime_adaptive_mode pnoscan_adaptive_dwell_mode;
 	uint32_t channel_prediction_full_scan;
 #endif
-};
+	/* mac address randomization attributes */
+	bool enable_pno_scan_randomization;
+	uint8_t mac_addr[QDF_MAC_ADDR_SIZE];
+	uint8_t mac_addr_mask[QDF_MAC_ADDR_SIZE];
 
+	/* probe req ie whitelisting attrs */
+	bool ie_whitelist;
+	uint32_t probe_req_ie_bitmap[PROBE_REQ_BITMAP_LEN];
+	uint32_t num_vendor_oui;
+	uint32_t oui_field_len;
+	uint8_t *voui;
+};
 
 #define WMI_WLAN_EXTSCAN_MAX_CHANNELS                 36
 #define WMI_WLAN_EXTSCAN_MAX_BUCKETS                  16
@@ -3243,11 +3318,15 @@ struct wmi_unit_test_cmd {
  * @vdev_id: vdev id
  * @bssid: mac address
  * @channel: channel
+ * @frame_len: frame length, includs mac header, fixed params and ies
+ * @frame_buf: buffer contaning probe response or beacon
  */
 struct wmi_roam_invoke_cmd {
 	uint32_t vdev_id;
 	uint8_t bssid[IEEE80211_ADDR_LEN];
 	uint32_t channel;
+	uint32_t frame_len;
+	uint8_t *frame_buf;
 };
 
 /**
@@ -4774,6 +4853,8 @@ typedef enum {
 	wmi_soc_hw_mode_transition_event_id,
 	wmi_soc_set_dual_mac_config_resp_event_id,
 	wmi_tx_data_traffic_ctrl_event_id,
+	wmi_update_rcpi_event_id,
+	wmi_get_arp_stats_req_id,
 
 	wmi_events_max,
 } wmi_conv_event_id;
@@ -5169,6 +5250,28 @@ typedef struct {
 	uint32_t	default_dbs_hw_mode_index;
 	uint32_t	num_msdu_desc;
 } target_capability_info;
+
+/**
+ * enum WMI_DBG_PARAM - Debug params
+ * @WMI_DBGLOG_LOG_LEVEL: Set the loglevel
+ * @WMI_DBGLOG_VAP_ENABLE:  Enable VAP level debug
+ * @WMI_DBGLOG_VAP_DISABLE: Disable VAP level debug
+ * @WMI_DBGLOG_MODULE_ENABLE: Enable MODULE level debug
+ * @WMI_DBGLOG_MODULE_DISABLE: Disable MODULE level debug
+ * @WMI_DBGLOG_MOD_LOG_LEVEL: Enable MODULE level debug
+ * @WMI_DBGLOG_TYPE: set type of the debug output
+ * @WMI_DBGLOG_REPORT_ENABLE: Enable Disable debug
+ */
+typedef enum {
+	WMI_DBGLOG_LOG_LEVEL = 0x1,
+	WMI_DBGLOG_VAP_ENABLE,
+	WMI_DBGLOG_VAP_DISABLE,
+	WMI_DBGLOG_MODULE_ENABLE,
+	WMI_DBGLOG_MODULE_DISABLE,
+	WMI_DBGLOG_MOD_LOG_LEVEL,
+	WMI_DBGLOG_TYPE,
+	WMI_DBGLOG_REPORT_ENABLE
+} WMI_DBG_PARAM;
 
 /**
  * struct wmi_host_fw_ver - FW version in non-tlv target
@@ -6543,6 +6646,51 @@ struct wmi_adaptive_dwelltime_params {
 };
 
 /**
+ * struct wmi_per_roam_config - per based roaming parameters
+ * @enable: if PER based roaming is enabled/disabled
+ * @tx_high_rate_thresh: high rate threshold at which PER based
+ *     roam will stop in tx path
+ * @rx_high_rate_thresh: high rate threshold at which PER based
+ *     roam will stop in rx path
+ * @tx_low_rate_thresh: rate below which traffic will be considered
+ *     for PER based roaming in Tx path
+ * @rx_low_rate_thresh: rate below which traffic will be considered
+ *     for PER based roaming in Tx path
+ * @tx_rate_thresh_percnt: % above which when traffic is below low_rate_thresh
+ *     will be considered for PER based scan in tx path
+ * @rx_rate_thresh_percnt: % above which when traffic is below low_rate_thresh
+ *     will be considered for PER based scan in rx path
+ * @per_rest_time: time for which PER based roam will wait once it
+ *     issues a roam scan.
+ * @tx_per_mon_time: Minimum time required to be considered as valid scenario
+ *     for PER based roam in tx path
+ * @rx_per_mon_time: Minimum time required to be considered as valid scenario
+ *     for PER based roam in rx path
+ */
+struct wmi_per_roam_config {
+	uint32_t enable;
+	uint32_t tx_high_rate_thresh;
+	uint32_t rx_high_rate_thresh;
+	uint32_t tx_low_rate_thresh;
+	uint32_t rx_low_rate_thresh;
+	uint32_t tx_rate_thresh_percnt;
+	uint32_t rx_rate_thresh_percnt;
+	uint32_t per_rest_time;
+	uint32_t tx_per_mon_time;
+	uint32_t rx_per_mon_time;
+};
+
+/**
+ * struct wmi_per_roam_config_req: PER based roaming config request
+ * @vdev_id: vdev id on which config needs to be set
+ * @per_config: PER config
+ */
+struct wmi_per_roam_config_req {
+	uint8_t vdev_id;
+	struct wmi_per_roam_config per_config;
+};
+
+/**
  * struct wmi_fw_dump_seg_req - individual segment details
  * @seg_id - segment id.
  * @seg_start_addr_lo - lower address of the segment.
@@ -6614,6 +6762,104 @@ struct encrypt_decrypt_req_params {
 	uint8_t mac_header[MAX_MAC_HEADER_LEN];
 	uint32_t data_len;
 	uint8_t *data;
+};
+
+#define MAX_SAR_LIMIT_ROWS_SUPPORTED 64
+/**
+ * struct sar_limit_cmd_row - sar limts row
+ * @band_id: Optional param for frequency band
+ * @chain_id: Optional param for antenna chain id
+ * @mod_id: Optional param for modulation scheme
+ * @limit_value: Mandatory param providing power limits in steps of 0.5 dbm
+ * @validity_bitmap: bitmap of valid optional params in sar_limit_cmd_row struct
+ */
+struct sar_limit_cmd_row {
+	uint32_t band_id;
+	uint32_t chain_id;
+	uint32_t mod_id;
+	uint32_t limit_value;
+	uint32_t validity_bitmap;
+};
+
+/**
+ * struct sar_limit_cmd_params - sar limts params
+ * @sar_enable: flag to enable SAR
+ * @num_limit_rows: number of items in sar_limits
+ * @commit_limits: indicates firmware to start apply new SAR values
+ * @sar_limit_row_list: pointer to array of sar limit rows
+ */
+struct sar_limit_cmd_params {
+	uint32_t sar_enable;
+	uint32_t num_limit_rows;
+	uint32_t commit_limits;
+	struct sar_limit_cmd_row *sar_limit_row_list;
+};
+
+/**
+ * enum rcpi_measurement_type - for identifying type of rcpi measurement
+ * @RCPI_MEASUREMENT_TYPE_AVG_MGMT: avg rcpi of mgmt frames
+ * @RCPI_MEASUREMENT_TYPE_AVG_DATA: avg rcpi of data frames
+ * @RCPI_MEASUREMENT_TYPE_LAST_MGMT: rcpi of last mgmt frame
+ * @RCPI_MEASUREMENT_TYPE_LAST_DATA: rcpi of last data frame
+ *
+ */
+enum rcpi_measurement_type {
+	RCPI_MEASUREMENT_TYPE_AVG_MGMT  = 0x1,
+	RCPI_MEASUREMENT_TYPE_AVG_DATA  = 0x2,
+	RCPI_MEASUREMENT_TYPE_LAST_MGMT = 0x3,
+	RCPI_MEASUREMENT_TYPE_LAST_DATA = 0x4,
+};
+
+/**
+ * struct rcpi_req - rcpi parameter
+ * @vdev_id: virtual device id
+ * @measurement_type: type of rcpi from enum wmi_rcpi_measurement_type
+ * @mac_addr: peer mac addr for which measurement is required
+ */
+struct rcpi_req {
+	uint32_t vdev_id;
+	enum rcpi_measurement_type measurement_type;
+	uint8_t mac_addr[IEEE80211_ADDR_LEN];
+};
+
+#define WMI_SUPPORTED_ACTION_CATEGORY           256
+#define WMI_SUPPORTED_ACTION_CATEGORY_ELE_LIST  (WMI_SUPPORTED_ACTION_CATEGORY/32)
+
+/**
+ * struct action_wakeup_set_param - action wakeup set params
+ * @vdev_id: virtual device id
+ * @operation: 0 reset to fw default, 1 set the bits,
+ *    2 add the setting bits, 3 delete the setting bits
+ * @action_category_map: bit mapping.
+ */
+struct action_wakeup_set_param {
+	uint32_t vdev_id;
+	uint32_t operation;
+	uint32_t action_category_map[WMI_SUPPORTED_ACTION_CATEGORY_ELE_LIST];
+};
+
+/**
+ * struct set_arp_stats - set/reset arp stats
+ * @vdev_id: vdev_id
+ * @flag: enable/disable stats
+ * @pkt_type: type of packet(1 - arp)
+ * @ip_addr: subnet ipv4 address in case of encrypted packets
+ */
+struct set_arp_stats {
+	uint32_t vdev_id;
+	uint8_t flag;
+	uint8_t pkt_type;
+	uint32_t ip_addr;
+};
+
+/**
+ * struct get_arp_stats - get arp stats from firmware
+ * @pkt_type: packet type(1 - ARP)
+ * @vdev_id: vdev_id
+ */
+struct get_arp_stats {
+	uint8_t pkt_type;
+	uint32_t vdev_id;
 };
 
 #endif /* _WMI_UNIFIED_PARAM_H_ */
