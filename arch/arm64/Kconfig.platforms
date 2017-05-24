@@ -250,4 +250,9 @@ config ARCH_ZYNQMP
 	help
 	  This enables support for Xilinx ZynqMP Family
 
+config BOARD_B1C1
+	bool "Google B1C1 Family"
+	depends on ARCH_QCOM
+	select ARCH_SDM845
+
 endmenu
