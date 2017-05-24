@@ -14,6 +14,7 @@
 	qcom,fg-jeita-hyst-temp = <2>;
 	qcom,fg-auto-recharge-soc;
 	qcom,fg-recharge-soc-thr = <97>;
+	qcom,fg-rsense-sel = <0>;
 	qcom,fg-chg-term-current = <50>;
 	qcom,fg-sys-term-current = <(-575)>;
 	qcom,fg-cutoff-voltage = <3400>;
