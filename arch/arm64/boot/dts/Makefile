@@ -9,6 +9,7 @@ dts-dirs += cavium
 dts-dirs += exynos
 dts-dirs += freescale
 dts-dirs += hisilicon
+dts-dirs += google
 dts-dirs += marvell
 dts-dirs += mediatek
 dts-dirs += nvidia
