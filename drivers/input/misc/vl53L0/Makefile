@@ -37,3 +37,7 @@ stmvl53l0-objs				:= stmvl53l0_module.o \
 ifeq ($(FEATURE_USE_CCI), true)
 stmvl53l0-objs				+= stmvl53l0_module-cci.o
 endif
+
+# TODO: remove me b/62057517
+subdir-ccflags-y += \
+	-Wno-typedef-redefinition

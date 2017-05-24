@@ -76,3 +76,7 @@ obj-$(CONFIG_ARCH_QCOM)		+= qcom/
 obj-$(CONFIG_POWER_SUPPLY)	+= supply/
 obj-$(CONFIG_HTC_BATTERY)	+= htc_battery.o
 obj-$(CONFIG_LGE_BATTERY)	+= lge_battery.o
+
+# TODO: remove me b/62057517
+subdir-ccflags-y += \
+	-Wno-tentative-definition-incomplete-type
