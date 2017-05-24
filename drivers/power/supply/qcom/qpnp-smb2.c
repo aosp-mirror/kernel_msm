@@ -429,7 +429,6 @@ static enum power_supply_property smb2_usb_props[] = {
 	POWER_SUPPLY_PROP_TYPEC_POWER_ROLE,
 	POWER_SUPPLY_PROP_TYPEC_CC_ORIENTATION,
 	POWER_SUPPLY_PROP_PD_ALLOWED,
-	POWER_SUPPLY_PROP_PD_APSD_DONE,
 	POWER_SUPPLY_PROP_PD_ACTIVE,
 	POWER_SUPPLY_PROP_INPUT_CURRENT_SETTLED,
 	POWER_SUPPLY_PROP_INPUT_CURRENT_NOW,
@@ -501,9 +500,6 @@ static int smb2_usb_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_PD_ALLOWED:
 		rc = smblib_get_prop_pd_allowed(chg, val);
 		break;
-	case POWER_SUPPLY_PROP_PD_APSD_DONE:
-		rc = smblib_get_prop_pd_apsd_done(chg, val);
-		break;
 	case POWER_SUPPLY_PROP_PD_ACTIVE:
 		val->intval = chg->pd_active;
 		break;
@@ -551,6 +547,12 @@ static int smb2_usb_set_prop(struct power_supply *psy,
 	struct smb_charger *chg = &chip->chg;
 	int rc = 0;
 
+	mutex_lock(&chg->lock);
+	if (!chg->typec_present) {
+		rc = -EINVAL;
+		goto unlock;
+	}
+
 	switch (psp) {
 	case POWER_SUPPLY_PROP_VOLTAGE_MIN:
 		rc = smblib_set_prop_usb_voltage_min(chg, val);
@@ -576,9 +578,6 @@ static int smb2_usb_set_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_PD_USB_SUSPEND_SUPPORTED:
 		chg->system_suspend_supported = val->intval;
 		break;
-	case POWER_SUPPLY_PROP_PD_CC_OVERRIDE:
-		rc = smblib_set_prop_pd_cc_override(chg, val);
-		break;
 	case POWER_SUPPLY_PROP_BOOST_CURRENT:
 		rc = smblib_set_prop_boost_current(chg, val);
 		break;
@@ -592,6 +591,8 @@ static int smb2_usb_set_prop(struct power_supply *psy,
 		break;
 	}
 
+unlock:
+	mutex_unlock(&chg->lock);
 	return rc;
 }
 
@@ -1031,6 +1032,8 @@ static int smb2_batt_set_prop(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_QNOVO:
 		chg->qnovo_fcc_ua = val->intval;
+		vote(chg->pl_disable_votable, PL_QNOVO_VOTER,
+			val->intval != -EINVAL && val->intval < 2000000, 0);
 		rc = rerun_election(chg->fcc_votable);
 		break;
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
@@ -1362,10 +1365,12 @@ static int smb2_configure_typec(struct smb_charger *chg)
 		return rc;
 	}
 
-	/* disable try.SINK mode */
-	rc = smblib_masked_write(chg, TYPE_C_CFG_3_REG, EN_TRYSINK_MODE_BIT, 0);
+	/* disable try.SINK mode and legacy cable IRQs */
+	rc = smblib_masked_write(chg, TYPE_C_CFG_3_REG, EN_TRYSINK_MODE_BIT |
+				TYPEC_NONCOMPLIANT_LEGACY_CABLE_INT_EN_BIT |
+				TYPEC_LEGACY_CABLE_INT_EN_BIT, 0);
 	if (rc < 0) {
-		dev_err(chg->dev, "Couldn't set TRYSINK_MODE rc=%d\n", rc);
+		dev_err(chg->dev, "Couldn't set Type-C config rc=%d\n", rc);
 		return rc;
 	}
 
@@ -1520,6 +1525,8 @@ static int smb2_init_hw(struct smb2 *chip)
 	vote(chg->dc_icl_votable,
 		DEFAULT_VOTER, true, chip->dt.dc_icl_ua);
 	vote(chg->hvdcp_disable_votable_indirect, PD_INACTIVE_VOTER,
+			true, 0);
+	vote(chg->hvdcp_disable_votable_indirect, VBUS_CC_SHORT_VOTER,
 			true, 0);
 	vote(chg->hvdcp_disable_votable_indirect, DEFAULT_VOTER,
 		chip->dt.hvdcp_disable, 0);
