@@ -3676,8 +3676,6 @@ static void smblib_handle_typec_removal(struct smb_charger *chg)
 	if (rc < 0)
 		smblib_err(chg, "Couldn't enable APSD_START_ON_CC rc=%d\n", rc);
 
-	chg->usb_ever_removed = true;
-
 	smblib_update_usb_type(chg);
 	typec_source_removal(chg);
 	typec_sink_removal(chg);
