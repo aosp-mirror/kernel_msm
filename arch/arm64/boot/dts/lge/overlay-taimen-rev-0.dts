@@ -54,3 +54,21 @@
 		status = "disabled";
 	};
 };
+
+&pm8998_vadc {
+	chan@51 {
+		label = "quiet_therm";
+	};
+	chan@4f {
+		label = "quiet_therm";
+	};
+};
+
+&pm8998_adc_tm {
+	chan@51 {
+		label = "quiet_therm";
+	};
+	chan@4f {
+		label = "quiet_therm";
+	};
+};
