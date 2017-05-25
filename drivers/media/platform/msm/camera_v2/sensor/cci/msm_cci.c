@@ -1646,12 +1646,25 @@ static int32_t msm_cci_write(struct v4l2_subdev *sd,
 	return rc;
 }
 
+static void msm_cci_init_lock(struct v4l2_subdev *sd)
+{
+	struct cci_device *cci_dev = v4l2_get_subdevdata(sd);
+	mutex_lock(&cci_dev->init_mutex);
+}
+
+static void msm_cci_init_unlock(struct v4l2_subdev *sd)
+{
+	struct cci_device *cci_dev = v4l2_get_subdevdata(sd);
+	mutex_unlock(&cci_dev->init_mutex);
+}
+
 static int32_t msm_cci_config(struct v4l2_subdev *sd,
 	struct msm_camera_cci_ctrl *cci_ctrl)
 {
 	int32_t rc = 0;
 	CDBG("%s line %d cmd %d\n", __func__, __LINE__,
 		cci_ctrl->cmd);
+	msm_cci_init_lock(sd);
 	switch (cci_ctrl->cmd) {
 	case MSM_CCI_INIT:
 		rc = msm_cci_init(sd, cci_ctrl);
@@ -1678,6 +1691,7 @@ static int32_t msm_cci_config(struct v4l2_subdev *sd,
 	default:
 		rc = -ENOIOCTLCMD;
 	}
+	msm_cci_init_unlock(sd);
 	CDBG("%s line %d rc %d\n", __func__, __LINE__, rc);
 	cci_ctrl->status = rc;
 	return rc;
@@ -2152,6 +2166,7 @@ static int msm_cci_probe(struct platform_device *pdev)
 		if (!new_cci_dev->write_wq[i])
 			pr_err("Failed to create write wq\n");
 	}
+	mutex_init(&new_cci_dev->init_mutex);
 	CDBG("%s cci subdev %pK\n", __func__, &new_cci_dev->msm_sd.sd);
 	CDBG("%s line %d\n", __func__, __LINE__);
 	return 0;
