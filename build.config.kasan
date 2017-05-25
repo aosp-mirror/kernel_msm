@@ -31,3 +31,4 @@ arch/arm64/boot/Image.gz-dtb
 vmlinux
 System.map
 "
+IN_KERNEL_MODULES=1
