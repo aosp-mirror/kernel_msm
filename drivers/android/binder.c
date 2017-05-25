@@ -2900,20 +2900,10 @@ static int binder_thread_write(struct binder_proc *proc,
 				ref->death = death;
 				if (ref->node_is_zombie) {
 					ref->death->work.type = BINDER_WORK_DEAD_BINDER;
-					if (thread->looper &
-					    (BINDER_LOOPER_STATE_REGISTERED |
-					     BINDER_LOOPER_STATE_ENTERED))
-						binder_enqueue_work(
-							&ref->death->work,
-							&thread->todo,
-							__LINE__);
-					else {
-						binder_enqueue_work(
-							&ref->death->work,
-							&proc->todo,
-							__LINE__);
-						binder_wakeup_proc(proc);
-					}
+					binder_enqueue_work(&ref->death->work,
+							    &proc->todo,
+							    __LINE__);
+					binder_wakeup_proc(proc);
 				}
 				binder_proc_unlock(proc, __LINE__);
 			} else {
