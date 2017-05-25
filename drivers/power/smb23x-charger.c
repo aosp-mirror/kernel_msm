@@ -2131,6 +2131,9 @@ static int smb23x_get_prop_batt_capacity(struct smb23x_chip *chip)
 static int smb23x_get_prop_batt_temp(struct smb23x_chip *chip)
 {
 	union power_supply_propval ret = {0, };
+	static int charge_disable_count = 0;
+	int rc, charge_current;
+	u8 enable;
 
 	chip->bms_psy = power_supply_get_by_name((char *)chip->bms_psy_name);
 	if (chip->bms_psy == NULL)
@@ -2143,6 +2146,27 @@ static int smb23x_get_prop_batt_temp(struct smb23x_chip *chip)
 		chip->last_temp = ret.intval;
 		if (chip->cfg_cool_temp_comp_mv != -EINVAL || chip->cfg_cool_temp_comp_ma != -EINVAL)
 			check_charger_thermal_state(chip, chip->last_temp);
+
+		//Disable charging when battery full and charge current less than 15 mA
+		rc = smb23x_read(chip, CMD_REG_0, &enable);
+		if (rc == 0) {
+			enable &= CHARGE_EN_BIT;
+
+			charge_current = smb23x_get_prop_batt_current(chip);
+			if (enable && (smb23x_get_prop_batt_capacity(chip) == 100)) {
+				if ((charge_current > 0) && (charge_current < 15000)) {
+					if (charge_disable_count < 5) {
+						charge_disable_count++;
+					} else {
+						charge_disable_count = 0;
+						smb23x_charging_enable(chip, 0);
+					}
+				} else
+					charge_disable_count = 0;
+			} else if (!enable && (smb23x_get_prop_batt_voltage(chip) < 4250000)) {
+				smb23x_charging_enable(chip, 1);
+			}
+		}
 
 		return ret.intval;
 	}
