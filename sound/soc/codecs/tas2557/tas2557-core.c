@@ -316,9 +316,15 @@ int tas2557_SA_ctl_echoRef(struct tas2557_priv *pTAS2557)
 			goto end;
 		/* set TAS2557 BCLK and WCLK inverted */
 		ret = pTAS2557->write(pTAS2557, channel_both, TAS2557_ASI1_DAC_BCLK_REG, 0x02);
+		if (ret < 0)
+			goto end;
 		ret = pTAS2557->write(pTAS2557, channel_both, TAS2557_ASI1_DAC_WCLK_REG, 0x0a);
+		if (ret < 0)
+			goto end;
 		/* left channel offset = 1 */
 		ret = pTAS2557->write(pTAS2557, channel_left, TAS2557_ASI1_OFFSET1_REG, 0x01);
+		if (ret < 0)
+			goto end;
 		/* right channel offset = 1 + Bits*2 */
 		ret = pTAS2557->write(pTAS2557, channel_right, TAS2557_ASI1_OFFSET1_REG, 0x01 + pTAS2557->mnI2SBits * 2);
 	}
@@ -2005,6 +2011,8 @@ start:
 
 		if (nOffset <= 0x7F) {
 			nResult = pTAS2557->write(pTAS2557, chl, TAS2557_REG(nBook, nPage, nOffset), nData);
+			if (nResult < 0)
+				goto end;
 
 			if (pBlock->mbYChkSumPresent) {
 				nResult = doSingleRegCheckSum(pTAS2557, chl, nBook, nPage, nOffset, nData);
@@ -2022,7 +2030,10 @@ start:
 			nPage = pData[1];
 			nOffset = pData[2];
 			if (nLength > 1) {
-				pTAS2557->bulk_write(pTAS2557, chl, TAS2557_REG(nBook, nPage, nOffset), pData + 3, nLength);
+				nResult = pTAS2557->bulk_write(pTAS2557, chl, TAS2557_REG(nBook, nPage, nOffset),
+						 pData + 3, nLength);
+				if (nResult < 0)
+					goto end;
 
 				if (pBlock->mbYChkSumPresent) {
 					nResult = doMultiRegCheckSum(pTAS2557, chl, nBook, nPage, nOffset, nLength);
@@ -2031,7 +2042,10 @@ start:
 					nCRCChkSum += (unsigned char)nResult;
 				}
 			} else {
-				pTAS2557->write(pTAS2557, chl, TAS2557_REG(nBook, nPage, nOffset), pData[3]);
+				nResult = pTAS2557->write(pTAS2557, chl, TAS2557_REG(nBook, nPage, nOffset),
+						 pData[3]);
+				if (nResult < 0)
+					goto end;
 
 				if (pBlock->mbYChkSumPresent) {
 					nResult = doSingleRegCheckSum(pTAS2557, chl, nBook, nPage, nOffset, pData[3]);
@@ -2048,14 +2062,23 @@ start:
 		}
 	}
 
-	if (chl == channel_broadcast)
+	if (chl == channel_broadcast) {
 		nResult = tas2557_exit_broadcast_mode(pTAS2557);
+		if (nResult < 0)
+			goto end;
+	}
 
 	if (pBlock->mbPChkSumPresent) {
-		if ((chl & channel_left) || (chl == channel_broadcast))
+		if ((chl & channel_left) || (chl == channel_broadcast)) {
 			nResult = pTAS2557->read(pTAS2557, channel_left, TAS2557_CRC_CHECKSUM_REG, &nValue1);
-		if ((chl & channel_right) || (chl == channel_broadcast))
+			if (nResult < 0)
+				goto end;
+		}
+		if ((chl & channel_right) || (chl == channel_broadcast)) {
 			nResult = pTAS2557->read(pTAS2557, channel_right, TAS2557_CRC_CHECKSUM_REG, &nValue2);
+			if (nResult < 0)
+				goto end;
+		}
 
 		if ((chl == channel_both) || (chl == channel_broadcast)) {
 			if ((nValue1 != nValue2) || (nValue1 != pBlock->mnPChkSum)) {
