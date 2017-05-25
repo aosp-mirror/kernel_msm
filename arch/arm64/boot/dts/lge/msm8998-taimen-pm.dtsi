@@ -237,7 +237,6 @@
 &pmi8998_charger {
 	qcom,usb-icl-ua = <1500000>;
 	qcom,fcc-max-ua = <3550000>;
-	qcom,jeita-cccomp-ua = <2850000>;
 	qcom,hvdcp-disable;
 	qcom,auto-recharge-soc;
 };
