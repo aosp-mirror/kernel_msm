@@ -349,27 +349,32 @@ void update_htc_chg_src(void)
 	htc_batt_info.rep.chg_src = chg_src;
 }
 
-#define IBAT_LIMIT_VOL_RECOVER_MV	4000
+#define HYST_MV	200
 #define MAX_IDX		4
-#define HEALTH_LEVELS	5
+#define HEALTH_LEVELS	6
 static int ibat_map_ac[MAX_IDX][HEALTH_LEVELS] = {
 /* IBAT_IDX =  < VOLTAGE-LIMITED, DISPLAY-ON > */
-/*  #0 (00) */ {    7,    10,    8,    5,    5},
-/*  #1 (01) */ {    7,    10,    5, 1000, 1000},
-/*  #2 (10) */ {    3,     5,    5,    5,    0},
-/*  #3 (11) */ {    3,     5,    5, 1000,    0},
+/*  #0 (00) */ {   30,   50,   100,   80,   50,   50},
+/*  #1 (01) */ {   30,   50,   100,   50, 1000, 1000},
+/*  #2 (10) */ {   15,   30,    50,   50,    0,    0},
+/*  #3 (11) */ {   15,   30,    50,   50,    0,    0},
 };
 
 static struct htc_thermal_stage thermal_stage[] = {
-	{	-INT_MAX,	170},
-	{	420,		150},	/* Good */
+	{	-INT_MAX,	120},
+	{	100,		220},
+	{	420,		200},	/* Good */
 	{	450,		400},
 	{	480,		430},
 	{	INT_MAX,	460}
 };
 
+static int thermal_limit_vol[] = {
+	4200, 4200, 4200, 4200, 4300, 4100 };
+
 enum {
-	HEALTH_COOL = 0,
+	HEALTH_COOL2 = 0,
+	HEALTH_COOL1,
 	HEALTH_GOOD,
 	HEALTH_WARM1,
 	HEALTH_WARM2,
@@ -408,9 +413,10 @@ int update_ibat_setting(void)
 		}
 	}
 	/* Step 2: Update Voltage status */
-	if (is_vol_limited || batt_vol > htc_batt_info.batt_thermal_limit_vol)
+	if (is_vol_limited || batt_vol > thermal_limit_vol[batt_thermal])
 		is_vol_limited = true;
-	if (!is_vol_limited || batt_vol < IBAT_LIMIT_VOL_RECOVER_MV)
+	if (!is_vol_limited ||
+	    batt_vol < (thermal_limit_vol[batt_thermal] - HYST_MV))
 		is_vol_limited = false;
 
 	/* Step 3: Apply Screen ON configuration */
@@ -425,9 +431,9 @@ int update_ibat_setting(void)
 	case POWER_SUPPLY_TYPE_USB_HVDCP:
 	case POWER_SUPPLY_TYPE_USB_DCP:
 	case POWER_SUPPLY_TYPE_USB_PD:
-		if (ibat_map_ac[idx][batt_thermal] <= 10)
+		if (ibat_map_ac[idx][batt_thermal] <= 100)
 			ibat_ma = htc_batt_info.batt_fcc_ma *
-					ibat_map_ac[idx][batt_thermal] / 10;
+					ibat_map_ac[idx][batt_thermal] / 100;
 		else
 			ibat_ma = ibat_map_ac[idx][batt_thermal];
 		break;
@@ -446,7 +452,7 @@ int update_ibat_setting(void)
 			"%s: thermal=%d,temp=%d,fcc=%d,is_vol_limited(>%dmV)=%d,is_screen_on=%d,idx=%d,ibat_ma=%d.\n",
 			__func__, batt_thermal, batt_temp,
 			htc_batt_info.batt_fcc_ma,
-			htc_batt_info.batt_thermal_limit_vol, is_vol_limited,
+			thermal_limit_vol[batt_thermal], is_vol_limited,
 			is_screen_on, idx, ibat_ma);
 	}
 
