@@ -250,8 +250,9 @@ static void mdss_dsi_panel_set_alpm_mode(struct mdss_dsi_ctrl_pdata *ctrl,
 					 u32 extra_flags)
 {
 	struct dsi_panel_cmds *pcmds;
+	u32 flags = CMD_REQ_COMMIT | extra_flags;
 
-	if ((mode < 0) || (mode >= ALPM_MODE_MAX)) {
+	if (mode >= ALPM_MODE_MAX) {
 		pr_err("Invalid alpm_mode=%d\n", mode);
 		return;
 	}
@@ -263,7 +264,7 @@ static void mdss_dsi_panel_set_alpm_mode(struct mdss_dsi_ctrl_pdata *ctrl,
 	}
 
 	pr_debug("%s: ndx=%d mode=0x%02x\n", __func__, ctrl->ndx, mode);
-	mdss_dsi_panel_cmds_send(ctrl, pcmds, CMD_REQ_COMMIT);
+	mdss_dsi_panel_cmds_send(ctrl, pcmds, flags);
 }
 
 static void mdss_dsi_bl_update_alpm_mode(struct mdss_dsi_ctrl_pdata *ctrl,
@@ -1062,8 +1063,11 @@ static int mdss_dsi_panel_low_power_config(struct mdss_panel_data *pdata,
 	if (pinfo->alpm_feature_enabled) {
 		enum alpm_mode_type mode;
 
-		mode = enable ? ctrl->alpm_mode : ALPM_MODE_OFF;
-		mdss_dsi_panel_set_alpm_mode(ctrl, mode, 0);
+		/* if enabling LP but not going to ALPM mode, skip */
+		if (!enable || ctrl->alpm_mode != ALPM_MODE_OFF) {
+			mode = enable ? ctrl->alpm_mode : ALPM_MODE_OFF;
+			mdss_dsi_panel_set_alpm_mode(ctrl, mode, 0);
+		}
 	}
 
 	pr_debug("%s:-\n", __func__);
