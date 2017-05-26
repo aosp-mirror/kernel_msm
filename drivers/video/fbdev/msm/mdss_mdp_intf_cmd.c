@@ -22,7 +22,7 @@
 #include "mdss_mdp_trace.h"
 #include "mdss_dsi_clk.h"
 
-#define MAX_RECOVERY_TRIALS 20
+#define MAX_RECOVERY_TRIALS 2
 #define MAX_SESSIONS 2
 
 #define SPLIT_MIXER_OFFSET 0x800
