@@ -10,17 +10,8 @@
  * GNU General Public License for more details.
  */
 
-
-/dts-v1/;
-
 #include "../qcom/sdm845.dtsi"
 #include "sdm845-v1-b1c1-common.dtsi"
 
-/* TODO: Add dev board display and touch includes here */
-/* TODO: Fix model/compatible/board-id */
-
-/ {
-	model = "Qualcomm Technologies, Inc. MSM sdm845 v1 MTP";
-	compatible = "qcom,sdm845-mtp", "qcom,sdm845", "qcom,mtp";
-	qcom,board-id = <8 0>;
-};
+#include "sdm845-taimen-touch-stm-ftm4.dtsi"
+#include "sdm845-taimen-panel.dtsi"
