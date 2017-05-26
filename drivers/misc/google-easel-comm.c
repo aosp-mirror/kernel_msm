@@ -78,6 +78,9 @@ struct easelcomm_user_state {
 
 /* max delay in msec waiting for remote to ack link shutdown */
 #define LINK_SHUTDOWN_ACK_TIMEOUT 500
+/* max delay in msec waiting for remote to return flush done */
+#define SERVICE_FLUSH_DONE_TIMEOUT 5000
+
 static bool easelcomm_up; /* is easelcomm up and running? */
 /* used to wait for remote peer to ack link shutdown */
 static DECLARE_COMPLETION(easelcomm_link_peer_shutdown);
@@ -698,6 +701,9 @@ static void easelcomm_handle_service_shutdown(
 	spin_unlock(&service->lock);
 	/* Wakeup any receiveMessage() waiter so they can return to user */
 	complete(&service->receivemsg_queue_new);
+
+	/* Wakeup flush_done waiter so they can return to user */
+	complete(&service->flush_done);
 
 	/* Wakeup any sendMessageReceiveReply() waiter to return to user */
 	__force_complete_reply_waiter(service);
@@ -1482,8 +1488,10 @@ static void easelcomm_flush_service(struct easelcomm_service *service)
 	ret = easelcomm_send_cmd_noargs(service, EASELCOMM_CMD_FLUSH_SERVICE);
 	if (ret)
 		return;
-	ret = wait_for_completion_interruptible(&service->flush_done);
-	if (ret)
+	ret = wait_for_completion_interruptible_timeout(
+			&service->flush_done,
+			msecs_to_jiffies(SERVICE_FLUSH_DONE_TIMEOUT));
+	if (ret <= 0)
 		dev_err(easelcomm_miscdev.this_device,
 			"service flush done wait aborted svc %u\n",
 			service->service_id);
