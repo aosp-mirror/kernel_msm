@@ -633,6 +633,17 @@ static void smblib_uusb_removal(struct smb_charger *chg)
 	int rc;
 
 	cancel_delayed_work_sync(&chg->pl_enable_work);
+
+	if (chg->dpdm_reg && regulator_is_enabled(chg->dpdm_reg)) {
+		smblib_dbg(chg, PR_MISC, "disabling DPDM regulator\n");
+		rc = regulator_disable(chg->dpdm_reg);
+		if (rc < 0)
+			smblib_err(chg, "Couldn't disable dpdm regulator rc=%d\n",
+				rc);
+	}
+
+	if (chg->wa_flags & BOOST_BACK_WA)
+		vote(chg->usb_icl_votable, BOOST_BACK_VOTER, false, 0);
 	vote(chg->pl_disable_votable, PL_DELAY_VOTER, true, 0);
 	vote(chg->awake_votable, PL_DELAY_VOTER, false, 0);
 
@@ -3216,10 +3227,13 @@ void smblib_usb_plugin_hard_reset_locked(struct smb_charger *chg)
 
 	vbus_rising = (bool)(stat & USBIN_PLUGIN_RT_STS_BIT);
 
-	if (vbus_rising)
+	if (vbus_rising) {
 		smblib_cc2_sink_removal_exit(chg);
-	else
+	} else {
 		smblib_cc2_sink_removal_enter(chg);
+		if (chg->wa_flags & BOOST_BACK_WA)
+			vote(chg->usb_icl_votable, BOOST_BACK_VOTER, false, 0);
+	}
 
 	power_supply_changed(chg->usb_psy);
 	smblib_dbg(chg, PR_INTERRUPT, "IRQ: usbin-plugin %s\n",
@@ -3651,6 +3665,17 @@ static void smblib_handle_typec_removal(struct smb_charger *chg)
 
 	chg->cc2_detach_wa_active = false;
 
+	if (chg->dpdm_reg && regulator_is_enabled(chg->dpdm_reg)) {
+		smblib_dbg(chg, PR_MISC, "disabling DPDM regulator\n");
+		rc = regulator_disable(chg->dpdm_reg);
+		if (rc < 0)
+			smblib_err(chg, "Couldn't disable dpdm regulator rc=%d\n",
+				rc);
+	}
+
+	if (chg->wa_flags & BOOST_BACK_WA)
+		vote(chg->usb_icl_votable, BOOST_BACK_VOTER, false, 0);
+
 	/* reset APSD voters */
 	vote(chg->apsd_disable_votable, PD_HARD_RESET_VOTER, false, 0);
 	vote(chg->apsd_disable_votable, PD_VOTER, false, 0);
@@ -3871,6 +3896,16 @@ irqreturn_t smblib_handle_high_duty_cycle(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+static void smblib_bb_removal_work(struct work_struct *work)
+{
+	struct smb_charger *chg = container_of(work, struct smb_charger,
+						bb_removal_work.work);
+
+	vote(chg->usb_icl_votable, BOOST_BACK_VOTER, false, 0);
+	vote(chg->awake_votable, BOOST_BACK_VOTER, false, 0);
+}
+
+#define BOOST_BACK_UNVOTE_DELAY_MS		750
 irqreturn_t smblib_handle_switcher_power_ok(int irq, void *data)
 {
 	struct smb_irq_data *irq_data = data;
@@ -3898,6 +3933,14 @@ irqreturn_t smblib_handle_switcher_power_ok(int irq, void *data)
 	if (is_storming(&irq_data->storm_data)) {
 		smblib_err(chg, "Reverse boost detected: voting 0mA to suspend input\n");
 		vote(chg->usb_icl_votable, BOOST_BACK_VOTER, true, 0);
+		vote(chg->awake_votable, BOOST_BACK_VOTER, true, 0);
+		/*
+		 * Remove the boost-back vote after a delay, to avoid
+		 * permanently suspending the input if the boost-back condition
+		 * is unintentionally hit.
+		 */
+		schedule_delayed_work(&chg->bb_removal_work,
+			msecs_to_jiffies(BOOST_BACK_UNVOTE_DELAY_MS));
 	}
 
 	return IRQ_HANDLED;
@@ -4812,6 +4855,7 @@ int smblib_init(struct smb_charger *chg)
 	INIT_WORK(&chg->legacy_detection_work, smblib_legacy_detection_work);
 	INIT_DELAYED_WORK(&chg->port_overheat_work, port_overheat_work);
 	INIT_DELAYED_WORK(&chg->uusb_otg_work, smblib_uusb_otg_work);
+	INIT_DELAYED_WORK(&chg->bb_removal_work, smblib_bb_removal_work);
 	chg->fake_capacity = -EINVAL;
 	chg->fake_port_temp = -EINVAL;
 	chg->fake_input_current_limited = -EINVAL;
@@ -4870,6 +4914,7 @@ int smblib_deinit(struct smb_charger *chg)
 		cancel_delayed_work_sync(&chg->pl_enable_work);
 		cancel_work_sync(&chg->legacy_detection_work);
 		cancel_delayed_work_sync(&chg->uusb_otg_work);
+		cancel_delayed_work_sync(&chg->bb_removal_work);
 		power_supply_unreg_notifier(&chg->nb);
 		smblib_destroy_votables(chg);
 		qcom_batt_deinit();
