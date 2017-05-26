@@ -1,0 +1,67 @@
+/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include "dsi-panel-sw43402-dsc-qhd-cmd.dtsi"
+
+&soc {
+	dsi_sw43402_cmd_display: qcom,dsi-display@50 {
+		compatible = "qcom,dsi-display";
+		label = "dsi_sw43402_cmd_display";
+		qcom,display-type = "primary";
+
+		qcom,dsi-ctrl = <&mdss_dsi0>;
+		qcom,dsi-phy = <&mdss_dsi_phy0>;
+		clocks = <&mdss_dsi0_pll BYTECLK_MUX_0_CLK>,
+			<&mdss_dsi0_pll PCLK_MUX_0_CLK>;
+		clock-names = "src_byte_clk", "src_pixel_clk";
+
+		pinctrl-names = "panel_active", "panel_suspend";
+		pinctrl-0 = <&sde_dsi_active &sde_te_active &sde_pmgpio_active>;
+		pinctrl-1 = <&sde_dsi_suspend &sde_te_suspend &sde_pmgpio_suspend>;
+		qcom,platform-reset-gpio = <&tlmm 6 0>;
+		qcom,platform-te-gpio = <&tlmm 10 0>;
+
+		qcom,dsi-panel = <&dsi_sw43402_dsc_qhd_cmd>;
+
+		vddio-supply = <&pm8998_l14>;
+		vdd-supply = <&pm8998_l28>;
+
+		qcom,dsi-display-active;
+	};
+};
+
+/*
+ * Reset is GPIO6
+ * VSYNC/TE is GPIO10
+ * VDDI is 1p8, L14A source (first one up)
+ * VPNL (POLED_VCI??) is 3.0 L28A source. (second one up)
+ * POLED_GPO0 is also PM845 GPIO2 - > (do not drive)
+ * POLED_GPO1 is also PM845 GPIO5 - > (do not drive)
+ * Single DSI (dsi0)
+ */
+
+
+&mdss_dsi1 {
+	status = "disabled";
+};
+
+&dsi_sw43402_dsc_qhd_cmd {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_vdd_no_labibb>;
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+	qcom,mdss-dsi-panel-timings = [00 11 04 04 07 0C 04 04 03 03 04 00];
+	qcom,mdss-dsi-t-clk-post = <0x05>;
+	qcom,mdss-dsi-t-clk-pre = <0x1B>;
+};
+
+&pm8998_l28 {
+	qcom,init-voltage = <3000000>;
+};

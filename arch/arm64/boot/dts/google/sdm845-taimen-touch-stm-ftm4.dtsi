@@ -1,0 +1,60 @@
+/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/* Setting 3.3V to match Taimen (coded and measured.)
+ * There is a concern that PMI8998 VBOB is only 3.312 and is the
+ * reference for L19, but it is matching the Taimen, so let's leave
+ * it for now (Re-investigate for Proto display).
+ */
+&pm8998_l19 {
+	regulator-min-microvolt = <3300000>;
+	regulator-max-microvolt = <3300000>;
+	qcom,init-voltage = <3300000>;
+	status = "okay";
+};
+
+&pm8998_l14 {
+	regulator-min-microvolt = <1800000>;
+	regulator-max-microvolt = <1800000>;
+	qcom,init-voltage = <1800000>;
+	status = "okay";
+};
+
+/* TOUCH_HOST_SEL (gpio128): Keep it low for AP to use touch.
+ * AP Touch I2C SDA is gpio27, SCL is gpio28. (QUP2)
+ * Reset gpio99, int gpio125, AP/SLPI switch is 128. (Reset isn't used?).
+ */
+
+&qupv3_se2_i2c {
+	status = "ok";
+	qcom,clk-freq-out = <400000>;
+
+	ftm4_fts@49 {
+		status = "ok";
+		compatible = "stm,ftm4_fts";
+		reg = <0x49>;
+
+		pinctrl-names = "on_state", "off_state";
+		pinctrl-0 = <&ts_active>;
+		pinctrl-1 = <&ts_suspend>;
+
+		stm,switch_gpio= <&tlmm 128 0>;
+		stm,irq_gpio = <&tlmm 125 0>;
+		stm,irq_type = <0x2004>; /* Trigger high? */
+		stm,num_lines = <32 16>;
+		stm,max_coords = <1440 2880>;
+		stm,regulator_dvdd = "pm8998_l14";
+		stm,regulator_avdd = "pm8998_l19";
+
+		stm,firmware_name = "ftm4_fw.ftb";
+	};
+};

@@ -1,0 +1,77 @@
+/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&soc {
+	pinctrl@03400000 {
+		pmx_sde {
+			sde_dsi_active {
+				mux {
+					pins = "gpio6";
+				};
+				config {
+					pins = "gpio6";
+				};
+			};
+			sde_dsi_suspend {
+				mux {
+					pins = "gpio6";
+				};
+				config {
+					pins = "gpio6";
+				};
+			};
+		};
+		ts_mux {
+			ts_active: ts_active {
+				mux {
+					pins = "gpio99", "gpio125", "gpio75";
+					function = "gpio";
+				};
+				config {
+					pins = "gpio99", "gpio125", "gpio75";
+					drive-strength = <16>;
+					bias-pull-up;
+				};
+			};
+			ts_suspend: ts_suspend {
+				mux {
+					pins = "gpio99", "gpio125", "gpio75";
+					function = "gpio";
+				};
+				config {
+					pins = "gpio99", "gpio125", "gpio75";
+					drive-strength = <2>;
+					bias-pull-down;
+				};
+			};
+		};
+	};
+};
+
+&pm8998_gpios {
+	/delete-node/ key_home;
+	/* Don't drive these, for display */
+	sde_pmgpio_active: sde_pmgpio_active {
+		pins = "gpio2", "gpio5";
+		function = "normal";
+		input-enable;
+		bias-disable;
+		power-source = <0>;
+	};
+	sde_pmgpio_suspend: sde_pmgpio_suspend {
+		pins = "gpio2", "gpio5";
+		function = "normal";
+		input-enable;
+		bias-disable;
+		power-source = <0>;
+	};
+};
