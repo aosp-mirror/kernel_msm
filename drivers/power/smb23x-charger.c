@@ -102,8 +102,8 @@ static void udp_sendmsg_charging(int power_status)
 
 static void udp_sendmsg_tempature(int value)
 {
-	const int thresholdTempRaising=2;
-	const int thresholdTempFalling=2;
+	const int thresholdTempRaising=4;
+	const int thresholdTempFalling=4;
 	static int compareTemp=0;
 	static int tempStatus=0;
 	int currentTemp=value/10;
