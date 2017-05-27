@@ -75,6 +75,7 @@ struct fts_i2c_platform_data {
 #endif
 	unsigned gpio_scl;
 	unsigned gpio_sda;
+	int switch_gpio;
 };
 
 // #define FTS_SUPPORT_TA_MODE // DE version don't need.

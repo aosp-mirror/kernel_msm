@@ -1445,7 +1445,7 @@ static int fts_setup_drv_data(struct i2c_client *client)
 {
 	int retval = 0;
 	struct fts_i2c_platform_data *pdata;
-	struct fts_ts_info *info;
+	struct fts_ts_info *info = NULL;
 
 	/* parse dt */
 	if (client->dev.of_node) {
@@ -1461,7 +1461,7 @@ static int fts_setup_drv_data(struct i2c_client *client)
 		retval = fts_parse_dt(client);
 		if (retval) {
 			tsp_debug_err(&client->dev, "Failed to parse dt\n");
-			return retval;
+			goto error;
 		}
 	} else {
 		pdata = client->dev.platform_data;
@@ -1473,13 +1473,15 @@ static int fts_setup_drv_data(struct i2c_client *client)
 	}
 	if (!pdata->power) {
 		tsp_debug_err(&client->dev, "No power contorl found\n");
-			return -EINVAL;
+			retval = -EINVAL;
+			goto error;
 	}
 
 	pdata->pinctrl = devm_pinctrl_get(&client->dev);
 	if (IS_ERR(pdata->pinctrl)) {
 		tsp_debug_err(&client->dev, "could not get pinctrl\n");
-		return PTR_ERR(pdata->pinctrl);
+		retval = PTR_ERR(pdata->pinctrl);
+		goto error;
 	}
 
 	pdata->pins_default = pinctrl_lookup_state(pdata->pinctrl, "on_state");
@@ -1495,7 +1497,8 @@ static int fts_setup_drv_data(struct i2c_client *client)
 		tsp_debug_err(&client->dev,
 				"%s: Failed to alloc mem for info\n",
 				__func__);
-		return -ENOMEM;
+		retval = -ENOMEM;
+		goto error;
 	}
 
 	info->client = client;
@@ -1545,9 +1548,34 @@ static int fts_setup_drv_data(struct i2c_client *client)
 			"MAGNA" : "SDC", info->ddi_type);
 	}
 
+	pdata->switch_gpio = of_get_named_gpio(client->dev.of_node,
+					"stm,switch_gpio", 0);
+
+	if (gpio_is_valid(pdata->switch_gpio)) {
+		retval = gpio_request_one(pdata->switch_gpio,
+				GPIOF_OUT_INIT_LOW,
+				"stm,tsp_i2c_switch");
+		if (retval) {
+			tsp_debug_err(&client->dev,
+				"Can't req GPIO%d: rev %d\n",
+				pdata->switch_gpio, retval);
+			goto error;
+		}
+	} else {
+		tsp_debug_info(&client->dev, "Didn't find switch_gpio = %d\n",
+				pdata->switch_gpio);
+	}
+
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
 	tui_tsp_info = info;
 #endif
+	return 0;
+error:
+	kfree(info);
+	if (client->dev.of_node) {
+		kfree(pdata);
+		client->dev.platform_data = NULL;
+	}
 	return retval;
 }
 
