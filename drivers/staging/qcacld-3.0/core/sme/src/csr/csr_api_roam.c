@@ -17188,7 +17188,11 @@ QDF_STATUS csr_get_snr(tpAniSirGlobal pMac,
 		return QDF_STATUS_E_NOMEM;
 	}
 
-	csr_roam_get_session_id_from_bssid(pMac, &bssId, &sessionId);
+	status = csr_roam_get_session_id_from_bssid(pMac, &bssId, &sessionId);
+	if (!QDF_IS_STATUS_SUCCESS(status)) {
+		sme_err("Couldn't find session_id for given BSSID");
+		return status;
+	}
 
 	pMsg->msgType = eWNI_SME_GET_SNR_REQ;
 	pMsg->msgLen = (uint16_t) sizeof(tAniGetSnrReq);
