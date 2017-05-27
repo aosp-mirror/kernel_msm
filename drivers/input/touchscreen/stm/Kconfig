@@ -1,0 +1,19 @@
+#
+# STMicroelectronics TOUCH driver configuration
+#
+
+config TOUCHSCREEN_FTM4
+	tristate "STMicroelectronics i2c multitouch touchscreen - FTM4 with FingerTipS"
+	depends on I2C
+	help
+	  Say Y here to enable STMicroelectronics touchscreen support.
+	  If unsure, say N.
+	  To compile this driver as a module, choose M here: the module
+	  will be called fts_touch.
+
+config TOUCHSCREEN_FTM4_SHOW_EVENTS
+	boolean "Enable debug of FTM4 events"
+	depends on TOUCHSCREEN_FTM4
+	help
+	  Say Y here to enable dumping of touch driver events.  This should
+	  only be enabled for debugging and not for shipping code.
