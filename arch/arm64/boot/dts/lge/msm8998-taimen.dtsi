@@ -27,6 +27,7 @@
 #include "msm8998-taimen-led.dtsi"
 #include "msm8998-taimen-haptics.dtsi"
 #include "msm8998-mdss-panels.dtsi"
+#include "msm8998-taimen-usb.dtsi"
 
 &reserved_memory {
 	ramoops_mem: ramoops_region@b0000000 {
