@@ -178,6 +178,15 @@ static int bm_vote_fcc_update(struct battery_manager *bm)
 				      "Couldn't set current, rc=%d\n", rc);
 				return rc;
 			}
+			rc = bm_set_property(
+				bm->batt_psy,
+				POWER_SUPPLY_PROP_CHARGE_DISABLE,
+				(fcc == 0 ? 1 : 0));
+			if (rc < 0) {
+				pr_bm(ERROR,
+				      "Couldn't charge disable, rc=%d\n", rc);
+				return rc;
+			}
 		}
 		bm->bm_vote_fcc_reason = reason;
 		bm->bm_vote_fcc_value = fcc;
