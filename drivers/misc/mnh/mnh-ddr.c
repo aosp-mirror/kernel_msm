@@ -517,6 +517,13 @@ int mnh_ddr_po_init(struct device *dev, struct gpio_desc *iso_n)
 	MNH_DDR_PI_OUTf(00, PI_START, 1);
 	MNH_DDR_CTL_OUTf(00, START, 1);
 
+	/*
+	 * Wait for 20 ms ~ 25 ms before polling INIT_DONE
+	 * TODO(gucheng): The time of delay is subject to change.  Need to
+	 * revisit here when the fix is finalized.  b/37552459
+	 */
+	usleep_range(20000, 25000);
+
 	while ((timeout < 1000) && (!mnh_ddr_int_status_bit(INIT_DONE_SBIT))) {
 		udelay(10);
 		timeout++;
