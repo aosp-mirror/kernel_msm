@@ -81,8 +81,7 @@ int SquareRootRounded(int a_nInput)
 	return res;
 }
 
-// from http://gamedev.stackexchange.com/questions/22133/how-to-detect-if-object-is-moving-in-clockwise-or-counterclockwise-direction
-// this is working for almost 25+ cases verified around edges apart from normal 90/180/60/30/360 degree swipes
+/* Check the rotation is clock-wise/anticlock-wise */
 bool isAntiClockWise(int x, int y)
 {
      int res = ((first_x - tp_center)*(y - tp_center) - (first_y - tp_center)*(x -tp_center)) ;
@@ -109,7 +108,7 @@ int bezel_report_wheel(int x, int y, struct bezel_data *bdata)
 	if((first_x == -1)&&(first_y == -1)) {
 		first_y = y;
 		first_x = x;
-
+		bdata->step_threshold2 = INIT_ANGULAR_DISTANCE_THRESHOLD;
 		return 0;
 	}
 	/* find distance travelled since last EV_REL
@@ -125,9 +124,9 @@ int bezel_report_wheel(int x, int y, struct bezel_data *bdata)
 	 * bezel rotation direct either clock-wise or aniclock-wise and post
 	 * event to user space depending on number of 3 degree displacement
 	 */
-	if(tempDis2 >= (bdata->angular_dist_thresh)) {
+	if(tempDis2 >= (bdata->step_threshold2)) {
 		/* Check for number of 3 degree displacement with circular rotation */
-		total_ev = tempDis2/bdata->angular_dist_thresh;
+		total_ev = tempDis2/bdata->step_threshold2;
 
 		if(isAntiClockWise(x,y)) {
 			input_report_rel(input_dev, REL_WHEEL, -1*total_ev);
@@ -140,6 +139,8 @@ int bezel_report_wheel(int x, int y, struct bezel_data *bdata)
 		/* Save privious coordinates */
 		first_y = y;
 		first_x = x;
+		if(bdata->step_threshold2 == INIT_ANGULAR_DISTANCE_THRESHOLD)
+			bdata->step_threshold2 = bdata->angular_dist_thresh;
 	}
 
 	return 0;

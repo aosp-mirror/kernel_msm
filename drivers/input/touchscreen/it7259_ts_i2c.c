@@ -131,7 +131,7 @@
 #define PD_PALM_FLAG_BIT		0x01
 #define FD_PRESSURE_BITS		0x0F
 #define FD_PRESSURE_NONE		0x00
-#define FD_PRESSURE_LIGHT		0x02
+#define FD_PRESSURE_LIGHT		0x01
 
 #define IT_VTG_MIN_UV		1800000
 #define IT_VTG_MAX_UV		1800000
@@ -812,7 +812,7 @@ static bool gfnIT7259_FirmwareDownload(struct it7259_ts_data *ts_data, unsigned 
 	int wTmp;
 	unsigned int unTmp;
 	unsigned int nConfigSize;
-	unsigned long dwFlashSize;
+	unsigned long dwFlashSize = 0x10000;
 	unsigned int nEndFwSector;
 	unsigned int nStartCFGSector;
 	unsigned char putFWBuffer[1024];
@@ -944,7 +944,6 @@ static bool gfnIT7259_FirmwareDownload(struct it7259_ts_data *ts_data, unsigned 
 		//3.7 get address for writing config (in flash)
 		//check whether fw and config are in the same sector or not
 		//set flash size
-		dwFlashSize = 0x10000;
 		nEndFwSector = (unTmp-1) / 1024;
 		nStartCFGSector = 62 - (unConfigLength-1)/1024;
 		nRemainderFwSize = 0;
@@ -1607,10 +1606,10 @@ static irqreturn_t it7259_ts_threaded_handler(int irq, void *devid)
 	int ret;
 #ifdef	CONFIG_BEZEL_SUPPORT
 	u8 bezel_count = 0;
+	static u8 transit_from_disp_to_bezel = 0;
 	u8 disp_radius = 0;
 	u16 x_center = 0, y_center = 0, x_position = 0, y_position = 0;
 	u16 x_thickness_center = 0, y_thickness_center = 0;
-	u32 sq_rad_thickness = 0;
 	u32 virtual_radius = 0, panel_radius = 0, sq_rad_position = 0, sq_disp_position = 0;
 #endif
 
@@ -1707,8 +1706,6 @@ static irqreturn_t it7259_ts_threaded_handler(int irq, void *devid)
 				x_position = ABS(x, x_center);
 				y_position = ABS(y, y_center);
 
-				sq_rad_thickness = (u32)((x_thickness_center * x_thickness_center));
-
 				sq_rad_position = (u32)((x_position * x_position) + (y_position * y_position));
 				ts_data->bdata->sq_rad_position = sq_rad_position;
 
@@ -1717,10 +1714,11 @@ static irqreturn_t it7259_ts_threaded_handler(int irq, void *devid)
 
 				sq_disp_position = (u32)(virtual_radius * virtual_radius);
 
-				if((sq_rad_position > sq_disp_position) &&
-					(sq_rad_position < sq_rad_thickness)) {
-					ts_data->bdata->bezel_touch_status = true;
+				if(sq_rad_position > sq_disp_position) {
 					bezel_report_wheel(x, y, ts_data->bdata);
+					if(ts_data->bdata->step_threshold2 ==
+						ts_data->bdata->angular_dist_thresh)
+					ts_data->bdata->bezel_touch_status = true;
                                         bezel_count++;
 				} else
 #endif
@@ -1730,6 +1728,7 @@ static irqreturn_t it7259_ts_threaded_handler(int irq, void *devid)
 							ABS_MT_POSITION_X, x);
 				        input_report_abs(input_dev,
 							ABS_MT_POSITION_Y, y);
+					transit_from_disp_to_bezel = true;
 				        touch_count++;
                                 }
 			}
@@ -1745,10 +1744,13 @@ static irqreturn_t it7259_ts_threaded_handler(int irq, void *devid)
 			ts_data->palm_pressed = false;
 		}
 		input_sync(input_dev);
+	} else if (transit_from_disp_to_bezel) {
+		transit_from_disp_to_bezel = false;
+		input_report_key(input_dev, BTN_TOUCH, touch_count > 0);
+		input_sync(input_dev);
 	}
 #ifdef	CONFIG_BEZEL_SUPPORT
         /*input_report_rel(input_dev, BTN_TOOL_FINGER, bezel_count > 0);*/
-
 	if(!(bezel_count > 0)) {
 		bezel_reset();
 		ts_data->bdata->bezel_touch_status = false;
