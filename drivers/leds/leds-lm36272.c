@@ -69,28 +69,26 @@ int lm36272_dsv_ctrl(int dsv_en)
 	}
 
 	if (dsv_en) {
-		lm36272_write_reg(dev->client, 0x09, 0x81);
+		lm36272_write_reg(dev->client, 0x09, 0x99);
 		lm36272_write_reg(dev->client, 0x0C, 0x28);
 		lm36272_write_reg(dev->client, 0x0D, 0x1E);
 		lm36272_write_reg(dev->client, 0x0E, 0x1E);
-		usleep_range(2 * 1000, 2 * 1000);
+		usleep_range(1000, 1000);
 
 		if (gpio_is_valid(dev->dsv_p_gpio))
 			gpio_set_value_cansleep(dev->dsv_p_gpio, 1);
-		usleep_range(2 * 1000, 2 * 1000);
+		usleep_range(2000, 2000);
 
 		if (gpio_is_valid(dev->dsv_n_gpio))
 			gpio_set_value_cansleep(dev->dsv_n_gpio, 1);
-		usleep_range(10 * 1000, 10 * 1000);
+		usleep_range(12000, 12000);
 	} else {
 		if (gpio_is_valid(dev->dsv_n_gpio))
 			gpio_set_value_cansleep(dev->dsv_n_gpio, 0);
+		usleep_range(500 , 500);
 		if (gpio_is_valid(dev->dsv_p_gpio))
 			gpio_set_value_cansleep(dev->dsv_p_gpio, 0);
-		usleep_range(50 * 1000, 50 * 1000);
-
-		lm36272_write_reg(dev->client, 0x09, 0x99);
-		lm36272_write_reg(dev->client, 0x09, 0x00);
+		usleep_range(2000, 2000);
 
 		dev->status = BL_OFF;
 	}
