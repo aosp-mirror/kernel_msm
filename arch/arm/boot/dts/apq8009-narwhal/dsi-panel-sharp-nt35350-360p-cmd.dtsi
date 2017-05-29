@@ -40,8 +40,8 @@
 			15 01 00 00 00 00 02 FF 10
 			15 01 00 00 00 00 02 B3 00
 			15 01 00 00 00 00 02 BB 10
-			05 01 00 00 78 00 01 11 /* Sleep out */
-			05 01 00 00 28 00 01 29 /* Display On */
+			05 01 00 00 64 00 01 11 /* Sleep out */
+			05 01 00 00 00 00 01 29 /* Display On */
 			];
 		qcom,mdss-dsi-post-panel-on-command = [
 			39 01 00 00 00 00 01 2C
@@ -70,7 +70,7 @@
 		qcom,mdss-dsi-bl-max-level = <255>;
 		qcom,mdss-dsi-dma-trigger = "trigger_sw";
 		qcom,mdss-dsi-mdp-trigger = "none";
-		qcom,mdss-dsi-reset-sequence = <1 1>, <0 50>, <1 1>;
+		qcom,mdss-dsi-reset-sequence = <1 10>, <0 1>, <1 1>;
 		qcom,mdss-pan-physical-width-dimension = <35>;
 		qcom,mdss-pan-physical-height-dimension = <35>;
 	};
