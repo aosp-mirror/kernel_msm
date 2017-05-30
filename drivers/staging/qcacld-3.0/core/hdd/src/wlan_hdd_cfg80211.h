@@ -75,6 +75,9 @@
 #define WMM_OUI_TYPE   "\x00\x50\xf2\x02\x01"
 #define WMM_OUI_TYPE_SIZE  5
 
+#define VENDOR1_AP_OUI_TYPE "\x00\xE0\x4C"
+#define VENDOR1_AP_OUI_TYPE_SIZE 3
+
 #define WLAN_BSS_MEMBERSHIP_SELECTOR_VHT_PHY 126
 #define WLAN_BSS_MEMBERSHIP_SELECTOR_HT_PHY 127
 #define BASIC_RATE_MASK   0x80
@@ -2028,6 +2031,21 @@ enum qca_vendor_attr_wisa_cmd {
  * @QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_PTK_KCK: KCK of the PTK
  * @QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_PTK_KEK: KEK of the PTK
  * @QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_SUBNET_STATUS: subnet change status
+ * @QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_STATUS: Indicates the status of
+ *  re-association requested by user space for the bssid specified by Type u16.
+ *  Represents the status code from AP. Use %WLAN_STATUS_UNSPECIFIED_FAILURE
+ *  if the device cannot give you the real status code for failures.
+ * @QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_RETAIN_CONNECTION: This attribute intends
+ *  either to  retain / disconnect the current association when a
+ *  re-association is requested by user space. Used along with
+ *  WLAN_VENDOR_ATTR_ROAM_AUTH_STATUS to know the current re-association
+ *  status. Type flag.
+ *  The following is the interpretation of this attribute.
+ *  Re-association Failure
+ *      Set to retain the current connection.
+ *      Reset to disconnect the current connection.
+ *  Re-association Success
+ *      Not Applicable.
  */
 enum qca_wlan_vendor_attr_roam_auth {
 	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_INVALID = 0,
@@ -2039,6 +2057,8 @@ enum qca_wlan_vendor_attr_roam_auth {
 	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_PTK_KCK,
 	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_PTK_KEK,
 	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_SUBNET_STATUS,
+	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_STATUS,
+	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_RETAIN_CONNECTION,
 	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_AFTER_LAST,
 	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_MAX =
 		QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_AFTER_LAST - 1
@@ -2751,6 +2771,20 @@ enum qca_wlan_vendor_config {
 	QCA_WLAN_VENDOR_ATTR_CONFIG_RX_BLOCKSIZE_PEER_MAC = 35,
 	QCA_WLAN_VENDOR_ATTR_CONFIG_RX_BLOCKSIZE_WINLIMIT = 36,
 	QCA_WLAN_VENDOR_ATTR_CONFIG_PROPAGATION_ABS_DELAY = 40,
+	/* 32-bit unsigned value to set probe period*/
+	QCA_WLAN_VENDOR_ATTR_CONFIG_ANT_DIV_PROBE_PERIOD = 41,
+	/* 32-bit unsigned value to set stay period*/
+	QCA_WLAN_VENDOR_ATTR_CONFIG_ANT_DIV_STAY_PERIOD = 42,
+	/* 32-bit unsigned value to set snr diff*/
+	QCA_WLAN_VENDOR_ATTR_CONFIG_ANT_DIV_SNR_DIFF = 43,
+	/* 32-bit unsigned value to set probe dewll time*/
+	QCA_WLAN_VENDOR_ATTR_CONFIG_ANT_DIV_PROBE_DWELL_TIME = 44,
+	/* 32-bit unsigned value to set mgmt snr weight*/
+	QCA_WLAN_VENDOR_ATTR_CONFIG_ANT_DIV_MGMT_SNR_WEIGHT = 45,
+	/* 32-bit unsigned value to set data snr weight*/
+	QCA_WLAN_VENDOR_ATTR_CONFIG_ANT_DIV_DATA_SNR_WEIGHT = 46,
+	/* 32-bit unsigned value to set ack snr weight*/
+	QCA_WLAN_VENDOR_ATTR_CONFIG_ANT_DIV_ACK_SNR_WEIGHT = 47,
 
 	/* keep last */
 	QCA_WLAN_VENDOR_ATTR_CONFIG_LAST,
@@ -3867,7 +3901,19 @@ void hdd_select_cbmode(hdd_adapter_t *pAdapter, uint8_t operationChannel,
 
 uint8_t *wlan_hdd_cfg80211_get_ie_ptr(const uint8_t *ies_ptr, int length,
 				      uint8_t eid);
-
+/**
+ * wlan_hdd_is_ap_supports_immediate_power_save() - to find certain vendor APs
+ *				which do not support immediate power-save.
+ * @ies: beacon IE of the AP which STA is connecting/connected to
+ * @length: beacon IE length only
+ *
+ * This API takes the IE of connected/connecting AP and determines that
+ * whether it has specific vendor OUI. If it finds then it will return false to
+ * notify that AP doesn't support immediate power-save.
+ *
+ * Return: true or false based on findings
+ */
+bool wlan_hdd_is_ap_supports_immediate_power_save(uint8_t *ies, int length);
 void wlan_hdd_del_station(hdd_adapter_t *adapter);
 
 #if defined(USE_CFG80211_DEL_STA_V2)
@@ -4079,4 +4125,16 @@ int wlan_hdd_try_disconnect(hdd_adapter_t *adapter);
  * Return: none
  */
 void hdd_bt_activity_cb(void *context, uint32_t bt_activity);
+
+/**
+ * hdd_update_cca_info_cb() - stores congestion value in station context
+ * @context : HDD context
+ * @congestion : congestion
+ * @vdev_id : vdev id
+ *
+ * Return: None
+ */
+void hdd_update_cca_info_cb(void *context, uint32_t congestion,
+			uint32_t vdev_id);
+
 #endif

@@ -2038,6 +2038,8 @@ ol_txrx_vdev_attach(ol_txrx_pdev_handle pdev,
 	vdev->tx_fl_hwm = 0;
 	vdev->rx = NULL;
 	vdev->wait_on_peer_id = OL_TXRX_INVALID_LOCAL_PEER_ID;
+	qdf_mem_zero(&vdev->last_peer_mac_addr,
+			sizeof(union ol_txrx_align_mac_addr_t));
 	qdf_spinlock_create(&vdev->flow_control_lock);
 	vdev->osif_flow_control_cb = NULL;
 	vdev->osif_fc_ctx = NULL;
@@ -2391,6 +2393,8 @@ ol_txrx_peer_attach(ol_txrx_vdev_handle vdev, uint8_t *peer_mac_addr)
 	bool wait_on_deletion = false;
 	unsigned long rc;
 	struct ol_txrx_pdev_t *pdev;
+	bool cmp_wait_mac = false;
+	uint8_t zero_mac_addr[QDF_MAC_ADDR_SIZE] = { 0, 0, 0, 0, 0, 0 };
 
 	/* preconditions */
 	TXRX_ASSERT2(vdev);
@@ -2399,12 +2403,16 @@ ol_txrx_peer_attach(ol_txrx_vdev_handle vdev, uint8_t *peer_mac_addr)
 	pdev = vdev->pdev;
 	TXRX_ASSERT2(pdev);
 
+	if (qdf_mem_cmp(&zero_mac_addr, &vdev->last_peer_mac_addr,
+				QDF_MAC_ADDR_SIZE))
+		cmp_wait_mac = true;
+
 	qdf_spin_lock_bh(&pdev->peer_ref_mutex);
 	/* check for duplicate exsisting peer */
 	TAILQ_FOREACH(temp_peer, &vdev->peer_list, peer_list_elem) {
 		if (!ol_txrx_peer_find_mac_addr_cmp(&temp_peer->mac_addr,
 			(union ol_txrx_align_mac_addr_t *)peer_mac_addr)) {
-			ol_txrx_info(
+			ol_txrx_info_high(
 				"vdev_id %d (%02x:%02x:%02x:%02x:%02x:%02x) already exsist.\n",
 				vdev->vdev_id,
 				peer_mac_addr[0], peer_mac_addr[1],
@@ -2414,14 +2422,40 @@ ol_txrx_peer_attach(ol_txrx_vdev_handle vdev, uint8_t *peer_mac_addr)
 				vdev->wait_on_peer_id = temp_peer->local_id;
 				qdf_event_reset(&vdev->wait_delete_comp);
 				wait_on_deletion = true;
+				break;
 			} else {
 				qdf_spin_unlock_bh(&pdev->peer_ref_mutex);
+				return NULL;
+			}
+		}
+		if (cmp_wait_mac && !ol_txrx_peer_find_mac_addr_cmp(
+					&temp_peer->mac_addr,
+					&vdev->last_peer_mac_addr)) {
+			ol_txrx_info_high(
+				"vdev_id %d (%02x:%02x:%02x:%02x:%02x:%02x) old peer exsist.\n",
+				vdev->vdev_id,
+				vdev->last_peer_mac_addr.raw[0],
+				vdev->last_peer_mac_addr.raw[1],
+				vdev->last_peer_mac_addr.raw[2],
+				vdev->last_peer_mac_addr.raw[3],
+				vdev->last_peer_mac_addr.raw[4],
+				vdev->last_peer_mac_addr.raw[5]);
+			if (qdf_atomic_read(&temp_peer->delete_in_progress)) {
+				vdev->wait_on_peer_id = temp_peer->local_id;
+				qdf_event_reset(&vdev->wait_delete_comp);
+				wait_on_deletion = true;
+				break;
+			} else {
+				qdf_spin_unlock_bh(&pdev->peer_ref_mutex);
+				ol_txrx_err("peer not found");
 				return NULL;
 			}
 		}
 	}
 	qdf_spin_unlock_bh(&pdev->peer_ref_mutex);
 
+	qdf_mem_zero(&vdev->last_peer_mac_addr,
+			sizeof(union ol_txrx_align_mac_addr_t));
 	if (wait_on_deletion) {
 		/* wait for peer deletion */
 		rc = qdf_wait_single_event(&vdev->wait_delete_comp,
@@ -2432,7 +2466,10 @@ ol_txrx_peer_attach(ol_txrx_vdev_handle vdev, uint8_t *peer_mac_addr)
 				vdev->wait_on_peer_id, (int) rc);
 			/* Added for debugging only */
 			wma_peer_debug_dump();
-			QDF_ASSERT(0);
+			if (cds_is_self_recovery_enabled())
+				cds_trigger_recovery(false);
+			else
+				QDF_ASSERT(0);
 			vdev->wait_on_peer_id = OL_TXRX_INVALID_LOCAL_PEER_ID;
 			return NULL;
 		}
@@ -2777,7 +2814,7 @@ ol_txrx_remove_peers_for_vdev(ol_txrx_vdev_handle vdev,
 	qdf_spin_unlock_bh(&vdev->pdev->peer_ref_mutex);
 
 	if (self_removed)
-		ol_txrx_info("%s: self peer removed by caller ",
+		ol_txrx_info_high("%s: self peer removed by caller ",
 				  __func__);
 
 	if (remove_last_peer) {
@@ -2804,7 +2841,7 @@ ol_txrx_remove_peers_for_vdev_no_lock(ol_txrx_vdev_handle vdev,
 	ol_txrx_peer_handle peer = NULL;
 
 	TAILQ_FOREACH(peer, &vdev->peer_list, peer_list_elem) {
-		ol_txrx_info(
+		ol_txrx_info_high(
 			   "%s: peer found for vdev id %d. deleting the peer",
 			   __func__, vdev->vdev_id);
 		callback(callback_context, (uint8_t *)&vdev->mac_addr,
@@ -3119,11 +3156,6 @@ int ol_txrx_peer_unref_delete(ol_txrx_peer_handle peer,
 	if (qdf_atomic_dec_and_test(&peer->ref_cnt)) {
 		u_int16_t peer_id;
 
-		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_DEBUG,
-			   "[%s][%d]: Deleting peer %p (%pM) ref_cnt %d\n",
-			   fname, line, peer, peer->mac_addr.raw,
-			   qdf_atomic_read(&peer->ref_cnt));
-
 		wma_peer_debug_log(vdev->vdev_id, DEBUG_DELETING_PEER_OBJ,
 				   DEBUG_INVALID_PEER_ID,
 				   &peer->mac_addr.raw, peer, 0,
@@ -3202,6 +3234,11 @@ int ol_txrx_peer_unref_delete(ol_txrx_peer_handle peer,
 		} else {
 			qdf_spin_unlock_bh(&pdev->peer_ref_mutex);
 		}
+
+		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_DEBUG,
+			   "[%s][%d]: Deleting peer %p (%pM) ref_cnt %d\n",
+			   fname, line, peer, peer->mac_addr.raw,
+			   qdf_atomic_read(&peer->ref_cnt));
 
 		ol_txrx_peer_tx_queue_free(pdev, peer);
 
@@ -3313,7 +3350,10 @@ void peer_unmap_timer_handler(void *data)
 		 peer->mac_addr.raw[4], peer->mac_addr.raw[5]);
 	if (!cds_is_driver_recovering()) {
 		wma_peer_debug_dump();
-		QDF_BUG(0);
+		if (cds_is_self_recovery_enabled())
+			cds_trigger_recovery(false);
+		else
+			QDF_BUG(0);
 	} else {
 		WMA_LOGE("%s: Recovery is in progress, ignore!", __func__);
 	}
@@ -3375,9 +3415,12 @@ void ol_txrx_peer_detach(ol_txrx_peer_handle peer)
 	 * Create a timer to track unmap events when the sta peer gets deleted.
 	 */
 	if (vdev->opmode == wlan_op_mode_sta) {
+		qdf_mem_copy(&peer->vdev->last_peer_mac_addr,
+			&peer->mac_addr,
+			sizeof(union ol_txrx_align_mac_addr_t));
 		qdf_timer_start(&peer->peer_unmap_timer,
 				OL_TXRX_PEER_UNMAP_TIMEOUT);
-		ol_txrx_info("%s: started peer_unmap_timer for peer %p",
+		ol_txrx_info_high("%s: started peer_unmap_timer for peer %p",
 			     __func__, peer);
 	}
 
@@ -3486,7 +3529,7 @@ QDF_STATUS ol_txrx_wait_for_pending_tx(int timeout)
 }
 
 #ifndef QCA_WIFI_3_0_EMU
-#define SUSPEND_DRAIN_WAIT 500
+#define SUSPEND_DRAIN_WAIT 1000
 #else
 #define SUSPEND_DRAIN_WAIT 3000
 #endif

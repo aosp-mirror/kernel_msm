@@ -2150,7 +2150,7 @@ lim_send_auth_mgmt_frame(tpAniSirGlobal mac_ctx,
 		goto alloc_packet;
 	}
 
-	pe_info("Sending Auth seq# %d status %d (%d) to "
+	pe_debug("Sending Auth seq# %d status %d (%d) to "
 		MAC_ADDRESS_STR,
 		auth_frame->authTransactionSeqNumber,
 		auth_frame->authStatusCode,
@@ -4130,6 +4130,8 @@ lim_send_radio_measure_report_action_frame(tpAniSirGlobal pMac,
 		qdf_mem_free(frm);
 		return eSIR_FAILURE;
 	}
+
+	smeSessionId = psessionEntry->smeSessionId;
 
 	pe_debug("dialog_token %d num_report %d",
 			dialog_token, num_report);

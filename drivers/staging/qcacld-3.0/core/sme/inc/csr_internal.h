@@ -649,6 +649,7 @@ typedef struct tagCsrConfig {
 	uint8_t fils_max_chan_guard_time;
 	uint16_t pkt_err_disconn_th;
 	bool is_bssid_hint_priority;
+	bool is_force_1x1;
 } tCsrConfig;
 
 typedef struct tagCsrChannelPowerInfo {
@@ -982,6 +983,7 @@ typedef struct tagCsrRoamSession {
 	qdf_mc_timer_t roaming_offload_timer;
 	bool is_fils_connection;
 	uint16_t fils_seq_num;
+	bool ignore_assoc_disallowed;
 } tCsrRoamSession;
 
 typedef struct tagCsrRoamStruct {

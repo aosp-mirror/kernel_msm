@@ -18,7 +18,3 @@ modules_install:
 
 clean:
 	$(MAKE) -C $(KERNEL_SRC) M=$(PWD) clean
-
-# TODO: remove me b/62057517
-KBUILD_CFLAGS += \
-	-Wno-typedef-redefinition

@@ -50,6 +50,7 @@
 #define MAX_WEIGHT_OF_PCL_CHANNELS 255
 /* Some fixed weight difference between the groups */
 #define PCL_GROUPS_WEIGHT_DIFFERENCE 20
+#define CDS_INVALID_VDEV_ID 255
 
 /* Currently max, only 3 groups are possible as per 'enum cds_pcl_type'.
  * i.e., in a PCL only 3 groups of channels can be present
@@ -857,6 +858,7 @@ QDF_STATUS cds_deregister_sap_restart_channel_switch_cb(void);
 #endif
 bool cds_is_any_mode_active_on_band_along_with_session(uint8_t session_id,
 						       enum cds_band band);
+QDF_STATUS cds_get_chan_by_session_id(uint8_t session_id, uint8_t *chan);
 QDF_STATUS cds_get_mac_id_by_session_id(uint8_t session_id, uint8_t *mac_id);
 QDF_STATUS cds_get_mcc_session_id_on_mac(uint8_t mac_id, uint8_t session_id,
 						uint8_t *mcc_session_id);
@@ -864,12 +866,26 @@ uint8_t cds_get_mcc_operating_channel(uint8_t session_id);
 QDF_STATUS cds_get_pcl_for_existing_conn(enum cds_con_mode mode,
 			uint8_t *pcl_ch, uint32_t *len,
 			uint8_t *weight_list, uint32_t weight_len);
-QDF_STATUS cds_get_valid_chan_weights(struct sir_pcl_chan_weights *weight);
+QDF_STATUS cds_get_valid_chan_weights(struct sir_pcl_chan_weights *weight,
+			enum cds_con_mode mode);
 QDF_STATUS cds_set_hw_mode_on_channel_switch(uint8_t session_id);
 void cds_set_do_hw_mode_change_flag(bool flag);
 bool cds_is_hw_mode_change_after_vdev_up(void);
 void cds_checkn_update_hw_mode_single_mac_mode(uint8_t channel);
 void cds_dump_connection_status_info(void);
+/**
+ * cds_mode_specific_vdev_id() - provides the
+ * vdev id of specific mode
+ * @mode: type of connection
+ *
+ * This function provides the vdev id of specific mode
+ *
+ * Note: This gives the first vdev id of the mode type in a
+ * sta+sta or sap+sap or p2p + p2p case
+ *
+ * Return: vdev id of specific type
+ */
+uint32_t cds_mode_specific_vdev_id(enum cds_con_mode mode);
 uint32_t cds_mode_specific_connection_count(enum cds_con_mode mode,
 						uint32_t *list);
 void cds_hw_mode_transition_cb(uint32_t old_hw_mode_index,

@@ -76,7 +76,7 @@
 #define HDD_IPA_UC_RT_DEBUG_FILL_INTERVAL  10000
 
 #define HDD_IPA_WLAN_HDR_DES_MAC_OFFSET    0
-#define HDD_IPA_MAX_IFACE                  3
+#define HDD_IPA_MAX_IFACE                  MAX_IPA_IFACE
 #define HDD_IPA_MAX_SYSBAM_PIPE            4
 #define HDD_IPA_RX_PIPE                    HDD_IPA_MAX_IFACE
 #define HDD_IPA_ENABLE_MASK                BIT(0)
@@ -158,11 +158,21 @@ struct hdd_ipa_tx_hdr {
  * @reserved2: Reserved not used
  *
  */
+#ifdef QCA_WIFI_3_0
 struct frag_header {
 	uint16_t length;
 	uint32_t reserved1;
 	uint32_t reserved2;
 } __packed;
+#else
+struct frag_header {
+	uint32_t
+		length:16,
+		reserved16:16;
+	uint32_t reserved32;
+} __packed;
+
+#endif
 
 /**
  * struct ipa_header - ipa header type registered to IPA hardware
@@ -587,7 +597,7 @@ do { \
 static struct hdd_ipa_adapter_2_client {
 	enum ipa_client_type cons_client;
 	enum ipa_client_type prod_client;
-} hdd_ipa_adapter_2_client[HDD_IPA_MAX_IFACE] = {
+} hdd_ipa_adapter_2_client[] = {
 	{
 		IPA_CLIENT_WLAN2_CONS, IPA_CLIENT_WLAN1_PROD
 	}, {
@@ -598,6 +608,7 @@ static struct hdd_ipa_adapter_2_client {
 };
 
 /* For Tx pipes, use Ethernet-II Header format */
+#ifdef QCA_WIFI_3_0
 struct hdd_ipa_uc_tx_hdr ipa_uc_tx_hdr = {
 	{
 		0x0000,
@@ -613,6 +624,22 @@ struct hdd_ipa_uc_tx_hdr ipa_uc_tx_hdr = {
 		0x0008
 	}
 };
+#else
+struct hdd_ipa_uc_tx_hdr ipa_uc_tx_hdr = {
+	{
+		0x00000000,
+		0x00000000
+	},
+	{
+		0x00000000
+	},
+	{
+		{0x00, 0x03, 0x7f, 0xaa, 0xbb, 0xcc},
+		{0x00, 0x03, 0x7f, 0xdd, 0xee, 0xff},
+		0x0008
+	}
+};
+#endif
 
 /* For Tx pipes, use 802.3 Header format */
 static struct hdd_ipa_tx_hdr ipa_tx_hdr = {
@@ -706,10 +733,13 @@ static void hdd_ipa_uc_loaded_uc_cb(void *priv_ctxt)
 
 	/* When the same uC OPCODE is already pended, just return */
 	if (uc_op_work->msg)
-		return;
+		goto done;
 
 	uc_op_work->msg = msg;
 	schedule_work(&uc_op_work->work);
+
+done:
+	qdf_mem_free(msg);
 }
 
 /**
@@ -1481,9 +1511,9 @@ static void __hdd_ipa_uc_stat_request(hdd_adapter_t *adapter, uint8_t reason)
 		(false == hdd_ipa->resource_loading)) {
 		hdd_ipa->stat_req_reason = reason;
 		qdf_mutex_release(&hdd_ipa->ipa_lock);
-		wma_cli_set_command(
-			(int)adapter->sessionId,
-			(int)WMA_VDEV_TXRX_GET_IPA_UC_FW_STATS_CMDID,
+		sme_ipa_uc_stat_request(WLAN_HDD_GET_HAL_CTX(adapter),
+			adapter->sessionId,
+			WMA_VDEV_TXRX_GET_IPA_UC_FW_STATS_CMDID,
 			0, VDEV_CMD);
 	} else {
 		qdf_mutex_release(&hdd_ipa->ipa_lock);
@@ -2793,11 +2823,15 @@ QDF_STATUS hdd_ipa_uc_ol_init(hdd_context_t *hdd_ctx)
 		ret = ipa_connect_wdi_pipe(&ipa_ctxt->prod_pipe_in, &pipe_out);
 		if (ret) {
 			HDD_IPA_LOG(QDF_TRACE_LEVEL_ERROR,
-				"ipa_connect_wdi_pipe falied for Rx: ret=%d",
+				"ipa_connect_wdi_pipe failed for Rx: ret=%d",
 				ret);
 			stat = QDF_STATUS_E_FAILURE;
+			ret = ipa_disconnect_wdi_pipe(ipa_ctxt->tx_pipe_handle);
+			if (ret)
+				HDD_IPA_LOG(QDF_TRACE_LEVEL_ERROR,
+					    "disconnect failed for TX: ret=%d",
+					    ret);
 			goto fail_return;
-
 		}
 		ipa_ctxt->rx_ready_doorbell_paddr = pipe_out.uc_door_bell_pa;
 		ipa_ctxt->rx_pipe_handle = pipe_out.clnt_hdl;
@@ -2851,6 +2885,9 @@ int hdd_ipa_uc_ol_deinit(hdd_context_t *hdd_ctx)
 
 	if (!hdd_ipa_uc_is_enabled(hdd_ctx))
 		return ret;
+
+	if (!hdd_ipa->ipa_pipes_down)
+		hdd_ipa_uc_disable_pipes(hdd_ipa);
 
 	if (true == hdd_ipa->uc_loaded) {
 		HDD_IPA_LOG(QDF_TRACE_LEVEL_INFO,
@@ -3119,8 +3156,6 @@ static int __hdd_ipa_uc_ssr_deinit(void)
 	 * IPA submodule during SSR transient state. So deinit basic IPA
 	 * UC host side to be in sync with reloaded FW during SSR
 	 */
-	if (!hdd_ipa->ipa_pipes_down)
-		hdd_ipa_uc_disable_pipes(hdd_ipa);
 
 	qdf_mutex_acquire(&hdd_ipa->ipa_lock);
 	for (idx = 0; idx < WLAN_MAX_STA_COUNT; idx++) {
@@ -6016,7 +6051,8 @@ static QDF_STATUS __hdd_ipa_cleanup(hdd_context_t *hdd_ctx)
 		qdf_spin_unlock_bh(&hdd_ipa->pm_lock);
 
 		pm_tx_cb = (struct hdd_ipa_pm_tx_cb *)skb->cb;
-		ipa_free_skb(pm_tx_cb->ipa_tx_desc);
+		if (pm_tx_cb->ipa_tx_desc)
+			ipa_free_skb(pm_tx_cb->ipa_tx_desc);
 
 		qdf_spin_lock_bh(&hdd_ipa->pm_lock);
 	}

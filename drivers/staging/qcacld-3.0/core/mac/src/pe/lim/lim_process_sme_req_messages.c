@@ -1646,6 +1646,12 @@ __lim_process_sme_join_req(tpAniSirGlobal mac_ctx, uint32_t *msg_buf)
 		session->limQosEnabled = sme_join_req->isQosEnabled;
 		session->wps_registration = sme_join_req->wps_registration;
 
+		/* Update supplicant configured ignore assoc disallowed */
+		session->ignore_assoc_disallowed =
+				sme_join_req->ignore_assoc_disallowed;
+		session->enable_bcast_probe_rsp =
+				sme_join_req->enable_bcast_probe_rsp;
+
 		/* Store vendor specfic IE for CISCO AP */
 		ie_len = (bss_desc->length + sizeof(bss_desc->length) -
 			 GET_FIELD_OFFSET(tSirBssDescription, ieFields));
@@ -6068,6 +6074,14 @@ static void lim_process_nss_update_request(tpAniSirGlobal mac_ctx,
 	/* populate nss field in the beacon */
 	session_entry->gLimOperatingMode.present = 1;
 	session_entry->gLimOperatingMode.rxNSS = nss_update_req_ptr->new_nss;
+	session_entry->gLimOperatingMode.chanWidth = session_entry->ch_width;
+
+	if ((nss_update_req_ptr->new_nss == NSS_1x1_MODE) &&
+			(session_entry->ch_width > CH_WIDTH_80MHZ))
+		session_entry->gLimOperatingMode.chanWidth = CH_WIDTH_80MHZ;
+
+	pe_debug("ch width %hu", session_entry->gLimOperatingMode.chanWidth);
+
 	/* Send nss update request from here */
 	if (sch_set_fixed_beacon_fields(mac_ctx, session_entry) !=
 			eSIR_SUCCESS) {

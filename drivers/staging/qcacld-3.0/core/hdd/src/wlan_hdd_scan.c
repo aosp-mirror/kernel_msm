@@ -521,9 +521,9 @@ static void hdd_update_dbs_scan_ctrl_ext_flag(hdd_context_t *hdd_ctx,
 	/* Resetting the scan_ctrl_flags_ext to 0 */
 	scan_req->scan_ctrl_flags_ext = 0;
 
-	if ((hdd_ctx->config->dual_mac_feature_disable)
-	    || (!wma_is_hw_dbs_capable())) {
-		hdd_info("DBS is disabled or HW is not capable of DBS");
+	if (hdd_ctx->config->dual_mac_feature_disable ==
+				DISABLE_DBS_CXN_AND_SCAN) {
+		hdd_info("DBS is disabled");
 		goto end;
 	}
 
@@ -1434,13 +1434,7 @@ static bool wlan_hdd_sap_skip_scan_check(hdd_context_t *hdd_ctx,
 }
 #endif
 
-/**
- * wlan_hdd_cfg80211_scan_block_cb() - scan block work handler
- * @work: Pointer to work
- *
- * Return: none
- */
-static void wlan_hdd_cfg80211_scan_block_cb(struct work_struct *work)
+void wlan_hdd_cfg80211_scan_block_cb(struct work_struct *work)
 {
 	hdd_adapter_t *adapter = container_of(work,
 					      hdd_adapter_t, scan_block_work);
@@ -1508,7 +1502,7 @@ static int wlan_hdd_update_scan_ies(hdd_adapter_t *adapter,
 	uint8_t *current_ie;
 	uint8_t elem_id;
 	uint16_t elem_len;
-	bool add_ie;
+	bool add_ie = false;
 
 	if (!scan_info->default_scan_ies_len || !scan_info->default_scan_ies)
 		return 0;
@@ -1526,7 +1520,7 @@ static int wlan_hdd_update_scan_ies(hdd_adapter_t *adapter,
 				add_ie = true;
 			break;
 		case IE_EID_VENDOR:
-			if ((0 == qdf_mem_cmp(&temp_ie[0], MBO_OUI_TYPE,
+			if ((0 != qdf_mem_cmp(&temp_ie[0], MBO_OUI_TYPE,
 							MBO_OUI_TYPE_SIZE)) ||
 				(0 == qdf_mem_cmp(&temp_ie[0], QCN_OUI_TYPE,
 							QCN_OUI_TYPE_SIZE)))
@@ -1699,16 +1693,13 @@ static int __wlan_hdd_cfg80211_scan(struct wiphy *wiphy,
 		pAdapter->device_mode);
 
 	/*
-	 * IBSS vdev does not have peers on other macs,
-	 * so it does not support scan on other band,
-	 * and IBSS vdev does not need to scan to establish
+	 * IBSS vdev does not need to scan to establish
 	 * IBSS connection. If IBSS vdev need to support scan,
 	 * Firmware need to make the change to add self peer
 	 * per mac for IBSS vdev.
 	 */
-	if (wma_is_hw_dbs_capable() &&
-	   (QDF_IBSS_MODE == pAdapter->device_mode)) {
-		hdd_err("Scan not supported for IBSS in if HW support DBS");
+	if (QDF_IBSS_MODE == pAdapter->device_mode) {
+		hdd_err("Scan not supported for IBSS");
 		return -EINVAL;
 	}
 
@@ -1740,13 +1731,12 @@ static int __wlan_hdd_cfg80211_scan(struct wiphy *wiphy,
 			pAdapter->request = request;
 			pAdapter->scan_source = source;
 
-			INIT_WORK(&pAdapter->scan_block_work,
-				  wlan_hdd_cfg80211_scan_block_cb);
 			schedule_work(&pAdapter->scan_block_work);
 			return 0;
 		}
 	}
-	if (!wma_is_hw_dbs_capable()) {
+	if (pHddCtx->config->dual_mac_feature_disable ==
+				DISABLE_DBS_CXN_AND_SCAN) {
 		if (true == pScanInfo->mScanPending) {
 			scan_ebusy_cnt++;
 			if (MAX_PENDING_LOG >
@@ -1845,8 +1835,6 @@ static int __wlan_hdd_cfg80211_scan(struct wiphy *wiphy,
 		hdd_debug("sap scan skipped");
 		pAdapter->request = request;
 		pAdapter->scan_source = source;
-		INIT_WORK(&pAdapter->scan_block_work,
-			wlan_hdd_cfg80211_scan_block_cb);
 		schedule_work(&pAdapter->scan_block_work);
 		return 0;
 	}
@@ -3317,7 +3305,7 @@ static int __wlan_hdd_cfg80211_sched_scan_stop(struct net_device *dev)
 	 * clean up of the second interface will have the dev pointer corresponding
 	 * to the first one leading to a crash.
 	 */
-	if (cds_is_driver_recovering()) {
+	if (cds_is_driver_recovering() || cds_is_driver_in_bad_state()) {
 		hdd_info("Recovery in Progress. State: 0x%x Ignore!!!",
 			 cds_get_driver_state());
 		return 0;
@@ -3443,6 +3431,8 @@ void hdd_cleanup_scan_queue(hdd_context_t *hdd_ctx)
 		adapter = hdd_scan_req->adapter;
 		if (WLAN_HDD_ADAPTER_MAGIC != adapter->magic) {
 			hdd_err("HDD adapter magic is invalid");
+		} else if (!req) {
+			hdd_debug("pending scan is wext triggered");
 		} else {
 			if (NL_SCAN == source)
 				hdd_cfg80211_scan_done(adapter, req, aborted);

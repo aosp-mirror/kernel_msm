@@ -116,10 +116,12 @@ void htc_print_credit_history(HTC_HANDLE htc, uint32_t count,
 		struct HTC_CREDIT_HISTORY *hist =
 						&htc_credit_history_buffer[idx];
 		long long us = qdf_log_timestamp_to_usecs(hist->time);
+		long long s = qdf_do_div(us, 1000000);
+		long long us_mod = qdf_do_mod(us, 1000000);
 
 		print(print_priv, "% 8lld.%06lld    %-25s    %-7.d    %d",
-		      us / 1000000,
-		      us % 1000000,
+		      s,
+		      us_mod,
 		      htc_credit_exchange_type_str(hist->type),
 		      hist->tx_credit,
 		      hist->htc_tx_queue_depth);
@@ -1874,6 +1876,8 @@ static HTC_PACKET *htc_lookup_tx_packet(HTC_TARGET *target,
 	HTC_PACKET_QUEUE lookupQueue;
 
 	INIT_HTC_PACKET_QUEUE(&lookupQueue);
+	LOCK_HTC_EP_TX_LOOKUP(pEndpoint);
+
 	LOCK_HTC_TX(target);
 
 	/* mark that HIF has indicated the send complete for another packet */
@@ -1883,10 +1887,12 @@ static HTC_PACKET *htc_lookup_tx_packet(HTC_TARGET *target,
 	pPacket = htc_packet_dequeue(&pEndpoint->TxLookupQueue);
 	if (qdf_unlikely(!pPacket)) {
 		UNLOCK_HTC_TX(target);
+		UNLOCK_HTC_EP_TX_LOOKUP(pEndpoint);
 		return NULL;
 	}
 	if (netbuf == (qdf_nbuf_t) GET_HTC_PACKET_NET_BUF_CONTEXT(pPacket)) {
 		UNLOCK_HTC_TX(target);
+		UNLOCK_HTC_EP_TX_LOOKUP(pEndpoint);
 		return pPacket;
 	}
 	HTC_PACKET_ENQUEUE(&lookupQueue, pPacket);
@@ -1922,6 +1928,7 @@ static HTC_PACKET *htc_lookup_tx_packet(HTC_TARGET *target,
 	HTC_PACKET_QUEUE_TRANSFER_TO_HEAD(&pEndpoint->TxLookupQueue,
 					  &lookupQueue);
 	UNLOCK_HTC_TX(target);
+	UNLOCK_HTC_EP_TX_LOOKUP(pEndpoint);
 
 	return pFoundPacket;
 }

@@ -35,6 +35,7 @@
 #include "wlan_hdd_hostapd.h"
 #include "wlan_hdd_debugfs_llstat.h"
 #include "wma_api.h"
+#include "wma.h"
 
 /* 11B, 11G Rate table include Basic rate and Extended rate
  * The IDX field is the rate index
@@ -3097,7 +3098,18 @@ static int __wlan_hdd_cfg80211_get_station(struct wiphy *wiphy,
 				  RCPI_MEASUREMENT_TYPE_AVG_MGMT);
 
 	wlan_hdd_get_station_stats(pAdapter);
-	sinfo->signal = pAdapter->hdd_stats.summary_stat.rssi;
+
+	if (pAdapter->hdd_stats.summary_stat.rssi)
+		pAdapter->rssi = pAdapter->hdd_stats.summary_stat.rssi;
+
+	/* for new connection there might be no valid previous RSSI */
+	if (!pAdapter->rssi) {
+		hdd_get_rssi_snr_by_bssid(pAdapter,
+				pHddStaCtx->conn_info.bssId.bytes,
+				&pAdapter->rssi, NULL);
+	}
+
+	sinfo->signal = pAdapter->rssi;
 	snr = pAdapter->hdd_stats.summary_stat.snr;
 	hdd_debug("snr: %d, rssi: %d",
 		pAdapter->hdd_stats.summary_stat.snr,
@@ -3123,6 +3135,10 @@ static int __wlan_hdd_cfg80211_get_station(struct wiphy *wiphy,
 	myRate = pAdapter->hdd_stats.ClassA_stat.tx_rate * 5;
 	if (!(rate_flags & eHAL_TX_RATE_LEGACY)) {
 		nss = pAdapter->hdd_stats.ClassA_stat.nss;
+		if (wma_is_current_hwmode_dbs()) {
+			hdd_debug("Hw mode is DBS, Reduce nss to 1");
+			nss--;
+		}
 
 		if (eHDD_LINK_SPEED_REPORT_ACTUAL == pCfg->reportMaxLinkSpeed) {
 			/* Get current rate flags if report actual */

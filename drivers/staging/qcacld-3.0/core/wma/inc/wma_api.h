@@ -53,7 +53,7 @@ typedef void *WMA_HANDLE;
  * @GEN_PARAM_RESET_TSF_GPIO: reset tsf gpio
  * @GEN_VDEV_ROAM_SYNCH_DELAY: roam sync delay
  */
-typedef enum {
+enum GEN_PARAM {
 	GEN_VDEV_PARAM_AMPDU = 0x1,
 	GEN_VDEV_PARAM_AMSDU,
 	GEN_PARAM_CRASH_INJECT,
@@ -61,7 +61,7 @@ typedef enum {
 	GEN_PARAM_CAPTURE_TSF,
 	GEN_PARAM_RESET_TSF_GPIO,
 	GEN_VDEV_ROAM_SYNCH_DELAY,
-} GEN_PARAM;
+};
 
 /**
  * struct wma_caps_per_phy - various caps per phy
@@ -193,6 +193,7 @@ void wma_set_peer_authorized_cb(void *wma_ctx, wma_peer_authorized_fp auth_cb);
 QDF_STATUS wma_set_peer_param(void *wma_ctx, uint8_t *peer_addr,
 		  uint32_t param_id,
 		  uint32_t param_value, uint32_t vdev_id);
+QDF_STATUS wma_get_link_speed(WMA_HANDLE handle, tSirLinkSpeedInfo *pLinkSpeed);
 #ifdef NOT_YET
 QDF_STATUS wma_update_channel_list(WMA_HANDLE handle, void *scan_chan_info);
 #endif
@@ -246,6 +247,8 @@ QDF_STATUS wma_get_updated_scan_config(uint32_t *scan_config,
 QDF_STATUS wma_get_updated_fw_mode_config(uint32_t *fw_mode_config,
 		bool dbs,
 		bool agile_dfs);
+QDF_STATUS wma_get_updated_scan_and_fw_mode_config(uint32_t *scan_config,
+		uint32_t *fw_mode_config, uint32_t dual_mac_disable_ini);
 bool wma_get_dbs_scan_config(void);
 bool wma_get_dbs_plus_agile_scan_config(void);
 bool wma_get_single_mac_scan_with_dfs_config(void);

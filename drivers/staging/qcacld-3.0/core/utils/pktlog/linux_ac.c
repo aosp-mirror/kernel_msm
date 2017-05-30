@@ -127,6 +127,7 @@ int pktlog_alloc_buf(struct hif_opaque_softc *scn)
 	unsigned long vaddr;
 	struct page *vpg;
 	struct ath_pktlog_info *pl_info;
+	struct ath_pktlog_buf *buffer;
 	ol_txrx_pdev_handle pdev_txrx_handle;
 	pdev_txrx_handle = cds_get_context(QDF_MODULE_ID_TXRX);
 
@@ -142,25 +143,39 @@ int pktlog_alloc_buf(struct hif_opaque_softc *scn)
 
 	page_cnt = (sizeof(*(pl_info->buf)) + pl_info->buf_size) / PAGE_SIZE;
 
-	pl_info->buf = vmalloc((page_cnt + 2) * PAGE_SIZE);
-	if (pl_info->buf == NULL) {
+	spin_lock_bh(&pl_info->log_lock);
+	if (pl_info->buf != NULL) {
+		printk(PKTLOG_TAG "Buffer is already in use\n");
+		spin_unlock_bh(&pl_info->log_lock);
+		return -EINVAL;
+	}
+	spin_unlock_bh(&pl_info->log_lock);
+
+	buffer = vmalloc((page_cnt + 2) * PAGE_SIZE);
+	if (buffer == NULL) {
 		printk(PKTLOG_TAG
 		       "%s: Unable to allocate buffer "
 		       "(%d pages)\n", __func__, page_cnt);
 		return -ENOMEM;
 	}
 
-	pl_info->buf = (struct ath_pktlog_buf *)
-		       (((unsigned long)(pl_info->buf) + PAGE_SIZE - 1)
+	buffer = (struct ath_pktlog_buf *)
+		       (((unsigned long)(buffer) + PAGE_SIZE - 1)
 			& PAGE_MASK);
 
-	for (vaddr = (unsigned long)(pl_info->buf);
-	     vaddr < ((unsigned long)(pl_info->buf) + (page_cnt * PAGE_SIZE));
+	for (vaddr = (unsigned long)(buffer);
+	     vaddr < ((unsigned long)(buffer) + (page_cnt * PAGE_SIZE));
 	     vaddr += PAGE_SIZE) {
 		vpg = vmalloc_to_page((const void *)vaddr);
 		SetPageReserved(vpg);
 	}
 
+	spin_lock_bh(&pl_info->log_lock);
+	if (pl_info->buf != NULL)
+		pktlog_release_buf(scn);
+
+	pl_info->buf =  buffer;
+	spin_unlock_bh(&pl_info->log_lock);
 	return 0;
 }
 
@@ -201,6 +216,7 @@ static void pktlog_cleanup(struct ath_pktlog_info *pl_info)
 {
 	pl_info->log_state = 0;
 	PKTLOG_LOCK_DESTROY(pl_info);
+	mutex_destroy(&pl_info->pktlog_mutex);
 }
 
 /* sysctl procfs handler to enable pktlog */
@@ -520,12 +536,15 @@ static void pktlog_detach(struct hif_opaque_softc *scn)
 	pl_info = pl_dev->pl_info;
 	remove_proc_entry(WLANDEV_BASENAME, g_pktlog_pde);
 	pktlog_sysctl_unregister(pl_dev);
-	pktlog_cleanup(pl_info);
+
+	spin_lock_bh(&pl_info->log_lock);
 
 	if (pl_info->buf) {
 		pktlog_release_buf(scn);
 		pl_dev->tgt_pktlog_alloced = false;
 	}
+	spin_unlock_bh(&pl_info->log_lock);
+	pktlog_cleanup(pl_info);
 
 	if (pl_dev) {
 		kfree(pl_info);
@@ -701,11 +720,16 @@ pktlog_read_proc_entry(char *buf, size_t nbytes, loff_t *ppos,
 	int rem_len;
 	int start_offset, end_offset;
 	int fold_offset, ppos_data, cur_rd_offset, cur_wr_offset;
-	struct ath_pktlog_buf *log_buf = pl_info->buf;
+	struct ath_pktlog_buf *log_buf;
+
+	spin_lock_bh(&pl_info->log_lock);
+	log_buf = pl_info->buf;
+
 	*read_complete = false;
 
 	if (log_buf == NULL) {
 		*read_complete = true;
+		spin_unlock_bh(&pl_info->log_lock);
 		return 0;
 	}
 
@@ -808,7 +832,6 @@ rd_done:
 	*ppos += ret_val;
 
 	if (ret_val == 0) {
-		PKTLOG_LOCK(pl_info);
 		/* Write pointer might have been updated during the read.
 		 * So, if some data is written into, lets not reset the pointers
 		 * We can continue to read from the offset position
@@ -822,9 +845,8 @@ rd_done:
 			pl_info->buf->offset = PKTLOG_READ_OFFSET;
 			*read_complete = true;
 		}
-		PKTLOG_UNLOCK(pl_info);
 	}
-
+	spin_unlock_bh(&pl_info->log_lock);
 	return ret_val;
 }
 
@@ -849,16 +871,20 @@ __pktlog_read(struct file *file, char *buf, size_t nbytes, loff_t *ppos)
 	if (!pl_info)
 		return 0;
 
+	spin_lock_bh(&pl_info->log_lock);
 	log_buf = pl_info->buf;
 
-	if (log_buf == NULL)
+	if (log_buf == NULL) {
+		spin_unlock_bh(&pl_info->log_lock);
 		return 0;
+	}
 
 	if (pl_info->log_state) {
 		/* Read is not allowed when write is going on
 		 * When issuing cat command, ensure to send
 		 * pktlog disable command first.
 		 */
+		spin_unlock_bh(&pl_info->log_lock);
 		return -EINVAL;
 	}
 
@@ -875,11 +901,13 @@ __pktlog_read(struct file *file, char *buf, size_t nbytes, loff_t *ppos)
 
 	if (*ppos < bufhdr_size) {
 		count = QDF_MIN((bufhdr_size - *ppos), rem_len);
+		spin_unlock_bh(&pl_info->log_lock);
 		if (copy_to_user(buf, ((char *)&log_buf->bufhdr) + *ppos,
 				 count))
 			return -EFAULT;
 		rem_len -= count;
 		ret_val += count;
+		spin_lock_bh(&pl_info->log_lock);
 	}
 
 	start_offset = log_buf->rd_offset;
@@ -921,19 +949,23 @@ __pktlog_read(struct file *file, char *buf, size_t nbytes, loff_t *ppos)
 			goto rd_done;
 
 		count = QDF_MIN(rem_len, (end_offset - ppos_data + 1));
+		spin_unlock_bh(&pl_info->log_lock);
 		if (copy_to_user(buf + ret_val,
 				 log_buf->log_data + ppos_data, count))
 			return -EFAULT;
 		ret_val += count;
 		rem_len -= count;
+		spin_lock_bh(&pl_info->log_lock);
 	} else {
 		if (ppos_data <= fold_offset) {
 			count = QDF_MIN(rem_len, (fold_offset - ppos_data + 1));
+			spin_unlock_bh(&pl_info->log_lock);
 			if (copy_to_user(buf + ret_val,
 					 log_buf->log_data + ppos_data, count))
 				return -EFAULT;
 			ret_val += count;
 			rem_len -= count;
+			spin_lock_bh(&pl_info->log_lock);
 		}
 
 		if (rem_len == 0)
@@ -945,11 +977,13 @@ __pktlog_read(struct file *file, char *buf, size_t nbytes, loff_t *ppos)
 
 		if (ppos_data <= end_offset) {
 			count = QDF_MIN(rem_len, (end_offset - ppos_data + 1));
+			spin_unlock_bh(&pl_info->log_lock);
 			if (copy_to_user(buf + ret_val,
 					 log_buf->log_data + ppos_data, count))
 				return -EFAULT;
 			ret_val += count;
 			rem_len -= count;
+			spin_lock_bh(&pl_info->log_lock);
 		}
 	}
 
@@ -960,6 +994,7 @@ rd_done:
 	}
 	*ppos += ret_val;
 
+	spin_unlock_bh(&pl_info->log_lock);
 	return ret_val;
 }
 
@@ -967,11 +1002,18 @@ static ssize_t
 pktlog_read(struct file *file, char *buf, size_t nbytes, loff_t *ppos)
 {
 	int ret;
+	struct ath_pktlog_info *pl_info;
+
+	pl_info = (struct ath_pktlog_info *)
+					PDE_DATA(file->f_path.dentry->d_inode);
+	if (!pl_info)
+		return 0;
 
 	cds_ssr_protect(__func__);
+	mutex_lock(&pl_info->pktlog_mutex);
 	ret = __pktlog_read(file, buf, nbytes, ppos);
+	mutex_unlock(&pl_info->pktlog_mutex);
 	cds_ssr_unprotect(__func__);
-
 	return ret;
 }
 

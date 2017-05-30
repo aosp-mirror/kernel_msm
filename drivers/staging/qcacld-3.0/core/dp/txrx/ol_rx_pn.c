@@ -36,19 +36,15 @@
 #include <ol_rx.h>              /* ol_rx_deliver */
 
 /* add the MSDUs from this MPDU to the list of good frames */
-static void ol_rx_add_mpdu_to_list(qdf_nbuf_t head,
-				   qdf_nbuf_t tail,
-				   qdf_nbuf_t mpdu,
-				   qdf_nbuf_t mpdu_tail)
-{
-	do {
-		if (!head)
-			head = mpdu;
-		else
-			qdf_nbuf_set_next(tail, mpdu);
-		tail = mpdu_tail;
-	} while (0);
-}
+#define ADD_MPDU_TO_LIST(head, tail, mpdu, mpdu_tail) do {		\
+		if (!head) {						\
+			head = mpdu;					\
+		} else {						\
+			qdf_nbuf_set_next(tail, mpdu);			\
+		}							\
+		tail = mpdu_tail;					\
+	} while (0)
+
 int ol_rx_pn_cmp24(union htt_rx_pn_t *new_pn,
 		   union htt_rx_pn_t *old_pn, int is_unicast, int opmode)
 {
@@ -86,7 +82,7 @@ int ol_rx_pn_wapi_cmp(union htt_rx_pn_t *new_pn,
 qdf_nbuf_t
 ol_rx_pn_check_base(struct ol_txrx_vdev_t *vdev,
 		    struct ol_txrx_peer_t *peer,
-		    unsigned tid, qdf_nbuf_t msdu_list)
+		    unsigned int tid, qdf_nbuf_t msdu_list)
 {
 	struct ol_txrx_pdev_t *pdev = vdev->pdev;
 	union htt_rx_pn_t *last_pn;
@@ -131,7 +127,7 @@ ol_rx_pn_check_base(struct ol_txrx_vdev_t *vdev,
 
 		/* Don't check the PN replay for non-encrypted frames */
 		if (!htt_rx_mpdu_is_encrypted(pdev->htt_pdev, rx_desc)) {
-			ol_rx_add_mpdu_to_list(out_list_head, out_list_tail,
+			ADD_MPDU_TO_LIST(out_list_head, out_list_tail,
 					       mpdu, mpdu_tail);
 			mpdu = next_mpdu;
 			continue;
@@ -216,17 +212,17 @@ ol_rx_pn_check_base(struct ol_txrx_vdev_t *vdev,
 			/* free all MSDUs within this MPDU */
 			do {
 				qdf_nbuf_t next_msdu;
+
 				OL_RX_ERR_STATISTICS_1(pdev, vdev, peer,
 						       rx_desc, OL_RX_ERR_PN);
 				next_msdu = qdf_nbuf_next(msdu);
 				htt_rx_desc_frame_free(pdev->htt_pdev, msdu);
 				if (msdu == mpdu_tail)
 					break;
-				else
-					msdu = next_msdu;
+				msdu = next_msdu;
 			} while (1);
 		} else {
-			ol_rx_add_mpdu_to_list(out_list_head, out_list_tail,
+			ADD_MPDU_TO_LIST(out_list_head, out_list_tail,
 					       mpdu, mpdu_tail);
 			/*
 			 * Remember the new PN.
@@ -252,7 +248,8 @@ ol_rx_pn_check_base(struct ol_txrx_vdev_t *vdev,
 
 void
 ol_rx_pn_check(struct ol_txrx_vdev_t *vdev,
-	       struct ol_txrx_peer_t *peer, unsigned tid, qdf_nbuf_t msdu_list)
+	       struct ol_txrx_peer_t *peer, unsigned int tid,
+	       qdf_nbuf_t msdu_list)
 {
 	msdu_list = ol_rx_pn_check_base(vdev, peer, tid, msdu_list);
 	ol_rx_fwd_check(vdev, peer, tid, msdu_list);
@@ -261,7 +258,7 @@ ol_rx_pn_check(struct ol_txrx_vdev_t *vdev,
 void
 ol_rx_pn_check_only(struct ol_txrx_vdev_t *vdev,
 		    struct ol_txrx_peer_t *peer,
-		    unsigned tid, qdf_nbuf_t msdu_list)
+		    unsigned int tid, qdf_nbuf_t msdu_list)
 {
 	msdu_list = ol_rx_pn_check_base(vdev, peer, tid, msdu_list);
 	ol_rx_deliver(vdev, peer, tid, msdu_list);
@@ -339,6 +336,7 @@ void ol_rx_pn_trace_display(ol_txrx_pdev_handle pdev, int just_once)
 	elems = (end - 1 - start) & pdev->rx_pn_trace.mask;
 	if (limit > 0 && elems > limit) {
 		int delta;
+
 		delta = elems - limit;
 		start += delta;
 		start &= pdev->rx_pn_trace.mask;

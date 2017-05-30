@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -37,6 +37,8 @@
 #include <qdf_types.h>
 #include <i_qdf_mem.h>
 
+#define QDF_CACHE_LINE_SZ __qdf_cache_line_sz
+
 /**
  * struct qdf_mem_dma_page_t - Allocated dmaable page
  * @page_v_addr_start: Page start virtual address
@@ -67,32 +69,22 @@ struct qdf_mem_multi_page_t {
 /* Preprocessor definitions and constants */
 
 typedef __qdf_mempool_t qdf_mempool_t;
-#ifdef MEMORY_DEBUG
-void qdf_mem_clean(void);
 
+/**
+ * qdf_mem_init() - Initialize QDF memory module
+ *
+ * Return: None
+ *
+ */
 void qdf_mem_init(void);
 
+/**
+ * qdf_mem_exit() - Exit QDF memory module
+ *
+ * Return: None
+ *
+ */
 void qdf_mem_exit(void);
-
-#else
-/**
- * qdf_mem_init() - initialize qdf memory debug functionality
- *
- * Return: none
- */
-static inline void qdf_mem_init(void)
-{
-}
-
-/**
- * qdf_mem_exit() - exit qdf memory debug functionality
- *
- * Return: none
- */
-static inline void qdf_mem_exit(void)
-{
-}
-#endif
 
 #ifdef MEMORY_DEBUG
 #define qdf_mem_malloc(size) \

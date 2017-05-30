@@ -26,6 +26,7 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <net/cfg80211.h>
+#include <net/cnss_nl.h>
 #include <ani_global.h>
 #include "wlan_hdd_main.h"
 #include "wlan_hdd_spectralscan.h"
@@ -73,6 +74,36 @@ static const struct nla_policy spectral_scan_policy[
 							.type = NLA_U32},
 	[QCA_WLAN_VENDOR_ATTR_SPECTRAL_SCAN_COOKIE] = {.type = NLA_U32},
 };
+
+/**
+ * spectral_nl_srv_ucast() - Wrapper function to send ucast msgs to spectral
+ * @skb: sk buffer pointer
+ * @dst_pid: Destination PID
+ * @flag: flags
+ *
+ * Sends the ucast message to spectral with generic nl socket if CNSS_GENL
+ * is enabled. Else, use the legacy netlink socket to send.
+ *
+ * Return: None
+ */
+#ifdef CNSS_GENL
+static int spectral_nl_srv_ucast(struct sk_buff *skb, int dst_pid, int flag)
+{
+	int ret;
+
+	ret = nl_srv_ucast(skb, dst_pid, flag, WLAN_NL_MSG_SPECTRAL_SCAN,
+			   CLD80211_MCGRP_SVC_MSGS);
+	return ret;
+}
+#else
+static int spectral_nl_srv_ucast(struct sk_buff *skb, int dst_pid, int flag)
+{
+	int ret;
+
+	ret = nl_srv_ucast(skb, dst_pid, flag);
+	return ret;
+}
+#endif
 
 /**
  * __wlan_hdd_cfg80211_spectral_scan_start() - start spectral scan
@@ -355,7 +386,7 @@ static void send_spectral_scan_reg_rsp_msg(hdd_context_t *hdd_ctx)
 	hdd_info("sending App Reg Response to process pid %d",
 			hdd_ctx->sscan_pid);
 
-	(void)nl_srv_ucast(skb, hdd_ctx->sscan_pid, MSG_DONTWAIT);
+	spectral_nl_srv_ucast(skb, hdd_ctx->sscan_pid, MSG_DONTWAIT);
 }
 
 static int spectral_scan_msg_callback(struct sk_buff *skb)
@@ -466,9 +497,9 @@ void spectral_scan_callback(void *context, struct spectral_samp_msg   *samp_msg)
 	struct sk_buff *spectral_skb;
 	struct nlmsghdr *nlh;
 	int err;
-	struct spectral_samp_msg_info samp_msg_info;
+	struct spectral_samp_msg_info *samp_msg_info;
 	hdd_context_t *hdd_ctx = (hdd_context_t *)context;
-	uint8_t i;
+	int i;
 
 	spectral_skb = alloc_skb(NLMSG_SPACE(MAX_SPECTRAL_PAYLOAD), GFP_KERNEL);
 	if (spectral_skb == NULL)
@@ -484,97 +515,96 @@ void spectral_scan_callback(void *context, struct spectral_samp_msg   *samp_msg)
 	skb_put(spectral_skb, NLMSG_SPACE(sizeof(
 					struct spectral_samp_msg_info)));
 
-	samp_msg_info.signature          = samp_msg->signature;
-	samp_msg_info.freq               = samp_msg->freq;
-	samp_msg_info.vhtop_ch_freq_seg1 = samp_msg->vhtop_ch_freq_seg1;
-	samp_msg_info.vhtop_ch_freq_seg2 = samp_msg->vhtop_ch_freq_seg2;
-	samp_msg_info.freq_loading       = samp_msg->freq_loading;
-	samp_msg_info.dcs_enabled        = samp_msg->dcs_enabled;
-	samp_msg_info.int_type           = samp_msg->int_type;
+	samp_msg_info = NLMSG_DATA(nlh);
+	samp_msg_info->signature          = samp_msg->signature;
+	samp_msg_info->freq               = samp_msg->freq;
+	samp_msg_info->vhtop_ch_freq_seg1 = samp_msg->vhtop_ch_freq_seg1;
+	samp_msg_info->vhtop_ch_freq_seg2 = samp_msg->vhtop_ch_freq_seg2;
+	samp_msg_info->freq_loading       = samp_msg->freq_loading;
+	samp_msg_info->dcs_enabled        = samp_msg->dcs_enabled;
+	samp_msg_info->int_type           = samp_msg->int_type;
 	for (i = 0; i < ETH_ALEN; i++)
-		samp_msg_info.macaddr[i] = samp_msg->macaddr[i];
-	samp_msg_info.samp_data.spectral_data_len =
+		samp_msg_info->macaddr[i] = samp_msg->macaddr[i];
+	samp_msg_info->samp_data.spectral_data_len =
 				samp_msg->samp_data.spectral_data_len;
-	samp_msg_info.samp_data.spectral_data_len_sec80 =
+	samp_msg_info->samp_data.spectral_data_len_sec80 =
 				samp_msg->samp_data.spectral_data_len_sec80;
-	samp_msg_info.samp_data.spectral_rssi =
+	samp_msg_info->samp_data.spectral_rssi =
 				samp_msg->samp_data.spectral_rssi;
-	samp_msg_info.samp_data.spectral_rssi_sec80 =
+	samp_msg_info->samp_data.spectral_rssi_sec80 =
 				samp_msg->samp_data.spectral_rssi_sec80;
-	samp_msg_info.samp_data.spectral_combined_rssi =
+	samp_msg_info->samp_data.spectral_combined_rssi =
 				samp_msg->samp_data.spectral_combined_rssi;
-	samp_msg_info.samp_data.spectral_upper_rssi =
+	samp_msg_info->samp_data.spectral_upper_rssi =
 				samp_msg->samp_data.spectral_upper_rssi;
-	samp_msg_info.samp_data.spectral_lower_rssi =
+	samp_msg_info->samp_data.spectral_lower_rssi =
 				samp_msg->samp_data.spectral_lower_rssi;
 	for (i = 0; i < MAX_SPECTRAL_CHAINS; i++) {
-		samp_msg_info.samp_data.spectral_chain_ctl_rssi[i] =
+		samp_msg_info->samp_data.spectral_chain_ctl_rssi[i] =
 			samp_msg->samp_data.spectral_chain_ctl_rssi[i];
-		samp_msg_info.samp_data.spectral_chain_ext_rssi[i] =
+		samp_msg_info->samp_data.spectral_chain_ext_rssi[i] =
 			samp_msg->samp_data.spectral_chain_ext_rssi[i];
 	}
-	samp_msg_info.samp_data.spectral_max_scale =
+	samp_msg_info->samp_data.spectral_max_scale =
 				samp_msg->samp_data.spectral_max_scale;
-	samp_msg_info.samp_data.spectral_bwinfo =
+	samp_msg_info->samp_data.spectral_bwinfo =
 				samp_msg->samp_data.spectral_bwinfo;
-	samp_msg_info.samp_data.spectral_tstamp =
+	samp_msg_info->samp_data.spectral_tstamp =
 				samp_msg->samp_data.spectral_tstamp;
-	samp_msg_info.samp_data.spectral_max_index =
+	samp_msg_info->samp_data.spectral_max_index =
 				samp_msg->samp_data.spectral_max_index;
-	samp_msg_info.samp_data.spectral_max_index_sec80 =
+	samp_msg_info->samp_data.spectral_max_index_sec80 =
 				samp_msg->samp_data.spectral_max_index_sec80;
-	samp_msg_info.samp_data.spectral_max_mag =
+	samp_msg_info->samp_data.spectral_max_mag =
 				samp_msg->samp_data.spectral_max_mag;
-	samp_msg_info.samp_data.spectral_max_mag_sec80 =
+	samp_msg_info->samp_data.spectral_max_mag_sec80 =
 				samp_msg->samp_data.spectral_max_mag_sec80;
-	samp_msg_info.samp_data.spectral_max_exp =
+	samp_msg_info->samp_data.spectral_max_exp =
 				samp_msg->samp_data.spectral_max_exp;
-	samp_msg_info.samp_data.spectral_last_tstamp =
+	samp_msg_info->samp_data.spectral_last_tstamp =
 				samp_msg->samp_data.spectral_last_tstamp;
-	samp_msg_info.samp_data.spectral_upper_max_index =
+	samp_msg_info->samp_data.spectral_upper_max_index =
 				samp_msg->samp_data.spectral_upper_max_index;
-	samp_msg_info.samp_data.spectral_lower_max_index =
+	samp_msg_info->samp_data.spectral_lower_max_index =
 				samp_msg->samp_data.spectral_lower_max_index;
-	samp_msg_info.samp_data.spectral_nb_upper =
+	samp_msg_info->samp_data.spectral_nb_upper =
 				samp_msg->samp_data.spectral_nb_upper;
-	samp_msg_info.samp_data.spectral_nb_lower =
+	samp_msg_info->samp_data.spectral_nb_lower =
 				samp_msg->samp_data.spectral_nb_lower;
-	samp_msg_info.samp_data.bin_pwr_count =
+	samp_msg_info->samp_data.bin_pwr_count =
 				samp_msg->samp_data.bin_pwr_count;
-	samp_msg_info.samp_data.lb_edge_extrabins =
+	samp_msg_info->samp_data.lb_edge_extrabins =
 				samp_msg->samp_data.lb_edge_extrabins;
-	samp_msg_info.samp_data.rb_edge_extrabins =
+	samp_msg_info->samp_data.rb_edge_extrabins =
 				samp_msg->samp_data.rb_edge_extrabins;
-	samp_msg_info.samp_data.bin_pwr_count_sec80 =
+	samp_msg_info->samp_data.bin_pwr_count_sec80 =
 				samp_msg->samp_data.bin_pwr_count_sec80;
 	for (i = 0; i < MAX_NUM_BINS; i++) {
-		samp_msg_info.samp_data.bin_pwr[i] =
+		samp_msg_info->samp_data.bin_pwr[i] =
 				samp_msg->samp_data.bin_pwr[i];
-		samp_msg_info.samp_data.bin_pwr_sec80[i] =
+		samp_msg_info->samp_data.bin_pwr_sec80[i] =
 				samp_msg->samp_data.bin_pwr_sec80[i];
 	}
-	samp_msg_info.samp_data.interf_list.count =
+	samp_msg_info->samp_data.interf_list.count =
 				samp_msg->samp_data.interf_list.count;
 	for (i = 0; i < MAX_INTERF; i++) {
-		samp_msg_info.samp_data.interf_list.interf[i].interf_type =
+		samp_msg_info->samp_data.interf_list.interf[i].interf_type =
 			samp_msg->samp_data.interf_list.interf[i].interf_type;
-		samp_msg_info.samp_data.interf_list.interf[i].interf_min_freq =
+		samp_msg_info->samp_data.interf_list.interf[i].interf_min_freq =
 			samp_msg->samp_data.interf_list.interf[i].
 							interf_min_freq;
-		samp_msg_info.samp_data.interf_list.interf[i].interf_max_freq =
+		samp_msg_info->samp_data.interf_list.interf[i].interf_max_freq =
 			samp_msg->samp_data.interf_list.interf[i].
 							interf_max_freq;
 	}
-	samp_msg_info.samp_data.noise_floor =
+	samp_msg_info->samp_data.noise_floor =
 				samp_msg->samp_data.noise_floor;
-	samp_msg_info.samp_data.noise_floor_sec80 =
+	samp_msg_info->samp_data.noise_floor_sec80 =
 				samp_msg->samp_data.noise_floor_sec80;
-	samp_msg_info.samp_data.ch_width =
+	samp_msg_info->samp_data.ch_width =
 				samp_msg->samp_data.ch_width;
 
-	memcpy(NLMSG_DATA(nlh), &samp_msg_info,
-		sizeof(struct spectral_samp_msg_info));
-	err = nl_srv_ucast(spectral_skb, hdd_ctx->sscan_pid, MSG_DONTWAIT);
+	err = spectral_nl_srv_ucast(spectral_skb, hdd_ctx->sscan_pid, MSG_DONTWAIT);
 	if (err < 0)
 		hdd_err("SPECTRAL : failed to send to spectral scan app");
 }

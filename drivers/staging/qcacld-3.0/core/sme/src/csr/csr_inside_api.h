@@ -94,11 +94,8 @@
 #define CSR_ROAMING_DFS_CHANNEL_ENABLED_NORMAL     (1)
 #define CSR_ROAMING_DFS_CHANNEL_ENABLED_ACTIVE     (2)
 
-#ifdef QCA_WIFI_3_0_EMU
-#define CSR_ACTIVE_SCAN_LIST_CMD_TIMEOUT (1000*30*20)
-#else
 #define CSR_ACTIVE_SCAN_LIST_CMD_TIMEOUT (1000*30)
-#endif
+
 /* ***************************************************************************
  * The MAX BSSID Count should be lower than the command timeout value and it
  * can be of a fraction of 3/4 of the total command timeout value.
@@ -209,9 +206,10 @@ struct tag_csrscan_result {
 	eCsrEncryptionType mcEncryptionType;
 	/* Preferred auth type that matched with the profile. */
 	eCsrAuthType authType;
+	int  bss_score;
 
 	tCsrScanResultInfo Result;
-	int  bss_score;
+	/* Do not add any element here */
 };
 
 struct scan_result_list {
@@ -244,11 +242,6 @@ struct csr_scan_for_ssid_context {
 		(eCSR_ENCRYPT_TYPE_WEP40_STATICKEY == (encType)) || \
 		(eCSR_ENCRYPT_TYPE_WEP104_STATICKEY == (encType)))
 
-#define CSR_IS_AUTH_TYPE_FILS(auth_type) \
-		((eCSR_AUTH_TYPE_FILS_SHA256 == auth_type) || \
-		(eCSR_AUTH_TYPE_FILS_SHA384 == auth_type) || \
-		(eCSR_AUTH_TYPE_FT_FILS_SHA256 == auth_type) || \
-		(eCSR_AUTH_TYPE_FT_FILS_SHA384 == auth_type))
 #define CSR_IS_WAIT_FOR_KEY(pMac, sessionId) \
 		 (CSR_IS_ROAM_JOINED(pMac, sessionId) && \
 		  CSR_IS_ROAM_SUBSTATE_WAITFORKEY(pMac, sessionId))
@@ -264,6 +257,7 @@ struct csr_scan_for_ssid_context {
 #define CSR_IS_DISCONNECT_COMMAND(pCommand) ((eSmeCommandRoam == \
 		(pCommand)->command) && \
 		((eCsrForcedDisassoc == (pCommand)->u.roamCmd.roamReason) || \
+		(eCsrForcedIbssLeave == (pCommand)->u.roamCmd.roamReason) ||\
 		(eCsrForcedDeauth == (pCommand)->u.roamCmd.roamReason) || \
 					(eCsrSmeIssuedDisassocForHandoff == \
 					(pCommand)->u.roamCmd.roamReason) || \
@@ -568,9 +562,31 @@ QDF_STATUS csr_roam_open_session(tpAniSirGlobal pMac,
 				void *pContext,
 				 uint8_t *pSelfMacAddr, uint8_t *pbSessionId,
 				 uint32_t type, uint32_t subType);
-/* fSync: true means cleanupneeds to handle synchronously. */
+
+/**
+ * csr_purge_sme_cmd_list() - perge all sme cmds.
+ * @mac_ctx: mac context
+ * @sessionid: session id of the session
+ * @flush_all_sme_cmd: If all sme cmds needed to be flushed
+ *
+ * Return: void
+ */
+void csr_purge_sme_cmd_list(tpAniSirGlobal mac_ctx, uint8_t sessionid,
+				bool flush_all_cmd);
+
+/**
+ * csr_roam_close_session: API to close csr session
+ * @pMac: mac context
+ * @sessionId: session id
+ * @fSync: whether cleanupneeds to handle synchronously
+ * @flush_all_sme_cmds: whether all commands needs to be flushed
+ * @callback: pointer to callback API
+ * @pContext: callback context
+ *
+ * Return: None
+ */
 QDF_STATUS csr_roam_close_session(tpAniSirGlobal pMac, uint32_t sessionId,
-				  bool fSync,
+				  bool fSync, bool flush_all_sme_cmds,
 				  csr_roamSessionCloseCallback callback,
 				  void *pContext);
 void csr_cleanup_session(tpAniSirGlobal pMac, uint32_t sessionId);

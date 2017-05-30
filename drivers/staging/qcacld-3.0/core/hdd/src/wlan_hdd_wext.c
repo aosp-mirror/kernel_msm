@@ -3433,6 +3433,7 @@ static void hdd_get_rssi_cb(int8_t rssi, uint32_t staId, void *pContext)
 {
 	struct statsContext *pStatsContext;
 	hdd_adapter_t *pAdapter;
+	hdd_station_ctx_t *pHddStaCtx;
 
 	if (NULL == pContext) {
 		hdd_err("Bad param");
@@ -3441,6 +3442,7 @@ static void hdd_get_rssi_cb(int8_t rssi, uint32_t staId, void *pContext)
 
 	pStatsContext = pContext;
 	pAdapter = pStatsContext->pAdapter;
+	pHddStaCtx = WLAN_HDD_GET_STATION_CTX_PTR(pAdapter);
 
 	/* there is a race condition that exists between this callback
 	 * function and the caller since the caller could time out
@@ -3465,11 +3467,15 @@ static void hdd_get_rssi_cb(int8_t rssi, uint32_t staId, void *pContext)
 	/* paranoia: invalidate the magic */
 	pStatsContext->magic = 0;
 
-	/* copy over the rssi */
-	pAdapter->rssi = rssi;
+	/* update rssi only if its valid else return previous valid rssi */
+	if (rssi)
+		pAdapter->rssi = rssi;
 
-	if (pAdapter->rssi > 0)
-		pAdapter->rssi = 0;
+	/* for new connection there might be no valid previous RSSI */
+	if (!pAdapter->rssi)
+		hdd_get_rssi_snr_by_bssid(pAdapter,
+			pHddStaCtx->conn_info.bssId.bytes,
+			&pAdapter->rssi, NULL);
 
 	/* notify the caller */
 	complete(&pStatsContext->completion);
@@ -3551,7 +3557,7 @@ QDF_STATUS wlan_hdd_get_rssi(hdd_adapter_t *pAdapter, int8_t *rssi_value)
 		hdd_err("Invalid context, pAdapter");
 		return QDF_STATUS_E_FAULT;
 	}
-	if (cds_is_driver_recovering()) {
+	if (cds_is_driver_recovering() || cds_is_driver_in_bad_state()) {
 		hdd_warn("Recovery in Progress. State: 0x%x Ignore!!!",
 			cds_get_driver_state());
 		/* return a cached value */
@@ -3794,10 +3800,10 @@ int wlan_hdd_get_linkspeed_for_peermac(hdd_adapter_t *pAdapter,
 	status = sme_get_link_speed(WLAN_HDD_GET_HAL_CTX(pAdapter),
 				    linkspeed_req,
 				    &context, hdd_get_link_speed_cb);
+	qdf_mem_free(linkspeed_req);
 	errno = qdf_status_to_os_return(status);
 	if (errno) {
 		hdd_err("Unable to retrieve statistics for link speed");
-		qdf_mem_free(linkspeed_req);
 	} else {
 		rc = wait_for_completion_timeout
 			(&context.completion,
@@ -3987,6 +3993,7 @@ void hdd_clear_roam_profile_ie(hdd_adapter_t *pAdapter)
 	pAdapter->wapi_info.nWapiMode = 0;
 #endif
 
+	hdd_clear_fils_connection_info(pAdapter);
 	qdf_zero_macaddr(&pWextState->req_bssId);
 	EXIT();
 }
@@ -5971,7 +5978,7 @@ QDF_STATUS wlan_hdd_get_class_astats(hdd_adapter_t *pAdapter)
 		hdd_err("pAdapter is NULL");
 		return QDF_STATUS_E_FAULT;
 	}
-	if (cds_is_driver_recovering()) {
+	if (cds_is_driver_recovering() || cds_is_driver_in_bad_state()) {
 		hdd_debug("Recovery in Progress. State: 0x%x Ignore!!!",
 			 cds_get_driver_state());
 		return QDF_STATUS_SUCCESS;
@@ -8924,6 +8931,8 @@ static int __iw_setnone_getint(struct net_device *dev,
 	{
 		sme_get_config_param(hHal, &smeConfig);
 		*value = (smeConfig.csrConfig.enable2x2 == 0) ? 1 : 2;
+		 if (wma_is_current_hwmode_dbs())
+			 *value = *value-1;
 		hdd_debug("GET_NSS: Current NSS:%d", *value);
 		break;
 	}
@@ -9452,7 +9461,8 @@ static int __iw_set_three_ints_getnone(struct net_device *dev,
 		break;
 	case WE_SET_DUAL_MAC_SCAN_CONFIG:
 		hdd_debug("Ioctl to set dual mac scan config");
-		if (hdd_ctx->config->dual_mac_feature_disable) {
+		if (hdd_ctx->config->dual_mac_feature_disable ==
+				DISABLE_DBS_CXN_AND_SCAN) {
 			hdd_err("Dual mac feature is disabled from INI");
 			return -EPERM;
 		}
@@ -11496,6 +11506,11 @@ static int __iw_set_packet_filter_params(struct net_device *dev,
 		return -ENOTSUPP;
 	}
 
+	if (!hdd_conn_is_connected(WLAN_HDD_GET_STATION_CTX_PTR(adapter))) {
+		hdd_err("Packet filter not supported in disconnected state");
+		return -ENOTSUPP;
+	}
+
 	/* copy data using copy_from_user */
 	request = mem_alloc_copy_from_user_helper(priv_data.pointer,
 						   priv_data.length);
@@ -12387,7 +12402,8 @@ static int __iw_set_two_ints_getnone(struct net_device *dev,
 		break;
 	case WE_SET_DUAL_MAC_FW_MODE_CONFIG:
 		hdd_debug("Ioctl to set dual fw mode config");
-		if (hdd_ctx->config->dual_mac_feature_disable) {
+		if (hdd_ctx->config->dual_mac_feature_disable ==
+				DISABLE_DBS_CXN_AND_SCAN) {
 			hdd_err("Dual mac feature is disabled from INI");
 			return -EPERM;
 		}

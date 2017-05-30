@@ -766,6 +766,7 @@ struct hdd_station_ctx {
 #ifdef WLAN_FEATURE_NAN_DATAPATH
 	struct nan_datapath_ctx ndp_ctx;
 #endif
+	bool ap_supports_immediate_power_save;
 };
 
 #define BSS_STOP    0
@@ -1247,18 +1248,10 @@ struct hdd_adapter_s {
 	/* rcpi information */
 	struct rcpi_info rcpi;
 	/*
-	 * defer disconnect is used as a flag by roaming to check
-	 * if any disconnect has been deferred because of roaming
-	 * and handle it. It stores the source of the disconnect.
-	 * Based on the source, it will appropriately handle the
-	 * disconnect.
+	 * Indicate if HO fails during disconnect so that
+	 * disconnect is not initiated by HDD as its already
+	 * initiated by CSR
 	 */
-	uint8_t defer_disconnect;
-	/*
-	 * cfg80211 issues a reason for disconnect. Store this reason if the
-	 * disconnect is being deferred.
-	 */
-	uint8_t cfg80211_disconnect_reason;
 	bool roam_ho_fail;
 	struct lfr_firmware_status lfr_fw_status;
 	bool con_status;
@@ -1267,14 +1260,6 @@ struct hdd_adapter_s {
 	spinlock_t random_mac_lock;
 	struct action_frame_random_mac random_mac[MAX_RANDOM_MAC_ADDRS];
 };
-
-/*
- * Below two definitions are useful to distinguish the
- * source of the disconnect when a disconnect is
- * deferred.
- */
-#define DEFER_DISCONNECT_TRY_DISCONNECT      1
-#define DEFER_DISCONNECT_CFG80211_DISCONNECT 2
 
 #define WLAN_HDD_GET_STATION_CTX_PTR(pAdapter) (&(pAdapter)->sessionCtx.station)
 #define WLAN_HDD_GET_AP_CTX_PTR(pAdapter) (&(pAdapter)->sessionCtx.ap)
@@ -1859,6 +1844,7 @@ void hdd_exchange_version_and_caps(hdd_context_t *pHddCtx);
 int wlan_hdd_validate_context(hdd_context_t *pHddCtx);
 bool hdd_is_valid_mac_address(const uint8_t *pMacAddr);
 QDF_STATUS hdd_issta_p2p_clientconnected(hdd_context_t *pHddCtx);
+bool wlan_hdd_modules_are_enabled(hdd_context_t *hdd_ctx);
 
 struct qdf_mac_addr *
 hdd_wlan_get_ibss_mac_addr_from_staid(hdd_adapter_t *pAdapter,
@@ -2401,5 +2387,31 @@ void hdd_unregister_notifiers(hdd_context_t *hdd_ctx);
 void hdd_chip_pwr_save_fail_detected_cb(void *hdd_ctx,
 				struct chip_pwr_save_fail_detected_params
 				*data);
+
+#if defined(WLAN_FEATURE_FILS_SK) && defined(CFG80211_FILS_SK_OFFLOAD_SUPPORT)
+/**
+ * hdd_clear_fils_connection_info: API to clear fils info from roam profile and
+ * free allocated memory
+ * @adapter: pointer to hdd adapter
+ *
+ * Return: None
+ */
+void hdd_clear_fils_connection_info(hdd_adapter_t *adapter);
+#else
+static inline void hdd_clear_fils_connection_info(hdd_adapter_t *adapter)
+{ }
+#endif
+
+/**
+ * hdd_get_rssi_snr_by_bssid() - gets the rssi and snr by bssid from scan cache
+ * @adapter: adapter handle
+ * @bssid: bssid to look for in scan cache
+ * @rssi: rssi value found
+ * @snr: snr value found
+ *
+ * Return: QDF_STATUS
+ */
+int hdd_get_rssi_snr_by_bssid(hdd_adapter_t *adapter, const uint8_t *bssid,
+			      int8_t *rssi, int8_t *snr);
 
 #endif /* end #if !defined(WLAN_HDD_MAIN_H) */

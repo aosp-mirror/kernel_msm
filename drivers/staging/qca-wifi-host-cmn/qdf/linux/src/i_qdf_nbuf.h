@@ -65,6 +65,8 @@ typedef struct sk_buff *__qdf_nbuf_t;
 #define QDF_NBUF_CB_PACKET_TYPE_ARP    2
 #define QDF_NBUF_CB_PACKET_TYPE_WAPI   3
 #define QDF_NBUF_CB_PACKET_TYPE_DHCP   4
+#define QDF_NBUF_CB_PACKET_TYPE_ICMP   5
+
 
 /* mark the first packet after wow wakeup */
 #define QDF_MARK_FIRST_WAKEUP_PACKET   0x80000000
@@ -560,8 +562,8 @@ static inline size_t __qdf_nbuf_len(struct sk_buff *skb)
  * @dst: Buffer to piggyback into
  * @src: Buffer to put
  *
- * Link tow nbufs the new buf is piggybacked into the older one. The older
- * (src) skb is released.
+ * Concat two nbufs, the new buf(src) is piggybacked into the older one.
+ * It is callers responsibility to free the src skb.
  *
  * Return: QDF_STATUS (status of the call) if failed the src skb
  *         is released
@@ -583,11 +585,9 @@ __qdf_nbuf_cat(struct sk_buff *dst, struct sk_buff *src)
 		if (error)
 			return __qdf_to_status(error);
 	}
+
 	memcpy(skb_tail_pointer(dst), src->data, src->len);
-
 	skb_put(dst, src->len);
-	dev_kfree_skb_any(src);
-
 	return __qdf_to_status(error);
 }
 

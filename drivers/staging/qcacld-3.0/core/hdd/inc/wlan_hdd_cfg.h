@@ -1587,6 +1587,29 @@ enum hdd_dot11_mode {
 
 /*
  * <ini>
+ * gForce1x1Exception - force 1x1 when connecting to certain peer
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This INI when enabled will force 1x1 connection with certain peer.
+ *
+ *
+ * Related: None
+ *
+ * Supported Feature: connection
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_FORCE_1X1_NAME      "gForce1x1Exception"
+#define CFG_FORCE_1X1_MIN       (0)
+#define CFG_FORCE_1X1_MAX       (1)
+#define CFG_FORCE_1X1_DEFAULT   (0)
+
+/*
+ * <ini>
  * gEnableFastRoamInConcurrency - Enable LFR roaming on STA during concurrency
  * @Min: 0
  * @Max: 1
@@ -4033,29 +4056,6 @@ enum station_keepalive_method {
 
 /*
  * <ini>
- * McastBcastFilter - Filters Mcast/Bcast Rx packets completely
- * @Min: 0
- * @Max: 3
- * @Default: 0
- *
- * This ini is used to send default NULL frame to AP
- *
- * Related: None
- *
- * Supported Feature: STA
- *
- * Usage: Internal/External
- *
- * </ini>
- */
-
-#define CFG_MCAST_BCAST_FILTER_SETTING_NAME          "McastBcastFilter"
-#define CFG_MCAST_BCAST_FILTER_SETTING_MIN           (0)
-#define CFG_MCAST_BCAST_FILTER_SETTING_MAX           (3)
-#define CFG_MCAST_BCAST_FILTER_SETTING_DEFAULT       (0)
-
-/*
- * <ini>
  * gDynamicPSPollvalue - Set dynamic PSpoll value
  * @Min: 0
  * @Max: 255
@@ -5049,17 +5049,17 @@ enum hdd_link_speed_rpt_type {
 #define CFG_ENABLE_EGAP_INACT_TIME_FEATURE         "gEGAPInactTime"
 #define CFG_ENABLE_EGAP_INACT_TIME_FEATURE_MIN     (0)
 #define CFG_ENABLE_EGAP_INACT_TIME_FEATURE_MAX     (300000)
-#define CFG_ENABLE_EGAP_INACT_TIME_FEATURE_DEFAULT (1000)
+#define CFG_ENABLE_EGAP_INACT_TIME_FEATURE_DEFAULT (2000)
 
 #define CFG_ENABLE_EGAP_WAIT_TIME_FEATURE          "gEGAPWaitTime"
 #define CFG_ENABLE_EGAP_WAIT_TIME_FEATURE_MIN      (0)
 #define CFG_ENABLE_EGAP_WAIT_TIME_FEATURE_MAX      (300000)
-#define CFG_ENABLE_EGAP_WAIT_TIME_FEATURE_DEFAULT  (100)
+#define CFG_ENABLE_EGAP_WAIT_TIME_FEATURE_DEFAULT  (150)
 
 #define CFG_ENABLE_EGAP_FLAGS_FEATURE              "gEGAPFeatures"
 #define CFG_ENABLE_EGAP_FLAGS_FEATURE_MIN          (0)
 #define CFG_ENABLE_EGAP_FLAGS_FEATURE_MAX          (15)
-#define CFG_ENABLE_EGAP_FLAGS_FEATURE_DEFAULT      (7)
+#define CFG_ENABLE_EGAP_FLAGS_FEATURE_DEFAULT      (3)
 /* end Enhanced Green AP flags/params */
 
 #endif
@@ -8167,11 +8167,19 @@ enum dot11p_mode {
  * <ini>
  * gDualMacFeatureDisable - Disable Dual MAC feature.
  * @Min: 0
- * @Max: 1
+ * @Max: 4
  * @Default: 0
  *
  * This ini is used to enable/disable dual MAC feature.
- * 0 - enable DBS  1 - disable DBS
+ * 0 - enable DBS
+ * 1 - disable DBS
+ * 2 - disable DBS for connection but keep DBS for scan
+ * 3 - disable DBS for connection but keep DBS scan with async
+ *			scan policy disabled.
+ * 4 - enable DBS for connection as well as for scan with async
+ *			scan policy disabled.
+ *
+ * Note: INI item value should match 'enum dbs_support'
  *
  * Related: None.
  *
@@ -8183,7 +8191,7 @@ enum dot11p_mode {
  */
 #define CFG_DUAL_MAC_FEATURE_DISABLE               "gDualMacFeatureDisable"
 #define CFG_DUAL_MAC_FEATURE_DISABLE_MIN          (0)
-#define CFG_DUAL_MAC_FEATURE_DISABLE_MAX          (1)
+#define CFG_DUAL_MAC_FEATURE_DISABLE_MAX          (4)
 #define CFG_DUAL_MAC_FEATURE_DISABLE_DEFAULT      (0)
 
 /*
@@ -9554,6 +9562,31 @@ enum dot11p_mode {
 #define CFG_AUTO_PS_ENABLE_TIMER_MAX           (120)
 #define CFG_AUTO_PS_ENABLE_TIMER_DEFAULT       (0)
 
+#ifdef WLAN_ICMP_DISABLE_PS
+/*
+ * <ini>
+ * gIcmpDisablePsValue - Set ICMP packet disable power save value
+ * @Min:     0
+ * @Max:     10000
+ * @Default: 5000
+ *
+ * This ini is used to set ICMP packet disable power save value in
+ * millisecond.
+ *
+ * Related: gEnableBmps
+ *
+ * Supported Feature: Power Save
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ICMP_DISABLE_PS_NAME               "gIcmpDisablePsValue"
+#define CFG_ICMP_DISABLE_PS_MIN                (0)
+#define CFG_ICMP_DISABLE_PS_MAX                (10000)
+#define CFG_ICMP_DISABLE_PS_DEFAULT            (5000)
+#endif
+
 /*
  * <ini>
  * gBmpsMinListenInterval - Set BMPS Minimum Listen Interval
@@ -10185,6 +10218,7 @@ enum hw_filter_mode {
 #define CFG_ENABLE_PACKET_FILTERS_MAX      (63)
 
 /*
+ * <ini>
  * arp_ac_category - ARP access category
  * @Min: 0
  * @Max: 3
@@ -10665,6 +10699,7 @@ enum hw_filter_mode {
 #define CFG_ENABLE_ANI_DEFAULT           (1)
 
 /**
+ * <ini>
  * gSetRTSForSIFSBursting - set rts for sifs bursting
  * @Min: 0
  * @Max: 1
@@ -10700,6 +10735,7 @@ enum hw_filter_mode {
 #define CFG_MAX_MPDUS_IN_AMPDU_DEFAULT          (0)
 
 /*
+ * <ini>
  * gSapMaxMCSForTxData - sap 11n max mcs
  * @Min: 0
  * @Max: 383
@@ -10717,6 +10753,7 @@ enum hw_filter_mode {
 #define CFG_SAP_MAX_MCS_FOR_TX_DATA_DEFAULT         (0)
 
 /*
+ * <ini>
  * g_is_bssid_hint_priority - Set priority for connection with bssid_hint
  * BSSID.
  * @Min: 0
@@ -10738,6 +10775,29 @@ enum hw_filter_mode {
 #define CFG_IS_BSSID_HINT_PRIORITY_DEFAULT (1)
 #define CFG_IS_BSSID_HINT_PRIORITY_MIN     (0)
 #define CFG_IS_BSSID_HINT_PRIORITY_MAX     (1)
+
+/*
+ * <ini>
+ * g_is_fils_enabled - Enable/Disable FILS support in driver
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to enable/disable FILS support in driver
+ * Driver will update config to supplicant based on this config.
+ *
+ * Related: None
+ *
+ * Supported Feature: FILS
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_IS_FILS_ENABLED_NAME    "g_is_fils_enabled"
+#define CFG_IS_FILS_ENABLED_DEFAULT (1)
+#define CFG_IS_FILS_ENABLED_MIN     (0)
+#define CFG_IS_FILS_ENABLED_MAX     (1)
 
 /*
  * <ini>
@@ -10812,6 +10872,7 @@ struct hdd_config {
 	bool fIsImpsEnabled;
 	bool is_ps_enabled;
 	uint32_t auto_bmps_timer_val;
+	uint32_t icmp_disable_ps_val;
 	uint32_t nBmpsModListenInterval;
 	uint32_t nBmpsMaxListenInterval;
 	uint32_t nBmpsMinListenInterval;
@@ -10975,7 +11036,6 @@ struct hdd_config {
 	 * single replay counter for all TID
 	 */
 	bool bSingleTidRc;
-	uint8_t mcastBcastFilterSetting;
 	bool fhostArpOffload;
 	bool ssdp;
 
@@ -11553,8 +11613,10 @@ struct hdd_config {
 	uint8_t max_mpdus_inampdu;
 	uint16_t sap_max_mcs_txdata;
 	bool is_bssid_hint_priority;
+	bool is_fils_enabled;
 	uint8_t dfs_beacon_tx_enhanced;
 	uint8_t scan_backoff_multiplier;
+	bool is_force_1x1;
 };
 
 #define VAR_OFFSET(_Struct, _Var) (offsetof(_Struct, _Var))

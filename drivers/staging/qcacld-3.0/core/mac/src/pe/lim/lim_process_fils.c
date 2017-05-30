@@ -531,13 +531,16 @@ static void lim_get_keys(tpPESession pe_session)
 	struct pe_fils_session *fils_info = pe_session->fils_info;
 	uint8_t key_data[MAX_ICK_LEN + MAX_KEK_LEN + MAX_TK_LEN] = {0};
 	uint8_t key_data_len;
-	uint8_t ick_len = lim_get_ick_len(fils_info->akm);
-	uint8_t kek_len = lim_get_kek_len(fils_info->akm);
+	uint8_t ick_len;
+	uint8_t kek_len;
 	uint8_t tk_len = lim_get_tk_len(pe_session->encryptType);
 	uint8_t *buf;
 
 	if (!fils_info)
 		return;
+
+	ick_len = lim_get_ick_len(fils_info->akm);
+	kek_len = lim_get_kek_len(fils_info->akm);
 
 	key_data_len = ick_len + kek_len + tk_len;
 
@@ -700,7 +703,7 @@ static QDF_STATUS lim_process_auth_wrapped_data(tpPESession pe_session,
 	uint8_t type;
 	unsigned long flags;
 	struct pe_fils_session *fils_info;
-	uint8_t hash[32], crypto;
+	uint8_t hash[32] = {0}, crypto;
 	uint32_t remaining_len = data_len, new_len;
 	uint8_t *input_data[1];
 	uint32_t input_len[1];
@@ -1151,9 +1154,11 @@ void lim_update_fils_config(tpPESession session,
 		qdf_mem_free(csr_fils_info->keyname_nai_data);
 		return;
 	}
-	qdf_mem_copy(csr_fils_info->fils_r_rk,
-			fils_config_info->r_rk,
-			fils_config_info->r_rk_length);
+
+	if (fils_config_info->r_rk_length <= FILS_MAX_RRK_LENGTH)
+		qdf_mem_copy(csr_fils_info->fils_r_rk,
+				fils_config_info->r_rk,
+				fils_config_info->r_rk_length);
 
 	qdf_mem_copy(csr_fils_info->fils_pmkid,
 			fils_config_info->pmkid, PMKID_LEN);
@@ -1204,6 +1209,15 @@ uint32_t lim_create_fils_auth_data(tpAniSirGlobal mac_ctx,
 	if (!session->fils_info)
 		return 0;
 
+	/* These memory may already been allocated if auth retry */
+	if (session->fils_info->fils_r_ik) {
+		qdf_mem_free(session->fils_info->fils_r_ik);
+		session->fils_info->fils_r_ik = NULL;
+	}
+	if  (session->fils_info->fils_erp_reauth_pkt) {
+		qdf_mem_free(session->fils_info->fils_erp_reauth_pkt);
+		session->fils_info->fils_erp_reauth_pkt = NULL;
+	}
 	if (auth_frame->authAlgoNumber == eSIR_FILS_SK_WITHOUT_PFS) {
 		frame_len += session->fils_info->rsn_ie_len;
 		/* FILS nounce */
@@ -1277,6 +1291,12 @@ void populate_fils_connect_params(tpAniSirGlobal mac_ctx,
 
 	fils_join_rsp->gtk_len = fils_info->gtk_len;
 	qdf_mem_copy(fils_join_rsp->gtk, fils_info->gtk, fils_info->gtk_len);
+
+	cds_copy_hlp_info(&fils_info->dst_mac, &fils_info->src_mac,
+			  fils_info->hlp_data_len, fils_info->hlp_data,
+			  &fils_join_rsp->dst_mac, &fils_join_rsp->src_mac,
+			  &fils_join_rsp->hlp_data_len,
+			  fils_join_rsp->hlp_data);
 
 	pe_debug("FILS connect params copied lim");
 	pe_delete_fils_info(session);
@@ -1427,6 +1447,22 @@ bool lim_verify_fils_params_assoc_rsp(tpAniSirGlobal mac_ctx,
 	if (!QDF_IS_STATUS_SUCCESS(status)) {
 		pe_err("KDE parsing fails");
 		goto verify_fils_params_fails;
+	}
+
+	if (assoc_rsp->hlp_data_len) {
+		fils_info->hlp_data = qdf_mem_malloc(assoc_rsp->hlp_data_len);
+
+		if (!fils_info->hlp_data) {
+			pe_err("FILS session HLP data malloc fails");
+			return true;
+		}
+
+		/* Save the HLP container IE data if present*/
+		cds_copy_hlp_info(&assoc_rsp->dst_mac, &assoc_rsp->src_mac,
+				  assoc_rsp->hlp_data_len, assoc_rsp->hlp_data,
+				  &fils_info->dst_mac, &fils_info->src_mac,
+				  &fils_info->hlp_data_len,
+				  fils_info->hlp_data);
 	}
 	return true;
 

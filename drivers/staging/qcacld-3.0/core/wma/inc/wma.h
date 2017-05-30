@@ -63,6 +63,7 @@
 #define WMA_WAKE_LOCK_TIMEOUT              1000
 #define WMA_RESUME_TIMEOUT                 6000
 #define MAX_MEM_CHUNKS                     32
+#define NAN_CLUSTER_ID_BYTES               4
 
 #define WMA_CRASH_INJECT_TIMEOUT           5000
 
@@ -88,6 +89,8 @@
 #define WMA_MAX_SUPPORTED_BSS     5
 
 #define FRAGMENT_SIZE 3072
+
+#define MAX_PRINT_FAILURE_CNT 50
 
 #define WMA_INVALID_VDEV_ID                             0xFF
 #define MAX_MEM_CHUNKS                                  32
@@ -214,7 +217,8 @@ enum ds_mode {
 #define WMA_ROAM_LOW_RSSI_TRIGGER_VERYLOW    (10)
 #define WMA_ROAM_BEACON_WEIGHT_DEFAULT       (14)
 #define WMA_ROAM_OPP_SCAN_PERIOD_DEFAULT     (120000)
-#define WMA_ROAM_OPP_SCAN_AGING_PERIOD_DEFAULT (WMA_ROAM_OPP_SCAN_PERIOD_DEFAULT * 5)
+#define WMA_ROAM_OPP_SCAN_AGING_PERIOD_DEFAULT \
+					(WMA_ROAM_OPP_SCAN_PERIOD_DEFAULT * 5)
 #define WMA_ROAM_BMISS_FIRST_BCNT_DEFAULT    (10)
 #define WMA_ROAM_BMISS_FINAL_BCNT_DEFAULT    (10)
 #define WMA_ROAM_BMISS_FIRST_BCNT_DEFAULT_P2P (15)
@@ -266,13 +270,10 @@ enum ds_mode {
 #define WMA_VDEV_START_REQUEST_TIMEOUT (6000)   /* 6 seconds */
 #define WMA_VDEV_STOP_REQUEST_TIMEOUT  (6000)   /* 6 seconds */
 
-/*
- * The firmware value has been changed recently to 0x127
- * But, to maintain backward compatibility, the old
- * value is also preserved.
- */
-#define WMA_TGT_INVALID_SNR_OLD (-1)
-#define WMA_TGT_INVALID_SNR_NEW 0x127
+#define WMA_TGT_INVALID_SNR (0)
+
+#define WMA_TGT_IS_VALID_SNR(x)  ((x) >= 0 && (x) < WMA_TGT_MAX_SNR)
+#define WMA_TGT_IS_INVALID_SNR(x) (!WMA_TGT_IS_VALID_SNR(x))
 
 #define WMA_TX_Q_RECHECK_TIMER_WAIT      2      /* 2 ms */
 #define WMA_TX_Q_RECHECK_TIMER_MAX_WAIT  20     /* 20 ms */
@@ -332,6 +333,8 @@ enum ds_mode {
 #define WMA_ROAM_HO_WAKE_LOCK_DURATION          (500)          /* in msec */
 #ifdef FEATURE_WLAN_AUTO_SHUTDOWN
 #define WMA_AUTO_SHUTDOWN_WAKE_LOCK_DURATION    (5 * 1000)     /* in msec */
+#else
+#define WMA_AUTO_SHUTDOWN_WAKE_LOCK_DURATION    0              /* in msec */
 #endif
 #define WMA_BMISS_EVENT_WAKE_LOCK_DURATION      (4 * 1000)     /* in msec */
 #define WMA_FW_RSP_EVENT_WAKE_LOCK_DURATION     (3 * 1000)     /* in msec */
@@ -651,6 +654,7 @@ enum wma_phy_idx {
 struct wma_mem_chunk {
 	uint32_t *vaddr;
 	uint32_t paddr;
+
 	qdf_dma_mem_context(memctx);
 	uint32_t len;
 	uint32_t req_id;
@@ -1409,6 +1413,13 @@ struct peer_debug_info {
  * @pno_wake_lock: PNO wake lock
  * @extscan_wake_lock: extscan wake lock
  * @wow_wake_lock: wow wake lock
+ * @wow_auth_req_wl: wow wake lock for auth req
+ * @wow_assoc_req_wl: wow wake lock for assoc req
+ * @wow_deauth_rec_wl: wow wake lock for deauth req
+ * @wow_disassoc_rec_wl: wow wake lock for disassoc req
+ * @wow_ap_assoc_lost_wl: wow wake lock for assoc lost req
+ * @wow_auto_shutdown_wl: wow wake lock for shutdown req
+ * @roam_ho_wl: wake lock for roam handoff req
  * @wow_nack: wow negative ack flag
  * @ap_client_cnt: ap client count
  * @is_wow_bus_suspended: is wow bus suspended flag
@@ -1577,6 +1588,13 @@ typedef struct {
 	qdf_wake_lock_t extscan_wake_lock;
 #endif
 	qdf_wake_lock_t wow_wake_lock;
+	qdf_wake_lock_t wow_auth_req_wl;
+	qdf_wake_lock_t wow_assoc_req_wl;
+	qdf_wake_lock_t wow_deauth_rec_wl;
+	qdf_wake_lock_t wow_disassoc_rec_wl;
+	qdf_wake_lock_t wow_ap_assoc_lost_wl;
+	qdf_wake_lock_t wow_auto_shutdown_wl;
+	qdf_wake_lock_t roam_ho_wl;
 	int wow_nack;
 	bool wow_initial_wake_up;
 	qdf_atomic_t is_wow_bus_suspended;
@@ -1639,6 +1657,7 @@ typedef struct {
 	 * the serialized MC thread context with a timer.
 	 */
 	qdf_mc_timer_t service_ready_ext_timer;
+
 	QDF_STATUS (*csr_roam_synch_cb)(tpAniSirGlobal mac,
 		roam_offload_synch_ind *roam_synch_data,
 		tpSirBssDescription  bss_desc_ptr,
@@ -1671,6 +1690,8 @@ typedef struct {
 	struct peer_debug_info *peer_dbg;
 	bool auto_power_save_enabled;
 	uint8_t in_imps;
+	uint64_t tx_fail_cnt;
+	uint64_t wmi_desc_fail_count;
 #ifdef FEATURE_SPECTRAL_SCAN
 	struct vdev_spectral_configure_params ss_configs;
 #endif
@@ -2393,6 +2414,16 @@ QDF_STATUS wma_create_peer(tp_wma_handle wma, ol_txrx_pdev_handle pdev,
 			   u_int32_t peer_type, u_int8_t vdev_id,
 			   bool roam_synch_in_progress);
 
+/**
+ * wma_get_cca_stats() - send request to fw to get CCA
+ * @wmi_hdl: wma handle
+ * @vdev_id: vdev id
+ *
+ * Return: QDF status
+ */
+QDF_STATUS wma_get_cca_stats(tp_wma_handle wma_handle,
+				uint8_t vdev_id);
+
 struct wma_ini_config *wma_get_ini_handle(tp_wma_handle wma_handle);
 WLAN_PHY_MODE wma_chan_phy_mode(u8 chan, enum phy_ch_width chan_width,
 	u8 dot11_mode);
@@ -2580,5 +2611,13 @@ static inline void wma_print_wmi_mgmt_event_log(uint32_t count,
 					 print_priv);
 }
 #endif /* WMI_INTERFACE_EVENT_LOGGING */
+
+/**
+ * wma_ipa_uc_stat_request() - set ipa config parameters
+ * @privcmd: private command
+ *
+ * Return: None
+ */
+void wma_ipa_uc_stat_request(wma_cli_set_cmd_t *privcmd);
 
 #endif

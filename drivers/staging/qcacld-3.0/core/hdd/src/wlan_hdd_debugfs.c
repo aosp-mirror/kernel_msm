@@ -84,6 +84,8 @@ static ssize_t __wcnss_wowenable_write(struct file *file,
 	if (0 != ret)
 		return ret;
 
+	if (!wlan_hdd_modules_are_enabled(hdd_ctx))
+		return -EINVAL;
 
 	if (!sme_is_feature_supported_by_fw(WOW)) {
 		hdd_err("Wake-on-Wireless feature is not supported in firmware!");
@@ -201,6 +203,9 @@ static ssize_t __wcnss_wowpattern_write(struct file *file,
 	ret = wlan_hdd_validate_context(hdd_ctx);
 	if (0 != ret)
 		return ret;
+
+	if (!wlan_hdd_modules_are_enabled(hdd_ctx))
+		return -EINVAL;
 
 	if (!sme_is_feature_supported_by_fw(WOW)) {
 		hdd_err("Wake-on-Wireless feature is not supported in firmware!");
@@ -323,6 +328,9 @@ static ssize_t __wcnss_patterngen_write(struct file *file,
 	if (0 != ret)
 		return ret;
 
+	if (!wlan_hdd_modules_are_enabled(pHddCtx))
+		return -EINVAL;
+
 	if (!sme_is_feature_supported_by_fw(WLAN_PERIODIC_TX_PTRN)) {
 		hdd_err("Periodic Tx Pattern Offload feature is not supported in firmware!");
 		return -EINVAL;
@@ -407,8 +415,8 @@ static ssize_t __wcnss_patterngen_write(struct file *file,
 	hdd_debug("device mode %d", pAdapter->device_mode);
 	if ((QDF_STA_MODE == pAdapter->device_mode) &&
 	    (!hdd_conn_is_connected(WLAN_HDD_GET_STATION_CTX_PTR(pAdapter)))) {
-			hdd_err("Not in Connected state!");
-			goto failure;
+		hdd_err("Not in Connected state!");
+		goto failure;
 	}
 
 	/* Get pattern */
@@ -602,6 +610,9 @@ static ssize_t __wlan_hdd_read_power_debugfs(struct file *file,
 	ret_cnt = wlan_hdd_validate_context(hdd_ctx);
 	if (0 != ret_cnt)
 		return ret_cnt;
+
+	if (!wlan_hdd_modules_are_enabled(hdd_ctx))
+		return -EINVAL;
 
 	if (adapter->chip_power_stats)
 		qdf_mem_free(adapter->chip_power_stats);
@@ -821,7 +832,7 @@ static const struct file_operations fops_powerdebugs = {
  */
 static QDF_STATUS wlan_hdd_create_power_stats_file(hdd_adapter_t *adapter)
 {
-	if (!debugfs_create_file("power_stats", S_IRUSR | S_IRGRP | S_IROTH,
+	if (!debugfs_create_file("power_stats", 00400 | 00040 | 00004,
 				adapter->debugfs_phy, adapter,
 				&fops_powerdebugs))
 		return QDF_STATUS_E_FAILURE;
@@ -851,22 +862,23 @@ static QDF_STATUS wlan_hdd_create_power_stats_file(hdd_adapter_t *adapter)
 QDF_STATUS hdd_debugfs_init(hdd_adapter_t *adapter)
 {
 	struct net_device *dev = adapter->dev;
+
 	adapter->debugfs_phy = debugfs_create_dir(dev->name, 0);
 
 	if (NULL == adapter->debugfs_phy)
 		return QDF_STATUS_E_FAILURE;
 
-	if (NULL == debugfs_create_file("wow_enable", S_IRUSR | S_IWUSR,
+	if (NULL == debugfs_create_file("wow_enable", 00400 | 00200,
 					adapter->debugfs_phy, adapter,
 					&fops_wowenable))
 		return QDF_STATUS_E_FAILURE;
 
-	if (NULL == debugfs_create_file("wow_pattern", S_IRUSR | S_IWUSR,
+	if (NULL == debugfs_create_file("wow_pattern", 00400 | 00200,
 					adapter->debugfs_phy, adapter,
 					&fops_wowpattern))
 		return QDF_STATUS_E_FAILURE;
 
-	if (NULL == debugfs_create_file("pattern_gen", S_IRUSR | S_IWUSR,
+	if (NULL == debugfs_create_file("pattern_gen", 00400 | 00200,
 					adapter->debugfs_phy, adapter,
 					&fops_patterngen))
 		return QDF_STATUS_E_FAILURE;
@@ -890,11 +902,6 @@ QDF_STATUS hdd_debugfs_init(hdd_adapter_t *adapter)
  */
 void hdd_debugfs_exit(hdd_adapter_t *adapter)
 {
-	struct net_device *dev = adapter->dev;
-
-	if (adapter->debugfs_phy)
-		debugfs_remove_recursive(adapter->debugfs_phy);
-	else
-		hdd_debug("Interface %s has no debugfs entry", dev->name);
+	debugfs_remove_recursive(adapter->debugfs_phy);
 }
 #endif /* #ifdef WLAN_OPEN_SOURCE */

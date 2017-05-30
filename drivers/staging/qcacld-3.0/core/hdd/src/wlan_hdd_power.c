@@ -130,8 +130,6 @@ void hdd_wlan_offload_event(uint8_t type, uint8_t state)
 
 extern struct notifier_block hdd_netdev_notifier;
 
-static struct timer_list ssr_timer;
-static bool ssr_timer_started;
 /**
  * hdd_conf_gtk_offload() - Configure GTK offload
  * @pAdapter:   pointer to the adapter
@@ -531,6 +529,11 @@ void hdd_conf_ns_offload(hdd_adapter_t *adapter, bool fenable)
 		QDF_P2P_GO_MODE == adapter->device_mode) &&
 		!hdd_ctx->ap_arpns_support) {
 		hdd_debug("NS Offload is not supported in SAP/P2PGO mode");
+		return;
+	}
+
+	if (QDF_IBSS_MODE == adapter->device_mode) {
+		hdd_debug("NS Offload is not supported in IBSS mode");
 		return;
 	}
 
@@ -1247,7 +1250,7 @@ hdd_suspend_wlan(void (*callback)(void *callbackContext, bool suspended),
 		return;
 	}
 
-	if (cds_is_driver_recovering()) {
+	if (cds_is_driver_recovering() || cds_is_driver_in_bad_state()) {
 		hdd_info("Recovery in Progress. State: 0x%x Ignore suspend!!!",
 			 cds_get_driver_state());
 		return;
@@ -1305,7 +1308,7 @@ static void hdd_resume_wlan(void)
 		return;
 	}
 
-	if (cds_is_driver_recovering()) {
+	if (cds_is_driver_recovering() || cds_is_driver_in_bad_state()) {
 		hdd_info("Recovery in Progress. State: 0x%x Ignore resume!!!",
 			 cds_get_driver_state());
 		return;
@@ -1336,66 +1339,6 @@ static void hdd_resume_wlan(void)
 	hdd_ipa_resume(pHddCtx);
 
 	return;
-}
-
-/**
- * DOC: SSR Timer
- *
- * When SSR is initiated, an SSR timer is started.  Under normal
- * circumstances SSR should complete amd the timer should be deleted
- * before it fires.  If the SSR timer does fire, it indicates SSR has
- * taken too long, and our only recourse is to invoke the QDF_BUG()
- * API which can allow a crashdump to be captured.
- */
-
-/**
- * hdd_ssr_timer_init() - Initialize SSR Timer
- *
- * Return: None.
- */
-static void hdd_ssr_timer_init(void)
-{
-	init_timer(&ssr_timer);
-}
-
-/**
- * hdd_ssr_timer_del() - Delete SSR Timer
- *
- * Return: None.
- */
-static void hdd_ssr_timer_del(void)
-{
-	del_timer(&ssr_timer);
-	ssr_timer_started = false;
-}
-
-/**
- * hdd_ssr_timer_cb() - SSR Timer callback function
- * @data: opaque data registered with timer infrastructure
- *
- * Return: None.
- */
-static void hdd_ssr_timer_cb(unsigned long data)
-{
-	hdd_info("HDD SSR timer expired!");
-	QDF_BUG(0);
-}
-
-/**
- * hdd_ssr_timer_start() - Start SSR Timer
- * @msec: Timer timeout value in milliseconds
- *
- * Return: None.
- */
-static void hdd_ssr_timer_start(int msec)
-{
-	if (ssr_timer_started) {
-		hdd_debug("Trying to start SSR timer when " "it's running!");
-	}
-	ssr_timer.expires = jiffies + msecs_to_jiffies(msec);
-	ssr_timer.function = hdd_ssr_timer_cb;
-	add_timer(&ssr_timer);
-	ssr_timer_started = true;
 }
 
 /**
@@ -1468,10 +1411,6 @@ QDF_STATUS hdd_wlan_shutdown(void)
 	QDF_STATUS qdf_status;
 
 	hdd_info("WLAN driver shutting down!");
-
-	/* If SSR never completes, then do kernel panic. */
-	hdd_ssr_timer_init();
-	hdd_ssr_timer_start(HDD_SSR_BRING_UP_TIME);
 
 	/* Get the global CDS context. */
 	p_cds_context = cds_get_global_context();
@@ -1614,7 +1553,7 @@ QDF_STATUS hdd_wlan_re_init(void)
 	ret = hdd_wlan_start_modules(pHddCtx, pAdapter, true);
 	if (ret) {
 		hdd_err("Failed to start wlan after error");
-		goto err_wiphy_unregister;
+		goto err_re_init;
 	}
 
 	hdd_wlan_get_version(pHddCtx, NULL, NULL);
@@ -1642,7 +1581,6 @@ QDF_STATUS hdd_wlan_re_init(void)
 		goto err_cds_disable;
 	}
 
-	hdd_lpass_notify_start(pHddCtx);
 	/* set chip power save failure detected callback */
 	sme_set_chip_pwr_save_fail_cb(pHddCtx->hHal,
 				      hdd_chip_pwr_save_fail_detected_cb);
@@ -1653,25 +1591,7 @@ QDF_STATUS hdd_wlan_re_init(void)
 err_cds_disable:
 	hdd_wlan_stop_modules(pHddCtx, false);
 
-err_wiphy_unregister:
-	if (bug_on_reinit_failure)
-		QDF_BUG(0);
-
-	if (pHddCtx) {
-		/* Unregister the Notifier's */
-		hdd_unregister_notifiers(pHddCtx);
-		ptt_sock_deactivate_svc();
-		nl_srv_exit();
-		hdd_free_probe_req_ouis(pHddCtx);
-		hdd_close_all_adapters(pHddCtx, false);
-		wlan_hdd_cfg80211_deinit(pHddCtx->wiphy);
-		hdd_lpass_notify_stop(pHddCtx);
-		wlan_hdd_deinit_tx_rx_histogram(pHddCtx);
-		wiphy_unregister(pHddCtx->wiphy);
-	}
-
 err_re_init:
-	hdd_ssr_timer_del();
 	/* Allow the phone to go to sleep */
 	hdd_allow_suspend(WIFI_POWER_EVENT_WAKELOCK_DRIVER_REINIT);
 	return -EPERM;
@@ -1679,24 +1599,17 @@ err_re_init:
 success:
 	if (pHddCtx->config->sap_internal_restart)
 		hdd_ssr_restart_sap(pHddCtx);
-	hdd_ssr_timer_del();
+
 	hdd_wlan_ssr_reinit_event();
 	return QDF_STATUS_SUCCESS;
 }
 
-/**
- * wlan_hdd_set_powersave() - Set powersave mode
- * @adapter: adapter upon which the request was received
- * @allow_power_save: is wlan allowed to go into power save mode
- * @timeout: timeout period in ms
- *
- * Return: 0 on success, non-zero on any error
- */
-static int wlan_hdd_set_powersave(hdd_adapter_t *adapter,
+int wlan_hdd_set_powersave(hdd_adapter_t *adapter,
 	bool allow_power_save, uint32_t timeout)
 {
 	tHalHandle hal;
 	hdd_context_t *hdd_ctx;
+	bool force_trigger = false;
 
 	if (NULL == adapter) {
 		hdd_err("Adapter NULL");
@@ -1711,6 +1624,15 @@ static int wlan_hdd_set_powersave(hdd_adapter_t *adapter,
 
 	hdd_debug("Allow power save: %d", allow_power_save);
 	hal = WLAN_HDD_GET_HAL_CTX(adapter);
+
+	if ((QDF_STA_MODE == adapter->device_mode) &&
+	    !adapter->sessionCtx.station.ap_supports_immediate_power_save) {
+		/* override user's requested flag */
+		force_trigger = allow_power_save;
+		allow_power_save = false;
+		timeout = AUTO_PS_ENTRY_USER_TIMER_DEFAULT_VALUE;
+		hdd_debug("Defer power-save for few seconds...");
+	}
 
 	if (allow_power_save) {
 		if (QDF_STA_MODE == adapter->device_mode ||
@@ -1744,7 +1666,7 @@ static int wlan_hdd_set_powersave(hdd_adapter_t *adapter,
 			adapter->sessionId);
 		sme_ps_enable_disable(hal, adapter->sessionId, SME_PS_DISABLE);
 		sme_ps_enable_auto_ps_timer(WLAN_HDD_GET_HAL_CTX(adapter),
-			adapter->sessionId, timeout);
+			adapter->sessionId, timeout, force_trigger);
 	}
 
 	return 0;

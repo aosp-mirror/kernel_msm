@@ -515,7 +515,7 @@ static void lim_process_auth_frame_type2(tpAniSirGlobal mac_ctx,
 	uint32_t val, key_length = 8;
 	uint8_t defaultkey[SIR_MAC_KEY_LENGTH];
 	struct tLimPreAuthNode *auth_node;
-	uint8_t encr_auth_frame[LIM_ENCR_AUTH_BODY_LEN];
+	uint8_t *encr_auth_frame;
 
 	/* AuthFrame 2 */
 	if (pe_session->limMlmState != eLIM_MLM_WT_AUTH_FRAME2_STATE) {
@@ -732,6 +732,11 @@ static void lim_process_auth_frame_type2(tpAniSirGlobal mac_ctx,
 			(tpSirMacAuthFrameBody)plainbody)->challengeText,
 			rx_auth_frm_body->challengeText,
 			SIR_MAC_AUTH_CHALLENGE_LENGTH);
+		encr_auth_frame = qdf_mem_malloc(LIM_ENCR_AUTH_BODY_LEN);
+		if (!encr_auth_frame) {
+			pe_err("failed to allocate memory");
+			return;
+		}
 		lim_encrypt_auth_frame(mac_ctx, key_id,
 				defaultkey, plainbody,
 				encr_auth_frame, key_length);
@@ -743,7 +748,7 @@ static void lim_process_auth_frame_type2(tpAniSirGlobal mac_ctx,
 				(tpSirMacAuthFrameBody)encr_auth_frame,
 				mac_hdr->sa, LIM_WEP_IN_FC,
 				pe_session);
-
+		qdf_mem_free(encr_auth_frame);
 		return;
 	}
 }
@@ -1079,7 +1084,7 @@ lim_process_auth_frame(tpAniSirGlobal mac_ctx, uint8_t *rx_pkt_info,
 	curr_seq_num = (mac_hdr->seqControl.seqNumHi << 4) |
 		(mac_hdr->seqControl.seqNumLo);
 
-	pe_info("Sessionid: %d System role: %d limMlmState: %d: Auth response Received BSSID: "MAC_ADDRESS_STR" RSSI: %d",
+	pe_debug("Sessionid: %d System role: %d limMlmState: %d: Auth response Received BSSID: "MAC_ADDRESS_STR" RSSI: %d",
 		pe_session->peSessionId, GET_LIM_SYSTEM_ROLE(pe_session),
 		pe_session->limMlmState, MAC_ADDR_ARRAY(mac_hdr->bssId),
 		(uint) abs((int8_t) WMA_GET_RX_RSSI_NORMALIZED(rx_pkt_info)));
@@ -1409,7 +1414,7 @@ tSirRetStatus lim_process_auth_frame_no_session(tpAniSirGlobal pMac, uint8_t *pB
 	pBody = WMA_GET_RX_MPDU_DATA(pBd);
 	frameLen = WMA_GET_RX_PAYLOAD_LEN(pBd);
 
-	pe_info("Auth Frame Received: BSSID " MAC_ADDRESS_STR " (RSSI %d)",
+	pe_debug("Auth Frame Received: BSSID " MAC_ADDRESS_STR " (RSSI %d)",
 		MAC_ADDR_ARRAY(pHdr->bssId),
 		(uint) abs((int8_t) WMA_GET_RX_RSSI_NORMALIZED(pBd)));
 

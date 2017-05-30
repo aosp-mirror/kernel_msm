@@ -480,13 +480,13 @@ static int wma_ndp_indication_event_handler(void *handle, uint8_t *event_info,
 	WMI_MAC_ADDR_TO_CHAR_ARRAY(&fixed_params->peer_discovery_mac_addr,
 				ind_event.peer_discovery_mac_addr.bytes);
 
-	WMA_LOGD(FL("WMI_NDP_INDICATION_EVENTID(0x%X) received. vdev %d, \n"
-		"service_instance %d, ndp_instance %d, role %d, policy %d, \n"
-		"csid: %d, scid_len: %d, peer_mac_addr: %pM, peer_disc_mac_addr: %pM"),
-		 WMI_NDP_INDICATION_EVENTID, fixed_params->vdev_id,
+	WMA_LOGD(FL("WMI_NDP_INDICATION_EVENTID(0x%X) received. vdev %d"),
+		 WMI_NDP_INDICATION_EVENTID, fixed_params->vdev_id);
+	WMA_LOGD(FL("service_instance %d, ndp_instance %d, role %d, policy %d"),
 		 fixed_params->service_instance_id,
 		 fixed_params->ndp_instance_id, fixed_params->self_ndp_role,
-		 fixed_params->accept_policy,
+		 fixed_params->accept_policy);
+	WMA_LOGD(FL("csid: %d, scid_len: %d, peer_mac_addr: %pM, peer_disc_mac_addr: %pM"),
 		 fixed_params->nan_csid, fixed_params->nan_scid_len,
 		 ind_event.peer_mac_addr.bytes,
 		 ind_event.peer_discovery_mac_addr.bytes);
@@ -913,7 +913,7 @@ void wma_ndp_add_wow_wakeup_event(tp_wma_handle wma_handle,
 
 	wma_set_wow_event_bitmap(WOW_NAN_DATA_EVENT, WMI_WOW_MAX_EVENT_BM_LEN,
 				 event_bitmap);
-	WMA_LOGI("NDI specific default wake up event 0x%x vdev id %d",
+	WMA_LOGD("NDI specific default wake up event 0x%x vdev id %d",
 		 event_bitmap[0], vdev_id);
 	wma_add_wow_wakeup_event(wma_handle, vdev_id, event_bitmap, true);
 }
@@ -963,7 +963,7 @@ uint32_t wma_ndp_get_eventid_from_tlvtag(uint32_t tag)
 		break;
 	}
 
-	WMA_LOGI(FL("For tag %d WMI event 0x%x"), tag, event_id);
+	WMA_LOGD(FL("For tag %d WMI event 0x%x"), tag, event_id);
 	return event_id;
 }
 
@@ -1039,7 +1039,7 @@ void wma_add_bss_ndi_mode(tp_wma_handle wma, tpAddBssParams add_bss)
 	QDF_STATUS status;
 	struct vdev_set_params param = {0};
 
-	WMA_LOGI("%s: enter", __func__);
+	WMA_LOGD("%s: enter", __func__);
 	if (NULL == wma_find_vdev_by_addr(wma, add_bss->bssId, &vdev_id)) {
 		WMA_LOGE("%s: Failed to find vdev", __func__);
 		goto send_fail_resp;
@@ -1090,7 +1090,7 @@ void wma_add_bss_ndi_mode(tp_wma_handle wma, tpAddBssParams add_bss)
 			WMA_TARGET_REQ_TYPE_VDEV_START);
 		goto send_fail_resp;
 	}
-	WMA_LOGI("%s: vdev start request for NDI sent to target", __func__);
+	WMA_LOGD("%s: vdev start request for NDI sent to target", __func__);
 
 	/* Initialize protection mode to no protection */
 	param.if_id = vdev_id;
@@ -1148,8 +1148,8 @@ void wma_delete_all_nan_remote_peers(tp_wma_handle wma, uint32_t vdev_id)
 		if (peer == TAILQ_FIRST(&vdev->peer_list)) {
 			WMA_LOGE("%s: self peer removed", __func__);
 			break;
-		} else
-			temp = peer;
+		}
+		temp = peer;
 	}
 	qdf_spin_unlock_bh(&vdev->pdev->peer_ref_mutex);
 

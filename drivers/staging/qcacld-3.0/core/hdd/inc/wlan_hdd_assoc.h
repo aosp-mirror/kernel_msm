@@ -46,7 +46,7 @@
 #define HDD_MAX_NUM_TDLS_STA          8
 #define HDD_MAX_NUM_TDLS_STA_P_UAPSD_OFFCHAN  1
 #define TDLS_STA_INDEX_VALID(staId) \
-	(((staId) >= 1) && ((staId) < 0xFF))
+	(((staId) >= 0) && ((staId) < 0xFF))
 #endif
 #define TKIP_COUNTER_MEASURE_STARTED 1
 #define TKIP_COUNTER_MEASURE_STOPED  0
@@ -174,6 +174,7 @@ struct hdd_conn_flag {
  * @roam_count: roaming counter
  * @signal: holds rssi info
  * @assoc_status_code: holds assoc fail reason
+ * @congestion: holds congestion percentage
  */
 typedef struct connection_info_s {
 	eConnectionState connState;
@@ -205,6 +206,7 @@ typedef struct connection_info_s {
 	uint32_t roam_count;
 	int8_t signal;
 	int32_t assoc_status_code;
+	uint32_t cca;
 } connection_info_t;
 
 /* Forward declarations */

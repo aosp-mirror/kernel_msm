@@ -144,7 +144,7 @@ static int hdd_close_ndi(hdd_adapter_t *adapter)
 	if (test_bit(SME_SESSION_OPENED, &adapter->event_flags)) {
 		INIT_COMPLETION(adapter->session_close_comp_var);
 		if (QDF_STATUS_SUCCESS == sme_close_session(hdd_ctx->hHal,
-				adapter->sessionId,
+				adapter->sessionId, true,
 				hdd_sme_close_session_callback, adapter)) {
 			/* Block on a timed completion variable */
 			rc = wait_for_completion_timeout(
@@ -320,6 +320,13 @@ static int hdd_ndi_create_req_handler(hdd_context_t *hdd_ctx,
 	transaction_id =
 		nla_get_u16(tb[QCA_WLAN_VENDOR_ATTR_NDP_TRANSACTION_ID]);
 
+	/* check for an existing NDI with the same name */
+	adapter = hdd_get_adapter_by_iface_name(hdd_ctx, iface_name);
+	if (adapter) {
+		hdd_err("NAN data interface %s is available", iface_name);
+		return -EEXIST;
+	}
+
 	adapter = hdd_open_adapter(hdd_ctx, QDF_NDI_MODE, iface_name,
 			wlan_hdd_get_intf_addr(hdd_ctx), NET_NAME_UNKNOWN,
 			true);
@@ -398,7 +405,7 @@ static int hdd_ndi_delete_req_handler(hdd_context_t *hdd_ctx,
 	adapter = hdd_get_adapter_by_iface_name(hdd_ctx, iface_name);
 	if (!adapter) {
 		hdd_err("NAN data interface %s is not available", iface_name);
-		return -EINVAL;
+		return -ENODEV;
 	}
 
 	/* check if adapter is in NDI mode */
@@ -420,11 +427,9 @@ static int hdd_ndi_delete_req_handler(hdd_context_t *hdd_ctx,
 	}
 
 	/* check if there are active peers on the adapter */
-	if (ndp_ctx->active_ndp_peers > 0) {
-		hdd_err("NDP peers active: %d, cannot delete NDI",
+	if (ndp_ctx->active_ndp_peers > 0)
+		hdd_err("NDP peers active: %d, active NDPs may not terminated",
 			ndp_ctx->active_ndp_peers);
-		return -EINVAL;
-	}
 
 	/*
 	 * Since, the interface is being deleted, remove the
@@ -1027,7 +1032,6 @@ static void hdd_ndp_iface_delete_rsp_handler(hdd_adapter_t *adapter,
 				     WLAN_CONTROL_PATH);
 
 	complete(&adapter->disconnect_comp_var);
-	return;
 }
 
 /**
@@ -1792,6 +1796,7 @@ static void hdd_ndp_end_ind_handler(hdd_adapter_t *adapter,
 				data_len, QCA_NL80211_VENDOR_SUBCMD_NDP_INDEX,
 				GFP_KERNEL);
 	if (!vendor_event) {
+		qdf_mem_free(ndp_instance_array);
 		hdd_err("cfg80211_vendor_event_alloc failed");
 		return;
 	}
@@ -2072,9 +2077,9 @@ int hdd_init_nan_data_mode(struct hdd_adapter_s *adapter)
 			(int)WMI_PDEV_PARAM_BURST_ENABLE,
 			(int)hdd_ctx->config->enableSifsBurst,
 			PDEV_CMD);
-	if (0 != ret_val) {
+	if (0 != ret_val)
 		hdd_err("WMI_PDEV_PARAM_BURST_ENABLE set failed %d", ret_val);
-	}
+
 
 	ndp_ctx->state = NAN_DATA_NDI_CREATING_STATE;
 	return ret_val;
@@ -2091,7 +2096,7 @@ error_register_wext:
 		INIT_COMPLETION(adapter->session_close_comp_var);
 		if (QDF_STATUS_SUCCESS ==
 				sme_close_session(hdd_ctx->hHal,
-					adapter->sessionId,
+					adapter->sessionId, true,
 					hdd_sme_close_session_callback,
 					adapter)) {
 			rc = wait_for_completion_timeout(
