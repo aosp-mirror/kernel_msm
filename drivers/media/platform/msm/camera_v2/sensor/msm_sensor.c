@@ -86,6 +86,25 @@ int msm_sensor_checkvcmfw(struct msm_sensor_ctrl_t *s_ctrl)
 #endif
 /*fw update end*/
 
+static void print_time(const char *func, const char *sensor_name)
+{
+	unsigned int tlen;
+	struct timespec time;
+	struct tm tmresult;
+
+	time = __current_kernel_time();
+	time_to_tm(time.tv_sec, sys_tz.tz_minuteswest * 60 * (-1), &tmresult);
+
+	pr_info("%s: [%02d-%02d %02d:%02d:%02d.%03lu] %s\n",
+			func,
+			tmresult.tm_mon+1,
+			tmresult.tm_mday,
+			tmresult.tm_hour,
+			tmresult.tm_min,
+			tmresult.tm_sec,
+			(unsigned long) time.tv_nsec/1000000,
+			sensor_name);
+}
 
 static void msm_sensor_adjust_mclk(struct msm_camera_power_ctrl_t *ctrl)
 {
@@ -203,6 +222,8 @@ int msm_sensor_power_down(struct msm_sensor_ctrl_t *s_ctrl)
 	if (s_ctrl->is_secure)
 		msm_camera_tz_i2c_power_down(sensor_i2c_client);
 
+	print_time(__func__, s_ctrl->sensordata->sensor_name);
+
 	return msm_camera_power_down(power_info, sensor_device_type,
 		sensor_i2c_client);
 }
@@ -276,6 +297,8 @@ int msm_sensor_power_up(struct msm_sensor_ctrl_t *s_ctrl)
 			break;
 		}
 	}
+
+	print_time(__func__, sensor_name);
 
 	return rc;
 }
