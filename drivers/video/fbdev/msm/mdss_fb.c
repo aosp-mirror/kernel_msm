@@ -912,6 +912,12 @@ static ssize_t mdss_fb_idle_pc_notify(struct device *dev,
 	return scnprintf(buf, PAGE_SIZE, "idle power collapsed\n");
 }
 
+static ssize_t mdss_fb_pp_timeout_notify(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "pingpong timeout\n");
+}
+
 static DEVICE_ATTR(msm_fb_type, S_IRUGO, mdss_fb_get_type, NULL);
 static DEVICE_ATTR(msm_fb_split, S_IRUGO | S_IWUSR, mdss_fb_show_split,
 					mdss_fb_store_split);
@@ -933,6 +939,7 @@ static DEVICE_ATTR(measured_fps, S_IRUGO | S_IWUSR | S_IWGRP,
 static DEVICE_ATTR(msm_fb_persist_mode, S_IRUGO | S_IWUSR,
 	mdss_fb_get_persist_mode, mdss_fb_change_persist_mode);
 static DEVICE_ATTR(idle_power_collapse, S_IRUGO, mdss_fb_idle_pc_notify, NULL);
+static DEVICE_ATTR(pingpong_timeout, S_IRUGO, mdss_fb_pp_timeout_notify, NULL);
 
 static struct attribute *mdss_fb_attrs[] = {
 	&dev_attr_msm_fb_type.attr,
@@ -948,6 +955,7 @@ static struct attribute *mdss_fb_attrs[] = {
 	&dev_attr_measured_fps.attr,
 	&dev_attr_msm_fb_persist_mode.attr,
 	&dev_attr_idle_power_collapse.attr,
+	&dev_attr_pingpong_timeout.attr,
 	NULL,
 };
 
@@ -5226,4 +5234,10 @@ void mdss_fb_idle_pc(struct msm_fb_data_type *mfd)
 		pr_debug("Notify fb%d idle power collapsed\n", mfd->index);
 		sysfs_notify(&mfd->fbi->dev->kobj, NULL, "idle_power_collapse");
 	}
+}
+
+void mdss_fb_pp_timeout(struct msm_fb_data_type *mfd)
+{
+	pr_debug("Notify fb%d pingpong timeout\n", mfd->index);
+	sysfs_notify(&mfd->fbi->dev->kobj, NULL, "pingpong_timeout");
 }
