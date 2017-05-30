@@ -15,6 +15,29 @@
 
 #include "msm8998-taimen.dtsi"
 
+&soc {
+	pinctrl@03400000 {
+		pmx_mdss {
+			mdss_dsi_active {
+				mux {
+					pins = "gpio94", "gpio133", "gpio21", "gpio100";
+				};
+				config {
+					pins = "gpio94", "gpio133", "gpio21", "gpio100";
+				};
+			};
+			mdss_dsi_suspend {
+				mux {
+					pins = "gpio94", "gpio133", "gpio21", "gpio100";
+				};
+				config {
+					pins = "gpio94", "gpio133", "gpio21", "gpio100";
+				};
+			};
+		};
+	};
+};
+
 &pm8998_vadc {
 	chan@83 {
 		label = "vph_pwr";
