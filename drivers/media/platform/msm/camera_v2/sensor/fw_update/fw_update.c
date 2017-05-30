@@ -5,7 +5,7 @@
 #include "../cci/msm_cci.h"
 #include "fw_update.h"
 
-#define OIS_CUR_FW_VERSION 0x16
+#define OIS_CUR_FW_VERSION 0x19
 
 #define OIS_COMPONENT_I2C_ADDR_WRITE 0x7C
 #define AF_EEPROM_I2C_ADDR_WRITE_STEP1 0xE4
