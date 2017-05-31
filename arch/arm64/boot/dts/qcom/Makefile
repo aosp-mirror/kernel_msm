@@ -1,3 +1,6 @@
+# Do not include QC default DTBs for B1C1 builds.
+ifneq ($(CONFIG_BOARD_B1C1),y)
+
 dtb-$(CONFIG_ARCH_QCOM)	+= apq8016-sbc.dtb msm8916-mtp.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= msm8996-mtp.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= apq8096-db820c.dtb
@@ -47,6 +50,8 @@ endif
 dtb-$(CONFIG_ARCH_SDM670) += sdm670-rumi.dtb \
 	sdm670-mtp.dtb \
 	sdm670-cdp.dtb
+
+endif #CONFIG_BOARD_B1C1
 
 always		:= $(dtb-y)
 subdir-y	:= $(dts-dirs)
