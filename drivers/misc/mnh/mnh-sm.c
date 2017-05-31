@@ -1246,20 +1246,20 @@ static int mnh_sm_set_state_locked(int state)
 
 	switch (state) {
 	case MNH_STATE_OFF:
-		disable_irq(mnh_sm_dev->ready_irq);
-
 		/* toggle powered flag and clear completion */
 		mnh_sm_dev->powered = false;
 		reinit_completion(&mnh_sm_dev->powered_complete);
 
 		ret = mnh_sm_poweroff();
+
+		disable_irq(mnh_sm_dev->ready_irq);
 		break;
 	case MNH_STATE_ACTIVE:
+		enable_irq(mnh_sm_dev->ready_irq);
+
 		ret = mnh_sm_poweron();
 		if (ret)
 			break;
-
-		enable_irq(mnh_sm_dev->ready_irq);
 
 		/* toggle powered flag and notify any waiting threads */
 		mnh_sm_dev->powered = true;
@@ -1302,6 +1302,9 @@ static int mnh_sm_set_state_locked(int state)
 		dev_err(mnh_sm_dev->dev,
 			 "%s: failed to transition to state %d (%d)\n",
 			 __func__, state, ret);
+
+		if (state == MNH_STATE_ACTIVE)
+			disable_irq(mnh_sm_dev->ready_irq);
 
 		return ret;
 	}
@@ -1666,6 +1669,7 @@ static int mnh_sm_probe(struct platform_device *pdev)
 	mnh_sm_dev->ready_irq = gpiod_to_irq(mnh_sm_dev->ready_gpio);
 
 	/* request ready gpio irq */
+	irq_set_status_flags(mnh_sm_dev->ready_irq, IRQ_DISABLE_UNLAZY);
 	error = devm_request_threaded_irq(dev, mnh_sm_dev->ready_irq, NULL,
 					  mnh_sm_ready_irq_handler,
 					  IRQF_TRIGGER_FALLING |
