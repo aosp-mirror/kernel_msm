@@ -1662,6 +1662,9 @@ static irqreturn_t fusb302_irq_intn(int irq, void *dev_id)
 	u8 interrupta;
 	u8 interruptb;
 	u8 status0;
+	u8 control2;
+	u8 maska;
+	u8 mask1;
 	bool vbus_present;
 	bool comp_result;
 	bool intr_togdone;
@@ -1689,8 +1692,20 @@ static irqreturn_t fusb302_irq_intn(int irq, void *dev_id)
 	ret = fusb302_i2c_read(chip, FUSB_REG_STATUS0, &status0);
 	if (ret < 0)
 		goto done;
-	fusb302_log("IRQ: 0x%02x, a: 0x%02x, b: 0x%02x, status0: 0x%02x\n",
+	ret = fusb302_i2c_read(chip, FUSB_REG_CONTROL2, &control2);
+	if (ret < 0)
+		goto done;
+	ret = fusb302_i2c_read(chip, FUSB_REG_MASKA, &maska);
+	if (ret < 0)
+		goto done;
+	ret = fusb302_i2c_read(chip, FUSB_REG_MASK, &mask1);
+	if (ret < 0)
+		goto done;
+
+	fusb302_log("IRQ: 0x%02x, a: 0x%02x, b: 0x%02x, status0: 0x%02x",
 		    interrupt, interrupta, interruptb, status0);
+	fusb302_log("control2: 0x%02x maska: 0x%02x mask1: 0x%02x\n",
+		    control2, maska, mask1);
 
 	if (interrupt & FUSB_REG_INTERRUPT_VBUSOK) {
 		vbus_present = !!(status0 & FUSB_REG_STATUS0_VBUSOK);
