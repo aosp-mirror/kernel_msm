@@ -204,7 +204,7 @@
 	compatible = "android,firmware";
 	vbmeta {
 		compatible = "android,vbmeta";
-		parts = "vbmeta,boot,system,vendor,dtbo";
+		parts = "vbmeta,boot,system,vendor,dtbo,laf";
 		by_name_prefix = "/dev/block/platform/soc/1da4000.ufshc/by-name";
 	};
 	fstab {
