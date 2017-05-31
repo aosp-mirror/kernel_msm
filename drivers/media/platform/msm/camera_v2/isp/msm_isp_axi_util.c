@@ -3943,9 +3943,9 @@ void msm_isp_process_axi_irq_stream(struct vfe_device *vfe_dev,
 
 	if (vfe_dev->vt_enable) {
 		msm_isp_get_avtimer_ts(ts);
-		time_stamp = &ts->vt_time;
-	} else {
 		time_stamp = &ts->buf_time;
+	} else {
+		time_stamp = &ts->event_time;
 	}
 
 	frame_id = vfe_dev->axi_data.
