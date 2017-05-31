@@ -107,120 +107,192 @@ int checkHighLevelCommand(int cnt)
 			pr_info("[OISFW]:Waiting...");
 	}
 	pr_err("[OISFW]:checkHighLevelCommand fail.");
-	return -1;
+	return -EINVAL;
 }
 
-#define LGIT 0x09
-#define SHARPIT 0x04
+#define LGIT 0x474C
+#define LGIT_CM1 0x0000
+#define SHARPIT 0x5053
 #define NOUPDATE 0
 #define CM1_SHARP 1
 #define CM1_LG 2
 #define CM2_SHARP 3
 #define CM2_LG 4
 
+int doFWrecover(void)
+{
+	int rc = 0;
+
+	pr_info("[OISFW]:%s.", __func__);
+	rc = F40_FlashDownload(0, 9, 8);/*CM2_LG*/
+	if (rc != 0) {
+		pr_err("[OISFW]%s: OIS FW update failed rc = %d.",
+			__func__, rc);
+		return rc;
+	}
+
+	rc = checkHighLevelCommand(20);
+	if (rc != 0) {
+		pr_err("[OISFW]:%s checkHighLevelCommand failed = %d\n",
+			__func__, rc);
+		return -EINVAL;
+	}
+	return rc;
+}
+
+int doFWupdate(int HW_Ver)
+{
+	int rc = 0;
+
+	if (HW_Ver < 0) {
+		pr_info("[OISFW]%s: Invalid HW version.\n", __func__);
+		return -EINVAL;
+	}
+
+	if (HW_Ver == CM1_LG) {
+		pr_info("[OISFW]:%s F40_FlashDownload(0, 9, 6 )_LGCM1.",
+				__func__);
+		rc = F40_FlashDownload(0, 9, 6);
+	} else if (HW_Ver == CM1_SHARP) {
+		pr_info("[OISFW]:%s F40_FlashDownload(0, 4, 6 )_SHARPCM1.",
+				__func__);
+		rc = F40_FlashDownload(0, 4, 6);
+	} else if (HW_Ver == CM2_LG) {
+		pr_info("[OISFW]:%s F40_FlashDownload(0, 9, 8 )_LGCM2.",
+				__func__);
+		rc = F40_FlashDownload(0, 9, 8);
+	} else if (HW_Ver == CM2_SHARP) {
+		pr_info("[OISFW]:%s F40_FlashDownload(0, 4, 8 )_SHARPCM2.",
+				__func__);
+		rc = F40_FlashDownload(0, 4, 8);
+	} else {
+		pr_info("[OISFW]:%s no need to update.", __func__);
+		return rc;
+	}
+
+	if (rc == 0) {
+		/*Wait for FW update finish.*/
+		rc = checkHighLevelCommand(20);
+	} else {
+		pr_err("[OISFW]%s:OIS FW update failed rc = %d.\n",
+			__func__, rc);
+		rc = -EINVAL;
+	}
+
+	return rc;
+}
 
 int checkHWFWversion(void)
 {
-    int rc;
-    UINT_16 RamAddr;
-    UINT_32 RamData;
-    UINT_32 UlReadVal;
-    UINT_16 CM_version;
-    UINT_16 FW_version;
-    UINT_16 IT_version;
-    UINT_16 EVT_version;
+	int rc;
+	UINT_16 RamAddr;
+	UINT_32 RamData;
+	UINT_32 UlReadVal;
+	UINT_16 CM_version;
+	UINT_16 FW_version;
+	UINT_16 EVT_version;
 
-    pr_info("[OISFW]%s", __func__);
+	pr_info("[OISFW]:%s\n", __func__);
 
-    RamAddr = 0x8000;
-    RamRead32A(RamAddr, &UlReadVal);
-    pr_info("[OISFW]:%s 0x8000 =  0x%08x", __func__, UlReadVal);
-    FW_version = UlReadVal & 0xFF;
-    IT_version = UlReadVal >> 24;
-    pr_info("[OISFW]:%s FW_version =  0x%02x", __func__, FW_version);
-    pr_info("[OISFW]:%s IT_version =  0x%02x", __func__, IT_version);
+	RamAddr = 0x8000;
+	RamRead32A(RamAddr, &UlReadVal);
+	pr_info("[OISFW]:%s 0x8000 =  0x%08x.\n", __func__, UlReadVal);
+	FW_version = UlReadVal & 0xFF;
+	pr_info("[OISFW]:%s FW_version =  0x%02x.\n", __func__, FW_version);
 
-    if (FW_version >= OIS_CUR_FW_VERSION)
-    {
-        pr_info("[OISFW]%s: No need to update.", __func__);
-        return 0;
-    }
+	if (UlReadVal == 0x0) {
+		pr_err("[OISFW]:%s High level command failed. Do FW recover.\n",
+			__func__);
+		rc = doFWrecover();
+		FW_version = 0x0; /*Always need to update after FW recover.*/
+		if (rc != 0) {
+			pr_err("[OISFW]%s: OIS recover update failed rc = %d.\n",
+				__func__, rc);
+			return rc;
+		}
+	}
 
-    rc = checkHighLevelCommand(100);
-	if (rc != 0)
-    {
+	if (FW_version >= OIS_CUR_FW_VERSION) {
+		pr_info("[OISFW]%s: No need to update.\n", __func__);
+		return 0;
+	}
+
+	rc = checkHighLevelCommand(100);
+	if (rc != 0) {
 		pr_err("[OISFW]:%s checkHighLevelCommand failed = %d\n",
 			__func__, rc);
-        return -1;
-    }
-    else
-	pr_info("[OISFW]:%s checkHighLevelCommand = %d\n", __func__, rc);
+		return -EINVAL;
+	}
 
-    RamAddr = 0xF01B;
-    RamData = 0x1A00;
-    RamWrite32A(RamAddr, RamData);
-    RamRead32A(RamAddr, &UlReadVal); //Read EEPROM
-    /*
-        SHARP    50 53 xx xx
-        LG EVT1  00 00 4c 47
-        LG EVT2  47 4c xx xx
-    */
-    pr_info("[OISFW]:%s 0x1A00 =  0x%08x", __func__, UlReadVal);
-    EVT_version = UlReadVal >> 16;
-    pr_info("[OISFW]:%s EVT_version =  0x%04x", __func__, EVT_version);
+	pr_info("[OISFW]:%s checkHighLevelCommand = %d\n",
+		__func__, rc);
 
-    RamAddr = 0xF01B;
-    RamData = 0x1A02;
-    RamWrite32A(RamAddr, RamData);
-    RamRead32A(RamAddr, &UlReadVal);//Read EEPROM
-    pr_info("[OISFW]:%s UlReadVal =  0x%08x", __func__, UlReadVal);
+	RamAddr = 0xF01B;
+	RamData = 0x1A00;
+	RamWrite32A(RamAddr, RamData);
+	RamRead32A(RamAddr, &UlReadVal); /*Read EEPROM*/
+	/*
+	 * SHARP    50 53 xx xx
+	 * LG EVT1  00 00 4c 47
+	 * LG EVT2  47 4c xx xx
+	 */
+	pr_info("[OISFW]:%s 0x1A00 =  0x%08x\n", __func__, UlReadVal);
+	EVT_version = UlReadVal >> 16;
+	pr_info("[OISFW]:%s EVT_version =  0x%04x\n", __func__, EVT_version);
+
+	RamAddr = 0xF01B;
+	RamData = 0x1A02;
+	RamWrite32A(RamAddr, RamData);
+	RamRead32A(RamAddr, &UlReadVal);/*Read EEPROM*/
+	pr_info("[OISFW]:%s UlReadVal =  0x%08x\n", __func__, UlReadVal);
 
 	if (EVT_version == 0x0)
-        CM_version = UlReadVal & 0xFF; // LG EVT1
-    else
-        CM_version = UlReadVal >> 24; //LG EVT2 and SHARP
+		CM_version = UlReadVal & 0xFF; /*LG EVT1*/
+	else
+		CM_version = UlReadVal >> 24; /*LG EVT2 and SHARP*/
 
-    pr_info("[OISFW]:%s CM_version =  0x%02x", __func__, CM_version);
+	pr_info("[OISFW]:%s CM_version =  0x%02x\n", __func__, CM_version);
 
-	if (FW_version < OIS_CUR_FW_VERSION && IT_version == LGIT) {
+	if (FW_version < OIS_CUR_FW_VERSION
+		&& (EVT_version == LGIT || EVT_version == LGIT_CM1)) {
 		if (CM_version < 2)
 			rc = CM1_LG;
 		else if (CM_version == 2)
 			rc = CM2_LG;
 		else
 			rc = NOUPDATE;
-	} else if (FW_version < OIS_CUR_FW_VERSION && IT_version == SHARPIT) {
+	} else if (FW_version < OIS_CUR_FW_VERSION && EVT_version == SHARPIT) {
 		if (CM_version < 2)
 			rc = CM1_SHARP;
 		else if (CM_version == 2)
 			rc = CM2_SHARP;
-        else
-            rc = NOUPDATE;
-    }else{
-        pr_info("[OISFW]%s: No need to update.", __func__);
-        rc = NOUPDATE;
-    }
-    pr_info("[OISFW]%s:HW version : %d.", __func__, rc);
+		else
+			rc = NOUPDATE;
+	} else {
+		pr_info("[OISFW]%s: No need to update.\n", __func__);
+		rc = NOUPDATE;
+	}
+	pr_info("[OISFW]:%s HW version : %d.\n", __func__, rc);
 
-    return rc;
+	return rc;
 }
 
 int checkFWUpdate(struct msm_sensor_ctrl_t *s_ctrl)
 {
-    int rc = 0;
-    int i;
-    unsigned short cci_client_sid_backup;
-    UINT_32 FWRead;
-    UINT_8 HWVer;
+	int rc = 0;
+	int i;
+	unsigned short cci_client_sid_backup;
+	UINT_32 FWRead;
+	UINT_8 HWVer;
+	UINT_16 FW_version;
 
-    if (g_first != true)
-    {
-        pr_info("[OISFW]%s: No need.\n", __func__);
-        return 0;
-    }
-    g_first = false;
+	if (g_first != true) {
+		pr_info("[OISFW]%s: No need.\n", __func__);
+		return 0;
+	}
+	g_first = false;
 
-	pr_info("[OISFW]: %s 1. sid = %d\n", __func__,
+	pr_info("[OISFW]:%s 1. sid = %d\n", __func__,
 		s_ctrl->sensor_i2c_client->cci_client->sid);
 	/* Bcakup the I2C slave address */
 	cci_client_sid_backup = s_ctrl->sensor_i2c_client->cci_client->sid;
@@ -228,71 +300,37 @@ int checkFWUpdate(struct msm_sensor_ctrl_t *s_ctrl)
 	s_ctrl->sensor_i2c_client->cci_client->sid =
 		OIS_COMPONENT_I2C_ADDR_WRITE >> 1;
 
-    g_i2c_client = s_ctrl->sensor_i2c_client;
-    WitTim(100);
+	g_i2c_client = s_ctrl->sensor_i2c_client;
+	WitTim(100);
 
-    HWVer = checkHWFWversion();//Check current HW and FW version
+	HWVer = checkHWFWversion();/*Check current HW and FW version*/
 
-    if (HWVer == CM1_LG)
-    {
-		pr_info("[OISFW]%s: F40_FlashDownload(0, 9, 6 )_LGCM1.",
-				__func__);
-        rc = F40_FlashDownload(0, 9, 6 );
-	} else if (HWVer == CM1_SHARP) {
-		pr_info("[OISFW]%s: F40_FlashDownload(0, 4, 6 )_SHARPCM1.",
-				__func__);
-		rc = F40_FlashDownload(0, 4, 6);
-	} else if (HWVer == CM2_LG) {
-		pr_info("[OISFW]%s: F40_FlashDownload(0, 9, 8 )_LGCM2.",
-				__func__);
-		rc = F40_FlashDownload(0, 9, 8);
-	} else if (HWVer == CM2_SHARP) {
-		pr_info("[OISFW]%s: F40_FlashDownload(0, 4, 8 )_SHARPCM2.",
-				__func__);
-		rc = F40_FlashDownload(0, 4, 8);
-    }
-    else
-		pr_info("[OISFW]%s: no need to update.", __func__);
+	if (HWVer != NOUPDATE) {
+		rc = doFWupdate(HWVer);
 
-	if (rc != 0) {
-		pr_err("[OISFW]%s: OIS FW update failed rc = %d.",
-			__func__, rc);
-		/* Restore the I2C slave address */
-		s_ctrl->sensor_i2c_client->cci_client->sid =
-			cci_client_sid_backup;
-		return rc;
+		for (i = 0; i < 2 ; i++) {
+			RamRead32A(0x8000, &FWRead);
+			FW_version = FWRead & 0xFF;
+			if (FW_version != OIS_CUR_FW_VERSION) {
+				pr_err("[OISFW]:FW version check failed after update. retry.\n");
+				rc = doFWupdate(HWVer);
+			} else {
+				pr_info("[OISFW]: FW vserion verify pass.\n");
+				break;
+			}
+		}
 	}
-    //Wait for FW update finish.
-	if (HWVer != NOUPDATE)
-    {
-        for(i = 0; i < 20; i++)
-        {
-            WitTim(100);
-            RamRead32A(0xF100, &FWRead);//Check high level command ready.
-            pr_info("[OISFW]:%s FWRead =  0x%x", __func__, FWRead);
-            if (FWRead == 0x0 )
-            {
-                pr_info("[OISFW]:Update finish.");
-                break;
-            }else
-                pr_info("[OISFW]:Waiting...");
-        }
-        if (FWRead != 0x0)
-        {
-            rc = -1;
-            pr_err("[OISFW]%s: OIS FW update failed rc = %d. FWRead =  0x%x", __func__, rc, FWRead);
-        }
-    }
-    RamRead32A(0x8000, &FWRead);
-    pr_info("[OISFW]:%s 0x8000 =  0x%08x", __func__, FWRead);
-    /* Restore the I2C slave address */
+
+	RamRead32A(0x8000, &FWRead);
+	pr_info("[OISFW]:%s 0x8000 =  0x%08x", __func__, FWRead);
+	/* Restore the I2C slave address */
 	s_ctrl->sensor_i2c_client->cci_client->sid =
 		cci_client_sid_backup;
-	pr_info("[OISFW]: %s 2. sid = %d\n", __func__,
+	pr_info("[OISFW]:%s 2. sid = %d\n", __func__,
 		s_ctrl->sensor_i2c_client->cci_client->sid);
-	pr_info("[OISFW]%s rc = %d\n", __func__, rc);
+	pr_info("[OISFW]:%s rc = %d\n", __func__, rc);
 
-    return rc;
+	return rc;
 }
 
 /*fw update start*/
