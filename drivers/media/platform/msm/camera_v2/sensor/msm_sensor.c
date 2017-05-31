@@ -88,7 +88,6 @@ int msm_sensor_checkvcmfw(struct msm_sensor_ctrl_t *s_ctrl)
 
 static void print_time(const char *func, const char *sensor_name)
 {
-	unsigned int tlen;
 	struct timespec time;
 	struct tm tmresult;
 
