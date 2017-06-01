@@ -198,9 +198,11 @@ struct drv260x_data {
 	struct hrtimer vib_timer;
 	struct timed_output_dev timed_dev;
 	int state;
+	int haptic_vib;
 	int schedule_time;
 	struct mutex lock;
 	struct work_struct work_sim;
+	struct work_struct work_haptic;
 	struct work_struct work;
 	struct gpio_desc *enable_gpio;
 	struct regulator *regulator;
@@ -327,6 +329,14 @@ static const struct reg_default drv260x_lra_cal_regs[] = {
 	{ DRV260X_CTRL3, DRV260X_NG_THRESH_2 },
 	{ DRV260X_FEEDBACK_CTRL, DRV260X_FB_REG_LRA_MODE |
 		DRV260X_BRAKE_FACTOR_4X | DRV260X_LOOP_GAIN_HIGH },
+};
+
+static const struct reg_default drv260x_vib_cal_regs[] = {
+	{ DRV260X_MODE, DRV260X_AUTO_CAL },
+	{ DRV260X_CTRL3, DRV260X_NG_THRESH_2 },
+	{ DRV260X_FEEDBACK_CTRL, DRV260X_FB_REG_LRA_MODE |
+		DRV260X_BRAKE_FACTOR_4X | DRV260X_LOOP_GAIN_MED },
+	{ DRV260X_CTRL4, DRV260X_AUTOCAL_TIME_150MS },
 };
 
 static const struct reg_default drv260x_lra_init_regs[] = {
@@ -583,6 +593,74 @@ static void drv260x_worker_sim(struct work_struct *work_sim)
 
 }
 
+/*  Rated and Overdriver Voltages:
+ * Calculated using the formula r = v * 255 / 5.6
+ */
+#define HAPTIC_RATED_VOLT   (1000 * 255 / 5600)
+
+static void drv260x_worker_haptic(struct work_struct *work_haptic)
+{
+	struct drv260x_data *haptics = container_of(work_haptic, struct drv260x_data, work_haptic);
+	int error;
+	unsigned int cal_buf;
+
+	if(0 == haptics->state) {
+		gpiod_set_value(haptics->enable_gpio, 0);
+		return;
+	}
+
+	gpiod_set_value(haptics->enable_gpio, 1);
+        /* Data sheet says to wait 250us before trying to communicate */
+        udelay(250);
+
+	error = regmap_write(haptics->regmap,
+			DRV260X_RATED_VOLT, HAPTIC_RATED_VOLT);
+	if (error) {
+		dev_err(&haptics->client->dev,
+				"Failed to write DRV260X_RATED_VOLT register: %d\n",
+				error);
+		return;
+	}
+
+	error = regmap_write(haptics->regmap,
+			DRV260X_OD_CLAMP_VOLT, HAPTIC_RATED_VOLT);
+	if (error) {
+		dev_err(&haptics->client->dev,
+				"Failed to write DRV260X_OD_CLAMP_VOLT register: %d\n",
+				error);
+		return;
+	}
+
+	error = regmap_register_patch(haptics->regmap,
+			drv260x_vib_cal_regs,
+			ARRAY_SIZE(drv260x_vib_cal_regs));
+	if (error) {
+		dev_err(&haptics->client->dev,
+				"Failed to write LRA calibration registers: %d\n",
+				error);
+		return;
+	}
+
+	error = regmap_write(haptics->regmap, DRV260X_GO, DRV260X_GO_BIT);
+	if (error) {
+		dev_err(&haptics->client->dev,
+				"Failed to write GO register: %d\n",
+				error);
+		return;
+	}
+
+	do {
+		error = regmap_read(haptics->regmap, DRV260X_GO, &cal_buf);
+		if (error) {
+			dev_err(&haptics->client->dev,
+				"Failed to read GO register: %d\n",
+				error);
+			return;
+		}
+	} while (cal_buf == DRV260X_GO_BIT);
+
+}
+
 static void drv260x_vib_enable(struct timed_output_dev *dev, int value)
 {
 	struct drv260x_data *haptics = container_of(dev, struct drv260x_data,
@@ -590,17 +668,44 @@ static void drv260x_vib_enable(struct timed_output_dev *dev, int value)
 
 	hrtimer_cancel(&haptics->vib_timer);
 
-	if (value == 0) {
+	switch(value) {
+		case 10:
+		case 15:
+		case 16:
+		case 21:
+		case 75:
+		case 150:
+		case 500:
+			haptics->haptic_vib = true;
+			if(value == 500)
+				value = 1000;
+		break;
+		default:
+			haptics->haptic_vib = false;
+	}
+
+	if (value == 0 || value == 30) {
 		haptics->state = 0;
-	} else {
-		value = (value < 3000 ?
-				3000 : value);
+		haptics->haptic_vib = false;
+	} else if(haptics->haptic_vib == false) {
+		if(value != 200)
+			value = 1000;
 		haptics->state = 1;
 		hrtimer_start(&haptics->vib_timer,
 				ktime_set(value / 1000, (value % 1000) * 1000000),
 				HRTIMER_MODE_REL);
+		schedule_work(&haptics->work_sim);
+	} else if (haptics->haptic_vib == true) {
+		haptics->state = 1;
+                hrtimer_start(&haptics->vib_timer,
+                                ktime_set(value / 1000, (value % 1000) * 1000000),
+                                HRTIMER_MODE_REL);
+
+		/* Haptic vibration set */
+		schedule_work(&haptics->work_haptic);
+	} else {
+		gpiod_set_value(haptics->enable_gpio, 0);
 	}
-	schedule_work(&haptics->work_sim);
 }
 
 
@@ -622,7 +727,10 @@ static enum hrtimer_restart drv260x_vib_timer_func(struct hrtimer *timer)
 	struct drv260x_data *haptics = container_of(timer, struct drv260x_data,
 								  vib_timer);
 	haptics->state = 0;
-	schedule_work(&haptics->work_sim);
+	if(haptics->haptic_vib == false)
+		schedule_work(&haptics->work_sim);
+	else
+		schedule_work(&haptics->work_haptic);
 
 	return HRTIMER_NORESTART;
 }
@@ -729,6 +837,7 @@ static int drv260x_probe(struct i2c_client *client,
 
 	INIT_WORK(&haptics->work, drv260x_worker);
 	INIT_WORK(&haptics->work_sim, drv260x_worker_sim);
+	INIT_WORK(&haptics->work_haptic, drv260x_worker_haptic);
 	mutex_init(&haptics->lock);
 	hrtimer_init(&haptics->vib_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	haptics->vib_timer.function = drv260x_vib_timer_func;
