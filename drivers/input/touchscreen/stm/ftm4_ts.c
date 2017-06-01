@@ -304,13 +304,13 @@ static int fts_product_info_read(struct fts_ts_info *info)
 			if (total_length == FTS_LOCKDOWNCODE_SIZE) {
 				for (i = 0; i < 4; i++) {
 					if (offset+i >= FTS_LOCKDOWNCODE_SIZE) {
-						strncpy(&info->prd_info.product_id[0], &prd_info[0], 3);
+						memcpy(&info->prd_info.product_id[0], &prd_info[0], 3);
 						info->prd_info.chip_rev = (prd_info[3] >> 4) & 0xF;
 						info->prd_info.fpc_rev = prd_info[3] & 0xF;
 						info->prd_info.t_sensor_rev = prd_info[4];
 						info->prd_info.site = prd_info[5];
 						info->prd_info.inspector_no = prd_info[6];
-						strncpy(&info->prd_info.date[0], &prd_info[7], 6);
+						memcpy(&info->prd_info.date[0], &prd_info[7], 6);
 
 						info->fts_command(info, SENSEON);
 						info->fts_interrupt_set(info, INT_ENABLE);
@@ -684,7 +684,12 @@ static int fts_init(struct fts_ts_info *info)
 	unsigned char regAdd[8];
 	int rc = 0;
 
-	fts_systemreset(info);
+	rc = fts_systemreset(info);
+	if (rc < 0) {
+		tsp_debug_err(&info->client->dev, "%s: Failed to system reset(rc = %d)\n",
+				__func__, rc);
+		return rc;
+	}
 
 	rc = fts_wait_for_ready(info);
 	if (rc == -FTS_ERROR_EVENT_ID) {
@@ -696,10 +701,11 @@ static int fts_init(struct fts_ts_info *info)
 	}
 
 	rc = fts_read_chip_id(info);
-	if (rc  < 0)
+	if (rc < 0) {
 		tsp_debug_err(&info->client->dev, "%s: Failed to fts_read_chip_id\n",
 					__func__);
-
+		return rc;
+	}
 /*
 	rc  = fts_fw_update(info);
 	if (rc  < 0)
@@ -720,6 +726,7 @@ static int fts_init(struct fts_ts_info *info)
 						"FTS read failed rc = %d\n", rc);
 			tsp_debug_err(&info->client->dev,
 						"FTS Initialise Failed\n");
+			return rc;
 		}
 		info->pFrame =
 			kzalloc(info->SenseChannelLength * info->ForceChannelLength * 2,

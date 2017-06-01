@@ -231,10 +231,10 @@ void fts_execute_autotune(struct fts_ts_info *info)
 	NoNeedAutoTune = get_pure_autotune_status(info);
 
 	tsp_debug_info(info->dev,
-		"%s: AFE(%d), NoNeedAutoTune(%d)\n", __func__,
-		bFinalAFE, NoNeedAutoTune);
+		"%s: AFE(%d), NoNeedAutoTune(%d), o_afe_ver(%d), afe_ver(%d)\n",
+		__func__, bFinalAFE, NoNeedAutoTune, info->o_afe_ver, info->afe_ver);
 
-	if ((!NoNeedAutoTune) || (info->o_afe_ver != info->afe_ver)) {
+	if ((!NoNeedAutoTune) || (info->o_afe_ver < info->afe_ver)) {
 		info->fts_command(info, CX_TUNNING);
 		fts_delay(300);
 		fts_fw_wait_for_event(info, STATUS_EVENT_MUTUAL_AUTOTUNE_DONE,
