@@ -298,16 +298,6 @@ static const char * const qpnp_poff_reason[] = {
 static int warm_boot;
 module_param(warm_boot, int, 0);
 
-static int debug_flag = 0;
-static int __init htcramdump_set(char *str)
-{
-	if (!strncmp(str, "1", 1))
-		debug_flag = 1;
-
-	return 0;
-}
-__setup("htcramdump=", htcramdump_set);
-
 static int
 qpnp_pon_masked_write(struct qpnp_pon *pon, u16 addr, u8 mask, u8 val)
 {
@@ -1483,8 +1473,6 @@ static int qpnp_pon_config_init(struct qpnp_pon *pon)
 					"Unable to read s2-type\n");
 				return rc;
 			}
-			if (debug_flag)
-				cfg->s2_type = 0x1;
 			if (cfg->s2_type > QPNP_PON_RESET_TYPE_MAX) {
 				dev_err(&pon->spmi->dev,
 					"Incorrect reset type specified\n");
