@@ -22,14 +22,19 @@
 #include <linux/timer.h>
 #include <linux/mod_devicetable.h>
 
-#define BEZEL_INSET_POS 10
+#define BEZEL_INSET_POS 20
 /* Approximated to distance for angular movement of 3 degree :
    2 * pi * 227 * (3/360): rounded up; square of 11.88... */
 #define ANGULAR_DISTANCE_THRESHOLD  141
 
+/* Approximated to distance for angular movement of 3 degree :
+   2 * pi * 227 * (10/360): rounded up; square of 39.61... */
+#define INIT_ANGULAR_DISTANCE_THRESHOLD  1568
+
 struct bezel_data {
 	u8 inset;
-	u8 angular_dist_thresh;
+	u16 angular_dist_thresh;
+	u16 step_threshold2;
 	u8 thickness;
 	u32 sq_rad_position;
 	bool bezel_touch_status;
