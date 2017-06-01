@@ -29,7 +29,6 @@
 #include <dt-bindings/input/ti-drv260x.h>
 #include <linux/platform_data/drv260x-pdata.h>
 #include "../../staging/android/timed_output.h"
-#define TIME_OUT_SUPPORT 1
 
 #define DRV260X_STATUS		0x0
 #define DRV260X_MODE		0x1
@@ -196,7 +195,6 @@ struct drv260x_data {
 	struct input_dev *input_dev;
 	struct i2c_client *client;
 	struct regmap *regmap;
-#ifdef TIME_OUT_SUPPORT
 	struct hrtimer vib_timer;
 	struct timed_output_dev timed_dev;
 	int state;
@@ -205,7 +203,6 @@ struct drv260x_data {
 	struct mutex lock;
 	struct work_struct work_sim;
 	struct work_struct work_haptic;
-#endif
 	struct work_struct work;
 	struct gpio_desc *enable_gpio;
 	struct regulator *regulator;
@@ -324,9 +321,7 @@ static void drv260x_close(struct input_dev *input)
 			"Failed to enter standby mode: %d\n", error);
 
 	gpiod_set_value(haptics->enable_gpio, 0);
-#ifdef TIME_OUT_SUPPORT
 	mutex_destroy(&haptics->lock);
-#endif
 }
 
 static const struct reg_default drv260x_lra_cal_regs[] = {
@@ -534,7 +529,6 @@ static inline int drv260x_parse_dt(struct device *dev,
 }
 #endif
 
-#ifdef TIME_OUT_SUPPORT
 static void drv260x_worker_sim(struct work_struct *work_sim)
 {
 	struct drv260x_data *haptics = container_of(work_sim, struct drv260x_data, work_sim);
@@ -696,7 +690,6 @@ static void drv260x_vib_enable(struct timed_output_dev *dev, int value)
 	} else if(haptics->haptic_vib == false) {
 		if(value != 200)
 			value = 1000;
-`
 		haptics->state = 1;
 		hrtimer_start(&haptics->vib_timer,
 				ktime_set(value / 1000, (value % 1000) * 1000000),
@@ -741,7 +734,6 @@ static enum hrtimer_restart drv260x_vib_timer_func(struct hrtimer *timer)
 
 	return HRTIMER_NORESTART;
 }
-#endif
 
 static int drv260x_probe(struct i2c_client *client,
 			 const struct i2c_device_id *id)
@@ -844,7 +836,6 @@ static int drv260x_probe(struct i2c_client *client,
 	}
 
 	INIT_WORK(&haptics->work, drv260x_worker);
-#ifdef TIME_OUT_SUPPORT
 	INIT_WORK(&haptics->work_sim, drv260x_worker_sim);
 	INIT_WORK(&haptics->work_haptic, drv260x_worker_haptic);
 	mutex_init(&haptics->lock);
@@ -856,7 +847,6 @@ static int drv260x_probe(struct i2c_client *client,
 	if (timed_output_dev_register(&haptics->timed_dev) < 0)
 		dev_err(&client->dev, "Failed to register as TIME_OUT_SUPPORT\n");
 
-#endif
 
 	haptics->client = client;
 	i2c_set_clientdata(client, haptics);
