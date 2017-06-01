@@ -79,6 +79,9 @@ HW_OUTx(HWIO_PCIE_SS_BASE_ADDR, PCIE_SS, reg, inst, val)
 #define INIT_DONE 0x1
 #define INIT_RESUME 0x2
 
+/* Timeout for waiting for PCIe firmware download */
+#define PCIE_FIRMWARE_DOWNLOAD_TIMEOUT msecs_to_jiffies(500)
+
 /* Timeout for waiting for MNH to be powered */
 #define POWERED_COMPLETE_TIMEOUT msecs_to_jiffies(5000)
 
@@ -348,7 +351,7 @@ static int dma_callback(uint8_t chan, enum mnh_dma_chan_dir_t dir,
 
 static int mnh_firmware_waitdownloaded(void)
 {
-	unsigned long timeout = jiffies + msecs_to_jiffies(5000);
+	unsigned long timeout = jiffies + PCIE_FIRMWARE_DOWNLOAD_TIMEOUT;
 
 	do {
 		if (mnh_sm_dev->image_loaded == FW_IMAGE_DOWNLOAD_SUCCESS) {
