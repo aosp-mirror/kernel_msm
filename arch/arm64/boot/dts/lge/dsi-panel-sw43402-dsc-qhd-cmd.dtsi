@@ -106,11 +106,11 @@
 		];
 		qcom,alpm-low-command = [
 			05 01 00 00 00 00 01 39    /* IDLE on */
-			15 01 00 00 00 00 02 51 40 /* brightness control */
+			15 01 00 00 10 00 02 51 40 /* brightness control */
 		];
 		qcom,alpm-high-command = [
 			05 01 00 00 00 00 01 39    /* IDLE on */
-			15 01 00 00 00 00 02 51 80 /* brightness control */
+			15 01 00 00 10 00 02 51 80 /* brightness control */
 		];
 		qcom,mdss-pan-physical-width-dimension = <68>;
 		qcom,mdss-pan-physical-height-dimension = <136>;
