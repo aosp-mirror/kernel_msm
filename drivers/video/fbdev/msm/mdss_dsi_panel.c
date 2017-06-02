@@ -264,6 +264,7 @@ static void mdss_dsi_panel_set_alpm_mode(struct mdss_dsi_ctrl_pdata *ctrl,
 	}
 
 	pr_debug("%s: ndx=%d mode=0x%02x\n", __func__, ctrl->ndx, mode);
+	mdss_dsi_cmd_mdp_busy(ctrl);
 	mdss_dsi_panel_cmds_send(ctrl, pcmds, flags);
 }
 
