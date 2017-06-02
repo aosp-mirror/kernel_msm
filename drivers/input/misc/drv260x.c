@@ -602,9 +602,13 @@ static void drv260x_worker_haptic(struct work_struct *work_haptic)
 {
 	struct drv260x_data *haptics = container_of(work_haptic, struct drv260x_data, work_haptic);
 	int error;
-	unsigned int cal_buf;
 
 	if(0 == haptics->state) {
+		error = regmap_write(haptics->regmap, DRV260X_MODE, DRV260X_STANDBY);
+		if (error) {
+                dev_err(&haptics->client->dev,
+                        "Failed to write set mode: %d\n", error);
+		}
 		gpiod_set_value(haptics->enable_gpio, 0);
 		return;
 	}
@@ -614,50 +618,17 @@ static void drv260x_worker_haptic(struct work_struct *work_haptic)
         udelay(250);
 
 	error = regmap_write(haptics->regmap,
-			DRV260X_RATED_VOLT, HAPTIC_RATED_VOLT);
-	if (error) {
-		dev_err(&haptics->client->dev,
-				"Failed to write DRV260X_RATED_VOLT register: %d\n",
-				error);
-		return;
-	}
-
-	error = regmap_write(haptics->regmap,
-			DRV260X_OD_CLAMP_VOLT, HAPTIC_RATED_VOLT);
-	if (error) {
-		dev_err(&haptics->client->dev,
-				"Failed to write DRV260X_OD_CLAMP_VOLT register: %d\n",
-				error);
-		return;
-	}
-
-	error = regmap_register_patch(haptics->regmap,
-			drv260x_vib_cal_regs,
-			ARRAY_SIZE(drv260x_vib_cal_regs));
-	if (error) {
-		dev_err(&haptics->client->dev,
-				"Failed to write LRA calibration registers: %d\n",
-				error);
-		return;
-	}
-
-	error = regmap_write(haptics->regmap, DRV260X_GO, DRV260X_GO_BIT);
-	if (error) {
-		dev_err(&haptics->client->dev,
-				"Failed to write GO register: %d\n",
-				error);
-		return;
-	}
-
-	do {
-		error = regmap_read(haptics->regmap, DRV260X_GO, &cal_buf);
-		if (error) {
-			dev_err(&haptics->client->dev,
-				"Failed to read GO register: %d\n",
-				error);
-			return;
-		}
-	} while (cal_buf == DRV260X_GO_BIT);
+                             DRV260X_MODE, DRV260X_RT_PLAYBACK);
+        if (error) {
+                dev_err(&haptics->client->dev,
+                        "Failed to write set mode: %d\n", error);
+        } else {
+                error = regmap_write(haptics->regmap,
+                                     DRV260X_RT_PB_IN, haptics->magnitude);
+                if (error)
+                        dev_err(&haptics->client->dev,
+                                "Failed to set magnitude: %d\n", error);
+        }
 
 }
 
@@ -673,24 +644,26 @@ static void drv260x_vib_enable(struct timed_output_dev *dev, int value)
 		case 15:
 		case 16:
 		case 21:
+		case 30:
+		case 60:
 		case 75:
+		case 120:
 		case 150:
 		case 500:
 			haptics->haptic_vib = true;
-			if(value == 500)
-				value = 1000;
-		break;
+			break;
 		default:
 			haptics->haptic_vib = false;
 	}
 
-	if (value == 0 || value == 30) {
+	if (value == 0) {
 		haptics->state = 0;
 		haptics->haptic_vib = false;
 	} else if(haptics->haptic_vib == false) {
 		if(value != 200)
 			value = 1000;
 		haptics->state = 1;
+		haptics->mode = DRV260X_LRA_MODE;
 		hrtimer_start(&haptics->vib_timer,
 				ktime_set(value / 1000, (value % 1000) * 1000000),
 				HRTIMER_MODE_REL);
@@ -702,6 +675,9 @@ static void drv260x_vib_enable(struct timed_output_dev *dev, int value)
                                 HRTIMER_MODE_REL);
 
 		/* Haptic vibration set */
+		haptics->mode = DRV260X_LRA_NO_CAL_MODE;
+		haptics->magnitude = 30;
+
 		schedule_work(&haptics->work_haptic);
 	} else {
 		gpiod_set_value(haptics->enable_gpio, 0);
