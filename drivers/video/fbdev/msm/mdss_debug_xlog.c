@@ -77,6 +77,7 @@ struct mdss_dbg_xlog {
 	u32 enable_dsi_dbgbus_dump;
 	struct work_struct xlog_dump_work;
 	struct mdss_debug_base *blk_arr[MDSS_DEBUG_BASE_MAX];
+	bool work_read_xlog;
 	bool work_panic;
 	bool work_dbgbus;
 	bool work_vbif_dbgbus;
@@ -85,6 +86,14 @@ struct mdss_dbg_xlog {
 	u32 *vbif_dbgbus_dump; /* address for the vbif debug bus dump */
 	u32 *nrt_vbif_dbgbus_dump; /* address for the nrt vbif debug bus dump */
 	u32 *dsi_dbgbus_dump; /* address for the dsi debug bus dump */
+	char *blk_name;
+	char *range_name;
+	u32 reg_blk_idx;
+	u32 reg_dump_idx;
+	u32 dbgbus_dump_idx;
+	u32 vbif_dbgbus_dump_idx;
+	u32 dsi_dbgbus_dump_idx;
+	struct range_dump_node *cur_xnode;
 } mdss_dbg_xlog;
 
 static inline bool mdss_xlog_is_enabled(u32 flag)
@@ -582,7 +591,7 @@ struct mdss_debug_base *get_dump_blk_addr(const char *blk_name)
 }
 
 static void mdss_xlog_dump_array(struct mdss_debug_base *blk_arr[],
-	u32 len, bool dead, const char *name, bool dump_dbgbus,
+	u32 len, bool dead, const char *name, bool dump_xlog, bool dump_dbgbus,
 	bool dump_vbif_dbgbus, bool dump_dsi_dbgbus)
 {
 	int i;
@@ -593,7 +602,8 @@ static void mdss_xlog_dump_array(struct mdss_debug_base *blk_arr[],
 				mdss_dbg_xlog.enable_reg_dump);
 	}
 
-	mdss_xlog_dump_all();
+	if (dump_xlog)
+		mdss_xlog_dump_all();
 
 	if (dump_dbgbus)
 		mdss_dump_debug_bus(mdss_dbg_xlog.enable_dbgbus_dump,
@@ -621,6 +631,7 @@ static void xlog_debug_work(struct work_struct *work)
 	mdss_xlog_dump_array(mdss_dbg_xlog.blk_arr,
 		ARRAY_SIZE(mdss_dbg_xlog.blk_arr),
 		mdss_dbg_xlog.work_panic, "xlog_workitem",
+		mdss_dbg_xlog.work_read_xlog,
 		mdss_dbg_xlog.work_dbgbus,
 		mdss_dbg_xlog.work_vbif_dbgbus,
 		mdss_dbg_xlog.work_dsi_dbgbus);
@@ -632,6 +643,7 @@ void mdss_xlog_tout_handler_default(bool queue, const char *name, ...)
 	bool dead = false;
 	bool dump_dbgbus = false, dump_vbif_dbgbus = false;
 	bool dump_dsi_dbgbus = false;
+	bool dump_xlog = false;
 	va_list args;
 	char *blk_name = NULL;
 	struct mdss_debug_base *blk_base = NULL;
@@ -661,6 +673,9 @@ void mdss_xlog_tout_handler_default(bool queue, const char *name, ...)
 			index++;
 		}
 
+		if (!strcmp(blk_name, "xlog"))
+			dump_xlog = true;
+
 		if (!strcmp(blk_name, "dbg_bus"))
 			dump_dbgbus = true;
 
@@ -678,13 +693,14 @@ void mdss_xlog_tout_handler_default(bool queue, const char *name, ...)
 	if (queue) {
 		/* schedule work to dump later */
 		mdss_dbg_xlog.work_panic = dead;
+		mdss_dbg_xlog.work_read_xlog = dump_xlog;
 		mdss_dbg_xlog.work_dbgbus = dump_dbgbus;
 		mdss_dbg_xlog.work_vbif_dbgbus = dump_vbif_dbgbus;
 		mdss_dbg_xlog.work_dsi_dbgbus = dump_dsi_dbgbus;
 		schedule_work(&mdss_dbg_xlog.xlog_dump_work);
 	} else {
-		mdss_xlog_dump_array(blk_arr, blk_len, dead, name, dump_dbgbus,
-			dump_vbif_dbgbus, dump_dsi_dbgbus);
+		mdss_xlog_dump_array(blk_arr, blk_len, dead, name, dump_xlog,
+			dump_dbgbus, dump_vbif_dbgbus, dump_dsi_dbgbus);
 	}
 }
 
@@ -732,6 +748,236 @@ static const struct file_operations mdss_xlog_fops = {
 	.write = mdss_xlog_dump_write,
 };
 
+static int mdss_regdump_open(struct inode *inode, struct file *file)
+{
+	/* non-seekable */
+	file->f_mode &= ~(FMODE_LSEEK | FMODE_PREAD | FMODE_PWRITE);
+	file->private_data = inode->i_private;
+	mdss_dbg_xlog.reg_blk_idx = 0;
+	mdss_dbg_xlog.reg_dump_idx = 0;
+	mdss_dbg_xlog.blk_name = NULL;
+	mdss_dbg_xlog.range_name = NULL;
+	mdss_dbg_xlog.cur_xnode = NULL;
+	return 0;
+}
+
+static ssize_t _lookup_blk_header(struct mdss_debug_base *blk, char *buf,
+		ssize_t len)
+{
+	if (mdss_dbg_xlog.blk_name != blk->name) {
+		mdss_dbg_xlog.blk_name = blk->name;
+		len += snprintf(buf+len, MDSS_XLOG_BUF_MAX,
+				"\n\n================================================\n");
+		len += snprintf(buf+len, MDSS_XLOG_BUF_MAX,
+				"  Block:[%s]  0x%.8X\n", blk->name,
+				(int)blk->off);
+		len += snprintf(buf+len, MDSS_XLOG_BUF_MAX,
+				"================================================\n");
+	}
+
+	return len;
+}
+
+static ssize_t _lookup_range_name(struct range_dump_node *xnode, char *buf,
+		ssize_t len)
+{
+	if (mdss_dbg_xlog.range_name != xnode->range_name) {
+		mdss_dbg_xlog.range_name = xnode->range_name;
+		len += snprintf(buf+len, MDSS_XLOG_BUF_MAX,
+				"\n------------------------------------------------\n");
+		len += snprintf(buf+len, MDSS_XLOG_BUF_MAX,
+				"[%s]  0x%.8X\n", xnode->range_name,
+				xnode->offset.start);
+		len += snprintf(buf+len, MDSS_XLOG_BUF_MAX,
+				"------------------------------------------------\n");
+	}
+
+	return len;
+}
+
+static ssize_t _lookup_last_node(struct mdss_debug_base *blk, char *buf,
+		ssize_t len)
+{
+	u32 range;
+	u32 *addr;
+	struct range_dump_node *xlog_node = mdss_dbg_xlog.cur_xnode;
+
+	if (list_empty(&blk->dump_list))
+		goto lookup_node_end;
+
+	if (!xlog_node) {
+		xlog_node = list_first_entry(&blk->dump_list,
+				struct range_dump_node, head);
+		mdss_dbg_xlog.cur_xnode = xlog_node;
+	}
+
+	range = get_dump_range(&xlog_node->offset, blk->max_offset);
+	range /= 4;
+
+	if (mdss_dbg_xlog.reg_dump_idx >= range) {
+		pr_debug("Next xlog_node, idx:%d, range:%d\n",
+				mdss_dbg_xlog.reg_dump_idx, range);
+		if (xlog_node->head.next == &blk->dump_list) {
+			pr_debug("No more xlog_node [END]\n");
+			mdss_dbg_xlog.cur_xnode = NULL;
+			goto lookup_node_end;
+		}
+
+		xlog_node = list_next_entry(xlog_node, head);
+		pr_debug("xnode:%s, start:0x%X, end:0x%X\n",
+				xlog_node->range_name,
+				xlog_node->offset.start,
+				xlog_node->offset.end);
+		mdss_dbg_xlog.reg_dump_idx = 0;
+		mdss_dbg_xlog.range_name = NULL;
+		mdss_dbg_xlog.cur_xnode = xlog_node;
+	}
+
+	if (xlog_node->reg_dump) {
+		len += _lookup_range_name(xlog_node, buf, len);
+
+		addr = xlog_node->reg_dump + mdss_dbg_xlog.reg_dump_idx;
+		len += snprintf(buf+len, MDSS_XLOG_BUF_MAX,
+			"0x%.8X | %.8X %.8X %.8X %.8X\n",
+			xlog_node->offset.start+mdss_dbg_xlog.reg_dump_idx,
+			addr[0], addr[1], addr[2], addr[3]);
+		mdss_dbg_xlog.reg_dump_idx += 4;
+	}
+
+	return len;
+
+lookup_node_end:
+	mdss_dbg_xlog.reg_dump_idx = 0;
+	return len;
+}
+
+static ssize_t mdss_regdump_read(struct file *file, char __user *buff,
+		size_t count, loff_t *ppos)
+{
+	ssize_t len = 0;
+	char xlog_buf[MDSS_XLOG_BUF_MAX];
+	u32 blk_array_size = ARRAY_SIZE(mdss_dbg_xlog.blk_arr);
+	struct mdss_debug_base **blk_arr = mdss_dbg_xlog.blk_arr;
+	int i;
+
+	for (i = mdss_dbg_xlog.reg_blk_idx; i < blk_array_size; i++) {
+		if (blk_arr[i] == NULL)
+			continue;
+
+		len += _lookup_blk_header(blk_arr[i], xlog_buf, len);
+
+		if (len == 0) {
+			len += _lookup_last_node(blk_arr[i], xlog_buf, len);
+			if (len == 0)
+				continue;
+		}
+
+		if (copy_to_user(buff, xlog_buf, len))
+			return -EFAULT;
+		*ppos += len;
+		break;
+	}
+
+	mdss_dbg_xlog.reg_blk_idx = i;
+
+	return len;
+}
+
+static const struct file_operations mdss_reg_fops = {
+	.open = mdss_regdump_open,
+	.read = mdss_regdump_read,
+};
+
+static int mdss_dbgbus_dump_open(struct inode *inode, struct file *file)
+{
+	/* non-seekable */
+	file->f_mode &= ~(FMODE_LSEEK | FMODE_PREAD | FMODE_PWRITE);
+	file->private_data = inode->i_private;
+	mdss_dbg_xlog.dbgbus_dump_idx = 0;
+	return 0;
+}
+
+static ssize_t mdss_dbgbus_dump_read(struct file *file, char __user *buff,
+		size_t count, loff_t *ppos)
+{
+	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
+	ssize_t len = 0;
+	char xlog_buf[MDSS_XLOG_BUF_MAX];
+	u32 *data;
+
+	if (mdss_dbg_xlog.dbgbus_dump &&
+			(mdss_dbg_xlog.dbgbus_dump_idx <
+			 (mdata->dbg_bus_size * 4))) {
+		data = &mdss_dbg_xlog.dbgbus_dump[
+			mdss_dbg_xlog.dbgbus_dump_idx];
+		len = snprintf(xlog_buf, MDSS_XLOG_BUF_MAX,
+				"0x%pK| %.8X %.8X %.8X %.8X\n",
+				data, data[0], data[1], data[2], data[3]);
+		mdss_dbg_xlog.dbgbus_dump_idx += 4;
+		if (copy_to_user(buff, xlog_buf, len))
+			return -EFAULT;
+		*ppos += len;
+	}
+
+	return len;
+}
+
+static const struct file_operations mdss_dbgbus_fops = {
+	.open = mdss_dbgbus_dump_open,
+	.read = mdss_dbgbus_dump_read,
+};
+
+static int mdss_vbif_dbgbus_dump_open(struct inode *inode, struct file *file)
+{
+	/* non-seekable */
+	file->f_mode &= ~(FMODE_LSEEK | FMODE_PREAD | FMODE_PWRITE);
+	file->private_data = inode->i_private;
+	mdss_dbg_xlog.vbif_dbgbus_dump_idx = 0;
+	return 0;
+}
+
+static ssize_t mdss_vbif_dbgbus_dump_read(struct file *file, char __user *buff,
+		size_t count, loff_t *ppos)
+{
+	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
+	ssize_t len = 0;
+	char xlog_buf[MDSS_XLOG_BUF_MAX];
+	int i;
+	u32 *data;
+	u32 list_size = 0;
+	struct vbif_debug_bus *head;
+
+	if (!mdss_dbg_xlog.vbif_dbgbus_dump)
+		return len;
+
+	/* allocate memory for each test point */
+	for (i = 0; i < mdata->vbif_dbg_bus_size; i++) {
+		head = mdata->vbif_dbg_bus + i;
+		list_size += (head->block_cnt * head->test_pnt_cnt);
+	}
+
+	/* 4 entries for each test point*/
+	list_size *= 4;
+	if (mdss_dbg_xlog.vbif_dbgbus_dump_idx < list_size) {
+		data = &mdss_dbg_xlog.vbif_dbgbus_dump[
+			mdss_dbg_xlog.vbif_dbgbus_dump_idx];
+		len = snprintf(xlog_buf, MDSS_XLOG_BUF_MAX,
+				"0x%pK| %.8X %.8X %.8X %.8X\n",
+				data, data[0], data[1], data[2], data[3]);
+		mdss_dbg_xlog.vbif_dbgbus_dump_idx += 4;
+		if (copy_to_user(buff, xlog_buf, len))
+			return -EFAULT;
+		*ppos += len;
+	}
+
+	return len;
+}
+
+static const struct file_operations mdss_vbif_dbgbus_fops = {
+	.open = mdss_vbif_dbgbus_dump_open,
+	.read = mdss_vbif_dbgbus_dump_read,
+};
+
 int mdss_create_xlog_debug(struct mdss_debug_data *mdd)
 {
 	int i;
@@ -752,6 +998,12 @@ int mdss_create_xlog_debug(struct mdss_debug_data *mdd)
 
 	debugfs_create_file("dump", 0644, mdss_dbg_xlog.xlog, NULL,
 						&mdss_xlog_fops);
+	debugfs_create_file("reg_xlog", 0644, mdss_dbg_xlog.xlog, NULL,
+						&mdss_reg_fops);
+	debugfs_create_file("dbgbus_xlog", 0644, mdss_dbg_xlog.xlog, NULL,
+						&mdss_dbgbus_fops);
+	debugfs_create_file("vbif_dbgbus_xlog", 0644, mdss_dbg_xlog.xlog, NULL,
+						&mdss_vbif_dbgbus_fops);
 	debugfs_create_u32("enable", 0644, mdss_dbg_xlog.xlog,
 			    &mdss_dbg_xlog.xlog_enable);
 	debugfs_create_u32("panic", 0644, mdss_dbg_xlog.xlog,
