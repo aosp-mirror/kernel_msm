@@ -14,9 +14,13 @@
  * msm8998-htc-pm.dtsi: common pm config of HTC projects
  */
 
+#include <dt-bindings/msm/power-on.h>
+
 &spmi_bus {
 	qcom,pm8998@0 {
 		qcom,power-on@800 {
+			qcom,hard-reset-poweroff-type =
+				<PON_POWER_OFF_WARM_RESET>;
 			qcom,pon_1 {
 				status = "disabled";
 			};
