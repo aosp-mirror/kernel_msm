@@ -150,52 +150,47 @@ static void drv2624_disable_irq(struct drv2624_data *drv2624)
 			  DRV2624_REG_INT_ENABLE, INT_MASK_ALL);
 }
 
+static int drv2624_poll_go_bit_stop(struct drv2624_data *drv2624)
+{
+	int ret, value;
+	int poll_ready = POLL_GO_BIT_RETRY; /* to finish auto-brake */
+
+	do {
+		ret = drv2624_reg_read(drv2624, DRV2624_REG_GO);
+		if (ret >= 0) {
+			value = ret & 0x01;
+			if (!value)
+				break;
+		}
+		usleep_range(8000, 10000);
+	} while (poll_ready--);
+
+	if (ret < 0)
+		dev_err(drv2624->dev,
+			"%s, ERROR: failed to clear GO\n", __func__);
+
+	return ret;
+}
+
 static int drv2624_set_go_bit(struct drv2624_data *drv2624, unsigned char val)
 {
-	int ret = 0, value = 0;
-	int poll_ready = 10; /* to finish auto-brake */
-	int retry = 15;
+	int ret;
+	int retry = POLL_GO_BIT_RETRY;
 
 	val &= 0x01;
 
-set_go_bit_write:
-	ret = drv2624_reg_write(drv2624, DRV2624_REG_GO, val);
-	if (ret >= 0) {
-		if (val == 1) {
-			usleep_range(1000, 2000);
-			value = drv2624_reg_read(drv2624, DRV2624_REG_GO);
-			if (value < 0) {
-				ret = value;
-			} else if (value != 1) {
-				ret = -1;
-				dev_warn(drv2624->dev,
-					 "%s, GO fail, stop action\n",
-					 __func__);
+	do {
+		ret = drv2624_reg_write(drv2624, DRV2624_REG_GO, val);
+		if (ret >= 0) {
+			/* Only poll GO bit for STOP */
+			if (!val) {
+				usleep_range(8000, 10000);
+				ret = drv2624_poll_go_bit_stop(drv2624);
 			}
-		} else {
-			while (poll_ready > 0) {
-				value =
-				    drv2624_reg_read(drv2624, DRV2624_REG_GO);
-				if (value < 0) {
-					ret = value;
-					break;
-				}
-
-				if (value == 0)
-					break;
-				usleep_range(10000, 20000);
-				poll_ready--;
-			}
-
-			if (poll_ready == 0) {
-				dev_err(drv2624->dev,
-					"%s, ERROR: clear GO fail\n",
-					__func__);
-			}
+			return ret;
 		}
-	} else if (retry-- > 0) {
-		goto set_go_bit_write;
-	}
+		usleep_range(8000, 10000);
+	} while (retry--);
 
 	return ret;
 }

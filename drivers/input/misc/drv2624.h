@@ -178,6 +178,8 @@
 #define	GO					1
 #define STOP					0
 
+#define POLL_GO_BIT_RETRY			100
+
 enum actuator_type {
 	ERM,
 	LRA
