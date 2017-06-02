@@ -1306,8 +1306,13 @@ static int mnh_sm_set_state_locked(int state)
 			 "%s: failed to transition to state %d (%d)\n",
 			 __func__, state, ret);
 
-		if (state == MNH_STATE_ACTIVE)
+		if (state == MNH_STATE_ACTIVE) {
+			mnh_sm_dev->powered = false;
+			reinit_completion(&mnh_sm_dev->powered_complete);
+			mnh_sm_poweroff();
 			disable_irq(mnh_sm_dev->ready_irq);
+			mnh_sm_dev->state = MNH_STATE_OFF;
+		}
 
 		return ret;
 	}
