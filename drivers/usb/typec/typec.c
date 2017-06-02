@@ -1245,9 +1245,7 @@ EXPORT_SYMBOL_GPL(typec_unregister_port);
 static int __init typec_init(void)
 {
 	typec_class = class_create(THIS_MODULE, "typec");
-	if (IS_ERR(typec_class))
-		return PTR_ERR(typec_class);
-	return 0;
+	return PTR_ERR_OR_ZERO(typec_class);
 }
 subsys_initcall(typec_init);
 

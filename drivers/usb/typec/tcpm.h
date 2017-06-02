@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016 Google, Inc
+ * Copyright 2015-2017 Google, Inc
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,7 +17,7 @@
 
 #include <linux/bitops.h>
 #include <linux/usb/typec.h>
-#include <linux/usb/pd.h>
+#include "pd.h"
 
 enum typec_cc_status {
 	TYPEC_CC_OPEN,
@@ -34,7 +34,8 @@ enum typec_cc_polarity {
 };
 
 /* Time to wait for TCPC to complete transmit */
-#define PD_T_TCPC_TX_TIMEOUT  100
+#define PD_T_TCPC_TX_TIMEOUT	100		/* in ms	*/
+#define PD_ROLE_SWAP_TIMEOUT	(MSEC_PER_SEC * 10)
 
 enum tcpm_transmit_status {
 	TCPC_TX_SUCCESS = 0,
@@ -59,6 +60,9 @@ struct tcpc_config {
 
 	const u32 *snk_pdo;
 	unsigned int nr_snk_pdo;
+
+	const u32 *snk_vdo;
+	unsigned int nr_snk_vdo;
 
 	unsigned int max_snk_mv;
 	unsigned int max_snk_ma;

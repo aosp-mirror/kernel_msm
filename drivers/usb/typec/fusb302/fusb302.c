@@ -34,13 +34,13 @@
 #include <linux/string.h>
 #include <linux/time.h>
 #include <linux/types.h>
-#include <linux/usb/pd.h>
 #include <linux/usb/typec.h>
 #include <linux/usb/usb_controller.h>
 #include <linux/usb/usb_typec.h>
 #include <linux/workqueue.h>
 
 #include "fusb302_reg.h"
+#include "../pd.h"
 #include "../tcpm.h"
 
 #define PM_WAKE_DELAY_MS 2000
