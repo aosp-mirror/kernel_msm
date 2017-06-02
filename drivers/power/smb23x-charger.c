@@ -103,6 +103,7 @@ struct smb23x_chip {
 	struct smb23x_wakeup_source	smb23x_ws;
 
 	/* extend */
+	bool			boot_up_phase;
 	int				cfg_cool_temp_comp_mv;
 	int				cfg_cool_temp_comp_ma;
 	int				index_soft_temp_comp_mv;
@@ -120,6 +121,7 @@ struct smb23x_chip {
 	struct delayed_work		delaywork_init_register;
 	struct timer_list			timer_print_register;
 	struct delayed_work		delaywork_print_register;
+	struct delayed_work		delaywork_boot_up;
 };
 
 static struct smb23x_chip *g_chip;
@@ -2264,7 +2266,7 @@ void smb23x_delaywork_init_register(struct work_struct *work)
 	power_supply_changed(g_chip->usb_psy);
 	if (rc < 0) {
 		pr_err("Initialize register failed!\n");
-	} else {
+	} else if (g_chip->boot_up_phase == 0){
 		rc = smb23x_print_register(g_chip);
 		if (rc < 0)
 			pr_err("print register failed!\n");
@@ -2293,6 +2295,23 @@ void smb23x_delaywork_print_register(struct work_struct *work)
 		g_chip->timer_print_register.expires = jiffies + 30*HZ;
 		add_timer(&g_chip->timer_print_register);
 		g_chip->reg_print_count++;
+	}
+}
+
+void smb23x_delaywork_boot_up(struct work_struct *work)
+{
+	int rc;
+
+	g_chip->boot_up_phase = 0;
+
+	if (g_chip->charger_plugin) {
+		rc = smb23x_print_register(g_chip);
+		if (rc < 0)
+			pr_err("print register failed!\n");
+		del_timer(&g_chip->timer_print_register);
+		g_chip->timer_print_register.expires = jiffies + 30*HZ;
+		add_timer(&g_chip->timer_print_register);
+		g_chip->reg_print_count = 0;
 	}
 }
 
@@ -2846,6 +2865,7 @@ static int smb23x_probe(struct i2c_client *client,
 	g_chip = chip;
 	chip->last_temp = DEFAULT_BATT_TEMP;
 	chip->index_soft_temp_comp_mv = NORMAL;
+	chip->boot_up_phase = 1;
 	chip->workqueue = create_singlethread_workqueue("smb23x_workqueue");
 	if (chip->workqueue == NULL) {
 		pr_err("failed to create work queue\n");
@@ -2861,6 +2881,10 @@ static int smb23x_probe(struct i2c_client *client,
 	INIT_DELAYED_WORK(&chip->delaywork_print_register, smb23x_delaywork_print_register);
 	init_timer(&chip->timer_print_register);
 	chip->timer_print_register.function = smb23x_timer_print_register;
+
+	//Init a 120 seconds timer
+	INIT_DEFERRABLE_WORK(&chip->delaywork_boot_up, smb23x_delaywork_boot_up);
+	schedule_delayed_work(&chip->delaywork_boot_up, 12000);
 
 #ifdef QTI_SMB231
 	/*
