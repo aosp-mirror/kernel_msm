@@ -490,7 +490,7 @@ static void tcpm_log_source_caps(struct tcpm_port *port)
 				  pdo_max_power(pdo));
 			break;
 		default:
-			strcpy(msg, "undefined");
+			strlcpy(msg, "undefined", sizeof(msg));
 			break;
 		}
 		tcpm_log(port, " PDO %d: type %d, %s",
