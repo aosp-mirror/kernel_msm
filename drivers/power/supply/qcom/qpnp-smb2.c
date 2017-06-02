@@ -1080,7 +1080,7 @@ static int smb2_batt_get_prop(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
 		val->intval = get_client_vote(chg->fcc_votable,
-					      DEFAULT_VOTER);
+					      BATT_PROFILE_VOTER);
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
 		rc = smblib_get_prop_batt_temp(chg, val);
