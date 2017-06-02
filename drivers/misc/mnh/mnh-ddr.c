@@ -120,6 +120,9 @@ do { \
 
 #define CLR_START(ddrblock) (_state.ddrblock[0] &= (0xFFFFFFFE))
 
+/* timeout for training all FSPs */
+#define TRAINING_TIMEOUT msecs_to_jiffies(45)
+
 #define LP_CMD_EXIT_LP 0x81
 #define LP_CMD_DSRPD 0xFE
 
@@ -136,8 +139,8 @@ static struct mnh_ddr_state mnh_ddr_po_config = {
 		HWIO_DDR_PI_BASE_ADDR
 	},
 	.fsps = {
-		0x100B007D,
-		0x1000007D,
+		0x111B007D,
+		0x1111007D,
 		0x0311007D,
 		0x0422007D
 	},
@@ -426,7 +429,7 @@ EXPORT_SYMBOL(mnh_ddr_resume);
 int mnh_ddr_po_init(struct device *dev, struct gpio_desc *iso_n)
 {
 	int index;
-	int timeout = 0;
+	unsigned long timeout;
 	struct mnh_ddr_state *state = &mnh_ddr_po_config;
 
 	mnh_ddr_init_internal_state(state);
@@ -517,17 +520,10 @@ int mnh_ddr_po_init(struct device *dev, struct gpio_desc *iso_n)
 	MNH_DDR_PI_OUTf(00, PI_START, 1);
 	MNH_DDR_CTL_OUTf(00, START, 1);
 
-	/*
-	 * Wait for 20 ms ~ 25 ms before polling INIT_DONE
-	 * TODO(gucheng): The time of delay is subject to change.  Need to
-	 * revisit here when the fix is finalized.  b/37552459
-	 */
-	usleep_range(20000, 25000);
-
-	while ((timeout < 1000) && (!mnh_ddr_int_status_bit(INIT_DONE_SBIT))) {
-		udelay(10);
-		timeout++;
-	}
+	timeout = jiffies + TRAINING_TIMEOUT;
+	while (time_before(jiffies, timeout) &&
+	       (!mnh_ddr_int_status_bit(INIT_DONE_SBIT)))
+		usleep_range(100, 200);
 
 	if (!mnh_ddr_int_status_bit(INIT_DONE_SBIT)) {
 		dev_err(dev, "%s timed out on init done.\n", __func__);
