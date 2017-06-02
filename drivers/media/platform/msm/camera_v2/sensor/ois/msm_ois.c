@@ -1030,6 +1030,7 @@ static int32_t msm_ois_i2c_probe(struct i2c_client *client,
 	ois_ctrl_t->ois_state = OIS_DISABLE_STATE;
 	pr_info("msm_ois_i2c_probe: succeeded\n");
 	CDBG("Exit\n");
+	return rc;
 
 probe_failure:
 	kfree(ois_ctrl_t);
