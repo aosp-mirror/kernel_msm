@@ -50,10 +50,10 @@
 #define CALIBRATION_DATA_PATH "/calibration_data"
 #define AUDIO_DATA "aud_cali_data"
 /* TAS2557_LOAD_FROM_DTS_END */
+#define TAS2557_CAL_MAX_SIZE 1024
 
 
-static int tas2557_load_calibration(struct tas2557_priv *pTAS2557,
-	char *pFileName);
+static int tas2557_load_calibration(struct tas2557_priv *pTAS2557);
 static int tas2557_load_data(struct tas2557_priv *pTAS2557, struct TData *pData,
 	unsigned int nType);
 static void tas2557_clear_firmware(struct TFirmware *pFirmware);
@@ -2330,7 +2330,12 @@ void tas2557_clear_firmware(struct TFirmware *pFirmware)
 	memset(pFirmware, 0x00, sizeof(struct TFirmware));
 }
 
-static int tas2557_load_calibration(struct tas2557_priv *pTAS2557,	char *pFileName)
+/*
+ * The order of picking the calibration
+ * a. device tree
+ * b. calibration file
+ */
+static int tas2557_load_calibration(struct tas2557_priv *pTAS2557)
 {
 	/* TAS2557_LOAD_FROM_DTS_START */
 	int nResult = 0;
@@ -2338,34 +2343,62 @@ static int tas2557_load_calibration(struct tas2557_priv *pTAS2557,	char *pFileNa
 
 	struct device_node *offset = NULL;
 	unsigned char *p_data = NULL;
+	const struct firmware *fw = NULL;
 
 	dev_dbg(pTAS2557->dev, "%s:\n", __func__);
 
+	/* try to read the calibration from device tree */
 	offset = of_find_node_by_path(CALIBRATION_DATA_PATH);
+	if (offset)
+		p_data = (unsigned char *)of_get_property(offset, AUDIO_DATA,
+							  &nSize);
 
-	if (offset != NULL) {
-		dev_info(pTAS2557->dev, "TAS2557 cali_data load success from dts\n");
-		p_data = (unsigned char *) of_get_property(offset, AUDIO_DATA, &nSize);
-	} else {
-		dev_err(pTAS2557->dev, "TAS2557 cali_data load fail on dts\n");
-		return -EINVAL;
+	if (p_data && nSize > 0)
+		dev_info(pTAS2557->dev,
+			 "TAS2557 cali_data load success from dts\n");
+
+	if (pTAS2557->cal_file_name && (0 == nSize || NULL == p_data)) {
+		/* try to read the calibration from file */
+		nResult = request_firmware(&fw, pTAS2557->cal_file_name,
+					   pTAS2557->dev);
+		if (nResult < 0) {
+			dev_err(pTAS2557->dev, "Couldn't load %s\n",
+				pTAS2557->cal_file_name);
+			goto out;
+		}
+
+		if (fw->size > TAS2557_CAL_MAX_SIZE) {
+			dev_err(pTAS2557->dev, "file too big %lu\n",
+				(unsigned long)fw->size);
+			nResult = -EINVAL;
+			goto out;
+		}
+
+		nSize = (int)fw->size;
+		p_data = (unsigned char *)fw->data;
 	}
 
-	if (nSize == 0)
-		return -EINVAL;
+	if (nSize == 0) {
+		nResult = -EINVAL;
+		goto out;
+	}
 
 	tas2557_clear_firmware(pTAS2557->mpCalFirmware);
 	dev_info(pTAS2557->dev, "TAS2557 calibration file size = %d\n", nSize);
-	nResult = fw_parse(pTAS2557, pTAS2557->mpCalFirmware, p_data, nSize);
 
+	nResult = fw_parse(pTAS2557, pTAS2557->mpCalFirmware, p_data, nSize);
 	if (nResult) {
 		dev_err(pTAS2557->dev, "TAS2557 calibration file is corrupt\n");
 		tas2557_clear_firmware(pTAS2557->mpCalFirmware);
-		return nResult;
+		goto out;
 	}
 
 	dev_info(pTAS2557->dev, "TAS2557 calibration: %d calibrations\n",
 		pTAS2557->mpCalFirmware->mnCalibrations);
+
+out:
+	if (fw)
+		release_firmware(fw);
 
 	return nResult;
 	/* TAS2557_LOAD_FROM_DTS_END */
@@ -2404,7 +2437,7 @@ void tas2557_fw_ready(const struct firmware *pFW, void *pContext)
 	}
 
 	/* TAS2557_LOAD_FROM_DTS_START */
-	tas2557_load_calibration(pTAS2557, NULL);
+	tas2557_load_calibration(pTAS2557);
 	/* TAS2557_LOAD_FROM_DTS_END */
 
 	if (pTAS2557->mpFirmware->mpConfigurations) {
@@ -2620,8 +2653,9 @@ int tas2557_set_calibration(struct tas2557_priv *pTAS2557, int nCalibration)
 	}
 
 	if (nCalibration == 0x00FF) {
-		dev_info(pTAS2557->dev, "load new calibration file %s\n", TAS2557_CAL_NAME);
-		nResult = tas2557_load_calibration(pTAS2557, TAS2557_CAL_NAME);
+		dev_info(pTAS2557->dev, "load new calibration file %s\n",
+			 pTAS2557->cal_file_name);
+		nResult = tas2557_load_calibration(pTAS2557);
 		if (nResult < 0)
 			goto end;
 		nCalibration = 0;
@@ -2806,6 +2840,13 @@ int tas2557_parse_dt(struct device *dev, struct tas2557_priv *pTAS2557)
 	else
 		pTAS2557->mnI2SBits = value;
 
+	rc = of_property_read_string(np, "ti,cal-file-name",
+				     &pTAS2557->cal_file_name);
+	if (rc)
+		pTAS2557->cal_file_name = TAS2557_CAL_NAME;
+	else
+		dev_dbg(pTAS2557->dev, "ti,cal-file-name=%s\n",
+			pTAS2557->cal_file_name);
 end:
 
 	return ret;

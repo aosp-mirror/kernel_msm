@@ -537,7 +537,7 @@ struct tas2557_priv {
 	int mnCurrentReg;
 	struct mutex file_lock;
 #endif
-
+	const char *cal_file_name;
 };
 
 #endif /* _TAS2557_H */
