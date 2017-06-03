@@ -1747,8 +1747,8 @@ out:
 }
 
 /*
- * Client calls this in kworker context upon receipt of BOOTSTRAP_READY IRQ
- * from server.	 Call MNH host driver to setup iATU mappings for the command
+ * Client calls this upon receipt of BOOTSTRAP_READY IRQ
+ * from server. Call MNH host driver to setup iATU mappings for the command
  * channels and send LINK_INIT.
  */
 int easelcomm_client_remote_cmdchan_ready_handler(void)

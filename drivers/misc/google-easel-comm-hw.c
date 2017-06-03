@@ -41,6 +41,12 @@
 /* Use only one DMA channel for app requests */
 #define APP_DMA_CHAN 1
 
+/* timeout for waiting for bootstrap MSI after hotplug */
+#define BOOTSTRAP_TIMEOUT msecs_to_jiffies(2000)
+
+/* Signaled when server sents bootstrap MSI */
+static DECLARE_COMPLETION(bootstrap_done);
+
 /*
  * Mutex serializes thread context access to app_dma* data structures below.
  * Client thread performing the app DMA transfer holds this for the duration
@@ -230,17 +236,6 @@ EXPORT_SYMBOL(easelcomm_hw_init);
 #endif
 
 #ifdef EASELCOMM_AP
-/* Called on workqueue when server sends bootstrap set MSI. */
-static void easelcomm_hw_ap_server_ready(struct work_struct *work)
-{
-	int ret = easelcomm_client_remote_cmdchan_ready_handler();
-
-	if (ret)
-		pr_debug("easelcomm: remote_cmdchan_ready_handler returns %d\n",
-			ret);
-}
-static DECLARE_WORK(server_cmdchan_ready, easelcomm_hw_ap_server_ready);
-
 /* AP/client MNH API MSI callback */
 static int easelcomm_hw_ap_msi_callback(uint32_t msi)
 {
@@ -248,7 +243,7 @@ static int easelcomm_hw_ap_msi_callback(uint32_t msi)
 
 	switch (msi) {
 	case MSI_BOOTSTRAP_SET:
-		schedule_work(&server_cmdchan_ready);
+		complete(&bootstrap_done);
 		break;
 	case MSI_MSG_SEND:
 		schedule_work(&cmdchan_data);
@@ -283,8 +278,8 @@ static int easelcomm_hw_ap_dma_callback(
 /* AP/client PCIe ready, EP enumerated, can now use MNH host driver. */
 static int easelcomm_hw_ap_pcie_ready(void)
 {
+	int ret = 0;
 	uint64_t temp_rb_base_val;
-	int ret;
 
 	/* Only allocate ringbuffer once for AP */
 	if (local_cmdchan_cpu_addr == NULL) {
@@ -305,14 +300,34 @@ static int easelcomm_hw_ap_pcie_ready(void)
 		&easelcomm_hw_ap_msi_callback, NULL,
 		&easelcomm_hw_ap_dma_callback);
 	WARN_ON(ret);
+
 	/*
-	 * Easel is booting in parallel, poll whether it already sent
-	 * bootstrap done MSI with ringbuffer base setup, prior to us being
-	 * ready to handle the IRQ.
+	 * Wasel is booting in parallel, poll whether it already sent
+	 * bootstrap done MSI with ringbuffer base setup, prior to us
+	 * being ready to handle the IRQ.
 	 */
 	ret = mnh_get_rb_base(&temp_rb_base_val);
-	if (!WARN_ON(ret) && temp_rb_base_val)
-		schedule_work(&server_cmdchan_ready);
+	if (WARN_ON(ret)) {
+		pr_err("%s: mnh_get_rb_base failed (%d)\n", __func__, ret);
+		mnh_reg_irq_callback(NULL, NULL, NULL);
+		return ret;
+	} else if (!temp_rb_base_val) {
+		/* wait for bootstrap completion */
+		ret = wait_for_completion_timeout(&bootstrap_done,
+						  BOOTSTRAP_TIMEOUT);
+		if (!ret) {
+			pr_err("%s: timeout waiting for bootstrap msi\n",
+			       __func__);
+			mnh_reg_irq_callback(NULL, NULL, NULL);
+			return -ETIMEDOUT;
+		}
+	}
+
+	ret = easelcomm_client_remote_cmdchan_ready_handler();
+	if (ret)
+		pr_warn("%s: remote_cmdchan_ready_handler returns %d\n",
+			__func__, ret);
+
 	return ret;
 }
 
@@ -323,11 +338,12 @@ static int easelcomm_hw_ap_hotplug_callback(enum mnh_hotplug_event_t event)
 
 	switch (event) {
 	case MNH_HOTPLUG_IN:
-		pr_debug("easelcomm: mnh hotplug in\n");
+		pr_debug("%s: mnh hotplug in\n", __func__);
 		ret = easelcomm_hw_ap_pcie_ready();
 	 break;
 	case MNH_HOTPLUG_OUT:
-		pr_debug("easelcomm: mnh hotplug out\n");
+		pr_debug("%s: mnh hotplug out\n", __func__);
+		reinit_completion(&bootstrap_done);
 		/* Unregister IRQ callbacks first */
 		ret = mnh_reg_irq_callback(NULL, NULL, NULL);
 		WARN_ON(ret);
