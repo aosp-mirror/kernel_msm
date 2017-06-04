@@ -242,6 +242,13 @@ static int mnh_pwr_pcie_suspend(void)
 	if (!pcidev)
 		return -ENODEV;
 
+	/* suspend the driver state */
+	ret = mnh_pci_suspend();
+	if (ret) {
+		dev_err(mnh_pwr->dev, "%s: mnh_pci_suspend failed (%d)\n",
+			__func__, ret);
+	}
+
 	/* prepare the root complex and endpoint for going to suspend */
 	ret = pci_prepare_to_sleep(pcidev);
 	if (ret) {
@@ -324,11 +331,10 @@ static int mnh_pwr_pcie_resume(void)
 		/* apply the saved state to the device */
 		pci_restore_state(pcidev);
 
-		/* reinitialize some of the driver state */
-		ret = mnh_pci_init_resume();
+		/* resume the driver state */
+		ret = mnh_pci_resume();
 		if (ret) {
-			dev_err(mnh_pwr->dev,
-				"%s: mnh_pci_init_resume (%d)\n",
+			dev_err(mnh_pwr->dev, "%s: mnh_pci_resume failed (%d)\n",
 				__func__, ret);
 			goto fail_pcie_resume_mnh_init;
 		}

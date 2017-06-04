@@ -81,13 +81,13 @@ struct mnh_device {
 	irq_cb_t	vm_cb;
 	irq_dma_cb_t	dma_cb;
 	uint32_t	ring_buf_addr;
-	spinlock_t	lock;
 	uint32_t	msi_num;
 	int		irq;
 	uint8_t		bar2_iatu_region; /* 0  - whole BAR2
 					1 - ROM/SRAM
 					2 - Peripheral Config */
 	uint32_t	bar_size[BAR_MAX_NUM];
+	bool powered;
 };
 
 static struct mnh_device *mnh_dev;
@@ -164,6 +164,13 @@ int mnh_pcie_config_read(uint32_t offset,  uint32_t len, uint32_t *data)
 	if (offset > mnh_dev->bar_size[BAR_0] - sizeof(uint32_t))
 		return -EINVAL; /* address invalid */
 
+	if (WARN_ON(!mnh_dev->powered)) {
+		dev_err(&mnh_dev->pdev->dev,
+			"%s: cannot do pcie transfer while powering down\n",
+			__func__);
+		return -EIO;
+	}
+
 	pci_read_config_dword(mnh_dev->pdev, offset, data);
 
 	dev_dbg(&mnh_dev->pdev->dev, "Read PCIE Config [0x%08x]-0x%x\n",
@@ -200,6 +207,13 @@ int mnh_pcie_config_write(uint32_t offset, uint32_t len, uint32_t data)
 	dev_dbg(&mnh_dev->pdev->dev, "Write PCIE Config[0x%08x]-0x%x",
 		offset, data);
 
+	if (WARN_ON(!mnh_dev->powered)) {
+		dev_err(&mnh_dev->pdev->dev,
+			"%s: cannot do pcie transfer while powering down\n",
+			__func__);
+		return -EIO;
+	}
+
 	pci_write_config_dword(mnh_dev->pdev, offset, data);
 
 	return 0;
@@ -232,6 +246,13 @@ int mnh_config_read(uint32_t offset,  uint32_t len, uint32_t *data)
 
 	new_offset = mnh_check_iatu_bar2(offset);
 
+	if (WARN_ON(!mnh_dev->powered)) {
+		dev_err(&mnh_dev->pdev->dev,
+			"%s: cannot do pcie transfer while powering down\n",
+			__func__);
+		return -EIO;
+	}
+
 	if (len == sizeof(uint32_t))
 		*data = ioread32(mnh_dev->config + new_offset);
 	else if (len == sizeof(uint16_t))
@@ -239,8 +260,8 @@ int mnh_config_read(uint32_t offset,  uint32_t len, uint32_t *data)
 	else if (len == sizeof(uint8_t))
 		*data = ioread8(mnh_dev->config + new_offset);
 	else {
-		dev_err(&mnh_dev->pdev->dev, "Read Config:len not allowed-%d\n",
-				len);
+		dev_err(&mnh_dev->pdev->dev, "%s: invalid len %d\n",
+			__func__, len);
 		return -EINVAL;
 	}
 
@@ -279,14 +300,24 @@ int mnh_config_write(uint32_t offset, uint32_t len, uint32_t data)
 	dev_dbg(&mnh_dev->pdev->dev, "Write Config[0x%08x] - 0x%x",
 		new_offset, data);
 
+	if (WARN_ON(!mnh_dev->powered)) {
+		dev_err(&mnh_dev->pdev->dev,
+			"%s: cannot do pcie transfer while powering down\n",
+			__func__);
+		return -EIO;
+	}
+
 	if (len == sizeof(uint32_t))
 		iowrite32(data, mnh_dev->config + new_offset);
 	else if (len == sizeof(uint16_t))
 		iowrite16(data, mnh_dev->config + new_offset);
 	else if (len == sizeof(uint8_t))
 		iowrite8(data, mnh_dev->config + new_offset);
-	else
+	else {
+		dev_err(&mnh_dev->pdev->dev, "%s: invalid len %d\n",
+			__func__, len);
 		return -EINVAL;
+	}
 
 	return 0;
 
@@ -317,9 +348,17 @@ int mnh_ddr_read(uint32_t offset,  uint32_t len, void *data)
 	if (offset > mnh_dev->bar_size[BAR_4] - len)
 		return -EINVAL; /* address invalid */
 
-	memcpy(data, mnh_dev->ddr + offset, len);
 	dev_dbg(&mnh_dev->pdev->dev, "Read DDR[0x%08x], len-%d, data-0x%0x",
 		offset, len, *(uint32_t *)data);
+
+	if (WARN_ON(!mnh_dev->powered)) {
+		dev_err(&mnh_dev->pdev->dev,
+			"%s: cannot do pcie transfer while powering down\n",
+			__func__);
+		return -EIO;
+	}
+
+	memcpy(data, mnh_dev->ddr + offset, len);
 
 	return 0;
 }
@@ -355,6 +394,13 @@ int mnh_ddr_write(uint32_t offset, uint32_t len, void *data)
 
 	dev_dbg(&mnh_dev->pdev->dev, "Write DDR[0x%08x], len-%d, data-0x%x",
 			offset, len, *(uint32_t *)data);
+
+	if (WARN_ON(!mnh_dev->powered)) {
+		dev_err(&mnh_dev->pdev->dev,
+			"%s: cannot do pcie transfer while powering down\n",
+			__func__);
+		return -EIO;
+	}
 
 	memcpy(mnh_dev->ddr + offset, data, len);
 
@@ -1806,6 +1852,9 @@ static int mnh_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	mnh_dev->pdev = pdev;
 
+	/* probe is called after pcie has enumerated, so set powered flag */
+	mnh_dev->powered = true;
+
 	/* enable pci dev */
 	err = pci_enable_device(pdev);
 	if (err) {
@@ -1874,7 +1923,6 @@ static int mnh_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	mnh_dev->msi_num = mnh_irq_init(pdev);
 #endif
 
-	spin_lock_init(&mnh_dev->lock);
 	pci_set_drvdata(pdev, (void *)mnh_dev);
 
 	mnh_dma_init();
@@ -1960,8 +2008,7 @@ static void mnh_pci_remove(struct pci_dev *pdev)
 		pci_iounmap(pdev, dev->ddr);
 	}
 
-
-        pci_set_drvdata(pdev, NULL);
+	pci_set_drvdata(pdev, NULL);
 	kfree(dev);
 
 	pci_release_regions(pdev);
@@ -1970,20 +2017,63 @@ static void mnh_pci_remove(struct pci_dev *pdev)
 	dev_dbg(&pdev->dev, "MNH PCIe driver is removed\n");
 }
 
-#ifdef CONFIG_PM
-static int mnh_pci_suspend(struct pci_dev *pdev, pm_message_t state)
+int mnh_pci_suspend(void)
 {
-	dev_dbg(&pdev->dev, "MNH PCIe driver is suspended\n");
-	return 0;
-}
+	struct pci_dev *pdev = mnh_dev->pdev;
+	struct device *dev = &mnh_dev->pdev->dev;
 
-static int mnh_pci_resume(struct pci_dev *pdev)
-{
-	dev_dbg(&pdev->dev, "MNH PCIe driver is resumed\n");
+	dev_dbg(dev, "%s: enter\n", __func__);
 
-	return 0;
-}
+	/* disable IRQs */
+#ifdef CONFIG_MNH_PCIE_MULTIPLE_MSI
+	for (i = MSI_GENERIC_START; i <= MSI_GENERIC_END; i++)
+		disable_irq(pdev->irq + i);
+	disable_irq(pdev->irq + MSI_DMA_READ);
+	disable_irq(pdev->irq + MSI_DMA_WRITE);
+#else
+	disable_irq(pdev->irq);
 #endif
+
+	mnh_dev->powered = false;
+
+	dev_dbg(dev, "%s: exit\n", __func__);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(mnh_pci_suspend);
+
+int mnh_pci_resume(void)
+{
+	struct pci_dev *pdev = mnh_dev->pdev;
+	struct device *dev = &mnh_dev->pdev->dev;
+	int ret = 0;
+
+	dev_dbg(dev, "%s: enter\n", __func__);
+
+	mnh_dev->powered = true;
+
+	ret = mnh_pci_init_resume();
+	if (ret) {
+		dev_err(dev, "%s: mnh_pci_init_resume failed (%d)\n",
+			__func__, ret);
+		return ret;
+	}
+
+	/* enable IRQs */
+#ifdef CONFIG_MNH_PCIE_MULTIPLE_MSI
+	for (i = MSI_GENERIC_START; i <= MSI_GENERIC_END; i++)
+		enable_irq(pdev->irq + i);
+	enable_irq(pdev->irq + MSI_DMA_READ);
+	enable_irq(pdev->irq + MSI_DMA_WRITE);
+#else
+	enable_irq(pdev->irq);
+#endif
+
+	dev_dbg(dev, "%s: exit\n", __func__);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(mnh_pci_resume);
 
 #if 0 /* TODO: implement error handlers below */
 static const struct pci_error_handlers mnh_pci_err_handler = {
@@ -2002,10 +2092,6 @@ static struct pci_driver mnh_pci_driver = {
 	.probe = mnh_pci_probe,
 	.remove = mnh_pci_remove,
 	.shutdown = mnh_pci_remove,
-#ifdef CONFIG_PM
-	.suspend = mnh_pci_suspend,
-	.resume = mnh_pci_resume,
-#endif
 };
 
 module_pci_driver(mnh_pci_driver);

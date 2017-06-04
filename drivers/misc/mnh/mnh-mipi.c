@@ -1136,6 +1136,23 @@ int mnh_mipi_init(struct device *dev)
 }
 EXPORT_SYMBOL(mnh_mipi_init);
 
+int mnh_mipi_suspend(struct device *dev)
+{
+	dev_dbg(dev, "%s: enter\n", __func__);
+
+	/* abort any previously running worker threads */
+	atomic_set(&mnh_mipi->poll, 0);
+	cancel_work_sync(&mnh_mipi->asr_work);
+
+	/* wait enough time for the worker thread to complete */
+	udelay(2 * ASR_POLL_DELAY_US);
+
+	dev_dbg(dev, "%s: exit\n", __func__);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(mnh_mipi_suspend);
+
 void mnh_mipi_set_debug(int val)
 {
 	mipi_debug = val;

@@ -1252,6 +1252,8 @@ static int mnh_sm_set_state_locked(int state)
 		mnh_sm_dev->powered = false;
 		reinit_completion(&mnh_sm_dev->powered_complete);
 
+		mnh_mipi_suspend(mnh_sm_dev->dev);
+
 		ret = mnh_sm_poweroff();
 
 		disable_irq(mnh_sm_dev->ready_irq);
@@ -1314,6 +1316,7 @@ static int mnh_sm_set_state_locked(int state)
 		if (state == MNH_STATE_ACTIVE) {
 			mnh_sm_dev->powered = false;
 			reinit_completion(&mnh_sm_dev->powered_complete);
+			mnh_mipi_suspend(mnh_sm_dev->dev);
 			mnh_sm_poweroff();
 			disable_irq(mnh_sm_dev->ready_irq);
 			mnh_sm_dev->state = MNH_STATE_OFF;
