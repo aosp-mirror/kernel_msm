@@ -346,8 +346,8 @@ static int __init lge_panic_handler_early_init(void)
 		return -ENODEV;
 	}
 
-	of_property_read_u32(np, "mem-address", &mem_addr);
-	of_property_read_u32(np, "mem-size", &mem_size);
+	of_property_read_u32(np, "android,ramoops-buffer-start", &mem_addr);
+	of_property_read_u32(np, "android,ramoops-buffer-size", &mem_size);
 	pr_info("mem-address=%d\n", mem_addr);
 	pr_info("mem-size=%d\n", mem_size);
 	lge_set_ram_console_addr(mem_addr, mem_size);
