@@ -1032,6 +1032,14 @@ int mnh_sm_reg_hotplug_callback(hotplug_cb_t hotplug_cb)
 }
 EXPORT_SYMBOL(mnh_sm_reg_hotplug_callback);
 
+static int mnh_sm_hotplug_callback(enum mnh_hotplug_event_t event)
+{
+	if (!mnh_hotplug_cb)
+		return -EFAULT;
+
+	return mnh_hotplug_cb(event);
+}
+
 /**
  * API to initialize Power and clocks to MNH.
  * @param[in] Structure argument to configure power and clock component.
@@ -1213,25 +1221,33 @@ static int mnh_sm_resume(void)
  */
 int mnh_sm_get_state(void)
 {
+	int state;
+
 	if (!mnh_sm_dev)
 		return MNH_STATE_OFF;
 
-	return mnh_sm_dev->state;
+	mutex_lock(&mnh_sm_dev->lock);
+	state = mnh_sm_dev->state;
+	mutex_unlock(&mnh_sm_dev->lock);
+
+	return state;
 }
 EXPORT_SYMBOL(mnh_sm_get_state);
 
 static int mnh_sm_set_state_locked(int state)
 {
+	struct device *dev = mnh_sm_dev->dev;
 	int ret = 0;
 
 	if (state == mnh_sm_dev->state) {
-		dev_dbg(mnh_sm_dev->dev, "%s: already in state %d\n", __func__,
-			state);
+		dev_dbg(dev, "%s: already in state %d\n", __func__, state);
 		return 0;
 	}
 
 	switch (state) {
 	case MNH_STATE_OFF:
+		mnh_sm_hotplug_callback(MNH_HOTPLUG_OUT);
+
 		/* toggle powered flag and clear completion */
 		mnh_sm_dev->powered = false;
 		reinit_completion(&mnh_sm_dev->powered_complete);
@@ -1267,10 +1283,16 @@ static int mnh_sm_set_state_locked(int state)
 			ret = mnh_sm_resume();
 		else
 			ret = mnh_sm_download();
+		if (ret)
+			break;
+
+		ret = mnh_sm_hotplug_callback(MNH_HOTPLUG_IN);
 		break;
 	case MNH_STATE_SUSPEND:
 		ret = mnh_sm_set_state_locked(MNH_STATE_ACTIVE);
 		if (!ret) {
+			mnh_sm_hotplug_callback(MNH_HOTPLUG_OUT);
+
 			/* toggle powered flag and clear completion */
 			mnh_sm_dev->powered = false;
 			reinit_completion(&mnh_sm_dev->powered_complete);
@@ -1312,7 +1334,6 @@ static int mnh_sm_set_state_locked(int state)
 int mnh_sm_set_state(int state)
 {
 	int ret;
-	int prev_state = mnh_sm_dev->state;
 
 	if (!mnh_sm_dev)
 		return -ENODEV;
@@ -1337,12 +1358,6 @@ int mnh_sm_set_state(int state)
 
 	dev_info(mnh_sm_dev->dev, "%s: finished state %d\n", __func__,
 		 mnh_sm_dev->state);
-
-	/* check for hotplug conditions */
-	if (mnh_hotplug_cb && (mnh_sm_dev->state == MNH_STATE_ACTIVE))
-		mnh_hotplug_cb(MNH_HOTPLUG_IN);
-	else if (mnh_hotplug_cb && (prev_state == MNH_STATE_ACTIVE))
-		mnh_hotplug_cb(MNH_HOTPLUG_OUT);
 
 	return 0;
 }
