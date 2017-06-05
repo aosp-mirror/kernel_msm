@@ -3667,8 +3667,11 @@ static ssize_t mdss_mdp_wait_pp_show(struct device *dev,
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
 	struct mdss_mdp_ctl *ctl = mfd_to_ctl(mfd);
 	int ret;
-
-	ret = scnprintf(buf, PAGE_SIZE, "%d\n", atomic_read(&ctl->wait_pp));
+	if (!ctl) {
+		ret = scnprintf(buf, PAGE_SIZE, "0\n");
+	} else {
+		ret = scnprintf(buf, PAGE_SIZE, "%d\n", atomic_read(&ctl->wait_pp));
+	}
 	return ret;
 }
 
