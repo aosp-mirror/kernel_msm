@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -42,6 +42,9 @@
 #include <wlan_hdd_wext.h>
 #include <net/sock.h>
 #include <linux/netlink.h>
+#ifdef CNSS_GENL
+#include <net/cnss_nl.h>
+#endif
 
 #ifdef WLAN_OPEN_SOURCE
 #include <linux/debugfs.h>
@@ -1634,6 +1637,24 @@ dbglog_debugfs_raw_data(wmi_unified_t wmi_handle, const u_int8_t *buf, A_UINT32 
 }
 #endif /* WLAN_OPEN_SOURCE */
 
+/**
+ * nl_srv_bcast_fw_logs() - Wrapper func to send bcast msgs to FW logs mcast grp
+ * @skb: sk buffer pointer
+ *
+ * Sends the bcast message to FW logs multicast group with generic nl socket
+ * if CNSS_GENL is enabled. Else, use the legacy netlink socket to send.
+ *
+ * Return: zero on success, error code otherwise
+ */
+static int nl_srv_bcast_fw_logs(struct sk_buff *skb)
+{
+#ifdef CNSS_GENL
+	return nl_srv_bcast(skb, CLD80211_MCGRP_FW_LOGS, WLAN_NL_MSG_CNSS_DIAG);
+#else
+	return nl_srv_bcast(skb);
+#endif
+}
+
 /*
  * Package the data from the fw diag WMI event handler.
  * Pass this data to cnss-diag service
@@ -1645,6 +1666,9 @@ send_fw_diag_nl_data(const u_int8_t *buffer,
     struct sk_buff *skb_out;
     struct nlmsghdr *nlh;
     int res = 0;
+    tAniNlHdr *wnl;
+    int radio = 0;
+    int msg_len = 0;
 
     if (WARN_ON(len > ATH6KL_FWLOG_PAYLOAD_SIZE))
         return -ENODEV;
@@ -1654,20 +1678,23 @@ send_fw_diag_nl_data(const u_int8_t *buffer,
 
     if (vos_is_multicast_logging())
     {
-        skb_out = nlmsg_new(len, 0);
+        msg_len = len + sizeof(radio);
+        skb_out = nlmsg_new(msg_len, 0);
         if (!skb_out)
         {
             AR_DEBUG_PRINTF(ATH_DEBUG_ERR, ("Failed to allocate new skb\n"));
             return -1;
         }
-        nlh = nlmsg_put(skb_out, 0, 0, WLAN_NL_MSG_CNSS_DIAG, len, 0);
-        memcpy(nlmsg_data(nlh), buffer, len);
+        nlh = nlmsg_put(skb_out, 0, 0, WLAN_NL_MSG_CNSS_DIAG, msg_len, 0);
+        wnl = (tAniNlHdr *)nlh;
+        wnl->radio = 0;
+        memcpy(nlmsg_data(nlh) + sizeof(radio), buffer, len);
 
-        res = nl_srv_bcast(skb_out);
+        res = nl_srv_bcast_fw_logs(skb_out);
         if (res < 0)
         {
             AR_DEBUG_PRINTF(ATH_DEBUG_RSVD1,
-                            ("%s: nl_srv_bcast failed 0x%x \n", __func__, res));
+                            ("%s: nl_srv_bcast_fw_logs failed 0x%x \n", __func__, res));
             return res;
         }
     }
@@ -1683,6 +1710,8 @@ send_diag_netlink_data(const u_int8_t *buffer,
     int res = 0;
     struct dbglog_slot *slot;
     size_t slot_len;
+    tAniNlHdr *wnl;
+    int radio = 0;
 
     if (WARN_ON(len > ATH6KL_FWLOG_PAYLOAD_SIZE))
         return -ENODEV;
@@ -1691,7 +1720,7 @@ send_diag_netlink_data(const u_int8_t *buffer,
 	return -EIO;
 
     if (vos_is_multicast_logging()) {
-        slot_len = sizeof(*slot) + ATH6KL_FWLOG_PAYLOAD_SIZE;
+        slot_len = sizeof(*slot) + ATH6KL_FWLOG_PAYLOAD_SIZE + sizeof(radio);
 
         skb_out = nlmsg_new(slot_len, 0);
         if (!skb_out) {
@@ -1701,7 +1730,9 @@ send_diag_netlink_data(const u_int8_t *buffer,
         }
 
         nlh = nlmsg_put(skb_out, 0, 0, WLAN_NL_MSG_CNSS_DIAG, slot_len, 0);
-        slot = (struct dbglog_slot *) nlmsg_data(nlh);
+        wnl = (tAniNlHdr *)nlh;
+        wnl->radio = 0;
+        slot = (struct dbglog_slot *) (nlmsg_data(nlh) + sizeof(radio));
         slot->diag_type = cmd;
         slot->timestamp = cpu_to_le32(jiffies);
         slot->length = cpu_to_le32(len);
@@ -1709,10 +1740,10 @@ send_diag_netlink_data(const u_int8_t *buffer,
         slot->dropped = get_version;
         memcpy(slot->payload, buffer, len);
 
-        res = nl_srv_bcast(skb_out);
+        res = nl_srv_bcast_fw_logs(skb_out);
         if (res < 0) {
             AR_DEBUG_PRINTF(ATH_DEBUG_RSVD1,
-                            ("%s: nl_srv_bcast failed 0x%x \n", __func__, res));
+                            ("%s: nl_srv_bcast_fw_logs failed 0x%x \n", __func__, res));
             return res;
         }
     }
@@ -1755,11 +1786,11 @@ dbglog_process_netlink_data(wmi_unified_t wmi_handle, const u_int8_t *buffer,
         slot->dropped = cpu_to_le32(dropped);
         memcpy(slot->payload, buffer, len);
 
-        res = nl_srv_bcast(skb_out);
+        res = nl_srv_bcast_fw_logs(skb_out);
         if (res < 0)
         {
             AR_DEBUG_PRINTF(ATH_DEBUG_RSVD1,
-                            ("%s: nl_srv_bcast failed 0x%x \n", __func__, res));
+                            ("%s: nl_srv_bcast_fw_logs failed 0x%x \n", __func__, res));
             return res;
         }
     }
@@ -3915,6 +3946,41 @@ int dbglog_debugfs_remove(wmi_unified_t wmi_handle)
 }
 #endif /* WLAN_OPEN_SOURCE */
 
+/**
+ * cnss_diag_handle_crash_inject() - API to handle crash inject command
+ * @slot: pointer to struct dbglog_slot
+ *
+ * API to handle CNSS diag crash inject command
+ *
+ * Return: None
+ */
+static void cnss_diag_handle_crash_inject(struct dbglog_slot *slot)
+{
+	switch (slot->diag_type) {
+	case DIAG_TYPE_CRASH_INJECT:
+		if (slot->length == 2) {
+			AR_DEBUG_PRINTF(ATH_DEBUG_INFO,
+					("%s : DIAG_TYPE_CRASH_INJECT: %d %d\n", __func__,
+					 slot->payload[0], slot->payload[1]));
+			if (!tgt_assert_enable) {
+				AR_DEBUG_PRINTF(ATH_DEBUG_INFO,
+						("%s: tgt Assert Disabled\n", __func__));
+				return;
+			}
+			process_wma_set_command_twoargs(0,
+					(int)GEN_PARAM_CRASH_INJECT,
+					slot->payload[0],
+					slot->payload[1], GEN_CMD);
+		}
+		else
+			AR_DEBUG_PRINTF(ATH_DEBUG_ERR, ("crash_inject cmd error\n"));
+		break;
+	default:
+		AR_DEBUG_PRINTF(ATH_DEBUG_ERR, ("Unknown cmd error\n"));
+		break;
+	}
+}
+
 /**---------------------------------------------------------------------------
   \brief cnss_diag_msg_callback() - Call back invoked by netlink service
 
@@ -3928,46 +3994,77 @@ int dbglog_debugfs_remove(wmi_unified_t wmi_handle)
 --------------------------------------------------------------------------*/
 int cnss_diag_msg_callback(struct sk_buff *skb)
 {
-    struct nlmsghdr *nlh;
-    struct dbglog_slot *slot;
-    A_UINT8 *msg;
+	struct nlmsghdr *nlh;
+	A_UINT8 *msg;
 
-    nlh = (struct nlmsghdr *)skb->data;
-    if (!nlh)
-    {
-       AR_DEBUG_PRINTF(ATH_DEBUG_ERR, ("%s: Netlink header null \n", __func__));
-       return -1;
-    }
+	nlh = (struct nlmsghdr *)skb->data;
+	if (!nlh) {
+		AR_DEBUG_PRINTF(ATH_DEBUG_ERR, ("%s: Netlink header null \n", __func__));
+		return -1;
+	}
 
-    msg = NLMSG_DATA(nlh);
+	msg = NLMSG_DATA(nlh);
+	cnss_diag_handle_crash_inject((struct dbglog_slot *)msg);
 
-    slot = (struct dbglog_slot *)msg;
-    switch (slot->diag_type) {
-    case DIAG_TYPE_CRASH_INJECT:
-        if (slot->length == 2) {
-            AR_DEBUG_PRINTF(ATH_DEBUG_INFO,
-                           ("%s : DIAG_TYPE_CRASH_INJECT: %d %d\n", __func__,
-                           slot->payload[0], slot->payload[1]));
-            if (!tgt_assert_enable) {
-                AR_DEBUG_PRINTF(ATH_DEBUG_INFO,
-                               ("%s: tgt Assert Disabled\n", __func__));
-                return 0;
-            }
-            process_wma_set_command_twoargs(0,
-                                           (int)GEN_PARAM_CRASH_INJECT,
-                                           slot->payload[0],
-                                           slot->payload[1], GEN_CMD);
-        }
-        else
-            AR_DEBUG_PRINTF(ATH_DEBUG_ERR, ("crash_inject cmd error\n"));
-    break;
-    default:
-    break;
-    }
-    return 0;
-
+	return 0;
 }
 
+#ifdef CNSS_GENL
+
+/**
+ * cnss_diag_cmd_handler() - API to handle CNSS diag command
+ * @data: Data received
+ * @data_len: length of the data received
+ * @ctx: Pointer to stored context
+ * @pid: Process ID
+ *
+ * API to handle CNSS diag commands from user space
+ *
+ * Return: None
+ */
+static void cnss_diag_cmd_handler(const void *data, int data_len,
+						void *ctx, int pid)
+{
+	struct dbglog_slot *slot = NULL;
+	struct nlattr *tb[QCA_WLAN_VENDOR_ATTR_MAX + 1];
+
+	if (nla_parse(tb, CLD80211_ATTR_MAX, data, data_len, NULL)) {
+		AR_DEBUG_PRINTF(ATH_DEBUG_ERR, ("%s: nla parse fails \n",
+							__func__));
+		return;
+	}
+
+	if (!tb[CLD80211_ATTR_DATA]) {
+		AR_DEBUG_PRINTF(ATH_DEBUG_ERR, ("%s: attr VENDOR_DATA fails \n",
+								__func__));
+		return;
+	}
+	slot = (struct dbglog_slot *)nla_data(tb[CLD80211_ATTR_DATA]);
+
+	if (!slot) {
+		AR_DEBUG_PRINTF(ATH_DEBUG_ERR, ("%s: data NULL \n", __func__));
+		return;
+	}
+
+	cnss_diag_handle_crash_inject(slot);
+	return;
+}
+
+/**
+ * cnss_diag_activate_service() - API to register CNSS diag cmd handler
+ *
+ * API to register the CNSS diag command handler using new genl infra.
+ * Return type is zero to match with legacy prototype
+ *
+ * Return: 0
+ */
+int cnss_diag_activate_service(void)
+{
+	register_cld_cmd_cb(WLAN_NL_MSG_CNSS_DIAG, cnss_diag_cmd_handler, NULL);
+	return 0;
+}
+
+#else
 /**---------------------------------------------------------------------------
   \brief cnss_diag_activate_service() - Activate cnss_diag message handler
 
@@ -3979,7 +4076,7 @@ int cnss_diag_msg_callback(struct sk_buff *skb)
 
   \return - 0 for success, non zero for failure
 --------------------------------------------------------------------------*/
-int cnss_diag_activate_service()
+int cnss_diag_activate_service(void)
 {
     int ret = 0;
 
@@ -3993,6 +4090,7 @@ int cnss_diag_activate_service()
     kd_nl_init = TRUE;
     return 0;
 }
+#endif
 
 A_BOOL
 dbglog_wow_print_handler(

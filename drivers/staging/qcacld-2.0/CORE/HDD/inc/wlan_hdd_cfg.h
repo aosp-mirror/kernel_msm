@@ -56,6 +56,8 @@
 
 //Number of items that can be configured
 #define MAX_CFG_INI_ITEMS   1024
+#define MAX_PRB_REQ_VENDOR_OUI_INI_LEN 160
+#define VENDOR_SPECIFIC_IE_BITMAP 0x20000000
 
 #ifdef SAP_AUTH_OFFLOAD
 /* 802.11 pre-share key length */
@@ -539,16 +541,6 @@ enum
 #define CFG_ACTIVE_MIN_CHANNEL_TIME_MIN        ( 0 )
 #define CFG_ACTIVE_MIN_CHANNEL_TIME_MAX        ( 10000 )
 #define CFG_ACTIVE_MIN_CHANNEL_TIME_DEFAULT    ( 20 )
-
-#define CFG_ACTIVE_MAX_CHANNEL_TIME_BTC_NAME       "gActiveMaxChannelTimeBtc"
-#define CFG_ACTIVE_MAX_CHANNEL_TIME_BTC_MIN        ( 0 )
-#define CFG_ACTIVE_MAX_CHANNEL_TIME_BTC_MAX        ( 10000 )
-#define CFG_ACTIVE_MAX_CHANNEL_TIME_BTC_DEFAULT    ( 120 )
-
-#define CFG_ACTIVE_MIN_CHANNEL_TIME_BTC_NAME       "gActiveMinChannelTimeBtc"
-#define CFG_ACTIVE_MIN_CHANNEL_TIME_BTC_MIN        ( 0 )
-#define CFG_ACTIVE_MIN_CHANNEL_TIME_BTC_MAX        ( 10000 )
-#define CFG_ACTIVE_MIN_CHANNEL_TIME_BTC_DEFAULT    ( 60 )
 
 #define CFG_RETRY_LIMIT_ZERO_NAME       "gRetryLimitZero"
 #define CFG_RETRY_LIMIT_ZERO_MIN        ( 0 )
@@ -3838,6 +3830,66 @@ enum dot11p_mode {
 #define CFG_ACTIVE_MODE_OFFLOAD_MAX        (1)
 #define CFG_ACTIVE_MODE_OFFLOAD_DEFAULT    (0)
 
+/* enable/disable probe request whiltelist IE feature */
+#define CFG_PRB_REQ_IE_WHITELIST_NAME    "g_enable_probereq_whitelist_ies"
+#define CFG_PRB_REQ_IE_WHITELIST_MIN     (0)
+#define CFG_PRB_REQ_IE_WHITELIST_MAX     (1)
+#define CFG_PRB_REQ_IE_WHITELIST_DEFAULT (0)
+/*
+ * For IE white listing in Probe Req, following ini parameters from
+ * g_probe_req_ie_bitmap_0 to g_probe_req_ie_bitmap_7 are used. User needs to
+ * input this values in hexa decimal format, when bit is set, corresponding ie
+ * needs to be included in probe request.
+ */
+#define CFG_PRB_REQ_IE_BIT_MAP0_NAME    "g_probe_req_ie_bitmap_0"
+#define CFG_PRB_REQ_IE_BIT_MAP0_MIN     (0x00000000)
+#define CFG_PRB_REQ_IE_BIT_MAP0_MAX     (0xFFFFFFFF)
+#define CFG_PRB_REQ_IE_BIT_MAP0_DEFAULT (0x00000000)
+
+#define CFG_PRB_REQ_IE_BIT_MAP1_NAME    "g_probe_req_ie_bitmap_1"
+#define CFG_PRB_REQ_IE_BIT_MAP1_MIN     (0x00000000)
+#define CFG_PRB_REQ_IE_BIT_MAP1_MAX     (0xFFFFFFFF)
+#define CFG_PRB_REQ_IE_BIT_MAP1_DEFAULT (0x00000000)
+
+#define CFG_PRB_REQ_IE_BIT_MAP2_NAME    "g_probe_req_ie_bitmap_2"
+#define CFG_PRB_REQ_IE_BIT_MAP2_MIN     (0x00000000)
+#define CFG_PRB_REQ_IE_BIT_MAP2_MAX     (0xFFFFFFFF)
+#define CFG_PRB_REQ_IE_BIT_MAP2_DEFAULT (0x00000000)
+
+#define CFG_PRB_REQ_IE_BIT_MAP3_NAME    "g_probe_req_ie_bitmap_3"
+#define CFG_PRB_REQ_IE_BIT_MAP3_MIN     (0x00000000)
+#define CFG_PRB_REQ_IE_BIT_MAP3_MAX     (0xFFFFFFFF)
+#define CFG_PRB_REQ_IE_BIT_MAP3_DEFAULT (0x00000000)
+
+#define CFG_PRB_REQ_IE_BIT_MAP4_NAME    "g_probe_req_ie_bitmap_4"
+#define CFG_PRB_REQ_IE_BIT_MAP4_MIN     (0x00000000)
+#define CFG_PRB_REQ_IE_BIT_MAP4_MAX     (0xFFFFFFFF)
+#define CFG_PRB_REQ_IE_BIT_MAP4_DEFAULT (0x00000000)
+
+#define CFG_PRB_REQ_IE_BIT_MAP5_NAME    "g_probe_req_ie_bitmap_5"
+#define CFG_PRB_REQ_IE_BIT_MAP5_MIN     (0x00000000)
+#define CFG_PRB_REQ_IE_BIT_MAP5_MAX     (0xFFFFFFFF)
+#define CFG_PRB_REQ_IE_BIT_MAP5_DEFAULT (0x00000000)
+
+#define CFG_PRB_REQ_IE_BIT_MAP6_NAME    "g_probe_req_ie_bitmap_6"
+#define CFG_PRB_REQ_IE_BIT_MAP6_MIN     (0x00000000)
+#define CFG_PRB_REQ_IE_BIT_MAP6_MAX     (0xFFFFFFFF)
+#define CFG_PRB_REQ_IE_BIT_MAP6_DEFAULT (0x00000000)
+
+#define CFG_PRB_REQ_IE_BIT_MAP7_NAME    "g_probe_req_ie_bitmap_7"
+#define CFG_PRB_REQ_IE_BIT_MAP7_MIN     (0x00000000)
+#define CFG_PRB_REQ_IE_BIT_MAP7_MAX     (0xFFFFFFFF)
+#define CFG_PRB_REQ_IE_BIT_MAP7_DEFAULT (0x00000000)
+
+/*
+ * For vendor specific IE, Probe Req OUI types and sub types which are
+ * to be white listed are specifed in gProbeReqOUIs in the following
+ * example format - gProbeReqOUIs=AABBCCDD EEFF1122
+ */
+#define CFG_PROBE_REQ_OUI_NAME    "gProbeReqOUIs"
+#define CFG_PROBE_REQ_OUI_DEFAULT ""
+
+
 /*---------------------------------------------------------------------------
   Type declarations
   -------------------------------------------------------------------------*/
@@ -3963,8 +4015,6 @@ struct hdd_config {
    v_U32_t        nInitialDwellTime;     //in units of milliseconds
    bool           initial_scan_no_dfs_chnl;
 
-   v_U32_t        nActiveMinChnTimeBtc;     //in units of milliseconds
-   v_U32_t        nActiveMaxChnTimeBtc;     //in units of milliseconds
 #ifdef WLAN_AP_STA_CONCURRENCY
    v_U32_t        nPassiveMinChnTimeConc;    //in units of milliseconds
    v_U32_t        nPassiveMaxChnTimeConc;    //in units of milliseconds
@@ -4593,6 +4643,20 @@ struct hdd_config {
    uint32_t                    edca_be_aifs;
    uint32_t                    rx_wakelock_timeout;
    bool                        active_mode_offload;
+
+   bool probe_req_ie_whitelist;
+   /* probe request bit map ies */
+   uint32_t probe_req_ie_bitmap_0;
+   uint32_t probe_req_ie_bitmap_1;
+   uint32_t probe_req_ie_bitmap_2;
+   uint32_t probe_req_ie_bitmap_3;
+   uint32_t probe_req_ie_bitmap_4;
+   uint32_t probe_req_ie_bitmap_5;
+   uint32_t probe_req_ie_bitmap_6;
+   uint32_t probe_req_ie_bitmap_7;
+
+   /* Probe Request multiple vendor OUIs */
+   uint8_t probe_req_ouis[MAX_PRB_REQ_VENDOR_OUI_INI_LEN];
 };
 
 typedef struct hdd_config hdd_config_t;
@@ -4710,6 +4774,9 @@ static __inline unsigned long utilMin( unsigned long a, unsigned long b )
   Function declarations and documentation
   -------------------------------------------------------------------------*/
 VOS_STATUS hdd_parse_config_ini(hdd_context_t *pHddCtx);
+uint32_t hdd_validate_prb_req_ie_bitmap(hdd_context_t* pHddCtx);
+VOS_STATUS hdd_parse_probe_req_ouis(hdd_context_t* pHddCtx);
+void hdd_free_probe_req_ouis(hdd_context_t* pHddCtx);
 VOS_STATUS hdd_update_mac_config(hdd_context_t *pHddCtx);
 VOS_STATUS hdd_set_sme_config( hdd_context_t *pHddCtx );
 VOS_STATUS hdd_set_sme_chan_list(hdd_context_t *hdd_ctx);

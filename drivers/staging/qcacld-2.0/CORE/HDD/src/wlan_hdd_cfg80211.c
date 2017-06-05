@@ -1559,6 +1559,49 @@ wlan_hdd_cfg80211_get_supported_features(struct wiphy *wiphy,
 }
 
 /**
+ * wlan_hdd_fill_whitelist_ie_attrs - fill the white list members
+ * @ie_whitelist: enables whitelist
+ * @probe_req_ie_bitmap: bitmap to be filled
+ * @num_vendor_oui: pointer to no of ouis
+ * @voui: pointer to ouis to be filled
+ * @pHddCtx: pointer to hdd ctx
+ *
+ * This function fills the ie bitmap and vendor oui fields with the
+ * corresponding values present in cfg_ini and PHddCtx
+ *
+ * Return:   Return none
+ */
+static void wlan_hdd_fill_whitelist_ie_attrs(bool *ie_whitelist,
+					     uint32_t *probe_req_ie_bitmap,
+					     uint32_t *num_vendor_oui,
+					     struct vendor_oui *voui,
+					     hdd_context_t *pHddCtx)
+{
+	uint32_t i = 0;
+
+	*ie_whitelist = true;
+	probe_req_ie_bitmap[0] = pHddCtx->cfg_ini->probe_req_ie_bitmap_0;
+	probe_req_ie_bitmap[1] = pHddCtx->cfg_ini->probe_req_ie_bitmap_1;
+	probe_req_ie_bitmap[2] = pHddCtx->cfg_ini->probe_req_ie_bitmap_2;
+	probe_req_ie_bitmap[3] = pHddCtx->cfg_ini->probe_req_ie_bitmap_3;
+	probe_req_ie_bitmap[4] = pHddCtx->cfg_ini->probe_req_ie_bitmap_4;
+	probe_req_ie_bitmap[5] = pHddCtx->cfg_ini->probe_req_ie_bitmap_5;
+	probe_req_ie_bitmap[6] = pHddCtx->cfg_ini->probe_req_ie_bitmap_6;
+	probe_req_ie_bitmap[7] = pHddCtx->cfg_ini->probe_req_ie_bitmap_7;
+
+	*num_vendor_oui = 0;
+
+	if ((pHddCtx->no_of_probe_req_ouis != 0) && (voui != NULL)) {
+		*num_vendor_oui = pHddCtx->no_of_probe_req_ouis;
+		for (i = 0; i < pHddCtx->no_of_probe_req_ouis; i++) {
+			voui[i].oui_type = pHddCtx->probe_req_voui[i].oui_type;
+			voui[i].oui_subtype =
+					pHddCtx->probe_req_voui[i].oui_subtype;
+		}
+	}
+}
+
+/**
  * __wlan_hdd_cfg80211_set_scanning_mac_oui() - set scan MAC
  * @wiphy:   pointer to wireless wiphy structure.
  * @wdev:    pointer to wireless_dev structure.
@@ -1580,6 +1623,8 @@ __wlan_hdd_cfg80211_set_scanning_mac_oui(struct wiphy *wiphy,
     struct nlattr *tb[QCA_WLAN_VENDOR_ATTR_SET_SCANNING_MAC_OUI_MAX + 1];
     eHalStatus status;
     int ret;
+    struct net_device *ndev = wdev->netdev;
+    hdd_adapter_t *pAdapter = WLAN_HDD_GET_PRIV_PTR(ndev);
 
     ENTER();
 
@@ -1604,11 +1649,16 @@ __wlan_hdd_cfg80211_set_scanning_mac_oui(struct wiphy *wiphy,
         return -EINVAL;
     }
 
-    pReqMsg = vos_mem_malloc(sizeof(*pReqMsg));
+    pReqMsg = vos_mem_malloc(sizeof(*pReqMsg) +
+                    (pHddCtx->no_of_probe_req_ouis) *
+                    (sizeof(struct vendor_oui)));
     if (!pReqMsg) {
         hddLog(LOGE, FL("vos_mem_malloc failed"));
         return -ENOMEM;
     }
+    vos_mem_zero(pReqMsg, sizeof(*pReqMsg) +
+                    (pHddCtx->no_of_probe_req_ouis) *
+                    (sizeof(struct vendor_oui)));
 
     /* Parse and fetch oui */
     if (!tb[QCA_WLAN_VENDOR_ATTR_SET_SCANNING_MAC_OUI]) {
@@ -1620,8 +1670,20 @@ __wlan_hdd_cfg80211_set_scanning_mac_oui(struct wiphy *wiphy,
             tb[QCA_WLAN_VENDOR_ATTR_SET_SCANNING_MAC_OUI],
             sizeof(pReqMsg->oui));
 
-    hddLog(LOG1, FL("Oui (%02x:%02x:%02x)"), pReqMsg->oui[0], pReqMsg->oui[1],
-                 pReqMsg->oui[2]);
+    /* populate pReqMsg for mac addr randomization */
+    pReqMsg->vdev_id = pAdapter->sessionId;
+    pReqMsg->enb_probe_req_sno_randomization = 1;
+
+    hddLog(LOG1, FL("Oui (%02x:%02x:%02x), vdev_id = %d"), pReqMsg->oui[0],
+                     pReqMsg->oui[1], pReqMsg->oui[2], pReqMsg->vdev_id);
+
+    if (pHddCtx->cfg_ini->probe_req_ie_whitelist)
+         wlan_hdd_fill_whitelist_ie_attrs(&pReqMsg->ie_whitelist,
+                                      pReqMsg->probe_req_ie_bitmap,
+                                      &pReqMsg->num_vendor_oui,
+                                      (struct vendor_oui *)((uint8_t *)pReqMsg +
+                                      sizeof(*pReqMsg)),
+                                      pHddCtx);
 
     status = sme_SetScanningMacOui(pHddCtx->hHal, pReqMsg);
     if (!HAL_STATUS_SUCCESS(status)) {
@@ -10300,8 +10362,7 @@ const struct wiphy_vendor_command hdd_wiphy_vendor_commands[] =
         .info.vendor_id = QCA_NL80211_VENDOR_ID,
         .info.subcmd = QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_GET_CAPABILITIES,
         .flags = WIPHY_VENDOR_CMD_NEED_WDEV |
-                 WIPHY_VENDOR_CMD_NEED_NETDEV |
-                 WIPHY_VENDOR_CMD_NEED_RUNNING,
+                 WIPHY_VENDOR_CMD_NEED_NETDEV,
         .doit = wlan_hdd_cfg80211_extscan_get_capabilities
     },
     {
@@ -10675,8 +10736,7 @@ const struct wiphy_vendor_command hdd_wiphy_vendor_commands[] =
 		.info.vendor_id = QCA_NL80211_VENDOR_ID,
 		.info.subcmd = QCA_NL80211_VENDOR_SUBCMD_GET_BUS_SIZE,
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV |
-			WIPHY_VENDOR_CMD_NEED_NETDEV |
-			WIPHY_VENDOR_CMD_NEED_RUNNING,
+			WIPHY_VENDOR_CMD_NEED_NETDEV,
 		.doit = wlan_hdd_cfg80211_get_bus_size
 	},
 	{
@@ -10725,6 +10785,19 @@ struct wiphy *wlan_hdd_cfg80211_wiphy_alloc(int priv_size)
 
     return wiphy;
 }
+
+#ifdef CFG80211_SCAN_RANDOM_MAC_ADDR
+static void wlan_hdd_cfg80211_scan_randomization_init(struct wiphy *wiphy)
+{
+	wiphy->features |= NL80211_FEATURE_SCAN_RANDOM_MAC_ADDR;
+	wiphy->features |= NL80211_FEATURE_SCHED_SCAN_RANDOM_MAC_ADDR;
+}
+#else
+static void wlan_hdd_cfg80211_scan_randomization_init(struct wiphy *wiphy)
+{
+	return;
+}
+#endif
 
 /*
  * FUNCTION: wlan_hdd_cfg80211_init
@@ -10966,6 +11039,7 @@ int wlan_hdd_cfg80211_init(struct device *dev,
 #ifdef CHANNEL_SWITCH_SUPPORTED
     wiphy->flags |= WIPHY_FLAG_HAS_CHANNEL_SWITCH;
 #endif
+    wlan_hdd_cfg80211_scan_randomization_init(wiphy);
 
     EXIT();
     return 0;
@@ -16101,6 +16175,89 @@ static void wlan_hdd_cfg80211_scan_block_cb(struct work_struct *work)
     }
 }
 
+#ifdef CFG80211_SCAN_RANDOM_MAC_ADDR
+/**
+ * wlan_hdd_update_scan_rand_attrs - fill the host/pno scan rand attrs
+ * @scan_req: pointer for destination mac addr and mac mask
+ * @cfg_scan_req: pointer for source mac addr and mac mask
+ * @scan_type: type of scan from enum wlan_hdd_scan_type_for_randomization
+ *
+ * If scan randomize flag is set in cfg scan request flags, this function
+ * copies mac addr and mac mask in cfg80211 scan/sched scan request to
+ * randomization attributes in tCsrScanRequest (normal scan) or
+ * tpSirPNOScanReq (sched scan). Based on the type of scan, scan_req and
+ * cfg_scan_req are type casted accordingly.
+ *
+ * Return:   Return none
+ */
+static void wlan_hdd_update_scan_rand_attrs(void *scan_req,
+					    void *cfg_scan_req,
+					    uint32_t scan_type)
+{
+	uint32_t flags = 0;
+	uint8_t *cfg_mac_addr = NULL;
+	uint8_t *cfg_mac_addr_mask = NULL;
+	uint32_t *scan_randomization = NULL;
+	uint8_t *scan_mac_addr = NULL;
+	uint8_t *scan_mac_addr_mask = NULL;
+
+	if (scan_type == WLAN_HDD_HOST_SCAN) {
+		tCsrScanRequest *csr_scan_req = NULL;
+		struct cfg80211_scan_request *request = NULL;
+
+		csr_scan_req = (tCsrScanRequest *)scan_req;
+		request = (struct cfg80211_scan_request *)cfg_scan_req;
+
+		flags = request->flags;
+		if (!(flags & NL80211_SCAN_FLAG_RANDOM_ADDR))
+			return;
+
+		cfg_mac_addr = request->mac_addr;
+		cfg_mac_addr_mask = request->mac_addr_mask;
+		scan_randomization = &csr_scan_req->enable_scan_randomization;
+		scan_mac_addr = csr_scan_req->mac_addr;
+		scan_mac_addr_mask = csr_scan_req->mac_addr_mask;
+	} else if (scan_type == WLAN_HDD_PNO_SCAN) {
+		tpSirPNOScanReq pno_scan_req = NULL;
+		struct cfg80211_sched_scan_request *request = NULL;
+
+		pno_scan_req = (tpSirPNOScanReq)scan_req;
+		request = (struct cfg80211_sched_scan_request *)cfg_scan_req;
+
+		flags = request->flags;
+		if (!(flags & NL80211_SCAN_FLAG_RANDOM_ADDR))
+			return;
+
+		cfg_mac_addr = request->mac_addr;
+		cfg_mac_addr_mask = request->mac_addr_mask;
+		scan_randomization =
+				&pno_scan_req->enable_pno_scan_randomization;
+		scan_mac_addr = pno_scan_req->mac_addr;
+		scan_mac_addr_mask = pno_scan_req->mac_addr_mask;
+	} else {
+		hddLog(LOGE, FL("invalid scan type for randomization"));
+		return;
+	}
+
+	/* enable mac randomization */
+	*scan_randomization = 1;
+	memcpy(scan_mac_addr, cfg_mac_addr, VOS_MAC_ADDR_SIZE);
+	memcpy(scan_mac_addr_mask, cfg_mac_addr_mask, VOS_MAC_ADDR_SIZE);
+
+	hddLog(LOG1, FL("Mac Addr: "MAC_ADDRESS_STR
+			" and Mac Mask: " MAC_ADDRESS_STR),
+			MAC_ADDR_ARRAY(scan_mac_addr),
+			MAC_ADDR_ARRAY(scan_mac_addr_mask));
+}
+#else
+static void wlan_hdd_update_scan_rand_attrs(void *scan_req,
+					    void *cfg_scan_req,
+					    uint32_t scan_type)
+{
+	return;
+}
+#endif
+
 /*
  * FUNCTION: __wlan_hdd_cfg80211_scan
  * this scan respond to scan trigger and update cfg80211 scan database
@@ -16118,6 +16275,7 @@ int __wlan_hdd_cfg80211_scan( struct wiphy *wiphy,
     hdd_adapter_t *pAdapter = WLAN_HDD_GET_PRIV_PTR( dev );
     hdd_context_t *pHddCtx = WLAN_HDD_GET_CTX( pAdapter );
     hdd_wext_state_t *pwextBuf = WLAN_HDD_GET_WEXT_STATE_PTR(pAdapter);
+    hdd_station_ctx_t *station_ctx = WLAN_HDD_GET_STATION_CTX_PTR(pAdapter);
     hdd_config_t *cfg_param = NULL;
     tCsrScanRequest scanRequest;
     tANI_U8 *channelList = NULL, i;
@@ -16477,6 +16635,32 @@ int __wlan_hdd_cfg80211_scan( struct wiphy *wiphy,
                 pAdapter->sessionId);
 #endif
 
+    wlan_hdd_update_scan_rand_attrs((void *)&scanRequest, (void *)request,
+                                    WLAN_HDD_HOST_SCAN);
+
+	if (pAdapter->device_mode == WLAN_HDD_INFRA_STATION &&
+		!is_p2p_scan &&
+		!hdd_connIsConnected(station_ctx) &&
+        (pHddCtx->cfg_ini->probe_req_ie_whitelist)) {
+        if (pHddCtx->no_of_probe_req_ouis != 0) {
+            scanRequest.voui = (struct vendor_oui *)vos_mem_malloc(
+                                              pHddCtx->no_of_probe_req_ouis *
+                                              sizeof(struct vendor_oui));
+            if (!scanRequest.voui) {
+                hddLog(LOGE, FL("Not enough memory for voui"));
+                scanRequest.num_vendor_oui = 0;
+                status = -ENOMEM;
+                goto free_mem;
+            }
+        }
+
+        wlan_hdd_fill_whitelist_ie_attrs(&scanRequest.ie_whitelist,
+                                         scanRequest.probe_req_ie_bitmap,
+                                         &scanRequest.num_vendor_oui,
+                                         scanRequest.voui,
+                                         pHddCtx);
+    }
+
     vos_runtime_pm_prevent_suspend(pHddCtx->runtime_context.scan);
     status = sme_ScanRequest( WLAN_HDD_GET_HAL_CTX(pAdapter),
                               pAdapter->sessionId, &scanRequest, &scanId,
@@ -16517,6 +16701,9 @@ free_mem:
 
     if( channelList )
       vos_mem_free( channelList );
+
+    if(scanRequest.voui)
+        vos_mem_free(scanRequest.voui);
 
     EXIT();
     return status;
@@ -20174,6 +20361,7 @@ static int __wlan_hdd_cfg80211_sched_scan_start(struct wiphy *wiphy,
     hdd_scaninfo_t *pScanInfo = &pAdapter->scan_info;
     hdd_config_t *config = NULL;
     v_U32_t num_ignore_dfs_ch = 0;
+    hdd_station_ctx_t *station_ctx = WLAN_HDD_GET_STATION_CTX_PTR(pAdapter);
 
     ENTER();
 
@@ -20235,7 +20423,14 @@ static int __wlan_hdd_cfg80211_sched_scan_start(struct wiphy *wiphy,
         return -ENOTSUPP;
     }
 
-    pPnoRequest = (tpSirPNOScanReq) vos_mem_malloc(sizeof (tSirPNOScanReq));
+    if (!hdd_connIsConnected(station_ctx) &&
+        pHddCtx->cfg_ini->probe_req_ie_whitelist)
+        pPnoRequest = (tpSirPNOScanReq) vos_mem_malloc(sizeof(tSirPNOScanReq) +
+                                    (pHddCtx->no_of_probe_req_ouis) *
+                                    (sizeof(struct vendor_oui)));
+    else
+        pPnoRequest = (tpSirPNOScanReq) vos_mem_malloc(sizeof(tSirPNOScanReq));
+
     if (NULL == pPnoRequest)
     {
         VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_FATAL,
@@ -20243,7 +20438,14 @@ static int __wlan_hdd_cfg80211_sched_scan_start(struct wiphy *wiphy,
         return -ENOMEM;
     }
 
-    memset(pPnoRequest, 0, sizeof (tSirPNOScanReq));
+    if (!hdd_connIsConnected(station_ctx) &&
+        pHddCtx->cfg_ini->probe_req_ie_whitelist)
+        memset(pPnoRequest, 0, sizeof (tSirPNOScanReq) +
+               (pHddCtx->no_of_probe_req_ouis) *
+               (sizeof(struct vendor_oui)));
+    else
+        memset(pPnoRequest, 0, sizeof (tSirPNOScanReq));
+
     pPnoRequest->enable = 1; /*Enable PNO */
     pPnoRequest->ucNetworksCount = request->n_match_sets;
     if ((!pPnoRequest->ucNetworksCount ) ||
@@ -20409,6 +20611,19 @@ static int __wlan_hdd_cfg80211_sched_scan_start(struct wiphy *wiphy,
     VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
              "SessionId %d, enable %d, modePNO %d",
              pAdapter->sessionId, pPnoRequest->enable, pPnoRequest->modePNO);
+
+    wlan_hdd_update_scan_rand_attrs((void *)pPnoRequest, (void *)request,
+                                    WLAN_HDD_PNO_SCAN);
+
+    if (pHddCtx->cfg_ini->probe_req_ie_whitelist &&
+        !hdd_connIsConnected(station_ctx))
+        wlan_hdd_fill_whitelist_ie_attrs(&pPnoRequest->ie_whitelist,
+                                         pPnoRequest->probe_req_ie_bitmap,
+                                         &pPnoRequest->num_vendor_oui,
+                                         (struct vendor_oui *)(
+                                         (uint8_t *)pPnoRequest +
+                                         sizeof(*pPnoRequest)),
+                                         pHddCtx);
 
     status = sme_SetPreferredNetworkList(WLAN_HDD_GET_HAL_CTX(pAdapter),
                               pPnoRequest, pAdapter->sessionId,

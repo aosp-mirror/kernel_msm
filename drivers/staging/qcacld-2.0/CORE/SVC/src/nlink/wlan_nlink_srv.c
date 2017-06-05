@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -51,6 +51,13 @@
 #include <net/sock.h>
 #include <wlan_nlink_srv.h>
 #include <vos_trace.h>
+
+#ifdef CNSS_GENL
+#include <vos_memory.h>
+#include <wlan_nlink_common.h>
+#include <net/genetlink.h>
+#include <net/cnss_nl.h>
+#endif
 
 /* Global variables */
 static DEFINE_MUTEX(nl_srv_sem);
@@ -155,6 +162,195 @@ int nl_srv_unregister(tWlanNlModTypes msg_type, nl_srv_msg_callback msg_handler)
    return retcode;
 }
 
+#ifdef CNSS_GENL
+
+/**
+ * nl80211hdr_put() - API to fill genlmsg header
+ * @skb: Sk buffer
+ * @portid: Port ID
+ * @seq: Sequence number
+ * @flags: Flags
+ * @cmd: Command id
+ *
+ * API to fill genl message header for brodcast events to user space
+ *
+ * Return: Pointer to user specific header/payload
+ */
+static inline void *nl80211hdr_put(struct sk_buff *skb, uint32_t portid,
+					uint32_t seq, int flags, uint8_t cmd)
+{
+	struct genl_family *cld80211_fam = cld80211_get_genl_family();
+
+	return genlmsg_put(skb, portid, seq, cld80211_fam, flags, cmd);
+}
+
+/**
+ * cld80211_fill_data() - API to fill payload to nl message
+ * @msg: Sk buffer
+ * @portid: Port ID
+ * @seq: Sequence number
+ * @flags: Flags
+ * @cmd: Command ID
+ * @buf: data buffer/payload to be filled
+ * @len: length of the payload ie. @buf
+ *
+ * API to fill the payload/data of the nl message to be sent
+ *
+ * Return: zero on success
+ */
+static int cld80211_fill_data(struct sk_buff *msg, uint32_t portid,
+					uint32_t seq, int flags, uint8_t cmd,
+					uint8_t *buf, int len)
+{
+	void *hdr;
+	struct nlattr *nest;
+
+	hdr = nl80211hdr_put(msg, portid, seq, flags, cmd);
+	if (!hdr) {
+		VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
+						"nl80211 hdr put failed");
+		return -EPERM;
+	}
+
+	nest = nla_nest_start(msg, CLD80211_ATTR_VENDOR_DATA);
+	if (!nest) {
+		VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
+						"nla_nest_start failed");
+		goto nla_put_failure;
+	}
+
+	if (nla_put(msg, CLD80211_ATTR_DATA, len, buf)) {
+		VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
+							"nla_put failed");
+		goto nla_put_failure;
+	}
+
+	nla_nest_end(msg, nest);
+	genlmsg_end(msg, hdr);
+
+	return 0;
+nla_put_failure:
+	genlmsg_cancel(msg, hdr);
+	return -EPERM;
+}
+
+/**
+ * send_msg_to_cld80211() - API to send message to user space Application
+ * @cld_mcgroup_id: Multicast group ID
+ * @pid: Port ID
+ * @app_id: Application ID
+ * @buf: Data/payload buffer to be sent
+ * @len: Length of the data ie. @buf
+ *
+ * API to send the nl message to user space application.
+ *
+ * Return: zero on success
+ */
+static int send_msg_to_cld80211(enum cld80211_multicast_groups cld_mcgroup_id,
+				int pid, int app_id, uint8_t *buf, int len)
+{
+	struct sk_buff *msg;
+	int status;
+	int flags = GFP_KERNEL;
+	int mcgroup_id;
+
+	if (in_interrupt() || irqs_disabled() || in_atomic())
+		flags = GFP_ATOMIC;
+
+	msg = nlmsg_new(NLMSG_DEFAULT_SIZE, flags);
+	if (!msg) {
+		VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
+						"nlmsg malloc fails");
+		return -EPERM;
+	}
+
+	status = cld80211_fill_data(msg, pid, 0, 0, app_id, buf, len);
+	if (status) {
+		nlmsg_free(msg);
+		return -EPERM;
+	}
+	mcgroup_id = cld80211_get_mcgrp_id(cld_mcgroup_id);
+	if (mcgroup_id == -1) {
+		nlmsg_free(msg);
+		return -EINVAL;
+	}
+	genlmsg_multicast_netns(&init_net, msg, 0, mcgroup_id, flags);
+	return 0;
+}
+
+/**
+ * nl_srv_bcast() - wrapper function to do broadcast events to user space apps
+ * @skb: the socket buffer to send
+ * @mcgroup_id: multicast group id
+ * @app_id: application id
+ *
+ * This function is common wrapper to send broadcast events to different
+ * user space applications.
+ *
+ * return: none
+ */
+int nl_srv_bcast(struct sk_buff *skb, int mcgroup_id, int app_id)
+{
+	struct nlmsghdr *nlh = (struct nlmsghdr *)skb->data;
+	void *msg = NLMSG_DATA(nlh);
+	uint32_t msg_len = nlmsg_len(nlh);
+	uint8_t *tempbuf;
+	int status;
+
+	tempbuf = (uint8_t *)vos_mem_malloc(msg_len);
+	vos_mem_copy(tempbuf, msg, msg_len);
+	status = send_msg_to_cld80211(mcgroup_id, 0, app_id, tempbuf, msg_len);
+	if (status) {
+		VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
+			"send msg to cld80211 fails for app id %d", app_id);
+		return -EPERM;
+	}
+
+	dev_kfree_skb(skb);
+	vos_mem_free(tempbuf);
+	return 0;
+}
+
+/**
+ * nl_srv_ucast() - wrapper function to do unicast events to user space apps
+ * @skb: the socket buffer to send
+ * @dst_pid: destination process IF
+ * @flag: flags
+ * @app_id: application id
+ * @mcgroup_id: Multicast group ID
+ *
+ * This function is common wrapper to send unicast events to different
+ * user space applications. This internally used broadcast API with multicast
+ * group mcgrp_id. This wrapper serves as a common API in both
+ * new generic netlink infra and legacy implementation.
+ *
+ * return: zero on success, error code otherwise
+ */
+int nl_srv_ucast(struct sk_buff *skb, int dst_pid, int flag,
+					int app_id, int mcgroup_id)
+{
+	struct nlmsghdr *nlh = (struct nlmsghdr *)skb->data;
+	void *msg = NLMSG_DATA(nlh);
+	uint32_t msg_len = nlmsg_len(nlh);
+	uint8_t *tempbuf;
+	int status;
+
+	tempbuf = (uint8_t *)vos_mem_malloc(msg_len);
+	vos_mem_copy(tempbuf, msg, msg_len);
+	status = send_msg_to_cld80211(mcgroup_id, dst_pid, app_id,
+					tempbuf, msg_len);
+	if (status) {
+		VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
+			"send msg to cld80211 fails for app id %d", app_id);
+		return -EPERM;
+	}
+
+	dev_kfree_skb(skb);
+	vos_mem_free(tempbuf);
+	return 0;
+}
+
+#else
 /*
  * Unicast the message to the process in user space identfied
  * by the dst-pid
@@ -183,10 +379,6 @@ int nl_srv_ucast(struct sk_buff *skb, int dst_pid, int flag)
    return err;
 }
 
-/*
- *  Broadcast the message. Broadcast will return an error if
- *  there are no listeners
- */
 int nl_srv_bcast(struct sk_buff *skb)
 {
    int err = 0;
@@ -214,6 +406,8 @@ int nl_srv_bcast(struct sk_buff *skb)
    }
    return err;
 }
+
+#endif
 
 /*
  *  Processes the Netlink socket input queue.

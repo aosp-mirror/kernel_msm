@@ -48,7 +48,6 @@
 #include <linux/wireless.h>
 #include <macTrace.h>
 #include <wlan_hdd_includes.h>
-#include <wlan_btc_svc.h>
 #include <wlan_nlink_common.h>
 #include <vos_api.h>
 #include <net/arp.h>

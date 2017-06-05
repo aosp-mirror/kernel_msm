@@ -32,7 +32,7 @@ struct flowi_common {
 #define FLOWI_FLAG_CAN_SLEEP		0x02
 #define FLOWI_FLAG_KNOWN_NH		0x04
 	__u32	flowic_secid;
-	kuid_t	flowic_uid;
+	kuid_t  flowic_uid;
 };
 
 union flowi_uli {

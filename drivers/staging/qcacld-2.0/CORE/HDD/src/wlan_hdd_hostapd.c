@@ -71,7 +71,6 @@
 #include <linux/netdevice.h>
 #include <linux/mmc/sdio_func.h>
 #include "wlan_nlink_common.h"
-#include "wlan_btc_svc.h"
 #include "wlan_hdd_p2p.h"
 #ifdef IPA_OFFLOAD
 #include <wlan_hdd_ipa.h>
@@ -570,10 +569,9 @@ static int __hdd_hostapd_ioctl(struct net_device *dev,
       goto exit;
    }
 
-   if ((!ifr) || (!ifr->ifr_data))
-   {
-      VOS_TRACE( VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                FL("ifr or ifr->ifr_data is NULL"));
+   if ((!ifr) || (!ifr->ifr_data)) {
+      hddLog(LOGE,
+             FL("ifr or ifr->ifr_data is NULL cmd: %d"), cmd);
       ret = -EINVAL;
       goto exit;
    }
@@ -1452,9 +1450,6 @@ VOS_STATUS hdd_hostapd_SAPEventCB( tpSap_Event pSapEvent, v_PVOID_t usrDataForCa
             pHostapdState->bssState = BSS_START;
 
             hdd_wlan_green_ap_start_bss(pHddCtx);
-
-            // Send current operating channel of SoftAP to BTC-ES
-            send_btc_nlink_msg(WLAN_BTC_SOFTAP_BSS_START, 0);
 
             /* Set default key index */
             VOS_TRACE( VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,

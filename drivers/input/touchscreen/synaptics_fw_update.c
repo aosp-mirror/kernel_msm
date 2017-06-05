@@ -2474,7 +2474,7 @@ static int synaptics_rmi4_fwu_init(struct synaptics_rmi4_data *rmi4_data)
 	fwu->ts_info = kzalloc(RMI4_INFO_MAX_LEN, GFP_KERNEL);
 	if (!fwu->ts_info) {
 		dev_err(&rmi4_data->i2c_client->dev, "Not enough memory\n");
-		goto exit_free_ts_info;
+		goto exit_free_mem;
 	}
 
 	synaptics_rmi4_update_debug_info();
@@ -2519,7 +2519,6 @@ static int synaptics_rmi4_fwu_init(struct synaptics_rmi4_data *rmi4_data)
 	}
 
 	return 0;
-exit_free_ts_info:
 	debugfs_remove(temp);
 exit_remove_attrs:
 	for (attr_count--; attr_count >= 0; attr_count--) {

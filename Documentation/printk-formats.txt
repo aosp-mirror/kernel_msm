@@ -45,6 +45,11 @@ Kernel Pointers:
 	users. The behaviour of %pK depends on the kptr_restrict sysctl - see
 	Documentation/sysctl/kernel.txt for more details.
 
+	%pP     0x01234567 or 0x0123456789abcdef
+
+	For printing kernel pointers which should always be shown, even to
+	unprivileged users.
+
 Struct Resources:
 
 	%pr	[mem 0x60000000-0x6fffffff flags 0x2200] or

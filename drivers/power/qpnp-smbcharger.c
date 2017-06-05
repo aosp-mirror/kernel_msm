@@ -3584,10 +3584,10 @@ static void smbchg_discharge_while_plugged_check(struct work_struct *work)
 		atomic_set(&chip->discharge_while_plugged_event_count, 0);
 	}
 discharge_while_plugged_check_next:
-discharge_while_plugged_check_error:
 	pr_smb(PR_MISC, "count:%d sf:%d ci:%d ct:%d vd:%d\n",
 		atomic_read(&chip->discharge_while_plugged_event_count),
 		status_full, chg_inhibit, chg_type, valid_chg_disabled);
+discharge_while_plugged_check_error:
 	schedule_delayed_work(&chip->discharge_while_plugged_work,
 		msecs_to_jiffies(DISCHARGE_WHILE_PLUGGED_LOOP_TIME_MS));
 }
@@ -6161,6 +6161,8 @@ static int smbchg_probe(struct spmi_device *spmi)
 						rc);
 			return rc;
 		}
+	} else {
+		vadc_dev = NULL;
 	}
 
 	chip = devm_kzalloc(&spmi->dev, sizeof(*chip), GFP_KERNEL);

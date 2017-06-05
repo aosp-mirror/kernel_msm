@@ -817,9 +817,6 @@ limLookupNaddHashEntry(tpAniSirGlobal pMac,
         }
     }
 
-    if ((false == found) && dontUpdateAll)
-        return eHAL_STATUS_FAILURE;
-
     //for now, only rssi, we can add more if needed
     if ((action == LIM_HASH_UPDATE) && dontUpdateAll && rssi && rssi_raw)
     {

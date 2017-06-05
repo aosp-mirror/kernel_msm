@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -48,6 +48,9 @@
 #include "vos_utils.h"
 #include "wma.h"
 #include "wlan_hdd_oemdata.h"
+#ifdef CNSS_GENL
+#include <net/cnss_nl.h>
+#endif
 
 static struct hdd_context_s *pHddCtx;
 
@@ -158,6 +161,26 @@ int iw_get_oem_data_cap(
     return 0;
 }
 
+/**
+ * nl_srv_ucast_oem() - Wrapper function to send ucast msgs to OEM
+ * @skb: sk buffer pointer
+ * @dst_pid: Destination PID
+ * @flag: flags
+ *
+ * Sends the ucast message to OEM with generic nl socket if CNSS_GENL
+ * is enabled. Else, use the legacy netlink socket to send.
+ *
+ * Return: None
+ */
+static void nl_srv_ucast_oem(struct sk_buff *skb, int dst_pid, int flag)
+{
+#ifdef CNSS_GENL
+	nl_srv_ucast(skb, dst_pid, flag, WLAN_NL_MSG_OEM,
+					CLD80211_MCGRP_OEM_MSGS);
+#else
+	nl_srv_ucast(skb, dst_pid, flag);
+#endif
+}
 /**---------------------------------------------------------------------------
 
   \brief send_oem_reg_rsp_nlink_msg() - send oem registration response
@@ -247,7 +270,7 @@ static void send_oem_reg_rsp_nlink_msg(void)
              "%s: sending App Reg Response length (%d) to process pid (%d)",
              __func__, aniHdr->length, pHddCtx->oem_pid);
 
-   (void)nl_srv_ucast(skb, pHddCtx->oem_pid, MSG_DONTWAIT);
+   (void)nl_srv_ucast_oem(skb, pHddCtx->oem_pid, MSG_DONTWAIT);
 
    return;
 }
@@ -299,7 +322,7 @@ static void send_oem_err_rsp_nlink_msg(v_SINT_t app_pid, tANI_U8 error_code)
              "%s: sending oem error response to process pid (%d)",
              __func__, app_pid);
 
-   (void)nl_srv_ucast(skb, app_pid, MSG_DONTWAIT);
+   (void)nl_srv_ucast_oem(skb, app_pid, MSG_DONTWAIT);
 
    return;
 }
@@ -367,7 +390,7 @@ void send_oem_data_rsp_msg(int length, tANI_U8 *oemDataRsp)
              "%s: sending Oem Data Response of len (%d) to process pid (%d)",
              __func__, length, pHddCtx->oem_pid);
 
-   (void)nl_srv_ucast(skb, pHddCtx->oem_pid, MSG_DONTWAIT);
+   (void)nl_srv_ucast_oem(skb, pHddCtx->oem_pid, MSG_DONTWAIT);
 
    return;
 }
@@ -601,7 +624,7 @@ static int oem_process_channel_info_req_msg(int numOfChannels, char *chanList)
              "%s: sending channel info resp for num channels (%d) to pid (%d)",
              __func__, numOfChannels, pHddCtx->oem_pid);
 
-   (void)nl_srv_ucast(skb, pHddCtx->oem_pid, MSG_DONTWAIT);
+   (void)nl_srv_ucast_oem(skb, pHddCtx->oem_pid, MSG_DONTWAIT);
 
    return 0;
 }
@@ -720,11 +743,202 @@ void hdd_SendPeerStatusIndToOemApp(v_MACADDR_t *peerMac,
              pPeerInfo->peer_chan_info.reg_info_2,
              pPeerInfo->reserved0);
 
-   (void)nl_srv_ucast(skb, pHddCtx->oem_pid, MSG_DONTWAIT);
+   (void)nl_srv_ucast_oem(skb, pHddCtx->oem_pid, MSG_DONTWAIT);
 
    return;
 }
 
+#ifdef CNSS_GENL
+/*
+ * Callback function invoked by Netlink service for all netlink
+ * messages (from user space) addressed to WLAN_NL_MSG_OEM
+ */
+
+/**
+ * oem_msg_callback() - callback invoked by netlink service
+ * @skb:    skb with netlink message
+ *
+ * This function gets invoked by netlink service when a message
+ * is received from user space addressed to WLAN_NL_MSG_OEM
+ *
+ * Return: zero on success
+ *         On error, error number will be returned.
+ */
+static int oem_msg_callback(tAniMsgHdr *msg_hdr, int len, int pid)
+{
+   int ret;
+   char *sign_str = NULL;
+
+   ret = wlan_hdd_validate_context(pHddCtx);
+   if (0 != ret)
+       return ret;
+
+   if (!msg_hdr) {
+       hddLog(LOGE, FL("Message header null"));
+       send_oem_err_rsp_nlink_msg(pid, OEM_ERR_NULL_MESSAGE_HEADER);
+       return -EPERM;
+   }
+
+   if (len < sizeof(tAniMsgHdr) + msg_hdr->length) {
+       hddLog(LOGE, FL("Invalid msg len, len (%d), msg_hdr->len (%d)"),
+              len, msg_hdr->length);
+       send_oem_err_rsp_nlink_msg(pid,
+                                  OEM_ERR_INVALID_MESSAGE_LENGTH);
+       return -EPERM;
+   }
+
+   switch (msg_hdr->type) {
+   case ANI_MSG_APP_REG_REQ:
+      /* Registration request is only allowed for Qualcomm Application */
+      hddLog(LOG1, FL("Received App Req Req from App process pid(%d), len(%d)"),
+                   pid, msg_hdr->length);
+
+      sign_str = (char *)((char *)msg_hdr + sizeof(tAniMsgHdr));
+      if ((OEM_APP_SIGNATURE_LEN == msg_hdr->length) &&
+          (0 == strncmp(sign_str, OEM_APP_SIGNATURE_STR,
+                        OEM_APP_SIGNATURE_LEN))) {
+          hddLog(LOG1, FL("Valid App Req Req from oem app process pid(%d)"),
+                       pid);
+
+          pHddCtx->oem_app_registered = TRUE;
+          pHddCtx->oem_pid = pid;
+          send_oem_reg_rsp_nlink_msg();
+      } else {
+          hddLog(LOGE, FL("Invalid signature in App Reg Request from pid(%d)"),
+                 pid);
+          send_oem_err_rsp_nlink_msg(pid,
+                                       OEM_ERR_INVALID_SIGNATURE);
+          return -EPERM;
+      }
+      break;
+
+   case ANI_MSG_OEM_DATA_REQ:
+      hddLog(LOG1, FL("Received Oem Data Request length(%d) from pid: %d"),
+                   msg_hdr->length, pid);
+
+      if ((!pHddCtx->oem_app_registered) ||
+          (pid != pHddCtx->oem_pid)) {
+          /* either oem app is not registered yet or pid is different */
+          hddLog(LOGE, FL("OEM DataReq: app not registered(%d) or incorrect pid(%d)"),
+                 pHddCtx->oem_app_registered, pid);
+          send_oem_err_rsp_nlink_msg(pid,
+                                       OEM_ERR_APP_NOT_REGISTERED);
+          return -EPERM;
+      }
+
+      if ((!msg_hdr->length) || (OEM_DATA_REQ_SIZE < msg_hdr->length)) {
+          hddLog(LOGE, FL("Invalid length (%d) in Oem Data Request"),
+                       msg_hdr->length);
+          send_oem_err_rsp_nlink_msg(pid,
+                                       OEM_ERR_INVALID_MESSAGE_LENGTH);
+          return -EPERM;
+      }
+      oem_process_data_req_msg(msg_hdr->length,
+                              (char *) ((char *)msg_hdr +
+                              sizeof(tAniMsgHdr)));
+      break;
+
+   case ANI_MSG_CHANNEL_INFO_REQ:
+      hddLog(LOG1,
+             FL("Received channel info request, num channel(%d) from pid: %d"),
+             msg_hdr->length, pid);
+
+      if ((!pHddCtx->oem_app_registered) ||
+          (pid != pHddCtx->oem_pid)) {
+          /* either oem app is not registered yet or pid is different */
+          hddLog(LOGE,
+                 FL("Chan InfoReq: app not registered(%d) or incorrect pid(%d)"),
+                 pHddCtx->oem_app_registered, pid);
+          send_oem_err_rsp_nlink_msg(pid,
+                                     OEM_ERR_APP_NOT_REGISTERED);
+          return -EPERM;
+      }
+
+      /* message length contains list of channel ids */
+      if ((!msg_hdr->length) ||
+          (WNI_CFG_VALID_CHANNEL_LIST_LEN < msg_hdr->length)) {
+          hddLog(LOGE,
+                 FL("Invalid length (%d) in channel info request"),
+                 msg_hdr->length);
+          send_oem_err_rsp_nlink_msg(pid,
+                                    OEM_ERR_INVALID_MESSAGE_LENGTH);
+          return -EPERM;
+      }
+      oem_process_channel_info_req_msg(msg_hdr->length,
+                            (char *)((char*)msg_hdr + sizeof(tAniMsgHdr)));
+      break;
+
+   default:
+      hddLog(LOGE,
+             FL("Received Invalid message type (%d), length (%d)"),
+             msg_hdr->type, msg_hdr->length);
+      send_oem_err_rsp_nlink_msg(pid,
+                                 OEM_ERR_INVALID_MESSAGE_TYPE);
+      return -EPERM;
+   }
+   return 0;
+}
+/**
+ * oem_cmd_handler() - API to handle OEM commands
+ * @data: Pointer to data
+ * @data_len: length of the received data
+ * @ctx: Pointer to the context
+ * @pid: Process id
+ *
+ * This API handles the command from OEM application from user space and
+ * send back event to user space if necessary.
+ *
+ * Return: None
+ */
+static void oem_cmd_handler(const void *data, int data_len, void *ctx, int pid)
+{
+	tAniMsgHdr *msg_hdr;
+	int ret;
+	struct nlattr *tb[CLD80211_ATTR_MAX + 1];
+
+	ret = wlan_hdd_validate_context(pHddCtx);
+	if (ret) {
+		hddLog(LOGE, FL("hdd ctx validate fails"));
+		return;
+	}
+
+	if (nla_parse(tb, CLD80211_ATTR_MAX, data, data_len, NULL)) {
+		hddLog(LOGE, FL("Invalid ATTR"));
+		return;
+	}
+
+	if (!tb[CLD80211_ATTR_DATA]) {
+		hddLog(LOGE, FL("attr ATTR_DATA failed"));
+		return;
+	}
+
+	msg_hdr = (tAniMsgHdr *)nla_data(tb[CLD80211_ATTR_DATA]);
+	if (!msg_hdr) {
+		hddLog(LOGE, FL("msg_hdr null"));
+		send_oem_err_rsp_nlink_msg(pid, OEM_ERR_NULL_MESSAGE_HEADER);
+		return;
+	}
+        oem_msg_callback(msg_hdr, nla_len(tb[CLD80211_ATTR_DATA]), pid);
+
+	return;
+}
+
+/**
+ * oem_activate_service() - API to register the oem command handler
+ * @hdd_ctx: Pointer to HDD Context
+ *
+ * This API is used to register the oem app command handler. Argument
+ * @pAdapter is given for prototype compatibility with legacy code.
+ *
+ * Return: 0
+ */
+int oem_activate_service(void *hdd_ctx)
+{
+	pHddCtx = (struct hdd_context_s *) hdd_ctx;
+	register_cld_cmd_cb(WLAN_NL_MSG_OEM, oem_cmd_handler, NULL);
+	return 0;
+}
+#else
 /*
  * Callback function invoked by Netlink service for all netlink
  * messages (from user space) addressed to WLAN_NL_MSG_OEM
@@ -744,10 +958,10 @@ static int oem_msg_callback(struct sk_buff *skb)
 {
    struct nlmsghdr *nlh;
    tAniMsgHdr *msg_hdr;
-   int ret;
    char *sign_str = NULL;
-   nlh = (struct nlmsghdr *)skb->data;
+   int ret;
 
+   nlh = (struct nlmsghdr *)skb->data;
    if (!nlh) {
        hddLog(LOGE, FL("Netlink header null"));
        return -EPERM;
@@ -884,20 +1098,18 @@ static int __oem_msg_callback(struct sk_buff *skb)
   an OEM application process.
 
   \param -
-     - pAdapter - pointer to HDD adapter
+     - hdd_ctx: Pointer to HDD context
 
   \return - 0 for success, non zero for failure
 
   --------------------------------------------------------------------------*/
-int oem_activate_service(void *pAdapter)
+int oem_activate_service(void *hdd_ctx)
 {
-   pHddCtx = (struct hdd_context_s*) pAdapter;
+   pHddCtx = (struct hdd_context_s *) hdd_ctx;
 
    /* Register the msg handler for msgs addressed to WLAN_NL_MSG_OEM */
    nl_srv_register(WLAN_NL_MSG_OEM, __oem_msg_callback);
    return 0;
 }
-
-
-
+#endif
 #endif

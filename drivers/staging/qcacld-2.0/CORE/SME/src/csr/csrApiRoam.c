@@ -1197,8 +1197,6 @@ static void initConfigParam(tpAniSirGlobal pMac)
     pMac->roam.configParam.nActiveMinChnTime = CSR_ACTIVE_MIN_CHANNEL_TIME;
     pMac->roam.configParam.nPassiveMaxChnTime = CSR_PASSIVE_MAX_CHANNEL_TIME;
     pMac->roam.configParam.nPassiveMinChnTime = CSR_PASSIVE_MIN_CHANNEL_TIME;
-    pMac->roam.configParam.nActiveMaxChnTimeBtc = CSR_ACTIVE_MAX_CHANNEL_TIME_BTC;
-    pMac->roam.configParam.nActiveMinChnTimeBtc = CSR_ACTIVE_MIN_CHANNEL_TIME_BTC;
     pMac->roam.configParam.disableAggWithBtc = eANI_BOOLEAN_TRUE;
 #ifdef WLAN_AP_STA_CONCURRENCY
     pMac->roam.configParam.nActiveMaxChnTimeConc = CSR_ACTIVE_MAX_CHANNEL_TIME_CONC;
@@ -1802,14 +1800,6 @@ eHalStatus csrChangeDefaultConfigParam(tpAniSirGlobal pMac, tCsrConfigParam *pPa
             cfgSetInt(pMac, WNI_CFG_PASSIVE_MINIMUM_CHANNEL_TIME,
                       pParam->nPassiveMinChnTime);
         }
-        if (pParam->nActiveMaxChnTimeBtc)
-        {
-            pMac->roam.configParam.nActiveMaxChnTimeBtc = pParam->nActiveMaxChnTimeBtc;
-        }
-        if (pParam->nActiveMinChnTimeBtc)
-        {
-            pMac->roam.configParam.nActiveMinChnTimeBtc = pParam->nActiveMinChnTimeBtc;
-        }
 #ifdef WLAN_AP_STA_CONCURRENCY
         if (pParam->nActiveMaxChnTimeConc)
         {
@@ -2092,8 +2082,6 @@ eHalStatus csrGetConfigParam(tpAniSirGlobal pMac, tCsrConfigParam *pParam)
         pParam->nActiveMinChnTime = pMac->roam.configParam.nActiveMinChnTime;
         pParam->nPassiveMaxChnTime = pMac->roam.configParam.nPassiveMaxChnTime;
         pParam->nPassiveMinChnTime = pMac->roam.configParam.nPassiveMinChnTime;
-        pParam->nActiveMaxChnTimeBtc = pMac->roam.configParam.nActiveMaxChnTimeBtc;
-        pParam->nActiveMinChnTimeBtc = pMac->roam.configParam.nActiveMinChnTimeBtc;
         pParam->disableAggWithBtc = pMac->roam.configParam.disableAggWithBtc;
 #ifdef WLAN_AP_STA_CONCURRENCY
         pParam->nActiveMaxChnTimeConc = pMac->roam.configParam.nActiveMaxChnTimeConc;
@@ -13619,20 +13607,8 @@ static void csrPrepareJoinReassocReqBuffer( tpAniSirGlobal pMac,
         smsLog(pMac, LOGE, FL("can not find any valid channel"));
         *pBuf++ = 0;  //tSirSupChnl->numChnl
     }
-    //Check whether it is ok to enter UAPSD
-#ifndef WLAN_MDM_CODE_REDUCTION_OPT
-    if( btcIsReadyForUapsd(pMac) )
-#endif /* WLAN_MDM_CODE_REDUCTION_OPT*/
-    {
-       *pBuf++ = uapsdMask;
-    }
-#ifndef WLAN_MDM_CODE_REDUCTION_OPT
-    else
-    {
-        smsLog(pMac, LOGE, FL(" BTC doesn't allow UAPSD for uapsd_mask(0x%X)"), uapsdMask);
-        *pBuf++ = 0;
-    }
-#endif /* WLAN_MDM_CODE_REDUCTION_OPT*/
+
+    *pBuf++ = uapsdMask;
 
     // move the entire BssDescription into the join request.
     vos_mem_copy(pBuf, pBssDescription,

@@ -1471,12 +1471,6 @@ eHalStatus sme_Open(tHalHandle hHal)
          break;
       }
 
-      status = btcOpen(pMac);
-      if ( ! HAL_STATUS_SUCCESS( status ) ) {
-         smsLog( pMac, LOGE,
-                 "btcOpen open failed during initialization with status=%d", status );
-         break;
-      }
 #endif
 #ifdef FEATURE_OEM_DATA_SUPPORT
       status = oemData_OemDataReqOpen(pMac);
@@ -2159,14 +2153,6 @@ eHalStatus sme_HDDReadyInd(tHalHandle hHal)
                  smsLog( pMac, LOGE, "pmcReady failed with status=%d", status );
                  break;
              }
-#ifndef WLAN_MDM_CODE_REDUCTION_OPT
-             if(VOS_STATUS_SUCCESS != btcReady(hHal))
-             {
-                 status = eHAL_STATUS_FAILURE;
-                 smsLog( pMac, LOGE, "btcReady failed");
-                 break;
-             }
-#endif
 
 #if defined WLAN_FEATURE_VOWIFI
              if(VOS_STATUS_SUCCESS != rrmReady(hHal))
@@ -2186,14 +2172,6 @@ eHalStatus sme_HDDReadyInd(tHalHandle hHal)
               smsLog( pMac, LOGE, "csrReady failed with status=%d", status );
               break;
           }
-#ifndef WLAN_MDM_CODE_REDUCTION_OPT
-          if(VOS_STATUS_SUCCESS != btcReady(hHal))
-          {
-              status = eHAL_STATUS_FAILURE;
-              smsLog( pMac, LOGE, "btcReady failed");
-              break;
-          }
-#endif
 
 #if defined WLAN_FEATURE_VOWIFI
           if(VOS_STATUS_SUCCESS != rrmReady(hHal))
@@ -2829,19 +2807,6 @@ eHalStatus sme_ProcessMsg(tHalHandle hHal, vos_msg_t* pMsg)
                 else
                 {
                     smsLog( pMac, LOGE, "Empty rsp message for meas (eWNI_SME_ACTION_FRAME_SEND_CNF), nothing to process");
-                }
-                break;
-          case eWNI_SME_COEX_IND:
-                MTRACE(vos_trace(VOS_MODULE_ID_SME, TRACE_CODE_SME_RX_WDA_MSG,
-                                              NO_SESSION, pMsg->type));
-                if(pMsg->bodyptr)
-                {
-                   status = btcHandleCoexInd((void *)pMac, pMsg->bodyptr);
-                   vos_mem_free(pMsg->bodyptr);
-                }
-                else
-                {
-                   smsLog(pMac, LOGE, "Empty rsp message for meas (eWNI_SME_COEX_IND), nothing to process");
                 }
                 break;
 
@@ -3539,13 +3504,6 @@ eHalStatus sme_Close(tHalHandle hHal)
 #endif
 
 #ifndef WLAN_MDM_CODE_REDUCTION_OPT
-   status = btcClose(hHal);
-   if ( ! HAL_STATUS_SUCCESS( status ) ) {
-      smsLog( pMac, LOGE, "BTC close failed during sme close with status=%d",
-              status );
-      fail_status = status;
-   }
-
    status = sme_QosClose(pMac);
    if ( ! HAL_STATUS_SUCCESS( status ) ) {
       smsLog( pMac, LOGE, "Qos close failed during sme close with status=%d",
@@ -6831,94 +6789,6 @@ eHalStatus sme_TXFailMonitorStartStopInd(tHalHandle hHal, tANI_U8 tx_fail_count,
     return (status);
 }
 
-/* ---------------------------------------------------------------------------
-    \fn sme_BtcSignalBtEvent
-    \brief  API to signal Bluetooth (BT) event to the WLAN driver. Based on the
-            BT event type and the current operating mode of Libra (full power,
-            BMPS, UAPSD etc), appropriate Bluetooth Coexistence (BTC) strategy
-            would be employed.
-    \param  hHal - The handle returned by macOpen.
-    \param  pBtEvent -  Pointer to a caller allocated object of type tSmeBtEvent
-                        Caller owns the memory and is responsible for freeing it.
-    \return VOS_STATUS
-            VOS_STATUS_E_FAILURE  BT Event not passed to HAL. This can happen
-                                   if BTC execution mode is set to BTC_WLAN_ONLY
-                                   or BTC_PTA_ONLY.
-            VOS_STATUS_SUCCESS    BT Event passed to HAL
-  ---------------------------------------------------------------------------*/
-VOS_STATUS sme_BtcSignalBtEvent (tHalHandle hHal, tpSmeBtEvent pBtEvent)
-{
-    VOS_STATUS status = VOS_STATUS_E_FAILURE;
-
-#ifndef WLAN_MDM_CODE_REDUCTION_OPT
-    tpAniSirGlobal pMac = PMAC_STRUCT( hHal );
-
-    MTRACE(vos_trace(VOS_MODULE_ID_SME,
-           TRACE_CODE_SME_RX_HDD_BTC_SIGNALEVENT, NO_SESSION, 0));
-    if ( eHAL_STATUS_SUCCESS == sme_AcquireGlobalLock( &pMac->sme ) )
-    {
-        status = btcSignalBTEvent (hHal, pBtEvent);
-        sme_ReleaseGlobalLock( &pMac->sme );
-    }
-#endif
-    return (status);
-}
-
-/* ---------------------------------------------------------------------------
-    \fn sme_BtcSetConfig
-    \brief  API to change the current Bluetooth Coexistence (BTC) configuration
-            This function should be invoked only after CFG download has completed.
-            Calling it after sme_HDDReadyInd is recommended.
-    \param  hHal - The handle returned by macOpen.
-    \param  pSmeBtcConfig - Pointer to a caller allocated object of type tSmeBtcConfig.
-                            Caller owns the memory and is responsible for freeing it.
-    \return VOS_STATUS
-            VOS_STATUS_E_FAILURE  Config not passed to HAL.
-            VOS_STATUS_SUCCESS  Config passed to HAL
-  ---------------------------------------------------------------------------*/
-VOS_STATUS sme_BtcSetConfig (tHalHandle hHal, tpSmeBtcConfig pSmeBtcConfig)
-{
-    VOS_STATUS status = VOS_STATUS_E_FAILURE;
-#ifndef WLAN_MDM_CODE_REDUCTION_OPT
-    tpAniSirGlobal pMac = PMAC_STRUCT( hHal );
-    MTRACE(vos_trace(VOS_MODULE_ID_SME,
-                 TRACE_CODE_SME_RX_HDD_BTC_SETCONFIG, NO_SESSION, 0));
-    if ( eHAL_STATUS_SUCCESS == sme_AcquireGlobalLock( &pMac->sme ) )
-    {
-        status = btcSetConfig (hHal, pSmeBtcConfig);
-        sme_ReleaseGlobalLock( &pMac->sme );
-    }
-#endif
-    return (status);
-}
-
-/* ---------------------------------------------------------------------------
-    \fn sme_BtcGetConfig
-    \brief  API to retrieve the current Bluetooth Coexistence (BTC) configuration
-    \param  hHal - The handle returned by macOpen.
-    \param  pSmeBtcConfig - Pointer to a caller allocated object of type
-                            tSmeBtcConfig. Caller owns the memory and is responsible
-                            for freeing it.
-    \return VOS_STATUS
-            VOS_STATUS_E_FAILURE - failure
-            VOS_STATUS_SUCCESS  success
-  ---------------------------------------------------------------------------*/
-VOS_STATUS sme_BtcGetConfig (tHalHandle hHal, tpSmeBtcConfig pSmeBtcConfig)
-{
-    VOS_STATUS status = VOS_STATUS_E_FAILURE;
-#ifndef WLAN_MDM_CODE_REDUCTION_OPT
-    tpAniSirGlobal pMac = PMAC_STRUCT( hHal );
-
-    MTRACE(vos_trace(VOS_MODULE_ID_SME,
-             TRACE_CODE_SME_RX_HDD_BTC_GETCONFIG, NO_SESSION, 0));
-    if ( eHAL_STATUS_SUCCESS == sme_AcquireGlobalLock( &pMac->sme ) )
-    {
-        status = btcGetConfig (hHal, pSmeBtcConfig);
-        sme_ReleaseGlobalLock( &pMac->sme );
-    }
-#endif
-    return (status);
-}
 /* ---------------------------------------------------------------------------
     \fn sme_SetCfgPrivacy
     \brief  API to set configure privacy parameters
