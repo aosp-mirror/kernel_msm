@@ -414,6 +414,14 @@
 		pinctrl-1 = <&cdc_reset_sleep>;
 	};
 
+	qcom,bcl {
+		/delete-property/ qcom,bcl-hotplug-list;
+		/delete-property/ qcom,bcl-soc-hotplug-list;
+		qcom,ibat-monitor {
+			qcom,mitigation-freq-khz = <1132800>;
+			qcom,soc-low-threshold = <2>;
+		};
+	};
 };
 
 /{
