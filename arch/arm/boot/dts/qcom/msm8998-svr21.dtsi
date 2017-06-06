@@ -628,7 +628,7 @@
 /{
 	svr21_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <25>;
-                #include "SVR835v2_3600mAh_12012016_PMI8998GUI20052.dtsi"
+                #include "SVR835v2_3600mAh_Jan102017_rapidchg.dtsi"
 	};
 };
 
