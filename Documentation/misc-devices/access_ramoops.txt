@@ -14,4 +14,4 @@ Sysfs entries
 -------------
 
 label  - The name of the region.
-
+size   - The size of the region.

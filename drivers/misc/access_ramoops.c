@@ -48,10 +48,22 @@ static ssize_t label_show(struct device *dev,
 	return snprintf(buf, PAGE_SIZE, "%s\n", info->label);
 }
 
+static ssize_t size_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct miscdevice *miscdev = dev_get_drvdata(dev);
+	struct access_ramoops_info *info =
+		container_of(miscdev, struct access_ramoops_info, miscdev);
+
+	return snprintf(buf, PAGE_SIZE, "%zd\n", info->size);
+}
+
 static DEVICE_ATTR_RO(label);
+static DEVICE_ATTR_RO(size);
 
 static struct attribute *access_ramoops_attrs[] = {
 	&dev_attr_label.attr,
+	&dev_attr_size.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(access_ramoops);
