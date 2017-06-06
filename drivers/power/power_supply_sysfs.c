@@ -85,12 +85,29 @@ static ssize_t power_supply_show_property(struct device *dev,
 	struct power_supply *psy = dev_get_drvdata(dev);
 	const ptrdiff_t off = attr - power_supply_attrs;
 	union power_supply_propval value;
+	bool usb_fake_online = 0;
 
 	if (off == POWER_SUPPLY_PROP_TYPE) {
 		if (!strcmp(psy->name,"usb")) {
+			//get usb online
+			value.intval = 0;
+			ret = psy->get_property(psy, POWER_SUPPLY_PROP_ONLINE, &value);
+			if (ret < 0) {
+				if (ret == -ENODATA)
+					dev_dbg(dev, "driver has no data for `%s' property\n", attr->attr.name);
+				else if (ret != -ENODEV)
+					dev_err(dev, "driver failed to report `%s' property: %zd\n", attr->attr.name, ret);
+			} else { 
+				usb_fake_online = value.intval;
+			}
+
 			//When healthd initialize, return type "USB" for usb power supply
 			if(!healthd_init_done)
 				value.intval = POWER_SUPPLY_TYPE_USB;
+			else if (usb_fake_online && (psy->type == POWER_SUPPLY_TYPE_UNKNOWN))
+				value.intval = POWER_SUPPLY_TYPE_USB_DCP;
+			else if (!usb_fake_online)
+				value.intval = POWER_SUPPLY_TYPE_UNKNOWN;
 			else
 				value.intval = psy->type;
 		} else

@@ -123,6 +123,7 @@ static struct regulator *hsusb_vdd;
 static struct regulator *vbus_otg;
 static struct power_supply *psy;
 static bool usb_online;
+static bool fake_online = 0;
 static int vdd_val[VDD_VAL_MAX];
 static u32 bus_freqs[USB_NUM_BUS_CLOCKS];	/* bimc, snoc, pcnoc clk */;
 static char bus_clkname[USB_NUM_BUS_CLOCKS][20] = {"bimc_clk", "snoc_clk",
@@ -3389,7 +3390,10 @@ static int otg_power_get_property_usb(struct power_supply *psy,
 		break;
 	/* Reflect USB enumeration */
 	case POWER_SUPPLY_PROP_ONLINE:
-		val->intval = motg->online;
+		val->intval = fake_online;
+		break;
+	case POWER_SUPPLY_PROP_TECHNOLOGY:
+		val->intval = fake_online;
 		break;
 	case POWER_SUPPLY_PROP_TYPE:
 		val->intval = psy->type;
@@ -3445,6 +3449,13 @@ static int otg_power_set_property_usb(struct power_supply *psy,
 			if (charger_psy)
 				charger_psy->set_property(charger_psy, POWER_SUPPLY_PROP_STATUS, &data);
 		}
+		break;
+	case POWER_SUPPLY_PROP_TECHNOLOGY:
+		pr_info("otg_power_SET_property_usb, set fake_online:%d  \n", val->intval);
+		fake_online = val->intval;
+		charger_psy = power_supply_get_by_name("battery");
+		if (charger_psy)
+			power_supply_changed(charger_psy);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 		motg->voltage_max = val->intval;
@@ -3540,6 +3551,7 @@ static int otg_power_property_is_writeable_usb(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_HEALTH:
 	case POWER_SUPPLY_PROP_PRESENT:
 	case POWER_SUPPLY_PROP_ONLINE:
+	case POWER_SUPPLY_PROP_TECHNOLOGY:	
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
 	case POWER_SUPPLY_PROP_DP_DM:
@@ -3561,6 +3573,7 @@ static enum power_supply_property otg_pm_power_props_usb[] = {
 	POWER_SUPPLY_PROP_HEALTH,
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_ONLINE,
+	POWER_SUPPLY_PROP_TECHNOLOGY,
 	POWER_SUPPLY_PROP_VOLTAGE_MAX,
 	POWER_SUPPLY_PROP_CURRENT_MAX,
 	POWER_SUPPLY_PROP_INPUT_CURRENT_MAX,
