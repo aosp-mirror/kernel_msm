@@ -154,9 +154,7 @@ __rb_insert(struct rb_node *node, struct rb_root *root,
 				 * continuation into Case 3 will fix that.
 				 */
 				tmp = node->rb_left;
-				BUG_ON(parent == tmp);
 				WRITE_ONCE(parent->rb_right, tmp);
-				BUG_ON(node == parent);
 				WRITE_ONCE(node->rb_left, parent);
 				if (tmp)
 					rb_set_parent_color(tmp, parent,
@@ -176,9 +174,7 @@ __rb_insert(struct rb_node *node, struct rb_root *root,
 			 *     /                 \
 			 *    n                   U
 			 */
-			BUG_ON(gparent == tmp);
 			WRITE_ONCE(gparent->rb_left, tmp); /* == parent->rb_right */
-			BUG_ON(parent == gparent);
 			WRITE_ONCE(parent->rb_right, gparent);
 			if (tmp)
 				rb_set_parent_color(tmp, gparent, RB_BLACK);
@@ -201,9 +197,7 @@ __rb_insert(struct rb_node *node, struct rb_root *root,
 			if (node == tmp) {
 				/* Case 2 - right rotate at parent */
 				tmp = node->rb_right;
-				BUG_ON(parent == tmp);
 				WRITE_ONCE(parent->rb_left, tmp);
-				BUG_ON(node == parent);
 				WRITE_ONCE(node->rb_right, parent);
 				if (tmp)
 					rb_set_parent_color(tmp, parent,
@@ -215,9 +209,7 @@ __rb_insert(struct rb_node *node, struct rb_root *root,
 			}
 
 			/* Case 3 - left rotate at gparent */
-			BUG_ON(gparent == tmp);
 			WRITE_ONCE(gparent->rb_right, tmp); /* == parent->rb_left */
-			BUG_ON(parent == gparent);
 			WRITE_ONCE(parent->rb_left, gparent);
 			if (tmp)
 				rb_set_parent_color(tmp, gparent, RB_BLACK);
@@ -259,9 +251,7 @@ ____rb_erase_color(struct rb_node *parent, struct rb_root *root,
 				 *     Sl  Sr      N   Sl
 				 */
 				tmp1 = sibling->rb_left;
-				BUG_ON(parent == tmp1);
 				WRITE_ONCE(parent->rb_right, tmp1);
-				BUG_ON(sibling == parent);
 				WRITE_ONCE(sibling->rb_left, parent);
 				rb_set_parent_color(tmp1, parent, RB_BLACK);
 				__rb_rotate_set_parents(parent, sibling, root,
@@ -313,11 +303,8 @@ ____rb_erase_color(struct rb_node *parent, struct rb_root *root,
 				 *                        Sr
 				 */
 				tmp1 = tmp2->rb_right;
-				BUG_ON(sibling == tmp1);
 				WRITE_ONCE(sibling->rb_left, tmp1);
-				BUG_ON(tmp2 == sibling);
 				WRITE_ONCE(tmp2->rb_right, sibling);
-				BUG_ON(parent == tmp2);
 				WRITE_ONCE(parent->rb_right, tmp2);
 				if (tmp1)
 					rb_set_parent_color(tmp1, sibling,
@@ -339,9 +326,7 @@ ____rb_erase_color(struct rb_node *parent, struct rb_root *root,
 			 *      (sl) sr      N  (sl)
 			 */
 			tmp2 = sibling->rb_left;
-			BUG_ON(parent == tmp2);
 			WRITE_ONCE(parent->rb_right, tmp2);
-			BUG_ON(sibling == parent);
 			WRITE_ONCE(sibling->rb_left, parent);
 			rb_set_parent_color(tmp1, sibling, RB_BLACK);
 			if (tmp2)
@@ -355,9 +340,7 @@ ____rb_erase_color(struct rb_node *parent, struct rb_root *root,
 			if (rb_is_red(sibling)) {
 				/* Case 1 - right rotate at parent */
 				tmp1 = sibling->rb_right;
-				BUG_ON(parent == tmp1);
 				WRITE_ONCE(parent->rb_left, tmp1);
-				BUG_ON(sibling == parent);
 				WRITE_ONCE(sibling->rb_right, parent);
 				rb_set_parent_color(tmp1, parent, RB_BLACK);
 				__rb_rotate_set_parents(parent, sibling, root,
@@ -384,11 +367,8 @@ ____rb_erase_color(struct rb_node *parent, struct rb_root *root,
 				}
 				/* Case 3 - right rotate at sibling */
 				tmp1 = tmp2->rb_left;
-				BUG_ON(sibling == tmp1);
 				WRITE_ONCE(sibling->rb_right, tmp1);
-				BUG_ON(tmp2 == sibling);
 				WRITE_ONCE(tmp2->rb_left, sibling);
-				BUG_ON(parent == tmp2);
 				WRITE_ONCE(parent->rb_left, tmp2);
 				if (tmp1)
 					rb_set_parent_color(tmp1, sibling,
@@ -399,9 +379,7 @@ ____rb_erase_color(struct rb_node *parent, struct rb_root *root,
 			}
 			/* Case 4 - left rotate at parent + color flips */
 			tmp2 = sibling->rb_right;
-			BUG_ON(parent == tmp2);
 			WRITE_ONCE(parent->rb_left, tmp2);
-			BUG_ON(sibling == parent);
 			WRITE_ONCE(sibling->rb_right, parent);
 			rb_set_parent_color(tmp1, sibling, RB_BLACK);
 			if (tmp2)

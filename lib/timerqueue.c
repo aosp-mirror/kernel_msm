@@ -43,7 +43,7 @@ void timerqueue_add(struct timerqueue_head *head, struct timerqueue_node *node)
 	struct timerqueue_node  *ptr;
 
 	/* Make sure we don't add nodes that are already added */
-	BUG_ON(!RB_EMPTY_NODE(&node->node));
+	WARN_ON_ONCE(!RB_EMPTY_NODE(&node->node));
 
 	while (*p) {
 		parent = *p;
@@ -71,7 +71,7 @@ EXPORT_SYMBOL_GPL(timerqueue_add);
  */
 void timerqueue_del(struct timerqueue_head *head, struct timerqueue_node *node)
 {
-	BUG_ON(RB_EMPTY_NODE(&node->node));
+	WARN_ON_ONCE(RB_EMPTY_NODE(&node->node));
 
 	/* update next pointer */
 	if (head->next == node) {
