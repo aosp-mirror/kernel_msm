@@ -193,7 +193,7 @@ static const int DefVMTempTable[NTEMP] = VMTEMPTABLE;
 static const char *charger_name = "battery";
 //static int g_low_battery_counter;
 static bool g_debug, g_standby_mode, g_boot_phase, g_force_SOC_update;
-static int g_ui_soc, g_last_status, g_ocv, g_reg_soc;
+static int g_ui_soc, g_last_status, g_ocv, g_reg_soc, g_dummy_soc;
 static const char * const charge_status[] = {
 	"unknown",
 	"charging",
@@ -484,6 +484,13 @@ static int stc311x_set_property(struct power_supply *psy,
 			g_debug = 1;
 		else
 			g_debug = 0;
+		break;
+	case POWER_SUPPLY_PROP_CAPACITY_RAW:
+		if ((val->intval >= 0) && (val->intval <= 100))
+			g_dummy_soc = val->intval;
+		else
+			g_dummy_soc = 101;
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -515,13 +522,19 @@ static int stc311x_get_property(struct power_supply *psy,
 		val->intval = chip->batt_current * 1000;  /* in uA */
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
-		val->intval = g_ui_soc;
+		if (g_dummy_soc == 101)
+			val->intval = g_ui_soc;
+		else
+			val->intval = g_dummy_soc;
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
 		val->intval = chip->Temperature;
 		break;
 	case POWER_SUPPLY_PROP_TECHNOLOGY:
 		val->intval = g_debug;
+		break;
+	case POWER_SUPPLY_PROP_CAPACITY_RAW:
+		val->intval = g_dummy_soc;
 		break;
 	default:
 		return -EINVAL;
@@ -534,6 +547,7 @@ static int stc311x_battery_is_writeable(struct power_supply *psy,
 {
 	switch (prop) {
 	case POWER_SUPPLY_PROP_TECHNOLOGY:
+	case POWER_SUPPLY_PROP_CAPACITY_RAW:
 		return 1;
 	default:
 		break;
@@ -2600,12 +2614,12 @@ static void stc311x_boot_up_work(struct work_struct *work)
 }
 
 static enum power_supply_property stc311x_battery_props[] = {
+	POWER_SUPPLY_PROP_TECHNOLOGY,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_CAPACITY,
+	POWER_SUPPLY_PROP_CAPACITY_RAW,
 	POWER_SUPPLY_PROP_TEMP,
-	POWER_SUPPLY_PROP_TECHNOLOGY,
-
 };
 
 static int stc311x_probe(struct i2c_client *client,
@@ -2635,6 +2649,7 @@ static int stc311x_probe(struct i2c_client *client,
 	g_debug = 0;
 	g_boot_phase = 1;
 	g_force_SOC_update = 0;
+	g_dummy_soc = 101;
 
 	/* The common I2C client data is placed right specific data. */
 	chip->client = client;
