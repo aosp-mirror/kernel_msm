@@ -128,6 +128,14 @@ enum {
 	RTT_BW_80 = BIT(4),
 	RTT_BW_160 = BIT(5)
 };
+
+enum rtt_rate_bw {
+	RTT_RATE_20M,
+	RTT_RATE_40M,
+	RTT_RATE_80M,
+	RTT_RATE_160M
+};
+
 #define FTM_MAX_NUM_BURST_EXP	14
 #define HAS_11MC_CAP(cap) (cap & RTT_CAP_FTM_WAY)
 #define HAS_ONEWAY_CAP(cap) (cap & RTT_CAP_ONE_WAY)
