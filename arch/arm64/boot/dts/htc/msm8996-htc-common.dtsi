@@ -125,6 +125,7 @@
 			qcom,mitigation-freq-khz = <1132800>;
 		};
 	};
+	/delete-node/ qcom,qbt1000;
 };
 
 &wdog {

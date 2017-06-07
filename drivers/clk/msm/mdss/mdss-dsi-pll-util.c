@@ -446,7 +446,7 @@ static void pll_28nm_vco_config(void __iomem *pll_base,
 
 int vco_set_rate(struct dsi_pll_vco_clk *vco, unsigned long rate)
 {
-	struct mdss_dsi_vco_calc vco_calc;
+	struct mdss_dsi_vco_calc vco_calc = { 0 };
 	struct mdss_pll_resources *dsi_pll_res = vco->priv;
 	int rc = 0;
 

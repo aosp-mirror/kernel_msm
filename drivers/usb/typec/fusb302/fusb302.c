@@ -34,13 +34,13 @@
 #include <linux/string.h>
 #include <linux/time.h>
 #include <linux/types.h>
-#include <linux/usb/pd.h>
 #include <linux/usb/typec.h>
 #include <linux/usb/usb_controller.h>
 #include <linux/usb/usb_typec.h>
 #include <linux/workqueue.h>
 
 #include "fusb302_reg.h"
+#include "../pd.h"
 #include "../tcpm.h"
 
 #define PM_WAKE_DELAY_MS 2000
@@ -630,7 +630,7 @@ static int tcpm_set_cc(struct tcpc_dev *dev, enum typec_cc_status cc)
 		ret = fusb302_i2c_mask_write(chip, FUSB_REG_MASK,
 					     FUSB_REG_MASK_BC_LVL |
 					     FUSB_REG_MASK_COMP_CHNG,
-					     FUSB_REG_MASK_COMP_CHNG);
+					     FUSB_REG_MASK_BC_LVL);
 		if (ret < 0) {
 			fusb302_log("cannot set SRC interrupt, ret=%d\n",
 				    ret);
@@ -638,12 +638,19 @@ static int tcpm_set_cc(struct tcpc_dev *dev, enum typec_cc_status cc)
 		}
 		chip->intr_bc_lvl = false;
 		chip->intr_comp_chng = true;
+
+		ret = fusb302_set_toggling(chip, TOGGLING_MODE_SRC);
+		if (ret < 0) {
+			fusb302_log("cannot set toggling to SRC mode, ret=%d\n",
+				    ret);
+			goto done;
+		}
 	}
 	if (pull_down) {
 		ret = fusb302_i2c_mask_write(chip, FUSB_REG_MASK,
 					     FUSB_REG_MASK_BC_LVL |
 					     FUSB_REG_MASK_COMP_CHNG,
-					     FUSB_REG_MASK_BC_LVL);
+					     FUSB_REG_MASK_COMP_CHNG);
 		if (ret < 0) {
 			fusb302_log("cannot set SRC interrupt, ret=%d\n",
 				    ret);
@@ -651,6 +658,13 @@ static int tcpm_set_cc(struct tcpc_dev *dev, enum typec_cc_status cc)
 		}
 		chip->intr_bc_lvl = true;
 		chip->intr_comp_chng = false;
+
+		ret = fusb302_set_toggling(chip, TOGGLING_MODE_SNK);
+		if (ret < 0) {
+			fusb302_log("cannot set toggling to SNK mode, ret=%d\n",
+				    ret);
+			goto done;
+		}
 	}
 	fusb302_log("cc := %s\n", typec_cc_status_name[cc]);
 done:
@@ -1537,18 +1551,25 @@ static int fusb302_handle_togdone_src(struct fusb302_chip *chip,
 		cc_status_active = TYPEC_CC_RD;
 	else
 		/* Ra is not supported, report as Open */
-		cc_status_active = TYPEC_CC_OPEN;
+		cc_status_active = TYPEC_CC_RA;
 	/* restart toggling if the cc status on the active line is OPEN */
 	if (cc_status_active == TYPEC_CC_OPEN) {
 		fusb302_log("restart toggling as CC_OPEN detected\n");
 		ret = fusb302_set_toggling(chip, chip->toggling_mode);
 		return ret;
 	}
-	/* update tcpm with the new cc value */
-	cc1 = (cc_polarity == TYPEC_POLARITY_CC1) ?
-	      cc_status_active : TYPEC_CC_OPEN;
-	cc2 = (cc_polarity == TYPEC_POLARITY_CC2) ?
-	      cc_status_active : TYPEC_CC_OPEN;
+
+	if (cc_status_active != TYPEC_CC_RA) {
+		/* update tcpm with the new cc value */
+		cc1 = (cc_polarity == TYPEC_POLARITY_CC1) ?
+		      cc_status_active : TYPEC_CC_OPEN;
+		cc2 = (cc_polarity == TYPEC_POLARITY_CC2) ?
+		      cc_status_active : TYPEC_CC_OPEN;
+	} else {
+		cc1 = cc_status_active;
+		cc2 = cc_status_active;
+	}
+
 	if ((chip->cc1 != cc1) || (chip->cc2 != cc2)) {
 		chip->cc1 = cc1;
 		chip->cc2 = cc2;
@@ -1662,6 +1683,9 @@ static irqreturn_t fusb302_irq_intn(int irq, void *dev_id)
 	u8 interrupta;
 	u8 interruptb;
 	u8 status0;
+	u8 control2;
+	u8 maska;
+	u8 mask1;
 	bool vbus_present;
 	bool comp_result;
 	bool intr_togdone;
@@ -1689,8 +1713,20 @@ static irqreturn_t fusb302_irq_intn(int irq, void *dev_id)
 	ret = fusb302_i2c_read(chip, FUSB_REG_STATUS0, &status0);
 	if (ret < 0)
 		goto done;
-	fusb302_log("IRQ: 0x%02x, a: 0x%02x, b: 0x%02x, status0: 0x%02x\n",
+	ret = fusb302_i2c_read(chip, FUSB_REG_CONTROL2, &control2);
+	if (ret < 0)
+		goto done;
+	ret = fusb302_i2c_read(chip, FUSB_REG_MASKA, &maska);
+	if (ret < 0)
+		goto done;
+	ret = fusb302_i2c_read(chip, FUSB_REG_MASK, &mask1);
+	if (ret < 0)
+		goto done;
+
+	fusb302_log("IRQ: 0x%02x, a: 0x%02x, b: 0x%02x, status0: 0x%02x",
 		    interrupt, interrupta, interruptb, status0);
+	fusb302_log("control2: 0x%02x maska: 0x%02x mask1: 0x%02x\n",
+		    control2, maska, mask1);
 
 	if (interrupt & FUSB_REG_INTERRUPT_VBUSOK) {
 		vbus_present = !!(status0 & FUSB_REG_STATUS0_VBUSOK);

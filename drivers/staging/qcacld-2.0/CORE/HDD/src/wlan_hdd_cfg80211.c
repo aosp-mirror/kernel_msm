@@ -17353,7 +17353,9 @@ int __wlan_hdd_cfg80211_scan( struct wiphy *wiphy,
     wlan_hdd_update_scan_rand_attrs((void *)&scanRequest, (void *)request,
                                     WLAN_HDD_HOST_SCAN);
 
-    if (!hdd_connIsConnected(station_ctx) &&
+	if (pAdapter->device_mode == WLAN_HDD_INFRA_STATION &&
+		!is_p2p_scan &&
+		!hdd_connIsConnected(station_ctx) &&
         (pHddCtx->cfg_ini->probe_req_ie_whitelist)) {
         if (pHddCtx->no_of_probe_req_ouis != 0) {
             scanRequest.voui = (struct vendor_oui *)vos_mem_malloc(
@@ -21170,16 +21172,27 @@ static void hdd_config_sched_scan_plan(tpSirPNOScanReq pno_req,
 				struct cfg80211_sched_scan_request *request,
 				hdd_context_t *hdd_ctx)
 {
-	pno_req->fast_scan_period =
-		request->scan_plans[0].interval * MSEC_PER_SEC;
-	pno_req->fast_scan_max_cycles = request->scan_plans[0].iterations;
-	pno_req->slow_scan_period =
-		request->scan_plans[1].interval * MSEC_PER_SEC;
-	hddLog(LOGE, "Base scan interval: %d sec, scan cycles: %d, slow scan interval %d",
-		request->scan_plans[0].interval,
-		request->scan_plans[0].iterations,
-		request->scan_plans[1].interval);
-
+	if (request->n_scan_plans == 2) {
+		pno_req->fast_scan_period =
+			request->scan_plans[0].interval * MSEC_PER_SEC;
+		pno_req->fast_scan_max_cycles =
+			request->scan_plans[0].iterations;
+		pno_req->slow_scan_period =
+			request->scan_plans[1].interval * MSEC_PER_SEC;
+		hddLog(LOGE, "Base scan interval: %d sec, scan cycles: %d, slow scan interval %d",
+		       request->scan_plans[0].interval,
+		       request->scan_plans[0].iterations,
+		       request->scan_plans[1].interval);
+	} else if (request->n_scan_plans == 1) {
+		pno_req->fast_scan_period = request->scan_plans[0].interval *
+			MSEC_PER_SEC;
+		pno_req->fast_scan_max_cycles = 1;
+		pno_req->slow_scan_period = request->scan_plans[0].interval *
+			MSEC_PER_SEC;
+	} else {
+		hddLog(LOGE, "Invalid number of scan plans %d !!",
+		       request->n_scan_plans);
+	}
 }
 #else
 static void hdd_config_sched_scan_plan(tpSirPNOScanReq pno_req,
@@ -21461,8 +21474,8 @@ static int __wlan_hdd_cfg80211_sched_scan_start(struct wiphy *wiphy,
 
     VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
               "request->ie_len = %zu", request->ie_len);
-    if ((0 < request->ie_len) && (NULL != request->ie))
-    {
+    if ((request->ie_len > 0 && request->ie_len <= SIR_PNO_MAX_PB_REQ_SIZE) &&
+       (NULL != request->ie)) {
         pPnoRequest->us24GProbeTemplateLen = request->ie_len;
         memcpy(&pPnoRequest->p24GProbeTemplate, request->ie,
                 pPnoRequest->us24GProbeTemplateLen);

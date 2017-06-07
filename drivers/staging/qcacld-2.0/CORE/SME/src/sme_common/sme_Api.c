@@ -3301,7 +3301,8 @@ eHalStatus sme_ProcessMsg(tHalHandle hHal, vos_msg_t* pMsg)
                 roam_info = vos_mem_malloc(sizeof(*roam_info));
                 if (roam_info) {
                     vos_mem_zero(roam_info, sizeof(*roam_info));
-                    roam_info->pBssDesc = &result->bss_description;
+					roam_info->pBssDesc = (tSirBssDescription *)(
+							(uint8_t *)&result->bss_description+result->ap.ieLength);
                     csrRoamCallCallback(pMac, 0, roam_info, 0,
                         eCSR_ROAM_UPDATE_SCAN_RESULT, eCSR_ROAM_RESULT_NONE);
                     vos_mem_free(roam_info);

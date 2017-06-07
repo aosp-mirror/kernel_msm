@@ -276,8 +276,6 @@ fail_ep_exists:
  */
 int ipa2_disconnect_mhi_pipe(u32 clnt_hdl)
 {
-	struct ipa_ep_context *ep;
-
 	IPA_MHI_FUNC_ENTRY();
 
 	if (clnt_hdl >= ipa_ctx->ipa_num_pipes) {
@@ -290,7 +288,7 @@ int ipa2_disconnect_mhi_pipe(u32 clnt_hdl)
 		return -EINVAL;
 	}
 
-	ep->valid = 0;
+	ipa_ctx->ep[clnt_hdl].valid = 0;
 	ipa_delete_dflt_flt_rules(clnt_hdl);
 
 	IPA_MHI_DBG("client (ep: %d) disconnected\n", clnt_hdl);

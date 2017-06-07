@@ -275,8 +275,14 @@ __limExtScanForwardBcnProbeRsp(tpAniSirGlobal pmac, uint8_t *rx_pkt_info,
 	vos_mem_copy((uint8_t *) &result->ap.ieData,
 			body + SIR_MAC_B_PR_SSID_OFFSET, ie_len);
 
-	limCollectBssDescription(pmac, &result->bss_description,
-			frame, rx_pkt_info, eANI_BOOLEAN_FALSE);
+	/* bss_description points to ap.ieData as ap.ieData is flexible arrary
+	 * member.
+	 * Fill result->bss_description by leaving ie_len bytes after ap.ieData
+	 * manually.
+	 */
+	limCollectBssDescription(pmac,
+							(tSirBssDescription *)((uint8_t *)&result->bss_description +
+							ie_len), frame, rx_pkt_info, eANI_BOOLEAN_FALSE);
 
 	mmh_msg.type = msg_type;
 	mmh_msg.bodyptr = result;
@@ -1396,12 +1402,10 @@ limProcessMessages(tpAniSirGlobal pMac, tpSirMsgQ  limMsg)
             break;
         case eWNI_SME_SCAN_ABORT_IND:
           {
-            tSirMbMsg *pMsg = limMsg->bodyptr;
-            tANI_U8 sessionId;
+            tSirSmeScanAbortReq *pMsg = (tSirSmeScanAbortReq *) limMsg->bodyptr;
             if (pMsg)
             {
-               sessionId = (tANI_U8) pMsg->data[0];
-               limProcessAbortScanInd(pMac, sessionId);
+               limProcessAbortScanInd(pMac, pMsg->sessionId);
                vos_mem_free((v_VOID_t *)limMsg->bodyptr);
                limMsg->bodyptr = NULL;
             }

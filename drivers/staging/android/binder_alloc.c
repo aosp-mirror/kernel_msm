@@ -30,6 +30,8 @@
 #include "binder_alloc.h"
 #include "binder_trace.h"
 
+static DEFINE_MUTEX(binder_alloc_mmap_lock);
+
 enum {
 	BINDER_DEBUG_OPEN_CLOSE             = 1U << 1,
 	BINDER_DEBUG_BUFFER_ALLOC           = 1U << 2,
@@ -114,8 +116,8 @@ static void binder_insert_allocated_buffer(struct binder_alloc *alloc,
 	rb_insert_color(&new_buffer->rb_node, &alloc->allocated_buffers);
 }
 
-struct binder_buffer *binder_alloc_buffer_lookup(struct binder_alloc *alloc,
-						 uintptr_t user_ptr)
+struct binder_buffer *binder_alloc_prepare_to_free(struct binder_alloc *alloc,
+						   uintptr_t user_ptr)
 {
 	struct rb_node *n;
 	struct binder_buffer *buffer;
@@ -135,6 +137,17 @@ struct binder_buffer *binder_alloc_buffer_lookup(struct binder_alloc *alloc,
 		else if (kern_ptr > buffer)
 			n = n->rb_right;
 		else {
+			/*
+			 * Guard against user threads attempting to
+			 * free the buffer twice
+			 */
+			if (!buffer->free_in_progress) {
+				buffer->free_in_progress = 1;
+			} else {
+				pr_err("%d:%d FREE_BUFFER u%016llx user freed buffer twice\n",
+				       alloc->pid, current->pid, (u64)user_ptr);
+				buffer = NULL;
+			}
 			mutex_unlock(&alloc->mutex);
 			return buffer;
 		}
@@ -376,6 +389,7 @@ struct binder_buffer *binder_alloc_new_buf(struct binder_alloc *alloc,
 
 	rb_erase(best_fit, &alloc->free_buffers);
 	buffer->free = 0;
+	buffer->free_in_progress = 0;
 	binder_insert_allocated_buffer(alloc, buffer);
 	if (buffer_size != size) {
 		struct binder_buffer *new_buffer = (void *)buffer->data + size;
@@ -535,7 +549,7 @@ int binder_alloc_mmap_handler(struct binder_alloc *alloc,
 	const char *failure_string;
 	struct binder_buffer *buffer;
 
-	mutex_lock(&alloc->mutex);
+	mutex_lock(&binder_alloc_mmap_lock);
 	if (alloc->buffer) {
 		ret = -EBUSY;
 		failure_string = "already mapped";
@@ -551,6 +565,7 @@ int binder_alloc_mmap_handler(struct binder_alloc *alloc,
 	alloc->buffer = area->addr;
 	WRITE_ONCE(alloc->user_buffer_offset,
 			vma->vm_start - (uintptr_t)alloc->buffer);
+	mutex_unlock(&binder_alloc_mmap_lock);
 
 #ifdef CONFIG_CPU_CACHE_VIPT
 	if (cache_is_vipt_aliasing()) {
@@ -589,7 +604,6 @@ int binder_alloc_mmap_handler(struct binder_alloc *alloc,
 	barrier();
 	alloc->vma = vma;
 	alloc->vma_vm_mm = vma->vm_mm;
-	mutex_unlock(&alloc->mutex);
 
 	return 0;
 
@@ -597,11 +611,12 @@ err_alloc_small_buf_failed:
 	kfree(alloc->pages);
 	alloc->pages = NULL;
 err_alloc_pages_failed:
+	mutex_lock(&binder_alloc_mmap_lock);
 	vfree(alloc->buffer);
 	alloc->buffer = NULL;
 err_get_vm_area_failed:
 err_already_mapped:
-	mutex_unlock(&alloc->mutex);
+	mutex_unlock(&binder_alloc_mmap_lock);
 	pr_err("%s: %d %lx-%lx %s failed %d\n", __func__,
 	       alloc->pid, vma->vm_start, vma->vm_end, failure_string, ret);
 	return ret;

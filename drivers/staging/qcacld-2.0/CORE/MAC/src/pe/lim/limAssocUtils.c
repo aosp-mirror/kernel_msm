@@ -3501,6 +3501,17 @@ limCheckAndAnnounceJoinSuccess(tpAniSirGlobal pMac,
         mlmJoinCnf.sessionId = psessionEntry->peSessionId;
         limPostSmeMessage(pMac, LIM_MLM_JOIN_CNF, (tANI_U32 *) &mlmJoinCnf);
     } // if ((pMac->lim.gLimSystemRole == IBSS....
+
+    if (pBPR->vendor2_ie.VHTCaps.present) {
+        psessionEntry->is_vendor_specific_vhtcaps = true;
+        psessionEntry->vendor_specific_vht_ie_type =
+            pBPR->vendor2_ie.type;
+        psessionEntry->vendor_specific_vht_ie_sub_type =
+            pBPR->vendor2_ie.sub_type;
+        limLog(pMac, LOG1, FL(
+                    "VHT caps are present in vendor specific IE"));
+    }
+
 }
 
 /**
@@ -3638,6 +3649,86 @@ limDelBss(tpAniSirGlobal pMac, tpDphHashNode pStaDs, tANI_U16 bssIdx,tpPESession
     return retCode;
 }
 
+ /* lim_update_vhtcaps_assoc_resp : Update VHT caps in assoc response.
+ * @pMac Pointer to Global MAC structure
+ * @add_bss_params: parameters required for add bss params.
+ * @vht_caps: VHT capabilities.
+ * @session_entry : session entry.
+ *
+ * Return : void
+ */
+void lim_update_vhtcaps_assoc_resp(tpAniSirGlobal pMac,
+                tpAddBssParams add_bss_params,
+                tDot11fIEVHTCaps *vht_caps, tpPESession session_entry)
+{
+	add_bss_params->currentExtChannel = limGet11ACPhyCBState(pMac,
+					add_bss_params->currentOperChannel,
+					add_bss_params->currentExtChannel,
+					session_entry->apCenterChan,
+					session_entry);
+
+	add_bss_params->staContext.vht_caps =
+		((vht_caps->maxMPDULen << SIR_MAC_VHT_CAP_MAX_MPDU_LEN) |
+		 (vht_caps->supportedChannelWidthSet <<
+		  SIR_MAC_VHT_CAP_SUPP_CH_WIDTH_SET) |
+		 (vht_caps->ldpcCodingCap <<
+		  SIR_MAC_VHT_CAP_LDPC_CODING_CAP) |
+		 (vht_caps->shortGI80MHz <<
+		  SIR_MAC_VHT_CAP_SHORTGI_80MHZ) |
+		 (vht_caps->shortGI160and80plus80MHz <<
+		  SIR_MAC_VHT_CAP_SHORTGI_160_80_80MHZ) |
+		 (vht_caps->txSTBC << SIR_MAC_VHT_CAP_TXSTBC) |
+		 (vht_caps->rxSTBC << SIR_MAC_VHT_CAP_RXSTBC) |
+		 (vht_caps->suBeamFormerCap <<
+		  SIR_MAC_VHT_CAP_SU_BEAMFORMER_CAP) |
+		 (vht_caps->suBeamformeeCap <<
+		  SIR_MAC_VHT_CAP_SU_BEAMFORMEE_CAP) |
+		 (vht_caps->csnofBeamformerAntSup <<
+		  SIR_MAC_VHT_CAP_CSN_BEAMORMER_ANT_SUP) |
+		 (vht_caps->numSoundingDim <<
+		  SIR_MAC_VHT_CAP_NUM_SOUNDING_DIM) |
+		 (vht_caps->muBeamformerCap <<
+		  SIR_MAC_VHT_CAP_NUM_BEAM_FORMER_CAP)|
+		 (vht_caps->muBeamformeeCap <<
+		  SIR_MAC_VHT_CAP_NUM_BEAM_FORMEE_CAP) |
+		 (vht_caps->vhtTXOPPS << SIR_MAC_VHT_CAP_TXOPPS) |
+		 (vht_caps->htcVHTCap << SIR_MAC_VHT_CAP_HTC_CAP) |
+		 (vht_caps->maxAMPDULenExp <<
+		  SIR_MAC_VHT_CAP_MAX_AMDU_LEN_EXPO) |
+		 (vht_caps->vhtLinkAdaptCap <<
+		  SIR_MAC_VHT_CAP_LINK_ADAPT_CAP) |
+		 (vht_caps->rxAntPattern <<
+		  SIR_MAC_VHT_CAP_RX_ANTENNA_PATTERN) |
+		 (vht_caps->txAntPattern <<
+		  SIR_MAC_VHT_CAP_TX_ANTENNA_PATTERN) |
+		 (vht_caps->reserved1 << SIR_MAC_VHT_CAP_RESERVED2));
+
+	add_bss_params->staContext.maxAmpduSize =
+		SIR_MAC_GET_VHT_MAX_AMPDU_EXPO(
+				add_bss_params->staContext.vht_caps);
+
+	limLog(pMac, LOG1,
+			FL("Updating VHT Caps in assoc Response"));
+}
+
+/**
+ * lim_update_vht_oper_assoc_resp : Update VHT Operations in assoc response.
+ * @pMac Pointer to Global MAC structure
+ * @add_bss_params: parameters required for add bss params.
+ * @vht_oper: VHT Operations to update.
+ * @session_entry : session entry.
+ *
+ * Return : void
+ */
+void lim_update_vht_oper_assoc_resp(tpAniSirGlobal pMac,
+		tpAddBssParams add_bss_params,
+		tDot11fIEVHTOperation *vht_oper, tpPESession session_entry)
+{
+	if (vht_oper->chanWidth)
+		add_bss_params->vhtTxChannelWidthSet = vht_oper->chanWidth;
+	limLog(pMac, LOG1,
+			FL("Updating VHT Operation in assoc Response"));
+}
 
 
 /**
@@ -3681,6 +3772,10 @@ tSirRetStatus limStaSendAddBss( tpAniSirGlobal pMac, tpSirAssocRsp pAssocRsp,
     tANI_U32 shortGi20MhzSupport;
     tANI_U32 shortGi40MhzSupport;
     tANI_U32 enableTxBF20MHz;
+    tDot11fIEVHTCaps *vht_caps = NULL;
+    tDot11fIEVHTOperation *vht_oper = NULL;
+
+
     // Package SIR_HAL_ADD_BSS_REQ message parameters
     pAddBssParams = vos_mem_malloc(sizeof( tAddBssParams ));
     if (NULL == pAddBssParams)
@@ -3815,57 +3910,34 @@ tSirRetStatus limStaSendAddBss( tpAniSirGlobal pMac, tpSirAssocRsp pAssocRsp,
     if (psessionEntry->vhtCapability && ( pAssocRsp->VHTCaps.present ))
     {
         pAddBssParams->vhtCapable = pAssocRsp->VHTCaps.present;
-        pAddBssParams->vhtTxChannelWidthSet = pAssocRsp->VHTOperation.chanWidth;
         pAddBssParams->currentExtChannel = limGet11ACPhyCBState ( pMac,
                                                                   pAddBssParams->currentOperChannel,
                                                                   pAddBssParams->currentExtChannel,
                                                                   psessionEntry->apCenterChan,
                                                                   psessionEntry);
-
-        pAddBssParams->staContext.vht_caps =
-            ((pAssocRsp->VHTCaps.maxMPDULen << SIR_MAC_VHT_CAP_MAX_MPDU_LEN) |
-             (pAssocRsp->VHTCaps.supportedChannelWidthSet <<
-                                      SIR_MAC_VHT_CAP_SUPP_CH_WIDTH_SET) |
-             (pAssocRsp->VHTCaps.ldpcCodingCap <<
-                                      SIR_MAC_VHT_CAP_LDPC_CODING_CAP) |
-             (pAssocRsp->VHTCaps.shortGI80MHz <<
-                                      SIR_MAC_VHT_CAP_SHORTGI_80MHZ) |
-             (pAssocRsp->VHTCaps.shortGI160and80plus80MHz <<
-                                      SIR_MAC_VHT_CAP_SHORTGI_160_80_80MHZ) |
-             (pAssocRsp->VHTCaps.txSTBC << SIR_MAC_VHT_CAP_TXSTBC) |
-             (pAssocRsp->VHTCaps.rxSTBC << SIR_MAC_VHT_CAP_RXSTBC) |
-             (pAssocRsp->VHTCaps.suBeamFormerCap <<
-                                      SIR_MAC_VHT_CAP_SU_BEAMFORMER_CAP) |
-             (pAssocRsp->VHTCaps.suBeamformeeCap <<
-                                      SIR_MAC_VHT_CAP_SU_BEAMFORMEE_CAP) |
-             (pAssocRsp->VHTCaps.csnofBeamformerAntSup <<
-                                  SIR_MAC_VHT_CAP_CSN_BEAMORMER_ANT_SUP) |
-             (pAssocRsp->VHTCaps.numSoundingDim <<
-                                       SIR_MAC_VHT_CAP_NUM_SOUNDING_DIM) |
-             (pAssocRsp->VHTCaps.muBeamformerCap <<
-                                     SIR_MAC_VHT_CAP_NUM_BEAM_FORMER_CAP)|
-             (pAssocRsp->VHTCaps.muBeamformeeCap <<
-                                    SIR_MAC_VHT_CAP_NUM_BEAM_FORMEE_CAP) |
-             (pAssocRsp->VHTCaps.vhtTXOPPS << SIR_MAC_VHT_CAP_TXOPPS) |
-             (pAssocRsp->VHTCaps.htcVHTCap << SIR_MAC_VHT_CAP_HTC_CAP) |
-             (pAssocRsp->VHTCaps.maxAMPDULenExp <<
-                                SIR_MAC_VHT_CAP_MAX_AMDU_LEN_EXPO) |
-             (pAssocRsp->VHTCaps.vhtLinkAdaptCap <<
-                                   SIR_MAC_VHT_CAP_LINK_ADAPT_CAP) |
-             (pAssocRsp->VHTCaps.rxAntPattern <<
-                               SIR_MAC_VHT_CAP_RX_ANTENNA_PATTERN) |
-             (pAssocRsp->VHTCaps.txAntPattern <<
-                               SIR_MAC_VHT_CAP_TX_ANTENNA_PATTERN) |
-             (pAssocRsp->VHTCaps.reserved1 << SIR_MAC_VHT_CAP_RESERVED2));
-
-        pAddBssParams->staContext.maxAmpduSize =
-                                  SIR_MAC_GET_VHT_MAX_AMPDU_EXPO(
-                                           pAddBssParams->staContext.vht_caps);
+        vht_caps =  &pAssocRsp->VHTCaps;
+        vht_oper = &pAssocRsp->VHTOperation;
+    } else if (psessionEntry->vhtCapability &&
+	       pAssocRsp->vendor2_ie.VHTCaps.present) {
+        pAddBssParams->vhtCapable =
+                  pAssocRsp->vendor2_ie.VHTCaps.present;
+        limLog(pMac, LOG1,
+                 FL("VHT Caps and Operation are present in vendor Specfic IE"));
+        vht_caps = &pAssocRsp->vendor2_ie.VHTCaps;
+        vht_oper = &pAssocRsp->vendor2_ie.VHTOperation;
     }
     else
-    {
         pAddBssParams->vhtCapable = 0;
+
+    if (pAddBssParams->vhtCapable) {
+        if (vht_oper != NULL)
+            lim_update_vht_oper_assoc_resp(pMac, pAddBssParams,
+                                vht_oper, psessionEntry);
+        if (vht_caps != NULL)
+            lim_update_vhtcaps_assoc_resp(pMac, pAddBssParams,
+                                vht_caps, psessionEntry);
     }
+
     limLog(pMac, LOG2, FL("vhtCapable %d vhtTxChannelWidthSet %d "
     "currentExtChannel %d"),pAddBssParams->vhtCapable,
     pAddBssParams->vhtTxChannelWidthSet,
@@ -3927,33 +3999,48 @@ tSirRetStatus limStaSendAddBss( tpAniSirGlobal pMac, tpSirAssocRsp pAssocRsp,
             pAddBssParams->staContext.greenFieldCapable,
             pAddBssParams->staContext.lsigTxopProtection);
 #ifdef WLAN_FEATURE_11AC
-            if (psessionEntry->vhtCapability && IS_BSS_VHT_CAPABLE(pBeaconStruct->VHTCaps))
-            {
+            if (psessionEntry->vhtCapability &&
+                    (IS_BSS_VHT_CAPABLE(pBeaconStruct->VHTCaps) ||
+                     IS_BSS_VHT_CAPABLE(
+                     pBeaconStruct->vendor2_ie.VHTCaps))) {
                 pAddBssParams->staContext.vhtCapable = 1;
                 pAddBssParams->staContext.vhtSupportedRxNss = pStaDs->vhtSupportedRxNss;
-                if ((pAssocRsp->VHTCaps.suBeamFormerCap ||
-                     pAssocRsp->VHTCaps.muBeamformerCap) &&
-                     psessionEntry->txBFIniFeatureEnabled)
-                {
-                    pAddBssParams->staContext.vhtTxBFCapable = 1;
-                }
+                if (pAssocRsp->VHTCaps.present)
+                    vht_caps = &pAssocRsp->VHTCaps;
+                else if (pAssocRsp->vendor2_ie.VHTCaps.present) {
+                      vht_caps =
+                              &pAssocRsp->vendor2_ie.VHTCaps;
+                      limLog(pMac, LOG1,
+                              FL("VHT Caps is present in vendor Specfic IE"));
 
-                if (pAssocRsp->VHTCaps.muBeamformerCap &&
-                    psessionEntry->txMuBformee )
-                {
+                }
+                if ((vht_caps != NULL) && (vht_caps->suBeamFormerCap ||
+                      vht_caps->muBeamformerCap) &&
+                     psessionEntry->txBFIniFeatureEnabled)
+                    pAddBssParams->staContext.vhtTxBFCapable = 1;
+                if ((vht_caps != NULL) &&
+                            vht_caps->muBeamformerCap &&
+                           psessionEntry->txMuBformee)
                     pAddBssParams->staContext.vhtTxMUBformeeCapable = 1;
                 }
-            }
 #endif
             if( (pAssocRsp->HTCaps.supportedChannelWidthSet) &&
                 (chanWidthSupp) )
             {
                 pAddBssParams->staContext.txChannelWidthSet = ( tANI_U8 )pAssocRsp->HTInfo.recommendedTxWidthSet;
 #ifdef WLAN_FEATURE_11AC
-                if (pAddBssParams->staContext.vhtCapable)
-                {
-                    pAddBssParams->staContext.vhtTxChannelWidthSet = pAssocRsp->VHTOperation.chanWidth; //pMac->lim.apChanWidth;
+                if (pAssocRsp->VHTCaps.present)
+                    vht_oper = &pAssocRsp->VHTOperation;
+                else if (pAssocRsp->vendor2_ie.VHTCaps.present) {
+                      vht_oper = &pAssocRsp->vendor2_ie.VHTOperation;
+                      limLog(pMac, LOG1, FL("VHT Operation is present in vendor Specfic IE"));
                 }
+
+                if ((vht_oper != NULL) &&
+                          pAddBssParams->staContext.vhtCapable)
+                    pAddBssParams->staContext.vhtTxChannelWidthSet = vht_oper->chanWidth; //pMac->lim.apChanWidth;
+
+
                 limLog(pMac, LOG2,FL("StaContext vhtCapable %d "
                 "vhtTxChannelWidthSet: %d vhtTxBFCapable: %d"),
                 pAddBssParams->staContext.vhtCapable,
@@ -4232,6 +4319,7 @@ tSirRetStatus limStaSendAddBssPreAssoc( tpAniSirGlobal pMac, tANI_U8 updateEntry
     tANI_U32 shortGi20MhzSupport;
     tANI_U32 shortGi40MhzSupport;
     tpSirBssDescription bssDescription = &psessionEntry->pLimJoinReq->bssDescription;
+    tDot11fIEVHTCaps *vht_caps = NULL;
 
     pBeaconStruct = vos_mem_malloc(sizeof(tSchBeaconStruct));
     if (NULL == pBeaconStruct)
@@ -4364,16 +4452,18 @@ tSirRetStatus limStaSendAddBssPreAssoc( tpAniSirGlobal pMac, tANI_U8 updateEntry
     limLog(pMac, LOG2, FL("currentOperChannel %d"),
     pAddBssParams->currentOperChannel);
 #ifdef WLAN_FEATURE_11AC
-    if (psessionEntry->vhtCapability && IS_BSS_VHT_CAPABLE(pBeaconStruct->VHTCaps))
-    {
-        pAddBssParams->vhtCapable = pBeaconStruct->VHTCaps.present;
+    if (psessionEntry->vhtCapability &&
+            (IS_BSS_VHT_CAPABLE(pBeaconStruct->VHTCaps) ||
+             IS_BSS_VHT_CAPABLE(pBeaconStruct->vendor2_ie.VHTCaps))) {
+                pAddBssParams->vhtCapable = 1;
         /*
          * in limExtractApCapability function intersection of FW advertised
          * channel width and AP advertised channel width has been taken into
          * account for calculating psessionEntry->apChanWidth
          */
         pAddBssParams->vhtTxChannelWidthSet = psessionEntry->apChanWidth;
-        pAddBssParams->currentExtChannel = limGet11ACPhyCBState (pMac,
+
+        pAddBssParams->currentExtChannel = limGet11ACPhyCBState ( pMac,
                                                                   pAddBssParams->currentOperChannel,
                                                                   pAddBssParams->currentExtChannel,
                                                                   psessionEntry->apCenterChan,
@@ -4428,21 +4518,26 @@ tSirRetStatus limStaSendAddBssPreAssoc( tpAniSirGlobal pMac, tANI_U8 updateEntry
             pAddBssParams->staContext.greenFieldCapable,
             pAddBssParams->staContext.lsigTxopProtection);
 #ifdef WLAN_FEATURE_11AC
-            if (psessionEntry->vhtCapability && IS_BSS_VHT_CAPABLE(pBeaconStruct->VHTCaps))
-            {
+            if (psessionEntry->vhtCapability &&
+                   (IS_BSS_VHT_CAPABLE(pBeaconStruct->VHTCaps) ||
+                    IS_BSS_VHT_CAPABLE(pBeaconStruct->vendor2_ie.VHTCaps))) {
                 pAddBssParams->staContext.vhtCapable = 1;
-                if ((pBeaconStruct->VHTCaps.suBeamFormerCap ||
-                     pBeaconStruct->VHTCaps.muBeamformerCap) &&
-                     psessionEntry->txBFIniFeatureEnabled )
-                {
-                    pAddBssParams->staContext.vhtTxBFCapable = 1;
-                }
+                if (pBeaconStruct->VHTCaps.present)
+                        vht_caps = &pBeaconStruct->VHTCaps;
+                else if (
+                      pBeaconStruct->vendor2_ie.VHTCaps.present)
+                        vht_caps =
+                        &pBeaconStruct->vendor2_ie.VHTCaps;
 
-                if ( pBeaconStruct->VHTCaps.muBeamformerCap &&
-                     psessionEntry->txMuBformee )
-                {
+                if ((vht_caps != NULL) &&
+                        (vht_caps->suBeamFormerCap ||
+                        vht_caps->muBeamformerCap) &&
+                        psessionEntry->txBFIniFeatureEnabled)
+                     pAddBssParams->staContext.vhtTxBFCapable = 1;
+                if ((vht_caps != NULL) && vht_caps->muBeamformerCap &&
+                                 psessionEntry->txMuBformee)
                      pAddBssParams->staContext.vhtTxMUBformeeCapable = 1;
-                }
+
             }
 #endif
             if( (pBeaconStruct->HTCaps.supportedChannelWidthSet) &&

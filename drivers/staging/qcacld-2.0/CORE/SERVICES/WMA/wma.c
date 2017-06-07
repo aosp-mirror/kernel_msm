@@ -7345,7 +7345,20 @@ VOS_STATUS WDA_open(v_VOID_t *vos_context, v_VOID_t *os_ctx,
 		vos_wake_lock_init(&wma_handle->extscan_wake_lock,
 					"wlan_extscan_wl");
 #endif
-		vos_wake_lock_init(&wma_handle->wow_wake_lock, "wlan_wow_wl");
+		vos_wake_lock_init(&wma_handle->wow_wake_lock,
+			"wlan_wow_wl");
+		vos_wake_lock_init(&wma_handle->wow_auth_req_wl,
+			"wlan_auth_req_wl");
+		vos_wake_lock_init(&wma_handle->wow_assoc_req_wl,
+			"wlan_assoc_req_wl");
+		vos_wake_lock_init(&wma_handle->wow_deauth_rec_wl,
+			"wlan_deauth_rec_wl");
+		vos_wake_lock_init(&wma_handle->wow_disassoc_rec_wl,
+			"wlan_disassoc_rec_wl");
+		vos_wake_lock_init(&wma_handle->wow_ap_assoc_lost_wl,
+			"wlan_ap_assoc_lost_wl");
+		vos_wake_lock_init(&wma_handle->wow_auto_shutdown_wl,
+			"wlan_auto_shutdown_wl");
 	}
 
 	/* attach the wmi */
@@ -7749,6 +7762,12 @@ err_wma_handle:
 		vos_wake_lock_destroy(&wma_handle->extscan_wake_lock);
 #endif
 		vos_wake_lock_destroy(&wma_handle->wow_wake_lock);
+		vos_wake_lock_destroy(&wma_handle->wow_auth_req_wl);
+		vos_wake_lock_destroy(&wma_handle->wow_assoc_req_wl);
+		vos_wake_lock_destroy(&wma_handle->wow_deauth_rec_wl);
+		vos_wake_lock_destroy(&wma_handle->wow_disassoc_rec_wl);
+		vos_wake_lock_destroy(&wma_handle->wow_ap_assoc_lost_wl);
+		vos_wake_lock_destroy(&wma_handle->wow_auto_shutdown_wl);
 	}
 
 	wma_runtime_context_deinit(wma_handle);
@@ -9251,18 +9270,6 @@ VOS_STATUS wma_get_buf_start_scan_cmd(tp_wma_handle wma_handle,
 		WMI_CHAR_ARRAY_TO_MAC_ADDR(scan_req->mac_addr_mask,
 						&cmd->mac_mask);
 	}
-	if (scan_req->ie_whitelist)
-		cmd->scan_ctrl_flags |=
-				WMI_SCAN_ENABLE_IE_WHTELIST_IN_PROBE_REQ;
-
-	WMA_LOGI("scan_ctrl_flags = %x", cmd->scan_ctrl_flags);
-
-	if (scan_req->ie_whitelist) {
-		for (i = 0; i < PROBE_REQ_BITMAP_LEN; i++)
-			cmd->ie_bitmap[i] = scan_req->probe_req_ie_bitmap[i];
-	}
-
-	cmd->num_vendor_oui = scan_req->num_vendor_oui;
 
 	if (!scan_req->p2pScanType) {
 		WMA_LOGD("Normal Scan request");
@@ -9275,6 +9282,15 @@ VOS_STATUS wma_get_buf_start_scan_cmd(tp_wma_handle wma_handle,
 		cmd->scan_ctrl_flags |= WMI_SCAN_ADD_TPC_IE_IN_PROBE_REQ;
 		cmd->scan_ctrl_flags |= WMI_SCAN_FILTER_PROBE_REQ;
 
+		if (scan_req->ie_whitelist) {
+			cmd->scan_ctrl_flags |=
+			WMI_SCAN_ENABLE_IE_WHITELIST_IN_PROBE_REQ;
+			for (i = 0; i < PROBE_REQ_BITMAP_LEN; i++)
+					cmd->ie_bitmap[i] =
+					scan_req->probe_req_ie_bitmap[i];
+		}
+
+		cmd->num_vendor_oui = scan_req->num_vendor_oui;
 		/*
 		 * Decide burst_duration and dwell_time_active based on
 		 * what type of devices are active.
@@ -21592,11 +21608,51 @@ static uint32_t wma_wow_get_wakelock_duration(int wake_reason)
 	case WOW_REASON_DISASSOC_RECVD:
 		wake_lock_duration = WMA_DISASSOC_RECV_WAKE_LOCK_DURATION;
 		break;
+	case WOW_REASON_AP_ASSOC_LOST:
+		wake_lock_duration = WMA_BMISS_EVENT_WAKE_LOCK_DURATION;
+		break;
+	case WOW_REASON_HOST_AUTO_SHUTDOWN:
+		wake_lock_duration = WMA_AUTO_SHUTDOWN_WAKE_LOCK_DURATION;
+		break;
 	default:
 		break;
 	}
 
 	return wake_lock_duration;
+}
+
+/**
+ * wma_wow_get_wakelock() - return the wakelock
+ *        for some mgmt packets received.
+ * @wma_handle: wma handle
+ * @wake_reason: wow wakeup reason
+ *
+ * This function returns the wakelock for some mgmt packets
+ * received while in wow suspend.
+ *
+ * Return: wakelock
+ */
+static vos_wake_lock_t *wma_wow_get_wakelock(tp_wma_handle wma_handle,
+		int wake_reason)
+{
+
+	switch (wake_reason) {
+	case WOW_REASON_AUTH_REQ_RECV:
+		return &wma_handle->wow_auth_req_wl;
+	case WOW_REASON_ASSOC_REQ_RECV:
+		return &wma_handle->wow_assoc_req_wl;
+	case WOW_REASON_DEAUTH_RECVD:
+		return &wma_handle->wow_deauth_rec_wl;
+	case WOW_REASON_DISASSOC_RECVD:
+		return &wma_handle->wow_disassoc_rec_wl;
+	case WOW_REASON_AP_ASSOC_LOST:
+		return &wma_handle->wow_ap_assoc_lost_wl;
+	case WOW_REASON_HOST_AUTO_SHUTDOWN:
+		return &wma_handle->wow_auto_shutdown_wl;
+	default:
+		return NULL;
+	}
+
 }
 
 /*
@@ -21644,8 +21700,6 @@ static int wma_wow_wakeup_host_event(void *handle, u_int8_t *event,
 	case WOW_REASON_REASSOC_RES_RECV:
 	case WOW_REASON_BEACON_RECV:
 	case WOW_REASON_ACTION_FRAME_RECV:
-		wake_lock_duration =
-			wma_wow_get_wakelock_duration(wake_info->wake_reason);
 		if (param_buf->wow_packet_buffer) {
 			/* First 4-bytes of wow_packet_buffer is the length */
 			vos_mem_copy((uint8_t *) &wow_buf_pkt_len,
@@ -21662,7 +21716,6 @@ static int wma_wow_wakeup_host_event(void *handle, u_int8_t *event,
 		break;
 
 	case WOW_REASON_AP_ASSOC_LOST:
-		wake_lock_duration = WMA_BMISS_EVENT_WAKE_LOCK_DURATION;
 		wma_wow_ap_lost_helper(wma, param_buf);
 		break;
 #ifdef FEATURE_WLAN_RA_FILTERING
@@ -21672,7 +21725,6 @@ static int wma_wow_wakeup_host_event(void *handle, u_int8_t *event,
 #endif
 #ifdef FEATURE_WLAN_AUTO_SHUTDOWN
 	case WOW_REASON_HOST_AUTO_SHUTDOWN:
-		wake_lock_duration = WMA_AUTO_SHUTDOWN_WAKE_LOCK_DURATION;
 		WMA_LOGA("Received WOW Auto Shutdown trigger in suspend");
 		if (wma_post_auto_shutdown_msg())
 			return -EINVAL;
@@ -21916,11 +21968,17 @@ static int wma_wow_wakeup_host_event(void *handle, u_int8_t *event,
 		break;
 	}
 
+	wake_lock_duration =
+		wma_wow_get_wakelock_duration(wake_info->wake_reason);
 	if (wake_lock_duration) {
-		vos_wake_lock_timeout_acquire(&wma->wow_wake_lock,
+		vos_wake_lock_t *wake_lock = wma_wow_get_wakelock(wma,
+						wake_info->wake_reason);
+		if (wake_lock) {
+			vos_wake_lock_timeout_acquire(wake_lock,
 					      wake_lock_duration,
 					      WIFI_POWER_EVENT_WAKELOCK_WOW);
-		WMA_LOGA("Holding %d msec wake_lock", wake_lock_duration);
+			WMA_LOGA("Holding %d msec wake_lock", wake_lock_duration);
+		}
 	}
 
 	return 0;
@@ -33469,7 +33527,14 @@ VOS_STATUS wma_close(v_VOID_t *vos_ctx)
 		vos_wake_lock_destroy(&wma_handle->extscan_wake_lock);
 #endif
 		vos_wake_lock_destroy(&wma_handle->wow_wake_lock);
+		vos_wake_lock_destroy(&wma_handle->wow_auth_req_wl);
+		vos_wake_lock_destroy(&wma_handle->wow_assoc_req_wl);
+		vos_wake_lock_destroy(&wma_handle->wow_deauth_rec_wl);
+		vos_wake_lock_destroy(&wma_handle->wow_disassoc_rec_wl);
+		vos_wake_lock_destroy(&wma_handle->wow_ap_assoc_lost_wl);
+		vos_wake_lock_destroy(&wma_handle->wow_auto_shutdown_wl);
 	}
+
 	vos_mem_zero(&wma_handle->wow, sizeof(struct wma_wow));
 	wma_runtime_context_deinit(wma_handle);
 

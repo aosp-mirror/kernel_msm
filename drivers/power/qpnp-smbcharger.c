@@ -1020,19 +1020,6 @@ static void read_usb_type(struct smbchg_chip *chip, char **usb_type_name,
 	type = get_type(reg);
 	bc12_power_supply_type = get_usb_supply_type(type);
 
-#ifdef CONFIG_HTC_BATT
-	/* Precedence: PD > Type-C (3A or 1.5A) -> SDP, CDP, DCP from APSD
-	 * Origin table matches with APSD detection(SMBCHGL_MISC_IDEV_STS[7:4])
-	 * Now we extended it with below two types
-	 * - Type 5: Type C Port
-	 * - Type 6: Power Delivery Port
-	 */
-	if (htc_battery_is_pd_detected())
-		type = 6;
-	else if (chip->utc.sink_current &&
-			chip->utc.sink_current != utccDefault)
-		type = 5;
-#endif /* CONFIG_HTC_BATT */
 	*usb_type_name = get_usb_type_name(type);
 	*usb_supply_type = get_usb_supply_type(type);
 }
@@ -2058,6 +2045,7 @@ static int smbchg_set_usb_current_max(struct smbchg_chip *chip,
 							int current_ma)
 {
 	int rc = 0;
+	enum power_supply_type type;
 
 	/*
 	 * if the battery is not present, do not allow the usb ICL to lower in
@@ -2090,7 +2078,16 @@ static int smbchg_set_usb_current_max(struct smbchg_chip *chip,
 		rc = vote(chip->usb_suspend_votable, USB_EN_VOTER, false, 0);
 	}
 
-	switch (chip->usb_supply_type) {
+	type = chip->usb_supply_type;
+#ifdef CONFIG_HTC_BATT
+	if (htc_battery_is_pd_detected())
+		type = POWER_SUPPLY_TYPE_USB_PD;
+	else if (chip->utc.sink_current &&
+		 chip->utc.sink_current != utccDefault)
+		type = POWER_SUPPLY_TYPE_USB_TYPE_C;
+#endif /* CONFIG_HTC_BATT */
+
+	switch (type) {
 #ifdef CONFIG_HTC_BATT
 	case POWER_SUPPLY_TYPE_USB_PD_DRP:
 	case POWER_SUPPLY_TYPE_USB_PD:
@@ -4182,8 +4179,10 @@ static void smbchg_external_power_changed(struct power_supply *psy)
 				struct smbchg_chip, batt_psy);
 	union power_supply_propval prop = {0,};
 	int rc, current_limit = 0, soc;
+#ifndef CONFIG_HTC_BATT
 	enum power_supply_type usb_supply_type;
 	char *usb_type_name = "null";
+#endif /* CONFIG_HTC_BATT */
 
 	if (chip->bms_psy_name)
 		chip->bms_psy =
@@ -4217,23 +4216,16 @@ static void smbchg_external_power_changed(struct power_supply *psy)
 		current_limit = prop.intval / 1000;
 
 #ifdef CONFIG_HTC_BATT
-	rc = chip->usb_psy->get_property(chip->usb_psy,
-				POWER_SUPPLY_PROP_TYPE, &prop);
-	if (rc == 0)
-		usb_supply_type = prop.intval;
-	else
-		read_usb_type(chip, &usb_type_name, &usb_supply_type);
+	pr_smb(PR_STATUS, "usb type = %d, current_limit = %d, rc = %d\n",
+				chip->usb_supply_type, current_limit, rc);
+
+	if (chip->usb_supply_type != POWER_SUPPLY_TYPE_USB)
+		goto  skip_current_for_non_sdp;
 #else
 	read_usb_type(chip, &usb_type_name, &usb_supply_type);
-#endif /* CONFIG_HTC_BATT */
-
 	if (usb_supply_type != POWER_SUPPLY_TYPE_USB)
 		goto  skip_current_for_non_sdp;
 
-#ifdef CONFIG_HTC_BATT
-	pr_smb(PR_MISC, "CHG_TYPE is %d, current_limit = %d, rc = %d\n",
-			usb_supply_type, current_limit, rc);
-#else
 	pr_smb(PR_MISC, "usb type = %s current_limit = %d\n",
 			usb_type_name, current_limit);
 #endif /* CONFIG_HTC_BATT */
@@ -5028,6 +5020,7 @@ static int smbchg_change_usb_supply_type(struct smbchg_chip *chip,
 	int rc;
 	// default to DEFAULT_SDP_MA
 	int current_limit_ma = DEFAULT_SDP_MA;
+	enum power_supply_type saved_type = type;
 
 	/*
 	 * if the type is not unknown, set the type before changing ICL vote
@@ -5043,6 +5036,14 @@ static int smbchg_change_usb_supply_type(struct smbchg_chip *chip,
 	 * Note: for SDP supporting current based on USB notifications.
 	 */
 #ifdef CONFIG_HTC_BATT
+	if (type != POWER_SUPPLY_TYPE_UNKNOWN) {
+		if (htc_battery_is_pd_detected())
+			type = POWER_SUPPLY_TYPE_USB_PD;
+		else if (chip->utc.sink_current &&
+			 chip->utc.sink_current != utccDefault)
+			type = POWER_SUPPLY_TYPE_USB_TYPE_C;
+	}
+
 	/*
 	 * Precedence: PD > Type-C (3A or 1.5A) -> SDP, CDP, DCP from APSD
 	 */
@@ -5091,7 +5092,7 @@ static int smbchg_change_usb_supply_type(struct smbchg_chip *chip,
 	}
 
 	if (!chip->skip_usb_notification)
-		power_supply_set_supply_type(chip->usb_psy, type);
+		power_supply_set_supply_type(chip->usb_psy, saved_type);
 
 	/*
 	 * otherwise if it is unknown, remove vote
@@ -5482,6 +5483,8 @@ static void smbchg_iusb_5v_2a_detect_work(struct work_struct *work)
 
 static void smbchg_sink_current_change_worker(struct work_struct *work)
 {
+	enum power_supply_type type;
+
 	if (!the_chip) {
 		pr_err("called before init\n");
 		return;
@@ -5492,11 +5495,16 @@ static void smbchg_sink_current_change_worker(struct work_struct *work)
 		return;
 	}
 
-	if ((the_chip->usb_supply_type != POWER_SUPPLY_TYPE_USB_TYPE_C) &&
-			(the_chip->utc.sink_current != utcc3p0A) &&
-			(the_chip->utc.sink_current != utcc1p5A)) {
+	type = the_chip->usb_supply_type;
+	if (the_chip->utc.sink_current &&
+	    the_chip->utc.sink_current != utccDefault)
+		type = POWER_SUPPLY_TYPE_USB_TYPE_C;
+
+	if ((type != POWER_SUPPLY_TYPE_USB_TYPE_C) &&
+	    (the_chip->utc.sink_current != utcc3p0A) &&
+	    (the_chip->utc.sink_current != utcc1p5A)) {
 		pr_smb(PR_STATUS, "skip change, chg_type: %d, sink_curr: %d\n",
-				the_chip->usb_supply_type,
+				type,
 					(int)the_chip->utc.sink_current);
 		return;
 	}
@@ -7334,23 +7342,12 @@ static void smbchg_usb_limit_current_WA_work(struct work_struct *work)
 		pr_err("called before init\n");
 		return;
 	}
-	/* Disable AICL */
-	smbchg_sec_masked_write(the_chip, the_chip->usb_chgpth_base + USB_AICL_CFG,
-			AICL_EN_BIT, 0);
-	pr_smb(PR_INTERRUPT, "AICL disabled\n");
 
 	rc = vote(the_chip->usb_icl_votable, PSY_ICL_VOTER, true, USB_MA_1000);
 	if (rc < 0)
 		pr_err("Couldn't set usb current rc = %d\n", rc);
 	else
 		pr_smb(PR_INTERRUPT, "USB max current changed to 1A\n");
-
-
-	/* Add a delay so that AICL successfully clears */
-	msleep(50);
-	smbchg_sec_masked_write(the_chip, the_chip->usb_chgpth_base + USB_AICL_CFG,
-			AICL_EN_BIT, AICL_EN_BIT);
-	pr_smb(PR_INTERRUPT, "AICL re-enabled\n");
 }
 #endif /* CONFIG_HTC_BATT */
 
@@ -7869,6 +7866,12 @@ void check_charger_ability(int aicl_level)
 	rc = the_chip->usb_psy->get_property(the_chip->usb_psy,
 				POWER_SUPPLY_PROP_TYPE, &prop);
 	usb_supply_type = prop.intval;
+	if (htc_battery_is_pd_detected())
+		usb_supply_type = POWER_SUPPLY_TYPE_USB_PD;
+	else if (the_chip->utc.sink_current &&
+		 the_chip->utc.sink_current != utccDefault)
+		usb_supply_type = POWER_SUPPLY_TYPE_USB_TYPE_C;
+
 	pr_smb(PR_STATUS, "CHG_TYPE = %d, AICL = %d, level = %d, vbat_mv = %d, hard_limit = %d\n",
 		usb_supply_type, aicl_level, level, vbat_mv, is_smbchg_hard_limit(the_chip));
 

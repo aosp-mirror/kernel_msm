@@ -313,18 +313,11 @@ struct tLimScanResultNode
 
 #ifdef FEATURE_OEM_DATA_SUPPORT
 
-#ifndef OEM_DATA_REQ_SIZE
-#define OEM_DATA_REQ_SIZE 280
-#endif
-#ifndef OEM_DATA_RSP_SIZE
-#define OEM_DATA_RSP_SIZE 1724
-#endif
-
 // OEM Data related structure definitions
 typedef struct sLimMlmOemDataReq
 {
     tSirMacAddr           selfMacAddr;
-    uint8_t               data_len;
+    uint32_t               data_len;
     uint8_t               *data;
 } tLimMlmOemDataReq, *tpLimMlmOemDataReq;
 
