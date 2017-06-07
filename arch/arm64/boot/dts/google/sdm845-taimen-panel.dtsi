@@ -54,6 +54,10 @@
 	status = "disabled";
 };
 
+&mdss_mdp {
+	connectors = <&sde_rscc &sde_wb &dsi_sw43402_cmd_display>;
+};
+
 &dsi_sw43402_dsc_qhd_cmd {
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_vdd_no_labibb>;
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
