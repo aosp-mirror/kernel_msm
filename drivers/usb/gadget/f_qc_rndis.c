@@ -81,7 +81,7 @@
  */
 
 struct f_rndis_qc {
-	struct qc_gether			port;
+	struct qc_gether		port;
 	u8				ctrl_id, data_id;
 	u8				ethaddr[ETH_ALEN];
 	u32				vendorID;
@@ -90,8 +90,8 @@ struct f_rndis_qc {
 	u32				max_pkt_size;
 	const char			*manufacturer;
 	int				config;
-	atomic_t		ioctl_excl;
-	atomic_t		open_excl;
+	atomic_t			ioctl_excl;
+	atomic_t			open_excl;
 
 	struct usb_ep			*notify;
 	struct usb_request		*notify_req;
@@ -101,6 +101,7 @@ struct f_rndis_qc {
 };
 
 static struct ipa_usb_init_params rndis_ipa_params;
+static spinlock_t rndis_lock;
 static bool rndis_ipa_supported;
 static void rndis_qc_open(struct qc_gether *geth);
 
@@ -548,11 +549,18 @@ static void rndis_qc_response_available(void *_rndis)
 }
 
 static void rndis_qc_response_complete(struct usb_ep *ep,
-						struct usb_request *req)
+					struct usb_request *req)
 {
 	struct f_rndis_qc		*rndis = req->context;
 	int				status = req->status;
-	struct usb_composite_dev	*cdev = rndis->port.func.config->cdev;
+	struct usb_composite_dev	*cdev;
+
+	if (!rndis->port.func.config || !rndis->port.func.config->cdev) {
+		pr_err("%s(): cdev or config is NULL.\n", __func__);
+		return;
+	} else {
+		cdev = rndis->port.func.config->cdev;
+	}
 
 	/* after TX:
 	 *  - USB_CDC_GET_ENCAPSULATED_RESPONSE (ep0/control)
@@ -686,7 +694,7 @@ invalid:
 
 static int rndis_qc_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 {
-	struct f_rndis_qc		*rndis = func_to_rndis_qc(f);
+	struct f_rndis_qc	 *rndis = func_to_rndis_qc(f);
 	struct usb_composite_dev *cdev = f->config->cdev;
 
 	/* we know alt == 0 */
@@ -1026,6 +1034,7 @@ static void
 rndis_qc_unbind(struct usb_configuration *c, struct usb_function *f)
 {
 	struct f_rndis_qc		*rndis = func_to_rndis_qc(f);
+	unsigned long flags;
 
 	pr_debug("rndis_qc_unbind: free");
 	bam_data_destroy(0);
@@ -1044,7 +1053,10 @@ rndis_qc_unbind(struct usb_configuration *c, struct usb_function *f)
 		rndis_ipa_supported = false;
 	}
 
+	spin_lock_irqsave(&rndis_lock, flags);
 	kfree(rndis);
+	_rndis_qc = NULL;
+	spin_unlock_irqrestore(&rndis_lock, flags);
 }
 
 bool is_rndis_ipa_supported(void)
@@ -1197,101 +1209,143 @@ rndis_qc_bind_config_vendor(struct usb_configuration *c, u8 ethaddr[ETH_ALEN],
 	rndis->port.func.suspend = rndis_qc_suspend;
 	rndis->port.func.resume = rndis_qc_resume;
 
-	_rndis_qc = rndis;
+	if (rndis->xport == USB_GADGET_XPORT_BAM2BAM_IPA) {
+		status = rndis_ipa_init(&rndis_ipa_params);
+		if (status) {
+			pr_err("%s: failed to init rndis_ipa\n", __func__);
+			goto fail;
+		}
+	}
 
 	status = usb_add_function(c, &rndis->port.func);
 	if (status) {
-		kfree(rndis);
+		if (rndis->xport == USB_GADGET_XPORT_BAM2BAM_IPA)
+			rndis_ipa_cleanup(rndis_ipa_params.private);
 		goto fail;
 	}
 
-	if (rndis->xport != USB_GADGET_XPORT_BAM2BAM_IPA)
-		return status;
+	_rndis_qc = rndis;
+	
+	return status;
 
-	status = rndis_ipa_init(&rndis_ipa_params);
-	if (status) {
-		pr_err("%s: failed to initialize rndis_ipa\n", __func__);
-		kfree(rndis);
-		goto fail;
-	} else {
-		pr_debug("%s: rndis_ipa successful created\n", __func__);
-		return status;
-	}
 fail:
+	kfree(rndis);
+	_rndis_qc = NULL;
 	rndis_exit();
 	return status;
 }
 
 static int rndis_qc_open_dev(struct inode *ip, struct file *fp)
 {
+	int ret = 0;
+	unsigned long flags;
 	pr_info("Open rndis QC driver\n");
 
+	spin_lock_irqsave(&rndis_lock, flags);
 	if (!_rndis_qc) {
 		pr_err("rndis_qc_dev not created yet\n");
-		return -ENODEV;
+		ret = -ENODEV;
+		goto fail;
 	}
 
 	if (rndis_qc_lock(&_rndis_qc->open_excl)) {
 		pr_err("Already opened\n");
-		return -EBUSY;
+		ret = -EBUSY;
+		goto fail;
 	}
 
 	fp->private_data = _rndis_qc;
-	pr_info("rndis QC file opened\n");
+fail:
+	spin_unlock_irqrestore(&rndis_lock, flags);
 
-	return 0;
+	if (!ret)
+		pr_info("rndis QC file opened\n");
+
+	return ret;
 }
 
 static int rndis_qc_release_dev(struct inode *ip, struct file *fp)
 {
-	struct f_rndis_qc	*rndis = fp->private_data;
-
+	unsigned long flags;
 	pr_info("Close rndis QC file");
-	rndis_qc_unlock(&rndis->open_excl);
 
+	spin_lock_irqsave(&rndis_lock, flags);
+
+	if (!_rndis_qc) {
+		pr_err("rndis_qc_dev not present\n");
+		spin_unlock_irqrestore(&rndis_lock, flags);
+		return -ENODEV;
+	}
+	rndis_qc_unlock(&_rndis_qc->open_excl);
+	spin_unlock_irqrestore(&rndis_lock, flags);
 	return 0;
 }
 
 static long rndis_qc_ioctl(struct file *fp, unsigned cmd, unsigned long arg)
 {
-	struct f_rndis_qc	*rndis = fp->private_data;
+	u8 qc_max_pkt_per_xfer = 0;
+	u32 qc_max_pkt_size = 0;
 	int ret = 0;
+	unsigned long flags;
 
-	pr_info("Received command %d", cmd);
+	spin_lock_irqsave(&rndis_lock, flags);
+	if (!_rndis_qc) {
+		pr_err("rndis_qc_dev not present\n");
+		ret = -ENODEV;
+		goto fail;
+	}
 
-	if (rndis_qc_lock(&rndis->ioctl_excl))
-		return -EBUSY;
+	qc_max_pkt_per_xfer = _rndis_qc->max_pkt_per_xfer;
+	qc_max_pkt_size = _rndis_qc->max_pkt_size;
+
+	if (rndis_qc_lock(&_rndis_qc->ioctl_excl)) {
+		ret = -EBUSY;
+		goto fail;
+	}
+
+	spin_unlock_irqrestore(&rndis_lock, flags);
+
+	pr_info("Received command %d\n", cmd);
 
 	switch (cmd) {
 	case RNDIS_QC_GET_MAX_PKT_PER_XFER:
 		ret = copy_to_user((void __user *)arg,
-					&rndis->max_pkt_per_xfer,
-					sizeof(rndis->max_pkt_per_xfer));
+					&qc_max_pkt_per_xfer,
+					sizeof(qc_max_pkt_per_xfer));
 		if (ret) {
 			pr_err("copying to user space failed");
 			ret = -EFAULT;
 		}
 		pr_info("Sent max packets per xfer %d",
-				rndis->max_pkt_per_xfer);
+				qc_max_pkt_per_xfer);
 		break;
 	case RNDIS_QC_GET_MAX_PKT_SIZE:
 		ret = copy_to_user((void __user *)arg,
-					&rndis->max_pkt_size,
-					sizeof(rndis->max_pkt_size));
+					&qc_max_pkt_size,
+					sizeof(qc_max_pkt_size));
 		if (ret) {
 			pr_err("copying to user space failed");
 			ret = -EFAULT;
 		}
 		pr_debug("Sent max packet size %d",
-				rndis->max_pkt_size);
+				qc_max_pkt_size);
 		break;
 	default:
 		pr_err("Unsupported IOCTL");
 		ret = -EINVAL;
 	}
 
-	rndis_qc_unlock(&rndis->ioctl_excl);
+	spin_lock_irqsave(&rndis_lock, flags);
 
+	if (!_rndis_qc) {
+		pr_err("rndis_qc_dev not present\n");
+		ret = -ENODEV;
+		goto fail;
+	}
+	rndis_qc_unlock(&_rndis_qc->ioctl_excl);
+
+fail:
+	spin_unlock_irqrestore(&rndis_lock, flags);
 	return ret;
 }
 
@@ -1313,6 +1367,8 @@ static int rndis_qc_init(void)
 	int ret;
 
 	pr_info("initialize rndis QC instance\n");
+
+	spin_lock_init(&rndis_lock);
 
 	ret = misc_register(&rndis_qc_device);
 	if (ret)
