@@ -121,7 +121,7 @@ static inline void init_llist_head(struct llist_head *list)
  */
 #define llist_for_each_entry(pos, node, member)				\
 	for ((pos) = llist_entry((node), typeof(*(pos)), member);	\
-	     &(pos)->member != NULL;					\
+	     (pos) != llist_entry(NULL, typeof(*(pos)), member);	\
 	     (pos) = llist_entry((pos)->member.next, typeof(*(pos)), member))
 
 /**
@@ -143,7 +143,7 @@ static inline void init_llist_head(struct llist_head *list)
  */
 #define llist_for_each_entry_safe(pos, n, node, member)			       \
 	for (pos = llist_entry((node), typeof(*pos), member);		       \
-	     &pos->member != NULL &&					       \
+	     (pos) != llist_entry(NULL, typeof(*(pos)), member) &&	       \
 	        (n = llist_entry(pos->member.next, typeof(*n), member), true); \
 	     pos = n)
 
