@@ -609,6 +609,8 @@ static int tcpm_set_cc(struct tcpc_dev *dev, enum typec_cc_status cc)
 	/* reset the cc status */
 	chip->cc1 = TYPEC_CC_OPEN;
 	chip->cc2 = TYPEC_CC_OPEN;
+	/* report OPEN status back to TCPM */
+	tcpm_cc_change(chip->tcpm_port);
 	/* adjust current for SRC */
 	if (pull_up) {
 		ret = fusb302_set_src_current(chip, cc_src_current[cc]);
