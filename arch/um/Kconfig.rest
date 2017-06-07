@@ -1,4 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0
+
+source "test/Kconfig"
+
 source "init/Kconfig"
 
 source "kernel/Kconfig.freezer"
