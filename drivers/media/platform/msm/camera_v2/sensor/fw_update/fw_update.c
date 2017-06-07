@@ -257,17 +257,13 @@ int checkHWFWversion(void)
 		&& (EVT_version == LGIT || EVT_version == LGIT_CM1)) {
 		if (CM_version < 2)
 			rc = CM1_LG;
-		else if (CM_version == 2)
-			rc = CM2_LG;
 		else
-			rc = NOUPDATE;
+			rc = CM2_LG;
 	} else if (FW_version < OIS_CUR_FW_VERSION && EVT_version == SHARPIT) {
 		if (CM_version < 2)
 			rc = CM1_SHARP;
-		else if (CM_version == 2)
-			rc = CM2_SHARP;
 		else
-			rc = NOUPDATE;
+			rc = CM2_SHARP;
 	} else {
 		pr_info("[OISFW]%s: No need to update.\n", __func__);
 		rc = NOUPDATE;
