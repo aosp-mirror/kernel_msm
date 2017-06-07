@@ -53,6 +53,7 @@ static int32_t msm_ois_power_down(struct msm_ois_ctrl_t *o_ctrl);
 
 static struct i2c_driver msm_ois_i2c_driver;
 static void msm_ois_read_work(struct work_struct *work);
+static struct ois_timer ois_timer_t;
 
 /*ioctl from userspace.
 *Get ois gyro readout data from ring buffer.
@@ -151,17 +152,17 @@ static void msm_ois_read_work(struct work_struct *work)
 	struct timespec ts;
 	int64_t readout_time;
 	bool result;
-	struct msm_ois_ctrl_t *ois_ctl;
+	struct ois_timer *ois_timer_in_t;
 
 	/*
 	struct sched_param param = { .sched_priority = 75 };
 	sched_setscheduler(current, SCHED_FIFO, &param);
 	*/
 
-	ois_ctl = container_of(work, struct msm_ois_ctrl_t, g_work);
+	ois_timer_in_t = container_of(work, struct ois_timer, g_work);
 	get_monotonic_boottime(&ts);
-	rc = ois_ctl->i2c_client.i2c_func_tbl->i2c_read_seq(
-		&ois_ctl->i2c_client, 0xE001, &buf[0], 6);
+	rc = ois_timer_in_t->o_ctrl->i2c_client.i2c_func_tbl->i2c_read_seq(
+		&ois_timer_in_t->o_ctrl->i2c_client, 0xE001, &buf[0], 6);
 	if (rc != 0)
 		pr_err("[OISDBG] %s : i2c_read_seq fail.\n", __func__);
 	else {
@@ -172,7 +173,7 @@ static void msm_ois_read_work(struct work_struct *work)
 		y_shift = (int16_t)(((uint16_t)buf[2] << 8) + (uint16_t)buf[3]);
 
 		result = msm_ois_data_enqueue(readout_time, x_shift,
-			y_shift, &ois_ctl->buf);
+			y_shift, &ois_timer_in_t->o_ctrl->buf);
 		if (!result)
 			pr_err("%s %d ois data enqueue ring buffer failed",
 				__func__, __LINE__);
@@ -182,15 +183,18 @@ static void msm_ois_read_work(struct work_struct *work)
 static enum hrtimer_restart msm_gyro_timer(struct hrtimer *timer)
 {
 	ktime_t currtime, interval;
-	struct msm_ois_ctrl_t *ois_ctl;
+	struct ois_timer *ois_timer_in_t;
 
-	ois_ctl = container_of(timer, struct msm_ois_ctrl_t, hr_timer);
-	queue_work(ois_ctl->ois_wq, &ois_ctl->g_work);
-	currtime  = ktime_get();
-	interval = ktime_set(0, READ_OUT_TIME);
-	hrtimer_forward(timer, currtime, interval);
+	ois_timer_in_t = container_of(timer, struct ois_timer, hr_timer);
+	if (ois_timer_in_t->o_ctrl->ois_state == OIS_OPS_ACTIVE) {
+		queue_work(ois_timer_in_t->ois_wq, &ois_timer_in_t->g_work);
+		currtime  = ktime_get();
+		interval = ktime_set(0, READ_OUT_TIME);
+		hrtimer_forward(timer, currtime, interval);
 
-	return HRTIMER_RESTART;
+		return HRTIMER_RESTART;
+	} else
+		return HRTIMER_NORESTART;
 }
 
 /*Create a timer for OIS gyro readout*/
@@ -199,29 +203,41 @@ static int msm_startGyroThread(struct msm_ois_ctrl_t *o_ctrl)
 	ktime_t  ktime;
 
 	pr_info("[OISDBG] %s:E\n", __func__);
-	o_ctrl->i2c_client.cci_client->i2c_freq_mode = I2C_FAST_PLUS_MODE;
-	INIT_WORK(&o_ctrl->g_work, msm_ois_read_work);
-	o_ctrl->ois_wq = create_workqueue("ois_wq");
-	if (!o_ctrl->ois_wq) {
-		pr_err("[OISDBG]:%s ois_wq create failed.\n", __func__);
-		return -EFAULT;
-	}
-	ktime = ktime_set(0, READ_OUT_TIME);
-	hrtimer_init(&o_ctrl->hr_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
-	o_ctrl->hr_timer.function = &msm_gyro_timer;
-	hrtimer_start(&o_ctrl->hr_timer, ktime, HRTIMER_MODE_REL);
+	if (ois_timer_t.ois_timer_state != OIS_TIME_ACTIVE) {
+		o_ctrl->i2c_client.cci_client->i2c_freq_mode =
+			I2C_FAST_PLUS_MODE;
+		ois_timer_t.o_ctrl = o_ctrl;
+		INIT_WORK(&ois_timer_t.g_work, msm_ois_read_work);
+		ois_timer_t.ois_wq = create_workqueue("ois_wq");
+		if (!ois_timer_t.ois_wq) {
+			pr_err("[OISDBG]:%s ois_wq create failed.\n", __func__);
+			return -EFAULT;
+		}
+		ktime = ktime_set(0, READ_OUT_TIME);
+		hrtimer_init(&ois_timer_t.hr_timer, CLOCK_MONOTONIC,
+			HRTIMER_MODE_REL);
+		ois_timer_t.hr_timer.function = &msm_gyro_timer;
+		hrtimer_start(&ois_timer_t.hr_timer, ktime,
+			HRTIMER_MODE_REL);
+		ois_timer_t.ois_timer_state = OIS_TIME_ACTIVE;
+	} else
+		pr_err("[OISDBG] invalid timer state = %d.\n",
+			ois_timer_t.ois_timer_state);
 	pr_info("[OISDBG] %s:X\n", __func__);
 	return 0;
 }
 
-static int msm_stopGyroThread(struct msm_ois_ctrl_t *o_ctrl)
+static int msm_stopGyroThread(void)
 {
 	pr_info("[OISDBG] %s:E\n", __func__);
-	if (o_ctrl->hr_timer.function != NULL) {
+	if (ois_timer_t.ois_timer_state == OIS_TIME_ACTIVE) {
 		pr_info("[OISDBG] %s:timer cancel.\n", __func__);
-		hrtimer_cancel(&o_ctrl->hr_timer);
-		destroy_workqueue(o_ctrl->ois_wq);
-	}
+		hrtimer_cancel(&ois_timer_t.hr_timer);
+		destroy_workqueue(ois_timer_t.ois_wq);
+		ois_timer_t.ois_timer_state = OIS_TIME_INACTIVE;
+	} else
+		pr_err("[OISDBG] invalid timer state = %d\n",
+			ois_timer_t.ois_timer_state);
 	pr_info("[OISDBG] %s:X\n", __func__);
 	return 0;
 }
@@ -533,6 +549,9 @@ static int msm_ois_init(struct msm_ois_ctrl_t *o_ctrl)
 			pr_err("cci_init failed\n");
 	}
 	o_ctrl->ois_state = OIS_OPS_ACTIVE;
+
+	if (ois_timer_t.ois_timer_state != OIS_TIME_ACTIVE)
+		ois_timer_t.ois_timer_state = OIS_TIME_INIT;
 	CDBG("Exit\n");
 	return rc;
 }
@@ -761,7 +780,7 @@ static int32_t msm_ois_config(struct msm_ois_ctrl_t *o_ctrl,
 		rc = msm_startGyroThread(o_ctrl);
 		break;
 	case CFG_OIS_READ_TIMER_STOP:
-		rc = msm_stopGyroThread(o_ctrl);
+		rc = msm_stopGyroThread();
 		break;
 	case CFG_OIS_GET_GYRO:
 		rc = msm_ois_get_gyro(o_ctrl, &cdata->cfg.gyro);

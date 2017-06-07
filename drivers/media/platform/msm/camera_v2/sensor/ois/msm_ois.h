@@ -42,6 +42,12 @@ enum msm_ois_state_t {
 	OIS_DISABLE_STATE,
 };
 
+enum msm_ois_timer_state_t {
+	OIS_TIME_INIT,
+	OIS_TIME_ACTIVE,
+	OIS_TIME_INACTIVE,
+};
+
 struct msm_ois_vreg {
 	struct camera_vreg_t *cam_vreg;
 	void *data[MSM_OIS_MAX_VREGS];
@@ -61,6 +67,13 @@ struct msm_ois_readout_buffer {
 	int32_t buffer_tail;
 };
 
+struct ois_timer {
+	struct hrtimer hr_timer;
+	struct workqueue_struct *ois_wq;
+	struct work_struct g_work;
+	enum msm_ois_timer_state_t ois_timer_state;
+	struct msm_ois_ctrl_t *o_ctrl;
+};
 
 struct msm_ois_ctrl_t {
 	struct i2c_driver *i2c_driver;
@@ -83,10 +96,7 @@ struct msm_ois_ctrl_t {
 	struct msm_pinctrl_info pinctrl_info;
 	uint8_t cam_pinctrl_status;
 	struct msm_ois_board_info *oboard_info;
-	struct workqueue_struct *ois_wq;
-	struct work_struct g_work;
 	struct msm_ois_readout_buffer buf;
-	struct hrtimer hr_timer;
 };
 
 #endif
