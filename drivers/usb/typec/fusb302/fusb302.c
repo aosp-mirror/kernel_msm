@@ -1045,7 +1045,7 @@ static int tcpm_set_roles(struct tcpc_dev *dev, bool attached,
 	u8 switches1_data = 0x00;
 
 	if (!attached)
-		data = TYPEC_HOST;
+		data = TYPEC_DEVICE;
 
 	mutex_lock(&chip->lock);
 
