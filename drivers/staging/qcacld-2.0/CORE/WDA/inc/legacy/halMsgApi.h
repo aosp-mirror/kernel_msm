@@ -752,7 +752,7 @@ typedef struct
 {
     tSirMacAddr          selfMacAddr;
     eHalStatus           status;
-    uint8_t              data_len;
+    uint32_t              data_len;
     uint8_t              *data;
 } tStartOemDataReq, *tpStartOemDataReq;
 

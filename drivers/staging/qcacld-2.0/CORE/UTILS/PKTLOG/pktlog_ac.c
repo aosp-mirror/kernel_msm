@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -349,6 +349,7 @@ pktlog_enable(struct ol_softc *scn, int32_t log_state)
 			}
 		}
 
+		spin_lock_bh(&pl_info->log_lock);
 		pl_info->buf->bufhdr.version = CUR_PKTLOG_VER;
 		pl_info->buf->bufhdr.magic_num = PKTLOG_MAGIC_NUM;
 		pl_info->buf->wr_offset = 0;
@@ -357,6 +358,7 @@ pktlog_enable(struct ol_softc *scn, int32_t log_state)
 		pl_info->buf->bytes_written = 0;
 		pl_info->buf->msg_index = 1;
 		pl_info->buf->offset = PKTLOG_READ_OFFSET;
+		spin_unlock_bh(&pl_info->log_lock);
 
 		pl_info->start_time_thruput = OS_GET_TIMESTAMP();
 		pl_info->start_time_per = pl_info->start_time_thruput;
@@ -404,11 +406,13 @@ pktlog_setsize(struct ol_softc *scn, int32_t size)
 		return -EINVAL;
 	}
 
+	spin_lock_bh(&pl_info->log_lock);
 	if (pl_info->buf != NULL)
 		pktlog_release_buf(scn);
 
 	if (size != 0)
 		pl_info->buf_size = size;
+	spin_unlock_bh(&pl_info->log_lock);
 
 	return 0;
 }
