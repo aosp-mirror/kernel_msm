@@ -24,8 +24,9 @@
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/usb/typec.h>
-#include <linux/usb/pd.h>
 #include <linux/workqueue.h>
+
+#include "../typec/pd.h"
 #include "../typec/tcpm.h"
 #include "usbpd.h"
 

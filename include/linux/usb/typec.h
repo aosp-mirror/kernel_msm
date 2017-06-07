@@ -2,10 +2,23 @@
 #ifndef __LINUX_USB_TYPEC_H
 #define __LINUX_USB_TYPEC_H
 
-#include <linux/device.h>
 #include <linux/types.h>
 
+/* XXX: Once we have a header for USB Power Delivery, this belongs there */
+#define ALTMODE_MAX_MODES	6
+
+/* USB Type-C Specification releases */
+#define USB_TYPEC_REV_1_0	0x100 /* 1.0 */
+#define USB_TYPEC_REV_1_1	0x110 /* 1.1 */
+#define USB_TYPEC_REV_1_2	0x120 /* 1.2 */
+
+struct typec_altmode;
+struct typec_partner;
+struct typec_cable;
+struct typec_plug;
 struct typec_port;
+
+struct fwnode_handle;
 
 enum typec_port_type {
 	TYPEC_PORT_DFP,
@@ -44,207 +57,187 @@ enum typec_accessory {
 	TYPEC_ACCESSORY_DEBUG,
 };
 
+#define TYPEC_MAX_ACCESSORY	3
+
 /*
- * struct typec_mode - Individual Mode of an Alternate Mode
- * @vdo: VDO returned by Discover Modes USB PD command
- * @desc: Mode description
- * @active: Tells if the mode is currently entered or not
- * @index: Index of the mode
- * @group_name: Name for the sysfs folder in form "mode<index>"
- * @group: The sysfs group (folder) for the mode
- * @attrs: The attributes for the sysfs group
- * @vdo_attr: Device attribute to expose the VDO of the mode
- * @desc_attr: Device attribute to expose the description of the mode
- * @active_attr: Device attribute to expose active of the mode
- * @roles: Only for ports. DRP if the mode is awailable in both roles
- * @roles_attr: Device attribute, only for ports, to expose the supported roles
+ * struct usb_pd_identity - USB Power Delivery identity data
+ * @id_header: ID Header VDO
+ * @cert_stat: Cert Stat VDO
+ * @product: Product VDO
  *
- * Details about a mode of an Alternate Mode which a connector, cable plug or
+ * USB power delivery Discover Identity command response data.
+ *
+ * REVISIT: This is USB Power Delivery specific information, so this structure
+ * probable belongs to USB Power Delivery header file once we have them.
+ */
+struct usb_pd_identity {
+	u32			id_header;
+	u32			cert_stat;
+	u32			product;
+};
+
+int typec_partner_set_identity(struct typec_partner *partner);
+int typec_cable_set_identity(struct typec_cable *cable);
+
+/*
+ * struct typec_mode_desc - Individual Mode of an Alternate Mode
+ * @index: Index of the Mode within the SVID
+ * @vdo: VDO returned by Discover Modes USB PD command
+ * @desc: Optional human readable description of the mode
+ * @roles: Only for ports. DRP if the mode is available in both roles
+ *
+ * Description of a mode of an Alternate Mode which a connector, cable plug or
  * partner supports. Every mode will have it's own sysfs group. The details are
  * the VDO returned by discover modes command, description for the mode and
- * active flag telling is the mode currently active or not.
+ * active flag telling has the mode being entered or not.
  */
-struct typec_mode {
+struct typec_mode_desc {
+	int			index;
 	u32			vdo;
 	char			*desc;
-	unsigned int		active:1;
-	/* Only for ports */
+	/* Only used with ports */
 	enum typec_port_type	roles;
-
-	struct typec_altmode	*alt_mode;
-
-	int			index;
-	char			group_name[8];
-	struct attribute_group	group;
-	struct attribute	*attrs[5];
-	struct device_attribute vdo_attr;
-	struct device_attribute desc_attr;
-	struct device_attribute active_attr;
-	/* Only for ports */
-	struct device_attribute roles_attr;
 };
 
 /*
- * struct typec_altmode - USB Type-C Alternate Mode
- * @dev: struct device instance
- * @name: Name for the Alternate Mode (optional)
+ * struct typec_altmode_desc - USB Type-C Alternate Mode Descriptor
  * @svid: Standard or Vendor ID
  * @n_modes: Number of modes
- * @modes: Array of modes supported by the Alternat Mode
- * @mode_groups: The modes as attribute groups to be exposed in sysfs
+ * @modes: Array of modes supported by the Alternate Mode
  *
  * Representation of an Alternate Mode that has SVID assigned by USB-IF. The
  * array of modes will list the modes of a particular SVID that are supported by
  * a connector, partner of a cable plug.
  */
-struct typec_altmode {
-	struct device		dev;
-	char			*name;
-
+struct typec_altmode_desc {
 	u16			svid;
 	int			n_modes;
-	struct typec_mode	*modes;
-
-	const struct attribute_group **mode_groups;
+	struct typec_mode_desc	modes[ALTMODE_MAX_MODES];
 };
 
-#define to_altmode(d) container_of(d, struct typec_altmode, dev)
+struct typec_altmode
+*typec_partner_register_altmode(struct typec_partner *partner,
+				struct typec_altmode_desc *desc);
+struct typec_altmode
+*typec_plug_register_altmode(struct typec_plug *plug,
+			     struct typec_altmode_desc *desc);
+struct typec_altmode
+*typec_port_register_altmode(struct typec_port *port,
+			     struct typec_altmode_desc *desc);
+void typec_unregister_altmode(struct typec_altmode *altmode);
 
 struct typec_port *typec_altmode2port(struct typec_altmode *alt);
 
 void typec_altmode_update_active(struct typec_altmode *alt, int mode,
 				 bool active);
 
-int typec_register_altmodes(struct device *dev, struct typec_altmode *alt);
-void typec_unregister_altmodes(struct device *dev);
+enum typec_plug_index {
+	TYPEC_PLUG_SOP_P,
+	TYPEC_PLUG_SOP_PP,
+};
 
 /*
- * struct typec_plug - USB Type-C Cable Plug
- * @dev: struct device instance
- * @index: 1 for the plug connected to DFP and 2 for the plug connected to UFP
- * @alt_modes: Alternate Modes the cable plug supports (null terminated)
+ * struct typec_plug_desc - USB Type-C Cable Plug Descriptor
+ * @index: SOP Prime for the plug connected to DFP and SOP Double Prime for the
+ *         plug connected to UFP
  *
  * Represents USB Type-C Cable Plug.
  */
-struct typec_plug {
-	struct device		dev;
-	int			index;
-	struct typec_altmode	*alt_modes;
+struct typec_plug_desc {
+	enum typec_plug_index	index;
 };
 
 /*
- * struct typec_cable - USB Type-C Cable
- * @dev: struct device instance
+ * struct typec_cable_desc - USB Type-C Cable Descriptor
  * @type: The plug type from USB PD Cable VDO
- * @usb_pd: Electronically Marked Cable
  * @active: Is the cable active or passive
- * @sop_pp_controller: Tells whether both cable plugs are configurable or not
- * @plug: The two plugs in the cable.
+ * @identity: Result of Discover Identity command
  *
- * Represents USB Type-C Cable attached to USB Type-C port. Two plugs are
- * created if the cable has SOP Double Prime controller as defined in USB PD
- * specification. Otherwise only one will be created if the cable is active. For
- * passive cables no plugs are created.
+ * Represents USB Type-C Cable attached to USB Type-C port.
  */
-struct typec_cable {
-	struct device		dev;
+struct typec_cable_desc {
 	enum typec_plug_type	type;
-	u32			vdo;
-	unsigned int		usb_pd:1;
 	unsigned int		active:1;
-	unsigned int		sop_pp_controller:1;
-
-	struct typec_plug	plug[2];
+	struct usb_pd_identity	*identity;
 };
 
 /*
- * struct typec_partner - USB Type-C Partner
- * @dev: struct device instance
- * @type: Normal USB device, charger, Alternate Mode or Accessory
+ * struct typec_partner_desc - USB Type-C Partner Descriptor
  * @usb_pd: USB Power Delivery support
- * @vdo: VDO returned by Discover Identity USB PD command
- * @alt_modes: Alternate Modes the partner supports (null terminated)
+ * @accessory: Audio, Debug or none.
+ * @identity: Discover Identity command data
  *
- * Details about a partner that is attached to USB Type-C port.
+ * Details about a partner that is attached to USB Type-C port. If @identity
+ * member exists when partner is registered, a directory named "identity" is
+ * created to sysfs for the partner device.
  */
-struct typec_partner {
-	struct device		dev;
+struct typec_partner_desc {
 	unsigned int		usb_pd:1;
-	u32			vdo;
 	enum typec_accessory	accessory;
-	struct typec_altmode	*alt_modes;
+	struct usb_pd_identity	*identity;
 };
 
 /*
  * struct typec_capability - USB Type-C Port Capabilities
  * @role: DFP (Host-only), UFP (Device-only) or DRP (Dual Role)
- * @usb_pd: USB Power Delivery support
+ * @revision: USB Type-C Specification release. Binary coded decimal
+ * @pd_revision: USB Power Delivery Specification revision if supported
  * @prefer_role: Initial role preference
- * @accessory: Supported Accessory Modes (NULL terminated array)
- * @alt_modes: Alternate Modes the connector supports (NULL terminated)
+ * @accessory: Supported Accessory Modes
+ * @fwnode: Optional fwnode of the port
  * @try_role: Set data role preference for DRP port
  * @dr_set: Set Data Role
  * @pr_set: Set Power Role
  * @vconn_set: Set VCONN Role
  * @activate_mode: Enter/exit given Alternate Mode
+ * @port_type_set: Set port type
  *
  * Static capabilities of a single USB Type-C port.
  */
 struct typec_capability {
 	enum typec_port_type	type;
-	unsigned int		usb_pd:1;
+	u16			revision; /* 0120H = "1.2" */
+	u16			pd_revision; /* 0300H = "3.0" */
 	int			prefer_role;
-	enum typec_accessory	*accessory;
-	struct typec_altmode	*alt_modes;
+	enum typec_accessory	accessory[TYPEC_MAX_ACCESSORY];
 
-	int			(*try_role)(const struct typec_capability *,
-					    int role);
+	struct fwnode_handle	*fwnode;
 
-	int			(*dr_set)(const struct typec_capability *,
-					  enum typec_data_role);
-	int			(*pr_set)(const struct typec_capability *,
-					  enum typec_role);
-	int			(*vconn_set)(const struct typec_capability *,
-					     enum typec_role);
+	int		(*try_role)(const struct typec_capability *,
+				    int role);
 
-	int			(*activate_mode)(struct typec_altmode *,
-						 int mode, int activate);
+	int		(*dr_set)(const struct typec_capability *,
+				  enum typec_data_role);
+	int		(*pr_set)(const struct typec_capability *,
+				  enum typec_role);
+	int		(*vconn_set)(const struct typec_capability *,
+				     enum typec_role);
+
+	int		(*activate_mode)(const struct typec_capability *,
+					 int mode, int activate);
+	int		(*port_type_set)(const struct typec_capability *,
+					enum typec_port_type);
+
 };
 
 /* Specific to try_role(). Indicates the user want's to clear the preference. */
 #define TYPEC_NO_PREFERRED_ROLE	(-1)
 
-/*
- * struct typec_connection - Details about USB Type-C port connection event
- * @partner: The attached partner
- * @cable: The attached cable
- * @data_role: Initial USB data role (host or device)
- * @pwr_role: Initial Power role (source or sink)
- * @vconn_role: Initial VCONN role (source or sink)
- * @pwr_opmode: The power mode of the connection
- *
- * All the relevant details about a connection event. Wrapper that is passed to
- * typec_connect(). The context is copied when typec_connect() is called and the
- * structure is not used for anything else.
- */
-struct typec_connection {
-	struct typec_partner	*partner;
-	struct typec_cable	*cable;
-
-	enum typec_data_role	data_role;
-	enum typec_role		pwr_role;
-	enum typec_role		vconn_role;
-	enum typec_pwr_opmode	pwr_opmode;
-};
-
-struct typec_port *typec_register_port(struct device *dev,
+struct typec_port *typec_register_port(struct device *parent,
 				       const struct typec_capability *cap);
 void typec_unregister_port(struct typec_port *port);
 
-int typec_connect(struct typec_port *port, struct typec_connection *con);
-void typec_disconnect(struct typec_port *port);
+struct typec_partner *typec_register_partner(struct typec_port *port,
+					     struct typec_partner_desc *desc);
+void typec_unregister_partner(struct typec_partner *partner);
 
-/* Callbacks from driver */
+struct typec_cable *typec_register_cable(struct typec_port *port,
+					 struct typec_cable_desc *desc);
+void typec_unregister_cable(struct typec_cable *cable);
+
+struct typec_plug *typec_register_plug(struct typec_cable *cable,
+				       struct typec_plug_desc *desc);
+void typec_unregister_plug(struct typec_plug *plug);
 
 void typec_set_data_role(struct typec_port *port, enum typec_data_role role);
 void typec_set_pwr_role(struct typec_port *port, enum typec_role role);

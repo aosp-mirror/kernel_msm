@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016 Google, Inc
+ * Copyright 2015-2017 Google, Inc
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -92,12 +92,22 @@ static inline unsigned int pd_header_type_le(__le16 header)
 	return pd_header_type(le16_to_cpu(header));
 }
 
+static inline unsigned int pd_header_msgid(u16 header)
+{
+	return (header >> PD_HEADER_ID_SHIFT) & PD_HEADER_ID_MASK;
+}
+
+static inline unsigned int pd_header_msgid_le(__le16 header)
+{
+	return pd_header_msgid(le16_to_cpu(header));
+}
+
 #define PD_MAX_PAYLOAD		7
 
 struct pd_message {
 	__le16 header;
 	__le32 payload[PD_MAX_PAYLOAD];
-};
+} __packed;
 
 /* PDO: Power Data Object */
 #define PDO_MAX_OBJECTS		7
@@ -249,7 +259,7 @@ static inline unsigned int rdo_max_power(u32 rdo)
 /* USB PD timers and counters */
 #define PD_T_NO_RESPONSE	5000	/* 4.5 - 5.5 seconds */
 #define PD_T_DB_DETECT		10000	/* 10 - 15 seconds */
-#define PD_T_SEND_SOURCE_CAP	150
+#define PD_T_SEND_SOURCE_CAP	150	/* 100 - 200 ms */
 #define PD_T_SENDER_RESPONSE	60	/* 24 - 30 ms, relaxed */
 #define PD_T_SOURCE_ACTIVITY	45
 #define PD_T_SINK_ACTIVITY	135
