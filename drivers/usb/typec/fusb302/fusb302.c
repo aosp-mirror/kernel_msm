@@ -629,6 +629,14 @@ static int tcpm_set_cc(struct tcpc_dev *dev, enum typec_cc_status cc)
 				    ret);
 			goto done;
 		}
+
+		ret = fusb302_set_toggling(chip, TOGGLING_MODE_SRC);
+		if (ret < 0) {
+			fusb302_log("cannot set toggling to SRC mode, ret=%d\n",
+				    ret);
+			goto done;
+		}
+
 		ret = fusb302_i2c_mask_write(chip, FUSB_REG_MASK,
 					     FUSB_REG_MASK_BC_LVL |
 					     FUSB_REG_MASK_COMP_CHNG,
@@ -640,33 +648,26 @@ static int tcpm_set_cc(struct tcpc_dev *dev, enum typec_cc_status cc)
 		}
 		chip->intr_bc_lvl = false;
 		chip->intr_comp_chng = true;
-
-		ret = fusb302_set_toggling(chip, TOGGLING_MODE_SRC);
-		if (ret < 0) {
-			fusb302_log("cannot set toggling to SRC mode, ret=%d\n",
-				    ret);
-			goto done;
-		}
 	}
 	if (pull_down) {
-		ret = fusb302_i2c_mask_write(chip, FUSB_REG_MASK,
-					     FUSB_REG_MASK_BC_LVL |
-					     FUSB_REG_MASK_COMP_CHNG,
-					     FUSB_REG_MASK_COMP_CHNG);
-		if (ret < 0) {
-			fusb302_log("cannot set SRC interrupt, ret=%d\n",
-				    ret);
-			goto done;
-		}
-		chip->intr_bc_lvl = true;
-		chip->intr_comp_chng = false;
-
 		ret = fusb302_set_toggling(chip, TOGGLING_MODE_SNK);
 		if (ret < 0) {
 			fusb302_log("cannot set toggling to SNK mode, ret=%d\n",
 				    ret);
 			goto done;
 		}
+
+		ret = fusb302_i2c_mask_write(chip, FUSB_REG_MASK,
+					     FUSB_REG_MASK_BC_LVL |
+					     FUSB_REG_MASK_COMP_CHNG,
+					     FUSB_REG_MASK_COMP_CHNG);
+		if (ret < 0) {
+			fusb302_log("cannot set SNK interrupt, ret=%d\n",
+				    ret);
+			goto done;
+		}
+		chip->intr_bc_lvl = true;
+		chip->intr_comp_chng = false;
 	}
 	fusb302_log("cc := %s\n", typec_cc_status_name[cc]);
 done:
