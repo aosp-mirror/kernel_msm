@@ -67,6 +67,9 @@
 
 	qcom,display-topology = <2 2 1>; /* 2xLM, 2xDSC Enc, 1xDSI Intf */
 	qcom,default-topology-index = <0>;
+
+	qcom,platform-reset-gpio = <&tlmm 6 0>;
+	qcom,platform-te-gpio = <&tlmm 10 0>;
 };
 
 &pm8998_l28 {
