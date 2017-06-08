@@ -1092,10 +1092,17 @@ static int mnh_sm_poweroff(void)
 
 static int mnh_sm_config_ddr(void)
 {
-	/* Initialize DDR */
-	mnh_ddr_po_init(mnh_sm_dev->dev, mnh_sm_dev->ddr_pad_iso_n_pin);
-	mnh_sm_dev->ddr_status = MNH_DDR_ACTIVE;
+	int ret;
 
+	/* Initialize DDR */
+	ret = mnh_ddr_po_init(mnh_sm_dev->dev, mnh_sm_dev->ddr_pad_iso_n_pin);
+	if (ret) {
+		dev_err(mnh_sm_dev->dev, "%s: ddr training failed (%d)\n",
+			__func__, ret);
+		return ret;
+	}
+
+	mnh_sm_dev->ddr_status = MNH_DDR_ACTIVE;
 	return 0;
 }
 
