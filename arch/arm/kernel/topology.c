@@ -53,6 +53,19 @@ unsigned long scale_cpu_capacity(struct sched_domain *sd, int cpu)
 #endif
 }
 
+unsigned long scale_cpu_transient_capacity(struct sched_domain *sd, int cpu)
+{
+#ifdef CONFIG_CPU_FREQ
+	unsigned long transient_scale =
+		cpufreq_scale_transient_capacity(cpu);
+
+	return per_cpu(cpu_scale, cpu) *
+		transient_scale >> SCHED_CAPACITY_SHIFT;
+#else
+	return per_cpu(cpu_scale, cpu);
+#endif
+}
+
 static void set_capacity_scale(unsigned int cpu, unsigned long capacity)
 {
 	per_cpu(cpu_scale, cpu) = capacity;
