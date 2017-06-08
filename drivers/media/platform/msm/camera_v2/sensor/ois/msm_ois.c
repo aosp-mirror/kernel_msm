@@ -67,6 +67,8 @@ static int32_t msm_ois_get_gyro(struct msm_ois_ctrl_t *o_ctrl,
 	uint8_t data_get_count = 0;
 	uint16_t counter = 0;
 
+	memset(gyro_data, 0, sizeof(gyro_data));
+
 	mutex_lock(&ois_gyro_mutex);
 
 	if (o_ctrl->buf.buffer_tail < MSM_OIS_DATA_BUFFER_SIZE &&
@@ -103,7 +105,6 @@ static int32_t msm_ois_get_gyro(struct msm_ois_ctrl_t *o_ctrl,
 		MAX_GYRO_QUERY_SIZE + 1) {
 		if (copy_to_user((void *)gyro->gyro_data, gyro_data,
 			data_get_count * sizeof(struct msm_ois_readout))) {
-			kfree(gyro_data);
 			gyro->query_size = 0;
 			pr_err("[OISDBG] Error copying\n");
 			return -EFAULT;
