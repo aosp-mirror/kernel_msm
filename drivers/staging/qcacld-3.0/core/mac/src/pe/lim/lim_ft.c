@@ -487,7 +487,7 @@ void lim_fill_ft_session(tpAniSirGlobal pMac,
 	int8_t localPowerConstraint;
 	int8_t regMax;
 	tSchBeaconStruct *pBeaconStruct;
-	uint32_t selfDot11Mode;
+	uint32_t self_dot11_mode;
 	ePhyChanBondState cbEnabledMode;
 
 	pBeaconStruct = qdf_mem_malloc(sizeof(tSchBeaconStruct));
@@ -528,9 +528,16 @@ void lim_fill_ft_session(tpAniSirGlobal pMac,
 	qdf_mem_copy(pftSessionEntry->ssId.ssId, pBeaconStruct->ssId.ssId,
 		     pftSessionEntry->ssId.length);
 
-	wlan_cfg_get_int(pMac, WNI_CFG_DOT11_MODE, &selfDot11Mode);
-	pe_debug("selfDot11Mode: %d", selfDot11Mode);
-	pftSessionEntry->dot11mode = selfDot11Mode;
+	if (psessionEntry->ftPEContext.pFTPreAuthReq &&
+			!pMac->roam.configParam.isRoamOffloadEnabled)
+		pftSessionEntry->dot11mode =
+			psessionEntry->ftPEContext.pFTPreAuthReq->dot11mode;
+	else {
+		wlan_cfg_get_int(pMac, WNI_CFG_DOT11_MODE, &self_dot11_mode);
+		pe_debug("selfDot11Mode: %d", self_dot11_mode);
+		pftSessionEntry->dot11mode = self_dot11_mode;
+	}
+	pe_debug("dot11mode: %d", pftSessionEntry->dot11mode);
 	pftSessionEntry->vhtCapability =
 		(IS_DOT11_MODE_VHT(pftSessionEntry->dot11mode)
 		 && IS_BSS_VHT_CAPABLE(pBeaconStruct->VHTCaps));

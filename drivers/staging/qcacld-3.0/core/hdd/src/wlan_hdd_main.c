@@ -204,6 +204,7 @@ static const struct wiphy_wowlan_support wowlan_support_reg_init = {
 #endif
 
 /* internal function declaration */
+struct notifier_block hdd_netdev_notifier;
 
 struct sock *cesium_nl_srv_sock;
 #ifdef FEATURE_WLAN_AUTO_SHUTDOWN
@@ -1492,8 +1493,6 @@ void hdd_update_tgt_cfg(void *context, void *param)
 	hdd_debug("Init current antenna mode: %d",
 		 hdd_ctx->current_antenna_mode);
 
-	hdd_debug("Target BPF %d Host BPF %d",
-		cfg->bpf_enabled, hdd_ctx->config->bpf_packet_filter_enable);
 	hdd_ctx->bpf_enabled = (cfg->bpf_enabled &&
 				hdd_ctx->config->bpf_packet_filter_enable);
 	hdd_ctx->rcpi_enabled = cfg->rcpi_enabled;
@@ -1501,6 +1500,21 @@ void hdd_update_tgt_cfg(void *context, void *param)
 
 	hdd_ctx->fw_mem_dump_enabled = cfg->fw_mem_dump_enabled;
 
+	if ((hdd_ctx->config->txBFCsnValue >
+		WNI_CFG_VHT_CSN_BEAMFORMEE_ANT_SUPPORTED_FW_DEF) &&
+						!cfg->tx_bfee_8ss_enabled)
+		hdd_ctx->config->txBFCsnValue =
+			WNI_CFG_VHT_CSN_BEAMFORMEE_ANT_SUPPORTED_FW_DEF;
+
+	if (sme_cfg_set_int(hdd_ctx->hHal,
+			WNI_CFG_VHT_CSN_BEAMFORMEE_ANT_SUPPORTED,
+			hdd_ctx->config->txBFCsnValue) == QDF_STATUS_E_FAILURE)
+		hdd_err("fw update WNI_CFG_VHT_CSN_BEAMFORMEE_ANT_SUPPORTED to CFG fails");
+
+
+	hdd_debug("Target BPF %d Host BPF %d 8ss fw support %d txBFCsnValue %d",
+		cfg->bpf_enabled, hdd_ctx->config->bpf_packet_filter_enable,
+		cfg->tx_bfee_8ss_enabled, hdd_ctx->config->txBFCsnValue);
 	/*
 	 * If BPF is enabled, maxWowFilters set to WMA_STA_WOW_DEFAULT_PTRN_MAX
 	 * because we need atleast WMA_STA_WOW_DEFAULT_PTRN_MAX free slots to
@@ -1834,6 +1848,9 @@ int hdd_wlan_start_modules(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter,
 				goto release_lock;
 			}
 		}
+
+		pld_set_fw_log_mode(hdd_ctx->parent_dev,
+				    hdd_ctx->config->enable_fw_log);
 
 		ret = hdd_hif_open(qdf_dev->dev, qdf_dev->drv_hdl, qdf_dev->bid,
 				   qdf_dev->bus_type,
@@ -3984,6 +4001,12 @@ QDF_STATUS hdd_reset_all_adapters(hdd_context_t *hdd_ctx)
 
 	while (NULL != adapterNode && QDF_STATUS_SUCCESS == status) {
 		adapter = adapterNode->pAdapter;
+
+		if ((adapter->device_mode == QDF_STA_MODE) ||
+		    (adapter->device_mode == QDF_P2P_CLIENT_MODE))
+			/* Stop tdls timers */
+			hdd_tdls_timers_stop(adapter);
+
 		hdd_debug("Disabling queues");
 		if (hdd_ctx->config->sap_internal_restart &&
 		    adapter->device_mode == QDF_SAP_MODE) {
@@ -4529,6 +4552,7 @@ void hdd_connect_result(struct net_device *dev, const u8 *bssid,
 			status, gfp, connect_timeout, timeout_reason);
 	}
 	qdf_runtime_pm_allow_suspend(&padapter->connect_rpm_ctx.connect);
+	hdd_allow_suspend(WIFI_POWER_EVENT_WAKELOCK_CONNECT);
 }
 #else
 void hdd_connect_result(struct net_device *dev, const u8 *bssid,
@@ -4543,6 +4567,7 @@ void hdd_connect_result(struct net_device *dev, const u8 *bssid,
 	cfg80211_connect_result(dev, bssid, req_ie, req_ie_len,
 				resp_ie, resp_ie_len, status, gfp);
 	qdf_runtime_pm_allow_suspend(&padapter->connect_rpm_ctx.connect);
+	hdd_allow_suspend(WIFI_POWER_EVENT_WAKELOCK_CONNECT);
 }
 #endif
 
@@ -7410,13 +7435,6 @@ static hdd_context_t *hdd_context_create(struct device *dev)
 
 	if (ret)
 		goto err_free_config;
-
-
-	ret = pld_set_fw_log_mode(hdd_ctx->parent_dev,
-			hdd_ctx->config->enable_fw_log);
-
-	if (ret && cds_is_fw_down())
-		goto err_deinit_hdd_context;
 
 	/* Uses to enabled logging after SSR */
 	hdd_ctx->fw_log_settings.enable = hdd_ctx->config->enable_fw_log;
@@ -11097,16 +11115,15 @@ static int __con_mode_handler(const char *kmessage, struct kernel_param *kp,
 	enum tQDF_GLOBAL_CON_MODE curr_mode;
 	enum tQDF_ADAPTER_MODE adapter_mode;
 
+	hdd_info("con_mode handler: %s", kmessage);
+
 	ret = wlan_hdd_validate_context(hdd_ctx);
 	if (ret)
 		return ret;
 
 	cds_set_load_in_progress(true);
 
-	hdd_debug("con_mode handler: %s", kmessage);
 	ret = param_set_int(kmessage, kp);
-
-
 
 	if (!(is_con_mode_valid(con_mode))) {
 		hdd_err("invlaid con_mode %d", con_mode);

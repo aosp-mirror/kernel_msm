@@ -4104,6 +4104,10 @@ QDF_STATUS csr_roam_prepare_bss_config(tpAniSirGlobal pMac,
 		else
 			pBssConfig->uCfgDot11Mode = eCSR_CFG_DOT11_MODE_11A;
 	}
+
+	sme_debug("phyMode=%d, uCfgDot11Mode=%d",
+			pProfile->phyMode, pBssConfig->uCfgDot11Mode);
+
 	/* Qos */
 	if ((pBssConfig->uCfgDot11Mode != eCSR_CFG_DOT11_MODE_11N) &&
 	    (pMac->roam.configParam.WMMSupportMode == eCsrRoamWmmNoQos)) {
@@ -14604,6 +14608,9 @@ QDF_STATUS csr_send_join_req_msg(tpAniSirGlobal pMac, uint32_t sessionId,
 			ucDot11Mode = WNI_CFG_DOT11_MODE_11N;
 		}
 		csr_join_req->dot11mode = (uint8_t) ucDot11Mode;
+		sme_debug("dot11mode=%d, uCfgDot11Mode=%d",
+			csr_join_req->dot11mode,
+			pSession->bssParams.uCfgDot11Mode);
 #ifdef FEATURE_WLAN_MCC_TO_SCC_SWITCH
 		csr_join_req->cc_switch_mode =
 			pMac->roam.configParam.cc_switch_mode;
@@ -15029,18 +15036,6 @@ QDF_STATUS csr_send_join_req_msg(tpAniSirGlobal pMac, uint32_t sessionId,
 				&value1) != eSIR_SUCCESS)
 			QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_ERROR,
 				("Failed to get CSN beamformee capability"));
-
-		/*
-		 * Set SU Bformee only if SU Bformee is enabled in INI
-		 * and AP is SU Bformer capable
-		 */
-		if (value && !((IS_BSS_VHT_CAPABLE(pIes->VHTCaps) &&
-		   pIes->VHTCaps.suBeamFormerCap) ||
-		   (IS_BSS_VHT_CAPABLE(
-		   pIes->vendor_vht_ie.VHTCaps)
-		   && pIes->vendor_vht_ie.VHTCaps.
-		   suBeamFormerCap)))
-			value = 0;
 
 		csr_join_req->vht_config.su_beam_formee = value;
 
@@ -17275,12 +17270,12 @@ QDF_STATUS csr_get_snr(tpAniSirGlobal pMac,
 {
 	QDF_STATUS status = QDF_STATUS_SUCCESS;
 	cds_msg_t msg;
-	uint32_t sessionId = 0;
+	uint32_t sessionId = CSR_SESSION_ID_INVALID;
 	tAniGetSnrReq *pMsg;
 
 	pMsg = (tAniGetSnrReq *) qdf_mem_malloc(sizeof(tAniGetSnrReq));
 	if (NULL == pMsg) {
-		sme_err("%s: failed to allocate mem for req", __func__);
+		sme_err("failed to allocate mem for req");
 		return QDF_STATUS_E_NOMEM;
 	}
 
@@ -19259,6 +19254,35 @@ QDF_STATUS csr_queue_sme_command(tpAniSirGlobal pMac, tSmeCmd *pCommand,
 	return QDF_STATUS_SUCCESS;
 }
 
+QDF_STATUS csr_roam_update_config(tpAniSirGlobal mac_ctx, uint8_t session_id,
+				  uint16_t capab, uint32_t value)
+{
+	struct update_config *msg;
+	QDF_STATUS status = QDF_STATUS_SUCCESS;
+	tCsrRoamSession *session = CSR_GET_SESSION(mac_ctx, session_id);
+
+	sme_debug("update HT config requested");
+	if (NULL == session) {
+		sme_err("Session does not exist for session id %d", session_id);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	msg = qdf_mem_malloc(sizeof(*msg));
+	if (NULL == msg) {
+		sme_err("malloc failed");
+		return QDF_STATUS_E_NOMEM;
+	}
+
+	msg->messageType = eWNI_SME_UPDATE_CONFIG;
+	msg->sme_session_id = session_id;
+	msg->capab = capab;
+	msg->value = value;
+	msg->length = sizeof(*msg);
+	status = cds_send_mb_message_to_mac(msg);
+
+	return status;
+}
+
 QDF_STATUS csr_roam_update_apwpsie(tpAniSirGlobal pMac, uint32_t sessionId,
 				   tSirAPWPSIEs *pAPWPSIES)
 {
@@ -20529,6 +20553,16 @@ static QDF_STATUS csr_process_roam_sync_callback(tpAniSirGlobal mac_ctx,
 	case SIR_ROAM_SYNCH_NAPI_OFF:
 		csr_roam_call_callback(mac_ctx, session_id, NULL, 0,
 				eCSR_ROAM_NAPI_OFF, eSIR_SME_SUCCESS);
+		return status;
+	case SIR_ROAMING_INVOKE_FAIL:
+		csr_roam_call_callback(mac_ctx, session_id, NULL, 0,
+				       eCSR_ROAM_ASSOCIATION_FAILURE,
+				       eCSR_ROAM_RESULT_INVOKE_FAILED);
+
+		/* Userspace roam request failed, disconnect with current AP */
+		sme_debug("LFR3: roam invoke from user-space fail, dis cur AP");
+		csr_roam_disconnect(mac_ctx, session_id,
+				    eCSR_DISCONNECT_REASON_DEAUTH);
 		return status;
 	case SIR_ROAM_SYNCH_PROPAGATION:
 		break;

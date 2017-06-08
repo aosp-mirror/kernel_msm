@@ -48,7 +48,6 @@
 #include "lim_types.h"
 #include "wmi_unified_api.h"
 #include "cdp_txrx_cmn.h"
-#include "ol_defines.h"
 #include "dbglog.h"
 #include "wma_spectral.h"
 
@@ -1023,6 +1022,7 @@ typedef struct {
  * @plink_status_req: link status request
  * @psnr_req: snr request
  * @delay_before_vdev_stop: delay
+ * @override_li: dynamically user configured listen interval
  * @tx_streams: number of tx streams can be used by the vdev
  * @rx_streams: number of rx streams can be used by the vdev
  * @chain_mask: chain mask can be used by the vdev
@@ -1098,6 +1098,7 @@ struct wma_txrx_node {
 #endif
 	uint32_t alt_modulated_dtim;
 	bool alt_modulated_dtim_enabled;
+	uint32_t override_li;
 	uint32_t tx_streams;
 	uint32_t rx_streams;
 	uint32_t chain_mask;
@@ -1566,6 +1567,9 @@ typedef struct {
 	uint8_t powersave_mode;
 	bool ptrn_match_enable_all_vdev;
 	void *pGetRssiReq;
+	bool get_one_peer_info;
+	bool get_sta_peer_info;
+	struct qdf_mac_addr peer_macaddr;
 	t_thermal_mgmt thermal_mgmt_info;
 	bool roam_offload_enabled;
 	/* Here ol_ini_info is used to store ini
@@ -1686,6 +1690,7 @@ typedef struct {
 	bool rcpi_enabled;
 	tSirLLStatsResults *link_stats_results;
 	bool fw_mem_dump_enabled;
+	bool tx_bfee_8ss_enabled;
 	tSirAddonPsReq ps_setting;
 	struct peer_debug_info *peer_dbg;
 	bool auto_power_save_enabled;

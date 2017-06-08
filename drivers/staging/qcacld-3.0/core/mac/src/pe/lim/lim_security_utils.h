@@ -39,7 +39,7 @@
 #define __LIM_SECURITY_UTILS_H
 #include "sir_mac_prot_def.h"      /* for tSirMacAuthFrameBody */
 
-#define LIM_ENCR_AUTH_BODY_LEN  (sizeof(tSirMacAuthFrameBody) -	\
+#define LIM_ENCR_AUTH_BODY_LEN  (sizeof(tSirMacAuthFrameBody) - \
 				 FILS_AUTH_IE_LEN + \
 				 SIR_MAC_WEP_IV_LENGTH + \
 				 SIR_MAC_WEP_ICV_LENGTH)
