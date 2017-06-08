@@ -6,6 +6,7 @@ menu "KUnit support"
 
 config TEST
 	bool "Enable support for unit tests (KUnit)"
+	select HAS_IOMEM
 	help
 	  Enables support for kernel unit tests (KUnit), a lightweight unit
 	  testing and mocking framework for the Linux kernel. These tests are

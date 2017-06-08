@@ -20,7 +20,13 @@ config MMU
 	default y
 
 config NO_IOMEM
-	def_bool y
+	bool
+	default y if !TEST
+
+config HAS_IOMEM
+	bool "Turns on fake IOMEM support for KUnit"
+	depends on TEST
+	select MOCK_IOMEM
 
 config ISA
 	bool
