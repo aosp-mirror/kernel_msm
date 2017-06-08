@@ -35,3 +35,7 @@
 &soc {
 	/delete-node/ qcom,qbt1000;
 };
+
+&pcie0 {
+	/delete-property/ qcom,l1ss-supported;
+};
