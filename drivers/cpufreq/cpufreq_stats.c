@@ -825,6 +825,27 @@ static void cpufreq_stats_create_table(unsigned int cpu)
 	cpufreq_cpu_put(policy);
 }
 
+void cpufreq_task_stats_remove_uids(uid_t uid_start, uid_t uid_end)
+{
+	struct uid_entry *uid_entry;
+	struct hlist_node *tmp;
+
+	rt_mutex_lock(&uid_lock);
+
+	for (; uid_start <= uid_end; uid_start++) {
+		hash_for_each_possible_safe(uid_hash_table, uid_entry, tmp,
+			hash, uid_start) {
+			if (uid_start == uid_entry->uid) {
+				hash_del(&uid_entry->hash);
+				kfree(uid_entry->dead_time_in_state);
+				kfree(uid_entry);
+			}
+		}
+	}
+
+	rt_mutex_unlock(&uid_lock);
+}
+
 static int cpufreq_stat_notifier_policy(struct notifier_block *nb,
 		unsigned long val, void *data)
 {
