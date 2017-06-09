@@ -24,7 +24,7 @@
 #include <linux/pm_wakeup.h>
 #include <linux/spinlock.h>
 #include <linux/delay.h>
-
+#include <linux/wakelock.h>
 
 struct smb23x_wakeup_source {
 	struct wakeup_source source;
@@ -122,6 +122,8 @@ struct smb23x_chip {
 	struct timer_list		timer_print_register;
 	struct delayed_work		delaywork_print_register;
 	struct delayed_work		delaywork_boot_up;
+	struct delayed_work		delaywork_charging_disable;
+	struct wake_lock 		reginit_wlock;
 };
 
 static struct smb23x_chip *g_chip;
@@ -2149,14 +2151,14 @@ static int smb23x_get_prop_batt_temp(struct smb23x_chip *chip)
 		if (chip->cfg_cool_temp_comp_mv != -EINVAL || chip->cfg_cool_temp_comp_ma != -EINVAL)
 			check_charger_thermal_state(chip, chip->last_temp);
 
-		//Disable charging when battery full and charge current less than 15 mA
+		//Disable charging when battery full and charge current less than 20 mA
 		rc = smb23x_read(chip, CMD_REG_0, &enable);
 		if (rc == 0) {
 			enable &= CHARGE_EN_BIT;
 
 			charge_current = smb23x_get_prop_batt_current(chip);
 			if (enable && (smb23x_get_prop_batt_capacity(chip) == 100)) {
-				if ((charge_current > 0) && (charge_current < 15000)) {
+				if ((charge_current > 0) && (charge_current < 20000)) {
 					if (charge_disable_count < 5) {
 						charge_disable_count++;
 					} else {
@@ -2214,41 +2216,130 @@ static int smb23x_system_temp_level_set(struct smb23x_chip *chip, int lvl_sel)
 static int smb23x_print_register(struct smb23x_chip *chip)
 {
 	int rc;
-	u8 reg, addr = 0;
+	u8 reg1, reg2, reg3, reg4;
 
-	pr_err("Enter !\n");
-	for(addr = CFG_REG_0 ; addr <= I2C_COMM_CFG_REG ; addr++) {
-		reg = 0;
-		rc = smb23x_read(chip, addr, &reg);
-		if (rc) {
-			pr_err("Read fail. addr=0x%02x\n", addr);
+	reg1 = reg2 = reg3 = reg4 = 0;
+	rc = smb23x_read(chip, CFG_REG_0, &reg1);
+	if (rc) {
+			pr_err("Read fail. addr=0x%02x\n", CFG_REG_0);
 			return rc;
-		} else {
-			pr_err("Reg 0x%02x=0x%02x\n", addr, reg);
-		}
 	}
+	rc = smb23x_read(chip, CFG_REG_1, &reg2);
+	if (rc) {
+			pr_err("Read fail. addr=0x%02x\n", CFG_REG_1);
+			return rc;
+	}
+	rc = smb23x_read(chip, CFG_REG_2, &reg3);
+	if (rc) {
+			pr_err("Read fail. addr=0x%02x\n", CFG_REG_2);
+			return rc;
+	}
+	rc = smb23x_read(chip, CFG_REG_3, &reg4);
+	if (rc) {
+			pr_err("Read fail. addr=0x%02x\n", CFG_REG_3);
+			return rc;
+	}
+	pr_info("0x00=0x%02x, 0x%02x, 0x%02x, 0x%02x\n", reg1, reg2, reg3, reg4);
 
-	for(addr = CMD_REG_0 ; addr <= CMD_REG_1 ; addr++) {
-		reg = 0;
-		rc = smb23x_read(chip, addr, &reg);
-		if (rc) {
-			pr_err("Read fail. addr=0x%02x\n", addr);
+	reg1 = reg2 = reg3 = reg4 = 0;
+	rc = smb23x_read(chip, CFG_REG_4, &reg1);
+	if (rc) {
+			pr_err("Read fail. addr=0x%02x\n", CFG_REG_4);
 			return rc;
-		} else {
-			pr_err("Reg 0x%02x=0x%02x\n", addr, reg);
-		}
 	}
+	rc = smb23x_read(chip, CFG_REG_5, &reg2);
+	if (rc) {
+			pr_err("Read fail. addr=0x%02x\n", CFG_REG_5);
+			return rc;
+	}
+	rc = smb23x_read(chip, CFG_REG_6, &reg3);
+	if (rc) {
+			pr_err("Read fail. addr=0x%02x\n", CFG_REG_6);
+			return rc;
+	}
+	rc = smb23x_read(chip, CFG_REG_7, &reg4);
+	if (rc) {
+			pr_err("Read fail. addr=0x%02x\n", CFG_REG_7);
+			return rc;
+	}
+	pr_info("0x04=0x%02x, 0x%02x, 0x%02x, 0x%02x\n", reg1, reg2, reg3, reg4);
 
-	for(addr = IRQ_A_STATUS_REG ; addr <= AICL_STATUS_REG ; addr++) {
-		reg = 0;
-		rc = smb23x_read(chip, addr, &reg);
-		if (rc) {
-			pr_err("Read fail. addr=0x%02x\n", addr);
+	reg1 = reg2 = reg3 = 0;
+	rc = smb23x_read(chip, CFG_REG_8, &reg1);
+	if (rc) {
+			pr_err("Read fail. addr=0x%02x\n", CFG_REG_8);
 			return rc;
-		} else {
-			pr_err("Reg 0x%02x=0x%02x\n", addr, reg);
-		}
 	}
+	rc = smb23x_read(chip, IRQ_CFG_REG_9, &reg2);
+	if (rc) {
+			pr_err("Read fail. addr=0x%02x\n", IRQ_CFG_REG_9);
+			return rc;
+	}
+	rc = smb23x_read(chip, I2C_COMM_CFG_REG, &reg3);
+	if (rc) {
+			pr_err("Read fail. addr=0x%02x\n", I2C_COMM_CFG_REG);
+			return rc;
+	}
+	pr_info("0x08=0x%02x, 0x%02x, 0x%02x\n", reg1, reg2, reg3);
+
+	reg1 = reg2 = 0;
+	rc = smb23x_read(chip, CMD_REG_0, &reg1);
+	if (rc) {
+			pr_err("Read fail. addr=0x%02x\n", CMD_REG_0);
+			return rc;
+	}
+	rc = smb23x_read(chip, CMD_REG_1, &reg2);
+	if (rc) {
+			pr_err("Read fail. addr=0x%02x\n", CMD_REG_1);
+			return rc;
+	}
+	pr_info("0x30=0x%02x, 0x%02x\n", reg1, reg2);
+
+	reg1 = reg2 = reg3 = reg4 = 0;
+	rc = smb23x_read(chip, IRQ_A_STATUS_REG, &reg1);
+	if (rc) {
+			pr_err("Read fail. addr=0x%02x\n", IRQ_A_STATUS_REG);
+			return rc;
+	}
+	rc = smb23x_read(chip, IRQ_B_STATUS_REG, &reg2);
+	if (rc) {
+			pr_err("Read fail. addr=0x%02x\n", IRQ_B_STATUS_REG);
+			return rc;
+	}
+	rc = smb23x_read(chip, IRQ_C_STATUS_REG, &reg3);
+	if (rc) {
+			pr_err("Read fail. addr=0x%02x\n", IRQ_C_STATUS_REG);
+			return rc;
+	}
+	rc = smb23x_read(chip, IRQ_D_STATUS_REG, &reg4);
+	if (rc) {
+			pr_err("Read fail. addr=0x%02x\n", IRQ_D_STATUS_REG);
+			return rc;
+	}
+	pr_info("0x38=0x%02x, 0x%02x, 0x%02x, 0x%02x\n", reg1, reg2, reg3, reg4);
+
+	reg1 = reg2 = reg3 = reg4 = 0;
+	rc = smb23x_read(chip, CHG_STATUS_A_REG, &reg1);
+	if (rc) {
+			pr_err("Read fail. addr=0x%02x\n", CHG_STATUS_A_REG);
+			return rc;
+	}
+	rc = smb23x_read(chip, CHG_STATUS_B_REG, &reg2);
+	if (rc) {
+			pr_err("Read fail. addr=0x%02x\n", CHG_STATUS_B_REG);
+			return rc;
+	}
+	rc = smb23x_read(chip, CHG_STATUS_C_REG, &reg3);
+	if (rc) {
+			pr_err("Read fail. addr=0x%02x\n", CHG_STATUS_C_REG);
+			return rc;
+	}
+	rc = smb23x_read(chip, AICL_STATUS_REG, &reg4);
+	if (rc) {
+			pr_err("Read fail. addr=0x%02x\n", AICL_STATUS_REG);
+			return rc;
+	}
+	pr_info("0x3C=0x%02x, 0x%02x, 0x%02x, 0x%02x\n", reg1, reg2, reg3, reg4);
 
 	return 0;
 }
@@ -2274,6 +2365,11 @@ void smb23x_delaywork_init_register(struct work_struct *work)
 		g_chip->timer_print_register.expires = jiffies + 30*HZ;
 		add_timer(&g_chip->timer_print_register);
 		g_chip->reg_print_count = 0;
+	}
+
+	if (wake_lock_active(&g_chip->reginit_wlock)) {
+		wake_unlock(&g_chip->reginit_wlock);
+		pr_info("reginit_wake_unlock \n");
 	}
 }
 
@@ -2312,6 +2408,19 @@ void smb23x_delaywork_boot_up(struct work_struct *work)
 		g_chip->timer_print_register.expires = jiffies + 30*HZ;
 		add_timer(&g_chip->timer_print_register);
 		g_chip->reg_print_count = 0;
+	}
+}
+
+void smb23x_delaywork_charging_disable(struct work_struct *work)
+{
+	g_chip->charger_plugin = 1;
+	smb23x_charging_enable(g_chip, 0);
+	g_chip->charger_plugin = 0;
+	pr_err("charging disable\n");
+
+	if (wake_lock_active(&g_chip->reginit_wlock)) {
+		wake_unlock(&g_chip->reginit_wlock);
+		pr_info("reginit_wake_unlock \n");
 	}
 }
 
@@ -2470,11 +2579,16 @@ static int smb23x_battery_set_property(struct power_supply *psy,
 		chip->charger_plugin = val->intval;
 		del_timer(&chip->timer_init_register);
 		del_timer(&chip->timer_print_register);
+		if (!wake_lock_active(&chip->reginit_wlock)) {
+			wake_lock(&chip->reginit_wlock);
+			pr_info("reginit_wlock \n");
+		}
 		if (chip->charger_plugin) {
 			chip->index_soft_temp_comp_mv = NORMAL;
 			chip->timer_init_register.expires = jiffies + HZ;
 			add_timer(&chip->timer_init_register); 
-		}
+		} else
+			schedule_delayed_work(&chip->delaywork_charging_disable, 10);
 		pr_info("Charger plug, state=%d\n", chip->charger_plugin);
 		power_supply_changed(chip->usb_psy);
 		break;
@@ -2843,6 +2957,7 @@ static int smb23x_probe(struct i2c_client *client,
 	chip->fake_battery_soc = -EINVAL;
 	i2c_set_clientdata(client, chip);
 
+	wake_lock_init(&chip->reginit_wlock, WAKE_LOCK_SUSPEND, "smb23x");
 	mutex_init(&chip->read_write_lock);
 #ifdef QTI_SMB231
 	mutex_init(&chip->irq_complete);
@@ -2885,6 +3000,9 @@ static int smb23x_probe(struct i2c_client *client,
 	//Init a 120 seconds timer
 	INIT_DEFERRABLE_WORK(&chip->delaywork_boot_up, smb23x_delaywork_boot_up);
 	schedule_delayed_work(&chip->delaywork_boot_up, 12000);
+
+	//Init a delaywork for charging disable
+	INIT_DEFERRABLE_WORK(&chip->delaywork_charging_disable, smb23x_delaywork_charging_disable);
 
 #ifdef QTI_SMB231
 	/*
@@ -3072,6 +3190,7 @@ static int smb23x_remove(struct i2c_client *client)
 	mutex_destroy(&chip->read_write_lock);
 	mutex_destroy(&chip->chg_disable_lock);
 #endif
+	wake_lock_destroy(&chip->reginit_wlock);
 	return 0;
 }
 
