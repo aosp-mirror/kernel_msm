@@ -4560,8 +4560,6 @@ static void port_overheat_work(struct work_struct *work)
 	bool rerun_work, attached;
 	union power_supply_propval pval = {0, };
 
-	smblib_dbg(chg, PR_MISC, "Port overheat work running...\n");
-
 	if (!chg->port_overheat_mitigation_running) {
 		chg->port_overheat_mitigation_running = true;
 		wake_lock(&chg->port_overheat_mitigation_work_wakelock);
@@ -4574,6 +4572,12 @@ static void port_overheat_work(struct work_struct *work)
 		goto rerun;
 	}
 	temp = pval.intval;
+
+	if (!chg->port_overheat)
+		smblib_dbg(chg, PR_MISC,
+			   "Port overheat work running, temp=%d\n", temp);
+	else
+		smblib_err(chg, "USB port overheat detected, temp=%d\n", temp);
 
 	if (chg->port_overheat &&
 	    temp < chg->port_overheat_mitigation_end_temp) {
