@@ -936,10 +936,14 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 
 			z = data[4 + EventNum * FTS_EVENT_SIZE];
 
-			bw = data[6 + EventNum * FTS_EVENT_SIZE];
-			bh = data[7 + EventNum * FTS_EVENT_SIZE];
+			bw = (data[6 + EventNum * FTS_EVENT_SIZE] << 2)
+				| ((data[7 + EventNum * FTS_EVENT_SIZE] >> 6)
+						& 0x03);
 
-			orient = data[5 + EventNum * FTS_EVENT_SIZE];
+			bh = (data[7 + EventNum * FTS_EVENT_SIZE] & 0x3F)
+				* bw / 63;
+
+			orient = (s8)data[5 + EventNum * FTS_EVENT_SIZE];
 
 			if (z == 255) {
 				tsp_debug_info(&info->client->dev,
@@ -963,26 +967,19 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 
 			input_report_key(info->input_dev, BTN_TOUCH, 1);
 			input_report_key(info->input_dev,
-					 BTN_TOOL_FINGER, 1);
+					BTN_TOOL_FINGER, 1);
 			input_report_abs(info->input_dev,
-					 ABS_MT_POSITION_X, x);
+					ABS_MT_POSITION_X, x);
 			input_report_abs(info->input_dev,
-					 ABS_MT_POSITION_Y, y);
-
+					ABS_MT_POSITION_Y, y);
 			input_report_abs(info->input_dev,
-					 ABS_MT_TOUCH_MAJOR, max(bw,
-								 bh));
-
+					ABS_MT_TOUCH_MAJOR, bw);
 			input_report_abs(info->input_dev,
-					 ABS_MT_TOUCH_MINOR, min(bw,
-								 bh));
-
+					ABS_MT_TOUCH_MINOR, bh);
 			input_report_abs(info->input_dev,
-					 ABS_MT_PRESSURE, z);
-
+					ABS_MT_PRESSURE, z);
 			input_report_abs(info->input_dev,
-					 ABS_MT_ORIENTATION, orient);
-
+					ABS_MT_ORIENTATION, orient);
 			info->finger[TouchID].lx = x;
 			info->finger[TouchID].ly = y;
 
@@ -994,14 +991,15 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 
 			if (info->palm_pressed) {
 				tsp_debug_info(&info->client->dev,
-						"%s: Palm Released\n", __func__);
+						"%s: Palm Released\n",
+						__func__);
 				info->palm_pressed = false;
 				return 0;
 			}
 
 			if (info->touch_count <= 0) {
 				tsp_debug_info(&info->client->dev,
-							"%s: count 0\n", __func__);
+						"%s: count 0\n", __func__);
 				fts_release_all_finger(info);
 				break;
 			}
@@ -1028,19 +1026,26 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 
 				fts_write_reg(info, &regAdd[0], 4);
 
-				tsp_debug_dbg(&info->client->dev, "[FTS] Received the Raw Data Ready Event\n");
+				tsp_debug_dbg(&info->client->dev,
+						"[FTS] Received the Raw Data Ready Event\n");
 			} else if (status == STATUS_EVENT_FORCE_CAL_MUTUAL) {
-				tsp_debug_dbg(&info->client->dev, "[FTS] Received Force Calibration Mutual only Event\n");
+				tsp_debug_dbg(&info->client->dev,
+						"[FTS] Received Force Calibration Mutual only Event\n");
 			} else if (status == STATUS_EVENT_FORCE_CAL_SELF) {
-				tsp_debug_dbg(&info->client->dev, "[FTS] Received Force Calibration Self only Event\n");
+				tsp_debug_dbg(&info->client->dev,
+						"[FTS] Received Force Calibration Self only Event\n");
 			} else if (status == STATUS_EVENT_WATERMODE_ON) {
-				tsp_debug_dbg(&info->client->dev, "[FTS] Received Water Mode On Event\n");
+				tsp_debug_dbg(&info->client->dev,
+						"[FTS] Received Water Mode On Event\n");
 			} else if (status == STATUS_EVENT_WATERMODE_OFF) {
-				tsp_debug_dbg(&info->client->dev, "[FTS] Received Water Mode Off Event\n");
+				tsp_debug_dbg(&info->client->dev,
+						"[FTS] Received Water Mode Off Event\n");
 			} else if (status == STATUS_EVENT_MUTUAL_CAL_FRAME_CHECK) {
-				tsp_debug_dbg(&info->client->dev, "[FTS] Received Mutual Calib Frame Check Event\n");
+				tsp_debug_dbg(&info->client->dev,
+						"[FTS] Received Mutual Calib Frame Check Event\n");
 			} else if (status == STATUS_EVENT_SELF_CAL_FRAME_CHECK) {
-				tsp_debug_dbg(&info->client->dev, "[FTS] Received Self Calib Frame Check Event\n");
+				tsp_debug_dbg(&info->client->dev,
+						"[FTS] Received Self Calib Frame Check Event\n");
 			} else {
 				fts_debug_msg_event_handler(info,
 						  &data[EventNum *
@@ -1680,13 +1685,13 @@ static int fts_probe(struct i2c_client *client, const struct i2c_device_id *idp)
 	}
 
 	input_set_abs_params(info->input_dev, ABS_MT_TOUCH_MAJOR,
-				 0, 255, 0, 0);
+				 0, 1024, 0, 0);
 	input_set_abs_params(info->input_dev, ABS_MT_TOUCH_MINOR,
-				 0, 255, 0, 0);
+				 0, 1024, 0, 0);
 	input_set_abs_params(info->input_dev, ABS_MT_DISTANCE,
 				 0, 255, 0, 0);
 	input_set_abs_params(info->input_dev, ABS_MT_ORIENTATION,
-				 0, 255, 0, 0);
+				 -128, 127, 0, 0);
 
 	input_set_drvdata(info->input_dev, info);
 	i2c_set_clientdata(client, info);
