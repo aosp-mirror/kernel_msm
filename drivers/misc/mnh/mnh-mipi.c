@@ -35,6 +35,21 @@
 /* ASR boost voltage */
 #define ASR_VBOOST 1000000
 
+#define TOP_IN(reg)             HW_IN(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, reg)
+#define TOP_MASK(reg, fld)      HWIO_MIPI_TOP_##reg##_##fld##_FLDMASK
+#define TOP_OUTf(reg, fld, val) \
+	HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, reg, fld, val)
+#define TOP_OUTf_LOCAL(reg, fld, val, curr) \
+			((curr & ~HWIO_MIPI_TOP_##reg##_##fld##_FLDMASK) | \
+			((val << HWIO_MIPI_TOP_##reg##_##fld##_FLDSHFT) & \
+			HWIO_MIPI_TOP_##reg##_##fld##_FLDMASK))
+
+#define TX_IN(reg)		HW_IN(baddr,   MIPI_TX, reg)
+#define TX_MASK(reg, fld)	HWIO_MIPI_TX_##reg##_##fld##_FLDMASK
+
+#define RX_IN(reg)		HW_IN(baddr,   MIPI_RX, reg)
+#define RX_MASK(reg, fld)	HWIO_MIPI_RX_##reg##_##fld##_FLDMASK
+
 struct mipi_rate_config {
 	uint32_t rate;
 	uint32_t freq_range_code;
@@ -1126,3 +1141,105 @@ void mnh_mipi_set_debug(int val)
 	mipi_debug = val;
 }
 EXPORT_SYMBOL(mnh_mipi_set_debug);
+
+int mnh_mipi_get_top_interrupts(struct device *dev,
+				struct mipi_device_irq_st *int_status)
+{
+	u32 status;
+
+	switch (int_status->dev) {
+	case 0:
+		status = TOP_IN(TX0_BYPINT);
+		if (status & TOP_MASK(TX0_BYPINT, TX0_BYP_OF)) {
+			TOP_OUTf(TX0_BYPINT, TX0_BYP_OF, 1);
+			dev_info(dev, "TX0_BYPINT BYP_OF occurred\n");
+			int_status->fifo_overflow = 1;
+		}
+		break;
+	case 1:
+		status = TOP_IN(TX1_BYPINT);
+		if (status & TOP_MASK(TX1_BYPINT, TX1_BYP_OF)) {
+			TOP_OUTf(TX1_BYPINT, TX1_BYP_OF, 1);
+			dev_info(dev, "TX1_BYPINT BYP_OF occurred\n");
+			int_status->fifo_overflow = 1;
+		}
+		break;
+	default:
+		break;
+	}
+	return status;
+}
+
+int mnh_mipi_get_device_interrupts(struct device *dev,
+			struct mipi_device_irq_st *int_status)
+{
+	uint32_t baddr = HWIO_MIPI_TX_BASE_ADDR(int_status->dev);
+
+	int_status->main = TX_IN(INT_ST_MAIN);
+	dev_info(dev, "MIPI device controller %d interrupt main: %x\n",
+		 int_status->dev, int_status->main);
+
+	if (int_status->main & TX_MASK(INT_ST_MAIN, INT_ST_VPG)) {
+		int_status->vpg = TX_IN(INT_ST_VPG);
+		dev_info(dev, "CSI INT_ST_VPG: %x\n", int_status->vpg);
+	}
+	if (int_status->main & TX_MASK(INT_ST_MAIN, INT_ST_IDI)) {
+		int_status->idi = TX_IN(INT_ST_IDI);
+		dev_info(dev, "CSI INT_ST_IDI: %x\n", int_status->idi);
+	}
+	if (int_status->main & TX_MASK(INT_ST_MAIN, INT_ST_PHY)) {
+		int_status->phy = TX_IN(INT_ST_PHY);
+		dev_info(dev, "CSI INT_ST_PHY: %x\n", int_status->phy);
+	}
+	mnh_mipi_get_top_interrupts(dev, int_status);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(mnh_mipi_get_device_interrupts);
+
+int mnh_mipi_get_host_interrupts(struct device *dev,
+				 struct mipi_host_irq_st *int_status)
+{
+
+	uint32_t baddr = HWIO_MIPI_RX_BASE_ADDR(int_status->dev);
+
+	int_status->main = RX_IN(INT_ST_MAIN);
+	dev_info(dev, "MIPI host controller %d interrupt main: %x\n",
+		 int_status->dev, int_status->main);
+
+	if (int_status->main & RX_MASK(INT_ST_MAIN, STATUS_INT_PHY_FATAL)) {
+		int_status->phy_fatal = RX_IN(INT_ST_PHY_FATAL);
+		dev_info(dev, "CSI INT PHY FATAL: %x\n",
+				int_status->phy_fatal);
+	}
+
+	if (int_status->main & RX_MASK(INT_ST_MAIN, STATUS_INT_PKT_FATAL)) {
+		int_status->pkt_fatal = RX_IN(INT_ST_PKT_FATAL);
+		dev_info(dev, "CSI INT PKT FATAL: %x\n",
+				int_status->pkt_fatal);
+	}
+
+	if (int_status->main & RX_MASK(INT_ST_MAIN, STATUS_INT_FRAME_FATAL)) {
+		int_status->frame_fatal = RX_IN(INT_ST_FRAME_FATAL);
+		dev_info(dev, "CSI INT FRAME FATAL: %x\n",
+				int_status->frame_fatal);
+	}
+
+	if (int_status->main & RX_MASK(INT_ST_MAIN, STATUS_INT_PHY)) {
+		int_status->phy = RX_IN(INT_ST_PHY);
+		dev_info(dev, "CSI INT PHY: %x\n", int_status->phy);
+	}
+
+	if (int_status->main & RX_MASK(INT_ST_MAIN, STATUS_INT_PKT)) {
+		int_status->pkt = RX_IN(INT_ST_PKT);
+		dev_info(dev, "CSI INT PKT: %x\n", int_status->pkt);
+	}
+
+	if (int_status->main & RX_MASK(INT_ST_MAIN, STATUS_INT_LINE)) {
+		int_status->line = RX_IN(INT_ST_LINE);
+		dev_info(dev, "CSI INT LINE: %x\n", int_status->line);
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(mnh_mipi_get_host_interrupts);

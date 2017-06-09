@@ -961,6 +961,38 @@ static ssize_t power_mode_store(struct device *dev,
 static DEVICE_ATTR_RW(power_mode);
 
 
+
+static ssize_t mipi_int_show(struct device *dev,
+			     struct device_attribute *attr,
+			     char *buf)
+{
+	int i, int_event = 0;
+	struct mipi_device_irq_st dev_ints;
+	struct mipi_host_irq_st host_ints;
+
+	memset((void *)&dev_ints, 0, sizeof(dev_ints));
+	memset((void *)&host_ints, 0, sizeof(host_ints));
+
+	dev_info(mnh_sm_dev->dev, "%s: Querying MIPI interrupts\n", __func__);
+	/* Read device & top interrupts */
+	for (i = 0; i <= 1; i++) {
+		dev_ints.dev = i;
+		mnh_mipi_get_device_interrupts(mnh_sm_dev->dev, &dev_ints);
+		if (dev_ints.main || dev_ints.fifo_overflow)
+			int_event = 1;
+	}
+	/* Read host interrupts */
+	for (i = 0; i <= 2; i++) {
+		host_ints.dev = i;
+		mnh_mipi_get_host_interrupts(mnh_sm_dev->dev, &host_ints);
+		if (host_ints.main)
+			int_event = 1;
+	}
+	return scnprintf(buf, MAX_STR_COPY, "%d\n", int_event);
+}
+
+static DEVICE_ATTR_RO(mipi_int);
+
 static struct attribute *mnh_sm_attrs[] = {
 	&dev_attr_stage_fw.attr,
 	&dev_attr_poweron.attr,
@@ -977,6 +1009,7 @@ static struct attribute *mnh_sm_attrs[] = {
 	&dev_attr_boot_args.attr,
 	&dev_attr_enable_uart.attr,
 	&dev_attr_power_mode.attr,
+	&dev_attr_mipi_int.attr,
 	NULL
 };
 ATTRIBUTE_GROUPS(mnh_sm);
