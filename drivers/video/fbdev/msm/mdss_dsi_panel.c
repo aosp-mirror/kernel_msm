@@ -3104,6 +3104,9 @@ static int mdss_panel_parse_dt(struct device_node *np,
 		goto error;
 	}
 
+	ctrl_pdata->burst_mode_enabled = !of_property_read_bool(np,
+			"qcom,mdss-dsi-disable-burstmode");
+
 	mdss_dsi_parse_panel_horizintal_line_idle(np, ctrl_pdata);
 
 	mdss_dsi_parse_dfps_config(np, ctrl_pdata);

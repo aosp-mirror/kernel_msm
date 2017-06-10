@@ -1299,12 +1299,12 @@ void mdss_dsi_set_burst_mode(struct mdss_dsi_ctrl_pdata *ctrl)
 	 * so disable burst mode if idle has been configured for
 	 * the panel, otherwise enable the feature.
 	 */
-	if (ctrl->idle_enabled)
+	if (ctrl->idle_enabled) {
 		data &= ~BIT(16); /* disable burst mode */
-	else
+		ctrl->burst_mode_enabled = false;
+	} else if (ctrl->burst_mode_enabled) {
 		data |= BIT(16); /* enable burst mode */
-
-	ctrl->burst_mode_enabled = !ctrl->idle_enabled;
+	}
 
 	MIPI_OUTP((ctrl->ctrl_base + 0x1b8), data);
 	pr_debug("%s: burst=%d\n", __func__, ctrl->burst_mode_enabled);
