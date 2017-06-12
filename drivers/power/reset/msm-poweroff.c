@@ -69,7 +69,7 @@ static void scm_disable_sdi(void);
 #endif
 
 static int in_panic;
-static int download_mode = 1;
+static int download_mode = 0;
 static struct kobject dload_kobj;
 static void *dload_mode_addr, *dload_type_addr;
 static bool dload_mode_enabled;
@@ -279,6 +279,12 @@ static void msm_restart_prepare(const char *cmd)
 
 	set_dload_mode(download_mode &&
 			(in_panic || restart_mode == RESTART_DLOAD));
+
+	// Ramoops crash logs on panic need warm reset to preserve memory
+	if (in_panic) {
+		need_warm_reset = true;
+	}
+
 #endif
 
 	if (qpnp_pon_check_hard_reset_stored()) {
