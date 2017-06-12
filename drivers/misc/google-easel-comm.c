@@ -1343,10 +1343,28 @@ static int easelcomm_wait_message(
 	struct easelcomm_kmsg_desc __user *msgp)
 {
 	struct easelcomm_message_metadata *msg_metadata = NULL;
+	struct easelcomm_kmsg_desc msg_temp;
 	int ret = 0;
+	bool has_timeout = false;
+	long remaining = 0;
 
 	dev_dbg(easelcomm_miscdev.this_device, "WAITMSG svc %u\n",
 		service->service_id);
+
+	if (copy_from_user(&msg_temp, (void __user *) msgp,
+				sizeof(struct easelcomm_kmsg_desc)))
+		return -EFAULT;
+
+	dev_dbg(easelcomm_miscdev.this_device,
+		"%s: timeout_ms=%d\n", __func__, msg_temp.wait.timeout_ms);
+
+	if (msg_temp.wait.timeout_ms >= 0) {
+		has_timeout = true;
+		remaining = (long)msecs_to_jiffies(
+				(unsigned int)msg_temp.wait.timeout_ms);
+		dev_dbg(easelcomm_miscdev.this_device, "%s: remaining=%ld\n",
+			__func__, remaining);
+	}
 
 	while (!msg_metadata) {
 		spin_lock(&service->lock);
@@ -1368,8 +1386,18 @@ static int easelcomm_wait_message(
 		if (msg_metadata)
 			break;
 		spin_unlock(&service->lock);
-		ret = wait_for_completion_interruptible(
-			&service->receivemsg_queue_new);
+		if (has_timeout) {
+			remaining = wait_for_completion_interruptible_timeout(
+					&service->receivemsg_queue_new,
+					(unsigned long)remaining);
+			if (remaining == 0)
+				ret = -ETIMEDOUT;
+			if (remaining < 0)
+				ret = remaining;
+		} else {
+			ret = wait_for_completion_interruptible(
+				&service->receivemsg_queue_new);
+		}
 		if (ret)
 			return ret;
 	}
@@ -1404,10 +1432,23 @@ static int easelcomm_wait_reply(
 	struct easelcomm_message_metadata *orig_msg_metadata;
 	struct easelcomm_message_metadata *msg_metadata = NULL;
 	int ret;
+	bool has_timeout = false;
+	long remaining = 0;
 
 	if (copy_from_user(&orig_msg_desc, (void __user *) pmsg_desc,
 				sizeof(struct easelcomm_kmsg_desc)))
 		return -EFAULT;
+
+	dev_dbg(easelcomm_miscdev.this_device, "%s: timeout_ms=%d\n",
+		__func__, orig_msg_desc.wait.timeout_ms);
+
+	if (orig_msg_desc.wait.timeout_ms >= 0) {
+		has_timeout = true;
+		remaining = (long)msecs_to_jiffies(
+				(unsigned int)orig_msg_desc.wait.timeout_ms);
+		dev_dbg(easelcomm_miscdev.this_device, "%s: remaining=%ld\n",
+			__func__, remaining);
+	}
 
 	/* Grab a reference to the original message. */
 	orig_msg_metadata = easelcomm_find_local_message(
@@ -1423,8 +1464,18 @@ static int easelcomm_wait_reply(
 		"WAITREPLY msg %u:l%llu\n",
 		service->service_id, orig_msg_desc.message_id);
 
-	ret = wait_for_completion_interruptible(
-		&orig_msg_metadata->reply_received);
+	if (has_timeout) {
+		remaining = wait_for_completion_interruptible_timeout(
+				&orig_msg_metadata->reply_received,
+				(unsigned long)remaining);
+		if (remaining == 0)
+			ret = -ETIMEDOUT;
+		if (remaining < 0)
+			ret = remaining;
+	} else {
+		ret = wait_for_completion_interruptible(
+			&orig_msg_metadata->reply_received);
+	}
 	if (ret)
 		goto out;
 	if (orig_msg_metadata->flushing) {

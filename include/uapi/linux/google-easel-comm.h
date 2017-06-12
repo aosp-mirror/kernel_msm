@@ -21,7 +21,11 @@
 #define EASELCOMM_SERVICE_COUNT 64
 
 /* Easel message identifier.  Compatible with libeasel defines. */
-typedef uint64_t easelcomm_msgid_t;
+typedef __u64 easelcomm_msgid_t;
+
+struct easelcomm_wait {
+	__s32 timeout_ms;           /* timeout in ms; -1 means indefinite */
+};
 
 /*
  * Userspace/kernel interface message descriptor.  libeasel converts
@@ -33,10 +37,11 @@ struct easelcomm_kmsg_desc {
 	/* 64-bit IDs go first for 32/64-bit struct packing conformity */
 	easelcomm_msgid_t message_id;  /* message ID */
 	easelcomm_msgid_t in_reply_to; /* msg ID replied to if non-zero */
-	uint32_t message_size;         /* size in bytes of the message data */
-	uint32_t dma_buf_size;         /* size of the DMA buffer transfer */
-	uint32_t need_reply;           /* non-zero if reply requested */
-	uint32_t replycode;            /* replycode if in_reply_to != 0 */
+	__u32 message_size;         /* size in bytes of the message data */
+	__u32 dma_buf_size;         /* size of the DMA buffer transfer */
+	__u32 need_reply;           /* non-zero if reply requested */
+	__u32 replycode;            /* replycode if in_reply_to != 0 */
+	struct easelcomm_wait wait;
 };
 
 enum easelcomm_dma_buffer_type {
@@ -57,7 +62,8 @@ struct easelcomm_kbuf_desc {
 	void __user *buf;              /* local buffer source or dest */
 	int dma_buf_fd;                /* fd of local dma_buf */
 	int buf_type;                  /* use enum easelcomm_dma_buffer_type */
-	uint32_t buf_size;             /* size of the local buffer */
+	__u32 buf_size;                /* size of the local buffer */
+	struct easelcomm_wait wait;
 };
 
 /*
@@ -150,7 +156,7 @@ struct easelcomm_kbuf_desc {
  * Returns error ESHUTDOWN if a SHUTDOWN ioctl is issued for the file
  * descriptor or the file descriptor has been closed.
  */
-#define EASELCOMM_IOC_WAITMSG       _IOR(EASELCOMM_IOC_MAGIC, 7, \
+#define EASELCOMM_IOC_WAITMSG       _IOWR(EASELCOMM_IOC_MAGIC, 7, \
 					struct easelcomm_kmsg_desc *)
 /*
  * Shut down the local easelcomm connection for the given file descriptor.
