@@ -360,7 +360,7 @@ int msm_ioctl_gem_submit(struct drm_device *dev, void *data,
 		void __user *userptr =
 			to_user_ptr(args->cmds + (i * sizeof(submit_cmd)));
 		struct msm_gem_object *msm_obj;
-		uint32_t iova;
+		uint64_t iova;
 		size_t size;
 
 		ret = copy_from_user(&submit_cmd, userptr, sizeof(submit_cmd));
