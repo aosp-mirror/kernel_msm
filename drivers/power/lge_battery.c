@@ -38,6 +38,8 @@
 #define SC_CURRENT			2400000
 #define LCD_ON_CURRENT			1000000
 #define WATCH_DELAY			30000
+#define DEMO_MODE_MAX			35
+#define DEMO_MODE_MIN			30
 
 enum debug_mask_print {
 	ASSERT = BIT(0),
@@ -53,6 +55,7 @@ enum bm_vote_reason {
 	BM_REASON_LCD,
 	BM_REASON_STEP,
 	BM_REASON_THERM,
+	BM_REASON_DEMO,
 	BM_REASON_MAX,
 };
 
@@ -83,9 +86,13 @@ struct battery_manager {
 	enum bm_therm_states		therm_stat;
 	int		chg_present;
 	int		chg_status;
+	int		batt_soc;
 	int		fb_state;
 	int		bm_vote_fcc_reason;
 	int		bm_vote_fcc_value;
+	int		demo_iusb;
+	int		demo_ibat;
+	int		demo_enable;
 	bool		bm_active;
 	bool		sc_status;
 };
@@ -110,9 +117,11 @@ static int bm_vote_fcc_table[BM_REASON_MAX] = {
 	-EINVAL,
 	-EINVAL,
 	-EINVAL,
+	-EINVAL,
 };
 
 static int debug_mask = ERROR | INTERRUPT | MISC | VERBOSE;
+static int demo_mode;
 
 static int bm_get_property(struct power_supply *psy,
 			   enum power_supply_property prop, int *value)
@@ -221,6 +230,61 @@ static int bm_vote_fcc_get(struct battery_manager *bm)
 	return bm_vote_fcc_table[bm->bm_vote_fcc_reason];
 }
 
+void bm_check_demo_mode(struct battery_manager *bm)
+{
+	int rc = 0;
+	int before_demo_iusb = bm->demo_iusb;
+	int before_demo_ibat = bm->demo_ibat;
+
+	if (!demo_mode || !bm->bm_active) {
+		bm->demo_iusb = 1;
+		bm->demo_ibat = 1;
+	} else {
+		if (bm->batt_soc > DEMO_MODE_MAX) {
+			bm->demo_iusb = 0;
+			bm->demo_ibat = 0;
+		} else if (bm->batt_soc >= DEMO_MODE_MAX) {
+			bm->demo_iusb = 1;
+			bm->demo_ibat = 0;
+		} else if (bm->batt_soc < DEMO_MODE_MIN) {
+			bm->demo_iusb = 1;
+			bm->demo_ibat = 1;
+		}
+	}
+
+	if (bm->demo_ibat != before_demo_ibat) {
+		if (!bm->demo_ibat)
+			rc = bm_vote_fcc(bm, BM_REASON_DEMO, 0);
+		else
+			rc = bm_vote_fcc(bm, BM_REASON_DEMO, -EINVAL);
+
+		if (rc < 0) {
+			bm->demo_iusb = before_demo_iusb;
+			bm->demo_ibat = before_demo_ibat;
+			pr_bm(ERROR, "Couldn't set ibat for demo rc=%d\n", rc);
+			return;
+		}
+	}
+
+	if (bm->demo_iusb != before_demo_iusb) {
+		if (!bm->demo_iusb)
+			rc = bm_set_property(bm->batt_psy,
+					     POWER_SUPPLY_PROP_INPUT_SUSPEND,
+					     1);
+		else
+			rc = bm_set_property(bm->batt_psy,
+					     POWER_SUPPLY_PROP_INPUT_SUSPEND,
+					     0);
+		if (rc < 0) {
+			bm->demo_iusb = before_demo_iusb;
+			pr_bm(ERROR, "Couldn't set iusb for demo rc=%d\n", rc);
+			return;
+		}
+	}
+
+	bm->demo_enable = demo_mode;
+}
+
 void bm_check_therm_charging(struct battery_manager *bm,
 			     int batt_temp, int batt_volt)
 {
@@ -262,7 +326,7 @@ void bm_check_step_charging(struct battery_manager *bm, int volt)
 {
 	int rc = 0;
 
-	if (!bm->chg_present) {
+	if (!bm->bm_active) {
 		if (bm->sc_status) {
 			rc = bm_vote_fcc(bm, BM_REASON_STEP, -EINVAL);
 			if (rc < 0) {
@@ -370,7 +434,7 @@ static void bm_batt_update_work(struct work_struct *work)
 	struct battery_manager *bm = container_of(work,
 						struct battery_manager,
 						bm_batt_update);
-	int rc = 0;
+	int rc, batt_soc = bm->batt_soc;
 
 	mutex_lock(&bm->work_lock);
 
@@ -380,6 +444,15 @@ static void bm_batt_update_work(struct work_struct *work)
 		goto error;
 
 	bm_check_status(bm);
+
+	rc = bm_get_property(bm->batt_psy,
+			     POWER_SUPPLY_PROP_CAPACITY, &bm->batt_soc);
+	if (rc < 0)
+		goto error;
+
+	if ((bm->demo_enable != demo_mode) ||
+	    (demo_mode && (bm->batt_soc != batt_soc)))
+		bm_check_demo_mode(bm);
 
 error:
 	mutex_unlock(&bm->work_lock);
@@ -401,9 +474,14 @@ static void bm_usb_update_work(struct work_struct *work)
 
 	bm_check_status(bm);
 
-	if (!bm->bm_active && (bm->bm_active != chg_active)) {
-		bm_check_step_charging(bm, 0);
-		bm_check_therm_charging(bm, 250, 0);
+	if (bm->bm_active != chg_active) {
+		if (!bm->bm_active) {
+			bm_check_step_charging(bm, 0);
+			bm_check_therm_charging(bm, 250, 0);
+		}
+
+		if (bm->demo_enable)
+			bm_check_demo_mode(bm);
 	}
 
 error:
@@ -548,10 +626,23 @@ static int bm_init(struct battery_manager *bm)
 	if (rc < 0)
 		batt_volt = 4000000;
 
+	rc = bm_get_property(bm->batt_psy,
+			     POWER_SUPPLY_PROP_CAPACITY, &bm->batt_soc);
+	if (rc < 0)
+		bm->batt_soc = 50;
+
 	rc = bm_get_property(bm->usb_psy,
 			     POWER_SUPPLY_PROP_PRESENT, &bm->chg_present);
 	if (rc < 0)
 		bm->chg_present = 0;
+
+	if (bm->chg_present) {
+		bm->demo_iusb = 1;
+		bm->demo_ibat = 1;
+	} else {
+		bm->demo_iusb = 0;
+		bm->demo_ibat = 0;
+	}
 
 	rc = bm_set_property(bm->pl_psy,
 			     POWER_SUPPLY_PROP_VOLTAGE_MAX,
@@ -701,6 +792,39 @@ static void __exit lge_battery_exit(void)
 	platform_device_unregister(&lge_battery_pdev);
 	platform_driver_unregister(&lge_battery_driver);
 }
+
+static int set_demo_mode(const char *val, const struct kernel_param *kp)
+{
+	struct power_supply *batt_psy;
+	int rc = 0;
+	int old_val = demo_mode;
+
+	rc = param_set_int(val, kp);
+	if (rc) {
+		pr_bm(ERROR, "Unable to set demo mode = %d\n", rc);
+		return rc;
+	}
+
+	if (demo_mode == old_val)
+		return 0;
+
+	batt_psy = power_supply_get_by_name("battery");
+	if (!batt_psy) {
+		pr_bm(ERROR, "Couldn't get batt_psy\n");
+		return -ENODEV;
+	}
+
+	power_supply_changed(batt_psy);
+	return 0;
+}
+
+static struct kernel_param_ops demo_mode_ops = {
+	.set = set_demo_mode,
+	.get = param_get_int,
+};
+
+module_param_cb(demo_mode, &demo_mode_ops, &demo_mode, 0644);
+MODULE_PARM_DESC(demo_mode, "VZW Demo mode <on|off>");
 
 module_init(lge_battery_init);
 module_exit(lge_battery_exit);
