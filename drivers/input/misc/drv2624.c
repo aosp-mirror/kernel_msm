@@ -150,6 +150,23 @@ static void drv2624_disable_irq(struct drv2624_data *drv2624)
 			  DRV2624_REG_INT_ENABLE, INT_MASK_ALL);
 }
 
+static void drv2624_reset(struct drv2624_data *drv2624)
+{
+	int ret;
+
+	gpio_set_value(drv2624->plat_data.gpio_nrst, 0);
+	usleep_range(1000, 2000);
+	gpio_set_value(drv2624->plat_data.gpio_nrst, 1);
+	usleep_range(1000, 2000);
+
+	regcache_mark_dirty(drv2624->regmap);
+	ret = regcache_sync(drv2624->regmap);
+	if (ret) {
+		dev_err(drv2624->dev, "Failed to sync cache: %d\n", ret);
+		gpio_direction_output(drv2624->plat_data.gpio_nrst, 0);
+	}
+}
+
 static int drv2624_poll_go_bit_stop(struct drv2624_data *drv2624)
 {
 	int ret, value;
@@ -160,16 +177,14 @@ static int drv2624_poll_go_bit_stop(struct drv2624_data *drv2624)
 		if (ret >= 0) {
 			value = ret & 0x01;
 			if (!value)
-				break;
+				return ret;
 		}
 		usleep_range(8000, 10000);
 	} while (poll_ready--);
 
-	if (ret < 0)
-		dev_err(drv2624->dev,
-			"%s, ERROR: failed to clear GO\n", __func__);
+	dev_err(drv2624->dev, "%s, ERROR: failed to clear GO\n", __func__);
 
-	return ret;
+	return -EINVAL;
 }
 
 static int drv2624_set_go_bit(struct drv2624_data *drv2624, unsigned char val)
@@ -180,17 +195,18 @@ static int drv2624_set_go_bit(struct drv2624_data *drv2624, unsigned char val)
 	val &= 0x01;
 
 	do {
-		ret = drv2624_reg_write(drv2624, DRV2624_REG_GO, val);
+		ret = drv2624_set_bits(drv2624, DRV2624_REG_GO, 0x01, val);
 		if (ret >= 0) {
+			usleep_range(1000, 1100);
 			/* Only poll GO bit for STOP */
-			if (!val) {
-				usleep_range(8000, 10000);
+			if (!val)
 				ret = drv2624_poll_go_bit_stop(drv2624);
-			}
 			return ret;
 		}
 		usleep_range(8000, 10000);
 	} while (retry--);
+
+	drv2624_reset(drv2624);
 
 	return ret;
 }
@@ -209,18 +225,26 @@ static int drv2624_get_mode(struct drv2624_data *drv2624)
 static void drv2624_stop(struct drv2624_data *drv2624)
 {
 	if (drv2624->vibrator_playing) {
-		int ret;
 		dev_dbg(drv2624->dev, "%s\n", __func__);
 		drv2624_disable_irq(drv2624);
-		ret = drv2624_set_go_bit(drv2624, STOP);
-		if (ret < 0) {
-			dev_warn(drv2624->dev, "Stop failed\n");
-			drv2624->work_mode |= WORK_ERROR;
-			gpio_direction_output(drv2624->plat_data.gpio_nrst, 0);
-		}
+		drv2624_set_go_bit(drv2624, STOP);
+		drv2624->work_mode = WORK_IDLE;
 		drv2624->vibrator_playing = false;
 		wake_unlock(&drv2624->wklock);
 	}
+}
+
+static void drv2624_haptics_stopwork(struct work_struct *work)
+{
+	struct drv2624_data *drv2624 =
+		container_of(work, struct drv2624_data, stop_work);
+
+	mutex_lock(&drv2624->lock);
+
+	drv2624_stop(drv2624);
+	drv2624->led_dev.brightness = LED_OFF;
+
+	mutex_unlock(&drv2624->lock);
 }
 
 static void drv2624_haptics_work(struct work_struct *work)
@@ -228,43 +252,26 @@ static void drv2624_haptics_work(struct work_struct *work)
 	struct drv2624_data *drv2624 =
 		container_of(work, struct drv2624_data, work);
 	int ret = 0;
-	const int state = drv2624->led_dev.brightness;
-
-	dev_dbg(drv2624->dev, "%s, state=%d\n", __func__, state);
 
 	mutex_lock(&drv2624->lock);
 
-	if (unlikely(drv2624->work_mode & WORK_ERROR)) {
-		dev_err(drv2624->dev, "Device is in error mode: work_mode=0x%x\n",
-			drv2624->work_mode);
-		goto drv2624_haptics_work_unlock;
-	}
-
-	drv2624->work_mode = WORK_IDLE;
-	dev_dbg(drv2624->dev, "%s, afer mnWorkMode=0x%x\n",
-		__func__, drv2624->work_mode);
-
 	drv2624_stop(drv2624);
 
-	if (state != LED_OFF) {
-		wake_lock(&drv2624->wklock);
-		drv2624->vibrator_playing = true;
-		drv2624_enable_irq(drv2624, true);
+	wake_lock(&drv2624->wklock);
+	drv2624->vibrator_playing = true;
+	drv2624_enable_irq(drv2624, true);
 
-		ret = drv2624_set_go_bit(drv2624, GO);
-		if (ret < 0) {
-			dev_warn(drv2624->dev, "Start playback failed\n");
-			wake_unlock(&drv2624->wklock);
-			drv2624->vibrator_playing = false;
-			drv2624_disable_irq(drv2624);
-			drv2624->work_mode |= WORK_ERROR;
-			gpio_direction_output(drv2624->plat_data.gpio_nrst, 0);
-		} else {
-			drv2624->work_mode |= WORK_VIBRATOR;
-		}
+	ret = drv2624_set_go_bit(drv2624, GO);
+	if (ret < 0) {
+		dev_warn(drv2624->dev, "Start playback failed\n");
+		drv2624->vibrator_playing = false;
+		drv2624_disable_irq(drv2624);
+		wake_unlock(&drv2624->wklock);
+	} else {
+		drv2624->led_dev.brightness = LED_FULL;
+		drv2624->work_mode |= WORK_VIBRATOR;
 	}
 
-drv2624_haptics_work_unlock:
 	mutex_unlock(&drv2624->lock);
 }
 
@@ -274,8 +281,11 @@ static void vibrator_enable(struct led_classdev *led_cdev,
 	struct drv2624_data *drv2624 =
 			container_of(led_cdev, struct drv2624_data, led_dev);
 
-	led_cdev->brightness = value;
-	queue_work(drv2624->drv2624_wq, &drv2624->work);
+	if (value == LED_OFF)
+		queue_work(drv2624->drv2624_wq, &drv2624->stop_work);
+	else
+		queue_work(drv2624->drv2624_wq, &drv2624->work);
+
 }
 
 static void vibrator_work_routine(struct work_struct *work)
@@ -290,12 +300,6 @@ static void vibrator_work_routine(struct work_struct *work)
 
 	dev_dbg(drv2624->dev, "%s, afer mnWorkMode=0x%x\n",
 		__func__, drv2624->work_mode);
-
-	if (unlikely(drv2624->work_mode & WORK_ERROR)) {
-		dev_err(drv2624->dev, "Device is in error mode: work_mode=0x%x\n",
-			drv2624->work_mode);
-		goto err;
-	}
 
 	if (drv2624->work_mode & WORK_IRQ) {
 		ret = drv2624_reg_read(drv2624, DRV2624_REG_STATUS);
@@ -570,6 +574,7 @@ static int haptics_init(struct drv2624_data *drv2624)
 
 	INIT_WORK(&drv2624->vibrator_work, vibrator_work_routine);
 	INIT_WORK(&drv2624->work, drv2624_haptics_work);
+	INIT_WORK(&drv2624->stop_work, drv2624_haptics_stopwork);
 
 	return 0;
 }
@@ -992,7 +997,9 @@ static ssize_t rtp_input_show(struct device *dev,
 	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
 	int rtp_input;
 
+	mutex_lock(&drv2624->lock);
 	rtp_input = drv2624_reg_read(drv2624, DRV2624_REG_RTP_INPUT);
+	mutex_unlock(&drv2624->lock);
 
 	return snprintf(buf, PAGE_SIZE, "%d\n", rtp_input);
 }
@@ -1011,7 +1018,9 @@ static ssize_t rtp_input_store(struct device *dev,
 		return ret;
 	}
 
+	mutex_lock(&drv2624->lock);
 	drv2624_reg_write(drv2624, DRV2624_REG_RTP_INPUT, rtp_input);
+	mutex_unlock(&drv2624->lock);
 
 	return count;
 }
@@ -1055,6 +1064,7 @@ static ssize_t mode_store(struct device *dev,
 			mutex_lock(&drv2624->lock);
 			drv2624_change_mode(drv2624, new_mode);
 			mutex_unlock(&drv2624->lock);
+			break;
 		}
 	}
 
@@ -1067,8 +1077,10 @@ static ssize_t loop_show(struct device *dev,
 	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
 	int loop;
 
+	mutex_lock(&drv2624->lock);
 	loop = drv2624_reg_read(drv2624, DRV2624_REG_MAIN_LOOP) &
 		MAIN_LOOP_MASK;
+	mutex_unlock(&drv2624->lock);
 
 	if (loop == MAIN_LOOP_MASK)
 		loop = -1; /* infinite */
@@ -1095,7 +1107,9 @@ static ssize_t loop_store(struct device *dev,
 	if (loop == -1)
 		loop = MAIN_LOOP_MASK; /*infinite */
 
+	mutex_lock(&drv2624->lock);
 	drv2624_reg_write(drv2624, DRV2624_REG_MAIN_LOOP, loop);
+	mutex_unlock(&drv2624->lock);
 
 	return count;
 }
@@ -1106,8 +1120,10 @@ static ssize_t interval_show(struct device *dev,
 	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
 	int interval;
 
+	mutex_lock(&drv2624->lock);
 	interval = drv2624_reg_read(drv2624, DRV2624_REG_CONTROL2);
 	interval = ((interval & INTERVAL_MASK) >> INTERVAL_SHIFT);
+	mutex_unlock(&drv2624->lock);
 
 	return snprintf(buf, PAGE_SIZE, "%d\n", interval);
 }
@@ -1128,8 +1144,10 @@ static ssize_t interval_store(struct device *dev,
 
 	interval = max(min(interval, 1), 0);
 
+	mutex_lock(&drv2624->lock);
 	drv2624_set_bits(drv2624, DRV2624_REG_CONTROL2, INTERVAL_MASK,
 			 interval << INTERVAL_SHIFT);
+	mutex_unlock(&drv2624->lock);
 
 	return count;
 }
@@ -1140,8 +1158,10 @@ static ssize_t scale_show(struct device *dev,
 	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
 	int interval;
 
+	mutex_lock(&drv2624->lock);
 	interval = drv2624_reg_read(drv2624, DRV2624_REG_CONTROL2);
 	interval = interval & SCALE_MASK;
+	mutex_unlock(&drv2624->lock);
 
 	return snprintf(buf, PAGE_SIZE, "%d\n", interval);
 }
@@ -1162,7 +1182,9 @@ static ssize_t scale_store(struct device *dev,
 
 	interval = max(min(interval, 3), 0);
 
+	mutex_lock(&drv2624->lock);
 	drv2624_set_bits(drv2624, DRV2624_REG_CONTROL2, SCALE_MASK, interval);
+	mutex_unlock(&drv2624->lock);
 
 	return count;
 }
@@ -1173,8 +1195,10 @@ static ssize_t ctrl_loop_show(struct device *dev,
 	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
 	int ctrl_loop;
 
+	mutex_lock(&drv2624->lock);
 	ctrl_loop = drv2624_reg_read(drv2624, DRV2624_REG_CONTROL1);
 	ctrl_loop = (ctrl_loop & LOOP_MASK) >> LOOP_SHIFT;
+	mutex_unlock(&drv2624->lock);
 
 	return snprintf(buf, PAGE_SIZE, "%d\n", ctrl_loop);
 }
@@ -1195,8 +1219,10 @@ static ssize_t ctrl_loop_store(struct device *dev,
 
 	ctrl_loop = max(min(ctrl_loop, 1), 0);
 
+	mutex_lock(&drv2624->lock);
 	drv2624_set_bits(drv2624, DRV2624_REG_CONTROL1, LOOP_MASK,
 			 ctrl_loop << LOOP_SHIFT);
+	mutex_unlock(&drv2624->lock);
 
 	return count;
 }
@@ -1223,7 +1249,9 @@ static ssize_t set_sequencer_store(struct device *dev,
 	if (n > DRV2624_SEQUENCER_SIZE * 2)
 		return -EINVAL;
 
+	mutex_lock(&drv2624->lock);
 	drv2624_set_waveform(drv2624, &sequencer);
+	mutex_unlock(&drv2624->lock);
 
 	return count;
 }
@@ -1234,7 +1262,9 @@ static ssize_t od_clamp_show(struct device *dev,
 	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
 	int od_clamp;
 
+	mutex_lock(&drv2624->lock);
 	od_clamp = drv2624_reg_read(drv2624, DRV2624_REG_OVERDRIVE_CLAMP);
+	mutex_unlock(&drv2624->lock);
 
 	return snprintf(buf, PAGE_SIZE, "%d\n", od_clamp);
 }
@@ -1253,7 +1283,9 @@ static ssize_t od_clamp_store(struct device *dev,
 		return ret;
 	}
 
+	mutex_lock(&drv2624->lock);
 	drv2624_reg_write(drv2624, DRV2624_REG_OVERDRIVE_CLAMP, od_clamp);
+	mutex_unlock(&drv2624->lock);
 
 	return count;
 }
@@ -1264,8 +1296,10 @@ static ssize_t diag_result_show(struct device *dev,
 	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
 	int diag_z, diag_k;
 
+	mutex_lock(&drv2624->lock);
 	diag_z = drv2624_reg_read(drv2624, DRV2624_REG_DIAG_Z);
 	diag_k = drv2624_reg_read(drv2624, DRV2624_REG_DIAG_K);
+	mutex_unlock(&drv2624->lock);
 
 	return snprintf(buf, PAGE_SIZE, "z=%d k=%d\n", diag_z, diag_k);
 }
@@ -1276,11 +1310,13 @@ static ssize_t autocal_show(struct device *dev,
 	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
 	u32 autocal_comp, autocal_bemf, autocal_gain;
 
+	mutex_lock(&drv2624->lock);
 	autocal_comp = drv2624_reg_read(drv2624, DRV2624_REG_CAL_COMP);
 	autocal_bemf = drv2624_reg_read(drv2624, DRV2624_REG_CAL_BEMF);
 	autocal_gain =
 		drv2624_reg_read(drv2624, DRV2624_REG_LOOP_CONTROL) &
 		BEMFGAIN_MASK;
+	mutex_unlock(&drv2624->lock);
 
 	return snprintf(buf, PAGE_SIZE, "%d %d %d\n",
 			autocal_comp, autocal_bemf, autocal_gain);
@@ -1298,10 +1334,12 @@ static ssize_t autocal_store(struct device *dev,
 	if (n != 3)
 		return -EINVAL;
 
+	mutex_lock(&drv2624->lock);
 	drv2624_reg_write(drv2624, DRV2624_REG_CAL_COMP, comp);
 	drv2624_reg_write(drv2624, DRV2624_REG_CAL_BEMF, bemf);
 	drv2624_set_bits(drv2624, DRV2624_REG_LOOP_CONTROL,
 			 BEMFGAIN_MASK, bemfgain);
+	mutex_unlock(&drv2624->lock);
 
 	return count;
 }
@@ -1312,9 +1350,11 @@ static ssize_t lra_period_show(struct device *dev,
 	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
 	u32 lra_period;
 
+	mutex_lock(&drv2624->lock);
 	lra_period = drv2624_reg_read(drv2624, DRV2624_REG_LRA_PERIOD_H) & 0x03;
 	lra_period = (lra_period << 8) |
 		drv2624_reg_read(drv2624, DRV2624_REG_LRA_PERIOD_L);
+	mutex_unlock(&drv2624->lock);
 
 	return snprintf(buf, PAGE_SIZE, "%d\n", lra_period);
 }
@@ -1325,9 +1365,11 @@ static ssize_t status_show(struct device *dev,
 	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
 	u32 status;
 
+	mutex_lock(&drv2624->lock);
 	status = drv2624_reg_read(drv2624, DRV2624_REG_STATUS);
 	/* Ignore Bit 6-5 reserved, Bit 4 PRG_ERR and BIT 3 PROC_DONE */
 	status &= ~((1 << 6) | (1 << 5) | (1 << 4) | (1 << 3));
+	mutex_unlock(&drv2624->lock);
 
 	return snprintf(buf, PAGE_SIZE, "%d\n", status);
 }
@@ -1338,10 +1380,12 @@ static ssize_t ol_lra_period_show(struct device *dev,
 	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
 	u32 ol_lra_period;
 
+	mutex_lock(&drv2624->lock);
 	ol_lra_period =
 		drv2624_reg_read(drv2624, DRV2624_REG_OL_PERIOD_H) & 0x03;
 	ol_lra_period = (ol_lra_period << 8) |
 		drv2624_reg_read(drv2624, DRV2624_REG_OL_PERIOD_L);
+	mutex_unlock(&drv2624->lock);
 
 	return snprintf(buf, PAGE_SIZE, "%d\n", ol_lra_period);
 }
@@ -1360,10 +1404,12 @@ static ssize_t ol_lra_period_store(struct device *dev,
 		return ret;
 	}
 
+	mutex_lock(&drv2624->lock);
 	drv2624_reg_write(drv2624, DRV2624_REG_OL_PERIOD_H,
 			  (ol_lra_period >> 8) & 0x03);
 	drv2624_reg_write(drv2624, DRV2624_REG_OL_PERIOD_L,
 			  ol_lra_period & 0xFF);
+	mutex_unlock(&drv2624->lock);
 
 	return count;
 }
@@ -1374,9 +1420,11 @@ static ssize_t lra_wave_shape_show(struct device *dev,
 	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
 	u32 lra_wave_shape;
 
+	mutex_lock(&drv2624->lock);
 	lra_wave_shape =
 		drv2624_reg_read(drv2624,
 				 DRV2624_REG_LRA_OL_CTRL) & LRA_WAVE_SHAPE_MASK;
+	mutex_unlock(&drv2624->lock);
 
 	return snprintf(buf, PAGE_SIZE, "%d\n", lra_wave_shape);
 }
@@ -1396,8 +1444,10 @@ static ssize_t lra_wave_shape_store(struct device *dev,
 		return ret;
 	}
 
+	mutex_lock(&drv2624->lock);
 	drv2624_set_bits(drv2624, DRV2624_REG_LRA_OL_CTRL,
 			 LRA_WAVE_SHAPE_MASK, lra_wave_shape);
+	mutex_unlock(&drv2624->lock);
 
 	return count;
 }
@@ -1618,6 +1668,7 @@ static int drv2624_suspend(struct device *dev)
 
 	cancel_work_sync(&drv2624->vibrator_work);
 	cancel_work_sync(&drv2624->work);
+	cancel_work_sync(&drv2624->stop_work);
 	drv2624_stop(drv2624);
 
 	return 0;

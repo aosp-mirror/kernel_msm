@@ -173,12 +173,11 @@
 #define	WORK_IDLE				0
 #define	WORK_VIBRATOR				0x01
 #define	WORK_IRQ				0x02
-#define	WORK_ERROR				0x04
 
 #define	GO					1
 #define STOP					0
 
-#define POLL_GO_BIT_RETRY			100
+#define POLL_GO_BIT_RETRY			10
 
 enum actuator_type {
 	ERM,
@@ -308,6 +307,7 @@ struct drv2624_data {
 	struct workqueue_struct *drv2624_wq;
 	struct work_struct vibrator_work;
 	struct work_struct work;
+	struct work_struct stop_work;
 	struct led_classdev led_dev;
 
 	struct drv2624_autocal_result auto_cal_result;
