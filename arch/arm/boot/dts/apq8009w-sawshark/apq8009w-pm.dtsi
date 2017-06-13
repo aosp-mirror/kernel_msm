@@ -14,8 +14,8 @@
 
 / {
     reserved-memory {
-		ramoops_mem: ramoops_region@a0000000 {
-			reg = <0x0 0xa0000000 0x0 0x80000>;
+		ramoops_mem: ramoops_region@0 {
+			reg = <0x0 0x9ff00000 0x0 0x00100000>;
 			compatible = "removed-dma-pool";
 			no-map;
 			};
@@ -27,12 +27,12 @@
 		compatible = "ramoops";
 		status = "ok";
 
-		android,ramoops-buffer-start = <0xa0000000>;
-		android,ramoops-buffer-size = <0x80000>;
-		android,ramoops-console-size = <0x40000>;
-		android,ramoops-record-size = <0x1000>;
-		android,ramoops-ftrace-size = <0x20000>;
-		android,ramoops-pmsg-size = <0x20000>;
+		android,ramoops-buffer-start = <0x9ff00000>;
+		android,ramoops-buffer-size = <0x00100000>;
+		android,ramoops-console-size = <0x00080000>;
+		android,ramoops-record-size = <0x00008000>;
+		android,ramoops-ftrace-size = <0x00020000>;
+		android,ramoops-pmsg-size = <0x00040000>;
 		android,ramoops-dump-oops = <0x1>;
 		linux,contiguous-region = <&ramoops_mem>;
 		};
