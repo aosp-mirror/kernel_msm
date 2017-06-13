@@ -1,4 +1,4 @@
-/* Copyright (c) 2012, 2016 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012, 2016-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -748,6 +748,16 @@ static int tmc_enable(struct tmc_drvdata *drvdata, enum tmc_mode mode)
 		return ret;
 
 	mutex_lock(&drvdata->mem_lock);
+
+	spin_lock_irqsave(&drvdata->spinlock, flags);
+	if (drvdata->reading) {
+		spin_unlock_irqrestore(&drvdata->spinlock, flags);
+		mutex_unlock(&drvdata->mem_lock);
+		pm_runtime_put(drvdata->dev);
+		return -EBUSY;
+	}
+	spin_unlock_irqrestore(&drvdata->spinlock, flags);
+
 	if (drvdata->config_type == TMC_CONFIG_TYPE_ETR &&
 	    drvdata->out_mode == TMC_ETR_OUT_MODE_MEM) {
 		/*
@@ -782,17 +792,8 @@ static int tmc_enable(struct tmc_drvdata *drvdata, enum tmc_mode mode)
 			return ret;
 		}
 	}
-	mutex_unlock(&drvdata->mem_lock);
 
 	spin_lock_irqsave(&drvdata->spinlock, flags);
-	if (drvdata->reading) {
-		spin_unlock_irqrestore(&drvdata->spinlock, flags);
-		if (drvdata->config_type == TMC_CONFIG_TYPE_ETR
-		    && drvdata->out_mode == TMC_ETR_OUT_MODE_USB)
-			usb_qdss_close(drvdata->usbch);
-		clk_disable_unprepare(drvdata->clk);
-		return -EBUSY;
-	}
 
 	if (drvdata->config_type == TMC_CONFIG_TYPE_ETB) {
 		tmc_etb_enable_hw(drvdata);
@@ -807,6 +808,7 @@ static int tmc_enable(struct tmc_drvdata *drvdata, enum tmc_mode mode)
 	}
 	drvdata->enable = true;
 	spin_unlock_irqrestore(&drvdata->spinlock, flags);
+	mutex_unlock(&drvdata->mem_lock);
 
 	dev_info(drvdata->dev, "TMC enabled\n");
 	return 0;
@@ -1050,6 +1052,7 @@ static int tmc_read_prepare(struct tmc_drvdata *drvdata)
 	unsigned long flags;
 	enum tmc_mode mode;
 
+	mutex_lock(&drvdata->mem_lock);
 	spin_lock_irqsave(&drvdata->spinlock, flags);
 	if (!drvdata->enable)
 		goto out;
@@ -1070,11 +1073,13 @@ static int tmc_read_prepare(struct tmc_drvdata *drvdata)
 out:
 	drvdata->reading = true;
 	spin_unlock_irqrestore(&drvdata->spinlock, flags);
+	mutex_unlock(&drvdata->mem_lock);
 
 	dev_info(drvdata->dev, "TMC read start\n");
 	return 0;
 err:
 	spin_unlock_irqrestore(&drvdata->spinlock, flags);
+	mutex_unlock(&drvdata->mem_lock);
 	return ret;
 }
 
@@ -1249,7 +1254,11 @@ static ssize_t tmc_read(struct file *file, char __user *data, size_t len,
 {
 	struct tmc_drvdata *drvdata = container_of(file->private_data,
 						   struct tmc_drvdata, miscdev);
-	char *bufp = drvdata->buf + *ppos;
+	char *bufp;
+
+	mutex_lock(&drvdata->mem_lock);
+
+	bufp = drvdata->buf + *ppos;
 
 	if (*ppos + len > drvdata->size)
 		len = drvdata->size - *ppos;
@@ -1271,6 +1280,7 @@ static ssize_t tmc_read(struct file *file, char __user *data, size_t len,
 
 	if (copy_to_user(data, bufp, len)) {
 		dev_dbg(drvdata->dev, "%s: copy_to_user failed\n", __func__);
+		mutex_unlock(&drvdata->mem_lock);
 		return -EFAULT;
 	}
 
@@ -1278,6 +1288,8 @@ static ssize_t tmc_read(struct file *file, char __user *data, size_t len,
 
 	dev_dbg(drvdata->dev, "%s: %zu bytes copied, %d bytes left\n",
 		__func__, len, (int)(drvdata->size - *ppos));
+
+	mutex_unlock(&drvdata->mem_lock);
 	return len;
 }
 
