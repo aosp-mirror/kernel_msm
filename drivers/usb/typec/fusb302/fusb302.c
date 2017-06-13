@@ -609,8 +609,9 @@ static int tcpm_set_cc(struct tcpc_dev *dev, enum typec_cc_status cc)
 	/* reset the cc status */
 	chip->cc1 = TYPEC_CC_OPEN;
 	chip->cc2 = TYPEC_CC_OPEN;
-	/* report OPEN status back to TCPM */
-	tcpm_cc_change(chip->tcpm_port);
+	/* report OPEN status back to TCPM when not in PR_SWAP path*/
+	if (!IsPRSwap)
+		tcpm_cc_change(chip->tcpm_port);
 	/* adjust current for SRC */
 	if (pull_up) {
 		ret = fusb302_set_src_current(chip, cc_src_current[cc]);
@@ -630,11 +631,19 @@ static int tcpm_set_cc(struct tcpc_dev *dev, enum typec_cc_status cc)
 			goto done;
 		}
 
-		ret = fusb302_set_toggling(chip, TOGGLING_MODE_SRC);
-		if (ret < 0) {
-			fusb302_log("cannot set toggling to SRC mode, ret=%d\n",
-				    ret);
-			goto done;
+		/* WAR: Fairchild chip cannot send control packets when
+		 * TOGDONE interrupt is enabled. Since, TOGDONE is not
+		 * needed during PR_SWAP as CC pin is manupulated, do
+		 * enable TOGDONE interrupt to unblock chip on sending
+		 * the control messages such as PS_RDY.
+		 */
+		if (!IsPRSwap) {
+			ret = fusb302_set_toggling(chip, TOGGLING_MODE_SRC);
+			if (ret < 0) {
+				fusb302_log("cannot set toggling to SRC mode,");
+				fusb302_log("ret=%d\n", ret);
+				goto done;
+			}
 		}
 
 		ret = fusb302_i2c_mask_write(chip, FUSB_REG_MASK,
@@ -650,11 +659,13 @@ static int tcpm_set_cc(struct tcpc_dev *dev, enum typec_cc_status cc)
 		chip->intr_comp_chng = true;
 	}
 	if (pull_down) {
-		ret = fusb302_set_toggling(chip, TOGGLING_MODE_SNK);
-		if (ret < 0) {
-			fusb302_log("cannot set toggling to SNK mode, ret=%d\n",
-				    ret);
-			goto done;
+		if (!IsPRSwap) {
+			ret = fusb302_set_toggling(chip, TOGGLING_MODE_SNK);
+			if (ret < 0) {
+				fusb302_log("cannot set toggling to SNK mode,");
+				fusb302_log("ret=%d\n", ret);
+				goto done;
+			}
 		}
 
 		ret = fusb302_i2c_mask_write(chip, FUSB_REG_MASK,
