@@ -28,6 +28,9 @@
 
 #define HTC_BATT_NAME "htc_battery"
 
+/* mutex for static data htc_batt_info and htc_batt_timer */
+static struct mutex htc_battery_lock;
+
 static int full_level_dis_chg = 100;
 module_param_named(
 	full_level_dis_chg, full_level_dis_chg, int, S_IRUSR | S_IWUSR
@@ -186,6 +189,7 @@ const char *g_chr_src[] = {
 	"USB_CDP", "USB_ACA", "USB_HVDCP", "USB_HVDCP_3", "USB_PD",
 	"WIRELESS", "BMS", "USB_PARALLEL", "WIPOWER", "TYPEC", "UFP", "DFP"};
 
+/* accesses htc_batt_timer, needs htc_battery_lock */
 static void batt_set_check_timer(u32 seconds)
 {
 	pr_debug("[BATT] %s(%u sec)\n", __func__, seconds);
@@ -217,6 +221,7 @@ static int get_property(struct power_supply *psy,
 	return ret.intval;
 }
 
+/* accesses htc_batt_info, needs htc_battery_lock */
 static int set_batt_psy_property(enum power_supply_property prop, int value)
 {
 	union power_supply_propval ret = {0, };
@@ -233,6 +238,7 @@ static int set_batt_psy_property(enum power_supply_property prop, int value)
 	return rc;
 }
 
+/* accesses htc_batt_info, needs htc_battery_lock */
 static void batt_update_info_from_charger(void)
 {
 	htc_batt_info.prev.batt_temp = htc_batt_info.rep.batt_temp;
@@ -259,12 +265,14 @@ static void batt_update_info_from_charger(void)
 		get_property(htc_batt_info.batt_psy, POWER_SUPPLY_PROP_HEALTH);
 }
 
+/* accesses htc_batt_info, needs htc_battery_lock */
 static void batt_update_info_from_gauge(void)
 {
 	htc_batt_info.rep.level = get_property(htc_batt_info.batt_psy,
 					       POWER_SUPPLY_PROP_CAPACITY);
 }
 
+/* accesses htc_batt_info, needs htc_battery_lock */
 static int is_bounding_fully_charged_level(void)
 {
 	static int s_pingpong = 1;
@@ -306,6 +314,7 @@ static int is_bounding_fully_charged_level(void)
 	return is_batt_chg_off_by_bounding;
 }
 
+/* accesses htc_batt_info, needs htc_battery_lock */
 void update_htc_chg_src(void)
 {
 /* In bootable/offmode_charging/offmode_charging.c
@@ -382,7 +391,8 @@ enum {
 	HEALTH_WARM3,
 };
 
-int update_ibat_setting(void)
+/* accesses htc_batt_info, needs htc_battery_lock */
+static int update_ibat_setting(void)
 {
 	static int batt_thermal = HEALTH_GOOD;
 	static bool is_vol_limited;
@@ -512,6 +522,8 @@ static void batt_worker(struct work_struct *work)
 	int ibat_new = 0;
 	unsigned long time_since_last_update_ms;
 	unsigned long cur_jiffies;
+
+	mutex_lock(&htc_battery_lock);
 
 	/* STEP 1: print out and reset total_time since last update */
 	cur_jiffies = jiffies;
@@ -681,12 +693,16 @@ static void batt_worker(struct work_struct *work)
 	}
 	BATT_LOG(" v_elvdd_dis_en=%d\n",
 		 gpio_get_value(htc_batt_info.v_elvdd_dis_en));
+
+	mutex_unlock(&htc_battery_lock);
 }
 
 static void htc_battery_update_work(struct work_struct *work)
 {
 	int intval = 0, present = 0, latest_chg_src = 0;
 	bool info_update = false;
+
+	mutex_lock(&htc_battery_lock);
 
 	/* POWER_SUPPLY_PROP_TYPE */
 	present = get_property(htc_batt_info.usb_psy,
@@ -720,6 +736,8 @@ static void htc_battery_update_work(struct work_struct *work)
 	/* Update batt_worker */
 	if (info_update)
 		htc_batt_schedule_batt_info_update();
+
+	mutex_unlock(&htc_battery_lock);
 }
 
 static int htc_notifier_batt_callback(struct notifier_block *nb,
@@ -745,6 +763,7 @@ static int htc_notifier_batt_callback(struct notifier_block *nb,
 #define MUSKIE_BATT_ID_1	"muskie 1"
 #define MUSKIE_BATT_ID_2	"muskie 2"
 #define LOADING_BATT_TYPE	"Loading Battery"
+/* accesses htc_batt_info, needs htc_battery_lock */
 static int htc_battery_probe_process(void)
 {
 	union power_supply_propval ret = {0, };
@@ -894,6 +913,7 @@ batt_check_alarm_handler(struct alarm *alarm, ktime_t time)
 	return 0;
 }
 
+/* accesses htc_batt_info, needs htc_battery_lock */
 static int htc_battery_fb_register(void)
 {
 	int rc = 0;
@@ -912,6 +932,9 @@ static int htc_battery_probe(struct platform_device *pdev)
 {
 	int rc = 0;
 
+	mutex_init(&htc_battery_lock);
+	mutex_lock(&htc_battery_lock);
+
 	INIT_WORK(&htc_batt_timer.batt_work, batt_worker);
 	INIT_WORK(&htc_batt_info.batt_update_work, htc_battery_update_work);
 	init_timer(&htc_batt_timer.batt_timer);
@@ -925,15 +948,17 @@ static int htc_battery_probe(struct platform_device *pdev)
 
 	rc = htc_battery_probe_process();
 	if (rc < 0)
-		return rc;
+		goto done;
 
 	rc = htc_battery_fb_register();
 	if (rc < 0)
-		return rc;
+		goto done;
 
 	g_htc_battery_probe_done = true;
 
-	return 0;
+done:
+	mutex_unlock(&htc_battery_lock);
+	return rc;
 }
 
 static struct platform_device htc_battery_pdev = {
