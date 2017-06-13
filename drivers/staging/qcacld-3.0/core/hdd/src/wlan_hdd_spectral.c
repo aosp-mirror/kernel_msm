@@ -348,13 +348,10 @@ static void send_spectral_scan_reg_rsp_msg(hdd_context_t *hdd_ctx)
 
 	rsp_msg = NLMSG_DATA(nlh);
 	rsp_msg->msg_type = SPECTRAL_SCAN_REGISTER_RSP;
-	rsp_msg->buf = NULL;
-	rsp_msg->buf_len = 0;
+	rsp_msg->pid = hdd_ctx->sscan_pid;
 
-	nlh->nlmsg_len = NLMSG_LENGTH(sizeof(struct spectral_scan_msg) +
-					rsp_msg->buf_len);
-	skb_put(skb, NLMSG_SPACE((sizeof(struct spectral_scan_msg) +
-					rsp_msg->buf_len)));
+	nlh->nlmsg_len = NLMSG_LENGTH(sizeof(struct spectral_scan_msg));
+	skb_put(skb, NLMSG_SPACE(sizeof(struct spectral_scan_msg)));
 
 	hdd_info("sending App Reg Response to process pid %d",
 			hdd_ctx->sscan_pid);
@@ -370,6 +367,80 @@ static void send_spectral_scan_reg_rsp_msg(hdd_context_t *hdd_ctx)
 			" response");
 }
 
+#ifdef CNSS_GENL
+/**
+ * spectral_scan_msg_handler() - API to handle spectral scan
+ * command
+ * @data: Data received
+ * @data_len: length of the data received
+ * @ctx: Pointer to stored context
+ * @pid: Process ID
+ *
+ * API to handle spectral scan commands from user space
+ *
+ * Return: None
+ */
+static void spectral_scan_msg_handler(const void *data, int data_len,
+	              void *ctx, int pid)
+{
+	struct spectral_scan_msg *ss_msg = NULL;
+	struct nlattr *tb[QCA_WLAN_VENDOR_ATTR_MAX + 1];
+	hdd_context_t *hdd_ctx;
+
+	if (nla_parse(tb, CLD80211_ATTR_MAX, data, data_len, NULL)) {
+		hdd_err("%s: nla parse fails\n", __func__);
+		return;
+	}
+
+	if (!tb[CLD80211_ATTR_DATA]) {
+		hdd_err("%s: attr VENDOR_DATA fails\n", __func__);
+		return;
+	}
+	ss_msg = (struct spectral_scan_msg *)nla_data(tb[CLD80211_ATTR_DATA]);
+
+	if (!ss_msg) {
+		hdd_err("%s: data NULL\n", __func__);
+		return;
+	}
+
+	switch (ss_msg->msg_type) {
+	case SPECTRAL_SCAN_REGISTER_REQ:
+		hdd_ctx = (hdd_context_t *)cds_get_context(QDF_MODULE_ID_HDD);
+		if (hdd_ctx != NULL) {
+			hdd_ctx->sscan_pid = ss_msg->pid;
+			hdd_info("spectral scan application registered, pid=%d",
+				 hdd_ctx->sscan_pid);
+			send_spectral_scan_reg_rsp_msg(hdd_ctx);
+		} else {
+			hdd_err("failed to get hdd context");
+		}
+		break;
+	default:
+		hdd_info("invalid message type %d", ss_msg->msg_type);
+		break;
+	}
+
+	return;
+}
+
+/**
+ * spectral_scan_activate_service() - API to register spectral
+ * scan cmd handler
+ *
+ * API to register the spectral scan command handler using new
+ * genl infra. Return type is zero to match with legacy
+ * prototype
+ *
+ * Return: 0
+ */
+int spectral_scan_activate_service(void)
+{
+	register_cld_cmd_cb(WLAN_NL_MSG_SPECTRAL_SCAN,
+				spectral_scan_msg_handler, NULL);
+	return 0;
+}
+
+#else
 static int spectral_scan_msg_callback(struct sk_buff *skb)
 {
 	struct nlmsghdr *nlh;
@@ -430,6 +501,7 @@ int spectral_scan_activate_service(void)
 
 	return ret;
 }
+#endif
 
 /**
  * hdd_init_spectral_scan() - Initialize spectral scan config parameters
