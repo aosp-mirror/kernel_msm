@@ -2591,7 +2591,6 @@ static void run_state_machine(struct tcpm_port *port)
 	/* PR_Swap states */
 	case PR_SWAP_ACCEPT:
 		tcpm_pd_send_control(port, PD_CTRL_ACCEPT);
-		IsPRSwap = true;
 		tcpm_set_state(port, PR_SWAP_START, 0);
 		break;
 	case PR_SWAP_SEND:
@@ -2601,10 +2600,10 @@ static void run_state_machine(struct tcpm_port *port)
 		break;
 	case PR_SWAP_SEND_TIMEOUT:
 		tcpm_swap_complete(port, -ETIMEDOUT);
-		IsPRSwap = false;
 		tcpm_set_state(port, ready_state(port), 0);
 		break;
 	case PR_SWAP_START:
+		IsPRSwap = true;
 		if (port->pwr_role == TYPEC_SOURCE)
 			tcpm_set_state(port, PR_SWAP_SRC_SNK_TRANSITION_OFF,
 				       PD_T_SRC_TRANSITION);
@@ -2712,6 +2711,7 @@ static void run_state_machine(struct tcpm_port *port)
 		tcpm_set_state(port, unattached_state(port), 0);
 		break;
 	case ERROR_RECOVERY:
+		IsPRSwap = false;
 		tcpm_swap_complete(port, -EPROTO);
 		tcpm_set_state(port, PORT_RESET, 0);
 		break;
