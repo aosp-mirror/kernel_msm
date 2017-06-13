@@ -212,7 +212,7 @@ static int mnh_sm_get_val_from_buf(const char *buf, unsigned long *val)
 		return -EINVAL;
 }
 
-static ssize_t mnh_sm_stage_fw_show(struct device *dev,
+static ssize_t stage_fw_show(struct device *dev,
 			     struct device_attribute *attr,
 			     char *buf)
 {
@@ -226,7 +226,7 @@ static ssize_t mnh_sm_stage_fw_show(struct device *dev,
 	return 0;
 }
 
-static ssize_t mnh_sm_stage_fw_store(struct device *dev,
+static ssize_t stage_fw_store(struct device *dev,
 			      struct device_attribute *attr,
 			      const char *buf,
 			      size_t count)
@@ -247,12 +247,11 @@ static ssize_t mnh_sm_stage_fw_store(struct device *dev,
 	return -EINVAL;
 }
 
-static DEVICE_ATTR(stage_fw, S_IWUSR | S_IRUSR | S_IRGRP,
-		mnh_sm_stage_fw_show, mnh_sm_stage_fw_store);
+static DEVICE_ATTR_RW(stage_fw);
 
-static ssize_t mnh_sm_poweron_show(struct device *dev,
-			     struct device_attribute *attr,
-			     char *buf)
+static ssize_t poweron_show(struct device *dev,
+			    struct device_attribute *attr,
+			    char *buf)
 {
 	ssize_t strlen = 0;
 
@@ -261,19 +260,9 @@ static ssize_t mnh_sm_poweron_show(struct device *dev,
 	return strlen;
 }
 
-static ssize_t mnh_sm_poweron_store(struct device *dev,
-			      struct device_attribute *attr,
-			      const char *buf,
-			      size_t count)
-{
-	dev_dbg(dev, "Entering mnh_sm_poweron_store...\n");
-	return -EINVAL;
-}
+static DEVICE_ATTR_RO(poweron);
 
-static DEVICE_ATTR(poweron, S_IWUSR | S_IRUSR | S_IRGRP,
-		mnh_sm_poweron_show, mnh_sm_poweron_store);
-
-static ssize_t mnh_sm_poweroff_show(struct device *dev,
+static ssize_t poweroff_show(struct device *dev,
 			     struct device_attribute *attr,
 			     char *buf)
 {
@@ -285,32 +274,21 @@ static ssize_t mnh_sm_poweroff_show(struct device *dev,
 	return strlen;
 }
 
-static ssize_t mnh_sm_poweroff_store(struct device *dev,
-			      struct device_attribute *attr,
-			      const char *buf,
-			      size_t count)
-{
-	dev_dbg(dev, "Entering mnh_sm_poweroff_store...\n");
+static DEVICE_ATTR_RO(poweroff);
 
-	return -EINVAL;
-}
-
-static DEVICE_ATTR(poweroff, S_IWUSR | S_IRUSR | S_IRGRP,
-		mnh_sm_poweroff_show, mnh_sm_poweroff_store);
-
-static ssize_t mnh_sm_state_show(struct device *dev,
-			     struct device_attribute *attr,
-			     char *buf)
+static ssize_t state_show(struct device *dev,
+			  struct device_attribute *attr,
+			  char *buf)
 {
 	dev_dbg(dev, "Entering mnh_sm_state_show...\n");
 
 	return scnprintf(buf, MAX_STR_COPY, "%d\n", mnh_sm_dev->state);
 }
 
-static ssize_t mnh_sm_state_store(struct device *dev,
-			      struct device_attribute *attr,
-			      const char *buf,
-			      size_t count)
+static ssize_t state_store(struct device *dev,
+			   struct device_attribute *attr,
+			   const char *buf,
+			   size_t count)
 {
 	unsigned long val = 0;
 	int ret;
@@ -322,8 +300,7 @@ static ssize_t mnh_sm_state_store(struct device *dev,
 	return count;
 }
 
-static DEVICE_ATTR(state, S_IWUSR | S_IRUGO,
-		mnh_sm_state_show, mnh_sm_state_store);
+static DEVICE_ATTR_RW(state);
 
 static int dma_callback(uint8_t chan, enum mnh_dma_chan_dir_t dir,
 		enum mnh_dma_trans_status_t status)
@@ -696,7 +673,7 @@ int mnh_download_firmware(void)
 	return mnh_download_firmware_legacy();
 }
 
-static ssize_t mnh_sm_download_show(struct device *dev,
+static ssize_t download_show(struct device *dev,
 			     struct device_attribute *attr,
 			     char *buf)
 {
@@ -709,12 +686,11 @@ static ssize_t mnh_sm_download_show(struct device *dev,
 	return strlen;
 }
 
-static DEVICE_ATTR(download, S_IRUSR | S_IRGRP,
-		mnh_sm_download_show, NULL);
+static DEVICE_ATTR_RO(download);
 
-static ssize_t mnh_sm_suspend_show(struct device *dev,
-			     struct device_attribute *attr,
-			     char *buf)
+static ssize_t suspend_show(struct device *dev,
+			    struct device_attribute *attr,
+			    char *buf)
 {
 	ssize_t strlen = 0;
 
@@ -723,16 +699,7 @@ static ssize_t mnh_sm_suspend_show(struct device *dev,
 	return strlen;
 }
 
-static ssize_t mnh_sm_suspend_store(struct device *dev,
-			      struct device_attribute *attr,
-			      const char *buf,
-			      size_t count)
-{
-	return -EINVAL;
-}
-
-static DEVICE_ATTR(suspend, S_IWUSR | S_IRUGO,
-		mnh_sm_suspend_show, mnh_sm_suspend_store);
+static DEVICE_ATTR_RO(suspend);
 
 int mnh_resume_firmware(void)
 {
@@ -765,9 +732,9 @@ int mnh_resume_firmware(void)
 	return 0;
 }
 
-static ssize_t mnh_sm_resume_show(struct device *dev,
-			     struct device_attribute *attr,
-			     char *buf)
+static ssize_t resume_show(struct device *dev,
+			   struct device_attribute *attr,
+			   char *buf)
 {
 	ssize_t strlen = 0;
 
@@ -776,40 +743,22 @@ static ssize_t mnh_sm_resume_show(struct device *dev,
 	return strlen;
 }
 
-static ssize_t mnh_sm_resume_store(struct device *dev,
-			      struct device_attribute *attr,
-			      const char *buf,
-			      size_t count)
-{
-	return -EINVAL;
-}
+static DEVICE_ATTR_RO(resume);
 
-static DEVICE_ATTR(resume, S_IRUGO | S_IWUSR | S_IWGRP,
-		mnh_sm_resume_show, mnh_sm_resume_store);
-
-static ssize_t mnh_sm_reset_show(struct device *dev,
-			     struct device_attribute *attr,
-			     char *buf)
+static ssize_t reset_show(struct device *dev,
+			  struct device_attribute *attr,
+			  char *buf)
 {
 	ssize_t strlen = 0;
 	return strlen;
 }
 
-static ssize_t mnh_sm_reset_store(struct device *dev,
-			      struct device_attribute *attr,
-			      const char *buf,
-			      size_t count)
-{
-	return -EINVAL;
-}
+static DEVICE_ATTR_RO(reset);
 
-static DEVICE_ATTR(reset, S_IRUGO | S_IWUSR | S_IWGRP,
-		mnh_sm_reset_show, mnh_sm_reset_store);
-
-static ssize_t mnh_sm_cpu_clk_store(struct device *dev,
-			      struct device_attribute *attr,
-			      const char *buf,
-			      size_t count)
+static ssize_t cpu_clk_store(struct device *dev,
+			     struct device_attribute *attr,
+			     const char *buf,
+			     size_t count)
 {
 	unsigned long val = 0;
 	int ret;
@@ -828,22 +777,21 @@ static ssize_t mnh_sm_cpu_clk_store(struct device *dev,
 	return -EINVAL;
 }
 
-static DEVICE_ATTR(cpu_clk, S_IWUSR,
-		NULL, mnh_sm_cpu_clk_store);
+static DEVICE_ATTR_WO(cpu_clk);
 
-static ssize_t mnh_sm_debug_mipi_show(struct device *dev,
-				 struct device_attribute *attr,
-				 char *buf)
+static ssize_t debug_mipi_show(struct device *dev,
+			       struct device_attribute *attr,
+			       char *buf)
 {
 	dev_dbg(mnh_sm_dev->dev, "Entering mnh_sm_debug_mipi_show...\n");
 
 	return scnprintf(buf, MAX_STR_COPY, "%d\n", mnh_mipi_debug);
 }
 
-static ssize_t mnh_sm_debug_mipi_store(struct device *dev,
-				  struct device_attribute *attr,
-				  const char *buf,
-				  size_t count)
+static ssize_t debug_mipi_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf,
+				size_t count)
 {
 	unsigned long val = 0;
 	int ret;
@@ -860,10 +808,9 @@ static ssize_t mnh_sm_debug_mipi_store(struct device *dev,
 	return -EINVAL;
 }
 
-static DEVICE_ATTR(debug_mipi, S_IWUSR | S_IRUGO,
-		mnh_sm_debug_mipi_show, mnh_sm_debug_mipi_store);
+static DEVICE_ATTR_RW(debug_mipi);
 
-static ssize_t mnh_sm_freeze_state_show(struct device *dev,
+static ssize_t freeze_state_show(struct device *dev,
 				 struct device_attribute *attr,
 				 char *buf)
 {
@@ -872,7 +819,7 @@ static ssize_t mnh_sm_freeze_state_show(struct device *dev,
 	return scnprintf(buf, MAX_STR_COPY, "%d\n", mnh_freeze_state);
 }
 
-static ssize_t mnh_sm_freeze_state_store(struct device *dev,
+static ssize_t freeze_state_store(struct device *dev,
 				  struct device_attribute *attr,
 				  const char *buf,
 				  size_t count)
@@ -891,14 +838,13 @@ static ssize_t mnh_sm_freeze_state_store(struct device *dev,
 	return -EINVAL;
 }
 
-static DEVICE_ATTR(freeze_state, S_IWUSR | S_IRUGO,
-		mnh_sm_freeze_state_show, mnh_sm_freeze_state_store);
+static DEVICE_ATTR_RW(freeze_state);
 
 /* temporary sysfs hook to test mipi shutdown of the available channels */
-static ssize_t mnh_sm_mipi_stop_store(struct device *dev,
-				  struct device_attribute *attr,
-				  const char *buf,
-				  size_t count)
+static ssize_t mipi_stop_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf,
+			       size_t count)
 {
 	struct mnh_mipi_config cfg;
 	unsigned long val = 0;
@@ -926,22 +872,21 @@ static ssize_t mnh_sm_mipi_stop_store(struct device *dev,
 	return -EINVAL;
 }
 
-static DEVICE_ATTR(mipi_stop, S_IWUSR,
-		   NULL, mnh_sm_mipi_stop_store);
+static DEVICE_ATTR_WO(mipi_stop);
 
-static ssize_t mnh_sm_boot_args_show(struct device *dev,
-				 struct device_attribute *attr,
-				 char *buf)
+static ssize_t boot_args_show(struct device *dev,
+			      struct device_attribute *attr,
+			      char *buf)
 {
 	dev_dbg(mnh_sm_dev->dev, "Entering mnh_sm_boot_args_show...\n");
 
 	return scnprintf(buf, MAX_STR_COPY, "%d\n", mnh_boot_args);
 }
 
-static ssize_t mnh_sm_boot_args_store(struct device *dev,
-				  struct device_attribute *attr,
-				  const char *buf,
-				  size_t count)
+static ssize_t boot_args_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf,
+			       size_t count)
 {
 	unsigned long val = 0;
 	int ret;
@@ -957,21 +902,20 @@ static ssize_t mnh_sm_boot_args_store(struct device *dev,
 	return -EINVAL;
 }
 
-static DEVICE_ATTR(boot_args, S_IWUSR | S_IRUGO,
-		mnh_sm_boot_args_show, mnh_sm_boot_args_store);
+static DEVICE_ATTR_RW(boot_args);
 
-static ssize_t mnh_sm_enable_uart_show(struct device *dev,
-				 struct device_attribute *attr,
-				 char *buf)
+static ssize_t enable_uart_show(struct device *dev,
+				struct device_attribute *attr,
+				char *buf)
 {
 	return scnprintf(buf, MAX_STR_COPY, "%d\n", mnh_boot_args &
 			 MNH_UART_ENABLE);
 }
 
-static ssize_t mnh_sm_enable_uart_store(struct device *dev,
-				  struct device_attribute *attr,
-				  const char *buf,
-				  size_t count)
+static ssize_t enable_uart_store(struct device *dev,
+				 struct device_attribute *attr,
+				 const char *buf,
+				 size_t count)
 {
 	unsigned long val = 0;
 	int ret;
@@ -988,20 +932,19 @@ static ssize_t mnh_sm_enable_uart_store(struct device *dev,
 	return -EINVAL;
 }
 
-static DEVICE_ATTR(enable_uart, S_IWUSR | S_IRUGO,
-		mnh_sm_enable_uart_show, mnh_sm_enable_uart_store);
+static DEVICE_ATTR_RW(enable_uart);
 
-static ssize_t mnh_sm_power_mode_show(struct device *dev,
-				 struct device_attribute *attr,
-				 char *buf)
+static ssize_t power_mode_show(struct device *dev,
+			       struct device_attribute *attr,
+			       char *buf)
 {
 	return scnprintf(buf, MAX_STR_COPY, "%d\n", mnh_power_mode);
 }
 
-static ssize_t mnh_sm_power_mode_store(struct device *dev,
-				  struct device_attribute *attr,
-				  const char *buf,
-				  size_t count)
+static ssize_t power_mode_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf,
+				size_t count)
 {
 	int val = 0;
 	int ret;
@@ -1015,8 +958,8 @@ static ssize_t mnh_sm_power_mode_store(struct device *dev,
 	return -EINVAL;
 }
 
-static DEVICE_ATTR(power_mode, S_IWUSR | S_IRUGO,
-		mnh_sm_power_mode_show, mnh_sm_power_mode_store);
+static DEVICE_ATTR_RW(power_mode);
+
 
 static struct attribute *mnh_sm_attrs[] = {
 	&dev_attr_stage_fw.attr,
