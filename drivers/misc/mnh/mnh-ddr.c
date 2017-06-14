@@ -139,8 +139,8 @@ static struct mnh_ddr_state mnh_ddr_po_config = {
 		HWIO_DDR_PI_BASE_ADDR
 	},
 	.fsps = {
-		0x111B007D,
-		0x1111007D,
+		0x131B007D,
+		0x1311007D,
 		0x0311007D,
 		0x0422007D
 	},
