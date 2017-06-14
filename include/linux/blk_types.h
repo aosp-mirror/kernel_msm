@@ -20,12 +20,10 @@ typedef void (bio_destructor_t) (struct bio *);
 #define BC_ENCRYPT_FL		0x00000001
 #define BC_AES_256_XTS_FL	0x00000002
 
-#define BC_MAX_ENCRYPTION_KEY_SIZE	64
-
 struct bio_crypt_ctx {
-	unsigned int	bc_flags;
-	unsigned int	bc_key_size;
-	struct key	*bc_keyring_key;
+	unsigned int		bc_flags;
+	unsigned int		bc_key_size;
+	const unsigned char	*bc_key;
 };
 
 /*

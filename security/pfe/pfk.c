@@ -37,7 +37,6 @@
 #include <crypto/ice.h>
 
 #include <linux/pfk.h>
-#include <keys/user-type.h>
 
 #include "pfk_kc.h"
 #include "objsec.h"
@@ -124,58 +123,40 @@ inline bool pfk_is_ready(void)
 }
 EXPORT_SYMBOL(pfk_is_ready);
 
-/*
- * get_keys_from_bio() - Retrieve keys from BIO.
- * @bio:					Pointer to BIO to retrieve keys from.
- * @keyring_key:	Retrieved keyring key.
- * @key:					Retrieved raw key.
- * @salt:					Retrieved salt.
- *
- * The function takes keyring key semaphore, the expectation from the caller is
- * to release the semaphore once keyring_key operations are complete.
- *
- * Return: true if keys have been successfully retrieved, false otherwise.
- *
- */
-static int get_keys_from_bio(const struct bio *bio, struct key **keyring_key,
-		unsigned char const **key, unsigned char const **salt) {
-	int ret;
-	struct user_key_payload *ukp;
-	struct pfk_encryption_key *master_key;
-	struct key *keyring_key_tmp;
-	if (!(bio->bi_crypt_ctx.bc_flags & BC_AES_256_XTS_FL)) {
-		printk(KERN_WARNING "%s: Unsupported mode\n", __func__);
-		return -EINVAL;
+static int get_key_from_bio(const struct bio *bio, bool *is_pfe,
+			    const unsigned char **key_ret, size_t *key_size_ret,
+			    const unsigned char **salt_ret, size_t *salt_size_ret,
+			    enum ice_cryto_algo_mode *algo_mode_ret,
+			    enum ice_crpto_key_size *key_size_type_ret)
+{
+	const struct bio_crypt_ctx *ctx = &bio->bi_crypt_ctx;
+
+	if (!(ctx->bc_flags & BC_ENCRYPT_FL)) {
+		*is_pfe = false;
+		return -ENOTSUPP;
 	}
-	if (bio->bi_crypt_ctx.bc_key_size !=
-	    (PFK_SUPPORTED_KEY_SIZE + PFK_SUPPORTED_SALT_SIZE)) {
-		printk(KERN_WARNING
-				"%s: Unsupported key size. Expected [%d], "
-				"got [%d]\n", __func__,
-				(PFK_SUPPORTED_KEY_SIZE + PFK_SUPPORTED_SALT_SIZE),
-				bio->bi_crypt_ctx.bc_key_size);
-		return -EINVAL;
+
+	if (!(ctx->bc_flags & BC_AES_256_XTS_FL)) {
+		pr_err("pfk: unsupported encryption algorithm (bc_flags=0x%x)\n",
+		       ctx->bc_flags);
+		return -ENOTSUPP;
 	}
-	keyring_key_tmp = bio->bi_crypt_ctx.bc_keyring_key;
-	BUG_ON(!keyring_key_tmp);
-	do {
-		ret = down_read_trylock(&keyring_key_tmp->sem);
-	} while (!ret);
-	ukp = ((struct user_key_payload *)keyring_key_tmp->payload.data);
-	if (!ukp || ukp->datalen != sizeof(struct pfk_encryption_key)) {
-		up_read(&keyring_key_tmp->sem);
-		return -ENOKEY;
+
+	if (ctx->bc_key_size !=
+	    PFK_SUPPORTED_KEY_SIZE + PFK_SUPPORTED_SALT_SIZE) {
+		pr_err("pfk: unsupported key size: %u\n", ctx->bc_key_size);
+		return -ENOTSUPP;
 	}
-	master_key = (struct pfk_encryption_key *)ukp->data;
-	if (!master_key || master_key->size != PFK_AES_256_XTS_KEY_SIZE) {
-		printk_once(KERN_WARNING "%s: key size incorrect: %d\n",
-				__func__, master_key->size);
-		up_read(&keyring_key_tmp->sem);
-		return -ENOKEY;
-	}
-	*keyring_key = keyring_key_tmp;
-	*key = &master_key->raw[0];
-	*salt = &master_key->raw[PFK_SUPPORTED_KEY_SIZE];
+
+	*key_ret = &ctx->bc_key[0];
+	*key_size_ret = PFK_SUPPORTED_KEY_SIZE;
+	*salt_ret = &ctx->bc_key[PFK_SUPPORTED_KEY_SIZE];
+	*salt_size_ret = PFK_SUPPORTED_SALT_SIZE;
+
+	*algo_mode_ret = ICE_CRYPTO_ALGO_MODE_AES_XTS;
+
+	BUILD_BUG_ON(PFK_SUPPORTED_KEY_SIZE != 256 / 8);
+	*key_size_type_ret = ICE_CRYPTO_KEY_SIZE_256;
 	return 0;
 }
 
@@ -209,7 +190,6 @@ int pfk_load_key_start(const struct bio *bio,
 	enum ice_cryto_algo_mode algo_mode = 0;
 	enum ice_crpto_key_size key_size_type = 0;
 	u32 key_index = 0;
-	struct key *keyring_key = NULL;
 
 	if (!is_pfe) {
 		pr_err("is_pfe is NULL\n");
@@ -230,18 +210,11 @@ int pfk_load_key_start(const struct bio *bio,
 		return -EINVAL;
 	}
 
-	if (bio->bi_crypt_ctx.bc_flags & BC_ENCRYPT_FL) {
-		ret = get_keys_from_bio(bio, &keyring_key, &key, &salt);
-		if (ret)
-			return ret;
-		key_size = PFK_SUPPORTED_KEY_SIZE;
-		salt_size = PFK_SUPPORTED_SALT_SIZE;
-		algo_mode = ICE_CRYPTO_ALGO_MODE_AES_XTS;
-		key_size_type = ICE_CRYPTO_KEY_SIZE_256;
-	} else {
-		*is_pfe = false;
-		return -ENOTSUPP;
-	}
+	ret = get_key_from_bio(bio, is_pfe, &key, &key_size, &salt, &salt_size,
+			       &algo_mode, &key_size_type);
+	if (ret)
+		return ret;
+
 #if 0  /* debug */
 	printk(KERN_WARNING "%s: Loading key w/ key[0:1] == [%.2x%.2x] and "
 	       "salt[0:1] == [%.2x%.2x] into key_index [%d]\n", __func__,
@@ -249,9 +222,6 @@ int pfk_load_key_start(const struct bio *bio,
 #endif
 	ret = pfk_kc_load_key_start(key, key_size, salt, salt_size, &key_index,
 			async);
-	/* Release the semaphore taken by get_keys_from_bio */
-	if (keyring_key)
-		up_read(&keyring_key->sem);
 	if (ret) {
 		if (ret != -EBUSY && ret != -EAGAIN) {
 			pr_err("start: could not load key into pfk key cache, "
@@ -286,7 +256,8 @@ int pfk_load_key_end(const struct bio *bio, bool *is_pfe)
 	const unsigned char *salt = NULL;
 	size_t key_size = 0;
 	size_t salt_size = 0;
-	struct key *keyring_key = NULL;
+	enum ice_cryto_algo_mode algo_mode = 0;
+	enum ice_crpto_key_size key_size_type = 0;
 
 	if (!is_pfe) {
 		pr_err("is_pfe is NULL\n");
@@ -302,21 +273,12 @@ int pfk_load_key_end(const struct bio *bio, bool *is_pfe)
 	if (!pfk_is_ready())
 		return -ENODEV;
 
-	if (bio->bi_crypt_ctx.bc_flags & BC_ENCRYPT_FL) {
-		ret = get_keys_from_bio(bio, &keyring_key, &key, &salt);
-		if (ret)
-			return ret;
-		key_size = PFK_SUPPORTED_KEY_SIZE;
-		salt_size = PFK_SUPPORTED_SALT_SIZE;
-	} else {
-		*is_pfe = false;
-		return -ENOTSUPP;
-	}
+	ret = get_key_from_bio(bio, is_pfe, &key, &key_size, &salt, &salt_size,
+			       &algo_mode, &key_size_type);
+	if (ret)
+		return ret;
 
 	pfk_kc_load_key_end(key, key_size, salt, salt_size);
-	/* Release the semaphore taken by get_keys_from_bio */
-	if (keyring_key)
-		up_read(&keyring_key->sem);
 
 	return 0;
 }
