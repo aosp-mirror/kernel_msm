@@ -18,8 +18,8 @@
 #include "swift-pr_msm8909-pm8916.dtsi"
 #include "swift-pr_msm8909-pm8916-mtp.dtsi"
 #include "swift-pr_msm8909w.dtsi"
-#include "swift-pr_apq8009w-memory.dtsi"
-
+/*Use the setting without GPS*/
+#include "apq8009w-nowgr-memory.dtsi"
 / {
 	model = "Qualcomm Technologies, Inc. APQ8009W-PM8916 MTP SWIFT PR";
 	compatible = "qcom,apq8009-mtp", "qcom,apq8009", "qcom,mtp";
