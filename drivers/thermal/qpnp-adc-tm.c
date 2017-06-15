@@ -2045,7 +2045,12 @@ static irqreturn_t qpnp_adc_tm_high_thr_isr(int irq, void *data)
 		sensor_notify_num >>= 1;
 		i++;
 	}
-	atomic_inc(&chip->wq_cnt);
+	if (1 > atomic_read(&chip->wq_cnt)){
+		atomic_inc(&chip->wq_cnt);
+	}
+	else {
+		pr_err("adc-tm high thr get wq_cnt.count=%d doesn't equal 0\n", chip->wq_cnt.counter);
+	}
 	queue_work(chip->high_thr_wq, &chip->trigger_high_thr_work);
 
 	return IRQ_HANDLED;
@@ -2155,7 +2160,12 @@ static irqreturn_t qpnp_adc_tm_low_thr_isr(int irq, void *data)
 		i++;
 	}
 
-	atomic_inc(&chip->wq_cnt);
+	if (1 > atomic_read(&chip->wq_cnt)){
+		atomic_inc(&chip->wq_cnt);
+	}
+	else {
+		pr_err("adc-tm low thr get wq_cnt.count=%d doesn't equal 0\n", chip->wq_cnt.counter);
+	}
 	queue_work(chip->low_thr_wq, &chip->trigger_low_thr_work);
 
 	return IRQ_HANDLED;
