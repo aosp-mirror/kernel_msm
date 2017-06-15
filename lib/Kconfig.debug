@@ -30,6 +30,22 @@ config CONSOLE_LOGLEVEL_DEFAULT
 	  usage in the kernel. That is controlled by the MESSAGE_LOGLEVEL_DEFAULT
 	  option.
 
+config PRINTK_CPU_ID
+	bool "Show CPU number on printks"
+	default y
+	depends on PRINTK
+	help
+	  Selecting this option adds CPU number to printk() messages.
+	  It can be turned off by writing 0 to printk module parameter cpu.
+
+config PRINTK_PID
+	bool "Show process ID on printks"
+	default y
+	depends on PRINTK
+	help
+	  Selecting this option adds process ID to printk() messages.
+	  It can be turned off by writing 0 to printk module parameter pid.
+
 config MESSAGE_LOGLEVEL_DEFAULT
 	int "Default message log level (1-7)"
 	range 1 7

@@ -363,11 +363,15 @@ struct printk_log {
 	u8 facility;		/* syslog facility */
 	u8 flags:5;		/* internal record flags */
 	u8 level:3;		/* syslog level */
+	unsigned int cpu;
+	pid_t pid;
 }
 #ifdef CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS
 __packed __aligned(4)
 #endif
 ;
+
+static struct printk_log *last_msg;
 
 /*
  * The logbuf_lock protects kmsg buffer, indices, counters.  This can be taken
@@ -635,6 +639,9 @@ static int log_store(int facility, int level,
 	/* insert message */
 	log_next_idx += msg->len;
 	log_next_seq++;
+
+	/* record last_msg for extension */
+	last_msg = msg;
 
 	return msg->text_len;
 }
@@ -1229,6 +1236,43 @@ static size_t print_time(u64 ts, char *buf)
 		       (unsigned long)ts, rem_nsec / 1000);
 }
 
+static bool printk_cpu = IS_ENABLED(CONFIG_PRINTK_CPU_ID);
+module_param_named(cpu, printk_cpu, bool, 0644);
+
+static bool printk_pid = IS_ENABLED(CONFIG_PRINTK_PID);
+module_param_named(pid, printk_pid, bool, 0644);
+
+static size_t print_cpu(unsigned int cpu, char *buf)
+{
+	if (!printk_cpu)
+		return 0;
+
+	if (!buf)
+		return snprintf(NULL, 0, "c%u ", cpu);
+
+	return sprintf(buf, "c%u ", cpu);
+}
+
+static size_t print_pid(pid_t pid, char *buf)
+{
+	if (!printk_pid)
+		return 0;
+
+	if (!buf)
+		return snprintf(NULL, 0, "%6u ", pid);
+
+	return sprintf(buf, "%6u ", pid);
+}
+
+static void update_msg_ext(unsigned int cpu, pid_t pid)
+{
+	if (!last_msg)
+		return;
+
+	last_msg->cpu = cpu;
+	last_msg->pid = pid;
+}
+
 static size_t print_prefix(const struct printk_log *msg, bool syslog, char *buf)
 {
 	size_t len = 0;
@@ -1249,6 +1293,8 @@ static size_t print_prefix(const struct printk_log *msg, bool syslog, char *buf)
 	}
 
 	len += print_time(msg->ts_nsec, buf ? buf + len : NULL);
+	len += print_cpu(msg->cpu, buf ? buf + len : NULL);
+	len += print_pid(msg->pid, buf ? buf + len : NULL);
 	return len;
 }
 
@@ -1752,6 +1798,8 @@ static struct cont {
 	u8 level;			/* log level of first message */
 	u8 facility;			/* log facility of first message */
 	enum log_flags flags;		/* prefix, newline flags */
+	unsigned int cpu;
+	pid_t pid;
 } cont;
 
 static void cont_flush(void)
@@ -1761,6 +1809,7 @@ static void cont_flush(void)
 
 	log_store(cont.facility, cont.level, cont.flags, cont.ts_nsec,
 		  NULL, 0, cont.buf, cont.len);
+	update_msg_ext(cont.cpu, cont.pid);
 	cont.len = 0;
 }
 
@@ -1782,6 +1831,8 @@ static bool cont_add(int facility, int level, enum log_flags flags, const char *
 		cont.owner = current;
 		cont.ts_nsec = local_clock();
 		cont.flags = flags;
+		cont.cpu = smp_processor_id();
+		cont.pid = current->pid;
 	}
 
 	memcpy(cont.buf + cont.len, text, len);
@@ -1838,6 +1889,7 @@ int vprintk_store(int facility, int level,
 	char *text = textbuf;
 	size_t text_len;
 	enum log_flags lflags = 0;
+	size_t printed_len;
 
 	/*
 	 * The printf needs to come first; we need the syslog
@@ -1883,8 +1935,11 @@ int vprintk_store(int facility, int level,
 	if (dict)
 		lflags |= LOG_PREFIX|LOG_NEWLINE;
 
-	return log_output(facility, level, lflags,
+	printed_len = log_output(facility, level, lflags,
 			  dict, dictlen, text, text_len);
+	update_msg_ext(smp_processor_id(), current->pid);
+
+	return printed_len;
 }
 
 asmlinkage int vprintk_emit(int facility, int level,
