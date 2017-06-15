@@ -1263,10 +1263,6 @@ static int mnh_sm_set_state_locked(int state)
 		if (ret)
 			break;
 
-		/* toggle powered flag and notify any waiting threads */
-		mnh_sm_dev->powered = true;
-		complete(&mnh_sm_dev->powered_complete);
-
 		/* make sure ddr is configured */
 		if (mnh_sm_dev->ddr_status == MNH_DDR_OFF)
 			ret = mnh_sm_config_ddr();
@@ -1274,6 +1270,10 @@ static int mnh_sm_set_state_locked(int state)
 			ret = mnh_sm_resume_ddr();
 		if (ret)
 			break;
+
+		/* toggle powered flag and notify any waiting threads */
+		mnh_sm_dev->powered = true;
+		complete(&mnh_sm_dev->powered_complete);
 
 		/* use max CPU frequency for fast boot */
 		mnh_cpu_freq_change(CPU_FREQ_950);
