@@ -1017,7 +1017,7 @@ static int __ipa_add_flt_rule(struct ipa_flt_tbl *tbl, enum ipa_ip_type ip,
 				goto error;
 			}
 
-			if (rt_tbl->cookie != IPA_COOKIE) {
+			if (rt_tbl->cookie != IPA_RT_TBL_COOKIE) {
 				IPAERR("RT table cookie is invalid\n");
 				goto error;
 			}
@@ -1038,7 +1038,7 @@ static int __ipa_add_flt_rule(struct ipa_flt_tbl *tbl, enum ipa_ip_type ip,
 	}
 	INIT_LIST_HEAD(&entry->link);
 	entry->rule = *rule;
-	entry->cookie = IPA_COOKIE;
+	entry->cookie = IPA_FLT_COOKIE;
 	entry->rt_tbl = rt_tbl;
 	entry->tbl = tbl;
 	if (add_rear) {
@@ -1057,13 +1057,19 @@ static int __ipa_add_flt_rule(struct ipa_flt_tbl *tbl, enum ipa_ip_type ip,
 	if (id < 0) {
 		IPAERR("failed to add to tree\n");
 		WARN_ON(1);
+		goto ipa_insert_failed;
 	}
 	*rule_hdl = id;
 	entry->id = id;
 	IPADBG("add flt rule rule_cnt=%d\n", tbl->rule_cnt);
 
 	return 0;
-
+ipa_insert_failed:
+	tbl->rule_cnt--;
+	if (entry->rt_tbl)
+		entry->rt_tbl->ref_cnt--;
+	list_del(&entry->link);
+	kmem_cache_free(ipa_ctx->flt_rule_cache, entry);
 error:
 	return -EPERM;
 }
@@ -1079,7 +1085,7 @@ static int __ipa_del_flt_rule(u32 rule_hdl)
 		return -EINVAL;
 	}
 
-	if (entry->cookie != IPA_COOKIE) {
+	if (entry->cookie != IPA_FLT_COOKIE) {
 		IPAERR("bad params\n");
 		return -EINVAL;
 	}
@@ -1111,7 +1117,7 @@ static int __ipa_mdfy_flt_rule(struct ipa_flt_rule_mdfy *frule,
 		goto error;
 	}
 
-	if (entry->cookie != IPA_COOKIE) {
+	if (entry->cookie != IPA_FLT_COOKIE) {
 		IPAERR("bad params\n");
 		goto error;
 	}
@@ -1132,7 +1138,7 @@ static int __ipa_mdfy_flt_rule(struct ipa_flt_rule_mdfy *frule,
 				goto error;
 			}
 
-			if (rt_tbl->cookie != IPA_COOKIE) {
+			if (rt_tbl->cookie != IPA_RT_TBL_COOKIE) {
 				IPAERR("RT table cookie is invalid\n");
 				goto error;
 			}
