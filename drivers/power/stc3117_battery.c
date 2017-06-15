@@ -71,6 +71,7 @@
 /* minimum application current consumption in mA ( <0 !) */
 #define APP_MIN_CURRENT     (-5)
 #define APP_MIN_VOLTAGE	    3300  /* application cut-off voltage*/
+#define APP_MIN_THRESHOLD	100
 #define TEMP_MIN_ADJ	    (-5) /* minimum temperature for gain adjustment */
 
 /* normalized VM_CNF at 60, 40, 25, 10, 0, -10°C, -20°C */
@@ -416,7 +417,7 @@ static struct stc311x_platform_data stc3117_data = {
 	/* nominal internal impedance*/
 	.Rint = 898,
 	/* nominal capacity in mAh, coming from battery characterisation*/
-	.Cnom = 300,
+	.Cnom = 280,
 	.Rsense = 10, /* sense resistor mOhms*/
 	.RelaxCurrent = 15, /* current for relaxation in mA (< C/20) */
 	.Adaptive = 1, /* 1=Adaptive mode enabled, 0=Adaptive mode disabled */
@@ -881,7 +882,7 @@ static int STC311x_Restore(void)
 	reg_soc = (STC31xx_ReadWord(STC311x_REG_SOC)/512);
 	ram_soc = (GG_Ram.reg.HRSOC/512);
 	pr_info("reg_soc:%d, ram_HRSOC:%d \n", reg_soc, ram_soc);
-	pr_info("GG_status: %d, GG_Ram.reg.SOC: %d \n", GG_Ram.reg.GG_Status,GG_Ram.reg.SOC);
+	pr_info("GG_status: %c, GG_Ram.reg.SOC: %d \n", GG_Ram.reg.GG_Status,GG_Ram.reg.SOC);
 
 	/* if restore from unexpected reset, restore SOC (system dependent) */
 	if (GG_Ram.reg.GG_Status == GG_RUNNING) {
@@ -1418,7 +1419,7 @@ static void Reset_FSM_GG(void)
 /* -------------------- Algo functions ------------------------------------- */
 
 //Temporarily skip soc_correction() to fix soc jumps problem
-//#define OG2
+#define OG2
 
 #define CURRENT_TH  (GG->Cnom/10)
 #define GAIN 10
@@ -2034,7 +2035,8 @@ int GasGauge_Task(struct GasGauge_DataTypeDef *GG)
 		if ((BattData.STC_Status & M_BATFAIL) == 0)
 			BattData.BattOnline = 1;
 
-		SOC_correction(GG);
+		if (g_boot_phase == 0)
+			SOC_correction(GG);
 		/* SOC derating with temperature */
 		BattData.SOC = CompensateSOC(BattData.SOC,
 					     BattData.Temperature);
@@ -2046,16 +2048,18 @@ int GasGauge_Task(struct GasGauge_DataTypeDef *GG)
 		if (BattData.Voltage < value)
 			value = BattData.Voltage;
 		//In the boot up phase, skip early empty compensation to avoid soc drop
-		if ((g_boot_phase == 0) && value < (APP_MIN_VOLTAGE+50) &&
+		if ((g_boot_phase == 0) && value < (APP_MIN_VOLTAGE+APP_MIN_THRESHOLD) &&
 		    value > (APP_MIN_VOLTAGE-500)) {
+			if (g_debug)
+				pr_err("early empty compensation: voltage = %d, BattData.SOC = %d (0.1)\n", value, BattData.SOC);
 			if ((value < APP_MIN_VOLTAGE) && ((BattData.AvgCurrent > -100) && (BattData.AvgCurrent < 0)))
 				BattData.SOC = 0;
 			else
 				BattData.SOC = BattData.SOC *
-					(value - APP_MIN_VOLTAGE) / 50;
+					(value - APP_MIN_VOLTAGE) / APP_MIN_THRESHOLD;
 			if (g_debug)
-				pr_err("early empty compensation:  AvgVoltage = %d, BattData.Voltage = %d, BattData.SOC = %d (0.1)\n", BattData.AvgVoltage, BattData.Voltage, BattData.SOC);
-	}
+				pr_err("early empty compensation:  new BattData.SOC = %d (0.1)\n", BattData.SOC);
+		}
 
 		BattData.AccVoltage += (BattData.Voltage - BattData.AvgVoltage);
 		BattData.AccCurrent += (BattData.Current - BattData.AvgCurrent);
@@ -2089,7 +2093,9 @@ int GasGauge_Task(struct GasGauge_DataTypeDef *GG)
 			if (BattData.AvgCurrent < 0 &&
 			   BattData.SOC >= 15 &&
 			   BattData.SOC < 20 &&
-			   BattData.Voltage > (APP_MIN_VOLTAGE+50)) {
+			   BattData.Voltage > (APP_MIN_VOLTAGE+APP_MIN_THRESHOLD)) {
+			   if (g_debug)
+					pr_err("2P Lately empty compensation: BattData.SOC=%d, APP_MIN_VOLTAGE=%d, APP_MIN_THRESHOLD=%d \n", BattData.SOC, APP_MIN_VOLTAGE, APP_MIN_THRESHOLD);
 				BattData.SOC = 20;
 				STC311x_SetSOC(2*512);
 			}
