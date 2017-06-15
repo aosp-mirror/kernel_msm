@@ -29,10 +29,10 @@
 #endif
 
 #define XLOG_DEFAULT_PANIC 1
-#define XLOG_DEFAULT_REGDUMP 0x2 /* dump in RAM */
-#define XLOG_DEFAULT_DBGBUSDUMP 0x2 /* dump in RAM */
-#define XLOG_DEFAULT_VBIF_DBGBUSDUMP 0x2 /* dump in RAM */
-#define XLOG_DEFAULT_DSI_DBGBUSDUMP 0x2 /* dump in RAM */
+#define XLOG_DEFAULT_REGDUMP (MDSS_DBG_DUMP_IN_MEM|MDSS_DBG_DUMP_IN_LOG)
+#define XLOG_DEFAULT_DBGBUSDUMP MDSS_DBG_DUMP_IN_MEM
+#define XLOG_DEFAULT_VBIF_DBGBUSDUMP MDSS_DBG_DUMP_IN_MEM
+#define XLOG_DEFAULT_DSI_DBGBUSDUMP (MDSS_DBG_DUMP_IN_MEM|MDSS_DBG_DUMP_IN_LOG)
 
 /*
  * xlog will print this number of entries when it is called through
@@ -472,8 +472,8 @@ void mdss_dump_reg(const char *dump_name, u32 reg_dump_flag, char *addr,
 		xc = readl_relaxed(addr+0xc);
 
 		if (in_log)
-			pr_info("%pK : %08x %08x %08x %08x\n", addr, x0, x4, x8,
-				xc);
+			pr_info("%04x : %08x %08x %08x %08x\n", i*4,
+				x0, x4, x8, xc);
 
 		if (dump_addr && in_mem) {
 			dump_addr[i*4] = x0;

@@ -22,7 +22,7 @@
 #include "mdss_mdp_trace.h"
 #include "mdss_dsi_clk.h"
 
-#define MAX_RECOVERY_TRIALS 20
+#define MAX_RECOVERY_TRIALS 0
 #define MAX_SESSIONS 2
 
 #define SPLIT_MIXER_OFFSET 0x800
@@ -2154,21 +2154,28 @@ static int mdss_mdp_cmd_wait4pingpong(struct mdss_mdp_ctl *ctl, void *arg)
 				__func__);
 			esd_check = true;
 		}
+
 		if (ctx->pp_timeout_report_cnt == 0) {
 			MDSS_XLOG(0xbad1);
-			MDSS_XLOG_TOUT_HANDLER("mdp", "dsi0_ctrl", "dsi0_phy",
-				"dsi1_ctrl", "dsi1_phy", "vbif", "vbif_nrt",
-				"dbg_bus", "vbif_dbg_bus", "dsi_dbg_bus");
+			MDSS_XLOG_TOUT_HANDLER("mdp", "dbg_bus",
+				"dsi0_ctrl", "dsi0_phy", "dsi_dbg_bus",
+				"vbif", "vbif_nrt", "vbif_dbg_bus",
+				"xlog");
 			/* Send event to userspace on first timeout */
 			mdss_fb_pp_timeout(ctl->mfd);
+			msleep(200);
 		}
 
 		if (ctx->pp_timeout_report_cnt == MAX_RECOVERY_TRIALS) {
+#if MAX_RECOVERY_TRIALS > 0
 			MDSS_XLOG(0xbad2);
 			MDSS_XLOG_TOUT_HANDLER("mdp", "dsi0_ctrl", "dsi0_phy",
-				"dsi1_ctrl", "dsi1_phy", "vbif", "vbif_nrt",
+				"vbif", "vbif_nrt",
 				"dbg_bus", "vbif_dbg_bus",
-				"dsi_dbg_bus", "panic");
+				"dsi_dbg_bus", "xlog", "panic");
+#else
+			MDSS_XLOG_TOUT_HANDLER("panic");
+#endif
 			mdss_fb_report_panel_dead(ctl->mfd);
 		}
 		ctx->pp_timeout_report_cnt++;

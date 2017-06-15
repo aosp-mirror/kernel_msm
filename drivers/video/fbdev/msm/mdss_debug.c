@@ -1833,6 +1833,7 @@ void mdss_dsi_debug_bus_init(struct mdss_dsi_data *sdata)
 	sdata->dbg_bus_size = 0;
 
 	switch (sdata->shared_data->hw_rev) {
+	case MDSS_DSI_HW_REV_200:
 	case MDSS_DSI_HW_REV_201:
 		sdata->dbg_bus = dsi_dbg_bus_sdm660;
 		sdata->dbg_bus_size = ARRAY_SIZE(dsi_dbg_bus_sdm660);
