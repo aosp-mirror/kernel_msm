@@ -1182,10 +1182,16 @@ static void fts_irq_enable(struct fts_ts_info *info,
 		if (atomic_cmpxchg(&info->irq_enabled, 0, 1) == 0) {
 			tsp_debug_dbg(info->dev, "enable_irq\n");
 			enable_irq(info->irq);
+
+			if (device_may_wakeup(&info->client->dev))
+				enable_irq_wake(info->irq);
 		}
 	} else {
 		if (atomic_cmpxchg(&info->irq_enabled, 1, 0) == 1) {
 			tsp_debug_dbg(info->dev, "disable_irq\n");
+			if (device_may_wakeup(&info->client->dev))
+				disable_irq_wake(info->irq);
+
 			disable_irq_nosync(info->irq);
 		}
 	}
@@ -1743,7 +1749,7 @@ static int fts_probe(struct i2c_client *client, const struct i2c_device_id *idp)
 #ifdef FEATURE_FTS_PRODUCTION_CODE
 	fts_production_init(info);
 #endif /* FEATURE_FTS_PRODUCTION_CODE */
-	device_init_wakeup(&client->dev, true);
+	device_init_wakeup(&client->dev, false);
 	if (device_may_wakeup(&info->client->dev))
 		enable_irq_wake(info->irq);
 	info->lowpower_mode = true;
