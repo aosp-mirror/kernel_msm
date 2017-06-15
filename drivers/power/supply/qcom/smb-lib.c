@@ -840,14 +840,16 @@ static int smblib_usb_icl_vote_callback(struct votable *votable, void *data,
 	u8 icl_options;
 	u8 apsd_stat;
 
+	disable_irq_nosync(chg->irq_info[USBIN_ICL_CHANGE_IRQ].irq);
+
 	if (client && icl_ua == 0) {
 		rc = smblib_set_usb_suspend(chg, true);
-		if (rc < 0)
+		if (rc < 0) {
 			smblib_err(chg, "Couldn't suspend usb, rc=%d\n", rc);
+			goto enable_irq;
+		}
 		return rc;
 	}
-
-	disable_irq_nosync(chg->irq_info[USBIN_ICL_CHANGE_IRQ].irq);
 
 	pd_icl_ua = get_client_vote_locked(votable, PD_VOTER);
 	default_icl_ua = get_client_vote_locked(votable, DEFAULT_VOTER);
@@ -889,7 +891,7 @@ static int smblib_usb_icl_vote_callback(struct votable *votable, void *data,
 		}
 
 		chg->current_max_ua = pd_icl_ua;
-		goto enable_irq;
+		goto enable_chg;
 	}
 
 	if (pd_icl_ua == 0) {
@@ -948,6 +950,7 @@ static int smblib_usb_icl_vote_callback(struct votable *votable, void *data,
 		break;
 	}
 
+enable_chg:
 	rc = smblib_set_usb_suspend(chg, false);
 	if (rc < 0)
 		smblib_err(chg, "Couldn't resume usb, rc=%d\n", rc);
