@@ -1285,7 +1285,6 @@ void tracing_reset_all_online_cpus(void)
 
 #define SAVED_CMDLINES_DEFAULT 128
 #define NO_CMDLINE_MAP UINT_MAX
-static unsigned saved_tgids[SAVED_CMDLINES_DEFAULT];
 static arch_spinlock_t trace_cmdline_lock = __ARCH_SPIN_LOCK_UNLOCKED;
 struct saved_cmdlines_buffer {
 	unsigned map_pid_to_cmdline[PID_MAX_DEFAULT+1];
@@ -1293,6 +1292,7 @@ struct saved_cmdlines_buffer {
 	unsigned cmdline_num;
 	int cmdline_idx;
 	char *saved_cmdlines;
+	int *saved_tgids;
 };
 static struct saved_cmdlines_buffer *savedcmd;
 
@@ -1319,6 +1319,13 @@ static int allocate_cmdlines_buffer(unsigned int val,
 
 	s->saved_cmdlines = kmalloc(val * TASK_COMM_LEN, GFP_KERNEL);
 	if (!s->saved_cmdlines) {
+		kfree(s->map_cmdline_to_pid);
+		return -ENOMEM;
+	}
+
+	s->saved_tgids = kmalloc(val * sizeof(*s->saved_tgids), GFP_KERNEL);
+	if (!s->saved_tgids) {
+		kfree(s->saved_cmdlines);
 		kfree(s->map_cmdline_to_pid);
 		return -ENOMEM;
 	}
@@ -1524,7 +1531,7 @@ static int trace_save_cmdline(struct task_struct *tsk)
 	}
 
 	set_cmdline(idx, tsk->comm);
-	saved_tgids[idx] = tsk->tgid;
+	savedcmd->saved_tgids[idx] = tsk->tgid;
 	arch_spin_unlock(&trace_cmdline_lock);
 
 	return 1;
@@ -1576,7 +1583,7 @@ int trace_find_tgid(int pid)
 	arch_spin_lock(&trace_cmdline_lock);
 	map = savedcmd->map_pid_to_cmdline[pid];
 	if (map != NO_CMDLINE_MAP)
-		tgid = saved_tgids[map];
+		tgid = savedcmd->saved_tgids[map];
 	else
 		tgid = -1;
 
@@ -3892,6 +3899,7 @@ tracing_saved_cmdlines_size_read(struct file *filp, char __user *ubuf,
 static void free_saved_cmdlines_buffer(struct saved_cmdlines_buffer *s)
 {
 	kfree(s->saved_cmdlines);
+	kfree(s->saved_tgids);
 	kfree(s->map_cmdline_to_pid);
 	kfree(s);
 }
