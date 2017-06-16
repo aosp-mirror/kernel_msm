@@ -517,7 +517,7 @@ static void batt_worker(struct work_struct *work)
 	static int s_prev_pwrsrc_enabled = 1;
 	int pwrsrc_enabled = s_prev_pwrsrc_enabled;
 	int charging_enabled = gs_prev_charging_enabled;
-	int src = 0, present = 0;
+	int src = 0, online = 0;
 	int ibat = 0;
 	int ibat_new = 0;
 	unsigned long time_since_last_update_ms;
@@ -541,9 +541,9 @@ static void batt_worker(struct work_struct *work)
 
 	/* STEP 3: update charging_source */
 	htc_batt_info.prev.charging_source = htc_batt_info.rep.charging_source;
-	present = get_property(htc_batt_info.usb_psy,
-			       POWER_SUPPLY_PROP_PRESENT);
-	if (present)
+	online = get_property(htc_batt_info.usb_psy,
+			      POWER_SUPPLY_PROP_ONLINE);
+	if (online)
 		htc_batt_info.rep.charging_source =
 				get_property(htc_batt_info.usb_psy,
 					     POWER_SUPPLY_PROP_TYPE);
