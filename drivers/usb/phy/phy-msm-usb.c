@@ -3352,7 +3352,9 @@ static int msm_otg_pmic_dp_dm(struct msm_otg *motg, int value)
 
 	return ret;
 }
-
+#if CONFIG_HUAWEI_SAWSHARK
+extern bool mp2661_global_is_chg_plugged_in(void);
+#endif
 static int otg_power_get_property_usb(struct power_supply *psy,
 				  enum power_supply_property psp,
 				  union power_supply_propval *val)
