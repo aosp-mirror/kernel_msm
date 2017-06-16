@@ -18,3 +18,10 @@
 */
 #undef inline
 #define inline inline __attribute__((unused)) notrace
+
+#ifdef CONFIG_CC_LTO
+#ifdef CONFIG_FTRACE_MCOUNT_RECORD
+#define __norecordmcount \
+	__attribute__((__section__(".text..ftrace")))
+#endif
+#endif
