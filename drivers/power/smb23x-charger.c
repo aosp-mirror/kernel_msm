@@ -104,6 +104,7 @@ struct smb23x_chip {
 
 	/* extend */
 	bool			boot_up_phase;
+	u8				charge_disable_reason;
 	int				cfg_cool_temp_comp_mv;
 	int				cfg_cool_temp_comp_ma;
 	int				index_soft_temp_comp_mv;
@@ -391,6 +392,7 @@ enum {
 	CURRENT = BIT(1),
 	BMS = BIT(2),
 	THERMAL = BIT(3),
+	BATT_FULL = BIT(4),
 };
 
 enum {
@@ -917,6 +919,10 @@ static int smb23x_charging_enable(struct smb23x_chip *chip, int enable)
 	if (rc)
 		return rc;
 	reg &= CHG_EN_ACTIVE_LOW_BIT;
+
+	//The disable reason must be 0 so that charge can enable
+	pr_info("enable:%d, disable_reason:0x%x \n", enable, chip->charge_disable_reason);
+	enable &= !chip->charge_disable_reason;
 
 	mutex_lock(&chip->chg_disable_lock);
 	if (enable) {
@@ -2132,50 +2138,65 @@ static int smb23x_get_prop_batt_capacity(struct smb23x_chip *chip)
 }
 
 #define DEFAULT_BATT_TEMP	280
+#define BATT_STOP_CHARGE_TEMP 470
+#define BATT_RESUME_CHARGE_TEMP 450
 static int smb23x_get_prop_batt_temp(struct smb23x_chip *chip)
 {
 	union power_supply_propval ret = {0, };
 	static int charge_disable_count = 0;
-	int rc, charge_current;
-	u8 enable;
+	int charge_current;
 
-	chip->bms_psy = power_supply_get_by_name((char *)chip->bms_psy_name);
 	if (chip->bms_psy == NULL)
-			pr_err("smb23x can't find bms device \n");
+		chip->bms_psy = power_supply_get_by_name((char *)chip->bms_psy_name);
 
-	if (chip->bms_psy) {
-		chip->bms_psy->get_property(chip->bms_psy,
-				POWER_SUPPLY_PROP_TEMP, &ret);
-
-		chip->last_temp = ret.intval;
-		if (chip->cfg_cool_temp_comp_mv != -EINVAL || chip->cfg_cool_temp_comp_ma != -EINVAL)
-			check_charger_thermal_state(chip, chip->last_temp);
-
-		//Disable charging when battery full and charge current less than 20 mA
-		rc = smb23x_read(chip, CMD_REG_0, &enable);
-		if (rc == 0) {
-			enable &= CHARGE_EN_BIT;
-
-			charge_current = smb23x_get_prop_batt_current(chip);
-			if (enable && (smb23x_get_prop_batt_capacity(chip) == 100)) {
-				if ((charge_current > 0) && (charge_current < 20000)) {
-					if (charge_disable_count < 5) {
-						charge_disable_count++;
-					} else {
-						charge_disable_count = 0;
-						smb23x_charging_enable(chip, 0);
-					}
-				} else
-					charge_disable_count = 0;
-			} else if (!enable && (smb23x_get_prop_batt_voltage(chip) < 4250000)) {
-				smb23x_charging_enable(chip, 1);
-			}
-		}
-
-		return ret.intval;
+	if (chip->bms_psy == NULL) {
+		pr_err("smb23x can't find bms device \n");
+		return DEFAULT_BATT_TEMP;
 	}
 
-	return DEFAULT_BATT_TEMP;
+	chip->bms_psy->get_property(chip->bms_psy, POWER_SUPPLY_PROP_TEMP, &ret);
+	chip->last_temp = ret.intval;
+	if (chip->cfg_cool_temp_comp_mv != -EINVAL || chip->cfg_cool_temp_comp_ma != -EINVAL)
+		check_charger_thermal_state(chip, chip->last_temp);
+
+	//Stop charging if temp >= 47 degC; start charging if temp <= 45 degC
+	if (chip->last_temp >= BATT_STOP_CHARGE_TEMP && !(chip->charge_disable_reason & THERMAL)) {
+		chip->charge_disable_reason |= THERMAL;
+		pr_info("batt_temp=%d, stop charging. disable_reason=0x%x \n", chip->last_temp, chip->charge_disable_reason);
+		smb23x_charging_enable(chip, 0);
+	} else if ((chip->last_temp <= BATT_RESUME_CHARGE_TEMP) && (chip->charge_disable_reason & THERMAL)) {
+		chip->charge_disable_reason &= ~THERMAL;
+		pr_info("batt_temp=%d, start charging. disable_reason=0x%x \n", chip->last_temp, chip->charge_disable_reason);
+		smb23x_charging_enable(chip, 1);
+	}
+
+	//Stop charging if SOC is 100 and 0 < batt_A <= 20 mA; start charging if batt_V < 4250 mV
+	if ((smb23x_get_prop_batt_capacity(chip) == 100)) {
+		charge_current = smb23x_get_prop_batt_current(chip);
+		if ((charge_current > 0) && 
+					(charge_current <= 20000) && 
+					!(chip->charge_disable_reason & BATT_FULL)) {
+			if (charge_disable_count < 5) {
+				charge_disable_count++;
+			} else {
+				charge_disable_count = 0;
+				chip->charge_disable_reason |= BATT_FULL;
+				pr_info("batt full, stop charging. disable_reason=0x%x \n", chip->charge_disable_reason);
+				smb23x_charging_enable(chip, 0);
+			}
+		} else if ((smb23x_get_prop_batt_voltage(chip) < 4250000) &&
+					(chip->charge_disable_reason & BATT_FULL)) {
+			chip->charge_disable_reason &= ~BATT_FULL;
+			pr_info("batt not full, start charging. disable_reason=0x%x \n", chip->charge_disable_reason);
+			smb23x_charging_enable(chip, 1);
+		} else
+			charge_disable_count = 0;
+	} else {
+		charge_disable_count = 0;
+		chip->charge_disable_reason &= ~BATT_FULL;
+	}
+
+	return ret.intval;
 }
 #ifdef QTI_SMB231
 static int smb23x_system_temp_level_set(struct smb23x_chip *chip, int lvl_sel)
@@ -2587,8 +2608,10 @@ static int smb23x_battery_set_property(struct power_supply *psy,
 			chip->index_soft_temp_comp_mv = NORMAL;
 			chip->timer_init_register.expires = jiffies + HZ;
 			add_timer(&chip->timer_init_register); 
-		} else
+		} else {
 			schedule_delayed_work(&chip->delaywork_charging_disable, 10);
+			chip->charge_disable_reason &= ~BATT_FULL;
+		}
 		pr_info("Charger plug, state=%d\n", chip->charger_plugin);
 		power_supply_changed(chip->usb_psy);
 		break;
@@ -2978,6 +3001,7 @@ static int smb23x_probe(struct i2c_client *client,
 
 	//Init variable
 	g_chip = chip;
+	chip->charge_disable_reason = 0;
 	chip->last_temp = DEFAULT_BATT_TEMP;
 	chip->index_soft_temp_comp_mv = NORMAL;
 	chip->boot_up_phase = 1;
