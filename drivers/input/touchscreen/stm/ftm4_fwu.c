@@ -831,12 +831,6 @@ int fts_fw_update(struct fts_ts_info *info)
 	int retval = 0;
 	struct FW_FTB_HEADER fw_ftbHeader;
 
-	if (info->fts_power_state != FTS_POWER_STATE_ACTIVE) {
-		tsp_debug_err(info->dev,
-			"%s : FTS_POWER_STATE is not ACTIVE\n", __func__);
-		return -EPERM;
-	}
-
 	if (info->test_fwpath[0]) {
 		strlcpy(fw_path, &info->test_fwpath[0], sizeof(fw_path));
 	} else if(info->board->firmware_name) {
@@ -945,6 +939,12 @@ EXPORT_SYMBOL(fts_fw_update);
 int fts_fw_verify_update(struct fts_ts_info *info)
 {
 	int retry = 0;
+
+	if (info->fts_power_state != FTS_POWER_STATE_ACTIVE) {
+		tsp_debug_err(info->dev,
+			"%s : FTS_POWER_STATE is not ACTIVE\n", __func__);
+		return -EPERM;
+	}
 
 	info->fts_irq_enable(info, false);
 	while (retry++ < FTS_FW_UPDATE_RETRY) {
