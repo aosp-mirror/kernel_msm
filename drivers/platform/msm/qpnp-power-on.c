@@ -881,20 +881,20 @@ static irqreturn_t qpnp_cblpwr_irq(int irq, void *_pon)
 	int vbus;
 	struct qpnp_pon *pon = _pon;
 
-	pr_info("qpnp_cblpwr_irq: irq=%d \n", irq);
+	vbus = !!irq_read_line(irq);
+	pr_info("qpnp_cblpwr_irq: vbus=%d \n", vbus);
 
 	if (pon->usb_psy == NULL)
 		pon->usb_psy = power_supply_get_by_name("usb");
 	if (pon->usb_psy == NULL)
 		return IRQ_HANDLED;
 
-	if (!wake_lock_active(&pon->cblpwr_wlock)) {
+	if (!wake_lock_active(&pon->cblpwr_wlock) && (pon->timer_id != CBLPWR_TIMER_REINIT)) {
 		wake_lock(&pon->cblpwr_wlock);
 		pr_info("cblpwr_wake_lock \n");
 	}
 
 	if (pon->timer_id == CBLPWR_NOTIMER) {
-		vbus = !!irq_read_line(irq);
 		if (vbus)
 			qpnp_pon_cblpwr_online(pon);
 		schedule_delayed_work(&pon->delaywork_cblpwr, TIMER_IRQ);
@@ -2010,7 +2010,8 @@ void qpnp_pon_cblpwr_init(struct qpnp_pon *pon)
 			schedule_delayed_work(&pon->delaywork_cblpwr, TIMER_IRQ);
 			pon->timer_id = CBLPWR_TIMER_IRQ;
 		}
-	}
+	} else
+		pon->timer_id = CBLPWR_NOTIMER;
 }
 
 void qpnp_pon_timer_trigger_usb(struct work_struct *work)
