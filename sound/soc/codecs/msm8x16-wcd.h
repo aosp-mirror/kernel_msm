@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -218,7 +218,6 @@ struct msm8916_asoc_mach_data {
 	int spk_ext_pa_gpio;
 	int mclk_freq;
 	int lb_mode;
-	int afe_clk_ver;
 	u8 micbias1_cap_mode;
 	u8 micbias2_cap_mode;
 	atomic_t mclk_rsc_ref;
