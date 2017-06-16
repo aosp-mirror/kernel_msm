@@ -1281,6 +1281,20 @@ static int mp2661_is_chg_plugged_in(struct mp2661_chg *chip)
     return (reg & CHAG_IN_VALID_IRQ) ? 1 : 0;
 }
 
+bool mp2661_global_is_chg_plugged_in(void)
+{
+    int rc;
+
+    if (!global_mp2661)
+    {
+        pr_err("mp2661 chip can not register\n");
+        return false;
+    }
+
+    rc = (bool)mp2661_is_chg_plugged_in(global_mp2661);
+    return rc;
+}
+
 static int mp2661_battery_set_property(struct power_supply *psy,
                        enum power_supply_property prop,
                        const union power_supply_propval *val)
