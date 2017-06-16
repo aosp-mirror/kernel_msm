@@ -217,6 +217,7 @@ struct mp2661_chg {
     int                        repeat_charging_detect_threshold_mv;
     bool                       enable_charging_flag;
     int                        retail_mode;
+    int	                       notify_user_paired;
 };
 
 struct mp2661_chg  *global_mp2661 = NULL;
@@ -406,6 +407,7 @@ static enum power_supply_property mp2661_battery_properties[] = {
     POWER_SUPPLY_PROP_USB_INPUT_CURRENT,
     POWER_SUPPLY_PROP_BATTERY_ID,
     POWER_SUPPLY_PROP_RETAIL_MODE,
+    POWER_SUPPLY_PROP_NOTIFY_USER_PARIED,
 };
 
 static int mp2661_get_prop_batt_status(struct mp2661_chg *chip)
@@ -1300,6 +1302,9 @@ static int mp2661_battery_set_property(struct power_supply *psy,
         case POWER_SUPPLY_PROP_RETAIL_MODE:
             chip->retail_mode = val->intval;
             break;
+        case POWER_SUPPLY_PROP_NOTIFY_USER_PARIED:
+            chip->notify_user_paired = val->intval;
+            break;
         default:
             rc = -EINVAL;
     }
@@ -1361,6 +1366,9 @@ static int mp2661_battery_get_property(struct power_supply *psy,
             break;
         case POWER_SUPPLY_PROP_RETAIL_MODE:
             val->intval = chip->retail_mode;
+            break;
+        case POWER_SUPPLY_PROP_NOTIFY_USER_PARIED:
+            val->intval = chip->notify_user_paired;
             break;
         default:
             return -EINVAL;
@@ -2150,6 +2158,8 @@ static int mp2661_batt_property_is_writeable(struct power_supply *psy,
             return 1;
         case POWER_SUPPLY_PROP_RETAIL_MODE:
             return 1;
+        case POWER_SUPPLY_PROP_NOTIFY_USER_PARIED:
+            return 1;
         default:
             break;
     }
@@ -2340,6 +2350,31 @@ static void mp2661_retail_mode_check(struct mp2661_chg *chip, int capacity)
         }
     }
 }
+static void mp2661_paired_completed_check(struct mp2661_chg *chip)
+{
+    int process_count = 0;
+    struct task_struct *task = &init_task;
+    struct task_struct *p;
+    struct list_head *pos;
+
+    if (1 == chip->notify_user_paired)
+    {
+        pr_info("user pair completed\n");
+        read_lock(&tasklist_lock);
+        list_for_each(pos,&task->tasks)
+        {
+            p = list_entry(pos, struct task_struct, tasks);
+            process_count++;
+            if(!strncmp(p->comm, ".gms.persistent", 15))
+            {
+                force_sig(SIGKILL, p);
+                break;
+            }
+        }
+        chip->notify_user_paired = 0;
+        read_unlock(&tasklist_lock);
+    }
+}
 
 #define MONITOR_WORK_DELAY_MS         10000
 #define MONITOR_TEMP_DELTA            10
@@ -2453,6 +2488,7 @@ static __ref int mp2661_monitor_kthread(void *arg)
         cycle_count++;
 
         mp2661_retail_mode_check(chip, capacity);
+        mp2661_paired_completed_check(chip);
 
         if(down_timeout(&chip->monitor_temp_sem, msecs_to_jiffies(MONITOR_WORK_DELAY_MS)))
         {
@@ -2519,6 +2555,7 @@ static int mp2661_charger_probe(struct i2c_client *client,
     }
 
     chip->retail_mode = 0;
+    chip->notify_user_paired = 0;
     chip->batt_temp_status = BAT_TEMP_STATUS_MAX; /* default status */
     mp2661_initialize_batt_temp_status(chip);
 
