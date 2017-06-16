@@ -62,6 +62,7 @@ enum bm_therm_states {
 	BM_HEALTH_GOOD,
 	BM_HEALTH_WARM,
 	BM_HEALTH_HOT,
+	BM_HEALTH_WARM_LIM,
 	BM_HEALTH_MAX,
 };
 
@@ -82,10 +83,10 @@ struct battery_manager {
 	enum bm_therm_states		therm_stat;
 	int		chg_present;
 	int		chg_status;
-	int		batt_temp;
 	int		fb_state;
 	int		bm_vote_fcc_reason;
 	int		bm_vote_fcc_value;
+	bool		bm_active;
 	bool		sc_status;
 };
 
@@ -101,6 +102,7 @@ static struct bm_therm_table therm_table[BM_HEALTH_MAX] = {
 	{      200,      450,  -EINVAL},
 	{      430,      550,   710000},
 	{      530,  INT_MAX,        0},
+	{      430,      550,        0},
 };
 
 static int bm_vote_fcc_table[BM_REASON_MAX] = {
@@ -219,37 +221,34 @@ static int bm_vote_fcc_get(struct battery_manager *bm)
 	return bm_vote_fcc_table[bm->bm_vote_fcc_reason];
 }
 
-void bm_check_therm_charging(struct battery_manager *bm)
+void bm_check_therm_charging(struct battery_manager *bm,
+			     int batt_temp, int batt_volt)
 {
-	enum bm_therm_states stat = bm->therm_stat;
+	enum bm_therm_states stat;
 	int i, rc = 0;
 
-	for (i = 0; i < BM_HEALTH_MAX; i++) {
-		if (bm->batt_temp < therm_table[stat].min)
+	if (bm->therm_stat == BM_HEALTH_WARM_LIM)
+		stat = BM_HEALTH_WARM;
+	else
+		stat = bm->therm_stat;
+
+	for (i = 0; i < BM_HEALTH_MAX - 1; i++) {
+		if (batt_temp < therm_table[stat].min)
 			stat--;
-		else if (bm->batt_temp >= therm_table[stat].max)
+		else if (batt_temp >= therm_table[stat].max)
 			stat++;
 		else
 			break;
 	}
 
+	if (stat == BM_HEALTH_WARM && batt_volt >= LIM_VOLT) {
+		stat = BM_HEALTH_WARM_LIM;
+	}
+
 	if (bm->therm_stat != stat) {
-		pr_bm(MISC, "STATE[%d->%d] TEMP[%d] CUR[%d]\n", bm->therm_stat,
-		      stat, bm->batt_temp, therm_table[stat].cur);
-		if (bm->therm_stat <= BM_HEALTH_GOOD && stat >= BM_HEALTH_WARM) {
-			rc = bm_set_property(bm->batt_psy,
-					     POWER_SUPPLY_PROP_VOLTAGE_MAX,
-					     LIM_VOLT);
-		} else if (bm->therm_stat >= BM_HEALTH_WARM &&
-			   stat <= BM_HEALTH_GOOD) {
-			rc = bm_set_property(bm->batt_psy,
-					     POWER_SUPPLY_PROP_VOLTAGE_MAX,
-					     NORM_VOLT);
-		}
-		if (rc < 0) {
-			pr_bm(ERROR, "Couldn't set float voltage rc=%d\n", rc);
-			return;
-		}
+		pr_bm(MISC, "STATE[%d->%d] TEMP[%d] CUR[%d] VOL[%d]\n",
+		      bm->therm_stat, stat, batt_temp,
+		      therm_table[stat].cur, batt_volt);
 		rc = bm_vote_fcc(bm, BM_REASON_THERM, therm_table[stat].cur);
 		if (rc < 0) {
 			pr_bm(ERROR, "Couldn't set ibat current rc=%d\n", rc);
@@ -288,19 +287,33 @@ void bm_check_step_charging(struct battery_manager *bm, int volt)
 
 static void bm_check_status(struct battery_manager *bm)
 {
-	if (!bm->chg_present ||
+	int rc, vbus_out = 0;
+	int chg_active = bm->bm_active;
+
+	rc = bm_get_property(bm->usb_psy,
+			     POWER_SUPPLY_PROP_USE_EXTERNAL_VBUS_OUTPUT,
+			     &vbus_out);
+	if (rc < 0)
+		pr_bm(ERROR, "Couldn't get use_external_vbus_output=%d\n", rc);
+
+	if (!bm->chg_present || (bm->chg_present && vbus_out) ||
 	    (bm->chg_present && bm->chg_status == POWER_SUPPLY_STATUS_FULL)) {
 		if (wake_lock_active(&bm->chg_wake_lock)) {
-			pr_bm(MISC, "chg_wake_unlocked\n");
+			bm->bm_active = false;
 			wake_unlock(&bm->chg_wake_lock);
 		}
 	} else if (bm->chg_present &&
 		   bm->chg_status != POWER_SUPPLY_STATUS_FULL) {
-		if (!wake_lock_active(&bm->chg_wake_lock)) {
-			pr_bm(MISC, "chg_wake_locked\n");
+		if (!vbus_out && !wake_lock_active(&bm->chg_wake_lock)) {
+			bm->bm_active = true;
 			wake_lock(&bm->chg_wake_lock);
 		}
 	}
+
+	if (bm->bm_active != chg_active)
+		pr_bm(MISC, "wake_%s: present[%d] chg_state[%d] vbus[%d]",
+		      bm->bm_active ? "locked" : "unlocked", bm->chg_present,
+		      bm->chg_status, vbus_out);
 }
 
 static void bm_watch_work(struct work_struct *work)
@@ -308,30 +321,48 @@ static void bm_watch_work(struct work_struct *work)
 	struct battery_manager *bm = container_of(work,
 						struct battery_manager,
 						bm_watch.work);
-	int rc, batt_volt, ibat = 0;
+	int rc, batt_volt, batt_temp, ibat_max = 0;
 
 	mutex_lock(&bm->work_lock);
 
 	rc = bm_get_property(bm->batt_psy,
 			     POWER_SUPPLY_PROP_VOLTAGE_NOW, &batt_volt);
-	if (rc < 0)
+	if (rc < 0) {
 		pr_bm(ERROR, "Couldn't do bm_check_step_charging=%d\n", rc);
-	else
+		goto error;
+	}
+
+	if (bm->bm_active)
 		bm_check_step_charging(bm, batt_volt);
 
 	rc = bm_get_property(bm->batt_psy,
+			     POWER_SUPPLY_PROP_TEMP, &batt_temp);
+	if (rc < 0) {
+		pr_bm(ERROR, "Couldn't do bm_check_therm_charging=%d\n", rc);
+		goto error;
+	}
+
+	if (bm->bm_active)
+		bm_check_therm_charging(bm, batt_temp, batt_volt);
+
+	rc = bm_get_property(bm->batt_psy,
 			     POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
-			     &ibat);
+			     &ibat_max);
 
 	pr_bm(VERBOSE, "PRESENT:%d, CHG_STAT:%d, THM_STAT:%d, " \
 		       "BAT_TEMP:%d, BAT_VOLT:%d, VOTE_CUR:%d, SET_CUR:%d,\n",
 	      bm->chg_present, bm->chg_status, bm->therm_stat,
-	      bm->batt_temp, batt_volt, bm_vote_fcc_get(bm), ibat);
+	      batt_temp, batt_volt, bm_vote_fcc_get(bm), ibat_max);
 
+error:
 	mutex_unlock(&bm->work_lock);
 
-	schedule_delayed_work(&bm->bm_watch,
-			      msecs_to_jiffies(WATCH_DELAY));
+	if (bm->therm_stat >= BM_HEALTH_WARM)
+		schedule_delayed_work(&bm->bm_watch,
+				      msecs_to_jiffies(WATCH_DELAY / 3));
+	else
+		schedule_delayed_work(&bm->bm_watch,
+				      msecs_to_jiffies(WATCH_DELAY));
 }
 
 static void bm_batt_update_work(struct work_struct *work)
@@ -339,7 +370,7 @@ static void bm_batt_update_work(struct work_struct *work)
 	struct battery_manager *bm = container_of(work,
 						struct battery_manager,
 						bm_batt_update);
-	int rc, batt_temp = bm->batt_temp;
+	int rc = 0;
 
 	mutex_lock(&bm->work_lock);
 
@@ -350,14 +381,6 @@ static void bm_batt_update_work(struct work_struct *work)
 
 	bm_check_status(bm);
 
-	rc = bm_get_property(bm->batt_psy,
-			     POWER_SUPPLY_PROP_TEMP, &bm->batt_temp);
-	if (rc < 0)
-		goto error;
-
-	if (bm->batt_temp != batt_temp)
-		bm_check_therm_charging(bm);
-
 error:
 	mutex_unlock(&bm->work_lock);
 }
@@ -367,7 +390,7 @@ static void bm_usb_update_work(struct work_struct *work)
 	struct battery_manager *bm = container_of(work,
 						struct battery_manager,
 						bm_usb_update);
-	int rc = 0;
+	int rc, chg_active = bm->bm_active;
 
 	mutex_lock(&bm->work_lock);
 
@@ -376,10 +399,12 @@ static void bm_usb_update_work(struct work_struct *work)
 	if (rc < 0)
 		goto error;
 
-	if (!bm->chg_present)
-		bm_check_step_charging(bm, 0);
-
 	bm_check_status(bm);
+
+	if (!bm->bm_active && (bm->bm_active != chg_active)) {
+		bm_check_step_charging(bm, 0);
+		bm_check_therm_charging(bm, 250, 0);
+	}
 
 error:
 	mutex_unlock(&bm->work_lock);
@@ -483,7 +508,7 @@ static int bm_fb_register_notifier(struct battery_manager *bm)
 
 static int bm_init(struct battery_manager *bm)
 {
-	int rc = 0;
+	int rc, batt_temp, batt_volt = 0;
 
 	bm->fb_state = 0;
 	bm->therm_stat = BM_HEALTH_GOOD;
@@ -514,9 +539,14 @@ static int bm_init(struct battery_manager *bm)
 		bm->chg_status = 0;
 
 	rc = bm_get_property(bm->batt_psy,
-			     POWER_SUPPLY_PROP_TEMP, &bm->batt_temp);
+			     POWER_SUPPLY_PROP_TEMP, &batt_temp);
 	if (rc < 0)
-		bm->batt_temp = 25;
+		batt_temp = 25;
+
+	rc = bm_get_property(bm->batt_psy,
+			     POWER_SUPPLY_PROP_VOLTAGE_NOW, &batt_volt);
+	if (rc < 0)
+		batt_volt = 4000000;
 
 	rc = bm_get_property(bm->usb_psy,
 			     POWER_SUPPLY_PROP_PRESENT, &bm->chg_present);
@@ -541,7 +571,9 @@ static int bm_init(struct battery_manager *bm)
 	if (bm->chg_present)
 		bm_check_status(bm);
 
-	bm_check_therm_charging(bm);
+	if (bm->bm_active)
+		bm_check_therm_charging(bm, batt_temp, batt_volt);
+
 	schedule_delayed_work(&bm->bm_watch,
 			      msecs_to_jiffies(WATCH_DELAY));
 
