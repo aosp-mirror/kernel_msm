@@ -247,8 +247,9 @@ static ssize_t show_version_info(struct device *dev,
 	mutex_lock(&info->device_mutex);
 
 	if (fts_get_version_info(info) < 0) {
-		mutex_unlock(&info->device_mutex);
-		return -EINVAL;
+		tsp_debug_info(&info->client->dev,
+			       "%s: fts_get_version_info failed, falling back"
+			       " to cached version.", __func__);
 	}
 
 	mutex_unlock(&info->device_mutex);
