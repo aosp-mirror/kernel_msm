@@ -18,6 +18,7 @@
 #include "swift-sr_msm8909-pm8916.dtsi"
 #include "swift-sr_msm8909-pm8916-mtp.dtsi"
 #include "swift-sr_msm8909w.dtsi"
+#include "apq8009w-nowgr-memory.dtsi"
 
 / {
 	model = "Qualcomm Technologies, Inc. APQ8009W-PM8916 MTP SWIFT SR";
@@ -27,17 +28,6 @@
 	qcom,board-id= <8 0x131>;
 };
 
-&external_image_mem {
-	reg = <0x0 0x87a00000 0x0 0x0600000>;
-};
-
-&modem_adsp_mem {
-	reg = <0x0 0x88000000 0x0 0x02c00000>;
-};
-
-&peripheral_mem {
-	reg = <0x0 0x8ac00000 0x0 0x0500000>;
-};
 
 &apc_vreg_corner {
 	qcom,cpr-voltage-ceiling = <1000000 1175000 1350000>;
