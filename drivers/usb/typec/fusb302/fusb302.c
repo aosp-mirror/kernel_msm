@@ -1565,25 +1565,18 @@ static int fusb302_handle_togdone_src(struct fusb302_chip *chip,
 		cc_status_active = TYPEC_CC_RD;
 	else
 		/* Ra is not supported, report as Open */
-		cc_status_active = TYPEC_CC_RA;
+		cc_status_active = TYPEC_CC_OPEN;
 	/* restart toggling if the cc status on the active line is OPEN */
 	if (cc_status_active == TYPEC_CC_OPEN) {
 		fusb302_log("restart toggling as CC_OPEN detected\n");
 		ret = fusb302_set_toggling(chip, chip->toggling_mode);
 		return ret;
 	}
-
-	if (cc_status_active != TYPEC_CC_RA) {
-		/* update tcpm with the new cc value */
-		cc1 = (cc_polarity == TYPEC_POLARITY_CC1) ?
-		      cc_status_active : TYPEC_CC_OPEN;
-		cc2 = (cc_polarity == TYPEC_POLARITY_CC2) ?
-		      cc_status_active : TYPEC_CC_OPEN;
-	} else {
-		cc1 = cc_status_active;
-		cc2 = cc_status_active;
-	}
-
+	/* update tcpm with the new cc value */
+	cc1 = (cc_polarity == TYPEC_POLARITY_CC1) ?
+	      cc_status_active : TYPEC_CC_OPEN;
+	cc2 = (cc_polarity == TYPEC_POLARITY_CC2) ?
+	      cc_status_active : TYPEC_CC_OPEN;
 	if ((chip->cc1 != cc1) || (chip->cc2 != cc2)) {
 		chip->cc1 = cc1;
 		chip->cc2 = cc2;
