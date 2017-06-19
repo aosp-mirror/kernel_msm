@@ -99,7 +99,7 @@
 * Static variables
 *******************************************************************************/
 static unsigned char CTPM_FW_FNW1_BLACK[] = {
-	#include "FTS_FW/CEI_EFWA_3207_0x01_V0x03_20170317_app.i"
+	#include "FTS_FW/CEI_EFWA_3207_0x01_V0x04_20170615_app.i"
 };
 
  struct fts_Upgrade_Info fts_updateinfo[] =
