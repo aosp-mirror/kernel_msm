@@ -71,7 +71,6 @@
 			linux,remove-completely;
 			reg = <0x04d00000 0x1b00000>;
 			label = "modem_mem";
-			status = "disabled";
 		};
 
 		modem_efs: modem_efs_region@0x07f00000 {
@@ -80,7 +79,6 @@
 			linux,remove-completely;
 			reg = <0x07F00000 0x100000>;
 			label = "modem_efs";
-			status = "disabled";
 		};
 
 	};
