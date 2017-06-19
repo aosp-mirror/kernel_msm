@@ -74,5 +74,4 @@ obj-$(CONFIG_ACCESS_RAMOOPS)	+= access_ramoops.o
 
 # TODO: remove me b/62057517
 subdir-ccflags-y += \
-	-Wno-ignored-attributes \
-	-Wno-header-guard
+	-Wno-ignored-attributes

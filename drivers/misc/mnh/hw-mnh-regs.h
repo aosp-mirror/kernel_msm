@@ -15,7 +15,7 @@
  */
 
 #ifndef __HW_MNH_PCIE_REGS_H_
-#define __HW_MNH_PCIE_REGS_H
+#define __HW_MNH_PCIE_REGS_H_
 
 
 #define HW_MNH_PCIE_CONFIG_ADDR_START   0x00200000
