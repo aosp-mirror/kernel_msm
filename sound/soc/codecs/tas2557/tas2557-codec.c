@@ -331,17 +331,17 @@ static int tas2557_DevA_Cali_get(struct snd_kcontrol *pKcontrol,
 	struct snd_soc_codec *codec = snd_kcontrol_chip(pKcontrol);
 #endif
 	struct tas2557_priv *pTAS2557 = snd_soc_codec_get_drvdata(codec);
-	int ret = 0;
+	bool ret = 0;
 	int prm_r0 = 0;
 
 	mutex_lock(&pTAS2557->codec_lock);
 
 	ret = tas2557_get_Cali_prm_r0(pTAS2557, channel_left, &prm_r0);
-	pValue->value.integer.value[0] = prm_r0;
-	dev_dbg(pTAS2557->dev, "%s = 0x%x\n", __func__, prm_r0);
+	if (ret)
+		pValue->value.integer.value[0] = prm_r0;
 
 	mutex_unlock(&pTAS2557->codec_lock);
-	return ret;
+	return 0;
 }
 
 static int tas2557_DevB_Cali_get(struct snd_kcontrol *pKcontrol,
@@ -353,17 +353,17 @@ static int tas2557_DevB_Cali_get(struct snd_kcontrol *pKcontrol,
 	struct snd_soc_codec *codec = snd_kcontrol_chip(pKcontrol);
 #endif
 	struct tas2557_priv *pTAS2557 = snd_soc_codec_get_drvdata(codec);
-	int ret = 0;
+	bool ret = 0;
 	int prm_r0 = 0;
 
 	mutex_lock(&pTAS2557->codec_lock);
 
 	ret = tas2557_get_Cali_prm_r0(pTAS2557, channel_right, &prm_r0);
-	pValue->value.integer.value[0] = prm_r0;
-	dev_dbg(pTAS2557->dev, "%s = 0x%x\n", __func__, prm_r0);
+	if (ret)
+		pValue->value.integer.value[0] = prm_r0;
 
 	mutex_unlock(&pTAS2557->codec_lock);
-	return ret;
+	return 0;
 }
 
 static int tas2557_program_get(struct snd_kcontrol *pKcontrol,

@@ -183,6 +183,8 @@
 
 #define TAS2557_PG2P1_CALI_R0_REG		TAS2557_REG(0x8c, 0x2f, 0x40)
 #define TAS2557_PG1P0_CALI_R0_REG		TAS2557_REG(0x8c, 0x2f, 0x28)
+#define TAS2557_PG2P1_CALI_T_REG		TAS2557_REG(0x8c, 0x30, 0x20)
+#define TAS2557_PG1P0_CALI_T_REG		TAS2557_REG(0x8c, 0x30, 0x08)
 
 #define TAS2557_DAC_INTERPOL_REG		TAS2557_REG(100, 0, 1)
 #define TAS2557_SOFT_MUTE_REG			TAS2557_REG(100, 0, 7)
@@ -528,6 +530,12 @@ struct tas2557_priv {
 	struct work_struct mtimerwork;
 
 	unsigned int mnErrCode;
+
+	/* for configurations with maximum TLimit 0x7fffffff,
+	 * bypass calibration update, usually used in factory test
+	*/
+	bool mbBypassTMax;
+
 #ifdef CONFIG_TAS2557_CODEC_STEREO
 	struct mutex codec_lock;
 #endif
@@ -538,6 +546,7 @@ struct tas2557_priv {
 	struct mutex file_lock;
 #endif
 	const char *cal_file_name;
+	spinlock_t irq_lock;
 };
 
 #endif /* _TAS2557_H */

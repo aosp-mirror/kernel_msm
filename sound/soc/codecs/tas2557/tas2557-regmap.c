@@ -601,6 +601,10 @@ void tas2557_enableIRQ(struct tas2557_priv *pTAS2557, enum channel chl, bool ena
 	static bool bLeftChlEnable;
 	static bool bRightChlEnable;
 
+	unsigned long flags;
+
+	spin_lock_irqsave(&pTAS2557->irq_lock, flags);
+
 	if (enable) {
 		if (!pTAS2557->mbIRQEnable) {
 			if (chl & channel_left) {
@@ -643,6 +647,8 @@ void tas2557_enableIRQ(struct tas2557_priv *pTAS2557, enum channel chl, bool ena
 			pTAS2557->mbIRQEnable = false;
 		}
 	}
+
+	spin_unlock_irqrestore(&pTAS2557->irq_lock, flags);
 }
 
 static void tas2557_hw_reset(struct tas2557_priv *pTAS2557)
@@ -1166,6 +1172,8 @@ static int tas2557_i2c_probe(struct i2c_client *pClient,
 	if (gpio_is_valid(pTAS2557->mnLeftChlGpioRst)
 		|| gpio_is_valid(pTAS2557->mnRightChlGpioRst))
 		tas2557_hw_reset(pTAS2557);
+
+	spin_lock_init(&pTAS2557->irq_lock);
 
 	pTAS2557->read = tas2557_dev_read;
 	pTAS2557->write = tas2557_dev_write;

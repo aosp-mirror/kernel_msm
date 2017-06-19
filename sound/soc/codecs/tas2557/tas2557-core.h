@@ -50,6 +50,7 @@
 #define TAS2557_YRAM5_START_REG			8
 #define TAS2557_YRAM5_END_REG			27
 
+#define TAS2557_COEFFICIENT_TMAX	0x7fffffff
 #define TAS2557_SAFE_GUARD_PATTERN		0x5a
 #define LOW_TEMPERATURE_CHECK_PERIOD 5000	/* 5 second */
 
@@ -69,7 +70,7 @@ int tas2557_set_bit_rate(struct tas2557_priv *pTAS2557, enum channel chn, unsign
 int tas2557_get_bit_rate(struct tas2557_priv *pTAS2557, enum channel chn, unsigned char *pBitRate);
 int tas2557_set_config(struct tas2557_priv *pTAS2557, int config);
 void tas2557_fw_ready(const struct firmware *pFW, void *pContext);
-int tas2557_get_Cali_prm_r0(struct tas2557_priv *pTAS2557, enum channel chl, int *prm_r0);
+bool tas2557_get_Cali_prm_r0(struct tas2557_priv *pTAS2557, enum channel chl, int *prm_r0);
 int tas2557_set_program(struct tas2557_priv *pTAS2557, unsigned int nProgram, int nConfig);
 int tas2557_set_calibration(struct tas2557_priv *pTAS2557, int nCalibration);
 int tas2557_load_default(struct tas2557_priv *pTAS2557);
