@@ -32,6 +32,8 @@ DEFINE_MSM_MUTEX(ois_gyro_mutex);
 
 #define MSM_OIS_DATA_BUFFER_SIZE 15
 
+#define MAX_FAIL_CNT 3
+
 
 struct msm_ois_ctrl_t;
 
@@ -46,6 +48,7 @@ enum msm_ois_timer_state_t {
 	OIS_TIME_INIT,
 	OIS_TIME_ACTIVE,
 	OIS_TIME_INACTIVE,
+	OIS_TIME_ERROR,
 };
 
 struct msm_ois_vreg {
@@ -73,6 +76,7 @@ struct ois_timer {
 	struct work_struct g_work;
 	enum msm_ois_timer_state_t ois_timer_state;
 	struct msm_ois_ctrl_t *o_ctrl;
+	int i2c_fail_count;
 };
 
 struct msm_ois_ctrl_t {
