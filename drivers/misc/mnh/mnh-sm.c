@@ -1215,6 +1215,27 @@ mipi_config_arg_fail:
 
 static DEVICE_ATTR_WO(mipi_config);
 
+static ssize_t ddr_mbist_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf, size_t count)
+{
+	int val = 0;
+	int ret;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret || ((val != LIMITED_MOVI1_3N) && (val != MOVI1_3N)))
+		return -EINVAL;
+
+	mnh_pwr_set_state(MNH_PWR_S0);
+	mnh_ddr_po_init(mnh_sm_dev->dev, mnh_sm_dev->ddr_pad_iso_n_pin);
+	mnh_ddr_mbist(dev, val);
+	mnh_pwr_set_state(MNH_PWR_S4);
+
+	return count;
+}
+
+static DEVICE_ATTR_WO(ddr_mbist);
+
 static struct attribute *mnh_sm_attrs[] = {
 	&dev_attr_stage_fw.attr,
 	&dev_attr_poweron.attr,
@@ -1237,6 +1258,7 @@ static struct attribute *mnh_sm_attrs[] = {
 	&dev_attr_error_event.attr,
 	&dev_attr_fw_ver.attr,
 	&dev_attr_mipi_config.attr,
+	&dev_attr_ddr_mbist.attr,
 	NULL
 };
 ATTRIBUTE_GROUPS(mnh_sm);
