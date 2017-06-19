@@ -1323,7 +1323,7 @@ static int allocate_cmdlines_buffer(unsigned int val,
 		return -ENOMEM;
 	}
 
-	s->saved_tgids = kmalloc(val * sizeof(*s->saved_tgids), GFP_KERNEL);
+	s->saved_tgids = kzalloc(val * sizeof(*s->saved_tgids), GFP_KERNEL);
 	if (!s->saved_tgids) {
 		kfree(s->saved_cmdlines);
 		kfree(s->map_cmdline_to_pid);
