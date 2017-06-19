@@ -409,6 +409,14 @@ static int smb2_parse_dt(struct smb2 *chip)
 
 	chg->suspend_input_on_debug_batt = of_property_read_bool(node,
 					"qcom,suspend-input-on-debug-batt");
+
+	/* config vega model: the JEITA_CCCOMP_CFG_REG, FVCOMP regs ( compensate
+	current -1600mA,voltage -200mV ) in jeita Tcold,Thot temperature range. */
+	if (of_property_read_bool(node, "lenovo,vega-model")) {
+		smblib_write(chg, JEITA_FVCOMP_CFG_REG, 0x1A);
+		smblib_write(chg, JEITA_CCCOMP_CFG_REG, 0x3F);
+	}
+
 	return 0;
 }
 
