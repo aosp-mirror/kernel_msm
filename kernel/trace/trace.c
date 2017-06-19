@@ -3966,13 +3966,13 @@ tracing_saved_tgids_read(struct file *file, char __user *ubuf,
 	int pid;
 	int i;
 
-	file_buf = kmalloc(SAVED_CMDLINES_DEFAULT*(16+1+16), GFP_KERNEL);
+	file_buf = kmalloc(savedcmd->cmdline_num*(16+1+16), GFP_KERNEL);
 	if (!file_buf)
 		return -ENOMEM;
 
 	buf = file_buf;
 
-	for (i = 0; i < SAVED_CMDLINES_DEFAULT; i++) {
+	for (i = 0; i < savedcmd->cmdline_num; i++) {
 		int tgid;
 		int r;
 
