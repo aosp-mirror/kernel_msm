@@ -40,6 +40,7 @@
 #include <linux/fs.h>
 #include <linux/sched/rt.h>
 #include <linux/coresight-stm.h>
+#include <linux/vmalloc.h>
 
 #include "trace.h"
 #include "trace_output.h"
@@ -1312,23 +1313,23 @@ static inline void set_cmdline(int idx, const char *cmdline)
 static int allocate_cmdlines_buffer(unsigned int val,
 				    struct saved_cmdlines_buffer *s)
 {
-	s->map_cmdline_to_pid = kmalloc(val * sizeof(*s->map_cmdline_to_pid),
-					GFP_KERNEL);
+	s->map_cmdline_to_pid = vmalloc(val * sizeof(*s->map_cmdline_to_pid));
 	if (!s->map_cmdline_to_pid)
 		return -ENOMEM;
 
-	s->saved_cmdlines = kmalloc(val * TASK_COMM_LEN, GFP_KERNEL);
+	s->saved_cmdlines = vmalloc(val * TASK_COMM_LEN);
 	if (!s->saved_cmdlines) {
-		kfree(s->map_cmdline_to_pid);
+		vfree(s->map_cmdline_to_pid);
 		return -ENOMEM;
 	}
 
-	s->saved_tgids = kzalloc(val * sizeof(*s->saved_tgids), GFP_KERNEL);
+	s->saved_tgids = vmalloc(val * sizeof(*s->saved_tgids));
 	if (!s->saved_tgids) {
-		kfree(s->saved_cmdlines);
-		kfree(s->map_cmdline_to_pid);
+		vfree(s->saved_cmdlines);
+		vfree(s->map_cmdline_to_pid);
 		return -ENOMEM;
 	}
+	memset(s->saved_tgids, 0, val * sizeof(*s->saved_tgids));
 
 	s->cmdline_idx = 0;
 	s->cmdline_num = val;
@@ -3898,9 +3899,9 @@ tracing_saved_cmdlines_size_read(struct file *filp, char __user *ubuf,
 
 static void free_saved_cmdlines_buffer(struct saved_cmdlines_buffer *s)
 {
-	kfree(s->saved_cmdlines);
-	kfree(s->saved_tgids);
-	kfree(s->map_cmdline_to_pid);
+	vfree(s->saved_cmdlines);
+	vfree(s->saved_tgids);
+	vfree(s->map_cmdline_to_pid);
 	kfree(s);
 }
 
@@ -3966,7 +3967,7 @@ tracing_saved_tgids_read(struct file *file, char __user *ubuf,
 	int pid;
 	int i;
 
-	file_buf = kmalloc(savedcmd->cmdline_num*(16+1+16), GFP_KERNEL);
+	file_buf = vmalloc(savedcmd->cmdline_num*(16+1+16));
 	if (!file_buf)
 		return -ENOMEM;
 
@@ -3989,7 +3990,7 @@ tracing_saved_tgids_read(struct file *file, char __user *ubuf,
 	len = simple_read_from_buffer(ubuf, cnt, ppos,
 				      file_buf, len);
 
-	kfree(file_buf);
+	vfree(file_buf);
 
 	return len;
 }
