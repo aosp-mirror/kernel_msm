@@ -27,8 +27,6 @@
 #include <linux/workqueue.h>
 
 #define HTC_BATT_NAME "htc_battery"
-static struct htc_battery_info htc_batt_info;
-static struct htc_battery_timer htc_batt_timer;
 
 static int full_level_dis_chg = 100;
 module_param_named(
@@ -135,6 +133,9 @@ struct htc_battery_timer {
 	unsigned int time_out;
 	struct alarm batt_check_wakeup_alarm;
 };
+
+static struct htc_battery_info htc_batt_info;
+static struct htc_battery_timer htc_batt_timer;
 
 enum {
 	BATT_ID_1 = 1,
