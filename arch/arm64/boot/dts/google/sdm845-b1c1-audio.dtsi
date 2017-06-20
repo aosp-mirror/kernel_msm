@@ -1,0 +1,129 @@
+/* AUDIO: RESET: GPIO64, INTR1: GPIO54, INTR2: GPIO53, EXT_CLK: PM845.68 LN_BB_CLK3, SLIMBUS_CLK: GPIO70, SLIMBUS_DATA[0..1]: GPIO71,GPIO72 */
+
+#include <dt-bindings/clock/qcom,audio-ext-clk.h>
+
+&pm8998_gpios {
+	gpio@cc00 { /* GPIO 13 */
+		status = "disabled";
+	};
+};
+
+&slim_aud {
+	tavil_codec {
+		/delete-node/ swr_master;
+	};
+};
+
+&tlmm {
+	spkr_boost_reset: spkr_boost_reset {
+		spkr_boost_reset_active: spkr_boost_reset_active {
+			mux {
+				pins = "gpio75";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio75";
+				drive-strength = <8>;
+				bias-pull-up;
+				output-high;
+			};
+		};
+		spkr_boost_reset_sleep: spkr_boost_reset_sleep {
+			mux {
+				pins = "gpio75";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio75";
+				drive-strength = <2>;
+				bias-pull-up;
+				output-high;
+			};
+		};
+	};
+	spkr_boost_irq: spkr_boost_irq {
+		spkr_boost_irq_active: spkr_boost_irq_active {
+			mux {
+				pins = "gpio40";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio40";
+				drive-strength = <2>;
+				input-enable;
+				bias-pull-up;
+			};
+		};
+		spkr_boost_irq_sleep: spkr_boost_irq_sleep {
+			mux {
+				pins = "gpio40";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio40";
+				drive-strength = <2>;
+				input-enable;
+				bias-pull-up;
+			};
+		};
+	};
+};
+
+&soc {
+	clock_audio_lnbb: audio_ext_clk_lnbb {
+		status = "ok";
+		compatible = "qcom,audio-ref-clk";
+		clock-names = "osr_clk";
+		clocks = <&clock_rpmh RPMH_LN_BB_CLK3>;
+		qcom,node_has_rpm_clock;
+		#clock-cells = <1>;
+	};
+
+	sound-tavil {
+		qcom,audio-routing =
+			"AIF4 VI", "MCLK",
+			"RX_BIAS", "MCLK",
+			"MADINPUT", "MCLK",
+			"DMIC0", "MIC BIAS1",
+			"MIC BIAS1", "Digital Mic0",
+			"DMIC1", "MIC BIAS1",
+			"MIC BIAS1", "Digital Mic1",
+			"DMIC2", "MIC BIAS3",
+			"MIC BIAS3", "Digital Mic2",
+			"DMIC3", "MIC BIAS4",
+			"MIC BIAS4", "Digital Mic3";
+
+		qcom,wsa-max-devs = <0>;
+		/delete-property/ qcom,wsa-devs;
+		/delete-property/ qcom,wsa-aux-dev-prefix;
+	};
+};
+
+/* path to speaker boosters */
+&dai_mi2s3 {
+	/* AP in SD0 (gpio60), AP out SD1 (gpio61); */
+	/* SD0; in; ("rx-lines" is playback path): mask=1 */
+	/* SD1; out ("tx-lines" is capture path): mask=2 */
+	pinctrl-names = "default", "sleep";
+	pinctrl-0 = <&quat_mi2s_mclk_active &quat_mi2s_active &quat_mi2s_sd0_active &quat_mi2s_sd1_active &spkr_boost_irq_active &spkr_boost_reset_active>;
+	pinctrl-1 = <&quat_mi2s_mclk_sleep &quat_mi2s_sleep &quat_mi2s_sd0_sleep &quat_mi2s_sd1_sleep &spkr_boost_irq_sleep &spkr_boost_reset_sleep>;
+};
+
+/* speaker boosters */
+&qupv3_se12_i2c {
+	status = "ok";
+	spk_codec1: max98927@39 {
+		compatible = "maxim,max98927";
+		maxim,vmon-slot-no = <0>;
+		maxim,imon-slot-no = <1>;
+		maxim,interleave-mode = <0>;
+		reg = <0x39>;
+	};
+	spk_codec2: max98927@3a {
+		compatible = "maxim,max98927";
+		maxim,vmon-slot-no = <2>;
+		maxim,imon-slot-no = <3>;
+		maxim,interleave-mode = <0>;
+		reg = <0x3a>;
+	};
+};

@@ -1,0 +1,9 @@
+&pm8998_gpios {
+	nfc_clk_default {
+		pins = "gpio21";
+		function = "normal";
+		input-enable;
+		power-source = <1>;
+	};
+};
+
