@@ -18,6 +18,7 @@ qcom,walleye-unknown-batterydata {
 	htc,batt_id = <255>;
 	htc,id_raw_min = <200001>;
 	htc,id_raw_max = <450000>;
+	htc,fastchg-current-ma = <2700>;
 	qcom,fg-profile-data = [
 		 6E 1F B0 05
 		 74 0A 9B FC

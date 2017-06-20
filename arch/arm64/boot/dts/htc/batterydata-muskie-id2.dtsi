@@ -16,6 +16,7 @@ qcom,muskie-id2-batterydata {
 	qcom,fg-cc-cv-threshold-mv = <4400>;
 	qcom,fcc-mah = <3830>;
 	qcom,batt-thermal-limit-vol = <4200>;
+	htc,fastchg-current-ma = <3825>;
 	qcom,fg-profile-data = [
 		 6D 1F BB 05
 		 62 0A CF FC

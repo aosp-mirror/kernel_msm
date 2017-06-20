@@ -16,6 +16,7 @@ qcom,walleye-id1-batterydata {
 	qcom,fg-cc-cv-threshold-mv = <4400>;
 	qcom,fcc-mah = <2700>;
 	qcom,batt-thermal-limit-vol = <4200>;
+	htc,fastchg-current-ma = <2700>;
 	qcom,fg-profile-data = [
 		 6E 1F B0 05
 		 74 0A 9B FC
