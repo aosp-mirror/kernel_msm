@@ -10,48 +10,46 @@
  * GNU General Public License for more details.
  */
 
-&soc {
-	pinctrl@03400000 {
-		pmx_sde {
-			sde_dsi_active {
-				mux {
-					pins = "gpio6";
-				};
-				config {
-					pins = "gpio6";
-				};
+&tlmm {
+	pmx_sde {
+		sde_dsi_active {
+			mux {
+				pins = "gpio6";
 			};
-			sde_dsi_suspend {
-				mux {
-					pins = "gpio6";
-				};
-				config {
-					pins = "gpio6";
-				};
+			config {
+				pins = "gpio6";
 			};
 		};
-		ts_mux {
-			ts_active: ts_active {
-				mux {
-					pins = "gpio99", "gpio125";
-					function = "gpio";
-				};
-				config {
-					pins = "gpio99", "gpio125";
-					drive-strength = <16>;
-					bias-pull-up;
-				};
+		sde_dsi_suspend {
+			mux {
+				pins = "gpio6";
 			};
-			ts_suspend: ts_suspend {
-				mux {
-					pins = "gpio99", "gpio125";
-					function = "gpio";
-				};
-				config {
-					pins = "gpio99", "gpio125";
-					drive-strength = <2>;
-					bias-pull-down;
-				};
+			config {
+				pins = "gpio6";
+			};
+		};
+	};
+	ts_mux {
+		ts_active: ts_active {
+			mux {
+				pins = "gpio99", "gpio125";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio99", "gpio125";
+				drive-strength = <16>;
+				bias-pull-up;
+			};
+		};
+		ts_suspend: ts_suspend {
+			mux {
+				pins = "gpio99", "gpio125";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio99", "gpio125";
+				drive-strength = <2>;
+				bias-pull-down;
 			};
 		};
 	};

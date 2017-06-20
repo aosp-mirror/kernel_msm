@@ -1,0 +1,34 @@
+&us_euro_sw_wcd_active {
+	config {
+		/delete-property/ output-high;
+		output-low;
+	};
+};
+
+&spkr_1_wcd_en_active{
+	config {
+		/delete-property/ output-high;
+		output-low;
+	};
+};
+
+&spkr_2_wcd_en_active {
+	config {
+		/delete-property/ output-high;
+		output-low;
+	};
+};
+
+&hph_en0_wcd_active {
+	config {
+		/delete-property/ output-high;
+		output-low;
+	};
+};
+
+&hph_en1_wcd_active{
+	config {
+		/delete-property/ output-high;
+		output-low;
+	};
+};
