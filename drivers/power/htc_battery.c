@@ -829,11 +829,11 @@ static int htc_battery_probe_process(void)
 		} else {
 			rc = of_property_read_u32(
 					profile_node,
-					"qcom,fastchg-current-ma",
+					"htc,fastchg-current-ma",
 					&htc_batt_info.batt_fcc_ma);
 			if (rc < 0) {
 				BATT_LOG(
-					"%s: error reading qcom,fastchg-current-ma. %d\n",
+					"%s: error reading htc,fastchg-current-ma. %d\n",
 					__func__, rc);
 				htc_batt_info.batt_fcc_ma = 2600;
 			}
