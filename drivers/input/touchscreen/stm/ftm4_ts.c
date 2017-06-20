@@ -2002,6 +2002,7 @@ static int fts_stop_device(struct fts_ts_info *info)
 
 		fts_interrupt_set(info, INT_DISABLE);
 		fts_irq_enable(info, false);
+		synchronize_irq(info->irq);
 
 		fts_command(info, FLUSHBUFFER);
 		fts_command(info, SENSEOFF);
@@ -2015,6 +2016,7 @@ static int fts_stop_device(struct fts_ts_info *info)
 	} else {
 		fts_interrupt_set(info, INT_DISABLE);
 		fts_irq_enable(info, false);
+		synchronize_irq(info->irq);
 
 		fts_command(info, FLUSHBUFFER);
 		fts_release_all_finger(info);
