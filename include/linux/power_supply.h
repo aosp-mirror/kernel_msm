@@ -251,6 +251,8 @@ enum power_supply_property {
 	POWER_SUPPLY_PROP_IPD,
 	POWER_SUPPLY_PROP_REAL_TYPE,
 	POWER_SUPPLY_PROP_PR_SWAP,
+	POWER_SUPPLY_PROP_CC_STEP,
+	POWER_SUPPLY_PROP_CC_STEP_SEL,
 	/* Local extensions of type int64_t */
 	POWER_SUPPLY_PROP_CHARGE_COUNTER_EXT,
 	/* Properties of type `const char *' */
