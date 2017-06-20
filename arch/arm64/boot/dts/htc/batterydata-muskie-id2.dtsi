@@ -7,7 +7,12 @@ qcom,muskie-id2-batterydata {
 	qcom,battery-type = "muskie 2";
 	qcom,checksum = <0x13D4>;
 	qcom,gui-version = "PMI8998GUI - 2.0.0.55";
-	qcom,fastchg-current-ma = <3825>;
+	/*
+	 * a conservative value used to limit charge current in case the
+	 * charging module is not loaded. The charging module would change
+	 * the value to allow faster charging.
+	 */
+	qcom,fastchg-current-ma = <500>;
 	qcom,fg-cc-cv-threshold-mv = <4400>;
 	qcom,fcc-mah = <3830>;
 	qcom,batt-thermal-limit-vol = <4200>;

@@ -65,6 +65,12 @@
 	qcom,hvdcp-disable;		/* disable HVDCP */
 	qcom,usb-icl-ua = <1500000>;
 	external-vbus-supply = <&tps61099_vbus>;
+	/*
+	 * a conservative value used to limit charge current in case the
+	 * charging module is not loaded. The charging module would change
+	 * the value to allow faster charging.
+	 */
+	qcom,fcc-max-ua = <500000>;
 };
 
 &qusb_phy0 {
