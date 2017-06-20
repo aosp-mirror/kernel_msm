@@ -12,6 +12,8 @@
 
 &soc {
 	i2c@78b9000 { /* BLSP1 QUP5 */
+		qcom,clk-freq-out = <400000>;
+
 		synaptics@20 {
 			status = "disabled";
 		};
