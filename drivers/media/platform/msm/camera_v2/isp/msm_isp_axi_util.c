@@ -27,6 +27,12 @@ static void __msm_isp_axi_stream_update(
 			struct msm_vfe_axi_stream *stream_info,
 			struct msm_isp_timestamp *ts);
 
+static int msm_isp_return_empty_buffer(struct vfe_device *vfe_dev,
+	struct msm_vfe_axi_stream *stream_info, uint32_t user_stream_id,
+	uint32_t frame_id, uint32_t buf_index,
+	enum msm_vfe_input_src frame_src,
+	struct msm_isp_buffer *buf);
+
 #define DUAL_VFE_AND_VFE1(s, v) ((s->stream_src < RDI_INTF_0) && \
 			v->is_split && vfe_dev->pdev->id == ISP_VFE1)
 
@@ -1645,7 +1651,6 @@ static int msm_isp_update_deliver_count(struct vfe_device *vfe_dev,
 		rc = -EINVAL;
 		goto done;
 	} else {
-		stream_info->undelivered_request_cnt--;
 		if (pingpong_bit != stream_info->sw_ping_pong_bit) {
 			pr_err("%s:%d ping pong bit actual %d sw %d\n",
 				__func__, __LINE__, pingpong_bit,
@@ -1653,6 +1658,7 @@ static int msm_isp_update_deliver_count(struct vfe_device *vfe_dev,
 			rc = -EINVAL;
 			goto done;
 		}
+		stream_info->undelivered_request_cnt--;
 		stream_info->sw_ping_pong_bit ^= 1;
 	}
 done:
@@ -2584,6 +2590,18 @@ int msm_isp_axi_reset(struct vfe_device *vfe_dev,
 
 		/* set ping pong to scratch before flush */
 		spin_lock_irqsave(&stream_info->lock, flags);
+		/* for HAL 3 return empty buffers */
+		while (stream_info->undelivered_request_cnt) {
+			msm_isp_return_empty_buffer(vfe_dev, stream_info,
+					stream_info->stream_id,
+					reset_cmd->frame_id + 1, 0,
+					SRC_TO_INTF(stream_info->stream_src),
+					stream_info->buf[
+						stream_info->sw_ping_pong_bit]);
+			stream_info->sw_ping_pong_bit ^= 1;
+			stream_info->undelivered_request_cnt--;
+		}
+		stream_info->sw_ping_pong_bit = 0;
 		msm_isp_cfg_stream_scratch(stream_info,
 					VFE_PING_FLAG);
 		msm_isp_cfg_stream_scratch(stream_info,
@@ -3249,10 +3267,10 @@ int msm_isp_cfg_axi_stream(struct vfe_device *vfe_dev, void *arg)
 static int msm_isp_return_empty_buffer(struct vfe_device *vfe_dev,
 	struct msm_vfe_axi_stream *stream_info, uint32_t user_stream_id,
 	uint32_t frame_id, uint32_t buf_index,
-	enum msm_vfe_input_src frame_src)
+	enum msm_vfe_input_src frame_src,
+	struct msm_isp_buffer *buf)
 {
 	int rc = -1;
-	struct msm_isp_buffer *buf = NULL;
 	uint32_t bufq_handle = 0;
 	uint32_t stream_idx;
 	struct msm_isp_event_data error_event;
@@ -3283,12 +3301,14 @@ static int msm_isp_return_empty_buffer(struct vfe_device *vfe_dev,
 	else
 		bufq_handle = stream_info->bufq_handle[VFE_BUF_QUEUE_SHARED];
 
-
-	rc = vfe_dev->buf_mgr->ops->get_buf(vfe_dev->buf_mgr,
-		vfe_dev->pdev->id, bufq_handle, buf_index, &buf);
-	if (rc == -EFAULT) {
-		msm_isp_halt_send_error(vfe_dev, ISP_EVENT_BUF_FATAL_ERROR);
-		return rc;
+	if (!buf) {
+		rc = vfe_dev->buf_mgr->ops->get_buf(vfe_dev->buf_mgr,
+			vfe_dev->pdev->id, bufq_handle, buf_index, &buf);
+		if (rc == -EFAULT) {
+			msm_isp_halt_send_error(vfe_dev,
+				ISP_EVENT_BUF_FATAL_ERROR);
+			return rc;
+		}
 	}
 
 	if (rc < 0 || buf == NULL) {
@@ -3315,7 +3335,7 @@ static int msm_isp_return_empty_buffer(struct vfe_device *vfe_dev,
 	error_event.u.error_info.err_type = ISP_ERROR_RETURN_EMPTY_BUFFER;
 	error_event.u.error_info.session_id = stream_info->session_id;
 	error_event.u.error_info.stream_id_mask =
-		1 << (bufq_handle & 0xFF);
+		1 << (buf->bufq_handle & 0xFF);
 	msm_isp_send_event(vfe_dev, ISP_EVENT_ERROR, &error_event);
 
 	return 0;
@@ -3397,7 +3417,7 @@ static int msm_isp_request_frame(struct vfe_device *vfe_dev,
 			stream_info->stream_id);
 
 		rc = msm_isp_return_empty_buffer(vfe_dev, stream_info,
-			user_stream_id, frame_id, buf_index, frame_src);
+			user_stream_id, frame_id, buf_index, frame_src, NULL);
 		if (rc < 0)
 			pr_err("%s:%d failed: return_empty_buffer src %d\n",
 				__func__, __LINE__, frame_src);
@@ -3420,7 +3440,7 @@ static int msm_isp_request_frame(struct vfe_device *vfe_dev,
 				__func__, stream_info->stream_id);
 			rc = msm_isp_return_empty_buffer(vfe_dev, stream_info,
 				user_stream_id, frame_id, buf_index,
-				frame_src);
+				frame_src, NULL);
 			spin_unlock_irqrestore(&stream_info->lock,
 					flags);
 			return 0;
@@ -3511,7 +3531,7 @@ static int msm_isp_request_frame(struct vfe_device *vfe_dev,
 	return rc;
 error:
 	rc = msm_isp_return_empty_buffer(vfe_dev, stream_info,
-		user_stream_id, frame_id, buf_index, frame_src);
+		user_stream_id, frame_id, buf_index, frame_src, NULL);
 	if (rc < 0)
 		pr_err("%s:%d failed: return_empty_buffer src %d\n",
 		__func__, __LINE__, frame_src);
