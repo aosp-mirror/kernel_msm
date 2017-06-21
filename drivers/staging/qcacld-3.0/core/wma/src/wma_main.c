@@ -1685,7 +1685,7 @@ static int wma_process_fw_event_mc_thread_ctx(void *ctx, void *ev)
 	cds_msg.bodyval = 0;
 
 	if (QDF_STATUS_SUCCESS !=
-		cds_mq_post_message(CDS_MQ_ID_WMA, &cds_msg)) {
+		cds_mq_post_message(QDF_MODULE_ID_WMA, &cds_msg)) {
 		WMA_LOGE("%s: Failed to post WMA_PROCESS_FW_EVENT msg",
 			 __func__);
 		qdf_nbuf_free(ev);
@@ -2669,6 +2669,10 @@ QDF_STATUS wma_open(void *cds_context,
 					   wma_get_bpf_caps_event_handler,
 					   WMA_RX_SERIALIZER_CTX);
 	wmi_unified_register_event_handler(wma_handle->wmi_handle,
+					   WMI_CHAN_INFO_EVENTID,
+					   wma_chan_info_event_handler,
+					   WMA_RX_SERIALIZER_CTX);
+	wmi_unified_register_event_handler(wma_handle->wmi_handle,
 				WMI_VDEV_ENCRYPT_DECRYPT_DATA_RESP_EVENTID,
 				wma_encrypt_decrypt_msg_handler,
 				WMA_RX_SERIALIZER_CTX);
@@ -2805,7 +2809,7 @@ QDF_STATUS wma_pre_start(void *cds_ctx)
 	wma_msg.bodyptr = NULL;
 	wma_msg.bodyval = 0;
 
-	qdf_status = cds_mq_post_message(CDS_MQ_ID_WMA, &wma_msg);
+	qdf_status = cds_mq_post_message(QDF_MODULE_ID_WMA, &wma_msg);
 	if (QDF_STATUS_SUCCESS != qdf_status) {
 		WMA_LOGE("%s: Failed to post WNI_CFG_DNLD_REQ msg", __func__);
 		QDF_ASSERT(0);
@@ -5217,12 +5221,36 @@ bool wma_is_rx_ldpc_supported_for_channel(uint32_t channel,
 	struct wma_caps_per_phy caps_per_phy = {0};
 	enum cds_band_type band;
 	bool status;
+	t_wma_handle *wma_handle;
+	struct hif_target_info *tgt_info;
+	struct hif_opaque_softc *scn = cds_get_context(QDF_MODULE_ID_HIF);
+
+	if (!scn) {
+		WMA_LOGE("%s: Invalid wma handle", __func__);
+		return false;
+	}
 
 	if (!CDS_IS_CHANNEL_24GHZ(channel))
 		band = CDS_BAND_5GHZ;
 	else
 		band = CDS_BAND_2GHZ;
 
+	tgt_info = hif_get_target_info_handle(scn);
+
+	if ((tgt_info->target_type == TARGET_TYPE_AR6320V1) ||
+	    (tgt_info->target_type == TARGET_TYPE_AR6320V2) ||
+	    (tgt_info->target_type == TARGET_TYPE_AR6320V3) ||
+	    (tgt_info->target_type == TARGET_TYPE_QCA9377V1)) {
+		wma_handle = cds_get_context(QDF_MODULE_ID_WMA);
+		if (!wma_handle) {
+			WMA_LOGE("Invalid wma handle");
+			return false;
+		}
+		if (wma_handle->ht_cap_info & WMI_HT_CAP_LDPC)
+			return true;
+		else
+			return false;
+	}
 	if (QDF_STATUS_SUCCESS != wma_get_caps_for_phyidx_hwmode(
 						&caps_per_phy,
 						hw_mode, band)) {

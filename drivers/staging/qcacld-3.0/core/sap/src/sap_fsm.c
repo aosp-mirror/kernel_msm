@@ -2562,7 +2562,7 @@ QDF_STATUS sap_open_session(tHalHandle hHal, ptSapContext sapContext,
 	pMac->sap.sapCtxList[sapContext->sessionId].sapPersona =
 		sapContext->csr_roamProfile.csrPersona;
 	*session_id = sapContext->sessionId;
-	sapContext->isSapSessionOpen = eSAP_TRUE;
+	sapContext->isSapSessionOpen = true;
 	sapContext->is_pre_cac_on = false;
 	sapContext->pre_cac_complete = false;
 	sapContext->chan_before_pre_cac = 0;
@@ -2957,6 +2957,17 @@ QDF_STATUS sap_signal_hdd_event(ptSapContext sap_ctx,
 		reassoc_complete->status = (eSapStatus) context;
 		reassoc_complete->timingMeasCap = csr_roaminfo->timingMeasCap;
 		reassoc_complete->ecsa_capable = csr_roaminfo->ecsa_capable;
+		reassoc_complete->ampdu = csr_roaminfo->ampdu;
+		reassoc_complete->sgi_enable = csr_roaminfo->sgi_enable;
+		reassoc_complete->tx_stbc = csr_roaminfo->tx_stbc;
+		reassoc_complete->rx_stbc = csr_roaminfo->rx_stbc;
+		reassoc_complete->ch_width = csr_roaminfo->ch_width;
+		reassoc_complete->mode = csr_roaminfo->mode;
+		reassoc_complete->max_supp_idx = csr_roaminfo->max_supp_idx;
+		reassoc_complete->max_ext_idx = csr_roaminfo->max_ext_idx;
+		reassoc_complete->max_mcs_idx = csr_roaminfo->max_mcs_idx;
+		reassoc_complete->rx_mcs_map = csr_roaminfo->rx_mcs_map;
+		reassoc_complete->tx_mcs_map = csr_roaminfo->tx_mcs_map;
 		break;
 
 	case eSAP_STA_DISASSOC_EVENT:
@@ -3566,7 +3577,7 @@ static QDF_STATUS sap_fsm_state_disconnected(ptSapContext sap_ctx,
 			  "eSAP_DISCONNECTED", "eSAP_CH_SELECT",
 			  sap_ctx->sessionId);
 
-		if (sap_ctx->isSapSessionOpen == eSAP_FALSE) {
+		if (sap_ctx->isSapSessionOpen == false) {
 			uint32_t type, subtype;
 			if (sap_ctx->csr_roamProfile.csrPersona ==
 			    QDF_P2P_GO_MODE)
@@ -3594,7 +3605,7 @@ static QDF_STATUS sap_fsm_state_disconnected(ptSapContext sap_ctx,
 				return QDF_STATUS_E_FAILURE;
 			}
 
-			sap_ctx->isSapSessionOpen = eSAP_TRUE;
+			sap_ctx->isSapSessionOpen = true;
 		}
 
 		/* init dfs channel nol */
@@ -3993,10 +4004,10 @@ static QDF_STATUS sap_fsm_state_starting(ptSapContext sap_ctx,
 		qdf_status = sap_goto_disconnected(sap_ctx);
 		/* Close the SME session */
 
-		if (eSAP_TRUE == sap_ctx->isSapSessionOpen) {
+		if (true == sap_ctx->isSapSessionOpen) {
 			if (QDF_STATUS_SUCCESS == sap_close_session(hal,
 						sap_ctx, NULL, false))
-				sap_ctx->isSapSessionOpen = eSAP_FALSE;
+				sap_ctx->isSapSessionOpen = false;
 		}
 	} else if (msg == eSAP_OPERATING_CHANNEL_CHANGED) {
 		/* The operating channel has changed, update hostapd */
@@ -4129,8 +4140,8 @@ static QDF_STATUS sap_fsm_state_disconnecting(ptSapContext sap_ctx,
 		sap_ctx->sapsMachine = eSAP_DISCONNECTED;
 
 		/* Close the SME session */
-		if (eSAP_TRUE == sap_ctx->isSapSessionOpen) {
-			sap_ctx->isSapSessionOpen = eSAP_FALSE;
+		if (true == sap_ctx->isSapSessionOpen) {
+			sap_ctx->isSapSessionOpen = false;
 			qdf_status = sap_close_session(hal, sap_ctx,
 					sap_roam_session_close_callback, true);
 			if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
@@ -4325,8 +4336,6 @@ sapconvert_to_csr_profile(tsap_Config_t *pconfig_params, eCsrRoamBssType bssType
 			     pconfig_params->RSNWPAReqIELength);
 		profile->nRSNReqIELength = pconfig_params->RSNWPAReqIELength;
 	}
-	/* Turn off CB mode */
-	profile->CBMode = eCSR_CB_OFF;
 
 	/* set the phyMode to accept anything */
 	/* Best means everything because it covers all the things we support */
@@ -4454,7 +4463,7 @@ void sap_sort_mac_list(struct qdf_mac_addr *macList, uint8_t size)
 	}
 }
 
-eSapBool
+bool
 sap_search_mac_list(struct qdf_mac_addr *macList,
 		    uint8_t num_mac, uint8_t *peerMac,
 		    uint8_t *index)
@@ -4466,7 +4475,7 @@ sap_search_mac_list(struct qdf_mac_addr *macList,
 	if ((NULL == macList) || (num_mac > MAX_ACL_MAC_ADDRESS)) {
 		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_HIGH,
 		    FL("either buffer is NULL or size = %d is more."), num_mac);
-		return eSAP_FALSE;
+		return false;
 	}
 
 	while (nStart <= nEnd) {
@@ -4486,7 +4495,7 @@ sap_search_mac_list(struct qdf_mac_addr *macList,
 					  QDF_TRACE_LEVEL_INFO_HIGH, "index %d",
 					  *index);
 			}
-			return eSAP_TRUE;
+			return true;
 		}
 		if (nRes < 0)
 			nStart = nMiddle + 1;
@@ -4496,7 +4505,7 @@ sap_search_mac_list(struct qdf_mac_addr *macList,
 
 	QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_HIGH,
 		  "search not succ");
-	return eSAP_FALSE;
+	return false;
 }
 
 void sap_add_mac_to_acl(struct qdf_mac_addr *macList,
@@ -4718,9 +4727,9 @@ static QDF_STATUS sap_get_channel_list(ptSapContext sap_ctx,
 		 * - DFS scan enabled and chan not in CHANNEL_STATE_DISABLE
 		 * - DFS scan disable but chan in CHANNEL_STATE_ENABLE
 		 */
-		if (!(((eSAP_TRUE == mac_ctx->scan.fEnableDFSChnlScan) &&
+		if (!(((true == mac_ctx->scan.fEnableDFSChnlScan) &&
 		      CDS_CHANNEL_STATE(loop_count)) ||
-		    ((eSAP_FALSE == mac_ctx->scan.fEnableDFSChnlScan) &&
+		    ((false == mac_ctx->scan.fEnableDFSChnlScan) &&
 		     (CHANNEL_STATE_ENABLE ==
 		      CDS_CHANNEL_STATE(loop_count)))))
 			continue;
@@ -4911,7 +4920,7 @@ uint8_t sap_indicate_radar(ptSapContext sapContext,
 	 * if the radar is found in the STARTED state
 	 */
 	if (eSAP_STARTED == sapContext->sapsMachine)
-		pMac->sap.SapDfsInfo.csaIERequired = eSAP_TRUE;
+		pMac->sap.SapDfsInfo.csaIERequired = true;
 
 	if (sapContext->csr_roamProfile.disableDFSChSwitch) {
 		return sapContext->channel;

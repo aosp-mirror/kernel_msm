@@ -369,7 +369,7 @@ static void send_spectral_scan_reg_rsp_msg(hdd_context_t *hdd_ctx)
 
 #ifdef CNSS_GENL
 /**
- * spectral_scan_msg_handler() - API to handle spectral scan
+ * __spectral_scan_msg_handler() - API to handle spectral scan
  * command
  * @data: Data received
  * @data_len: length of the data received
@@ -380,47 +380,54 @@ static void send_spectral_scan_reg_rsp_msg(hdd_context_t *hdd_ctx)
  *
  * Return: None
  */
-static void spectral_scan_msg_handler(const void *data, int data_len,
-	              void *ctx, int pid)
+static void __spectral_scan_msg_handler(const void *data, int data_len,
+					void *ctx, int pid)
 {
 	struct spectral_scan_msg *ss_msg = NULL;
 	struct nlattr *tb[QCA_WLAN_VENDOR_ATTR_MAX + 1];
 	hdd_context_t *hdd_ctx;
+	int ret;
+
+	hdd_ctx = (hdd_context_t *)cds_get_context(QDF_MODULE_ID_HDD);
+	ret = wlan_hdd_validate_context(hdd_ctx);
+	if (0 != ret)
+		return;
 
 	if (nla_parse(tb, CLD80211_ATTR_MAX, data, data_len, NULL)) {
-		hdd_err("%s: nla parse fails\n", __func__);
+		hdd_err("nla parse fails");
 		return;
 	}
 
 	if (!tb[CLD80211_ATTR_DATA]) {
-		hdd_err("%s: attr VENDOR_DATA fails\n", __func__);
+		hdd_err("attr VENDOR_DATA fails");
 		return;
 	}
 	ss_msg = (struct spectral_scan_msg *)nla_data(tb[CLD80211_ATTR_DATA]);
 
 	if (!ss_msg) {
-		hdd_err("%s: data NULL\n", __func__);
+		hdd_err("data NULL");
 		return;
 	}
 
 	switch (ss_msg->msg_type) {
 	case SPECTRAL_SCAN_REGISTER_REQ:
-		hdd_ctx = (hdd_context_t *)cds_get_context(QDF_MODULE_ID_HDD);
-		if (hdd_ctx != NULL) {
-			hdd_ctx->sscan_pid = ss_msg->pid;
-			hdd_info("spectral scan application registered, pid=%d",
+		hdd_ctx->sscan_pid = ss_msg->pid;
+		hdd_debug("spectral scan application registered, pid=%d",
 				 hdd_ctx->sscan_pid);
-			send_spectral_scan_reg_rsp_msg(hdd_ctx);
-		} else {
-			hdd_err("failed to get hdd context");
-		}
+		send_spectral_scan_reg_rsp_msg(hdd_ctx);
 		break;
 	default:
-		hdd_info("invalid message type %d", ss_msg->msg_type);
+		hdd_warn("invalid message type %d", ss_msg->msg_type);
 		break;
 	}
+}
 
-	return;
+static void spectral_scan_msg_handler(const void *data, int data_len,
+					void *ctx, int pid)
+{
+	cds_ssr_protect(__func__);
+	__spectral_scan_msg_handler(data, data_len, ctx, pid);
+	cds_ssr_unprotect(__func__);
 }
 
 /**

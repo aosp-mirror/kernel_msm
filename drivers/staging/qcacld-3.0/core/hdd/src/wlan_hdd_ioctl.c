@@ -368,7 +368,7 @@ static int hdd_parse_setrmcrate_command(uint8_t *pValue,
 	if ('\0' == *inPtr)
 		return 0;
 
-	v = sscanf(inPtr, "%32s ", buf);
+	v = sscanf(inPtr, "%31s ", buf);
 	if (1 != v)
 		return -EINVAL;
 
@@ -2967,8 +2967,8 @@ static int drv_cmd_country(hdd_adapter_t *adapter,
 			country_code,
 			adapter,
 			hdd_ctx->pcds_context,
-			eSIR_TRUE,
-			eSIR_TRUE);
+			true,
+			true);
 	if (status == QDF_STATUS_SUCCESS) {
 		rc = wait_for_completion_timeout(
 			&adapter->change_country_code,

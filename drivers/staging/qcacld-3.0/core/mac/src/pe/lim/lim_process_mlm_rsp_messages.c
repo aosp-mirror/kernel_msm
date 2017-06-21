@@ -755,7 +755,7 @@ lim_fill_assoc_ind_params(tpAniSirGlobal mac_ctx,
 
 	/* Copy the new TITAN capabilities */
 	sme_assoc_ind->spectrumMgtIndicator = assoc_ind->spectrumMgtIndicator;
-	if (assoc_ind->spectrumMgtIndicator == eSIR_TRUE) {
+	if (assoc_ind->spectrumMgtIndicator == true) {
 		sme_assoc_ind->powerCap.minTxPower =
 			assoc_ind->powerCap.minTxPower;
 		sme_assoc_ind->powerCap.maxTxPower =
@@ -772,6 +772,17 @@ lim_fill_assoc_ind_params(tpAniSirGlobal mac_ctx,
 	/* Fill in WmmInfo */
 	sme_assoc_ind->wmmEnabledSta = assoc_ind->WmmStaInfoPresent;
 	sme_assoc_ind->ecsa_capable = assoc_ind->ecsa_capable;
+	sme_assoc_ind->ampdu = assoc_ind->ampdu;
+	sme_assoc_ind->sgi_enable = assoc_ind->sgi_enable;
+	sme_assoc_ind->tx_stbc = assoc_ind->tx_stbc;
+	sme_assoc_ind->rx_stbc = assoc_ind->rx_stbc;
+	sme_assoc_ind->ch_width = assoc_ind->ch_width;
+	sme_assoc_ind->mode = assoc_ind->mode;
+	sme_assoc_ind->max_supp_idx = assoc_ind->max_supp_idx;
+	sme_assoc_ind->max_ext_idx = assoc_ind->max_ext_idx;
+	sme_assoc_ind->max_mcs_idx = assoc_ind->max_mcs_idx;
+	sme_assoc_ind->rx_mcs_map = assoc_ind->rx_mcs_map;
+	sme_assoc_ind->tx_mcs_map = assoc_ind->tx_mcs_map;
 }
 
 /**
@@ -3254,7 +3265,7 @@ void lim_process_rx_scan_event(tpAniSirGlobal pMac, void *buf)
 	case SIR_SCAN_EVENT_START_FAILED:
 		if (ROC_SCAN_REQUESTOR_ID == pScanEvent->requestor) {
 			lim_send_sme_roc_rsp(pMac, eWNI_SME_REMAIN_ON_CHN_RSP,
-					 QDF_STATUS_SUCCESS,
+					 eSIR_SME_SUCCESS,
 					 pScanEvent->sessionId,
 					 pScanEvent->scanId);
 			qdf_mem_free(pMac->lim.gpLimRemainOnChanReq);
@@ -3282,7 +3293,7 @@ void lim_process_rx_scan_event(tpAniSirGlobal pMac, void *buf)
 			if (pMac->lim.gpLimRemainOnChanReq) {
 				lim_send_sme_roc_rsp(pMac,
 						 eWNI_SME_REMAIN_ON_CHN_RDY_IND,
-						 QDF_STATUS_SUCCESS,
+						 eSIR_SME_SUCCESS,
 						 pScanEvent->sessionId,
 						 pScanEvent->scanId);
 			} else {

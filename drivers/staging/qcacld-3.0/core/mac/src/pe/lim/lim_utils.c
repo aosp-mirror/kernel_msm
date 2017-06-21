@@ -3931,26 +3931,27 @@ static void lim_handle_ht20coexist_ht20protection(tpAniSirGlobal mac_ctx,
 			 */
 			(eSIR_HT_OP_MODE_OVERLAP_LEGACY ==
 				session_entry->htOperMode)) {
-				if (session_entry->gLimHt20Params.
-					protectionEnabled) {
+			if (session_entry->gLimHt20Params.
+				protectionEnabled) {
 				if (eHT_CHANNEL_WIDTH_20MHZ ==
-				session_entry->htSupportedChannelWidthSet)
+					session_entry->
+					htSupportedChannelWidthSet)
 					session_entry->htOperMode =
 						eSIR_HT_OP_MODE_PURE;
 				else
 					session_entry->htOperMode =
 					eSIR_HT_OP_MODE_NO_LEGACY_20MHZ_HT;
 
-					lim_enable_ht_rifs_protection(mac_ctx,
+				lim_enable_ht_rifs_protection(mac_ctx,
 						false, overlap, beaconparams,
 						session_entry);
-					lim_enable_ht_obss_protection(mac_ctx,
+				lim_enable_ht_obss_protection(mac_ctx,
 						false, overlap, beaconparams,
 						session_entry);
-				} else {
-					session_entry->htOperMode =
-						eSIR_HT_OP_MODE_PURE;
-				}
+			} else {
+				session_entry->htOperMode =
+					eSIR_HT_OP_MODE_PURE;
+			}
 		}
 	} else if (LIM_IS_AP_ROLE(session_entry) && !overlap) {
 		/* Disable protection from 11G stations. */
@@ -5014,7 +5015,7 @@ void lim_resset_scan_channel_info(tpAniSirGlobal pMac)
  * @param  channel - New channel to which we are expected to move
  * @return None
  */
-tAniBool lim_is_channel_valid_for_channel_switch(tpAniSirGlobal pMac, uint8_t channel)
+bool lim_is_channel_valid_for_channel_switch(tpAniSirGlobal pMac, uint8_t channel)
 {
 	uint8_t index;
 	uint32_t validChannelListLen = WNI_CFG_VALID_CHANNEL_LIST_LEN;
@@ -5025,16 +5026,16 @@ tAniBool lim_is_channel_valid_for_channel_switch(tpAniSirGlobal pMac, uint8_t ch
 			     (uint32_t *) &validChannelListLen) !=
 			eSIR_SUCCESS) {
 		pe_err("could not retrieve valid channel list");
-		return eSIR_FALSE;
+		return false;
 	}
 
 	for (index = 0; index < validChannelListLen; index++) {
 		if (validChannelList[index] == channel)
-			return eSIR_TRUE;
+			return true;
 	}
 
 	/* channel does not belong to list of valid channels */
-	return eSIR_FALSE;
+	return false;
 }
 
 /**------------------------------------------------------

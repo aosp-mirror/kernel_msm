@@ -208,8 +208,13 @@ typedef struct sLimMlmStartCnf {
 typedef struct sLimMlmScanCnf {
 	tSirResultCodes resultCode;
 	uint16_t scanResultLength;
-	tSirBssDescription bssDescription[1];
 	uint8_t sessionId;
+	tSirBssDescription bssDescription[1];
+	/*
+	 * WARNING: Pls make bssDescription as last variable in struct
+	 * tLimMlmScanCnf as it has ieFields followed after this bss
+	 * description. Adding a variable after this corrupts the ieFields
+	 */
 } tLimMlmScanCnf, *tpLimMlmScanCnf;
 
 typedef struct sLimScanResult {
@@ -246,12 +251,12 @@ typedef struct sLimMlmAssocInd {
 	tSirWAPIie wapiIE;
 	tSirAddie addIE;        /* additional IE received from the peer, which possibly includes WSC IE and/or P2P IE. */
 	tSirMacCapabilityInfo capabilityInfo;
-	tAniBool spectrumMgtIndicator;
+	bool spectrumMgtIndicator;
 	tSirMacPowerCapInfo powerCap;
 	tSirSupChnl supportedChannels;
 	uint8_t sessionId;
 
-	tAniBool WmmStaInfoPresent;
+	bool WmmStaInfoPresent;
 
 	/* Required for indicating the frames to upper layer */
 	uint32_t beaconLength;
@@ -259,7 +264,18 @@ typedef struct sLimMlmAssocInd {
 	uint32_t assocReqLength;
 	uint8_t *assocReqPtr;
 	tSirSmeChanInfo chan_info;
-	uint8_t              ecsa_capable;
+	uint8_t ecsa_capable;
+	bool ampdu;
+	bool sgi_enable;
+	bool tx_stbc;
+	bool rx_stbc;
+	tSirMacHTChannelWidth ch_width;
+	enum sir_sme_phy_mode mode;
+	uint8_t max_supp_idx;
+	uint8_t max_ext_idx;
+	uint8_t max_mcs_idx;
+	uint8_t rx_mcs_map;
+	uint8_t tx_mcs_map;
 } tLimMlmAssocInd, *tpLimMlmAssocInd;
 
 typedef struct sLimMlmReassocReq {
@@ -286,11 +302,11 @@ typedef struct sLimMlmReassocInd {
 	tSirWAPIie wapiIE;
 	tSirAddie addIE;        /* additional IE received from the peer, which can be WSC IE and/or P2P IE. */
 	tSirMacCapabilityInfo capabilityInfo;
-	tAniBool spectrumMgtIndicator;
+	bool spectrumMgtIndicator;
 	tSirMacPowerCapInfo powerCap;
 	tSirSupChnl supportedChannels;
 
-	tAniBool WmmStaInfoPresent;
+	bool WmmStaInfoPresent;
 
 	/* Required for indicating the frames to upper layer */
 	uint32_t beaconLength;

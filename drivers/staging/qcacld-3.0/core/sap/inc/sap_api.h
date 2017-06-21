@@ -201,12 +201,6 @@ typedef enum {
 	eSAP_USR_INITATED_DISASSOC
 } eSapDisassocReason;
 
-/*Handle bool over here*/
-typedef enum {
-	eSAP_FALSE,
-	eSAP_TRUE,
-} eSapBool;
-
 typedef enum {
 	eSAP_DFS_NOL_CLEAR,
 	eSAP_DFS_NOL_RANDOMIZE,
@@ -284,7 +278,18 @@ typedef struct sap_StationAssocReassocCompleteEvent_s {
 	uint8_t *assocRespPtr;
 	uint8_t timingMeasCap;
 	tSirSmeChanInfo chan_info;
-	uint8_t      ecsa_capable;
+	uint8_t ecsa_capable;
+	bool ampdu;
+	bool sgi_enable;
+	bool tx_stbc;
+	bool rx_stbc;
+	tSirMacHTChannelWidth ch_width;
+	enum sir_sme_phy_mode mode;
+	uint8_t max_supp_idx;
+	uint8_t max_ext_idx;
+	uint8_t max_mcs_idx;
+	uint8_t rx_mcs_map;
+	uint8_t tx_mcs_map;
 } tSap_StationAssocReassocCompleteEvent;
 
 typedef struct sap_StationDisassocCompleteEvent_s {
@@ -305,7 +310,7 @@ typedef struct sap_StationMICFailureEvent_s {
 	struct qdf_mac_addr srcMacAddr;    /* address used to compute MIC */
 	struct qdf_mac_addr staMac;        /* taMacAddr transmitter address */
 	struct qdf_mac_addr dstMacAddr;
-	eSapBool multicast;
+	bool   multicast;
 	uint8_t IV1;            /* first byte of IV */
 	uint8_t keyId;          /* second byte of IV */
 	uint8_t TSC[SIR_CIPHER_SEQ_CTR_SIZE];           /* sequence number */

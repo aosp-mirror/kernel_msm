@@ -81,6 +81,13 @@ struct hdd_scan_info {
 	char *end;
 };
 
+static const
+struct nla_policy scan_policy[QCA_WLAN_VENDOR_ATTR_SCAN_MAX + 1] = {
+	[QCA_WLAN_VENDOR_ATTR_SCAN_FLAGS] = {.type = NLA_U32},
+	[QCA_WLAN_VENDOR_ATTR_SCAN_TX_NO_CCK_RATE] = {.type = NLA_FLAG},
+	[QCA_WLAN_VENDOR_ATTR_SCAN_COOKIE] = {.type = NLA_U64},
+};
+
 /**
  * hdd_translate_abg_rate_to_mbps_rate() - translate abg rate to Mbps rate
  * @pFcRate: Rate pointer
@@ -605,24 +612,24 @@ static void hdd_update_dbs_scan_ctrl_ext_flag(hdd_context_t *hdd_ctx,
 
 	if (hdd_ctx->config->dual_mac_feature_disable ==
 				DISABLE_DBS_CXN_AND_SCAN) {
-		hdd_info("DBS is disabled");
+		hdd_debug("DBS is disabled");
 		goto end;
 	}
 
 	if (scan_req->SSIDs.numOfSSIDs) {
-		hdd_info("Directed SSID");
+		hdd_debug("Directed SSID");
 		goto end;
 	}
 
 	if (!(qdf_is_macaddr_zero(&scan_req->bssid) ||
 			qdf_is_group_addr((u8 *)&scan_req->bssid))) {
-		hdd_info("Directed BSSID");
+		hdd_debug("Directed BSSID");
 		goto end;
 	}
 
 	num_chan = scan_req->ChannelInfo.numOfChannels;
 
-	hdd_info("num_chan = %u, threshold = %u", num_chan,
+	hdd_debug("num_chan = %u, threshold = %u", num_chan,
 			HDD_MIN_CHAN_DBS_SCAN_THRESHOLD);
 
 	/* num_chan=0 means all channels */
@@ -1254,7 +1261,7 @@ static void hdd_vendor_scan_callback(hdd_adapter_t *adapter,
 		goto nla_put_failure;
 	}
 	cfg80211_vendor_event(skb, GFP_KERNEL);
-	hdd_info("scan complete event sent to NL");
+	hdd_debug("scan complete event sent to NL");
 	qdf_mem_free(req);
 	return;
 
@@ -1760,6 +1767,17 @@ static int __wlan_hdd_cfg80211_scan(struct wiphy *wiphy,
 	if (0 != status)
 		return status;
 
+	if ((eConnectionState_Associated ==
+			WLAN_HDD_GET_STATION_CTX_PTR(pAdapter)->
+						conn_info.connState) &&
+	    (!pHddCtx->config->enable_connected_scan)) {
+		hdd_info("enable_connected_scan is false, Aborting scan");
+		pAdapter->request = request;
+		pAdapter->scan_source = source;
+		schedule_work(&pAdapter->scan_block_work);
+		return 0;
+	}
+
 	MTRACE(qdf_trace(QDF_MODULE_ID_HDD,
 			 TRACE_CODE_HDD_CFG80211_SCAN,
 			 pAdapter->sessionId, request->n_channels));
@@ -1858,13 +1876,6 @@ static int __wlan_hdd_cfg80211_scan(struct wiphy *wiphy,
 		return status;
 	}
 #endif
-
-	if (pHddCtx->btCoexModeSet) {
-		scan_ebusy_cnt++;
-		cds_info("BTCoex Mode operation in progress. scan_ebusy_cnt: %d",
-			 scan_ebusy_cnt);
-		return -EBUSY;
-	}
 
 	/* Check if scan is allowed at this point of time */
 	if (cds_is_connection_in_progress(&curr_session_id, &curr_reason)) {
@@ -2166,7 +2177,7 @@ static int __wlan_hdd_cfg80211_scan(struct wiphy *wiphy,
 						pHddCtx->no_of_probe_req_ouis *
 						sizeof(struct vendor_oui));
 			if (!scan_req.voui) {
-				hdd_info("Not enough memory for voui");
+				hdd_debug("Not enough memory for voui");
 				scan_req.num_vendor_oui = 0;
 				status = -ENOMEM;
 				goto free_mem;
@@ -2473,7 +2484,7 @@ static int __wlan_hdd_cfg80211_vendor_scan(struct wiphy *wiphy,
 		return ret;
 
 	if (nla_parse(tb, QCA_WLAN_VENDOR_ATTR_SCAN_MAX, data,
-		data_len, NULL)) {
+		      data_len, scan_policy)) {
 		hdd_err("Invalid ATTR");
 		return -EINVAL;
 	}
@@ -2526,8 +2537,13 @@ static int __wlan_hdd_cfg80211_vendor_scan(struct wiphy *wiphy,
 	count = 0;
 	if (tb[QCA_WLAN_VENDOR_ATTR_SCAN_FREQUENCIES]) {
 		nla_for_each_nested(attr,
-				tb[QCA_WLAN_VENDOR_ATTR_SCAN_FREQUENCIES],
-				tmp) {
+				    tb[QCA_WLAN_VENDOR_ATTR_SCAN_FREQUENCIES],
+				    tmp) {
+			if (nla_len(attr) != sizeof(uint32_t)) {
+				hdd_err("len is not correct for frequency %d",
+					count);
+				goto error;
+			}
 			chan = __ieee80211_get_channel(wiphy,
 							nla_get_u32(attr));
 			if (!chan)
@@ -2755,7 +2771,7 @@ static int __wlan_hdd_vendor_abort_scan(
 
 	ret = -EINVAL;
 	if (nla_parse(tb, QCA_WLAN_VENDOR_ATTR_SCAN_MAX, data,
-	    data_len, NULL)) {
+		      data_len, scan_policy)) {
 		hdd_err("Invalid ATTR");
 		return ret;
 	}
@@ -3036,6 +3052,15 @@ static int __wlan_hdd_cfg80211_sched_scan_start(struct wiphy *wiphy,
 
 	if (0 != ret)
 		return ret;
+
+	if ((eConnectionState_Associated ==
+				WLAN_HDD_GET_STATION_CTX_PTR(pAdapter)->
+							conn_info.connState) &&
+	    (!pHddCtx->config->enable_connected_scan)) {
+		hdd_info("enable_connected_scan is false, Aborting scan");
+		return -EBUSY;
+	}
+
 
 	if (!sme_is_session_id_valid(pHddCtx->hHal, pAdapter->sessionId))
 		return -EINVAL;

@@ -1033,7 +1033,7 @@ send_dbglog_cmd_tlv(wmi_unified_t wmi_handle,
 {
 	wmi_buf_t buf;
 	wmi_debug_log_config_cmd_fixed_param *configmsg;
-	A_STATUS status = A_OK;
+	QDF_STATUS status;
 	int32_t i;
 	int32_t len;
 	int8_t *buf_ptr;
@@ -1046,7 +1046,7 @@ send_dbglog_cmd_tlv(wmi_unified_t wmi_handle,
 	      (sizeof(int32_t) * MAX_MODULE_ID_BITMAP_WORDS);
 	buf = wmi_buf_alloc(wmi_handle, len);
 	if (buf == NULL)
-		return A_NO_MEMORY;
+		return QDF_STATUS_E_NOMEM;
 
 	configmsg =
 		(wmi_debug_log_config_cmd_fixed_param *) (wmi_buf_data(buf));
@@ -1076,7 +1076,7 @@ send_dbglog_cmd_tlv(wmi_unified_t wmi_handle,
 	status = wmi_unified_cmd_send(wmi_handle, buf,
 				      len, WMI_DBGLOG_CFG_CMDID);
 
-	if (status != A_OK)
+	if (status != QDF_STATUS_SUCCESS)
 		wmi_buf_free(buf);
 
 	return status;
@@ -4147,7 +4147,8 @@ QDF_STATUS send_set_rssi_monitoring_cmd_tlv(wmi_unified_t wmi_handle,
 		wmi_buf_free(buf);
 	}
 
-	WMI_LOGI("Sent WMI_RSSI_BREACH_MONITOR_CONFIG_CMDID to FW");
+	WMI_LOGD("Sent WMI_RSSI_BREACH_MONITOR_CONFIG_CMDID to FW");
+
 	return ret;
 }
 
@@ -4586,21 +4587,21 @@ QDF_STATUS send_roam_scan_offload_mode_cmd_tlv(wmi_unified_t wmi_handle,
 				    roam_req->fw_okc) {
 					WMI_SET_ROAM_OFFLOAD_OKC_ENABLED
 						(roam_offload_11i->flags);
-					WMI_LOGE("LFR3:OKC enabled");
+					WMI_LOGI("LFR3:OKC enabled");
 				} else {
 					WMI_SET_ROAM_OFFLOAD_OKC_DISABLED
 						(roam_offload_11i->flags);
-					WMI_LOGE("LFR3:OKC disabled");
+					WMI_LOGI("LFR3:OKC disabled");
 				}
 				if (roam_req->roam_key_mgmt_offload_enabled &&
 				    roam_req->fw_pmksa_cache) {
 					WMI_SET_ROAM_OFFLOAD_PMK_CACHE_ENABLED
 						(roam_offload_11i->flags);
-					WMI_LOGE("LFR3:PMKSA caching enabled");
+					WMI_LOGI("LFR3:PMKSA caching enabled");
 				} else {
 					WMI_SET_ROAM_OFFLOAD_PMK_CACHE_DISABLED
 						(roam_offload_11i->flags);
-					WMI_LOGE("LFR3:PMKSA caching disabled");
+					WMI_LOGI("LFR3:PMKSA caching disabled");
 				}
 
 				qdf_mem_copy(roam_offload_11i->pmk,
@@ -6245,7 +6246,7 @@ QDF_STATUS send_pno_start_cmd_tlv(wmi_unified_t wmi_handle,
 		nlo_list[i].bcast_nw_type.valid = true;
 		nlo_list[i].bcast_nw_type.bcast_nw_type =
 			pno->aNetworks[i].bcastNetwType;
-		WMI_LOGI("Broadcast NW type (%u)",
+		WMI_LOGD("Broadcast NW type (%u)",
 			 nlo_list[i].bcast_nw_type.bcast_nw_type);
 	}
 	buf_ptr += cmd->no_of_ssids * sizeof(nlo_configured_parameters);
@@ -6296,7 +6297,7 @@ QDF_STATUS send_pno_start_cmd_tlv(wmi_unified_t wmi_handle,
 	}
 	if (pno->relative_rssi_set)
 		cmd->flags |= WMI_NLO_CONFIG_ENABLE_CNLO_RSSI_CONFIG;
-	WMI_LOGI("pno flags = %x", cmd->flags);
+	WMI_LOGD("pno flags = %x", cmd->flags);
 
 	/* ie white list */
 	WMITLV_SET_HDR(buf_ptr, WMITLV_TAG_ARRAY_STRUC, pno->num_vendor_oui *
@@ -6320,7 +6321,7 @@ QDF_STATUS send_pno_start_cmd_tlv(wmi_unified_t wmi_handle,
 		WMITLV_TAG_STRUC_wmi_connected_nlo_rssi_params,
 		WMITLV_GET_STRUCT_TLVLEN(connected_nlo_rssi_params));
 	nlo_relative_rssi->relative_rssi = pno->relative_rssi;
-	WMI_LOGI("relative_rssi %d", nlo_relative_rssi->relative_rssi);
+	WMI_LOGD("relative_rssi %d", nlo_relative_rssi->relative_rssi);
 	buf_ptr += sizeof(*nlo_relative_rssi);
 
 	/*
@@ -6342,7 +6343,7 @@ QDF_STATUS send_pno_start_cmd_tlv(wmi_unified_t wmi_handle,
 				connected_nlo_bss_band_rssi_pref));
 		 nlo_band_rssi[i].band = pno->band_rssi_pref.band;
 		 nlo_band_rssi[i].rssi_pref = pno->band_rssi_pref.rssi;
-		 WMI_LOGI("band_pref %d, rssi_pref %d",
+		 WMI_LOGD("band_pref %d, rssi_pref %d",
 			nlo_band_rssi[i].band,
 			nlo_band_rssi[i].rssi_pref);
 	}
@@ -9101,8 +9102,8 @@ QDF_STATUS send_process_ch_avoid_update_cmd_tlv(wmi_unified_t wmi_handle)
  */
 QDF_STATUS send_regdomain_info_to_fw_cmd_tlv(wmi_unified_t wmi_handle,
 				   uint32_t reg_dmn, uint16_t regdmn2G,
-				   uint16_t regdmn5G, int8_t ctl2G,
-				   int8_t ctl5G)
+				   uint16_t regdmn5G, uint8_t ctl2G,
+				   uint8_t ctl5G)
 {
 	wmi_buf_t buf;
 	wmi_pdev_set_regdomain_cmd_fixed_param *cmd;
@@ -9418,7 +9419,7 @@ QDF_STATUS send_update_tdls_peer_state_cmd_tlv(wmi_unified_t wmi_handle,
 
 		if (peerStateParams->peerCap.peerChan[i].dfsSet) {
 			WMI_SET_CHANNEL_FLAG(chan_info, WMI_CHAN_FLAG_PASSIVE);
-			WMI_LOGI("chan[%d] DFS[%d]\n",
+			WMI_LOGD("chan[%d] DFS[%d]\n",
 				 peerStateParams->peerCap.peerChan[i].chanId,
 				 peerStateParams->peerCap.peerChan[i].dfsSet);
 		}
@@ -11395,6 +11396,8 @@ QDF_STATUS send_per_roam_config_cmd_tlv(wmi_unified_t wmi_handle,
 	wmi_per_config->pkt_err_rate_mon_time =
 			(req_buf->per_config.tx_per_mon_time << 16) |
 			(req_buf->per_config.rx_per_mon_time & 0x0000ffff);
+	wmi_per_config->min_candidate_rssi =
+			req_buf->per_config.min_candidate_rssi;
 
 	/* Send per roam config parameters */
 	status = wmi_unified_cmd_send(wmi_handle, buf,
@@ -12115,7 +12118,17 @@ static QDF_STATUS extract_vdev_start_resp_tlv(wmi_unified_t wmi_handle,
 
 	vdev_rsp->vdev_id = ev->vdev_id;
 	vdev_rsp->requestor_id = ev->requestor_id;
-	vdev_rsp->resp_type = ev->resp_type;
+	switch (ev->resp_type) {
+	case WMI_VDEV_START_RESP_EVENT:
+		vdev_rsp->resp_type = WMI_HOST_VDEV_START_RESP_EVENT;
+		break;
+	case WMI_VDEV_RESTART_RESP_EVENT:
+		vdev_rsp->resp_type = WMI_HOST_VDEV_RESTART_RESP_EVENT;
+		break;
+	default:
+		qdf_print("Invalid start response event buffer\n");
+		break;
+	};
 	vdev_rsp->status = ev->status;
 	vdev_rsp->chain_mask = ev->chain_mask;
 	vdev_rsp->smps_mode = ev->smps_mode;
@@ -12521,7 +12534,7 @@ static QDF_STATUS extract_all_stats_counts_tlv(wmi_unified_t wmi_handle,
 
 	ev = (wmi_stats_event_fixed_param *) param_buf->fixed_param;
 	if (!ev) {
-		WMI_LOGE("%s: Failed to alloc memory\n", __func__);
+		WMI_LOGE("%s: Failed to alloc memory", __func__);
 		return QDF_STATUS_E_FAILURE;
 	}
 
@@ -12806,7 +12819,7 @@ static QDF_STATUS extract_chan_info_event_tlv(wmi_unified_t wmi_handle,
 
 	ev = (wmi_chan_info_event_fixed_param *) param_buf->fixed_param;
 	if (!ev) {
-		WMI_LOGE("%s: Failed to allocmemory\n", __func__);
+		WMI_LOGE("%s: Failed to alloc memory", __func__);
 		return QDF_STATUS_E_FAILURE;
 	}
 

@@ -472,7 +472,7 @@ int wma_stats_ext_event_handler(void *handle, uint8_t *event_buf,
 	cds_msg.bodyptr = (void *)stats_ext_event;
 	cds_msg.bodyval = 0;
 
-	status = cds_mq_post_message(CDS_MQ_ID_SME, &cds_msg);
+	status = cds_mq_post_message(QDF_MODULE_ID_SME, &cds_msg);
 	if (status != QDF_STATUS_SUCCESS) {
 		WMA_LOGE("%s: Failed to post stats ext event to SME", __func__);
 		qdf_mem_free(stats_ext_event);
@@ -3863,7 +3863,7 @@ static void wma_post_ftm_response(tp_wma_handle wma_handle)
 	msg.bodyptr = payload;
 	msg.bodyval = 0;
 
-	status = cds_mq_post_message(CDS_MQ_ID_SYS, &msg);
+	status = cds_mq_post_message(QDF_MODULE_ID_SYS, &msg);
 
 	if (status != QDF_STATUS_SUCCESS) {
 		WMA_LOGE("failed to post ftm response to SYS");
@@ -5176,6 +5176,22 @@ uint32_t wma_get_num_of_setbits_from_bitmask(uint32_t mask)
 }
 
 /**
+ * wma_is_csa_offload_enabled - checks fw CSA offload capability
+ *
+ * Return: true or false
+ */
+
+bool wma_is_csa_offload_enabled(void)
+{
+	tp_wma_handle wma = cds_get_context(QDF_MODULE_ID_WMA);
+
+	if (!wma)
+		return false;
+
+	return WMI_SERVICE_IS_ENABLED(wma->wmi_service_bitmap,
+				   WMI_SERVICE_CSA_OFFLOAD);
+}
+/**
  * wma_config_debug_module_cmd - set debug log config
  * @wmi_handle: wmi layer handle
  * @param: debug log parameter
@@ -5261,19 +5277,19 @@ QDF_STATUS wma_get_rcpi_req(WMA_HANDLE handle,
 	switch (rcpi_request->measurement_type) {
 
 	case RCPI_MEASUREMENT_TYPE_AVG_MGMT:
-		cmd.measurement_type = WMI_RCPI_MEASUREMENT_TYPE_AVG_MGMT;
+		cmd.measurement_type = RCPI_MEASUREMENT_TYPE_AVG_MGMT;
 		break;
 
 	case RCPI_MEASUREMENT_TYPE_AVG_DATA:
-		cmd.measurement_type = WMI_RCPI_MEASUREMENT_TYPE_AVG_DATA;
+		cmd.measurement_type = RCPI_MEASUREMENT_TYPE_AVG_DATA;
 		break;
 
 	case RCPI_MEASUREMENT_TYPE_LAST_MGMT:
-		cmd.measurement_type = WMI_RCPI_MEASUREMENT_TYPE_LAST_MGMT;
+		cmd.measurement_type = RCPI_MEASUREMENT_TYPE_LAST_MGMT;
 		break;
 
 	case RCPI_MEASUREMENT_TYPE_LAST_DATA:
-		cmd.measurement_type = WMI_RCPI_MEASUREMENT_TYPE_LAST_DATA;
+		cmd.measurement_type = RCPI_MEASUREMENT_TYPE_LAST_DATA;
 		break;
 
 	default:
@@ -5281,7 +5297,7 @@ QDF_STATUS wma_get_rcpi_req(WMA_HANDLE handle,
 		 * invalid rcpi measurement type, fall back to
 		 * RCPI_MEASUREMENT_TYPE_AVG_MGMT
 		 */
-		cmd.measurement_type = WMI_RCPI_MEASUREMENT_TYPE_AVG_MGMT;
+		cmd.measurement_type = RCPI_MEASUREMENT_TYPE_AVG_MGMT;
 		break;
 	}
 

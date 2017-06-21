@@ -40,6 +40,7 @@
 #include "cfg_api.h"
 #include "qdf_status.h"
 #include "cds_sched.h"
+#include "cds_config.h"
 #include "sir_mac_prot_def.h"
 #include "wma_types.h"
 #include "ol_txrx_types.h"
@@ -534,18 +535,6 @@ typedef void (*encrypt_decrypt_cb)(struct sir_encrypt_decrypt_rsp_params
 
 typedef void (*tp_wma_packetdump_cb)(qdf_nbuf_t netbuf,
 			uint8_t status, uint8_t vdev_id, uint8_t type);
-
-/**
- * enum t_wma_drv_type - wma driver type
- * @WMA_DRIVER_TYPE_PRODUCTION: production driver type
- * @WMA_DRIVER_TYPE_MFG: manufacture driver type
- * @WMA_DRIVER_TYPE_INVALID: invalid driver type
- */
-typedef enum {
-	WMA_DRIVER_TYPE_PRODUCTION = 0,
-	WMA_DRIVER_TYPE_MFG = 1,
-	WMA_DRIVER_TYPE_INVALID = 0x7FFFFFFF
-} t_wma_drv_type;
 
 #ifdef FEATURE_WLAN_TDLS
 /**
@@ -1499,7 +1488,7 @@ typedef struct {
 	qdf_event_t recovery_event;
 	uint16_t max_station;
 	uint16_t max_bssid;
-	t_wma_drv_type driver_type;
+	enum driver_type driver_type;
 	uint8_t myaddr[IEEE80211_ADDR_LEN];
 	uint8_t hwaddr[IEEE80211_ADDR_LEN];
 	wmi_abi_version target_abi_vers;
@@ -1728,7 +1717,7 @@ struct wma_target_cap {
 typedef struct {
 	void *pConfigBuffer;
 	uint16_t usConfigBufferLen;
-	t_wma_drv_type driver_type;
+	enum driver_type driver_type;
 	void *pUserData;
 	void *pIndUserData;
 } t_wma_start_req;
@@ -1760,8 +1749,8 @@ typedef struct qdf_packed sHalMacStartParameter {
 
 extern void cds_wma_complete_cback(void *p_cds_context);
 extern void wma_send_regdomain_info_to_fw(uint32_t reg_dmn, uint16_t regdmn2G,
-					  uint16_t regdmn5G, int8_t ctl2G,
-					  int8_t ctl5G);
+					  uint16_t regdmn5G, uint8_t ctl2G,
+					  uint8_t ctl5G);
 /**
  * enum frame_index - Frame index
  * @GENERIC_NODOWNLD_NOACK_COMP_INDEX: Frame index for no download comp no ack
@@ -2625,4 +2614,16 @@ static inline void wma_print_wmi_mgmt_event_log(uint32_t count,
  */
 void wma_ipa_uc_stat_request(wma_cli_set_cmd_t *privcmd);
 
+/*
+ * wma_chan_info_event_handler() - chan info event handler
+ * @handle: wma handle
+ * @event_buf: event handler data
+ * @len: length of event_buf
+ *
+ * this function will handle the WMI_CHAN_INFO_EVENTID
+ *
+ * Return: int
+ */
+int wma_chan_info_event_handler(void *handle, u_int8_t *event_buf,
+						u_int32_t len);
 #endif

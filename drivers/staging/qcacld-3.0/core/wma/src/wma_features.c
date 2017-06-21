@@ -357,7 +357,7 @@ int wma_vdev_tsf_handler(void *handle, uint8_t *data, uint32_t data_len)
 	tsf_msg.bodyval = 0;
 
 	if (QDF_STATUS_SUCCESS !=
-		cds_mq_post_message(CDS_MQ_ID_SME, &tsf_msg)) {
+		cds_mq_post_message(QDF_MODULE_ID_SME, &tsf_msg)) {
 
 		WMA_LOGP("%s: Failed to post eWNI_SME_TSF_EVENT", __func__);
 		qdf_mem_free(ptsf);
@@ -1656,7 +1656,7 @@ int wma_nan_rsp_event_handler(void *handle, uint8_t *event_buf,
 	cds_msg.bodyptr = (void *)nan_rsp_event;
 	cds_msg.bodyval = 0;
 
-	status = cds_mq_post_message(CDS_MQ_ID_SME, &cds_msg);
+	status = cds_mq_post_message(QDF_MODULE_ID_SME, &cds_msg);
 	if (status != QDF_STATUS_SUCCESS) {
 		WMA_LOGE("%s: Failed to post NaN response event to SME",
 			 __func__);
@@ -2325,6 +2325,7 @@ QDF_STATUS wma_extract_comb_phyerr_spectral(void *handle, void *data,
 	return QDF_STATUS_SUCCESS;
 }
 
+#if defined(QCA_WIFI_3_0_ADRASTEA)
 #ifdef FEATURE_SPECTRAL_SCAN
 /**
  * get_spectral_control_info() - Get spectral control channel info
@@ -3226,6 +3227,75 @@ void wma_register_phy_err_event_handler(tp_wma_handle wma_handle)
 			 __func__);
 }
 
+#else
+/**
+ * wma_unified_phyerr_rx_event_handler() - phyerr event handler
+ * @handle: wma handle
+ * @data: data buffer
+ * @datalen: buffer length
+ *
+ * WMI Handler for WMI_PHYERR_EVENTID event from firmware.
+ *
+ * Return: 0 for success, other value for failure
+ */
+static int wma_unified_phyerr_rx_event_handler(void *handle,
+						uint8_t *data, uint32_t datalen)
+{
+       return dfs_phyerr_no_offload_event_handler(handle,
+						data, datalen);
+}
+
+/**
+ * wma_unified_dfs_radar_rx_event_handler() - radar event handler
+ * @handle: wma handle
+ * @data: data buffer
+ * @datalen: buffer length
+ *
+ * WMI Handler for WMI_DFS_RADAR_EVENTID event from firmware.
+ *
+ * Return: 0 for success, other value for failure
+ */
+static int wma_unified_dfs_radar_rx_event_handler(void *handle,
+						uint8_t *data, uint32_t datalen)
+{
+       return dfs_phyerr_offload_event_handler(handle,
+						data, datalen);
+}
+
+/**
+ * wma_register_phy_err_event_handler() - register appropriate phy error event
+ *     handler
+ * @wma_handle: wma handle
+ *
+ * Register phyerror event handler for DFS
+ *
+ * Return: none
+ */
+void wma_register_phy_err_event_handler(tp_wma_handle wma_handle)
+{
+	if (NULL == wma_handle) {
+		WMA_LOGE("%s:wma_handle is NULL", __func__);
+		return;
+	}
+
+	if (false == wma_handle->dfs_phyerr_filter_offload) {
+		wmi_unified_register_event_handler(wma_handle->wmi_handle,
+					WMI_PHYERR_EVENTID,
+					wma_unified_phyerr_rx_event_handler,
+					WMA_RX_WORK_CTX);
+		WMA_LOGD("%s: WMI_PHYERR_EVENTID event handler registered",
+			__func__);
+	} else {
+		wmi_unified_register_event_handler(wma_handle->wmi_handle,
+					WMI_DFS_RADAR_EVENTID,
+					wma_unified_dfs_radar_rx_event_handler,
+					WMA_RX_WORK_CTX);
+		WMA_LOGD("%s: WMI_DFS_RADAR_EVENTID event handler registered",
+		__func__);
+	}
+}
+#endif
+
 /**
  * wma_unified_dfs_phyerr_filter_offload_enable() - enable dfs phyerr filter
  * @wma_handle: wma handle
@@ -3304,7 +3374,7 @@ static void wma_send_status_to_suspend_ind(tp_wma_handle wma, bool suspended)
 	cds_msg.bodyptr = (void *)ready_to_suspend;
 	cds_msg.bodyval = 0;
 
-	status = cds_mq_post_message(CDS_MQ_ID_SME, &cds_msg);
+	status = cds_mq_post_message(QDF_MODULE_ID_SME, &cds_msg);
 	if (status != QDF_STATUS_SUCCESS) {
 		WMA_LOGE("Failed to post ready to suspend");
 		qdf_mem_free(ready_to_suspend);
@@ -4316,17 +4386,19 @@ int wma_wow_wakeup_host_event(void *handle, uint8_t *event,
 	wake_info = param_buf->fixed_param;
 
 	/* unspecified means apps-side wakeup, so there won't be a vdev */
-	if (wake_info->wake_reason != WOW_REASON_UNSPECIFIED)
+	if (wake_info->wake_reason != WOW_REASON_UNSPECIFIED) {
 		wma_vdev = &wma->interfaces[wake_info->vdev_id];
-
-	if ((wake_info->wake_reason != WOW_REASON_UNSPECIFIED) ||
-	    (wake_info->wake_reason == WOW_REASON_UNSPECIFIED &&
-	     !wmi_get_runtime_pm_inprogress(wma->wmi_handle))) {
-		WMA_LOGA("WOW wakeup host event received; reason: %s(%d), vdev_id: %d, vdev_type: %s",
+		WMA_LOGA("WLAN triggered wakeup: %s (%d), vdev: %d (%s)",
 			 wma_wow_wake_reason_str(wake_info->wake_reason),
 			 wake_info->wake_reason,
 			 wake_info->vdev_id,
-			 wma_vdev ? wma_vdev_type_str(wma_vdev->type) : "none");
+			 wma_vdev_type_str(wma_vdev->type));
+		qdf_wow_wakeup_host_event(wake_info->wake_reason);
+		qdf_wma_wow_wakeup_stats_event();
+	} else if (!wmi_get_runtime_pm_inprogress(wma->wmi_handle)) {
+		WMA_LOGA("Non-WLAN triggered wakeup: %s (%d)",
+			 wma_wow_wake_reason_str(wake_info->wake_reason),
+			 wake_info->wake_reason);
 		qdf_wow_wakeup_host_event(wake_info->wake_reason);
 		qdf_wma_wow_wakeup_stats_event();
 	}
@@ -5743,7 +5815,6 @@ static bool wma_is_wow_applicable(tp_wma_handle wma)
  */
 static void wma_configure_dynamic_wake_events(tp_wma_handle wma)
 {
-
 	int vdev_id;
 	uint32_t enable_mask[BM_LEN] = {0};
 	uint32_t disable_mask[BM_LEN] = {0};
@@ -5757,7 +5828,7 @@ static void wma_configure_dynamic_wake_events(tp_wma_handle wma)
 		qdf_mem_set(disable_mask, sizeof(uint32_t) * BM_LEN, 0);
 		vdev = wma_find_vdev_by_id(wma, vdev_id);
 		if (NULL == vdev) {
-			WMA_LOGP("%s: Couldn't find vdev for vdev_id: %d",
+			WMA_LOGD("%s: Couldn't find vdev for vdev_id: %d",
 				 __func__, vdev_id);
 			continue;
 		}
@@ -5768,11 +5839,12 @@ static void wma_configure_dynamic_wake_events(tp_wma_handle wma)
 							 BM_LEN,
 							 enable_mask);
 				enable_configured = true;
-			} else
+			} else {
 				wma_set_wow_event_bitmap(EV_NLO,
 							 BM_LEN,
 							 disable_mask);
 				disable_configured = true;
+			}
 		}
 		if ((wma->interfaces[vdev_id].in_bmps == true ||
 		     wma->in_imps == true) &&
@@ -6464,7 +6536,7 @@ int wma_gtk_offload_status_event(void *handle, uint8_t *event,
 	cds_msg.bodyptr = (void *)resp;
 	cds_msg.bodyval = 0;
 
-	if (cds_mq_post_message(CDS_MQ_ID_SME, (cds_msg_t *) &cds_msg)
+	if (cds_mq_post_message(QDF_MODULE_ID_SME, (cds_msg_t *) &cds_msg)
 	    != QDF_STATUS_SUCCESS) {
 		WMA_LOGE("Failed to post GTK response to SME");
 		qdf_mem_free(resp);
@@ -7228,7 +7300,7 @@ static void wma_send_status_of_ext_wow(tp_wma_handle wma, bool status)
 	cds_msg.bodyptr = (void *)ready_to_extwow;
 	cds_msg.bodyval = 0;
 
-	vstatus = cds_mq_post_message(CDS_MQ_ID_SME, &cds_msg);
+	vstatus = cds_mq_post_message(QDF_MODULE_ID_SME, &cds_msg);
 	if (vstatus != QDF_STATUS_SUCCESS) {
 		WMA_LOGE("Failed to post ready to suspend");
 		qdf_mem_free(ready_to_extwow);
@@ -7645,8 +7717,8 @@ QDF_STATUS wma_set_reg_domain(void *clientCtxt, v_REGDOMAIN_t regId)
  * Return: none
  */
 void wma_send_regdomain_info_to_fw(uint32_t reg_dmn, uint16_t regdmn2G,
-				   uint16_t regdmn5G, int8_t ctl2G,
-				   int8_t ctl5G)
+				   uint16_t regdmn5G, uint8_t ctl2G,
+				   uint8_t ctl5G)
 {
 	tp_wma_handle wma = cds_get_context(QDF_MODULE_ID_WMA);
 	int32_t cck_mask_val = 0;
@@ -8255,6 +8327,14 @@ QDF_STATUS wma_set_tdls_offchan_mode(WMA_HANDLE handle,
 		goto end;
 	}
 
+	if (wma_is_roam_synch_in_progress(wma_handle,
+					  chan_switch_params->vdev_id)) {
+		WMA_LOGE("%s: roaming in progress, reject offchan mode cmd!",
+			 __func__);
+		ret = -EPERM;
+		goto end;
+	}
+
 	params.vdev_id = chan_switch_params->vdev_id;
 	params.tdls_off_ch_bw_offset =
 			chan_switch_params->tdls_off_ch_bw_offset;
@@ -8294,6 +8374,13 @@ QDF_STATUS wma_update_fw_tdls_state(WMA_HANDLE handle, void *pwmaTdlsparams)
 		WMA_LOGE("%s: WMA is closed, can not issue fw tdls state cmd",
 			 __func__);
 		ret = -EINVAL;
+		goto end_fw_tdls_state;
+	}
+
+	if (wma_is_roam_synch_in_progress(wma_handle, wma_tdls->vdev_id)) {
+		WMA_LOGE("%s: roaming in progress, reject fw tdls state cmd!",
+			 __func__);
+		ret = -EPERM;
 		goto end_fw_tdls_state;
 	}
 
@@ -8364,6 +8451,14 @@ int wma_update_tdls_peer_state(WMA_HANDLE handle,
 	if (!wma_handle || !wma_handle->wmi_handle) {
 		WMA_LOGE("%s: WMA is closed, can not issue cmd", __func__);
 		ret = -EINVAL;
+		goto end_tdls_peer_state;
+	}
+
+	if (wma_is_roam_synch_in_progress(wma_handle,
+					peerStateParams->vdevId)) {
+		WMA_LOGE("%s: roaming in progress, reject peer update cmd!",
+			 __func__);
+		ret = -EPERM;
 		goto end_tdls_peer_state;
 	}
 
@@ -10048,7 +10143,51 @@ int wma_wlan_bt_activity_evt_handler(void *handle, uint8_t *event, uint32_t len)
 		WMA_LOGE(FL("Failed to post msg to SME"));
 		return -EINVAL;
 	}
+	return 0;
+}
 
+int wma_chan_info_event_handler(void *handle, u_int8_t *event_buf,
+						u_int32_t len)
+{
+	tp_wma_handle wma = (tp_wma_handle)handle;
+	WMI_CHAN_INFO_EVENTID_param_tlvs *param_buf;
+	wmi_chan_info_event_fixed_param *event;
+	struct scan_chan_info buf;
+	tpAniSirGlobal mac = NULL;
+
+	WMA_LOGD("%s: Enter", __func__);
+
+	if (wma != NULL && wma->cds_context != NULL)
+		mac = (tpAniSirGlobal)cds_get_context(QDF_MODULE_ID_PE);
+
+	if (!mac) {
+		WMA_LOGE("%s: Invalid mac context", __func__);
+		return -EINVAL;
+	}
+
+	WMA_LOGD("%s: monitor:%d", __func__, mac->snr_monitor_enabled);
+	if (mac->snr_monitor_enabled && mac->chan_info_cb) {
+		param_buf =
+			(WMI_CHAN_INFO_EVENTID_param_tlvs *)event_buf;
+		if (!param_buf) {
+			WMA_LOGA("%s: Invalid chan info event", __func__);
+			return -EINVAL;
+		}
+
+		event = param_buf->fixed_param;
+		if (!event) {
+			WMA_LOGA("%s: Invalid fixed param", __func__);
+			return -EINVAL;
+		}
+		buf.tx_frame_count = event->tx_frame_cnt;
+		buf.clock_freq = event->mac_clk_mhz;
+		buf.cmd_flag = event->cmd_flags;
+		buf.freq = event->freq;
+		buf.noise_floor = event->noise_floor;
+		buf.cycle_count = event->cycle_count;
+		buf.rx_clear_count = event->rx_clear_count;
+		mac->chan_info_cb(&buf);
+	}
 	return 0;
 }
 
@@ -10187,7 +10326,7 @@ int wma_rx_aggr_failure_event_handler(void *handle, u_int8_t *event_buf,
 	cds_msg.bodyptr = rx_aggr_hole_event;
 	cds_msg.bodyval = 0;
 
-	status = cds_mq_post_message(CDS_MQ_ID_SME, &cds_msg);
+	status = cds_mq_post_message(QDF_MODULE_ID_SME, &cds_msg);
 	if (status != QDF_STATUS_SUCCESS) {
 		WMA_LOGE("%s: Failed to post stats ext event to SME", __func__);
 		qdf_mem_free(rx_aggr_hole_event);

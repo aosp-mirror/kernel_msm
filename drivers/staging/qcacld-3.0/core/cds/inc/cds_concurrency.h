@@ -728,7 +728,7 @@ static inline void cds_check_and_restart_sap_with_non_dfs_acs(void)
 #endif /* FEATURE_WLAN_STA_AP_MODE_DFS_DISABLE */
 void cds_incr_active_session(enum tQDF_ADAPTER_MODE mode,
 				uint8_t sessionId);
-void cds_decr_active_session(enum tQDF_ADAPTER_MODE mode,
+QDF_STATUS cds_decr_active_session(enum tQDF_ADAPTER_MODE mode,
 				uint8_t sessionId);
 void cds_decr_session_set_pcl(enum tQDF_ADAPTER_MODE mode,
 		uint8_t session_id);
@@ -888,6 +888,19 @@ void cds_dump_connection_status_info(void);
 uint32_t cds_mode_specific_vdev_id(enum cds_con_mode mode);
 uint32_t cds_mode_specific_connection_count(enum cds_con_mode mode,
 						uint32_t *list);
+/**
+ * cds_check_conn_with_mode_and_vdev_id() - checks if any active
+ * session with specific mode and vdev_id
+ * @mode: type of connection
+ * @vdev_id: vdev_id of the connection
+ *
+ * This function checks if any active session with specific mode and vdev_id
+ * is present
+ *
+ * Return: QDF STATUS with success if active session is found, else failure
+ */
+QDF_STATUS cds_check_conn_with_mode_and_vdev_id(enum cds_con_mode mode,
+						uint32_t vdev_id);
 void cds_hw_mode_transition_cb(uint32_t old_hw_mode_index,
 			uint32_t new_hw_mode_index,
 			uint32_t num_vdev_mac_entries,
@@ -900,4 +913,16 @@ void cds_remove_sap_mandatory_chan(uint8_t chan);
 bool cds_is_sap_mandatory_chan_list_enabled(void);
 void cds_init_sap_mandatory_2g_chan(void);
 uint32_t cds_get_sap_mandatory_chan_list_len(void);
+/**
+ * cds_save_wlan_unsafe_channels() - saves the
+ * LTE channel avoidance list in cds
+ * @unsafe_channel_list: LTE channel avoidance list
+ * @unsafe_channel_count: LTE channel avoidance list count
+ *
+ * This function saves the LTE unsafe channels in cds context
+ *
+ * Return: None
+ */
+void cds_save_wlan_unsafe_channels(uint16_t *unsafe_channel_list,
+		uint16_t unsafe_channel_count);
 #endif /* __CDS_CONCURRENCY_H */

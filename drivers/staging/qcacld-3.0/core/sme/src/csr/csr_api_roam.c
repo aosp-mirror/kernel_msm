@@ -162,6 +162,12 @@ int diag_enc_type_from_csr_type(eCsrEncryptionType encType)
 	case eCSR_ENCRYPT_TYPE_AES:
 		n = ENC_MODE_AES;
 		break;
+	case eCSR_ENCRYPT_TYPE_AES_GCMP:
+		n = ENC_MODE_AES_GCMP;
+		break;
+	case eCSR_ENCRYPT_TYPE_AES_GCMP_256:
+		n = ENC_MODE_AES_GCMP_256;
+		break;
 #ifdef FEATURE_WLAN_WAPI
 	case eCSR_ENCRYPT_TYPE_WPI:
 		n = ENC_MODE_SMS4;
@@ -323,7 +329,7 @@ QDF_STATUS csr_process_same_ap_reassoc_cmd(tpAniSirGlobal mac_ctx,
 	msg.type = eWNI_SME_ROAM_INVOKE;
 	msg.reserved = 0;
 	msg.bodyptr = fastreassoc;
-	status = cds_mq_post_message(CDS_MQ_ID_PE, &msg);
+	status = cds_mq_post_message(QDF_MODULE_ID_PE, &msg);
 	if (QDF_STATUS_SUCCESS != status) {
 		sme_err("Not able to post ROAM_INVOKE_CMD");
 		qdf_mem_free(fastreassoc);
@@ -1237,7 +1243,6 @@ QDF_STATUS csr_roam_copy_connect_profile(tpAniSirGlobal pMac,
 		pProfile->mcEncryptionType = connected_prof->mcEncryptionType;
 		pProfile->BSSType = connected_prof->BSSType;
 		pProfile->operationChannel = connected_prof->operationChannel;
-		pProfile->CBMode = connected_prof->CBMode;
 		qdf_mem_copy(&pProfile->bssid, &connected_prof->bssid,
 			sizeof(struct qdf_mac_addr));
 		qdf_mem_copy(&pProfile->SSID, &connected_prof->SSID,
@@ -4457,6 +4462,8 @@ void csr_set_cfg_privacy(tpAniSirGlobal pMac, tCsrRoamProfile *pProfile,
 
 	case eCSR_ENCRYPT_TYPE_TKIP:
 	case eCSR_ENCRYPT_TYPE_AES:
+	case eCSR_ENCRYPT_TYPE_AES_GCMP:
+	case eCSR_ENCRYPT_TYPE_AES_GCMP_256:
 #ifdef FEATURE_WLAN_WAPI
 	case eCSR_ENCRYPT_TYPE_WPI:
 #endif /* FEATURE_WLAN_WAPI */
@@ -7683,7 +7690,6 @@ QDF_STATUS csr_roam_copy_profile(tpAniSirGlobal pMac,
 		if (pDstProfile->phyMode & eCSR_DOT11_MODE_11n)
 			pDstProfile->phyMode &= ~eCSR_DOT11_MODE_11n;
 #endif /* FEATURE_WLAN_WAPI */
-	pDstProfile->CBMode = pSrcProfile->CBMode;
 	pDstProfile->ch_params.ch_width = pSrcProfile->ch_params.ch_width;
 	pDstProfile->ch_params.center_freq_seg0 =
 		pSrcProfile->ch_params.center_freq_seg0;
@@ -7821,7 +7827,6 @@ QDF_STATUS csr_roam_copy_connected_profile(tpAniSirGlobal pMac,
 	pDstProfile->negotiatedMCEncryptionType =
 		pSrcProfile->mcEncryptionType;
 	pDstProfile->BSSType = pSrcProfile->BSSType;
-	pDstProfile->CBMode = pSrcProfile->CBMode;
 	qdf_mem_copy(&pDstProfile->Keys, &pSrcProfile->Keys,
 		sizeof(pDstProfile->Keys));
 	if (pSrcProfile->MDID.mdiePresent) {
@@ -8787,12 +8792,6 @@ QDF_STATUS csr_roam_save_connected_infomation(tpAniSirGlobal pMac,
 		pConnectProfile->MFPCapable = pProfile->MFPCapable;
 #endif
 	}
-	if (pIes)
-		pConnectProfile->CBMode = csr_get_cb_mode_from_ies(pMac,
-				pSirBssDesc->channelId, pIes);
-	else
-		sme_err("IE unavailable to derive CB mode");
-
 	/* Save bssid */
 	pConnectProfile->operationChannel = pSirBssDesc->channelId;
 	pConnectProfile->beaconInterval = pSirBssDesc->beaconInterval;
@@ -9452,10 +9451,10 @@ static void csr_roam_roaming_state_reassoc_rsp_processor(tpAniSirGlobal pMac,
 			if (pNeighborRoamInfo) {
 				qdf_mem_zero(&roamInfo, sizeof(tCsrRoamInfo));
 				csr_roam_call_callback(pMac,
-						       pSmeJoinRsp->sessionId,
-						       &roamInfo, roamId,
-						    eCSR_ROAM_FT_REASSOC_FAILED,
-						       eSIR_SME_SUCCESS);
+						pSmeJoinRsp->sessionId,
+						&roamInfo, roamId,
+						eCSR_ROAM_FT_REASSOC_FAILED,
+						eCSR_ROAM_RESULT_SUCCESS);
 				/*
 				 * Since the above callback sends a disconnect
 				 * to HDD, we should clean-up our state
@@ -9599,7 +9598,8 @@ csr_post_roam_failure(tpAniSirGlobal mac_ctx,
 	/* Inform the upper layers that the reassoc failed */
 	qdf_mem_zero(roam_info, sizeof(tCsrRoamInfo));
 	csr_roam_call_callback(mac_ctx, session_id, roam_info, 0,
-			       eCSR_ROAM_FT_REASSOC_FAILED, eSIR_SME_SUCCESS);
+			       eCSR_ROAM_FT_REASSOC_FAILED,
+			       eCSR_ROAM_RESULT_SUCCESS);
 	/*
 	 * Issue a disassoc request so that PE/LIM uses this to clean-up the FT
 	 * session. Upon success, we would re-enter this routine after receiving
@@ -10044,6 +10044,17 @@ void csr_roam_joined_state_msg_processor(tpAniSirGlobal pMac, void *pMsgBuf)
 			     &pUpperLayerAssocCnf->chan_info,
 			     sizeof(tSirSmeChanInfo));
 		pRoamInfo->ecsa_capable = pUpperLayerAssocCnf->ecsa_capable;
+		pRoamInfo->ampdu = pUpperLayerAssocCnf->ampdu;
+		pRoamInfo->sgi_enable = pUpperLayerAssocCnf->sgi_enable;
+		pRoamInfo->tx_stbc = pUpperLayerAssocCnf->tx_stbc;
+		pRoamInfo->tx_stbc = pUpperLayerAssocCnf->rx_stbc;
+		pRoamInfo->ch_width = pUpperLayerAssocCnf->ch_width;
+		pRoamInfo->mode = pUpperLayerAssocCnf->mode;
+		pRoamInfo->max_supp_idx = pUpperLayerAssocCnf->max_supp_idx;
+		pRoamInfo->max_ext_idx = pUpperLayerAssocCnf->max_ext_idx;
+		pRoamInfo->max_mcs_idx = pUpperLayerAssocCnf->max_mcs_idx;
+		pRoamInfo->rx_mcs_map = pUpperLayerAssocCnf->rx_mcs_map;
+		pRoamInfo->tx_mcs_map = pUpperLayerAssocCnf->tx_mcs_map;
 		if (CSR_IS_INFRA_AP(pRoamInfo->u.pConnectedProfile)) {
 			pMac->roam.roamSession[sessionId].connectState =
 				eCSR_ASSOC_STATE_TYPE_INFRA_CONNECTED;
@@ -10187,6 +10198,32 @@ csr_update_key_cmd(tpAniSirGlobal mac_ctx, tCsrRoamSession *session,
 		set_key_cmd->u.setKeyCmd.keyLength = CSR_AES_KEY_LEN;
 		qdf_mem_copy(set_key_cmd->u.setKeyCmd.Key, set_key->Key,
 			     CSR_AES_KEY_LEN);
+		*enqueue_cmd = true;
+		break;
+	case eCSR_ENCRYPT_TYPE_AES_GCMP:
+		if (set_key->keyLength < CSR_AES_GCMP_KEY_LEN) {
+			sme_warn(
+				"Invalid AES_GCMP keylength [= %d]",
+				set_key->keyLength);
+			*enqueue_cmd = false;
+			return QDF_STATUS_E_INVAL;
+		}
+		set_key_cmd->u.setKeyCmd.keyLength = CSR_AES_GCMP_KEY_LEN;
+		qdf_mem_copy(set_key_cmd->u.setKeyCmd.Key, set_key->Key,
+			     CSR_AES_GCMP_KEY_LEN);
+		*enqueue_cmd = true;
+		break;
+	case eCSR_ENCRYPT_TYPE_AES_GCMP_256:
+		if (set_key->keyLength < CSR_AES_GCMP_256_KEY_LEN) {
+			sme_warn(
+				"Invalid AES_GCMP_256 keylength [= %d]",
+				set_key->keyLength);
+			*enqueue_cmd = false;
+			return QDF_STATUS_E_INVAL;
+		}
+		set_key_cmd->u.setKeyCmd.keyLength = CSR_AES_GCMP_256_KEY_LEN;
+		qdf_mem_copy(set_key_cmd->u.setKeyCmd.Key, set_key->Key,
+			     CSR_AES_GCMP_256_KEY_LEN);
 		*enqueue_cmd = true;
 		break;
 #ifdef FEATURE_WLAN_WAPI
@@ -14501,7 +14538,7 @@ QDF_STATUS csr_send_join_req_msg(tpAniSirGlobal pMac, uint32_t sessionId,
 	uint8_t txBFCsnValue = 0;
 	tSirSmeJoinReq *csr_join_req;
 	tSirMacCapabilityInfo *pAP_capabilityInfo;
-	tAniBool fTmp;
+	bool fTmp;
 	int8_t pwrLimit = 0;
 	struct ps_global_info *ps_global_info = &pMac->sme.ps_global_info;
 	struct ps_params *ps_param = &ps_global_info->ps_params[sessionId];
@@ -15141,9 +15178,9 @@ QDF_STATUS csr_send_join_req_msg(tpAniSirGlobal pMac, uint32_t sessionId,
 		 */
 		if (csr_is11h_supported(pMac) && pAP_capabilityInfo->spectrumMgt
 			&& eSIR_11A_NW_TYPE == pBssDescription->nwType) {
-			fTmp = (tAniBool) 1;
+			fTmp = true;
 		} else
-			fTmp = (tAniBool) 0;
+			fTmp = false;
 
 		csr_join_req->spectrumMgtIndicator = fTmp;
 		csr_join_req->powerCap.minTxPower = MIN_TX_PWR_CAP;
@@ -15614,7 +15651,7 @@ QDF_STATUS csr_send_assoc_cnf_msg(tpAniSirGlobal pMac, tpSirSmeAssocInd
 		msg.bodyval = 0;
 		msg.bodyptr = pMsg;
 		/* pMsg is freed by cds_send_mb_message_to_mac in anycase*/
-		status = cds_mq_post_message_by_priority(CDS_MQ_ID_PE,
+		status = cds_mq_post_message_by_priority(QDF_MODULE_ID_PE,
 					&msg, HIGH_PRIORITY);
 	} while (0);
 	return status;
@@ -15647,56 +15684,93 @@ QDF_STATUS csr_send_assoc_ind_to_upper_layer_cnf_msg(tpAniSirGlobal pMac,
 		else
 			statusCode = eSIR_SME_ASSOC_REFUSED;
 		qdf_mem_copy(pBuf, &statusCode, sizeof(tSirResultCodes));
-		pBuf += sizeof(tSirResultCodes);
 		/* bssId */
-		qdf_mem_copy((tSirMacAddr *) pBuf, pAssocInd->bssId,
-			     sizeof(tSirMacAddr));
-		pBuf += sizeof(tSirMacAddr);
+		pBuf = (uint8_t *)&pMsg->bssId;
+		qdf_mem_copy((tSirMacAddr *)pBuf, pAssocInd->bssId,
+			sizeof(tSirMacAddr));
 		/* peerMacAddr */
-		qdf_mem_copy((tSirMacAddr *) pBuf, pAssocInd->peerMacAddr,
-			     sizeof(tSirMacAddr));
-		pBuf += sizeof(tSirMacAddr);
+		pBuf = (uint8_t *)&pMsg->peerMacAddr;
+		qdf_mem_copy((tSirMacAddr *)pBuf, pAssocInd->peerMacAddr,
+			sizeof(tSirMacAddr));
 		/* StaId */
+		pBuf = (uint8_t *)&pMsg->aid;
 		wTmp = pAssocInd->staId;
 		qdf_mem_copy(pBuf, &wTmp, sizeof(uint16_t));
-		pBuf += sizeof(uint16_t);
 		/* alternateBssId */
-		qdf_mem_copy((tSirMacAddr *) pBuf, pAssocInd->bssId,
-			     sizeof(tSirMacAddr));
-		pBuf += sizeof(tSirMacAddr);
+		pBuf = (uint8_t *)&pMsg->alternateBssId;
+		qdf_mem_copy((tSirMacAddr *)pBuf, pAssocInd->bssId,
+			sizeof(tSirMacAddr));
 		/* alternateChannelId */
+		pBuf = (uint8_t *)&pMsg->alternateChannelId;
 		*pBuf = 11;
-		pBuf += sizeof(uint8_t);
-		/* Instead of copying roam Info, we just copy only WmmEnabled,
-		 * RsnIE information
+		/*
+		 * Instead of copying roam Info,just copy WmmEnabled,
+		 * RsnIE information.
+		 * Wmm
 		 */
-		/* Wmm */
+		pBuf = (uint8_t *)&pMsg->wmmEnabledSta;
 		*pBuf = pAssocInd->wmmEnabledSta;
-		pBuf += sizeof(uint8_t);
 		/* RSN IE */
-		qdf_mem_copy((tSirRSNie *) pBuf, &pAssocInd->rsnIE,
-			     sizeof(tSirRSNie));
-		pBuf += sizeof(tSirRSNie);
+		pBuf = (uint8_t *)&pMsg->rsnIE;
+		qdf_mem_copy((tSirRSNie *)pBuf, &pAssocInd->rsnIE,
+			sizeof(tSirRSNie));
 #ifdef FEATURE_WLAN_WAPI
 		/* WAPI IE */
-		qdf_mem_copy((tSirWAPIie *) pBuf, &pAssocInd->wapiIE,
-			     sizeof(tSirWAPIie));
-		pBuf += sizeof(tSirWAPIie);
+		pBuf = (uint8_t *)&pMsg->wapiIE;
+		qdf_mem_copy((tSirWAPIie *)pBuf, &pAssocInd->wapiIE,
+			sizeof(tSirWAPIie));
 #endif
 		/* Additional IE */
-		qdf_mem_copy((void *)pBuf, &pAssocInd->addIE,
-			     sizeof(tSirAddie));
-		pBuf += sizeof(tSirAddie);
+		pBuf = (uint8_t *)&pMsg->addIE;
+		qdf_mem_copy((tSirAddie *)pBuf, &pAssocInd->addIE,
+			sizeof(tSirAddie));
 		/* reassocReq */
+		pBuf = (uint8_t *)&pMsg->reassocReq;
 		*pBuf = pAssocInd->reassocReq;
-		pBuf += sizeof(uint8_t);
 		/* timingMeasCap */
+		pBuf = (uint8_t *)&pMsg->timingMeasCap;
 		*pBuf = pAssocInd->timingMeasCap;
-		pBuf += sizeof(uint8_t);
+		/* chan_info */
+		pBuf = (uint8_t *)&pMsg->chan_info;
 		qdf_mem_copy((void *)pBuf, &pAssocInd->chan_info,
-			     sizeof(tSirSmeChanInfo));
-		pBuf += sizeof(tSirSmeChanInfo);
+			sizeof(tSirSmeChanInfo));
+		/* ecsa capable */
+		pBuf = (uint8_t *)&pMsg->ecsa_capable;
 		*pBuf = pAssocInd->ecsa_capable;
+		/* ampdu */
+		pBuf = (uint8_t *)&pMsg->ampdu;
+		*pBuf = pAssocInd->ampdu;
+		/* sgi_enable */
+		pBuf = (uint8_t *)&pMsg->sgi_enable;
+		*pBuf = pAssocInd->sgi_enable;
+		/* tx stbc */
+		pBuf = (uint8_t *)&pMsg->tx_stbc;
+		*pBuf = pAssocInd->tx_stbc;
+		/* ch_width */
+		pBuf = (uint8_t *)&pMsg->ch_width;
+		*pBuf = pAssocInd->ch_width;
+		/* mode */
+		pBuf = (uint8_t *)&pMsg->mode;
+		*pBuf = pAssocInd->mode;
+		/* rx stbc */
+		pBuf = (uint8_t *)&pMsg->rx_stbc;
+		*pBuf = pAssocInd->rx_stbc;
+		/* max supported idx */
+		pBuf = (uint8_t *)&pMsg->max_supp_idx;
+		*pBuf = pAssocInd->max_supp_idx;
+		/* max extended idx */
+		pBuf = (uint8_t *)&pMsg->max_ext_idx;
+		*pBuf = pAssocInd->max_ext_idx;
+		/* max ht mcs idx */
+		pBuf = (uint8_t *)&pMsg->max_mcs_idx;
+		*pBuf = pAssocInd->max_mcs_idx;
+		/* vht rx mcs map */
+		pBuf = (uint8_t *)&pMsg->rx_mcs_map;
+		*pBuf = pAssocInd->rx_mcs_map;
+		/* vht tx mcs map */
+		pBuf = (uint8_t *)&pMsg->tx_mcs_map;
+		*pBuf = pAssocInd->tx_mcs_map;
+
 		msgQ.type = eWNI_SME_UPPER_LAYER_ASSOC_CNF;
 		msgQ.bodyptr = pMsg;
 		msgQ.bodyval = 0;
@@ -16124,13 +16198,13 @@ QDF_STATUS csr_process_add_sta_session_command(tpAniSirGlobal pMac,
 	struct add_sta_self_params *add_sta_self_req;
 	uint8_t nss_2g;
 	uint8_t nss_5g;
-	QDF_STATUS status = QDF_STATUS_E_NOMEM;
+	tSirRetStatus status;
 	tSirMsgQ msg;
 
 	add_sta_self_req = qdf_mem_malloc(sizeof(struct add_sta_self_params));
 	if (NULL == add_sta_self_req) {
 		sme_err("Unable to allocate memory for tAddSelfStaParams");
-		return status;
+		return QDF_STATUS_E_NOMEM;
 	}
 
 	csr_get_vdev_type_nss(pMac, pAddStaReq->currDeviceMode,
@@ -16163,12 +16237,13 @@ QDF_STATUS csr_process_add_sta_session_command(tpAniSirGlobal pMac,
 		 MAC_ADDR_ARRAY(add_sta_self_req->self_mac_addr));
 	status = wma_post_ctrl_msg(pMac, &msg);
 
-	if (status != QDF_STATUS_SUCCESS) {
+	if (status != eSIR_SUCCESS) {
 		sme_err("wma_post_ctrl_msg failed");
 		qdf_mem_free(add_sta_self_req);
 		add_sta_self_req = NULL;
+		return QDF_STATUS_E_FAILURE;
 	}
-	return status;
+	return QDF_STATUS_SUCCESS;
 }
 
 QDF_STATUS csr_roam_open_session(tpAniSirGlobal mac_ctx,
@@ -16481,7 +16556,7 @@ QDF_STATUS csr_process_del_sta_session_command(tpAniSirGlobal pMac,
 {
 	struct del_sta_self_params *del_sta_self_req;
 	tSirMsgQ msg;
-	QDF_STATUS status = QDF_STATUS_E_FAILURE;
+	tSirRetStatus status;
 
 	del_sta_self_req = qdf_mem_malloc(sizeof(struct del_sta_self_params));
 	if (NULL == del_sta_self_req) {
@@ -16501,11 +16576,12 @@ QDF_STATUS csr_process_del_sta_session_command(tpAniSirGlobal pMac,
 
 	sme_debug("sending WMA_DEL_STA_SELF_REQ");
 	status = wma_post_ctrl_msg(pMac, &msg);
-	if (status != QDF_STATUS_SUCCESS) {
+	if (status != eSIR_SUCCESS) {
 		sme_err("wma_post_ctrl_msg failed");
 		qdf_mem_free(del_sta_self_req);
+		return QDF_STATUS_E_FAILURE;
 	}
-	return status;
+	return QDF_STATUS_SUCCESS;
 }
 
 /**
@@ -17256,7 +17332,7 @@ QDF_STATUS csr_get_rssi(tpAniSirGlobal pMac,
 	msg.type = eWNI_SME_GET_RSSI_REQ;
 	msg.bodyptr = pMsg;
 	msg.reserved = 0;
-	if (QDF_STATUS_SUCCESS != cds_mq_post_message(CDS_MQ_ID_SME, &msg)) {
+	if (QDF_STATUS_SUCCESS != cds_mq_post_message(QDF_MODULE_ID_SME, &msg)) {
 		sme_err("csr_get_rssi failed to post msg to self ");
 		qdf_mem_free((void *)pMsg);
 		status = QDF_STATUS_E_FAILURE;
@@ -17295,7 +17371,7 @@ QDF_STATUS csr_get_snr(tpAniSirGlobal pMac,
 	msg.bodyptr = pMsg;
 	msg.reserved = 0;
 
-	if (QDF_STATUS_SUCCESS != cds_mq_post_message(CDS_MQ_ID_SME, &msg)) {
+	if (QDF_STATUS_SUCCESS != cds_mq_post_message(QDF_MODULE_ID_SME, &msg)) {
 		sme_err("%s failed to post msg to self", __func__);
 		qdf_mem_free((void *)pMsg);
 		status = QDF_STATUS_E_FAILURE;
@@ -19422,7 +19498,7 @@ QDF_STATUS csr_handoff_request(tpAniSirGlobal pMac,
 	msg.type = eWNI_SME_HANDOFF_REQ;
 	msg.bodyptr = pMsg;
 	msg.reserved = 0;
-	if (QDF_STATUS_SUCCESS != cds_mq_post_message(CDS_MQ_ID_SME, &msg)) {
+	if (QDF_STATUS_SUCCESS != cds_mq_post_message(QDF_MODULE_ID_SME, &msg)) {
 		sme_err("csr_handoff_request failed to post msg to self ");
 		qdf_mem_free((void *)pMsg);
 		status = QDF_STATUS_E_FAILURE;
@@ -20161,13 +20237,6 @@ void csr_process_set_hw_mode(tpAniSirGlobal mac, tSmeCmd *command)
 	tSirMsgQ msg;
 	struct sir_set_hw_mode_resp *param;
 	enum cds_hw_mode_change cds_hw_mode;
-	hdd_context_t *hdd_ctx;
-
-	hdd_ctx = cds_get_context(QDF_MODULE_ID_HDD);
-	if (!hdd_ctx) {
-		cds_err("HDD context is NULL");
-		goto fail;
-	}
 
 	/* Setting HW mode is for the entire system.
 	 * So, no need to check session
@@ -20203,11 +20272,8 @@ void csr_process_set_hw_mode(tpAniSirGlobal mac, tSmeCmd *command)
 
 	if ((SIR_UPDATE_REASON_OPPORTUNISTIC ==
 	     command->u.set_hw_mode_cmd.reason) &&
-	    (hdd_ctx->btCoexModeSet ||
-		(cds_is_connection_in_progress(NULL, NULL)))) {
-		sme_err(
-		"Set HW mode refused: conn or btcoex(%d) is in progress",
-			hdd_ctx->btCoexModeSet);
+	    (true == cds_is_connection_in_progress(NULL, NULL))) {
+		sme_err("Set HW mode refused: conn in progress");
 		cds_restart_opportunistic_timer(false);
 		goto fail;
 	}
@@ -20535,24 +20601,24 @@ static QDF_STATUS csr_process_roam_sync_callback(tpAniSirGlobal mac_ctx,
 			return QDF_STATUS_E_FAILURE;
 		}
 		csr_roam_call_callback(mac_ctx, session_id, NULL, 0,
-				eCSR_ROAM_FT_START, eSIR_SME_SUCCESS);
+				eCSR_ROAM_FT_START, eCSR_ROAM_RESULT_SUCCESS);
 		return status;
 	case SIR_ROAMING_START:
 		csr_roam_roaming_offload_timer_action(mac_ctx,
 				CSR_ROAMING_OFFLOAD_TIMEOUT_PERIOD, session_id,
 				ROAMING_OFFLOAD_TIMER_START);
 		csr_roam_call_callback(mac_ctx, session_id, NULL, 0,
-				eCSR_ROAM_START, eSIR_SME_SUCCESS);
+				eCSR_ROAM_START, eCSR_ROAM_RESULT_SUCCESS);
 		return status;
 	case SIR_ROAMING_ABORT:
 		csr_roam_roaming_offload_timer_action(mac_ctx,
 				0, session_id, ROAMING_OFFLOAD_TIMER_STOP);
 		csr_roam_call_callback(mac_ctx, session_id, NULL, 0,
-				eCSR_ROAM_ABORT, eSIR_SME_SUCCESS);
+				eCSR_ROAM_ABORT, eCSR_ROAM_RESULT_SUCCESS);
 		return status;
 	case SIR_ROAM_SYNCH_NAPI_OFF:
 		csr_roam_call_callback(mac_ctx, session_id, NULL, 0,
-				eCSR_ROAM_NAPI_OFF, eSIR_SME_SUCCESS);
+				eCSR_ROAM_NAPI_OFF, eCSR_ROAM_RESULT_SUCCESS);
 		return status;
 	case SIR_ROAMING_INVOKE_FAIL:
 		csr_roam_call_callback(mac_ctx, session_id, NULL, 0,
