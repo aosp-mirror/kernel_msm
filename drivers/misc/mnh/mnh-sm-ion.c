@@ -21,15 +21,20 @@
 
 #define MSM_ION_EASEL_MEM_HEAP_NAME	"easel_mem"
 
-/* mnh_ion_fw_copy must be called in slot incrementing order:*/
-/* 1. MNH_FW_SLOT_SBL, 2. MNH_FW_SLOT_KERNEL,*/
-/* 3. MNH_FW_SLOT_DTB, 4. MNH_FW_SLOT_RAMDISK */
-static void mnh_ion_fw_copy(struct mnh_ion *ion, int slot,
+/**
+ * mnh_ion_fw_copy - Copy data to ION buffer and flush cache
+ * Return 0		on success
+ *        -ENOMEM	if exceeding totoal buffer size
+ * mnh_ion_fw_copy must be called in slot incrementing order:
+ * 1. MNH_FW_SLOT_SBL, 2. MNH_FW_SLOT_KERNEL,
+ * 3. MNH_FW_SLOT_DTB, 4. MNH_FW_SLOT_RAMDISK
+ */
+static int mnh_ion_fw_copy(struct mnh_ion *ion, int slot,
 				uint64_t ep_addr, size_t size,
 				const u8 *data)
 {
-	dma_addr_t ion_addr;
-	unsigned long offset;
+	dma_addr_t ion_addr;	/* Base bus address of ION buffer */
+	unsigned long offset;	/* offset inside ION buffer */
 	void *buf;
 
 	ion_addr = ion->sg->sgl->dma_address;
@@ -37,6 +42,13 @@ static void mnh_ion_fw_copy(struct mnh_ion *ion, int slot,
 		ion->fw_array[slot-1].size;
 
 	buf = ion->vaddr + offset;
+
+	if (offset + size >= ion->total_size) {
+		dev_err(ion->device,
+			"%s: slot=%d offset=0x%lx + size=0x%zx >= total=0x%zx\n",
+			__func__, slot, offset, size, ion->total_size);
+		return -ENOMEM;
+	}
 
 	ion->fw_array[slot].ep_addr = ep_addr;
 	ion->fw_array[slot].size = size;
@@ -47,140 +59,155 @@ static void mnh_ion_fw_copy(struct mnh_ion *ion, int slot,
 
 	msm_ion_do_cache_op(ion->client, ion->handle, buf, size,
 			    ION_IOC_CLEAN_CACHES);
+
+	return 0;
 }
 
+/**
+ * mnh_ion_fw_copy_by_name - Request firmware from disk and copy to ION
+ * Returns 0		on success
+ *         negative	on error
+ */
+static int mnh_ion_fw_copy_by_name(struct mnh_ion *ion, int slot,
+				   uint64_t ep_addr, const char *name)
+{
+	int err = 0;
+	const struct firmware *fw_img;
+
+	dev_dbg(ion->device, "%s: request %s for slot %d\n",
+		__func__, name, slot);
+
+	err = request_firmware(&fw_img, name, ion->device);
+	if (err) {
+		dev_err(ion->device, "%s: request %s failed (%d)\n",
+			__func__, name, err);
+		return err;
+	}
+	err = mnh_ion_fw_copy(ion, slot, ep_addr, fw_img->size, fw_img->data);
+	if (err) {
+		dev_err(ion->device, "%s: copy %s to ION failed (%d)\n",
+			__func__, name, err);
+		/* Do not return yet */
+	}
+	release_firmware(fw_img);
+
+	return err;
+}
+
+/**
+ * mnh_ion_fw_copy_try_ion_sec - Try update from secondary ION buffer
+ * Returns 0		on success
+ *         negative	no update at this slot, or failed to copy
+ */
+static int mnh_ion_fw_copy_try_ion_sec(struct mnh_ion *ion,
+				       struct mnh_ion *ion_sec, int slot,
+				       uint64_t ep_addr)
+{
+	int err = 0;
+
+	if (!ion_sec || !ion)
+		return -EINVAL;
+
+	if (ion_sec->fw_array[slot].size <= 0)
+		return -EINVAL;
+
+	dev_dbg(ion->device, "%s: Using update buffer for slot %d\n",
+		__func__, slot);
+
+	err = mnh_ion_fw_copy(ion, slot, ep_addr,
+			      ion_sec->fw_array[slot].size,
+			      ion_sec->vaddr +
+			      ion_sec->fw_array[slot].ap_offs);
+
+	return err;
+}
+
+/**
+ * mnh_ion_fw_update_request - For each slot, try to update from secondary
+ *     ION buffer first.  If failed, try update that slot from disk instead.
+ * Returns 0		on success
+ *         negative	on error
+ */
 static int mnh_ion_fw_update_request(struct mnh_ion *ion,
 				     struct mnh_ion *ion_sec)
 {
-	const struct firmware *fip_img, *dt_img, *kernel_img, *ram_img;
 	int err;
 
-	if (ion_sec->fw_array[MNH_FW_SLOT_SBL].size > 0) {
-		dev_dbg(ion->device, "%s: Using update buffer for SBL\n",
-			__func__);
-		mnh_ion_fw_copy(ion, MNH_FW_SLOT_SBL, HW_MNH_SBL_DOWNLOAD,
-				ion_sec->fw_array[MNH_FW_SLOT_SBL].size,
-				ion_sec->vaddr +
-				ion_sec->fw_array[MNH_FW_SLOT_SBL].ap_offs);
-	} else {
-		err = request_firmware(&fip_img, "easel/fip.bin", ion->device);
-		if (err) {
-			dev_err(ion->device, "request fip_image failed - %d\n",
-				err);
-			return -EIO;
-		}
-		mnh_ion_fw_copy(ion, MNH_FW_SLOT_SBL, HW_MNH_SBL_DOWNLOAD,
-				fip_img->size, fip_img->data);
-		release_firmware(fip_img);
+	err = mnh_ion_fw_copy_try_ion_sec(ion, ion_sec, MNH_FW_SLOT_SBL,
+					  HW_MNH_SBL_DOWNLOAD);
+	if (err) {
+		err = mnh_ion_fw_copy_by_name(ion, MNH_FW_SLOT_SBL,
+					      HW_MNH_SBL_DOWNLOAD,
+					      "easel/fip.bin");
+		if (err)
+			return err;
 	}
 
-	if (ion_sec->fw_array[MNH_FW_SLOT_KERNEL].size > 0) {
-		dev_dbg(ion->device, "%s: Using update buffer for kernel\n",
-			__func__);
-		mnh_ion_fw_copy(ion, MNH_FW_SLOT_KERNEL, HW_MNH_KERNEL_DOWNLOAD,
-				ion_sec->fw_array[MNH_FW_SLOT_KERNEL].size,
-				ion_sec->vaddr +
-				ion_sec->fw_array[MNH_FW_SLOT_KERNEL].ap_offs);
-	} else {
-		err = request_firmware(&kernel_img, "easel/Image", ion->device);
-		if (err) {
-			dev_err(ion->device, "request kernel failed - %d\n",
-				err);
-			return -EIO;
-		}
-		mnh_ion_fw_copy(ion, MNH_FW_SLOT_KERNEL, HW_MNH_KERNEL_DOWNLOAD,
-				kernel_img->size, kernel_img->data);
-		release_firmware(kernel_img);
+	err = mnh_ion_fw_copy_try_ion_sec(ion, ion_sec, MNH_FW_SLOT_KERNEL,
+					  HW_MNH_KERNEL_DOWNLOAD);
+	if (err) {
+		err = mnh_ion_fw_copy_by_name(ion, MNH_FW_SLOT_KERNEL,
+					      HW_MNH_KERNEL_DOWNLOAD,
+					      "easel/Image");
+		if (err)
+			return err;
 	}
 
-	if (ion_sec->fw_array[MNH_FW_SLOT_DTB].size > 0) {
-		dev_dbg(ion->device, "%s: Using update buffer for DTB\n",
-			__func__);
-		mnh_ion_fw_copy(ion, MNH_FW_SLOT_DTB, HW_MNH_DT_DOWNLOAD,
-				ion_sec->fw_array[MNH_FW_SLOT_DTB].size,
-				ion_sec->vaddr +
-				ion_sec->fw_array[MNH_FW_SLOT_DTB].ap_offs);
-	} else {
-		err = request_firmware(&dt_img, "easel/mnh.dtb", ion->device);
-		if (err) {
-			dev_err(ion->device, "request kernel failed - %d\n",
-				err);
-			return -EIO;
-		}
-		mnh_ion_fw_copy(ion, MNH_FW_SLOT_DTB, HW_MNH_DT_DOWNLOAD,
-				dt_img->size, dt_img->data);
-		release_firmware(dt_img);
+	err = mnh_ion_fw_copy_try_ion_sec(ion, ion_sec, MNH_FW_SLOT_DTB,
+					  HW_MNH_DT_DOWNLOAD);
+	if (err) {
+		err = mnh_ion_fw_copy_by_name(ion, MNH_FW_SLOT_DTB,
+					      HW_MNH_DT_DOWNLOAD,
+					      "easel/mnh.dtb");
+		if (err)
+			return err;
 	}
 
-	if (ion_sec->fw_array[MNH_FW_SLOT_RAMDISK].size > 0) {
-		dev_dbg(ion->device, "%s: Using update buffer for ramdisk\n",
-			__func__);
-		mnh_ion_fw_copy(ion, MNH_FW_SLOT_RAMDISK,
-				HW_MNH_RAMDISK_DOWNLOAD,
-				ion_sec->fw_array[MNH_FW_SLOT_RAMDISK].size,
-				ion_sec->vaddr +
-				ion_sec->fw_array[MNH_FW_SLOT_RAMDISK].ap_offs
-			);
-	} else {
-		err = request_firmware(&ram_img, "easel/ramdisk.img",
-				       ion->device);
-		if (err) {
-			dev_err(ion->device, "request kernel failed - %d\n",
-				err);
-			return -EIO;
-		}
-		mnh_ion_fw_copy(ion, MNH_FW_SLOT_RAMDISK,
-				HW_MNH_RAMDISK_DOWNLOAD,
-				ram_img->size, ram_img->data);
-		release_firmware(ram_img);
+	err = mnh_ion_fw_copy_try_ion_sec(ion, ion_sec, MNH_FW_SLOT_RAMDISK,
+					  HW_MNH_RAMDISK_DOWNLOAD);
+	if (err) {
+		err = mnh_ion_fw_copy_by_name(ion, MNH_FW_SLOT_RAMDISK,
+					      HW_MNH_RAMDISK_DOWNLOAD,
+					      "easel/ramdisk.img");
+		if (err)
+			return err;
 	}
 
 	return 0;
 }
 
-
+/**
+ * mnh_ion_fw_request - For each slot, update firmware from disk
+ * Returns 0		on success
+ *         negative	on error
+ */
 static int mnh_ion_fw_request(struct mnh_ion *ion)
 {
-	const struct firmware *fip_img, *dt_img, *kernel_img, *ram_img;
 	int err;
 
-	err = request_firmware(&fip_img, "easel/fip.bin", ion->device);
-	if (err) {
-		dev_err(ion->device, "request fip_image failed - %d\n",
-			err);
-		return -EIO;
-	}
-	mnh_ion_fw_copy(ion, MNH_FW_SLOT_SBL, HW_MNH_SBL_DOWNLOAD,
-			fip_img->size, fip_img->data);
-	release_firmware(fip_img);
+	err = mnh_ion_fw_copy_by_name(ion, MNH_FW_SLOT_SBL,
+				      HW_MNH_SBL_DOWNLOAD,
+				      "easel/fip.bin");
+	if (err)
+		return err;
 
-	err = request_firmware(&kernel_img, "easel/Image", ion->device);
-	if (err) {
-		dev_err(ion->device, "request kernel failed - %d\n", err);
-		return -EIO;
-	}
-	mnh_ion_fw_copy(ion, MNH_FW_SLOT_KERNEL, HW_MNH_KERNEL_DOWNLOAD,
-			kernel_img->size, kernel_img->data);
-	release_firmware(kernel_img);
+	err = mnh_ion_fw_copy_by_name(ion, MNH_FW_SLOT_KERNEL,
+				      HW_MNH_KERNEL_DOWNLOAD,
+				      "easel/Image");
+	if (err)
+		return err;
 
+	err = mnh_ion_fw_copy_by_name(ion, MNH_FW_SLOT_DTB,
+				      HW_MNH_DT_DOWNLOAD,
+				      "easel/mnh.dtb");
+	if (err)
+		return err;
 
-	err = request_firmware(&dt_img, "easel/mnh.dtb", ion->device);
-	if (err) {
-		dev_err(ion->device, "request kernel failed - %d\n", err);
-		return -EIO;
-	}
-	mnh_ion_fw_copy(ion, MNH_FW_SLOT_DTB,
-			    HW_MNH_DT_DOWNLOAD, dt_img->size, dt_img->data);
-	release_firmware(dt_img);
-
-	err = request_firmware(&ram_img, "easel/ramdisk.img", ion->device);
-	if (err) {
-		dev_err(ion->device, "request kernel failed - %d\n", err);
-		return -EIO;
-	}
-	mnh_ion_fw_copy(ion, MNH_FW_SLOT_RAMDISK, HW_MNH_RAMDISK_DOWNLOAD,
-			ram_img->size, ram_img->data);
-	release_firmware(ram_img);
+	err = mnh_ion_fw_copy_by_name(ion, MNH_FW_SLOT_RAMDISK,
+				      HW_MNH_RAMDISK_DOWNLOAD,
+				      "easel/ramdisk.img");
+	if (err)
+		return err;
 
 	return 0;
 }
@@ -192,6 +219,7 @@ int mnh_ion_stage_firmware(struct mnh_ion *ion)
 	if (!ion || !ion->client)
 		return -ENODEV;
 
+	ion->is_fw_ready = false;
 	ret = mnh_ion_fw_request(ion);
 	if (ret)
 		return ret;
