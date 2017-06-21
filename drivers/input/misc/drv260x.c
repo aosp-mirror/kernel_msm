@@ -197,6 +197,7 @@ struct drv260x_data {
 	struct regmap *regmap;
 	struct hrtimer vib_timer;
 	struct timed_output_dev timed_dev;
+	int value;
 	int state;
 	int haptic_vib;
 	int schedule_time;
@@ -293,6 +294,11 @@ static int drv260x_haptics_play(struct input_dev *input, void *data,
 {
 	struct drv260x_data *haptics = input_get_drvdata(input);
 
+	
+	/* Since there is Timeout vibrator is in use, Hence there is no
+	  use of memless support. While any application trigger haptic/vibration
+	  it function will return without doing any opration */
+	return 0;
 	haptics->mode = DRV260X_LRA_NO_CAL_MODE;
 
 	if (effect->u.rumble.strong_magnitude > 0)
@@ -589,6 +595,8 @@ static void drv260x_vib_sim(struct drv260x_data *haptics)
 			return;
 		}
 	} while (cal_buf == DRV260X_GO_BIT);
+
+	haptics->state = 0;
 }
 
 /*  Rated and Overdriver Voltages:
@@ -602,6 +610,7 @@ static void drv260x_worker_haptic(struct work_struct *work_haptic)
 	int error;
 
 	if(0 == haptics->state) {
+		haptics->magnitude = 0;
 		error = regmap_write(haptics->regmap, DRV260X_MODE, DRV260X_STANDBY);
 		if (error) {
                 dev_err(&haptics->client->dev,
@@ -614,6 +623,10 @@ static void drv260x_worker_haptic(struct work_struct *work_haptic)
 	gpiod_set_value(haptics->enable_gpio, 1);
         /* Data sheet says to wait 250us before trying to communicate */
 	udelay(250);
+	hrtimer_start(&haptics->vib_timer,
+		ktime_set(haptics->value / 1000, (haptics->value % 1000) * 1000000), 
+		HRTIMER_MODE_REL);
+
 	error = regmap_write(haptics->regmap,
 			DRV260X_RATED_VOLT, haptics->rated_voltage);
 	if (error) {
@@ -655,15 +668,18 @@ static void drv260x_worker_haptic(struct work_struct *work_haptic)
 					"Failed to set magnitude: %d\n", error);
 	}
 
+	haptics->magnitude = 0;
 }
 
 static void drv260x_vib_enable(struct timed_output_dev *dev, int value)
 {
+	int error;
 	struct drv260x_data *haptics = container_of(dev, struct drv260x_data,
 			timed_dev);
 
 	mutex_lock(&haptics->lock);
 
+	haptics->value = value;
 	if(value >= 10 && value != 200) {
 		haptics->haptic_vib = true;
 		haptics->magnitude = 50;
@@ -676,8 +692,14 @@ static void drv260x_vib_enable(struct timed_output_dev *dev, int value)
 	if (value == 0 || value == 1) {
 		haptics->state = 0;
 		haptics->haptic_vib = false;
-		mutex_unlock(&haptics->lock);
+		haptics->magnitude = 0;
+		error = regmap_write(haptics->regmap, DRV260X_MODE, DRV260X_STANDBY);
+                if (error) {
+                dev_err(&haptics->client->dev,
+                        "Failed to write set mode: %d\n", error);
+                }
 		gpiod_set_value(haptics->enable_gpio, 0);
+		mutex_unlock(&haptics->lock);
 	} else if(haptics->haptic_vib == false) {
 		haptics->state = 1;
 		haptics->mode = DRV260X_LRA_MODE;
@@ -687,13 +709,9 @@ static void drv260x_vib_enable(struct timed_output_dev *dev, int value)
 		if(haptics->state == 0)
 			hrtimer_cancel(&haptics->vib_timer);
 
-		haptics->state = 1;
-                hrtimer_start(&haptics->vib_timer,
-                                ktime_set(value / 1000, (value % 1000) * 1000000),
-                                HRTIMER_MODE_REL);
-
 		/* Haptic vibration set */
 		haptics->mode = DRV260X_LRA_NO_CAL_MODE;
+		haptics->state = 1;
 		mutex_unlock(&haptics->lock);
 		schedule_work(&haptics->work_haptic);
 	} else {
