@@ -29,7 +29,7 @@
 
 &mdss_fb0 {
 	/* cont_splash memory*/
-	qcom,memblock-reserve = <0x07e9c000 0x64000>;
+	qcom,memblock-reserve = <0x04d00000 0x64000>;
 };
 
 
@@ -41,6 +41,12 @@
 			synaptics,is_wake;
 		};
 	};
+
+	qcom,mss@fc880000 {
+		status = "disabled";
+
+	};
+
 };
 
 &pm8x26_rtc {
