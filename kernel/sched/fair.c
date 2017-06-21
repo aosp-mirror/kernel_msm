@@ -5675,8 +5675,10 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int sd_flag, int wake_f
 
 	if (!sd) {
 		int sync_used = 0;
+		bool about_to_idle = (cpu_rq(cpu)->nr_running < 2);
 
-		if (sysctl_sched_sync_hint_enable && sync) {
+		if (sysctl_sched_sync_hint_enable && sync
+				&& about_to_idle) {
 			cpumask_t search_cpus;
 			cpumask_and(&search_cpus, tsk_cpus_allowed(p),
 				    cpu_online_mask);
