@@ -753,6 +753,11 @@ static int __init bluetooth_power_init(void)
 		BTFMSLIM_ERR("failed to allocate char dev\n");
 		goto chrdev_unreg;
 	}
+	ret = btfm_slim_init();
+	if (ret < 0) {
+		BTFMSLIM_ERR("coudn't register slimbus ");
+		goto chrdev_unreg;
+	}
 	return 0;
 
 chrdev_unreg:
@@ -764,6 +769,7 @@ chrdev_unreg:
 static void __exit bluetooth_power_exit(void)
 {
 	platform_driver_unregister(&bt_power_driver);
+	btfm_slim_exit();
 }
 
 MODULE_LICENSE("GPL v2");

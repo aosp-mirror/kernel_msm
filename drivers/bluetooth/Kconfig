@@ -329,7 +329,7 @@ config MSM_BT_POWER
 	  to Bluetooth device.
 
 config BTFM_SLIM
-	tristate "MSM Bluetooth/FM Slimbus Driver"
+	bool "MSM Bluetooth/FM Slimbus Driver"
 	depends on MSM_BT_POWER
 	help
 	  This enables BT/FM slimbus driver to get multiple audio channel.
@@ -341,7 +341,7 @@ config BTFM_SLIM
 	  this driver.
 
 config BTFM_SLIM_WCN3990
-	tristate "MSM Bluetooth/FM WCN3990 Device"
+	bool "MSM Bluetooth/FM WCN3990 Device"
 	depends on BTFM_SLIM
 	help
 	  This enables specific driver handle for WCN3990 device.

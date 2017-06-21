@@ -33,7 +33,6 @@
 #include <sound/pcm_params.h>
 #include <sound/q6core.h>
 #include <sound/audio_cal_utils.h>
-#include <sound/msm-dts-eagle.h>
 #include <sound/audio_effects.h>
 #include <sound/hwdep.h>
 
@@ -208,10 +207,6 @@ static void msm_pcm_routing_cfg_pp(int port_id, int copp_idx, int topology,
 					__func__, topology, port_id, rc);
 		}
 		break;
-	case ADM_CMD_COPP_OPEN_TOPOLOGY_ID_DTS_HPX:
-		pr_debug("%s: DTS_EAGLE_COPP_TOPOLOGY_ID\n", __func__);
-		msm_dts_eagle_init_post(port_id, copp_idx);
-		break;
 	case ADM_CMD_COPP_OPEN_TOPOLOGY_ID_AUDIOSPHERE:
 		pr_debug("%s: TOPOLOGY_ID_AUDIOSPHERE\n", __func__);
 		rc = msm_qti_pp_asphere_init(port_id, copp_idx);
@@ -245,10 +240,6 @@ static void msm_pcm_routing_deinit_pp(int port_id, int topology)
 			pr_debug("%s: DOLBY_ADM_COPP_TOPOLOGY_ID\n", __func__);
 			msm_dolby_dap_deinit(port_id);
 		}
-		break;
-	case ADM_CMD_COPP_OPEN_TOPOLOGY_ID_DTS_HPX:
-		pr_debug("%s: DTS_EAGLE_COPP_TOPOLOGY_ID\n", __func__);
-		msm_dts_eagle_deinit_post(port_id, topology);
 		break;
 	case ADM_CMD_COPP_OPEN_TOPOLOGY_ID_AUDIOSPHERE:
 		pr_debug("%s: TOPOLOGY_ID_AUDIOSPHERE\n", __func__);
@@ -9842,17 +9833,14 @@ static int msm_routing_put_app_type_gain_control(struct snd_kcontrol *kcontrol,
 	unsigned long copp;
 	struct msm_pcm_routing_bdai_data *bedai;
 	int dir = ucontrol->value.integer.value[0] ? SESSION_TYPE_TX :
-						SESSION_TYPE_RX;
+						     SESSION_TYPE_RX;
 	int app_type = ucontrol->value.integer.value[1];
 	int gain = (ucontrol->value.integer.value[2] +
 		    ucontrol->value.integer.value[3])/2;
 
-	port_type = dir == SESSION_TYPE_RX ? MSM_AFE_PORT_TYPE_RX :
-					MSM_AFE_PORT_TYPE_TX;
+	port_type = (dir == SESSION_TYPE_RX) ? MSM_AFE_PORT_TYPE_RX :
+					       MSM_AFE_PORT_TYPE_TX;
 
-	pr_err("%s: dir %s app_type %d gain %d\n", __func__,
-	       dir == SESSION_TYPE_RX ? "P" : "C",
-	       app_type, gain);
 	mutex_lock(&routing_lock);
 	for (be_id = 0; be_id < MSM_BACKEND_DAI_MAX; be_id++) {
 		if (is_be_dai_extproc(be_id))
@@ -14736,8 +14724,8 @@ static int msm_routing_stereo_channel_reverse_control_put(
 				ucontrol->value.integer.value[0]);
 
 	swap_ch = ucontrol->value.integer.value[0];
-	mutex_lock(&routing_lock);
 
+	mutex_lock(&routing_lock);
 	for (be_index = 0; be_index < MSM_BACKEND_DAI_MAX; be_index++) {
 		port_id = msm_bedais[be_index].port_id;
 		if (!msm_bedais[be_index].active)
@@ -14750,7 +14738,7 @@ static int msm_routing_stereo_channel_reverse_control_put(
 				if (!test_bit(idx, &copp))
 					continue;
 
-				pr_debug("%s: swap channel of portid:%d, coppid:%d\n",
+				pr_debug("%s: swap channel control of portid:%d, coppid:%d\n",
 					 __func__, port_id, idx);
 				ret = adm_swap_speaker_channels(
 					port_id, idx,
@@ -14758,7 +14746,7 @@ static int msm_routing_stereo_channel_reverse_control_put(
 					swap_ch);
 				if (ret) {
 					pr_err("%s:Swap_channel failed, err=%d\n",
-						__func__, ret);
+						 __func__, ret);
 					goto done;
 				}
 			}
@@ -14830,8 +14818,6 @@ static int msm_routing_probe(struct snd_soc_platform *platform)
 	snd_soc_add_platform_controls(platform,
 		msm_routing_be_dai_name_table_mixer_controls,
 		ARRAY_SIZE(msm_routing_be_dai_name_table_mixer_controls));
-
-	msm_dts_eagle_add_controls(platform);
 
 	snd_soc_add_platform_controls(platform, msm_source_tracking_controls,
 				ARRAY_SIZE(msm_source_tracking_controls));

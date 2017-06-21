@@ -2279,6 +2279,36 @@ static int ipa3_q6_set_ex_path_to_apps(void)
 			desc[num_descs].len = cmd_pyld->len;
 			num_descs++;
 		}
+
+		/* disable statuses for modem producers */
+		if (IPA_CLIENT_IS_Q6_PROD(client_idx)) {
+			ipa_assert_on(num_descs >= ipa3_ctx->ipa_num_pipes);
+
+			reg_write.skip_pipeline_clear = false;
+			reg_write.pipeline_clear_options =
+				IPAHAL_HPS_CLEAR;
+			reg_write.offset =
+				ipahal_get_reg_n_ofst(IPA_ENDP_STATUS_n,
+					ep_idx);
+			reg_write.value = 0;
+			reg_write.value_mask = ~0;
+			cmd_pyld = ipahal_construct_imm_cmd(
+				IPA_IMM_CMD_REGISTER_WRITE, &reg_write, false);
+			if (!cmd_pyld) {
+				IPAERR("fail construct register_write cmd\n");
+				ipa_assert();
+				return -EFAULT;
+			}
+
+			desc[num_descs].opcode = ipahal_imm_cmd_get_opcode(
+				IPA_IMM_CMD_REGISTER_WRITE);
+			desc[num_descs].type = IPA_IMM_CMD_DESC;
+			desc[num_descs].callback = ipa3_destroy_imm;
+			desc[num_descs].user1 = cmd_pyld;
+			desc[num_descs].pyld = cmd_pyld->data;
+			desc[num_descs].len = cmd_pyld->len;
+			num_descs++;
+		}
 	}
 
 	/* Will wait 500msecs for IPA tag process completion */
@@ -4069,37 +4099,6 @@ fail_setup_apps_pipes:
 	else
 		sps_deregister_bam_device(ipa3_ctx->bam_handle);
 fail_register_device:
-	ipa_rm_delete_resource(IPA_RM_RESOURCE_APPS_CONS);
-	ipa_rm_exit();
-	cdev_del(&ipa3_ctx->cdev);
-	device_destroy(ipa3_ctx->class, ipa3_ctx->dev_num);
-	unregister_chrdev_region(ipa3_ctx->dev_num, 1);
-	if (ipa3_ctx->pipe_mem_pool)
-		gen_pool_destroy(ipa3_ctx->pipe_mem_pool);
-	ipa3_free_dma_task_for_gsi();
-	ipa3_destroy_flt_tbl_idrs();
-	idr_destroy(&ipa3_ctx->ipa_idr);
-	kmem_cache_destroy(ipa3_ctx->rx_pkt_wrapper_cache);
-	kmem_cache_destroy(ipa3_ctx->tx_pkt_wrapper_cache);
-	kmem_cache_destroy(ipa3_ctx->rt_tbl_cache);
-	kmem_cache_destroy(ipa3_ctx->hdr_proc_ctx_offset_cache);
-	kmem_cache_destroy(ipa3_ctx->hdr_proc_ctx_cache);
-	kmem_cache_destroy(ipa3_ctx->hdr_offset_cache);
-	kmem_cache_destroy(ipa3_ctx->hdr_cache);
-	kmem_cache_destroy(ipa3_ctx->rt_rule_cache);
-	kmem_cache_destroy(ipa3_ctx->flt_rule_cache);
-	destroy_workqueue(ipa3_ctx->transport_power_mgmt_wq);
-	destroy_workqueue(ipa3_ctx->power_mgmt_wq);
-	iounmap(ipa3_ctx->mmio);
-	ipa3_disable_clks();
-	msm_bus_scale_unregister_client(ipa3_ctx->ipa_bus_hdl);
-	if (ipa3_bus_scale_table) {
-		msm_bus_cl_clear_pdata(ipa3_bus_scale_table);
-		ipa3_bus_scale_table = NULL;
-	}
-	kfree(ipa3_ctx->ctrl);
-	kfree(ipa3_ctx);
-	ipa3_ctx = NULL;
 	return result;
 }
 
@@ -4774,6 +4773,10 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
 
 fail_cdev_add:
 fail_ipa_post_init:
+	if (ipa3_bus_scale_table) {
+		msm_bus_cl_clear_pdata(ipa3_bus_scale_table);
+		ipa3_bus_scale_table = NULL;
+	}
 fail_ipa_init_interrupts:
 	ipa_rm_delete_resource(IPA_RM_RESOURCE_APPS_CONS);
 fail_create_apps_resource:
@@ -4821,7 +4824,8 @@ fail_remap:
 	ipa3_active_clients_log_destroy();
 fail_init_active_client:
 fail_clk:
-	msm_bus_scale_unregister_client(ipa3_ctx->ipa_bus_hdl);
+	if (ipa3_ctx->ipa3_hw_mode != IPA_HW_MODE_VIRTUAL)
+		msm_bus_scale_unregister_client(ipa3_ctx->ipa_bus_hdl);
 fail_bus_reg:
 fail_init_mem_partition:
 fail_bind:

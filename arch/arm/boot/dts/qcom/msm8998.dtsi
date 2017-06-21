@@ -418,6 +418,10 @@
 		compatible = "simple-bus";
 	};
 
+	firmware {
+		firmware_android: android {};
+	};
+
 	reserved-memory {
 		#address-cells = <2>;
 		#size-cells = <2>;
