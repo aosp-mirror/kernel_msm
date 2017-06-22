@@ -1316,7 +1316,6 @@ wl_show_host_event(dhd_pub_t *dhd_pub, wl_event_msg_t *event, void *event_data,
 	case WLC_E_PFN_SCAN_NONE:
 	case WLC_E_PFN_SCAN_ALLGONE:
 	case WLC_E_PFN_GSCAN_FULL_RESULT:
-	case WLC_E_PFN_SWC:
 	case WLC_E_PFN_SSID_EXT:
 		DHD_EVENT(("PNOEVENT: %s\n", event_name));
 		break;
