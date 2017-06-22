@@ -50,7 +50,7 @@
 #include <linux/dma-buf.h>
 #include "mdss_fb.h"
 #include "mdss_dsi.h"
-#include "mdss_dsi_cmd.h" 
+#include "mdss_dsi_cmd.h"
 #include "mdss_mdp_splash_logo.h"
 #define CREATE_TRACE_POINTS
 #include "mdss_debug.h"
@@ -1863,9 +1863,9 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 	switch (blank_mode) {
 	case FB_BLANK_UNBLANK:
 		pr_debug("unblank called. cur pwr state=%d\n", cur_power_state);
-		
+
 		cancel_delayed_work_sync(&mfd->idle_3bit_work);
-		mdss_fb_set_3bit_color_mode(mfd, false); 
+		mdss_fb_set_3bit_color_mode(mfd, false);
 		ret = mdss_fb_blank_unblank(mfd);
 		break;
 	case BLANK_FLAG_ULP:
@@ -4162,8 +4162,6 @@ static int mdss_fb_handle_buf_sync_ioctl(struct msm_sync_pt_data *sync_pt_data,
 	sync_fence_install(retire_fence, retire_fen_fd);
 
 skip_retire_fence:
-	sync_fence_install(rel_fence, rel_fen_fd);
-
 	mutex_unlock(&sync_pt_data->sync_mutex);
 
 	if (buf_sync->flags & MDP_BUF_SYNC_FLAG_WAIT)
