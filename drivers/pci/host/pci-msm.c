@@ -5849,7 +5849,7 @@ static int msm_pcie_pm_suspend(struct pci_dev *dev,
 
 	if (dev && !(options & MSM_PCIE_CONFIG_NO_CFG_RESTORE)
 		&& msm_pcie_confirm_linkup(pcie_dev, true, true,
-			pcie_dev->conf)) {
+			pcie_dev->conf) && !pcie_dev->saved_state) {
 		ret = pci_save_state(dev);
 		pcie_dev->saved_state =	pci_store_saved_state(dev);
 	}
@@ -5969,8 +5969,12 @@ static int msm_pcie_pm_resume(struct pci_dev *dev,
 			"RC%d: entry of PCI framework restore state\n",
 			pcie_dev->rc_idx);
 
-		pci_load_and_free_saved_state(dev,
-				&pcie_dev->saved_state);
+		if (options & MSM_PCIE_CONFIG_NO_CFG_FREE)
+			pci_load_saved_state(dev,
+					     pcie_dev->saved_state);
+		else
+			pci_load_and_free_saved_state(dev,
+					     &pcie_dev->saved_state);
 		pci_restore_state(dev);
 
 		PCIE_DBG(pcie_dev,
