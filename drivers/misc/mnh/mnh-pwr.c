@@ -35,7 +35,7 @@
 #define PCIE20_CAP_LINKCTRLSTATUS  0x80
 
 #define PM_OPT_SUSPEND MSM_PCIE_CONFIG_LINKDOWN
-#define PM_OPT_RESUME 0
+#define PM_OPT_RESUME MSM_PCIE_CONFIG_NO_CFG_FREE
 
 struct mnh_pwr_data {
 	struct platform_device *pdev;
