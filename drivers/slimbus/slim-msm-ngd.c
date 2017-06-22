@@ -110,7 +110,7 @@ static irqreturn_t ngd_slim_interrupt(int irq, void *d)
 		else
 			dev->err = -EIO;
 
-		SLIM_WARN(dev, "NGD interrupt error:0x%x, err:%d\n", stat,
+		SLIM_DBG(dev, "NGD interrupt error:0x%x, err:%d\n", stat,
 								dev->err);
 		/* Guarantee that error interrupts are cleared */
 		mb();
@@ -718,7 +718,7 @@ static int ngd_xfer_msg(struct slim_controller *ctrl, struct slim_msg_txn *txn)
 		u32 conf, stat, rx_msgq, int_stat, int_en, int_clr;
 		void __iomem *ngd = dev->base + NGD_BASE(dev->ctrl.nr,
 							dev->ver);
-		SLIM_WARN(dev, "TX failed :MC:0x%x,mt:0x%x, ret:%d, ver:%d\n",
+		SLIM_DBG(dev, "TX failed :MC:0x%x,mt:0x%x, ret:%d, ver:%d\n",
 				txn_mc, txn_mt, ret, dev->ver);
 		conf = readl_relaxed(ngd);
 		stat = readl_relaxed(ngd + NGD_STATUS);
@@ -727,9 +727,9 @@ static int ngd_xfer_msg(struct slim_controller *ctrl, struct slim_msg_txn *txn)
 		int_en = readl_relaxed(ngd + NGD_INT_EN);
 		int_clr = readl_relaxed(ngd + NGD_INT_CLR);
 
-		SLIM_WARN(dev, "conf:0x%x,stat:0x%x,rxmsgq:0x%x\n",
+		SLIM_DBG(dev, "conf:0x%x,stat:0x%x,rxmsgq:0x%x\n",
 				conf, stat, rx_msgq);
-		SLIM_ERR(dev, "int_stat:0x%x,int_en:0x%x,int_cll:0x%x\n",
+		SLIM_DBG(dev, "int_stat:0x%x,int_en:0x%x,int_cll:0x%x\n",
 				int_stat, int_en, int_clr);
 	}
 

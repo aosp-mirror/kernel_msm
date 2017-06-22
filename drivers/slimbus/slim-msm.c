@@ -668,7 +668,7 @@ void msm_slim_tx_msg_return(struct msm_slim_ctrl *dev, int err)
 					(idx * (SLIM_MSGQ_BUF_LEN >> 2));
 			/* print the descriptor that resulted in error */
 			for (i = 0; i < (SLIM_MSGQ_BUF_LEN >> 2); i++)
-				SLIM_WARN(dev, "err desc[%d]:0x%x", i, addr[i]);
+				SLIM_DBG(dev, "err desc[%d]:0x%x", i, addr[i]);
 		}
 		/* reclaim all packets that were delivered out of order */
 		if (idx != dev->tx_head)
