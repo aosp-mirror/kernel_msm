@@ -1488,6 +1488,20 @@ static bool softirq_masked(int pc)
 	return !!((pc & SOFTIRQ_MASK)>= SOFTIRQ_DISABLE_OFFSET);
 }
 
+static bool is_top_app_cpu(int cpu)
+{
+	bool boosted = (schedtune_cpu_boost(cpu) > 0);
+
+	return boosted;
+}
+
+static bool is_top_app(struct task_struct *cur)
+{
+	bool boosted = (schedtune_task_boost(cur) > 0);
+
+	return boosted;
+}
+
 /*
  * Return whether the task on the given cpu is currently non-preemptible
  * while handling a potentially long softint, or if the task is likely
@@ -1502,8 +1516,14 @@ task_may_not_preempt(struct task_struct *task, int cpu)
 	struct task_struct *cpu_ksoftirqd = per_cpu(ksoftirqd, cpu);
 	int task_pc = 0;
 
-	if (task)
+	if (task) {
+		if (is_top_app(task))
+			return true;
 		task_pc = task_preempt_count(task);
+	}
+
+	if (is_top_app_cpu(cpu))
+		return true;
 
 	if (softirq_masked(task_pc))
 		return true;
