@@ -2920,6 +2920,13 @@ static int smb23x_battery_set_property(struct power_supply *psy,
 
     case POWER_SUPPLY_PROP_CHARGE_ENABLED:
     {
+        if(chip->charger_plugin == 0xFF)
+        {
+            pr_err("Not allowed since the charger status has never been updated\n");
+
+            return 0;
+        }
+
         if(gpio_is_valid(chip->susp_gpio))
         {
             if(!val->intval)
