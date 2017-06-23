@@ -22,6 +22,7 @@
 #include "mdss_dsi.h"
 #include "mdss_dp.h"
 #include "mdss_dsi_phy.h"
+#include "mdss_debug.h"
 
 #define MDSS_DSI_DSIPHY_REGULATOR_CTRL_0	0x00
 #define MDSS_DSI_DSIPHY_REGULATOR_CTRL_1	0x04
@@ -573,7 +574,7 @@ static void mdss_dsi_phy_shutdown(struct mdss_dsi_ctrl_pdata *ctrl)
 		pr_err("%s: Invalid input data\n", __func__);
 		return;
 	}
-
+	MDSS_XLOG(ctrl->ndx);
 	if (ctrl->shared_data->phy_rev == DSI_PHY_REV_20) {
 		MIPI_OUTP(ctrl->phy_io.base + DSIPHY_PLL_CLKBUFLR_EN, 0);
 		MIPI_OUTP(ctrl->phy_io.base + DSIPHY_CMN_GLBL_TEST_CTRL, 0);
@@ -1203,6 +1204,7 @@ static void mdss_dsi_phy_ctrl(struct mdss_dsi_ctrl_pdata *ctrl, bool enable)
 		return;
 	}
 
+	MDSS_XLOG(ctrl->ndx, enable);
 	if (enable) {
 
 		if (ctrl->shared_data->phy_rev == DSI_PHY_REV_20) {

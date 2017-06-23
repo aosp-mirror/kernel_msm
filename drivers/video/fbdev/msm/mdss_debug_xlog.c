@@ -39,7 +39,7 @@
  * sysfs node or panic. This prevents kernel log from xlog message
  * flood.
  */
-#define MDSS_XLOG_PRINT_ENTRY	256
+#define MDSS_XLOG_PRINT_ENTRY	1024
 
 /*
  * xlog keeps this number of entries in memory for debug purpose. This

@@ -721,6 +721,7 @@ static int mdss_fb_blanking_mode_switch(struct msm_fb_data_type *mfd, int mode)
 	struct mdss_panel_info *pinfo = NULL;
 	struct mdss_panel_data *pdata;
 
+	MDSS_XLOG(0x1111);
 	if (!mfd || !mfd->panel_info)
 		return -EINVAL;
 
@@ -793,6 +794,7 @@ static int mdss_fb_blanking_mode_switch(struct msm_fb_data_type *mfd, int mode)
 
 	pr_debug("Exit mode: %d\n", mode);
 
+	MDSS_XLOG(mode, 0x2222);
 	return 0;
 }
 
@@ -1510,6 +1512,7 @@ static int mdss_fb_suspend_sub(struct msm_fb_data_type *mfd)
 
 	pr_debug("mdss_fb suspend index=%d\n", mfd->index);
 
+	MDSS_XLOG(0x1111);
 	ret = mdss_fb_pan_idle(mfd);
 	if (ret) {
 		pr_warn("mdss_fb_pan_idle for fb%d failed. ret=%d\n",
@@ -1545,6 +1548,7 @@ static int mdss_fb_suspend_sub(struct msm_fb_data_type *mfd)
 		fb_set_suspend(mfd->fbi, FBINFO_STATE_SUSPENDED);
 	}
 exit:
+	MDSS_XLOG(0x2222);
 	return ret;
 }
 
@@ -1555,6 +1559,7 @@ static int mdss_fb_resume_sub(struct msm_fb_data_type *mfd)
 	if ((!mfd) || (mfd->key != MFD_KEY))
 		return 0;
 
+	MDSS_XLOG(0x1111);
 	reinit_completion(&mfd->power_set_comp);
 	mfd->is_power_setting = true;
 	pr_debug("mdss_fb resume index=%d\n", mfd->index);
@@ -1596,6 +1601,7 @@ static int mdss_fb_resume_sub(struct msm_fb_data_type *mfd)
 	mfd->is_power_setting = false;
 	complete_all(&mfd->power_set_comp);
 
+	MDSS_XLOG(0x2222);
 	return ret;
 }
 
@@ -1717,6 +1723,8 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 	bool ad_bl_notify_needed = false;
 	bool bl_notify_needed = false;
 
+	MDSS_XLOG(bkl_lvl, 0x1111);
+
 	if ((((mdss_fb_is_power_off(mfd) && mfd->dcm_state != DCM_ENTER)
 		|| !mfd->allow_bl_update) && !IS_CALIB_MODE_BL(mfd)) ||
 		mfd->panel_info->cont_splash_enabled) {
@@ -1761,6 +1769,7 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 			mdss_fb_bl_update_notify(mfd,
 				NOTIFY_TYPE_BL_UPDATE);
 	}
+	MDSS_XLOG(0x2222);
 }
 
 void mdss_fb_update_backlight(struct msm_fb_data_type *mfd)
@@ -2042,6 +2051,8 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 		}
 	}
 
+	MDSS_XLOG(blank_mode, mfd->panel_power_state, 0x1111);
+
 	switch (blank_mode) {
 	case FB_BLANK_UNBLANK:
 		pr_debug("unblank called. cur pwr state=%d\n", cur_power_state);
@@ -2088,6 +2099,7 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 
 	ATRACE_END(trace_buffer);
 
+	MDSS_XLOG(mfd->panel_power_state, 0x2222);
 	return ret;
 }
 
@@ -2097,6 +2109,7 @@ static int mdss_fb_blank(int blank_mode, struct fb_info *info)
 	struct mdss_panel_data *pdata;
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
 
+	MDSS_XLOG(0x1111);
 	ret = mdss_fb_pan_idle(mfd);
 	if (ret) {
 		pr_warn("mdss_fb_pan_idle for fb%d failed. ret=%d\n",
@@ -2139,6 +2152,7 @@ static int mdss_fb_blank(int blank_mode, struct fb_info *info)
 end:
 	mutex_unlock(&mfd->mdss_sysfs_lock);
 
+	MDSS_XLOG(0x2222);
 	return ret;
 }
 
@@ -3983,6 +3997,7 @@ static int mdss_fb_set_par(struct fb_info *info)
 	int old_imgType, old_format;
 	int ret = 0;
 
+	MDSS_XLOG(0x1111);
 	ret = mdss_fb_pan_idle(mfd);
 	if (ret) {
 		pr_err("mdss_fb_pan_idle failed. rc=%d\n", ret);
@@ -4068,6 +4083,7 @@ static int mdss_fb_set_par(struct fb_info *info)
 		if (old_format != mfd->panel_info->out_format)
 			mfd->panel_reconfig = true;
 	}
+	MDSS_XLOG(mfd->panel_reconfig);
 
 	if (mfd->panel_reconfig || (mfd->fb_imgType != old_imgType)) {
 		mdss_fb_blank_sub(FB_BLANK_POWERDOWN, info, mfd->op_enable);
@@ -4076,6 +4092,7 @@ static int mdss_fb_set_par(struct fb_info *info)
 		mfd->panel_reconfig = false;
 	}
 
+	MDSS_XLOG(mfd->panel_reconfig, 0x2222);
 	return ret;
 }
 
@@ -4958,6 +4975,8 @@ int mdss_fb_do_ioctl(struct fb_info *info, unsigned int cmd,
 	ret = __ioctl_wait_idle(mfd, cmd);
 	if (ret)
 		goto exit;
+
+	MDSS_XLOG(cmd);
 
 	switch (cmd) {
 	case MSMFB_CURSOR:
