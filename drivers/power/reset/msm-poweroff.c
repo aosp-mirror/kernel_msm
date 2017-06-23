@@ -25,6 +25,8 @@
 #include <linux/delay.h>
 #include <linux/input/qpnp-power-on.h>
 #include <linux/of_address.h>
+#include <linux/console.h>
+#include <linux/rtc.h>
 
 #include <asm/cacheflush.h>
 #include <asm/system_misc.h>
@@ -248,6 +250,38 @@ void msm_set_restart_mode(int mode)
 }
 EXPORT_SYMBOL(msm_set_restart_mode);
 
+static void flush_console(void)
+{
+	unsigned long flags;
+	struct timespec ts;
+	struct rtc_time tm;
+
+	pr_emerg("\n");
+
+	getnstimeofday(&ts);
+	rtc_time_to_tm(ts.tv_sec, &tm);
+	pr_emerg("Restarting %d-%02d-%02d %02d:%02d:%02d.%09lu UTC\n",
+		 tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+		 tm.tm_hour, tm.tm_min, tm.tm_sec, ts.tv_nsec);
+
+	/* mostly from arm_machine_flush_console in arch/arm/kernel/reboot.c */
+	pr_emerg("Restarting %s\n", linux_banner);
+	if (console_trylock()) {
+		console_unlock();
+		return;
+	}
+
+	msleep(50);
+
+	local_irq_save(flags);
+	if (!console_trylock())
+		pr_emerg("flush_console: Console was locked! Busting\n");
+	else
+		pr_emerg("flush_console: Console was locked!\n");
+	console_unlock();
+	local_irq_restore(flags);
+}
+
 /*
  * Force the SPMI PMIC arbiter to shutdown so that no more SPMI transactions
  * are sent from the MSM to the PMIC.  This is required in order to avoid an
@@ -359,6 +393,7 @@ static void msm_restart_prepare(const char *cmd)
 		__raw_writel(0x77665501, restart_reason);
 	}
 
+	flush_console();
 	flush_cache_all();
 
 	/*outer_flush_all is not supported by 64bit kernel*/
