@@ -316,7 +316,7 @@ static struct audio_ext_pmi_clk audio_pmi_lnbb_clk = {
 		.div = 1,
 		.hw.init = &(struct clk_init_data){
 			.name = "audio_ext_pmi_lnbb_clk",
-			.parent_names = (const char *[]){ "ln_bb_clk2" },
+			.parent_names = (const char *[]){ "ln_bb_clk3" },
 			.num_parents = 1,
 			.ops = &clk_dummy_ops,
 		},
@@ -508,8 +508,8 @@ static int audio_ref_clk_probe(struct platform_device *pdev)
 
 	ret = audio_get_pinctrl(pdev, AP_CLK2);
 	if (ret)
-		dev_dbg(&pdev->dev, "%s: Parsing pinctrl failed\n",
-			__func__);
+		dev_dbg(&pdev->dev, "%s: Parsing pinctrl %s failed\n",
+			__func__, "AP_CLK2");
 
 	clk_data = devm_kzalloc(&pdev->dev, sizeof(*clk_data), GFP_KERNEL);
 	if (!clk_data)

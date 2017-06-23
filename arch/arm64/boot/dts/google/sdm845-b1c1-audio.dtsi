@@ -6,6 +6,21 @@
 	gpio@cc00 { /* GPIO 13 */
 		status = "disabled";
 	};
+	audio_clk_enable {
+		audio_clk_enable_default: audio_clk_enable_default {
+			pins = "gpio21";
+			function = "normal";
+			output-high;
+			power-source = <1>;
+		};
+		audio_clk_enable_sleep: audio_clk_enable_sleep {
+			pins = "gpio21";
+			function = "normal";
+			input-enable;
+			bias-pull-down;
+			power-source = <1>;
+		};
+	};
 };
 
 &slim_aud {
@@ -77,6 +92,9 @@
 		clocks = <&clock_rpmh RPMH_LN_BB_CLK3>;
 		qcom,node_has_rpm_clock;
 		#clock-cells = <1>;
+		pinctrl-names = "sleep", "default";
+		pinctrl-0 = <&audio_clk_enable_sleep>;
+		pinctrl-1 = <&audio_clk_enable_default>;
 	};
 
 	sound-tavil {
