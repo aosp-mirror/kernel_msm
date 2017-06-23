@@ -20,18 +20,6 @@
 };
 
 &soc {
-	qcom,msm-thermal {
-		qcom,disable-gfx-phase-ctrl;
-		qcom,disable-psm;
-		qcom,disable-ocr;
-		qcom,disable-cx-phase-ctrl;
-		qcom,disable-vdd-mx;
-		/* mitigate gold cluster freq to 1.536Ghz */
-		qcom,freq-mitigation-temp = <95>;
-		qcom,freq-mitigation-temp-hysteresis = <10>;
-		qcom,freq-mitigation-value = <1536000>;
-	};
-
 	qcom,bcl {
 		qcom,bcl-soc-hotplug-list = <>;
 		qcom,ibat-monitor {
