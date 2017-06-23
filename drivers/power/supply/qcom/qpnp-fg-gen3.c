@@ -4338,16 +4338,6 @@ static int fg_gen3_probe(struct platform_device *pdev)
 		return rc;
 	}
 
-#ifdef CONFIG_FG_DC_BATT_ID
-	if (is_dc_batt_id(chip)) {
-		/* DC power supply, disable FG and notify charger */
-		if (batt_psy_initialized(chip))
-			fg_notify_charger_fake_battery(chip);
-		dev_info(chip->dev, "Disable FG for DC power supply\n");
-		return -ENXIO;
-	}
-#endif
-
 	rc = of_property_match_string(chip->dev->of_node,
 				"io-channel-names", "rradc_die_temp");
 	if (rc >= 0) {
@@ -4411,6 +4401,16 @@ static int fg_gen3_probe(struct platform_device *pdev)
 		pr_warn("profile for batt_id=%dKOhms not found..using OTP, rc:%d\n",
 			chip->batt_id_ohms / 1000, rc);
 	}
+
+#ifdef CONFIG_FG_DC_BATT_ID
+	if (is_dc_batt_id(chip)) {
+		/* DC power supply, disable FG and notify charger */
+		if (batt_psy_initialized(chip))
+			fg_notify_charger_fake_battery(chip);
+		dev_info(chip->dev, "Disable FG for DC power supply\n");
+		return -ENXIO;
+	}
+#endif
 
 	rc = fg_memif_init(chip);
 	if (rc < 0) {
