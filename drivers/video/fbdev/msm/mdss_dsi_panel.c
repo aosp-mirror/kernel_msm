@@ -34,6 +34,10 @@
 
 DEFINE_LED_TRIGGER(bl_led_trigger);
 
+#define PANEL_BOE 1
+#define PANEL_TIANMA 2
+static int current_panel = 0;
+
 void mdss_dsi_panel_pwm_cfg(struct mdss_dsi_ctrl_pdata *ctrl)
 {
 	if (ctrl->pwm_pmi)
@@ -2601,9 +2605,19 @@ static int  mdss_dsi_panel_config_res_properties(struct device_node *np,
 
 	mdss_dsi_parse_roi_alignment(np, pt);
 
-	mdss_dsi_parse_dcs_cmds(np, &pt->on_cmds,
-		"qcom,mdss-dsi-on-command",
-		"qcom,mdss-dsi-on-command-state");
+	/* vega: select display panel */
+	if(current_panel == PANEL_TIANMA){
+		pr_err("vega: use qcom,mdss-dsi-on-command-tianma \n");
+		mdss_dsi_parse_dcs_cmds(np, &pt->on_cmds,
+			"qcom,mdss-dsi-on-command-tianma",
+			"qcom,mdss-dsi-on-command-state");
+	}
+	else {
+		pr_err("vega:use qcom,mdss-dsi-on-command for BOE \n");
+		mdss_dsi_parse_dcs_cmds(np, &pt->on_cmds,
+			"qcom,mdss-dsi-on-command",
+			"qcom,mdss-dsi-on-command-state");
+	}
 
 	mdss_dsi_parse_dcs_cmds(np, &pt->post_panel_on_cmds,
 		"qcom,mdss-dsi-post-panel-on-command", NULL);
@@ -2707,6 +2721,8 @@ static int mdss_panel_parse_dt(struct device_node *np,
 {
 	u32 tmp;
 	int rc, len = 0;
+	int display_select_gpio;
+	int gpio_level;
 	const char *data;
 	static const char *pdest;
 	const char *bridge_chip_name;
@@ -2852,6 +2868,36 @@ static int mdss_panel_parse_dt(struct device_node *np,
 		"qcom,mdss-dsi-lane-2-state");
 	pinfo->mipi.data_lane3 = of_property_read_bool(np,
 		"qcom,mdss-dsi-lane-3-state");
+
+	/* vega: check current panel */
+	if(current_panel == 0) {
+		/* default panel is boe */
+		current_panel = PANEL_BOE;
+
+		display_select_gpio = of_get_named_gpio(np, "oem,display-select-gpio", 0);
+		/* if gpio is not valid */
+		if (!gpio_is_valid(display_select_gpio)){
+			pr_err("vega: oem,display-select-gpio is not find, use boe panel as default\n");
+		} else {
+			rc = gpio_request(display_select_gpio, "display_select");
+			if (rc) {
+				pr_err("vega: request display_select_gpio failed, rc = %d\n", rc);
+				gpio_free(display_select_gpio);
+			} else {
+				rc = gpio_direction_input(display_select_gpio);
+				if (rc < 0) {
+					pr_err("vega:gpio_direction_input failed, rc =%d\n", rc);
+				} else {
+					gpio_level = gpio_get_value(display_select_gpio);
+					pr_info("vega: display_select_gpio_level =%d\n", gpio_level);
+					if(gpio_level == 1)
+						current_panel = PANEL_TIANMA;
+					else
+						current_panel = PANEL_BOE;
+				}
+			}
+		}
+	}
 
 	/* parse split link properties */
 	rc = mdss_dsi_parse_split_link_settings(np, pinfo);
