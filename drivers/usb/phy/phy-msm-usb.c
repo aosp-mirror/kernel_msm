@@ -3386,17 +3386,12 @@ static int otg_power_get_property_usb(struct power_supply *psy,
 		break;
 	/* Reflect USB enumeration */
 	case POWER_SUPPLY_PROP_ONLINE:
-		val->intval = motg->online;
 #if CONFIG_HUAWEI_SAWSHARK
-		if(0 == val->intval)
-		{
-			/* fix online status acording to system charing status */
-			val->intval = (int)mp2661_global_is_chg_plugged_in();
-			if(val->intval != 0)
-			{
-				pr_info("fix usb status to online\n");
-			}
-		}
+		/* online status is determined by charger */
+		val->intval = (int)mp2661_global_is_chg_plugged_in();
+#else
+		val->intval = motg->online;
+
 #endif
 		break;
 	case POWER_SUPPLY_PROP_TYPE:

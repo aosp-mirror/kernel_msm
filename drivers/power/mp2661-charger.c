@@ -410,9 +410,10 @@ static enum power_supply_property mp2661_battery_properties[] = {
     POWER_SUPPLY_PROP_NOTIFY_USER_PARIED,
 };
 
+static irqreturn_t mp2661_chg_stat_handler(int irq, void *dev_id);
 static int mp2661_get_prop_batt_status(struct mp2661_chg *chip)
 {
-    int rc;
+    int rc, usb_present;
     u8 reg;
     int status = POWER_SUPPLY_STATUS_DISCHARGING;
     u8 chgr_sts = 0;
@@ -423,22 +424,37 @@ static int mp2661_get_prop_batt_status(struct mp2661_chg *chip)
         pr_err("Unable to read system status reg rc = %d\n", rc);
         return POWER_SUPPLY_STATUS_UNKNOWN;
     }
-    chgr_sts = (reg & CHG_STAT_MASK) >> CHG_STAT_SHIFT;
-    pr_debug("system status reg = %x\n", chgr_sts);
 
-    if ((CHG_STAT_NOT_CHARGING == chgr_sts)
-        && (!chip->repeat_charging_detect_flag))
+    chgr_sts = (reg & CHG_STAT_MASK) >> CHG_STAT_SHIFT;
+    usb_present = (reg & CHAG_IN_VALID_IRQ) ? 1 : 0;
+    pr_info("reg = %x, chgr_sts = %d, usb_present = %d\n", reg, chgr_sts, usb_present);
+    if(usb_present)
     {
-        status = POWER_SUPPLY_STATUS_DISCHARGING;
-    }
-    else if ((CHG_STAT_CHARGE_DONE == chgr_sts)
-            || chip->repeat_charging_detect_flag)
-    {
-        status = POWER_SUPPLY_STATUS_FULL;
+        if (chip->repeat_charging_detect_flag)
+        {
+            status = POWER_SUPPLY_STATUS_FULL;
+        }
+        else if (CHG_STAT_CHARGE_DONE == chgr_sts)
+        {
+            status = POWER_SUPPLY_STATUS_FULL;
+        }
+        else if (CHG_STAT_NOT_CHARGING == chgr_sts)
+        {
+            status = POWER_SUPPLY_STATUS_DISCHARGING;
+        }
+        else
+        {
+            status = POWER_SUPPLY_STATUS_CHARGING;
+        }
     }
     else
     {
-        status = POWER_SUPPLY_STATUS_CHARGING;
+        if (chip->repeat_charging_detect_flag)
+        {
+            pr_info("usb has gone, need to fix it\n");
+            mp2661_chg_stat_handler(chip->client->irq, chip);
+        }
+        status = POWER_SUPPLY_STATUS_DISCHARGING;
     }
 
     return status;
@@ -1480,6 +1496,7 @@ static void mp2661_process_interrupt_work(struct work_struct *work)
 
     /* check usb status */
     usb_present = mp2661_is_chg_plugged_in(chip);
+    pr_info("usb_present = %d, chip->usb_present = %d\n", usb_present, chip->usb_present);
     if (chip->usb_present != usb_present)
     {
         chip->usb_present = usb_present;
@@ -1608,7 +1625,7 @@ static void mp2661_process_interrupt_work(struct work_struct *work)
 static irqreturn_t mp2661_chg_stat_handler(int irq, void *dev_id)
 {
     struct mp2661_chg *chip = dev_id;
-
+    pr_info("interrupt happens\n");
     queue_work(chip->charger_int_work_queue, &chip->process_interrupt_work);
 
     return IRQ_HANDLED;
