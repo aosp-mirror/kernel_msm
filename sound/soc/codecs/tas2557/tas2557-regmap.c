@@ -21,7 +21,6 @@
 
 #ifdef CONFIG_TAS2557_REGMAP_STEREO
 
-#define DEBUG
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/init.h>
@@ -915,7 +914,7 @@ end:
 static irqreturn_t tas2557_irq_handler(int irq, void *dev_id)
 {
 	struct tas2557_priv *pTAS2557 = (struct tas2557_priv *)dev_id;
-	dev_dbg(pTAS2557->dev, "%s\n", __func__);
+	dev_info(pTAS2557->dev, "%s\n", __func__);
 	tas2557_enableIRQ(pTAS2557, channel_both, false);
 	/* get IRQ status after 100 ms */
 	schedule_delayed_work(&pTAS2557->irq_work, msecs_to_jiffies(100));
@@ -982,7 +981,7 @@ static void timer_work_routine(struct work_struct *work)
 					if (nResult < 0)
 						goto end;
 					pTAS2557->mnDevCurrentGain = LOW_TEMPERATURE_GAIN;
-					dev_dbg(pTAS2557->dev, "LOW Temp: set gain to %d\n", LOW_TEMPERATURE_GAIN);
+					dev_info(pTAS2557->dev, "LOW Temp: set gain to %d\n", LOW_TEMPERATURE_GAIN);
 				}
 			} else if (nAvg > 5) {
 				/* if Die temperature is above 5 degree C */
@@ -991,7 +990,7 @@ static void timer_work_routine(struct work_struct *work)
 					if (nResult < 0)
 						goto end;
 					pTAS2557->mnDevCurrentGain = pTAS2557->mnDevGain;
-					dev_dbg(pTAS2557->dev, "LOW Temp: set gain to original\n");
+					dev_info(pTAS2557->dev, "LOW Temp: set gain to original\n");
 				}
 			}
 			nAvg = 0;

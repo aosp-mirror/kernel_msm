@@ -21,7 +21,6 @@
 
 #ifdef CONFIG_TAS2557_CODEC_STEREO
 
-#define DEBUG
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/init.h>
