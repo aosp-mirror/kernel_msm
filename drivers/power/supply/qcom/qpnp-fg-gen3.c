@@ -699,7 +699,6 @@ static int calc_tuned_temp(struct fg_chip *chip, int temp)
 static int fg_get_battery_temp(struct fg_chip *chip, int *val)
 {
 	int rc = 0, temp;
-	int prev_temp = 0, ori_temp = 0;
 	u8 buf[2];
 
 	rc = fg_read(chip, BATT_INFO_BATT_TEMP_LSB(chip), buf, 2);
@@ -716,13 +715,12 @@ static int fg_get_battery_temp(struct fg_chip *chip, int *val)
 	/* Value is in Kelvin; Convert it to deciDegC */
 	temp = (temp - 273) * 10;
 	if (chip->batt_temp_comp) {
-		ori_temp = temp;
+		int ori_temp = temp;
 		temp = calc_tuned_temp(chip, temp);
 
-		if (prev_temp / 10 != temp / 10) {
+		if (ori_temp / 10 != temp / 10) {
 			pr_info("batt temperature original:%d, tuned:%d\n",
 				ori_temp, temp);
-			prev_temp = temp;
 		}
 	}
 	*val = temp;
