@@ -1,0 +1,71 @@
+qcom,2912653_goertek_cowboycos_4000mah_averaged_masterslave_jun12th2017 {
+	qcom, = <24>;
+	/* #2912653_Goertek_Cowboycos_4000mAh_averaged_MasterSlave_Jun12th2017*/
+	qcom,max-voltage-uv = <4400000>;
+	qcom,nom-batt-capacity-mah = <4000>;
+	qcom,fg-cc-cv-threshold-mv = <4390>;
+	qcom,fastchg-current-ma = <2800>;
+	qcom,batt-id-kohm = <100>;
+	qcom,battery-beta = <3380>;
+	qcom,battery-type = "2912653_goertek_cowboycos_4000mah_averaged_masterslave_jun12th2017";
+	qcom,checksum = <0x80E8>;
+	qcom,gui-version = "PMI8998GUI - 2.0.0.58";
+	qcom,fg-profile-data = [
+		 63 1F C3 05
+		 5E 0A 66 06
+		 7B 1D 13 F5
+		 4E 12 0F 14
+		 FA 18 F5 22
+		 59 45 3D 53
+		 56 00 00 00
+		 0E 00 00 00
+		 00 00 B9 C5
+		 AC C5 51 A4
+		 17 00 08 00
+		 39 D3 6A E5
+		 9D FD 76 EB
+		 52 00 52 0B
+		 A8 E5 A8 32
+		 16 06 09 20
+		 27 00 14 00
+		 C3 1F 8C 05
+		 77 0A B5 FC
+		 66 1D EE E2
+		 01 0B CF 14
+		 62 19 BD 22
+		 97 45 DD 52
+		 54 00 00 00
+		 0E 00 00 00
+		 00 00 FC D5
+		 E5 C2 3A BB
+		 13 00 00 00
+		 46 00 6A E5
+		 E7 06 55 EB
+		 51 F2 A9 0A
+		 48 DB 75 1B
+		 B0 33 CC FF
+		 07 10 00 00
+		 51 10 66 46
+		 13 00 40 00
+		 40 01 0A FA
+		 FF 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+	];
+};

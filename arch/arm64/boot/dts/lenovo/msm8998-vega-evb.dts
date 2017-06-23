@@ -428,8 +428,7 @@
 	mtp_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <15>;
 		goog,dc-batt-id = <200>;
-		#include "../qcom/fg-gen3-batterydata-itech-3000mah.dtsi"
-		#include "../qcom/fg-gen3-batterydata-ascent-3450mah.dtsi"
+		#include "2912653_Goertek_Cowboycos_4000mAh_averaged_MasterSlave_Jun12th2017_PMI8998GUI20058.dtsi"
 	};
 };
 
@@ -621,4 +620,29 @@
 
 &i2c_7 {
 	/delete-node/qcom,smb138x@8;
+};
+&spmi_bus {
+	qcom,pmi8998@2 {
+		compatible = "qcom,spmi-pmic";
+			pmi8998_fg: qpnp,fg {
+			/delete-property/qcom,fg-cutoff-voltage;
+			/delete-property/qcom,fg-empty-voltage ;
+			/delete-property/qcom,fg-chg-term-current;
+			/delete-property/qcom,fg-jeita-thresholds;
+			compatible = "qcom,fg-gen3";
+			qcom,fg-cutoff-voltage = <3400>;
+			qcom,fg-empty-voltage = <3400>;
+			qcom,fg-chg-term-current = <200>;
+			qcom,fg-jeita-thresholds = <0 15 43 50>;
+			};
+
+			pmi8998_charger: qcom,qpnp-smb2 {
+			/delete-property/qcom,usb-icl-ua;
+			/delete-property/qcom,otg-cl-ua;
+			compatible = "qcom,qpnp-smb2";
+			lenovo,vega-model;
+			qcom,usb-icl-ua = <3000000>;
+			qcom,otg-cl-ua = <800000>;
+			};
+		};
 };
