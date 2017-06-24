@@ -209,6 +209,7 @@ remove_channel:
 
 	return ret;
 }
+EXPORT_SYMBOL(btfm_slim_enable_ch);
 
 int btfm_slim_disable_ch(struct btfmslim *btfmslim, struct btfmslim_ch *ch,
 	uint8_t rxport, uint8_t grp, uint8_t nchan)
@@ -249,6 +250,8 @@ int btfm_slim_disable_ch(struct btfmslim *btfmslim, struct btfmslim_ch *ch,
 error:
 	return ret;
 }
+EXPORT_SYMBOL(btfm_slim_disable_ch);
+
 static int btfm_slim_get_logical_addr(struct slim_device *slim)
 {
 	int ret = 0;
@@ -378,7 +381,7 @@ error:
 	mutex_unlock(&btfmslim->io_lock);
 	return ret;
 }
-
+EXPORT_SYMBOL(btfm_slim_hw_init);
 
 int btfm_slim_hw_deinit(struct btfmslim *btfmslim)
 {
@@ -396,6 +399,7 @@ int btfm_slim_hw_deinit(struct btfmslim *btfmslim)
 	mutex_unlock(&btfmslim->io_lock);
 	return ret;
 }
+EXPORT_SYMBOL(btfm_slim_hw_deinit);
 
 static int btfm_slim_get_dt_info(struct btfmslim *btfmslim)
 {
@@ -539,7 +543,7 @@ static struct slim_driver btfm_slim_driver = {
 	.id_table = btfm_slim_id
 };
 
-static int __init btfm_slim_init(void)
+int  btfm_slim_init(void)
 {
 	int ret;
 
@@ -550,14 +554,11 @@ static int __init btfm_slim_init(void)
 	return ret;
 }
 
-static void __exit btfm_slim_exit(void)
+void  btfm_slim_exit(void)
 {
 	BTFMSLIM_DBG("");
 	slim_driver_unregister(&btfm_slim_driver);
 }
-
-module_init(btfm_slim_init);
-module_exit(btfm_slim_exit);
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("BTFM Slimbus Slave driver");

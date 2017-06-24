@@ -162,4 +162,6 @@ int btfm_slim_disable_ch(struct btfmslim *btfmslim,
  * 0
 */
 int btfm_slim_register_codec(struct device *dev);
+int btfm_slim_init(void);
+void btfm_slim_exit(void);
 #endif /* BTFM_SLIM_H */
