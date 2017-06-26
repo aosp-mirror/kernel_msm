@@ -862,6 +862,7 @@ static int STC311x_Startup(void)
  * Input          : None
  * Return         :
  *****************************************************************************/
+#define HRSOC_1_PERCENT (MAX_HRSOC/100)
 static int STC311x_Restore(void)
 {
 	int res;
@@ -878,7 +879,7 @@ static int STC311x_Restore(void)
 
 	STC311x_SetParam();  /* set parameters  */
 
-	reg_soc = (STC31xx_ReadWord(STC311x_REG_SOC)/512);
+	reg_soc = (STC31xx_ReadWord(STC311x_REG_SOC)/HRSOC_1_PERCENT);
 	ram_hrsoc = (GG_Ram.reg.HRSOC);
 	pr_info("STC311x_Restore-reg_soc:%d, ram_HRSOC:%d \n", reg_soc, ram_hrsoc);
 	pr_info("STC311x_Restore-GG_status: %c, GG_Ram.reg.SOC: %d \n", GG_Ram.reg.GG_Status,GG_Ram.reg.SOC);
@@ -888,7 +889,8 @@ static int STC311x_Restore(void)
 		if (GG_Ram.reg.SOC != 0) {
 			/*   restore SOC */
 			STC31xx_WriteWord(STC311x_REG_SOC, GG_Ram.reg.HRSOC);
-		}
+		} else
+			STC31xx_WriteWord(STC311x_REG_SOC, HRSOC_1_PERCENT);
 	}
 
 	/* rewrite ocv to start SOC with updated OCV curve*/
