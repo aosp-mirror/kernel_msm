@@ -1,0 +1,108 @@
+/* I2C pins 85/86 QUP_L0(5)
+ * NRST 87
+ * TRIG_INTZ 88
+ *
+ * HAP_PMIC_EN: PM845 GPIO 15
+ */
+
+&qupv3_se5_spi {
+	status = "disabled";
+};
+
+/* Add PM GPIO15 to the list of allowed GPIOs. */
+&pm8998_gpios {
+	interrupts = <0x0 0xc0 0 IRQ_TYPE_NONE>,
+			<0x0 0xc1 0 IRQ_TYPE_NONE>,
+			<0x0 0xc3 0 IRQ_TYPE_NONE>,
+			<0x0 0xc4 0 IRQ_TYPE_NONE>,
+			<0x0 0xc5 0 IRQ_TYPE_NONE>,
+			<0x0 0xc6 0 IRQ_TYPE_NONE>,
+			<0x0 0xc7 0 IRQ_TYPE_NONE>,
+			<0x0 0xc8 0 IRQ_TYPE_NONE>,
+			<0x0 0xc9 0 IRQ_TYPE_NONE>,
+			<0x0 0xca 0 IRQ_TYPE_NONE>,
+			<0x0 0xcb 0 IRQ_TYPE_NONE>,
+			<0x0 0xcc 0 IRQ_TYPE_NONE>,
+			<0x0 0xcd 0 IRQ_TYPE_NONE>,
+			<0x0 0xce 0 IRQ_TYPE_NONE>,
+			<0x0 0xcf 0 IRQ_TYPE_NONE>,
+			<0x0 0xd0 0 IRQ_TYPE_NONE>,
+			<0x0 0xd1 0 IRQ_TYPE_NONE>,
+			<0x0 0xd2 0 IRQ_TYPE_NONE>,
+			<0x0 0xd4 0 IRQ_TYPE_NONE>,
+			<0x0 0xd6 0 IRQ_TYPE_NONE>;
+	interrupt-names = "pm8998_gpio1", "pm8998_gpio2",
+			"pm8998_gpio4", "pm8998_gpio5",
+			"pm8998_gpio6", "pm8998_gpio7",
+			"pm8998_gpio8", "pm8998_gpio9",
+			"pm8998_gpio10", "pm8998_gpio11",
+			"pm8998_gpio12", "pm8998_gpio13",
+			"pm8998_gpio14", "pm8998_gpio15",
+			"pm8998_gpio16",
+			"pm8998_gpio17", "pm8998_gpio18",
+			"pm8998_gpio19", "pm8998_gpio21",
+			"pm8998_gpio23";
+	qcom,gpios-disallowed = <3 20 22 24 25 26>;
+};
+
+&tlmm {
+	drv2624_rst: drv2624_rst {
+		mux {
+			pins = "gpio87";
+			function = "gpio";
+		};
+		config {
+			drive-strength = <2>;
+			output-low;
+		};
+	};
+	drv2624_intz: drv2624_intz {
+		mux {
+			pins = "gpio88";
+			function = "gpio";
+		};
+		config {
+			drive-strength = <2>;
+			output-low;
+		};
+	};
+};
+
+&pm8998_gpios {
+	drv2624_pm_gpio {
+		drv2624_pwr: drv2624_pwr {
+			pins = "gpio15";
+			function = "normal";
+			output-high;
+			power-source = <0>;
+		};
+	};
+};
+
+&qupv3_se5_i2c {
+	status = "okay";
+	drv2624@5a {
+		compatible = "ti,drv2624";
+		pinctrl-names = "default";
+		pinctrl-0 = <&drv2624_intz &drv2624_rst &drv2624_pwr>;
+		reg = <0x5a>;
+		ti,reset-gpio = <&tlmm 87 0>;
+		ti,irq-gpio = <&tlmm 88 0>;
+		ti,smart-loop = <0>; /* 0-closeloop, 1-openloop */
+		ti,actuator = <1>; /* 0-ERM, 1-LRA */
+		ti,rated-voltage = <77>; /* 1.8 Vrms */
+		ti,odclamp-voltage = <165>; /* 3.5 Vpeak */
+		ti,lra-frequency = <155>; /* f0 = 155Hz */
+		ti,ol-lra-frequency = <155>; /* off-f0 in OL */
+		ti,bemf-factor = <150>;
+		ti,bemf-gain = <0>;
+		ti,voltage-comp = <18>;
+		ti,blanking-time = <2>; /* 50 us */
+		ti,idiss-time = <2>; /* 50 us */
+		ti,zc-det-time = <3>; /* 390 us*/
+		ti,lra-wave-shape = <0>; /* Square wave */
+		ti,waveform-interval = <1>; /* 1 ms */
+		status = "ok";
+	};
+};
+
