@@ -862,12 +862,11 @@ static int STC311x_Startup(void)
  * Input          : None
  * Return         :
  *****************************************************************************/
-#define SOC_DIFF 3
 static int STC311x_Restore(void)
 {
 	int res;
 	int ocv;
-	int ram_soc, reg_soc;
+	int ram_hrsoc, reg_soc;
 
 	/* check STC310x status */
 	res = STC311x_Status();
@@ -880,21 +879,15 @@ static int STC311x_Restore(void)
 	STC311x_SetParam();  /* set parameters  */
 
 	reg_soc = (STC31xx_ReadWord(STC311x_REG_SOC)/512);
-	ram_soc = (GG_Ram.reg.HRSOC/512);
-	pr_info("reg_soc:%d, ram_HRSOC:%d \n", reg_soc, ram_soc);
-	pr_info("GG_status: %c, GG_Ram.reg.SOC: %d \n", GG_Ram.reg.GG_Status,GG_Ram.reg.SOC);
+	ram_hrsoc = (GG_Ram.reg.HRSOC);
+	pr_info("STC311x_Restore-reg_soc:%d, ram_HRSOC:%d \n", reg_soc, ram_hrsoc);
+	pr_info("STC311x_Restore-GG_status: %c, GG_Ram.reg.SOC: %d \n", GG_Ram.reg.GG_Status,GG_Ram.reg.SOC);
 
 	/* if restore from unexpected reset, restore SOC (system dependent) */
 	if (GG_Ram.reg.GG_Status == GG_RUNNING) {
 		if (GG_Ram.reg.SOC != 0) {
-			//compare the ram SOC with register SOC.
-			if (reg_soc <= STC311x_SOC_LOW_THRESHOLD)
-				pr_err("Battery is low, skip restore SOC from ram \n");
-			else if (((reg_soc > ram_soc) && (reg_soc - ram_soc > SOC_DIFF)) || ((ram_soc > reg_soc) && (ram_soc - reg_soc > SOC_DIFF)))
-				pr_err("SOC not match, skip restore SOC from ram \n");
-			else			
-				/*   restore SOC */
-				STC31xx_WriteWord(STC311x_REG_SOC, GG_Ram.reg.HRSOC);
+			/*   restore SOC */
+			STC31xx_WriteWord(STC311x_REG_SOC, GG_Ram.reg.HRSOC);
 		}
 	}
 
