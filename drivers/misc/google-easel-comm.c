@@ -309,7 +309,7 @@ static void easelcomm_free_message(
 	if (msg_metadata->queued)
 		list_del(&msg_metadata->rcvq_list);
 	kfree(msg_metadata->msg);
-	kfree(msg_metadata->dma_xfer.sg_local);
+	vfree(msg_metadata->dma_xfer.sg_local);  /* was allocated by vmalloc */
 	kfree(msg_metadata->dma_xfer.sg_remote);
 	kfree(msg_metadata);
 }

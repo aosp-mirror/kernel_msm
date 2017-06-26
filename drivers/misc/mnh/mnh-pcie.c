@@ -870,7 +870,7 @@ int mnh_sg_retrieve_from_dma_buf(int fd, struct mnh_sg_entry **sg,
 	 * Allocate enough for one entry per sc_list entry, plus end of list.
 	 */
 	maxsg = sgl->n_num + 1;
-	*sg = kcalloc(maxsg, sizeof(struct mnh_sg_entry), GFP_KERNEL);
+	*sg = vmalloc(maxsg * sizeof(struct mnh_sg_entry));
 	if (!(*sg)) {
 		mnh_sg_release_from_dma_buf(sgl);
 		return -ENOMEM;
@@ -883,7 +883,7 @@ int mnh_sg_retrieve_from_dma_buf(int fd, struct mnh_sg_entry **sg,
 	sgl->length = scatterlist_to_mnh_sg(sgl->sc_list, sgl->n_num,
 								*sg, maxsg);
 	if (IS_ERR(&sgl->length)) {
-		kfree((*sg));
+		vfree((*sg));
 		*sg = NULL;
 		ret = PTR_ERR(&sgl->length);
 		mnh_sg_release_from_dma_buf(sgl);
@@ -940,7 +940,7 @@ int mnh_sg_build(void *dmadest, size_t size, struct mnh_sg_entry **sg,
 	 * to crossing a page boundary, plus end of list.
 	 */
 	maxsg = (size / PAGE_SIZE) + 3;
-	*sg = kcalloc(maxsg, sizeof(struct mnh_sg_entry), GFP_KERNEL);
+	*sg = vmalloc(maxsg * sizeof(struct mnh_sg_entry));
 	if (!(*sg))
 		return -ENOMEM;
 
