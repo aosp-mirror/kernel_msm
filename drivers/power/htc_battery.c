@@ -475,10 +475,8 @@ int htc_batt_schedule_batt_info_update(void)
 	if (!g_htc_battery_probe_done)
 		return 1;
 
-	if (!work_pending(&htc_batt_timer.batt_work)) {
-		flush_work(&htc_batt_timer.batt_work);
+	if (!work_pending(&htc_batt_timer.batt_work))
 		queue_work(htc_batt_timer.batt_wq, &htc_batt_timer.batt_work);
-	}
 	return 0;
 }
 
