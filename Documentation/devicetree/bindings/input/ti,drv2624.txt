@@ -1,0 +1,33 @@
+* Texas Instruments - drv2624 Haptics driver
+
+Required properties:
+	- compatible - "ti,drv2624" - DRV2624
+	- reg -  I2C slave address
+	- ti,reset-gpio - GPIO to reset the device
+
+Optional properties:
+	- ti,irq-gpio - GPIO to receive the interrupt
+	- ti,voltage-comp - Voltage compensation for any resistive losses in the
+	  driver IC.
+	- ti,ol-lra-frequency - LRA frequency for open-loop mode
+	- ti,bemf-factor - Sets the feedback gain for closed-loop operation
+	- ti,bemf-gain - Sets the analog gain of the back-EMF amplifier
+	- ti,blanking-time - Time waiting for BEMF to settle. Before ADC
+	  sampling
+	- ti,idiss-time - Sime waiting for inductor current to discharge
+	- ti,zc-det-time - Zero crossing detection time
+	- ti,lra-wave-shape - Selects which shape to use for driving the LRA
+	  when in open loop mode. 0 - Square Wave, 1 - Sine Wave.
+	- ti,waveform-interval - Sets the internal memory playback interval to
+	  either 5 ms or 1 ms. 0 - 5 ms, 1 - 1 ms.
+
+Example:
+
+drv2624: drv2624@5a {
+	compatible = "ti,drv2624";
+	reg = <0x5a>;
+	ti,reset-gpio = <&tlmm 95 0>;
+};
+
+For more product information please see the link below:
+http://www.ti.com/product/drv2624
