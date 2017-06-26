@@ -72,9 +72,11 @@
 		qcom,cam-vreg-op-mode = <0 0 0>;
 		pinctrl-names = "cam_default", "cam_suspend";
 		pinctrl-0 = <&cam_sensor_mclk0_active
-				 &cam_sensor_rear_active>;
+				 &cam_sensor_rear_active
+				 &cam_sensor_vsync_active>;
 		pinctrl-1 = <&cam_sensor_mclk0_suspend
-				 &cam_sensor_rear_suspend>;
+				 &cam_sensor_rear_suspend
+				 &cam_sensor_vsync_suspend>;
 		gpios = <&tlmm 13 0>, /* MCLK */
 			<&tlmm 24 0>, /* RESET */
 			<&pm8998_gpios 20 0>, /* DVDD */
@@ -119,9 +121,11 @@
 		qcom,cam-vreg-op-mode = <0>;
 		pinctrl-names = "cam_default", "cam_suspend";
 		pinctrl-0 = <&cam_sensor_mclk1_active
-				 &cam_sensor_front_active>;
+				 &cam_sensor_front_active
+				 &cam_sensor_front_vsync_active>;
 		pinctrl-1 = <&cam_sensor_mclk1_suspend
-				 &cam_sensor_front_suspend>;
+				 &cam_sensor_front_suspend
+				 &cam_sensor_front_vsync_suspend>;
 		gpios = <&tlmm 14 0>, /* MCLK */
 				<&tlmm 23 0>, /* RESET */
 				<&pmi8998_gpios 6 0>, /* 1.2V DVDD */
@@ -164,9 +168,11 @@
 		qcom,cam-vreg-op-mode = <0 0 0>;
 		pinctrl-names = "cam_default", "cam_suspend";
 		pinctrl-0 = <&cam_sensor_mclk0_active
-				 &cam_sensor_rear_active>;
+				 &cam_sensor_rear_active
+				 &cam_sensor_vsync_active>;
 		pinctrl-1 = <&cam_sensor_mclk0_suspend
-				 &cam_sensor_rear_suspend>;
+				 &cam_sensor_rear_suspend
+				 &cam_sensor_vsync_suspend>;
 		gpios = <&tlmm 13 0>, /* MCLK */
 			<&tlmm 24 0>, /* RESET */
 			<&pm8998_gpios 20 0>, /* DVDD */
@@ -215,9 +221,11 @@
 		qcom,cam-vreg-op-mode = <0>;
 		pinctrl-names = "cam_default", "cam_suspend";
 		pinctrl-0 = <&cam_sensor_mclk1_active
-				 &cam_sensor_front_active>;
+				 &cam_sensor_front_active
+				 &cam_sensor_front_vsync_active>;
 		pinctrl-1 = <&cam_sensor_mclk1_suspend
-				 &cam_sensor_front_suspend>;
+				 &cam_sensor_front_suspend
+				 &cam_sensor_front_vsync_suspend>;
 		gpios = <&tlmm 14 0>, /* MCLK */
 				<&tlmm 23 0>, /* RESET */
 				<&pmi8998_gpios 6 0>, /* 1.2V DVDD */
