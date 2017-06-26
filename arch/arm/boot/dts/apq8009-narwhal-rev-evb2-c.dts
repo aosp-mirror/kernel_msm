@@ -11,10 +11,10 @@
  */
 
 /dts-v1/;
-#include "apq8009-narwhal/apq8009-narwhal-rev-evb3.dtsi"
+#include "apq8009-narwhal/apq8009-narwhal-rev-evb2-c.dtsi"
 
 / {
-	model = "LGE APQ 8009 NARHAL rev-evb3";
+	model = "LGE APQ 8009 NARHAL rev-evb2-c";
 	compatible = "qcom,apq8009";
 	qcom,msm-id =   <301 0>;
 
@@ -26,5 +26,5 @@
 	 * Pm -- Platform minor version
 	 * PH -- Platform hardware CDP/MTP
 	 */
-	qcom,board-id = <0x000299 0x100>;
+	qcom,board-id = <0x000399 0x100>;
 };

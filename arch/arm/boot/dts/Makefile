@@ -184,9 +184,10 @@ dtb-$(CONFIG_MACH_ANGELFISH) += \
 	apq8009-angelfish-rev-evb1.dtb
 dtb-$(CONFIG_MACH_NARWHAL) += \
 	apq8009-narwhal-rev-a.dtb \
-	apq8009-narwhal-rev-evb3.dtb \
-	apq8009-narwhal-rev-evb2.dtb \
-	apq8009-narwhal-rev-evb1.dtb
+	apq8009-narwhal-rev-evb2-c.dtb \
+	apq8009-narwhal-rev-evb2-b.dtb \
+	apq8009-narwhal-rev-evb2-a.dtb \
+	apq8009-narwhal-rev-evb1-a.dtb
 dtb-$(CONFIG_ARCH_MXC) += \
 	imx1-ads.dtb \
 	imx1-apf9328.dtb \
