@@ -2646,6 +2646,8 @@ QDF_STATUS csr_change_default_config_param(tpAniSirGlobal pMac,
 			pParam->per_roam_config.tx_per_mon_time;
 		pMac->roam.configParam.per_roam_config.rx_per_mon_time =
 			pParam->per_roam_config.rx_per_mon_time;
+		pMac->roam.configParam.per_roam_config.min_candidate_rssi =
+			pParam->per_roam_config.min_candidate_rssi;
 
 		/* update p2p offload status */
 		pMac->pnoOffload = pParam->pnoOffload;
@@ -2721,7 +2723,12 @@ QDF_STATUS csr_change_default_config_param(tpAniSirGlobal pMac,
 			pParam->fils_max_chan_guard_time;
 		pMac->roam.configParam.is_bssid_hint_priority =
 			pParam->is_bssid_hint_priority;
-
+		pMac->roam.configParam.disallow_duration =
+			pParam->disallow_duration;
+		pMac->roam.configParam.rssi_channel_penalization =
+			pParam->rssi_channel_penalization;
+		pMac->roam.configParam.num_disallowed_aps =
+			pParam->num_disallowed_aps;
 
 	}
 	return status;
@@ -2883,6 +2890,8 @@ QDF_STATUS csr_get_config_param(tpAniSirGlobal pMac, tCsrConfigParam *pParam)
 			cfg_params->per_roam_config.tx_per_mon_time;
 	pParam->per_roam_config.rx_per_mon_time =
 			cfg_params->per_roam_config.rx_per_mon_time;
+	pParam->per_roam_config.min_candidate_rssi =
+			cfg_params->per_roam_config.min_candidate_rssi;
 
 	pParam->conc_custom_rule1 = cfg_params->conc_custom_rule1;
 	pParam->conc_custom_rule2 = cfg_params->conc_custom_rule2;
@@ -2965,6 +2974,12 @@ QDF_STATUS csr_get_config_param(tpAniSirGlobal pMac, tCsrConfigParam *pParam)
 		pMac->roam.configParam.fils_max_chan_guard_time;
 	pParam->is_bssid_hint_priority =
 		pMac->roam.configParam.is_bssid_hint_priority;
+	pParam->disallow_duration =
+		pMac->roam.configParam.disallow_duration;
+	pParam->rssi_channel_penalization =
+		pMac->roam.configParam.rssi_channel_penalization;
+	pParam->num_disallowed_aps =
+		pMac->roam.configParam.num_disallowed_aps;
 
 	return QDF_STATUS_SUCCESS;
 }
@@ -9351,8 +9366,7 @@ csr_roaming_state_config_cnf_processor(tpAniSirGlobal mac_ctx,
 		    && csr_roam_is11r_assoc(mac_ctx, session_id)) {
 			status = csr_roam_issue_reassociate(mac_ctx,
 					session_id, bss_desc,
-					(tDot11fBeaconIEs *)
-					(scan_result->Result.pvIes),
+					local_ies,
 					&cmd->u.roamCmd.roamProfile);
 		} else
 #ifdef FEATURE_WLAN_ESE
@@ -9375,8 +9389,7 @@ csr_roaming_state_config_cnf_processor(tpAniSirGlobal mac_ctx,
 			 */
 			status = csr_roam_issue_join(mac_ctx, session_id,
 						    bss_desc,
-						    (tDot11fBeaconIEs *)
-						    (scan_result->Result.pvIes),
+						    local_ies,
 						    &cmd->u.roamCmd.roamProfile,
 						    cmd->u.roamCmd.roamId);
 		}
@@ -15790,6 +15803,7 @@ QDF_STATUS csr_send_mb_set_context_req_msg(tpAniSirGlobal pMac,
 					   uint8_t *pKeyRsc)
 {
 	tSirSmeSetContextReq *pMsg;
+	cds_msg_t cds_msg = {0};
 	uint16_t msgLen;
 	QDF_STATUS status = QDF_STATUS_E_FAILURE;
 	tCsrRoamSession *pSession = CSR_GET_SESSION(pMac, sessionId);
@@ -15841,7 +15855,12 @@ QDF_STATUS csr_send_mb_set_context_req_msg(tpAniSirGlobal pMac,
 		if (keyLength && pKey)
 			qdf_mem_copy(pMsg->keyMaterial.key[0].key,
 					pKey, keyLength);
-		status = cds_send_mb_message_to_mac(pMsg);
+		cds_msg.type = eWNI_SME_SETCONTEXT_REQ;
+		cds_msg.bodyptr = pMsg;
+		status = cds_mq_post_message_by_priority(QDF_MODULE_ID_PE, &cds_msg,
+					HIGH_PRIORITY);
+		if (QDF_IS_STATUS_ERROR(status))
+			qdf_mem_free(pMsg);
 	} while (0);
 	return status;
 }
@@ -18237,15 +18256,24 @@ csr_create_roam_scan_offload_request(tpAniSirGlobal mac_ctx,
 		mac_ctx->roam.configParam.early_stop_scan_max_threshold;
 	req_buf->roamscan_adaptive_dwell_mode =
 		mac_ctx->roam.configParam.roamscan_adaptive_dwell_mode;
+	req_buf->lca_config_params.disallow_duration =
+		mac_ctx->roam.configParam.disallow_duration;
+	req_buf->lca_config_params.rssi_channel_penalization =
+		mac_ctx->roam.configParam.rssi_channel_penalization;
+	req_buf->lca_config_params.num_disallowed_aps =
+		mac_ctx->roam.configParam.num_disallowed_aps;
 
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD
 	QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
-		  FL("HomeAwayTime=%d EarlyStopFeature Enable=%d, MinThresh=%d, MaxThresh=%d PMK len=%d"),
+		  FL("HomeAwayTime=%d EarlyStopFeature Enable=%d, MinThresh=%d, MaxThresh=%d PMK len=%d disallow_dur=%d rssi_chan_pen=%d num_disallowed_aps=%d"),
 		  req_buf->HomeAwayTime,
 		  req_buf->early_stop_scan_enable,
 		  req_buf->early_stop_scan_min_threshold,
 		  req_buf->early_stop_scan_max_threshold,
-		  req_buf->pmk_len);
+		  req_buf->pmk_len,
+		  req_buf->lca_config_params.disallow_duration,
+		  req_buf->lca_config_params.rssi_channel_penalization,
+		  req_buf->lca_config_params.num_disallowed_aps);
 	req_buf->RoamOffloadEnabled = csr_roamIsRoamOffloadEnabled(mac_ctx);
 	req_buf->RoamKeyMgmtOffloadEnabled = session->RoamKeyMgmtOffloadEnabled;
 	req_buf->pmkid_modes = session->pmkid_modes;
@@ -18600,15 +18628,18 @@ csr_create_per_roam_request(tpAniSirGlobal mac_ctx, uint8_t session_id)
 		mac_ctx->roam.configParam.per_roam_config.tx_rate_thresh_percnt;
 	req_buf->per_config.rx_rate_thresh_percnt =
 		mac_ctx->roam.configParam.per_roam_config.rx_rate_thresh_percnt;
+	req_buf->per_config.min_candidate_rssi =
+		mac_ctx->roam.configParam.per_roam_config.min_candidate_rssi;
 
 	QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
-		"PER based roaming configuaration enable: %d vdev: %d high_rate_thresh: %d low_rate_thresh: %d rate_thresh_percnt: %d per_rest_time: %d monitor_time: %d",
+		"PER based roaming configuaration enable: %d vdev: %d high_rate_thresh: %d low_rate_thresh: %d rate_thresh_percnt: %d per_rest_time: %d monitor_time: %d min cand rssi: %d",
 			  req_buf->per_config.enable, session_id,
 			  req_buf->per_config.tx_high_rate_thresh,
 			  req_buf->per_config.tx_low_rate_thresh,
 			  req_buf->per_config.tx_rate_thresh_percnt,
 			  req_buf->per_config.per_rest_time,
-			  req_buf->per_config.tx_per_mon_time);
+			  req_buf->per_config.tx_per_mon_time,
+			  req_buf->per_config.min_candidate_rssi);
 	return req_buf;
 }
 
@@ -19876,7 +19907,7 @@ void csr_process_ho_fail_ind(tpAniSirGlobal pMac, void *pMsgBuf)
 	csr_roam_disconnect(pMac, sessionId,
 			eCSR_DISCONNECT_REASON_ROAM_HO_FAIL);
 	if (pMac->roam.configParam.enable_fatal_event)
-		cds_flush_logs(WLAN_LOG_TYPE_NON_FATAL,
+		cds_flush_logs(WLAN_LOG_TYPE_FATAL,
 				WLAN_LOG_INDICATOR_HOST_DRIVER,
 				WLAN_LOG_REASON_ROAM_HO_FAILURE,
 				true, false);

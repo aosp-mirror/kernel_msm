@@ -610,6 +610,12 @@ static void hdd_update_dbs_scan_ctrl_ext_flag(hdd_context_t *hdd_ctx,
 	/* Resetting the scan_ctrl_flags_ext to 0 */
 	scan_req->scan_ctrl_flags_ext = 0;
 
+	if (!(hdd_ctx->is_dbs_scan_duty_cycle_enabled)) {
+		scan_dbs_policy = HDD_SCAN_DBS_POLICY_IGNORE_DUTY;
+		hdd_info("DBS scan duty cycle is disabled");
+		goto end;
+	}
+
 	if (hdd_ctx->config->dual_mac_feature_disable ==
 				DISABLE_DBS_CXN_AND_SCAN) {
 		hdd_debug("DBS is disabled");
@@ -1399,7 +1405,7 @@ static QDF_STATUS hdd_cfg80211_scan_done_callback(tHalHandle halHandle,
 			 */
 			if (time_elapsed >
 			    MIN_TIME_REQUIRED_FOR_NEXT_BUG_REPORT) {
-				cds_flush_logs(WLAN_LOG_TYPE_NON_FATAL,
+				cds_flush_logs(WLAN_LOG_TYPE_FATAL,
 						WLAN_LOG_INDICATOR_HOST_DRIVER,
 						WLAN_LOG_REASON_NO_SCAN_RESULTS,
 						true, false);

@@ -4328,6 +4328,11 @@ typedef enum {
      *  bit 16~31 : 11ag mode TX chain number.
      */
     WMI_PDEV_PARAM_ABG_MODE_TX_CHAIN_NUM,
+    /** Enable/Disable cck txfir override
+     *  bit 0 - enable (1) or disale (0) CCK tx FIR
+     *  bits 31:1 - unused / reserved (set to 0)
+     */
+    WMI_PDEV_PARAM_ENABLE_CCK_TXFIR_OVERRIDE,
 } WMI_PDEV_PARAM;
 
 typedef struct {
@@ -9778,7 +9783,19 @@ enum {
     ROAM_FILTER_OP_BITMAP_BLACK_LIST =   0x1,
     ROAM_FILTER_OP_BITMAP_WHITE_LIST =   0x2,
     ROAM_FILTER_OP_BITMAP_PREFER_BSSID = 0x4,
+    ROAM_FILTER_OP_BITMAP_LCA_DISALLOW = 0x8,
 };
+
+/** lca_enable_source_bitmap */
+#define WMI_ROAM_LCA_DISALLOW_SOURCE_PER        = 0x1,
+#define WMI_ROAM_LCA_DISALLOW_SOURCE_BMISS      = 0x2,
+#define WMI_ROAM_LCA_DISALLOW_SOURCE_LOW_RSSI   = 0x4,
+#define WMI_ROAM_LCA_DISALLOW_SOURCE_HIGH_RSSI  = 0x8,
+#define WMI_ROAM_LCA_DISALLOW_SOURCE_PERIODIC   = 0x10,
+#define WMI_ROAM_LCA_DISALLOW_SOURCE_MAWC       = 0x20, /* MAWC = Motion Aided Wifi connectivity */
+#define WMI_ROAM_LCA_DISALLOW_SOURCE_DENSE      = 0x40,
+#define WMI_ROAM_LCA_DISALLOW_SOURCE_BACKGROUND = 0x80,
+#define WMI_ROAM_LCA_DISALLOW_SOURCE_FORCED     = 0x100,
 
 typedef struct {
     A_UINT32 tlv_header;     /** TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_roam_filter_list_fixed_param */
@@ -9795,8 +9812,17 @@ typedef struct {
      *     wmi_ssid ssid_white_list[];
      *     wmi_mac_addr bssid_preferred_list[];
      *     A_UINT32 bssid_preferred_factor[];
+     *     wmi_roam_lca_disallow_config_tlv_param lca_disallow_param[0/1] (opt)
      */
 } wmi_roam_filter_fixed_param;
+
+typedef struct {
+    A_UINT32 tlv_header;        /** TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_roam_lca_disallow_config_tlv_param */
+    A_UINT32 disallow_duration; /** How long LCA AP will be disallowed before it can be a roaming candidate again, in units of seconds */
+    A_UINT32 rssi_channel_penalization; /** How much RSSI will be penalized if candidate(s) are found in the same channel as disallowed AP's, in units of db */
+    A_UINT32 num_disallowed_aps; /** How many APs the target should maintain in its LCA (Last Connected AP) list */
+    A_UINT32 disallow_lca_enable_source_bitmap; /** disallow LCA logic is enabled only when trigger sources are matched with corresponding bit (see WMI_ROAM_LCA_DISALLOW_SOURCE constants) */
+} wmi_roam_lca_disallow_config_tlv_param;
 
 typedef struct {
     A_UINT8 address[4]; /* IPV4 address in Network Byte Order */
@@ -10017,6 +10043,11 @@ typedef enum p2p_lo_start_ctrl_flags_e {
     P2P_LO_START_CTRL_FLAG_FLUSH_LISTEN_RESULT = 1 << 0,  /* flush prob. req when host is awake */
 } p2p_lo_start_ctrl_flags;
 
+#define P2P_LO_PER_DEV_TYPE_LEN     8
+#define P2P_LO_DEV_TYPES_COUNT_MAX  10
+#define P2P_LO_DEV_TYPES_LEN_MAX    (P2P_LO_PER_DEV_TYPE_LEN * P2P_LO_DEV_TYPES_COUNT_MAX)
+#define P2P_LO_PROB_RESP_MAX_LEN    512
+
 typedef struct {
     A_UINT32 tlv_header;
     A_UINT32 vdev_id;
@@ -10030,11 +10061,13 @@ typedef struct {
      * device_types_data[] byte-array TLV that follows this TLV.
      * The data in device_types_data[] is in 8-byte elements, so
      * device_types_len will be a multiple of 8.
+     * Refer to P2P_LO_DEV_TYPES_LEN_MAX
      */
     A_UINT32 device_types_len;
     /*
      * prob_resp_len specifies the number of bytes in the
      * prob_resp_data[] byte-array TLV that follows this TLV.
+     * Refer to P2P_LO_PROB_RESP_MAX_LEN
      */
     A_UINT32 prob_resp_len;
     /*
@@ -18091,6 +18124,7 @@ typedef enum wmi_coex_config_type {
     WMI_COEX_CONFIG_PTA_BT_INFO         = 20, /* get BT information,
                                                  arg1 BT info type: WMI_COEX_PTA_BT_INFO_TYPE_T, scan/advertise/connection info,
                                                  arg2-arg5: BT information parameters */
+    WMI_COEX_CONFIG_SINK_WLAN_TDM       = 21, /* config interval (ms units) (arg1 BT, arg2 WLAN) for A2DP SINK + WLAN */
 } WMI_COEX_CONFIG_TYPE;
 
 typedef struct {

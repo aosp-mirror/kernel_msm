@@ -1557,6 +1557,9 @@ struct hdd_context_s {
 	uint8_t no_of_open_sessions[QDF_MAX_NO_OF_MODE];
 	uint8_t no_of_active_sessions[QDF_MAX_NO_OF_MODE];
 
+	/* Check if dbs scan duty cycle is enabled */
+	bool is_dbs_scan_duty_cycle_enabled;
+
 	/** P2P Device MAC Address for the adapter  */
 	struct qdf_mac_addr p2pDeviceAddress;
 
@@ -2006,25 +2009,25 @@ bool hdd_is_5g_supported(hdd_context_t *pHddCtx);
 
 int wlan_hdd_scan_abort(hdd_adapter_t *pAdapter);
 
-#ifdef FEATURE_WLAN_LFR
-static inline bool hdd_driver_roaming_supported(hdd_context_t *hdd_ctx)
+#ifdef WLAN_FEATURE_ROAM_OFFLOAD
+static inline bool roaming_offload_enabled(hdd_context_t *hdd_ctx)
 {
-	return hdd_ctx->cfg_ini->isFastRoamIniFeatureEnabled;
+	return hdd_ctx->config->isRoamOffloadEnabled;
 }
 #else
-static inline bool hdd_driver_roaming_supported(hdd_context_t *hdd_ctx)
+static inline bool roaming_offload_enabled(hdd_context_t *hdd_ctx)
 {
 	return false;
 }
 #endif
 
-#ifdef WLAN_FEATURE_ROAM_SCAN_OFFLOAD
-static inline bool hdd_firmware_roaming_supported(hdd_context_t *hdd_ctx)
+#ifdef WLAN_FEATURE_HOST_ROAM
+static inline bool hdd_driver_roaming_supported(hdd_context_t *hdd_ctx)
 {
-	return hdd_ctx->cfg_ini->isRoamOffloadScanEnabled;
+	return hdd_ctx->config->isFastRoamIniFeatureEnabled;
 }
 #else
-static inline bool hdd_firmware_roaming_supported(hdd_context_t *hdd_ctx)
+static inline bool hdd_driver_roaming_supported(hdd_context_t *hdd_ctx)
 {
 	return false;
 }
@@ -2035,7 +2038,7 @@ static inline bool hdd_roaming_supported(hdd_context_t *hdd_ctx)
 	bool val;
 
 	val = hdd_driver_roaming_supported(hdd_ctx) ||
-		hdd_firmware_roaming_supported(hdd_ctx);
+		roaming_offload_enabled(hdd_ctx);
 
 	return val;
 }
@@ -2215,18 +2218,6 @@ void wlan_hdd_restart_sap(hdd_adapter_t *ap_adapter);
 #else
 static inline void wlan_hdd_restart_sap(hdd_adapter_t *ap_adapter)
 {
-}
-#endif
-
-#ifdef WLAN_FEATURE_ROAM_OFFLOAD
-static inline bool roaming_offload_enabled(hdd_context_t *hdd_ctx)
-{
-	return hdd_ctx->config->isRoamOffloadEnabled;
-}
-#else
-static inline bool roaming_offload_enabled(hdd_context_t *hdd_ctx)
-{
-	return false;
 }
 #endif
 
