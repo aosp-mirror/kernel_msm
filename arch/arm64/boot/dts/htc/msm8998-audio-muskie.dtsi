@@ -10,11 +10,11 @@
 		};
 
 		gpio@c600 { /* pm8998 gpio 7 */
-			qcom,pull = <5>; /* NO PULL */
+			qcom,pull = <4>; /* PULL DOWN */
 		};
 
 		gpio@c700 { /* pm8998 gpio 8 */
-			qcom,pull = <5>; /* NO PULL */
+			qcom,pull = <4>; /* PULL DOWN */
 		};
 };
 
