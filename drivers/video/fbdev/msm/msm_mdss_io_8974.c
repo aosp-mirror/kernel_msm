@@ -2274,6 +2274,7 @@ int mdss_dsi_pre_clkoff_cb(void *priv,
 	struct mdss_panel_data *pdata = NULL;
 
 	pdata = &ctrl->panel_data;
+	MDSS_XLOG(clk, new_state, ctrl->ctrl_state);
 
 	if ((clk & MDSS_DSI_LINK_CLK) && (new_state == MDSS_DSI_CLK_OFF)) {
 		if (pdata->panel_info.mipi.force_clk_lane_hs)
@@ -2332,6 +2333,9 @@ int mdss_dsi_post_clkon_cb(void *priv,
 	bool mmss_clamp;
 
 	pdata = &ctrl->panel_data;
+
+	MDSS_XLOG(clk, curr_state, ctrl->mmss_clamp, ctrl->ulps,
+			ctrl->phy_power_off);
 
 	if (clk & MDSS_DSI_CORE_CLK) {
 		mmss_clamp = ctrl->mmss_clamp;
@@ -2415,6 +2419,8 @@ int mdss_dsi_post_clkoff_cb(void *priv,
 		return -EINVAL;
 	}
 
+	MDSS_XLOG(clk_type, curr_state, ctrl->ctrl_state);
+
 	if ((clk_type & MDSS_DSI_CORE_CLK) &&
 	    (curr_state == MDSS_DSI_CLK_OFF)) {
 		sdata = ctrl->shared_data;
@@ -2454,6 +2460,8 @@ int mdss_dsi_pre_clkon_cb(void *priv,
 		pr_err("%s: invalid input\n", __func__);
 		return -EINVAL;
 	}
+
+	MDSS_XLOG(clk_type, new_state, ctrl->core_power);
 
 	if ((clk_type & MDSS_DSI_CORE_CLK) && (new_state == MDSS_DSI_CLK_ON) &&
 	    (ctrl->core_power == false)) {

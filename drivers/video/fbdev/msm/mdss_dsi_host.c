@@ -459,6 +459,7 @@ void mdss_dsi_host_init(struct mdss_panel_data *pdata)
 
 	dsi_ctrl |= BIT(0);	/* enable dsi */
 	MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x0004, dsi_ctrl);
+	MDSS_XLOG(dsi_ctrl);
 
 	/* enable contention detection for receiving */
 	mdss_dsi_lp_cd_rx(ctrl_pdata);
@@ -504,6 +505,7 @@ void mdss_dsi_sw_reset(struct mdss_dsi_ctrl_pdata *ctrl, bool restore)
 
 	data0 = MIPI_INP(ctrl->ctrl_base + 0x0004);
 	MIPI_OUTP(ctrl->ctrl_base + 0x0004, (data0 & ~BIT(0)));
+	MDSS_XLOG(data0 & ~BIT(0));
 	/*
 	 * dsi controller need to be disabled before
 	 * clocks turned on
@@ -523,6 +525,7 @@ void mdss_dsi_sw_reset(struct mdss_dsi_ctrl_pdata *ctrl, bool restore)
 	if (restore) {
 		MIPI_OUTP(ctrl->ctrl_base + 0x0004, data0);
 		wmb();	/* make sure dsi controller enabled again */
+		MDSS_XLOG(data0);
 	}
 
 	/* It is safe to clear mdp_busy as reset is happening */
@@ -1032,6 +1035,7 @@ void mdss_dsi_controller_cfg(int enable,
 
 	MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x0004, dsi_ctrl);
 	wmb();
+	MDSS_XLOG(dsi_ctrl);
 }
 
 void mdss_dsi_restore_intr_mask(struct mdss_dsi_ctrl_pdata *ctrl)
@@ -1088,6 +1092,7 @@ void mdss_dsi_op_mode_config(int mode,
 	MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x0004, dsi_ctrl);
 	MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x003c, dma_ctrl);
 	wmb();
+	MDSS_XLOG(dsi_ctrl);
 }
 
 void mdss_dsi_cmd_bta_sw_trigger(struct mdss_panel_data *pdata)
@@ -1767,6 +1772,7 @@ static inline bool __mdss_dsi_cmd_mode_config(
 	u32 dsi_ctrl;
 
 	dsi_ctrl = MIPI_INP((ctrl->ctrl_base) + 0x0004);
+	MDSS_XLOG(dsi_ctrl, enable);
 	/* if currently in video mode, enable command mode */
 	if (enable) {
 		if ((dsi_ctrl) & BIT(1)) {
@@ -2094,6 +2100,21 @@ end:
 	return rp->read_cnt;
 }
 
+static inline void __dump_reg_xlog(struct mdss_dsi_ctrl_pdata *ctrl,
+		int timeout)
+{
+	unsigned char *base = ctrl->ctrl_base;
+
+	MDSS_XLOG(timeout,
+		  MIPI_INP(base + 0x4),
+		  MIPI_INP(base + 0x8),
+		  MIPI_INP(base + 0xc),
+		  MIPI_INP(base + 0x68),
+		  MIPI_INP(base + 0xa8),
+		  MIPI_INP(base + 0xc0),
+		  MIPI_INP(base + 0x120));
+}
+
 static int mdss_dsi_cmd_dma_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 					struct dsi_buf *tp)
 {
@@ -2102,6 +2123,7 @@ static int mdss_dsi_cmd_dma_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 	char *bp;
 	struct mdss_dsi_ctrl_pdata *mctrl = NULL;
 	int ignored = 0;	/* overflow ignored */
+	int timeout = 0;
 
 	bp = tp->data;
 
@@ -2178,13 +2200,17 @@ static int mdss_dsi_cmd_dma_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 			MIPI_OUTP(ctrl->ctrl_base + 0x0110, reg_val);
 			mdss_dsi_disable_irq_nosync(ctrl, DSI_CMD_TERM);
 			complete(&ctrl->dma_comp);
+			timeout = 1;
 
 			pr_warn("%s: dma tx done but irq not triggered\n",
 				__func__);
 		} else {
+			timeout = 2;
 			ret = -ETIMEDOUT;
 		}
 	}
+
+	__dump_reg_xlog(ctrl, timeout);
 
 	if (!IS_ERR_VALUE(ret))
 		ret = tp->len;
