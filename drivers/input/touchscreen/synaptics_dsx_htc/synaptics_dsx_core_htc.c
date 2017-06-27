@@ -1362,9 +1362,7 @@ static ssize_t int_status_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
 	struct synaptics_rmi4_data *rmi4_data = exp_data.rmi4_data;
-	const struct synaptics_dsx_board_data *bdata =
-			rmi4_data->hw_if->board_data;
-	int value, ret = 0;
+	int value;
 
 	if (sysfs_streq(buf, "0"))
 		value = false;
@@ -1373,20 +1371,21 @@ static ssize_t int_status_store(struct device *dev,
 	else
 		return -EINVAL;
 
+	mutex_lock(&(rmi4_data->rmi4_irq_enable_mutex));
+
 	if (value) {
-		ret = request_threaded_irq(rmi4_data->irq, NULL,
-				synaptics_rmi4_irq, bdata->irq_flags,
-				PLATFORM_DRIVER_NAME, rmi4_data);
-		if (ret == 0) {
-			rmi4_data->irq_enabled = true;
-			pr_info("%s: interrupt enable: %x\n", __func__, rmi4_data->irq_enabled);
-		}
+		enable_irq(rmi4_data->irq);
+		rmi4_data->irq_enabled = true;
+		pr_info("%s: interrupt enable: %x\n", __func__,
+			rmi4_data->irq_enabled);
 	} else {
 		disable_irq(rmi4_data->irq);
-		free_irq(rmi4_data->irq, rmi4_data);
 		rmi4_data->irq_enabled = false;
-		pr_info("%s: interrupt disable: %x\n", __func__, rmi4_data->irq_enabled);
+		pr_info("%s: interrupt disable: %x\n", __func__,
+			rmi4_data->irq_enabled);
 	}
+
+	mutex_unlock(&(rmi4_data->rmi4_irq_enable_mutex));
 
 	return count;
 }
