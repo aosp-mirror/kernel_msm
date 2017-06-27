@@ -53,7 +53,6 @@ struct sop716_info {
 
 	int reset_pin;
 	int interrupt_pin;
-	int i2c_ldo_pin;
 	int bslen_pin;
 	int gpio_temp_1_pin;
 
@@ -495,23 +494,6 @@ static int sop716_parse_gpio(struct device_node *node, struct sop716_info *dd)
 		gpio_direction_input(dd->interrupt_pin);
 	} else {
 		pr_err("%s: interrupt gpio error:%d\n", __func__, dd->interrupt_pin);
-		return -1;
-	}
-
-	/* i2c ldo enable */
-	if ((dd->i2c_ldo_pin =
-			of_get_named_gpio_flags(node, "soprod,i2c_ldo", 0, NULL)) > 0) {
-		error = gpio_request(dd->i2c_ldo_pin, "soprod,i2c_ldo");
-		if (error < 0) {
-			pr_err("%s: FAIL: soprod,i2c_ldo gpio_request\n", __func__);
-			return -1;
-		}
-		gpio_direction_output(dd->i2c_ldo_pin, 1);
-
-		msleep(100);
-		gpio_set_value(dd->i2c_ldo_pin, 1);
-	} else {
-		pr_err("%s: i2c_ldo gpio error:%d\n",__func__, dd->i2c_ldo_pin);
 		return -1;
 	}
 

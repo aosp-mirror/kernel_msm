@@ -43,9 +43,8 @@
 		compatible = "lge,soprod_movement";
 		reg = <0x48>;
 		status = "ok";
-		soprod,i2c_ldo = <&msm_gpio 24 0x0>;
-		soprod,reset = <&msm_gpio 21 0x0>;
-		soprod,interrupt = <&msm_gpio 20 0x0>;
+		soprod,reset = <&msm_gpio 33 0x0>;
+		soprod,interrupt = <&msm_gpio 34 0x0>;
 		soprod,bslen = <&msm_gpio 16 0x0>;
 		soprod,gpio_temp_1 = <&msm_gpio 22 0x0>;
 	};
