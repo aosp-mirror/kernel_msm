@@ -20,8 +20,10 @@
 &mdss_dsi0 {
 	qcom,dsi-pref-prim-pan = <&dsi_sharp_nt35350_cmd>;
 	pinctrl-names = "mdss_default", "mdss_sleep";
-	pinctrl-0 = <&mdss_reset_active &mdss_enable_active>;
-	pinctrl-1 = <&mdss_reset_suspend &mdss_enable_suspend>;
+	pinctrl-0 = <&mdss_reset_active &mdss_enable_active &mdss_te_active>;
+	pinctrl-1 = <&mdss_reset_suspend &mdss_enable_suspend &mdss_te_suspend>;
+
+	qcom,platform-te-gpio = <&msm_gpio 24 0>;
 
 	qcom,platform-reset-gpio = <&msm_gpio 25 0>;
 	qcom,platform-enable-gpio = <&msm_gpio 38 0>;

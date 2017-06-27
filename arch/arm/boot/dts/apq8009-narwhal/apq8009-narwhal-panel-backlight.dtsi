@@ -11,7 +11,7 @@
  */
 
 &soc {
-	i2c@78b6000 { /* BLSP1 QUP2 */
+	i2c@78b8000 { /* BLSP1 QUP4 */
 		backlight_dsv: lm36272@11 {
 			compatible = "leds,lm36272";
 			status = "okay";
@@ -19,7 +19,7 @@
 			lm36272,dsv_p_en = <&msm_gpio 95 0x00>;
 			lm36272,dsv_n_en = <&msm_gpio 83 0x00>;
 			lm36272,min_brightness = <0>;
-			lm36272,default_brightness = <184>;
+			lm36272,default_brightness = <177>;
 			lm36272,max_brightness = <255>;
 			lm36272,blmap_size = <256>;
 			lm36272,blmap = <
