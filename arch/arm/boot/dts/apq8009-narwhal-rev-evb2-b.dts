@@ -26,5 +26,5 @@
 	 * Pm -- Platform minor version
 	 * PH -- Platform hardware CDP/MTP
 	 */
-	qcom,board-id = <0x000299 0x100>;
+	qcom,board-id = <0x000299 0>;
 };
