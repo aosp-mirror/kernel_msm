@@ -63,6 +63,7 @@
 		qcom,mdss-dsi-te-check-enable;
 		qcom,mdss-dsi-te-using-te-pin;
 		qcom,dcs-cmd-by-left;
+		qcom,ulps-enabled;
 		qcom,mdss-dsi-on-command = [
 			05 01 00 00 78 00 02 11 00 /* sleep out */
 			05 01 00 00 00 00 02 35 00 /* TE on */
