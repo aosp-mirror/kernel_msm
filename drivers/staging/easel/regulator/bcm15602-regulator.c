@@ -1052,29 +1052,40 @@ static void bcm15602_disable_wdt(struct bcm15602_chip *ddata)
 /* some changes to default configuration based on bringup */
 static int bcm15602_chip_fixup(struct bcm15602_chip *ddata)
 {
-	/* enable bandgap curvature correction for improved accuracy */
-	bcm15602_write_byte(ddata, BCM15602_REG_ADC_BGCTRL, 0x7B);
+	dev_dbg(ddata->dev, "%s: rev %d\n", __func__, ddata->rev_id);
 
-	/* unlock register, then set ASR switching frequency trim */
-	bcm15602_write_byte(ddata, BCM15602_REG_SYS_WRLOCKEY, 0x38);
-	bcm15602_write_byte(ddata, BCM15602_REG_BUCK_ASR_CTRL2, 0x04);
+	if (ddata->rev_id < BCM15602_REV_A1) {
+		/* enable bandgap curvature correction for improved accuracy */
+		bcm15602_update_bits(ddata, BCM15602_REG_ADC_BGCTRL, 0x40,
+				     0x40);
 
-	/* set ASR undervoltage threshold */
-	bcm15602_update_bits(ddata, BCM15602_REG_BUCK_ASR_CTRL5, 0x0C, 0x04);
+		/* unlock register, then set ASR switching frequency trim */
+		bcm15602_write_byte(ddata, BCM15602_REG_SYS_WRLOCKEY, 0x38);
+		bcm15602_write_byte(ddata, BCM15602_REG_BUCK_ASR_CTRL2, 0x04);
 
-	/* set ASR comparator input filter select */
-	bcm15602_update_bits(ddata, BCM15602_REG_BUCK_ASR_CTRL11, 0x03, 0x03);
+		/* set ASR undervoltage threshold */
+		bcm15602_update_bits(ddata, BCM15602_REG_BUCK_ASR_CTRL5, 0x0C,
+				     0x04);
 
-	/* set ASR feedback network R2 adjustment */
-	bcm15602_update_bits(ddata, BCM15602_REG_BUCK_ASR_TSET_CTRL2, 0x03,
-			     0x02);
+		/* set ASR comparator input filter select */
+		bcm15602_update_bits(ddata, BCM15602_REG_BUCK_ASR_CTRL11, 0x03,
+				     0x03);
 
-	/* set ASR rail to 0.9V */
-	bcm15602_write_byte(ddata, BCM15602_REG_BUCK_ASR_VOCTRL, 0x43);
+		/* set ASR feedback network R2 adjustment */
+		bcm15602_update_bits(ddata, BCM15602_REG_BUCK_ASR_TSET_CTRL2,
+				     0x03, 0x02);
 
-	/* set ASR to single phase */
-	bcm15602_update_bits(ddata, BCM15602_REG_BUCK_ASR_TSET_CTRL2, 0x10,
-			     0x00);
+		/* set ASR rail to 0.9V */
+		bcm15602_write_byte(ddata, BCM15602_REG_BUCK_ASR_VOCTRL, 0x43);
+
+		/* set ASR to single phase */
+		bcm15602_update_bits(ddata, BCM15602_REG_BUCK_ASR_TSET_CTRL2,
+				     0x10, 0x00);
+	} else if (ddata->rev_id == BCM15602_REV_A1) {
+		/* enable bandgap curvature correction for improved accuracy */
+		bcm15602_update_bits(ddata, BCM15602_REG_ADC_BGCTRL, 0x40,
+				     0x40);
+	}
 
 	return 0;
 }

@@ -311,9 +311,10 @@ static ssize_t bcm15602_attr_store_asr_dual_phase(
 	}
 
 	if (ddata->rev_id >= BCM15602_REV_A1) {
-		dev_err(dev, "%s: Should not set phase for this version of chip\n",
-			__func__);
-		return -EPERM;
+		dev_warn(dev,
+			 "%s: Skipping workaround for this silicon version\n",
+			 __func__);
+		return count;
 	}
 
 	bcm15602_update_bits(ddata, BCM15602_REG_BUCK_ASR_TSET_CTRL2, 0x10,
