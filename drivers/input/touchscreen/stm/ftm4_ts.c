@@ -434,6 +434,7 @@ int fts_read_chip_id(struct fts_ts_info *info)
 			tsp_debug_info(&info->client->dev,
 				"FTS Chip ID : %02X %02X\n",
 				val[1], val[2]);
+			info->flash_corruption_info.fw_broken = false;
 		}
 	} else
 		return -FTS_ERROR_INVALID_CHIP_ID;
@@ -1679,7 +1680,10 @@ static int fts_probe(struct i2c_client *client, const struct i2c_device_id *idp)
 	retval = fts_init(info);
 	info->reinit_done = true;
 	mutex_unlock(&info->device_mutex);
-	if (retval < 0) {
+	if (info->flash_corruption_info.fw_broken) {
+		tsp_debug_err(&info->client->dev,
+			      "Attempt to recover corrupt/missing firmware.");
+	} else if (retval < 0) {
 		tsp_debug_err(&info->client->dev, "FTS fts_init fail!\n");
 		goto err_fts_init;
 	}
