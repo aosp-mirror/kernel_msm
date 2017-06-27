@@ -107,7 +107,7 @@
 	ramoops_mem: ramoops_region {
 		compatible = "removed-dma-pool";
 		no-map;
-		reg = <0 0x99c00000 0 0x00200000>;
+		reg = <0 0xa1100000 0 0x00200000>;
 	};
 
 	ramoops_meta_mem: ramoops_meta_region@affff000 {
