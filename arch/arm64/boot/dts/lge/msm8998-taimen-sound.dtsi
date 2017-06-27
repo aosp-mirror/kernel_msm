@@ -196,7 +196,7 @@
 	/* tas2557, irq-gpio-right */
 	gpio@c600 { /* GPIO 7 */
 		qcom,mode = <1>;       		/* Output */
-		qcom,pull = <5>;		/* No Pull */
+		qcom,pull = <4>;		/* Pull Down */
 		qcom,vin-sel = <0>;		/* VIN1 GPIO_LV */
 		qcom,src-sel = <0>;		/* GPIO */
 		qcom,invert = <0>;		/* Invert */
@@ -208,7 +208,7 @@
 	/* tas2557, irq-gpio-left */
 	gpio@c700 { /* GPIO 8 */
 		qcom,mode = <1>;                /* Output */
-		qcom,pull = <5>;                /* No Pull */
+		qcom,pull = <4>;                /* Pull Down */
 		qcom,vin-sel = <0>;		/* VIN1 GPIO_LV */
 		qcom,src-sel = <0>;		/* GPIO */
 		qcom,invert = <0>;		/* Invert */
