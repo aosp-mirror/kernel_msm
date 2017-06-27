@@ -948,7 +948,7 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 			if (z == 255) {
 				tsp_debug_info(&info->client->dev,
 						"%s: Palm Detected\n", __func__);
-				tsp_debug_info(&info->client->dev, "%s: "
+				tsp_debug_event(&info->client->dev, "%s: "
 						"[ID:%2d  X:%4d  Y:%4d  Z:%4d "
 						" WM:%4d  Wm:%4d  Orient:%2d  "
 						"tc:%2d]\n", __func__,
@@ -990,7 +990,7 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 				break;
 
 			if (info->palm_pressed) {
-				tsp_debug_info(&info->client->dev,
+				tsp_debug_event(&info->client->dev,
 						"%s: Palm Released\n",
 						__func__);
 				info->palm_pressed = false;
@@ -1914,7 +1914,7 @@ void fts_release_all_finger(struct fts_ts_info *info)
 			if (info->touch_count < 0)
 				info->touch_count = 0;
 
-			tsp_debug_info(&info->client->dev,
+			tsp_debug_event(&info->client->dev,
 				"[RA] tID:%d mc: %d tc:%d Ver[%02X%04X%01X%01X]\n",
 				i, info->finger[i].mcount, info->touch_count,
 				info->panel_revision, info->fw_main_version_of_ic,
