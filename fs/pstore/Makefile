@@ -11,3 +11,5 @@ pstore-$(CONFIG_PSTORE_PMSG)	+= pmsg.o
 
 ramoops-objs += ram.o ram_core.o
 obj-$(CONFIG_PSTORE_RAM)	+= ramoops.o
+
+obj-$(CONFIG_HTC_DEBUG_BOOTLOADER_LOG) += htc_bootloader_log.o

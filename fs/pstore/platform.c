@@ -36,6 +36,7 @@
 #include <linux/hardirq.h>
 #include <linux/jiffies.h>
 #include <linux/workqueue.h>
+#include <linux/htc_debug_tools.h>
 
 #include "internal.h"
 
@@ -590,6 +591,10 @@ void pstore_get_records(int quiet)
 				compressed = true;
 			}
 		}
+
+		if (type == PSTORE_TYPE_CONSOLE)
+			size += bldr_log_total_size();
+
 		rc = pstore_mkfile(type, psi->name, id, count, buf,
 				  compressed, (size_t)size, time, psi);
 		if (unzipped_len < 0) {
