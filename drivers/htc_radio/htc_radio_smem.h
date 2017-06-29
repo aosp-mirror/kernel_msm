@@ -34,4 +34,17 @@ struct htc_smem_type {
 	/* totally 2048 bytes */
 };
 
+#define htc_smem_addr(smem, field) \
+	({ \
+		volatile void __iomem *__p = (smem); \
+		__p += offsetof(typeof(*(smem)), field); \
+		__p; \
+	})
+
+#define htc_smem_set_u32(p, field, value) \
+	writel((value), htc_smem_addr((p), field))
+
+#define htc_smem_copy(p, field, src) \
+	memcpy_toio(htc_smem_addr((p), field), (src), sizeof((p)->field))
+
 #endif /* end of _HTC_RADIO_SMEM_H */

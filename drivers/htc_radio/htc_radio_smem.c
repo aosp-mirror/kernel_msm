@@ -21,37 +21,20 @@
 #include <linux/fs.h>
 #include <linux/of.h>
 #include <linux/ctype.h>
+#include <asm/io.h>
 #include "htc_radio_smem.h"
 #include <soc/qcom/smem.h>
 
 #define DEVICE_TREE_RADIO_PATH "/chosen/radio"
-
-static void smem_init(struct htc_smem_type *smem)
-{
-	int i = 0;
-
-	smem->version = 0;
-	smem->struct_size = 0;
-	smem->htc_smem_pid = 0;
-	smem->htc_smem_app_run_mode = 0;
-	smem->htc_smem_flag = 0;
-	smem->htc_smem_factory_reset = 0;
-
-	for (i = 0; i < sizeof(smem->htc_rom_ver); i++)
-		smem->htc_rom_ver[i] = 0;
-
-	for (i = 0; i < sizeof(smem->htc_smem_skuid); i++)
-		smem->htc_smem_skuid[i] = 0;
-
-	for (i = 0; i < sizeof(smem->reserved); i++)
-		smem->reserved[i] = 0;
-}
 
 static int htc_radio_smem_probe(struct platform_device *pdev)
 {
 	int ret = -1;
 	struct device_node *dnp;
 	struct htc_smem_type *htc_radio_smem;
+	u32 value;
+	u8 buffer[max(sizeof(htc_radio_smem->htc_rom_ver),
+		      sizeof(htc_radio_smem->htc_smem_skuid))];
 
 	pr_info("[smem]%s: start.\n", __func__);
 
@@ -68,28 +51,37 @@ static int htc_radio_smem_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	/* set smem init 0 */
-	smem_init(htc_radio_smem);
+	/* set smem to 0 */
+	memset_io(htc_radio_smem, 0, sizeof(*htc_radio_smem));
 
 	/* get smem data from radio data note */
 	dnp = of_find_node_by_path(DEVICE_TREE_RADIO_PATH);
 	if (dnp) {
-		htc_radio_smem->version = HTC_RADIO_SMEM_VERSION;
-		htc_radio_smem->struct_size = sizeof(struct htc_smem_type);
-		of_property_read_u32(dnp, "htc_smem_radio_dbg_flag",
-				&htc_radio_smem->htc_smem_flag);
-		of_property_read_u32(dnp, "htc_smem_app_run_mode",
-				&htc_radio_smem->htc_smem_app_run_mode);
-		of_property_read_u32(dnp, "htc_smem_pid",
-				&htc_radio_smem->htc_smem_pid);
-		of_property_read_u32(dnp, "htc_smem_factory_reset",
-				&htc_radio_smem->htc_smem_factory_reset);
-		of_property_read_u8_array(dnp, "htc_rom_ver",
-				&htc_radio_smem->htc_rom_ver[0],
+		htc_smem_set_u32(htc_radio_smem, version,
+			HTC_RADIO_SMEM_VERSION);
+		htc_smem_set_u32(htc_radio_smem, struct_size,
+			sizeof(struct htc_smem_type));
+
+		of_property_read_u32(dnp, "htc_smem_radio_dbg_flag", &value);
+		htc_smem_set_u32(htc_radio_smem, htc_smem_flag, value);
+
+		of_property_read_u32(dnp, "htc_smem_app_run_mode", &value);
+		htc_smem_set_u32(htc_radio_smem, htc_smem_app_run_mode, value);
+
+		of_property_read_u32(dnp, "htc_smem_pid", &value);
+		htc_smem_set_u32(htc_radio_smem, htc_smem_pid, value);
+
+		of_property_read_u32(dnp, "htc_smem_factory_reset", &value);
+		htc_smem_set_u32(htc_radio_smem, htc_smem_factory_reset,
+			value);
+
+		of_property_read_u8_array(dnp, "htc_rom_ver", buffer,
 				sizeof(htc_radio_smem->htc_rom_ver));
-		of_property_read_u8_array(dnp, "sku_id",
-				&htc_radio_smem->htc_smem_skuid[0],
+		htc_smem_copy(htc_radio_smem, htc_rom_ver, buffer);
+
+		of_property_read_u8_array(dnp, "sku_id", buffer,
 				sizeof(htc_radio_smem->htc_smem_skuid));
+		htc_smem_copy(htc_radio_smem, htc_smem_skuid, buffer);
 	} else
 		pr_err("[smem]%s: cannot find path %s.\n", __func__,
 			DEVICE_TREE_RADIO_PATH);
