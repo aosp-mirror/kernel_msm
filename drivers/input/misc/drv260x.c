@@ -867,10 +867,12 @@ static int drv260x_probe(struct i2c_client *client,
 		return error;
 	}
 
-	error = drv260x_init(haptics);
-	if (error) {
-		dev_err(&client->dev, "Device init failed: %d\n", error);
-		return error;
+	if (!strstr(saved_command_line, "androidboot.vib_enable")) {
+		error = drv260x_init(haptics);
+		if (error) {
+			dev_err(&client->dev, "Device init failed: %d\n", error);
+			return error;
+		}
 	}
 
 	error = input_register_device(haptics->input_dev);
