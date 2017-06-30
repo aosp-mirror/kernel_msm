@@ -42,7 +42,7 @@
 			ite,irq-gpio = <&msm_gpio 13 0x2008>;
 			ite,panel-coords = <0 0 494 494>;
 			ite,display-coords = <20 20 474 474>;
-			ite,reset-delay = <20>;
+			ite,reset-delay = <200>;
 			ite,num-fingers = <2>;
 			ite,wakeup;
 			ite,palm-detect-en;
