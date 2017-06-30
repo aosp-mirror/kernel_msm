@@ -372,15 +372,12 @@ static void adjust_jiffies(unsigned long val, struct cpufreq_freqs *ci)
 
 static DEFINE_PER_CPU(unsigned long, freq_scale) = SCHED_CAPACITY_SCALE;
 static DEFINE_PER_CPU(unsigned long, max_freq_scale) = SCHED_CAPACITY_SCALE;
-static DEFINE_PER_CPU(unsigned long, max_transient_scale) =
-	SCHED_CAPACITY_SCALE;
 
 static void
 scale_freq_capacity(struct cpufreq_policy *policy, struct cpufreq_freqs *freqs)
 {
 	unsigned long cur = freqs ? freqs->new : policy->cur;
 	unsigned long scale = (cur << SCHED_CAPACITY_SHIFT) / policy->max;
-	unsigned long scale_transient;
 	struct cpufreq_cpuinfo *cpuinfo = &policy->cpuinfo;
 	int cpu;
 
@@ -394,17 +391,13 @@ scale_freq_capacity(struct cpufreq_policy *policy, struct cpufreq_freqs *freqs)
 		return;
 
 	scale = (policy->max << SCHED_CAPACITY_SHIFT) / cpuinfo->max_freq;
-	scale_transient = (policy->max_transient << SCHED_CAPACITY_SHIFT) /
-		cpuinfo->max_freq;
 
 	pr_debug("cpus %*pbl cur max/max freq %u/%u kHz max freq scale %lu\n",
 		 cpumask_pr_args(policy->cpus), policy->max, cpuinfo->max_freq,
 		 scale);
 
-	for_each_cpu(cpu, policy->cpus) {
+	for_each_cpu(cpu, policy->cpus)
 		per_cpu(max_freq_scale, cpu) = scale;
-		per_cpu(max_transient_scale, cpu) = scale_transient;
-	}
 }
 
 unsigned long cpufreq_scale_freq_capacity(struct sched_domain *sd, int cpu)
@@ -415,11 +408,6 @@ unsigned long cpufreq_scale_freq_capacity(struct sched_domain *sd, int cpu)
 unsigned long cpufreq_scale_max_freq_capacity(int cpu)
 {
 	return per_cpu(max_freq_scale, cpu);
-}
-
-unsigned long cpufreq_scale_transient_capacity(int cpu)
-{
-	return per_cpu(max_transient_scale, cpu);
 }
 
 static void __cpufreq_notify_transition(struct cpufreq_policy *policy,
@@ -2255,7 +2243,6 @@ static int cpufreq_set_policy(struct cpufreq_policy *policy,
 
 	policy->min = new_policy->min;
 	policy->max = new_policy->max;
-	policy->max_transient = new_policy->max_transient;
 	trace_cpu_frequency_limits(policy->max, policy->min, policy->cpu);
 
 	pr_debug("new min and max freqs are %u - %u kHz\n",

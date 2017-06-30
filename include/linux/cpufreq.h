@@ -71,7 +71,6 @@ struct cpufreq_policy {
 
 	unsigned int		min;    /* in kHz */
 	unsigned int		max;    /* in kHz */
-	unsigned int		max_transient; /* in kHz */
 	unsigned int		cur;    /* in kHz, only needed if cpufreq
 					 * governors are used */
 	unsigned int		restore_freq; /* = policy->cur before transition */
@@ -705,5 +704,4 @@ int cpufreq_generic_init(struct cpufreq_policy *policy,
 struct sched_domain;
 unsigned long cpufreq_scale_freq_capacity(struct sched_domain *sd, int cpu);
 unsigned long cpufreq_scale_max_freq_capacity(int cpu);
-unsigned long cpufreq_scale_transient_capacity(int cpu);
 #endif /* _LINUX_CPUFREQ_H */

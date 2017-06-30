@@ -21,7 +21,6 @@
 #include <linux/sched.h>
 #include <linux/sched.h>
 #include <linux/sched_energy.h>
-#include <linux/cpufreq.h>
 
 #include <asm/cputype.h>
 #include <asm/topology.h>
@@ -41,19 +40,6 @@ unsigned long scale_cpu_capacity(struct sched_domain *sd, int cpu)
 	unsigned long max_freq_scale = cpufreq_scale_max_freq_capacity(cpu);
 
 	return per_cpu(cpu_scale, cpu) * max_freq_scale >> SCHED_CAPACITY_SHIFT;
-#else
-	return per_cpu(cpu_scale, cpu);
-#endif
-}
-
-unsigned long scale_cpu_transient_capacity(struct sched_domain *sd, int cpu)
-{
-#ifdef CONFIG_CPU_FREQ
-	unsigned long transient_scale =
-		cpufreq_scale_transient_capacity(cpu);
-
-	return per_cpu(cpu_scale, cpu) *
-		transient_scale >> SCHED_CAPACITY_SHIFT;
 #else
 	return per_cpu(cpu_scale, cpu);
 #endif

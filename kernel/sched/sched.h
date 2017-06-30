@@ -1561,10 +1561,6 @@ unsigned long arch_scale_cpu_capacity(struct sched_domain *sd, int cpu)
 }
 #endif
 
-#ifndef arch_scale_cpu_transient_capacity
-#define arch_scale_cpu_transient_capacity arch_scale_cpu_capacity
-#endif
-
 #ifdef CONFIG_SMP
 static inline unsigned long capacity_of(int cpu)
 {

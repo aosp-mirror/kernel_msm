@@ -1007,10 +1007,6 @@ static int  msm_thermal_cpufreq_callback(struct notifier_block *nfb,
 		if (max_freq_req < min_freq_req)
 			pr_err("Invalid frequency request Max:%u Min:%u\n",
 				max_freq_req, min_freq_req);
-
-		policy->max_transient =
-			cpus[policy->cpu].parent_ptr->limited_max_freq;
-
 		break;
 	}
 	return NOTIFY_OK;
@@ -1124,10 +1120,13 @@ static void update_cpu_freq(int cpu, enum freq_limits changed)
 		 * freq lesser than what we desire and that would be honored.
 		 * Update cpufreq, so the min freq remains consistent in the hw.
 		 */
-		if (lmh_dcvs_available)
+		if (lmh_dcvs_available) {
 			msm_lmh_dcvs_update(cpu);
-
-		cpufreq_update_policy(cpu);
+			if (changed & FREQ_LIMIT_MIN)
+				cpufreq_update_policy(cpu);
+		} else {
+			cpufreq_update_policy(cpu);
+		}
 
 		trace_thermal_post_frequency_mit(cpu,
 			cpufreq_quick_get_max(cpu),
