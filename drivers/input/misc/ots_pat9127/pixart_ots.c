@@ -59,7 +59,6 @@ bool OTS_Sensor_Init(int check_calib, uint8_t s_c, uint8_t s_f, uint8_t btn_hi,
 	bool read_id_ok = false;
 	uint8_t frame_avg = 0;
 	int ret = 0;
-	int btn_dis_val = 35; /*For check reboot issue*/
 
 	/* Read sensor_pid in address 0x00 to check if
 	the serial link is valid, PID should be 0x31 */
@@ -95,33 +94,10 @@ bool OTS_Sensor_Init(int check_calib, uint8_t s_c, uint8_t s_f, uint8_t btn_hi,
 		/* These settings need be read from EEPROM and
 		written to PAT9127 whenever sensor be reset or powered on. */
 
-		/*Read frame average for judging reboot issue*/
 		frame_avg = OTS_Read_Reg(PIXART_PAT9127_FRAME_AVG_REG);
-		pr_err("[PAT9127]: Before Change, FA: %d, HiTh: %d, LoTh: %d, s_c: %d.\n",
+		pr_err("[PAT9127]: FA: %d, HiTh: %d, LoTh: %d, s_c: %d.\n",
 			frame_avg, btn_hi, btn_lo, s_c);
 		if (check_calib == 1) {
-			if (frame_avg < btn_lo) {
-				pr_err("[PAT9127]:Be4 tuning,FA: %d,HiTh: %d,LoTh: %d,s_c: %d.\n",
-					frame_avg, btn_hi, btn_lo, s_c);
-                                while(frame_avg < btn_lo) {
-					s_c--;
-					if(s_c == 0xff) {
-						s_c = 0x00;
-						break;
-					}
-					OTS_WriteRead_Reg(PIXART_PAT9127_SHUTTER_C_REG, s_c);
-					delay(150);
-					frame_avg = OTS_Read_Reg(PIXART_PAT9127_FRAME_AVG_REG);
-				}
-				pr_err("[PAT9127]:After tuning,FA: %d,HiTh: %d,LoTh: %d,s_c: %d.\n",
-					frame_avg, btn_hi, btn_lo, s_c);
-				if (frame_avg > btn_dis_val) {
-					btn_hi = frame_avg - 10;
-					btn_lo = frame_avg - 20;
-				}
-			}
-			pr_err("[PAT9127]:After Change Hi/LoTh,FA: %d,HiTh: %d,LoTh: %d,s_c: %d.\n",
-				frame_avg, btn_hi, btn_lo, s_c);
 			OTS_WriteRead_Reg(PIXART_PAT9127_SHUTTER_C_REG, s_c);
 			OTS_WriteRead_Reg(PIXART_PAT9127_SHUTTER_F_REG, s_f);
 			OTS_WriteRead_Reg(PIXART_PAT9127_BTN_HITHD_REG, btn_hi);
