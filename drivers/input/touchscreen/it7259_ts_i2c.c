@@ -140,6 +140,7 @@
 #define IT_I2C_VTG_MAX_UV	3300000
 #define IT_I2C_ACTIVE_LOAD_UA	10000
 #define DELAY_VTG_REG_EN	170
+#define DELAY_I2C_TRANSATION	200
 
 #define PINCTRL_STATE_ACTIVE	"pmx_ts_active"
 #define PINCTRL_STATE_SUSPEND	"pmx_ts_suspend"
@@ -2012,12 +2013,10 @@ static int it7259_gpio_configure(struct it7259_ts_data *ts_data, bool on)
 					retval);
 				goto err_reset_gpio_dir;
 			}
-
 			if (ts_data->pdata->low_reset)
 				gpio_set_value(ts_data->pdata->reset_gpio, 0);
 			else
 				gpio_set_value(ts_data->pdata->reset_gpio, 1);
-
 			msleep(ts_data->pdata->reset_delay);
 		} else {
 			dev_err(&ts_data->client->dev,
@@ -2431,12 +2430,14 @@ static int it7259_ts_probe(struct i2c_client *client,
 		}
 	}
 
+	msleep(DELAY_I2C_TRANSATION);
 	ret = it7259_ts_chip_identify(ts_data);
 	if (ret) {
 		dev_err(&client->dev, "Failed to identify chip %d!!!", ret);
 		goto err_identification_fail;
 	}
 
+	msleep(DELAY_I2C_TRANSATION);
 	it7259_get_chip_versions(ts_data);
 
 	ts_data->input_dev = input_allocate_device();
