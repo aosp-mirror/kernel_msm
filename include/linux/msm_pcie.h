@@ -170,6 +170,8 @@ int msm_pcie_debug_info(struct pci_dev *dev, u32 option, u32 base,
  */
 int msm_pcie_configure_sid(struct device *dev, u32 *sid,
 			int *domain);
+
+int msm_pcie_set_reset(u32 rc_idx, bool enable);
 #else /* !CONFIG_PCI_MSM */
 static inline int msm_pcie_pm_control(enum msm_pcie_pm_opt pm_opt, u32 busnr,
 			void *user, void *data, u32 options)
