@@ -225,7 +225,8 @@ static int32_t msm_isp_stats_buf_divert(struct vfe_device *vfe_dev,
 		rc = vfe_dev->buf_mgr->ops->buf_done(
 			vfe_dev->buf_mgr,
 			done_buf->bufq_handle,
-			done_buf->buf_idx, &ts->buf_time, frame_id, 0);
+			done_buf->buf_idx, &ts->buf_time, frame_id, 0,
+			VB2_BUF_STATE_DONE);
 		if (rc == -EFAULT)
 			msm_isp_halt_send_error(vfe_dev,
 					ISP_EVENT_BUF_FATAL_ERROR);
