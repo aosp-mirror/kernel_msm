@@ -851,6 +851,21 @@ static void neigh_invalidate(struct neighbour *neigh)
 	neigh->arp_queue_len_bytes = 0;
 }
 
+static void neigh_log_probe(const struct neighbour *neigh)
+{
+	if (neigh->nud_state == NUD_INCOMPLETE)
+		return;
+	if (neigh->ops->family == AF_INET) {
+		pr_info("%s: probe #%d to %pI4c state=%d\n", __func__,
+			atomic_read(&neigh->probes), neigh->primary_key,
+			neigh->nud_state);
+	} else if (neigh->ops->family == AF_INET6) {
+		pr_info("%s: probe #%d to %pI6c state=%d\n", __func__,
+			atomic_read(&neigh->probes), neigh->primary_key,
+			neigh->nud_state);
+	}
+}
+
 static void neigh_probe(struct neighbour *neigh)
 	__releases(neigh->lock)
 {
@@ -858,6 +873,7 @@ static void neigh_probe(struct neighbour *neigh)
 	/* keep skb alive even if arp_queue overflows */
 	if (skb)
 		skb = skb_clone(skb, GFP_ATOMIC);
+	neigh_log_probe(neigh);
 	write_unlock(&neigh->lock);
 	neigh->ops->solicit(neigh, skb);
 	atomic_inc(&neigh->probes);

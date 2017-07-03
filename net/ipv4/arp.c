@@ -624,9 +624,56 @@ out:
 }
 EXPORT_SYMBOL(arp_create);
 
+static inline void arp_log(const struct sk_buff *skb,
+			   const struct ethhdr *ethhdr, int err) {
+	struct ether_arp_hdr {
+		/* Lifted from the comments in uapi/linux/if_arp.h. */
+		unsigned char		ar_sha[ETH_ALEN];
+		unsigned char		ar_sip[4];
+		unsigned char		ar_tha[ETH_ALEN];
+		unsigned char		ar_tip[4];
+	} __packed * arp_ether;
+	const struct net_device *dev = skb->dev;
+	const struct arphdr *arp = arp_hdr(skb);
+	const char *msg, *type;
+
+	if (skb_headlen(skb) <= sizeof(*arp) + sizeof(*arp_ether))
+		return;
+	if (!dev || !arp || arp->ar_hrd != htons(ARPHRD_ETHER))
+		return;
+	if (ether_addr_equal(ethhdr->h_dest, dev->broadcast))
+		return;
+
+	arp_ether = (struct ether_arp_hdr *)(arp + 1);
+	switch (htons(arp->ar_op)) {
+	case ARPOP_REQUEST:
+		type = "request";
+		break;
+	case ARPOP_REPLY:
+		type = "reply";
+		break;
+	default:
+		type = "???";
+		break;
+	}
+	msg = err ? "failed to send" : "sent";
+	pr_info("%s: %s ARP %s for %pI4 %pM %s err=%d\n",
+		__func__, msg, type, arp_ether->ar_tip, ethhdr->h_dest,
+		dev->name, err);
+}
+
 static int arp_xmit_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
-	return dev_queue_xmit(skb);
+	int err;
+	struct ethhdr eth;
+
+	if (skb_headlen(skb) >= sizeof(eth)) {
+		/* Save the ethernet header, dev_queue_xmit might modify it. */
+		memcpy(&eth, skb->data, sizeof(eth));
+	}
+	err = dev_queue_xmit(skb);
+	arp_log(skb, &eth, err);
+	return err;
 }
 
 /*
