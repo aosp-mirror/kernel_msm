@@ -35,13 +35,16 @@
 
 const unsigned long eprom_address[] =
 {
-	0x00001880, 0x00001904, 0x00004400, 0x00009DB2, 0x0000FFD2, 0x0000FFE8,
+	0x00001880, 0x00001940, 0x00001948, 0x00004400, 0x0000E424, 0x0000FFD2,
+	0x0000FFE8,
 };
 const unsigned long eprom_length_of_sections[] =
 {
-	0x00000002, 0x00000002, 0x000059B1, 0x000000C6, 0x00000014, 0x00000018,
+	0x00000002, 0x00000002, 0x00000002, 0x0000A023, 0x000000C6, 0x00000014,
+	0x00000018,
 };
-const unsigned long eprom_sections    = 0x00000006;
+
+const unsigned long eprom_sections    = 0x00000007;
 const unsigned long eprom_termination = 0x00000000;
 const unsigned long eprom_start       = 0x00001880;
 const unsigned long eprom_finish      = 0x00010000;
@@ -51,6 +54,7 @@ const unsigned long eprom_length      = 0x0000E780;
 #define EPROM_START       0x00001880
 #define EPROM_FINISH      0x00010000
 #define EPROM_LENGTH      0x0000E780
-#define EPROM_SECTIONS    0x00000006
+#define EPROM_SECTIONS    0x00000007
+
 
 #endif

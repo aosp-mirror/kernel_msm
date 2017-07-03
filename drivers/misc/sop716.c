@@ -39,7 +39,7 @@
 #define CMD_SOP716_READ_FW_VERSION   5
 
 #define MAJOR_VER 1
-#define MINOR_VER 6
+#define MINOR_VER 8
 
 
 struct timer_list sop_demo_timer;
