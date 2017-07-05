@@ -1094,7 +1094,7 @@
 		};
 	};
 
-	rpmh-regulator-ldoa14 {
+	rpmh_regulator_ldoa14: rpmh-regulator-ldoa14 {
 		compatible = "qcom,rpmh-vrm-regulator";
 		mboxes = <&apps_rsc 0>;
 		qcom,resource-name = "ldoa14";
