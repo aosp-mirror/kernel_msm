@@ -413,27 +413,57 @@ static int update_usb_data_role(struct usbpd *pd)
 			      pd->extcon_usb_ss ? "Y" : "N", ret);
 		return ret;
 	}
-	ret = extcon_set_cable_state_(pd->extcon, EXTCON_USB_HOST,
-				      pd->extcon_usb_host);
-	if (ret < 0) {
-		pd_engine_log(pd, "unable to set extcon usb host [%s], ret=%d",
-			      pd->extcon_usb_host ? "Y" : "N", ret);
-		return ret;
-	}
 
 	/* Turn on USB data (device role) only when a valid power supply that
-	 * supports USB data connection is connected, i.e. SDP or CDP.
+	 * supports USB data connection is connected, i.e. SDP or CDP
 	 *
 	 * update_usb_data_role() is called when APSD is done, thus here
 	 * pd->psy_type is a valid detection result.
 	 */
 	extcon_usb = pd->extcon_usb && psy_support_usb_data(pd->psy_type);
 
-	ret = extcon_set_cable_state_(pd->extcon, EXTCON_USB, extcon_usb);
-	if (ret < 0) {
-		pd_engine_log(pd, "unable to set extcon usb [%s], ret=%d",
-			      extcon_usb ? "Y" : "N", ret);
-		return ret;
+	/*
+	 * EXTCON_USB_HOST and EXTCON_USB is mutually exlusive.
+	 * Therefore while responding to commands such as DR_SWAP,
+	 * update the cable state of the one being turned off before
+	 * turning on the other one.
+	 */
+	if (!pd->extcon_usb_host) {
+		ret = extcon_set_cable_state_(pd->extcon, EXTCON_USB_HOST,
+					      pd->extcon_usb_host);
+		if (ret < 0) {
+			pd_engine_log(pd,
+				"unable to set extcon usb host [%s], ret=%d",
+				      pd->extcon_usb_host ? "Y" : "N", ret);
+			return ret;
+		}
+
+		ret = extcon_set_cable_state_(pd->extcon, EXTCON_USB,
+					      extcon_usb);
+		if (ret < 0) {
+			pd_engine_log(pd,
+				      "unable to set extcon usb [%s], ret=%d",
+				      extcon_usb ? "Y" : "N", ret);
+			return ret;
+		}
+	} else {
+		ret = extcon_set_cable_state_(pd->extcon, EXTCON_USB,
+					      extcon_usb);
+		if (ret < 0) {
+			pd_engine_log(pd,
+				      "unable to set extcon usb [%s], ret=%d",
+				      extcon_usb ? "Y" : "N", ret);
+			return ret;
+		}
+
+		ret = extcon_set_cable_state_(pd->extcon, EXTCON_USB_HOST,
+					      pd->extcon_usb_host);
+		if (ret < 0) {
+			pd_engine_log(pd,
+				"unable to set extcon usb host [%s], ret=%d",
+				      pd->extcon_usb_host ? "Y" : "N", ret);
+			return ret;
+		}
 	}
 
 	pd_engine_log(pd,
