@@ -606,6 +606,12 @@ static int msm_isp_stats_update_cgc_override(struct vfe_device *vfe_dev,
 	int i;
 	uint32_t stats_mask = 0, idx;
 
+	if (stream_cfg_cmd->num_streams > MSM_ISP_STATS_MAX) {
+		pr_err("%s invalid num_streams %d\n", __func__,
+			stream_cfg_cmd->num_streams);
+		return -EINVAL;
+	}
+
 	for (i = 0; i < stream_cfg_cmd->num_streams; i++) {
 		idx = STATS_IDX(stream_cfg_cmd->stream_handle[i]);
 
@@ -682,6 +688,13 @@ static int msm_isp_start_stats_stream(struct vfe_device *vfe_dev,
 		stats_data->stream_info);
 	if (rc < 0)
 		return rc;
+
+	if (stream_cfg_cmd->num_streams > MSM_ISP_STATS_MAX) {
+		pr_err("%s invalid num_streams %d\n", __func__,
+			stream_cfg_cmd->num_streams);
+		return -EINVAL;
+	}
+
 	for (i = 0; i < stream_cfg_cmd->num_streams; i++) {
 		idx = STATS_IDX(stream_cfg_cmd->stream_handle[i]);
 
@@ -757,6 +770,12 @@ static int msm_isp_stop_stats_stream(struct vfe_device *vfe_dev,
 
 	num_stats_comp_mask =
 		vfe_dev->hw_info->stats_hw_info->num_stats_comp_mask;
+
+	if (stream_cfg_cmd->num_streams > MSM_ISP_STATS_MAX) {
+		pr_err("%s invalid num_streams %d\n", __func__,
+			stream_cfg_cmd->num_streams);
+		return -EINVAL;
+	}
 
 	for (i = 0; i < stream_cfg_cmd->num_streams; i++) {
 
