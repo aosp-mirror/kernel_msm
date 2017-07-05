@@ -760,6 +760,7 @@ struct mdss_dsi_debugfs_info {
 	struct mdss_dsi_ctrl_pdata ctrl_pdata;
 	struct buf_data on_cmd;
 	struct buf_data off_cmd;
+	struct buf_data alpm_cmd[ALPM_MODE_MAX];
 	u32 override_flag;
 };
 
@@ -1087,6 +1088,16 @@ static int mdss_dsi_debugfs_setup(struct mdss_panel_data *pdata,
 	DEBUGFS_CREATE_DCS_CMD("dsi_off_cmd", dfs->root, &dfs->off_cmd,
 				ctrl_pdata->off_cmds);
 
+	DEBUGFS_CREATE_DCS_CMD("alpm_off_cmd", dfs->root,
+			       &dfs->alpm_cmd[ALPM_MODE_OFF],
+			       ctrl_pdata->alpm_mode_cmds[ALPM_MODE_OFF]);
+	DEBUGFS_CREATE_DCS_CMD("alpm_low_cmd", dfs->root,
+			       &dfs->alpm_cmd[ALPM_MODE_LOW],
+			       ctrl_pdata->alpm_mode_cmds[ALPM_MODE_LOW]);
+	DEBUGFS_CREATE_DCS_CMD("alpm_high_cmd", dfs->root,
+			       &dfs->alpm_cmd[ALPM_MODE_HIGH],
+			       ctrl_pdata->alpm_mode_cmds[ALPM_MODE_HIGH]);
+
 	debugfs_create_u32("dsi_err_counter", 0644, dfs->root,
 			   &dfs_ctrl->err_cont.max_err_index);
 	debugfs_create_u32("dsi_err_time_delta", 0644, dfs->root,
@@ -1209,6 +1220,7 @@ static void mdss_dsi_debugfsinfo_to_dsictrl_info(
 	struct mdss_dsi_debugfs_info *dfs = ctrl_pdata->debugfs_info;
 	struct dsi_err_container *dfs_err_cont = &dfs->ctrl_pdata.err_cont;
 	struct dsi_err_container *err_cont = &ctrl_pdata->err_cont;
+	int i;
 
 	ctrl_pdata->cmd_sync_wait_broadcast =
 			dfs->ctrl_pdata.cmd_sync_wait_broadcast;
@@ -1217,6 +1229,9 @@ static void mdss_dsi_debugfsinfo_to_dsictrl_info(
 
 	_mdss_dsi_refresh_cmd(&dfs->on_cmd, &ctrl_pdata->on_cmds);
 	_mdss_dsi_refresh_cmd(&dfs->off_cmd, &ctrl_pdata->off_cmds);
+	for (i = 0; i < ALPM_MODE_MAX; i++)
+		_mdss_dsi_refresh_cmd(&dfs->alpm_cmd[i],
+				      &ctrl_pdata->alpm_mode_cmds[i]);
 
 	ctrl_pdata->on_cmds.link_state =
 			dfs->ctrl_pdata.on_cmds.link_state;
