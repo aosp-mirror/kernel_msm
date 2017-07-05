@@ -7381,10 +7381,10 @@ int wlan_hdd_update_phymode(struct net_device *net, tHalHandle hal,
 			return -EIO;
 		}
 		if (phddctx->config->nChannelBondingMode5GHz)
-			phddctx->wiphy->bands[NL80211_BAND_5GHZ]->ht_cap.cap
+			phddctx->wiphy->bands[HDD_NL80211_BAND_5GHZ]->ht_cap.cap
 				|= IEEE80211_HT_CAP_SUP_WIDTH_20_40;
 		else
-			phddctx->wiphy->bands[NL80211_BAND_5GHZ]->ht_cap.cap
+			phddctx->wiphy->bands[HDD_NL80211_BAND_5GHZ]->ht_cap.cap
 				&= ~IEEE80211_HT_CAP_SUP_WIDTH_20_40;
 
 		hdd_debug("New_Phymode= %d ch_bonding=%d band=%d VHT_ch_width=%u",
@@ -10308,13 +10308,13 @@ static int iw_get_policy_manager_ut_ops(hdd_context_t *hdd_ctx,
 
 	case WE_POLICY_MANAGER_QUERY_ACTION_CMD:
 	{
-		enum cds_conc_next_action action;
+		QDF_STATUS status;
 
 		hdd_debug("<iwpriv wlan0 pm_query_action> is called");
-		action = cds_current_connections_update(adapter->sessionId,
+		status = cds_current_connections_update(adapter->sessionId,
 						apps_args[0],
 						SIR_UPDATE_REASON_UT);
-		pr_info("next action is %d {HDD_NOP = 0, HDD_DBS, HDD_DBS_DOWNGRADE, HDD_MCC, HDD_MCC_UPGRADE}", action);
+		pr_info("status is %d {HDD_NOP = 0, HDD_DBS, HDD_DBS_DOWNGRADE, HDD_MCC, HDD_MCC_UPGRADE}", status);
 	}
 	break;
 
@@ -11362,7 +11362,7 @@ int wlan_hdd_set_filter(hdd_context_t *hdd_ctx,
 		}
 		packetFilterSetReq.numFieldParams = request->num_params;
 		packetFilterSetReq.coalesceTime = 0;
-		packetFilterSetReq.filterType = HDD_RCV_FILTER_SET;
+		packetFilterSetReq.filterType = SIR_RCV_FILTER_TYPE_FILTER_PKT;
 		for (i = 0; i < request->num_params; i++) {
 			packetFilterSetReq.paramsData[i].protocolLayer =
 				request->params_data[i].protocol_layer;
