@@ -330,7 +330,7 @@ int checkFWUpdate(struct msm_sensor_ctrl_t *s_ctrl)
 }
 
 /*fw update start*/
-static struct msm_camera_i2c_reg_array lc898214xd_fw_setting[] = {
+static struct msm_camera_i2c_reg_array lc898214xd_fw_setting_largan[] = {
 	{0x42, 0x02, 0x00},
 	{0x43, 0x90, 0x00},
 	{0x44, 0x7A, 0x00},
@@ -361,11 +361,48 @@ static struct msm_camera_i2c_reg_array lc898214xd_fw_setting[] = {
 	{0x2F, 0x78, 0x00},
 };
 
+static struct msm_camera_i2c_reg_array lc898214xd_fw_setting_kt[] = {
+	{0x42, 0x02, 0x00},
+	{0x43, 0x90, 0x00},
+	{0x44, 0x7A, 0x00},
+	{0x48, 0x40, 0x00},
+	{0x49, 0x30, 0x00},
+	{0x4C, 0x8B, 0x00},
+	{0x4D, 0x90, 0x00},
+	{0x4E, 0x75, 0x00},
+	{0x4F, 0x10, 0x00},
+	{0x50, 0x69, 0x00},
+	{0x51, 0x70, 0x00},
+	{0x52, 0x2D, 0x00},
+	{0x53, 0x70, 0x00},
+	{0x58, 0x39, 0x00},
+	{0x59, 0x30, 0x00},
+	{0x5A, 0xC4, 0x00},
+	{0x5B, 0x20, 0x00},
+	{0x60, 0x04, 0x00},
+	{0x61, 0xA0, 0x00},
+	{0x62, 0x76, 0x00},
+	{0x63, 0xB0, 0x00},
+	{0x6E, 0x40, 0x00},
+	{0x6F, 0x30, 0x00},
+	{0x54, 0x1B, 0x00},
+	{0x1E, 0x00, 0x00},
+	{0x1A, 0x28, 0x00},
+	{0x2D, 0x60, 0x00},
+	{0x2F, 0x78, 0x00},
+};
+
 int checkVCMFWUpdate(struct msm_sensor_ctrl_t *s_ctrl)
 {
 	int32_t rc = 0;
 	int32_t i = 0;
-	uint16_t reg_data = 0, reg_data2 = 0, reg_data3 = 0;
+	uint16_t reg_data = 0, reg_data2 = 0, reg_data3 = 0, reg_data4 = 0;
+	UINT_16 RamAddr;
+	UINT_32 RamData;
+	UINT_32 UlReadVal;
+	UINT_8 LENS_REV = 0;
+	/* LENS_VENDOR 0 for KT, 1 for Largan */
+	UINT_8 LENS_VENDOR = 0;
 
 	pr_info("[VCMFW]:%s :E\n", __func__);
 
@@ -389,6 +426,24 @@ int checkVCMFWUpdate(struct msm_sensor_ctrl_t *s_ctrl)
 		MSM_CAMERA_I2C_BYTE_DATA);
 	usleep_range(10000, 11000);
 
+	s_ctrl->sensor_i2c_client->addr_type = MSM_CAMERA_I2C_WORD_ADDR;
+	s_ctrl->sensor_i2c_client->cci_client->sid =
+		OIS_COMPONENT_I2C_ADDR_WRITE >> 1;
+
+	g_i2c_client = s_ctrl->sensor_i2c_client;
+
+	RamAddr = 0xF01B;
+	RamData = 0x1A03;
+	RamWrite32A(RamAddr, RamData);
+	RamRead32A(RamAddr, &UlReadVal);/*Read EEPROM*/
+	pr_info("[VCMFW]:%s UlReadVal =  0x%08x\n", __func__, UlReadVal);
+	LENS_REV = (UlReadVal >> 8) & 0xFF;
+	if (LENS_REV == 0 || LENS_REV == 2 || LENS_REV == 4 || LENS_REV == 6)
+		LENS_VENDOR = 0;
+	else if (LENS_REV == 1 || ((UlReadVal >> 16) & 0xFF) == 1)
+		LENS_VENDOR = 1;
+
+	s_ctrl->sensor_i2c_client->addr_type = MSM_CAMERA_I2C_BYTE_ADDR;
 	s_ctrl->sensor_i2c_client->cci_client->sid =
 		AF_EEPROM_I2C_ADDR_WRITE_STEP2 >> 1;
 
@@ -402,9 +457,14 @@ int checkVCMFWUpdate(struct msm_sensor_ctrl_t *s_ctrl)
 	rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_read(
 		s_ctrl->sensor_i2c_client, 0x54, &reg_data3,
 		MSM_CAMERA_I2C_BYTE_DATA);
+	rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_read(
+		s_ctrl->sensor_i2c_client, 0x4C, &reg_data4,
+		MSM_CAMERA_I2C_BYTE_DATA);
 	s_ctrl->sensor_i2c_client->cci_client->sid =
 		AF_EEPROM_I2C_ADDR_WRITE_STEP1 >> 1;
-	if (reg_data == 0x78 && reg_data2 == 0x02 && reg_data3 == 0x1B) {
+	if (reg_data == 0x78 && reg_data2 == 0x02 && reg_data3 == 0x1B
+		&& ((LENS_VENDOR == 0 && reg_data4 == 0x8B)
+		|| (LENS_VENDOR == 1 && reg_data4 == 0x8C))) {
 		pr_err("[VCMFW]%s: No need to update AF FW\n", __func__);
 	} else {
 		pr_err("[VCMFW]%s: Update AF FW...\n", __func__);
@@ -418,21 +478,52 @@ int checkVCMFWUpdate(struct msm_sensor_ctrl_t *s_ctrl)
 		/* Replace the I2C slave address with AF EEPROM */
 		s_ctrl->sensor_i2c_client->cci_client->sid =
 			AF_EEPROM_I2C_ADDR_WRITE_STEP2 >> 1;
-		for (i = 0; i < ARRAY_SIZE(lc898214xd_fw_setting); i++) {
-			s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
-				s_ctrl->sensor_i2c_client,
-				lc898214xd_fw_setting[i].reg_addr,
-				lc898214xd_fw_setting[i].reg_data,
-				MSM_CAMERA_I2C_BYTE_DATA);
-			usleep_range(3000, 4000);
-			rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_poll(
-				s_ctrl->sensor_i2c_client, 0xED, 0x0,
-				MSM_CAMERA_I2C_BYTE_DATA, 10);
-			if (rc < 0) {
-				pr_err("%s: i2c poll failed after wrtie 0x%x\n",
-					__func__,
-					lc898214xd_fw_setting[i].reg_addr);
-				return rc;
+		if (LENS_VENDOR == 0) {
+			for (i = 0; i < ARRAY_SIZE(lc898214xd_fw_setting_kt);
+				i++) {
+				s_ctrl->sensor_i2c_client->i2c_func_tbl
+					->i2c_write(
+					s_ctrl->sensor_i2c_client,
+					lc898214xd_fw_setting_kt[i].reg_addr,
+					lc898214xd_fw_setting_kt[i].reg_data,
+					MSM_CAMERA_I2C_BYTE_DATA);
+				usleep_range(3000, 4000);
+				rc = s_ctrl->sensor_i2c_client->i2c_func_tbl
+					->i2c_poll(
+					s_ctrl->sensor_i2c_client, 0xED, 0x0,
+					MSM_CAMERA_I2C_BYTE_DATA, 10);
+				if (rc < 0) {
+					pr_err("%s: i2c poll failed after wrtie 0x%x\n",
+						__func__,
+						lc898214xd_fw_setting_kt[i]
+						.reg_addr);
+					return rc;
+				}
+			}
+		} else {
+			for (i = 0;
+				i < ARRAY_SIZE(lc898214xd_fw_setting_largan);
+				i++) {
+				s_ctrl->sensor_i2c_client->i2c_func_tbl
+					->i2c_write(
+					s_ctrl->sensor_i2c_client,
+					lc898214xd_fw_setting_largan[i]
+					.reg_addr,
+					lc898214xd_fw_setting_largan[i]
+					.reg_data,
+					MSM_CAMERA_I2C_BYTE_DATA);
+				usleep_range(3000, 4000);
+				rc = s_ctrl->sensor_i2c_client->i2c_func_tbl
+					->i2c_poll(s_ctrl->sensor_i2c_client,
+					0xED, 0x0,
+					MSM_CAMERA_I2C_BYTE_DATA, 10);
+				if (rc < 0) {
+					pr_err("%s: i2c poll failed after wrtie 0x%x\n",
+						__func__,
+						lc898214xd_fw_setting_largan[i]
+						.reg_addr);
+					return rc;
+				}
 			}
 		}
 		/* Restore the I2C slave address */
