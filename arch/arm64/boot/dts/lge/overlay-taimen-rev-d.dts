@@ -35,3 +35,23 @@
 &spi_5 {
 	status = "disabled";
 };
+
+&soc {
+	qcom,sensor-information {
+		qcom,sensor-information-31 {
+			qcom,sensor-name = "bd_therm2";
+		};
+	};
+};
+
+&pm8998_vadc {
+	chan@51 {
+		label = "bd_therm2";
+	};
+};
+
+&pm8998_adc_tm {
+	chan@51 {
+		label = "bd_therm2";
+	};
+};
