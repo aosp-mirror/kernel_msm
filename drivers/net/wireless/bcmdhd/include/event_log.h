@@ -141,6 +141,7 @@
 #define LOGSTRS_MAGIC   0x4C4F4753
 #define LOGSTRS_VERSION 0x1
 
+#define EVENT_LOG_BLOCK_HDRLEN		8
 
 /*
  * There are multiple levels of objects define here:
