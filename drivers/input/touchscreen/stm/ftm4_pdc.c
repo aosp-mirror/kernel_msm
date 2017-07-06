@@ -680,10 +680,10 @@ static int fts_panel_ito_test(struct fts_ts_info *info)
 	int retry = 0;
 	int result = -1;
 
+	info->fts_interrupt_set(info, INT_DISABLE);
+	info->fts_irq_enable(info, false);
 	info->fts_systemreset(info);
 	info->fts_wait_for_ready(info);
-	info->fts_irq_enable(info, false);
-	info->fts_interrupt_set(info, INT_DISABLE);
 	info->fts_write_reg(info, &regAdd[0], 4);
 	info->fts_command(info, FLUSHBUFFER);
 	info->fts_write_reg(info, &wregAdd[0], 3);

@@ -685,6 +685,9 @@ static int fts_init(struct fts_ts_info *info)
 	unsigned char regAdd[8];
 	int rc = 0;
 
+	fts_interrupt_set(info, INT_DISABLE);
+	fts_irq_enable(info, false);
+
 	rc = fts_systemreset(info);
 	if (rc < 0) {
 		tsp_debug_err(&info->client->dev, "%s: Failed to system reset(rc = %d)\n",
@@ -762,6 +765,7 @@ static int fts_init(struct fts_ts_info *info)
 
 	fts_command(info, FORCECALIBRATION);
 
+	fts_irq_enable(info, true);
 	fts_interrupt_set(info, INT_ENABLE);
 
 	memset(val, 0x0, 4);
@@ -1905,6 +1909,9 @@ static void fts_input_close(struct input_dev *dev)
 
 static void fts_reinit(struct fts_ts_info *info)
 {
+	fts_interrupt_set(info, INT_DISABLE);
+	fts_irq_enable(info, false);
+
 	fts_systemreset(info);
 
 	fts_wait_for_ready(info);
@@ -1925,6 +1932,8 @@ static void fts_reinit(struct fts_ts_info *info)
 	info->palm_pressed = false;
 
 	fts_command(info, FLUSHBUFFER);
+
+	fts_irq_enable(info, true);
 	fts_interrupt_set(info, INT_ENABLE);
 }
 
@@ -2105,9 +2114,6 @@ static int fts_start_device(struct fts_ts_info *info)
 		info->reinit_done = false;
 		fts_reinit(info);
 		info->reinit_done = true;
-
-		fts_irq_enable(info, true);
-
 	} else {
 tsp_power_on:
 		if (info->board->power)
@@ -2117,8 +2123,6 @@ tsp_power_on:
 		info->reinit_done = false;
 		fts_reinit(info);
 		info->reinit_done = true;
-
-		fts_irq_enable(info, true);
 	}
 
  out:

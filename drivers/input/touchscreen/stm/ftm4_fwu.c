@@ -218,12 +218,47 @@ int fts_fw_wait_for_event(struct fts_ts_info *info, unsigned char eid0,
 	return rc;
 }
 
+static void ftm4_do_autotune(struct device *dev)
+{
+	struct  fts_ts_info *info = dev_get_drvdata(dev);
+
+	tsp_debug_dbg(info->dev, "%s: start\n", __func__);
+
+	tsp_debug_info(info->dev, "%s: mutual autotune ...\n", __func__);
+	info->fts_command(info, CX_TUNNING);
+	fts_delay(300);
+	fts_fw_wait_for_event(info, STATUS_EVENT_MUTUAL_AUTOTUNE_DONE, 0x00);
+
+	tsp_debug_info(info->dev, "%s: self autotune ...\n", __func__);
+	info->fts_command(info, SELF_AUTO_TUNE);
+	fts_delay(300);
+	fts_fw_wait_for_event(info, STATUS_EVENT_SELF_AUTOTUNE_DONE, 0x00);
+
+	tsp_debug_dbg(info->dev, "%s: end\n", __func__);
+}
+
+static void ftm4_save_autotune(struct device *dev)
+{
+	struct  fts_ts_info *info = dev_get_drvdata(dev);
+
+	tsp_debug_dbg(info->dev, "%s: start\n", __func__);
+
+	tsp_debug_info(info->dev, "%s: flash write CX_TUNE value ...\n",
+			__func__);
+	info->fts_command(info, FTS_CMD_SAVE_CX_TUNING);
+	fts_delay(230);
+	fts_fw_wait_for_event(info, STATUS_EVENT_FLASH_WRITE_CXTUNE_VALUE,
+				0x00);
+
+	tsp_debug_dbg(info->dev, "%s: end\n", __func__);
+}
+
 void fts_execute_autotune(struct fts_ts_info *info)
 {
-	int ret = 0;
-	unsigned char regData[4]; /* {0xC1, 0x0E}; */
-	bool bFinalAFE = false;
 	bool NoNeedAutoTune = false; /* default for factory */
+	int ret = 0;
+	unsigned char regData[2]; /* {0xC1, 0x0E}; */
+	bool bFinalAFE = false;
 
 	bFinalAFE = get_afe_status(info);
 
@@ -235,15 +270,9 @@ void fts_execute_autotune(struct fts_ts_info *info)
 		__func__, bFinalAFE, NoNeedAutoTune, info->o_afe_ver, info->afe_ver);
 
 	if ((!NoNeedAutoTune) || (info->o_afe_ver < info->afe_ver)) {
-		info->fts_command(info, CX_TUNNING);
-		fts_delay(300);
-		fts_fw_wait_for_event(info, STATUS_EVENT_MUTUAL_AUTOTUNE_DONE,
-				0x00);
+		tsp_debug_dbg(info->dev, "%s: autotune start\n", __func__);
 
-		info->fts_command(info, SELF_AUTO_TUNE);
-		fts_delay(300);
-		fts_fw_wait_for_event(info, STATUS_EVENT_SELF_AUTOTUNE_DONE,
-				0x00);
+		ftm4_do_autotune(info->dev);
 
 		if (NoNeedAutoTune) {
 			tsp_debug_info(info->dev,
@@ -265,22 +294,9 @@ void fts_execute_autotune(struct fts_ts_info *info)
 				0x00);
 		}
 
-		info->fts_command(info, FTS_CMD_SAVE_CX_TUNING);
-		fts_delay(230);
-		fts_fw_wait_for_event(info,
-				STATUS_EVENT_FLASH_WRITE_CXTUNE_VALUE, 0x00);
-
-		info->fts_command(info, FTS_CMD_SAVE_FWCONFIG);
-		fts_delay(230);
-		fts_fw_wait_for_event(info, STATUS_EVENT_FLASH_WRITE_CONFIG,
-				0x00);
-
-		/* Reset FTS */
-		info->fts_systemreset(info);
-		fts_delay(20);
-		/* wait for ready event */
-		info->fts_wait_for_ready(info);
+		ftm4_save_autotune(info->dev);
 	}
+	tsp_debug_dbg(info->dev, "%s: autotune end\n", __func__);
 }
 
 #define FW_IMAGE_NAME_D2_TB_INTEG	"tsp_stm/stm_tb_integ.fw"
@@ -783,12 +799,22 @@ void fts_fw_init(struct fts_ts_info *info)
 {
 	tsp_debug_info(info->dev, "%s\n", __func__);
 
+	info->fts_release_all_finger(info);
+	info->fts_interrupt_set(info, INT_DISABLE);
+	info->fts_irq_enable(info, false);
+
+	info->fts_systemreset(info);
+	fts_delay(20);
+	/* wait for ready event */
+	info->fts_wait_for_ready(info);
+
 	info->fts_command(info, FTS_CMD_TRIM_LOW_POWER_OSCILLATOR);
 	fts_delay(200);
 	info->fts_command(info, FTS_CMD_SAVE_CX_TUNING);
 	fts_delay(230);
 	fts_fw_wait_for_event(info, STATUS_EVENT_FLASH_WRITE_CXTUNE_VALUE, 0x00);
 
+	info->o_afe_ver = info->afe_ver;
 	fts_get_afe_info(info);
 
 	fts_execute_autotune(info);
@@ -797,6 +823,7 @@ void fts_fw_init(struct fts_ts_info *info)
 
 	fts_fw_wait_for_event(info, STATUS_EVENT_FORCE_CAL_DONE, 0x00);
 
+	info->fts_irq_enable(info, true);
 	info->fts_interrupt_set(info, INT_ENABLE);
 }
 
@@ -866,7 +893,7 @@ int fts_fw_update(struct fts_ts_info *info)
 	info->fw_version_of_bin = header->fw_ver;
 	info->config_version_of_bin = header->cfg_ver;
 	 /* saver previous afe version before downloading */
-	info->o_afe_ver = info->afe_ver;
+
 #ifdef FTS_FTB_STYLE_2
 	info->fw_main_version_of_bin =
 	((header->ext_ver & 0xff)<<8) +
