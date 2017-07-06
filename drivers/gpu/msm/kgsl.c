@@ -2118,7 +2118,7 @@ static int kgsl_setup_dmabuf_useraddr(struct kgsl_device *device,
 
 	if (IS_ERR_OR_NULL(dmabuf)) {
 		up_read(&current->mm->mmap_sem);
- 		return dmabuf ? PTR_ERR(dmabuf) : -ENODEV;
+		return dmabuf ? PTR_ERR(dmabuf) : -ENODEV;
 	}
 
 	ret = kgsl_setup_dma_buf(device, pagetable, entry, dmabuf);
@@ -2131,7 +2131,6 @@ static int kgsl_setup_dmabuf_useraddr(struct kgsl_device *device,
 	/* Setup the user addr/cache mode for cache operations */
 	entry->memdesc.useraddr = hostptr;
 	_setup_cache_mode(entry, vma);
-
 	up_read(&current->mm->mmap_sem);
 	return 0;
 }
