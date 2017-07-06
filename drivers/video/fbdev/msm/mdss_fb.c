@@ -2021,6 +2021,15 @@ static int mdss_fb_blank_unblank(struct msm_fb_data_type *mfd)
 			mfd->allow_bl_update = false;
 		}
 		mutex_unlock(&mfd->bl_lock);
+	} else if (mdss_panel_is_power_on_lp(cur_power_state)) {
+		mutex_lock(&mfd->bl_lock);
+		/*
+		 * block backlight updates until the first kickoff to make sure
+		 * first interactive frame is synchronized with backlight
+		 */
+		mfd->allow_bl_update = false;
+		mfd->unset_bl_level = mfd->bl_level;
+		mutex_unlock(&mfd->bl_lock);
 	}
 
 error:
