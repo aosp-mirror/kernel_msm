@@ -1223,6 +1223,7 @@ static void pd_phy_shutdown(struct usbpd *pd)
 
 static const u32 src_pdo[] = {
 	PDO_FIXED(5000, 500, PDO_FIXED_FLAGS),
+	PDO_FIXED(5000, 900, PDO_FIXED_FLAGS),
 };
 
 static const u32 snk_pdo[] = {
