@@ -58,6 +58,13 @@ Charger specific properties:
   Value type: <u32>
   Definition: Specifies the DC input current limit in micro-amps.
 
+- qcom,otg-current-limit
+  Usage:      optional
+  Value type: <u32>
+  Definition: Specifies the OTG output current limit.
+	      If the values is not present, 2.4Amps is used as default.
+	      0 : 0.5A, 1: 0.6A, 2 : 1.0A, 3 : 1.3A, 4 : 1.6A, 5 : 1.9A, 6 : 2.4A
+
 - qcom,charger-temp-max-mdegc
   Usage:      optional
   Value type: <u32>

@@ -47,6 +47,8 @@
 #define TDIE_AVG_COUNT	10
 #define MAX_SPEED_READING_TIMES		5
 
+#define SMB138X_DEFAULT_OTG_CURRENT_LIMIT	6
+
 enum {
 	OOB_COMP_WA_BIT = BIT(0),
 };
@@ -97,6 +99,7 @@ struct smb_dt_props {
 	int	chg_temp_max_mdegc;
 	int	connector_temp_max_mdegc;
 	int	pl_mode;
+	int	otg_current_limit;
 };
 
 struct smb138x {
@@ -184,6 +187,11 @@ static int smb138x_parse_dt(struct smb138x *chip)
 				"qcom,dc-icl-ua", &chip->dt.dc_icl_ua);
 	if (rc < 0)
 		chip->dt.dc_icl_ua = SMB138X_DEFAULT_ICL_UA;
+
+	rc = of_property_read_u32(node,
+				"qcom,otg-current-limit", &chip->dt.otg_current_limit);
+	if (rc < 0)
+		chip->dt.otg_current_limit = SMB138X_DEFAULT_OTG_CURRENT_LIMIT;
 
 	rc = of_property_read_u32(node,
 				"qcom,charger-temp-max-mdegc",
@@ -908,6 +916,10 @@ static int smb138x_init_slave_hw(struct smb138x *chip)
 			rc);
 		return rc;
 	}
+
+	/* OTG current limit configuration */
+	rc = smblib_masked_write(chg, OTG_CURRENT_LIMIT_CFG_REG,
+				 OTG_CURRENT_LIMIT_MASK, chip->dt.otg_current_limit);
 
 	/* enable stacked diode */
 	rc = smblib_write(chg, SMB2CHG_DC_TM_SREFGEN, STACKED_DIODE_EN_BIT);
