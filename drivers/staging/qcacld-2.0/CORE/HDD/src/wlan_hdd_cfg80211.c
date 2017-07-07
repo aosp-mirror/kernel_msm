@@ -8481,7 +8481,8 @@ static int __wlan_hdd_cfg80211_wifi_logger_start(struct wiphy *wiphy,
 static const struct
 nla_policy
 qca_wlan_vendor_attr_policy[QCA_WLAN_VENDOR_ATTR_MAX+1] = {
-	[QCA_WLAN_VENDOR_ATTR_MAC_ADDR] = { .type = NLA_UNSPEC },
+	[QCA_WLAN_VENDOR_ATTR_MAC_ADDR] = {
+		.type = NLA_BINARY, .len = VOS_MAC_ADDR_SIZE },
 };
 
 /**
@@ -8533,6 +8534,13 @@ static int __wlan_hdd_cfg80211_get_link_properties(struct wiphy *wiphy,
 		hddLog(VOS_TRACE_LEVEL_ERROR,
 		       FL("Attribute peerMac not provided for mode=%d"),
 		       adapter->device_mode);
+		return -EINVAL;
+	}
+
+	if (nla_len(tb[QCA_WLAN_VENDOR_ATTR_MAC_ADDR]) < sizeof(peer_mac)) {
+		hddLog(VOS_TRACE_LEVEL_ERROR,
+			FL("Attribute peerMac is invalid=%d"),
+			adapter->device_mode);
 		return -EINVAL;
 	}
 
