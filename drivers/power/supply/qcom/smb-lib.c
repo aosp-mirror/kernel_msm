@@ -19,6 +19,7 @@
 #include <linux/qpnp/qpnp-revid.h>
 #include <linux/input/qpnp-power-on.h>
 #include <linux/irq.h>
+#include <linux/wakelock.h>
 #include "smb-lib.h"
 #include "smb-reg.h"
 #include "storm-watch.h"
@@ -2329,6 +2330,47 @@ int smblib_get_pe_start(struct smb_charger *chg,
 	return 0;
 }
 
+int smblib_get_prop_usb_port_temp(struct smb_charger *chg,
+				  union power_supply_propval *val)
+{
+	int rc = 0;
+	int temp = 250;
+
+	if (chg->fake_port_temp >= 0) {
+		val->intval = chg->fake_port_temp;
+		return 0;
+	}
+
+	if (!chg->usb_port_tz_name)
+		return -ENODEV;
+
+	/* lazily get the usb port thermal zone */
+	if (!chg->usb_port_tz) {
+		chg->usb_port_tz = thermal_zone_get_zone_by_name(
+						chg->usb_port_tz_name);
+		if (IS_ERR(chg->usb_port_tz)) {
+			rc = PTR_ERR(chg->usb_port_tz);
+			chg->usb_port_tz = NULL;
+			smblib_err(chg,
+				   "Couldn't get USB thermal zone rc=%d\n",
+				   rc);
+			return rc;
+		}
+	}
+
+	rc = thermal_zone_get_temp(chg->usb_port_tz, &temp);
+	if (rc < 0) {
+		smblib_err(chg,
+			   "Couldn't get temp USB thermal zone rc=%d\n",
+			   rc);
+		return rc;
+	}
+
+	val->intval = temp;
+
+	return 0;
+}
+
 int smblib_get_prop_die_health(struct smb_charger *chg,
 						union power_supply_propval *val)
 {
@@ -2417,13 +2459,14 @@ int smblib_set_prop_boost_current(struct smb_charger *chg,
 	return rc;
 }
 
-int smblib_set_prop_typec_power_role(struct smb_charger *chg,
-				     const union power_supply_propval *val)
+static int smblib_set_prop_typec_power_role_locked(
+				struct smb_charger *chg,
+				enum power_supply_typec_power_role pr_role)
 {
 	int rc = 0;
 	u8 power_role;
 
-	switch (val->intval) {
+	switch (pr_role) {
 	case POWER_SUPPLY_TYPEC_PR_NONE:
 		power_role = TYPEC_DISABLE_CMD_BIT;
 		break;
@@ -2437,7 +2480,7 @@ int smblib_set_prop_typec_power_role(struct smb_charger *chg,
 		power_role = DFP_EN_CMD_BIT;
 		break;
 	default:
-		smblib_err(chg, "power role %d not supported\n", val->intval);
+		smblib_err(chg, "power role %d not supported\n", pr_role);
 		return -EINVAL;
 	}
 
@@ -2465,6 +2508,23 @@ int smblib_set_prop_typec_power_role(struct smb_charger *chg,
 		return rc;
 	}
 
+	return rc;
+}
+
+int smblib_set_prop_typec_power_role(struct smb_charger *chg,
+				     const union power_supply_propval *val)
+{
+	int rc = 0;
+	enum power_supply_typec_power_role pr_role = val->intval;
+
+	mutex_lock(&chg->typec_pr_lock);
+
+	chg->typec_pr_pd_vote = pr_role;
+	if (chg->typec_pr_disabled)
+		pr_role = POWER_SUPPLY_TYPEC_PR_NONE;
+	rc = smblib_set_prop_typec_power_role_locked(chg, pr_role);
+
+	mutex_unlock(&chg->typec_pr_lock);
 	return rc;
 }
 
@@ -2773,6 +2833,14 @@ int smblib_set_prop_pd_in_hard_reset(struct smb_charger *chg,
 	return rc;
 }
 
+int smblib_set_prop_usb_port_temp(struct smb_charger *chg,
+				  const union power_supply_propval *val)
+{
+	chg->fake_port_temp = val->intval;
+
+	return 0;
+}
+
 /***********************
 * USB MAIN PSY GETTERS *
 *************************/
@@ -2958,6 +3026,17 @@ irqreturn_t smblib_handle_otg_overcurrent(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+static void smblib_port_overheat_handle_chg_state_change(
+						struct smb_charger *chg,
+						u8 stat)
+{
+	if (!chg->port_overheat_mitigation_enabled)
+		return;
+
+	cancel_delayed_work_sync(&chg->port_overheat_work);
+	schedule_delayed_work(&chg->port_overheat_work, 0);
+}
+
 irqreturn_t smblib_handle_chg_state_change(int irq, void *data)
 {
 	struct smb_irq_data *irq_data = data;
@@ -2975,6 +3054,7 @@ irqreturn_t smblib_handle_chg_state_change(int irq, void *data)
 	}
 
 	stat = stat & BATTERY_CHARGER_STATUS_MASK;
+	smblib_port_overheat_handle_chg_state_change(chg, stat);
 	power_supply_changed(chg->batt_psy);
 	return IRQ_HANDLED;
 }
@@ -3916,6 +3996,185 @@ rerun:
 	schedule_work(&chg->rdstd_cc2_detach_work);
 }
 
+#define PORT_OVERHEAT_PROBE_CC_DELAY_MS	200
+/* require the caller to hold chg->typec_pr_lock */
+static int port_overheat_probe_cc_status_locked(struct smb_charger *chg,
+						bool *attached)
+{
+	int rc = 0;
+	u8 stat;
+
+	rc = smblib_set_prop_typec_power_role_locked(
+					chg, POWER_SUPPLY_TYPEC_PR_SINK);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't enable type-c block rc=%d\n", rc);
+		return rc;
+	}
+
+	msleep(PORT_OVERHEAT_PROBE_CC_DELAY_MS);
+
+	rc = smblib_read(chg, TYPE_C_STATUS_4_REG, &stat);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't read Type-C status 4 rc=%d\n", rc);
+		return rc;
+	}
+
+	*attached = stat & CC_ATTACHED_BIT ? true : false;
+
+	rc = smblib_set_prop_typec_power_role_locked(
+					chg, POWER_SUPPLY_TYPEC_PR_NONE);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't disable type-c block rc=%d\n", rc);
+		return rc;
+	}
+
+	return 0;
+}
+
+static int port_overheat_mitigation_end(struct smb_charger *chg)
+{
+	int rc;
+	enum power_supply_typec_power_role pr_role;
+
+	/* resume USB */
+	rc = vote(chg->usb_icl_votable, OVERHEAT_MITIGATION_VOTER,
+		  false, 0);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't vote usb suspend: false rc=%d\n", rc);
+		return rc;
+	}
+	/* enable Type-C */
+	mutex_lock(&chg->typec_pr_lock);
+	chg->typec_pr_disabled = false;
+	pr_role = chg->typec_pr_pd_vote;
+	rc = smblib_set_prop_typec_power_role_locked(chg, pr_role);
+	if (rc < 0)
+		chg->typec_pr_disabled = true; /* enable Type-C failed */
+	mutex_unlock(&chg->typec_pr_lock);
+	if (rc < 0)
+		smblib_err(chg, "Couldn't enable type-c pr %d rc=%d\n",
+			   pr_role, rc);
+
+	return rc;
+}
+
+static int port_overheat_mitigation_begin(struct smb_charger *chg)
+{
+	int rc;
+	enum power_supply_typec_power_role pr_role;
+
+	/* disable Type-C */
+	mutex_lock(&chg->typec_pr_lock);
+	chg->typec_pr_disabled = true;
+	pr_role = POWER_SUPPLY_TYPEC_PR_NONE;
+	rc = smblib_set_prop_typec_power_role_locked(chg, pr_role);
+	if (rc < 0)
+		chg->typec_pr_disabled = false; /* disable Type-C failed */
+	mutex_unlock(&chg->typec_pr_lock);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't disable type-c rc=%d\n", rc);
+		return rc;
+	}
+	/* suspend USB */
+	rc = vote(chg->usb_icl_votable, OVERHEAT_MITIGATION_VOTER,
+		  true, 0);
+	if (rc < 0)
+		smblib_err(chg, "Couldn't vote usb suspend: true rc=%d\n", rc);
+
+	return rc;
+}
+
+static void port_overheat_work(struct work_struct *work)
+{
+	struct smb_charger *chg = container_of(work, struct smb_charger,
+					       port_overheat_work.work);
+	int rc = 0;
+	u8 stat;
+	int temp;
+	bool rerun_work, attached;
+	union power_supply_propval pval = {0, };
+
+	smblib_dbg(chg, PR_MISC, "Port overheat work running...\n");
+
+	if (!chg->port_overheat_mitigation_running) {
+		chg->port_overheat_mitigation_running = true;
+		wake_lock(&chg->port_overheat_mitigation_work_wakelock);
+	}
+
+	rc = smblib_get_prop_usb_port_temp(chg, &pval);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't get USB port temp rc=%d\n", rc);
+		rerun_work = true;
+		goto rerun;
+	}
+	temp = pval.intval;
+
+	if (chg->port_overheat &&
+	    temp < chg->port_overheat_mitigation_end_temp) {
+		/* check if the cable is still there */
+		mutex_lock(&chg->typec_pr_lock);
+		rc = port_overheat_probe_cc_status_locked(chg, &attached);
+		mutex_unlock(&chg->typec_pr_lock);
+		if (rc < 0) {
+			smblib_err(chg, "Probe cc status failed rc=%d\n", rc);
+			rerun_work = true;
+			goto rerun;
+		}
+		/* temperature drops and cable unplugged */
+		if (!attached) {
+			smblib_err(chg, "Port overheat mitigation ends.\n");
+			rc = port_overheat_mitigation_end(chg);
+			if (rc < 0) {
+				smblib_err(chg,
+					   "Couldn't end mitigation rc=%d\n",
+					   rc);
+				rerun_work = true;
+				goto rerun;
+			}
+			chg->port_overheat = false;
+		}
+	} else if (!chg->port_overheat &&
+		   temp > chg->port_overheat_mitigation_begin_temp) {
+		smblib_err(chg, "Port overheat mitigation begins.\n");
+		rc = port_overheat_mitigation_begin(chg);
+		if (rc < 0) {
+			smblib_err(chg, "Couldn't begin mitigation rc=%d\n",
+				   rc);
+			rerun_work = true;
+			goto rerun;
+		}
+		chg->port_overheat = true;
+	}
+
+	rerun_work = chg->port_overheat;
+
+	if (!rerun_work) {
+		rc = smblib_read(chg, BATTERY_CHARGER_STATUS_1_REG, &stat);
+		if (rc < 0) {
+			smblib_err(chg,
+				   "Couldn't read BATTERY_CHARGER_STATUS_1 rc=%d\n",
+				   rc);
+			rerun_work = true;
+		} else {
+			stat = stat & BATTERY_CHARGER_STATUS_MASK;
+			if (stat != DISABLE_CHARGE)
+				rerun_work = true;
+		}
+	}
+
+rerun:
+	if (rerun_work) {
+		schedule_delayed_work(
+			&chg->port_overheat_work,
+			msecs_to_jiffies(
+				chg->port_overheat_mitigation_work_interval));
+	} else {
+		chg->port_overheat_mitigation_running = false;
+		wake_unlock(&chg->port_overheat_mitigation_work_wakelock);
+	}
+
+}
+
 static void smblib_otg_oc_exit(struct smb_charger *chg, bool success)
 {
 	int rc;
@@ -4326,6 +4585,57 @@ static int smblib_create_votables(struct smb_charger *chg)
 	return rc;
 }
 
+static int smblib_init_port_overheat_mitigation(struct smb_charger *chg)
+{
+	int rc = 0;
+	int value;
+	struct device_node *node = chg->dev->of_node;
+
+	chg->port_overheat_mitigation_running = false;
+	wake_lock_init(&chg->port_overheat_mitigation_work_wakelock,
+		       WAKE_LOCK_SUSPEND,
+		       "port-overheat-monitor");
+
+	chg->port_overheat_mitigation_enabled =
+			of_property_read_bool(
+					node, "goog,port-overheat-mitigation");
+
+	rc = of_property_read_u32(node, "goog,port-overheat-begin-temp",
+				  &value);
+	if (rc < 0)
+		chg->port_overheat_mitigation_enabled = false;
+	else
+		chg->port_overheat_mitigation_begin_temp = value;
+
+	rc = of_property_read_u32(node, "goog,port-overheat-end-temp",
+				  &value);
+	if (rc < 0)
+		chg->port_overheat_mitigation_enabled = false;
+	else
+		chg->port_overheat_mitigation_end_temp = value;
+
+	rc = of_property_read_u32(node,
+				  "goog,port-overheat-work-interval",
+				  &value);
+	if ((rc < 0) || (value < 0))
+		chg->port_overheat_mitigation_enabled = false;
+	else
+		chg->port_overheat_mitigation_work_interval = value;
+
+	rc = of_property_read_string(
+			node, "goog,port-overheat-usb-port-tz-name",
+			&chg->usb_port_tz_name);
+	/*
+	 * of_property_read_string() modifies chg->usb_port_tz_name
+	 * only if a valid string can be decoded. Therfore, no need
+	 * to reset chg->usb_port_tz_name when things failed
+	 */
+	if (rc < 0)
+		chg->port_overheat_mitigation_enabled = false;
+
+	return rc;
+}
+
 static void smblib_destroy_votables(struct smb_charger *chg)
 {
 	if (chg->dc_suspend_votable)
@@ -4373,6 +4683,7 @@ int smblib_init(struct smb_charger *chg)
 	mutex_init(&chg->lock);
 	mutex_init(&chg->write_lock);
 	mutex_init(&chg->otg_oc_lock);
+	mutex_init(&chg->typec_pr_lock);
 	INIT_WORK(&chg->bms_update_work, bms_update_work);
 	INIT_WORK(&chg->rdstd_cc2_detach_work, rdstd_cc2_detach_work);
 	INIT_DELAYED_WORK(&chg->hvdcp_detect_work, smblib_hvdcp_detect_work);
@@ -4384,7 +4695,9 @@ int smblib_init(struct smb_charger *chg)
 	INIT_DELAYED_WORK(&chg->icl_change_work, smblib_icl_change_work);
 	INIT_DELAYED_WORK(&chg->pl_enable_work, smblib_pl_enable_work);
 	INIT_WORK(&chg->legacy_detection_work, smblib_legacy_detection_work);
+	INIT_DELAYED_WORK(&chg->port_overheat_work, port_overheat_work);
 	chg->fake_capacity = -EINVAL;
+	chg->fake_port_temp = -EINVAL;
 
 	switch (chg->mode) {
 	case PARALLEL_MASTER:
@@ -4403,6 +4716,8 @@ int smblib_init(struct smb_charger *chg)
 				"Couldn't register notifier rc=%d\n", rc);
 			return rc;
 		}
+
+		smblib_init_port_overheat_mitigation(chg);
 
 		chg->bms_psy = power_supply_get_by_name("bms");
 		chg->pl.psy = power_supply_get_by_name("parallel");
