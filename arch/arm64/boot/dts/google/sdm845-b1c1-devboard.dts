@@ -15,10 +15,8 @@
 
 #include "sdm845-b1c1-devboard-common.dtsi"
 
-/* TODO: Fix model/compatible/board-id */
-
 / {
-	model = "Qualcomm Technologies, Inc. MSM sdm845 v1 MTP";
-	compatible = "qcom,sdm845-mtp", "qcom,sdm845", "qcom,mtp";
-	qcom,board-id = <8 0>;
+	model = "Google Inc. MSM sdm845 Dev Board";
+	compatible = "google,b1c1-sdm845", "qcom,sdm845";
+	qcom,board-id = <0x00010205 0>;
 };

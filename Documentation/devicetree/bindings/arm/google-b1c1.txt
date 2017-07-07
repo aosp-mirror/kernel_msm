@@ -1,0 +1,20 @@
+Google Platforms Device Tree Bindings
+---------------------------------------
+
+Google boards
+
+Required root node properties:
+- compatible: it should be "google,b1c1-sdm845";
+- qcom,board-id: qcom board-id as described in [1]. The following rules are used
+  for Google boards:
+	- Platform Type ID: must use 0x05 (which is OEM code reserved by QCOM)
+	- Major ID: global Google-wide major for the product
+	- Minor ID: product-specific Minor as HW version (EVT, DVT etc)
+	- Subtype: product-specific Subtype as HW modification
+
+Example:
+	compatible = "google,b1c1-sdm845", "qcom,sdm845";
+	qcom,board-id = <0x00010205 0>;
+
+
+[1] Documentation/devicetree/bindings/arm/msm/board-id.txt
