@@ -59,6 +59,7 @@
 
 		//stm,vdd-gpio = <&tlmm 85 0x0>;
 		//stm,vio-gpio = <&tlmm 86 0x0>;
+		stm,reset-gpio = <&tlmm 89 0x0>;
 
 		stm,firmware_name = "ftm4_fw.ftb";
 	};
