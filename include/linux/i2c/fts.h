@@ -65,6 +65,7 @@ struct fts_i2c_platform_data {
 	int vdd_gpio;
 	int vio_gpio;
 	int irq_type;
+	int reset_pin;
 
 #ifdef FTS_SUPPORT_TOUCH_KEY
 	bool support_mskey;

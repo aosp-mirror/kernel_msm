@@ -1445,6 +1445,20 @@ static int fts_parse_dt(struct i2c_client *client)
 
 	pdata->power = fts_power_ctrl;
 
+	pdata->reset_pin = of_get_named_gpio(np, "stm,reset-gpio", 0);
+	if (gpio_is_valid(pdata->reset_pin)) {
+		if (devm_gpio_request_one(&client->dev, pdata->reset_pin,
+					GPIOF_OUT_INIT_LOW, "reset_pin")) {
+			tsp_debug_err(dev, "Failed to request gpio reset_pin\n");
+			pdata->reset_pin = -1;
+		} else {
+			tsp_debug_dbg(dev, "reset_pin : %d\n",
+					gpio_get_value(pdata->reset_pin));
+		}
+	} else {
+		tsp_debug_err(dev, "Failed to get reset_pin gpio\n");
+	}
+
 	/* Optional parmeters(those values are not mandatory)
 	 * do not return error value even if fail to get the value
 	 */
@@ -1631,8 +1645,13 @@ static int fts_probe(struct i2c_client *client, const struct i2c_device_id *idp)
 		goto err_get_drv_data;
 	}
 
-	if (info->board->power)
+	if (info->board->power) {
 		info->board->power(info, true);
+		fts_delay(15);
+
+		if (gpio_is_valid(info->board->reset_pin))
+			gpio_set_value(info->board->reset_pin, 1);
+	}
 
 	info->dev = &info->client->dev;
 	info->input_dev = input_allocate_device();
