@@ -260,6 +260,7 @@
 
 &smb138x_parallel_slave {
 	qcom,parallel-mode = <2>;
+	qcom,otg-current-limit = <4>;
 
 	smb138x_vbus: qcom,smb138x-vbus {
 		status = "okay";
