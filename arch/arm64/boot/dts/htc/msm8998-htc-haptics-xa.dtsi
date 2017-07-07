@@ -20,7 +20,7 @@
 		ti,voltage-comp = <18>;
 		ti,blanking-time = <2>; /* 50 us */
 		ti,idiss-time = <2>; /* 50 us */
-		ti,zc-det-time = <3>; /* 390 us*/
+		ti,zc-det-time = <0>; /* 100 us*/
 		ti,lra-wave-shape = <0>; /* Square wave */
 		ti,waveform-interval = <1>; /* 1 ms */
 		status = "ok";
