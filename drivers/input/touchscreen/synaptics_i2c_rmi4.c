@@ -3972,6 +3972,31 @@ static void synaptics_rmi4_set_idle_param(struct synaptics_rmi4_data
 	}
 }
 
+static int synaptics_rmi4_input_open(struct input_dev *dev)
+{
+	struct synaptics_rmi4_data *rmi4_data = input_get_drvdata(dev);
+
+	if (rmi4_data->sensor_sleep == true) {
+		synaptics_rmi4_sensor_wake(rmi4_data);
+		rmi4_data->touch_stopped = false;
+		synaptics_rmi4_irq_enable(rmi4_data, true);
+	}
+
+	return 0;
+}
+
+static void synaptics_rmi4_input_close(struct input_dev *dev)
+{
+	struct synaptics_rmi4_data *rmi4_data = input_get_drvdata(dev);
+
+	if (rmi4_data->sensor_sleep == false) {
+		rmi4_data->touch_stopped = true;
+		wake_up(&rmi4_data->wait);
+		synaptics_rmi4_irq_enable(rmi4_data, false);
+		synaptics_rmi4_sensor_sleep(rmi4_data);
+	}
+}
+
  /**
  * synaptics_rmi4_probe()
  *
@@ -4072,6 +4097,8 @@ static int synaptics_rmi4_probe(struct i2c_client *client,
 	rmi4_data->input_dev->id.product = SYNAPTICS_DSX_DRIVER_PRODUCT;
 	rmi4_data->input_dev->id.version = SYNAPTICS_DSX_DRIVER_VERSION;
 	rmi4_data->input_dev->dev.parent = &client->dev;
+	rmi4_data->input_dev->open = synaptics_rmi4_input_open;
+	rmi4_data->input_dev->close = synaptics_rmi4_input_close;
 	input_set_drvdata(rmi4_data->input_dev, rmi4_data);
 
 	set_bit(EV_SYN, rmi4_data->input_dev->evbit);
