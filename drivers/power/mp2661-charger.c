@@ -411,9 +411,10 @@ static enum power_supply_property mp2661_battery_properties[] = {
 };
 
 static irqreturn_t mp2661_chg_stat_handler(int irq, void *dev_id);
+static int mp2661_get_prop_current_now(struct mp2661_chg *chip);
 static int mp2661_get_prop_batt_status(struct mp2661_chg *chip)
 {
-    int rc, usb_present;
+    int rc, usb_present, current_now_ma;
     u8 reg;
     int status = POWER_SUPPLY_STATUS_DISCHARGING;
     u8 chgr_sts = 0;
@@ -444,7 +445,16 @@ static int mp2661_get_prop_batt_status(struct mp2661_chg *chip)
         }
         else
         {
-            status = POWER_SUPPLY_STATUS_CHARGING;
+            current_now_ma = mp2661_get_prop_current_now(chip) / 1000;
+            if(current_now_ma < 0)
+            {
+                pr_info("fix charging status");
+                status = POWER_SUPPLY_STATUS_DISCHARGING;
+            }
+            else
+            {
+                status = POWER_SUPPLY_STATUS_CHARGING;
+            }
         }
     }
     else
