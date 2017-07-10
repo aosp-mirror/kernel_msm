@@ -513,9 +513,10 @@ static void batt_worker(struct work_struct *work)
 {
 	static int s_first = 1;
 	static int s_prev_pwrsrc_enabled = 1;
+	static int s_chg_present;
 	int pwrsrc_enabled = s_prev_pwrsrc_enabled;
 	int charging_enabled = gs_prev_charging_enabled;
-	int src = 0, online = 0;
+	int src = 0, online = 0, chg_present = 0;
 	int ibat = 0;
 	int ibat_new = 0;
 	unsigned long time_since_last_update_ms;
@@ -562,8 +563,11 @@ static void batt_worker(struct work_struct *work)
 	/* STEP 5: set the charger contorl depends on current status
 	 * if charging source exist, determine charging_enable
 	 */
-	if ((int)htc_batt_info.rep.charging_source >
-	    POWER_SUPPLY_TYPE_BATTERY) {
+	chg_present = get_property(htc_batt_info.usb_psy,
+				   POWER_SUPPLY_PROP_PRESENT);
+	if (((int)htc_batt_info.rep.charging_source >
+	    POWER_SUPPLY_TYPE_BATTERY) ||
+	    (chg_present && g_pwrsrc_dis_reason)) {
 		htc_batt_info.rep.full_level = full_level_dis_chg;
 		if (is_bounding_fully_charged_level())
 			g_pwrsrc_dis_reason |= HTC_BATT_PWRSRC_DIS_BIT_MFG;
@@ -594,9 +598,9 @@ static void batt_worker(struct work_struct *work)
 				ibat_new);
 		}
 
-		if (htc_batt_info.rep.full_level != 100) {
+		if (s_chg_present != chg_present) {
 			BATT_EMBEDDED(
-				     "set full level pwrsrc_enable(%d)",
+				     "set pwrsrc_enable(%d) when plug-in",
 				     pwrsrc_enabled);
 			set_batt_psy_property(
 					     POWER_SUPPLY_PROP_INPUT_SUSPEND,
@@ -618,6 +622,7 @@ static void batt_worker(struct work_struct *work)
 
 	gs_prev_charging_enabled = charging_enabled;
 	s_prev_pwrsrc_enabled = pwrsrc_enabled;
+	s_chg_present = chg_present;
 	s_first = 0;
 
 	if (g_pwrsrc_dis_reason || g_chg_dis_reason) {
