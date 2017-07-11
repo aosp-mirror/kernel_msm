@@ -872,22 +872,55 @@ ErrorExit:
 static void get_fw_ver_bin(void *device_data)
 {
 	struct fts_ts_info *info = (struct fts_ts_info *)device_data;
-	char buff[16] = {0};
+	struct fts_i2c_platform_data *board = NULL;
+	const struct firmware *fw_entry = NULL;
+	const struct FW_FTB_HEADER *header = NULL;
+	int ret = 0;
+	char buff[100] = {0};
+
+	if (!info) {
+		tsp_debug_err(&info->client->dev,
+				"%s: No platform data found\n", __func__);
+		goto exit;
+	}
+
+	board = info->board;
+	if (!board) {
+		tsp_debug_err(&info->client->dev,
+				"%s: No board data found\n", __func__);
+		goto exit;
+	}
+
+	if (!board->firmware_name) {
+		tsp_debug_err(&info->client->dev,
+				"%s: No firmware_name found\n", __func__);
+		goto exit;
+	}
+
+	ret = request_firmware(&fw_entry, board->firmware_name, info->dev);
+	if (ret) {
+		tsp_debug_err(&info->client->dev,
+				"%s : Firmware image %s not available\n",
+				__func__, board->firmware_name);
+		goto exit;
+	}
+
+	header = (struct FW_FTB_HEADER *)fw_entry->data;
+
+	info->fw_version_of_bin = header->fw_ver;
+	info->config_version_of_bin = header->cfg_ver;
 
 	set_default_result(info);
 
-	if (strncmp(info->board->model_name, "G925", 4) == 0) {
-		info->tspid_val = gpio_get_value(info->board->tspid);
-		info->tspid2_val = gpio_get_value(info->board->tspid2);
+	snprintf(buff, sizeof(buff),
+			"BIN Firmware Version : 0x%04X\n"
+			"BIN Config Version : 0x%04X\n",
+			info->fw_version_of_bin,
+			info->config_version_of_bin);
 
-		sprintf(buff, "ST%01X%01X%04X",
-				info->tspid_val, info->tspid2_val,
-				info->fw_main_version_of_bin);
-	} else {
-		sprintf(buff, "ST%02X%04X",
-				info->panel_revision,
-				info->fw_main_version_of_bin);
-	}
+exit:
+	if (fw_entry)
+		release_firmware(fw_entry);
 
 	set_cmd_result(info, buff, strnlen(buff, sizeof(buff)));
 	info->cmd_state = CMD_STATUS_OK;
@@ -897,22 +930,19 @@ static void get_fw_ver_bin(void *device_data)
 static void get_fw_ver_ic(void *device_data)
 {
 	struct fts_ts_info *info = (struct fts_ts_info *)device_data;
-	char buff[16] = {0};
+	char buff[200] = {0};
 
 	set_default_result(info);
 
-	if (strncmp(info->board->model_name, "G925", 4) == 0) {
-		info->tspid_val = gpio_get_value(info->board->tspid);
-		info->tspid2_val = gpio_get_value(info->board->tspid2);
-
-		sprintf(buff, "ST%01X%01X%04X",
-				info->tspid_val, info->tspid2_val,
-				info->fw_main_version_of_ic);
-	} else {
-		sprintf(buff, "ST%02X%04X",
-				info->panel_revision,
-				info->fw_main_version_of_ic);
-	}
+	snprintf(buff, sizeof(buff),
+			"IC Firmware Version : 0x%04X\n"
+			"IC Config Version : 0x%04X\n"
+			"IC Main Version : 0x%04X\n"
+			"AFE Version : 0x%02X\n",
+			info->fw_version_of_ic,
+			info->config_version_of_ic,
+			info->fw_main_version_of_ic,
+			info->afe_ver);
 
 	set_cmd_result(info, buff, strnlen(buff, sizeof(buff)));
 	info->cmd_state = CMD_STATUS_OK;
@@ -1622,7 +1652,7 @@ static void run_cx_data_read(void *device_data)
 {
 	struct fts_ts_info *info = (struct fts_ts_info *)device_data;
 
-	char buff[SEC_CMD_STR_LEN] = { 0 };
+	char buff[CMD_STR_LEN] = { 0 };
 	unsigned char ReadData[info->ForceChannelLength]
 		[info->SenseChannelLength + FTS_CX2_READ_LENGTH];
 	int cxdiffData_rx[info->ForceChannelLength *
