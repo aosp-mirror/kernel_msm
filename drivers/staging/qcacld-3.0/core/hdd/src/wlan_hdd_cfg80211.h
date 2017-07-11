@@ -2477,6 +2477,7 @@ enum qca_wlan_vendor_attr_sap_conditional_chan_switch {
 #define WIFI_FEATURE_CONTROL_ROAMING    0x800000  /* Enable/Disable roaming */
 #define WIFI_FEATURE_IE_WHITELIST       0x1000000 /* Support Probe IE white listing */
 #define WIFI_FEATURE_SCAN_RAND          0x2000000 /* Support MAC & Probe Sequence Number randomization */
+#define WIFI_FEATURE_SET_TX_POWER_LIMIT 0x4000000 /* Support Tx Power Limit setting */
 
 /**
  * enum wifi_logger_supported_features - values for supported logger features
