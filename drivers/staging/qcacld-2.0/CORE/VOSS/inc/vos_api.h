@@ -347,6 +347,14 @@ v_U64_t vos_get_monotonic_boottime(void);
  * Return: kernel boottime in nano sec
  */
 v_U64_t vos_get_monotonic_boottime_ns(void);
+
+/**
+ * vos_get_bootbased_boottime_ns - Get kenel boottime in ns
+ * it includes the system suspend time also
+ * Return: kernel boottime in nano sec
+ */
+v_U64_t vos_get_bootbased_boottime_ns(void);
+
 void vos_trigger_recovery(bool);
 
 #ifdef FEATURE_WLAN_D0WOW

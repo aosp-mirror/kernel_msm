@@ -179,7 +179,7 @@ limCollectBssDescription(tpAniSirGlobal pMac,
                   sizeof(tSirMacAddr));
 
     // Copy Timestamp, Beacon Interval and Capability Info
-    pBssDescr->scansystimensec = vos_get_monotonic_boottime_ns();
+    pBssDescr->scansystimensec = vos_get_bootbased_boottime_ns();
 
     pBssDescr->timeStamp[0]   = pBPR->timeStamp[0];
     pBssDescr->timeStamp[1]   = pBPR->timeStamp[1];
