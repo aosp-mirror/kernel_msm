@@ -80,13 +80,16 @@
 		qcom,cont-splash-enabled;
 		qcom,mdss-dsi-lp11-init;
 		qcom,panel-supply-entries = <&dsi_panel_pwr_supply_s6e3fa5>;
+		qcom,alpm-bl-threshold = <27>;
 		qcom,alpm-off-command = [
 			15 01 00 00 00 00 02 53 20 /* ALPM off */
 		];
 		qcom,alpm-low-command = [
+			15 01 00 00 00 00 02 51 06
 			15 01 00 00 00 00 02 53 23 /* ALPM 10 nits */
 		];
 		qcom,alpm-high-command = [
+			15 01 00 00 00 00 02 51 1B
 			15 01 00 00 00 00 02 53 22 /* ALPM 50 nits */
 		];
 		qcom,mdss-dsi-lp-mode-on = [
