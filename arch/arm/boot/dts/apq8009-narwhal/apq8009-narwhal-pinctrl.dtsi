@@ -107,6 +107,7 @@
 				};
 
 				config {
+					pins = "gpio24";
 					drive-strength = <2>; /* 2 mA */
 					bias-pull-down; /* pull down */
 				};
@@ -119,6 +120,7 @@
 				};
 
 				config {
+					pins = "gpio24";
 					drive-strength = <2>; /* 2 mA */
 					bias-pull-down; /* pull down */
 				};
