@@ -32,7 +32,7 @@
 #define DEFAULT_MDP_TRANSFER_TIME 14000
 
 /* backlight level to use as threshold for picking ALPM low/high mode */
-#define ALPM_BL_THRESHOLD 30
+#define DEFAULT_ALPM_BL_THRESHOLD 30
 
 #define VSYNC_DELAY msecs_to_jiffies(17)
 
@@ -275,7 +275,7 @@ static void mdss_dsi_bl_update_alpm_mode(struct mdss_dsi_ctrl_pdata *ctrl,
 	if (!bl_level)
 		alpm_mode = ALPM_MODE_OFF;
 	else
-		alpm_mode = bl_level < ALPM_BL_THRESHOLD ?
+		alpm_mode = bl_level < ctrl->alpm_bl_threshold ?
 				ALPM_MODE_LOW : ALPM_MODE_HIGH;
 
 	if (alpm_mode != ctrl->alpm_mode) {
@@ -2158,10 +2158,15 @@ static void mdss_dsi_parse_alpm_modes(struct device_node *np,
 	    !mdss_dsi_parse_dcs_cmds(np, &ctrl->alpm_mode_cmds[ALPM_MODE_LOW],
 				    "qcom,alpm-low-command", NULL) &&
 	    !mdss_dsi_parse_dcs_cmds(np, &ctrl->alpm_mode_cmds[ALPM_MODE_HIGH],
-				    "qcom,alpm-high-command", NULL))
+				    "qcom,alpm-high-command", NULL)) {
 		ctrl->panel_data.panel_info.alpm_feature_enabled = true;
-	else
+
+		if (of_property_read_u32(np, "qcom,alpm-bl-threshold",
+					 &ctrl->alpm_bl_threshold))
+			ctrl->alpm_bl_threshold = DEFAULT_ALPM_BL_THRESHOLD;
+	} else {
 		ctrl->panel_data.panel_info.alpm_feature_enabled = false;
+	}
 }
 
 static int mdss_dsi_parse_cmd_pos(struct device_node *np,

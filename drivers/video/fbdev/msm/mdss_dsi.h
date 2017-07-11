@@ -627,6 +627,7 @@ struct mdss_dsi_ctrl_pdata {
 	/* alpm brightness setting */
 	struct dsi_panel_cmds alpm_mode_cmds[ALPM_MODE_MAX];
 	enum alpm_mode_type alpm_mode;
+	u32 alpm_bl_threshold;
 
 	/* rgb calibration */
 	struct dsi_cmd_pos rgb_gain_pos;
