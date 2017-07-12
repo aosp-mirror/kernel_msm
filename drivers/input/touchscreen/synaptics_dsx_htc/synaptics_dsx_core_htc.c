@@ -3577,7 +3577,7 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 			dev_err(rmi4_data->pdev->dev.parent,
 					"%s: Failed to change double-tap XY setting\n",
 					__func__);
-			return retval;
+			goto exit;
 		}
 
 		retval = synaptics_rmi4_reg_read(rmi4_data,
@@ -3588,7 +3588,7 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 			dev_err(rmi4_data->pdev->dev.parent,
 					"%s: Failed to change double-tap XY settings\n",
 					__func__);
-			return retval;
+			goto exit;
 		}
 
 		double_tap[0] = (ctrl_18->double_tap_x0_msb << 8) | ctrl_18->double_tap_x0_lsb;
@@ -3610,7 +3610,7 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 					"%s: failed to configure long press "
 					"gesture window\n",
 					__func__);
-			return retval;
+			goto exit;
 		}
 	}
 
@@ -3642,7 +3642,8 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s report data init fail\n",
 				__func__);
-		return -1;
+		retval = -1;
+		goto exit;
 	}
 
 	dev_info(rmi4_data->pdev->dev.parent,
@@ -3654,6 +3655,7 @@ exit:
 	kfree(query_5);
 	kfree(query_8);
 	kfree(ctrl_8);
+	kfree(ctrl_18);
 	kfree(ctrl_23);
 	kfree(ctrl_31);
 	kfree(ctrl_58);
