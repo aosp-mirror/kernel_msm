@@ -194,6 +194,8 @@ static int drv2624_set_go_bit(struct drv2624_data *drv2624, unsigned char val)
 
 	val &= 0x01;
 
+	dev_warn(drv2624->dev, "%s: %d\n", __func__, val);
+
 	do {
 		ret = drv2624_set_bits(drv2624, DRV2624_REG_GO, 0x01, val);
 		if (ret >= 0) {
@@ -205,6 +207,8 @@ static int drv2624_set_go_bit(struct drv2624_data *drv2624, unsigned char val)
 		}
 		usleep_range(8000, 10000);
 	} while (retry--);
+
+	dev_err(drv2624->dev, "failed to set GO bit, attempting to reset\n");
 
 	drv2624_reset(drv2624);
 
@@ -263,7 +267,7 @@ static void drv2624_haptics_work(struct work_struct *work)
 
 	ret = drv2624_set_go_bit(drv2624, GO);
 	if (ret < 0) {
-		dev_warn(drv2624->dev, "Start playback failed\n");
+		dev_err(drv2624->dev, "Start playback failed\n");
 		drv2624->vibrator_playing = false;
 		drv2624_disable_irq(drv2624);
 		wake_unlock(&drv2624->wklock);
@@ -280,6 +284,8 @@ static void vibrator_enable(struct led_classdev *led_cdev,
 {
 	struct drv2624_data *drv2624 =
 			container_of(led_cdev, struct drv2624_data, led_dev);
+
+	dev_warn(drv2624->dev, "%s: %d\n", __func__, value);
 
 	if (value == LED_OFF)
 		queue_work(drv2624->drv2624_wq, &drv2624->stop_work);
@@ -565,7 +571,7 @@ static int haptics_init(struct drv2624_data *drv2624)
 	mutex_init(&drv2624->lock);
 
 	drv2624->drv2624_wq =
-		alloc_workqueue("drv2624_wq", WQ_HIGHPRI | WQ_UNBOUND, 1);
+		alloc_ordered_workqueue("drv2624_wq", WQ_HIGHPRI);
 	if (!drv2624->drv2624_wq) {
 		dev_err(drv2624->dev,
 			"drv2624: fail to alloc_workqueue for drv2624_wq\n");
