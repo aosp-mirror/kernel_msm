@@ -141,7 +141,7 @@
 	qcom,vddmax-mv = <4350>;
 	qcom,vddsafe-mv = <4380>;
 	/delete-property/ qcom,charging-disabled;
-        qcom,btc-disabled;
+        /delete-property/ qcom,btc-disabled;
 };
 
 /{
