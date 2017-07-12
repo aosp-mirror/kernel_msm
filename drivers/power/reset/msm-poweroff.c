@@ -47,7 +47,7 @@
 
 
 static int restart_mode;
-static void *restart_reason, *dload_type_addr;
+static void *restart_reason;
 static bool scm_pmic_arbiter_disable_supported;
 static bool scm_deassert_ps_hold_supported;
 /* Download mode master kill-switch */
@@ -60,9 +60,11 @@ static void scm_disable_sdi(void);
  * So the SDI cannot be re-enabled when it already by-passed.
 */
 static int download_mode = 1;
-static struct kobject dload_kobj;
 
 #ifdef CONFIG_MSM_DLOAD_MODE
+static void *dload_type_addr;
+static struct kobject dload_kobj;
+
 #define EDL_MODE_PROP "qcom,msm-imem-emergency_download_mode"
 #define DL_MODE_PROP "qcom,msm-imem-download_mode"
 
@@ -403,6 +405,7 @@ static void do_msm_poweroff(void)
 	return;
 }
 
+#ifdef CONFIG_MSM_DLOAD_MODE
 static ssize_t attr_show(struct kobject *kobj, struct attribute *attr,
 				char *buf)
 {
@@ -470,6 +473,7 @@ static size_t store_emmc_dload(struct kobject *kobj, struct attribute *attr,
 
 	return count;
 }
+
 RESET_ATTR(emmc_dload, 0644, show_emmc_dload, store_emmc_dload);
 
 static struct attribute *reset_attrs[] = {
@@ -480,6 +484,7 @@ static struct attribute *reset_attrs[] = {
 static struct attribute_group reset_attr_group = {
 	.attrs = reset_attrs,
 };
+#endif
 
 static int msm_restart_probe(struct platform_device *pdev)
 {
