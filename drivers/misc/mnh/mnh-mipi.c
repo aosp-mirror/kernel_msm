@@ -338,6 +338,29 @@ static uint8_t mnh_sm_mipi_rx_dphy_read_gen3(uint16_t command, uint32_t device)
 	return data;
 }
 
+/* Bugfix for b/63578602 */
+static void mnh_mipi_gen3_lprxpon_wa(u32 device, int enable)
+{
+	dev_dbg(mnh_mipi->dev, "%s: dev %d\n", __func__, device);
+	if (enable == 1) {
+		mnh_sm_mipi_rx_dphy_write_gen3(0x1AE, 0x07, device);
+		mnh_sm_mipi_rx_dphy_write_gen3(0x1AD, 0xe0, device);
+		mnh_sm_mipi_rx_dphy_write_gen3(0x305, 0x06, device);
+		mnh_sm_mipi_rx_dphy_write_gen3(0x505, 0x06, device);
+		mnh_sm_mipi_rx_dphy_write_gen3(0x705, 0x06, device);
+		mnh_sm_mipi_rx_dphy_write_gen3(0x905, 0x06, device);
+		mnh_sm_mipi_rx_dphy_write_gen3(0xB05, 0x06, device);
+	} else {
+		mnh_sm_mipi_rx_dphy_write_gen3(0x1AE, 0x00, device);
+		mnh_sm_mipi_rx_dphy_write_gen3(0x1AD, 0x00, device);
+		mnh_sm_mipi_rx_dphy_write_gen3(0x305, 0x00, device);
+		mnh_sm_mipi_rx_dphy_write_gen3(0x505, 0x00, device);
+		mnh_sm_mipi_rx_dphy_write_gen3(0x705, 0x00, device);
+		mnh_sm_mipi_rx_dphy_write_gen3(0x905, 0x00, device);
+		mnh_sm_mipi_rx_dphy_write_gen3(0xB05, 0x00, device);
+	}
+}
+
 /* kernel thread for ASR voltage increase during MIPI startup */
 static void mnh_mipi_asr_work(struct work_struct *data)
 {
@@ -467,14 +490,21 @@ static void mnh_mipi_gen3_host(struct device *dev, uint32_t device,
 	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, N_LANES, N_LANES, 0x3);
 	udelay(1);
 
+	/* b/63578602 */
+	mnh_mipi_gen3_lprxpon_wa(device, 1);
+
 	/* release reset */
 	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_SHUTDOWNZ,
 		PHY_SHUTDOWNZ, 0x1);
-	udelay(1);
+	udelay(20);
 	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, DPHY_RSTZ, DPHY_RSTZ,
 		0x1);
 	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, CSI2_RESETN,
 		CSI2_RESETN, 0x1);
+
+	udelay(30);
+
+	mnh_mipi_gen3_lprxpon_wa(device, 0);
 }
 
 static uint8_t mnh_mipi_get_vco_cntrl(uint32_t rate)
