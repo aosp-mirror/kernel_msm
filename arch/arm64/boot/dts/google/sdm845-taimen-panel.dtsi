@@ -61,7 +61,7 @@
 &dsi_sw43402_dsc_qhd_cmd {
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_vdd_no_labibb>;
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
-	qcom,mdss-dsi-panel-timings = [00 11 04 04 07 0C 04 04 03 03 04 00];
+	qcom,mdss-dsi-panel-phy-timings = [00 11 04 04 07 0C 04 04 03 03 04 00];
 	qcom,mdss-dsi-t-clk-post = <0x05>;
 	qcom,mdss-dsi-t-clk-pre = <0x1B>;
 
