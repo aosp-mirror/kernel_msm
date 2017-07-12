@@ -10,6 +10,7 @@
  * GNU General Public License for more details.
  */
 
+#include "dsi-panel-sw43402-dsc-qhd-cmd-rev1.dtsi"
 #include "dsi-panel-sw43402-dsc-qhd-cmd.dtsi"
 #include "dsi-panel-sw49408-dsc-qhd-cmd.dtsi"
 
@@ -35,6 +36,15 @@
 
 &mdss_dsi1 {
 	status = "disabled";
+};
+
+&dsi_sw43402_dsc_qhd_cmd_rev1 {
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+	/* qcom,cont-splash-enabled; */
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_no_labibb>;
+	qcom,mdss-dsi-panel-timings = [00 12 04 04 07 0C 04 04 03 03 04 00];
+	qcom,mdss-dsi-t-clk-post = <0x05>;
+	qcom,mdss-dsi-t-clk-pre = <0x1B>;
 };
 
 &dsi_sw43402_dsc_qhd_cmd {

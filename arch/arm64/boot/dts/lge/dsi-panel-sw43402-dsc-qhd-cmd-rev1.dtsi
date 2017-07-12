@@ -11,9 +11,9 @@
  */
 
 &mdss_mdp {
-	dsi_sw43402_dsc_qhd_cmd: qcom,mdss_dsi_sw43402_dsc_qhd_cmd {
+	dsi_sw43402_dsc_qhd_cmd_rev1: qcom,mdss_dsi_sw43402_dsc_qhd_cmd_rev1 {
 		qcom,mdss-dsi-panel-name =
-					"SW43402 cmd mode dsc dsi panel rev3";
+					"SW43402 cmd mode dsc dsi panel rev1";
 		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
 		qcom,mdss-dsi-panel-framerate = <60>;
 		qcom,mdss-dsi-virtual-channel-id = <0>;
@@ -63,8 +63,11 @@
 		qcom,mdss-dsi-on-command = [
 			39 01 00 00 00 00 03 B0
 			20 43
+			39 01 00 00 00 00 0D B2
+			5D 01 02 80 00 FF FF 15
+			00 00 00 00
 			39 01 00 00 00 00 03 DF
-			08 00
+			0A 70
 			39 01 00 00 00 00 03 B0
 			A5 00
 			05 01 00 00 00 00 01 35
@@ -80,13 +83,9 @@
 			03 77
 			39 01 00 00 00 00 06 ED
 			13 00 07 00 00
-			39 01 00 00 00 00 13 C9
-			00 00 00 24 33 AE
-			FF FF FF 00 1F 3F
-			5E 7D 91 AF CF FF
 			39 01 00 00 14 00 0F E2
 			20 0D 08 A8 0A AA
-			04 A4 83 83 83 5C
+			04 44 80 80 80 5C
 			5C 5C
 			15 01 00 00 00 00 02 51 01
 			05 01 00 00 00 00 01 29
@@ -101,24 +100,8 @@
 			05 01 00 00 64 00 01 10
 		];
 		qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
-		qcom,mdss-dsi-lp-mode-on = [
-			15 01 00 00 00 00 02 53
-			08
-			39 01 00 00 00 00 08 CA
-			00 46 00 46 00 16 11
-			39 01 00 00 00 00 0F E6
-			45 C5 04 88 D3 00 0A
-			0B 00 0A 0B 00 05 0B
-			];
-		qcom,mdss-dsi-lp-mode-off = [
-			15 01 00 00 00 00 02 53
-			00
-			39 01 00 00 00 00 08 CA
-			00 46 00 46 00 16 10
-			39 01 00 00 00 00 0F E6
-			45 C5 04 88 D1 00 0A
-			0B 00 0A 0B 00 05 0B
-			];
+		qcom,mdss-dsi-lp-mode-on = [15 01 00 00 00 00 02 53 08];
+		qcom,mdss-dsi-lp-mode-off = [15 01 00 00 00 00 02 53 00];
 		qcom,mdss-dsi-lp-change-state = "dsi_hs_mode";
 		qcom,mode-control-dsi-state = "dsi_lp_mode";
 
@@ -126,6 +109,7 @@
 			15 01 00 00 00 00 02 51 01
 			05 01 00 00 00 00 01 38
 			05 01 00 00 10 00 01 13
+
 		];
 		qcom,alpm-low-command = [
 			15 01 00 00 00 00 02 E0 1B
@@ -136,6 +120,7 @@
 			05 01 00 00 00 00 01 39
 			05 01 00 00 00 00 01 13
 			15 01 00 00 10 00 02 51 70
+
 		];
 		qcom,alpm-high-command = [
 			15 01 00 00 00 00 02 E0 1B
@@ -146,17 +131,18 @@
 			05 01 00 00 00 00 01 39
 			05 01 00 00 00 00 01 13
 			15 01 00 00 10 00 02 51 C1
+
 		];
 		qcom,mdss-pan-physical-width-dimension = <68>;
 		qcom,mdss-pan-physical-height-dimension = <136>;
 
 		qcom,compression-mode = "dsc";
-		qcom,config-select = <&dsi_sw43402_dsc_cmd_config0>;
+		qcom,config-select = <&dsi_sw43402_dsc_cmd_rev1_config0>;
 
 		qcom,mdss-dsc-version = <0x11>;
 		qcom,mdss-dsc-scr-version = <0x1>;
 
-		dsi_sw43402_dsc_cmd_config0: config0 {
+		dsi_sw43402_dsc_cmd_rev1_config0: config0 {
 			qcom,lm-split = <720 720>;
 			qcom,mdss-dsc-encoders = <2>;
 			qcom,mdss-dsc-slice-height = <16>;

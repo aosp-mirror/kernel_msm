@@ -32,7 +32,7 @@
 	};
 };
 
-&dsi_sw43402_dsc_qhd_cmd {
+&dsi_sw43402_dsc_qhd_cmd_rev1 {
 	qcom,mdss-dsi-bl-min-level = <23>;
 	qcom,mdss-dsi-bl-max-level = <223>;
 };
