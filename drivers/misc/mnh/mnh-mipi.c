@@ -987,8 +987,8 @@ int mnh_mipi_config(struct device *dev, struct mnh_mipi_config config)
 		__func__, rxdev, txdev, rx_rate, tx_rate, vc_en_mask);
 
 	/* abort any previously running thread */
-	atomic_set(&mnh_mipi->poll, 0);
-	cancel_work_sync(&mnh_mipi->asr_work);
+	mnh_mipi_suspend(dev);
+
 	/* boost ASR voltage on startup */
 	atomic_set(&mnh_mipi->poll, 1);
 	dev_dbg(mnh_mipi->dev, "%s: boosting ASR voltage\n", __func__);
@@ -1045,6 +1045,9 @@ int mnh_mipi_stop(struct device *dev, struct mnh_mipi_config config)
 
 	dev_dbg(dev, "%s: stopping rxdev %d, txdev %d\n", __func__, rxdev,
 		 txdev);
+
+	/* abort any previously running worker threads */
+	mnh_mipi_suspend(dev);
 
 	/* Shutdown host */
 	mnh_mipi_stop_host(dev, rxdev);
