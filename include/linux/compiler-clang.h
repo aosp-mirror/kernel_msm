@@ -10,3 +10,10 @@
 #undef uninitialized_var
 #define uninitialized_var(x) x = *(&(x))
 #endif
+
+/*
+* GCC does not warn about unused static inline functions for
+* -Wunused-function.  This turns out to avoid the need for complex #ifdef
+* directives.  Suppress the warning in clang as well.
+*/
+#define inline inline __attribute__((unused))
