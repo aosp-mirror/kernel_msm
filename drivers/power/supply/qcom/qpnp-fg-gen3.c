@@ -1720,7 +1720,7 @@ static int fg_set_recharge_voltage(struct fg_chip *chip, int voltage_mv)
 static int fg_charge_full_update(struct fg_chip *chip)
 {
 	union power_supply_propval prop = {0, };
-	int rc, msoc, bsoc, recharge_soc;
+	int rc, msoc, bsoc, recharge_soc, msoc_raw;
 	u8 full_soc[2] = {0xFF, 0xFF};
 
 	if (!chip->dt.hold_soc_while_full)
@@ -1756,6 +1756,7 @@ static int fg_charge_full_update(struct fg_chip *chip)
 		pr_err("Error in getting msoc, rc=%d\n", rc);
 		goto out;
 	}
+	msoc_raw = DIV_ROUND_CLOSEST(msoc * FULL_SOC_RAW, FULL_CAPACITY);
 
 	fg_dbg(chip, FG_STATUS, "msoc: %d bsoc: %x health: %d status: %d full: %d\n",
 		msoc, bsoc, chip->health, chip->charge_status,
@@ -1779,7 +1780,7 @@ static int fg_charge_full_update(struct fg_chip *chip)
 			fg_dbg(chip, FG_STATUS, "Terminated charging @ SOC%d\n",
 				msoc);
 		}
-	} else if ((bsoc >> 8) <= recharge_soc && chip->charge_full) {
+	} else if (msoc_raw <= recharge_soc && chip->charge_full) {
 		chip->delta_soc = FULL_CAPACITY - msoc;
 
 		/*
@@ -1809,8 +1810,8 @@ static int fg_charge_full_update(struct fg_chip *chip)
 				rc);
 			goto out;
 		}
-		fg_dbg(chip, FG_STATUS, "bsoc: %d recharge_soc: %d delta_soc: %d\n",
-			bsoc >> 8, recharge_soc, chip->delta_soc);
+		fg_dbg(chip, FG_STATUS, "msoc_raw = %d bsoc: %d recharge_soc: %d delta_soc: %d\n",
+			msoc_raw, bsoc >> 8, recharge_soc, chip->delta_soc);
 	} else {
 		goto out;
 	}
