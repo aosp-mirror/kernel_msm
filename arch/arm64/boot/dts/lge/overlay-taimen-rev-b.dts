@@ -32,6 +32,10 @@
 	};
 };
 
+&dsi_sw43402_dsc_qhd_cmd {
+	qcom,mdss-dsi-bl-off-level = <1>;
+};
+
 &spi_5 {
 	status = "disabled";
 };
