@@ -69,6 +69,8 @@ Optional properties:
   If imem is not present then there is no need to specify this property.
 - *-supply: A phandle pointing to the appropriate regulator. Number of
   regulators vary across targets.
+- supply-names : an array of strings which corresponds to names of regulators.
+- supply : an array of phandles to regulators.
 - clock-names: an array of clocks that the driver is supposed to be
   manipulating. The clocks names here correspond to the clock names used in
   clk_get(<name>).
