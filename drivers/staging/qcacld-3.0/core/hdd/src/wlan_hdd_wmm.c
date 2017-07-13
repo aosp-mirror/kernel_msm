@@ -127,6 +127,23 @@ const uint8_t hdd_linux_up_to_ac_map[HDD_WMM_UP_TO_AC_MAP_SIZE] = {
 	HDD_LINUX_AC_VO
 };
 
+static sme_tspec_dir_type get_convert_to_sme_dir(sme_QosWmmDirType dir)
+{
+	switch (dir) {
+	case SME_QOS_WMM_TS_DIR_UPLINK:
+		return SME_TX_DIR;
+	case SME_QOS_WMM_TS_DIR_DOWNLINK:
+		return SME_RX_DIR;
+	case SME_QOS_WMM_TS_DIR_RESV:
+	case SME_QOS_WMM_TS_DIR_BOTH:
+	default:
+		return SME_BI_DIR;
+	}
+
+	return SME_BI_DIR;
+}
+
+
 #ifndef WLAN_MDM_CODE_REDUCTION_OPT
 /**
  * hdd_wmm_enable_tl_uapsd() - function which decides whether and
@@ -187,7 +204,8 @@ static void hdd_wmm_enable_tl_uapsd(struct hdd_wmm_qos_context *pQosContext)
 					   pAc->wmmAcTspecInfo.ts_info.tid,
 					   pAc->wmmAcTspecInfo.ts_info.up,
 					   service_interval, suspension_interval,
-					   direction, psb, pAdapter->sessionId,
+					   get_convert_to_sme_dir(direction),
+					   psb, pAdapter->sessionId,
 					   pHddCtx->config->DelayedTriggerFrmInt);
 
 	if (!QDF_IS_STATUS_SUCCESS(status)) {

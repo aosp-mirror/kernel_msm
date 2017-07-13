@@ -3635,10 +3635,10 @@ hdd_roam_tdls_status_update_handler(hdd_adapter_t *pAdapter,
 	switch (roamResult) {
 	case eCSR_ROAM_RESULT_ADD_TDLS_PEER:
 	{
+		pAdapter->tdlsAddStaStatus = pRoamInfo->statusCode;
 		if (eSIR_SME_SUCCESS != pRoamInfo->statusCode) {
 			hdd_err("Add Sta failed. status code: %d",
 				pRoamInfo->statusCode);
-			pAdapter->tdlsAddStaStatus = QDF_STATUS_E_FAILURE;
 		} else {
 			/*
 			 * Check if there is available index for this new TDLS
@@ -3705,7 +3705,10 @@ hdd_roam_tdls_status_update_handler(hdd_adapter_t *pAdapter,
 				hdd_debug("no available slot in conn_info. staId: %d cannot be stored",
 					pRoamInfo->staId);
 			}
-			pAdapter->tdlsAddStaStatus = status;
+			if (status == QDF_STATUS_SUCCESS)
+				pAdapter->tdlsAddStaStatus = eSIR_SME_SUCCESS;
+			else
+			pAdapter->tdlsAddStaStatus = eSIR_SME_TDLS_FAILURE;
 		}
 		complete(&pAdapter->tdls_add_station_comp);
 		break;

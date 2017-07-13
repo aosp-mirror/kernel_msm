@@ -4680,6 +4680,13 @@ struct reg_table_entry g_registry_table[] = {
 		CFG_ROAM_NUM_DISALLOWED_APS_DEFAULT,
 		CFG_ROAM_NUM_DISALLOWED_APS_MIN,
 		CFG_ROAM_NUM_DISALLOWED_APS_MAX),
+
+	REG_VARIABLE(CFG_RANDOMIZE_NDI_MAC_NAME, WLAN_PARAM_Integer,
+		struct hdd_config, is_ndi_mac_randomized,
+		VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		CFG_RANDOMIZE_NDI_MAC_DEFAULT,
+		CFG_RANDOMIZE_NDI_MAC_MIN,
+		CFG_RANDOMIZE_NDI_MAC_MAX),
 };
 
 /**
@@ -6256,6 +6263,9 @@ void hdd_cfg_print(hdd_context_t *pHddCtx)
 	hdd_debug("Name = [%s] Value = [%u]",
 		CFG_ROAM_NUM_DISALLOWED_APS_NAME,
 		pHddCtx->config->num_disallowed_aps);
+	hdd_debug("Name = [%s] value = [%u]",
+		 CFG_RANDOMIZE_NDI_MAC_NAME,
+		 pHddCtx->config->is_ndi_mac_randomized);
 }
 
 /**
@@ -6274,6 +6284,7 @@ QDF_STATUS hdd_update_mac_config(hdd_context_t *pHddCtx)
 	char *line, *buffer = NULL;
 	char *temp = NULL;
 	char *name, *value;
+	int max_mac_addr = QDF_MAX_CONCURRENCY_PERSONA;
 	tCfgIniEntry macTable[QDF_MAX_CONCURRENCY_PERSONA];
 	tSirMacAddr customMacAddr;
 
@@ -6349,6 +6360,9 @@ QDF_STATUS hdd_update_mac_config(hdd_context_t *pHddCtx)
 	}
 
 	update_mac_from_string(pHddCtx, &macTable[0], i);
+	hdd_debug("Populating remaining %d Mac addreses",
+		   max_mac_addr - i);
+	hdd_populate_random_mac_addr(pHddCtx, max_mac_addr - i);
 
 	qdf_mem_copy(&customMacAddr,
 		     &pHddCtx->config->intfMacAddr[0].bytes[0],
