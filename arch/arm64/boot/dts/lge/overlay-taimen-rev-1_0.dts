@@ -1,0 +1,57 @@
+/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include "msm8998-taimen.dtsi"
+
+&i2c_5 {
+	status = "ok";
+};
+
+&pm8998_vadc {
+	chan@83 {
+		label = "vph_pwr";
+		reg = <0x83>;
+		qcom,decimation = <2>;
+		qcom,pre-div-channel-scaling = <1>;
+		qcom,calibration-type = "absolute";
+		qcom,scale-function = <0>;
+		qcom,hw-settle-time = <0>;
+		qcom,fast-avg-setup = <0>;
+	};
+};
+
+&spi_5 {
+	status = "disabled";
+};
+
+&soc {
+	qcom,sensor-information {
+		qcom,sensor-information-31 {
+			qcom,sensor-name = "bd_therm2";
+		};
+	};
+};
+
+&pm8998_vadc {
+	chan@51 {
+		label = "bd_therm2";
+	};
+};
+
+&pm8998_adc_tm {
+	chan@51 {
+		label = "bd_therm2";
+	};
+};
