@@ -128,7 +128,7 @@
 				ti,left-channel = <0x4c>;
 				ti,right-channel = <0x4d>;
 				ti,echo-ref = <0>;   /* 0, left channel; 1, right channel; 2, both */
-				ti,i2s-bits = <16>;   /* support 16, 24, 32 */
+				ti,i2s-bits = <24>;   /* support 16, 24, 32 */
 				ti,cal-file-name = "tas2557_cal.bin";
 				ti,bypass-tmax = <0>;   /* 0, do not bypass; */
 				status = "ok";
