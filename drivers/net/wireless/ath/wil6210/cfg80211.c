@@ -556,6 +556,9 @@ int wil_cfg80211_mgmt_tx(struct wiphy *wiphy, struct wireless_dev *wdev,
 		struct wmi_sw_tx_complete_event evt;
 	} __packed evt;
 
+	if (len < sizeof(struct ieee80211_mgmt))
+		return -EINVAL;
+
 	cmd = kmalloc(sizeof(*cmd) + len, GFP_KERNEL);
 	if (!cmd) {
 		rc = -ENOMEM;
