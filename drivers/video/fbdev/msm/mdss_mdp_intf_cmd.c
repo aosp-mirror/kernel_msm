@@ -2159,11 +2159,10 @@ static int mdss_mdp_cmd_wait4pingpong(struct mdss_mdp_ctl *ctl, void *arg)
 			MDSS_XLOG(0xbad1);
 			MDSS_XLOG_TOUT_HANDLER("mdp", "dbg_bus",
 				"dsi0_ctrl", "dsi0_phy", "dsi_dbg_bus",
-				"vbif", "vbif_nrt", "vbif_dbg_bus",
-				"xlog");
+				"vbif", "vbif_nrt", "vbif_dbg_bus");
 			/* Send event to userspace on first timeout */
 			mdss_fb_pp_timeout(ctl->mfd);
-			msleep(200);
+			msleep(50);
 		}
 
 		if (ctx->pp_timeout_report_cnt == MAX_RECOVERY_TRIALS) {
@@ -2174,7 +2173,7 @@ static int mdss_mdp_cmd_wait4pingpong(struct mdss_mdp_ctl *ctl, void *arg)
 				"dbg_bus", "vbif_dbg_bus",
 				"dsi_dbg_bus", "xlog", "panic");
 #else
-			MDSS_XLOG_TOUT_HANDLER("panic");
+			MDSS_XLOG_TOUT_HANDLER("xlog", "panic");
 #endif
 			mdss_fb_report_panel_dead(ctl->mfd);
 		}
