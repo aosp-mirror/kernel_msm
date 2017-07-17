@@ -21,7 +21,7 @@ CROSS_COMPILE=aarch64-linux-android-
 DEFCONFIG=marlin_defconfig
 KERNEL_DIR=private/msm-google
 POST_DEFCONFIG_CMDS="update_kasan_config"
-LINUX_GCC_CROSS_COMPILE_PREBUILTS_BIN=prebuilts-master/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin
+LINUX_GCC_CROSS_COMPILE_PREBUILTS_BIN=prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin
 FILES="
 arch/arm64/boot/Image.gz-dtb
 vmlinux
