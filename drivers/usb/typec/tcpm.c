@@ -2807,7 +2807,10 @@ static void _tcpm_cc_change(struct tcpm_port *port, enum typec_cc_status cc1,
 			tcpm_set_state(port, SRC_ATTACH_WAIT, 0);
 		break;
 	case SRC_ATTACHED:
-		if (tcpm_port_is_disconnected(port))
+	case SRC_SEND_CAPABILITIES:
+	case SRC_READY:
+		if (tcpm_port_is_disconnected(port) ||
+		    !tcpm_port_is_source(port))
 			tcpm_set_state(port, SRC_UNATTACHED, 0);
 		break;
 
