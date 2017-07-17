@@ -14,7 +14,7 @@ qcom,muskie-id1-batterydata {
 	 */
 	qcom,fastchg-current-ma = <500>;
 
-	qcom,fg-cc-cv-threshold-mv = <4400>;
+	qcom,fg-cc-cv-threshold-mv = <4390>;
 	qcom,fcc-mah = <3830>;
 	qcom,batt-thermal-limit-vol = <4200>;
 	htc,fastchg-current-ma = <3825>;

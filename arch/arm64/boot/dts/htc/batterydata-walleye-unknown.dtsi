@@ -12,7 +12,7 @@ qcom,walleye-unknown-batterydata {
 	 * the value to allow faster charging.
 	 */
 	qcom,fastchg-current-ma = <500>;
-	qcom,fg-cc-cv-threshold-mv = <4400>;
+	qcom,fg-cc-cv-threshold-mv = <4390>;
 	qcom,fcc-mah = <2700>;
 	qcom,batt-thermal-limit-vol = <4200>;
 	htc,batt_id = <255>;
