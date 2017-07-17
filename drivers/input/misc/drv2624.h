@@ -63,6 +63,8 @@
 #define	MODE_CALIBRATION			0x03
 #define	PINFUNC_MASK				0x0c
 #define	PINFUNC_INT				0x02
+#define	PINFUNC_TRIG_LEVEL			0x01
+#define	PINFUNC_TRIG_PULSE			0x00
 #define	PINFUNC_SHIFT				0x02
 
 #define DRV2624_REG_LRA_PERIOD_H		0x05

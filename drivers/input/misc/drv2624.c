@@ -1731,21 +1731,45 @@ static const struct of_device_id drv2624_of_match[] = {
 MODULE_DEVICE_TABLE(of, drv2624_of_match);
 #endif
 
+void drv2624_trigger_mode(struct drv2624_data *drv2624, int mode)
+{
+	drv2624_set_bits(drv2624, DRV2624_REG_MODE, PINFUNC_MASK,
+			 (mode << PINFUNC_SHIFT));
+}
+
 #ifdef CONFIG_PM
 static int drv2624_suspend(struct device *dev)
 {
 	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
+	struct drv2624_waveform_sequencer sequencer;
+
+	memset(&sequencer, 0, sizeof(sequencer));
 
 	cancel_work_sync(&drv2624->vibrator_work);
 	cancel_work_sync(&drv2624->work);
 	cancel_work_sync(&drv2624->stop_work);
 	drv2624_stop(drv2624);
 
+	if (drv2624->lp_trigger_effect) {
+		sequencer.waveform[0].effect = drv2624->lp_trigger_effect;
+		drv2624_set_waveform(drv2624, &sequencer);
+
+		drv2624_change_mode(drv2624, MODE_WAVEFORM_SEQUENCER);
+		drv2624_set_bits(drv2624, DRV2624_REG_CONTROL1, LOOP_MASK,
+				 0 << LOOP_SHIFT);
+
+		drv2624_trigger_mode(drv2624, PINFUNC_TRIG_PULSE);
+	}
+
 	return 0;
 }
 
 static int drv2624_resume(struct device *dev)
 {
+	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
+
+	drv2624_trigger_mode(drv2624, PINFUNC_INT);
+
 	return 0;
 }
 
