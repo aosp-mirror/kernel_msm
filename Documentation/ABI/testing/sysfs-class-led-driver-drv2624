@@ -168,3 +168,15 @@ Description:
 
 		0 - Square Wave
 		1 - Sine Wave
+
+What:		/sys/class/leds/vibrator/device/lp_trigger_effect
+Date:		Jul 2017
+KernelVersion:	4.4
+Contact:	David Lin <dtwlin@google.com>
+Description:
+		This parameter selects the effect and enables drv2624 to be
+		triggered by an external pin when the kernel is suspended.
+
+		0 - Low-power trigger mode disabled
+		1 or above - Index to the waveform sequencer to be used when
+		low-power playback is triggered.

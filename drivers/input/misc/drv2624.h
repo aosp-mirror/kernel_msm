@@ -64,6 +64,8 @@
 #define	MODE_CALIBRATION			0x03
 #define	PINFUNC_MASK				0x0c
 #define	PINFUNC_INT				0x02
+#define	PINFUNC_TRIG_LEVEL			0x01
+#define	PINFUNC_TRIG_PULSE			0x00
 #define	PINFUNC_SHIFT				0x02
 
 #define DRV2624_REG_LRA_PERIOD_H		0x05
@@ -316,6 +318,7 @@ struct drv2624_data {
 	struct drv2624_fw_header fw_header;
 	unsigned char ram_lsb;
 	unsigned char ram_msb;
+	unsigned char lp_trigger_effect;
 };
 
 #define	DRV2624_MAGIC_NUMBER	0x32363234	/* '2624' */
