@@ -1296,7 +1296,7 @@ static bool qdf_log_icmpv6_pkt(uint8_t session_id, struct sk_buff *skb,
 			QDF_DP_TRACE_ICMPV6_PACKET_RECORD,
 			session_id, (skb->data + QDF_NBUF_SRC_MAC_OFFSET),
 			(skb->data + QDF_NBUF_DEST_MAC_OFFSET),
-			QDF_PROTO_TYPE_ICMPV6, subtype, dir, false));
+			QDF_PROTO_TYPE_ICMPV6, subtype, dir, true));
 		if (dir == QDF_TX)
 			QDF_NBUF_CB_TX_DP_TRACE(skb) = 1;
 		else if (dir == QDF_RX)

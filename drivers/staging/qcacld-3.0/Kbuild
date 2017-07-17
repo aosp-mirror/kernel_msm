@@ -1715,16 +1715,6 @@ ifeq ($(call cc-option-yn, -Wheader-guard),y)
 EXTRA_CFLAGS += -Wheader-guard
 endif
 
-ifeq ($(cc-name),clang)
-EXTRA_CFLAGS += -Wno-error-enum-conversion
-EXTRA_CFLAGS += -Wno-error-pointer-bool-conversion
-EXTRA_CFLAGS += -Wno-error-typedef-redefinition
-EXTRA_CFLAGS += $(call cc-option,-Wno-error-address-of-packed-member)
-EXTRA_CFLAGS += $(call cc-option,-Wno-error-logical-not-parentheses)
-EXTRA_CFLAGS += -Wno-parentheses-equality
-EXTRA_CFLAGS += -Wframe-larger-than=3072
-endif
-
 # If the module name is not "wlan", then the define MULTI_IF_NAME to be the
 # same a the QCA CHIP name. The host driver will then append MULTI_IF_NAME to
 # any string that must be unique for all instances of the driver on the system.

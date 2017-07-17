@@ -663,6 +663,8 @@ struct hdd_scan_req {
 	uint32_t scan_id;
 	uint8_t source;
 	uint32_t timestamp;
+	qdf_timer_t hdd_scan_inactivity_timer;
+	uint32_t scan_req_flags;
 };
 
 enum p2p_action_frame_state {
@@ -2068,12 +2070,12 @@ void hdd_get_fw_version(hdd_context_t *hdd_ctx,
  *
  * Return: true if supported and false otherwise
  */
-static inline bool hdd_is_memdump_supported(void)
+static inline bool hdd_is_memdump_supported(hdd_context_t *hdd_ctx)
 {
-	return true;
+	return hdd_ctx->fw_mem_dump_enabled;
 }
 #else
-static inline bool hdd_is_memdump_supported(void)
+static inline bool hdd_is_memdump_supported(hdd_context_t *hdd_ctx)
 {
 	return false;
 }
