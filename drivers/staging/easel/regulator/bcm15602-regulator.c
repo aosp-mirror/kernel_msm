@@ -623,10 +623,15 @@ static int bcm15602_handle_int(struct bcm15602_chip *ddata,
 		break;
 
 	case BCM15602_INT_WDT_EXP:
-		dev_err(dev, "Watchdog timer expired\n");
 	case BCM15602_INT_THERM_TRIP:
-		dev_err(dev, "Received thermal trip event from device\n");
 	case BCM15602_INT_THERM_TRIP_DONE:
+		if (flag_num == BCM15602_INT_WDT_EXP)
+			dev_err(dev, "Watchdog timer expired\n");
+		else if (flag_num == BCM15602_INT_THERM_TRIP)
+			dev_err(dev, "Received thermal trip event from device\n");
+		else
+			dev_err(dev, "Thermal condition has returned to normal\n");
+
 		/* notify regulator clients of failures */
 		NOTIFY(BCM15602_ID_ASR, REGULATOR_EVENT_FAIL);
 		NOTIFY(BCM15602_ID_SDSR, REGULATOR_EVENT_FAIL);
@@ -653,6 +658,9 @@ static int bcm15602_check_int_flags(struct bcm15602_chip *ddata)
 
 	/* read interrupt status flags */
 	bcm15602_read_bytes(ddata, BCM15602_REG_INT_INTFLAG1, flags, 4);
+
+	dev_info(ddata->dev, "%s: [0] = 0x%02x, [1] = 0x%02x, [2] = 0x%02x, [3] = 0x%02x\n",
+		 __func__, flags[0], flags[1], flags[2], flags[3]);
 
 	/* iterate through each interrupt */
 	for (i = 0; i < 4; i++) {
@@ -731,6 +739,8 @@ static irqreturn_t bcm15602_intb_irq_handler(int irq, void *cookie)
 {
 	struct bcm15602_chip *ddata = (struct bcm15602_chip *)cookie;
 	int ret;
+
+	dev_info(ddata->dev, "%s: observed irq\n", __func__);
 
 	while (!gpio_get_value(ddata->pdata->intb_gpio)) {
 		ret = bcm15602_check_int_flags(ddata);
