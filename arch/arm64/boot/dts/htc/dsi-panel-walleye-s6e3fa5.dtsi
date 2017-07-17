@@ -68,6 +68,9 @@
 			05 01 00 00 78 00 02 11 00 /* sleep out */
 			05 01 00 00 00 00 02 35 00 /* TE on */
 			15 01 00 00 00 00 02 53 20 /* brightness control (dimming) */
+			29 01 00 00 00 00 03 F0 5A 5A
+			39 01 00 00 00 00 06 BB D4 00 36 20 F3
+			29 01 00 00 00 00 03 F0 A5 A5
 			05 01 00 00 00 00 02 29 00 /* display on */
 		];
 		qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
@@ -85,7 +88,7 @@
 			15 01 00 00 00 00 02 53 20 /* ALPM off */
 		];
 		qcom,alpm-low-command = [
-			15 01 00 00 00 00 02 51 06
+			15 01 00 00 00 00 02 51 05
 			15 01 00 00 00 00 02 53 23 /* ALPM 10 nits */
 		];
 		qcom,alpm-high-command = [
