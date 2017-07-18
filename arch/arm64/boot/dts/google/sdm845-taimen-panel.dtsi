@@ -65,6 +65,9 @@
 	qcom,mdss-dsi-t-clk-post = <0x05>;
 	qcom,mdss-dsi-t-clk-pre = <0x1B>;
 
+	qcom,mdss-dsi-bl-min-level = <23>;
+	qcom,mdss-dsi-bl-max-level = <223>;
+
 	qcom,display-topology = <2 2 1>; /* 2xLM, 2xDSC Enc, 1xDSI Intf */
 	qcom,default-topology-index = <0>;
 
