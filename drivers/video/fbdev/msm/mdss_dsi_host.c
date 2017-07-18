@@ -2752,7 +2752,7 @@ int mdss_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp)
 		rc = mdss_dsi_bus_bandwidth_vote(ctrl->shared_data, true);
 		if (rc) {
 			pr_err("%s: Bus bw vote failed\n", __func__);
-			if (from_mdp)
+			if (cmd_mutex_acquired)
 				mutex_unlock(&ctrl->cmd_mutex);
 			return rc;
 		}
@@ -2761,7 +2761,8 @@ int mdss_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp)
 			rc = ctrl->mdss_util->iommu_ctrl(1);
 			if (IS_ERR_VALUE(rc)) {
 				pr_err("IOMMU attach failed\n");
-				mutex_unlock(&ctrl->cmd_mutex);
+				if (cmd_mutex_acquired)
+					mutex_unlock(&ctrl->cmd_mutex);
 				return rc;
 			}
 			use_iommu = true;

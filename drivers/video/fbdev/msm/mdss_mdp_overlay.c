@@ -2545,6 +2545,7 @@ int mdss_mdp_overlay_kickoff(struct msm_fb_data_type *mfd,
 		ret = __overlay_secure_ctrl(mfd);
 		if (IS_ERR_VALUE(ret)) {
 			pr_err("secure operation failed %d\n", ret);
+			mutex_unlock(&mdp5_data->list_lock);
 			goto commit_fail;
 		}
 	}
