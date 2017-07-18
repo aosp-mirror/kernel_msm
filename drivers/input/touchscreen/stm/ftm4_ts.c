@@ -1047,6 +1047,11 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 			} else if (status == STATUS_EVENT_SELF_CAL_FRAME_CHECK) {
 				tsp_debug_dbg(&info->client->dev,
 						"[FTS] Received Self Calib Frame Check Event\n");
+			} else if (status == FTS_EVENT_REBOOT_BY_ESD) {
+				tsp_debug_dbg(&info->client->dev,
+						"[FTS] Received ESD detected Event need to Reset\n");
+				schedule_delayed_work(&info->reset_work,
+					msecs_to_jiffies(10));
 			} else {
 				fts_debug_msg_event_handler(info,
 						  &data[EventNum *
