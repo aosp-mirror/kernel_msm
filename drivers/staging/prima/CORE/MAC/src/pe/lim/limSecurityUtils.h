@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2015, 2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -59,7 +59,7 @@ tANI_U8 limDeleteOpenAuthPreAuthNode(tpAniSirGlobal pMac);
 
 // Encryption/Decryption related functions
 tCfgWepKeyEntry    *limLookUpKeyMappings(tSirMacAddr);
-void               limComputeCrc32(tANI_U8 *, tANI_U8 *, tANI_U8);
+void               limComputeCrc32(tANI_U8 *, tANI_U8 *, tANI_U16);
 void               limRC4(tANI_U8 *, tANI_U8 *, tANI_U8 *, tANI_U32, tANI_U16);
 void               limEncryptAuthFrame(tpAniSirGlobal, tANI_U8, tANI_U8 *, tANI_U8 *, tANI_U8 *, tANI_U32);
 tANI_U8                 limDecryptAuthFrame(tpAniSirGlobal, tANI_U8 *, tANI_U8 *, tANI_U8 *, tANI_U32, tANI_U16);
