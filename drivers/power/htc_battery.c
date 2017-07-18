@@ -516,7 +516,7 @@ static void batt_worker(struct work_struct *work)
 	static int s_chg_present;
 	int pwrsrc_enabled = s_prev_pwrsrc_enabled;
 	int charging_enabled = gs_prev_charging_enabled;
-	int src = 0, online = 0, chg_present = 0;
+	int src = 0, online = 0, chg_present = 0, ex_otg = 0;
 	int ibat = 0;
 	int ibat_new = 0;
 	unsigned long time_since_last_update_ms;
@@ -565,9 +565,11 @@ static void batt_worker(struct work_struct *work)
 	 */
 	chg_present = get_property(htc_batt_info.usb_psy,
 				   POWER_SUPPLY_PROP_PRESENT);
+	ex_otg = get_property(htc_batt_info.usb_psy,
+			      POWER_SUPPLY_PROP_USE_EXTERNAL_VBUS_OUTPUT);
 	if (((int)htc_batt_info.rep.charging_source >
 	    POWER_SUPPLY_TYPE_BATTERY) ||
-	    (chg_present && g_pwrsrc_dis_reason)) {
+	    (chg_present && !ex_otg)) {
 		htc_batt_info.rep.full_level = full_level_dis_chg;
 		if (is_bounding_fully_charged_level())
 			g_pwrsrc_dis_reason |= HTC_BATT_PWRSRC_DIS_BIT_MFG;
