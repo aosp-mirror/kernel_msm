@@ -622,9 +622,9 @@ static void sop_movement_work(struct work_struct *work)
 	my_time = __current_kernel_time();
 	time_to_tm(my_time.tv_sec, sys_tz.tz_minuteswest * 60 * (-1), &my_date);
 
-	pr_info("sop kernel time %02d:%02d:%02d, date %02d-%02d-%02d\n",
-			my_date.tm_hour, my_date.tm_min, my_date.tm_sec,
-			(u8)my_date.tm_year, my_date.tm_mon+1, my_date.tm_mday);
+	pr_info("sop kernel time: %04d-%02d-%02d %02d:%02d:%02d\n",
+			1900+(u8)my_date.tm_year, my_date.tm_mon+1, my_date.tm_mday,
+			my_date.tm_hour, my_date.tm_min, my_date.tm_sec);
 
 	if (sop_align_position == 0) {
 		u8 align_data[SOP716_I2C_DATA_LENGTH] =
