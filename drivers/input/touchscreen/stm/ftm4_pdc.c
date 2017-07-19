@@ -105,7 +105,10 @@ static void run_self_raw_read_all(void *device_data);
 static void get_cx_data(void *device_data);
 static void run_cx_data_read(void *device_data);
 static void get_cx_all_data(void *device_data);
+static void get_raw_all_data(void *device_data);
+static void get_filtered_all_data(void *device_data);
 static void get_strength_all_data(void *device_data);
+static void get_baseline_all_data(void *device_data);
 static void set_tsp_test_result(void *device_data);
 static void get_tsp_test_result(void *device_data);
 static void run_trx_short_test(void *device_data);
@@ -151,7 +154,10 @@ struct fts_cmd fts_commands[] = {
 	{FTS_CMD("get_cx_data", get_cx_data),},
 	{FTS_CMD("run_cx_data_read", run_cx_data_read),},
 	{FTS_CMD("get_cx_all_data", get_cx_all_data),},
+	{FTS_CMD("get_raw_all_data", get_raw_all_data),},
+	{FTS_CMD("get_filtered_all_data", get_filtered_all_data),},
 	{FTS_CMD("get_strength_all_data", get_strength_all_data),},
+	{FTS_CMD("get_baseline_all_data", get_baseline_all_data),},
 	{FTS_CMD("set_tsp_test_result", set_tsp_test_result),},
 	{FTS_CMD("get_tsp_test_result", get_tsp_test_result),},
 	{FTS_CMD("report_rate", report_rate),},
@@ -530,7 +536,7 @@ static void set_default_result(struct fts_ts_info *info)
 
 static void set_cmd_result(struct fts_ts_info *info, char *buff, int len)
 {
-	strncat(info->cmd_result, buff, len);
+	strlcat(info->cmd_result, buff, CMD_RESULT_STR_LEN);
 }
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
@@ -766,6 +772,7 @@ int fts_read_frame(struct fts_ts_info *info, unsigned char type, short *min,
 		goto ErrorExit;
 	}
 
+
 	pFrameAddress[2] = type;
 	totalbytes = info->SenseChannelLength * info->ForceChannelLength * 2;
 	ret = info->fts_read_reg(info, &pFrameAddress[0], 3, pRead, pFrameAddress[3]);
@@ -833,7 +840,6 @@ int fts_read_frame(struct fts_ts_info *info, unsigned char type, short *min,
 			}
 		}
 	}
-	kfree(pRead);
 
 #ifdef DEBUG_MSG
 	tsp_debug_info(&info->client->dev,
@@ -866,6 +872,7 @@ int fts_read_frame(struct fts_ts_info *info, unsigned char type, short *min,
 	fts_print_frame(info, min, max);
 
 ErrorExit:
+	kfree(pRead);
 	return rc;
 }
 
@@ -1080,18 +1087,17 @@ static void get_rawcap(void *device_data)
 	tsp_debug_info(&info->client->dev, "%s: %s\n", __func__, buff);
 }
 
-static void get_strength_all_data(void *device_data)
+static void get_frame_all_data(void *device_data, unsigned char frame_type)
 {
 	struct fts_ts_info *info = (struct fts_ts_info *)device_data;
 	char buff[CMD_STR_LEN] = { 0 };
 	short min = 0x7FFF;
 	short max = 0x8000;
 	const int str_size = info->ForceChannelLength *
-		info->SenseChannelLength * 5;
-	char all_strbuff[str_size];
+		info->SenseChannelLength * 8;
+	char *all_strbuff = NULL;
+	int used;
 	int i, j;
-
-	memset(all_strbuff, 0, sizeof(char)*(str_size)); /* size 5 ex(1125,) */
 
 	set_default_result(info);
 	if (info->touch_stopped) {
@@ -1104,25 +1110,62 @@ static void get_strength_all_data(void *device_data)
 		return;
 	}
 
-	fts_read_frame(info, TYPE_STRENGTH_DATA, &min, &max);
+	all_strbuff = kzalloc(str_size, GFP_KERNEL);
+	if (!all_strbuff) {
+		info->cmd_state = CMD_STATUS_FAIL;
+		return;
+	}
 
+	fts_read_frame(info, frame_type, &min, &max);
 
+	used = 0;
 	for (i = 0; i < info->ForceChannelLength; i++) {
 		for (j = 0; j < info->SenseChannelLength; j++) {
-			sprintf(buff, "%d,",
-				info->pFrame[
-				(i * info->SenseChannelLength) + j]);
-			strcat(all_strbuff, buff);
+			int val = info->pFrame[
+					(i * info->SenseChannelLength) + j];
+			used += scnprintf(&all_strbuff[used],
+					str_size - used,
+					"%d,", val);
+			if (used + 1 >= str_size) {
+				tsp_debug_info(&info->client->dev,
+					"%s: [ERROR] Ran out of buffer.",
+					__func__);
+				info->cmd_state = CMD_STATUS_FAIL;
+				goto out;
+			}
 		}
 	}
 
 	info->cmd_state = CMD_STATUS_OK;
 
+out:
+
 	set_cmd_result(info, all_strbuff,
-			strnlen(all_strbuff, sizeof(all_strbuff)));
+			strnlen(all_strbuff, str_size));
 	tsp_debug_info(&info->client->dev,
-			"%ld (%ld)\n", strnlen(all_strbuff,
-			sizeof(all_strbuff)), sizeof(all_strbuff));
+			"%ld (%d)\n", strnlen(all_strbuff,
+			str_size), str_size);
+	kfree(all_strbuff);
+}
+
+static void get_raw_all_data(void *device_data)
+{
+	get_frame_all_data(device_data, TYPE_RAW_DATA);
+}
+
+static void get_filtered_all_data(void *device_data)
+{
+	get_frame_all_data(device_data, TYPE_FILTERED_DATA);
+}
+
+static void get_strength_all_data(void *device_data)
+{
+	get_frame_all_data(device_data, TYPE_STRENGTH_DATA);
+}
+
+static void get_baseline_all_data(void *device_data)
+{
+	get_frame_all_data(device_data, TYPE_BASELINE_DATA);
 }
 
 void fts_read_self_frame(struct fts_ts_info *info, unsigned short oAddr)
