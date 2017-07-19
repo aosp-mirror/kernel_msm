@@ -33,6 +33,10 @@
 };
 
 &dsi_sw43402_dsc_qhd_cmd {
+	qcom,alpm-off-command = [
+		15 01 00 00 00 00 02 51 01
+		05 01 00 00 44 00 01 38
+	];
 	qcom,mdss-dsi-bl-off-level = <1>;
 };
 
