@@ -70,7 +70,7 @@ int msp430_firmware_update_start(struct device *dev)
 	uint32_t ii, uu, res;
 	uint8_t resetVector[2];
 	uint32_t resetVectorValue;
-	int fw_version_skip = 2;
+	int fw_version_skip = 3;
 	const struct firmware *fw_entry = NULL;
 
 	pr_info("\n----- Simplified MSP430 I2C Linux BSL ----- \n");

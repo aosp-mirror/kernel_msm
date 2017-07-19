@@ -31,15 +31,18 @@
 #define SOP716_I2C_DATA_LENGTH       4
 #define SOP716_I2C_DATA_LENGTH_TIME  8
 
-#define CMD_SOP716_SET_CURRENT_TIME  0
-#define CMD_SOP716_MOTOR_MOVE_ONE    1
-#define CMD_SOP716_MOTOR_MOVE_ALL    2
-#define CMD_SOP716_MOTOR_INIT        3
-#define CMD_SOP716_READ_CURRENT_TIME 4
-#define CMD_SOP716_READ_FW_VERSION   5
+#define CMD_SOP716_SET_CURRENT_TIME          0
+#define CMD_SOP716_MOTOR_MOVE_ONE            1
+#define CMD_SOP716_MOTOR_MOVE_ALL            2
+#define CMD_SOP716_MOTOR_INIT                3
+#define CMD_SOP716_READ_CURRENT_TIME         4
+#define CMD_SOP716_READ_FW_VERSION           5
+#define CMD_SOP716_BATTERY_CHECK_PERIOD      7
+#define CMD_SOP716_READ_BATTERY_LEVEL        8
+#define CMD_SOP716_READ_BATTERY_CHECK_PERIOD 9
 
 #define MAJOR_VER 1
-#define MINOR_VER 8
+#define MINOR_VER 10
 
 
 struct timer_list sop_demo_timer;
@@ -361,6 +364,69 @@ static ssize_t sop716_get_version_show(struct device *dev,
 	return snprintf(buf, PAGE_SIZE, "v%d.%d\n", data[1], data[2]);
 }
 
+/* Code for CMD_SOP716_BATTERY_CHECK_PERIOD */
+static ssize_t sop716_battery_check_period_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	u8 data[SOP716_I2C_DATA_LENGTH-2];
+	struct sop716_info *dd = dev_get_drvdata(dev);
+
+	sop716_read(dd, CMD_SOP716_READ_BATTERY_CHECK_PERIOD,
+			SOP716_I2C_DATA_LENGTH-2, data);
+
+	return snprintf(buf, PAGE_SIZE, "%d min\n", data[1]);
+}
+
+static ssize_t sop716_battery_check_period_store(struct device *dev,
+			struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct sop716_info *dd = dev_get_drvdata(dev);
+	u8 data[SOP716_I2C_DATA_LENGTH-2];
+	u8 tmp[4];
+	int interval;
+	int rc = 0;
+
+	if (count != 3 && count != 4) {
+		pr_err("%s: Error!!! invalid input count!\n", __func__);
+		return -EINVAL;
+	 }
+
+	snprintf(tmp, 4, buf);
+	rc = kstrtoint(tmp, 10, &interval);
+
+	if (rc) {
+		pr_err("%s: Error!!! invalid input format! rc:%d\n", __func__, rc);
+		return rc;
+	 }
+
+	if ((interval < 0 || interval > 60)) {
+		pr_err("%s: Error!!! invalid input format!\n", __func__);
+		return -EINVAL;
+	}
+
+	pr_debug("%s: cnt:%d interval:%d\n",
+			__func__, count, interval);
+
+	data[0] = CMD_SOP716_BATTERY_CHECK_PERIOD;
+	data[1] = interval;
+
+	sop716_write(dd, SOP716_I2C_DATA_LENGTH-2, SOP716_I2C_DATA_LENGTH-2, data);
+
+	return count;
+}
+
+/* Code for CMD_SOP716_READ_BATTERY_LEVEL */
+static ssize_t sop716_get_battery_level_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	u8 data[SOP716_I2C_DATA_LENGTH-1];
+	struct sop716_info *dd = dev_get_drvdata(dev);
+
+	sop716_read(dd, CMD_SOP716_READ_BATTERY_LEVEL,
+			SOP716_I2C_DATA_LENGTH-1, data);
+
+	return snprintf(buf, PAGE_SIZE, "%d mV\n", data[1]*256 + data[2]);
+}
 
 static struct device_attribute sop716_device_attrs[] = {
 	__ATTR(set_hands_alignment, S_IRUGO | S_IWUSR,
@@ -374,6 +440,9 @@ static struct device_attribute sop716_device_attrs[] = {
 	__ATTR(get_hands_position, S_IRUGO, sop716_hands_position_show, NULL),
 	__ATTR(get_time, S_IRUGO, sop716_get_time_show, NULL),
 	__ATTR(get_version, S_IRUGO, sop716_get_version_show, NULL),
+	__ATTR(battery_check_period, S_IRUGO | S_IWUSR,
+				sop716_battery_check_period_show, sop716_battery_check_period_store),
+	__ATTR(get_battery_level, S_IRUGO, sop716_get_battery_level_show, NULL),
 };
 
 static int sop716_write(struct sop716_info *dd, u8 reg, u8 length, u8 *val)
@@ -481,7 +550,7 @@ static int sop716_parse_gpio(struct device_node *node, struct sop716_info *dd)
 		return -1;
 	}
 
-	/* reset signal low--> high */
+	/* reset signal high --> low */
 	if ((dd->reset_pin =
 			of_get_named_gpio_flags(node, "soprod,reset", 0, NULL)) > 0) {
 		error = gpio_request(dd->reset_pin, "soprod,reset");
@@ -490,6 +559,10 @@ static int sop716_parse_gpio(struct device_node *node, struct sop716_info *dd)
 			return -1;
 		}
 		gpio_direction_output(dd->reset_pin, 0);
+		msleep(100);
+		gpio_set_value(dd->reset_pin, 0);
+		msleep(100);
+		gpio_set_value(dd->reset_pin, 1);
 		msleep(100);
 		gpio_set_value(dd->reset_pin, 0);
 	} else {
@@ -617,12 +690,13 @@ static void sop_movement_work(struct work_struct *work)
 
 		sop716_read(sop716, CMD_SOP716_READ_FW_VERSION,
 				SOP716_I2C_DATA_LENGTH-1, data);
+		pr_info("sop firmware version: v%d.%d\n", data[1], data[2]);
 
 		if( !(data[1] == MAJOR_VER && data[2] == MINOR_VER)) {
 			struct timespec system_time;
 			struct tm movement_time;
-			pr_info("sop_firmware_update: current ver%d.%d\n",
-					data[1], data[2]);
+			pr_info("sop_firmware_update : v%d.%d -> v%d.%d\n",
+					data[1], data[2], MAJOR_VER, MINOR_VER);
 			sop_firmware_update(chip);
 			system_time = __current_kernel_time();
 			time_to_tm(system_time.tv_sec, sys_tz.tz_minuteswest * 60 * (-1),
