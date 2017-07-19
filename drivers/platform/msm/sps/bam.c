@@ -1205,13 +1205,13 @@ u32 bam_check_irq_source(void *base, u32 ee, u32 mask,
 		status = bam_read_reg(base, IRQ_STTS, 0);
 
 		if (status & IRQ_STTS_BAM_ERROR_IRQ) {
-			SPS_ERR(dev, "sps:bam %pP 0x%pP(va);bam irq status="
+			SPS_ERR(dev, "sps:bam %paP 0x%pP(va);bam irq status="
 				"0x%x.\nsps: BAM_ERROR_IRQ\n",
 				BAM_ID(dev), dev->base, status);
 			bam_output_register_content(base, ee);
 			*cb_case = SPS_CALLBACK_BAM_ERROR_IRQ;
 		} else if (status & IRQ_STTS_BAM_HRESP_ERR_IRQ) {
-			SPS_ERR(dev, "sps:bam %pP 0x%pP(va);bam irq status="
+			SPS_ERR(dev, "sps:bam %paP 0x%pP(va);bam irq status="
 				"0x%x.\nsps: BAM_HRESP_ERR_IRQ\n",
 				BAM_ID(dev), dev->base, status);
 			bam_output_register_content(base, ee);
