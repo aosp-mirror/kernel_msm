@@ -781,7 +781,7 @@ static int fts_init(struct fts_ts_info *info)
 static void fts_debug_msg_event_handler(struct fts_ts_info *info,
 				      unsigned char data[])
 {
-	tsp_debug_dbg(&info->client->dev,
+	tsp_debug_info(&info->client->dev,
 	       "%s: %02X %02X %02X %02X "
 	       "%02X %02X %02X %02X\n", __func__,
 	       data[0], data[1], data[2], data[3],
@@ -1027,28 +1027,28 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 
 				fts_write_reg(info, &regAdd[0], 4);
 
-				tsp_debug_dbg(&info->client->dev,
+				tsp_debug_info(&info->client->dev,
 						"[FTS] Received the Raw Data Ready Event\n");
 			} else if (status == STATUS_EVENT_FORCE_CAL_MUTUAL) {
-				tsp_debug_dbg(&info->client->dev,
+				tsp_debug_info(&info->client->dev,
 						"[FTS] Received Force Calibration Mutual only Event\n");
 			} else if (status == STATUS_EVENT_FORCE_CAL_SELF) {
-				tsp_debug_dbg(&info->client->dev,
+				tsp_debug_info(&info->client->dev,
 						"[FTS] Received Force Calibration Self only Event\n");
 			} else if (status == STATUS_EVENT_WATERMODE_ON) {
-				tsp_debug_dbg(&info->client->dev,
+				tsp_debug_info(&info->client->dev,
 						"[FTS] Received Water Mode On Event\n");
 			} else if (status == STATUS_EVENT_WATERMODE_OFF) {
-				tsp_debug_dbg(&info->client->dev,
+				tsp_debug_info(&info->client->dev,
 						"[FTS] Received Water Mode Off Event\n");
 			} else if (status == STATUS_EVENT_MUTUAL_CAL_FRAME_CHECK) {
-				tsp_debug_dbg(&info->client->dev,
+				tsp_debug_info(&info->client->dev,
 						"[FTS] Received Mutual Calib Frame Check Event\n");
 			} else if (status == STATUS_EVENT_SELF_CAL_FRAME_CHECK) {
-				tsp_debug_dbg(&info->client->dev,
+				tsp_debug_info(&info->client->dev,
 						"[FTS] Received Self Calib Frame Check Event\n");
 			} else if (status == FTS_EVENT_REBOOT_BY_ESD) {
-				tsp_debug_dbg(&info->client->dev,
+				tsp_debug_info(&info->client->dev,
 						"[FTS] Received ESD detected Event need to Reset\n");
 				schedule_delayed_work(&info->reset_work,
 					msecs_to_jiffies(10));
