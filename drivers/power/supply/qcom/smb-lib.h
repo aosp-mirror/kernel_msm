@@ -354,6 +354,7 @@ struct smb_charger {
 	bool			pr_swap_in_progress;
 	int			typec_mode;
 	int			usb_icl_change_irq_enabled;
+	u32			jeita_status;
 
 	int			fake_port_temp;
 	bool			port_overheat;
