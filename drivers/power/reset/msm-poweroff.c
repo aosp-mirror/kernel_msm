@@ -271,7 +271,7 @@ static void flush_console(void)
 		return;
 	}
 
-	msleep(50);
+	mdelay(50);
 
 	local_irq_save(flags);
 	if (!console_trylock())
