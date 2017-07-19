@@ -12,6 +12,14 @@
 
 #include "apq8009-narwhal.dtsi"
 
+&dsi_sharp_nt35350_cmd {
+	/delete-property/ qcom,mdss-dsi-te-pin-select;
+	/delete-property/ qcom,mdss-dsi-te-check-enable;
+	/delete-property/ qcom,mdss-dsi-te-using-te-pin;
+	/delete-property/ qcom,esd-check-enabled;
+	/delete-property/ qcom,mdss-dsi-panel-status-check-mode;
+};
+
 &soc {
 	i2c@78b6000 { /* BLSP1 QUP2 */
 		backlight_dsv_qup2: lm36272@11 {
