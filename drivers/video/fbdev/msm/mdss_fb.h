@@ -238,14 +238,46 @@ struct msm_mdp_interface {
 };
 
 #define IS_CALIB_MODE_BL(mfd) (((mfd)->calib_mode) & MDSS_CALIB_MODE_BL)
-#define MDSS_BRIGHT_TO_BL(out, v, bl_max, max_bright) do {\
-				out = (2 * (v) * (bl_max) + max_bright);\
-				do_div(out, 2 * max_bright);\
-				} while (0)
-#define MDSS_BL_TO_BRIGHT(out, v, bl_max, max_bright) do {\
-				out = ((v) * (max_bright));\
-				do_div(out, bl_max);\
-				} while (0)
+
+/*
+ * This maps android backlight level 0 to 255 into driver backlight level
+ * 0 always maps to 0 backlight level, and any value from 1-brightness_max
+ * will map to range bl_min to bl_max rounding to closest integer
+ */
+static inline int mdss_brightness_to_bl(struct mdss_panel_info *pinfo, int val)
+{
+	int bl_lvl, bl_min, bl_range;
+
+	if (val <= 0)
+		return 0;
+	else if (val >= pinfo->brightness_max)
+		return pinfo->bl_max;
+
+	/* ensure tha bl_min is at least 1 since 0 is mapped to off */
+	bl_min = pinfo->bl_min ? : 1;
+	bl_range = pinfo->bl_max - bl_min;
+	bl_lvl = DIV_ROUND_CLOSEST((val - 1) * bl_range,
+				   pinfo->brightness_max - 1);
+
+	return bl_min + bl_lvl;
+}
+
+static inline int mdss_bl_to_brightness(struct mdss_panel_info *pinfo, int val)
+{
+	int bl_lvl, bl_min, bl_range;
+
+	bl_min = pinfo->bl_min ? : 1;
+	if (val < bl_min)
+		return 0;
+	else if (val >= pinfo->bl_max)
+		return pinfo->brightness_max;
+
+	/* ensure that value returned is at least 1 since 0 is mapped to off */
+	bl_range = pinfo->bl_max - bl_min;
+	bl_lvl = val - bl_min;
+
+	return 1 + mult_frac(bl_lvl, pinfo->brightness_max - 1, bl_range);
+}
 
 struct mdss_fb_file_info {
 	struct file *file;
