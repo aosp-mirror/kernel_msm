@@ -842,7 +842,7 @@ static int smblib_usb_icl_vote_callback(struct votable *votable, void *data,
 
 	disable_irq_nosync(chg->irq_info[USBIN_ICL_CHANGE_IRQ].irq);
 
-	if (client && icl_ua == 0) {
+	if (client && icl_ua >= 0 && icl_ua < USBIN_25MA) {
 		rc = smblib_set_usb_suspend(chg, true);
 		if (rc < 0) {
 			smblib_err(chg, "Couldn't suspend usb, rc=%d\n", rc);
