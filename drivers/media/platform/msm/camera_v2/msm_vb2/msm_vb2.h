@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2013, 2017 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -66,5 +66,6 @@ struct msm_stream {
 struct vb2_ops *msm_vb2_get_q_ops(void);
 struct vb2_mem_ops *msm_vb2_get_q_mem_ops(void);
 int msm_vb2_request_cb(struct msm_sd_req_vb2_q *req_sd);
+int msm_vb2_get_stream_state(struct msm_stream *stream);
 
 #endif /*_MSM_VB_H */
