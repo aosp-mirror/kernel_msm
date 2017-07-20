@@ -16,4 +16,3 @@
 #include "sdm845-taimen-touch-stm-ftm4.dtsi"
 #include "sdm845-taimen-panel.dtsi"
 #include "sdm845-b1c1-audio.dtsi"
-#include "sdm845-b1c1-wcd.dtsi"
