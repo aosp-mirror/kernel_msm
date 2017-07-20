@@ -289,13 +289,6 @@
 		qcom,cam-vreg-max-voltage = <1800000 2850000 1050000>;
 		qcom,cam-vreg-op-mode = <0 0 0>;
 		qcom,gpio-no-mux = <0>;
-		pinctrl-names = "cam_default", "cam_suspend";
-		pinctrl-0 = <&cam_sensor_mclk0_active
-				 &cam_sensor_rear_active
-				 &cam_sensor_vsync_active>;
-		pinctrl-1 = <&cam_sensor_mclk0_suspend
-				 &cam_sensor_rear_suspend
-				 &cam_sensor_vsync_suspend>;
 		gpios = <&tlmm 13 0>,
 			<&tlmm 24 0>,
 			<&pm8998_gpios 20 0>,
@@ -340,13 +333,6 @@
 		qcom,cam-vreg-max-voltage = <1200000 1800000 2850000>;
 		qcom,cam-vreg-op-mode = <0 0 0>;//uA
 		qcom,gpio-no-mux = <0>;
-		pinctrl-names = "cam_default", "cam_suspend";
-		pinctrl-0 = <&cam_sensor_mclk1_active
-			&cam_sensor_front_active
-			&cam_sensor_front_vsync_active>;
-		pinctrl-1 = <&cam_sensor_mclk1_suspend
-			&cam_sensor_front_suspend
-			&cam_sensor_front_vsync_suspend>;
 		gpios = <&tlmm 14 0>,
 			<&tlmm 23 0>,
 			<&pmi8998_gpios 6 0>,
