@@ -530,6 +530,7 @@ void sde_encoder_helper_split_config(
 	struct split_pipe_cfg cfg = { 0 };
 	struct sde_hw_mdp *hw_mdptop;
 	enum sde_rm_topology_name topology;
+	struct msm_display_info *disp_info;
 
 	if (!phys_enc || !phys_enc->hw_mdptop || !phys_enc->parent) {
 		SDE_ERROR("invalid arg(s), encoder %d\n", phys_enc != 0);
@@ -538,6 +539,10 @@ void sde_encoder_helper_split_config(
 
 	sde_enc = to_sde_encoder_virt(phys_enc->parent);
 	hw_mdptop = phys_enc->hw_mdptop;
+	disp_info = &sde_enc->disp_info;
+
+	if (disp_info->intf_type != DRM_MODE_CONNECTOR_DSI)
+		return;
 
 	/**
 	 * disable split modes since encoder will be operating in as the only
@@ -1164,15 +1169,11 @@ static int sde_encoder_update_rsc_client(
 struct sde_rsc_client *sde_encoder_get_rsc_client(struct drm_encoder *drm_enc)
 {
 	struct sde_encoder_virt *sde_enc;
-	struct msm_display_info *disp_info;
 
 	if (!drm_enc)
 		return NULL;
-
 	sde_enc = to_sde_encoder_virt(drm_enc);
-	disp_info = &sde_enc->disp_info;
-
-	return disp_info->is_primary ? sde_enc->rsc_client : NULL;
+	return sde_enc->rsc_client;
 }
 
 static void _sde_encoder_resource_control_helper(struct drm_encoder *drm_enc,
@@ -1846,6 +1847,12 @@ static void sde_encoder_frame_done_callback(
 	struct sde_encoder_virt *sde_enc = to_sde_encoder_virt(drm_enc);
 	unsigned int i;
 
+	if (!sde_enc->frame_busy_mask[0]) {
+		/* suppress frame_done without waiter, likely autorefresh */
+		SDE_EVT32(DRMID(drm_enc), event, ready_phys->intf_idx);
+		return;
+	}
+
 	/* One of the physical encoders has become idle */
 	for (i = 0; i < sde_enc->num_phys_encs; i++)
 		if (sde_enc->phys_encs[i] == ready_phys) {
@@ -2262,6 +2269,27 @@ void sde_encoder_trigger_kickoff_pending(struct drm_encoder *drm_enc)
 	}
 }
 
+static void _sde_encoder_setup_dither(struct sde_encoder_phys *phys)
+{
+	void *dither_cfg;
+	int ret = 0;
+	size_t len = 0;
+	enum sde_rm_topology_name topology;
+
+	if (!phys || !phys->connector || !phys->hw_pp ||
+			!phys->hw_pp->ops.setup_dither)
+		return;
+	topology = sde_connector_get_topology_name(phys->connector);
+	if ((topology == SDE_RM_TOPOLOGY_PPSPLIT) &&
+			(phys->split_role == ENC_ROLE_SLAVE))
+		return;
+
+	ret = sde_connector_get_dither_cfg(phys->connector,
+				phys->connector->state, &dither_cfg, &len);
+	if (!ret)
+		phys->hw_pp->ops.setup_dither(phys->hw_pp, dither_cfg, len);
+}
+
 void sde_encoder_prepare_for_kickoff(struct drm_encoder *drm_enc,
 		struct sde_encoder_kickoff_params *params)
 {
@@ -2288,6 +2316,7 @@ void sde_encoder_prepare_for_kickoff(struct drm_encoder *drm_enc,
 				phys->ops.prepare_for_kickoff(phys, params);
 			if (phys->enable_state == SDE_ENC_ERR_NEEDS_HW_RESET)
 				needs_hw_reset = true;
+			_sde_encoder_setup_dither(phys);
 		}
 	}
 

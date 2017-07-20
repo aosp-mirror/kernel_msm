@@ -979,7 +979,7 @@ static int _sde_crtc_check_rois_centered_and_symmetric(struct drm_crtc *crtc,
 	 * On certain HW, if using 2 LM, ROIs must be split evenly between the
 	 * LMs and be of equal width.
 	 */
-	if (sde_crtc->num_mixers == 1)
+	if (sde_crtc->num_mixers < 2)
 		return 0;
 
 	roi[0] = &crtc_state->lm_roi[0];
@@ -1202,6 +1202,11 @@ static void _sde_crtc_blend_setup_mixer(struct drm_crtc *crtc,
 				state->fb ? state->fb->base.id : -1);
 
 		format = to_sde_format(msm_framebuffer_format(pstate->base.fb));
+		if (!format) {
+			SDE_ERROR("invalid format\n");
+			return;
+		}
+
 		if (pstate->stage == SDE_STAGE_BASE && format->alpha_enable)
 			bg_alpha_enable = true;
 
@@ -1563,9 +1568,8 @@ static void sde_crtc_frame_event_work(struct kthread_work *work)
 		}
 
 		if (fevent->event == SDE_ENCODER_FRAME_EVENT_DONE ||
-			    (fevent->event & SDE_ENCODER_FRAME_EVENT_ERROR)) {
+			    (fevent->event & SDE_ENCODER_FRAME_EVENT_ERROR))
 			complete_all(&sde_crtc->frame_done_comp);
-		}
 
 		if (fevent->event == SDE_ENCODER_FRAME_EVENT_DONE)
 			sde_core_perf_crtc_update(crtc, 0, false);
@@ -2017,6 +2021,16 @@ static void sde_crtc_atomic_flush(struct drm_crtc *crtc,
 	if (unlikely(!sde_crtc->num_mixers))
 		return;
 
+	/*
+	 * For planes without commit update, drm framework will not add
+	 * those planes to current state since hardware update is not
+	 * required. However, if those planes were power collapsed since
+	 * last commit cycle, driver has to restore the hardware state
+	 * of those planes explicitly here prior to plane flush.
+	 */
+	drm_atomic_crtc_for_each_plane(plane, crtc)
+		sde_plane_restore(plane);
+
 	/* wait for acquire fences before anything else is done */
 	_sde_crtc_wait_for_fences(crtc);
 
@@ -2121,6 +2135,12 @@ void sde_crtc_commit_kickoff(struct drm_crtc *crtc)
 	dev = crtc->dev;
 	sde_crtc = to_sde_crtc(crtc);
 	sde_kms = _sde_crtc_get_kms(crtc);
+
+	if (!sde_kms || !sde_kms->dev || !sde_kms->dev->dev_private) {
+		SDE_ERROR("invalid argument\n");
+		return;
+	}
+
 	priv = sde_kms->dev->dev_private;
 	cstate = to_sde_crtc_state(crtc->state);
 
@@ -2291,7 +2311,7 @@ static void _sde_crtc_set_suspend(struct drm_crtc *crtc, bool enable)
 		_sde_crtc_vblank_enable_nolock(sde_crtc, !enable);
 
 	sde_crtc->suspend = enable;
-	msm_mode_object_event_nofity(&crtc->base, crtc->dev, &event,
+	msm_mode_object_event_notify(&crtc->base, crtc->dev, &event,
 			(u8 *)&power_on);
 	mutex_unlock(&sde_crtc->crtc_lock);
 }
@@ -2460,6 +2480,7 @@ static void sde_crtc_handle_power_event(u32 event_type, void *arg)
 			sde_plane_set_revalidate(plane, true);
 
 		drm_modeset_unlock_crtc(crtc);
+		sde_cp_crtc_suspend(crtc);
 	}
 
 	mutex_unlock(&sde_crtc->crtc_lock);
@@ -2514,6 +2535,17 @@ static void sde_crtc_disable(struct drm_crtc *crtc)
 		atomic_set(&sde_crtc->frame_pending, 0);
 	}
 
+	spin_lock_irqsave(&sde_crtc->spin_lock, flags);
+	list_for_each_entry(node, &sde_crtc->user_event_list, list) {
+		ret = 0;
+		if (node->func)
+			ret = node->func(crtc, false, &node->irq);
+		if (ret)
+			SDE_ERROR("%s failed to disable event %x\n",
+					sde_crtc->name, node->event);
+	}
+	spin_unlock_irqrestore(&sde_crtc->spin_lock, flags);
+
 	sde_core_perf_crtc_update(crtc, 0, true);
 
 	drm_for_each_encoder(encoder, crtc->dev) {
@@ -2533,17 +2565,7 @@ static void sde_crtc_disable(struct drm_crtc *crtc)
 
 	/* disable clk & bw control until clk & bw properties are set */
 	cstate->bw_control = false;
-
-	spin_lock_irqsave(&sde_crtc->spin_lock, flags);
-	list_for_each_entry(node, &sde_crtc->user_event_list, list) {
-		ret = 0;
-		if (node->func)
-			ret = node->func(crtc, false, &node->irq);
-		if (ret)
-			SDE_ERROR("%s failed to disable event %x\n",
-					sde_crtc->name, node->event);
-	}
-	spin_unlock_irqrestore(&sde_crtc->spin_lock, flags);
+	cstate->bw_split_vote = false;
 
 	mutex_unlock(&sde_crtc->crtc_lock);
 }
@@ -2628,7 +2650,7 @@ static int _sde_crtc_excl_rect_overlap_check(struct plane_state pstates[],
 	for (i = curr_cnt; i < cnt; i++) {
 		pstate = pstates[i].drm_pstate;
 		POPULATE_RECT(&dst_rect, pstate->crtc_x, pstate->crtc_y,
-				pstate->crtc_w, pstate->crtc_h, true);
+				pstate->crtc_w, pstate->crtc_h, false);
 		sde_kms_rect_intersect(&dst_rect, excl_rect, &intersect);
 
 		if (intersect.w == excl_rect->w && intersect.h == excl_rect->h
@@ -2997,6 +3019,10 @@ static void sde_crtc_install_properties(struct drm_crtc *crtc,
 	struct drm_device *dev;
 	struct sde_kms_info *info;
 	struct sde_kms *sde_kms;
+	static const struct drm_prop_enum_list e_secure_level[] = {
+		{SDE_DRM_SEC_NON_SEC, "sec_and_non_sec"},
+		{SDE_DRM_SEC_ONLY, "sec_only"},
+	};
 
 	SDE_DEBUG("\n");
 
@@ -3008,6 +3034,11 @@ static void sde_crtc_install_properties(struct drm_crtc *crtc,
 	sde_crtc = to_sde_crtc(crtc);
 	dev = crtc->dev;
 	sde_kms = _sde_crtc_get_kms(crtc);
+
+	if (!sde_kms) {
+		SDE_ERROR("invalid argument\n");
+		return;
+	}
 
 	info = kzalloc(sizeof(struct sde_kms_info), GFP_KERNEL);
 	if (!info) {
@@ -3040,13 +3071,21 @@ static void sde_crtc_install_properties(struct drm_crtc *crtc,
 			catalog->perf.max_bw_high * 1000ULL,
 			CRTC_PROP_CORE_IB);
 	msm_property_install_range(&sde_crtc->property_info,
-			"mem_ab", 0x0, 0, U64_MAX,
+			"llcc_ab", 0x0, 0, U64_MAX,
 			catalog->perf.max_bw_high * 1000ULL,
-			CRTC_PROP_MEM_AB);
+			CRTC_PROP_LLCC_AB);
 	msm_property_install_range(&sde_crtc->property_info,
-			"mem_ib", 0x0, 0, U64_MAX,
+			"llcc_ib", 0x0, 0, U64_MAX,
 			catalog->perf.max_bw_high * 1000ULL,
-			CRTC_PROP_MEM_IB);
+			CRTC_PROP_LLCC_IB);
+	msm_property_install_range(&sde_crtc->property_info,
+			"dram_ab", 0x0, 0, U64_MAX,
+			catalog->perf.max_bw_high * 1000ULL,
+			CRTC_PROP_DRAM_AB);
+	msm_property_install_range(&sde_crtc->property_info,
+			"dram_ib", 0x0, 0, U64_MAX,
+			catalog->perf.max_bw_high * 1000ULL,
+			CRTC_PROP_DRAM_IB);
 	msm_property_install_range(&sde_crtc->property_info,
 			"rot_prefill_bw", 0, 0, U64_MAX,
 			catalog->perf.max_bw_high * 1000ULL,
@@ -3061,6 +3100,11 @@ static void sde_crtc_install_properties(struct drm_crtc *crtc,
 
 	msm_property_install_volatile_range(&sde_crtc->property_info,
 		"sde_drm_roi_v1", 0x0, 0, ~0, 0, CRTC_PROP_ROI_V1);
+
+	msm_property_install_enum(&sde_crtc->property_info, "security_level",
+			0x0, 0, e_secure_level,
+			ARRAY_SIZE(e_secure_level),
+			CRTC_PROP_SECURITY_LEVEL);
 
 	sde_kms_info_reset(info);
 
@@ -3174,9 +3218,14 @@ static int sde_crtc_atomic_set_property(struct drm_crtc *crtc,
 			case CRTC_PROP_CORE_CLK:
 			case CRTC_PROP_CORE_AB:
 			case CRTC_PROP_CORE_IB:
-			case CRTC_PROP_MEM_AB:
-			case CRTC_PROP_MEM_IB:
 				cstate->bw_control = true;
+				break;
+			case CRTC_PROP_LLCC_AB:
+			case CRTC_PROP_LLCC_IB:
+			case CRTC_PROP_DRAM_AB:
+			case CRTC_PROP_DRAM_IB:
+				cstate->bw_control = true;
+				cstate->bw_split_vote = true;
 				break;
 			default:
 				/* nothing to do */
@@ -3529,15 +3578,22 @@ static int sde_crtc_debugfs_state_show(struct seq_file *s, void *v)
 	struct sde_crtc *sde_crtc = to_sde_crtc(crtc);
 	struct sde_crtc_state *cstate = to_sde_crtc_state(crtc->state);
 	struct sde_crtc_res *res;
+	int i;
 
 	seq_printf(s, "num_connectors: %d\n", cstate->num_connectors);
 	seq_printf(s, "client type: %d\n", sde_crtc_get_client_type(crtc));
 	seq_printf(s, "intf_mode: %d\n", sde_crtc_get_intf_mode(crtc));
-	seq_printf(s, "bw_ctl: %llu\n", sde_crtc->cur_perf.bw_ctl);
 	seq_printf(s, "core_clk_rate: %llu\n",
 			sde_crtc->cur_perf.core_clk_rate);
-	seq_printf(s, "max_per_pipe_ib: %llu\n",
-			sde_crtc->cur_perf.max_per_pipe_ib);
+	for (i = SDE_POWER_HANDLE_DBUS_ID_MNOC;
+			i < SDE_POWER_HANDLE_DBUS_ID_MAX; i++) {
+		seq_printf(s, "bw_ctl[%s]: %llu\n",
+				sde_power_handle_get_dbus_name(i),
+				sde_crtc->cur_perf.bw_ctl[i]);
+		seq_printf(s, "max_per_pipe_ib[%s]: %llu\n",
+				sde_power_handle_get_dbus_name(i),
+				sde_crtc->cur_perf.max_per_pipe_ib[i]);
+	}
 
 	seq_printf(s, "rp.%d: ", cstate->rp.sequence_id);
 	list_for_each_entry(res, &cstate->rp.res_list, list)

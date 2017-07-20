@@ -40,19 +40,21 @@ struct dp_panel_info {
 struct dp_panel {
 	/* dpcd raw data */
 	u8 dpcd[DP_RECEIVER_CAP_SIZE];
-	struct drm_dp_link dp_link;
+	struct drm_dp_link link_info;
 
 	struct sde_edid_ctrl *edid_ctrl;
 	struct dp_panel_info pinfo;
 
 	u32 vic;
+	u32 max_pclk_khz;
 
 	int (*sde_edid_register)(struct dp_panel *dp_panel);
 	void (*sde_edid_deregister)(struct dp_panel *dp_panel);
 	int (*init_info)(struct dp_panel *dp_panel);
 	int (*timing_cfg)(struct dp_panel *dp_panel);
 	int (*read_dpcd)(struct dp_panel *dp_panel);
-	u32 (*get_link_rate)(struct dp_panel *dp_panel);
+	u32 (*get_min_req_link_rate)(struct dp_panel *dp_panel);
+	u32 (*get_max_pclk)(struct dp_panel *dp_panel);
 };
 
 struct dp_panel *dp_panel_get(struct device *dev, struct dp_aux *aux,

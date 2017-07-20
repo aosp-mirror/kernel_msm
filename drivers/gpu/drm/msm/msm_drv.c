@@ -58,13 +58,14 @@
 #define MSM_VERSION_PATCHLEVEL	0
 
 #define TEARDOWN_DEADLOCK_RETRY_MAX 5
+#define HPD_STRING_SIZE 30
 
 static void msm_drm_helper_hotplug_event(struct drm_device *dev)
 {
 	struct drm_connector *connector;
-	char *event_string;
+	char name[HPD_STRING_SIZE], status[HPD_STRING_SIZE];
 	char const *connector_name;
-	char *envp[2];
+	char *envp[3];
 
 	if (!dev) {
 		DRM_ERROR("hotplug_event failed, invalid input\n");
@@ -73,12 +74,6 @@ static void msm_drm_helper_hotplug_event(struct drm_device *dev)
 
 	if (!dev->mode_config.poll_enabled)
 		return;
-
-	event_string = kzalloc(SZ_4K, GFP_KERNEL);
-	if (!event_string) {
-		DRM_ERROR("failed to allocate event string\n");
-		return;
-	}
 
 	mutex_lock(&dev->mode_config.mutex);
 	drm_for_each_connector(connector, dev) {
@@ -93,17 +88,20 @@ static void msm_drm_helper_hotplug_event(struct drm_device *dev)
 		else
 			connector_name = "unknown";
 
-		snprintf(event_string, SZ_4K, "name=%s status=%s\n",
-			connector_name,
+		snprintf(name, HPD_STRING_SIZE, "name=%s", connector_name);
+
+		snprintf(status, HPD_STRING_SIZE, "status=%s",
 			drm_get_connector_status_name(connector->status));
-		DRM_DEBUG("generating hotplug event [%s]\n", event_string);
-		envp[0] = event_string;
-		envp[1] = NULL;
+
+		DRM_DEBUG("generating hotplug event [%s]: [%s]\n",
+			name, status);
+		envp[0] = name;
+		envp[1] = status;
+		envp[2] = NULL;
 		kobject_uevent_env(&dev->primary->kdev->kobj, KOBJ_CHANGE,
 				envp);
 	}
 	mutex_unlock(&dev->mode_config.mutex);
-	kfree(event_string);
 }
 
 static void msm_fb_output_poll_changed(struct drm_device *dev)
@@ -150,42 +148,6 @@ static const struct drm_mode_config_funcs mode_config_funcs = {
 	.atomic_check = msm_atomic_check,
 	.atomic_commit = msm_atomic_commit,
 };
-
-int msm_register_mmu(struct drm_device *dev, struct msm_mmu *mmu)
-{
-	struct msm_drm_private *priv = dev->dev_private;
-	int idx = priv->num_mmus++;
-
-	if (WARN_ON(idx >= ARRAY_SIZE(priv->mmus)))
-		return -EINVAL;
-
-	priv->mmus[idx] = mmu;
-
-	return idx;
-}
-
-void msm_unregister_mmu(struct drm_device *dev, struct msm_mmu *mmu)
-{
-	struct msm_drm_private *priv = dev->dev_private;
-	int idx;
-
-	if (priv->num_mmus <= 0) {
-		dev_err(dev->dev, "invalid num mmus %d\n", priv->num_mmus);
-		return;
-	}
-
-	idx = priv->num_mmus - 1;
-
-	/* only support reverse-order deallocation */
-	if (priv->mmus[idx] != mmu) {
-		dev_err(dev->dev, "unexpected mmu at idx %d\n", idx);
-		return;
-	}
-
-	--priv->num_mmus;
-	priv->mmus[idx] = 0;
-}
-
 
 #ifdef CONFIG_DRM_MSM_REGISTER_LOGGING
 static bool reglog = false;
@@ -238,6 +200,24 @@ void __iomem *msm_ioremap(struct platform_device *pdev, const char *name,
 		printk(KERN_DEBUG "IO:region %s %p %08lx\n", dbgname, ptr, size);
 
 	return ptr;
+}
+
+unsigned long msm_iomap_size(struct platform_device *pdev, const char *name)
+{
+	struct resource *res;
+
+	if (name)
+		res = platform_get_resource_byname(pdev, IORESOURCE_MEM, name);
+	else
+		res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+
+	if (!res) {
+		dev_err(&pdev->dev, "failed to get memory resource: %s\n",
+									name);
+		return 0;
+	}
+
+	return resource_size(res);
 }
 
 void msm_iounmap(struct platform_device *pdev, void __iomem *addr)
@@ -400,10 +380,11 @@ static int msm_drm_uninit(struct device *dev)
 			       priv->vram.paddr, attrs);
 	}
 
+	component_unbind_all(dev, ddev);
+
 	sde_dbg_destroy();
 	debugfs_remove_recursive(priv->debug_root);
 
-	component_unbind_all(dev, ddev);
 	sde_power_client_destroy(&priv->phandle, priv->pclient);
 	sde_power_resource_deinit(pdev, &priv->phandle);
 
@@ -597,6 +578,15 @@ static int msm_drm_init(struct device *dev, struct drm_driver *drv)
 		goto power_client_fail;
 	}
 
+	dbg_power_ctrl.handle = &priv->phandle;
+	dbg_power_ctrl.client = priv->pclient;
+	dbg_power_ctrl.enable_fn = msm_power_enable_wrapper;
+	ret = sde_dbg_init(&pdev->dev, &dbg_power_ctrl);
+	if (ret) {
+		dev_err(dev, "failed to init sde dbg: %d\n", ret);
+		goto dbg_init_fail;
+	}
+
 	/* Bind all our sub-components: */
 	ret = msm_component_bind_all(dev, ddev);
 	if (ret)
@@ -605,15 +595,6 @@ static int msm_drm_init(struct device *dev, struct drm_driver *drv)
 	ret = msm_init_vram(ddev);
 	if (ret)
 		goto fail;
-
-	dbg_power_ctrl.handle = &priv->phandle;
-	dbg_power_ctrl.client = priv->pclient;
-	dbg_power_ctrl.enable_fn = msm_power_enable_wrapper;
-	ret = sde_dbg_init(&pdev->dev, &dbg_power_ctrl);
-	if (ret) {
-		dev_err(dev, "failed to init sde dbg: %d\n", ret);
-		goto fail;
-	}
 
 	switch (get_mdp_ver(pdev)) {
 	case KMS_MDP4:
@@ -768,6 +749,8 @@ fail:
 	msm_drm_uninit(dev);
 	return ret;
 bind_fail:
+	sde_dbg_destroy();
+dbg_init_fail:
 	sde_power_client_destroy(&priv->phandle, priv->pclient);
 power_client_fail:
 	sde_power_resource_deinit(pdev, &priv->phandle);
@@ -1374,7 +1357,7 @@ static int msm_ioctl_deregister_event(struct drm_device *dev, void *data,
 	return ret;
 }
 
-void msm_mode_object_event_nofity(struct drm_mode_object *obj,
+void msm_mode_object_event_notify(struct drm_mode_object *obj,
 		struct drm_device *dev, struct drm_event *event, u8 *payload)
 {
 	struct msm_drm_private *priv = NULL;
@@ -1934,6 +1917,30 @@ static int add_display_components(struct device *dev,
 	return ret;
 }
 
+struct msm_gem_address_space *
+msm_gem_smmu_address_space_get(struct drm_device *dev,
+		unsigned int domain)
+{
+	struct msm_drm_private *priv = NULL;
+	struct msm_kms *kms;
+	const struct msm_kms_funcs *funcs;
+
+	if ((!dev) || (!dev->dev_private))
+		return NULL;
+
+	priv = dev->dev_private;
+	kms = priv->kms;
+	if (!kms)
+		return NULL;
+
+	funcs = kms->funcs;
+
+	if ((!funcs) || (!funcs->get_address_space))
+		return NULL;
+
+	return funcs->get_address_space(priv->kms, domain);
+}
+
 /*
  * We don't know what's the best binding to link the gpu with the drm device.
  * Fow now, we just hunt for all the possible gpus that we support, and add them
@@ -2045,6 +2052,7 @@ void __exit adreno_unregister(void)
 static int __init msm_drm_register(void)
 {
 	DBG("init");
+	msm_smmu_driver_init();
 	msm_dsi_register();
 	msm_edp_register();
 	msm_hdmi_register();
@@ -2060,6 +2068,7 @@ static void __exit msm_drm_unregister(void)
 	adreno_unregister();
 	msm_edp_unregister();
 	msm_dsi_unregister();
+	msm_smmu_driver_cleanup();
 }
 
 module_init(msm_drm_register);
