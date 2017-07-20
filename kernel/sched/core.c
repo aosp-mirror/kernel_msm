@@ -1966,6 +1966,7 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 
 	success = 1; /* we're going to change ->state */
 	cpu = task_cpu(p);
+	p->waiting_time = cpu_clock(cpu);
 
 	/*
 	 * Ensure we load p->on_rq _after_ p->state, otherwise it would
@@ -2097,6 +2098,7 @@ static void try_to_wake_up_local(struct task_struct *p)
 		goto out;
 
 	trace_sched_waking(p);
+	p->waiting_time = cpu_clock(cpu_of(rq));
 
 	if (!task_on_rq_queued(p)) {
 		u64 wallclock = walt_ktime_clock();
@@ -3373,11 +3375,30 @@ static void __sched notrace __schedule(bool preempt)
 	rq->clock_skip_update = 0;
 
 	if (likely(prev != next)) {
+		u64 now;
 		rq->nr_switches++;
 		rq->curr = next;
 		++*switch_count;
 
 		trace_sched_switch(preempt, prev, next);
+
+		/* Log and trace when scheduling a long-delayed task */
+		now = cpu_clock(cpu);
+		prev->waiting_time = now;
+		if (!is_idle_task(next) &&
+		    now > next->waiting_time + NSEC_PER_SEC) {
+			printk("task wait timing: next->pid: %d, "
+			       "next->tid: %d, next->prio: %d, "
+			       "next->vruntime: %llu, "
+			       "now: %llu, ready: %llu, "
+			       "waiting time: %llu\n",
+			       next->tgid, next->pid, next->prio,
+			       next->se.vruntime,
+			       now, next->waiting_time,
+			       now - next->waiting_time);
+		}
+
+
 		rq = context_switch(rq, prev, next); /* unlocks the rq */
 		cpu = cpu_of(rq);
 	} else {
