@@ -780,6 +780,20 @@ static int da7219_mixin_pga_event(struct snd_soc_dapm_widget *w,
 	return 0;
 }
 
+static int da7219_mclk_event(struct snd_soc_dapm_widget *w,
+			     struct snd_kcontrol *kcontrol, int event)
+{
+	struct snd_soc_codec *codec = snd_soc_dapm_to_codec(w->dapm);
+	struct da7219_priv *da7219 = snd_soc_codec_get_drvdata(codec);
+
+	if (!da7219->mclk)
+		return 0;
+	if (w->clk != da7219->mclk)
+		w->clk = da7219->mclk;
+
+	return dapm_clock_event(w, kcontrol, event);
+}
+
 static int da7219_dai_event(struct snd_soc_dapm_widget *w,
 			    struct snd_kcontrol *kcontrol, int event)
 {
@@ -922,6 +936,10 @@ static int da7219_gain_ramp_event(struct snd_soc_dapm_widget *w,
  */
 
 static const struct snd_soc_dapm_widget da7219_dapm_widgets[] = {
+	/* MCLK is optional, so can't use SND_SOC_DAPM_CLOCK_SUPPLY */
+	SND_SOC_DAPM_SUPPLY("MCLK", SND_SOC_NOPM, 0, 0, da7219_mclk_event,
+			    SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
+
 	/* Input Supplies */
 	SND_SOC_DAPM_SUPPLY("Mic Bias", DA7219_MICBIAS_CTRL,
 			    DA7219_MICBIAS1_EN_SHIFT, DA7219_NO_INVERT,
@@ -1121,6 +1139,9 @@ static const struct snd_soc_dapm_route da7219_audio_map[] = {
 
 	{"HPL", NULL, "Charge Pump"},
 	{"HPR", NULL, "Charge Pump"},
+
+	/* MCLK */
+	{"DAI", NULL, "MCLK"},
 };
 
 
@@ -1618,25 +1639,8 @@ static int da7219_set_bias_level(struct snd_soc_codec *codec,
 				 enum snd_soc_bias_level level)
 {
 	struct da7219_priv *da7219 = snd_soc_codec_get_drvdata(codec);
-	int ret;
 
 	switch (level) {
-	case SND_SOC_BIAS_ON:
-		break;
-	case SND_SOC_BIAS_PREPARE:
-		/* Enable MCLK for transition to ON state */
-		if (snd_soc_codec_get_bias_level(codec) == SND_SOC_BIAS_STANDBY) {
-			if (da7219->mclk) {
-				ret = clk_prepare_enable(da7219->mclk);
-				if (ret) {
-					dev_err(codec->dev,
-						"Failed to enable mclk\n");
-					return ret;
-				}
-			}
-		}
-
-		break;
 	case SND_SOC_BIAS_STANDBY:
 		if (snd_soc_codec_get_bias_level(codec) == SND_SOC_BIAS_OFF)
 			/* Master bias */
@@ -1644,11 +1648,6 @@ static int da7219_set_bias_level(struct snd_soc_codec *codec,
 					    DA7219_BIAS_EN_MASK,
 					    DA7219_BIAS_EN_MASK);
 
-		if (snd_soc_codec_get_bias_level(codec) == SND_SOC_BIAS_PREPARE) {
-			/* Remove MCLK */
-			if (da7219->mclk)
-				clk_disable_unprepare(da7219->mclk);
-		}
 		break;
 	case SND_SOC_BIAS_OFF:
 		/* Only disable master bias if we're not a wake-up source */
@@ -1656,6 +1655,8 @@ static int da7219_set_bias_level(struct snd_soc_codec *codec,
 			snd_soc_update_bits(codec, DA7219_REFERENCES,
 					    DA7219_BIAS_EN_MASK, 0);
 
+		break;
+	default:
 		break;
 	}
 
