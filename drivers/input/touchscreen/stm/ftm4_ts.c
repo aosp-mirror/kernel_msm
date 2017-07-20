@@ -2274,7 +2274,7 @@ static int touch_fb_notifier_callback(struct notifier_block *self,
 
 		if (*blank == FB_BLANK_UNBLANK)
 			fts_resume(info->client);
-		else if (*blank == FB_BLANK_POWERDOWN)
+		else
 			fts_suspend(info->client, PMSG_SUSPEND);
 	}
 
