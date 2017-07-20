@@ -5135,6 +5135,10 @@ tracing_entries_write(struct file *filp, const char __user *ubuf,
 	if (!val)
 		return -EINVAL;
 
+	/* Limit the size of the per-CPU ring buffer to 200MB */
+	if (val > 204800)
+		return -ENOMEM;
+
 	/* value is in KB */
 	val <<= 10;
 	ret = tracing_resize_ring_buffer(tr, val, tracing_get_cpu(inode));
