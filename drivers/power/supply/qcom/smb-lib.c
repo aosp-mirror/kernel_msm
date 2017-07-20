@@ -3272,6 +3272,51 @@ int smblib_set_prop_usb_port_temp(struct smb_charger *chg,
 	return 0;
 }
 
+static int smblib_check_jeita(struct smb_charger *chg)
+{
+	u8 stat_1, stat_2;
+	int rc;
+
+	rc = smblib_read(chg, BATTERY_CHARGER_STATUS_1_REG, &stat_1);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't read BATTERY_CHARGER_STATUS_1 rc=%d\n",
+				rc);
+		return rc;
+	}
+
+	rc = smblib_read(chg, BATTERY_CHARGER_STATUS_2_REG, &stat_2);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't read BATTERY_CHARGER_STATUS_2 rc=%d\n",
+				rc);
+		return rc;
+	}
+
+	if ((chg->jeita_status && !(stat_2 & BAT_TEMP_STATUS_SOFT_LIMIT_MASK) &&
+		((stat_1 & BATTERY_CHARGER_STATUS_MASK) == TERMINATE_CHARGE))) {
+		/*
+		 * We are moving from JEITA soft -> Normal and charging
+		 * is terminated
+		 */
+		rc = smblib_write(chg, CHARGING_ENABLE_CMD_REG, 0);
+		if (rc < 0) {
+			smblib_err(chg, "Couldn't disable charging rc=%d\n",
+						rc);
+			return rc;
+		}
+		rc = smblib_write(chg, CHARGING_ENABLE_CMD_REG,
+						CHARGING_ENABLE_CMD_BIT);
+		if (rc < 0) {
+			smblib_err(chg, "Couldn't enable charging rc=%d\n",
+						rc);
+			return rc;
+		}
+	}
+
+	chg->jeita_status = stat_2 & BAT_TEMP_STATUS_SOFT_LIMIT_MASK;
+
+	return 0;
+}
+
 /***********************
 * USB MAIN PSY GETTERS *
 *************************/
@@ -3539,6 +3584,14 @@ irqreturn_t smblib_handle_batt_temp_changed(int irq, void *data)
 {
 	struct smb_irq_data *irq_data = data;
 	struct smb_charger *chg = irq_data->parent_data;
+	int rc;
+
+	rc = smblib_check_jeita(chg);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't check jeita for recharge rc=%d\n",
+				rc);
+		return IRQ_HANDLED;
+	}
 
 	rerun_election(chg->fcc_votable);
 	power_supply_changed(chg->batt_psy);

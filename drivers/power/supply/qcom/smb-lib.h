@@ -372,6 +372,7 @@ struct smb_charger {
 	 */
 	enum power_supply_typec_power_role	typec_pr_pd_vote;
 
+	u32                     jeita_status;
 	/* workaround flag */
 	u32			wa_flags;
 	bool			cc2_detach_wa_active;
