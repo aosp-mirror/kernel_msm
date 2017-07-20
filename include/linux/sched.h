@@ -1703,6 +1703,9 @@ struct task_struct {
 	unsigned long timer_slack_ns;
 	unsigned long default_timer_slack_ns;
 
+	/* Time that the task woke up or was last descheduled */
+	u64 waiting_time;
+
 #ifdef CONFIG_KASAN
 	unsigned int kasan_depth;
 #endif
