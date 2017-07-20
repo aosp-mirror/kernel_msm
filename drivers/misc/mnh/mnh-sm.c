@@ -1196,6 +1196,9 @@ static int mnh_sm_config_ddr(void)
 {
 	int ret;
 
+	/* Set core supply to 900 mV */
+	mnh_pwr_set_asr_voltage(900000);
+
 	/* Initialize DDR */
 	ret = mnh_ddr_po_init(mnh_sm_dev->dev, mnh_sm_dev->ddr_pad_iso_n_pin);
 	if (ret) {
