@@ -607,8 +607,10 @@ int mdss_mdp_get_plane_sizes(struct mdss_mdp_format_params *fmt, u32 w, u32 h,
 		}
 	}
 
-	/* Safe to use MAX_PLANES as ps is memset at start of function */
-	for (i = 0; i < MAX_PLANES; i++)
+	/* This happens per panel for every frame, ps->num_planes
+	 * is set for all cases. using ps->num_planes instead of MAX_PLANES
+	 * that adds unnecessary zeros. */
+	for (i = 0; i < ps->num_planes; i++)
 		ps->total_size += ps->plane_size[i];
 
 	return rc;
