@@ -26,7 +26,7 @@
 		qcom,mdss-dsi-h-pulse-width = <16>;
 		qcom,mdss-dsi-h-sync-skew = <0>;
 		qcom,mdss-dsi-v-back-porch = <150>;
-		qcom,mdss-dsi-v-front-porch = <150>;
+		qcom,mdss-dsi-v-front-porch = <200>;
 		qcom,mdss-dsi-v-pulse-width = <4>;
 		qcom,mdss-dsi-bpp = <24>;
 		qcom,mdss-dsi-underflow-color = <0xff>;
