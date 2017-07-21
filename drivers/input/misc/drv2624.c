@@ -194,7 +194,7 @@ static int drv2624_set_go_bit(struct drv2624_data *drv2624, unsigned char val)
 
 	val &= 0x01;
 
-	dev_warn(drv2624->dev, "%s: %d\n", __func__, val);
+	dev_dbg(drv2624->dev, "%s: %d\n", __func__, val);
 
 	do {
 		ret = drv2624_set_bits(drv2624, DRV2624_REG_GO, 0x01, val);
@@ -285,7 +285,7 @@ static void vibrator_enable(struct led_classdev *led_cdev,
 	struct drv2624_data *drv2624 =
 			container_of(led_cdev, struct drv2624_data, led_dev);
 
-	dev_warn(drv2624->dev, "%s: %d\n", __func__, value);
+	dev_dbg(drv2624->dev, "%s: %d\n", __func__, value);
 
 	if (value == LED_OFF)
 		queue_work(drv2624->drv2624_wq, &drv2624->stop_work);
