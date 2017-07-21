@@ -36,6 +36,8 @@
 #include <linux/pstore_ram.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
+#include <linux/scatterlist.h>
+#include <crypto/aead.h>
 #include <linux/htc_debug_tools.h>
 
 #define RAMOOPS_KERNMSG_HDR "===="
@@ -85,11 +87,16 @@ MODULE_PARM_DESC(ramoops_ecc,
 		"ECC buffer size in bytes (1 is a special value, means 16 "
 		"bytes ECC)");
 
+#define AES_KEY_MAX_LEN (256 / 8)
+#define AES_KEY_IV_LEN 12
+#define AES_KEY_TAG_LEN 16
+
 struct ramoops_context {
 	struct persistent_ram_zone **przs;
 	struct persistent_ram_zone *cprz;
 	struct persistent_ram_zone *fprz;
 	struct persistent_ram_zone *mprz;
+	phys_addr_t alt_phys_addr;
 	phys_addr_t phys_addr;
 	unsigned long size;
 	unsigned int memtype;
@@ -107,6 +114,15 @@ struct ramoops_context {
 	unsigned int ftrace_read_cnt;
 	unsigned int pmsg_read_cnt;
 	struct pstore_info pstore;
+	bool use_alt;
+	bool need_update;
+	bool decrypted;
+	int aes_key_len;
+	unsigned char aes_key[AES_KEY_MAX_LEN];
+	unsigned char aes_key_iv[AES_KEY_IV_LEN];
+	unsigned char aes_key_tag[AES_KEY_TAG_LEN];
+	struct class *ramoops_class;
+	struct device *ramoops_device;
 };
 
 static struct platform_device *dummy;
@@ -127,7 +143,7 @@ static struct persistent_ram_zone *
 ramoops_get_next_prz(struct persistent_ram_zone *przs[], uint *c, uint max,
 		     u64 *id,
 		     enum pstore_type_id *typep, enum pstore_type_id type,
-		     bool update)
+		     bool update, bool use_alt)
 {
 	struct persistent_ram_zone *prz;
 	int i = (*c)++;
@@ -141,7 +157,7 @@ ramoops_get_next_prz(struct persistent_ram_zone *przs[], uint *c, uint max,
 
 	/* Update old/shadowed buffer. */
 	if (update)
-		persistent_ram_save_old(prz);
+		persistent_ram_save_old(prz, use_alt);
 
 	if (!persistent_ram_old_size(prz))
 		return NULL;
@@ -181,6 +197,99 @@ static bool prz_ok(struct persistent_ram_zone *prz)
 			   persistent_ram_ecc_string(prz, NULL, 0));
 }
 
+static int ramoops_decrypt_alt(struct ramoops_context *cxt)
+{
+	struct crypto_aead *tfm;
+	struct scatterlist sg;
+	int ret = 0;
+	struct aead_request *aead_req;
+	void *va;
+	phys_addr_t start;
+	size_t size;
+	void *buf;
+
+	if (!cxt->alt_phys_addr)
+		return -EINVAL;
+
+	start = cxt->alt_phys_addr;
+	size = cxt->size;
+	if (!request_mem_region(start, size, "persistent_ram")) {
+		pr_err("request mem region (0x%llx@0x%llx) failed\n",
+			(unsigned long long)size, (unsigned long long)start);
+		return -ENOMEM;
+	}
+
+	if (cxt->memtype)
+		va = ioremap(start, size);
+	else
+		va = ioremap_wc(start, size);
+	if (va == NULL) {
+		pr_err("ioremap mem region (0x%llx@0x%llx) failed\n",
+			(unsigned long long)size, (unsigned long long)start);
+		release_mem_region(start, size);
+		ret = -ENOMEM;
+		goto out_iomap;
+	}
+
+	tfm = crypto_alloc_aead("gcm(aes)", 0, CRYPTO_ALG_ASYNC);
+	if (IS_ERR(tfm)) {
+		ret = PTR_ERR(tfm);
+		pr_err("Failed to alloc aes, %d\n", ret);
+		goto out_crypto_alloc;
+	}
+
+	ret = crypto_aead_setkey(tfm, cxt->aes_key, cxt->aes_key_len);
+	if (ret) {
+		pr_err("Failed to set key, %d\n", ret);
+		goto out_set;
+	}
+
+	ret = crypto_aead_setauthsize(tfm, 16);
+	if (ret) {
+		pr_err("Failed to set auth size, %d\n", ret);
+		goto out_set;
+	}
+
+	aead_req = aead_request_alloc(tfm, GFP_KERNEL);
+	if (!aead_req) {
+		ret = -ENOMEM;
+		pr_err("Failed to allocate aead request\n");
+		goto out_set;
+	}
+
+	buf = kmalloc(size + AES_KEY_TAG_LEN, GFP_KERNEL);
+	if (!buf) {
+		ret = -ENOMEM;
+		pr_err("Failed to allocate bounce\n");
+		goto out_no_buf;
+	}
+
+	memcpy(buf, va, size);
+	memcpy(buf + size, cxt->aes_key_tag, AES_KEY_TAG_LEN);
+	sg_init_one(&sg, buf, size + AES_KEY_TAG_LEN);
+	aead_request_set_crypt(aead_req, &sg, &sg, size + AES_KEY_TAG_LEN,
+			       cxt->aes_key_iv);
+	aead_request_set_ad(aead_req, 0);
+	ret = crypto_aead_decrypt(aead_req);
+	if (ret) {
+		pr_err("Failed to decrypt %d\n", ret);
+		goto out_decrypt;
+	}
+	memcpy(va, buf, size);
+
+out_decrypt:
+	kfree(buf);
+out_no_buf:
+	aead_request_free(aead_req);
+out_set:
+	crypto_free_aead(tfm);
+out_crypto_alloc:
+	iounmap(va);
+out_iomap:
+	release_mem_region(start, size);
+	return ret;
+}
+
 static ssize_t ramoops_pstore_read(u64 *id, enum pstore_type_id *type,
 				   int *count, struct timespec *time,
 				   char **buf, bool *compressed,
@@ -191,6 +300,10 @@ static ssize_t ramoops_pstore_read(u64 *id, enum pstore_type_id *type,
 	struct ramoops_context *cxt = psi->data;
 	struct persistent_ram_zone *prz = NULL;
 	int header_length = 0;
+	bool use_alt = cxt->use_alt;
+	bool update = cxt->need_update;
+
+	cxt->need_update = 0;
 
 	/* Ramoops headers provide time stamps for PSTORE_TYPE_DMESG, but
 	 * PSTORE_TYPE_CONSOLE and PSTORE_TYPE_FTRACE don't currently have
@@ -204,7 +317,7 @@ static ssize_t ramoops_pstore_read(u64 *id, enum pstore_type_id *type,
 	while (cxt->dump_read_cnt < cxt->max_dump_cnt && !prz) {
 		prz = ramoops_get_next_prz(cxt->przs, &cxt->dump_read_cnt,
 					   cxt->max_dump_cnt, id, type,
-					   PSTORE_TYPE_DMESG, 1);
+					   PSTORE_TYPE_DMESG, 1, use_alt);
 		if (!prz_ok(prz))
 			continue;
 		header_length = ramoops_read_kmsg_hdr(persistent_ram_old(prz),
@@ -212,20 +325,23 @@ static ssize_t ramoops_pstore_read(u64 *id, enum pstore_type_id *type,
 		/* Clear and skip this DMESG record if it has no valid header */
 		if (!header_length) {
 			persistent_ram_free_old(prz);
-			persistent_ram_zap(prz);
+			persistent_ram_zap(prz, use_alt);
 			prz = NULL;
 		}
 	}
 
 	if (!prz_ok(prz))
 		prz = ramoops_get_next_prz(&cxt->cprz, &cxt->console_read_cnt,
-					   1, id, type, PSTORE_TYPE_CONSOLE, 0);
+					   1, id, type, PSTORE_TYPE_CONSOLE,
+					   update, use_alt);
 	if (!prz_ok(prz))
 		prz = ramoops_get_next_prz(&cxt->fprz, &cxt->ftrace_read_cnt,
-					   1, id, type, PSTORE_TYPE_FTRACE, 0);
+					   1, id, type, PSTORE_TYPE_FTRACE,
+					   update, use_alt);
 	if (!prz_ok(prz))
 		prz = ramoops_get_next_prz(&cxt->mprz, &cxt->pmsg_read_cnt,
-					   1, id, type, PSTORE_TYPE_PMSG, 0);
+					   1, id, type, PSTORE_TYPE_PMSG,
+					   update, use_alt);
 	if (!prz_ok(prz))
 		return 0;
 
@@ -376,7 +492,7 @@ static int ramoops_pstore_erase(enum pstore_type_id type, u64 id, int count,
 	}
 
 	persistent_ram_free_old(prz);
-	persistent_ram_zap(prz);
+	persistent_ram_zap(prz, 0);
 
 	return 0;
 }
@@ -393,6 +509,84 @@ static struct ramoops_context oops_cxt = {
 	},
 };
 
+
+static ssize_t use_alt_show(struct device *dev,
+			    struct device_attribute *attr, char *buf)
+{
+	struct ramoops_context *cxt = &oops_cxt;
+	return snprintf(buf, PAGE_SIZE, "%d\n", cxt->use_alt);
+}
+
+static ssize_t use_alt_store(struct device *dev, struct device_attribute *attr,
+			     const char *buf, size_t count)
+{
+	struct ramoops_context *cxt = &oops_cxt;
+	int use_alt = 0;
+
+	if (kstrtoint(buf, 10, &use_alt) < 0)
+		return -EINVAL;
+	if (!cxt->use_alt && use_alt && !cxt->decrypted) {
+		int ret = ramoops_decrypt_alt(cxt);
+		if (ret < 0)
+			return ret;
+		cxt->decrypted = 1;
+	}
+	cxt->use_alt = use_alt;
+	cxt->need_update = 1;
+	return count;
+}
+static DEVICE_ATTR_RW(use_alt);
+
+static ssize_t aes_key_store(struct device *dev, struct device_attribute *attr,
+			     const char *buf, size_t count)
+{
+	struct ramoops_context *cxt = &oops_cxt;
+
+	if (count > AES_KEY_MAX_LEN)
+		count = AES_KEY_MAX_LEN;
+	if ((count != 16) && (count != 32))
+		return -EINVAL;
+	cxt->aes_key_len = count;
+	memcpy(cxt->aes_key, buf, count);
+	return count;
+}
+static DEVICE_ATTR_WO(aes_key);
+
+static ssize_t aes_key_iv_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	struct ramoops_context *cxt = &oops_cxt;
+
+	if (count > AES_KEY_IV_LEN)
+		count = AES_KEY_IV_LEN;
+	memcpy(cxt->aes_key_iv, buf, count);
+	return count;
+}
+static DEVICE_ATTR_WO(aes_key_iv);
+
+static ssize_t aes_key_tag_store(struct device *dev,
+				 struct device_attribute *attr,
+				 const char *buf, size_t count)
+{
+	struct ramoops_context *cxt = &oops_cxt;
+
+	if (count > AES_KEY_TAG_LEN)
+		count = AES_KEY_TAG_LEN;
+	memcpy(cxt->aes_key_tag, buf, count);
+	return count;
+}
+static DEVICE_ATTR_WO(aes_key_tag);
+
+static struct attribute *ramoops_attrs[] = {
+	&dev_attr_use_alt.attr,
+	&dev_attr_aes_key.attr,
+	&dev_attr_aes_key_iv.attr,
+	&dev_attr_aes_key_tag.attr,
+	NULL,
+};
+ATTRIBUTE_GROUPS(ramoops);
+
 static void ramoops_free_przs(struct ramoops_context *cxt)
 {
 	int i;
@@ -408,7 +602,8 @@ static void ramoops_free_przs(struct ramoops_context *cxt)
 }
 
 static int ramoops_init_przs(struct device *dev, struct ramoops_context *cxt,
-			     phys_addr_t *paddr, size_t dump_mem_sz)
+			     phys_addr_t *paddr, phys_addr_t *alt_paddr,
+			     size_t dump_mem_sz)
 {
 	int err = -ENOMEM;
 	int i;
@@ -433,7 +628,8 @@ static int ramoops_init_przs(struct device *dev, struct ramoops_context *cxt,
 	}
 
 	for (i = 0; i < cxt->max_dump_cnt; i++) {
-		cxt->przs[i] = persistent_ram_new(*paddr, cxt->record_size, 0,
+		cxt->przs[i] = persistent_ram_new(*paddr, *alt_paddr,
+						  cxt->record_size, 0,
 						  &cxt->ecc_info,
 						  cxt->memtype);
 		if (IS_ERR(cxt->przs[i])) {
@@ -448,6 +644,8 @@ static int ramoops_init_przs(struct device *dev, struct ramoops_context *cxt,
 			goto fail_prz;
 		}
 		*paddr += cxt->record_size;
+		if (*alt_paddr)
+			*alt_paddr += cxt->record_size;
 	}
 
 	return 0;
@@ -460,7 +658,8 @@ fail_mem:
 
 static int ramoops_init_prz(struct device *dev, struct ramoops_context *cxt,
 			    struct persistent_ram_zone **prz,
-			    phys_addr_t *paddr, size_t sz, u32 sig)
+			    phys_addr_t *paddr, phys_addr_t *alt_paddr,
+			    size_t sz, u32 sig)
 {
 	if (!sz)
 		return 0;
@@ -472,7 +671,8 @@ static int ramoops_init_prz(struct device *dev, struct ramoops_context *cxt,
 		return -ENOMEM;
 	}
 
-	*prz = persistent_ram_new(*paddr, sz, sig, &cxt->ecc_info, cxt->memtype);
+	*prz = persistent_ram_new(*paddr, *alt_paddr, sz, sig, &cxt->ecc_info,
+				  cxt->memtype);
 	if (IS_ERR(*prz)) {
 		int err = PTR_ERR(*prz);
 
@@ -481,9 +681,11 @@ static int ramoops_init_prz(struct device *dev, struct ramoops_context *cxt,
 		return err;
 	}
 
-	persistent_ram_zap(*prz);
+	persistent_ram_zap(*prz, 0);
 
 	*paddr += sz;
+	if (*alt_paddr)
+		*alt_paddr += sz;
 
 	return 0;
 }
@@ -525,6 +727,8 @@ static int ramoops_parse_dt(struct platform_device *pdev,
 	struct device_node *of_node = pdev->dev.of_node;
 	struct device_node *mem_region;
 	struct resource res;
+	size_t alt_mem_size;
+	unsigned int alt_mem_type;
 	u32 ecc_size;
 	int ret;
 
@@ -539,14 +743,38 @@ static int ramoops_parse_dt(struct platform_device *pdev,
 	ret = of_address_to_resource(mem_region, 0, &res);
 	of_node_put(mem_region);
 	if (ret) {
-		dev_err(&pdev->dev, "failed to translate memory-region to resource: %d\n",
-				ret);
+		dev_err(&pdev->dev,
+			"failed to translate memory-region to resource: %d\n",
+			ret);
 		return ret;
 	}
 
 	pdata->mem_size = resource_size(&res);
 	pdata->mem_address = res.start;
 	pdata->mem_type = of_property_read_bool(of_node, "unbuffered");
+
+	mem_region = of_parse_phandle(of_node, "alt-memory-region", 0);
+	if (mem_region) {
+		ret = of_address_to_resource(mem_region, 0, &res);
+		of_node_put(mem_region);
+		if (ret) {
+			dev_err(&pdev->dev,
+				"failed alt-memory-region to resource: %d\n",
+				ret);
+			return ret;
+		}
+
+		pdata->alt_mem_address = res.start;
+		alt_mem_size = resource_size(&res);
+		alt_mem_type = of_property_read_bool(of_node, "unbuffered");
+		/* Alt memory region should be same size/type as orig. region */
+		if (alt_mem_size != pdata->mem_size ||
+		    alt_mem_type != pdata->mem_type) {
+			dev_err(&pdev->dev,
+				"alt region not the same size/type as main.\n");
+			return -EINVAL;
+		}
+	}
 	pdata->dump_oops = !of_property_read_bool(of_node, "no-dump-oops");
 
 	ret = ramoops_parse_dt_size(pdev, "record-size", &pdata->record_size);
@@ -586,6 +814,7 @@ static int ramoops_probe(struct platform_device *pdev)
 	struct ramoops_context *cxt = &oops_cxt;
 	size_t dump_mem_sz;
 	phys_addr_t paddr;
+	phys_addr_t alt_paddr;
 	int err = -EINVAL;
 
 	if (dev->of_node && !pdata) {
@@ -625,6 +854,7 @@ static int ramoops_probe(struct platform_device *pdev)
 	cxt->size = pdata->mem_size;
 	cxt->phys_addr = pdata->mem_address;
 	cxt->memtype = pdata->mem_type;
+	cxt->alt_phys_addr = pdata->alt_mem_address;
 	cxt->record_size = pdata->record_size;
 	cxt->console_size = pdata->console_size;
 	cxt->ftrace_size = pdata->ftrace_size;
@@ -633,24 +863,26 @@ static int ramoops_probe(struct platform_device *pdev)
 	cxt->ecc_info = pdata->ecc_info;
 
 	paddr = cxt->phys_addr;
+	alt_paddr = cxt->alt_phys_addr;
 
 	dump_mem_sz = cxt->size - cxt->console_size - cxt->ftrace_size
 			- cxt->pmsg_size;
-	err = ramoops_init_przs(dev, cxt, &paddr, dump_mem_sz);
+	err = ramoops_init_przs(dev, cxt, &paddr, &alt_paddr, dump_mem_sz);
 	if (err)
 		goto fail_out;
 
-	err = ramoops_init_prz(dev, cxt, &cxt->cprz, &paddr,
+	err = ramoops_init_prz(dev, cxt, &cxt->cprz, &paddr, &alt_paddr,
 			       cxt->console_size, 0);
 	if (err)
 		goto fail_init_cprz;
 
-	err = ramoops_init_prz(dev, cxt, &cxt->fprz, &paddr, cxt->ftrace_size,
-			       LINUX_VERSION_CODE);
+	err = ramoops_init_prz(dev, cxt, &cxt->fprz, &paddr, &alt_paddr,
+			       cxt->ftrace_size, LINUX_VERSION_CODE);
 	if (err)
 		goto fail_init_fprz;
 
-	err = ramoops_init_prz(dev, cxt, &cxt->mprz, &paddr, cxt->pmsg_size, 0);
+	err = ramoops_init_prz(dev, cxt, &cxt->mprz, &paddr, &alt_paddr,
+			       cxt->pmsg_size, 0);
 	if (err)
 		goto fail_init_mprz;
 
@@ -690,6 +922,22 @@ static int ramoops_probe(struct platform_device *pdev)
 	ramoops_pmsg_size = pdata->pmsg_size;
 	ramoops_ftrace_size = pdata->ftrace_size;
 
+	cxt->ramoops_class = class_create(THIS_MODULE, "ramoops");
+	if (IS_ERR(cxt->ramoops_class)) {
+		pr_err("device class file already in use\n");
+		err = PTR_ERR(cxt->ramoops_class);
+		goto fail_buf;
+	}
+	cxt->ramoops_class->dev_groups = ramoops_groups;
+
+	cxt->ramoops_device = device_create(cxt->ramoops_class, NULL, 0,
+					    NULL, "pstore");
+	if (IS_ERR(cxt->ramoops_device)) {
+		pr_err("failed to create device\n");
+		err = PTR_ERR(cxt->ramoops_device);
+		goto fail_device;
+	}
+
 	pr_info("attached 0x%lx@0x%llx, ecc: %d/%d\n",
 		cxt->size, (unsigned long long)cxt->phys_addr,
 		cxt->ecc_info.ecc_size, cxt->ecc_info.block_size);
@@ -699,6 +947,8 @@ static int ramoops_probe(struct platform_device *pdev)
 
 	return 0;
 
+fail_device:
+	class_destroy(cxt->ramoops_class);
 fail_buf:
 	kfree(cxt->pstore.buf);
 fail_clear:
@@ -718,6 +968,8 @@ static int ramoops_remove(struct platform_device *pdev)
 {
 	struct ramoops_context *cxt = &oops_cxt;
 
+	device_unregister(cxt->ramoops_device);
+	class_destroy(cxt->ramoops_class);
 	pstore_unregister(&cxt->pstore);
 
 	kfree(cxt->pstore.buf);
