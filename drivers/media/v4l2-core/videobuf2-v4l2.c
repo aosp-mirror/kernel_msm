@@ -137,7 +137,7 @@ static void vb2_warn_zero_bytesused(struct vb2_buffer *vb)
 {
 	static bool check_once;
 
-	if (check_once)
+	if (check_once || vb->vb2_queue->allow_zero_bytesused)
 		return;
 
 	check_once = true;
