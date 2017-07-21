@@ -5973,6 +5973,9 @@ static const struct snd_kcontrol_new mmul3_mixer_controls[] = {
 	SOC_SINGLE_EXT("QUAT_TDM_TX_3", MSM_BACKEND_DAI_QUAT_TDM_TX_3,
 	MSM_FRONTEND_DAI_MULTIMEDIA3, 1, 0, msm_routing_get_audio_mixer,
 	msm_routing_put_audio_mixer),
+	SOC_SINGLE_EXT("USB_AUDIO_TX", MSM_BACKEND_DAI_USB_TX,
+	MSM_FRONTEND_DAI_MULTIMEDIA3, 1, 0, msm_routing_get_audio_mixer,
+	msm_routing_put_audio_mixer),
 };
 
 static const struct snd_kcontrol_new mmul4_mixer_controls[] = {
@@ -12692,6 +12695,7 @@ static const struct snd_soc_dapm_route intercon[] = {
 
 	{"MultiMedia1 Mixer", "USB_AUDIO_TX", "USB_AUDIO_TX"},
 	{"MultiMedia2 Mixer", "USB_AUDIO_TX", "USB_AUDIO_TX"},
+	{"MultiMedia3 Mixer", "USB_AUDIO_TX", "USB_AUDIO_TX"},
 	{"MultiMedia4 Mixer", "USB_AUDIO_TX", "USB_AUDIO_TX"},
 	{"MultiMedia5 Mixer", "USB_AUDIO_TX", "USB_AUDIO_TX"},
 	{"MultiMedia6 Mixer", "USB_AUDIO_TX", "USB_AUDIO_TX"},
