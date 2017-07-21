@@ -49,6 +49,7 @@
 #include <linux/firmware.h>
 #include <linux/regulator/consumer.h>
 #include <linux/of_gpio.h>
+#include <asm/io.h>
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
 #include <linux/trustedui.h>
@@ -1585,6 +1586,7 @@ static int fts_probe(struct i2c_client *client, const struct i2c_device_id *idp)
 	struct fts_ts_info *info = NULL;
 	static char fts_ts_phys[64] = { 0 };
 	int i = 0;
+	struct fts_i2c_platform_data *pdata;
 
 /*
 	tsp_debug_info(&client->dev, "FTS Driver [12%s] %s %s\n",
@@ -1703,7 +1705,6 @@ static int fts_probe(struct i2c_client *client, const struct i2c_device_id *idp)
 		goto err_enable_irq;
 	}
 	atomic_set(&info->irq_enabled, 1);
-
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
 	trustedui_set_tsp_irq(info->irq);
 	tsp_debug_info(&client->dev, "%s[%d] called!\n",
@@ -1731,6 +1732,23 @@ static int fts_probe(struct i2c_client *client, const struct i2c_device_id *idp)
 	if (device_may_wakeup(&info->client->dev))
 		enable_irq_wake(info->irq);
 	info->lowpower_mode = true;
+
+	pdata = info->dev->platform_data;
+
+	/* Set AP as owner of the IRQ. (This is really TZ's job) */
+	{
+		void __iomem *base = ioremap (0x0b204000, 0x1000);
+		/* Set IRQ owner to AP */
+		writel(0x2, base + 0x78c);
+		writel(0x2, base + 0x790);
+		writel(0x2, base + 0x794);
+		iounmap(base);
+	}
+
+	while (!gpio_get_value(pdata->gpio)) {
+		tsp_debug_err(&info->client->dev, "(Clear pending IRQs)\n");
+		fts_interrupt_handler(info->irq, info);
+	}
 
 	return 0;
 
