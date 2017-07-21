@@ -32,7 +32,7 @@
 #define DEFAULT_MDP_TRANSFER_TIME 14000
 
 /* backlight level to use as threshold for picking ALPM low/high mode */
-#define DEFAULT_ALPM_BL_THRESHOLD 30
+#define DEFAULT_ALPM_BL_THRESHOLD 27
 
 #define VSYNC_DELAY msecs_to_jiffies(17)
 
@@ -259,11 +259,18 @@ static void mdss_dsi_panel_set_alpm_mode(struct mdss_dsi_ctrl_pdata *ctrl,
 
 	pcmds = &ctrl->alpm_mode_cmds[mode];
 	if (pcmds->cmd_cnt == 0) {
-		pr_warn("%s: alpm mode=%d not supported\n", __func__, mode);
+		/* if bright mode not available try high mode */
+		if (mode == ALPM_MODE_BRIGHT)
+			mdss_dsi_panel_set_alpm_mode(ctrl,
+						     ALPM_MODE_HIGH,
+						     extra_flags);
+		else
+			pr_warn("%s: alpm mode=%d not supported\n",
+				__func__, mode);
 		return;
 	}
 
-	pr_debug("%s: ndx=%d mode=0x%02x\n", __func__, ctrl->ndx, mode);
+	pr_info("%s: ndx=%d mode=%d\n", __func__, ctrl->ndx, mode);
 	mdss_dsi_panel_cmds_send(ctrl, pcmds, flags);
 }
 
@@ -274,9 +281,13 @@ static void mdss_dsi_bl_update_alpm_mode(struct mdss_dsi_ctrl_pdata *ctrl,
 
 	if (!bl_level)
 		alpm_mode = ALPM_MODE_OFF;
+	else if (bl_level < ctrl->alpm_bl_threshold)
+		alpm_mode = ALPM_MODE_LOW;
+	else if ((bl_level > ctrl->alpm_bl_threshold) &&
+		 ctrl->alpm_mode_cmds[ALPM_MODE_BRIGHT].cmd_cnt)
+		alpm_mode = ALPM_MODE_BRIGHT;
 	else
-		alpm_mode = bl_level < ctrl->alpm_bl_threshold ?
-				ALPM_MODE_LOW : ALPM_MODE_HIGH;
+		alpm_mode = ALPM_MODE_HIGH;
 
 	if (alpm_mode != ctrl->alpm_mode) {
 		ctrl->alpm_mode = alpm_mode;
@@ -2167,6 +2178,10 @@ static void mdss_dsi_parse_alpm_modes(struct device_node *np,
 		if (of_property_read_u32(np, "qcom,alpm-bl-threshold",
 					 &ctrl->alpm_bl_threshold))
 			ctrl->alpm_bl_threshold = DEFAULT_ALPM_BL_THRESHOLD;
+		if (mdss_dsi_parse_dcs_cmds(np,
+				&ctrl->alpm_mode_cmds[ALPM_MODE_BRIGHT],
+				"qcom,alpm-bright-command", NULL))
+			ctrl->alpm_mode_cmds[ALPM_MODE_BRIGHT].cmd_cnt = 0;
 	} else {
 		ctrl->panel_data.panel_info.alpm_feature_enabled = false;
 	}

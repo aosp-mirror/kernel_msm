@@ -1097,6 +1097,9 @@ static int mdss_dsi_debugfs_setup(struct mdss_panel_data *pdata,
 	DEBUGFS_CREATE_DCS_CMD("alpm_high_cmd", dfs->root,
 			       &dfs->alpm_cmd[ALPM_MODE_HIGH],
 			       ctrl_pdata->alpm_mode_cmds[ALPM_MODE_HIGH]);
+	DEBUGFS_CREATE_DCS_CMD("alpm_bright_cmd", dfs->root,
+			       &dfs->alpm_cmd[ALPM_MODE_BRIGHT],
+			       ctrl_pdata->alpm_mode_cmds[ALPM_MODE_BRIGHT]);
 
 	debugfs_create_u32("dsi_err_counter", 0644, dfs->root,
 			   &dfs_ctrl->err_cont.max_err_index);

@@ -170,6 +170,7 @@ enum alpm_mode_type {
 	ALPM_MODE_OFF,
 	ALPM_MODE_LOW,
 	ALPM_MODE_HIGH,
+	ALPM_MODE_BRIGHT,
 	ALPM_MODE_MAX,
 };
 
