@@ -651,20 +651,32 @@ static int bcm15602_handle_int(struct bcm15602_chip *ddata,
 /* find pending interrupt flags */
 static int bcm15602_check_int_flags(struct bcm15602_chip *ddata)
 {
-	u8 flags[4], flag_mask, flag_clr_mask[4];
+	u8 flags[4], flags_dup[4], flag_mask, flag_clr_mask[4];
 	unsigned int first_bit, flag_num;
 	int ret;
 	int i;
 
 	/* read interrupt status flags */
 	bcm15602_read_bytes(ddata, BCM15602_REG_INT_INTFLAG1, flags, 4);
+	bcm15602_read_bytes(ddata, BCM15602_REG_INT_INTFLAG1, flags_dup, 4);
 
-	dev_info(ddata->dev, "%s: [0] = 0x%02x, [1] = 0x%02x, [2] = 0x%02x, [3] = 0x%02x\n",
+	dev_info(ddata->dev,
+		 "%s: [0] = 0x%02x, [1] = 0x%02x, [2] = 0x%02x, [3] = 0x%02x\n",
 		 __func__, flags[0], flags[1], flags[2], flags[3]);
 
 	/* iterate through each interrupt */
 	for (i = 0; i < 4; i++) {
 		flag_clr_mask[i] = 0;
+
+		/*
+		 * Workaround for b/63872924; bitwise AND the flags to reject
+		 * false interrupts
+		 */
+		if (flags[i] != flags_dup[i])
+			dev_err(ddata->dev,
+				"%s: mismatch irq for flag %d, 0x%02x != 0x%02x\n",
+				__func__, i, flags[i], flags_dup[i]);
+		flags[i] &= flags_dup[i];
 
 		while (flags[i]) {
 			/* find first set interrupt flag */
@@ -680,7 +692,7 @@ static int bcm15602_check_int_flags(struct bcm15602_chip *ddata)
 		}
 	}
 
-		/* clear handled interrupts */
+	/* clear handled interrupts */
 	bcm15602_write_bytes(ddata,
 			     BCM15602_REG_INT_INTFLAG1,
 			     flag_clr_mask,
@@ -740,7 +752,7 @@ static irqreturn_t bcm15602_intb_irq_handler(int irq, void *cookie)
 	struct bcm15602_chip *ddata = (struct bcm15602_chip *)cookie;
 	int ret;
 
-	dev_info(ddata->dev, "%s: observed irq\n", __func__);
+	dev_dbg(ddata->dev, "%s: observed irq\n", __func__);
 
 	while (!gpio_get_value(ddata->pdata->intb_gpio)) {
 		ret = bcm15602_check_int_flags(ddata);
