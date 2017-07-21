@@ -1515,6 +1515,16 @@ static int max31760_set_enabled(struct device *dev, bool enable)
 	return err;
 }
 
+static int max31760_remove(struct i2c_client *client)
+{
+	struct max31760 *max31760 = i2c_get_clientdata(client);
+
+	if (!max31760)
+		return 0;
+
+	return max31760_set_enabled(&client->dev, false);
+}
+
 static int __maybe_unused max31760_suspend(struct device *dev)
 {
 	return max31760_set_enabled(dev, false);
@@ -1549,6 +1559,7 @@ static struct i2c_driver max31760_driver = {
 		.of_match_table = of_match_ptr(max31760_of_ids),
 	},
 	.probe		= max31760_probe,
+	.remove		= max31760_remove,
 	.id_table	= max31760_i2c_ids,
 };
 
