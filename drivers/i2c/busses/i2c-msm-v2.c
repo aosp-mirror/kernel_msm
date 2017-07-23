@@ -2837,7 +2837,7 @@ static int i2c_msm_pm_sys_suspend_late(struct device *dev)
 static int i2c_msm_pm_sys_resume_early(struct device *dev)
 {
 	struct i2c_msm_ctrl *ctrl = dev_get_drvdata(dev);
-	int ret;
+	int ret = 0;
 
 	if (ctrl->rsrcs.bus_supply) {
 		ret = regulator_enable(ctrl->rsrcs.bus_supply);
