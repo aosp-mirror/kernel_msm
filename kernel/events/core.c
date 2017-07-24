@@ -3437,26 +3437,34 @@ u64 perf_event_read_local(struct perf_event *event)
 
 static int perf_event_read(struct perf_event *event, bool group)
 {
-	int ret = 0;
+	int event_cpu, ret = 0;
+	enum perf_event_active_state event_state;
+
+	event_state = READ_ONCE(event->state);
 
 	/*
 	 * If event is enabled and currently active on a CPU, update the
 	 * value in the event structure:
 	 */
-	if (event->state == PERF_EVENT_STATE_ACTIVE &&
-						!cpu_isolated(event->oncpu)) {
+	if (event_state == PERF_EVENT_STATE_ACTIVE) {
 		struct perf_read_data data = {
 			.event = event,
 			.group = group,
 			.ret = 0,
 		};
+
+		event_cpu = READ_ONCE(event->oncpu);
+		if (event_cpu < 0 || event_cpu >= nr_cpu_ids ||
+				cpu_isolated(event_cpu))
+			return 0;
+
 		if (!event->attr.exclude_idle ||
-					!per_cpu(is_idle, event->oncpu)) {
-			smp_call_function_single(event->oncpu,
+					!per_cpu(is_idle, event_cpu)) {
+			smp_call_function_single(event_cpu,
 				__perf_event_read, &data, 1);
 			ret = data.ret;
 		}
-	} else if (event->state == PERF_EVENT_STATE_INACTIVE) {
+	} else if (event_state == PERF_EVENT_STATE_INACTIVE) {
 		struct perf_event_context *ctx = event->ctx;
 		unsigned long flags;
 
