@@ -278,19 +278,39 @@ static void mdss_dsi_bl_update_alpm_mode(struct mdss_dsi_ctrl_pdata *ctrl,
 					 u32 bl_level)
 {
 	enum alpm_mode_type alpm_mode;
+	bool is_transition = false;
 
-	if (!bl_level)
+	if (!bl_level) {
 		alpm_mode = ALPM_MODE_OFF;
-	else if (bl_level < ctrl->alpm_bl_threshold)
-		alpm_mode = ALPM_MODE_LOW;
-	else if ((bl_level > ctrl->alpm_bl_threshold) &&
-		 ctrl->alpm_mode_cmds[ALPM_MODE_BRIGHT].cmd_cnt)
-		alpm_mode = ALPM_MODE_BRIGHT;
-	else
-		alpm_mode = ALPM_MODE_HIGH;
+	} else {
+		is_transition = ctrl->alpm_mode != ALPM_MODE_OFF;
+		if (bl_level < ctrl->alpm_bl_threshold)
+			alpm_mode = ALPM_MODE_LOW;
+		else if ((bl_level > ctrl->alpm_bl_threshold) &&
+			ctrl->alpm_mode_cmds[ALPM_MODE_BRIGHT].cmd_cnt)
+			alpm_mode = ALPM_MODE_BRIGHT;
+		else
+			alpm_mode = ALPM_MODE_HIGH;
+	}
 
 	if (alpm_mode != ctrl->alpm_mode) {
 		ctrl->alpm_mode = alpm_mode;
+		if (is_transition) {
+			enum alpm_mode_type new_mode;
+			if (alpm_mode == ALPM_MODE_LOW)
+				new_mode = ALPM_MODE_TRANSITION_LOW;
+			else if (alpm_mode == ALPM_MODE_BRIGHT)
+				new_mode = ALPM_MODE_TRANSITION_BRIGHT;
+			else
+				new_mode = ALPM_MODE_TRANSITION_HIGH;
+
+			if (ctrl->alpm_mode_cmds[new_mode].cmd_cnt) {
+				pr_debug("%s: new alpm mode=%d old=%d\n",
+					 __func__, new_mode, alpm_mode);
+				alpm_mode = new_mode;
+			}
+		}
+
 		if (ctrl->ctrl_state & CTRL_STATE_PANEL_LP)
 			mdss_dsi_panel_set_alpm_mode(ctrl, alpm_mode,
 						     CMD_CLK_CTRL);
@@ -2178,10 +2198,27 @@ static void mdss_dsi_parse_alpm_modes(struct device_node *np,
 		if (of_property_read_u32(np, "qcom,alpm-bl-threshold",
 					 &ctrl->alpm_bl_threshold))
 			ctrl->alpm_bl_threshold = DEFAULT_ALPM_BL_THRESHOLD;
+
 		if (mdss_dsi_parse_dcs_cmds(np,
 				&ctrl->alpm_mode_cmds[ALPM_MODE_BRIGHT],
 				"qcom,alpm-bright-command", NULL))
 			ctrl->alpm_mode_cmds[ALPM_MODE_BRIGHT].cmd_cnt = 0;
+
+		/* optional transition commands */
+		ctrl->alpm_mode_cmds[ALPM_MODE_TRANSITION_LOW].cmd_cnt = 0;
+		mdss_dsi_parse_dcs_cmds(np,
+			&ctrl->alpm_mode_cmds[ALPM_MODE_TRANSITION_LOW],
+			"qcom,alpm-low-transition-command", NULL);
+
+		ctrl->alpm_mode_cmds[ALPM_MODE_TRANSITION_HIGH].cmd_cnt = 0;
+		mdss_dsi_parse_dcs_cmds(np,
+			&ctrl->alpm_mode_cmds[ALPM_MODE_TRANSITION_HIGH],
+			"qcom,alpm-high-transition-command", NULL);
+
+		ctrl->alpm_mode_cmds[ALPM_MODE_TRANSITION_BRIGHT].cmd_cnt = 0;
+		mdss_dsi_parse_dcs_cmds(np,
+			&ctrl->alpm_mode_cmds[ALPM_MODE_TRANSITION_BRIGHT],
+			"qcom,alpm-bright-transition-command", NULL);
 	} else {
 		ctrl->panel_data.panel_info.alpm_feature_enabled = false;
 	}
