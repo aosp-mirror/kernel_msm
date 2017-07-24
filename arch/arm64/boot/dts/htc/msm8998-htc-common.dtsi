@@ -171,4 +171,9 @@
 			qcom,ion-heap-type = "CARVEOUT";
 		};
 	};
+
+	qcom,bcl {
+		qcom,bcl-hotplug-list = <>;
+		qcom,bcl-soc-hotplug-list = <>;
+	};
 };
