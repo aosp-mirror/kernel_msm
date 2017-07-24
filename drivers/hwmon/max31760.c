@@ -1465,7 +1465,7 @@ static int max31760_probe(struct i2c_client *client,
 }
 
 /* Toggle the fan GPIOs and regulators to match enable state. */
-static int max31760_update_fan_states(struct device *dev, bool enable)
+static int max31760_set_enabled(struct device *dev, bool enable)
 {
 	struct max31760 *max31760 = dev_get_drvdata(dev);
 	struct max31760_fan *fan;
@@ -1473,6 +1473,15 @@ static int max31760_update_fan_states(struct device *dev, bool enable)
 	int last_err;
 	int err = 0;
 	int i;
+
+	if (!enable) {
+		last_err = regmap_update_bits(max31760->regmap, MAX31760_REG_CR2,
+					      MAX31760_CR2_STBY, MAX31760_CR2_STBY);
+		if (last_err) {
+			err = last_err;
+			dev_err(dev, "Could not set Standby bit: %d", err);
+		}
+	}
 
 	for (i = 0; i < MAX31760_NUM_FANS; i++) {
 		fan = &max31760->fan[i];
@@ -1494,34 +1503,26 @@ static int max31760_update_fan_states(struct device *dev, bool enable)
 		}
 	}
 
+	if (enable) {
+		last_err = regmap_update_bits(max31760->regmap, MAX31760_REG_CR2,
+					      MAX31760_CR2_STBY, 0);
+		if (last_err) {
+			err = last_err;
+			dev_err(dev, "Could not clear Standby bit: %d", err);
+		}
+	}
+
 	return err;
 }
 
 static int __maybe_unused max31760_suspend(struct device *dev)
 {
-	struct max31760 *max31760 = dev_get_drvdata(dev);
-	int err;
-
-	err = max31760_update_fan_states(dev, 0);
-	if (err)
-		return err;
-
-	return regmap_update_bits(max31760->regmap, MAX31760_REG_CR2,
-				  MAX31760_CR2_STBY, MAX31760_CR2_STBY);
+	return max31760_set_enabled(dev, false);
 }
 
 static int __maybe_unused max31760_resume(struct device *dev)
 {
-	struct max31760 *max31760 = dev_get_drvdata(dev);
-	int err;
-
-	err = regmap_update_bits(max31760->regmap, MAX31760_REG_CR2,
-				 MAX31760_CR2_STBY, 0);
-	if (err)
-		dev_err(dev, "Could not clear Standby bit: %d", err);
-	else
-		err = max31760_update_fan_states(dev, 1);
-	return err;
+	return max31760_set_enabled(dev, true);
 }
 
 static SIMPLE_DEV_PM_OPS(max31760_dev_pm_ops, max31760_suspend,
