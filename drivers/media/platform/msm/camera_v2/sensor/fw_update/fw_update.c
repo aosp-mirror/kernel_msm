@@ -365,7 +365,7 @@ int checkVCMFWUpdate(struct msm_sensor_ctrl_t *s_ctrl)
 {
 	int32_t rc = 0;
 	int32_t i = 0;
-	uint16_t reg_data = 0, reg_data2 = 0, reg_data3 = 0;
+	uint16_t reg_data = 0, reg_data2 = 0, reg_data3 = 0, reg_data4 = 0;
 
 	pr_info("[VCMFW]:%s :E\n", __func__);
 
@@ -402,9 +402,14 @@ int checkVCMFWUpdate(struct msm_sensor_ctrl_t *s_ctrl)
 	rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_read(
 		s_ctrl->sensor_i2c_client, 0x54, &reg_data3,
 		MSM_CAMERA_I2C_BYTE_DATA);
+	rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_read(
+		s_ctrl->sensor_i2c_client, 0x4C, &reg_data4,
+		MSM_CAMERA_I2C_BYTE_DATA);
+
 	s_ctrl->sensor_i2c_client->cci_client->sid =
 		AF_EEPROM_I2C_ADDR_WRITE_STEP1 >> 1;
-	if (reg_data == 0x78 && reg_data2 == 0x02 && reg_data3 == 0x1B) {
+	if (reg_data == 0x78 && reg_data2 == 0x02 && reg_data3 == 0x1B
+		&& reg_data4 == 0x8C) {
 		pr_err("[VCMFW]%s: No need to update AF FW\n", __func__);
 	} else {
 		pr_err("[VCMFW]%s: Update AF FW...\n", __func__);
