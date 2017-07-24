@@ -172,6 +172,7 @@ struct max31760_fan {
  * struct max31760 - device data
  * @regmap:	Register map.
  * @fan:	Fan data.
+ * @vdd_supply: Optional regulator that supplies VDD.
  * @temp_label: Labels for the temperature sensors if provided in open firmware.
  * @lut_dev_attrs:
  *		Device attributes for the temperature to PWM lookup table.
@@ -182,6 +183,7 @@ struct max31760_fan {
 struct max31760 {
 	struct regmap *regmap;
 	struct max31760_fan fan[MAX31760_NUM_FANS];
+	struct regulator *vdd_supply;
 	const char *temp_label[MAX31760_NUM_TEMPS];
 	struct max31760_dev_attr lut_dev_attrs[MAX31760_LUT_AUTO_ATTR_COUNT];
 	struct attribute *lut_attrs[MAX31760_LUT_AUTO_ATTR_COUNT + 1];
@@ -1436,24 +1438,47 @@ static int max31760_probe(struct i2c_client *client,
 
 	dev_set_drvdata(dev, max31760);
 
+	max31760->vdd_supply = devm_regulator_get_optional(dev, "vdd");
+	err = PTR_ERR(max31760->vdd_supply);
+	if (err == -ENODEV) {
+		max31760->vdd_supply = NULL;
+	} else if (err == -EPROBE_DEFER) {
+		dev_dbg(dev, "Defer due to vdd-supply.");
+		return err;
+	} else if (err == -ENOENT) {
+		dev_err(dev, "Could not find regulator for vdd-supply.");
+		return err;
+	} else if (IS_ERR(max31760->vdd_supply)) {
+		dev_err(dev, "Unhandled error %d getting vdd-supply.", err);
+		return err;
+	}
+
+	if (max31760->vdd_supply) {
+		err = regulator_enable(max31760->vdd_supply);
+		if (err) {
+			dev_err(dev, "Failed to enable vdd-supply: %d", err);
+			return err;
+		}
+	}
+
 	max31760->regmap = devm_regmap_init_i2c(client,
 						&max31760_regmap_config);
 	if (IS_ERR(max31760->regmap)) {
 		err = PTR_ERR(max31760->regmap);
 		dev_err(dev, "regmap init failed: %d", err);
-		return err;
+		goto err_disable_regulator;
 	}
 
 	err = max31760_of_init(dev);
 	if (err) {
 		dev_err(dev, "failed to initialize from firmware: %d", err);
-		return err;
+		goto err_disable_regulator;
 	}
 
 	err = max31760_update_from_registers(dev);
 	if (err) {
 		dev_err(dev, "failed to update from registers: %d", err);
-		return err;
+		goto err_disable_regulator;
 	}
 
 	max31760_setup_attr_groups(dev);
@@ -1461,7 +1486,15 @@ static int max31760_probe(struct i2c_client *client,
 							 max31760,
 							 &max31760_chip_info,
 							 max31760->attr_groups);
-	return PTR_ERR_OR_ZERO(hwmon_dev);
+	err = PTR_ERR_OR_ZERO(hwmon_dev);
+	if (err)
+		goto err_disable_regulator;
+	return 0;
+
+err_disable_regulator:
+	if (max31760->vdd_supply)
+		regulator_disable(max31760->vdd_supply);
+	return err;
 }
 
 /* Toggle the fan GPIOs and regulators to match enable state. */
@@ -1500,6 +1533,20 @@ static int max31760_set_enabled(struct device *dev, bool enable)
 				dev_err(dev, "Failed to %s fan %d vdd-supply",
 					is_enabled ? "enabled" : "disable", i);
 			}
+		}
+	}
+
+	if (max31760->vdd_supply) {
+		if (enable)
+			last_err = regulator_enable(max31760->vdd_supply);
+		else if (regulator_is_enabled(max31760->vdd_supply))
+			last_err = regulator_disable(max31760->vdd_supply);
+		else
+			last_err = 0;
+		if (last_err) {
+			err = last_err;
+			dev_err(dev, "Failed to %s vdd-supply",
+				enable ? "enable" : "disable");
 		}
 	}
 
