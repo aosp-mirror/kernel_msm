@@ -60,8 +60,11 @@
 		//stm,vdd-gpio = <&tlmm 85 0x0>;
 		//stm,vio-gpio = <&tlmm 86 0x0>;
 		stm,reset-gpio = <&tlmm 89 0x0>;
+		stm,ta_detect_gpio = <&tlmm 50 0x0>;
 
 		stm,firmware_name = "ftm4_fw.ftb";
+
+		power-supplies = <&pmi8998_charger>;
 	};
 };
 
