@@ -90,6 +90,8 @@ struct wsa881x_priv {
 	bool comp_enable;
 	bool boost_enable;
 	bool visense_enable;
+	bool pwm_600kHz;
+	bool pwm_div_by_10;
 	u8 pa_gain;
 	struct swr_port port[WSA881X_MAX_SWR_PORTS];
 	int pd_gpio;
@@ -464,20 +466,6 @@ static const struct file_operations codec_debug_ops = {
 	.read = codec_debug_read,
 };
 
-static const struct reg_sequence wsa881x_pre_pmu_pa[] = {
-	{WSA881X_SPKR_DRV_GAIN, 0x41, 0},
-	{WSA881X_SPKR_MISC_CTL1, 0x01, 0},
-	{WSA881X_ADC_EN_DET_TEST_I, 0x01, 0},
-	{WSA881X_ADC_EN_MODU_V, 0x02, 0},
-	{WSA881X_ADC_EN_DET_TEST_V, 0x10, 0},
-	{WSA881X_SPKR_PWRSTG_DBG, 0xA0, 0},
-};
-
-static const struct reg_sequence wsa881x_pre_pmu_pa_2_0[] = {
-	{WSA881X_SPKR_DRV_GAIN, 0x41, 0},
-	{WSA881X_SPKR_MISC_CTL1, 0x87, 0},
-};
-
 static const struct reg_sequence wsa881x_post_pmu_pa[] = {
 	{WSA881X_SPKR_PWRSTG_DBG, 0x00, 0},
 	{WSA881X_ADC_EN_DET_TEST_V, 0x00, 0},
@@ -677,6 +665,54 @@ static int wsa881x_set_visense(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static const char *wsa881x_pwm_freqs_text[] = {"300KHZ", "600KHZ"};
+static SOC_ENUM_SINGLE_EXT_DECL(wsa881x_pwm_freqs, wsa881x_pwm_freqs_text);
+
+static int wsa881x_pwm_freq_get(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+	struct wsa881x_priv *wsa881x = snd_soc_codec_get_drvdata(codec);
+
+	ucontrol->value.enumerated.item[0] = wsa881x->pwm_600kHz ? 1 : 0;
+	return 0;
+}
+
+static int wsa881x_pwm_freq_put(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+	struct wsa881x_priv *wsa881x = snd_soc_codec_get_drvdata(codec);
+
+	wsa881x->pwm_600kHz = ucontrol->value.enumerated.item[0] > 0;
+	dev_dbg(codec->dev, "PWM freq: %dkHz\n", wsa881x->pwm_600kHz ? 600 : 300);
+	return 0;
+}
+
+static const char *wsa881x_pwm_div_text[] = {"BY_8", "BY_10"};
+static SOC_ENUM_SINGLE_EXT_DECL(wsa881x_pwm_div, wsa881x_pwm_div_text);
+
+static int wsa881x_pwm_div_get(struct snd_kcontrol *kcontrol,
+			       struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+	struct wsa881x_priv *wsa881x = snd_soc_codec_get_drvdata(codec);
+
+	ucontrol->value.enumerated.item[0] = wsa881x->pwm_div_by_10 ? 1 : 0;
+	return 0;
+}
+
+static int wsa881x_pwm_div_put(struct snd_kcontrol *kcontrol,
+			       struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+	struct wsa881x_priv *wsa881x = snd_soc_codec_get_drvdata(codec);
+
+	wsa881x->pwm_div_by_10 = ucontrol->value.enumerated.item[0] > 0;
+	dev_dbg(codec->dev, "PWM Div: %d\n", wsa881x->pwm_div_by_10 ? 10 : 8);
+	return 0;
+}
+
 static const struct snd_kcontrol_new wsa881x_snd_controls[] = {
 	SOC_SINGLE_EXT("COMP Switch", SND_SOC_NOPM, 0, 1, 0,
 		wsa881x_get_compander, wsa881x_set_compander),
@@ -686,6 +722,11 @@ static const struct snd_kcontrol_new wsa881x_snd_controls[] = {
 
 	SOC_SINGLE_EXT("VISENSE Switch", SND_SOC_NOPM, 0, 1, 0,
 		wsa881x_get_visense, wsa881x_set_visense),
+
+	SOC_ENUM_EXT("PWM Frequency", wsa881x_pwm_freqs,
+		wsa881x_pwm_freq_get, wsa881x_pwm_freq_put),
+	SOC_ENUM_EXT("PWM Divider", wsa881x_pwm_div,
+		wsa881x_pwm_div_get, wsa881x_pwm_div_put),
 };
 
 static const struct snd_kcontrol_new swr_dac_port[] = {
@@ -849,25 +890,25 @@ static int wsa881x_spkr_pa_event(struct snd_soc_dapm_widget *w,
 	struct snd_soc_codec *codec = snd_soc_dapm_to_codec(w->dapm);
 	struct wsa881x_priv *wsa881x = snd_soc_codec_get_drvdata(codec);
 	int min_gain, max_gain;
+	unsigned int drv_gain;
 
 	dev_dbg(codec->dev, "%s: %s %d\n", __func__, w->name, event);
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
 		snd_soc_update_bits(codec, WSA881X_SPKR_OCP_CTL, 0xC0, 0x80);
-		regmap_multi_reg_write(wsa881x->regmap,
-				wsa881x_pre_pmu_pa_2_0,
-				ARRAY_SIZE(wsa881x_pre_pmu_pa_2_0));
+		snd_soc_write(codec, WSA881X_SPKR_MISC_CTL1, 0x87);
+		drv_gain = 0x41;
+		if (wsa881x->pwm_600kHz)
+			drv_gain |= 0x04;
+		if (wsa881x->pwm_div_by_10)
+			drv_gain |= 0x02;
+		/* Set register mode if compander is not enabled */
+		if (!wsa881x->comp_enable)
+			drv_gain |= 0x08;
+		snd_soc_write(codec, WSA881X_SPKR_DRV_GAIN, drv_gain);
 		swr_slvdev_datapath_control(wsa881x->swr_slave,
 					    wsa881x->swr_slave->dev_num,
 					    true);
-		/* Set register mode if compander is not enabled */
-		if (!wsa881x->comp_enable)
-			snd_soc_update_bits(codec, WSA881X_SPKR_DRV_GAIN,
-					    0x08, 0x08);
-		else
-			snd_soc_update_bits(codec, WSA881X_SPKR_DRV_GAIN,
-					    0x08, 0x00);
-
 		break;
 	case SND_SOC_DAPM_POST_PMU:
 		if (!wsa881x->comp_enable) {
