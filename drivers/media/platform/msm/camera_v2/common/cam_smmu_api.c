@@ -1341,8 +1341,8 @@ int cam_smmu_set_attr(int handle, uint32_t flags, int32_t *data)
 	if (iommu_cb_set.cb_info[idx].handle != handle) {
 		pr_err("Error: hdl is not valid, table_hdl = %x, hdl = %x\n",
 			iommu_cb_set.cb_info[idx].handle, handle);
-		mutex_unlock(&iommu_cb_set.cb_info[idx].lock);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto err_smmu_set_attr;
 	}
 
 	if (iommu_cb_set.cb_info[idx].state == CAM_SMMU_DETACH) {
@@ -1353,11 +1353,15 @@ int cam_smmu_set_attr(int handle, uint32_t flags, int32_t *data)
 		ret = iommu_domain_set_attr(domain, cb->attr, (void *)data);
 		if (ret < 0) {
 			pr_err("Error: set attr\n");
-			return -ENODEV;
+			ret = -ENODEV;
+			goto err_smmu_set_attr;
 		}
 	} else {
-		return -EINVAL;
+		ret = -EINVAL;
+		goto err_smmu_set_attr;
 	}
+
+err_smmu_set_attr:
 	mutex_unlock(&iommu_cb_set.cb_info[idx].lock);
 	return ret;
 }
