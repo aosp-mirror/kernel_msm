@@ -12,6 +12,7 @@
 #include <linux/input/input_booster.h>
 #endif
 #include <linux/atomic.h>
+#include <linux/power_supply.h>
 
 #include <linux/printk.h>
 #define tsp_debug_dbg(dev, fmt, ...)	dev_dbg(dev, fmt, ## __VA_ARGS__)
@@ -339,6 +340,8 @@ struct fts_ts_info {
 	struct timer_list timer_charger;
 	struct timer_list timer_firmware;
 	struct work_struct work;
+	struct power_supply *ts_psy;
+	struct power_supply *usb_psy;
 
 	unsigned int switch_gpio;
 	int irq;
@@ -372,6 +375,7 @@ struct fts_ts_info {
 	bool run_autotune;
 	bool mainscr_disable;
 	unsigned int cover_type;
+	int charger_connected;
 
 	unsigned char lowpower_flag;
 	bool lowpower_mode;
@@ -435,6 +439,8 @@ struct fts_ts_info {
 	struct fts_flash_corruption_info flash_corruption_info;
 
 	unsigned int checksum_error;
+
+	struct delayed_work psy_work;
 
 	int (*stop_device)(struct fts_ts_info *info);
 	int (*start_device)(struct fts_ts_info *info);

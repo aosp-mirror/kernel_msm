@@ -65,6 +65,8 @@
 #include <linux/input/mt.h>
 #include "ftm4_ts.h"
 
+#define FTS_REGISTER_PSY_MS  200
+
 static struct i2c_driver fts_i2c_driver;
 
 extern int msm_gpio_install_direct_irq(unsigned int gpio,
@@ -97,6 +99,84 @@ static int fts_resume(struct i2c_client *client);
 static int touch_fb_notifier_callback(struct notifier_block *self,
 		unsigned long event, void *data);
 #endif
+
+static int fts_ts_get_property(struct power_supply *psy,
+	enum power_supply_property psp,
+	union power_supply_propval *val)
+{
+	return -EINVAL;
+}
+
+static enum power_supply_property fts_ts_props[] = {
+	POWER_SUPPLY_PROP_TYPE,
+};
+
+static void fts_control_ta_detect_pin(struct fts_ts_info *info)
+{
+	int ta_pin = 0;
+
+	if (!gpio_is_valid(info->board->ta_detect_pin))
+		return;
+
+	gpio_set_value(info->board->ta_detect_pin, info->charger_connected);
+
+	ta_pin = gpio_get_value(info->board->ta_detect_pin);
+
+	tsp_debug_info(&info->client->dev,
+			"%s: ta_detect_pin status = %d.\n",
+			__func__, ta_pin);
+}
+
+static void fts_external_power_changed(struct power_supply *psy)
+{
+	struct fts_ts_info *info = power_supply_get_drvdata(psy);
+	union power_supply_propval prop = {0};
+
+	if (!info->usb_psy)
+		info->usb_psy = power_supply_get_by_name("usb");
+	if (!info->usb_psy)
+		return;
+	if (info->usb_psy) {
+		power_supply_get_property(info->usb_psy,
+					  POWER_SUPPLY_PROP_ONLINE, &prop);
+		if (info->charger_connected != prop.intval) {
+			tsp_debug_info(&info->client->dev,
+				"%s: charger_connected transition: %d => %d.\n",
+				__func__, info->charger_connected, prop.intval);
+			info->charger_connected = prop.intval;
+			fts_control_ta_detect_pin(info);
+		}
+	}
+}
+
+static const struct power_supply_desc fts_ts_desc = {
+	.name			= "touch",
+	.type			= POWER_SUPPLY_TYPE_UNKNOWN,
+	.properties		= fts_ts_props,
+	.num_properties		= ARRAY_SIZE(fts_ts_props),
+	.get_property		= fts_ts_get_property,
+	.external_power_changed = fts_external_power_changed,
+};
+
+static void fts_psy_work(struct work_struct *work)
+{
+	struct fts_ts_info *info = container_of(work, struct fts_ts_info,
+						psy_work.work);
+	struct power_supply_config psy_cfg = {};
+
+	info->ts_psy = devm_power_supply_register(info->dev, &fts_ts_desc,
+						  &psy_cfg);
+	if (!IS_ERR(info->ts_psy)) {
+		fts_external_power_changed(info->ts_psy);
+	} else if (PTR_ERR(info->ts_psy) == -EPROBE_DEFER) {
+		schedule_delayed_work(&info->psy_work,
+				      msecs_to_jiffies(FTS_REGISTER_PSY_MS));
+	} else {
+		tsp_debug_err(info->dev,
+			      "%s: Failed to register power supply\n",
+			      __func__);
+	}
+}
 
 int fts_write_reg(struct fts_ts_info *info,
 		  unsigned char *reg, unsigned short num_com)
@@ -1476,6 +1556,20 @@ static int fts_parse_dt(struct i2c_client *client)
 		tsp_debug_err(dev, "Failed to get reset_pin gpio\n");
 	}
 
+	pdata->ta_detect_pin = of_get_named_gpio(np, "stm,ta_detect_gpio", 0);
+	if (gpio_is_valid(pdata->ta_detect_pin)) {
+		if (devm_gpio_request_one(&client->dev, pdata->ta_detect_pin,
+					GPIOF_OUT_INIT_LOW, "ta_detect_pin")) {
+			tsp_debug_err(dev, "Failed to request gpio ta_detect_pin\n");
+			pdata->ta_detect_pin = -1;
+		} else {
+			tsp_debug_dbg(dev, "ta_detect_pin : %d\n",
+				      gpio_get_value(pdata->ta_detect_pin));
+		}
+	} else {
+		tsp_debug_err(dev, "Failed to get ta_detect_pin gpio\n");
+	}
+
 	/* Optional parmeters(those values are not mandatory)
 	 * do not return error value even if fail to get the value
 	 */
@@ -1561,6 +1655,7 @@ static int fts_setup_drv_data(struct i2c_client *client)
 	info->irq = client->irq;
 	info->irq_type = info->board->irq_type;
 	atomic_set(&info->irq_enabled, 0);
+	info->charger_connected = 0;
 	info->touch_stopped = false;
 	info->panel_revision = info->board->panel_revision;
 	info->stop_device = fts_stop_device;
@@ -1633,6 +1728,7 @@ static int fts_probe(struct i2c_client *client, const struct i2c_device_id *idp)
 	int retval = 0;
 	struct fts_ts_info *info = NULL;
 	static char fts_ts_phys[64] = { 0 };
+	struct power_supply_config psy_cfg = {};
 	int i = 0;
 
 /*
@@ -1777,9 +1873,14 @@ static int fts_probe(struct i2c_client *client, const struct i2c_device_id *idp)
 		__func__, info->irq);
 #endif
 
-#if defined(CONFIG_FB)
+#ifdef CONFIG_FB
 	info->fb_notif.notifier_call = touch_fb_notifier_callback;
 	retval = fb_register_client(&info->fb_notif);
+	if (retval < 0) {
+		tsp_debug_err(&client->dev, "%s: Failed to register fb client\n",
+			__func__);
+		goto err_fb_client;
+	}
 #endif
 
 
@@ -1791,6 +1892,23 @@ static int fts_probe(struct i2c_client *client, const struct i2c_device_id *idp)
 		info->register_cb(&info->callbacks);
 #endif
 
+	INIT_DELAYED_WORK(&info->psy_work, fts_psy_work);
+	psy_cfg.of_node = info->dev->of_node;
+	psy_cfg.drv_data = info;
+	info->ts_psy = devm_power_supply_register(info->dev,
+						  &fts_ts_desc, &psy_cfg);
+	if (!IS_ERR(info->ts_psy)) {
+		fts_external_power_changed(info->ts_psy);
+	} else if (PTR_ERR(info->ts_psy) == -EPROBE_DEFER) {
+		schedule_delayed_work(&info->psy_work,
+				      msecs_to_jiffies(FTS_REGISTER_PSY_MS));
+	} else {
+		tsp_debug_err(&client->dev,
+			     "%s: Failed to register power supply\n", __func__);
+		retval = PTR_ERR(info->ts_psy);
+		goto err_power_supply;
+	}
+
 #ifdef FEATURE_FTS_PRODUCTION_CODE
 	fts_production_init(info);
 #endif /* FEATURE_FTS_PRODUCTION_CODE */
@@ -1800,6 +1918,15 @@ static int fts_probe(struct i2c_client *client, const struct i2c_device_id *idp)
 	info->lowpower_mode = true;
 
 	return 0;
+
+err_power_supply:
+#ifdef CONFIG_FB
+	fb_unregister_client(&info->fb_notif);
+
+err_fb_client:
+#endif
+	fts_irq_enable(info, false);
+	free_irq(info->irq, info);
 
 err_enable_irq:
 	input_unregister_device(info->input_dev);
