@@ -175,6 +175,7 @@ struct tcpc_dev {
 	int (*try_role)(struct tcpc_dev *dev, int role);
 	int (*pd_transmit)(struct tcpc_dev *dev, enum tcpm_transmit_type type,
 			   const struct pd_message *msg);
+	int (*set_in_pr_swap)(struct tcpc_dev *dev, bool pr_swap);
 	struct tcpc_mux_dev *mux;
 };
 

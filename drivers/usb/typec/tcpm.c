@@ -2149,6 +2149,8 @@ static void run_state_machine(struct tcpm_port *port)
 	port->enter_state = port->state;
 	switch (port->state) {
 	case DRP_TOGGLING:
+		tcpm_log(port, "in PR_SWAP := false");
+		port->tcpc->set_in_pr_swap(port->tcpc, false);
 		break;
 	/* SRC states */
 	case SRC_UNATTACHED:
@@ -2296,6 +2298,8 @@ static void run_state_machine(struct tcpm_port *port)
 		tcpm_set_state_cond(port, SRC_READY, 0);
 		break;
 	case SRC_READY:
+		tcpm_log(port, "in PR_SWAP := false");
+		port->tcpc->set_in_pr_swap(port->tcpc, false);
 #if 1
 		port->hard_reset_count = 0;
 #endif
@@ -2491,6 +2495,8 @@ static void run_state_machine(struct tcpm_port *port)
 			       PD_T_PS_TRANSITION);
 		break;
 	case SNK_READY:
+		tcpm_log(port, "in PR_SWAP := false");
+		port->tcpc->set_in_pr_swap(port->tcpc, false);
 		port->try_snk_count = 0;
 		if (port->explicit_contract) {
 			typec_set_pwr_opmode(port->typec_port,
@@ -2645,6 +2651,8 @@ static void run_state_machine(struct tcpm_port *port)
 		tcpm_set_state(port, ready_state(port), 0);
 		break;
 	case PR_SWAP_START:
+		tcpm_log(port, "in PR_SWAP := true");
+		port->tcpc->set_in_pr_swap(port->tcpc, true);
 		if (port->pwr_role == TYPEC_SOURCE)
 			tcpm_set_state(port, PR_SWAP_SRC_SNK_TRANSITION_OFF,
 				       PD_T_SRC_TRANSITION);

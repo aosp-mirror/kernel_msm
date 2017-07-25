@@ -994,6 +994,30 @@ unlock:
 	return ret;
 }
 
+static int tcpm_set_in_pr_swap(struct tcpc_dev *dev, bool pr_swap)
+{
+	union power_supply_propval val = {0};
+	struct usbpd *pd = container_of(dev, struct usbpd, tcpc_dev);
+	int ret;
+
+	mutex_lock(&pd->lock);
+	val.intval = pr_swap ? 1 : 0;
+	ret = power_supply_set_property(pd->usb_psy,
+					POWER_SUPPLY_PROP_PR_SWAP,
+					&val);
+	if (ret < 0) {
+		pd_engine_log(pd, "unable to set PR_SWAP to %d, ret=%d", pr_swap ? 1 : 0, ret);
+		goto unlock;
+	}
+
+	pd_engine_log(pd, "PR_SWAP = %d", pr_swap ? 1 : 0);
+
+unlock:
+	mutex_unlock(&pd->lock);
+	return ret;
+}
+
+
 enum power_role get_pdphy_power_role(enum typec_role role)
 {
 	switch (role) {
@@ -1261,6 +1285,7 @@ static void init_tcpc_dev(struct tcpc_dev *pd_tcpc_dev)
 	pd_tcpc_dev->try_role = NULL;
 	pd_tcpc_dev->pd_transmit = tcpm_pd_transmit;
 	pd_tcpc_dev->start_drp_toggling = tcpm_start_drp_toggling;
+	pd_tcpc_dev->set_in_pr_swap = tcpm_set_in_pr_swap;
 	pd_tcpc_dev->mux = NULL;
 }
 
