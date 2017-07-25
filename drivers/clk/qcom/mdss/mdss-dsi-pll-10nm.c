@@ -605,7 +605,7 @@ static void dsi_pll_enable_pll_bias(struct mdss_pll_resources *rsc)
 
 	MDSS_PLL_REG_W(rsc->phy_base, PHY_CMN_CTRL_0, data | BIT(5));
 	MDSS_PLL_REG_W(rsc->pll_base, PLL_SYSTEM_MUXES, 0xc0);
-	ndelay(250);
+	udelay(1000);
 }
 
 static void dsi_pll_disable_global_clk(struct mdss_pll_resources *rsc)
@@ -629,6 +629,7 @@ static int dsi_pll_enable(struct dsi_pll_vco_clk *vco)
 	int rc;
 	struct mdss_pll_resources *rsc = vco->priv;
 
+	udelay(3000);
 	dsi_pll_enable_pll_bias(rsc);
 	if (rsc->slave)
 		dsi_pll_enable_pll_bias(rsc->slave);
