@@ -93,6 +93,7 @@
 #define MAX31760_REG_USER0 0x10 /* Custom Control Register USER0 */
 #define     MAX31760_USER0_PULSE1 0x07 /* Fan1 Pulses per revolution */
 #define     MAX31760_USER0_PULSE2 0x38 /* Fan2 Pulses per revolution */
+#define MAX31760_REG_USER1_PWMR 0x11 /* Manual mode PWM value for resume */
 #define MAX31760_REG_LUT   0x20 /* 48-Byte Lookup Table (LUT) */
 #define     MAX31760_LUT_COUNT 48
 #define MAX31760_REG_PWMR  0x50 /* Direct Duty-Cycle Control Register */
@@ -626,7 +627,10 @@ static int max31760_write_pwm(struct device *dev, u32 attr, int channel,
 	switch (attr) {
 	case hwmon_pwm_input:
 		regval = (unsigned int)val & 0xff;
-		return regmap_write(max31760->regmap, MAX31760_REG_PWMR,
+		err = regmap_write(max31760->regmap, MAX31760_REG_PWMR, regval);
+		if (err)
+			return err;
+		return regmap_write(max31760->regmap, MAX31760_REG_USER1_PWMR,
 				    regval);
 	case hwmon_pwm_enable:
 		switch (val) {
@@ -1231,10 +1235,12 @@ static void max31760_setup_attr_groups(struct device *dev)
 static int max31760_update_from_registers(struct device *dev)
 {
 	struct max31760 *max31760 = dev_get_drvdata(dev);
+	unsigned int regval;
 	long val;
 	int i;
 	int err;
 
+	/* Restore fan pulses values. */
 	for (i = 0; i < MAX31760_NUM_FANS; i++) {
 		err = max31760_read_fan(dev, hwmon_fan_pulses, i, &val);
 		if (err)
@@ -1243,8 +1249,16 @@ static int max31760_update_from_registers(struct device *dev)
 	}
 
 	/* Clear standby bit in case it is set. */
-	return regmap_update_bits(max31760->regmap, MAX31760_REG_CR2,
-				  MAX31760_CR2_STBY, 0);
+	err = regmap_update_bits(max31760->regmap, MAX31760_REG_CR2,
+				 MAX31760_CR2_STBY, 0);
+	if (err)
+		return err;
+
+	/* Restore last stored manual PWM value. */
+	err = regmap_read(max31760->regmap, MAX31760_REG_USER1_PWMR, &regval);
+	if (err)
+		return err;
+	return regmap_write(max31760->regmap, MAX31760_REG_PWMR, regval);
 }
 
 /* Read properties of a fan node. */
@@ -1579,7 +1593,16 @@ static int __maybe_unused max31760_suspend(struct device *dev)
 
 static int __maybe_unused max31760_resume(struct device *dev)
 {
-	return max31760_set_enabled(dev, true);
+	int err;
+
+	err = max31760_set_enabled(dev, true);
+	if (err)
+		return err;
+
+	err = max31760_update_from_registers(dev);
+	if (err)
+		dev_err(dev, "failed to update from registers: %d", err);
+	return err;
 }
 
 static SIMPLE_DEV_PM_OPS(max31760_dev_pm_ops, max31760_suspend,
