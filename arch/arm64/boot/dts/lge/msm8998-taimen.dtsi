@@ -63,6 +63,12 @@
 	cont_splash_mem: splash_region@9d600000 {
 		status = "disabled";
 	};
+
+	bootloader_log_mem: bootloader_log_region@affffc000 {
+		compatible = "removed-dma-pool";
+		no-map;
+		reg = <0 0xafffc000 0 0x3000>;
+	};
 };
 
 &pil_ipa_gpu_mem {
@@ -127,6 +133,14 @@
 			memory-region = <&easel_mem>;
 			qcom,ion-heap-type = "CARVEOUT";
 		};
+	};
+
+	bootloader_log {
+		compatible = "htc,bldr_log";
+		/* tzbsp buffer(0x1e70) + header(12) + msg head(22) */
+		reg = <0xafffc000 0x1e92>;
+		reg-names = "bl_log";
+		memory-region = <&bootloader_log_mem>;
 	};
 };
 
