@@ -33,6 +33,7 @@
 
 &dsi_sharp_nt35350_cmd {
 	qcom,use-dsv;
+	qcom,mdss-brightness-default-level = <177>;
 	qcom,mdss-dsi-bl-min-level = <0>;
 	qcom,mdss-dsi-bl-max-level = <255>;
 	qcom,cont-splash-enabled;
