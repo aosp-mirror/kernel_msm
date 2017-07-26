@@ -343,6 +343,7 @@ struct smb_charger {
 	int			typec_mode;
 	int			usb_icl_change_irq_enabled;
 	u32			jeita_status;
+	u8			float_cfg;
 	bool			max_9v_adapter;
 
 	int			fake_port_temp;
