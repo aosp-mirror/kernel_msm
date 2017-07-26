@@ -33,6 +33,7 @@
 
 /* backlight level to use as threshold for picking ALPM low/high mode */
 #define DEFAULT_ALPM_BL_THRESHOLD 27
+#define DEFAULT_ALPM_DIM_THRESHOLD 5
 
 #define VSYNC_DELAY msecs_to_jiffies(17)
 
@@ -259,14 +260,8 @@ static void mdss_dsi_panel_set_alpm_mode(struct mdss_dsi_ctrl_pdata *ctrl,
 
 	pcmds = &ctrl->alpm_mode_cmds[mode];
 	if (pcmds->cmd_cnt == 0) {
-		/* if bright mode not available try high mode */
-		if (mode == ALPM_MODE_BRIGHT)
-			mdss_dsi_panel_set_alpm_mode(ctrl,
-						     ALPM_MODE_HIGH,
-						     extra_flags);
-		else
-			pr_warn("%s: alpm mode=%d not supported\n",
-				__func__, mode);
+		pr_warn("%s: alpm mode=%d not supported\n",
+			__func__, mode);
 		return;
 	}
 
@@ -284,10 +279,13 @@ static void mdss_dsi_bl_update_alpm_mode(struct mdss_dsi_ctrl_pdata *ctrl,
 		alpm_mode = ALPM_MODE_OFF;
 	} else {
 		is_transition = ctrl->alpm_mode != ALPM_MODE_OFF;
-		if (bl_level < ctrl->alpm_bl_threshold)
+		if ((bl_level < ctrl->alpm_dim_threshold) &&
+		    ctrl->alpm_mode_cmds[ALPM_MODE_DIM].cmd_cnt)
+			alpm_mode = ALPM_MODE_DIM;
+		else if (bl_level < ctrl->alpm_bl_threshold)
 			alpm_mode = ALPM_MODE_LOW;
 		else if ((bl_level > ctrl->alpm_bl_threshold) &&
-			ctrl->alpm_mode_cmds[ALPM_MODE_BRIGHT].cmd_cnt)
+			 ctrl->alpm_mode_cmds[ALPM_MODE_BRIGHT].cmd_cnt)
 			alpm_mode = ALPM_MODE_BRIGHT;
 		else
 			alpm_mode = ALPM_MODE_HIGH;
@@ -297,13 +295,16 @@ static void mdss_dsi_bl_update_alpm_mode(struct mdss_dsi_ctrl_pdata *ctrl,
 		ctrl->alpm_mode = alpm_mode;
 		if (is_transition) {
 			enum alpm_mode_type new_mode;
-			if (alpm_mode == ALPM_MODE_LOW)
+			if (alpm_mode == ALPM_MODE_DIM)
+				new_mode = ALPM_MODE_TRANSITION_DIM;
+			else if (alpm_mode == ALPM_MODE_LOW)
 				new_mode = ALPM_MODE_TRANSITION_LOW;
 			else if (alpm_mode == ALPM_MODE_BRIGHT)
 				new_mode = ALPM_MODE_TRANSITION_BRIGHT;
 			else
 				new_mode = ALPM_MODE_TRANSITION_HIGH;
 
+			/* allow transition if there's a command for it */
 			if (ctrl->alpm_mode_cmds[new_mode].cmd_cnt) {
 				pr_debug("%s: new alpm mode=%d old=%d\n",
 					 __func__, new_mode, alpm_mode);
@@ -2199,12 +2200,26 @@ static void mdss_dsi_parse_alpm_modes(struct device_node *np,
 					 &ctrl->alpm_bl_threshold))
 			ctrl->alpm_bl_threshold = DEFAULT_ALPM_BL_THRESHOLD;
 
+		if (of_property_read_u32(np, "qcom,alpm-dim-threshold",
+					 &ctrl->alpm_dim_threshold))
+			ctrl->alpm_dim_threshold = DEFAULT_ALPM_DIM_THRESHOLD;
+
+		if (mdss_dsi_parse_dcs_cmds(np,
+				&ctrl->alpm_mode_cmds[ALPM_MODE_DIM],
+				"qcom,alpm-dim-command", NULL))
+			ctrl->alpm_mode_cmds[ALPM_MODE_DIM].cmd_cnt = 0;
+
 		if (mdss_dsi_parse_dcs_cmds(np,
 				&ctrl->alpm_mode_cmds[ALPM_MODE_BRIGHT],
 				"qcom,alpm-bright-command", NULL))
 			ctrl->alpm_mode_cmds[ALPM_MODE_BRIGHT].cmd_cnt = 0;
 
 		/* optional transition commands */
+		ctrl->alpm_mode_cmds[ALPM_MODE_TRANSITION_DIM].cmd_cnt = 0;
+		mdss_dsi_parse_dcs_cmds(np,
+			&ctrl->alpm_mode_cmds[ALPM_MODE_TRANSITION_DIM],
+			"qcom,alpm-dim-transition-command", NULL);
+
 		ctrl->alpm_mode_cmds[ALPM_MODE_TRANSITION_LOW].cmd_cnt = 0;
 		mdss_dsi_parse_dcs_cmds(np,
 			&ctrl->alpm_mode_cmds[ALPM_MODE_TRANSITION_LOW],

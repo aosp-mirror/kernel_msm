@@ -1091,6 +1091,9 @@ static int mdss_dsi_debugfs_setup(struct mdss_panel_data *pdata,
 	DEBUGFS_CREATE_DCS_CMD("alpm_off_cmd", dfs->root,
 			       &dfs->alpm_cmd[ALPM_MODE_OFF],
 			       ctrl_pdata->alpm_mode_cmds[ALPM_MODE_OFF]);
+	DEBUGFS_CREATE_DCS_CMD("alpm_dim_cmd", dfs->root,
+			       &dfs->alpm_cmd[ALPM_MODE_DIM],
+			       ctrl_pdata->alpm_mode_cmds[ALPM_MODE_DIM]);
 	DEBUGFS_CREATE_DCS_CMD("alpm_low_cmd", dfs->root,
 			       &dfs->alpm_cmd[ALPM_MODE_LOW],
 			       ctrl_pdata->alpm_mode_cmds[ALPM_MODE_LOW]);
@@ -1100,6 +1103,9 @@ static int mdss_dsi_debugfs_setup(struct mdss_panel_data *pdata,
 	DEBUGFS_CREATE_DCS_CMD("alpm_bright_cmd", dfs->root,
 			       &dfs->alpm_cmd[ALPM_MODE_BRIGHT],
 			       ctrl_pdata->alpm_mode_cmds[ALPM_MODE_BRIGHT]);
+	DEBUGFS_CREATE_DCS_CMD("alpm_transition_dim_cmd", dfs->root,
+		&dfs->alpm_cmd[ALPM_MODE_TRANSITION_DIM],
+		ctrl_pdata->alpm_mode_cmds[ALPM_MODE_TRANSITION_DIM]);
 	DEBUGFS_CREATE_DCS_CMD("alpm_transition_low_cmd", dfs->root,
 		&dfs->alpm_cmd[ALPM_MODE_TRANSITION_LOW],
 		ctrl_pdata->alpm_mode_cmds[ALPM_MODE_TRANSITION_LOW]);
