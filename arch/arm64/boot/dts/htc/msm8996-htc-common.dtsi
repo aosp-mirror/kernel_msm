@@ -62,6 +62,13 @@
 					mnt_flags = "ro,barrier=1";
 					fsmgr_flags = "wait,slotselect,verify";
 				};
+				persist {
+					compatible = "android,persist";
+					dev = "/dev/block/platform/soc/624000.ufshc/by-name/persist";
+					type = "ext4";
+					mnt_flags = "nosuid,nodev,noatime,barrier=1";
+					fsmgr_flags = "wait";
+				};
 			};
 		};
 	};
