@@ -22,7 +22,6 @@
 #include <linux/qpnp/pwm.h>
 #include <linux/err.h>
 #include <linux/string.h>
-#include <linux/platform_data/leds-lm36272.h>
 
 #include "mdss_dsi.h"
 #ifdef TARGET_HW_MDSS_HDMI

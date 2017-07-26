@@ -20,6 +20,7 @@
 #include <linux/pinctrl/consumer.h>
 #include <linux/wakelock.h>
 #include <linux/gpio.h>
+#include <linux/platform_data/leds-lm36272.h>
 
 #include "mdss_panel.h"
 #include "mdss_dsi_cmd.h"

@@ -1453,8 +1453,12 @@ static int mdp3_ctrl_display_commit_kickoff(struct msm_fb_data_type *mfd,
 
 	mdp3_session->vsync_before_commit = 0;
 	if (!splash_done || mdp3_session->esd_recovery == true) {
-		if (panel && panel->set_backlight)
-			panel->set_backlight(panel, panel->panel_info.brightness_default);
+		if (panel->panel_info.use_dsv) {
+			lm36272_backlight_ctrl(panel->panel_info.brightness_default);
+		} else {
+			if (panel && panel->set_backlight)
+				panel->set_backlight(panel, panel->panel_info.brightness_default);
+		}
 		splash_done = true;
 		mdp3_session->esd_recovery = false;
 	}
@@ -1602,6 +1606,9 @@ static void mdp3_ctrl_pan_display(struct msm_fb_data_type *mfd)
 		if (panel)
 			panel->event_handler(panel, MDSS_EVENT_POST_PANEL_ON,
 					NULL);
+
+		if (panel->panel_info.use_dsv)
+			lm36272_backlight_ctrl(panel->panel_info.brightness_default);
 	}
 
 	mdp3_session->vsync_before_commit = 0;

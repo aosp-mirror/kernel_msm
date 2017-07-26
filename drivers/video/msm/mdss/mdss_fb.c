@@ -1731,7 +1731,10 @@ static int mdss_fb_blank_blank(struct msm_fb_data_type *mfd,
 		mutex_lock(&mfd->bl_lock);
 		current_bl = mfd->bl_level;
 		mfd->allow_bl_update = true;
-		mdss_fb_set_backlight(mfd, 0);
+		if (mfd->panel_info->use_dsv)
+			lm36272_backlight_ctrl(0);
+		else
+			mdss_fb_set_backlight(mfd, 0);
 		mfd->allow_bl_update = false;
 		mfd->unset_bl_level = current_bl;
 		mutex_unlock(&mfd->bl_lock);
