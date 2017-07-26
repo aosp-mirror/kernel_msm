@@ -4921,6 +4921,19 @@ static QDF_STATUS wma_configure_ssdp(tp_wma_handle wma, uint8_t vdev_id)
 }
 
 /**
+ * set_action_id_drop_pattern_for_spec_mgmt() - Set action id of action
+ * frames for spectrum mgmt frames to be droppped in fw.
+ *
+ * @action_id_per_category: Pointer to action id bitmaps.
+ */
+static void set_action_id_drop_pattern_for_spec_mgmt(
+					uint32_t *action_id_per_category)
+{
+	action_id_per_category[SIR_MAC_ACTION_SPECTRUM_MGMT]
+				= DROP_SPEC_MGMT_ACTION_FRAME_BITMAP;
+}
+
+/**
  * wma_register_action_frame_patterns() - register action frame map to fw
  * @handle: Pointer to wma handle
  * @vdev_id: VDEV ID
@@ -4950,6 +4963,8 @@ QDF_STATUS wma_register_action_frame_patterns(WMA_HANDLE handle,
 	cmd.action_category_map[i++] = ALLOWED_ACTION_FRAMES_BITMAP6;
 	cmd.action_category_map[i++] = ALLOWED_ACTION_FRAMES_BITMAP7;
 
+	set_action_id_drop_pattern_for_spec_mgmt(cmd.action_per_category);
+
 	for (i = 0; i < WMI_SUPPORTED_ACTION_CATEGORY_ELE_LIST; i++) {
 		if (i < ALLOWED_ACTION_FRAME_MAP_WORDS)
 			WMA_LOGD("%s: %d action Wakeup pattern 0x%x in fw",
@@ -4957,6 +4972,9 @@ QDF_STATUS wma_register_action_frame_patterns(WMA_HANDLE handle,
 		else
 			cmd.action_category_map[i] = 0;
 	}
+
+	WMA_LOGD("Spectrum mgmt action id drop bitmap: 0x%x",
+			cmd.action_per_category[SIR_MAC_ACTION_SPECTRUM_MGMT]);
 
 	err = wmi_unified_action_frame_patterns_cmd(wma->wmi_handle, &cmd);
 	if (err) {

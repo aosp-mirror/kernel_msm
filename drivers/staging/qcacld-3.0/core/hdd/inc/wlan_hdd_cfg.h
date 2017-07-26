@@ -5012,6 +5012,31 @@ enum hdd_link_speed_rpt_type {
 
 /*
  * <ini>
+ *
+ * gEnableCckTxFirOverride - Enable/disable CCK TxFIR Override
+ * @Min: 0 (disabled)
+ * @Max: 1 (enabled)
+ * @Default: 0 (disabled)
+ *
+ * When operating in an 802.11b mode, this configuration item forces a 2x2 radio
+ * configuration into 1x for Tx and 2x for Rx (ie 1x2) for regulatory compliance
+ * reasons.
+ *
+ * Related: enable2x2
+ *
+ * Supported Feature: 802.11b, 2x2
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_ENABLE_CCK_TX_FIR_OVERRIDE_NAME     "gEnableCckTxFirOverride"
+#define CFG_ENABLE_CCK_TX_FIR_OVERRIDE_MIN      (0)
+#define CFG_ENABLE_CCK_TX_FIR_OVERRIDE_MAX      (1)
+#define CFG_ENABLE_CCK_TX_FIR_OVERRIDE_DEFAULT  (0)
+
+/*
+ * <ini>
  * gDefaultRateIndex24Ghz -Set the rate index for 24Ghz
  * @Min: 1
  * @Max: 9
@@ -10251,7 +10276,7 @@ enum dot11p_mode {
  * <ini>
  * g_mc_bc_active_bpf_mode - Control MC/BC active BPF mode
  * @Min: 0 (disabled)
- * @Max: 2 (adaptive)
+ * @Max: 1 (enabled)
  * @Default: 0 (disabled)
  *
  * This config item is used to control MC/BC BPF mode.
@@ -10270,7 +10295,7 @@ enum dot11p_mode {
  */
 #define CFG_ACTIVE_MC_BC_BPF_MODE_NAME    "gActiveMcBcBpfMode"
 #define CFG_ACTIVE_MC_BC_BPF_MODE_MIN     (ACTIVE_BPF_DISABLED)
-#define CFG_ACTIVE_MC_BC_BPF_MODE_MAX     (ACTIVE_BPF_MODE_COUNT - 1)
+#define CFG_ACTIVE_MC_BC_BPF_MODE_MAX     (ACTIVE_BPF_ENABLED)
 #define CFG_ACTIVE_MC_BC_BPF_MODE_DEFAULT (ACTIVE_BPF_DISABLED)
 
 enum hw_filter_mode {
@@ -11135,6 +11160,100 @@ enum hw_filter_mode {
 #define CFG_RANDOMIZE_NDI_MAC_MAX       (1)
 #define CFG_RANDOMIZE_NDI_MAC_DEFAULT   (1)
 
+/*
+ * <ini>
+ * enable_11d_in_world_mode - enable 11d in world mode
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini enables 11d in world mode
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ENABLE_11D_IN_WORLD_MODE_NAME "enable_11d_in_world_mode"
+#define CFG_ENABLE_11D_IN_WORLD_MODE_DEFAULT (0)
+#define CFG_ENABLE_11D_IN_WORLD_MODE_MIN     (0)
+#define CFG_ENABLE_11D_IN_WORLD_MODE_MAX     (1)
+
+/*
+ * <ini>
+ * gEnableLPRx - Enable/Disable LPRx
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini Enables or disables the LPRx in FW
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+
+#define CFG_LPRx_NAME       "gEnableLPRx"
+#define CFG_LPRx_MIN         (0)
+#define CFG_LPRx_MAX         (1)
+#define CFG_LPRx_DEFAULT     (1)
+
+/*
+ * <ini>
+ * gUpperBrssiThresh - Sets Upper threshold for beacon RSSI
+ * @Min: 36
+ * @Max: 66
+ * @Default: 46
+ *
+ * This ini sets Upper beacon threshold for beacon RSSI in FW
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+
+#define CFG_UPPER_BRSSI_THRESH_NAME             "gUpperBrssiThresh"
+#define CFG_UPPER_BRSSI_THRESH_MIN              (36)
+#define CFG_UPPER_BRSSI_THRESH_MAX              (66)
+#define CFG_UPPER_BRSSI_THRESH_DEFAULT          (46)
+
+/*
+ * <ini>
+ * gLowerrBrssiThresh - Sets Lower threshold for beacon RSSI
+ * @Min: 6
+ * @Max: 36
+ * @Default: 26
+ *
+ * This ini sets Lower beacon threshold for beacon RSSI in FW
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+
+#define CFG_LOWER_BRSSI_THRESH_NAME     "gLowerBrssiThresh"
+#define CFG_LOWER_BRSSI_THRESH_MIN      (6)
+#define CFG_LOWER_BRSSI_THRESH_MAX      (36)
+#define CFG_LOWER_BRSSI_THRESH_DEFAULT  (26)
+
+/*
+ * <ini>
+ * gDtim1ChRxEnable - Enable/Disable DTIM 1Chrx feature
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini Enables or Disables DTIM 1CHRX feature in FW
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+
+#define CFG_DTIM_1CHRX_ENABLE_NAME      "gDtim1ChRxEnable"
+#define CFG_DTIM_1CHRX_ENABLE_MIN       (0)
+#define CFG_DTIM_1CHRX_ENABLE_MAX       (1)
+#define CFG_DTIM_1CHRX_ENABLE_DEFAULT   (1)
+
 /*---------------------------------------------------------------------------
    Type declarations
    -------------------------------------------------------------------------*/
@@ -11590,6 +11709,7 @@ struct hdd_config {
 	uint8_t apMaxOffloadReorderBuffs;
 	bool advertiseConcurrentOperation;
 	bool enableMemDeepSleep;
+	bool enable_cck_tx_fir_override;
 
 	uint32_t defaultRateIndex24Ghz;
 #ifdef MEMORY_DEBUG
@@ -11915,6 +12035,11 @@ struct hdd_config {
 	uint32_t rssi_channel_penalization;
 	uint32_t num_disallowed_aps;
 	bool is_ndi_mac_randomized;
+	bool enable_11d_in_world_mode;
+	bool enable_lprx;
+	uint8_t upper_brssi_thresh;
+	uint8_t lower_brssi_thresh;
+	bool enable_dtim_1chrx;
 };
 
 #define VAR_OFFSET(_Struct, _Var) (offsetof(_Struct, _Var))

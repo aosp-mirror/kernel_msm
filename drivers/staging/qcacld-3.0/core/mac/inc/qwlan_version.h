@@ -41,9 +41,9 @@
 #define QWLAN_VERSION_MAJOR            5
 #define QWLAN_VERSION_MINOR            1
 #define QWLAN_VERSION_PATCH            2
-#define QWLAN_VERSION_EXTRA            "U"
+#define QWLAN_VERSION_EXTRA            "W"
 #define QWLAN_VERSION_BUILD            21
 
-#define QWLAN_VERSIONSTR               "5.1.2.21U.1"
+#define QWLAN_VERSIONSTR               "5.1.2.21W"
 
 #endif /* QWLAN_VERSION_H */

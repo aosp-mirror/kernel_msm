@@ -444,6 +444,7 @@ QDF_STATUS csr_set_reg_info(tHalHandle hHal, uint8_t *apCntryCode)
 	cntryCodeLength = WNI_CFG_COUNTRY_CODE_LEN;
 	status = csr_get_regulatory_domain_for_country(pMac, apCntryCode,
 						&regId, SOURCE_USERSPACE);
+
 	if (status != QDF_STATUS_SUCCESS) {
 		sme_err("fail to get regId for country Code %.2s",
 			apCntryCode);
@@ -1528,6 +1529,7 @@ static void init_config_param(tpAniSirGlobal pMac)
 	pMac->roam.configParam.HeartbeatThresh50 = 40;
 	pMac->roam.configParam.Is11dSupportEnabled = false;
 	pMac->roam.configParam.Is11dSupportEnabledOriginal = false;
+	pMac->roam.configParam.enable_11d_in_world_mode = false;
 	pMac->roam.configParam.Is11eSupportEnabled = true;
 	pMac->roam.configParam.Is11hSupportEnabled = true;
 	pMac->roam.configParam.RTSThreshold = 2346;
@@ -2265,10 +2267,17 @@ QDF_STATUS csr_change_default_config_param(tpAniSirGlobal pMac,
 			pParam->Is11eSupportEnabled;
 		pMac->roam.configParam.FragmentationThreshold =
 			pParam->FragmentationThreshold;
-		pMac->roam.configParam.Is11dSupportEnabled =
-			pParam->Is11dSupportEnabled;
 		pMac->roam.configParam.Is11dSupportEnabledOriginal =
 			pParam->Is11dSupportEnabled;
+		pMac->roam.configParam.enable_11d_in_world_mode =
+			pParam->enable_11d_in_world_mode;
+		if ((pMac->roam.configParam.enable_11d_in_world_mode) &&
+		    (pMac->reg_hint_src == SOURCE_CORE))
+			pMac->roam.configParam.Is11dSupportEnabled =
+				true;
+		else
+			pMac->roam.configParam.Is11dSupportEnabled =
+				pParam->Is11dSupportEnabled;
 		pMac->roam.configParam.Is11hSupportEnabled =
 			pParam->Is11hSupportEnabled;
 
@@ -13875,12 +13884,17 @@ static void csr_update_pmk_cache(tCsrRoamSession *pSession,
 	/* Increment the CSR local cache index */
 	if (cache_idx < (CSR_MAX_PMKID_ALLOWED - 1))
 		pSession->curr_cache_idx++;
-	else
+	else {
+		sme_debug("max value reached, setting current index as 0");
 		pSession->curr_cache_idx = 0;
+	}
 
 	pSession->NumPmkidCache++;
-	if (pSession->NumPmkidCache > CSR_MAX_PMKID_ALLOWED)
+	if (pSession->NumPmkidCache > CSR_MAX_PMKID_ALLOWED) {
+		sme_debug("setting num pmkid cache to %d",
+			CSR_MAX_PMKID_ALLOWED);
 		pSession->NumPmkidCache = CSR_MAX_PMKID_ALLOWED;
+	}
 }
 
 QDF_STATUS
@@ -14015,6 +14029,9 @@ QDF_STATUS csr_roam_del_pmkid_from_cache(tpAniSirGlobal pMac,
 
 	/* Decrement the count since an entry has been deleted */
 	pSession->NumPmkidCache--;
+	sme_debug("PMKID at index=%d deleted, current index=%d cache count=%d",
+		Index, pSession->curr_cache_idx, pSession->NumPmkidCache);
+
 	return QDF_STATUS_SUCCESS;
 }
 
@@ -20860,7 +20877,6 @@ static QDF_STATUS csr_process_roam_sync_callback(tpAniSirGlobal mac_ctx,
 		eCSR_ASSOC_STATE_TYPE_INFRA_ASSOCIATED;
 	sme_qos_csr_event_ind(mac_ctx, session_id,
 		SME_QOS_CSR_REASSOC_COMPLETE, &assoc_info);
-	sme_qos_remove_addts_delts_cmd(mac_ctx, session_id);
 	roam_info->pBssDesc = bss_desc;
 	conn_profile->acm_mask = sme_qos_get_acm_mask(mac_ctx,
 			bss_desc, NULL);

@@ -3011,6 +3011,13 @@ struct reg_table_entry g_registry_table[] = {
 		     CFG_ENABLE_MEMORY_DEEP_SLEEP_MIN,
 		     CFG_ENABLE_MEMORY_DEEP_SLEEP_MAX),
 
+	REG_VARIABLE(CFG_ENABLE_CCK_TX_FIR_OVERRIDE_NAME, WLAN_PARAM_Integer,
+		     struct hdd_config, enable_cck_tx_fir_override,
+		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		     CFG_ENABLE_CCK_TX_FIR_OVERRIDE_DEFAULT,
+		     CFG_ENABLE_CCK_TX_FIR_OVERRIDE_MIN,
+		     CFG_ENABLE_CCK_TX_FIR_OVERRIDE_MAX),
+
 	REG_VARIABLE(CFG_DEFAULT_RATE_INDEX_24GH, WLAN_PARAM_Integer,
 		     struct hdd_config, defaultRateIndex24Ghz,
 		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
@@ -4687,6 +4694,41 @@ struct reg_table_entry g_registry_table[] = {
 		CFG_RANDOMIZE_NDI_MAC_DEFAULT,
 		CFG_RANDOMIZE_NDI_MAC_MIN,
 		CFG_RANDOMIZE_NDI_MAC_MAX),
+
+	REG_VARIABLE(CFG_ENABLE_11D_IN_WORLD_MODE_NAME, WLAN_PARAM_Integer,
+		     struct hdd_config, enable_11d_in_world_mode,
+		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		     CFG_ENABLE_11D_IN_WORLD_MODE_DEFAULT,
+		     CFG_ENABLE_11D_IN_WORLD_MODE_MIN,
+		     CFG_ENABLE_11D_IN_WORLD_MODE_MAX),
+
+	REG_VARIABLE(CFG_LPRx_NAME, WLAN_PARAM_Integer,
+		struct hdd_config, enable_lprx,
+		VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		CFG_LPRx_DEFAULT,
+		CFG_LPRx_MIN,
+		CFG_LPRx_MAX),
+
+	REG_VARIABLE(CFG_UPPER_BRSSI_THRESH_NAME, WLAN_PARAM_Integer,
+		struct hdd_config, upper_brssi_thresh,
+		VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		CFG_UPPER_BRSSI_THRESH_DEFAULT,
+		CFG_UPPER_BRSSI_THRESH_MIN,
+		CFG_UPPER_BRSSI_THRESH_MAX),
+
+	REG_VARIABLE(CFG_LOWER_BRSSI_THRESH_NAME, WLAN_PARAM_Integer,
+		struct hdd_config, lower_brssi_thresh,
+		VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		CFG_LOWER_BRSSI_THRESH_DEFAULT,
+		CFG_LOWER_BRSSI_THRESH_MIN,
+		CFG_LOWER_BRSSI_THRESH_MAX),
+
+	REG_VARIABLE(CFG_DTIM_1CHRX_ENABLE_NAME, WLAN_PARAM_Integer,
+		struct hdd_config, enable_dtim_1chrx,
+		VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		CFG_DTIM_1CHRX_ENABLE_DEFAULT,
+		CFG_DTIM_1CHRX_ENABLE_MIN,
+		CFG_DTIM_1CHRX_ENABLE_MAX),
 };
 
 /**
@@ -5848,6 +5890,9 @@ void hdd_cfg_print(hdd_context_t *pHddCtx)
 		  pHddCtx->config->apMaxOffloadPeers);
 	hdd_debug("Name = [gMaxOffloadReorderBuffs] value = [%u] ",
 		  pHddCtx->config->apMaxOffloadReorderBuffs);
+	hdd_debug("Name = [%s] Value = [%d]",
+		  CFG_ENABLE_CCK_TX_FIR_OVERRIDE_NAME,
+		  pHddCtx->config->enable_cck_tx_fir_override);
 	hdd_debug("Name = [gAllowDFSChannelRoam] Value = [%u] ",
 		  pHddCtx->config->allowDFSChannelRoam);
 	hdd_debug("Name = [gMaxConcurrentActiveSessions] Value = [%u] ",
@@ -6266,6 +6311,18 @@ void hdd_cfg_print(hdd_context_t *pHddCtx)
 	hdd_debug("Name = [%s] value = [%u]",
 		 CFG_RANDOMIZE_NDI_MAC_NAME,
 		 pHddCtx->config->is_ndi_mac_randomized);
+	hdd_debug("Name = [%s] value = [%u]",
+		CFG_LPRx_NAME,
+		pHddCtx->config->enable_lprx);
+	hdd_debug("Name = [%s] value = [%u]",
+		CFG_UPPER_BRSSI_THRESH_NAME,
+		pHddCtx->config->upper_brssi_thresh);
+	hdd_debug("Name = [%s] value = [%u]",
+		CFG_LOWER_BRSSI_THRESH_NAME,
+		pHddCtx->config->lower_brssi_thresh);
+	hdd_debug("Name = [%s] value = [%u]",
+		CFG_DTIM_1CHRX_ENABLE_NAME,
+	pHddCtx->config->enable_dtim_1chrx);
 }
 
 /**
@@ -7549,6 +7606,8 @@ QDF_STATUS hdd_set_sme_config(hdd_context_t *pHddCtx)
 		pConfig->FragmentationThreshold;
 	smeConfig->csrConfig.shortSlotTime = pConfig->ShortSlotTimeEnabled;
 	smeConfig->csrConfig.Is11dSupportEnabled = pConfig->Is11dSupportEnabled;
+	smeConfig->csrConfig.enable_11d_in_world_mode =
+		pConfig->enable_11d_in_world_mode;
 	smeConfig->csrConfig.HeartbeatThresh24 = pConfig->HeartbeatThresh24;
 
 	smeConfig->csrConfig.phyMode =

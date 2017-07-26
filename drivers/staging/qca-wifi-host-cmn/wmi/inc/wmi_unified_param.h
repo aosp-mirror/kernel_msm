@@ -6892,6 +6892,7 @@ struct action_wakeup_set_param {
 	uint32_t vdev_id;
 	uint32_t operation;
 	uint32_t action_category_map[WMI_SUPPORTED_ACTION_CATEGORY_ELE_LIST];
+	uint32_t action_per_category[WMI_SUPPORTED_ACTION_CATEGORY];
 };
 
 /**

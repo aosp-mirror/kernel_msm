@@ -2431,7 +2431,7 @@ wlan_hdd_set_roam_param_policy[MAX_ROAMING_PARAM + 1] = {
 	[PARAM_A_BAND_MAX_BOOST] = {.type = NLA_U32},
 	[PARAM_ROAM_HISTERESYS] = {.type = NLA_S32},
 	[PARAM_A_BAND_BOOST_THLD] = {.type = NLA_S32},
-	[PARAM_A_BAND_BOOST_THLD] = {.type = NLA_S32},
+	[PARAM_A_BAND_PELT_THLD] = {.type = NLA_S32},
 	[PARAM_RSSI_TRIGGER] = {.type = NLA_U32},
 	[PARAM_ROAM_ENABLE] = {	.type = NLA_S32},
 	[PARAM_NUM_BSSID] = {.type = NLA_U32},
@@ -2740,12 +2740,12 @@ static int hdd_set_ext_roam_params(hdd_context_t *hddctx,
 		hdd_debug("5G Boost Threshold (%d)",
 			roam_params->raise_rssi_thresh_5g);
 		/* Parse and fetch 5G Penalty Threshold */
-		if (!tb[PARAM_A_BAND_BOOST_THLD]) {
+		if (!tb[PARAM_A_BAND_PELT_THLD]) {
 			hdd_err("5G penalty threshold failed");
 			goto fail;
 		}
 		roam_params->drop_rssi_thresh_5g = nla_get_s32(
-			tb[PARAM_A_BAND_BOOST_THLD]);
+			tb[PARAM_A_BAND_PELT_THLD]);
 		hdd_debug("5G Penalty Threshold (%d)",
 			roam_params->drop_rssi_thresh_5g);
 		/* Parse and fetch 5G Boost Factor */
@@ -7966,6 +7966,8 @@ void hdd_init_bpf_completion(void)
 static const struct nla_policy
 wlan_hdd_sap_config_policy[QCA_WLAN_VENDOR_ATTR_SAP_CONFIG_MAX + 1] = {
 	[QCA_WLAN_VENDOR_ATTR_SAP_CONFIG_CHANNEL] = {.type = NLA_U8 },
+	[QCA_WLAN_VENDOR_ATTR_SAP_MANDATORY_FREQUENCY_LIST] = {
+							.type = NLA_NESTED },
 };
 
 static const struct nla_policy
@@ -11556,63 +11558,149 @@ void wlan_hdd_cfg80211_update_wiphy_caps(struct wiphy *wiphy)
 #endif
 }
 
+/**
+ * wlan_hdd_cfg80211_register_frames - Register for all callbacks and frames.
+ * @pAdapter: pointer to adapter
+ *
+ * This function registers for all frame which supplicant is interested in
+ * and callbacks for ack confirmation and mgmt indication.
+ *
+ * Return: 0 on success and non zero on failure
+ */
+
 /* This function registers for all frame which supplicant is interested in */
-void wlan_hdd_cfg80211_register_frames(hdd_adapter_t *pAdapter)
+int wlan_hdd_cfg80211_register_frames(hdd_adapter_t *pAdapter)
 {
 	tHalHandle hHal = WLAN_HDD_GET_HAL_CTX(pAdapter);
 	/* Register for all P2P action, public action etc frames */
 	uint16_t type = (SIR_MAC_MGMT_FRAME << 2) | (SIR_MAC_MGMT_ACTION << 4);
+	QDF_STATUS status;
 
 	ENTER();
 
 	/* Register frame indication call back */
-	sme_register_mgmt_frame_ind_callback(hHal, hdd_indicate_mgmt_frame);
+	status = sme_register_mgmt_frame_ind_callback(hHal,
+			hdd_indicate_mgmt_frame);
+	if (status != QDF_STATUS_SUCCESS) {
+		hdd_err("Failed to register hdd_indicate_mgmt_frame");
+		goto ret_status;
+	}
 
 	/* Register for p2p ack indication */
-	sme_register_p2p_ack_ind_callback(hHal, hdd_send_action_cnf_cb);
+	status = sme_register_p2p_ack_ind_callback(hHal,
+			hdd_send_action_cnf_cb);
+	if (status != QDF_STATUS_SUCCESS) {
+		hdd_err("Failed to register hdd_send_action_cnf_cb");
+		goto ret_status;
+	}
 
 	/* Right now we are registering these frame when driver is getting
 	   initialized. Once we will move to 2.6.37 kernel, in which we have
 	   frame register ops, we will move this code as a part of that */
 	/* GAS Initial Request */
-	sme_register_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
-				(uint8_t *) GAS_INITIAL_REQ,
-				GAS_INITIAL_REQ_SIZE);
+	status = sme_register_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
+			(uint8_t *) GAS_INITIAL_REQ,
+			GAS_INITIAL_REQ_SIZE);
+	if (status != QDF_STATUS_SUCCESS) {
+		hdd_err("Failed to register GAS_INITIAL_REQ");
+		goto ret_status;
+	}
 
 	/* GAS Initial Response */
-	sme_register_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
-				(uint8_t *) GAS_INITIAL_RSP,
-				GAS_INITIAL_RSP_SIZE);
+	status = sme_register_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
+			(uint8_t *) GAS_INITIAL_RSP,
+			GAS_INITIAL_RSP_SIZE);
+	if (status != QDF_STATUS_SUCCESS) {
+		hdd_err("Failed to register GAS_INITIAL_RSP");
+		goto dereg_gas_initial_req;
+	}
 
 	/* GAS Comeback Request */
-	sme_register_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
-				(uint8_t *) GAS_COMEBACK_REQ,
-				GAS_COMEBACK_REQ_SIZE);
+	status = sme_register_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
+			(uint8_t *) GAS_COMEBACK_REQ,
+			GAS_COMEBACK_REQ_SIZE);
+	if (status != QDF_STATUS_SUCCESS) {
+		hdd_err("Failed to register GAS_COMEBACK_REQ");
+		goto dereg_gas_initial_rsp;
+	}
 
 	/* GAS Comeback Response */
-	sme_register_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
-				(uint8_t *) GAS_COMEBACK_RSP,
-				GAS_COMEBACK_RSP_SIZE);
+	status = sme_register_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
+			(uint8_t *) GAS_COMEBACK_RSP,
+			GAS_COMEBACK_RSP_SIZE);
+	if (status != QDF_STATUS_SUCCESS) {
+		hdd_err("Failed to register GAS_COMEBACK_RSP");
+		goto dereg_gas_comeback_req;
+	}
 
 	/* P2P Public Action */
-	sme_register_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
-				(uint8_t *) P2P_PUBLIC_ACTION_FRAME,
-				P2P_PUBLIC_ACTION_FRAME_SIZE);
+	status = sme_register_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
+			(uint8_t *) P2P_PUBLIC_ACTION_FRAME,
+			P2P_PUBLIC_ACTION_FRAME_SIZE);
+	if (status != QDF_STATUS_SUCCESS) {
+		hdd_err("Failed to register P2P_PUBLIC_ACTION_FRAME");
+		goto dereg_gas_comeback_rsp;
+	}
 
 	/* P2P Action */
-	sme_register_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
-				(uint8_t *) P2P_ACTION_FRAME,
-				P2P_ACTION_FRAME_SIZE);
+	status = sme_register_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
+			(uint8_t *) P2P_ACTION_FRAME,
+			P2P_ACTION_FRAME_SIZE);
+	if (status != QDF_STATUS_SUCCESS) {
+		hdd_err("Failed to register P2P_ACTION_FRAME");
+		goto dereg_p2p_public_action_frm;
+	}
 
 	/* WNM BSS Transition Request frame */
-	sme_register_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
-				(uint8_t *) WNM_BSS_ACTION_FRAME,
-				WNM_BSS_ACTION_FRAME_SIZE);
+	status = sme_register_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
+			(uint8_t *) WNM_BSS_ACTION_FRAME,
+			WNM_BSS_ACTION_FRAME_SIZE);
+	if (status != QDF_STATUS_SUCCESS) {
+		hdd_err("Failed to register WNM_BSS_ACTION_FRAME");
+		goto dereg_p2p_action_frm;
+	}
 
 	/* WNM-Notification */
-	sme_register_mgmt_frame(hHal, pAdapter->sessionId, type,
-				(uint8_t *) WNM_NOTIFICATION_FRAME,
-				WNM_NOTIFICATION_FRAME_SIZE);
+	status = sme_register_mgmt_frame(hHal, pAdapter->sessionId, type,
+			(uint8_t *) WNM_NOTIFICATION_FRAME,
+			WNM_NOTIFICATION_FRAME_SIZE);
+	if (status != QDF_STATUS_SUCCESS) {
+		hdd_err("Failed to register hdd_send_action_cnf_cb");
+		goto dereg_wnm_bss_action_frm;
+	}
+	return qdf_status_to_os_return(status);
+
+dereg_wnm_bss_action_frm:
+	sme_deregister_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
+			(uint8_t *) WNM_BSS_ACTION_FRAME,
+			WNM_BSS_ACTION_FRAME_SIZE);
+dereg_p2p_action_frm:
+	sme_deregister_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
+			(uint8_t *) P2P_ACTION_FRAME,
+			P2P_ACTION_FRAME_SIZE);
+dereg_p2p_public_action_frm:
+	sme_deregister_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
+			(uint8_t *) P2P_PUBLIC_ACTION_FRAME,
+			P2P_PUBLIC_ACTION_FRAME_SIZE);
+dereg_gas_comeback_rsp:
+	sme_deregister_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
+			(uint8_t *) GAS_COMEBACK_RSP,
+			GAS_COMEBACK_RSP_SIZE);
+dereg_gas_comeback_req:
+	sme_deregister_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
+			(uint8_t *) GAS_COMEBACK_REQ,
+			GAS_COMEBACK_REQ_SIZE);
+dereg_gas_initial_rsp:
+	sme_deregister_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
+			(uint8_t *) GAS_INITIAL_RSP,
+			GAS_INITIAL_RSP_SIZE);
+dereg_gas_initial_req:
+	sme_deregister_mgmt_frame(hHal, SME_SESSION_ID_ANY, type,
+			(uint8_t *) GAS_INITIAL_REQ,
+			GAS_INITIAL_REQ_SIZE);
+ret_status:
+	return qdf_status_to_os_return(status);
+
 }
 
 void wlan_hdd_cfg80211_deregister_frames(hdd_adapter_t *pAdapter)
@@ -16769,29 +16857,32 @@ static int wlan_hdd_cfg80211_add_station(struct wiphy *wiphy,
 static inline bool wlan_hdd_is_pmksa_valid(struct cfg80211_pmksa *pmksa)
 {
 	if (!pmksa->bssid) {
-		hdd_err("bssid (%p) is NULL",
-		       pmksa->bssid);
-	} else if (!pmksa->ssid || !pmksa->cache_id) {
-		hdd_err("either ssid (%p) or cache_id (%p) are NULL",
-		       pmksa->ssid, pmksa->cache_id);
-		return false;
+		hdd_warn("bssid (%p) is NULL",
+				pmksa->bssid);
+		if (!pmksa->ssid || !pmksa->cache_id) {
+			hdd_err("either ssid (%p) or cache_id (%p) are NULL",
+					pmksa->ssid, pmksa->cache_id);
+			return false;
+		}
 	}
+
 	return true;
 }
 
 /*
- * hdd_update_pmksa_info: API to update tPmkidCacheInfo from cfg80211_pmksa
+ * hdd_fill_pmksa_info: API to update tPmkidCacheInfo from cfg80211_pmksa
  * @pmk_cache: pmksa from supplicant
  * @pmk_cache: pmk needs to be updated
  *
  * Return: None
  */
-static void hdd_update_pmksa_info(tPmkidCacheInfo *pmk_cache,
+static void hdd_fill_pmksa_info(tPmkidCacheInfo *pmk_cache,
 				  struct cfg80211_pmksa *pmksa, bool is_delete)
 {
 	if (pmksa->bssid) {
-		hdd_debug("set PMKSA for " MAC_ADDRESS_STR,
-		MAC_ADDR_ARRAY(pmksa->bssid));
+		hdd_debug("%s PMKSA for " MAC_ADDRESS_STR,
+			is_delete ? "Delete" : "Set",
+			MAC_ADDR_ARRAY(pmksa->bssid));
 		qdf_mem_copy(pmk_cache->BSSID.bytes,
 				pmksa->bssid, QDF_MAC_ADDR_SIZE);
 	} else {
@@ -16799,7 +16890,8 @@ static void hdd_update_pmksa_info(tPmkidCacheInfo *pmk_cache,
 				SIR_MAC_MAX_SSID_LENGTH);
 		qdf_mem_copy(pmk_cache->cache_id, pmksa->cache_id, CACHE_ID_LEN);
 		pmk_cache->ssid_len = pmksa->ssid_len;
-		hdd_debug("set PMKSA for ssid %*.*s cache_id %x %x",
+		hdd_debug("%s PMKSA for ssid %*.*s cache_id %x %x",
+			is_delete ? "Delete" : "Set",
 			pmk_cache->ssid_len, pmk_cache->ssid_len,
 			pmksa->ssid, pmksa->cache_id[0], pmksa->cache_id[1]);
 	}
@@ -16831,16 +16923,16 @@ static inline bool wlan_hdd_is_pmksa_valid(struct cfg80211_pmksa *pmksa)
 }
 
 /*
- * hdd_update_pmksa_info: API to update tPmkidCacheInfo from cfg80211_pmksa
+ * hdd_fill_pmksa_info: API to update tPmkidCacheInfo from cfg80211_pmksa
  * @pmk_cache: pmksa from supplicant
  * @pmk_cache: pmk needs to be updated
  *
  * Return: None
  */
-static void hdd_update_pmksa_info(tPmkidCacheInfo *pmk_cache,
+static void hdd_fill_pmksa_info(tPmkidCacheInfo *pmk_cache,
 				  struct cfg80211_pmksa *pmksa, bool is_delete)
 {
-	hdd_debug("set PMKSA for " MAC_ADDRESS_STR,
+	hdd_debug("%s PMKSA for " MAC_ADDRESS_STR, is_delete ? "Delete" : "Set",
 	MAC_ADDR_ARRAY(pmksa->bssid));
 	qdf_mem_copy(pmk_cache->BSSID.bytes,
 				pmksa->bssid, QDF_MAC_ADDR_SIZE);
@@ -16906,7 +16998,7 @@ static int __wlan_hdd_cfg80211_set_pmksa(struct wiphy *wiphy,
 
 	qdf_mem_zero(&pmk_cache, sizeof(pmk_cache));
 
-	hdd_update_pmksa_info(&pmk_cache, pmksa, false);
+	hdd_fill_pmksa_info(&pmk_cache, pmksa, false);
 
 	/*
 	 * Add to the PMKSA Cache in CSR
@@ -16998,7 +17090,7 @@ static int __wlan_hdd_cfg80211_del_pmksa(struct wiphy *wiphy,
 
 	qdf_mem_zero(&pmk_cache, sizeof(pmk_cache));
 
-	hdd_update_pmksa_info(&pmk_cache, pmksa, true);
+	hdd_fill_pmksa_info(&pmk_cache, pmksa, true);
 
 	/* Delete the PMKID CSR cache */
 	if (QDF_STATUS_SUCCESS !=
@@ -17627,6 +17719,7 @@ static int __wlan_hdd_cfg80211_testmode(struct wiphy *wiphy,
 			return -ENOMEM;
 		}
 
+		qdf_mem_zero(hb_params, sizeof(tSirLPHBReq));
 		qdf_mem_copy(hb_params, buf, buf_len);
 		smeStatus =
 			sme_lphb_config_req((tHalHandle) (pHddCtx->hHal),
