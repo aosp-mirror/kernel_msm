@@ -235,10 +235,10 @@ void msm_bam_set_hsic_host_dev(struct device *dev)
 	if (dev) {
 		/* Hold the device until allowing lpm */
 		info[HSIC_CTRL].in_lpm = false;
-		log_event_dbg("%s: Getting hsic device %p\n", __func__, dev);
+		log_event_dbg("%s: Getting hsic device %pK\n", __func__, dev);
 		pm_runtime_get(dev);
 	} else if (host_info[HSIC_CTRL].dev) {
-		log_event_dbg("%s: Try Putting hsic device %p, lpm:%d\n",
+		log_event_dbg("%s: Try Putting hsic device %pK, lpm:%d\n",
 				__func__, host_info[HSIC_CTRL].dev,
 				info[HSIC_CTRL].in_lpm);
 		/* Just release previous device if not already done */
@@ -825,7 +825,7 @@ static bool _hsic_host_bam_resume_core(void)
 
 	/* Exit from "full suspend" in case of hsic host */
 	if (host_info[HSIC_CTRL].dev && info[HSIC_CTRL].in_lpm) {
-		log_event_dbg("%s: Getting hsic device %p\n", __func__,
+		log_event_dbg("%s: Getting hsic device %pK\n", __func__,
 			host_info[HSIC_CTRL].dev);
 		pm_runtime_get(host_info[HSIC_CTRL].dev);
 		info[HSIC_CTRL].in_lpm = false;
@@ -839,7 +839,7 @@ static void _hsic_host_bam_suspend_core(void)
 	log_event_dbg("%s: enter\n", __func__);
 
 	if (host_info[HSIC_CTRL].dev && !info[HSIC_CTRL].in_lpm) {
-		log_event_dbg("%s: Putting hsic host device %p\n", __func__,
+		log_event_dbg("%s: Putting hsic host device %pK\n", __func__,
 			host_info[HSIC_CTRL].dev);
 		pm_runtime_put(host_info[HSIC_CTRL].dev);
 		info[HSIC_CTRL].in_lpm = true;
@@ -1721,7 +1721,7 @@ static bool check_pipes_empty(enum usb_ctrl bam_type, u8 src_idx, u8 dst_idx)
 	/* If we have any remaints in the pipes we don't go to sleep */
 	prod_pipe = ctx->usb_bam_sps.sps_pipes[src_idx];
 	cons_pipe = ctx->usb_bam_sps.sps_pipes[dst_idx];
-	log_event_dbg("prod_pipe=%p, cons_pipe=%p\n", prod_pipe, cons_pipe);
+	log_event_dbg("prod_pipe=%pK, cons_pipe=%pK\n", prod_pipe, cons_pipe);
 
 	if (!cons_pipe || (!prod_pipe &&
 			prod_pipe_connect->pipe_type == USB_BAM_PIPE_BAM2BAM)) {
@@ -2088,7 +2088,7 @@ static bool msm_bam_host_lpm_ok(enum usb_ctrl bam_type)
 		}
 
 		/* HSIC host will go now to lpm */
-		log_event_dbg("%s: vote for suspend hsic %p\n",
+		log_event_dbg("%s: vote for suspend hsic %pK\n",
 			__func__, host_info[bam_type].dev);
 
 		for (i = 0; i < ctx->max_connections; i++) {
@@ -2451,7 +2451,7 @@ static void usb_bam_work(struct work_struct *w)
 			if (pipe_iter->bam_type == pipe_connect->bam_type &&
 			    pipe_iter->dir == PEER_PERIPHERAL_TO_USB &&
 			    pipe_iter->enabled) {
-				log_event_dbg("%s: Register wakeup on pipe %p\n",
+				log_event_dbg("%s: Register wakeup on pipe %pK\n",
 					__func__, pipe_iter);
 				__usb_bam_register_wake_cb(
 					pipe_connect->bam_type, i,
@@ -3099,79 +3099,6 @@ static int enable_usb_bam(struct platform_device *pdev)
 	return 0;
 }
 
-static ssize_t
-usb_bam_show_inactivity_timer(struct device *dev, struct device_attribute *attr,
-		    char *buf)
-{
-	char *buff = buf;
-	int i;
-
-	for (i = 0; i < ARRAY_SIZE(bam_enable_strings); i++) {
-		buff += snprintf(buff, PAGE_SIZE, "%s: %dms\n",
-					bam_enable_strings[i],
-					msm_usb_bam[i].inactivity_timer_ms);
-	}
-
-	return buff - buf;
-}
-
-static ssize_t usb_bam_store_inactivity_timer(struct device *dev,
-				     struct device_attribute *attr,
-				     const char *buff, size_t count)
-{
-	char buf[USB_BAM_MAX_STR_LEN];
-	char *trimmed_buf, *bam_str, *bam_name, *timer;
-	int timer_d;
-	int bam;
-
-	if (strnstr(buff, "help", USB_BAM_MAX_STR_LEN)) {
-		pr_info("Usage: <bam_name> <ms>,<bam_name> <ms>,...\n");
-		pr_info("\tbam_name: [%s, %s, %s]\n",
-			bam_enable_strings[DWC3_CTRL],
-			bam_enable_strings[CI_CTRL],
-			bam_enable_strings[HSIC_CTRL]);
-		pr_info("\tms: time in ms. Use 0 to disable timer\n");
-		return count;
-	}
-
-	strlcpy(buf, buff, sizeof(buf));
-	trimmed_buf = strim(buf);
-
-	while (trimmed_buf) {
-		bam_str = strsep(&trimmed_buf, ",");
-		if (bam_str) {
-			bam_name = strsep(&bam_str, " ");
-			bam = get_bam_type_from_core_name(bam_name);
-			if (bam < 0 || bam >= MAX_BAMS) {
-				log_event_err("%s: Invalid bam, type=%d ,name=%s\n",
-					__func__, bam, bam_name);
-				return -EINVAL;
-			}
-
-			timer = strsep(&bam_str, " ");
-
-			if (!timer)
-				continue;
-
-			sscanf(timer, "%d", &timer_d);
-
-			/* Apply new timer setting if bam has running pipes */
-			if (msm_usb_bam[bam].inactivity_timer_ms != timer_d) {
-				msm_usb_bam[bam].inactivity_timer_ms = timer_d;
-				if (msm_usb_bam[bam].pipes_enabled_per_bam > 0
-						&& !info[bam].in_lpm)
-					usb_bam_set_inactivity_timer(bam);
-			}
-		}
-	}
-
-	return count;
-}
-
-static DEVICE_ATTR(inactivity_timer, S_IWUSR | S_IRUSR,
-		   usb_bam_show_inactivity_timer,
-		   usb_bam_store_inactivity_timer);
-
 static int usb_bam_panic_notifier(struct notifier_block *this,
 		unsigned long event, void *ptr)
 {
@@ -3219,12 +3146,6 @@ static int usb_bam_probe(struct platform_device *pdev)
 	struct msm_usb_bam_platform_data *pdata;
 
 	dev_dbg(&pdev->dev, "usb_bam_probe\n");
-
-	ret = device_create_file(&pdev->dev, &dev_attr_inactivity_timer);
-	if (ret) {
-		dev_err(&pdev->dev, "failed to create fs node\n");
-		return ret;
-	}
 
 	io_res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!io_res) {
