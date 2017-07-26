@@ -13,7 +13,7 @@
 &mdss_mdp {
 	dsi_sw43402_dsc_qhd_cmd_rev1: qcom,mdss_dsi_sw43402_dsc_qhd_cmd_rev1 {
 		qcom,mdss-dsi-panel-name =
-					"SW43402 cmd mode dsc dsi panel rev1";
+					"SW43402 cmd mode dsc dsi panel";
 		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
 		qcom,mdss-dsi-panel-framerate = <60>;
 		qcom,mdss-dsi-virtual-channel-id = <0>;
@@ -63,22 +63,19 @@
 		qcom,mdss-dsi-on-command = [
 			39 01 00 00 00 00 03 B0
 			20 43
-			39 01 00 00 00 00 0D B2
-			5D 01 02 80 00 FF FF 15
-			00 00 00 00
 			39 01 00 00 00 00 03 DF
 			0A 70
 			39 01 00 00 00 00 03 B0
 			A5 00
+			39 01 00 00 00 00 0D B2
+			5D 01 02 80 00 FF
+			FF 15 00 00 00 00
 			05 01 00 00 00 00 01 35
 			05 01 00 00 3C 00 01 11
 			15 01 00 00 00 00 02 53
 			00
 			15 01 00 00 00 00 02 55
 			0C
-			39 01 00 00 00 00 0D B2
-			5D 01 02 80 00 FF FF 15
-			00 00 00 00
 			39 01 00 00 00 00 03 FB
 			03 77
 			39 01 00 00 00 00 06 ED
