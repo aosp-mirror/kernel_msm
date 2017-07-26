@@ -56,8 +56,6 @@
 		qcom,mdss-dsi-te-using-te-pin;
 		qcom,mdss-dsi-lp11-init;
 		qcom,mdss-dsi-tx-eot-append;
-		qcom,mdss-mdp-transfer-time-us = <15000>;
-		qcom,ulps-enabled;
 		qcom,mdss-dsi-force-clock-lane-hs = <1>;
 
 		qcom,mdss-dsi-on-command = [
