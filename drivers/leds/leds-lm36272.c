@@ -34,6 +34,9 @@
 #define BL_ON	1
 #define BL_OFF	0
 
+#define DSV_OFF 0
+#define DSV_ON  1
+
 struct lm36272_device {
 	struct led_classdev led_dev;
 	struct i2c_client *client;
@@ -68,7 +71,8 @@ int lm36272_dsv_ctrl(int dsv_en)
 		return -ENODEV;
 	}
 
-	if (dsv_en) {
+	switch (dsv_en) {
+	case DSV_ON:
 		lm36272_write_reg(dev->client, 0x09, 0x99);
 		lm36272_write_reg(dev->client, 0x0C, 0x28);
 		lm36272_write_reg(dev->client, 0x0D, 0x1E);
@@ -82,15 +86,16 @@ int lm36272_dsv_ctrl(int dsv_en)
 		if (gpio_is_valid(dev->dsv_n_gpio))
 			gpio_set_value_cansleep(dev->dsv_n_gpio, 1);
 		usleep_range(12000, 12000);
-	} else {
+		break;
+	case DSV_OFF:
+	default:
 		if (gpio_is_valid(dev->dsv_n_gpio))
 			gpio_set_value_cansleep(dev->dsv_n_gpio, 0);
 		usleep_range(500 , 500);
 		if (gpio_is_valid(dev->dsv_p_gpio))
 			gpio_set_value_cansleep(dev->dsv_p_gpio, 0);
 		usleep_range(2000, 2000);
-
-		dev->status = BL_OFF;
+		break;
 	}
 	return 0;
 }
@@ -150,31 +155,39 @@ static void lm36272_set_main_current_level(struct i2c_client *client, int level)
 		lm36272_write_reg(client, 0x05, cal_value);
 	}
 
+	if (dev->status == BL_OFF)
+		lm36272_write_reg(dev->client, 0x08, 0x13);
+
 	pr_debug("%s: level=%d, cal_value=%d \n",
 				__func__, level, cal_value);
 }
 
-static void lm36272_backlight_on(struct lm36272_device *dev, int level)
+void lm36272_backlight_ctrl(int level)
 {
-	if (dev->status == BL_OFF) {
-		lm36272_write_reg(dev->client, 0x02, 0x60);
-		lm36272_write_reg(dev->client, 0x08, 0x13);
-	}
-	usleep_range(1000, 1000);
+	struct lm36272_device *dev = this;
 
-	lm36272_set_main_current_level(dev->client, level);
-	dev->status = BL_ON;
-}
-
-static void lm36272_backlight_off(struct lm36272_device *dev)
-{
-	if (dev->status == BL_OFF)
+	if (!dev) {
+		pr_err("%s : lm36272 is not ready\n", __func__);
 		return;
+	}
 
-	lm36272_set_main_current_level(dev->client, 0);
-	lm36272_write_reg(dev->client, 0x08, 0x00);
-	dev->status = BL_OFF;
+	if (level == 0) {
+		if (dev->status == BL_OFF)
+			return;
+
+		lm36272_set_main_current_level(dev->client, 0);
+		lm36272_write_reg(dev->client, 0x08, 0x00);
+		dev->status = BL_OFF;
+	} else {
+		if (dev->status == BL_OFF)
+			lm36272_write_reg(dev->client, 0x02, 0x60);
+
+		usleep_range(1000, 1000);
+		lm36272_set_main_current_level(dev->client, level);
+		dev->status = BL_ON;
+	}
 }
+EXPORT_SYMBOL_GPL(lm36272_backlight_ctrl);
 
 static void lm36272_lcd_backlight_set_level(struct led_classdev *led_cdev,
 		enum led_brightness level)
@@ -185,14 +198,11 @@ static void lm36272_lcd_backlight_set_level(struct led_classdev *led_cdev,
 	if (!dev)
 		return;
 
-	mutex_lock(&dev->bl_mutex);
 	if (level > MAX_BRIGHTNESS_LM36272)
 		level = MAX_BRIGHTNESS_LM36272;
 
-	if (level == 0)
-		lm36272_backlight_off(dev);
-	else
-		lm36272_backlight_on(dev, level);
+	mutex_lock(&dev->bl_mutex);
+	lm36272_backlight_ctrl(level);
 	mutex_unlock(&dev->bl_mutex);
 }
 
