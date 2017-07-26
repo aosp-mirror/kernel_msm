@@ -2235,7 +2235,7 @@ static ssize_t fwu_sysfs_do_reflash_store(struct device *dev,
 	}
 
 	if (!fwu->ext_data_source) {
-		return -EINVAL;
+		retval = -EINVAL;
 		goto reflash_store_exit;
 	} else {
 		fwu->img.image = fwu->ext_data_source;
@@ -2491,7 +2491,7 @@ static ssize_t fwu_sysfs_write_guest_code_store(struct device *dev,
 	}
 
 	if (!fwu->ext_data_source) {
-		return -EINVAL;
+		retval = -EINVAL;
 		goto guest_code_store_exit;
 	} else {
 		fwu->img.image = fwu->ext_data_source;
