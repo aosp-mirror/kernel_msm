@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -376,7 +376,7 @@ static int msm_ba_probe(struct platform_device *pdev)
 	struct ba_ctxt *ba_ctxt;
 	int rc = 0;
 
-	dprintk(BA_INFO, "Enter %s: pdev 0x%p device id = %d",
+	dprintk(BA_INFO, "Enter %s: pdev %pK device id = %d",
 		__func__, pdev, pdev->id);
 	ba_ctxt = msm_ba_get_ba_context();
 
