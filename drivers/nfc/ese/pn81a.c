@@ -145,6 +145,8 @@ static int ese_open(struct inode *inode, struct file *filp)
 	}
 	mutex_unlock(&ese_dev->mutex);
 
+	if (nqx_claim_ese(ese_dev->nfcc_data, true) != 0)
+		return -EBUSY;
 	filp->private_data = ese_dev;
 	dev_dbg(&ese_dev->spi->dev,
 			"%s: major,minor: %d,%d\n",
@@ -169,6 +171,8 @@ static int ese_release(struct inode *ino, struct file *filp)
 {
 	struct ese_dev *ese_dev = filp->private_data;
 	int pwr = 0;
+
+	nqx_claim_ese(ese_dev->nfcc_data, false);
 
 	pwr = ese_ioctl(filp, ESE_GET_PWR, 0);
 

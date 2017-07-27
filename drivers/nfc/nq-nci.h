@@ -54,5 +54,6 @@ enum nfcc_chip_variant {
 };
 
 struct nqx_dev;
+int nqx_claim_ese(struct nqx_dev *nqx_dev, bool claim);
 int nqx_ese_pwr(struct nqx_dev *nqx_dev, unsigned long int arg);
 #endif
