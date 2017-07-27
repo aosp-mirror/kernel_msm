@@ -40,8 +40,6 @@
 		qcom,mdss-dsi-lane-map = "lane_map_0123";
 		qcom,mdss-dsi-bllp-eof-power-mode;
 		qcom,mdss-dsi-bllp-power-mode;
-		qcom,partial-update-enabled= "single_roi";
-		qcom,panel-roi-alignment = <1440 0 1440 16 1440 16>;
 		qcom,mdss-dsi-lane-0-state;
 		qcom,mdss-dsi-lane-1-state;
 		qcom,mdss-dsi-lane-2-state;
@@ -59,6 +57,7 @@
 		qcom,mdss-dsi-tx-eot-append;
 		qcom,mdss-mdp-transfer-time-us = <15000>;
 		qcom,ulps-enabled;
+		qcom,err-detect-enabled = <1>;
 
 		qcom,mdss-dsi-on-command = [
 			39 01 00 00 00 00 03 B0
@@ -77,7 +76,7 @@
 			39 01 00 00 00 00 03 FB
 			03 77
 			39 01 00 00 00 00 06 ED
-			13 00 07 00 00
+			13 00 06 00 00
 			39 01 00 00 14 00 0F E2
 			20 0D 08 A8 0A AA
 			04 44 80 80 80 5C

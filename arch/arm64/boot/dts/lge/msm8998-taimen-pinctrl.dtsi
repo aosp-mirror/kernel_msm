@@ -198,6 +198,31 @@
 				};
 			};
 		};
+		poled_sw43402_int_active {
+			mux {
+				pins = "gpio11";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio11";
+				bias-pull-down;
+				drive-strength = <2>;
+			};
+		};
+
+		poled_sw43402_int_suspend {
+			mux {
+				pins = "gpio11";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio11";
+				bias-pull-down;
+				drive-strength = <2>;
+			};
+		};
 
 		/* pin set for Hall IC */
 		hallic_gpio {

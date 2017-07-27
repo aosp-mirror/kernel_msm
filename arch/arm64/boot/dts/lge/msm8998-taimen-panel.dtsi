@@ -33,6 +33,9 @@
 	qcom,platform-extra-ldo-vddio-gpio = <&tlmm 133 0>;
 	qcom,platform-extra-ldo-vpnl-gpio = <&tlmm 21 0>;
 	wqhd-vddio-supply = <>;
+	interrupt-parent = <&tlmm>;
+	interrupts = <11 0x2001>; /*IRQF_ONESHOT | IRQF_TRIGGER_RISING*/
+	qcom,platform-error-detect-gpio =  <&tlmm 11 0x2001>; /* IRQF_ONESHOT | IRQF_TRIGGER_RISING */
 };
 
 &mdss_dsi1 {

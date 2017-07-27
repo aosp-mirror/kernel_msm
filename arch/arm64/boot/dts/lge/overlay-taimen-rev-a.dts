@@ -40,7 +40,11 @@
 	qcom,mdss-dsi-bl-max-level = <223>;
 	qcom,mdss-dsi-bl-off-level = <1>;
 };
-
+&mdss_mdp {
+	dsi_sw43402_dsc_qhd_cmd_rev1 {
+		qcom,err-detect-enabled = <>;
+	};
+};
 &spi_5 {
 	status = "disabled";
 };
