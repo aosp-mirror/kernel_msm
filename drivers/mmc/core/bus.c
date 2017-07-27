@@ -172,6 +172,53 @@ static int mmc_bus_suspend(struct device *dev)
 	return ret;
 }
 
+#ifdef CONFIG_HUAWEI_SAWSHARK
+static struct device *g_mmc_device = NULL;
+static struct work_struct g_mmc_bus_resume_work;
+static bool g_mmc_bus_resume_work_init_flg = false;
+
+static int mmc_bus_resume_fix(struct device *dev)
+{
+	struct mmc_driver *drv = to_mmc_driver(dev->driver);
+	struct mmc_card *card = mmc_dev_to_card(dev);
+	struct mmc_host *host = card->host;
+	int ret;
+
+	if (mmc_bus_manual_resume(host)) {
+		host->bus_resume_flags |= MMC_BUSRESUME_NEEDS_RESUME;
+		goto skip_full_resume;
+	}
+
+	ret = host->bus_ops->resume(host);
+	if (ret)
+		pr_warn("%s: error %d during resume (card was removed?)\n",
+			mmc_hostname(host), ret);
+
+skip_full_resume:
+	if (dev->driver && drv->resume)
+		ret = drv->resume(card);
+
+	return ret;
+}
+
+static void mmc_bus_resume_event_work(struct work_struct *work)
+{
+	mmc_bus_resume_fix(g_mmc_device);
+}
+
+static int mmc_bus_resume(struct device *dev)
+{
+	g_mmc_device = dev;
+	if(!g_mmc_bus_resume_work_init_flg)
+	{
+		INIT_WORK(&g_mmc_bus_resume_work, mmc_bus_resume_event_work);
+		g_mmc_bus_resume_work_init_flg = true;
+	}
+	schedule_work(&g_mmc_bus_resume_work);
+	return 0;
+}
+#else
+
 static int mmc_bus_resume(struct device *dev)
 {
 	struct mmc_driver *drv = to_mmc_driver(dev->driver);
@@ -196,7 +243,7 @@ skip_full_resume:
 	return ret;
 }
 #endif
-
+#endif
 #ifdef CONFIG_PM_RUNTIME
 static int mmc_runtime_suspend(struct device *dev)
 {
