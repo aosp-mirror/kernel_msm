@@ -164,9 +164,11 @@ static void fts_psy_work(struct work_struct *work)
 						psy_work.work);
 	struct power_supply_config psy_cfg = {};
 
+	psy_cfg.of_node = info->dev->of_node;
+	psy_cfg.drv_data = info;
 	info->ts_psy = devm_power_supply_register(info->dev, &fts_ts_desc,
 						  &psy_cfg);
-	if (!IS_ERR(info->ts_psy)) {
+	if (!IS_ERR_OR_NULL(info->ts_psy)) {
 		fts_external_power_changed(info->ts_psy);
 	} else if (PTR_ERR(info->ts_psy) == -EPROBE_DEFER) {
 		schedule_delayed_work(&info->psy_work,
@@ -1897,7 +1899,7 @@ static int fts_probe(struct i2c_client *client, const struct i2c_device_id *idp)
 	psy_cfg.drv_data = info;
 	info->ts_psy = devm_power_supply_register(info->dev,
 						  &fts_ts_desc, &psy_cfg);
-	if (!IS_ERR(info->ts_psy)) {
+	if (!IS_ERR_OR_NULL(info->ts_psy)) {
 		fts_external_power_changed(info->ts_psy);
 	} else if (PTR_ERR(info->ts_psy) == -EPROBE_DEFER) {
 		schedule_delayed_work(&info->psy_work,
