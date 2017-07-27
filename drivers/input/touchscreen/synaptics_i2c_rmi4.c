@@ -2474,6 +2474,12 @@ static int synaptics_rmi4_f11_init(struct synaptics_rmi4_data *rmi4_data,
 	rmi4_data->max_touch_width = MAX_F11_TOUCH_WIDTH;
 
 	fhandler->intr_reg_num = (intr_count + 7) / 8;
+	if (fhandler->intr_reg_num >= MAX_INTR_REGISTERS) {
+		fhandler->intr_reg_num = 0;
+		fhandler->num_of_data_sources = 0;
+		fhandler->intr_mask = 0;
+		return -EINVAL;
+	}
 	if (fhandler->intr_reg_num != 0)
 		fhandler->intr_reg_num -= 1;
 
@@ -2547,19 +2553,23 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 
 	fhandler->fn_number = fd->fn_number;
 	fhandler->num_of_data_sources = fd->intr_src_count;
-	fhandler->extra = kmalloc(sizeof(*extra_data), GFP_KERNEL);
-	if (!fhandler->extra)
-		return -ENOMEM;
-
-	extra_data = (struct synaptics_rmi4_f12_extra_data *)fhandler->extra;
 	size_of_2d_data = sizeof(struct synaptics_rmi4_f12_finger_data);
+
+	fhandler->extra = kmalloc(sizeof(*extra_data), GFP_KERNEL);
+	if (!fhandler->extra) {
+		dev_err(&rmi4_data->i2c_client->dev,
+			"%s: Failed to alloc mem for function handler\n",
+			__func__);
+		return -ENOMEM;
+	}
+	extra_data = (struct synaptics_rmi4_f12_extra_data *)fhandler->extra;
 
 	retval = synaptics_rmi4_i2c_read(rmi4_data,
 			fhandler->full_addr.query_base + 5,
 			query_5.data,
 			sizeof(query_5.data));
 	if (retval < 0)
-		return retval;
+		goto free_function_handler_mem;
 
 	ctrl_8_offset = query_5.ctrl0_is_present +
 			query_5.ctrl1_is_present +
@@ -2601,7 +2611,7 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 			ctrl_23.data,
 			sizeof(ctrl_23.data));
 	if (retval < 0)
-		return retval;
+		goto free_function_handler_mem;
 
 	/* disable hover feature */
 	if (query_5.ctrl24_is_present) {
@@ -2642,14 +2652,14 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 			&size_of_query8,
 			sizeof(size_of_query8));
 	if (retval < 0)
-		return retval;
+		goto free_function_handler_mem;
 
 	retval = synaptics_rmi4_i2c_read(rmi4_data,
 			fhandler->full_addr.query_base + 8,
 			query_8.data,
 			size_of_query8);
 	if (retval < 0)
-		return retval;
+		goto free_function_handler_mem;
 
 	/* Determine the presence of the Data0 register */
 	extra_data->data1_offset = query_8.data0_is_present;
@@ -2686,14 +2696,14 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 	retval = synaptics_rmi4_f12_set_enables(rmi4_data,
 			fhandler->full_addr.ctrl_base + ctrl_28_offset);
 	if (retval < 0)
-		return retval;
+		goto free_function_handler_mem;
 
 	retval = synaptics_rmi4_i2c_read(rmi4_data,
 			fhandler->full_addr.ctrl_base + ctrl_8_offset,
 			ctrl_8.data,
 			sizeof(ctrl_8.data));
 	if (retval < 0)
-		return retval;
+		goto free_function_handler_mem;
 
 	/* Maximum x */
 	rmi4_data->sensor_max_x =
@@ -2705,7 +2715,8 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 			if (rmi4_data->board->panel_maxx >= F12_MAX_X) {
 				dev_err(&rmi4_data->i2c_client->dev,
 					"F12 max_x value out of bound.");
-				return -EINVAL;
+				retval = -EINVAL;
+				goto free_function_handler_mem;
 			}
 			if (rmi4_data->sensor_max_x !=
 					rmi4_data->board->panel_maxx) {
@@ -2723,7 +2734,7 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 					ctrl_8.data,
 					sizeof(ctrl_8.data));
 				if (retval < 0)
-					return retval;
+					goto free_function_handler_mem;
 			}
 		}
 	}
@@ -2738,7 +2749,8 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 			if (rmi4_data->board->panel_maxy >= F12_MAX_Y) {
 				dev_err(&rmi4_data->i2c_client->dev,
 					"F12 max_y value out of bound.");
-					return -EINVAL;
+				retval = -EINVAL;
+				goto free_function_handler_mem;
 			}
 			if (rmi4_data->sensor_max_y !=
 				rmi4_data->board->panel_maxy) {
@@ -2756,7 +2768,7 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 					ctrl_8.data,
 					sizeof(ctrl_8.data));
 				if (retval < 0)
-					return retval;
+					goto free_function_handler_mem;
 			}
 		}
 	}
@@ -2773,6 +2785,13 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 			rmi4_data->num_of_tx);
 
 	fhandler->intr_reg_num = (intr_count + 7) / 8;
+	if (fhandler->intr_reg_num >= MAX_INTR_REGISTERS) {
+		fhandler->intr_reg_num = 0;
+		fhandler->num_of_data_sources = 0;
+		fhandler->intr_mask = 0;
+		retval = -EINVAL;
+		goto free_function_handler_mem;
+	}
 	if (fhandler->intr_reg_num != 0)
 		fhandler->intr_reg_num -= 1;
 
@@ -2788,7 +2807,18 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 	/* Allocate memory for finger data storage space */
 	fhandler->data_size = num_of_fingers * size_of_2d_data;
 	fhandler->data = kmalloc(fhandler->data_size, GFP_KERNEL);
+	if (!fhandler->data) {
+		dev_err(&rmi4_data->i2c_client->dev,
+			"%s: Failed to alloc mem for function handler data\n",
+			__func__);
+		retval = -ENOMEM;
+		goto free_function_handler_mem;
+	}
 
+	return retval;
+
+free_function_handler_mem:
+	kfree(fhandler->extra);
 	return retval;
 }
 
@@ -2891,6 +2921,13 @@ static int synaptics_rmi4_f1a_init(struct synaptics_rmi4_data *rmi4_data,
 	fhandler->num_of_data_sources = fd->intr_src_count;
 
 	fhandler->intr_reg_num = (intr_count + 7) / 8;
+	if (fhandler->intr_reg_num >= MAX_INTR_REGISTERS) {
+		fhandler->intr_reg_num = 0;
+		fhandler->num_of_data_sources = 0;
+		fhandler->intr_mask = 0;
+		retval = -EINVAL;
+		goto error_exit;
+	}
 	if (fhandler->intr_reg_num != 0)
 		fhandler->intr_reg_num -= 1;
 
@@ -3241,7 +3278,8 @@ flash_prog_mode:
 	dev_dbg(&rmi4_data->i2c_client->dev,
 			"%s: Number of interrupt registers = %d\n",
 			__func__, rmi4_data->num_of_intr_regs);
-
+	if (rmi4_data->num_of_intr_regs >= MAX_INTR_REGISTERS)
+		return -EINVAL;
 	memset(rmi4_data->intr_mask, 0x00, sizeof(rmi4_data->intr_mask));
 
 	/*
@@ -3934,6 +3972,31 @@ static void synaptics_rmi4_set_idle_param(struct synaptics_rmi4_data
 	}
 }
 
+static int synaptics_rmi4_input_open(struct input_dev *dev)
+{
+	struct synaptics_rmi4_data *rmi4_data = input_get_drvdata(dev);
+
+	if (rmi4_data->sensor_sleep == true) {
+		synaptics_rmi4_sensor_wake(rmi4_data);
+		rmi4_data->touch_stopped = false;
+		synaptics_rmi4_irq_enable(rmi4_data, true);
+	}
+
+	return 0;
+}
+
+static void synaptics_rmi4_input_close(struct input_dev *dev)
+{
+	struct synaptics_rmi4_data *rmi4_data = input_get_drvdata(dev);
+
+	if (rmi4_data->sensor_sleep == false) {
+		rmi4_data->touch_stopped = true;
+		wake_up(&rmi4_data->wait);
+		synaptics_rmi4_irq_enable(rmi4_data, false);
+		synaptics_rmi4_sensor_sleep(rmi4_data);
+	}
+}
+
  /**
  * synaptics_rmi4_probe()
  *
@@ -4034,6 +4097,8 @@ static int synaptics_rmi4_probe(struct i2c_client *client,
 	rmi4_data->input_dev->id.product = SYNAPTICS_DSX_DRIVER_PRODUCT;
 	rmi4_data->input_dev->id.version = SYNAPTICS_DSX_DRIVER_VERSION;
 	rmi4_data->input_dev->dev.parent = &client->dev;
+	rmi4_data->input_dev->open = synaptics_rmi4_input_open;
+	rmi4_data->input_dev->close = synaptics_rmi4_input_close;
 	input_set_drvdata(rmi4_data->input_dev, rmi4_data);
 
 	set_bit(EV_SYN, rmi4_data->input_dev->evbit);

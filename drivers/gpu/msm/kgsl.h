@@ -140,6 +140,8 @@ struct kgsl_memdesc_ops {
 #define KGSL_MEMDESC_PRIVILEGED BIT(6)
 /* The memdesc is TZ locked content protection */
 #define KGSL_MEMDESC_TZ_LOCKED BIT(7)
+/* The memdesc is allocated through contiguous memory */
+#define KGSL_MEMDESC_CONTIG BIT(8)
 
 /**
  * struct kgsl_memdesc - GPU memory object descriptor
@@ -448,21 +450,6 @@ kgsl_mem_entry_put(struct kgsl_mem_entry *entry)
 {
 	if (entry)
 		kref_put(&entry->refcount, kgsl_mem_entry_destroy);
-}
-
-/**
- * kgsl_mem_entry_put_deferred() - Schedule a task to put the memory entry
- * @entry: Mem entry to put
- *
- * This function is for atomic contexts where a normal kgsl_mem_entry_put()
- * would result in the memory entry getting destroyed and possibly taking
- * mutexes along the way.  Schedule the work to happen outside of the atomic
- * context.
- */
-static inline void kgsl_mem_entry_put_deferred(struct kgsl_mem_entry *entry)
-{
-	if (entry != NULL)
-		queue_work(kgsl_driver.mem_workqueue, &entry->work);
 }
 
 /*

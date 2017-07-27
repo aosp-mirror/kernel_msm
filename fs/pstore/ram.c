@@ -34,10 +34,7 @@
 #include <linux/slab.h>
 #include <linux/compiler.h>
 #include <linux/pstore_ram.h>
-
-#ifdef CONFIG_OF
 #include <linux/of.h>
-#endif
 
 #ifdef CONFIG_LGE_HANDLE_PANIC
 #include <soc/qcom/lge/lge_handle_panic.h>
@@ -313,6 +310,24 @@ static int notrace ramoops_pstore_write_buf(enum pstore_type_id type,
 	return 0;
 }
 
+static int notrace ramoops_pstore_write_buf_user(enum pstore_type_id type,
+						 enum kmsg_dump_reason reason,
+						 u64 *id, unsigned int part,
+						 const char __user *buf,
+						 bool compressed, size_t size,
+						 struct pstore_info *psi)
+{
+	if (type == PSTORE_TYPE_PMSG) {
+		struct ramoops_context *cxt = psi->data;
+
+		if (!cxt->mprz)
+			return -ENOMEM;
+		return persistent_ram_write_user(cxt->mprz, buf, size);
+	}
+
+	return -EINVAL;
+}
+
 static int ramoops_pstore_erase(enum pstore_type_id type, u64 id, int count,
 				struct timespec time, struct pstore_info *psi)
 {
@@ -351,6 +366,7 @@ static struct ramoops_context oops_cxt = {
 		.open	= ramoops_pstore_open,
 		.read	= ramoops_pstore_read,
 		.write_buf	= ramoops_pstore_write_buf,
+		.write_buf_user	= ramoops_pstore_write_buf_user,
 		.erase	= ramoops_pstore_erase,
 	},
 };
@@ -444,61 +460,113 @@ static int ramoops_init_prz(struct device *dev, struct ramoops_context *cxt,
 	return 0;
 }
 
-#ifdef CONFIG_OF
-static int ramoops_parse_dt(struct device *dev, struct device_node *node)
-{
-	struct ramoops_platform_data *pdata;
-
-	if (!node) {
-		dev_err(dev, "no platform data\n");
-		return -EINVAL;
-	}
-
-	pdata = devm_kzalloc(dev, sizeof(*pdata), GFP_KERNEL);
-	if (!pdata)
-		return -ENOMEM;
-
-	of_property_read_u32(node, "mem-size", (u32 *)&pdata->mem_size);
-	of_property_read_u32(node, "mem-address", (u32 *)&pdata->mem_address);
-	of_property_read_u32(node, "record-size", (u32 *)&pdata->record_size);
-	of_property_read_u32(node, "console-size", (u32 *)&pdata->console_size);
-	of_property_read_u32(node, "ftrace-size", (u32 *)&pdata->ftrace_size);
-	of_property_read_u32(node, "dump-oops", (u32 *)&pdata->dump_oops);
-
-	dev->platform_data = pdata;
-
-	return 0;
-}
-#else
-static int ramoops_parse_dt(struct device *dev, struct device_node *node)
-{
-	return -EINVAL;
-}
-#endif
-
 void notrace ramoops_console_write_buf(const char *buf, size_t size)
 {
 	struct ramoops_context *cxt = &oops_cxt;
 	persistent_ram_write(cxt->cprz, buf, size);
 }
 
+#ifdef CONFIG_OF
+static struct of_device_id ramoops_of_match[] = {
+	{ .compatible = "ramoops", },
+	{ },
+};
+
+MODULE_DEVICE_TABLE(of, ramoops_of_match);
+static void  ramoops_of_init(struct platform_device *pdev)
+{
+	const struct device *dev = &pdev->dev;
+	struct ramoops_platform_data *pdata;
+	struct device_node *np = pdev->dev.of_node;
+	uint32_t ecc_info[4] = {0,};
+	u32 start = 0, size = 0, console = 0, pmsg = 0;
+	u32 record = 0, oops = 0, ftrace = 0;
+	int ret;
+
+	pdata = dev_get_drvdata(dev);
+	if (!pdata) {
+		pr_err("private data is empty!\n");
+		return;
+	}
+	ret = of_property_read_u32(np, "android,ramoops-buffer-start",
+				&start);
+	if (ret)
+		return;
+
+	ret = of_property_read_u32(np, "android,ramoops-buffer-size",
+				&size);
+	if (ret)
+		return;
+
+	ret = of_property_read_u32(np, "android,ramoops-console-size",
+				&console);
+	if (ret)
+		return;
+
+	ret = of_property_read_u32(np, "android,ramoops-pmsg-size",
+				&pmsg);
+	if (ret)
+		pr_info("pmsg buffer not configured");
+
+	ret = of_property_read_u32(np, "android,ramoops-record-size",
+				&record);
+	if (ret)
+		pr_info("record buffer not configured");
+
+	ret = of_property_read_u32(np, "android,ramoops-dump-oops",
+				&oops);
+	if (ret)
+		pr_info("oops not configured");
+
+	ret = of_property_read_u32(np, "android,ramoops-ftrace-size",
+				&ftrace);
+	if (ret)
+		pr_info("ftrace not configured");
+
+	ret = of_property_read_u32_array(np, "android,ramoops-ecc-info", ecc_info, 4);
+	if (ret)
+		pr_info("ecc_info not configured");
+
+	pdata->mem_address = start;
+	pdata->mem_size = size;
+	pdata->console_size = console;
+	pdata->pmsg_size = pmsg;
+	pdata->record_size = record;
+	pdata->ftrace_size = ftrace;
+	pdata->dump_oops = (int)oops;
+	pdata->ecc_info.block_size = ecc_info[0];
+	pdata->ecc_info.ecc_size = ecc_info[1];
+	pdata->ecc_info.symsize = ecc_info[2];
+	pdata->ecc_info.poly = ecc_info[3];
+}
+#else
+static inline void ramoops_of_init(struct platform_device *pdev)
+{
+	return;
+}
+#endif
+
 static int ramoops_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
-	struct ramoops_platform_data *pdata = pdev->dev.platform_data;
+	struct ramoops_platform_data *pdata;
 	struct ramoops_context *cxt = &oops_cxt;
-	struct device_node *node = pdev->dev.of_node;
 	size_t dump_mem_sz;
 	phys_addr_t paddr;
 	int err = -EINVAL;
 
+	pdata = devm_kzalloc(dev, sizeof(*pdata), GFP_KERNEL);
 	if (!pdata) {
-		err = ramoops_parse_dt(&pdev->dev, node);
-		if (err < 0)
-			return err;
-
-		pdata = pdev->dev.platform_data;
+		pr_err("could not allocate ramoops_platform_data\n");
+		return -ENOMEM;
 	}
+
+	dev_set_drvdata(dev, pdata);
+
+	if (pdev->dev.of_node)
+		ramoops_of_init(pdev);
+	else if (pdev->dev.platform_data)
+		memcpy(pdata, pdev->dev.platform_data, sizeof(*pdata));
 
 	/* Only a single ramoops area allowed at a time, so fail extra
 	 * probes.
@@ -521,6 +589,9 @@ static int ramoops_probe(struct platform_device *pdev)
 		pdata->ftrace_size = rounddown_pow_of_two(pdata->ftrace_size);
 	if (pdata->pmsg_size && !is_power_of_2(pdata->pmsg_size))
 		pdata->pmsg_size = rounddown_pow_of_two(pdata->pmsg_size);
+	/* If ecc is not defined in pdata, check module param */
+	if (!pdata->ecc_info.ecc_size)
+		pdata->ecc_info.ecc_size = ramoops_ecc == 1 ? 16 : ramoops_ecc;
 
 	cxt->size = pdata->mem_size;
 	cxt->phys_addr = pdata->mem_address;
@@ -588,6 +659,9 @@ static int ramoops_probe(struct platform_device *pdev)
 	mem_address = pdata->mem_address;
 	record_size = pdata->record_size;
 	dump_oops = pdata->dump_oops;
+	ramoops_console_size = pdata->console_size;
+	ramoops_pmsg_size = pdata->pmsg_size;
+	ramoops_ftrace_size = pdata->ftrace_size;
 
 	pr_info("attached 0x%lx@0x%llx, ecc: %d/%d\n",
 		cxt->size, (unsigned long long)cxt->phys_addr,
@@ -615,13 +689,6 @@ fail_out:
 	return err;
 }
 
-#ifdef CONFIG_OF
-static struct of_device_id ramoops_of_match[] = {
-	{.compatible = "ramoops", },
-	{ },
-};
-#endif
-
 static int __exit ramoops_remove(struct platform_device *pdev)
 {
 #if 0
@@ -648,10 +715,10 @@ static struct platform_driver ramoops_driver = {
 	.remove		= __exit_p(ramoops_remove),
 	.driver		= {
 		.name	= "ramoops",
-		.owner	= THIS_MODULE,
 #ifdef CONFIG_OF
 		.of_match_table = of_match_ptr(ramoops_of_match),
 #endif
+		.owner	= THIS_MODULE,
 	},
 };
 

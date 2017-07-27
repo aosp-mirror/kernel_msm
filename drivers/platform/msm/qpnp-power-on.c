@@ -30,8 +30,7 @@
 #include <linux/regulator/of_regulator.h>
 #include <linux/qpnp/power-on.h>
 #include <linux/timer.h>
-
-#include "../../staging/android/timed_output.h"
+#include <linux/leds.h>
 #include <linux/i2c.h>
 
 #define CREATE_MASK(NUM_BITS, POS) \
@@ -229,7 +228,7 @@ struct qpnp_pon {
 	bool			store_hard_reset_reason;
 	struct			delayed_work timed_init_work;
 	struct			work_struct timed_out_work;
-	struct			timed_output_dev *timed_dev;
+	struct			led_classdev *led_dev;
 	struct			hrtimer timed_timer;
 	int			longkey_warn_time;
 	bool			timed_inited;
@@ -806,18 +805,20 @@ static void timed_out_work_func(struct work_struct *work)
 {
 	struct qpnp_pon *pon = container_of(work, struct qpnp_pon,
 			timed_out_work);
-	struct timed_output_dev *dev = pon->timed_dev;
-	int saved_timeout = pon->vibe_timeout;
 
-	if (!dev)
+	if (!pon->led_dev)
 		return;
 
-	if (dev->enable)
-		dev->enable(dev, pon->vibe_timeout);
+	if (pon->vibe_timeout > 0) {
+		unsigned long delay_on = pon->vibe_timeout;
+		unsigned long delay_off = 100;
 
-	/* Rearm because enable_vibrator is invoked during runing worker */
-	if (saved_timeout != pon->vibe_timeout)
-		qpnp_pon_enable_vibrator(pon, pon->vibe_timeout);
+		dev_warn(pon->led_dev->dev,
+			 "power button warning %d ms\n", pon->vibe_timeout);
+		led_blink_set_oneshot(pon->led_dev,
+				      &delay_on, &delay_off, false);
+	} else
+		led_set_brightness(pon->led_dev, LED_OFF);
 }
 
 static enum hrtimer_restart qpnp_pon_vibe_timer_func(struct hrtimer *timer)
@@ -889,7 +890,8 @@ static void timed_init_work_func(struct work_struct *work)
 		pon->longkey_warn_time = QPNP_LONGKEY_WARN_TIME_MAX;
 	}
 
-	pon->timed_dev = vib_data;
+	/* Led device must be first field in vib_data. */
+	pon->led_dev = (struct led_classdev *)vib_data;
 
 	hrtimer_init(&pon->timed_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	pon->timed_timer.function = qpnp_pon_vibe_timer_func;

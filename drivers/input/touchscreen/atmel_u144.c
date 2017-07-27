@@ -3384,6 +3384,7 @@ static int mxt_flash_fw(struct mxt_data *data)
 
 	if (!fw_info->fw_raw_data) {
 		TOUCH_ERR_MSG("%s fw_raw_data is Null\n", __func__);
+		ret = -EINVAL;
 		goto out;
 	}
 

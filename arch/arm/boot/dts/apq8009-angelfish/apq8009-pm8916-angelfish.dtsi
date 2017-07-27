@@ -31,12 +31,16 @@
 &soc {
 	ramoops {
 		compatible = "ramoops";
-		mem-size = <0x80000>;
-		mem-address = <0x8aa00000>;
-		record-size = <4096>;
-		console-size = <0x40000>;
-		ftrace-size = <0x40000>;
-		dump-oops = <1>;
+		status = "ok";
+
+		android,ramoops-buffer-start = <0x8aa00000>;
+		android,ramoops-buffer-size = <0x80000>;
+		android,ramoops-console-size = <0x40000>;
+		android,ramoops-record-size = <0x1000>;
+		android,ramoops-ftrace-size = <0x20000>;
+		android,ramoops-pmsg-size = <0x20000>;
+		android,ramoops-dump-oops = <0x1>;
+		linux,contiguous-region = <&ramoops_mem>;
 	};
 
 	bootlog {
