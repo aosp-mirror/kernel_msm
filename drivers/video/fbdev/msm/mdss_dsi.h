@@ -19,6 +19,7 @@
 #include <linux/irqreturn.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/gpio.h>
+#include <linux/wait.h>
 
 #include "mdss_panel.h"
 #include "mdss_dsi_cmd.h"
@@ -547,8 +548,8 @@ struct mdss_dsi_ctrl_pdata {
 	char pps_buf[DSC_PPS_LEN];	/* dsc pps */
 
 	struct dcs_cmd_list cmdlist;
+	wait_queue_head_t mdp_waitq;
 	struct completion dma_comp;
-	struct completion mdp_comp;
 	struct completion video_comp;
 	struct completion dynamic_comp;
 	struct completion bta_comp;
@@ -556,6 +557,7 @@ struct mdss_dsi_ctrl_pdata {
 	spinlock_t mdp_lock;
 	int mdp_busy;
 	struct mutex mutex;
+	struct mutex mdp_mutex;
 	struct mutex cmd_mutex;
 	struct mutex cmdlist_mutex;
 	struct regulator *lab; /* vreg handle */
