@@ -87,7 +87,7 @@
 #define PWR_CTL_LOW_POWER_MODE		0x01
 /* sleep mode */
 #define PWR_CTL_SLEEP_MODE		0x02
-#define WAIT_CHANGE_MODE		20
+#define WAIT_CHANGE_MODE		50
 /* command is not documented in the datasheet v1.0.0.7 */
 #define CMD_UNKNOWN_7			0x07
 #define CMD_FIRMWARE_REINIT_C		0x0C
@@ -221,6 +221,7 @@ struct it7259_ts_data {
 	struct pinctrl_state *pinctrl_state_suspend;
 	struct pinctrl_state *pinctrl_state_release;
 	bool palm_pressed;
+	bool fw_active;
 };
 
 /* Function declarations */
@@ -1649,6 +1650,7 @@ static irqreturn_t it7259_ts_threaded_handler(int irq, void *devid)
 			input_sync(input_dev);
 			input_report_key(input_dev, KEY_WAKEUP, 0);
 			input_sync(input_dev);
+			ts_data->fw_active = true;
 			schedule_work(&ts_data->work_pm_relax);
 		} else {
 			dev_dbg(&ts_data->client->dev,
@@ -2450,6 +2452,7 @@ static int it7259_ts_probe(struct i2c_client *client,
 	/* Initialize mutex for fw and cfg upgrade */
 	mutex_init(&ts_data->fw_cfg_mutex);
 
+	ts_data->fw_active = true;
 	ts_data->input_dev->name = DEVICE_NAME;
 	ts_data->input_dev->phys = "I2C";
 	ts_data->input_dev->id.bustype = BUS_I2C;
@@ -2718,12 +2721,15 @@ static int it7259_ts_suspend(struct device *dev)
 
 	if (device_may_wakeup(dev)) {
 		if (!ts_data->in_low_power_mode) {
-			/* put the device in low power idle mode */
-			retval = it7259_ts_chip_low_power_mode(ts_data,
+			if(ts_data->fw_active) {
+				/* put the device in low power idle mode */
+				retval = it7259_ts_chip_low_power_mode(ts_data,
 						PWR_CTL_LOW_POWER_MODE);
-			if (retval)
-				dev_err(dev, "Can't go to low power mode %d\n",
-						retval);
+				if (retval)
+					dev_err(dev, "Can't go to low power mode %d\n",
+							retval);
+				ts_data->fw_active = false;
+			}
 
 			/* Set lpm current for avdd regulator */
 			if (ts_data->pdata->avdd_lpm_cur) {
