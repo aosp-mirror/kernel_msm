@@ -263,5 +263,6 @@ struct max98927_priv {
 	unsigned int iface;
 	unsigned int master;
 	unsigned int digital_gain;
+	struct gpio_desc *reset_gpio;
 };
 #endif

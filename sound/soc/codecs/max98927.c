@@ -954,6 +954,28 @@ static int max98927_i2c_probe(struct i2c_client *i2c,
 	}
 	i2c_set_clientdata(i2c, max98927);
 
+	max98927->reset_gpio = devm_gpiod_get_optional(&i2c->dev, "reset",
+							GPIOD_OUT_LOW);
+	if (IS_ERR(max98927->reset_gpio)) {
+		ret = PTR_ERR(max98927->reset_gpio);
+		max98927->reset_gpio = NULL;
+		if (ret == -EBUSY) {
+			dev_info(&i2c->dev,
+				"Reset line busy, assuming shared reset\n");
+		} else {
+			dev_err(&i2c->dev, "Failed to get reset GPIO: %d\n", ret);
+			goto err;
+		}
+	}
+
+	if (max98927->reset_gpio) {
+		gpiod_set_value_cansleep(max98927->reset_gpio, 1);
+		usleep_range(1000, 2100);
+		gpiod_set_value_cansleep(max98927->reset_gpio, 0);
+		usleep_range(10, 20);
+		gpiod_set_value_cansleep(max98927->reset_gpio, 1);
+	}
+
 	/* update interleave mode info */
 	if (!of_property_read_u32(i2c->dev.of_node,
 		"maxim,interleave_mode", &value)) {

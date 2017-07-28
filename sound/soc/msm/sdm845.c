@@ -376,7 +376,7 @@ static struct dev_config mi2s_rx_cfg[] = {
 	[PRIM_MI2S] = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 2},
 	[SEC_MI2S]  = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 2},
 	[TERT_MI2S] = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 2},
-	[QUAT_MI2S] = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 2},
+	[QUAT_MI2S] = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S24_LE, 2},
 };
 
 static struct dev_config mi2s_tx_cfg[] = {
@@ -4567,6 +4567,30 @@ static struct snd_soc_ops sdm845_tdm_be_ops = {
 	.shutdown = sdm845_tdm_snd_shutdown
 };
 
+static int msm_mi2s_snd_init(struct snd_soc_pcm_runtime *rtd)
+{
+	int ret = 0;
+
+#if defined (CONFIG_SND_SOC_CS35L36)
+	struct snd_soc_dai *codec_dai = rtd->codec_dai;
+	struct snd_soc_codec *codec = codec_dai->codec;
+	struct snd_soc_dai **codec_dais = rtd->codec_dais;
+	int i;
+
+	for (i = 0; i < rtd->num_codecs; i++) {
+		codec = codec_dais[i]->codec;
+		ret = snd_soc_dai_set_sysclk(codec_dais[i], 0,
+						Q6AFE_LPASS_IBIT_CLK_3_P072_MHZ,
+						SND_SOC_CLOCK_IN);
+		if (ret < 0)
+			pr_err("%s: set dai_sysclk failed, err:%d\n",
+				__func__, ret);
+	}
+#endif
+
+	return ret;
+}
+
 static int msm_mi2s_snd_startup(struct snd_pcm_substream *substream)
 {
 	int ret = 0;
@@ -4578,6 +4602,13 @@ static int msm_mi2s_snd_startup(struct snd_pcm_substream *substream)
 	struct msm_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
 	struct msm_pinctrl_info *pinctrl_info = &pdata->pinctrl_info;
 	int ret_pinctrl = 0;
+
+#if defined (CONFIG_SND_SOC_CS35L36) || defined (CONFIG_SND_SOC_MAX98927)
+	int i;
+	struct snd_soc_dai *codec_dai = rtd->codec_dai;
+	struct snd_soc_codec *codec = codec_dai->codec;
+	struct snd_soc_dai **codec_dais = rtd->codec_dais;
+#endif
 
 	dev_dbg(rtd->card->dev,
 		"%s: substream = %s  stream = %d, dai name %s, dai ID %d\n",
@@ -4591,7 +4622,7 @@ static int msm_mi2s_snd_startup(struct snd_pcm_substream *substream)
 			__func__, cpu_dai->id);
 		goto err;
 	}
-	if (index == QUAT_MI2S) {
+	if ((index == QUAT_MI2S) && pinctrl_info->mi2s_active) {
 		ret_pinctrl = msm_set_pinctrl(pinctrl_info, STATE_MI2S_ACTIVE);
 		if (ret_pinctrl)
 			pr_err("%s: MI2S TLMM pinctrl set failed with %d\n",
@@ -4634,6 +4665,27 @@ static int msm_mi2s_snd_startup(struct snd_pcm_substream *substream)
 				__func__, index, ret);
 			goto clk_off;
 		}
+
+#if defined (CONFIG_SND_SOC_CS35L36) || defined (CONFIG_SND_SOC_MAX98927)
+		for (i = 0; i < rtd->num_codecs; i++) {
+			codec = codec_dais[i]->codec;
+			ret = snd_soc_dai_set_fmt(codec_dais[i], SND_SOC_DAIFMT_CBS_CFS |
+							SND_SOC_DAIFMT_I2S);
+			if (ret < 0)
+				pr_err("%s: set fmt failed, err:%d\n",
+					__func__, ret);
+
+#if defined (CONFIG_SND_SOC_CS35L36)
+			ret = snd_soc_codec_set_sysclk(codec, 0, 0,
+							Q6AFE_LPASS_IBIT_CLK_3_P072_MHZ,
+							SND_SOC_CLOCK_IN);
+			if (ret < 0)
+				pr_err("%s: set sysclk failed, err:%d\n",
+					__func__, ret);
+#endif
+		}
+#endif
+
 	}
 clk_off:
 	if (ret < 0)
@@ -4674,7 +4726,7 @@ static void msm_mi2s_snd_shutdown(struct snd_pcm_substream *substream)
 	}
 	mutex_unlock(&mi2s_intf_conf[index].lock);
 
-	if (index == QUAT_MI2S) {
+	if ((index == QUAT_MI2S) && pinctrl_info->mi2s_disable) {
 		ret_pinctrl = msm_set_pinctrl(pinctrl_info, STATE_DISABLE);
 		if (ret_pinctrl)
 			pr_err("%s: MI2S TLMM pinctrl set failed with %d\n",
@@ -5997,6 +6049,32 @@ static struct snd_soc_dai_link ext_disp_be_dai_link[] = {
 	},
 };
 
+#if defined (CONFIG_SND_SOC_CS35L36)
+static struct snd_soc_dai_link_component spk_codec[] = {
+	{
+		.name = "cs35l36.4-0041",
+		.dai_name = "cs35l36-pcm",
+	},
+	{
+		.name = "cs35l36.4-0040",
+		.dai_name = "cs35l36-pcm",
+	},
+};
+#endif
+
+#if defined (CONFIG_SND_SOC_MAX98927)
+static struct snd_soc_dai_link_component spk_codec[] = {
+	{
+		.name = "max98927.4-003a",
+		.dai_name = "max98927-aif1",
+	},
+	{
+		.name = "max98927.4-0039",
+		.dai_name = "max98927-aif1",
+	},
+};
+#endif
+
 static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 	{
 		.name = LPASS_BE_PRI_MI2S_RX,
@@ -6090,8 +6168,14 @@ static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 		.stream_name = "Quaternary MI2S Playback",
 		.cpu_dai_name = "msm-dai-q6-mi2s.3",
 		.platform_name = "msm-pcm-routing",
-		.codec_name = "max98927.3-0039",
-		.codec_dai_name = "max98927-aif1",
+#if defined (CONFIG_SND_SOC_CS35L36) || defined (CONFIG_SND_SOC_MAX98927)
+		.codecs = spk_codec,
+		.num_codecs = ARRAY_SIZE(spk_codec),
+#else
+		.codec_name = "msm-stub-codec.1",
+		.codec_dai_name = "msm-stub-rx",
+#endif
+		.init = msm_mi2s_snd_init,
 		.no_pcm = 1,
 		.dpcm_playback = 1,
 		.id = MSM_BACKEND_DAI_QUATERNARY_MI2S_RX,
@@ -6104,9 +6188,20 @@ static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 		.name = LPASS_BE_QUAT_MI2S_TX,
 		.stream_name = "Quaternary MI2S Capture",
 		.cpu_dai_name = "msm-dai-q6-mi2s.3",
+#if defined (CONFIG_SND_SOC_CS35L36)
+		.platform_name = "msm-pcm-dsp.0",
+#else
 		.platform_name = "msm-pcm-routing",
-		.codec_name = "max98927.3-0039",
-		.codec_dai_name = "max98927-aif1",
+#endif
+#if defined (CONFIG_SND_SOC_CS35L36) || defined (CONFIG_SND_SOC_MAX98927)
+		.codecs = spk_codec,
+		.num_codecs = ARRAY_SIZE(spk_codec),
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+#else
+		.codec_name = "msm-stub-codec.1",
+		.codec_dai_name = "msm-stub-tx",
+#endif
+		.init = msm_mi2s_snd_init,
 		.no_pcm = 1,
 		.dpcm_capture = 1,
 		.id = MSM_BACKEND_DAI_QUATERNARY_MI2S_TX,
@@ -6290,9 +6385,31 @@ err:
 	return ret;
 }
 
+#if defined (CONFIG_SND_SOC_CS35L36)
+static struct snd_soc_codec_conf spk_codec_right_ch_conf[] = {
+	{
+		.dev_name		= "cs35l36.4-0041",
+		.name_prefix	= "R",
+	}
+};
+#endif
+
+#if defined (CONFIG_SND_SOC_MAX98927)
+static struct snd_soc_codec_conf spk_codec_right_ch_conf[] = {
+	{
+		.dev_name		= "max98927.4-003a",
+		.name_prefix	= "R",
+	}
+};
+#endif
+
 struct snd_soc_card snd_soc_card_tavil_msm = {
 	.name		= "sdm845-tavil-snd-card",
 	.late_probe	= msm_snd_card_tavil_late_probe,
+#if defined (CONFIG_SND_SOC_CS35L36) || defined (CONFIG_SND_SOC_MAX98927)
+	.codec_conf		= spk_codec_right_ch_conf,
+	.num_configs	= ARRAY_SIZE(spk_codec_right_ch_conf),
+#endif
 };
 
 static int msm_populate_dai_link_component_of_node(

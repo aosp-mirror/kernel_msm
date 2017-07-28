@@ -154,6 +154,11 @@ static DECLARE_TLV_DB_SCALE(amp_gain_tlv, 0, 1, 1);
 static DECLARE_TLV_DB_SCALE(pdm_aud_threshold_tlv, -16200, 6, 0);
 static DECLARE_TLV_DB_SCALE(pdm_ultra_threshold_tlv, -9000, 6, 0);
 
+static const char * const cs35l36_boost_ctrl_text[] = {"Off", "On"};
+
+static SOC_ENUM_SINGLE_DECL(boost_ctrl, CS35L36_PWR_CTRL2, 5,
+	cs35l36_boost_ctrl_text);
+
 static const struct snd_kcontrol_new dre_ctrl =
 	SOC_DAPM_SINGLE("Switch", CS35L36_PWR_CTRL3, 20, 1, 0);
 
@@ -187,6 +192,7 @@ static const struct snd_kcontrol_new cs35l36_aud_controls[] = {
 			amp_gain_tlv),
 	SOC_SINGLE_TLV("AMP PDM Gain", CS35L36_AMP_GAIN_CTRL, 0, 0x13, 0,
 			amp_gain_tlv),
+	SOC_ENUM("Boost Control", boost_ctrl),
 	SOC_ENUM("PCM Soft Ramp", pcm_sft_ramp),
 	SOC_ENUM("PDM Soft Ramp Up", pdm_sft_ramp_up),
 	SOC_ENUM("PDM Soft Ramp Down", pdm_sft_ramp_dn),
@@ -1519,7 +1525,7 @@ static int cs35l36_i2c_probe(struct i2c_client *i2c_client,
 
 	ret = devm_request_threaded_irq(dev, i2c_client->irq, NULL,
 					cs35l36_irq,
-					IRQF_ONESHOT | irq_pol,
+					IRQF_ONESHOT | IRQF_SHARED | irq_pol,
 					"cs35l36", cs35l36);
 
 	/* CS35L36 needs INT for PDN_DONE */
