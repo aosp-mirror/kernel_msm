@@ -1,86 +1,17 @@
 /* AUDIO: RESET: GPIO64, INTR1: GPIO54, INTR2: GPIO53, EXT_CLK: PM845.68 LN_BB_CLK3, SLIMBUS_CLK: GPIO70, SLIMBUS_DATA[0..1]: GPIO71,GPIO72 */
 
 #include <dt-bindings/clock/qcom,audio-ext-clk.h>
+#include "../qcom/sdm845-audio-overlay.dtsi"
 
 &pm8998_gpios {
 	gpio@cc00 { /* GPIO 13 */
 		status = "disabled";
-	};
-	audio_clk_enable {
-		audio_clk_enable_default: audio_clk_enable_default {
-			pins = "gpio21";
-			function = "normal";
-			output-high;
-			power-source = <1>;
-		};
-		audio_clk_enable_sleep: audio_clk_enable_sleep {
-			pins = "gpio21";
-			function = "normal";
-			input-enable;
-			bias-pull-down;
-			power-source = <1>;
-		};
 	};
 };
 
 &slim_aud {
 	tavil_codec {
 		/delete-node/ swr_master;
-	};
-};
-
-&tlmm {
-	spkr_boost_reset: spkr_boost_reset {
-		spkr_boost_reset_active: spkr_boost_reset_active {
-			mux {
-				pins = "gpio75";
-				function = "gpio";
-			};
-			config {
-				pins = "gpio75";
-				drive-strength = <8>;
-				bias-pull-up;
-				output-high;
-			};
-		};
-		spkr_boost_reset_sleep: spkr_boost_reset_sleep {
-			mux {
-				pins = "gpio75";
-				function = "gpio";
-			};
-			config {
-				pins = "gpio75";
-				drive-strength = <2>;
-				bias-pull-up;
-				output-high;
-			};
-		};
-	};
-	spkr_boost_irq: spkr_boost_irq {
-		spkr_boost_irq_active: spkr_boost_irq_active {
-			mux {
-				pins = "gpio40";
-				function = "gpio";
-			};
-			config {
-				pins = "gpio40";
-				drive-strength = <2>;
-				input-enable;
-				bias-pull-up;
-			};
-		};
-		spkr_boost_irq_sleep: spkr_boost_irq_sleep {
-			mux {
-				pins = "gpio40";
-				function = "gpio";
-			};
-			config {
-				pins = "gpio40";
-				drive-strength = <2>;
-				input-enable;
-				bias-pull-up;
-			};
-		};
 	};
 };
 
@@ -92,9 +23,6 @@
 		clocks = <&clock_rpmh RPMH_LN_BB_CLK3>;
 		qcom,node_has_rpm_clock;
 		#clock-cells = <1>;
-		pinctrl-names = "sleep", "default";
-		pinctrl-0 = <&audio_clk_enable_sleep>;
-		pinctrl-1 = <&audio_clk_enable_default>;
 	};
 
 	sound-tavil {
@@ -108,12 +36,20 @@
 			"MIC BIAS1", "Digital Mic1",
 			"DMIC2", "MIC BIAS3",
 			"MIC BIAS3", "Digital Mic2",
-			"DMIC3", "MIC BIAS4",
+			"DMIC5", "MIC BIAS4",
 			"MIC BIAS4", "Digital Mic3";
 
+		qcom,msm-mbhc-hphl-swh = <0>;
+		qcom,msm-mbhc-gnd-swh = <0>;
 		qcom,wsa-max-devs = <0>;
+		/delete-property/ qcom,hph-en0-gpio;
+		/delete-property/ qcom,hph-en1-gpio;
 		/delete-property/ qcom,wsa-devs;
 		/delete-property/ qcom,wsa-aux-dev-prefix;
+	};
+
+	wcd_usbc_analog_en1_gpio: msm_cdc_pinctrl@49 {
+		status = "disabled";
 	};
 };
 
@@ -123,25 +59,95 @@
 	/* SD0; in; ("rx-lines" is playback path): mask=1 */
 	/* SD1; out ("tx-lines" is capture path): mask=2 */
 	pinctrl-names = "default", "sleep";
-	pinctrl-0 = <&quat_mi2s_mclk_active &quat_mi2s_active &quat_mi2s_sd0_active &quat_mi2s_sd1_active &spkr_boost_irq_active &spkr_boost_reset_active>;
-	pinctrl-1 = <&quat_mi2s_mclk_sleep &quat_mi2s_sleep &quat_mi2s_sd0_sleep &quat_mi2s_sd1_sleep &spkr_boost_irq_sleep &spkr_boost_reset_sleep>;
+	pinctrl-0 = <&quat_mi2s_mclk_active &quat_mi2s_active &quat_mi2s_sd0_active &quat_mi2s_sd1_active>;
+	pinctrl-1 = <&quat_mi2s_mclk_sleep &quat_mi2s_sleep &quat_mi2s_sd0_sleep &quat_mi2s_sd1_sleep>;
 };
 
 /* speaker boosters */
 &qupv3_se12_i2c {
 	status = "ok";
-	spk_codec1: max98927@39 {
+	max98927_codec1: max98927@39 {
 		compatible = "maxim,max98927";
+		reset-gpios = <&tlmm 75 0x00>;
 		maxim,vmon-slot-no = <0>;
 		maxim,imon-slot-no = <1>;
 		maxim,interleave-mode = <0>;
 		reg = <0x39>;
 	};
-	spk_codec2: max98927@3a {
+	max98927_codec2: max98927@3a {
 		compatible = "maxim,max98927";
+		reset-gpios = <&tlmm 75 0x00>;
 		maxim,vmon-slot-no = <2>;
 		maxim,imon-slot-no = <3>;
 		maxim,interleave-mode = <0>;
 		reg = <0x3a>;
+	};
+
+	cs35l36_codec1: cs35l36@40 {
+		compatible = "cirrus,cs35l36";
+		reg = <0x40>;
+		reset-gpios = <&tlmm 75 0>;
+		irq-gpio = <&tlmm 40 0x01>;
+		VA-supply = <&pm8998_s4>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <40 8>;
+		cirrus,left-channel-amp;
+		cirrus,boost-ind-nanohenry = <1000>;
+		cirrus,boost-ctl-millivolt = <10000>;
+		cirrus,boost-peak-milliamp = <4500>;
+		cirrus,amp-gain-zc;
+		cirrus,ldm-mode-select = <0x01>;
+		cirrus,pdm-ldm-exit;
+		cirrus,pdm-ldm-enter;
+		cirrus,weak-fet-delay = <0x04>;
+		cirrus,weak-fet-thld = <0x01>;
+		cirrus,temp-warn-threshold = <0x01>;
+
+		cirrus,irq-config {
+			cirrus,irq-drive-select = <0x01>;
+			cirrus,irq-polarity = <0x01>;
+			cirrus,irq-gpio-select = <0x01>;
+			cirrus,irq-output-enable = <0x01>;
+			cirrus,irq-src-select = <0x01>;
+		};
+
+		cirrus,asp-tx-config {
+			cirrus,tx1-config = /bits/ 8 <0x00 0x18>;
+			cirrus,tx2-config = /bits/ 8 <0x01 0x19>;
+		};
+	};
+
+	cs35l36_codec2: cs35l36@41 {
+		compatible = "cirrus,cs35l36";
+		reg = <0x41>;
+		reset-gpios = <&tlmm 75 0>;
+		irq-gpio = <&tlmm 40 0x01>;
+		VA-supply = <&pm8998_s4>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <40 8>;
+		cirrus,right-channel-amp;
+		cirrus,boost-ind-nanohenry = <1000>;
+		cirrus,boost-ctl-millivolt = <10000>;
+		cirrus,boost-peak-milliamp = <4500>;
+		cirrus,amp-gain-zc;
+		cirrus,ldm-mode-select = <0x01>;
+		cirrus,pdm-ldm-exit;
+		cirrus,pdm-ldm-enter;
+		cirrus,weak-fet-delay = <0x04>;
+		cirrus,weak-fet-thld = <0x01>;
+		cirrus,temp-warn-threshold = <0x01>;
+
+		cirrus,irq-config {
+			cirrus,irq-drive-select = <0x01>;
+			cirrus,irq-polarity = <0x01>;
+			cirrus,irq-gpio-select = <0x01>;
+			cirrus,irq-output-enable = <0x01>;
+			cirrus,irq-src-select = <0x01>;
+		};
+
+		cirrus,asp-tx-config {
+			cirrus,tx1-config = /bits/ 8 <0x00 0x18>;
+			cirrus,tx2-config = /bits/ 8 <0x01 0x19>;
+		};
 	};
 };
