@@ -121,31 +121,53 @@ ssize_t bldr_log_read_once(char __user *userbuf, ssize_t klog_size)
 	return len;
 }
 
+/**
+ * Read last bootloader logs, kernel logs, current bootloader logs in order.
+ *
+ * Handle reads that overlap different regions so the file appears like one
+ * contiguous file to the reader.
+ */
 ssize_t bldr_log_read(const void *lastk_buf, ssize_t lastk_size,
 	char __user *userbuf, size_t count, loff_t *ppos)
 {
 	loff_t pos;
+	ssize_t total_len = 0;
 	ssize_t len;
+	int i;
+
+	struct {
+		const char *buf;
+		const ssize_t size;
+	} log_regions[] = {
+		{ .buf = bl_last_log_buf,    .size = bl_last_log_buf_size },
+		{ .buf = lastk_buf,	     .size = lastk_size },
+		{ .buf = bl_cur_log_buf,     .size = bl_cur_log_buf_size },
+	};
 
 	pos = *ppos;
-	if (pos < bl_last_log_buf_size) {
-		len = simple_read_from_buffer(userbuf, count, &pos,
-			bl_last_log_buf, bl_last_log_buf_size);
-	} else if (pos < lastk_size - bl_cur_log_buf_size) {
-		pos -= bl_last_log_buf_size;
-		len = simple_read_from_buffer(userbuf, count, &pos, lastk_buf,
-			lastk_size - bl_cur_log_buf_size -
-			bl_last_log_buf_size);
-	} else {
-		pos -= (lastk_size - bl_cur_log_buf_size);
-		len = simple_read_from_buffer(userbuf, count, &pos,
-			bl_cur_log_buf, bl_cur_log_buf_size);
+	if (pos < 0)
+		return -EINVAL;
+
+	if (!count)
+		return 0;
+
+	for (i = 0; i < ARRAY_SIZE(log_regions); ++i) {
+		if (pos < log_regions[i].size && log_regions[i].buf != NULL) {
+			len = simple_read_from_buffer(userbuf, count, &pos,
+				log_regions[i].buf, log_regions[i].size);
+			if (len < 0)
+				return len;
+			count -= len;
+			userbuf += len;
+			total_len += len;
+		}
+		pos -= log_regions[i].size;
+		if (pos < 0)
+			break;
 	}
 
-	if (len > 0)
-		*ppos += len;
-
-	return len;
+	*ppos += total_len;
+	return total_len;
 }
 
 ssize_t bldr_log_total_size(void)

@@ -592,9 +592,6 @@ void pstore_get_records(int quiet)
 			}
 		}
 
-		if (type == PSTORE_TYPE_CONSOLE)
-			size += bldr_log_total_size();
-
 		rc = pstore_mkfile(type, psi->name, id, count, buf,
 				  compressed, (size_t)size, time, psi);
 		if (unzipped_len < 0) {

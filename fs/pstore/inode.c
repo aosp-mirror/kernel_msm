@@ -390,6 +390,9 @@ int pstore_mkfile(enum pstore_type_id type, char *psname, u64 id, int count,
 	memcpy(private->data, data, size);
 	inode->i_size = private->size = size;
 
+	if (type == PSTORE_TYPE_CONSOLE)
+		inode->i_size += bldr_log_total_size();
+
 	inode->i_private = private;
 
 	if (time.tv_sec)
