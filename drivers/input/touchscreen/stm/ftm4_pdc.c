@@ -67,7 +67,7 @@
 #define FTS_CX2_ADDR_OFFSET		3
 #define FTS_CX2_TX_START		0
 #define FTS_CX2_BASE_ADDR		0x1000
-#define SEC_CMD_STR_LEN			12
+#define FTS_COMP_HEADER_SIZE		(16 + 1)
 
 #define DEBUG_MSG 1
 enum {
@@ -1339,7 +1339,7 @@ static void fts_read_ix_data(struct fts_ts_info *info, bool allnode)
 	regAdd[0] = 0xD0;
 	regAdd[1] = (comp_header_addr >> 8) & 0xFF;
 	regAdd[2] = comp_header_addr & 0xFF;
-	info->fts_read_reg(info, regAdd, 3, &buff[0], 16 + 1);
+	info->fts_read_reg(info, regAdd, 3, &buff[0], FTS_COMP_HEADER_SIZE);
 	tx_num = buff[5];
 	rx_num = buff[6];
 	tsp_debug_info(&info->client->dev,
@@ -1773,7 +1773,7 @@ static void run_cx_data_read(void *device_data)
 	regAdd[0] = 0xD0;
 	regAdd[1] = (comp_header_addr >> 8) & 0xFF;
 	regAdd[2] = comp_header_addr & 0xFF;
-	info->fts_read_reg(info, regAdd, 3, &buff[0], 16 + 1);
+	info->fts_read_reg(info, regAdd, 3, &buff[0], FTS_COMP_HEADER_SIZE);
 	tx_num = buff[5];
 	rx_num = buff[6];
 	comp_start_addr = comp_header_addr + 0x10;
@@ -1883,7 +1883,7 @@ static void run_cx_data_read(void *device_data)
 static void get_cx_all_data(void *device_data)
 {
 	struct fts_ts_info *info = (struct fts_ts_info *)device_data;
-	char buff[SEC_CMD_STR_LEN] = { 0 };
+	char buff[FTS_COMP_HEADER_SIZE] = { 0 };
 	unsigned char ReadData[info->ForceChannelLength]
 		[info->SenseChannelLength + FTS_CX2_READ_LENGTH];
 	unsigned char regAdd[8];
@@ -1948,7 +1948,7 @@ static void get_cx_all_data(void *device_data)
 	regAdd[0] = 0xD0;
 	regAdd[1] = (comp_header_addr >> 8) & 0xFF;
 	regAdd[2] = comp_header_addr & 0xFF;
-	info->fts_read_reg(info, regAdd, 3, &buff[0], 16 + 1);
+	info->fts_read_reg(info, regAdd, 3, &buff[0], FTS_COMP_HEADER_SIZE);
 	tx_num = buff[5];
 	rx_num = buff[6];
 	comp_start_addr = comp_header_addr + 0x10;
