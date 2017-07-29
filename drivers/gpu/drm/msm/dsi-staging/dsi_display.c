@@ -83,6 +83,9 @@ int dsi_display_set_backlight(void *display, u32 bl_lvl)
 
 	panel = dsi_display->panel;
 
+	if (!dsi_panel_initialized(panel))
+		return -EINVAL;
+
 	rc = dsi_panel_set_backlight(panel, bl_lvl);
 	if (rc)
 		pr_err("unable to set backlight\n");
