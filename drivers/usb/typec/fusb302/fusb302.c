@@ -609,8 +609,9 @@ static int tcpm_set_cc(struct tcpc_dev *dev, enum typec_cc_status cc)
 	/* reset the cc status */
 	chip->cc1 = TYPEC_CC_OPEN;
 	chip->cc2 = TYPEC_CC_OPEN;
-	/* report OPEN status back to TCPM */
-	tcpm_cc_change(chip->tcpm_port);
+	/* report OPEN status back to TCPM when not in PR_SWAP path*/
+	if (!IsPRSwap)
+		tcpm_cc_change(chip->tcpm_port);
 	/* adjust current for SRC */
 	if (pull_up) {
 		ret = fusb302_set_src_current(chip, cc_src_current[cc]);
@@ -630,11 +631,19 @@ static int tcpm_set_cc(struct tcpc_dev *dev, enum typec_cc_status cc)
 			goto done;
 		}
 
-		ret = fusb302_set_toggling(chip, TOGGLING_MODE_SRC);
-		if (ret < 0) {
-			fusb302_log("cannot set toggling to SRC mode, ret=%d\n",
-				    ret);
-			goto done;
+		/* WAR: Fairchild chip cannot send control packets when
+		 * TOGDONE interrupt is enabled. Since, TOGDONE is not
+		 * needed during PR_SWAP as CC pin is manupulated, do
+		 * enable TOGDONE interrupt to unblock chip on sending
+		 * the control messages such as PS_RDY.
+		 */
+		if (!IsPRSwap) {
+			ret = fusb302_set_toggling(chip, TOGGLING_MODE_SRC);
+			if (ret < 0) {
+				fusb302_log("cannot set toggling to SRC mode,");
+				fusb302_log("ret=%d\n", ret);
+				goto done;
+			}
 		}
 
 		ret = fusb302_i2c_mask_write(chip, FUSB_REG_MASK,
@@ -650,11 +659,13 @@ static int tcpm_set_cc(struct tcpc_dev *dev, enum typec_cc_status cc)
 		chip->intr_comp_chng = true;
 	}
 	if (pull_down) {
-		ret = fusb302_set_toggling(chip, TOGGLING_MODE_SNK);
-		if (ret < 0) {
-			fusb302_log("cannot set toggling to SNK mode, ret=%d\n",
-				    ret);
-			goto done;
+		if (!IsPRSwap) {
+			ret = fusb302_set_toggling(chip, TOGGLING_MODE_SNK);
+			if (ret < 0) {
+				fusb302_log("cannot set toggling to SNK mode,");
+				fusb302_log("ret=%d\n", ret);
+				goto done;
+			}
 		}
 
 		ret = fusb302_i2c_mask_write(chip, FUSB_REG_MASK,
@@ -1554,25 +1565,18 @@ static int fusb302_handle_togdone_src(struct fusb302_chip *chip,
 		cc_status_active = TYPEC_CC_RD;
 	else
 		/* Ra is not supported, report as Open */
-		cc_status_active = TYPEC_CC_RA;
+		cc_status_active = TYPEC_CC_OPEN;
 	/* restart toggling if the cc status on the active line is OPEN */
 	if (cc_status_active == TYPEC_CC_OPEN) {
 		fusb302_log("restart toggling as CC_OPEN detected\n");
 		ret = fusb302_set_toggling(chip, chip->toggling_mode);
 		return ret;
 	}
-
-	if (cc_status_active != TYPEC_CC_RA) {
-		/* update tcpm with the new cc value */
-		cc1 = (cc_polarity == TYPEC_POLARITY_CC1) ?
-		      cc_status_active : TYPEC_CC_OPEN;
-		cc2 = (cc_polarity == TYPEC_POLARITY_CC2) ?
-		      cc_status_active : TYPEC_CC_OPEN;
-	} else {
-		cc1 = cc_status_active;
-		cc2 = cc_status_active;
-	}
-
+	/* update tcpm with the new cc value */
+	cc1 = (cc_polarity == TYPEC_POLARITY_CC1) ?
+	      cc_status_active : TYPEC_CC_OPEN;
+	cc2 = (cc_polarity == TYPEC_POLARITY_CC2) ?
+	      cc_status_active : TYPEC_CC_OPEN;
 	if ((chip->cc1 != cc1) || (chip->cc2 != cc2)) {
 		chip->cc1 = cc1;
 		chip->cc2 = cc2;

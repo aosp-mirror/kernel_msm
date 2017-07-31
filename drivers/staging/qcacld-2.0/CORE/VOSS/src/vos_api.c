@@ -2998,3 +2998,9 @@ v_U64_t vos_get_monotonic_boottime_ns(void)
 	ktime_get_ts(&ts);
 	return timespec_to_ns(&ts);
 }
+
+v_U64_t vos_get_bootbased_boottime_ns(void)
+{
+       return ktime_get_boot_ns();
+}
+

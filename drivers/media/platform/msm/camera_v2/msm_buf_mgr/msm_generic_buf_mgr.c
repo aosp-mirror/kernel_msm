@@ -155,7 +155,8 @@ static int32_t msm_buf_mngr_buf_done(struct msm_buf_mngr_device *buf_mngr_dev,
 						buf_info->stream_id,
 						buf_info->frame_id,
 						&buf_info->timestamp,
-						buf_info->reserved);
+						buf_info->reserved,
+						VB2_BUF_STATE_DONE);
 			list_del_init(&bufs->entry);
 			kfree(bufs);
 			break;
@@ -208,7 +209,8 @@ static int32_t msm_generic_buf_mngr_flush(
 			(bufs->stream_id == buf_info->stream_id)) {
 			ret = buf_mngr_dev->vb2_ops.buf_done(bufs->vb2_buf,
 						buf_info->session_id,
-						buf_info->stream_id, 0, &ts, 0);
+						buf_info->stream_id, 0, &ts, 0,
+						VB2_BUF_STATE_DONE);
 			pr_err("Bufs not flushed: str_id = %d buf_index = %d ret = %d\n",
 			buf_info->stream_id, bufs->vb2_buf->v4l2_buf.index,
 			ret);

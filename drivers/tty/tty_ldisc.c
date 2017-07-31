@@ -591,9 +591,10 @@ int tty_set_ldisc(struct tty_struct *tty, int ldisc)
 
 	/* Restart the work queue in case no characters kick it off. Safe if
 	   already running */
-	schedule_work(&tty->port->buf.work);
+	queue_kthread_work(&tty->port->worker, &tty->port->buf.work);
 	if (o_tty)
-		schedule_work(&o_tty->port->buf.work);
+		queue_kthread_work(&o_tty->port->worker,
+				   &o_tty->port->buf.work);
 
 	tty_unlock(tty);
 	return retval;
