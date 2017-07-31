@@ -614,41 +614,40 @@ void fts_print_frame(struct fts_ts_info *info, short *min, short *max)
 	int j = 0;
 	unsigned char *pStr = NULL;
 	unsigned char pTmp[16] = {0};
+	unsigned int strSize = 0;
 
-	pStr = kzalloc(6 * (info->SenseChannelLength + 1), GFP_KERNEL);
+	strSize = 6 * info->SenseChannelLength + 32;
+	pStr = kzalloc(strSize, GFP_KERNEL);
 	if (pStr == NULL) {
 		tsp_debug_info(&info->client->dev, "FTS pStr kzalloc failed\n");
 		return;
 	}
 
-	memset(pStr, 0x0, 6 * (info->SenseChannelLength + 1));
-	snprintf(pTmp, sizeof(pTmp), "    ");
-	strncat(pStr, pTmp, 6 * info->SenseChannelLength);
+	memset(pStr, 0, strSize);
+	scnprintf(pStr, strSize, "    ");
 
 	for (i = 0; i < info->SenseChannelLength; i++) {
-		snprintf(pTmp, sizeof(pTmp), "Rx%02d  ", i);
-		strncat(pStr, pTmp, 6 * info->SenseChannelLength);
+		scnprintf(pTmp, sizeof(pTmp), "Rx%02d  ", i);
+		strlcat(pStr, pTmp, strSize);
 	}
 
 	tsp_debug_info(&info->client->dev, "FTS %s\n", pStr);
-	memset(pStr, 0x0, 6 * (info->SenseChannelLength + 1));
-	snprintf(pTmp, sizeof(pTmp), " +");
-	strncat(pStr, pTmp, 6 * info->SenseChannelLength);
+	memset(pStr, 0, strSize);
+	scnprintf(pStr, strSize, " +");
 
 	for (i = 0; i < info->SenseChannelLength; i++) {
-		snprintf(pTmp, sizeof(pTmp), "------");
-		strncat(pStr, pTmp, 6 * info->SenseChannelLength);
+		scnprintf(pTmp, sizeof(pTmp), "------");
+		strlcat(pStr, pTmp, strSize);
 	}
 
 	tsp_debug_info(&info->client->dev, "FTS %s\n", pStr);
 
 	for (i = 0; i < info->ForceChannelLength; i++) {
-		memset(pStr, 0x0, 6 * (info->SenseChannelLength + 1));
-		snprintf(pTmp, sizeof(pTmp), "Tx%02d | ", i);
-		strncat(pStr, pTmp, 6 * info->SenseChannelLength);
+		memset(pStr, 0, strSize);
+		scnprintf(pStr, strSize, "Tx%02d | ", i);
 
 		for (j = 0; j < info->SenseChannelLength; j++) {
-			snprintf(pTmp, sizeof(pTmp), "%5d ",
+			scnprintf(pTmp, sizeof(pTmp), "%5d ",
 				info->pFrame[(i * info->SenseChannelLength) + j]);
 
 			if (i > 0) {
@@ -658,7 +657,7 @@ void fts_print_frame(struct fts_ts_info *info, short *min, short *max)
 				if (info->pFrame[(i * info->SenseChannelLength) + j] > *max)
 					*max = info->pFrame[(i * info->SenseChannelLength) + j];
 			}
-			strncat(pStr, pTmp, 6 * info->SenseChannelLength);
+			strlcat(pStr, pTmp, strSize);
 		}
 		tsp_debug_info(&info->client->dev, "FTS %s\n", pStr);
 	}
