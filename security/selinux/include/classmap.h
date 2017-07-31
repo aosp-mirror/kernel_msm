@@ -42,6 +42,8 @@ struct security_class_mapping secclass_map[] = {
 	    "setrlimit", "rlimitinh", "dyntransition", "setcurrent",
 	    "execmem", "execstack", "execheap", "setkeycreate",
 	    "setsockcreate", NULL } },
+	{ "process2",
+	  { "nnp_transition", "nosuid_transition", NULL } },
 	{ "system",
 	  { "ipc_info", "syslog_read", "syslog_mod",
 	    "syslog_console", "module_request", "module_load", NULL } },
