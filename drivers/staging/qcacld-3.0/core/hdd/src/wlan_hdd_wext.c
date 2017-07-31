@@ -7056,7 +7056,7 @@ static int __iw_set_mlme(struct net_device *dev,
 			(WLAN_HDD_GET_WEXT_STATE_PTR(pAdapter))->authKeyMgmt =
 				0;
 
-			hdd_debug("Disabling queues");
+			hdd_info("Disabling queues");
 			wlan_hdd_netif_queue_control(pAdapter,
 					WLAN_STOP_ALL_NETIF_QUEUE_N_CARRIER,
 					WLAN_CONTROL_PATH);
@@ -7380,12 +7380,15 @@ int wlan_hdd_update_phymode(struct net_device *net, tHalHandle hal,
 			hdd_err("could not update config_dat");
 			return -EIO;
 		}
-		if (phddctx->config->nChannelBondingMode5GHz)
-			phddctx->wiphy->bands[HDD_NL80211_BAND_5GHZ]->ht_cap.cap
-				|= IEEE80211_HT_CAP_SUP_WIDTH_20_40;
-		else
-			phddctx->wiphy->bands[HDD_NL80211_BAND_5GHZ]->ht_cap.cap
-				&= ~IEEE80211_HT_CAP_SUP_WIDTH_20_40;
+
+		if (band_5g) {
+			if (phddctx->config->nChannelBondingMode5GHz)
+				phddctx->wiphy->bands[NL80211_BAND_5GHZ]->ht_cap.cap
+					|= IEEE80211_HT_CAP_SUP_WIDTH_20_40;
+			else
+				phddctx->wiphy->bands[NL80211_BAND_5GHZ]->ht_cap.cap
+					&= ~IEEE80211_HT_CAP_SUP_WIDTH_20_40;
+		}
 
 		hdd_debug("New_Phymode= %d ch_bonding=%d band=%d VHT_ch_width=%u",
 			phymode, chwidth, curr_band, vhtchanwidth);
@@ -12091,7 +12094,8 @@ int hdd_set_band(struct net_device *dev, u8 ui_band)
 	}
 
 	if ((band == eCSR_BAND_24 && pHddCtx->config->nBandCapability == 2) ||
-	    (band == eCSR_BAND_5G && pHddCtx->config->nBandCapability == 1)) {
+	    (band == eCSR_BAND_5G && pHddCtx->config->nBandCapability == 1) ||
+	    (band == eCSR_BAND_ALL && pHddCtx->config->nBandCapability != 0)) {
 		hdd_err("band value %u violate INI settings %u",
 			  band, pHddCtx->config->nBandCapability);
 		return -EIO;

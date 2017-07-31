@@ -370,6 +370,10 @@ typedef enum {
     WMI_PDEV_DIV_GET_RSSI_ANTID_CMDID,
     /* get bss chan info */
     WMI_PDEV_BSS_CHAN_INFO_REQUEST_CMDID,
+    /* update pmk cache info */
+    WMI_PDEV_UPDATE_PMK_CACHE_CMDID,
+    /*  update fils HLP */
+    WMI_PDEV_UPDATE_FILS_HLP_PKT_CMDID,
 
     /* VDEV (virtual device) specific commands */
     /** vdev create */
@@ -2740,9 +2744,9 @@ typedef struct {
 
 typedef struct {
     A_UINT32 tlv_header; /* TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_start_scan_cmd_fixed_param */
-    /** Scan ID */
+    /** Scan ID (lower 16 bits) MSB 4 bits is used to identify scan client based on enum WMI_SCAN_CLIENT_ID */
     A_UINT32 scan_id;
-    /** Scan requestor ID */
+    /** Scan requestor ID (lower 16 bits) is used by scan client to classify the scan source, reason, ...etc */
     A_UINT32 scan_req_id;
     /** VDEV id(interface) that is requesting scan */
     A_UINT32 vdev_id;
@@ -3095,6 +3099,100 @@ typedef struct {
     A_UINT32 dropped;
     /* followed by WMITLV_TAG_ARRAY_BYTE */
 } wmi_diag_event_fixed_param;
+
+
+#define WMI_MAX_PMKID_LEN   16
+#define WMI_MAX_PMK_LEN     64
+
+#define WMI_PMK_CACHE_CAT_FLAG_BSSID              0x1
+#define WMI_PMK_CACHE_CAT_FLAG_SSID_CACHE_ID      0x2
+
+#define WMI_PMK_CACHE_ACTION_FLAG_ADD_ENTRY       0x1
+#define WMI_PMK_CACHE_ACTION_FLAG_DEL_ENTRY       0x2
+
+typedef struct {
+    A_UINT32       tlv_header;
+    A_UINT32       pmk_len;
+    A_UINT8        pmk[WMI_MAX_PMK_LEN];/* for big-endian hosts, manual endian conversion will be needed to keep the array values in their original order,
+                                        in spite of the automatic byte-swap applied to WMI messages during download*/
+    A_UINT32       pmkid_len;
+    A_UINT8        pmkid[WMI_MAX_PMKID_LEN];
+    wmi_mac_addr   bssid;
+    wmi_ssid       ssid;
+    A_UINT32       cache_id;
+    A_UINT32       cat_flag;  // whether (bssid) or (ssid,cache_id) is valid
+    A_UINT32       action_flag;  // add/delete the entry
+} wmi_pmk_cache;
+
+#define WMI_PMK_CACHE_OP_FLAG_FLUSH_ALL       0x1
+
+typedef struct {
+    A_UINT32 tlv_header; /* TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_pdev_update_pmk_cache_cmd_fixed_param */
+    A_UINT32 op_flag;   //option to flush all the cache at once
+    A_UINT32 vdev_id;
+    A_UINT32 num_cache;
+    /**
+    * TLV (tag length value) parameters follow the update_pmk_cache cmd
+    * structure. The TLV's are:
+     * wmi_pmk_cache cache_list[];
+    */
+} wmi_pdev_update_pmk_cache_cmd_fixed_param;
+
+#define WMI_FILS_MAX_USERNAME_LEN 16
+#define WMI_FILS_MAX_REALM_LEN 256
+#define WMI_FILS_MAX_RRK_LEN 64
+#define WMI_FILS_MAX_RIK_LEN 64
+
+/* for big-endian hosts, manual endian conversion will be needed to keep the array values in their original order,
+in spite of the automatic byte-swap applied to WMI messages during download*/
+
+typedef struct {
+    A_UINT8     username[WMI_FILS_MAX_USERNAME_LEN];
+    A_UINT32    username_length;
+    A_UINT32    next_erp_seq_num;
+    A_UINT8     rRk[WMI_FILS_MAX_RRK_LEN];
+    A_UINT32    rRk_length;
+    A_UINT8     rIk[WMI_FILS_MAX_RIK_LEN];
+    A_UINT32    rIk_length;
+    A_UINT8     realm[WMI_FILS_MAX_REALM_LEN];
+    A_UINT32    realm_len;
+} wmi_erp_info;
+
+enum wmi_fils_hlp_pkt_type {
+    WMI_FILS_HLP_PKT_TYPE_DHCP_DISCOVER = 1,
+};
+
+typedef struct {
+    A_UINT32      tlv_header;  /** TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_roam_fils_offload_tlv_param */
+    A_UINT32      flags;
+    wmi_erp_info  vdev_erp_info;
+} wmi_roam_fils_offload_tlv_param;
+
+typedef struct {
+    A_UINT32  tlv_header; /** tag WMITLV_TAG_STRUC_wmi_pdev_update_fils_hlp_pkt_cmd_fixed_param**/
+    A_UINT32  flags;
+    A_UINT32  vdev_id;
+    A_UINT32  size;
+    A_UINT32  pkt_type; // filled using enum wmi_fils_hlp_pkt_type
+ // A_UINT8          fils_hlp_pkt[];
+} wmi_pdev_update_fils_hlp_pkt_cmd_fixed_param;
+
+#define WMI_MAX_KEK_LEN 64
+#define GTK_OFFLOAD_KEK_EXTENDED_BYTES WMI_MAX_KEK_LEN /*KEK len has been increased to 64 to support FILS security.
+                                          To not break backward compatibility, new GTK_OFFLOAD_KEK_EXTENDED_BYTES has been defined without modifying old GTK_OFFLOAD_KEK_BYTES */
+
+typedef struct {
+    A_UINT32   tlv_header; /* TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_roam_fils_synch_tlv_param */
+    A_UINT32   update_erp_next_seq_num;// Boolean denoting whether next erp_seq_num changed or not.
+    A_UINT32   next_erp_seq_num;
+    A_UINT32   kek_len;
+    A_UINT8    kek[WMI_MAX_KEK_LEN];
+    A_UINT32   pmk_len;
+    A_UINT8    pmk[WMI_MAX_PMK_LEN];
+    A_UINT8    pmkid[WMI_MAX_PMKID_LEN];
+    A_UINT8    realm[WMI_FILS_MAX_REALM_LEN];
+    A_UINT32   realm_len;
+} wmi_roam_fils_synch_tlv_param;
 
 /*
 * If FW has multiple active channels due to MCC(multi channel concurrency),
@@ -9355,6 +9453,7 @@ typedef struct {
      * wmi_roam_scan_extended_threshold_param extended_param;
      * wmi_roam_earlystop_rssi_thres_param earlystop_param;
      * wmi_roam_dense_thres_param dense_param;
+     * wmi_roam_bg_scan_roaming_param bg_scan_param;
      */
 } wmi_roam_scan_rssi_threshold_fixed_param;
 
@@ -9450,7 +9549,22 @@ enum {
     WMI_AUTH_RSNA_8021X_SHA256,
     WMI_AUTH_CCKM_WPA,
     WMI_AUTH_CCKM_RSNA,
+    WMI_AUTH_RSNA_FILS_SHA256,
+    WMI_AUTH_RSNA_FILS_SHA384,
 };
+
+typedef enum {
+    WMI_SCAN_CLIENT_NLO = 0x1,  /* 1 */
+    WMI_SCAN_CLIENT_EXTSCAN,    /* 2 */
+    WMI_SCAN_CLIENT_ROAM,       /* 3 */
+    WMI_SCAN_CLIENT_P2P,        /* 4 */
+    WMI_SCAN_CLIENT_LPI,        /* 5 */
+    WMI_SCAN_CLIENT_NAN,        /* 6 */
+    WMI_SCAN_CLIENT_ANQP,       /* 7 */
+    WMI_SCAN_CLIENT_OBSS,       /* 8 */
+    WMI_SCAN_CLIENT_PLM,        /* 9 */
+    WMI_SCAN_CLIENT_HOST,       /* 10 */
+} WMI_SCAN_CLIENT_ID;
 
 typedef struct {
     /** authentication mode (defined above)  */
@@ -9538,6 +9652,15 @@ typedef struct {
     /* traffic threshold to enable aggressive roaming in dense env; units are percent of medium occupancy, 0 - 100 */
     A_UINT32 roam_dense_traffic_thres;
 } wmi_roam_dense_thres_param;
+
+typedef struct {
+    /** TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_roam_bg_scan_roaming_param */
+    A_UINT32 tlv_header;
+    /** rssi threshold in dBm below which roaming will be triggered during background scan(non-roam scan). 0 will disable this threshold */
+    A_UINT32 roam_bg_scan_bad_rssi_thresh;
+    /** bitmap for which scan client will enable/disable background roaming. bit position is mapped to the enum WMI_SCAN_CLIENT_ID. 1 = enable, 0 = disable */
+    A_UINT32 roam_bg_scan_client_bitmap;
+} wmi_roam_bg_scan_roaming_param;
 
 /** Beacon filter wmi command info */
 
@@ -11620,6 +11743,16 @@ typedef struct {
     A_UINT8 KCK[GTK_OFFLOAD_KCK_BYTES]; /* key confirmation key */
     A_UINT8 replay_counter[GTK_REPLAY_COUNTER_BYTES]; /* replay counter for re-key */
 } WMI_GTK_OFFLOAD_CMD_fixed_param;
+
+typedef struct {
+    A_UINT32 tlv_header; /** TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_gtk_offload_extended_tlv_param */
+    A_UINT32 vdev_id; /** unique id identifying the VDEV */
+    A_UINT32 flags; /* control flags, GTK offload command use high byte  */
+    A_UINT32 kek_len;
+    A_UINT8  KEK[GTK_OFFLOAD_KEK_EXTENDED_BYTES]; /* key encryption key */
+    A_UINT8  KCK[GTK_OFFLOAD_KCK_BYTES]; /* key confirmation key */
+    A_UINT8  replay_counter[GTK_REPLAY_COUNTER_BYTES]; /* replay counter for re-key */
+} wmi_gtk_offload_fils_tlv_param;
 
 typedef struct {
     A_UINT32 tlv_header; /** TLV tag and len; tag equals WMITLV_TAG_STRUC_WMI_PMF_OFFLOAD_SET_SA_QUERY_CMD_fixed_param */
