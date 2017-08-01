@@ -1061,11 +1061,7 @@ static ssize_t power_mode_store(struct device *dev,
 
 static DEVICE_ATTR_RW(power_mode);
 
-
-
-static ssize_t mipi_int_show(struct device *dev,
-			     struct device_attribute *attr,
-			     char *buf)
+static int mnh_sm_read_mipi_interrupts(void)
 {
 	int i, int_event = 0;
 	struct mipi_device_irq_st dev_ints;
@@ -1089,7 +1085,16 @@ static ssize_t mipi_int_show(struct device *dev,
 		if (host_ints.main)
 			int_event = 1;
 	}
-	return scnprintf(buf, MAX_STR_COPY, "%d\n", int_event);
+
+	return int_event;
+}
+
+static ssize_t mipi_int_show(struct device *dev,
+			     struct device_attribute *attr,
+			     char *buf)
+{
+	return scnprintf(buf, MAX_STR_COPY, "%d\n",
+			 mnh_sm_read_mipi_interrupts());
 }
 
 static DEVICE_ATTR_RO(mipi_int);
@@ -1401,8 +1406,6 @@ static int mnh_sm_set_state_locked(int state)
 			mnh_ion_destroy_buffer(mnh_sm_dev->ion[FW_PART_SEC]);
 		}
 
-		mnh_mipi_suspend(mnh_sm_dev->dev);
-
 		ret = mnh_sm_poweroff();
 
 		disable_irq(mnh_sm_dev->ready_irq);
@@ -1465,7 +1468,6 @@ static int mnh_sm_set_state_locked(int state)
 		if (state == MNH_STATE_ACTIVE) {
 			mnh_sm_dev->powered = false;
 			reinit_completion(&mnh_sm_dev->powered_complete);
-			mnh_mipi_suspend(mnh_sm_dev->dev);
 			mnh_sm_poweroff();
 			disable_irq(mnh_sm_dev->ready_irq);
 			mnh_sm_dev->state = MNH_STATE_OFF;
@@ -1939,13 +1941,6 @@ static int mnh_sm_probe(struct platform_device *pdev)
 
 	/* initialize mnh-clk driver */
 	mnh_clk_init(dev, HWIO_SCU_BASE_ADDR);
-
-	/* initialize mnh-mipi */
-	error = mnh_mipi_init(dev);
-	if (error) {
-		dev_err(dev, "failed to initialize mipi (%d)\n", error);
-		goto fail_probe_0;
-	}
 
 	mnh_sm_dev->initialized = true;
 	dev_info(dev, "MNH SM initialized successfully\n");
