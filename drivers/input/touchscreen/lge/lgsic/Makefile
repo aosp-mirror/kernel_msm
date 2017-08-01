@@ -13,3 +13,7 @@ sw49408-objs				  += touch_sw49408.o \
 
 obj-$(CONFIG_LGE_TOUCH_LGSIC_SW49408_PRD) += touch_sw49408_prd.o
 #obj-$(CONFIG_LGE_TOUCH_LGSIC_SW49408)    += touch_filter.o
+
+#TODO: remove me b/62058353
+subdir-ccflags-y += \
+	-Wno-duplicate-decl-specifier

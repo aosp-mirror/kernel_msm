@@ -106,6 +106,8 @@ obj-$(CONFIG_QCOM_SMCINVOKE) += smcinvoke.o
 obj-$(CONFIG_QCOM_EARLY_RANDOM)	+= early_random.o
 obj-$(CONFIG_QCOM_CX_IPEAK) += cx_ipeak.o
 
-# TODO: remove me b/62057517
+# TODO: remove me b/62058353
 subdir-ccflags-y += \
-	-Wno-ignored-attributes
+	-Wno-ignored-attributes \
+	-Wno-gcc-compat \
+	-Wno-enum-conversion
