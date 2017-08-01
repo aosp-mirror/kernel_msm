@@ -3504,6 +3504,31 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 		}
 	}
 
+	if (pinfo->err_detect_enabled &&
+		gpio_is_valid(ctrl_pdata->disp_err_detect_gpio)) {
+		rc =  devm_gpio_request_one(&pdev->dev, ctrl_pdata->disp_err_detect_gpio,
+				GPIOF_DIR_IN, "disp_err_detect_gpio");
+		if (rc) {
+			pr_err("unable to request ERR_DETECT gpio [%d]\n",
+				ctrl_pdata->disp_err_detect_gpio);
+			goto error_shadow_clk_deinit;
+		}
+		INIT_DELAYED_WORK(&ctrl_pdata->err_int_work, disp_err_recovery_work);
+		ctrl_pdata->rdy_err_detect = false;
+
+		irq_set_status_flags(gpio_to_irq(ctrl_pdata->disp_err_detect_gpio),
+			IRQ_DISABLE_UNLAZY);
+		rc = devm_request_threaded_irq(&pdev->dev,
+				gpio_to_irq(ctrl_pdata->disp_err_detect_gpio), NULL,
+				disp_err_detect_handler, IRQF_TRIGGER_RISING | IRQF_ONESHOT,
+				"disp_err_detect_irq", ctrl_pdata);
+		if (rc) {
+			pr_err("Failed to request disp ERR_DETECT irq : %d\n", rc);
+			goto error_shadow_clk_deinit;
+		}
+		pr_info("request disp ERR_DETECT irq\n");
+	}
+
 	rc = mdss_dsi_get_bridge_chip_params(pinfo, ctrl_pdata, pdev);
 	if (rc) {
 		pr_err("%s: Failed to get bridge params\n", __func__);
@@ -4345,6 +4370,13 @@ static int mdss_dsi_parse_gpio_params(struct platform_device *ctrl_pdev,
 
 	if (!gpio_is_valid(ctrl_pdata->disp_err_fg_gpio))
 		pr_info("%s:%d: ERR_FG gpio not specified\n",
+			__func__, __LINE__);
+
+	ctrl_pdata->disp_err_detect_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
+		"qcom,platform-error-detect-gpio", 0);
+
+	if (!gpio_is_valid(ctrl_pdata->disp_err_detect_gpio))
+		pr_info("%s:%d: err detect gpio not specified\n",
 			__func__, __LINE__);
 
 	ctrl_pdata->bklt_en_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,

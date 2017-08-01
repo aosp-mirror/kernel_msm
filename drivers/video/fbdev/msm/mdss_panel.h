@@ -932,6 +932,8 @@ struct mdss_panel_info {
 
 	bool err_flag_enabled;
 
+	u32 err_detect_enabled;
+
 	/* esc clk recommended for the panel */
 	u32 esc_clk_rate_hz;
 };

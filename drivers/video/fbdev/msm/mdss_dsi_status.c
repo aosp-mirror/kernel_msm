@@ -32,6 +32,7 @@
 #include "mdss_panel.h"
 #include "mdss_mdp.h"
 
+#define DISP_ERR_RECOVERY_MS 50
 #define STATUS_CHECK_INTERVAL_MS 3000
 #define STATUS_CHECK_INTERVAL_MIN_MS 50
 #define DSI_STATUS_CHECK_INIT -1
@@ -173,6 +174,61 @@ irqreturn_t err_fg_handler(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+void disp_read_err_register(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
+{
+	struct dcs_cmd_req cmdreq;
+	char rx_buf[1] = {0x0};
+	char err_read_dcs_cmd[2] = {0x9F, 0x00}; /* DTYPE_DCS_READ */
+	struct dsi_cmd_desc err_read_dsi_cmd_desc = {
+		{DTYPE_DCS_READ, 1, 0, 1, 5, sizeof(err_read_dcs_cmd)},
+		err_read_dcs_cmd
+	};
+
+	memset(&cmdreq, 0, sizeof(cmdreq));
+	cmdreq.cmds = &err_read_dsi_cmd_desc;
+	cmdreq.cmds_cnt = 1;
+	cmdreq.flags = CMD_REQ_RX | CMD_REQ_COMMIT | CMD_REQ_HS_MODE;
+	cmdreq.rlen = 1;
+	cmdreq.cb = NULL;
+	cmdreq.rbuf = rx_buf;
+
+	mdss_dsi_cmdlist_put(ctrl_pdata, &cmdreq);
+	pr_info("%s: Reg[0x%x]=0x%x\n", __func__, err_read_dcs_cmd[0], rx_buf[0]);
+}
+
+void disp_err_recovery_work(struct work_struct *work)
+{
+	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
+	struct delayed_work *dw = to_delayed_work(work);
+	struct mdss_panel_info *pinfo;
+
+	ctrl_pdata = container_of(dw, struct mdss_dsi_ctrl_pdata, err_int_work);
+	if (!ctrl_pdata) {
+		pr_err("%s: invalid ctrl data\n", __func__);
+		return;
+	}
+
+	pinfo = &ctrl_pdata->panel_data.panel_info;
+
+	if (pinfo->panel_power_state !=  MDSS_PANEL_POWER_ON) {
+		pr_err("%s: SKIP panel reset\n", __func__);
+		return;
+	}
+	disp_read_err_register(ctrl_pdata);
+	mdss_fb_report_panel_dead(pstatus_data->mfd);
+}
+
+irqreturn_t disp_err_detect_handler(int irq, void *data)
+{
+	struct mdss_dsi_ctrl_pdata *pdata = (struct mdss_dsi_ctrl_pdata *)data;
+
+	pr_info("%s: Handle disp ERR_DETECT\n", __func__);
+	if (pdata->rdy_err_detect)
+		schedule_delayed_work(&pdata->err_int_work,
+			msecs_to_jiffies(DISP_ERR_RECOVERY_MS));
+	return IRQ_HANDLED;
+}
+
 /*
  * disable_esd_thread() - Cancels work item for the esd check.
  */
@@ -222,6 +278,10 @@ static int fb_event_callback(struct notifier_block *self,
 	}
 
 	pinfo = &ctrl_pdata->panel_data.panel_info;
+	if (pinfo->err_detect_enabled) {
+		pdata->mfd = evdata->info->par;
+		ctrl_pdata->rdy_err_detect = true;
+	}
 
 	if ((!(pinfo->esd_check_enabled) &&
 			dsi_status_disable) ||

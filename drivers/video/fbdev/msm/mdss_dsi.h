@@ -632,6 +632,10 @@ struct mdss_dsi_ctrl_pdata {
 	int disp_err_fg_gpio;
 	struct delayed_work err_fg_handler;
 
+	int disp_err_detect_gpio;
+	struct delayed_work err_int_work;
+	bool rdy_err_detect;
+
 	/* alpm brightness setting */
 	struct dsi_panel_cmds alpm_mode_cmds[ALPM_MODE_MAX];
 	enum alpm_mode_type alpm_mode;
@@ -690,6 +694,8 @@ int mdss_dsi_wait_for_lane_idle(struct mdss_dsi_ctrl_pdata *ctrl);
 irqreturn_t mdss_dsi_isr(int irq, void *ptr);
 irqreturn_t hw_vsync_handler(int irq, void *data);
 irqreturn_t err_fg_handler(int irq, void *data);
+irqreturn_t disp_err_detect_handler(int irq, void *data);
+void disp_err_recovery_work(struct work_struct *work);
 void disable_esd_thread(void);
 void mdss_dsi_irq_handler_config(struct mdss_dsi_ctrl_pdata *ctrl_pdata);
 
