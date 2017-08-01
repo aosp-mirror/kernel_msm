@@ -39,9 +39,7 @@
     /*
      *  Frame buffer device initialization and setup routines
      */
-static struct fb_event s_fb_event;
-static struct delayed_work fb_blank_work;
-#define FB_EVENT_BLANK_WAIT_MS	2
+
 #define FBPIXMAPSIZE	(1024 * 8)
 
 static DEFINE_MUTEX(registration_lock);
@@ -1054,36 +1052,32 @@ fb_set_var(struct fb_info *info, struct fb_var_screeninfo *var)
 }
 EXPORT_SYMBOL(fb_set_var);
 
-static void fb_notifier_blank_work(struct work_struct *work)
-{
-	fb_notifier_call_chain(FB_EVENT_BLANK, &s_fb_event);
-}
-
 int
 fb_blank(struct fb_info *info, int blank)
 {	
+	struct fb_event event;
 	int ret = -EINVAL, early_ret;
 
  	if (blank > FB_BLANK_POWERDOWN)
  		blank = FB_BLANK_POWERDOWN;
 
-	s_fb_event.info = info;
-	s_fb_event.data = &blank;
+	event.info = info;
+	event.data = &blank;
 
-	early_ret = fb_notifier_call_chain(FB_EARLY_EVENT_BLANK, &s_fb_event);
+	early_ret = fb_notifier_call_chain(FB_EARLY_EVENT_BLANK, &event);
 
 	if (info->fbops->fb_blank)
  		ret = info->fbops->fb_blank(blank, info);
 
 	if (!ret)
-		schedule_delayed_work(&fb_blank_work, msecs_to_jiffies(FB_EVENT_BLANK_WAIT_MS));
+		fb_notifier_call_chain(FB_EVENT_BLANK, &event);
 	else {
 		/*
 		 * if fb_blank is failed then revert effects of
 		 * the early blank event.
 		 */
 		if (!early_ret)
-			fb_notifier_call_chain(FB_R_EARLY_EVENT_BLANK, &s_fb_event);
+			fb_notifier_call_chain(FB_R_EARLY_EVENT_BLANK, &event);
 	}
 
  	return ret;
@@ -1865,7 +1859,6 @@ fbmem_init(void)
 		printk(KERN_WARNING "Unable to create fb class; errno = %ld\n", PTR_ERR(fb_class));
 		fb_class = NULL;
 	}
-	INIT_DELAYED_WORK(&fb_blank_work,fb_notifier_blank_work);
 	return 0;
 }
 
