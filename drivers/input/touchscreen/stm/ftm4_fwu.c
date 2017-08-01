@@ -901,6 +901,7 @@ void fts_fw_init(struct fts_ts_info *info)
 
 static int fts_fw_check(struct fts_ts_info *info)
 {
+	/* This function must be called with interrupts/irqs disabled */
 	int retval = 0;
 
 	retval = fts_systemreset(info);
@@ -912,14 +913,12 @@ static int fts_fw_check(struct fts_ts_info *info)
 		return retval;
 
 	retval = fts_read_chip_id(info);
-	if (retval < 0)
-		return retval;
-
 	return retval;
 }
 
 int fts_fw_update(struct fts_ts_info *info)
 {
+	/* This function must be called with interrupts/irqs disabled */
 	const struct firmware *fw_entry = NULL;
 	unsigned char *fw_data = NULL;
 	char fw_path[FTS_MAX_FW_PATH];
@@ -1038,6 +1037,7 @@ EXPORT_SYMBOL(fts_fw_update);
 int fts_fw_verify_update(struct fts_ts_info *info)
 {
 	int retry = 0;
+	int retval = -EIO;
 
 	if (info->fts_power_state != FTS_POWER_STATE_ACTIVE) {
 		tsp_debug_err(info->dev,
@@ -1045,16 +1045,20 @@ int fts_fw_verify_update(struct fts_ts_info *info)
 		return -EPERM;
 	}
 
+	info->fts_interrupt_set(info, INT_DISABLE);
 	info->fts_irq_enable(info, false);
+
 	while (retry++ < FTS_FW_UPDATE_RETRY) {
 		tsp_debug_info(info->dev,
 			"[fw_update] try:%d\n", retry);
 		if (0 == fts_fw_update(info)) {
-			info->fts_irq_enable(info, true);
-			return 0;
+			retval = 0;
+			break;
 		}
 	}
+
 	info->fts_irq_enable(info, true);
-	return -EIO;
+	info->fts_interrupt_set(info, INT_ENABLE);
+	return retval;
 }
 EXPORT_SYMBOL(fts_fw_verify_update);

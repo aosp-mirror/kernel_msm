@@ -364,6 +364,7 @@ static int fts_product_info_read(struct fts_ts_info *info)
 	memset(&info->prd_info, 0, sizeof(struct fts_prd_info));
 
 	info->fts_interrupt_set(info, INT_DISABLE);
+	info->fts_irq_enable(info, false);
 	info->fts_command(info, SENSEOFF);
 
 	fts_command(info,LOCKDOWN_READ);
@@ -395,6 +396,8 @@ static int fts_product_info_read(struct fts_ts_info *info)
 						memcpy(&info->prd_info.date[0], &prd_info[7], 6);
 
 						info->fts_command(info, SENSEON);
+						info->fts_irq_enable(info,
+								     true);
 						info->fts_interrupt_set(info, INT_ENABLE);
 						return 0;
 					}
@@ -420,6 +423,7 @@ static int fts_product_info_read(struct fts_ts_info *info)
 	tsp_debug_err(info->dev, "[fts_lockdown_read] Error - Time over, retry =%d", retry);
 error:
 	info->fts_command(info, SENSEON);
+	info->fts_irq_enable(info, true);
 	info->fts_interrupt_set(info, INT_ENABLE);
 
 	return -EINVAL;
