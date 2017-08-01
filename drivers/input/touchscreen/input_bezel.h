@@ -22,10 +22,10 @@
 #include <linux/timer.h>
 #include <linux/mod_devicetable.h>
 
-#define BEZEL_INSET_POS 20
+#define BEZEL_INSET_POS 60
 /* Approximated to distance for angular movement of 3 degree :
    2 * pi * 227 * (3/360): rounded up; square of 11.88... */
-#define ANGULAR_DISTANCE_THRESHOLD  141
+#define ANGULAR_DISTANCE_THRESHOLD  16
 
 /* Approximated to distance for angular movement of 3 degree :
    2 * pi * 227 * (10/360): rounded up; square of 39.61... */
