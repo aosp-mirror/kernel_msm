@@ -206,6 +206,9 @@
 #define FTS_SIDETOUCH_EVENT_LONG_PRESS		0xBB
 #define FTS_EVENT_REBOOT_BY_ESD			0xED
 
+#define FTS_EVENT_VR_MODE_ENABLED		0xE1
+#define FTS_EVENT_VR_MODE_DISABLED		0xE2
+
 #define FTS_ENABLE		1
 #define FTS_DISABLE		0
 
@@ -382,6 +385,7 @@ struct fts_ts_info {
 	int touch_count;
 	struct fts_finger finger[FINGER_MAX];
 	bool palm_pressed;
+	bool vr_mode;
 
 	int touch_mode;
 	int retry_hover_enable_after_wakeup;

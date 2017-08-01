@@ -133,6 +133,10 @@ static ssize_t store_check_fw(struct device *dev,
 	struct device_attribute *devattr, const char *buf, size_t count);
 static ssize_t show_version_info(struct device *dev,
 	struct device_attribute *devattr, char *buf);
+static ssize_t show_vrmode(struct device *dev,
+	struct device_attribute *devattr, char *buf);
+static ssize_t store_vrmode(struct device *dev,
+	struct device_attribute *devattr, const char *buf, size_t count);
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
 static void tui_mode_cmd(struct fts_ts_info *info);
@@ -176,6 +180,8 @@ static DEVICE_ATTR(cmd_list, S_IRUGO, cmd_list_show, NULL);
 static DEVICE_ATTR(fw_upgrade, S_IWUSR | S_IWGRP, NULL, store_upgrade);
 static DEVICE_ATTR(check_fw, S_IWUSR | S_IWGRP, NULL, store_check_fw);
 static DEVICE_ATTR(version, S_IRUGO, show_version_info, NULL);
+static DEVICE_ATTR(vrmode, S_IRUSR | S_IRGRP | S_IWUSR | S_IWGRP,
+		   show_vrmode, store_vrmode);
 
 static struct attribute *touch_pdc_attributes[] = {
 	&dev_attr_cmd.attr,
@@ -185,6 +191,7 @@ static struct attribute *touch_pdc_attributes[] = {
 	&dev_attr_fw_upgrade.attr,
 	&dev_attr_check_fw.attr,
 	&dev_attr_version.attr,
+	&dev_attr_vrmode.attr,
 	NULL,
 };
 
@@ -272,6 +279,50 @@ static ssize_t show_version_info(struct device *dev,
 	offset += snprintf(buf + offset, PAGE_SIZE - offset, "%s\n", str);
 
 	return offset;
+}
+
+static ssize_t show_vrmode(struct device *dev,
+	struct device_attribute *devattr, char *buf)
+{
+	struct fts_ts_info *info = dev_get_drvdata(dev);
+	int count = 0;
+
+	mutex_lock(&info->device_mutex);
+	count = scnprintf(buf, PAGE_SIZE, "%d\n", info->vr_mode);
+	mutex_unlock(&info->device_mutex);
+
+	return count;
+}
+
+static ssize_t store_vrmode(struct device *dev,
+	struct device_attribute *devattr, const char *buf, size_t count)
+{
+	struct fts_ts_info *info = dev_get_drvdata(dev);
+	unsigned char reg_data[2];
+	int enable;
+	int ret = 0;
+
+	if (kstrtoint(buf, 10, &enable) || (enable != 0 && enable != 1)) {
+		tsp_debug_info(&info->client->dev, "%s: Invalid input",
+				__func__);
+		return -EINVAL;
+	}
+
+	reg_data[0] = enable ? FTS_CMS_ENABLE_FEATURE : FTS_CMS_DISABLE_FEATURE;
+	reg_data[1] = 0x08; /* VR Mode */
+
+	mutex_lock(&info->device_mutex);
+
+	ret = info->fts_write_reg(info, reg_data, 2);
+	if (ret < 0) {
+		tsp_debug_info(&info->client->dev,
+				"%s: VR mode transition failed.",
+				__func__);
+	}
+
+	mutex_unlock(&info->device_mutex);
+
+	return count;
 }
 
 static int fts_check_index(void *device_data)

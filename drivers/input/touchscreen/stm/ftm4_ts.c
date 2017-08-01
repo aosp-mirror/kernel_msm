@@ -1056,6 +1056,14 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 						"[FTS] Received ESD detected Event need to Reset\n");
 				schedule_delayed_work(&info->reset_work,
 					msecs_to_jiffies(10));
+			} else if (status == FTS_EVENT_VR_MODE_ENABLED) {
+				tsp_debug_info(&info->client->dev,
+						"[FTS] Received VR Mode Enabled Event\n");
+				info->vr_mode = 1;
+			} else if (status == FTS_EVENT_VR_MODE_DISABLED) {
+				tsp_debug_info(&info->client->dev,
+						"[FTS] Received VR Mode Disabled Event\n");
+				info->vr_mode = 0;
 			} else {
 				fts_debug_msg_event_handler(info,
 						  &data[EventNum *
