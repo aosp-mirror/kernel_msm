@@ -137,6 +137,10 @@ static ssize_t show_vrmode(struct device *dev,
 	struct device_attribute *devattr, char *buf);
 static ssize_t store_vrmode(struct device *dev,
 	struct device_attribute *devattr, const char *buf, size_t count);
+static ssize_t store_autotune(struct device *dev,
+	struct device_attribute *devattr, const char *buf, size_t count);
+static ssize_t show_autotune(struct device *dev,
+	struct device_attribute *devattr, char *buf);
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
 static void tui_mode_cmd(struct fts_ts_info *info);
@@ -182,6 +186,8 @@ static DEVICE_ATTR(check_fw, S_IWUSR | S_IWGRP, NULL, store_check_fw);
 static DEVICE_ATTR(version, S_IRUGO, show_version_info, NULL);
 static DEVICE_ATTR(vrmode, S_IRUSR | S_IRGRP | S_IWUSR | S_IWGRP,
 		   show_vrmode, store_vrmode);
+static DEVICE_ATTR(autotune, S_IRUGO | S_IWUSR | S_IWGRP,
+		   show_autotune, store_autotune);
 
 static struct attribute *touch_pdc_attributes[] = {
 	&dev_attr_cmd.attr,
@@ -192,6 +198,7 @@ static struct attribute *touch_pdc_attributes[] = {
 	&dev_attr_check_fw.attr,
 	&dev_attr_version.attr,
 	&dev_attr_vrmode.attr,
+	&dev_attr_autotune.attr,
 	NULL,
 };
 
@@ -323,6 +330,41 @@ static ssize_t store_vrmode(struct device *dev,
 	mutex_unlock(&info->device_mutex);
 
 	return count;
+}
+
+static ssize_t store_autotune(struct device *dev,
+			      struct device_attribute *devattr,
+			      const char *buf, size_t count)
+{
+	struct fts_ts_info *info = dev_get_drvdata(dev);
+	int res = 0;
+
+	if (kstrtoint(buf, 0, &res) < 0 || !res) {
+		tsp_debug_err(info->dev, "%s: parameter error\n", __func__);
+		return -EINVAL;
+	}
+
+	if (info->fts_power_state != FTS_POWER_STATE_ACTIVE) {
+		tsp_debug_err(info->dev, "%s: should execute this in active\n",
+				__func__);
+		return -EBUSY;
+	};
+
+	fts_execute_force_autotune(info);
+	get_pure_autotune_status(info);
+
+	return count;
+}
+
+static ssize_t show_autotune(struct device *dev,
+			     struct device_attribute *devattr, char *buf)
+{
+	struct fts_ts_info *info = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE,
+			"pure_autotune     : %d\n"
+			"pure_autotune_info: %d\n",
+			info->pure_autotune, info->pure_autotune_info);
 }
 
 static int fts_check_index(void *device_data)

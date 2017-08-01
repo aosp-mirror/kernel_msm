@@ -342,6 +342,8 @@ struct fts_ts_info {
 	struct work_struct work;
 	struct power_supply *ts_psy;
 	struct power_supply *usb_psy;
+	bool pure_autotune;
+	u8 pure_autotune_info;
 
 	unsigned int switch_gpio;
 	int irq;
@@ -570,6 +572,8 @@ int fts_fw_wait_for_event(struct fts_ts_info *info, unsigned char eid1, unsigned
 int fts_systemreset(struct fts_ts_info *info);
 int fts_wait_for_ready(struct fts_ts_info *info);
 int fts_read_chip_id(struct fts_ts_info *info);
+void fts_execute_force_autotune(struct fts_ts_info *info);
+int get_pure_autotune_status(struct fts_ts_info *info);
 
 #ifdef FEATURE_FTS_PRODUCTION_CODE
 int fts_fw_wait_for_specific_event(struct fts_ts_info *info,

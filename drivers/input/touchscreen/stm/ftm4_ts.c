@@ -459,29 +459,33 @@ int fts_get_version_info(struct fts_ts_info *info)
 
 	fts_get_afe_info(info);
 	fts_product_info_read(info);
+	get_pure_autotune_status(info);
 
 	tsp_debug_info(&info->client->dev,
-			"IC Firmware Version : 0x%04X [%s] "
-			"IC Config Version : 0x%04X "
-			"IC Main Version : 0x%04X "
-			"AFE Version : 0x%02X\n",
+			"IC Firmware Version: 0x%04X [%s] "
+			"IC Config Version: 0x%04X "
+			"IC Main Version: 0x%04X "
+			"AFE Version: 0x%02X\n",
 			info->fw_version_of_ic, str,
 			info->config_version_of_ic,
 			info->fw_main_version_of_ic,
 			info->afe_ver);
 	tsp_debug_info(&info->client->dev,
-			"product id : [%02x %02x %02x]\n",
+			"product id: [%02x %02x %02x]\n",
 			info->prd_info.product_id[0],
 			info->prd_info.product_id[1],
 			info->prd_info.product_id[2]);
 	tsp_debug_info(&info->client->dev,
-			"Chip reveion : %d, fpc : %d, t_sensor: %d site : %d , inspector_no : %d\n",
-			info->prd_info.chip_rev, info->prd_info.fpc_rev, info->prd_info.t_sensor_rev,
-			info->prd_info.site, info->prd_info.inspector_no);
+			"Chip revision: %d, fpc: %d, t_sensor: %d, site: %d, "
+			"inspector_no: %d\n",
+			info->prd_info.chip_rev, info->prd_info.fpc_rev,
+			info->prd_info.t_sensor_rev, info->prd_info.site,
+			info->prd_info.inspector_no);
 	tsp_debug_info(&info->client->dev,
 			"date : %02d.%02d.%02d %02d:%02d:%02d\n",
-			info->prd_info.date[0], info->prd_info.date[1], info->prd_info.date[2],
-			info->prd_info.date[3], info->prd_info.date[4], info->prd_info.date[5]);
+			info->prd_info.date[0], info->prd_info.date[1],
+			info->prd_info.date[2], info->prd_info.date[3],
+			info->prd_info.date[4], info->prd_info.date[5]);
 
 error:
 	return rc;

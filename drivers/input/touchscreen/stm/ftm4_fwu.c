@@ -54,38 +54,58 @@ struct fts64_header {
 	unsigned int checksum;
 };
 
-bool get_pure_autotune_status(struct fts_ts_info *info)
+int get_pure_autotune_status(struct fts_ts_info *info)
 {
-	int rc = 0;
-	unsigned char addrs[3];
-	unsigned char buf[5];
-	bool ret = false;
+	int ret = 0;
+	unsigned char addrs[3] = { 0xD0, 0x00, 0x4E };
+	unsigned char buf[3];
 	int doffset = 1;
 
 	if (info->digital_rev == FTS_DIGITAL_REV_1)
 		doffset = 0;
 
-	addrs[0] = 0xd0;
-	addrs[1] = 0x00;
-	addrs[2] = 0x4E;
 
-	rc = info->fts_read_reg(info, addrs, 3, buf, 4);
-	if (rc < 0) {
+	ret = info->fts_read_reg(info, addrs, sizeof(addrs), buf, sizeof(buf));
+	if (ret < 0) {
 		tsp_debug_err(info->dev,
-			"%s: PureAutotune Information Read Fail!!"
-			"[Data : %2X%2X]\n",
+			"%s: failed to read the PureAutotune register!"
+			" [Data : %2X%2X]\n",
 			__func__, buf[0 + doffset],
 			buf[1 + doffset]);
-	} else {
-		if ((buf[0 + doffset] == 0xA5) && (buf[1 + doffset] == 0x96))
-			ret = 1;
-		tsp_debug_info(info->dev,
-			"%s: PureAutotune Information !! "
-			"[Data : %2X%2X]\n", __func__,
+		return ret;
+	}
+
+	tsp_debug_dbg(info->dev,
+			"%s: PureAutotune Status!"
+			" [Data : %2X%2X]\n", __func__,
 			buf[0 + doffset],
 			buf[1 + doffset]);
+
+	if ((buf[0 + doffset] == 0xA5) && (buf[1 + doffset] == 0x96))
+		info->pure_autotune = true;
+	else
+		info->pure_autotune = false;
+
+	addrs[2] = 0x5E;
+
+	ret = info->fts_read_reg(info, addrs, sizeof(addrs), buf, sizeof(buf));
+	if (ret < 0) {
+		tsp_debug_err(info->dev,
+			"%s: PureAutotune Information Read Fail!"
+			" [Data : %2X]\n",
+			__func__, buf[0 + doffset]);
+		return ret;
 	}
-	return ret;
+
+	info->pure_autotune_info = buf[0 + doffset];
+
+	tsp_debug_info(info->dev,
+			"%s: PureAutotune : %s\n",
+			__func__, info->pure_autotune
+			? ((info->pure_autotune_info == 1) ? "1 (E)" : "0 (D)")
+			: "0");
+
+	return 0;
 }
 EXPORT_SYMBOL(get_pure_autotune_status);
 
@@ -255,7 +275,6 @@ static void ftm4_save_autotune(struct device *dev)
 
 void fts_execute_autotune(struct fts_ts_info *info)
 {
-	bool NoNeedAutoTune = false; /* default for factory */
 	int ret = 0;
 	unsigned char regData[2]; /* {0xC1, 0x0E}; */
 	bool bFinalAFE = false;
@@ -263,18 +282,23 @@ void fts_execute_autotune(struct fts_ts_info *info)
 	bFinalAFE = get_afe_status(info);
 
 	/* Check flag and decide cx_tune */
-	NoNeedAutoTune = get_pure_autotune_status(info);
+	ret = get_pure_autotune_status(info);
+	if (ret < 0)
+		tsp_debug_err(info->dev,
+				"%s: Fail to read pure autotune status"
+				" (ret = %d)\n", __func__, ret);
 
 	tsp_debug_info(info->dev,
-		"%s: AFE(%d), NoNeedAutoTune(%d), o_afe_ver(%d), afe_ver(%d)\n",
-		__func__, bFinalAFE, NoNeedAutoTune, info->o_afe_ver, info->afe_ver);
+		"%s: AFE(%d), pure_autotune(%d), o_afe_ver(%d), afe_ver(%d)\n",
+		__func__, bFinalAFE, info->pure_autotune, info->o_afe_ver,
+		info->afe_ver);
 
-	if ((!NoNeedAutoTune) || (info->o_afe_ver < info->afe_ver)) {
+	if ((!info->pure_autotune) || (info->o_afe_ver < info->afe_ver)) {
 		tsp_debug_dbg(info->dev, "%s: autotune start\n", __func__);
 
 		ftm4_do_autotune(info->dev);
 
-		if (NoNeedAutoTune) {
+		if (info->pure_autotune) {
 			tsp_debug_info(info->dev,
 				"%s: AFE_status(%d) write ( C8 01 )\n",
 				__func__, bFinalAFE);
@@ -297,6 +321,54 @@ void fts_execute_autotune(struct fts_ts_info *info)
 		ftm4_save_autotune(info->dev);
 	}
 	tsp_debug_dbg(info->dev, "%s: autotune end\n", __func__);
+}
+
+void fts_execute_force_autotune(struct fts_ts_info *info)
+{
+	unsigned char regData[3];
+	int ret = 0;
+
+	tsp_debug_info(info->dev, "%s: autotune start\n", __func__);
+
+	info->fts_release_all_finger(info);
+	info->fts_interrupt_set(info, INT_DISABLE);
+	info->fts_irq_enable(info, false);
+
+	info->fts_systemreset(info);
+	fts_delay(20);
+	/* wait for ready event */
+	info->fts_wait_for_ready(info);
+
+	info->fts_command(info, FTS_CMD_TRIM_LOW_POWER_OSCILLATOR);
+	fts_delay(200);
+
+	ftm4_do_autotune(info->dev);
+
+	regData[0] = 0xC7;
+	regData[1] = 0x01;
+	regData[2] = 0x01;
+	ret = info->fts_write_reg(info, regData, 3);
+	if (ret < 0) {
+		tsp_debug_err(info->dev, "%s: Set PureAutotune failed\n",
+				__func__);
+	}
+
+	fts_fw_wait_for_event(info,
+		STATUS_EVENT_PURE_AUTOTUNE_FLAG_WRITE_FINISH, 0x00);
+
+	ftm4_save_autotune(info->dev);
+
+	info->fts_systemreset(info);
+	fts_delay(20);
+	info->fts_wait_for_ready(info);
+
+	info->fts_command(info, SENSEON);
+	fts_fw_wait_for_event(info, STATUS_EVENT_FORCE_CAL_DONE, 0x00);
+
+	info->fts_irq_enable(info, true);
+	info->fts_interrupt_set(info, INT_ENABLE);
+
+	tsp_debug_info(info->dev, "%s: autotune end\n", __func__);
 }
 
 #define FW_IMAGE_NAME_D2_TB_INTEG	"tsp_stm/stm_tb_integ.fw"
