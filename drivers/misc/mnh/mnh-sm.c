@@ -990,6 +990,21 @@ static ssize_t boot_args_store(struct device *dev,
 
 static DEVICE_ATTR_RW(boot_args);
 
+static ssize_t boot_trace_show(struct device *dev,
+				struct device_attribute *attr,
+				char *buf)
+{
+	int err;
+	uint32_t val;
+
+	err = mnh_config_read(MNH_BOOT_TRACE, sizeof(val), &val);
+	if (!err)
+		return scnprintf(buf, MAX_STR_COPY, "%x\n", val);
+	return scnprintf(buf, MAX_STR_COPY, "Unavailable\n");
+}
+
+static DEVICE_ATTR_RO(boot_trace);
+
 static ssize_t enable_uart_show(struct device *dev,
 				struct device_attribute *attr,
 				char *buf)
@@ -1128,6 +1143,7 @@ static struct attribute *mnh_sm_attrs[] = {
 	&dev_attr_power_mode.attr,
 	&dev_attr_mipi_int.attr,
 	&dev_attr_spi_boot_mode.attr,
+	&dev_attr_boot_trace.attr,
 	NULL
 };
 ATTRIBUTE_GROUPS(mnh_sm);

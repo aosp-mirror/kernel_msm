@@ -82,6 +82,7 @@
 #define HWIO_SCU_HW_STRAP_BOOT_MODE_FLDMASK      (0x01)
 #define HWIO_SCU_HW_STRAP_BOOT_MODE_FLDSHFT      (0)
 
+/* General Purpose Sticky */
 #define HWIO_SCU_GPS_REGNUM 4
 #define HWIO_SCU_GPS_REGOFF 0x10
 #define HWIO_SCU_GPS_ADDR(bAddr, regX) \
@@ -90,6 +91,14 @@
 #define HWIO_SCU_GPS_GPS_FLDMASK (0xffffffff)
 #define HWIO_SCU_GPS_GPS_FLDSHFT (0)
 
+/* General Purpose Scratchpad */
+/*
+ * Allocation:
+ * 0 = pcie init done (from AP)
+ * 1 = Power mode register (from Easel)
+ * 2 = boot args mask (from AP)
+ * 3 = debug boot trace low (from Easel)
+*/
 #define HWIO_SCU_GP_REGNUM 4
 #define HWIO_SCU_GP_REGOFF 0x20
 #define HWIO_SCU_GP_ADDR(bAddr, regX) \
@@ -97,6 +106,8 @@
 	(bAddr + HWIO_SCU_GP_REGOFF + (regX * 4)) : 0)
 #define HWIO_SCU_GP_GP_FLDMASK (0xffffffff)
 #define HWIO_SCU_GP_GP_FLDSHFT (0)
+
+#define MNH_BOOT_TRACE  (HWIO_SCU_GP_ADDR(HWIO_SCU_BASE_ADDR, 3))
 
 #define HWIO_SCU_GP_POWER_MODE_REGOFF 0x24
 #define HWIO_SCU_GP_POWER_MODE_ADDR(bAddr, regX) \
