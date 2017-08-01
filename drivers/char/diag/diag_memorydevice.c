@@ -214,8 +214,10 @@ int diag_md_write(int id, unsigned char *buf, int len, int ctx)
 		wake_up_interruptible(&driver->wait_q);
 	}
 
-	if (!found)
+	if (!found) {
+		diag_ws_on_copy_fail(DIAG_WS_MUX);
 		return -EINVAL;
+	}
 
 	return 0;
 }
