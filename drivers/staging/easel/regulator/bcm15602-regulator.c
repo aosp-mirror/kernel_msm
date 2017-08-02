@@ -47,7 +47,7 @@
 #define BCM15602_SHUTDOWN_RESET_TIMEOUT msecs_to_jiffies(10000)
 
 /* defines the timeout in jiffies for ADC conversion completion */
-#define BCM15602_ADC_CONV_TIMEOUT  msecs_to_jiffies(25)
+#define BCM15602_ADC_CONV_TIMEOUT  msecs_to_jiffies(100)
 
 static int bcm15602_chip_init(struct bcm15602_chip *ddata);
 static int bcm15602_regulator_set_voltage(struct regulator_dev *rdev,
@@ -378,19 +378,22 @@ int bcm15602_read_adc_chan(struct bcm15602_chip *ddata,
 	if (test_and_set_bit(0, &ddata->adc_conv_busy))
 		return -EAGAIN;
 
+	/* clear adc conversion completion before starting conversion */
+	reinit_completion(&ddata->adc_conv_complete);
+
 	/* enable the ADC clock and write the channel number to trigger
 	 * the conversion */
 	bytes[0] = 0x1;
 	bytes[1] = BCM15602_ADC_OVSP_4 | chan_num;
 	bcm15602_write_bytes(ddata, BCM15602_REG_ADC_MAN_CTRL, bytes, 2);
+	dev_dbg(ddata->dev, "%s: started ADC converstion\n", __func__);
 
 	/* wait for completion signaled by interrupt */
-	reinit_completion(&ddata->adc_conv_complete);
 	timeout = wait_for_completion_timeout(&ddata->adc_conv_complete,
 					  BCM15602_ADC_CONV_TIMEOUT);
 	if (!timeout) {
 		ret = -ETIMEDOUT;
-		dev_err(ddata->dev, "ADC converstion timeout\n");
+		dev_err(ddata->dev, "%s: ADC converstion timeout\n", __func__);
 		goto finish;
 	}
 
@@ -558,7 +561,7 @@ static int bcm15602_handle_int(struct bcm15602_chip *ddata,
 {
 	struct device *dev = ddata->dev;
 
-	dev_dbg(dev, "Handling flag %d\n", flag_num);
+	dev_dbg(dev, "%s: flag %d\n", __func__, flag_num);
 
 	switch (flag_num) {
 	case BCM15602_INT_ASR_OVERI:
@@ -611,6 +614,7 @@ static int bcm15602_handle_int(struct bcm15602_chip *ddata,
 		break;
 
 	case BCM15602_INT_ADC_CONV_DONE:
+		dev_dbg(dev, "%s: completing adc conversion\n", __func__);
 		complete(&ddata->adc_conv_complete);
 		break;
 
@@ -660,9 +664,9 @@ static int bcm15602_check_int_flags(struct bcm15602_chip *ddata)
 	bcm15602_read_bytes(ddata, BCM15602_REG_INT_INTFLAG1, flags, 4);
 	bcm15602_read_bytes(ddata, BCM15602_REG_INT_INTFLAG1, flags_dup, 4);
 
-	dev_info(ddata->dev,
-		 "%s: [0] = 0x%02x, [1] = 0x%02x, [2] = 0x%02x, [3] = 0x%02x\n",
-		 __func__, flags[0], flags[1], flags[2], flags[3]);
+	dev_dbg(ddata->dev,
+		"%s: [0] = 0x%02x, [1] = 0x%02x, [2] = 0x%02x, [3] = 0x%02x\n",
+		__func__, flags[0], flags[1], flags[2], flags[3]);
 
 	/* iterate through each interrupt */
 	for (i = 0; i < 4; i++) {
