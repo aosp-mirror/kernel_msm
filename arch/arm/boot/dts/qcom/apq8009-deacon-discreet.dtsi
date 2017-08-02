@@ -41,7 +41,7 @@
 			ite,reset-gpio = <&msm_gpio 12 0x00>;
 			ite,irq-gpio = <&msm_gpio 13 0x2008>;
 			ite,panel-coords = <0 0 494 494>;
-			ite,display-coords = <20 20 474 474>;
+			ite,display-coords = <25 25 469 469>;
 			ite,reset-delay = <200>;
 			ite,num-fingers = <2>;
 			ite,wakeup;
