@@ -706,6 +706,8 @@ static int diag_cmd_set_msg_mask(unsigned char *src_buf, int src_len,
 				pr_err_ratelimited("diag: In %s, unable to allocate memory for msg mask ptr, mask_size: %d\n",
 						   __func__, mask_size);
 				mutex_unlock(&mask->lock);
+				mutex_unlock(&mask_info->lock);
+				mutex_unlock(&driver->msg_mask_lock);
 				return -ENOMEM;
 			}
 			mask->ptr = temp;
