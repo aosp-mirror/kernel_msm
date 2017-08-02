@@ -1121,8 +1121,8 @@ static int mdss_dsi_panel_low_power_config(struct mdss_panel_data *pdata,
 	if (pinfo->alpm_feature_enabled) {
 		enum alpm_mode_type mode;
 
-		/* if enabling LP but not going to ALPM mode, skip */
-		if (!enable || ctrl->alpm_mode != ALPM_MODE_OFF) {
+		/* only switch mode if saved mode is not off */
+		if (ctrl->alpm_mode != ALPM_MODE_OFF) {
 			mode = enable ? ctrl->alpm_mode : ALPM_MODE_OFF;
 			mdss_dsi_panel_set_alpm_mode(ctrl, mode, 0);
 		}
