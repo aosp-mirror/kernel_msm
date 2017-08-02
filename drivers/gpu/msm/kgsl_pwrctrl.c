@@ -2837,7 +2837,8 @@ int kgsl_pwrctrl_change_state(struct kgsl_device *device, int state)
 		status = _nap(device);
 		break;
 	case KGSL_STATE_SLUMBER:
-		status = _slumber(device);
+		/* Let's skip this state, for stability. */
+		/* status = _slumber(device); */
 		break;
 	case KGSL_STATE_SUSPEND:
 		status = _suspend(device);
