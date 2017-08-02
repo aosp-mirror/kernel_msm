@@ -14,6 +14,7 @@
 
 #include <linux/debugfs.h>
 #include <linux/device.h>
+#include <linux/delay.h>
 #include <linux/extcon.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -73,6 +74,7 @@ struct usbpd {
 	int logbuffer_head;
 	int logbuffer_tail;
 	u8 *logbuffer[LOG_BUFFER_ENTRIES];
+	bool in_pr_swap;
 };
 
 /*
@@ -1040,17 +1042,36 @@ static int tcpm_set_in_pr_swap(struct tcpc_dev *dev, bool pr_swap)
 	int ret;
 
 	mutex_lock(&pd->lock);
-	val.intval = pr_swap ? 1 : 0;
-	ret = power_supply_set_property(pd->usb_psy,
+	if (pd->in_pr_swap != pr_swap) {
+		if (!pr_swap) {
+			val.intval = POWER_SUPPLY_TYPEC_PR_DUAL;
+			ret = power_supply_set_property(pd->usb_psy,
+					POWER_SUPPLY_PROP_TYPEC_POWER_ROLE,
+					&val);
+			if (ret < 0) {
+				pd_engine_log(pd,
+				"unable to set POWER_ROLE to PR_DUAL, ret=%d",
+					ret);
+				goto unlock;
+			}
+			/* Required for the PMIC to recover */
+			pd_engine_log(pd, "sleeping for 20mec");
+			msleep(20);
+		}
+		val.intval = pr_swap ? 1 : 0;
+		ret = power_supply_set_property(pd->usb_psy,
 					POWER_SUPPLY_PROP_PR_SWAP,
 					&val);
-	if (ret < 0) {
-		pd_engine_log(pd, "unable to set PR_SWAP to %d, ret=%d", pr_swap ? 1 : 0, ret);
-		goto unlock;
+		if (ret < 0) {
+			pd_engine_log(pd,
+					"unable to set PR_SWAP to %d, ret=%d",
+					pr_swap ? 1 : 0, ret);
+			goto unlock;
+		}
+
+		pd->in_pr_swap = pr_swap;
+		pd_engine_log(pd, "PR_SWAP = %d", pr_swap ? 1 : 0);
 	}
-
-	pd_engine_log(pd, "PR_SWAP = %d", pr_swap ? 1 : 0);
-
 unlock:
 	mutex_unlock(&pd->lock);
 	return ret;
