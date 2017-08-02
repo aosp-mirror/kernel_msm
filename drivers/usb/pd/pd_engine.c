@@ -1288,7 +1288,7 @@ static void pd_phy_message_rx(struct usbpd *pd, enum pd_msg_type type,
 			      get_data_len(msg.header), len);
 		return;
 	}
-	if (len >= PD_MAX_PAYLOAD * 4) {
+	if (len > PD_MAX_PAYLOAD * 4) {
 		pd_engine_log(pd, "len %ld > PD_MAX_PAYLOAD", len);
 		return;
 	}
