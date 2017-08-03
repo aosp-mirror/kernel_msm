@@ -235,6 +235,10 @@ static void ipa_gsi_notify_cb(struct gsi_per_notify *notify);
 static void ipa3_post_init_wq(struct work_struct *work);
 static DECLARE_WORK(ipa3_post_init_work, ipa3_post_init_wq);
 
+static void ipa_dec_clients_disable_clks_on_wq(struct work_struct *work);
+static DECLARE_WORK(ipa_dec_clients_disable_clks_on_wq_work,
+	ipa_dec_clients_disable_clks_on_wq);
+
 static struct ipa3_plat_drv_res ipa3_res = {0, };
 struct msm_bus_scale_pdata *ipa3_bus_scale_table;
 
@@ -262,7 +266,9 @@ int ipa3_active_clients_log_print_buffer(char *buf, int size)
 	int cnt = 0;
 	int start_idx;
 	int end_idx;
+	unsigned long flags;
 
+	spin_lock_irqsave(&ipa3_ctx->ipa3_active_clients_logging.lock, flags);
 	start_idx = (ipa3_ctx->ipa3_active_clients_logging.log_tail + 1) %
 			IPA3_ACTIVE_CLIENTS_LOG_BUFFER_SIZE_LINES;
 	end_idx = ipa3_ctx->ipa3_active_clients_logging.log_head;
@@ -273,6 +279,8 @@ int ipa3_active_clients_log_print_buffer(char *buf, int size)
 				.log_buffer[i]);
 		cnt += nbytes;
 	}
+	spin_unlock_irqrestore(&ipa3_ctx->ipa3_active_clients_logging.lock,
+		flags);
 
 	return cnt;
 }
@@ -282,7 +290,9 @@ int ipa3_active_clients_log_print_table(char *buf, int size)
 	int i;
 	struct ipa3_active_client_htable_entry *iterator;
 	int cnt = 0;
+	unsigned long flags;
 
+	spin_lock_irqsave(&ipa3_ctx->ipa3_active_clients_logging.lock, flags);
 	cnt = scnprintf(buf, size, "\n---- Active Clients Table ----\n");
 	hash_for_each(ipa3_ctx->ipa3_active_clients_logging.htable, i,
 			iterator, list) {
@@ -314,7 +324,9 @@ int ipa3_active_clients_log_print_table(char *buf, int size)
 	}
 	cnt += scnprintf(buf + cnt, size - cnt,
 			"\nTotal active clients count: %d\n",
-			ipa3_ctx->ipa3_active_clients.cnt);
+			atomic_read(&ipa3_ctx->ipa3_active_clients.cnt));
+	spin_unlock_irqrestore(&ipa3_ctx->ipa3_active_clients_logging.lock,
+		flags);
 
 	return cnt;
 }
@@ -322,11 +334,11 @@ int ipa3_active_clients_log_print_table(char *buf, int size)
 static int ipa3_active_clients_panic_notifier(struct notifier_block *this,
 		unsigned long event, void *ptr)
 {
-	ipa3_active_clients_lock();
+	mutex_lock(&ipa3_ctx->ipa3_active_clients.mutex);
 	ipa3_active_clients_log_print_table(active_clients_table_buf,
 			IPA3_ACTIVE_CLIENTS_TABLE_BUF_SIZE);
 	IPAERR("%s", active_clients_table_buf);
-	ipa3_active_clients_unlock();
+	mutex_unlock(&ipa3_ctx->ipa3_active_clients.mutex);
 
 	return NOTIFY_DONE;
 }
@@ -364,6 +376,7 @@ static int ipa3_active_clients_log_init(void)
 {
 	int i;
 
+	spin_lock_init(&ipa3_ctx->ipa3_active_clients_logging.lock);
 	ipa3_ctx->ipa3_active_clients_logging.log_buffer[0] = kzalloc(
 			IPA3_ACTIVE_CLIENTS_LOG_BUFFER_SIZE_LINES *
 			sizeof(char[IPA3_ACTIVE_CLIENTS_LOG_LINE_LEN]),
@@ -395,20 +408,28 @@ bail:
 
 void ipa3_active_clients_log_clear(void)
 {
-	ipa3_active_clients_lock();
+	unsigned long flags;
+
+	spin_lock_irqsave(&ipa3_ctx->ipa3_active_clients_logging.lock, flags);
 	ipa3_ctx->ipa3_active_clients_logging.log_head = 0;
 	ipa3_ctx->ipa3_active_clients_logging.log_tail =
 			IPA3_ACTIVE_CLIENTS_LOG_BUFFER_SIZE_LINES - 1;
-	ipa3_active_clients_unlock();
+	spin_unlock_irqrestore(&ipa3_ctx->ipa3_active_clients_logging.lock,
+		flags);
 }
 
 static void ipa3_active_clients_log_destroy(void)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&ipa3_ctx->ipa3_active_clients_logging.lock, flags);
 	ipa3_ctx->ipa3_active_clients_logging.log_rdy = 0;
 	kfree(ipa3_ctx->ipa3_active_clients_logging.log_buffer[0]);
 	ipa3_ctx->ipa3_active_clients_logging.log_head = 0;
 	ipa3_ctx->ipa3_active_clients_logging.log_tail =
 			IPA3_ACTIVE_CLIENTS_LOG_BUFFER_SIZE_LINES - 1;
+	spin_unlock_irqrestore(&ipa3_ctx->ipa3_active_clients_logging.lock,
+		flags);
 }
 
 enum ipa_smmu_cb_type {
@@ -745,7 +766,7 @@ static long ipa3_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			retval = -EFAULT;
 			break;
 		}
-		if (ipa4_nat_mdfy_pdn(&mdfy_pdn)) {
+		if (ipa3_nat_mdfy_pdn(&mdfy_pdn)) {
 			retval = -EFAULT;
 			break;
 		}
@@ -3267,7 +3288,6 @@ void _ipa_enable_clks_v3_0(void)
 	}
 
 	ipa3_uc_notify_clk_state(true);
-	ipa3_suspend_apps_pipes(false);
 }
 
 static unsigned int ipa3_get_bus_vote(void)
@@ -3399,7 +3419,10 @@ void ipa3_active_clients_log_mod(struct ipa_active_client_logging_info *id,
 	struct ipa3_active_client_htable_entry *hfound;
 	u32 hkey;
 	char str_to_hash[IPA3_ACTIVE_CLIENTS_LOG_NAME_LEN];
+	unsigned long flags;
 
+	spin_lock_irqsave(&ipa3_ctx->ipa3_active_clients_logging.lock, flags);
+	int_ctx = true;
 	hfound = NULL;
 	memset(str_to_hash, 0, IPA3_ACTIVE_CLIENTS_LOG_NAME_LEN);
 	strlcpy(str_to_hash, id->id_string, IPA3_ACTIVE_CLIENTS_LOG_NAME_LEN);
@@ -3419,6 +3442,9 @@ void ipa3_active_clients_log_mod(struct ipa_active_client_logging_info *id,
 				int_ctx ? GFP_ATOMIC : GFP_KERNEL);
 		if (hentry == NULL) {
 			IPAERR("failed allocating active clients hash entry");
+			spin_unlock_irqrestore(
+				&ipa3_ctx->ipa3_active_clients_logging.lock,
+				flags);
 			return;
 		}
 		hentry->type = id->type;
@@ -3443,6 +3469,8 @@ void ipa3_active_clients_log_mod(struct ipa_active_client_logging_info *id,
 				id->id_string, id->file, id->line);
 		ipa3_active_clients_log_insert(temp_str);
 	}
+	spin_unlock_irqrestore(&ipa3_ctx->ipa3_active_clients_logging.lock,
+		flags);
 }
 
 void ipa3_active_clients_log_dec(struct ipa_active_client_logging_info *id,
@@ -3466,13 +3494,33 @@ void ipa3_active_clients_log_inc(struct ipa_active_client_logging_info *id,
 */
 void ipa3_inc_client_enable_clks(struct ipa_active_client_logging_info *id)
 {
-	ipa3_active_clients_lock();
+	int ret;
+
 	ipa3_active_clients_log_inc(id, false);
-	ipa3_ctx->ipa3_active_clients.cnt++;
-	if (ipa3_ctx->ipa3_active_clients.cnt == 1)
-		ipa3_enable_clks();
-	IPADBG_LOW("active clients = %d\n", ipa3_ctx->ipa3_active_clients.cnt);
-	ipa3_active_clients_unlock();
+	ret = atomic_inc_not_zero(&ipa3_ctx->ipa3_active_clients.cnt);
+	if (ret) {
+		IPADBG_LOW("active clients = %d\n",
+			atomic_read(&ipa3_ctx->ipa3_active_clients.cnt));
+		return;
+	}
+
+	mutex_lock(&ipa3_ctx->ipa3_active_clients.mutex);
+
+	/* somebody might voted to clocks meanwhile */
+	ret = atomic_inc_not_zero(&ipa3_ctx->ipa3_active_clients.cnt);
+	if (ret) {
+		mutex_unlock(&ipa3_ctx->ipa3_active_clients.mutex);
+		IPADBG_LOW("active clients = %d\n",
+			atomic_read(&ipa3_ctx->ipa3_active_clients.cnt));
+		return;
+	}
+
+	ipa3_enable_clks();
+	atomic_inc(&ipa3_ctx->ipa3_active_clients.cnt);
+	IPADBG_LOW("active clients = %d\n",
+		atomic_read(&ipa3_ctx->ipa3_active_clients.cnt));
+	ipa3_suspend_apps_pipes(false);
+	mutex_unlock(&ipa3_ctx->ipa3_active_clients.mutex);
 }
 
 /**
@@ -3486,23 +3534,57 @@ void ipa3_inc_client_enable_clks(struct ipa_active_client_logging_info *id)
 int ipa3_inc_client_enable_clks_no_block(struct ipa_active_client_logging_info
 		*id)
 {
-	int res = 0;
-	unsigned long flags;
+	int ret;
 
-	if (ipa3_active_clients_trylock(&flags) == 0)
-		return -EPERM;
-
-	if (ipa3_ctx->ipa3_active_clients.cnt == 0) {
-		res = -EPERM;
-		goto bail;
+	ret = atomic_inc_not_zero(&ipa3_ctx->ipa3_active_clients.cnt);
+	if (ret) {
+		ipa3_active_clients_log_inc(id, true);
+		IPADBG_LOW("active clients = %d\n",
+			atomic_read(&ipa3_ctx->ipa3_active_clients.cnt));
+		return 0;
 	}
-	ipa3_active_clients_log_inc(id, true);
-	ipa3_ctx->ipa3_active_clients.cnt++;
-	IPADBG_LOW("active clients = %d\n", ipa3_ctx->ipa3_active_clients.cnt);
-bail:
-	ipa3_active_clients_trylock_unlock(&flags);
 
-	return res;
+	return -EPERM;
+}
+
+static void __ipa3_dec_client_disable_clks(void)
+{
+	int ret;
+
+	if (!atomic_read(&ipa3_ctx->ipa3_active_clients.cnt)) {
+		IPAERR("trying to disable clocks with refcnt is 0!\n");
+		ipa_assert();
+		return;
+	}
+
+	ret = atomic_add_unless(&ipa3_ctx->ipa3_active_clients.cnt, -1, 1);
+	if (ret)
+		goto bail;
+
+	/* seems like this is the only client holding the clocks */
+	mutex_lock(&ipa3_ctx->ipa3_active_clients.mutex);
+	if (atomic_read(&ipa3_ctx->ipa3_active_clients.cnt) == 1 &&
+	    ipa3_ctx->tag_process_before_gating) {
+		ipa3_ctx->tag_process_before_gating = false;
+		/*
+		 * When TAG process ends, active clients will be
+		 * decreased
+		 */
+		queue_work(ipa3_ctx->power_mgmt_wq, &ipa3_tag_work);
+		goto unlock_mutex;
+	}
+
+	/* a different context might increase the clock reference meanwhile */
+	ret = atomic_sub_return(1, &ipa3_ctx->ipa3_active_clients.cnt);
+	if (ret > 0)
+		goto unlock_mutex;
+	ipa3_disable_clks();
+
+unlock_mutex:
+	mutex_unlock(&ipa3_ctx->ipa3_active_clients.mutex);
+bail:
+	IPADBG_LOW("active clients = %d\n",
+		atomic_read(&ipa3_ctx->ipa3_active_clients.cnt));
 }
 
 /**
@@ -3518,29 +3600,39 @@ bail:
  */
 void ipa3_dec_client_disable_clks(struct ipa_active_client_logging_info *id)
 {
-	struct ipa_active_client_logging_info log_info;
-
-	ipa3_active_clients_lock();
 	ipa3_active_clients_log_dec(id, false);
-	ipa3_ctx->ipa3_active_clients.cnt--;
-	IPADBG_LOW("active clients = %d\n", ipa3_ctx->ipa3_active_clients.cnt);
-	if (ipa3_ctx->ipa3_active_clients.cnt == 0) {
-		if (ipa3_ctx->tag_process_before_gating) {
-			ipa3_ctx->tag_process_before_gating = false;
-			/*
-			 * When TAG process ends, active clients will be
-			 * decreased
-			 */
-			IPA_ACTIVE_CLIENTS_PREP_SPECIAL(log_info,
-					"TAG_PROCESS");
-			ipa3_active_clients_log_inc(&log_info, false);
-			ipa3_ctx->ipa3_active_clients.cnt = 1;
-			queue_work(ipa3_ctx->power_mgmt_wq, &ipa3_tag_work);
-		} else {
-			ipa3_disable_clks();
-		}
+	__ipa3_dec_client_disable_clks();
+}
+
+static void ipa_dec_clients_disable_clks_on_wq(struct work_struct *work)
+{
+	__ipa3_dec_client_disable_clks();
+}
+
+/**
+ * ipa3_dec_client_disable_clks_no_block() - Decrease active clients counter
+ * if possible without blocking. If this is the last client then the desrease
+ * will happen from work queue context.
+ *
+ * Return codes:
+ * None
+ */
+void ipa3_dec_client_disable_clks_no_block(
+	struct ipa_active_client_logging_info *id)
+{
+	int ret;
+
+	ipa3_active_clients_log_dec(id, true);
+	ret = atomic_add_unless(&ipa3_ctx->ipa3_active_clients.cnt, -1, 1);
+	if (ret) {
+		IPADBG_LOW("active clients = %d\n",
+			atomic_read(&ipa3_ctx->ipa3_active_clients.cnt));
+		return;
 	}
-	ipa3_active_clients_unlock();
+
+	/* seems like this is the only client holding the clocks */
+	queue_work(ipa3_ctx->power_mgmt_wq,
+		&ipa_dec_clients_disable_clks_on_wq_work);
 }
 
 /**
@@ -3636,34 +3728,20 @@ int ipa3_set_required_perf_profile(enum ipa_voltage_level floor_voltage,
 		return 0;
 	}
 
-	ipa3_active_clients_lock();
+	/* Hold the mutex to avoid race conditions with ipa3_enable_clocks() */
+	mutex_lock(&ipa3_ctx->ipa3_active_clients.mutex);
 	ipa3_ctx->curr_ipa_clk_rate = clk_rate;
 	IPADBG_LOW("setting clock rate to %u\n", ipa3_ctx->curr_ipa_clk_rate);
-	if (ipa3_ctx->ipa3_active_clients.cnt > 0) {
-		struct ipa_active_client_logging_info log_info;
-
-		/*
-		 * clk_set_rate should be called with unlocked lock to allow
-		 * clients to get a reference to IPA clock synchronously.
-		 * Hold a reference to IPA clock here to make sure clock
-		 * state does not change during set_rate.
-		 */
-		IPA_ACTIVE_CLIENTS_PREP_SIMPLE(log_info);
-		ipa3_ctx->ipa3_active_clients.cnt++;
-		ipa3_active_clients_log_inc(&log_info, false);
-		ipa3_active_clients_unlock();
-
+	if (atomic_read(&ipa3_ctx->ipa3_active_clients.cnt) > 0) {
 		if (ipa3_clk)
 			clk_set_rate(ipa3_clk, ipa3_ctx->curr_ipa_clk_rate);
 		if (msm_bus_scale_client_update_request(ipa3_ctx->ipa_bus_hdl,
-			ipa3_get_bus_vote()))
+				ipa3_get_bus_vote()))
 			WARN_ON(1);
-		/* remove the vote added here */
-		IPA_ACTIVE_CLIENTS_DEC_SIMPLE();
 	} else {
 		IPADBG_LOW("clocks are gated, not setting rate\n");
-		ipa3_active_clients_unlock();
 	}
+	mutex_unlock(&ipa3_ctx->ipa3_active_clients.mutex);
 	IPADBG_LOW("Done\n");
 
 	return 0;
@@ -4625,10 +4703,9 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
 	}
 
 	mutex_init(&ipa3_ctx->ipa3_active_clients.mutex);
-	spin_lock_init(&ipa3_ctx->ipa3_active_clients.spinlock);
 	IPA_ACTIVE_CLIENTS_PREP_SPECIAL(log_info, "PROXY_CLK_VOTE");
 	ipa3_active_clients_log_inc(&log_info, false);
-	ipa3_ctx->ipa3_active_clients.cnt = 1;
+	atomic_set(&ipa3_ctx->ipa3_active_clients.cnt, 1);
 
 	/* Create workqueues for power management */
 	ipa3_ctx->power_mgmt_wq =

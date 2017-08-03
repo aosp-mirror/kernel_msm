@@ -890,7 +890,8 @@ void sde_connector_prepare_fence(struct drm_connector *connector)
 	sde_fence_prepare(&to_sde_connector(connector)->retire_fence);
 }
 
-void sde_connector_complete_commit(struct drm_connector *connector)
+void sde_connector_complete_commit(struct drm_connector *connector,
+		ktime_t ts)
 {
 	if (!connector) {
 		SDE_ERROR("invalid connector\n");
@@ -898,7 +899,7 @@ void sde_connector_complete_commit(struct drm_connector *connector)
 	}
 
 	/* signal connector's retire fence */
-	sde_fence_signal(&to_sde_connector(connector)->retire_fence, 0);
+	sde_fence_signal(&to_sde_connector(connector)->retire_fence, ts, 0);
 }
 
 static enum drm_connector_status
