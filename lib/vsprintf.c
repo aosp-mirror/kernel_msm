@@ -1153,13 +1153,15 @@ char *pointer(const char *fmt, char *buf, char *end, void *ptr,
 		break;
 	case 'a':
 		{
-			unsigned long long addr = *((phys_addr_t *)ptr);
+			unsigned long long addr;
+			if (fmt[1] != 'P' && kptr_restrict_cleanse_addresses())
+				addr = 0;
+			else
+				addr = *((phys_addr_t *)ptr);
 			spec.flags |= SPECIAL | SMALL | ZEROPAD;
 			spec.field_width = sizeof(phys_addr_t) * 2 + 2;
 			spec.base = 16;
-			return number(buf, end,
-			      kptr_restrict_cleanse_addresses() ? 0UL : addr,
-			      spec);
+			return number(buf, end, addr, spec);
 		}
 	case 'P':
 		/*
