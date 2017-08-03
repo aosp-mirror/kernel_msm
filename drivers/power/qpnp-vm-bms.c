@@ -4140,6 +4140,9 @@ static int bms_suspend(struct device *dev)
 		}
 	}
 
+	force_fsm_state(chip, S2_STATE); //force S2 state
+	pr_info("Forcing S2 STATE \n");
+
 	cancel_delayed_work_sync(&chip->monitor_soc_work);
 
 	return 0;
