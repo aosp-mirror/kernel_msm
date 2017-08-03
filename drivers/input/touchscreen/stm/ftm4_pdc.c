@@ -266,12 +266,18 @@ static ssize_t show_version_info(struct device *dev,
 
 	mutex_lock(&info->device_mutex);
 
+	info->fts_interrupt_set(info, INT_DISABLE);
+	info->fts_irq_enable(info, false);
+
 	if (info->fts_power_state != FTS_POWER_STATE_ACTIVE ||
 	    fts_get_version_info(info) < 0) {
 		tsp_debug_info(&info->client->dev,
 			"%s: Cannot read version from touch controller."
 			" Falling back to cached version.", __func__);
 	}
+
+	info->fts_irq_enable(info, true);
+	info->fts_interrupt_set(info, INT_ENABLE);
 
 	mutex_unlock(&info->device_mutex);
 
