@@ -139,6 +139,14 @@ static int ramoops_pstore_open(struct pstore_info *psi)
 	return 0;
 }
 
+static int ramoops_pstore_close(struct pstore_info *psi)
+{
+	struct ramoops_context *cxt = psi->data;
+
+	cxt->need_update = 0;
+	return 0;
+}
+
 static struct persistent_ram_zone *
 ramoops_get_next_prz(struct persistent_ram_zone *przs[], uint *c, uint max,
 		     u64 *id,
@@ -264,7 +272,7 @@ static int ramoops_decrypt_alt(struct ramoops_context *cxt)
 		goto out_no_buf;
 	}
 
-	memcpy(buf, va, size);
+	memcpy_fromio(buf, va, size);
 	memcpy(buf + size, cxt->aes_key_tag, AES_KEY_TAG_LEN);
 	sg_init_one(&sg, buf, size + AES_KEY_TAG_LEN);
 	aead_request_set_crypt(aead_req, &sg, &sg, size + AES_KEY_TAG_LEN,
@@ -275,7 +283,7 @@ static int ramoops_decrypt_alt(struct ramoops_context *cxt)
 		pr_err("Failed to decrypt %d\n", ret);
 		goto out_decrypt;
 	}
-	memcpy(va, buf, size);
+	memcpy_toio(va, buf, size);
 
 out_decrypt:
 	kfree(buf);
@@ -302,8 +310,6 @@ static ssize_t ramoops_pstore_read(u64 *id, enum pstore_type_id *type,
 	int header_length = 0;
 	bool use_alt = cxt->use_alt;
 	bool update = cxt->need_update;
-
-	cxt->need_update = 0;
 
 	/* Ramoops headers provide time stamps for PSTORE_TYPE_DMESG, but
 	 * PSTORE_TYPE_CONSOLE and PSTORE_TYPE_FTRACE don't currently have
@@ -503,6 +509,7 @@ static struct ramoops_context oops_cxt = {
 		.name	= "ramoops",
 		.open	= ramoops_pstore_open,
 		.read	= ramoops_pstore_read,
+		.close  = ramoops_pstore_close,
 		.write_buf	= ramoops_pstore_write_buf,
 		.write_buf_user	= ramoops_pstore_write_buf_user,
 		.erase	= ramoops_pstore_erase,
