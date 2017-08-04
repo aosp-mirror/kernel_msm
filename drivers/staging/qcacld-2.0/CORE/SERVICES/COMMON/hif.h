@@ -880,4 +880,12 @@ static inline void hif_request_runtime_pm_resume(void *ol_sc)
 
 A_BOOL HIFIsMailBoxSwapped(HIF_DEVICE *hd);
 
+#ifdef HIF_PCI
+int hif_addr_in_boundary(HIF_DEVICE *hif_device, A_UINT32 offset);
+#else
+static inline int hif_addr_in_boundary(HIF_DEVICE *hif_device, A_UINT32 offset)
+{
+	return 0;
+}
+#endif
 #endif /* _HIF_H_ */
