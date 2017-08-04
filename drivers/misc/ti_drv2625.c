@@ -151,6 +151,7 @@ static int drv2625_set_bits(struct drv2625_data *pDrv2625data,
 static int drv2625_set_go_bit(struct drv2625_data *pDrv2625data,
 		unsigned char val)
 {
+	dev_info(pDrv2625data->dev, "set_go_bit %d\n", val & 0x01);
 	return drv2625_reg_write(pDrv2625data, DRV2625_REG_GO, (val&0x01));
 }
 
@@ -203,7 +204,7 @@ static void vibrator_enable(struct led_classdev *led_cdev,
 {
 	struct drv2625_data *pDrv2625data =
 		container_of(led_cdev, struct drv2625_data, led_dev);
-
+	dev_info(pDrv2625data->dev, "vibrator_enable brightness=%d\n", value);
 	led_cdev->brightness = value;
 	schedule_work(&pDrv2625data->haptics_work);
 }
@@ -593,6 +594,7 @@ static ssize_t rtp_input_store(struct device *dev,
 	int ret;
 	char rtp_input;
 
+	dev_info(pDrv2625data->dev, "store rtp amplitude: %s\n", buf);
 	ret = kstrtos8(buf, 10, &rtp_input);
 	if (ret) {
 		dev_err(dev, "Invalid input for rtp_input: ret = %d\n", ret);
@@ -639,6 +641,7 @@ static ssize_t mode_store(struct device *dev,
 	if (len && mode_name[len - 1] == '\n')
 		mode_name[len - 1] = '\0';
 
+	dev_info(dev, "store mode value: %s\n", mode_name);
 	for (new_mode = 0; new_mode < ARRAY_SIZE(drv2625_modes); new_mode++) {
 		if (!strcmp(mode_name, drv2625_modes[new_mode]))
 			drv2625_change_mode(pDrv2625data, new_mode);
