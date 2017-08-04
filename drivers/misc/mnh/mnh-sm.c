@@ -1376,6 +1376,24 @@ int mnh_sm_get_state(void)
 }
 EXPORT_SYMBOL(mnh_sm_get_state);
 
+static void mnh_sm_print_boot_trace(struct device (*dev))
+{
+	int err;
+	uint32_t val;
+
+	err = mnh_config_read(MNH_BOOT_TRACE, sizeof(val), &val);
+
+	if (err) {
+		dev_err(dev,
+			"%s: failed reading MNH_BOOT_TRACE (%d)\n",
+			__func__, err);
+		return;
+	}
+
+	dev_info(dev, "%s: MNH_BOOT_TRACE = 0x%x\n", __func__, val);
+}
+
+
 static int mnh_sm_set_state_locked(int state)
 {
 	struct device *dev = mnh_sm_dev->dev;
@@ -1441,6 +1459,9 @@ static int mnh_sm_set_state_locked(int state)
 			break;
 
 		ret = mnh_sm_hotplug_callback(MNH_HOTPLUG_IN);
+		if (ret)
+			mnh_sm_print_boot_trace(mnh_sm_dev->dev);
+
 		break;
 	case MNH_STATE_SUSPEND:
 		ret = mnh_sm_set_state_locked(MNH_STATE_ACTIVE);
