@@ -335,12 +335,16 @@ static int easelcomm_hw_ap_pcie_ready(void)
 static int easelcomm_hw_ap_hotplug_callback(enum mnh_hotplug_event_t event)
 {
 	int ret = 0;
+	static enum mnh_hotplug_event_t state = MNH_HOTPLUG_OUT;
+
+	if (state == event)
+		return 0;
 
 	switch (event) {
 	case MNH_HOTPLUG_IN:
 		pr_debug("%s: mnh hotplug in\n", __func__);
 		ret = easelcomm_hw_ap_pcie_ready();
-	 break;
+		break;
 	case MNH_HOTPLUG_OUT:
 		pr_debug("%s: mnh hotplug out\n", __func__);
 		reinit_completion(&bootstrap_done);
@@ -351,8 +355,13 @@ static int easelcomm_hw_ap_hotplug_callback(enum mnh_hotplug_event_t event)
 		easelcomm_pcie_hotplug_out();
 		break;
 	default:
+		ret = -EINVAL;
 		break;
 	}
+
+	if (!ret)
+		state = event;
+
 	return ret;
 }
 
