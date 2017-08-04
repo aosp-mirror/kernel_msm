@@ -96,6 +96,9 @@ HW_OUTx(HWIO_PCIE_SS_BASE_ADDR, PCIE_SS, reg, inst, val)
 /* PCIe */
 #define MNH_PCIE_CHAN_0 0
 
+/* Allow partial active mode where PCIe link is up, but Easel is not booted */
+#define ALLOW_PARTIAL_ACTIVE 1
+
 /* Firmware update mask, defines userspace updatable slots */
 #define FW_SLOT_UPDATE_MASK ((1 << MNH_FW_SLOT_RAMDISK) |\
 	(1 << MNH_FW_SLOT_SBL) |\
@@ -1130,6 +1133,14 @@ static ssize_t spi_boot_mode_store(struct device *dev,
 
 static DEVICE_ATTR_RW(spi_boot_mode);
 
+static ssize_t error_event_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, MAX_STR_COPY, "%d\n", 0);
+}
+
+static DEVICE_ATTR_RO(error_event);
+
 static struct attribute *mnh_sm_attrs[] = {
 	&dev_attr_stage_fw.attr,
 	&dev_attr_poweron.attr,
@@ -1149,6 +1160,7 @@ static struct attribute *mnh_sm_attrs[] = {
 	&dev_attr_mipi_int.attr,
 	&dev_attr_spi_boot_mode.attr,
 	&dev_attr_boot_trace.attr,
+	&dev_attr_error_event.attr,
 	NULL
 };
 ATTRIBUTE_GROUPS(mnh_sm);
@@ -1216,9 +1228,6 @@ static int mnh_sm_poweroff(void)
 static int mnh_sm_config_ddr(void)
 {
 	int ret;
-
-	/* Set core supply to 900 mV */
-	mnh_pwr_set_asr_voltage(900000);
 
 	/* Initialize DDR */
 	ret = mnh_ddr_po_init(mnh_sm_dev->dev, mnh_sm_dev->ddr_pad_iso_n_pin);
@@ -1393,6 +1402,19 @@ static void mnh_sm_print_boot_trace(struct device (*dev))
 	dev_info(dev, "%s: MNH_BOOT_TRACE = 0x%x\n", __func__, val);
 }
 
+/*
+ * NOTE (b/64372955): Put Easel into a low-power mode for MIPI bypass. Ideally,
+ * this would be done from Easel kernel, but if the Easel kernel fails for some
+ * reason, we can disable a lot of clocks on Easel to reduce power.
+ */
+static void mnh_sm_enter_low_power_mode(void)
+{
+	MNH_SCU_OUTf(CCU_CLK_CTL, CPU_CLKEN, 0);
+	MNH_SCU_OUTf(CCU_CLK_CTL, BTSRAM_CLKEN, 0);
+	MNH_SCU_OUTf(CCU_CLK_CTL, BTROM_CLKEN, 0);
+	MNH_SCU_OUTf(CCU_CLK_CTL, LP4_REFCLKEN, 0);
+	MNH_SCU_OUTf(CCU_CLK_CTL, IPU_CLKEN, 0);
+}
 
 static int mnh_sm_set_state_locked(int state)
 {
@@ -1435,6 +1457,10 @@ static int mnh_sm_set_state_locked(int state)
 		if (ret)
 			break;
 
+		/* toggle powered flag and notify any waiting threads */
+		mnh_sm_dev->powered = true;
+		complete(&mnh_sm_dev->powered_complete);
+
 		/* make sure ddr is configured */
 		if (mnh_sm_dev->ddr_status == MNH_DDR_OFF)
 			ret = mnh_sm_config_ddr();
@@ -1442,10 +1468,6 @@ static int mnh_sm_set_state_locked(int state)
 			ret = mnh_sm_resume_ddr();
 		if (ret)
 			break;
-
-		/* toggle powered flag and notify any waiting threads */
-		mnh_sm_dev->powered = true;
-		complete(&mnh_sm_dev->powered_complete);
 
 		/* use max CPU frequency for fast boot */
 		mnh_cpu_freq_change(CPU_FREQ_950);
@@ -1482,24 +1504,45 @@ static int mnh_sm_set_state_locked(int state)
 	}
 
 	if (ret) {
-		dev_err(mnh_sm_dev->dev,
-			 "%s: failed to transition to state %d (%d)\n",
-			 __func__, state, ret);
+		/*
+		 * NOTE (b/64372955): the minimum requirements for MIPI bypass
+		 * are power and PCIe. A successful boot is only necessary for
+		 * easelcomm communication. Return a special code to indicate
+		 * that we reached the minimum requirements, but couldn't
+		 * establish host communication. Also, disable a few clocks on
+		 * Easel to reduce power.
+		 */
+#if ALLOW_PARTIAL_ACTIVE
+		if ((state == MNH_STATE_ACTIVE) && (mnh_sm_dev->powered)) {
+			dev_warn(mnh_sm_dev->dev,
+				 "%s: failed to fully transition to state %d (%d), allow partial active\n",
+				 __func__, state, ret);
+			mnh_sm_enter_low_power_mode();
+			ret = -EHOSTUNREACH;
+		} else {
+#endif
+			dev_err(mnh_sm_dev->dev,
+				 "%s: failed to transition to state %d (%d)\n",
+				 __func__, state, ret);
 
-		if (state == MNH_STATE_ACTIVE) {
-			mnh_sm_dev->powered = false;
-			reinit_completion(&mnh_sm_dev->powered_complete);
-			mnh_sm_poweroff();
-			disable_irq(mnh_sm_dev->ready_irq);
-			mnh_sm_dev->state = MNH_STATE_OFF;
+			if (state == MNH_STATE_ACTIVE) {
+				mnh_sm_dev->powered = false;
+				reinit_completion(
+					&mnh_sm_dev->powered_complete);
+				mnh_sm_poweroff();
+				disable_irq(mnh_sm_dev->ready_irq);
+				mnh_sm_dev->state = MNH_STATE_OFF;
+			}
+
+			return ret;
+#if ALLOW_PARTIAL_ACTIVE
 		}
-
-		return ret;
+#endif
 	}
 
 	mnh_sm_dev->state = state;
 
-	return 0;
+	return ret;
 }
 
 /**
@@ -1549,6 +1592,7 @@ int mnh_sm_pwr_error_cb(void)
 	dev_err(mnh_sm_dev->dev,
 		"%s: observed mnh-pwr error, switching state to off\n",
 		__func__);
+	sysfs_notify(&mnh_sm_dev->dev->kobj, NULL, "error_event");
 	return mnh_sm_set_state(MNH_STATE_OFF);
 }
 EXPORT_SYMBOL(mnh_sm_pwr_error_cb);
