@@ -2046,7 +2046,7 @@ static void mxt_regulator_disable(struct mxt_data *data)
 	if (gpio_is_valid(data->pdata->gpio_reset))
 		gpio_set_value(data->pdata->gpio_reset, 0);
 
-	/* vdd_ana disable */
+	/* vdd_dig disable */
 	if (data->vcc_dig) {
 		error = regulator_disable(data->vcc_dig);
 		if (error < 0) {
@@ -2484,6 +2484,9 @@ static ssize_t mxt_idle_mode_store(struct mxt_data *data,
 	int idle = 0;
 	int ret;
 
+	if (data->suspended)
+		return -ENODEV;
+
 	ret = kstrtoint(buf, 0, &idle);
 	if (ret) {
 		TOUCH_ERR_MSG("%s: invalid parameter\n", __func__);
@@ -2791,8 +2794,10 @@ static void mxt_reset_slots(struct mxt_data *data)
 
 static void mxt_start(struct mxt_data *data)
 {
+	TOUCH_INFO_MSG("%s\n", __func__);
+
 	if (!data->suspended || data->in_bootloader) {
-		if(data->regulator_status == 1 && !data->in_bootloader) {
+		if (data->regulator_status == 1 && !data->in_bootloader) {
 			TOUCH_DEBUG_MSG("%s suspended flag is false."
 				" Calibration after System Shutdown.\n",
 				__func__);
@@ -2801,10 +2806,7 @@ static void mxt_start(struct mxt_data *data)
 		return;
 	}
 
-	TOUCH_INFO_MSG("%s\n", __func__);
-
-	disable_irq(data->irq);
-
+	enable_irq(data->irq);
 	mxt_regulator_enable(data);
 
 	data->delayed_cal = true;
@@ -2812,20 +2814,17 @@ static void mxt_start(struct mxt_data *data)
 	mxt_reset_slots(data);
 	data->suspended = false;
 	data->button_lock = false;
-	enable_irq(data->irq);
 }
 
 static void mxt_stop(struct mxt_data *data)
 {
+	TOUCH_INFO_MSG("%s\n", __func__);
+
 	if (data->suspended || data->in_bootloader)
 		return;
 
-	TOUCH_INFO_MSG("%s\n", __func__);
-
 	disable_irq(data->irq);
 
-	TOUCH_INFO_MSG("%s MXT_POWER_CFG_DEEPSLEEP\n", __func__);
-	// mxt_set_t7_power_cfg(data, MXT_POWER_CFG_DEEPSLEEP);
 	mxt_regulator_disable(data);
 
 	mxt_reset_slots(data);
