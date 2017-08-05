@@ -37,7 +37,6 @@
 
 #define XO_FREQ			19200000
 #define PROXY_TIMEOUT_MS	10000
-#define MAX_SSR_REASON_LEN	81U
 #define STOP_ACK_TIMEOUT_MS	1000
 #define CRASH_STOP_ACK_TO_MS	200
 
@@ -781,15 +780,16 @@ static struct pil_reset_ops pil_ops_trusted = {
 	.proxy_unvote = pil_remove_proxy_vote,
 };
 
-static void log_failure_reason(const struct pil_tz_data *d)
+static void log_failure_reason(struct pil_tz_data *d)
 {
 	u32 size;
-	char *smem_reason, reason[MAX_SSR_REASON_LEN];
+	char *smem_reason, *reason;
 	const char *name = d->subsys_desc.name;
 
 	if (d->smem_id == -1)
 		return;
 
+	reason = d->subsys_desc.last_crash_reason;
 	smem_reason = smem_get_entry_no_rlock(d->smem_id, &size, 0,
 							SMEM_ANY_HOST_FLAG);
 	if (!smem_reason || !size) {
