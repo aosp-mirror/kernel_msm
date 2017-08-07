@@ -4175,6 +4175,34 @@ rerun:
 
 }
 
+int smblib_get_ipd(struct smb_charger *chg, union power_supply_propval *val)
+{
+	int rc = 0;
+	struct qpnp_vadc_result results;
+
+	val->intval = 222;
+	if (chg->vadc_ipd_channel == VADC_REFRESH_MAX_NUM)
+		return -EINVAL;
+
+	if (!chg->vadc_ipd ||
+	    (IS_ERR(chg->vadc_ipd) && PTR_ERR(chg->vadc_ipd) == -EPROBE_DEFER))
+		chg->vadc_ipd = qpnp_get_vadc(chg->dev, "ipd");
+
+	if (IS_ERR(chg->vadc_ipd)) {
+		rc = PTR_ERR(chg->vadc_ipd);
+		dev_err(chg->dev, "Failed to get vadc_ipd: %d\n", rc);
+	} else {
+		rc = qpnp_vadc_read(chg->vadc_ipd, chg->vadc_ipd_channel,
+				    &results);
+		if (rc)
+			dev_err(chg->dev, "Unable to read IPD: %d\n", rc);
+		else
+			val->intval = (int)results.physical;
+	}
+
+	return rc;
+}
+
 static void smblib_otg_oc_exit(struct smb_charger *chg, bool success)
 {
 	int rc;

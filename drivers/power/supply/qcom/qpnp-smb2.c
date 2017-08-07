@@ -403,6 +403,11 @@ static int smb2_parse_dt(struct smb2 *chip)
 	chg->suspend_input_on_debug_batt = of_property_read_bool(node,
 					"qcom,suspend-input-on-debug-batt");
 
+	rc = of_property_read_u32(node, "qcom,ipd-channel",
+				  &chg->vadc_ipd_channel);
+	if (rc < 0)
+		chg->vadc_ipd_channel = VADC_REFRESH_MAX_NUM;
+
 	/* config vega model: the JEITA_CCCOMP_CFG_REG, FVCOMP regs ( compensate
 	current -1600mA,voltage -200mV ) in jeita Tcold,Thot temperature range. */
 	if (of_property_read_bool(node, "lenovo,vega-model")) {
@@ -894,6 +899,7 @@ static enum power_supply_property smb2_batt_props[] = {
 	POWER_SUPPLY_PROP_DIE_HEALTH,
 	POWER_SUPPLY_PROP_RERUN_AICL,
 	POWER_SUPPLY_PROP_DP_DM,
+	POWER_SUPPLY_PROP_IPD,
 };
 
 static int smb2_batt_get_prop(struct power_supply *psy,
@@ -995,6 +1001,9 @@ static int smb2_batt_get_prop(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_RERUN_AICL:
 		val->intval = 0;
+		break;
+	case POWER_SUPPLY_PROP_IPD:
+		rc = smblib_get_ipd(chg, val);
 		break;
 	default:
 		pr_err("batt power supply prop %d not supported\n", psp);

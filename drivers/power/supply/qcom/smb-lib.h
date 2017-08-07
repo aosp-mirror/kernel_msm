@@ -15,6 +15,7 @@
 #include <linux/extcon.h>
 #include <linux/interrupt.h>
 #include <linux/irqreturn.h>
+#include <linux/qpnp/qpnp-adc.h>
 #include <linux/regulator/driver.h>
 #include <linux/regulator/consumer.h>
 #include <linux/thermal.h>
@@ -376,6 +377,10 @@ struct smb_charger {
 	int			qnovo_fv_uv;
 	int			usb_icl_delta_ua;
 	int			pulse_cnt;
+
+	/* IPD */
+	unsigned int		vadc_ipd_channel;
+	struct qpnp_vadc_chip	*vadc_ipd;
 };
 
 int smblib_read(struct smb_charger *chg, u16 addr, u8 *val);
@@ -545,6 +550,7 @@ int smblib_rerun_aicl(struct smb_charger *chg);
 int smblib_set_icl_current(struct smb_charger *chg, int icl_ua);
 int smblib_get_charge_current(struct smb_charger *chg, int *total_current_ua);
 
+int smblib_get_ipd(struct smb_charger *chg, union power_supply_propval *val);
 int smblib_init(struct smb_charger *chg);
 int smblib_deinit(struct smb_charger *chg);
 #endif /* __SMB2_CHARGER_H */
