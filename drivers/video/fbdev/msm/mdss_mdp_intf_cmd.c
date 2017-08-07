@@ -3032,6 +3032,7 @@ static int mdss_mdp_cmd_kickoff(struct mdss_mdp_ctl *ctl, void *arg)
 	struct mdss_mdp_cmd_ctx *ctx, *sctx = NULL;
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
 	u32 clearbit = 0;
+	bool need_post_panel_on = false;
 
 	ctx = (struct mdss_mdp_cmd_ctx *) ctl->intf_ctx[MASTER_CTX];
 	if (!ctx) {
@@ -3068,8 +3069,10 @@ static int mdss_mdp_cmd_kickoff(struct mdss_mdp_ctl *ctl, void *arg)
 	 * turned on only when we send the first frame and not during cmd
 	 * start. This is to ensure that no artifacts are seen on the panel.
 	 */
-	if (__mdss_mdp_cmd_is_panel_power_off(ctx))
+	if (__mdss_mdp_cmd_is_panel_power_off(ctx)) {
 		mdss_mdp_cmd_panel_on(ctl, sctl);
+		need_post_panel_on = true;
+	}
 
 	ctx->current_pp_num = ctx->default_pp_num;
 	if (sctx)
@@ -3162,6 +3165,9 @@ static int mdss_mdp_cmd_kickoff(struct mdss_mdp_ctl *ctl, void *arg)
 	if (ctx->autorefresh_state == MDP_AUTOREFRESH_ON)
 		mdss_mdp_cmd_wait4_autorefresh_done(ctl);
 
+	if (need_post_panel_on)
+		mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_POST_PANEL_ON, NULL,
+			CTL_INTF_EVENT_FLAG_DEFAULT);
 	mb();
 	mutex_unlock(&ctx->autorefresh_lock);
 
