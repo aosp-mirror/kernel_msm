@@ -1290,6 +1290,12 @@ static int easelcomm_send_message_ioctl(
 		goto out_freedesc;
 	}
 	if (msg_desc->message_size > EASELCOMM_MAX_MESSAGE_SIZE) {
+		dev_err(easelcomm_miscdev.this_device,
+			"%s: svc:%u msg size %d is larger than max size %d\n",
+			__func__,
+			service->service_id,
+			msg_desc->message_size,
+			EASELCOMM_MAX_MESSAGE_SIZE);
 		ret = -EINVAL;
 		goto out_freedesc;
 	}
