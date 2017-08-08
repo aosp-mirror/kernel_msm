@@ -18,6 +18,7 @@
 #include "sdm845-camera-sensor.dtsi"
 #include "sdm845-b1c1-pinctrl.dtsi"
 #include "sdm845-b1c1-haptics.dtsi"
+#include "sdm845-b1c1-nfc.dtsi"
 #include "../qcom/smb1355.dtsi"
 
 / {
