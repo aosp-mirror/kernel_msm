@@ -727,12 +727,13 @@ static void lim_process_auth_frame_type2(tpAniSirGlobal mac_ctx,
 		((tpSirMacAuthFrameBody)plainbody)->type =
 			SIR_MAC_CHALLENGE_TEXT_EID;
 		((tpSirMacAuthFrameBody)plainbody)->length =
-			SIR_MAC_AUTH_CHALLENGE_LENGTH;
+			rx_auth_frm_body->length;
 		qdf_mem_copy((uint8_t *) (
 			(tpSirMacAuthFrameBody)plainbody)->challengeText,
 			rx_auth_frm_body->challengeText,
-			SIR_MAC_AUTH_CHALLENGE_LENGTH);
-		encr_auth_frame = qdf_mem_malloc(LIM_ENCR_AUTH_BODY_LEN);
+			rx_auth_frm_body->length);
+		encr_auth_frame = qdf_mem_malloc(rx_auth_frm_body->length +
+						 LIM_ENCR_AUTH_INFO_LEN);
 		if (!encr_auth_frame) {
 			pe_err("failed to allocate memory");
 			return;
@@ -746,7 +747,7 @@ static void lim_process_auth_frame_type2(tpAniSirGlobal mac_ctx,
 					pe_session->limMlmState));
 		lim_send_auth_mgmt_frame(mac_ctx,
 				(tpSirMacAuthFrameBody)encr_auth_frame,
-				mac_hdr->sa, LIM_WEP_IN_FC,
+				mac_hdr->sa, rx_auth_frm_body->length,
 				pe_session);
 		qdf_mem_free(encr_auth_frame);
 		return;
@@ -1053,7 +1054,7 @@ lim_process_auth_frame(tpAniSirGlobal mac_ctx, uint8_t *rx_pkt_info,
 {
 	uint8_t *body_ptr, key_id, cfg_privacy_opt_imp;
 	uint8_t defaultkey[SIR_MAC_KEY_LENGTH];
-	uint8_t plainbody[LIM_ENCR_AUTH_BODY_LEN];
+	uint8_t *plainbody = NULL;
 	uint8_t decrypt_result;
 	uint16_t frame_len, curr_seq_num = 0;
 	uint32_t val, key_length = 8;
@@ -1110,6 +1111,13 @@ lim_process_auth_frame(tpAniSirGlobal mac_ctx, uint8_t *rx_pkt_info,
 		pe_err("failed to allocate memory");
 		goto free;
 	}
+
+	plainbody = qdf_mem_malloc(LIM_ENCR_AUTH_BODY_LEN);
+	if (!plainbody) {
+		pe_err("failed to allocate memory for plainbody");
+		goto free;
+	}
+	qdf_mem_zero(plainbody, LIM_ENCR_AUTH_BODY_LEN);
 
 	/*
 	 * Determine if WEP bit is set in the FC or received MAC header
@@ -1385,6 +1393,8 @@ free:
 		qdf_mem_free(auth_frame);
 	if (rx_auth_frame)
 		qdf_mem_free(rx_auth_frame);
+	if (plainbody)
+		qdf_mem_free(plainbody);
 }
 
 /*----------------------------------------------------------------------
