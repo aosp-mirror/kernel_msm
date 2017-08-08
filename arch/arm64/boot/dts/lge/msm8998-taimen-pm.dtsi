@@ -25,22 +25,6 @@
 		qcom,bcl-soc-hotplug-list = <>;
 	};
 
-	qcom,limit_info-4 {
-		qcom,emergency-frequency-mitigate;
-	};
-
-	qcom,limit_info-5 {
-		qcom,emergency-frequency-mitigate;
-	};
-
-	qcom,limit_info-6 {
-		qcom,emergency-frequency-mitigate;
-	};
-
-	qcom,limit_info-7 {
-		qcom,emergency-frequency-mitigate;
-	};
-
 	qcom,sensor-information {
 		compatible = "qcom,sensor-information";
 
