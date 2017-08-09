@@ -1,4 +1,4 @@
-/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -10,10 +10,16 @@
  * GNU General Public License for more details.
  */
 
-#include "../qcom/sdm845.dtsi"
-#include "sdm845-v1-b1c1-common.dtsi"
+/{
+	/* Taimen's battery */
+	b1c1_batterydata: qcom,battery-data {
+		qcom,batt-id-range-pct = <20>;
+		#include "lge_blt35_lgc_3620mah.dtsi"
+		#include "lge_blt35_tocad_3620mah.dtsi"
+	};
+};
 
-#include "sdm845-taimen-touch-stm-ftm4.dtsi"
-#include "sdm845-taimen-panel.dtsi"
-#include "sdm845-b1c1-audio.dtsi"
-#include "sdm845-b1c1-devboard-battery.dtsi"
+&pmi8998_fg {
+        qcom,battery-data = <&b1c1_batterydata>;
+};
+
