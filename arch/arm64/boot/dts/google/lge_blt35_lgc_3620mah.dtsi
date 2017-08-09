@@ -1,0 +1,82 @@
+/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+qcom,lge_blt35_lgc_3620mah {
+	/* #2917292_LGE_BLT35lgc_3620mAh_averaged_MasterSlave_May12th2017*/
+	qcom,max-voltage-uv = <4400000>;
+	qcom,fastchg-current-ma = <500>;
+	qcom,fg-cc-cv-threshold-mv = <4390>;
+	qcom,batt-id-kohm = <20>;
+	qcom,battery-beta = <4150>;
+	qcom,battery-type = "lge_blt35_lgc_3620mah";
+	qcom,checksum = <0x4719>;
+	qcom,gui-version = "PMI8998GUI - 2.0.0.57";
+	qcom,fg-profile-data = [
+		 9B 1E EF FD
+		 46 02 D3 DC
+		 A6 1D C1 FC
+		 AD 13 BD 1C
+		 A4 18 B9 22
+		 EF 45 1F 52
+		 4D 00 00 00
+		 12 00 00 00
+		 00 00 FC 07
+		 99 C4 58 CA
+		 21 00 08 00
+		 D8 DB 9B ED
+		 94 06 31 EB
+		 B7 E2 B8 0A
+		 7E 02 DB 42
+		 18 06 09 20
+		 27 00 14 00
+		 43 1F 67 06
+		 10 03 21 EC
+		 4B 1D BF 00
+		 13 03 E7 15
+		 09 19 08 23
+		 49 45 48 53
+		 54 00 00 00
+		 0D 00 00 00
+		 00 00 EB CC
+		 25 D2 8A D5
+		 1D 00 00 00
+		 D6 EB 9B ED
+		 69 FD A2 EA
+		 4B EB 4C 0A
+		 94 D4 68 1A
+		 99 33 CC FF
+		 07 10 00 00
+		 B1 0E 66 46
+		 1D 00 40 00
+		 59 01 0A FA
+		 FF 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+	];
+};
+
