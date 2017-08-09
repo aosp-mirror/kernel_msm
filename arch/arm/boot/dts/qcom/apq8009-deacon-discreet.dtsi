@@ -155,6 +155,8 @@
 
 &pm8916_bms {
         status = "ok";
+        qcom,resume-soc = <99>;
+        qcom,use-reported-soc;
         qcom,battery-data = <&mtp_batterydata>;
 };
 
