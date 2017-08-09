@@ -13,7 +13,7 @@
 qcom,lge_blt35_tocad_3620mah {
 	/* #2883111_LGE_BLT35tocad_3620mAh_averaged_MasterSlave_Apr18th2017*/
 	qcom,max-voltage-uv = <4400000>;
-	qcom,fastchg-current-ma = <500>;
+	qcom,fastchg-current-ma = <3550>;
 	qcom,fg-cc-cv-threshold-mv = <4390>;
 	qcom,batt-id-kohm = <56>;
 	qcom,battery-beta = <4150>;
