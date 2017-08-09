@@ -1042,6 +1042,7 @@ static int fg_get_batt_profile(struct fg_chip *chip)
 	struct device_node *batt_node, *profile_node;
 	const char *data;
 	int rc, len;
+	u32 temp;
 
 	batt_node = of_find_node_by_name(node, "qcom,battery-data");
 	if (!batt_node) {
@@ -1086,6 +1087,14 @@ static int fg_get_batt_profile(struct fg_chip *chip)
 		pr_err("battery cc_cv threshold unavailable, rc:%d\n", rc);
 		chip->bp.vbatt_full_mv = -EINVAL;
 	}
+
+	rc = of_property_read_u32(profile_node, "qcom,fg-chg-term-current", &temp);
+	if (rc >= 0)
+		chip->dt.chg_term_curr_ma = temp;
+
+	rc = of_property_read_u32(profile_node, "qcom,fg-sys-term-current", &temp);
+	if (rc >= 0)
+		chip->dt.sys_term_curr_ma = temp;
 
 	data = of_get_property(profile_node, "qcom,fg-profile-data", &len);
 	if (!data) {
