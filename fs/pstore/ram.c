@@ -208,12 +208,16 @@ static bool prz_ok(struct persistent_ram_zone *prz)
 static int ramoops_decrypt_alt(struct ramoops_context *cxt)
 {
 	struct crypto_aead *tfm;
-	struct scatterlist sg;
+	struct sg_table sgt;
+	struct page **pages;
+	unsigned int nr_pages;
+	unsigned int i;
 	int ret = 0;
 	struct aead_request *aead_req;
 	void *va;
 	phys_addr_t start;
 	size_t size;
+	size_t buffer_size;
 	void *buf;
 
 	if (!cxt->alt_phys_addr)
@@ -265,7 +269,8 @@ static int ramoops_decrypt_alt(struct ramoops_context *cxt)
 		goto out_set;
 	}
 
-	buf = kmalloc(size + AES_KEY_TAG_LEN, GFP_KERNEL);
+	buffer_size = size + AES_KEY_TAG_LEN;
+	buf = vmalloc(buffer_size);
 	if (!buf) {
 		ret = -ENOMEM;
 		pr_err("Failed to allocate bounce\n");
@@ -274,8 +279,27 @@ static int ramoops_decrypt_alt(struct ramoops_context *cxt)
 
 	memcpy_fromio(buf, va, size);
 	memcpy(buf + size, cxt->aes_key_tag, AES_KEY_TAG_LEN);
-	sg_init_one(&sg, buf, size + AES_KEY_TAG_LEN);
-	aead_request_set_crypt(aead_req, &sg, &sg, size + AES_KEY_TAG_LEN,
+
+	nr_pages = DIV_ROUND_UP(buffer_size, PAGE_SIZE);
+	pages = kmalloc_array(nr_pages, sizeof(*pages), GFP_KERNEL);
+	if (!pages) {
+		ret = -ENOMEM;
+		pr_err("Failed to allocate page list\n");
+		goto out_no_page_list;
+	}
+
+	for (i = 0; i < nr_pages; ++i)
+		pages[i] = vmalloc_to_page(buf + (i * PAGE_SIZE));
+
+	ret = sg_alloc_table_from_pages(&sgt, pages, nr_pages, 0,
+					buffer_size, GFP_KERNEL);
+
+	if (ret) {
+		pr_err("Failed to allocate sg_table\n");
+		goto out_no_sg_table;
+	}
+
+	aead_request_set_crypt(aead_req, sgt.sgl, sgt.sgl, buffer_size,
 			       cxt->aes_key_iv);
 	aead_request_set_ad(aead_req, 0);
 	ret = crypto_aead_decrypt(aead_req);
@@ -286,7 +310,11 @@ static int ramoops_decrypt_alt(struct ramoops_context *cxt)
 	memcpy_toio(va, buf, size);
 
 out_decrypt:
-	kfree(buf);
+	sg_free_table(&sgt);
+out_no_sg_table:
+	kfree(pages);
+out_no_page_list:
+	vfree(buf);
 out_no_buf:
 	aead_request_free(aead_req);
 out_set:
