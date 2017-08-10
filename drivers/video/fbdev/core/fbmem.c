@@ -1070,7 +1070,7 @@ fb_blank(struct fb_info *info, int blank)
 	s_fb_event.info = info;
 	s_fb_event.data = &s_fb_blank;
 
-	early_ret = fb_notifier_call_chain(FB_EARLY_EVENT_BLANK, &event);
+	early_ret = fb_notifier_call_chain(FB_EARLY_EVENT_BLANK, &s_fb_event);
 
 	if (info->fbops->fb_blank)
  		ret = info->fbops->fb_blank(blank, info);
