@@ -30,7 +30,6 @@
  * TOTAL CUMULATIVE LIABILITY TO ANY PARTY SHALL NOT EXCEED ONE HUNDRED U.S.
  * DOLLARS.
  */
-#include <linux/ctype.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/slab.h>
@@ -2665,7 +2664,7 @@ static int fwu_get_image_firmware_id(unsigned int *fw_id)
 		max_index = min((ptrdiff_t)(MAX_FIRMWARE_ID_LEN - 1),
 				&fwu->image_name[MAX_IMAGE_NAME_LEN] - strptr);
 		index = 0;
-		while (index < max_index && isdigit(strptr[index])) {
+		while (index < max_index && strptr[index] >= '0' && strptr[index] <= '9') {
 			firmware_id[index] = strptr[index];
 			index++;
 		}
