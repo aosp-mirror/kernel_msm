@@ -72,7 +72,7 @@
 #define WAKEUP_DISPLAY_INTERVAL (1*HZ)
 
 static DECLARE_BITMAP(minors, N_SPI_MINORS);
-
+extern void mdss_fb_spidev_display(void);
 
 /* Bit masks for spi_device.mode management.  Note that incorrect
  * settings for some settings can cause *lots* of trouble for other
@@ -771,6 +771,8 @@ static void spidev_wakeup_display_work(struct work_struct *work)
 			mutex_unlock(&spidev->buf_list_lock);
 			spidev_complete(&spidev->read_compl);
 			wake_lock_timeout(&spidev->wake_lock, DATA_TRANSFER_INTERVAL);
+			pr_info("mdss_fb_spidev_display enter\n");
+			mdss_fb_spidev_display();
 		}
 		else
 		{
