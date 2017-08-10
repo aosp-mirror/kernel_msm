@@ -218,6 +218,10 @@ struct mp2661_chg {
     bool                       enable_charging_flag;
     int                        retail_mode;
     int	                       notify_user_paired;
+
+    /* continue check battery current */
+    struct timer_list          usb_in_timer;
+    bool                       ibat_continue_check_flag;
 };
 
 struct mp2661_chg  *global_mp2661 = NULL;
@@ -410,11 +414,78 @@ static enum power_supply_property mp2661_battery_properties[] = {
     POWER_SUPPLY_PROP_NOTIFY_USER_PARIED,
 };
 
-static irqreturn_t mp2661_chg_stat_handler(int irq, void *dev_id);
 static int mp2661_get_prop_current_now(struct mp2661_chg *chip);
+static int mp2661_is_chg_plugged_in(struct mp2661_chg *chip);
+/* The max check continue current time is IBAT_SLEEP_MS * CONTINUE_IBAT_MAX_COUNT */
+#define CONTINUE_IBAT_MAX_COUNT           80
+#define IBAT_SLEEP_MS                     30
+#define CONSECUTIVE_CHARGING_COUNT        3
+static int mp2661_fix_charging_status(struct mp2661_chg *chip)
+{
+    int usb_present, current_now_ma, retry_times;
+    int status = POWER_SUPPLY_STATUS_CHARGING;
+    int consective_charging_count = 0;
+
+    if(!chip->ibat_continue_check_flag)
+    {
+        current_now_ma = mp2661_get_prop_current_now(chip) / 1000;
+        if(current_now_ma < 0)
+        {
+            pr_info("fix charging status");
+            status = POWER_SUPPLY_STATUS_DISCHARGING;
+        }
+    }
+    else
+    {
+        /* need check some times to wait usb plugin stable */
+        for(retry_times = 0; retry_times < CONTINUE_IBAT_MAX_COUNT; retry_times++)
+        {
+            current_now_ma = mp2661_get_prop_current_now(chip) / 1000;
+            if(current_now_ma >= 0)
+            {
+                consective_charging_count++;
+            }
+            else
+            {
+                consective_charging_count = 0;
+            }
+
+            if((CONSECUTIVE_CHARGING_COUNT == consective_charging_count)
+                || (!chip->ibat_continue_check_flag))
+            {
+                break;
+            }
+
+            msleep(IBAT_SLEEP_MS);
+            /* consider unplugin usb during the continue check time */
+            usb_present = mp2661_is_chg_plugged_in(chip);
+            if(!usb_present)
+            {
+                pr_info("unplugin usb in continue check");
+                status = POWER_SUPPLY_STATUS_DISCHARGING;
+                break;
+            }
+        }
+
+        if(retry_times >= CONTINUE_IBAT_MAX_COUNT)
+        {
+            pr_info("fix charging status after some times check");
+            status = POWER_SUPPLY_STATUS_DISCHARGING;
+        }
+        else if(!chip->ibat_continue_check_flag && (0 == consective_charging_count))
+        {
+            pr_info("fix charging status after some time");
+            status = POWER_SUPPLY_STATUS_DISCHARGING;
+        }
+    }
+
+    return status;
+}
+
+static irqreturn_t mp2661_chg_stat_handler(int irq, void *dev_id);
 static int mp2661_get_prop_batt_status(struct mp2661_chg *chip)
 {
-    int rc, usb_present, current_now_ma;
+    int rc, usb_present;
     u8 reg;
     int status = POWER_SUPPLY_STATUS_DISCHARGING;
     u8 chgr_sts = 0;
@@ -445,15 +516,14 @@ static int mp2661_get_prop_batt_status(struct mp2661_chg *chip)
         }
         else
         {
-            current_now_ma = mp2661_get_prop_current_now(chip) / 1000;
-            if(current_now_ma < 0)
+            /* fix charging status according to battery current in healthd*/
+            if(strncmp(current->comm, "healthd", 7))
             {
-                pr_info("fix charging status");
-                status = POWER_SUPPLY_STATUS_DISCHARGING;
+                status = POWER_SUPPLY_STATUS_CHARGING;
             }
             else
             {
-                status = POWER_SUPPLY_STATUS_CHARGING;
+                status = mp2661_fix_charging_status(chip);
             }
         }
     }
@@ -1446,8 +1516,16 @@ static void mp2661_disable_and_enable_charging(struct mp2661_chg *chip)
     }
 }
 
+static void usb_in_timer_func(unsigned long arg)
+{
+	struct mp2661_chg *chip = (struct mp2661_chg *) arg;
+	pr_info("clear continue check flag\n");
+	chip->ibat_continue_check_flag = false;
+}
+
 #define STMR_EXPIRATION_COUNT_MAX              3
 #define BATT_TEMP_IN_NORMAL_STATE1_COUNT_MAX   9
+#define IBAT_CONTINUE_CHECK_TIME               (5 * HZ)
 static void mp2661_process_interrupt_work(struct work_struct *work)
 {
     int status, usb_present;
@@ -1461,7 +1539,7 @@ static void mp2661_process_interrupt_work(struct work_struct *work)
     status = mp2661_get_prop_batt_status(chip);
     if(chip->charging_status != status)
     {
-        pr_debug("charing status change from %d to %d\n",
+        pr_info("charing status change from %d to %d\n",
                         chip->charging_status, status);
         chip->charging_status = status;
         if(POWER_SUPPLY_STATUS_FULL == status)
@@ -1492,15 +1570,15 @@ static void mp2661_process_interrupt_work(struct work_struct *work)
                 pr_info("get bms power supply\n");
                 chip->bms_psy = power_supply_get_by_name((char *)chip->bms_psy_name);
             }
+        }
 
-            if(chip->bms_psy)
-            {
-                power_supply_changed(chip->bms_psy);
-            }
-            else
-            {
-                pr_err("bms_psy is NULL\n");
-            }
+        if(chip->bms_psy)
+        {
+            power_supply_changed(chip->bms_psy);
+        }
+        else
+        {
+            pr_err("bms_psy is NULL\n");
         }
     }
 
@@ -1513,6 +1591,11 @@ static void mp2661_process_interrupt_work(struct work_struct *work)
         if(chip->usb_present)
         {
             wake_lock(&chip->chg_wake_lock);
+            /* set battery current continue check time */
+            chip->ibat_continue_check_flag = true;
+            del_timer_sync(&chip->usb_in_timer);
+            chip->usb_in_timer.expires = jiffies + IBAT_CONTINUE_CHECK_TIME;
+            add_timer(&chip->usb_in_timer);
         }
         else
         {
@@ -1553,9 +1636,7 @@ static void mp2661_process_interrupt_work(struct work_struct *work)
             wake_unlock(&chip->chg_wake_lock);
         }
 
-        pr_info("usb_present = %d\n", chip->usb_present);
         power_supply_set_present(chip->usb_psy, chip->usb_present);
-        pr_info("usb psy changed\n");
         power_supply_changed(chip->usb_psy);
     }
 
@@ -2637,6 +2718,11 @@ static int mp2661_charger_probe(struct i2c_client *client,
         return -ENOMEM;
     }
     INIT_WORK(&chip->process_interrupt_work, mp2661_process_interrupt_work);
+
+    /* init usb in timer */
+    init_timer(&chip->usb_in_timer);
+    chip->usb_in_timer.data = (unsigned long)chip;
+    chip->usb_in_timer.function = usb_in_timer_func;
 
     /* stat irq configuration */
     if (client->irq)
