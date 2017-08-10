@@ -218,8 +218,7 @@ enum {
 	MNH_POWER_MODE_L1_2_ENABLE   = 1 << 1,
 	MNH_POWER_MODE_AXI_CG_ENABLE = 1 << 2,
 };
-static uint32_t mnh_power_mode = MNH_POWER_MODE_CLKPM_ENABLE |
-	MNH_POWER_MODE_L1_2_ENABLE;
+static uint32_t mnh_power_mode = MNH_POWER_MODE_CLKPM_ENABLE;
 
 /* flag for boot mode options */
 static enum mnh_boot_mode mnh_boot_mode = MNH_BOOT_MODE_PCIE;
