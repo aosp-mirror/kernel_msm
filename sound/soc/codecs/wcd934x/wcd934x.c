@@ -93,7 +93,7 @@ static const struct snd_kcontrol_new name##_mux = \
  * Timeout in milli seconds and it is the wait time for
  * slim channel removal interrupt to receive.
  */
-#define WCD934X_SLIM_CLOSE_TIMEOUT 1000
+#define WCD934X_SLIM_CLOSE_TIMEOUT 1600
 #define WCD934X_SLIM_IRQ_OVERFLOW (1 << 0)
 #define WCD934X_SLIM_IRQ_UNDERFLOW (1 << 1)
 #define WCD934X_SLIM_IRQ_PORT_CLOSED (1 << 2)
