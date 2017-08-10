@@ -907,6 +907,7 @@ void easelcomm_cmd_channel_data_handler(void)
 		channel_buf_hdr->producer_seqnbr_next) {
 		struct easelcomm_cmd_header *cmdhdr =
 			(struct easelcomm_cmd_header *)channel->readp;
+		uint32_t saved_cmd_len = READ_ONCE(cmdhdr->command_arg_len);
 
 		dev_dbg(easelcomm_miscdev.this_device, "cmdchan consumer loop prodseq=%llu consseq=%llu off=%lx\n",
 			channel_buf_hdr->producer_seqnbr_next,
@@ -936,15 +937,15 @@ void easelcomm_cmd_channel_data_handler(void)
 		dev_dbg(easelcomm_miscdev.this_device,
 			"cmdchan recv cmd seq=%llu svc=%u cmd=%u len=%u off=%lx\n",
 			cmdhdr->sequence_nbr, cmdhdr->service_id,
-			cmdhdr->command_code, cmdhdr->command_arg_len,
+			cmdhdr->command_code, saved_cmd_len,
 			channel->readp - channel->buffer);
 		if (sizeof(struct easelcomm_cmd_header) +
-			cmdhdr->command_arg_len >
+			saved_cmd_len >
 			EASELCOMM_CMD_CHANNEL_SIZE) {
 			dev_err(easelcomm_miscdev.this_device,
 				"command channel corruption detected: seq=%llu svc=%u cmd=%u len=%u off=%lx\n",
 				cmdhdr->sequence_nbr, cmdhdr->service_id,
-				cmdhdr->command_code, cmdhdr->command_arg_len,
+				cmdhdr->command_code, saved_cmd_len,
 				channel->readp - channel->buffer);
 			break;
 		}
@@ -960,8 +961,19 @@ void easelcomm_cmd_channel_data_handler(void)
 
 		/* Process the command. */
 		easelcomm_handle_command(cmdhdr);
+
+		/* Post-process double check */
+		if (saved_cmd_len != cmdhdr->command_arg_len) {
+			dev_err(easelcomm_miscdev.this_device,
+				"command channel corruption detected: off=%lx expected len %u got %u\n",
+				channel->readp - channel->buffer,
+				saved_cmd_len, cmdhdr->command_arg_len);
+			break;
+		}
+
 		channel->readp += sizeof(struct easelcomm_cmd_header) +
-			cmdhdr->command_arg_len;
+			saved_cmd_len;
+
 		/* 8-byte-align next entry pointer */
 		if ((uintptr_t)channel->readp & 0x7)
 			channel->readp += 8 - ((uintptr_t)channel->readp & 0x7);
