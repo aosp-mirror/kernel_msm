@@ -66,17 +66,21 @@
 #define REG_RULE_5745_5925    REG_RULE(5745-10, 5925+10, 80, 0, 20, \
 		NL80211_RRF_PASSIVE_SCAN | NL80211_RRF_NO_IBSS)
 
+#define REG_RULE_5745_5825    REG_RULE(5745-10, 5825+10, 80, 0, 20, \
+				       NL80211_RRF_NO_IR)
+
 static bool init_by_driver;
 static bool init_by_reg_core;
 
 static const struct ieee80211_regdomain
 hdd_world_regrules_60_61_62 = {
-	.n_reg_rules = 3,
+	.n_reg_rules = 4,
 	.alpha2 =  "00",
 	.reg_rules = {
 		REG_RULE_2412_2462,
 		REG_RULE_5180_5320,
 		REG_RULE_5500_5700,
+		REG_RULE_5745_5825,
 	}
 };
 
