@@ -77,7 +77,7 @@
 		qcom,mdss-dsi-dma-trigger = "trigger_sw";
 		qcom,mdss-dsi-mdp-trigger = "none";
 		qcom,mdss-dsi-reset-sequence = <1 10>, <0 1>, <1 1>;
-		qcom,mdss-pan-physical-width-dimension = <35>;
-		qcom,mdss-pan-physical-height-dimension = <35>;
+		qcom,mdss-pan-physical-width-dimension = <30>;
+		qcom,mdss-pan-physical-height-dimension = <30>;
 	};
 };
