@@ -821,12 +821,13 @@ int hif_napi_poll(struct hif_opaque_softc *hif_ctx,
 {
 	int    rc = 0; /* default: no work done, also takes care of error */
 	int    normalized = 0;
-	int    bucket;
 	int    cpu = smp_processor_id();
 	bool poll_on_right_cpu;
 	struct hif_softc      *hif = HIF_GET_SOFTC(hif_ctx);
 	struct qca_napi_info *napi_info;
 	struct CE_state *ce_state = NULL;
+	unsigned bucket;
+	unsigned long long time_taken;
 
 	if (unlikely(NULL == hif)) {
 		HIF_ERROR("%s: hif context is NULL", __func__);
@@ -860,13 +861,17 @@ int hif_napi_poll(struct hif_opaque_softc *hif_ctx,
 		normalized = (rc / napi_info->scale);
 		if (normalized == 0)
 			normalized++;
-		bucket = normalized / (QCA_NAPI_BUDGET / QCA_NAPI_NUM_BUCKETS);
-		if (bucket >= QCA_NAPI_NUM_BUCKETS) {
-			bucket = QCA_NAPI_NUM_BUCKETS - 1;
-			HIF_ERROR("Bad bucket#(%d) > QCA_NAPI_NUM_BUCKETS(%d)",
-				bucket, QCA_NAPI_NUM_BUCKETS);
+		/**
+		 * msg bucket calculation uses non-normalizes values (msgs),
+		 * as msg bucket granularity is now 1 per message ( > budget)
+		 */
+		bucket = rc % QCA_NAPI_MSG_BUCKETS;
+		if (bucket >= QCA_NAPI_MSG_BUCKETS) {
+			bucket = QCA_NAPI_MSG_BUCKETS - 1;
+			HIF_ERROR("Bad bucket#(%d) > QCA_NAPI_MSG_BUCKETS(%d)",
+				bucket, QCA_NAPI_MSG_BUCKETS);
 		}
-		napi_info->stats[cpu].napi_budget_uses[bucket]++;
+		napi_info->stats[cpu].napi_msg_budget[bucket]++;
 	} else {
 	/* if ce_per engine reports 0, then poll should be terminated */
 		NAPI_DEBUG("%s:%d: nothing processed by CE. Completing NAPI",
@@ -874,6 +879,20 @@ int hif_napi_poll(struct hif_opaque_softc *hif_ctx,
 	}
 
 	ce_state = hif->ce_id_to_state[NAPI_ID2PIPE(napi_info->id)];
+
+	/**
+	 * update the time historgram here, before re-enabling the interrupts
+         * as there is a risk that this function may be executed in parallel
+         */
+	time_taken = sched_clock() - ce_state->ce_service_start_time;
+	/* time limit is specified in usecs in the config file */
+	time_taken /= 1000;  /* nsecs -> usecs, as in the cfg */
+	bucket = time_taken / ( QCA_NAPI_TIME_MAX / QCA_NAPI_TIME_BUCKETS);
+	if (bucket >= QCA_NAPI_TIME_BUCKETS)
+		bucket = QCA_NAPI_TIME_BUCKETS - 1;
+	napi_info->stats[cpu].napi_time_budget[bucket]++;
+
+
 	/*
 	 * Not using the API hif_napi_correct_cpu directly in the if statement
 	 * below since the API may not get evaluated if put at the end if any
