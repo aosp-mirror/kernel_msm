@@ -34,15 +34,14 @@
 
 &qupv3_se3_i2c {
 	status = "ok";
-	st21nfcb: st21nfcb@8 {
-		compatible = "st,st21nfcb-i2c";
+	st21nfc: st21nfc@08 {
+		compatible = "st,st21nfc";
 		reg = <0x08>;
-		clock-frequency = <400000>;
 		interrupt-parent = <&tlmm>;
-		interrupts = <63 IRQ_TYPE_LEVEL_HIGH>;
-		reset-gpios = <&tlmm 12 GPIO_ACTIVE_HIGH>;
-		ese-present;
-		uicc-present;
+		interrupts = <63 0>;
+		st,reset_gpio = <&tlmm 12 0x00>;
+		st,irq_gpio = <&tlmm 63 0x00>;
+		status = "ok";
 		pinctrl-names = "default";
 		pinctrl-0 = <&nfc_int_active &nfc_enable_active>;
 	};
