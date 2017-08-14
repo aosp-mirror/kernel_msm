@@ -6618,10 +6618,12 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int sd_flag, int wake_f
 		 */
 		if (cpumask_test_cpu(cpu, tsk_cpus_allowed(p))) {
 			int _wake_cap = wake_cap(p, cpu, prev_cpu);
+			bool about_to_idle = (cpu_rq(cpu)->nr_running < 2);
 			/*
 			 * note that sync flag takes precedence over wake_wide
 			 */
-			if (sysctl_sched_sync_hint_enable && sync && !_wake_cap)
+			if (sysctl_sched_sync_hint_enable && sync &&
+			    !_wake_cap && about_to_idle)
 				return cpu;
 			want_affine = !wake_wide(p) && !_wake_cap;
 		}
