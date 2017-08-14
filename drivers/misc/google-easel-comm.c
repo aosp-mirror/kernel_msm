@@ -449,6 +449,61 @@ static void easelcomm_flush_local_service(struct easelcomm_service *service)
 }
 
 /*
+ * Wake up any message of a service waiting for reply.
+ */
+static void __force_complete_reply_waiter(struct easelcomm_service *service)
+{
+	struct easelcomm_message_metadata *msg_cursor;
+
+	spin_lock(&service->lock);
+	list_for_each_entry(msg_cursor, &service->local_list, list) {
+		if (msg_cursor->msg->desc.need_reply)
+			complete(&msg_cursor->reply_received);
+	}
+	spin_unlock(&service->lock);
+}
+
+/*
+ * Handle local-side processing of shutting down an Easel service.  Easel
+ * services are shutdown when the local side handling process closes its fd
+ * or issues the shutdown ioctl, or the remote side sends a CLOSE_SERVICE
+ * command (meaning the remote side is doing one of those things).
+ *
+ * Flush local state if local side initiated the shutdown, wakeup the
+ * receiveMessage() waiter.
+ */
+static void easelcomm_handle_service_shutdown(
+	struct easelcomm_service *service, bool shutdown_local)
+{
+	dev_dbg(easelcomm_miscdev.this_device, "svc %u shutdown from %s\n",
+		service->service_id, shutdown_local ? "local" : "remote");
+
+	/*
+	 * If local side shutting down then flush local state, just in case.
+	 * If remote is closing then local side may still have messages in
+	 * progress, just signal the receivemessage() caller to return
+	 * shutdown status.
+	 */
+	if (shutdown_local)
+		easelcomm_flush_local_service(service);
+
+	spin_lock(&service->lock);
+	if (shutdown_local)
+		service->shutdown_local = true;
+	else
+		service->shutdown_remote = true;
+	spin_unlock(&service->lock);
+	/* Wakeup any receiveMessage() waiter so they can return to user */
+	complete(&service->receivemsg_queue_new);
+
+	/* Wakeup flush_done waiter so they can return to user */
+	complete(&service->flush_done);
+
+	/* Wakeup any sendMessageReceiveReply() waiter to return to user */
+	__force_complete_reply_waiter(service);
+}
+
+/*
  * Shutdown easelcomm local activity, mark link down.
  */
 static void easelcomm_stop_local(void)
@@ -466,8 +521,7 @@ static void easelcomm_stop_local(void)
 		struct easelcomm_service *service = easelcomm_service_list[i];
 
 		if (service != NULL)
-			easelcomm_flush_local_service(service);
-
+			easelcomm_handle_service_shutdown(service, true);
 	}
 }
 
@@ -652,61 +706,6 @@ static int easelcomm_wait_channel_initialized(
 	}
 
 	return ret;
-}
-
-/*
- * Wake up any message of a service waiting for reply.
- */
-static void __force_complete_reply_waiter(struct easelcomm_service *service)
-{
-	struct easelcomm_message_metadata *msg_cursor;
-
-	spin_lock(&service->lock);
-	list_for_each_entry(msg_cursor, &service->local_list, list) {
-		if (msg_cursor->msg->desc.need_reply)
-			complete(&msg_cursor->reply_received);
-	}
-	spin_unlock(&service->lock);
-}
-
-/*
- * Handle local-side processing of shutting down an Easel service.  Easel
- * services are shutdown when the local side handling process closes its fd
- * or issues the shutdown ioctl, or the remote side sends a CLOSE_SERVICE
- * command (meaning the remote side is doing one of those things).
- *
- * Flush local state if local side initiated the shutdown, wakeup the
- * receiveMessage() waiter.
- */
-static void easelcomm_handle_service_shutdown(
-	struct easelcomm_service *service, bool shutdown_local)
-{
-	dev_dbg(easelcomm_miscdev.this_device, "svc %u shutdown from %s\n",
-		service->service_id, shutdown_local ? "local" : "remote");
-
-	/*
-	 * If local side shutting down then flush local state, just in case.
-	 * If remote is closing then local side may still have messages in
-	 * progress, just signal the receivemessage() caller to return
-	 * shutdown status.
-	 */
-	if (shutdown_local)
-		easelcomm_flush_local_service(service);
-
-	spin_lock(&service->lock);
-	if (shutdown_local)
-		service->shutdown_local = true;
-	else
-		service->shutdown_remote = true;
-	spin_unlock(&service->lock);
-	/* Wakeup any receiveMessage() waiter so they can return to user */
-	complete(&service->receivemsg_queue_new);
-
-	/* Wakeup flush_done waiter so they can return to user */
-	complete(&service->flush_done);
-
-	/* Wakeup any sendMessageReceiveReply() waiter to return to user */
-	__force_complete_reply_waiter(service);
 }
 
 /* CLOSE_SERVICE command received from remote, shut down service. */
