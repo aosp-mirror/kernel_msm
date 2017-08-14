@@ -3668,7 +3668,7 @@ void
 limSendAuthMgmtFrame(tpAniSirGlobal pMac,
                      tpSirMacAuthFrameBody pAuthFrameBody,
                      tSirMacAddr           peerMacAddr,
-                     tANI_U8               wepBit,
+                     tANI_U8               wep_challenge_len,
                      tpPESession           psessionEntry,
                      tAniBool              waitForAck
                                                        )
@@ -3693,7 +3693,7 @@ limSendAuthMgmtFrame(tpAniSirGlobal pMac,
            pAuthFrameBody->authStatusCode,
            (pAuthFrameBody->authStatusCode == eSIR_MAC_SUCCESS_STATUS),
             MAC_ADDR_ARRAY(peerMacAddr));
-    if (wepBit == LIM_WEP_IN_FC)
+    if (wep_challenge_len)
     {
         /// Auth frame3 to be sent with encrypted framebody
         /**
@@ -3703,10 +3703,8 @@ limSendAuthMgmtFrame(tpAniSirGlobal pMac,
          * 128 bytes for challenge text and 4 bytes each for
          * IV & ICV.
          */
-
-        frameLen = sizeof(tSirMacMgmtHdr) + LIM_ENCR_AUTH_BODY_LEN;
-
-        bodyLen = LIM_ENCR_AUTH_BODY_LEN;
+        bodyLen = wep_challenge_len + LIM_ENCR_AUTH_INFO_LEN;
+        frameLen = sizeof(tSirMacMgmtHdr) + bodyLen;
     } // if (wepBit == LIM_WEP_IN_FC)
     else
     {
@@ -3834,7 +3832,10 @@ limSendAuthMgmtFrame(tpAniSirGlobal pMac,
     }
 
     pMacHdr = ( tpSirMacMgmtHdr ) pFrame;
-    pMacHdr->fc.wep = wepBit;
+    if (wep_challenge_len)
+        pMacHdr->fc.wep = LIM_WEP_IN_FC;
+    else
+        pMacHdr->fc.wep = LIM_NO_WEP_IN_FC;
 
     // Prepare BSSId
     if(  (psessionEntry->limSystemRole == eLIM_AP_ROLE)|| (psessionEntry->limSystemRole == eLIM_BT_AMP_AP_ROLE) )
@@ -3847,7 +3848,7 @@ limSendAuthMgmtFrame(tpAniSirGlobal pMac,
     /// Prepare Authentication frame body
     pBody    = pFrame + sizeof(tSirMacMgmtHdr);
 
-    if (wepBit == LIM_WEP_IN_FC)
+    if (wep_challenge_len)
     {
         vos_mem_copy(pBody, (tANI_U8 *) pAuthFrameBody, bodyLen);
 
