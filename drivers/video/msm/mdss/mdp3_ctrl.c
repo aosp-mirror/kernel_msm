@@ -47,7 +47,6 @@ static int mdp3_ctrl_get_pack_pattern(u32 imgType);
 
 int mdp3_wait_for_dma_done(struct mdp3_session_data *session);
 
-struct msm_fb_data_type *g_mfd = NULL;
 u32 mdp_lut_inverse16[MDP_LUT_SIZE] = {
 0, 65536, 32768, 21845, 16384, 13107, 10923, 9362, 8192, 7282, 6554, 5958,
 5461, 5041, 4681, 4369, 4096, 3855, 3641, 3449, 3277, 3121, 2979, 2849, 2731,
@@ -2754,7 +2753,6 @@ int mdp3_ctrl_init(struct msm_fb_data_type *mfd)
 	int splash_mismatch = 0;
 
 	pr_info("mdp3_ctrl_init\n");
-	g_mfd = mfd;
 	rc = mdp3_parse_dt_splash(mfd);
 	if (rc)
 		splash_mismatch = 1;

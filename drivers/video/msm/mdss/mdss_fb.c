@@ -78,7 +78,6 @@
 #endif
 
 #define BUFF_LEN   10
-#define SPIDEV_DISPLAY_WAIT_MS   20
 
 static struct fb_info *fbi_list[MAX_FBI_LIST];
 static int fbi_list_index;
@@ -93,9 +92,6 @@ static u32 mdss_fb_pseudo_palette[16] = {
 };
 
 static struct msm_mdp_interface *mdp_instance;
-static struct mutex g_fb_unblank_lock;
-static struct delayed_work g_fb_unblank_work;
-extern struct msm_fb_data_type *g_mfd;
 
 static int mdss_fb_register(struct msm_fb_data_type *mfd);
 static int mdss_fb_open(struct fb_info *info, int user);
@@ -2111,12 +2107,7 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 	switch (blank_mode) {
 	case FB_BLANK_UNBLANK:
 		pr_debug("unblank called. cur pwr state=%d\n", cur_power_state);
-		mutex_lock(&g_fb_unblank_lock);
-		if (!mdss_panel_is_power_on_interactive(mfd->panel_power_state))
-		{
-			ret = mdss_fb_blank_unblank(mfd);
-		}
-		mutex_unlock(&g_fb_unblank_lock);
+		ret = mdss_fb_blank_unblank(mfd);
 		break;
 	case BLANK_FLAG_ULP:
 		req_power_state = MDSS_PANEL_POWER_LP2;
@@ -4649,27 +4640,6 @@ exit:
 	return ret;
 }
 
-static void mdss_fb_spidev_display_work(struct work_struct *work)
-{
-	int ret = 0;
-
-	pr_debug("mdss_fb_spidev_display_work enter\n");
-	if (!g_mfd){
-		pr_err("g_mfd is NULL\n");
-		return;
-	}
-
-	ret = mdss_fb_blank(FB_BLANK_UNBLANK, g_mfd->fbi);
-	if (ret) {
-		pr_err("mdss_fb_spidev_blank err\n");
-	}
-}
-
-void  mdss_fb_spidev_display(void)
-{
-	schedule_delayed_work(&g_fb_unblank_work,msecs_to_jiffies(SPIDEV_DISPLAY_WAIT_MS));
-}
-EXPORT_SYMBOL(mdss_fb_spidev_display);
 /*
  * mdss_fb_mode_switch() - Function to change DSI mode
  * @mfd:	Framebuffer data structure for display
@@ -5003,8 +4973,7 @@ int __init mdss_fb_init(void)
 
 	if (platform_driver_register(&mdss_fb_driver))
 		return rc;
-	mutex_init(&g_fb_unblank_lock);
-	INIT_DELAYED_WORK(&g_fb_unblank_work,mdss_fb_spidev_display_work);
+
 	return 0;
 }
 
