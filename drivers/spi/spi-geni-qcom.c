@@ -956,7 +956,6 @@ static void setup_fifo_xfer(struct spi_transfer *xfer,
 	else if (xfer->rx_buf)
 		m_cmd = SPI_RX_ONLY;
 
-	spi_tx_cfg &= ~CS_TOGGLE;
 	if (!(mas->cur_word_len % MIN_WORD_LEN)) {
 		trans_len =
 			((xfer->len << 3) / mas->cur_word_len) & TRANS_LEN_MSK;
@@ -966,9 +965,14 @@ static void setup_fifo_xfer(struct spi_transfer *xfer,
 		trans_len = (xfer->len / bytes_per_word) & TRANS_LEN_MSK;
 	}
 
-	if (!list_is_last(&xfer->transfer_list, &spi->cur_msg->transfers) ==
-	    !xfer->cs_change)
-		m_param |= FRAGMENTATION;
+	spi_tx_cfg &= ~CS_TOGGLE;
+	if (list_is_last(&xfer->transfer_list, &spi->cur_msg->transfers)) {
+		if (xfer->cs_change)
+			m_param |= FRAGMENTATION;
+	} else {
+		if (xfer->cs_change)
+			spi_tx_cfg |= CS_TOGGLE;
+	}
 
 	mas->cur_xfer = xfer;
 	if (m_cmd & SPI_TX_ONLY) {
