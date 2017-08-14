@@ -1776,6 +1776,8 @@ static long mnh_sm_ioctl(struct file *file, unsigned int cmd,
 				__func__, err);
 			return err;
 		}
+		if (!mnh_sm_dev->powered)
+			return -EIO;
 		if (cmd == MNH_SM_IOC_CONFIG_MIPI)
 			mnh_mipi_config(mnh_sm_dev->dev, mipi_config);
 		else

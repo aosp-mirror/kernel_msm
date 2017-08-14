@@ -68,22 +68,24 @@ struct mnh_pwr_data {
 	struct work_struct shutdown_work;
 
 	enum mnh_pwr_state state;
+
+	struct mutex lock;
 };
 
 static struct mnh_pwr_data *mnh_pwr;
 
-static int __mnh_pwr_down(bool pcie_suspend);
+static int __mnh_pwr_down(bool pcie_failure);
 
-static inline int mnh_pwr_down_skip_suspend_pcie(void)
+static inline int mnh_pwr_down_pcie_failure(void)
 {
-	return __mnh_pwr_down(false);
+	return __mnh_pwr_down(true);
 }
 
 static void mnh_pwr_shutdown_work(struct work_struct *data)
 {
 	dev_err(mnh_pwr->dev, "%s: begin emergency power down\n", __func__);
 
-	mnh_pwr_down_skip_suspend_pcie();
+	mnh_pwr_down_pcie_failure();
 	mnh_sm_pwr_error_cb();
 }
 
@@ -233,7 +235,7 @@ static int mnh_pwr_pcie_enumerate(void)
 	return 0;
 }
 
-static int mnh_pwr_pcie_suspend(void)
+static int mnh_pwr_pcie_suspend(bool pcie_failure)
 {
 	struct pci_dev *pcidev = mnh_pwr->pcidev;
 	int ret;
@@ -248,22 +250,35 @@ static int mnh_pwr_pcie_suspend(void)
 			__func__, ret);
 	}
 
-	/* prepare the root complex and endpoint for going to suspend */
-	ret = pci_prepare_to_sleep(pcidev);
-	if (ret) {
-		dev_err(mnh_pwr->dev,
-			"%s: pci_prepare_to_sleep failed (%d)\n",
-			__func__, ret);
-	}
+	if (pcie_failure) {
+		/* call the platform driver to update link status */
+		ret = msm_pcie_pm_control(MSM_PCIE_SUSPEND, pcidev->bus->number,
+			pcidev, NULL,
+			PM_OPT_SUSPEND | MSM_PCIE_CONFIG_NO_CFG_RESTORE);
+		if (ret) {
+			dev_err(mnh_pwr->dev,
+				"%s: msm_pcie_pm_control(suspend) failed (%d)\n",
+				__func__, ret);
+			return ret;
+		}
+	} else {
+		/* prepare the root complex and endpoint for going to suspend */
+		ret = pci_prepare_to_sleep(pcidev);
+		if (ret) {
+			dev_err(mnh_pwr->dev,
+				"%s: pci_prepare_to_sleep failed (%d)\n",
+				__func__, ret);
+		}
 
-	/* call the platform driver to suspend PCIe link */
-	ret = msm_pcie_pm_control(MSM_PCIE_SUSPEND, pcidev->bus->number,
-				  pcidev, NULL, PM_OPT_SUSPEND);
-	if (ret) {
-		dev_err(mnh_pwr->dev,
-			"%s: msm_pcie_pm_control(suspend) failed (%d)\n",
-			__func__, ret);
-		return ret;
+		/* call the platform driver to suspend PCIe link */
+		ret = msm_pcie_pm_control(MSM_PCIE_SUSPEND, pcidev->bus->number,
+					  pcidev, NULL, PM_OPT_SUSPEND);
+		if (ret) {
+			dev_err(mnh_pwr->dev,
+				"%s: msm_pcie_pm_control(suspend) failed (%d)\n",
+				__func__, ret);
+			return ret;
+		}
 	}
 
 	return 0;
@@ -351,13 +366,13 @@ fail_pcie_resume_awake:
 	return ret;
 }
 
-static int __mnh_pwr_down(bool pcie_suspend)
+static int __mnh_pwr_down(bool pcie_failure)
 {
 	int ret;
 
-	if (pcie_suspend && (mnh_sm_get_boot_mode() == MNH_BOOT_MODE_PCIE)) {
+	if (mnh_sm_get_boot_mode() == MNH_BOOT_MODE_PCIE) {
 		/* suspend pcie link */
-		ret = mnh_pwr_pcie_suspend();
+		ret = mnh_pwr_pcie_suspend(pcie_failure);
 		if (ret) {
 			dev_err(mnh_pwr->dev, "%s: failed to suspend pcie link (%d)\n",
 				__func__, ret);
@@ -451,7 +466,7 @@ fail_pwr_down_sdldo:
 
 static inline int mnh_pwr_down(void)
 {
-	return __mnh_pwr_down(true);
+	return __mnh_pwr_down(false);
 }
 
 static int mnh_pwr_suspend(void)
@@ -460,7 +475,7 @@ static int mnh_pwr_suspend(void)
 
 	if (mnh_sm_get_boot_mode() == MNH_BOOT_MODE_PCIE) {
 		/* suspend pcie link */
-		ret = mnh_pwr_pcie_suspend();
+		ret = mnh_pwr_pcie_suspend(false);
 		if (ret) {
 			dev_err(mnh_pwr->dev, "%s: failed to suspend pcie link (%d)\n",
 				__func__, ret);
@@ -764,9 +779,12 @@ EXPORT_SYMBOL(mnh_pwr_set_asr_voltage);
 int mnh_pwr_set_state(enum mnh_pwr_state system_state)
 {
 	int ret = 0;
+	enum mnh_pwr_state curr_state =  mnh_pwr_get_state();
 
 	dev_dbg(mnh_pwr->dev, "%s req: %d, current: %d\n", __func__,
-		system_state, mnh_pwr_get_state());
+		system_state, curr_state);
+
+	mutex_lock(&mnh_pwr->lock);
 
 	if (system_state != mnh_pwr->state) {
 		switch (system_state) {
@@ -782,7 +800,7 @@ int mnh_pwr_set_state(enum mnh_pwr_state system_state)
 		default:
 			dev_err(mnh_pwr->dev, "%s: invalid state %d\n",
 				__func__, system_state);
-			return -EINVAL;
+			ret = -EINVAL;
 			break;
 		}
 
@@ -792,10 +810,12 @@ int mnh_pwr_set_state(enum mnh_pwr_state system_state)
 				__func__, ret);
 		else
 			dev_dbg(mnh_pwr->dev, "%s done with state: %d\n",
-				__func__, mnh_pwr_get_state());
+				__func__, system_state);
 	} else {
 		dev_dbg(mnh_pwr->dev, "%s: no state change needed\n", __func__);
 	}
+
+	mutex_unlock(&mnh_pwr->lock);
 
 	return ret;
 }
@@ -803,7 +823,13 @@ EXPORT_SYMBOL_GPL(mnh_pwr_set_state);
 
 enum mnh_pwr_state mnh_pwr_get_state(void)
 {
-	return mnh_pwr->state;
+	enum mnh_pwr_state curr_state;
+
+	mutex_lock(&mnh_pwr->lock);
+	curr_state = mnh_pwr->state;
+	mutex_unlock(&mnh_pwr->lock);
+
+	return curr_state;
 }
 EXPORT_SYMBOL_GPL(mnh_pwr_get_state);
 
@@ -833,6 +859,7 @@ int mnh_pwr_init(struct platform_device *pdev, struct device *dev)
 
 	/* initialize some structures */
 	INIT_WORK(&mnh_pwr->shutdown_work, mnh_pwr_shutdown_work);
+	mutex_init(&mnh_pwr->lock);
 
 	/* power on the device to enumerate PCIe */
 	ret = mnh_pwr_up(MNH_PWR_S0);
