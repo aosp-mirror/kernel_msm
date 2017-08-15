@@ -13,7 +13,7 @@
 * more details.
 *
 */
-
+#define DEBUG
 #include <linux/delay.h>
 
 #include "mnh-hwio.h"
@@ -307,18 +307,23 @@ static int mnh_mipi_gen3_lookup_freq_code(uint32_t rate)
 			return i - 1;
 	}
 
-	return i;
+	return i - 1;
 }
 
 static int mnh_mipi_gen3_lookup_device_cfg_idx(uint32_t rate)
 {
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(mipi_dev_ovr_cfgs); i++)
-		if (rate == mipi_dev_ovr_cfgs[i].rate)
-			return i;
+	if ((rate < mipi_dev_ovr_cfgs[0].rate) ||
+	    (rate > mipi_dev_ovr_cfgs[ARRAY_SIZE(mipi_dev_ovr_cfgs)-1].rate))
+		return -EINVAL;
 
-	return -EINVAL;
+	for (i = 0; i < ARRAY_SIZE(mipi_dev_ovr_cfgs); i++) {
+		if (rate <= mipi_dev_ovr_cfgs[i].rate)
+			return i;
+	}
+
+	return i - 1;
 }
 
 static void mnh_mipi_gen3_host(struct device *dev, uint32_t device,
@@ -370,6 +375,8 @@ static void mnh_mipi_gen3_host(struct device *dev, uint32_t device,
 
 	/* get the PHY settings */
 	code_index = mnh_mipi_gen3_lookup_freq_code(rate);
+	if (code_index < 0)
+		return;
 	freq_range_code = mipi_rate_configs[code_index].freq_range_code;
 	osc_freq_code = mipi_rate_configs[code_index].osc_freq_code;
 
@@ -585,6 +592,8 @@ static void mnh_mipi_gen3_device(struct device *dev, uint32_t device,
 
 	/* get the PHY settings */
 	code_index = mnh_mipi_gen3_lookup_freq_code(rate);
+	if (code_index < 0)
+		return;
 	freq_range_code = mipi_rate_configs[code_index].freq_range_code;
 	osc_freq_code = mipi_rate_configs[code_index].osc_freq_code;
 
@@ -620,6 +629,8 @@ static void mnh_mipi_gen3_device(struct device *dev, uint32_t device,
 
 	/* mipi device configuration settings from lookup table */
 	mipi_dev_cfg_index = mnh_mipi_gen3_lookup_device_cfg_idx(rate);
+	if (mipi_dev_cfg_index < 0)
+		return;
 	dev_ovr_cfg = &mipi_dev_ovr_cfgs[mipi_dev_cfg_index];
 	dev_dbg(dev, "%s: Device configuration index: %d\n", __func__,
 		mipi_dev_cfg_index);
