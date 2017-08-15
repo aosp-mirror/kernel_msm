@@ -607,7 +607,6 @@ void proc_sched_show_task(struct task_struct *p, struct seq_file *m)
 	P(se.statistics.nr_wakeups_sis_count);
 	/* select_energy_cpu_brute() */
 	P(se.statistics.nr_wakeups_secb_attempts);
-	P(se.statistics.nr_wakeups_secb_sync);
 	P(se.statistics.nr_wakeups_secb_idle_bt);
 	P(se.statistics.nr_wakeups_secb_insuff_cap);
 	P(se.statistics.nr_wakeups_secb_no_nrg_sav);

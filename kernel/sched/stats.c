@@ -19,8 +19,8 @@ static inline void show_easstat(struct seq_file *seq, struct eas_stats *stats)
 	    stats->sis_attempts, stats->sis_idle, stats->sis_cache_affine,
 	    stats->sis_suff_cap, stats->sis_idle_cpu, stats->sis_count);
 
-	seq_printf(seq, "%llu %llu %llu %llu %llu %llu %llu ",
-	    stats->secb_attempts, stats->secb_sync, stats->secb_idle_bt,
+	seq_printf(seq, "%llu %llu %llu %llu %llu %llu ",
+	    stats->secb_attempts, stats->secb_idle_bt,
 	    stats->secb_insuff_cap, stats->secb_no_nrg_sav,
 	    stats->secb_nrg_sav, stats->secb_count);
 
