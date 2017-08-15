@@ -76,7 +76,6 @@ static void mnh_pwr_shutdown_work(struct work_struct *data)
 {
 	dev_err(mnh_pwr->dev, "%s: begin emergency power down\n", __func__);
 
-	mnh_pwr->pcie_failure = true;
 	mnh_pwr_set_state(MNH_PWR_S4);
 	mnh_sm_pwr_error_cb();
 }
@@ -85,6 +84,8 @@ static int mnh_pwr_smps1_notifier_cb(struct notifier_block *nb,
 				   unsigned long event, void *cookie)
 {
 	dev_dbg(mnh_pwr->dev, "%s: received event %ld\n", __func__, event);
+
+	mnh_pwr->pcie_failure = true;
 
 	/* force emergency shutdown if regulator output has failed */
 	if (event == REGULATOR_EVENT_FAIL) {
@@ -104,6 +105,8 @@ static int mnh_pwr_smps2_notifier_cb(struct notifier_block *nb,
 {
 	dev_dbg(mnh_pwr->dev, "%s: received event %ld\n", __func__, event);
 
+	mnh_pwr->pcie_failure = true;
+
 	/* force emergency shutdown if regulator output has failed */
 	if (event == REGULATOR_EVENT_FAIL) {
 		dev_err(mnh_pwr->dev,
@@ -122,6 +125,8 @@ static int mnh_pwr_ldo1_notifier_cb(struct notifier_block *nb,
 {
 	dev_dbg(mnh_pwr->dev, "%s: received event %ld\n", __func__, event);
 
+	mnh_pwr->pcie_failure = true;
+
 	/* force emergency shutdown if regulator output has failed */
 	if (event == REGULATOR_EVENT_FAIL) {
 		dev_err(mnh_pwr->dev,
@@ -139,6 +144,8 @@ static int mnh_pwr_ldo2_notifier_cb(struct notifier_block *nb,
 				   unsigned long event, void *cookie)
 {
 	dev_dbg(mnh_pwr->dev, "%s: received event %ld\n", __func__, event);
+
+	mnh_pwr->pcie_failure = true;
 
 	/* force emergency shutdown if regulator output has failed */
 	if (event == REGULATOR_EVENT_FAIL) {
@@ -162,6 +169,8 @@ void mnh_pwr_pcie_link_state_cb(struct msm_pcie_notify *notify)
 		dev_err(mnh_pwr->dev,
 			"%s: PCIe link is down, forcing power down\n",
 			__func__);
+
+		mnh_pwr->pcie_failure = true;
 
 		/* force emergency shutdown */
 		schedule_work(&mnh_pwr->shutdown_work);
@@ -227,7 +236,7 @@ static int mnh_pwr_pcie_enumerate(void)
 	return 0;
 }
 
-static int mnh_pwr_pcie_suspend(bool pcie_failure)
+static int mnh_pwr_pcie_suspend(void)
 {
 	struct pci_dev *pcidev = mnh_pwr->pcidev;
 	int ret;
@@ -242,7 +251,7 @@ static int mnh_pwr_pcie_suspend(bool pcie_failure)
 			__func__, ret);
 	}
 
-	if (pcie_failure) {
+	if (mnh_pwr->pcie_failure) {
 		/* call the platform driver to update link status */
 		ret = msm_pcie_pm_control(MSM_PCIE_SUSPEND, pcidev->bus->number,
 			pcidev, NULL,
@@ -362,13 +371,13 @@ fail_pcie_resume_awake:
 	return ret;
 }
 
-static int __mnh_pwr_down(bool pcie_failure)
+static int mnh_pwr_down(void)
 {
 	int ret;
 
 	if (mnh_sm_get_boot_mode() == MNH_BOOT_MODE_PCIE) {
 		/* suspend pcie link */
-		ret = mnh_pwr_pcie_suspend(pcie_failure);
+		ret = mnh_pwr_pcie_suspend();
 		if (ret) {
 			dev_err(mnh_pwr->dev, "%s: failed to suspend pcie link (%d)\n",
 				__func__, ret);
@@ -452,18 +461,13 @@ fail_pwr_down_ldo2:
 	return ret;
 }
 
-static inline int mnh_pwr_down(void)
-{
-	return __mnh_pwr_down(false);
-}
-
 static int mnh_pwr_suspend(void)
 {
 	int ret;
 
 	if (mnh_sm_get_boot_mode() == MNH_BOOT_MODE_PCIE) {
 		/* suspend pcie link */
-		ret = mnh_pwr_pcie_suspend(false);
+		ret = mnh_pwr_pcie_suspend();
 		if (ret) {
 			dev_err(mnh_pwr->dev, "%s: failed to suspend pcie link (%d)\n",
 				__func__, ret);
