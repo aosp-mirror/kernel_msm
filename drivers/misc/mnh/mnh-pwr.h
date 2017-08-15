@@ -32,6 +32,5 @@ enum mnh_pwr_state {
 int mnh_pwr_set_state(enum mnh_pwr_state system_state);
 enum mnh_pwr_state mnh_pwr_get_state(void);
 int mnh_pwr_init(struct platform_device *pdev, struct device *dev);
-int mnh_pwr_set_asr_voltage(int voltage_uV);
 
 #endif /* __MNH_PWR_H__ */
