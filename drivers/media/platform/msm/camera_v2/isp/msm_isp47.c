@@ -3067,11 +3067,6 @@ struct msm_vfe_hardware_info vfe47_hw_info = {
 	.axi_hw_info = &msm_vfe47_axi_hw_info,
 	.stats_hw_info = &msm_vfe47_stats_hw_info,
 	.regulator_names = {"vdd", "camss-vdd", "mmagic-vdd"},
-	.intf_states_irq_mask = { { 0x1, 0x10, 0xC, 0x60FF8000, 0x2 },
-				{ 0x0, 0x20, 0x0, 0x0, 0x0 },
-				{ 0x0, 0x40, 0x0, 0x0, 0x0 },
-				{ 0x0, 0x80, 0x0, 0x0, 0x0 },
-			},
 };
 EXPORT_SYMBOL(vfe47_hw_info);
 

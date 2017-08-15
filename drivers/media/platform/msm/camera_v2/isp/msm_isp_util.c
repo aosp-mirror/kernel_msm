@@ -2142,111 +2142,6 @@ irqreturn_t msm_isp_process_irq(int irq_num, void *data)
 	return IRQ_HANDLED;
 }
 
-static void msm_isp_process_irq_states(struct vfe_device *vfe_dev,
-	uint32_t irq_status0, uint32_t irq_status1,
-	struct msm_isp_timestamp *ts)
-{
-	enum msm_vfe_input_src i;
-	uint32_t *irq_mask;
-	uint32_t temp_irqmask;
-	uint32_t temp_irqstatus0;
-	struct msm_vfe_irq_ops *irq_ops = &vfe_dev->hw_info->vfe_ops.irq_ops;
-	struct msm_vfe_src_info *src_intf;
-
-	for (i = VFE_PIX_0; i <= VFE_RAW_2; i++) {
-		src_intf = &vfe_dev->axi_data.src_info[i];
-		irq_mask = &vfe_dev->hw_info->intf_states_irq_mask[i][0];
-		temp_irqstatus0 = irq_status0;
-
-		if((src_intf->irq_state == MSM_ISP_IRQ_STATE_BUFDONE) &&
-			(temp_irqstatus0 & irq_mask[src_intf->irq_state]) &&
-			(temp_irqstatus0 & irq_mask[MSM_ISP_IRQ_STATE_SOF]))
-			src_intf->irq_state = (src_intf->irq_state + 1)
-						% MSM_ISP_IRQ_STATE_EOF;
-		while (temp_irqstatus0 & src_intf->irq_mask) {
-			temp_irqmask = irq_mask[src_intf->irq_state];
-			/*
-			 * For EOF handle it together with buf done since
-			 * the order is not known
-			 */
-			if (src_intf->irq_state == MSM_ISP_IRQ_STATE_BUFDONE)
-				temp_irqmask |= irq_mask[
-						src_intf->irq_state + 1];
-			if (temp_irqstatus0 & temp_irqmask) {
-				switch (src_intf->irq_state) {
-				case MSM_ISP_IRQ_STATE_SOF:
-					irq_ops->process_camif_irq(vfe_dev,
-						temp_irqstatus0 &
-						irq_mask[src_intf->irq_state],
-						irq_status1, ts);
-					break;
-				case MSM_ISP_IRQ_STATE_REG_UPD:
-					irq_ops->process_reg_update(vfe_dev,
-						temp_irqstatus0 &
-						irq_mask[src_intf->irq_state],
-						irq_status1, ts);
-					break;
-				case MSM_ISP_IRQ_STATE_EPOCH:
-					irq_ops->process_epoch_irq(vfe_dev,
-						temp_irqstatus0 &
-						irq_mask[src_intf->irq_state],
-						irq_status1, ts);
-					break;
-				case MSM_ISP_IRQ_STATE_BUFDONE:
-					/*
-					 * check if buf done really came since
-					 * we may only have EOF
-					 */
-					if (temp_irqstatus0 &
-						irq_mask[src_intf->irq_state]) {
-						if (i == VFE_PIX_0)
-							irq_ops->
-							process_stats_irq(
-							vfe_dev,
-							temp_irqstatus0 &
-							irq_mask[
-							src_intf->irq_state],
-							irq_status1, ts);
-						irq_ops->process_axi_irq(
-							vfe_dev,
-							temp_irqstatus0 &
-							irq_mask[
-							src_intf->irq_state],
-							irq_status1, ts);
-					}
-					/* handle eof */
-					if (temp_irqstatus0 &
-						irq_mask[src_intf->irq_state
-							+ 1])
-						irq_ops->process_camif_irq(
-							vfe_dev,
-							temp_irqstatus0 &
-							irq_mask[
-							src_intf->irq_state],
-							irq_status1, ts);
-					break;
-				default:
-					pr_err("Unexpected vfe %d intf %d irq state %d\n",
-						vfe_dev->pdev->id, i,
-						src_intf->irq_state);
-					break;
-				}
-				temp_irqstatus0 &= ~temp_irqmask;
-			}
-			/*
-			 * For buf done state only transition if next state
-			 * irq has come, since there may be more buf done
-			 * irq coming in buf done state.
-			 */
-			if (temp_irqstatus0 ||
-				src_intf->irq_state !=
-				MSM_ISP_IRQ_STATE_BUFDONE)
-				src_intf->irq_state = (src_intf->irq_state + 1)
-						% MSM_ISP_IRQ_STATE_EOF;
-		}
-	}
-}
-
 void msm_isp_do_tasklet(unsigned long data)
 {
 	unsigned long flags;
@@ -2294,8 +2189,16 @@ void msm_isp_do_tasklet(unsigned long data)
 			continue;
 		}
 		msm_isp_process_error_info(vfe_dev);
-		msm_isp_process_irq_states(vfe_dev, irq_status0,
-						irq_status1, &ts);
+		irq_ops->process_stats_irq(vfe_dev,
+			irq_status0, irq_status1, &ts);
+		irq_ops->process_axi_irq(vfe_dev,
+			irq_status0, irq_status1, &ts);
+		irq_ops->process_camif_irq(vfe_dev,
+			irq_status0, irq_status1, &ts);
+		irq_ops->process_reg_update(vfe_dev,
+			irq_status0, irq_status1, &ts);
+		irq_ops->process_epoch_irq(vfe_dev,
+			irq_status0, irq_status1, &ts);
 	}
 }
 

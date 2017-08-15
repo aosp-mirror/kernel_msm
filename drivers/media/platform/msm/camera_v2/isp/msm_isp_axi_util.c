@@ -416,7 +416,6 @@ static void msm_isp_axi_reserve_wm(struct vfe_device *vfe_dev,
 	struct msm_vfe_axi_shared_data *axi_data = &vfe_dev->axi_data;
 	int i, j;
 	int vfe_idx = msm_isp_get_vfe_idx_for_stream(vfe_dev, stream_info);
-	enum msm_vfe_input_src intf;
 
 	for (i = 0; i < stream_info->num_planes; i++) {
 		for (j = 0; j < axi_data->hw_info->num_wm; j++) {
@@ -441,11 +440,6 @@ static void msm_isp_axi_reserve_wm(struct vfe_device *vfe_dev,
 				vfe_dev->hw_info->vfe_ops.core_ops.
 					set_bus_err_ign_mask(vfe_dev, j, 1);
 		}
-		/* add the wm interrupt to interface interrupt mask */
-		intf = SRC_TO_INTF(stream_info->stream_src);
-		axi_data->src_info[intf].irq_mask |= (1 << (j + 8));
-		vfe_dev->hw_info->intf_states_irq_mask[intf]
-			[MSM_ISP_IRQ_STATE_BUFDONE] |= (1 << (j + 8));
 	}
 }
 
@@ -455,7 +449,6 @@ void msm_isp_axi_free_wm(struct vfe_device *vfe_dev,
 	struct msm_vfe_axi_shared_data *axi_data = &vfe_dev->axi_data;
 	int i;
 	int vfe_idx = msm_isp_get_vfe_idx_for_stream(vfe_dev, stream_info);
-	enum msm_vfe_input_src intf;
 
 	for (i = 0; i < stream_info->num_planes; i++) {
 		axi_data->free_wm[stream_info->wm[vfe_idx][i]] = 0;
@@ -467,12 +460,6 @@ void msm_isp_axi_free_wm(struct vfe_device *vfe_dev,
 					set_bus_err_ign_mask(vfe_dev,
 						stream_info->wm[vfe_idx][i], 0);
 		}
-		intf = SRC_TO_INTF(stream_info->stream_src);
-		axi_data->src_info[intf].irq_mask &=
-				~(1 << (stream_info->wm[vfe_idx][i] + 8));
-		vfe_dev->hw_info->intf_states_irq_mask[intf]
-			[MSM_ISP_IRQ_STATE_BUFDONE] &=
-			~(1 << (stream_info->wm[vfe_idx][i] + 8));
 	}
 	if (stream_info->stream_src <= IDEAL_RAW)
 		axi_data->num_pix_stream++;
@@ -488,7 +475,6 @@ static void msm_isp_axi_reserve_comp_mask(
 	uint8_t comp_mask = 0;
 	struct msm_vfe_axi_shared_data *axi_data = &vfe_dev->axi_data;
 	int vfe_idx = msm_isp_get_vfe_idx_for_stream(vfe_dev, stream_info);
-	enum msm_vfe_input_src intf;
 
 	for (i = 0; i < stream_info->num_planes; i++)
 		comp_mask |= 1 << stream_info->wm[vfe_idx][i];
@@ -504,11 +490,6 @@ static void msm_isp_axi_reserve_comp_mask(
 		}
 	}
 	stream_info->comp_mask_index[vfe_idx] = i;
-	/* add the wm interrupt to interface interrupt mask */
-	intf = SRC_TO_INTF(stream_info->stream_src);
-	axi_data->src_info[intf].irq_mask |= (1 << (i + 25));
-	vfe_dev->hw_info->intf_states_irq_mask[intf]
-			[MSM_ISP_IRQ_STATE_BUFDONE] |= (1 << (i + 25));
 	return;
 }
 
@@ -517,18 +498,11 @@ static void msm_isp_axi_free_comp_mask(struct vfe_device *vfe_dev,
 {
 	struct msm_vfe_axi_shared_data *axi_data = &vfe_dev->axi_data;
 	int vfe_idx = msm_isp_get_vfe_idx_for_stream(vfe_dev, stream_info);
-	enum msm_vfe_input_src intf;
 
 	axi_data->composite_info[stream_info->comp_mask_index[vfe_idx]].
 		stream_composite_mask = 0;
 	axi_data->composite_info[stream_info->comp_mask_index[vfe_idx]].
 		stream_handle = 0;
-	intf = SRC_TO_INTF(stream_info->stream_src);
-	axi_data->src_info[intf].irq_mask &=
-			~(1 << (stream_info->comp_mask_index[vfe_idx] + 25));
-	vfe_dev->hw_info->intf_states_irq_mask[intf]
-			[MSM_ISP_IRQ_STATE_BUFDONE] &=
-			~(1 << (stream_info->comp_mask_index[vfe_idx] + 25));
 	axi_data->num_used_composite_mask--;
 }
 
@@ -2255,7 +2229,6 @@ static void msm_isp_input_disable(struct vfe_device *vfe_dev, int cmd_type)
 			continue;
 		/* deactivate the input line */
 		axi_data->src_info[i].active = 0;
-		axi_data->src_info[i].irq_mask = 0;
 		src_info = &axi_data->src_info[i];
 
 		if (src_info->dual_hw_type == DUAL_HW_MASTER_SLAVE) {
@@ -2332,7 +2305,6 @@ static void msm_isp_input_enable(struct vfe_device *vfe_dev,
 		(axi_data->src_info[VFE_PIX_0].input_mux == EXTERNAL_READ);
 	int stream_count;
 	int i;
-	int j;
 
 	for (i = 0; i < VFE_SRC_MAX; i++) {
 		stream_count = axi_data->src_info[i].stream_count +
@@ -2341,17 +2313,6 @@ static void msm_isp_input_enable(struct vfe_device *vfe_dev,
 			continue;
 		if (axi_data->src_info[i].active)
 			continue;
-		if (i != VFE_PIX_0)
-			axi_data->src_info[i].irq_state =
-					MSM_ISP_IRQ_STATE_REG_UPD;
-		else
-			axi_data->src_info[i].irq_state =
-					MSM_ISP_IRQ_STATE_SOF;
-		axi_data->src_info[i].irq_mask = 0;
-		for (j = 0; j < MSM_ISP_IRQ_STATE_MAX; j++) {
-			axi_data->src_info[i].irq_mask |=
-			vfe_dev->hw_info->intf_states_irq_mask[i][j];
-		}
 		/* activate the input since it is deactivated */
 		axi_data->src_info[i].frame_id = 0;
 		if (axi_data->src_info[i].input_mux != EXTERNAL_READ)
