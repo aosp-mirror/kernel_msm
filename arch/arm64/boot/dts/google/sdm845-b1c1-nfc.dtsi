@@ -1,22 +1,29 @@
 &tlmm {
 	nfc {
-		nfc_enable_active: nfc_enable_active {
-			/* active state */
+		/* remove the ../qcom/sdm845-pinctrl.dtsi legacy */
+		/delete-node/ nfc_int_active;
+		/delete-node/ nfc_int_suspend;
+		/delete-node/ nfc_enable_active;
+		/delete-node/ nfc_enable_suspend;
+
+		/* define the real stuff */
+		nfc_int_default: nfc_int_default {
+			/* default state */
 			mux {
-				/* 12: NFC ENABLE, 24:ESE Enable, 122:ESE WAKEUP INT */
-				pins = "gpio12", "gpio24", "gpio122";
+				/* GPIO 63 NFC Read Interrupt */
+				pins = "gpio63";
 				function = "gpio";
 			};
 
 			config {
-				pins = "gpio12", "gpio24", "gpio122";
+				pins = "gpio63";
 				drive-strength = <2>; /* 2 MA */
-				bias-pull-up;
+				bias-pull-down;
 			};
 		};
 
-		nfc_enable_suspend: nfc_enable_suspend {
-			/* sleep state */
+		nfc_enable_default: nfc_enable_default {
+			/* default state */
 			mux {
 				/* 12: NFC ENABLE, 24:ESE Enable, 122:ESE WAKEUP INT */
 				pins = "gpio12", "gpio24", "gpio122";
@@ -26,7 +33,7 @@
 			config {
 				pins = "gpio12", "gpio24", "gpio122";
 				drive-strength = <2>; /* 2 MA */
-				bias-disable;
+				bias-pull-down;
 			};
 		};
 	};
@@ -43,6 +50,6 @@
 		st,irq_gpio = <&tlmm 63 0x00>;
 		status = "ok";
 		pinctrl-names = "default";
-		pinctrl-0 = <&nfc_int_active &nfc_enable_active>;
+		pinctrl-0 = <&nfc_int_default &nfc_enable_default>;
 	};
 };
