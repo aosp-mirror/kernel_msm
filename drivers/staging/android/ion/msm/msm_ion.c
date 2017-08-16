@@ -75,6 +75,10 @@ static struct ion_heap_desc ion_heap_meta[] = {
 		.name	= ION_MM_FIRMWARE_HEAP_NAME,
 	},
 	{
+		.id	= ION_GOOGLE_HEAP_ID,
+		.name	= ION_GOOGLE_HEAP_NAME,
+	},
+	{
 		.id	= ION_CP_MFC_HEAP_ID,
 		.name	= ION_MFC_HEAP_NAME,
 		.permission_type = IPT_TYPE_MFC_SHAREDMEM,
