@@ -73,6 +73,8 @@ lkdtm-$(CONFIG_LKDTM)		+= lkdtm_rodata_objcopy.o
 lkdtm-$(CONFIG_LKDTM)		+= lkdtm_usercopy.o
 
 obj-y                           += mnh/
+obj-$(CONFIG_GOOGLE_EASEL)      += google-easel.o
+google-easel-objs               += google-easel-comm.o google-easel-comm-dma.o google-easel-comm-hw.o
 
 OBJCOPYFLAGS :=
 OBJCOPYFLAGS_lkdtm_rodata_objcopy.o := \
