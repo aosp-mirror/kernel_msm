@@ -87,6 +87,11 @@
 
 #define ENTRY_OVERHEAD strlen("bssid=\nssid=\nfreq=\nlevel=\nage=\ndist=\ndistSd=\n====")
 #define TIME_MIN_DIFF 5
+#define EVENT_DATABUF_MAXLEN	(512 - sizeof(bcm_event_t))
+#define EVENT_MAX_NETCNT \
+	((EVENT_DATABUF_MAXLEN - sizeof(wl_pfn_scanresults_t)) \
+	/ sizeof(wl_pfn_net_info_t) + 1)
+
 static wlc_ssid_ext_t * dhd_pno_get_legacy_pno_ssid(dhd_pub_t *dhd,
  dhd_pno_status_info_t *pno_state);
 #ifdef GSCAN_SUPPORT
@@ -3651,7 +3656,9 @@ void *dhd_handle_hotlist_scan_evt(dhd_pub_t *dhd, const void *event_data, int *s
 
 	gscan_params = &(_pno_state->pno_params_arr[INDEX_OF_GSCAN_PARAMS].params_gscan);
 
-	if (!results->count) {
+	if (!results->count || (results->count > EVENT_MAX_NETCNT)) {
+		DHD_ERROR(("%s: wrong count:%d\n", __FUNCTION__,
+				results->count));
 		*send_evt_bytes = 0;
 		return ptr;
 	}
