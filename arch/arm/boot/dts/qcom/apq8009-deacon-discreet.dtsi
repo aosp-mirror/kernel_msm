@@ -49,7 +49,8 @@
 			ite,palm-detect-keycode = <142>;
 			ite,fw-name = "it7260_fw_050D0014.bin";
 			ite,cfg-name = "it7260_cfg_62011E01.bin";
-			ite,avdd-lpm-cur = <3000>;
+			ite,avdd-lpm-cur = <1000>;
+
 		};
 		taos_tsl2584: tsl2584@39 {
 			compatible = "taos,tsl2584";
