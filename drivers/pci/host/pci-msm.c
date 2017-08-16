@@ -879,12 +879,19 @@ static void pcie_pcs_port_phy_init(struct msm_pcie_dev_t *dev)
 static bool pcie_phy_is_ready(struct msm_pcie_dev_t *dev)
 {
 	if (dev->phy_ver >= 0x20) {
-		if (readl_relaxed(dev->phy +
-			PCIE_N_PCS_STATUS(dev->rc_idx, dev->common_phy)) &
-					BIT(6))
-			return false;
-		else
-			return true;
+		if (dev->rc_idx == 0) {
+			if (readl_relaxed(dev->phy +
+				PCIE_N_PCS_STATUS(dev->rc_idx, dev->common_phy)) &
+						BIT(6))
+				return false;
+			else
+				return true;
+		} else {
+			if (readl_relaxed(dev->phy + 0x1AAC) & BIT(6))
+				return false;
+			else
+				return true;
+		}
 	}
 
 	if (!(readl_relaxed(dev->phy + PCIE_COM_PCS_READY_STATUS) & 0x1))
@@ -3815,6 +3822,28 @@ static int msm_pcie_enable(struct msm_pcie_dev_t *dev, u32 options)
 	/* set max tlp read size */
 	msm_pcie_write_reg_field(dev->dm_core, PCIE20_DEVICE_CONTROL_STATUS,
 				0x7000, dev->tlp_rd_size);
+
+	if (dev->rc_idx == 0x1) {
+		/* Allow establishing connection on one line even if there is a termination on the second line. Otherwise the link will go to compliance */
+		msm_pcie_write_reg_field(dev->dm_core,  0x80c, 0x1FF00, 1);
+
+		/* Gen3 configurations form PHY HPG */
+		msm_pcie_write_reg(dev->dm_core, 0x8ac,
+			(0x05 << 14) |    /* GEN3_EQ_FMDC_MAX_POST_CURSOR_DELTA */
+			(0x05 << 10) |    /* GEN3_EQ_FMDC_MAX_PRE_CURSOR_DELTA */
+			(0x0D <<  5) |    /* GEN3_EQ_FMDC_N_EVALS */
+			(0x00 <<  0)      /* GEN3_EQ_FMDC_T_MIN_PHASE23 */
+		);
+
+		msm_pcie_write_mask(dev->dm_core + 0x8a8, BIT(4), 0);
+
+		/* configure PCIe preset  */
+		msm_pcie_write_reg(dev->dm_core, 0x8bc, 1);
+		msm_pcie_write_reg(dev->dm_core, 0x154, 0x77777777);
+		msm_pcie_write_reg(dev->dm_core, 0x8bc, 1);
+
+		msm_pcie_write_reg_field(dev->dm_core, 0xa0, 0xf, 0x3);
+	}
 
 	/* enable link training */
 	msm_pcie_write_mask(dev->parf + PCIE20_PARF_LTSSM, 0, BIT(8));
