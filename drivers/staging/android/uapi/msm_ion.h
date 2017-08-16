@@ -44,6 +44,7 @@ enum ion_heap_ids {
 	ION_AUDIO_HEAP_ID = 28,
 
 	ION_MM_FIRMWARE_HEAP_ID = 29,
+	ION_GOOGLE_HEAP_ID = 30,
 
 	ION_HEAP_ID_RESERVED = 31 /** Bit reserved for ION_FLAG_SECURE flag */
 };
@@ -127,6 +128,7 @@ enum cp_mem_usage {
 #define ION_SPSS_HEAP_NAME	"spss"
 #define ION_WB_HEAP_NAME	"wb"
 #define ION_MM_FIRMWARE_HEAP_NAME	"mm_fw"
+#define ION_GOOGLE_HEAP_NAME		"easel_mem"
 #define ION_PIL1_HEAP_NAME  "pil_1"
 #define ION_PIL2_HEAP_NAME  "pil_2"
 #define ION_QSECOM_HEAP_NAME	"qsecom"
