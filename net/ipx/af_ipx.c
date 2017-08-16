@@ -1183,11 +1183,10 @@ static int ipxitf_ioctl(unsigned int cmd, void __user *arg)
 		sipx->sipx_network	= ipxif->if_netnum;
 		memcpy(sipx->sipx_node, ipxif->if_node,
 			sizeof(sipx->sipx_node));
-		rc = -EFAULT;
+		rc = 0;;
 		if (copy_to_user(arg, &ifr, sizeof(ifr)))
-			break;
+			rc = -EFAULT;
 		ipxitf_put(ipxif);
-		rc = 0;
 		break;
 	}
 	case SIOCAIPXITFCRT:
