@@ -1,0 +1,172 @@
+/**
+ *
+ * MNH PCIe/DMA HW Register Address header file
+ * Copyright (c) 2016, Intel Corporation.
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms and conditions of the GNU General Public License,
+ * version 2, as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ */
+
+#ifndef __HW_MNH_PCIE_REGS_H_
+#define __HW_MNH_PCIE_REGS_H_
+
+
+#define HW_MNH_PCIE_CONFIG_ADDR_START   0x00200000
+#define HW_MNH_PCIE_CONFIG_ADDR_END     0x00200FFF
+#define HW_MNH_PCIE_BAR_2_ADDR_START    0x00000000
+#define HW_MNH_PCIE_BAR_2_ADDR_END      0x3FFFFFFF
+#define HW_MNH_PCIE_BAR_4_ADDR_START    0x40000000
+#define HW_MNH_PCIE_BAR_4_ADDR_END      0x7FFFFFFF
+#define HW_MNH_PCIE_CLUSTER_ADDR_START  0x040C0000
+#define HW_MNH_PCIE_CLUSTER_ADDR_END    0x040C0FFF
+#define HW_MNH_PCIE_OUTBOUND_BASE       0x80000000
+#define HW_MNH_PCIE_OUTBOUND_END        0xFFFFFFFF
+
+#define HW_MNH_PCIE_BAR2_R1_ADDR_START  0x00000000  /* Start of ROM */
+#define HW_MNH_PCIE_BAR2_R1_ADDR_END    0x0011FFFF  /* End of SRAM */
+#define HW_MNH_PCIE_BAR2_R2_ADDR_START  0x04000000  /* Start of Peripheral */
+#define HW_MHH_PCIE_BAR2_R2_ADDR_END    0x047FFFFF  /* End of Peripheral */
+
+#define HW_MNH_PCIE_CLUSTER_ADDR_OFFSET \
+	(HW_MNH_PCIE_CLUSTER_ADDR_START - HW_MNH_PCIE_BAR_2_ADDR_START)
+
+/* PCIE Cluster register value */
+#define HW_MNH_PCIE_SW_INTR_TRIGG 0x0
+#define HW_MNH_PCIE_SW_INTR_TRIGG_MASK_RW  0x80000000 /*31*/
+#define HW_MNH_PCIE_SW_INTR_EN    0x4
+#define HW_MNH_PCIE_MSI_PEND_REG  0x1C
+#define HW_MNH_PCIE_GP_0	0x80   /* magic number handshake */
+#define HW_MNH_PCIE_GP_1	0x84   /* ring buffer address in MNH */
+#define HW_MNH_PCIE_GP_2	0x88   /* DMA Status from AP to EP */
+#define HW_MNH_PCIE_GP_3	0x8C   /* MSI vector */
+#define HW_MNH_PCIE_GP_4	0x90
+#define HW_MNH_PCIE_GP_5	0x94
+#define HW_MNH_PCIE_GP_6	0x98
+#define HW_MNH_PCIE_GP_7	0x9C
+
+/* IATU Registers */
+#define IATU_VIEWPORT			0x900
+#define IATU_LWR_BASE_ADDR		0x90C
+#define IATU_UPPER_BASE_ADDR		0x910
+#define IATU_LIMIT_ADDR			0x914
+#define IATU_LWR_TARGET_ADDR		0x918
+#define IATU_UPPER_TARGET_ADDR		0x91C
+#define	IATU_REGION_CTRL_1		0x904
+#define IATU_REGION_CTRL_2		0x908
+
+#define IATU_ENABLE			0x80000000
+#define IATU_OUTBOUND			0x0
+#define IATU_INBOUND			0x80000000
+#define IATU_BAR_MODE			0xC0000000
+
+/* MSI related register values */
+#define MSI_CAP_ID_NEXT_CTRL_REG    0x50
+#define MULTIPLE_MSG_ENABLE_MASK    0x700000
+#define MSI_CAP_OFF_04H_REG         0x54
+#define MSI_CAP_OFF_08H_REG         0x58
+#define MSI_CAP_OFF_0CH_REG         0x5C
+#define MSI_CAP_OFF_10H_REG	    0x60
+
+/* DMA related register values */
+#define DMA_CTRL_OFF 0x978 /* DMA Number of Channels Register */
+#define DMA_CTRL_OFF_MASK_WR_CHAN 0x07
+#define DMA_CTRL_OFF_MASK_RD_CHAN 0xE0000
+
+#define DMA_WRITE_ENGINE_EN_OFF 0x97C/* DMA Write Engine Enable Register */
+#define DMA_WRITE_ENGINE_EN_OFF_MASK_ENABLE 0x01
+
+#define DMA_WRITE_DOORBELL_OFF 0x980 /* DMA Write Doorbell register */
+#define DMA_WRITE_DOORBELL_OFF_MASK_CH_NUM 0x07
+#define DMA_WRITE_DOORBELL_OFF_MASK_WR_STOP 0x80000000
+
+#define DMA_READ_ENGINE_EN_OFF 0x99C /*DMA Read Engine Enable Register */
+#define DMA_READ_ENGINE_EN_OFF_MASK_ENABLE 0x01
+
+#define DMA_READ_DOORBELL_OFF 0x9A0 /* DMA Read Doorbell register */
+#define DMA_READ_DOORBELL_OFF_MASK_RD_STOP 0x80000000
+#define DMA_READ_DOORBELL_OFF_MASK_CH_NUM 0x07
+
+#define DMA_WRITE_INT_STATUS_OFF  0x9BC
+#define DMA_WRITE_INT_STATUS_OFF_ABORT_STATUS  0xFF0000 /*23:16*/
+#define DMA_WRITE_INT_STATUS_OFF_DONE_STATUS   0xFF/*7:0 */
+
+#define DMA_WRITE_INT_MASK_OFF 0x9C4
+#define DMA_WRITE_INT_CLEAR_OFF 0x9C8
+#define DMA_WRITE_ERR_STATUS_OFF 0x9CC
+#define DMA_WRITE_ERR_STATUS_OFF_MASK_APP_READ_ERR  0xFF /* 7:0 */
+#define DMA_WRITE_ERR_STATUS_OFF_MASK_LL_FETCH_ERR  0xFF0000 /* 23:16 */
+
+#define DMA_WRITE_DONE_IMWR_LOW_OFF     0x9d0
+#define DMA_WRITE_DONE_IMWR_HIGH_OFF    0x9d4
+#define DMA_WRITE_ABORT_IMWR_LOW_OFF    0x9d8
+#define DMA_WRITE_ABORT_IMWR_HIGH_OFF   0x9dc
+#define DMA_WRITE_CH01_IMWR_DATA_OFF 0x9E0
+#define DMA_WRITE_CH23_IMWR_DATA_OFF 0x9E4
+
+#define DMA_READ_INT_STATUS_OFF  0xA10
+#define DMA_READ_INT_STATUS_OFF_ABORT_STATUS  0xFF0000 /*23:16*/
+#define DMA_READ_INT_STATUS_OFF_DONE_STATUS   0xFF/*7:0 */
+
+#define DMA_READ_INT_MASK_OFF 0xA18
+#define DMA_READ_INT_CLEAR_OFF 0xA1C
+
+#define DMA_READ_ERR_STATUS_OFF 0xA24
+#define DMA_READ_ERR_STATUS_OFF_MASK_APP_READ_ERR  0xFF /* 7:0 */
+#define DMA_READ_ERR_STATUS_OFF_MASK_LL_FETCH_ERR  0xFF0000 /* 23:16 */
+#define DMA_READ_ERR_STATUS_HIGH_OFF 0xA28
+#define DMA_READ_ERR_STATUS_HIGH_OFF_MASK_DATA_POISON 0xFF000000 /* 31:24 */
+#define DMA_READ_ERR_STATUS_HIGH_OFF_CPL_TIMEOUT 0xFF0000 /*23:16 */
+#define DMA_READ_ERR_STATUS_HIGH_OFF_CPL_ABORT   0xFF00 /* 15:8 */
+#define DMA_READ_ERR_STATUS_HIGH_OFF_UNSUPPORTED 0xFF /*7:0 */
+
+#define DMA_READ_DONE_IMWR_LOW_OFF	0xa3c
+#define DMA_READ_DONE_IMWR_HIGH_OFF	0xa40
+#define DMA_READ_ABORT_IMWR_LOW_OFF	0xa44
+#define DMA_READ_ABORT_IMWR_HIGH_OFF	0xa48
+#define DMA_READ_CH01_IMWR_DATA_OFF	0xA4C
+#define DMA_READ_CH23_IMWR_DATA_OFF	0xA50
+
+#define DMA_READ_LINKED_LIST_ERR_EN_OFF	0xa34
+#define DMA_WRITE_LINKED_LIST_ERR_EN_OFF	0xa00
+
+
+#define DMA_VIEWPORT_SEL_OFF 0xA6C
+#define DMA_VIEWPORT_SEL_OFF_MASK_CHAN_DIR 0x80000000
+#define DMA_VIEWPORT_SEL_OFF_MASK_CHAN_NUM 0x7 /* 2:1 */
+
+#define DMA_CH_CONTROL1_OFF    0xA70
+#define DMA_CH_CONTROL1_OFF_RESERVED 0x4000000
+#define DMA_CH_CONTROL1_MASK_LLE 0x200
+#define DMA_CH_CONTROL1_MASK_CCS 0x100
+#define DMA_CH_CONTROL1_MASK_CS  0x60 /* 6:5 */
+#define DMA_CH_CONTROL1_MASK_RIE 0x10 /* 4 */
+#define DMA_CH_CONTROL1_MASK_LIE 0x8  /* 3 */
+#define DMA_CH_CONTROL1_MASK_LLP 0x4  /* 2 */
+#define DMA_CH_CONTROL1_MASK_TCB 0x2  /* 1 */
+
+#define DMA_CH_CONTROL2_OFF 0xA74
+
+
+#define DMA_TRANSFER_SIZE_OFF 0xA78
+
+#define DMA_SAR_LOW_OFF  0xA7C
+#define DMA_SAR_HIGH_OFF 0xA80
+#define DMA_DAR_LOW_OFF  0xA84
+#define DMA_DAR_HIGH_OFF 0xA88
+
+#define DMA_LLP_LOW_OFF  0xA8C
+#define DMA_LLP_HIGH_OFF 0xA90
+
+#define DMA_READ_DONE_MASK	0xFF		/* 7:0 */
+#define DMA_READ_ABORT_MASK	0xFF00		/* 15:8 */
+#define DMA_WRITE_DONE_MASK	0xFF0000	/* 16:23 */
+#define DMA_WRITE_ABORT_MASK	0xFF000000	/* 24:31 */
+
+#endif
