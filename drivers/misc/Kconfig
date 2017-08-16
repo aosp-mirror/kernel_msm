@@ -823,6 +823,21 @@ config CITADEL
 	  To compile this driver as a module, choose M here: the
 	  module will be called citadel-spi.
 
+config GOOGLE_EASEL
+	tristate "Google Easel/Paintbox Coprocessor Support"
+	help
+	  Say 'y' if platform has the Paintbox IPU on an Easel
+	  coprocessor, aka MonetteHill. This config is used to enable the
+	  communications driver support, but can also be used for future
+	  driver work.
+
+config GOOGLE_EASEL_AP
+	bool "Local system is Application Processor / Android"
+	depends on GOOGLE_EASEL
+	help
+	  Say 'y' if this kernel is for the AP/Android side of the link.  Say
+	  'n' if this kernel is for the Easel/MonetteHill side of the link.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
