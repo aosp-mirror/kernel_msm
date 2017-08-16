@@ -1,0 +1,7 @@
+config BCM15602
+	tristate "BCM15602 regulator"
+	depends on I2C
+	select REGMAP_I2C
+	help
+	  This driver controls the BCM15602 voltage regulator via I2C.
+
