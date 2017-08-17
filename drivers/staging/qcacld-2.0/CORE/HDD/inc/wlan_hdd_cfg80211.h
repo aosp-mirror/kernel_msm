@@ -1294,6 +1294,8 @@ enum qca_wlan_vendor_attr_pno_config_params {
 	 */
 	QCA_WLAN_VENDOR_ATTR_EPNO_BAND5GHZ_BONUS = 22,
 
+	/* Unsigned 32-bit value, representing the PNO Request ID */
+	QCA_WLAN_VENDOR_ATTR_PNO_CONFIG_REQUEST_ID = 23,
 
 	/* keep last */
 	QCA_WLAN_VENDOR_ATTR_PNO_AFTER_LAST,
