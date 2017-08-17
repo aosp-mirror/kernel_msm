@@ -213,7 +213,7 @@ struct mnh_sg_list {
 typedef int (*irq_cb_t)(uint32_t irq);
 typedef int (*irq_dma_cb_t)(uint8_t chan, enum mnh_dma_chan_dir_t dir,
 		enum mnh_dma_trans_status_t status);
-typedef int (*hotplug_cb_t)(enum mnh_hotplug_event_t event);
+typedef int (*hotplug_cb_t)(enum mnh_hotplug_event_t event, void *param);
 
 /*******************************************************************************
  *

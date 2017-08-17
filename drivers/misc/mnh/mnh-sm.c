@@ -93,6 +93,9 @@ HW_OUTx(HWIO_PCIE_SS_BASE_ADDR, PCIE_SS, reg, inst, val)
 /* Timeout for waiting for MNH set_state to complete */
 #define STATE_CHANGE_COMPLETE_TIMEOUT msecs_to_jiffies(5000)
 
+/* Timeout for MNH_HOTPLUG_IN when uart is enabled (in ms) */
+#define HOTPLUG_IN_LOOSE_TIMEOUT_MS 15000
+
 /* PCIe */
 #define MNH_PCIE_CHAN_0 0
 
@@ -215,8 +218,7 @@ enum {
 	MNH_POWER_MODE_L1_2_ENABLE   = 1 << 1,
 	MNH_POWER_MODE_AXI_CG_ENABLE = 1 << 2,
 };
-static uint32_t mnh_power_mode = MNH_POWER_MODE_CLKPM_ENABLE |
-	MNH_POWER_MODE_L1_2_ENABLE;
+static uint32_t mnh_power_mode = MNH_POWER_MODE_CLKPM_ENABLE;
 
 /* flag for boot mode options */
 static enum mnh_boot_mode mnh_boot_mode = MNH_BOOT_MODE_PCIE;
@@ -1188,7 +1190,15 @@ static int mnh_sm_hotplug_callback(enum mnh_hotplug_event_t event)
 	if (!mnh_hotplug_cb)
 		return -EFAULT;
 
-	return mnh_hotplug_cb(event);
+	if ((event == MNH_HOTPLUG_IN) && (mnh_boot_args & MNH_UART_ENABLE)) {
+		dev_info(mnh_sm_dev->dev,
+			 "%s: allow %d secs for MNH_HOTPLUG_IN\n",
+			 __func__, HOTPLUG_IN_LOOSE_TIMEOUT_MS / 1000);
+		return mnh_hotplug_cb(event,
+				      (void *)HOTPLUG_IN_LOOSE_TIMEOUT_MS);
+	}
+
+	return mnh_hotplug_cb(event, NULL);
 }
 
 /**
@@ -1766,6 +1776,8 @@ static long mnh_sm_ioctl(struct file *file, unsigned int cmd,
 				__func__, err);
 			return err;
 		}
+		if (!mnh_sm_dev->powered)
+			return -EIO;
 		if (cmd == MNH_SM_IOC_CONFIG_MIPI)
 			mnh_mipi_config(mnh_sm_dev->dev, mipi_config);
 		else

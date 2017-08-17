@@ -174,28 +174,6 @@ irqreturn_t err_fg_handler(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
-void disp_read_err_register(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
-{
-	struct dcs_cmd_req cmdreq;
-	char rx_buf[1] = {0x0};
-	char err_read_dcs_cmd[2] = {0x9F, 0x00}; /* DTYPE_DCS_READ */
-	struct dsi_cmd_desc err_read_dsi_cmd_desc = {
-		{DTYPE_DCS_READ, 1, 0, 1, 5, sizeof(err_read_dcs_cmd)},
-		err_read_dcs_cmd
-	};
-
-	memset(&cmdreq, 0, sizeof(cmdreq));
-	cmdreq.cmds = &err_read_dsi_cmd_desc;
-	cmdreq.cmds_cnt = 1;
-	cmdreq.flags = CMD_REQ_RX | CMD_REQ_COMMIT | CMD_REQ_HS_MODE;
-	cmdreq.rlen = 1;
-	cmdreq.cb = NULL;
-	cmdreq.rbuf = rx_buf;
-
-	mdss_dsi_cmdlist_put(ctrl_pdata, &cmdreq);
-	pr_info("%s: Reg[0x%x]=0x%x\n", __func__, err_read_dcs_cmd[0], rx_buf[0]);
-}
-
 void disp_err_recovery_work(struct work_struct *work)
 {
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
@@ -214,7 +192,6 @@ void disp_err_recovery_work(struct work_struct *work)
 		pr_err("%s: SKIP panel reset\n", __func__);
 		return;
 	}
-	disp_read_err_register(ctrl_pdata);
 	mdss_fb_report_panel_dead(pstatus_data->mfd);
 }
 

@@ -428,8 +428,21 @@ static void qusb_phy_host_init(struct usb_phy *phy)
 	if (ret)
 		dev_err(phy->dev, "%s: phy_reset deassert failed\n", __func__);
 
+	/* Disable the PHY */
+	writel_relaxed(readl_relaxed(qphy->base + QUSB2PHY_PWR_CTRL1) |
+			PWR_CTRL1_POWR_DOWN,
+			qphy->base + QUSB2PHY_PWR_CTRL1);
+
 	qusb_phy_write_seq(qphy->base, qphy->qusb_phy_host_init_seq,
 			qphy->host_init_seq_len, 0);
+
+	/* ensure above writes are completed before re-enabling PHY */
+	wmb();
+
+	/* Enable the PHY */
+	writel_relaxed(readl_relaxed(qphy->base + QUSB2PHY_PWR_CTRL1) &
+			~PWR_CTRL1_POWR_DOWN,
+			qphy->base + QUSB2PHY_PWR_CTRL1);
 
 	/* Ensure above write is completed before turning ON ref clk */
 	wmb();
