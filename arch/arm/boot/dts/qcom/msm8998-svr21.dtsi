@@ -112,12 +112,9 @@
 };
 
 &pmi8998_charger {
-        qcom,fcc-max-ua = <5000000>; //sets the FCC limit to 5A This limit is set by the battery
+        qcom,fcc-max-ua = <4500000>; //sets the FCC limit to 5A This limit is set by the battery
         qcom,usb-icl-ua = <3000000>; //sets the USBIN limit to 3A  This limit is set by USB Type-C cables
 };
-
-
-
 
 &blsp1_uart3_hs {
 	status = "ok";
