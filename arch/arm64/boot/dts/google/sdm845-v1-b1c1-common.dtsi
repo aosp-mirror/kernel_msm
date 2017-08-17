@@ -15,6 +15,7 @@
 /* for now, keep it as default MTP */
 
 #include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/clock/qcom,camcc-sdm845.h>
 #include "sdm845-camera-sensor.dtsi"
 #include "sdm845-b1c1-pinctrl.dtsi"
 #include "sdm845-b1c1-haptics.dtsi"
