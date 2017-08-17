@@ -2438,6 +2438,7 @@ static void msm_chg_detect_work(struct work_struct *w)
 
 			motg->chg_state = USB_CHG_STATE_DETECTED;
 			delay = 0;
+			goto state_detected;
 		}
 		break;
 	case USB_CHG_STATE_PRIMARY_DONE:
@@ -2451,6 +2452,7 @@ static void msm_chg_detect_work(struct work_struct *w)
 	case USB_CHG_STATE_SECONDARY_DONE:
 		motg->chg_state = USB_CHG_STATE_DETECTED;
 	case USB_CHG_STATE_DETECTED:
+		state_detected:
 		/*
 		 * Notify the charger type to power supply
 		 * owner as soon as we determine the charger.
@@ -2934,8 +2936,6 @@ static void msm_otg_set_vbus_state(int online)
 		pr_debug("PMIC: BSV clear\n");
 		msm_otg_dbg_log_event(&motg->phy, "PMIC: BSV CLEAR",
 				init, motg->inputs);
-		motg->chg_state = USB_CHG_STATE_UNDEFINED;
-		motg->chg_type = USB_INVALID_CHARGER;
 		if (!test_and_clear_bit(B_SESS_VLD, &motg->inputs) && init)
 			return;
 	}
