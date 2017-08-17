@@ -1200,8 +1200,7 @@ static int mdss_mdp_get_img(struct msmfb_data *img,
 			ion_free(iclient, ihandle);
 		return ret;
 	}
-
-	if (!*start) {
+	if (start && !*start) {
 		pr_err("start address is zero!\n");
 		mdss_mdp_put_img(data, rotator, dir);
 		return -ENOMEM;
