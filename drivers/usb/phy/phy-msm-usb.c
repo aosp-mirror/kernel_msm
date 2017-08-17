@@ -1158,10 +1158,8 @@ static int msm_otg_suspend(struct msm_otg *motg)
 	msm_otg_dbg_log_event(phy, "LPM ENTER START",
 			motg->inputs, phy->state);
 
-	if (atomic_read(&motg->in_lpm)) {
-		pr_info("[msm_otg] suspend: atomic_read(&motg->in_lpm), return 0 \n");
+	if (atomic_read(&motg->in_lpm))
 		return 0;
-	}
 
 	disable_irq(motg->irq);
 	if (motg->phy_irq)
@@ -1207,9 +1205,6 @@ lpm_start:
 	 * Don't abort suspend in case of dcp detected by PMIC
 	 */
 
-	pr_info("[msm_otg] suspend:test_bit(B_SESS_VLD):%d, !device_bus_suspend: %d, !dcp: %d \n", test_bit(B_SESS_VLD, &motg->inputs), !device_bus_suspend, !dcp);
-	pr_info("[msm_otg] suspend:!motg->is_ext_chg_dcp:%d, !prop_charger: %d, !floated_charger: %d \n", !motg->is_ext_chg_dcp, !prop_charger, !floated_charger);
-	pr_info("[msm_otg] suspend:sm_work_busy:%d \n", sm_work_busy);
 	if ((test_bit(B_SESS_VLD, &motg->inputs) && !device_bus_suspend &&
 		!dcp && !motg->is_ext_chg_dcp && !prop_charger &&
 			!floated_charger) || sm_work_busy) {
@@ -1218,7 +1213,6 @@ lpm_start:
 		enable_irq(motg->irq);
 		if (motg->phy_irq)
 			enable_irq(motg->phy_irq);
-		pr_err("[msm_otg] suspend: abort, return BUSY \n");
 		return -EBUSY;
 	}
 
@@ -1277,14 +1271,12 @@ phcd_retry:
 			msm_otg_dbg_log_event(phy, "PHY SUSPEND FAILED",
 				phcd_retry_cnt, phy->state);
 			dev_err(phy->dev, "PHY suspend failed\n");
-			pr_err("[msm_otg] suspend:phy suspend timeout, abort \n");
 			ret = -EBUSY;
 			goto phy_suspend_fail;
 		}
 
 		if (device_bus_suspend) {
 			dev_dbg(phy->dev, "PHY suspend aborted\n");
-			pr_err("[msm_otg] suspend: device bus suspend, abort \n");
 			ret = -EBUSY;
 			goto phy_suspend_fail;
 		} else {
@@ -1470,7 +1462,6 @@ phcd_retry:
 
 	enable_irq(motg->irq);
 	wake_unlock(&motg->wlock);
-	pr_info("[msm_otg] suspend: wake_unlock \n");
 
 	dev_dbg(phy->dev, "LPM caps = %lu flags = %lu\n",
 			motg->caps, motg->lpm_flags);
@@ -1492,7 +1483,6 @@ phy_suspend_fail:
 	enable_irq(motg->irq);
 	if (motg->phy_irq)
 		enable_irq(motg->phy_irq);
-	pr_err("[msm_otg] suspend: phy_suspend_fail \n");
 	return ret;
 }
 
@@ -1516,7 +1506,6 @@ static int msm_otg_resume(struct msm_otg *motg)
 
 	disable_irq(motg->irq);
 	wake_lock(&motg->wlock);
-	pr_info("[msm_otg] resume: wake_lock \n");
 
 	/*
 	 * If we are resuming from the device bus suspend, restore
@@ -4757,7 +4746,6 @@ static int msm_otg_probe(struct platform_device *pdev)
 		motg->caps |= ALLOW_BUS_SUSPEND_WITHOUT_REWORK;
 
 	wake_lock(&motg->wlock);
-	pr_info("[msm_otg] probe: wake_lock \n");
 	pm_runtime_set_active(&pdev->dev);
 	pm_runtime_enable(&pdev->dev);
 
