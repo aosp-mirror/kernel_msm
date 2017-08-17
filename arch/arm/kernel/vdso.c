@@ -317,9 +317,12 @@ void update_vsyscall(struct timekeeper *tk)
 
 	if (!vdso_data->use_syscall) {
 		vdso_data->cs_cycle_last	= tk->tkr.cycle_last;
+		vdso_data->raw_time_sec		= tk->raw_sec;
+		vdso_data->raw_time_nsec	= tk->tkr_raw.xtime_nsec;
 		vdso_data->xtime_clock_sec	= tk->xtime_sec;
 		vdso_data->xtime_clock_snsec	= tk->tkr.xtime_nsec;
 		vdso_data->cs_mono_mult		= tk->tkr.mult;
+		vdso_data->cs_raw_mult		= tk->tkr_raw.mult;
 		/* tkr_mono.shift == tkr_raw.shift */
 		vdso_data->cs_shift		= tk->tkr.shift;
 		vdso_data->cs_mask		= tk->tkr.mask;
