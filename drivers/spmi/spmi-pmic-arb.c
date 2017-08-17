@@ -25,6 +25,7 @@
 #include <linux/slab.h>
 #include <linux/spmi.h>
 #include <linux/syscore_ops.h>
+#include <linux/wakeup_reason.h>
 
 /* PMIC Arbiter configuration registers */
 #define PMIC_ARB_VERSION		0x0000
@@ -562,6 +563,7 @@ static void periph_interrupt(struct spmi_pmic_arb *pa, u16 apid, bool show)
 			else if (desc->action && desc->action->name)
 				name = desc->action->name;
 
+			log_base_wakeup_reason(irq);
 			pr_warn("spmi_show_resume_irq: %d triggered [0x%01x, 0x%02x, 0x%01x] %s\n",
 				irq, sid, per, id, name);
 		} else {
