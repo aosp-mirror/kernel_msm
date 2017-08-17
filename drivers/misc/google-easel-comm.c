@@ -906,7 +906,7 @@ void easelcomm_cmd_channel_data_handler(void)
 		channel_buf_hdr->producer_seqnbr_next) {
 		struct easelcomm_cmd_header *cmdhdr =
 			(struct easelcomm_cmd_header *)channel->readp;
-		uint32_t saved_cmd_len = READ_ONCE(cmdhdr->command_arg_len);
+		uint32_t saved_cmd_len;
 
 		dev_dbg(easelcomm_miscdev.this_device, "cmdchan consumer loop prodseq=%llu consseq=%llu off=%lx\n",
 			channel_buf_hdr->producer_seqnbr_next,
@@ -932,6 +932,8 @@ void easelcomm_cmd_channel_data_handler(void)
 			easelcomm_cmd_channel_bump_consumer_seqnbr(channel);
 			continue;
 		}
+
+		saved_cmd_len = READ_ONCE(cmdhdr->command_arg_len);
 
 		dev_dbg(easelcomm_miscdev.this_device,
 			"cmdchan recv cmd seq=%llu svc=%u cmd=%u len=%u off=%lx\n",
