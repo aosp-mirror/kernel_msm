@@ -987,12 +987,12 @@
                 cam_sensor_6dofl_active: cam_sensor_6dofl_active {
                         /* RESET, STANDBY */
                         mux {
-                                pins = "gpio148","gpio29";
+                                pins = "gpio148";
                                 function = "gpio";
                         };
 
                         config {
-                                pins = "gpio148","gpio29";
+                                pins = "gpio148";
                                 bias-disable; /* No PULL */
                                 drive-strength = <2>; /* 2 MA */
                         };
@@ -1015,12 +1015,12 @@
                 cam_sensor_6dofl_suspend: cam_sensor_6dofl_suspend {
                         /* RESET, STANDBY */
                         mux {
-                                pins = "gpio148","gpio29";
+                                pins = "gpio148";
                                 function = "gpio";
                         };
 
                         config {
-                                pins = "gpio148","gpio29";
+                                pins = "gpio148";
                                 bias-disable; /* No PULL */
                                 drive-strength = <2>; /* 2 MA */
                         };
