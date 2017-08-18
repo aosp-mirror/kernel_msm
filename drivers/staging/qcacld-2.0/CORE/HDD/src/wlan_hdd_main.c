@@ -320,6 +320,10 @@ struct init_comp {
 };
 static struct init_comp wlan_comp;
 
+/* Keep track unload status */
+static uint32_t g_current_unload_state;
+#define TRACK_UNLOAD_STATUS(state) (g_current_unload_state =  state)
+
 #ifdef QCA_WIFI_FTM
 extern int hdd_ftm_start(hdd_context_t *pHddCtx);
 extern int hdd_ftm_stop(hdd_context_t *pHddCtx);
@@ -1149,7 +1153,8 @@ int wlan_hdd_validate_context(hdd_context_t *pHddCtx)
 {
 
     if (NULL == pHddCtx || NULL == pHddCtx->cfg_ini) {
-        hddLog(LOGE, FL("%pS HDD context is Null"), (void *)_RET_IP_);
+        hddLog(LOGE, FL("%pS HDD context is Null. current unload state: %d"),
+               (void *)_RET_IP_, g_current_unload_state);
         return -ENODEV;
     }
 
@@ -1160,9 +1165,12 @@ int wlan_hdd_validate_context(hdd_context_t *pHddCtx)
 
     if ((pHddCtx->isLoadInProgress) ||
         (pHddCtx->isUnloadInProgress)) {
-        hddLog(LOGE,
-             FL("%pS Unloading/Loading in Progress. Ignore!!!"),
-             (void *)_RET_IP_);
+        hddLog(LOG1,
+             FL("%pS loading: %d unloading: %d in Progress, current unload state: %d. Ignore!!!"),
+             (void *)_RET_IP_,
+             pHddCtx->isLoadInProgress,
+             pHddCtx->isUnloadInProgress,
+             g_current_unload_state);
         return -EAGAIN;
     }
     return 0;
@@ -12911,6 +12919,76 @@ static inline int wlan_hdd_logging_sock_deactivate_svc(hdd_context_t *hdd_ctx)
 }
 #endif
 
+/**
+ * enum driver_unload_state - Various driver unload states
+ * @unload_start: Driver starting unload module.
+ * @unload_unregister_ip_notifier: Driver unregistering with ip notifiers.
+ * @unload_unregister_wext_adpater: Driver unregistering wext adapter.
+ * @unload_hdd_ftm_stop: Driver stopping ftm.
+ * @unload_hdd_ftm_close: Driver closing ftm.
+ * @unload_deregister_pm_ops:  Driver deregistering pm ops.
+ * @unload_unregister_thermal_notify_cb: Driver unregistering thermal callback.
+ * @unload_aborting_all_scan: Driver aborting all scan.
+ * @unload_disable_pwr_save: Driver disable power save in firmware.
+ * @unload_req_full_power: Driver requesting full power mode.
+ * @unload_set_idle_ps_config: Driver setting imps false.
+ * @unload_debugfs_exit: Driver exiting debugfs.
+ * @unload_netdev_notifier: Driver unregistering with netdev notifiers.
+ * @unload_stop_all_adapter: Driver stopping all adapters.
+ * @unload_vos_stop: Driver stopping vos.
+ * @unload_vos_sched_close: Driver closing scheduler.
+ * @unload_vos_nv_close: Driver closing nv module.
+ * @unload_vos_close: Driver closing vos module.
+ * @unload_deinit_greep_ap: Driver deinit greep ap.
+ * @unload_logging_sock_deactivate_svc: Driver deactivating logging socket.
+ * @unload_hdd_send_status_pkg: Driver sending status packet to LPSS.
+ * @unload_close_cesium_nl_sock: Driver closing cesium nl socket.
+ * @unload_runtime_suspend_deinit: Driver deinit  runtime suspend.
+ * @unload_close_all_adapters: Driver closing all adapter.
+ * @unload_ipa_cleanup: Driver performing ipa cleanup.
+ * @unload_flush_roc_work: Driver flush roc work.
+ * @unload_nl_srv_exit: Driver exit netlink service.
+ * @unload_wiphy_unregister: Driver unregister wiphy.
+ * @unload_wiphy_free: Driver free wiphy.
+ * @unload_subsystem_restart: Driver do subsystem restart.
+ * @unload_finish: Driver completed unload.
+ */
+enum driver_unload_state{
+	unload_start = 1,
+	unload_unregister_ip_notifier,
+	unload_unregister_wext_adpater,
+	unload_hdd_ftm_stop,
+	unload_hdd_ftm_close =5 ,
+	unload_deregister_pm_ops,
+	unload_unregister_thermal_notify_cb,
+	unload_aborting_all_scan,
+	unload_disable_pwr_save,
+	unload_req_full_power = 10,
+	unload_set_idle_ps_config,
+	unload_debugfs_exit,
+	unload_netdev_notifier,
+	unload_stop_all_adapter,
+	unload_vos_stop = 15,
+	unload_vos_sched_close,
+	unload_vos_nv_close,
+	unload_vos_close,
+	unload_deinit_greep_ap,
+	unload_logging_sock_deactivate_svc = 20,
+	unload_hdd_send_status_pkg,
+	unload_close_cesium_nl_sock,
+	unload_runtime_suspend_deinit,
+	unload_close_all_adapters,
+	unload_ipa_cleanup = 25,
+	unload_flush_roc_work,
+	unload_nl_srv_exit,
+	unload_wiphy_unregister,
+	unload_wiphy_free,
+	unload_subsystem_restart = 30,
+
+	/* keep it last*/
+	unload_finish = 0xff
+};
+
 /**---------------------------------------------------------------------------
 
   \brief hdd_wlan_exit() - HDD WLAN exit function
@@ -12933,8 +13011,10 @@ void hdd_wlan_exit(hdd_context_t *pHddCtx)
    hdd_config_t *pConfig = pHddCtx->cfg_ini;
 
    ENTER();
+   TRACK_UNLOAD_STATUS(unload_start);
 
    hddLog(LOGE, FL("Unregister IPv6 notifier"));
+   TRACK_UNLOAD_STATUS(unload_unregister_ip_notifier);
    hdd_wlan_unregister_ip6_notifier(pHddCtx);
    hddLog(LOGE, FL("Unregister IPv4 notifier"));
    unregister_inetaddr_notifier(&pHddCtx->ipv4_notifier);
@@ -12944,12 +13024,12 @@ void hdd_wlan_exit(hdd_context_t *pHddCtx)
       // Unloading, restart logic is no more required.
       wlan_hdd_restart_deinit(pHddCtx);
    }
-
+   TRACK_UNLOAD_STATUS(unload_unregister_wext_adpater);
    hdd_UnregisterWext_all_adapters(pHddCtx);
-
    if (VOS_FTM_MODE == hdd_get_conparam())
    {
       hddLog(VOS_TRACE_LEVEL_INFO, "%s: FTM MODE", __func__);
+      TRACK_UNLOAD_STATUS(unload_hdd_ftm_stop);
 #if  defined(QCA_WIFI_FTM)
       if (hdd_ftm_stop(pHddCtx))
       {
@@ -12958,11 +13038,13 @@ void hdd_wlan_exit(hdd_context_t *pHddCtx)
       }
       pHddCtx->ftm.ftm_state = WLAN_FTM_STOPPED;
 #endif
+      TRACK_UNLOAD_STATUS(unload_hdd_ftm_close);
       wlan_hdd_ftm_close(pHddCtx);
       hddLog(VOS_TRACE_LEVEL_FATAL, "%s: FTM driver unloaded", __func__);
       goto free_hdd_ctx;
    }
 
+   TRACK_UNLOAD_STATUS(unload_deregister_pm_ops);
    /* DeRegister with platform driver as client for Suspend/Resume */
    vosStatus = hddDeregisterPmOps(pHddCtx);
    if ( !VOS_IS_STATUS_SUCCESS( vosStatus ) )
@@ -12971,6 +13053,7 @@ void hdd_wlan_exit(hdd_context_t *pHddCtx)
       VOS_ASSERT(0);
    }
 
+   TRACK_UNLOAD_STATUS(unload_unregister_thermal_notify_cb);
    vosStatus = hddDevTmUnregisterNotifyCallback(pHddCtx);
    if ( !VOS_IS_STATUS_SUCCESS( vosStatus ) )
    {
@@ -12992,8 +13075,8 @@ void hdd_wlan_exit(hdd_context_t *pHddCtx)
     * the expectation is that by the time Request Full Power has completed,
     * all scans will be cancelled.
     */
+   TRACK_UNLOAD_STATUS(unload_aborting_all_scan);
    hdd_abort_mac_scan_all_adapters(pHddCtx);
-
 #ifdef FEATURE_BUS_BANDWIDTH
    if (VOS_TIMER_STATE_RUNNING ==
                         vos_timer_getCurrentState(&pHddCtx->bus_bw_timer))
@@ -13023,8 +13106,10 @@ void hdd_wlan_exit(hdd_context_t *pHddCtx)
    }
 #endif
 
+
    if (pConfig && !pConfig->enablePowersaveOffload)
    {
+      TRACK_UNLOAD_STATUS(unload_disable_pwr_save);
       //Disable IMPS/BMPS as we do not want the device to enter any power
       //save mode during shutdown
       sme_DisablePowerSave(pHddCtx->hHal, ePMC_IDLE_MODE_POWER_SAVE);
@@ -13035,6 +13120,7 @@ void hdd_wlan_exit(hdd_context_t *pHddCtx)
       init_completion(&powerContext.completion);
       powerContext.magic = POWER_CONTEXT_MAGIC;
 
+      TRACK_UNLOAD_STATUS(unload_req_full_power);
       halStatus = sme_RequestFullPower(pHddCtx->hHal, hdd_full_power_callback,
             &powerContext, eSME_FULL_PWR_NEEDED_BY_HDD);
 
@@ -13081,21 +13167,26 @@ void hdd_wlan_exit(hdd_context_t *pHddCtx)
        * Powersave Offload Case
        * Disable Idle Power Save Mode
        */
+      TRACK_UNLOAD_STATUS(unload_set_idle_ps_config);
       hdd_set_idle_ps_config(pHddCtx, FALSE);
    }
 
+   TRACK_UNLOAD_STATUS(unload_debugfs_exit);
    hdd_debugfs_exit(pHddCtx);
 
    // Unregister the Net Device Notifier
+   TRACK_UNLOAD_STATUS(unload_netdev_notifier);
    unregister_netdevice_notifier(&hdd_netdev_notifier);
 
    /* Stop all adapters, this will ensure the termination of active
     * connections on the interface. Make sure the vos_scheduler is
     * still available to handle those control messages
     */
+   TRACK_UNLOAD_STATUS(unload_stop_all_adapter);
    hdd_stop_all_adapters( pHddCtx );
 
 
+   TRACK_UNLOAD_STATUS(unload_vos_stop);
    //Stop all the modules
    vosStatus = vos_stop( pVosContext );
    if (!VOS_IS_STATUS_SUCCESS(vosStatus))
@@ -13108,6 +13199,7 @@ void hdd_wlan_exit(hdd_context_t *pHddCtx)
    //This requires pMac access, Call this before vos_close().
    hdd_unregister_mcast_bcast_filter(pHddCtx);
 
+   TRACK_UNLOAD_STATUS(unload_vos_sched_close);
    //Close the scheduler before calling vos_close to make sure no thread is
    // scheduled after the each module close is called i.e after all the data
    // structures are freed.
@@ -13124,6 +13216,7 @@ void hdd_wlan_exit(hdd_context_t *pHddCtx)
 
    hdd_hostapd_channel_wakelock_deinit(pHddCtx);
 
+  TRACK_UNLOAD_STATUS(unload_vos_nv_close);
   vosStatus = vos_nv_close();
   if (!VOS_IS_STATUS_SUCCESS(vosStatus))
   {
@@ -13132,20 +13225,25 @@ void hdd_wlan_exit(hdd_context_t *pHddCtx)
      VOS_ASSERT( VOS_IS_STATUS_SUCCESS( vosStatus ) );
   }
 
+   TRACK_UNLOAD_STATUS(unload_vos_close);
    //Close VOSS
    //This frees pMac(HAL) context. There should not be any call that requires pMac access after this.
    vos_close(pVosContext);
 
+   TRACK_UNLOAD_STATUS(unload_deinit_greep_ap);
    hdd_wlan_green_ap_deinit(pHddCtx);
 
    //Close Watchdog
    if (pConfig && pConfig->fIsLogpEnabled)
       vos_watchdog_close(pVosContext);
 
-   if (VOS_FTM_MODE != hdd_get_conparam())
+   if (VOS_FTM_MODE != hdd_get_conparam()) {
+       TRACK_UNLOAD_STATUS(unload_logging_sock_deactivate_svc);
        wlan_hdd_logging_sock_deactivate_svc(pHddCtx);
+   }
 
 #ifdef WLAN_FEATURE_LPSS
+   TRACK_UNLOAD_STATUS(unload_hdd_send_status_pkg);
    wlan_hdd_send_status_pkg(NULL, NULL, 0, 0);
 #endif
 
@@ -13155,12 +13253,16 @@ void hdd_wlan_exit(hdd_context_t *pHddCtx)
    nl_srv_exit();
 #endif /* WLAN_KD_READY_NOTIFIER */
 
+   TRACK_UNLOAD_STATUS(unload_close_cesium_nl_sock);
    hdd_close_cesium_nl_sock();
 
+   TRACK_UNLOAD_STATUS(unload_runtime_suspend_deinit);
    hdd_runtime_suspend_deinit(pHddCtx);
+   TRACK_UNLOAD_STATUS(unload_close_all_adapters);
    hdd_close_all_adapters( pHddCtx );
 
 #ifdef IPA_OFFLOAD
+   TRACK_UNLOAD_STATUS(unload_ipa_cleanup);
    hdd_ipa_cleanup(pHddCtx);
 #endif
 
@@ -13171,11 +13273,13 @@ void hdd_wlan_exit(hdd_context_t *pHddCtx)
                                            __func__);
    }
 
+   TRACK_UNLOAD_STATUS(unload_flush_roc_work);
    /* Free up RoC request queue and flush workqueue */
    vos_flush_work(&pHddCtx->rocReqWork);
    hdd_list_destroy(&pHddCtx->hdd_roc_req_q);
 
 free_hdd_ctx:
+   TRACK_UNLOAD_STATUS(unload_nl_srv_exit);
 
    /* Free up dynamically allocated members inside HDD Adapter */
    if (pHddCtx->cfg_ini) {
@@ -13184,21 +13288,25 @@ free_hdd_ctx:
    }
 
    wlan_hdd_deinit_tx_rx_histogram(pHddCtx);
+   TRACK_UNLOAD_STATUS(unload_wiphy_unregister);
    hdd_free_probe_req_ouis(pHddCtx);
    wiphy_unregister(wiphy) ;
    wlan_hdd_cfg80211_deinit(wiphy);
+   TRACK_UNLOAD_STATUS(unload_wiphy_free);
    wiphy_free(wiphy) ;
    if (hdd_is_ssr_required())
    {
 #ifdef MSM_PLATFORM
 #ifdef CONFIG_CNSS
        /* WDI timeout had happened during unload, so SSR is needed here */
+       TRACK_UNLOAD_STATUS(unload_subsystem_restart);
        subsystem_restart("wcnss");
 #endif
 #endif
        msleep(5000);
    }
    hdd_set_ssr_required (VOS_FALSE);
+   TRACK_UNLOAD_STATUS(unload_finish);
 }
 
 void __hdd_wlan_exit(void)
@@ -15876,6 +15984,91 @@ static int __init hdd_module_init ( void)
 }
 #endif /* #ifdef MODULE */
 
+static struct timer_list unload_timer;
+static bool unload_timer_started;
+
+#ifdef CONFIG_SLUB_DEBUG_ON
+#define HDD_UNLOAD_WAIT_TIME 35000
+#else
+#define HDD_UNLOAD_WAIT_TIME 30000
+#endif
+
+/**
+ * hdd_unload_timer_init() - API to initialize unload timer
+ *
+ * initialize unload timer
+ *
+ * Return: None
+ */
+static void hdd_unload_timer_init(void)
+{
+	init_timer(&unload_timer);
+}
+
+/**
+ * hdd_unload_timer_del() - API to Delete unload timer
+ *
+ * Delete unload timer
+ *
+ * Return: None
+ */
+static void hdd_unload_timer_del(void)
+{
+	del_timer(&unload_timer);
+	unload_timer_started = false;
+}
+
+/**
+ * hdd_unload_timer_cb() - Unload timer callback function
+ *
+ * Unload timer callback function
+ *
+ * Return: None
+ */
+static void hdd_unload_timer_cb(unsigned long data)
+{
+	v_CONTEXT_t vos_context = NULL;
+	hdd_context_t *hdd_ctx = NULL;
+
+	pr_err("HDD unload timer expired!,current unload status: %d",
+		g_current_unload_state);
+	/* Get the global VOSS context. */
+	vos_context = vos_get_global_context(VOS_MODULE_ID_SYS, NULL);
+	if(vos_context) {
+		hdd_ctx = (hdd_context_t *)vos_get_context(VOS_MODULE_ID_HDD,
+						vos_context );
+	if(hdd_ctx)
+		pr_err("Driver loading: %d unloading:%d logp_in_progress: %d",
+				hdd_ctx->isLoadInProgress,
+				hdd_ctx->isUnloadInProgress,
+			hdd_ctx->isLogpInProgress);
+	} else
+		pr_err("%s: HDD context is Null", __func__);
+
+#ifdef CONFIG_SLUB_DEBUG_ON
+	VOS_BUG(0);
+#endif
+}
+
+/**
+ * hdd_unload_timer_start() - API to start unload timer
+ * @msec: timer interval in msec units
+ *
+ * API to start unload timer
+ *
+ * Return: None
+ */
+static void hdd_unload_timer_start(int msec)
+{
+	if(unload_timer_started)
+		hddLog(VOS_TRACE_LEVEL_FATAL,
+			"%s: Starting unload timer when it's running!",
+			__func__);
+	unload_timer.expires = jiffies + msecs_to_jiffies(msec);
+	unload_timer.function = hdd_unload_timer_cb;
+	add_timer(&unload_timer);
+	unload_timer_started = true;
+}
 /**---------------------------------------------------------------------------
 
   \brief hdd_driver_exit() - Exit function
@@ -15948,7 +16141,12 @@ static void hdd_driver_exit(void)
    }
 
    vos_wait_for_work_thread_completion(__func__);
+   /* If unload never completes, then do kernel panic. */
+   hdd_unload_timer_init();
+   hdd_unload_timer_start(HDD_UNLOAD_WAIT_TIME);
    hif_unregister_driver();
+   hdd_unload_timer_del();
+
    vos_preClose( &pVosContext );
 
 #ifdef QCA_PKT_PROTO_TRACE
