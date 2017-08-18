@@ -488,10 +488,13 @@ static void msm_fd_hw_halt(struct msm_fd_device *fd)
 
 		msm_fd_hw_write_reg(fd, MSM_FD_IOMEM_MISC, MSM_FD_HW_STOP, 1);
 
-		time = wait_for_completion_timeout(&fd->hw_halt_completion,
-			msecs_to_jiffies(MSM_FD_HALT_TIMEOUT_MS));
-		if (!time)
-			dev_err(fd->dev, "Face detection halt timeout\n");
+		if (likely(fd->init)) {
+			time = wait_for_completion_timeout(
+				&fd->hw_halt_completion,
+				msecs_to_jiffies(MSM_FD_HALT_TIMEOUT_MS));
+			if (!time)
+				dev_err(fd->dev, "Face detection halt timeout\n");
+		}
 
 		/* Reset sequence after halt */
 		msm_fd_hw_write_reg(fd, MSM_FD_IOMEM_MISC, MSM_FD_MISC_SW_RESET,
