@@ -108,4 +108,6 @@ source "drivers/staging/vc04_services/Kconfig"
 
 source "drivers/staging/bcm15602/Kconfig"
 
+source "drivers/staging/s2mpb04/Kconfig"
+
 endif # STAGING
