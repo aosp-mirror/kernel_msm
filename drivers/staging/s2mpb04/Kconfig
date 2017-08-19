@@ -1,0 +1,7 @@
+config S2MPB04
+	tristate "S2MPB04 regulator"
+	depends on I2C
+	select REGMAP_I2C
+	help
+	  This driver controls the S2MPB04 voltage regulator via I2C.
+
