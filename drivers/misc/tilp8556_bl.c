@@ -17,8 +17,10 @@
 #include <linux/of.h>
 #include <linux/i2c.h>
 #include <linux/gpio.h>
+#include <linux/leds.h>
 #include <linux/of_gpio.h>
 #include <linux/delay.h>
+#include <linux/workqueue.h>
 
 #define LP8556_CFG98            0x98
 #define LP8556_CFG9E            0x9E
@@ -44,6 +46,8 @@
 #define LP8556_ID               0x03
 #define LP8556_DIR_CNTRL        0x04
 #define LP8556_LED_EN           0x16
+
+#define MAX_LEVEL               4095
 
 static int reg_array[] = {
 LP8556_CFG98,0xa3,
@@ -73,8 +77,11 @@ LP8556_LED_EN,0x0F
 };
 
 struct lp8556_bl {
+       struct led_classdev cdev;
        struct i2c_client *client;
        int lcd_en_gpio;
+       struct work_struct work_set;
+       u16 brightness;
 };
 
 static int lp8556_write(struct i2c_client *client, char *writebuf, int writelen)
@@ -137,6 +144,36 @@ err_lcd_en_gpio_dir:
        return err;
 }
 
+static void lp8556_deferred_brightness_set(struct work_struct *work)
+{
+       struct lp8556_bl *lp8556 = container_of(work, struct lp8556_bl, work_set);
+       struct i2c_client *client = lp8556->client;
+       int err;
+       u16 max_brightness, val;
+       u8 writeBuf[2];
+
+       /* Current setting: CFG1[3:0], CFG0[7:0]
+        * CFG0: reg_array[5], CFG1: reg_array[7]     */
+       max_brightness = reg_array[5] | ((reg_array[7] & 0xF)<<8);
+       val = max_brightness * (lp8556->brightness + 1) / (MAX_LEVEL + 1);
+
+       writeBuf[0] = LP8556_CFG1;
+       writeBuf[1] = (val>>8) & 0x0F | (reg_array[7] & 0xF0);
+       lp8556_write(client, &writeBuf, 2);
+       writeBuf[0] = LP8556_CFG0;
+       writeBuf[1] = val & 0xFF;
+       lp8556_write(client, &writeBuf, 2);
+       return 0;
+}
+
+static void lp8556_brightness_set(struct led_classdev *led_cdev,
+                                  enum led_brightness value)
+{
+       struct lp8556_bl *lp8556 = container_of(led_cdev, struct lp8556_bl, cdev);
+       lp8556->brightness = value;
+       schedule_work(&lp8556->work_set);
+}
+
 static int lp8556_parse_dt(struct lp8556_bl *lp8556)
 {
        struct i2c_client *client = lp8556->client;
@@ -151,11 +188,11 @@ static int lp8556_probe(struct i2c_client *client,
                            const struct i2c_device_id *id)
 {
        struct lp8556_bl *lp8556;
+       struct device *dev = &client->dev;
        int error = -1;
        unsigned char writeBuf[5],readBuf[5];
        int ret =0;
        int i, size = sizeof(reg_array)/sizeof(reg_array[0]);
-       
 
        if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
                pr_err("i2c_check_functionality error\n");
@@ -189,6 +226,19 @@ static int lp8556_probe(struct i2c_client *client,
        ret=lp8556_read(client,writeBuf,1,readBuf,1);
        if(ret)
            pr_err("%s:LP8556_STATUS=0x%x\n",__func__,readBuf[0]);
+
+       lp8556->cdev.name = "lp8556-led";
+       lp8556->cdev.default_trigger = "bkl-trigger";
+       lp8556->cdev.brightness_set = lp8556_brightness_set;
+       lp8556->cdev.max_brightness = MAX_LEVEL;
+
+       error = devm_led_classdev_register(dev, &lp8556->cdev);
+       if (error < 0) {
+           dev_err(dev, "failed to register as led class: %d", error);
+           return error;
+       }
+
+       INIT_WORK(&lp8556->work_set, lp8556_deferred_brightness_set);
 
        pr_err("%s succeed\n",__func__);
        return 0;
