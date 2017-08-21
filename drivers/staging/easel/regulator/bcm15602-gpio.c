@@ -29,6 +29,7 @@ struct bcm15602_gpio {
 	struct gpio_chip gpio_chip;
 	struct bcm15602_chip *bcm15602;
 	unsigned long int pin_used;
+	int value[BCM15602_NUM_GPIOS];
 };
 
 static inline struct bcm15602_gpio *to_bcm15602_gpio
@@ -76,9 +77,11 @@ static void bcm15602_gpio_set(struct gpio_chip *gpio_chip, unsigned offset,
 {
 	struct bcm15602_gpio *bcm15602_gpio = to_bcm15602_gpio(gpio_chip);
 	struct bcm15602_chip *bcm15602 = bcm15602_gpio->bcm15602;
+	u8 reg_data = 0xC;
 
-	bcm15602_update_bits(bcm15602, BCM15602_REG_SYS_GPIO_OUT_CTRL,
-			     (1 << offset), ((value ? 1 : 0) << offset));
+	bcm15602_gpio->value[offset] = (value ? 1 : 0);
+	reg_data |= (bcm15602_gpio->value[1] << 1) | bcm15602_gpio->value[0];
+	bcm15602_write_byte(bcm15602, BCM15602_REG_SYS_GPIO_OUT_CTRL, reg_data);
 }
 
 static int bcm15602_gpio_direction_output(struct gpio_chip *gpio_chip,

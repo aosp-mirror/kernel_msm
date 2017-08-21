@@ -1167,8 +1167,7 @@ static int bcm15602_chip_fixup(struct bcm15602_chip *ddata)
 
 	if (ddata->rev_id < BCM15602_REV_A1) {
 		/* enable bandgap curvature correction for improved accuracy */
-		bcm15602_update_bits(ddata, BCM15602_REG_ADC_BGCTRL, 0x40,
-				     0x40);
+		bcm15602_write_byte(ddata, BCM15602_REG_ADC_BGCTRL, 0x7b);
 
 		/* unlock register, then set ASR switching frequency trim */
 		bcm15602_write_byte(ddata, BCM15602_REG_SYS_WRLOCKEY, 0x38);
@@ -1194,8 +1193,7 @@ static int bcm15602_chip_fixup(struct bcm15602_chip *ddata)
 				     0x10, 0x00);
 	} else if (ddata->rev_id == BCM15602_REV_A1) {
 		/* enable bandgap curvature correction for improved accuracy */
-		bcm15602_update_bits(ddata, BCM15602_REG_ADC_BGCTRL, 0x40,
-				     0x40);
+		bcm15602_write_byte(ddata, BCM15602_REG_ADC_BGCTRL, 0x7b);
 	}
 
 	return 0;
