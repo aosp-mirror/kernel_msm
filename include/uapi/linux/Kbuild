@@ -20,3 +20,5 @@ include include/linux/Kbuild.vservices
 endif
 header-y += okl4-link-shbuf.h
 header-y += sockev.h
+
+header-y += citadel.h
