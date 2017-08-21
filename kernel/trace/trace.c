@@ -40,6 +40,7 @@
 #include <linux/fs.h>
 #include <linux/sched/rt.h>
 #include <linux/coresight-stm.h>
+#include <linux/vmalloc.h>
 
 #include "trace.h"
 #include "trace_output.h"
@@ -1312,23 +1313,20 @@ static inline void set_cmdline(int idx, const char *cmdline)
 static int allocate_cmdlines_buffer(unsigned int val,
 				    struct saved_cmdlines_buffer *s)
 {
-	s->map_cmdline_to_pid = kmalloc(val * sizeof(*s->map_cmdline_to_pid),
-					GFP_KERNEL);
+	s->map_cmdline_to_pid = vmalloc(val * sizeof(*s->map_cmdline_to_pid));
 	if (!s->map_cmdline_to_pid)
 		return -ENOMEM;
 
-	s->saved_cmdlines = kmalloc(val * TASK_COMM_LEN, GFP_KERNEL);
+	s->saved_cmdlines = vmalloc(val * TASK_COMM_LEN);
 	if (!s->saved_cmdlines) {
-		kfree(s->map_cmdline_to_pid);
+		vfree(s->map_cmdline_to_pid);
 		return -ENOMEM;
 	}
 
-	s->map_cmdline_to_tgid = kmalloc_array(val,
-					       sizeof(*s->map_cmdline_to_tgid),
-					       GFP_KERNEL);
+	s->map_cmdline_to_tgid = vmalloc(val * sizeof(*s->map_cmdline_to_tgid));
 	if (!s->map_cmdline_to_tgid) {
-		kfree(s->map_cmdline_to_pid);
-		kfree(s->saved_cmdlines);
+		vfree(s->map_cmdline_to_pid);
+		vfree(s->saved_cmdlines);
 		return -ENOMEM;
 	}
 
@@ -3921,9 +3919,9 @@ tracing_saved_cmdlines_size_read(struct file *filp, char __user *ubuf,
 
 static void free_saved_cmdlines_buffer(struct saved_cmdlines_buffer *s)
 {
-	kfree(s->saved_cmdlines);
-	kfree(s->map_cmdline_to_pid);
-	kfree(s->map_cmdline_to_tgid);
+	vfree(s->saved_cmdlines);
+	vfree(s->map_cmdline_to_pid);
+	vfree(s->map_cmdline_to_tgid);
 	kfree(s);
 }
 
@@ -3995,7 +3993,7 @@ tracing_saved_tgids_read(struct file *file, char __user *ubuf,
 	preempt_disable();
 	arch_spin_lock(&trace_cmdline_lock);
 
-	pids = kmalloc_array(savedcmd->cmdline_num, 2*sizeof(int), GFP_KERNEL);
+	pids = vmalloc(savedcmd->cmdline_num*(2*sizeof(int)));
 	if (!pids) {
 		arch_spin_unlock(&trace_cmdline_lock);
 		preempt_enable();
@@ -4017,15 +4015,15 @@ tracing_saved_tgids_read(struct file *file, char __user *ubuf,
 	preempt_enable();
 
 	if (n == 0) {
-		kfree(pids);
+		vfree(pids);
 		return 0;
 	}
 
 	/* enough to hold max pair of pids + space, lr and nul */
 	len = n * 12;
-	file_buf = kmalloc(len, GFP_KERNEL);
+	file_buf = vmalloc(len);
 	if (!file_buf) {
-		kfree(pids);
+		vfree(pids);
 		return -ENOMEM;
 	}
 
@@ -4041,8 +4039,8 @@ tracing_saved_tgids_read(struct file *file, char __user *ubuf,
 	len = simple_read_from_buffer(ubuf, cnt, ppos,
 				      file_buf, buf - file_buf);
 
-	kfree(file_buf);
-	kfree(pids);
+	vfree(file_buf);
+	vfree(pids);
 
 	return len;
 }
