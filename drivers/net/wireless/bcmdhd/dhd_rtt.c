@@ -502,6 +502,10 @@ dhd_rtt_event_handler(dhd_pub_t *dhd, wl_event_msg_t *event, void *event_data)
 	status = ntoh32_ua((void *)&event->status);
 	reason = ntoh32_ua((void *)&event->reason);
 
+	if (!event_data) {
+		DHD_ERROR(("%s: event_data:NULL\n", __FUNCTION__));
+		return -EINVAL;
+
 	if (event_type != WLC_E_PROXD) {
 		goto exit;
 	}
