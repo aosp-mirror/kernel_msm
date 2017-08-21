@@ -64,6 +64,8 @@ obj-$(CONFIG_MEMORY_STATE_TIME)	+= memory_state_time.o
 
 obj-$(CONFIG_NFC_ST21NFC)	+= st21nfc.o
 
+obj-$(CONFIG_CITADEL)		+= citadel-spi.o
+
 lkdtm-$(CONFIG_LKDTM)		+= lkdtm_core.o
 lkdtm-$(CONFIG_LKDTM)		+= lkdtm_bugs.o
 lkdtm-$(CONFIG_LKDTM)		+= lkdtm_heap.o

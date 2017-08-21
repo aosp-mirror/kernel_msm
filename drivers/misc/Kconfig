@@ -812,6 +812,17 @@ config NFC_ST21NFC
 	---help---
 	  ST Microelectronics ST21NFC Near Field Communication controller support
 
+config CITADEL
+	tristate "Google Citadel"
+	depends on SPI
+	---help---
+	  Say Y here if you have a Citadel security microcontroller from Google Inc.
+	  It will be accessible using a TPM-style transport interface from within
+	  Linux.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called citadel-spi.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"

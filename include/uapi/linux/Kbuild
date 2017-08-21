@@ -526,3 +526,4 @@ header-y += msm_dsps.h
 header-y += msm-core-interface.h
 header-y += msm_rotator.h
 header-y += nfc/
+header-y += citadel.h
