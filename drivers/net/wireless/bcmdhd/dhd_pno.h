@@ -273,11 +273,6 @@ typedef struct dhd_pno_gscan_channel_bucket {
 	uint16 chan_list[GSCAN_MAX_CH_BUCKETS];
 } dhd_pno_gscan_channel_bucket_t;
 
-typedef struct dhd_pno_swc_evt_param {
-	uint16 results_rxed_so_far;
-	wl_pfn_significant_net_t *change_array;
-} dhd_pno_swc_evt_param_t;
-
 typedef struct wifi_gscan_result {
 	uint64 ts;                           /* Time of discovery           */
 	char ssid[DOT11_MAX_SSID_LEN+1];     /* null terminated             */
@@ -305,10 +300,8 @@ typedef struct dhd_pno_gscan_capabilities {
 	int max_scan_cache_size;
 	int max_scan_buckets;
 	int max_ap_cache_per_scan;
-	int max_rssi_sample_size;
 	int max_scan_reporting_threshold;
 	int max_hotlist_aps;
-	int max_significant_wifi_change_aps;
 } dhd_pno_gscan_capabilities_t;
 
 struct dhd_pno_gscan_params {
@@ -316,8 +309,6 @@ struct dhd_pno_gscan_params {
 	uint8 bestn;
 	uint8 mscan;
 	uint8 buffer_threshold;
-	uint8 swc_nbssid_threshold;
-	uint8 swc_rssi_window_size;
 	uint8 lost_ap_window;
 	uint8 nchannel_buckets;
 	uint8 reason;
@@ -327,12 +318,9 @@ struct dhd_pno_gscan_params {
 	gscan_results_cache_t *gscan_batch_cache;
 	gscan_results_cache_t *gscan_hotlist_found;
 	gscan_results_cache_t *gscan_hotlist_lost;
-	uint16 nbssid_significant_change;
 	uint16 nbssid_hotlist;
-	struct dhd_pno_swc_evt_param param_significant;
 	struct dhd_pno_gscan_channel_bucket channel_bucket[GSCAN_MAX_CH_BUCKETS];
 	struct list_head hotlist_bssid_list;
-	struct list_head significant_bssid_list;
 };
 
 typedef struct gscan_scan_params {
@@ -358,26 +346,6 @@ typedef struct gscan_hotlist_scan_params {
 	struct bssid_t bssid[1];  /* n bssids to follow */
 } gscan_hotlist_scan_params_t;
 
-/* SWC (Significant WiFi Change) params */
-typedef struct gscan_swc_params {
-	/* Rssi averaging window size */
-	uint8 rssi_window;
-	/* Number of scans that the AP has to be absent before
-	 * being declared LOST
-	 */
-	uint8 lost_ap_window;
-	/* if x  Aps have a significant change generate an event. */
-	uint8 swc_threshold;
-	uint8 nbssid;
-	wl_pfn_significant_bssid_t bssid_elem_list[1];
-} gscan_swc_params_t;
-
-typedef struct dhd_pno_significant_bssid {
-	struct ether_addr BSSID;
-	int8 rssi_low_threshold;
-	int8 rssi_high_threshold;
-	struct list_head list;
-} dhd_pno_significant_bssid_t;
 #endif /* GSCAN_SUPPORT */
 typedef union dhd_pno_params {
 	struct dhd_pno_legacy_params params_legacy;
@@ -439,8 +407,6 @@ void dhd_dev_pno_lock_access_batch_results(struct net_device *dev);
 void dhd_dev_pno_unlock_access_batch_results(struct net_device *dev);
 extern int dhd_dev_pno_run_gscan(struct net_device *dev, bool run, bool flush);
 extern int dhd_dev_pno_enable_full_scan_result(struct net_device *dev, bool real_time);
-extern void * dhd_dev_swc_scan_event(struct net_device *dev, const void  *data,
-              int *send_evt_bytes);
 int dhd_retreive_batch_scan_results(dhd_pub_t *dhd);
 extern void * dhd_dev_hotlist_scan_event(struct net_device *dev,
             const void  *data, int *send_evt_bytes, hotlist_type_t type);
@@ -484,7 +450,6 @@ extern int dhd_pno_initiate_gscan_request(dhd_pub_t *dhd, bool run, bool flush);
 extern int dhd_pno_enable_full_scan_result(dhd_pub_t *dhd, bool real_time_flag);
 extern int dhd_pno_cfg_gscan(dhd_pub_t *dhd, dhd_pno_gscan_cmd_cfg_t type, void *buf);
 extern int dhd_dev_retrieve_batch_scan(struct net_device *dev);
-extern void *dhd_handle_swc_evt(dhd_pub_t *dhd, const void *event_data, int *send_evt_bytes);
 extern void *dhd_handle_hotlist_scan_evt(dhd_pub_t *dhd, const void *event_data,
                        int *send_evt_bytes, hotlist_type_t type);
 extern void *dhd_process_full_gscan_result(dhd_pub_t *dhd, const void *event_data,
