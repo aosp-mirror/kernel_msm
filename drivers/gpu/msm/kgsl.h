@@ -156,8 +156,9 @@ struct kgsl_memdesc_ops {
  * @ops: Function hooks for the memdesc memory type
  * @flags: Flags set from userspace
  * @dev: Pointer to the struct device that owns this memory
- * @memmap: bitmap of pages for mmapsize
- * @memmap_len: Number of bits for memmap
+ * @attrs: dma attributes for this memory
+ * @pages: An array of pointers to allocated pages
+ * @page_count: Total number of pages allocated
  */
 struct kgsl_memdesc {
 	struct kgsl_pagetable *pagetable;
@@ -174,6 +175,8 @@ struct kgsl_memdesc {
 	uint64_t flags;
 	struct device *dev;
 	struct dma_attrs attrs;
+	struct page **pages;
+	unsigned int page_count;
 };
 
 /*
