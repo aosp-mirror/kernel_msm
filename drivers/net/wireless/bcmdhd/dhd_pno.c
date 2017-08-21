@@ -51,6 +51,8 @@
 #include <proto/bcmevent.h>
 #include <dhd.h>
 #include <dhd_pno.h>
+#include <wl_cfg80211.h>
+#include <dhd_cfg80211.h>
 #include <dhd_dbg.h>
 #ifdef GSCAN_SUPPORT
 #include <linux/gcd.h>
@@ -3628,7 +3630,7 @@ dhd_gscan_hotlist_cache_cleanup(dhd_pub_t *dhd, hotlist_type_t type)
 }
 
 void *
-dhd_process_full_gscan_result(dhd_pub_t *dhd, const void *data, int *size)
+dhd_process_full_gscan_result(dhd_pub_t *dhd, const void *data, uint32 len,int *size)
 {
 	wl_bss_info_t *bi = NULL;
 	wl_gscan_result_t *gscan_result;
@@ -3638,6 +3640,8 @@ dhd_process_full_gscan_result(dhd_pub_t *dhd, const void *data, int *size)
 	uint32 mem_needed;
 	struct timespec ts;
 	wl_event_gas_t *gas_data;
+	u32 bi_ie_length = 0;
+	u32 bi_ie_offset = 0;
 
 	*size = 0;
 
@@ -3647,6 +3651,16 @@ dhd_process_full_gscan_result(dhd_pub_t *dhd, const void *data, int *size)
 		DHD_ERROR(("Invalid gscan result (NULL pointer)\n"));
 		goto exit;
 	}
+
+	if ((len < sizeof(*gscan_result)) ||
+	    (len < dtoh32(gscan_result->buflen)) ||
+	    (dtoh32(gscan_result->buflen) >
+	    (sizeof(*gscan_result) + WL_SCAN_IE_LEN_MAX))) {
+		DHD_ERROR(("%s: invalid gscan buflen:%u\n", __func__,
+			   dtoh32(gscan_result->buflen)));
+		goto exit;
+	}
+
 	if (!gscan_result->bss_info) {
 		DHD_ERROR(("Invalid gscan bss info (NULL pointer)\n"));
 		goto exit;
@@ -3656,6 +3670,14 @@ dhd_process_full_gscan_result(dhd_pub_t *dhd, const void *data, int *size)
 	if (bi_length != (dtoh32(gscan_result->buflen) -
 		WL_GSCAN_RESULTS_FIXED_SIZE - WL_GSCAN_INFO_FIXED_FIELD_SIZE)) {
 		DHD_ERROR(("Invalid bss_info length %d: ignoring\n", bi_length));
+		goto exit;
+	}
+
+	bi_ie_offset = dtoh32(bi->ie_offset);
+	bi_ie_length = dtoh32(bi->ie_length);
+	if ((bi_ie_offset + bi_ie_length) > bi_length) {
+		DHD_ERROR(("%s: Invalid ie_length:%u or ie_offset:%u\n",
+			   __func__, bi_ie_length, bi_ie_offset));
 		goto exit;
 	}
 	if ((bi->SSID_len > DOT11_MAX_SSID_LEN)||
@@ -3676,7 +3698,7 @@ dhd_process_full_gscan_result(dhd_pub_t *dhd, const void *data, int *size)
 		return NULL;
 	}
 
-	mem_needed = OFFSETOF(wifi_gscan_result_t, ie_data) + bi->ie_length;
+	mem_needed = OFFSETOF(wifi_gscan_result_t, ie_data) + bi_ie_length;
 	result = kmalloc(mem_needed, GFP_KERNEL);
 
 	if (!result) {
@@ -3698,9 +3720,9 @@ dhd_process_full_gscan_result(dhd_pub_t *dhd, const void *data, int *size)
 	result->ts = (uint64) TIMESPEC_TO_US(ts);
 	result->beacon_period = dtoh16(bi->beacon_period);
 	result->capability = dtoh16(bi->capability);
-	result->ie_length = dtoh32(bi->ie_length);
+	result->ie_length = bi_ie_length;
 	memcpy(&result->macaddr, &bi->BSSID, ETHER_ADDR_LEN);
-	memcpy(result->ie_data, ((uint8 *)bi + bi->ie_offset), bi->ie_length);
+	memcpy(result->ie_data, ((uint8 *)bi + bi_ie_offset), bi_ie_length);
 	*size = mem_needed;
 exit:
 	return result;
