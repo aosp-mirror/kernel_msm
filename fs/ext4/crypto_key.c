@@ -88,9 +88,8 @@ void ext4_free_crypt_info(struct ext4_crypt_info *ci)
 	if (!ci)
 		return;
 
-	if (ci->ci_keyring_key)
-		key_put(ci->ci_keyring_key);
 	crypto_free_ablkcipher(ci->ci_ctfm);
+	memset(ci, 0, sizeof(*ci)); /* sanitizes ->ci_raw_key */
 	kmem_cache_free(ext4_crypt_info_cachep, ci);
 }
 
@@ -117,7 +116,7 @@ static int ext4_default_data_encryption_mode(void)
 		EXT4_ENCRYPTION_MODE_AES_256_XTS;
 }
 
-int _ext4_get_encryption_info(struct inode *inode)
+int ext4_get_encryption_info(struct inode *inode)
 {
 	struct ext4_inode_info *ei = EXT4_I(inode);
 	struct ext4_crypt_info *crypt_info;
@@ -134,20 +133,13 @@ int _ext4_get_encryption_info(struct inode *inode)
 	int mode;
 	int res;
 
+	if (ei->i_crypt_info)
+		return 0;
+
 	if (!ext4_read_workqueue) {
 		res = ext4_init_crypto();
 		if (res)
 			return res;
-	}
-
-retry:
-	crypt_info = ACCESS_ONCE(ei->i_crypt_info);
-	if (crypt_info) {
-		if (!crypt_info->ci_keyring_key ||
-		    key_validate(crypt_info->ci_keyring_key) == 0)
-			return 0;
-		ext4_free_encryption_info(inode, crypt_info);
-		goto retry;
 	}
 
 	res = ext4_xattr_get(inode, EXT4_XATTR_INDEX_ENCRYPTION,
@@ -173,7 +165,6 @@ retry:
 	crypt_info->ci_data_mode = ctx.contents_encryption_mode;
 	crypt_info->ci_filename_mode = ctx.filenames_encryption_mode;
 	crypt_info->ci_ctfm = NULL;
-	crypt_info->ci_keyring_key = NULL;
 	memcpy(crypt_info->ci_master_key, ctx.master_key_descriptor,
 	       sizeof(crypt_info->ci_master_key));
 	if (S_ISDIR(inode->i_mode) || S_ISLNK(inode->i_mode))
@@ -216,7 +207,6 @@ retry:
 		keyring_key = NULL;
 		goto out;
 	}
-	crypt_info->ci_keyring_key = keyring_key;
 	if (keyring_key->type != &key_type_logon) {
 		printk_once(KERN_WARNING
 			    "ext4: key type must be logon\n");
@@ -241,13 +231,21 @@ retry:
 		up_read(&keyring_key->sem);
 		goto out;
 	}
-	/* If we don't need to derive, we still want to do everything
-	 * up until now to validate the key. It's cleaner to fail now
-	 * than to fail in block I/O. */
 	if (for_fname ||
 	    crypt_info->ci_data_mode != EXT4_ENCRYPTION_MODE_PRIVATE) {
 		res = ext4_derive_key_aes(ctx.nonce, master_key->raw,
 					  crypt_info->ci_raw_key);
+	} else {
+		/*
+		 * Inline encryption: no key derivation required because IVs are
+		 * assigned based on physical sector number, not based on the
+		 * offset within the file.
+		 */
+		BUILD_BUG_ON(sizeof(crypt_info->ci_raw_key) !=
+			     sizeof(master_key->raw));
+		memcpy(crypt_info->ci_raw_key,
+		       master_key->raw, sizeof(crypt_info->ci_raw_key));
+		res = 0;
 	}
 	up_read(&keyring_key->sem);
 	if (res)
@@ -279,16 +277,13 @@ got_key:
 		res = -EINVAL;
 		goto out;
 	}
-	if (cmpxchg(&ei->i_crypt_info, NULL, crypt_info) != NULL) {
-		ext4_free_crypt_info(crypt_info);
-		goto retry;
-	}
-	return 0;
 
+	if (cmpxchg(&ei->i_crypt_info, NULL, crypt_info) == NULL)
+		crypt_info = NULL;
 out:
 	if (res == -ENOKEY)
 		res = 0;
-	memset(crypt_info->ci_raw_key, 0, sizeof(crypt_info->ci_raw_key));
+	key_put(keyring_key);
 	ext4_free_crypt_info(crypt_info);
 	return res;
 }
@@ -311,7 +306,7 @@ void ext4_set_bio_crypt_context(struct inode *inode, struct bio *bio)
 		bio->bi_crypt_ctx.bc_flags |= (BC_ENCRYPT_FL |
 					       BC_AES_256_XTS_FL);
 		bio->bi_crypt_ctx.bc_key_size = EXT4_AES_256_XTS_KEY_SIZE;
-		bio->bi_crypt_ctx.bc_keyring_key = ci->ci_keyring_key;
+		bio->bi_crypt_ctx.bc_key = ci->ci_raw_key;
 	} else
 		bio->bi_crypt_ctx.bc_flags &= ~BC_ENCRYPT_FL;
 }
