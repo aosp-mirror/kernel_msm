@@ -871,24 +871,25 @@ static int tcpm_set_current_limit(struct tcpc_dev *dev, u32 max_ma, u32 mv)
 	struct fusb302_chip *chip = container_of(dev, struct fusb302_chip,
 						 tcpc_dev);
 	int ret = 0;
-	int dummy_val;
-	struct htc_pd_data pd_data;
-	enum usb_typec_current sink_current;
+	enum usb_typec_current sink_current, pre_sink_current;
 
 	mutex_lock(&chip->lock);
 
 	fusb302_log("current limit: %d ma, %d mv\n",
 		    max_ma, mv);
 
-	if ((mv == 5000) && (max_ma == 0 || max_ma == 1500 || max_ma == 3000)) {
+	if ((mv == 0 || mv == 5000) &&
+	    (max_ma == 0 || max_ma == 1500 || max_ma == 3000)) {
 		if (max_ma == 0)
 			sink_current = USB_TYPEC_CURRENT_DEFAULT;
 		else if (max_ma == 1500)
 			sink_current = USB_TYPEC_CURRENT_1_5_A;
 		else
 			sink_current = USB_TYPEC_CURRENT_3_0_A;
-		if (chip->utc)
+		if (chip->utc) {
+			pre_sink_current = chip->utc->sink_current;
 			chip->utc->sink_current = sink_current;
+		}
 
 		if (!chip->batt_psy) {
 			chip->batt_psy = power_supply_get_by_name("battery");
@@ -900,11 +901,12 @@ static int tcpm_set_current_limit(struct tcpc_dev *dev, u32 max_ma, u32 mv)
 			}
 		}
 
-		if (chip->batt_psy) {
+		if (chip->batt_psy && chip->utc &&
+		    (sink_current != pre_sink_current)) {
 			ret = chip->batt_psy->set_property(chip->batt_psy,
 					POWER_SUPPLY_PROP_TYPEC_SINK_CURRENT,
 					(const union power_supply_propval *)
-							&sink_current);
+							&pre_sink_current);
 			if (ret < 0) {
 				fusb302_log(
 					"cannot set battery sink current, ret=%d\n",
@@ -912,11 +914,6 @@ static int tcpm_set_current_limit(struct tcpc_dev *dev, u32 max_ma, u32 mv)
 			}
 		}
 	}
-
-	pd_data.pd_list[0][0] = mv;
-	pd_data.pd_list[0][1] = max_ma;
-
-	htc_battery_pd_charger_support(1, pd_data, &dummy_val);
 
 	mutex_unlock(&chip->lock);
 

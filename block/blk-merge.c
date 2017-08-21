@@ -1,6 +1,7 @@
 /*
  * Functions related to segment and merge handling
  */
+#include <crypto/algapi.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/bio.h>
@@ -550,8 +551,9 @@ static bool crypto_not_mergeable(const struct bio *bio, const struct bio *nxt)
 	 * same, don't merge. */
 	return ((bio->bi_crypt_ctx.bc_key_size !=
 		 nxt->bi_crypt_ctx.bc_key_size) ||
-		(bio->bi_crypt_ctx.bc_keyring_key !=
-		 nxt->bi_crypt_ctx.bc_keyring_key));
+		crypto_memneq(bio->bi_crypt_ctx.bc_key,
+			      nxt->bi_crypt_ctx.bc_key,
+			      bio->bi_crypt_ctx.bc_key_size));
 }
 
 /*

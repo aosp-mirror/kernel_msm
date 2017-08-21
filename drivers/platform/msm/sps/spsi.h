@@ -52,8 +52,6 @@
 #define MAX_MSG_LEN 80
 #define SPS_IPC_LOGPAGES 10
 #define SPS_IPC_REG_DUMP_FACTOR 3
-#define SPS_IPC_DEFAULT_LOGLEVEL 3
-#define SPS_IPC_DISABLE_LOGGING 4
 
 /* Connection mapping control struct */
 struct sps_rm {

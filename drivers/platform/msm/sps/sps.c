@@ -2178,7 +2178,7 @@ int sps_register_bam_device(const struct sps_bam_props *bam_props,
 	if (virt_addr != NULL)
 		bam->props.virt_addr = virt_addr;
 
-	snprintf(bam_name, sizeof(bam_name), "sps_bam_%pa_0",
+	snprintf(bam_name, sizeof(bam_name), "sps_bam_%paP_0",
 					&bam->props.phys_addr);
 	bam->ipc_log0 = ipc_log_context_create(SPS_IPC_LOGPAGES,
 							bam_name, 0);
@@ -2186,7 +2186,7 @@ int sps_register_bam_device(const struct sps_bam_props *bam_props,
 		SPS_ERR(sps, "%s : unable to create IPC Logging 0 for bam %pa",
 					__func__, &bam->props.phys_addr);
 
-	snprintf(bam_name, sizeof(bam_name), "sps_bam_%pa_1",
+	snprintf(bam_name, sizeof(bam_name), "sps_bam_%paP_1",
 					&bam->props.phys_addr);
 	bam->ipc_log1 = ipc_log_context_create(SPS_IPC_LOGPAGES,
 							bam_name, 0);
@@ -2194,7 +2194,7 @@ int sps_register_bam_device(const struct sps_bam_props *bam_props,
 		SPS_ERR(sps, "%s : unable to create IPC Logging 1 for bam %pa",
 					__func__, &bam->props.phys_addr);
 
-	snprintf(bam_name, sizeof(bam_name), "sps_bam_%pa_2",
+	snprintf(bam_name, sizeof(bam_name), "sps_bam_%paP_2",
 					&bam->props.phys_addr);
 	bam->ipc_log2 = ipc_log_context_create(SPS_IPC_LOGPAGES,
 							bam_name, 0);
@@ -2202,7 +2202,7 @@ int sps_register_bam_device(const struct sps_bam_props *bam_props,
 		SPS_ERR(sps, "%s : unable to create IPC Logging 2 for bam %pa",
 					__func__, &bam->props.phys_addr);
 
-	snprintf(bam_name, sizeof(bam_name), "sps_bam_%pa_3",
+	snprintf(bam_name, sizeof(bam_name), "sps_bam_%paP_3",
 					&bam->props.phys_addr);
 	bam->ipc_log3 = ipc_log_context_create(SPS_IPC_LOGPAGES,
 							bam_name, 0);
@@ -2210,7 +2210,7 @@ int sps_register_bam_device(const struct sps_bam_props *bam_props,
 		SPS_ERR(sps, "%s : unable to create IPC Logging 3 for bam %pa",
 					__func__, &bam->props.phys_addr);
 
-	snprintf(bam_name, sizeof(bam_name), "sps_bam_%pa_4",
+	snprintf(bam_name, sizeof(bam_name), "sps_bam_%paP_4",
 					&bam->props.phys_addr);
 	bam->ipc_log4 = ipc_log_context_create(SPS_IPC_LOGPAGES,
 							bam_name, 0);
@@ -2220,8 +2220,6 @@ int sps_register_bam_device(const struct sps_bam_props *bam_props,
 
 	if (bam_props->ipc_loglevel)
 		bam->ipc_loglevel = bam_props->ipc_loglevel;
-	else
-		bam->ipc_loglevel = SPS_IPC_DEFAULT_LOGLEVEL;
 
 	ok = sps_bam_device_init(bam);
 	mutex_unlock(&bam->lock);
