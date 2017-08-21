@@ -645,4 +645,48 @@
 			qcom,otg-cl-ua = <800000>;
 			};
 		};
+	qcom,pmi8998@3 {
+		qcom,leds@d000 {
+			red_led: qcom,rgb_0 {
+				/delete-property/ linux,default-trigger;
+				label = "rgb";
+				qcom,id = <5>;
+				qcom,mode = "pwm";
+				pwms = <&pmi8998_pwm_3 0 0>;
+				qcom,pwm-us = <100>;
+				qcom,max-current = <12>;
+				qcom,default-state = "off";
+				linux,name = "red";
+
+				qcom,use-blink;
+				qcom,start-idx = <1>;
+				qcom,idx-len = <18>;
+				qcom,duty-pcts = [00 50 00 50 00 50 00 00 00 00 00 00 00 00 00 00 00 00];
+				qcom,ramp-step-ms = <83>;
+			};
+
+			green_led: qcom,rgb_1 {
+				/delete-property/ linux,default-trigger;
+				status = "disabled";
+			};
+
+			blue_led: qcom,rgb_2 {
+				/delete-property/ linux,default-trigger;
+				label = "rgb";
+				qcom,id = <3>;
+				qcom,mode = "pwm";
+				pwms = <&pmi8998_pwm_5 0 0>;
+				qcom,pwm-us = <100>;
+				qcom,max-current = <12>;
+				qcom,default-state = "keep";
+				linux,name = "blue";
+
+				qcom,use-blink;
+				qcom,start-idx = <1>;
+				qcom,idx-len = <16>;
+				qcom,duty-pcts = [32 45 55 60 64 60 55 45 32 1E 0E 03 00 03 0E 1E];
+				qcom,ramp-step-ms = <62>;
+			};
+		};
+	};
 };
