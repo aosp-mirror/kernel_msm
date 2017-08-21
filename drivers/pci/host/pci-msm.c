@@ -6413,3 +6413,23 @@ int msm_pcie_shadow_control(struct pci_dev *dev, bool enable)
 	return ret;
 }
 EXPORT_SYMBOL(msm_pcie_shadow_control);
+
+int msm_pcie_set_reset(u32 rc_idx, bool enable)
+{
+	struct msm_pcie_dev_t *dev = &msm_pcie_dev[rc_idx];
+
+	if (enable) {
+		PCIE_INFO(dev, "PCIe: Assert the reset of endpoint of RC%d.\n",
+			dev->rc_idx);
+		gpio_set_value(dev->gpio[MSM_PCIE_GPIO_PERST].num,
+					dev->gpio[MSM_PCIE_GPIO_PERST].on);
+	} else {
+		PCIE_INFO(dev, "PCIe: Release the reset of endpoint of RC%d.\n",
+			dev->rc_idx);
+		gpio_set_value(dev->gpio[MSM_PCIE_GPIO_PERST].num,
+					1 - dev->gpio[MSM_PCIE_GPIO_PERST].on);
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(msm_pcie_set_reset);
