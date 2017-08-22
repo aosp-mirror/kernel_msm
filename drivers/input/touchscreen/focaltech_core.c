@@ -167,6 +167,7 @@ static struct sensors_classdev __maybe_unused sensors_proximity_cdev = {
 * Static function prototypes
 *******************************************************************************/
 int fts_ts_start(struct device *dev);
+int fts_ts_resume(struct device *dev);
 
 #ifdef CONFIG_TOUCHSCREEN_FTS_PSENSOR
 /*******************************************************************************
@@ -1307,20 +1308,172 @@ pwr_off_fail:
 int fts_ts_disable(struct device *dev)
 {
 	struct fts_ts_data *data = dev_get_drvdata(dev);
-
+	u8 txbuf[2];
+	int i, err;
 	if (ts_pwr_disabled) {
 		dev_dbg(dev, "Touch vdd/vcc has been disabled\n");
 		return 0;
 	}
 
 	disable_irq(data->client->irq);
-	fts_power_on(data, false);
-	ts_pwr_disabled = true;
 
+	/* release all touches */
+	for (i = 0; i < data->pdata->num_max_touches; i++) {
+		input_mt_slot(data->input_dev, i);
+		input_mt_report_slot_state(data->input_dev, MT_TOOL_FINGER, 0);
+	}
+	input_mt_report_pointer_emulation(data->input_dev, false);
+	input_sync(data->input_dev);
+
+	txbuf[0] = FTS_REG_PMODE;
+	txbuf[1] = FTS_PMODE_HIBERNATE;
+	err = fts_write_reg(fts_i2c_client, txbuf[0], txbuf[1]);		 //Entry Hibernate mode
+	printk(KERN_INFO "[fts]%s, FTS_PMODE_HIBERNATE, ret : %d\n", __func__, err);
+#ifdef FTS_POWER_CONTROL
+	if (data->pdata->power_on) {
+		err = data->pdata->power_on(false);
+		if (err) {
+			dev_err(dev, "power off failed");
+			goto pwr_off_fail;
+		}
+	} else {
+		err = fts_power_on(data, false);
+		if (err) {
+			dev_err(dev, "power off failed");
+			goto pwr_off_fail;
+		}
+	}
+
+#ifdef MSM_NEW_VER
+	if (data->ts_pinctrl) {
+		err = pinctrl_select_state(data->ts_pinctrl,
+			data->pinctrl_state_suspend);
+		if (err < 0)
+			dev_err(dev, "Cannot get suspend pinctrl state\n");
+	}
+#endif
+
+#endif
+
+#ifdef FTS_GPIO_CONTROL
+	err = fts_gpio_configure(data, false);
+	if (err < 0) {
+		dev_err(&data->client->dev,
+			"failed to put gpios in suspend state\n");
+		goto gpio_configure_fail;
+	}
+#endif
+
+	if (fts_irq_desc->depth > 0 && fts_wq_running == false) {
+		pr_info("[fts]%s, enable irq, disable depth : %u\n", __func__, fts_irq_desc->depth);
+			enable_irq(fts_wq_data->client->irq);
+		suspend_resume_recovery_count++;
+	}
+	ts_pwr_disabled = true;
 	data->suspended = true;
 
 	return 0;
 
+#ifdef FTS_GPIO_CONTROL
+gpio_configure_fail:
+#endif
+
+#ifdef FTS_POWER_CONTROL
+
+#ifdef MSM_NEW_VER
+	if (data->ts_pinctrl) {
+		err = pinctrl_select_state(data->ts_pinctrl,
+			data->pinctrl_state_active);
+		if (err < 0)
+			dev_err(dev, "Cannot get active pinctrl state\n");
+	}
+#endif
+
+	if (data->pdata->power_on) {
+		err = data->pdata->power_on(true);
+		if (err)
+			dev_err(dev, "power on failed");
+	} else {
+		err = fts_power_on(data, true);
+		if (err)
+			dev_err(dev, "power on failed");
+	}
+pwr_off_fail:
+	if (gpio_is_valid(data->pdata->reset_gpio)) {
+		gpio_set_value_cansleep(data->pdata->reset_gpio, 0);
+		msleep(data->pdata->hard_rst_dly);
+		gpio_set_value_cansleep(data->pdata->reset_gpio, 1);
+	}
+#endif
+
+
+	enable_irq(data->client->irq);
+
+	return err;
+
+}
+
+/*******************************************************************************
+*  Name: fts_ts_open
+*  Brief:
+*  Input:
+*  Output:
+*  Return:
+*******************************************************************************/
+static int fts_ts_open(struct input_dev *input_dev)
+{
+	struct fts_ts_data *data;
+	int err = 0;
+
+	pr_err("[fts]%s, start\n", __func__);
+	//pr_err("[fts]%s, input_dev: %d\n", __func__, input_dev);
+	if (input_dev == NULL){
+		pr_err("[fts]%s, input_dev is NULL\n", __func__);
+	}
+	else {
+		data = input_get_drvdata(input_dev);
+	}
+	pr_err("[fts]%s, after input\n", __func__);
+
+	err = fts_ts_resume(&(data->client->dev));
+	//printk(KERN_ERR "[fts]%s, finish, err : %d\n", __func__, err);
+	pr_err("[fts]%s, finish, err : %d\n", __func__, err);
+	if (err < 0) {
+		printk(KERN_ERR "[fts]%s, TP power on fail, err : %d\n", __func__, err);
+		pr_err("[fts]%s, TP power on fail, err : %d\n", __func__, err);
+		return err;
+	}
+	ts_pwr_disabled = false;
+
+	return 0;
+}
+
+/*******************************************************************************
+*  Name: fts_ts_close
+*  Brief:
+*  Input:
+*  Output:
+*  Return:
+*******************************************************************************/
+static void fts_ts_close(struct input_dev *input_dev)
+{
+	struct fts_ts_data *data;
+	int err = 0;
+
+	pr_err("[fts]%s, start\n", __func__);
+
+	data = input_get_drvdata(input_dev);
+	pr_err("[fts]%s, after input\n", __func__);
+
+	err = fts_ts_disable(&data->client->dev);
+	//printk(KERN_ERR "[fts]%s, finish, err : %d\n", __func__, err);
+	pr_err("[fts]%s, finish, err : %d\n", __func__, err);
+	if (err < 0) {
+		printk(KERN_ERR "[fts]%s, TP power disable fail, err : %d\n", __func__, err);
+		pr_err("[fts]%s, TP power disable fail, err : %d\n", __func__, err);
+		return;
+	}
+	ts_pwr_disabled = true;
 }
 
 /*******************************************************************************
@@ -1342,6 +1495,7 @@ int fts_ts_suspend(struct device *dev)
 	}
 
 	printk(KERN_ERR "[fts]%s, start\n", __func__);
+	pr_err("[fts]%s, start\n", __func__);
 
 	if (data->suspended) {
 		dev_info(dev, "Already in suspend state\n");
@@ -1395,6 +1549,8 @@ int fts_ts_resume(struct device *dev)
 		dev_dbg(dev, "Already in awake state\n");
 		return 0;
 	}
+
+	pr_err("[fts]%s, start\n", __func__);
 
 #ifdef CONFIG_TOUCHSCREEN_FTS_PSENSOR
 	if (fts_psensor_support_enabled() && data->pdata->psensor_support &&
@@ -1467,11 +1623,13 @@ static int fb_notifier_callback(struct notifier_block *self,
 		blank = evdata->data;
 		switch (*blank) {
 		case FB_BLANK_UNBLANK:
+			pr_err("[fts]FB_BLANK_UNBLANK\n");
 			fts_ts_resume(&fts_data->client->dev);
 		break;
 
 		case FB_BLANK_POWERDOWN:
 		case FB_BLANK_VSYNC_SUSPEND:		//dean add. for screen on
+			pr_err("[fts]FB_BLANK_VSYNC_SUSPEND\n");
 			fts_ts_suspend(&fts_data->client->dev);
 		break;
 
@@ -1945,6 +2103,8 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	u8 reg_addr;
 	int err, len;
 
+	pr_err("[fts]%s, start\n", __func__);
+
 	if (client->dev.of_node) {
 		pdata = devm_kzalloc(&client->dev,
 			sizeof(struct fts_ts_platform_data), GFP_KERNEL);
@@ -2011,6 +2171,9 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	input_dev->name = "fts_ts";
 	input_dev->id.bustype = BUS_I2C;
 	input_dev->dev.parent = &client->dev;
+
+	input_dev->open = fts_ts_open;
+	input_dev->close = fts_ts_close;
 
 	input_set_drvdata(input_dev, data);
 	i2c_set_clientdata(client, data);
