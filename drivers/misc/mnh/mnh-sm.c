@@ -191,6 +191,9 @@ struct mnh_sm_device {
 
 	/* node to carveout memory, owned by mnh_sm_device */
 	struct mnh_ion *ion[FW_PART_MAX];
+
+	/* firmware version */
+	char mnh_fw_ver[FW_VER_SIZE];
 };
 
 static struct mnh_sm_device *mnh_sm_dev;
@@ -792,6 +795,23 @@ static ssize_t suspend_show(struct device *dev,
 
 static DEVICE_ATTR_RO(suspend);
 
+int mnh_update_fw_version(struct mnh_ion *ion)
+{
+	if ((ion != NULL) && (ion->fw_array[MNH_FW_SLOT_RAMDISK].size <
+		   sizeof(mnh_sm_dev->mnh_fw_ver)))
+		return -EINVAL;
+	memcpy(mnh_sm_dev->mnh_fw_ver,
+	       (uint8_t *)(ion->vaddr +
+			   ion->fw_array[MNH_FW_SLOT_RAMDISK].ap_offs +
+			   ion->fw_array[MNH_FW_SLOT_RAMDISK].size -
+			   sizeof(mnh_sm_dev->mnh_fw_ver)),
+	       sizeof(mnh_sm_dev->mnh_fw_ver));
+	dev_dbg(mnh_sm_dev->dev,
+		"%s: Easel firmware version: %s size %zu\n", __func__,
+		mnh_sm_dev->mnh_fw_ver, sizeof(mnh_sm_dev->mnh_fw_ver));
+	return sizeof(mnh_sm_dev->mnh_fw_ver);
+}
+
 int mnh_resume_firmware(void)
 {
 	dev_dbg(mnh_sm_dev->dev, "%s sbl dl:0x%x ex:0x%x size:0x%x\n", __func__,
@@ -1066,6 +1086,15 @@ static ssize_t power_mode_store(struct device *dev,
 
 static DEVICE_ATTR_RW(power_mode);
 
+static ssize_t fw_ver_show(struct device *dev,
+			       struct device_attribute *attr,
+			       char *buf)
+{
+	return scnprintf(buf, MAX_STR_COPY, "%s\n", mnh_sm_dev->mnh_fw_ver);
+}
+
+static DEVICE_ATTR_RO(fw_ver);
+
 static int mnh_sm_read_mipi_interrupts(void)
 {
 	int i, int_event = 0;
@@ -1163,6 +1192,7 @@ static struct attribute *mnh_sm_attrs[] = {
 	&dev_attr_spi_boot_mode.attr,
 	&dev_attr_boot_trace.attr,
 	&dev_attr_error_event.attr,
+	&dev_attr_fw_ver.attr,
 	NULL
 };
 ATTRIBUTE_GROUPS(mnh_sm);
@@ -1452,6 +1482,7 @@ static int mnh_sm_set_state_locked(int state)
 			mnh_ion_stage_firmware_update(
 				mnh_sm_dev->ion[FW_PART_PRI],
 				mnh_sm_dev->ion[FW_PART_SEC]);
+			mnh_update_fw_version(mnh_sm_dev->ion[FW_PART_PRI]);
 			mnh_sm_dev->pending_update = false;
 			mnh_ion_destroy_buffer(mnh_sm_dev->ion[FW_PART_SEC]);
 		}
@@ -1646,6 +1677,8 @@ static int mnh_sm_open(struct inode *inode, struct file *filp)
 			dev_dbg(mnh_sm_dev->dev, "%s: staging firmware\n",
 				__func__);
 			mnh_ion_stage_firmware(mnh_sm_dev->ion[FW_PART_PRI]);
+			/* Extract firmware version from ramdisk image */
+			mnh_update_fw_version(mnh_sm_dev->ion[FW_PART_PRI]);
 		}
 	}
 	return 0;
@@ -1829,6 +1862,16 @@ static long mnh_sm_ioctl(struct file *file, unsigned int cmd,
 
 			dev_err(mnh_sm_dev->dev,
 				"%s: failed to validate slots (%d)\n",
+				__func__, err);
+			return err;
+		}
+		break;
+	case MNH_SM_IOC_GET_FW_VER:
+		err = copy_to_user((void __user *)arg, &mnh_sm_dev->mnh_fw_ver,
+				   sizeof(mnh_sm_dev->mnh_fw_ver));
+		if (err) {
+			dev_err(mnh_sm_dev->dev,
+				"%s: failed to copy to userspace (%d)\n",
 				__func__, err);
 			return err;
 		}
