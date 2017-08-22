@@ -1194,6 +1194,10 @@ static int bcm15602_chip_fixup(struct bcm15602_chip *ddata)
 	} else if (ddata->rev_id == BCM15602_REV_A1) {
 		/* enable bandgap curvature correction for improved accuracy */
 		bcm15602_write_byte(ddata, BCM15602_REG_ADC_BGCTRL, 0x7b);
+
+		/* set ASR to single phase */
+		bcm15602_update_bits(ddata, BCM15602_REG_BUCK_ASR_TSET_CTRL2,
+				     0x10, 0x00);
 	}
 
 	return 0;

@@ -310,15 +310,15 @@ static ssize_t bcm15602_attr_store_asr_dual_phase(
 		return -EINVAL;
 	}
 
-	if (ddata->rev_id >= BCM15602_REV_A1) {
-		dev_warn(dev,
-			 "%s: Skipping workaround for this silicon version\n",
-			 __func__);
-		return count;
+	if (val) {
+		/* set ASR to dual phase */
+		bcm15602_update_bits(ddata, BCM15602_REG_BUCK_ASR_TSET_CTRL2,
+				     0x10, 0x10);
+	} else {
+		/* set ASR to single phase */
+		bcm15602_update_bits(ddata, BCM15602_REG_BUCK_ASR_TSET_CTRL2,
+				     0x10, 0x00);
 	}
-
-	bcm15602_update_bits(ddata, BCM15602_REG_BUCK_ASR_TSET_CTRL2, 0x10,
-			     (val & 0x1) << 4);
 
 	return count;
 }
