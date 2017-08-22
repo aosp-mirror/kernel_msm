@@ -522,6 +522,13 @@ static int easelcomm_client_handle_dma_request(
 	if (msg_metadata->dma_xfer.xfer_type == EASELCOMM_DMA_XFER_ABORT)
 		return dma_dir == EASELCOMM_DMA_DIR_TO_CLIENT ? -EIO : 0;
 
+	/* Sanity check that list is properly terminated */
+	if (easelcomm_hw_verify_scatterlist(&msg_metadata->dma_xfer)) {
+		dev_err(easelcomm_miscdev.this_device,
+			"sg fails verification\n");
+		goto abort;
+	}
+
 	/* Single-Block or Multi-Block DMA? */
 	if (msg_metadata->dma_xfer.xfer_type == EASELCOMM_DMA_XFER_SBLK) {
 		/* Perform the SBLK DMA transfer */

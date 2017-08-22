@@ -382,6 +382,17 @@ int mnh_sg_build(void *dmadest, size_t size, struct mnh_sg_entry **sg,
 int mnh_sg_destroy(struct mnh_sg_list *sgl);
 
 /**
+ * API to verify that a scatter gather list is valid
+ * @param[in] *sg  pointer to the scatter gather list that was built during
+ *		mnh_sg_build
+ * @param[in] size  size of the list in bytes
+ * @param[in] sgl  pointer to the scatter gather local data, if any
+ * @return 0 for SUCCESS
+ */
+int mnh_sg_verify(struct mnh_sg_entry *sg, size_t size,
+		struct mnh_sg_list *sgl);
+
+/**
  * API to build a scatter-gather list for multi-block DMA transfer for a
  * dma_buf
  * @param[in] fd   Handle of dma_buf passed from user
