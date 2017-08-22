@@ -13,7 +13,7 @@
 * more details.
 *
 */
-#define DEBUG
+
 #include <linux/delay.h>
 
 #include "mnh-hwio.h"
