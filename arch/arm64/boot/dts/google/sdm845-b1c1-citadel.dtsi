@@ -10,19 +10,8 @@
  * GNU General Public License for more details.
  */
 
-&qupv3_se4_spi_pins {
-	citadel_pin_defaults: citadel_pin_defaults {
-		mux {
-			pins = "gpio89", "gpio90", "gpio91", "gpio92";
-			function = "qup4";
-		};
-	};
-};
-
 &qupv3_se4_spi {
 	status = "okay";
-	pinctrl-0 = <&citadel_pin_defaults>;
-	pinctrl-1 = <&citadel_pin_defaults>;
 	spidev@0 {
 		compatible = "google,citadel-spidev";
 		reg = <0>;
