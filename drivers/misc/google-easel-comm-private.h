@@ -273,6 +273,10 @@ extern int easelcomm_hw_scatterlist_block_count(uint32_t scatterlist_size);
 extern uint64_t easelcomm_hw_scatterlist_sblk_addr(void *sglist);
 /* destroy (and unmap pages pinned by) a scatter-gather list */
 extern void easelcomm_hw_destroy_scatterlist(void *sglocaldata);
+/* sanity check scatterlists */
+extern int easelcomm_hw_verify_scatterlist(
+	struct easelcomm_dma_xfer_info *xfer);
+
 /*
  * Easel builds multi-block DMA Linked List from local and remote SG lists.
  *
