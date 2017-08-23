@@ -21,7 +21,6 @@
 #include "sdm845-b1c1-haptics.dtsi"
 #include "sdm845-b1c1-nfc.dtsi"
 #include "sdm845-b1c1-citadel.dtsi"
-#include "sdm845-b1c1-easel.dtsi"
 #include "../qcom/smb1355.dtsi"
 
 / {
