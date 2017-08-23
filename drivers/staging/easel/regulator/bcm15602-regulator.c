@@ -1231,6 +1231,7 @@ static int bcm15602_probe(struct i2c_client *client,
 
 	/* set client data */
 	i2c_set_clientdata(client, ddata);
+	dev_set_drvdata(dev, ddata);
 
 	/* get platform data */
 	pdata = dev_get_platdata(dev);
@@ -1347,11 +1348,36 @@ error_reset:
 #ifdef CONFIG_PM
 static int bcm15602_suspend(struct device *dev)
 {
+	struct bcm15602_chip *ddata;
 	struct bcm15602_platform_data *pdata;
+	u8 reg_addr, reg_data;
+	int rid, ret;
 
 	pdata = dev_get_platdata(dev);
 	if (pdata)
 		enable_irq_wake(pdata->intb_irq);
+
+	ddata = dev_get_drvdata(dev);
+	if (!ddata)
+		return 0;
+
+	/* check to see if any regulators were left enabled */
+	for (rid = 0; rid < BCM15602_NUM_REGULATORS; rid++) {
+		if (rid == BCM15602_ID_SDLDO)
+			reg_addr = BCM15602_REG_LDO_SDLDO_ENCTRL;
+		else if (rid == BCM15602_ID_IOLDO)
+			reg_addr = BCM15602_REG_LDO_IOLDO_ENCTRL;
+		else if (rid == BCM15602_ID_ASR)
+			reg_addr = BCM15602_REG_BUCK_ASR_CTRL0;
+		else
+			reg_addr = BCM15602_REG_BUCK_SDSR_CTRL0;
+
+		ret = bcm15602_read_byte(ddata, reg_addr, &reg_data);
+		if (!ret && (reg_data & 0x1))
+			dev_err(dev, "%s: regulator %d is still enabled\n",
+				__func__, rid);
+	}
+
 	return 0;
 }
 
