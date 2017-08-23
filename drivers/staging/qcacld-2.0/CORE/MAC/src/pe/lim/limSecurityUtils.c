@@ -534,8 +534,6 @@ limRestoreFromAuthState(tpAniSirGlobal pMac, tSirResultCodes resultCode, tANI_U1
                       (tANI_U32 *) &mlmAuthCnf);
 } /*** end limRestoreFromAuthState() ***/
 
-
-
 /**
  * limLookUpKeyMappings()
  *
@@ -595,7 +593,10 @@ limEncryptAuthFrame(tpAniSirGlobal pMac, tANI_U8 keyId, tANI_U8 *pKey, tANI_U8 *
                     tANI_U8 *pEncrBody, tANI_U32 keyLength)
 {
     tANI_U8  seed[LIM_SEED_LENGTH], icv[SIR_MAC_WEP_ICV_LENGTH];
+    tANI_U16 framelen;
 
+    framelen = ((tpSirMacAuthFrameBody)pPlainText)->length +
+                 SIR_MAC_AUTH_FRAME_INFO_LEN + SIR_MAC_CHALLENGE_ID_LEN;
     keyLength += 3;
 
     // Bytes 0-2 of seed is IV
@@ -614,7 +615,7 @@ limEncryptAuthFrame(tpAniSirGlobal pMac, tANI_U8 keyId, tANI_U8 *pKey, tANI_U8 *
     // Run RC4 on plain text with the seed
     limRC4(pEncrBody + SIR_MAC_WEP_IV_LENGTH,
            (tANI_U8 *) pPlainText, seed, keyLength,
-           LIM_ENCR_AUTH_BODY_LEN - SIR_MAC_WEP_IV_LENGTH);
+           framelen + SIR_MAC_WEP_IV_LENGTH);
 
     // Prepare IV
     pEncrBody[0] = seed[0];
