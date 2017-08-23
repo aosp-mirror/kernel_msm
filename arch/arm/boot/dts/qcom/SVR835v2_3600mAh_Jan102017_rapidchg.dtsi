@@ -4,9 +4,6 @@ qcom,SVR835v2_3600mah_averaged_masterslave_jan10th2017 {
         qcom,max-voltage-uv = <4350000>;
         qcom,fg-cc-cv-threshold-mv = <4340>;
         qcom,nom-batt-capacity-mah = <3600>;
-        qcom,fg-jeita-thresholds = <0 15 45 45>;
-        qcom,fg-cutoff-voltage = <3000>;
-        qcom,fg-empty-voltage = <2800>;
         qcom,batt-id-kohm = <100>;
         qcom,battery-beta = <3435>;
         qcom,battery-type = "SVR835v2_3600mah_averaged_masterslave_jan10th2017_rapidchg";
