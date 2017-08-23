@@ -634,6 +634,7 @@
 			qcom,fg-empty-voltage = <3400>;
 			qcom,fg-chg-term-current = <200>;
 			qcom,fg-jeita-thresholds = <0 15 43 50>;
+			qcom,fg-rsense-sel = <0>; /* SRC_SEL_BATFET */
 			};
 
 			pmi8998_charger: qcom,qpnp-smb2 {
