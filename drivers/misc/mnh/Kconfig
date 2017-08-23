@@ -1,0 +1,36 @@
+#
+# MNH PCIE Host driver configuration
+#
+config MNH_PCIE_HOST
+    tristate "MNH PCIe Host-side driver"
+    depends on PCI
+    default "n"
+    ---help---
+      Include support for MNH PCIe Host-side driver
+
+
+config MNH_SM_HOST
+    tristate "MNH Easel State Machine Host-side driver"
+    depends on PCI
+    default "n"
+    ---help---
+      Include support for MNH State Machine Host-side driver. This driver
+      controls the power-on and power-down sequences including firmware
+      download. The state manager is controlled by a userspace service
+      to control state transitions.
+
+config MNH_THERMAL_HOST
+    tristate "MNH Easel Thermal Sensor Device Host-side driver"
+    depends on MNH_SM_HOST
+    default "n"
+    ---help---
+      Include support for MNH Thermal Sensor Device Host-side driver. This
+      driver adds support for all thermal zone sensors on the Easel device and
+      exposes them to the kernel thermal framework.
+
+config MNH_PCIE_MULTIPLE_MSI
+    tristate "MNH PCIE Multiple MSI support"
+    depends on MNH_PCIE_HOST
+    default "n"
+    ---help---
+       Include support for multiple MSIs in MNH PCIe Host driver
