@@ -670,6 +670,10 @@
 
 &pmi8998_fg {
 	qcom,battery-data = <&svr21_batterydata>;
+	qcom,fg-rsense-sel = <0>; /* SRC_SEL_BATFET */
+	qcom,fg-jeita-thresholds = <0 15 45 45>;
+	qcom,fg-cutoff-voltage = <3000>;
+	qcom,fg-empty-voltage = <2800>;
 };
 
 / {
