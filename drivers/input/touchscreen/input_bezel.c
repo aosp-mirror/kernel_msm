@@ -91,12 +91,32 @@ bool isAntiClockWise(int x, int y)
 	return false;
 }
 
+/* this api is added to avoid rounding errors of division to find multipler */
+int getMultiplier(int dist, int step)
+{
+	int mult, nxtMult ;
+	// KEEP STEP EVEN to make this work well
+	int stepHalf = step/2;
+	int lower_limit, upper_limit = 0;
+	for(mult = 1; mult < MAX_ANGLE_REPORTED ; ++mult) {
+		nxtMult = mult+1;
+		// initially will be 2 & 6; then 6 & 10, 10 & 14 etc
+		lower_limit = step * mult - stepHalf;
+		upper_limit = step * nxtMult - stepHalf;
+		if( (dist >= lower_limit) && (dist < upper_limit) )
+			break;
+	}
+	return mult;
+}
+
+
 /* Report bezel event while touching into bezel area */
 int bezel_report_wheel(int x, int y, struct bezel_data *bdata)
 {
 	int dx = 0, dy = 0, tempDis2 = 0;
 	int total_ev = 0;
 	int rad_pos = 0;
+        int dist = 0;
 
 
 	rad_pos = SquareRootRounded(bdata->sq_rad_position);
@@ -117,6 +137,8 @@ int bezel_report_wheel(int x, int y, struct bezel_data *bdata)
 	dx = ABS(x , first_x);
 	dy = ABS(y , first_y);
 
+        // pr_err("bezel_report_wheel:after mapping x = %d, y = %d, first_x = %d, first_y = %d\n", x, y, first_x, first_y);
+
 	tempDis2 = dx * dx + dy * dy;
 
 	/* If the distance between codinate (x0, y0) and codinate (x1, y1)
@@ -125,8 +147,12 @@ int bezel_report_wheel(int x, int y, struct bezel_data *bdata)
 	 * event to user space depending on number of 3 degree displacement
 	 */
 	if(tempDis2 >= (bdata->step_threshold2)) {
-		/* Check for number of 3 degree displacement with circular rotation */
-		total_ev = tempDis2/bdata->step_threshold2;
+		/* Check for number of 1 degree displacement with circular rotation */
+                dist = SquareRootRounded(tempDis2);
+                // division is causing rounding to lower int
+		// total_ev = dist/ANGULAR_DISTANCE_THRESHOLD_ROOT;
+		total_ev = getMultiplier(dist, ANGULAR_DISTANCE_THRESHOLD_ROOT);
+		// pr_err("tempDis2= %d, threshold= %d, dist= %d, total_ev = %d \n\n", tempDis2, bdata->step_threshold2, dist, total_ev);
 
 		if(isAntiClockWise(x,y)) {
 			input_report_rel(input_dev, REL_WHEEL, -1*total_ev);
@@ -136,7 +162,7 @@ int bezel_report_wheel(int x, int y, struct bezel_data *bdata)
 
 		input_sync(input_dev);
 
-		/* Save privious coordinates */
+		/* Save previous coordinates */
 		first_y = y;
 		first_x = x;
 		if(bdata->step_threshold2 == INIT_ANGULAR_DISTANCE_THRESHOLD)
