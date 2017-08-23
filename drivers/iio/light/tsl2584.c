@@ -32,6 +32,10 @@
 #include <linux/input.h>
 #include <linux/sensors.h>
 #include <linux/workqueue.h>
+#include <linux/string.h>
+#include <linux/module.h>
+#include <asm/uaccess.h>
+#include <linux/fs.h>
 
 #define TSL258X_MAX_DEVICE_REGS		32
 
@@ -73,7 +77,7 @@
 #define TSL258X_LS_MAX_POLL_DELAY       1000
 #define TSL258X_LS_DEFAULT_POLL_DELAY   100
 
-
+#define CAL_FILE  "/persist/sensors/lightsensor_calibration.dat"
 
 enum {
 	TSL258X_CHIP_UNKNOWN = 0,
@@ -116,6 +120,7 @@ struct tsl2584_chip {
 	struct work_struct als_work;
 	struct workqueue_struct *als_wq;
 	struct mutex io_lock;
+	bool cal_status;
 };
 
 static struct sensors_classdev sensors_light_cdev = {
@@ -172,8 +177,10 @@ struct gainadj {
 static const struct gainadj gainadj[] = {
 	{ 1, 1 },
 	{ 8, 8 },
-	{ 1, 1 },
-	{ 1, 1 }
+	{ 16, 16 },
+	{ 107, 115 }
+/*      { 1, 1 },
+	{ 1, 1 }*/
 };
 
 /*
@@ -185,12 +192,13 @@ static void taos_defaults(struct tsl2584_chip *chip)
 	/* Operational parameters */
 	chip->taos_settings.als_time = 100;
 	/* must be a multiple of 50mS */
-	chip->taos_settings.als_gain = 3;
+	//chip->taos_settings.als_gain = 3;
+	chip->taos_settings.als_gain = 0;
 	/* this is actually an index into the gain table */
 	/* assume clear glass as default */
 	chip->taos_settings.als_gain_trim = 1000;
 	/* default gain trim to account for aperture effects */
-	chip->taos_settings.als_cal_target = 130;
+	chip->taos_settings.als_cal_target = 600;
 	/* Known external ALS reading used for calibration */
 }
 
@@ -359,7 +367,8 @@ static int taos_get_lux(struct iio_dev *indio_dev)
 	lux64 = lux64 * chip->taos_settings.als_gain_trim;
 	lux64 >>= 13;
 	lux = lux64;
-	lux = (lux + 500) / 1000;
+	//lux = (lux + 500) / 1000;
+	lux = lux / 10;
 	if (lux > TSL258X_LUX_CALC_OVER_FLOW) { /* check for overflow */
 return_max:
 		lux = TSL258X_LUX_CALC_OVER_FLOW;
@@ -860,6 +869,36 @@ static const struct iio_info tsl2584_info = {
 	.driver_module = THIS_MODULE,
 };
 
+static int tsl258x_als_get_cal_data(struct tsl2584_chip *als_data)
+{
+	struct file *filp;
+	char read_data[8];
+	unsigned int read_size = 0;
+	int value;
+	mm_segment_t fs;
+
+	fs = get_fs();
+	set_fs(get_ds());
+	filp=filp_open(CAL_FILE, O_RDONLY, 0);
+	if(IS_ERR(filp)) {
+		pr_err("Failed to open %s\n", CAL_FILE);
+		return -EIO;
+	}
+
+	memset(read_data, 0, sizeof(read_data));
+
+	read_size = filp->f_op->read(filp, read_data, 8, &filp->f_pos);
+	if (kstrtoint(read_data, 0, &value))
+		return -EINVAL;
+
+	if (value)
+		als_data->taos_settings.als_gain_trim = value;
+
+	set_fs(fs);
+	filp_close(filp, NULL);
+
+	return 0;
+}
 
 static int tsl258x_als_set_enable(struct sensors_classdev *sensors_cdev,
 		unsigned int enable)
@@ -869,6 +908,14 @@ static int tsl258x_als_set_enable(struct sensors_classdev *sensors_cdev,
 	if ((enable != 0) && (enable != 1)) {
 		pr_err("%s: invalid value(%d)\n", __func__, enable);
 		return -EINVAL;
+	}
+
+	if(!als_data->cal_status) {
+		/* Read Caliberated data and set */
+		if(!tsl258x_als_get_cal_data(als_data))
+			als_data->cal_status = true;
+		else
+			als_data->cal_status = false;
 	}
 
 	mutex_lock(&als_data->io_lock);
