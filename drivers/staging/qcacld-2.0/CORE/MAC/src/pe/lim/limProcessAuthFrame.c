@@ -147,8 +147,8 @@ limProcessAuthFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession pse
 {
     tANI_U8                 *pBody, keyId, cfgPrivacyOptImp,
                             defaultKey[SIR_MAC_KEY_LENGTH],
-                            encrAuthFrame[LIM_ENCR_AUTH_BODY_LEN],
-                            plainBody[256];
+                            *encrAuthFrame = NULL,
+                            plainBody[LIM_ENCR_AUTH_BODY_LEN];
     tANI_U16                frameLen;
     tANI_U32                maxNumPreAuth, val;
     tSirMacAuthFrameBody    *pRxAuthFrameBody, rxAuthFrame, authFrame;
@@ -1280,10 +1280,18 @@ limProcessAuthFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession pse
                                 sirSwapU16ifNeeded((tANI_U16) (pRxAuthFrameBody->authTransactionSeqNumber + 1));
                                 ((tpSirMacAuthFrameBody) plainBody)->authStatusCode = eSIR_MAC_SUCCESS_STATUS;
                                 ((tpSirMacAuthFrameBody) plainBody)->type   = SIR_MAC_CHALLENGE_TEXT_EID;
-                                ((tpSirMacAuthFrameBody) plainBody)->length = SIR_MAC_AUTH_CHALLENGE_LENGTH;
+                                ((tpSirMacAuthFrameBody) plainBody)->length = pRxAuthFrameBody->length;
                                 vos_mem_copy((tANI_U8 *) ((tpSirMacAuthFrameBody) plainBody)->challengeText,
                                               pRxAuthFrameBody->challengeText,
-                                              SIR_MAC_AUTH_CHALLENGE_LENGTH);
+                                              pRxAuthFrameBody->length);
+                                encrAuthFrame = vos_mem_malloc(pRxAuthFrameBody->length +
+                                                               LIM_ENCR_AUTH_INFO_LEN);
+                                if (!encrAuthFrame) {
+                                    limLog(pMac, LOGE, FL("failed to allocate memory"));
+                                    goto free;
+                                }
+                                vos_mem_set(encrAuthFrame, pRxAuthFrameBody->length +
+                                            LIM_ENCR_AUTH_INFO_LEN, 0);
 
                                 limEncryptAuthFrame(pMac, 0,
                                                     pKeyMapEntry->key,
@@ -1296,7 +1304,7 @@ limProcessAuthFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession pse
                                 limSendAuthMgmtFrame(pMac,
                                                      (tpSirMacAuthFrameBody) encrAuthFrame,
                                                      pHdr->sa,
-                                                     LIM_WEP_IN_FC,
+                                                     pRxAuthFrameBody->length,
                                                      psessionEntry,
                                                      eSIR_FALSE);
 
@@ -1357,10 +1365,19 @@ limProcessAuthFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession pse
                                 sirSwapU16ifNeeded((tANI_U16) (pRxAuthFrameBody->authTransactionSeqNumber + 1));
                                 ((tpSirMacAuthFrameBody) plainBody)->authStatusCode = eSIR_MAC_SUCCESS_STATUS;
                                 ((tpSirMacAuthFrameBody) plainBody)->type   = SIR_MAC_CHALLENGE_TEXT_EID;
-                                ((tpSirMacAuthFrameBody) plainBody)->length = SIR_MAC_AUTH_CHALLENGE_LENGTH;
+                                ((tpSirMacAuthFrameBody) plainBody)->length = pRxAuthFrameBody->length;
                                 vos_mem_copy((tANI_U8 *) ((tpSirMacAuthFrameBody) plainBody)->challengeText,
                                               pRxAuthFrameBody->challengeText,
-                                              SIR_MAC_AUTH_CHALLENGE_LENGTH);
+                                              pRxAuthFrameBody->length);
+
+                                encrAuthFrame = vos_mem_malloc(pRxAuthFrameBody->length +
+                                                               LIM_ENCR_AUTH_INFO_LEN);
+                                if (!encrAuthFrame) {
+                                    limLog(pMac, LOGE, FL("failed to allocate memory"));
+                                    goto free;
+                                }
+                                vos_mem_set(encrAuthFrame, pRxAuthFrameBody->length +
+                                            LIM_ENCR_AUTH_INFO_LEN, 0);
 
                                 limEncryptAuthFrame(pMac, keyId,
                                                     defaultKey,
@@ -1374,7 +1391,7 @@ limProcessAuthFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession pse
                                 limSendAuthMgmtFrame(pMac,
                                                      (tpSirMacAuthFrameBody) encrAuthFrame,
                                                      pHdr->sa,
-                                                     LIM_WEP_IN_FC,
+                                                     pRxAuthFrameBody->length,
                                                      psessionEntry,
                                                      eSIR_FALSE);
 
@@ -1754,6 +1771,9 @@ limProcessAuthFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession pse
 
             break;
     } // end switch (pRxAuthFrameBody->authTransactionSeqNumber)
+free:
+    if (encrAuthFrame)
+        vos_mem_free(encrAuthFrame);
 } /*** end limProcessAuthFrame() ***/
 
 
