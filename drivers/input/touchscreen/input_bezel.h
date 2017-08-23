@@ -23,13 +23,18 @@
 #include <linux/mod_devicetable.h>
 
 #define BEZEL_INSET_POS 60
-/* Approximated to distance for angular movement of 3 degree :
-   2 * pi * 227 * (3/360): rounded up; square of 11.88... */
+/* Approximated to distance for angular movement of 1 degree :
+   2 * pi * 227 * (1/360): rounded up; square of 3.96 ... */
 #define ANGULAR_DISTANCE_THRESHOLD  16
+#define ANGULAR_DISTANCE_THRESHOLD_ROOT  4
 
-/* Approximated to distance for angular movement of 3 degree :
-   2 * pi * 227 * (10/360): rounded up; square of 39.61... */
-#define INIT_ANGULAR_DISTANCE_THRESHOLD  1568
+/* Approximated to distance for angular movement of 1 degree :
+   2 * pi * 227 * (1/360): rounded up; square of 3.96...
+   use 1568 for 10 degree and 392 for 5 degree */
+#define INIT_ANGULAR_DISTANCE_THRESHOLD  16
+
+/* used in get multiplier for batching case */
+#define MAX_ANGLE_REPORTED 200
 
 struct bezel_data {
 	u8 inset;
