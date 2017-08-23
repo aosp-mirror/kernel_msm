@@ -43,3 +43,4 @@ obj-$(CONFIG_KS7010)		+= ks7010/
 obj-$(CONFIG_GREYBUS)		+= greybus/
 obj-$(CONFIG_BCM2708_VCHIQ)	+= vc04_services/
 obj-$(CONFIG_BCM15602)		+= bcm15602/
+obj-$(CONFIG_S2MPB04)		+= s2mpb04/
