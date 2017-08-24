@@ -216,10 +216,8 @@
 		qcom,cam-vreg-op-mode = <0 80000 105000 0>;
 		qcom,gpio-no-mux = <0>;
 		pinctrl-names = "cam_default", "cam_suspend";
-		pinctrl-0 = <&cam_sensor_mclk0_active
-				 &cam_sensor_6dofl_active>;
-		pinctrl-1 = <&cam_sensor_mclk0_suspend
-				 &cam_sensor_6dofl_suspend>;
+		pinctrl-0 = <&cam_sensor_6dofl_active>;
+		pinctrl-1 = <&cam_sensor_6dofl_suspend>;
 		gpios = <&tlmm 13 0>,
 			<&tlmm 148 0>,
 			<&tlmm 52 0>,
