@@ -3397,21 +3397,6 @@ typedef struct wl_pfn_scanresults {
 	wl_pfn_net_info_t netinfo[1];
 } wl_pfn_scanresults_t;
 
-typedef struct wl_pfn_significant_net {
-	uint16 flags;
-	uint16 channel;
-	struct ether_addr BSSID;
-	int8 rssi[PFN_SWC_RSSI_WINDOW_MAX];
-} wl_pfn_significant_net_t;
-
-
-typedef struct wl_pfn_swc_results {
-	uint32 version;
-	uint32 pkt_count;
-	uint32 total_count;
-	wl_pfn_significant_net_t list[1];
-} wl_pfn_swc_results_t;
-
 /* used to report exactly one scan result */
 /* plus reports detailed scan info in bss_info */
 typedef struct wl_pfn_scanresult {
@@ -3451,11 +3436,6 @@ typedef struct wl_pfn_bssid {
 	uint16             flags;
 } wl_pfn_bssid_t;
 
-typedef struct wl_pfn_significant_bssid {
-	struct ether_addr	macaddr;
-	int8    rssi_low_threshold;
-	int8    rssi_high_threshold;
-} wl_pfn_significant_bssid_t;
 #define WL_PFN_SUPPRESSFOUND_MASK	0x08
 #define WL_PFN_SUPPRESSLOST_MASK	0x10
 #define WL_PFN_RSSI_MASK		0xff00
