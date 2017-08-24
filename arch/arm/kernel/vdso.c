@@ -327,6 +327,7 @@ void update_vsyscall(struct timekeeper *tk)
 		/* tkr_mono.shift == tkr_raw.shift */
 		vdso_data->cs_shift		= tk->tkr.shift;
 		vdso_data->cs_mask		= tk->tkr.mask;
+		vdso_data->btm_nsec		= ktime_to_ns(tk->offs_boot);
 	}
 
 	vdso_write_end(vdso_data);
