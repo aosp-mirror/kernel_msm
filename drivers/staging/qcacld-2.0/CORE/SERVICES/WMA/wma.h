@@ -106,7 +106,7 @@
 #define WMA_MAX_VDEV_SIZE				20
 #define WMA_VDEV_TBL_ENTRY_ADD				1
 #define WMA_VDEV_TBL_ENTRY_DEL				0
-
+#define WMA_SVC_MSG_MAX_SIZE                            1536
 
 /* 11A/G channel boundary */
 #define WMA_11A_CHANNEL_BEGIN           34
