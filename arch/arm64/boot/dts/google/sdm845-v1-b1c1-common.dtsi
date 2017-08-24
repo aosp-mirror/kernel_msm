@@ -116,6 +116,10 @@
 	};
 };
 
+&smb1355 {
+	reg = <0xc>;
+};
+
 &smb1355_charger {
 	status = "ok";
 };
