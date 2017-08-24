@@ -266,7 +266,7 @@ static struct regulator_init_data
 	},
 };
 
-static int bcm15602_toggle_pon(struct bcm15602_chip *ddata)
+int bcm15602_toggle_pon(struct bcm15602_chip *ddata)
 {
 	dev_err(ddata->dev, "%s: device is stuck, toggling PON\n", __func__);
 
@@ -275,6 +275,21 @@ static int bcm15602_toggle_pon(struct bcm15602_chip *ddata)
 
 	return 0;
 }
+EXPORT_SYMBOL(bcm15602_toggle_pon);
+
+int bcm15602_dump_regs(struct bcm15602_chip *ddata)
+{
+	u8 reg_data;
+	int i;
+
+	for (i = 0; i <= BCM15602_REG_WDT_WDTSTST; i++) {
+		bcm15602_read_byte(ddata, i, &reg_data);
+		dev_info(ddata->dev, "[0x%02x] = 0x%02x\n", i, reg_data);
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(bcm15602_dump_regs);
 
 static inline bool bcm15602_is_ready(struct bcm15602_chip *ddata)
 {

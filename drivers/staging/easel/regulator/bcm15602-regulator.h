@@ -358,6 +358,8 @@ int bcm15602_read_adc_chan(struct bcm15602_chip *ddata,
 int bcm15602_read_hk_slot(struct bcm15602_chip *ddata,
 			  int slot_num, u16 *slot_data);
 
+int bcm15602_toggle_pon(struct bcm15602_chip *ddata);
+int bcm15602_dump_regs(struct bcm15602_chip *ddata);
 void bcm15602_config_sysfs(struct device *dev);
 
 #endif /* BCM15602_REGULATOR_H */
