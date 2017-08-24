@@ -6374,7 +6374,10 @@ void hdd_cfg_print(hdd_context_t *pHddCtx)
 		pHddCtx->config->lower_brssi_thresh);
 	hdd_debug("Name = [%s] value = [%u]",
 		CFG_DTIM_1CHRX_ENABLE_NAME,
-	pHddCtx->config->enable_dtim_1chrx);
+		pHddCtx->config->enable_dtim_1chrx);
+	hdd_debug("Name = [%s] value = [%u]",
+		CFG_DOT11P_MODE_NAME,
+		pHddCtx->config->dot11p_mode);
 }
 
 /**
