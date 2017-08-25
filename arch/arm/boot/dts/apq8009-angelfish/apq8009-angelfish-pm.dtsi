@@ -195,7 +195,7 @@
 
 			vbatmin = <3000>;    //CC start voltage 3.0V
 			vfloat = <4400>;     //vbatmax
-			vrechg-hyst = <100>; //rechg = vfloat - (vrechg-hyst)
+			vrechg-hyst = <150>; //rechg = vfloat - (vrechg-hyst)
 			ibus = <500>;        //iusb for vbus
 			iin = <325>;         //iusb for wlc
 			iochrg = <200>;      //CC current

@@ -151,7 +151,46 @@ static int drv2625_set_bits(struct drv2625_data *pDrv2625data,
 static int drv2625_set_go_bit(struct drv2625_data *pDrv2625data,
 		unsigned char val)
 {
-	return drv2625_reg_write(pDrv2625data, DRV2625_REG_GO, (val&0x01));
+	int ret = 0;
+
+	val &= 0x01;
+	dev_info(pDrv2625data->dev, "set_go_bit %d\n", val);
+	ret = drv2625_reg_write(pDrv2625data, DRV2625_REG_GO, val);
+	if (ret < 0)
+		return ret; /* Error writing to GO bit */
+
+	if (val == 1) {
+		usleep_range(1000, 2000);
+		ret = drv2625_reg_read(pDrv2625data, DRV2625_REG_GO);
+		if (ret != 1) {
+			dev_err(pDrv2625data->dev,
+				"setting GO bit failed, stop action\n");
+			ret = -1;
+		}
+	} else {
+		/* After writing 0 to the GO bit, wait until the bit
+		 * reads back as 0, indicating that the auto-break
+		 * cycle has finished.
+		 */
+		int poll_ready = 20;
+
+		while (1) {
+			ret = drv2625_reg_read(pDrv2625data, DRV2625_REG_GO);
+			if (ret == 0)
+				break; /* Success */
+
+			/* Try reading again in 1-2 ms*/
+			poll_ready--;
+			if (poll_ready <= 0) {
+				dev_err(pDrv2625data->dev,
+					"clearing GO bit failed\n");
+				ret = -1;
+				break;
+			}
+			usleep_range(1000, 2000);
+		}
+	}
+	return ret;
 }
 
 static void drv2625_change_mode(struct drv2625_data *pDrv2625data,
@@ -203,7 +242,7 @@ static void vibrator_enable(struct led_classdev *led_cdev,
 {
 	struct drv2625_data *pDrv2625data =
 		container_of(led_cdev, struct drv2625_data, led_dev);
-
+	dev_info(pDrv2625data->dev, "vibrator_enable brightness=%d\n", value);
 	led_cdev->brightness = value;
 	schedule_work(&pDrv2625data->haptics_work);
 }
@@ -426,6 +465,10 @@ static void dev_init_platform_data(struct drv2625_data *pDrv2625data)
 			DRV2625_REG_CONTROL2, LIB_MASK, value_temp<<LIB_SHIFT);
 	}
 
+	/* Set PLAYBACK_INTERVAL to 1ms. This shortens auto-break to 10ms */
+	drv2625_set_bits(pDrv2625data,
+			DRV2625_REG_CONTROL2, INTERVAL_MASK, 1<<INTERVAL_SHIFT);
+
 	if (actuator.mnRatedVoltage != 0){
 		drv2625_reg_write(pDrv2625data,
 			DRV2625_REG_RATED_VOLTAGE, actuator.mnRatedVoltage);
@@ -593,6 +636,7 @@ static ssize_t rtp_input_store(struct device *dev,
 	int ret;
 	char rtp_input;
 
+	dev_info(pDrv2625data->dev, "store rtp amplitude: %s\n", buf);
 	ret = kstrtos8(buf, 10, &rtp_input);
 	if (ret) {
 		dev_err(dev, "Invalid input for rtp_input: ret = %d\n", ret);
@@ -639,6 +683,7 @@ static ssize_t mode_store(struct device *dev,
 	if (len && mode_name[len - 1] == '\n')
 		mode_name[len - 1] = '\0';
 
+	dev_info(dev, "store mode value: %s\n", mode_name);
 	for (new_mode = 0; new_mode < ARRAY_SIZE(drv2625_modes); new_mode++) {
 		if (!strcmp(mode_name, drv2625_modes[new_mode]))
 			drv2625_change_mode(pDrv2625data, new_mode);
