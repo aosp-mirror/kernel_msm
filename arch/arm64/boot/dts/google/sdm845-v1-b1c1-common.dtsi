@@ -100,6 +100,10 @@
 	status = "disabled";
 };
 
+&pcie0 {
+	status = "disabled";
+};
+
 &pmi8998_switch1 {
 	pinctrl-names = "led_enable", "led_disable";
 	pinctrl-0 = <&flash_led3_front_en>;
