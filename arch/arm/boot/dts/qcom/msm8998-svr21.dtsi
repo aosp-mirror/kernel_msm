@@ -14,6 +14,8 @@
 #include "msm8998-svr21-pinctrl.dtsi"
 #include "msm8998-camera-sensor-svr21.dtsi"
 #include "dsi-panel-jdi-novatek-nt36860.dtsi"
+#include "msm8998-mdss-panels.dtsi"
+
 / {
 	bluetooth: bt_wcn3990 {
 		compatible = "qca,wcn3990";

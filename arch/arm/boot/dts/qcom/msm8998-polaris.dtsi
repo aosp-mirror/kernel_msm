@@ -15,6 +15,7 @@
 
 #include "dsi-panel-jdi-synaptics-r63450.dtsi"
 #include "dsi-panel-jdi-novatek-nt36860.dtsi"
+#include "msm8998-mdss-panels.dtsi"
 #include "msm8998-polaris-pinctrl.dtsi"
 
 / {
