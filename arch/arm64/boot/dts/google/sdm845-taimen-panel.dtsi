@@ -62,18 +62,24 @@
 &dsi_sw43402_dsc_qhd_cmd {
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_vdd_no_labibb>;
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
-	qcom,mdss-dsi-panel-phy-timings = [00 15 05 05 20 1F 05 05 03 03 04 00];
 	qcom,mdss-dsi-t-clk-post = <0x0B>;
 	qcom,mdss-dsi-t-clk-pre = <0x23>;
 
 	qcom,mdss-dsi-bl-min-level = <23>;
 	qcom,mdss-dsi-bl-max-level = <223>;
 
-	qcom,display-topology = <2 2 1>; /* 2xLM, 2xDSC Enc, 1xDSI Intf */
-	qcom,default-topology-index = <0>;
-
 	qcom,platform-reset-gpio = <&tlmm 6 0>;
 	qcom,platform-te-gpio = <&tlmm 10 0>;
+	qcom,mdss-dsi-display-timings {
+		timing@0 {
+			qcom,mdss-dsi-panel-phy-timings =
+					[00 15 05 05 20 1F 05 05 03 03 04 00];
+
+			/* 2xLM, 2xDSC Enc, 1xDSI Intf */
+			qcom,display-topology = <2 2 1>;
+			qcom,default-topology-index = <0>;
+		};
+	};
 };
 
 &pm8998_l28 {
