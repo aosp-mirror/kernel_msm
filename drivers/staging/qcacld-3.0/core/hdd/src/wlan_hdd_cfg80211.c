@@ -12844,8 +12844,6 @@ static int wlan_hdd_set_akm_suite(hdd_adapter_t *pAdapter, u32 key_mgmt)
 {
 	hdd_wext_state_t *pWextState = WLAN_HDD_GET_WEXT_STATE_PTR(pAdapter);
 
-#define WLAN_AKM_SUITE_8021X_SHA256 0x000FAC05
-#define WLAN_AKM_SUITE_PSK_SHA256   0x000FAC06
 	/*set key mgmt type */
 	switch (key_mgmt) {
 	case WLAN_AKM_SUITE_PSK:
