@@ -21,6 +21,9 @@
 #include "kgsl_gmu.h"
 
 #define A6XX_NUM_CTXTS 2
+#define A6XX_NUM_AXI_ARB_BLOCKS 2
+#define A6XX_NUM_XIN_AXI_BLOCKS 5
+#define A6XX_NUM_XIN_CORE_BLOCKS 4
 
 static const unsigned int a6xx_gras_cluster[] = {
 	0x8000, 0x8006, 0x8010, 0x8092, 0x8094, 0x809D, 0x80A0, 0x80A6,
@@ -228,9 +231,9 @@ static const unsigned int a6xx_gmu_registers[] = {
 	0x1F980, 0x1F986, 0x1F990, 0x1F99E, 0x1F9C0, 0x1F9C0, 0x1F9C5, 0x1F9CC,
 	0x1F9E0, 0x1F9E2, 0x1F9F0, 0x1F9F0, 0x1FA00, 0x1FA03,
 	/* GPU RSCC */
-	0x23740, 0x23742, 0x23744, 0x23747, 0x2374C, 0x23787, 0x237EC, 0x237EF,
-	0x237F4, 0x2382F, 0x23894, 0x23897, 0x2389C, 0x238D7, 0x2393C, 0x2393F,
-	0x23944, 0x2397F,
+	0x2348C, 0x2348C, 0x23501, 0x23502, 0x23740, 0x23742, 0x23744, 0x23747,
+	0x2374C, 0x23787, 0x237EC, 0x237EF, 0x237F4, 0x2382F, 0x23894, 0x23897,
+	0x2389C, 0x238D7, 0x2393C, 0x2393F, 0x23944, 0x2397F,
 	/* GMU AO */
 	0x23B00, 0x23B16, 0x23C00, 0x23C00,
 	/* GPU CC */
@@ -393,9 +396,12 @@ static const struct adreno_debugbus_block a6xx_dbgc_debugbus_blocks[] = {
 	{ A6XX_DBGBUS_TPL1_3, 0x100, },
 };
 
+static const struct adreno_debugbus_block a6xx_vbif_debugbus_blocks = {
+	A6XX_DBGBUS_VBIF, 0x100,
+};
+
 static void __iomem *a6xx_cx_dbgc;
 static const struct adreno_debugbus_block a6xx_cx_dbgc_debugbus_blocks[] = {
-	{ A6XX_DBGBUS_VBIF, 0x100, },
 	{ A6XX_DBGBUS_GMU_CX, 0x100, },
 	{ A6XX_DBGBUS_CX, 0x100, },
 };
@@ -1076,7 +1082,7 @@ static void a6xx_dbgc_debug_bus_read(struct kgsl_device *device,
 	kgsl_regread(device, A6XX_DBGC_CFG_DBGBUS_TRACE_BUF1, val);
 }
 
-/* a6xx_snapshot_cbgc_debugbus_block() - Capture debug data for a gpu block */
+/* a6xx_snapshot_dbgc_debugbus_block() - Capture debug data for a gpu block */
 static size_t a6xx_snapshot_dbgc_debugbus_block(struct kgsl_device *device,
 	u8 *buf, size_t remain, void *priv)
 {
@@ -1112,6 +1118,89 @@ static size_t a6xx_snapshot_dbgc_debugbus_block(struct kgsl_device *device,
 	for (i = 0; i < dwords; i++)
 		a6xx_dbgc_debug_bus_read(device, block_id, i, &data[i*2]);
 
+	return size;
+}
+
+/* a6xx_snapshot_vbif_debugbus_block() - Capture debug data for VBIF block */
+static size_t a6xx_snapshot_vbif_debugbus_block(struct kgsl_device *device,
+			u8 *buf, size_t remain, void *priv)
+{
+	struct kgsl_snapshot_debugbus *header =
+		(struct kgsl_snapshot_debugbus *)buf;
+	struct adreno_debugbus_block *block = priv;
+	int i, j;
+	/*
+	 * Total number of VBIF data words considering 3 sections:
+	 * 2 arbiter blocks of 16 words
+	 * 5 AXI XIN blocks of 18 dwords each
+	 * 4 core clock side XIN blocks of 12 dwords each
+	 */
+	unsigned int dwords = (16 * A6XX_NUM_AXI_ARB_BLOCKS) +
+			(18 * A6XX_NUM_XIN_AXI_BLOCKS) +
+			(12 * A6XX_NUM_XIN_CORE_BLOCKS);
+	unsigned int *data = (unsigned int *)(buf + sizeof(*header));
+	size_t size;
+	unsigned int reg_clk;
+
+	size = (dwords * sizeof(unsigned int)) + sizeof(*header);
+
+	if (remain < size) {
+		SNAPSHOT_ERR_NOMEM(device, "DEBUGBUS");
+		return 0;
+	}
+	header->id = block->block_id;
+	header->count = dwords;
+
+	kgsl_regread(device, A6XX_VBIF_CLKON, &reg_clk);
+	kgsl_regwrite(device, A6XX_VBIF_CLKON, reg_clk |
+			(A6XX_VBIF_CLKON_FORCE_ON_TESTBUS_MASK <<
+			A6XX_VBIF_CLKON_FORCE_ON_TESTBUS_SHIFT));
+	kgsl_regwrite(device, A6XX_VBIF_TEST_BUS1_CTRL0, 0);
+	kgsl_regwrite(device, A6XX_VBIF_TEST_BUS_OUT_CTRL,
+			(A6XX_VBIF_TEST_BUS_OUT_CTRL_EN_MASK <<
+			A6XX_VBIF_TEST_BUS_OUT_CTRL_EN_SHIFT));
+
+	for (i = 0; i < A6XX_NUM_AXI_ARB_BLOCKS; i++) {
+		kgsl_regwrite(device, A6XX_VBIF_TEST_BUS2_CTRL0,
+			(1 << (i + 16)));
+		for (j = 0; j < 16; j++) {
+			kgsl_regwrite(device, A6XX_VBIF_TEST_BUS2_CTRL1,
+				((j & A6XX_VBIF_TEST_BUS2_CTRL1_DATA_SEL_MASK)
+				<< A6XX_VBIF_TEST_BUS2_CTRL1_DATA_SEL_SHIFT));
+			kgsl_regread(device, A6XX_VBIF_TEST_BUS_OUT,
+					data);
+			data++;
+		}
+	}
+
+	/* XIN blocks AXI side */
+	for (i = 0; i < A6XX_NUM_XIN_AXI_BLOCKS; i++) {
+		kgsl_regwrite(device, A6XX_VBIF_TEST_BUS2_CTRL0, 1 << i);
+		for (j = 0; j < 18; j++) {
+			kgsl_regwrite(device, A6XX_VBIF_TEST_BUS2_CTRL1,
+				((j & A6XX_VBIF_TEST_BUS2_CTRL1_DATA_SEL_MASK)
+				<< A6XX_VBIF_TEST_BUS2_CTRL1_DATA_SEL_SHIFT));
+			kgsl_regread(device, A6XX_VBIF_TEST_BUS_OUT,
+				data);
+			data++;
+		}
+	}
+	kgsl_regwrite(device, A6XX_VBIF_TEST_BUS2_CTRL0, 0);
+
+	/* XIN blocks core clock side */
+	for (i = 0; i < A6XX_NUM_XIN_CORE_BLOCKS; i++) {
+		kgsl_regwrite(device, A6XX_VBIF_TEST_BUS1_CTRL0, 1 << i);
+		for (j = 0; j < 12; j++) {
+			kgsl_regwrite(device, A6XX_VBIF_TEST_BUS1_CTRL1,
+				((j & A6XX_VBIF_TEST_BUS1_CTRL1_DATA_SEL_MASK)
+				<< A6XX_VBIF_TEST_BUS1_CTRL1_DATA_SEL_SHIFT));
+			kgsl_regread(device, A6XX_VBIF_TEST_BUS_OUT,
+				data);
+			data++;
+		}
+	}
+	/* restore the clock of VBIF */
+	kgsl_regwrite(device, A6XX_VBIF_CLKON, reg_clk);
 	return size;
 }
 
@@ -1309,6 +1398,10 @@ static void a6xx_snapshot_debugbus(struct kgsl_device *device,
 			snapshot, a6xx_snapshot_dbgc_debugbus_block,
 			(void *) &a6xx_dbgc_debugbus_blocks[i]);
 	}
+
+	kgsl_snapshot_add_section(device, KGSL_SNAPSHOT_SECTION_DEBUGBUS,
+			snapshot, a6xx_snapshot_vbif_debugbus_block,
+			(void *) &a6xx_vbif_debugbus_blocks);
 
 	if (a6xx_cx_dbgc) {
 		for (i = 0; i < ARRAY_SIZE(a6xx_cx_dbgc_debugbus_blocks); i++) {

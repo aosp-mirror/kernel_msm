@@ -103,6 +103,7 @@ int dsi_phy_hw_timing_val_v3_0(struct dsi_phy_per_lane_cfgs *timing_cfg,
 
 /* DSI controller common ops */
 u32 dsi_ctrl_hw_cmn_get_interrupt_status(struct dsi_ctrl_hw *ctrl);
+void dsi_ctrl_hw_cmn_debug_bus(struct dsi_ctrl_hw *ctrl);
 void dsi_ctrl_hw_cmn_clear_interrupt_status(struct dsi_ctrl_hw *ctrl, u32 ints);
 void dsi_ctrl_hw_cmn_enable_status_interrupts(struct dsi_ctrl_hw *ctrl,
 					     u32 ints);
@@ -146,6 +147,12 @@ void dsi_ctrl_hw_cmn_setup_cmd_stream(struct dsi_ctrl_hw *ctrl,
 				     struct dsi_rect *roi);
 void dsi_ctrl_hw_cmn_phy_sw_reset(struct dsi_ctrl_hw *ctrl);
 void dsi_ctrl_hw_cmn_soft_reset(struct dsi_ctrl_hw *ctrl);
+
+void dsi_ctrl_hw_cmn_setup_misr(struct dsi_ctrl_hw *ctrl,
+			enum dsi_op_mode panel_mode,
+			bool enable, u32 frame_count);
+u32 dsi_ctrl_hw_cmn_collect_misr(struct dsi_ctrl_hw *ctrl,
+			enum dsi_op_mode panel_mode);
 
 void dsi_ctrl_hw_cmn_kickoff_command(struct dsi_ctrl_hw *ctrl,
 			struct dsi_ctrl_cmd_dma_info *cmd,

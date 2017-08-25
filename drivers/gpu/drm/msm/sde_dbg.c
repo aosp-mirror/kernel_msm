@@ -23,6 +23,7 @@
 
 #include "sde_dbg.h"
 #include "sde/sde_hw_catalog.h"
+#include "dsi-staging/dsi_ctrl.h"
 
 #define SDE_DBG_BASE_MAX		10
 
@@ -56,6 +57,8 @@
 #define MMSS_VBIF_TEST_BUS_OUT		0x230
 
 /* Vbif error info */
+#define MMSS_VBIF_PND_ERR		0x190
+#define MMSS_VBIF_SRC_ERR		0x194
 #define MMSS_VBIF_XIN_HALT_CTRL1	0x204
 #define MMSS_VBIF_ERR_INFO		0X1a0
 #define MMSS_VBIF_ERR_INFO_1		0x1a4
@@ -2300,10 +2303,14 @@ static void _sde_dbg_dump_sde_dbg_bus(struct sde_dbg_sde_debug_bus *bus)
 				mem_base + head->wr_addr);
 		wmb(); /* make sure test bits were written */
 
-		if (bus->cmn.flags & DBGBUS_FLAGS_DSPP)
+		if (bus->cmn.flags & DBGBUS_FLAGS_DSPP) {
 			offset = DBGBUS_DSPP_STATUS;
-		else
+			/* keep DSPP test point enabled */
+			if (head->wr_addr != DBGBUS_DSPP)
+				writel_relaxed(0xF, mem_base + DBGBUS_DSPP);
+		} else {
 			offset = head->wr_addr + 0x4;
+		}
 
 		status = readl_relaxed(mem_base + offset);
 
@@ -2325,7 +2332,9 @@ static void _sde_dbg_dump_sde_dbg_bus(struct sde_dbg_sde_debug_bus *bus)
 
 		/* Disable debug bus once we are done */
 		writel_relaxed(0, mem_base + head->wr_addr);
-
+		if (bus->cmn.flags & DBGBUS_FLAGS_DSPP &&
+						head->wr_addr != DBGBUS_DSPP)
+			writel_relaxed(0x0, mem_base + DBGBUS_DSPP);
 	}
 	_sde_dbg_enable_power(false);
 
@@ -2373,7 +2382,7 @@ static void _sde_dbg_dump_vbif_dbg_bus(struct sde_dbg_vbif_debug_bus *bus)
 	u32 **dump_mem = NULL;
 	u32 *dump_addr = NULL;
 	u32 value, d0, d1;
-	unsigned long reg;
+	unsigned long reg, reg1, reg2;
 	struct vbif_debug_bus_entry *head;
 	phys_addr_t phys = 0;
 	int i, list_size = 0;
@@ -2447,13 +2456,18 @@ static void _sde_dbg_dump_vbif_dbg_bus(struct sde_dbg_vbif_debug_bus *bus)
 	wmb();
 
 	/**
-	 * Extract VBIF error info based on XIN halt status.
-	 * If the XIN client is not in HALT state, then retrieve the
-	 * VBIF error info for it.
+	 * Extract VBIF error info based on XIN halt and error status.
+	 * If the XIN client is not in HALT state, or an error is detected,
+	 * then retrieve the VBIF error info for it.
 	 */
 	reg = readl_relaxed(mem_base + MMSS_VBIF_XIN_HALT_CTRL1);
-	dev_err(sde_dbg_base.dev, "XIN HALT:0x%lX\n", reg);
+	reg1 = readl_relaxed(mem_base + MMSS_VBIF_PND_ERR);
+	reg2 = readl_relaxed(mem_base + MMSS_VBIF_SRC_ERR);
+	dev_err(sde_dbg_base.dev,
+			"XIN HALT:0x%lX, PND ERR:0x%lX, SRC ERR:0x%lX\n",
+			reg, reg1, reg2);
 	reg >>= 16;
+	reg &= ~(reg1 | reg2);
 	for (i = 0; i < MMSS_VBIF_CLIENT_NUM; i++) {
 		if (!test_bit(0, &reg)) {
 			writel_relaxed(i, mem_base + MMSS_VBIF_ERR_INFO);
@@ -2522,6 +2536,8 @@ static void _sde_dump_array(struct sde_dbg_reg_base *blk_arr[],
 
 	if (dump_dbgbus_vbif_rt)
 		_sde_dbg_dump_vbif_dbg_bus(&sde_dbg_base.dbgbus_vbif_rt);
+
+	dsi_ctrl_dump_debug_register();
 
 	if (do_panic && sde_dbg_base.panic_on_err)
 		panic(name);

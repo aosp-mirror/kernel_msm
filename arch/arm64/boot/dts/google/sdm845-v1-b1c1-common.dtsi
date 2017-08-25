@@ -21,6 +21,7 @@
 #include "sdm845-b1c1-haptics.dtsi"
 #include "sdm845-b1c1-nfc.dtsi"
 #include "sdm845-b1c1-citadel.dtsi"
+#include "sdm845-b1c1-easel.dtsi"
 #include "../qcom/smb1355.dtsi"
 
 / {
@@ -113,6 +114,10 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&usb2_vbus_det_default>;
 	};
+};
+
+&smb1355 {
+	reg = <0xc>;
 };
 
 &smb1355_charger {
