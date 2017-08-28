@@ -989,7 +989,7 @@ static int bcm15602_regulator_enable(struct regulator_dev *rdev)
 		break;
 	case BCM15602_ID_ASR:
 		ret = bcm15602_write_byte(ddata, BCM15602_REG_BUCK_ASR_CTRL0,
-					  0xC5);
+					  0xC1);
 		break;
 	case BCM15602_ID_SDSR:
 		ret = bcm15602_write_byte(ddata, BCM15602_REG_BUCK_SDSR_CTRL0,
@@ -1025,7 +1025,7 @@ static int bcm15602_regulator_disable(struct regulator_dev *rdev)
 		break;
 	case BCM15602_ID_ASR:
 		ret = bcm15602_write_byte(ddata, BCM15602_REG_BUCK_ASR_CTRL0,
-					  0xC4);
+					  0xC0);
 		break;
 	case BCM15602_ID_SDSR:
 		ret = bcm15602_write_byte(ddata, BCM15602_REG_BUCK_SDSR_CTRL0,
@@ -1203,16 +1203,14 @@ static int bcm15602_chip_fixup(struct bcm15602_chip *ddata)
 		/* set ASR rail to 0.9V */
 		bcm15602_write_byte(ddata, BCM15602_REG_BUCK_ASR_VOCTRL, 0x43);
 
-		/* set ASR to single phase */
-		bcm15602_update_bits(ddata, BCM15602_REG_BUCK_ASR_TSET_CTRL2,
-				     0x10, 0x00);
+		/* disable zero-I detection */
+		bcm15602_write_byte(ddata, BCM15602_REG_BUCK_ASR_CTRL0, 0xC0);
 	} else if (ddata->rev_id == BCM15602_REV_A1) {
 		/* enable bandgap curvature correction for improved accuracy */
 		bcm15602_write_byte(ddata, BCM15602_REG_ADC_BGCTRL, 0x7b);
 
-		/* set ASR to single phase */
-		bcm15602_update_bits(ddata, BCM15602_REG_BUCK_ASR_TSET_CTRL2,
-				     0x10, 0x00);
+		/* disable zero-I detection */
+		bcm15602_write_byte(ddata, BCM15602_REG_BUCK_ASR_CTRL0, 0xC0);
 	}
 
 	return 0;

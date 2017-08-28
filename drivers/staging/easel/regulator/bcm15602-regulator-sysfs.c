@@ -235,49 +235,6 @@ static ssize_t asr_vsel_store(struct device *dev,
 }
 DEVICE_ATTR_RW(asr_vsel);
 
-static ssize_t asr_dual_phase_show(struct device *dev,
-				   struct device_attribute *mattr,
-				   char *data)
-{
-	struct bcm15602_chip *ddata = dev_get_drvdata(dev);
-	u8 reg_data;
-
-	bcm15602_read_byte(ddata, BCM15602_REG_BUCK_ASR_TSET_CTRL2, &reg_data);
-
-	return snprintf(data, PAGE_SIZE, "%d\n", (reg_data & 0x10) >> 4);
-}
-
-static ssize_t asr_dual_phase_store(struct device *dev,
-				    struct device_attribute *mattr,
-				    const char *data, size_t count)
-{
-	struct bcm15602_chip *ddata = dev_get_drvdata(dev);
-	int val;
-
-	if (kstrtoint(data, 0, &val)) {
-		dev_err(dev, "%s: Not a valid int\n", __func__);
-		return -EINVAL;
-	}
-
-	if ((val != 0) && (val != 1)) {
-		dev_err(dev, "%s: Can only write 0 or 1\n", __func__);
-		return -EINVAL;
-	}
-
-	if (val) {
-		/* set ASR to dual phase */
-		bcm15602_update_bits(ddata, BCM15602_REG_BUCK_ASR_TSET_CTRL2,
-				     0x10, 0x10);
-	} else {
-		/* set ASR to single phase */
-		bcm15602_update_bits(ddata, BCM15602_REG_BUCK_ASR_TSET_CTRL2,
-				     0x10, 0x00);
-	}
-
-	return count;
-}
-DEVICE_ATTR_RW(asr_dual_phase);
-
 static ssize_t dump_regs_show(struct device *dev,
 			      struct device_attribute *mattr,
 			      char *data)
@@ -385,7 +342,6 @@ static struct attribute *bcm15602_attrs[] = {
 	&dev_attr_total_power.attr,
 	&dev_attr_hk_status.attr,
 	&dev_attr_asr_vsel.attr,
-	&dev_attr_asr_dual_phase.attr,
 	&dev_attr_dump_regs.attr,
 	&dev_attr_toggle_pon.attr,
 	&dev_attr_reg_read.attr,
