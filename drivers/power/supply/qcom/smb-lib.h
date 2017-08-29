@@ -245,14 +245,6 @@ struct smb_charger {
 	struct mutex		vconn_oc_lock;
 
 	/*
-	 * vbus_output_lock and otg_overcurrent_lock can sometimes be held
-	 * at the same time. vbus_output_lock should be locked before
-	 * otg_overcurrent_lock.
-	 */
-	struct mutex		vbus_output_lock; /* for vbus output src sel */
-	struct mutex		otg_overcurrent_lock;
-
-	/*
 	 * mutex for type-c power role config. Access to typec_pr_disabled,
 	 * typec_pr_pd_vote and the actual hardware register
 	 * TYPE_C_INTRPT_ENB_SOFTWARE_CTRL_REG's field POWER_ROLE_CMD_MASK, and
