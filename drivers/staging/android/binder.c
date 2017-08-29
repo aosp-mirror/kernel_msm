@@ -243,11 +243,6 @@ struct binder_device {
 	struct binder_context context;
 };
 
-static struct binder_context global_context = {
-	.binder_context_mgr_uid = INVALID_UID,
-	.name = "binder",
-};
-
 struct binder_work {
 	struct list_head entry;
 	enum {
@@ -1497,7 +1492,7 @@ static void binder_transaction_buffer_release(struct binder_proc *proc,
 
 			fp = to_flat_binder_object(hdr);
 			ref = binder_get_ref(proc, fp->handle,
-					hdr->type == BINDER_TYPE_HANDLE);
+					     hdr->type == BINDER_TYPE_HANDLE);
 			if (ref == NULL) {
 				pr_err("transaction release %d bad handle %d\n",
 				 debug_id, fp->handle);
@@ -2108,7 +2103,7 @@ static void binder_transaction(struct binder_proc *proc,
 		case BINDER_TYPE_FD: {
 			struct binder_fd_object *fp = to_binder_fd_object(hdr);
 			int target_fd = binder_translate_fd(fp->fd, t, thread,
-								in_reply_to);
+							    in_reply_to);
 
 			if (target_fd < 0) {
 				return_error = BR_FAILED_REPLY;
@@ -3213,6 +3208,7 @@ static int binder_ioctl_set_ctx_mgr(struct file *filp)
 	int ret = 0;
 	struct binder_proc *proc = filp->private_data;
 	struct binder_context *context = proc->context;
+
 	kuid_t curr_euid = current_euid();
 
 	if (context->binder_context_mgr_node) {
@@ -3220,15 +3216,12 @@ static int binder_ioctl_set_ctx_mgr(struct file *filp)
 		ret = -EBUSY;
 		goto out;
 	}
-	ret = security_binder_set_context_mgr(proc->tsk);
-	if (ret < 0)
-		goto out;
 	if (uid_valid(context->binder_context_mgr_uid)) {
 		if (!uid_eq(context->binder_context_mgr_uid, curr_euid)) {
 			pr_err("BINDER_SET_CONTEXT_MGR bad uid %d != %d\n",
 			       from_kuid(&init_user_ns, curr_euid),
 			       from_kuid(&init_user_ns,
-					context->binder_context_mgr_uid));
+					 context->binder_context_mgr_uid));
 			ret = -EPERM;
 			goto out;
 		}
@@ -3288,6 +3281,9 @@ static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	case BINDER_SET_CONTEXT_MGR:
 		ret = binder_ioctl_set_ctx_mgr(filp);
 		if (ret)
+			goto err;
+		ret = security_binder_set_context_mgr(proc->tsk);
+		if (ret < 0)
 			goto err;
 		break;
 	case BINDER_THREAD_EXIT:
@@ -4395,26 +4391,8 @@ static int __init binder_init(void)
 		debugfs_create_file("failed_transaction_log",
 				    S_IRUGO,
 				    binder_debugfs_dir_entry_root,
-				    &binder_transaction_log_failed,
-				    &binder_transaction_log_fops);
-	}
-
-	/*
-	 * Copy the module_parameter string, because we don't want to
-	 * tokenize it in-place.
-	 */
-	device_names = kzalloc(strlen(binder_devices_param) + 1, GFP_KERNEL);
-	if (!device_names) {
-		ret = -ENOMEM;
-		goto err_alloc_device_names_failed;
-	}
-	strlcpy(device_names, binder_devices_param,
-		strlen(binder_devices_param) + 1);
-
-	while ((device_name = strsep(&device_names, ","))) {
-		ret = init_binder_device(device_name);
-		if (ret)
-			goto err_init_binder_device_failed;
+				    NULL,
+				    &binder_failed_transaction_log_fops);
 	}
 
 	return ret;

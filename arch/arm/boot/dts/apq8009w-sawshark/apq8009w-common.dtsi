@@ -43,7 +43,7 @@
 
 
 &i2c_3 {
-	status = "ok";
+	status = "disabled";
 };
 
 &i2c_5 {
