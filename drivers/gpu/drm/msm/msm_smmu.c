@@ -58,7 +58,7 @@ static int msm_smmu_fault_handler(struct iommu_domain *iommu,
 	 struct device *dev, unsigned long iova, int flags, void *arg)
 {
 
-	dev_info(dev, "%s: iova=0x%08lx, flags=0x%x, iommu=%p\n", __func__,
+	dev_info(dev, "%s: iova=0x%08lx, flags=0x%x, iommu=%pK\n", __func__,
 			iova, flags, iommu);
 	return 0;
 }
