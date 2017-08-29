@@ -56,7 +56,7 @@
 
 	easel_mem: easel_mem@96000000 {
 		linux,contiguous-region;
-		reg = <0 0x96000000 0 0x4000000>;
+		reg = <0 0x96000000 0 0x6000000>; /* 96 MB */
 		label = "easel_mem";
 	};
 

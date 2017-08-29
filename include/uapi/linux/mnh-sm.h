@@ -38,7 +38,7 @@
 #define MNH_SM_IOC_MAGIC 'T'
 #define MNH_SM_MAX 8
 
-#define MNH_ION_BUFFER_SIZE SZ_64M
+#define MNH_ION_BUFFER_SIZE (SZ_32M + SZ_16M)  /* 48 MB for kernel */
 #define FW_VER_SIZE 16
 
 #define MNH_SM_IOC_GET_STATE \
