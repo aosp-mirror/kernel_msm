@@ -1084,6 +1084,7 @@ static int Force_Upgrade(struct it7259_ts_data *ts_data)
 	}
 }
 
+
 static int Upgrade_FW_CFG(struct it7259_ts_data *ts_data)
 {
 	unsigned int fw_size = 0;
@@ -1096,7 +1097,7 @@ static int Upgrade_FW_CFG(struct it7259_ts_data *ts_data)
 	unsigned char *fw_buf = kzalloc(0x10000, GFP_KERNEL);
 	unsigned char *config_buf = kzalloc(0x500, GFP_KERNEL);
 
-	printk("Execute Upgrade_FW_CFG()\n");
+	printk(KERN_ERR"Execute Upgrade_FW_CFG()\n");
 	if ( fw_buf  == NULL || config_buf == NULL  ) {
 		printk("kzalloc failed\n");
 	}
@@ -1112,7 +1113,7 @@ static int Upgrade_FW_CFG(struct it7259_ts_data *ts_data)
 	}
 
 	fw_size = fw_fd->f_op->read(fw_fd, fw_buf, 0x10000, &fw_fd->f_pos);
-	printk("File Firmware version : %02x %02x %02x %02x\n",
+	printk(KERN_ERR "File Firmware version : %02x %02x %02x %02x\n",
 		fw_buf[136], fw_buf[137], fw_buf[138], fw_buf[139]);
 	//printk("--------------------- fw_size = %x\n", fw_size);
 
@@ -1125,7 +1126,7 @@ static int Upgrade_FW_CFG(struct it7259_ts_data *ts_data)
 	}
 
 	config_size = config_fd->f_op->read(config_fd, config_buf, 0x500, &config_fd->f_pos);
-	printk("File Config version : %02x %02x %02x %02x\n",
+	printk(KERN_ERR "File Config version : %02x %02x %02x %02x\n",
 		config_buf[config_size-8], config_buf[config_size-7],
 		config_buf[config_size-6], config_buf[config_size-5]);
 
@@ -1133,10 +1134,10 @@ static int Upgrade_FW_CFG(struct it7259_ts_data *ts_data)
 	filp_close(fw_fd,NULL);
 	filp_close(config_fd,NULL);
 
-	printk("Chip firmware version : %02x %02x %02x %02x\n",
+	printk(KERN_ERR "Chip firmware version : %02x %02x %02x %02x\n",
 		ts_data->fw_ver[0], ts_data->fw_ver[1],
 		ts_data->fw_ver[2], ts_data->fw_ver[3]);
-	printk("Chip config version : %02x %02x %02x %02x\n",
+	printk(KERN_ERR "Chip config version : %02x %02x %02x %02x\n",
 		ts_data->cfg_ver[0], ts_data->cfg_ver[1],
 		ts_data->cfg_ver[2], ts_data->cfg_ver[3]);
 	download = 0;
@@ -1152,10 +1153,10 @@ static int Upgrade_FW_CFG(struct it7259_ts_data *ts_data)
 		(ts_data->fw_ver[3] != fw_buf[139]))
 		download += 2;
 
-	printk("%s, print download = %d\n", __func__, download);
+	printk(KERN_ERR "%s, print download = %d\n", __func__, download);
 
 	if(download == 0){
-		printk("Do not need to upgrade\n");
+		printk(KERN_ERR "Do not need to upgrade\n");
 		return 0;
 	} else {
 		if (gfnIT7259_FirmwareDownload(ts_data, fw_size, fw_buf, config_size, config_buf) == false) {
@@ -1203,7 +1204,7 @@ static ssize_t sysfs_upgrade_store(struct device *dev,
 {
         struct it7259_ts_data *ts_data = dev_get_drvdata(dev);
 
-        printk("%s():\n", __func__);
+        printk(KERN_INFO "%s():\n", __func__);
         if (ts_data->suspended) {
                 dev_err(dev, "Device is suspended, can't upgrade FW/CFG !!!\n");
                 return -EBUSY;
@@ -1211,16 +1212,13 @@ static ssize_t sysfs_upgrade_store(struct device *dev,
 
         mutex_lock(&ts_data->fw_cfg_mutex);
         if(Upgrade_FW_CFG(ts_data)) {
-                printk("IT7259_upgrade_failed\n");
-                return -1;
+                printk(KERN_ERR "IT7259_upgrade_failed\n");
 
         } else {
-                printk("IT7259_upgrade_OK\n\n");
-                return 0;
+                printk(KERN_ERR "IT7259_upgrade_OK\n\n");
         }
-        mutex_unlock(&ts_data->fw_cfg_mutex);
-
-        return count;
+	mutex_unlock(&ts_data->fw_cfg_mutex);
+	return 1;
 }
 
 static ssize_t sysfs_upgrade_show(struct device *dev,
@@ -2458,13 +2456,15 @@ static int it7259_ts_probe(struct i2c_client *client,
 		}
 	}
 
+	msleep(DELAY_I2C_TRANSATION);
 	ret = it7259_ts_chip_identify(ts_data);
 	if (ret) {
 		dev_err(&client->dev, "Failed to identify chip %d!!!", ret);
 		if(Force_Upgrade(ts_data))
-			printk("IT7259 force upgrade fail, please check hardware\n");
+			dev_err(&client->dev, "IT7259 force upgrade fail, please check hardware\n");
 		else
-			printk("IT7259 force upgrade success!!\n");
+			dev_err(&client->dev, "IT7259 force upgrade success!!\n");
+		//goto err_identification_fail;
 	}
 
 	msleep(DELAY_I2C_TRANSATION);
@@ -2597,6 +2597,7 @@ err_input_register:
 	ts_data->input_dev = NULL;
 
 err_input_alloc:
+//err_identification_fail:
 	if (ts_data->ts_pinctrl) {
 		if (IS_ERR_OR_NULL(ts_data->pinctrl_state_release)) {
 			devm_pinctrl_put(ts_data->ts_pinctrl);
