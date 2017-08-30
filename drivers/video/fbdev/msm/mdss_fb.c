@@ -875,7 +875,7 @@ static ssize_t mdss_fb_change_persist_mode(struct device *dev,
 	}
 
 	mutex_lock(&mfd->mdss_sysfs_lock);
-	if (mdss_panel_is_power_off(mfd->panel_power_state)) {
+	if (!mdss_panel_is_power_on_interactive(mfd->panel_power_state)) {
 		pinfo->persist_mode = persist_mode;
 		goto end;
 	}
