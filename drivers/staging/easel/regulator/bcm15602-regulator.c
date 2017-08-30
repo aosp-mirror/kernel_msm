@@ -1280,9 +1280,6 @@ static int bcm15602_probe(struct i2c_client *client,
 		return -ENOMEM;
 	}
 
-	/* create sysfs attributes */
-	bcm15602_config_sysfs(dev);
-
 	/* request GPIOs and IRQs */
 	devm_gpio_request_one(dev, pdata->pon_gpio, GPIOF_OUT_INIT_LOW,
 			      "BCM15602 PON");
@@ -1333,6 +1330,9 @@ static int bcm15602_probe(struct i2c_client *client,
 		dev_err(dev, "%s: powering on failed\n", __func__);
 		goto error_reset;
 	}
+
+	/* create sysfs attributes */
+	bcm15602_config_sysfs(dev);
 
 	/* enable the irq after power on */
 	enable_irq(pdata->resetb_irq);
