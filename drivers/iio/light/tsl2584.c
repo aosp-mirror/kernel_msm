@@ -912,10 +912,10 @@ static int tsl258x_als_set_enable(struct sensors_classdev *sensors_cdev,
 
 	if(!als_data->cal_status) {
 		/* Read Caliberated data and set */
-		if(!tsl258x_als_get_cal_data(als_data))
-			als_data->cal_status = true;
-		else
-			als_data->cal_status = false;
+		if(tsl258x_als_get_cal_data(als_data))
+			pr_err("lux calibration failed\n");
+
+		als_data->cal_status = true;
 	}
 
 	mutex_lock(&als_data->io_lock);
