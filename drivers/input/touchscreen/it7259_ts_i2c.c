@@ -1727,7 +1727,7 @@ static irqreturn_t it7259_ts_threaded_handler(int irq, void *devid)
 		pressure = pt_data.fd[finger].pressure & FD_PRESSURE_BITS;
 
 		if (finger_status) {
-			if (pressure >= FD_PRESSURE_LIGHT) {
+			if (pressure >= FD_PRESSURE_NONE) {
 #ifdef	CONFIG_BEZEL_SUPPORT
                                 /* Distance from present co-ordinate to center co-ordinate */
 				x_position = ABS(x, x_center);
