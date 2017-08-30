@@ -1751,7 +1751,7 @@ static void setup_smmu(struct pci_dev *pdev)
 	int ret;
 
 /* Following stolen from msm_11ad.c */
-#define SMMU_BASE	0x10000000 /* Device address range base */
+#define SMMU_BASE	0x20000000 /* Device address range base */
 #define SMMU_SIZE	0x40000000 /* Device address range size */
 
 	mapping = arm_iommu_create_mapping(&platform_bus_type,
