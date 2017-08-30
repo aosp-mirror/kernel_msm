@@ -453,6 +453,7 @@ typedef struct tagCsr11rConfig {
 typedef struct tagCsrNeighborRoamConfig {
 	uint32_t nNeighborScanTimerPeriod;
 	uint8_t nNeighborLookupRssiThreshold;
+	int8_t rssi_thresh_offset_5g;
 	uint16_t nNeighborScanMinChanTime;
 	uint16_t nNeighborScanMaxChanTime;
 	sCsrChannel neighborScanChanList;
