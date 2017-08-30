@@ -742,4 +742,16 @@ void lim_send_chan_switch_action_frame(tpAniSirGlobal mac_ctx,
 bool lim_check_if_vendor_oui_match(tpAniSirGlobal mac_ctx,
 				uint8_t *oui, uint8_t oui_len,
 				uint8_t *ie, uint8_t ie_len);
+
+/**
+ * lim_get_min_session_txrate() - Get the minimum rate supported in the session
+ * @session: Pointer to PE session
+ *
+ * This API will find the minimum rate supported by the given PE session and
+ * return the enum rateid corresponding to the rate.
+ *
+ * Return: enum rateid
+ */
+uint8_t lim_get_min_session_txrate(tpPESession session);
+
 #endif /* __LIM_UTILS_H */
