@@ -40,10 +40,10 @@
 
 #define QWLAN_VERSION_MAJOR            5
 #define QWLAN_VERSION_MINOR            1
-#define QWLAN_VERSION_PATCH            2
-#define QWLAN_VERSION_EXTRA            "Z"
-#define QWLAN_VERSION_BUILD            21
+#define QWLAN_VERSION_PATCH            3
+#define QWLAN_VERSION_EXTRA            "B"
+#define QWLAN_VERSION_BUILD            01
 
-#define QWLAN_VERSIONSTR               "5.1.2.21Z"
+#define QWLAN_VERSIONSTR               "5.1.3.01B"
 
 #endif /* QWLAN_VERSION_H */
