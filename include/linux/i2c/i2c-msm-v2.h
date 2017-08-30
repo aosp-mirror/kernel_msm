@@ -590,6 +590,7 @@ struct i2c_msm_ctrl {
 	struct i2c_msm_resources   rsrcs;
 	u32                        mstr_clk_ctl;
 	enum i2c_msm_power_state   pwr_state;
+	void *ipcl;
 };
 
 /* Enum for the profiling event types */
