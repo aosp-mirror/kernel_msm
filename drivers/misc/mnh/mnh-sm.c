@@ -1474,6 +1474,11 @@ static int mnh_sm_set_state_locked(int state)
 		mnh_sm_dev->powered = false;
 		reinit_completion(&mnh_sm_dev->powered_complete);
 
+		ret = mnh_sm_poweroff();
+
+		disable_irq(mnh_sm_dev->ready_irq);
+		break;
+	case MNH_STATE_ACTIVE:
 		/* stage firmware copy to ION if valid update was received */
 		if (mnh_sm_dev->pending_update) {
 			dev_dbg(mnh_sm_dev->dev,
@@ -1487,13 +1492,7 @@ static int mnh_sm_set_state_locked(int state)
 			mnh_ion_destroy_buffer(mnh_sm_dev->ion[FW_PART_SEC]);
 		}
 
-		ret = mnh_sm_poweroff();
-
-		disable_irq(mnh_sm_dev->ready_irq);
-		break;
-	case MNH_STATE_ACTIVE:
 		enable_irq(mnh_sm_dev->ready_irq);
-
 		ret = mnh_sm_poweron();
 		if (ret)
 			break;
