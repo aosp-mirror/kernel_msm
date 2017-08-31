@@ -10,8 +10,6 @@
  * GNU General Public License for more details.
  */
 
-/dts-v1/;
-
 #include "../qcom/apq8998-v2.1.dtsi"
 #include "../qcom/msm8998-camera-sensor-cdp.dtsi"
 
@@ -22,14 +20,6 @@
 #include "../qcom/dsi-panel-jdi-novatek-nt36860.dtsi"
 #include "dsi-panel-boe-nt36860-dualmipi-video.dtsi"
 #include "msm8998-vega-pinctrl.dtsi"
-
-
-/ {
-	model = "Lenovo. Vega EVB";
-	goog,board-revision = "vega-evb";
-	/* Board-Id GPIOs: 0: 100, 1: 99, 2: 119, 3: 118, and 4: 96. */
-	goog,board-id = <1 0>;
-};
 
 / {
 	bluetooth: bt_wcn3990 {
