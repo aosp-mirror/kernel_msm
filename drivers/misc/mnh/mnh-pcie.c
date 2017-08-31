@@ -539,10 +539,11 @@ int mnh_set_outbound_iatu(struct mnh_outb_region *outb)
 	mnh_pcie_config_write(IATU_LWR_TARGET_ADDR, size, lower);
 	mnh_pcie_config_write(IATU_UPPER_TARGET_ADDR, size, upper);
 	mnh_pcie_config_write(IATU_REGION_CTRL_1, size, IATU_MEM);
-	mnh_pcie_config_write(IATU_REGION_CTRL_2, size, IATU_ENABLE);
+	mnh_pcie_config_write(IATU_REGION_CTRL_2, size,
+		IATU_ENABLE | IATU_DMA_BYPASS);
 	udelay(1);
 	mnh_pcie_config_read(IATU_REGION_CTRL_2, size, &data);
-	if (data != IATU_ENABLE)
+	if (data != (IATU_ENABLE | IATU_DMA_BYPASS))
 		dev_err(&mnh_dev->pdev->dev, "Set outbound IATU Fail\n");
 
 	return 0;
