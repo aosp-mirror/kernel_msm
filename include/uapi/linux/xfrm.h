@@ -305,6 +305,7 @@ enum xfrm_attr_type_t {
 	XFRMA_PAD,
 	XFRMA_OFFLOAD_DEV,	/* struct xfrm_state_offload */
 	XFRMA_OUTPUT_MARK,	/* __u32 */
+	XFRMA_INPUT_MARK,	/* __u32 */
 	__XFRMA_MAX
 
 #define XFRMA_MAX (__XFRMA_MAX - 1)

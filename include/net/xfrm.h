@@ -156,6 +156,7 @@ struct xfrm_state {
 		int		trailer_len;
 		u32		extra_flags;
 		u32		output_mark;
+		u32		input_mark;
 	} props;
 
 	struct xfrm_lifetime_cfg lft;
