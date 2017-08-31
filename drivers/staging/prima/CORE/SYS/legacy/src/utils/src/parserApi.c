@@ -598,7 +598,7 @@ PopulateDot11fHTCaps(tpAniSirGlobal           pMac,
 
     uHTCapabilityInfo.nCfgValue16 = nCfgValue & 0xFFFF;
 
-
+    pDot11f->advCodingCap             = uHTCapabilityInfo.htCapInfo.advCodingCap;
     pDot11f->mimoPowerSave            = uHTCapabilityInfo.htCapInfo.mimoPowerSave;
     pDot11f->greenField               = uHTCapabilityInfo.htCapInfo.greenField;
     pDot11f->shortGI20MHz             = uHTCapabilityInfo.htCapInfo.shortGI20MHz;
@@ -616,15 +616,10 @@ PopulateDot11fHTCaps(tpAniSirGlobal           pMac,
     if (psessionEntry == NULL) // Only in case of NO session
     {
         pDot11f->supportedChannelWidthSet = uHTCapabilityInfo.htCapInfo.supportedChannelWidthSet;
-        pDot11f->advCodingCap = uHTCapabilityInfo.htCapInfo.advCodingCap;
     }
     else
     {
         pDot11f->supportedChannelWidthSet = psessionEntry->htSupportedChannelWidthSet;
-        if (psessionEntry->txLdpcIniFeatureEnabled & 0x1)
-            pDot11f->advCodingCap = 1;
-        else
-            pDot11f->advCodingCap = 0;
     }
 
     /* Ensure that shortGI40MHz is Disabled if supportedChannelWidthSet is
@@ -818,10 +813,7 @@ PopulateDot11fVHTCaps(tpAniSirGlobal           pMac,
 
     nCfgValue = 0;
     CFG_GET_INT( nStatus, pMac, WNI_CFG_VHT_LDPC_CODING_CAP, nCfgValue );
-    if (nCfgValue & 0x2)
-        pDot11f->ldpcCodingCap = 1;
-    else
-        pDot11f->ldpcCodingCap = 0;
+    pDot11f->ldpcCodingCap = (nCfgValue & 0x0001);
 
     nCfgValue = 0;
     CFG_GET_INT( nStatus, pMac, WNI_CFG_VHT_SHORT_GI_80MHZ, nCfgValue );
