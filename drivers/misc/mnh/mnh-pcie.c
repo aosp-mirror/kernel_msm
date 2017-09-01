@@ -960,7 +960,7 @@ int mnh_sg_build(void *dmadest, size_t size, struct mnh_sg_entry **sg,
 
 	sgl->mypage = kcalloc(p_num, sizeof(struct page *), GFP_KERNEL);
 	if (!sgl->mypage) {
-		kfree((*sg));
+		vfree((*sg));
 		*sg = NULL;
 		sgl->n_num = 0;
 		sgl->length = 0;
@@ -968,7 +968,7 @@ int mnh_sg_build(void *dmadest, size_t size, struct mnh_sg_entry **sg,
 	}
 	sgl->sc_list = kcalloc(p_num, sizeof(struct scatterlist), GFP_KERNEL);
 	if (!sgl->sc_list) {
-		kfree((*sg));
+		vfree((*sg));
 		*sg = NULL;
 		kfree(sgl->mypage);
 		sgl->mypage = NULL;
@@ -1024,7 +1024,7 @@ release_page:
 	for (i = 0; i < sgl->n_num; i++)
 		put_page(*(sgl->mypage + i));
 free_mem:
-	kfree((*sg));
+	vfree((*sg));
 	*sg = NULL;
 	kfree(sgl->mypage);
 	sgl->mypage = NULL;
