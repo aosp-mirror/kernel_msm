@@ -40,8 +40,6 @@
 #define MXT_REGISTER_PSY_MS  200
 #define LDO10_ACTIVE_LOAD_UA 15000
 
-static struct mutex i2c_suspend_lock;
-
 static bool selftest_enable;
 static bool selftest_show;
 static struct wake_lock touch_wake_lock;
@@ -790,6 +788,7 @@ static void mxt_firmware_update_func(struct work_struct *work_firmware_update)
 
 	TOUCH_DEBUG_MSG("%s \n", __func__);
 
+	mutex_lock(&data->fw_update_lock);
 	wake_lock_timeout(&touch_wake_lock, msecs_to_jiffies(2000));
 
 	irq_enabled = mxt_disable_irq(data);
@@ -824,6 +823,7 @@ exit:
 	if (irq_enabled)
 		mxt_enable_irq(data);
 	data->enable_reporting = true;
+	mutex_unlock(&data->fw_update_lock);
 }
 
 static void mxt_button_lock_func(struct work_struct *work_button_lock)
@@ -1278,10 +1278,10 @@ void trigger_usb_state_from_otg(struct mxt_data *data, int usb_type)
 
 	wake_lock_timeout(&touch_wake_lock, msecs_to_jiffies(2000));
 
-	if (mutex_is_locked(&i2c_suspend_lock))
+	if (mutex_is_locked(&data->i2c_suspend_lock))
 		TOUCH_DEBUG_MSG("%s mutex_is_locked \n", __func__);
 
-	mutex_lock(&i2c_suspend_lock);
+	mutex_lock(&data->i2c_suspend_lock);
 	if (usb_type == 0) {
 		if (mxt_patchevent_get(PATCH_EVENT_TA)) {
 			if (mxt_patchevent_get(PATCH_EVENT_IDLE))
@@ -1301,7 +1301,7 @@ void trigger_usb_state_from_otg(struct mxt_data *data, int usb_type)
 				mxt_patch_event(data, IDLE_IN_CHG);
 		}
 	}
-	mutex_unlock(&i2c_suspend_lock);
+	mutex_unlock(&data->i2c_suspend_lock);
 }
 
 static int mxt_proc_message(struct mxt_data *data, u8 *message)
@@ -1619,12 +1619,12 @@ static irqreturn_t mxt_interrupt_thread(int irq, void *dev_id)
 	if (!data->object_table)
 		return IRQ_HANDLED;
 
-	mutex_lock(&i2c_suspend_lock);
+	mutex_lock(&data->i2c_suspend_lock);
 	if (data->T44_address)
 		ret = mxt_process_messages_t44(data);
 	else
 		ret = mxt_process_messages(data);
-	mutex_unlock(&i2c_suspend_lock);
+	mutex_unlock(&data->i2c_suspend_lock);
 
 	return ret;
 }
@@ -2534,7 +2534,7 @@ static ssize_t mxt_idle_mode_store(struct mxt_data *data,
 
 	TOUCH_INFO_MSG("idle %d\n", idle);
 
-	mutex_lock(&i2c_suspend_lock);
+	mutex_lock(&data->i2c_suspend_lock);
 	if (idle && !mxt_patchevent_get(PATCH_EVENT_IDLE)) {
 		if (!data->charging_mode)
 			mxt_patch_event(data, IDLE_IN_NOCHG);
@@ -2557,7 +2557,7 @@ static ssize_t mxt_idle_mode_store(struct mxt_data *data,
 		if (ret < 0)
 			TOUCH_WARN_MSG("Regulator vdd set_opt failed\n");
 	}
-	mutex_unlock(&i2c_suspend_lock);
+	mutex_unlock(&data->i2c_suspend_lock);
 
 	return count;
 }
@@ -2845,6 +2845,7 @@ static void mxt_start(struct mxt_data *data)
 		return;
 	}
 
+	mutex_lock(&data->fw_update_lock);
 	mxt_enable_irq(data);
 	mxt_regulator_enable(data);
 
@@ -2853,6 +2854,7 @@ static void mxt_start(struct mxt_data *data)
 	mxt_reset_slots(data);
 	data->suspended = false;
 	data->button_lock = false;
+	mutex_unlock(&data->fw_update_lock);
 }
 
 static void mxt_stop(struct mxt_data *data)
@@ -4124,7 +4126,8 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		}
 	}
 
-	mutex_init(&i2c_suspend_lock);
+	mutex_init(&data->i2c_suspend_lock);
+	mutex_init(&data->fw_update_lock);
 	spin_lock_init(&data->lock);
 
 	wake_lock_init(&touch_wake_lock, WAKE_LOCK_SUSPEND,
@@ -4224,7 +4227,8 @@ err_mxt_touch_sysfs_init_and_add:
 err_init_t100_input_device:
 	mxt_regulator_disable(data);
 err_probe_regulators:
-	mutex_destroy(&i2c_suspend_lock);
+	mutex_destroy(&data->fw_update_lock);
+	mutex_destroy(&data->i2c_suspend_lock);
 
 	wake_lock_destroy(&touch_wake_lock);
 
@@ -4244,7 +4248,8 @@ static int mxt_remove(struct i2c_client *client)
 	mxt_regulator_disable(data);
 	mxt_free_object_table(data);
 
-	mutex_destroy(&i2c_suspend_lock);
+	mutex_destroy(&data->fw_update_lock);
+	mutex_destroy(&data->i2c_suspend_lock);
 
 	wake_lock_destroy(&touch_wake_lock);
 
