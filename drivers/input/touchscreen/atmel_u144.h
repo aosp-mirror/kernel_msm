@@ -648,12 +648,14 @@ struct mxt_data {
 	unsigned int irq;
 	unsigned int max_x;
 	unsigned int max_y;
+	bool irq_enabled;
 	bool in_bootloader;
 	u16 mem_size;
 	u8 t100_aux_ampl;
 	u8 t100_aux_area;
 	u8 t100_aux_vect;
 	u8 t100_aux_resv;
+	spinlock_t lock;
 
 	bool debug_enabled;
 	bool t57_debug_enabled;

@@ -94,6 +94,39 @@ static void mxt_read_fw_version(struct mxt_data *data);
 static int mxt_read_t100_config(struct mxt_data *data);
 static void mxt_external_power_changed(struct power_supply *psy);
 
+static bool mxt_enable_irq(struct mxt_data *data)
+{
+	bool old;
+
+	spin_lock(&data->lock);
+	old = data->irq_enabled;
+
+	if (!data->irq_enabled) {
+		enable_irq(data->irq);
+		data->irq_enabled = true;
+	}
+
+	spin_unlock(&data->lock);
+
+	return old;
+}
+
+static bool mxt_disable_irq(struct mxt_data *data)
+{
+	bool old;
+
+	spin_lock(&data->lock);
+	old = data->irq_enabled;
+
+	if (data->irq_enabled) {
+		disable_irq(data->irq);
+		data->irq_enabled = false;
+	}
+	spin_unlock(&data->lock);
+
+	return old;
+}
+
 static char mxt_power_block_get(void)
 {
 	return power_block_mask;
@@ -753,12 +786,13 @@ static void mxt_firmware_update_func(struct work_struct *work_firmware_update)
 			to_delayed_work(work_firmware_update),
 			struct mxt_data, work_firmware_update);
 	int error = 0;
+	bool irq_enabled;
 
 	TOUCH_DEBUG_MSG("%s \n", __func__);
 
 	wake_lock_timeout(&touch_wake_lock, msecs_to_jiffies(2000));
 
-	disable_irq(data->irq);
+	irq_enabled = mxt_disable_irq(data);
 
 	error = mxt_update_firmware(data, data->pdata->fw_name);
 	if (error) {
@@ -787,7 +821,8 @@ static void mxt_firmware_update_func(struct work_struct *work_firmware_update)
 
 	mxt_read_fw_version(data);
 exit:
-	enable_irq(data->irq);
+	if (irq_enabled)
+		mxt_enable_irq(data);
 	data->enable_reporting = true;
 }
 
@@ -962,13 +997,15 @@ static void mxt_proc_t100_message(struct mxt_data *data, u8 *message)
 	if (!data->enable_reporting){
 		TOUCH_DEBUG_MSG( "return event\n");
 		if (return_cnt++ > 30) {
+			bool irq_enabled;
 			TOUCH_ERR_MSG( "recalibration\n");
-			disable_irq(data->irq);
+			irq_enabled = mxt_disable_irq(data);
 			queue_delayed_work(touch_wq, &data->work_delay_cal,
 					msecs_to_jiffies(10));
 			data->delayed_cal = false;
 			msleep(50);
-			enable_irq(data->irq);
+			if (irq_enabled)
+				mxt_enable_irq(data);
 			return_cnt = 0;
 		}
 		return;
@@ -2329,6 +2366,7 @@ static ssize_t mxt_update_fw_store(struct mxt_data *data, const char *buf,
 	char *package_name = NULL;
 	int error = 0;
 	int wait_cnt = 0;
+	bool irq_enabled;
 
 	TOUCH_DEBUG_MSG("%s\n", __func__);
 
@@ -2336,7 +2374,7 @@ static ssize_t mxt_update_fw_store(struct mxt_data *data, const char *buf,
 
 	TOUCH_DEBUG_MSG("wait_cnt = %d\n", wait_cnt);
 
-	disable_irq(data->irq);
+	irq_enabled = mxt_disable_irq(data);
 
 	error = mxt_update_file_name(&data->client->dev,
 			&package_name, buf, count);
@@ -2368,7 +2406,8 @@ exit:
 	if (package_name)
 		kfree(package_name);
 
-	enable_irq(data->irq);
+	if (irq_enabled)
+		mxt_enable_irq(data);
 
 	mxt_read_fw_version(data);
 
@@ -2806,7 +2845,7 @@ static void mxt_start(struct mxt_data *data)
 		return;
 	}
 
-	enable_irq(data->irq);
+	mxt_enable_irq(data);
 	mxt_regulator_enable(data);
 
 	data->delayed_cal = true;
@@ -2823,7 +2862,7 @@ static void mxt_stop(struct mxt_data *data)
 	if (data->suspended || data->in_bootloader)
 		return;
 
-	disable_irq(data->irq);
+	mxt_disable_irq(data);
 
 	mxt_regulator_disable(data);
 
@@ -4086,6 +4125,7 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	}
 
 	mutex_init(&i2c_suspend_lock);
+	spin_lock_init(&data->lock);
 
 	wake_lock_init(&touch_wake_lock, WAKE_LOCK_SUSPEND,
 			"touch_wakelock");
@@ -4168,6 +4208,7 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		TOUCH_ERR_MSG("Failed to register interrupt\n");
 		goto err_request_irq;
 	}
+	data->irq_enabled = true;
 
 	TOUCH_INFO_MSG("%s success...\n", __func__);
 
