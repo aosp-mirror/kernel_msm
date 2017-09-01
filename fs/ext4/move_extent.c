@@ -187,7 +187,7 @@ mext_page_mkuptodate(struct page *page, unsigned from, unsigned to)
 	if (PageUptodate(page))
 		return 0;
 
-	blocksize = 1 << inode->i_blkbits;
+	blocksize = i_blocksize(inode);
 	if (!page_has_buffers(page))
 		create_empty_buffers(page, blocksize, 0);
 
@@ -595,6 +595,13 @@ ext4_move_extents(struct file *o_filp, struct file *d_filp, __u64 orig_blk,
 	    ext4_should_journal_data(donor_inode)) {
 		ext4_msg(orig_inode->i_sb, KERN_ERR,
 			 "Online defrag not supported with data journaling");
+		return -EOPNOTSUPP;
+	}
+
+	if (ext4_encrypted_inode(orig_inode) ||
+	    ext4_encrypted_inode(donor_inode)) {
+		ext4_msg(orig_inode->i_sb, KERN_ERR,
+			 "Online defrag not supported for encrypted files");
 		return -EOPNOTSUPP;
 	}
 

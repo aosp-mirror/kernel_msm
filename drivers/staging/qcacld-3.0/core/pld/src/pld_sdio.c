@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2017 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -28,6 +28,8 @@
 
 #include "pld_common.h"
 #include "pld_internal.h"
+#include "pld_sdio.h"
+
 
 #ifdef CONFIG_SDIO
 /* SDIO manufacturer ID and Codes */
@@ -154,6 +156,64 @@ static void pld_sdio_crash_shutdown(struct sdio_func *sdio_func)
 		pld_context->ops->crash_shutdown(dev, PLD_BUS_TYPE_SDIO);
 }
 
+/**
+ * pld_hif_sdio_get_virt_ramdump_mem() - Get virtual ramdump memory
+ * @dev: device
+ * @size: buffer to virtual memory size
+ *
+ * Return: virtual ramdump memory address
+ */
+void *pld_hif_sdio_get_virt_ramdump_mem(struct device *dev,
+						unsigned long *size)
+{
+	return cnss_common_get_virt_ramdump_mem(dev, size);
+}
+
+/**
+ * pld_hif_sdio_release_ramdump_mem() - Release virtual ramdump memory
+ * @address: virtual ramdump memory address
+ *
+ * Return: void
+ */
+void pld_hif_sdio_release_ramdump_mem(unsigned long *address)
+{
+}
+#else
+
+/**
+ * pld_hif_sdio_get_virt_ramdump_mem() - Get virtual ramdump memory
+ * @dev: device
+ * @size: buffer to virtual memory size
+ *
+ * Return: virtual ramdump memory address
+ */
+static inline void *pld_hif_sdio_get_virt_ramdump_mem(struct device *dev,
+						unsigned long *size)
+{
+	size_t length = 0;
+	int flags = GFP_KERNEL;
+
+	length = TOTAL_DUMP_SIZE;
+
+	if (size != NULL)
+		*size = (unsigned long)length;
+
+	if (in_interrupt() || irqs_disabled())
+		flags = GFP_ATOMIC;
+
+	return kzalloc(length, flags);
+}
+
+/**
+ * pld_hif_sdio_release_ramdump_mem() - Release virtual ramdump memory
+ * @address: virtual ramdump memory address
+ *
+ * Return: void
+ */
+static inline void pld_hif_sdio_release_ramdump_mem(unsigned long *address)
+{
+	kfree(address);
+}
 #endif
 
 #ifdef CONFIG_PM
@@ -288,6 +348,18 @@ void pld_sdio_unregister_driver(void)
 #endif
 
 #ifdef CONFIG_PLD_SDIO_CNSS
+#ifdef CONFIG_TUFELLO_DUAL_FW_SUPPORT
+static inline int pld_sdio_is_tufello_dual_fw_supported(void)
+{
+	return 1;
+}
+#else
+static inline int pld_sdio_is_tufello_dual_fw_supported(void)
+{
+	return 0;
+#endif
+}
+
 /**
  * pld_sdio_get_fw_files_for_target() - Get FW file names
  * @pfw_files: buffer for FW file names
@@ -310,25 +382,30 @@ int pld_sdio_get_fw_files_for_target(struct pld_fw_files *pfw_files,
 
 	memset(pfw_files, 0, sizeof(*pfw_files));
 
-	ret = cnss_get_fw_files_for_target(&cnss_fw_files,
+	if (target_version == PLD_QCA9377_REV1_1_VERSION) {
+		cnss_get_qca9377_fw_files(&cnss_fw_files, PLD_MAX_FILE_NAME,
+			pld_sdio_is_tufello_dual_fw_supported());
+	} else {
+		ret = cnss_get_fw_files_for_target(&cnss_fw_files,
 					   target_type, target_version);
+	}
 	if (0 != ret)
 		return ret;
 
-	strlcpy(pfw_files->image_file, cnss_fw_files.image_file,
-		PLD_MAX_FILE_NAME);
-	strlcpy(pfw_files->board_data, cnss_fw_files.board_data,
-		PLD_MAX_FILE_NAME);
-	strlcpy(pfw_files->otp_data, cnss_fw_files.otp_data,
-		PLD_MAX_FILE_NAME);
-	strlcpy(pfw_files->utf_file, cnss_fw_files.utf_file,
-		PLD_MAX_FILE_NAME);
-	strlcpy(pfw_files->utf_board_data, cnss_fw_files.utf_board_data,
-		PLD_MAX_FILE_NAME);
-	strlcpy(pfw_files->epping_file, cnss_fw_files.epping_file,
-		PLD_MAX_FILE_NAME);
-	strlcpy(pfw_files->evicted_data, cnss_fw_files.evicted_data,
-		PLD_MAX_FILE_NAME);
+	snprintf(pfw_files->image_file, PLD_MAX_FILE_NAME, PREFIX "%s",
+		cnss_fw_files.image_file);
+	snprintf(pfw_files->board_data, PLD_MAX_FILE_NAME, PREFIX "%s",
+		cnss_fw_files.board_data);
+	snprintf(pfw_files->otp_data, PLD_MAX_FILE_NAME, PREFIX "%s",
+		cnss_fw_files.otp_data);
+	snprintf(pfw_files->utf_file, PLD_MAX_FILE_NAME, PREFIX "%s",
+		cnss_fw_files.utf_file);
+	snprintf(pfw_files->utf_board_data, PLD_MAX_FILE_NAME, PREFIX "%s",
+		cnss_fw_files.utf_board_data);
+	snprintf(pfw_files->epping_file, PLD_MAX_FILE_NAME, PREFIX "%s",
+		cnss_fw_files.epping_file);
+	snprintf(pfw_files->evicted_data, PLD_MAX_FILE_NAME, PREFIX "%s",
+		cnss_fw_files.evicted_data);
 
 	return ret;
 }

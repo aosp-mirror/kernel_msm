@@ -707,7 +707,7 @@ void cds_fill_and_send_ctl_to_fw(struct regulatory *reg)
 {
 	const struct reg_dmn *reg_dmn_2g = NULL;
 	const struct reg_dmn *reg_dmn_5g = NULL;
-	int8_t ctl_2g, ctl_5g;
+	uint8_t ctl_2g, ctl_5g;
 	const struct reg_dmn_pair *regpair;
 	tp_wma_handle wma = cds_get_context(QDF_MODULE_ID_WMA);
 
@@ -759,7 +759,7 @@ void cds_set_wma_dfs_region(uint8_t dfs_region)
 		return;
 	}
 
-	QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_INFO,
+	QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_DEBUG,
 		  "dfs_region: %d", dfs_region);
 
 	wma_set_dfs_region(wma, dfs_region);

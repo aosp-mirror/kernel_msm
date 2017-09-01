@@ -77,6 +77,7 @@ enum kgsl_event_results {
 	{ KGSL_CONTEXT_PER_CONTEXT_TS, "PER_CONTEXT_TS" }, \
 	{ KGSL_CONTEXT_USER_GENERATED_TS, "USER_TS" }, \
 	{ KGSL_CONTEXT_NO_FAULT_TOLERANCE, "NO_FT" }, \
+	{ KGSL_CONTEXT_INVALIDATE_ON_FAULT, "INVALIDATE_ON_FAULT" }, \
 	{ KGSL_CONTEXT_PWR_CONSTRAINT, "PWR" }, \
 	{ KGSL_CONTEXT_SAVE_GMEM, "SAVE_GMEM" }
 
@@ -254,6 +255,11 @@ struct kgsl_device {
 	struct timer_list idle_timer;
 	struct kgsl_pwrctrl pwrctrl;
 	int open_count;
+
+	/* For GPU inline submission */
+	uint32_t submit_now;
+	spinlock_t submit_lock;
+	bool slumber;
 
 	struct mutex mutex;
 	uint32_t state;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -107,11 +107,11 @@ void ol_rx_reorder_init(struct ol_rx_reorder_t *rx_reorder, uint8_t tid)
 
 static enum htt_rx_status
 ol_rx_reorder_seq_num_check(
-				struct ol_txrx_pdev_t *pdev,
+			    struct ol_txrx_pdev_t *pdev,
 			    struct ol_txrx_peer_t *peer,
-			    unsigned tid, unsigned seq_num)
+			    unsigned int tid, unsigned int seq_num)
 {
-	unsigned seq_num_delta;
+	unsigned int seq_num_delta;
 
 	/* don't check the new seq_num against last_seq
 	   if last_seq is not valid */
@@ -189,30 +189,33 @@ ol_rx_seq_num_check(struct ol_txrx_pdev_t *pdev,
 		retry = htt_rx_mpdu_desc_retry(pdev->htt_pdev, rx_mpdu_desc);
 
 		/*
-		 * At this point, we define frames to be duplicate if they arrive
-		 * "ONLY" in succession with the same sequence number and the last
-		 * one has the retry bit set. For an older frame, we consider that
-		 * as an out of order frame, and hence do not perform the dup-detection
-		 * or out-of-order check for multicast frames as per discussions & spec
+		 * At this point, we define frames to be duplicate if they
+		 * arrive "ONLY" in succession with the same sequence number
+		 * and the last one has the retry bit set. For an older frame,
+		 * we consider that as an out of order frame, and hence do not
+		 * perform the dup-detection or out-of-order check for multicast
+		 * frames as per discussions & spec.
 		 * Hence "seq_num <= last_seq_num" check is not necessary.
 		 */
 		if (qdf_unlikely(retry &&
-			(seq_num == peer->tids_mcast_last_seq[pkt_tid]))) {/* drop mcast */
+			(seq_num == peer->tids_mcast_last_seq[pkt_tid]))) {
+			/* drop mcast */
 			TXRX_STATS_INCR(pdev, priv.rx.err.msdu_mc_dup_drop);
 			return htt_rx_status_err_replay;
-		} else {
-			/*
-			 * This is a multicast packet likely to be passed on...
-			 * Set the mcast last seq number here
-			 * This is fairly accurate since:
-			 * a) f/w sends multicast as separate PPDU/HTT messages
-			 * b) Mcast packets are not aggregated & hence single
-			 * c) Result of b) is that, flush / release bit is set always
-			 *	on the mcast packets, so likely to be immediatedly released.
-			 */
-			peer->tids_mcast_last_seq[pkt_tid] = seq_num;
-			return htt_rx_status_ok;
 		}
+
+		/*
+		 * This is a multicast packet likely to be passed on...
+		 * Set the mcast last seq number here
+		 * This is fairly accurate since:
+		 * a) f/w sends multicast as separate PPDU/HTT messages
+		 * b) Mcast packets are not aggregated & hence single
+		 * c) Result of b) is that, flush / release bit is set
+		 *    always on the mcast packets, so likely to be
+		 *    immediatedly released.
+		 */
+		peer->tids_mcast_last_seq[pkt_tid] = seq_num;
+		return htt_rx_status_ok;
 	} else
 		return ol_rx_reorder_seq_num_check(pdev, peer, tid, seq_num);
 }
@@ -221,8 +224,9 @@ ol_rx_seq_num_check(struct ol_txrx_pdev_t *pdev,
 void
 ol_rx_reorder_store(struct ol_txrx_pdev_t *pdev,
 		    struct ol_txrx_peer_t *peer,
-		    unsigned tid,
-		    unsigned idx, qdf_nbuf_t head_msdu, qdf_nbuf_t tail_msdu)
+		    unsigned int tid,
+		    unsigned int idx, qdf_nbuf_t head_msdu,
+		    qdf_nbuf_t tail_msdu)
 {
 	struct ol_rx_reorder_array_elem_t *rx_reorder_array_elem;
 
@@ -240,10 +244,11 @@ ol_rx_reorder_store(struct ol_txrx_pdev_t *pdev,
 void
 ol_rx_reorder_release(struct ol_txrx_vdev_t *vdev,
 		      struct ol_txrx_peer_t *peer,
-		      unsigned tid, unsigned idx_start, unsigned idx_end)
+		      unsigned int tid, unsigned int idx_start,
+		      unsigned int idx_end)
 {
-	unsigned idx;
-	unsigned win_sz, win_sz_mask;
+	unsigned int idx;
+	unsigned int win_sz, win_sz_mask;
 	struct ol_rx_reorder_array_elem_t *rx_reorder_array_elem;
 	qdf_nbuf_t head_msdu;
 	qdf_nbuf_t tail_msdu;
@@ -317,12 +322,12 @@ ol_rx_reorder_release(struct ol_txrx_vdev_t *vdev,
 void
 ol_rx_reorder_flush(struct ol_txrx_vdev_t *vdev,
 		    struct ol_txrx_peer_t *peer,
-		    unsigned tid,
-		    unsigned idx_start,
-		    unsigned idx_end, enum htt_rx_flush_action action)
+		    unsigned int tid,
+		    unsigned int idx_start,
+		    unsigned int idx_end, enum htt_rx_flush_action action)
 {
 	struct ol_txrx_pdev_t *pdev;
-	unsigned win_sz;
+	unsigned int win_sz;
 	uint8_t win_sz_mask;
 	struct ol_rx_reorder_array_elem_t *rx_reorder_array_elem;
 	qdf_nbuf_t head_msdu = NULL;
@@ -394,6 +399,7 @@ ol_rx_reorder_flush(struct ol_txrx_vdev_t *vdev,
 		} else {
 			do {
 				qdf_nbuf_t next;
+
 				next = qdf_nbuf_next(head_msdu);
 				htt_rx_desc_frame_free(pdev->htt_pdev,
 						       head_msdu);
@@ -414,10 +420,10 @@ ol_rx_reorder_flush(struct ol_txrx_vdev_t *vdev,
 
 void
 ol_rx_reorder_first_hole(struct ol_txrx_peer_t *peer,
-			 unsigned tid, unsigned *idx_end)
+			 unsigned int tid, unsigned int *idx_end)
 {
-	unsigned win_sz, win_sz_mask;
-	unsigned idx_start = 0, tmp_idx = 0;
+	unsigned int win_sz, win_sz_mask;
+	unsigned int idx_start = 0, tmp_idx = 0;
 
 	win_sz = peer->tids_rx_reorder[tid].win_sz;
 	win_sz_mask = peer->tids_rx_reorder[tid].win_sz_mask;
@@ -446,11 +452,67 @@ ol_rx_reorder_first_hole(struct ol_txrx_peer_t *peer,
 	*idx_end = tmp_idx;
 }
 
+#ifdef HL_RX_AGGREGATION_HOLE_DETECTION
+
+/**
+ * ol_rx_reorder_detect_hole - ol rx reorder detect hole
+ * @peer: ol_txrx_peer_t
+ * @tid: tid
+ * @idx_start: idx_start
+ *
+ * Return: void
+ */
+static void ol_rx_reorder_detect_hole(struct ol_txrx_peer_t *peer,
+					uint32_t tid,
+					uint32_t idx_start)
+{
+	uint32_t win_sz_mask, next_rel_idx, hole_size;
+
+	if (peer->tids_next_rel_idx[tid] == INVALID_REORDER_INDEX)
+		return;
+
+	win_sz_mask = peer->tids_rx_reorder[tid].win_sz_mask;
+	/* Return directly if block-ack not enable */
+	if (win_sz_mask == 0)
+		return;
+
+	idx_start &= win_sz_mask;
+	next_rel_idx = peer->tids_next_rel_idx[tid] & win_sz_mask;
+
+	if (idx_start != next_rel_idx) {
+		hole_size = ((int)idx_start - (int)next_rel_idx) & win_sz_mask;
+
+		ol_rx_aggregation_hole(hole_size);
+	}
+
+	return;
+}
+
+#else
+
+/**
+ * ol_rx_reorder_detect_hole - ol rx reorder detect hole
+ * @peer: ol_txrx_peer_t
+ * @tid: tid
+ * @idx_start: idx_start
+ *
+ * Return: void
+ */
+static void ol_rx_reorder_detect_hole(struct ol_txrx_peer_t *peer,
+					uint32_t tid,
+					uint32_t idx_start)
+{
+	/* no-op */
+}
+
+#endif
+
 void
 ol_rx_reorder_peer_cleanup(struct ol_txrx_vdev_t *vdev,
 			   struct ol_txrx_peer_t *peer)
 {
 	int tid;
+
 	for (tid = 0; tid < OL_TXRX_NUM_EXT_TIDS; tid++) {
 		ol_rx_reorder_flush(vdev, peer, tid, 0, 0,
 				    htt_rx_flush_discard);
@@ -467,7 +529,7 @@ ol_rx_addba_handler(ol_txrx_pdev_handle pdev,
 		    uint8_t win_sz, uint16_t start_seq_num, uint8_t failed)
 {
 	uint8_t round_pwr2_win_sz;
-	unsigned array_size;
+	unsigned int array_size;
 	struct ol_txrx_peer_t *peer;
 	struct ol_rx_reorder_t *rx_reorder;
 
@@ -511,7 +573,7 @@ ol_rx_delba_handler(ol_txrx_pdev_handle pdev, uint16_t peer_id, uint8_t tid)
 	if (peer == NULL)
 		return;
 
-	peer->tids_next_rel_idx[tid] = 0xffff;  /* invalid value */
+	peer->tids_next_rel_idx[tid] = INVALID_REORDER_INDEX;
 	rx_reorder = &peer->tids_rx_reorder[tid];
 
 	/* check that there really was a block ack agreement */
@@ -524,8 +586,8 @@ ol_rx_delba_handler(ol_txrx_pdev_handle pdev, uint16_t peer_id, uint8_t tid)
 	 * used for non block-ack cases.
 	 */
 	if (rx_reorder->array != &rx_reorder->base) {
-		TXRX_PRINT(TXRX_PRINT_LEVEL_INFO1,
-			   "%s, delete reorder array, tid:%d\n", __func__, tid);
+		ol_txrx_dbg("%s, delete reorder array, tid:%d\n",
+			    __func__, tid);
 		qdf_mem_free(rx_reorder->array);
 	}
 
@@ -572,6 +634,10 @@ ol_rx_flush_handler(ol_txrx_pdev_handle pdev,
 			return;
 		}
 	}
+
+	if (action == htt_rx_flush_release)
+		ol_rx_reorder_detect_hole(peer, tid, idx_start);
+
 	ol_rx_reorder_flush(vdev, peer, tid, idx_start, idx_end, action);
 	/*
 	 * If the rx reorder timeout is handled by host SW, see if there are
@@ -592,7 +658,7 @@ ol_rx_pn_ind_handler(ol_txrx_pdev_handle pdev,
 	void *rx_desc;
 	struct ol_txrx_peer_t *peer;
 	struct ol_rx_reorder_array_elem_t *rx_reorder_array_elem;
-	unsigned win_sz_mask;
+	unsigned int win_sz_mask;
 	qdf_nbuf_t head_msdu = NULL;
 	qdf_nbuf_t tail_msdu = NULL;
 	htt_pdev_handle htt_pdev = pdev->htt_pdev;
@@ -632,7 +698,6 @@ ol_rx_pn_ind_handler(ol_txrx_pdev_handle pdev,
 				static uint32_t last_pncheck_print_time;
 				/* Do not need to initialize as C does it */
 
-				int log_level;
 				uint32_t current_time_ms;
 				union htt_rx_pn_t pn = { 0 };
 				int index, pn_len;
@@ -660,11 +725,7 @@ ol_rx_pn_ind_handler(ol_txrx_pdev_handle pdev,
 				     last_pncheck_print_time)) {
 					last_pncheck_print_time =
 						current_time_ms;
-					log_level = TXRX_PRINT_LEVEL_WARN;
-				} else {
-					log_level = TXRX_PRINT_LEVEL_INFO2;
-				}
-				TXRX_PRINT(log_level,
+					ol_txrx_warn(
 					   "Tgt PN check failed - TID %d, peer %p "
 					   "(%02x:%02x:%02x:%02x:%02x:%02x)\n"
 					   "    PN (u64 x2)= 0x%08llx %08llx (LSBs = %lld)\n"
@@ -680,6 +741,24 @@ ol_rx_pn_ind_handler(ol_txrx_pdev_handle pdev,
 					   pn.pn128[0] & 0xffffffffffffULL,
 					   htt_rx_mpdu_desc_seq_num(htt_pdev,
 								    rx_desc));
+				} else {
+					ol_txrx_dbg(
+					   "Tgt PN check failed - TID %d, peer %p "
+					   "(%02x:%02x:%02x:%02x:%02x:%02x)\n"
+					   "    PN (u64 x2)= 0x%08llx %08llx (LSBs = %lld)\n"
+					   "    new seq num = %d\n",
+					   tid, peer,
+					   peer->mac_addr.raw[0],
+					   peer->mac_addr.raw[1],
+					   peer->mac_addr.raw[2],
+					   peer->mac_addr.raw[3],
+					   peer->mac_addr.raw[4],
+					   peer->mac_addr.raw[5], pn.pn128[1],
+					   pn.pn128[0],
+					   pn.pn128[0] & 0xffffffffffffULL,
+					   htt_rx_mpdu_desc_seq_num(htt_pdev,
+								    rx_desc));
+				}
 				ol_rx_err(pdev->ctrl_pdev, vdev->vdev_id,
 					  peer->mac_addr.raw, tid,
 					  htt_rx_mpdu_desc_tsf32(htt_pdev,
@@ -692,8 +771,7 @@ ol_rx_pn_ind_handler(ol_txrx_pdev_handle pdev,
 					htt_rx_desc_frame_free(htt_pdev, msdu);
 					if (msdu == mpdu_tail)
 						break;
-					else
-						msdu = next_msdu;
+					msdu = next_msdu;
 				} while (1);
 
 			} else {
@@ -788,6 +866,7 @@ ol_rx_reorder_trace_display(ol_txrx_pdev_handle pdev, int just_once, int limit)
 	elems = (end - 1 - start) & pdev->rx_reorder_trace.mask;
 	if (limit > 0 && elems > limit) {
 		int delta;
+
 		delta = elems - limit;
 		start += delta;
 		start &= pdev->rx_reorder_trace.mask;
@@ -801,6 +880,7 @@ ol_rx_reorder_trace_display(ol_txrx_pdev_handle pdev, int just_once, int limit)
 		  "   count   idx  tid   idx  num (LSBs)");
 	do {
 		uint16_t seq_num, reorder_idx;
+
 		seq_num = pdev->rx_reorder_trace.data[i].seq_num;
 		reorder_idx = pdev->rx_reorder_trace.data[i].reorder_idx;
 		if (seq_num < (1 << 14)) {
@@ -810,6 +890,7 @@ ol_rx_reorder_trace_display(ol_txrx_pdev_handle pdev, int just_once, int limit)
 				  reorder_idx, seq_num, seq_num & 63);
 		} else {
 			int err = TXRX_SEQ_NUM_ERR(seq_num);
+
 			QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_INFO,
 				  "  %6lld  %4d err %d (%d MPDUs)",
 				  cnt, i, err,

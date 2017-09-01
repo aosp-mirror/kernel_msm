@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -252,8 +252,8 @@ int ipa2_allocate_nat_device(struct ipa_ioc_nat_alloc_mem *mem)
 
 	mutex_lock(&nat_ctx->lock);
 	if (strcmp(mem->dev_name, NAT_DEV_NAME)) {
-		IPAERR("Nat device name mismatch\n");
-		IPAERR("Expect: %s Recv: %s\n", NAT_DEV_NAME, mem->dev_name);
+		IPAERR_RL("Nat device name mismatch\n");
+		IPAERR_RL("Expect: %s Recv: %s\n", NAT_DEV_NAME, mem->dev_name);
 		result = -EPERM;
 		goto bail;
 	}
@@ -272,7 +272,7 @@ int ipa2_allocate_nat_device(struct ipa_ioc_nat_alloc_mem *mem)
 
 	if (mem->size <= 0 ||
 			nat_ctx->is_dev_init == true) {
-		IPAERR("Invalid Parameters or device is already init\n");
+		IPAERR_RL("Invalid Parameters or device is already init\n");
 		result = -EPERM;
 		goto bail;
 	}
@@ -325,6 +325,7 @@ int ipa2_nat_init_cmd(struct ipa_ioc_v4_nat_init *init)
 	int result;
 	u32 offset = 0;
 	size_t tmp;
+	gfp_t flag = GFP_KERNEL | (ipa_ctx->use_dma_zone ? GFP_DMA : 0);
 
 	IPADBG("\n");
 	if (init->table_entries == 0) {
@@ -334,17 +335,17 @@ int ipa2_nat_init_cmd(struct ipa_ioc_v4_nat_init *init)
 
 	/* check for integer overflow */
 	if (init->ipv4_rules_offset >
-		UINT_MAX - (TBL_ENTRY_SIZE * (init->table_entries + 1))) {
-			IPAERR("Detected overflow\n");
-			return -EPERM;
+		(UINT_MAX - (TBL_ENTRY_SIZE * (init->table_entries + 1)))) {
+		IPAERR_RL("Detected overflow\n");
+		return -EPERM;
 	}
 	/* Check Table Entry offset is not
 	   beyond allocated size */
 	tmp = init->ipv4_rules_offset +
 		(TBL_ENTRY_SIZE * (init->table_entries + 1));
 	if (tmp > ipa_ctx->nat_mem.size) {
-		IPAERR("Table rules offset not valid\n");
-		IPAERR("offset:%d entrys:%d size:%zu mem_size:%zu\n",
+		IPAERR_RL("Table rules offset not valid\n");
+		IPAERR_RL("offset:%d entrys:%d size:%zu mem_size:%zu\n",
 			init->ipv4_rules_offset, (init->table_entries + 1),
 			tmp, ipa_ctx->nat_mem.size);
 		return -EPERM;
@@ -353,16 +354,16 @@ int ipa2_nat_init_cmd(struct ipa_ioc_v4_nat_init *init)
 	/* check for integer overflow */
 	if (init->expn_rules_offset >
 		UINT_MAX - (TBL_ENTRY_SIZE * init->expn_table_entries)) {
-			IPAERR("Detected overflow\n");
-			return -EPERM;
+		IPAERR_RL("Detected overflow\n");
+		return -EPERM;
 	}
 	/* Check Expn Table Entry offset is not
 	   beyond allocated size */
 	tmp = init->expn_rules_offset +
 		(TBL_ENTRY_SIZE * init->expn_table_entries);
 	if (tmp > ipa_ctx->nat_mem.size) {
-		IPAERR("Expn Table rules offset not valid\n");
-		IPAERR("offset:%d entrys:%d size:%zu mem_size:%zu\n",
+		IPAERR_RL("Expn Table rules offset not valid\n");
+		IPAERR_RL("offset:%d entrys:%d size:%zu mem_size:%zu\n",
 			init->expn_rules_offset, init->expn_table_entries,
 			tmp, ipa_ctx->nat_mem.size);
 		return -EPERM;
@@ -371,16 +372,16 @@ int ipa2_nat_init_cmd(struct ipa_ioc_v4_nat_init *init)
   /* check for integer overflow */
 	if (init->index_offset >
 		UINT_MAX - (INDX_TBL_ENTRY_SIZE * (init->table_entries + 1))) {
-			IPAERR("Detected overflow\n");
-			return -EPERM;
+		IPAERR_RL("Detected overflow\n");
+		return -EPERM;
 	}
 	/* Check Indx Table Entry offset is not
 	   beyond allocated size */
 	tmp = init->index_offset +
 		(INDX_TBL_ENTRY_SIZE * (init->table_entries + 1));
 	if (tmp > ipa_ctx->nat_mem.size) {
-		IPAERR("Indx Table rules offset not valid\n");
-		IPAERR("offset:%d entrys:%d size:%zu mem_size:%zu\n",
+		IPAERR_RL("Indx Table rules offset not valid\n");
+		IPAERR_RL("offset:%d entrys:%d size:%zu mem_size:%zu\n",
 			init->index_offset, (init->table_entries + 1),
 			tmp, ipa_ctx->nat_mem.size);
 		return -EPERM;
@@ -388,17 +389,17 @@ int ipa2_nat_init_cmd(struct ipa_ioc_v4_nat_init *init)
 
   /* check for integer overflow */
 	if (init->index_expn_offset >
-		UINT_MAX - (INDX_TBL_ENTRY_SIZE * init->expn_table_entries)) {
-			IPAERR("Detected overflow\n");
-			return -EPERM;
+		(UINT_MAX - (INDX_TBL_ENTRY_SIZE * init->expn_table_entries))) {
+		IPAERR_RL("Detected overflow\n");
+		return -EPERM;
 	}
 	/* Check Expn Table entry offset is not
 	   beyond allocated size */
 	tmp = init->index_expn_offset +
 		(INDX_TBL_ENTRY_SIZE * init->expn_table_entries);
 	if (tmp > ipa_ctx->nat_mem.size) {
-		IPAERR("Indx Expn Table rules offset not valid\n");
-		IPAERR("offset:%d entrys:%d size:%zu mem_size:%zu\n",
+		IPAERR_RL("Indx Expn Table rules offset not valid\n");
+		IPAERR_RL("offset:%d entrys:%d size:%zu mem_size:%zu\n",
 			init->index_expn_offset, init->expn_table_entries,
 			tmp, ipa_ctx->nat_mem.size);
 		return -EPERM;
@@ -406,7 +407,7 @@ int ipa2_nat_init_cmd(struct ipa_ioc_v4_nat_init *init)
 
 	memset(&desc, 0, sizeof(desc));
 	/* NO-OP IC for ensuring that IPA pipeline is empty */
-	reg_write_nop = kzalloc(sizeof(*reg_write_nop), GFP_KERNEL);
+	reg_write_nop = kzalloc(sizeof(*reg_write_nop), flag);
 	if (!reg_write_nop) {
 		IPAERR("no mem\n");
 		result = -ENOMEM;
@@ -424,7 +425,7 @@ int ipa2_nat_init_cmd(struct ipa_ioc_v4_nat_init *init)
 	desc[0].pyld = (void *)reg_write_nop;
 	desc[0].len = sizeof(*reg_write_nop);
 
-	cmd = kmalloc(size, GFP_KERNEL);
+	cmd = kmalloc(size, flag);
 	if (!cmd) {
 		IPAERR("Failed to alloc immediate command object\n");
 		result = -ENOMEM;
@@ -443,16 +444,16 @@ int ipa2_nat_init_cmd(struct ipa_ioc_v4_nat_init *init)
 				(init->expn_rules_offset > offset) ||
 				(init->index_offset > offset) ||
 				(init->index_expn_offset > offset)) {
-			IPAERR("Failed due to integer overflow\n");
-			IPAERR("nat.mem.dma_handle: 0x%pa\n",
+			IPAERR_RL("Failed due to integer overflow\n");
+			IPAERR_RL("nat.mem.dma_handle: 0x%pa\n",
 				&ipa_ctx->nat_mem.dma_handle);
-			IPAERR("ipv4_rules_offset: 0x%x\n",
+			IPAERR_RL("ipv4_rules_offset: 0x%x\n",
 				init->ipv4_rules_offset);
-			IPAERR("expn_rules_offset: 0x%x\n",
+			IPAERR_RL("expn_rules_offset: 0x%x\n",
 				init->expn_rules_offset);
-			IPAERR("index_offset: 0x%x\n",
+			IPAERR_RL("index_offset: 0x%x\n",
 				init->index_offset);
-			IPAERR("index_expn_offset: 0x%x\n",
+			IPAERR_RL("index_expn_offset: 0x%x\n",
 				init->index_expn_offset);
 			result = -EPERM;
 			goto free_mem;
@@ -508,7 +509,7 @@ int ipa2_nat_init_cmd(struct ipa_ioc_v4_nat_init *init)
 	desc[1].len = size;
 	IPADBG("posting v4 init command\n");
 	if (ipa_send_cmd(2, desc)) {
-		IPAERR("Fail to send immediate command\n");
+		IPAERR_RL("Fail to send immediate command\n");
 		result = -EPERM;
 		goto free_mem;
 	}
@@ -569,10 +570,11 @@ int ipa2_nat_dma_cmd(struct ipa_ioc_nat_dma_cmd *dma)
 	struct ipa_desc *desc = NULL;
 	u16 size = 0, cnt = 0;
 	int ret = 0;
+	gfp_t flag = GFP_KERNEL | (ipa_ctx->use_dma_zone ? GFP_DMA : 0);
 
 	IPADBG("\n");
 	if (dma->entries <= 0) {
-		IPAERR("Invalid number of commands %d\n",
+		IPAERR_RL("Invalid number of commands %d\n",
 			dma->entries);
 		ret = -EPERM;
 		goto bail;
@@ -580,7 +582,7 @@ int ipa2_nat_dma_cmd(struct ipa_ioc_nat_dma_cmd *dma)
 
 	for (cnt = 0; cnt < dma->entries; cnt++) {
 		if (dma->dma[cnt].table_index >= 1) {
-			IPAERR("Invalid table index %d\n",
+			IPAERR_RL("Invalid table index %d\n",
 				dma->dma[cnt].table_index);
 			ret = -EPERM;
 			goto bail;
@@ -591,7 +593,7 @@ int ipa2_nat_dma_cmd(struct ipa_ioc_nat_dma_cmd *dma)
 			if (dma->dma[cnt].offset >=
 				(ipa_ctx->nat_mem.size_base_tables + 1) *
 				NAT_TABLE_ENTRY_SIZE_BYTE) {
-				IPAERR("Invalid offset %d\n",
+				IPAERR_RL("Invalid offset %d\n",
 					dma->dma[cnt].offset);
 				ret = -EPERM;
 				goto bail;
@@ -603,7 +605,7 @@ int ipa2_nat_dma_cmd(struct ipa_ioc_nat_dma_cmd *dma)
 			if (dma->dma[cnt].offset >=
 				ipa_ctx->nat_mem.size_expansion_tables *
 				NAT_TABLE_ENTRY_SIZE_BYTE) {
-				IPAERR("Invalid offset %d\n",
+				IPAERR_RL("Invalid offset %d\n",
 					dma->dma[cnt].offset);
 				ret = -EPERM;
 				goto bail;
@@ -615,7 +617,7 @@ int ipa2_nat_dma_cmd(struct ipa_ioc_nat_dma_cmd *dma)
 			if (dma->dma[cnt].offset >=
 				(ipa_ctx->nat_mem.size_base_tables + 1) *
 				NAT_INTEX_TABLE_ENTRY_SIZE_BYTE) {
-				IPAERR("Invalid offset %d\n",
+				IPAERR_RL("Invalid offset %d\n",
 					dma->dma[cnt].offset);
 				ret = -EPERM;
 				goto bail;
@@ -627,7 +629,7 @@ int ipa2_nat_dma_cmd(struct ipa_ioc_nat_dma_cmd *dma)
 			if (dma->dma[cnt].offset >=
 				ipa_ctx->nat_mem.size_expansion_tables *
 				NAT_INTEX_TABLE_ENTRY_SIZE_BYTE) {
-				IPAERR("Invalid offset %d\n",
+				IPAERR_RL("Invalid offset %d\n",
 					dma->dma[cnt].offset);
 				ret = -EPERM;
 				goto bail;
@@ -636,7 +638,7 @@ int ipa2_nat_dma_cmd(struct ipa_ioc_nat_dma_cmd *dma)
 			break;
 
 		default:
-			IPAERR("Invalid base_addr %d\n",
+			IPAERR_RL("Invalid base_addr %d\n",
 				dma->dma[cnt].base_addr);
 			ret = -EPERM;
 			goto bail;
@@ -652,7 +654,7 @@ int ipa2_nat_dma_cmd(struct ipa_ioc_nat_dma_cmd *dma)
 	}
 
 	size = sizeof(struct ipa_nat_dma);
-	cmd = kzalloc(size, GFP_KERNEL);
+	cmd = kzalloc(size, flag);
 	if (cmd == NULL) {
 		IPAERR("Failed to alloc memory\n");
 		ret = -ENOMEM;
@@ -660,7 +662,7 @@ int ipa2_nat_dma_cmd(struct ipa_ioc_nat_dma_cmd *dma)
 	}
 
 	/* NO-OP IC for ensuring that IPA pipeline is empty */
-	reg_write_nop = kzalloc(sizeof(*reg_write_nop), GFP_KERNEL);
+	reg_write_nop = kzalloc(sizeof(*reg_write_nop), flag);
 	if (!reg_write_nop) {
 		IPAERR("Failed to alloc memory\n");
 		ret = -ENOMEM;
@@ -754,6 +756,7 @@ int ipa2_nat_del_cmd(struct ipa_ioc_v4_nat_del *del)
 	u8 mem_type = IPA_NAT_SHARED_MEMORY;
 	u32 base_addr = IPA_NAT_PHYS_MEM_OFFSET;
 	int result;
+	gfp_t flag = GFP_KERNEL | (ipa_ctx->use_dma_zone ? GFP_DMA : 0);
 
 	IPADBG("\n");
 	if (ipa_ctx->nat_mem.is_tmp_mem) {
@@ -770,7 +773,7 @@ int ipa2_nat_del_cmd(struct ipa_ioc_v4_nat_del *del)
 
 	memset(&desc, 0, sizeof(desc));
 	/* NO-OP IC for ensuring that IPA pipeline is empty */
-	reg_write_nop = kzalloc(sizeof(*reg_write_nop), GFP_KERNEL);
+	reg_write_nop = kzalloc(sizeof(*reg_write_nop), flag);
 	if (!reg_write_nop) {
 		IPAERR("no mem\n");
 		result = -ENOMEM;
@@ -788,7 +791,7 @@ int ipa2_nat_del_cmd(struct ipa_ioc_v4_nat_del *del)
 	desc[0].pyld = (void *)reg_write_nop;
 	desc[0].len = sizeof(*reg_write_nop);
 
-	cmd = kmalloc(size, GFP_KERNEL);
+	cmd = kmalloc(size, flag);
 	if (cmd == NULL) {
 		IPAERR("Failed to alloc immediate command object\n");
 		result = -ENOMEM;

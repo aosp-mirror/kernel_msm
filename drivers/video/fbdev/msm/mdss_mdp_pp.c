@@ -2567,6 +2567,8 @@ static int pp_dspp_setup(u32 disp_num, struct mdss_mdp_mixer *mixer,
 				ad_hw->base + MDSS_MDP_REG_AD_TFILT_CTRL);
 			writel_relaxed(ad->cfg.mode | MDSS_AD_AUTO_TRIGGER,
 				ad_hw->base + MDSS_MDP_REG_AD_MODE_SEL);
+			ad->last_str = 0xFF & readl_relaxed(ad_hw->base +
+				MDSS_MDP_REG_AD_STR_OUT);
 		}
 
 		pp_ad_bypass_config(ad, ctl, ad_hw->num, &ad_bypass);
@@ -2599,6 +2601,7 @@ int mdss_mdp_dest_scaler_setup_locked(struct mdss_mdp_mixer *mixer)
 	u32 op_mode;
 	u32 mask;
 	char *ds_offset;
+	int mixer_num = 0;
 
 	if (!mixer || !mixer->ctl || !mixer->ctl->mdata)
 		return -EINVAL;
@@ -2657,6 +2660,14 @@ int mdss_mdp_dest_scaler_setup_locked(struct mdss_mdp_mixer *mixer)
 		if (ret) {
 			pr_err("Failed setup destination scaler\n");
 			return ret;
+		}
+		/* Set LM Flush in order to update DS registers */
+		if (ds->flags & DS_SCALE_UPDATE) {
+			mutex_lock(&ctl->flush_lock);
+			mixer_num = mdss_mdp_mixer_get_hw_num(mixer);
+			ctl->flush_bits |=
+					BIT(mixer_num < 5 ? 6 + mixer_num : 20);
+			mutex_unlock(&ctl->flush_lock);
 		}
 		/*
 		 * Clearing the flag because we don't need to program the block
@@ -2772,7 +2783,7 @@ int mdss_mdp_pp_setup_locked(struct mdss_mdp_ctl *ctl,
 		(ctl->mfd->panel_info->type != WRITEBACK_PANEL));
 
 	if (valid_mixers && (mixer_cnt <= mdata->nmax_concurrent_ad_hw) &&
-		valid_ad_panel) {
+		valid_ad_panel && (info->pp_program_mask & PP_PROGRAM_AD)) {
 		ret = mdss_mdp_ad_setup(ctl->mfd);
 		if (ret < 0)
 			pr_warn("ad_setup(disp%d) returns %d\n", disp_num, ret);
@@ -3253,6 +3264,8 @@ int mdss_mdp_pp_overlay_init(struct msm_fb_data_type *mfd)
 		pr_err("Invalid mfd %pK mdata %pK\n", mfd, mdata);
 		return -EPERM;
 	}
+	if (mfd->index >= (MDP_BLOCK_MAX - MDP_LOGICAL_BLOCK_DISP_0))
+		return 0;
 
 	if (mdata->nad_cfgs)
 		mfd->mdp.ad_calc_bl = pp_ad_calc_bl;
@@ -7630,6 +7643,13 @@ static int pp_mfd_release_all(struct msm_fb_data_type *mfd)
 {
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
 	int ret = 0;
+	if (!mfd || !mdata) {
+		pr_err("Invalid mfd %pK mdata %pK\n", mfd, mdata);
+		return -EPERM;
+	}
+
+	if (mfd->index >= (MDP_BLOCK_MAX - MDP_LOGICAL_BLOCK_DISP_0))
+		return ret;
 
 	if (mdata->nad_cfgs) {
 		ret = pp_mfd_ad_release_all(mfd);

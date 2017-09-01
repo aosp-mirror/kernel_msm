@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014, 2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2014, 2016-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -33,6 +33,8 @@
 #include "htc_packet.h"
 #include "htc_api.h"
 #include "hif_internal.h"
+
+#define INVALID_MAILBOX_NUMBER 0xFF
 
 #define HIF_SDIO_RX_BUFFER_SIZE            1792
 #define HIF_SDIO_RX_DATA_OFFSET            64
@@ -114,12 +116,12 @@ struct hif_sdio_device {
 	void *pTarget;
 };
 
-#define LOCK_HIF_DEV(device)    qdf_spin_lock(&(device)->Lock);
-#define UNLOCK_HIF_DEV(device)  qdf_spin_unlock(&(device)->Lock);
-#define LOCK_HIF_DEV_RX(t)      qdf_spin_lock(&(t)->RxLock);
-#define UNLOCK_HIF_DEV_RX(t)    qdf_spin_unlock(&(t)->RxLock);
-#define LOCK_HIF_DEV_TX(t)      qdf_spin_lock(&(t)->TxLock);
-#define UNLOCK_HIF_DEV_TX(t)    qdf_spin_unlock(&(t)->TxLock);
+#define LOCK_HIF_DEV(device)    qdf_spin_lock(&(device)->Lock)
+#define UNLOCK_HIF_DEV(device)  qdf_spin_unlock(&(device)->Lock)
+#define LOCK_HIF_DEV_RX(t)      qdf_spin_lock(&(t)->RxLock)
+#define UNLOCK_HIF_DEV_RX(t)    qdf_spin_unlock(&(t)->RxLock)
+#define LOCK_HIF_DEV_TX(t)      qdf_spin_lock(&(t)->TxLock)
+#define UNLOCK_HIF_DEV_TX(t)    qdf_spin_unlock(&(t)->TxLock)
 
 #define DEV_CALC_RECV_PADDED_LEN(pDev, length) \
 		(((length) + (pDev)->BlockMask) & (~((pDev)->BlockMask)))

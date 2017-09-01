@@ -212,7 +212,7 @@
 
 		qcom,mdss-pp-offsets {
 			qcom,mdss-sspp-mdss-igc-lut-off = <0x2000>;
-			qcom,mdss-sspp-vig-pcc-off = <0x1780>;
+			qcom,mdss-sspp-vig-pcc-off = <0x1b00>;
 			qcom,mdss-sspp-rgb-pcc-off = <0x380>;
 			qcom,mdss-sspp-dma-pcc-off = <0x380>;
 			qcom,mdss-lm-pgc-off = <0x3c0>;
@@ -335,6 +335,7 @@
 				qcom,supply-max-voltage = <0>;
 				qcom,supply-enable-load = <0>;
 				qcom,supply-disable-load = <0>;
+				qcom,supply-lp-mode-disable-allowed;
 			};
 		};
 
@@ -363,6 +364,7 @@
 				qcom,supply-max-voltage = <880000>;
 				qcom,supply-enable-load = <73400>;
 				qcom,supply-disable-load = <32>;
+				qcom,supply-lp-mode-disable-allowed;
 			};
 		};
 
@@ -384,6 +386,8 @@
 			ibb-supply = <&ibb_regulator>;
 			qcom,mdss-mdp = <&mdss_mdp>;
 			qcom,mdss-fb-map = <&mdss_fb0>;
+
+			qcom,null-insertion-enabled;
 
 			clocks = <&clock_mmss clk_mmss_mdss_byte0_clk>,
 				 <&clock_mmss clk_mmss_mdss_pclk0_clk>,
@@ -422,6 +426,8 @@
 			ibb-supply = <&ibb_regulator>;
 			qcom,mdss-mdp = <&mdss_mdp>;
 			qcom,mdss-fb-map = <&mdss_fb0>;
+
+			qcom,null-insertion-enabled;
 
 			clocks = <&clock_mmss clk_mmss_mdss_byte1_clk>,
 				 <&clock_mmss clk_mmss_mdss_pclk1_clk>,
@@ -661,5 +667,3 @@
 		qcom,pluggable;
 	};
 };
-
-#include "msm8998-mdss-panels.dtsi"

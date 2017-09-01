@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -54,6 +54,9 @@
 #include "pktlog_ac.h"
 #endif
 #include "epping_main.h"
+#include "sdio_api.h"
+#include "pld_sdio.h"
+#include "targaddrs.h"
 
 #ifndef ATH_BUS_PM
 #ifdef CONFIG_PM
@@ -62,11 +65,11 @@
 #endif /* ATH_BUS_PM */
 
 #ifndef REMOVE_PKT_LOG
-struct ol_pl_os_dep_funcs *g_ol_pl_os_dep_funcs = NULL;
+struct ol_pl_os_dep_funcs *g_ol_pl_os_dep_funcs;
 #endif
 #define HIF_SDIO_LOAD_TIMEOUT 1000
 
-struct hif_sdio_softc *scn = NULL;
+struct hif_sdio_softc *scn;
 struct hif_softc *ol_sc;
 static atomic_t hif_sdio_load_state;
 /* Wait queue for MC thread */
@@ -86,8 +89,8 @@ static A_STATUS hif_sdio_probe(void *context, void *hif_handle)
 	struct sdio_func *func = NULL;
 	const struct sdio_device_id *id;
 	uint32_t target_type;
-	HIF_ENTER();
 
+	HIF_ENTER();
 	scn = (struct hif_sdio_softc *)qdf_mem_malloc(sizeof(*scn));
 	if (!scn) {
 		ret = -ENOMEM;
@@ -141,6 +144,7 @@ static A_STATUS hif_sdio_probe(void *context, void *hif_handle)
 		} else if ((id->device & MANUFACTURER_ID_AR6K_BASE_MASK) ==
 				MANUFACTURER_ID_AR6320_BASE) {
 			int ar6kid = id->device & MANUFACTURER_ID_AR6K_REV_MASK;
+
 			if (ar6kid >= 1) {
 				/* v2 or higher silicon */
 				hif_register_tbl_attach(ol_sc,
@@ -167,14 +171,18 @@ static A_STATUS hif_sdio_probe(void *context, void *hif_handle)
 	scn->ol_sc = *ol_sc;
 	ol_sc->target_info.target_type = target_type;
 
-#ifndef TARGET_DUMP_FOR_NON_QC_PLATFORM
-	scn->ramdump_base = ioremap(RAMDUMP_ADDR, RAMDUMP_SIZE);
-	scn->ramdump_size = RAMDUMP_SIZE;
-	if (scn->ramdump_base == NULL) {
-		scn->ramdump_base = 0;
-		scn->ramdump_size = 0;
+	scn->ramdump_base = pld_hif_sdio_get_virt_ramdump_mem(
+					scn->aps_osdev.device,
+					&scn->ramdump_size);
+	if (scn->ramdump_base == NULL || !scn->ramdump_size) {
+		QDF_TRACE(QDF_MODULE_ID_HIF, QDF_TRACE_LEVEL_ERROR,
+			"%s: Failed to get RAM dump memory address or size!\n",
+			__func__);
+	} else {
+		QDF_TRACE(QDF_MODULE_ID_HIF, QDF_TRACE_LEVEL_INFO,
+			"%s: ramdump base 0x%p size %d\n", __func__,
+			scn->ramdump_base, (int)scn->ramdump_size);
 	}
-#endif
 
 	if (athdiag_procfs_init(scn) != 0) {
 		QDF_TRACE(QDF_MODULE_ID_HIF, QDF_TRACE_LEVEL_ERROR,
@@ -189,32 +197,13 @@ static A_STATUS hif_sdio_probe(void *context, void *hif_handle)
 	return 0;
 
 err_attach1:
+	if (scn->ramdump_base)
+		pld_hif_sdio_release_ramdump_mem(scn->ramdump_base);
 	qdf_mem_free(ol_sc);
 err_attach:
 	qdf_mem_free(scn);
 	scn = NULL;
 err_alloc:
-	return ret;
-}
-
-/**
- * ol_ath_sdio_configure() - configure sdio device
- * @hif_sc: pointer to sdio softc structure
- * @dev: pointer to net device
- * @hif_handle: pointer to sdio function
- *
- * Return: 0 for success and non-zero for failure
- */
-int
-ol_ath_sdio_configure(void *hif_sc, struct net_device *dev,
-		      hif_handle_t *hif_hdl)
-{
-	struct hif_sdio_softc *sc = (struct hif_sdio_softc *)hif_sc;
-	int ret = 0;
-
-	sc->aps_osdev.netdev = dev;
-	*hif_hdl = sc->hif_handle;
-
 	return ret;
 }
 
@@ -241,6 +230,11 @@ static A_STATUS hif_sdio_remove(void *context, void *hif_handle)
 #ifndef TARGET_DUMP_FOR_NON_QC_PLATFORM
 	iounmap(scn->ramdump_base);
 #endif
+
+	if (ol_sc) {
+		qdf_mem_free(ol_sc);
+		ol_sc = NULL;
+	}
 
 	if (scn) {
 		qdf_mem_free(scn);
@@ -301,21 +295,16 @@ static char *dev_info = "ath_hif_sdio";
  */
 static int init_ath_hif_sdio(void)
 {
-	static int probed;
 	QDF_STATUS status;
 	struct osdrv_callbacks osdrv_callbacks;
-	HIF_ENTER();
 
+	HIF_ENTER();
 	qdf_mem_zero(&osdrv_callbacks, sizeof(osdrv_callbacks));
 	osdrv_callbacks.device_inserted_handler = hif_sdio_probe;
 	osdrv_callbacks.device_removed_handler = hif_sdio_remove;
 	osdrv_callbacks.device_suspend_handler = hif_sdio_suspend;
 	osdrv_callbacks.device_resume_handler = hif_sdio_resume;
 	osdrv_callbacks.device_power_change_handler = hif_sdio_power_change;
-
-	if (probed)
-		return -ENODEV;
-	probed++;
 
 	QDF_TRACE(QDF_MODULE_ID_HIF, QDF_TRACE_LEVEL_INFO, "%s %d", __func__,
 		  __LINE__);
@@ -329,21 +318,6 @@ static int init_ath_hif_sdio(void)
 		 "%s: %s\n", dev_info, version);
 
 	return 0;
-}
-
-/**
- * hif_targ_is_awake(): check if target is awake
- *
- * This function returns true if the target is awake
- *
- * @scn: struct hif_softc
- * @mem: mapped mem base
- *
- * Return: bool
- */
-bool hif_targ_is_awake(struct hif_softc *scn, void *__iomem *mem)
-{
-	return true;
 }
 
 /**
@@ -384,24 +358,6 @@ int hif_sdio_bus_resume(struct hif_softc *hif_ctx)
 }
 
 /**
- * hif_enable_power_gating() - enable HW power gating
- *
- * Return: n/a
- */
-void hif_enable_power_gating(void *hif_ctx)
-{
-}
-
-/**
- * hif_disable_aspm() - hif_disable_aspm
- *
- * Return: n/a
- */
-void hif_disable_aspm(void)
-{
-}
-
-/**
  * hif_sdio_close() - hif_bus_close
  *
  * Return: None
@@ -426,28 +382,6 @@ QDF_STATUS hif_sdio_open(struct hif_softc *hif_sc,
 	status = init_ath_hif_sdio();
 
 	return status;
-}
-
-/**
- * hif_get_target_type() - Get the target type
- *
- * This function is used to query the target type.
- *
- * @ol_sc: ol_softc struct pointer
- * @dev: device pointer
- * @bdev: bus dev pointer
- * @bid: bus id pointer
- * @hif_type: HIF type such as HIF_TYPE_QCA6180
- * @target_type: target type such as TARGET_TYPE_QCA6180
- *
- * Return: 0 for success
- */
-int hif_get_target_type(struct hif_softc *ol_sc, struct device *dev,
-	void *bdev, const hif_bus_id *bid, uint32_t *hif_type,
-	uint32_t *target_type)
-{
-
-	return 0;
 }
 
 void hif_get_target_revision(struct hif_softc *ol_sc)
@@ -478,7 +412,8 @@ void hif_get_target_revision(struct hif_softc *ol_sc)
  * Return: QDF_STATUS
  */
 QDF_STATUS hif_sdio_enable_bus(struct hif_softc *hif_sc,
-			struct device *dev, void *bdev, const hif_bus_id *bid,
+			struct device *dev, void *bdev,
+			const struct hif_bus_id *bid,
 			enum hif_enable_type type)
 {
 	int ret = 0;
@@ -487,8 +422,7 @@ QDF_STATUS hif_sdio_enable_bus(struct hif_softc *hif_sc,
 
 	init_waitqueue_head(&sync_wait_queue);
 	if (hif_sdio_device_inserted(dev, id)) {
-			HIF_ERROR("wlan: %s hif_sdio_device_inserted"
-					  "failed", __func__);
+		HIF_ERROR("wlan: %s hif_sdio_device_inserted failed", __func__);
 		return QDF_STATUS_E_NOMEM;
 	}
 
@@ -557,8 +491,8 @@ void hif_sdio_set_mailbox_swap(struct hif_softc *hif_sc)
 {
 	struct hif_sdio_softc *scn = HIF_GET_SDIO_SOFTC(hif_sc);
 	struct hif_sdio_dev *hif_device = scn->hif_handle;
+
 	hif_device->swap_mailbox = true;
-	return;
 }
 
 /**
@@ -571,8 +505,8 @@ void hif_sdio_claim_device(struct hif_softc *hif_sc)
 {
 	struct hif_sdio_softc *scn = HIF_GET_SDIO_SOFTC(hif_sc);
 	struct hif_sdio_dev *hif_device = scn->hif_handle;
+
 	hif_device->claimed_ctx = hif_sc;
-	return;
 }
 
 /**
@@ -585,8 +519,8 @@ void hif_sdio_mask_interrupt_call(struct hif_softc *scn)
 {
 	struct hif_sdio_softc *hif_ctx = HIF_GET_SDIO_SOFTC(scn);
 	struct hif_sdio_dev *hif_device = hif_ctx->hif_handle;
+
 	hif_mask_interrupt(hif_device);
-	return;
 }
 
 /**
@@ -602,15 +536,28 @@ void hif_trigger_dump(struct hif_opaque_softc *scn, uint8_t cmd_id, bool start)
 }
 
 /**
- * hif_check_fw_reg() - hif_check_fw_reg
- * @scn: scn
- * @state:
+ * hif_check_fw_reg() - check fw selfrecovery indication
+ * @hif_ctx: hif_opaque_softc
  *
  * Return: int
  */
-int hif_check_fw_reg(struct hif_opaque_softc *scn)
+int hif_check_fw_reg(struct hif_opaque_softc *hif_ctx)
 {
-	return 0;
+	int ret = 1;
+	uint32_t fw_indication = 0;
+	struct hif_sdio_softc *scn = HIF_GET_SDIO_SOFTC(hif_ctx);
+
+	if (hif_diag_read_access(hif_ctx, FW_INDICATOR_ADDRESS,
+				 &fw_indication) != QDF_STATUS_SUCCESS) {
+		HIF_ERROR("%s Get fw indication failed\n", __func__);
+		return 1;
+	}
+	HIF_INFO("%s: fw indication is 0x%x def 0x%x.\n", __func__,
+		fw_indication, FW_IND_HELPER);
+	if (fw_indication & FW_IND_HELPER)
+		ret = 0;
+
+	return ret;
 }
 
 /**
@@ -621,16 +568,4 @@ int hif_check_fw_reg(struct hif_opaque_softc *scn)
  */
 void hif_wlan_disable(struct hif_softc *scn)
 {
-}
-
-/**
- * hif_config_target() - configure hif bus
- * @hif_hdl: hif handle
- * @state:
- *
- * Return: int
- */
-int hif_config_target(void *hif_hdl)
-{
-	return 0;
 }

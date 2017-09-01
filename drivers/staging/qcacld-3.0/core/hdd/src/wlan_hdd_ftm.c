@@ -103,7 +103,6 @@ static uint32_t wlan_ftm_postmsg(uint8_t *cmd_ptr, uint16_t cmd_len)
 	if (QDF_STATUS_SUCCESS != cds_mq_post_message(QDF_MODULE_ID_WMA,
 						      &ftmMsg)) {
 		hdd_err("Failed to post Msg to HAL");
-
 		return QDF_STATUS_E_FAILURE;
 	}
 
@@ -129,7 +128,7 @@ int hdd_update_cds_config_ftm(hdd_context_t *hdd_ctx)
 		return -ENOMEM;
 	}
 
-	cds_cfg->driver_type = eDRIVER_TYPE_MFG;
+	cds_cfg->driver_type = QDF_DRIVER_TYPE_MFG;
 	cds_cfg->powersave_offload_enabled =
 			hdd_ctx->config->enablePowersaveOffload;
 	hdd_lpass_populate_cds_config(cds_cfg, hdd_ctx);
@@ -153,7 +152,7 @@ void hdd_ftm_mc_process_msg(void *message)
 	uint32_t data_len;
 
 	if (!message) {
-		hdd_err("Message is NULL, nothing to process.");
+		hdd_debug("Message is NULL, nothing to process");
 		return;
 	}
 
@@ -188,7 +187,8 @@ static int wlan_hdd_qcmbr_command(hdd_adapter_t *adapter,
 	switch (pqcmbr_data->cmd) {
 	case ATH_XIOCTL_UNIFIED_UTF_CMD: {
 		pqcmbr_data->copy_to_user = 0;
-		if (pqcmbr_data->length) {
+		if (pqcmbr_data->length &&
+			pqcmbr_data->length <= sizeof(pqcmbr_data->buf)) {
 			if (wlan_hdd_ftm_testmode_cmd(pqcmbr_data->buf,
 						      pqcmbr_data->
 						      length)

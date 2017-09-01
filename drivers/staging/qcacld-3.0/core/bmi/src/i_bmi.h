@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -59,7 +59,6 @@
 #define AXI_LOCATION            0x000a0000
 #define AXI_SIZE                0x00018000
 
-#define TOTAL_DUMP_SIZE         0x00200000
 #define PCIE_READ_LIMIT         0x00005000
 
 #define SHA256_DIGEST_SIZE      32
@@ -97,14 +96,14 @@ struct hash_fw {
 	u8 utf[SHA256_DIGEST_SIZE];
 };
 
-typedef enum _ATH_BIN_FILE {
+enum ATH_BIN_FILE {
 	ATH_OTP_FILE,
 	ATH_FIRMWARE_FILE,
 	ATH_PATCH_FILE,
 	ATH_BOARD_DATA_FILE,
 	ATH_FLASH_FILE,
 	ATH_SETUP_FILE,
-} ATH_BIN_FILE;
+};
 
 #if defined(QCA_WIFI_3_0_ADRASTEA)
 #define NO_BMI 1
@@ -184,16 +183,4 @@ void ramdump_work_handler(void *arg);
 void fw_indication_work_handler(void *arg);
 struct ol_config_info *ol_get_ini_handle(struct ol_context *ol_ctx);
 
-#ifdef HIF_SDIO
-QDF_STATUS hif_reg_based_get_target_info(struct hif_opaque_softc *hif_ctx,
-		  struct bmi_target_info *targ_info);
-#endif
-#if defined(HIF_PCI) || defined(SNOC) || defined(HIF_AHB) || defined(HIF_USB)
-static inline QDF_STATUS
-hif_reg_based_get_target_info(struct hif_opaque_softc *hif_ctx,
-		  struct bmi_target_info *targ_info)
-{
-	return QDF_STATUS_SUCCESS;
-}
-#endif
 #endif

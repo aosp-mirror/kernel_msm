@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -44,7 +44,7 @@
 
 #define HIF_LINUX_MMC_SCATTER_SUPPORT
 
-#define BUS_REQUEST_MAX_NUM                64
+#define BUS_REQUEST_MAX_NUM                105
 
 #define SDIO_CLOCK_FREQUENCY_DEFAULT       25000000
 #define SDWLAN_ENABLE_DISABLE_TIMEOUT      20
@@ -181,6 +181,20 @@ enum hif_sdio_device_state {
 		HIF_DEVICE_STATE_WOW
 };
 
+/**
+ * struct bus_request_record - basic bus request struct
+ * @request: request info
+ * @address: address of sdio register
+ * @len: length of register that this request will read or write
+ * @time: record time
+ */
+struct bus_request_record {
+	u_int32_t request;
+	u_int32_t address;
+	u_int32_t len;
+	u_int64_t time;
+};
+
 struct bus_request {
 	struct bus_request *next;       /* link list of available requests */
 	struct bus_request *inusenext;  /* link list of in use requests */
@@ -214,7 +228,7 @@ struct hif_sdio_dev {
 	bool is_suspend;
 	bool is_disabled;
 	atomic_t irq_handling;
-	HIF_DEVICE_POWER_CHANGE_TYPE power_config;
+	enum HIF_DEVICE_POWER_CHANGE_TYPE power_config;
 	enum hif_sdio_device_state device_state;
 	const struct sdio_device_id *id;
 	struct mmc_host *host;
@@ -232,30 +246,35 @@ struct hif_mailbox_properties {
 };
 
 struct hif_device_irq_yield_params {
-	int recv_packet_yield_count; /* max number of packets to force DSR
-				   to return */
+	int recv_packet_yield_count;
+	/* max number of packets to force DSR to return */
 };
 
 struct hif_device_mbox_info {
-	u_int32_t mbox_addresses[4]; /*first element for legacy HIFs and
-				  return the address and ARRAY of 32bit words */
+	u_int32_t mbox_addresses[4];
+	/* first element for legacy HIFs and return the address and ARRAY of
+	 * 32bit words
+	 */
 	struct hif_mailbox_properties mbox_prop[4];
 	u_int32_t gmbox_address;
 	u_int32_t gmbox_size;
-	u_int32_t flags;   /* flags to describe mbox behavior or usage */
+	u_int32_t flags;
+	/* flags to describe mbox behavior or usage */
 };
 
 enum hif_device_irq_mode {
-	HIF_DEVICE_IRQ_SYNC_ONLY,   /* DSR to process all
-				     * interrupts before returning */
+	HIF_DEVICE_IRQ_SYNC_ONLY,
+	/* DSR to process all interrupts before returning */
 	HIF_DEVICE_IRQ_ASYNC_SYNC,  /* DSR to process interrupts */
 };
 
 struct osdrv_callbacks {
-	void *context;          /* context to pass for all callbacks
-				 * except device_removed_handler
-				 * the device_removed_handler is only
-				 * called if the device is claimed */
+	void *context;
+	/* context to pass for all callbacks
+	 * except device_removed_handler
+	 * the device_removed_handler is only
+	 * called if the device is claimed
+	 */
 	int (*device_inserted_handler)(void *context, void *hif_handle);
 	int (*device_removed_handler)(void *claimed_ctx,
 				    void *hif_handle);
@@ -263,7 +282,7 @@ struct osdrv_callbacks {
 	int (*device_resume_handler)(void *context);
 	int (*device_wakeup_handler)(void *context);
 	int (*device_power_change_handler)(void *context,
-					HIF_DEVICE_POWER_CHANGE_TYPE
+					enum HIF_DEVICE_POWER_CHANGE_TYPE
 					config);
 };
 
@@ -301,7 +320,7 @@ QDF_STATUS hif_configure_device(struct hif_sdio_dev *device,
 QDF_STATUS hif_init(struct osdrv_callbacks *callbacks);
 
 QDF_STATUS hif_attach_htc(struct hif_sdio_dev *device,
-			  HTC_CALLBACKS *callbacks);
+			  struct htc_callbacks *callbacks);
 
 QDF_STATUS hif_read_write(struct hif_sdio_dev *device,
 			uint32_t address,
@@ -349,8 +368,8 @@ struct _HIF_SCATTER_REQ {
 	struct _HIF_SCATTER_ITEM    scatter_list[1]; /* start of scatter list */
 };
 
-typedef struct
-_HIF_SCATTER_REQ * (*HIF_ALLOCATE_SCATTER_REQUEST)(struct hif_sdio_dev *device);
+typedef struct _HIF_SCATTER_REQ * (*HIF_ALLOCATE_SCATTER_REQUEST)(
+						struct hif_sdio_dev *device);
 typedef void (*HIF_FREE_SCATTER_REQUEST)(struct hif_sdio_dev *device,
 				struct _HIF_SCATTER_REQ *request);
 typedef QDF_STATUS (*HIF_READWRITE_SCATTER)(struct hif_sdio_dev *device,

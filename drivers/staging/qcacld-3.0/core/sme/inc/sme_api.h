@@ -54,13 +54,27 @@
   Preprocessor definitions and constants
   ------------------------------------------------------------------------*/
 
-#define SME_SUMMARY_STATS         1
-#define SME_GLOBAL_CLASSA_STATS   2
-#define SME_GLOBAL_CLASSB_STATS   4
-#define SME_GLOBAL_CLASSC_STATS   8
-#define SME_GLOBAL_CLASSD_STATS  16
-#define SME_PER_STA_STATS        32
-#define SME_PER_CHAIN_RSSI_STATS 64
+#define SME_SUMMARY_STATS         (1 << eCsrSummaryStats)
+#define SME_GLOBAL_CLASSA_STATS   (1 << eCsrGlobalClassAStats)
+#define SME_GLOBAL_CLASSD_STATS   (1 << eCsrGlobalClassDStats)
+#define SME_PER_CHAIN_RSSI_STATS  (1 << csr_per_chain_rssi_stats)
+
+#define sme_log(level, args...) QDF_TRACE(QDF_MODULE_ID_SME, level, ## args)
+#define sme_logfl(level, format, args...) sme_log(level, FL(format), ## args)
+
+#define sme_alert(format, args...) \
+		sme_logfl(QDF_TRACE_LEVEL_FATAL, format, ## args)
+#define sme_err(format, args...) \
+		sme_logfl(QDF_TRACE_LEVEL_ERROR, format, ## args)
+#define sme_warn(format, args...) \
+		sme_logfl(QDF_TRACE_LEVEL_WARN, format, ## args)
+#define sme_info(format, args...) \
+		sme_logfl(QDF_TRACE_LEVEL_INFO, format, ## args)
+#define sme_debug(format, args...) \
+		sme_logfl(QDF_TRACE_LEVEL_DEBUG, format, ## args)
+
+#define SME_ENTER() sme_logfl(QDF_TRACE_LEVEL_DEBUG, "enter")
+#define SME_EXIT() sme_logfl(QDF_TRACE_LEVEL_DEBUG, "exit")
 
 #define SME_SESSION_ID_ANY        50
 
@@ -90,6 +104,7 @@ typedef void (*hdd_ftm_msg_processor)(void *);
 typedef struct _smeConfigParams {
 	tCsrConfigParam csrConfig;
 	struct rrm_config_param rrmConfig;
+	bool snr_monitor_enabled;
 } tSmeConfigParams, *tpSmeConfigParams;
 
 #ifdef FEATURE_WLAN_TDLS
@@ -177,15 +192,18 @@ typedef enum {
 	SME_AC_VO = 3
 } sme_ac_enum_type;
 
-/* TSPEC Direction Enum Type */
+/*---------------------------------------------------------------------------
+  Enumeration of the various TSPEC directions
+
+  From 802.11e/WMM specifications
+  ---------------------------------------------------------------------------*/
+
 typedef enum {
-	/* uplink */
-	SME_TX_DIR = 0,
-	/* downlink */
-	SME_RX_DIR = 1,
-	/* bidirectional */
-	SME_BI_DIR = 2,
-} sme_tspec_dir_type;
+	SME_QOS_WMM_TS_DIR_UPLINK = 0,
+	SME_QOS_WMM_TS_DIR_DOWNLINK = 1,
+	SME_QOS_WMM_TS_DIR_RESV = 2,    /* Reserved */
+	SME_QOS_WMM_TS_DIR_BOTH = 3,
+} sme_qos_wmm_dir_type;
 
 /**
  * struct sme_oem_capability - OEM capability to be exchanged between host
@@ -235,11 +253,22 @@ QDF_STATUS sme_open_session(tHalHandle hHal, csr_roam_completeCallback callback,
 		uint32_t subType);
 void sme_set_curr_device_mode(tHalHandle hHal,
 		enum tQDF_ADAPTER_MODE currDeviceMode);
+/**
+ * sme_close_session: Close session for scan/roam operation.
+ * @hHal: The handle returned by mac_open.
+ * @sessionId: A previous opened session's ID.
+ * @flush_all_sme_cmds: whether all sme commands needs to be flushed
+ * @callback: pointer to callback API
+ * @pContext: context needs to be passed to callback
+ *
+ * @Return: QDF_STATUS
+ */
 QDF_STATUS sme_close_session(tHalHandle hHal, uint8_t sessionId,
+		bool flush_all_sme_cmds,
 		csr_roamSessionCloseCallback callback,
 		void *pContext);
 QDF_STATUS sme_update_roam_params(tHalHandle hHal, uint8_t session_id,
-		struct roam_ext_params roam_params_src, int update_param);
+		struct roam_ext_params *roam_params_src, int update_param);
 #ifdef FEATURE_WLAN_SCAN_PNO
 void sme_update_roam_pno_channel_prediction_config(
 		tHalHandle hal, tCsrConfigParam *csr_config,
@@ -443,8 +472,8 @@ QDF_STATUS sme_change_country_code(tHalHandle hHal,
 		uint8_t *pCountry,
 		void *pContext,
 		void *p_cds_context,
-		tAniBool countryFromUserSpace,
-		tAniBool sendRegHint);
+		bool countryFromUserSpace,
+		bool sendRegHint);
 QDF_STATUS sme_generic_change_country_code(tHalHandle hHal,
 					   uint8_t *pCountry);
 QDF_STATUS sme_tx_fail_monitor_start_stop_ind(tHalHandle hHal,
@@ -491,25 +520,15 @@ QDF_STATUS sme_set_host_offload(tHalHandle hHal, uint8_t sessionId,
 		tpSirHostOffloadReq pRequest);
 
 /**
- * sme_enable_non_arp_broadcast_filter(): API to enable Broadcast filter
- * when target goes to wow suspend/resume mode
- * @hal: The handle returned by mac_open.
- * @session_id: Session Identifier
+ * sme_conf_hw_filter_mode() - configure the given mode for the given session
+ * @hal: internal hal handle
+ * @session_id: the Id of the session to configure the hw filter for
+ * @mode_bitmap: the hw filter mode to configure
  *
- * Return QDF_STATUS
+ * Return: QDF_STATUS
  */
-QDF_STATUS sme_enable_non_arp_broadcast_filter(tHalHandle hal,
-						uint8_t session_id);
-/**
- * sme_disable_nonarp_broadcast_filter(): API to disable Broadcast filter
- * when target goes to wow suspend/resume mode
- * @hal: The handle returned by mac_open.
- * @session_id: Session Identifier
- *
- * Return QDF_STATUS
- */
-QDF_STATUS sme_disable_nonarp_broadcast_filter(tHalHandle hal,
-						uint8_t session_id);
+QDF_STATUS sme_conf_hw_filter_mode(tHalHandle hal, uint8_t session_id,
+				   uint8_t mode_bitmap);
 
 QDF_STATUS sme_set_keep_alive(tHalHandle hHal, uint8_t sessionId,
 		tpSirKeepAliveReq pRequest);
@@ -728,7 +747,7 @@ QDF_STATUS sme_send_tdls_mgmt_frame(tHalHandle hHal, uint8_t sessionId,
 		const tSirMacAddr peerMac, uint8_t frame_type,
 		uint8_t dialog, uint16_t status,
 		uint32_t peerCapability, uint8_t *buf,
-		uint8_t len, uint8_t responder);
+		uint8_t len, uint8_t responder, enum sir_wifi_traffic_ac ac);
 QDF_STATUS sme_change_tdls_peer_sta(tHalHandle hHal, uint8_t sessionId,
 		const tSirMacAddr peerMac,
 		tCsrStaParams *pstaParams);
@@ -762,12 +781,10 @@ QDF_STATUS sme_add_periodic_tx_ptrn(tHalHandle hHal, tSirAddPeriodicTxPtrn
 		*addPeriodicTxPtrnParams);
 QDF_STATUS sme_del_periodic_tx_ptrn(tHalHandle hHal, tSirDelPeriodicTxPtrn
 		*delPeriodicTxPtrnParams);
-void sme_enable_disable_split_scan(tHalHandle hHal, uint8_t nNumStaChan,
-		uint8_t nNumP2PChan);
 QDF_STATUS sme_send_rate_update_ind(tHalHandle hHal,
 		tSirRateUpdateInd *rateUpdateParams);
 QDF_STATUS sme_roam_del_pmkid_from_cache(tHalHandle hHal, uint8_t sessionId,
-		const uint8_t *pBSSId, bool flush_cache);
+		tPmkidCacheInfo *pmksa, bool flush_cache);
 void sme_get_command_q_status(tHalHandle hHal);
 
 QDF_STATUS sme_enable_rmc(tHalHandle hHal, uint32_t sessionId);
@@ -869,6 +886,19 @@ typedef struct sStatsExtRequestReq {
 typedef void (*StatsExtCallback)(void *, tStatsExtEvent *);
 void sme_stats_ext_register_callback(tHalHandle hHal,
 		StatsExtCallback callback);
+
+/**
+ * sme_register_stats_ext2_callback() - Register stats ext2 register
+ * @hal_handle: hal handle for getting global mac struct
+ * @stats_ext2_cb: callback to be registered
+ *
+ * This function will register a callback for frame aggregation failure
+ * indications processing.
+ *
+ * Return: void
+ */
+void sme_stats_ext2_register_callback(tHalHandle hal_handle,
+		void (*stats_ext2_cb)(void *, struct stats_ext2_event *));
 void sme_stats_ext_deregister_callback(tHalHandle hhal);
 QDF_STATUS sme_stats_ext_request(uint8_t session_id,
 		tpStatsExtRequestReq input);
@@ -932,7 +962,12 @@ QDF_STATUS sme_ll_stats_get_req(tHalHandle hHal,
 QDF_STATUS sme_set_link_layer_stats_ind_cb(tHalHandle hHal,
 		void (*callbackRoutine)(void *callbackCtx,
 				int indType, void *pRsp));
+QDF_STATUS sme_set_link_layer_ext_cb(tHalHandle hal,
+		     void (*ll_stats_ext_cb)(tHddHandle callback_ctx,
+					     tSirLLStatsResults * rsp));
 QDF_STATUS sme_reset_link_layer_stats_ind_cb(tHalHandle hhal);
+QDF_STATUS sme_ll_stats_set_thresh(tHalHandle hal,
+				struct sir_ll_ext_stats_threshold *threshold);
 #endif /* WLAN_FEATURE_LINK_LAYER_STATS */
 
 QDF_STATUS sme_fw_mem_dump(tHalHandle hHal, void *recvd_req);
@@ -1001,6 +1036,9 @@ QDF_STATUS sme_ext_change_channel(tHalHandle hHal, uint32_t channel,
 QDF_STATUS sme_configure_modulated_dtim(tHalHandle hal, uint8_t session_id,
 				      uint32_t modulated_dtim);
 
+QDF_STATUS sme_override_listen_interval(tHalHandle h_hal, uint8_t session_id,
+		uint32_t override_li);
+
 QDF_STATUS sme_configure_stats_avg_factor(tHalHandle hal, uint8_t session_id,
 					  uint16_t stats_avg_factor);
 
@@ -1017,7 +1055,7 @@ QDF_STATUS sme_enable_uapsd_for_ac(void *cds_ctx, uint8_t sta_id,
 				      sme_ac_enum_type ac, uint8_t tid,
 				      uint8_t pri, uint32_t srvc_int,
 				      uint32_t sus_int,
-				      sme_tspec_dir_type dir,
+				      sme_qos_wmm_dir_type dir,
 				      uint8_t psb, uint32_t sessionId,
 				      uint32_t delay_interval);
 
@@ -1273,7 +1311,10 @@ QDF_STATUS sme_create_mon_session(tHalHandle hal_handle, uint8_t *bssid);
 QDF_STATUS sme_set_adaptive_dwelltime_config(tHalHandle hal,
 			struct adaptive_dwelltime_params *dwelltime_params);
 
-void sme_set_vdev_ies_per_band(tHalHandle hal, uint8_t vdev_id);
+void sme_set_vdev_ies_per_band(uint8_t vdev_id,
+			       uint8_t is_hw_mode_dbs);
+bool sme_check_enable_rx_ldpc_sta_ini_item(void);
+QDF_STATUS sme_issue_same_ap_reassoc_cmd(uint8_t session_id);
 void sme_set_pdev_ht_vht_ies(tHalHandle hHal, bool enable2x2);
 
 void sme_update_vdev_type_nss(tHalHandle hal, uint8_t max_supp_nss,
@@ -1374,6 +1415,7 @@ QDF_STATUS sme_encrypt_decrypt_msg(tHalHandle hal,
 QDF_STATUS sme_set_cts2self_for_p2p_go(tHalHandle hal);
 void sme_set_prefer_80MHz_over_160MHz(tHalHandle hal,
 		bool sta_prefer_80MHz_over_160MHz);
+void sme_set_allow_adj_ch_bcn(tHalHandle hal, bool allow_adj_ch_bcn);
 QDF_STATUS sme_update_tx_fail_cnt_threshold(tHalHandle hal_handle,
 		uint8_t session_id, uint32_t tx_fail_count);
 QDF_STATUS sme_update_short_retry_limit_threshold(tHalHandle hal_handle,
@@ -1480,6 +1522,20 @@ static inline QDF_STATUS sme_set_udp_resp_offload(struct udp_resp_offload
 QDF_STATUS sme_get_rcpi(tHalHandle hal, struct sme_rcpi_req *rcpi);
 
 /**
+ * sme_get_rssi_snr_by_bssid() - gets the rssi and snr by bssid from scan cache
+ * @hal: handle returned by mac_open
+ * @profile: current connected profile
+ * @bssid: bssid to look for in scan cache
+ * @rssi: rssi value found
+ * @snr: snr value found
+ *
+ * Return: QDF_STATUS
+ */
+QDF_STATUS sme_get_rssi_snr_by_bssid(tHalHandle hal, tCsrRoamProfile *profile,
+				     const uint8_t *bssid, int8_t *rssi,
+				     int8_t *snr);
+
+/**
  * sme_get_beacon_frm() - gets the bss descriptor from scan cache and prepares
  * beacon frame
  * @hal: handle returned by mac_open
@@ -1487,12 +1543,14 @@ QDF_STATUS sme_get_rcpi(tHalHandle hal, struct sme_rcpi_req *rcpi);
  * @bssid: bssid to look for in scan cache
  * @frame_buf: frame buffer to populate
  * @frame_len: length of constructed frame
+ * @channel: Pointer to channel info to be filled
  *
  * Return: QDF_STATUS
  */
 QDF_STATUS sme_get_beacon_frm(tHalHandle hal, tCsrRoamProfile *profile,
 			    const tSirMacAddr bssid,
-			    uint8_t **frame_buf, uint32_t *frame_len);
+			    uint8_t **frame_buf, uint32_t *frame_len,
+			    int *channel);
 
 /**
  * sme_rso_cmd_status_cb() - Set RSO cmd status callback
@@ -1510,6 +1568,16 @@ void sme_set_5g_band_pref(tHalHandle hal_handle,
 			  struct sme_5g_band_pref_params *pref_params);
 
 /**
+ * sme_set_bt_activity_info_cb - set the callback handler for bt events
+ * @hal: handle returned by mac_open
+ * @cb: callback handler
+ *
+ * Return: QDF_STATUS
+ */
+QDF_STATUS sme_set_bt_activity_info_cb(tHalHandle hal,
+				void (*cb)(void *, uint32_t profile_info));
+
+/**
  * sme_congestion_register_callback(): registers congestion callback
  * @hal: handler for HAL
  * @congestion_cb: congestion callback
@@ -1519,7 +1587,53 @@ void sme_set_5g_band_pref(tHalHandle hal_handle,
 QDF_STATUS sme_congestion_register_callback(tHalHandle hal,
 	void (*congestion_cb)(void *, uint32_t congestion, uint32_t vdev_id));
 
+/**
+ * sme_scan_get_result_for_bssid - gets the scan result from scan cache for the
+ *	bssid specified
+ * @hal: handle returned by mac_open
+ * @bssid: bssid to get the scan result for
+ *
+ * Return: tCsrScanResultInfo * or NULL if no result
+ */
+tCsrScanResultInfo *sme_scan_get_result_for_bssid(tHalHandle hal_handle,
+						  struct qdf_mac_addr *bssid);
+
 QDF_STATUS sme_delete_all_tdls_peers(tHalHandle hal, uint8_t session_id);
+
+/**
+ * sme_set_random_mac() - Set random mac address filter
+ * @hal: hal handle for getting global mac struct
+ * @callback: callback to be invoked for response from firmware
+ * @session_id: interface id
+ * @random_mac: random mac address to be set
+ * @freq: Channel frequency
+ * @context: parameter to callback
+ *
+ * This function is used to set random mac address filter for action frames
+ * which are send with the same address, callback is invoked when corresponding
+ * event from firmware has come.
+ *
+ * Return: eHalStatus enumeration.
+ */
+QDF_STATUS sme_set_random_mac(tHalHandle hal,
+			      action_frame_random_filter_callback callback,
+			      uint32_t session_id, uint8_t *random_mac,
+			      uint32_t freq, void *context);
+
+/**
+ * sme_clear_random_mac() - clear random mac address filter
+ * @hal: HAL handle
+ * @session_id: interface id
+ * @random_mac: random mac address to be cleared
+ * @freq: Channel frequency
+ *
+ * This function is used to clear the randmom mac address filters
+ * which are set with sme_set_random_mac
+ *
+ * Return: QDF_STATUS enumeration.
+ */
+QDF_STATUS sme_clear_random_mac(tHalHandle hal, uint32_t session_id,
+				uint8_t *random_mac, uint32_t freq);
 
 /**
  * sme_set_chip_pwr_save_fail_cb() - set chip power save failure callback
@@ -1533,6 +1647,26 @@ QDF_STATUS sme_delete_all_tdls_peers(tHalHandle hal, uint8_t session_id);
 QDF_STATUS sme_set_chip_pwr_save_fail_cb(tHalHandle hal, void (*cb)(void *,
 				 struct chip_pwr_save_fail_detected_params *));
 /**
+ * sme_get_chain_rssi - sme api to get chain rssi
+ * @phal: global hal handle
+ * @input: get chain rssi req params
+ *
+ * Return: QDF_STATUS enumeration.
+ */
+QDF_STATUS sme_get_chain_rssi(tHalHandle phal,
+	struct get_chain_rssi_req_params *input);
+
+/**
+ * sme_chain_rssi_register_callback - chain rssi callback
+ * @phal: global hal handle
+ * @pchain_rssi_ind_cb: callback function pointer
+ *
+ * Return: QDF_STATUS enumeration.
+ */
+QDF_STATUS sme_chain_rssi_register_callback(tHalHandle phal,
+			void (*pchain_rssi_ind_cb)(void *ctx, void *pmsg));
+
+/**
  * sme_process_msg_callback() - process callback message from LIM
  * @hal: global hal handle
  * @msg: cds message
@@ -1543,4 +1677,121 @@ QDF_STATUS sme_set_chip_pwr_save_fail_cb(tHalHandle hal, void (*cb)(void *,
  */
 QDF_STATUS sme_process_msg_callback(tHalHandle hal, cds_msg_t *msg);
 
+/**
+ * sme_set_dbs_scan_selection_config() - Update DBS scan selection
+ * configuration
+ * @hal: The handle returned by macOpen
+ * @params: wmi_dbs_scan_sel_params config
+ *
+ * Return: QDF_STATUS if DBS scan selection update
+ * configuration success else failure status
+ */
+QDF_STATUS sme_set_dbs_scan_selection_config(tHalHandle hal,
+		struct wmi_dbs_scan_sel_params *params);
+
+/**
+ * sme_set_reorder_timeout() - set reorder timeout value
+ * including Voice,Video,Besteffort,Background parameters
+ * @hal: hal handle for getting global mac struct
+ * @reg: struct sir_set_rx_reorder_timeout_val
+ *
+ * Return: QDF_STATUS_SUCCESS or non-zero on failure.
+ */
+QDF_STATUS sme_set_reorder_timeout(tHalHandle hal,
+		struct sir_set_rx_reorder_timeout_val *req);
+
+/**
+ * sme_set_rx_set_blocksize() - set blocksize value
+ * including mac_addr and win_limit parameters
+ * @hal: hal handle for getting global mac struct
+ * @reg: struct sir_peer_set_rx_blocksize
+ *
+ * Return: QDF_STATUS_SUCCESS or non-zero on failure.
+ */
+
+QDF_STATUS sme_set_rx_set_blocksize(tHalHandle hal,
+		struct sir_peer_set_rx_blocksize *req);
+/**
+ * sme_ipa_uc_stat_request() - set ipa config parameters
+ * @vdev_id: virtual device for the command
+ * @param_id: parameter id
+ * @param_val: parameter value
+ * @req_cat: parameter category
+ *
+ * Return: QDF_STATUS_SUCCESS or non-zero on failure
+ */
+QDF_STATUS sme_ipa_uc_stat_request(tHalHandle hal,
+			uint32_t vdev_id, uint32_t param_id,
+			uint32_t param_val, uint32_t req_cat);
+
+/**
+ * sme_get_peer_info() - sme api to get peer info
+ * @hal: hal handle for getting global mac struct
+ * @req: peer info request struct send to wma
+ * @context: context of callback function
+ * @callbackfn: hdd callback function when receive response
+ *
+ * This function will send WMA_GET_PEER_INFO to WMA
+ *
+ * Return: QDF_STATUS_SUCCESS or non-zero on failure
+ */
+QDF_STATUS sme_get_peer_info(tHalHandle hal,
+		struct sir_peer_info_req req,
+		void *context,
+		void (*callbackfn)(struct sir_peer_info_resp *param,
+			void *pcontext));
+
+/**
+ * sme_get_peer_info_ext() - sme api to get peer ext info
+ * @hal: hal handle for getting global mac struct
+ * @req: peer ext info request struct send to wma
+ * @context: context of callback function
+ * @callbackfn: hdd callback function when receive response
+ *
+ * This function will send WMA_GET_PEER_INFO_EXT to WMA
+ *
+ * Return: QDF_STATUS_SUCCESS or non-zero on failure
+ */
+QDF_STATUS sme_get_peer_info_ext(tHalHandle hal,
+		struct sir_peer_info_ext_req *req,
+		void *context,
+		void (*callbackfn)(struct sir_peer_info_ext_resp *param,
+			void *pcontext));
+
+/**
+ * sme_cli_set_command() - SME wrapper API over WMA "set" command
+ * processor cmd
+ * @vdev_id: virtual device for the command
+ * @param_id: parameter id
+ * @sval: parameter value
+ * @vpdev: parameter category
+ *
+ * Command handler for set operations
+ *
+ * Return: 0 on success, errno on failure
+ */
+int sme_cli_set_command(int vdev_id, int param_id, int sval, int vpdev);
+
+/*
+ * sme_set_chan_info_callback() - set scan chan info call back
+ * @hal: Handle returned by mac_open
+ * @callback: scan chan info call back
+ *
+ * This function is used to set scan chan info call back.
+ *
+ * Return: None
+ */
+void sme_set_chan_info_callback(tHalHandle hal_handle,
+			void (*callback)(struct scan_chan_info *chan_info));
+
+/**
+ * sme_send_limit_off_chan_cmd() - send limit off-channel command parameters
+ * @hal: hal handle for getting global mac struct
+ * @param:  pointer to sir_limit_off_chan
+ *
+ * Return: 0 on success and non zero value on failure
+ */
+
+QDF_STATUS sme_send_limit_off_chan_cmd(tHalHandle hal,
+		struct sir_limit_off_chan *param);
 #endif /* #if !defined( __SME_API_H ) */

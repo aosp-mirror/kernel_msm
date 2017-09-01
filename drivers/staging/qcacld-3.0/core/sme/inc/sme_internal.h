@@ -93,6 +93,7 @@ typedef enum eSmeCommandType {
 	e_sme_command_nss_update,
 	e_sme_command_set_dual_mac_config,
 	e_sme_command_set_antenna_mode,
+	e_sme_command_issue_self_reassoc,
 	eSmeCommandNdpInitiatorRequest,
 	eSmeCommandNdpResponderRequest,
 	eSmeCommandNdpDataEndInitiatorRequest,
@@ -122,6 +123,16 @@ typedef struct sStatsExtEvent {
 	uint32_t event_data_len;
 	uint8_t event_data[];
 } tStatsExtEvent, *tpStatsExtEvent;
+
+/**
+ * struct stats_ext2_event - stats ext2 event
+ * @hole_cnt: hole counter
+ * @hole_info_array: hole informaton
+ */
+struct stats_ext2_event {
+	uint32_t hole_cnt;
+	uint32_t hole_info_array[];
+};
 
 #define MAX_ACTIVE_CMD_STATS    16
 
@@ -182,6 +193,8 @@ typedef struct tagSmeStruct {
 #ifdef WLAN_FEATURE_LINK_LAYER_STATS
 	void (*pLinkLayerStatsIndCallback)(void *callbackContext,
 			int indType, void *pRsp);
+	void (*link_layer_stats_ext_cb)(tHddHandle callback_ctx,
+					tSirLLStatsResults *rsp);
 #endif /* WLAN_FEATURE_LINK_LAYER_STATS */
 
 #ifdef WLAN_POWER_DEBUGFS
@@ -199,6 +212,14 @@ typedef struct tagSmeStruct {
 	void (*pLinkSpeedIndCb)(tSirLinkSpeedInfo *indParam,
 			void *pDevContext);
 	void *pLinkSpeedCbContext;
+	/* get peer info callback */
+	void (*pget_peer_info_ind_cb)(struct sir_peer_info_resp *param,
+		void *pcontext);
+	void *pget_peer_info_cb_context;
+	/* get extended peer info callback */
+	void (*pget_peer_info_ext_ind_cb)(struct sir_peer_info_ext_resp *param,
+		void *pcontext);
+	void *pget_peer_info_ext_cb_context;
 #ifdef FEATURE_WLAN_EXTSCAN
 	void (*pExtScanIndCb)(void *, const uint16_t, void *);
 #endif /* FEATURE_WLAN_EXTSCAN */
@@ -257,9 +278,15 @@ typedef struct tagSmeStruct {
 	void (*rso_cmd_status_cb)(void *hdd_context,
 			 struct rso_cmd_status *rso_status);
 	void (*get_arp_stats_cb)(void *, struct rsp_stats *);
+	void (*bt_activity_info_cb)(void *context, uint32_t bt_activity);
 	void (*chip_power_save_fail_cb)(void *,
 			struct chip_pwr_save_fail_detected_params *);
+	void (*pchain_rssi_ind_cb)(void *ctx, void *pmsg);
+	void (*spectral_scan_cb)(void *context,
+			struct spectral_samp_msg *samp_msg);
+	void (*stats_ext2_cb)(void *, struct stats_ext2_event *);
 	void (*congestion_cb)(void *, uint32_t congestion, uint32_t vdev_id);
 } tSmeStruct, *tpSmeStruct;
+
 
 #endif /* #if !defined( __SMEINTERNAL_H ) */

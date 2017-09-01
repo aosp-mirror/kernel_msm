@@ -458,8 +458,11 @@ struct mdss_dsi_ctrl_pdata {
 	int bklt_en_gpio;
 	bool bklt_en_gpio_invert;
 	bool bklt_en_gpio_state;
+	int avdd_en_gpio;
+	bool avdd_en_gpio_invert;
 	int lcd_mode_sel_gpio;
 	int bklt_ctrl;	/* backlight ctrl */
+	enum dsi_ctrl_op_mode bklt_dcs_op_mode; /* backlight dcs ctrl mode */
 	bool pwm_pmi;
 	int pwm_period;
 	int pwm_pmic_gpio;

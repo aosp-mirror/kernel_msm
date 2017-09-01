@@ -192,6 +192,8 @@ static DEFINE_SPINLOCK(reg_spinlock);
 #define WCNSS_USR_WLAN_MAC_ADDR   (WCNSS_USR_CTRL_MSG_START + 3)
 
 #define MAC_ADDRESS_STR "%02x:%02x:%02x:%02x:%02x:%02x"
+#define SHOW_MAC_ADDRESS_STR	"%02x:%02x:%02x:%02x:%02x:%02x\n"
+#define WCNSS_USER_MAC_ADDR_LENGTH	18
 
 /* message types */
 #define WCNSS_CTRL_MSG_START	0x01000000
@@ -395,7 +397,7 @@ static struct {
 	int	user_cal_read;
 	int	user_cal_available;
 	u32	user_cal_rcvd;
-	int	user_cal_exp_size;
+	u32	user_cal_exp_size;
 	int	iris_xo_mode_set;
 	int	fw_vbatt_state;
 	char	wlan_nv_macAddr[WLAN_MAC_ADDR_SIZE];
@@ -426,23 +428,28 @@ static struct {
 static ssize_t wcnss_wlan_macaddr_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
-	char macAddr[WLAN_MAC_ADDR_SIZE];
+	int index;
+	int macAddr[WLAN_MAC_ADDR_SIZE];
 
 	if (!penv)
 		return -ENODEV;
 
-	pr_debug("%s: Receive MAC Addr From user space: %s\n", __func__, buf);
+	if (strlen(buf) != WCNSS_USER_MAC_ADDR_LENGTH) {
+		dev_err(dev, "%s: Invalid MAC addr length\n", __func__);
+		return -EINVAL;
+	}
 
 	if (WLAN_MAC_ADDR_SIZE != sscanf(buf, MAC_ADDRESS_STR,
-		 (int *)&macAddr[0], (int *)&macAddr[1],
-		 (int *)&macAddr[2], (int *)&macAddr[3],
-		 (int *)&macAddr[4], (int *)&macAddr[5])) {
-
+		&macAddr[0], &macAddr[1], &macAddr[2],
+		&macAddr[3], &macAddr[4], &macAddr[5])) {
 		pr_err("%s: Failed to Copy MAC\n", __func__);
 		return -EINVAL;
 	}
 
-	memcpy(penv->wlan_nv_macAddr, macAddr, sizeof(penv->wlan_nv_macAddr));
+	for (index = 0; index < WLAN_MAC_ADDR_SIZE; index++) {
+		memcpy(&penv->wlan_nv_macAddr[index],
+		       (char *)&macAddr[index], sizeof(char));
+	}
 
 	pr_info("%s: Write MAC Addr:" MAC_ADDRESS_STR "\n", __func__,
 		penv->wlan_nv_macAddr[0], penv->wlan_nv_macAddr[1],
@@ -458,7 +465,7 @@ static ssize_t wcnss_wlan_macaddr_show(struct device *dev,
 	if (!penv)
 		return -ENODEV;
 
-	return scnprintf(buf, PAGE_SIZE, MAC_ADDRESS_STR,
+	return scnprintf(buf, PAGE_SIZE, SHOW_MAC_ADDRESS_STR,
 		penv->wlan_nv_macAddr[0], penv->wlan_nv_macAddr[1],
 		penv->wlan_nv_macAddr[2], penv->wlan_nv_macAddr[3],
 		penv->wlan_nv_macAddr[4], penv->wlan_nv_macAddr[5]);
@@ -2037,21 +2044,23 @@ void extract_cal_data(int len)
 		return;
 	}
 
+	mutex_lock(&penv->dev_lock);
 	rc = smd_read(penv->smd_ch, (unsigned char *)&calhdr,
 			sizeof(struct cal_data_params));
 	if (rc < sizeof(struct cal_data_params)) {
 		pr_err("wcnss: incomplete cal header read from smd\n");
+		mutex_unlock(&penv->dev_lock);
 		return;
 	}
 
 	if (penv->fw_cal_exp_frag != calhdr.frag_number) {
 		pr_err("wcnss: Invalid frgament");
-		goto exit;
+		goto unlock_exit;
 	}
 
 	if (calhdr.frag_size > WCNSS_MAX_FRAME_SIZE) {
 		pr_err("wcnss: Invalid fragment size");
-		goto exit;
+		goto unlock_exit;
 	}
 
 	if (penv->fw_cal_available) {
@@ -2060,8 +2069,9 @@ void extract_cal_data(int len)
 		penv->fw_cal_exp_frag++;
 		if (calhdr.msg_flags & LAST_FRAGMENT) {
 			penv->fw_cal_exp_frag = 0;
-			goto exit;
+			goto unlock_exit;
 		}
+		mutex_unlock(&penv->dev_lock);
 		return;
 	}
 
@@ -2069,7 +2079,7 @@ void extract_cal_data(int len)
 		if (calhdr.total_size > MAX_CALIBRATED_DATA_SIZE) {
 			pr_err("wcnss: Invalid cal data size %d",
 				calhdr.total_size);
-			goto exit;
+			goto unlock_exit;
 		}
 		kfree(penv->fw_cal_data);
 		penv->fw_cal_rcvd = 0;
@@ -2077,11 +2087,10 @@ void extract_cal_data(int len)
 				GFP_KERNEL);
 		if (penv->fw_cal_data == NULL) {
 			smd_read(penv->smd_ch, NULL, calhdr.frag_size);
-			goto exit;
+			goto unlock_exit;
 		}
 	}
 
-	mutex_lock(&penv->dev_lock);
 	if (penv->fw_cal_rcvd + calhdr.frag_size >
 			MAX_CALIBRATED_DATA_SIZE) {
 		pr_err("calibrated data size is more than expected %d",
@@ -2116,12 +2125,9 @@ void extract_cal_data(int len)
 
 unlock_exit:
 	mutex_unlock(&penv->dev_lock);
-
-exit:
 	wcnss_send_cal_rsp(fw_status);
 	return;
 }
-
 
 static void wcnssctrl_rx_handler(struct work_struct *worker)
 {

@@ -41,6 +41,10 @@ ifeq ($(KERNEL_BUILD), 0)
 	# These are configurable via Kconfig for kernel-based builds
 	# Need to explicitly configure for Android-based builds
 
+	ifneq ($(DEVELOPER_DISABLE_BUILD_TIMESTAMP),y)
+	CONFIG_BUILD_TIMESTAMP := y
+	endif
+
 	ifeq ($(CONFIG_ARCH_MDM9630), y)
 	CONFIG_MOBILE_ROUTER := y
 	endif
@@ -49,42 +53,29 @@ ifeq ($(KERNEL_BUILD), 0)
 	CONFIG_MOBILE_ROUTER := y
 	endif
 
-	# As per target team, build is done as follows:
-	# Defconfig : build with default flags
-	# Slub      : defconfig  + CONFIG_SLUB_DEBUG=y +
-	#	      CONFIG_SLUB_DEBUG_ON=y + CONFIG_PAGE_POISONING=y
-	# Perf      : Using appropriate msmXXXX-perf_defconfig
-	#
-	# Shipment builds (user variants) should not have any debug feature
-	# enabled. This is identified using 'TARGET_BUILD_VARIANT'. Slub builds
-	# are identified using the CONFIG_SLUB_DEBUG_ON configuration. Since
-	# there is no other way to identify defconfig builds, QCOMs internal
-	# representation of perf builds (identified using the string 'perf'),
-	# is used to identify if the build is a slub or defconfig one. This
-	# way no critical debug feature will be enabled for perf and shipment
-	# builds. Other OEMs are also protected using the TARGET_BUILD_VARIANT
-	# config.
-	ifneq ($(TARGET_BUILD_VARIANT),user)
-		CONFIG_FEATURE_PKTLOG := y
-		ifeq ($(CONFIG_SLUB_DEBUG_ON),y)
-			CONFIG_FEATURE_DP_TRACE := y
-		else
-			ifeq ($(findstring perf,$(KERNEL_DEFCONFIG)),)
-				CONFIG_FEATURE_DP_TRACE := y
-			endif
+	ifeq ($(CONFIG_ARCH_SDX20), y)
+	CONFIG_MOBILE_ROUTER := y
+	endif
+
+	# If platform wants to support two driver base on this source
+	# code, below feature WLAN_DISABLE_EXPORT_SYMBOL needs to be
+	# enabled, otherwise when loading the second the driver,
+	# it will hit error of duplicate symbol.
+	ifeq ($(CONFIG_ARCH_SDX20), y)
+	CONFIG_WLAN_DISABLE_EXPORT_SYMBOL := y
+	endif
+
+	ifeq ($(CONFIG_ARCH_MSM8917), y)
+		ifeq ($(CONFIG_ROME_IF), sdio)
+			CONFIG_WLAN_SYNC_TSF_PLUS := y
 		endif
 	endif
 
 	#Flag to enable Legacy Fast Roaming2(LFR2)
 	CONFIG_QCACLD_WLAN_LFR2 := y
 	#Flag to enable Legacy Fast Roaming3(LFR3)
-	ifneq ($(CONFIG_ARCH_SDXHEDGEHOG), y)
+	ifneq ($(CONFIG_ARCH_SDX20), y)
 	CONFIG_QCACLD_WLAN_LFR3 := y
-	endif
-
-	#Enable Power debugfs feature only if debug_fs is enabled
-	ifeq ($(CONFIG_DEBUG_FS), y)
-	CONFIG_WLAN_POWER_DEBUGFS := y
 	endif
 
 	# JB kernel has CPU enablement patches, so enable
@@ -122,6 +113,11 @@ ifeq ($(KERNEL_BUILD), 0)
 
 	#Flag to enable Fast Transition (11r) feature
 	CONFIG_QCOM_VOWIFI_11R := y
+
+	ifneq ($(CONFIG_ARCH_SDX20), y)
+	#Flag to enable FILS Feature (11ai)
+	CONFIG_WLAN_FEATURE_FILS := y
+	endif
 
 	ifneq ($(CONFIG_QCA_CLD_WLAN),)
 		ifeq (y,$(findstring y,$(CONFIG_CNSS) $(CONFIG_ICNSS)))
@@ -177,6 +173,9 @@ ifeq ($(KERNEL_BUILD), 0)
 	CONFIG_WLAN_FEATURE_DSRC := y
 	endif
 
+	#enable spectral scan feature
+	CONFIG_WLAN_SPECTRAL_SCAN := y
+
 ifneq ($(CONFIG_ROME_IF),sdio)
 	#Flag to enable memdump feature
 	CONFIG_WLAN_FEATURE_MEMDUMP := y
@@ -218,12 +217,36 @@ endif
 	# Flag to enable MCC to SCC switch feature
 	CONFIG_MCC_TO_SCC_SWITCH := y
 
-ifeq ($(CONFIG_DEBUG_FS), y)
-	# Flag to enable debugfs. Depends on CONFIG_DEBUG_FS in kernel
-	# configuration.
-	CONFIG_WLAN_DEBUGFS := y
 endif
 
+
+# As per target team, build is done as follows:
+# Defconfig : build with default flags
+# Slub      : defconfig  + CONFIG_SLUB_DEBUG=y +
+#	      CONFIG_SLUB_DEBUG_ON=y + CONFIG_PAGE_POISONING=y
+# Perf      : Using appropriate msmXXXX-perf_defconfig
+#
+# Shipment builds (user variants) should not have any debug feature
+# enabled. This is identified using 'TARGET_BUILD_VARIANT'. Slub builds
+# are identified using the CONFIG_SLUB_DEBUG_ON configuration. Since
+# there is no other way to identify defconfig builds, QCOMs internal
+# representation of perf builds (identified using the string 'perf'),
+# is used to identify if the build is a slub or defconfig one. This
+# way no critical debug feature will be enabled for perf and shipment
+# builds. Other OEMs are also protected using the TARGET_BUILD_VARIANT
+# config.
+ifneq ($(TARGET_BUILD_VARIANT),user)
+	CONFIG_FEATURE_PKTLOG := y
+endif
+
+
+#Enable WLAN/Power debugfs feature only if debug_fs is enabled
+ifeq ($(CONFIG_DEBUG_FS), y)
+       # Flag to enable debugfs. Depends on CONFIG_DEBUG_FS in kernel
+       # configuration.
+       CONFIG_WLAN_DEBUGFS := y
+
+       CONFIG_WLAN_POWER_DEBUGFS := y
 endif
 
 # If not set, assume, Common driver is with in the build tree
@@ -347,6 +370,11 @@ CONFIG_ATH_PCIE_ACCESS_DEBUG := 0
 #Enable IPA offload
 ifeq ($(CONFIG_IPA), y)
 CONFIG_IPA_OFFLOAD := 1
+CONFIG_NUM_IPA_IFACE := 3
+endif
+ifeq ($(CONFIG_IPA3), y)
+CONFIG_IPA_OFFLOAD := 1
+CONFIG_NUM_IPA_IFACE := 2
 endif
 
 #Enable Signed firmware support for split binary format
@@ -411,6 +439,7 @@ HDD_OBJS := 	$(HDD_SRC_DIR)/wlan_hdd_assoc.o \
 
 ifeq ($(CONFIG_WLAN_DEBUGFS), y)
 HDD_OBJS += $(HDD_SRC_DIR)/wlan_hdd_debugfs.o
+HDD_OBJS += $(HDD_SRC_DIR)/wlan_hdd_debugfs_llstat.o
 endif
 
 ifeq ($(CONFIG_WLAN_FEATURE_DSRC), y)
@@ -452,6 +481,10 @@ ifeq ($(CONFIG_QCOM_TDLS),y)
 HDD_OBJS +=	$(HDD_SRC_DIR)/wlan_hdd_tdls.o
 endif
 
+ifeq ($(CONFIG_WLAN_SYNC_TSF_PLUS), y)
+CONFIG_WLAN_SYNC_TSF := y
+endif
+
 ifeq ($(CONFIG_WLAN_SYNC_TSF),y)
 HDD_OBJS +=	$(HDD_SRC_DIR)/wlan_hdd_tsf.o
 endif
@@ -474,6 +507,10 @@ endif
 
 ifeq ($(CONFIG_WLAN_FEATURE_NAN_DATAPATH), y)
 HDD_OBJS += $(HDD_SRC_DIR)/wlan_hdd_nan_datapath.o
+endif
+
+ifeq ($(CONFIG_WLAN_SPECTRAL_SCAN), y)
+HDD_OBJS += $(HDD_SRC_DIR)/wlan_hdd_spectral.o
 endif
 
 ########### HOST DIAG LOG ###########
@@ -514,7 +551,6 @@ MAC_INC := 	-I$(WLAN_ROOT)/$(MAC_INC_DIR) \
 		-I$(WLAN_ROOT)/$(MAC_SRC_DIR)/pe/nan
 
 MAC_CFG_OBJS := $(MAC_SRC_DIR)/cfg/cfg_api.o \
-		$(MAC_SRC_DIR)/cfg/cfg_debug.o \
 		$(MAC_SRC_DIR)/cfg/cfg_param_name.o \
 		$(MAC_SRC_DIR)/cfg/cfg_proc_msg.o \
 		$(MAC_SRC_DIR)/cfg/cfg_send_msg.o
@@ -525,7 +561,6 @@ MAC_LIM_OBJS := $(MAC_SRC_DIR)/pe/lim/lim_aid_mgmt.o \
 		$(MAC_SRC_DIR)/pe/lim/lim_admit_control.o \
 		$(MAC_SRC_DIR)/pe/lim/lim_api.o \
 		$(MAC_SRC_DIR)/pe/lim/lim_assoc_utils.o \
-		$(MAC_SRC_DIR)/pe/lim/lim_debug.o \
 		$(MAC_SRC_DIR)/pe/lim/lim_ft.o \
 		$(MAC_SRC_DIR)/pe/lim/lim_ibss_peer_mgmt.o \
 		$(MAC_SRC_DIR)/pe/lim/lim_link_monitoring_algo.o \
@@ -563,6 +598,10 @@ ifeq ($(CONFIG_QCOM_TDLS),y)
 MAC_LIM_OBJS += $(MAC_SRC_DIR)/pe/lim/lim_process_tdls.o
 endif
 
+ifeq ($(CONFIG_WLAN_FEATURE_FILS),y)
+MAC_LIM_OBJS += $(MAC_SRC_DIR)/pe/lim/lim_process_fils.o
+endif
+
 ifeq ($(CONFIG_WLAN_FEATURE_NAN_DATAPATH), y)
 MAC_NDP_OBJS += $(MAC_SRC_DIR)/pe/nan/nan_datapath.o
 endif
@@ -578,7 +617,6 @@ endif
 MAC_SCH_OBJS := $(MAC_SRC_DIR)/pe/sch/sch_api.o \
 		$(MAC_SRC_DIR)/pe/sch/sch_beacon_gen.o \
 		$(MAC_SRC_DIR)/pe/sch/sch_beacon_process.o \
-		$(MAC_SRC_DIR)/pe/sch/sch_debug.o \
 		$(MAC_SRC_DIR)/pe/sch/sch_message.o
 
 MAC_RRM_OBJS :=	$(MAC_SRC_DIR)/pe/rrm/rrm_api.o
@@ -668,13 +706,18 @@ ifeq ($(CONFIG_WLAN_FEATURE_NAN_DATAPATH), y)
 SME_NDP_OBJS += $(SME_SRC_DIR)/nan/nan_datapath_api.o
 endif
 
+ifeq ($(CONFIG_WLAN_SPECTRAL_SCAN), y)
+SME_SPECTRAL_OBJS += $(SME_SRC_DIR)/spectralscan/spectral_scan_api.o
+endif
+
 SME_OBJS :=	$(SME_CMN_OBJS) \
 		$(SME_CSR_OBJS) \
 		$(SME_P2P_OBJS) \
 		$(SME_QOS_OBJS) \
 		$(SME_RRM_OBJS) \
 		$(SME_NAN_OBJS) \
-		$(SME_NDP_OBJS)
+		$(SME_NDP_OBJS) \
+		$(SME_SPECTRAL_OBJS)
 
 ############ NLINK ############
 NLINK_DIR     :=	core/utils/nlink
@@ -715,10 +758,8 @@ SYS_OBJS :=	$(SYS_COMMON_SRC_DIR)/wlan_qct_sys.o \
 		$(SYS_LEGACY_SRC_DIR)/system/src/mac_init_api.o \
 		$(SYS_LEGACY_SRC_DIR)/system/src/sys_entry_func.o \
 		$(SYS_LEGACY_SRC_DIR)/utils/src/dot11f.o \
-		$(SYS_LEGACY_SRC_DIR)/utils/src/log_api.o \
 		$(SYS_LEGACY_SRC_DIR)/utils/src/mac_trace.o \
 		$(SYS_LEGACY_SRC_DIR)/utils/src/parser_api.o \
-		$(SYS_LEGACY_SRC_DIR)/utils/src/utils_api.o \
 		$(SYS_LEGACY_SRC_DIR)/utils/src/utils_parser.o
 
 ############ Qca-wifi-host-cmn ############
@@ -738,6 +779,7 @@ QDF_OBJS := 	$(QDF_OBJ_DIR)/qdf_defer.o \
 		$(QDF_OBJ_DIR)/qdf_mem.o \
 		$(QDF_OBJ_DIR)/qdf_nbuf.o \
 		$(QDF_OBJ_DIR)/qdf_threads.o \
+		$(QDF_OBJ_DIR)/qdf_crypto.o \
 		$(QDF_OBJ_DIR)/qdf_trace.o
 
 ifeq ($(CONFIG_WLAN_DEBUGFS), y)
@@ -1144,6 +1186,10 @@ ifneq ($(CONFIG_HIF_USB), 1)
 CDEFINES += -DWLAN_LOGGING_SOCK_SVC_ENABLE
 endif
 
+ifeq ($(CONFIG_WLAN_FEATURE_FILS),y)
+CDEFINES += -DWLAN_FEATURE_FILS_SK
+endif
+
 ifeq ($(CONFIG_CNSS), y)
 ifeq ($(CONFIG_CNSS_SDIO), y)
 CDEFINES += -DCONFIG_PLD_SDIO_CNSS
@@ -1158,7 +1204,6 @@ endif
 
 ifeq (y,$(filter y,$(CONFIG_CNSS_EOS) $(CONFIG_ICNSS)))
 CDEFINES += -DQCA_WIFI_3_0
-CDEFINES += -DQCA_WIFI_3_0_EMU
 endif
 
 ifeq (y,$(filter y,$(CONFIG_CNSS_ADRASTEA) $(CONFIG_ICNSS)))
@@ -1175,7 +1220,7 @@ ifeq ($(CONFIG_FEATURE_PKTLOG), y)
 CDEFINES +=     -DFEATURE_PKTLOG
 endif
 
-ifeq ($(CONFIG_FEATURE_DP_TRACE), y)
+ifneq ($(CONFIG_ARCH_SDX20), y)
 CDEFINES +=	-DFEATURE_DP_TRACE
 endif
 
@@ -1219,8 +1264,19 @@ endif
 ifeq ($(CONFIG_SLUB_DEBUG_ON),y)
 CDEFINES += -DTIMER_MANAGER
 CDEFINES += -DMEMORY_DEBUG
+CDEFINES += -DCONFIG_HALT_KMEMLEAK
 CDEFINES += -DWLAN_SUSPEND_RESUME_TEST
+CONFIG_LOCK_STATS_ON := y
 endif
+
+ifeq ($(CONFIG_LOCK_STATS_ON),y)
+CDEFINES += -DQDF_LOCK_STATS=1
+CDEFINES += -DQDF_LOCK_STATS_DESTROY_PRINT=0
+CDEFINES += -DQDF_LOCK_STATS_BUG_ON=1
+CDEFINES += -DQDF_LOCK_STATS_LIST=1
+CDEFINES += -DQDF_LOCK_STATS_LIST_SIZE=256
+endif
+
 
 ifeq ($(HAVE_CFG80211),1)
 CDEFINES += -DWLAN_FEATURE_P2P
@@ -1244,6 +1300,10 @@ endif
 
 ifeq ($(CONFIG_QCACLD_WLAN_LFR3),y)
 CDEFINES += -DWLAN_FEATURE_ROAM_OFFLOAD
+endif
+
+ifeq ($(CONFIG_CNSS_GENL), y)
+CDEFINES += -DCNSS_GENL
 endif
 
 ifeq ($(CONFIG_QCACLD_WLAN_LFR2),y)
@@ -1366,6 +1426,14 @@ ifeq ($(CONFIG_WLAN_FEATURE_DSRC), y)
 CDEFINES += -DWLAN_FEATURE_DSRC
 endif
 
+ifeq ($(CONFIG_ARCH_SDX20), y)
+ifeq ($(CONFIG_QCA_WIFI_SDIO), 1)
+ifeq ($(CONFIG_WCNSS_SKB_PRE_ALLOC), y)
+CDEFINES += -DFEATURE_SKB_PRE_ALLOC
+endif
+endif
+endif
+
 #Enable USB specific APIS
 ifeq ($(CONFIG_HIF_USB), 1)
 CDEFINES += -DHIF_USB \
@@ -1426,15 +1494,30 @@ ifeq ($(CONFIG_CHECKSUM_OFFLOAD), 1)
 CDEFINES += -DCHECKSUM_OFFLOAD
 endif
 
-#Enable Checksum Offload support
-ifeq ($(CONFIG_IPA_OFFLOAD), 1)
-CDEFINES += -DIPA_OFFLOAD
+ifeq ($(CONFIG_ARCH_SDX20), y)
+CONFIG_NUM_IPA_IFACE := 2
 endif
 
-ifneq ($(CONFIG_ARCH_MDM9630), y)
-ifeq ($(CONFIG_ARCH_MDM9640), y)
-CDEFINES += -DQCA_CONFIG_SMP
+#Enable IPA Offload support
+ifeq ($(CONFIG_IPA_OFFLOAD), 1)
+CDEFINES += -DIPA_OFFLOAD
+CDEFINES += -DMAX_IPA_IFACE=$(CONFIG_NUM_IPA_IFACE)
 endif
+
+ifeq ($(CONFIG_ARCH_SDX20), y)
+CDEFINES += -DSYNC_IPA_READY
+endif
+
+ifeq ($(CONFIG_ARCH_MSM8996), y)
+CDEFINES += -DCHANNEL_HOPPING_ALL_BANDS
+endif
+
+ifeq ($(CONFIG_ARCH_MSM8909), y)
+CDEFINES += -DACS_FW_REPORT_PARAM
+endif
+
+ifeq ($(CONFIG_ARCH_MSM8996), y)
+CDEFINES += -DACS_FW_REPORT_PARAM
 endif
 
 #Enable GTK Offload
@@ -1456,6 +1539,11 @@ endif
 #Enable Channel Matrix restriction for all Rome only targets
 ifneq (y,$(filter y,$(CONFIG_CNSS_EOS) $(CONFIG_ICNSS)))
 CDEFINES += -DWLAN_ENABLE_CHNL_MATRIX_RESTRICTION
+endif
+
+#Enable ICMP packet disable powersave feature
+ifeq ($(CONFIG_ICMP_DISABLE_PS),y)
+CDEFINES += -DWLAN_ICMP_DISABLE_PS
 endif
 
 #Enable OBSS feature
@@ -1509,6 +1597,10 @@ CDEFINES += -DWLAN_FEATURE_RX_FULL_REORDER_OL
 endif
 endif
 
+ifeq ($(CONFIG_ARCH_MDM9607), y)
+CDEFINES += -DCONFIG_TUFELLO_DUAL_FW_SUPPORT
+endif
+
 #Enable Signed firmware support for split binary format
 ifeq ($(CONFIG_QCA_SIGNED_SPLIT_BINARY_SUPPORT), 1)
 CDEFINES += -DQCA_SIGNED_SPLIT_BINARY_SUPPORT
@@ -1543,6 +1635,10 @@ ifeq ($(CONFIG_WLAN_SYNC_TSF), y)
 CDEFINES += -DWLAN_FEATURE_TSF
 endif
 
+ifeq ($(CONFIG_WLAN_SYNC_TSF_PLUS), y)
+CDEFINES += -DWLAN_FEATURE_TSF_PLUS
+endif
+
 # Enable full rx re-order offload for adrastea
 ifeq (y, $(filter y, $(CONFIG_CNSS_ADRASTEA) $(CONFIG_ICNSS)))
 CDEFINES += -DWLAN_FEATURE_RX_FULL_REORDER_OL
@@ -1564,7 +1660,7 @@ CONFIG_HELIUMPLUS := y
 CONFIG_64BIT_PADDR := y
 CONFIG_FEATURE_TSO := y
 CONFIG_FEATURE_TSO_DEBUG := y
-ifeq ($(CONFIG_ARCH_MSM8998), y)
+ifneq ($(CONFIG_FORCE_ALLOC_FROM_DMA_ZONE), y)
 CONFIG_ENABLE_DEBUG_ADDRESS_MARKING := y
 endif
 ifeq ($(CONFIG_HELIUMPLUS),y)
@@ -1576,6 +1672,7 @@ endif
 
 ifeq ($(CONFIG_SLUB_DEBUG_ON),y)
 CDEFINES += -DOL_RX_INDICATION_RECORD
+CDEFINES += -DTSOSEG_DEBUG
 endif
 
 endif
@@ -1597,6 +1694,10 @@ endif
 
 ifeq ($(CONFIG_MOBILE_ROUTER), y)
 CDEFINES += -DFEATURE_AP_MCC_CH_AVOIDANCE
+endif
+
+ifeq ($(CONFIG_WLAN_DISABLE_EXPORT_SYMBOL), y)
+CDEFINES += -DWLAN_DISABLE_EXPORT_SYMBOL
 endif
 
 ifeq ($(CONFIG_MPC_UT_FRAMEWORK), y)
@@ -1631,6 +1732,22 @@ ifeq ($(CONFIG_WLAN_DEBUGFS), y)
 CDEFINES += -DWLAN_DEBUGFS
 endif
 
+ifeq ($(CONFIG_WLAN_SPECTRAL_SCAN), y)
+CDEFINES += -DFEATURE_SPECTRAL_SCAN
+endif
+
+#Flag to enable/disable WLAN D0-WOW
+ifeq ($(CONFIG_PCI_MSM), y)
+ifeq ($(CONFIG_ROME_IF),pci)
+CDEFINES += -DFEATURE_WLAN_D0WOW
+endif
+endif
+
+#Flag to enable SMMU S1 support
+ifeq ($(CONFIG_ARCH_SDM845), y)
+CDEFINES += -DENABLE_SMMU_S1_TRANSLATION
+endif
+
 KBUILD_CPPFLAGS += $(CDEFINES)
 
 # Currently, for versions of gcc which support it, the kernel Makefile
@@ -1647,13 +1764,14 @@ EXTRA_CFLAGS += -Wheader-guard
 endif
 
 # If the module name is not "wlan", then the define MULTI_IF_NAME to be the
-# same a the module name. The host driver will then append MULTI_IF_NAME to
+# same a the QCA CHIP name. The host driver will then append MULTI_IF_NAME to
 # any string that must be unique for all instances of the driver on the system.
 # This allows multiple instances of the driver with different module names.
 # If the module name is wlan, leave MULTI_IF_NAME undefined and the code will
 # treat the driver as the primary driver.
 ifneq ($(MODNAME), wlan)
-CDEFINES += -DMULTI_IF_NAME=\"$(MODNAME)\"
+CHIP_NAME ?= $(MODNAME)
+CDEFINES += -DMULTI_IF_NAME=\"$(CHIP_NAME)\"
 endif
 
 # WLAN_HDD_ADAPTER_MAGIC must be unique for all instances of the driver on the
@@ -1662,6 +1780,11 @@ endif
 # WLAN_HDD_ADAPTER_MAGIC.
 ifdef WLAN_HDD_ADAPTER_MAGIC
 CDEFINES += -DWLAN_HDD_ADAPTER_MAGIC=$(WLAN_HDD_ADAPTER_MAGIC)
+endif
+
+# inject some build related information
+ifeq ($(CONFIG_BUILD_TIMESTAMP), y)
+CDEFINES += -DBUILD_TIMESTAMP=\"$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')\"
 endif
 
 # Module information used by KBuild framework

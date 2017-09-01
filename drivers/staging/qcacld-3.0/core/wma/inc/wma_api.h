@@ -52,8 +52,9 @@ typedef void *WMA_HANDLE;
  * @GEN_PARAM_CAPTURE_TSF: read tsf
  * @GEN_PARAM_RESET_TSF_GPIO: reset tsf gpio
  * @GEN_VDEV_ROAM_SYNCH_DELAY: roam sync delay
+ * @GEN_PARAM_LISTEN_INTERVAL: listen interval
  */
-typedef enum {
+enum GEN_PARAM {
 	GEN_VDEV_PARAM_AMPDU = 0x1,
 	GEN_VDEV_PARAM_AMSDU,
 	GEN_PARAM_CRASH_INJECT,
@@ -61,7 +62,8 @@ typedef enum {
 	GEN_PARAM_CAPTURE_TSF,
 	GEN_PARAM_RESET_TSF_GPIO,
 	GEN_VDEV_ROAM_SYNCH_DELAY,
-} GEN_PARAM;
+	GEN_PARAM_LISTEN_INTERVAL
+};
 
 /**
  * struct wma_caps_per_phy - various caps per phy
@@ -184,15 +186,17 @@ void wma_handle_initial_wake_up(void);
 int wma_bus_resume(void);
 QDF_STATUS wma_resume_target(WMA_HANDLE handle);
 QDF_STATUS wma_disable_wow_in_fw(WMA_HANDLE handle);
+void wma_set_d0wow_flag(WMA_HANDLE handle, bool flag);
+bool wma_read_d0wow_flag(WMA_HANDLE handle);
 QDF_STATUS wma_disable_d0wow_in_fw(WMA_HANDLE handle);
+QDF_STATUS wma_enable_d0wow_in_fw(WMA_HANDLE handle);
 bool wma_is_wow_mode_selected(WMA_HANDLE handle);
 QDF_STATUS wma_enable_wow_in_fw(WMA_HANDLE handle, uint32_t wow_flags);
-QDF_STATUS wma_enable_d0wow_in_fw(WMA_HANDLE handle, uint32_t wow_flags);
-bool wma_check_scan_in_progress(WMA_HANDLE handle);
 void wma_set_peer_authorized_cb(void *wma_ctx, wma_peer_authorized_fp auth_cb);
 QDF_STATUS wma_set_peer_param(void *wma_ctx, uint8_t *peer_addr,
 		  uint32_t param_id,
 		  uint32_t param_value, uint32_t vdev_id);
+QDF_STATUS wma_get_link_speed(WMA_HANDLE handle, tSirLinkSpeedInfo *pLinkSpeed);
 #ifdef NOT_YET
 QDF_STATUS wma_update_channel_list(WMA_HANDLE handle, void *scan_chan_info);
 #endif
@@ -246,6 +250,8 @@ QDF_STATUS wma_get_updated_scan_config(uint32_t *scan_config,
 QDF_STATUS wma_get_updated_fw_mode_config(uint32_t *fw_mode_config,
 		bool dbs,
 		bool agile_dfs);
+QDF_STATUS wma_get_updated_scan_and_fw_mode_config(uint32_t *scan_config,
+		uint32_t *fw_mode_config, uint32_t dual_mac_disable_ini);
 bool wma_get_dbs_scan_config(void);
 bool wma_get_dbs_plus_agile_scan_config(void);
 bool wma_get_single_mac_scan_with_dfs_config(void);
@@ -259,7 +265,8 @@ bool wma_get_prev_dbs_plus_agile_scan_config(void);
 bool wma_get_prev_single_mac_scan_with_dfs_config(void);
 QDF_STATUS wma_get_caps_for_phyidx_hwmode(struct wma_caps_per_phy *caps_per_phy,
 		enum hw_mode_dbs_capab hw_mode, enum cds_band_type band);
-bool wma_is_rx_ldpc_supported_for_channel(uint32_t channel);
+bool wma_is_rx_ldpc_supported_for_channel(uint32_t channel,
+				enum hw_mode_dbs_capab hw_mode);
 
 #define LRO_IPV4_SEED_ARR_SZ 5
 #define LRO_IPV6_SEED_ARR_SZ 11
@@ -297,6 +304,17 @@ QDF_STATUS wma_add_beacon_filter(WMA_HANDLE wma,
 				struct beacon_filter_param *filter_params);
 QDF_STATUS wma_send_adapt_dwelltime_params(WMA_HANDLE handle,
 			struct adaptive_dwelltime_params *dwelltime_params);
+
+/**
+ * wma_send_dbs_scan_selection_params() - send DBS scan selection configuration
+ * params to firmware
+ * @handle:	 wma handler
+ * @dbs_scan_params: pointer to wmi_dbs_scan_sel_params
+ *
+ * Return: QDF_STATUS_SUCCESS on success and QDF failure reason code for failure
+ */
+QDF_STATUS wma_send_dbs_scan_selection_params(WMA_HANDLE handle,
+			struct wmi_dbs_scan_sel_params *dbs_scan_params);
 #ifdef FEATURE_GREEN_AP
 void wma_setup_egap_support(struct wma_tgt_cfg *tgt_cfg, WMA_HANDLE handle);
 void wma_register_egap_event_handle(WMA_HANDLE handle);
@@ -328,6 +346,7 @@ static inline QDF_STATUS wma_register_ndp_cb(QDF_STATUS (*pe_ndp_event_handler)
 }
 #endif
 
+bool wma_is_csa_offload_enabled(void);
 bool wma_is_p2p_lo_capable(void);
 QDF_STATUS wma_p2p_lo_start(struct sir_p2p_lo_start *params);
 QDF_STATUS wma_p2p_lo_stop(u_int32_t vdev_id);
@@ -399,4 +418,60 @@ void wma_peer_debug_log(uint8_t vdev_id, uint8_t op,
 			void *peer_obj, uint32_t val1, uint32_t val2);
 void wma_peer_debug_dump(void);
 
+#ifdef WLAN_FEATURE_LINK_LAYER_STATS
+/**
+ * wma_tx_failure_cb() - TX failure callback
+ * @ctx: txrx context
+ * @num_msdu: number of msdu with the same status
+ * @tid: TID number
+ * @status: failure status
+ */
+void wma_tx_failure_cb(void *ctx, uint32_t num_msdu,
+		       uint8_t tid, enum htt_tx_status status);
+#else
+static inline void wma_tx_failure_cb(void *ctx, uint32_t num_msdu,
+				     uint8_t tid, enum htt_tx_status status)
+{
+}
+#endif
+
+/**
+ * wmi_to_sir_peer_type() - convert peer type from WMI to SIR enum
+ * @type: enum wmi_peer_type
+ *
+ * Return: tSirWifiPeerType
+ */
+tSirWifiPeerType wmi_to_sir_peer_type(enum wmi_peer_type type);
+
+#ifdef FEATURE_SPECTRAL_SCAN
+/**
+ * wma_spectral_scan_req() - start or stop spectral scan
+ * @wma_ptr: pointer to wma handle
+ * @req: enable/disable spectral scan request
+ *
+ * Return: none
+ */
+void wma_spectral_scan_req(WMA_HANDLE wma_handle,
+				struct vdev_spectral_enable_params *req);
+
+/**
+ * wma_spectral_scan_config() - config spectral scan parameters
+ * @wma_ptr: pointer to wma handle
+ * @req: spectral scan configuration request
+ *
+ * Return: none
+ */
+void wma_spectral_scan_config(WMA_HANDLE wma_handle,
+				struct vdev_spectral_configure_params *req);
+#else
+static inline void wma_spectral_scan_req(WMA_HANDLE wma_handle,
+				struct vdev_spectral_enable_params *req)
+{
+}
+
+static inline void wma_spectral_scan_config(WMA_HANDLE wma_handle,
+				struct vdev_spectral_configure_params *req)
+{
+}
+#endif
 #endif

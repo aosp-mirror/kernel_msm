@@ -40,6 +40,9 @@
 
 #define HDD_MAX_CMP_PER_PACKET_FILTER	5
 
+#define HDD_WAKELOCK_TIMEOUT_CONNECT 1000
+#define HDD_WAKELOCK_TIMEOUT_RESUME 1000
+
 /**
  * enum pkt_filter_protocol_layer - packet filter protocol layer
  * @HDD_FILTER_PROTO_TYPE_INVALID: Invalid initial value
@@ -151,22 +154,13 @@ QDF_STATUS hdd_conf_arp_offload(hdd_adapter_t *pAdapter, bool fenable);
 void hdd_conf_hostoffload(hdd_adapter_t *pAdapter, bool fenable);
 
 /**
- * hdd_set_non_arp_hw_broadcast_filter() - enable HW Broadcast filter
- * when target goes to wow suspend/resume mode
- * @adapter: Adapter context for which broadcast filter is to be configured
+ * hdd_conf_hw_filter_mode() - configure the given mode for the given adapter
+ * @adapter: the adapter to configure the hw filter for
+ * @mode: the hw filter mode to configure
  *
- * Return: zero if success, non-zero otherwise
+ * Return: Errno
  */
-int hdd_set_non_arp_hw_broadcast_filter(hdd_adapter_t *adapter);
-
-/**
- * hdd_clear_non_arp_hw_broadcast_filter() - disable HW Broadcast filter
- * when target goes to wow suspend/resume mode
- * @adapter: Adapter context for which broadcast filter is to be configured
- *
- * Return: zero if success, non-zero otherwise
- */
-int hdd_clear_non_arp_hw_broadcast_filter(hdd_adapter_t *adapter);
+int hdd_conf_hw_filter_mode(hdd_adapter_t *adapter, enum hw_filter_mode mode);
 
 #ifdef WLAN_FEATURE_PACKET_FILTERING
 int wlan_hdd_set_mc_addr_list(hdd_adapter_t *pAdapter, uint8_t set);
@@ -215,6 +209,17 @@ void hdd_wlan_suspend_resume_event(uint8_t state);
 static inline
 void hdd_wlan_suspend_resume_event(uint8_t state) {}
 #endif /* FEATURE_WLAN_DIAG_SUPPORT */
+
+/**
+ * wlan_hdd_set_powersave() - Set powersave mode
+ * @adapter: adapter upon which the request was received
+ * @allow_power_save: is wlan allowed to go into power save mode
+ * @timeout: timeout period in ms
+ *
+ * Return: 0 on success, non-zero on any error
+ */
+int wlan_hdd_set_powersave(hdd_adapter_t *adapter,
+			   bool allow_power_save, uint32_t timeout);
 
 /**
  * wlan_hdd_inc_suspend_stats() - Prints, then increments, then prints suspend

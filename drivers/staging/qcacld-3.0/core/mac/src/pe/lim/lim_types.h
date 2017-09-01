@@ -45,7 +45,6 @@
 #include "utils_api.h"
 
 #include "lim_api.h"
-#include "lim_debug.h"
 #include "lim_trace.h"
 #include "lim_send_sme_rsp_messages.h"
 #include "sys_global.h"
@@ -209,8 +208,13 @@ typedef struct sLimMlmStartCnf {
 typedef struct sLimMlmScanCnf {
 	tSirResultCodes resultCode;
 	uint16_t scanResultLength;
-	tSirBssDescription bssDescription[1];
 	uint8_t sessionId;
+	tSirBssDescription bssDescription[1];
+	/*
+	 * WARNING: Pls make bssDescription as last variable in struct
+	 * tLimMlmScanCnf as it has ieFields followed after this bss
+	 * description. Adding a variable after this corrupts the ieFields
+	 */
 } tLimMlmScanCnf, *tpLimMlmScanCnf;
 
 typedef struct sLimScanResult {
@@ -247,12 +251,12 @@ typedef struct sLimMlmAssocInd {
 	tSirWAPIie wapiIE;
 	tSirAddie addIE;        /* additional IE received from the peer, which possibly includes WSC IE and/or P2P IE. */
 	tSirMacCapabilityInfo capabilityInfo;
-	tAniBool spectrumMgtIndicator;
+	bool spectrumMgtIndicator;
 	tSirMacPowerCapInfo powerCap;
 	tSirSupChnl supportedChannels;
 	uint8_t sessionId;
 
-	tAniBool WmmStaInfoPresent;
+	bool WmmStaInfoPresent;
 
 	/* Required for indicating the frames to upper layer */
 	uint32_t beaconLength;
@@ -260,6 +264,18 @@ typedef struct sLimMlmAssocInd {
 	uint32_t assocReqLength;
 	uint8_t *assocReqPtr;
 	tSirSmeChanInfo chan_info;
+	uint8_t ecsa_capable;
+	bool ampdu;
+	bool sgi_enable;
+	bool tx_stbc;
+	bool rx_stbc;
+	tSirMacHTChannelWidth ch_width;
+	enum sir_sme_phy_mode mode;
+	uint8_t max_supp_idx;
+	uint8_t max_ext_idx;
+	uint8_t max_mcs_idx;
+	uint8_t rx_mcs_map;
+	uint8_t tx_mcs_map;
 } tLimMlmAssocInd, *tpLimMlmAssocInd;
 
 typedef struct sLimMlmReassocReq {
@@ -286,17 +302,18 @@ typedef struct sLimMlmReassocInd {
 	tSirWAPIie wapiIE;
 	tSirAddie addIE;        /* additional IE received from the peer, which can be WSC IE and/or P2P IE. */
 	tSirMacCapabilityInfo capabilityInfo;
-	tAniBool spectrumMgtIndicator;
+	bool spectrumMgtIndicator;
 	tSirMacPowerCapInfo powerCap;
 	tSirSupChnl supportedChannels;
 
-	tAniBool WmmStaInfoPresent;
+	bool WmmStaInfoPresent;
 
 	/* Required for indicating the frames to upper layer */
 	uint32_t beaconLength;
 	uint8_t *beaconPtr;
 	uint32_t assocReqLength;
 	uint8_t *assocReqPtr;
+	uint8_t              ecsa_capable;
 } tLimMlmReassocInd, *tpLimMlmReassocInd;
 
 typedef struct sLimMlmAuthCnf {
@@ -499,6 +516,9 @@ void lim_send_disassoc_mgmt_frame(tpAniSirGlobal, uint16_t, tSirMacAddr,
 void lim_send_deauth_mgmt_frame(tpAniSirGlobal, uint16_t, tSirMacAddr, tpPESession,
 				bool waitForAck);
 
+void lim_process_mlm_update_hidden_ssid_rsp(
+		tpAniSirGlobal mac_ctx, tpSirMsgQ msg);
+
 tSirResultCodes lim_mlm_add_bss(tpAniSirGlobal, tLimMlmStartReq *,
 				tpPESession psessionEntry);
 
@@ -669,7 +689,7 @@ lim_post_sme_message(tpAniSirGlobal pMac, uint32_t msgType, uint32_t *pMsgBuf)
 	tSirMsgQ msg;
 
 	if (pMsgBuf == NULL) {
-		lim_log(pMac, LOGE, FL("Buffer is Pointing to NULL"));
+		pe_err("Buffer is Pointing to NULL");
 		return;
 	}
 
@@ -713,10 +733,10 @@ lim_post_sme_message(tpAniSirGlobal pMac, uint32_t msgType, uint32_t *pMsgBuf)
 static inline void
 lim_post_mlm_message(tpAniSirGlobal pMac, uint32_t msgType, uint32_t *pMsgBuf)
 {
-
 	tSirMsgQ msg;
+
 	if (pMsgBuf == NULL) {
-		lim_log(pMac, LOGE, FL("Buffer is Pointing to NULL"));
+		pe_err("Buffer is Pointing to NULL");
 		return;
 	}
 	msg.type = (uint16_t) msgType;
@@ -868,8 +888,29 @@ int lim_process_remain_on_chnl_req(tpAniSirGlobal pMac, uint32_t *pMsg);
 void lim_remain_on_chn_rsp(tpAniSirGlobal pMac, QDF_STATUS status, uint32_t *data);
 void lim_send_sme_disassoc_deauth_ntf(tpAniSirGlobal mac_ctx,
 				QDF_STATUS status, uint32_t *ctx);
+
+#ifdef FEATURE_WLAN_TDLS
 tSirRetStatus lim_process_sme_del_all_tdls_peers(tpAniSirGlobal p_mac,
 						 uint32_t *msg_buf);
+#else
+static inline
+tSirRetStatus lim_process_sme_del_all_tdls_peers(tpAniSirGlobal p_mac,
+						 uint32_t *msg_buf)
+{
+	return eSIR_SUCCESS;
+}
+#endif
+
+/**
+ * lim_process_rx_channel_status_event() - processes
+ * event WDA_RX_CHN_STATUS_EVENT
+ * @mac_ctx Pointer to Global MAC structure
+ * @buf: Received message info
+ *
+ * Return: None
+ */
+void lim_process_rx_channel_status_event(tpAniSirGlobal mac_ctx, void *buf);
+
 /* / Bit value data structure */
 typedef enum sHalBitVal         /* For Bit operations */
 {

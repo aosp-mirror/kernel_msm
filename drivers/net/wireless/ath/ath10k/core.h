@@ -70,6 +70,20 @@
 #define ATH10K_NAPI_BUDGET      64
 #define ATH10K_NAPI_QUOTA_LIMIT 60
 
+#define ATH10K_RX_MCS_MIN           0
+#define ATH10K_RX_HT_MCS_MAX        32
+#define ATH10K_RX_VHT_RATEIDX_MAX   9
+#define ATH10K_RX_VHT_MCS_MAX       20  /* For 2x2 */
+#define ATH10K_RX_NSS_MIN           0
+#define ATH10K_RX_NSS_MAX           5
+
+enum ath10k_datapath_rx_band {
+	ATH10K_BAND_MIN,
+	ATH10K_BAND_2GHZ = ATH10K_BAND_MIN,
+	ATH10K_BAND_5GHZ,
+	ATH10K_BAND_MAX,
+};
+
 struct ath10k;
 
 enum ath10k_bus {
@@ -351,7 +365,8 @@ struct ath10k_sta {
 #endif
 };
 
-#define ATH10K_VDEV_SETUP_TIMEOUT_HZ (5 * HZ)
+#define ATH10K_VDEV_SETUP_TIMEOUT_HZ	(5 * HZ)
+#define ATH10K_VDEV_DELETE_TIMEOUT_HZ	(5 * HZ)
 
 enum ath10k_beacon_state {
 	ATH10K_BEACON_SCHEDULED = 0,
@@ -703,6 +718,20 @@ struct ath10k_fw_components {
 	struct ath10k_fw_file fw_file;
 };
 
+struct datapath_rx_stats {
+	u32 no_of_packets;
+	u32 short_gi_pkts;
+	u32 ht_rate_indx[ATH10K_RX_HT_MCS_MAX + 1];
+	u32 vht_rate_indx[ATH10K_RX_VHT_MCS_MAX + 1];
+	u32 ht_rate_packets;
+	u32 vht_rate_packets;
+	u32 legacy_pkt;
+	u32 nss[ATH10K_RX_NSS_MAX + 1];
+	u32 num_pkts_40Mhz;
+	u32 num_pkts_80Mhz;
+	u32 band[ATH10K_BAND_MAX + 1];
+};
+
 struct ath10k {
 	struct ath_common ath_common;
 	struct ieee80211_hw *hw;
@@ -729,7 +758,7 @@ struct ath10k {
 	u32 max_spatial_stream;
 	/* protected by conf_mutex */
 	bool ani_enabled;
-
+	bool sifs_burst_enabled;
 	bool p2p;
 
 	struct {
@@ -740,6 +769,7 @@ struct ath10k {
 	struct completion target_suspend;
 
 	const struct ath10k_hw_regs *regs;
+	const struct ath10k_hw_ce_regs *hw_ce_regs;
 	const struct ath10k_hw_values *hw_values;
 	struct ath10k_shadow_reg_value *shadow_reg_value;
 	struct ath10k_shadow_reg_address *shadow_reg_address;
@@ -824,6 +854,7 @@ struct ath10k {
 	struct completion install_key_done;
 
 	struct completion vdev_setup_done;
+	struct completion vdev_delete_done;
 
 	struct workqueue_struct *workqueue;
 	/* Auxiliary workqueue */
@@ -899,7 +930,10 @@ struct ath10k {
 		enum ath10k_spectral_mode mode;
 		struct ath10k_spec_scan config;
 	} spectral;
+	struct datapath_rx_stats *rx_stats;
 #endif
+	/* prevent concurrency histogram for receiving data packet */
+	spinlock_t datapath_rx_stat_lock;
 
 	struct {
 		/* protected by conf_mutex */
@@ -923,13 +957,11 @@ struct ath10k {
 	struct net_device napi_dev;
 	struct napi_struct napi;
 
-	void (*bus_write32)(void *ar, u32 offset, u32 value);
-	u32 (*bus_read32)(void *ar, u32 offset);
-	spinlock_t ce_lock; /* lock for CE access */
-	void *ce_states;
 	struct fw_flag *fw_flags;
 	/* set for bmi chip sets */
+	struct completion peer_delete_done;
 	bool is_bmi;
+	enum ieee80211_sta_state sta_state;
 	/* must be last */
 	u8 drv_priv[0] __aligned(sizeof(void *));
 };

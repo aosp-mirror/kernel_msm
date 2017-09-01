@@ -133,9 +133,8 @@ ol_tx_desc_find_check(struct ol_txrx_pdev_t *pdev, u_int16_t tx_desc_id)
 
 	tx_desc = ol_tx_desc_find(pdev, tx_desc_id);
 
-	if (tx_desc->pkt_type == ol_tx_frm_freed) {
+	if (tx_desc->pkt_type == ol_tx_frm_freed)
 		return NULL;
-	}
 
 	return tx_desc;
 }
@@ -145,7 +144,15 @@ ol_tx_desc_find_check(struct ol_txrx_pdev_t *pdev, u_int16_t tx_desc_id)
 static inline struct ol_tx_desc_t *
 ol_tx_desc_find_check(struct ol_txrx_pdev_t *pdev, u_int16_t tx_desc_id)
 {
-	return ol_tx_desc_find(pdev, tx_desc_id);
+	struct ol_tx_desc_t *tx_desc;
+
+	tx_desc = ol_tx_desc_find(pdev, tx_desc_id);
+
+	/* check against invalid tx_desc_id */
+	if (ol_cfg_is_high_latency(pdev->ctrl_pdev) && !tx_desc->vdev)
+		return NULL;
+
+	return tx_desc;
 }
 #endif
 
@@ -233,15 +240,16 @@ struct qdf_tso_num_seg_elem_t *ol_tso_num_seg_alloc(
 void ol_tso_num_seg_free(struct ol_txrx_pdev_t *pdev,
 	 struct qdf_tso_num_seg_elem_t *tso_num_seg);
 void ol_free_remaining_tso_segs(ol_txrx_vdev_handle vdev,
-				struct ol_txrx_msdu_info_t *msdu_info);
+				struct ol_txrx_msdu_info_t *msdu_info,
+				bool is_tso_seg_mapping_done);
 
 #else
 #define ol_tso_alloc_segment(pdev) /*no-op*/
 #define ol_tso_free_segment(pdev, tso_seg) /*no-op*/
 #define ol_tso_num_seg_alloc(pdev) /*no-op*/
 #define ol_tso_num_seg_free(pdev, tso_num_seg) /*no-op*/
-#define ol_free_remaining_tso_segs(vdev, msdu_info) /*no-op*/
-
+/*no-op*/
+#define ol_free_remaining_tso_segs(vdev, msdu_info, is_tso_seg_mapping_done)
 #endif
 
 /**
@@ -256,6 +264,7 @@ static inline
 struct ol_tx_desc_t *ol_tx_get_desc_global_pool(struct ol_txrx_pdev_t *pdev)
 {
 	struct ol_tx_desc_t *tx_desc = &pdev->tx_desc.freelist->tx_desc;
+
 	pdev->tx_desc.freelist = pdev->tx_desc.freelist->next;
 	pdev->tx_desc.num_free--;
 	return tx_desc;
@@ -279,7 +288,6 @@ void ol_tx_put_desc_global_pool(struct ol_txrx_pdev_t *pdev,
 	pdev->tx_desc.freelist =
 			 (union ol_tx_desc_list_elem_t *)tx_desc;
 	pdev->tx_desc.num_free++;
-	return;
 }
 
 
@@ -297,6 +305,7 @@ static inline
 struct ol_tx_desc_t *ol_tx_get_desc_flow_pool(struct ol_tx_flow_pool_t *pool)
 {
 	struct ol_tx_desc_t *tx_desc = &pool->freelist->tx_desc;
+
 	pool->freelist = pool->freelist->next;
 	pool->avail_desc--;
 	return tx_desc;
@@ -319,7 +328,6 @@ void ol_tx_put_desc_flow_pool(struct ol_tx_flow_pool_t *pool,
 	((union ol_tx_desc_list_elem_t *)tx_desc)->next = pool->freelist;
 	pool->freelist = (union ol_tx_desc_list_elem_t *)tx_desc;
 	pool->avail_desc++;
-	return;
 }
 
 #else
@@ -356,7 +364,8 @@ void ol_tx_desc_dup_detect_init(struct ol_txrx_pdev_t *pdev, uint16_t pool_size)
 static inline
 void ol_tx_desc_dup_detect_deinit(struct ol_txrx_pdev_t *pdev)
 {
-	qdf_print("%s: pool_size %d num_free %d\n", __func__,
+	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_DEBUG,
+		  "%s: pool_size %d num_free %d\n", __func__,
 		pdev->tx_desc.pool_size, pdev->tx_desc.num_free);
 	if (pdev->tx_desc.free_list_bitmap)
 		qdf_mem_free(pdev->tx_desc.free_list_bitmap);

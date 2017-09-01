@@ -42,7 +42,8 @@
 #define SDE_HW_VER_170	SDE_HW_VER(1, 7, 0) /* 8996 v1.0 */
 #define SDE_HW_VER_171	SDE_HW_VER(1, 7, 1) /* 8996 v2.0 */
 #define SDE_HW_VER_172	SDE_HW_VER(1, 7, 2) /* 8996 v3.0 */
-#define SDE_HW_VER_300	SDE_HW_VER(3, 0, 0) /* cobalt v1.0 */
+#define SDE_HW_VER_300	SDE_HW_VER(3, 0, 0) /* 8998 v1.0 */
+#define SDE_HW_VER_301	SDE_HW_VER(3, 0, 1) /* 8998 v1.1 */
 #define SDE_HW_VER_400	SDE_HW_VER(4, 0, 0) /* msmskunk v1.0 */
 
 #define IS_MSMSKUNK_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_400)
@@ -56,6 +57,8 @@
 		((((MAJOR) & 0xFFFF) << 16) | (((MINOR) & 0xFFFF)))
 #define SDE_COLOR_PROCESS_MAJOR(version) (((version) & 0xFFFF0000) >> 16)
 #define SDE_COLOR_PROCESS_MINOR(version) ((version) & 0xFFFF)
+
+#define SSPP_NAME_SIZE 12
 
 /**
  * MDP TOP BLOCK features
@@ -455,12 +458,16 @@ struct sde_ctl_cfg {
  * @sblk:              SSPP sub-blocks information
  * @xin_id:            bus client identifier
  * @clk_ctrl           clock control identifier
+ * @name               source pipe name
+ * @type               sspp type identifier
  */
 struct sde_sspp_cfg {
 	SDE_HW_BLK_INFO;
 	const struct sde_sspp_sub_blks *sblk;
 	u32 xin_id;
 	enum sde_clk_ctrl_type clk_ctrl;
+	char name[SSPP_NAME_SIZE];
+	u32 type;
 };
 
 /**
@@ -608,6 +615,31 @@ struct sde_perf_cfg {
 };
 
 /**
+* struct sde_vp_sub_blks - Virtual Plane sub-blocks
+* @pipeid_list             list for hw pipe id
+* @sspp_id                 SSPP ID, refer to enum sde_sspp.
+*/
+struct sde_vp_sub_blks {
+	struct list_head pipeid_list;
+	u32 sspp_id;
+};
+
+/**
+* struct sde_vp_cfg - information of Virtual Plane SW blocks
+* @id                 enum identifying this block
+* @sub_blks           list head for virtual plane sub blocks
+* @plane_type         plane type, such as primary, overlay or cursor
+* @display_type       which display the plane bound to, such as primary,
+*                     secondary or tertiary
+*/
+struct sde_vp_cfg {
+	u32 id;
+	struct list_head sub_blks;
+	const char *plane_type;
+	const char *display_type;
+};
+
+/**
  * struct sde_mdss_cfg - information of MDSS HW
  * This is the main catalog data structure representing
  * this HW version. Contains number of instances,
@@ -623,6 +655,11 @@ struct sde_perf_cfg {
  * @csc_type           csc or csc_10bit support.
  * @has_src_split      source split feature status
  * @has_cdp            Client driver prefetch feature status
+ * @has_hdr            HDR feature support
+ * @dma_formats        Supported formats for dma pipe
+ * @cursor_formats     Supported formats for cursor pipe
+ * @vig_formats        Supported formats for vig pipe
+ * @wb_formats         Supported formats for wb
  */
 struct sde_mdss_cfg {
 	u32 hwversion;
@@ -636,7 +673,7 @@ struct sde_mdss_cfg {
 	u32 csc_type;
 	bool has_src_split;
 	bool has_cdp;
-
+	bool has_hdr;
 	u32 mdss_count;
 	struct sde_mdss_base_cfg mdss[MAX_BLOCKS];
 
@@ -672,6 +709,14 @@ struct sde_mdss_cfg {
 	/* Add additional block data structures here */
 
 	struct sde_perf_cfg perf;
+
+	u32 vp_count;
+	struct sde_vp_cfg vp[MAX_BLOCKS];
+
+	struct sde_format_extended *dma_formats;
+	struct sde_format_extended *cursor_formats;
+	struct sde_format_extended *vig_formats;
+	struct sde_format_extended *wb_formats;
 };
 
 struct sde_mdss_hw_cfg_handler {

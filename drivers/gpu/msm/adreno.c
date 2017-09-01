@@ -1720,6 +1720,30 @@ static int adreno_getproperty(struct kgsl_device *device,
 			status = 0;
 		}
 		break;
+	case KGSL_PROP_DEVICE_QTIMER:
+		{
+			struct kgsl_qtimer_prop qtimerprop = {0};
+			struct kgsl_memdesc *qtimer_desc =
+				kgsl_mmu_get_qtimer_global_entry(device);
+
+			if (sizebytes != sizeof(qtimerprop)) {
+				status = -EINVAL;
+				break;
+			}
+
+			if (qtimer_desc) {
+				qtimerprop.gpuaddr = qtimer_desc->gpuaddr;
+				qtimerprop.size = qtimer_desc->size;
+			}
+
+			if (copy_to_user(value, &qtimerprop,
+						sizeof(qtimerprop))) {
+				status = -EFAULT;
+				break;
+			}
+			status = 0;
+		}
+		break;
 	case KGSL_PROP_MMU_ENABLE:
 		{
 			/* Report MMU only if we can handle paged memory */
@@ -2114,6 +2138,11 @@ static int adreno_soft_reset(struct kgsl_device *device)
 	kgsl_cffdump_close(device);
 	/* Reset the GPU */
 	_soft_reset(adreno_dev);
+
+	/* Clear the busy_data stats - we're starting over from scratch */
+	adreno_dev->busy_data.gpu_busy = 0;
+	adreno_dev->busy_data.vbif_ram_cycles = 0;
+	adreno_dev->busy_data.vbif_starved_ram = 0;
 
 	/* Set the page table back to the default page table */
 	adreno_ringbuffer_set_global(adreno_dev, 0);

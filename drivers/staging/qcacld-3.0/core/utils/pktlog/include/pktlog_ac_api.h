@@ -34,12 +34,7 @@
 #define _PKTLOG_AC_API_
 #ifndef REMOVE_PKT_LOG
 
-/**
- * @typedef ol_pktlog_dev_handle
- * @brief opaque handle for pktlog device object
- */
 struct ol_pktlog_dev_t;
-typedef struct ol_pktlog_dev_t *ol_pktlog_dev_handle;
 
 /**
  * @typedef hif_opaque_softc_handle
@@ -100,6 +95,7 @@ struct ath_pktlog_info {
 	/* Size of buffer in bytes */
 	int32_t buf_size;
 	spinlock_t log_lock;
+	struct mutex pktlog_mutex;
 
 	/* Threshold of TCP SACK packets for triggered stop */
 	int sack_thr;

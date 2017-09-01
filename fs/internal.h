@@ -84,9 +84,11 @@ extern struct file *get_empty_filp(void);
  * super.c
  */
 extern int do_remount_sb(struct super_block *, int, void *, int);
+extern int do_remount_sb2(struct vfsmount *, struct super_block *, int,
+								void *, int);
 extern bool trylock_super(struct super_block *sb);
 extern struct dentry *mount_fs(struct file_system_type *,
-			       int, const char *, void *);
+			       int, const char *, struct vfsmount *, void *);
 extern struct super_block *user_get_super(dev_t);
 
 /*
@@ -151,3 +153,29 @@ extern void mnt_pin_kill(struct mount *m);
  * fs/nsfs.c
  */
 extern struct dentry_operations ns_dentry_operations;
+
+#ifdef CONFIG_FILE_TABLE_DEBUG
+void global_filetable_print_warning_once(void);
+void global_filetable_add(struct file *filp);
+void global_filetable_del(struct file *filp);
+void global_filetable_delayed_print(struct mount *mnt);
+
+#else /* i.e NOT CONFIG_FILE_TABLE_DEBUG */
+
+static inline void global_filetable_print_warning_once(void)
+{
+}
+
+static inline void global_filetable_add(struct file *filp)
+{
+}
+
+static inline void global_filetable_del(struct file *filp)
+{
+}
+
+static inline void global_filetable_delayed_print(struct mount *mnt)
+{
+}
+
+#endif /* CONFIG_FILE_TABLE_DEBUG */

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -39,7 +39,7 @@
  */
 void hif_dummy_bus_prevent_linkdown(struct hif_softc *scn, bool flag)
 {
-	HIF_ERROR("wlan: %s pcie power collapse ignored",
+	HIF_DBG("wlan: %s pcie power collapse ignored",
 			(flag ? "disable" : "enable"));
 }
 
@@ -195,7 +195,6 @@ hif_dummy_get_config_item(struct hif_softc *hif_sc,
 void
 hif_dummy_set_mailbox_swap(struct hif_softc *hif_sc)
 {
-	return;
 }
 
 /**
@@ -207,7 +206,6 @@ hif_dummy_set_mailbox_swap(struct hif_softc *hif_sc)
 void
 hif_dummy_claim_device(struct hif_softc *hif_sc)
 {
-	return;
 }
 
 /**
@@ -219,7 +217,6 @@ hif_dummy_claim_device(struct hif_softc *hif_sc)
 void
 hif_dummy_cancel_deferred_target_sleep(struct hif_softc *hif_sc)
 {
-	return;
 }
 
 /**
@@ -292,7 +289,6 @@ void hif_dummy_ipa_get_ce_resource(struct hif_softc *hif_sc,
 void
 hif_dummy_mask_interrupt_call(struct hif_softc *hif_sc)
 {
-	return;
 }
 
 /**
@@ -323,7 +319,6 @@ void hif_dummy_clear_stats(struct hif_softc *hif_ctx)
 void hif_dummy_set_bundle_mode(struct hif_softc *hif_ctx,
 					bool enabled, int rx_bundle_cnt)
 {
-	return;
 }
 
 /**

@@ -27,11 +27,9 @@
 #ifndef _WMI_UNIFIED_TLV_H_
 #define _WMI_UNIFIED_TLV_H_
 #include <osdep.h>
-#include "a_types.h"
 #include "wmi_unified_param.h"
 #include "wmi.h"
 #include "wmi_unified.h"
-#include "ol_defines.h" /* Fix Me: wmi_unified_t structure definition */
 
 QDF_STATUS send_vdev_create_cmd_tlv(wmi_unified_t wmi_handle,
 				 uint8_t macaddr[IEEE80211_ADDR_LEN],
@@ -90,6 +88,13 @@ QDF_STATUS send_suspend_cmd_tlv(wmi_unified_t wmi_handle,
 
 QDF_STATUS send_resume_cmd_tlv(wmi_unified_t wmi_handle,
 				uint8_t mac_id);
+
+#ifdef FEATURE_WLAN_D0WOW
+QDF_STATUS send_d0wow_enable_cmd_tlv(wmi_unified_t wmi_handle,
+				uint8_t mac_id);
+QDF_STATUS send_d0wow_disable_cmd_tlv(wmi_unified_t wmi_handle,
+				uint8_t mac_id);
+#endif
 
 QDF_STATUS send_wow_enable_cmd_tlv(wmi_unified_t wmi_handle,
 				struct wow_cmd_params *param,
@@ -472,8 +477,8 @@ QDF_STATUS send_process_ch_avoid_update_cmd_tlv(wmi_unified_t wmi_handle);
 
 QDF_STATUS send_regdomain_info_to_fw_cmd_tlv(wmi_unified_t wmi_handle,
 				   uint32_t reg_dmn, uint16_t regdmn2G,
-				   uint16_t regdmn5G, int8_t ctl2G,
-				   int8_t ctl5G);
+				   uint16_t regdmn5G, uint8_t ctl2G,
+				   uint8_t ctl5G);
 
 QDF_STATUS send_set_tdls_offchan_mode_cmd_tlv(wmi_unified_t wmi_handle,
 			      struct tdls_channel_switch_params *chan_switch_params);
@@ -540,17 +545,15 @@ QDF_STATUS send_enable_arp_ns_offload_cmd_tlv(wmi_unified_t wmi_handle,
 			   uint8_t vdev_id);
 
 /**
- * send_enable_broadcast_filter_cmd_tlv() - Enable/Disable Broadcast filter
- * when target goes to wow suspend/resume mode
- * @wma: wmi handle
- * @vdev_id: device identifier
- * @enable: enable/disable broadcast filter
+ * send_conf_hw_filter_cmd_tlv() - configure hw filter mode to firmware
+ * @wmi: wmi handle
+ * @vdev_id: Id of the vdev to configure
+ * @mode_bitmap: the hw filter mode to configure
  *
- *
- * Return: QDF Status
+ * Return: QDF_STATUS
  */
-QDF_STATUS send_enable_broadcast_filter_cmd_tlv(wmi_unified_t wmi_handle,
-			   uint8_t vdev_id, bool enable);
+QDF_STATUS send_conf_hw_filter_cmd_tlv(wmi_unified_t wmi, uint8_t vdev_id,
+				       uint8_t mode_bitmap);
 
 QDF_STATUS send_set_led_flashing_cmd_tlv(wmi_unified_t wmi_handle,
 				struct flashing_req_params *flashing);

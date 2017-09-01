@@ -34,8 +34,6 @@
 #define _WMI_UNIFIED_API_H_
 
 #include <osdep.h>
-#include "a_types.h"
-#include "ol_defines.h"
 #ifdef CONFIG_MCL
 #include "wmi.h"
 #endif
@@ -366,6 +364,13 @@ QDF_STATUS wmi_unified_stats_request_send(void *wmi_hdl,
 
 QDF_STATUS wmi_unified_green_ap_ps_send(void *wmi_hdl,
 						uint32_t value, uint8_t mac_id);
+
+#ifdef FEATURE_WLAN_D0WOW
+QDF_STATUS wmi_d0wow_enable_send(void *wmi_hdl,
+				uint8_t mac_id);
+QDF_STATUS wmi_d0wow_disable_send(void *wmi_hdl,
+				uint8_t mac_id);
+#endif
 
 
 QDF_STATUS wmi_unified_wow_enable_send(void *wmi_hdl,
@@ -782,8 +787,8 @@ QDF_STATUS wmi_unified_process_ch_avoid_update_cmd(void *wmi_hdl);
 
 QDF_STATUS wmi_unified_send_regdomain_info_to_fw_cmd(void *wmi_hdl,
 				   uint32_t reg_dmn, uint16_t regdmn2G,
-				   uint16_t regdmn5G, int8_t ctl2G,
-				   int8_t ctl5G);
+				   uint16_t regdmn5G, uint8_t ctl2G,
+				   uint8_t ctl5G);
 
 QDF_STATUS wmi_unified_set_tdls_offchan_mode_cmd(void *wmi_hdl,
 			      struct tdls_channel_switch_params *chan_switch_params);
@@ -853,18 +858,20 @@ QDF_STATUS wmi_unified_enable_arp_ns_offload_cmd(void *wmi_hdl,
 			   uint8_t vdev_id);
 
 /**
- * wmi_unified_configure_broadcast_filter_cmd() - Enable/Disable Broadcast
- * filter
- * when target goes to wow suspend/resume mode
+ * wmi_unified_conf_hw_filter_mode_cmd() - Configure hardware filter
  * @wmi_hdl: wmi handle
  * @vdev_id: device identifier
- * @bc_filter: enable/disable Broadcast filter
+ * @config_bitmap: bitmap of packet types to drop
  *
+ * The hardware filter is only effective in DTIM mode. Use this configuration
+ * to blanket drop broadcast/multicast packets at the hardware level, without
+ * waking up the firmware
  *
- * Return: QDF_STATUS_SUCCESS on success and QDF_STATUS_E_FAILURE for failure
+ * Return: QDF_STATUS
  */
-QDF_STATUS wmi_unified_configure_broadcast_filter_cmd(void *wmi_hdl,
-			   uint8_t vdev_id, bool bc_filter);
+QDF_STATUS wmi_unified_conf_hw_filter_mode_cmd(void *wmi_hdl,
+					       uint8_t vdev_id,
+					       uint8_t config_bitmap);
 
 QDF_STATUS wmi_unified_set_led_flashing_cmd(void *wmi_hdl,
 				struct flashing_req_params *flashing);
@@ -1374,4 +1381,33 @@ QDF_STATUS wmi_unified_set_arp_stats_req(void *wmi_hdl,
 					 struct set_arp_stats *req_buf);
 QDF_STATUS wmi_unified_get_arp_stats_req(void *wmi_hdl,
 					 struct get_arp_stats *req_buf);
+
+#ifdef WMI_INTERFACE_EVENT_LOGGING
+void wmi_print_cmd_log(wmi_unified_t wmi, uint32_t count,
+		       qdf_abstract_print *print, void *print_priv);
+
+void wmi_print_cmd_tx_cmp_log(wmi_unified_t wmi, uint32_t count,
+			      qdf_abstract_print *print, void *print_priv);
+
+void wmi_print_mgmt_cmd_log(wmi_unified_t wmi, uint32_t count,
+			    qdf_abstract_print *print, void *print_priv);
+
+void wmi_print_mgmt_cmd_tx_cmp_log(wmi_unified_t wmi, uint32_t count,
+				   qdf_abstract_print *print, void *print_priv);
+
+void wmi_print_event_log(wmi_unified_t wmi, uint32_t count,
+			 qdf_abstract_print *print, void *print_priv);
+
+void wmi_print_rx_event_log(wmi_unified_t wmi, uint32_t count,
+			    qdf_abstract_print *print, void *print_priv);
+
+void wmi_print_mgmt_event_log(wmi_unified_t wmi, uint32_t count,
+			      qdf_abstract_print *print, void *print_priv);
+#endif /* WMI_INTERFACE_EVENT_LOGGING */
+
+QDF_STATUS wmi_unified_send_dbs_scan_sel_params_cmd(void *wmi_hdl,
+				   struct wmi_dbs_scan_sel_params *wmi_param);
+
+QDF_STATUS wmi_unified_send_limit_off_chan_cmd(void *wmi_hdl,
+				   struct wmi_limit_off_chan_param *wmi_param);
 #endif /* _WMI_UNIFIED_API_H_ */

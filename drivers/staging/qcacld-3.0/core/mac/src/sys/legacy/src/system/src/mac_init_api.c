@@ -41,7 +41,6 @@
 #include "cfg_api.h"             /* cfg_cleanup */
 #include "lim_api.h"             /* lim_cleanup */
 #include "sir_types.h"
-#include "sys_debug.h"
 #include "sys_entry_func.h"
 #include "mac_init_api.h"
 
@@ -68,9 +67,7 @@ tSirRetStatus mac_start(tHalHandle hHal, void *pHalMacStartParams)
 	pMac->gDriverType =
 		((tHalMacStartParameters *) pHalMacStartParams)->driverType;
 
-	sys_log(pMac, LOG2, FL("called"));
-
-	if (ANI_DRIVER_TYPE(pMac) != eDRIVER_TYPE_MFG) {
+	if (ANI_DRIVER_TYPE(pMac) != QDF_DRIVER_TYPE_MFG) {
 		status = pe_start(pMac);
 	}
 
@@ -86,13 +83,13 @@ tSirRetStatus mac_start(tHalHandle hHal, void *pHalMacStartParams)
    \return tSirRetStatus
    -------------------------------------------------------------*/
 
-tSirRetStatus mac_stop(tHalHandle hHal, tHalStopType stopType)
+QDF_STATUS mac_stop(tHalHandle hHal, tHalStopType stopType)
 {
 	tpAniSirGlobal pMac = (tpAniSirGlobal) hHal;
 	pe_stop(pMac);
 	cfg_cleanup(pMac);
 
-	return eSIR_SUCCESS;
+	return QDF_STATUS_SUCCESS;
 }
 
 /** -------------------------------------------------------------
@@ -127,17 +124,11 @@ tSirRetStatus mac_open(tHalHandle *pHalHandle, tHddHandle hHdd,
 		 * For Non-FTM cases this value will be reset during mac_start
 		 */
 		if (cds_cfg->driver_type)
-			p_mac->gDriverType = eDRIVER_TYPE_MFG;
-
-		/* Call various PE (and other layer init here) */
-		if (eSIR_SUCCESS != log_init(p_mac))
-			return eSIR_FAILURE;
+			p_mac->gDriverType = QDF_DRIVER_TYPE_MFG;
 
 		/* Call routine to initialize CFG data structures */
-		if (eSIR_SUCCESS != cfg_init(p_mac)) {
-			log_deinit(p_mac);
+		if (eSIR_SUCCESS != cfg_init(p_mac))
 			return eSIR_FAILURE;
-		}
 
 		sys_init_globals(p_mac);
 	}
@@ -148,9 +139,8 @@ tSirRetStatus mac_open(tHalHandle *pHalHandle, tHddHandle hHdd,
 
 	status =  pe_open(p_mac, cds_cfg);
 	if (eSIR_SUCCESS != status) {
-		sys_log(p_mac, LOGE, FL("pe_open failure"));
+		pe_err("pe_open() failure");
 		cfg_de_init(p_mac);
-		log_deinit(p_mac);
 	}
 
 	return status;
@@ -164,22 +154,20 @@ tSirRetStatus mac_open(tHalHandle *pHalHandle, tHddHandle hHdd,
    \return none
    -------------------------------------------------------------*/
 
-tSirRetStatus mac_close(tHalHandle hHal)
+QDF_STATUS mac_close(tHalHandle hHal)
 {
 
 	tpAniSirGlobal pMac = (tpAniSirGlobal) hHal;
 
 	if (!pMac)
-		return eSIR_FAILURE;
+		return QDF_STATUS_E_FAILURE;
 
 	pe_close(pMac);
 
 	/* Call routine to free-up all CFG data structures */
 	cfg_de_init(pMac);
 
-	log_deinit(pMac);
-
 	qdf_mem_zero(pMac, sizeof(*pMac));
 
-	return eSIR_SUCCESS;
+	return QDF_STATUS_SUCCESS;
 }

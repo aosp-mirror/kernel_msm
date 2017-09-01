@@ -40,6 +40,9 @@
 #include <qdf_status.h>
 #include <qdf_lock.h>
 #include <qdf_trace.h>
+#include <qdf_module.h>
+#include <qdf_atomic.h>
+
 #include <net/ieee80211_radiotap.h>
 
 #if defined(FEATURE_TSO)
@@ -98,7 +101,7 @@ void qdf_nbuf_tx_desc_count_display(void)
 			 nbuf_tx_mgmt[QDF_NBUF_TX_PKT_FREE],
 		nbuf_tx_mgmt[QDF_NBUF_TX_PKT_FREE]);
 }
-EXPORT_SYMBOL(qdf_nbuf_tx_desc_count_display);
+qdf_export_symbol(qdf_nbuf_tx_desc_count_display);
 
 /**
  * qdf_nbuf_tx_desc_count_update() - Updates the layer packet counter
@@ -121,7 +124,7 @@ static inline void qdf_nbuf_tx_desc_count_update(uint8_t packet_type,
 		break;
 	}
 }
-EXPORT_SYMBOL(qdf_nbuf_tx_desc_count_update);
+qdf_export_symbol(qdf_nbuf_tx_desc_count_update);
 
 /**
  * qdf_nbuf_tx_desc_count_clear() - Clears packet counter for both data, mgmt
@@ -133,7 +136,7 @@ void qdf_nbuf_tx_desc_count_clear(void)
 	memset(nbuf_tx_mgmt, 0, sizeof(nbuf_tx_mgmt));
 	memset(nbuf_tx_data, 0, sizeof(nbuf_tx_data));
 }
-EXPORT_SYMBOL(qdf_nbuf_tx_desc_count_clear);
+qdf_export_symbol(qdf_nbuf_tx_desc_count_clear);
 
 /**
  * qdf_nbuf_set_state() - Updates the packet state
@@ -152,6 +155,7 @@ void qdf_nbuf_set_state(qdf_nbuf_t nbuf, uint8_t current_state)
 	 * such as scan commands are not tracked
 	 */
 	uint8_t packet_type;
+
 	packet_type = QDF_NBUF_CB_TX_PACKET_TRACK(nbuf);
 
 	if ((packet_type != QDF_NBUF_TX_PKT_DATA_TRACK) &&
@@ -162,7 +166,7 @@ void qdf_nbuf_set_state(qdf_nbuf_t nbuf, uint8_t current_state)
 	qdf_nbuf_tx_desc_count_update(packet_type,
 					current_state);
 }
-EXPORT_SYMBOL(qdf_nbuf_set_state);
+qdf_export_symbol(qdf_nbuf_set_state);
 
 /* globals do not need to be initialized to NULL/0 */
 qdf_nbuf_trace_update_t qdf_trace_update_cb;
@@ -193,10 +197,9 @@ struct sk_buff *__qdf_nbuf_alloc(qdf_device_t osdev, size_t size, int reserve,
 
 	skb = dev_alloc_skb(size);
 
-	if (!skb) {
-		pr_info("ERROR:NBUF alloc failed\n");
+	if (!skb)
 		return NULL;
-	}
+
 	memset(skb->cb, 0x0, sizeof(skb->cb));
 
 	/*
@@ -225,7 +228,7 @@ struct sk_buff *__qdf_nbuf_alloc(qdf_device_t osdev, size_t size, int reserve,
 
 	return skb;
 }
-EXPORT_SYMBOL(__qdf_nbuf_alloc);
+qdf_export_symbol(__qdf_nbuf_alloc);
 
 /**
  * __qdf_nbuf_free() - free the nbuf its interrupt safe
@@ -240,7 +243,7 @@ void __qdf_nbuf_free(struct sk_buff *skb)
 	else
 		dev_kfree_skb_any(skb);
 }
-EXPORT_SYMBOL(__qdf_nbuf_free);
+qdf_export_symbol(__qdf_nbuf_free);
 
 /**
  * __qdf_nbuf_map() - map a buffer to local bus address space
@@ -256,6 +259,7 @@ QDF_STATUS
 __qdf_nbuf_map(qdf_device_t osdev, struct sk_buff *skb, qdf_dma_dir_t dir)
 {
 	struct skb_shared_info *sh = skb_shinfo(skb);
+
 	qdf_assert((dir == QDF_DMA_TO_DEVICE)
 			|| (dir == QDF_DMA_FROM_DEVICE));
 
@@ -270,7 +274,7 @@ __qdf_nbuf_map(qdf_device_t osdev, struct sk_buff *skb, qdf_dma_dir_t dir)
 
 	return __qdf_nbuf_map_single(osdev, skb, dir);
 }
-EXPORT_SYMBOL(__qdf_nbuf_map);
+qdf_export_symbol(__qdf_nbuf_map);
 
 #else
 QDF_STATUS
@@ -278,7 +282,7 @@ __qdf_nbuf_map(qdf_device_t osdev, struct sk_buff *skb, qdf_dma_dir_t dir)
 {
 	return __qdf_nbuf_map_single(osdev, skb, dir);
 }
-EXPORT_SYMBOL(__qdf_nbuf_map);
+qdf_export_symbol(__qdf_nbuf_map);
 #endif
 /**
  * __qdf_nbuf_unmap() - to unmap a previously mapped buf
@@ -301,7 +305,7 @@ __qdf_nbuf_unmap(qdf_device_t osdev, struct sk_buff *skb,
 	 */
 	__qdf_nbuf_unmap_single(osdev, skb, dir);
 }
-EXPORT_SYMBOL(__qdf_nbuf_unmap);
+qdf_export_symbol(__qdf_nbuf_unmap);
 
 /**
  * __qdf_nbuf_map_single() - map a single buffer to local bus address space
@@ -311,7 +315,7 @@ EXPORT_SYMBOL(__qdf_nbuf_unmap);
  *
  * Return: QDF_STATUS
  */
-#if defined(A_SIMOS_DEVHOST) || defined (HIF_USB)
+#if defined(A_SIMOS_DEVHOST) || defined(HIF_USB)
 QDF_STATUS
 __qdf_nbuf_map_single(qdf_device_t osdev, qdf_nbuf_t buf, qdf_dma_dir_t dir)
 {
@@ -322,7 +326,7 @@ __qdf_nbuf_map_single(qdf_device_t osdev, qdf_nbuf_t buf, qdf_dma_dir_t dir)
 	BUILD_BUG_ON(sizeof(QDF_NBUF_CB_PADDR(buf)) < sizeof(buf->data));
 	return QDF_STATUS_SUCCESS;
 }
-EXPORT_SYMBOL(__qdf_nbuf_map_single);
+qdf_export_symbol(__qdf_nbuf_map_single);
 #else
 QDF_STATUS
 __qdf_nbuf_map_single(qdf_device_t osdev, qdf_nbuf_t buf, qdf_dma_dir_t dir)
@@ -337,7 +341,7 @@ __qdf_nbuf_map_single(qdf_device_t osdev, qdf_nbuf_t buf, qdf_dma_dir_t dir)
 		? QDF_STATUS_E_FAILURE
 		: QDF_STATUS_SUCCESS;
 }
-EXPORT_SYMBOL(__qdf_nbuf_map_single);
+qdf_export_symbol(__qdf_nbuf_map_single);
 #endif
 /**
  * __qdf_nbuf_unmap_single() -  unmap a previously mapped buf
@@ -347,11 +351,10 @@ EXPORT_SYMBOL(__qdf_nbuf_map_single);
  *
  * Return: none
  */
-#if defined(A_SIMOS_DEVHOST) || defined (HIF_USB)
+#if defined(A_SIMOS_DEVHOST) || defined(HIF_USB)
 void __qdf_nbuf_unmap_single(qdf_device_t osdev, qdf_nbuf_t buf,
 				qdf_dma_dir_t dir)
 {
-	return;
 }
 #else
 void __qdf_nbuf_unmap_single(qdf_device_t osdev, qdf_nbuf_t buf,
@@ -362,7 +365,7 @@ void __qdf_nbuf_unmap_single(qdf_device_t osdev, qdf_nbuf_t buf,
 			skb_end_pointer(buf) - buf->data, dir);
 }
 #endif
-EXPORT_SYMBOL(__qdf_nbuf_unmap_single);
+qdf_export_symbol(__qdf_nbuf_unmap_single);
 
 /**
  * __qdf_nbuf_set_rx_cksum() - set rx checksum
@@ -392,7 +395,7 @@ __qdf_nbuf_set_rx_cksum(struct sk_buff *skb, qdf_nbuf_rx_cksum_t *cksum)
 	}
 	return QDF_STATUS_SUCCESS;
 }
-EXPORT_SYMBOL(__qdf_nbuf_set_rx_cksum);
+qdf_export_symbol(__qdf_nbuf_set_rx_cksum);
 
 /**
  * __qdf_nbuf_get_tx_cksum() - get tx checksum
@@ -406,8 +409,6 @@ qdf_nbuf_tx_cksum_t __qdf_nbuf_get_tx_cksum(struct sk_buff *skb)
 	case CHECKSUM_NONE:
 		return QDF_NBUF_TX_CKSUM_NONE;
 	case CHECKSUM_PARTIAL:
-		/* XXX ADF and Linux checksum don't map with 1-to-1. This is
-		 * not 100% correct */
 		return QDF_NBUF_TX_CKSUM_TCP_UDP;
 	case CHECKSUM_COMPLETE:
 		return QDF_NBUF_TX_CKSUM_TCP_UDP_IP;
@@ -415,7 +416,7 @@ qdf_nbuf_tx_cksum_t __qdf_nbuf_get_tx_cksum(struct sk_buff *skb)
 		return QDF_NBUF_TX_CKSUM_NONE;
 	}
 }
-EXPORT_SYMBOL(__qdf_nbuf_get_tx_cksum);
+qdf_export_symbol(__qdf_nbuf_get_tx_cksum);
 
 /**
  * __qdf_nbuf_get_tid() - get tid
@@ -427,7 +428,7 @@ uint8_t __qdf_nbuf_get_tid(struct sk_buff *skb)
 {
 	return skb->priority;
 }
-EXPORT_SYMBOL(__qdf_nbuf_get_tid);
+qdf_export_symbol(__qdf_nbuf_get_tid);
 
 /**
  * __qdf_nbuf_set_tid() - set tid
@@ -439,7 +440,7 @@ void __qdf_nbuf_set_tid(struct sk_buff *skb, uint8_t tid)
 {
 	skb->priority = tid;
 }
-EXPORT_SYMBOL(__qdf_nbuf_set_tid);
+qdf_export_symbol(__qdf_nbuf_set_tid);
 
 /**
  * __qdf_nbuf_set_tid() - set tid
@@ -451,7 +452,7 @@ uint8_t __qdf_nbuf_get_exemption_type(struct sk_buff *skb)
 {
 	return QDF_NBUF_EXEMPT_NO_EXEMPTION;
 }
-EXPORT_SYMBOL(__qdf_nbuf_get_exemption_type);
+qdf_export_symbol(__qdf_nbuf_get_exemption_type);
 
 /**
  * __qdf_nbuf_reg_trace_cb() - register trace callback
@@ -462,9 +463,8 @@ EXPORT_SYMBOL(__qdf_nbuf_get_exemption_type);
 void __qdf_nbuf_reg_trace_cb(qdf_nbuf_trace_update_t cb_func_ptr)
 {
 	qdf_trace_update_cb = cb_func_ptr;
-	return;
 }
-EXPORT_SYMBOL(__qdf_nbuf_reg_trace_cb);
+qdf_export_symbol(__qdf_nbuf_reg_trace_cb);
 
 /**
  * __qdf_nbuf_data_get_dhcp_subtype() - get the subtype
@@ -1170,6 +1170,30 @@ static uint32_t qdf_net_buf_track_max_free;
 static uint32_t qdf_net_buf_track_max_allocated;
 
 /**
+ * struct qdf_nbuf_free_track_t - Network buffer free track structure
+ * @p_next: Pointer to next
+ * @net_buf: Pointer to network buffer
+ * @file_name: File name
+ * @line_num: Line number
+ * @time: Time stamp
+ */
+struct qdf_nbuf_free_track_t {
+	struct qdf_nbuf_track_t *p_next;
+	qdf_nbuf_t net_buf;
+	uint8_t *file_name;
+	uint32_t line_num;
+	uint64_t time;
+};
+
+struct qdf_nbuf_free_record_t {
+	struct qdf_nbuf_free_track_t gp_qdf_netbuf_free_tbl[
+					QDF_NET_BUF_TRACK_MAX_SIZE];
+	qdf_atomic_t count;
+};
+
+static struct qdf_nbuf_free_record_t qdf_nbuf_free_record_info;
+
+/**
  * update_max_used() - update qdf_net_buf_track_max_used tracking variable
  *
  * tracks the max number of network buffers that the wlan driver was tracking
@@ -1425,10 +1449,20 @@ void qdf_net_buf_debug_init(void)
 		gp_qdf_net_buf_track_tbl[i] = NULL;
 		spin_lock_init(&g_qdf_net_buf_track_lock[i]);
 	}
-
-	return;
 }
-EXPORT_SYMBOL(qdf_net_buf_debug_init);
+qdf_export_symbol(qdf_net_buf_debug_init);
+
+#ifdef CONFIG_HALT_KMEMLEAK
+static void qdf_net_buf_handle_skb_leak(uint32_t leaked_skb_count)
+{
+	if (leaked_skb_count) {
+		qdf_print("%d SKB leaked", leaked_skb_count);
+		QDF_BUG(0);
+	}
+}
+#else
+static void qdf_net_buf_handle_skb_leak(uint32_t leaked_skb_count) { }
+#endif
 
 /**
  * qdf_net_buf_debug_init() - exit network buffer debug functionality
@@ -1442,6 +1476,7 @@ EXPORT_SYMBOL(qdf_net_buf_debug_init);
 void qdf_net_buf_debug_exit(void)
 {
 	uint32_t i;
+	uint32_t count = 0;
 	unsigned long irq_flag;
 	QDF_NBUF_TRACK *p_node;
 	QDF_NBUF_TRACK *p_prev;
@@ -1452,6 +1487,7 @@ void qdf_net_buf_debug_exit(void)
 		while (p_node) {
 			p_prev = p_node;
 			p_node = p_node->p_next;
+			count++;
 			qdf_print("SKB buf memory Leak@ File %s, @Line %d, size %zu\n",
 				  p_prev->file_name, p_prev->line_num,
 				  p_prev->size);
@@ -1462,9 +1498,54 @@ void qdf_net_buf_debug_exit(void)
 
 	qdf_nbuf_track_memory_manager_destroy();
 
-	return;
+	qdf_net_buf_handle_skb_leak(count);
 }
-EXPORT_SYMBOL(qdf_net_buf_debug_exit);
+qdf_export_symbol(qdf_net_buf_debug_exit);
+
+/**
+ * qdf_nbuf_free_dbg_get_index() - Get the next record index
+ * @tbl_index: atomic index variable to increment
+ * @size: array size of the circular buffer
+ *
+ * Return: array index
+ */
+static int qdf_nbuf_free_dbg_get_index(qdf_atomic_t *tbl_index, int size)
+{
+	int index = qdf_atomic_inc_return(tbl_index);
+
+	if (index == size)
+		qdf_atomic_sub(size, tbl_index);
+
+	while (index >= size)
+		index -= size;
+
+	return index;
+}
+
+/**
+ * qdf_netbuf_free_debug_add() - Add netbuff free info to the debug
+ * @netbuf: pointer to network buffer
+ * @file_name: fie name from where net buff is freed
+ * @line_num: line number
+ *
+ * Return: none
+ */
+void qdf_netbuf_free_debug_add(qdf_nbuf_t net_buf,
+			       uint8_t *file_name, uint32_t line_num)
+{
+	struct qdf_nbuf_free_track_t *p_node;
+	uint16_t index;
+
+	index = qdf_nbuf_free_dbg_get_index(&qdf_nbuf_free_record_info.count,
+					  QDF_NET_BUF_TRACK_MAX_SIZE);
+
+	p_node = &qdf_nbuf_free_record_info.gp_qdf_netbuf_free_tbl[index];
+	p_node->net_buf = net_buf;
+	p_node->file_name = file_name;
+	p_node->line_num = line_num;
+	p_node->time = qdf_get_log_timestamp();
+}
+EXPORT_SYMBOL(qdf_netbuf_free_debug_add);
 
 /**
  * qdf_net_buf_debug_hash() - hash network buffer pointer
@@ -1537,6 +1618,7 @@ void qdf_net_buf_debug_add_node(qdf_nbuf_t net_buf, size_t size,
 			p_node->file_name = file_name;
 			p_node->line_num = line_num;
 			p_node->size = size;
+			qdf_mem_skb_inc(size);
 			p_node->p_next = gp_qdf_net_buf_track_tbl[i];
 			gp_qdf_net_buf_track_tbl[i] = p_node;
 		} else
@@ -1544,11 +1626,10 @@ void qdf_net_buf_debug_add_node(qdf_nbuf_t net_buf, size_t size,
 				  "Mem alloc failed ! Could not track skb from %s %d of size %zu",
 				  file_name, line_num, size);
 	}
-	spin_unlock_irqrestore(&g_qdf_net_buf_track_lock[i], irq_flag);
 
-	return;
+	spin_unlock_irqrestore(&g_qdf_net_buf_track_lock[i], irq_flag);
 }
-EXPORT_SYMBOL(qdf_net_buf_debug_add_node);
+qdf_export_symbol(qdf_net_buf_debug_add_node);
 
 /**
  * qdf_net_buf_debug_delete_node() - remove skb from debug hash table
@@ -1600,12 +1681,31 @@ done:
 			  net_buf);
 		QDF_ASSERT(0);
 	} else {
+		qdf_mem_skb_dec(p_node->size);
 		qdf_nbuf_track_free(p_node);
 	}
-
-	return;
 }
-EXPORT_SYMBOL(qdf_net_buf_debug_delete_node);
+qdf_export_symbol(qdf_net_buf_debug_delete_node);
+
+void qdf_net_buf_debug_acquire_skb(qdf_nbuf_t net_buf,
+			uint8_t *file_name, uint32_t line_num)
+{
+	qdf_nbuf_t ext_list = qdf_nbuf_get_ext_list(net_buf);
+
+	while (ext_list) {
+		/*
+		 * Take care to add if it is Jumbo packet connected using
+		 * frag_list
+		 */
+		qdf_nbuf_t next;
+
+		next = qdf_nbuf_queue_next(ext_list);
+		qdf_net_buf_debug_add_node(ext_list, 0, file_name, line_num);
+		ext_list = next;
+	}
+	qdf_net_buf_debug_add_node(net_buf, 0, file_name, line_num);
+}
+qdf_export_symbol(qdf_net_buf_debug_acquire_skb);
 
 /**
  * qdf_net_buf_debug_release_skb() - release skb to avoid memory leak
@@ -1634,15 +1734,9 @@ void qdf_net_buf_debug_release_skb(qdf_nbuf_t net_buf)
 	}
 	qdf_net_buf_debug_delete_node(net_buf);
 }
-EXPORT_SYMBOL(qdf_net_buf_debug_release_skb);
+qdf_export_symbol(qdf_net_buf_debug_release_skb);
 
-#else
-void qdf_net_buf_debug_delete_node(qdf_nbuf_t net_buf)
-{
-}
-EXPORT_SYMBOL(qdf_net_buf_debug_delete_node);
 #endif /*MEMORY_DEBUG */
-
 #if defined(FEATURE_TSO)
 
 /**
@@ -1702,6 +1796,7 @@ static uint8_t __qdf_nbuf_get_tso_cmn_seg_info(qdf_device_t osdev,
 	if (tso_info->ethproto == htons(ETH_P_IP)) { /* IPv4 */
 		/* for IPv4, get the IP ID and enable TCP and IP csum */
 		struct iphdr *ipv4_hdr = ip_hdr(skb);
+
 		tso_info->ip_id = ntohs(ipv4_hdr->id);
 		tso_info->ipv4_csum_en = 1;
 		tso_info->tcp_ipv4_csum_en = 1;
@@ -1736,7 +1831,21 @@ static uint8_t __qdf_nbuf_get_tso_cmn_seg_info(qdf_device_t osdev,
 		qdf_assert(0);
 		return 1;
 	}
-	tso_info->ip_tcp_hdr_len = tso_info->eit_hdr_len - tso_info->l2_len;
+
+	if (tso_info->ethproto == htons(ETH_P_IP)) {
+		/* inlcude IPv4 header length for IPV4 (total length) */
+		tso_info->ip_tcp_hdr_len =
+			tso_info->eit_hdr_len - tso_info->l2_len;
+	} else if (tso_info->ethproto == htons(ETH_P_IPV6)) {
+		/* exclude IPv6 header length for IPv6 (payload length) */
+		tso_info->ip_tcp_hdr_len = tcp_hdrlen(skb);
+	}
+	/*
+	 * The length of the payload (application layer data) is added to
+	 * tso_info->ip_tcp_hdr_len before passing it on to the msdu link ext
+	 * descriptor.
+	 */
+
 	TSO_DEBUG("%s seq# %u eit hdr len %u l2 len %u  skb len %u\n", __func__,
 		tso_info->tcp_seq_num,
 		tso_info->eit_hdr_len,
@@ -1821,8 +1930,6 @@ static inline void __qdf_nbuf_fill_tso_cmn_seg_info(
 		   tso_cmn_info->eit_hdr_len,
 		   curr_seg->seg.tso_flags.tcp_seq_num,
 		   curr_seg->seg.total_len);
-
-
 }
 
 /**
@@ -1901,6 +2008,8 @@ uint32_t __qdf_nbuf_get_tso_info(qdf_device_t osdev, struct sk_buff *skb,
 			return tso_info->num_segs;
 
 		curr_seg->seg.tso_flags.ip_len = tso_cmn_info.ip_tcp_hdr_len;
+		/* frag len is added to ip_len in while loop below*/
+
 		curr_seg->seg.num_frags++;
 
 		while (more_tso_frags) {
@@ -1987,7 +2096,7 @@ uint32_t __qdf_nbuf_get_tso_info(qdf_device_t osdev, struct sk_buff *skb,
 	}
 	return tso_info->num_segs;
 }
-EXPORT_SYMBOL(__qdf_nbuf_get_tso_info);
+qdf_export_symbol(__qdf_nbuf_get_tso_info);
 
 /**
  * __qdf_nbuf_unmap_tso_segment() - function to dma unmap TSO segment element
@@ -2046,7 +2155,7 @@ void __qdf_nbuf_unmap_tso_segment(qdf_device_t osdev,
 		tso_seg->seg.tso_frags[0].paddr = 0;
 	}
 }
-EXPORT_SYMBOL(__qdf_nbuf_unmap_tso_segment);
+qdf_export_symbol(__qdf_nbuf_unmap_tso_segment);
 
 /**
  * __qdf_nbuf_get_tso_num_seg() - function to divide a TSO nbuf
@@ -2077,7 +2186,7 @@ uint32_t __qdf_nbuf_get_tso_num_seg(struct sk_buff *skb)
 	}
 	return num_segs;
 }
-EXPORT_SYMBOL(__qdf_nbuf_get_tso_num_seg);
+qdf_export_symbol(__qdf_nbuf_get_tso_num_seg);
 
 #endif /* FEATURE_TSO */
 
@@ -2086,13 +2195,13 @@ struct sk_buff *__qdf_nbuf_inc_users(struct sk_buff *skb)
 	atomic_inc(&skb->users);
 	return skb;
 }
-EXPORT_SYMBOL(__qdf_nbuf_inc_users);
+qdf_export_symbol(__qdf_nbuf_inc_users);
 
 int __qdf_nbuf_get_users(struct sk_buff *skb)
 {
 	return atomic_read(&skb->users);
 }
-EXPORT_SYMBOL(__qdf_nbuf_get_users);
+qdf_export_symbol(__qdf_nbuf_get_users);
 
 /**
  * __qdf_nbuf_ref() - Reference the nbuf so it can get held until the last free.
@@ -2105,7 +2214,7 @@ void __qdf_nbuf_ref(struct sk_buff *skb)
 {
 	skb_get(skb);
 }
-EXPORT_SYMBOL(__qdf_nbuf_ref);
+qdf_export_symbol(__qdf_nbuf_ref);
 
 /**
  * __qdf_nbuf_shared() - Check whether the buffer is shared
@@ -2117,7 +2226,7 @@ int __qdf_nbuf_shared(struct sk_buff *skb)
 {
 	return skb_shared(skb);
 }
-EXPORT_SYMBOL(__qdf_nbuf_shared);
+qdf_export_symbol(__qdf_nbuf_shared);
 
 /**
  * __qdf_nbuf_dmamap_create() - create a DMA map.
@@ -2145,7 +2254,7 @@ __qdf_nbuf_dmamap_create(qdf_device_t osdev, __qdf_dma_map_t *dmap)
 
 	return error;
 }
-EXPORT_SYMBOL(__qdf_nbuf_dmamap_create);
+qdf_export_symbol(__qdf_nbuf_dmamap_create);
 /**
  * __qdf_nbuf_dmamap_destroy() - delete a dma map
  * @osdev: qdf device handle
@@ -2158,7 +2267,7 @@ __qdf_nbuf_dmamap_destroy(qdf_device_t osdev, __qdf_dma_map_t dmap)
 {
 	kfree(dmap);
 }
-EXPORT_SYMBOL(__qdf_nbuf_dmamap_destroy);
+qdf_export_symbol(__qdf_nbuf_dmamap_destroy);
 
 /**
  * __qdf_nbuf_map_nbytes_single() - map nbytes
@@ -2179,7 +2288,7 @@ QDF_STATUS __qdf_nbuf_map_nbytes_single(
 	QDF_NBUF_CB_PADDR(buf) = paddr = buf->data;
 	return QDF_STATUS_SUCCESS;
 }
-EXPORT_SYMBOL(__qdf_nbuf_map_nbytes_single);
+qdf_export_symbol(__qdf_nbuf_map_nbytes_single);
 #else
 QDF_STATUS __qdf_nbuf_map_nbytes_single(
 		qdf_device_t osdev, struct sk_buff *buf,
@@ -2194,7 +2303,7 @@ QDF_STATUS __qdf_nbuf_map_nbytes_single(
 	return dma_mapping_error(osdev->dev, paddr) ?
 		QDF_STATUS_E_FAULT : QDF_STATUS_SUCCESS;
 }
-EXPORT_SYMBOL(__qdf_nbuf_map_nbytes_single);
+qdf_export_symbol(__qdf_nbuf_map_nbytes_single);
 #endif
 /**
  * __qdf_nbuf_unmap_nbytes_single() - unmap nbytes
@@ -2210,9 +2319,8 @@ void
 __qdf_nbuf_unmap_nbytes_single(
 	qdf_device_t osdev, struct sk_buff *buf, qdf_dma_dir_t dir, int nbytes)
 {
-	return;
 }
-EXPORT_SYMBOL(__qdf_nbuf_unmap_nbytes_single);
+qdf_export_symbol(__qdf_nbuf_unmap_nbytes_single);
 
 #else
 void
@@ -2226,7 +2334,7 @@ __qdf_nbuf_unmap_nbytes_single(
 	dma_unmap_single(osdev->dev, QDF_NBUF_CB_PADDR(buf),
 			nbytes, dir);
 }
-EXPORT_SYMBOL(__qdf_nbuf_unmap_nbytes_single);
+qdf_export_symbol(__qdf_nbuf_unmap_nbytes_single);
 #endif
 /**
  * __qdf_nbuf_map_nbytes() - get the dma map of the nbuf
@@ -2246,6 +2354,7 @@ __qdf_nbuf_map_nbytes(
 	int nbytes)
 {
 	struct skb_shared_info  *sh = skb_shinfo(skb);
+
 	qdf_assert((dir == QDF_DMA_TO_DEVICE) || (dir == QDF_DMA_FROM_DEVICE));
 
 	/*
@@ -2259,7 +2368,7 @@ __qdf_nbuf_map_nbytes(
 
 	return __qdf_nbuf_map_nbytes_single(osdev, skb, dir, nbytes);
 }
-EXPORT_SYMBOL(__qdf_nbuf_map_nbytes);
+qdf_export_symbol(__qdf_nbuf_map_nbytes);
 #else
 QDF_STATUS
 __qdf_nbuf_map_nbytes(
@@ -2270,7 +2379,7 @@ __qdf_nbuf_map_nbytes(
 {
 	return __qdf_nbuf_map_nbytes_single(osdev, skb, dir, nbytes);
 }
-EXPORT_SYMBOL(__qdf_nbuf_map_nbytes);
+qdf_export_symbol(__qdf_nbuf_map_nbytes);
 #endif
 /**
  * __qdf_nbuf_unmap_nbytes() - to unmap a previously mapped buf
@@ -2296,7 +2405,7 @@ __qdf_nbuf_unmap_nbytes(
 	 */
 	__qdf_nbuf_unmap_nbytes_single(osdev, skb, dir, nbytes);
 }
-EXPORT_SYMBOL(__qdf_nbuf_unmap_nbytes);
+qdf_export_symbol(__qdf_nbuf_unmap_nbytes);
 
 /**
  * __qdf_nbuf_dma_map_info() - return the dma map info
@@ -2315,7 +2424,7 @@ __qdf_nbuf_dma_map_info(__qdf_dma_map_t bmap, qdf_dmamap_info_t *sg)
 			sizeof(struct __qdf_segment));
 	sg->nsegs = bmap->nsegs;
 }
-EXPORT_SYMBOL(__qdf_nbuf_dma_map_info);
+qdf_export_symbol(__qdf_nbuf_dma_map_info);
 /**
  * __qdf_nbuf_frag_info() - return the frag data & len, where frag no. is
  *			specified by the index
@@ -2335,6 +2444,7 @@ __qdf_nbuf_frag_info(struct sk_buff *skb, qdf_sglist_t  *sg)
 
 	for (int i = 1; i <= sh->nr_frags; i++) {
 		skb_frag_t    *f        = &sh->frags[i - 1];
+
 		sg->sg_segs[i].vaddr    = (uint8_t *)(page_address(f->page) +
 			f->page_offset);
 		sg->sg_segs[i].len      = f->size;
@@ -2344,7 +2454,7 @@ __qdf_nbuf_frag_info(struct sk_buff *skb, qdf_sglist_t  *sg)
 	sg->nsegs += i;
 
 }
-EXPORT_SYMBOL(__qdf_nbuf_frag_info);
+qdf_export_symbol(__qdf_nbuf_frag_info);
 #else
 #ifdef QDF_OS_DEBUG
 void
@@ -2360,7 +2470,7 @@ __qdf_nbuf_frag_info(struct sk_buff *skb, qdf_sglist_t  *sg)
 
 	qdf_assert(sh->nr_frags == 0);
 }
-EXPORT_SYMBOL(__qdf_nbuf_frag_info);
+qdf_export_symbol(__qdf_nbuf_frag_info);
 #else
 void
 __qdf_nbuf_frag_info(struct sk_buff *skb, qdf_sglist_t  *sg)
@@ -2369,7 +2479,7 @@ __qdf_nbuf_frag_info(struct sk_buff *skb, qdf_sglist_t  *sg)
 	sg->sg_segs[0].len   = skb->len;
 	sg->nsegs            = 1;
 }
-EXPORT_SYMBOL(__qdf_nbuf_frag_info);
+qdf_export_symbol(__qdf_nbuf_frag_info);
 #endif
 #endif
 /**
@@ -2384,9 +2494,10 @@ __qdf_nbuf_get_frag_size(__qdf_nbuf_t nbuf, uint32_t cur_frag)
 {
 	struct skb_shared_info  *sh = skb_shinfo(nbuf);
 	const skb_frag_t *frag = sh->frags + cur_frag;
+
 	return skb_frag_size(frag);
 }
-EXPORT_SYMBOL(__qdf_nbuf_get_frag_size);
+qdf_export_symbol(__qdf_nbuf_get_frag_size);
 
 /**
  * __qdf_nbuf_frag_map() - dma map frag
@@ -2408,16 +2519,16 @@ QDF_STATUS __qdf_nbuf_frag_map(
 	QDF_NBUF_CB_PADDR(nbuf) = paddr = nbuf->data;
 	return QDF_STATUS_SUCCESS;
 }
-EXPORT_SYMBOL(__qdf_nbuf_frag_map);
+qdf_export_symbol(__qdf_nbuf_frag_map);
 #else
 QDF_STATUS __qdf_nbuf_frag_map(
 	qdf_device_t osdev, __qdf_nbuf_t nbuf,
 	int offset, qdf_dma_dir_t dir, int cur_frag)
 {
 	dma_addr_t paddr, frag_len;
-
 	struct skb_shared_info *sh = skb_shinfo(nbuf);
 	const skb_frag_t *frag = sh->frags + cur_frag;
+
 	frag_len = skb_frag_size(frag);
 
 	QDF_NBUF_CB_TX_EXTRA_FRAG_PADDR(nbuf) = paddr =
@@ -2425,7 +2536,7 @@ QDF_STATUS __qdf_nbuf_frag_map(
 	return dma_mapping_error(osdev->dev, paddr) ?
 			QDF_STATUS_E_FAULT : QDF_STATUS_SUCCESS;
 }
-EXPORT_SYMBOL(__qdf_nbuf_frag_map);
+qdf_export_symbol(__qdf_nbuf_frag_map);
 #endif
 /**
  * __qdf_nbuf_dmamap_set_cb() - setup the map callback for a dma map
@@ -2440,7 +2551,7 @@ __qdf_nbuf_dmamap_set_cb(__qdf_dma_map_t dmap, void *cb, void *arg)
 {
 	return;
 }
-EXPORT_SYMBOL(__qdf_nbuf_dmamap_set_cb);
+qdf_export_symbol(__qdf_nbuf_dmamap_set_cb);
 
 
 #ifndef REMOVE_INIT_DEBUG_CODE
@@ -2491,7 +2602,7 @@ __qdf_nbuf_sync_for_cpu(qdf_device_t osdev,
 	 */
 	__qdf_nbuf_sync_single_for_cpu(osdev, skb, dir);
 }
-EXPORT_SYMBOL(__qdf_nbuf_sync_for_cpu);
+qdf_export_symbol(__qdf_nbuf_sync_for_cpu);
 #endif
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0))
@@ -2518,6 +2629,7 @@ static unsigned int qdf_nbuf_update_radiotap_vht_flags(
 		IEEE80211_RADIOTAP_VHT_KNOWN_BANDWIDTH;
 	put_unaligned_le16(vht_flags, &rtap_buf[rtap_len]);
 	rtap_len += 2;
+
 	rtap_buf[rtap_len] |=
 		(rx_status->is_stbc ?
 		 IEEE80211_RADIOTAP_VHT_FLAG_STBC : 0) |
@@ -2526,8 +2638,8 @@ static unsigned int qdf_nbuf_update_radiotap_vht_flags(
 		 IEEE80211_RADIOTAP_VHT_FLAG_LDPC_EXTRA_OFDM_SYM : 0) |
 		(rx_status->beamformed ?
 		 IEEE80211_RADIOTAP_VHT_FLAG_BEAMFORMED : 0);
-
 	rtap_len += 1;
+
 	rtap_buf[rtap_len] = (rx_status->vht_flag_values2);
 	rtap_len += 1;
 	rtap_buf[rtap_len] = (rx_status->vht_flag_values3[0]);
@@ -2587,11 +2699,15 @@ unsigned int qdf_nbuf_update_radiotap(struct mon_rx_status *rx_status,
 	rtap_len += 1;
 
 	/* IEEE80211_RADIOTAP_RATE  u8           500kb/s */
-	rthdr->it_present |= cpu_to_le32(1 << IEEE80211_RADIOTAP_RATE);
-	rtap_buf[rtap_len] = rx_status->rate;
+	if (!rx_status->ht_flags && !rx_status->vht_flags) {
+		rthdr->it_present |= cpu_to_le32(1 << IEEE80211_RADIOTAP_RATE);
+		rtap_buf[rtap_len] = rx_status->rate;
+	} else
+		rtap_buf[rtap_len] = 0;
 	rtap_len += 1;
-	rthdr->it_present |= cpu_to_le32(1 << IEEE80211_RADIOTAP_CHANNEL);
+
 	/* IEEE80211_RADIOTAP_CHANNEL 2 x __le16   MHz, bitmap */
+	rthdr->it_present |= cpu_to_le32(1 << IEEE80211_RADIOTAP_CHANNEL);
 	put_unaligned_le16(rx_status->chan_freq, &rtap_buf[rtap_len]);
 	rtap_len += 2;
 	/* Channel flags. */
@@ -2614,6 +2730,25 @@ unsigned int qdf_nbuf_update_radiotap(struct mon_rx_status *rx_status,
 	rthdr->it_present |= cpu_to_le32(1 << IEEE80211_RADIOTAP_ANTENNA);
 	rtap_buf[rtap_len] = rx_status->nr_ant;
 	rtap_len += 1;
+
+	if (rx_status->ht_flags) {
+		/* IEEE80211_RADIOTAP_VHT u8, u8, u8 */
+		rthdr->it_present |= cpu_to_le32(1 << IEEE80211_RADIOTAP_MCS);
+		rtap_buf[rtap_len] = IEEE80211_RADIOTAP_MCS_HAVE_BW |
+					IEEE80211_RADIOTAP_MCS_HAVE_MCS |
+					IEEE80211_RADIOTAP_MCS_HAVE_GI;
+		rtap_len += 1;
+
+		if (rx_status->sgi)
+			rtap_buf[rtap_len] |= IEEE80211_RADIOTAP_MCS_SGI;
+		if (rx_status->bw)
+			rtap_buf[rtap_len] |= IEEE80211_RADIOTAP_MCS_BW_40;
+		rtap_len += 1;
+
+		rtap_buf[rtap_len] = rx_status->mcs;
+		rtap_len += 1;
+	}
+
 	if (rx_status->vht_flags) {
 		/* IEEE80211_RADIOTAP_VHT u16, u8, u8, u8[4], u8, u8, u16 */
 		rthdr->it_present |= cpu_to_le32(1 << IEEE80211_RADIOTAP_VHT);
@@ -2623,7 +2758,7 @@ unsigned int qdf_nbuf_update_radiotap(struct mon_rx_status *rx_status,
 	}
 	rthdr->it_len = cpu_to_le16(rtap_len);
 
-	if ((headroom_sz  - rtap_len) < 0) {
+	if (headroom_sz < rtap_len) {
 		qdf_print("ERROR: not enough space to update radiotap\n");
 		return 0;
 	}
@@ -2660,5 +2795,4 @@ unsigned int qdf_nbuf_update_radiotap(struct mon_rx_status *rx_status,
 void __qdf_nbuf_reg_free_cb(qdf_nbuf_free_t cb_func_ptr)
 {
 	nbuf_free_cb = cb_func_ptr;
-	return;
 }

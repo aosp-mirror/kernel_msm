@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -309,6 +309,17 @@ static inline __qdf_workqueue_t *__qdf_create_workqueue(char *name)
 }
 
 /**
+ * __qdf_create_singlethread_workqueue() - create a single threaded workqueue
+ * @name: string
+ *
+ * Return: pointer of type qdf_workqueue_t
+ */
+static inline __qdf_workqueue_t *__qdf_create_singlethread_workqueue(char *name)
+{
+	return create_singlethread_workqueue(name);
+}
+
+/**
  * __qdf_flush_workqueue - flush the workqueue
  * @hdl: OS handle
  * @wqueue: pointer to workqueue
@@ -391,6 +402,16 @@ __qdf_disable_bh(qdf_handle_t hdl, struct tasklet_struct *bh)
 {
 	tasklet_kill(bh);
 	return QDF_STATUS_SUCCESS;
+}
+
+/**
+ * __qdf_tasklet_is_scheduled - check bh status
+ * @bh: pointer to bottom
+ * Return: tasklet schedule state
+ */
+static inline bool __qdf_tasklet_is_scheduled(struct tasklet_struct *bh)
+{
+	return test_bit(TASKLET_STATE_SCHED, &bh->state);
 }
 
 #endif /*_I_QDF_DEFER_H*/

@@ -2361,6 +2361,14 @@ static void regulator_disable_work(struct work_struct *work)
 	count = rdev->deferred_disables;
 	rdev->deferred_disables = 0;
 
+	/*
+	 * Workqueue functions queue the new work instance while the previous
+	 * work instance is being processed. Cancel the queued work instance
+	 * as the work instance under processing does the job of the queued
+	 * work instance.
+	 */
+	cancel_delayed_work(&rdev->disable_work);
+
 	for (i = 0; i < count; i++) {
 		ret = _regulator_disable(rdev);
 		if (ret != 0)
@@ -2395,7 +2403,6 @@ static void regulator_disable_work(struct work_struct *work)
 int regulator_disable_deferred(struct regulator *regulator, int ms)
 {
 	struct regulator_dev *rdev = regulator->rdev;
-	int ret;
 
 	if (regulator->always_on)
 		return 0;
@@ -2405,15 +2412,11 @@ int regulator_disable_deferred(struct regulator *regulator, int ms)
 
 	mutex_lock(&rdev->mutex);
 	rdev->deferred_disables++;
+	mod_delayed_work(system_power_efficient_wq, &rdev->disable_work,
+			 msecs_to_jiffies(ms));
 	mutex_unlock(&rdev->mutex);
 
-	ret = queue_delayed_work(system_power_efficient_wq,
-				 &rdev->disable_work,
-				 msecs_to_jiffies(ms));
-	if (ret < 0)
-		return ret;
-	else
-		return 0;
+	return 0;
 }
 EXPORT_SYMBOL_GPL(regulator_disable_deferred);
 
@@ -2931,7 +2934,8 @@ static int regulator_set_voltage_unlocked(struct regulator *regulator,
 		goto out2;
 
 	if (rdev->supply && (rdev->desc->min_dropout_uV ||
-				!rdev->desc->ops->get_voltage)) {
+				!(rdev->desc->ops->get_voltage ||
+					rdev->desc->ops->get_voltage_sel))) {
 		int current_supply_uV;
 		int selector;
 
@@ -4704,12 +4708,13 @@ static void regulator_summary_show_subtree(struct seq_file *s,
 	seq_puts(s, "\n");
 
 	list_for_each_entry(consumer, &rdev->consumer_list, list) {
-		if (consumer->dev->class == &regulator_class)
+		if (consumer->dev && consumer->dev->class == &regulator_class)
 			continue;
 
 		seq_printf(s, "%*s%-*s ",
 			   (level + 1) * 3 + 1, "",
-			   30 - (level + 1) * 3, dev_name(consumer->dev));
+			   30 - (level + 1) * 3,
+			   consumer->dev ? dev_name(consumer->dev) : "deviceless");
 
 		switch (rdev->desc->type) {
 		case REGULATOR_VOLTAGE:

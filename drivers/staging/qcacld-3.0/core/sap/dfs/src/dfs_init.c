@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2002-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -234,7 +234,7 @@ int dfs_init_radar_filters(struct ieee80211com *ic,
 	 * the rest of the radar configuration as suspect.
 	 */
 	if (radar_info == NULL || radar_info->dfsdomain == 0) {
-		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_ERROR,
+		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_DEBUG,
 			  "%s[%d]: Unknown dfs domain %d ",
 			  __func__, __LINE__, dfs->dfsdomain);
 		/* Disable radar detection since we don't have a radar domain */
@@ -245,7 +245,7 @@ int dfs_init_radar_filters(struct ieee80211com *ic,
 		return DFS_STATUS_SUCCESS;
 	}
 
-	QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO,
+	QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_DEBUG,
 		  "%s[%d]:dfsdomain=%d, numradars=%d, numb5radars=%d",
 		  __func__, __LINE__, radar_info->dfsdomain,
 		  radar_info->numradars, radar_info->numb5radars);
@@ -368,12 +368,12 @@ int dfs_init_radar_filters(struct ieee80211com *ic,
 		rf->rf_threshold = dfs_radars[p].rp_threshold;
 		rf->rf_filterlen = rf->rf_maxpri * rf->rf_numpulses;
 
-		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO,
+		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_DEBUG,
 			  "%s[%d]: minprf = %d maxprf = %d pulsevar = %d thresh=%d",
 			  __func__, __LINE__, dfs_radars[p].rp_pulsefreq,
 			  dfs_radars[p].rp_max_pulsefreq,
 			  dfs_radars[p].rp_pulsevar, rf->rf_threshold);
-		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO,
+		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_DEBUG,
 			  "%s[%d]:minpri = %d maxpri = %d filterlen = %d filterID = %d",
 			  __func__, __LINE__, rf->rf_minpri, rf->rf_maxpri,
 			  rf->rf_filterlen, rf->rf_pulseid);
@@ -471,10 +471,10 @@ int dfs_init_radar_filters(struct ieee80211com *ic,
 		dfs_round((int32_t) ((max_pulsedur * 100 / 80) * 100));
 	/* relax the max pulse duration a little bit due to inaccuracy caused by chirping. */
 	dfs->dfs_rinfo.rn_maxpulsedur = dfs->dfs_rinfo.rn_maxpulsedur + 20;
-	QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO,
+	QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_DEBUG,
 		  "%s[%d]: DFS min filter rssiThresh = %d",
 		  __func__, __LINE__, min_rssithresh);
-	QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO,
+	QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_DEBUG,
 		  "%s[%d]:DFS max pulse dur = %d ticks",
 		  __func__, __LINE__, dfs->dfs_rinfo.rn_maxpulsedur);
 	return DFS_STATUS_SUCCESS;

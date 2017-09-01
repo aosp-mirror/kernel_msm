@@ -27,6 +27,7 @@
 #include "dsi_display.h"
 #include "dsi_drm.h"
 #include "sde_wb.h"
+#include "sde_hdmi.h"
 
 #include "sde_kms.h"
 #include "sde_core_irq.h"
@@ -39,10 +40,6 @@
 
 #define CREATE_TRACE_POINTS
 #include "sde_trace.h"
-
-static const char * const iommu_ports[] = {
-		"mdp_0",
-};
 
 /**
  * Controls size of event log buffer. Specified as a power of 2.
@@ -415,6 +412,10 @@ static void sde_kms_wait_for_commit_done(struct msm_kms *kms,
 		return;
 	}
 
+	ret = drm_crtc_vblank_get(crtc);
+	if (ret)
+		return;
+
 	list_for_each_entry(encoder, &dev->mode_config.encoder_list, head) {
 		if (encoder->crtc != crtc)
 			continue;
@@ -430,6 +431,8 @@ static void sde_kms_wait_for_commit_done(struct msm_kms *kms,
 			break;
 		}
 	}
+
+	drm_crtc_vblank_put(crtc);
 }
 
 static void sde_kms_prepare_fence(struct msm_kms *kms,
@@ -504,7 +507,29 @@ static int _sde_kms_get_displays(struct sde_kms *sde_kms)
 			wb_display_get_displays(sde_kms->wb_displays,
 					sde_kms->wb_display_count);
 	}
+
+	/* hdmi */
+	sde_kms->hdmi_displays = NULL;
+	sde_kms->hdmi_display_count = sde_hdmi_get_num_of_displays();
+	SDE_DEBUG("hdmi display count=%d", sde_kms->hdmi_display_count);
+	if (sde_kms->hdmi_display_count) {
+		sde_kms->hdmi_displays = kcalloc(sde_kms->hdmi_display_count,
+				  sizeof(void *),
+				  GFP_KERNEL);
+		if (!sde_kms->hdmi_displays) {
+			SDE_ERROR("failed to allocate hdmi displays\n");
+			goto exit_deinit_hdmi;
+		}
+		sde_kms->hdmi_display_count =
+			sde_hdmi_get_displays(sde_kms->hdmi_displays,
+				sde_kms->hdmi_display_count);
+	}
+
 	return 0;
+
+exit_deinit_hdmi:
+	sde_kms->hdmi_display_count = 0;
+	sde_kms->hdmi_displays = NULL;
 
 exit_deinit_wb:
 	kfree(sde_kms->wb_displays);
@@ -528,6 +553,9 @@ static void _sde_kms_release_displays(struct sde_kms *sde_kms)
 		SDE_ERROR("invalid sde kms\n");
 		return;
 	}
+	kfree(sde_kms->hdmi_displays);
+	sde_kms->hdmi_display_count = 0;
+	sde_kms->hdmi_displays = NULL;
 
 	kfree(sde_kms->wb_displays);
 	sde_kms->wb_displays = NULL;
@@ -565,18 +593,33 @@ static int _sde_kms_setup_displays(struct drm_device *dev,
 		.set_property = sde_wb_connector_set_property,
 		.get_info =     sde_wb_get_info,
 	};
-	struct msm_display_info info;
+	static const struct sde_connector_ops hdmi_ops = {
+		.pre_deinit = sde_hdmi_connector_pre_deinit,
+		.post_init =  sde_hdmi_connector_post_init,
+		.detect =     sde_hdmi_connector_detect,
+		.get_modes =  sde_hdmi_connector_get_modes,
+		.mode_valid = sde_hdmi_mode_valid,
+		.get_info =   sde_hdmi_get_info,
+		.set_property = sde_hdmi_set_property,
+		.get_property = sde_hdmi_get_property,
+		.pre_kickoff = sde_hdmi_pre_kickoff,
+	};
+	struct msm_display_info info = {0};
 	struct drm_encoder *encoder;
 	void *display, *connector;
 	int i, max_encoders;
 	int rc = 0;
+	int connector_poll;
 
 	if (!dev || !priv || !sde_kms) {
 		SDE_ERROR("invalid argument(s)\n");
 		return -EINVAL;
 	}
 
-	max_encoders = sde_kms->dsi_display_count + sde_kms->wb_display_count;
+	max_encoders = sde_kms->dsi_display_count +
+		sde_kms->wb_display_count +
+		sde_kms->hdmi_display_count;
+
 	if (max_encoders > ARRAY_SIZE(priv->encoders)) {
 		max_encoders = ARRAY_SIZE(priv->encoders);
 		SDE_ERROR("capping number of displays to %d", max_encoders);
@@ -666,6 +709,57 @@ static int _sde_kms_setup_displays(struct drm_device *dev,
 		}
 	}
 
+	/* hdmi */
+	for (i = 0; i < sde_kms->hdmi_display_count &&
+		priv->num_encoders < max_encoders; ++i) {
+		display = sde_kms->hdmi_displays[i];
+		encoder = NULL;
+
+		memset(&info, 0x0, sizeof(info));
+		rc = sde_hdmi_dev_init(display);
+		if (rc) {
+			SDE_ERROR("hdmi dev_init %d failed\n", i);
+			continue;
+		}
+		rc = sde_hdmi_get_info(&info, display);
+		if (rc) {
+			SDE_ERROR("hdmi get_info %d failed\n", i);
+			continue;
+		}
+		if (info.capabilities & MSM_DISPLAY_CAP_HOT_PLUG)
+			connector_poll = DRM_CONNECTOR_POLL_HPD;
+		else
+			connector_poll = 0;
+		encoder = sde_encoder_init(dev, &info);
+		if (IS_ERR_OR_NULL(encoder)) {
+			SDE_ERROR("encoder init failed for hdmi %d\n", i);
+			continue;
+		}
+
+		rc = sde_hdmi_drm_init(display, encoder);
+		if (rc) {
+			SDE_ERROR("hdmi drm %d init failed, %d\n", i, rc);
+			sde_encoder_destroy(encoder);
+			continue;
+		}
+
+		connector = sde_connector_init(dev,
+					encoder,
+					0,
+					display,
+					&hdmi_ops,
+					connector_poll,
+					DRM_MODE_CONNECTOR_HDMIA);
+		if (connector) {
+			priv->encoders[priv->num_encoders++] = encoder;
+		} else {
+			SDE_ERROR("hdmi %d connector init failed\n", i);
+			sde_hdmi_dev_deinit(display);
+			sde_hdmi_drm_deinit(display);
+			sde_encoder_destroy(encoder);
+		}
+	}
+
 	return 0;
 }
 
@@ -705,6 +799,16 @@ static void _sde_kms_drm_obj_destroy(struct sde_kms *sde_kms)
 	_sde_kms_release_displays(sde_kms);
 }
 
+static inline int sde_get_crtc_id(const char *display_type)
+{
+	if (!strcmp(display_type, "primary"))
+		return 0;
+	else if (!strcmp(display_type, "secondary"))
+		return 1;
+	else
+		return 2;
+}
+
 static int _sde_kms_drm_obj_init(struct sde_kms *sde_kms)
 {
 	struct drm_device *dev;
@@ -726,6 +830,9 @@ static int _sde_kms_drm_obj_init(struct sde_kms *sde_kms)
 	priv = dev->dev_private;
 	catalog = sde_kms->catalog;
 
+	ret = sde_core_irq_domain_add(sde_kms);
+	if (ret)
+		goto fail_irq;
 	/*
 	 * Query for underlying display drivers, and create connectors,
 	 * bridges and encoders for them.
@@ -734,28 +841,57 @@ static int _sde_kms_drm_obj_init(struct sde_kms *sde_kms)
 		(void)_sde_kms_setup_displays(dev, priv, sde_kms);
 
 	max_crtc_count = min(catalog->mixer_count, priv->num_encoders);
-	max_plane_count = min_t(u32, catalog->sspp_count, MAX_PLANES);
 
 	/* Create the planes */
 	primary_planes_idx = 0;
-	for (i = 0; i < max_plane_count; i++) {
-		bool primary = true;
+	if (catalog->vp_count) {
+		max_plane_count = min_t(u32, catalog->vp_count, MAX_PLANES);
 
-		if (catalog->sspp[i].features & BIT(SDE_SSPP_CURSOR)
-			|| primary_planes_idx >= max_crtc_count)
-			primary = false;
+		for (i = 0; i < max_plane_count; i++) {
+			bool primary = true;
+			int crtc_id =
+				sde_get_crtc_id(catalog->vp[i].display_type);
 
-		plane = sde_plane_init(dev, catalog->sspp[i].id, primary,
-				(1UL << max_crtc_count) - 1);
-		if (IS_ERR(plane)) {
-			SDE_ERROR("sde_plane_init failed\n");
-			ret = PTR_ERR(plane);
-			goto fail;
+			if (strcmp(catalog->vp[i].plane_type, "primary"))
+				primary = false;
+
+			plane = sde_plane_init(dev, catalog->vp[i].id,
+					primary, 1UL << crtc_id, true);
+			if (IS_ERR(plane)) {
+				SDE_ERROR("sde_plane_init failed\n");
+				ret = PTR_ERR(plane);
+				goto fail;
+			}
+			priv->planes[priv->num_planes++] = plane;
+
+			if (primary) {
+				primary_planes[crtc_id] = plane;
+				primary_planes_idx++;
+			}
 		}
-		priv->planes[priv->num_planes++] = plane;
+	} else {
+		max_plane_count = min_t(u32, catalog->sspp_count, MAX_PLANES);
 
-		if (primary)
-			primary_planes[primary_planes_idx++] = plane;
+		for (i = 0; i < max_plane_count; i++) {
+			bool primary = true;
+
+			if (catalog->sspp[i].features & BIT(SDE_SSPP_CURSOR)
+				|| primary_planes_idx >= max_crtc_count)
+				primary = false;
+
+			plane = sde_plane_init(dev, catalog->sspp[i].id,
+					primary, (1UL << max_crtc_count) - 1,
+					false);
+			if (IS_ERR(plane)) {
+				SDE_ERROR("sde_plane_init failed\n");
+				ret = PTR_ERR(plane);
+				goto fail;
+			}
+			priv->planes[priv->num_planes++] = plane;
+
+			if (primary)
+				primary_planes[primary_planes_idx++] = plane;
+		}
 	}
 
 	max_crtc_count = min(max_crtc_count, primary_planes_idx);
@@ -784,6 +920,8 @@ static int _sde_kms_drm_obj_init(struct sde_kms *sde_kms)
 	return 0;
 fail:
 	_sde_kms_drm_obj_destroy(sde_kms);
+fail_irq:
+	sde_core_irq_domain_fini(sde_kms);
 	return ret;
 }
 
@@ -940,17 +1078,16 @@ static int _sde_kms_mmu_destroy(struct sde_kms *sde_kms)
 	struct msm_mmu *mmu;
 	int i;
 
-	for (i = ARRAY_SIZE(sde_kms->mmu_id) - 1; i >= 0; i--) {
-		if (!sde_kms->mmu[i])
+	for (i = ARRAY_SIZE(sde_kms->aspace) - 1; i >= 0; i--) {
+		if (!sde_kms->aspace[i])
 			continue;
 
-		mmu = sde_kms->mmu[i];
-		msm_unregister_mmu(sde_kms->dev, mmu);
-		mmu->funcs->detach(mmu, (const char **)iommu_ports,
-				ARRAY_SIZE(iommu_ports));
-		mmu->funcs->destroy(mmu);
-		sde_kms->mmu[i] = 0;
-		sde_kms->mmu_id[i] = 0;
+		mmu = sde_kms->aspace[i]->mmu;
+
+		mmu->funcs->detach(mmu);
+		msm_gem_address_space_put(sde_kms->aspace[i]);
+
+		sde_kms->aspace[i] = NULL;
 	}
 
 	return 0;
@@ -962,6 +1099,8 @@ static int _sde_kms_mmu_init(struct sde_kms *sde_kms)
 	int i, ret;
 
 	for (i = 0; i < MSM_SMMU_DOMAIN_MAX; i++) {
+		struct msm_gem_address_space *aspace;
+
 		mmu = msm_smmu_new(sde_kms->dev->dev, i);
 		if (IS_ERR(mmu)) {
 			/* MMU's can be optional depending on platform */
@@ -971,25 +1110,23 @@ static int _sde_kms_mmu_init(struct sde_kms *sde_kms)
 			continue;
 		}
 
-		ret = mmu->funcs->attach(mmu, (const char **)iommu_ports,
-				ARRAY_SIZE(iommu_ports));
-		if (ret) {
-			SDE_ERROR("failed to attach iommu %d: %d\n", i, ret);
+		aspace = msm_gem_smmu_address_space_create(sde_kms->dev->dev,
+			mmu, "sde");
+		if (IS_ERR(aspace)) {
+			ret = PTR_ERR(aspace);
 			mmu->funcs->destroy(mmu);
 			goto fail;
 		}
 
-		sde_kms->mmu_id[i] = msm_register_mmu(sde_kms->dev, mmu);
-		if (sde_kms->mmu_id[i] < 0) {
-			ret = sde_kms->mmu_id[i];
-			SDE_ERROR("failed to register sde iommu %d: %d\n",
-					i, ret);
-			mmu->funcs->detach(mmu, (const char **)iommu_ports,
-					ARRAY_SIZE(iommu_ports));
+		sde_kms->aspace[i] = aspace;
+
+		ret = mmu->funcs->attach(mmu, NULL, 0);
+		if (ret) {
+			SDE_ERROR("failed to attach iommu %d: %d\n", i, ret);
+			msm_gem_address_space_put(aspace);
 			goto fail;
 		}
 
-		sde_kms->mmu[i] = mmu;
 	}
 
 	return 0;
@@ -1134,6 +1271,14 @@ static int sde_kms_hw_init(struct msm_kms *kms)
 		goto perf_err;
 	}
 
+	sde_kms->hw_intr = sde_hw_intr_init(sde_kms->mmio, sde_kms->catalog);
+	if (IS_ERR_OR_NULL(sde_kms->hw_intr)) {
+		rc = PTR_ERR(sde_kms->hw_intr);
+		SDE_ERROR("hw_intr init failed: %d\n", rc);
+		sde_kms->hw_intr = NULL;
+		goto hw_intr_init_err;
+	}
+
 	/*
 	 * _sde_kms_drm_obj_init should create the DRM related objects
 	 * i.e. CRTCs, planes, encoders, connectors and so forth
@@ -1159,21 +1304,12 @@ static int sde_kms_hw_init(struct msm_kms *kms)
 	 */
 	dev->mode_config.allow_fb_modifiers = true;
 
-	sde_kms->hw_intr = sde_hw_intr_init(sde_kms->mmio, sde_kms->catalog);
-	if (IS_ERR_OR_NULL(sde_kms->hw_intr)) {
-		rc = PTR_ERR(sde_kms->hw_intr);
-		SDE_ERROR("hw_intr init failed: %d\n", rc);
-		sde_kms->hw_intr = NULL;
-		goto hw_intr_init_err;
-	}
-
 	sde_power_resource_enable(&priv->phandle, sde_kms->core_client, false);
 	return 0;
 
-hw_intr_init_err:
-	_sde_kms_drm_obj_destroy(sde_kms);
 drm_obj_init_err:
 	sde_core_perf_destroy(&sde_kms->perf);
+hw_intr_init_err:
 perf_err:
 power_error:
 	sde_power_resource_enable(&priv->phandle, sde_kms->core_client, false);

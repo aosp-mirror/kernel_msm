@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -38,10 +38,10 @@
 #define PEER_DELETION_TIMEOUT 500
 
 enum txrx_wmm_ac {
-	TXRX_WMM_AC_VO,
-	TXRX_WMM_AC_VI,
-	TXRX_WMM_AC_BK,
 	TXRX_WMM_AC_BE,
+	TXRX_WMM_AC_BK,
+	TXRX_WMM_AC_VI,
+	TXRX_WMM_AC_VO,
 
 	TXRX_NUM_WMM_AC
 };
@@ -86,12 +86,16 @@ enum wlan_sta_state {
 	/* Transition in this state made upon creation */
 	WLAN_STA_INIT = 0,
 
-	/* Transition happens after Assoc success if second level authentication
-	   is needed */
+	/*
+	 * Transition happens after Assoc success if second level authentication
+	 * is needed
+	 */
 	WLAN_STA_CONNECTED,
 
-	/* Transition happens when second level auth is successful and keys are
-	   properly installed */
+	/*
+	 * Transition happens when second level auth is successful and keys are
+	 * properly installed
+	 */
 	WLAN_STA_AUTHENTICATED,
 
 	/* Transition happens when connectivity is lost */

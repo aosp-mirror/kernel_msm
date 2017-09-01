@@ -1,4 +1,4 @@
-/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -16,6 +16,12 @@
 #include "sde_kms.h"
 #include "sde_connector.h"
 #include "sde_backlight.h"
+
+#define SDE_DEBUG_CONN(c, fmt, ...) SDE_DEBUG("conn%d " fmt,\
+		(c) ? (c)->base.base.id : -1, ##__VA_ARGS__)
+
+#define SDE_ERROR_CONN(c, fmt, ...) SDE_ERROR("conn%d " fmt,\
+		(c) ? (c)->base.base.id : -1, ##__VA_ARGS__)
 
 static const struct drm_prop_enum_list e_topology_name[] = {
 	{SDE_RM_TOPOLOGY_UNKNOWN,	"sde_unknown"},
@@ -54,6 +60,36 @@ int sde_connector_get_info(struct drm_connector *connector,
 	return c_conn->ops.get_info(info, c_conn->display);
 }
 
+int sde_connector_pre_kickoff(struct drm_connector *connector)
+{
+	struct sde_connector *c_conn;
+	struct sde_connector_state *c_state;
+	struct msm_display_kickoff_params params;
+	int rc;
+
+	if (!connector) {
+		SDE_ERROR("invalid argument\n");
+		return -EINVAL;
+	}
+
+	c_conn = to_sde_connector(connector);
+	c_state = to_sde_connector_state(connector->state);
+
+	if (!c_conn->display) {
+		SDE_ERROR("invalid argument\n");
+		return -EINVAL;
+	}
+
+	if (!c_conn->ops.pre_kickoff)
+		return 0;
+
+	params.hdr_ctrl = &c_state->hdr_ctrl;
+
+	rc = c_conn->ops.pre_kickoff(connector, c_conn->display, &params);
+
+	return rc;
+}
+
 static void sde_connector_destroy(struct drm_connector *connector)
 {
 	struct sde_connector *c_conn;
@@ -65,8 +101,13 @@ static void sde_connector_destroy(struct drm_connector *connector)
 
 	c_conn = to_sde_connector(connector);
 
+	if (c_conn->ops.pre_deinit)
+		c_conn->ops.pre_deinit(connector, c_conn->display);
+
 	if (c_conn->blob_caps)
 		drm_property_unreference_blob(c_conn->blob_caps);
+	if (c_conn->blob_hdr)
+		drm_property_unreference_blob(c_conn->blob_hdr);
 	msm_property_destroy(&c_conn->property_info);
 
 	drm_connector_unregister(connector);
@@ -88,8 +129,7 @@ static void _sde_connector_destroy_fb(struct sde_connector *c_conn,
 		return;
 	}
 
-	msm_framebuffer_cleanup(c_state->out_fb,
-			c_state->mmu_id);
+	msm_framebuffer_cleanup(c_state->out_fb, c_state->aspace);
 	drm_framebuffer_unreference(c_state->out_fb);
 	c_state->out_fb = NULL;
 
@@ -193,12 +233,80 @@ sde_connector_atomic_duplicate_state(struct drm_connector *connector)
 	if (c_state->out_fb) {
 		drm_framebuffer_reference(c_state->out_fb);
 		rc = msm_framebuffer_prepare(c_state->out_fb,
-				c_state->mmu_id);
+				c_state->aspace);
 		if (rc)
 			SDE_ERROR("failed to prepare fb, %d\n", rc);
 	}
 
 	return &c_state->base;
+}
+
+static int _sde_connector_set_hdr_info(
+	struct sde_connector *c_conn,
+	struct sde_connector_state *c_state,
+	void *usr_ptr)
+{
+	struct drm_connector *connector;
+	struct drm_msm_ext_panel_hdr_ctrl *hdr_ctrl;
+	struct drm_msm_ext_panel_hdr_metadata *hdr_meta;
+	int i;
+
+	if (!c_conn || !c_state) {
+		SDE_ERROR_CONN(c_conn, "invalid args\n");
+		return -EINVAL;
+	}
+
+	connector = &c_conn->base;
+
+	if (!connector->hdr_supported) {
+		SDE_ERROR_CONN(c_conn, "sink doesn't support HDR\n");
+		return -ENOTSUPP;
+	}
+
+	memset(&c_state->hdr_ctrl, 0, sizeof(c_state->hdr_ctrl));
+
+	if (!usr_ptr) {
+		SDE_DEBUG_CONN(c_conn, "hdr control cleared\n");
+		return 0;
+	}
+
+	if (copy_from_user(&c_state->hdr_ctrl,
+		(void __user *)usr_ptr,
+			sizeof(*hdr_ctrl))) {
+		SDE_ERROR_CONN(c_conn, "failed to copy hdr control\n");
+		return -EFAULT;
+	}
+
+	hdr_ctrl = &c_state->hdr_ctrl;
+
+	SDE_DEBUG_CONN(c_conn, "hdr_supported %d\n",
+				   hdr_ctrl->hdr_state);
+
+	hdr_meta = &hdr_ctrl->hdr_meta;
+
+	SDE_DEBUG_CONN(c_conn, "hdr_supported %d\n",
+				   hdr_meta->hdr_supported);
+	SDE_DEBUG_CONN(c_conn, "eotf %d\n",
+				   hdr_meta->eotf);
+	SDE_DEBUG_CONN(c_conn, "white_point_x %d\n",
+				   hdr_meta->white_point_x);
+	SDE_DEBUG_CONN(c_conn, "white_point_y %d\n",
+				   hdr_meta->white_point_y);
+	SDE_DEBUG_CONN(c_conn, "max_luminance %d\n",
+				   hdr_meta->max_luminance);
+	SDE_DEBUG_CONN(c_conn, "max_content_light_level %d\n",
+				   hdr_meta->max_content_light_level);
+	SDE_DEBUG_CONN(c_conn, "max_average_light_level %d\n",
+				   hdr_meta->max_average_light_level);
+
+	for (i = 0; i < HDR_PRIMARIES_COUNT; i++) {
+		SDE_DEBUG_CONN(c_conn, "display_primaries_x [%d]\n",
+				   hdr_meta->display_primaries_x[i]);
+		SDE_DEBUG_CONN(c_conn, "display_primaries_y [%d]\n",
+				   hdr_meta->display_primaries_y[i]);
+	}
+
+	return 0;
 }
 
 static int sde_connector_atomic_set_property(struct drm_connector *connector,
@@ -241,14 +349,14 @@ static int sde_connector_atomic_set_property(struct drm_connector *connector,
 			rc = -EFAULT;
 		} else {
 			if (c_state->out_fb->flags & DRM_MODE_FB_SECURE)
-				c_state->mmu_id =
-				c_conn->mmu_id[SDE_IOMMU_DOMAIN_SECURE];
+				c_state->aspace =
+				c_conn->aspace[SDE_IOMMU_DOMAIN_SECURE];
 			else
-				c_state->mmu_id =
-				c_conn->mmu_id[SDE_IOMMU_DOMAIN_UNSECURE];
+				c_state->aspace =
+				c_conn->aspace[SDE_IOMMU_DOMAIN_UNSECURE];
 
 			rc = msm_framebuffer_prepare(c_state->out_fb,
-					c_state->mmu_id);
+					c_state->aspace);
 			if (rc)
 				SDE_ERROR("prep fb failed, %d\n", rc);
 		}
@@ -258,6 +366,12 @@ static int sde_connector_atomic_set_property(struct drm_connector *connector,
 		rc = sde_rm_check_property_topctl(val);
 		if (rc)
 			SDE_ERROR("invalid topology_control: 0x%llX\n", val);
+	}
+
+	if (idx == CONNECTOR_PROP_HDR_CONTROL) {
+		rc = _sde_connector_set_hdr_info(c_conn, c_state, (void *)val);
+		if (rc)
+			SDE_ERROR_CONN(c_conn, "cannot set hdr info %d\n", rc);
 	}
 
 	/* check for custom property handling */
@@ -352,6 +466,32 @@ void sde_connector_complete_commit(struct drm_connector *connector)
 	sde_fence_signal(&to_sde_connector(connector)->retire_fence, 0);
 }
 
+static void sde_connector_update_hdr_props(struct drm_connector *connector)
+{
+	struct sde_connector *c_conn = to_sde_connector(connector);
+	struct drm_msm_ext_panel_hdr_properties hdr_prop = {};
+
+	hdr_prop.hdr_supported = connector->hdr_supported;
+
+	if (hdr_prop.hdr_supported) {
+		hdr_prop.hdr_eotf =
+		  connector->hdr_eotf;
+		hdr_prop.hdr_metadata_type_one =
+		  connector->hdr_metadata_type_one;
+		hdr_prop.hdr_max_luminance =
+		  connector->hdr_max_luminance;
+		hdr_prop.hdr_avg_luminance =
+		  connector->hdr_avg_luminance;
+		hdr_prop.hdr_min_luminance =
+		  connector->hdr_min_luminance;
+	}
+	msm_property_set_blob(&c_conn->property_info,
+			      &c_conn->blob_hdr,
+			      &hdr_prop,
+			      sizeof(hdr_prop),
+			      CONNECTOR_PROP_HDR_INFO);
+}
+
 static enum drm_connector_status
 sde_connector_detect(struct drm_connector *connector, bool force)
 {
@@ -389,6 +529,7 @@ static const struct drm_connector_funcs sde_connector_ops = {
 static int sde_connector_get_modes(struct drm_connector *connector)
 {
 	struct sde_connector *c_conn;
+	int ret = 0;
 
 	if (!connector) {
 		SDE_ERROR("invalid connector\n");
@@ -400,8 +541,11 @@ static int sde_connector_get_modes(struct drm_connector *connector)
 		SDE_DEBUG("missing get_modes callback\n");
 		return 0;
 	}
+	ret = c_conn->ops.get_modes(connector, c_conn->display);
+	if (ret)
+		sde_connector_update_hdr_props(connector);
 
-	return c_conn->ops.get_modes(connector, c_conn->display);
+	return ret;
 }
 
 static enum drm_mode_status
@@ -492,18 +636,17 @@ struct drm_connector *sde_connector_init(struct drm_device *dev,
 	c_conn->panel = panel;
 	c_conn->display = display;
 
-	/* cache mmu_id's for later */
 	sde_kms = to_sde_kms(priv->kms);
 	if (sde_kms->vbif[VBIF_NRT]) {
-		c_conn->mmu_id[SDE_IOMMU_DOMAIN_UNSECURE] =
-			sde_kms->mmu_id[MSM_SMMU_DOMAIN_NRT_UNSECURE];
-		c_conn->mmu_id[SDE_IOMMU_DOMAIN_SECURE] =
-			sde_kms->mmu_id[MSM_SMMU_DOMAIN_NRT_SECURE];
+		c_conn->aspace[SDE_IOMMU_DOMAIN_UNSECURE] =
+			sde_kms->aspace[MSM_SMMU_DOMAIN_NRT_UNSECURE];
+		c_conn->aspace[SDE_IOMMU_DOMAIN_SECURE] =
+			sde_kms->aspace[MSM_SMMU_DOMAIN_NRT_SECURE];
 	} else {
-		c_conn->mmu_id[SDE_IOMMU_DOMAIN_UNSECURE] =
-			sde_kms->mmu_id[MSM_SMMU_DOMAIN_UNSECURE];
-		c_conn->mmu_id[SDE_IOMMU_DOMAIN_SECURE] =
-			sde_kms->mmu_id[MSM_SMMU_DOMAIN_SECURE];
+		c_conn->aspace[SDE_IOMMU_DOMAIN_UNSECURE] =
+			sde_kms->aspace[MSM_SMMU_DOMAIN_UNSECURE];
+		c_conn->aspace[SDE_IOMMU_DOMAIN_SECURE] =
+			sde_kms->aspace[MSM_SMMU_DOMAIN_SECURE];
 	}
 
 	if (ops)
@@ -536,14 +679,6 @@ struct drm_connector *sde_connector_init(struct drm_device *dev,
 	if (rc) {
 		SDE_ERROR("failed to attach encoder to connector, %d\n", rc);
 		goto error_unregister_conn;
-	}
-
-	if (c_conn->ops.set_backlight) {
-		rc = sde_backlight_setup(&c_conn->base);
-		if (rc) {
-			pr_err("failed to setup backlight, rc=%d\n", rc);
-			goto error_unregister_conn;
-		}
 	}
 
 	/* create properties */
@@ -581,18 +716,37 @@ struct drm_connector *sde_connector_init(struct drm_device *dev,
 		kfree(info);
 	}
 
+	if (connector_type == DRM_MODE_CONNECTOR_HDMIA) {
+		msm_property_install_blob(&c_conn->property_info,
+				"hdr_properties",
+				DRM_MODE_PROP_IMMUTABLE,
+				CONNECTOR_PROP_HDR_INFO);
+	}
+
+	msm_property_install_volatile_range(&c_conn->property_info,
+		"hdr_control", 0x0, 0, ~0, 0,
+		CONNECTOR_PROP_HDR_CONTROL);
+
 	msm_property_install_range(&c_conn->property_info, "RETIRE_FENCE",
 			0x0, 0, INR_OPEN_MAX, 0, CONNECTOR_PROP_RETIRE_FENCE);
+
+	msm_property_install_volatile_signed_range(&c_conn->property_info,
+			"PLL_DELTA", 0x0, INT_MIN, INT_MAX, 0,
+			CONNECTOR_PROP_PLL_DELTA);
+
+	msm_property_install_volatile_range(&c_conn->property_info,
+			"PLL_ENABLE", 0x0, 0, 1, 0,
+			CONNECTOR_PROP_PLL_ENABLE);
 
 	/* enum/bitmask properties */
 	msm_property_install_enum(&c_conn->property_info, "topology_name",
 			DRM_MODE_PROP_IMMUTABLE, 0, e_topology_name,
 			ARRAY_SIZE(e_topology_name),
-			CONNECTOR_PROP_TOPOLOGY_NAME);
+			CONNECTOR_PROP_TOPOLOGY_NAME, 0);
 	msm_property_install_enum(&c_conn->property_info, "topology_control",
 			0, 1, e_topology_control,
 			ARRAY_SIZE(e_topology_control),
-			CONNECTOR_PROP_TOPOLOGY_CONTROL);
+			CONNECTOR_PROP_TOPOLOGY_CONTROL, 0);
 
 	rc = msm_property_install_get_status(&c_conn->property_info);
 	if (rc) {
@@ -610,6 +764,8 @@ struct drm_connector *sde_connector_init(struct drm_device *dev,
 error_destroy_property:
 	if (c_conn->blob_caps)
 		drm_property_unreference_blob(c_conn->blob_caps);
+	if (c_conn->blob_hdr)
+		drm_property_unreference_blob(c_conn->blob_hdr);
 	msm_property_destroy(&c_conn->property_info);
 error_unregister_conn:
 	drm_connector_unregister(&c_conn->base);

@@ -1400,18 +1400,6 @@ HAL
 #ENUM ON       1
 
 *
-* Default LOG level
-*
-
-WNI_CFG_LOG_LEVEL    I    4    12
-V   RW    NP
-NONE
-0   7   4
-V   RW    NP
-NONE
-0   7   4
-
-*
 * OLBC detection timeout
 *
 
@@ -3933,19 +3921,6 @@ NONE
 V    RW    NP
 NONE
 0    1    1
-
-*
-*  MCAST BCAST filter Setting
-*  0: No filter, 1: Block Mcast, 2: Block Bcast, 3: Block Mcast and Bcast
-*
-
-WNI_CFG_MCAST_BCAST_FILTER_SETTING    I    4    7
-V    RW    NP
-HAL
-0    3    0
-V    RW    NP
-HAL
-0    3    0
 
 *
 *  BTC DHCP No of Bt slots to block

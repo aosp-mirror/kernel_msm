@@ -149,14 +149,12 @@ enum htt_tx_status {
  * @param num_msdus - how many MSDUs are referenced by the tx completion
  *      message
  * @param status - whether transmission was successful
- * @param tx_msdu_id_iterator - abstract method of finding the IDs for the
- *      individual MSDUs referenced by the tx completion message, via the
- *      htt_tx_compl_desc_id API function
+ * @param msg_word - the tx completion message
  */
 void
 ol_tx_completion_handler(ol_txrx_pdev_handle pdev,
 			 int num_msdus,
-			 enum htt_tx_status status, void *tx_msdu_id_iterator);
+			 enum htt_tx_status status, void *msg_word);
 
 void ol_tx_credit_completion_handler(ol_txrx_pdev_handle pdev, int credits);
 
@@ -199,7 +197,6 @@ static inline void ol_txrx_peer_link_status_handler(
 	u_int16_t peer_num,
 	struct rate_report_t *peer_link_status)
 {
-	return;
 }
 #endif
 
@@ -276,17 +273,14 @@ ol_tx_clear_group_credit_stats(ol_txrx_pdev_handle pdev);
 
 static inline void ol_tx_update_group_credit_stats(ol_txrx_pdev_handle pdev)
 {
-	return;
 }
 
 static inline void ol_tx_dump_group_credit_stats(ol_txrx_pdev_handle pdev)
 {
-	return;
 }
 
 static inline void ol_tx_clear_group_credit_stats(ol_txrx_pdev_handle pdev)
 {
-	return;
 }
 #endif
 
@@ -297,7 +291,6 @@ ol_tx_desc_update_group_credit(
 	u_int16_t tx_desc_id,
 	int credit, u_int8_t absolute, enum htt_tx_status status)
 {
-	return;
 }
 #endif
 
@@ -395,8 +388,9 @@ ol_rx_indication_handler(ol_txrx_pdev_handle pdev,
  *  invoke the rx fragment data processing on the new fragment.
  *
  * @param pdev - the data physical device that received the frames
- *      (registered with HTT as a context pointer during attach time)
- * @param rx_frag_ind_msg - the network buffer holding the rx fragment indication message
+ *               (registered with HTT as a context pointer during attach time)
+ * @param rx_frag_ind_msg - the network buffer holding the rx fragment
+ *                          indication message
  * @param peer_id - which peer sent this rx data
  * @param tid - what (extended) traffic type the rx data is
  */

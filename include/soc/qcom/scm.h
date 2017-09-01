@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -30,6 +30,7 @@
 #define SCM_SVC_SMMU_PROGRAM		0x15
 #define SCM_SVC_QDSS			0x16
 #define SCM_SVC_TZSCHEDULER		0xFC
+#define SCM_SVC_BW			0xFD
 
 #define SCM_FUSE_READ			0x7
 #define SCM_CMD_HDCP			0x01
@@ -94,7 +95,7 @@ struct scm_desc {
 	u64 x5;
 };
 
-#ifdef CONFIG_QCOM_SCM
+#if defined(CONFIG_QCOM_SCM) || defined(CONFIG_QCOM_SCM_QCPE)
 extern int scm_call(u32 svc_id, u32 cmd_id, const void *cmd_buf, size_t cmd_len,
 		void *resp_buf, size_t resp_len);
 
@@ -229,7 +230,7 @@ static inline int scm_io_write(phys_addr_t address, u32 val)
 	return 0;
 }
 
-inline bool scm_is_secure_device(void)
+static inline bool scm_is_secure_device(void)
 {
 	return false;
 }

@@ -47,6 +47,7 @@
 #define MTP_BULK_BUFFER_SIZE       16384
 #define INTR_BUFFER_SIZE           28
 #define MAX_INST_NAME_LEN          40
+#define MTP_MAX_FILE_SIZE          0xFFFFFFFFL
 
 /* String IDs */
 #define INTERFACE_STRING_INDEX	0
@@ -413,6 +414,7 @@ static inline struct mtp_dev *func_to_mtp(struct usb_function *f)
 static struct usb_request *mtp_request_new(struct usb_ep *ep, int buffer_size)
 {
 	struct usb_request *req = usb_ep_alloc_request(ep, GFP_KERNEL);
+
 	if (!req)
 		return NULL;
 
@@ -867,14 +869,11 @@ static void send_file_work(struct work_struct *data)
 			/* prepend MTP data header */
 			header = (struct mtp_data_header *)req->buf;
 			/*
-			 * Set length as 0xffffffff, if it is greater than
-			 * 0xffffffff. Otherwise host will throw error, if file
-			 * size greater than 0xffffffff being transferred.
-			 */
-			if (count > 0xffffffffLL)
-				header->length = 0xffffffff;
-			else
-				header->length = __cpu_to_le32(count);
+                         * set file size with header according to
+                         * MTP Specification v1.0
+                         */
+			header->length = (count > MTP_MAX_FILE_SIZE) ?
+				MTP_MAX_FILE_SIZE : __cpu_to_le32(count);
 			header->type = __cpu_to_le16(2); /* data packet */
 			header->command = __cpu_to_le16(dev->xfer_command);
 			header->transaction_id =
@@ -1011,6 +1010,10 @@ static void receive_file_work(struct work_struct *data)
 					r = -ECANCELED;
 				if (!dev->rx_done)
 					usb_ep_dequeue(dev->ep_out, read_req);
+				break;
+			}
+			if (read_req->status) {
+				r = read_req->status;
 				break;
 			}
 
@@ -1384,6 +1387,7 @@ static int mtp_ctrlrequest(struct usb_composite_dev *cdev,
 		} else if (ctrl->bRequest == MTP_REQ_GET_DEVICE_STATUS
 				&& w_index == 0 && w_value == 0) {
 			struct mtp_device_status *status = cdev->req->buf;
+
 			status->wLength =
 				__constant_cpu_to_le16(sizeof(*status));
 
@@ -1406,6 +1410,7 @@ static int mtp_ctrlrequest(struct usb_composite_dev *cdev,
 	/* respond with data transfer or status phase? */
 	if (value >= 0) {
 		int rc;
+
 		cdev->req->zero = value < w_length;
 		cdev->req->length = value;
 		rc = usb_ep_queue(cdev->gadget->ep0, cdev->req, GFP_ATOMIC);
@@ -1487,6 +1492,7 @@ mtp_function_bind(struct usb_configuration *c, struct usb_function *f)
 			mtp_fullspeed_out_desc.bEndpointAddress;
 	}
 
+	fi_mtp->func_inst.f = &dev->function;
 	DBG(cdev, "%s speed %s: IN/%s, OUT/%s\n",
 		gadget_is_superspeed(c->cdev->gadget) ? "super" :
 		(gadget_is_dualspeed(c->cdev->gadget) ? "dual" : "full"),
@@ -1498,9 +1504,10 @@ static void
 mtp_function_unbind(struct usb_configuration *c, struct usb_function *f)
 {
 	struct mtp_dev	*dev = func_to_mtp(f);
+	struct mtp_instance *fi_mtp;
 	struct usb_request *req;
 	int i;
-
+	fi_mtp = container_of(f->fi, struct mtp_instance, func_inst);
 	mtp_string_defs[INTERFACE_STRING_INDEX].id = 0;
 	mutex_lock(&dev->read_mutex);
 	while ((req = mtp_req_get(dev, &dev->tx_idle)))
@@ -1514,6 +1521,7 @@ mtp_function_unbind(struct usb_configuration *c, struct usb_function *f)
 	dev->is_ptp = false;
 	kfree(f->os_desc_table);
 	f->os_desc_n = 0;
+	fi_mtp->func_inst.f = NULL;
 }
 
 static int mtp_function_set_alt(struct usb_function *f,
@@ -1768,6 +1776,7 @@ static struct mtp_instance *to_mtp_instance(struct config_item *item)
 static void mtp_attr_release(struct config_item *item)
 {
 	struct mtp_instance *fi_mtp = to_mtp_instance(item);
+
 	usb_put_function_instance(&fi_mtp->func_inst);
 }
 
@@ -1850,6 +1859,8 @@ struct usb_function_instance *alloc_inst_mtp_ptp(bool mtp_config)
 	config_group_init_type_name(&fi_mtp->func_inst.group,
 					"", &mtp_func_type);
 
+	mutex_init(&fi_mtp->dev->read_mutex);
+
 	return  &fi_mtp->func_inst;
 }
 EXPORT_SYMBOL_GPL(alloc_inst_mtp_ptp);
@@ -1888,7 +1899,7 @@ struct usb_function *function_alloc_mtp_ptp(struct usb_function_instance *fi,
 		pr_err("\t2: Create MTP function\n");
 		pr_err("\t3: Create and symlink PTP function"
 				" with a gadget configuration\n");
-		return NULL;
+		return ERR_PTR(-EINVAL); /* Invalid Configuration */
 	}
 
 	dev = fi_mtp->dev;
@@ -1910,9 +1921,7 @@ struct usb_function *function_alloc_mtp_ptp(struct usb_function_instance *fi,
 	dev->function.setup = mtp_ctrlreq_configfs;
 	dev->function.free_func = mtp_free;
 	dev->is_ptp = !mtp_config;
-	fi->f = &dev->function;
 
-	mutex_init(&dev->read_mutex);
 	return &dev->function;
 }
 EXPORT_SYMBOL_GPL(function_alloc_mtp_ptp);

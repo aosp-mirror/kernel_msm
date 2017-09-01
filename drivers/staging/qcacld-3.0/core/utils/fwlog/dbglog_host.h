@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, 2014-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011, 2014-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -33,7 +33,9 @@ extern "C" {
 #endif
 
 #include "dbglog_common.h"
-#include "ol_defines.h"
+#include "qdf_nbuf.h"
+#include "qdf_types.h"
+#include "wmi_unified_param.h"
 
 #define DIAG_FWID_OFFSET            24
 #define DIAG_FWID_MASK              0xFF000000  /* Bit 24-31 */
@@ -129,9 +131,10 @@ dbglog_set_log_lvl(wmi_unified_t wmi_handle, enum DBGLOG_LOG_LVL log_lvl);
  *  mod_id_lvl : the format is more user friendly.
  *    module_id =  mod_id_lvl/10;
  *    log_level =  mod_id_lvl%10;
- * example : mod_id_lvl is 153. then module id is 15 and log level is 3. this format allows
- *         user to pass a sinlge value (which is the most convenient way for most of the OSs)
- *         to be passed from user to the driver.
+ * example : mod_id_lvl is 153. then module id is 15 and log level is 3.
+ *           this format allows user to pass a sinlge value
+ *           (which is the most convenient way for most of the OSs)
+ *           to be passed from user to the driver.
  */
 int
 dbglog_set_mod_log_lvl(wmi_unified_t wmi_handle, A_UINT32 mod_id_lvl);
@@ -150,8 +153,9 @@ void
 dbglog_set_vap_enable_bitmap(wmi_unified_t wmi_handle,
 			     A_UINT32 vap_enable_bitmap);
 
-/** set log level for all the modules specified in the bitmap. for all other modules
- * with 0 in the bitmap (or) outside the bitmap , the log level be reset to DBGLOG_ERR.
+/** set log level for all the modules specified in the bitmap.
+ *  for all other modules with 0 in the bitmap (or) outside the bitmap,
+ *  the log level be reset to DBGLOG_ERR.
  */
 void
 dbglog_set_mod_enable_bitmap(wmi_unified_t wmi_handle,

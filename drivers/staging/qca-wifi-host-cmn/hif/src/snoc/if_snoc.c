@@ -63,10 +63,10 @@ void hif_snoc_disable_isr(struct hif_softc *scn)
 
 /**
  * hif_dump_registers(): dump bus debug registers
- * @scn: struct hif_opaque_softc
+ * @hif_ctx: struct hif_opaque_softc
  *
  * This function dumps hif bus debug registers
-  *
+ *
  * Return: 0 for success or error code
  */
 int hif_snoc_dump_registers(struct hif_softc *hif_ctx)
@@ -199,7 +199,7 @@ int hif_snoc_bus_configure(struct hif_softc *scn)
  * Return: 0 for success
  */
 static inline int hif_snoc_get_target_type(struct hif_softc *ol_sc,
-	struct device *dev, void *bdev, const hif_bus_id *bid,
+	struct device *dev, void *bdev, const struct hif_bus_id *bid,
 	uint32_t *hif_type, uint32_t *target_type)
 {
 	/* TODO: need to use HW version. Hard code for now */
@@ -217,6 +217,9 @@ static inline int hif_snoc_get_target_type(struct hif_softc *ol_sc,
 static int hif_set_dma_coherent_mask(struct device *dev)
 {
 	uint8_t addr_bits;
+
+	if (false == hif_get_ipa_present())
+		return qdf_set_dma_coherent_mask(dev, 37);
 
 	if (hif_get_ipa_hw_type() < IPA_HW_v3_0)
 		addr_bits = DMA_COHERENT_MASK_BELOW_IPA_VER_3;
@@ -243,7 +246,7 @@ static int hif_set_dma_coherent_mask(struct device *dev)
  */
 QDF_STATUS hif_snoc_enable_bus(struct hif_softc *ol_sc,
 			  struct device *dev, void *bdev,
-			  const hif_bus_id *bid,
+			  const struct hif_bus_id *bid,
 			  enum hif_enable_type type)
 {
 	int ret;
@@ -287,7 +290,7 @@ QDF_STATUS hif_snoc_enable_bus(struct hif_softc *ol_sc,
 	/* the bus should remain on durring suspend for snoc */
 	hif_vote_link_up(GET_HIF_OPAQUE_HDL(ol_sc));
 
-	HIF_TRACE("%s: X - hif_type = 0x%x, target_type = 0x%x",
+	HIF_DBG("%s: X - hif_type = 0x%x, target_type = 0x%x",
 		  __func__, hif_type, target_type);
 
 	return QDF_STATUS_SUCCESS;
@@ -325,6 +328,7 @@ void hif_snoc_disable_bus(struct hif_softc *scn)
 void hif_snoc_nointrs(struct hif_softc *scn)
 {
 	struct HIF_CE_state *hif_state = HIF_GET_CE_STATE(scn);
+
 	if (scn->request_irq_done) {
 		ce_unregister_irq(hif_state, 0xfff);
 		scn->request_irq_done = false;
@@ -457,3 +461,18 @@ int hif_snoc_bus_suspend_noirq(struct hif_softc *scn)
 	return 0;
 }
 
+/**
+ * hif_is_target_register_access_allowed(): Check target register access allow
+ * @scn: HIF Context
+ *
+ * This function help to check whether target register access is allowed or not
+ *
+ * Return: true if target access is allowed else false
+ */
+bool hif_is_target_register_access_allowed(struct hif_softc *scn)
+{
+	if (hif_is_recovery_in_progress(scn))
+		return hif_is_target_ready(scn);
+	else
+		return true;
+}

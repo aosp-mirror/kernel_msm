@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -597,10 +597,41 @@ uint8_t cds_freq_to_chan(uint32_t freq)
 	return chan;
 }
 
+void cds_upper_to_lower(uint8_t *txt, uint32_t length)
+{
+	int i;
+
+	for (i = 0; i < length; i++) {
+		if (txt[i] >= 'A' && txt[i] <= 'Z')
+			txt[i] = txt[i] + 32;
+	}
+}
+
 enum cds_band_type cds_chan_to_band(uint32_t chan)
 {
 	if (chan <= CDS_24_GHZ_CHANNEL_14)
 		return CDS_BAND_2GHZ;
 
 	return CDS_BAND_5GHZ;
+}
+
+void cds_copy_hlp_info(struct qdf_mac_addr *input_dst_mac,
+		       struct qdf_mac_addr *input_src_mac,
+		       uint16_t input_hlp_data_len,
+		       uint8_t *input_hlp_data,
+		       struct qdf_mac_addr *output_dst_mac,
+		       struct qdf_mac_addr *output_src_mac,
+		       uint16_t *output_hlp_data_len,
+		       uint8_t *output_hlp_data)
+{
+	if (!input_hlp_data_len) {
+		QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_ERROR,
+			  "Input HLP data len zero\n");
+		return;
+	}
+
+	qdf_copy_macaddr(output_dst_mac, input_dst_mac);
+	qdf_copy_macaddr(output_src_mac, input_src_mac);
+	*output_hlp_data_len = input_hlp_data_len;
+	qdf_mem_copy(output_hlp_data, input_hlp_data, input_hlp_data_len);
 }

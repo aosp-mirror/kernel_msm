@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -31,7 +31,7 @@
 
 #define ADV7533_REG_CHIP_REVISION (0x00)
 #define ADV7533_DSI_CEC_I2C_ADDR_REG (0xE1)
-#define ADV7533_RESET_DELAY (100)
+#define ADV7533_RESET_DELAY (10)
 
 #define PINCTRL_STATE_ACTIVE    "pmx_adv7533_active"
 #define PINCTRL_STATE_SUSPEND   "pmx_adv7533_suspend"
@@ -517,13 +517,25 @@ static void adv7533_parse_vreg_dt(struct device *dev,
 		}
 		mp->vreg_config[i].disable_load = val_array[i];
 
-		pr_debug("%s: %s min=%d, max=%d, enable=%d disable=%d\n",
+		/* post-on-sleep */
+		memset(val_array, 0, sizeof(u32) * dt_vreg_total);
+		rc = of_property_read_u32_array(of_node,
+				"qcom,post-on-sleep", val_array,
+						dt_vreg_total);
+		if (rc)
+			pr_warn("%s: error read post on sleep. rc=%d\n",
+					__func__, rc);
+		else
+			mp->vreg_config[i].post_on_sleep = val_array[i];
+
+		pr_debug("%s: %s min=%d, max=%d, enable=%d disable=%d post-on-sleep=%d\n",
 			__func__,
 			mp->vreg_config[i].vreg_name,
 			mp->vreg_config[i].min_voltage,
 			mp->vreg_config[i].max_voltage,
 			mp->vreg_config[i].enable_load,
-			mp->vreg_config[i].disable_load);
+			mp->vreg_config[i].disable_load,
+			mp->vreg_config[i].post_on_sleep);
 	}
 
 	devm_kfree(dev, val_array);
@@ -1539,14 +1551,14 @@ exit:
 static int adv7533_video_on(void *client, bool on,
 	struct msm_dba_video_cfg *cfg, u32 flags)
 {
-	int ret = -EINVAL;
+	int ret = 0;
 	u8 lanes;
 	u8 reg_val = 0;
 	struct adv7533 *pdata = adv7533_get_platform_data(client);
 
 	if (!pdata || !cfg) {
 		pr_err("%s: invalid platform data\n", __func__);
-		return ret;
+		return -EINVAL;
 	}
 
 	mutex_lock(&pdata->ops_mutex);

@@ -26,6 +26,10 @@
 
 #include <linux/types.h>
 
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
 #define fourcc_code(a, b, c, d) ((__u32)(a) | ((__u32)(b) << 8) | \
 				 ((__u32)(c) << 16) | ((__u32)(d) << 24))
 
@@ -237,4 +241,31 @@
  */
 #define DRM_FORMAT_MOD_QCOM_COMPRESSED	fourcc_mod_code(QCOM, 1)
 
+/*
+ * QTI DX Format
+ *
+ * Refers to a DX variant of the base format.
+ * Implementation may be platform and base-format specific.
+ */
+#define DRM_FORMAT_MOD_QCOM_DX	fourcc_mod_code(QCOM, 0x2)
+
+/*
+ * QTI Tight Format
+ *
+ * Refers to a tightly packed variant of the base format.
+ * Implementation may be platform and base-format specific.
+ */
+#define DRM_FORMAT_MOD_QCOM_TIGHT	fourcc_mod_code(QCOM, 0x4)
+
+/*
+ * QTI Tile Format
+ *
+ * Refers to a tile variant of the base format.
+ * Implementation may be platform and base-format specific.
+ */
+#define DRM_FORMAT_MOD_QCOM_TILE	fourcc_mod_code(QCOM, 0x8)
+
+#if defined(__cplusplus)
+}
+#endif
 #endif /* DRM_FOURCC_H */

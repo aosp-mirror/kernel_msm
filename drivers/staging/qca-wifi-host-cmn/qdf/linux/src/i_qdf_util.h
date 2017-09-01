@@ -55,7 +55,7 @@
 #endif
 
 #include <qdf_types.h>
-#include <asm/io.h>
+#include <linux/io.h>
 #include <asm/byteorder.h>
 
 #ifdef QCA_PARTNER_PLATFORM
@@ -288,6 +288,7 @@ static inline uint64_t
 __qdf_get_totalramsize(void)
 {
 	struct sysinfo meminfo;
+
 	si_meminfo(&meminfo);
 	return MEMINFO_KB(meminfo.totalram);
 }
@@ -371,5 +372,33 @@ int __qdf_set_dma_coherent_mask(struct device *dev, uint8_t addr_bits)
 	return dma_set_coherent_mask(dev, DMA_BIT_MASK(addr_bits));
 }
 #endif
+
+/**
+ * __qdf_do_div() - wrapper function for kernel macro(do_div).
+ * @dividend: Dividend value
+ * @divisor : Divisor value
+ *
+ * Return: Quotient
+ */
+static inline
+uint64_t __qdf_do_div(uint64_t dividend, uint32_t divisor)
+{
+	do_div(dividend, divisor);
+	/*do_div macro updates dividend with Quotient of dividend/divisor */
+	return dividend;
+}
+
+/**
+ * __qdf_do_mod() - wrapper function for kernel macro(do_div).
+ * @dividend: Dividend value
+ * @divisor : Divisor value
+ *
+ * Return: Modulo
+ */
+static inline
+uint64_t __qdf_do_mod(uint64_t dividend, uint32_t divisor)
+{
+	return do_div(dividend, divisor);
+}
 
 #endif /*_I_QDF_UTIL_H*/

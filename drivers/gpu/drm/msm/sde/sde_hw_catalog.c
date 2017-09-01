@@ -14,6 +14,8 @@
 #include <linux/slab.h>
 #include <linux/of_address.h>
 
+#include <linux/of_platform.h>
+
 #include "sde_hw_mdss.h"
 #include "sde_hw_catalog.h"
 #include "sde_hw_catalog_format.h"
@@ -403,6 +405,38 @@ static struct sde_prop_type vbif_prop[] = {
 /*************************************************************
  * static API list
  *************************************************************/
+
+/**
+ * _sde_copy_formats   - copy formats from src_list to dst_list
+ * @dst_list:          pointer to destination list where to copy formats
+ * @dst_list_size:     size of destination list
+ * @dst_list_pos:      starting position on the list where to copy formats
+ * @src_list:          pointer to source list where to copy formats from
+ * @src_list_size:     size of source list
+ * Return: number of elements populated
+ */
+static uint32_t _sde_copy_formats(
+		struct sde_format_extended *dst_list,
+		uint32_t dst_list_size,
+		uint32_t dst_list_pos,
+		const struct sde_format_extended *src_list,
+		uint32_t src_list_size)
+{
+	uint32_t cur_pos, i;
+
+	if (!dst_list || !src_list || (dst_list_pos >= (dst_list_size - 1)))
+		return 0;
+
+	for (i = 0, cur_pos = dst_list_pos;
+		(cur_pos < (dst_list_size - 1)) && (i < src_list_size)
+		&& src_list[i].fourcc_format; ++i, ++cur_pos)
+		dst_list[cur_pos] = src_list[i];
+
+	dst_list[cur_pos].fourcc_format = 0;
+
+	return i;
+}
+
 static int _parse_dt_u32_handler(struct device_node *np,
 	char *prop_name, u32 *offsets, int len, bool mandatory)
 {
@@ -469,6 +503,7 @@ static int _validate_dt_entry(struct device_node *np,
 				rc = -EINVAL;
 			}
 			*off_count = 0;
+			memset(prop_count, 0, sizeof(int) * prop_size);
 			return rc;
 		}
 	}
@@ -656,7 +691,7 @@ static void _sde_sspp_setup_vig(struct sde_mdss_cfg *sde_cfg,
 	sblk->maxdwnscale = MAX_SSPP_DOWNSCALE;
 	sspp->id = SSPP_VIG0 + *vig_count;
 	sspp->clk_ctrl = SDE_CLK_CTRL_VIG0 + *vig_count;
-	sblk->format_list = plane_formats_yuv;
+	sspp->type = SSPP_TYPE_VIG;
 	set_bit(SDE_SSPP_QOS, &sspp->features);
 	(*vig_count)++;
 
@@ -715,6 +750,7 @@ static void _sde_sspp_setup_vig(struct sde_mdss_cfg *sde_cfg,
 		sblk->pcc_blk.len = 0;
 		set_bit(SDE_SSPP_PCC, &sspp->features);
 	}
+	snprintf(sspp->name, sizeof(sspp->name), "vig%d", *vig_count-1);
 }
 
 static void _sde_sspp_setup_rgb(struct sde_mdss_cfg *sde_cfg,
@@ -725,7 +761,7 @@ static void _sde_sspp_setup_rgb(struct sde_mdss_cfg *sde_cfg,
 	sblk->maxdwnscale = MAX_SSPP_DOWNSCALE;
 	sspp->id = SSPP_RGB0 + *rgb_count;
 	sspp->clk_ctrl = SDE_CLK_CTRL_RGB0 + *rgb_count;
-	sblk->format_list = plane_formats;
+	sspp->type = SSPP_TYPE_RGB;
 	set_bit(SDE_SSPP_QOS, &sspp->features);
 	(*rgb_count)++;
 
@@ -753,6 +789,7 @@ static void _sde_sspp_setup_rgb(struct sde_mdss_cfg *sde_cfg,
 		sblk->pcc_blk.len = 0;
 		set_bit(SDE_SSPP_PCC, &sspp->features);
 	}
+	snprintf(sspp->name, sizeof(sspp->name), "rgb%d", *rgb_count-1);
 }
 
 static void _sde_sspp_setup_cursor(struct sde_mdss_cfg *sde_cfg,
@@ -764,8 +801,9 @@ static void _sde_sspp_setup_cursor(struct sde_mdss_cfg *sde_cfg,
 	sblk->maxdwnscale = SSPP_UNITY_SCALE;
 	sspp->id = SSPP_CURSOR0 + *cursor_count;
 	sspp->clk_ctrl = SDE_CLK_CTRL_CURSOR0 + *cursor_count;
-	sblk->format_list = plane_formats;
+	sspp->type = SSPP_TYPE_CURSOR;
 	(*cursor_count)++;
+	snprintf(sspp->name, sizeof(sspp->name), "cursor%d", *cursor_count-1);
 }
 
 static void _sde_sspp_setup_dma(struct sde_mdss_cfg *sde_cfg,
@@ -776,9 +814,10 @@ static void _sde_sspp_setup_dma(struct sde_mdss_cfg *sde_cfg,
 	sblk->maxdwnscale = SSPP_UNITY_SCALE;
 	sspp->id = SSPP_DMA0 + *dma_count;
 	sspp->clk_ctrl = SDE_CLK_CTRL_DMA0 + *dma_count;
-	sblk->format_list = plane_formats;
+	sspp->type = SSPP_TYPE_DMA;
 	set_bit(SDE_SSPP_QOS, &sspp->features);
 	(*dma_count)++;
+	snprintf(sspp->name, sizeof(sspp->name), "dma%d", *dma_count-1);
 }
 
 static int sde_sspp_parse_dt(struct device_node *np,
@@ -1200,7 +1239,8 @@ end:
 	return rc;
 }
 
-static int sde_wb_parse_dt(struct device_node *np, struct sde_mdss_cfg *sde_cfg)
+static int sde_wb_parse_dt(struct device_node *np,
+	struct sde_mdss_cfg *sde_cfg)
 {
 	int rc, prop_count[WB_PROP_MAX], i, j;
 	struct sde_prop_value *prop_value = NULL;
@@ -1251,7 +1291,6 @@ static int sde_wb_parse_dt(struct device_node *np, struct sde_mdss_cfg *sde_cfg)
 		wb->xin_id = PROP_VALUE_ACCESS(prop_value, WB_XIN_ID, i);
 		wb->vbif_idx = VBIF_NRT;
 		wb->len = PROP_VALUE_ACCESS(prop_value, WB_LEN, 0);
-		wb->format_list = wb2_formats;
 		if (!prop_exists[WB_LEN])
 			wb->len = DEFAULT_SDE_HW_BLOCK_LEN;
 		sblk->maxlinewidth = sde_cfg->max_wb_linewidth;
@@ -1686,7 +1725,8 @@ end:
 	return rc;
 }
 
-static int sde_pp_parse_dt(struct device_node *np, struct sde_mdss_cfg *sde_cfg)
+static int sde_pp_parse_dt(struct device_node *np,
+	struct sde_mdss_cfg *sde_cfg)
 {
 	int rc, prop_count[PP_PROP_MAX], i;
 	struct sde_prop_value *prop_value = NULL;
@@ -1757,6 +1797,94 @@ static int sde_pp_parse_dt(struct device_node *np, struct sde_mdss_cfg *sde_cfg)
 
 end:
 	kfree(prop_value);
+	return rc;
+}
+
+static inline u32 _sde_parse_sspp_id(struct sde_mdss_cfg *cfg,
+	const char *name)
+{
+	int i;
+
+	for (i = 0; i < cfg->sspp_count; i++) {
+		if (!strcmp(cfg->sspp[i].name, name))
+			return cfg->sspp[i].id;
+	}
+
+	return SSPP_NONE;
+}
+
+static int _sde_vp_parse_dt(struct device_node *np,
+	struct sde_mdss_cfg *cfg)
+{
+	int rc = 0, i = 0;
+	struct device_node *node = NULL;
+	struct device_node *root_node = NULL;
+	struct sde_vp_cfg *vp;
+	struct sde_vp_sub_blks *vp_sub, *vp_sub_next;
+	struct property *prop;
+	const char *cname;
+
+	root_node = of_get_child_by_name(np, "qcom,sde-plane-id-map");
+	if (!root_node) {
+		root_node = of_parse_phandle(np, "qcom,sde-plane-id-map", 0);
+		if (!root_node) {
+			SDE_ERROR("No entry present for qcom,sde-plane-id-map");
+			rc = -EINVAL;
+			goto end;
+		}
+	}
+
+	for_each_child_of_node(root_node, node) {
+		if (i >= MAX_BLOCKS) {
+			SDE_ERROR("num of nodes(%d) is bigger than max(%d)\n",
+					i, MAX_BLOCKS);
+			rc = -EINVAL;
+			goto end;
+		}
+		cfg->vp_count++;
+		vp = &(cfg->vp[i]);
+		vp->id = i;
+		rc = of_property_read_string(node, "qcom,display-type",
+						&(vp->display_type));
+		if (rc) {
+			SDE_ERROR("failed to read display-type, rc = %d\n", rc);
+			goto end;
+		}
+
+		rc = of_property_read_string(node, "qcom,plane-type",
+						&(vp->plane_type));
+		if (rc) {
+			SDE_ERROR("failed to read plane-type, rc = %d\n", rc);
+			goto end;
+		}
+
+		INIT_LIST_HEAD(&vp->sub_blks);
+		of_property_for_each_string(node, "qcom,plane-name",
+						prop, cname) {
+			vp_sub = kzalloc(sizeof(*vp_sub), GFP_KERNEL);
+			if (!vp_sub) {
+				rc = -ENOMEM;
+				goto end;
+			}
+			vp_sub->sspp_id = _sde_parse_sspp_id(cfg, cname);
+			list_add_tail(&vp_sub->pipeid_list, &vp->sub_blks);
+		}
+		i++;
+	}
+
+end:
+	if (rc && cfg->vp_count) {
+		vp = &(cfg->vp[i]);
+		for (i = 0; i < cfg->vp_count; i++) {
+			list_for_each_entry_safe(vp_sub, vp_sub_next,
+				&vp->sub_blks, pipeid_list) {
+				list_del(&vp_sub->pipeid_list);
+				kfree(vp_sub);
+			}
+		}
+		memset(&(cfg->vp[0]), 0, sizeof(cfg->vp));
+		cfg->vp_count = 0;
+	}
 	return rc;
 }
 
@@ -1851,7 +1979,8 @@ end:
 	return rc;
 }
 
-static int sde_perf_parse_dt(struct device_node *np, struct sde_mdss_cfg *cfg)
+static int sde_perf_parse_dt(struct device_node *np,
+	struct sde_mdss_cfg *cfg)
 {
 	int rc, len, prop_count[PERF_PROP_MAX];
 	struct sde_prop_value *prop_value = NULL;
@@ -1891,8 +2020,129 @@ end:
 	return rc;
 }
 
-static void sde_hardware_caps(struct sde_mdss_cfg *sde_cfg, uint32_t hw_rev)
+static int sde_hardware_format_caps(struct sde_mdss_cfg *sde_cfg,
+	uint32_t hw_rev)
 {
+	int i, rc = 0;
+	uint32_t dma_list_size, vig_list_size, wb2_list_size;
+	uint32_t cursor_list_size = 0;
+	struct sde_sspp_sub_blks *sblk;
+	uint32_t index = 0;
+
+	if (IS_SDE_MAJOR_MINOR_SAME((hw_rev), SDE_HW_VER_300)) {
+		cursor_list_size = ARRAY_SIZE(cursor_formats);
+		sde_cfg->cursor_formats = kcalloc(cursor_list_size,
+			sizeof(struct sde_format_extended), GFP_KERNEL);
+		if (!sde_cfg->cursor_formats) {
+			rc = -ENOMEM;
+			goto end;
+		}
+		index = _sde_copy_formats(sde_cfg->cursor_formats,
+			cursor_list_size, 0, cursor_formats,
+			ARRAY_SIZE(cursor_formats));
+	}
+
+	dma_list_size = ARRAY_SIZE(plane_formats);
+	vig_list_size = ARRAY_SIZE(plane_formats_yuv);
+	wb2_list_size = ARRAY_SIZE(wb2_formats);
+
+	dma_list_size += ARRAY_SIZE(rgb_10bit_formats);
+	vig_list_size += ARRAY_SIZE(rgb_10bit_formats)
+		+ ARRAY_SIZE(tp10_ubwc_formats)
+		+ ARRAY_SIZE(p010_formats);
+	wb2_list_size += ARRAY_SIZE(rgb_10bit_formats)
+		+ ARRAY_SIZE(tp10_ubwc_formats);
+
+	sde_cfg->dma_formats = kcalloc(dma_list_size,
+		sizeof(struct sde_format_extended), GFP_KERNEL);
+	if (!sde_cfg->dma_formats) {
+		rc = -ENOMEM;
+		goto end;
+	}
+
+	sde_cfg->vig_formats = kcalloc(vig_list_size,
+		sizeof(struct sde_format_extended), GFP_KERNEL);
+	if (!sde_cfg->vig_formats) {
+		rc = -ENOMEM;
+		goto end;
+	}
+
+	sde_cfg->wb_formats = kcalloc(wb2_list_size,
+		sizeof(struct sde_format_extended), GFP_KERNEL);
+	if (!sde_cfg->wb_formats) {
+		SDE_ERROR("failed to allocate wb format list\n");
+		rc = -ENOMEM;
+		goto end;
+	}
+
+	if (IS_SDE_MAJOR_MINOR_SAME((hw_rev), SDE_HW_VER_300) ||
+		IS_SDE_MAJOR_MINOR_SAME((hw_rev), SDE_HW_VER_301)) {
+		sde_cfg->has_hdr = true;
+	}
+
+	index = _sde_copy_formats(sde_cfg->dma_formats, dma_list_size,
+		0, plane_formats, ARRAY_SIZE(plane_formats));
+	index += _sde_copy_formats(sde_cfg->dma_formats, dma_list_size,
+		index, rgb_10bit_formats,
+		ARRAY_SIZE(rgb_10bit_formats));
+
+	index = _sde_copy_formats(sde_cfg->vig_formats, vig_list_size,
+		0, plane_formats_yuv, ARRAY_SIZE(plane_formats_yuv));
+	index += _sde_copy_formats(sde_cfg->vig_formats, vig_list_size,
+		index, rgb_10bit_formats,
+		ARRAY_SIZE(rgb_10bit_formats));
+	index += _sde_copy_formats(sde_cfg->vig_formats, vig_list_size,
+		index, p010_formats, ARRAY_SIZE(p010_formats));
+
+	index += _sde_copy_formats(sde_cfg->vig_formats, vig_list_size,
+		index, tp10_ubwc_formats,
+		ARRAY_SIZE(tp10_ubwc_formats));
+
+	index = _sde_copy_formats(sde_cfg->wb_formats, wb2_list_size,
+		0, wb2_formats, ARRAY_SIZE(wb2_formats));
+	index += _sde_copy_formats(sde_cfg->wb_formats, wb2_list_size,
+		index, rgb_10bit_formats,
+		ARRAY_SIZE(rgb_10bit_formats));
+	index += _sde_copy_formats(sde_cfg->wb_formats, wb2_list_size,
+		index, tp10_ubwc_formats,
+		ARRAY_SIZE(tp10_ubwc_formats));
+
+	for (i = 0; i < sde_cfg->sspp_count; ++i) {
+		struct sde_sspp_cfg *sspp = &sde_cfg->sspp[i];
+
+		sblk = (struct sde_sspp_sub_blks *)sspp->sblk;
+		switch (sspp->type) {
+		case SSPP_TYPE_VIG:
+			sblk->format_list = sde_cfg->vig_formats;
+			break;
+		case SSPP_TYPE_CURSOR:
+			if (IS_SDE_MAJOR_MINOR_SAME((hw_rev), SDE_HW_VER_300))
+				sblk->format_list = sde_cfg->cursor_formats;
+			else
+				SDE_ERROR("invalid sspp type %d, xin id %d\n",
+					sspp->type, sspp->xin_id);
+			break;
+		case SSPP_TYPE_DMA:
+			sblk->format_list = sde_cfg->dma_formats;
+			break;
+		default:
+			SDE_ERROR("invalid sspp type %d\n", sspp->type);
+			rc = -EINVAL;
+			goto end;
+		}
+	}
+
+	for (i = 0; i < sde_cfg->wb_count; ++i)
+		sde_cfg->wb[i].format_list = sde_cfg->wb_formats;
+
+end:
+	return rc;
+}
+
+static int sde_hardware_caps(struct sde_mdss_cfg *sde_cfg, uint32_t hw_rev)
+{
+	int rc = 0;
+
 	switch (hw_rev) {
 	case SDE_HW_VER_170:
 	case SDE_HW_VER_171:
@@ -1900,15 +2150,20 @@ static void sde_hardware_caps(struct sde_mdss_cfg *sde_cfg, uint32_t hw_rev)
 		/* update msm8996 target here */
 		break;
 	case SDE_HW_VER_300:
+	case SDE_HW_VER_301:
 	case SDE_HW_VER_400:
 		/* update cobalt and skunk target here */
+		rc = sde_hardware_format_caps(sde_cfg, hw_rev);
 		break;
 	}
+
+	return rc;
 }
 
 void sde_hw_catalog_deinit(struct sde_mdss_cfg *sde_cfg)
 {
 	int i;
+	struct sde_vp_sub_blks *vp_sub, *vp_sub_next;
 
 	if (!sde_cfg)
 		return;
@@ -1932,13 +2187,28 @@ void sde_hw_catalog_deinit(struct sde_mdss_cfg *sde_cfg)
 		kfree(sde_cfg->vbif[i].dynamic_ot_rd_tbl.cfg);
 		kfree(sde_cfg->vbif[i].dynamic_ot_wr_tbl.cfg);
 	}
+
+	for (i = 0; i < sde_cfg->vp_count; i++) {
+		list_for_each_entry_safe(vp_sub, vp_sub_next,
+			&sde_cfg->vp[i].sub_blks, pipeid_list) {
+			list_del(&vp_sub->pipeid_list);
+			kfree(vp_sub);
+		}
+	}
+
+	kfree(sde_cfg->dma_formats);
+	kfree(sde_cfg->cursor_formats);
+	kfree(sde_cfg->vig_formats);
+	kfree(sde_cfg->wb_formats);
+
 	kfree(sde_cfg);
 }
 
 /*************************************************************
  * hardware catalog init
  *************************************************************/
-struct sde_mdss_cfg *sde_hw_catalog_init(struct drm_device *dev, u32 hw_rev)
+struct sde_mdss_cfg *sde_hw_catalog_init(struct drm_device *dev,
+	u32 hw_rev)
 {
 	int rc;
 	struct sde_mdss_cfg *sde_cfg;
@@ -1996,7 +2266,13 @@ struct sde_mdss_cfg *sde_hw_catalog_init(struct drm_device *dev, u32 hw_rev)
 	if (rc)
 		goto end;
 
-	sde_hardware_caps(sde_cfg, hw_rev);
+	rc = _sde_vp_parse_dt(np, sde_cfg);
+	if (rc)
+		SDE_DEBUG("virtual plane is not supported.\n");
+
+	rc = sde_hardware_caps(sde_cfg, hw_rev);
+	if (rc)
+		goto end;
 
 	return sde_cfg;
 

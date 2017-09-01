@@ -1017,7 +1017,7 @@ static int mmc_blk_ioctl_rpmb_cmd(struct block_device *bdev,
 {
 	struct mmc_blk_ioc_rpmb_data *idata;
 	struct mmc_blk_data *md;
-	struct mmc_card *card;
+	struct mmc_card *card = NULL;
 	struct mmc_command cmd = {0};
 	struct mmc_data data = {0};
 	struct mmc_request mrq = {NULL};
@@ -1701,12 +1701,14 @@ static int mmc_blk_cmd_recovery(struct mmc_card *card, struct request *req,
 		mmc_retune_recheck(card->host);
 
 		prev_cmd_status_valid = false;
-		pr_err("%s: error %d sending status command, %sing\n",
+		pr_err_ratelimited("%s: error %d sending status command, %sing\n",
 		       req->rq_disk->disk_name, err, retry ? "retry" : "abort");
 	}
 
 	/* We couldn't get a response from the card.  Give up. */
 	if (err) {
+		if (card->err_in_sdr104)
+			return ERR_RETRY;
 		/* Check if the card is removed */
 		if (mmc_detect_card_removed(card->host))
 			return ERR_NOMEDIUM;
@@ -2197,7 +2199,8 @@ static int mmc_blk_err_check(struct mmc_card *card,
 	     brq->data.error == -ETIMEDOUT ||
 	     brq->cmd.error == -EILSEQ ||
 	     brq->cmd.error == -EIO ||
-	     brq->cmd.error == -ETIMEDOUT))
+	     brq->cmd.error == -ETIMEDOUT ||
+	     brq->sbc.error))
 		card->err_in_sdr104 = true;
 
 	/*
@@ -2867,7 +2870,7 @@ static void mmc_blk_packed_hdr_wrq_prep(struct mmc_queue_req *mqrq,
 	struct mmc_blk_data *md = mq->data;
 	struct mmc_packed *packed = mqrq->packed;
 	bool do_rel_wr, do_data_tag;
-	u32 *packed_cmd_hdr;
+	__le32 *packed_cmd_hdr;
 	u8 hdr_blocks;
 	u8 i = 1;
 
@@ -4189,7 +4192,8 @@ static struct mmc_blk_data *mmc_blk_alloc_req(struct mmc_card *card,
 	set_capacity(md->disk, size);
 
 	if (mmc_host_cmd23(card->host)) {
-		if (mmc_card_mmc(card) ||
+		if ((mmc_card_mmc(card) &&
+		     card->csd.mmca_vsn >= CSD_SPEC_VER_3) ||
 		    (mmc_card_sd(card) &&
 		     card->scr.cmds & SD_SCR_CMD23_SUPPORT))
 			md->flags |= MMC_BLK_CMD23;
@@ -4694,10 +4698,6 @@ static int _mmc_blk_suspend(struct mmc_card *card, bool wait)
 static void mmc_blk_shutdown(struct mmc_card *card)
 {
 	_mmc_blk_suspend(card, 1);
-
-	/* send power off notification */
-	if (mmc_card_mmc(card))
-		mmc_send_pon(card);
 }
 
 #ifdef CONFIG_PM_SLEEP

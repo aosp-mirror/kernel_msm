@@ -31,19 +31,6 @@
 #include "cdp_txrx_cfg.h"
 
 /**
- * enum driver_type - Indicate the driver type to the cds, and based on this
- * do appropriate initialization.
- *
- * @DRIVER_TYPE_PRODUCTION: Driver used in the production
- * @DRIVER_TYPE_MFG: Driver used in the Factory
- *
- */
-enum driver_type {
-	DRIVER_TYPE_PRODUCTION = 0,
-	DRIVER_TYPE_MFG = 1,
-};
-
-/**
  * enum cfg_sub_20_channel_width: ini values for su 20 mhz channel width
  * @WLAN_SUB_20_CH_WIDTH_5: Use 5 mhz channel width
  * @WLAN_SUB_20_CH_WIDTH_10: Use 10 mhz channel width
@@ -114,8 +101,12 @@ enum active_bpf_mode {
  * @flow_steering_enabled: Receive flow steering.
  * @is_fw_timeout: Indicate whether crash host when fw timesout or not
  * @force_target_assert_enabled: Indicate whether target assert enabled or not
- * @active_bpf_mode: Setting that determines how BPF is applied in active mode
+ * @active_uc_bpf_mode: Setting that determines how BPF is applied in active
+ * mode for uc packets
+ * @active_mc_bc_bpf_mode: Setting that determines how BPF is applied in
+ * active mode for MC/BC packets
  * @rps_enabled: RPS enabled in SAP mode
+ * @ito_repeat_count: Indicates ito repeated count
  * Structure for holding cds ini parameters.
  */
 
@@ -126,7 +117,7 @@ struct cds_config_info {
 	uint8_t sta_maxlimod_dtim;
 	uint8_t sta_mod_dtim;
 	uint8_t sta_dynamic_dtim;
-	enum driver_type driver_type;
+	enum qdf_driver_type driver_type;
 	uint8_t max_wow_filters;
 	uint8_t wow_enable;
 	uint8_t ol_ini_info;
@@ -172,8 +163,33 @@ struct cds_config_info {
 	struct ol_tx_sched_wrr_ac_specs_t ac_specs[TX_WMM_AC_NUM];
 
 	bool force_target_assert_enabled;
-	enum active_bpf_mode active_bpf_mode;
+	enum active_bpf_mode active_uc_bpf_mode;
+	enum active_bpf_mode active_mc_bc_bpf_mode;
 	bool rps_enabled;
 	bool auto_power_save_fail_mode;
+	uint8_t ito_repeat_count;
 };
+
+#ifdef WLAN_FEATURE_FILS_SK
+#define MAX_PMK_LEN 48
+#define FILS_MAX_KEYNAME_NAI_LENGTH 255
+#define FILS_MAX_REALM_LEN 255
+#define FILS_MAX_RRK_LENGTH 64
+
+struct cds_fils_connection_info {
+	bool is_fils_connection;
+	uint8_t keyname_nai[FILS_MAX_KEYNAME_NAI_LENGTH];
+	uint32_t key_nai_length;
+	uint16_t sequence_number;
+	uint8_t r_rk[FILS_MAX_RRK_LENGTH];
+	uint32_t r_rk_length;
+	uint8_t realm[FILS_MAX_REALM_LEN];
+	uint32_t realm_len;
+	uint8_t akm_type;
+	uint8_t auth_type;
+	uint8_t pmk[MAX_PMK_LEN];
+	uint8_t pmk_len;
+	uint8_t pmkid[16];
+};
+#endif
 #endif /* !defined( __CDS_CONFIG_H ) */

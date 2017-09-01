@@ -2321,6 +2321,44 @@ static const struct snd_kcontrol_new afe_enc_config_controls[] = {
 		     msm_dai_q6_afe_input_bit_format_put),
 };
 
+static int msm_dai_q6_slim_rx_drift_info(struct snd_kcontrol *kcontrol,
+				    struct snd_ctl_elem_info *uinfo)
+{
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_BYTES;
+	uinfo->count = sizeof(struct afe_param_id_dev_timing_stats);
+
+	return 0;
+}
+
+static int msm_dai_q6_slim_rx_drift_get(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	int ret = -EINVAL;
+	struct afe_param_id_dev_timing_stats timing_stats;
+	struct snd_soc_dai *dai = kcontrol->private_data;
+	struct msm_dai_q6_dai_data *dai_data = dev_get_drvdata(dai->dev);
+
+	if (!test_bit(STATUS_PORT_STARTED, dai_data->status_mask)) {
+		pr_err("%s: afe port not started. dai_data->status_mask = %ld\n",
+			__func__, *dai_data->status_mask);
+		goto done;
+	}
+
+	memset(&timing_stats, 0, sizeof(struct afe_param_id_dev_timing_stats));
+	ret = afe_get_av_dev_drift(&timing_stats, dai->id);
+	if (ret) {
+		pr_err("%s: Error getting AFE Drift for port %d, err=%d\n",
+			__func__, dai->id, ret);
+
+		goto done;
+	}
+
+	memcpy(ucontrol->value.bytes.data, (void *)&timing_stats,
+			sizeof(struct afe_param_id_dev_timing_stats));
+done:
+	return ret;
+}
+
 static const char * const afe_cal_mode_text[] = {
 	"CAL_MODE_DEFAULT", "CAL_MODE_NONE"
 };
@@ -2373,6 +2411,29 @@ static const struct snd_kcontrol_new usb_audio_cfg_controls[] = {
 			msm_dai_q6_usb_audio_endian_cfg_put),
 };
 
+static const struct snd_kcontrol_new avd_drift_config_controls[] = {
+	{
+		.access = SNDRV_CTL_ELEM_ACCESS_READ,
+		.iface	= SNDRV_CTL_ELEM_IFACE_PCM,
+		.name	= "SLIMBUS_0_RX DRIFT",
+		.info	= msm_dai_q6_slim_rx_drift_info,
+		.get	= msm_dai_q6_slim_rx_drift_get,
+	},
+	{
+		.access = SNDRV_CTL_ELEM_ACCESS_READ,
+		.iface	= SNDRV_CTL_ELEM_IFACE_PCM,
+		.name	= "SLIMBUS_6_RX DRIFT",
+		.info	= msm_dai_q6_slim_rx_drift_info,
+		.get	= msm_dai_q6_slim_rx_drift_get,
+	},
+	{
+		.access = SNDRV_CTL_ELEM_ACCESS_READ,
+		.iface	= SNDRV_CTL_ELEM_IFACE_PCM,
+		.name	= "SLIMBUS_7_RX DRIFT",
+		.info	= msm_dai_q6_slim_rx_drift_info,
+		.get	= msm_dai_q6_slim_rx_drift_get,
+	},
+};
 static int msm_dai_q6_dai_probe(struct snd_soc_dai *dai)
 {
 	struct msm_dai_q6_dai_data *dai_data;
@@ -2422,6 +2483,9 @@ static int msm_dai_q6_dai_probe(struct snd_soc_dai *dai)
 		rc = snd_ctl_add(dai->component->card->snd_card,
 				 snd_ctl_new1(&afe_enc_config_controls[2],
 				 dai_data));
+		rc = snd_ctl_add(dai->component->card->snd_card,
+				snd_ctl_new1(&avd_drift_config_controls[2],
+					dai));
 		break;
 	case RT_PROXY_DAI_001_RX:
 		rc = snd_ctl_add(dai->component->card->snd_card,
@@ -2448,6 +2512,16 @@ static int msm_dai_q6_dai_probe(struct snd_soc_dai *dai)
 		rc = snd_ctl_add(dai->component->card->snd_card,
 				 snd_ctl_new1(&usb_audio_cfg_controls[3],
 				 dai_data));
+		break;
+	case SLIMBUS_0_RX:
+		rc = snd_ctl_add(dai->component->card->snd_card,
+				snd_ctl_new1(&avd_drift_config_controls[0],
+					dai));
+		break;
+	case SLIMBUS_6_RX:
+		rc = snd_ctl_add(dai->component->card->snd_card,
+				snd_ctl_new1(&avd_drift_config_controls[1],
+					dai));
 		break;
 	}
 	if (IS_ERR_VALUE(rc))
@@ -3511,6 +3585,9 @@ static int msm_dai_q6_dai_mi2s_probe(struct snd_soc_dai *dai)
 		if (dai->id == MSM_INT5_MI2S)
 			ctrl = &mi2s_config_controls[11];
 	}
+
+	if (dai->id == MSM_QUAT_MI2S)
+		ctrl = &mi2s_config_controls[8];
 
 	if (ctrl) {
 		rc = snd_ctl_add(dai->component->card->snd_card,
@@ -4952,6 +5029,44 @@ static struct platform_driver msm_dai_q6_spdif_driver = {
 	},
 };
 
+static int msm_dai_q6_tdm_set_clk_param(u32 group_id,
+					struct afe_clk_set *clk_set, u32 mode)
+{
+	switch (group_id) {
+	case AFE_GROUP_DEVICE_ID_PRIMARY_TDM_RX:
+	case AFE_GROUP_DEVICE_ID_PRIMARY_TDM_TX:
+		if (mode)
+			clk_set->clk_id = Q6AFE_LPASS_CLK_ID_PRI_TDM_IBIT;
+		else
+			clk_set->clk_id = Q6AFE_LPASS_CLK_ID_PRI_TDM_EBIT;
+		break;
+	case AFE_GROUP_DEVICE_ID_SECONDARY_TDM_RX:
+	case AFE_GROUP_DEVICE_ID_SECONDARY_TDM_TX:
+		if (mode)
+			clk_set->clk_id = Q6AFE_LPASS_CLK_ID_SEC_TDM_IBIT;
+		else
+			clk_set->clk_id = Q6AFE_LPASS_CLK_ID_SEC_TDM_EBIT;
+		break;
+	case AFE_GROUP_DEVICE_ID_TERTIARY_TDM_RX:
+	case AFE_GROUP_DEVICE_ID_TERTIARY_TDM_TX:
+		if (mode)
+			clk_set->clk_id = Q6AFE_LPASS_CLK_ID_TER_TDM_IBIT;
+		else
+			clk_set->clk_id = Q6AFE_LPASS_CLK_ID_TER_TDM_EBIT;
+		break;
+	case AFE_GROUP_DEVICE_ID_QUATERNARY_TDM_RX:
+	case AFE_GROUP_DEVICE_ID_QUATERNARY_TDM_TX:
+		if (mode)
+			clk_set->clk_id = Q6AFE_LPASS_CLK_ID_QUAD_TDM_IBIT;
+		else
+			clk_set->clk_id = Q6AFE_LPASS_CLK_ID_QUAD_TDM_EBIT;
+		break;
+	default:
+		return -EINVAL;
+	}
+	return 0;
+}
+
 static int msm_dai_tdm_q6_probe(struct platform_device *pdev)
 {
 	int rc = 0;
@@ -4959,6 +5074,7 @@ static int msm_dai_tdm_q6_probe(struct platform_device *pdev)
 	uint32_t array_length = 0;
 	int i = 0;
 	int group_idx = 0;
+	u32 clk_mode = 0;
 
 	/* extract tdm group info into static */
 	rc = of_property_read_u32(pdev->dev.of_node,
@@ -5030,6 +5146,47 @@ static int msm_dai_tdm_q6_probe(struct platform_device *pdev)
 	}
 	dev_dbg(&pdev->dev, "%s: Clk Rate from DT file %d\n",
 		__func__, tdm_clk_set.clk_freq_in_hz);
+
+	/* initialize static tdm clk attribute to default value */
+	tdm_clk_set.clk_attri = Q6AFE_LPASS_CLK_ATTRIBUTE_INVERT_COUPLE_NO;
+
+	/* extract tdm clk attribute into static */
+	if (of_find_property(pdev->dev.of_node,
+			"qcom,msm-cpudai-tdm-clk-attribute", NULL)) {
+		rc = of_property_read_u16(pdev->dev.of_node,
+			"qcom,msm-cpudai-tdm-clk-attribute",
+			&tdm_clk_set.clk_attri);
+		if (rc) {
+			dev_err(&pdev->dev, "%s: clk attribute from DT file %s\n",
+				__func__, "qcom,msm-cpudai-tdm-clk-attribute");
+			goto rtn;
+		}
+		dev_dbg(&pdev->dev, "%s: clk attribute from DT file %d\n",
+			__func__, tdm_clk_set.clk_attri);
+	} else {
+		dev_dbg(&pdev->dev, "%s: No optional clk attribute found\n",
+			__func__);
+	}
+
+	/* extract tdm clk src master/slave info into static */
+	rc = of_property_read_u32(pdev->dev.of_node,
+		"qcom,msm-cpudai-tdm-clk-internal",
+		&clk_mode);
+	if (rc) {
+		dev_err(&pdev->dev, "%s: Clk id from DT file %s\n",
+			__func__, "qcom,msm-cpudai-tdm-clk-internal");
+		goto rtn;
+	}
+	dev_dbg(&pdev->dev, "%s: Clk id from DT file %d\n",
+		__func__, clk_mode);
+
+	rc = msm_dai_q6_tdm_set_clk_param(tdm_group_cfg.group_id,
+					  &tdm_clk_set, clk_mode);
+	if (rc) {
+		dev_err(&pdev->dev, "%s: group id not supported 0x%x\n",
+			__func__, tdm_group_cfg.group_id);
+		goto rtn;
+	}
 
 	/* other initializations within device group */
 	group_idx = msm_dai_q6_get_group_idx(tdm_group_cfg.group_id);
@@ -5826,48 +5983,6 @@ static int msm_dai_q6_tdm_set_clk(
 {
 	int rc = 0;
 
-	switch (dai_data->group_cfg.tdm_cfg.group_id) {
-	case AFE_GROUP_DEVICE_ID_PRIMARY_TDM_RX:
-	case AFE_GROUP_DEVICE_ID_PRIMARY_TDM_TX:
-		if (dai_data->clk_set.clk_freq_in_hz) {
-			dai_data->clk_set.clk_id =
-				Q6AFE_LPASS_CLK_ID_PRI_TDM_IBIT;
-		} else
-			dai_data->clk_set.clk_id =
-				Q6AFE_LPASS_CLK_ID_PRI_TDM_EBIT;
-		break;
-	case AFE_GROUP_DEVICE_ID_SECONDARY_TDM_RX:
-	case AFE_GROUP_DEVICE_ID_SECONDARY_TDM_TX:
-		if (dai_data->clk_set.clk_freq_in_hz) {
-			dai_data->clk_set.clk_id =
-				Q6AFE_LPASS_CLK_ID_SEC_TDM_IBIT;
-		} else
-			dai_data->clk_set.clk_id =
-				Q6AFE_LPASS_CLK_ID_SEC_TDM_EBIT;
-		break;
-	case AFE_GROUP_DEVICE_ID_TERTIARY_TDM_RX:
-	case AFE_GROUP_DEVICE_ID_TERTIARY_TDM_TX:
-		if (dai_data->clk_set.clk_freq_in_hz) {
-			dai_data->clk_set.clk_id =
-				Q6AFE_LPASS_CLK_ID_TER_TDM_IBIT;
-		} else
-			dai_data->clk_set.clk_id =
-				Q6AFE_LPASS_CLK_ID_TER_TDM_EBIT;
-		break;
-	case AFE_GROUP_DEVICE_ID_QUATERNARY_TDM_RX:
-	case AFE_GROUP_DEVICE_ID_QUATERNARY_TDM_TX:
-		if (dai_data->clk_set.clk_freq_in_hz) {
-			dai_data->clk_set.clk_id =
-				Q6AFE_LPASS_CLK_ID_QUAD_TDM_IBIT;
-		} else
-			dai_data->clk_set.clk_id =
-				Q6AFE_LPASS_CLK_ID_QUAD_TDM_EBIT;
-		break;
-	default:
-		pr_err("%s: port id 0x%x not supported\n",
-			__func__, port_id);
-		return -EINVAL;
-	}
 	dai_data->clk_set.enable = enable;
 
 	rc = afe_set_lpass_clock_v2(port_id,
@@ -6131,6 +6246,41 @@ static int msm_dai_q6_tdm_set_tdm_slot(struct snd_soc_dai *dai,
 
 	return rc;
 }
+
+static int msm_dai_q6_tdm_set_sysclk(struct snd_soc_dai *dai,
+				int clk_id, unsigned int freq, int dir)
+{
+	struct msm_dai_q6_tdm_dai_data *dai_data =
+		dev_get_drvdata(dai->dev);
+
+	switch (dai->id) {
+	case AFE_PORT_ID_PRIMARY_TDM_RX:
+	case AFE_PORT_ID_PRIMARY_TDM_RX_1:
+	case AFE_PORT_ID_PRIMARY_TDM_RX_2:
+	case AFE_PORT_ID_PRIMARY_TDM_RX_3:
+	case AFE_PORT_ID_PRIMARY_TDM_RX_4:
+	case AFE_PORT_ID_PRIMARY_TDM_RX_5:
+	case AFE_PORT_ID_PRIMARY_TDM_RX_6:
+	case AFE_PORT_ID_PRIMARY_TDM_RX_7:
+	case AFE_PORT_ID_PRIMARY_TDM_TX:
+	case AFE_PORT_ID_PRIMARY_TDM_TX_1:
+	case AFE_PORT_ID_PRIMARY_TDM_TX_2:
+	case AFE_PORT_ID_PRIMARY_TDM_TX_3:
+	case AFE_PORT_ID_PRIMARY_TDM_TX_4:
+	case AFE_PORT_ID_PRIMARY_TDM_TX_5:
+	case AFE_PORT_ID_PRIMARY_TDM_TX_6:
+	case AFE_PORT_ID_PRIMARY_TDM_TX_7:
+		dai_data->clk_set.clk_freq_in_hz = freq;
+		break;
+	default:
+		return 0;
+	}
+
+	dev_dbg(dai->dev, "%s: dai id = 0x%x group clk_freq %d\n",
+			__func__, dai->id, freq);
+	return 0;
+}
+
 
 static int msm_dai_q6_tdm_set_channel_map(struct snd_soc_dai *dai,
 				unsigned int tx_num, unsigned int *tx_slot,
@@ -6559,6 +6709,7 @@ static struct snd_soc_dai_ops msm_dai_q6_tdm_ops = {
 	.hw_params        = msm_dai_q6_tdm_hw_params,
 	.set_tdm_slot     = msm_dai_q6_tdm_set_tdm_slot,
 	.set_channel_map  = msm_dai_q6_tdm_set_channel_map,
+	.set_sysclk       = msm_dai_q6_tdm_set_sysclk,
 	.shutdown         = msm_dai_q6_tdm_shutdown,
 };
 
@@ -7856,6 +8007,7 @@ static int msm_dai_q6_tdm_dev_probe(struct platform_device *pdev)
 	int rc = 0;
 	u32 tdm_dev_id = 0;
 	int port_idx = 0;
+	struct device_node *tdm_parent_node = NULL;
 
 	/* retrieve device/afe id */
 	rc = of_property_read_u32(pdev->dev.of_node,
@@ -7890,7 +8042,8 @@ static int msm_dai_q6_tdm_dev_probe(struct platform_device *pdev)
 	memset(dai_data, 0, sizeof(*dai_data));
 
 	/* TDM CFG */
-	rc = of_property_read_u32(pdev->dev.of_node,
+	tdm_parent_node = of_get_parent(pdev->dev.of_node);
+	rc = of_property_read_u32(tdm_parent_node,
 		"qcom,msm-cpudai-tdm-sync-mode",
 		(u32 *)&dai_data->port_cfg.tdm.sync_mode);
 	if (rc) {
@@ -7901,7 +8054,7 @@ static int msm_dai_q6_tdm_dev_probe(struct platform_device *pdev)
 	dev_dbg(&pdev->dev, "%s: Sync Mode from DT file 0x%x\n",
 		__func__, dai_data->port_cfg.tdm.sync_mode);
 
-	rc = of_property_read_u32(pdev->dev.of_node,
+	rc = of_property_read_u32(tdm_parent_node,
 		"qcom,msm-cpudai-tdm-sync-src",
 		(u32 *)&dai_data->port_cfg.tdm.sync_src);
 	if (rc) {
@@ -7912,7 +8065,7 @@ static int msm_dai_q6_tdm_dev_probe(struct platform_device *pdev)
 	dev_dbg(&pdev->dev, "%s: Sync Src from DT file 0x%x\n",
 		__func__, dai_data->port_cfg.tdm.sync_src);
 
-	rc = of_property_read_u32(pdev->dev.of_node,
+	rc = of_property_read_u32(tdm_parent_node,
 		"qcom,msm-cpudai-tdm-data-out",
 		(u32 *)&dai_data->port_cfg.tdm.ctrl_data_out_enable);
 	if (rc) {
@@ -7923,7 +8076,7 @@ static int msm_dai_q6_tdm_dev_probe(struct platform_device *pdev)
 	dev_dbg(&pdev->dev, "%s: Data Out from DT file 0x%x\n",
 		__func__, dai_data->port_cfg.tdm.ctrl_data_out_enable);
 
-	rc = of_property_read_u32(pdev->dev.of_node,
+	rc = of_property_read_u32(tdm_parent_node,
 		"qcom,msm-cpudai-tdm-invert-sync",
 		(u32 *)&dai_data->port_cfg.tdm.ctrl_invert_sync_pulse);
 	if (rc) {
@@ -7934,7 +8087,7 @@ static int msm_dai_q6_tdm_dev_probe(struct platform_device *pdev)
 	dev_dbg(&pdev->dev, "%s: Invert Sync from DT file 0x%x\n",
 		__func__, dai_data->port_cfg.tdm.ctrl_invert_sync_pulse);
 
-	rc = of_property_read_u32(pdev->dev.of_node,
+	rc = of_property_read_u32(tdm_parent_node,
 		"qcom,msm-cpudai-tdm-data-delay",
 		(u32 *)&dai_data->port_cfg.tdm.ctrl_sync_data_delay);
 	if (rc) {

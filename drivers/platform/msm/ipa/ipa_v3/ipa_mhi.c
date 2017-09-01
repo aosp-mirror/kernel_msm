@@ -1,4 +1,4 @@
-/* Copyright (c) 2015, 2016 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015, 2017 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -153,10 +153,16 @@ int ipa3_mhi_reset_channel_internal(enum ipa_client_type client)
 int ipa3_mhi_start_channel_internal(enum ipa_client_type client)
 {
 	int res;
+	int ipa_ep_idx;
 
 	IPA_MHI_FUNC_ENTRY();
 
-	res = ipa3_enable_data_path(ipa3_get_ep_mapping(client));
+	ipa_ep_idx = ipa3_get_ep_mapping(client);
+	if (ipa_ep_idx < 0) {
+		IPA_MHI_ERR("Invalid client %d\n", client);
+		return -EINVAL;
+	}
+	res = ipa3_enable_data_path(ipa_ep_idx);
 	if (res) {
 		IPA_MHI_ERR("ipa3_enable_data_path failed %d\n", res);
 		return res;
@@ -185,7 +191,7 @@ static int ipa3_mhi_get_ch_poll_cfg(enum ipa_client_type client,
 static int ipa_mhi_start_gsi_channel(enum ipa_client_type client,
 	int ipa_ep_idx, struct start_gsi_channel *params)
 {
-	int res;
+	int res = 0;
 	struct gsi_evt_ring_props ev_props;
 	struct ipa_mhi_msi_info *msi;
 	struct gsi_chan_props ch_props;
@@ -235,7 +241,6 @@ static int ipa_mhi_start_gsi_channel(enum ipa_client_type client,
 		if (res) {
 			IPA_MHI_ERR("gsi_alloc_evt_ring failed %d\n", res);
 			goto fail_alloc_evt;
-			return res;
 		}
 		IPA_MHI_DBG("client %d, caching event ring hdl %lu\n",
 				client,
@@ -247,6 +252,22 @@ static int ipa_mhi_start_gsi_channel(enum ipa_client_type client,
 		IPA_MHI_DBG("event ring already exists: evt_ring_hdl=%lu\n",
 			*params->cached_gsi_evt_ring_hdl);
 		ep->gsi_evt_ring_hdl = *params->cached_gsi_evt_ring_hdl;
+	}
+
+	if (params->ev_ctx_host->wp == params->ev_ctx_host->rbase) {
+		IPA_MHI_ERR("event ring wp is not updated. base=wp=0x%llx\n",
+			params->ev_ctx_host->wp);
+		goto fail_alloc_ch;
+	}
+
+	IPA_MHI_DBG("Ring event db: evt_ring_hdl=%lu host_wp=0x%llx\n",
+		ep->gsi_evt_ring_hdl, params->ev_ctx_host->wp);
+	res = gsi_ring_evt_ring_db(ep->gsi_evt_ring_hdl,
+		params->ev_ctx_host->wp);
+	if (res) {
+		IPA_MHI_ERR("fail to ring evt ring db %d. hdl=%lu wp=0x%llx\n",
+			res, ep->gsi_evt_ring_hdl, params->ev_ctx_host->wp);
+		goto fail_alloc_ch;
 	}
 
 	memset(&ch_props, 0, sizeof(ch_props));
@@ -521,6 +542,10 @@ int ipa3_mhi_resume_channels_internal(enum ipa_client_type client,
 	IPA_MHI_FUNC_ENTRY();
 
 	ipa_ep_idx = ipa3_get_ep_mapping(client);
+	if (ipa_ep_idx < 0) {
+		IPA_MHI_ERR("Invalid client %d\n", client);
+		return -EINVAL;
+	}
 	ep = &ipa3_ctx->ep[ipa_ep_idx];
 
 	if (brstmode_enabled && !LPTransitionRejected) {
@@ -557,11 +582,14 @@ int ipa3_mhi_query_ch_info(enum ipa_client_type client,
 	IPA_MHI_FUNC_ENTRY();
 
 	ipa_ep_idx = ipa3_get_ep_mapping(client);
-
+	if (ipa_ep_idx < 0) {
+		IPA_MHI_ERR("Invalid client %d\n", client);
+		return -EINVAL;
+	}
 	ep = &ipa3_ctx->ep[ipa_ep_idx];
 	res = gsi_query_channel_info(ep->gsi_chan_hdl, ch_info);
 	if (res) {
-		IPAERR("gsi_query_channel_info failed\n");
+		IPA_MHI_ERR("gsi_query_channel_info failed\n");
 		return res;
 	}
 
@@ -596,7 +624,10 @@ int ipa3_mhi_destroy_channel(enum ipa_client_type client)
 	struct ipa3_ep_context *ep;
 
 	ipa_ep_idx = ipa3_get_ep_mapping(client);
-
+	if (ipa_ep_idx < 0) {
+		IPA_MHI_ERR("Invalid client %d\n", client);
+		return -EINVAL;
+	}
 	ep = &ipa3_ctx->ep[ipa_ep_idx];
 
 	IPA_MHI_DBG("reset event ring (hdl: %lu, ep: %d)\n",

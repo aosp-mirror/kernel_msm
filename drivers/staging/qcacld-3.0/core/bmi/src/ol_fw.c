@@ -73,8 +73,8 @@ static int ol_target_coredump(void *inst, void *memory_block,
 					uint32_t block_len);
 
 #ifdef FEATURE_SECURE_FIRMWARE
-static int ol_check_fw_hash(struct device *dev,
-			    const u8 *data, u32 fw_size, ATH_BIN_FILE file)
+static int ol_check_fw_hash(struct device *dev, const u8 *data,
+			    u32 fw_size, enum ATH_BIN_FILE file)
 {
 	u8 *hash = NULL;
 	u8 *fw_mem = NULL;
@@ -147,8 +147,8 @@ end:
 #endif
 
 static int
-__ol_transfer_bin_file(struct ol_context *ol_ctx, ATH_BIN_FILE file,
-				  uint32_t address, bool compressed)
+__ol_transfer_bin_file(struct ol_context *ol_ctx, enum ATH_BIN_FILE file,
+		       uint32_t address, bool compressed)
 {
 	struct hif_opaque_softc *scn = ol_ctx->scn;
 	int status = EOK;
@@ -255,7 +255,8 @@ __ol_transfer_bin_file(struct ol_context *ol_ctx, ATH_BIN_FILE file,
 
 #if defined(QCA_WIFI_FTM)
 		/* Try default board data file if FTM specific
-		 * board data file is not present. */
+		 * board data file is not present.
+		 */
 		if (filename == bmi_ctx->fw_files.utf_board_data) {
 			filename = bmi_ctx->fw_files.board_data;
 			BMI_INFO("%s: Trying to load default %s",
@@ -279,17 +280,18 @@ __ol_transfer_bin_file(struct ol_context *ol_ctx, ATH_BIN_FILE file,
 
 	if (!fw_entry || !fw_entry->data) {
 		BMI_ERR("Invalid fw_entries");
-		return QDF_STATUS_E_FAILURE;
+		status = -ENOENT;
+		goto release_fw;
 	}
 
 	fw_entry_size = fw_entry->size;
 	temp_eeprom = NULL;
 
 #ifdef FEATURE_SECURE_FIRMWARE
-
-	if (ol_check_fw_hash(qdf_dev->dev, fw_entry->data, fw_entry_size, file)) {
+	if (ol_check_fw_hash(qdf_dev->dev, fw_entry->data,
+			     fw_entry_size, file)) {
 		BMI_ERR("Hash Check failed for file:%s", filename);
-		status = QDF_STATUS_E_FAILURE;
+		status = -EINVAL;
 		goto end;
 	}
 #endif
@@ -302,7 +304,7 @@ __ol_transfer_bin_file(struct ol_context *ol_ctx, ATH_BIN_FILE file,
 		if (!temp_eeprom) {
 			BMI_ERR("%s: Memory allocation failed", __func__);
 			release_firmware(fw_entry);
-			return QDF_STATUS_E_NOMEM;
+			return -ENOMEM;
 		}
 
 		qdf_mem_copy(temp_eeprom, (uint8_t *) fw_entry->data,
@@ -363,7 +365,7 @@ __ol_transfer_bin_file(struct ol_context *ol_ctx, ATH_BIN_FILE file,
 
 		if (fw_entry_size < sizeof(SIGN_HEADER_T)) {
 			BMI_ERR("Invalid binary size %d", fw_entry_size);
-			status = QDF_STATUS_E_FAILURE;
+			status = -EINVAL;
 			goto end;
 		}
 
@@ -379,7 +381,7 @@ __ol_transfer_bin_file(struct ol_context *ol_ctx, ATH_BIN_FILE file,
 						sizeof(SIGN_HEADER_T), ol_ctx);
 			if (status != EOK) {
 				BMI_ERR("unable to start sign stream");
-				status = QDF_STATUS_E_FAILURE;
+				status = -EINVAL;
 				goto end;
 			}
 
@@ -429,23 +431,21 @@ end:
 	if (temp_eeprom)
 		qdf_mem_free(temp_eeprom);
 
-	if (status != EOK) {
-		BMI_ERR("%s, BMI operation failed: %d", __func__, __LINE__);
+release_fw:
+	if (fw_entry)
 		release_firmware(fw_entry);
-		return QDF_STATUS_E_FAILURE;
-	}
 
-	release_firmware(fw_entry);
-
-	BMI_INFO("transferring file: %s size %d bytes done!",
-		(filename != NULL) ? filename : " ", fw_entry_size);
-
+	if (status != EOK)
+		BMI_ERR("%s, BMI operation failed: %d", __func__, __LINE__);
+	else
+		BMI_INFO("transferring file: %s size %d bytes done!",
+			 (filename != NULL) ? filename : " ", fw_entry_size);
 	return status;
 }
 
 static int
-ol_transfer_bin_file(struct ol_context *ol_ctx, ATH_BIN_FILE file,
-				uint32_t address, bool compressed)
+ol_transfer_bin_file(struct ol_context *ol_ctx, enum ATH_BIN_FILE file,
+		     uint32_t address, bool compressed)
 {
 	int ret;
 	qdf_device_t qdf_dev = ol_ctx->qdf_dev;
@@ -493,10 +493,10 @@ int ol_copy_ramdump(struct hif_opaque_softc *scn)
 		BMI_ERR("%s qdf_dev is NULL", __func__);
 		return -EINVAL;
 	}
-
-	if (hif_get_bus_type(scn) == QDF_BUS_TYPE_SDIO)
+	if (pld_is_fw_dump_skipped(qdf_dev->dev)) {
+		BMI_INFO("%s ssr enabled, skip ramdump", __func__);
 		return 0;
-
+	}
 	info = qdf_mem_malloc(sizeof(struct ramdump_info));
 	if (!info) {
 		BMI_ERR("%s Memory for Ramdump Allocation failed", __func__);
@@ -507,6 +507,7 @@ int ol_copy_ramdump(struct hif_opaque_softc *scn)
 
 	if (!info->base || !info->size) {
 		BMI_ERR("%s:ramdump collection fail", __func__);
+		qdf_mem_free(info);
 		return -EACCES;
 	}
 
@@ -583,7 +584,6 @@ out_fail:
 		pld_device_self_recovery(qdf_dev->dev);
 	else
 		pld_device_crashed(qdf_dev->dev);
-	return;
 }
 
 void fw_indication_work_handler(void *data)
@@ -624,17 +624,18 @@ void ol_target_failure(void *instance, QDF_STATUS status)
 		return;
 	}
 
-	if (cds_is_driver_recovering()) {
+	if (cds_is_driver_recovering() || cds_is_driver_in_bad_state()) {
 		BMI_ERR("%s: Recovery in progress, ignore!\n", __func__);
 		return;
 	}
 
+	cds_set_recovery_in_progress(true);
 	if (cds_is_load_or_unload_in_progress()) {
+		cds_set_recovery_in_progress(false);
 		BMI_ERR("%s: Loading/Unloading is in progress, ignore!",
 		       __func__);
 		return;
 	}
-	cds_set_recovery_in_progress(true);
 
 	ret = hif_check_fw_reg(scn);
 	if (0 == ret) {
@@ -654,8 +655,6 @@ void ol_target_failure(void *instance, QDF_STATUS status)
 		qdf_sched_work(0, &ol_ctx->ramdump_work);
 	else
 		pr_debug("%s: athdiag read for target reg\n", __func__);
-
-	return;
 }
 
 #ifdef CONFIG_DISABLE_CDC_MAX_PERF_WAR
@@ -798,7 +797,7 @@ QDF_STATUS ol_configure_target(struct ol_context *ol_ctx)
 					 hi_option_flag2)),
 				(uint8_t *)&param, 4, ol_ctx) !=
 							QDF_STATUS_SUCCESS) {
-				BMI_ERR("bmi_read_memory for setting external SWREG failed");
+				BMI_ERR("BMI READ failed for external SWREG");
 				return QDF_STATUS_E_FAILURE;
 			}
 
@@ -809,7 +808,7 @@ QDF_STATUS ol_configure_target(struct ol_context *ol_ctx)
 						 hi_option_flag2)),
 					(uint8_t *)&param, 4, ol_ctx) !=
 							QDF_STATUS_SUCCESS) {
-				BMI_ERR("BMI WRITE for setting external SWREG fail");
+				BMI_ERR("BMI WRITE failed for external SWREG");
 				return QDF_STATUS_E_FAILURE;
 			}
 		}
@@ -854,8 +853,7 @@ ol_check_dataset_patch(struct hif_opaque_softc *scn, uint32_t *address)
 	return 0;
 }
 
-
-static QDF_STATUS ol_fw_populate_clk_settings(A_refclk_speed_t refclk,
+static QDF_STATUS ol_fw_populate_clk_settings(enum a_refclk_speed_t refclk,
 					      struct cmnos_clock_s *clock_s)
 {
 	if (!clock_s)
@@ -1272,7 +1270,7 @@ QDF_STATUS ol_download_firmware(struct ol_context *ol_ctx)
 		/* Flash is either not available or invalid */
 		if (ol_transfer_bin_file(ol_ctx, ATH_BOARD_DATA_FILE, address,
 							false) != EOK) {
-			return -1;
+			return QDF_STATUS_E_FAILURE;
 		}
 
 		/* Record the fact that Board Data is initialized */
@@ -1311,46 +1309,53 @@ QDF_STATUS ol_download_firmware(struct ol_context *ol_ctx)
 	address = BMI_SEGMENTED_WRITE_ADDR;
 	if (ol_transfer_bin_file(ol_ctx, ATH_FIRMWARE_FILE,
 				address, true) != EOK) {
-		return -1;
+		return QDF_STATUS_E_FAILURE;
 	}
 
 	/* Apply the patches */
 	if (ol_check_dataset_patch(scn, &address)) {
 		if ((ol_transfer_bin_file(ol_ctx, ATH_PATCH_FILE, address,
-				false)) != EOK) {
-			return -1;
+					  false)) != EOK) {
+			return QDF_STATUS_E_FAILURE;
 		}
 		bmi_write_memory(hif_hia_item_address(target_type,
 			offsetof(struct host_interest_s, hi_dset_list_head)),
 			(uint8_t *) &address, 4, ol_ctx);
 	}
 
-	if (ini_cfg->enable_uart_print) {
-		switch (target_version) {
-		case AR6004_VERSION_REV1_3:
-			param = 11;
-			break;
-		case AR6320_REV1_VERSION:
-		case AR6320_REV2_VERSION:
-		case AR6320_REV3_VERSION:
-		case AR6320_REV3_2_VERSION:
-		case QCA9379_REV1_VERSION:
-		case AR6320_REV4_VERSION:
-		case AR6320_DEV_VERSION:
+	switch (target_version) {
+	case AR6004_VERSION_REV1_3:
+		param = 11;
+		break;
+	case AR6320_REV1_VERSION:
+	case AR6320_REV2_VERSION:
+	case AR6320_REV3_VERSION:
+	case AR6320_REV3_2_VERSION:
+	case QCA9377_REV1_1_VERSION:
+	case QCA9379_REV1_VERSION:
+	case AR6320_REV4_VERSION:
+	case AR6320_DEV_VERSION:
+		/*
+		 * In sdio interface chip, both sdio_data2 and uart_tx pin
+		 * will use GPIO6. It is set by fw rom code, which will cause
+		 * sdio CRC error when there is sdio transaction.
+		 * Override uart tx pin to avoid side effect to sdio pin.
+		 */
 		if (hif_get_bus_type(scn) == QDF_BUS_TYPE_SDIO)
 			param = 19;
 		else
 			param = 6;
+		break;
+	default:
+	/* Configure GPIO AR9888 UART */
+		param = 7;
+	}
 
-			break;
-		default:
-			/* Configure GPIO AR9888 UART */
-			param = 7;
-		}
+	bmi_write_memory(hif_hia_item_address(target_type,
+		offsetof(struct host_interest_s, hi_dbg_uart_txpin)),
+		(uint8_t *)&param, 4, ol_ctx);
 
-		bmi_write_memory(hif_hia_item_address(target_type,
-			offsetof(struct host_interest_s, hi_dbg_uart_txpin)),
-			(uint8_t *)&param, 4, ol_ctx);
+	if (ini_cfg->enable_uart_print) {
 		param = 1;
 		bmi_write_memory(hif_hia_item_address(target_type,
 			offsetof(struct host_interest_s, hi_serial_enable)),
@@ -1406,6 +1411,7 @@ static int ol_diag_read(struct hif_opaque_softc *scn, uint8_t *buffer,
 		size_t amount_read = 0;
 		size_t readSize = PCIE_READ_LIMIT;
 		size_t remainder = 0;
+
 		if (count > PCIE_READ_LIMIT) {
 			while ((amount_read < count) && (0 == result)) {
 				result = hif_diag_read_mem(scn, pos,
@@ -1432,7 +1438,7 @@ static int ol_diag_read(struct hif_opaque_softc *scn, uint8_t *buffer,
 }
 
 static int ol_ath_get_reg_table(uint32_t target_version,
-				tgt_reg_table *reg_table)
+				struct tgt_reg_table *reg_table)
 {
 	int section_len = 0;
 
@@ -1443,23 +1449,20 @@ static int ol_ath_get_reg_table(uint32_t target_version,
 
 	switch (target_version) {
 	case AR6320_REV2_1_VERSION:
-		reg_table->section =
-			(tgt_reg_section *) &ar6320v2_reg_table[0];
-		reg_table->section_size = sizeof(ar6320v2_reg_table)
-					  / sizeof(ar6320v2_reg_table[0]);
+		reg_table->section = ar6320v2_reg_table;
+		reg_table->section_size = ARRAY_SIZE(ar6320v2_reg_table);
 		section_len = AR6320_REV2_1_REG_SIZE;
 		break;
 	case AR6320_REV3_VERSION:
 	case AR6320_REV3_2_VERSION:
 	case QCA9379_REV1_VERSION:
-		reg_table->section =
-			(tgt_reg_section *) &ar6320v3_reg_table[0];
-		reg_table->section_size = sizeof(ar6320v3_reg_table)
-					  / sizeof(ar6320v3_reg_table[0]);
+	case QCA9377_REV1_1_VERSION:
+		reg_table->section = ar6320v3_reg_table;
+		reg_table->section_size = ARRAY_SIZE(ar6320v3_reg_table);
 		section_len = AR6320_REV3_REG_SIZE;
 		break;
 	default:
-		reg_table->section = (void *)NULL;
+		reg_table->section = NULL;
 		reg_table->section_size = 0;
 		section_len = 0;
 	}
@@ -1472,8 +1475,8 @@ static int ol_diag_read_reg_loc(struct hif_opaque_softc *scn, uint8_t *buffer,
 {
 	int i, len, section_len, fill_len;
 	int dump_len, result = 0;
-	tgt_reg_table reg_table;
-	tgt_reg_section *curr_sec, *next_sec;
+	struct tgt_reg_table reg_table;
+	const struct tgt_reg_section *curr_sec, *next_sec;
 	struct hif_target_info *tgt_info = hif_get_target_info_handle(scn);
 	uint32_t target_version =  tgt_info->target_version;
 
@@ -1491,9 +1494,8 @@ static int ol_diag_read_reg_loc(struct hif_opaque_softc *scn, uint8_t *buffer,
 		dump_len = curr_sec->end_addr - curr_sec->start_addr;
 
 		if ((buffer_len - result) < dump_len) {
-			BMI_ERR("Not enough memory to dump the registers:"
-			       " %d: 0x%08x-0x%08x", i,
-			       curr_sec->start_addr, curr_sec->end_addr);
+			BMI_ERR("No buffer to dump regs:%d: 0x%08x-0x%08x",
+				i, curr_sec->start_addr, curr_sec->end_addr);
 			goto out;
 		}
 
@@ -1510,14 +1512,13 @@ static int ol_diag_read_reg_loc(struct hif_opaque_softc *scn, uint8_t *buffer,
 		}
 
 		if (result < section_len) {
-			next_sec = (tgt_reg_section *) ((uint8_t *) curr_sec
-							+ sizeof(*curr_sec));
+			next_sec = (struct tgt_reg_section *) ((uint8_t *)
+						 curr_sec + sizeof(*curr_sec));
 			fill_len = next_sec->start_addr - curr_sec->end_addr;
 			if ((buffer_len - result) < fill_len) {
-				BMI_ERR("Not enough memory to fill registers:"
-				       " %d: 0x%08x-0x%08x", i,
-				       curr_sec->end_addr,
-				       next_sec->start_addr);
+				BMI_ERR("No buf to fill regs:%d: 0x%08x-0x%08x",
+					i, curr_sec->end_addr,
+					next_sec->start_addr);
 				goto out;
 			}
 
@@ -1656,8 +1657,9 @@ static int ol_target_coredump(void *inst, void *memory_block,
 		}
 
 		if ((block_len - amount_read) >= read_len) {
-			if ((hif_get_bus_type(scn) == QDF_BUS_TYPE_PCI) &&
-				(pos == REGISTER_LOCATION)) {
+			if (((hif_get_bus_type(scn) == QDF_BUS_TYPE_PCI) ||
+			     (hif_get_bus_type(scn) == QDF_BUS_TYPE_SDIO)) &&
+			    (pos == REGISTER_LOCATION)) {
 				result = ol_diag_read_reg_loc(scn,
 						buffer_loc,
 						block_len - amount_read);

@@ -116,6 +116,26 @@ static inline void tk_update_sleep_time(struct timekeeper *tk, ktime_t delta)
 	tk->offs_boot = ktime_add(tk->offs_boot, delta);
 }
 
+/*
+ * tk_clock_read - atomic clocksource read() helper
+ *
+ * This helper is necessary to use in the read paths because, while the
+ * seqlock ensures we don't return a bad value while structures are updated,
+ * it doesn't protect from potential crashes. There is the possibility that
+ * the tkr's clocksource may change between the read reference, and the
+ * clock reference passed to the read function.  This can cause crashes if
+ * the wrong clocksource is passed to the wrong read function.
+ * This isn't necessary to use when holding the timekeeper_lock or doing
+ * a read of the fast-timekeeper tkrs (which is protected by its own locking
+ * and update logic).
+ */
+static inline u64 tk_clock_read(struct tk_read_base *tkr)
+{
+	struct clocksource *clock = READ_ONCE(tkr->clock);
+
+	return clock->read(clock);
+}
+
 #ifdef CONFIG_DEBUG_TIMEKEEPING
 #define WARNING_FREQ (HZ*300) /* 5 minute rate-limiting */
 
@@ -173,7 +193,7 @@ static inline cycle_t timekeeping_get_delta(struct tk_read_base *tkr)
 	 */
 	do {
 		seq = read_seqcount_begin(&tk_core.seq);
-		now = tkr->read(tkr->clock);
+		now = tk_clock_read(tkr);
 		last = tkr->cycle_last;
 		mask = tkr->mask;
 		max = tkr->clock->max_cycles;
@@ -207,7 +227,7 @@ static inline cycle_t timekeeping_get_delta(struct tk_read_base *tkr)
 	cycle_t cycle_now, delta;
 
 	/* read clocksource */
-	cycle_now = tkr->read(tkr->clock);
+	cycle_now = tk_clock_read(tkr);
 
 	/* calculate the delta since the last update_wall_time */
 	delta = clocksource_delta(cycle_now, tkr->cycle_last, tkr->mask);
@@ -235,12 +255,10 @@ static void tk_setup_internals(struct timekeeper *tk, struct clocksource *clock)
 
 	old_clock = tk->tkr_mono.clock;
 	tk->tkr_mono.clock = clock;
-	tk->tkr_mono.read = clock->read;
 	tk->tkr_mono.mask = clock->mask;
-	tk->tkr_mono.cycle_last = tk->tkr_mono.read(clock);
+	tk->tkr_mono.cycle_last = tk_clock_read(&tk->tkr_mono);
 
 	tk->tkr_raw.clock = clock;
-	tk->tkr_raw.read = clock->read;
 	tk->tkr_raw.mask = clock->mask;
 	tk->tkr_raw.cycle_last = tk->tkr_mono.cycle_last;
 
@@ -298,10 +316,10 @@ u32 (*arch_gettimeoffset)(void) = default_arch_gettimeoffset;
 static inline u32 arch_gettimeoffset(void) { return 0; }
 #endif
 
-static inline s64 timekeeping_delta_to_ns(struct tk_read_base *tkr,
+static inline u64 timekeeping_delta_to_ns(struct tk_read_base *tkr,
 					  cycle_t delta)
 {
-	s64 nsec;
+	u64 nsec;
 
 	nsec = delta * tkr->mult + tkr->xtime_nsec;
 	nsec >>= tkr->shift;
@@ -404,7 +422,7 @@ static __always_inline u64 __ktime_get_fast_ns(struct tk_fast *tkf)
 
 		now += timekeeping_delta_to_ns(tkr,
 				clocksource_delta(
-					tkr->read(tkr->clock),
+					tk_clock_read(tkr),
 					tkr->cycle_last,
 					tkr->mask));
 	} while (read_seqcount_retry(&tkf->seq, seq));
@@ -424,6 +442,35 @@ u64 ktime_get_raw_fast_ns(void)
 }
 EXPORT_SYMBOL_GPL(ktime_get_raw_fast_ns);
 
+/**
+ * ktime_get_boot_fast_ns - NMI safe and fast access to boot clock.
+ *
+ * To keep it NMI safe since we're accessing from tracing, we're not using a
+ * separate timekeeper with updates to monotonic clock and boot offset
+ * protected with seqlocks. This has the following minor side effects:
+ *
+ * (1) Its possible that a timestamp be taken after the boot offset is updated
+ * but before the timekeeper is updated. If this happens, the new boot offset
+ * is added to the old timekeeping making the clock appear to update slightly
+ * earlier:
+ *    CPU 0                                        CPU 1
+ *    timekeeping_inject_sleeptime64()
+ *    __timekeeping_inject_sleeptime(tk, delta);
+ *                                                 timestamp();
+ *    timekeeping_update(tk, TK_CLEAR_NTP...);
+ *
+ * (2) On 32-bit systems, the 64-bit boot offset (tk->offs_boot) may be
+ * partially updated.  Since the tk->offs_boot update is a rare event, this
+ * should be a rare occurrence which postprocessing should be able to handle.
+ */
+u64 notrace ktime_get_boot_fast_ns(void)
+{
+	struct timekeeper *tk = &tk_core.timekeeper;
+
+	return (ktime_get_mono_fast_ns() + ktime_to_ns(tk->offs_boot));
+}
+EXPORT_SYMBOL_GPL(ktime_get_boot_fast_ns);
+
 /* Suspend-time cycles value for halted fast timekeeper. */
 static cycle_t cycles_at_suspend;
 
@@ -431,6 +478,10 @@ static cycle_t dummy_clock_read(struct clocksource *cs)
 {
 	return cycles_at_suspend;
 }
+
+static struct clocksource dummy_clock = {
+	.read = dummy_clock_read,
+};
 
 /**
  * halt_fast_timekeeper - Prevent fast timekeeper from accessing clocksource.
@@ -448,13 +499,13 @@ static void halt_fast_timekeeper(struct timekeeper *tk)
 	struct tk_read_base *tkr = &tk->tkr_mono;
 
 	memcpy(&tkr_dummy, tkr, sizeof(tkr_dummy));
-	cycles_at_suspend = tkr->read(tkr->clock);
-	tkr_dummy.read = dummy_clock_read;
+	cycles_at_suspend = tk_clock_read(tkr);
+	tkr_dummy.clock = &dummy_clock;
 	update_fast_timekeeper(&tkr_dummy, &tk_fast_mono);
 
 	tkr = &tk->tkr_raw;
 	memcpy(&tkr_dummy, tkr, sizeof(tkr_dummy));
-	tkr_dummy.read = dummy_clock_read;
+	tkr_dummy.clock = &dummy_clock;
 	update_fast_timekeeper(&tkr_dummy, &tk_fast_raw);
 }
 
@@ -618,11 +669,10 @@ static void timekeeping_update(struct timekeeper *tk, unsigned int action)
  */
 static void timekeeping_forward_now(struct timekeeper *tk)
 {
-	struct clocksource *clock = tk->tkr_mono.clock;
 	cycle_t cycle_now, delta;
 	s64 nsec;
 
-	cycle_now = tk->tkr_mono.read(clock);
+	cycle_now = tk_clock_read(&tk->tkr_mono);
 	delta = clocksource_delta(cycle_now, tk->tkr_mono.cycle_last, tk->tkr_mono.mask);
 	tk->tkr_mono.cycle_last = cycle_now;
 	tk->tkr_raw.cycle_last  = cycle_now;
@@ -1405,7 +1455,7 @@ void timekeeping_resume(void)
 	 * The less preferred source will only be tried if there is no better
 	 * usable source. The rtc part is handled separately in rtc core code.
 	 */
-	cycle_now = tk->tkr_mono.read(clock);
+	cycle_now = tk_clock_read(&tk->tkr_mono);
 	if ((clock->flags & CLOCK_SOURCE_SUSPEND_NONSTOP) &&
 		cycle_now > tk->tkr_mono.cycle_last) {
 		u64 num, max = ULLONG_MAX;
@@ -1800,7 +1850,7 @@ void update_wall_time(void)
 #ifdef CONFIG_ARCH_USES_GETTIMEOFFSET
 	offset = real_tk->cycle_interval;
 #else
-	offset = clocksource_delta(tk->tkr_mono.read(tk->tkr_mono.clock),
+	offset = clocksource_delta(tk_clock_read(&tk->tkr_mono),
 				   tk->tkr_mono.cycle_last, tk->tkr_mono.mask);
 #endif
 

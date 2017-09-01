@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -45,7 +45,7 @@
 void cds_linux_timer_callback(unsigned long data)
 {
 	qdf_mc_timer_t *timer = (qdf_mc_timer_t *)data;
-	cds_msg_t msg;
+	cds_msg_t msg = {0};
 	QDF_STATUS status;
 
 	qdf_mc_timer_callback_t callback = NULL;
@@ -126,9 +126,8 @@ void cds_linux_timer_callback(unsigned long data)
 	msg.bodyptr = user_data;
 	msg.bodyval = 0;
 
-	if (cds_mq_post_message(CDS_MQ_ID_SYS, &msg) == QDF_STATUS_SUCCESS)
+	if (cds_mq_post_message(QDF_MODULE_ID_SYS, &msg) == QDF_STATUS_SUCCESS)
 		return;
 	QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_ERROR,
 		  "%s: Could not enqueue timer to any queue", __func__);
-	QDF_ASSERT(0);
 }

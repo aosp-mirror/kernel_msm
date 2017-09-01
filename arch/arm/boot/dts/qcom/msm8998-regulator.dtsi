@@ -411,8 +411,9 @@
 	rpm-regulator-ldoa24 {
 		status = "okay";
 		pm8998_l24: regulator-l24 {
-			regulator-min-microvolt = <3088000>;
+			regulator-min-microvolt = <1848000>;
 			regulator-max-microvolt = <3088000>;
+			parent-supply = <&pm8998_l12>;
 			status = "okay";
 		};
 	};
@@ -501,6 +502,8 @@
 		pmi8998_bob: regulator-bob {
 			regulator-min-microvolt = <3312000>;
 			regulator-max-microvolt = <3600000>;
+			qcom,pwm-threshold-current = <2000000>;
+			qcom,init-bob-mode = <2>;
 			status = "okay";
 		};
 		pmi8998_bob_pin1: regulator-bob-pin1 {
@@ -509,6 +512,8 @@
 			qcom,set = <3>;
 			regulator-min-microvolt = <3312000>;
 			regulator-max-microvolt = <3600000>;
+			qcom,pwm-threshold-current = <2000000>;
+			qcom,init-bob-mode = <2>;
 			qcom,use-pin-ctrl-voltage1;
 		};
 		pmi8998_bob_pin2: regulator-bob-pin2 {
@@ -517,6 +522,8 @@
 			qcom,set = <3>;
 			regulator-min-microvolt = <3312000>;
 			regulator-max-microvolt = <3600000>;
+			qcom,pwm-threshold-current = <2000000>;
+			qcom,init-bob-mode = <2>;
 			qcom,use-pin-ctrl-voltage2;
 		};
 		pmi8998_bob_pin3: regulator-bob-pin3 {
@@ -525,6 +532,8 @@
 			qcom,set = <3>;
 			regulator-min-microvolt = <3312000>;
 			regulator-max-microvolt = <3600000>;
+			qcom,pwm-threshold-current = <2000000>;
+			qcom,init-bob-mode = <2>;
 			qcom,use-pin-ctrl-voltage3;
 		};
 	};
@@ -721,7 +730,7 @@
 
 				qcom,cpr-open-loop-voltage-fuse-adjustment =
 					<0 0 0 0>,
-					<150000 150000 0 0>,
+					<40000 24000 0 0>,
 					<40000 24000 0 0>,
 					<40000 24000 0 0>,
 					<40000 24000 0 0>,
@@ -731,7 +740,7 @@
 
 				qcom,cpr-closed-loop-voltage-fuse-adjustment =
 					<0 0 0 0>,
-					<150000 150000 0 0>,
+					<20000 26000 0 0>,
 					<20000 26000 0 0>,
 					<20000 26000 0 0>,
 					<20000 26000 0 0>,

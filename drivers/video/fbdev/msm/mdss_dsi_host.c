@@ -165,7 +165,14 @@ void mdss_dsi_clk_req(struct mdss_dsi_ctrl_pdata *ctrl,
 
 	MDSS_XLOG(ctrl->ndx, enable, ctrl->mdp_busy, current->pid,
 		client);
-	if (enable == 0) {
+	/*
+	 * ensure that before going into ecg or turning
+	 * off the clocks, cmd_mdp_busy is not true. During a
+	 * race condition, clocks are turned off and so the
+	 * isr for cmd_mdp_busy does not get cleared in hw.
+	 */
+	if (enable == MDSS_DSI_CLK_OFF ||
+		enable == MDSS_DSI_CLK_EARLY_GATE) {
 		/* need wait before disable */
 		mutex_lock(&ctrl->cmd_mutex);
 		mdss_dsi_cmd_mdp_busy(ctrl);
@@ -1153,6 +1160,8 @@ static int mdss_dsi_read_status(struct mdss_dsi_ctrl_pdata *ctrl)
 
 		rc = mdss_dsi_cmdlist_put(ctrl, &cmdreq);
 		if (rc <= 0) {
+			if (!mdss_dsi_sync_wait_enable(ctrl) ||
+				mdss_dsi_sync_wait_trigger(ctrl))
 			pr_err("%s: get status: fail\n", __func__);
 			return rc;
 		}
@@ -2265,6 +2274,7 @@ static int mdss_dsi_cmd_dma_rx(struct mdss_dsi_ctrl_pdata *ctrl,
 	bool ack_error = false;
 	char reg[16] = {0x0};
 	int repeated_bytes = 0;
+	struct mdss_dsi_ctrl_pdata *mctrl = mdss_dsi_get_other_ctrl(ctrl);
 
 	lp = (u32 *)rp->data;
 	temp = (u32 *)reg;
@@ -2325,7 +2335,11 @@ static int mdss_dsi_cmd_dma_rx(struct mdss_dsi_ctrl_pdata *ctrl,
 	off += ((cnt - 1) * 4);
 
 	for (i = 0; i < cnt; i++) {
-		data = (u32)MIPI_INP((ctrl->ctrl_base) + off);
+		if (mdss_dsi_sync_wait_trigger(ctrl))
+			data = (u32)MIPI_INP((mctrl->ctrl_base) + off);
+		else
+			data = (u32)MIPI_INP((ctrl->ctrl_base) + off);
+
 		/* to network byte order */
 		if (!repeated_bytes)
 			*lp++ = ntohl(data);
@@ -2557,15 +2571,8 @@ void mdss_dsi_cmd_mdp_busy(struct mdss_dsi_ctrl_pdata *ctrl)
 		if (!ctrl->mdp_busy)
 			rc = 1;
 		spin_unlock_irqrestore(&ctrl->mdp_lock, flags);
-		if (!rc) {
-			if (mdss_dsi_mdp_busy_tout_check(ctrl)) {
-				pr_err("%s: timeout error\n", __func__);
-				MDSS_XLOG_TOUT_HANDLER("mdp", "dsi0_ctrl",
-					"dsi0_phy", "dsi1_ctrl", "dsi1_phy",
-					"vbif", "vbif_nrt", "dbg_bus",
-					"vbif_dbg_bus", "dsi_dbg_bus", "panic");
-			}
-		}
+		if (!rc && mdss_dsi_mdp_busy_tout_check(ctrl))
+			pr_err("%s: timeout error\n", __func__);
 	}
 	pr_debug("%s: done pid=%d\n", __func__, current->pid);
 	MDSS_XLOG(ctrl->ndx, ctrl->mdp_busy, current->pid, XLOG_FUNC_EXIT);

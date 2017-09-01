@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -115,13 +115,26 @@ static inline int ptt_sock_send_msg_to_app(tAniHdr *wmsg, int radio,
  * WLAN Driver, in either direction. Each msg will begin with this header and
  * will followed by the Quarky message
  */
-typedef struct sAniAppRegReq {
+struct sAniAppRegReq {
 	tAniNlModTypes type;    /* module id */
 	int pid;                /* process id */
-} tAniNlAppRegReq;
-typedef struct sAniNlAppRegRsp {
-	tAniHdr wniHdr;         /* Generic WNI msg header */
-	tAniNlAppRegReq regReq; /* The original request msg */
-	int ret;                /* Return code */
-} tAniNlAppRegRsp;
+};
+
+/**
+ * struct sptt_app_reg_req - PTT register request structure
+ * @radio: Radio ID
+ * @wmsg: ANI header
+ *
+ * payload structure received as nl data from PTT app/user space
+ */
+struct sptt_app_reg_req {
+	int radio;
+	tAniHdr wmsg;
+};
+
+struct sAniNlAppRegRsp {
+	tAniHdr wniHdr;              /* Generic WNI msg header */
+	struct sAniAppRegReq regReq; /* The original request msg */
+	int ret;                     /* Return code */
+};
 #endif

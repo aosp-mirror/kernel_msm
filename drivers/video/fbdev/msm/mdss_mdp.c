@@ -1373,7 +1373,9 @@ static inline void __mdss_mdp_reg_access_clk_enable(
 		mdss_mdp_clk_update(MDSS_CLK_AHB, 1);
 		mdss_mdp_clk_update(MDSS_CLK_AXI, 1);
 		mdss_mdp_clk_update(MDSS_CLK_MDP_CORE, 1);
+		mdss_mdp_clk_update(MDSS_CLK_THROTTLE_AXI, 1);
 	} else {
+		mdss_mdp_clk_update(MDSS_CLK_THROTTLE_AXI, 0);
 		mdss_mdp_clk_update(MDSS_CLK_MDP_CORE, 0);
 		mdss_mdp_clk_update(MDSS_CLK_AXI, 0);
 		mdss_mdp_clk_update(MDSS_CLK_AHB, 0);
@@ -1415,6 +1417,7 @@ static void __mdss_mdp_clk_control(struct mdss_data_type *mdata, bool enable)
 		mdss_mdp_clk_update(MDSS_CLK_AXI, 1);
 		mdss_mdp_clk_update(MDSS_CLK_MDP_CORE, 1);
 		mdss_mdp_clk_update(MDSS_CLK_MDP_LUT, 1);
+		mdss_mdp_clk_update(MDSS_CLK_THROTTLE_AXI, 1);
 		if (mdata->vsync_ena)
 			mdss_mdp_clk_update(MDSS_CLK_MDP_VSYNC, 1);
 	} else {
@@ -1430,6 +1433,7 @@ static void __mdss_mdp_clk_control(struct mdss_data_type *mdata, bool enable)
 		mdss_mdp_clk_update(MDSS_CLK_AXI, 0);
 		mdss_mdp_clk_update(MDSS_CLK_AHB, 0);
 		mdss_mdp_clk_update(MDSS_CLK_MNOC_AHB, 0);
+		mdss_mdp_clk_update(MDSS_CLK_THROTTLE_AXI, 0);
 
 		/* release iommu control */
 		mdss_iommu_ctrl(0);
@@ -1915,8 +1919,7 @@ static int mdss_mdp_irq_clk_setup(struct mdss_data_type *mdata)
 
 	if (mdss_mdp_irq_clk_register(mdata, "bus_clk", MDSS_CLK_AXI) ||
 	    mdss_mdp_irq_clk_register(mdata, "iface_clk", MDSS_CLK_AHB) ||
-	    mdss_mdp_irq_clk_register(mdata, "core_clk",
-				      MDSS_CLK_MDP_CORE))
+	    mdss_mdp_irq_clk_register(mdata, "core_clk", MDSS_CLK_MDP_CORE))
 		return -EINVAL;
 
 	/* lut_clk is not present on all MDSS revisions */
@@ -1927,6 +1930,10 @@ static int mdss_mdp_irq_clk_setup(struct mdss_data_type *mdata)
 
 	/* this clk is not present on all MDSS revisions */
 	mdss_mdp_irq_clk_register(mdata, "mnoc_clk", MDSS_CLK_MNOC_AHB);
+
+	/* this clk is not present on all MDSS revisions */
+	mdss_mdp_irq_clk_register(mdata, "throttle_bus_clk",
+				  MDSS_CLK_THROTTLE_AXI);
 
 	/* Setting the default clock rate to the max supported.*/
 	mdss_mdp_set_clk_rate(mdata->max_mdp_clk_rate, false);
@@ -2173,7 +2180,6 @@ static void mdss_mdp_hw_rev_caps_init(struct mdss_data_type *mdata)
 		mdss_set_quirk(mdata, MDSS_QUIRK_MDP_CLK_SET_RATE);
 		mdata->has_wb_ubwc = true;
 		set_bit(MDSS_CAPS_10_BIT_SUPPORTED, mdata->mdss_caps_map);
-		set_bit(MDSS_CAPS_AVR_SUPPORTED, mdata->mdss_caps_map);
 		set_bit(MDSS_CAPS_SEC_DETACH_SMMU, mdata->mdss_caps_map);
 		mdss_set_quirk(mdata, MDSS_QUIRK_HDR_SUPPORT_ENABLED);
 		break;
@@ -2773,6 +2779,8 @@ ssize_t mdss_mdp_show_capabilities(struct device *dev,
 		SPRINT(" avr");
 	if (mdss_has_quirk(mdata, MDSS_QUIRK_HDR_SUPPORT_ENABLED))
 		SPRINT(" hdr");
+	if (mdata->nvig_pipes && mdata->mdp_rev >= MDSS_MDP_HW_REV_300)
+		SPRINT(" vig_csc_db"); /* double buffered VIG CSC block */
 	SPRINT("\n");
 #undef SPRINT
 
@@ -4520,6 +4528,15 @@ static int mdss_mdp_parse_dt_misc(struct platform_device *pdev)
 	mdata->clk_factor.denom = 1;
 	mdss_mdp_parse_dt_fudge_factors(pdev, "qcom,mdss-clk-factor",
 		&mdata->clk_factor);
+
+	/*
+	 * Bus throughput factor will be used during high downscale cases.
+	 * The recommended default factor is 1.1.
+	 */
+	mdata->bus_throughput_factor.numer = 11;
+	mdata->bus_throughput_factor.denom = 10;
+	mdss_mdp_parse_dt_fudge_factors(pdev, "qcom,mdss-bus-througput-factor",
+		&mdata->bus_throughput_factor);
 
 	rc = of_property_read_u32(pdev->dev.of_node,
 			"qcom,max-bandwidth-low-kbps", &mdata->max_bw_low);

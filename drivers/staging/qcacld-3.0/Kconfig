@@ -105,7 +105,7 @@ config WLAN_TX_FLOW_CONTROL_V2
 config WLAN_LRO
 	bool "Enable Large Receive Offload"
 	depends on HELIUMPLUS
-	depends on CONFIG_INET_LRO
+	depends on INET_LRO
 	default n
 
 config WLAN_SYNC_TSF
@@ -124,12 +124,19 @@ config QCACLD_WLAN_LFR2
 	bool "Enable the WLAN Legacy Fast Roaming feature Version 2"
 	default n
 
-config FEATURE_DP_TRACE
-	bool "Enable data path trace feature"
-	default n
-
 config WLAN_FEATURE_DISA
 	bool "Enable DISA certification feature"
 	default n
 
+config WLAN_SPECTRAL_SCAN
+	bool "Enable Spectral Scan feature"
+	default n
+
+config ICMP_DISABLE_PS
+	bool "Enable ICMP packet disable powersave feature"
+	default n
+
+config CONFIG_BUILD_TIMESTAMP
+	bool "Embed timestamp in wlan version"
+	default n
 endif # QCA_CLD_WLAN

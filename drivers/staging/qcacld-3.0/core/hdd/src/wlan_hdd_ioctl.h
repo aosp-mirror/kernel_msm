@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2014, 2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -32,8 +32,20 @@
 #include <uapi/linux/if.h>
 #include "wlan_hdd_main.h"
 
+extern struct sock *cesium_nl_srv_sock;
+
 int hdd_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd);
 int wlan_hdd_set_mc_rate(hdd_adapter_t *pAdapter, int targetRate);
 
+/**
+ * hdd_update_smps_antenna_mode() - set smps and antenna mode
+ * @hdd_ctx: Pointer to hdd context
+ * @mode: antenna mode
+ *
+ * This function will set smps and antenna mode.
+ *
+ * Return: QDF_STATUS
+ */
+QDF_STATUS hdd_update_smps_antenna_mode(hdd_context_t *hdd_ctx, int mode);
 #endif /* end #if !defined(WLAN_HDD_IOCTL_H) */
 

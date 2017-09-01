@@ -39,8 +39,8 @@ static const struct nla_policy
 qca_wlan_vendor_ndp_policy[QCA_WLAN_VENDOR_ATTR_NDP_PARAMS_MAX + 1] = {
 	[QCA_WLAN_VENDOR_ATTR_NDP_SUBCMD] = { .type = NLA_U32 },
 	[QCA_WLAN_VENDOR_ATTR_NDP_TRANSACTION_ID] = { .type = NLA_U16 },
-	[QCA_WLAN_VENDOR_ATTR_NDP_IFACE_STR] = { .type = NLA_STRING,
-					.len = IFNAMSIZ },
+	[QCA_WLAN_VENDOR_ATTR_NDP_IFACE_STR] = { .type = NLA_NUL_STRING,
+					.len = IFNAMSIZ - 1 },
 	[QCA_WLAN_VENDOR_ATTR_NDP_SERVICE_INSTANCE_ID] = { .type = NLA_U32 },
 	[QCA_WLAN_VENDOR_ATTR_NDP_CHANNEL] = { .type = NLA_U32 },
 	[QCA_WLAN_VENDOR_ATTR_NDP_PEER_DISCOVERY_MAC_ADDR] = {
@@ -66,6 +66,10 @@ qca_wlan_vendor_ndp_policy[QCA_WLAN_VENDOR_ATTR_NDP_PARAMS_MAX + 1] = {
 					.len = NDP_PMK_LEN },
 	[QCA_WLAN_VENDOR_ATTR_NDP_SCID] = { .type = NLA_BINARY,
 					.len = NDP_SCID_BUF_LEN },
+	[QCA_WLAN_VENDOR_ATTR_NDP_PASSPHRASE] = { .type = NLA_BINARY,
+					.len = NAN_PASSPHRASE_MAX_LEN },
+	[QCA_WLAN_VENDOR_ATTR_NDP_SERVICE_NAME] = { .type = NLA_BINARY,
+					.len = NAN_MAX_SERVICE_NAME_LEN },
 };
 
 /**
@@ -76,9 +80,9 @@ qca_wlan_vendor_ndp_policy[QCA_WLAN_VENDOR_ATTR_NDP_PARAMS_MAX + 1] = {
  */
 void hdd_ndp_print_ini_config(hdd_context_t *hdd_ctx)
 {
-	hdd_info("Name = [%s] Value = [%u]", CFG_ENABLE_NAN_DATAPATH_NAME,
+	hdd_debug("Name = [%s] Value = [%u]", CFG_ENABLE_NAN_DATAPATH_NAME,
 		hdd_ctx->config->enable_nan_datapath);
-	hdd_info("Name = [%s] Value = [%u]", CFG_ENABLE_NAN_NDI_CHANNEL_NAME,
+	hdd_debug("Name = [%s] Value = [%u]", CFG_ENABLE_NAN_NDI_CHANNEL_NAME,
 		hdd_ctx->config->nan_datapath_ndi_channel);
 }
 
@@ -140,7 +144,7 @@ static int hdd_close_ndi(hdd_adapter_t *adapter)
 	if (test_bit(SME_SESSION_OPENED, &adapter->event_flags)) {
 		INIT_COMPLETION(adapter->session_close_comp_var);
 		if (QDF_STATUS_SUCCESS == sme_close_session(hdd_ctx->hHal,
-				adapter->sessionId,
+				adapter->sessionId, true,
 				hdd_sme_close_session_callback, adapter)) {
 			/* Block on a timed completion variable */
 			rc = wait_for_completion_timeout(
@@ -282,6 +286,49 @@ static int hdd_ndi_start_bss(hdd_adapter_t *adapter,
 	return ret;
 }
 
+/**
+ * hdd_get_random_nan_mac_addr() - generate random non pre-existent mac address
+ * @hdd_ctx: hdd context pointer
+ * @mac_addr: mac address buffer to populate
+ *
+ * Return: status of operation
+ */
+static int hdd_get_random_nan_mac_addr(hdd_context_t *hdd_ctx,
+				       struct qdf_mac_addr *mac_addr)
+{
+	hdd_adapter_t *adapter;
+	uint8_t i, attempts, max_attempt = 16;
+
+	for (attempts = 0; attempts < max_attempt; attempts++) {
+		cds_rand_get_bytes(0, (uint8_t *)mac_addr, sizeof(*mac_addr));
+
+		/*
+		 * Reset multicast bit (bit-0) and set locally-administered bit
+		 */
+		mac_addr->bytes[0] = 0x2;
+
+		/*
+		 * to avoid potential conflict with FW's generated NMI mac addr,
+		 * host sets LSB if 6th byte to 0
+		 */
+		mac_addr->bytes[5] &= 0xFE;
+
+		for (i = 0; i < QDF_MAX_CONCURRENCY_PERSONA; i++) {
+			if (!qdf_mem_cmp(hdd_ctx->config->intfMacAddr[i].bytes,
+					 mac_addr, sizeof(*mac_addr)))
+				continue;
+		}
+
+		adapter = hdd_get_adapter_by_macaddr(hdd_ctx, mac_addr->bytes);
+		if (!adapter)
+			return 0;
+	}
+
+	hdd_err("unable to get non-pre-existing mac address in %d attempts",
+		max_attempt);
+
+	return -EINVAL;
+}
 
 /**
  * hdd_ndi_create_req_handler() - NDI create request handler
@@ -300,6 +347,8 @@ static int hdd_ndi_create_req_handler(hdd_context_t *hdd_ctx,
 	struct nan_datapath_ctx *ndp_ctx;
 	uint8_t op_channel =
 		hdd_ctx->config->nan_datapath_ndi_channel;
+	struct qdf_mac_addr random_ndi_mac;
+	uint8_t *ndi_mac_addr;
 
 	ENTER();
 
@@ -316,16 +365,29 @@ static int hdd_ndi_create_req_handler(hdd_context_t *hdd_ctx,
 	transaction_id =
 		nla_get_u16(tb[QCA_WLAN_VENDOR_ATTR_NDP_TRANSACTION_ID]);
 
-	/* Check for an existing interface of NDI type */
-	adapter = hdd_get_adapter(hdd_ctx, QDF_NDI_MODE);
+	/* check for an existing NDI with the same name */
+	adapter = hdd_get_adapter_by_iface_name(hdd_ctx, iface_name);
 	if (adapter) {
-		hdd_err("Cannot support more than one NDI");
+		hdd_err("NAN data interface %s is available", iface_name);
 		return -EEXIST;
 	}
 
+	if (hdd_ctx->config->is_ndi_mac_randomized) {
+		if (hdd_get_random_nan_mac_addr(hdd_ctx, &random_ndi_mac)) {
+			hdd_err("get random mac address failed");
+			return -EINVAL;
+		}
+		ndi_mac_addr = &random_ndi_mac.bytes[0];
+	} else {
+		ndi_mac_addr = wlan_hdd_get_intf_addr(hdd_ctx);
+		if (!ndi_mac_addr) {
+			hdd_err("get intf address failed");
+			return -EINVAL;
+		}
+	}
+
 	adapter = hdd_open_adapter(hdd_ctx, QDF_NDI_MODE, iface_name,
-			wlan_hdd_get_intf_addr(hdd_ctx), NET_NAME_UNKNOWN,
-			true);
+				ndi_mac_addr, NET_NAME_UNKNOWN, true);
 	if (!adapter) {
 		hdd_err("hdd_open_adapter failed");
 		return -ENOMEM;
@@ -398,14 +460,14 @@ static int hdd_ndi_delete_req_handler(hdd_context_t *hdd_ctx,
 		nla_get_u16(tb[QCA_WLAN_VENDOR_ATTR_NDP_TRANSACTION_ID]);
 
 	/* Check if there is already an existing inteface with the same name */
-	adapter = hdd_get_adapter(hdd_ctx, QDF_NDI_MODE);
+	adapter = hdd_get_adapter_by_iface_name(hdd_ctx, iface_name);
 	if (!adapter) {
 		hdd_err("NAN data interface %s is not available", iface_name);
-		return -EINVAL;
+		return -ENODEV;
 	}
 
 	/* check if adapter is in NDI mode */
-	if (QDF_NDI_MODE != adapter->device_mode) {
+	if (!WLAN_HDD_IS_NDI(adapter)) {
 		hdd_err("Interface %s is not in NDI mode", iface_name);
 		return -EINVAL;
 	}
@@ -423,11 +485,9 @@ static int hdd_ndi_delete_req_handler(hdd_context_t *hdd_ctx,
 	}
 
 	/* check if there are active peers on the adapter */
-	if (ndp_ctx->active_ndp_peers > 0) {
-		hdd_err("NDP peers active: %d, cannot delete NDI",
+	if (ndp_ctx->active_ndp_peers > 0)
+		hdd_err("NDP peers active: %d, active NDPs may not terminated",
 			ndp_ctx->active_ndp_peers);
-		return -EINVAL;
-	}
 
 	/*
 	 * Since, the interface is being deleted, remove the
@@ -450,6 +510,65 @@ static int hdd_ndi_delete_req_handler(hdd_context_t *hdd_ctx,
 }
 
 /**
+ * ndp_parse_security_params() - parse vendor attributes for security params.
+ * @tb: parsed NL attribute list
+ * @ncs_sk_type: out parameter to populate ncs_sk_type
+ * @pmk: out parameter to populate pmk
+ * @passphrase: out parameter to populate passphrase
+ * @service_name: out parameter to populate service_name
+ *
+ * Return:  0 on success or error code on failure
+ */
+static int ndp_parse_security_params(struct nlattr **tb,
+			uint32_t *ncs_sk_type, struct ndp_pmk *pmk,
+			struct ndp_passphrase *passphrase,
+			struct ndp_service_name *service_name)
+{
+	if (!ncs_sk_type || !pmk || !passphrase || !service_name) {
+		hdd_err("out buffers for one ore more parameters is null");
+		return -EINVAL;
+	}
+
+	if (tb[QCA_WLAN_VENDOR_ATTR_NDP_NCS_SK_TYPE]) {
+		*ncs_sk_type =
+			nla_get_u32(tb[QCA_WLAN_VENDOR_ATTR_NDP_NCS_SK_TYPE]);
+	}
+
+	if (tb[QCA_WLAN_VENDOR_ATTR_NDP_PMK]) {
+		pmk->pmk_len =
+			nla_len(tb[QCA_WLAN_VENDOR_ATTR_NDP_PMK]);
+		pmk->pmk =
+			nla_data(tb[QCA_WLAN_VENDOR_ATTR_NDP_PMK]);
+		hdd_err("pmk len: %d", pmk->pmk_len);
+		QDF_TRACE_HEX_DUMP(QDF_MODULE_ID_HDD, QDF_TRACE_LEVEL_ERROR,
+				   pmk->pmk, pmk->pmk_len);
+	}
+
+	if (tb[QCA_WLAN_VENDOR_ATTR_NDP_PASSPHRASE]) {
+		passphrase->passphrase_len =
+			nla_len(tb[QCA_WLAN_VENDOR_ATTR_NDP_PASSPHRASE]);
+		passphrase->passphrase =
+			nla_data(tb[QCA_WLAN_VENDOR_ATTR_NDP_PASSPHRASE]);
+		hdd_err("passphrase len: %d", passphrase->passphrase_len);
+		QDF_TRACE_HEX_DUMP(QDF_MODULE_ID_HDD, QDF_TRACE_LEVEL_ERROR,
+			passphrase->passphrase, passphrase->passphrase_len);
+	}
+
+	if (tb[QCA_WLAN_VENDOR_ATTR_NDP_SERVICE_NAME]) {
+		service_name->service_name_len =
+			nla_len(tb[QCA_WLAN_VENDOR_ATTR_NDP_SERVICE_NAME]);
+		service_name->service_name =
+			nla_data(tb[QCA_WLAN_VENDOR_ATTR_NDP_SERVICE_NAME]);
+		hdd_err("service_name len: %d", service_name->service_name_len);
+		QDF_TRACE_HEX_DUMP(QDF_MODULE_ID_HDD, QDF_TRACE_LEVEL_ERROR,
+				service_name->service_name,
+				service_name->service_name_len);
+	}
+
+	return 0;
+}
+
+/**
  * hdd_ndp_initiator_req_handler() - NDP initiator request handler
  * @hdd_ctx: hdd context
  * @tb: parsed NL attribute list
@@ -465,6 +584,8 @@ static int hdd_ndi_delete_req_handler(hdd_context_t *hdd_ctx,
  * QCA_WLAN_VENDOR_ATTR_NDP_CONFIG_QOS - optional
  * QCA_WLAN_VENDOR_ATTR_NDP_PMK - optional
  * QCA_WLAN_VENDOR_ATTR_NDP_NCS_SK_TYPE - optional
+ * QCA_WLAN_VENDOR_ATTR_NDP_PASSPHRASE - optional
+ * QCA_WLAN_VENDOR_ATTR_NDP_SERVICE_NAME - optional
  *
  * Return:  0 on success or error code on failure
  */
@@ -488,9 +609,14 @@ static int hdd_ndp_initiator_req_handler(hdd_context_t *hdd_ctx,
 
 	iface_name = nla_data(tb[QCA_WLAN_VENDOR_ATTR_NDP_IFACE_STR]);
 	/* Check for interface in NDI mode */
-	adapter = hdd_get_adapter(hdd_ctx, QDF_NDI_MODE);
+	adapter = hdd_get_adapter_by_iface_name(hdd_ctx, iface_name);
 	if (!adapter) {
 		hdd_err("NAN data interface %s not available", iface_name);
+		return -EINVAL;
+	}
+
+	if (!WLAN_HDD_IS_NDI(adapter)) {
+		hdd_err("Interface %s is not in NDI mode", iface_name);
 		return -EINVAL;
 	}
 
@@ -519,16 +645,17 @@ static int hdd_ndp_initiator_req_handler(hdd_context_t *hdd_ctx,
 	req.transaction_id =
 		nla_get_u16(tb[QCA_WLAN_VENDOR_ATTR_NDP_TRANSACTION_ID]);
 
-	if (tb[QCA_WLAN_VENDOR_ATTR_NDP_CHANNEL])
+	if (tb[QCA_WLAN_VENDOR_ATTR_NDP_CHANNEL]) {
 		req.channel =
 			nla_get_u32(tb[QCA_WLAN_VENDOR_ATTR_NDP_CHANNEL]);
 
-	if (tb[QCA_WLAN_VENDOR_ATTR_NDP_CHANNEL_CONFIG]) {
-		req.channel_cfg =
-		    nla_get_u32(tb[QCA_WLAN_VENDOR_ATTR_NDP_CHANNEL_CONFIG]);
-	} else {
-		hdd_err("Channel config is unavailable");
-		return -EINVAL;
+		if (tb[QCA_WLAN_VENDOR_ATTR_NDP_CHANNEL_CONFIG]) {
+			req.channel_cfg =
+				nla_get_u32(tb[QCA_WLAN_VENDOR_ATTR_NDP_CHANNEL_CONFIG]);
+		} else {
+			hdd_err("Channel config is unavailable");
+			return -EINVAL;
+		}
 	}
 
 	if (!tb[QCA_WLAN_VENDOR_ATTR_NDP_SERVICE_INSTANCE_ID]) {
@@ -564,24 +691,10 @@ static int hdd_ndp_initiator_req_handler(hdd_context_t *hdd_ctx,
 			nla_get_u32(tb[QCA_WLAN_VENDOR_ATTR_NDP_CONFIG_QOS]);
 	}
 
-	if (tb[QCA_WLAN_VENDOR_ATTR_NDP_NCS_SK_TYPE] &&
-		!tb[QCA_WLAN_VENDOR_ATTR_NDP_PMK]) {
-		hdd_err("PMK cannot be absent when CSID is present.");
+	if (ndp_parse_security_params(tb, &req.ncs_sk_type, &req.pmk,
+				&req.passphrase, &req.service_name)) {
+		hdd_err("inconsistent security params present in request.");
 		return -EINVAL;
-	}
-
-	if (tb[QCA_WLAN_VENDOR_ATTR_NDP_PMK]) {
-		req.pmk.pmk = nla_data(tb[QCA_WLAN_VENDOR_ATTR_NDP_PMK]);
-		req.pmk.pmk_len = nla_len(tb[QCA_WLAN_VENDOR_ATTR_NDP_PMK]);
-		QDF_TRACE_HEX_DUMP(QDF_MODULE_ID_HDD,
-				QDF_TRACE_LEVEL_DEBUG,
-				req.pmk.pmk, req.pmk.pmk_len);
-	}
-
-	if (tb[QCA_WLAN_VENDOR_ATTR_NDP_NCS_SK_TYPE]) {
-		req.ncs_sk_type =
-			nla_get_u32(tb[QCA_WLAN_VENDOR_ATTR_NDP_NCS_SK_TYPE]);
-
 	}
 
 	hdd_info("vdev_id: %d, transaction_id: %d, channel: %d, service_instance_id: %d, ndp_app_info_len: %d, csid: %d, peer_discovery_mac_addr: %pM",
@@ -635,14 +748,14 @@ static int hdd_ndp_responder_req_handler(hdd_context_t *hdd_ctx,
 
 	iface_name = nla_data(tb[QCA_WLAN_VENDOR_ATTR_NDP_IFACE_STR]);
 	/* Check if there is already an existing NAN interface */
-	adapter = hdd_get_adapter(hdd_ctx, QDF_NDI_MODE);
+	adapter = hdd_get_adapter_by_iface_name(hdd_ctx, iface_name);
 	if (!adapter) {
 		hdd_err("NAN data interface %s not available", iface_name);
 		return -EINVAL;
 	}
 
-	if (QDF_NDI_MODE != adapter->device_mode) {
-		hdd_err("Interface %s not in NDI mode", iface_name);
+	if (!WLAN_HDD_IS_NDI(adapter)) {
+		hdd_err("Interface %s is not in NDI mode", iface_name);
 		return -EINVAL;
 	}
 
@@ -704,24 +817,10 @@ static int hdd_ndp_responder_req_handler(hdd_context_t *hdd_ctx,
 		hdd_info("NDP config data is unavailable");
 	}
 
-	if (tb[QCA_WLAN_VENDOR_ATTR_NDP_NCS_SK_TYPE] &&
-		!tb[QCA_WLAN_VENDOR_ATTR_NDP_PMK]) {
-		hdd_err("PMK cannot be absent when CSID is present.");
+	if (ndp_parse_security_params(tb, &req.ncs_sk_type, &req.pmk,
+				&req.passphrase, &req.service_name)) {
+		hdd_err("inconsistent security params present in request.");
 		return -EINVAL;
-	}
-
-	if (tb[QCA_WLAN_VENDOR_ATTR_NDP_PMK]) {
-		req.pmk.pmk = nla_data(tb[QCA_WLAN_VENDOR_ATTR_NDP_PMK]);
-		req.pmk.pmk_len = nla_len(tb[QCA_WLAN_VENDOR_ATTR_NDP_PMK]);
-		QDF_TRACE_HEX_DUMP(QDF_MODULE_ID_HDD,
-				QDF_TRACE_LEVEL_DEBUG,
-				req.pmk.pmk, req.pmk.pmk_len);
-	}
-
-	if (tb[QCA_WLAN_VENDOR_ATTR_NDP_NCS_SK_TYPE]) {
-		req.ncs_sk_type =
-			nla_get_u32(tb[QCA_WLAN_VENDOR_ATTR_NDP_NCS_SK_TYPE]);
-
 	}
 
 	hdd_info("vdev_id: %d, transaction_id: %d, ndp_rsp %d, ndp_instance_id: %d, ndp_app_info_len: %d, csid: %d",
@@ -822,19 +921,27 @@ static void hdd_ndp_iface_create_rsp_handler(hdd_adapter_t *adapter,
 				NLMSG_HDRLEN + (4 * NLA_HDRLEN);
 	struct nan_datapath_ctx *ndp_ctx = WLAN_HDD_GET_NDP_CTX_PTR(adapter);
 	bool create_fail = false;
-	uint8_t create_transaction_id = 0;
+	uint16_t create_transaction_id = 0;
 	uint32_t create_status = NDP_RSP_STATUS_ERROR;
 	uint32_t create_reason = NDP_NAN_DATA_IFACE_CREATE_FAILED;
 	hdd_station_ctx_t *sta_ctx = WLAN_HDD_GET_STATION_CTX_PTR(adapter);
 	struct qdf_mac_addr bc_mac_addr = QDF_MAC_ADDR_BROADCAST_INITIALIZER;
-	tCsrRoamInfo roam_info = {0};
+	tCsrRoamInfo *roam_info;
 	tSirBssDescription tmp_bss_descp = {0};
 
 	ENTER();
 
-	if (wlan_hdd_validate_context(hdd_ctx))
-		/* No way the driver can send response back to user space */
+	roam_info = qdf_mem_malloc(sizeof(*roam_info));
+	if (!roam_info) {
+		hdd_err("failed to allocate memory");
 		return;
+	}
+
+	if (wlan_hdd_validate_context(hdd_ctx)) {
+		/* No way the driver can send response back to user space */
+		qdf_mem_free(roam_info);
+		return;
+	}
 
 	if (ndi_rsp) {
 		create_status = ndi_rsp->status;
@@ -930,11 +1037,12 @@ static void hdd_ndp_iface_create_rsp_handler(hdd_adapter_t *adapter,
 
 	sta_ctx->broadcast_staid = ndi_rsp->sta_id;
 	hdd_save_peer(sta_ctx, sta_ctx->broadcast_staid, &bc_mac_addr);
-	hdd_roam_register_sta(adapter, &roam_info,
+	hdd_roam_register_sta(adapter, roam_info,
 				sta_ctx->broadcast_staid,
 				&bc_mac_addr, &tmp_bss_descp);
 	hdd_ctx->sta_to_adapter[sta_ctx->broadcast_staid] = adapter;
 
+	qdf_mem_free(roam_info);
 
 	EXIT();
 	return;
@@ -943,6 +1051,7 @@ nla_put_failure:
 	kfree_skb(vendor_event);
 close_ndi:
 	hdd_close_ndi(adapter);
+	qdf_mem_free(roam_info);
 	return;
 }
 
@@ -981,7 +1090,6 @@ static void hdd_ndp_iface_delete_rsp_handler(hdd_adapter_t *adapter,
 				     WLAN_CONTROL_PATH);
 
 	complete(&adapter->disconnect_comp_var);
-	return;
 }
 
 /**
@@ -1182,15 +1290,21 @@ static void hdd_ndp_new_peer_ind_handler(hdd_adapter_t *adapter,
 	struct sme_ndp_peer_ind *new_peer_ind = ind_params;
 	hdd_context_t *hdd_ctx = WLAN_HDD_GET_CTX(adapter);
 	tSirBssDescription tmp_bss_descp = {0};
-	tCsrRoamInfo roam_info = {0};
+	tCsrRoamInfo *roam_info;
 	struct nan_datapath_ctx *ndp_ctx = WLAN_HDD_GET_NDP_CTX_PTR(adapter);
 	hdd_station_ctx_t *sta_ctx = WLAN_HDD_GET_STATION_CTX_PTR(adapter);
 
 	ENTER();
 
+	roam_info = qdf_mem_malloc(sizeof(*roam_info));
+	if (!roam_info) {
+		hdd_err("failed to allocate memory");
+		return;
+	}
+
 	if (NULL == ind_params) {
 		hdd_err("Invalid new NDP peer params");
-		return;
+		goto free;
 	}
 	hdd_info("session_id: %d, peer_mac: %pM, sta_id: %d",
 		new_peer_ind->session_id, new_peer_ind->peer_mac_addr.bytes,
@@ -1200,7 +1314,7 @@ static void hdd_ndp_new_peer_ind_handler(hdd_adapter_t *adapter,
 	if (false == hdd_save_peer(sta_ctx, new_peer_ind->sta_id,
 				   &new_peer_ind->peer_mac_addr)) {
 		hdd_warn("Ndp peer table full. cannot save new peer");
-		return;
+		goto free;
 	}
 
 	/* this function is called for each new peer */
@@ -1208,17 +1322,19 @@ static void hdd_ndp_new_peer_ind_handler(hdd_adapter_t *adapter,
 	hdd_info("vdev_id: %d, num_peers: %d", adapter->sessionId,
 		 ndp_ctx->active_ndp_peers);
 
-	hdd_roam_register_sta(adapter, &roam_info, new_peer_ind->sta_id,
+	hdd_roam_register_sta(adapter, roam_info, new_peer_ind->sta_id,
 			    &new_peer_ind->peer_mac_addr, &tmp_bss_descp);
 	hdd_ctx->sta_to_adapter[new_peer_ind->sta_id] = adapter;
 	/* perform following steps for first new peer ind */
 	if (ndp_ctx->active_ndp_peers == 1) {
 		hdd_info("Set ctx connection state to connected");
 		sta_ctx->conn_info.connState = eConnectionState_NdiConnected;
-		hdd_wmm_connect(adapter, &roam_info, eCSR_BSS_TYPE_NDI);
+		hdd_wmm_connect(adapter, roam_info, eCSR_BSS_TYPE_NDI);
 		wlan_hdd_netif_queue_control(adapter,
 				WLAN_WAKE_ALL_NETIF_QUEUE, WLAN_CONTROL_PATH);
 	}
+free:
+	qdf_mem_free(roam_info);
 	EXIT();
 }
 
@@ -1738,6 +1854,7 @@ static void hdd_ndp_end_ind_handler(hdd_adapter_t *adapter,
 				data_len, QCA_NL80211_VENDOR_SUBCMD_NDP_INDEX,
 				GFP_KERNEL);
 	if (!vendor_event) {
+		qdf_mem_free(ndp_instance_array);
 		hdd_err("cfg80211_vendor_event_alloc failed");
 		return;
 	}
@@ -1885,10 +2002,10 @@ static int __wlan_hdd_cfg80211_process_ndp_cmd(struct wiphy *wiphy,
 
 	if (tb[QCA_WLAN_VENDOR_ATTR_NDP_IFACE_STR]) {
 		iface_name = nla_data(tb[QCA_WLAN_VENDOR_ATTR_NDP_IFACE_STR]);
-		hdd_notice("Transaction Id: %d NDP Cmd: %d iface_name: %s",
+		hdd_debug("Transaction Id: %d NDP Cmd: %d iface_name: %s",
 			transaction_id, ndp_cmd_type, iface_name);
 	} else {
-		hdd_notice("Transaction Id: %d NDP Cmd: %d iface_name: unspecified",
+		hdd_debug("Transaction Id: %d NDP Cmd: %d iface_name: unspecified",
 			transaction_id, ndp_cmd_type);
 	}
 
@@ -2018,9 +2135,9 @@ int hdd_init_nan_data_mode(struct hdd_adapter_s *adapter)
 			(int)WMI_PDEV_PARAM_BURST_ENABLE,
 			(int)hdd_ctx->config->enableSifsBurst,
 			PDEV_CMD);
-	if (0 != ret_val) {
+	if (0 != ret_val)
 		hdd_err("WMI_PDEV_PARAM_BURST_ENABLE set failed %d", ret_val);
-	}
+
 
 	ndp_ctx->state = NAN_DATA_NDI_CREATING_STATE;
 	return ret_val;
@@ -2037,7 +2154,7 @@ error_register_wext:
 		INIT_COMPLETION(adapter->session_close_comp_var);
 		if (QDF_STATUS_SUCCESS ==
 				sme_close_session(hdd_ctx->hHal,
-					adapter->sessionId,
+					adapter->sessionId, true,
 					hdd_sme_close_session_callback,
 					adapter)) {
 			rc = wait_for_completion_timeout(

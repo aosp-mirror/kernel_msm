@@ -53,9 +53,9 @@ QDF_STATUS(*htt_h2t_rx_ring_cfg_msg)(struct htt_pdev_t *pdev);
 QDF_STATUS(*htt_h2t_rx_ring_rfs_cfg_msg)(struct htt_pdev_t *pdev);
 
 #ifdef IPA_OFFLOAD
-static A_STATUS htt_ipa_config(htt_pdev_handle pdev, A_STATUS status)
+static QDF_STATUS htt_ipa_config(htt_pdev_handle pdev, QDF_STATUS status)
 {
-	if ((A_OK == status) &&
+	if ((QDF_STATUS_SUCCESS == status) &&
 	    ol_cfg_ipa_uc_offload_enabled(pdev->ctrl_pdev))
 		status = htt_h2t_ipa_uc_rsc_cfg_msg(pdev);
 	return status;
@@ -107,6 +107,7 @@ void htt_htc_pkt_free(struct htt_pdev_t *pdev, struct htt_htc_pkt *pkt)
 void htt_htc_pkt_pool_free(struct htt_pdev_t *pdev)
 {
 	struct htt_htc_pkt_union *pkt, *next;
+
 	pkt = pdev->htt_htc_pkt_freelist;
 	while (pkt) {
 		next = pkt->u.next;
@@ -131,7 +132,8 @@ htt_htc_misc_pkt_list_trim(struct htt_pdev_t *pdev, int level)
 		next = pkt->u.next;
 		/* trim the out grown list*/
 		if (++i > level) {
-			netbuf = (qdf_nbuf_t)(pkt->u.pkt.htc_pkt.pNetBufContext);
+			netbuf =
+				(qdf_nbuf_t)(pkt->u.pkt.htc_pkt.pNetBufContext);
 			qdf_nbuf_unmap(pdev->osdev, netbuf, QDF_DMA_TO_DEVICE);
 			qdf_nbuf_free(netbuf);
 			qdf_mem_free(pkt);
@@ -171,6 +173,7 @@ void htt_htc_misc_pkt_pool_free(struct htt_pdev_t *pdev)
 {
 	struct htt_htc_pkt_union *pkt, *next;
 	qdf_nbuf_t netbuf;
+
 	pkt = pdev->htt_htc_pkt_misclist;
 
 	while (pkt) {
@@ -213,13 +216,13 @@ void htt_htc_misc_pkt_pool_free(struct htt_pdev_t *pdev)
  */
 static void
 htt_htc_tx_htt2_service_start(struct htt_pdev_t *pdev,
-			      HTC_SERVICE_CONNECT_REQ *connect_req,
-			      HTC_SERVICE_CONNECT_RESP *connect_resp)
+			      struct htc_service_connect_req *connect_req,
+			      struct htc_service_connect_resp *connect_resp)
 {
-	A_STATUS status;
+	QDF_STATUS status;
 
-	qdf_mem_set(connect_req, 0, sizeof(HTC_SERVICE_CONNECT_REQ));
-	qdf_mem_set(connect_resp, 0, sizeof(HTC_SERVICE_CONNECT_RESP));
+	qdf_mem_set(connect_req, 0, sizeof(struct htc_service_connect_req));
+	qdf_mem_set(connect_resp, 0, sizeof(struct htc_service_connect_resp));
 
 	/* The same as HTT service but no RX. */
 	connect_req->EpCallbacks.pContext = pdev;
@@ -236,7 +239,7 @@ htt_htc_tx_htt2_service_start(struct htt_pdev_t *pdev,
 
 	status = htc_connect_service(pdev->htc_pdev, connect_req, connect_resp);
 
-	if (status != A_OK) {
+	if (status != QDF_STATUS_SUCCESS) {
 		pdev->htc_tx_htt2_endpoint = ENDPOINT_UNUSED;
 		pdev->htc_tx_htt2_max_size = 0;
 	} else {
@@ -245,7 +248,7 @@ htt_htc_tx_htt2_service_start(struct htt_pdev_t *pdev,
 	}
 
 	qdf_print("TX HTT %s, ep %d size %d\n",
-		  (status == A_OK ? "ON" : "OFF"),
+		  (status == QDF_STATUS_SUCCESS ? "ON" : "OFF"),
 		  pdev->htc_tx_htt2_endpoint,
 		  pdev->htc_tx_htt2_max_size);
 }
@@ -253,10 +256,9 @@ htt_htc_tx_htt2_service_start(struct htt_pdev_t *pdev,
 
 static inline void
 htt_htc_tx_htt2_service_start(struct htt_pdev_t *pdev,
-			      HTC_SERVICE_CONNECT_REQ *connect_req,
-			      HTC_SERVICE_CONNECT_RESP *connect_resp)
+			      struct htc_service_connect_req *connect_req,
+			      struct htc_service_connect_resp *connect_resp)
 {
-	return;
 }
 #endif
 
@@ -277,7 +279,7 @@ htt_htc_tx_htt2_service_start(struct htt_pdev_t *pdev,
  */
 static
 void htt_htc_credit_flow_disable(struct htt_pdev_t *pdev,
-				 HTC_SERVICE_CONNECT_REQ *connect_req)
+				 struct htc_service_connect_req *connect_req)
 {
 	if (pdev->osdev->bus_type == QDF_BUS_TYPE_SDIO) {
 		/*
@@ -315,6 +317,38 @@ void htt_dump_bundle_stats(htt_pdev_handle pdev)
 void htt_clear_bundle_stats(htt_pdev_handle pdev)
 {
 	htc_clear_bundle_stats(pdev->htc_pdev);
+}
+#endif
+
+#if defined(QCA_WIFI_3_0_ADRASTEA)
+/**
+ * htt_htc_attach_all() - Connect to HTC service for HTT
+ * @pdev: pdev ptr
+ *
+ * Return: 0 for success or error code.
+ */
+static int
+htt_htc_attach_all(struct htt_pdev_t *pdev)
+{
+	if (htt_htc_attach(pdev, HTT_DATA_MSG_SVC))
+		return -EIO;
+	if (htt_htc_attach(pdev, HTT_DATA2_MSG_SVC))
+		return -EIO;
+	if (htt_htc_attach(pdev, HTT_DATA3_MSG_SVC))
+		return -EIO;
+	return 0;
+}
+#else
+/**
+ * htt_htc_attach_all() - Connect to HTC service for HTT
+ * @pdev: pdev ptr
+ *
+ * Return: 0 for success or error code.
+ */
+static int
+htt_htc_attach_all(struct htt_pdev_t *pdev)
+{
+	return htt_htc_attach(pdev, HTT_DATA_MSG_SVC);
 }
 #endif
 
@@ -359,12 +393,14 @@ htt_pdev_alloc(ol_txrx_pdev_handle txrx_pdev,
 
 	pdev->cfg.is_full_reorder_offload =
 			ol_cfg_is_full_reorder_offload(pdev->ctrl_pdev);
-	qdf_print("is_full_reorder_offloaded? %d\n",
+	QDF_TRACE(QDF_MODULE_ID_HTT, QDF_TRACE_LEVEL_INFO,
+		  "is_full_reorder_offloaded? %d",
 		  (int)pdev->cfg.is_full_reorder_offload);
 
 	pdev->cfg.ce_classify_enabled =
 		ol_cfg_is_ce_classify_enabled(ctrl_pdev);
-	qdf_print("ce_classify_enabled %d\n",
+	QDF_TRACE(QDF_MODULE_ID_HTT, QDF_TRACE_LEVEL_INFO,
+		  "ce_classify_enabled? %d",
 		  pdev->cfg.ce_classify_enabled);
 
 	if (pdev->cfg.is_high_latency) {
@@ -387,23 +423,15 @@ htt_pdev_alloc(ol_txrx_pdev_handle txrx_pdev,
 	 * since htt_rx_attach involves sending a rx ring configure
 	 * message to the target.
 	 */
-	if (htt_htc_attach(pdev, HTT_DATA_MSG_SVC))
-		goto fail2;
-	if (htt_htc_attach(pdev, HTT_DATA2_MSG_SVC))
-		;
-	/* TODO: enable the following line once FW is ready */
-	/* goto fail2; */
-	if (htt_htc_attach(pdev, HTT_DATA3_MSG_SVC))
-		;
-	/* TODO: enable the following line once FW is ready */
-	/* goto fail2; */
+	if (htt_htc_attach_all(pdev))
+		goto htt_htc_attach_fail;
 	if (hif_ce_fastpath_cb_register(osc, htt_t2h_msg_handler_fast, pdev))
 		qdf_print("failed to register fastpath callback\n");
 
 success:
 	return pdev;
 
-fail2:
+htt_htc_attach_fail:
 	qdf_mem_free(pdev);
 
 fail1:
@@ -438,6 +466,7 @@ htt_attach(struct htt_pdev_t *pdev, int desc_pool_size)
 	/* pre-allocate some HTC_PACKET objects */
 	for (i = 0; i < HTT_HTC_PKT_POOL_INIT_SIZE; i++) {
 		struct htt_htc_pkt_union *pkt;
+
 		pkt = qdf_mem_malloc(sizeof(*pkt));
 		if (!pkt)
 			break;
@@ -503,7 +532,8 @@ htt_attach(struct htt_pdev_t *pdev, int desc_pool_size)
 		} else if (frm_type == wlan_frm_fmt_802_3) {
 			pdev->download_len = HTT_TX_HDR_SIZE_ETHERNET;
 		} else {
-			qdf_print("Unexpected frame type spec: %d\n", frm_type);
+			QDF_TRACE(QDF_MODULE_ID_HTT, QDF_TRACE_LEVEL_ERROR,
+				  "Unexpected frame type spec: %d", frm_type);
 			HTT_ASSERT0(0);
 		}
 
@@ -562,12 +592,12 @@ fail1:
 	return ret;
 }
 
-A_STATUS htt_attach_target(htt_pdev_handle pdev)
+QDF_STATUS htt_attach_target(htt_pdev_handle pdev)
 {
-	A_STATUS status;
+	QDF_STATUS status;
 
 	status = htt_h2t_ver_req_msg(pdev);
-	if (status != A_OK)
+	if (status != QDF_STATUS_SUCCESS)
 		return status;
 
 #if defined(HELIUMPLUS)
@@ -635,7 +665,8 @@ int htt_update_endpoint(struct htt_pdev_t *pdev,
 	hif_ctx = cds_get_context(QDF_MODULE_ID_HIF);
 	if (qdf_unlikely(NULL == hif_ctx)) {
 		QDF_ASSERT(NULL != hif_ctx);
-		qdf_print("%s:%d: assuming non-tx service.",
+		QDF_TRACE(QDF_MODULE_ID_HTT, QDF_TRACE_LEVEL_ERROR,
+			  "%s:%d: assuming non-tx service.",
 			  __func__, __LINE__);
 	} else {
 		ul = dl = 0xff;
@@ -643,7 +674,8 @@ int htt_update_endpoint(struct htt_pdev_t *pdev,
 		    hif_map_service_to_pipe(hif_ctx, service_id,
 					    &ul, &dl,
 					    &ul_polled, &dl_polled))
-			qdf_print("%s:%d: assuming non-tx srv.",
+			QDF_TRACE(QDF_MODULE_ID_HTT, QDF_TRACE_LEVEL_INFO,
+				  "%s:%d: assuming non-tx srv.",
 				  __func__, __LINE__);
 		else
 			tx_service = (ul != 0xff);
@@ -661,9 +693,9 @@ int htt_update_endpoint(struct htt_pdev_t *pdev,
 
 int htt_htc_attach(struct htt_pdev_t *pdev, uint16_t service_id)
 {
-	HTC_SERVICE_CONNECT_REQ connect;
-	HTC_SERVICE_CONNECT_RESP response;
-	A_STATUS status;
+	struct htc_service_connect_req connect;
+	struct htc_service_connect_resp response;
+	QDF_STATUS status;
 
 	qdf_mem_set(&connect, sizeof(connect), 0);
 	qdf_mem_set(&response, sizeof(response), 0);
@@ -696,8 +728,12 @@ int htt_htc_attach(struct htt_pdev_t *pdev, uint16_t service_id)
 
 	status = htc_connect_service(pdev->htc_pdev, &connect, &response);
 
-	if (status != A_OK)
+	if (status != QDF_STATUS_SUCCESS) {
+		if (!cds_is_fw_down())
+			QDF_BUG(0);
+
 		return -EIO;       /* failure */
+	}
 
 	htt_update_endpoint(pdev, service_id, response.Endpoint);
 
@@ -753,7 +789,8 @@ int htt_ipa_uc_attach(struct htt_pdev_t *pdev)
 		ol_cfg_ipa_uc_tx_max_buf_cnt(pdev->ctrl_pdev),
 		ol_cfg_ipa_uc_tx_partition_base(pdev->ctrl_pdev));
 	if (error) {
-		qdf_print("HTT IPA UC TX attach fail code %d\n", error);
+		QDF_TRACE(QDF_MODULE_ID_HTT, QDF_TRACE_LEVEL_ERROR,
+			  "HTT IPA UC TX attach fail code %d", error);
 		HTT_ASSERT0(0);
 		return error;
 	}
@@ -762,7 +799,8 @@ int htt_ipa_uc_attach(struct htt_pdev_t *pdev)
 	error = htt_rx_ipa_uc_attach(
 		pdev, qdf_get_pwr2(pdev->rx_ring.fill_level));
 	if (error) {
-		qdf_print("HTT IPA UC RX attach fail code %d\n", error);
+		QDF_TRACE(QDF_MODULE_ID_HTT, QDF_TRACE_LEVEL_ERROR,
+			  "HTT IPA UC RX attach fail code %d", error);
 		htt_tx_ipa_uc_detach(pdev);
 		HTT_ASSERT0(0);
 		return error;
@@ -883,7 +921,8 @@ void htt_mark_first_wakeup_packet(htt_pdev_handle pdev,
 			uint8_t value)
 {
 	if (!pdev) {
-		qdf_print("%s: htt pdev is NULL", __func__);
+		QDF_TRACE(QDF_MODULE_ID_HTT, QDF_TRACE_LEVEL_ERROR,
+			  "%s: htt pdev is NULL", __func__);
 		return;
 	}
 

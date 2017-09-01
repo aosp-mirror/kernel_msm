@@ -30,18 +30,34 @@
 #define WLAN_HDD_SCAN_H
 
 #include "wlan_hdd_main.h"
+#include "csr_inside_api.h"
 
 #define MAX_PENDING_LOG 5
 
 /* (30 Mins) */
 #define MIN_TIME_REQUIRED_FOR_NEXT_BUG_REPORT (30 * 60 * 1000)
 
+/* DBS Scan policy selection ext flags */
+#define HDD_SCAN_FLAG_EXT_DBS_SCAN_POLICY_MASK  0x00000003
+#define HDD_SCAN_FLAG_EXT_DBS_SCAN_POLICY_BIT   0
+#define HDD_SCAN_DBS_POLICY_DEFAULT             0x0
+#define HDD_SCAN_DBS_POLICY_FORCE_NONDBS        0x1
+#define HDD_SCAN_DBS_POLICY_IGNORE_DUTY         0x2
+#define HDD_SCAN_DBS_POLICY_MAX                 0x3
+
+/* Minimum number of channels for enabling DBS Scan */
+#define HDD_MIN_CHAN_DBS_SCAN_THRESHOLD         8
+
+/* HDD Scan inactivity timeout set to 10 seconds
+ * more than the CSR CMD Timeout */
+#define HDD_SCAN_INACTIVITY_TIMEOUT \
+	(CSR_ACTIVE_SCAN_LIST_CMD_TIMEOUT + (10*1000))
 /*
  * enum scan_source - scan request source
  *
  * @NL_SCAN: Scan initiated from NL
  * @VENDOR_SCAN: Scan intiated from vendor command
-*/
+ */
 enum scan_source {
 	NL_SCAN,
 	VENDOR_SCAN,
@@ -125,9 +141,38 @@ int wlan_hdd_vendor_abort_scan(
 void hdd_cleanup_scan_queue(hdd_context_t *hdd_ctx);
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)) || \
-    defined(CFG80211_ABORT_SCAN)
+	defined(CFG80211_ABORT_SCAN)
 void wlan_hdd_cfg80211_abort_scan(struct wiphy *wiphy,
 				  struct wireless_dev *wdev);
 #endif
-#endif /* end #if !defined(WLAN_HDD_SCAN_H) */
 
+/**
+ * wlan_hdd_fill_whitelist_ie_attrs - fill the white list members
+ * @ie_whitelist: enables whitelist
+ * @probe_req_ie_bitmap: bitmap to be filled
+ * @num_vendor_oui: pointer to no of ouis
+ * @voui: pointer to ouis to be filled
+ * @hdd_ctx: pointer to hdd ctx
+ *
+ * This function fills the ie bitmap and vendor oui fields with the
+ * corresponding values present in config and hdd_ctx
+ *
+ * Return: None
+ */
+void wlan_hdd_fill_whitelist_ie_attrs(bool *ie_whitelist,
+				      uint32_t *probe_req_ie_bitmap,
+				      uint32_t *num_vendor_oui,
+				      uint32_t *voui,
+				      hdd_context_t *hdd_ctx);
+
+/**
+ * wlan_hdd_cfg80211_scan_block_cb() - scan block work handler
+ * @work: Pointer to work
+ *
+ * This function is used to do scan block work handler
+ *
+ * Return: none
+ */
+void wlan_hdd_cfg80211_scan_block_cb(struct work_struct *work);
+
+#endif /* end #if !defined(WLAN_HDD_SCAN_H) */

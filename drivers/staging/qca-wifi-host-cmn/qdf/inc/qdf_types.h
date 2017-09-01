@@ -136,6 +136,14 @@ typedef __qdf_dma_size_t     qdf_dma_size_t;
  */
 typedef __qdf_dma_context_t qdf_dma_context_t;
 
+typedef __qdf_mem_info_t qdf_mem_info_t;
+typedef __sgtable_t sgtable_t;
+
+/**
+ * typedef qdf_dma_dir_t - DMA data direction.
+ */
+typedef __qdf_dma_dir_t qdf_dma_dir_t;
+
 /**
  * struct qdf_dma_map_info - Information inside a DMA map.
  * @nsegs: total number mapped segments
@@ -150,6 +158,20 @@ typedef struct qdf_dma_map_info {
 		qdf_dma_size_t len;
 	} dma_segs[QDF_MAX_SCATTER];
 } qdf_dmamap_info_t;
+
+/**
+ * struct qdf_shared_mem - Shared memory resource
+ * @mem_info: memory info struct
+ * @vaddr: virtual address
+ * @sgtable: scatter-gather table
+ * @memctx: dma address
+ */
+typedef struct qdf_shared_mem {
+	qdf_mem_info_t mem_info;
+	void *vaddr;
+	sgtable_t sgtable;
+	qdf_dma_mem_context(memctx);
+} qdf_shared_mem_t;
 
 #define qdf_iomem_t __qdf_iomem_t;
 
@@ -190,16 +212,23 @@ typedef struct {
 } qdf_resource_t;
 
 /**
- * typedef qdf_dma_dir_t - DMA directions
- * @QDF_DMA_BIDIRECTIONAL: bidirectional data
- * @QDF_DMA_TO_DEVICE: data going from device to memory
- * @QDF_DMA_FROM_DEVICE: data going from memory to device
+ * enum qdf_driver_type - Indicate the driver type and based on this
+ * do appropriate initialization.
+ *
+ * @QDF_DRIVER_TYPE_PRODUCTION: Driver used in the production
+ * @QDF_DRIVER_TYPE_MFG: Driver used in the Factory
+ * @QDF_DRIVER_TYPE_INVALID: Invalid and unrecognized type
+ *
  */
-typedef enum {
-	QDF_DMA_BIDIRECTIONAL = __QDF_DMA_BIDIRECTIONAL,
-	QDF_DMA_TO_DEVICE = __QDF_DMA_TO_DEVICE,
-	QDF_DMA_FROM_DEVICE = __QDF_DMA_FROM_DEVICE,
-} qdf_dma_dir_t;
+enum qdf_driver_type {
+	QDF_DRIVER_TYPE_PRODUCTION = 0,
+	QDF_DRIVER_TYPE_MFG = 1,
+	QDF_DRIVER_TYPE_INVALID = 0x7FFFFFFF
+};
+
+#define QDF_DMA_BIDIRECTIONAL __QDF_DMA_BIDIRECTIONAL
+#define QDF_DMA_TO_DEVICE __QDF_DMA_TO_DEVICE
+#define QDF_DMA_FROM_DEVICE __QDF_DMA_FROM_DEVICE
 
 /* work queue(kernel thread)/DPC function callback */
 typedef void (*qdf_defer_fn_t)(void *);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, 2013-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011, 2013-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -82,7 +82,7 @@ int ol_rx_pn_wapi_cmp(union htt_rx_pn_t *new_pn,
 qdf_nbuf_t
 ol_rx_pn_check_base(struct ol_txrx_vdev_t *vdev,
 		    struct ol_txrx_peer_t *peer,
-		    unsigned tid, qdf_nbuf_t msdu_list)
+		    unsigned int tid, qdf_nbuf_t msdu_list)
 {
 	struct ol_txrx_pdev_t *pdev = vdev->pdev;
 	union htt_rx_pn_t *last_pn;
@@ -127,8 +127,8 @@ ol_rx_pn_check_base(struct ol_txrx_vdev_t *vdev,
 
 		/* Don't check the PN replay for non-encrypted frames */
 		if (!htt_rx_mpdu_is_encrypted(pdev->htt_pdev, rx_desc)) {
-			ADD_MPDU_TO_LIST(out_list_head, out_list_tail, mpdu,
-					 mpdu_tail);
+			ADD_MPDU_TO_LIST(out_list_head, out_list_tail,
+					       mpdu, mpdu_tail);
 			mpdu = next_mpdu;
 			continue;
 		}
@@ -149,7 +149,6 @@ ol_rx_pn_check_base(struct ol_txrx_vdev_t *vdev,
 		if (pn_is_replay) {
 			qdf_nbuf_t msdu;
 			static uint32_t last_pncheck_print_time /* = 0 */;
-			int log_level;
 			uint32_t current_time_ms;
 
 			/*
@@ -164,12 +163,7 @@ ol_rx_pn_check_base(struct ol_txrx_vdev_t *vdev,
 			if (TXRX_PN_CHECK_FAILURE_PRINT_PERIOD_MS <
 			    (current_time_ms - last_pncheck_print_time)) {
 				last_pncheck_print_time = current_time_ms;
-				log_level = TXRX_PRINT_LEVEL_WARN;
-			} else {
-				log_level = TXRX_PRINT_LEVEL_INFO2;
-			}
-
-			TXRX_PRINT(log_level,
+				ol_txrx_warn(
 				   "PN check failed - TID %d, peer %p "
 				   "(%02x:%02x:%02x:%02x:%02x:%02x) %s\n"
 				   "    old PN (u64 x2)= 0x%08llx %08llx (LSBs = %lld)\n"
@@ -187,6 +181,26 @@ ol_rx_pn_check_base(struct ol_txrx_vdev_t *vdev,
 				   new_pn.pn128[0] & 0xffffffffffffULL,
 				   htt_rx_mpdu_desc_seq_num(pdev->htt_pdev,
 							    rx_desc));
+			} else {
+				ol_txrx_dbg(
+				   "PN check failed - TID %d, peer %p "
+				   "(%02x:%02x:%02x:%02x:%02x:%02x) %s\n"
+				   "    old PN (u64 x2)= 0x%08llx %08llx (LSBs = %lld)\n"
+				   "    new PN (u64 x2)= 0x%08llx %08llx (LSBs = %lld)\n"
+				   "    new seq num = %d\n",
+				   tid, peer,
+				   peer->mac_addr.raw[0], peer->mac_addr.raw[1],
+				   peer->mac_addr.raw[2], peer->mac_addr.raw[3],
+				   peer->mac_addr.raw[4], peer->mac_addr.raw[5],
+				   (index ==
+				    txrx_sec_ucast) ? "ucast" : "mcast",
+				   last_pn->pn128[1], last_pn->pn128[0],
+				   last_pn->pn128[0] & 0xffffffffffffULL,
+				   new_pn.pn128[1], new_pn.pn128[0],
+				   new_pn.pn128[0] & 0xffffffffffffULL,
+				   htt_rx_mpdu_desc_seq_num(pdev->htt_pdev,
+							    rx_desc));
+			}
 #if defined(ENABLE_RX_PN_TRACE)
 			ol_rx_pn_trace_display(pdev, 1);
 #endif /* ENABLE_RX_PN_TRACE */
@@ -198,18 +212,18 @@ ol_rx_pn_check_base(struct ol_txrx_vdev_t *vdev,
 			/* free all MSDUs within this MPDU */
 			do {
 				qdf_nbuf_t next_msdu;
+
 				OL_RX_ERR_STATISTICS_1(pdev, vdev, peer,
 						       rx_desc, OL_RX_ERR_PN);
 				next_msdu = qdf_nbuf_next(msdu);
 				htt_rx_desc_frame_free(pdev->htt_pdev, msdu);
 				if (msdu == mpdu_tail)
 					break;
-				else
-					msdu = next_msdu;
+				msdu = next_msdu;
 			} while (1);
 		} else {
-			ADD_MPDU_TO_LIST(out_list_head, out_list_tail, mpdu,
-					 mpdu_tail);
+			ADD_MPDU_TO_LIST(out_list_head, out_list_tail,
+					       mpdu, mpdu_tail);
 			/*
 			 * Remember the new PN.
 			 * For simplicity, just do 2 64-bit word copies to
@@ -234,7 +248,8 @@ ol_rx_pn_check_base(struct ol_txrx_vdev_t *vdev,
 
 void
 ol_rx_pn_check(struct ol_txrx_vdev_t *vdev,
-	       struct ol_txrx_peer_t *peer, unsigned tid, qdf_nbuf_t msdu_list)
+	       struct ol_txrx_peer_t *peer, unsigned int tid,
+	       qdf_nbuf_t msdu_list)
 {
 	msdu_list = ol_rx_pn_check_base(vdev, peer, tid, msdu_list);
 	ol_rx_fwd_check(vdev, peer, tid, msdu_list);
@@ -243,7 +258,7 @@ ol_rx_pn_check(struct ol_txrx_vdev_t *vdev,
 void
 ol_rx_pn_check_only(struct ol_txrx_vdev_t *vdev,
 		    struct ol_txrx_peer_t *peer,
-		    unsigned tid, qdf_nbuf_t msdu_list)
+		    unsigned int tid, qdf_nbuf_t msdu_list)
 {
 	msdu_list = ol_rx_pn_check_base(vdev, peer, tid, msdu_list);
 	ol_rx_deliver(vdev, peer, tid, msdu_list);
@@ -321,6 +336,7 @@ void ol_rx_pn_trace_display(ol_txrx_pdev_handle pdev, int just_once)
 	elems = (end - 1 - start) & pdev->rx_pn_trace.mask;
 	if (limit > 0 && elems > limit) {
 		int delta;
+
 		delta = elems - limit;
 		start += delta;
 		start &= pdev->rx_pn_trace.mask;

@@ -552,7 +552,6 @@ static void armpmu_init(struct arm_pmu *armpmu)
 		.stop		= armpmu_stop,
 		.read		= armpmu_read,
 		.filter_match	= armpmu_filter_match,
-		.events_across_hotplug = 1,
 	};
 }
 
@@ -979,6 +978,7 @@ static int of_pmu_irq_cfg(struct arm_pmu *pmu)
 			if (i > 0 && spi != using_spi) {
 				pr_err("PPI/SPI IRQ type mismatch for %s!\n",
 					dn->name);
+				of_node_put(dn);
 				kfree(irqs);
 				return -EINVAL;
 			}

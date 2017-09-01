@@ -211,6 +211,7 @@ is_ol_tx_discard_frames_success(struct ol_txrx_pdev_t *pdev,
 				struct ol_tx_desc_t *tx_desc)
 {
 	ol_txrx_vdev_handle vdev;
+
 	vdev = tx_desc->vdev;
 	return qdf_atomic_read(&vdev->tx_desc_count) >
 			((ol_tx_desc_pool_size_hl(pdev->ctrl_pdev) >> 1)
@@ -246,6 +247,7 @@ ol_tx_enqueue(
 	 */
 	if (is_ol_tx_discard_frames_success(pdev, tx_desc)) {
 		ol_tx_desc_list tx_descs;
+
 		TAILQ_INIT(&tx_descs);
 		ol_tx_queue_discard(pdev, false, &tx_descs);
 		/*Discard Frames in Discard List*/
@@ -288,7 +290,7 @@ ol_tx_dequeue(
 {
 	u_int16_t num_frames;
 	int bytes_sum;
-	unsigned credit_sum;
+	unsigned int credit_sum;
 
 	TXRX_ASSERT2(txq->flag != ol_tx_queue_paused);
 	TX_SCHED_DEBUG_PRINT("Enter %s\n", __func__);
@@ -299,8 +301,9 @@ ol_tx_dequeue(
 	bytes_sum = 0;
 	credit_sum = 0;
 	for (num_frames = 0; num_frames < max_frames; num_frames++) {
-		unsigned frame_credit;
+		unsigned int frame_credit;
 		struct ol_tx_desc_t *tx_desc;
+
 		tx_desc = TAILQ_FIRST(&txq->head);
 
 		frame_credit = htt_tx_msdu_credit(tx_desc->netbuf);
@@ -417,6 +420,7 @@ ol_txrx_peer_pause_but_no_mgmt_q_base(
 	struct ol_txrx_peer_t *peer)
 {
 	int i;
+
 	for (i = 0; i < OL_TX_MGMT_TID; i++)
 		ol_txrx_peer_tid_pause_base(pdev, peer, i);
 }
@@ -436,6 +440,7 @@ ol_txrx_peer_pause_base(
 	struct ol_txrx_peer_t *peer)
 {
 	int i;
+
 	for (i = 0; i < QDF_ARRAY_SIZE(peer->txqs); i++)
 		ol_txrx_peer_tid_pause_base(pdev, peer, i);
 }
@@ -505,6 +510,7 @@ ol_txrx_peer_unpause_but_no_mgmt_q_base(
 	struct ol_txrx_peer_t *peer)
 {
 	int i;
+
 	for (i = 0; i < OL_TX_MGMT_TID; i++)
 		ol_txrx_peer_tid_unpause_base(pdev, peer, i);
 }
@@ -523,6 +529,7 @@ ol_txrx_peer_tid_unpause(ol_txrx_peer_handle peer, int tid)
 
 	if (tid == -1) {
 		int i;
+
 		for (i = 0; i < QDF_ARRAY_SIZE(peer->txqs); i++)
 			ol_txrx_peer_tid_unpause_base(pdev, peer, i);
 
@@ -595,6 +602,7 @@ void ol_txrx_vdev_unpause(ol_txrx_vdev_handle vdev, uint32_t reason)
 {
 	struct ol_txrx_pdev_t *pdev = vdev->pdev;
 	struct ol_txrx_peer_t *peer;
+
 	/* TO DO: log the queue unpause */
 	/* acquire the mutex lock, since we'll be modifying the queues */
 	TX_SCHED_DEBUG_PRINT("Enter %s\n", __func__);
@@ -787,8 +795,18 @@ ol_tx_bad_peer_update_tx_limit(struct ol_txrx_pdev_t *pdev,
 			       u_int16_t frames,
 			       u_int16_t tx_limit_flag)
 {
+	if (unlikely(NULL == pdev)) {
+		TX_SCHED_DEBUG_PRINT_ALWAYS("Error: NULL pdev handler\n");
+		return;
+	}
+
+	if (unlikely(NULL == txq)) {
+		TX_SCHED_DEBUG_PRINT_ALWAYS("Error: NULL txq\n");
+		return;
+	}
+
 	qdf_spin_lock_bh(&pdev->tx_peer_bal.mutex);
-	if (txq && tx_limit_flag && (txq->peer) &&
+	if (tx_limit_flag && (txq->peer) &&
 	    (txq->peer->tx_limit_flag)) {
 		if (txq->peer->tx_limit < frames)
 			txq->peer->tx_limit = 0;
@@ -837,7 +855,7 @@ ol_txrx_bad_peer_txctl_update_threshold(struct ol_txrx_pdev_t *pdev,
  *
  * Return: None
  */
-void
+static void
 ol_tx_pdev_peer_bal_timer(void *context)
 {
 	int i;
@@ -853,14 +871,17 @@ ol_tx_pdev_peer_bal_timer(void *context)
 				pdev->tx_peer_bal.limit_list[i].limit;
 
 			struct ol_txrx_peer_t *peer = NULL;
+
 			peer = ol_txrx_peer_find_by_id(pdev, peer_id);
 			TX_SCHED_DEBUG_PRINT(
 				"%s peer_id %d  peer = 0x%x tx limit %d\n",
 				__func__, peer_id,
 				(int)peer, tx_limit);
 
-			/* It is possible the peer limit is still not 0,
-			   but it is the scenario should not be cared */
+			/*
+			 * It is possible the peer limit is still not 0,
+			 * but it is the scenario should not be cared
+			 */
 			if (peer) {
 				peer->tx_limit = tx_limit;
 			} else {
@@ -986,6 +1007,7 @@ ol_txrx_peer_link_status_handler(
 		peer = ol_txrx_peer_find_by_id(pdev, peer_id);
 		if (peer) {
 			u_int32_t thresh, limit, phy;
+
 			phy = peer_link_status->phy;
 			thresh = pdev->tx_peer_bal.ctl_thresh[phy].tput_thresh;
 			limit = pdev->tx_peer_bal.ctl_thresh[phy].tx_limit;
@@ -1072,7 +1094,7 @@ ol_tx_queue_log_entry_type_info(
 			struct ol_tx_log_queue_state_var_sz_t *record;
 
 			align_pad =
-				(*align - ((((u_int32_t) *type) + 1)))
+			(*align - (uint32_t)(((unsigned long) type) + 1))
 							& (*align - 1);
 			record = (struct ol_tx_log_queue_state_var_sz_t *)
 				(type + 1 + align_pad);
@@ -1150,9 +1172,9 @@ ol_tx_queue_log_oldest_update(struct ol_txrx_pdev_t *pdev, int offset)
 			(align - ((oldest_record_offset + 1/*type*/)))
 							& (align - 1);
 		/*
-		   QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_INFO_LOW,
-		   "TXQ LOG old alloc: offset %d, type %d, size %d (%d)\n",
-		   oldest_record_offset, type, size, size + 1 + align_pad);
+		 * QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_INFO_LOW,
+		 * "TXQ LOG old alloc: offset %d, type %d, size %d (%d)\n",
+		 * oldest_record_offset, type, size, size + 1 + align_pad);
 		 */
 		oldest_record_offset += size + 1 + align_pad;
 	}
@@ -1171,7 +1193,7 @@ ol_tx_queue_log_oldest_update(struct ol_txrx_pdev_t *pdev, int offset)
  *
  * Return: log element
  */
-void*
+static void*
 ol_tx_queue_log_alloc(
 	struct ol_txrx_pdev_t *pdev,
 	u_int8_t type /* ol_tx_log_entry_type */,
@@ -1209,9 +1231,9 @@ alloc_found:
 						ol_tx_log_entry_type_wrap;
 
 	/*
-	   QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_INFO_LOW,
-	   "TXQ LOG new alloc: offset %d, type %d, size %d (%d)\n",
-	   offset, type, size, size + 1 + align_pad);
+	 * QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_INFO_LOW,
+	 * "TXQ LOG new alloc: offset %d, type %d, size %d (%d)\n",
+	 * offset, type, size, size + 1 + align_pad);
 	 */
 	pdev->txq_log.data[offset] = type;
 	pdev->txq_log.offset = offset + size + 1 + align_pad;
@@ -1246,6 +1268,7 @@ ol_tx_queue_log_record_display(struct ol_txrx_pdev_t *pdev, int offset)
 	case ol_tx_log_entry_type_enqueue:
 	{
 		struct ol_tx_log_queue_add_t record;
+
 		qdf_mem_copy(&record,
 			     &pdev->txq_log.data[offset + 1 + align_pad],
 			     sizeof(struct ol_tx_log_queue_add_t));
@@ -1278,13 +1301,14 @@ ol_tx_queue_log_record_display(struct ol_txrx_pdev_t *pdev, int offset)
 				  QDF_TRACE_LEVEL_INFO,
 				  "Q: %6d  %5d  %3d  from vdev",
 				  record.num_frms, record.num_bytes,
-				   record.tid);
+				  record.tid);
 		}
 		break;
 	}
 	case ol_tx_log_entry_type_dequeue:
 	{
 		struct ol_tx_log_queue_add_t record;
+
 		qdf_mem_copy(&record,
 			     &pdev->txq_log.data[offset + 1 + align_pad],
 			     sizeof(struct ol_tx_log_queue_add_t));
@@ -1323,6 +1347,7 @@ ol_tx_queue_log_record_display(struct ol_txrx_pdev_t *pdev, int offset)
 	case ol_tx_log_entry_type_queue_free:
 	{
 		struct ol_tx_log_queue_add_t record;
+
 		qdf_mem_copy(&record,
 			     &pdev->txq_log.data[offset + 1 + align_pad],
 			     sizeof(struct ol_tx_log_queue_add_t));
@@ -1442,6 +1467,7 @@ ol_tx_queue_log_display(struct ol_txrx_pdev_t *pdev)
 
 	while (unwrap || offset != pdev->txq_log.offset) {
 		int delta = ol_tx_queue_log_record_display(pdev, offset);
+
 		if (delta == 0)
 			return; /* error */
 
@@ -1461,6 +1487,7 @@ ol_tx_queue_log_enqueue(
 	int tid;
 	u_int16_t peer_id = msdu_info->htt.info.peer_id;
 	struct ol_tx_log_queue_add_t *log_elem;
+
 	tid = msdu_info->htt.info.ext_tid;
 
 	qdf_spin_lock_bh(&pdev->txq_log_spinlock);
@@ -1632,6 +1659,7 @@ ol_tx_queues_display(struct ol_txrx_pdev_t *pdev)
 	TAILQ_FOREACH(vdev, &pdev->vdev_list, vdev_list_elem) {
 		struct ol_txrx_peer_t *peer;
 		int i;
+
 		for (i = 0; i < QDF_ARRAY_SIZE(vdev->txqs); i++) {
 			if (vdev->txqs[i].frms == 0)
 				continue;
@@ -1763,7 +1791,6 @@ void ol_txrx_vdev_flush(ol_txrx_vdev_handle vdev)
 #if (!defined(QCA_LL_LEGACY_TX_FLOW_CONTROL)) && (!defined(CONFIG_HL_SUPPORT))
 void ol_txrx_vdev_flush(ol_txrx_vdev_handle data_vdev)
 {
-	return;
 }
 #endif
 
@@ -1791,7 +1818,7 @@ ol_txrx_map_to_netif_reason_type(uint32_t reason)
 	case OL_TXQ_PAUSE_REASON_THERMAL_MITIGATION:
 		return WLAN_THERMAL_MITIGATION;
 	default:
-		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+		ol_txrx_err(
 			   "%s: reason not supported %d\n",
 			   __func__, reason);
 		return WLAN_REASON_TYPE_MAX;
@@ -1811,8 +1838,7 @@ void ol_txrx_vdev_pause(ol_txrx_vdev_handle vdev, uint32_t reason)
 	enum netif_reason_type netif_reason;
 
 	if (qdf_unlikely((!pdev) || (!pdev->pause_cb))) {
-		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
-				   "%s: invalid pdev\n", __func__);
+		ol_txrx_err("%s: invalid pdev\n", __func__);
 		return;
 	}
 
@@ -1836,7 +1862,7 @@ void ol_txrx_vdev_unpause(ol_txrx_vdev_handle vdev, uint32_t reason)
 	enum netif_reason_type netif_reason;
 
 	if (qdf_unlikely((!pdev) || (!pdev->pause_cb))) {
-		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+		ol_txrx_err(
 				   "%s: invalid pdev\n", __func__);
 		return;
 	}
@@ -1902,7 +1928,6 @@ static inline
 void ol_txrx_thermal_pause(struct ol_txrx_pdev_t *pdev)
 {
 	ol_txrx_pdev_pause(pdev, OL_TXQ_PAUSE_REASON_THERMAL_MITIGATION);
-	return;
 }
 /**
  * ol_txrx_thermal_unpause() - unpause due to thermal mitigation
@@ -1914,7 +1939,6 @@ static inline
 void ol_txrx_thermal_unpause(struct ol_txrx_pdev_t *pdev)
 {
 	ol_txrx_pdev_unpause(pdev, OL_TXQ_PAUSE_REASON_THERMAL_MITIGATION);
-	return;
 }
 #else
 /**
@@ -1926,7 +1950,6 @@ void ol_txrx_thermal_unpause(struct ol_txrx_pdev_t *pdev)
 static inline
 void ol_txrx_thermal_pause(struct ol_txrx_pdev_t *pdev)
 {
-	return;
 }
 
 /**
@@ -1939,7 +1962,6 @@ static inline
 void ol_txrx_thermal_unpause(struct ol_txrx_pdev_t *pdev)
 {
 	ol_tx_pdev_ll_pause_queue_send_all(pdev);
-	return;
 }
 #endif
 
@@ -1958,7 +1980,7 @@ static void ol_tx_pdev_throttle_phase_timer(void *context)
 
 	if (pdev->tx_throttle.current_throttle_phase == THROTTLE_PHASE_OFF) {
 		/* Traffic is stopped */
-		TXRX_PRINT(TXRX_PRINT_LEVEL_WARN,
+		ol_txrx_dbg(
 				   "throttle phase --> OFF\n");
 		ol_txrx_throttle_pause(pdev);
 		ol_txrx_thermal_pause(pdev);
@@ -1967,14 +1989,14 @@ static void ol_tx_pdev_throttle_phase_timer(void *context)
 		ms = pdev->tx_throttle.throttle_time_ms[cur_level][cur_phase];
 		if (pdev->tx_throttle.current_throttle_level !=
 				THROTTLE_LEVEL_0) {
-			TXRX_PRINT(TXRX_PRINT_LEVEL_WARN,
+			ol_txrx_dbg(
 					   "start timer %d ms\n", ms);
 			qdf_timer_start(&pdev->tx_throttle.
 							phase_timer, ms);
 		}
 	} else {
 		/* Traffic can go */
-		TXRX_PRINT(TXRX_PRINT_LEVEL_WARN,
+		ol_txrx_dbg(
 					"throttle phase --> ON\n");
 		ol_txrx_throttle_unpause(pdev);
 		ol_txrx_thermal_unpause(pdev);
@@ -1983,7 +2005,7 @@ static void ol_tx_pdev_throttle_phase_timer(void *context)
 		ms = pdev->tx_throttle.throttle_time_ms[cur_level][cur_phase];
 		if (pdev->tx_throttle.current_throttle_level !=
 		    THROTTLE_LEVEL_0) {
-			TXRX_PRINT(TXRX_PRINT_LEVEL_WARN, "start timer %d ms\n",
+			ol_txrx_dbg("start timer %d ms\n",
 				   ms);
 			qdf_timer_start(&pdev->tx_throttle.phase_timer,
 						ms);
@@ -1995,6 +2017,7 @@ static void ol_tx_pdev_throttle_phase_timer(void *context)
 static void ol_tx_pdev_throttle_tx_timer(void *context)
 {
 	struct ol_txrx_pdev_t *pdev = (struct ol_txrx_pdev_t *)context;
+
 	ol_tx_pdev_ll_pause_queue_send_all(pdev);
 }
 #endif
@@ -2053,13 +2076,13 @@ void ol_tx_throttle_set_level(struct ol_txrx_pdev_t *pdev, int level)
 	int ms = 0;
 
 	if (level >= THROTTLE_LEVEL_MAX) {
-		TXRX_PRINT(TXRX_PRINT_LEVEL_WARN,
+		ol_txrx_dbg(
 			   "%s invalid throttle level set %d, ignoring\n",
 			   __func__, level);
 		return;
 	}
 
-	TXRX_PRINT(TXRX_PRINT_LEVEL_ERR, "Setting throttle level %d\n", level);
+	ol_txrx_info("Setting throttle level %d\n", level);
 
 	/* Set the current throttle level */
 	pdev->tx_throttle.current_throttle_level = (enum throttle_level) level;
@@ -2078,7 +2101,7 @@ void ol_tx_throttle_init_period(struct ol_txrx_pdev_t *pdev, int period,
 	/* Set the current throttle level */
 	pdev->tx_throttle.throttle_period_ms = period;
 
-	TXRX_PRINT(TXRX_PRINT_LEVEL_WARN, "level  OFF  ON\n");
+	ol_txrx_dbg("level  OFF  ON\n");
 	for (i = 0; i < THROTTLE_LEVEL_MAX; i++) {
 		pdev->tx_throttle.throttle_time_ms[i][THROTTLE_PHASE_ON] =
 			pdev->tx_throttle.throttle_period_ms -
@@ -2088,7 +2111,7 @@ void ol_tx_throttle_init_period(struct ol_txrx_pdev_t *pdev, int period,
 			pdev->tx_throttle.throttle_period_ms -
 			pdev->tx_throttle.throttle_time_ms[
 				i][THROTTLE_PHASE_ON];
-		TXRX_PRINT(TXRX_PRINT_LEVEL_WARN, "%d      %d    %d\n", i,
+		ol_txrx_dbg("%d      %d    %d\n", i,
 			   pdev->tx_throttle.
 			   throttle_time_ms[i][THROTTLE_PHASE_OFF],
 			   pdev->tx_throttle.
@@ -2146,6 +2169,7 @@ ol_tx_vdev_has_tx_queue_group(
 	u_int8_t vdev_id)
 {
 	u_int16_t vdev_bitmap;
+
 	vdev_bitmap = OL_TXQ_GROUP_VDEV_ID_MASK_GET(group->membership);
 	if (OL_TXQ_GROUP_VDEV_ID_BIT_MASK_GET(vdev_bitmap, vdev_id))
 		return true;
@@ -2166,6 +2190,7 @@ ol_tx_ac_has_tx_queue_group(
 	u_int8_t ac)
 {
 	u_int16_t ac_bitmap;
+
 	ac_bitmap = OL_TXQ_GROUP_AC_MASK_GET(group->membership);
 	if (OL_TXQ_GROUP_AC_BIT_MASK_GET(ac_bitmap, ac))
 		return true;
@@ -2180,6 +2205,7 @@ u_int32_t ol_tx_txq_group_credit_limit(
 {
 	u_int8_t i;
 	int updated_credit = credit;
+
 	/*
 	 * If this tx queue belongs to a group, check whether the group's
 	 * credit limit is more stringent than the global credit limit.
@@ -2229,6 +2255,7 @@ ol_tx_set_vdev_group_ptr(
 	TAILQ_FOREACH(vdev, &pdev->vdev_list, vdev_list_elem) {
 		if (vdev->vdev_id == vdev_id) {
 			u_int8_t i, j;
+
 			/* update vdev queues group pointers */
 			for (i = 0; i < OL_TX_VDEV_NUM_QUEUES; i++) {
 				for (j = 0; j < OL_TX_MAX_GROUPS_PER_QUEUE; j++)
@@ -2256,6 +2283,7 @@ void ol_tx_txq_set_group_ptr(
 	struct ol_tx_queue_group_t *grp_ptr)
 {
 	u_int8_t i;
+
 	for (i = 0; i < OL_TX_MAX_GROUPS_PER_QUEUE; i++)
 		txq->group_ptrs[i] = grp_ptr;
 }

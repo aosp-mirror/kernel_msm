@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -67,7 +67,11 @@
 	((LIntrvl * LIM_TIM_WAIT_COUNT_FACTOR) > LIM_MIN_TIM_WAIT_COUNT ? \
 	(LIntrvl * LIM_TIM_WAIT_COUNT_FACTOR) : LIM_MIN_TIM_WAIT_COUNT)
 
-#define LIM_MAX_CSA_IE_UPDATES    (5)
+#ifdef CHANNEL_HOPPING_ALL_BANDS
+#define CHAN_HOP_ALL_BANDS_ENABLE        1
+#else
+#define CHAN_HOP_ALL_BANDS_ENABLE        0
+#endif
 
 /* enums exported by LIM are as follows */
 
@@ -99,7 +103,6 @@ typedef enum eLimSmeStates {
 	eLIM_SME_WT_AUTH_STATE,
 	eLIM_SME_WT_ASSOC_STATE,
 	eLIM_SME_WT_REASSOC_STATE,
-	eLIM_SME_WT_REASSOC_LINK_FAIL_STATE,
 	eLIM_SME_JOIN_FAILURE_STATE,
 	eLIM_SME_ASSOCIATED_STATE,
 	eLIM_SME_REASSOCIATED_STATE,
@@ -237,6 +240,11 @@ typedef struct sLimMlmJoinReq {
 	tSirMacRateSet operationalRateSet;
 	uint8_t sessionId;
 	tSirBssDescription bssDescription;
+	/*
+	 * WARNING: Pls make bssDescription as last variable in struct
+	 * tLimMlmJoinReq as it has ieFields followed after this bss
+	 * description. Adding a variable after this corrupts the ieFields
+	 */
 } tLimMlmJoinReq, *tpLimMlmJoinReq;
 
 typedef struct sLimMlmScanReq {

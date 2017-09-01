@@ -244,7 +244,7 @@ void lim_update_sta_run_time_ht_info(struct sAniSirGlobal *pMac,
 void lim_cancel_dot11h_channel_switch(tpAniSirGlobal pMac,
 		tpPESession psessionEntry);
 void lim_cancel_dot11h_quiet(tpAniSirGlobal pMac, tpPESession psessionEntry);
-tAniBool lim_is_channel_valid_for_channel_switch(tpAniSirGlobal pMac,
+bool lim_is_channel_valid_for_channel_switch(tpAniSirGlobal pMac,
 		uint8_t channel);
 void lim_frame_transmission_control(tpAniSirGlobal pMac, tLimQuietTxMode type,
 		tLimControlTx mode);
@@ -413,6 +413,19 @@ tSirRetStatus lim_post_sm_state_update(tpAniSirGlobal pMac,
 void lim_delete_sta_context(tpAniSirGlobal pMac, tpSirMsgQ limMsg);
 void lim_delete_dialogue_token_list(tpAniSirGlobal pMac);
 void lim_resset_scan_channel_info(tpAniSirGlobal pMac);
+
+/**
+ * lim_add_channel_status_info() - store
+ * chan status info into Global MAC structure
+ * @p_mac: Pointer to Global MAC structure
+ * @channel_stat: Pointer to chan status info reported by firmware
+ * @channel_id: current channel id
+ *
+ * Return: None
+ */
+void lim_add_channel_status_info(tpAniSirGlobal p_mac,
+				 struct lim_channel_status *channel_stat,
+				 uint8_t channel_id);
 uint8_t lim_get_channel_from_beacon(tpAniSirGlobal pMac,
 		tpSchBeaconStruct pBeacon);
 tSirNwType lim_get_nw_type(tpAniSirGlobal pMac, uint8_t channelNum,
@@ -632,7 +645,8 @@ QDF_STATUS lim_send_ext_cap_ie(tpAniSirGlobal mac_ctx, uint32_t session_id,
 			       tDot11fIEExtCap *extracted_extcap, bool merge);
 
 QDF_STATUS lim_send_ies_per_band(tpAniSirGlobal mac_ctx,
-				 tpPESession session, uint8_t vdev_id);
+				 tpPESession session, uint8_t vdev_id,
+				 uint8_t is_hw_mode_dbs);
 
 tSirRetStatus lim_strip_extcap_ie(tpAniSirGlobal mac_ctx, uint8_t *addn_ie,
 			  uint16_t *addn_ielen, uint8_t *extracted_extcap);
@@ -695,6 +709,9 @@ tSirRetStatus lim_strip_ie(tpAniSirGlobal mac_ctx,
 		uint8_t eid, eSizeOfLenField size_of_len_field,
 		uint8_t *oui, uint8_t out_len, uint8_t *extracted_ie,
 		uint32_t eid_max_len);
+bool lim_get_rx_ldpc(tpAniSirGlobal mac_ctx, enum channel_enum ch,
+			   uint8_t is_hw_mode_dbs);
+
 /**
  * lim_decrement_pending_mgmt_count: Decrement mgmt frame count
  * @mac_ctx: Pointer to global MAC structure
@@ -708,4 +725,53 @@ void lim_decrement_pending_mgmt_count(tpAniSirGlobal mac_ctx);
 QDF_STATUS lim_util_get_type_subtype(void *pkt, uint8_t *type,
 					uint8_t *subtype);
 
+/**
+ * lim_send_chan_switch_action_frame()- function to send ECSA/CSA
+ * action frame for each sta connected to SAP/GO and AP in case of
+ * STA .
+ * @mac_ctx: pointer to global mac structure
+ * @new_channel: new channel to switch to.
+ * @ch_bandwidth: BW of channel to calculate op_class
+ * @session_entry: pe session
+ *
+ * This function is called to send ECSA/CSA frame for STA/CLI and SAP/GO.
+ *
+ * Return: void
+ */
+void lim_send_chan_switch_action_frame(tpAniSirGlobal mac_ctx,
+			uint16_t new_channel, uint8_t ch_bandwidth,
+			tpPESession session_entry);
+
+/**
+ * lim_assoc_rej_add_to_rssi_based_reject_list() - Add BSSID to the rssi based
+ * rejection list
+ * @mac_ctx: mac ctx
+ * @rssi_assoc_rej: rssi assoc reject attribute
+ * @bssid : BSSID of the AP
+ * @rssi : RSSI of the assoc resp
+ *
+ * Add BSSID to the rssi based rejection list. Also if number
+ * of entries is greater than MAX_RSSI_AVOID_BSSID_LIST
+ * remove the entry with lowest time delta
+ *
+ * Return: void
+ */
+void lim_assoc_rej_add_to_rssi_based_reject_list(tpAniSirGlobal mac_ctx,
+	tDot11fTLVrssi_assoc_rej  *rssi_assoc_rej,
+	tSirMacAddr bssid, int8_t rssi);
+
+/**
+ * lim_check_if_vendor_oui_match() - Check if the given OUI match in IE buffer
+ * @mac_ctx: MAC context
+ * @ie: IE buffer
+ * @ie_len: length of @ie
+ *
+ * This API is used to check if given vendor OUI
+ * matches in given IE buffer
+ *
+ * Return: True, if mataches. False otherwise
+ */
+bool lim_check_if_vendor_oui_match(tpAniSirGlobal mac_ctx,
+				uint8_t *oui, uint8_t oui_len,
+				uint8_t *ie, uint8_t ie_len);
 #endif /* __LIM_UTILS_H */

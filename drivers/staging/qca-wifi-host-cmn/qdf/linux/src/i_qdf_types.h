@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -66,6 +66,9 @@
 #include <linux/dma-mapping.h>
 #include <linux/wireless.h>
 #include <linux/if.h>
+#ifdef IPA_OFFLOAD
+#include <ipa.h>
+#endif
 #else
 
 /*
@@ -127,6 +130,26 @@ typedef int (*__qdf_os_intr)(void *);
 typedef dma_addr_t __qdf_dma_addr_t;
 typedef size_t __qdf_dma_size_t;
 typedef dma_addr_t __qdf_dma_context_t;
+typedef enum dma_data_direction __qdf_dma_dir_t;
+
+#ifdef IPA_OFFLOAD
+typedef struct ipa_wdi_buffer_info __qdf_mem_info_t;
+#else
+/**
+ * struct __qdf_shared_mem_info - shared mem info struct
+ * @pa : physical address
+ * @iova: i/o virtual address
+ * @size: allocated memory size
+ * @result: status
+ */
+typedef struct __qdf_shared_mem_info {
+	phys_addr_t pa;
+	unsigned long iova;
+	size_t size;
+	int result;
+} __qdf_mem_info_t;
+#endif /* IPA_OFFLOAD */
+typedef struct sg_table __sgtable_t;
 
 #define qdf_dma_mem_context(context) dma_addr_t context
 #define qdf_get_dma_mem_context(var, field)   ((qdf_dma_context_t)(var->field))
@@ -190,6 +213,7 @@ struct __qdf_device {
 #ifdef CONFIG_MCL
 	const struct hif_bus_id *bid;
 #endif
+	bool smmu_s1_enabled;
 };
 typedef struct __qdf_device *__qdf_device_t;
 
@@ -223,7 +247,6 @@ struct __qdf_dma_map {
 	__qdf_segment_t      seg[__QDF_MAX_SCATTER];
 };
 typedef struct  __qdf_dma_map  *__qdf_dma_map_t;
-typedef uint32_t  ath_dma_addr_t;
 
 /**
  * __qdf_net_wireless_evcode - enum for event code

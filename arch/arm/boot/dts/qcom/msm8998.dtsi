@@ -275,6 +275,30 @@
 
 	soc: soc { };
 
+	vendor: vendor {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges = <0 0 0 0xffffffff>;
+		compatible = "simple-bus";
+	};
+
+	firmware: firmware {
+		android {
+			compatible = "android,firmware";
+			fstab {
+				compatible = "android,fstab";
+				vendor {
+					compatible = "android,vendor";
+					dev = "/dev/block/platform/soc/1da4000.ufshc/by-name/vendor";
+					type = "ext4";
+					mnt_flags = "ro,barrier=1,discard";
+					fsmgr_flags = "wait,slotselect";
+					status = "ok";
+				};
+			};
+		};
+	};
+
 	reserved-memory {
 		#address-cells = <2>;
 		#size-cells = <2>;
@@ -1520,6 +1544,7 @@
 		qcom,xprt-linkid = <1>;
 		qcom,xprt-version = <1>;
 		qcom,fragmented-data;
+		qcom,dynamic-wakeup-source;
 	};
 
 	qcom,spcom {
@@ -1820,6 +1845,7 @@
 		vdda18-supply = <&pm8998_l12>;
 		vdda33-supply = <&pm8998_l24>;
 		qcom,vdd-voltage-level = <0 880000 880000>;
+		qcom,vdda33-voltage-level = <2400000 3088000 3088000>;
 		qcom,qusb-phy-init-seq =
 				/* <value reg_offset> */
 					<0x80 0x0
@@ -2340,6 +2366,10 @@
 		hyplog-size-offset = <0x414>;    /* 0x066BFB34 */
 	};
 
+	qcom_msmhdcp: qcom,msm_hdcp {
+		compatible = "qcom,msm-hdcp";
+	};
+
 	qcom_crypto: qcrypto@1DE0000 {
 		compatible = "qcom,qcrypto";
 		reg = <0x1DE0000 0x20000>,
@@ -2627,7 +2657,7 @@
 					0x260 0x10 0x00
 					0x28c 0x06 0x00
 					0x504 0x03 0x00
-					0x500 0x1c 0x00
+					0x500 0x10 0x00
 					0x50c 0x14 0x00
 					0x4d4 0x0a 0x00
 					0x4d8 0x04 0x00
@@ -2649,16 +2679,19 @@
 					0x9a8 0x00 0x00
 					0x8a4 0x01 0x00
 					0x8a8 0x73 0x00
-					0x9d8 0x99 0x00
+					0x9d8 0xaa 0x00
 					0x9b0 0x03 0x00
 					0x804 0x03 0x00
 					0x800 0x00 0x00
 					0x808 0x03 0x00>;
 
-		pinctrl-names = "default";
+		pinctrl-names = "default", "sleep";
 		pinctrl-0 = <&pcie0_clkreq_default
 			&pcie0_perst_default
 			&pcie0_wake_default>;
+		pinctrl-1 = <&pcie0_clkreq_default
+			&pcie0_perst_default
+			&pcie0_wake_sleep>;
 
 		perst-gpio = <&tlmm 35 0>;
 		wake-gpio = <&tlmm 37 0>;
@@ -2679,7 +2712,7 @@
 
 		qcom,ep-latency = <10>;
 
-		qcom,ep-wakeirq;
+		qcom,boot-option = <0x1>;
 
 		linux,pci-domain = <0>;
 
@@ -3030,8 +3063,8 @@
 	qcom,msm-core@780000 {
 		compatible = "qcom,apss-core-ea";
 		reg = <0x780000 0x1000>;
-		qcom,low-hyst-temp = <10>;
-		qcom,high-hyst-temp = <5>;
+		qcom,low-hyst-temp = <100>;
+		qcom,high-hyst-temp = <100>;
 		qcom,polling-interval = <50>;
 
 		ea0: ea0 {
@@ -3071,6 +3104,8 @@
 	msm_ath10k_wlan: qcom,msm_ath10k_wlan {
 		status = "disabled";
 		compatible = "qcom,wcn3990-wifi";
+		reg = <0x18800000 0x800000>;
+		reg-names = "membase";
 		interrupts =
 			<0 413 0 /* CE0 */ >,
 			<0 414 0 /* CE1 */ >,
@@ -3188,6 +3223,11 @@
 			 <&clock_gcc clk_rf_clk3_pin>;
 		clock-names = "rf_clk3_clk", "rf_clk3_pin_clk";
 		qcom,smmu-support;
+		qcom,smmu-s1-en;
+		qcom,smmu-fast-map;
+		qcom,smmu-coherent;
+		qcom,smmu-mapping = <0x20000000 0xe0000000>;
+		qcom,keep-radio-on-during-sleep;
 		status = "disabled";
 	};
 
@@ -3319,3 +3359,4 @@
 #include "msm8998-blsp.dtsi"
 #include "msm8998-audio.dtsi"
 #include "msm-smb138x.dtsi"
+#include "msm8998-sde.dtsi"

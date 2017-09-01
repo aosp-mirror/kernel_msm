@@ -598,7 +598,7 @@ config LEDS_QPNP
 
 config LEDS_QPNP_FLASH_V2
 	tristate "Support for QPNP V2 Flash LEDs"
-	depends on LEDS_CLASS && MFD_SPMI_PMIC && !LEDS_QPNP_FLASH
+	depends on LEDS_CLASS && MFD_SPMI_PMIC
 	help
 	  This driver supports the flash V2 LED functionality of Qualcomm
 	  Technologies, Inc. QPNP PMICs.  This driver supports PMICs starting

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -41,8 +41,7 @@
 #include "cfg_api.h"
 #include "sch_api.h"
 #include "dph_global.h"
-#include "lim_debug.h"
-
+#include "lim_api.h"
 #include "wma_if.h"
 
 /* --------------------------------------------------------------------- */
@@ -135,7 +134,7 @@ tpDphHashNode dph_lookup_hash_entry(tpAniSirGlobal pMac, uint8_t staAddr[],
 	uint16_t index = hash_function(pMac, staAddr, pDphHashTable->size);
 
 	if (!pDphHashTable->pHashTable) {
-		lim_log(pMac, LOGE, FL("pHashTable is NULL"));
+		pe_err("pHashTable is NULL");
 		return ptr;
 	}
 
@@ -241,23 +240,21 @@ tpDphHashNode dph_init_sta_state(tpAniSirGlobal pMac, tSirMacAddr staAddr,
 {
 	uint32_t val;
 
-	tpDphHashNode pStaDs;
+	tpDphHashNode pStaDs, pnext;
 	uint16_t staIdx = STA_INVALID_IDX;
 
 	if (assocId >= pDphHashTable->size) {
-		PELOGE(lim_log(pMac, LOGE, FL("Invalid Assoc Id %d"), assocId);)
+		pe_err("Invalid Assoc Id %d", assocId);
 		return NULL;
 	}
 
 	pStaDs = get_node(pMac, (uint8_t) assocId, pDphHashTable);
 	staIdx = pStaDs->staIndex;
+	pnext = pStaDs->next;
 
-	PELOG1(lim_log
-		       (pMac, LOG1, FL("Assoc Id %d, Addr %08X"), assocId, pStaDs);
-	       )
-	/* Clear the STA node except for the next pointer (last 4 bytes) */
-	qdf_mem_set((uint8_t *) pStaDs,
-		    sizeof(tDphHashNode) - sizeof(tpDphHashNode), 0);
+	/* Clear the STA node except for the next pointer */
+	qdf_mem_set((uint8_t *)pStaDs, sizeof(tDphHashNode), 0);
+	pStaDs->next = pnext;
 
 	/* Initialize the assocId */
 	pStaDs->assocId = assocId;
@@ -272,8 +269,7 @@ tpDphHashNode dph_init_sta_state(tpAniSirGlobal pMac, tSirMacAddr staAddr,
 	/* Initialize fragmentation threshold */
 	if (wlan_cfg_get_int(pMac, WNI_CFG_FRAGMENTATION_THRESHOLD, &val) !=
 	    eSIR_SUCCESS)
-		lim_log(pMac, LOGP,
-			FL("could not retrieve fragmentation threshold"));
+		pe_warn("could not retrieve fragmentation threshold");
 	else
 		pStaDs->fragSize = (uint16_t) val;
 
@@ -313,23 +309,23 @@ tpDphHashNode dph_add_hash_entry(tpAniSirGlobal pMac, tSirMacAddr staAddr,
 	tpDphHashNode ptr, node;
 	uint16_t index = hash_function(pMac, staAddr, pDphHashTable->size);
 
-	PELOG1(lim_log(pMac, LOG1, FL("assocId %d index %d STA addr"),
-		       assocId, index); dph_print_mac_addr(pMac, staAddr, LOG1);
-	       )
+	pe_debug("assocId %d index %d STA addr",
+		       assocId, index);
+	pe_debug(MAC_ADDRESS_STR, MAC_ADDR_ARRAY(staAddr));
 
 	if (assocId >= pDphHashTable->size) {
-		PELOGE(lim_log(pMac, LOGE, FL("invalid STA id %d"), assocId);)
+		pe_err("invalid STA id %d", assocId);
 		return NULL;
 	}
 
 	if (pDphHashTable->pDphNodeArray[assocId].added) {
-		PELOGE(lim_log(pMac, LOGE, FL("already added STA %d"), assocId);)
+		pe_err("already added STA %d", assocId);
 		return NULL;
 	}
 
 	for (ptr = pDphHashTable->pHashTable[index]; ptr; ptr = ptr->next) {
 		if (ptr == ptr->next) {
-			PELOGE(lim_log(pMac, LOGE, FL("Infinite Loop"));)
+			pe_err("Infinite Loop");
 			return NULL;
 		}
 
@@ -340,16 +336,13 @@ tpDphHashNode dph_add_hash_entry(tpAniSirGlobal pMac, tSirMacAddr staAddr,
 
 	if (ptr) {
 		/* Duplicate entry */
-		lim_log(pMac, LOGE, FL("assocId %d hashIndex %d entry exists"),
+		pe_err("assocId %d hashIndex %d entry exists",
 			assocId, index);
 		return NULL;
 	} else {
 		if (dph_init_sta_state
 			    (pMac, staAddr, assocId, false, pDphHashTable) == NULL) {
-			PELOGE(lim_log
-				       (pMac, LOGE, FL("could not Init STAid=%d"),
-				       assocId);
-			       )
+			pe_err("could not Init STA id: %d", assocId);
 			return NULL;
 		}
 		/* Add the node to the link list */
@@ -389,17 +382,16 @@ tSirRetStatus dph_delete_hash_entry(tpAniSirGlobal pMac, tSirMacAddr staAddr,
 	tpDphHashNode ptr, prev;
 	uint16_t index = hash_function(pMac, staAddr, pDphHashTable->size);
 
-	PELOG1(lim_log(pMac, LOG1, FL("assocId %d index %d STA addr"),
-		       assocId, index); dph_print_mac_addr(pMac, staAddr, LOG1);
-	       )
+	pe_debug("assocId %d index %d STA addr", assocId, index);
+	pe_debug(MAC_ADDRESS_STR, MAC_ADDR_ARRAY(staAddr));
 
 	if (assocId >= pDphHashTable->size) {
-		PELOGE(lim_log(pMac, LOGE, FL("invalid STA id %d"), assocId);)
+		pe_err("invalid STA id %d", assocId);
 		return eSIR_FAILURE;
 	}
 
 	if (pDphHashTable->pDphNodeArray[assocId].added == 0) {
-		PELOGE(lim_log(pMac, LOGE, FL("STA %d never added"), assocId);)
+		pe_err("STA %d never added", assocId);
 		return eSIR_FAILURE;
 	}
 
@@ -408,7 +400,7 @@ tSirRetStatus dph_delete_hash_entry(tpAniSirGlobal pMac, tSirMacAddr staAddr,
 		if (dph_compare_mac_addr(staAddr, ptr->staAddr))
 			break;
 		if (prev == ptr) {
-			PELOGE(lim_log(pMac, LOGE, FL("Infinite Loop"));)
+			pe_err("Infinite Loop");
 			return eSIR_FAILURE;
 		}
 	}
@@ -429,40 +421,12 @@ tSirRetStatus dph_delete_hash_entry(tpAniSirGlobal pMac, tSirMacAddr staAddr,
 		ptr->sta_deletion_in_progress = false;
 		ptr->next = 0;
 	} else {
-		/* / Entry not present */
-		PELOGE(lim_log(pMac, LOGE, FL("Entry not present STA addr"));
-		       dph_print_mac_addr(pMac, staAddr, LOGE);
-		       )
+		pe_err("Entry not present STA addr");
+		pe_err(MAC_ADDRESS_STR, MAC_ADDR_ARRAY(staAddr));
 		return eSIR_FAILURE;
 	}
 
 	return eSIR_SUCCESS;
 }
-
-/* --------------------------------------------------------------------- */
-/**
- * dph_print_mac_addr
- *
- * FUNCTION:
- * Print a MAC address
- *
- * LOGIC:
- *
- * ASSUMPTIONS:
- *
- * NOTE:
- *
- * @param addr MAC address
- * @return None
- */
-
-void dph_print_mac_addr(tpAniSirGlobal pMac, uint8_t addr[], uint32_t level)
-{
-	lim_log(pMac, (uint16_t) level,
-		FL("MAC ADDR = %02x:%02x:%02x:%02x:%02x:%02x"),
-		addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
-}
-
-/* --------------------------------------------------------------------- */
 
 

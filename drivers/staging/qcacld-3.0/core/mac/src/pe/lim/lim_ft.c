@@ -80,18 +80,18 @@ void lim_ft_cleanup_all_ft_sessions(tpAniSirGlobal pMac)
 void lim_ft_cleanup(tpAniSirGlobal pMac, tpPESession psessionEntry)
 {
 	if (NULL == psessionEntry) {
-		PELOGE(lim_log(pMac, LOGE, FL("psessionEntry is NULL"));)
+		pe_err("psessionEntry is NULL");
 		return;
 	}
 
 	/* Nothing to be done if the session is not in STA mode */
 	if (!LIM_IS_STA_ROLE(psessionEntry)) {
-		lim_log(pMac, LOGE, FL("psessionEntry is not in STA mode"));
+		pe_err("psessionEntry is not in STA mode");
 		return;
 	}
 
 	if (NULL != psessionEntry->ftPEContext.pFTPreAuthReq) {
-		lim_log(pMac, LOG1, FL("Freeing pFTPreAuthReq= %p"),
+		pe_debug("Freeing pFTPreAuthReq: %p",
 			       psessionEntry->ftPEContext.pFTPreAuthReq);
 		if (NULL !=
 		    psessionEntry->ftPEContext.pFTPreAuthReq->
@@ -138,22 +138,20 @@ void lim_ft_prepare_add_bss_req(tpAniSirGlobal pMac,
 
 	/* Nothing to be done if the session is not in STA mode */
 	if (!LIM_IS_STA_ROLE(pftSessionEntry)) {
-		lim_log(pMac, LOGE, FL("psessionEntry is not in STA mode"));
+		pe_err("psessionEntry is not in STA mode");
 		return;
 	}
 
 	pBeaconStruct = qdf_mem_malloc(sizeof(tSchBeaconStruct));
 	if (NULL == pBeaconStruct) {
-		lim_log(pMac, LOGE,
-			FL("Unable to allocate memory for creating ADD_BSS"));
+		pe_err("Unable to allocate memory for creating ADD_BSS");
 		return;
 	}
 	/* Package SIR_HAL_ADD_BSS_REQ message parameters */
 	pAddBssParams = qdf_mem_malloc(sizeof(tAddBssParams));
 	if (NULL == pAddBssParams) {
 		qdf_mem_free(pBeaconStruct);
-		lim_log(pMac, LOGP,
-			FL("Unable to allocate memory for creating ADD_BSS"));
+		pe_err("Unable to allocate memory for creating ADD_BSS");
 		return;
 	}
 
@@ -322,7 +320,7 @@ void lim_ft_prepare_add_bss_req(tpAniSirGlobal pMac,
 		pAddBssParams->vhtCapable = 0;
 	}
 
-	lim_log(pMac, LOG1, FL("SIR_HAL_ADD_BSS_REQ with channel = %d..."),
+	pe_debug("SIR_HAL_ADD_BSS_REQ with channel: %d",
 		pAddBssParams->currentOperChannel);
 
 	/* Populate the STA-related parameters here */
@@ -467,10 +465,56 @@ void lim_ft_prepare_add_bss_req(tpAniSirGlobal pMac,
 
 	pftSessionEntry->ftPEContext.pAddBssReq = pAddBssParams;
 
-	lim_log(pMac, LOG1, FL("Saving SIR_HAL_ADD_BSS_REQ for pre-auth ap."));
+	pe_debug("Saving SIR_HAL_ADD_BSS_REQ for pre-auth ap");
 
 	qdf_mem_free(pBeaconStruct);
 	return;
+}
+#endif
+
+#ifdef WLAN_FEATURE_ROAM_OFFLOAD
+/**
+ * lim_fill_dot11mode() - to fill 802.11 mode in FT session
+ * @mac_ctx: pointer to mac ctx
+ * @pftSessionEntry: FT session
+ * @psessionEntry: PE session
+ *
+ * This API fills FT session's dot11mode either from pe session or
+ * from CFG depending on the condition.
+ *
+ * Return: none
+ */
+static void lim_fill_dot11mode(tpAniSirGlobal mac_ctx,
+			tpPESession pftSessionEntry, tpPESession psessionEntry)
+{
+	uint32_t self_dot11_mode;
+
+	if (psessionEntry->ftPEContext.pFTPreAuthReq &&
+			!mac_ctx->roam.configParam.isRoamOffloadEnabled) {
+		pftSessionEntry->dot11mode =
+			psessionEntry->ftPEContext.pFTPreAuthReq->dot11mode;
+	} else {
+		wlan_cfg_get_int(mac_ctx, WNI_CFG_DOT11_MODE, &self_dot11_mode);
+		pe_debug("selfDot11Mode: %d", self_dot11_mode);
+		pftSessionEntry->dot11mode = self_dot11_mode;
+	}
+}
+#else
+/**
+ * lim_fill_dot11mode() - to fill 802.11 mode in FT session
+ * @mac_ctx: pointer to mac ctx
+ * @pftSessionEntry: FT session
+ * @psessionEntry: PE session
+ *
+ * This API fills FT session's dot11mode either from pe session.
+ *
+ * Return: none
+ */
+static void lim_fill_dot11mode(tpAniSirGlobal mac_ctx,
+			tpPESession pftSessionEntry, tpPESession psessionEntry)
+{
+	pftSessionEntry->dot11mode =
+			psessionEntry->ftPEContext.pFTPreAuthReq->dot11mode;
 }
 #endif
 
@@ -489,18 +533,15 @@ void lim_fill_ft_session(tpAniSirGlobal pMac,
 	int8_t localPowerConstraint;
 	int8_t regMax;
 	tSchBeaconStruct *pBeaconStruct;
-	uint32_t selfDot11Mode;
 	ePhyChanBondState cbEnabledMode;
 
 	pBeaconStruct = qdf_mem_malloc(sizeof(tSchBeaconStruct));
 	if (NULL == pBeaconStruct) {
-		lim_log(pMac, LOGE,
-			FL("No memory for creating lim_fill_ft_session"));
+		pe_err("No memory for creating lim_fill_ft_session");
 		return;
 	}
 
 	/* Retrieve the session that was already created and update the entry */
-	lim_print_mac_addr(pMac, pbssDescription->bssId, LOG1);
 	pftSessionEntry->limWmeEnabled = psessionEntry->limWmeEnabled;
 	pftSessionEntry->limQosEnabled = psessionEntry->limQosEnabled;
 	pftSessionEntry->limWsmEnabled = psessionEntry->limWsmEnabled;
@@ -531,10 +572,9 @@ void lim_fill_ft_session(tpAniSirGlobal pMac,
 	pftSessionEntry->ssId.length = pBeaconStruct->ssId.length;
 	qdf_mem_copy(pftSessionEntry->ssId.ssId, pBeaconStruct->ssId.ssId,
 		     pftSessionEntry->ssId.length);
+	lim_fill_dot11mode(pMac, pftSessionEntry, psessionEntry);
 
-	wlan_cfg_get_int(pMac, WNI_CFG_DOT11_MODE, &selfDot11Mode);
-	lim_log(pMac, LOG1, FL("selfDot11Mode %d"), selfDot11Mode);
-	pftSessionEntry->dot11mode = selfDot11Mode;
+	pe_debug("dot11mode: %d", pftSessionEntry->dot11mode);
 	pftSessionEntry->vhtCapability =
 		(IS_DOT11_MODE_VHT(pftSessionEntry->dot11mode)
 		 && IS_BSS_VHT_CAPABLE(pBeaconStruct->VHTCaps));
@@ -587,7 +627,7 @@ void lim_fill_ft_session(tpAniSirGlobal pMac,
 				pftSessionEntry->ch_center_freq_seg0 =
 					pbssDescription->channelId - 2;
 			else
-				lim_log(pMac, LOGE, FL("Invalid sec ch offset"));
+				pe_warn("Invalid sec ch offset");
 		}
 	} else {
 		pftSessionEntry->ch_width = CH_WIDTH_20MHZ;
@@ -600,7 +640,6 @@ void lim_fill_ft_session(tpAniSirGlobal pMac,
 	sir_copy_mac_addr(pftSessionEntry->limReAssocbssId,
 			  pbssDescription->bssId);
 	sir_copy_mac_addr(pftSessionEntry->prev_ap_bssid, psessionEntry->bssId);
-	lim_print_mac_addr(pMac, pftSessionEntry->limReAssocbssId, LOG1);
 
 	/* Store beaconInterval */
 	pftSessionEntry->beaconParams.beaconInterval =
@@ -615,7 +654,7 @@ void lim_fill_ft_session(tpAniSirGlobal pMac,
 		pftSessionEntry->limSystemRole = eLIM_STA_ROLE;
 	} else {
 		/* Throw an error & return & make sure to delete the session */
-		lim_log(pMac, LOGE, FL("Invalid bss type"));
+		pe_warn("Invalid bss type");
 	}
 
 	pftSessionEntry->limCurrentBssCaps = pbssDescription->capabilityInfo;
@@ -660,8 +699,7 @@ void lim_fill_ft_session(tpAniSirGlobal pMac,
 	pftSessionEntry->maxTxPower = QDF_MIN(regMax, (localPowerConstraint));
 #endif
 
-	lim_log(pMac, LOG1,
-		FL("Reg max=%d, local pwr=%d, ini tx pwr=%d, max tx pwr = %d"),
+	pe_debug("Reg max: %d local pwr: %d, ini tx pwr: %d max tx pwr: %d",
 		regMax, localPowerConstraint,
 		pMac->roam.configParam.nTxPowerCap,
 		pftSessionEntry->maxTxPower);
@@ -691,12 +729,10 @@ void lim_fill_ft_session(tpAniSirGlobal pMac,
 	 * self and peer rates
 	 */
 	pftSessionEntry->supported_nss_1x1 = true;
-	lim_log(pMac, LOG1,
-		FL("FT enable smps: %d mode: %d supported nss 1x1: %d"),
+	pe_debug("FT enable smps: %d mode: %d supported nss 1x1: %d",
 		pftSessionEntry->enableHtSmps,
 		pftSessionEntry->htSmpsvalue,
 		pftSessionEntry->supported_nss_1x1);
-
 
 	qdf_mem_free(pBeaconStruct);
 }
@@ -725,17 +761,15 @@ bool lim_process_ft_update_key(tpAniSirGlobal pMac, uint32_t *pMsgBuf)
 	psessionEntry = pe_find_session_by_bssid(pMac, pKeyInfo->bssid.bytes,
 						 &sessionId);
 	if (NULL == psessionEntry) {
-		PELOGE(lim_log(pMac, LOGE,
-			       "%s: Unable to find session for the following bssid",
+		pe_err("%s: Unable to find session for the following bssid",
 			       __func__);
-		       )
 		lim_print_mac_addr(pMac, pKeyInfo->bssid.bytes, LOGE);
 		return false;
 	}
 
 	/* Nothing to be done if the session is not in STA mode */
 	if (!LIM_IS_STA_ROLE(psessionEntry)) {
-		lim_log(pMac, LOGE, FL("psessionEntry is not in STA mode"));
+		pe_err("psessionEntry is not in STA mode");
 		return false;
 	}
 
@@ -759,10 +793,8 @@ bool lim_process_ft_update_key(tpAniSirGlobal pMac, uint32_t *pMsgBuf)
 		psessionEntry->ftPEContext.PreAuthKeyInfo.
 		extSetStaKeyParamValid = true;
 
-		lim_log(pMac, LOGE, FL("pAddBssReq is NULL"));
-
 		if (psessionEntry->ftPEContext.pAddStaReq == NULL) {
-			lim_log(pMac, LOGE, FL("pAddStaReq is NULL"));
+			pe_err("pAddStaReq is NULL");
 			lim_send_set_sta_key_req(pMac, pMlmSetKeysReq, 0, 0,
 						 psessionEntry, false);
 			psessionEntry->ftPEContext.PreAuthKeyInfo.
@@ -780,22 +812,18 @@ bool lim_process_ft_update_key(tpAniSirGlobal pMac, uint32_t *pMsgBuf)
 			     sizeof(tSirKeys));
 		if (eSIR_SUCCESS !=
 		    wlan_cfg_get_int(pMac, WNI_CFG_SINGLE_TID_RC, &val)) {
-			lim_log(pMac, LOGP,
-				FL("Unable to read WNI_CFG_SINGLE_TID_RC"));
+			pe_warn("Unable to read WNI_CFG_SINGLE_TID_RC");
 		}
 
 		pAddBssParams->extSetStaKeyParam.singleTidRc = val;
-		PELOG1(lim_log(pMac, LOG1, FL("Key valid %d"),
-			       pAddBssParams->extSetStaKeyParamValid,
-			       pAddBssParams->extSetStaKeyParam.key[0].
-			       keyLength);
-		       )
+		pe_debug("Key valid: %d keyLength: %d",
+			pAddBssParams->extSetStaKeyParamValid,
+			pAddBssParams->extSetStaKeyParam.key[0].keyLength);
 
 		pAddBssParams->extSetStaKeyParam.staIdx = 0;
 
-		PELOG1(lim_log(pMac, LOG1,
-			       FL("BSSID = " MAC_ADDRESS_STR),
-			       MAC_ADDR_ARRAY(pKeyInfo->bssid.bytes));)
+		pe_debug("BSSID: " MAC_ADDRESS_STR,
+			       MAC_ADDR_ARRAY(pKeyInfo->bssid.bytes));
 
 		qdf_copy_macaddr(&pAddBssParams->extSetStaKeyParam.peer_macaddr,
 				 &pKeyInfo->bssid);
@@ -816,8 +844,7 @@ lim_ft_send_aggr_qos_rsp(tpAniSirGlobal pMac, uint8_t rspReqd,
 	}
 	rsp = qdf_mem_malloc(sizeof(tSirAggrQosRsp));
 	if (NULL == rsp) {
-		lim_log(pMac, LOGP,
-			FL("AllocateMemory failed for tSirAggrQosRsp"));
+		pe_err("AllocateMemory failed for tSirAggrQosRsp");
 		return;
 	}
 	rsp->messageType = eWNI_SME_FT_AGGR_QOS_RSP;
@@ -826,7 +853,12 @@ lim_ft_send_aggr_qos_rsp(tpAniSirGlobal pMac, uint8_t rspReqd,
 	rsp->aggrInfo.tspecIdx = aggrQosRsp->tspecIdx;
 	for (i = 0; i < SIR_QOS_NUM_AC_MAX; i++) {
 		if ((1 << i) & aggrQosRsp->tspecIdx) {
-			rsp->aggrInfo.aggrRsp[i].status = aggrQosRsp->status[i];
+			if (QDF_IS_STATUS_SUCCESS(aggrQosRsp->status[i]))
+				rsp->aggrInfo.aggrRsp[i].status =
+					eSIR_MAC_SUCCESS_STATUS;
+			else
+				rsp->aggrInfo.aggrRsp[i].status =
+					eSIR_MAC_UNSPEC_FAILURE_STATUS;
 			rsp->aggrInfo.aggrRsp[i].tspec = aggrQosRsp->tspec[i];
 		}
 	}
@@ -844,26 +876,24 @@ void lim_process_ft_aggr_qo_s_rsp(tpAniSirGlobal pMac, tpSirMsgQ limMsg)
 	uint8_t rspReqd = 1;
 	tpPESession psessionEntry = NULL;
 	int i = 0;
-	PELOG1(lim_log(pMac, LOG1, FL(" Received AGGR_QOS_RSP from HAL"));)
+	pe_debug(" Received AGGR_QOS_RSP from HAL");
 	SET_LIM_PROCESS_DEFD_MESGS(pMac, true);
 	pAggrQosRspMsg = (tpAggrAddTsParams) (limMsg->bodyptr);
 	if (NULL == pAggrQosRspMsg) {
-		PELOGE(lim_log(pMac, LOGE, FL("NULL pAggrQosRspMsg"));)
+		pe_err("NULL pAggrQosRspMsg");
 		return;
 	}
 	psessionEntry =
 		pe_find_session_by_session_id(pMac, pAggrQosRspMsg->sessionId);
 	if (NULL == psessionEntry) {
-		PELOGE(lim_log(pMac, LOGE,
-			       FL("Cant find session entry for %s"), __func__);
-		       )
+		pe_err("Cant find session entry for %s", __func__);
 		if (pAggrQosRspMsg != NULL) {
 			qdf_mem_free(pAggrQosRspMsg);
 		}
 		return;
 	}
 	if (!LIM_IS_STA_ROLE(psessionEntry)) {
-		lim_log(pMac, LOGE, FL("psessionEntry is not in STA mode"));
+		pe_err("psessionEntry is not in STA mode");
 		return;
 	}
 	for (i = 0; i < HAL_QOS_NUM_AC_MAX; i++) {
@@ -913,7 +943,7 @@ tSirRetStatus lim_process_ft_aggr_qos_req(tpAniSirGlobal pMac, uint32_t *pMsgBuf
 
 	pAggrAddTsParam = qdf_mem_malloc(sizeof(tAggrAddTsParams));
 	if (NULL == pAggrAddTsParam) {
-		PELOGE(lim_log(pMac, LOGE, FL("AllocateMemory() failed"));)
+		pe_err("AllocateMemory() failed");
 		return eSIR_MEM_ALLOC_FAILED;
 	}
 
@@ -921,18 +951,15 @@ tSirRetStatus lim_process_ft_aggr_qos_req(tpAniSirGlobal pMac, uint32_t *pMsgBuf
 						 &sessionId);
 
 	if (psessionEntry == NULL) {
-		PELOGE(lim_log
-			       (pMac, LOGE,
-			       FL("psession Entry Null for sessionId = %d"),
+		pe_err("psession Entry Null for sessionId: %d",
 			       aggrQosReq->sessionId);
-		       )
 		qdf_mem_free(pAggrAddTsParam);
 		return eSIR_FAILURE;
 	}
 
 	/* Nothing to be done if the session is not in STA mode */
 	if (!LIM_IS_STA_ROLE(psessionEntry)) {
-		lim_log(pMac, LOGE, FL("psessionEntry is not in STA mode"));
+		pe_err("psessionEntry is not in STA mode");
 		qdf_mem_free(pAggrAddTsParam);
 		return eSIR_FAILURE;
 	}
@@ -940,10 +967,7 @@ tSirRetStatus lim_process_ft_aggr_qos_req(tpAniSirGlobal pMac, uint32_t *pMsgBuf
 	pSta = dph_lookup_hash_entry(pMac, aggrQosReq->bssid.bytes, &aid,
 				     &psessionEntry->dph.dphHashTable);
 	if (pSta == NULL) {
-		PELOGE(lim_log(pMac, LOGE,
-			       FL
-				       ("Station context not found - ignoring AddTsRsp"));
-		       )
+		pe_err("Station context not found - ignoring AddTsRsp");
 		qdf_mem_free(pAggrAddTsParam);
 		return eSIR_FAILURE;
 	}
@@ -1021,11 +1045,7 @@ tSirRetStatus lim_process_ft_aggr_qos_req(tpAniSirGlobal pMac, uint32_t *pMsgBuf
 			if (eSIR_SUCCESS !=
 			    lim_tspec_add(pMac, pSta->staAddr, pSta->assocId,
 					  pTspec, 0, &tspecInfo)) {
-				PELOGE(lim_log
-					       (pMac, LOGE,
-					       FL
-						       ("Adding entry in lim Tspec Table failed "));
-				       )
+				pe_err("Adding entry in lim Tspec Table failed");
 				pMac->lim.gLimAddtsSent = false;
 				qdf_mem_free(pAggrAddTsParam);
 				return eSIR_FAILURE;
@@ -1053,9 +1073,7 @@ tSirRetStatus lim_process_ft_aggr_qos_req(tpAniSirGlobal pMac, uint32_t *pMsgBuf
 	MTRACE(mac_trace_msg_tx(pMac, psessionEntry->peSessionId, msg.type));
 
 	if (eSIR_SUCCESS != wma_post_ctrl_msg(pMac, &msg)) {
-			PELOGW(lim_log
-				       (pMac, LOGW, FL("wma_post_ctrl_msg() failed"));
-			       )
+			pe_warn("wma_post_ctrl_msg() failed");
 			SET_LIM_PROCESS_DEFD_MESGS(pMac, true);
 			qdf_mem_free(pAggrAddTsParam);
 			return eSIR_FAILURE;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -34,6 +34,7 @@
 #define _QDF_OS_TIME_H
 
 #include <i_qdf_time.h>
+#include "qdf_util.h"
 
 typedef __qdf_time_t qdf_time_t;
 
@@ -91,10 +92,19 @@ static inline qdf_time_t qdf_get_system_uptime(void)
  * Return:
  * The time since system booted in nanoseconds
  */
+
+#if (LINUX_VERSION_CODE > KERNEL_VERSION(3, 10, 0))
 static inline s64 qdf_get_bootbased_boottime_ns(void)
 {
 	return ktime_get_boot_ns();
 }
+
+#else
+static inline s64 qdf_get_bootbased_boottime_ns(void)
+{
+	return ktime_to_ns(ktime_get_boottime());
+}
+#endif
 
 /**
  * qdf_get_system_timestamp - Return current timestamp
@@ -190,14 +200,16 @@ enum qdf_timestamp_unit {
 
 static inline unsigned long long qdf_log_timestamp_to_usecs(uint64_t time)
 {
-	if ((time * 10) < time)
-		return (time / QDF_LOG_TIMESTAMP_CYCLES_PER_10_US) * 10;
-	return (time * 10) / QDF_LOG_TIMESTAMP_CYCLES_PER_10_US;
+	if ((time * 10) < time) {
+		time = qdf_do_div(time, QDF_LOG_TIMESTAMP_CYCLES_PER_10_US);
+		return time * 10;
+	}
+	return qdf_do_div(time * 10, QDF_LOG_TIMESTAMP_CYCLES_PER_10_US);
 }
 
 static inline uint64_t qdf_usecs_to_log_timestamp(uint64_t usecs)
 {
-	return (usecs * QDF_LOG_TIMESTAMP_CYCLES_PER_10_US) / 10;
+	return qdf_do_div(usecs * QDF_LOG_TIMESTAMP_CYCLES_PER_10_US, 10);
 }
 
 /**

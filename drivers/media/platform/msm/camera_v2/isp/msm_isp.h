@@ -86,15 +86,6 @@ enum msm_isp_irq_operation {
 	MSM_ISP_IRQ_SET = 3,
 };
 
-enum msm_isp_irq_states {
-	MSM_ISP_IRQ_STATE_SOF = 0,
-	MSM_ISP_IRQ_STATE_REG_UPD = 1,
-	MSM_ISP_IRQ_STATE_EPOCH = 2,
-	MSM_ISP_IRQ_STATE_BUFDONE = 3,
-	MSM_ISP_IRQ_STATE_EOF = 4,
-	MSM_ISP_IRQ_STATE_MAX = 5
-};
-
 /* This struct is used to save/track SOF info for some INTF.
  * e.g. used in Master-Slave mode */
 struct msm_vfe_sof_info {
@@ -366,7 +357,6 @@ struct msm_vfe_hardware_info {
 	uint32_t dmi_reg_offset;
 	uint32_t min_ab;
 	uint32_t min_ib;
-	uint32_t intf_states_irq_mask[VFE_SRC_MAX][MSM_ISP_IRQ_STATE_MAX];
 	const char *regulator_names[];
 };
 
@@ -466,7 +456,7 @@ struct msm_vfe_axi_stream {
 	uint32_t runtime_output_format;
 	enum msm_stream_rdi_input_type  rdi_input_type;
 	struct msm_isp_sw_framskip sw_skip;
-	uint8_t sw_ping_pong_bit;
+	int8_t sw_ping_pong_bit;
 
 	struct vfe_device *vfe_dev[MAX_VFE];
 	int num_isp;
@@ -479,6 +469,7 @@ struct msm_vfe_axi_stream {
 	 */
 	uint32_t vfe_mask;
 	uint32_t composite_irq[MSM_ISP_COMP_IRQ_MAX];
+	int lpm_mode;
 };
 
 struct msm_vfe_axi_composite_info {
@@ -506,8 +497,6 @@ struct msm_vfe_src_info {
 	struct timeval time_stamp;
 	enum msm_vfe_dual_hw_type dual_hw_type;
 	struct msm_vfe_dual_hw_ms_info dual_hw_ms_info;
-	uint32_t irq_mask;
-	enum msm_isp_irq_states irq_state;
 	bool accept_frame;
 	uint32_t lpm;
 };
@@ -750,6 +739,7 @@ struct msm_vfe_common_dev_data {
 	struct msm_vfe_axi_stream streams[VFE_AXI_SRC_MAX * MAX_VFE];
 	struct msm_vfe_stats_stream stats_streams[MSM_ISP_STATS_MAX * MAX_VFE];
 	struct mutex vfe_common_mutex;
+	uint8_t pd_buf_idx;
 	/* Irq debug Info */
 	struct msm_vfe_irq_dump vfe_irq_dump;
 	struct msm_vfe_tasklet tasklets[MAX_VFE + 1];
@@ -796,6 +786,7 @@ struct vfe_device {
 	size_t num_norm_clk;
 	bool hvx_clk_state;
 	enum cam_ahb_clk_vote ahb_vote;
+	enum cam_ahb_clk_vote user_requested_ahb_vote;
 	struct cx_ipeak_client *vfe_cx_ipeak;
 
 	/* Sync variables*/
@@ -805,6 +796,7 @@ struct vfe_device {
 	struct mutex core_mutex;
 	spinlock_t shared_data_lock;
 	spinlock_t reg_update_lock;
+	spinlock_t completion_lock;
 
 	/* Tasklet info */
 	atomic_t irq_cnt;
@@ -848,8 +840,6 @@ struct vfe_device {
 	uint32_t bus_err_ign_mask;
 	uint32_t recovery_irq0_mask;
 	uint32_t recovery_irq1_mask;
-	/* Store the buf_idx for pd stats RDI stream */
-	uint8_t pd_buf_idx;
 	/* total bandwidth per vfe */
 	uint64_t total_bandwidth;
 };

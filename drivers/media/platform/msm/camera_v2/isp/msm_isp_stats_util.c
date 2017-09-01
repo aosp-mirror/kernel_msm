@@ -229,8 +229,12 @@ static int32_t msm_isp_stats_buf_divert(struct vfe_device *vfe_dev,
 
 	stats_event->pd_stats_idx = 0xF;
 	if (stream_info->stats_type == MSM_ISP_STATS_BF) {
-		stats_event->pd_stats_idx = vfe_dev->pd_buf_idx;
-		vfe_dev->pd_buf_idx = 0xF;
+		spin_lock_irqsave(&vfe_dev->common_data->
+			common_dev_data_lock, flags);
+		stats_event->pd_stats_idx = vfe_dev->common_data->pd_buf_idx;
+		vfe_dev->common_data->pd_buf_idx = 0xF;
+		spin_unlock_irqrestore(&vfe_dev->common_data->
+			common_dev_data_lock, flags);
 	}
 	if (comp_stats_type_mask == NULL) {
 		stats_event->stats_mask =
@@ -263,7 +267,9 @@ static int32_t msm_isp_stats_configure(struct vfe_device *vfe_dev,
 	int result = 0;
 
 	memset(&buf_event, 0, sizeof(struct msm_isp_event_data));
-	buf_event.timestamp = ts->buf_time;
+	buf_event.timestamp = ts->event_time;
+	buf_event.mono_timestamp = ts->buf_time;
+
 	buf_event.frame_id = vfe_dev->axi_data.src_info[VFE_PIX_0].frame_id;
 	pingpong_status = vfe_dev->hw_info->
 		vfe_ops.stats_ops.get_pingpong_status(vfe_dev);
@@ -1259,7 +1265,7 @@ int msm_isp_update_stats_stream(struct vfe_device *vfe_dev, void *arg)
 				&update_cmd->update_info[i];
 		/*check array reference bounds*/
 		if (STATS_IDX(update_info->stream_handle)
-			> vfe_dev->hw_info->stats_hw_info->num_stats_type) {
+			>= vfe_dev->hw_info->stats_hw_info->num_stats_type) {
 			pr_err("%s: stats idx %d out of bound!", __func__,
 			STATS_IDX(update_info->stream_handle));
 			return -EINVAL;

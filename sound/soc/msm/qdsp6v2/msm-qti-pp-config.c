@@ -45,21 +45,6 @@ enum {
 	EQ_BAND_MAX,
 };
 
-struct msm_audio_eq_band {
-	uint16_t     band_idx; /* The band index, 0 .. 11 */
-	uint32_t     filter_type; /* Filter band type */
-	uint32_t     center_freq_hz; /* Filter band center frequency */
-	uint32_t     filter_gain; /* Filter band initial gain (dB) */
-			/* Range is +12 dB to -12 dB with 1dB increments. */
-	uint32_t     q_factor;
-} __packed;
-
-struct msm_audio_eq_stream_config {
-	uint32_t	enable; /* Number of consequtive bands specified */
-	uint32_t	num_bands;
-	struct msm_audio_eq_band	eq_bands[EQ_BAND_MAX];
-} __packed;
-
 /* Audio Sphere data structures */
 struct msm_audio_pp_asphere_state_s {
 	uint32_t enabled;
@@ -313,11 +298,11 @@ int msm_qti_pp_send_stereo_to_custom_stereo_cmd(int port_id, int copp_idx,
 	*update_params_value16++ = op_FR_ip_FR_weight;
 	avail_length = avail_length - (4 * sizeof(uint16_t));
 	if (params_length) {
-		rc = adm_set_stereo_to_custom_stereo(port_id,
-						     copp_idx,
-						     session_id,
-						     params_value,
-						     params_length);
+		rc = adm_set_pspd_matrix_params(port_id,
+						copp_idx,
+						session_id,
+						params_value,
+						params_length);
 		if (rc) {
 			pr_err("%s: send params failed rc=%d\n", __func__, rc);
 			kfree(params_value);
@@ -814,6 +799,286 @@ static int msm_qti_pp_asphere_set(struct snd_kcontrol *kcontrol,
 					false);
 		}
 	}
+	return 0;
+}
+
+int msm_adsp_init_mixer_ctl_pp_event_queue(struct snd_soc_pcm_runtime *rtd)
+{
+	struct snd_kcontrol *kctl;
+	const char *deviceNo = "NN";
+	char *mixer_str = NULL;
+	int ctl_len = 0, ret = 0;
+	const char *mixer_ctl_name = DSP_STREAM_CALLBACK;
+	struct dsp_stream_callback_prtd *kctl_prtd = NULL;
+
+	if (!rtd) {
+		pr_err("%s: rtd is NULL\n", __func__);
+		ret = -EINVAL;
+		goto done;
+	}
+
+	ctl_len = strlen(mixer_ctl_name) + 1 + strlen(deviceNo) + 1;
+	mixer_str = kzalloc(ctl_len, GFP_KERNEL);
+	if (!mixer_str) {
+		ret = -EINVAL;
+		goto done;
+	}
+
+	snprintf(mixer_str, ctl_len, "%s %d", mixer_ctl_name,
+		rtd->pcm->device);
+	kctl = snd_soc_card_get_kcontrol(rtd->card, mixer_str);
+	kfree(mixer_str);
+	if (!kctl) {
+		pr_err("%s: failed to get kctl.\n", __func__);
+		ret = -EINVAL;
+		goto done;
+	}
+
+	if (kctl->private_data != NULL) {
+		pr_err("%s: kctl_prtd is not NULL at initialization.\n",
+			__func__);
+		return -EINVAL;
+	}
+
+	kctl_prtd = kzalloc(sizeof(struct dsp_stream_callback_prtd),
+			GFP_KERNEL);
+	if (!kctl_prtd) {
+		ret = -ENOMEM;
+		goto done;
+	}
+
+	spin_lock_init(&kctl_prtd->prtd_spin_lock);
+	INIT_LIST_HEAD(&kctl_prtd->event_queue);
+	kctl_prtd->event_count = 0;
+	kctl->private_data = kctl_prtd;
+
+done:
+	return ret;
+}
+
+int msm_adsp_clean_mixer_ctl_pp_event_queue(struct snd_soc_pcm_runtime *rtd)
+{
+	struct snd_kcontrol *kctl;
+	const char *deviceNo = "NN";
+	char *mixer_str = NULL;
+	int ctl_len = 0, ret = 0;
+	struct dsp_stream_callback_list *node, *n;
+	unsigned long spin_flags;
+	const char *mixer_ctl_name = DSP_STREAM_CALLBACK;
+	struct dsp_stream_callback_prtd *kctl_prtd = NULL;
+
+	if (!rtd) {
+		pr_err("%s: rtd is NULL\n", __func__);
+		ret = -EINVAL;
+		goto done;
+	}
+
+	ctl_len = strlen(mixer_ctl_name) + 1 + strlen(deviceNo) + 1;
+	mixer_str = kzalloc(ctl_len, GFP_KERNEL);
+	if (!mixer_str) {
+		ret = -EINVAL;
+		goto done;
+	}
+
+	snprintf(mixer_str, ctl_len, "%s %d", mixer_ctl_name,
+		rtd->pcm->device);
+	kctl = snd_soc_card_get_kcontrol(rtd->card, mixer_str);
+	kfree(mixer_str);
+	if (!kctl) {
+		pr_err("%s: failed to get kctl.\n", __func__);
+		ret = -EINVAL;
+		goto done;
+	}
+
+	kctl_prtd = (struct dsp_stream_callback_prtd *)
+			kctl->private_data;
+	if (kctl_prtd != NULL) {
+		spin_lock_irqsave(&kctl_prtd->prtd_spin_lock, spin_flags);
+		/* clean the queue */
+		list_for_each_entry_safe(node, n,
+				&kctl_prtd->event_queue, list) {
+			list_del(&node->list);
+			kctl_prtd->event_count--;
+			pr_debug("%s: %d remaining events after del.\n",
+				__func__, kctl_prtd->event_count);
+			kfree(node);
+		}
+		spin_unlock_irqrestore(&kctl_prtd->prtd_spin_lock, spin_flags);
+	}
+
+	kfree(kctl_prtd);
+	kctl->private_data = NULL;
+
+done:
+	return ret;
+}
+
+int msm_adsp_inform_mixer_ctl(struct snd_soc_pcm_runtime *rtd,
+			uint32_t *payload)
+{
+	/* adsp pp event notifier */
+	struct snd_kcontrol *kctl;
+	struct snd_ctl_elem_value control;
+	const char *deviceNo = "NN";
+	char *mixer_str = NULL;
+	int ctl_len = 0, ret = 0;
+	struct dsp_stream_callback_list *new_event;
+	struct dsp_stream_callback_list *oldest_event;
+	unsigned long spin_flags;
+	struct dsp_stream_callback_prtd *kctl_prtd = NULL;
+	struct msm_adsp_event_data *event_data = NULL;
+	const char *mixer_ctl_name = DSP_STREAM_CALLBACK;
+	struct snd_ctl_elem_info kctl_info;
+
+	if (!rtd || !payload) {
+		pr_err("%s: %s is NULL\n", __func__,
+			(!rtd) ? "rtd" : "payload");
+		ret = -EINVAL;
+		goto done;
+	}
+
+	if (rtd->card->snd_card == NULL) {
+		pr_err("%s: snd_card is null.\n", __func__);
+		ret = -EINVAL;
+		goto done;
+	}
+
+	ctl_len = strlen(mixer_ctl_name) + 1 + strlen(deviceNo) + 1;
+	mixer_str = kzalloc(ctl_len, GFP_ATOMIC);
+	if (!mixer_str) {
+		ret = -EINVAL;
+		goto done;
+	}
+
+	snprintf(mixer_str, ctl_len, "%s %d", mixer_ctl_name,
+		rtd->pcm->device);
+	kctl = snd_soc_card_get_kcontrol(rtd->card, mixer_str);
+	kfree(mixer_str);
+	if (!kctl) {
+		pr_err("%s: failed to get kctl.\n", __func__);
+		ret = -EINVAL;
+		goto done;
+	}
+
+	event_data = (struct msm_adsp_event_data *)payload;
+	kctl->info(kctl, &kctl_info);
+	if (sizeof(struct msm_adsp_event_data)
+		+ event_data->payload_len > kctl_info.count) {
+		pr_err("%s: payload length exceeds limit of %u bytes.\n",
+			__func__, kctl_info.count);
+		ret = -EINVAL;
+		goto done;
+	}
+
+	kctl_prtd = (struct dsp_stream_callback_prtd *)
+			kctl->private_data;
+	if (kctl_prtd == NULL) {
+		/* queue is not initialized */
+		ret = -EINVAL;
+		pr_err("%s: event queue is not initialized.\n", __func__);
+		goto done;
+	}
+
+	new_event = kzalloc(sizeof(struct dsp_stream_callback_list)
+			+ event_data->payload_len,
+			GFP_ATOMIC);
+	if (new_event == NULL) {
+		ret = -ENOMEM;
+		goto done;
+	}
+	memcpy((void *)&new_event->event, (void *)payload,
+		   event_data->payload_len
+		   + sizeof(struct msm_adsp_event_data));
+
+	spin_lock_irqsave(&kctl_prtd->prtd_spin_lock, spin_flags);
+	while (kctl_prtd->event_count >= DSP_STREAM_CALLBACK_QUEUE_SIZE) {
+		pr_info("%s: queue of size %d is full. delete oldest one.\n",
+			__func__, DSP_STREAM_CALLBACK_QUEUE_SIZE);
+		oldest_event = list_first_entry(&kctl_prtd->event_queue,
+				struct dsp_stream_callback_list, list);
+		pr_info("%s: event deleted: type %d length %d\n",
+			__func__, oldest_event->event.event_type,
+			oldest_event->event.payload_len);
+		list_del(&oldest_event->list);
+		kctl_prtd->event_count--;
+		kfree(oldest_event);
+	}
+
+	list_add_tail(&new_event->list, &kctl_prtd->event_queue);
+	kctl_prtd->event_count++;
+	spin_unlock_irqrestore(&kctl_prtd->prtd_spin_lock, spin_flags);
+
+	control.id = kctl->id;
+	snd_ctl_notify(rtd->card->snd_card,
+			SNDRV_CTL_EVENT_MASK_INFO,
+			&control.id);
+
+done:
+	return ret;
+}
+
+int msm_adsp_stream_cmd_info(struct snd_kcontrol *kcontrol,
+			struct snd_ctl_elem_info *uinfo)
+{
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_BYTES;
+	uinfo->count =
+		sizeof(((struct snd_ctl_elem_value *)0)->value.bytes.data);
+
+	return 0;
+}
+
+int msm_adsp_stream_callback_get(struct snd_kcontrol *kcontrol,
+			struct snd_ctl_elem_value *ucontrol)
+{
+	uint32_t payload_size = 0;
+	struct dsp_stream_callback_list *oldest_event;
+	unsigned long spin_flags;
+	struct dsp_stream_callback_prtd *kctl_prtd = NULL;
+	int ret = 0;
+
+	kctl_prtd = (struct dsp_stream_callback_prtd *)
+			kcontrol->private_data;
+	if (kctl_prtd == NULL) {
+		pr_err("%s: ASM Stream PP event queue is not initialized.\n",
+			__func__);
+		ret = -EINVAL;
+		goto done;
+	}
+
+	spin_lock_irqsave(&kctl_prtd->prtd_spin_lock, spin_flags);
+	pr_debug("%s: %d events in queue.\n", __func__, kctl_prtd->event_count);
+	if (list_empty(&kctl_prtd->event_queue)) {
+		pr_err("%s: ASM Stream PP event queue is empty.\n", __func__);
+		ret = -EINVAL;
+		spin_unlock_irqrestore(&kctl_prtd->prtd_spin_lock, spin_flags);
+		goto done;
+	}
+
+	oldest_event = list_first_entry(&kctl_prtd->event_queue,
+			struct dsp_stream_callback_list, list);
+	list_del(&oldest_event->list);
+	kctl_prtd->event_count--;
+	spin_unlock_irqrestore(&kctl_prtd->prtd_spin_lock, spin_flags);
+
+	payload_size = oldest_event->event.payload_len;
+	pr_debug("%s: event fetched: type %d length %d\n",
+			__func__, oldest_event->event.event_type,
+			oldest_event->event.payload_len);
+	memcpy(ucontrol->value.bytes.data, &oldest_event->event,
+		sizeof(struct msm_adsp_event_data) + payload_size);
+	kfree(oldest_event);
+
+done:
+	return ret;
+}
+
+int msm_adsp_stream_callback_info(struct snd_kcontrol *kcontrol,
+			struct snd_ctl_elem_info *uinfo)
+{
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_BYTES;
+	uinfo->count =
+		sizeof(((struct snd_ctl_elem_value *)0)->value.bytes.data);
+
 	return 0;
 }
 

@@ -27,7 +27,6 @@
 #include "wma_types.h"
 #include "cds_mq.h"
 #include "csr_inside_api.h"
-#include "sms_debug.h"
 #include "sme_qos_internal.h"
 #include "sme_inside.h"
 #include "host_diag_core_event.h"
@@ -41,6 +40,18 @@
 static void csr_reinit_preauth_cmd(tpAniSirGlobal pMac, tSmeCmd *pCommand);
 static QDF_STATUS csr_neighbor_roam_add_preauth_fail(tpAniSirGlobal mac_ctx,
 			uint8_t session_id, tSirMacAddr bssid);
+
+/**
+ * csr_get_dot11_mode() - Derives dot11mode
+ * @hal: Global Handle
+ * @session_id: SME Session ID
+ * @bss_desc: BSS descriptor
+ *
+ * Return: dot11mode
+ */
+static uint32_t csr_get_dot11_mode(tHalHandle hal, uint32_t session_id,
+			      tpSirBssDescription bss_desc);
+
 /**
  * csr_neighbor_roam_state_preauth_done() - Check if state is preauth done
  * @mac_ctx: Global MAC context
@@ -140,7 +151,7 @@ QDF_STATUS csr_roam_enqueue_preauth(tpAniSirGlobal mac_ctx,
 
 	command = csr_get_command_buffer(mac_ctx);
 	if (NULL == command) {
-		sms_log(mac_ctx, LOGE, FL(" fail to get command buffer"));
+		sme_err("fail to get command buffer");
 		status = QDF_STATUS_E_RESOURCES;
 	} else {
 		if (bss_desc) {
@@ -151,9 +162,8 @@ QDF_STATUS csr_roam_enqueue_preauth(tpAniSirGlobal mac_ctx,
 			status = csr_queue_sme_command(mac_ctx, command,
 					immediate);
 			if (!QDF_IS_STATUS_SUCCESS(status)) {
-				sms_log(mac_ctx, LOGE,
-					FL("fail to queue preauth,status=%d"),
-						status);
+				sme_err("fail to queue preauth,status: %d",
+					status);
 				csr_release_command_preauth(mac_ctx, command);
 			}
 		} else {
@@ -251,8 +261,7 @@ QDF_STATUS csr_neighbor_roam_preauth_rsp_handler(tpAniSirGlobal mac_ctx,
 		 * of the disconnect command, we would have reset
 		 * preauthRspPending and transitioned to INIT state.
 		 */
-		sms_log(mac_ctx, LOGW,
-			FL("Unexpected pre-auth response in state %d"),
+		sme_warn("Unexpected pre-auth response in state %d",
 			neighbor_roam_info->neighborRoamState);
 		preauth_processed = QDF_STATUS_E_FAILURE;
 		goto DEQ_PREAUTH;
@@ -260,8 +269,7 @@ QDF_STATUS csr_neighbor_roam_preauth_rsp_handler(tpAniSirGlobal mac_ctx,
 	/* We can receive it in these 2 states. */
 	if ((neighbor_roam_info->neighborRoamState !=
 	     eCSR_NEIGHBOR_ROAM_STATE_PREAUTHENTICATING)) {
-		sms_log(mac_ctx, LOGW,
-			FL("Preauth response received in state %s"),
+		sme_debug("Preauth response received in state %s",
 			mac_trace_get_neighbour_roam_state
 				(neighbor_roam_info->neighborRoamState));
 		preauth_processed = QDF_STATUS_E_FAILURE;
@@ -276,11 +284,9 @@ QDF_STATUS csr_neighbor_roam_preauth_rsp_handler(tpAniSirGlobal mac_ctx,
 				mac_ctx, &neighbor_roam_info->roamableAPList,
 				NULL);
 	if ((eSIR_SUCCESS == lim_status) && (NULL != preauth_rsp_node)) {
-		sms_log(mac_ctx, LOG1,
-			FL("Preauth completed successfully after %d tries"),
+		sme_debug("Preauth completed successfully after %d tries",
 			neighbor_roam_info->FTRoamInfo.numPreAuthRetries);
-		sms_log(mac_ctx, LOG1,
-			FL("After Pre-Auth: BSSID " MAC_ADDRESS_STR ", Ch:%d"),
+		sme_debug("After Pre-Auth: BSSID " MAC_ADDRESS_STR ", Ch:%d",
 			MAC_ADDR_ARRAY(
 				preauth_rsp_node->pBssDescription->bssId),
 			(int)preauth_rsp_node->pBssDescription->channelId);
@@ -314,8 +320,7 @@ QDF_STATUS csr_neighbor_roam_preauth_rsp_handler(tpAniSirGlobal mac_ctx,
 		tListElem *entry;
 		bool is_dis_pending = false;
 
-		sms_log(mac_ctx, LOGE,
-			FL("Preauth failed retry number %d, status = 0x%x"),
+		sme_err("Preauth failed retry number %d, status: 0x%x",
 			neighbor_roam_info->FTRoamInfo.numPreAuthRetries,
 			lim_status);
 
@@ -340,8 +345,7 @@ QDF_STATUS csr_neighbor_roam_preauth_rsp_handler(tpAniSirGlobal mac_ctx,
 					&neighbor_roam_info->roamableAPList,
 					LL_ACCESS_LOCK);
 			if (!entry) {
-				sms_log(mac_ctx, LOGE,
-					FL("Preauth list is empty"));
+				sme_err("Preauth list is empty");
 				goto NEXT_PREAUTH;
 			}
 			neighbor_bss_node = GET_BASE_ADDR(entry,
@@ -368,8 +372,7 @@ QDF_STATUS csr_neighbor_roam_preauth_rsp_handler(tpAniSirGlobal mac_ctx,
 NEXT_PREAUTH:
 		is_dis_pending = is_disconnect_pending(mac_ctx, session_id);
 		if (is_dis_pending) {
-			sms_log(mac_ctx, LOGE,
-				FL("Disconnect in progress, Abort preauth"));
+			sme_err("Disconnect in progress, Abort preauth");
 			goto ABORT_PREAUTH;
 		}
 		/* Issue preauth request for the same/next entry */
@@ -416,8 +419,7 @@ static QDF_STATUS csr_neighbor_roam_add_preauth_fail(tpAniSirGlobal mac_ctx,
 	uint8_t num_mac_addr = neighbor_roam_info->FTRoamInfo.preAuthFailList.
 				numMACAddress;
 
-	sms_log(mac_ctx, LOGE,
-		FL(" Added BSSID " MAC_ADDRESS_STR " to Preauth failed list"),
+	sme_warn("Added BSSID " MAC_ADDRESS_STR " to Preauth failed list",
 		MAC_ADDR_ARRAY(bssid));
 
 	for (i = 0;
@@ -426,16 +428,14 @@ static QDF_STATUS csr_neighbor_roam_add_preauth_fail(tpAniSirGlobal mac_ctx,
 		if (!qdf_mem_cmp(
 		   neighbor_roam_info->FTRoamInfo.preAuthFailList.macAddress[i],
 		   bssid, sizeof(tSirMacAddr))) {
-			sms_log(mac_ctx, LOGW,
-				FL("BSSID "MAC_ADDRESS_STR" already fail list"),
+			sme_warn("BSSID "MAC_ADDRESS_STR" already fail list",
 			MAC_ADDR_ARRAY(bssid));
 			return QDF_STATUS_SUCCESS;
 		}
 	}
 
 	if ((num_mac_addr + 1) > MAX_NUM_PREAUTH_FAIL_LIST_ADDRESS) {
-		sms_log(mac_ctx, LOGE,
-			FL("Cannot add, preauth fail list is full."));
+		sme_err("Cannot add, preauth fail list is full");
 		return QDF_STATUS_E_FAILURE;
 	}
 	qdf_mem_copy(neighbor_roam_info->FTRoamInfo.preAuthFailList.
@@ -474,14 +474,71 @@ bool csr_neighbor_roam_is_preauth_candidate(tpAniSirGlobal pMac,
 		if (!qdf_mem_cmp(pNeighborRoamInfo->FTRoamInfo.
 				    preAuthFailList.macAddress[i], bssId,
 				    sizeof(tSirMacAddr))) {
-			sms_log(pMac, LOGE,
-				FL("BSSID exists in fail list" MAC_ADDRESS_STR),
+			sme_err("BSSID exists in fail list" MAC_ADDRESS_STR,
 					MAC_ADDR_ARRAY(bssId));
 			return false;
 		}
 	}
 
 	return true;
+}
+
+uint32_t csr_get_dot11_mode(tHalHandle hal, uint32_t session_id,
+			      tpSirBssDescription bss_desc)
+{
+	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal);
+	tCsrRoamSession *csr_session = CSR_GET_SESSION(mac_ctx, session_id);
+	eCsrCfgDot11Mode ucfg_dot11_mode, cfg_dot11_mode;
+	QDF_STATUS status;
+	tDot11fBeaconIEs *ies_local = NULL;
+	uint32_t dot11mode = 0;
+
+	if (!csr_session) {
+		sme_err("Invalid session id %d", session_id);
+		return 0;
+	}
+
+	sme_debug("phyMode %d", csr_session->pCurRoamProfile->phyMode);
+
+	/* Get IE's */
+	status = csr_get_parsed_bss_description_ies(mac_ctx, bss_desc,
+							&ies_local);
+	if (!QDF_IS_STATUS_SUCCESS(status)) {
+		sme_err("csr_get_parsed_bss_description_ies failed");
+		return 0;
+	}
+	if (ies_local == NULL) {
+		sme_err("ies_local is NULL");
+		return 0;
+	}
+
+	if (csr_is_phy_mode_match(mac_ctx,
+			csr_session->pCurRoamProfile->phyMode,
+			bss_desc, csr_session->pCurRoamProfile,
+			&cfg_dot11_mode, ies_local))
+		ucfg_dot11_mode = cfg_dot11_mode;
+	else {
+		sme_err("Can not find match phy mode");
+		if (CDS_IS_CHANNEL_5GHZ(bss_desc->channelId))
+			ucfg_dot11_mode = eCSR_CFG_DOT11_MODE_11A;
+		else
+			ucfg_dot11_mode = eCSR_CFG_DOT11_MODE_11G;
+	}
+
+	/* dot11mode */
+	dot11mode = csr_translate_to_wni_cfg_dot11_mode(mac_ctx,
+							ucfg_dot11_mode);
+	sme_debug("dot11mode %d ucfg_dot11_mode %d",
+			dot11mode, ucfg_dot11_mode);
+
+	if (bss_desc->channelId <= 14 &&
+		false == mac_ctx->roam.configParam.enableVhtFor24GHz &&
+		WNI_CFG_DOT11_MODE_11AC == dot11mode) {
+		/* Need to disable VHT operation in 2.4 GHz band */
+		dot11mode = WNI_CFG_DOT11_MODE_11N;
+	}
+	qdf_mem_free(ies_local);
+	return dot11mode;
 }
 
 /**
@@ -501,17 +558,15 @@ QDF_STATUS csr_roam_issue_ft_preauth_req(tHalHandle hal, uint32_t session_id,
 	tCsrRoamSession *csr_session = CSR_GET_SESSION(mac_ctx, session_id);
 
 	if (NULL == csr_session) {
-		sms_log(mac_ctx, LOGE,
-			FL("Session does not exist for session id(%d)"),
-				session_id);
+		sme_err("Session does not exist for session id: %d",
+			session_id);
 		return QDF_STATUS_E_FAILURE;
 	}
 
 	auth_req_len = sizeof(tSirFTPreAuthReq);
 	preauth_req = (tpSirFTPreAuthReq) qdf_mem_malloc(auth_req_len);
 	if (NULL == preauth_req) {
-		sms_log(mac_ctx, LOGE,
-			FL("Memory allocation for FT Preauth request failed"));
+		sme_err("Memory allocation for FT Preauth request failed");
 		return QDF_STATUS_E_NOMEM;
 	}
 	/* Save the SME Session ID. We need it while processing preauth resp */
@@ -521,14 +576,20 @@ QDF_STATUS csr_roam_issue_ft_preauth_req(tHalHandle hal, uint32_t session_id,
 		(tpSirBssDescription) qdf_mem_malloc(sizeof(bss_desc->length)
 				+ bss_desc->length);
 	if (NULL == preauth_req->pbssDescription) {
-		sms_log(mac_ctx, LOGE,
-			FL("Memory allocation for FT Preauth request failed"));
+		sme_err("Memory allocation for FT Preauth request failed");
 		return QDF_STATUS_E_NOMEM;
 	}
 
 	preauth_req->messageType = eWNI_SME_FT_PRE_AUTH_REQ;
 
 	preauth_req->preAuthchannelNum = bss_desc->channelId;
+	preauth_req->dot11mode =
+				csr_get_dot11_mode(hal, session_id, bss_desc);
+	if (!preauth_req->dot11mode) {
+		sme_err("preauth_req->dot11mode is zero");
+		qdf_mem_free(preauth_req);
+		return QDF_STATUS_E_FAILURE;
+	}
 
 	qdf_mem_copy((void *)&preauth_req->currbssId,
 			(void *)csr_session->connectedProfile.bssid.bytes,
@@ -574,14 +635,13 @@ void csr_roam_ft_pre_auth_rsp_processor(tHalHandle hal,
 	tDot11fAuthentication *p_auth = NULL;
 
 	if (NULL == csr_session) {
-		sms_log(mac_ctx, LOGE, FL("CSR session is NULL"));
+		sme_err("CSR session is NULL");
 		return;
 	}
 	status = csr_neighbor_roam_preauth_rsp_handler(mac_ctx,
 			preauth_rsp->smeSessionId, preauth_rsp->status);
 	if (status != QDF_STATUS_SUCCESS) {
-		sms_log(mac_ctx, LOGE,
-			FL("Preauth was not processed: %d SessionID: %d"),
+		sme_err("Preauth was not processed: %d SessionID: %d",
 			status, session_id);
 		return;
 	}
@@ -605,8 +665,7 @@ void csr_roam_ft_pre_auth_rsp_processor(tHalHandle hal,
 			&csr_session->ftSmeContext.preAuthReassocIntvlTimer,
 			60);
 	if (QDF_STATUS_SUCCESS != status) {
-		sms_log(mac_ctx, LOGE,
-			FL("PreauthReassocInterval timer failed status %d"),
+		sme_err("PreauthReassocInterval timer failed status %d",
 			status);
 		return;
 	}
@@ -652,6 +711,7 @@ void csr_roam_ft_pre_auth_rsp_processor(tHalHandle hal,
 	if (csr_roam_is11r_assoc(mac_ctx, preauth_rsp->smeSessionId) &&
 			(conn_Auth_type == eCSR_AUTH_TYPE_OPEN_SYSTEM)) {
 		uint16_t ft_ies_length;
+
 		ft_ies_length = preauth_rsp->ric_ies_length;
 
 		if ((csr_session->ftSmeContext.reassoc_ft_ies) &&
@@ -668,10 +728,9 @@ void csr_roam_ft_pre_auth_rsp_processor(tHalHandle hal,
 
 		status = dot11f_unpack_authentication(mac_ctx,
 				preauth_rsp->ft_ies,
-				preauth_rsp->ft_ies_length, p_auth);
+				preauth_rsp->ft_ies_length, p_auth, false);
 		if (DOT11F_FAILED(status))
-			sms_log(mac_ctx, LOGE,
-				FL("Failed to parse an Authentication frame"));
+			sme_err("Failed to parse an Authentication frame");
 		else if (p_auth->MobilityDomain.present)
 			csr_session->ftSmeContext.addMDIE = true;
 
@@ -683,19 +742,16 @@ void csr_roam_ft_pre_auth_rsp_processor(tHalHandle hal,
 		csr_session->ftSmeContext.reassoc_ft_ies =
 			qdf_mem_malloc(ft_ies_length);
 		if (NULL == csr_session->ftSmeContext.reassoc_ft_ies) {
-			sms_log(mac_ctx, LOGE,
-				FL("Memory allocation failed for ft_ies"));
+			sme_err("Memory allocation failed for ft_ies");
 			return;
-		} else {
-			/* Copy the RIC IEs to reassoc IEs */
-			qdf_mem_copy(((uint8_t *) csr_session->ftSmeContext.
-						reassoc_ft_ies),
+		}
+		/* Copy the RIC IEs to reassoc IEs */
+		qdf_mem_copy(((uint8_t *) csr_session->ftSmeContext.
+					reassoc_ft_ies),
 					(uint8_t *) preauth_rsp->ric_ies,
 					preauth_rsp->ric_ies_length);
-			csr_session->ftSmeContext.reassoc_ft_ies_length =
-				ft_ies_length;
-			csr_session->ftSmeContext.addMDIE = true;
-		}
+		csr_session->ftSmeContext.reassoc_ft_ies_length = ft_ies_length;
+		csr_session->ftSmeContext.addMDIE = true;
 	}
 }
 
@@ -736,28 +792,25 @@ QDF_STATUS csr_neighbor_roam_issue_preauth_req(tpAniSirGlobal mac_ctx,
 				&neighbor_roam_info->roamableAPList, NULL);
 
 	if (NULL == neighbor_bss_node) {
-		sms_log(mac_ctx, LOGW, FL("Roamable AP list is empty.. "));
+		sme_err("Roamable AP list is empty..");
 		return QDF_STATUS_E_FAILURE;
-	} else {
-		csr_neighbor_roam_send_lfr_metric_event(mac_ctx, session_id,
+	}
+	csr_neighbor_roam_send_lfr_metric_event(mac_ctx, session_id,
 			neighbor_bss_node->pBssDescription->bssId,
 			eCSR_ROAM_PREAUTH_INIT_NOTIFY);
-		status = csr_roam_enqueue_preauth(mac_ctx, session_id,
+	status = csr_roam_enqueue_preauth(mac_ctx, session_id,
 				neighbor_bss_node->pBssDescription,
 				eCsrPerformPreauth, true);
 
-		sms_log(mac_ctx, LOG1,
-			FL("Before Pre-Auth: BSSID " MAC_ADDRESS_STR ", Ch:%d"),
+	sme_debug("Before Pre-Auth: BSSID " MAC_ADDRESS_STR ", Ch:%d",
 			MAC_ADDR_ARRAY(
 				neighbor_bss_node->pBssDescription->bssId),
 			(int)neighbor_bss_node->pBssDescription->channelId);
 
-		if (QDF_STATUS_SUCCESS != status) {
-			sms_log(mac_ctx, LOGE,
-				FL("Return failed preauth request status %d"),
-				status);
-			return status;
-		}
+	if (QDF_STATUS_SUCCESS != status) {
+		sme_err("Return failed preauth request status %d",
+			status);
+		return status;
 	}
 
 	neighbor_roam_info->FTRoamInfo.preauthRspPending = true;

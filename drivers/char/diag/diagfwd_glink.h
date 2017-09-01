@@ -1,4 +1,4 @@
-﻿/* Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -37,6 +37,7 @@ struct diag_glink_info {
 	struct work_struct read_work;
 	struct work_struct connect_work;
 	struct work_struct remote_disconnect_work;
+	struct work_struct late_init_work;
 	struct diagfwd_info *fwd_ctxt;
 };
 

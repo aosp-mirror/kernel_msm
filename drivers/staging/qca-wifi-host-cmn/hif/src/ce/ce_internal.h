@@ -96,7 +96,7 @@ struct CE_ring_state {
 	unsigned int low_water_mark_nentries;
 	unsigned int high_water_mark_nentries;
 	void **per_transfer_context;
-	OS_DMA_MEM_CONTEXT(ce_dmacontext) /* OS Specific DMA context */
+	OS_DMA_MEM_CONTEXT(ce_dmacontext); /* OS Specific DMA context */
 };
 
 /* Copy Engine internal state */
@@ -134,14 +134,15 @@ struct CE_state {
 	atomic_t rx_pending;
 
 	qdf_spinlock_t ce_index_lock;
-	bool force_break;	/* Flag to indicate whether to
-				 * break out the DPC context */
+	/* Flag to indicate whether to break out the DPC context */
+	bool force_break;
 
 	/* time in nanoseconds to yield control of napi poll */
 	unsigned long long ce_service_yield_time;
-	unsigned int receive_count;	/* count Num Of Receive Buffers
-					 * handled for one interrupt
-					 * DPC routine */
+	/* CE service start time in nanoseconds */
+	unsigned long long ce_service_start_time;
+	/* Num Of Receive Buffers handled for one interrupt DPC routine */
+	unsigned int receive_count;
 	/* epping */
 	bool timer_inited;
 	qdf_timer_t poll_timer;
@@ -395,7 +396,8 @@ struct ce_sendlist_s {
 			unsigned int ndesc;     /* Rx descriptor list */
 		} u;
 		/* flags: externally-specified flags;
-		 * OR-ed with internal flags */
+		 * OR-ed with internal flags
+		 */
 		uint32_t flags;
 		uint32_t user_flags;
 	} item[CE_SENDLIST_ITEMS_MAX];

@@ -37,7 +37,6 @@
 #include "sch_global.h"
 #include "sys_global.h"
 #include "cfg_global.h"
-#include "utils_global.h"
 #include "sir_api.h"
 
 #include "csr_api.h"
@@ -83,6 +82,9 @@
 
 #define P2P_WILDCARD_SSID "DIRECT-"     /* TODO Put it in proper place; */
 #define P2P_WILDCARD_SSID_LEN 7
+
+/* Flags for processing single BSS */
+#define WLAN_SKIP_RSSI_UPDATE   0x01
 
 #ifdef WLAN_FEATURE_CONCURRENT_P2P
 #define MAX_NO_OF_P2P_SESSIONS  5
@@ -173,6 +175,7 @@ enum log_event_indicator {
  * @WLAN_LOG_REASON_SCAN_NOT_ALLOWED: scan not allowed due to connection states
  * @WLAN_LOG_REASON_HB_FAILURE: station triggered heart beat failure with AP
  * @WLAN_LOG_REASON_ROAM_HO_FAILURE: Handover failed during LFR3 roaming
+ * @WLAN_LOG_REASON_DISCONNECT: Disconnect because of some failure
  */
 enum log_event_host_reason_code {
 	WLAN_LOG_REASON_CODE_UNUSED,
@@ -188,7 +191,8 @@ enum log_event_host_reason_code {
 	WLAN_LOG_REASON_NO_SCAN_RESULTS,
 	WLAN_LOG_REASON_SCAN_NOT_ALLOWED,
 	WLAN_LOG_REASON_HB_FAILURE,
-	WLAN_LOG_REASON_ROAM_HO_FAILURE
+	WLAN_LOG_REASON_ROAM_HO_FAILURE,
+	WLAN_LOG_REASON_DISCONNECT
 };
 
 
@@ -393,6 +397,8 @@ typedef struct sAniSirLim {
 	/* abort scan is used to abort an on-going scan */
 	uint8_t abortScan;
 	tLimScanChnInfo scanChnInfo;
+
+	struct lim_scan_channel_status scan_channel_status;
 
 	/* ////////////////////////////////////     SCAN/LEARN RELATED START /////////////////////////////////////////// */
 	tSirMacAddr gSelfMacAddr;       /* added for BT-AMP Support */
@@ -846,22 +852,9 @@ typedef struct sRrmContext {
 	tRrmPEContext rrmPEContext;
 } tRrmContext, *tpRrmContext;
 
-/**
- * enum tDriverType - Indicate the driver type to the mac, and based on this
- * do appropriate initialization.
- *
- * @eDRIVER_TYPE_PRODUCTION:
- * @eDRIVER_TYPE_MFG:
- *
- */
-typedef enum {
-	eDRIVER_TYPE_PRODUCTION = 0,
-	eDRIVER_TYPE_MFG = 1,
-} tDriverType;
-
 typedef struct sHalMacStartParameters {
 	/* parametes for the Firmware */
-	tDriverType driverType;
+	enum qdf_driver_type driverType;
 
 } tHalMacStartParameters;
 
@@ -903,16 +896,32 @@ struct vdev_type_nss {
 	uint8_t ocb;
 };
 
+/**
+ * struct limit_off_chan_params - limit off channel parameters
+ * @is_active: status of parameters.
+ * @vdev_id: vdev_id
+ * @max_offchan_time: max allowed off channel time
+ * @rest_time: home channel time
+ * @skip_dfs_chan: skip DFS channels during scan
+ * Holds the limit off channel parameters.
+ */
+struct limit_off_chan_params {
+	bool is_active;
+	uint32_t vdev_id;
+	uint32_t max_offchan_time;
+	uint32_t rest_time;
+	bool skip_dfs_chan;
+};
+
 /* ------------------------------------------------------------------- */
 /* / MAC Sirius parameter structure */
 typedef struct sAniSirGlobal {
-	tDriverType gDriverType;
+	enum qdf_driver_type gDriverType;
 
 	tAniSirCfg cfg;
 	tAniSirLim lim;
 	tAniSirSch sch;
 	tAniSirSys sys;
-	tAniSirUtils utils;
 
 	/* PAL/HDD handle */
 	tHddHandle hHdd;
@@ -963,6 +972,7 @@ typedef struct sAniSirGlobal {
 	/* 802.11p enable */
 	bool enable_dot11p;
 
+	bool allow_adj_ch_bcn;
 	/* DBS capability based on INI and FW capability */
 	uint8_t hw_dbs_capable;
 	/* Based on INI parameter */
@@ -977,6 +987,10 @@ typedef struct sAniSirGlobal {
 	enum  country_src reg_hint_src;
 	uint32_t rx_packet_drop_counter;
 	struct candidate_chan_info candidate_channel_info[QDF_MAX_NUM_CHAN];
+	bool snr_monitor_enabled;
+	/* channel information callback */
+	void (*chan_info_cb)(struct scan_chan_info *chan_info);
+	struct limit_off_chan_params limit_off_chan_params;
 } tAniSirGlobal;
 
 typedef enum {

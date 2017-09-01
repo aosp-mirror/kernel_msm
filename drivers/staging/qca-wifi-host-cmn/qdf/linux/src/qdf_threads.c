@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -34,6 +34,7 @@
 #include <qdf_threads.h>
 #include <qdf_types.h>
 #include <qdf_trace.h>
+#include <qdf_module.h>
 #include <linux/jiffies.h>
 #include <linux/sched.h>
 #include <linux/delay.h>
@@ -62,7 +63,7 @@ void qdf_sleep(uint32_t ms_interval)
 	}
 	msleep_interruptible(ms_interval);
 }
-EXPORT_SYMBOL(qdf_sleep);
+qdf_export_symbol(qdf_sleep);
 
 /**
  *  qdf_sleep_us() - sleep
@@ -77,6 +78,7 @@ EXPORT_SYMBOL(qdf_sleep);
 void qdf_sleep_us(uint32_t us_interval)
 {
 	unsigned long timeout = usecs_to_jiffies(us_interval) + 1;
+
 	if (in_interrupt()) {
 		QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_ERROR,
 			  "%s cannot be called from interrupt context!!!",
@@ -87,7 +89,7 @@ void qdf_sleep_us(uint32_t us_interval)
 	while (timeout && !signal_pending(current))
 		timeout = schedule_timeout_interruptible(timeout);
 }
-EXPORT_SYMBOL(qdf_sleep_us);
+qdf_export_symbol(qdf_sleep_us);
 
 /**
  *  qdf_busy_wait() - busy wait
@@ -103,4 +105,4 @@ void qdf_busy_wait(uint32_t us_interval)
 {
 	udelay(us_interval);
 }
-EXPORT_SYMBOL(qdf_busy_wait);
+qdf_export_symbol(qdf_busy_wait);

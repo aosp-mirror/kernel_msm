@@ -2055,6 +2055,9 @@ static const char * const rdac2_mux_text[] = {
 	"ZERO", "RX2", "RX1"
 };
 
+static const struct snd_kcontrol_new adc1_switch =
+	SOC_DAPM_SINGLE("Switch", SND_SOC_NOPM, 0, 1, 0);
+
 static const struct soc_enum rdac2_mux_enum =
 	SOC_ENUM_SINGLE(MSM89XX_PMIC_DIGITAL_CDC_CONN_HPHR_DAC_CTL,
 		0, 3, rdac2_mux_text);
@@ -3105,7 +3108,8 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"ADC2 MUX", "INP2", "ADC2_INP2"},
 	{"ADC2 MUX", "INP3", "ADC2_INP3"},
 
-	{"ADC1", NULL, "AMIC1"},
+	{"ADC1", NULL, "ADC1_INP1"},
+	{"ADC1_INP1", "Switch", "AMIC1"},
 	{"ADC2_INP2", NULL, "AMIC2"},
 	{"ADC2_INP3", NULL, "AMIC3"},
 
@@ -3446,6 +3450,8 @@ static const struct snd_soc_dapm_widget msm_anlg_cdc_dapm_widgets[] = {
 
 	SND_SOC_DAPM_SPK("Ext Spk", msm_anlg_cdc_codec_enable_spk_ext_pa),
 
+	SND_SOC_DAPM_SWITCH("ADC1_INP1", SND_SOC_NOPM, 0, 0,
+			    &adc1_switch),
 	SND_SOC_DAPM_SUPPLY("RX1 CLK", MSM89XX_PMIC_DIGITAL_CDC_DIG_CLK_CTL,
 			    0, 0, NULL, 0),
 	SND_SOC_DAPM_SUPPLY("RX2 CLK", MSM89XX_PMIC_DIGITAL_CDC_DIG_CLK_CTL,
@@ -3829,7 +3835,6 @@ static int msm_anlg_cdc_device_up(struct snd_soc_codec *codec)
 {
 	struct sdm660_cdc_priv *sdm660_cdc_priv =
 		snd_soc_codec_get_drvdata(codec);
-	int ret = 0;
 
 	dev_dbg(codec->dev, "%s: device up!\n", __func__);
 
@@ -3851,21 +3856,6 @@ static int msm_anlg_cdc_device_up(struct snd_soc_codec *codec)
 	else if (sdm660_cdc_priv->boost_option == BYPASS_ALWAYS)
 		msm_anlg_cdc_bypass_on(codec);
 
-	msm_anlg_cdc_configure_cap(codec, false, false);
-	wcd_mbhc_stop(&sdm660_cdc_priv->mbhc);
-	wcd_mbhc_deinit(&sdm660_cdc_priv->mbhc);
-	/* Disable mechanical detection and set type to insertion */
-	snd_soc_update_bits(codec, MSM89XX_PMIC_ANALOG_MBHC_DET_CTL_1,
-			    0xA0, 0x20);
-	ret = wcd_mbhc_init(&sdm660_cdc_priv->mbhc, codec, &mbhc_cb,
-			    &intr_ids, wcd_mbhc_registers, true);
-	if (ret)
-		dev_err(codec->dev, "%s: mbhc initialization failed\n",
-			__func__);
-	else
-		wcd_mbhc_start(&sdm660_cdc_priv->mbhc,
-			sdm660_cdc_priv->mbhc.mbhc_cfg);
-
 	return 0;
 }
 
@@ -3886,8 +3876,10 @@ static int sdm660_cdc_notifier_service_cb(struct notifier_block *nb,
 
 	switch (opcode) {
 	case AUDIO_NOTIFIER_SERVICE_DOWN:
-		if (initial_boot)
+		if (initial_boot) {
+			initial_boot = false;
 			break;
+		}
 		dev_dbg(codec->dev,
 			"ADSP is about to power down. teardown/reset codec\n");
 		msm_anlg_cdc_device_down(codec);

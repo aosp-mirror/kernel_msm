@@ -41,7 +41,6 @@ static inline int pld_snoc_register_driver(void)
 
 static inline void pld_snoc_unregister_driver(void)
 {
-	return;
 }
 static inline int pld_snoc_wlan_enable(struct pld_wlan_enable_cfg *config,
 		    enum pld_driver_mode mode, const char *host_version)
@@ -64,11 +63,9 @@ static inline int pld_snoc_ce_free_irq(unsigned int ce_id, void *ctx)
 }
 static inline void pld_snoc_enable_irq(unsigned int ce_id)
 {
-	return;
 }
 static inline void pld_snoc_disable_irq(unsigned int ce_id)
 {
-	return;
 }
 static inline int pld_snoc_get_soc_info(struct pld_soc_info *info)
 {
@@ -150,6 +147,15 @@ static inline int pld_snoc_force_assert_target(struct device *dev)
 	return 0;
 }
 static inline int pld_snoc_set_fw_log_mode(u8 fw_log_mode)
+{
+	return 0;
+}
+
+static inline void pld_snoc_increment_driver_load_cnt(void)
+{
+}
+
+static inline int pld_snoc_get_driver_load_cnt(void)
 {
 	return 0;
 }
@@ -255,9 +261,20 @@ static inline int pld_snoc_force_assert_target(struct device *dev)
 {
 	return icnss_trigger_recovery(dev);
 }
+
 static inline int pld_snoc_set_fw_log_mode(u8 fw_log_mode)
 {
 	return icnss_set_fw_log_mode(fw_log_mode);
+}
+
+static inline void pld_snoc_increment_driver_load_cnt(void)
+{
+	icnss_increment_driver_load_cnt();
+}
+
+static inline int pld_snoc_get_driver_load_cnt(void)
+{
+	return icnss_get_driver_load_cnt();
 }
 #endif
 #endif

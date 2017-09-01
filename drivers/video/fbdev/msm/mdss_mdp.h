@@ -587,6 +587,7 @@ struct mdss_mdp_ctl {
 	struct mdss_mdp_avr_info avr_info;
 	bool commit_in_progress;
 	struct mutex ds_lock;
+	bool need_vsync_on;
 };
 
 struct mdss_mdp_mixer {
@@ -1108,9 +1109,9 @@ static inline enum mdss_mdp_pu_type mdss_mdp_get_pu_type(
 
 	if (!is_split_lm(mctl->mfd) || mdss_mdp_is_both_lm_valid(mctl))
 		pu_type = MDSS_MDP_DEFAULT_UPDATE;
-	else if (mctl->mixer_left->valid_roi)
+	else if (mctl->mixer_left && mctl->mixer_left->valid_roi)
 		pu_type = MDSS_MDP_LEFT_ONLY_UPDATE;
-	else if (mctl->mixer_right->valid_roi)
+	else if (mctl->mixer_right && mctl->mixer_right->valid_roi)
 		pu_type = MDSS_MDP_RIGHT_ONLY_UPDATE;
 	else
 		pr_err("%s: invalid pu_type\n", __func__);
@@ -1786,7 +1787,7 @@ void mdss_mdp_ctl_notifier_register(struct mdss_mdp_ctl *ctl,
 void mdss_mdp_ctl_notifier_unregister(struct mdss_mdp_ctl *ctl,
 	struct notifier_block *notifier);
 u32 mdss_mdp_ctl_perf_get_transaction_status(struct mdss_mdp_ctl *ctl);
-u32 apply_comp_ratio_factor(u32 quota, struct mdss_mdp_format_params *fmt,
+u64 apply_comp_ratio_factor(u64 quota, struct mdss_mdp_format_params *fmt,
 	struct mult_factor *factor);
 
 int mdss_mdp_scan_pipes(void);
@@ -2023,6 +2024,8 @@ void mdss_mdp_disable_hw_irq(struct mdss_data_type *mdata);
 void mdss_mdp_set_supported_formats(struct mdss_data_type *mdata);
 int mdss_mdp_dest_scaler_setup_locked(struct mdss_mdp_mixer *mixer);
 void *mdss_mdp_intf_get_ctx_base(struct mdss_mdp_ctl *ctl, int intf_num);
+
+int mdss_mdp_mixer_get_hw_num(struct mdss_mdp_mixer *mixer);
 
 #ifdef CONFIG_FB_MSM_MDP_NONE
 struct mdss_data_type *mdss_mdp_get_mdata(void)

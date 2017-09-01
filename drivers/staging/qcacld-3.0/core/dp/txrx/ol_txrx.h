@@ -39,7 +39,7 @@
  */
 #define OL_TX_NON_FWD_RESERVE	100
 #define OL_TXRX_PEER_UNREF_DELETE(peer) \
-	ol_txrx_peer_unref_delete(peer, __func__, __LINE__);
+	ol_txrx_peer_unref_delete(peer, __func__, __LINE__)
 
 int ol_txrx_peer_unref_delete(ol_txrx_peer_handle peer,
 					      const char *fname,
@@ -88,7 +88,6 @@ ol_txrx_hl_tdls_flag_reset(struct ol_txrx_vdev_t *vdev, bool flag);
 static inline void
 ol_txrx_hl_tdls_flag_reset(struct ol_txrx_vdev_t *vdev, bool flag)
 {
-	return;
 }
 #endif
 
@@ -114,14 +113,12 @@ ol_txrx_update_last_real_peer(
 static inline void
 ol_txrx_copy_mac_addr_raw(ol_txrx_vdev_handle vdev, uint8_t *bss_addr)
 {
-	return;
 }
 
 static inline void
 ol_txrx_add_last_real_peer(ol_txrx_pdev_handle pdev,
 			   ol_txrx_vdev_handle vdev, uint8_t *peer_id)
 {
-	return;
 }
 
 static inline bool
@@ -137,7 +134,6 @@ ol_txrx_update_last_real_peer(
 	uint8_t *peer_id, bool restore_last_peer)
 
 {
-	return;
 }
 #endif
 
@@ -180,6 +176,7 @@ QDF_STATUS ol_txrx_set_wisa_mode(ol_txrx_vdev_handle vdev,
 			bool enable);
 void ol_txrx_update_mac_id(uint8_t vdev_id, uint8_t mac_id);
 void ol_txrx_peer_detach_force_delete(ol_txrx_peer_handle peer);
+void peer_unmap_timer_work_function(void *);
 void peer_unmap_timer_handler(void *data);
 
 #endif /* _OL_TXRX__H_ */

@@ -62,13 +62,14 @@
 
 		/* Clocks */
 		clock-names = "gcc_mmss_sys_noc_axi_clk",
-			"mmssnoc_axi_clk", "mmss_mnoc_ahb_clk",
-			"mmss_bimc_smmu_ahb_clk", "mmss_bimc_smmu_axi_clk",
-			"mmss_video_core_clk", "mmss_video_ahb_clk",
-			"mmss_video_axi_clk",
+			"mmssnoc_axi_clk", "mmss_throttle_video_axi_clk",
+			"mmss_mnoc_ahb_clk", "mmss_bimc_smmu_ahb_clk",
+			"mmss_bimc_smmu_axi_clk", "mmss_video_core_clk",
+			"mmss_video_ahb_clk", "mmss_video_axi_clk",
 			"mmss_video_core0_clk";
 		clocks = <&clock_gcc GCC_MMSS_SYS_NOC_AXI_CLK>,
 			<&clock_rpmcc MMSSNOC_AXI_CLK>,
+			<&clock_mmss MMSS_THROTTLE_VIDEO_AXI_CLK>,
 			<&clock_mmss MMSS_MNOC_AHB_CLK>,
 			<&clock_mmss MMSS_BIMC_SMMU_AHB_CLK>,
 			<&clock_mmss MMSS_BIMC_SMMU_AXI_CLK>,
@@ -76,7 +77,7 @@
 			<&clock_mmss MMSS_VIDEO_AHB_CLK>,
 			<&clock_mmss  MMSS_VIDEO_AXI_CLK>,
 			<&clock_mmss MMSS_VIDEO_SUBCORE0_CLK>;
-		qcom,clock-configs = <0x0 0x0 0x0 0x0 0x0
+		qcom,clock-configs = <0x0 0x0 0x0 0x0 0x0 0x0
 				0x3 0x0 0x2 0x3>;
 
 		/* Buses */
@@ -208,7 +209,7 @@
 				<&mmss_bimc_smmu 0x411>,
 				<&mmss_bimc_smmu 0x431>;
 			buffer-types = <0xfff>;
-			virtual-addr-pool = <0x70800000 0x6f800000>;
+			virtual-addr-pool = <0x79000000 0x60000000>;
 		};
 
 		firmware_cb {
@@ -230,7 +231,7 @@
 				<&mmss_bimc_smmu 0x529>,
 				<&mmss_bimc_smmu 0x52b>;
 			buffer-types = <0x241>;
-			virtual-addr-pool = <0x4b000000 0x25800000>;
+			virtual-addr-pool = <0x51000000 0x28000000>;
 			qcom,secure-context-bank;
 		};
 
@@ -242,7 +243,7 @@
 				<&mmss_bimc_smmu 0x510>,
 				<&mmss_bimc_smmu 0x52c>;
 			buffer-types = <0x106>;
-			virtual-addr-pool = <0x25800000 0x25800000>;
+			virtual-addr-pool = <0x29000000 0x28000000>;
 			qcom,secure-context-bank;
 		};
 
@@ -259,7 +260,7 @@
 				<&mmss_bimc_smmu 0x52d>,
 				<&mmss_bimc_smmu 0x540>;
 			buffer-types = <0x480>;
-			virtual-addr-pool = <0x1000000 0x24800000>;
+			virtual-addr-pool = <0x1000000 0x28000000>;
 			qcom,secure-context-bank;
 		};
 	};

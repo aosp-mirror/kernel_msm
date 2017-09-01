@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015,2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -64,7 +64,7 @@ lim_get_session_info(tpAniSirGlobal pMac, uint8_t *pBuf, uint8_t *sessionId,
 		     uint16_t *transactionId)
 {
 	if (!pBuf) {
-		lim_log(pMac, LOGE, FL("NULL ptr received. "));
+		pe_err("NULL ptr received");
 		return;
 	}
 
@@ -101,10 +101,6 @@ tSirRetStatus lim_send_disassoc_frm_req_ser_des(tpAniSirGlobal mac_ctx,
 
 	len = disassoc_frm_req->length = lim_get_u16(buf);
 	buf += sizeof(A_UINT16);
-
-	PELOG1(lim_log(mac_ctx, LOG1,
-		FL("SME_DISASSOC_REQ length %d bytes is:"), len);)
-		PELOG1(sirDumpBuf(mac_ctx, SIR_LIM_MODULE_ID, LOG1, buf, len);)
 
 	if (len < (A_INT16) sizeof(A_UINT32))
 		return eSIR_FAILURE;

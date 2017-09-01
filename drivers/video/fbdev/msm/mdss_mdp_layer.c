@@ -741,14 +741,15 @@ static int __cursor_layer_check(struct msm_fb_data_type *mfd,
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
 
 	if ((layer->z_order != HW_CURSOR_STAGE(mdata))
+			|| layer->flags & MDP_LAYER_FLIP_LR
 			|| layer->src_rect.w > mdata->max_cursor_size
 			|| layer->src_rect.h > mdata->max_cursor_size
 			|| layer->src_rect.w != layer->dst_rect.w
 			|| layer->src_rect.h != layer->dst_rect.h
 			|| !mdata->ncursor_pipes) {
-		pr_err("Incorrect cursor configs for pipe:%d, cursor_pipes:%d, z_order:%d\n",
+		pr_err("Incorrect cursor configs for pipe:0x%x, ncursor_pipes:%d, z_order:%d, flags:0x%x\n",
 				layer->pipe_ndx, mdata->ncursor_pipes,
-				layer->z_order);
+				layer->z_order, layer->flags);
 		pr_err("src:{%d,%d,%d,%d}, dst:{%d,%d,%d,%d}\n",
 				layer->src_rect.x, layer->src_rect.y,
 				layer->src_rect.w, layer->src_rect.h,
@@ -974,26 +975,31 @@ static int __validate_layer_reconfig(struct mdp_input_layer *layer,
 	struct mdss_mdp_pipe *pipe)
 {
 	int status = 0;
-	struct mdss_mdp_format_params *src_fmt;
+	struct mdss_mdp_format_params *layer_src_fmt;
+	struct mdss_data_type *mdata = mfd_to_mdata(pipe->mfd);
+	bool is_csc_db = (mdata->mdp_rev < MDSS_MDP_HW_REV_300) ? false : true;
+
+	layer_src_fmt = mdss_mdp_get_format_params(layer->buffer.format);
+	if (!layer_src_fmt) {
+		pr_err("Invalid layer format %d\n", layer->buffer.format);
+		status = -EINVAL;
+		goto err_exit;
+	}
 
 	/*
-	 * csc registers are not double buffered. It is not permitted
-	 * to change them on staged pipe with YUV layer.
+	 * HW earlier to sdm 3.x.x does not support double buffer CSC.
+	 * Invalidate any reconfig of CSC block on staged pipe.
 	 */
-	if (pipe->csc_coeff_set != layer->color_space) {
-		src_fmt = mdss_mdp_get_format_params(layer->buffer.format);
-		if (!src_fmt) {
-			pr_err("Invalid layer format %d\n",
-						layer->buffer.format);
-			status = -EINVAL;
-		} else {
-			if (pipe->src_fmt->is_yuv && src_fmt &&
-							src_fmt->is_yuv) {
-				status = -EPERM;
-				pr_err("csc change is not permitted on used pipe\n");
-			}
-		}
+	if (!is_csc_db &&
+		((!!pipe->src_fmt->is_yuv != !!layer_src_fmt->is_yuv) ||
+		(pipe->src_fmt->is_yuv && layer_src_fmt->is_yuv &&
+		pipe->csc_coeff_set != layer->color_space))) {
+		pr_err("CSC reconfig not allowed on staged pipe\n");
+		status = -EINVAL;
+		goto err_exit;
 	}
+
+err_exit:
 	return status;
 }
 
@@ -1691,11 +1697,24 @@ static struct mdss_mdp_pipe *__find_and_move_cleanup_pipe(
 	enum mdss_mdp_pipe_rect rect_num)
 {
 	struct mdss_mdp_pipe *pipe = NULL;
+	struct mdss_mdp_data *buf, *tmpbuf;
 
 	if (__find_pipe_in_list(&mdp5_data->pipes_destroy,
 				pipe_ndx, &pipe, rect_num)) {
 		pr_debug("reuse destroy pipe id:%d ndx:%d rect:%d\n",
 				pipe->num, pipe_ndx, rect_num);
+		/*
+		 * Pipe is being moved from destroy list to used list.
+		 * It is possible that the buffer which was attached to a pipe
+		 * in destroy list hasn't been cleaned up yet. Mark the buffers
+		 * as cleanup to make sure that they will be freed before the
+		 * pipe is reused.
+		 */
+		list_for_each_entry_safe(buf, tmpbuf, &pipe->buf_queue,
+						pipe_list) {
+			buf->state = MDP_BUF_STATE_CLEANUP;
+			list_del_init(&buf->pipe_list);
+		}
 		list_move(&pipe->list, &mdp5_data->pipes_used);
 	} else if (__find_pipe_in_list(&mdp5_data->pipes_cleanup,
 				pipe_ndx, &pipe, rect_num)) {
@@ -1812,13 +1831,16 @@ static int __validate_secure_session(struct mdss_overlay_private *mdp5_data)
 
 	pr_debug("pipe count:: secure display:%d non-secure:%d secure-vid:%d,secure-cam:%d\n",
 		sd_pipes, nonsd_pipes, secure_vid_pipes, secure_cam_pipes);
+	MDSS_XLOG(mdss_get_sd_client_cnt(), sd_pipes, nonsd_pipes,
+			secure_vid_pipes, secure_cam_pipes);
 
 	if (mdss_get_sd_client_cnt() && !mdp5_data->sd_enabled) {
 		pr_err("Secure session already enabled for other client\n");
 		return -EINVAL;
 	}
 
-	if ((sd_pipes) &&
+	if (((sd_pipes) || (mdp5_data->ctl->is_video_mode &&
+		mdss_get_sd_client_cnt())) &&
 		(nonsd_pipes || secure_vid_pipes ||
 		secure_cam_pipes)) {
 		pr_err("non-secure layer validation request during secure display session\n");
@@ -2160,115 +2182,157 @@ static int __multirect_validate_mode(struct msm_fb_data_type *mfd,
 	return 0;
 }
 
-static int __update_multirect_info(struct msm_fb_data_type *mfd,
-		struct mdss_mdp_validate_info_t *validate_info_list,
-		struct mdp_input_layer *layer_list, int ndx, int layer_cnt)
+/*
+ * linear search for a layer with given source pipe and rectangle number.
+ * If rectangle number is invalid, it's dropped from search criteria
+ */
+static int find_layer(enum mdss_mdp_sspp_index pnum,
+			int rect_num,
+			struct mdp_input_layer *layer_list,
+			size_t layer_cnt, int start_index)
 {
-	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
-	struct mdss_mdp_validate_info_t *vinfo[MDSS_MDP_PIPE_MAX_RECTS];
-	int i, ptype, max_rects, mode;
-	int cnt = 1;
+	int i;
 
-	mode = __multirect_layer_flags_to_mode(layer_list[ndx].flags);
-	if (IS_ERR_VALUE(mode))
-		return mode;
+	if (start_index < 0)
+		start_index = 0;
 
-	pr_debug("layer #%d pipe_ndx=%d multirect mode=%d\n",
-			ndx, layer_list[ndx].pipe_ndx, mode);
+	if (start_index >= layer_cnt)
+		return -EINVAL;
 
-	vinfo[0] = &validate_info_list[ndx];
-	vinfo[0]->layer = &layer_list[ndx];
-	vinfo[0]->multirect.mode = mode;
-	vinfo[0]->multirect.num = MDSS_MDP_PIPE_RECT0;
-	vinfo[0]->multirect.next = NULL;
+	for (i = start_index; i < layer_cnt; i++) {
+		if (get_pipe_num_from_ndx(layer_list[i].pipe_ndx) == pnum &&
+			(rect_num < MDSS_MDP_PIPE_RECT0 ||
+			rect_num >= MDSS_MDP_PIPE_MAX_RECTS ||
+			layer_list[i].rect_num == rect_num))
+			return i;
+	}
+
+	return -ENOENT; /* no match found */
+}
+
+static int __validate_multirect_param(struct msm_fb_data_type *mfd,
+			struct mdss_mdp_validate_info_t *validate_info_list,
+			struct mdp_input_layer *layer_list,
+			int ndx, size_t layer_count)
+{
+	int multirect_mode;
+	int pnum;
+	int rect_num;
+
+	/* populate v_info with default values */
+	validate_info_list[ndx].layer = &layer_list[ndx];
+	validate_info_list[ndx].multirect.max_rects = MDSS_MDP_PIPE_MAX_RECTS;
+	validate_info_list[ndx].multirect.next = NULL;
+	validate_info_list[ndx].multirect.num = MDSS_MDP_PIPE_RECT0;
+	validate_info_list[ndx].multirect.mode = MDSS_MDP_PIPE_MULTIRECT_NONE;
+
+	multirect_mode = __multirect_layer_flags_to_mode(
+					layer_list[ndx].flags);
+	if (IS_ERR_VALUE(multirect_mode))
+		return multirect_mode;
 
 	/* nothing to be done if multirect is disabled */
-	if (mode == MDSS_MDP_PIPE_MULTIRECT_NONE)
-		return cnt;
+	if (multirect_mode == MDSS_MDP_PIPE_MULTIRECT_NONE)
+		return 0;
 
-	ptype = get_pipe_type_from_ndx(layer_list[ndx].pipe_ndx);
-	if (ptype == MDSS_MDP_PIPE_TYPE_INVALID) {
-		pr_err("invalid pipe ndx %d\n", layer_list[ndx].pipe_ndx);
-		return -EINVAL;
-	}
+	validate_info_list[ndx].multirect.mode = multirect_mode;
 
-	max_rects = mdata->rects_per_sspp[ptype] ? : 1;
-
-	for (i = ndx + 1; i < layer_cnt; i++) {
-		if (layer_list[ndx].pipe_ndx == layer_list[i].pipe_ndx) {
-			if (cnt >= max_rects) {
-				pr_err("more than %d layers of type %d with same pipe_ndx=%d indexes=%d %d\n",
-					max_rects, ptype,
-					layer_list[ndx].pipe_ndx, ndx, i);
-				return -EINVAL;
-			}
-
-			mode = __multirect_layer_flags_to_mode(
-					layer_list[i].flags);
-			if (IS_ERR_VALUE(mode))
-				return mode;
-
-			if (mode != vinfo[0]->multirect.mode) {
-				pr_err("unable to set different multirect modes for pipe_ndx=%d (%d %d)\n",
-					layer_list[ndx].pipe_ndx, ndx, i);
-				return -EINVAL;
-			}
-
-			pr_debug("found matching pair for pipe_ndx=%d (%d %d)\n",
-					layer_list[i].pipe_ndx, ndx, i);
-
-			vinfo[cnt] = &validate_info_list[i];
-			vinfo[cnt]->multirect.num = cnt;
-			vinfo[cnt]->multirect.next = vinfo[0]->layer;
-			vinfo[cnt]->multirect.mode = mode;
-			vinfo[cnt]->layer = &layer_list[i];
-
-			vinfo[cnt - 1]->multirect.next = vinfo[cnt]->layer;
-			cnt++;
-		}
-	}
-
-	if (cnt == 1) {
-		pr_err("multirect mode enabled but unable to find extra rects for pipe_ndx=%x\n",
+	pnum = get_pipe_num_from_ndx(layer_list[ndx].pipe_ndx);
+	if (get_pipe_type_from_num(pnum) != MDSS_MDP_PIPE_TYPE_DMA) {
+		pr_err("Multirect not supported on pipe ndx 0x%x\n",
 			layer_list[ndx].pipe_ndx);
 		return -EINVAL;
 	}
 
-	return cnt;
+	rect_num = layer_list[ndx].rect_num;
+	if (rect_num >= MDSS_MDP_PIPE_MAX_RECTS)
+		return -EINVAL;
+	validate_info_list[ndx].multirect.num = rect_num;
+
+	return 0;
 }
 
-static int __validate_multirect(struct msm_fb_data_type *mfd,
-	struct mdss_mdp_validate_info_t *validate_info_list,
-	struct mdp_input_layer *layer_list, int ndx, int layer_cnt)
+static int __update_multirect_info(struct msm_fb_data_type *mfd,
+			struct mdss_mdp_validate_info_t *validate_info_list,
+			struct mdp_input_layer *layer_list,
+			int ndx, size_t layer_cnt, int is_rect_num_valid)
 {
-	struct mdp_input_layer *layers[MDSS_MDP_PIPE_MAX_RECTS] = { 0 };
-	int i, cnt, rc;
+	int ret;
+	int pair_rect_num = -1;
+	int pair_index;
 
-	cnt = __update_multirect_info(mfd, validate_info_list,
-			layer_list, ndx, layer_cnt);
-	if (IS_ERR_VALUE(cnt))
-		return cnt;
+	if (!is_rect_num_valid)
+		layer_list[ndx].rect_num = MDSS_MDP_PIPE_RECT0;
 
-	if (cnt <= 1) {
-		/* nothing to validate in single rect mode */
-		return 0;
-	} else if (cnt > 2) {
-		pr_err("unsupported multirect configuration, multirect cnt=%d\n",
-				cnt);
+	ret = __validate_multirect_param(mfd, validate_info_list,
+				layer_list, ndx, layer_cnt);
+	/* return if we hit error or multirectangle mode is disabled. */
+	if (IS_ERR_VALUE(ret) ||
+		(!ret && validate_info_list[ndx].multirect.mode ==
+		MDSS_MDP_PIPE_MULTIRECT_NONE))
+		return ret;
+
+	if (is_rect_num_valid)
+		pair_rect_num = (validate_info_list[ndx].multirect.num ==
+				MDSS_MDP_PIPE_RECT0) ? MDSS_MDP_PIPE_RECT1 :
+				MDSS_MDP_PIPE_RECT0;
+
+	pair_index = find_layer(get_pipe_num_from_ndx(
+			layer_list[ndx].pipe_ndx), pair_rect_num,
+			layer_list, layer_cnt, ndx + 1);
+	if (IS_ERR_VALUE(pair_index)) {
+		pr_err("Multirect pair not found for pipe ndx 0x%x\n",
+			layer_list[ndx].pipe_ndx);
 		return -EINVAL;
 	}
 
-	layers[0] = validate_info_list[ndx].layer;
-	layers[1] = validate_info_list[ndx].multirect.next;
+	if (!is_rect_num_valid)
+		layer_list[pair_index].rect_num = MDSS_MDP_PIPE_RECT1;
 
+	ret = __validate_multirect_param(mfd, validate_info_list,
+				layer_list, pair_index, layer_cnt);
+	if (IS_ERR_VALUE(ret) ||
+		(validate_info_list[ndx].multirect.mode !=
+		validate_info_list[pair_index].multirect.mode))
+		return -EINVAL;
+
+	validate_info_list[ndx].multirect.next = &layer_list[pair_index];
+	validate_info_list[pair_index].multirect.next = &layer_list[ndx];
+
+	return 0;
+}
+
+static int __validate_multirect(struct msm_fb_data_type *mfd,
+			struct mdss_mdp_validate_info_t *validate_info_list,
+			struct mdp_input_layer *layer_list,
+			int ndx, size_t layer_cnt, int is_rect_num_valid)
+{
+	int ret;
+	int i;
+	struct mdp_input_layer *layers[MDSS_MDP_PIPE_MAX_RECTS];
+	struct mdp_input_layer *pair_layer;
+
+	ret = __update_multirect_info(mfd, validate_info_list,
+				layer_list, ndx, layer_cnt, is_rect_num_valid);
+	/* return if we hit error or multirectangle mode is disabled. */
+	if (IS_ERR_VALUE(ret) ||
+		(!ret && validate_info_list[ndx].multirect.mode ==
+		MDSS_MDP_PIPE_MULTIRECT_NONE))
+		return ret;
+
+	layers[validate_info_list[ndx].multirect.num] = &layer_list[ndx];
+	pair_layer = validate_info_list[ndx].multirect.next;
+	layers[pair_layer->rect_num] = pair_layer;
+
+	/* check against smart DMA v1.0 restrictions */
 	for (i = 0; i < ARRAY_SIZE(__multirect_validators); i++) {
-		if (!__multirect_validators[i](layers, cnt))
+		if (!__multirect_validators[i](layers,
+			MDSS_MDP_PIPE_MAX_RECTS))
 			return -EINVAL;
 	}
-
-	rc = __multirect_validate_mode(mfd, layers, cnt);
-	if (IS_ERR_VALUE(rc))
-		return rc;
+	ret = __multirect_validate_mode(mfd, layers, MDSS_MDP_PIPE_MAX_RECTS);
+	if (IS_ERR_VALUE(ret))
+		return ret;
 
 	return 0;
 }
@@ -2368,14 +2432,14 @@ static int __validate_layers(struct msm_fb_data_type *mfd,
 	int layer_count = commit->input_layer_cnt;
 	u32 ds_mode = 0;
 
-	struct mdss_mdp_pipe *pipe, *tmp, *left_blend_pipe;
+	struct mdss_mdp_pipe *pipe = NULL, *tmp, *left_blend_pipe;
 	struct mdss_mdp_pipe *right_plist[MAX_PIPES_PER_LM] = {0};
 	struct mdss_mdp_pipe *left_plist[MAX_PIPES_PER_LM] = {0};
 	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
 	struct mdss_data_type *mdata = mfd_to_mdata(mfd);
 
 	struct mdss_mdp_mixer *mixer = NULL;
-	struct mdp_input_layer *layer, *layer_list;
+	struct mdp_input_layer *layer = NULL, *layer_list;
 	struct mdss_mdp_validate_info_t *validate_info_list = NULL;
 	bool is_single_layer = false, force_validate;
 	enum layer_pipe_q pipe_q_type;
@@ -2416,14 +2480,14 @@ static int __validate_layers(struct msm_fb_data_type *mfd,
 
 		if (!validate_info_list[i].layer) {
 			ret = __validate_multirect(mfd, validate_info_list,
-						   layer_list, i, layer_count);
+				layer_list, i, layer_count,
+				!!(commit->flags & MDP_COMMIT_RECT_NUM));
 			if (ret) {
 				pr_err("error validating multirect config. ret=%d i=%d\n",
 					ret, i);
 				goto end;
 			}
 		}
-
 		rect_num = validate_info_list[i].multirect.num;
 		BUG_ON(rect_num >= MDSS_MDP_PIPE_MAX_RECTS);
 
@@ -2782,7 +2846,8 @@ int mdss_mdp_layer_pre_commit(struct msm_fb_data_type *mfd,
 	for (i = 0; i < layer_count; i++) {
 		if (!validate_info_list[i].layer) {
 			ret = __update_multirect_info(mfd, validate_info_list,
-						   layer_list, i, layer_count);
+				layer_list, i, layer_count,
+				!!(commit->flags & MDP_COMMIT_RECT_NUM));
 			if (IS_ERR_VALUE(ret)) {
 				pr_err("error updating multirect config. ret=%d i=%d\n",
 					ret, i);
@@ -3071,6 +3136,14 @@ int mdss_mdp_layer_pre_commit_wfd(struct msm_fb_data_type *mfd,
 		sync_pt_data = &mfd->mdp_sync_pt_data;
 		mutex_lock(&sync_pt_data->sync_mutex);
 		count = sync_pt_data->acq_fen_cnt;
+
+		if (count >= MDP_MAX_FENCE_FD) {
+			pr_err("Reached maximum possible value for fence count\n");
+			mutex_unlock(&sync_pt_data->sync_mutex);
+			rc = -EINVAL;
+			goto input_layer_err;
+		}
+
 		sync_pt_data->acq_fen[count] = fence;
 		sync_pt_data->acq_fen_cnt++;
 		mutex_unlock(&sync_pt_data->sync_mutex);

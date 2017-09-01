@@ -79,11 +79,8 @@ static inline void ol_ap_fwd_check(struct ol_txrx_vdev_t *vdev, qdf_nbuf_t msdu)
 	    qdf_mem_cmp
 		     (mac_header->i_addr3, vdev->mac_addr.raw,
 		     IEEE80211_ADDR_LEN)) {
-#ifdef DEBUG_HOST_RC
-		TXRX_PRINT(TXRX_PRINT_LEVEL_INFO1,
-			   "Exit: %s | Unnecessary to adjust mac header\n",
+		ol_txrx_dbg("Exit: %s | Unnecessary to adjust mac header\n",
 			   __func__);
-#endif
 	} else {
 		/* Flip the ToDs bit to FromDs */
 		mac_header->i_fc[1] &= 0xfe;
@@ -146,12 +143,12 @@ static inline void ol_rx_fwd_to_tx(struct ol_txrx_vdev_t *vdev, qdf_nbuf_t msdu)
 		 */
 		qdf_nbuf_tx_free(msdu, QDF_NBUF_PKT_ERROR);
 	}
-	return;
 }
 
 void
 ol_rx_fwd_check(struct ol_txrx_vdev_t *vdev,
-		struct ol_txrx_peer_t *peer, unsigned tid, qdf_nbuf_t msdu_list)
+		struct ol_txrx_peer_t *peer,
+		unsigned int tid, qdf_nbuf_t msdu_list)
 {
 	struct ol_txrx_pdev_t *pdev = vdev->pdev;
 	qdf_nbuf_t deliver_list_head = NULL;
@@ -206,7 +203,6 @@ ol_rx_fwd_check(struct ol_txrx_vdev_t *vdev,
 			if (!ol_txrx_fwd_desc_thresh_check(vdev)) {
 				/* Drop the packet*/
 				htt_rx_msdu_desc_free(pdev->htt_pdev, msdu);
-				qdf_net_buf_debug_release_skb(msdu);
 				TXRX_STATS_MSDU_LIST_INCR(
 					pdev, tx.dropped.host_reject, msdu);
 				/* add NULL terminator */
@@ -225,7 +221,6 @@ ol_rx_fwd_check(struct ol_txrx_vdev_t *vdev,
 			 */
 			if (htt_rx_msdu_discard(pdev->htt_pdev, rx_desc)) {
 				htt_rx_msdu_desc_free(pdev->htt_pdev, msdu);
-				qdf_net_buf_debug_release_skb(msdu);
 				ol_rx_fwd_to_tx(tx_vdev, msdu);
 				msdu = NULL;    /* already handled this MSDU */
 				tx_vdev->fwd_tx_packets++;
@@ -237,13 +232,6 @@ ol_rx_fwd_check(struct ol_txrx_vdev_t *vdev,
 
 				copy = qdf_nbuf_copy(msdu);
 				if (copy) {
-					/* Since this is a private copy of skb
-					 * and part of skb tracking table, so
-					 * mark it to make sure that this skb
-					 * is getting deleted from tracking
-					 * table on receiving tx completion.
-					 */
-					QDF_NBUF_CB_TX_IS_PACKET_PRIV(copy) = 1;
 					ol_rx_fwd_to_tx(tx_vdev, copy);
 					tx_vdev->fwd_tx_packets++;
 				}
@@ -271,7 +259,6 @@ ol_rx_fwd_check(struct ol_txrx_vdev_t *vdev,
 			ol_rx_deliver(vdev, peer, tid, deliver_list_head);
 		}
 	}
-	return;
 }
 
 /*

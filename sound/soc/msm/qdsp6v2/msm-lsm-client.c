@@ -1165,28 +1165,27 @@ static int msm_lsm_ioctl_shared(struct snd_pcm_substream *substream,
 		break;
 
 	case SNDRV_LSM_SET_FWK_MODE_CONFIG: {
-		u32 *mode = NULL;
+		u32 mode;
 
-		if (!arg) {
-			dev_err(rtd->dev,
-				"%s: Invalid param arg for ioctl %s session %d\n",
-				__func__, "SNDRV_LSM_SET_FWK_MODE_CONFIG",
-				prtd->lsm_client->session);
-			rc = -EINVAL;
-			break;
+		if (copy_from_user(&mode, arg, sizeof(mode))) {
+			dev_err(rtd->dev, "%s: %s: copy_frm_user failed\n",
+				__func__, "LSM_SET_FWK_MODE_CONFIG");
+			return -EFAULT;
 		}
-		mode = (u32 *)arg;
-		if (prtd->lsm_client->event_mode == *mode) {
+
+		dev_dbg(rtd->dev, "%s: ioctl %s, enable = %d\n",
+			__func__, "SNDRV_LSM_SET_FWK_MODE_CONFIG", mode);
+		if (prtd->lsm_client->event_mode == mode) {
 			dev_dbg(rtd->dev,
 				"%s: mode for %d already set to %d\n",
-				__func__, prtd->lsm_client->session, *mode);
+				__func__, prtd->lsm_client->session, mode);
 			rc = 0;
 		} else {
 			dev_dbg(rtd->dev, "%s: Event mode = %d\n",
-				 __func__, *mode);
-			rc = q6lsm_set_fwk_mode_cfg(prtd->lsm_client, *mode);
+				 __func__, mode);
+			rc = q6lsm_set_fwk_mode_cfg(prtd->lsm_client, mode);
 			if (!rc)
-				prtd->lsm_client->event_mode = *mode;
+				prtd->lsm_client->event_mode = mode;
 			else
 				dev_err(rtd->dev,
 					"%s: set event mode failed %d\n",
@@ -1313,7 +1312,7 @@ static int msm_lsm_ioctl_compat(struct snd_pcm_substream *substream,
 		}
 
 		size = sizeof(*user) + userarg32.payload_size;
-		user = kmalloc(size, GFP_KERNEL);
+		user = kzalloc(size, GFP_KERNEL);
 		if (!user) {
 			dev_err(rtd->dev,
 				"%s: Allocation failed event status size %d\n",
@@ -1334,7 +1333,7 @@ static int msm_lsm_ioctl_compat(struct snd_pcm_substream *substream,
 			err = -EFAULT;
 		}
 		if (!err) {
-			user32 = kmalloc(size, GFP_KERNEL);
+			user32 = kzalloc(size, GFP_KERNEL);
 			if (!user32) {
 				dev_err(rtd->dev,
 					"%s: Allocation event user status size %d\n",
@@ -1379,7 +1378,7 @@ static int msm_lsm_ioctl_compat(struct snd_pcm_substream *substream,
 		}
 
 		size = sizeof(*user) + userarg32.payload_size;
-		user = kmalloc(size, GFP_KERNEL);
+		user = kzalloc(size, GFP_KERNEL);
 		if (!user) {
 			dev_err(rtd->dev,
 				"%s: Allocation failed event status size %d\n",
@@ -1399,7 +1398,7 @@ static int msm_lsm_ioctl_compat(struct snd_pcm_substream *substream,
 			err = -EFAULT;
 		}
 		if (!err) {
-			user32 = kmalloc(size, GFP_KERNEL);
+			user32 = kzalloc(size, GFP_KERNEL);
 			if (!user32) {
 				dev_err(rtd->dev,
 					"%s: Allocation event user status size %d\n",
@@ -1814,7 +1813,7 @@ static int msm_lsm_ioctl(struct snd_pcm_substream *substream,
 
 		size = sizeof(struct snd_lsm_event_status) +
 		userarg.payload_size;
-		user = kmalloc(size, GFP_KERNEL);
+		user = kzalloc(size, GFP_KERNEL);
 		if (!user) {
 			dev_err(rtd->dev,
 				"%s: Allocation failed event status size %d\n",
@@ -1875,7 +1874,7 @@ static int msm_lsm_ioctl(struct snd_pcm_substream *substream,
 
 		size = sizeof(struct snd_lsm_event_status_v3) +
 			userarg.payload_size;
-		user = kmalloc(size, GFP_KERNEL);
+		user = kzalloc(size, GFP_KERNEL);
 		if (!user) {
 			dev_err(rtd->dev,
 				"%s: Allocation failed event status size %d\n",
@@ -2247,21 +2246,18 @@ static int msm_lsm_app_type_cfg_ctl_put(struct snd_kcontrol *kcontrol,
 	u64 fe_id = kcontrol->private_value;
 	int session_type = SESSION_TYPE_TX;
 	int be_id = ucontrol->value.integer.value[3];
+	struct msm_pcm_stream_app_type_cfg cfg_data = {0};
 	int ret = 0;
-	int app_type;
-	int acdb_dev_id;
-	int sample_rate;
 
-	app_type = ucontrol->value.integer.value[0];
-	acdb_dev_id = ucontrol->value.integer.value[1];
-	sample_rate = ucontrol->value.integer.value[2];
+	cfg_data.app_type = ucontrol->value.integer.value[0];
+	cfg_data.acdb_dev_id = ucontrol->value.integer.value[1];
+	cfg_data.sample_rate = ucontrol->value.integer.value[2];
 
 	pr_debug("%s: fe_id- %llu session_type- %d be_id- %d app_type- %d acdb_dev_id- %d sample_rate- %d\n",
 		__func__, fe_id, session_type, be_id,
-		app_type, acdb_dev_id, sample_rate);
+		cfg_data.app_type, cfg_data.acdb_dev_id, cfg_data.sample_rate);
 	ret = msm_pcm_routing_reg_stream_app_type_cfg(fe_id, session_type,
-						      be_id, app_type,
-						      acdb_dev_id, sample_rate);
+						      be_id, &cfg_data);
 	if (ret < 0)
 		pr_err("%s: msm_pcm_routing_reg_stream_app_type_cfg failed returned %d\n",
 			__func__, ret);
@@ -2274,28 +2270,25 @@ static int msm_lsm_app_type_cfg_ctl_get(struct snd_kcontrol *kcontrol,
 {
 	u64 fe_id = kcontrol->private_value;
 	int session_type = SESSION_TYPE_TX;
-	int be_id = ucontrol->value.integer.value[3];
+	int be_id = 0;
+	struct msm_pcm_stream_app_type_cfg cfg_data = {0};
 	int ret = 0;
-	int app_type;
-	int acdb_dev_id;
-	int sample_rate;
 
 	ret = msm_pcm_routing_get_stream_app_type_cfg(fe_id, session_type,
-						      be_id, &app_type,
-						      &acdb_dev_id,
-						      &sample_rate);
+						      &be_id, &cfg_data);
 	if (ret < 0) {
 		pr_err("%s: msm_pcm_routing_get_stream_app_type_cfg failed returned %d\n",
 			__func__, ret);
 		goto done;
 	}
 
-	ucontrol->value.integer.value[0] = app_type;
-	ucontrol->value.integer.value[1] = acdb_dev_id;
-	ucontrol->value.integer.value[2] = sample_rate;
+	ucontrol->value.integer.value[0] = cfg_data.app_type;
+	ucontrol->value.integer.value[1] = cfg_data.acdb_dev_id;
+	ucontrol->value.integer.value[2] = cfg_data.sample_rate;
+	ucontrol->value.integer.value[3] = be_id;
 	pr_debug("%s: fedai_id %llu, session_type %d, be_id %d, app_type %d, acdb_dev_id %d, sample_rate %d\n",
 		__func__, fe_id, session_type, be_id,
-		app_type, acdb_dev_id, sample_rate);
+		cfg_data.app_type, cfg_data.acdb_dev_id, cfg_data.sample_rate);
 done:
 	return ret;
 }

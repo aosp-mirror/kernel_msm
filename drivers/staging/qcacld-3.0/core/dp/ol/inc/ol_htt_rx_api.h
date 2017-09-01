@@ -190,8 +190,8 @@ int htt_rx_ind_release(htt_pdev_handle pdev, qdf_nbuf_t rx_ind_msg);
 void
 htt_rx_ind_release_seq_num_range(htt_pdev_handle pdev,
 				 qdf_nbuf_t rx_ind_msg,
-				 unsigned *seq_num_start,
-				 unsigned *seq_num_end);
+				 unsigned int *seq_num_start,
+				 unsigned int *seq_num_end);
 
 /*
  * For now, the host HTT -> host data rx status enum
@@ -655,12 +655,14 @@ extern bool
 extern int
 (*htt_rx_amsdu_pop)(htt_pdev_handle pdev,
 		    qdf_nbuf_t rx_ind_msg,
-		    qdf_nbuf_t *head_msdu, qdf_nbuf_t *tail_msdu);
+		    qdf_nbuf_t *head_msdu, qdf_nbuf_t *tail_msdu,
+		    uint32_t *msdu_count);
 
 extern int
 (*htt_rx_frag_pop)(htt_pdev_handle pdev,
 		   qdf_nbuf_t rx_ind_msg,
-		   qdf_nbuf_t *head_msdu, qdf_nbuf_t *tail_msdu);
+		   qdf_nbuf_t *head_msdu, qdf_nbuf_t *tail_msdu,
+		   uint32_t *msdu_count);
 
 /**
  * @brief Return a linked list of buffers holding one MSDU
@@ -678,10 +680,10 @@ extern int
  *
  * @param pdev - the HTT instance the rx data was received on
  * @param offload_deliver_msg - the nebuf containing the offload deliver message
- * @param head_msdu - call-by-reference network buffer handle, which gets set in this
- *      function to the head buffer of this MSDU
- * @param tail_msdu - call-by-reference network buffer handle, which gets set in this
- *      function to the tail buffer of this MSDU
+ * @param head_msdu - call-by-reference network buffer handle, which gets set in
+ *      this function to the head buffer of this MSDU
+ * @param tail_msdu - call-by-reference network buffer handle, which gets set in
+ *      this function to the tail buffer of this MSDU
  */
 extern int
 (*htt_rx_offload_msdu_pop)(htt_pdev_handle pdev,
@@ -833,7 +835,8 @@ htt_rx_restitch_mpdu_from_msdus(htt_pdev_handle pdev,
 /**
  * @brief Return the sequence number of MPDUs to flush.
  * @param pdev - the HTT instance the rx data was received on
- * @param rx_frag_ind_msg - the netbuf containing the rx fragment indication message
+ * @param rx_frag_ind_msg - the netbuf containing the rx fragment indication
+ *      message
  * @param seq_num_start - (call-by-reference output) sequence number
  *      for the start of the range of MPDUs to flush
  * @param seq_num_end - (call-by-reference output) sequence number

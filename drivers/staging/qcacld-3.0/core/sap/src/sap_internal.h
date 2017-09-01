@@ -225,7 +225,7 @@ typedef struct sSapContext {
 	 * on a DFS channel and a RADAR is detected on the channel.
 	 */
 	tAll5GChannelList SapAllChnlList;
-
+	uint32_t auto_channel_select_weight;
 	tSapAcsChannelInfo acsBestChannelInfo;
 	bool enableOverLapCh;
 	struct sap_acs_cfg *acs_cfg;
@@ -272,6 +272,7 @@ typedef struct sSapContext {
 	tSirMacRateSet supp_rate_set;
 	tSirMacRateSet extended_rate_set;
 	enum sap_acs_dfs_mode dfs_mode;
+	uint8_t sap_sta_id;
 } *ptSapContext;
 
 /*----------------------------------------------------------------------------
@@ -362,7 +363,7 @@ sap_remove_mac_from_acl(struct qdf_mac_addr *macList, uint8_t *size,
 void
 sap_print_acl(struct qdf_mac_addr *macList, uint8_t size);
 
-eSapBool
+bool
 sap_search_mac_list(struct qdf_mac_addr *macList, uint8_t num_mac,
 		 uint8_t *peerMac, uint8_t *index);
 

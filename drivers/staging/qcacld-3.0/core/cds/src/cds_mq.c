@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -163,7 +163,7 @@ inline p_cds_msg_wrapper cds_mq_get(p_cds_mq_type pMq)
 	spin_lock_irqsave(&pMq->mqLock, flags);
 
 	if (list_empty(&pMq->mqList)) {
-		QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_WARN,
+		QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_DEBUG,
 			  "%s: CDS Message Queue is empty", __func__);
 	} else {
 		listptr = pMq->mqList.next;
@@ -221,19 +221,19 @@ QDF_STATUS cds_send_mb_message_to_mac(void *pBuf)
 	if (NULL == cds_context) {
 		QDF_TRACE(QDF_MODULE_ID_SYS, QDF_TRACE_LEVEL_ERROR,
 			  "%s: invalid cds_context", __func__);
+		qdf_mem_free(pBuf);
 	} else {
 		hHal = cds_get_context(QDF_MODULE_ID_SME);
 		if (NULL == hHal) {
 			QDF_TRACE(QDF_MODULE_ID_SYS, QDF_TRACE_LEVEL_ERROR,
 				  "%s: invalid hHal", __func__);
+			qdf_mem_free(pBuf);
 		} else {
 			sirStatus = u_mac_post_ctrl_msg(hHal, pBuf);
 			if (eSIR_SUCCESS == sirStatus)
 				qdf_ret_status = QDF_STATUS_SUCCESS;
 		}
 	}
-
-	qdf_mem_free(pBuf);
 
 	return qdf_ret_status;
 }

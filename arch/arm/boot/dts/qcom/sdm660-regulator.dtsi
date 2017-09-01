@@ -237,6 +237,9 @@
 	rpm-regulator-ldoa10 {
 		status = "okay";
 		pm660_l10: regulator-l10 {
+			proxy-supply = <&pm660_l10>;
+			qcom,proxy-consumer-enable;
+			qcom,proxy-consumer-current = <14000>;
 			regulator-min-microvolt = <1780000>;
 			regulator-max-microvolt = <1950000>;
 			status = "okay";
@@ -450,6 +453,8 @@
 		pm660l_bob: regulator-bob {
 			regulator-min-microvolt = <3300000>;
 			regulator-max-microvolt = <3600000>;
+			qcom,pwm-threshold-current = <2000000>;
+			qcom,init-bob-mode = <2>;
 			status = "okay";
 		};
 
@@ -459,6 +464,8 @@
 			qcom,set = <3>;
 			regulator-min-microvolt = <3300000>;
 			regulator-max-microvolt = <3600000>;
+			qcom,pwm-threshold-current = <2000000>;
+			qcom,init-bob-mode = <2>;
 			qcom,use-pin-ctrl-voltage1;
 		};
 
@@ -468,6 +475,8 @@
 			qcom,set = <3>;
 			regulator-min-microvolt = <3300000>;
 			regulator-max-microvolt = <3600000>;
+			qcom,pwm-threshold-current = <2000000>;
+			qcom,init-bob-mode = <2>;
 			qcom,use-pin-ctrl-voltage2;
 		};
 
@@ -477,6 +486,8 @@
 			qcom,set = <3>;
 			regulator-min-microvolt = <3300000>;
 			regulator-max-microvolt = <3600000>;
+			qcom,pwm-threshold-current = <2000000>;
+			qcom,init-bob-mode = <2>;
 			qcom,use-pin-ctrl-voltage3;
 		};
 	};
@@ -733,8 +744,8 @@
 					< (-4000)  4000  7000  19000 (-8000)>;
 
 				qcom,cpr-closed-loop-voltage-fuse-adjustment =
-					<(-32000) (-30000) (-29000) (-23000)
-					(-21000)>;
+					<(-32000) (-30000) (-29000) (-38000)
+					(-36000)>;
 
 				qcom,cpr-floor-to-ceiling-max-range =
 					<32000  32000  32000  40000  44000

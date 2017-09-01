@@ -187,6 +187,10 @@ Optional properties:
 					"bl_ctrl_wled" = Backlight controlled by WLED.
 					"bl_ctrl_dcs" = Backlight controlled by DCS commands.
 					other: Unknown backlight control. (default)
+- qcom,mdss-dsi-bl-dcs-command-state:	A string that specifies the ctrl state for sending brightness
+					controlling commands, this is only available when backlight is controlled by DCS commands.
+					"dsi_lp_mode" = DSI low power mode (default).
+					"dsi_hs_mode" = DSI high speed mode.
 - qcom,mdss-dsi-bl-pwm-pmi:		Boolean to indicate that PWM control is through second pmic chip.
 - qcom,mdss-dsi-bl-pmic-bank-select:	LPG channel for backlight.
 					Requred if blpmiccontroltype is PWM
@@ -563,6 +567,7 @@ Optional properites:
 					to a non-DSI interface.
 - qcom,bridge-name:			A string to indicate the name of the bridge chip connected to DSI. qcom,bridge-name
 					is required if qcom,dba-panel is defined for the panel.
+- qcom,hdmi-mode:			Indicates where current panel is HDMI mode, otherwise, it will be DVI mode.
 - qcom,adjust-timer-wakeup-ms:		An integer value to indicate the timer delay(in ms) to accommodate
 					s/w delay while configuring the event timer wakeup logic.
 

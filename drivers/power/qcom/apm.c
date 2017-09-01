@@ -27,6 +27,7 @@
 #include <linux/string.h>
 #include <linux/power/qcom/apm.h>
 #include <soc/qcom/scm.h>
+#include <linux/arm-smccc.h>
 
 /*
  *        VDD_APCC
@@ -78,8 +79,6 @@
 #define SPM_EVENT_NUM              6
 
 #define MSM_APM_DRIVER_NAME        "qcom,msm-apm"
-
-asmlinkage int __invoke_psci_fn_smc(u64, u64, u64, u64);
 
 enum {
 	CLOCK_ASSERT_ENABLE,
@@ -629,9 +628,15 @@ done:
 #define MSM8953_APCC_APM_MODE              0x000002a8
 #define MSM8953_APCC_APM_CTL_STS           0x000002b0
 
+/* 8953 constants */
+#define MSM8953_APM_SWITCH_TIMEOUT_US      500
+
+/* Register bit mask definitions */
+#define MSM8953_APM_CTL_STS_MASK           0x1f
+
 static int msm8953_apm_switch_to_mx(struct msm_apm_ctrl_dev *ctrl_dev)
 {
-	int timeout = MSM_APM_SWITCH_TIMEOUT_US;
+	int timeout = MSM8953_APM_SWITCH_TIMEOUT_US;
 	u32 regval;
 	int ret = 0;
 	unsigned long flags;
@@ -648,7 +653,7 @@ static int msm8953_apm_switch_to_mx(struct msm_apm_ctrl_dev *ctrl_dev)
 	while (timeout > 0) {
 		regval = readl_relaxed(ctrl_dev->reg_base +
 					MSM8953_APCC_APM_CTL_STS);
-		if ((regval & MSM_APM_CTL_STS_MASK) ==
+		if ((regval & MSM8953_APM_CTL_STS_MASK) ==
 				MSM8953_APM_MX_DONE_VAL)
 			break;
 
@@ -672,7 +677,7 @@ static int msm8953_apm_switch_to_mx(struct msm_apm_ctrl_dev *ctrl_dev)
 
 static int msm8953_apm_switch_to_apcc(struct msm_apm_ctrl_dev *ctrl_dev)
 {
-	int timeout = MSM_APM_SWITCH_TIMEOUT_US;
+	int timeout = MSM8953_APM_SWITCH_TIMEOUT_US;
 	u32 regval;
 	int ret = 0;
 	unsigned long flags;
@@ -689,7 +694,7 @@ static int msm8953_apm_switch_to_apcc(struct msm_apm_ctrl_dev *ctrl_dev)
 	while (timeout > 0) {
 		regval = readl_relaxed(ctrl_dev->reg_base +
 					MSM8953_APCC_APM_CTL_STS);
-		if ((regval & MSM_APM_CTL_STS_MASK) ==
+		if ((regval & MSM8953_APM_CTL_STS_MASK) ==
 				MSM8953_APM_APCC_DONE_VAL)
 			break;
 

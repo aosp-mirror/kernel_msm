@@ -479,8 +479,12 @@ static int msm_isp_cfg_pix(struct vfe_device *vfe_dev,
 
 	if (input_cfg->d.pix_cfg.input_mux == CAMIF ||
 		input_cfg->d.pix_cfg.input_mux == TESTGEN) {
-		vfe_dev->axi_data.src_info[VFE_PIX_0].width =
-			input_cfg->d.pix_cfg.camif_cfg.pixels_per_line;
+		if (input_cfg->d.pix_cfg.input_mux == CAMIF)
+			vfe_dev->axi_data.src_info[VFE_PIX_0].width =
+				input_cfg->d.pix_cfg.camif_cfg.pixels_per_line;
+		if (input_cfg->d.pix_cfg.input_mux == TESTGEN)
+			vfe_dev->axi_data.src_info[VFE_PIX_0].width =
+			input_cfg->d.pix_cfg.testgen_cfg.pixels_per_line;
 		if (input_cfg->d.pix_cfg.camif_cfg.subsample_cfg.
 			sof_counter_step > 0) {
 			vfe_dev->axi_data.src_info[VFE_PIX_0].
@@ -506,6 +510,9 @@ static int msm_isp_cfg_rdi(struct vfe_device *vfe_dev,
 			   input_cfg->input_src - VFE_RAW_0);
 		return -EINVAL;
 	}
+
+	vfe_dev->axi_data.
+		src_info[input_cfg->input_src].sof_counter_step = 1;
 
 	vfe_dev->axi_data.src_info[input_cfg->input_src].pixel_clock =
 		input_cfg->input_pix_clk;
@@ -2135,111 +2142,6 @@ irqreturn_t msm_isp_process_irq(int irq_num, void *data)
 	return IRQ_HANDLED;
 }
 
-static void msm_isp_process_irq_states(struct vfe_device *vfe_dev,
-	uint32_t irq_status0, uint32_t irq_status1,
-	struct msm_isp_timestamp *ts)
-{
-	enum msm_vfe_input_src i;
-	uint32_t *irq_mask;
-	uint32_t temp_irqmask;
-	uint32_t temp_irqstatus0;
-	struct msm_vfe_irq_ops *irq_ops = &vfe_dev->hw_info->vfe_ops.irq_ops;
-	struct msm_vfe_src_info *src_intf;
-
-	for (i = VFE_PIX_0; i <= VFE_RAW_2; i++) {
-		src_intf = &vfe_dev->axi_data.src_info[i];
-		irq_mask = &vfe_dev->hw_info->intf_states_irq_mask[i][0];
-		temp_irqstatus0 = irq_status0;
-
-		if((src_intf->irq_state == MSM_ISP_IRQ_STATE_BUFDONE) &&
-			(temp_irqstatus0 & irq_mask[src_intf->irq_state]) &&
-			(temp_irqstatus0 & irq_mask[MSM_ISP_IRQ_STATE_SOF]))
-			src_intf->irq_state = (src_intf->irq_state + 1)
-						% MSM_ISP_IRQ_STATE_EOF;
-		while (temp_irqstatus0 & src_intf->irq_mask) {
-			temp_irqmask = irq_mask[src_intf->irq_state];
-			/*
-			 * For EOF handle it together with buf done since
-			 * the order is not known
-			 */
-			if (src_intf->irq_state == MSM_ISP_IRQ_STATE_BUFDONE)
-				temp_irqmask |= irq_mask[
-						src_intf->irq_state + 1];
-			if (temp_irqstatus0 & temp_irqmask) {
-				switch (src_intf->irq_state) {
-				case MSM_ISP_IRQ_STATE_SOF:
-					irq_ops->process_camif_irq(vfe_dev,
-						temp_irqstatus0 &
-						irq_mask[src_intf->irq_state],
-						irq_status1, ts);
-					break;
-				case MSM_ISP_IRQ_STATE_REG_UPD:
-					irq_ops->process_reg_update(vfe_dev,
-						temp_irqstatus0 &
-						irq_mask[src_intf->irq_state],
-						irq_status1, ts);
-					break;
-				case MSM_ISP_IRQ_STATE_EPOCH:
-					irq_ops->process_epoch_irq(vfe_dev,
-						temp_irqstatus0 &
-						irq_mask[src_intf->irq_state],
-						irq_status1, ts);
-					break;
-				case MSM_ISP_IRQ_STATE_BUFDONE:
-					/*
-					 * check if buf done really came since
-					 * we may only have EOF
-					 */
-					if (temp_irqstatus0 &
-						irq_mask[src_intf->irq_state]) {
-						if (i == VFE_PIX_0)
-							irq_ops->
-							process_stats_irq(
-							vfe_dev,
-							temp_irqstatus0 &
-							irq_mask[
-							src_intf->irq_state],
-							irq_status1, ts);
-						irq_ops->process_axi_irq(
-							vfe_dev,
-							temp_irqstatus0 &
-							irq_mask[
-							src_intf->irq_state],
-							irq_status1, ts);
-					}
-					/* handle eof */
-					if (temp_irqstatus0 &
-						irq_mask[src_intf->irq_state
-							+ 1])
-						irq_ops->process_camif_irq(
-							vfe_dev,
-							temp_irqstatus0 &
-							irq_mask[
-							src_intf->irq_state],
-							irq_status1, ts);
-					break;
-				default:
-					pr_err("Unexpected vfe %d intf %d irq state %d\n",
-						vfe_dev->pdev->id, i,
-						src_intf->irq_state);
-					break;
-				}
-				temp_irqstatus0 &= ~temp_irqmask;
-			}
-			/*
-			 * For buf done state only transition if next state
-			 * irq has come, since there may be more buf done
-			 * irq coming in buf done state.
-			 */
-			if (temp_irqstatus0 ||
-				src_intf->irq_state !=
-				MSM_ISP_IRQ_STATE_BUFDONE)
-				src_intf->irq_state = (src_intf->irq_state + 1)
-						% MSM_ISP_IRQ_STATE_EOF;
-		}
-	}
-}
-
 void msm_isp_do_tasklet(unsigned long data)
 {
 	unsigned long flags;
@@ -2287,8 +2189,16 @@ void msm_isp_do_tasklet(unsigned long data)
 			continue;
 		}
 		msm_isp_process_error_info(vfe_dev);
-		msm_isp_process_irq_states(vfe_dev, irq_status0,
-						irq_status1, &ts);
+		irq_ops->process_stats_irq(vfe_dev,
+			irq_status0, irq_status1, &ts);
+		irq_ops->process_axi_irq(vfe_dev,
+			irq_status0, irq_status1, &ts);
+		irq_ops->process_camif_irq(vfe_dev,
+			irq_status0, irq_status1, &ts);
+		irq_ops->process_reg_update(vfe_dev,
+			irq_status0, irq_status1, &ts);
+		irq_ops->process_epoch_irq(vfe_dev,
+			irq_status0, irq_status1, &ts);
 	}
 }
 
@@ -2322,8 +2232,6 @@ static void msm_vfe_iommu_fault_handler(struct iommu_domain *domain,
 
 		mutex_lock(&vfe_dev->core_mutex);
 		if (vfe_dev->vfe_open_cnt > 0) {
-			atomic_set(&vfe_dev->error_info.overflow_state,
-				HALT_ENFORCED);
 			pr_err_ratelimited("%s: fault address is %lx\n",
 				__func__, iova);
 			msm_isp_process_iommu_page_fault(vfe_dev);
@@ -2413,11 +2321,13 @@ int msm_isp_open_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 	/* Register page fault handler */
 	vfe_dev->buf_mgr->pagefault_debug_disable = 0;
 	/* initialize pd_buf_idx with an invalid index 0xF */
-	vfe_dev->pd_buf_idx = 0xF;
+	vfe_dev->common_data->pd_buf_idx = 0xF;
 
 	cam_smmu_reg_client_page_fault_handler(
 			vfe_dev->buf_mgr->iommu_hdl,
-			msm_vfe_iommu_fault_handler, vfe_dev);
+			msm_vfe_iommu_fault_handler,
+			NULL,
+			vfe_dev);
 	mutex_unlock(&vfe_dev->core_mutex);
 	mutex_unlock(&vfe_dev->realtime_mutex);
 	return 0;
@@ -2439,6 +2349,7 @@ int msm_isp_close_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 {
 	long rc = 0;
 	int wm;
+	int i;
 	struct vfe_device *vfe_dev = v4l2_get_subdevdata(sd);
 	ISP_DBG("%s E open_cnt %u\n", __func__, vfe_dev->vfe_open_cnt);
 	mutex_lock(&vfe_dev->realtime_mutex);
@@ -2465,7 +2376,7 @@ int msm_isp_close_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 	/* Unregister page fault handler */
 	cam_smmu_reg_client_page_fault_handler(
 		vfe_dev->buf_mgr->iommu_hdl,
-		NULL, vfe_dev);
+		NULL, NULL, vfe_dev);
 
 	rc = vfe_dev->hw_info->vfe_ops.axi_ops.halt(vfe_dev, 1);
 	if (rc <= 0)
@@ -2488,6 +2399,8 @@ int msm_isp_close_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 		msm_isp_end_avtimer();
 		vfe_dev->vt_enable = 0;
 	}
+	for (i = 0; i < VFE_SRC_MAX; i++)
+		vfe_dev->axi_data.src_info[i].lpm = 0;
 	MSM_ISP_DUAL_VFE_MUTEX_UNLOCK(vfe_dev);
 	vfe_dev->is_split = 0;
 

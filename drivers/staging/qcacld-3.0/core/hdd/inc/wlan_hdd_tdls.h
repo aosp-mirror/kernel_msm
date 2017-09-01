@@ -33,7 +33,7 @@
  */
 
 /*
- * enum eTDLSSupportMode - TDLS support modes
+ * enum tdls_support_mode - TDLS support modes
  * @eTDLS_SUPPORT_NOT_ENABLED: TDLS support not enabled
  * @eTDLS_SUPPORT_DISABLED: suppress implicit trigger and not respond
  *     to the peer
@@ -43,13 +43,13 @@
  * @eTDLS_SUPPORT_EXTERNAL_CONTROL: implicit trigger but only to a
  *     peer mac configured by user space.
  */
-typedef enum {
+enum tdls_support_mode {
 	eTDLS_SUPPORT_NOT_ENABLED = 0,
 	eTDLS_SUPPORT_DISABLED,
 	eTDLS_SUPPORT_EXPLICIT_TRIGGER_ONLY,
 	eTDLS_SUPPORT_ENABLED,
 	eTDLS_SUPPORT_EXTERNAL_CONTROL,
-} eTDLSSupportMode;
+};
 
 /**
  * enum tdls_concerned_external_events - External events that affect TDLS
@@ -108,6 +108,7 @@ enum tdls_concerned_external_events {
  * @HDD_SET_TDLS_MODE_SOURCE_OFFCHANNEL: disable during offchannel
  * @HDD_SET_TDLS_MODE_SOURCE_BTC: disable during bluetooth
  * @HDD_SET_TDLS_MODE_SOURCE_P2P: disable during p2p
+ * @HDD_SET_TDLS_MODE_SOURCE_POLICY_MGR: disable during DBS HW mode
  */
 enum tdls_disable_source {
 	HDD_SET_TDLS_MODE_SOURCE_USER = 0,
@@ -115,6 +116,7 @@ enum tdls_disable_source {
 	HDD_SET_TDLS_MODE_SOURCE_OFFCHANNEL,
 	HDD_SET_TDLS_MODE_SOURCE_BTC,
 	HDD_SET_TDLS_MODE_SOURCE_P2P,
+	HDD_SET_TDLS_MODE_SOURCE_POLICY_MGR,
 };
 
 /**
@@ -187,20 +189,20 @@ enum tdls_nss_transition_type {
 };
 
 /**
- * enum tTDLSCapType - tdls capability type
+ * enum tdls_cap_type - tdls capability type
  *
  * @eTDLS_CAP_NOT_SUPPORTED: tdls not supported
  * @eTDLS_CAP_UNKNOWN: unknown capability
  * @eTDLS_CAP_SUPPORTED: tdls capability supported
  */
-typedef enum eTDLSCapType {
+enum tdls_cap_type {
 	eTDLS_CAP_NOT_SUPPORTED = -1,
 	eTDLS_CAP_UNKNOWN = 0,
 	eTDLS_CAP_SUPPORTED = 1,
-} tTDLSCapType;
+};
 
 /**
- * enum tTDLSLinkStatus - tdls link status
+ * enum tdls_link_status - tdls link status
  *
  * @eTDLS_LINK_IDLE: tdls link idle
  * @eTDLS_LINK_DISCOVERING: tdls link discovering
@@ -209,14 +211,14 @@ typedef enum eTDLSCapType {
  * @eTDLS_LINK_CONNECTED: tdls link connected
  * @eTDLS_LINK_TEARING: tdls link tearing
  */
-typedef enum eTDLSLinkStatus {
+enum tdls_link_status {
 	eTDLS_LINK_IDLE = 0,
 	eTDLS_LINK_DISCOVERING,
 	eTDLS_LINK_DISCOVERED,
 	eTDLS_LINK_CONNECTING,
 	eTDLS_LINK_CONNECTED,
 	eTDLS_LINK_TEARING,
-} tTDLSLinkStatus;
+};
 
 /**
  * enum tdls_teardown_reason - Reason for TDLS teardown
@@ -243,7 +245,7 @@ enum tdls_teardown_reason {
 };
 
 /**
- * enum tTDLSLinkReason - tdls link reason
+ * enum tdls_link_reason - tdls link reason
  *
  * @eTDLS_LINK_SUCCESS: Success
  * @eTDLS_LINK_UNSPECIFIED: Unspecified reason
@@ -252,14 +254,14 @@ enum tdls_teardown_reason {
  * @eTDLS_LINK_NOT_BENEFICIAL: Going to AP is better than direct
  * @eTDLS_LINK_DROPPED_BY_REMOTE: Remote side doesn't want it anymore
  */
-typedef enum {
+enum tdls_link_reason {
 	eTDLS_LINK_SUCCESS,
 	eTDLS_LINK_UNSPECIFIED = -1,
 	eTDLS_LINK_NOT_SUPPORTED = -2,
 	eTDLS_LINK_UNSUPPORTED_BAND = -3,
 	eTDLS_LINK_NOT_BENEFICIAL = -4,
 	eTDLS_LINK_DROPPED_BY_REMOTE = -5
-} tTDLSLinkReason;
+};
 
 /**
  * struct tdls_req_params_t - tdls request parameters
@@ -277,7 +279,7 @@ typedef struct {
 } tdls_req_params_t;
 
 /**
- * enum tdls_state_t - tdls state
+ * enum tdls_state - tdls state
  *
  * @QCA_WIFI_HAL_TDLS_DISABLED: TDLS is not enabled, or is disabled now
  * @QCA_WIFI_HAL_TDLS_ENABLED: TDLS is enabled, but not yet tried
@@ -286,14 +288,14 @@ typedef struct {
  * @QCA_WIFI_HAL_TDLS_DROPPED: Direct link was established, but is now dropped
  * @QCA_WIFI_HAL_TDLS_FAILED: Direct link failed
  */
-typedef enum {
+enum tdls_state {
 	QCA_WIFI_HAL_TDLS_DISABLED = 1,
 	QCA_WIFI_HAL_TDLS_ENABLED,
 	QCA_WIFI_HAL_TDLS_ESTABLISHED,
 	QCA_WIFI_HAL_TDLS_ESTABLISHED_OFF_CHANNEL,
 	QCA_WIFI_HAL_TDLS_DROPPED,
 	QCA_WIFI_HAL_TDLS_FAILED
-} tdls_state_t;
+};
 
 typedef int (*cfg80211_exttdls_callback)(const uint8_t *mac,
 					 uint32_t opclass,
@@ -439,8 +441,8 @@ typedef struct _hddTdlsPeer_t {
 	tSirMacAddr peerMac;
 	uint16_t staId;
 	int8_t rssi;
-	tTDLSCapType tdls_support;
-	tTDLSLinkStatus link_status;
+	enum tdls_cap_type tdls_support;
+	enum tdls_link_status link_status;
 	uint8_t signature;
 	uint8_t is_responder;
 	uint8_t discovery_processed;
@@ -462,7 +464,7 @@ typedef struct _hddTdlsPeer_t {
 	qdf_mc_timer_t peer_idle_timer;
 	bool is_peer_idle_timer_initialised;
 	uint8_t spatial_streams;
-	tTDLSLinkReason reason;
+	enum tdls_link_reason reason;
 	cfg80211_exttdls_callback state_change_notification;
 	uint8_t qos;
 } hddTdlsPeer_t;
@@ -541,15 +543,15 @@ hddTdlsPeer_t *wlan_hdd_tdls_get_peer(hdd_adapter_t *pAdapter,
 				      const uint8_t *mac);
 
 int wlan_hdd_tdls_set_cap(hdd_adapter_t *pAdapter, const uint8_t *mac,
-			  tTDLSCapType cap);
+			  enum tdls_cap_type cap);
 
 void wlan_hdd_tdls_set_peer_link_status(hddTdlsPeer_t *curr_peer,
-					tTDLSLinkStatus status,
-					tTDLSLinkReason reason);
+					enum tdls_link_status status,
+					enum tdls_link_reason reason);
 void wlan_hdd_tdls_set_link_status(hdd_adapter_t *pAdapter,
 				   const uint8_t *mac,
-				   tTDLSLinkStatus linkStatus,
-				   tTDLSLinkReason reason);
+				   enum tdls_link_status linkStatus,
+				   enum tdls_link_reason reason);
 
 int wlan_hdd_tdls_recv_discovery_resp(hdd_adapter_t *pAdapter,
 				      const uint8_t *mac);
@@ -710,6 +712,30 @@ int wlan_hdd_cfg80211_tdls_mgmt(struct wiphy *wiphy,
 #endif
 #endif
 
+/**
+ * wlan_hdd_tdls_check_enable_tdls_scan - Check whether enable_tdls_scan ini
+ *     is true
+ * @hdd_ctx: hdd context
+ *
+ * This routine is called to check whether enable_tdls_scan is true or no.
+ *
+ * Return: true if enable_tdls_scan is true, else false
+ */
+bool wlan_hdd_tdls_check_enable_tdls_scan(hdd_context_t *hdd_ctx);
+
+/**
+ * wlan_hdd_tdls_check_peer_buf_capable - Checks whether self-Sta is sleep-sta
+ *     capable and all peer TDLS Sta are BufSta capable.
+ * @hdd_ctx: hdd context
+ * @connectedTdlsPeers: number of tdls peers
+ *
+ * This routine is called to check whether self-Sta is sleep-Sta capable and
+ * all peer TDLS Sta are BufSta capable
+ *
+ * Return: True if scan is allowed without tearing TDLS, else false
+ */
+bool wlan_hdd_tdls_check_peer_buf_capable(hdd_context_t *hdd_ctx,
+					  uint16_t connectedTdlsPeers);
 void hdd_update_tdls_ct_and_teardown_links(hdd_context_t *hdd_ctx);
 void wlan_hdd_tdls_disable_offchan_and_teardown_links(hdd_context_t *hddctx);
 
@@ -755,6 +781,21 @@ void wlan_hdd_tdls_notify_connect(hdd_adapter_t *adapter,
  * Return: None
  */
 void wlan_hdd_tdls_notify_disconnect(hdd_adapter_t *adapter, bool lfr_roam);
+
+/**
+ * wlan_hdd_check_conc_and_update_tdls_state - Check concurrency and update
+ *     FW TDLS state if needed
+ * @hdd_ctx: hdd context
+ * @disable_tdls: disable TDLS in FW TDLS state
+ *
+ * This routine is called to teardown TDLS links, and enable/disable TDLS mode
+ * in FW tdls state if concurrency is detected.
+ *
+ * Return: None
+ */
+void wlan_hdd_check_conc_and_update_tdls_state(hdd_context_t *hdd_ctx,
+					       bool disable_tdls);
+
 void wlan_hdd_change_tdls_mode(void *hdd_ctx);
 
 /**
@@ -787,7 +828,47 @@ int wlan_hdd_cfg80211_configure_tdls_mode(struct wiphy *wiphy,
 					const void *data,
 					int data_len);
 
+/**
+ * hdd_tdls_notify_set_state_disable() - callback from pe to update tdls state
+ * @session_id: session_id
+ *
+ * This function is called part of STA disconnect and we need to
+ * update the TDLS state before vdev is stopped
+ *
+ * Return: none
+ */
+void hdd_tdls_notify_set_state_disable(uint32_t session_id);
+
+/**
+ * hdd_tdls_timers_stop() - stop all the tdls timers
+ * @adapter: hdd adapter
+ *
+ * Return: none
+ */
+void hdd_tdls_timers_stop(hdd_adapter_t *adapter);
+
+/**
+ * hdd_tdls_notify_hw_mode_change() - Notify hardware mode change to TDLS
+ * @is_dbs_hw_mode: true or false
+ *
+ * This function notify TDLS about the hw mode change operation
+ *
+ * Return: none
+ */
+void hdd_tdls_notify_hw_mode_change(bool is_dbs_hw_mode);
+
 #else
+static inline bool
+wlan_hdd_tdls_check_enable_tdls_scan(hdd_context_t *hdd_ctx)
+{
+	return true;
+}
+static inline bool
+wlan_hdd_tdls_check_peer_buf_capable(hdd_context_t *hdd_ctx,
+				     uint16_t connectedTdlsPeers)
+{
+	return true;
+}
 static inline void hdd_update_tdls_ct_and_teardown_links(hdd_context_t *hdd_ctx)
 {
 }
@@ -829,6 +910,12 @@ static inline void wlan_hdd_tdls_notify_disconnect(hdd_adapter_t *adapter,
 {
 }
 
+static inline void
+wlan_hdd_check_conc_and_update_tdls_state(hdd_context_t *hdd_ctx,
+					  bool disable_tdls)
+{
+}
+
 static inline int wlan_hdd_cfg80211_configure_tdls_mode(struct wiphy *wiphy,
 					struct wireless_dev *wdev,
 					const void *data,
@@ -845,6 +932,17 @@ hdd_tdls_notify_p2p_roc(hdd_context_t *hdd_ctx,
 			enum tdls_concerned_external_events event)
 {
 }
+static inline void hdd_tdls_notify_set_state_disable(uint32_t session_id)
+{
+}
+static inline void hdd_tdls_timers_stop(hdd_adapter_t *adapter)
+{
+}
+static inline void
+hdd_tdls_notify_hw_mode_change(bool is_dbs_hw_mode)
+{
+}
+
 #endif /* End of FEATURE_WLAN_TDLS */
 
 #ifdef FEATURE_WLAN_DIAG_SUPPORT
@@ -866,5 +964,19 @@ void hdd_wlan_tdls_enable_link_event(const uint8_t *peer_mac,
 	uint8_t is_off_chan_established) {}
 static inline void hdd_wlan_block_scan_by_tdls_event(void) {}
 #endif /* FEATURE_WLAN_DIAG_SUPPORT */
+
+/**
+ * process_rx_tdls_disc_resp_frame() - Process TDLS DISC RESP action frame
+ * @adapter:   pointer to HDD adapter
+ * @pb_frames: TDLS disc resp RX frame buffer
+ * @frm_len:   Length of the TDLS disc resp RX frame
+ * @rx_rssi:   Received RSSI
+ *
+ * This function process the RX TDLS DISC RESP action frame
+ *
+ * Return: none
+ */
+void process_rx_tdls_disc_resp_frame(hdd_adapter_t *adapter,
+				     uint8_t *peer_addr, int8_t rx_rssi);
 
 #endif /* __HDD_TDLS_H */
