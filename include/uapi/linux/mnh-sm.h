@@ -39,7 +39,7 @@
 #define MNH_SM_MAX 8
 
 #define MNH_ION_BUFFER_SIZE SZ_64M
-#define FW_VER_SIZE 16
+#define FW_VER_SIZE 24
 
 #define MNH_SM_IOC_GET_STATE \
 	_IOR(MNH_SM_IOC_MAGIC, 1, int *)
