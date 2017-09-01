@@ -321,13 +321,6 @@ static int smb2_parse_dt(struct smb2 *chip)
 					&chg->otg_delay_ms);
 	if (rc < 0)
 		chg->otg_delay_ms = OTG_DEFAULT_DEGLITCH_TIME_MS;
-
-	/* config vega model: the JEITA_CCCOMP_CFG_REG, FVCOMP regs ( compensate
-	current -1600mA,voltage -200mV ) in jeita Tcold,Thot temperature range. */
-	if (of_property_read_bool(node, "lenovo,vega-model")) {
-		smblib_write(chg, JEITA_FVCOMP_CFG_REG, 0x1A);
-		smblib_write(chg, JEITA_CCCOMP_CFG_REG, 0x3F);
-	}
 	return 0;
 }
 
@@ -2345,6 +2338,13 @@ static int smb2_probe(struct platform_device *pdev)
 		goto cleanup;
 	}
 	batt_charge_type = val.intval;
+
+	/* config vega model: the JEITA_CCCOMP_CFG_REG, FVCOMP regs ( compensate
+	current -1600mA,voltage -200mV ) in jeita Tcold,Thot temperature range. */
+	if (of_property_read_bool(chg->dev->of_node, "lenovo,vega-model")) {
+		smblib_write(chg, JEITA_FVCOMP_CFG_REG, 0x1A);
+		smblib_write(chg, JEITA_CCCOMP_CFG_REG, 0x3F);
+	}
 
 	device_init_wakeup(chg->dev, true);
 
