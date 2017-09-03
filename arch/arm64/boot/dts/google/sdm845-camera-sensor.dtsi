@@ -129,34 +129,6 @@
 		gpio = <&tlmm 27 0>;
 		vin-supply = <&pmi8998_bob>;
 	};
-
-	camera_rear_ldo: gpio-regulator@1 {
-		compatible = "regulator-fixed";
-		reg = <0x01 0x00>;
-		regulator-name = "camera_rear_ldo";
-		regulator-min-microvolt = <1050000>;
-		regulator-max-microvolt = <1050000>;
-		regulator-enable-ramp-delay = <135>;
-		enable-active-high;
-		gpio = <&pm8998_gpios 12 0>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&camera_rear_dvdd_en_default>;
-		vin-supply = <&pm8998_s3>;
-	};
-
-	camera_ldo: gpio-regulator@2 {
-		compatible = "regulator-fixed";
-		reg = <0x02 0x00>;
-		regulator-name = "camera_ldo";
-		regulator-min-microvolt = <1050000>;
-		regulator-max-microvolt = <1050000>;
-		regulator-enable-ramp-delay = <233>;
-		enable-active-high;
-		gpio = <&pm8998_gpios 9 0>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&camera_dvdd_en_default>;
-		vin-supply = <&pm8998_s3>;
-	};
 };
 
 &cam_cci {
@@ -255,7 +227,6 @@
 		sensor-position-roll = <90>;
 		sensor-position-pitch = <0>;
 		sensor-position-yaw = <180>;
-		//eeprom-src = <&eeprom_rear_aux>;
 		cam_vdig-supply = <&pm8998_s3>;
 		cam_vio-supply = <&pm8998_lvs1>;
 		cam_vana-supply = <&pmi8998_bob>;
@@ -308,8 +279,8 @@
 		regulator-names = "cam_vio", "cam_vana", "cam_vdig",
 			"cam_clk";
 		rgltr-cntrl-support;
-		rgltr-min-voltage = <0 3312000 1050000 0>;
-		rgltr-max-voltage = <0 3600000 1050000 0>;
+		rgltr-min-voltage = <0 3312000 1352000 0>;
+		rgltr-max-voltage = <0 3600000 1352000 0>;
 		rgltr-load-current = <0 80000 105000 0>;
 		gpio-no-mux = <0>;
 		pinctrl-names = "cam_default", "cam_suspend";
