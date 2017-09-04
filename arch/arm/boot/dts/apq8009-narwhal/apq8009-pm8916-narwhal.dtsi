@@ -39,6 +39,7 @@
 		android,ramoops-console-size = <0x40000>;
 		android,ramoops-record-size = <0x1000>;
 		android,ramoops-ftrace-size = <0x20000>;
+		android,ramoops-pmsg-size = <0x20000>;
 		android,ramoops-dump-oops = <0x1>;
 		linux,contiguous-region = <&ramoops_mem>;
 	};
