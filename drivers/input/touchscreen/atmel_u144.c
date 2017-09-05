@@ -3716,8 +3716,6 @@ static int mxt_write_config(struct mxt_data *data)
 	struct mxt_object *object = NULL;
 	struct mxt_cfg_data *cfg_data = NULL;
 	u32 current_crc = 0;
-	u32 t38_cfg_crc = 0;
-	u8 buf_crc_t38[3] = {0};
 	u8 i = 0, val = 0;
 	u16 reg = 0, index = 0;
 	int ret = 0;
@@ -3746,28 +3744,8 @@ static int mxt_write_config(struct mxt_data *data)
 		return 0;
 	}
 
-	object = mxt_get_object(data, MXT_SPT_USERDATA_T38);
-
-	if(!object) {
-		TOUCH_ERR_MSG("fail to get object\n");
-		return 0;
-	}
-
-	ret = mxt_read_mem(data, object->start_address+3, 3, buf_crc_t38);
-	if (ret) {
-		TOUCH_ERR_MSG("T38 CRC read fail \n");
-		return 0;
-	}
-
-	t38_cfg_crc = buf_crc_t38[2] << 16 |
-		      buf_crc_t38[1] << 8 |
-		      buf_crc_t38[0];
-	TOUCH_DEBUG_MSG("T38 CRC[%06X] FW CRC[%06X]\n",
-			t38_cfg_crc, fw_info->cfg_crc);
-
 	/* Check config CRC */
-	if (current_crc == fw_info->cfg_crc ||
-	    t38_cfg_crc == fw_info->cfg_crc) {
+	if (current_crc == fw_info->cfg_crc) {
 		TOUCH_INFO_MSG("Same Config[%06X] Skip Writing\n",
 				current_crc);
 		return 0;
@@ -3863,23 +3841,6 @@ static int mxt_write_config(struct mxt_data *data)
 	}
 
 	TOUCH_INFO_MSG("Configuration Updated \n");
-
-	TOUCH_DEBUG_MSG("Restore CRC value \n");
-	object = mxt_get_object(data, MXT_SPT_USERDATA_T38);
-	if (!object) {
-		TOUCH_ERR_MSG("fail to get object\n");
-		return 0;
-	}
-
-	buf_crc_t38[0] = (u8)(fw_info->cfg_crc & 0x000000FF);
-	buf_crc_t38[1] = (u8)((fw_info->cfg_crc & 0x0000FF00) >> 8);
-	buf_crc_t38[2] = (u8)((fw_info->cfg_crc & 0x00FF0000) >> 16);
-
-	ret = mxt_write_mem(data, object->start_address+3, 3, buf_crc_t38);
-	if (ret) {
-		TOUCH_ERR_MSG("Reference CRC Restore fail\n");
-		return ret;
-	}
 
 	/* Backup to memory */
 	ret = mxt_command_backup(data, MXT_BACKUP_VALUE);
