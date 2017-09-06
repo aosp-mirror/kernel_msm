@@ -22,6 +22,7 @@
 #include <linux/delay.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
+#include <linux/nls.h>
 #include <linux/utsname.h>
 #include <linux/platform_device.h>
 #include <linux/pm_qos.h>
@@ -92,6 +93,10 @@ static const char longname[] = "Gadget Android";
 #define MIDI_OUTPUT_PORTS   1
 #define MIDI_BUFFER_SIZE    1024
 #define MIDI_QUEUE_LENGTH   32
+
+/* OS descriptor default values */
+#define OS_B_VENDOR_CODE 0x01
+#define OS_STRING	 "MSFT100"
 
 struct android_usb_function {
 	char *name;
@@ -3349,6 +3354,10 @@ android_bind_enabled_functions(struct android_dev *dev,
 	struct android_configuration *conf =
 		container_of(c, struct android_configuration, usb_config);
 	int ret;
+	bool has_os_desc = false;
+
+	/* Functionfs only copies os descriptors when this is true. */
+	c->cdev->use_os_string = true;
 
 	list_for_each_entry(f_holder, &conf->enabled_functions, enabled_list) {
 		ret = f_holder->f->bind_config(f_holder->f, c);
@@ -3370,6 +3379,25 @@ android_bind_enabled_functions(struct android_dev *dev,
 			return ret;
 		}
 		f_holder->f->bound = true;
+		if (!strcmp("ffs", f_holder->f->name)) {
+			struct functionfs_config *cfg =
+				(struct functionfs_config *)
+				f_holder->f->config;
+			if (cfg->func->os_desc_n) {
+				has_os_desc = true;
+			}
+		}
+	}
+	if (has_os_desc) {
+		/* Use os descriptors if at least one function provides them */
+		c->cdev->b_vendor_code = OS_B_VENDOR_CODE;
+		c->cdev->os_desc_config = c;
+		utf8s_to_utf16s(OS_STRING, OS_STRING_QW_SIGN_LEN,
+				UTF16_LITTLE_ENDIAN,
+				(wchar_t *) c->cdev->qw_sign,
+				OS_STRING_QW_SIGN_LEN);
+	} else {
+		c->cdev->use_os_string = false;
 	}
 	return 0;
 }
