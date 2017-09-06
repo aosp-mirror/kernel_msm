@@ -3004,6 +3004,12 @@ static int fts_set_gpio(struct fts_ts_info *info) {
         goto err_gpio_irq;
     }
 
+    if (gpio_is_valid(bdata->switch_gpio)) {
+        retval = fts_gpio_setup(bdata->switch_gpio, true, 1, 0);
+        if (retval < 0)
+            logError(1, "%s %s: Failed to configure I2C switch\n", tag, __func__);
+    }
+
     if (bdata->reset_gpio >= 0) {
         retval = fts_gpio_setup(bdata->reset_gpio, true, 1, 0);
         if (retval < 0) {
@@ -3035,6 +3041,9 @@ static int parse_dt(struct device *dev, struct fts_hw_platform_data *bdata) {
     int retval;
     const char *name;
     struct device_node *np = dev->of_node;
+
+    bdata->switch_gpio = of_get_named_gpio(np, "st,switch-gpio", 0);
+    logError(0, "%s switch_gpio = %d\n", tag, bdata->switch_gpio);
 
     bdata->irq_gpio = of_get_named_gpio_flags(np,"st,irq-gpio", 0, NULL);
 

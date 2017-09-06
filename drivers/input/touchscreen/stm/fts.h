@@ -154,6 +154,7 @@
  */
 struct fts_hw_platform_data {
 	int (*power) (bool on);
+	int switch_gpio; /* (optional) I2C switch */
 	int irq_gpio;																///< number of the gpio associated to the interrupt pin
 	int reset_gpio;																///< number of the gpio associated to the reset pin
 	const char *vdd_reg_name;													///< name of the VDD regulator
