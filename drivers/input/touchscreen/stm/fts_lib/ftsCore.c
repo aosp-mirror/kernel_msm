@@ -736,7 +736,7 @@ int fts_disableInterrupt()
 		logError(0, "%s Number of disable = %d \n", tag, disable_irq_count);
 		if(disable_irq_count==0){
 			logError(0, "%s Excecuting Disable... \n", tag);
-			disable_irq(getClient()->irq);
+			disable_irq_nosync(getClient()->irq);
 			disable_irq_count++;
 		}// disable_irq is re-entrant so it is required to keep track of the number of calls of this when reenabling			
 		spin_unlock_irqrestore(&fts_int,flag);
