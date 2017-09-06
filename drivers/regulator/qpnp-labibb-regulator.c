@@ -51,6 +51,7 @@
 
 /* LAB register offset definitions */
 #define REG_LAB_STATUS1			0x08
+#define REG_LAB_INT_RT_STS		0x10
 #define REG_LAB_SWIRE_PGM_CTL		0x40
 #define REG_LAB_VOLTAGE			0x41
 #define REG_LAB_RING_SUPPRESSION_CTL	0x42
@@ -103,7 +104,6 @@
 #define LAB_PD_CTL_STRONG_PULL		BIT(0)
 #define LAB_PD_CTL_STRENGTH_MASK	BIT(0)
 #define LAB_PD_CTL_DISABLE_PD		BIT(1)
-#define LAB_PD_CTL_EN_MASK		BIT(1)
 
 /* REG_LAB_IBB_EN_RDY */
 #define LAB_IBB_EN_RDY_EN		BIT(7)
@@ -609,6 +609,7 @@ struct qpnp_labibb {
 	struct mutex			bus_mutex;
 	enum qpnp_labibb_mode		mode;
 	struct work_struct		lab_vreg_ok_work;
+	struct work_struct		aod_lab_vreg_ok_work;
 	struct delayed_work		sc_err_recovery_work;
 	struct hrtimer			sc_err_check_timer;
 	int				sc_err_count;
@@ -624,6 +625,7 @@ struct qpnp_labibb {
 	bool				notify_lab_vreg_ok_sts;
 	bool				detect_lab_sc;
 	bool				sc_detected;
+	bool				aod_mode;
 	u32				swire_2nd_cmd_delay;
 	u32				swire_ibb_ps_enable_delay;
 };
@@ -829,6 +831,57 @@ static int qpnp_labibb_sec_masked_write(struct qpnp_labibb *labibb, u16 base,
 error:
 	mutex_unlock(&(labibb->bus_mutex));
 	return rc;
+}
+
+static int qpnp_lab_scp_control(struct qpnp_labibb *labibb, bool enable)
+{
+	int rc;
+	u8 val;
+
+	val = enable ? 0 : LAB_SPARE_DISABLE_SCP_BIT;
+	rc = qpnp_labibb_masked_write(labibb, labibb->lab_base +
+			REG_LAB_SPARE_CTL, LAB_SPARE_DISABLE_SCP_BIT, val);
+	if (rc < 0) {
+		pr_err("qpnp_labibb_write register %x failed rc = %d\n",
+			REG_LAB_SPARE_CTL, rc);
+		return rc;
+	}
+
+	return 0;
+}
+
+static int qpnp_lab_pd_control(struct qpnp_labibb *labibb, bool enable)
+{
+	int rc;
+	u8 val;
+
+	val = enable ? 0 : LAB_PD_CTL_DISABLE_PD;
+	rc = qpnp_labibb_masked_write(labibb, labibb->lab_base + REG_LAB_PD_CTL,
+			LAB_PD_CTL_DISABLE_PD, val);
+	if (rc < 0) {
+		pr_err("write to register %x failed rc = %d\n",
+				REG_LAB_PD_CTL, rc);
+		return rc;
+	}
+
+	return 0;
+}
+
+static int qpnp_ibb_pd_control(struct qpnp_labibb *labibb, bool enable)
+{
+	int rc;
+	u8 val;
+
+	val = enable ? IBB_PD_CTL_EN : 0;
+	rc = qpnp_labibb_masked_write(labibb, labibb->ibb_base +
+				REG_IBB_PD_CTL, IBB_PD_CTL_EN_MASK, val);
+	if (rc < 0) {
+		pr_err("write to register %x failed rc = %d\n",
+				REG_IBB_PD_CTL, rc);
+		return rc;
+	}
+
+	return 0;
 }
 
 static int qpnp_ibb_smart_ps_config_v1(struct qpnp_labibb *labibb, bool enable,
@@ -1491,7 +1544,7 @@ static int qpnp_lab_dt_init(struct qpnp_labibb *labibb,
 	if (!of_property_read_bool(of_node, "qcom,qpnp-lab-pull-down-enable"))
 		val |= LAB_PD_CTL_DISABLE_PD;
 
-	mask = LAB_PD_CTL_EN_MASK | LAB_PD_CTL_STRENGTH_MASK;
+	mask = LAB_PD_CTL_DISABLE_PD | LAB_PD_CTL_STRENGTH_MASK;
 	rc = qpnp_labibb_masked_write(labibb, labibb->lab_base + REG_LAB_PD_CTL,
 					mask, val);
 
@@ -2183,6 +2236,75 @@ static int qpnp_labibb_regulator_ttw_mode_exit(struct qpnp_labibb *labibb)
 	return rc;
 }
 
+static void qpnp_aod_lab_vreg_ok_work(struct work_struct *work)
+{
+	struct qpnp_labibb *labibb  = container_of(work, struct qpnp_labibb,
+						aod_lab_vreg_ok_work);
+	int rc, retries = 100;
+	u8 val;
+	ktime_t vreg_en_time;
+	s64 time_ms;
+
+	vreg_en_time = ktime_get();
+
+	while (retries--) {
+		rc = qpnp_labibb_read(labibb, labibb->lab_base +
+				REG_LAB_STATUS1, &val, 1);
+		if (rc < 0) {
+			pr_err("read register %x failed rc = %d\n",
+				REG_LAB_STATUS1, rc);
+			goto out;
+		}
+
+		if (val & LAB_STATUS1_VREG_OK_BIT)
+			break;
+
+		usleep_range(5000, 5010);
+	}
+
+	if (!(val & LAB_STATUS1_VREG_OK_BIT)) {
+		time_ms = ktime_ms_delta(ktime_get(), vreg_en_time);
+		pr_err("LAB_VREG_OK not set (%x) waited for %lld ms!\n", val,
+			time_ms);
+		goto out;
+	}
+
+	rc = qpnp_lab_scp_control(labibb, true);
+	if (rc < 0)
+		goto out;
+
+	rc = qpnp_lab_pd_control(labibb, true);
+	if (rc < 0)
+		goto out;
+
+	retries = 10;
+	while (retries--) {
+		rc = qpnp_labibb_read(labibb, labibb->ibb_base +
+					REG_IBB_STATUS1, &val, 1);
+		if (rc < 0) {
+			pr_err("read register %x failed rc = %d\n",
+				REG_IBB_STATUS1, rc);
+			goto out;
+		}
+
+		if (val & IBB_STATUS1_VREG_OK_BIT)
+			break;
+
+		usleep_range(2000, 2010);
+	}
+
+	if (!(val & IBB_STATUS1_VREG_OK_BIT)) {
+		time_ms = ktime_ms_delta(ktime_get(), vreg_en_time);
+		pr_err("IBB_VREG_OK not set (%x) waited for %lld ms!\n", val,
+			time_ms);
+		goto out;
+	}
+
+	rc = qpnp_ibb_pd_control(labibb, true);
+out:
+	return;
+}
+
 static void qpnp_lab_vreg_notifier_work(struct work_struct *work)
 {
 	int rc = 0;
@@ -2491,6 +2613,9 @@ static int qpnp_lab_regulator_enable(struct regulator_dev *rdev)
 	if (labibb->notify_lab_vreg_ok_sts || labibb->detect_lab_sc)
 		schedule_work(&labibb->lab_vreg_ok_work);
 
+	if (labibb->aod_mode)
+		schedule_work(&labibb->aod_lab_vreg_ok_work);
+
 	return 0;
 }
 
@@ -2516,6 +2641,23 @@ static int qpnp_lab_regulator_disable(struct regulator_dev *rdev)
 
 		labibb->lab_vreg.vreg_enabled = 0;
 	}
+
+	if (labibb->aod_mode) {
+		cancel_work_sync(&labibb->aod_lab_vreg_ok_work);
+		rc = qpnp_ibb_pd_control(labibb, false);
+		if (rc < 0)
+			goto out;
+
+		rc = qpnp_lab_pd_control(labibb, false);
+		if (rc < 0)
+			goto out;
+
+		rc = qpnp_lab_scp_control(labibb, false);
+		if (rc < 0)
+			goto out;
+	}
+
+out:
 	return 0;
 }
 
@@ -4117,6 +4259,9 @@ static int qpnp_labibb_regulator_probe(struct platform_device *pdev)
 				of_property_read_bool(labibb->dev->of_node,
 				"qcom,skip-2nd-swire-cmd");
 
+		labibb->aod_mode = of_property_read_bool(labibb->dev->of_node,
+					"qcom,aod-mode");
+
 		rc = of_property_read_u32(labibb->dev->of_node,
 				"qcom,swire-2nd-cmd-delay",
 				&labibb->swire_2nd_cmd_delay);
@@ -4202,6 +4347,7 @@ static int qpnp_labibb_regulator_probe(struct platform_device *pdev)
 	}
 
 	INIT_WORK(&labibb->lab_vreg_ok_work, qpnp_lab_vreg_notifier_work);
+	INIT_WORK(&labibb->aod_lab_vreg_ok_work, qpnp_aod_lab_vreg_ok_work);
 	INIT_DELAYED_WORK(&labibb->sc_err_recovery_work,
 			labibb_sc_err_recovery_work);
 	hrtimer_init(&labibb->sc_err_check_timer,
@@ -4247,6 +4393,8 @@ static int qpnp_labibb_regulator_remove(struct platform_device *pdev)
 			regulator_unregister(labibb->ibb_vreg.rdev);
 
 		cancel_work_sync(&labibb->lab_vreg_ok_work);
+		if (labibb->aod_mode)
+			cancel_work_sync(&labibb->aod_lab_vreg_ok_work);
 	}
 	return 0;
 }

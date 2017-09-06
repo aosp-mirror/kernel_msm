@@ -52,6 +52,8 @@ Main node optional properties:
 					and IBB regulators. This will be mostly
 					needed when LAB and IBB are operating
 					in standalone mode to vote for MBG.
+- qcom,aod-mode:			A boolean property which indicates if
+					AOD mode is supported for AMOLED panel.
 
 Following properties are available only for PM660A:
 
@@ -351,6 +353,11 @@ Example:
 			qcom,qpnp-labibb-mode = "lcd";
 			qcom,pmic-revid = <&pmi8994_revid>;
 			qcom,skip-2nd-swire-cmd;
+
+			/* For AMOLED */
+			qcom,qpnp-labibb-mode = "amoled";
+			qcom,swire-control;
+			qcom,aod-mode;
 
 			lab_regulator: qcom,lab@de00 {
 				reg = <0xde00 0x100>;
