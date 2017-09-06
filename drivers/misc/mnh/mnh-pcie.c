@@ -155,7 +155,7 @@ int mnh_pcie_config_read(uint32_t offset,  uint32_t len, uint32_t *data)
 	if (!mnh_dev || !mnh_dev->pdev)
 		return -ENODEV;
 
-	if (mnh_dev->pdev->current_state != PCI_D0)
+	if ((mnh_dev->pdev->current_state != PCI_D0) || !mnh_dev->powered)
 		return -EIO;
 
 	if (len != sizeof(uint32_t))
@@ -163,13 +163,6 @@ int mnh_pcie_config_read(uint32_t offset,  uint32_t len, uint32_t *data)
 
 	if (offset > mnh_dev->bar_size[BAR_0] - sizeof(uint32_t))
 		return -EINVAL; /* address invalid */
-
-	if (WARN_ON(!mnh_dev->powered)) {
-		dev_err(&mnh_dev->pdev->dev,
-			"%s: cannot do pcie transfer while powering down\n",
-			__func__);
-		return -EIO;
-	}
 
 	pci_read_config_dword(mnh_dev->pdev, offset, data);
 
@@ -195,7 +188,7 @@ int mnh_pcie_config_write(uint32_t offset, uint32_t len, uint32_t data)
 	if (!mnh_dev || !mnh_dev->pdev)
 		return -ENODEV;
 
-	if (mnh_dev->pdev->current_state != PCI_D0)
+	if ((mnh_dev->pdev->current_state != PCI_D0) || !mnh_dev->powered)
 		return -EIO;
 
 	if (len != sizeof(uint32_t))
@@ -206,13 +199,6 @@ int mnh_pcie_config_write(uint32_t offset, uint32_t len, uint32_t data)
 
 	dev_dbg(&mnh_dev->pdev->dev, "Write PCIE Config[0x%08x]-0x%x",
 		offset, data);
-
-	if (WARN_ON(!mnh_dev->powered)) {
-		dev_err(&mnh_dev->pdev->dev,
-			"%s: cannot do pcie transfer while powering down\n",
-			__func__);
-		return -EIO;
-	}
 
 	pci_write_config_dword(mnh_dev->pdev, offset, data);
 
@@ -236,7 +222,7 @@ int mnh_config_read(uint32_t offset,  uint32_t len, uint32_t *data)
 	if (!mnh_dev || !mnh_dev->pdev)
 		return -ENODEV;
 
-	if (mnh_dev->pdev->current_state != PCI_D0)
+	if ((mnh_dev->pdev->current_state != PCI_D0) || !mnh_dev->powered)
 		return -EIO;
 
 	if (offset > HW_MNH_PCIE_BAR_2_ADDR_END - len) {
@@ -245,13 +231,6 @@ int mnh_config_read(uint32_t offset,  uint32_t len, uint32_t *data)
 	}
 
 	new_offset = mnh_check_iatu_bar2(offset);
-
-	if (WARN_ON(!mnh_dev->powered)) {
-		dev_err(&mnh_dev->pdev->dev,
-			"%s: cannot do pcie transfer while powering down\n",
-			__func__);
-		return -EIO;
-	}
 
 	if (len == sizeof(uint32_t))
 		*data = ioread32(mnh_dev->config + new_offset);
@@ -289,7 +268,7 @@ int mnh_config_write(uint32_t offset, uint32_t len, uint32_t data)
 	if (!mnh_dev || !mnh_dev->pdev)
 		return -ENODEV;
 
-	if (mnh_dev->pdev->current_state != PCI_D0)
+	if ((mnh_dev->pdev->current_state != PCI_D0) || !mnh_dev->powered)
 		return -EIO;
 
 	if (offset > HW_MNH_PCIE_BAR_2_ADDR_END - len)
@@ -299,13 +278,6 @@ int mnh_config_write(uint32_t offset, uint32_t len, uint32_t data)
 
 	dev_dbg(&mnh_dev->pdev->dev, "Write Config[0x%08x] - 0x%x",
 		new_offset, data);
-
-	if (WARN_ON(!mnh_dev->powered)) {
-		dev_err(&mnh_dev->pdev->dev,
-			"%s: cannot do pcie transfer while powering down\n",
-			__func__);
-		return -EIO;
-	}
 
 	if (len == sizeof(uint32_t))
 		iowrite32(data, mnh_dev->config + new_offset);
@@ -339,7 +311,7 @@ int mnh_ddr_read(uint32_t offset,  uint32_t len, void *data)
 	if (!mnh_dev || !mnh_dev->pdev)
 		return -ENODEV;
 
-	if (mnh_dev->pdev->current_state != PCI_D0)
+	if ((mnh_dev->pdev->current_state != PCI_D0) || !mnh_dev->powered)
 		return -EIO;
 
 	if (len > mnh_dev->bar_size[BAR_4])
@@ -350,13 +322,6 @@ int mnh_ddr_read(uint32_t offset,  uint32_t len, void *data)
 
 	dev_dbg(&mnh_dev->pdev->dev, "Read DDR[0x%08x], len-%d, data-0x%0x",
 		offset, len, *(uint32_t *)data);
-
-	if (WARN_ON(!mnh_dev->powered)) {
-		dev_err(&mnh_dev->pdev->dev,
-			"%s: cannot do pcie transfer while powering down\n",
-			__func__);
-		return -EIO;
-	}
 
 	memcpy(data, mnh_dev->ddr + offset, len);
 
@@ -378,7 +343,7 @@ int mnh_ddr_write(uint32_t offset, uint32_t len, void *data)
 	if (!mnh_dev || !mnh_dev->pdev)
 		return -ENODEV;
 
-	if (mnh_dev->pdev->current_state != PCI_D0)
+	if ((mnh_dev->pdev->current_state != PCI_D0) || !mnh_dev->powered)
 		return -EIO;
 
 	if (len > mnh_dev->bar_size[BAR_4])
@@ -394,13 +359,6 @@ int mnh_ddr_write(uint32_t offset, uint32_t len, void *data)
 
 	dev_dbg(&mnh_dev->pdev->dev, "Write DDR[0x%08x], len-%d, data-0x%x",
 			offset, len, *(uint32_t *)data);
-
-	if (WARN_ON(!mnh_dev->powered)) {
-		dev_err(&mnh_dev->pdev->dev,
-			"%s: cannot do pcie transfer while powering down\n",
-			__func__);
-		return -EIO;
-	}
 
 	memcpy(mnh_dev->ddr + offset, data, len);
 
