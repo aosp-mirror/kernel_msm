@@ -30,46 +30,46 @@
 
 #define MNH_DDR_CTL_IN(reg) \
 	HW_IN(HWIO_DDR_CTL_BASE_ADDR, DDR_CTL, reg)
-#define MNH_DDR_CTL_INf(reg, fld) \
-	HW_INf(HWIO_DDR_CTL_BASE_ADDR, DDR_CTL, reg, fld)
-#define MNH_DDR_CTL_OUT(reg, val) \
-	HW_OUT(HWIO_DDR_CTL_BASE_ADDR, DDR_CTL, reg, val)
-#define MNH_DDR_CTL_OUTf(reg, fld, val) \
-	HW_OUTf(HWIO_DDR_CTL_BASE_ADDR, DDR_CTL, reg, fld, val)
+#define MNH_DDR_CTL_INf(...) \
+	HW_INf(HWIO_DDR_CTL_BASE_ADDR, DDR_CTL, __VA_ARGS__)
+#define MNH_DDR_CTL_OUT(...) \
+	HW_OUT(HWIO_DDR_CTL_BASE_ADDR, DDR_CTL, __VA_ARGS__)
+#define MNH_DDR_CTL_OUTf(...) \
+	HW_OUTf(HWIO_DDR_CTL_BASE_ADDR, DDR_CTL, __VA_ARGS__)
 
-#define MNH_DDR_PI_INf(reg, fld) \
-	HW_INf(HWIO_DDR_PI_BASE_ADDR, DDR_PI, reg, fld)
-#define MNH_DDR_PI_OUTf(reg, fld, val) \
-	HW_OUTf(HWIO_DDR_PI_BASE_ADDR, DDR_PI, reg, fld, val)
-#define MNH_DDR_PI_OUT(reg, val) \
-	HW_OUT(HWIO_DDR_PI_BASE_ADDR, DDR_PI, reg, val)
+#define MNH_DDR_PI_INf(...) \
+	HW_INf(HWIO_DDR_PI_BASE_ADDR, DDR_PI, __VA_ARGS__)
+#define MNH_DDR_PI_OUTf(...) \
+	HW_OUTf(HWIO_DDR_PI_BASE_ADDR, DDR_PI, __VA_ARGS__)
+#define MNH_DDR_PI_OUT(...) \
+	HW_OUT(HWIO_DDR_PI_BASE_ADDR, DDR_PI, __VA_ARGS__)
 
-#define MNH_DDR_PHY_INf(reg, fld) \
-	HW_INf(HWIO_DDR_PHY_BASE_ADDR, DDR_PHY, reg, fld)
-#define MNH_DDR_PHY_OUTf(reg, fld, val) \
-	HW_OUTf(HWIO_DDR_PHY_BASE_ADDR, DDR_PHY, reg, fld, val)
-#define MNH_DDR_PHY_OUT(reg, val) \
-	HW_OUT(HWIO_DDR_PHY_BASE_ADDR, DDR_PHY, reg, val)
+#define MNH_DDR_PHY_INf(...) \
+	HW_INf(HWIO_DDR_PHY_BASE_ADDR, DDR_PHY, __VA_ARGS__)
+#define MNH_DDR_PHY_OUTf(...) \
+	HW_OUTf(HWIO_DDR_PHY_BASE_ADDR, DDR_PHY, __VA_ARGS__)
+#define MNH_DDR_PHY_OUT(...) \
+	HW_OUT(HWIO_DDR_PHY_BASE_ADDR, DDR_PHY, __VA_ARGS__)
 
 #define MNH_SCU_IN(reg) \
 	HW_IN(HWIO_SCU_BASE_ADDR, SCU, reg)
-#define MNH_SCU_INf(reg, fld) \
-	HW_INf(HWIO_SCU_BASE_ADDR, SCU, reg, fld)
-#define MNH_SCU_INx(reg, inst) \
-	HW_INx(HWIO_SCU_BASE_ADDR, SCU, reg, inst)
-#define MNH_SCU_INxf(reg, inst, fld) \
-	HW_INxf(HWIO_SCU_BASE_ADDR, SCU, reg, inst, fld)
-#define MNH_SCU_OUTf(reg, fld, val) \
-	HW_OUTf(HWIO_SCU_BASE_ADDR, SCU, reg, fld, val)
-#define MNH_SCU_OUT(reg, val) \
-	HW_OUT(HWIO_SCU_BASE_ADDR, SCU, reg, val)
-#define MNH_SCU_OUTx(reg, inst, val) \
-	HW_OUTx(HWIO_SCU_BASE_ADDR, SCU, reg, inst, val)
+#define MNH_SCU_INf(...) \
+	HW_INf(HWIO_SCU_BASE_ADDR, SCU, __VA_ARGS__)
+#define MNH_SCU_INx(...) \
+	HW_INx(HWIO_SCU_BASE_ADDR, SCU, __VA_ARGS__)
+#define MNH_SCU_INxf(...) \
+	HW_INxf(HWIO_SCU_BASE_ADDR, SCU, __VA_ARGS__)
+#define MNH_SCU_OUTf(...) \
+	HW_OUTf(HWIO_SCU_BASE_ADDR, SCU, __VA_ARGS__)
+#define MNH_SCU_OUT(...) \
+	HW_OUT(HWIO_SCU_BASE_ADDR, SCU, __VA_ARGS__)
+#define MNH_SCU_OUTx(...) \
+	HW_OUTx(HWIO_SCU_BASE_ADDR, SCU, __VA_ARGS__)
 
 #define MNH_RSTC_INf(fld) \
 	HW_INf(HWIO_SCU_BASE_ADDR, SCU, RSTC, fld)
-#define MNH_RSTC_OUTf(fld, val) \
-	HW_OUTf(HWIO_SCU_BASE_ADDR, SCU, RSTC, fld, val)
+#define MNH_RSTC_OUTf(...) \
+	HW_OUTf(HWIO_SCU_BASE_ADDR, SCU, RSTC, __VA_ARGS__)
 
 #define WRITE_DDR_REG_CONFIG(ddrblock, regindex) \
 	mnh_reg_write(_state.ddrblock##_base + (regindex * sizeof(u32)), \
