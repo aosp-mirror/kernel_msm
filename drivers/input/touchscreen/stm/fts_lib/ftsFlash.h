@@ -111,8 +111,6 @@ int flash_disable_remapping(void);
 int flash_erase_unlock(void);
 int flash_full_erase(void);
 int flash_erase_page_by_page(ErasePage keep_cx);
-int start_flash_dma(void);
-int fillFlash(u32 address, u8 * data, int size);
 #endif
 
 int flash_unlock(void);

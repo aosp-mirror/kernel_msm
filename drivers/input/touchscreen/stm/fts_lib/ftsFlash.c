@@ -267,7 +267,7 @@ int flash_status_ready() {
 * Poll the flash status register, waiting for the Flash to become ready
 * @return OK if success or an error code which specify the type of error encountered
 */
-int wait_for_flash_ready() {
+static int wait_for_flash_ready() {
     int status;
     int(*code)(void);
 
@@ -329,7 +329,7 @@ int flash_unlock() {
 * @param keep_cx if 1, the CX area will be loaded and burnt otherwise will be skipped and the area will be untouched 
 * @return OK if success or an error code which specify the type of error encountered 
 */
-int parseBinFile(u8* fw_data, int fw_size, Firmware *fwData, int keep_cx) {
+static int parseBinFile(u8* fw_data, int fw_size, Firmware *fwData, int keep_cx) {
 	int dimension;
 	
 	if (keep_cx) {
@@ -1056,7 +1056,8 @@ int flash_erase_page_by_page(ErasePage keep_cx) {
 * Start the DMA procedure which actually transfer and burn the data loaded from memory into the Flash
 * @return OK if success or an error code which specify the type of error encountered 
 */
-int start_flash_dma(){
+static int start_flash_dma(void)
+{
     int status;
 	
 #ifndef FTI
@@ -1090,7 +1091,7 @@ int start_flash_dma(){
 * @param size size of data
 * @return OK if success or an error code which specify the type of error encountered 
 */
-int fillFlash(u32 address, u8 *data, int size) {
+static int fillFlash(u32 address, u8 *data, int size) {
 
     int remaining = size, index = 0;
     int toWrite = 0;

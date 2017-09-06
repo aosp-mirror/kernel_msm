@@ -2217,7 +2217,7 @@ static void fts_event_handler(struct work_struct *work) {
 *	The function perform a fw update of the IC in case of crc error or a new fw version and then understand if the IC need to be re-initialized again.  
 *	@return  OK if success or an error code which specify the type of error encountered
 */
-int fts_fw_update(struct fts_ts_info *info){
+static int fts_fw_update(struct fts_ts_info *info){
 #ifndef FTM3_CHIP
     u8 error_to_search[4] = {EVT_TYPE_ERROR_CRC_CX_HEAD, EVT_TYPE_ERROR_CRC_CX, EVT_TYPE_ERROR_CRC_CX_SUB_HEAD, EVT_TYPE_ERROR_CRC_CX_SUB } ;
 #endif
@@ -2487,7 +2487,7 @@ static int fts_init(struct fts_ts_info *info) {
 * @return 0 if success or another value if fail
 */
 int fts_chip_powercycle(struct fts_ts_info *info) {
-    int error;
+    int error = 0;
     
     logError(1, "%s %s: Power Cycle Starting... \n", tag, __func__);
     logError(1, "%s %s: Disabling IRQ... \n", tag, __func__);	//if IRQ pin is short with DVDD a call to the ISR will triggered when the regulator is turned off
@@ -3091,10 +3091,6 @@ static int fts_probe(struct spi_device *client) {
 	u16 bus_type;
 
     logError(1, "%s %s: driver probe begin!\n", tag, __func__);
-
-    
-    logError(1, "%s driver ver. %s (built on %s, %s)\n", tag, FTS_TS_DRV_VERSION, __DATE__, __TIME__);
-
 
 	logError(1, "%s SET Bus Functionality : \n", tag);
 #ifdef I2C_INTERFACE

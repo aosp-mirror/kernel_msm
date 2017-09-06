@@ -297,7 +297,7 @@ void fts_execute_autotune(struct fts_ts_info *info)
 #define FW_IMAGE_SIZE_D3		(256 * 1024)
 #define SIGNEDKEY_SIZE			(256)
 
-int wait_for_flash_ready(struct fts_ts_info *info, uint8_t type)
+static int wait_for_flash_ready(struct fts_ts_info *info, uint8_t type)
 {
 	uint8_t cmd[2] = {FLASH_CMD_READ_REGISTER, type};
 	uint8_t readData;
@@ -324,7 +324,7 @@ int wait_for_flash_ready(struct fts_ts_info *info, uint8_t type)
 	return 1;
 }
 
-int start_flash_dma(struct fts_ts_info *info)
+static int start_flash_dma(struct fts_ts_info *info)
 {
 	int status;
 	uint8_t cmd[3] = {FLASH_CMD_WRITE_REGISTER,
@@ -346,7 +346,7 @@ int start_flash_dma(struct fts_ts_info *info)
 	return true;
 }
 
-int fillFlash(struct fts_ts_info *info, uint32_t address, uint8_t *data,
+static int fillFlash(struct fts_ts_info *info, uint32_t address, uint8_t *data,
 		int size)
 {
 	int remaining;
@@ -450,7 +450,7 @@ uint32_t convU8toU32(uint8_t *src)
 	return tmpData;
 }
 
-int parseBinFile(struct fts_ts_info *info, uint8_t *data,
+static int parseBinFile(struct fts_ts_info *info, uint8_t *data,
 	int fw_size,
 	struct FW_FTB_HEADER *fw_header,
 	int keep_cx)
@@ -819,7 +819,7 @@ static int fts_fw_check(struct fts_ts_info *info)
 	return retval;
 }
 
-int fts_fw_update(struct fts_ts_info *info)
+static int fts_fw_update(struct fts_ts_info *info)
 {
 	const struct firmware *fw_entry = NULL;
 	unsigned char *fw_data = NULL;
@@ -940,7 +940,6 @@ out:
 		release_firmware(fw_entry);
 	return retval;
 }
-EXPORT_SYMBOL(fts_fw_update);
 
 int fts_fw_verify_update(struct fts_ts_info *info)
 {

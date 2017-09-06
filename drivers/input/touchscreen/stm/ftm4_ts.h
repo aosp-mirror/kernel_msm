@@ -550,7 +550,6 @@ enum fts_system_information_address {
 
 void fts_delay(unsigned int ms);
 int fts_cmd_completion_check(struct fts_ts_info *info, uint8_t event1, uint8_t event2, uint8_t event3);
-int fts_fw_update(struct fts_ts_info *info);
 int fts_fw_verify_update(struct fts_ts_info *info);
 int fts_get_version_info(struct fts_ts_info *info);
 void fts_get_afe_info(struct fts_ts_info *info);
