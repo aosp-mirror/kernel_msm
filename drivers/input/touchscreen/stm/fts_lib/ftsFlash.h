@@ -110,7 +110,11 @@ int flash_disable_remapping(void);
 #endif
 int flash_erase_unlock(void);
 int flash_full_erase(void);
+#ifndef FTI
+int flash_erase_page_by_page(int keep_cx);
+#else
 int flash_erase_page_by_page(ErasePage keep_cx);
+#endif
 #endif
 
 int flash_unlock(void);
