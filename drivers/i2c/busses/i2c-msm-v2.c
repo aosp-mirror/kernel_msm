@@ -2819,13 +2819,7 @@ static int i2c_msm_pm_sys_resume_noirq(struct device *dev)
 static void i2c_msm_pm_rt_init(struct device *dev)
 {
 	pm_runtime_set_suspended(dev);
-	/*
-	 * Set autosuspend delay to a high value to disable runtime suspend.
-	 * The i2c bus will still get suspended when system suspend happens
-	 * and it will get properly resumed when the system exits suspend.
-	 * Make sure the delay value doesn't overflow int and become negative.
-	 */
-	pm_runtime_set_autosuspend_delay(dev, (MSEC_PER_SEC * 3600));
+	pm_runtime_set_autosuspend_delay(dev, (MSEC_PER_SEC >> 2));
 	pm_runtime_use_autosuspend(dev);
 	pm_runtime_enable(dev);
 }
