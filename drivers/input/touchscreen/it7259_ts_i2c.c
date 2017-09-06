@@ -223,6 +223,7 @@ struct it7259_ts_data {
 	struct pinctrl_state *pinctrl_state_release;
 	bool palm_pressed;
 	bool fw_active;
+	bool pm_suspend;
 };
 
 /* Function declarations */
@@ -2683,11 +2684,15 @@ static int fb_notifier_callback(struct notifier_block *self,
 	if (evdata && evdata->data && ts_data && ts_data->client) {
 		if (event == FB_EVENT_BLANK) {
 			blank = evdata->data;
-			if (*blank == FB_BLANK_UNBLANK)
+			if (*blank == FB_BLANK_UNBLANK) {
+				ts_data->pm_suspend = false;
 				it7259_ts_resume(&(ts_data->client->dev));
-			else if (*blank == FB_BLANK_POWERDOWN ||
-					*blank == FB_BLANK_VSYNC_SUSPEND)
+			}
+			else if (*blank == FB_BLANK_VSYNC_SUSPEND) {
+				ts_data->pm_suspend = false;
 				it7259_ts_suspend(&(ts_data->client->dev));
+			} else if (*blank == FB_BLANK_POWERDOWN)
+				ts_data->pm_suspend = true;
 		}
 	}
 
@@ -2701,7 +2706,8 @@ static int it7259_ts_resume(struct device *dev)
 	struct it7259_ts_data *ts_data = dev_get_drvdata(dev);
 	int retval;
 
-	if (device_may_wakeup(dev)) {
+
+	if (device_may_wakeup(dev) && (ts_data->pm_suspend == false)) {
 		if (ts_data->in_low_power_mode) {
 			/* Set active current for the avdd regulator */
 			if (ts_data->pdata->avdd_lpm_cur) {
@@ -2728,9 +2734,11 @@ static int it7259_ts_resume(struct device *dev)
 			goto err_pinctrl_select_suspend;
 		}
 	}
+	msleep(100);
 
 	enable_irq(ts_data->client->irq);
 	ts_data->suspended = false;
+
 	return 0;
 
 err_pinctrl_select_suspend:
@@ -2747,7 +2755,7 @@ static int it7259_ts_suspend(struct device *dev)
 		return -EBUSY;
 	}
 
-	if (device_may_wakeup(dev)) {
+	if (device_may_wakeup(dev) && (ts_data->pm_suspend == false)) {
 		if (!ts_data->in_low_power_mode) {
 			if(ts_data->fw_active) {
 				/* put the device in low power idle mode */
