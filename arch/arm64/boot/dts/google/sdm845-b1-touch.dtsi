@@ -1,0 +1,63 @@
+/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/* Setting 3.3V per FTM5 porting guide
+ * There is a concern that PMI8998 VBOB is only 3.312 and is the
+ * reference for L19, but it is matching the Taimen.
+ */
+&pm8998_l19 {
+	regulator-min-microvolt = <3300000>;
+	regulator-max-microvolt = <3300000>;
+	qcom,init-voltage = <3300000>;
+	status = "okay";
+};
+
+&pm8998_l14 {
+	regulator-min-microvolt = <1800000>;
+	regulator-max-microvolt = <1800000>;
+	qcom,init-voltage = <1800000>;
+	qcom,init-mode = <RPMH_REGULATOR_MODE_LDO_HPM>;
+	status = "okay";
+};
+
+&rpmh_regulator_ldoa14 {
+	qcom,supported-modes = <RPMH_REGULATOR_MODE_LDO_HPM>;
+};
+
+/* AP Touch I2C SDA is gpio27, SCL is gpio28. (QUP2)
+ * Reset gpio99, int gpio125.
+ */
+
+&qupv3_se2_i2c {
+	status = "ok";
+	qcom,clk-freq-out = <400000>;
+
+	st_fts@49 {
+		status = "ok";
+		compatible = "st,fts";
+		reg = <0x49>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <125 IRQ_TYPE_LEVEL_LOW>;
+		vdd-supply = <&pm8998_l14>; /* 1.8V */
+		avdd-supply = <&pm8998_l19>; /* 3.3V */
+		pinctrl-names = "pmx_ts_active", "pmx_ts_suspend";
+		pinctrl-0 = <&ts_active &ts_reset_active>;
+		pinctrl-1 = <&ts_suspend>;
+
+		st,irq-gpio = <&tlmm 125 0>;
+		st,reset-gpio = <&tlmm 99 0>;
+		st,max-coords = <1080 2160>;
+		st,regulator_dvdd = "vdd";
+		st,regulator_avdd = "avdd";
+		/* todo  st,firmware_name = "ftm4_fw.ftb"; */
+	};
+};

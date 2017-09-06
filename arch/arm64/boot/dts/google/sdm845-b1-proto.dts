@@ -13,7 +13,7 @@
 
 /dts-v1/;
 
-#include "sdm845-b1c1-devboard-common.dtsi"
+#include "sdm845-b1-common.dtsi"
 
 / {
 	model = "Google Inc. MSM sdm845 B1 proto Board";
