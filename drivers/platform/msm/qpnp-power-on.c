@@ -831,6 +831,13 @@ static enum hrtimer_restart qpnp_pon_vibe_timer_func(struct hrtimer *timer)
 	return HRTIMER_NORESTART;
 }
 
+#ifdef CONFIG_QPNP_VIBRATOR
+static int of_dev_node_match(struct device *dev, void *data)
+{
+	return dev->of_node == data;
+}
+#endif
+
 static void timed_init_work_func(struct work_struct *work)
 {
 	struct qpnp_pon *pon =
@@ -838,10 +845,13 @@ static void timed_init_work_func(struct work_struct *work)
 	struct spmi_device *spmi;
 	struct device_node *dev_node;
 	struct device_node *node;
-	struct i2c_client *vib_client;
 	void *vib_data;
 	int rc;
 	static int retry = 0;
+	struct device *dev;
+#ifndef CONFIG_QPNP_VIBRATOR
+	struct i2c_client *vib_client;
+#endif
 
 	if (!pon) {
 		pr_warn("%s: no device\n", __func__);
@@ -857,7 +867,17 @@ static void timed_init_work_func(struct work_struct *work)
 			"Can't find qcom,external-vibrator phandle\n");
 		return;
 	}
+	dev_info(&spmi->dev, "vibrator: %s\n", node->name);
+#ifdef CONFIG_QPNP_VIBRATOR
+	dev = bus_find_device(spmi->dev.bus, NULL, node, of_dev_node_match);
+	if (!dev) {
+		dev_warn(&spmi->dev,
+			"can't find pon_vibrator spmi device by node\n");
+		return;
+	}
 
+	vib_data = dev_get_drvdata(dev);
+#else
 	vib_client = of_find_i2c_device_by_node(node);
 	if (!vib_client) {
 		dev_warn(&spmi->dev,
@@ -866,6 +886,9 @@ static void timed_init_work_func(struct work_struct *work)
 	}
 
 	vib_data = i2c_get_clientdata(vib_client);
+	dev = &vib_client->dev;
+#endif
+
 	if (!vib_data) {
 		dev_warn(&spmi->dev,
 			"Can't find the vibrator data\n");
@@ -878,7 +901,7 @@ static void timed_init_work_func(struct work_struct *work)
 			schedule_delayed_work(&pon->timed_init_work,
 					QPNP_VIBE_INIT_DELAY);
 		}
-		put_device(&vib_client->dev);
+		put_device(dev);
 		return;
 	}
 
@@ -889,6 +912,8 @@ static void timed_init_work_func(struct work_struct *work)
 			"Unable to read 'qcom,longkey-warn-time'\n");
 		pon->longkey_warn_time = QPNP_LONGKEY_WARN_TIME_MAX;
 	}
+	dev_info(&spmi->dev, "vibration longkey warn time: %d ms\n",
+		pon->longkey_warn_time);
 
 	/* Led device must be first field in vib_data. */
 	pon->led_dev = (struct led_classdev *)vib_data;
@@ -897,7 +922,9 @@ static void timed_init_work_func(struct work_struct *work)
 	pon->timed_timer.function = qpnp_pon_vibe_timer_func;
 
 	pon->timed_inited = true;
-	put_device(&vib_client->dev);
+	put_device(dev);
+
+	dev_info(&spmi->dev, "pon_vibration init done!!\n");
 }
 
 static int
