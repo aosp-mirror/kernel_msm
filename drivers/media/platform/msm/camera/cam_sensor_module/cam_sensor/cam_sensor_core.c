@@ -17,6 +17,8 @@
 #include "cam_soc_util.h"
 #include "cam_trace.h"
 
+#include "mnh-sm.h"
+
 static int32_t cam_sensor_i2c_pkt_parse(struct cam_sensor_ctrl_t *s_ctrl,
 	void *arg)
 {
@@ -632,11 +634,19 @@ int cam_sensor_power(struct v4l2_subdev *sd, int on)
 
 int cam_sensor_power_up(struct cam_sensor_ctrl_t *s_ctrl)
 {
-	int rc;
+	int rc, rc2;
 	struct cam_sensor_power_ctrl_t *power_info;
 	struct cam_camera_slave_info *slave_info;
 	struct cam_hw_soc_info *soc_info =
 		&s_ctrl->soc_info;
+	struct mnh_mipi_config mipi_config1 = {
+		.txdev = MIPI_TX1,
+		.rxdev = MIPI_RX1,
+		.rx_rate = 1368,
+		.tx_rate = 1368,
+		.mode = MIPI_MODE_BYPASS,
+		.vc_en_mask = MNH_MIPI_VC_ALL_EN_MASK,
+	};
 
 	if (!s_ctrl) {
 		CAM_ERR(CAM_SENSOR, "failed: %pK", s_ctrl);
@@ -649,6 +659,15 @@ int cam_sensor_power_up(struct cam_sensor_ctrl_t *s_ctrl)
 	if (!power_info || !slave_info) {
 		CAM_ERR(CAM_SENSOR, "failed: %pK %pK", power_info, slave_info);
 		return -EINVAL;
+	}
+
+	rc2 = mnh_sm_set_state(MNH_STATE_ACTIVE);
+	if (!rc2) {
+		rc2 = mnh_sm_mipi_config(mipi_config1);
+		if (rc2)
+			CAM_ERR(CAM_SENSOR, "configure easel failed:%d", rc2);
+	} else {
+		CAM_WARN(CAM_SENSOR, "power up easel failed:%d", rc2);
 	}
 
 	rc = cam_sensor_core_power_up(power_info, soc_info);
@@ -674,7 +693,7 @@ int cam_sensor_power_down(struct cam_sensor_ctrl_t *s_ctrl)
 {
 	struct cam_sensor_power_ctrl_t *power_info;
 	struct cam_hw_soc_info *soc_info;
-	int rc = 0;
+	int rc = 0, rc2;
 
 	if (!s_ctrl) {
 		CAM_ERR(CAM_SENSOR, "failed: s_ctrl %pK", s_ctrl);
@@ -688,11 +707,16 @@ int cam_sensor_power_down(struct cam_sensor_ctrl_t *s_ctrl)
 		CAM_ERR(CAM_SENSOR, "failed: power_info %pK", power_info);
 		return -EINVAL;
 	}
+
 	rc = msm_camera_power_down(power_info, soc_info);
 	if (rc < 0) {
 		CAM_ERR(CAM_SENSOR, "power down the core is failed:%d", rc);
 		return rc;
 	}
+
+	rc2 = mnh_sm_set_state(MNH_STATE_OFF);
+	if (rc2)
+		CAM_WARN(CAM_SENSOR, "power down easel failed:%d", rc2);
 
 	if (s_ctrl->io_master_info.master_type == CCI_MASTER)
 		camera_io_release(&(s_ctrl->io_master_info));
