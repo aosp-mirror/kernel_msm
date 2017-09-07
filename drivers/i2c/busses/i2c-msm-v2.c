@@ -2083,7 +2083,8 @@ static int i2c_msm_xfer_wait_for_completion(struct i2c_msm_ctrl *ctrl,
 	time_left = wait_for_completion_timeout(complete,
 						xfer->timeout);
 	if (!time_left) {
-		ipc_log_string(ctrl->ipcl, "%s Timeout on I2C transfer\n", __func__);
+		ipc_log_string(ctrl->ipcl,
+				"%s Timeout on I2C transfer\n", __func__);
 		xfer->err = I2C_MSM_ERR_TIMEOUT;
 		i2c_msm_dbg_dump_diag(ctrl, false, 0, 0);
 		ret = -EIO;
@@ -2266,11 +2267,17 @@ static int i2c_msm_pm_xfer_start(struct i2c_msm_ctrl *ctrl)
 		i2c_msm_pm_resume(ctrl->dev);
 	}
 
-	ipc_log_string(ctrl->ipcl, "%s Turning ON the I2C clocks\n", __func__);
-	ret = i2c_msm_pm_clk_enable(ctrl);
-	if (ret) {
-		mutex_unlock(&ctrl->xfer.mtx);
-		return ret;
+	if (ctrl->is_clk_disable) {
+		dev_info(ctrl->dev, "Clocks not enabled by Runtime PM-callback.\n");
+		ret = i2c_msm_pm_clk_enable(ctrl);
+		if (ret) {
+			mutex_unlock(&ctrl->xfer.mtx);
+			return ret;
+		}
+		ctrl->is_clk_disable = false;
+		ipc_log_string(ctrl->ipcl,
+				"%s AHB and I2C core clock manually enabled.\n",
+				__func__);
 	}
 	i2c_msm_qup_init(ctrl);
 
@@ -2294,8 +2301,11 @@ static void i2c_msm_pm_xfer_end(struct i2c_msm_ctrl *ctrl)
 	if (ctrl->xfer.mode_id == I2C_MSM_XFER_MODE_DMA)
 		i2c_msm_dma_free_channels(ctrl);
 
-	ipc_log_string(ctrl->ipcl, "%s Turning OFF the I2C clocks\n", __func__);
-	i2c_msm_pm_clk_disable(ctrl);
+	/*
+	 * Moved to pm suspend.
+	 *
+	 *i2c_msm_pm_clk_disable(ctrl);
+	 */
 
 	if (!pm_runtime_enabled(ctrl->dev))
 		i2c_msm_pm_suspend(ctrl->dev);
@@ -2726,9 +2736,11 @@ static void i2c_msm_pm_suspend(struct device *dev)
 		return;
 	}
 	i2c_msm_dbg(ctrl, MSM_DBG, "suspending...");
-	ipc_log_string(ctrl->ipcl, "%s Clock path unvoting and unprepare.\n", __func__);
+	i2c_msm_pm_clk_disable(ctrl);
+	ipc_log_string(ctrl->ipcl, "%s Clock disable.\n", __func__);
 	i2c_msm_pm_clk_unprepare(ctrl);
 	i2c_msm_clk_path_unvote(ctrl);
+	ctrl->is_clk_disable = true;
 
 	/*
 	 * We implement system and runtime suspend in the same way. However
@@ -2747,6 +2759,7 @@ static void i2c_msm_pm_suspend(struct device *dev)
 static int i2c_msm_pm_resume(struct device *dev)
 {
 	struct i2c_msm_ctrl *ctrl = dev_get_drvdata(dev);
+	int ret;
 
 	if (!ctrl->ipcl) {
 		char ipc_name[I2C_NAME_SIZE];
@@ -2754,14 +2767,19 @@ static int i2c_msm_pm_resume(struct device *dev)
 		snprintf(ipc_name, I2C_NAME_SIZE, "i2c-%d", ctrl->adapter.nr);
 		ctrl->ipcl = ipc_log_context_create(2, ipc_name, 0);
 	}
+
 	if (ctrl->pwr_state == I2C_MSM_PM_RT_ACTIVE)
 		return 0;
 
 	i2c_msm_dbg(ctrl, MSM_DBG, "resuming...");
 
-	ipc_log_string(ctrl->ipcl, "%s Clock path voting and prepare.\n", __func__);
 	i2c_msm_clk_path_vote(ctrl);
 	i2c_msm_pm_clk_prepare(ctrl);
+	ipc_log_string(ctrl->ipcl, "%s Clock enable.\n", __func__);
+	ret = i2c_msm_pm_clk_enable(ctrl);
+	if (!ret)
+		ctrl->is_clk_disable = false;
+
 	ctrl->pwr_state = I2C_MSM_PM_RT_ACTIVE;
 	return 0;
 }
@@ -2962,6 +2980,7 @@ static int i2c_msm_probe(struct platform_device *pdev)
 	i2c_msm_pm_clk_disable(ctrl);
 	i2c_msm_pm_clk_unprepare(ctrl);
 	i2c_msm_clk_path_unvote(ctrl);
+	ctrl->is_clk_disable = true;
 
 	ret = i2c_msm_rsrcs_gpio_pinctrl_init(ctrl);
 	if (ret)

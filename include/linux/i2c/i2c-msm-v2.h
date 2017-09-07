@@ -591,6 +591,7 @@ struct i2c_msm_ctrl {
 	u32                        mstr_clk_ctl;
 	enum i2c_msm_power_state   pwr_state;
 	void *ipcl;
+	bool is_clk_disable;
 };
 
 /* Enum for the profiling event types */
