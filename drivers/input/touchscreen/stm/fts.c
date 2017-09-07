@@ -1659,11 +1659,11 @@ static void fts_enter_pointer_event_handler(struct fts_ts_info *info, unsigned c
 	//TODO: check with fw how they will report distance and pressure
 	z=PRESSURE_MAX;
 	distance = 0;		//if the tool is touching the display the distance should be 0
-	
-    if (x == X_AXIS_MAX)
+
+    if (x == info->board->x_axis_max)
         x--;
 
-    if (y == Y_AXIS_MAX)
+    if (y == info->board->y_axis_max)
         y--;
 
     input_mt_slot(info->input_dev, touchId);
@@ -3041,6 +3041,7 @@ static int parse_dt(struct device *dev, struct fts_hw_platform_data *bdata) {
     int retval;
     const char *name;
     struct device_node *np = dev->of_node;
+    u32 coords[2];
 
     bdata->switch_gpio = of_get_named_gpio(np, "st,switch-gpio", 0);
     logError(0, "%s switch_gpio = %d\n", tag, bdata->switch_gpio);
@@ -3077,6 +3078,14 @@ static int parse_dt(struct device *dev, struct fts_hw_platform_data *bdata) {
     } else {
         bdata->reset_gpio = GPIO_NOT_DEFINED;
     }
+
+    if (of_property_read_u32_array(np, "st,max-coords", coords, 2)) {
+        logError(0, "%s st,max-coords not found, using 1440x2560\n");
+        coords[0] = 1440;
+        coords[1] = 2560;
+    }
+    bdata->x_axis_max = coords[0];
+    bdata->y_axis_max = coords[1];
 
     return OK;
 }
@@ -3216,8 +3225,10 @@ static int fts_probe(struct spi_device *client) {
 
     //input_mt_init_slots(info->input_dev, TOUCH_ID_MAX);
 
-    input_set_abs_params(info->input_dev, ABS_MT_POSITION_X, X_AXIS_MIN, X_AXIS_MAX, 0, 0);
-    input_set_abs_params(info->input_dev, ABS_MT_POSITION_Y, Y_AXIS_MIN, Y_AXIS_MAX, 0, 0);
+    input_set_abs_params(info->input_dev, ABS_MT_POSITION_X, X_AXIS_MIN,
+                         info->board->x_axis_max, 0, 0);
+    input_set_abs_params(info->input_dev, ABS_MT_POSITION_Y, Y_AXIS_MIN,
+                         info->board->y_axis_max, 0, 0);
     input_set_abs_params(info->input_dev, ABS_MT_TOUCH_MAJOR, AREA_MIN, AREA_MAX, 0, 0);
     input_set_abs_params(info->input_dev, ABS_MT_TOUCH_MINOR, AREA_MIN, AREA_MAX, 0, 0);
     input_set_abs_params(info->input_dev, ABS_MT_PRESSURE, PRESSURE_MIN, PRESSURE_MAX, 0, 0);
