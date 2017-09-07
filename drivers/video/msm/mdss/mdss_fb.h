@@ -346,6 +346,7 @@ struct msm_fb_data_type {
 	struct dma_buf *fbmem_buf;
 	struct dma_buf_attachment *fb_attachment;
 	struct sg_table *fb_table;
+	bool dma_buff_attached_for_pan;
 
 	bool mdss_fb_split_stored;
 

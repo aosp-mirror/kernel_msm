@@ -1490,6 +1490,7 @@ static int mdp3_map_pan_buff_immediate(struct msm_fb_data_type *mfd)
 
 	pr_debug("%s : smmu map dma buf VA: (%llx) MFD->iova %llx\n",
 			__func__, (u64) addr, (u64) mfd->iova);
+	mfd->dma_buff_attached_for_pan = true;
 	return rc;
 
 err_unmap:

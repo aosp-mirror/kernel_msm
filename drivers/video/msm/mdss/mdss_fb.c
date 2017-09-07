@@ -2018,6 +2018,14 @@ void mdss_fb_free_fb_ion_memory(struct msm_fb_data_type *mfd)
 		dma_buf_put(mfd->fbmem_buf);
 	}
 
+	if (mfd->dma_buff_attached_for_pan) {
+		int domain = mfd->mdp.fb_mem_get_iommu_domain();
+
+		mfd->dma_buff_attached_for_pan = false;
+		mdss_smmu_unmap_dma_buf(mfd->fb_table, domain,
+				DMA_BIDIRECTIONAL, mfd->fbmem_buf);
+	}
+
 	ion_free(mfd->fb_ion_client, mfd->fb_ion_handle);
 	mfd->fb_ion_handle = NULL;
 	mfd->fbmem_buf = NULL;
