@@ -543,10 +543,6 @@ static int sop716_parse_gpio(struct device_node *node, struct sop716_info *dd)
 		gpio_direction_output(dd->reset_pin, 0);
 		msleep(100);
 		gpio_set_value(dd->reset_pin, 0);
-		msleep(100);
-		gpio_set_value(dd->reset_pin, 1);
-		msleep(100);
-		gpio_set_value(dd->reset_pin, 0);
 	} else {
 		pr_err("%s: reset gpio error:%d\n", __func__, dd->reset_pin);
 		return -1;
