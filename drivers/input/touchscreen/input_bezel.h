@@ -22,16 +22,26 @@
 #include <linux/timer.h>
 #include <linux/mod_devicetable.h>
 
-#define BEZEL_INSET_POS 60
+/* After first touch on Bezel, it becomes "20px + BEZEL_INSET_POS" wide
+   This should ideally be 48dp or bigger to avoid finger generating display touch/swipe events
+   accidentally. So INSET can be 96-20 = 76 or larger. Note a very large value of this
+   but a very small value of INIT_ANGULAR_DISTANCE_THRESHOLD will block display swipe events from
+   edge of matted bezel area. e.g. Swiping down in Watchface to bring system UI will do nothing till
+   we cross this inset */
+#define BEZEL_INSET_POS 160
+
+/* Any event in outer this much pixel of display will never be sent as display touch events.
+   This value must not be large. Any touch elements in this area will not be tappable/swipable */
+#define INIT_BEZEL_INSET 5
+
 /* Approximated to distance for angular movement of 1 degree :
    2 * pi * 227 * (1/360): rounded up; square of 3.96 ... */
 #define ANGULAR_DISTANCE_THRESHOLD  16
 #define ANGULAR_DISTANCE_THRESHOLD_ROOT  4
 
-/* Approximated to distance for angular movement of 1 degree :
-   2 * pi * 227 * (1/360): rounded up; square of 3.96...
-   use 1568 for 10 degree and 392 for 5 degree */
-#define INIT_ANGULAR_DISTANCE_THRESHOLD  16
+/* Approximated to distance for angular movement of 5 degree :
+   2 * pi * 227 * (5/360): rounded up; square of 3.9635 * 5 */
+#define INIT_ANGULAR_DISTANCE_THRESHOLD  393
 
 /* used in get multiplier for batching case */
 #define MAX_ANGLE_REPORTED 200

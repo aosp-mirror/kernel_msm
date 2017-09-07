@@ -1737,8 +1737,11 @@ static irqreturn_t it7259_ts_threaded_handler(int irq, void *devid)
 				sq_rad_position = (u32)((x_position * x_position) + (y_position * y_position));
 				ts_data->bdata->sq_rad_position = sq_rad_position;
 
+				/* If already one bezel event has gone, make bezel very fat/wide */
 				if(ts_data->bdata->bezel_touch_status)
 					virtual_radius = disp_radius - ts_data->bdata->inset;
+				else /* If no bezel event has gone, it can still be larger than 20px physical size based on INIT_BEZEL_INSET */
+					virtual_radius = disp_radius - INIT_BEZEL_INSET;
 
 				sq_disp_position = (u32)(virtual_radius * virtual_radius);
 
