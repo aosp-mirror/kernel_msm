@@ -96,6 +96,11 @@ int easelcomm_hw_ap_setup_cmdchans(void)
 	struct mnh_outb_region outbound;
 	int ret;
 
+	/* Command channel size shall not exceed the translation region size */
+	BUILD_BUG_ON_MSG(
+		EASELCOMM_CMD_CHANNEL_SIZE > HW_MNH_PCIE_OUTBOUND_SIZE,
+	       "Easelcomm command channel size exceeds translation region");
+
 	ret = mnh_get_rb_base(&easel_cmdchan_dma_addr);
 	if (WARN_ON(ret))
 		return ret;
