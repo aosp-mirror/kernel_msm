@@ -3889,10 +3889,10 @@ dhd_start_xmit(struct sk_buff *skb, struct net_device *net)
 #ifdef PCIE_FULL_DONGLE
 		dhd->pub.dhd_bus_busy_state &= ~DHD_BUS_BUSY_IN_TX;
 		dhd_os_busbusy_wake(&dhd->pub);
-		DHD_GENERAL_UNLOCK(&dhd->pub, flags);
 #endif /* PCIE_FULL_DONGLE */
 		DHD_PERIM_UNLOCK_TRY(DHD_FWDER_UNIT(dhd), lock_taken);
 		DHD_OS_WAKE_UNLOCK(&dhd->pub);
+		DHD_GENERAL_UNLOCK(&dhd->pub, flags);
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 20))
 		return -ENODEV;
 #else
