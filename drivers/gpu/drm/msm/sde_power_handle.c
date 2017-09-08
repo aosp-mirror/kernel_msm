@@ -76,7 +76,7 @@ static int sde_power_rsc_update(struct sde_power_handle *phandle, bool enable)
 
 	if (phandle->rsc_client)
 		ret = sde_rsc_client_state_update(phandle->rsc_client,
-			rsc_state, NULL, -1);
+			rsc_state, NULL, SDE_RSC_INVALID_CRTC_ID, NULL);
 
 	return ret;
 }
@@ -362,13 +362,13 @@ static int _sde_power_data_bus_set_quota(
 		ib_quota_nrt = max_t(u64, ib_quota_nrt,
 				SDE_POWER_HANDLE_ENABLE_BUS_IB_QUOTA);
 	} else {
-		ab_quota_rt = min_t(u64, ab_quota_rt,
+		ab_quota_rt = max_t(u64, ab_quota_rt,
 				SDE_POWER_HANDLE_DISABLE_BUS_AB_QUOTA);
-		ib_quota_rt = min_t(u64, ib_quota_rt,
+		ib_quota_rt = max_t(u64, ib_quota_rt,
 				SDE_POWER_HANDLE_DISABLE_BUS_IB_QUOTA);
-		ab_quota_nrt = min_t(u64, ab_quota_nrt,
+		ab_quota_nrt = max_t(u64, ab_quota_nrt,
 				SDE_POWER_HANDLE_DISABLE_BUS_AB_QUOTA);
-		ib_quota_nrt = min_t(u64, ib_quota_nrt,
+		ib_quota_nrt = max_t(u64, ib_quota_nrt,
 				SDE_POWER_HANDLE_DISABLE_BUS_IB_QUOTA);
 	}
 

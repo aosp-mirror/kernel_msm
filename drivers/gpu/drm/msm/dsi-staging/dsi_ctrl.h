@@ -190,6 +190,8 @@ struct dsi_ctrl_interrupts {
  * @debugfs_root:        Root for debugfs entries.
  * @misr_enable:         Frame MISR enable/disable
  * @misr_cache:          Cached Frame MISR value
+ * @phy_isolation_enabled:    A boolean property allows to isolate the phy from
+ *                          dsi controller and run only dsi controller.
  */
 struct dsi_ctrl {
 	struct platform_device *pdev;
@@ -232,6 +234,7 @@ struct dsi_ctrl {
 	bool misr_enable;
 	u32 misr_cache;
 
+	bool phy_isolation_enabled;
 };
 
 /**
@@ -616,10 +619,5 @@ void dsi_ctrl_drv_register(void);
  * dsi_ctrl_drv_unregister() - unregister platform driver
  */
 void dsi_ctrl_drv_unregister(void);
-
-/**
- * dsi_ctrl_dump_debug_register() - dump dsi debug register
- */
-void dsi_ctrl_dump_debug_register(void);
 
 #endif /* _DSI_CTRL_H_ */

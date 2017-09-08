@@ -445,12 +445,6 @@ struct dsi_ctrl_hw_ops {
 	void (*phy_sw_reset)(struct dsi_ctrl_hw *ctrl);
 
 	/**
-	 * debug_bus() - get dsi debug bus status.
-	 * @ctrl:        Pointer to the controller host hardware.
-	 */
-	void (*debug_bus)(struct dsi_ctrl_hw *ctrl);
-
-	/**
 	 * soft_reset() - perform a soft reset on DSI controller
 	 * @ctrl:          Pointer to the controller host hardware.
 	 *
@@ -717,6 +711,8 @@ struct dsi_ctrl_hw_ops {
  *                          controller.
  * @supported_interrupts:   Number of supported interrupts.
  * @supported_errors:       Number of supported errors.
+ * @phy_isolation_enabled:    A boolean property allows to isolate the phy from
+ *                          dsi controller and run only dsi controller.
  */
 struct dsi_ctrl_hw {
 	void __iomem *base;
@@ -734,6 +730,8 @@ struct dsi_ctrl_hw {
 	/* capabilities */
 	u32 supported_interrupts;
 	u64 supported_errors;
+
+	bool phy_isolation_enabled;
 };
 
 #endif /* _DSI_CTRL_HW_H_ */

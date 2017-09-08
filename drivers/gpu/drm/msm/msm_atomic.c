@@ -26,6 +26,7 @@ struct msm_commit {
 	struct drm_device *dev;
 	struct drm_atomic_state *state;
 	uint32_t crtc_mask;
+	bool nonblock;
 	struct kthread_work commit_work;
 };
 
@@ -62,7 +63,8 @@ static void end_atomic(struct msm_drm_private *priv, uint32_t crtc_mask)
 static void commit_destroy(struct msm_commit *c)
 {
 	end_atomic(c->dev->dev_private, c->crtc_mask);
-	kfree(c);
+	if (c->nonblock)
+		kfree(c);
 }
 
 static void msm_atomic_wait_for_commit_done(
@@ -310,13 +312,6 @@ static void msm_atomic_helper_commit_modeset_enables(struct drm_device *dev,
 		if (msm_is_mode_seamless(&crtc->state->mode))
 			continue;
 
-		/**
-		 * On DMS switch, wait for ping pong done to ensure the current
-		 * frame transfer is complete.
-		 */
-		if (msm_is_mode_seamless_dms(&crtc->state->adjusted_mode))
-			kms->funcs->wait_for_tx_complete(kms, crtc);
-
 		funcs = crtc->helper_private;
 
 		if (crtc->state->enable) {
@@ -456,7 +451,8 @@ static void _msm_drm_commit_work_cb(struct kthread_work *work)
 	SDE_ATRACE_END("complete_commit");
 }
 
-static struct msm_commit *commit_init(struct drm_atomic_state *state)
+static struct msm_commit *commit_init(struct drm_atomic_state *state,
+		bool nonblock)
 {
 	struct msm_commit *c = kzalloc(sizeof(*c), GFP_KERNEL);
 
@@ -465,6 +461,7 @@ static struct msm_commit *commit_init(struct drm_atomic_state *state)
 
 	c->dev = state->dev;
 	c->state = state;
+	c->nonblock = nonblock;
 
 	kthread_init_work(&c->commit_work, _msm_drm_commit_work_cb);
 
@@ -472,13 +469,17 @@ static struct msm_commit *commit_init(struct drm_atomic_state *state)
 }
 
 /* Start display thread function */
-static int msm_atomic_commit_dispatch(struct drm_device *dev,
+static void msm_atomic_commit_dispatch(struct drm_device *dev,
 		struct drm_atomic_state *state, struct msm_commit *commit)
 {
 	struct msm_drm_private *priv = dev->dev_private;
 	struct drm_crtc *crtc = NULL;
 	struct drm_crtc_state *crtc_state = NULL;
 	int ret = -EINVAL, i = 0, j = 0;
+	bool nonblock;
+
+	/* cache since work will kfree commit in non-blocking case */
+	nonblock = commit->nonblock;
 
 	for_each_crtc_in_state(state, crtc, crtc_state, i) {
 		for (j = 0; j < priv->num_crtcs; j++) {
@@ -509,7 +510,22 @@ static int msm_atomic_commit_dispatch(struct drm_device *dev,
 			break;
 	}
 
-	return ret;
+	if (ret) {
+		/**
+		 * this is not expected to happen, but at this point the state
+		 * has been swapped, but we couldn't dispatch to a crtc thread.
+		 * fallback now to a synchronous complete_commit to try and
+		 * ensure that SW and HW state don't get out of sync.
+		 */
+		DRM_ERROR("failed to dispatch commit to any CRTC\n");
+		complete_commit(commit);
+	} else if (!nonblock) {
+		kthread_flush_work(&commit->commit_work);
+	}
+
+	/* free nonblocking commits in this context, after processing */
+	if (!nonblock)
+		kfree(commit);
 }
 
 /**
@@ -542,7 +558,7 @@ int msm_atomic_commit(struct drm_device *dev,
 		return ret;
 	}
 
-	c = commit_init(state);
+	c = commit_init(state, nonblock);
 	if (!c) {
 		ret = -ENOMEM;
 		goto error;
@@ -610,20 +626,7 @@ int msm_atomic_commit(struct drm_device *dev,
 	 * current layout.
 	 */
 
-	if (nonblock) {
-		ret = msm_atomic_commit_dispatch(dev, state, c);
-		if (ret) {
-			DRM_ERROR("%s: atomic commit failed\n", __func__);
-			drm_atomic_state_free(state);
-			commit_destroy(c);
-			goto error;
-		}
-		SDE_ATRACE_END("atomic_commit");
-		return 0;
-	}
-
-	complete_commit(c);
-
+	msm_atomic_commit_dispatch(dev, state, c);
 	SDE_ATRACE_END("atomic_commit");
 	return 0;
 

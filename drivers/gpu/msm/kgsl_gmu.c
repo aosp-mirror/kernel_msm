@@ -51,6 +51,8 @@ struct gmu_vma {
 	unsigned int image_start;
 };
 
+static void gmu_snapshot(struct kgsl_device *device);
+
 struct gmu_iommu_context {
 	const char *name;
 	struct device *dev;
@@ -436,26 +438,33 @@ int gmu_dcvs_set(struct gmu_device *gmu,
 	struct kgsl_device *device = container_of(gmu, struct kgsl_device, gmu);
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
-	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
 	int perf_idx = INVALID_DCVS_IDX, bw_idx = INVALID_DCVS_IDX;
+	int ret;
 
-	if (gpu_pwrlevel < gmu->num_gpupwrlevels)
+	if (gpu_pwrlevel < gmu->num_gpupwrlevels - 1)
 		perf_idx = gmu->num_gpupwrlevels - gpu_pwrlevel - 1;
 
-	if (bus_level < gmu->num_bwlevels)
+	if (bus_level < gmu->num_bwlevels && bus_level > 0)
 		bw_idx = bus_level;
 
 	if ((perf_idx == INVALID_DCVS_IDX) &&
 		(bw_idx == INVALID_DCVS_IDX))
 		return -EINVAL;
 
-	if (bw_idx == INVALID_DCVS_IDX)
-		/* Use default BW, algorithm changes on V2 */
-		bw_idx = pwr->pwrlevels[gpu_pwrlevel].bus_freq;
-
-	if (ADRENO_QUIRK(adreno_dev, ADRENO_QUIRK_HFI_USE_REG))
-		return gpudev->rpmh_gpu_pwrctrl(adreno_dev,
+	if (ADRENO_QUIRK(adreno_dev, ADRENO_QUIRK_HFI_USE_REG)) {
+		ret = gpudev->rpmh_gpu_pwrctrl(adreno_dev,
 			GMU_DCVS_NOHFI, perf_idx, bw_idx);
+
+		if (ret) {
+			dev_err(&gmu->pdev->dev,
+				"Failed to set GPU perf idx %d, bw idx %d\n",
+				perf_idx, bw_idx);
+
+			gmu_snapshot(device);
+		}
+
+		return ret;
+	}
 
 	return hfi_send_dcvs_vote(gmu, perf_idx, bw_idx, ACK_NONBLOCK);
 }
@@ -853,7 +862,7 @@ static int gmu_pwrlevel_probe(struct gmu_device *gmu, struct device_node *node)
 	return 0;
 }
 
-static int gmu_reg_probe(struct gmu_device *gmu, const char *name, bool is_gmu)
+static int gmu_reg_probe(struct gmu_device *gmu, const char *name)
 {
 	struct resource *res;
 
@@ -871,7 +880,7 @@ static int gmu_reg_probe(struct gmu_device *gmu, const char *name, bool is_gmu)
 		return -EINVAL;
 	}
 
-	if (is_gmu) {
+	if (!strcmp(name, "kgsl_gmu_reg")) {
 		gmu->reg_phys = res->start;
 		gmu->reg_len = resource_size(res);
 		gmu->reg_virt = devm_ioremap(&gmu->pdev->dev, res->start,
@@ -882,11 +891,18 @@ static int gmu_reg_probe(struct gmu_device *gmu, const char *name, bool is_gmu)
 			return -ENODEV;
 		}
 
-	} else {
+	} else if (!strcmp(name, "kgsl_gmu_pdc_reg")) {
 		gmu->pdc_reg_virt = devm_ioremap(&gmu->pdev->dev, res->start,
 				resource_size(res));
 		if (gmu->pdc_reg_virt == NULL) {
 			dev_err(&gmu->pdev->dev, "PDC regs ioremap failed\n");
+			return -ENODEV;
+		}
+	} else if (!strcmp(name, "kgsl_gmu_cpr_reg")) {
+		gmu->cpr_reg_virt = devm_ioremap(&gmu->pdev->dev, res->start,
+				resource_size(res));
+		if (gmu->cpr_reg_virt == NULL) {
+			dev_err(&gmu->pdev->dev, "CPR regs ioremap failed\n");
 			return -ENODEV;
 		}
 	}
@@ -1109,11 +1125,15 @@ int gmu_probe(struct kgsl_device *device)
 	mem_addr = gmu->hfi_mem;
 
 	/* Map and reserve GMU CSRs registers */
-	ret = gmu_reg_probe(gmu, "kgsl_gmu_reg", true);
+	ret = gmu_reg_probe(gmu, "kgsl_gmu_reg");
 	if (ret)
 		goto error;
 
-	ret = gmu_reg_probe(gmu, "kgsl_gmu_pdc_reg", false);
+	ret = gmu_reg_probe(gmu, "kgsl_gmu_pdc_reg");
+	if (ret)
+		goto error;
+
+	ret = gmu_reg_probe(gmu, "kgsl_gmu_cpr_reg");
 	if (ret)
 		goto error;
 
@@ -1218,19 +1238,10 @@ static int gmu_enable_clks(struct gmu_device *gmu)
 
 static int gmu_disable_clks(struct gmu_device *gmu)
 {
-	int ret, j = 0;
-	unsigned int gmu_freq;
+	int j = 0;
 
 	if (IS_ERR_OR_NULL(gmu->clks[0]))
 		return 0;
-
-	gmu_freq = gmu->gmu_freqs[gmu->num_gmupwrlevels - 1];
-	ret = clk_set_rate(gmu->clks[0], gmu_freq);
-	if (ret) {
-		dev_err(&gmu->pdev->dev, "fail to reset GMU clk freq %d\n",
-				gmu_freq);
-		return ret;
-	}
 
 	while ((j < MAX_GMU_CLKS) && gmu->clks[j]) {
 		clk_disable_unprepare(gmu->clks[j]);

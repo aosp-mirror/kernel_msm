@@ -11,6 +11,8 @@
  */
 
 #include "../qcom/sdm845.dtsi"
+#include "../qcom/sdm845-pmic-overlay.dtsi"
+#include "../qcom/sdm845-pinctrl-overlay.dtsi"
 #include "sdm845-v1-b1c1-common.dtsi"
 
 #include "sdm845-taimen-touch-stm-ftm4.dtsi"

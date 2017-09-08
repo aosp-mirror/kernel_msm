@@ -117,6 +117,7 @@
 #define A6XX_CP_ALWAYS_ON_COUNTER_HI     0x981
 #define A6XX_CP_AHB_CNTL                 0x98D
 #define A6XX_CP_APERTURE_CNTL_HOST       0xA00
+#define A6XX_CP_APERTURE_CNTL_CD         0xA03
 #define A6XX_VSC_ADDR_MODE_CNTL          0xC01
 
 /* RBBM registers */
@@ -599,6 +600,8 @@
 #define A6XX_RB_PERFCTR_CMP_SEL_1           0x8E2D
 #define A6XX_RB_PERFCTR_CMP_SEL_2           0x8E2E
 #define A6XX_RB_PERFCTR_CMP_SEL_3           0x8E2F
+#define A6XX_RB_RB_SUB_BLOCK_SEL_CNTL_HOST  0x8E3B
+#define A6XX_RB_RB_SUB_BLOCK_SEL_CNTL_CD    0x8E3D
 #define A6XX_RB_CONTEXT_SWITCH_GMEM_SAVE_RESTORE 0x8E50
 
 /* PC registers */
@@ -962,6 +965,10 @@
 #define A6XX_RSCC_TCS2_DRV0_STATUS                      0x23A16
 #define A6XX_RSCC_TCS3_DRV0_STATUS                      0x23B7E
 
+
+/* CPR controller */
+#define A6XX_GPU_CPR_FSM_CTL				0x26801
+
 /* GPU PDC sequencer registers in AOSS.RPMh domain */
 #define	PDC_GPU_ENABLE_PDC			0x21140
 #define PDC_GPU_SEQ_START_ADDR			0x21148
@@ -979,5 +986,7 @@
 #define PDC_GPU_TCS1_CMD0_DATA			0x21577
 #define PDC_GPU_SEQ_MEM_0			0xA0000
 
+/* GFX rail CPR registers in AOSS.CPR domain */
+#define CPR_CPRF_CPRF5_CTRL			0x1801
 #endif /* _A6XX_REG_H */
 
