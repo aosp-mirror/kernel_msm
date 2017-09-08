@@ -20,6 +20,7 @@
 #include <linux/msm_ion.h>
 #include <uapi/linux/mnh-sm.h>
 #include "mnh-pcie.h"
+#include "mnh-mipi.h"
 
 /* Firmware download address */
 #define HW_MNH_DRAM_BASE		0x40000000
@@ -126,6 +127,8 @@ int mnh_ion_stage_firmware_update(struct mnh_ion *ion,
  * @return -errno      on failure
  */
 int mnh_sm_pwr_error_cb(void);
+
+int mnh_sm_mipi_config(struct mnh_mipi_config config);
 
 enum mnh_boot_mode mnh_sm_get_boot_mode(void);
 

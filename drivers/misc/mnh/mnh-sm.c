@@ -1597,6 +1597,15 @@ int mnh_sm_is_present(void)
 }
 EXPORT_SYMBOL(mnh_sm_is_present);
 
+int mnh_sm_mipi_config(struct mnh_mipi_config config)
+{
+	if (!mnh_sm_dev)
+		return -ENODEV;
+
+	return mnh_mipi_config(mnh_sm_dev->dev, config);
+}
+EXPORT_SYMBOL_GPL(mnh_sm_mipi_config);
+
 int mnh_sm_pwr_error_cb(void)
 {
 	dev_err(mnh_sm_dev->dev,
