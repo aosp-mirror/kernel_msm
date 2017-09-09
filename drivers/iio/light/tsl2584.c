@@ -434,7 +434,7 @@ static int taos_als_calibrate(struct iio_dev *indio_dev)
 		return lux_val;
 	}
 	gain_trim_val = (unsigned int)(((chip->taos_settings.als_cal_target)
-			* chip->taos_settings.als_gain_trim) / lux_val);
+			* 1000) / lux_val); // Atom for use default value to do calibration
 
 	if ((gain_trim_val < 250) || (gain_trim_val > 4000)) {
 		dev_err(&chip->client->dev,
