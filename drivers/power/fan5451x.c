@@ -1218,7 +1218,6 @@ static void fan5451x_batt_external_power_changed(struct power_supply *psy)
 		chip->eoc = false;
 		chip->full = false;
 		fan5451x_vbat_measure(chip);
-		fan5451x_batfet_enable(chip, CABLE, 0);
 		fan5451x_batfet_enable(chip, CHARGE, 1);
 	}
 
