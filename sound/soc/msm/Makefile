@@ -33,3 +33,7 @@ obj-$(CONFIG_SND_SOC_EXT_CODEC) += snd-soc-ext-codec.o
 # for SDM845 sound card driver
 snd-soc-sdm845-objs := sdm845.o
 obj-$(CONFIG_SND_SOC_MACHINE_SDM845) += snd-soc-sdm845.o
+
+# for SDM845 board with MAX98927 codec
+snd-soc-sdm845-max98927-objs := sdm845_max98927.o
+obj-$(CONFIG_SND_SOC_MACHINE_SDM845_MAX98927) += snd-soc-sdm845-max98927.o

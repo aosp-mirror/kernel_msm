@@ -223,6 +223,16 @@ config SND_SOC_MACHINE_SDM845
 	All platform specific audio modules are
 	enabled here.
 
+config SND_SOC_MACHINE_SDM845_MAX98927
+	tristate "SoC Machine driver for SDM845 boards with MAX9827 codec"
+	select SND_SOC_WCD934X
+
+	help
+	To enable the machine driver and the
+	corresponding DAI-links on SDM845.
+	All platform specific audio modules are
+	enabled here.
+
 config SND_SOC_SDM845
 	tristate "SoC Machine driver for SDM845 boards"
 	depends on ARCH_QCOM

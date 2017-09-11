@@ -38,7 +38,7 @@
 #include "../codecs/wcd934x/wcd934x-mbhc.h"
 #include "../codecs/wsa881x.h"
 
-#define DRV_NAME "sdm845-asoc-snd"
+#define DRV_NAME "sdm845-asoc-snd-max9827"
 
 #define __CHIPSET__ "SDM845 "
 #define MSM_DAILINK_NAME(name) (__CHIPSET__#name)
@@ -4571,23 +4571,6 @@ static int msm_mi2s_snd_init(struct snd_soc_pcm_runtime *rtd)
 {
 	int ret = 0;
 
-#if defined (CONFIG_SND_SOC_CS35L36)
-	struct snd_soc_dai *codec_dai = rtd->codec_dai;
-	struct snd_soc_codec *codec = codec_dai->codec;
-	struct snd_soc_dai **codec_dais = rtd->codec_dais;
-	int i;
-
-	for (i = 0; i < rtd->num_codecs; i++) {
-		codec = codec_dais[i]->codec;
-		ret = snd_soc_dai_set_sysclk(codec_dais[i], 0,
-						Q6AFE_LPASS_IBIT_CLK_3_P072_MHZ,
-						SND_SOC_CLOCK_IN);
-		if (ret < 0)
-			pr_err("%s: set dai_sysclk failed, err:%d\n",
-				__func__, ret);
-	}
-#endif
-
 	return ret;
 }
 
@@ -4603,7 +4586,7 @@ static int msm_mi2s_snd_startup(struct snd_pcm_substream *substream)
 	struct msm_pinctrl_info *pinctrl_info = &pdata->pinctrl_info;
 	int ret_pinctrl = 0;
 
-#if IS_ENABLED(CONFIG_SND_SOC_CS35L36)
+#if IS_ENABLED(CONFIG_SND_SOC_MAX98927)
 	int i;
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 	struct snd_soc_codec *codec = codec_dai->codec;
@@ -4666,21 +4649,16 @@ static int msm_mi2s_snd_startup(struct snd_pcm_substream *substream)
 			goto clk_off;
 		}
 
-#if IS_ENABLED(CONFIG_SND_SOC_CS35L36)
+#if IS_ENABLED(CONFIG_SND_SOC_MAX98927)
 		for (i = 0; i < rtd->num_codecs; i++) {
 			codec = codec_dais[i]->codec;
-			ret = snd_soc_dai_set_fmt(codec_dais[i], SND_SOC_DAIFMT_CBS_CFS |
-							SND_SOC_DAIFMT_I2S);
+			ret = snd_soc_dai_set_fmt(codec_dais[i],
+						  SND_SOC_DAIFMT_CBS_CFS |
+						  SND_SOC_DAIFMT_I2S);
 			if (ret < 0)
 				pr_err("%s: set fmt failed, err:%d\n",
 					__func__, ret);
 
-			ret = snd_soc_codec_set_sysclk(codec, 0, 0,
-							Q6AFE_LPASS_IBIT_CLK_3_P072_MHZ,
-							SND_SOC_CLOCK_IN);
-			if (ret < 0)
-				pr_err("%s: set sysclk failed, err:%d\n",
-					__func__, ret);
 		}
 #endif
 
@@ -6047,15 +6025,15 @@ static struct snd_soc_dai_link ext_disp_be_dai_link[] = {
 	},
 };
 
-#if IS_ENABLED(CONFIG_SND_SOC_CS35L36)
+#if IS_ENABLED(CONFIG_SND_SOC_MAX98927)
 static struct snd_soc_dai_link_component spk_codec[] = {
 	{
-		.name = "cs35l36.4-0041",
-		.dai_name = "cs35l36-pcm",
+		.name = "max98927.4-003a",
+		.dai_name = "max98927-aif1",
 	},
 	{
-		.name = "cs35l36.4-0040",
-		.dai_name = "cs35l36-pcm",
+		.name = "max98927.4-0039",
+		.dai_name = "max98927-aif1",
 	},
 };
 #endif
@@ -6153,7 +6131,7 @@ static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 		.stream_name = "Quaternary MI2S Playback",
 		.cpu_dai_name = "msm-dai-q6-mi2s.3",
 		.platform_name = "msm-pcm-routing",
-#if IS_ENABLED(CONFIG_SND_SOC_CS35L36)
+#if IS_ENABLED(CONFIG_SND_SOC_MAX98927)
 		.codecs = spk_codec,
 		.num_codecs = ARRAY_SIZE(spk_codec),
 #else
@@ -6173,13 +6151,12 @@ static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 		.name = LPASS_BE_QUAT_MI2S_TX,
 		.stream_name = "Quaternary MI2S Capture",
 		.cpu_dai_name = "msm-dai-q6-mi2s.3",
-#if IS_ENABLED(CONFIG_SND_SOC_CS35L36)
-		.platform_name = "msm-pcm-dsp.0",
+#if IS_ENABLED(CONFIG_SND_SOC_MAX98927)
+		.platform_name = "msm-pcm-routing",
 		.codecs = spk_codec,
 		.num_codecs = ARRAY_SIZE(spk_codec),
 		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
 #else
-		.platform_name = "msm-pcm-routing",
 		.codec_name = "msm-stub-codec.1",
 		.codec_dai_name = "msm-stub-tx",
 #endif
@@ -6367,10 +6344,10 @@ err:
 	return ret;
 }
 
-#if IS_ENABLED(CONFIG_SND_SOC_CS35L36)
+#if IS_ENABLED(CONFIG_SND_SOC_MAX98927)
 static struct snd_soc_codec_conf spk_codec_right_ch_conf[] = {
 	{
-		.dev_name		= "cs35l36.4-0041",
+		.dev_name		= "max98927.4-003a",
 		.name_prefix	= "R",
 	}
 };
@@ -6379,7 +6356,7 @@ static struct snd_soc_codec_conf spk_codec_right_ch_conf[] = {
 static struct snd_soc_card snd_soc_card_tavil_msm = {
 	.name		= "sdm845-tavil-snd-card",
 	.late_probe	= msm_snd_card_tavil_late_probe,
-#if IS_ENABLED(CONFIG_SND_SOC_CS35L36)
+#if IS_ENABLED(CONFIG_SND_SOC_MAX98927)
 	.codec_conf		= spk_codec_right_ch_conf,
 	.num_configs	= ARRAY_SIZE(spk_codec_right_ch_conf),
 #endif
@@ -6615,7 +6592,7 @@ static struct snd_soc_card snd_soc_card_stub_msm = {
 };
 
 static const struct of_device_id sdm845_asoc_machine_of_match[]  = {
-	{ .compatible = "qcom,sdm845-asoc-snd-tavil",
+	{ .compatible = "qcom,sdm845-asoc-snd-tavil-max98927",
 	  .data = "tavil_codec"},
 	{ .compatible = "qcom,sdm845-asoc-snd-stub",
 	  .data = "stub_codec"},
