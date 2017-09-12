@@ -70,15 +70,35 @@ static const struct regmap_config s2mpb04_regmap_config = {
 	.val_bits = 8,
 };
 
-static int s2mpb04_toggle_pon(struct s2mpb04_core *ddata)
+int s2mpb04_toggle_pon(struct s2mpb04_core *ddata)
 {
-	dev_err(ddata->dev, "%s: device is stuck, toggling PON\n", __func__);
+	dev_err(ddata->dev, "%s: toggling PON\n", __func__);
 
 	gpio_set_value_cansleep(ddata->pdata->pon_gpio, 0);
+	usleep_range(20, 25);
 	gpio_set_value_cansleep(ddata->pdata->pon_gpio, 1);
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(s2mpb04_toggle_pon);
+
+int s2mpb04_dump_regs(struct s2mpb04_core *ddata)
+{
+	u8 reg_data;
+	int i;
+
+	for (i = 0; i <= S2MPB04_REG_SEQ2; i++) {
+		s2mpb04_read_byte(ddata, i, &reg_data);
+		dev_info(ddata->dev, "[0x%02x] = 0x%02x\n", i, reg_data);
+	}
+	for (i = S2MPB04_REG_ADC_CTRL; i <= S2MPB04_REG_ADC_DBNC_CTRL2; i++) {
+		s2mpb04_read_byte(ddata, i, &reg_data);
+		dev_info(ddata->dev, "[0x%02x] = 0x%02x\n", i, reg_data);
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(s2mpb04_dump_regs);
 
 static inline bool s2mpb04_is_ready(struct s2mpb04_core *ddata)
 {
@@ -577,6 +597,7 @@ static int s2mpb04_probe(struct i2c_client *client,
 
 	/* set client data */
 	i2c_set_clientdata(client, ddata);
+	dev_set_drvdata(dev, ddata);
 
 	/* get platform data */
 	pdata = dev_get_platdata(dev);
@@ -607,9 +628,6 @@ static int s2mpb04_probe(struct i2c_client *client,
 			__func__, ret);
 		return -ENOMEM;
 	}
-
-	/* create sysfs attributes */
-	s2mpb04_config_sysfs(dev);
 
 	/* request GPIOs and IRQs */
 	devm_gpio_request_one(dev, pdata->pon_gpio, GPIOF_OUT_INIT_LOW,
@@ -661,6 +679,9 @@ static int s2mpb04_probe(struct i2c_client *client,
 		dev_err(dev, "%s: powering on failed\n", __func__);
 		goto error_reset;
 	}
+
+	/* create sysfs attributes */
+	s2mpb04_config_sysfs(dev);
 
 	/* enable the irq after power on */
 	enable_irq(pdata->resetb_irq);

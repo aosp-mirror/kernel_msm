@@ -163,32 +163,12 @@ struct s2mpb04_platform_data {
 	unsigned int intb_irq;
 };
 
-/* adc channel configuration */
-struct bcm15602_adc_ctrl {
-	union {
-		struct {
-			u8 chan_num : 4;
-			u8 ovsp     : 3;
-			u8 state    : 1;
-		};
-		u8 ctrl;
-	};
-	union {
-		struct  {
-			u16 threshold : 10;
-			u8 ot_ut      : 1;
-			u8 deb_en     : 1;
-			u8 th_en      : 1;
-			u8 reserved   : 3;
-		};
-		u16 th_ctrl;
-	};
-};
-
 int s2mpb04_read_byte(struct s2mpb04_core *ddata, u8 addr, u8 *data);
 int s2mpb04_write_byte(struct s2mpb04_core *ddata, u8 addr, u8 data);
 int s2mpb04_update_bits(struct s2mpb04_core *ddata, u8 addr, unsigned int mask,
 			u8 data);
+int s2mpb04_toggle_pon(struct s2mpb04_core *ddata);
+int s2mpb04_dump_regs(struct s2mpb04_core *ddata);
 int s2mpb04_read_adc_chan(struct s2mpb04_core *ddata, int chan_num,
 			  u8 *chan_data);
 

@@ -19,6 +19,9 @@
 
 #include "s2mpb04-core.h"
 
+/* used for register access attributes */
+static u8 _reg_addr;
+
 /* smps1_volt is in uV */
 static int s2mpb04_get_smps1_volt(struct s2mpb04_core *ddata, int *smps1_volt)
 {
@@ -269,6 +272,98 @@ static ssize_t total_power_show(struct device *dev,
 }
 DEVICE_ATTR_RO(total_power);
 
+static ssize_t dump_regs_show(struct device *dev,
+			      struct device_attribute *mattr,
+			      char *data)
+{
+	struct s2mpb04_core *ddata = dev_get_drvdata(dev);
+
+	s2mpb04_dump_regs(ddata);
+
+	return snprintf(data, PAGE_SIZE, "ok\n");
+}
+DEVICE_ATTR_RO(dump_regs);
+
+static ssize_t toggle_pon_show(struct device *dev,
+			       struct device_attribute *mattr,
+			       char *data)
+{
+	struct s2mpb04_core *ddata = dev_get_drvdata(dev);
+
+	s2mpb04_toggle_pon(ddata);
+
+	return snprintf(data, PAGE_SIZE, "ok\n");
+}
+DEVICE_ATTR_RO(toggle_pon);
+
+static ssize_t reg_addr_show(struct device *dev,
+			     struct device_attribute *attr,
+			     char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "0x%02x\n", _reg_addr);
+}
+
+static ssize_t reg_addr_store(struct device *dev,
+			      struct device_attribute *attr,
+			      const char *buf,
+			      size_t count)
+{
+	struct s2mpb04_core *ddata = dev_get_drvdata(dev);
+	int val = 0;
+	int ret;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	if ((val < 0) || (val > 0xff))
+		return -EINVAL;
+
+	dev_dbg(ddata->dev, "%s: _reg_addr %d\n", __func__, val);
+
+	_reg_addr = val;
+
+	return count;
+}
+DEVICE_ATTR_RW(reg_addr);
+
+static ssize_t reg_data_show(struct device *dev,
+			     struct device_attribute *attr,
+			     char *buf)
+{
+	struct s2mpb04_core *ddata = dev_get_drvdata(dev);
+	u8 reg_data;
+
+	s2mpb04_read_byte(ddata, _reg_addr, &reg_data);
+
+	return snprintf(buf, PAGE_SIZE, "0x%02x\n", reg_data);
+}
+
+static ssize_t reg_data_store(struct device *dev,
+			      struct device_attribute *attr,
+			      const char *buf,
+			      size_t count)
+{
+	struct s2mpb04_core *ddata = dev_get_drvdata(dev);
+	int val = 0;
+	int ret;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	if ((val < 0) || (val > 0xff))
+		return -EINVAL;
+
+	dev_dbg(ddata->dev, "%s: reg 0x%02x, data 0x%02x\n", __func__,
+		_reg_addr, val);
+
+	s2mpb04_write_byte(ddata, _reg_addr, val);
+
+	return count;
+}
+DEVICE_ATTR_RW(reg_data);
+
 static struct attribute *s2mpb04_attrs[] = {
 	&dev_attr_smps1_volt.attr,
 	&dev_attr_smps1_curr.attr,
@@ -281,6 +376,10 @@ static struct attribute *s2mpb04_attrs[] = {
 	&dev_attr_vbat.attr,
 	&dev_attr_temperature.attr,
 	&dev_attr_total_power.attr,
+	&dev_attr_dump_regs.attr,
+	&dev_attr_toggle_pon.attr,
+	&dev_attr_reg_addr.attr,
+	&dev_attr_reg_data.attr,
 	NULL
 };
 
