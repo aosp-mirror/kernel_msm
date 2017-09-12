@@ -1624,7 +1624,7 @@ tracing_generic_entry_update(struct trace_entry *entry, unsigned long flags,
 		TRACE_FLAG_IRQS_NOSUPPORT |
 #endif
 		((pc & HARDIRQ_MASK) ? TRACE_FLAG_HARDIRQ : 0) |
-		((pc & SOFTIRQ_MASK) ? TRACE_FLAG_SOFTIRQ : 0) |
+		((pc & SOFTIRQ_OFFSET) ? TRACE_FLAG_SOFTIRQ : 0) |
 		(tif_need_resched() ? TRACE_FLAG_NEED_RESCHED : 0) |
 		(test_preempt_need_resched() ? TRACE_FLAG_PREEMPT_RESCHED : 0);
 }
@@ -6507,6 +6507,7 @@ static int instance_rmdir(const char *name)
 	debugfs_remove_recursive(tr->dir);
 	free_trace_buffers(tr);
 
+	free_cpumask_var(tr->tracing_cpumask);
 	kfree(tr->name);
 	kfree(tr);
 
