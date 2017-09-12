@@ -1073,8 +1073,10 @@ static void print_other_cpu_stall(struct rcu_state *rsp, unsigned long gpnum)
 	 */
 	pr_err("INFO: %s detected stalls on CPUs/tasks:",
 	       rsp->name);
+#if defined(CONFIG_TRACING) && defined(DEBUG)
 	trace_printk("INFO: %s detected stalls on other CPUs\n",
 	       rsp->name);
+#endif
 	print_cpu_stall_info_begin();
 	rcu_for_each_leaf_node(rsp, rnp) {
 		raw_spin_lock_irqsave(&rnp->lock, flags);
@@ -1146,8 +1148,10 @@ static void print_cpu_stall(struct rcu_state *rsp)
 	 * RCU CPU stall warnings.
 	 */
 	pr_err("INFO: %s self-detected stall on CPU", rsp->name);
+#if defined(CONFIG_TRACING) && defined(DEBUG)
 	trace_printk("INFO: %s self-detected stall on CPU\n",
 	       rsp->name);
+#endif
 	print_cpu_stall_info_begin();
 	print_cpu_stall_info(rsp, smp_processor_id());
 	print_cpu_stall_info_end();
