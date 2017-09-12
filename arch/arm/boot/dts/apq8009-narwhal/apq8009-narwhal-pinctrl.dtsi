@@ -43,6 +43,29 @@
 			};
 		};
 
+		uart_2_active: uart_2_active {
+			mux {
+				pins = "gpio20", "gpio21", "gpio111", "gpio112";
+				function = "blsp_uart2";
+			};
+			config {
+				pins = "gpio20", "gpio21", "gpio111", "gpio112";
+				drive-strength = <2>; /* 2 MA */
+				bias-disable; /* No PULL */
+			};
+		};
+		uart_2_sleep: uart_2_sleep {
+			mux {
+				pins = "gpio20", "gpio21", "gpio111", "gpio112";
+				function = "blsp_uart2";
+			};
+			config {
+				pins = "gpio20", "gpio21", "gpio111", "gpio112";
+				drive-strength = <2>; /* 2 MA */
+				bias-disable; /* No PULL */
+			};
+		};
+
 		pmx_mdss {
 			mdss_reset_active: mdss_reset_active {
 				mux {

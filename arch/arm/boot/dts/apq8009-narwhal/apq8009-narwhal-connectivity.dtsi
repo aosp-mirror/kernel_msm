@@ -1,0 +1,63 @@
+/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/ {
+	aliases {
+		uart99 = &blsp1_uart2;
+	};
+};
+
+&blsp1_uart2 { /* BLSP1 QUP2 */
+	compatible = "qcom,msm-hsuart-v14";
+	cell-index = <99>;
+	status = "ok";
+	reg = <0x78b0000 0x200>,
+	      <0x7884000 0x23000>;
+	reg-names = "core_mem", "bam_mem";
+	interrupts = <0 108 0>, <0 238 0>;
+	interrupt-names = "core_irq", "bam_irq";
+	clocks = <&clock_gcc clk_gcc_blsp1_uart2_apps_clk>,
+		 <&clock_gcc clk_gcc_blsp1_ahb_clk>;
+	clock-names = "core_clk", "iface_clk";
+	qcom,tx-gpio = <&msm_gpio 20 0x00>;
+	qcom,rx-gpio = <&msm_gpio 21 0x00>;
+	qcom,cts-gpio = <&msm_gpio 111 0x00>;
+	qcom,rfr-gpio = <&msm_gpio 112 0x00>;
+
+	qcom,bam-tx-ep-pipe-index = <2>;
+	qcom,bam-rx-ep-pipe-index = <3>;
+
+	qcom,msm-bus,name = "blsp1_uart2";
+	qcom,msm-bus,num-cases = <2>;
+	qcom,msm-bus,num-paths = <1>;
+	qcom,msm-bus,vectors-KBps = <86 512 0 0>,
+				    <86 512 500 800>;
+	qcom,msm-obs;
+	pinctrl-names = "default", "sleep";
+	pinctrl-0 = <&uart_2_active>;
+	pinctrl-1 = <&uart_2_sleep>;
+};
+
+&soc {
+	bt_nitrous: bt_nitrous {
+		compatible = "goog,nitrous";
+		uart-port = <99>;
+		power-gpio = <&msm_gpio 44 0>;
+		host-wake-gpio = <&msm_gpio 48 0>;
+		host-wake-polarity = <0>;
+		dev-wake-gpio = <&msm_gpio 47 0>;
+		dev-wake-polarity = <0>;
+		interrupt-parent = <&msm_gpio>;
+		interrupts = <48 0>;
+		interrupt-names = "host_wake";
+	};
+};

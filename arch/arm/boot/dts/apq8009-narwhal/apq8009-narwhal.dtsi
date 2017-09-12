@@ -20,6 +20,7 @@
 #include "apq8009-narwhal-panel.dtsi"
 #include "apq8009-narwhal-sound.dtsi"
 #include "apq8009-narwhal-misc.dtsi"
+#include "apq8009-narwhal-connectivity.dtsi"
 
 /{
 	aliases {
@@ -123,4 +124,8 @@
 
 &usb_otg {
 	qcom,no-set-vbus-power;
+};
+
+&i2c_2 {
+	status = "disabled";
 };

@@ -82,9 +82,25 @@
 	};
 };
 
+&i2c_2 {
+	status = "ok";
+};
+
 &i2c_6 {
 	lge,soprod_movement@40 {
 		soprod,reset = <&msm_gpio 21 0x0>;
 		soprod,interrupt = <&msm_gpio 20 0x0>;
 	};
+};
+
+&sdhc_2 {
+	status = "disabled";
+};
+
+&blsp1_uart2 {
+	status = "disabled";
+};
+
+&bt_nitrous {
+	status = "disabled";
 };
