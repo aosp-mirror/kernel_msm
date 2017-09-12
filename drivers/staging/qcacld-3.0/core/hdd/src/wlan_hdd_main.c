@@ -5697,6 +5697,7 @@ static void hdd_wlan_exit(hdd_context_t *hdd_ctx)
 	}
 
 	wlan_destroy_bug_report_lock();
+	unregister_netdevice_notifier(&hdd_netdev_notifier);
 
 	/*
 	 * Close the scheduler before calling cds_close to make sure
@@ -5725,9 +5726,6 @@ static void hdd_wlan_exit(hdd_context_t *hdd_ctx)
 
 	hdd_runtime_suspend_context_deinit(hdd_ctx);
 	hdd_close_all_adapters(hdd_ctx, false);
-
-	unregister_netdevice_notifier(&hdd_netdev_notifier);
-
 	hdd_ipa_cleanup(hdd_ctx);
 
 	/* Free up RoC request queue and flush workqueue */
