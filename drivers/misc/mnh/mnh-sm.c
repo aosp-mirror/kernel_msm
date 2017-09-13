@@ -1420,8 +1420,7 @@ static int mnh_sm_download(void)
 	}
 
 	/* set the boot_args mask */
-	mnh_config_write(HWIO_SCU_GP_ADDR(HWIO_SCU_BASE_ADDR, 2), 4,
-			 mnh_boot_args);
+	MNH_SCU_OUT(GP_BOOT_ARGS, mnh_boot_args);
 
 	/* set the default power mode */
 	MNH_SCU_OUT(GP_POWER_MODE, mnh_power_mode);
@@ -1499,6 +1498,12 @@ static int mnh_sm_suspend(void)
  */
 static int mnh_sm_resume(void)
 {
+	/* set the boot_args mask */
+	MNH_SCU_OUT(GP_BOOT_ARGS, mnh_boot_args);
+
+	/* set the default power mode */
+	MNH_SCU_OUT(GP_POWER_MODE, mnh_power_mode);
+
 	mnh_resume_firmware();
 	return 0;
 }
@@ -1712,6 +1717,8 @@ static int mnh_sm_set_state_locked(int state)
 			reinit_completion(&mnh_sm_dev->powered_complete);
 
 			ret = mnh_sm_suspend();
+
+			disable_irq(mnh_sm_dev->ready_irq);
 		}
 		break;
 	default:
@@ -2070,7 +2077,7 @@ static irqreturn_t mnh_sm_ready_irq_handler(int irq, void *cookie)
 			 __func__);
 		reinit_completion(&mnh_sm_dev->suspend_complete);
 	} else {
-		dev_dbg(mnh_sm_dev->dev, "%s: mnh device is ready to suspend\n",
+		dev_info(mnh_sm_dev->dev, "%s: mnh device is ready to suspend\n",
 			__func__);
 		complete(&mnh_sm_dev->suspend_complete);
 	}
