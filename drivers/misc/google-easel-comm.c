@@ -1513,7 +1513,7 @@ static int easelcomm_wait_reply(
 	struct easelcomm_kmsg_desc orig_msg_desc;
 	struct easelcomm_message_metadata *orig_msg_metadata;
 	struct easelcomm_message_metadata *msg_metadata = NULL;
-	int ret;
+	int ret = 0;
 	bool has_timeout = false;
 	long remaining = 0;
 
