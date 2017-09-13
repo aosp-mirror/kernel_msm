@@ -55,8 +55,12 @@
 	status = "disabled";
 };
 
+&sde_dp {
+	status = "disabled";
+};
+
 &mdss_mdp {
-	connectors = <&sde_rscc &sde_wb &dsi_sw43402_cmd_display>;
+	connectors = <&sde_rscc &sde_wb>;
 };
 
 &dsi_sw43402_dsc_qhd_cmd {
@@ -80,6 +84,19 @@
 			qcom,default-topology-index = <0>;
 		};
 	};
+};
+
+&pmi8998_wled {
+	status = "okay";
+	qcom,disp-type-amoled;
+	qcom,led-strings-list = [02 03];
+	qcom,avdd-target-voltage-mv = <5800>;
+};
+
+&labibb {
+	status = "okay";
+	qcom,qpnp-labibb-mode = "amoled";
+	qcom,swire-control;
 };
 
 &pm8998_l28 {
