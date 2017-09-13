@@ -115,6 +115,7 @@ typedef enum
 }config_type;
 
 char version[HWVER_SMEM_SIZE] = {0};
+char *smem = NULL;
 
 static int hw_get_high_low_config(int adc_range)
 {
@@ -510,8 +511,41 @@ ssize_t hwver_proc_read(struct file *file, char __user *buf, size_t count, loff_
     return count;
 }
 
+ssize_t hwver_proc_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
+{
+    int ret;
+    char c = 0;
+
+    if(count < 1)
+    {
+        return HWERR;
+    }
+
+    ret = copy_from_user(&c, buf, 1);
+    if(ret)
+    {
+        printk(KERN_ERR"hwver:%s:hwver_proc_write fail.\n", __func__);
+        return HWERR;
+    }
+
+    if('1' == c)
+    {
+        printk(KERN_INFO "hwver:write smem LEOXXU\n");
+        smem[HWVER_SMEM_SIZE-1] = '1';
+    }
+    else
+    {
+        printk(KERN_ERR "hwver:write smem LEOXXE\n");
+        smem[HWVER_SMEM_SIZE-1] = '0';
+    }
+
+    *ppos += count;
+    return count;
+}
+
 static const struct file_operations hwver_proc_fops = {
     .read = hwver_proc_read,
+    .write = hwver_proc_write,
 };
 
 static int hwver_probe(struct platform_device *pdev)
@@ -519,7 +553,6 @@ static int hwver_probe(struct platform_device *pdev)
     int rc = 0;
     hwver_struct hardware;
     static struct proc_dir_entry *hw_version = NULL;
-    char *smem = NULL;
 
     smem = (char *) smem_alloc(SMEM_ID_VENDOR2, HWVER_SMEM_SIZE, 0,SMEM_ANY_HOST_FLAG);
     if(NULL == smem)
