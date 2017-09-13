@@ -10,7 +10,6 @@
  * GNU General Public License for more details.
  */
 
-#include "../qcom/sdm845.dtsi"
 #include "../qcom/sdm845-pmic-overlay.dtsi"
 #include "../qcom/sdm845-pinctrl-overlay.dtsi"
 #include "sdm845-b1c1-common.dtsi"
