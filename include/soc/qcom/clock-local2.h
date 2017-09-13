@@ -235,6 +235,7 @@ extern struct clk_ops clk_ops_rcg;
 extern struct clk_ops clk_ops_rcg_mnd;
 extern struct clk_ops clk_ops_branch;
 extern struct clk_ops clk_ops_vote;
+extern struct clk_ops clk_ops_blsp1_ahb_vote;
 extern struct clk_ops clk_ops_rcg_hdmi;
 extern struct clk_ops clk_ops_rcg_edp;
 extern struct clk_ops clk_ops_byte;
