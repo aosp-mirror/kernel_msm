@@ -266,7 +266,7 @@
 		cell-index = <2>;
 		compatible = "qcom,cam-sensor";
 		reg = <0x02>;
-		csiphy-sd-index = <2>;
+		csiphy-sd-index = <1>;
 		sensor-position-roll = <270>;
 		sensor-position-pitch = <0>;
 		sensor-position-yaw = <0>;
