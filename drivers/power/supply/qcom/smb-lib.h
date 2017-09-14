@@ -339,6 +339,7 @@ struct smb_charger {
 	bool			typec_present;
 	u8			typec_status[5];
 	bool			typec_legacy_valid;
+	bool			max_9v_adapter;
 
 	int			fake_port_temp;
 	bool			port_overheat;
