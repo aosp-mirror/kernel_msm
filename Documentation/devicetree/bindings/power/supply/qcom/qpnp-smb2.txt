@@ -181,6 +181,12 @@ Charger specific properties:
   Definition: Specifies the maximum charger buck/boost switching frequency in
 		 KHz. It overrides the max frequency defined for the charger.
 
+- qcom,max-9v-adapter
+  Usage:      optional
+  Value type: <empty>
+  Definition: Boolean flag to set maximum allowed adapter voltage to 9V (disable
+              12V adapters).
+
 =============================================
 Second Level Nodes - SMB2 Charger Peripherals
 =============================================
