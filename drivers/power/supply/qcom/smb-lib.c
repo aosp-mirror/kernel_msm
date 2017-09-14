@@ -4763,6 +4763,18 @@ int smblib_deinit(struct smb_charger *chg)
 {
 	switch (chg->mode) {
 	case PARALLEL_MASTER:
+		cancel_work_sync(&chg->bms_update_work);
+		cancel_work_sync(&chg->rdstd_cc2_detach_work);
+		cancel_delayed_work_sync(&chg->hvdcp_detect_work);
+		cancel_delayed_work_sync(&chg->step_soc_req_work);
+		cancel_delayed_work_sync(&chg->clear_hdc_work);
+		cancel_work_sync(&chg->otg_oc_work);
+		cancel_work_sync(&chg->vconn_oc_work);
+		cancel_delayed_work_sync(&chg->otg_ss_done_work);
+		cancel_delayed_work_sync(&chg->icl_change_work);
+		cancel_delayed_work_sync(&chg->pl_enable_work);
+		cancel_work_sync(&chg->legacy_detection_work);
+		cancel_delayed_work_sync(&chg->port_overheat_work);
 		power_supply_unreg_notifier(&chg->nb);
 		smblib_destroy_votables(chg);
 		break;
