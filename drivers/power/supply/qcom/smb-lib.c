@@ -427,8 +427,7 @@ static int smblib_set_adapter_allowance(struct smb_charger *chg,
 	case USBIN_ADAPTER_ALLOW_9V_TO_12V:
 	case USBIN_ADAPTER_ALLOW_5V_OR_9V_TO_12V:
 	case USBIN_ADAPTER_ALLOW_5V_TO_12V:
-		/* PM660 only support max. 9V */
-		if (chg->smb_version == PM660_SUBTYPE) {
+		if (chg->max_9v_adapter) {
 			smblib_dbg(chg, PR_MISC, "voltage not supported=%d\n",
 					allowed_voltage);
 			allowed_voltage = USBIN_ADAPTER_ALLOW_5V_OR_9V;
@@ -4996,6 +4995,7 @@ int smblib_deinit(struct smb_charger *chg)
 		cancel_work_sync(&chg->legacy_detection_work);
 		cancel_delayed_work_sync(&chg->uusb_otg_work);
 		cancel_delayed_work_sync(&chg->bb_removal_work);
+		cancel_delayed_work_sync(&chg->port_overheat_work);
 		power_supply_unreg_notifier(&chg->nb);
 		smblib_destroy_votables(chg);
 		qcom_step_chg_deinit();

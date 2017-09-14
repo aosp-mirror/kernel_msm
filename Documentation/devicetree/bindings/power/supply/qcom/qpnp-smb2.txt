@@ -178,6 +178,11 @@ Charger specific properties:
   Definition: WD bark-timeout in seconds. The possible values are
 		16, 32, 64, 128. If not defined it defaults to 64.
 
+- qcom,max-9v-adapter
+  Usage:      optional
+  Value type: <empty>
+  Definition: Boolean flag to set maximum allowed adapter voltage to 9V (disable
+              12V adapters).
 
 =============================================
 Second Level Nodes - SMB2 Charger Peripherals
