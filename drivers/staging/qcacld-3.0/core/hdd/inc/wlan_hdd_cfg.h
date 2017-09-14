@@ -11737,7 +11737,7 @@ enum hw_filter_mode {
 /*
  * <ini>
  * good_rssi_bucket_size - Bucket size between best and good RSSI to score.
- * @Min: 0
+ * @Min: 1
  * @Max: 100
  * @Default: 5
  *
@@ -11755,13 +11755,13 @@ enum hw_filter_mode {
  */
 #define CFG_GOOD_RSSI_BUCKET_SIZE_NAME            "good_rssi_bucket_size"
 #define CFG_GOOD_RSSI_BUCKET_SIZE_DEFAULT         (5)
-#define CFG_GOOD_RSSI_BUCKET_SIZE_MIN             (0)
+#define CFG_GOOD_RSSI_BUCKET_SIZE_MIN             (1)
 #define CFG_GOOD_RSSI_BUCKET_SIZE_MAX             (100)
 
 /*
  * <ini>
  * bad_rssi_bucket_size - Bucket size between good and bad RSSI to score.
- * @Min: 0
+ * @Min: 1
  * @Max: 5
  * @Default: 100
  *
@@ -11779,7 +11779,7 @@ enum hw_filter_mode {
  */
 #define CFG_BAD_RSSI_BUCKET_SIZE_NAME            "bad_rssi_bucket_size"
 #define CFG_BAD_RSSI_BUCKET_SIZE_DEFAULT         (5)
-#define CFG_BAD_RSSI_BUCKET_SIZE_MIN             (0)
+#define CFG_BAD_RSSI_BUCKET_SIZE_MIN             (1)
 #define CFG_BAD_RSSI_BUCKET_SIZE_MAX             (100)
 
 /*
