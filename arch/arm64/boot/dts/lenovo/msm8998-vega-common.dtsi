@@ -626,6 +626,7 @@
 			lenovo,vega-model;
 			qcom,usb-icl-ua = <3000000>;
 			qcom,otg-cl-ua = <800000>;
+			qcom,max-9v-adapter;
 		};
 	};
 	qcom,pmi8998@3 {
