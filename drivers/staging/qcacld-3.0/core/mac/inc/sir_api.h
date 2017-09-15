@@ -3499,6 +3499,7 @@ typedef struct sSirRoamOffloadScanReq {
 	enum wmi_dwelltime_adaptive_mode roamscan_adaptive_dwell_mode;
 	tSirAddie assoc_ie;
 	struct lca_disallow_config_params lca_config_params;
+	struct scoring_param score_params;
 } tSirRoamOffloadScanReq, *tpSirRoamOffloadScanReq;
 
 typedef struct sSirRoamOffloadScanRsp {
