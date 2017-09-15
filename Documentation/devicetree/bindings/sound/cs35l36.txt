@@ -30,6 +30,13 @@ Optional properties:
   increments of 50mV.
   (Default) VP
 
+  - cirrus,boost-ctl-select : Boost converter control source selection.
+  Selects the source of the BST_CTL target VBST voltage for the boost
+  converter to generate.
+  0x00 - Control Port Value
+  0x01 - Class H Tracking
+  0x10 - MultiDevice Sync Value
+
   - cirrus,boost-peak-milliamp : Boost-converter peak current limit in mA.
   Configures the peak current by monitoring the current through the boost FET.
   Range starts at 1600mA and goes to a maximum of 4500mA with increments of

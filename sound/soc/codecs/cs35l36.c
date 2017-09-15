@@ -878,6 +878,11 @@ static int cs35l36_codec_probe(struct snd_soc_codec *codec)
 				   CS35L35_BSTCVRT_CTL_MASK,
 				   cs35l36->pdata.bst_vctl);
 
+	if (cs35l36->pdata.bst_vctl_sel)
+		regmap_update_bits(cs35l36->regmap, CS35L36_BSTCVRT_VCTRL2,
+				   CS35L35_BSTCVRT_CTL_SEL_MASK,
+				   cs35l36->pdata.bst_vctl_sel);
+
 	if (cs35l36->pdata.bst_ipk)
 		regmap_update_bits(cs35l36->regmap, CS35L36_BSTCVRT_PEAK_CUR,
 				   CS35L36_BST_IPK_MASK,
@@ -1184,8 +1189,12 @@ static int cs35l36_handle_of_data(struct i2c_client *i2c_client,
 				"Invalid Boost Voltage %d mV\n", val);
 			return -EINVAL;
 		}
-		pdata->bst_vctl = ((val - 2550) / 100) + 1;
+		pdata->bst_vctl = ((val - 2550) / 50) + 1;
 	}
+
+	ret = of_property_read_u32(np, "cirrus,boost-ctrl-select", &val);
+	if (!ret)
+		pdata->bst_vctl_sel = val | CS35L36_VALID_PDATA;
 
 	ret = of_property_read_u32(np, "cirrus,boost-peak-milliamp", &val);
 	if (ret >= 0) {

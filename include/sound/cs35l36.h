@@ -54,6 +54,7 @@ struct cs35l36_platform_data {
        bool pdm_ldm_enter;
        int boost_ind;
        int bst_vctl;
+       int bst_vctl_sel;
        int bst_ipk;
        int temp_warn_thld;
        struct irq_cfg irq_config;
