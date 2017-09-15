@@ -25,6 +25,7 @@
 
 enum mnh_pwr_state {
 	MNH_PWR_S0 = 0, /* active mode */
+	MNH_PWR_S1 = 1, /* partial active mode */
 	MNH_PWR_S3 = 3, /* suspend mode */
 	MNH_PWR_S4 = 4, /* power off */
 };

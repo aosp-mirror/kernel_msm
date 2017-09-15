@@ -398,35 +398,40 @@ static int mnh_pwr_down(void)
 	}
 
 	/* disable supplies: smps2 -> smps1 -> ldo1 -> ldo2 */
-	ret = regulator_disable(mnh_pwr->smps2_supply);
-	if (ret) {
-		dev_err(mnh_pwr->dev,
-			"%s: failed to disable smps2 (%d)\n", __func__, ret);
-		goto fail_pwr_down_smps2;
+	if (regulator_is_enabled(mnh_pwr->smps2_supply)) {
+		ret = regulator_disable(mnh_pwr->smps2_supply);
+		if (ret) {
+			dev_err(mnh_pwr->dev, "%s: failed to disable smps2 (%d)\n",
+				__func__, ret);
+			goto fail_pwr_down_smps2;
+		}
 	}
 
-	if (mnh_pwr->state == MNH_PWR_S0) {
+	if (regulator_is_enabled(mnh_pwr->smps1_supply)) {
 		ret = regulator_disable(mnh_pwr->smps1_supply);
 		if (ret) {
-			dev_err(mnh_pwr->dev,
-				"%s: failed to disable smps1 (%d)\n",
+			dev_err(mnh_pwr->dev, "%s: failed to disable smps1 (%d)\n",
 				__func__, ret);
 			goto fail_pwr_down_smps1;
 		}
+	}
 
-		regulator_disable(mnh_pwr->ldo1_supply);
+	if (regulator_is_enabled(mnh_pwr->ldo1_supply)) {
+		ret = regulator_disable(mnh_pwr->ldo1_supply);
 		if (ret) {
-			dev_err(mnh_pwr->dev,
-				"%s: failed to disable ldo1 (%d)\n",
+			dev_err(mnh_pwr->dev, "%s: failed to disable ldo1 (%d)\n",
 				__func__, ret);
 			goto fail_pwr_down_ldo1;
 		}
 	}
-	regulator_disable(mnh_pwr->ldo2_supply);
-	if (ret) {
-		dev_err(mnh_pwr->dev,
-			"%s: failed to disable ldo2 (%d)\n", __func__, ret);
-		goto fail_pwr_down_ldo2;
+
+	if (regulator_is_enabled(mnh_pwr->ldo2_supply)) {
+		ret = regulator_disable(mnh_pwr->ldo2_supply);
+		if (ret) {
+			dev_err(mnh_pwr->dev, "%s: failed to disable ldo2 (%d)\n",
+				__func__, ret);
+			goto fail_pwr_down_ldo2;
+		}
 	}
 
 	mnh_pwr->state = MNH_PWR_S4;
@@ -529,6 +534,33 @@ fail_pwr_suspend_regulators:
 	mnh_pwr->state = MNH_PWR_S4;
 
 	return ret;
+}
+
+static int mnh_pwr_partial(void)
+{
+	int ret;
+
+	/* disable DRAM core supply */
+	if (regulator_is_enabled(mnh_pwr->smps2_supply)) {
+		ret = regulator_disable(mnh_pwr->smps2_supply);
+		if (ret) {
+			dev_err(mnh_pwr->dev, "%s: failed to disable smps2 (%d)\n",
+				__func__, ret);
+		}
+	}
+
+	/* disable DRAM I/O supply */
+	if (regulator_is_enabled(mnh_pwr->ldo2_supply)) {
+		ret = regulator_disable(mnh_pwr->ldo2_supply);
+		if (ret) {
+			dev_err(mnh_pwr->dev, "%s: failed to disable ldo2 (%d)\n",
+				__func__, ret);
+		}
+	}
+
+	mnh_pwr->state = MNH_PWR_S1;
+
+	return 0;
 }
 
 static int mnh_pwr_up(enum mnh_pwr_state next_state)
@@ -744,6 +776,9 @@ int mnh_pwr_set_state(enum mnh_pwr_state system_state)
 		switch (system_state) {
 		case MNH_PWR_S0:
 			ret = mnh_pwr_up(system_state);
+			break;
+		case MNH_PWR_S1:
+			ret = mnh_pwr_partial();
 			break;
 		case MNH_PWR_S3:
 			ret = mnh_pwr_suspend();
