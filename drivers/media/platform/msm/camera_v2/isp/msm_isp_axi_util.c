@@ -3912,6 +3912,11 @@ int msm_isp_update_axi_stream(struct vfe_device *vfe_dev, void *arg)
 	case UPDATE_STREAM_REQUEST_FRAMES_VER2: {
 		struct msm_vfe_axi_stream_cfg_update_info_req_frm *req_frm =
 			&update_cmd->req_frm_ver2;
+		if (HANDLE_TO_IDX(req_frm->stream_handle) >= VFE_AXI_SRC_MAX) {
+			pr_err("%s: Invalid stream handle \n", __func__);
+			rc = -EINVAL;
+			break;
+		}
 		stream_info = msm_isp_get_stream_common_data(vfe_dev,
 				HANDLE_TO_IDX(req_frm->stream_handle));
 		if (stream_info == NULL) {
