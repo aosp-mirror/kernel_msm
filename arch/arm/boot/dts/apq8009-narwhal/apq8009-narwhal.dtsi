@@ -29,6 +29,10 @@
 		/delete-property/spi0;
 		i2c6 = &i2c_6; /* I2C6 controller device */
 	};
+
+	firmware {
+		firmware_android: android {};
+	};
 };
 
 &external_image_mem {
@@ -146,4 +150,18 @@
 
 &i2c_2 {
 	status = "disabled";
+};
+
+&firmware_android {
+	compatible = "android,firmware";
+	fstab {
+		compatible = "android,fstab";
+		vendor {
+			compatible = "android,vendor";
+			dev = "/dev/block/platform/soc/7824900.sdhci/by-name/vendor";
+			type = "ext4";
+			mnt_flags = "ro,barrier=1";
+			fsmgr_flags = "wait";
+		};
+	};
 };
