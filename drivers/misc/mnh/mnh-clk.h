@@ -96,6 +96,8 @@ int mnh_lpddr_freq_change(int index);
  */
 int mnh_lpddr_sys200_mode(void);
 
+int mnh_cpu_ipu_sys200_mode(void);
+
 /**
  * Setup interface for controlling clocks
  * @dev: device structure.

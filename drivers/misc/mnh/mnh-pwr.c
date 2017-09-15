@@ -406,35 +406,40 @@ static int mnh_pwr_down(void)
 	}
 
 	/* disable supplies: sdsr -> asr -> ioldo -> sdldo */
-	ret = regulator_disable(mnh_pwr->sdsr_supply);
-	if (ret) {
-		dev_err(mnh_pwr->dev,
-			"%s: failed to disable sdsr (%d)\n", __func__, ret);
-		goto fail_pwr_down_sdsr;
+	if (regulator_is_enabled(mnh_pwr->sdsr_supply)) {
+		ret = regulator_disable(mnh_pwr->sdsr_supply);
+		if (ret) {
+			dev_err(mnh_pwr->dev, "%s: failed to disable sdsr (%d)\n",
+				__func__, ret);
+			goto fail_pwr_down_sdsr;
+		}
 	}
 
-	if (mnh_pwr->state == MNH_PWR_S0) {
+	if (regulator_is_enabled(mnh_pwr->asr_supply)) {
 		ret = regulator_disable(mnh_pwr->asr_supply);
 		if (ret) {
-			dev_err(mnh_pwr->dev,
-				"%s: failed to disable asr (%d)\n",
+			dev_err(mnh_pwr->dev, "%s: failed to disable asr (%d)\n",
 				__func__, ret);
 			goto fail_pwr_down_asr;
 		}
+	}
 
-		regulator_disable(mnh_pwr->ioldo_supply);
+	if (regulator_is_enabled(mnh_pwr->ioldo_supply)) {
+		ret = regulator_disable(mnh_pwr->ioldo_supply);
 		if (ret) {
-			dev_err(mnh_pwr->dev,
-				"%s: failed to disable ioldo (%d)\n",
+			dev_err(mnh_pwr->dev, "%s: failed to disable ioldo (%d)\n",
 				__func__, ret);
 			goto fail_pwr_down_ioldo;
 		}
 	}
-	regulator_disable(mnh_pwr->sdldo_supply);
-	if (ret) {
-		dev_err(mnh_pwr->dev,
-			"%s: failed to disable sdldo (%d)\n", __func__, ret);
-		goto fail_pwr_down_sdldo;
+
+	if (regulator_is_enabled(mnh_pwr->sdldo_supply)) {
+		ret = regulator_disable(mnh_pwr->sdldo_supply);
+		if (ret) {
+			dev_err(mnh_pwr->dev, "%s: failed to disable sdldo (%d)\n",
+				__func__, ret);
+			goto fail_pwr_down_sdldo;
+		}
 	}
 
 	mnh_pwr->state = MNH_PWR_S4;
@@ -549,6 +554,33 @@ fail_pwr_suspend_regulators:
 	mnh_pwr->state = MNH_PWR_S4;
 
 	return ret;
+}
+
+static int mnh_pwr_partial(void)
+{
+	int ret;
+
+	/* disable DRAM core supply */
+	if (regulator_is_enabled(mnh_pwr->sdsr_supply)) {
+		ret = regulator_disable(mnh_pwr->sdsr_supply);
+		if (ret) {
+			dev_err(mnh_pwr->dev, "%s: failed to disable sdsr (%d)\n",
+				__func__, ret);
+		}
+	}
+
+	/* disable DRAM I/O supply */
+	if (regulator_is_enabled(mnh_pwr->sdldo_supply)) {
+		ret = regulator_disable(mnh_pwr->sdldo_supply);
+		if (ret) {
+			dev_err(mnh_pwr->dev, "%s: failed to disable sdldo (%d)\n",
+				__func__, ret);
+		}
+	}
+
+	mnh_pwr->state = MNH_PWR_S1;
+
+	return 0;
 }
 
 static int mnh_pwr_up(enum mnh_pwr_state next_state)
@@ -787,6 +819,9 @@ int mnh_pwr_set_state(enum mnh_pwr_state system_state)
 		switch (system_state) {
 		case MNH_PWR_S0:
 			ret = mnh_pwr_up(system_state);
+			break;
+		case MNH_PWR_S1:
+			ret = mnh_pwr_partial();
 			break;
 		case MNH_PWR_S3:
 			ret = mnh_pwr_suspend();
