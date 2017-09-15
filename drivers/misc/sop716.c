@@ -42,7 +42,7 @@
 #define CMD_SOP716_READ_BATTERY_CHECK_PERIOD 9
 
 #define MAJOR_VER 1
-#define MINOR_VER 10
+#define MINOR_VER 12
 
 
 struct timer_list sop_demo_timer;
@@ -367,20 +367,20 @@ static ssize_t sop716_get_version_show(struct device *dev,
 static ssize_t sop716_battery_check_period_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
-	u8 data[SOP716_I2C_DATA_LENGTH-2];
+	u8 data[SOP716_I2C_DATA_LENGTH-1];
 	struct sop716_info *dd = dev_get_drvdata(dev);
 
 	sop716_read(dd, CMD_SOP716_READ_BATTERY_CHECK_PERIOD,
-			SOP716_I2C_DATA_LENGTH-2, data);
+			SOP716_I2C_DATA_LENGTH-1, data);
 
-	return snprintf(buf, PAGE_SIZE, "%d min\n", data[1]);
+	return snprintf(buf, PAGE_SIZE, "%d sec\n", data[1]*256 + data[2]);
 }
 
 static ssize_t sop716_battery_check_period_store(struct device *dev,
 			struct device_attribute *attr, const char *buf, size_t count)
 {
 	struct sop716_info *dd = dev_get_drvdata(dev);
-	u8 data[SOP716_I2C_DATA_LENGTH-2];
+	u8 data[SOP716_I2C_DATA_LENGTH-1];
 	u8 tmp[4];
 	int interval;
 	int rc = 0;
@@ -398,7 +398,7 @@ static ssize_t sop716_battery_check_period_store(struct device *dev,
 		return rc;
 	 }
 
-	if ((interval < 0 || interval > 60)) {
+	if ((interval < 0 || interval > 240)) {
 		pr_err("%s: Error!!! invalid input format!\n", __func__);
 		return -EINVAL;
 	}
@@ -407,9 +407,10 @@ static ssize_t sop716_battery_check_period_store(struct device *dev,
 			__func__, count, interval);
 
 	data[0] = CMD_SOP716_BATTERY_CHECK_PERIOD;
-	data[1] = interval;
+	data[1] = 0;
+	data[2] = interval;
 
-	sop716_write(dd, SOP716_I2C_DATA_LENGTH-2, SOP716_I2C_DATA_LENGTH-2, data);
+	sop716_write(dd, SOP716_I2C_DATA_LENGTH-1, SOP716_I2C_DATA_LENGTH-1, data);
 
 	return count;
 }
