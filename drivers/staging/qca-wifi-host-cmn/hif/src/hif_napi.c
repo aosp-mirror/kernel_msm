@@ -861,7 +861,7 @@ int hif_napi_poll(struct hif_opaque_softc *hif_ctx,
 		normalized = (rc / napi_info->scale);
 		if (normalized == 0)
 			normalized++;
-		/**
+		/*
 		 * msg bucket calculation uses non-normalizes values (msgs),
 		 * as msg bucket granularity is now 1 per message ( > budget)
 		 */
@@ -880,14 +880,14 @@ int hif_napi_poll(struct hif_opaque_softc *hif_ctx,
 
 	ce_state = hif->ce_id_to_state[NAPI_ID2PIPE(napi_info->id)];
 
-	/**
+	/*
 	 * update the time historgram here, before re-enabling the interrupts
          * as there is a risk that this function may be executed in parallel
          */
 	time_taken = sched_clock() - ce_state->ce_service_start_time;
 	/* time limit is specified in usecs in the config file */
 	time_taken /= 1000;  /* nsecs -> usecs, as in the cfg */
-	bucket = time_taken / ( QCA_NAPI_TIME_MAX / QCA_NAPI_TIME_BUCKETS);
+	bucket = time_taken / (QCA_NAPI_TIME_MAX / QCA_NAPI_TIME_BUCKETS);
 	if (bucket >= QCA_NAPI_TIME_BUCKETS)
 		bucket = QCA_NAPI_TIME_BUCKETS - 1;
 	napi_info->stats[cpu].napi_time_budget[bucket]++;

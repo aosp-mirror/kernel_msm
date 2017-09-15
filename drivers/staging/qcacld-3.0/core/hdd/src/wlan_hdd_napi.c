@@ -482,7 +482,7 @@ int hdd_display_napi_stats(void)
 
 				if (napis->napi_schedules != 0) {
 				n = 0;
-					buf[0]='\0';
+					buf[0] = '\0';
 				max = sizeof(buf);
 					qdf_print("NAPI[%2d]CPU[%d]: %7d %7d %7d %7d %5d %5d %5d %9llu %s",
 						  i, j,
