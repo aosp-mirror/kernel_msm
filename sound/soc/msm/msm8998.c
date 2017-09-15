@@ -6556,6 +6556,7 @@ static int msm_populate_dai_link_component_of_node(
 				goto err;
 			}
 			dai_link[i].platform_of_node = np;
+			dai_link[i].platform_name = NULL;
 		}
 
 		/* populate cpu_of_node for snd card dai links */
@@ -6574,6 +6575,7 @@ static int msm_populate_dai_link_component_of_node(
 					goto err;
 				}
 				dai_link[i].cpu_of_node = np;
+				dai_link[i].cpu_dai_name = NULL;
 			}
 		}
 
@@ -6593,6 +6595,7 @@ static int msm_populate_dai_link_component_of_node(
 				goto err;
 			}
 			dai_link[i].codec_of_node = np;
+			dai_link[i].codec_name = NULL;
 		}
 	}
 
