@@ -506,7 +506,6 @@ static struct platform_device *spdev;
 static int msm_hifi_control;
 
 static bool is_initial_boot;
-static bool codec_reg_done;
 static struct snd_soc_aux_dev *msm_aux_dev;
 static struct snd_soc_codec_conf *msm_codec_conf;
 static struct msm_asoc_wcd93xx_codec msm_codec_fn;
@@ -3712,7 +3711,6 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 		pdata->codec_root = entry;
 		tasha_codec_info_create_codec_entry(pdata->codec_root, codec);
 	}
-	codec_reg_done = true;
 	return 0;
 
 err_snd_module:
@@ -6691,7 +6689,6 @@ static int msm_populate_dai_link_component_of_node(
 				goto err;
 			}
 			dai_link[i].platform_of_node = np;
-			dai_link[i].platform_name = NULL;
 		}
 
 		/* populate cpu_of_node for snd card dai links */
@@ -6710,7 +6707,6 @@ static int msm_populate_dai_link_component_of_node(
 					goto err;
 				}
 				dai_link[i].cpu_of_node = np;
-				dai_link[i].cpu_dai_name = NULL;
 			}
 		}
 
@@ -6730,7 +6726,6 @@ static int msm_populate_dai_link_component_of_node(
 				goto err;
 			}
 			dai_link[i].codec_of_node = np;
-			dai_link[i].codec_name = NULL;
 		}
 	}
 
@@ -7427,8 +7422,6 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 
 	ret = devm_snd_soc_register_card(&pdev->dev, card);
 	if (ret == -EPROBE_DEFER) {
-		if (codec_reg_done)
-			ret = -EINVAL;
 		goto err;
 	} else if (ret) {
 		dev_err(&pdev->dev, "snd_soc_register_card failed (%d)\n",
