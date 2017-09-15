@@ -1606,23 +1606,25 @@ static void init_config_param(tpAniSirGlobal pMac)
 	pMac->roam.configParam.nInitialDwellTime = 0;
 	pMac->roam.configParam.initial_scan_no_dfs_chnl = 0;
 
-	pMac->roam.configParam.best_candidate_weight_config.
-		rssi_weightage = RSSI_WEIGHTAGE;
-	pMac->roam.configParam.best_candidate_weight_config.
-		ht_caps_weightage = HT_CAPABILITY_WEIGHTAGE;
-	pMac->roam.configParam.best_candidate_weight_config.
-		vht_caps_weightage = VHT_CAP_WEIGHTAGE;
-	pMac->roam.configParam.best_candidate_weight_config.
-		chan_width_weightage = CHAN_WIDTH_WEIGHTAGE;
-	pMac->roam.configParam.best_candidate_weight_config.
-		chan_band_weightage = CHAN_BAND_WEIGHTAGE;
-	pMac->roam.configParam.best_candidate_weight_config.
-		nss_weightage = NSS_WEIGHTAGE;
-	pMac->roam.configParam.best_candidate_weight_config.
+	qdf_mem_zero(&pMac->roam.configParam.bss_score_params,
+		     sizeof(struct sir_score_config));
+	pMac->roam.configParam.bss_score_params.weight_cfg.rssi_weightage =
+		RSSI_WEIGHTAGE;
+	pMac->roam.configParam.bss_score_params.weight_cfg.ht_caps_weightage =
+		HT_CAPABILITY_WEIGHTAGE;
+	pMac->roam.configParam.bss_score_params.weight_cfg.vht_caps_weightage =
+		VHT_CAP_WEIGHTAGE;
+	pMac->roam.configParam.bss_score_params.
+		weight_cfg.chan_width_weightage = CHAN_WIDTH_WEIGHTAGE;
+	pMac->roam.configParam.bss_score_params.
+		weight_cfg.chan_band_weightage = CHAN_BAND_WEIGHTAGE;
+	pMac->roam.configParam.bss_score_params.weight_cfg.nss_weightage =
+		NSS_WEIGHTAGE;
+	pMac->roam.configParam.bss_score_params.weight_cfg.
 		beamforming_cap_weightage = BEAMFORMING_CAP_WEIGHTAGE;
-	pMac->roam.configParam.best_candidate_weight_config.
-		pcl_weightage = PCL_WEIGHT;
-	pMac->roam.configParam.best_candidate_weight_config.
+	pMac->roam.configParam.bss_score_params.weight_cfg.pcl_weightage =
+		PCL_WEIGHT;
+	pMac->roam.configParam.bss_score_params.weight_cfg.
 		channel_congestion_weightage = CHANNEL_CONGESTION_WEIGHTAGE;
 }
 
@@ -2761,10 +2763,10 @@ QDF_STATUS csr_change_default_config_param(tpAniSirGlobal pMac,
 		pMac->roam.configParam.num_disallowed_aps =
 			pParam->num_disallowed_aps;
 
-		qdf_mem_copy(&pMac->roam.configParam.
-			best_candidate_weight_config,
-			&pParam->best_candidate_weight_config,
-			sizeof(struct csr_best_candidate_weight_config));
+		qdf_mem_copy(&pMac->roam.configParam.bss_score_params,
+			     &pParam->bss_score_params,
+			     sizeof(struct sir_score_config));
+
 	}
 	return status;
 }
@@ -3020,9 +3022,9 @@ QDF_STATUS csr_get_config_param(tpAniSirGlobal pMac, tCsrConfigParam *pParam)
 		pMac->roam.configParam.rssi_channel_penalization;
 	pParam->num_disallowed_aps =
 		pMac->roam.configParam.num_disallowed_aps;
-	qdf_mem_copy(&pParam->best_candidate_weight_config,
-		&pMac->roam.configParam.best_candidate_weight_config,
-		sizeof(struct best_candidate_wt_cfg_param));
+	qdf_mem_copy(&pParam->bss_score_params,
+		&pMac->roam.configParam.bss_score_params,
+		sizeof(struct sir_score_config));
 
 	return QDF_STATUS_SUCCESS;
 }
