@@ -905,9 +905,29 @@ struct wlan_dbg_txq_stats {
     A_UINT16 tid_sw_qdepth[DBG_STATS_MAX_TID_NUM]; /* WAL_MAX_TID is 20 */
 };
 
-struct wlan_dbg_tidq_stats{
+struct wlan_dbg_tidq_stats {
     A_UINT32 wlan_dbg_tid_txq_status;
     struct wlan_dbg_txq_stats txq_st;
 };
+
+typedef enum {
+    WLAN_DBG_DATA_STALL_NONE = 0,
+    WLAN_DBG_DATA_STALL_VDEV_PAUSE,         /* 1 */
+    WLAN_DBG_DATA_STALL_HWSCHED_CMD_FILTER, /* 2 */
+    WLAN_DBG_DATA_STALL_HWSCHED_CMD_FLUSH,  /* 3 */
+    WLAN_DBG_DATA_STALL_RX_REFILL_FAILED,   /* 4 */
+    WLAN_DBG_DATA_STALL_RX_FCS_LEN_ERROR,   /* 5 */
+    WLAN_DBG_DATA_STALL_MAC_WDOG_ERRORS,    /* 6 */ /* Mac watch dog */
+    WLAN_DBG_DATA_STALL_PHY_BB_WDOG_ERROR,  /* 7 */ /* PHY watch dog */
+    WLAN_DBG_DATA_STALL_MAX,
+} wlan_dbg_data_stall_type_e;
+
+typedef enum {
+    WLAN_DBG_DATA_STALL_RECOVERY_NONE = 0,
+    WLAN_DBG_DATA_STALL_RECOVERY_CONNECT_DISCONNECT,
+    WLAN_DBG_DATA_STALL_RECOVERY_CONNECT_MAC_PHY_RESET,
+    WLAN_DBG_DATA_STALL_RECOVERY_CONNECT_PDR,
+    WLAN_DBG_DATA_STALL_RECOVERY_CONNECT_SSR,
+} wlan_dbg_data_stall_recovery_type_e;
 
 #endif /* __WLANDEFS_H__ */
