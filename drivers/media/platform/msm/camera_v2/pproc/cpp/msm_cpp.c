@@ -3070,15 +3070,13 @@ end:
 	return rc;
 }
 
-static int msm_cpp_validate_ioctl_input(unsigned int cmd, void *arg,
+static int msm_cpp_validate_input(unsigned int cmd, void *arg,
 	struct msm_camera_v4l2_ioctl_t **ioctl_ptr)
 {
 	switch (cmd) {
 	case MSM_SD_SHUTDOWN:
 	case MSM_SD_NOTIFY_FREEZE:
 	case MSM_SD_UNNOTIFY_FREEZE:
-	case VIDIOC_MSM_CPP_IOMMU_ATTACH:
-	case VIDIOC_MSM_CPP_IOMMU_DETACH:
 		break;
 	default: {
 		if (ioctl_ptr == NULL) {
@@ -3153,7 +3151,7 @@ long msm_cpp_subdev_ioctl(struct v4l2_subdev *sd,
 		return -EINVAL;
 	}
 
-	rc = msm_cpp_validate_ioctl_input(cmd, arg, &ioctl_ptr);
+	rc = msm_cpp_validate_input(cmd, arg, &ioctl_ptr);
 	if (rc != 0) {
 		pr_err("input validation failed\n");
 		return rc;
