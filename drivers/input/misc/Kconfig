@@ -881,3 +881,4 @@ config INPUT_HISI_POWERKEY
 endif
 
 source "drivers/input/misc/vd6281/Kconfig"
+source "drivers/input/misc/fpr_FingerprintCard/Kconfig"
