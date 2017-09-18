@@ -15,12 +15,11 @@
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/slab.h>
-#include <linux/hrtimer.h>
 #include <linux/of_device.h>
 #include <linux/spmi.h>
 #include <linux/qpnp/pwm.h>
 #include <linux/err.h>
-#include "../../staging/android/timed_output.h"
+#include <linux/leds.h>
 
 #define QPNP_VIB_VTG_CTL(base)		(base + 0x41)
 #define QPNP_VIB_EN_CTL(base)		(base + 0x46)
@@ -50,9 +49,9 @@ struct qpnp_pwm_info {
 };
 
 struct qpnp_vib {
+	/* led_dev should be first because it may be refereneced by power_on */
+	struct led_classdev led_dev;
 	struct spmi_device *spmi;
-	struct hrtimer vib_timer;
-	struct timed_output_dev timed_dev;
 	struct work_struct work;
 	struct qpnp_pwm_info pwm_info;
 	enum   qpnp_vib_mode mode;
@@ -61,7 +60,6 @@ struct qpnp_vib {
 	u8  reg_en_ctl;
 	u8  active_low;
 	u16 base;
-	int state;
 	int vtg_level;
 	int timeout;
 	struct mutex lock;
@@ -143,9 +141,10 @@ static int qpnp_vibrator_config(struct qpnp_vib *vib)
 
 static int qpnp_vib_set(struct qpnp_vib *vib, int on)
 {
-	int rc;
+	int rc = 0;
 	u8 val;
 
+	mutex_lock(&vib->lock);
 	if (on) {
 		if (vib->mode != QPNP_VIB_MANUAL) {
 			pwm_enable(vib->pwm_info.pwm_dev);
@@ -155,7 +154,7 @@ static int qpnp_vib_set(struct qpnp_vib *vib, int on)
 			rc = qpnp_vib_write_u8(vib, &val,
 					QPNP_VIB_EN_CTL(vib->base));
 			if (rc < 0)
-				return rc;
+				goto out;
 			vib->reg_en_ctl = val;
 		}
 	} else {
@@ -167,33 +166,25 @@ static int qpnp_vib_set(struct qpnp_vib *vib, int on)
 			rc = qpnp_vib_write_u8(vib, &val,
 					QPNP_VIB_EN_CTL(vib->base));
 			if (rc < 0)
-				return rc;
+				goto out;
 			vib->reg_en_ctl = val;
 		}
 	}
 
-	return 0;
+out:
+	mutex_unlock(&vib->lock);
+	return rc;
 }
 
-static void qpnp_vib_enable(struct timed_output_dev *dev, int value)
+static void qpnp_vib_enable(struct led_classdev *led_cdev,
+		enum led_brightness value)
 {
-	struct qpnp_vib *vib = container_of(dev, struct qpnp_vib,
-					 timed_dev);
+	struct qpnp_vib *vib = container_of(led_cdev, struct qpnp_vib,
+					 led_dev);
+	struct spmi_device *spmi = vib->spmi;
 
-	mutex_lock(&vib->lock);
-	hrtimer_cancel(&vib->vib_timer);
-
-	if (value == 0) {
-		vib->state = 0;
-	} else {
-		value = (value > vib->timeout ?
-				 vib->timeout : value);
-		vib->state = 1;
-		hrtimer_start(&vib->vib_timer,
-			      ktime_set(value / 1000, (value % 1000) * 1000000),
-			      HRTIMER_MODE_REL);
-	}
-	mutex_unlock(&vib->lock);
+	dev_info(&spmi->dev, "brightness=%d\n", value);
+	led_cdev->brightness = value;
 	schedule_work(&vib->work);
 }
 
@@ -201,31 +192,12 @@ static void qpnp_vib_update(struct work_struct *work)
 {
 	struct qpnp_vib *vib = container_of(work, struct qpnp_vib,
 					 work);
-	qpnp_vib_set(vib, vib->state);
-}
+	const int state = vib->led_dev.brightness;
 
-static int qpnp_vib_get_time(struct timed_output_dev *dev)
-{
-	struct qpnp_vib *vib = container_of(dev, struct qpnp_vib,
-							 timed_dev);
-
-	if (hrtimer_active(&vib->vib_timer)) {
-		ktime_t r = hrtimer_get_remaining(&vib->vib_timer);
-
-		return (int)ktime_to_us(r);
-	} else
-		return 0;
-}
-
-static enum hrtimer_restart qpnp_vib_timer_func(struct hrtimer *timer)
-{
-	struct qpnp_vib *vib = container_of(timer, struct qpnp_vib,
-							 vib_timer);
-
-	vib->state = 0;
-	schedule_work(&vib->work);
-
-	return HRTIMER_NORESTART;
+	if (LED_OFF != state)
+		qpnp_vib_set(vib, 1);
+	else
+		qpnp_vib_set(vib, 0);
 }
 
 #ifdef CONFIG_PM
@@ -233,7 +205,6 @@ static int qpnp_vibrator_suspend(struct device *dev)
 {
 	struct qpnp_vib *vib = dev_get_drvdata(dev);
 
-	hrtimer_cancel(&vib->vib_timer);
 	cancel_work_sync(&vib->work);
 	/* turn-off vibrator */
 	qpnp_vib_set(vib, 0);
@@ -360,16 +331,13 @@ static int qpnp_vibrator_probe(struct spmi_device *spmi)
 	mutex_init(&vib->lock);
 	INIT_WORK(&vib->work, qpnp_vib_update);
 
-	hrtimer_init(&vib->vib_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
-	vib->vib_timer.function = qpnp_vib_timer_func;
-
-	vib->timed_dev.name = "vibrator";
-	vib->timed_dev.get_time = qpnp_vib_get_time;
-	vib->timed_dev.enable = qpnp_vib_enable;
+	vib->led_dev.name = "vibrator";
+	vib->led_dev.max_brightness = LED_FULL;
+	vib->led_dev.brightness_set = qpnp_vib_enable;
 
 	dev_set_drvdata(&spmi->dev, vib);
 
-	rc = timed_output_dev_register(&vib->timed_dev);
+	rc = led_classdev_register(&spmi->dev, &vib->led_dev);
 	if (rc < 0)
 		return rc;
 
@@ -381,8 +349,7 @@ static int qpnp_vibrator_remove(struct spmi_device *spmi)
 	struct qpnp_vib *vib = dev_get_drvdata(&spmi->dev);
 
 	cancel_work_sync(&vib->work);
-	hrtimer_cancel(&vib->vib_timer);
-	timed_output_dev_unregister(&vib->timed_dev);
+	led_classdev_unregister(&vib->led_dev);
 	mutex_destroy(&vib->lock);
 
 	return 0;
