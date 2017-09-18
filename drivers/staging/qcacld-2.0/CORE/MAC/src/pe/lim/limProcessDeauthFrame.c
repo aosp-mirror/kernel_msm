@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2014, 2016-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -94,16 +94,16 @@ limProcessDeauthFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession p
          (eLIM_SME_WT_DEAUTH_STATE == psessionEntry->limSmeState)))
     {
         /*Every 15th deauth frame will be logged in kmsg*/
-        if(!(pMac->lim.deauthMsgCnt & 0xF))
+        if(!(psessionEntry->deauthmsgcnt & 0xF))
         {
-            PELOGE(limLog(pMac, LOGE,
+            limLog(pMac, LOGE,
              FL("received Deauth frame in DEAUTH_WT_STATE"
              "(already processing previously received DEAUTH frame).."
-             "Dropping this.. Deauth Failed %d"),++pMac->lim.deauthMsgCnt);)
+             "Dropping this.. Deauth Failed %d"),++psessionEntry->deauthmsgcnt);
         }
         else
         {
-            pMac->lim.deauthMsgCnt++;
+            psessionEntry->deauthmsgcnt++;
         }
         return;
     }
@@ -534,12 +534,14 @@ limProcessDeauthFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession p
                eSIR_MAC_UNSPEC_FAILURE_STATUS, psessionEntry);
         return;
     }
-    /* reset the deauthMsgCnt here since we are able to Process
-     * the deauth frame and sending up the indication as well */
-    if(pMac->lim.deauthMsgCnt != 0)
-    {
-        pMac->lim.deauthMsgCnt = 0;
-    }
+
+    /*
+     * reset the deauthMsgCnt here since we are able to Process
+     * the deauth frame and sending up the indication as well
+     */
+    if (psessionEntry->deauthmsgcnt != 0)
+        psessionEntry->deauthmsgcnt = 0;
+
     if (LIM_IS_STA_ROLE(psessionEntry))
         WDA_TxAbort(psessionEntry->smeSessionId);
 

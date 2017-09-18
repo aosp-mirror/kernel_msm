@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -183,6 +183,19 @@ limDeleteStaContext(tpAniSirGlobal pMac, tpSirMsgQ limMsg)
                            limIsReassocInProgress(pMac, psessionEntry));
                      vos_mem_free(pMsg);
                      return;
+                 }
+                 if (!((psessionEntry->limMlmState ==
+                        eLIM_MLM_LINK_ESTABLISHED_STATE) &&
+                       (psessionEntry->limSmeState !=
+                        eLIM_SME_WT_DISASSOC_STATE) &&
+                       (psessionEntry->limSmeState !=
+                        eLIM_SME_WT_DEAUTH_STATE))) {
+                        limLog(pMac, LOGE, FL("Do not process in limMlmState %s(%x) limSmeState (%x)"),
+                          limMlmStateStr(psessionEntry->limMlmState),
+                          psessionEntry->limMlmState,
+                          psessionEntry->limSmeState);
+                        vos_mem_free(pMsg);
+                        return;
                  }
                  pStaDs = dphGetHashEntry(pMac,
                                           DPH_STA_HASH_INDEX_PEER,
