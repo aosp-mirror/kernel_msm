@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013, 2015-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013, 2015-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -755,7 +755,7 @@ VOS_STATUS vos_timer_start( vos_timer_t *timer, v_U32_t expirationTime )
    unsigned long flags;
      
    VOS_TRACE( VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO_HIGH, 
-             "Timer Addr inside voss_start : 0x%p ", timer );
+             "Timer Addr inside voss_start : 0x%pK ", timer );
    
    // Check for invalid pointer
    if ( NULL == timer )
@@ -850,7 +850,7 @@ VOS_STATUS vos_timer_stop ( vos_timer_t *timer )
    unsigned long flags;
 
    VOS_TRACE( VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO_HIGH, 
-               "%s: Timer Addr inside voss_stop : 0x%p",__func__,timer );
+               "%s: Timer Addr inside voss_stop : 0x%pK",__func__,timer );
 
    // Check for invalid pointer
    if ( NULL == timer )
