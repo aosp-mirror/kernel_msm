@@ -74,10 +74,11 @@ static bool init_by_reg_core;
 
 static const struct ieee80211_regdomain
 hdd_world_regrules_60_61_62 = {
-	.n_reg_rules = 4,
+	.n_reg_rules = 5,
 	.alpha2 =  "00",
 	.reg_rules = {
 		REG_RULE_2412_2462,
+		REG_RULE_2467_2472,
 		REG_RULE_5180_5320,
 		REG_RULE_5500_5700,
 		REG_RULE_5745_5825,
