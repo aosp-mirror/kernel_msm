@@ -1412,7 +1412,7 @@ VOS_STATUS peHandleMgmtFrame( v_PVOID_t pvosGCtx, v_PVOID_t vosBuff)
     if(mHdr->fc.type == SIR_MAC_MGMT_FRAME) 
     {
     PELOG1(limLog( pMac, LOG1,
-       FL ( "RxBd=%p mHdr=%p Type: %d Subtype: %d  Sizes:FC%d Mgmt%d"),
+       FL ( "RxBd=%pK mHdr=%pK Type: %d Subtype: %d  Sizes:FC%d Mgmt%d"),
        pRxPacketInfo, mHdr, mHdr->fc.type, mHdr->fc.subType, sizeof(tSirMacFrameCtl), sizeof(tSirMacMgmtHdr) );)
 
 #ifdef WLAN_FEATURE_ROAM_SCAN_OFFLOAD
