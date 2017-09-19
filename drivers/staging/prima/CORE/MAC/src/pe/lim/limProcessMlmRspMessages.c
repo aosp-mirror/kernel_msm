@@ -950,7 +950,7 @@ limProcessMlmReassocCnf(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
      */
     if (pMac->ft.ftPEContext.pFTPreAuthReq)
     {
-        limLog(pMac, LOG1, "%s: Freeing pFTPreAuthReq= %p", __func__,
+        limLog(pMac, LOG1, "%s: Freeing pFTPreAuthReq= %pK", __func__,
                pMac->ft.ftPEContext.pFTPreAuthReq);
         if (pMac->ft.ftPEContext.pFTPreAuthReq->pbssDescription)
         {
