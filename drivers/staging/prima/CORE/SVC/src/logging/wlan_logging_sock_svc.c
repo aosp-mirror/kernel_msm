@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2014-2015 The Linux Foundation. All rights reserved.
+* Copyright (c) 2014-2015, 2017 The Linux Foundation. All rights reserved.
 *
 * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
 *
@@ -507,8 +507,8 @@ static int send_fw_log_pkt_to_user(void)
 		msg_header.wmsg.length = skb->len;
 
 		if (unlikely(skb_headroom(skb) < sizeof(msg_header))) {
-			pr_err("VPKT [%d]: Insufficient headroom, head[%p],"
-				" data[%p], req[%zu]", __LINE__, skb->head,
+			pr_err("VPKT [%d]: Insufficient headroom, head[%pK],"
+				" data[%pK], req[%zu]", __LINE__, skb->head,
 				skb->data, sizeof(msg_header));
 			return -EIO;
 		}
@@ -603,8 +603,8 @@ static int send_data_mgmt_log_pkt_to_user(void)
 		msg_header.frameSize = WLAN_MGMT_LOGGING_FRAMESIZE_128BYTES;
 
 		if (unlikely(skb_headroom(skb) < sizeof(msg_header))) {
-			pr_err("VPKT [%d]: Insufficient headroom, head[%p],"
-				" data[%p], req[%zu]", __LINE__, skb->head,
+			pr_err("VPKT [%d]: Insufficient headroom, head[%pK],"
+				" data[%pK], req[%zu]", __LINE__, skb->head,
 				skb->data, sizeof(msg_header));
 			return -EIO;
 		}
