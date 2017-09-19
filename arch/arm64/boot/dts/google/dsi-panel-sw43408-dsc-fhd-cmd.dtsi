@@ -1,4 +1,4 @@
-/* Copyright (c) 2017, LGE Inc. All rights reserved.
+/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -11,8 +11,8 @@
  */
 
 &mdss_mdp {
-	dsi_sw43402_dsc_qhd_cmd: qcom,mdss_dsi_sw43402_dsc_qhd_cmd {
-		qcom,mdss-dsi-panel-name = "SW43402 cmd mode dsc dsi panel";
+	dsi_sw43408_dsc_fhd_cmd: qcom,mdss_dsi_sw43408_dsc_fhd_cmd {
+		qcom,mdss-dsi-panel-name = "sw43408 cmd mode dsc dsi panel";
 		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
 		qcom,mdss-dsi-virtual-channel-id = <0>;
 		qcom,mdss-dsi-stream = <0>;
@@ -68,8 +68,8 @@
 		qcom,mdss-dsi-display-timings {
 			timing@0 {
 				qcom,mdss-dsi-panel-framerate = <60>;
-				qcom,mdss-dsi-panel-width = <1440>;
-				qcom,mdss-dsi-panel-height = <2880>;
+				qcom,mdss-dsi-panel-width = <1080>;
+				qcom,mdss-dsi-panel-height = <2160>;
 				qcom,mdss-dsi-h-front-porch = <20>;
 				qcom,mdss-dsi-h-back-porch = <20>;
 				qcom,mdss-dsi-h-pulse-width = <32>;
@@ -82,35 +82,15 @@
 				qcom,mdss-dsi-v-top-border = <0>;
 				qcom,mdss-dsi-v-bottom-border = <0>;
 				qcom,mdss-dsi-on-command = [
-					39 01 00 00 00 00 03 B0
-					20 43
-					39 01 00 00 00 00 03 DF
-					08 00
-					39 01 00 00 00 00 03 B0
-					A5 00
 					05 01 00 00 00 00 01 35
 					05 01 00 00 3C 00 01 11
 					15 01 00 00 00 00 02 53
 					00
 					15 01 00 00 00 00 02 55
 					0C
-					39 01 00 00 00 00 03 FB
-					03 77
-					39 01 00 00 00 00 06 ED
-					13 00 07 00 00
-					39 01 00 00 00 00 13 C9
-					00 00 00 24 33 AE
-					FF FF FF 00 1F 3F
-					5E 7D 91 AF CF FF
-					39 01 00 00 14 00 0F E2
-					20 0D 08 A8 0A AA
-					04 A4 83 83 83 5C
-					5C 5C
 					05 01 00 00 00 00 01 29
 				];
 				qcom,mdss-dsi-off-command = [
-					39 01 00 00 00 00 05 E8
-					08 90 18 05
 					05 01 00 00 00 00 01 28
 					05 01 00 00 64 00 01 10
 				];
@@ -119,7 +99,7 @@
 				qcom,mdss-dsi-h-sync-pulse = <0>;
 				qcom,compression-mode = "dsc";
 				qcom,mdss-dsc-slice-height = <16>;
-				qcom,mdss-dsc-slice-width = <720>;
+				qcom,mdss-dsc-slice-width = <540>;
 				qcom,mdss-dsc-slice-per-pkt = <1>;
 				qcom,mdss-dsc-bit-per-component = <8>;
 				qcom,mdss-dsc-bit-per-pixel = <8>;

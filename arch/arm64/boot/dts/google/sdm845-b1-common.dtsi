@@ -16,6 +16,10 @@
 #include "sdm845-b1c1-common.dtsi"
 
 #include "sdm845-b1-touch.dtsi"
-#include "sdm845-taimen-panel.dtsi"
 #include "sdm845-b1c1-audio.dtsi"
 #include "sdm845-b1c1-devboard-battery.dtsi"
+
+&dsi_sw43408_cmd_display {
+	qcom,dsi-display-active;
+};
+
