@@ -3447,7 +3447,6 @@ static int kswapd(void *p)
 		if (!ret) {
 			trace_mm_vmscan_kswapd_wake(pgdat->node_id, order);
 			balanced_classzone_idx = classzone_idx;
-			vm_swappiness = 180;
 			balanced_order = balance_pgdat(pgdat, order,
 						&balanced_classzone_idx);
 		}
