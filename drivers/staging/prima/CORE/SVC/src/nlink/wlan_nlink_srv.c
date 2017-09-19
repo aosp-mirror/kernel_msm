@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2015, 2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -239,7 +239,7 @@ static void nl_srv_rcv_skb (struct sk_buff *skb)
 
       if (nlh->nlmsg_len < sizeof(*nlh) || skb->len < nlh->nlmsg_len) {
          VOS_TRACE( VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_WARN, "NLINK: Invalid "
-            "Netlink message: skb[%p], len[%d], nlhdr[%p], nlmsg_len[%d]",
+            "Netlink message: skb[%pK], len[%d], nlhdr[%pK], nlmsg_len[%d]",
             skb, skb->len, nlh, nlh->nlmsg_len);
          return;
       }
