@@ -2519,8 +2519,6 @@ set_page_owner(struct page *page, unsigned int order, gfp_t gfp_mask)
 #endif /* CONFIG_PAGE_OWNER */
 }
 
-extern int vm_swappiness;
-
 /* The really slow allocator path where we enter direct reclaim */
 static inline struct page *
 __alloc_pages_direct_reclaim(gfp_t gfp_mask, unsigned int order,
@@ -2530,8 +2528,6 @@ __alloc_pages_direct_reclaim(gfp_t gfp_mask, unsigned int order,
 {
 	struct page *page = NULL;
 	bool drained = false;
-
-	vm_swappiness = 0;
 
 	*did_some_progress = __perform_reclaim(gfp_mask, order, zonelist,
 					       nodemask);
