@@ -1906,14 +1906,14 @@ tSirRetStatus limProcessAuthFrameNoSession(tpAniSirGlobal pMac, tANI_U8 *pBd, vo
          * pre-auth.
          */
         PELOGE(limLog(pMac,LOG1,"Auth rsp already posted to SME"
-               " (session %p, FT session %p)", psessionEntry,
+               " (session %pK, FT session %pK)", psessionEntry,
                pMac->ft.ftPEContext.pftSessionEntry););
         return eSIR_SUCCESS;
     }
     else
     {
         PELOGE(limLog(pMac,LOGW,"Auth rsp not yet posted to SME"
-               " (session %p, FT session %p)", psessionEntry,
+               " (session %pK, FT session %pK)", psessionEntry,
                pMac->ft.ftPEContext.pftSessionEntry););
         pMac->ft.ftPEContext.pFTPreAuthReq->bPreAuthRspProcessed =
             eANI_BOOLEAN_TRUE;
