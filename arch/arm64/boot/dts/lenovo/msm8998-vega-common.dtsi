@@ -599,9 +599,6 @@
 
 &mdss_dsi1 {
 	qcom,dsi-pref-prim-pan = <&dsi_dual_boe_nt36860_video>;
-	pinctrl-names = "mdss_default", "mdss_sleep";
-	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
-	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
 	qcom,platform-bklight-en-gpio = <&tlmm 39 0>;
 	qcom,platform-te-gpio = <&tlmm 96 0>;
 	level-swap-supply = <&pm8998_l19>;
