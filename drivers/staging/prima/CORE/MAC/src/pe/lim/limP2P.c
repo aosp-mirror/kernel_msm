@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2014, 2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2014, 2016-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -895,7 +895,7 @@ void limSetHtCaps(tpAniSirGlobal pMac, tpPESession psessionEntry, tANI_U8 *pIeSt
 
     pIe = limGetIEPtr(pMac,pIeStartPtr, nBytes,
                                        DOT11F_EID_HTCAPS,ONE_BYTE);
-    limLog( pMac, LOG2, FL("pIe %p dot11HtCap.supportedMCSSet[0]=0x%x"),
+    limLog( pMac, LOG2, FL("pIe %pK dot11HtCap.supportedMCSSet[0]=0x%x"),
             pIe, dot11HtCap.supportedMCSSet[0]);
     if(pIe)
     {
@@ -1109,7 +1109,7 @@ void limSendP2PActionFrame(tpAniSirGlobal pMac, tpSirMsgQ pMsg)
                 }
                 nBytes += noaLen;
                 limLog( pMac, LOGE,
-                        FL("noaLen=%d origLen=%d pP2PIe=%p"
+                        FL("noaLen=%d origLen=%d pP2PIe=%pK"
                            " nBytes=%d nBytesToCopy=%zu"),
                         noaLen,origLen, pP2PIe, nBytes,
                         ((pP2PIe + origLen + 2) - (v_U8_t *)pMbMsg->data));
