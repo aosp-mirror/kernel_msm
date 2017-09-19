@@ -2158,7 +2158,7 @@ tANI_U16 wlan_hdd_tdlsConnectedPeers(hdd_adapter_t *pAdapter)
     if ((NULL == pAdapter) || (WLAN_HDD_ADAPTER_MAGIC != pAdapter->magic))
     {
         VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                  FL("invalid pAdapter: %p"), pAdapter);
+                  FL("invalid pAdapter: %pK"), pAdapter);
         return 0;
     }
     pHddCtx = WLAN_HDD_GET_CTX(pAdapter);
@@ -2416,7 +2416,7 @@ void wlan_hdd_tdls_check_bmps(hdd_adapter_t *pAdapter)
     if ((NULL == pAdapter) || (WLAN_HDD_ADAPTER_MAGIC != pAdapter->magic))
     {
         VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                  FL("invalid pAdapter: %p"), pAdapter);
+                  FL("invalid pAdapter: %pK"), pAdapter);
         return;
     }
 
@@ -2767,7 +2767,7 @@ void wlan_hdd_tdls_check_power_save_prohibited(hdd_adapter_t *pAdapter)
     if ((NULL == pAdapter) || (WLAN_HDD_ADAPTER_MAGIC != pAdapter->magic))
     {
         VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                  FL("invalid pAdapter: %p"), pAdapter);
+                  FL("invalid pAdapter: %pK"), pAdapter);
         return;
     }
 

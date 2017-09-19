@@ -500,7 +500,7 @@ void hddDevTmTxBlockTimeoutHandler(void *usrData)
    if ((NULL == staAdapater) || (WLAN_HDD_ADAPTER_MAGIC != staAdapater->magic))
    {
       VOS_TRACE(VOS_MODULE_ID_HDD,VOS_TRACE_LEVEL_ERROR,
-                FL("invalid Adapter %p"), staAdapater);
+                FL("invalid Adapter %pK"), staAdapater);
       VOS_ASSERT(0);
       return;
    }
