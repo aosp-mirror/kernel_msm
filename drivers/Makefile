@@ -171,7 +171,5 @@ obj-$(CONFIG_BIF)		+= bif/
 
 obj-$(CONFIG_SENSORS_SSC)	+= sensors/
 
-# <t-base drivers
-obj-$(CONFIG_MOBICORE_DRIVER)	+= gud/
 obj-y                           += hwversion/
 obj-y                           += hwmcu/
