@@ -109,11 +109,10 @@ hdd_world_regrules_64 = {
 
 static const struct ieee80211_regdomain
 hdd_world_regrules_66_69 = {
-	.n_reg_rules = 5,
+	.n_reg_rules = 4,
 	.alpha2 =  "00",
 	.reg_rules = {
 		REG_RULE_2412_2462,
-		REG_RULE_2467_2472,
 		REG_RULE_5180_5320,
 		REG_RULE_5500_5720,
 		REG_RULE_5745_5925,
