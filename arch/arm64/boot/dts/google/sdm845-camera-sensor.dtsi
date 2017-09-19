@@ -122,12 +122,11 @@
 		compatible = "regulator-fixed";
 		reg = <0x00 0x00>;
 		regulator-name = "actuator_regulator";
-		regulator-min-microvolt = <2800000>;
-		regulator-max-microvolt = <2800000>;
+		regulator-min-microvolt = <2864000>;
+		regulator-max-microvolt = <2864000>;
 		regulator-enable-ramp-delay = <100>;
 		enable-active-high;
-		gpio = <&tlmm 27 0>;
-		vin-supply = <&pmi8998_bob>;
+		vin-supply = <&pm8998_l22>;
 	};
 };
 
@@ -153,8 +152,8 @@
 		cam_vaf-supply = <&actuator_regulator>;
 		regulator-names = "cam_vaf";
 		rgltr-cntrl-support;
-		rgltr-min-voltage = <2800000>;
-		rgltr-max-voltage = <2800000>;
+		rgltr-min-voltage = <2864000>;
+		rgltr-max-voltage = <2864000>;
 		rgltr-load-current = <0>;
 	};
 
@@ -180,10 +179,7 @@
 		sensor-position-roll = <90>;
 		sensor-position-pitch = <0>;
 		sensor-position-yaw = <180>;
-		//led-flash-src = <&led_flash_rear>;
-		//actuator-src = <&actuator_rear>;
-		//ois-src = <&ois_rear>;
-		//eeprom-src = <&eeprom_rear>;
+		actuator-src = <&actuator_front>;
 		cam_vio-supply = <&pm8998_lvs1>;
 		cam_vana-supply = <&pmi8998_bob>;
 		cam_vdig-supply = <&pm8998_s3>;
