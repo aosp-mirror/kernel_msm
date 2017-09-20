@@ -415,7 +415,7 @@ static int s2mpb04_handle_int(struct s2mpb04_core *ddata,
 		break;
 
 	default:
-		dev_err(dev, "%s: Unknown flag %d\n", __func__, flag_num);
+		dev_dbg(dev, "%s: Reserved flag %d\n", __func__, flag_num);
 		break;
 	}
 
@@ -550,9 +550,10 @@ static void s2mpb04_config_ints(struct s2mpb04_core *ddata)
 	/* clear any pending interrupts */
 	s2mpb04_read_bytes(ddata, S2MPB04_REG_INT1, bytes, 3);
 
-	/* unmask all interrupts */
-	memset(bytes, 0, sizeof(bytes));
-	s2mpb04_write_bytes(ddata, S2MPB04_REG_INT1M, bytes, 3);
+	/* unmask all (non-reserved) interrupts */
+	s2mpb04_write_byte(ddata, S2MPB04_REG_INT1M, 0x00);
+	s2mpb04_write_byte(ddata, S2MPB04_REG_INT2M, 0x00);
+	s2mpb04_write_byte(ddata, S2MPB04_REG_INT3M, 0x7F);
 }
 
 /* some changes to default configuration based on bringup */
