@@ -77,6 +77,9 @@ static void s2mpb04_gpio_set(struct gpio_chip *gpio_chip, unsigned int offset,
 	struct s2mpb04_gpio *s2mpb04_gpio = to_s2mpb04_gpio(gpio_chip);
 	struct s2mpb04_core *s2mpb04_core = s2mpb04_gpio->s2mpb04_core;
 
+	dev_dbg(s2mpb04_core->dev, "%s: offset %d, value %d\n", __func__,
+		offset, value);
+
 	/*
 	 * GPIO1 is an open-drain output and has to have the output disabled to
 	 * allow it to float high when value is not 0.
@@ -86,7 +89,8 @@ static void s2mpb04_gpio_set(struct gpio_chip *gpio_chip, unsigned int offset,
 	} else {
 		s2mpb04_update_bits(s2mpb04_core, S2MPB04_REG_GPIO_A,
 				    (1 << offset), ((value ? 1 : 0) << offset));
-		s2mpb04_write_byte(s2mpb04_core, S2MPB04_REG_GPIO_CTRL, 0xC0);
+		s2mpb04_update_bits(s2mpb04_core, S2MPB04_REG_GPIO_CTRL,
+				    (0x40 << offset), (0x40 << offset));
 	}
 }
 
