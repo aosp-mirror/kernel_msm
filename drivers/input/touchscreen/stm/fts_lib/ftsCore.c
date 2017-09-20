@@ -15,7 +15,7 @@
 
 /*!
 * \file ftsCore.c
-* \brief Contains the implementation of the Core functions    
+* \brief Contains the implementation of the Core functions
 */
 
 #include <linux/spinlock.h>
@@ -46,9 +46,9 @@ spinlock_t fts_int;																///< spinlock to controll the access to the d
 #endif
 
 /**
-* Initialize core variables of the library. Must be called during the probe before any other lib function 
+* Initialize core variables of the library. Must be called during the probe before any other lib function
 * @param info pointer to fts_ts_info which contains info about the device and its hw setup
-* @return OK if success or an error code which specify the type of error encountered 
+* @return OK if success or an error code which specify the type of error encountered
 */
 int initCore(struct fts_ts_info *info){
 	int ret = OK;
@@ -66,7 +66,7 @@ int initCore(struct fts_ts_info *info){
 }
 
 /**
-* Set the reset_gpio variable with the actual gpio number of the board link to the reset pin 
+* Set the reset_gpio variable with the actual gpio number of the board link to the reset pin
 * @param gpio gpio number link to the reset pin of the IC
 */
 void setResetGpio(int gpio)
@@ -76,9 +76,9 @@ void setResetGpio(int gpio)
 }
 
 /**
-* Perform a system reset of the IC. 
+* Perform a system reset of the IC.
 * If the reset pin is associated to a gpio, the function execute an hw reset (toggling of reset pin) otherwise send an hw command to the IC
-* @return OK if success or an error code which specify the type of error encountered 
+* @return OK if success or an error code which specify the type of error encountered
 */
 int fts_system_reset()
 {
@@ -92,7 +92,7 @@ int fts_system_reset()
 	logError(0, "%s System resetting...\n", tag);
 	for (i = 0; i < RETRY_SYSTEM_RESET && res < 0; i++)
 	{
-		resetErrorList(); 
+		resetErrorList();
 #ifndef FTM3_CHIP
 		fts_disableInterrupt();			//disable interrupt before resetting to be able to get boot events
 #endif
@@ -134,7 +134,7 @@ int fts_system_reset()
 }
 
 /**
-* Return the value of system_resetted_down. 
+* Return the value of system_resetted_down.
 * @return the flag value: 0 if not set, 1 if set
 */
 int isSystemResettedDown()
@@ -143,7 +143,7 @@ int isSystemResettedDown()
 }
 
 /**
-* Return the value of system_resetted_up. 
+* Return the value of system_resetted_up.
 * @return the flag value: 0 if not set, 1 if set
 */
 int isSystemResettedUp()
@@ -154,7 +154,7 @@ int isSystemResettedUp()
 
 /**
 * Set the value of system_reseted_down flag
-* @param val value to write in the flag 
+* @param val value to write in the flag
 */
 void setSystemResetedDown(int val)
 {
@@ -163,7 +163,7 @@ void setSystemResetedDown(int val)
 
 /**
 * Set the value of system_reseted_up flag
-* @param val value to write in the flag 
+* @param val value to write in the flag
 */
 void setSystemResetedUp(int val)
 {
@@ -177,7 +177,7 @@ void setSystemResetedUp(int val)
 
 /**
 * Poll the FIFO looking for a specified event within a timeout. Support a retry mechanism.
-* @param event_to_search pointer to an array of int where each element correspond to a byte of the event to find. If the element of the array has value -1, the byte of the event, in the same position of the element is ignored.  
+* @param event_to_search pointer to an array of int where each element correspond to a byte of the event to find. If the element of the array has value -1, the byte of the event, in the same position of the element is ignored.
 * @param event_bytes size of event_to_search
 * @param readData pointer to an array of byte which will contain the event found
 * @param time_to_wait time to wait before going in timeout
@@ -282,7 +282,7 @@ int checkEcho(u8 *cmd, int size)
 	int event_to_search[FIFO_EVENT_SIZE];
 	u8 readData[FIFO_EVENT_SIZE];
 
-	
+
 	if (size < 1)
 	{
 		logError(1, "%s checkEcho: Error Size = %d not valid! \n", tag, size, ERROR_OP_NOT_ALLOW);
@@ -327,7 +327,7 @@ int checkEcho(u8 *cmd, int size)
 int setScanMode(u8 mode, u8 settings){
 	u8 cmd[3] = { FTS_CMD_SCAN_MODE, mode, settings };
 	int ret,size=3;
-	
+
 	logError(0,"%s %s: Setting scan mode: mode = %02X settings = %02X !\n", tag, __func__, mode, settings);
 	if(mode == SCAN_MODE_LOW_POWER)
 		size =2;
@@ -345,7 +345,7 @@ int setScanMode(u8 mode, u8 settings){
 /** @addtogroup feat_sel
 * @{
 */
-/** 
+/**
 * Set a feature and its option in the IC
 * @param feat feature to set; possible values @link feat_opt Feature Selection Option @endlink
 * @param settings pointer to an array of byte which store the options for the selected feature (for example the gesture mask to activate @link gesture_opt Gesture IDs @endlink)
@@ -378,7 +378,7 @@ int setFeatures(u8 feat, u8 *settings, int size){
 /** @addtogroup sys_cmd
 * @{
 */
-/** 
+/**
 * Write a system command to the IC
 * @param sys_cmd System Command to execute; possible values @link sys_opt System Command Option @endlink
 * @param sett settings option for the selected system command (@link sys_special_opt	 Special Command Option @endlink, @link ito_opt	ITO Test Option @endlink, @link load_opt Load Host Data Option @endlink)
@@ -388,10 +388,10 @@ int setFeatures(u8 feat, u8 *settings, int size){
 int writeSysCmd(u8 sys_cmd, u8 *sett, int size){
 	u8 cmd[2+size];
 	int ret;
-	
+
 	cmd[0] = FTS_CMD_SYSTEM;
 	cmd[1] = sys_cmd;
-	
+
 	logError(0,"%s %s: Command = %02X %02X ", tag, __func__, cmd[0], cmd[1]);
 	for(ret=0; ret<size; ret++){
 		cmd[2+ret] = sett[ret];
@@ -410,12 +410,12 @@ int writeSysCmd(u8 sys_cmd, u8 *sett, int size){
 	}
 	if (ret<OK){
 		logError(1,"%s %s: ERROR %08X\n", tag, __func__, ret);
-		
+
 	}else
 		logError(0,"%s %s: FINISHED! \n", tag, __func__);
-	
+
 	return ret;
-	
+
 }
 /** @}*/
 
@@ -430,7 +430,7 @@ int writeSysCmd(u8 sys_cmd, u8 *sett, int size){
 int defaultSysInfo(int i2cError){
 	int i;
 	logError(0, "%s Setting default System Info... \n", tag);
-	
+
 	if(i2cError==1){
 		systemInfo.u16_fwVer=0xFFFF;
 		systemInfo.u16_cfgId=0xFFFF;
@@ -446,18 +446,18 @@ int defaultSysInfo(int i2cError){
 		}
 		systemInfo.u16_cxVer = 0x0000;
 	}
-	
+
 	systemInfo.u8_scrRxLen = 0;
 	systemInfo.u8_scrTxLen = 0;
-				
-	
+
+
 	logError(0, "%s default System Info DONE! \n", tag);
 	return OK;
-	
+
 }
 
 /**
-* Read the System Info data from memory. System Info is loaded automatically after every system reset. 
+* Read the System Info data from memory. System Info is loaded automatically after every system reset.
 * @param request if 1, will be asked to the FW to reload the data, otherwise attempt to read it directly from memory
 * @return OK if success or an error code which specify the type of error encountered
 */
@@ -465,7 +465,7 @@ int readSysInfo(int request){
 	int ret, i, index = 0;
 	u8 sett = LOAD_SYS_INFO;
 	u8 data[SYS_INFO_SIZE] = {0};
-	
+
 	if (request == 1)
 	{
 		logError(0, "%s %s: Requesting System Info...\n", tag, __func__);
@@ -477,14 +477,14 @@ int readSysInfo(int request){
 			goto FAIL;
 		}
 	}
-	
+
 	logError(0,"%s %s: Reading System Info...\n", tag, __func__);
 	ret = fts_writeReadU8UX(FTS_CMD_FRAMEBUFFER_R, BITS_16, ADDR_FRAMEBUFFER, data, SYS_INFO_SIZE, DUMMY_FRAMEBUFFER);
 	if(ret<OK){
 		logError(1,"%s %s: error while reading the system data ERROR %08X\n", tag, __func__, ret);
 		goto FAIL;
 	}
-	
+
 	logError(0,"%s %s: Parsing System Info...\n", tag, __func__);
 
 	if (data[0] != HEADER_SIGNATURE) {
@@ -544,14 +544,14 @@ int readSysInfo(int request){
 		logError(1, "%02X ", systemInfo.u8_dieInfo[i]);
 	}
 	logError(1, "\n");
-	
+
 	logError(1, "%s Release Info =  ", tag);
 	for (i = 0; i < RELEASE_INFO_SIZE;i++) {
 		systemInfo.u8_releaseInfo[i] = data[index++];
 		logError(1, "%02X ", systemInfo.u8_releaseInfo[i]);
 	}
 	logError(1, "\n");
-	
+
 	u8ToU16(&data[index], &systemInfo.u16_cxFormatVer_rev);
 	index += 2;
 	logError(1, "%s CX FORMAT VER = %04X \n", tag, systemInfo.u16_cxFormatVer_rev);
@@ -563,9 +563,9 @@ int readSysInfo(int request){
 	u8ToU16(&data[index], &systemInfo.u16_cxMemId);
 	index += 2;
 	logError(1, "%s CX MEM VER = %04X - CX MEM ID = %04X \n", tag, systemInfo.u16_cxMemVer, systemInfo.u16_cxMemId);
-	
+
 	index+=8;																	//skip reserved area
-	
+
 	u8ToU16(&data[index], &systemInfo.u16_scrResX);
 	index += 2;
 	u8ToU16(&data[index], &systemInfo.u16_scrResY);
@@ -579,14 +579,14 @@ int readSysInfo(int request){
 	logError(1, "%s Key Len = %d \n", tag, systemInfo.u8_keyLen);
 	systemInfo.u8_forceLen = data[index++];
 	logError(1, "%s Force Len = %d \n", tag, systemInfo.u8_forceLen);
-	
+
 	index+=40;																	//skip reserved area
-	
+
 	u8ToU16(&data[index], &systemInfo.u16_dbgInfoAddr);
 	index += 2;
-	
+
 	index += 6;																	//skip reserved area
-	
+
 	u8ToU16(&data[index], &systemInfo.u16_msTchRawAddr );
 	index += 2;
 	u8ToU16(&data[index], &systemInfo.u16_msTchFilterAddr);
@@ -595,7 +595,7 @@ int readSysInfo(int request){
 	index += 2;
 	u8ToU16(&data[index], &systemInfo.u16_msTchBaselineAddr);
 	index += 2;
-	
+
 	u8ToU16(&data[index], &systemInfo.u16_ssTchTxRawAddr);
 	index += 2;
 	u8ToU16(&data[index], &systemInfo.u16_ssTchTxFilterAddr);
@@ -604,7 +604,7 @@ int readSysInfo(int request){
 	index += 2;
 	u8ToU16(&data[index], &systemInfo.u16_ssTchTxBaselineAddr);
 	index += 2;
-	
+
 	u8ToU16(&data[index], &systemInfo.u16_ssTchRxRawAddr);
 	index += 2;
 	u8ToU16(&data[index], &systemInfo.u16_ssTchRxFilterAddr);
@@ -613,7 +613,7 @@ int readSysInfo(int request){
 	index += 2;
 	u8ToU16(&data[index], &systemInfo.u16_ssTchRxBaselineAddr);
 	index += 2;
-	
+
 	u8ToU16(&data[index], &systemInfo.u16_keyRawAddr);
 	index += 2;
 	u8ToU16(&data[index], &systemInfo.u16_keyFilterAddr);
@@ -622,7 +622,7 @@ int readSysInfo(int request){
 	index += 2;
 	u8ToU16(&data[index], &systemInfo.u16_keyBaselineAddr);
 	index += 2;
-	
+
 	u8ToU16(&data[index], &systemInfo.u16_frcRawAddr);
 	index += 2;
 	u8ToU16(&data[index], &systemInfo.u16_frcFilterAddr);
@@ -631,7 +631,7 @@ int readSysInfo(int request){
 	index += 2;
 	u8ToU16(&data[index], &systemInfo.u16_frcBaselineAddr);
 	index += 2;
-	
+
 	u8ToU16(&data[index], &systemInfo.u16_ssHvrTxRawAddr);
 	index += 2;
 	u8ToU16(&data[index], &systemInfo.u16_ssHvrTxFilterAddr);
@@ -640,7 +640,7 @@ int readSysInfo(int request){
 	index += 2;
 	u8ToU16(&data[index], &systemInfo.u16_ssHvrTxBaselineAddr);
 	index += 2;
-	
+
 	u8ToU16(&data[index], &systemInfo.u16_ssHvrRxRawAddr);
 	index += 2;
 	u8ToU16(&data[index], &systemInfo.u16_ssHvrRxFilterAddr);
@@ -649,7 +649,7 @@ int readSysInfo(int request){
 	index += 2;
 	u8ToU16(&data[index], &systemInfo.u16_ssHvrRxBaselineAddr);
 	index += 2;
-	
+
 	u8ToU16(&data[index], &systemInfo.u16_ssPrxTxRawAddr);
 	index += 2;
 	u8ToU16(&data[index], &systemInfo.u16_ssPrxTxFilterAddr);
@@ -658,7 +658,7 @@ int readSysInfo(int request){
 	index += 2;
 	u8ToU16(&data[index], &systemInfo.u16_ssPrxTxBaselineAddr);
 	index += 2;
-	
+
 	u8ToU16(&data[index], &systemInfo.u16_ssPrxRxRawAddr);
 	index += 2;
 	u8ToU16(&data[index], &systemInfo.u16_ssPrxRxFilterAddr);
@@ -667,9 +667,9 @@ int readSysInfo(int request){
 	index += 2;
 	u8ToU16(&data[index], &systemInfo.u16_ssPrxRxBaselineAddr);
 	//index += 2;
-	
+
 	logError(1, "%s Parsed %d bytes! \n", tag, index);
-	
+
 
 	if (index != SYS_INFO_SIZE) {
 		logError(1, "%s %s: index = %d different from %d ERROR %08X\n", tag, __func__, index, SYS_INFO_SIZE, ERROR_OP_NOT_ALLOW);
@@ -682,7 +682,7 @@ int readSysInfo(int request){
 FAIL:
 	defaultSysInfo(isI2cError(ret));
 	return ret;
-		
+
 }
 /** @}*/
 
@@ -690,24 +690,24 @@ FAIL:
 /**
  * Read data from the Config Memory
  * @param offset Starting address in the Config Memory of data to read
- * @param outBuf pointer of a byte array which contain the bytes to read 
+ * @param outBuf pointer of a byte array which contain the bytes to read
  * @param len number of bytes to read
  * @return OK if success or an error code which specify the type of error encountered
  */
 int readConfig(u16 offset, u8* outBuf, int len){
 	int ret;
 	u64 final_address = offset+ADDR_CONFIG_OFFSET;
-	
+
 	logError(0, "%s %s: Starting to read config memory at %08X ...",tag,__func__,final_address);
 	ret = fts_writeReadU8UX(FTS_CMD_CONFIG_R, BITS_16, final_address, outBuf, len, DUMMY_CONFIG);
 	if(ret<OK){
 		logError(1, "%s %s: Impossible to read Config Memory... ERROR %08X!",tag,__func__,ret);
 		return ret;
 	}
-	
+
 	logError(0, "%s %s: Read config memory FINISHED!",tag,__func__);
 	return OK;
-	
+
 }
 
 /**
@@ -715,12 +715,12 @@ int readConfig(u16 offset, u8* outBuf, int len){
  * @return OK if success or an error code which specify the type of error encountered
  */
 int fts_disableInterrupt()
-{	
+{
 #ifdef FTM3
 	int ret;
 	u8 data[1] = {IER_DISABLE};				//disable interrupt
 	//u16ToU8_be(IER_ADDR, &cmd[1]);
-	
+
 	ret = fts_writeU8UX(FTS_CMD_HW_REG_W,ADDR_SIZE_HW_REG, ADDR_IER, data, ARRAY_SIZE(data));
 	if ( ret < OK)
 	{
@@ -738,7 +738,7 @@ int fts_disableInterrupt()
 			logError(0, "%s Excecuting Disable... \n", tag);
 			disable_irq_nosync(getClient()->irq);
 			disable_irq_count++;
-		}// disable_irq is re-entrant so it is required to keep track of the number of calls of this when reenabling			
+		}// disable_irq is re-entrant so it is required to keep track of the number of calls of this when reenabling
 		spin_unlock_irqrestore(&fts_int,flag);
 		logError(0, "%s Interrupt Disabled!\n", tag);
 		return OK;
@@ -764,8 +764,8 @@ int fts_disableInterruptNoSync()
 			logError(0, "%s Excecuting Disable... \n", tag);
 			disable_irq_nosync(getClient()->irq);
 			disable_irq_count++;
-		}// disable_irq is re-entrant so it is required to keep track of the number of calls of this when reenabling			
-		
+		}// disable_irq is re-entrant so it is required to keep track of the number of calls of this when reenabling
+
 		spin_unlock(&fts_int);
 		logError(0, "%s Interrupt No Sync Disabled!\n", tag);
 		return OK;
@@ -783,12 +783,12 @@ int fts_disableInterruptNoSync()
  */
 int fts_enableInterrupt()
 {
-	
+
 #ifdef FTM3
 	int ret;
 	u8 data[1] = {IER_ENABLE};				//enable interrupt
 	//u16ToU8_be(IER_ADDR, &cmd[1]);
-	
+
 	ret = fts_writeU8UX(FTS_CMD_HW_REG_W,ADDR_SIZE_HW_REG, ADDR_IER, data, ARRAY_SIZE(data));
 	if ( ret < OK)
 	{
@@ -807,7 +807,7 @@ int fts_enableInterrupt()
 			enable_irq(getClient()->irq);
 			disable_irq_count--;
 		}
-		
+
 		spin_unlock_irqrestore(&fts_int,flag);
 		logError(0, "%s Interrupt Enabled!\n", tag);
 		return OK;
@@ -871,7 +871,7 @@ int fts_crc_check() {
 	}
 
 #endif
-	
+
 	return OK;
 }
 
@@ -898,14 +898,14 @@ int requestSyncFrame(u8 type) {
 			retry2++;
 			continue;
 		}
-		
+
 		if(readData[0]!=HEADER_SIGNATURE){
 			logError(1, "%s %s: Invalid Signature while reading count! ERROR %08X \n", tag, __func__, ret|ERROR_REQU_DATA);
 			ret|=ERROR_REQU_DATA;
 			retry2++;
 			continue;
 		}
-		
+
 		count = (readData[3]<<8)|readData[2];
 		new_count = count;
 		logError(0, "%s %s: Base count = %d\n", tag, __func__, count);

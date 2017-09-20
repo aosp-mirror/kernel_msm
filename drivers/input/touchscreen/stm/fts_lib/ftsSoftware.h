@@ -59,26 +59,26 @@ typedef enum {
  * @{
  */
 
-/** @defgroup scan_mode	Scan Mode 
+/** @defgroup scan_mode	Scan Mode
 * @ingroup host_command
 * Set the scanning mode required according to the parameters
-* @{ 
+* @{
 */
 #define FTS_CMD_SCAN_MODE					0xA0								///< OP Code to set scan mode
 /** @} */
 
-/** @defgroup feat_sel	 Feature Select 
+/** @defgroup feat_sel	 Feature Select
 * @ingroup host_command
 * Set the system defined features to enable/disable according the parameters
-* @{ 
+* @{
 */
 #define FTS_CMD_FEATURE						0xA2								///< OP code to set features
 /** @} */
 
-/** @defgroup sys_cmd  System Command  
+/** @defgroup sys_cmd  System Command
 * @ingroup host_command
 * Execute a system command to perform core tasks
-* @{ 
+* @{
 */
 #define FTS_CMD_SYSTEM						0xA4								///< OP code to write s system command
 /** @} */
@@ -87,10 +87,10 @@ typedef enum {
 
 //SCAN MODE OPTION (0xA0)
 //Scan mode selection
-/** @defgroup scan_opt	 Scan Mode Option 
+/** @defgroup scan_opt	 Scan Mode Option
 * @ingroup scan_mode
-* Valid scanning modes and their options 
-* @{ 
+* Valid scanning modes and their options
+* @{
 */
 #define SCAN_MODE_ACTIVE					0x00								///< Select the Active scanning mode
 #define SCAN_MODE_LOW_POWER					0x01								///< Select the low power scanning mode
@@ -98,13 +98,13 @@ typedef enum {
 /** @}*/
 
 //Active mode option (bitmask)
-/** @defgroup active_bitmask Active Mode Bitmask 
+/** @defgroup active_bitmask Active Mode Bitmask
 * @ingroup scan_opt
-* Bitmask to use to enables the specific scanning with the SCAN_MODE_ACTIVE option 
-* @{ 
+* Bitmask to use to enables the specific scanning with the SCAN_MODE_ACTIVE option
+* @{
 */
 #define ACTIVE_MULTI_TOUCH					0x01								///< Bit 0 MS/SS scan
-#define ACTIVE_KEY							0x02								///< Bit 1 Key scan 
+#define ACTIVE_KEY							0x02								///< Bit 1 Key scan
 #define ACTIVE_HOVER						0x04								///< Bit 2 Hover scan
 #define ACTIVE_PROXIMITY					0x08								///< Bit 3 Proximity scan
 #define ACTIVE_FORCE						0x10								///< Bit 4 Force scan
@@ -112,12 +112,12 @@ typedef enum {
 
 //FEATURE SELECT OPTION (0xA2)
 //Feature Selection
-/** @defgroup feat_opt	 Feature Selection Option 
+/** @defgroup feat_opt	 Feature Selection Option
 * @ingroup feat_sel
-* System defined features that can be enable/disable 
-* @{ 
+* System defined features that can be enable/disable
+* @{
 */
-#define FEAT_SEL_GLOVE						0x00								///< Glove Mode			
+#define FEAT_SEL_GLOVE						0x00								///< Glove Mode
 #define FEAT_SEL_COVER						0x01								///< Cover Mode
 #define FEAT_SEL_CHARGER					0x02								///< Charger Mode
 #define FEAT_SEL_GESTURE					0x03								///< Gesture Mode
@@ -131,21 +131,21 @@ typedef enum {
 
 
 //Charger
-/** @defgroup charger_opt	 Charger Mode Option 
+/** @defgroup charger_opt	 Charger Mode Option
 * @ingroup feat_sel
-* Option for Charger Mode, it is a bitmask where the each bit indicate a different kind of chager 
-* @{ 
+* Option for Charger Mode, it is a bitmask where the each bit indicate a different kind of chager
+* @{
 */
 #define	CHARGER_CABLE						0x01								///< normal usb charger
 #define CHARGER_WIRLESS						0x02								///< wireless charger
 /** @}*/
 
 //Gestures
-/** @defgroup gesture_opt	 Gesture Mode Option 
+/** @defgroup gesture_opt	 Gesture Mode Option
 * @ingroup feat_sel
-* Gesture IDs of the predefined gesture recognized by the fw. 
+* Gesture IDs of the predefined gesture recognized by the fw.
 * The ID represent also the position of the corresponding bit in the gesture mask
-* @{ 
+* @{
 */
 #define GEST_ID_UP_1F						0x01								///< Bottom to Top line
 #define GEST_ID_DOWN_1F						0x02								///< Top to bottom line
@@ -154,7 +154,7 @@ typedef enum {
 #define	GEST_ID_DBLTAP						0x05								///< Double Tap
 #define GEST_ID_O							0x06								///< 'O'
 #define GEST_ID_C							0x07								///< 'C'
-#define GEST_ID_M							0x08								///< 'M' 
+#define GEST_ID_M							0x08								///< 'M'
 #define GEST_ID_W							0x09								///< 'W'
 #define GEST_ID_E							0x0A								///< 'e'
 #define GEST_ID_L							0x0B								///< 'L'
@@ -170,13 +170,13 @@ typedef enum {
 
 //WRYTE SYSTEM COMMAND (0xA4)
 //System command
-/** @defgroup sys_opt	 System Command Option 
+/** @defgroup sys_opt	 System Command Option
 * @ingroup sys_cmd
-* Valid System Command Parameters 
-* @{ 
+* Valid System Command Parameters
+* @{
 */
 #define SYS_CMD_SPECIAL						0x00								///< Special Commands
-#define SYS_CMD_INT							0x01								///< FW Interrupt Control 
+#define SYS_CMD_INT							0x01								///< FW Interrupt Control
 #define SYS_CMD_FORCE_CAL					0x02								///< Force Calibration
 #define SYS_CMD_CX_TUNING					0x03								///< CX initialization
 #define SYS_CMD_ITO							0x04								///< ITO test
@@ -186,10 +186,10 @@ typedef enum {
 
 //System command settings
 //Special commands
-/** @defgroup sys_special_opt	 Special Command Option 
+/** @defgroup sys_special_opt	 Special Command Option
 * @ingroup sys_cmd
-* Valid special command 
-* @{ 
+* Valid special command
+* @{
 */
 #define SPECIAL_SYS_RESET					0x00								///< System Reset triggered by the FW
 #define SPECIAL_FIFO_FLUSH					0x01								///< Flush of the FIFO
@@ -205,14 +205,14 @@ typedef enum {
 #define CAL_SS_IDLE							0x03								///< Self Sense Touch in idle mode
 #define CAL_MS_KEY							0x04								///< Mutual Sense Key
 #define CAL_SS_KEY							0x05								///< Self Sense Key
-#define CAL_MS_FORCE						0x06								///< Mutual Sense Force 
+#define CAL_MS_FORCE						0x06								///< Mutual Sense Force
 #define CAL_SS_FORCE						0x07								///< Self Sense Force
 
 //ITO checks (position of the bit in the mask)
-/** @defgroup ito_opt	 ITO Test Option 
+/** @defgroup ito_opt	 ITO Test Option
 * @ingroup sys_cmd
-* Valid option for the ITO test 
-* @{ 
+* Valid option for the ITO test
+* @{
 */
 #define ITO_FORCE_OPEN						0x00								///< Check if some force channels is open
 #define ITO_SENSE_OPEN						0x01								///< Check if some sense channels is open
@@ -221,17 +221,17 @@ typedef enum {
 #define ITO_FORCE_VDD						0x04								///< Check if some force channels is short to VDD
 #define ITO_SENSE_VDD						0x05								///< Check if some sense channels is short to VDD
 #define ITO_FORCE_FORCE						0x06								///< Check force to force channels
-#define ITO_FORCE_SENSE						0x07								///< Check force to sense channels 
+#define ITO_FORCE_SENSE						0x07								///< Check force to sense channels
 #define ITO_SENSE_SENSE						0x08								///< Check sense to sense channels
 #define ITO_KEY_FORCE_OPEN					0x09								///< Check if some force channels used for the key is open
 #define ITO_KEY_SENSE_OPEN					0x0A								///< Check if some sense channels used for the key is open
 /** @}*/
 
 //Save flash
-/** @defgroup save_opt	 Save to Flash Option 
+/** @defgroup save_opt	 Save to Flash Option
 * @ingroup sys_cmd
-* Valid option for saving data to the Flash 
-* @{ 
+* Valid option for saving data to the Flash
+* @{
 */
 #define	SAVE_FW_CONF						0x01								///< Save the confing to the flash
 #define SAVE_CX								0x02								///< Save the CX to the flash
@@ -239,17 +239,17 @@ typedef enum {
 /** @}*/
 
 //Load Data
-/** @defgroup load_opt	 Load Host Data Option 
+/** @defgroup load_opt	 Load Host Data Option
 * @ingroup sys_cmd
-* Valid option to ask to the FW to load host data into the memory 
-* @{ 
+* Valid option to ask to the FW to load host data into the memory
+* @{
 */
-#define LOAD_SYS_INFO						0x01								///< Load System Info 
+#define LOAD_SYS_INFO						0x01								///< Load System Info
 #define LOAD_CX_MS_TOUCH					0x10								///< Load MS Init Data for Active Mode
 #define LOAD_CX_MS_LOW_POWER				0x11								///< Load MS Init Data for Low Power Mode
 #define LOAD_CX_SS_TOUCH					0x12								///< Load SS Init Data for Active Mode
 #define LOAD_CX_SS_TOUCH_IDLE				0x13								///< Load SS Init Data for Low Power Mode
-#define LOAD_CX_MS_KEY						0x14								///< Load MS Init Data for Key 
+#define LOAD_CX_MS_KEY						0x14								///< Load MS Init Data for Key
 #define LOAD_CX_SS_KEY						0x15								///< Load SS Init Data for Key
 #define LOAD_CX_MS_FORCE					0x16								///< Load MS Init Data for Force
 #define LOAD_CX_SS_FORCE					0x17								///< Load SS Init Data for Force
@@ -268,11 +268,11 @@ typedef enum {
 /** @}*/
 
 //EVENT ID
-/** @defgroup events_group	 FW Event IDs and Types  
-* Event IDs and Types pushed by the FW into the FIFO 
-* @{ 
+/** @defgroup events_group	 FW Event IDs and Types
+* Event IDs and Types pushed by the FW into the FIFO
+* @{
 */
-#define EVT_ID_NOEVENT						0x00								///< No Events				
+#define EVT_ID_NOEVENT						0x00								///< No Events
 #define EVT_ID_CONTROLLER_READY				0x03								///< Controller ready, issued after a system reset.
 #define EVT_ID_ENTER_POINT					0x13								///< Touch enter in the sensing area
 #define EVT_ID_MOTION_POINT					0x23								///< Touch motion (a specific touch changed position)
@@ -287,10 +287,10 @@ typedef enum {
 /** @}*/
 
 //STATUS TYPE
-/** @defgroup status_type	 Status Event Types 
+/** @defgroup status_type	 Status Event Types
 * @ingroup events_group
 * Types of EVT_ID_STATUS_UPDATE events
-* @{ 
+* @{
 */
 #define EVT_TYPE_STATUS_ECHO				0x01								///< Echo event, contain the first 5 bytes of the FW command sent
 #define EVT_TYPE_STATUS_FRAME_DROP			0x03								///< Some frame was skipped during the elaboration
@@ -300,21 +300,21 @@ typedef enum {
 /** @} */
 
 //USER TYPE
-/** @defgroup user_type	 User Event Types 
+/** @defgroup user_type	 User Event Types
 * @ingroup events_group
 * Types of EVT_ID_USER_REPORT events generated by thw FW
-* @{ 
+* @{
 */
-#define EVT_TYPE_USER_KEY					0x00								///< Keys pressed/relesed event report 
-#define EVT_TYPE_USER_PROXIMITY				0x01								///< Proximity detection event report 
+#define EVT_TYPE_USER_KEY					0x00								///< Keys pressed/relesed event report
+#define EVT_TYPE_USER_PROXIMITY				0x01								///< Proximity detection event report
 #define EVT_TYPE_USER_GESTURE				0x02								///< Gesture detection event report
 /** @}*/
 
 //ERROR TYPE
-/** @defgroup error_type  Error Event Types 
+/** @defgroup error_type  Error Event Types
 * @ingroup events_group
-* Types of EVT_ID_ERROR events reported by the FW 
-* @{ 
+* Types of EVT_ID_ERROR events reported by the FW
+* @{
 */
 #define EVT_TYPE_ERROR_WATCHDOG				0x06								///< Watchdog timer expired
 
@@ -334,7 +334,7 @@ typedef enum {
 #define EVT_TYPE_ERROR_ITO_KEYOPEN			0x68								///< Key open
 
 #define EVT_TYPE_ERROR_CRC_CX_HEAD			0xA0								///< CRC error in the CX Area Header
-#define EVT_TYPE_ERROR_CRC_CX				0xA1								///< CRC error in the CX Area 
+#define EVT_TYPE_ERROR_CRC_CX				0xA1								///< CRC error in the CX Area
 #define EVT_TYPE_ERROR_CRC_CX_SUB_HEAD		0xA5								///< CRC error in the CX Subsection Area Header
 #define EVT_TYPE_ERROR_CRC_CX_SUB			0xA6								///< CRC error in the CX Subsection Area
 

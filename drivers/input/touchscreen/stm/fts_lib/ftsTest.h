@@ -34,7 +34,7 @@
 
 #define NO_INIT							0										///< No Initialization required during the MP
 
-#define RETRY_INIT_BOOT					3										///< number of retry of the initialization process at boot		
+#define RETRY_INIT_BOOT					3										///< number of retry of the initialization process at boot
 
 /** @defgroup mp_test Mass Production Test
  * Mass production test API.
@@ -125,7 +125,7 @@
 
 /**
 * Struct used to specify which test perform during the Mass Production Test.
-* For each test item selected in this structure, there should be one or more labels associated in the Limit file from where load the thresholds 
+* For each test item selected in this structure, there should be one or more labels associated in the Limit file from where load the thresholds
 */
 typedef struct {
 	int MutualRaw;																///< MS Raw min/Max test
@@ -173,12 +173,12 @@ typedef struct {
 #define MAX_LIMIT_FILE_NAME					100									///< max number of chars of the limit file name
 
 /**
- * Struct which store the data coming from a Production Limit File 
+ * Struct which store the data coming from a Production Limit File
  */
 typedef struct {
 	char *data;																	///< pointer to an array of char which contains the content of the Production Limit File
 	int size;																	///< size of data
-	char name[MAX_LIMIT_FILE_NAME];												///< identifier of the source from where the limits data were loaded (if loaded from a file it will be the file name, while if loaded from .h will be "NULL") 
+	char name[MAX_LIMIT_FILE_NAME];												///< identifier of the source from where the limits data were loaded (if loaded from a file it will be the file name, while if loaded from .h will be "NULL")
 } LimitFile;
 
 
@@ -208,7 +208,7 @@ int checkLimitsMapAdjTotal(u16 *data, int row, int column, int *max);
 /**  @defgroup mp_api MP API
  * @ingroup mp_test
  * Functions to execute the MP test.
- * The parameters of these functions allow to customize their behavior in order to satisfy different scenarios 
+ * The parameters of these functions allow to customize their behavior in order to satisfy different scenarios
  * @{
  */
 int production_test_ito(void);

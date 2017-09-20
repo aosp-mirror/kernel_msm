@@ -39,7 +39,7 @@ static u16 I2CSAD;																///< slave address of the IC in the i2c bus
 #include <linux/spi/spidev.h>
 #endif
 
-static void *client = NULL;														///< bus client retrived by the OS and used to execute the bus transfers 
+static void *client = NULL;														///< bus client retrived by the OS and used to execute the bus transfers
 
 
 
@@ -50,7 +50,7 @@ static void *client = NULL;														///< bus client retrived by the OS and 
 
 
 /**
-* Initialize the static client variable of the fts_lib library in order to allow any i2c/spi transaction in the driver. (Must be called in the probe) 
+* Initialize the static client variable of the fts_lib library in order to allow any i2c/spi transaction in the driver. (Must be called in the probe)
 * @param clt pointer to i2c_client or spi_device struct which identify the bus slave device
 * @return OK
 */
@@ -85,7 +85,7 @@ struct device * getDev()
 #ifdef I2C_INTERFACE
 /**
 * Retrieve the pointer of the i2c_client struct representing the IC as i2c slave
-* @return client if it was previously set or NULL in all the other cases 
+* @return client if it was previously set or NULL in all the other cases
 */
 struct i2c_client * getClient()
 {
@@ -97,7 +97,7 @@ struct i2c_client * getClient()
 #else
 /**
 * Retrieve the pointer of the spi_device struct representing the IC as spi slave
-* @return client if it was previously set or NULL in all the other cases 
+* @return client if it was previously set or NULL in all the other cases
 */
 struct spi_device * getClient()
 {
@@ -115,14 +115,14 @@ struct spi_device * getClient()
 /**
 * Perform a direct bus read
 * @param outBuf pointer of a byte array which should contain the byte read from the IC
-* @param byteToRead number of bytes to read  
-* @return OK if success or an error code which specify the type of error encountered 
+* @param byteToRead number of bytes to read
+* @return OK if success or an error code which specify the type of error encountered
 */
 int fts_read(u8* outBuf, int byteToRead)
 {
 	int ret = -1;
 	int retry = 0;
-	
+
 #ifdef I2C_INTERFACE
 	struct i2c_msg I2CMsg[1];
 
@@ -142,18 +142,18 @@ int fts_read(u8* outBuf, int byteToRead)
 	transfer[0].rx_buf = outBuf;
 	spi_message_add_tail(&transfer[0], &msg);
 #endif
-	
+
 
 	if (client == NULL) return ERROR_BUS_O;
 	while (retry < I2C_RETRY && ret < OK)
 	{
-		
+
 #ifdef I2C_INTERFACE
 		ret = i2c_transfer(getClient()->adapter, I2CMsg, 1);
 #else
 		ret = spi_sync(getClient(), &msg);
 #endif
-		
+
 		retry++;
 		if (ret < OK) mdelay(I2C_WAIT_BEFORE_RETRY);
 		//logError(1,"%s fts_writeCmd: attempt %d\n", tag, retry);
@@ -173,17 +173,17 @@ int fts_read(u8* outBuf, int byteToRead)
 * @param cmd byte array containing the command to write
 * @param cmdLength size of cmd
 * @param outBuf pointer of a byte array which should contain the bytes read from the IC
-* @param byteToRead number of bytes to read  
-* @return OK if success or an error code which specify the type of error encountered 
+* @param byteToRead number of bytes to read
+* @return OK if success or an error code which specify the type of error encountered
 */
 int fts_writeRead(u8* cmd, int cmdLength, u8* outBuf, int byteToRead)
 {
 	int ret = -1;
 	int retry = 0;
-		
+
 #ifdef I2C_INTERFACE
 	struct i2c_msg I2CMsg[2];
-	
+
 	//write msg
 	I2CMsg[0].addr = (__u16) I2CSAD;
 	I2CMsg[0].flags = (__u16) 0;
@@ -195,7 +195,7 @@ int fts_writeRead(u8* cmd, int cmdLength, u8* outBuf, int byteToRead)
 	I2CMsg[1].flags = I2C_M_RD;
 	I2CMsg[1].len = byteToRead;
 	I2CMsg[1].buf = (__u8*) outBuf;
-	
+
 #else
     struct spi_message msg;
 	struct spi_transfer transfer[2]={{0},{0}};
@@ -210,13 +210,13 @@ int fts_writeRead(u8* cmd, int cmdLength, u8* outBuf, int byteToRead)
 	transfer[1].len = byteToRead;
 	transfer[1].delay_usecs = SPI_DELAY_CS;
 	transfer[1].tx_buf = NULL;
-	transfer[1].rx_buf = outBuf;	
+	transfer[1].rx_buf = outBuf;
 	spi_message_add_tail(&transfer[1], &msg);
-	
+
 #endif
-	
+
 	if (client == NULL) return ERROR_BUS_O;
-	
+
 	while (retry < I2C_RETRY && ret < OK)
 	{
 #ifdef I2C_INTERFACE
@@ -224,7 +224,7 @@ int fts_writeRead(u8* cmd, int cmdLength, u8* outBuf, int byteToRead)
 #else
 		ret = spi_sync(getClient(), &msg);
 #endif
-		
+
 		retry++;
 		if (ret < OK) mdelay(I2C_WAIT_BEFORE_RETRY);
 	}
@@ -238,16 +238,16 @@ int fts_writeRead(u8* cmd, int cmdLength, u8* outBuf, int byteToRead)
 
 
 /**
-* Perform a bus write 
+* Perform a bus write
 * @param cmd byte array containing the command to write
 * @param cmdLength size of cmd
-* @return OK if success or an error code which specify the type of error encountered 
+* @return OK if success or an error code which specify the type of error encountered
 */
 int fts_write(u8 *cmd, int cmdLength)
 {
 	int ret = -1;
 	int retry = 0;
-	
+
 #ifdef I2C_INTERFACE
 	struct i2c_msg I2CMsg[1];
 
@@ -267,7 +267,7 @@ int fts_write(u8 *cmd, int cmdLength)
 	transfer[0].rx_buf = NULL;
 	spi_message_add_tail(&transfer[0], &msg);
 #endif
-	
+
 
 	if (client == NULL) return ERROR_BUS_O;
 	while (retry < I2C_RETRY && ret < OK)
@@ -277,7 +277,7 @@ int fts_write(u8 *cmd, int cmdLength)
 #else
 		ret = spi_sync(getClient(), &msg);
 #endif
-		
+
 		retry++;
 		if (ret < OK) mdelay(I2C_WAIT_BEFORE_RETRY);
 		//logError(1,"%s fts_writeCmd: attempt %d\n", tag, retry);
@@ -294,7 +294,7 @@ int fts_write(u8 *cmd, int cmdLength)
 * Write a FW command to the IC and check automatically the echo event
 * @param cmd byte array containing the command to send
 * @param cmdLength size of cmd
-* @return OK if success, or an error code which specify the type of error encountered 
+* @return OK if success, or an error code which specify the type of error encountered
 */
 int fts_writeFwCmd(u8 *cmd, int cmdLength)
 {
@@ -320,7 +320,7 @@ int fts_writeFwCmd(u8 *cmd, int cmdLength)
 	transfer[0].rx_buf = NULL;
 	spi_message_add_tail(&transfer[0], &msg);
 #endif
-	
+
 	if (client == NULL) return ERROR_BUS_O;
 	resetErrorList();
 	while (retry < I2C_RETRY && (ret < OK || ret2 < OK))
@@ -352,20 +352,20 @@ int fts_writeFwCmd(u8 *cmd, int cmdLength)
 
 /**
 * Perform two bus write and one bus read without any stop condition
-* In case of FTI this function is not supported and the same sequence can be achieved calling fts_write followed by an fts_writeRead. 
+* In case of FTI this function is not supported and the same sequence can be achieved calling fts_write followed by an fts_writeRead.
 * @param writeCmd1 byte array containing the first command to write
 * @param writeCmdLength size of writeCmd1
 * @param readCmd1 byte array containing the second command to write
 * @param readCmdLength size of readCmd1
 * @param outBuf pointer of a byte array which should contain the bytes read from the IC
-* @param byteToRead number of bytes to read  
-* @return OK if success or an error code which specify the type of error encountered 
+* @param byteToRead number of bytes to read
+* @return OK if success or an error code which specify the type of error encountered
 */
 int fts_writeThenWriteRead(u8 *writeCmd1, int writeCmdLength, u8 *readCmd1, int readCmdLength, u8 *outBuf, int byteToRead)
 {
 	int ret = -1;
 	int retry = 0;
-	
+
 #ifdef I2C_INTERFACE
 	struct i2c_msg I2CMsg[3];
 
@@ -408,7 +408,7 @@ int fts_writeThenWriteRead(u8 *writeCmd1, int writeCmdLength, u8 *readCmd1, int 
 	transfer[2].rx_buf = outBuf;
 	spi_message_add_tail(&transfer[2], &msg);
 #endif
-	
+
 	if (client == NULL) return ERROR_BUS_O;
 	while (retry < I2C_RETRY && ret < OK)
 	{
@@ -434,13 +434,13 @@ int fts_writeThenWriteRead(u8 *writeCmd1, int writeCmdLength, u8 *readCmd1, int 
 
 
 /**
-* Perform a chunked write with one byte op code and 1 to 8 bytes address 
+* Perform a chunked write with one byte op code and 1 to 8 bytes address
 * @param cmd byte containing the op code to write
-* @param addrSize address size in byte 
+* @param addrSize address size in byte
 * @param address the starting address
-* @param data pointer of a byte array which contain the bytes to write 
-* @param dataSize size of data  
-* @return OK if success or an error code which specify the type of error encountered 
+* @param data pointer of a byte array which contain the bytes to write
+* @param dataSize size of data
+* @return OK if success or an error code which specify the type of error encountered
 */
 //this function works only if the address is max 8 bytes
 int fts_writeU8UX(u8 cmd, AddrSize addrSize, u64 address, u8 *data, int dataSize)
@@ -452,7 +452,7 @@ int fts_writeU8UX(u8 cmd, AddrSize addrSize, u64 address, u8 *data, int dataSize
 
 	if (addrSize<=sizeof(u64))
 	{
-		
+
 		while (remaining > 0)
 		{
 			if (remaining >= WRITE_CHUNK)
@@ -496,12 +496,12 @@ int fts_writeU8UX(u8 cmd, AddrSize addrSize, u64 address, u8 *data, int dataSize
 /**
 * Perform a chunked write read with one byte op code and 1 to 8 bytes address and dummy byte support.
 * @param cmd byte containing the op code to write
-* @param addrSize address size in byte 
+* @param addrSize address size in byte
 * @param address the starting address
-* @param outBuf pointer of a byte array which contain the bytes to read 
+* @param outBuf pointer of a byte array which contain the bytes to read
 * @param byteToRead number of bytes to read
 * @param hasDummyByte  if the first byte of each reading is dummy (must be skipped) set to 1, otherwise if it is valid set to 0 (or any other value)
-* @return OK if success or an error code which specify the type of error encountered 
+* @return OK if success or an error code which specify the type of error encountered
 */
 int fts_writeReadU8UX(u8 cmd, AddrSize addrSize, u64 address, u8* outBuf, int byteToRead, int hasDummyByte){
 	u8 finalCmd[1 + addrSize];
@@ -551,19 +551,19 @@ int fts_writeReadU8UX(u8 cmd, AddrSize addrSize, u64 address, u8* outBuf, int by
 	}
 
 	return OK;
-	
+
 }
 
 /**
-* Perform a chunked write followed by a second write with one byte op code  for each write and 1 to 8 bytes address (the sum of the 2 address size of the two writes can not exceed 8 bytes) 
+* Perform a chunked write followed by a second write with one byte op code  for each write and 1 to 8 bytes address (the sum of the 2 address size of the two writes can not exceed 8 bytes)
 * @param cmd1 byte containing the op code of first write
 * @param addrSize1 address size in byte of first write
 * @param cmd2 byte containing the op code of second write
-* @param addrSize2 address size in byte of second write	
-* @param address the starting address 
-* @param data pointer of a byte array which contain the bytes to write 
-* @param dataSize size of data  
-* @return OK if success or an error code which specify the type of error encountered 
+* @param addrSize2 address size in byte of second write
+* @param address the starting address
+* @param data pointer of a byte array which contain the bytes to write
+* @param dataSize size of data
+* @return OK if success or an error code which specify the type of error encountered
 */
 //this function works only if the sum of two addresses in the two commands is max 8 bytes
 int fts_writeU8UXthenWriteU8UX(u8 cmd1, AddrSize addrSize1, u8 cmd2, AddrSize addrSize2, u64 address, u8 *data, int dataSize)
@@ -625,11 +625,11 @@ int fts_writeU8UXthenWriteU8UX(u8 cmd1, AddrSize addrSize1, u8 cmd2, AddrSize ad
 * @param addrSize1 address size in byte of first write
 * @param cmd2 byte containing the op code of second write read
 * @param addrSize2 address size in byte of second write	read
-* @param address the starting address 
-* @param outBuf pointer of a byte array which contain the bytes to read 
+* @param address the starting address
+* @param outBuf pointer of a byte array which contain the bytes to read
 * @param byteToRead number of bytes to read
 * @param hasDummyByte  if the first byte of each reading is dummy (must be skipped) set to 1, otherwise if it is valid set to 0 (or any other value)
-* @return OK if success or an error code which specify the type of error encountered 
+* @return OK if success or an error code which specify the type of error encountered
 */
 //this function works only if the sum of two addresses in the two commands is max 8 bytes
 int fts_writeU8UXthenWriteReadU8UX(u8 cmd1, AddrSize addrSize1, u8 cmd2, AddrSize addrSize2, u64 address, u8 *outBuf, int byteToRead, int hasDummyByte)
@@ -640,7 +640,7 @@ int fts_writeU8UXthenWriteReadU8UX(u8 cmd1, AddrSize addrSize1, u8 cmd2, AddrSiz
 	int remaining = byteToRead;
 	int toRead = 0, i = 0;
 
-	
+
 	while (remaining > 0)
 	{
 		if (remaining >= READ_CHUNK)
@@ -652,8 +652,8 @@ int fts_writeU8UXthenWriteReadU8UX(u8 cmd1, AddrSize addrSize1, u8 cmd2, AddrSiz
 			toRead = remaining;
 			remaining = 0;
 		}
-		
-		
+
+
 		finalCmd1[0] = cmd1;
 		for (i = 0; i < addrSize1; i++)
 		{
@@ -698,9 +698,3 @@ int fts_writeU8UXthenWriteReadU8UX(u8 cmd1, AddrSize addrSize1, u8 cmd2, AddrSiz
 
 	return OK;
 }
-
-
-
-
-
-

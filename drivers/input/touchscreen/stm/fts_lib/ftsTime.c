@@ -15,7 +15,7 @@
 
 /*!
 * \file ftsTime.c
-* \brief Contains all functions to handle and measure the time in the driver 
+* \brief Contains all functions to handle and measure the time in the driver
 */
 
 #include "ftsTime.h"
@@ -34,7 +34,7 @@
 
 
 /**
-* Take the starting time and save it in a StopWatch variable 
+* Take the starting time and save it in a StopWatch variable
 * @param w pointer of a StopWatch struct
 */
 void startStopWatch(StopWatch *w) {
@@ -42,7 +42,7 @@ void startStopWatch(StopWatch *w) {
 }
 
 /**
-* Take the stop time and save it in a StopWatch variable 
+* Take the stop time and save it in a StopWatch variable
 * @param w pointer of a StopWatch struct
 */
 void stopStopWatch(StopWatch *w) {
@@ -56,7 +56,7 @@ void stopStopWatch(StopWatch *w) {
 */
 int elapsedMillisecond(StopWatch *w) {
 	int result;
-	
+
 	result = ((w->end.tv_sec - w->start.tv_sec)*1000) + (w->end.tv_nsec - w->start.tv_nsec) / 1000000;
 	return result;
 }
@@ -72,4 +72,3 @@ int elapsedNanosecond(StopWatch *w) {
 	result = ((w->end.tv_sec - w->start.tv_sec)*1000000000) + (w->end.tv_nsec - w->start.tv_nsec);
 	return result;
 }
-

@@ -33,10 +33,10 @@
  */
 
 //FIRST LEVEL ERROR CODE
-/** @defgroup first_level	First Level Error Code 
+/** @defgroup first_level	First Level Error Code
 * @ingroup error_codes
-* Errors related to low level operation which are not under control of driver, such as: communication protocol (I2C/SPI), timeout, file operations ... 
-* @{ 
+* Errors related to low level operation which are not under control of driver, such as: communication protocol (I2C/SPI), timeout, file operations ...
+* @{
 */
 #define OK								(int)0x00000000							///< No ERROR
 #define ERROR_ALLOC						(int)0x80000001							///< allocation of memory failed
@@ -49,20 +49,20 @@
 #define ERROR_FILE_NOT_FOUND			(int)0x80000008							///< the file that i want to open is not found
 #define ERROR_FILE_PARSE				(int)0x80000009							///< error during parsing the file
 #define ERROR_FILE_READ					(int)0x8000000A							///< error during reading the file
-#define ERROR_LABEL_NOT_FOUND			(int)0x8000000B							///< label not found 
+#define ERROR_LABEL_NOT_FOUND			(int)0x8000000B							///< label not found
 #define ERROR_FW_NO_UPDATE				(int)0x8000000C							///< fw in the chip newer than the one in the memmh
 #define ERROR_FLASH_UNKNOWN				(int)0x8000000D							///< flash status busy or unknown
 /** @}*/
 
 //SECOND LEVEL ERROR CODE
-/** @defgroup second_level Second Level Error Code 
+/** @defgroup second_level Second Level Error Code
 * @ingroup error_codes
-* Errors related to simple logic operations in the IC which require one command or which are part of a more complex procedure 
-* @{ 
+* Errors related to simple logic operations in the IC which require one command or which are part of a more complex procedure
+* @{
 */
 #define ERROR_DISABLE_INTER				(int)0x80000200							///< unable to disable the interrupt
 #define ERROR_ENABLE_INTER				(int)0x80000300							///< unable to activate the interrup
-#define ERROR_READ_CONFIG				(int)0x80000400							///< failed to read config memory	
+#define ERROR_READ_CONFIG				(int)0x80000400							///< failed to read config memory
 #define ERROR_GET_OFFSET				(int)0x80000500							///< unable to read an offset from memory
 #define ERROR_GET_FRAME_DATA			(int)0x80000600							///< unable to retrieve the data of a required frame
 #define ERROR_DIFF_DATA_TYPE			(int)0x80000700							///< FW answers with an event that has a different address respect the request done
@@ -83,10 +83,10 @@
 /** @}*/
 
 //THIRD LEVEL ERROR CODE
-/** @defgroup third_level	Third Level Error Code 
+/** @defgroup third_level	Third Level Error Code
 * @ingroup error_codes
 * Errors related to logic operations in the IC which require more commands/steps or which are part of a more complex procedure
-* @{ 
+* @{
 */
 #define ERROR_REQU_COMP_DATA			(int)0x80010000							///< compensation data request failed
 #define ERROR_REQU_DATA					(int)0x80020000							///< data request failed
@@ -106,28 +106,28 @@
 /** @}*/
 
 //FOURTH LEVEL ERROR CODE
-/** @defgroup fourth_level	Fourth Level Error Code 
+/** @defgroup fourth_level	Fourth Level Error Code
 * @ingroup error_codes
 * Errors related to the highest logic operations in the IC which have an important impact on the driver flow or which require several commands and steps to be executed
-* @{ 
+* @{
 */
 #define ERROR_PROD_TEST_DATA			(int)0x81000000							///< production data test failed
 #define ERROR_FLASH_PROCEDURE			(int)0x82000000							///< fw update procedure failed
 #define ERROR_PROD_TEST_ITO				(int)0x83000000							///< production ito test failed
 #define ERROR_PROD_TEST_INITIALIZATION	(int)0x84000000							///< production initialization test failed
-#define ERROR_GET_INIT_STATUS			(int)0x85000000							///< mismatch of the MS or SS tuning_version 
+#define ERROR_GET_INIT_STATUS			(int)0x85000000							///< mismatch of the MS or SS tuning_version
 /** @}*/
 
 /** @}*/	//end of error_commands section
 
 /**
 * Struct which store an ordered list of the errors events encountered during the polling of a FIFO.
-* The max number of error events that can be stored is equal to FIFO_DEPTH 
+* The max number of error events that can be stored is equal to FIFO_DEPTH
 */
 typedef struct{
 	u8 list[FIFO_DEPTH*FIFO_EVENT_SIZE];										///< byte array which contains the series of error events encountered from the last reset of the list.
 	int count;																	///< number of error events stored in the list
-	int last_index;																///< index of the list where will be stored the next error event. Subtract -1 to have the index of the last error event! 
+	int last_index;																///< index of the list where will be stored the next error event. Subtract -1 to have the index of the last error event!
 } ErrorList;
 
 

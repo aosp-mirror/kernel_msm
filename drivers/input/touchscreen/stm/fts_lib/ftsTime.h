@@ -15,7 +15,7 @@
 
 /*!
 * \file ftsTime.h
-* \brief Contains all the definitions and structs to handle and measure the time in the driver 
+* \brief Contains all the definitions and structs to handle and measure the time in the driver
 */
 
 #ifndef FTS_TIME_H
@@ -25,9 +25,9 @@
 #include <linux/time.h>
 
 //TIMEOUT
-/** @defgroup timeouts	 Timeouts 
+/** @defgroup timeouts	 Timeouts
 * Definitions of all the Timeout used in several operations
-* @{ 
+* @{
 */
 #define TIMEOUT_RESOLUTION							2							///< timeout resolution in ms (all timeout should be multiples of this unit)
 #define GENERAL_TIMEOUT								50*TIMEOUT_RESOLUTION		///< general timeout in ms
@@ -46,7 +46,7 @@
 *	Struct used to measure the time elapsed between a starting and ending point.
 */
 typedef struct {
-	struct timespec start;														///< store the starting time 
+	struct timespec start;														///< store the starting time
 	struct timespec end;														///< store the finishing time
 } StopWatch;
 

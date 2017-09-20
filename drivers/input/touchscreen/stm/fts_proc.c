@@ -38,26 +38,26 @@
 #include "fts_lib/ftsTool.h"
 
 
-#define DRIVER_TEST_FILE_NODE								"driver_test"		///< name of file node published 
-#define CHUNK_PROC											1024				///< Max chunk of data printed on the sequential file in each iteration 
+#define DRIVER_TEST_FILE_NODE								"driver_test"		///< name of file node published
+#define CHUNK_PROC											1024				///< Max chunk of data printed on the sequential file in each iteration
 #define DIAGNOSTIC_NUM_FRAME								10					///< number of frames reading iterations during the diagnostic test
 
 
 
-/** @defgroup proc_file_code	 Proc File Node  
+/** @defgroup proc_file_code	 Proc File Node
 * @ingroup file_nodes
 * The /proc/fts/driver_test file node provide expose the most important API implemented into the driver to execute any possible operation into the IC \n
 * Thanks to a series of Operation Codes, each of them, with a different set of parameter, it is possible to select a function to execute\n
-* The result of the function is usually returned into the shell as an ASCII hex string where each byte is encoded in two chars.\n 
-* @{ 
+* The result of the function is usually returned into the shell as an ASCII hex string where each byte is encoded in two chars.\n
+* @{
 */
 
-//Bus operations 
+//Bus operations
 #define CMD_READ											0x00				///< I2C/SPI read: need to pass: byteToRead1 byteToRead0 (optional) dummyByte
-#define CMD_WRITE											0x01				///< I2C/SPI write: need to pass: cmd[0]  cmd[1] … cmd[cmdLength-1] 
+#define CMD_WRITE											0x01				///< I2C/SPI write: need to pass: cmd[0]  cmd[1] … cmd[cmdLength-1]
 #define CMD_WRITEREAD										0x02				///< I2C/SPI writeRead: need to pass: cmd[0]  cmd[1] … cmd[cmdLength-1] byteToRead1 byteToRead0 dummyByte
 #define CMD_WRITETHENWRITEREAD								0x03				///< I2C/SPI write then writeRead: need to pass: cmdSize1 cmdSize2 cmd1[0] cmd1[1] … cmd1[cmdSize1-1] cmd2[0] cmd2[1] … cmd2[cmdSize2-1]  byteToRead1 byteToRead0
-#define CMD_WRITEU8UX										0x04				///< I2C/SPI writeU8UX: need to pass: cmd addrSize addr[0] … addr[addrSize-1] data[0] data[1] … 
+#define CMD_WRITEU8UX										0x04				///< I2C/SPI writeU8UX: need to pass: cmd addrSize addr[0] … addr[addrSize-1] data[0] data[1] …
 #define CMD_WRITEREADU8UX									0x05				///< I2C/SPI writeReadU8UX: need to pass: cmd addrSize addr[0] … addr[addrSize-1] byteToRead1 byteToRead0 hasDummyByte
 #define CMD_WRITEU8UXTHENWRITEU8UX							0x06				///< I2C/SPI writeU8UX then writeU8UX: need to pass: cmd1 addrSize1 cmd2 addrSize2 addr[0] … addr[addrSize1+addrSize2-1] data[0] data[1] …
 #define CMD_WRITEU8UXTHENWRITEREADU8UX						0x07				///< I2C/SPI writeU8UX  then writeReadU8UX: need to pass: cmd1 addrSize1 cmd2 addrSize2 addr[0] … addr[addrSize1+addrSize2-1]  byteToRead1 byteToRead0 hasDummybyte
@@ -79,20 +79,20 @@
 #define CMD_GETLIMITSFILE_BYTE								0xF8				///< Byte output version of Production Limits File @see CMD_GETLIMITSFILE
 #define CMD_GETFWFILE_BYTE									0xF9				///< Byte output version of FW file need to pass: @see CMD_GETFWFILE
 #define CMD_VERSION_BYTE									0xFA				///< Byte output version of driver version and setting @see CMD_VERSION
-#define CMD_CHANGE_OUTPUT_MODE								0xFF				///< Select the output mode of the scriptless protocol, need to pass: bin_output = 1 data returned as binary, bin_output =0 data returned as hex string 
+#define CMD_CHANGE_OUTPUT_MODE								0xFF				///< Select the output mode of the scriptless protocol, need to pass: bin_output = 1 data returned as binary, bin_output =0 data returned as hex string
 
 //Core/Tools
 #define CMD_POLLFOREVENT									0x11				///< Poll the FIFO for an event: need to pass: eventLength event[0] event[1] … event[eventLength-1] timeToWait1 timeToWait0
 #define CMD_SYSTEMRESET										0x12				///< System Reset
-#define CMD_CLEANUP											0x13				///< Perform a system reset and optionally re-enable the scanning, need to pass: enableTouch 
+#define CMD_CLEANUP											0x13				///< Perform a system reset and optionally re-enable the scanning, need to pass: enableTouch
 #define CMD_POWERCYCLE										0x14				///< Execute a power cycle toggling the regulators
 #define CMD_READSYSINFO										0x15				///< Read the System Info information from the framebuffer, need to pass: doRequest
-#define CMD_FWWRITE											0x16				///< Write a FW command: need to pass: cmd[0]  cmd[1] … cmd[cmdLength-1] 
-#define CMD_INTERRUPT										0x17				///< Allow to enable or disable the interrupts, need to pass: enable (if 1 will enable the interrupt) 
+#define CMD_FWWRITE											0x16				///< Write a FW command: need to pass: cmd[0]  cmd[1] … cmd[cmdLength-1]
+#define CMD_INTERRUPT										0x17				///< Allow to enable or disable the interrupts, need to pass: enable (if 1 will enable the interrupt)
 
 //Frame
 #define CMD_GETFORCELEN										0x20				///< Get the number of Force channels
-#define CMD_GETSENSELEN										0x21				///< Get the number of Sense channels				
+#define CMD_GETSENSELEN										0x21				///< Get the number of Sense channels
 #define CMD_GETMSFRAME										0x23				///< Get a MS frame: need to pass: MSFrameType
 #define CMD_GETSSFRAME										0x24				///< Get a SS frame: need to pass: SSFrameType
 
@@ -100,7 +100,7 @@
 #define CMD_REQCOMPDATA										0x30				///< Request Init data: need to pass: type
 #define CMD_READCOMPDATAHEAD								0x31				///< Read Init data header: need to pass: type
 #define CMD_READMSCOMPDATA									0x32				///< Read MS Init data: need to pass: type
-#define CMD_READSSCOMPDATA									0x33				///< Read SS Init data: need to pass: type				
+#define CMD_READSSCOMPDATA									0x33				///< Read SS Init data: need to pass: type
 #define CMD_READTOTMSCOMPDATA								0x35				///< Read Tot MS Init data: need to pass: type
 #define CMD_READTOTSSCOMPDATA								0x36				///< Read Tot SS Init data: need to pass: type
 
@@ -112,7 +112,7 @@
 #define CMD_FLASHPROCEDURE									0x44				///< Perform a full flashing procedure: need to pass: force keep_cx
 #ifndef FTM3_CHIP
 #define CMD_FLASHERASEUNLOCK								0x45				///< Unlock the erase of the flash
-#define CMD_FLASHERASEPAGE									0x46				///< Erase page by page the flash, need to pass: keep_cx, if keep_cx>SKIP_PANEL_INIT Panel Init Page will be skipped, if >SKIP_PANEL_CX_INIT Cx and Panel Init Pages will be skipped otherwise if =ERASE_ALL all the pages will be deleted 
+#define CMD_FLASHERASEPAGE									0x46				///< Erase page by page the flash, need to pass: keep_cx, if keep_cx>SKIP_PANEL_INIT Panel Init Page will be skipped, if >SKIP_PANEL_CX_INIT Cx and Panel Init Pages will be skipped otherwise if =ERASE_ALL all the pages will be deleted
 #endif
 
 //MP test
@@ -141,25 +141,25 @@ static u8 bin_output = 0;														///< Select the output type of the script
 
 #define MESSAGE_START_BYTE									0x7B				///< start byte of each message transferred in Scriptless Mode
 #define MESSAGE_END_BYTE									0x7D				///< end byte of each message transferred in Scriptless Mode
-#define MESSAGE_MIN_HEADER_SIZE								8					///< minimun number of bytes of the structure of a messages exchanged with host (include start/end byte, counter, actions, msg_size) 
+#define MESSAGE_MIN_HEADER_SIZE								8					///< minimun number of bytes of the structure of a messages exchanged with host (include start/end byte, counter, actions, msg_size)
 
 /**
- * Possible actions that can be requested by an host 
+ * Possible actions that can be requested by an host
  */
 typedef enum{
-	ACTION_WRITE = (u16) 0x0001,												///< Bus Write							
+	ACTION_WRITE = (u16) 0x0001,												///< Bus Write
 	ACTION_READ = (u16) 0x0002,													///< Bus Read
 	ACTION_WRITE_READ = (u16) 0x0003,											///< Bus Write followed by a Read
 	ACTION_GET_VERSION = (u16) 0x0004,											///< Get Version of the protocol (equal to the first 2 bye of driver version)
-	ACTION_WRITEU8UX = (u16) 0x0011,											///< Bus Write with support to different address size 
+	ACTION_WRITEU8UX = (u16) 0x0011,											///< Bus Write with support to different address size
 	ACTION_WRITEREADU8UX = (u16) 0x0012,										///< Bus writeRead with support to different address size
-	ACTION_WRITETHENWRITEREAD = (u16) 0x0013,									///< Bus write followed by a writeRead 
+	ACTION_WRITETHENWRITEREAD = (u16) 0x0013,									///< Bus write followed by a writeRead
 	ACTION_WRITEU8XTHENWRITEREADU8UX = (u16) 0x0014,							///< Bus write followed by a writeRead with support to different address size
 	ACTION_WRITEU8UXTHENWRITEU8UX = (u16) 0x0015,								///< Bus write followed by a write with support to different address size
 	ACTION_GET_FW = (u16) 0x1000,												///< Get Fw file content used by the driver
 	ACTION_GET_LIMIT = (u16) 0x1001												///< Get Limit File content used by the driver
 }Actions;
- 
+
 /**
  * Struct used to contain info of the message received by the host in Scriptless mode
  */
@@ -176,62 +176,62 @@ typedef struct{
 
 extern TestToDo tests;
 
-static int limit = 0;															///< store the amount of data to print into the shell			
+static int limit = 0;															///< store the amount of data to print into the shell
 static int chunk =0;															///< store the chuk of data that should be printed in this iteration
 static int printed=0;															///< store the amount of data already printed in the shell
 static struct proc_dir_entry* fts_dir = NULL;									///< reference to the directory fts under /proc
 static u8* driver_test_buff = NULL;												///< pointer to an array of bytes used to store the result of the function executed
 char buf_chunk[CHUNK_PROC] = {0};												///< buffer used to store the message info received
 static Message mess = {0};														///< store the information of the Scriptless message received
-													
+
 
 /************************ SEQUENTIAL FILE UTILITIES **************************/
 /**
 * This function is called at the beginning of the stream to a sequential file or every time into the sequential were already written PAGE_SIZE bytes and the stream need to restart
 * @param s pointer to the sequential file on which print the data
 * @param pos pointer to the offset where write the data
-* @return NULL if there is no data to print or the pointer to the beginning of the data that need to be printed 
+* @return NULL if there is no data to print or the pointer to the beginning of the data that need to be printed
 */
 static void *fts_seq_start(struct seq_file *s, loff_t *pos)
 {
-	
+
 	logError(0, "%s %s: Entering start(), pos = %Ld limit = %d printed = %d \n", tag, __func__, *pos, limit, printed);
 
 	if (driver_test_buff == NULL && *pos == 0)
 	{
 		logError(1, "%s %s: No data to print!\n", tag, __func__);
 		driver_test_buff = (u8* )kmalloc(13*sizeof(u8),GFP_KERNEL);
-		
+
 		sprintf(driver_test_buff, "{ %08X }\n", ERROR_OP_NOT_ALLOW);
 
-		
+
 		limit = strlen(driver_test_buff);
 		//logError(0, "%s %s: len = %d driver_test_buff = %s  \n", tag, __func__, limit, driver_test_buff);
 	} else
 	{
 		if(*pos!=0)
 			*pos+=chunk-1;
-		
+
 		if (*pos >= limit)
-		{ 
+		{
 			//logError(0, "%s %s: Apparently, we're done.\n", tag, __func__);
 			return NULL;
 		}
 	}
-	
+
 		chunk = CHUNK_PROC;
 		if (limit - *pos < CHUNK_PROC)
 			chunk = limit - *pos;
 		//logError(0, "%s %s: In start(), updated pos = %Ld limit = %d printed = %d chunk = %d \n", tag, __func__, *pos, limit, printed, chunk);
 		memset(buf_chunk, 0, CHUNK_PROC);
 		memcpy(buf_chunk, &driver_test_buff[(int)*pos], chunk);
-	
+
 	return buf_chunk;
 }
 
 /**
 * This function actually print a chunk amount of data in the sequential file
-* @param s pointer to the sequential file where to print the data 
+* @param s pointer to the sequential file where to print the data
 * @param v pointer to the data to print
 * @return 0
 */
@@ -248,7 +248,7 @@ static int fts_seq_show(struct seq_file *s, void *v)
 * @param s pointer to the sequential file where to print the data
 * @param v pointer to the data to print
 * @param pos pointer to the offset where write the next data
-* @return NULL if there is no data to print or the pointer to the beginning of the next data that need to be printed 
+* @return NULL if there is no data to print or the pointer to the beginning of the next data that need to be printed
 */
 static void *fts_seq_next(struct seq_file *s, void *v, loff_t *pos)
 {
@@ -276,7 +276,7 @@ static void *fts_seq_next(struct seq_file *s, void *v, loff_t *pos)
 /**
 * This function is called when there are no more data to print  the stream need to be terminated or when PAGE_SIZE data were already written into the sequential file
 * @param s pointer to the sequential file where to print the data
-* @param v pointer returned by fts_seq_next 
+* @param v pointer returned by fts_seq_next
 */
 static void fts_seq_stop(struct seq_file *s, void *v)
 {
@@ -307,7 +307,7 @@ static void fts_seq_stop(struct seq_file *s, void *v)
 }
 
 /**
-* Struct where define and specify the functions which implements the flow for writing on a sequential file 
+* Struct where define and specify the functions which implements the flow for writing on a sequential file
 */
 static struct seq_operations fts_seq_ops = {
 	.start = fts_seq_start,
@@ -316,7 +316,7 @@ static struct seq_operations fts_seq_ops = {
 	.show = fts_seq_show
 };
 
-/** 
+/**
 * This function open a sequential file
 * @param inode Inode in the file system that was called and triggered this function
 * @param file file associated to the file node
@@ -375,15 +375,15 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 
 	Firmware fw;
 	LimitFile lim;
-	
+
 	mess.dummy=0;
 	mess.action=0;
 	mess.msg_size =0;
-	
+
 	/*for(temp = 0; temp<count; temp++){
 		logError(0,"%s p[%d] = %02X \n",tag, temp, p[temp]);
 	}*/
-	
+
 	if(count>MESSAGE_MIN_HEADER_SIZE-1 && p[0]== MESSAGE_START_BYTE){
 		logError(0,"%s Enter in Byte Mode! \n",tag);
 		byte_call = 1;
@@ -391,7 +391,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 		mess.counter = (p[3]<<8)|p[4];
 		mess.action = (p[5]<<8)|p[6];
 		logError(0, "%s Message received: size = %d, counter_id = %d, action = %04X \n", tag, mess.msg_size, mess.counter, mess.action);
-		size =MESSAGE_MIN_HEADER_SIZE+2; //+2 error code 
+		size =MESSAGE_MIN_HEADER_SIZE+2; //+2 error code
 		if(count< mess.msg_size || p[count-2]!=MESSAGE_END_BYTE){
 			logError(1, "%s number of byte received or end byte wrong! msg_size = %d != %d, last_byte = %02X != %02X ... ERROR %08X\n", tag, mess.msg_size, count, p[count-1], MESSAGE_END_BYTE, ERROR_OP_NOT_ALLOW);
 			res = ERROR_OP_NOT_ALLOW;
@@ -404,47 +404,47 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 				//numberParam = mess.msg_size-MESSAGE_MIN_HEADER_SIZE+1;
 				cmd[0] = funcToTest[0] = CMD_READ_BYTE;
 				break;
-				
+
 			case ACTION_WRITE:
 				cmd[0] = funcToTest[0] = CMD_WRITE_BYTE;
 				break;
-				
+
 			case ACTION_WRITE_READ:
 				cmd[0] = funcToTest[0] = CMD_WRITEREAD_BYTE;
 				break;
-				
+
 			case ACTION_GET_VERSION:
 				cmd[0] = funcToTest[0] = CMD_VERSION_BYTE;
 				break;
-				
+
 			case ACTION_WRITETHENWRITEREAD:
 				cmd[0] = funcToTest[0] = CMD_WRITETHENWRITEREAD_BYTE;
 				break;
-				
+
 			case ACTION_WRITEU8UX:
 				cmd[0] = funcToTest[0] = CMD_WRITEU8UX_BYTE;
 				break;
-				
+
 			case ACTION_WRITEREADU8UX:
 				cmd[0] = funcToTest[0] = CMD_WRITEREADU8UX_BYTE;
 				break;
-				
+
 			case ACTION_WRITEU8UXTHENWRITEU8UX:
 				cmd[0] = funcToTest[0] = CMD_WRITEU8UXTHENWRITEU8UX_BYTE;
 				break;
-				
+
 			case ACTION_WRITEU8XTHENWRITEREADU8UX:
 				cmd[0] = funcToTest[0] = CMD_WRITEU8UXTHENWRITEREADU8UX_BYTE;
 				break;
-				
+
 			case ACTION_GET_FW:
 				cmd[0] = funcToTest[0] = CMD_GETFWFILE_BYTE;
 				break;
-				
+
 			case ACTION_GET_LIMIT:
 				cmd[0] = funcToTest[0] = CMD_GETLIMITSFILE_BYTE;
 				break;
-				
+
 			default:
 				logError(1, "%s Invalid Action = %d ... ERROR %08X\n", tag, mess.action, ERROR_OP_NOT_ALLOW);
 				res = ERROR_OP_NOT_ALLOW;
@@ -474,7 +474,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 		case CMD_GETLIMITSFILE:
 			if(count - 2 -1 >1){
 				numberParam = 2; //the first byte is an hex string coded in three byte (2 chars for hex and the space) and -1 for the space at the end
-				sscanf(p, "%100s", path);	
+				sscanf(p, "%100s", path);
 			}
 			break;
 
@@ -488,13 +488,13 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 
 			}
 		}
-	
+
 	}
-	
+
 
 	fw.data = NULL;
 	lim.data = NULL;
-	
+
 	logError(1, "%s Number of Parameters = %d \n", tag, numberParam);
 
 	//elaborate input
@@ -505,7 +505,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 		{
 			logError(0, "%s %s: ERROR %08X \n", tag, __func__, res);
 			res = (res | ERROR_DISABLE_INTER);
-			goto END;			
+			goto END;
 		}
 		switch (funcToTest[0])
 		{
@@ -524,14 +524,14 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 				logError(1, "%s %s: Impossible allocate memory... ERROR %08X \n", tag, __func__, res);
 			}
 			break;
-			
-			
+
+
 		case CMD_VERSION:
 			byteToRead = 2 * sizeof (u32);
 			mess.dummy = 0;
 			readData = (u8*) kmalloc(byteToRead * sizeof (u8), GFP_KERNEL);
 			u32ToU8_be(FTS_TS_DRV_VER, readData);
-			fileSize = 0;		
+			fileSize = 0;
 			//first two bytes bitmask of features enabled in the IC, second two bytes bitmask of features enabled in the driver
 
 #ifdef FW_H_FILE
@@ -541,58 +541,58 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 #ifdef LIMITS_H_FILE
 			fileSize|=0x00020000;
 #endif
-			
-#ifdef USE_ONE_FILE_NODE	
+
+#ifdef USE_ONE_FILE_NODE
 			fileSize|=0x00040000;
 #endif
 
 #ifdef FW_UPDATE_ON_PROBE
 			fileSize|=0x00080000;
 #endif
-			
+
 #ifdef ENGINEERING_CODE
 			fileSize|=0x00100000;
 #endif
 
 #ifdef COMPUTE_CX_ON_PHONE
 			fileSize|=0x00200000;
-#endif			
-			
+#endif
+
 #ifdef USE_GESTURE_MASK
 			fileSize|=0x00100000;
 #endif
 
 #ifdef I2C_INTERFACE
 			fileSize|=0x00200000;
-#endif			
-			
+#endif
+
 #ifdef PHONE_KEY					//it is a feature enabled in the config of the chip
 			fileSize|=0x00000100;
 #endif
-			
+
 #ifdef GESTURE_MODE
 			fromIDtoMask(FEAT_SEL_GESTURE,(u8*)&fileSize,4);
-#endif 
+#endif
 
-			
-#ifdef GRIP_MODE			
+
+#ifdef GRIP_MODE
 			fromIDtoMask(FEAT_SEL_GRIP,(u8*)&fileSize,4);
 #endif
 
-#ifdef CHARGER_MODE			
+#ifdef CHARGER_MODE
 			fromIDtoMask(FEAT_SEL_CHARGER,(u8*)&fileSize,4);
 #endif
 
-#ifdef GLOVE_MODE			
+#ifdef GLOVE_MODE
 			fromIDtoMask(FEAT_SEL_GLOVE,(u8*)&fileSize,4);
 #endif
 
 
-#ifdef COVER_MODE			
+#ifdef COVER_MODE
 			fromIDtoMask(FEAT_SEL_COVER,(u8*)&fileSize,4);
 #endif
-			
-#ifdef STYLUS_MODE			
+
+#ifdef STYLUS_MODE
 			fromIDtoMask(FEAT_SEL_STYLUS,(u8*)&fileSize,4);
 #endif
 
@@ -600,20 +600,20 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 			res = OK;
 			size += (byteToRead * sizeof (u8));
 			break;
-			
+
 		case CMD_WRITEREAD:
 		case CMD_WRITEREAD_BYTE:
 			if (numberParam >= 5)
 			{ //need to pass: cmd[0]  cmd[1] … cmd[cmdLength-1] byteToRead1 byteToRead0 dummyByte
-				
+
 					temp = numberParam - 4;
 					if(cmd[numberParam - 1]==0){
 						mess.dummy = 0;
 					}else
 						mess.dummy = 1;
-				
-				
-	
+
+
+
 				u8ToU16_be(&cmd[numberParam - 3], &byteToRead);
 				logError(0, "%s bytesToRead = %d \n", tag, byteToRead+mess.dummy);
 
@@ -631,10 +631,10 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 		case CMD_WRITE:
 		case CMD_WRITE_BYTE:
 			if (numberParam >= 2)
-			{ //need to pass: cmd[0]  cmd[1] … cmd[cmdLength-1] 
-				
+			{ //need to pass: cmd[0]  cmd[1] … cmd[cmdLength-1]
+
 				temp = numberParam - 1;
-				
+
 				res = fts_write(&cmd[1], temp);
 
 			} else
@@ -668,7 +668,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 		case CMD_WRITETHENWRITEREAD_BYTE:
 			//need to pass: cmdSize1 cmdSize2 cmd1[0] cmd1[1] … cmd1[cmdSize1-1] cmd2[0] cmd2[1] … cmd2[cmdSize2-1]  byteToRead1 byteToRead0
 			if (numberParam >= 6)
-			{ 	
+			{
 				u8ToU16_be(&cmd[numberParam - 2], &byteToRead);
 				readData = (u8*) kmalloc(byteToRead * sizeof (u8), GFP_KERNEL);
 				res = fts_writeThenWriteRead(&cmd[3], cmd[1], &cmd[3 + (int) cmd[1]], cmd[2], readData, byteToRead);
@@ -683,16 +683,16 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 
 		case CMD_WRITEU8UX:
 		case CMD_WRITEU8UX_BYTE:
-			//need to pass: cmd addrSize addr[0] … addr[addrSize-1] data[0] data[1] … 
+			//need to pass: cmd addrSize addr[0] … addr[addrSize-1] data[0] data[1] …
 			if (numberParam >= 4)
 			{
 				if (cmd[2] <= sizeof (u64))
 				{
-				
+
 					u8ToU64_be(&cmd[3], &addr, cmd[2]);
 					logError(0, "%s addr = %016X %ld \n", tag, addr, addr);
 					res = fts_writeU8UX(cmd[1], cmd[2], addr, &cmd[3 + cmd[2]], (numberParam - cmd[2] - 3));
-					
+
 				} else
 				{
 					logError(1, "%s Wrong address size!\n", tag);
@@ -709,20 +709,20 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 
 		case CMD_WRITEREADU8UX:
 		case CMD_WRITEREADU8UX_BYTE:
-			//need to pass: cmd addrSize addr[0] … addr[addrSize-1] byteToRead1 byteToRead0 hasDummyByte 
+			//need to pass: cmd addrSize addr[0] … addr[addrSize-1] byteToRead1 byteToRead0 hasDummyByte
 			if (numberParam >= 6)
 			{
 
 				if (cmd[2] <= sizeof (u64))
 				{
-					
+
 					u8ToU64_be(&cmd[3], &addr, cmd[2]);
 					u8ToU16_be(&cmd[numberParam - 3], &byteToRead);
 					readData = (u8*) kmalloc(byteToRead * sizeof (u8), GFP_KERNEL);
 					logError(0, "%s addr = %016X byteToRead = %d \n", tag, addr, byteToRead);
 					res = fts_writeReadU8UX(cmd[1], cmd[2], addr, readData, byteToRead, cmd[numberParam - 1]);
 					size += (byteToRead * sizeof (u8));
-					
+
 				} else
 				{
 					logError(1, "%s Wrong address size!\n", tag);
@@ -743,12 +743,12 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 			{
 				if ((cmd[2] + cmd[4]) <= sizeof (u64))
 				{
-					
+
 					u8ToU64_be(&cmd[5], &addr, cmd[2] + cmd[4]);
-					
+
 					logError(0, "%s addr = %016X %ld \n", tag, addr, addr);
 					res = fts_writeU8UXthenWriteU8UX(cmd[1], cmd[2], cmd[3], cmd[4], addr, &cmd[5 + cmd[2] + cmd[4]], (numberParam - cmd[2] - cmd[4] - 5));
-					
+
 				} else
 				{
 					logError(1, "%s Wrong address size! \n", tag);
@@ -788,9 +788,9 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 			}
 
 			break;
-			
+
 		case CMD_CHANGE_OUTPUT_MODE:
-			//need to pass: bin_output 
+			//need to pass: bin_output
 			if(numberParam>=2){
 				bin_output = cmd[1];
 				logError(0, "%s Setting Scriptless output mode: %d \n", tag, bin_output);
@@ -803,7 +803,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 
 		case CMD_FWWRITE:
 			if (numberParam >= 3)
-			{ //need to pass: cmd[0]  cmd[1] … cmd[cmdLength-1] 
+			{ //need to pass: cmd[0]  cmd[1] … cmd[cmdLength-1]
 				if (numberParam >=2)
 				{
 					temp = numberParam - 1;
@@ -820,7 +820,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 				res = ERROR_OP_NOT_ALLOW;
 			}
 			break;
-			
+
 		case CMD_INTERRUPT:
 			//need to pass: enable
 			if (numberParam >= 2)
@@ -836,7 +836,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 			}
 			break;
 
-			
+
 		case CMD_READCONFIG:
 			if (numberParam == 5)
 			{ //need to pass: addr[0]  addr[1] byteToRead1 byteToRead0
@@ -883,7 +883,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 
 		case CMD_READSYSINFO:
 			if (numberParam == 2)
-			{ //need to pass: doRequest 
+			{ //need to pass: doRequest
 				res = readSysInfo(funcToTest[1]);
 			} else
 			{
@@ -895,7 +895,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 
 		case CMD_CLEANUP: // TOUCH ENABLE/DISABLE
 			if (numberParam == 2)
-			{ //need to pass: enableTouch 
+			{ //need to pass: enableTouch
 				res = cleanUp(funcToTest[1]);
 			} else
 			{
@@ -946,7 +946,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 				{
 					logError(0, "%s The frame size is %d words\n", tag, res);
 					size += (res * sizeof (short) + 2);   //+2 to add force and sense channels
-					/* set res to OK because if getMSFrame is 
+					/* set res to OK because if getMSFrame is
 					   successful res = number of words read
 					 */
 					res = OK;
@@ -980,7 +980,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 				{
 					logError(0, "%s The frame size is %d words\n", tag, res);
 					size += (res * sizeof (short) + 2);			//+2 to add force and sense channels
-					/* set res to OK because if getMSFrame is 
+					/* set res to OK because if getMSFrame is
 					   successful res = number of words read
 					 */
 					res = OK;
@@ -1088,7 +1088,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 				res = ERROR_OP_NOT_ALLOW;
 			}
 			break;
-		
+
 		case CMD_READTOTMSCOMPDATA: //read mutual comp data
 			if (numberParam == 2)
 			{
@@ -1213,7 +1213,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 				res = ERROR_OP_NOT_ALLOW;
 			}
 			break;
-#ifndef FTM3_CHIP			
+#ifndef FTM3_CHIP
 		case CMD_FLASHERASEUNLOCK:
 			res = flash_erase_unlock();
 			if (res < OK)
@@ -1224,7 +1224,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 				logError(0, "%s Flash Erase Unlock Finished! \n", tag);
 			}
 			break;
-			
+
 		case CMD_FLASHERASEPAGE:
 			if (numberParam == 2)
 			{ //need to pass: keep_cx
@@ -1265,7 +1265,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 
 
 		case CMD_MSRAWTEST: // MS Raw DATA TEST
-			if (numberParam == 2) //need to specify if stopOnFail 
+			if (numberParam == 2) //need to specify if stopOnFail
 				res = production_test_ms_raw(LIMITS_FILE, cmd[1], &tests);
 			else
 			{
@@ -1275,7 +1275,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 			break;
 
 		case CMD_MSINITDATATEST: // MS CX DATA TEST
-			if (numberParam == 2) //need to specify if stopOnFail 
+			if (numberParam == 2) //need to specify if stopOnFail
 				res = production_test_ms_cx(LIMITS_FILE, cmd[1], &tests);
 			else
 			{
@@ -1285,7 +1285,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 			break;
 
 		case CMD_SSRAWTEST: // SS RAW DATA TEST
-			if (numberParam == 2) //need to specify if stopOnFail 
+			if (numberParam == 2) //need to specify if stopOnFail
 				res = production_test_ss_raw(LIMITS_FILE, cmd[1], &tests);
 			else
 			{
@@ -1295,7 +1295,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 			break;
 
 		case CMD_SSINITDATATEST: // SS IX CX DATA TEST
-			if (numberParam == 2) //need to specify if stopOnFail 
+			if (numberParam == 2) //need to specify if stopOnFail
 				res = production_test_ss_ix_cx(LIMITS_FILE, cmd[1], &tests);
 			else
 			{
@@ -1318,7 +1318,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 		case CMD_POWERCYCLE:
 			res = fts_chip_powercycle(info);
 			break;
-			
+
 		case CMD_GETLIMITSFILE:
 			//need to pass: path(optional) return error code + number of byte read otherwise GUI could not now how many byte read
 			if(numberParam>=1){
@@ -1338,34 +1338,34 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 				res = ERROR_OP_NOT_ALLOW;
 			}
 			break;
-			
+
 		case CMD_GETLIMITSFILE_BYTE:
-			//need to pass: byteToRead1 byteToRead0 
+			//need to pass: byteToRead1 byteToRead0
 			if(numberParam>=3){
 				lim.data = NULL;
 				lim.size = 0;
-				
+
 				u8ToU16_be(&cmd[1],&byteToRead);
 				addr = ((u64)byteToRead)*4;						//number of words
-				
+
 				res = getLimitsFile(LIMITS_FILE, &lim);
-				
+
 				readData = lim.data;
 				fileSize = lim.size;
-				
-				if(fileSize>addr){			
+
+				if(fileSize>addr){
 					logError(1, "%s Limits dimension expected by Host is less than actual size: expected = %d, real = %d \n", tag, byteToRead, fileSize);
 					res = ERROR_OP_NOT_ALLOW;
 				}
-				
+
 				size += (addr * sizeof (u8));
-				
+
 			}else{
 				logError(1, "%s Wrong number of parameters! \n", tag);
 				res = ERROR_OP_NOT_ALLOW;
 			}
 			break;
-			
+
 		case CMD_GETFWFILE:
 			//need to pass: from (optional) otherwise select the approach chosen at compile time
 			if(numberParam>=1){
@@ -1374,7 +1374,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 					res = getFWdata(PATH_FILE_FW, &readData, &fileSize);
 				else
 					res = getFWdata(path, &readData, &fileSize);
-				
+
 				size += (fileSize * sizeof(u8));
 				if(byte_call==1)
 					size+=sizeof(u32);		//transmit as first 4 bytes the size
@@ -1383,21 +1383,21 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 				res = ERROR_OP_NOT_ALLOW;
 			}
 			break;
-			
+
 		case CMD_GETFWFILE_BYTE:
 			//need to pass: byteToRead1 byteToRead0
 			if(numberParam==3){
-				
+
 				u8ToU16_be(&cmd[1],&byteToRead);
 				addr = ((u64)byteToRead)*4;						//number of words
-				
-				
+
+
 				res = getFWdata(PATH_FILE_FW, &readData, &fileSize);
 				if(fileSize>addr){
 					logError(1, "%s FW dimension expected by Host is less than actual size: expected = %d, real = %d \n", tag, byteToRead, fileSize);
 					res = ERROR_OP_NOT_ALLOW;
 				}
-				
+
 				size += (addr * sizeof(u8));				//return always the amount requested by host, if real size is smaller, the data are padded to zero
 
 			}else{
@@ -1405,7 +1405,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 				res = ERROR_OP_NOT_ALLOW;
 			}
 			break;
-		
+
 		// finish all the diagnostic command with a goto ERROR in order to skip the modification on driver_test_buff
 		// remember to set properly the limit and printed variables in order to make the seq_file logic to work
 		case CMD_DIAGNOSTIC:
@@ -1421,7 +1421,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 			}
 			j = snprintf(&driver_test_buff[index],fileSize-index,"DIAGNOSTIC TEST:\n1) I2C Test: ");
 			index+=j;
-			
+
 			res =fts_writeReadU8UX(FTS_CMD_HW_REG_R,ADDR_SIZE_HW_REG, ADDR_DCHIP_ID, (u8*)&temp,2,DUMMY_HW_REG);
 			if(res<OK){
 				logError(1, "%s Error during I2C test: ERROR %08X! \n", tag, res);
@@ -1430,7 +1430,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 				res = ERROR_OP_NOT_ALLOW;
 				goto END_DIAGNOSTIC;
 			}
-			
+
 			temp&=0xFFFF;
 			logError(1, "%s Chip ID = %04X! \n", tag, temp);
 			j = snprintf(&driver_test_buff[index],fileSize-index,"DATA = %04X, expected = %02X%02X \n",temp, DCHIP_ID_1, DCHIP_ID_0);
@@ -1440,10 +1440,10 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 				res = ERROR_OP_NOT_ALLOW;
 				goto END_DIAGNOSTIC;
 			}
-			
+
 			j = snprintf(&driver_test_buff[index],fileSize-index,"Present Driver Mode: %08X \n", info->mode);
 			index+=j;
-			
+
 			j = snprintf(&driver_test_buff[index],fileSize-index,"2) FW running: Sensing On...");
 			index+=j;
 			logError(1, "%s Sensing On! \n", tag, temp);
@@ -1462,7 +1462,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 				j = snprintf(&driver_test_buff[index],fileSize-index,"Echo FOUND... OK!\n");
 				index+=j;
 			}
-			
+
 			logError(1, "%s Reading Frames...! \n", tag, temp);
 			j =snprintf(&driver_test_buff[index],fileSize-index,"3) Read Frames: \n");
 			index+=j;
@@ -1531,13 +1531,13 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 						for (address = 0; address < frameSS.header.force_node;address++)
 						{
 							j = snprintf(&driver_test_buff[index], fileSize-index, "%d\n", frameSS.force_data[address]);
-							
+
 							index+=j;
 						}
 						for (address = 0; address < frameSS.header.sense_node;address++)
 						{
 							j = snprintf(&driver_test_buff[index], fileSize-index, "%d, ", frameSS.sense_data[address]);
-							
+
 							index+=j;
 						}
 						j = snprintf(&driver_test_buff[index], fileSize-index, "\n");
@@ -1547,12 +1547,12 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 					if(frameSS.sense_data!=NULL) kfree(frameSS.sense_data);
 				}
 			}
-			
-			
+
+
 			logError(1, "%s Reading error info... \n", tag, temp);
 			j = snprintf(&driver_test_buff[index],fileSize-index,"4) FW INFO DUMP: ");
 			index+=j;
-			temp = dumpErrorInfo(readData,ERROR_DUMP_ROW_SIZE*ERROR_DUMP_COL_SIZE);		//OR to detect if there are failures also in the previous reading of frames and write the correct result 
+			temp = dumpErrorInfo(readData,ERROR_DUMP_ROW_SIZE*ERROR_DUMP_COL_SIZE);		//OR to detect if there are failures also in the previous reading of frames and write the correct result
 			if(temp<OK){
 				logError(1, "%s Error during dump: ERROR %08X! \n", tag, res);
 				j = snprintf(&driver_test_buff[index],fileSize-index,"ERROR %08X \n",temp);
@@ -1569,7 +1569,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 				}
 			}
 			res|=temp;
-			
+
 END_DIAGNOSTIC:
 			if(res<OK){
 				j = snprintf(&driver_test_buff[index],fileSize-index,"\nRESULT = FAIL \n");
@@ -1579,7 +1579,7 @@ END_DIAGNOSTIC:
 				index+=j;
 			}
 			// the sting is already terminated with the null char by snprintf
-			limit = index; 
+			limit = index;
 			printed = 0;
 			goto ERROR;
 		break;
@@ -1726,13 +1726,13 @@ END: //here start the reporting phase, assembling the data to send in the file n
 			case CMD_READMSCOMPDATA:
 				snprintf(&driver_test_buff[index], 3, "%02X", (u8) compData.header.type);
 				index+=2;
-				
+
 				snprintf(&driver_test_buff[index], 3, "%02X", (u8) compData.header.force_node);
 				index+=2;
-				
+
 				snprintf(&driver_test_buff[index], 3, "%02X", (u8) compData.header.sense_node);
 				index+=2;
-				
+
 				//Cpying CX1 value
 				snprintf(&driver_test_buff[index], 3, "%02X", compData.cx1&0xFF);
 				index+=2;
@@ -1750,37 +1750,37 @@ END: //here start the reporting phase, assembling the data to send in the file n
 			case CMD_READSSCOMPDATA:
 				snprintf(&driver_test_buff[index], 3, "%02X", (u8) comData.header.type);
 				index+=2;
-				
+
 				snprintf(&driver_test_buff[index], 3, "%02X", comData.header.force_node);
 				index+=2;
-				
+
 
 				snprintf(&driver_test_buff[index], 3, "%02X", comData.header.sense_node);
 				index+=2;
-				
+
 
 				snprintf(&driver_test_buff[index], 3, "%02X", comData.f_ix1&0xFF);
 				index+=2;
-				
+
 
 				snprintf(&driver_test_buff[index], 3, "%02X", comData.s_ix1&0xFF);
 				index+=2;
-				
+
 
 				snprintf(&driver_test_buff[index], 3, "%02X", comData.f_cx1&0xFF);
 				index+=2;
-				
+
 
 				snprintf(&driver_test_buff[index], 3, "%02X", comData.s_cx1&0xFF);
 				index+=2;
-				
+
 
 				//Copying IX2 Force
 				for (j = 0; j < comData.header.force_node; j++)
 				{
 					snprintf(&driver_test_buff[index], 3, "%02X", comData.ix2_fm[j]&0xFF);
 					index+=2;
-					
+
 				}
 
 				//Copying IX2 Sense
@@ -1788,14 +1788,14 @@ END: //here start the reporting phase, assembling the data to send in the file n
 				{
 					snprintf(&driver_test_buff[index], 3, "%02X", comData.ix2_sn[j]&0xFF);
 					index+=2;
-					
+
 				}
 
 				//Copying CX2 Force
 				for (j = 0; j < comData.header.force_node; j++)
 				{
 					snprintf(&driver_test_buff[index], 3, "%02X", comData.cx2_fm[j]&0xFF);
-					
+
 					index+=2;
 				}
 
@@ -1813,19 +1813,19 @@ END: //here start the reporting phase, assembling the data to send in the file n
 				break;
 
 
-				
+
 			case CMD_READTOTMSCOMPDATA:
 				snprintf(&driver_test_buff[index], 3, "%02X", (u8) totCompData.header.type);
 				index+=2;
-				
+
 				snprintf(&driver_test_buff[index], 3, "%02X", (u8) totCompData.header.force_node);
 				index+=2;
-				
+
 
 				snprintf(&driver_test_buff[index], 3, "%02X", (u8) totCompData.header.sense_node);
-				
+
 				index+=2;
-				
+
 				//Copying TOT CX values
 				for (j = 0; j < totCompData.node_data_size; j++)
 				{
@@ -1835,11 +1835,11 @@ END: //here start the reporting phase, assembling the data to send in the file n
 
 				kfree(totCompData.node_data);
 				break;
-				
+
 			case CMD_READTOTSSCOMPDATA:
 				snprintf(&driver_test_buff[index], 3, "%02X", (u8) totComData.header.type);
 				index+=2;
-				
+
 				snprintf(&driver_test_buff[index], 3, "%02X", totComData.header.force_node);
 				index+=2;
 
@@ -1922,7 +1922,7 @@ END: //here start the reporting phase, assembling the data to send in the file n
 			//error
 			driver_test_buff[index++]= (res&0xFF00)>>8;
 			driver_test_buff[index++]= (res&0x00FF);
-			
+
 		}else{
 			if(funcToTest[0]==CMD_GETLIMITSFILE_BYTE || funcToTest[0]==CMD_GETFWFILE_BYTE)
 				snprintf(&driver_test_buff[index], 5, "%02X%02X", (((fileSize + 3) / 4)&0xFF00) >> 8,((fileSize + 3) / 4)&0x00FF);
@@ -1983,7 +1983,7 @@ END: //here start the reporting phase, assembling the data to send in the file n
 		default:
 			break;
 		}
-			
+
 			driver_test_buff[index++]=MESSAGE_END_BYTE;
 			driver_test_buff[index]='\n';
 			/*for(j=0; j<size; j++){
@@ -2016,8 +2016,8 @@ static struct file_operations fts_driver_test_ops = {
 /*****************************************************************************/
 
 /**
-* This function is called in the probe to initialize and create the directory /proc/fts and the driver test file node DRIVER_TEST_FILE_NODE into the /proc file system  
-* @return OK if success or an error code which specify the type of error encountered 
+* This function is called in the probe to initialize and create the directory /proc/fts and the driver test file node DRIVER_TEST_FILE_NODE into the /proc file system
+* @return OK if success or an error code which specify the type of error encountered
 */
 int fts_proc_init(void)
 {
@@ -2052,8 +2052,8 @@ out:
 }
 
 /**
-* Delete and Clean from the file system, all the references to the driver test file node 
-* @return OK 
+* Delete and Clean from the file system, all the references to the driver test file node
+* @return OK
 */
 int fts_proc_remove(void)
 {
@@ -2061,5 +2061,3 @@ int fts_proc_remove(void)
 	remove_proc_entry("fts", NULL);
 	return OK;
 }
-
-

@@ -6,7 +6,7 @@
 **                        marco.cali@st.com								**
 **************************************************************************
 *                                                                        *
-*               	FTS API for Flashing the IC							 *
+*			FTS API for Flashing the IC							 *
 *                                                                        *
 **************************************************************************
 **************************************************************************
@@ -33,7 +33,7 @@
 
 
 //Flash timing parameters
-#define FLASH_RETRY_COUNT				200										///< number of attemps to read the flash status		
+#define FLASH_RETRY_COUNT				200										///< number of attemps to read the flash status
 #define FLASH_WAIT_BEFORE_RETRY         50										///< time to wait in ms between one status reading and another
 
 
@@ -44,8 +44,8 @@
 #define PATH_FILE_FW			"st_fts.bin"									///< FW bin file name
 #else
 #define PATH_FILE_FW			"st_fts.ftb"									///< new FW bin file name
-#endif														
-#endif 
+#endif
+#endif
 
 #ifndef FTM3_CHIP
 #ifdef FTI
@@ -54,7 +54,7 @@
 #else
 #define FLASH_CHUNK			64*1024												///< Max number of bytes that the DMA can burn on the flash in one shot
 #define DMA_CHUNK			2*1024												///< Max number of bytes that can be written in I2C to the DMA
-#endif	
+#endif
 #endif
 
 /**
@@ -62,7 +62,7 @@
  */
 typedef enum{
 	ERASE_ALL =0,																///< erase all the pages
-	SKIP_PANEL_INIT =1,															///< skip erase Panel Init Pages																
+	SKIP_PANEL_INIT =1,															///< skip erase Panel Init Pages
 	SKIP_PANEL_CX_INIT = 2														///< skip erase Panel Init and CX Pages
 }ErasePage;
 

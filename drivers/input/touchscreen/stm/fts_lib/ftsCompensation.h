@@ -65,13 +65,13 @@ typedef struct {
 typedef struct {
 	DataHeader header;															///< Header
 	u8 f_ix1;																	///< IX1 Force
-	u8 s_ix1;																	///< IX1 Sense 
+	u8 s_ix1;																	///< IX1 Sense
 	i8 f_cx1;																	///< CX1 Force (can be negative)
 	i8 s_cx1;																	///< CX1 Sense (can be negative)
 	u8 f_max_n;																	///< Force MaxN
 	u8 s_max_n;																	///< Sense MaxN
 
-	u8 *ix2_fm;																	///< pointer to an array of bytes which contains Force Ix2 data node 
+	u8 *ix2_fm;																	///< pointer to an array of bytes which contains Force Ix2 data node
 	u8 *ix2_sn;																	///< pointer to an array of bytes which contains Sense Ix2 data node
 	i8 *cx2_fm;																	///< pointer to an array of bytes which contains Force Cx2 data node (can be negative)
 	i8 *cx2_sn;																	///< pointer to an array of bytes which contains Sense Cx2 data node (can be negative))

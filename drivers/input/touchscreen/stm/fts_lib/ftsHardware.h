@@ -50,7 +50,7 @@
 #define DCHIP_ID_1								0x70							///< MSB chip ID for FTM4
 #endif
 #endif
-  
+
 
 #define DCHIP_FW_VER_BYTE						2								///< number of bytes of the fw versions
 
@@ -65,15 +65,15 @@
 #define I2C_SAD									0x49							///< slave address of the IC
 #else
 #define SPI4_WIRE																///< comment if the master is SPI3 wires (MOSI and MISO share same line)
-#define SPI_DELAY_CS							10								///< time in usec to wait before rising the CS 
+#define SPI_DELAY_CS							10								///< time in usec to wait before rising the CS
 #define SPI_CLOCK_FREQ							7000000							///< clock frequency in Hz of the SPI bus
 #endif
 
-//#define ICR_ADDR								0x0024							///< address of Device control register to set the comunication protocol (SPI/I2C)		
+//#define ICR_ADDR								0x0024							///< address of Device control register to set the comunication protocol (SPI/I2C)
 //#define ICR_SPI_VALUE							0x02							///< value to write in ICR_ADDR to enable the SPI4 protocol
 
-	
-#define IER_ENABLE								0x41							///< value to write in IER_ADDR to enable the interrupts	
+
+#define IER_ENABLE								0x41							///< value to write in IER_ADDR to enable the interrupts
 #define IER_DISABLE								0x00							///< value to write in IER_ADDR to disable the interrupts
 
 //FLASH COMMAND
@@ -81,7 +81,7 @@
  *	All the commands that works with the flash of the IC
  *	@{
  */
-#define FLASH_CMD_UNLOCK						0xF7							
+#define FLASH_CMD_UNLOCK						0xF7
 #ifdef FTM3_CHIP
 #define FLASH_CMD_WRITE_LOWER_64                0xF0
 #define FLASH_CMD_WRITE_UPPER_64                0xF1
@@ -117,7 +117,7 @@
 #define FLASH_ERASE_UNLOCK_CODE0				0xDE
 #define FLASH_ERASE_UNLOCK_CODE1				0x03
 #define FLASH_ERASE_CODE0                       0x6A
-#define FLASH_DMA_CODE0                      	0x71
+#define FLASH_DMA_CODE0				0x71
 #define FLASH_DMA_CONFIG                        0x72
 #define FLASH_NUM_PAGE							32								///< number of pages in main flash
 #ifndef SONIA
@@ -152,7 +152,7 @@
 #define FLASH_ADDR_SWITCH_CMD                   0x00010000						///< address which remark the first 64k in flash
 #define FLASH_ADDR_CODE							0x00000000						///< starting address in the flash of the code
 #define FLASH_ADDR_CONFIG						0x0001E800						///< starting address in the flash of the config
-#define FLASH_ADDR_CX							0x0001F000						///< starting address in the flash of the CX 
+#define FLASH_ADDR_CX							0x0001F000						///< starting address in the flash of the CX
 #else
 #define FLASH_ADDR_CODE							0x00000000						///< starting address (words) in the flash of the code in FTM4
 #ifdef FTI
@@ -165,7 +165,7 @@
 #endif
 #else
 #define ADDR_WARM_BOOT                          0x001E							///< address of the System Reset control register in FTM4
-#define WARM_BOOT_VALUE                         0x38							///< value to write in ADDR_WARM_BOOT to performa a warm boot 
+#define WARM_BOOT_VALUE                         0x38							///< value to write in ADDR_WARM_BOOT to performa a warm boot
 #define FLASH_ADDR_CONFIG						0x0000FC00						///< starting address (words) in the flash of the config in FTM4
 #define FLASH_ADDR_CX							0x0000EC00						///< starting address (words) in the flash of the Init data in FTM4
 #endif
@@ -176,7 +176,7 @@
 
 //SIZES FW, CODE, CONFIG, MEMH
 /** @defgroup fw_file FW file info
- *	All the info related to the fw file 
+ *	All the info related to the fw file
  *	@{
  */
 #ifdef FTM3_CHIP
@@ -185,7 +185,7 @@
 #define FW_CODE_SIZE							(int)(122*1024)									///< code size in bytes
 #define FW_CONFIG_SIZE							(int)(2*1024)									///< config size in bytes
 #define FW_CX_SIZE								(int)(FW_SIZE-FW_CODE_SIZE-FW_CONFIG_SIZE)		///< CX size in bytes
-#define FW_VER_MEMH_BYTE1						193																		
+#define FW_VER_MEMH_BYTE1						193
 #define FW_VER_MEMH_BYTE0						192
 #define FW_OFF_CONFID_MEMH_BYTE1				2												///< offset of the config id MSB in the config memh
 #define FW_OFF_CONFID_MEMH_BYTE0				1												///< offset of the config id LSB in the config
@@ -198,7 +198,7 @@
 #define FW_BYTES_ALLIGN							4												///< allignment of the info
 #define FW_BIN_VER_OFFSET						16												///< offset of the fw version in the .ftb file
 #define FW_BIN_CONFIG_ID_OFFSET					20												///< offset of the config id in the .ftb file
-#define FW_CX_VERSION							(16+4)											///< offset of CX version in the sec2 of FW file 
+#define FW_CX_VERSION							(16+4)											///< offset of CX version in the sec2 of FW file
 #endif
 /** @} */
 
@@ -264,18 +264,18 @@
 //DUMMY BYTES DATA
 #ifdef FTI
 #ifndef I2C_INTERFACE
-#define DUMMY_HW_REG							1								///< 1 if the first byte read from HW register is dummy		
+#define DUMMY_HW_REG							1								///< 1 if the first byte read from HW register is dummy
 #define DUMMY_FRAMEBUFFER						1								///< 1 if the first byte read from Frame buffer is dummy
 #define DUMMY_CONFIG							1								///< 1 if the first byte read from Config Memory is dummy
 #define DUMMY_FIFO								1								///< 1 if the first byte read from FIFO is dummy
 #else
-#define DUMMY_HW_REG							0								///< 1 if the first byte read from HW register is dummy		
+#define DUMMY_HW_REG							0								///< 1 if the first byte read from HW register is dummy
 #define DUMMY_FRAMEBUFFER						0								///< 1 if the first byte read from Frame buffer is dummy
 #define DUMMY_CONFIG							0								///< 1 if the first byte read from Config Memory is dummy
 #define DUMMY_FIFO								0								///< 1 if the first byte read from FIFO is dummy
 #endif
 #else
-#define DUMMY_HW_REG							1								///< 1 if the first byte read from HW register is dummy		
+#define DUMMY_HW_REG							1								///< 1 if the first byte read from HW register is dummy
 #define DUMMY_FRAMEBUFFER						1								///< 1 if the first byte read from Frame buffer is dummy
 #define DUMMY_CONFIG							1								///< 1 if the first byte read from Config Memory is dummy
 #define DUMMY_FIFO								0								///< 1 if the first byte read from FIFO is dummy
@@ -378,4 +378,3 @@
 
 
 #endif
-

@@ -33,7 +33,7 @@
 #include "ftsCompensation.h"
 
 
-static ErrorList errors;														///< private variable which implement the Error List 
+static ErrorList errors;														///< private variable which implement the Error List
 
 /**
 * Print messages in the kernel log
@@ -42,9 +42,9 @@ static ErrorList errors;														///< private variable which implement the 
 * @param ... additional parameters that are used in msg according the format of printf
 */
 void logError(int force, const char *msg, ...){
-	if (force == 1 
+	if (force == 1
 #ifdef DEBUG
-		|| 1 
+		|| 1
 #endif
 		) {
 		va_list args;
@@ -76,10 +76,10 @@ int isI2cError(int error){
 int dumpErrorInfo(u8* outBuf, int size){
 	int ret,i;
 	u8 data[ERROR_DUMP_ROW_SIZE*ERROR_DUMP_COL_SIZE] = {0};
-	u32 sign =0;	
+	u32 sign =0;
 
 	logError(0,"%s %s: Starting dump of error info...\n",tag,__func__);
-	
+
 		ret=fts_writeReadU8UX(FTS_CMD_FRAMEBUFFER_R, BITS_16, ADDR_ERROR_DUMP, data, ERROR_DUMP_ROW_SIZE*ERROR_DUMP_COL_SIZE, DUMMY_FRAMEBUFFER);
 		if(ret<OK){
 			logError(1, "%s %s: reading data ERROR %08X\n", tag, __func__, ret );
@@ -108,7 +108,7 @@ int dumpErrorInfo(u8* outBuf, int size){
 			logError(0,"%s %s: dump of error info FINISHED!\n",tag,__func__);
 			return OK;
 		}
-	
+
 }
 
 
@@ -116,7 +116,7 @@ int dumpErrorInfo(u8* outBuf, int size){
 * Implement recovery strategies to be used when an error event is found while polling the FIFO
 * @param event error event found during the polling
 * @param size size of event
-* @return OK if the error event doesn't require any action or the recovery strategy doesn't have any impact in the possible procedure that trigger the error, otherwise return an error code which specify the kind of error encountered. If ERROR_HANDLER_STOP_PROC the calling function must stop! 
+* @return OK if the error event doesn't require any action or the recovery strategy doesn't have any impact in the possible procedure that trigger the error, otherwise return an error code which specify the kind of error encountered. If ERROR_HANDLER_STOP_PROC the calling function must stop!
 */
 int errorHandler(u8 *event, int size){
 	int res=OK;
@@ -124,7 +124,7 @@ int errorHandler(u8 *event, int size){
 
 	if(getDev()!=NULL)
 		info = dev_get_drvdata(getDev());
-	
+
 	if(info!=NULL && event!=NULL && size>1 && event[0]==EVT_ID_ERROR){
 		logError(1,"%s errorHandler: Starting handling...\n",tag);
 		addErrorIntoList(event,size);
@@ -152,8 +152,8 @@ int errorHandler(u8 *event, int size){
 					logError(1, "%s errorHandler: Cannot reset the device ERROR %08X\n", tag, res);
 				}
 			res = (ERROR_HANDLER_STOP_PROC|res);
-			break;	
-			
+			break;
+
 			case EVT_TYPE_ERROR_ITO_FORCETOGND:
 				logError(1, "%s errorHandler: Force Short to GND!\n", tag);
 				break;
@@ -185,7 +185,7 @@ int errorHandler(u8 *event, int size){
 			default:
 				logError(1, "%s errorHandler: No Action taken! \n", tag);
 			break;
-			
+
 		}
 		logError(1,"%s errorHandler: handling Finished! res = %08X\n",tag,res);
 		return res;
@@ -206,9 +206,9 @@ int errorHandler(u8 *event, int size){
 */
 int addErrorIntoList(u8 *event, int size){
 	int i=0;
-	
+
 	logError(0,"%s Adding error in to ErrorList... \n", tag);
-	
+
 	memcpy(&errors.list[errors.last_index*FIFO_EVENT_SIZE],event,size);
 	i = FIFO_EVENT_SIZE-size;
 	if(i>0){
@@ -216,17 +216,17 @@ int addErrorIntoList(u8 *event, int size){
 		memset(&errors.list[errors.last_index*FIFO_EVENT_SIZE+size],0,i);
 	}
 	logError(0,"%s Adding error in to ErrorList... FINISHED!\n",tag);
-	
+
 	errors.count+=1;
 	if(errors.count>FIFO_DEPTH)
 		logError(1,"%s ErrorList is going in overflow... the first %d event(s) were override!\n",tag, errors.count-FIFO_DEPTH);
 	errors.last_index=(errors.last_index+1)%FIFO_DEPTH;
-	
+
 	return OK;
 }
 
 /**
-* Reset the Error List setting the count and last_index to 0. 
+* Reset the Error List setting the count and last_index to 0.
 * @return OK
 */
 int resetErrorList(void){
@@ -250,14 +250,14 @@ int getErrorListCount(void){
 //in case of success return the index of the event found
 /**
 * Scroll the Error List looking for the event specified
-* @param event_to_search event_to_search pointer to an array of int where each element correspond to a byte of the event to find. If the element of the array has value -1, the byte of the event, in the same position of the element is ignored.  
+* @param event_to_search event_to_search pointer to an array of int where each element correspond to a byte of the event to find. If the element of the array has value -1, the byte of the event, in the same position of the element is ignored.
 * @param event_bytes size of event_to_search
-* @return a value >=0 if the event is found which represent the index of the Error List where the event is located otherwise an error code 
+* @return a value >=0 if the event is found which represent the index of the Error List where the event is located otherwise an error code
 */
 int pollErrorList(int *event_to_search, int event_bytes){
 	int i=0, j=0, find =0;
 	int count = getErrorListCount();
-	
+
 	logError(1, "%s Starting to poll ErrorList... \n",tag);
 	while(find!=1 && i<count){
 		find = 1;
@@ -278,22 +278,22 @@ int pollErrorList(int *event_to_search, int event_bytes){
 	}else{
 		logError(1, "%s Error Not Found into ErrorList! ERROR %08X \n",tag, ERROR_TIMEOUT);
 		return ERROR_TIMEOUT;
-	}	
+	}
 }
 
 
 
 /**
-* Poll the Error List looking for any error types passed in the arguments. Return at the first match! 
+* Poll the Error List looking for any error types passed in the arguments. Return at the first match!
 * @param list pointer to a list of error types to look for
 * @param size size of list
 * @return error type found if success or ERROR_TIMEOUT
 */
 int pollForErrorType(u8 *list, int size){
-	
+
 	int i=0, j=0, find =0;
 	int count = getErrorListCount();
-	
+
 	logError(1, "%s %s: Starting to poll ErrorList... count = %d \n",tag,__func__, count);
 	while(find!=1 && i<count){
 		for (j = 0; j < size; j++)
@@ -308,28 +308,9 @@ int pollForErrorType(u8 *list, int size){
 	}
 	if(find==1){
 		logError(1, "%s %s: Error Type %02X into ErrorList! \n",tag,__func__, list[j]);
-		return list[j];		
+		return list[j];
 	}else{
 		logError(1, "%s %s: Error Type Not Found into ErrorList! ERROR %08X \n",tag, __func__, ERROR_TIMEOUT);
 		return ERROR_TIMEOUT;
 	}
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

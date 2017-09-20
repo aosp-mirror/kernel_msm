@@ -6,7 +6,7 @@
  * Copyright (C) 2017, STMicroelectronics
  * Authors: AMG(Analog Mems Group)
  *
- * 		marco.cali@st.com
+ *		marco.cali@st.com
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -37,9 +37,9 @@
 
 
 /****************** CONFIGURATION SECTION ******************/
-/** @defgroup conf_section	 Driver Configuration Section 
-* Settings of the driver code in order to suit the HW set up and the application behavior  
-* @{ 
+/** @defgroup conf_section	 Driver Configuration Section
+* Settings of the driver code in order to suit the HW set up and the application behavior
+* @{
 */
 //**** CODE CONFIGURATION ****
 #define FTS_TS_DRV_NAME                     "fts"								///< driver name
@@ -48,12 +48,12 @@
 
 #define DEBUG																	///< define to print more logs in the kernel log and better follow the code flow
 
-#define DRIVER_TEST																///< if defined allow to use and test special functions of the driver and fts_lib from comand shell (usefull for enginering/debug operations) 
+#define DRIVER_TEST																///< if defined allow to use and test special functions of the driver and fts_lib from comand shell (usefull for enginering/debug operations)
 
-#define ENGINEERING_CODE														///< if defined allow to have some procedures at the boot or from file node to assure that touch works under any condition that usually are disabled in the MP stage of the project 
+#define ENGINEERING_CODE														///< if defined allow to have some procedures at the boot or from file node to assure that touch works under any condition that usually are disabled in the MP stage of the project
 #define COMPUTE_CX_ON_PHONE														///< initialization of CX memory allowed on the phone
 
-#define FW_H_FILE																///< include the FW data as header file 
+#define FW_H_FILE																///< include the FW data as header file
 #ifdef FW_H_FILE
 	#define FW_SIZE_NAME myArray_size											///< name of the variable in the FW header file which specified the dimension of the FW data array
 	#define FW_ARRAY_NAME myArray												///< name of the variable in the FW header file which specified the FW data array
@@ -63,13 +63,13 @@
 #ifndef FW_UPDATE_ON_PROBE
 #define LIMITS_H_FILE															///< include the Production Limit File as header file, can be commented to use a .csv file instead
 #ifdef LIMITS_H_FILE
-	#define LIMITS_SIZE_NAME myArray2_size										///< name of the variable in the limits header file which specified the dimension of the limits data array 
+	#define LIMITS_SIZE_NAME myArray2_size										///< name of the variable in the limits header file which specified the dimension of the limits data array
 	#define LIMITS_ARRAY_NAME myArray2											///< name of the variable in the limits header file which specified the limits data array
 #endif
 #else
 //if execute fw update in the probe the limit file must be a .h
 #define LIMITS_H_FILE															///< include the Production Limit File as header file, DO NOT COMMENT!
-#define LIMITS_SIZE_NAME myArray2_size											///< name of the variable in the limits header file which specified the dimension of the limits data array 
+#define LIMITS_SIZE_NAME myArray2_size											///< name of the variable in the limits header file which specified the dimension of the limits data array
 #define LIMITS_ARRAY_NAME myArray2												///< name of the variable in the limits header file which specified the limits data array
 #endif
 
@@ -77,7 +77,7 @@
 
 #ifndef FW_UPDATE_ON_PROBE
 #define EXP_FN_WORK_DELAY_MS				1000								///< time in ms elapsed after the probe to start the work which execute FW update and the Initialization of the IC
-#endif 
+#endif
 
 //**** END ****
 
@@ -89,7 +89,7 @@
 #define GESTURE_MODE															///< enable the support of the gestures
 #ifdef GESTURE_MODE
 	#define USE_GESTURE_MASK													///< the gestures to select are referred using a gesture bitmask instead of their gesture IDs
-#endif 
+#endif
 
 
 #define CHARGER_MODE															///< enable the support to charger mode feature (comment to disable)
@@ -105,7 +105,7 @@
 
 //**** END ****
 
-                         
+
 //**** PANEL SPECIFICATION ****
 #define X_AXIS_MIN                          0									///< min X coordinate of the display
 #define Y_AXIS_MIN                          0									///< min Y coordinate of the display
@@ -119,7 +119,7 @@
 #define TOUCH_ID_MAX                        10									///< Max number of simoultaneous touches reported
 
 #define AREA_MIN                            PRESSURE_MIN						///< min value of Major/minor axis reported
-#define AREA_MAX                            PRESSURE_MAX						///< Man value of Major/minor axis reported	
+#define AREA_MAX                            PRESSURE_MAX						///< Man value of Major/minor axis reported
 //**** END ****
 /**@}*/
 /*********************************************************/
@@ -131,10 +131,10 @@
  * bitmask which can assume the value defined as features in ftsSoftware.h or the following values
  */
 
-/** @defgroup mode_section	 IC Status Mode 
-* Bitmask which keeps track of the features and working mode enabled in the IC. 
+/** @defgroup mode_section	 IC Status Mode
+* Bitmask which keeps track of the features and working mode enabled in the IC.
 * The meaning of the the LSB of the bitmask must be interpreted considering that the value defined in @link feat_opt Feature Selection Option @endlink correspond to the position of the corresponding bit in the mask
-* @{ 
+* @{
 */
 #define MODE_NOTHING						0x00000000											///< nothing enabled (sense off)
 #define MODE_ACTIVE(_mask, _sett)           _mask |= (SCAN_MODE_ACTIVE<<24)|(_sett<<16)			///< store the status of scan mode active and its setting
@@ -174,7 +174,7 @@ typedef void (*event_dispatch_handler_t)
                                 (struct fts_ts_info *info, unsigned char *data);
 
 /**
- * FTS capacitive touch screen device information 
+ * FTS capacitive touch screen device information
  * - dev             Pointer to the structure device \n
  * - client          client structure \n
  * - input_dev       Input device structure \n
@@ -186,11 +186,11 @@ typedef void (*event_dispatch_handler_t)
  * - touch_id        Bitmask for touch id (mapped to input slots) \n
  * - stylus_id       Bitmask for tracking the stylus touches (mapped using the touchId) \n
  * - timer           Timer when operating in polling mode \n
- * - power           Power on/off routine \n 
+ * - power           Power on/off routine \n
  * - board           HW info retrieved from device tree \n
  * - vdd_reg         DVDD power regulator \n
  * - avdd_reg        AVDD power regulator \n
- * - resume_bit      Indicate if screen off/on \n 
+ * - resume_bit      Indicate if screen off/on \n
  * - fwupdate_stat   Store the result of a fw update triggered by the host \n
  * - notifier        Used for be notified from a suspend/resume event \n
  * - sensor_sleep    true suspend was called, false resume was called \n
@@ -225,24 +225,24 @@ struct fts_ts_info{
 #ifdef STYLUS_MODE
 		unsigned long             stylus_id;									///< Bitmask for tracking the stylus touches (mapped using the touchId)
 #endif
-        
+
 
         struct fts_hw_platform_data *board;										///< HW info retrieved from device tree
         struct regulator *vdd_reg;												///< DVDD power regulator
         struct regulator *avdd_reg;												///< AVDD power regulator
 
 
-		int resume_bit;															///< Indicate if screen off/on 
+		int resume_bit;															///< Indicate if screen off/on
 		int fwupdate_stat;														///< Store the result of a fw update triggered by the host
 
-	
+
 		struct notifier_block notifier;											///< Used for be notified from a suspend/resume event
 		bool sensor_sleep;														///< if true suspend was called while if false resume was called
 		struct wake_lock wakelock;												///< Wake Lock struct
 
 		/* input lock */
-		struct mutex input_report_mutex;										///< mutex for handling the	report of the pressure of keys 
-		
+		struct mutex input_report_mutex;										///< mutex for handling the	report of the pressure of keys
+
 		//switches for features
 		int gesture_enabled;													///< if set, the gesture mode will be enabled during the suspend
 		int glove_enabled;														///< if set, the glove mode will be enabled when allowed
@@ -264,4 +264,3 @@ extern int fts_proc_init(void);
 extern int fts_proc_remove(void);
 
 #endif
-

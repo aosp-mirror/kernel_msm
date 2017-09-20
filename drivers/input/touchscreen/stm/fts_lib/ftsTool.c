@@ -95,7 +95,7 @@ int flushFIFO()
 * Convert an array of bytes to an array of u16 taking two bytes at time, src has LSB first.
 * @param src pointer to the source byte array
 * @param src_length size of src
-* @param dst pointer to the destination array. 
+* @param dst pointer to the destination array.
 * @return the final size of dst (half of the source) or ERROR_OP_NOT_ALLOW if the size of src is not multiple of 2.
 */
 int u8ToU16n(u8* src, int src_length, u16* dst)
@@ -122,7 +122,7 @@ int u8ToU16n(u8* src, int src_length, u16* dst)
 /**
 * Convert an array of 2 bytes to a u16, src has LSB first (little endian).
 * @param src pointer to the source byte array
-* @param dst pointer to the destination u16. 
+* @param dst pointer to the destination u16.
 * @return OK
 */
 int u8ToU16(u8* src, u16* dst)
@@ -134,7 +134,7 @@ int u8ToU16(u8* src, u16* dst)
 /**
 * Convert an array of 2 bytes to a u16, src has MSB first (big endian).
 * @param src pointer to the source byte array
-* @param dst pointer to the destination u16. 
+* @param dst pointer to the destination u16.
 * @return OK
 */
 int u8ToU16_be(u8* src, u16* dst)
@@ -147,7 +147,7 @@ int u8ToU16_be(u8* src, u16* dst)
 * Convert an array of u16 to an array of u8, dst has MSB first (big endian).
 * @param src pointer to the source array of u16
 * @param src_length size of src
-* @param dst pointer to the destination array of u8. This array should be free when no need anymore 
+* @param dst pointer to the destination array of u8. This array should be free when no need anymore
 * @return size of dst (src size multiply by 2)
 */
 int u16ToU8n_be(u16* src, int src_length, u8* dst)
@@ -169,7 +169,7 @@ int u16ToU8n_be(u16* src, int src_length, u8* dst)
 /**
 * Convert a u16 to an array of 2 u8, dst has MSB first (big endian).
 * @param src u16 to convert
-* @param dst pointer to the destination array of 2 u8. 
+* @param dst pointer to the destination array of 2 u8.
 * @return OK
 */
 int u16ToU8_be(u16 src, u8* dst)
@@ -183,7 +183,7 @@ int u16ToU8_be(u16 src, u8* dst)
 /**
 * Convert a u16 to an array of 2 u8, dst has LSB first (little endian).
 * @param src u16 to convert
-* @param dst pointer to the destination array of 2 u8. 
+* @param dst pointer to the destination array of 2 u8.
 * @return OK
 */
 int u16ToU8(u16 src, u8* dst)
@@ -196,7 +196,7 @@ int u16ToU8(u16 src, u8* dst)
 /**
 * Convert an array of bytes to a u32, src has LSB first (little endian).
 * @param src array of bytes to convert
-* @param dst pointer to the destination u32 variable. 
+* @param dst pointer to the destination u32 variable.
 * @return OK
 */
 int u8ToU32(u8* src, u32* dst)
@@ -209,7 +209,7 @@ int u8ToU32(u8* src, u32* dst)
 /**
 * Convert a u32 to an array of 4 bytes, dst has LSB first (little endian).
 * @param src u32 value to convert
-* @param dst pointer to the destination array of 4 bytes. 
+* @param dst pointer to the destination array of 4 bytes.
 * @return OK
 */
 int u32ToU8(u32 src, u8* dst)
@@ -224,7 +224,7 @@ int u32ToU8(u32 src, u8* dst)
 /**
 * Convert a u32 to an array of 4 bytes, dst has MSB first (big endian).
 * @param src u32 value to convert
-* @param dst pointer to the destination array of 4 bytes. 
+* @param dst pointer to the destination array of 4 bytes.
 * @return OK
 */
 int u32ToU8_be(u32 src, u8* dst)
@@ -237,11 +237,11 @@ int u32ToU8_be(u32 src, u8* dst)
 }
 
 /**
-* Execute a function passed as argment and retry it defined number of times if not successfull  
+* Execute a function passed as argment and retry it defined number of times if not successfull
 * @param code pointer to a function which return an int and doesn't have any parameters
 * @param wait_before_retry interval of time in ms to wait between one trial and another one
 * @param retry_count max number of retry to attemp
-* @return last return value obtained from the last execution of the code function 
+* @return last return value obtained from the last execution of the code function
 */
 int attempt_function(int(*code)(void), unsigned long wait_before_retry, int retry_count)
 {
@@ -333,7 +333,7 @@ int cleanUp(int enableTouch)
 * Transform an array of short in a matrix of short with a defined number of columns and the resulting number of rows
 * @param data array of bytes to convert
 * @param size size of data
-* @param columns number of columns that the resulting matrix should have. 
+* @param columns number of columns that the resulting matrix should have.
 * @return a reference to a matrix of short where for each row there are columns elements
 */
 short** array1dTo2d_short(short* data, int size, int columns)
@@ -361,7 +361,7 @@ short** array1dTo2d_short(short* data, int size, int columns)
 * Transform an array of u16 in a matrix of u16 with a defined number of columns and the resulting number of rows
 * @param data array of bytes to convert
 * @param size size of data
-* @param columns number of columns that the resulting matrix should have. 
+* @param columns number of columns that the resulting matrix should have.
 * @return a reference to a matrix of u16 where for each row there are columns elements
 */
 u16** array1dTo2d_u16(u16* data, int size, int columns)
@@ -389,7 +389,7 @@ u16** array1dTo2d_u16(u16* data, int size, int columns)
 * Transform an array of u8 in a matrix of u8 with a defined number of columns and the resulting number of rows
 * @param data array of bytes to convert
 * @param size size of data
-* @param columns number of columns that the resulting matrix should have. 
+* @param columns number of columns that the resulting matrix should have.
 * @return a reference to a matrix of short where for each row there are columns elements
 */
 u8** array1dTo2d_u8(u8* data, int size, int columns)
@@ -417,7 +417,7 @@ u8** array1dTo2d_u8(u8* data, int size, int columns)
 * Transform an array of i8 in a matrix of i8 with a defined number of columns and the resulting number of rows
 * @param data array of bytes to convert
 * @param size size of data
-* @param columns number of columns that the resulting matrix should have. 
+* @param columns number of columns that the resulting matrix should have.
 * @return a reference to a matrix of short where for each row there are columns elements
 */
 i8** array1dTo2d_i8(i8* data, int size, int columns)
@@ -446,7 +446,7 @@ i8** array1dTo2d_i8(i8* data, int size, int columns)
 * @param label pointer to the string to print before the actual matrix
 * @param matrix reference to the matrix of short which contain the actual data
 * @param row number of rows on which the matrix should be print
-* @param column number of columns for each row 
+* @param column number of columns for each row
 */
 void print_frame_short(char *label, short **matrix, int row, int column)
 {
@@ -470,7 +470,7 @@ void print_frame_short(char *label, short **matrix, int row, int column)
 * @param label pointer to the string to print before the actual matrix
 * @param matrix reference to the matrix of u16 which contain the actual data
 * @param row number of rows on which the matrix should be print
-* @param column number of columns for each row 
+* @param column number of columns for each row
 */
 void print_frame_u16(char *label, u16 **matrix, int row, int column)
 {
@@ -494,7 +494,7 @@ void print_frame_u16(char *label, u16 **matrix, int row, int column)
 * @param label pointer to the string to print before the actual matrix
 * @param matrix reference to the matrix of u8 which contain the actual data
 * @param row number of rows on which the matrix should be print
-* @param column number of columns for each row 
+* @param column number of columns for each row
 */
 void print_frame_u8(char *label, u8 **matrix, int row, int column)
 {
@@ -518,7 +518,7 @@ void print_frame_u8(char *label, u8 **matrix, int row, int column)
 * @param label pointer to the string to print before the actual matrix
 * @param matrix reference to the matrix of u8 which contain the actual data
 * @param row number of rows on which the matrix should be print
-* @param column number of columns for each row 
+* @param column number of columns for each row
 */
 void print_frame_i8(char *label, i8 **matrix, int row, int column)
 {
@@ -542,7 +542,7 @@ void print_frame_i8(char *label, i8 **matrix, int row, int column)
 * @param label pointer to the string to print before the actual matrix
 * @param matrix reference to the matrix of u32 which contain the actual data
 * @param row number of rows on which the matrix should be print
-* @param column number of columns for each row 
+* @param column number of columns for each row
 */
 void print_frame_u32(char *label, u32 **matrix, int row, int column)
 {
@@ -566,7 +566,7 @@ void print_frame_u32(char *label, u32 **matrix, int row, int column)
 * @param label pointer to the string to print before the actual matrix
 * @param matrix reference to the matrix of int which contain the actual data
 * @param row number of rows on which the matrix should be print
-* @param column number of columns for each row 
+* @param column number of columns for each row
 */
 void print_frame_int(char *label, int **matrix, int row, int column)
 {
@@ -606,7 +606,7 @@ int u8ToU64_be(u8 *src, u64 *dest, int size)
 	{
 		*dest |= (u64)(src[i]) << ((size - 1 - i)*8);
 	}
-	
+
 
 	return OK;
 	}
@@ -657,8 +657,3 @@ int fromIDtoMask(u8 id, u8 *mask, int size) {
 		return ERROR_OP_NOT_ALLOW;
 	}
 }
-
-
-
-
-

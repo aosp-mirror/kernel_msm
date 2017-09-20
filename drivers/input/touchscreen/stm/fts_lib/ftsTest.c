@@ -46,7 +46,7 @@
 
 #ifdef LIMITS_H_FILE
 #include <../fts_limits.h>
-#endif 
+#endif
 
 
 TestToDo tests;																	///< global variable that specify the tests to perform during the Mass Production Test
@@ -155,7 +155,7 @@ int computeAdjHoriz(i8* data, int row, int column, u8** result)
 }
 
 /**
- * Compute the Horizontal adjacent matrix of short values doing the abs of the difference between the column i with the i-1 one. 
+ * Compute the Horizontal adjacent matrix of short values doing the abs of the difference between the column i with the i-1 one.
  * Both the original data matrix and the adj matrix are disposed as 1 dimension array one row after the other \n
  * The resulting matrix has one column less than the starting original one \n
  * @param data pointer to the array of signed bytes containing the original data
@@ -195,8 +195,8 @@ int computeAdjHorizTotal(short* data, int row, int column, u16** result)
 }
 
 /**
- * Compute the Vertical adjacent matrix doing the abs of the difference between the row i with the i-1 one. 
- * Both the original data matrix and the adj matrix are disposed as 1 dimension array one row after the other. \n 
+ * Compute the Vertical adjacent matrix doing the abs of the difference between the row i with the i-1 one.
+ * Both the original data matrix and the adj matrix are disposed as 1 dimension array one row after the other. \n
  * The resulting matrix has one column less than the starting original one \n
  * @param data pointer to the array of signed bytes containing the original data
  * @param row number of rows of the original data
@@ -234,10 +234,10 @@ int computeAdjVert(i8* data, int row, int column, u8**result)
 }
 
 /**
- * Compute the Vertical adjacent matrix of short values doing the abs of the difference between the row i with the i-1 one. 
+ * Compute the Vertical adjacent matrix of short values doing the abs of the difference between the row i with the i-1 one.
  * Both the original data matrix and the adj matrix are disposed as 1 dimension array one row after the other. \n
  * The resulting matrix has one column less than the starting original one \n
- * @param data pointer to the array of signed bytes containing the original data 
+ * @param data pointer to the array of signed bytes containing the original data
  * @param row number of rows of the original data
  * @param column number of columns of the original data
  * @param result pointer of a pointer to an array of unsigned bytes which will contain the adj matrix
@@ -313,7 +313,7 @@ int computeAdjHorizFromU(u8* data, int row, int column, u8** result)
 }
 
 /**
- * Compute the Horizontal adjacent matrix of u16 values doing the abs of the difference between the column i with the i-1 one. 
+ * Compute the Horizontal adjacent matrix of u16 values doing the abs of the difference between the column i with the i-1 one.
  * Both the original data matrix and the adj matrix are disposed as 1 dimension array one row after the other \n
  * The resulting matrix has one column less than the starting original one \n
  * @param data pointer to the array of unsigned bytes containing the original data
@@ -353,8 +353,8 @@ int computeAdjHorizTotalFromU(u16* data, int row, int column, u16** result)
 }
 
 /**
- * Compute the Vertical adjacent matrix doing the abs of the difference between the row i with the i-1 one. 
- * Both the original data matrix and the adj matrix are disposed as 1 dimension array one row after the other. \n 
+ * Compute the Vertical adjacent matrix doing the abs of the difference between the row i with the i-1 one.
+ * Both the original data matrix and the adj matrix are disposed as 1 dimension array one row after the other. \n
  * The resulting matrix has one column less than the starting original one \n
  * @param data pointer to the array of unsigned bytes containing the original data
  * @param row number of rows of the original data
@@ -392,10 +392,10 @@ int computeAdjVertFromU(u8* data, int row, int column, u8**result)
 }
 
 /**
- * Compute the Vertical adjacent matrix of u16 values doing the abs of the difference between the row i with the i-1 one. 
+ * Compute the Vertical adjacent matrix of u16 values doing the abs of the difference between the row i with the i-1 one.
  * Both the original data matrix and the adj matrix are disposed as 1 dimension array one row after the other. \n
  * The resulting matrix has one column less than the starting original one \n
- * @param data pointer to the array of unsigned bytes containing the original data 
+ * @param data pointer to the array of unsigned bytes containing the original data
  * @param row number of rows of the original data
  * @param column number of columns of the original data
  * @param result pointer of a pointer to an array of unsigned bytes which will contain the adj matrix
@@ -439,7 +439,7 @@ int computeAdjVertTotalFromU(u16* data, int row, int column, u16**result)
  * @param row number of rows of data
  * @param column number of columns of data
  * @param min minimum value allowed
- * @param max Maximum value allowed 
+ * @param max Maximum value allowed
  * @return the number of elements that overcome the specified interval (0 = OK)
  */
 int checkLimitsMinMax(short *data, int row, int column, int min, int max)
@@ -459,16 +459,16 @@ int checkLimitsMinMax(short *data, int row, int column, int min, int max)
 		}
 	}
 
-	return count; //if count is 0 = OK, test completed successfully 
+	return count; //if count is 0 = OK, test completed successfully
 }
 
 /**
  * Check that the difference between the max and min of a matrix of short is less or equal to a threshold.\n
- * The matrix is stored as 1 dimension array one row after the other. 
+ * The matrix is stored as 1 dimension array one row after the other.
  * @param data pointer to the array of short containing the data to check
  * @param row number of rows of data
  * @param column number of columns of data
- * @param threshold threshold value allowed 
+ * @param threshold threshold value allowed
  * @return OK if the difference is <= to threshold otherwise ERROR_TEST_CHECK_FAIL
  */
 int checkLimitsGap(short *data, int row, int column, int threshold)
@@ -512,7 +512,7 @@ int checkLimitsGap(short *data, int row, int column, int threshold)
 
 /**
  * Check that each value of a matrix of i8 doesn't exceed a specific min and Max value  set for each node (these values are included in the interval). \n
- * The matrixes of data, min and max values are stored as 1 dimension arrays one row after the other. 
+ * The matrixes of data, min and max values are stored as 1 dimension arrays one row after the other.
  * @param data pointer to the array of short containing the data to check
  * @param row number of rows of data
  * @param column number of columns of data
@@ -537,12 +537,12 @@ int checkLimitsMap(i8 *data, int row, int column, int *min, int *max)
 		}
 	}
 
-	return count; //if count is 0 = OK, test completed successfully 
+	return count; //if count is 0 = OK, test completed successfully
 }
 
 /**
  * Check that each value of a matrix of short doesn't exceed a specific min and Max value  set for each node (these values are included in the interval).
- * The matrixes of data, min and max values are stored as 1 dimension arrays one row after the other. 
+ * The matrixes of data, min and max values are stored as 1 dimension arrays one row after the other.
  * @param data pointer to the array of short containing the data to check
  * @param row number of rows of data
  * @param column number of columns of data
@@ -567,12 +567,12 @@ int checkLimitsMapTotal(short *data, int row, int column, int *min, int *max)
 		}
 	}
 
-	return count; //if count is 0 = OK, test completed successfully 
+	return count; //if count is 0 = OK, test completed successfully
 }
 
 /**
  * Check that each value of a matrix of u8 doesn't exceed a specific min and Max value  set for each node (these values are included in the interval). \n
- * The matrixes of data, min and max values are stored as 1 dimension arrays one row after the other. 
+ * The matrixes of data, min and max values are stored as 1 dimension arrays one row after the other.
  * @param data pointer to the array of short containing the data to check
  * @param row number of rows of data
  * @param column number of columns of data
@@ -597,12 +597,12 @@ int checkLimitsMapFromU(u8 *data, int row, int column, int *min, int *max)
 		}
 	}
 
-	return count; //if count is 0 = OK, test completed successfully 
+	return count; //if count is 0 = OK, test completed successfully
 }
 
 /**
  * Check that each value of a matrix of u16 doesn't exceed a specific min and Max value  set for each node (these values are included in the interval).
- * The matrixes of data, min and max values are stored as 1 dimension arrays one row after the other. 
+ * The matrixes of data, min and max values are stored as 1 dimension arrays one row after the other.
  * @param data pointer to the array of short containing the data to check
  * @param row number of rows of data
  * @param column number of columns of data
@@ -627,12 +627,12 @@ int checkLimitsMapTotalFromU(u16 *data, int row, int column, int *min, int *max)
 		}
 	}
 
-	return count; //if count is 0 = OK, test completed successfully 
+	return count; //if count is 0 = OK, test completed successfully
 }
 
 /**
  * Check that each value of a matrix of u8 doesn't exceed a specific Max value  set for each node (max value is included in the interval).
- * The matrixes of data and max values are stored as 1 dimension arrays one row after the other. 
+ * The matrixes of data and max values are stored as 1 dimension arrays one row after the other.
  * @param data pointer to the array of short containing the data to check
  * @param row number of rows of data
  * @param column number of columns of data
@@ -656,12 +656,12 @@ int checkLimitsMapAdj(u8 *data, int row, int column, int *max)
 		}
 	}
 
-	return count; //if count is 0 = OK, test completed successfully 
+	return count; //if count is 0 = OK, test completed successfully
 }
 
 /**
  * Check that each value of a matrix of u16 doesn't exceed a specific Max value set for each node (max value is included in the interval).
- * The matrixes of data and max values are stored as 1 dimension arrays one row after the other. 
+ * The matrixes of data and max values are stored as 1 dimension arrays one row after the other.
  * @param data pointer to the array of short containing the data to check
  * @param row number of rows of data
  * @param column number of columns of data
@@ -685,7 +685,7 @@ int checkLimitsMapAdjTotal(u16 *data, int row, int column, int *max)
 		}
 	}
 
-	return count; //if count is 0 = OK, test completed successfully 
+	return count; //if count is 0 = OK, test completed successfully
 }
 
 /**
@@ -725,7 +725,7 @@ int production_test_ito()
 }
 
 /**
- * Perform the Initialization of the IC 
+ * Perform the Initialization of the IC
  * @param type type of initialization to do (see @link sys_special_opt Initialization Options (Full or Panel) @endlink)
  * @return OK if success or an error code which specify the type of error encountered
  */
@@ -1250,7 +1250,7 @@ int production_test_ms_cx(char *path_limits, int stop_on_fail, TestToDo *todo)
 
 	if (todo->MutualCxTotal == 1 || todo->MutualCxTotalAdj == 1)
 	{
-		
+
 		logError(0, "%s MS TOTAL CX MIN MAX TEST: \n", tag);
 		if (todo->MutualCxTotal == 1)
 		{
@@ -1422,7 +1422,7 @@ ERROR_LIMITS:
 }
 
 /**
- * Perform all the tests selected in a TestTodo variable related to MS Init data of the keys 
+ * Perform all the tests selected in a TestTodo variable related to MS Init data of the keys
  * @param path_limits name of Production Limit file to load or "NULL" if the limits data should be loaded by a .h file
  * @param stop_on_fail if 1, the test flow stops at the first data check failure otherwise it keeps going performing all the selected test
  * @param todo pointer to a TestToDo variable which select the test to do
@@ -1531,7 +1531,7 @@ int production_test_ms_key_cx(char *path_limits, int stop_on_fail, TestToDo *tod
 
 	if (todo->MutualKeyCxTotal == 1)
 	{
-		ret = readTotMutualSenseCompensationData(LOAD_PANEL_CX_TOT_MS_KEY, &totCompData); 
+		ret = readTotMutualSenseCompensationData(LOAD_PANEL_CX_TOT_MS_KEY, &totCompData);
 		if (ret < 0)
 		{
 			logError(1, "%s production_test_data: computeTotalCx failed... ERROR %08X \n", tag, ERROR_PROD_TEST_DATA);
@@ -2763,8 +2763,8 @@ END:
 
 /**
  * Retrieve the actual Test Limit data from the system (bin file or header file)
- * @param path name of Production Test Limit file to load or "NULL" if the limits data should be loaded by a .h file 
- * @param file pointer to the LimitFile struct which will contains the limits data 
+ * @param path name of Production Test Limit file to load or "NULL" if the limits data should be loaded by a .h file
+ * @param file pointer to the LimitFile struct which will contains the limits data
  * @return OK if success or an error code which specify the type of error encountered
  */
 int getLimitsFile(char *path, LimitFile *file)
@@ -2871,14 +2871,14 @@ int freeLimitsFile(LimitFile *file)
 
 /**
  * Parse the raw data read from a Production test limit file in order to find the specified information
- * If no limits file data are passed, the function loads and stores the limit file from the system 
- * @param path name of Production Test Limit file to load or "NULL" if the limits data should be loaded by a .h file 
- * @param file pointer to LimitFile struct that should be parsed or NULL if the limit file in the system should be loaded and then parsed 
+ * If no limits file data are passed, the function loads and stores the limit file from the system
+ * @param path name of Production Test Limit file to load or "NULL" if the limits data should be loaded by a .h file
+ * @param file pointer to LimitFile struct that should be parsed or NULL if the limit file in the system should be loaded and then parsed
  * @param label string which identify a particular set of data in the file that want to be loaded
  * @param data pointer to the pointer which will contains the specified limits data as 1 dimension matrix with data arranged row after row
  * @param row pointer to a int variable which will contain the number of row of data
  * @param column pointer to a int variable which will contain the number of column of data
- * @return OK if success or an error code which specify the type of error encountered 
+ * @return OK if success or an error code which specify the type of error encountered
  */
 int parseProductionTestLimits(char *path, LimitFile *file, char *label, int **data, int *row, int *column)
 {
@@ -2895,7 +2895,7 @@ int parseProductionTestLimits(char *path, LimitFile *file, char *label, int **da
 	char *buf = NULL;
 	int n, size, pointer = 0, ret = OK;
 	char *data_file = NULL;
-  
+
 
 	if (file == NULL || strcmp(path, file->name) != 0 || file->size == 0)
 	{
@@ -2980,7 +2980,7 @@ int parseProductionTestLimits(char *path, LimitFile *file, char *label, int **da
 				}
 
 
-				//start to read the data 
+				//start to read the data
 				for (i = 0; i < *row; i++)
 				{
 					if (readLine(&data_file[pointer], line, size - pointer, &n) < 0)
@@ -3041,7 +3041,7 @@ END:
  * @param line pointer to an array of char that will contain the line read
  * @param size size of data
  * @param n pointer to a int variable which will contain the number of characters of the line
- * @return OK if success or an error code which specify the type of error encountered 
+ * @return OK if success or an error code which specify the type of error encountered
  */
 int readLine(char * data, char *line, int size, int *n)
 {
@@ -3060,5 +3060,3 @@ int readLine(char * data, char *line, int size, int *n)
 	return OK;
 
 }
-
-
