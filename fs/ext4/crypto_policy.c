@@ -152,12 +152,18 @@ int ext4_is_child_context_consistent_with_parent(struct inode *parent,
 	struct ext4_encryption_context parent_ctx, child_ctx;
 	int res;
 
+	if ((parent == NULL) || (child == NULL)) {
+		pr_err("parent %p child %p\n", parent, child);
+		WARN_ON(1);	/* Should never happen */
+		return 0;
+	}
+
 	/* No restrictions on file types which are never encrypted */
 	if (!S_ISREG(child->i_mode) && !S_ISDIR(child->i_mode) &&
 	    !S_ISLNK(child->i_mode))
 		return 1;
 
-	/* No restrictions if the parent directory is unencrypted */
+	/* no restrictions if the parent directory is not encrypted */
 	if (!ext4_encrypted_inode(parent))
 		return 1;
 
