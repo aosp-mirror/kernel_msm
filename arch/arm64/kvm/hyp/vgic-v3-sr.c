@@ -29,14 +29,14 @@
 #define read_gicreg(r)							\
 	({								\
 		u64 reg;						\
-		asm volatile("mrs_s %0, " __stringify(r) : "=r" (reg));	\
+		mrs_s((r), reg)						\
 		reg;							\
 	})
 
 #define write_gicreg(v,r)						\
 	do {								\
 		u64 __val = (v);					\
-		asm volatile("msr_s " __stringify(r) ", %0" : : "r" (__val));\
+		msr_s((r), __val)
 	} while (0)
 
 /* vcpu is already in the HYP VA space */
