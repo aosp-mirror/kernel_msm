@@ -3271,6 +3271,9 @@ static int ath10k_pci_probe(struct pci_dev *pdev,
 		goto err_free_pipes;
 	}
 
+	if (QCA_REV_6174(ar) || QCA_REV_9377(ar))
+		ath10k_pci_override_ce_config(ar);
+
 	ret = ath10k_pci_force_wake(ar);
 	if (ret) {
 		ath10k_warn(ar, "failed to wake up device : %d\n", ret);
