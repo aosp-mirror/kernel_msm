@@ -110,6 +110,24 @@
 	status = "ok";
 };
 
+&sdhc_2 {
+	/delete-property/ vdd-supply;
+	vdd-io-supply = <&pm8916_l12>;
+	qcom,vdd-io-always-on;
+	qcom,vdd-io-voltage-level = <1800000 1800000>;
+	qcom,vdd-io-current-level = <200 22000>;
+
+	pinctrl-names = "active", "sleep";
+	pinctrl-0 = <&sdc2_clk_on &sdc2_cmd_on &sdc2_data_on>;
+	pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off>;
+
+	qcom,clk-rates = <400000 20000000 25000000 50000000>;
+	qcom,sup-voltages = <1800 2950>;
+
+	qcom,nonremovable;
+	status = "ok";
+};
+
 &venus_qseecom_mem {
 	status = "disabled";
 };
