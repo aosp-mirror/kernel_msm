@@ -10,16 +10,17 @@
  * GNU General Public License for more details.
  */
 
-#include "../qcom/sdm845-v2.dtsi"
-#include "../qcom/sdm845-pmic-overlay.dtsi"
-#include "../qcom/sdm845-pinctrl-overlay.dtsi"
-#include "sdm845-b1c1-common.dtsi"
+/{
+	/* Taimen's battery */
+	b1_batterydata: qcom,battery-data {
+		qcom,batt-id-range-pct = <15>;
+		#include "b1-atl-3135.dtsi"
+		#include "b1-lishen-3135.dtsi"
+		#include "b1-liwinon-3135.dtsi"
+	};
+};
 
-#include "sdm845-b1-touch.dtsi"
-#include "sdm845-b1c1-audio.dtsi"
-#include "sdm845-b1-battery.dtsi"
-
-&dsi_sw43408_cmd_display {
-	qcom,dsi-display-active;
+&pmi8998_fg {
+	qcom,battery-data = <&b1_batterydata>;
 };
 
