@@ -477,6 +477,10 @@ static int ptrace_gethbpregs(struct task_struct *tsk, long num,
 	struct perf_event *bp;
 	struct arch_hw_breakpoint_ctrl arch_ctrl;
 
+	/* Check the hw break point support */
+	if (!arch_get_max_wp_len())
+		return -ENOTSUPP;
+
 	if (num == 0) {
 		reg = ptrace_get_hbp_resource_info();
 	} else {
@@ -523,6 +527,10 @@ static int ptrace_sethbpregs(struct task_struct *tsk, long num,
 	struct perf_event *bp;
 	struct arch_hw_breakpoint_ctrl ctrl;
 	struct perf_event_attr attr;
+
+	/* Check the hw break point support */
+	if (!arch_get_max_wp_len())
+		return -ENOTSUPP;
 
 	if (num == 0)
 		goto out;
