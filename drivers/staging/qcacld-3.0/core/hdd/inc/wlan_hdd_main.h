@@ -2502,4 +2502,10 @@ int hdd_get_rssi_snr_by_bssid(hdd_adapter_t *adapter, const uint8_t *bssid,
  */
 void hdd_dp_trace_init(struct hdd_config *config);
 
+/**
+ * hdd_pld_ipa_uc_shutdown_pipes() - Disconnect IPA WDI pipes during PDR
+ *
+ * Return: None
+ */
+void hdd_pld_ipa_uc_shutdown_pipes(void);
 #endif /* end #if !defined(WLAN_HDD_MAIN_H) */
