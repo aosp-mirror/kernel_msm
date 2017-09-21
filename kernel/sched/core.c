@@ -3393,11 +3393,15 @@ static void __sched notrace __schedule(bool preempt)
 		prev->waiting_time = now;
 		if (!is_idle_task(next) &&
 		    now > next->waiting_time + NSEC_PER_SEC) {
-			printk("task wait timing: next->pid: %d, "
-			       "next->tid: %d, next->prio: %d, "
-			       "next->vruntime: %llu, "
+			printk("task wait timing: "
+			       "prev->tgid: %d, prev->pid: %d, "
+			       "prev->prio: %d, prev->vruntime: %llu, "
+			       "next->tgid: %d, next->pid: %d, "
+			       "next->prio: %d, next->vruntime: %llu, "
 			       "now: %llu, ready: %llu, "
 			       "waiting time: %llu\n",
+			       prev->tgid, prev->pid, prev->prio,
+			       prev->se.vruntime,
 			       next->tgid, next->pid, next->prio,
 			       next->se.vruntime,
 			       now, next->waiting_time,
