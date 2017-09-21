@@ -222,6 +222,7 @@
 			qcom,batt-cold-percentage = <80>;
 			qcom,tchg-mins = <232>;
 			qcom,resume-soc = <99>;
+			qcom,float-charge;
 			qcom,chg-vadc = <&pm8916_vadc>;
 			qcom,chg-adc_tm = <&pm8916_adc_tm>;
 

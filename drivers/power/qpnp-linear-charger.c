@@ -1600,7 +1600,10 @@ static int qpnp_batt_power_set_property(struct power_supply *psy,
 		switch (val->intval) {
 		case POWER_SUPPLY_STATUS_FULL:
 			if (chip->cfg_float_charge)
+			{
+				chip->chg_done = true;
 				break;
+			}
 			/* Disable charging */
 			rc = qpnp_lbc_charger_enable(chip, SOC, 0);
 			if (rc)
