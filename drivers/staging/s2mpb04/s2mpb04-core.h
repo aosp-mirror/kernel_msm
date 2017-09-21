@@ -91,8 +91,8 @@
 #define S2MPB04_ADC_SCALE_VBAT      23438 /* in uV/lsb */
 
 /* macros for PTAT-to-temperature conversion */
-#define TEMP_TO_PTAT_CODE(X)  (((X) + 238260) / 1167)
-#define PTAT_CODE_TO_TEMP(X)  ((X) * 1167 - 238260)
+#define TEMP_TO_PTAT_CODE(X)  ((238260 - (X)) / 1167)
+#define PTAT_CODE_TO_TEMP(X)  (238260 - ((X) * 1167))
 
 /* interrupt flags */
 #define S2MPB04_INT_PONR              0
