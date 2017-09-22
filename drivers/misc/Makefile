@@ -77,6 +77,8 @@ obj-y                           += mnh/
 obj-$(CONFIG_GOOGLE_EASEL)      += google-easel.o
 google-easel-objs               += google-easel-comm.o google-easel-comm-dma.o google-easel-comm-hw.o
 
+obj-y                           += st33/
+
 OBJCOPYFLAGS :=
 OBJCOPYFLAGS_lkdtm_rodata_objcopy.o := \
 			--set-section-flags .text=alloc,readonly \

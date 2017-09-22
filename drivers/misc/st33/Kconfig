@@ -1,0 +1,9 @@
+#
+# ST33 SPI driver
+#
+config ST33
+    tristate "ST33"
+    depends on SPI
+    default "n"
+    ---help---
+      Include support for ST33 SPI driver
