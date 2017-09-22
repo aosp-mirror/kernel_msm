@@ -479,7 +479,7 @@ static int ptrace_gethbpregs(struct task_struct *tsk, long num,
 
 	/* Check the hw break point support */
 	if (!arch_get_max_wp_len())
-		return -ENOTSUPP;
+		return -EIO;
 
 	if (num == 0) {
 		reg = ptrace_get_hbp_resource_info();
@@ -530,7 +530,7 @@ static int ptrace_sethbpregs(struct task_struct *tsk, long num,
 
 	/* Check the hw break point support */
 	if (!arch_get_max_wp_len())
-		return -ENOTSUPP;
+		return -EIO;
 
 	if (num == 0)
 		goto out;
