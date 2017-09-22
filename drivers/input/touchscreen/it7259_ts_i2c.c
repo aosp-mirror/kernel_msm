@@ -2770,6 +2770,13 @@ static int it7259_ts_suspend(struct device *dev)
 				if (retval < 0)
 					dev_err(dev, "Regulator avdd set_opt failed at suspend rc=%d\n",
 						retval);
+
+				retval = regulator_enable(ts_data->avdd);
+				if (retval)
+					dev_err(&ts_data->client->dev,
+							"Regulator avdd enable failed rc=%d\n",
+							retval);
+
 			}
 
 			ts_data->in_low_power_mode = true;
