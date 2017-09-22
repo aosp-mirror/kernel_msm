@@ -131,6 +131,12 @@
 	};
 };
 
+&dsi_sim_vid {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
+	qcom,platform-reset-gpio = <&tlmm 6 0>;
+};
+
 &pmi8998_wled {
 	status = "okay";
 	qcom,disp-type-amoled;
