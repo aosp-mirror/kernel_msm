@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2015, 2017 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -86,6 +86,7 @@ struct kgsl_cmdbatch {
  * @context: Pointer to the KGSL context that owns the cmdbatch
  * @timestamp: Pending timestamp for the event
  * @handle: Pointer to a sync fence handle
+ * @handle_lock: Spin lock to protect handle
  * @device: Pointer to the KGSL device
  */
 struct kgsl_cmdbatch_sync_event {
@@ -95,6 +96,7 @@ struct kgsl_cmdbatch_sync_event {
 	struct kgsl_context *context;
 	unsigned int timestamp;
 	struct kgsl_sync_fence_waiter *handle;
+	spinlock_t handle_lock;
 	struct kgsl_device *device;
 };
 
