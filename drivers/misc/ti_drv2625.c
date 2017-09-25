@@ -193,12 +193,28 @@ static int drv2625_set_go_bit(struct drv2625_data *pDrv2625data,
 	return ret;
 }
 
+static void drv2625_set_interval(struct drv2625_data *pDrv2625data,
+				 int interval)
+{
+	drv2625_set_bits(pDrv2625data, DRV2625_REG_CONTROL2,
+			 INTERVAL_MASK,
+			 interval << INTERVAL_SHIFT);
+}
+
 static void drv2625_change_mode(struct drv2625_data *pDrv2625data,
 		unsigned char work_mode)
 {
-	drv2625_set_bits(pDrv2625data, DRV2625_REG_MODE, DRV2625_MODE_MASK , work_mode);
-}
+	drv2625_set_bits(pDrv2625data,
+			 DRV2625_REG_MODE, DRV2625_MODE_MASK, work_mode);
+	/* Set playback interval to 5 ms when playing built-in
+	 * effects, otherwise vibratiion durations are too short.
+	 */
+	if (work_mode == DRV2625_MODE_WAVEFORM_SEQUENCER)
+		drv2625_set_interval(pDrv2625data, 0);
+	else
+		drv2625_set_interval(pDrv2625data, 1);
 
+}
 
 static void drv2625_stop(struct drv2625_data *pDrv2625data)
 {
@@ -466,8 +482,7 @@ static void dev_init_platform_data(struct drv2625_data *pDrv2625data)
 	}
 
 	/* Set PLAYBACK_INTERVAL to 1ms. This shortens auto-break to 10ms */
-	drv2625_set_bits(pDrv2625data,
-			DRV2625_REG_CONTROL2, INTERVAL_MASK, 1<<INTERVAL_SHIFT);
+	drv2625_set_interval(pDrv2625data, 1);
 
 	if (actuator.mnRatedVoltage != 0){
 		drv2625_reg_write(pDrv2625data,
@@ -755,8 +770,7 @@ static ssize_t interval_store(struct device *dev,
 		       interval);
 		return -EINVAL;
 	}
-	drv2625_set_bits(pDrv2625data, DRV2625_REG_CONTROL2, INTERVAL_MASK,
-			 interval << INTERVAL_SHIFT);
+	drv2625_set_interval(pDrv2625data, interval);
 	return count;
 }
 
@@ -879,6 +893,7 @@ static ssize_t set_sequencer_store(struct device *dev,
 	unsigned char loop[DRV2625_SEQUENCER_SIZE] = { 0 };
 	int n;
 
+	dev_info(pDrv2625data->dev, "set sequencer %s\n", buf);
 	n = sscanf(buf,
 		   "%hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu "
 		   "%hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu",
