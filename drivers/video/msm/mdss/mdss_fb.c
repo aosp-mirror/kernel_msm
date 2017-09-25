@@ -1017,6 +1017,11 @@ static ssize_t mdss_fb_get_image_mode(struct device *dev,
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 	char *rx_buf = NULL;
 
+	if ((!dev) || (!attr) || (!buf))
+	{
+		pr_err("dev attr buf NULL!\n");
+		return -EINVAL;
+	}
 	pdata = dev_get_platdata(&mfd->pdev->dev);
 	if (!pdata) {
 		pr_err("no panel connected!\n");
@@ -1025,13 +1030,13 @@ static ssize_t mdss_fb_get_image_mode(struct device *dev,
 	pinfo = &pdata->panel_info;
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
-	rx_buf= kzalloc(2, GFP_KERNEL);
+	rx_buf= kzalloc(2, GFP_KERNEL);//malloc 2 bytes buffer
 	if (!rx_buf) {
 		pr_err("not enough memory to hold panel reg dump\n");
 		return -ENOMEM;;
 	}
 	mdss_dsi_panel_cmd_read(ctrl_pdata, 0x0d, 0x00,
-				NULL, rx_buf, 1);
+				NULL, rx_buf, 1);//read image mode
 	ret = scnprintf(buf, PAGE_SIZE, "0x%02x\n",rx_buf[0]);
 
 	kfree(rx_buf);
@@ -1048,11 +1053,20 @@ static ssize_t mdss_fb_set_image_mode(struct device *dev,
 	struct mdss_panel_info* pinfo;
 	struct mdss_dsi_ctrl_pdata* ctrl_pdata = NULL;
 	struct dcs_cmd_req cmdreq;
-	static char cmd[2] = {0x13, 0x00};
+	static char cmd[2] = {0x13, 0x00};//normal mode cmd
 	static struct dsi_cmd_desc dsi_cmd = {
 		{DTYPE_DCS_WRITE, 1, 0, 0, 1, sizeof(cmd)},cmd};
 
+	if ((!dev) || (!attr) || (!buf))
+	{
+		pr_err("dev attr buf NULL!\n");
+		return -EINVAL;
+	}
 	pdata = dev_get_platdata(&mfd->pdev->dev);
+	if (!pdata) {
+		pr_err("no panel connected!\n");
+		return -EINVAL;
+	}
 	pinfo = &pdata->panel_info;
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata, panel_data);
 
@@ -1079,6 +1093,11 @@ static ssize_t mdss_fb_get_pixel_mode(struct device *dev,
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 	char *rx_buf = NULL;
 
+	if ((!dev) || (!attr) || (!buf))
+	{
+		pr_err("dev attr buf NULL!\n");
+		return -EINVAL;
+	}
 	pdata = dev_get_platdata(&mfd->pdev->dev);
 	if (!pdata) {
 		pr_err("no panel connected!\n");
@@ -1087,13 +1106,13 @@ static ssize_t mdss_fb_get_pixel_mode(struct device *dev,
 	pinfo = &pdata->panel_info;
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
-	rx_buf= kzalloc(2, GFP_KERNEL);
+	rx_buf= kzalloc(2, GFP_KERNEL);//malloc 2 bytes buffer
 	if (!rx_buf) {
 		pr_err("not enough memory to hold panel reg dump\n");
 		return -ENOMEM;;
 	}
 	mdss_dsi_panel_cmd_read(ctrl_pdata, 0x0c, 0x00,
-				NULL, rx_buf, 1);
+				NULL, rx_buf, 1);//read pixel mode
 	ret = scnprintf(buf, PAGE_SIZE, "0x%02x\n",rx_buf[0]);
 
 	kfree(rx_buf);
@@ -1110,11 +1129,20 @@ static ssize_t mdss_fb_set_pixel_mode(struct device *dev,
 	struct mdss_panel_info* pinfo;
 	struct mdss_dsi_ctrl_pdata* ctrl_pdata = NULL;
 	struct dcs_cmd_req cmdreq;
-	static char cmd[2] = {0x22, 0x00};
+	static char cmd[2] = {0x22, 0x00};//all pixel off cmd
 	static struct dsi_cmd_desc dsi_cmd = {
 		{DTYPE_DCS_WRITE, 1, 0, 0, 1, sizeof(cmd)},cmd};
 
+	if ((!dev) || (!attr) || (!buf))
+	{
+		pr_err("dev attr buf NULL!\n");
+		return -EINVAL;
+	}
 	pdata = dev_get_platdata(&mfd->pdev->dev);
+	if (!pdata) {
+		pr_err("no panel connected!\n");
+		return -EINVAL;
+	}
 	pinfo = &pdata->panel_info;
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata, panel_data);
 
@@ -1141,6 +1169,11 @@ static ssize_t mdss_fb_get_signal_mode(struct device *dev,
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 	char *rx_buf = NULL;
 
+	if ((!dev) || (!attr) || (!buf))
+	{
+		pr_err("dev attr buf NULL!\n");
+		return -EINVAL;
+	}
 	pdata = dev_get_platdata(&mfd->pdev->dev);
 	if (!pdata) {
 		pr_err("no panel connected!\n");
@@ -1149,14 +1182,14 @@ static ssize_t mdss_fb_get_signal_mode(struct device *dev,
 	pinfo = &pdata->panel_info;
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
-	rx_buf= kzalloc(2, GFP_KERNEL);
+	rx_buf= kzalloc(2, GFP_KERNEL);//malloc 2 bytes buffer
 	if (!rx_buf) {
 		pr_err("not enough memory to hold panel reg dump\n");
 		return -ENOMEM;;
 	}
 	mdss_dsi_panel_cmd_read(ctrl_pdata, 0x0e, 0x00,
 				NULL, rx_buf, 1);
-	ret = scnprintf(buf, PAGE_SIZE, "0x%02x\n",rx_buf[0]);
+	ret = scnprintf(buf, PAGE_SIZE, "0x%02x\n",rx_buf[0]);//read signal mode
 
 	kfree(rx_buf);
 
@@ -1174,6 +1207,11 @@ static ssize_t mdss_fb_get_bright_mode(struct device *dev,
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 	char *rx_buf = NULL;
 
+	if ((!dev) || (!attr) || (!buf))
+	{
+		pr_err("dev attr buf NULL!\n");
+		return -EINVAL;
+	}
 	pdata = dev_get_platdata(&mfd->pdev->dev);
 	if (!pdata) {
 		pr_err("no panel connected!\n");
@@ -1182,13 +1220,13 @@ static ssize_t mdss_fb_get_bright_mode(struct device *dev,
 	pinfo = &pdata->panel_info;
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
-	rx_buf= kzalloc(2, GFP_KERNEL);
+	rx_buf= kzalloc(2, GFP_KERNEL);//malloc 2 bytes buffer
 	if (!rx_buf) {
 		pr_err("not enough memory to hold panel reg dump\n");
 		return -ENOMEM;;
 	}
 	mdss_dsi_panel_cmd_read(ctrl_pdata, 0x52, 0x00,
-				NULL, rx_buf, 1);
+				NULL, rx_buf, 1);//read bright mode
 	ret = scnprintf(buf, PAGE_SIZE, "0x%02x\n",rx_buf[0]);
 
 	kfree(rx_buf);
@@ -1205,11 +1243,20 @@ static ssize_t mdss_fb_set_bright_mode(struct device *dev,
 	struct mdss_panel_info* pinfo;
 	struct mdss_dsi_ctrl_pdata* ctrl_pdata = NULL;
 	struct dcs_cmd_req cmdreq;
-	static char cmd[2] = {0x51, 0xff};
+	static char cmd[2] = {0x51, 0xff};//set brightness to max cmd
 	static struct dsi_cmd_desc dsi_cmd = {
 		{DTYPE_DCS_WRITE1, 1, 0, 0, 1, sizeof(cmd)},cmd};
 
+	if ((!dev) || (!attr) || (!buf))
+	{
+		pr_err("dev attr buf NULL!\n");
+		return -EINVAL;
+	}
 	pdata = dev_get_platdata(&mfd->pdev->dev);
+	if (!pdata) {
+		pr_err("no panel connected!\n");
+		return -EINVAL;
+	}
 	pinfo = &pdata->panel_info;
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata, panel_data);
 
@@ -1225,7 +1272,6 @@ static ssize_t mdss_fb_set_bright_mode(struct device *dev,
 	return count;
 }
 
-
 static ssize_t mdss_fb_get_bright_en_mode(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -1237,6 +1283,11 @@ static ssize_t mdss_fb_get_bright_en_mode(struct device *dev,
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 	char *rx_buf = NULL;
 
+	if ((!dev) || (!attr) || (!buf))
+	{
+		pr_err("dev attr buf NULL!\n");
+		return -EINVAL;
+	}
 	pdata = dev_get_platdata(&mfd->pdev->dev);
 	if (!pdata) {
 		pr_err("no panel connected!\n");
@@ -1245,13 +1296,13 @@ static ssize_t mdss_fb_get_bright_en_mode(struct device *dev,
 	pinfo = &pdata->panel_info;
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
-	rx_buf= kzalloc(2, GFP_KERNEL);
+	rx_buf= kzalloc(2, GFP_KERNEL);//malloc 2 bytes buffer
 	if (!rx_buf) {
 		pr_err("not enough memory to hold panel reg dump\n");
 		return -ENOMEM;;
 	}
 	mdss_dsi_panel_cmd_read(ctrl_pdata, 0x54, 0x00,
-				NULL, rx_buf, 1);
+				NULL, rx_buf, 1);//read bright enable mode
 	ret = scnprintf(buf, PAGE_SIZE, "0x%02x\n",rx_buf[0]);
 
 	kfree(rx_buf);
@@ -2185,13 +2236,25 @@ int mdss_set_short_cmd(struct msm_fb_data_type* mfd, char cmd0, char cmd1)
 	struct mdss_panel_info* pinfo;
 	struct mdss_dsi_ctrl_pdata* ctrl_pdata = NULL;
 	struct dcs_cmd_req cmdreq;
-	static char cmd[2] = {0};
+	static char cmd[2] = {0};//2 bytes cmd size
 	static struct dsi_cmd_desc dsi_cmd = {
 		{DTYPE_DCS_WRITE, 1, 0, 0, 1, sizeof(cmd)},cmd};
+
+	if (!mfd)
+	{
+		pr_err("mfd NULL!\n");
+		return -EINVAL;
+	}
+
 	cmd[0] = cmd0;
 	cmd[1] = cmd1;
-
 	pdata = dev_get_platdata(&mfd->pdev->dev);
+	if (!pdata)
+	{
+		pr_err("no panel connected!\n");
+		return -EINVAL;
+	}
+
 	pinfo = &pdata->panel_info;
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata, panel_data);
 
@@ -2216,8 +2279,12 @@ int mdss_fb_get_register_value(struct msm_fb_data_type* mfd, int reg, int *val)
 	struct mdss_dsi_ctrl_pdata* ctrl_pdata = NULL;
 	char* rx_buf = NULL;
 
+	if (!mfd)
+	{
+		pr_err("mfd NULL!\n");
+		return -EINVAL;
+	}
 	pdata = dev_get_platdata(&mfd->pdev->dev);
-
 	if (!pdata)
 	{
 		pr_err("no panel connected!\n");
@@ -2226,7 +2293,7 @@ int mdss_fb_get_register_value(struct msm_fb_data_type* mfd, int reg, int *val)
 
 	pinfo = &pdata->panel_info;
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata, panel_data);
-	rx_buf = kzalloc(2, GFP_KERNEL);
+	rx_buf = kzalloc(2, GFP_KERNEL);//malloc 2 bytes buffer
 
 	if (!rx_buf)
 	{
