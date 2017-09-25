@@ -1633,6 +1633,13 @@ static int mdss_dsi_cmds2buf_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 			}
 			pr_debug("%s: cmd_dma_tx for cmd = 0x%x, len = %d\n",
 					__func__,  cm->payload[0], len);
+			/*check if 0x22 cmd is set to change panel to all pixel off*/
+			if (0x22 == cm->payload[0])
+			{
+				pr_err("%s: cmd_dma_tx for cmd = 0x%x, len = %d\n",
+					__func__,  cm->payload[0], len);
+				WARN_ON(1);
+			}
 
 			if (!wait || dchdr->wait > VSYNC_PERIOD)
 				usleep_range(dchdr->wait * 1000, dchdr->wait * 1000);
