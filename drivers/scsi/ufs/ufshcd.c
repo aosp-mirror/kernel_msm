@@ -6107,7 +6107,15 @@ static irqreturn_t ufshcd_update_uic_error(struct ufs_hba *hba)
 					dev_err(hba->dev, "%s: LINERESET during hibern8 enter, reg 0x%x\n",
 						__func__, reg);
 					hba->full_init_linereset = true;
+				} else {
+					dev_err(hba->dev,
+						"%s: LINERESET with cmd != UIC_CMD_DME_HIBER_ENTER, reg 0x%x\n",
+						__func__, reg);
 				}
+			} else {
+				dev_err(hba->dev,
+					"%s: LINERESET without cmd, reg 0x%x\n",
+					__func__, reg);
 			}
 		}
 		retval |= IRQ_HANDLED;
