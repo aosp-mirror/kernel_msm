@@ -81,7 +81,7 @@
 
 static struct fb_info *fbi_list[MAX_FBI_LIST];
 static int fbi_list_index;
-extern struct msm_fb_data_type *g_mfd;
+
 static void *panel_lk_addr = NULL;
 
 static u32 mdss_fb_pseudo_palette[16] = {
@@ -1013,7 +1013,7 @@ static ssize_t mdss_fb_get_image_mode(struct device *dev,
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
 	struct mdss_panel_data *pdata;
 	struct mdss_panel_info *pinfo;
-	int ret;
+	int ret = 0;
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 	char *rx_buf = NULL;
 
@@ -1089,7 +1089,7 @@ static ssize_t mdss_fb_get_pixel_mode(struct device *dev,
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
 	struct mdss_panel_data *pdata;
 	struct mdss_panel_info *pinfo;
-	int ret;
+	int ret = 0;
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 	char *rx_buf = NULL;
 
@@ -1165,7 +1165,7 @@ static ssize_t mdss_fb_get_signal_mode(struct device *dev,
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
 	struct mdss_panel_data *pdata;
 	struct mdss_panel_info *pinfo;
-	int ret;
+	int ret = 0;
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 	char *rx_buf = NULL;
 
@@ -1203,7 +1203,7 @@ static ssize_t mdss_fb_get_bright_mode(struct device *dev,
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
 	struct mdss_panel_data *pdata;
 	struct mdss_panel_info *pinfo;
-	int ret;
+	int ret = 0;
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 	char *rx_buf = NULL;
 
@@ -1279,7 +1279,7 @@ static ssize_t mdss_fb_get_bright_en_mode(struct device *dev,
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
 	struct mdss_panel_data *pdata;
 	struct mdss_panel_info *pinfo;
-	int ret;
+	int ret = 0;
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 	char *rx_buf = NULL;
 
@@ -2275,7 +2275,7 @@ int mdss_fb_get_register_value(struct msm_fb_data_type* mfd, int reg, int *val)
 {
 	struct mdss_panel_data* pdata;
 	struct mdss_panel_info* pinfo;
-	int ret;
+	int ret = 0;
 	struct mdss_dsi_ctrl_pdata* ctrl_pdata = NULL;
 	char* rx_buf = NULL;
 
@@ -2370,6 +2370,7 @@ static int mdss_fb_blank_unblank(struct msm_fb_data_type *mfd)
 {
 	int ret = 0;
 	int cur_power_state;
+	int reg_val = 0;
 
 	if (!mfd)
 		return -EINVAL;
@@ -2450,6 +2451,16 @@ static int mdss_fb_blank_unblank(struct msm_fb_data_type *mfd)
 	}
 
 error:
+		/*read 0x0d status reg to check whether the panel has been set to all pixel off, set 0x13 cmd to normal mode*/
+		reg_val = -1;
+		mdss_fb_get_register_value(mfd, 0x0d, &reg_val);
+		if (0x08 == reg_val)
+		{
+			pr_err("read 0x0d error:%d\n",reg_val);
+			mdss_set_short_cmd(mfd, 0x13, 0x00);
+			mdss_fb_get_register_value(mfd, 0x0d, &reg_val);
+			pr_err("read 0x0d after set to normal mode:%d\n",reg_val);
+		}
 	return ret;
 }
 
@@ -4154,7 +4165,6 @@ static int __mdss_fb_display_thread(void *data)
 	struct msm_fb_data_type *mfd = data;
 	int ret;
 	struct sched_param param;
-	int reg_val = 0;
 
 	/*
 	 * this priority was found during empiric testing to have appropriate
@@ -4176,16 +4186,6 @@ static int __mdss_fb_display_thread(void *data)
 			break;
 
 		MDSS_XLOG(mfd->index, XLOG_FUNC_ENTRY);
-		/*read 0x0d status reg to check whether the panel has been set to all pixel off, set 0x13 cmd to normal mode*/
-		reg_val = -1;
-		mdss_fb_get_register_value(g_mfd, 0x0d, &reg_val);
-		if (0x08 == reg_val)
-		{
-			pr_err("read 0x0d error:%d\n",reg_val);
-			mdss_set_short_cmd(g_mfd, 0x13, 0x00);
-			mdss_fb_get_register_value(g_mfd, 0x0d, &reg_val);
-			pr_err("read 0x0d after set to normal mode:%d\n",reg_val);
-		}
 		ret = __mdss_fb_perform_commit(mfd);
 		MDSS_XLOG(mfd->index, XLOG_FUNC_EXIT);
 
