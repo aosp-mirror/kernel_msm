@@ -904,7 +904,7 @@ A_STATUS ol_txrx_pdev_attach_target(ol_txrx_pdev_handle pdev)
 void
 ol_txrx_pdev_detach(ol_txrx_pdev_handle pdev, int force)
 {
-    int i;
+    int i = 0;
     unsigned int page_idx;
     struct ol_txrx_stats_req_internal *req;
 
@@ -920,9 +920,23 @@ ol_txrx_pdev_detach(ol_txrx_pdev_handle pdev, int force)
     TXRX_ASSERT1(TAILQ_EMPTY(&pdev->vdev_list));
 
     adf_os_spin_lock_bh(&pdev->req_list_spinlock);
+    if (pdev->req_list_depth > 0)
+        TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+            "Warning: the txrx req list is not empty, depth=%d\n",
+            pdev->req_list_depth
+            );
     TAILQ_FOREACH(req, &pdev->req_list, req_list_elem) {
         TAILQ_REMOVE(&pdev->req_list, req, req_list_elem);
         pdev->req_list_depth--;
+        TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+            "%d: %p,verbose(%d), concise(%d), up_m(0x%x), reset_m(0x%x)\n",
+            i++,
+            req,
+            req->base.print.verbose,
+            req->base.print.concise,
+            req->base.stats_type_upload_mask,
+            req->base.stats_type_reset_mask
+            );
         adf_os_mem_free(req);
     }
     adf_os_spin_unlock_bh(&pdev->req_list_spinlock);
