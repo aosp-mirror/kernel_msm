@@ -1172,6 +1172,49 @@ static ssize_t error_event_show(struct device *dev,
 
 static DEVICE_ATTR_RO(error_event);
 
+static ssize_t mipi_config_store(struct device *dev,
+				 struct device_attribute *attr,
+				 const char *buf, size_t count)
+{
+	unsigned long val = 0;
+	int ret;
+	struct mnh_mipi_config cfg = {.vc_en_mask = MNH_MIPI_VC_ALL_EN_MASK};
+
+	ret = mnh_sm_get_val_from_buf(buf, &val);
+	if (ret)
+		goto mipi_config_arg_fail;
+	cfg.rxdev = val;
+
+	ret = mnh_sm_get_val_from_buf(buf, &val);
+	if (ret)
+		goto mipi_config_arg_fail;
+	cfg.rx_rate = val;
+
+	ret = mnh_sm_get_val_from_buf(buf, &val);
+	if (ret)
+		goto mipi_config_arg_fail;
+	cfg.txdev = val;
+
+	ret = mnh_sm_get_val_from_buf(buf, &val);
+	if (ret)
+		goto mipi_config_arg_fail;
+	cfg.tx_rate = val;
+
+	mnh_mipi_stop(mnh_sm_dev->dev, cfg);
+	mnh_mipi_config(mnh_sm_dev->dev, cfg);
+
+	return count;
+
+mipi_config_arg_fail:
+	dev_err(dev,
+		"%s: invalid argument; expecting \"{rx_device};{rx_rate};{tx_device};{tx_rate}\"\n",
+		__func__);
+
+	return -EINVAL;
+}
+
+static DEVICE_ATTR_WO(mipi_config);
+
 static struct attribute *mnh_sm_attrs[] = {
 	&dev_attr_stage_fw.attr,
 	&dev_attr_poweron.attr,
@@ -1193,6 +1236,7 @@ static struct attribute *mnh_sm_attrs[] = {
 	&dev_attr_boot_trace.attr,
 	&dev_attr_error_event.attr,
 	&dev_attr_fw_ver.attr,
+	&dev_attr_mipi_config.attr,
 	NULL
 };
 ATTRIBUTE_GROUPS(mnh_sm);
