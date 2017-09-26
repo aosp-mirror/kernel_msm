@@ -91,7 +91,7 @@
 		ti,smart-loop = <0>; /* 0-closeloop, 1-openloop */
 		ti,actuator = <1>; /* 0-ERM, 1-LRA */
 		ti,rated-voltage = <77>; /* 1.8 Vrms */
-		ti,odclamp-voltage = <165>; /* 3.5 Vpeak */
+		ti,odclamp-voltage = <236>; /* 5.0 Vpeak */
 		ti,lra-frequency = <155>; /* f0 = 155Hz */
 		ti,ol-lra-frequency = <155>; /* off-f0 in OL */
 		ti,bemf-factor = <150>;
