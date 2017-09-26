@@ -110,4 +110,6 @@ source "drivers/staging/bcm15602/Kconfig"
 
 source "drivers/staging/s2mpb04/Kconfig"
 
+source "drivers/staging/wlan_mac/Kconfig"
+
 endif # STAGING
