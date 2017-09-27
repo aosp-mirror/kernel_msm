@@ -4892,6 +4892,49 @@ static int tasha_codec_enable_swr(struct snd_soc_dapm_widget *w,
 	return 0;
 }
 
+static int tasha_codec_update_hph_gain(struct snd_soc_dapm_widget *w,
+					u16 gain_update_reg, int gain)
+{
+	struct snd_soc_codec *codec = w->codec;
+	u16 intp_reg, vol_reg;
+	int val = 0, vol_val = 0;
+
+	switch (gain_update_reg) {
+	case WCD9335_CDC_RX1_RX_VOL_CTL:
+		intp_reg = WCD9335_CDC_RX2_RX_PATH_CTL;
+		vol_reg = WCD9335_CDC_RX2_RX_VOL_CTL;
+		break;
+	case WCD9335_CDC_RX2_RX_VOL_CTL:
+		intp_reg = WCD9335_CDC_RX1_RX_PATH_CTL;
+		vol_reg = WCD9335_CDC_RX1_RX_VOL_CTL;
+		break;
+	case WCD9335_CDC_RX1_RX_VOL_MIX_CTL:
+		intp_reg = WCD9335_CDC_RX2_RX_PATH_CTL;
+		vol_reg = WCD9335_CDC_RX2_RX_VOL_MIX_CTL;
+		break;
+	case WCD9335_CDC_RX2_RX_VOL_MIX_CTL:
+		intp_reg = WCD9335_CDC_RX1_RX_PATH_CTL;
+		vol_reg = WCD9335_CDC_RX1_RX_VOL_MIX_CTL;
+		break;
+	default:
+		pr_debug("%s: not HPH gain reg = %x\n", __func__,
+			 gain_update_reg);
+		return 0;
+	}
+	/* Check left interpolator clk is ON for right and vice versa */
+	val = (snd_soc_read(codec, intp_reg) >> 5) & 0x1;
+	if (val) {
+		/* Read left gain value for right and vice versa */
+		vol_val = snd_soc_read(codec, vol_reg);
+		/* Update with max gain of left and right */
+		if (vol_val > gain) {
+			usleep_range(5000, 5500);
+			snd_soc_write(codec, gain_update_reg, vol_val);
+		}
+	}
+	return 0;
+}
+
 static int tasha_codec_enable_mix_path(struct snd_soc_dapm_widget *w,
 		struct snd_kcontrol *kcontrol, int event)
 {
@@ -4959,6 +5002,7 @@ static int tasha_codec_enable_mix_path(struct snd_soc_dapm_widget *w,
 		val = snd_soc_read(codec, gain_reg);
 		val += offset_val;
 		snd_soc_write(codec, gain_reg, val);
+		tasha_codec_update_hph_gain(w, gain_reg, val);
 		break;
 	case SND_SOC_DAPM_POST_PMD:
 		if ((tasha->spkr_gain_offset == RX_GAIN_OFFSET_M1P5_DB) &&
@@ -5193,6 +5237,7 @@ static int tasha_codec_enable_interpolator(struct snd_soc_dapm_widget *w,
 		val = snd_soc_read(codec, gain_reg);
 		val += offset_val;
 		snd_soc_write(codec, gain_reg, val);
+		tasha_codec_update_hph_gain(w, gain_reg, val);
 		break;
 	case SND_SOC_DAPM_POST_PMD:
 		tasha_config_compander(codec, w->shift, event);

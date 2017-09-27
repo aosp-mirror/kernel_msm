@@ -279,7 +279,7 @@ static inline unsigned int rdo_max_power(u32 rdo)
 #define PD_T_SINK_REQUEST	100	/* 100 ms minimum */
 #define PD_T_ERROR_RECOVERY	100	/* minimum 25 is insufficient */
 
-#define PD_T_DRP_TRY		100	/* 75 - 150 ms */
+#define PD_T_DRP_TRY		140	/* 75 - 150 ms */
 #define PD_T_DRP_TRYWAIT	600	/* 400 - 800 ms */
 
 #define PD_T_CC_DEBOUNCE	200	/* 100 - 200 ms */

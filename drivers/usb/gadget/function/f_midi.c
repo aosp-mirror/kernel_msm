@@ -90,6 +90,9 @@ struct f_midi {
 	int index;
 	char *id;
 	unsigned int buflen, qlen;
+
+	struct mutex		lock;
+	unsigned char		free_ref;
 };
 
 static inline struct f_midi *func_to_midi(struct usb_function *f)
@@ -408,6 +411,30 @@ static void f_midi_disable(struct usb_function *f)
 	usb_ep_disable(midi->out_ep);
 }
 
+static void f_midi_free(struct usb_function *f)
+{
+	struct f_midi *midi = func_to_midi(f);
+	bool free = false;
+
+	mutex_lock(&midi->lock);
+	if (!--midi->free_ref)
+		free = true;
+	mutex_unlock(&midi->lock);
+
+	if (free) {
+		kfree(midi->id);
+		midi->id = NULL;
+
+		usb_free_all_descriptors(f);
+		kfree(midi);
+	}
+}
+
+static void f_midi_rmidi_free(struct snd_rawmidi *rmidi)
+{
+	f_midi_free(rmidi->private_data);
+}
+
 static void f_midi_unbind(struct usb_configuration *c, struct usb_function *f)
 {
 	struct usb_composite_dev *cdev = f->config->cdev;
@@ -422,13 +449,9 @@ static void f_midi_unbind(struct usb_configuration *c, struct usb_function *f)
 	card = midi->card;
 	midi->card = NULL;
 	if (card)
-		snd_card_free(card);
+		snd_card_free_when_closed(card);
 
-	kfree(midi->id);
-	midi->id = NULL;
-
-	usb_free_all_descriptors(f);
-	kfree(midi);
+	f_midi_free(f);
 }
 
 static int f_midi_snd_free(struct snd_device *device)
@@ -718,6 +741,8 @@ static int f_midi_register_card(struct f_midi *midi)
 			    SNDRV_RAWMIDI_INFO_INPUT |
 			    SNDRV_RAWMIDI_INFO_DUPLEX;
 	rmidi->private_data = midi;
+	rmidi->private_free = f_midi_rmidi_free;
+	midi->free_ref++;
 
 	/*
 	 * Yes, rawmidi OUTPUT = USB IN, and rawmidi INPUT = USB OUT.
@@ -1000,6 +1025,9 @@ int /* __init */ f_midi_bind_config(struct usb_configuration *c,
 
 	midi->gadget = c->cdev->gadget;
 	tasklet_init(&midi->tasklet, f_midi_in_tasklet, (unsigned long) midi);
+
+	midi->free_ref = 1;
+	mutex_init(&midi->lock);
 
 	/* set up ALSA midi devices */
 	midi->id = kstrdup(id, GFP_KERNEL);

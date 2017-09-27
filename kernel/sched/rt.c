@@ -1038,6 +1038,12 @@ static enum hrtimer_restart rt_schedtune_timer(struct hrtimer *timer)
 	sched_rt_update_capacity_req(rq, false);
 out:
 	raw_spin_unlock(&rq->lock);
+
+	/*
+	 * This can free the task_struct if no more references.
+	 */
+	put_task_struct(p);
+
 	return HRTIMER_NORESTART;
 }
 
@@ -1398,9 +1404,11 @@ enqueue_task_rt(struct rq *rq, struct task_struct *p, int flags)
 	/*
 	 * If schedtune timer is active, that means a boost was already
 	 * done, just cancel the timer so that deboost doesn't happen.
-	 * Otherwise, increase the boost.
+	 * Otherwise, increase the boost. If an enqueued timer was
+	 * cancelled, put the task reference.
 	 */
-	hrtimer_try_to_cancel(&rt_se->schedtune_timer);
+	if (hrtimer_try_to_cancel(&rt_se->schedtune_timer) == 1)
+		put_task_struct(p);
 
 	/*
 	 * schedtune_enqueued can be true in the following situation:
@@ -1432,6 +1440,7 @@ static void dequeue_task_rt(struct rq *rq, struct task_struct *p, int flags)
 		return;
 
 	if (flags == DEQUEUE_SLEEP) {
+		get_task_struct(p);
 		start_schedtune_timer(rt_se);
 		return;
 	}
@@ -1542,8 +1551,12 @@ static void schedtune_dequeue_rt(struct rq *rq, struct task_struct *p)
 	if (rt_se->schedtune_enqueued == false)
 		return;
 
-	/* Incase of class change cancel any active timers */
-	hrtimer_try_to_cancel(&rt_se->schedtune_timer);
+	/*
+	 * Incase of class change cancel any active timers. Otherwise, increase
+	 * the boost. If an enqueued timer was cancelled, put the task ref.
+	 */
+	if (hrtimer_try_to_cancel(&rt_se->schedtune_timer) == 1)
+		put_task_struct(p);
 
 	/* schedtune_enqueued is true, deboost it */
 	rt_se->schedtune_enqueued = false;

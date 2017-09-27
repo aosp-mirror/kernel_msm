@@ -2766,8 +2766,9 @@ static int binder_thread_write(struct binder_proc *proc,
 						buf_node->async_todo.list.next,
 						struct binder_work, entry);
 					binder_dequeue_work(w, __LINE__);
-					binder_enqueue_work(w, &thread->todo,
+					binder_enqueue_work(w, &proc->todo,
 							    __LINE__);
+					binder_wakeup_proc(proc);
 				}
 				binder_proc_unlock(buffer->target_node->proc,
 						   __LINE__);
@@ -3651,6 +3652,7 @@ static struct binder_thread *binder_get_thread(struct binder_proc *proc)
 		 * to recalc the insertion point in the rb tree.
 		 */
 		p = &proc->threads.rb_node;
+		parent = NULL;
 		while (*p) {
 			parent = *p;
 			thread = rb_entry(parent,
@@ -3766,13 +3768,7 @@ static unsigned int binder_poll(struct file *filp,
 	wait_for_proc_work = binder_available_for_proc_work(thread);
 	binder_proc_unlock(thread->proc, __LINE__);
 
-	if (binder_has_work(thread, wait_for_proc_work))
-		goto ret_pollin;
-	binder_put_thread(thread);
 	poll_wait(filp, &thread->wait, wait);
-	thread = binder_get_thread(proc);
-	if (!thread)
-		return -ENOENT;
 	if (binder_has_work(thread, wait_for_proc_work))
 		goto ret_pollin;
 	binder_put_thread(thread);
@@ -3950,6 +3946,30 @@ static void zombie_cleanup_check(struct binder_proc *proc)
 		binder_defer_work(proc, BINDER_ZOMBIE_CLEANUP);
 }
 
+static int binder_ioctl_get_node_debug_info(struct binder_proc *proc,
+				struct binder_node_debug_info *info) {
+	struct rb_node *n;
+	binder_uintptr_t ptr = info->ptr;
+
+	memset(info, 0, sizeof(*info));
+
+	binder_proc_lock(proc, __LINE__);
+	for (n = rb_first(&proc->nodes); n != NULL; n = rb_next(n)) {
+		struct binder_node *node = rb_entry(n, struct binder_node,
+						    rb_node);
+		if (node->ptr > ptr) {
+			info->ptr = node->ptr;
+			info->cookie = node->cookie;
+			info->has_strong_ref = node->has_strong_ref;
+			info->has_weak_ref = node->has_weak_ref;
+			break;
+		}
+	}
+	binder_proc_unlock(proc, __LINE__);
+
+	return 0;
+}
+
 static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	int ret;
@@ -3957,6 +3977,8 @@ static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	struct binder_thread *thread;
 	unsigned int size = _IOC_SIZE(cmd);
 	void __user *ubuf = (void __user *)arg;
+
+	binder_selftest_alloc(&proc->alloc);
 
 	trace_binder_ioctl(cmd, arg);
 
@@ -4018,6 +4040,24 @@ static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		if (put_user(BINDER_CURRENT_PROTOCOL_VERSION,
 			     &ver->protocol_version)) {
 			ret = -EINVAL;
+			goto err;
+		}
+		break;
+	}
+	case BINDER_GET_NODE_DEBUG_INFO: {
+		struct binder_node_debug_info info;
+
+		if (copy_from_user(&info, ubuf, sizeof(info))) {
+			ret = -EFAULT;
+			goto err;
+		}
+
+		ret = binder_ioctl_get_node_debug_info(proc, &info);
+		if (ret < 0)
+			goto err;
+
+		if (copy_to_user(ubuf, &info, sizeof(info))) {
+			ret = -EFAULT;
 			goto err;
 		}
 		break;

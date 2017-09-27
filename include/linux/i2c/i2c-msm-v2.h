@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015,2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -552,6 +552,7 @@ struct i2c_msm_xfer {
 	int                        msg_cnt;
 	enum i2c_msm_xfer_mode_id  mode_id;
 	struct completion          complete;
+	struct completion          rx_complete;
 	size_t                     rx_cnt;
 	size_t                     tx_cnt;
 	size_t                     rx_ovrhd_cnt;
@@ -589,6 +590,8 @@ struct i2c_msm_ctrl {
 	struct i2c_msm_resources   rsrcs;
 	u32                        mstr_clk_ctl;
 	enum i2c_msm_power_state   pwr_state;
+	void *ipcl;
+	bool is_clk_disable;
 };
 
 /* Enum for the profiling event types */
