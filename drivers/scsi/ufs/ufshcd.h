@@ -795,8 +795,6 @@ struct ufs_hba {
 	int rpm_lvl;
 	/* Desired UFS power management level during system PM */
 	int spm_lvl;
-	struct device_attribute rpm_lvl_attr;
-	struct device_attribute spm_lvl_attr;
 	int pm_op_in_progress;
 
 	struct ufshcd_lrb *lrb;
