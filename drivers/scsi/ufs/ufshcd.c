@@ -4496,6 +4496,9 @@ int ufshcd_map_desc_id_to_length(struct ufs_hba *hba,
 	case QUERY_DESC_IDN_INTERCONNECT:
 		*desc_len = hba->desc_size.interc_desc;
 		break;
+	case QUERY_DESC_IDN_HEALTH:
+		*desc_len = hba->desc_size.health_desc;
+		break;
 	case QUERY_DESC_IDN_STRING:
 		*desc_len = QUERY_DESC_MAX_SIZE;
 		break;
@@ -8454,6 +8457,11 @@ static void ufshcd_init_desc_sizes(struct ufs_hba *hba)
 		&hba->desc_size.geom_desc);
 	if (err)
 		hba->desc_size.geom_desc = QUERY_DESC_GEOMETRY_DEF_SIZE;
+
+	err = ufshcd_read_desc_length(hba, QUERY_DESC_IDN_HEALTH, 0,
+		&hba->desc_size.health_desc);
+	if (err)
+		hba->desc_size.health_desc = QUERY_DESC_HEALTH_DEF_SIZE;
 }
 
 static void ufshcd_def_desc_sizes(struct ufs_hba *hba)
@@ -8464,6 +8472,7 @@ static void ufshcd_def_desc_sizes(struct ufs_hba *hba)
 	hba->desc_size.conf_desc = QUERY_DESC_CONFIGURATION_DEF_SIZE;
 	hba->desc_size.unit_desc = QUERY_DESC_UNIT_DEF_SIZE;
 	hba->desc_size.geom_desc = QUERY_DESC_GEOMETRY_DEF_SIZE;
+	hba->desc_size.health_desc = QUERY_DESC_HEALTH_DEF_SIZE;
 }
 
 static void ufshcd_apply_pm_quirks(struct ufs_hba *hba)
@@ -10476,10 +10485,71 @@ static const struct attribute_group ufshcd_attr_group = {
 	.attrs = ufshcd_attrs,
 };
 
+struct health_attr {
+	struct attribute attr;
+	ssize_t (*show)(struct device *, struct health_attr *, char *);
+	int bytes;
+};
+
+static ssize_t health_attr_show(struct device *dev,
+				struct health_attr *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	int buff_len = hba->desc_size.health_desc;
+	u8 *desc_buf = NULL;
+	int err;
+
+	if (buff_len) {
+		desc_buf = kmalloc(buff_len, GFP_KERNEL);
+		if (!desc_buf) {
+			dev_err(hba->dev,
+				"%s: Failed to allocate desc_buf\n", __func__);
+			return 0;
+		}
+	}
+	pm_runtime_get_sync(hba->dev);
+	err = ufshcd_read_desc(hba, QUERY_DESC_IDN_HEALTH, 0,
+					desc_buf, buff_len);
+	pm_runtime_put_sync(hba->dev);
+	if (err)
+		return 0;
+
+	return scnprintf(buf, PAGE_SIZE, "0x%02x", desc_buf[attr->bytes]);
+}
+
+#define HEALTH_ATTR_RO(_name, _bytes)					\
+static struct health_attr ufs_health_##_name = {			\
+	.attr = {.name = __stringify(_name), .mode = 0444},		\
+	.show = health_attr_show,					\
+	.bytes = _bytes,						\
+}
+
+HEALTH_ATTR_RO(length, 0);
+HEALTH_ATTR_RO(type, 1);
+HEALTH_ATTR_RO(eol, 2);
+HEALTH_ATTR_RO(lifetimeA, 3);
+HEALTH_ATTR_RO(lifetimeB, 4);
+
+static struct attribute *ufshcd_health_attrs[] = {
+	&ufs_health_length.attr,
+	&ufs_health_type.attr,
+	&ufs_health_eol.attr,
+	&ufs_health_lifetimeA.attr,
+	&ufs_health_lifetimeB.attr,
+	NULL
+};
+
+static const struct attribute_group ufshcd_health_attr_group = {
+	.name = "health",
+	.attrs = ufshcd_health_attrs,
+};
+
 static inline void ufshcd_add_sysfs_nodes(struct ufs_hba *hba)
 {
 	if (sysfs_create_group(&hba->dev->kobj, &ufshcd_attr_group))
 		dev_err(hba->dev, "Failed to create default sysfs group\n");
+	if (sysfs_create_group(&hba->dev->kobj, &ufshcd_health_attr_group))
+		dev_err(hba->dev, "Failed to create health sysfs group\n");
 }
 
 static void __ufshcd_shutdown_clkscaling(struct ufs_hba *hba)
