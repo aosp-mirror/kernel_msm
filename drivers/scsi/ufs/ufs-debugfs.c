@@ -980,6 +980,8 @@ static int ufsdbg_show_hba_show(struct seq_file *file, void *data)
 			(u32)hba->outstanding_reqs);
 
 	seq_printf(file, "hba->capabilities = 0x%x\n", hba->capabilities);
+	seq_printf(file, "hba->auto_hibern8 support = %d\n",
+					ufshcd_is_auto_hibern8_supported(hba));
 	seq_printf(file, "hba->nutrs = %d\n", hba->nutrs);
 	seq_printf(file, "hba->nutmrs = %d\n", hba->nutmrs);
 	seq_printf(file, "hba->ufs_version = 0x%x\n", hba->ufs_version);
