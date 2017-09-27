@@ -111,8 +111,8 @@
 &dsi_sw43408_dsc_fhd_cmd {
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_vdd_no_labibb>;
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
-	qcom,mdss-dsi-t-clk-post = <0x0B>;
-	qcom,mdss-dsi-t-clk-pre = <0x23>;
+	qcom,mdss-dsi-t-clk-post = <0x09>;
+	qcom,mdss-dsi-t-clk-pre = <0x1A>;
 
 	qcom,mdss-dsi-bl-min-level = <23>;
 	qcom,mdss-dsi-bl-max-level = <223>;
@@ -122,7 +122,7 @@
 	qcom,mdss-dsi-display-timings {
 		timing@0 {
 			qcom,mdss-dsi-panel-phy-timings =
-					[00 15 05 05 20 1F 05 05 03 03 04 00];
+					[00 0E 03 03 1E 1D 04 04 02 03 04 00];
 
 			/* 2xLM, 2xDSC Enc, 1xDSI Intf */
 			qcom,display-topology = <2 2 1>;
@@ -141,7 +141,7 @@
 	status = "okay";
 	qcom,disp-type-amoled;
 	qcom,led-strings-list = [02 03];
-	qcom,avdd-target-voltage-mv = <5800>;
+	qcom,avdd-target-voltage-mv = <7600>;
 };
 
 &labibb {
