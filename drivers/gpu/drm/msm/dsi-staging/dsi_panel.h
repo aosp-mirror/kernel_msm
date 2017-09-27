@@ -115,6 +115,11 @@ struct dsi_panel_reset_config {
 	u32 mode_sel_state;
 };
 
+struct dsi_panel_debug {
+	u8 reg_read_cmd;
+	size_t reg_read_len;
+};
+
 struct dsi_panel {
 	const char *name;
 	struct device_node *panel_of_node;
@@ -143,6 +148,7 @@ struct dsi_panel {
 	struct dsi_panel_reset_config reset_config;
 	struct dsi_pinctrl_info pinctrl;
 	struct drm_panel_hdr_properties hdr_props;
+	struct dsi_panel_debug debug;
 
 	u32 init_delay_us;
 	bool lp11_init;
@@ -175,6 +181,8 @@ void dsi_panel_put(struct dsi_panel *panel);
 int dsi_panel_drv_init(struct dsi_panel *panel, struct mipi_dsi_host *host);
 
 int dsi_panel_drv_deinit(struct dsi_panel *panel);
+
+void dsi_panel_debugfs_init(struct dsi_panel *panel, struct dentry *dir);
 
 int dsi_panel_get_mode_count(struct dsi_panel *panel,
 		struct device_node *of_node);
