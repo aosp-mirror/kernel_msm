@@ -266,11 +266,29 @@ static struct regulator_init_data
 	},
 };
 
+static int bcm15602_toggle_pon(struct bcm15602_chip *ddata)
+{
+	dev_err(ddata->dev, "%s: device is stuck, toggling PON\n", __func__);
+
+	gpio_set_value_cansleep(ddata->pdata->pon_gpio, 0);
+	gpio_set_value_cansleep(ddata->pdata->pon_gpio, 1);
+
+	return 0;
+}
+
+static inline bool bcm15602_is_ready(struct bcm15602_chip *ddata)
+{
+	return (gpio_get_value(ddata->pdata->resetb_gpio) == 1);
+}
+
 int bcm15602_read_byte(struct bcm15602_chip *ddata, u8 addr, u8 *data)
 {
 	int ret;
 	unsigned int val;
 	int retry_cnt = 0;
+
+	if (!bcm15602_is_ready(ddata))
+		return -EBUSY;
 
 	do {
 		ret = regmap_read(ddata->regmap, addr, &val);
@@ -284,7 +302,11 @@ int bcm15602_read_byte(struct bcm15602_chip *ddata, u8 addr, u8 *data)
 			addr, ret, retry_cnt);
 	} while (++retry_cnt < BCM15602_I2C_RETRY_COUNT);
 
-	return ret;
+	dev_err(ddata->dev, "%s: failed with %d retries, power cycling device\n",
+		__func__, BCM15602_I2C_RETRY_COUNT);
+	bcm15602_toggle_pon(ddata);
+
+	return -EIO;
 }
 EXPORT_SYMBOL_GPL(bcm15602_read_byte);
 
@@ -294,17 +316,23 @@ int bcm15602_read_bytes(struct bcm15602_chip *ddata, u8 addr, u8 *data,
 	int ret;
 	int retry_cnt = 0;
 
+	if (!bcm15602_is_ready(ddata))
+		return -EBUSY;
+
 	do {
 		ret = regmap_bulk_read(ddata->regmap, addr, data, count);
 		if (!ret)
 			return 0;
 
-		dev_err(ddata->dev,
-			"failed to read %zd bytes from addr 0x%.2x (%d), retry %d\n",
-			count, addr, ret, retry_cnt);
+		dev_err(ddata->dev, "%s: failed to read %zd bytes from addr 0x%.2x (%d), retry %d\n",
+			__func__, count, addr, ret, retry_cnt);
 	} while (++retry_cnt < BCM15602_I2C_RETRY_COUNT);
 
-	return ret;
+	dev_err(ddata->dev, "%s: failed with %d retries, power cycling device\n",
+		__func__, BCM15602_I2C_RETRY_COUNT);
+	bcm15602_toggle_pon(ddata);
+
+	return -EIO;
 }
 EXPORT_SYMBOL_GPL(bcm15602_read_bytes);
 
@@ -312,6 +340,9 @@ int bcm15602_write_byte(struct bcm15602_chip *ddata, u8 addr, u8 data)
 {
 	int ret;
 	int retry_cnt = 0;
+
+	if (!bcm15602_is_ready(ddata))
+		return -EBUSY;
 
 	do {
 		ret = regmap_write(ddata->regmap, addr, data);
@@ -323,7 +354,11 @@ int bcm15602_write_byte(struct bcm15602_chip *ddata, u8 addr, u8 data)
 			addr, ret, retry_cnt);
 	} while (++retry_cnt < BCM15602_I2C_RETRY_COUNT);
 
-	return ret;
+	dev_err(ddata->dev, "%s: failed with %d retries, power cycling device\n",
+		__func__, BCM15602_I2C_RETRY_COUNT);
+	bcm15602_toggle_pon(ddata);
+
+	return -EIO;
 }
 EXPORT_SYMBOL_GPL(bcm15602_write_byte);
 
@@ -332,6 +367,9 @@ int bcm15602_write_bytes(struct bcm15602_chip *ddata, u8 addr, u8 *data,
 {
 	int ret;
 	int retry_cnt = 0;
+
+	if (!bcm15602_is_ready(ddata))
+		return -EBUSY;
 
 	do {
 		ret = regmap_bulk_write(ddata->regmap, addr, data, count);
@@ -343,7 +381,11 @@ int bcm15602_write_bytes(struct bcm15602_chip *ddata, u8 addr, u8 *data,
 			count, addr, ret, retry_cnt);
 	} while (++retry_cnt < BCM15602_I2C_RETRY_COUNT);
 
-	return ret;
+	dev_err(ddata->dev, "%s: failed with %d retries, power cycling device\n",
+		__func__, BCM15602_I2C_RETRY_COUNT);
+	bcm15602_toggle_pon(ddata);
+
+	return -EIO;
 }
 EXPORT_SYMBOL_GPL(bcm15602_write_bytes);
 
@@ -352,6 +394,9 @@ int bcm15602_update_bits(struct bcm15602_chip *ddata, u8 addr,
 {
 	int ret;
 	int retry_cnt = 0;
+
+	if (!bcm15602_is_ready(ddata))
+		return -EBUSY;
 
 	do {
 		ret = regmap_update_bits(ddata->regmap, addr, mask, data);
@@ -363,7 +408,11 @@ int bcm15602_update_bits(struct bcm15602_chip *ddata, u8 addr,
 			addr, ret, retry_cnt);
 	} while (++retry_cnt < BCM15602_I2C_RETRY_COUNT);
 
-	return ret;
+	dev_err(ddata->dev, "%s: failed with %d retries, power cycling device\n",
+		__func__, BCM15602_I2C_RETRY_COUNT);
+	bcm15602_toggle_pon(ddata);
+
+	return -EIO;
 }
 EXPORT_SYMBOL_GPL(bcm15602_update_bits);
 
@@ -385,7 +434,9 @@ int bcm15602_read_adc_chan(struct bcm15602_chip *ddata,
 	 * the conversion */
 	bytes[0] = 0x1;
 	bytes[1] = BCM15602_ADC_OVSP_4 | chan_num;
-	bcm15602_write_bytes(ddata, BCM15602_REG_ADC_MAN_CTRL, bytes, 2);
+	ret = bcm15602_write_bytes(ddata, BCM15602_REG_ADC_MAN_CTRL, bytes, 2);
+	if (ret)
+		goto adc_cleanup;
 	dev_dbg(ddata->dev, "%s: started ADC converstion\n", __func__);
 
 	/* wait for completion signaled by interrupt */
@@ -398,13 +449,17 @@ int bcm15602_read_adc_chan(struct bcm15602_chip *ddata,
 	}
 
 	/* read and format the conversion result */
-	bcm15602_read_bytes(ddata, BCM15602_REG_ADC_MAN_RESULT_L, bytes, 2);
+	ret = bcm15602_read_bytes(ddata, BCM15602_REG_ADC_MAN_RESULT_L, bytes,
+				  2);
+	if (ret)
+		goto adc_cleanup;
 	*chan_data = ((bytes[1] & 0x7F) << 3) | (bytes[0] & 0x7);
 
 finish:
 	/* disable the ADC clock */
 	bcm15602_write_byte(ddata, BCM15602_REG_ADC_MAN_CTRL, 0x0);
 
+adc_cleanup:
 	/* release adc conversion */
 	clear_bit(0, &ddata->adc_conv_busy);
 
@@ -418,6 +473,7 @@ int bcm15602_read_hk_slot(struct bcm15602_chip *ddata,
 	u8 reading_mask[2];
 	u8 zeros[2] = {0, 0};
 	u8 byte = 0;
+	int ret = 0;
 
 	/* serialize reads to the hk slots */
 	if (test_and_set_bit(0, &ddata->hk_read_busy))
@@ -429,25 +485,33 @@ int bcm15602_read_hk_slot(struct bcm15602_chip *ddata,
 	 */
 	reading_mask[0] = (1 << slot_num) & 0xFF;
 	reading_mask[1] = ((1 << slot_num) >> 8) & 0xF;
-	bcm15602_write_bytes(ddata, BCM15602_REG_ADC_SLOTDATA_READINGL,
-			     reading_mask, 2);
+	ret = bcm15602_write_bytes(ddata, BCM15602_REG_ADC_SLOTDATA_READINGL,
+				   reading_mask, 2);
+	if (ret)
+		goto read_hk_cleanup;
 
-	bcm15602_read_byte(ddata, BCM15602_REG_ADC_SLOTDATA0 + slot_num,
-			   &byte);
+	ret = bcm15602_read_byte(ddata, BCM15602_REG_ADC_SLOTDATA0 + slot_num,
+				 &byte);
+	if (ret)
+		goto read_hk_cleanup;
 	*slot_data = (byte << 2);
-	bcm15602_read_byte(ddata,
-			   BCM15602_REG_ADC_SLOTDATA3_0_LSB + (slot_num / 4),
-			   &byte);
+	ret = bcm15602_read_byte(ddata, BCM15602_REG_ADC_SLOTDATA3_0_LSB +
+				 (slot_num / 4), &byte);
+	if (ret)
+		goto read_hk_cleanup;
 	*slot_data |= (byte >> (slot_num % 4)) & 0x3;
 
 	/* unset the reading mask */
-	bcm15602_write_bytes(ddata, BCM15602_REG_ADC_SLOTDATA_READINGL,
-			     zeros, 2);
+	ret = bcm15602_write_bytes(ddata, BCM15602_REG_ADC_SLOTDATA_READINGL,
+				   zeros, 2);
+	if (ret)
+		goto read_hk_cleanup;
 
+read_hk_cleanup:
 	/* release hk read */
 	clear_bit(0, &ddata->hk_read_busy);
 
-	return 0;
+	return ret;
 }
 EXPORT_SYMBOL_GPL(bcm15602_read_hk_slot);
 
@@ -470,14 +534,19 @@ static int bcm15602_handle_hk_int(struct bcm15602_chip *ddata)
 	struct device *dev = ddata->dev;
 	u16 status;
 	u8 bytes[2];
+	int ret;
 
 	/* read interrupt status flags */
-	bcm15602_read_bytes(ddata, BCM15602_REG_ADC_SLOTSTAL, bytes, 2);
+	ret = bcm15602_read_bytes(ddata, BCM15602_REG_ADC_SLOTSTAL, bytes, 2);
+	if (ret)
+		return ret;
 	status = ((bytes[1] & 0x3) << 8) | bytes[0];
 	dev_dbg(dev, "%s: ADC_SLOTSTA: 0x%04x\n", __func__, status);
 
 	/* clear handled interrupts */
-	bcm15602_write_bytes(ddata, BCM15602_REG_ADC_SLOTSTAL, bytes, 2);
+	ret = bcm15602_write_bytes(ddata, BCM15602_REG_ADC_SLOTSTAL, bytes, 2);
+	if (ret)
+		return ret;
 
 	ddata->hk_status = status;
 
@@ -504,7 +573,8 @@ static void bcm15602_print_id(struct bcm15602_chip *ddata)
 		/* byte 3 is the customer supplied id */
 		ddata->rev_id = bytes[3];
 	} else {
-		dev_err(dev, "Could not read PMIC ID\n");
+		dev_err(dev, "%s: Could not read PMIC ID (%d)\n", __func__,
+			ret);
 	}
 }
 
@@ -657,12 +727,17 @@ static int bcm15602_check_int_flags(struct bcm15602_chip *ddata)
 {
 	u8 flags[4], flags_dup[4], flag_mask, flag_clr_mask[4];
 	unsigned int first_bit, flag_num;
-	int ret;
+	int ret = 0;
 	int i;
 
 	/* read interrupt status flags */
-	bcm15602_read_bytes(ddata, BCM15602_REG_INT_INTFLAG1, flags, 4);
-	bcm15602_read_bytes(ddata, BCM15602_REG_INT_INTFLAG1, flags_dup, 4);
+	ret = bcm15602_read_bytes(ddata, BCM15602_REG_INT_INTFLAG1, flags, 4);
+	if (ret)
+		return ret;
+	ret = bcm15602_read_bytes(ddata, BCM15602_REG_INT_INTFLAG1, flags_dup,
+				  4);
+	if (ret)
+		return ret;
 
 	dev_dbg(ddata->dev,
 		"%s: [0] = 0x%02x, [1] = 0x%02x, [2] = 0x%02x, [3] = 0x%02x\n",
@@ -697,12 +772,10 @@ static int bcm15602_check_int_flags(struct bcm15602_chip *ddata)
 	}
 
 	/* clear handled interrupts */
-	bcm15602_write_bytes(ddata,
-			     BCM15602_REG_INT_INTFLAG1,
-			     flag_clr_mask,
-			     4);
+	ret = bcm15602_write_bytes(ddata, BCM15602_REG_INT_INTFLAG1,
+				   flag_clr_mask, 4);
 
-	return 0;
+	return ret;
 }
 
 /* kernel thread for waiting for chip to come out of reset */
@@ -740,10 +813,11 @@ static irqreturn_t bcm15602_resetb_irq_handler(int irq, void *cookie)
 	struct bcm15602_chip *ddata = (struct bcm15602_chip *)cookie;
 
 	if (gpio_get_value(ddata->pdata->resetb_gpio)) {
-		dev_dbg(ddata->dev, "%s: completing reset\n", __func__);
+		dev_info(ddata->dev, "%s: completing reset\n", __func__);
 		complete(&ddata->reset_complete);
 	} else {
 		dev_err(ddata->dev, "%s: unexpected device reset\n", __func__);
+		reinit_completion(&ddata->reset_complete);
 		schedule_work(&ddata->reset_work);
 	}
 
@@ -811,32 +885,41 @@ static int bcm15602_regulator_get_voltage(struct regulator_dev *rdev)
 	enum bcm15602_regulator_ids rid = rdev_get_id(rdev);
 	u8 reg_data;
 	int vsel, vstep, vbase;
+	int ret;
 
 	switch (rid) {
 	case BCM15602_ID_SDLDO:
-		bcm15602_read_byte(ddata, BCM15602_REG_LDO_SDLDO_VOCTRL,
-				   &reg_data);
+		ret = bcm15602_read_byte(ddata, BCM15602_REG_LDO_SDLDO_VOCTRL,
+					 &reg_data);
+		if (ret)
+			return ret;
 		vbase = (reg_data & 0x80) ? 1725000 : 1380000;
 		vstep = (reg_data & 0x80) ? 25000 : 10000;
 		vsel = reg_data & 0x3F;
 		break;
 	case BCM15602_ID_IOLDO:
-		bcm15602_read_byte(ddata, BCM15602_REG_LDO_IOLDO_VOCTRL,
-				   &reg_data);
+		ret = bcm15602_read_byte(ddata, BCM15602_REG_LDO_IOLDO_VOCTRL,
+					 &reg_data);
+		if (ret)
+			return ret;
 		vbase = (reg_data & 0x80) ? 1725000 : 1380000;
 		vstep = (reg_data & 0x80) ? 25000 : 10000;
 		vsel = reg_data & 0x3F;
 		break;
 	case BCM15602_ID_ASR:
-		bcm15602_read_byte(ddata, BCM15602_REG_BUCK_ASR_VOCTRL,
-				   &reg_data);
+		ret = bcm15602_read_byte(ddata, BCM15602_REG_BUCK_ASR_VOCTRL,
+					 &reg_data);
+		if (ret)
+			return ret;
 		vbase = 565000;
 		vstep = 5000;
 		vsel = reg_data & 0x7F;
 		break;
 	case BCM15602_ID_SDSR:
-		bcm15602_read_byte(ddata, BCM15602_REG_BUCK_SDSR_CTRL1,
-				   &reg_data);
+		ret = bcm15602_read_byte(ddata, BCM15602_REG_BUCK_SDSR_CTRL1,
+					 &reg_data);
+		if (ret)
+			return ret;
 		switch ((reg_data & 0xC0) >> 6) {
 		case 0:
 			vbase = 565000;
@@ -857,8 +940,10 @@ static int bcm15602_regulator_get_voltage(struct regulator_dev *rdev)
 		default: // make compiler happy
 			return -EINVAL;
 		}
-		bcm15602_read_byte(ddata, BCM15602_REG_BUCK_SDSR_VOCTRL,
-				   &reg_data);
+		ret = bcm15602_read_byte(ddata, BCM15602_REG_BUCK_SDSR_VOCTRL,
+					 &reg_data);
+		if (ret)
+			return ret;
 		vsel = reg_data & 0x7F;
 		break;
 	default:

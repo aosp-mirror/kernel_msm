@@ -449,6 +449,61 @@ static void easelcomm_flush_local_service(struct easelcomm_service *service)
 }
 
 /*
+ * Wake up any message of a service waiting for reply.
+ */
+static void __force_complete_reply_waiter(struct easelcomm_service *service)
+{
+	struct easelcomm_message_metadata *msg_cursor;
+
+	spin_lock(&service->lock);
+	list_for_each_entry(msg_cursor, &service->local_list, list) {
+		if (msg_cursor->msg->desc.need_reply)
+			complete(&msg_cursor->reply_received);
+	}
+	spin_unlock(&service->lock);
+}
+
+/*
+ * Handle local-side processing of shutting down an Easel service.  Easel
+ * services are shutdown when the local side handling process closes its fd
+ * or issues the shutdown ioctl, or the remote side sends a CLOSE_SERVICE
+ * command (meaning the remote side is doing one of those things).
+ *
+ * Flush local state if local side initiated the shutdown, wakeup the
+ * receiveMessage() waiter.
+ */
+static void easelcomm_handle_service_shutdown(
+	struct easelcomm_service *service, bool shutdown_local)
+{
+	dev_dbg(easelcomm_miscdev.this_device, "svc %u shutdown from %s\n",
+		service->service_id, shutdown_local ? "local" : "remote");
+
+	/*
+	 * If local side shutting down then flush local state, just in case.
+	 * If remote is closing then local side may still have messages in
+	 * progress, just signal the receivemessage() caller to return
+	 * shutdown status.
+	 */
+	if (shutdown_local)
+		easelcomm_flush_local_service(service);
+
+	spin_lock(&service->lock);
+	if (shutdown_local)
+		service->shutdown_local = true;
+	else
+		service->shutdown_remote = true;
+	spin_unlock(&service->lock);
+	/* Wakeup any receiveMessage() waiter so they can return to user */
+	complete(&service->receivemsg_queue_new);
+
+	/* Wakeup flush_done waiter so they can return to user */
+	complete(&service->flush_done);
+
+	/* Wakeup any sendMessageReceiveReply() waiter to return to user */
+	__force_complete_reply_waiter(service);
+}
+
+/*
  * Shutdown easelcomm local activity, mark link down.
  */
 static void easelcomm_stop_local(void)
@@ -466,8 +521,7 @@ static void easelcomm_stop_local(void)
 		struct easelcomm_service *service = easelcomm_service_list[i];
 
 		if (service != NULL)
-			easelcomm_flush_local_service(service);
-
+			easelcomm_handle_service_shutdown(service, true);
 	}
 }
 
@@ -652,61 +706,6 @@ static int easelcomm_wait_channel_initialized(
 	}
 
 	return ret;
-}
-
-/*
- * Wake up any message of a service waiting for reply.
- */
-static void __force_complete_reply_waiter(struct easelcomm_service *service)
-{
-	struct easelcomm_message_metadata *msg_cursor;
-
-	spin_lock(&service->lock);
-	list_for_each_entry(msg_cursor, &service->local_list, list) {
-		if (msg_cursor->msg->desc.need_reply)
-			complete(&msg_cursor->reply_received);
-	}
-	spin_unlock(&service->lock);
-}
-
-/*
- * Handle local-side processing of shutting down an Easel service.  Easel
- * services are shutdown when the local side handling process closes its fd
- * or issues the shutdown ioctl, or the remote side sends a CLOSE_SERVICE
- * command (meaning the remote side is doing one of those things).
- *
- * Flush local state if local side initiated the shutdown, wakeup the
- * receiveMessage() waiter.
- */
-static void easelcomm_handle_service_shutdown(
-	struct easelcomm_service *service, bool shutdown_local)
-{
-	dev_dbg(easelcomm_miscdev.this_device, "svc %u shutdown from %s\n",
-		service->service_id, shutdown_local ? "local" : "remote");
-
-	/*
-	 * If local side shutting down then flush local state, just in case.
-	 * If remote is closing then local side may still have messages in
-	 * progress, just signal the receivemessage() caller to return
-	 * shutdown status.
-	 */
-	if (shutdown_local)
-		easelcomm_flush_local_service(service);
-
-	spin_lock(&service->lock);
-	if (shutdown_local)
-		service->shutdown_local = true;
-	else
-		service->shutdown_remote = true;
-	spin_unlock(&service->lock);
-	/* Wakeup any receiveMessage() waiter so they can return to user */
-	complete(&service->receivemsg_queue_new);
-
-	/* Wakeup flush_done waiter so they can return to user */
-	complete(&service->flush_done);
-
-	/* Wakeup any sendMessageReceiveReply() waiter to return to user */
-	__force_complete_reply_waiter(service);
 }
 
 /* CLOSE_SERVICE command received from remote, shut down service. */
@@ -907,6 +906,7 @@ void easelcomm_cmd_channel_data_handler(void)
 		channel_buf_hdr->producer_seqnbr_next) {
 		struct easelcomm_cmd_header *cmdhdr =
 			(struct easelcomm_cmd_header *)channel->readp;
+		uint32_t saved_cmd_len = READ_ONCE(cmdhdr->command_arg_len);
 
 		dev_dbg(easelcomm_miscdev.this_device, "cmdchan consumer loop prodseq=%llu consseq=%llu off=%lx\n",
 			channel_buf_hdr->producer_seqnbr_next,
@@ -936,15 +936,15 @@ void easelcomm_cmd_channel_data_handler(void)
 		dev_dbg(easelcomm_miscdev.this_device,
 			"cmdchan recv cmd seq=%llu svc=%u cmd=%u len=%u off=%lx\n",
 			cmdhdr->sequence_nbr, cmdhdr->service_id,
-			cmdhdr->command_code, cmdhdr->command_arg_len,
+			cmdhdr->command_code, saved_cmd_len,
 			channel->readp - channel->buffer);
 		if (sizeof(struct easelcomm_cmd_header) +
-			cmdhdr->command_arg_len >
+			saved_cmd_len >
 			EASELCOMM_CMD_CHANNEL_SIZE) {
 			dev_err(easelcomm_miscdev.this_device,
 				"command channel corruption detected: seq=%llu svc=%u cmd=%u len=%u off=%lx\n",
 				cmdhdr->sequence_nbr, cmdhdr->service_id,
-				cmdhdr->command_code, cmdhdr->command_arg_len,
+				cmdhdr->command_code, saved_cmd_len,
 				channel->readp - channel->buffer);
 			break;
 		}
@@ -960,8 +960,19 @@ void easelcomm_cmd_channel_data_handler(void)
 
 		/* Process the command. */
 		easelcomm_handle_command(cmdhdr);
+
+		/* Post-process double check */
+		if (saved_cmd_len != cmdhdr->command_arg_len) {
+			dev_err(easelcomm_miscdev.this_device,
+				"command channel corruption detected: off=%lx expected len %u got %u\n",
+				channel->readp - channel->buffer,
+				saved_cmd_len, cmdhdr->command_arg_len);
+			break;
+		}
+
 		channel->readp += sizeof(struct easelcomm_cmd_header) +
-			cmdhdr->command_arg_len;
+			saved_cmd_len;
+
 		/* 8-byte-align next entry pointer */
 		if ((uintptr_t)channel->readp & 0x7)
 			channel->readp += 8 - ((uintptr_t)channel->readp & 0x7);

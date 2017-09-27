@@ -68,8 +68,16 @@
 #define NUM_TX_QUEUES 4
 #endif
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0)) || \
+	defined(CFG80211_REMOVE_IEEE80211_BACKPORT)
 #define HDD_NL80211_BAND_2GHZ   NL80211_BAND_2GHZ
 #define HDD_NL80211_BAND_5GHZ   NL80211_BAND_5GHZ
+#define HDD_NUM_NL80211_BANDS   NUM_NL80211_BANDS
+#else
+#define HDD_NL80211_BAND_2GHZ   IEEE80211_BAND_2GHZ
+#define HDD_NL80211_BAND_5GHZ   IEEE80211_BAND_5GHZ
+#define HDD_NUM_NL80211_BANDS   ((enum nl80211_band)IEEE80211_NUM_BANDS)
+#endif
 
 /** Length of the TX queue for the netdev */
 #define HDD_NETDEV_TX_QUEUE_LEN (3000)
@@ -170,6 +178,29 @@
 #define MIN_GENIE_LEN (2)
 
 #define WLAN_CHIP_VERSION   "WCNSS"
+
+#define hdd_log_rate_limited(rate, level, args...) \
+		QDF_TRACE_RATE_LIMITED(rate, QDF_MODULE_ID_HDD, level, ## args)
+#define hdd_log_rate_limited_fl(rate, level, format, args...) \
+		hdd_log_rate_limited(rate, level, FL(format), ## args)
+#define hdd_alert_rate_limited(rate, format, args...) \
+		hdd_log_rate_limited_fl(rate, QDF_TRACE_LEVEL_FATAL,\
+			format, ## args)
+#define hdd_err_rate_limited(rate, format, args...) \
+		hdd_log_rate_limited_fl(rate, QDF_TRACE_LEVEL_ERROR,\
+			format, ## args)
+#define hdd_warn_rate_limited(rate, format, args...) \
+		hdd_log_rate_limited_fl(rate, QDF_TRACE_LEVEL_WARN,\
+			format, ## args)
+#define hdd_notice_rate_limited(rate, format, args...) \
+		hdd_log_rate_limited_fl(rate, QDF_TRACE_LEVEL_INFO,\
+			format, ## args)
+#define hdd_info_rate_limited(rate, format, args...) \
+		hdd_log_rate_limited_fl(rate, QDF_TRACE_LEVEL_INFO,\
+			format, ## args)
+#define hdd_debug_rate_limited(rate, format, args...) \
+		hdd_log_rate_limited_fl(rate, QDF_TRACE_LEVEL_DEBUG,\
+			format, ## args)
 
 #define hdd_log(level, args...) QDF_TRACE(QDF_MODULE_ID_HDD, level, ## args)
 #define hdd_logfl(level, format, args...) hdd_log(level, FL(format), ## args)
@@ -272,6 +303,7 @@
 #define HDD_SESSION_ID_INVALID    0xFF
 
 #define SCAN_REJECT_THRESHOLD_TIME 300000 /* Time is in msec, equal to 5 mins */
+#define SCAN_REJECT_THRESHOLD 15
 
 /* wait time for nud stats in milliseconds */
 #define WLAN_WAIT_TIME_NUD_STATS 800
@@ -1795,6 +1827,7 @@ struct hdd_context_s {
 	uint8_t last_scan_reject_session_id;
 	scan_reject_states last_scan_reject_reason;
 	unsigned long last_scan_reject_timestamp;
+	uint8_t scan_reject_cnt;
 	uint8_t beacon_probe_rsp_cnt_per_scan;
 	bool rcpi_enabled;
 	bool imps_enabled;

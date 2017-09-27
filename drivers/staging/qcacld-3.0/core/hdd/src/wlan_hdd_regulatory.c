@@ -60,23 +60,27 @@
 #define REG_RULE_5500_5720    REG_RULE(5500-10, 5720+10, 160, 0, 20, \
 		NL80211_RRF_PASSIVE_SCAN | NL80211_RRF_NO_IBSS)
 
+#define REG_RULE_5500_5700    REG_RULE(5500-10, 5700+10, 160, 0, 20, \
+		NL80211_RRF_PASSIVE_SCAN | NL80211_RRF_NO_IBSS)
+
 #define REG_RULE_5745_5925    REG_RULE(5745-10, 5925+10, 80, 0, 20, \
 		NL80211_RRF_PASSIVE_SCAN | NL80211_RRF_NO_IBSS)
+
+#define REG_RULE_5745_5825    REG_RULE(5745-10, 5825+10, 80, 0, 20, \
+				       NL80211_RRF_NO_IR)
 
 static bool init_by_driver;
 static bool init_by_reg_core;
 
 static const struct ieee80211_regdomain
 hdd_world_regrules_60_61_62 = {
-	.n_reg_rules = 6,
+	.n_reg_rules = 4,
 	.alpha2 =  "00",
 	.reg_rules = {
 		REG_RULE_2412_2462,
-		REG_RULE_2467_2472,
-		REG_RULE_2484,
 		REG_RULE_5180_5320,
-		REG_RULE_5500_5720,
-		REG_RULE_5745_5925,
+		REG_RULE_5500_5700,
+		REG_RULE_5745_5825,
 	}
 };
 
@@ -382,7 +386,7 @@ static void hdd_process_regulatory_data(hdd_context_t *hdd_ctx,
 
 	band_capability = hdd_ctx->config->nBandCapability;
 
-	for (band_num = 0; band_num < NUM_NL80211_BANDS; band_num++) {
+	for (band_num = 0; band_num < HDD_NUM_NL80211_BANDS; band_num++) {
 
 		if (wiphy->bands[band_num] == NULL)
 			continue;
@@ -568,7 +572,7 @@ static void hdd_restore_custom_reg_settings(struct wiphy *wiphy,
 	    (country_alpha2[1] == '0') &&
 	    (wiphy->flags & WIPHY_FLAG_CUSTOM_REGULATORY)) {
 
-		for (band = 0; band < NUM_NL80211_BANDS; band++) {
+		for (band = 0; band < HDD_NUM_NL80211_BANDS; band++) {
 			sband = wiphy->bands[band];
 			if (!sband)
 				continue;

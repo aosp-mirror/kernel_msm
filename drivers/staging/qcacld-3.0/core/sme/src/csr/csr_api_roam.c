@@ -14492,6 +14492,23 @@ static QDF_STATUS csr_set_ldpc_exception(tpAniSirGlobal mac_ctx,
 
 #ifdef WLAN_FEATURE_11W
 /**
+ * csr_is_mfpc_capable() - is MFPC capable
+ * @ies: AP information element
+ *
+ * Return: true if MFPC capable, false otherwise
+ */
+bool csr_is_mfpc_capable(struct sDot11fIERSN *rsn)
+{
+	bool mfpc_capable = false;
+
+	if (rsn && rsn->present &&
+	    ((rsn->RSN_Cap[0] >> 7) & 0x01))
+		mfpc_capable = true;
+
+	return mfpc_capable;
+}
+
+/**
  * csr_set_mgmt_enc_type() - set mgmt enc type for PMF
  * @profile: roam profile
  * @ies: AP ie
@@ -14508,8 +14525,7 @@ static void csr_set_mgmt_enc_type(tCsrRoamProfile *profile,
 		csr_join_req->MgmtEncryptionType = eSIR_ED_NONE;
 	if (profile->MFPEnabled &&
 	   !(profile->MFPRequired) &&
-	   ((ies->RSN.present) &&
-	   (!(ies->RSN.RSN_Cap[0] >> 7) & 0x1)))
+	   !csr_is_mfpc_capable(&ies->RSN))
 		csr_join_req->MgmtEncryptionType = eSIR_ED_NONE;
 }
 #else
@@ -20774,8 +20790,8 @@ static QDF_STATUS csr_process_roam_sync_callback(tpAniSirGlobal mac_ctx,
 	 *      with AP after this point and sends new keys to the driver.
 	 *      Driver starts wait_for_key timer for that purpose.
 	 */
-	if ((roam_synch_data->authStatus
-				== CSR_ROAM_AUTH_STATUS_AUTHENTICATED)) {
+	if (roam_synch_data->authStatus
+				== CSR_ROAM_AUTH_STATUS_AUTHENTICATED) {
 		QDF_TRACE(QDF_MODULE_ID_SME,
 				QDF_TRACE_LEVEL_DEBUG,
 				FL("LFR3:Don't start waitforkey timer"));
