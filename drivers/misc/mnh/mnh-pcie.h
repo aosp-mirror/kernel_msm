@@ -213,7 +213,7 @@ struct mnh_sg_list {
 typedef int (*irq_cb_t)(uint32_t irq);
 typedef int (*irq_dma_cb_t)(uint8_t chan, enum mnh_dma_chan_dir_t dir,
 		enum mnh_dma_trans_status_t status);
-typedef int (*hotplug_cb_t)(enum mnh_hotplug_event_t event);
+typedef int (*hotplug_cb_t)(enum mnh_hotplug_event_t event, void *param);
 
 /*******************************************************************************
  *
@@ -380,6 +380,17 @@ int mnh_sg_build(void *dmadest, size_t size, struct mnh_sg_entry **sg,
  * @return 0 for SUCCESS
  */
 int mnh_sg_destroy(struct mnh_sg_list *sgl);
+
+/**
+ * API to verify that a scatter gather list is valid
+ * @param[in] *sg  pointer to the scatter gather list that was built during
+ *		mnh_sg_build
+ * @param[in] size  size of the list in bytes
+ * @param[in] sgl  pointer to the scatter gather local data, if any
+ * @return 0 for SUCCESS
+ */
+int mnh_sg_verify(struct mnh_sg_entry *sg, size_t size,
+		struct mnh_sg_list *sgl);
 
 /**
  * API to build a scatter-gather list for multi-block DMA transfer for a

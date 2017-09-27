@@ -1454,6 +1454,7 @@ QDF_STATUS hdd_wlan_shutdown(void)
 	if (true == pHddCtx->isMcThreadSuspended) {
 		complete(&cds_sched_context->ResumeMcEvent);
 		pHddCtx->isMcThreadSuspended = false;
+		pHddCtx->isWiphySuspended = false;
 	}
 #ifdef QCA_CONFIG_SMP
 	if (true == pHddCtx->is_ol_rx_thread_suspended) {
@@ -1575,6 +1576,7 @@ QDF_STATUS hdd_wlan_re_init(void)
 	pHddCtx->last_scan_reject_session_id = 0xFF;
 	pHddCtx->last_scan_reject_reason = 0;
 	pHddCtx->last_scan_reject_timestamp = 0;
+	pHddCtx->scan_reject_cnt = 0;
 
 	hdd_set_roaming_in_progress(false);
 	complete(&pAdapter->roaming_comp_var);

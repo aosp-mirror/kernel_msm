@@ -139,6 +139,14 @@ static int ramoops_pstore_open(struct pstore_info *psi)
 	return 0;
 }
 
+static int ramoops_pstore_close(struct pstore_info *psi)
+{
+	struct ramoops_context *cxt = psi->data;
+
+	cxt->need_update = 0;
+	return 0;
+}
+
 static struct persistent_ram_zone *
 ramoops_get_next_prz(struct persistent_ram_zone *przs[], uint *c, uint max,
 		     u64 *id,
@@ -200,12 +208,16 @@ static bool prz_ok(struct persistent_ram_zone *prz)
 static int ramoops_decrypt_alt(struct ramoops_context *cxt)
 {
 	struct crypto_aead *tfm;
-	struct scatterlist sg;
+	struct sg_table sgt;
+	struct page **pages;
+	unsigned int nr_pages;
+	unsigned int i;
 	int ret = 0;
 	struct aead_request *aead_req;
 	void *va;
 	phys_addr_t start;
 	size_t size;
+	size_t buffer_size;
 	void *buf;
 
 	if (!cxt->alt_phys_addr)
@@ -257,17 +269,37 @@ static int ramoops_decrypt_alt(struct ramoops_context *cxt)
 		goto out_set;
 	}
 
-	buf = kmalloc(size + AES_KEY_TAG_LEN, GFP_KERNEL);
+	buffer_size = size + AES_KEY_TAG_LEN;
+	buf = vmalloc(buffer_size);
 	if (!buf) {
 		ret = -ENOMEM;
 		pr_err("Failed to allocate bounce\n");
 		goto out_no_buf;
 	}
 
-	memcpy(buf, va, size);
+	memcpy_fromio(buf, va, size);
 	memcpy(buf + size, cxt->aes_key_tag, AES_KEY_TAG_LEN);
-	sg_init_one(&sg, buf, size + AES_KEY_TAG_LEN);
-	aead_request_set_crypt(aead_req, &sg, &sg, size + AES_KEY_TAG_LEN,
+
+	nr_pages = DIV_ROUND_UP(buffer_size, PAGE_SIZE);
+	pages = kmalloc_array(nr_pages, sizeof(*pages), GFP_KERNEL);
+	if (!pages) {
+		ret = -ENOMEM;
+		pr_err("Failed to allocate page list\n");
+		goto out_no_page_list;
+	}
+
+	for (i = 0; i < nr_pages; ++i)
+		pages[i] = vmalloc_to_page(buf + (i * PAGE_SIZE));
+
+	ret = sg_alloc_table_from_pages(&sgt, pages, nr_pages, 0,
+					buffer_size, GFP_KERNEL);
+
+	if (ret) {
+		pr_err("Failed to allocate sg_table\n");
+		goto out_no_sg_table;
+	}
+
+	aead_request_set_crypt(aead_req, sgt.sgl, sgt.sgl, buffer_size,
 			       cxt->aes_key_iv);
 	aead_request_set_ad(aead_req, 0);
 	ret = crypto_aead_decrypt(aead_req);
@@ -275,10 +307,14 @@ static int ramoops_decrypt_alt(struct ramoops_context *cxt)
 		pr_err("Failed to decrypt %d\n", ret);
 		goto out_decrypt;
 	}
-	memcpy(va, buf, size);
+	memcpy_toio(va, buf, size);
 
 out_decrypt:
-	kfree(buf);
+	sg_free_table(&sgt);
+out_no_sg_table:
+	kfree(pages);
+out_no_page_list:
+	vfree(buf);
 out_no_buf:
 	aead_request_free(aead_req);
 out_set:
@@ -302,8 +338,6 @@ static ssize_t ramoops_pstore_read(u64 *id, enum pstore_type_id *type,
 	int header_length = 0;
 	bool use_alt = cxt->use_alt;
 	bool update = cxt->need_update;
-
-	cxt->need_update = 0;
 
 	/* Ramoops headers provide time stamps for PSTORE_TYPE_DMESG, but
 	 * PSTORE_TYPE_CONSOLE and PSTORE_TYPE_FTRACE don't currently have
@@ -503,6 +537,7 @@ static struct ramoops_context oops_cxt = {
 		.name	= "ramoops",
 		.open	= ramoops_pstore_open,
 		.read	= ramoops_pstore_read,
+		.close  = ramoops_pstore_close,
 		.write_buf	= ramoops_pstore_write_buf,
 		.write_buf_user	= ramoops_pstore_write_buf_user,
 		.erase	= ramoops_pstore_erase,
@@ -631,7 +666,7 @@ static int ramoops_init_przs(struct device *dev, struct ramoops_context *cxt,
 		cxt->przs[i] = persistent_ram_new(*paddr, *alt_paddr,
 						  cxt->record_size, 0,
 						  &cxt->ecc_info,
-						  cxt->memtype);
+						  cxt->memtype, 0);
 		if (IS_ERR(cxt->przs[i])) {
 			err = PTR_ERR(cxt->przs[i]);
 			dev_err(dev, "failed to request mem region (0x%zx@0x%llx): %d\n",
@@ -672,7 +707,7 @@ static int ramoops_init_prz(struct device *dev, struct ramoops_context *cxt,
 	}
 
 	*prz = persistent_ram_new(*paddr, *alt_paddr, sz, sig, &cxt->ecc_info,
-				  cxt->memtype);
+				  cxt->memtype, 0);
 	if (IS_ERR(*prz)) {
 		int err = PTR_ERR(*prz);
 

@@ -3170,6 +3170,7 @@ update_cfs_rq_load_avg(u64 now, struct cfs_rq *cfs_rq, bool update_freq)
  */
 #define UPDATE_TG	0x1
 #define SKIP_AGE_LOAD	0x2
+#define SKIP_CPUFREQ	0x4
 
 /* Update task and its cfs_rq load average */
 static inline void update_load_avg(struct sched_entity *se, int flags)
@@ -3190,7 +3191,7 @@ static inline void update_load_avg(struct sched_entity *se, int flags)
 			  cfs_rq->curr == se, NULL);
 	}
 
-	decayed  = update_cfs_rq_load_avg(now, cfs_rq, true);
+	decayed  = update_cfs_rq_load_avg(now, cfs_rq, !(flags & SKIP_CPUFREQ));
 	decayed |= propagate_entity_load_avg(se);
 
 	if (decayed && (flags & UPDATE_TG))
@@ -3363,6 +3364,7 @@ update_cfs_rq_load_avg(u64 now, struct cfs_rq *cfs_rq, bool update_freq)
 
 #define UPDATE_TG	0x0
 #define SKIP_AGE_LOAD	0x0
+#define SKIP_CPUFREQ	0x0
 
 static inline void update_load_avg(struct sched_entity *se, int not_used1){}
 static inline void
@@ -3579,6 +3581,8 @@ static __always_inline void return_cfs_rq_runtime(struct cfs_rq *cfs_rq);
 static void
 dequeue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 {
+	int update_flags;
+
 	/*
 	 * Update run-time statistics of the 'current'.
 	 */
@@ -3592,7 +3596,12 @@ dequeue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	 *   - For group entity, update its weight to reflect the new share
 	 *     of its group cfs_rq.
 	 */
-	update_load_avg(se, UPDATE_TG);
+	update_flags = UPDATE_TG;
+
+	if (flags & DEQUEUE_IDLE)
+		update_flags |= SKIP_CPUFREQ;
+
+	update_load_avg(se, update_flags);
 	dequeue_entity_load_avg(cfs_rq, se);
 
 	update_stats_dequeue(cfs_rq, se);
@@ -4396,6 +4405,26 @@ static void check_enqueue_throttle(struct cfs_rq *cfs_rq)
 	if (!cfs_bandwidth_used())
 		return;
 
+	/* Synchronize hierarchical throttle counter: */
+	if (unlikely(!cfs_rq->throttle_uptodate)) {
+		struct rq *rq = rq_of(cfs_rq);
+		struct cfs_rq *pcfs_rq;
+		struct task_group *tg;
+
+		cfs_rq->throttle_uptodate = 1;
+
+		/* Get closest up-to-date node, because leaves go first: */
+		for (tg = cfs_rq->tg->parent; tg; tg = tg->parent) {
+			pcfs_rq = tg->cfs_rq[cpu_of(rq)];
+			if (pcfs_rq->throttle_uptodate)
+				break;
+		}
+		if (tg) {
+			cfs_rq->throttle_count = pcfs_rq->throttle_count;
+			cfs_rq->throttled_clock_task = rq_clock_task(rq);
+		}
+	}
+
 	/* an active group must be handled by the update_curr()->put() path */
 	if (!cfs_rq->runtime_enabled || cfs_rq->curr)
 		return;
@@ -4772,6 +4801,9 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	struct sched_entity *se = &p->se;
 	int task_sleep = flags & DEQUEUE_SLEEP;
 
+	if (task_sleep && rq->nr_running == 1)
+		flags |= DEQUEUE_IDLE;
+
 	for_each_sched_entity(se) {
 		cfs_rq = cfs_rq_of(se);
 		dequeue_entity(cfs_rq, se, flags);
@@ -4789,21 +4821,22 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 
 		/* Don't dequeue parent if it has other entities besides us */
 		if (cfs_rq->load.weight) {
+			/* Avoid re-evaluating load for this entity: */
+			se = parent_entity(se);
 			/*
 			 * Bias pick_next to pick a task from this cfs_rq, as
 			 * p is sleeping when it is within its sched_slice.
 			 */
-			if (task_sleep && parent_entity(se))
-				set_next_buddy(parent_entity(se));
-
-			/* avoid re-evaluating load for this entity */
-			se = parent_entity(se);
+			if (task_sleep && se && !throttled_hierarchy(cfs_rq))
+				set_next_buddy(se);
 			break;
 		}
 		flags |= DEQUEUE_SLEEP;
 	}
 
 	for_each_sched_entity(se) {
+		int update_flags;
+
 		cfs_rq = cfs_rq_of(se);
 		cfs_rq->h_nr_running--;
 		walt_dec_cfs_cumulative_runnable_avg(cfs_rq, p);
@@ -4811,7 +4844,12 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 		if (cfs_rq_throttled(cfs_rq))
 			break;
 
-		update_load_avg(se, UPDATE_TG);
+		update_flags = UPDATE_TG;
+
+		if (flags & DEQUEUE_IDLE)
+			update_flags |= SKIP_CPUFREQ;
+
+		update_load_avg(se, update_flags);
 		update_cfs_shares(se);
 	}
 

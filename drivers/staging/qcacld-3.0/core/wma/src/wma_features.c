@@ -1642,6 +1642,12 @@ int wma_nan_rsp_event_handler(void *handle, uint8_t *event_buf,
 	buf_ptr = (uint8_t *) nan_rsp_event_hdr;
 	alloc_len = sizeof(tSirNanEvent);
 	alloc_len += nan_rsp_event_hdr->data_len;
+	if (nan_rsp_event_hdr->data_len > ((WMI_SVC_MSG_MAX_SIZE -
+	    sizeof(*nan_rsp_event_hdr)) / sizeof(uint8_t))) {
+		WMA_LOGE("excess data length:%d", nan_rsp_event_hdr->data_len);
+		QDF_ASSERT(0);
+		return -EINVAL;
+	}
 	nan_rsp_event = (tSirNanEvent *) qdf_mem_malloc(alloc_len);
 	if (NULL == nan_rsp_event) {
 		WMA_LOGE("%s: Memory allocation failure", __func__);
@@ -6104,7 +6110,7 @@ void wma_aggr_qos_req(tp_wma_handle wma,
 	wmi_unified_aggr_qos_cmd(wma->wmi_handle,
 			   (struct aggr_add_ts_param *)pAggrQosRspMsg);
 	/* send reponse to upper layers from here only. */
-	wma_send_msg(wma, WMA_AGGR_QOS_RSP, pAggrQosRspMsg, 0);
+	wma_send_msg_high_priority(wma, WMA_AGGR_QOS_RSP, pAggrQosRspMsg, 0);
 }
 
 #ifdef FEATURE_WLAN_ESE
@@ -6169,7 +6175,7 @@ void wma_add_ts_req(tp_wma_handle wma, tAddTsParams *msg)
 #endif /* WLAN_FEATURE_ROAM_OFFLOAD */
 
 	}
-	wma_send_msg(wma, WMA_ADD_TS_RSP, msg, 0);
+	wma_send_msg_high_priority(wma, WMA_ADD_TS_RSP, msg, 0);
 }
 
 /**

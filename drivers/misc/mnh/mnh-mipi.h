@@ -54,8 +54,8 @@ struct mipi_host_irq_st {
 
 int mnh_mipi_config(struct device *dev, struct mnh_mipi_config cfg);
 int mnh_mipi_stop(struct device *dev, struct mnh_mipi_config cfg);
-void mnh_mipi_stop_device(struct device *dev, int txdev);
-void mnh_mipi_stop_host(struct device *dev, int rxdev);
+int mnh_mipi_stop_device(struct device *dev, int txdev);
+int mnh_mipi_stop_host(struct device *dev, int rxdev);
 void mnh_mipi_set_debug(int val);
 int mnh_mipi_get_device_interrupts(struct device *dev,
 				   struct mipi_device_irq_st *int_status);

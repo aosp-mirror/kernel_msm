@@ -104,28 +104,39 @@ typedef void *hif_handle_t;
 struct CE_state;
 #define CE_COUNT_MAX 12
 
-#ifdef CONFIG_SLUB_DEBUG_ON
+/**
+ * With a max time limit in BH, max_num_messages is now
+ * reduced to 128, which is much higher than what we
+ * observe. We dont need to have different limits
+ * for PERF and SLUB builds.
+ */
 #define QCA_NAPI_BUDGET    64
 #define QCA_NAPI_DEF_SCALE  2
-#else  /* PERF build */
-#define QCA_NAPI_BUDGET    64
-#define QCA_NAPI_DEF_SCALE 16
-#endif /* SLUB_DEBUG_ON */
-#define HIF_NAPI_MAX_RECEIVES (QCA_NAPI_BUDGET * QCA_NAPI_DEF_SCALE)
 
 /* NOTE: "napi->scale" can be changed,
  * but this does not change the number of buckets
  */
-#define QCA_NAPI_NUM_BUCKETS 4
+#define HIF_NAPI_MAX_RECEIVES (QCA_NAPI_BUDGET * QCA_NAPI_DEF_SCALE)
+
+#define QCA_NAPI_MSG_BUCKETS (HIF_NAPI_MAX_RECEIVES)  /* 1 msg granularity */
+
+/**
+ * Note: the following MAX has to be the same as the max
+ *       in the wlan_hdd_cfg.h
+ */
+#define QCA_NAPI_TIME_MAX    10000
+#define QCA_NAPI_TIME_BUCKETS 40
 struct qca_napi_stat {
 	uint32_t napi_schedules;
 	uint32_t napi_polls;
 	uint32_t napi_completes;
 	uint32_t napi_workdone;
 	uint32_t cpu_corrected;
-	uint32_t napi_budget_uses[QCA_NAPI_NUM_BUCKETS];
+	uint32_t napi_msg_budget[QCA_NAPI_MSG_BUCKETS];
+	uint32_t napi_time_budget[QCA_NAPI_TIME_BUCKETS];
 	uint32_t time_limit_reached;
 	uint32_t rxpkt_thresh_reached;
+	unsigned long long napi_max_poll_time;
 };
 
 /**
@@ -368,6 +379,7 @@ struct hif_driver_state_callbacks {
 	bool (*is_recovery_in_progress)(void *context);
 	bool (*is_load_unload_in_progress)(void *context);
 	bool (*is_driver_unloading)(void *context);
+	bool (*is_target_ready)(void *context);
 };
 
 /* This API detaches the HTC layer from the HIF device */
@@ -526,6 +538,12 @@ struct hif_pipe_addl_info {
 	struct hif_ul_pipe_info ul_pipe;
 	struct hif_dl_pipe_info dl_pipe;
 };
+
+#ifdef CONFIG_SLUB_DEBUG_ON
+#define MSG_FLUSH_NUM 16
+#else /* PERF build */
+#define MSG_FLUSH_NUM 32
+#endif /* SLUB_DEBUG_ON */
 
 struct hif_bus_id;
 
@@ -754,4 +772,40 @@ hif_reg_based_get_target_info(struct hif_opaque_softc *hif_ctx,
 }
 #endif
 
+/**
+ * hif_set_ce_service_max_yield_time() - sets CE service max yield time
+ * @hif: hif context
+ * @ce_service_max_yield_time: CE service max yield time to set, in usecs
+ *
+ * This API storess CE service max yield time in hif context based
+ * on ini value.
+ *
+ * Return: void
+ */
+void hif_set_ce_service_max_yield_time(struct hif_opaque_softc *hif,
+				       uint32_t ce_service_max_yield_time);
+
+/**
+ * hif_get_ce_service_max_yield_time() - get CE service max yield time
+ * @hif: hif context
+ *
+ * This API returns CE service max yield time, in nsecs.
+ *
+ * Return: CE service max yield time
+ */
+unsigned long long
+hif_get_ce_service_max_yield_time(struct hif_opaque_softc *hif);
+
+/**
+ * hif_set_ce_service_max_rx_ind_flush() - sets CE service max rx ind flush
+ * @hif: hif context
+ * @ce_service_max_rx_ind_flush: CE service max rx ind flush to set
+ *
+ * This API stores CE service max rx ind flush in hif context based
+ * on ini value.
+ *
+ * Return: void
+ */
+void hif_set_ce_service_max_rx_ind_flush(struct hif_opaque_softc *hif,
+				       uint8_t ce_service_max_rx_ind_flush);
 #endif /* _HIF_H_ */

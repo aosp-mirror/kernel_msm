@@ -1124,12 +1124,6 @@ endif
 
 EXTRA_CFLAGS += $(INCS)
 
-# TODO: remove me b/62058353
-EXTRA_CFLAGS += \
-	-Wno-parentheses-equality \
-	-Wno-logical-not-parentheses \
-	-Wno-enum-conversion \
-
 CDEFINES :=	-DANI_LITTLE_BYTE_ENDIAN \
 		-DANI_LITTLE_BIT_ENDIAN \
 		-DDOT11F_LITTLE_ENDIAN_HOST \

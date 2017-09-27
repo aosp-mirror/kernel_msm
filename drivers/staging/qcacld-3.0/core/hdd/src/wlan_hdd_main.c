@@ -368,6 +368,40 @@ int hdd_validate_channel_and_bandwidth(hdd_adapter_t *adapter,
 	return 0;
 }
 
+/**
+ * hdd_wait_for_recovery_completion() - Wait for cds recovery completion
+ *
+ * Block the unloading of the driver (or) interface up until the
+ * cds recovery is completed
+ *
+ * Return: true for recovery completion else false
+ */
+static bool hdd_wait_for_recovery_completion(void)
+{
+	int retry = 0;
+
+	/* Wait for recovery to complete */
+	while (cds_is_driver_recovering()) {
+		if (retry == HDD_MOD_EXIT_SSR_MAX_RETRIES/2)
+			hdd_err("Recovery in progress; wait here!!!");
+		msleep(1000);
+		if (retry++ == HDD_MOD_EXIT_SSR_MAX_RETRIES) {
+			hdd_err("SSR never completed, error");
+			/*
+			 * Trigger the bug_on in the internal builds, in the
+			 * customer builds self-recovery will be enabled
+			 * in those cases just return error.
+			 */
+			if (cds_is_self_recovery_enabled())
+				return false;
+			QDF_BUG(0);
+		}
+	}
+
+	hdd_info("Recovery completed successfully!");
+	return true;
+}
+
 static int __hdd_netdev_notifier_call(struct notifier_block *nb,
 				    unsigned long state, void *data)
 {
@@ -2023,6 +2057,16 @@ static int __hdd_open(struct net_device *dev)
 	MTRACE(qdf_trace(QDF_MODULE_ID_HDD, TRACE_CODE_HDD_OPEN_REQUEST,
 		adapter->sessionId, adapter->device_mode));
 
+	/* Nothing to be done if device is unloading */
+	if (cds_is_driver_unloading()) {
+		hdd_err("Driver is unloading can not open the hdd");
+		return -EBUSY;
+	}
+
+	if (!hdd_wait_for_recovery_completion()) {
+		hdd_err("Recovery failed");
+		return -EIO;
+	}
 	mutex_lock(&hdd_init_deinit_lock);
 
 	/*
@@ -5653,6 +5697,7 @@ static void hdd_wlan_exit(hdd_context_t *hdd_ctx)
 	}
 
 	wlan_destroy_bug_report_lock();
+	unregister_netdevice_notifier(&hdd_netdev_notifier);
 
 	/*
 	 * Close the scheduler before calling cds_close to make sure
@@ -5681,9 +5726,6 @@ static void hdd_wlan_exit(hdd_context_t *hdd_ctx)
 
 	hdd_runtime_suspend_context_deinit(hdd_ctx);
 	hdd_close_all_adapters(hdd_ctx, false);
-
-	unregister_netdevice_notifier(&hdd_netdev_notifier);
-
 	hdd_ipa_cleanup(hdd_ctx);
 
 	/* Free up RoC request queue and flush workqueue */
@@ -8007,6 +8049,8 @@ static int hdd_update_cds_config(hdd_context_t *hdd_ctx)
 	cds_cfg->max_station = hdd_ctx->config->maxNumberOfPeers;
 	cds_cfg->sub_20_channel_width = WLAN_SUB_20_CH_WIDTH_NONE;
 	cds_cfg->flow_steering_enabled = hdd_ctx->config->flow_steering_enable;
+	cds_cfg->max_msdus_per_rxinorderind =
+		hdd_ctx->config->max_msdus_per_rxinorderind;
 	cds_cfg->self_recovery_enabled = hdd_ctx->config->enableSelfRecovery;
 	cds_cfg->fw_timeout_crash = hdd_ctx->config->fw_timeout_crash;
 	cds_cfg->active_uc_bpf_mode = hdd_ctx->config->active_uc_bpf_mode;
@@ -10897,27 +10941,6 @@ err_dev_state:
 	return ret;
 }
 
-/**
- * hdd_wait_for_recovery_completion() - Wait for cds recovery completion
- *
- * Block the unloading of the driver until the cds recovery is completed
- *
- * Return: None
- */
-static void hdd_wait_for_recovery_completion(void)
-{
-	int retry = 0;
-
-	/* Wait for recovery to complete */
-	while (cds_is_driver_recovering()) {
-		hdd_err("Recovery in progress; wait here!!!");
-		msleep(1000);
-		if (retry++ == HDD_MOD_EXIT_SSR_MAX_RETRIES) {
-			hdd_err("SSR never completed, error");
-			QDF_BUG(0);
-		}
-	}
-}
 
 /**
  * __hdd_module_exit - Module exit helper
@@ -11642,6 +11665,15 @@ int hdd_get_rssi_snr_by_bssid(hdd_adapter_t *adapter, const uint8_t *bssid,
 	}
 
 	return 0;
+}
+
+void hdd_pld_ipa_uc_shutdown_pipes(void)
+{
+	hdd_context_t *hdd_ctx = cds_get_context(QDF_MODULE_ID_HDD);
+	if (!hdd_ctx)
+		return;
+
+	hdd_ipa_uc_force_pipe_shutdown(hdd_ctx);
 }
 
 /* Register the module init/exit functions */

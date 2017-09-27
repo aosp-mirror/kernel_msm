@@ -324,6 +324,30 @@ static bool is_pon_gen2(struct qpnp_pon *pon)
 			pon->subtype == PON_GEN2_SECONDARY;
 }
 
+static void qpnp_pon_dump_regs(struct qpnp_pon *pon)
+{
+	uint8_t regs[16];
+	int i;
+	int j;
+	int rc;
+
+	dev_info(&pon->pdev->dev, "PMIC@SID%d register dump:\n",
+		 to_spmi_device(pon->pdev->dev.parent)->usid);
+	for (i = 0; i < 0xF0; i += ARRAY_SIZE(regs)) {
+		rc = regmap_bulk_read(pon->regmap, pon->base + i, &regs,
+				      ARRAY_SIZE(regs));
+		if (rc) {
+			dev_err(&pon->pdev->dev,
+				"Unable to read at ofs: %x (%d)\n", i, rc);
+			return;
+		}
+		printk("%04x: ", pon->base + i);
+		for (j = 0; j < ARRAY_SIZE(regs); j++)
+			printk("%02x ", regs[j]);
+		printk("\n");
+	}
+}
+
 /**
  * qpnp_pon_set_restart_reason - Store device restart reason in PMIC register.
  *
@@ -2141,6 +2165,7 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 			"PMIC@SID%d Power-on reason: Unknown and '%s' boot\n",
 			to_spmi_device(pon->pdev->dev.parent)->usid,
 			 cold_boot ? "cold" : "warm");
+		qpnp_pon_dump_regs(pon);
 	} else {
 		pon->pon_trigger_reason = index;
 		dev_info(&pon->pdev->dev,
@@ -2171,12 +2196,16 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 		dev_info(&pon->pdev->dev,
 				"PMIC@SID%d: Unknown power-off reason\n",
 				to_spmi_device(pon->pdev->dev.parent)->usid);
+		qpnp_pon_dump_regs(pon);
 	} else {
 		pon->pon_power_off_reason = index;
 		dev_info(&pon->pdev->dev,
 				"PMIC@SID%d: Power-off reason: %s\n",
 				to_spmi_device(pon->pdev->dev.parent)->usid,
 				qpnp_poff_reason[index]);
+		/* OTST3 (14, 31) and Stage 3 (15) */
+		if (index == 14 || index == 15 || index == 31)
+			qpnp_pon_dump_regs(pon);
 	}
 
 	if (pon->pon_trigger_reason == PON_SMPL ||

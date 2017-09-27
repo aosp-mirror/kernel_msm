@@ -44,6 +44,18 @@
 				 SIR_MAC_WEP_IV_LENGTH + \
 				 SIR_MAC_WEP_ICV_LENGTH)
 
+#define LIM_ENCR_AUTH_BODY_LEN_SAP  (SIR_MAC_AUTH_FRAME_INFO_LEN + \
+				     SIR_MAC_SAP_AUTH_CHALLENGE_LENGTH + \
+				     SIR_MAC_CHALLENGE_ID_LEN + \
+				     SIR_MAC_WEP_IV_LENGTH + \
+				     SIR_MAC_WEP_ICV_LENGTH)
+
+#define LIM_ENCR_AUTH_INFO_LEN  (SIR_MAC_AUTH_FRAME_INFO_LEN +\
+				 SIR_MAC_WEP_IV_LENGTH + \
+				 SIR_MAC_WEP_ICV_LENGTH + \
+				 SIR_MAC_CHALLENGE_ID_LEN)
+
+
 struct tLimPreAuthNode;
 
 uint8_t lim_is_auth_algo_supported(tpAniSirGlobal, tAniAuthType, tpPESession);

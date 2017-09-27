@@ -212,7 +212,7 @@ bool hif_ce_service_should_yield(struct hif_softc *scn,
 
 	yield =  time_limit_reached || rxpkt_thresh_reached;
 
-	if (yield)
+	if (yield && ce_state->htt_rx_data)
 		hif_napi_update_yield_stats(ce_state,
 					    time_limit_reached,
 					    rxpkt_thresh_reached);
@@ -1640,11 +1640,6 @@ static void ce_fastpath_rx_handle(struct CE_state *ce_state,
 	dest_ring->write_index = write_index;
 }
 
-#ifdef CONFIG_SLUB_DEBUG_ON
-#define MSG_FLUSH_NUM 16
-#else /* PERF build */
-#define MSG_FLUSH_NUM 32
-#endif /* SLUB_DEBUG_ON */
 /**
  * ce_per_engine_service_fast() - CE handler routine to service fastpath msgs
  * @scn: hif_context
@@ -1741,15 +1736,17 @@ more_data:
 		 * we are not posting the buffers back instead
 		 * reusing the buffers
 		 */
-		if (nbuf_cmpl_idx == MSG_FLUSH_NUM) {
+		if (nbuf_cmpl_idx == scn->ce_service_max_rx_ind_flush) {
 			hif_record_ce_desc_event(scn, ce_state->id,
 						 FAST_RX_SOFTWARE_INDEX_UPDATE,
 						 NULL, NULL, sw_index);
 			dest_ring->sw_index = sw_index;
 			ce_fastpath_rx_handle(ce_state, cmpl_msdus,
-					      MSG_FLUSH_NUM, ctrl_addr);
+					scn->ce_service_max_rx_ind_flush,
+					ctrl_addr);
 
-			ce_state->receive_count += MSG_FLUSH_NUM;
+			ce_state->receive_count +=
+					scn->ce_service_max_rx_ind_flush;
 			if (qdf_unlikely(hif_ce_service_should_yield(
 						scn, ce_state))) {
 				ce_state->force_break = 1;
@@ -1788,9 +1785,18 @@ more_data:
 		more_comp_cnt = 0;
 		goto more_data;
 	}
+
+	hif_update_napi_max_poll_time(ce_state, scn->napi_data.napis[ce_id],
+				      qdf_get_cpu());
+
 	qdf_atomic_set(&ce_state->rx_pending, 0);
-	CE_ENGINE_INT_STATUS_CLEAR(scn, ctrl_addr,
-				   HOST_IS_COPY_COMPLETE_MASK);
+	if (TARGET_REGISTER_ACCESS_ALLOW(scn)) {
+		CE_ENGINE_INT_STATUS_CLEAR(scn, ctrl_addr,
+					   HOST_IS_COPY_COMPLETE_MASK);
+	} else {
+		HIF_ERROR("%s: target access is not allowed", __func__);
+		return;
+	}
 
 	if (ce_recv_entries_done_nolock(scn, ce_state)) {
 		if (more_comp_cnt++ < CE_TXRX_COMP_CHECK_THRESHOLD) {
@@ -1809,11 +1815,6 @@ static void ce_per_engine_service_fast(struct hif_softc *scn, int ce_id)
 {
 }
 #endif /* WLAN_FEATURE_FASTPATH */
-
-/* Maximum amount of time in nano seconds before which the CE per engine service
- * should yield. ~1 jiffie.
- */
-#define CE_PER_ENGINE_SERVICE_MAX_YIELD_TIME_NS (10 * 1000 * 1000)
 
 /*
  * Guts of interrupt handler for per-engine interrupts on a particular CE.
@@ -1851,10 +1852,11 @@ int ce_per_engine_service(struct hif_softc *scn, unsigned int CE_id)
 	/* Clear force_break flag and re-initialize receive_count to 0 */
 	CE_state->receive_count = 0;
 	CE_state->force_break = 0;
+	CE_state->ce_service_start_time = sched_clock();
 	CE_state->ce_service_yield_time =
-		sched_clock() +
-		(unsigned long long)CE_PER_ENGINE_SERVICE_MAX_YIELD_TIME_NS;
-
+		CE_state->ce_service_start_time +
+		hif_get_ce_service_max_yield_time(
+			(struct hif_opaque_softc *)scn);
 
 	qdf_spin_lock(&CE_state->ce_index_lock);
 	/*
@@ -1986,9 +1988,14 @@ more_watermarks:
 	 * more copy completions happened while the misc interrupts were being
 	 * handled.
 	 */
-	CE_ENGINE_INT_STATUS_CLEAR(scn, ctrl_addr,
-				   CE_WATERMARK_MASK |
-				   HOST_IS_COPY_COMPLETE_MASK);
+	if (TARGET_REGISTER_ACCESS_ALLOW(scn)) {
+		CE_ENGINE_INT_STATUS_CLEAR(scn, ctrl_addr,
+					   CE_WATERMARK_MASK |
+					   HOST_IS_COPY_COMPLETE_MASK);
+	} else {
+		HIF_ERROR("%s: target access is not allowed", __func__);
+		return CE_state->receive_count;
+	}
 
 	/*
 	 * Now that per-engine interrupts are cleared, verify that
@@ -2103,6 +2110,11 @@ ce_per_engine_handler_adjust(struct CE_state *CE_state,
 
 	if (Q_TARGET_ACCESS_BEGIN(scn) < 0)
 		return;
+
+	if (!TARGET_REGISTER_ACCESS_ALLOW(scn)) {
+		HIF_ERROR("%s: target access is not allowed", __func__);
+		return;
+	}
 
 	if ((!disable_copy_compl_intr) &&
 	    (CE_state->send_cb || CE_state->recv_cb))

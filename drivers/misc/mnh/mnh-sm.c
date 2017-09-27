@@ -42,6 +42,7 @@
 
 #include "hw-mnh-regs.h"
 #include "mnh-clk.h"
+#include "mnh-crypto.h"
 #include "mnh-ddr.h"
 #include "mnh-hwio.h"
 #include "mnh-hwio-bases.h"
@@ -93,8 +94,14 @@ HW_OUTx(HWIO_PCIE_SS_BASE_ADDR, PCIE_SS, reg, inst, val)
 /* Timeout for waiting for MNH set_state to complete */
 #define STATE_CHANGE_COMPLETE_TIMEOUT msecs_to_jiffies(5000)
 
+/* Timeout for MNH_HOTPLUG_IN when uart is enabled (in ms) */
+#define HOTPLUG_IN_LOOSE_TIMEOUT_MS 15000
+
 /* PCIe */
 #define MNH_PCIE_CHAN_0 0
+
+/* Allow partial active mode where PCIe link is up, but Easel is not booted */
+#define ALLOW_PARTIAL_ACTIVE 1
 
 /* Firmware update mask, defines userspace updatable slots */
 #define FW_SLOT_UPDATE_MASK ((1 << MNH_FW_SLOT_RAMDISK) |\
@@ -118,9 +125,17 @@ enum mnh_ddr_status {
 };
 
 enum fw_image_partition_index {
-	FW_PART_PRI = 0,
-	FW_PART_SEC,
+	FW_PART_PRI = 0, /* Carveout region, stores final FW for easel */
+	FW_PART_SEC,     /* Temp allocation for buf sharing with PS app */
+	FW_PART_TER,     /* Temp allocation to protect shared buffer */
 	FW_PART_MAX
+};
+
+enum fw_update_status {
+	FW_UPD_NONE = 0, /* no update available */
+	FW_UPD_INIT, /* update service requested firmware buffer */
+	FW_UPD_RECEIVED, /* service uploaded new FW, authentication pending */
+	FW_UPD_VERIFIED /* fw signature check successful */
 };
 
 struct mnh_sm_device {
@@ -181,10 +196,13 @@ struct mnh_sm_device {
 	bool firmware_downloaded;
 
 	/* flag indicating a valid update buffer */
-	bool pending_update;
+	enum fw_update_status update_status;
 
 	/* node to carveout memory, owned by mnh_sm_device */
 	struct mnh_ion *ion[FW_PART_MAX];
+
+	/* firmware version */
+	char mnh_fw_ver[FW_VER_SIZE];
 };
 
 static struct mnh_sm_device *mnh_sm_dev;
@@ -212,8 +230,7 @@ enum {
 	MNH_POWER_MODE_L1_2_ENABLE   = 1 << 1,
 	MNH_POWER_MODE_AXI_CG_ENABLE = 1 << 2,
 };
-static uint32_t mnh_power_mode = MNH_POWER_MODE_CLKPM_ENABLE |
-	MNH_POWER_MODE_L1_2_ENABLE;
+static uint32_t mnh_power_mode = MNH_POWER_MODE_CLKPM_ENABLE;
 
 /* flag for boot mode options */
 static enum mnh_boot_mode mnh_boot_mode = MNH_BOOT_MODE_PCIE;
@@ -461,6 +478,64 @@ static int mnh_transfer_firmware(size_t fw_size, const uint8_t *fw_data,
 	return err;
 }
 
+/*
+ * Returns:
+ *  0  if all firmware slots verify correct
+ *  >1 bitmask indicating firmware slots with wrong signature
+ *     bit 0: SBL
+ *     bit 1: Kernel
+ *     bit 2: DTB
+ *     bit 3: Ramdisk
+ *  -ENODEV in case ION buffer is not available
+ */
+int mnh_verify_firmware_ion(struct mnh_ion *ion)
+{
+#if IS_ENABLED(CONFIG_MNH_SIG)
+	int err = 0, ret = 0;
+	int i;
+
+	struct cert_info info = {0};
+
+	if (!ion)
+		return -ENODEV;
+
+	for (i = 0; i < MAX_NR_MNH_FW_SLOTS; i++) {
+		dev_dbg(mnh_sm_dev->dev,
+			"Slot %d size %zu\n", i, ion->fw_array[i].size);
+		if (ion->fw_array[i].size > 0) {
+			dev_dbg(mnh_sm_dev->dev,
+				"Signature check of slot[%d]...\n", i);
+
+			info.img = ion->vaddr + ion->fw_array[i].ap_offs;
+			info.img_len = ion->fw_array[i].size;
+
+			err = mnh_crypto_verify(mnh_sm_dev->dev, &info);
+
+			ion->fw_array[i].cert = info.cert;
+			ion->fw_array[i].cert_size = info.cert_size;
+			if (!err) {
+				dev_dbg(mnh_sm_dev->dev,
+					"->Sig. check PASS for slot[%d]\n", i);
+				dev_dbg(mnh_sm_dev->dev,
+					"->Img size %zu, total img size %zu\n",
+					ion->fw_array[i].size -
+					ion->fw_array[i].cert_size,
+					ion->fw_array[i].size);
+			} else {
+				dev_err(mnh_sm_dev->dev,
+					"->Sig. check failed for slot[%d]=%d\n",
+					i,
+					ion->fw_array[i].cert);
+				ret |= (1 << i);
+			}
+		}
+	}
+	return ret;
+#else
+	return 0;
+#endif
+}
+
 int mnh_transfer_slot_ion(struct mnh_ion *ion, int slot)
 {
 	int err;
@@ -488,7 +563,8 @@ int mnh_transfer_slot_ion(struct mnh_ion *ion, int slot)
 			ion->fw_array[slot].ep_addr);
 	} else {
 		err = mnh_transfer_firmware_contig(
-			ion->fw_array[slot].size,
+			ion->fw_array[slot].size -
+			ion->fw_array[slot].cert_size,
 			ion->fw_array[slot].ap_addr,
 			ion->fw_array[slot].ep_addr);
 	}
@@ -517,6 +593,15 @@ int mnh_download_firmware_ion(struct mnh_ion *ion[FW_PART_MAX])
 	}
 
 	for (i = 0; i < MAX_NR_MNH_FW_SLOTS; i++) {
+#if IS_ENABLED(CONFIG_MNH_SIG_FORCE_OTA)
+		if (ion[FW_PART_PRI]->fw_array[i].cert != FW_IMAGE_CERT_OK) {
+			dev_err(mnh_sm_dev->dev,
+				"Firmware tainted, upload aborted - %d\n",
+				ion[FW_PART_PRI]->fw_array[i].cert);
+			mnh_reg_irq_callback(NULL, NULL, NULL);
+			return -EKEYREJECTED;
+		}
+#endif
 		/* only upload from primary ION buffer */
 		err = mnh_transfer_slot_ion(ion[FW_PART_PRI], i);
 		if (err) {
@@ -698,15 +783,19 @@ int mnh_download_firmware(void)
 			"%s: ION download successful\n", __func__);
 		return 0;
 	}
-
+#if !IS_ENABLED(CONFIG_MNH_SIG_FORCE_OTA)
 	/* Otherwise fall back to legacy mode */
 	dev_err(mnh_sm_dev->dev, "%s: Fallback to legacy mode\n", __func__);
 	return mnh_download_firmware_legacy();
+#else
+	return -EKEYREJECTED;
+#endif
 }
 
 /**
  * Verify the integrity of the images in the secondary ion buffer
- * and populate the fw_array structure
+ * and populate the fw_array structure. Use tertiary buffer only
+ * if signature verification is enabled.
  * @return 0 if success or -1 on failure to verify the image integrity
  */
 int mnh_validate_update_buf(struct mnh_update_configs configs)
@@ -714,15 +803,39 @@ int mnh_validate_update_buf(struct mnh_update_configs configs)
 	int i, slot;
 	int err_mask = 0;
 	struct mnh_update_config config;
+	enum fw_image_partition_index fw_idx;
+
+#if IS_ENABLED(CONFIG_MNH_SIG)
+	fw_idx = FW_PART_TER;
+#else
+	fw_idx = FW_PART_SEC;
+#endif
 
 	if (!mnh_sm_dev->ion[FW_PART_SEC])
 		return -ENOMEM;
 
+#if IS_ENABLED(CONFIG_MNH_SIG)
+	/* buffer to prevent future data corruption from userspace */
+	if (mnh_sm_dev->ion[FW_PART_TER])
+		mnh_ion_destroy_buffer(mnh_sm_dev->ion[FW_PART_TER]);
+	if (mnh_ion_create_buffer(mnh_sm_dev->ion[FW_PART_TER],
+				  MNH_ION_BUFFER_SIZE,
+				  ION_SYSTEM_HEAP_ID)) {
+		dev_err(mnh_sm_dev->dev, "%s: cannot claim ION buffer\n",
+			 __func__);
+		return -ENOMEM;
+	}
+	memcpy(mnh_sm_dev->ion[FW_PART_TER]->vaddr,
+	       mnh_sm_dev->ion[FW_PART_SEC]->vaddr,
+	       MNH_ION_BUFFER_SIZE);
+	mnh_ion_destroy_buffer(mnh_sm_dev->ion[FW_PART_SEC]);
+#endif
 	/* Initialize update buffer struct */
 	for (i = 0; i < MAX_NR_MNH_FW_SLOTS; i++) {
-		mnh_sm_dev->ion[FW_PART_SEC]->fw_array[i].ap_offs = 0;
-		mnh_sm_dev->ion[FW_PART_SEC]->fw_array[i].size = 0;
+		mnh_sm_dev->ion[fw_idx]->fw_array[i].ap_offs = 0;
+		mnh_sm_dev->ion[fw_idx]->fw_array[i].size = 0;
 	}
+
 	/* Parse update slots */
 	for (i = 0; i < MAX_NR_MNH_FW_SLOTS; i++) {
 		config = configs.config[i];
@@ -730,32 +843,30 @@ int mnh_validate_update_buf(struct mnh_update_configs configs)
 		/* only configure slots masked by FW_SLOT_UPDATE_MASK */
 		if ((FW_SLOT_UPDATE_MASK & (1 << slot)) &&
 		    (config.size > 0)) {
-			mnh_sm_dev->ion[FW_PART_SEC]->fw_array[slot].ap_offs =
+			mnh_sm_dev->ion[fw_idx]->fw_array[slot].ap_offs =
 				config.offset;
-			mnh_sm_dev->ion[FW_PART_SEC]->fw_array[slot].size =
+			mnh_sm_dev->ion[fw_idx]->fw_array[slot].size =
 				config.size;
-			dev_dbg(mnh_sm_dev->dev,
-				"%s: Validating slot[%d]: size %zd offs %lu\n",
-				__func__, slot, config.size, config.offset);
-			/* perform signature check */
-			dev_dbg(mnh_sm_dev->dev, "%s: Performing sig. check\n",
-				__func__);
-			err_mask = 0; /* todo: b/36782736 add sig.check here */
 		}
 	}
 
-	/* all update slots must verify positive or they are discarded */
+	/* Signature verification */
+	err_mask = mnh_verify_firmware_ion(mnh_sm_dev->ion[fw_idx]);
+
+#if IS_ENABLED(CONFIG_MNH_SIG_FORCE_PS)
+	/* all update slots must verify for the update to be accepted */
 	if (err_mask) {
-		dev_err(mnh_sm_dev->dev, "%s: Update firmware tainted\n",
-			__func__);
-		mnh_sm_dev->ion[FW_PART_SEC]->is_fw_ready = false;
-		mnh_sm_dev->pending_update = false;
+		dev_err(mnh_sm_dev->dev, "%s: Update firmware tainted: %d\n",
+			__func__, err_mask);
+		mnh_sm_dev->ion[fw_idx]->is_fw_ready = false;
 		return err_mask;
 	}
-	dev_dbg(mnh_sm_dev->dev, "%s: Update firmware validated\n",
+#endif
+	dev_info(mnh_sm_dev->dev, "%s: Update firmware validated\n",
 		__func__);
-	mnh_sm_dev->ion[FW_PART_SEC]->is_fw_ready = true;
-	mnh_sm_dev->pending_update = true;
+
+	mnh_sm_dev->ion[fw_idx]->is_fw_ready = true;
+
 	return 0;
 }
 
@@ -786,6 +897,24 @@ static ssize_t suspend_show(struct device *dev,
 }
 
 static DEVICE_ATTR_RO(suspend);
+
+int mnh_update_fw_version(struct mnh_ion *ion)
+{
+	if ((ion != NULL) && (ion->fw_array[MNH_FW_SLOT_RAMDISK].size <
+		   sizeof(mnh_sm_dev->mnh_fw_ver)))
+		return -EINVAL;
+	memcpy(mnh_sm_dev->mnh_fw_ver,
+	       (uint8_t *)(ion->vaddr +
+			   ion->fw_array[MNH_FW_SLOT_RAMDISK].ap_offs +
+			   ion->fw_array[MNH_FW_SLOT_RAMDISK].size -
+			   ion->fw_array[MNH_FW_SLOT_RAMDISK].cert_size -
+			   sizeof(mnh_sm_dev->mnh_fw_ver)),
+	       sizeof(mnh_sm_dev->mnh_fw_ver));
+	dev_dbg(mnh_sm_dev->dev,
+		"%s: Easel firmware version: %s size %zu\n", __func__,
+		mnh_sm_dev->mnh_fw_ver, sizeof(mnh_sm_dev->mnh_fw_ver));
+	return sizeof(mnh_sm_dev->mnh_fw_ver);
+}
 
 int mnh_resume_firmware(void)
 {
@@ -1061,6 +1190,15 @@ static ssize_t power_mode_store(struct device *dev,
 
 static DEVICE_ATTR_RW(power_mode);
 
+static ssize_t fw_ver_show(struct device *dev,
+			       struct device_attribute *attr,
+			       char *buf)
+{
+	return scnprintf(buf, MAX_STR_COPY, "%s\n", mnh_sm_dev->mnh_fw_ver);
+}
+
+static DEVICE_ATTR_RO(fw_ver);
+
 static int mnh_sm_read_mipi_interrupts(void)
 {
 	int i, int_event = 0;
@@ -1130,6 +1268,54 @@ static ssize_t spi_boot_mode_store(struct device *dev,
 
 static DEVICE_ATTR_RW(spi_boot_mode);
 
+static ssize_t error_event_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, MAX_STR_COPY, "%d\n", 0);
+}
+
+static DEVICE_ATTR_RO(error_event);
+
+#if IS_ENABLED(CONFIG_MNH_SIG)
+/* issue signature verification of the firmware in memory and print results */
+static ssize_t verify_fw_show(struct device *dev,
+			      struct device_attribute *attr,
+			      char *buf)
+{
+	int err, i;
+
+	dev_info(dev, "Starting signature check\n");
+	err = mnh_verify_firmware_ion(mnh_sm_dev->ion[FW_PART_PRI]);
+	for (i = 0; i < MAX_NR_MNH_FW_SLOTS; i++) {
+		dev_info(dev, "Signature check slot[%d]:%d\n", i,
+			mnh_sm_dev->ion[FW_PART_PRI]->fw_array[i].cert);
+	}
+	return scnprintf(buf, MAX_STR_COPY, "%d", err);
+}
+
+static DEVICE_ATTR_RO(verify_fw);
+#endif
+
+static ssize_t ddr_mbist_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf, size_t count)
+{
+	int val = 0;
+	int ret;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret || ((val != LIMITED_MOVI1_3N) && (val != MOVI1_3N)))
+		return -EINVAL;
+
+	mnh_pwr_set_state(MNH_PWR_S0);
+	mnh_ddr_po_init(mnh_sm_dev->dev, mnh_sm_dev->ddr_pad_iso_n_pin);
+	mnh_ddr_mbist(dev, val);
+	mnh_pwr_set_state(MNH_PWR_S4);
+
+	return count;
+}
+static DEVICE_ATTR_WO(ddr_mbist);
+
 static struct attribute *mnh_sm_attrs[] = {
 	&dev_attr_stage_fw.attr,
 	&dev_attr_poweron.attr,
@@ -1149,6 +1335,12 @@ static struct attribute *mnh_sm_attrs[] = {
 	&dev_attr_mipi_int.attr,
 	&dev_attr_spi_boot_mode.attr,
 	&dev_attr_boot_trace.attr,
+	&dev_attr_error_event.attr,
+	&dev_attr_fw_ver.attr,
+#if IS_ENABLED(CONFIG_MNH_SIG)
+	&dev_attr_verify_fw.attr,
+#endif
+	&dev_attr_ddr_mbist.attr,
 	NULL
 };
 ATTRIBUTE_GROUPS(mnh_sm);
@@ -1176,7 +1368,15 @@ static int mnh_sm_hotplug_callback(enum mnh_hotplug_event_t event)
 	if (!mnh_hotplug_cb)
 		return -EFAULT;
 
-	return mnh_hotplug_cb(event);
+	if ((event == MNH_HOTPLUG_IN) && (mnh_boot_args & MNH_UART_ENABLE)) {
+		dev_info(mnh_sm_dev->dev,
+			 "%s: allow %d secs for MNH_HOTPLUG_IN\n",
+			 __func__, HOTPLUG_IN_LOOSE_TIMEOUT_MS / 1000);
+		return mnh_hotplug_cb(event,
+				      (void *)HOTPLUG_IN_LOOSE_TIMEOUT_MS);
+	}
+
+	return mnh_hotplug_cb(event, NULL);
 }
 
 /**
@@ -1216,9 +1416,6 @@ static int mnh_sm_poweroff(void)
 static int mnh_sm_config_ddr(void)
 {
 	int ret;
-
-	/* Set core supply to 900 mV */
-	mnh_pwr_set_asr_voltage(900000);
 
 	/* Initialize DDR */
 	ret = mnh_ddr_po_init(mnh_sm_dev->dev, mnh_sm_dev->ddr_pad_iso_n_pin);
@@ -1376,10 +1573,48 @@ int mnh_sm_get_state(void)
 }
 EXPORT_SYMBOL(mnh_sm_get_state);
 
+static void mnh_sm_print_boot_trace(struct device (*dev))
+{
+	int err;
+	uint32_t val;
+
+	err = mnh_config_read(MNH_BOOT_TRACE, sizeof(val), &val);
+
+	if (err) {
+		dev_err(dev,
+			"%s: failed reading MNH_BOOT_TRACE (%d)\n",
+			__func__, err);
+		return;
+	}
+
+	dev_info(dev, "%s: MNH_BOOT_TRACE = 0x%x\n", __func__, val);
+}
+
+/*
+ * NOTE (b/64372955): Put Easel into a low-power mode for MIPI bypass. Ideally,
+ * this would be done from Easel kernel, but if the Easel kernel fails for some
+ * reason, we can disable a lot of clocks on Easel to reduce power.
+ */
+static void mnh_sm_enter_low_power_mode(void)
+{
+	MNH_SCU_OUTf(CCU_CLK_CTL, CPU_CLKEN, 0);
+	MNH_SCU_OUTf(CCU_CLK_CTL, BTSRAM_CLKEN, 0);
+	MNH_SCU_OUTf(CCU_CLK_CTL, BTROM_CLKEN, 0);
+	MNH_SCU_OUTf(CCU_CLK_CTL, LP4_REFCLKEN, 0);
+	MNH_SCU_OUTf(CCU_CLK_CTL, IPU_CLKEN, 0);
+}
+
 static int mnh_sm_set_state_locked(int state)
 {
 	struct device *dev = mnh_sm_dev->dev;
 	int ret = 0;
+	enum fw_image_partition_index fw_idx;
+
+#if IS_ENABLED(CONFIG_MNH_SIG)
+	fw_idx = FW_PART_TER;
+#else
+	fw_idx = FW_PART_SEC;
+#endif
 
 	if (state == mnh_sm_dev->state) {
 		dev_dbg(dev, "%s: already in state %d\n", __func__, state);
@@ -1394,28 +1629,33 @@ static int mnh_sm_set_state_locked(int state)
 		mnh_sm_dev->powered = false;
 		reinit_completion(&mnh_sm_dev->powered_complete);
 
-		/* stage firmware copy to ION if valid update was received */
-		if (mnh_sm_dev->pending_update) {
-			dev_dbg(mnh_sm_dev->dev,
-				"%s: staging firmware update",
-				__func__);
-			mnh_ion_stage_firmware_update(
-				mnh_sm_dev->ion[FW_PART_PRI],
-				mnh_sm_dev->ion[FW_PART_SEC]);
-			mnh_sm_dev->pending_update = false;
-			mnh_ion_destroy_buffer(mnh_sm_dev->ion[FW_PART_SEC]);
-		}
-
 		ret = mnh_sm_poweroff();
 
 		disable_irq(mnh_sm_dev->ready_irq);
 		break;
 	case MNH_STATE_ACTIVE:
-		enable_irq(mnh_sm_dev->ready_irq);
+		/* stage firmware copy to ION if valid update was received */
+		if (mnh_sm_dev->update_status == FW_UPD_VERIFIED) {
+			dev_info(mnh_sm_dev->dev,
+				"%s: staging firmware update",
+				__func__);
+			mnh_ion_stage_firmware_update(
+				mnh_sm_dev->ion[FW_PART_PRI],
+				mnh_sm_dev->ion[fw_idx]
+				);
+			mnh_ion_destroy_buffer(mnh_sm_dev->ion[fw_idx]);
+			mnh_update_fw_version(mnh_sm_dev->ion[FW_PART_PRI]);
+			mnh_sm_dev->update_status = FW_UPD_NONE;
+		}
 
+		enable_irq(mnh_sm_dev->ready_irq);
 		ret = mnh_sm_poweron();
 		if (ret)
 			break;
+
+		/* toggle powered flag and notify any waiting threads */
+		mnh_sm_dev->powered = true;
+		complete(&mnh_sm_dev->powered_complete);
 
 		/* make sure ddr is configured */
 		if (mnh_sm_dev->ddr_status == MNH_DDR_OFF)
@@ -1424,10 +1664,6 @@ static int mnh_sm_set_state_locked(int state)
 			ret = mnh_sm_resume_ddr();
 		if (ret)
 			break;
-
-		/* toggle powered flag and notify any waiting threads */
-		mnh_sm_dev->powered = true;
-		complete(&mnh_sm_dev->powered_complete);
 
 		/* use max CPU frequency for fast boot */
 		mnh_cpu_freq_change(CPU_FREQ_950);
@@ -1441,6 +1677,9 @@ static int mnh_sm_set_state_locked(int state)
 			break;
 
 		ret = mnh_sm_hotplug_callback(MNH_HOTPLUG_IN);
+		if (ret)
+			mnh_sm_print_boot_trace(mnh_sm_dev->dev);
+
 		break;
 	case MNH_STATE_SUSPEND:
 		ret = mnh_sm_set_state_locked(MNH_STATE_ACTIVE);
@@ -1461,24 +1700,45 @@ static int mnh_sm_set_state_locked(int state)
 	}
 
 	if (ret) {
-		dev_err(mnh_sm_dev->dev,
-			 "%s: failed to transition to state %d (%d)\n",
-			 __func__, state, ret);
+		/*
+		 * NOTE (b/64372955): the minimum requirements for MIPI bypass
+		 * are power and PCIe. A successful boot is only necessary for
+		 * easelcomm communication. Return a special code to indicate
+		 * that we reached the minimum requirements, but couldn't
+		 * establish host communication. Also, disable a few clocks on
+		 * Easel to reduce power.
+		 */
+#if ALLOW_PARTIAL_ACTIVE
+		if ((state == MNH_STATE_ACTIVE) && (mnh_sm_dev->powered)) {
+			dev_warn(mnh_sm_dev->dev,
+				 "%s: failed to fully transition to state %d (%d), allow partial active\n",
+				 __func__, state, ret);
+			mnh_sm_enter_low_power_mode();
+			ret = -EHOSTUNREACH;
+		} else {
+#endif
+			dev_err(mnh_sm_dev->dev,
+				 "%s: failed to transition to state %d (%d)\n",
+				 __func__, state, ret);
 
-		if (state == MNH_STATE_ACTIVE) {
-			mnh_sm_dev->powered = false;
-			reinit_completion(&mnh_sm_dev->powered_complete);
-			mnh_sm_poweroff();
-			disable_irq(mnh_sm_dev->ready_irq);
-			mnh_sm_dev->state = MNH_STATE_OFF;
+			if (state == MNH_STATE_ACTIVE) {
+				mnh_sm_dev->powered = false;
+				reinit_completion(
+					&mnh_sm_dev->powered_complete);
+				mnh_sm_poweroff();
+				disable_irq(mnh_sm_dev->ready_irq);
+				mnh_sm_dev->state = MNH_STATE_OFF;
+			}
+
+			return ret;
+#if ALLOW_PARTIAL_ACTIVE
 		}
-
-		return ret;
+#endif
 	}
 
 	mnh_sm_dev->state = state;
 
-	return 0;
+	return ret;
 }
 
 /**
@@ -1528,6 +1788,7 @@ int mnh_sm_pwr_error_cb(void)
 	dev_err(mnh_sm_dev->dev,
 		"%s: observed mnh-pwr error, switching state to off\n",
 		__func__);
+	sysfs_notify(&mnh_sm_dev->dev->kobj, NULL, "error_event");
 	return mnh_sm_set_state(MNH_STATE_OFF);
 }
 EXPORT_SYMBOL(mnh_sm_pwr_error_cb);
@@ -1562,8 +1823,15 @@ static int mnh_sm_open(struct inode *inode, struct file *filp)
 			dev_dbg(mnh_sm_dev->dev, "%s: staging firmware\n",
 				__func__);
 			mnh_ion_stage_firmware(mnh_sm_dev->ion[FW_PART_PRI]);
+			/* Extract firmware version from ramdisk image */
+			mnh_update_fw_version(mnh_sm_dev->ion[FW_PART_PRI]);
 		}
 	}
+
+	/* perform signature check on firmware images */
+#if IS_ENABLED(CONFIG_MNH_SIG_FORCE_OTA)
+	mnh_verify_firmware_ion(mnh_sm_dev->ion[FW_PART_PRI]);
+#endif
 	return 0;
 }
 
@@ -1701,6 +1969,8 @@ static long mnh_sm_ioctl(struct file *file, unsigned int cmd,
 				__func__, err);
 			return err;
 		}
+		if (!mnh_sm_dev->powered)
+			return -EIO;
 		if (cmd == MNH_SM_IOC_CONFIG_MIPI)
 			mnh_mipi_config(mnh_sm_dev->dev, mipi_config);
 		else
@@ -1721,11 +1991,13 @@ static long mnh_sm_ioctl(struct file *file, unsigned int cmd,
 		err = copy_to_user((void __user *)arg, &fd, sizeof(fd));
 		if (err) {
 			mnh_ion_destroy_buffer(mnh_sm_dev->ion[FW_PART_SEC]);
+			mnh_sm_dev->update_status = FW_UPD_NONE;
 			dev_err(mnh_sm_dev->dev,
 				"%s: failed to copy to userspace (%d)\n",
 				__func__, err);
 			return err;
 		}
+		mnh_sm_dev->update_status = FW_UPD_INIT;
 		break;
 	case MNH_SM_IOC_POST_UPDATE_BUF:
 		err = copy_from_user(&update_configs, (void __user *)arg,
@@ -1736,13 +2008,27 @@ static long mnh_sm_ioctl(struct file *file, unsigned int cmd,
 				__func__, err);
 			return err;
 		}
-
-		err = mnh_validate_update_buf(update_configs);
+		if (mnh_sm_dev->update_status == FW_UPD_INIT) {
+			mnh_sm_dev->update_status = FW_UPD_RECEIVED;
+			err = mnh_validate_update_buf(update_configs);
+			if (err) {
+				mnh_ion_destroy_buffer(
+					mnh_sm_dev->ion[FW_PART_SEC]);
+				mnh_sm_dev->update_status = FW_UPD_NONE;
+				dev_err(mnh_sm_dev->dev,
+					"%s: failed to validate slots (%d)\n",
+					__func__, err);
+				return err;
+			}
+			mnh_sm_dev->update_status = FW_UPD_VERIFIED;
+		}
+		break;
+	case MNH_SM_IOC_GET_FW_VER:
+		err = copy_to_user((void __user *)arg, &mnh_sm_dev->mnh_fw_ver,
+				   sizeof(mnh_sm_dev->mnh_fw_ver));
 		if (err) {
-			mnh_ion_destroy_buffer(mnh_sm_dev->ion[FW_PART_SEC]);
-
 			dev_err(mnh_sm_dev->dev,
-				"%s: failed to validate slots (%d)\n",
+				"%s: failed to copy to userspace (%d)\n",
 				__func__, err);
 			return err;
 		}
@@ -1862,25 +2148,23 @@ static int mnh_sm_probe(struct platform_device *pdev)
 	init_completion(&mnh_sm_dev->work_complete);
 	init_completion(&mnh_sm_dev->suspend_complete);
 
+	/* Allocate ion buffer structures */
+	for (i = 0; i < FW_PART_MAX; i++) {
+		mnh_sm_dev->ion[i] = devm_kzalloc(dev,
+						  sizeof(struct mnh_ion),
+						  GFP_KERNEL);
+		if (mnh_sm_dev->ion[i])
+			mnh_sm_dev->ion[i]->device = dev;
+	}
+
 	/* Allocate primary ION buffer (from carveout region) */
-	mnh_sm_dev->ion[FW_PART_PRI] = devm_kzalloc(dev,
-						    sizeof(struct mnh_ion),
-						    GFP_KERNEL);
 	if (mnh_sm_dev->ion[FW_PART_PRI]) {
-		mnh_sm_dev->ion[FW_PART_PRI]->device = dev;
 		if (mnh_ion_create_buffer(mnh_sm_dev->ion[FW_PART_PRI],
 					  MNH_ION_BUFFER_SIZE,
 					  ION_GOOGLE_HEAP_ID))
 			dev_warn(dev, "%s: cannot claim ION buffer\n",
 				 __func__);
 	}
-
-	/* Initialize ION structure of firmware update buffer */
-	mnh_sm_dev->ion[FW_PART_SEC] = devm_kzalloc(dev,
-						    sizeof(struct mnh_ion),
-						    GFP_KERNEL);
-	if (mnh_sm_dev->ion[FW_PART_SEC])
-		mnh_sm_dev->ion[FW_PART_SEC]->device = dev;
 
 	/* get boot mode gpio */
 	mnh_sm_dev->boot_mode_gpio = devm_gpiod_get(&pdev->dev, "boot-mode",
@@ -1938,6 +2222,9 @@ static int mnh_sm_probe(struct platform_device *pdev)
 		dev_err(dev, "failed to initialize mnh-pwr (%d)\n", error);
 		goto fail_probe_2;
 	}
+
+	/* initialize mnh-crypto */
+	mnh_crypto_config_sysfs();
 
 	/* initialize mnh-clk driver */
 	mnh_clk_init(dev, HWIO_SCU_BASE_ADDR);

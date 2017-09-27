@@ -75,6 +75,7 @@
 #include <linux/binfmts.h>
 #include <linux/context_tracking.h>
 #include <linux/compiler.h>
+#include <linux/cpufreq.h>
 
 #include <asm/switch_to.h>
 #include <asm/tlb.h>
@@ -2178,10 +2179,15 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 	memset(&p->se.statistics, 0, sizeof(p->se.statistics));
 #endif
 
+#ifdef CONFIG_CPU_FREQ_STAT
+	cpufreq_task_stats_init(p);
+#endif
+
 	RB_CLEAR_NODE(&p->dl.rb_node);
 	init_dl_task_timer(&p->dl);
 	__dl_clear_params(p);
 
+	init_rt_schedtune_timer(&p->rt);
 	INIT_LIST_HEAD(&p->rt.run_list);
 
 #ifdef CONFIG_PREEMPT_NOTIFIERS
@@ -3387,11 +3393,15 @@ static void __sched notrace __schedule(bool preempt)
 		prev->waiting_time = now;
 		if (!is_idle_task(next) &&
 		    now > next->waiting_time + NSEC_PER_SEC) {
-			printk("task wait timing: next->pid: %d, "
-			       "next->tid: %d, next->prio: %d, "
-			       "next->vruntime: %llu, "
+			printk("task wait timing: "
+			       "prev->tgid: %d, prev->pid: %d, "
+			       "prev->prio: %d, prev->vruntime: %llu, "
+			       "next->tgid: %d, next->pid: %d, "
+			       "next->prio: %d, next->vruntime: %llu, "
 			       "now: %llu, ready: %llu, "
 			       "waiting time: %llu\n",
+			       prev->tgid, prev->pid, prev->prio,
+			       prev->se.vruntime,
 			       next->tgid, next->pid, next->prio,
 			       next->se.vruntime,
 			       now, next->waiting_time,
@@ -6415,6 +6425,9 @@ enum s_alloc {
  * Build an iteration mask that can exclude certain CPUs from the upwards
  * domain traversal.
  *
+ * Only CPUs that can arrive at this group should be considered to continue
+ * balancing.
+ *
  * Asymmetric node setups can result in situations where the domain tree is of
  * unequal depth, make sure to skip domains that already cover the entire
  * range.
@@ -6426,18 +6439,31 @@ enum s_alloc {
  */
 static void build_group_mask(struct sched_domain *sd, struct sched_group *sg)
 {
-	const struct cpumask *span = sched_domain_span(sd);
+	const struct cpumask *sg_span = sched_group_cpus(sg);
 	struct sd_data *sdd = sd->private;
 	struct sched_domain *sibling;
 	int i;
 
-	for_each_cpu(i, span) {
+	for_each_cpu(i, sg_span) {
 		sibling = *per_cpu_ptr(sdd->sd, i);
-		if (!cpumask_test_cpu(i, sched_domain_span(sibling)))
+
+		/*
+		 * Can happen in the asymmetric case, where these siblings are
+		 * unused. The mask will not be empty because those CPUs that
+		 * do have the top domain _should_ span the domain.
+		 */
+		if (!sibling->child)
+			continue;
+
+		/* If we would not end up here, we can't continue from here */
+		if (!cpumask_equal(sg_span, sched_domain_span(sibling->child)))
 			continue;
 
 		cpumask_set_cpu(i, sched_group_mask(sg));
 	}
+
+	/* We must not have empty masks here */
+	WARN_ON_ONCE(cpumask_empty(sched_group_mask(sg)));
 }
 
 /*
@@ -8641,9 +8667,18 @@ cpu_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 	if (IS_ERR(tg))
 		return ERR_PTR(-ENOMEM);
 
-	sched_online_group(tg, parent);
-
 	return &tg->css;
+}
+
+/* Expose task group only after completing cgroup initialization */
+static int cpu_cgroup_css_online(struct cgroup_subsys_state *css)
+{
+	struct task_group *tg = css_tg(css);
+	struct task_group *parent = css_tg(css->parent);
+
+	if (parent)
+		sched_online_group(tg, parent);
+	return 0;
 }
 
 static void cpu_cgroup_css_released(struct cgroup_subsys_state *css)
@@ -9020,6 +9055,7 @@ static struct cftype cpu_files[] = {
 
 struct cgroup_subsys cpu_cgrp_subsys = {
 	.css_alloc	= cpu_cgroup_css_alloc,
+	.css_online	= cpu_cgroup_css_online,
 	.css_released	= cpu_cgroup_css_released,
 	.css_free	= cpu_cgroup_css_free,
 	.fork		= cpu_cgroup_fork,

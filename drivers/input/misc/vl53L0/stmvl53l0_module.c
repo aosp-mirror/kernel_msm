@@ -2730,6 +2730,9 @@ static int stmvl53l0_init_client(struct stmvl53l0_data *data)
             g_PhaseCal = data->PhaseCal;
             g_refSpadCount = data->refSpadCount;
             g_isApertureSpads = data->isApertureSpads;
+        } else {
+            vl53l0_errmsg("failed: no calibration data\n");
+            return -EIO;
         }
     }
     /* -Taimen */

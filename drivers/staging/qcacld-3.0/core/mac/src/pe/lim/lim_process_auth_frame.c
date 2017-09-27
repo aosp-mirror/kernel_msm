@@ -199,7 +199,7 @@ static void lim_process_auth_shared_system_algo(tpAniSirGlobal mac_ctx,
 		 */
 		if (!QDF_IS_STATUS_SUCCESS(cds_rand_get_bytes(0,
 				(uint8_t *) challenge_txt_arr,
-				SIR_MAC_AUTH_CHALLENGE_LENGTH)))
+				SIR_MAC_SAP_AUTH_CHALLENGE_LENGTH)))
 			pe_err("Challenge text preparation failed");
 		challenge = auth_node->challengeText;
 		qdf_mem_copy(challenge, (uint8_t *)challenge_txt_arr,
@@ -212,10 +212,10 @@ static void lim_process_auth_shared_system_algo(tpAniSirGlobal mac_ctx,
 			rx_auth_frm_body->authTransactionSeqNumber + 1;
 		auth_frame->authStatusCode = eSIR_MAC_SUCCESS_STATUS;
 		auth_frame->type = SIR_MAC_CHALLENGE_TEXT_EID;
-		auth_frame->length = SIR_MAC_AUTH_CHALLENGE_LENGTH;
+		auth_frame->length = SIR_MAC_SAP_AUTH_CHALLENGE_LENGTH;
 		qdf_mem_copy(auth_frame->challengeText,
 				auth_node->challengeText,
-				SIR_MAC_AUTH_CHALLENGE_LENGTH);
+				SIR_MAC_SAP_AUTH_CHALLENGE_LENGTH);
 		lim_send_auth_mgmt_frame(mac_ctx, auth_frame,
 				mac_hdr->sa, LIM_NO_WEP_IN_FC,
 				pe_session);
@@ -272,7 +272,7 @@ static void lim_process_auth_frame_type1(tpAniSirGlobal mac_ctx,
 {
 	tpDphHashNode sta_ds_ptr = NULL;
 	struct tLimPreAuthNode *auth_node;
-	uint8_t challenge_txt_arr[SIR_MAC_AUTH_CHALLENGE_LENGTH];
+	uint8_t challenge_txt_arr[SIR_MAC_SAP_AUTH_CHALLENGE_LENGTH];
 	uint32_t maxnum_preauth;
 	uint16_t associd = 0;
 
@@ -727,12 +727,13 @@ static void lim_process_auth_frame_type2(tpAniSirGlobal mac_ctx,
 		((tpSirMacAuthFrameBody)plainbody)->type =
 			SIR_MAC_CHALLENGE_TEXT_EID;
 		((tpSirMacAuthFrameBody)plainbody)->length =
-			SIR_MAC_AUTH_CHALLENGE_LENGTH;
+			rx_auth_frm_body->length;
 		qdf_mem_copy((uint8_t *) (
 			(tpSirMacAuthFrameBody)plainbody)->challengeText,
 			rx_auth_frm_body->challengeText,
-			SIR_MAC_AUTH_CHALLENGE_LENGTH);
-		encr_auth_frame = qdf_mem_malloc(LIM_ENCR_AUTH_BODY_LEN);
+			rx_auth_frm_body->length);
+		encr_auth_frame = qdf_mem_malloc(rx_auth_frm_body->length +
+						 LIM_ENCR_AUTH_INFO_LEN);
 		if (!encr_auth_frame) {
 			pe_err("failed to allocate memory");
 			return;
@@ -746,7 +747,7 @@ static void lim_process_auth_frame_type2(tpAniSirGlobal mac_ctx,
 					pe_session->limMlmState));
 		lim_send_auth_mgmt_frame(mac_ctx,
 				(tpSirMacAuthFrameBody)encr_auth_frame,
-				mac_hdr->sa, LIM_WEP_IN_FC,
+				mac_hdr->sa, rx_auth_frm_body->length,
 				pe_session);
 		qdf_mem_free(encr_auth_frame);
 		return;
@@ -868,7 +869,7 @@ static void lim_process_auth_frame_type3(tpAniSirGlobal mac_ctx,
 		 */
 		if (!qdf_mem_cmp(rx_auth_frm_body->challengeText,
 					auth_node->challengeText,
-					SIR_MAC_AUTH_CHALLENGE_LENGTH)) {
+					SIR_MAC_SAP_AUTH_CHALLENGE_LENGTH)) {
 			/*
 			 * Challenge match. STA is autheticated
 			 * Delete Authentication response timer if running
@@ -1053,7 +1054,7 @@ lim_process_auth_frame(tpAniSirGlobal mac_ctx, uint8_t *rx_pkt_info,
 {
 	uint8_t *body_ptr, key_id, cfg_privacy_opt_imp;
 	uint8_t defaultkey[SIR_MAC_KEY_LENGTH];
-	uint8_t plainbody[LIM_ENCR_AUTH_BODY_LEN];
+	uint8_t *plainbody = NULL;
 	uint8_t decrypt_result;
 	uint16_t frame_len, curr_seq_num = 0;
 	uint32_t val, key_length = 8;
@@ -1111,6 +1112,13 @@ lim_process_auth_frame(tpAniSirGlobal mac_ctx, uint8_t *rx_pkt_info,
 		goto free;
 	}
 
+	plainbody = qdf_mem_malloc(LIM_ENCR_AUTH_BODY_LEN);
+	if (!plainbody) {
+		pe_err("failed to allocate memory for plainbody");
+		goto free;
+	}
+	qdf_mem_zero(plainbody, LIM_ENCR_AUTH_BODY_LEN);
+
 	/*
 	 * Determine if WEP bit is set in the FC or received MAC header
 	 * Note: WEP bit is set in FC of MAC header.
@@ -1155,7 +1163,7 @@ lim_process_auth_frame(tpAniSirGlobal mac_ctx, uint8_t *rx_pkt_info,
 			goto free;
 		}
 
-		if (frame_len < LIM_ENCR_AUTH_BODY_LEN) {
+		if (frame_len < LIM_ENCR_AUTH_BODY_LEN_SAP) {
 			/* Log error */
 			pe_err("Not enough size: %d to decry rx Auth frm",
 				frame_len);
@@ -1385,6 +1393,8 @@ free:
 		qdf_mem_free(auth_frame);
 	if (rx_auth_frame)
 		qdf_mem_free(rx_auth_frame);
+	if (plainbody)
+		qdf_mem_free(plainbody);
 }
 
 /*----------------------------------------------------------------------

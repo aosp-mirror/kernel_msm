@@ -29,6 +29,40 @@
 			};
 		};
 
+		/* SPI CONFIGURATION */
+
+		spi_1 {
+			spi_1_active {
+				mux {
+					pins = "gpio0", "gpio1",
+							"gpio2", "gpio3";
+					function = "blsp_spi1";
+				};
+
+				config {
+					pins = "gpio0", "gpio1",
+							"gpio2", "gpio3";
+					drive-strength = <6>;
+					bias-disable;
+				};
+			};
+
+			spi_1_sleep {
+				mux {
+					pins = "gpio0", "gpio1",
+							"gpio2", "gpio3";
+					function = "blsp_spi1";
+				};
+
+				config {
+					pins = "gpio0", "gpio1",
+							"gpio2", "gpio3";
+					drive-strength = <6>;
+					bias-pull-down;
+				};
+			};
+		};
+
 		spi_4 {
 			spi_4_active {
 				mux {

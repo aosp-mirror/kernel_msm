@@ -869,11 +869,10 @@ error:
 
 void fts_fw_init(struct fts_ts_info *info)
 {
+	/* This function must be called with interrupts/irqs disabled */
 	tsp_debug_info(info->dev, "%s\n", __func__);
 
 	info->fts_release_all_finger(info);
-	info->fts_interrupt_set(info, INT_DISABLE);
-	info->fts_irq_enable(info, false);
 
 	info->fts_systemreset(info);
 	fts_delay(20);
@@ -894,9 +893,6 @@ void fts_fw_init(struct fts_ts_info *info)
 	info->fts_command(info, SENSEON);
 
 	fts_fw_wait_for_event(info, STATUS_EVENT_FORCE_CAL_DONE, 0x00);
-
-	info->fts_irq_enable(info, true);
-	info->fts_interrupt_set(info, INT_ENABLE);
 }
 
 static int fts_fw_check(struct fts_ts_info *info)

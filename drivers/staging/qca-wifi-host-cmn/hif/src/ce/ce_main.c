@@ -59,7 +59,7 @@
 #include "mp_dev.h"
 
 /* Forward references */
-static int hif_post_recv_buffers_for_pipe(struct HIF_CE_pipe_info *pipe_info);
+QDF_STATUS hif_post_recv_buffers_for_pipe(struct HIF_CE_pipe_info *pipe_info);
 
 /*
  * Fix EV118783, poll to check whether a BMI response comes
@@ -81,7 +81,7 @@ static int hif_post_recv_buffers_for_pipe(struct HIF_CE_pipe_info *pipe_info);
 #define HTT_DATA3_MSG_SVC MAKE_SERVICE_ID(HTT_SERVICE_GROUP, 2)
 #endif
 
-static int hif_post_recv_buffers(struct hif_softc *scn);
+QDF_STATUS hif_post_recv_buffers(struct hif_softc *scn);
 static void hif_config_rri_on_ddr(struct hif_softc *scn);
 static void hif_clear_rri_on_ddr(struct hif_softc *scn);
 
@@ -1685,7 +1685,7 @@ static void hif_post_recv_buffers_failure(struct HIF_CE_pipe_info *pipe_info,
 
 
 
-static int hif_post_recv_buffers_for_pipe(struct HIF_CE_pipe_info *pipe_info)
+QDF_STATUS hif_post_recv_buffers_for_pipe(struct HIF_CE_pipe_info *pipe_info)
 {
 	struct CE_handle *ce_hdl;
 	qdf_size_t buf_sz;
@@ -1696,7 +1696,7 @@ static int hif_post_recv_buffers_for_pipe(struct HIF_CE_pipe_info *pipe_info)
 	buf_sz = pipe_info->buf_sz;
 	if (buf_sz == 0) {
 		/* Unused Copy Engine */
-		return 0;
+		return QDF_STATUS_SUCCESS;
 	}
 
 	ce_hdl = pipe_info->ce_hdl;
@@ -1705,7 +1705,6 @@ static int hif_post_recv_buffers_for_pipe(struct HIF_CE_pipe_info *pipe_info)
 	while (atomic_read(&pipe_info->recv_bufs_needed) > 0) {
 		qdf_dma_addr_t CE_data;      /* CE space buffer address */
 		qdf_nbuf_t nbuf;
-		int status;
 
 		atomic_dec(&pipe_info->recv_bufs_needed);
 		qdf_spin_unlock_bh(&pipe_info->recv_bufs_needed_lock);
@@ -1716,7 +1715,7 @@ static int hif_post_recv_buffers_for_pipe(struct HIF_CE_pipe_info *pipe_info)
 					&pipe_info->nbuf_alloc_err_count,
 					 HIF_RX_NBUF_ALLOC_FAILURE,
 					"HIF_RX_NBUF_ALLOC_FAILURE");
-			return 1;
+			return QDF_STATUS_E_NOMEM;
 		}
 
 		/*
@@ -1733,16 +1732,16 @@ static int hif_post_recv_buffers_for_pipe(struct HIF_CE_pipe_info *pipe_info)
 					 HIF_RX_NBUF_MAP_FAILURE,
 					"HIF_RX_NBUF_MAP_FAILURE");
 			qdf_nbuf_free(nbuf);
-			return 1;
+			return ret;
 		}
 
 		CE_data = qdf_nbuf_get_frag_paddr(nbuf, 0);
 
 		qdf_mem_dma_sync_single_for_device(scn->qdf_dev, CE_data,
 					       buf_sz, DMA_FROM_DEVICE);
-		status = ce_recv_buf_enqueue(ce_hdl, (void *)nbuf, CE_data);
-		QDF_ASSERT(status == QDF_STATUS_SUCCESS);
-		if (unlikely(status != EOK)) {
+		ret = ce_recv_buf_enqueue(ce_hdl, (void *)nbuf, CE_data);
+		if (unlikely(ret != QDF_STATUS_SUCCESS)) {
+			QDF_ASSERT(0);
 			hif_post_recv_buffers_failure(pipe_info, nbuf,
 					&pipe_info->nbuf_ce_enqueue_err_count,
 					 HIF_RX_NBUF_ENQUEUE_FAILURE,
@@ -1751,7 +1750,7 @@ static int hif_post_recv_buffers_for_pipe(struct HIF_CE_pipe_info *pipe_info)
 			qdf_nbuf_unmap_single(scn->qdf_dev, nbuf,
 						QDF_DMA_FROM_DEVICE);
 			qdf_nbuf_free(nbuf);
-			return 1;
+			return ret;
 		}
 
 		qdf_spin_lock_bh(&pipe_info->recv_bufs_needed_lock);
@@ -1769,7 +1768,7 @@ static int hif_post_recv_buffers_for_pipe(struct HIF_CE_pipe_info *pipe_info)
 
 	qdf_spin_unlock_bh(&pipe_info->recv_bufs_needed_lock);
 
-	return 0;
+	return QDF_STATUS_SUCCESS;
 }
 
 /*
@@ -1779,11 +1778,12 @@ static int hif_post_recv_buffers_for_pipe(struct HIF_CE_pipe_info *pipe_info)
  * failures, non-zero if unable to completely replenish
  * receive buffers for fastpath rx Copy engine.
  */
-static int hif_post_recv_buffers(struct hif_softc *scn)
+QDF_STATUS hif_post_recv_buffers(struct hif_softc *scn)
 {
 	struct HIF_CE_state *hif_state = HIF_GET_CE_STATE(scn);
-	int pipe_num, rv = 0;
+	int pipe_num;
 	struct CE_state *ce_state;
+	QDF_STATUS qdf_status;
 
 	A_TARGET_ACCESS_LIKELY(scn);
 	for (pipe_num = 0; pipe_num < scn->ce_count; pipe_num++) {
@@ -1796,24 +1796,25 @@ static int hif_post_recv_buffers(struct hif_softc *scn)
 		    ce_state && (ce_state->htt_rx_data))
 			continue;
 
-		if (hif_post_recv_buffers_for_pipe(pipe_info) &&
+		qdf_status = hif_post_recv_buffers_for_pipe(pipe_info);
+		if (!QDF_IS_STATUS_SUCCESS(qdf_status) &&
 			ce_state->htt_rx_data &&
 			scn->fastpath_mode_on) {
-			rv = 1;
-			goto done;
+			A_TARGET_ACCESS_UNLIKELY(scn);
+			return qdf_status;
 		}
 	}
 
-done:
 	A_TARGET_ACCESS_UNLIKELY(scn);
 
-	return rv;
+	return QDF_STATUS_SUCCESS;
 }
 
 QDF_STATUS hif_start(struct hif_opaque_softc *hif_ctx)
 {
 	struct hif_softc *scn = HIF_GET_SOFTC(hif_ctx);
 	struct HIF_CE_state *hif_state = HIF_GET_CE_STATE(scn);
+	QDF_STATUS qdf_status = QDF_STATUS_SUCCESS;
 
 	hif_update_fastpath_recv_bufs_cnt(scn);
 
@@ -1826,13 +1827,14 @@ QDF_STATUS hif_start(struct hif_opaque_softc *hif_ctx)
 	hif_state->started = true;
 
 	/* Post buffers once to start things off. */
-	if (hif_post_recv_buffers(scn)) {
+	qdf_status = hif_post_recv_buffers(scn);
+	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
 		/* cleanup is done in hif_ce_disable */
 		HIF_ERROR("%s:failed to post buffers", __func__);
-		return QDF_STATUS_E_FAILURE;
+		return qdf_status;
 	}
 
-	return QDF_STATUS_SUCCESS;
+	return qdf_status;
 }
 
 static void hif_recv_buffer_cleanup_on_pipe(struct HIF_CE_pipe_info *pipe_info)
@@ -2307,6 +2309,7 @@ int hif_config_ce(struct hif_softc *scn)
 	QDF_STATUS rv = QDF_STATUS_SUCCESS;
 
 	scn->notice_send = true;
+	scn->ce_service_max_rx_ind_flush = MSG_FLUSH_NUM;
 
 	hif_post_static_buf_to_target(scn);
 
@@ -2831,11 +2834,16 @@ inline unsigned int hif_get_src_ring_read_index(struct hif_softc *scn,
 	struct CE_attr attr;
 
 	attr = host_ce_config[COPY_ENGINE_ID(CE_ctrl_addr)];
-	if (attr.flags & CE_ATTR_DISABLE_INTR)
+	if (attr.flags & CE_ATTR_DISABLE_INTR) {
 		return CE_SRC_RING_READ_IDX_GET_FROM_DDR(scn, CE_ctrl_addr);
-	else
-		return A_TARGET_READ(scn,
-				(CE_ctrl_addr) + CURRENT_SRRI_ADDRESS);
+	} else {
+		if (TARGET_REGISTER_ACCESS_ALLOW(scn))
+			return A_TARGET_READ(scn,
+					(CE_ctrl_addr) + CURRENT_SRRI_ADDRESS);
+		else
+			return CE_SRC_RING_READ_IDX_GET_FROM_DDR(scn,
+					CE_ctrl_addr);
+	}
 }
 
 /**
@@ -2856,11 +2864,16 @@ inline unsigned int hif_get_dst_ring_read_index(struct hif_softc *scn,
 
 	attr = host_ce_config[COPY_ENGINE_ID(CE_ctrl_addr)];
 
-	if (attr.flags & CE_ATTR_DISABLE_INTR)
+	if (attr.flags & CE_ATTR_DISABLE_INTR) {
 		return CE_DEST_RING_READ_IDX_GET_FROM_DDR(scn, CE_ctrl_addr);
-	else
-		return A_TARGET_READ(scn,
-				(CE_ctrl_addr) + CURRENT_DRRI_ADDRESS);
+	} else {
+		if (TARGET_REGISTER_ACCESS_ALLOW(scn))
+			return A_TARGET_READ(scn,
+					(CE_ctrl_addr) + CURRENT_DRRI_ADDRESS);
+		else
+			return CE_DEST_RING_READ_IDX_GET_FROM_DDR(scn,
+					CE_ctrl_addr);
+	}
 }
 
 /**

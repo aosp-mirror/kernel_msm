@@ -155,7 +155,7 @@ int mnh_pcie_config_read(uint32_t offset,  uint32_t len, uint32_t *data)
 	if (!mnh_dev || !mnh_dev->pdev)
 		return -ENODEV;
 
-	if (mnh_dev->pdev->current_state != PCI_D0)
+	if ((mnh_dev->pdev->current_state != PCI_D0) || !mnh_dev->powered)
 		return -EIO;
 
 	if (len != sizeof(uint32_t))
@@ -163,13 +163,6 @@ int mnh_pcie_config_read(uint32_t offset,  uint32_t len, uint32_t *data)
 
 	if (offset > mnh_dev->bar_size[BAR_0] - sizeof(uint32_t))
 		return -EINVAL; /* address invalid */
-
-	if (WARN_ON(!mnh_dev->powered)) {
-		dev_err(&mnh_dev->pdev->dev,
-			"%s: cannot do pcie transfer while powering down\n",
-			__func__);
-		return -EIO;
-	}
 
 	pci_read_config_dword(mnh_dev->pdev, offset, data);
 
@@ -195,7 +188,7 @@ int mnh_pcie_config_write(uint32_t offset, uint32_t len, uint32_t data)
 	if (!mnh_dev || !mnh_dev->pdev)
 		return -ENODEV;
 
-	if (mnh_dev->pdev->current_state != PCI_D0)
+	if ((mnh_dev->pdev->current_state != PCI_D0) || !mnh_dev->powered)
 		return -EIO;
 
 	if (len != sizeof(uint32_t))
@@ -206,13 +199,6 @@ int mnh_pcie_config_write(uint32_t offset, uint32_t len, uint32_t data)
 
 	dev_dbg(&mnh_dev->pdev->dev, "Write PCIE Config[0x%08x]-0x%x",
 		offset, data);
-
-	if (WARN_ON(!mnh_dev->powered)) {
-		dev_err(&mnh_dev->pdev->dev,
-			"%s: cannot do pcie transfer while powering down\n",
-			__func__);
-		return -EIO;
-	}
 
 	pci_write_config_dword(mnh_dev->pdev, offset, data);
 
@@ -236,7 +222,7 @@ int mnh_config_read(uint32_t offset,  uint32_t len, uint32_t *data)
 	if (!mnh_dev || !mnh_dev->pdev)
 		return -ENODEV;
 
-	if (mnh_dev->pdev->current_state != PCI_D0)
+	if ((mnh_dev->pdev->current_state != PCI_D0) || !mnh_dev->powered)
 		return -EIO;
 
 	if (offset > HW_MNH_PCIE_BAR_2_ADDR_END - len) {
@@ -245,13 +231,6 @@ int mnh_config_read(uint32_t offset,  uint32_t len, uint32_t *data)
 	}
 
 	new_offset = mnh_check_iatu_bar2(offset);
-
-	if (WARN_ON(!mnh_dev->powered)) {
-		dev_err(&mnh_dev->pdev->dev,
-			"%s: cannot do pcie transfer while powering down\n",
-			__func__);
-		return -EIO;
-	}
 
 	if (len == sizeof(uint32_t))
 		*data = ioread32(mnh_dev->config + new_offset);
@@ -289,7 +268,7 @@ int mnh_config_write(uint32_t offset, uint32_t len, uint32_t data)
 	if (!mnh_dev || !mnh_dev->pdev)
 		return -ENODEV;
 
-	if (mnh_dev->pdev->current_state != PCI_D0)
+	if ((mnh_dev->pdev->current_state != PCI_D0) || !mnh_dev->powered)
 		return -EIO;
 
 	if (offset > HW_MNH_PCIE_BAR_2_ADDR_END - len)
@@ -299,13 +278,6 @@ int mnh_config_write(uint32_t offset, uint32_t len, uint32_t data)
 
 	dev_dbg(&mnh_dev->pdev->dev, "Write Config[0x%08x] - 0x%x",
 		new_offset, data);
-
-	if (WARN_ON(!mnh_dev->powered)) {
-		dev_err(&mnh_dev->pdev->dev,
-			"%s: cannot do pcie transfer while powering down\n",
-			__func__);
-		return -EIO;
-	}
 
 	if (len == sizeof(uint32_t))
 		iowrite32(data, mnh_dev->config + new_offset);
@@ -339,7 +311,7 @@ int mnh_ddr_read(uint32_t offset,  uint32_t len, void *data)
 	if (!mnh_dev || !mnh_dev->pdev)
 		return -ENODEV;
 
-	if (mnh_dev->pdev->current_state != PCI_D0)
+	if ((mnh_dev->pdev->current_state != PCI_D0) || !mnh_dev->powered)
 		return -EIO;
 
 	if (len > mnh_dev->bar_size[BAR_4])
@@ -350,13 +322,6 @@ int mnh_ddr_read(uint32_t offset,  uint32_t len, void *data)
 
 	dev_dbg(&mnh_dev->pdev->dev, "Read DDR[0x%08x], len-%d, data-0x%0x",
 		offset, len, *(uint32_t *)data);
-
-	if (WARN_ON(!mnh_dev->powered)) {
-		dev_err(&mnh_dev->pdev->dev,
-			"%s: cannot do pcie transfer while powering down\n",
-			__func__);
-		return -EIO;
-	}
 
 	memcpy(data, mnh_dev->ddr + offset, len);
 
@@ -378,7 +343,7 @@ int mnh_ddr_write(uint32_t offset, uint32_t len, void *data)
 	if (!mnh_dev || !mnh_dev->pdev)
 		return -ENODEV;
 
-	if (mnh_dev->pdev->current_state != PCI_D0)
+	if ((mnh_dev->pdev->current_state != PCI_D0) || !mnh_dev->powered)
 		return -EIO;
 
 	if (len > mnh_dev->bar_size[BAR_4])
@@ -394,13 +359,6 @@ int mnh_ddr_write(uint32_t offset, uint32_t len, void *data)
 
 	dev_dbg(&mnh_dev->pdev->dev, "Write DDR[0x%08x], len-%d, data-0x%x",
 			offset, len, *(uint32_t *)data);
-
-	if (WARN_ON(!mnh_dev->powered)) {
-		dev_err(&mnh_dev->pdev->dev,
-			"%s: cannot do pcie transfer while powering down\n",
-			__func__);
-		return -EIO;
-	}
 
 	memcpy(mnh_dev->ddr + offset, data, len);
 
@@ -539,10 +497,11 @@ int mnh_set_outbound_iatu(struct mnh_outb_region *outb)
 	mnh_pcie_config_write(IATU_LWR_TARGET_ADDR, size, lower);
 	mnh_pcie_config_write(IATU_UPPER_TARGET_ADDR, size, upper);
 	mnh_pcie_config_write(IATU_REGION_CTRL_1, size, IATU_MEM);
-	mnh_pcie_config_write(IATU_REGION_CTRL_2, size, IATU_ENABLE);
+	mnh_pcie_config_write(IATU_REGION_CTRL_2, size,
+		IATU_ENABLE | IATU_DMA_BYPASS);
 	udelay(1);
 	mnh_pcie_config_read(IATU_REGION_CTRL_2, size, &data);
-	if (data != IATU_ENABLE)
+	if (data != (IATU_ENABLE | IATU_DMA_BYPASS))
 		dev_err(&mnh_dev->pdev->dev, "Set outbound IATU Fail\n");
 
 	return 0;
@@ -753,31 +712,34 @@ static int scatterlist_to_mnh_sg(struct scatterlist *sc_list, int count,
 	u = 0;	/* iterator of *sg */
 
 	for_each_sg(sc_list, in_sg, count, i) {
-		if (u < maxsg) {
-			sg[u].paddr = sg_dma_address(in_sg);
-			sg[u].size = sg_dma_len(in_sg);
+		/* Last entry is reserved for the NULL terminator */
+		if (u >= (maxsg - 1)) {
+			dev_err(&mnh_dev->pdev->dev, "maxsg exceeded\n");
+			return -EINVAL;
+		}
+		sg[u].paddr = sg_dma_address(in_sg);
+		sg[u].size = sg_dma_len(in_sg);
 
 		dev_dbg(&mnh_dev->pdev->dev,
 			"sg[%d] : Address %pa , length %zu\n",
 			u, &sg[u].paddr, sg[u].size);
 #ifdef COMBINE_SG
-			if ((u > 0) && (sg[u-1].paddr + sg[u-1].size ==
-				sg[u].paddr)) {
-				sg[u-1].size = sg[u-1].size
-					+ sg[u].size;
-				sg[u].size = 0;
-			} else {
-				u++;
-			}
-#else
-			u++;
-#endif
+		if ((u > 0) && (sg[u-1].paddr + sg[u-1].size ==
+			sg[u].paddr)) {
+			sg[u-1].size = sg[u-1].size
+				+ sg[u].size;
+			sg[u].size = 0;
 		} else {
-			dev_err(&mnh_dev->pdev->dev, "maxsg exceeded\n");
-			return -EINVAL;
+			u++;
 		}
+#else
+		u++;
+#endif
 	}
-	sg[u].paddr = 0x0;
+	/* Zero out the list terminator entry.
+	 * mnh dma engine looks at sg.paddr=0 for end of chain */
+	memset(&sg[u], 0, sizeof(sg[0]));
+	u++; /* Count of entries includes list terminator entry */
 
 	dev_dbg(&mnh_dev->pdev->dev, "SGL with %d/%d entries\n", u, i);
 
@@ -956,7 +918,7 @@ int mnh_sg_build(void *dmadest, size_t size, struct mnh_sg_entry **sg,
 
 	sgl->mypage = kcalloc(p_num, sizeof(struct page *), GFP_KERNEL);
 	if (!sgl->mypage) {
-		kfree((*sg));
+		vfree((*sg));
 		*sg = NULL;
 		sgl->n_num = 0;
 		sgl->length = 0;
@@ -964,7 +926,7 @@ int mnh_sg_build(void *dmadest, size_t size, struct mnh_sg_entry **sg,
 	}
 	sgl->sc_list = kcalloc(p_num, sizeof(struct scatterlist), GFP_KERNEL);
 	if (!sgl->sc_list) {
-		kfree((*sg));
+		vfree((*sg));
 		*sg = NULL;
 		kfree(sgl->mypage);
 		sgl->mypage = NULL;
@@ -1021,7 +983,7 @@ release_page:
 	for (i = 0; i < sgl->n_num; i++)
 		page_cache_release(*(sgl->mypage + i));
 free_mem:
-	kfree((*sg));
+	vfree((*sg));
 	*sg = NULL;
 	kfree(sgl->mypage);
 	sgl->mypage = NULL;
@@ -1063,6 +1025,40 @@ int mnh_sg_destroy(struct mnh_sg_list *sgl)
 	return 0;
 }
 EXPORT_SYMBOL(mnh_sg_destroy);
+
+int mnh_sg_verify(struct mnh_sg_entry *sg, size_t size, struct mnh_sg_list *sgl)
+{
+	int i;
+	size_t len = size / sizeof(struct mnh_sg_entry);
+
+	/* At least one entry plus null terminator required */
+	if (len < 2) {
+		dev_err(&mnh_dev->pdev->dev,
+			"Invalid SG list length %zu\n", len);
+		return -EINVAL;
+	}
+	if (sg == NULL) {
+		dev_err(&mnh_dev->pdev->dev, "No SG list\n");
+		return -EINVAL;
+	}
+	for (i = 0; i < len - 1; i++) {
+		if (sg[i].paddr == 0) {
+			dev_err(&mnh_dev->pdev->dev, "Early list end\n");
+			return -EINVAL;
+		}
+		if (sg[i].size == 0) {
+			dev_err(&mnh_dev->pdev->dev, "Invalid entry size\n");
+			return -EINVAL;
+		}
+	}
+	/* Verify terminator */
+	if (sg[i].paddr != 0) {
+		dev_err(&mnh_dev->pdev->dev, "Missing list terminator\n");
+		return -EINVAL;
+	}
+	return 0;
+}
+EXPORT_SYMBOL(mnh_sg_verify);
 
 /**
  * API to read/write multi blocks on specific channel.

@@ -218,20 +218,20 @@ static inline int __msm_queue_find_command_ack_q(void *d1, void *d2)
 
 static void msm_pm_qos_add_request(void)
 {
-	pr_info("%s: add request", __func__);
+	pr_info("%s: add request\n", __func__);
 	pm_qos_add_request(&msm_v4l2_pm_qos_request, PM_QOS_CPU_DMA_LATENCY,
 	PM_QOS_DEFAULT_VALUE);
 }
 
 static void msm_pm_qos_remove_request(void)
 {
-	pr_info("%s: remove request", __func__);
+	pr_info("%s: remove request\n", __func__);
 	pm_qos_remove_request(&msm_v4l2_pm_qos_request);
 }
 
 void msm_pm_qos_update_request(int val)
 {
-	pr_info("%s: update request %d", __func__, val);
+	pr_info("%s: update request %d\n", __func__, val);
 	pm_qos_update_request(&msm_v4l2_pm_qos_request, val);
 }
 
@@ -385,6 +385,11 @@ static void msm_add_sd_in_position(struct msm_sd_subdev *msm_subdev,
 	struct msm_sd_subdev *temp_sd;
 
 	list_for_each_entry(temp_sd, sd_list, list) {
+		if (temp_sd == msm_subdev) {
+			pr_err("%s :Fail to add the same sd %d\n",
+				__func__, __LINE__);
+			return;
+		}
 		if (msm_subdev->close_seq < temp_sd->close_seq) {
 			list_add_tail(&msm_subdev->list, &temp_sd->list);
 			return;

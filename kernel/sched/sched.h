@@ -422,7 +422,7 @@ struct cfs_rq {
 
 	u64 throttled_clock, throttled_clock_task;
 	u64 throttled_clock_task_time;
-	int throttled, throttle_count;
+	int throttled, throttle_count, throttle_uptodate;
 	struct list_head throttled_list;
 #endif /* CONFIG_CFS_BANDWIDTH */
 #endif /* CONFIG_FAIR_GROUP_SCHED */
@@ -1027,7 +1027,11 @@ static inline void __set_task_cpu(struct task_struct *p, unsigned int cpu)
 	 * per-task data have been completed by this moment.
 	 */
 	smp_wmb();
+#ifdef CONFIG_THREAD_INFO_IN_TASK
+	p->cpu = cpu;
+#else
 	task_thread_info(p)->cpu = cpu;
+#endif
 	p->wake_cpu = cpu;
 #endif
 }
@@ -1240,6 +1244,7 @@ static const u32 prio_to_wmult[40] = {
 #define DEQUEUE_SLEEP		0x01
 #define DEQUEUE_SAVE		0x02 /* matches ENQUEUE_RESTORE */
 #define DEQUEUE_MOVE		0x04 /* matches ENQUEUE_MOVE */
+#define DEQUEUE_IDLE		0x80 /* The last dequeue before IDLE */
 
 #define ENQUEUE_WAKEUP		0x01
 #define ENQUEUE_RESTORE		0x02
@@ -1409,6 +1414,7 @@ extern void resched_cpu(int cpu);
 
 extern struct rt_bandwidth def_rt_bandwidth;
 extern void init_rt_bandwidth(struct rt_bandwidth *rt_b, u64 period, u64 runtime);
+extern void init_rt_schedtune_timer(struct sched_rt_entity *rt_se);
 
 extern struct dl_bandwidth def_dl_bandwidth;
 extern void init_dl_bandwidth(struct dl_bandwidth *dl_b, u64 period, u64 runtime);

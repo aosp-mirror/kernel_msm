@@ -92,7 +92,7 @@
 
 &reserved_memory {
 
-	easel_mem: easel_mem@a3800000 {
+	easel_mem: easel_mem@95c00000 {
 		compatible = "removed-dma-pool";
 		reg = <0 0x95c00000 0 0x4000000>;
 		label = "easel_mem";

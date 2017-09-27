@@ -21,64 +21,8 @@
 
 #include "bcm15602-regulator.h"
 
-static ssize_t bcm15602_attr_show_asr_curr
-	(struct device *dev, struct device_attribute *mattr, char *data);
-static ssize_t bcm15602_attr_show_sdsr_curr
-	(struct device *dev, struct device_attribute *mattr, char *data);
-static ssize_t bcm15602_attr_show_sdldo_curr
-	(struct device *dev, struct device_attribute *mattr, char *data);
-static ssize_t bcm15602_attr_show_ioldo_curr
-	(struct device *dev, struct device_attribute *mattr, char *data);
-static ssize_t bcm15602_attr_show_vbat
-	(struct device *dev, struct device_attribute *mattr, char *data);
-static ssize_t bcm15602_attr_show_temperature
-	(struct device *dev, struct device_attribute *mattr, char *data);
-static ssize_t bcm15602_attr_show_total_power
-	(struct device *dev, struct device_attribute *mattr, char *data);
-static ssize_t bcm15602_attr_show_hk_status
-	(struct device *dev, struct device_attribute *mattr, char *data);
-static ssize_t bcm15602_attr_show_asr_vsel
-	(struct device *dev, struct device_attribute *mattr, char *data);
-static ssize_t bcm15602_attr_store_asr_vsel
-	(struct device *dev, struct device_attribute *mattr, const char *data,
-	 size_t count);
-static ssize_t bcm15602_attr_show_asr_dual_phase
-	(struct device *dev, struct device_attribute *mattr, char *data);
-static ssize_t bcm15602_attr_store_asr_dual_phase
-	(struct device *dev, struct device_attribute *mattr, const char *data,
-	 size_t count);
-
-DEVICE_ATTR(asr_curr, 0440, bcm15602_attr_show_asr_curr, NULL);
-DEVICE_ATTR(sdsr_curr, 0440, bcm15602_attr_show_sdsr_curr, NULL);
-DEVICE_ATTR(sdldo_curr, 0440, bcm15602_attr_show_sdldo_curr, NULL);
-DEVICE_ATTR(ioldo_curr, 0440, bcm15602_attr_show_ioldo_curr, NULL);
-DEVICE_ATTR(vbat, 0440, bcm15602_attr_show_vbat, NULL);
-DEVICE_ATTR(temperature, 0440, bcm15602_attr_show_temperature, NULL);
-DEVICE_ATTR(total_power, 0440, bcm15602_attr_show_total_power, NULL);
-DEVICE_ATTR(hk_status, 0440, bcm15602_attr_show_hk_status, NULL);
-DEVICE_ATTR(asr_vsel, S_IWUSR | S_IRUGO, bcm15602_attr_show_asr_vsel,
-	    bcm15602_attr_store_asr_vsel);
-DEVICE_ATTR(asr_dual_phase, S_IWUSR | S_IRUGO,
-	    bcm15602_attr_show_asr_dual_phase,
-	    bcm15602_attr_store_asr_dual_phase);
-
-static struct attribute *bcm15602_attrs[] = {
-	&dev_attr_asr_curr.attr,
-	&dev_attr_sdsr_curr.attr,
-	&dev_attr_sdldo_curr.attr,
-	&dev_attr_ioldo_curr.attr,
-	&dev_attr_vbat.attr,
-	&dev_attr_temperature.attr,
-	&dev_attr_total_power.attr,
-	&dev_attr_hk_status.attr,
-	&dev_attr_asr_vsel.attr,
-	&dev_attr_asr_dual_phase.attr,
-	NULL
-};
-
-static const struct attribute_group bcm15602_attr_group = {
-	.attrs = bcm15602_attrs,
-};
+/* used for reg_read attribute */
+static u8 _reg_read_addr;
 
 /* asr_curr is in uA */
 static int bcm15602_get_asr_curr(struct bcm15602_chip *ddata, int *asr_curr)
@@ -132,9 +76,9 @@ static int bcm15602_get_ioldo_curr(struct bcm15602_chip *ddata, int *ioldo_curr)
 	return 0;
 }
 
-static ssize_t bcm15602_attr_show_asr_curr(struct device *dev,
-					   struct device_attribute *mattr,
-					   char *data)
+static ssize_t asr_curr_show(struct device *dev,
+			     struct device_attribute *mattr,
+			     char *data)
 {
 	struct bcm15602_chip *ddata = dev_get_drvdata(dev);
 	int asr_curr;
@@ -143,10 +87,11 @@ static ssize_t bcm15602_attr_show_asr_curr(struct device *dev,
 
 	return snprintf(data, PAGE_SIZE, "%d\n", asr_curr);
 }
+DEVICE_ATTR_RO(asr_curr);
 
-static ssize_t bcm15602_attr_show_sdsr_curr(struct device *dev,
-					    struct device_attribute *mattr,
-					    char *data)
+static ssize_t sdsr_curr_show(struct device *dev,
+			      struct device_attribute *mattr,
+			      char *data)
 {
 	struct bcm15602_chip *ddata = dev_get_drvdata(dev);
 	int sdsr_curr;
@@ -155,10 +100,11 @@ static ssize_t bcm15602_attr_show_sdsr_curr(struct device *dev,
 
 	return snprintf(data, PAGE_SIZE, "%d\n", sdsr_curr);
 }
+DEVICE_ATTR_RO(sdsr_curr);
 
-static ssize_t bcm15602_attr_show_sdldo_curr(struct device *dev,
-					     struct device_attribute *mattr,
-					     char *data)
+static ssize_t sdldo_curr_show(struct device *dev,
+			       struct device_attribute *mattr,
+			       char *data)
 {
 	struct bcm15602_chip *ddata = dev_get_drvdata(dev);
 	int sdldo_curr;
@@ -167,10 +113,11 @@ static ssize_t bcm15602_attr_show_sdldo_curr(struct device *dev,
 
 	return snprintf(data, PAGE_SIZE, "%d\n", sdldo_curr);
 }
+DEVICE_ATTR_RO(sdldo_curr);
 
-static ssize_t bcm15602_attr_show_ioldo_curr(struct device *dev,
-					     struct device_attribute *mattr,
-					     char *data)
+static ssize_t ioldo_curr_show(struct device *dev,
+			       struct device_attribute *mattr,
+			       char *data)
 {
 	struct bcm15602_chip *ddata = dev_get_drvdata(dev);
 	int ioldo_curr;
@@ -179,10 +126,11 @@ static ssize_t bcm15602_attr_show_ioldo_curr(struct device *dev,
 
 	return snprintf(data, PAGE_SIZE, "%d\n", ioldo_curr);
 }
+DEVICE_ATTR_RO(ioldo_curr);
 
-static ssize_t bcm15602_attr_show_vbat(struct device *dev,
-				       struct device_attribute *mattr,
-				       char *data)
+static ssize_t vbat_show(struct device *dev,
+			 struct device_attribute *mattr,
+			 char *data)
 {
 	struct bcm15602_chip *ddata = dev_get_drvdata(dev);
 	u16 chan_data;
@@ -192,10 +140,11 @@ static ssize_t bcm15602_attr_show_vbat(struct device *dev,
 	return snprintf(data, PAGE_SIZE, "%d\n",
 			chan_data * BCM15602_ADC_SCALE_VBAT);
 }
+DEVICE_ATTR_RO(vbat);
 
-static ssize_t bcm15602_attr_show_temperature(struct device *dev,
-					      struct device_attribute *mattr,
-					      char *data)
+static ssize_t temperature_show(struct device *dev,
+				struct device_attribute *mattr,
+				char *data)
 {
 	struct bcm15602_chip *ddata = dev_get_drvdata(dev);
 	u16 chan_data;
@@ -204,11 +153,12 @@ static ssize_t bcm15602_attr_show_temperature(struct device *dev,
 
 	return snprintf(data, PAGE_SIZE, "%d\n", PTAT_CODE_TO_TEMP(chan_data));
 }
+DEVICE_ATTR_RO(temperature);
 
 /* shows power in mW */
-static ssize_t bcm15602_attr_show_total_power(struct device *dev,
-					      struct device_attribute *mattr,
-					      char *data)
+static ssize_t total_power_show(struct device *dev,
+				struct device_attribute *mattr,
+				char *data)
 {
 	struct bcm15602_chip *ddata = dev_get_drvdata(dev);
 	int asr_curr, sdsr_curr, sdldo_curr, ioldo_curr;
@@ -226,10 +176,11 @@ static ssize_t bcm15602_attr_show_total_power(struct device *dev,
 
 	return snprintf(data, PAGE_SIZE, "%ld\n", total_power);
 }
+DEVICE_ATTR_RO(total_power);
 
-static ssize_t bcm15602_attr_show_hk_status(struct device *dev,
-					    struct device_attribute *mattr,
-					    char *data)
+static ssize_t hk_status_show(struct device *dev,
+			      struct device_attribute *mattr,
+			      char *data)
 {
 	struct bcm15602_chip *ddata = dev_get_drvdata(dev);
 	u16 status;
@@ -239,10 +190,11 @@ static ssize_t bcm15602_attr_show_hk_status(struct device *dev,
 
 	return snprintf(data, PAGE_SIZE, "0x%04x\n", status);
 }
+DEVICE_ATTR_RO(hk_status);
 
-static ssize_t bcm15602_attr_show_asr_vsel(struct device *dev,
-					   struct device_attribute *mattr,
-					   char *data)
+static ssize_t asr_vsel_show(struct device *dev,
+			     struct device_attribute *mattr,
+			     char *data)
 {
 	struct bcm15602_chip *ddata = dev_get_drvdata(dev);
 	u8 reg_data;
@@ -254,9 +206,9 @@ static ssize_t bcm15602_attr_show_asr_vsel(struct device *dev,
 	return snprintf(data, PAGE_SIZE, "%d\n", 565 + voctrl * 5);
 }
 
-static ssize_t bcm15602_attr_store_asr_vsel(struct device *dev,
-					    struct device_attribute *mattr,
-					    const char *data, size_t count)
+static ssize_t asr_vsel_store(struct device *dev,
+			      struct device_attribute *mattr,
+			      const char *data, size_t count)
 {
 	struct bcm15602_chip *ddata = dev_get_drvdata(dev);
 	int vsel, voctrl;
@@ -281,47 +233,125 @@ static ssize_t bcm15602_attr_store_asr_vsel(struct device *dev,
 
 	return count;
 }
+DEVICE_ATTR_RW(asr_vsel);
 
-static ssize_t bcm15602_attr_show_asr_dual_phase(
-	struct device *dev, struct device_attribute *mattr, char *data)
+static ssize_t dump_regs_show(struct device *dev,
+			      struct device_attribute *mattr,
+			      char *data)
+{
+	struct bcm15602_chip *ddata = dev_get_drvdata(dev);
+
+	bcm15602_dump_regs(ddata);
+
+	return snprintf(data, PAGE_SIZE, "ok\n");
+}
+DEVICE_ATTR_RO(dump_regs);
+
+static ssize_t toggle_pon_show(struct device *dev,
+			       struct device_attribute *mattr,
+			       char *data)
+{
+	struct bcm15602_chip *ddata = dev_get_drvdata(dev);
+
+	bcm15602_toggle_pon(ddata);
+
+	return snprintf(data, PAGE_SIZE, "ok\n");
+}
+DEVICE_ATTR_RO(toggle_pon);
+
+static ssize_t reg_read_show(struct device *dev,
+			     struct device_attribute *attr,
+			     char *buf)
 {
 	struct bcm15602_chip *ddata = dev_get_drvdata(dev);
 	u8 reg_data;
 
-	bcm15602_read_byte(ddata, BCM15602_REG_BUCK_ASR_TSET_CTRL2, &reg_data);
+	bcm15602_read_byte(ddata, _reg_read_addr, &reg_data);
 
-	return snprintf(data, PAGE_SIZE, "%d\n", (reg_data & 0x10) >> 4);
+	return snprintf(buf, PAGE_SIZE, "0x%02x\n", reg_data);
 }
 
-static ssize_t bcm15602_attr_store_asr_dual_phase(
-	struct device *dev, struct device_attribute *mattr, const char *data,
-	size_t count)
+static ssize_t reg_read_store(struct device *dev,
+			      struct device_attribute *attr,
+			      const char *buf,
+			      size_t count)
 {
 	struct bcm15602_chip *ddata = dev_get_drvdata(dev);
-	int val;
+	int val = 0;
+	int ret;
 
-	if (kstrtoint(data, 0, &val)) {
-		dev_err(dev, "%s: Not a valid int\n", __func__);
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	dev_dbg(ddata->dev, "%s: %d\n", __func__, val);
+
+	if ((val < 0) || (val > 0xff))
 		return -EINVAL;
-	}
 
-	if ((val != 0) && (val != 1)) {
-		dev_err(dev, "%s: Can only write 0 or 1\n", __func__);
-		return -EINVAL;
-	}
-
-	if (ddata->rev_id >= BCM15602_REV_A1) {
-		dev_warn(dev,
-			 "%s: Skipping workaround for this silicon version\n",
-			 __func__);
-		return count;
-	}
-
-	bcm15602_update_bits(ddata, BCM15602_REG_BUCK_ASR_TSET_CTRL2, 0x10,
-			     (val & 0x1) << 4);
+	_reg_read_addr = val;
 
 	return count;
 }
+DEVICE_ATTR_RW(reg_read);
+
+static ssize_t reg_write_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf,
+			       size_t count)
+{
+	struct bcm15602_chip *ddata = dev_get_drvdata(dev);
+	int val1 = 0, val2 = 0;
+	int ret;
+	char *str;
+
+	str = strsep((char **)&buf, ";");
+	if (!str)
+		return -EINVAL;
+
+	ret = kstrtoint(str, 0, &val1);
+	if (ret < 0)
+		return ret;
+
+	if ((val1 < 0) || (val1 > 0xff))
+		return -EINVAL;
+
+	ret = kstrtoint(buf, 0, &val2);
+	if (ret < 0)
+		return ret;
+
+	if ((val2 < 0) || (val2 > 0xff))
+		return -EINVAL;
+
+	dev_dbg(ddata->dev, "%s: reg 0x%02x, data 0x%02x\n", __func__,
+		val1, val2);
+
+	bcm15602_write_byte(ddata, val1, val2);
+
+	return count;
+}
+DEVICE_ATTR_WO(reg_write);
+
+static struct attribute *bcm15602_attrs[] = {
+	&dev_attr_asr_curr.attr,
+	&dev_attr_sdsr_curr.attr,
+	&dev_attr_sdldo_curr.attr,
+	&dev_attr_ioldo_curr.attr,
+	&dev_attr_vbat.attr,
+	&dev_attr_temperature.attr,
+	&dev_attr_total_power.attr,
+	&dev_attr_hk_status.attr,
+	&dev_attr_asr_vsel.attr,
+	&dev_attr_dump_regs.attr,
+	&dev_attr_toggle_pon.attr,
+	&dev_attr_reg_read.attr,
+	&dev_attr_reg_write.attr,
+	NULL
+};
+
+static const struct attribute_group bcm15602_attr_group = {
+	.attrs = bcm15602_attrs,
+};
 
 void bcm15602_config_sysfs(struct device *dev)
 {

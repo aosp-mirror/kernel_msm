@@ -1363,7 +1363,9 @@ static int fd_probe(struct platform_device *pdev)
 	}
 	fd->hw_revision = msm_fd_hw_get_revision(fd);
 
+	/* Reset HW and don't wait for complete in probe */
 	msm_fd_hw_put(fd);
+	fd->init = true;
 
 	ret = msm_fd_hw_request_irq(pdev, fd, msm_fd_wq_handler);
 	if (ret < 0) {

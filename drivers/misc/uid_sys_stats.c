@@ -26,6 +26,7 @@
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
+#include <linux/cpufreq.h>
 
 #define UID_HASH_BITS	10
 DECLARE_HASHTABLE(hash_table, UID_HASH_BITS);
@@ -186,6 +187,14 @@ static ssize_t uid_remove_write(struct file *file,
 		kstrtol(end_uid, 10, &uid_end) != 0) {
 		return -EINVAL;
 	}
+
+	/* TODO need to unify uid_sys_stats interface with uid_time_in_state.
+	 * Here we are reusing remove_uid_range to reduce the number of
+	 * sys calls made by userspace clients, remove_uid_range removes uids
+	 * from both here as well as from cpufreq uid_time_in_state
+	 */
+	cpufreq_task_stats_remove_uids(uid_start, uid_end);
+
 	rt_mutex_lock(&uid_lock);
 
 	for (; uid_start <= uid_end; uid_start++) {
@@ -233,13 +242,29 @@ static void compute_uid_io_bucket_stats(struct io_stats *io_bucket,
 					struct io_stats *io_last,
 					struct io_stats *io_dead)
 {
-	io_bucket->read_bytes += io_curr->read_bytes + io_dead->read_bytes -
+	s64 delta;
+
+	delta = io_curr->read_bytes + io_dead->read_bytes -
 		io_last->read_bytes;
-	io_bucket->write_bytes += io_curr->write_bytes + io_dead->write_bytes -
+	if (delta > 0)
+		io_bucket->read_bytes += delta;
+
+	delta = io_curr->write_bytes + io_dead->write_bytes -
 		io_last->write_bytes;
-	io_bucket->rchar += io_curr->rchar + io_dead->rchar - io_last->rchar;
-	io_bucket->wchar += io_curr->wchar + io_dead->wchar - io_last->wchar;
-	io_bucket->fsync += io_curr->fsync + io_dead->fsync - io_last->fsync;
+	if (delta > 0)
+		io_bucket->write_bytes += delta;
+
+	delta = io_curr->rchar + io_dead->rchar - io_last->rchar;
+	if (delta > 0)
+		io_bucket->rchar += delta;
+
+	delta = io_curr->wchar + io_dead->wchar - io_last->wchar;
+	if (delta > 0)
+		io_bucket->wchar += delta;
+
+	delta = io_curr->fsync + io_dead->fsync - io_last->fsync;
+	if (delta > 0)
+		io_bucket->fsync += delta;
 
 	io_last->read_bytes = io_curr->read_bytes;
 	io_last->write_bytes = io_curr->write_bytes;

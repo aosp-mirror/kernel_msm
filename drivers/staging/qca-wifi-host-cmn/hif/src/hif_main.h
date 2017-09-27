@@ -157,6 +157,9 @@ struct hif_softc {
 #ifdef FEATURE_NAPI
 	struct qca_napi_data napi_data;
 #endif /* FEATURE_NAPI */
+	/* stores ce_service_max_yield_time in ns */
+	unsigned long long ce_service_max_yield_time;
+	uint8_t ce_service_max_rx_ind_flush;
 	struct hif_driver_state_callbacks callbacks;
 	uint32_t hif_con_param;
 #ifdef QCA_NSS_WIFI_OFFLOAD_SUPPORT
@@ -220,6 +223,7 @@ struct hif_driver_state_callbacks *hif_get_callbacks_handle(
 bool hif_is_driver_unloading(struct hif_softc *scn);
 bool hif_is_load_or_unload_in_progress(struct hif_softc *scn);
 bool hif_is_recovery_in_progress(struct hif_softc *scn);
+bool hif_is_target_ready(struct hif_softc *scn);
 void hif_wlan_disable(struct hif_softc *scn);
 int hif_target_sleep_state_adjust(struct hif_softc *scn,
 					 bool sleep_ok,
@@ -234,4 +238,13 @@ static inline void hif_usb_get_hw_info(struct hif_softc *scn) {}
 static inline void hif_ramdump_handler(struct hif_opaque_softc *scn) {}
 #endif
 
+#ifdef HIF_SNOC
+bool hif_is_target_register_access_allowed(struct hif_softc *hif_sc);
+#else
+static inline
+bool hif_is_target_register_access_allowed(struct hif_softc *hif_sc)
+{
+	return true;
+}
+#endif
 #endif /* __HIF_MAIN_H__ */

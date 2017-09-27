@@ -6656,7 +6656,7 @@ void lim_update_extcap_struct(tpAniSirGlobal mac_ctx,
 	}
 
 	if (DOT11F_EID_EXTCAP != buf[0] || buf[1] > DOT11F_IE_EXTCAP_MAX_LEN) {
-		pe_warn("Invalid IEs eid: %d elem_len: %d",
+		pe_debug_rate_limited(30, "Invalid IEs eid: %d elem_len: %d",
 				buf[0], buf[1]);
 		return;
 	}
@@ -7244,4 +7244,65 @@ bool lim_check_if_vendor_oui_match(tpAniSirGlobal mac_ctx,
 		return true;
 	else
 		return false;
+}
+
+uint8_t lim_get_min_session_txrate(tpPESession session)
+{
+	enum rateid rid = RATEID_DEFAULT;
+	uint8_t min_rate = SIR_MAC_RATE_54, curr_rate, i;
+	tSirMacRateSet *rateset = &session->rateSet;
+
+	if (!session)
+		return rid;
+
+	for (i = 0; i < rateset->numRates; i++) {
+		/* Ignore MSB - set to indicate basic rate */
+		curr_rate = rateset->rate[i] & 0x7F;
+		min_rate =  (curr_rate < min_rate) ? curr_rate : min_rate;
+	}
+	pe_debug("supported min_rate: %0x(%d)", min_rate, min_rate);
+
+	switch (min_rate) {
+	case SIR_MAC_RATE_1:
+		rid = RATEID_1MBPS;
+		break;
+	case SIR_MAC_RATE_2:
+		rid = RATEID_2MBPS;
+		break;
+	case SIR_MAC_RATE_5_5:
+		rid = RATEID_5_5MBPS;
+		break;
+	case SIR_MAC_RATE_11:
+		rid = RATEID_11MBPS;
+		break;
+	case SIR_MAC_RATE_6:
+		rid = RATEID_6MBPS;
+		break;
+	case SIR_MAC_RATE_9:
+		rid = RATEID_9MBPS;
+		break;
+	case SIR_MAC_RATE_12:
+		rid = RATEID_12MBPS;
+		break;
+	case SIR_MAC_RATE_18:
+		rid = RATEID_18MBPS;
+		break;
+	case SIR_MAC_RATE_24:
+		rid = RATEID_24MBPS;
+		break;
+	case SIR_MAC_RATE_36:
+		rid = RATEID_36MBPS;
+		break;
+	case SIR_MAC_RATE_48:
+		rid = RATEID_48MBPS;
+		break;
+	case SIR_MAC_RATE_54:
+		rid = RATEID_54MBPS;
+		break;
+	default:
+		rid = RATEID_DEFAULT;
+		break;
+	}
+
+	return rid;
 }

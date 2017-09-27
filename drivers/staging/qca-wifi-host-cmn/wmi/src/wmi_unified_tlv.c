@@ -1810,6 +1810,48 @@ end:
 	return qdf_status;
 }
 #endif
+
+/**
+ * populate_tx_send_params - Populate TX param TLV for mgmt and offchan tx
+ *
+ * @bufp: Pointer to buffer
+ * @param: Pointer to tx param
+ *
+ * Return: QDF_STATUS_SUCCESS for success and QDF_STATUS_E_FAILURE for failure
+ */
+static inline QDF_STATUS populate_tx_send_params(uint8_t *bufp,
+					 struct tx_send_params param)
+{
+	wmi_tx_send_params *tx_param;
+	QDF_STATUS status = QDF_STATUS_SUCCESS;
+
+	if (!bufp) {
+		status = QDF_STATUS_E_FAILURE;
+		return status;
+	}
+	tx_param = (wmi_tx_send_params *)bufp;
+	WMITLV_SET_HDR(&tx_param->tlv_header,
+		       WMITLV_TAG_STRUC_wmi_tx_send_params,
+		       WMITLV_GET_STRUCT_TLVLEN(wmi_tx_send_params));
+	WMI_TX_SEND_PARAM_PWR_SET(tx_param->tx_param_dword0, param.pwr);
+	WMI_TX_SEND_PARAM_MCS_MASK_SET(tx_param->tx_param_dword0,
+				       param.mcs_mask);
+	WMI_TX_SEND_PARAM_NSS_MASK_SET(tx_param->tx_param_dword0,
+				       param.nss_mask);
+	WMI_TX_SEND_PARAM_RETRY_LIMIT_SET(tx_param->tx_param_dword0,
+					  param.retry_limit);
+	WMI_TX_SEND_PARAM_CHAIN_MASK_SET(tx_param->tx_param_dword1,
+					 param.chain_mask);
+	WMI_TX_SEND_PARAM_BW_MASK_SET(tx_param->tx_param_dword1,
+				      param.bw_mask);
+	WMI_TX_SEND_PARAM_PREAMBLE_SET(tx_param->tx_param_dword1,
+				       param.preamble_type);
+	WMI_TX_SEND_PARAM_FRAME_TYPE_SET(tx_param->tx_param_dword1,
+					 param.frame_type);
+
+	return status;
+}
+
 /**
  *  send_mgmt_cmd_tlv() - WMI scan start function
  *  @wmi_handle      : handle to WMI.
@@ -1826,14 +1868,15 @@ QDF_STATUS send_mgmt_cmd_tlv(wmi_unified_t wmi_handle,
 	uint64_t dma_addr;
 	void *qdf_ctx = param->qdf_ctx;
 	uint8_t *bufp;
-	QDF_STATUS status;
+	QDF_STATUS status = QDF_STATUS_SUCCESS;
 	int32_t bufp_len = (param->frm_len < mgmt_tx_dl_frm_len) ? param->frm_len :
 		mgmt_tx_dl_frm_len;
 
 	cmd_len = sizeof(wmi_mgmt_tx_send_cmd_fixed_param) +
-		WMI_TLV_HDR_SIZE + roundup(bufp_len, sizeof(uint32_t));
+		  WMI_TLV_HDR_SIZE +
+		  roundup(bufp_len, sizeof(uint32_t));
 
-	buf = wmi_buf_alloc(wmi_handle, cmd_len);
+	buf = wmi_buf_alloc(wmi_handle, sizeof(wmi_tx_send_params) + cmd_len);
 	if (!buf) {
 		WMI_LOGE("%s:wmi_buf_alloc failed", __func__);
 		return QDF_STATUS_E_NOMEM;
@@ -1870,9 +1913,21 @@ QDF_STATUS send_mgmt_cmd_tlv(wmi_unified_t wmi_handle,
 #endif
 	cmd->frame_len = param->frm_len;
 	cmd->buf_len = bufp_len;
+	cmd->tx_params_valid = param->tx_params_valid;
 
 	wmi_mgmt_cmd_record(wmi_handle, WMI_MGMT_TX_SEND_CMDID,
 			bufp, cmd->vdev_id, cmd->chanfreq);
+
+	bufp += roundup(bufp_len, sizeof(uint32_t));
+	if (param->tx_params_valid) {
+		status = populate_tx_send_params(bufp, param->tx_param);
+		if (status != QDF_STATUS_SUCCESS) {
+			WMI_LOGE("%s: Populate TX send params failed",
+				 __func__);
+			goto err1;
+		}
+		cmd_len += sizeof(wmi_tx_send_params);
+	}
 
 	if (wmi_unified_cmd_send(wmi_handle, buf, cmd_len,
 				      WMI_MGMT_TX_SEND_CMDID)) {
@@ -4743,6 +4798,8 @@ QDF_STATUS send_roam_scan_offload_rssi_thresh_cmd_tlv(wmi_unified_t wmi_handle,
 	rssi_threshold_fp->hirssi_scan_delta =
 			roam_req->hi_rssi_scan_rssi_delta;
 	rssi_threshold_fp->hirssi_upper_bound = roam_req->hi_rssi_scan_rssi_ub;
+	rssi_threshold_fp->rssi_thresh_offset_5g =
+		roam_req->rssi_thresh_offset_5g;
 
 	buf_ptr += sizeof(wmi_roam_scan_rssi_threshold_fixed_param);
 	WMITLV_SET_HDR(buf_ptr,
@@ -4984,8 +5041,21 @@ QDF_STATUS send_roam_scan_filter_cmd_tlv(wmi_unified_t wmi_handle,
 	wmi_roam_lca_disallow_config_tlv_param *blist_param;
 
 	len = sizeof(wmi_roam_filter_fixed_param);
+
 	len += WMI_TLV_HDR_SIZE;
-	len += roam_req->len;
+	if (roam_req->num_bssid_black_list)
+		len += roam_req->num_bssid_black_list * sizeof(wmi_mac_addr);
+	len += WMI_TLV_HDR_SIZE;
+	if (roam_req->num_ssid_white_list)
+		len += roam_req->num_ssid_white_list * sizeof(wmi_ssid);
+	len += 2 * WMI_TLV_HDR_SIZE;
+	if (roam_req->num_bssid_preferred_list) {
+		len += roam_req->num_bssid_preferred_list * sizeof(wmi_mac_addr);
+		len += roam_req->num_bssid_preferred_list * sizeof(A_UINT32);
+	}
+	if (roam_req->lca_disallow_config_present)
+		len += WMI_TLV_HDR_SIZE +
+			sizeof(wmi_roam_lca_disallow_config_tlv_param);
 
 	buf = wmi_buf_alloc(wmi_handle, len);
 	if (!buf) {
@@ -10054,6 +10124,13 @@ QDF_STATUS send_log_supported_evt_cmd_tlv(wmi_unified_t wmi_handle,
 	if (wmi_handle->events_logs_list)
 		qdf_mem_free(wmi_handle->events_logs_list);
 
+	if (num_of_diag_events_logs >
+		(WMI_SVC_MSG_MAX_SIZE / sizeof(uint32_t))) {
+		WMI_LOGE("%s: excess num of logs:%d", __func__,
+			num_of_diag_events_logs);
+		QDF_ASSERT(0);
+		return QDF_STATUS_E_INVAL;
+	}
 	/* Store the event list for run time enable/disable */
 	wmi_handle->events_logs_list = qdf_mem_malloc(num_of_diag_events_logs *
 			sizeof(uint32_t));

@@ -2138,14 +2138,15 @@ sir_convert_probe_req_frame2_struct(tpAniSirGlobal pMac,
 	}
 	/* & "transliterate" from a 'tDot11fProbeRequestto' a 'tSirProbeReq'... */
 	if (!pr.SSID.present) {
-		pe_warn("Mandatory IE SSID not present!");
+		pe_debug_rate_limited(30, "Mandatory IE SSID not present!");
 	} else {
 		pProbeReq->ssidPresent = 1;
 		convert_ssid(pMac, &pProbeReq->ssId, &pr.SSID);
 	}
 
 	if (!pr.SuppRates.present) {
-		pe_warn("Mandatory IE Supported Rates not present!");
+		pe_debug_rate_limited(30,
+				"Mandatory IE Supported Rates not present!");
 		return eSIR_FAILURE;
 	} else {
 		pProbeReq->suppRatesPresent = 1;
@@ -2410,14 +2411,15 @@ tSirRetStatus sir_convert_probe_frame2_struct(tpAniSirGlobal pMac,
 	sir_copy_caps_info(pMac, pr->Capabilities, pProbeResp);
 
 	if (!pr->SSID.present) {
-		pe_warn("Mandatory IE SSID not present!");
+		pe_debug_rate_limited(30, "Mandatory IE SSID not present!");
 	} else {
 		pProbeResp->ssidPresent = 1;
 		convert_ssid(pMac, &pProbeResp->ssId, &pr->SSID);
 	}
 
 	if (!pr->SuppRates.present) {
-		pe_warn("Mandatory IE Supported Rates not present!");
+		pe_debug_rate_limited(30,
+				"Mandatory IE Supported Rates not present!");
 	} else {
 		pProbeResp->suppRatesPresent = 1;
 		convert_supp_rates(pMac, &pProbeResp->supportedRates,
@@ -3006,7 +3008,8 @@ sir_convert_assoc_resp_frame2_struct(tpAniSirGlobal pMac,
 
 	if (!ar->SuppRates.present) {
 		pAssocRsp->suppRatesPresent = 0;
-		pe_warn("Mandatory IE Supported Rates not present!");
+		pe_debug_rate_limited(30,
+				"Mandatory IE Supported Rates not present!");
 	} else {
 		pAssocRsp->suppRatesPresent = 1;
 		convert_supp_rates(pMac, &pAssocRsp->supportedRates,
@@ -3065,7 +3068,7 @@ sir_convert_assoc_resp_frame2_struct(tpAniSirGlobal pMac,
 				sizeof(tDot11fIEFTInfo));
 	}
 
-	if (ar->num_RICDataDesc <= 2) {
+	if (ar->num_RICDataDesc  && ar->num_RICDataDesc <= 2) {
 		for (cnt = 0; cnt < ar->num_RICDataDesc; cnt++) {
 			if (ar->RICDataDesc[cnt].present) {
 				qdf_mem_copy(&pAssocRsp->RICData[cnt],
@@ -3366,7 +3369,7 @@ sir_beacon_ie_ese_bcn_report(tpAniSirGlobal pMac,
 	}
 	/* & "transliterate" from a 'tDot11fBeaconIEs' to a 'eseBcnReportMandatoryIe'... */
 	if (!pBies->SSID.present) {
-		pe_warn("Mandatory IE SSID not present!");
+		pe_debug_rate_limited(30, "Mandatory IE SSID not present!");
 	} else {
 		eseBcnReportMandatoryIe.ssidPresent = 1;
 		convert_ssid(pMac, &eseBcnReportMandatoryIe.ssId, &pBies->SSID);
@@ -3375,7 +3378,8 @@ sir_beacon_ie_ese_bcn_report(tpAniSirGlobal pMac,
 	}
 
 	if (!pBies->SuppRates.present) {
-		pe_warn("Mandatory IE Supported Rates not present!");
+		pe_debug_rate_limited(30,
+				"Mandatory IE Supported Rates not present!");
 	} else {
 		eseBcnReportMandatoryIe.suppRatesPresent = 1;
 		convert_supp_rates(pMac, &eseBcnReportMandatoryIe.supportedRates,
@@ -3670,14 +3674,15 @@ sir_parse_beacon_ie(tpAniSirGlobal pMac,
 	}
 	/* & "transliterate" from a 'tDot11fBeaconIEs' to a 'tSirProbeRespBeacon'... */
 	if (!pBies->SSID.present) {
-		pe_warn("Mandatory IE SSID not present!");
+		pe_debug_rate_limited(30, "Mandatory IE SSID not present!");
 	} else {
 		pBeaconStruct->ssidPresent = 1;
 		convert_ssid(pMac, &pBeaconStruct->ssId, &pBies->SSID);
 	}
 
 	if (!pBies->SuppRates.present) {
-		pe_warn("Mandatory IE Supported Rates not present!");
+		pe_debug_rate_limited(30,
+				"Mandatory IE Supported Rates not present!");
 	} else {
 		pBeaconStruct->suppRatesPresent = 1;
 		convert_supp_rates(pMac, &pBeaconStruct->supportedRates,
@@ -4023,14 +4028,15 @@ sir_convert_beacon_frame2_struct(tpAniSirGlobal pMac,
 		pBeacon->Capabilities.immediateBA;
 
 	if (!pBeacon->SSID.present) {
-		pe_warn("Mandatory IE SSID not present!");
+		pe_debug_rate_limited(30, "Mandatory IE SSID not present!");
 	} else {
 		pBeaconStruct->ssidPresent = 1;
 		convert_ssid(pMac, &pBeaconStruct->ssId, &pBeacon->SSID);
 	}
 
 	if (!pBeacon->SuppRates.present) {
-		pe_warn("Mandatory IE Supported Rates not present!");
+		pe_debug_rate_limited(30,
+				"Mandatory IE Supported Rates not present!");
 	} else {
 		pBeaconStruct->suppRatesPresent = 1;
 		convert_supp_rates(pMac, &pBeaconStruct->supportedRates,

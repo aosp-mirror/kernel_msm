@@ -33,9 +33,7 @@
 #define NORM_VOLT			4400000
 #define LIM_VOLT			4100000
 #define PARALLEL_VOLT			4450000
-#define SC_VOLT				4200000
 #define CHG_CURRENT_MAX			3550000
-#define SC_CURRENT			2400000
 #define LCD_ON_CURRENT			1000000
 #define WATCH_DELAY			30000
 #define DEMO_MODE_MAX			35
@@ -69,9 +67,16 @@ enum bm_therm_states {
 	BM_HEALTH_MAX,
 };
 
+enum bm_batt_maker {
+	BM_BATT_LGC,
+	BM_BATT_TOCAD,
+	BM_BATT_MAX,
+};
+
 struct battery_manager {
 	struct device			*dev;
 	struct power_supply		*batt_psy;
+	struct power_supply		*bms_psy;
 	struct power_supply		*usb_psy;
 	struct power_supply		*pl_psy;
 	struct notifier_block		ps_nb;
@@ -84,6 +89,7 @@ struct battery_manager {
 	struct mutex			work_lock;
 
 	enum bm_therm_states		therm_stat;
+	int		batt_id;
 	int		chg_present;
 	int		chg_status;
 	int		batt_soc;
@@ -93,8 +99,8 @@ struct battery_manager {
 	int		demo_iusb;
 	int		demo_ibat;
 	int		demo_enable;
+	int		sc_status;
 	bool		bm_active;
-	bool		sc_status;
 };
 
 struct bm_therm_table {
@@ -118,6 +124,34 @@ static int bm_vote_fcc_table[BM_REASON_MAX] = {
 	-EINVAL,
 	-EINVAL,
 	-EINVAL,
+};
+
+struct bm_step_table {
+	int		cur;
+	int		volt;
+};
+
+static struct bm_step_table LGC_step_table[] = {
+	{  -EINVAL,  4200000},
+	{  2400000,  INT_MAX},
+};
+
+static struct bm_step_table TOCAD_step_table[] = {
+	{  -EINVAL,  4200000},
+	{  3000000,  4350000},
+	{  2400000,  INT_MAX},
+};
+
+struct bm_batt_id_table {
+	int			min;
+	int			max;
+	int			step_max;
+	struct bm_step_table	*step_table;
+};
+
+static struct bm_batt_id_table valid_batt_id[BM_BATT_MAX] = {
+	{  16000,  24000,  1,    LGC_step_table},
+	{  44800,  67200,  2,  TOCAD_step_table},
 };
 
 static int debug_mask = ERROR | INTERRUPT | MISC | VERBOSE;
@@ -324,28 +358,36 @@ void bm_check_therm_charging(struct battery_manager *bm,
 
 void bm_check_step_charging(struct battery_manager *bm, int volt)
 {
-	int rc = 0;
+	int rc, stat;
 
-	if (!bm->bm_active) {
-		if (bm->sc_status) {
-			rc = bm_vote_fcc(bm, BM_REASON_STEP, -EINVAL);
-			if (rc < 0) {
-				pr_bm(ERROR,
-				      "Couldn't set ibat curr rc=%d\n", rc);
-				return;
-			}
-			bm->sc_status = false;
+	if (!bm->bm_active && bm->sc_status) {
+		rc = bm_vote_fcc(bm, BM_REASON_STEP, -EINVAL);
+		if (rc < 0) {
+			pr_bm(ERROR,
+			      "Couldn't set ibat curr rc=%d\n", rc);
+			return;
 		}
+		bm->sc_status = 0;
 		return;
 	}
 
-	if (!bm->sc_status && volt >= SC_VOLT) {
-		rc = bm_vote_fcc(bm, BM_REASON_STEP, SC_CURRENT);
+	for (stat = bm->sc_status;
+	     stat < valid_batt_id[bm->batt_id].step_max; stat++) {
+		if (volt < valid_batt_id[bm->batt_id].step_table[stat].volt)
+			break;
+	}
+
+	if (bm->sc_status != stat) {
+		pr_bm(MISC, "STATE[%d->%d] CUR[%d] VOL[%d]\n",
+		      bm->sc_status, stat,
+		      valid_batt_id[bm->batt_id].step_table[stat].cur, volt);
+		rc = bm_vote_fcc(bm, BM_REASON_STEP,
+			 valid_batt_id[bm->batt_id].step_table[stat].cur);
 		if (rc < 0) {
 			pr_bm(ERROR, "Couldn't set ibat curr rc=%d\n", rc);
 			return;
 		}
-		bm->sc_status = true;
+		bm->sc_status = stat;
 	}
 }
 
@@ -386,6 +428,7 @@ static void bm_watch_work(struct work_struct *work)
 						struct battery_manager,
 						bm_watch.work);
 	int rc, batt_volt, batt_temp, ibat_max = 0;
+	int batt_ocv, batt_res, charge_counter, charge_raw;
 
 	mutex_lock(&bm->work_lock);
 
@@ -413,10 +456,40 @@ static void bm_watch_work(struct work_struct *work)
 			     POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
 			     &ibat_max);
 
+	rc = bm_get_property(bm->bms_psy,
+			POWER_SUPPLY_PROP_VOLTAGE_OCV, &batt_ocv);
+	if (rc < 0) {
+		pr_bm(ERROR, "Couldn't get BATT_OCV = %d\n", rc);
+		goto error;
+	}
+
+	rc = bm_get_property(bm->bms_psy,
+			POWER_SUPPLY_PROP_RESISTANCE, &batt_res);
+	if (rc < 0) {
+		pr_bm(ERROR, "Couldn't get BATT_RES = %d\n", rc);
+		goto error;
+	}
+
+	rc = bm_get_property(bm->bms_psy,
+			POWER_SUPPLY_PROP_CHARGE_COUNTER, &charge_counter);
+	if (rc < 0) {
+		pr_bm(ERROR, "Couldn't get CHARGE_COUNTER = %d\n", rc);
+		goto error;
+	}
+
+	rc = bm_get_property(bm->bms_psy,
+			POWER_SUPPLY_PROP_CHARGE_FULL, &charge_raw);
+	if (rc < 0) {
+		pr_bm(ERROR, "Couldn't get CHARGE_RAW = %d\n", rc);
+		goto error;
+	}
+
 	pr_bm(VERBOSE, "PRESENT:%d, CHG_STAT:%d, THM_STAT:%d, " \
-		       "BAT_TEMP:%d, BAT_VOLT:%d, VOTE_CUR:%d, SET_CUR:%d,\n",
-	      bm->chg_present, bm->chg_status, bm->therm_stat,
-	      batt_temp, batt_volt, bm_vote_fcc_get(bm), ibat_max);
+		"BAT_TEMP:%d, BAT_VOLT:%d, BAT_OCV:%d, VOTE_CUR:%d, " \
+		"SET_CUR:%d, BATT_RES:%d, BATT_CC:%d, BATT_CAPA:%d \n",
+			bm->chg_present, bm->chg_status, bm->therm_stat,
+			batt_temp, batt_volt, batt_ocv, bm_vote_fcc_get(bm),
+			ibat_max, batt_res, charge_counter, charge_raw);
 
 error:
 	mutex_unlock(&bm->work_lock);
@@ -586,9 +659,10 @@ static int bm_fb_register_notifier(struct battery_manager *bm)
 
 static int bm_init(struct battery_manager *bm)
 {
-	int rc, batt_temp, batt_volt = 0;
+	int i, rc, batt_temp, batt_volt, batt_id = 0;
 
 	bm->fb_state = 0;
+	bm->sc_status = 0;
 	bm->therm_stat = BM_HEALTH_GOOD;
 	bm->bm_vote_fcc_reason = -EINVAL;
 	bm->bm_vote_fcc_value = -EINVAL;
@@ -608,6 +682,12 @@ static int bm_init(struct battery_manager *bm)
 	bm->pl_psy = power_supply_get_by_name("parallel");
 	if (!bm->pl_psy) {
 		pr_bm(ERROR, "Couldn't get pl_psy\n");
+		return -ENODEV;
+	}
+
+	bm->bms_psy = power_supply_get_by_name("bms");
+	if (!bm->bms_psy) {
+		pr_bm(ERROR, "Couldn't get bms_psy\n");
 		return -ENODEV;
 	}
 
@@ -635,6 +715,23 @@ static int bm_init(struct battery_manager *bm)
 			     POWER_SUPPLY_PROP_PRESENT, &bm->chg_present);
 	if (rc < 0)
 		bm->chg_present = 0;
+
+	rc = bm_get_property(bm->bms_psy,
+			     POWER_SUPPLY_PROP_RESISTANCE_ID, &batt_id);
+	if (rc < 0) {
+		bm->batt_id = BM_BATT_TOCAD;
+	} else {
+		for (i = 0; i < BM_BATT_MAX; i++) {
+			if (valid_batt_id[i].min <= batt_id &&
+			    valid_batt_id[i].max >= batt_id)
+				break;
+		}
+		if (i == BM_BATT_MAX) {
+			pr_bm(ERROR, "Couldn't get valid battery id\n");
+			return -EINVAL;
+		}
+		bm->batt_id = i;
+	}
 
 	if (bm->chg_present) {
 		bm->demo_iusb = 1;

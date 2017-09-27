@@ -1072,7 +1072,14 @@ int diagfwd_channel_open(struct diagfwd_info *fwd_info)
 	mutex_lock(&driver->diagfwd_channel_mutex[fwd_info->peripheral]);
 	fwd_info->ch_open = 1;
 	diagfwd_buffers_init(fwd_info);
-	diagfwd_write_buffers_init(fwd_info);
+
+	/*
+	 * Initialize buffers for glink supported
+	 * peripherals only.
+	 */
+	if (fwd_info->transport == TRANSPORT_GLINK)
+		diagfwd_write_buffers_init(fwd_info);
+
 	if (fwd_info && fwd_info->c_ops && fwd_info->c_ops->open)
 		fwd_info->c_ops->open(fwd_info);
 	for (i = 0; i < NUM_WRITE_BUFFERS; i++) {

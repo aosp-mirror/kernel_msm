@@ -76,6 +76,10 @@ struct easelcomm_user_state {
 	struct easelcomm_service *service;
 };
 
+/* max delay in msec waiting for remote to wrap command channel */
+#define CMDCHAN_WRAP_DONE_TIMEOUT_MS 500  /* TODO: set to 2000 (b/65052892) */
+/* additional retry times for asking remote to wrap command channel */
+#define CMDCHAN_SEND_WRAP_RETRY_TIMES 3   /* TODO: remove (b/65052892) */
 /* max delay in msec waiting for remote to ack link shutdown */
 #define LINK_SHUTDOWN_ACK_TIMEOUT 500
 /* max delay in msec waiting for remote to return flush done */
@@ -449,6 +453,61 @@ static void easelcomm_flush_local_service(struct easelcomm_service *service)
 }
 
 /*
+ * Wake up any message of a service waiting for reply.
+ */
+static void __force_complete_reply_waiter(struct easelcomm_service *service)
+{
+	struct easelcomm_message_metadata *msg_cursor;
+
+	spin_lock(&service->lock);
+	list_for_each_entry(msg_cursor, &service->local_list, list) {
+		if (msg_cursor->msg->desc.need_reply)
+			complete(&msg_cursor->reply_received);
+	}
+	spin_unlock(&service->lock);
+}
+
+/*
+ * Handle local-side processing of shutting down an Easel service.  Easel
+ * services are shutdown when the local side handling process closes its fd
+ * or issues the shutdown ioctl, or the remote side sends a CLOSE_SERVICE
+ * command (meaning the remote side is doing one of those things).
+ *
+ * Flush local state if local side initiated the shutdown, wakeup the
+ * receiveMessage() waiter.
+ */
+static void easelcomm_handle_service_shutdown(
+	struct easelcomm_service *service, bool shutdown_local)
+{
+	dev_dbg(easelcomm_miscdev.this_device, "svc %u shutdown from %s\n",
+		service->service_id, shutdown_local ? "local" : "remote");
+
+	/*
+	 * If local side shutting down then flush local state, just in case.
+	 * If remote is closing then local side may still have messages in
+	 * progress, just signal the receivemessage() caller to return
+	 * shutdown status.
+	 */
+	if (shutdown_local)
+		easelcomm_flush_local_service(service);
+
+	spin_lock(&service->lock);
+	if (shutdown_local)
+		service->shutdown_local = true;
+	else
+		service->shutdown_remote = true;
+	spin_unlock(&service->lock);
+	/* Wakeup any receiveMessage() waiter so they can return to user */
+	complete(&service->receivemsg_queue_new);
+
+	/* Wakeup flush_done waiter so they can return to user */
+	complete(&service->flush_done);
+
+	/* Wakeup any sendMessageReceiveReply() waiter to return to user */
+	__force_complete_reply_waiter(service);
+}
+
+/*
  * Shutdown easelcomm local activity, mark link down.
  */
 static void easelcomm_stop_local(void)
@@ -466,8 +525,7 @@ static void easelcomm_stop_local(void)
 		struct easelcomm_service *service = easelcomm_service_list[i];
 
 		if (service != NULL)
-			easelcomm_flush_local_service(service);
-
+			easelcomm_handle_service_shutdown(service, true);
 	}
 }
 
@@ -652,61 +710,6 @@ static int easelcomm_wait_channel_initialized(
 	}
 
 	return ret;
-}
-
-/*
- * Wake up any message of a service waiting for reply.
- */
-static void __force_complete_reply_waiter(struct easelcomm_service *service)
-{
-	struct easelcomm_message_metadata *msg_cursor;
-
-	spin_lock(&service->lock);
-	list_for_each_entry(msg_cursor, &service->local_list, list) {
-		if (msg_cursor->msg->desc.need_reply)
-			complete(&msg_cursor->reply_received);
-	}
-	spin_unlock(&service->lock);
-}
-
-/*
- * Handle local-side processing of shutting down an Easel service.  Easel
- * services are shutdown when the local side handling process closes its fd
- * or issues the shutdown ioctl, or the remote side sends a CLOSE_SERVICE
- * command (meaning the remote side is doing one of those things).
- *
- * Flush local state if local side initiated the shutdown, wakeup the
- * receiveMessage() waiter.
- */
-static void easelcomm_handle_service_shutdown(
-	struct easelcomm_service *service, bool shutdown_local)
-{
-	dev_dbg(easelcomm_miscdev.this_device, "svc %u shutdown from %s\n",
-		service->service_id, shutdown_local ? "local" : "remote");
-
-	/*
-	 * If local side shutting down then flush local state, just in case.
-	 * If remote is closing then local side may still have messages in
-	 * progress, just signal the receivemessage() caller to return
-	 * shutdown status.
-	 */
-	if (shutdown_local)
-		easelcomm_flush_local_service(service);
-
-	spin_lock(&service->lock);
-	if (shutdown_local)
-		service->shutdown_local = true;
-	else
-		service->shutdown_remote = true;
-	spin_unlock(&service->lock);
-	/* Wakeup any receiveMessage() waiter so they can return to user */
-	complete(&service->receivemsg_queue_new);
-
-	/* Wakeup flush_done waiter so they can return to user */
-	complete(&service->flush_done);
-
-	/* Wakeup any sendMessageReceiveReply() waiter to return to user */
-	__force_complete_reply_waiter(service);
 }
 
 /* CLOSE_SERVICE command received from remote, shut down service. */
@@ -907,6 +910,7 @@ void easelcomm_cmd_channel_data_handler(void)
 		channel_buf_hdr->producer_seqnbr_next) {
 		struct easelcomm_cmd_header *cmdhdr =
 			(struct easelcomm_cmd_header *)channel->readp;
+		uint32_t saved_cmd_len;
 
 		dev_dbg(easelcomm_miscdev.this_device, "cmdchan consumer loop prodseq=%llu consseq=%llu off=%lx\n",
 			channel_buf_hdr->producer_seqnbr_next,
@@ -933,18 +937,20 @@ void easelcomm_cmd_channel_data_handler(void)
 			continue;
 		}
 
+		saved_cmd_len = READ_ONCE(cmdhdr->command_arg_len);
+
 		dev_dbg(easelcomm_miscdev.this_device,
 			"cmdchan recv cmd seq=%llu svc=%u cmd=%u len=%u off=%lx\n",
 			cmdhdr->sequence_nbr, cmdhdr->service_id,
-			cmdhdr->command_code, cmdhdr->command_arg_len,
+			cmdhdr->command_code, saved_cmd_len,
 			channel->readp - channel->buffer);
 		if (sizeof(struct easelcomm_cmd_header) +
-			cmdhdr->command_arg_len >
+			saved_cmd_len >
 			EASELCOMM_CMD_CHANNEL_SIZE) {
 			dev_err(easelcomm_miscdev.this_device,
 				"command channel corruption detected: seq=%llu svc=%u cmd=%u len=%u off=%lx\n",
 				cmdhdr->sequence_nbr, cmdhdr->service_id,
-				cmdhdr->command_code, cmdhdr->command_arg_len,
+				cmdhdr->command_code, saved_cmd_len,
 				channel->readp - channel->buffer);
 			break;
 		}
@@ -960,8 +966,19 @@ void easelcomm_cmd_channel_data_handler(void)
 
 		/* Process the command. */
 		easelcomm_handle_command(cmdhdr);
+
+		/* Post-process double check */
+		if (saved_cmd_len != cmdhdr->command_arg_len) {
+			dev_err(easelcomm_miscdev.this_device,
+				"command channel corruption detected: off=%lx expected len %u got %u\n",
+				channel->readp - channel->buffer,
+				saved_cmd_len, cmdhdr->command_arg_len);
+			break;
+		}
+
 		channel->readp += sizeof(struct easelcomm_cmd_header) +
-			cmdhdr->command_arg_len;
+			saved_cmd_len;
+
 		/* 8-byte-align next entry pointer */
 		if ((uintptr_t)channel->readp & 0x7)
 			channel->readp += 8 - ((uintptr_t)channel->readp & 0x7);
@@ -1077,6 +1094,96 @@ static int easelcomm_cmd_channel_bump_producer_seqnbr(
 }
 
 /*
+ * Wrap around remote's buffer.  If producer does not receive a signal that
+ * consumer has wrapped around within predefined time, it will retry sending
+ * wrap command if enabled.
+ *
+ * Note: this retry mechanism is done by writing the wrap marker to the top
+ * of remote's cmd channel, which could, in the worst case, overwrite the
+ * unconsumed command at the top of cmd channel, causing all unconsumed
+ * commands behind it to be discarded.
+ *
+ * Called with remote channel mutex held.
+ * Caller is responsible for releasing the mutex.
+ *
+ * @channel: the pointer to remote channel
+ *
+ * @Return: 0        - sent wrap and remote completed wrapping
+ *          negative - on error
+ */
+static int easelcomm_cmd_channel_send_wrap(
+	struct easelcomm_cmd_channel_remote *channel)
+{
+	int ret = 0;
+	int attempted = 0;
+	long remaining;
+	uint64_t wrap_marker = CMD_BUFFER_WRAP_MARKER;
+
+	/* TODO: remove retry code once b/65052892 is fixed */
+	do {
+		if (attempted > 0) {
+			dev_warn(easelcomm_miscdev.this_device,
+				 "%s: retrying after %d attempts",
+				 __func__, attempted);
+		}
+		attempted++;
+
+		/* Write the "buffer wrapped" marker in place of sequence # */
+		dev_dbg(easelcomm_miscdev.this_device, "cmdchan producer wrap at off=%llx seq=%llu\n",
+			channel->write_offset, channel->write_seqnbr);
+		ret = easelcomm_hw_remote_write(
+			&wrap_marker, sizeof(wrap_marker),
+			channel->write_offset);
+		if (ret)
+			goto exit;
+
+		/*
+		 * Bump the producer seqnbr for the wrap marker (so consumer
+		 * knows its there) and send IRQ to remote to consume the new
+		 * data.
+		 *
+		 * Consumer will process entries up to and including the wrap
+		 * marker and then send a "wrapped" interrupt that wakes up
+		 * the wrap_ready completion.
+		 */
+		ret = easelcomm_cmd_channel_bump_producer_seqnbr(channel);
+		if (ret)
+			goto exit;
+		ret = easelcomm_hw_send_data_interrupt();
+		if (ret)
+			goto exit;
+
+		channel->write_offset =
+			(sizeof(struct easelcomm_cmd_channel_header) + 7)
+			& ~0x7;
+		/* Wait for remote to catch up.	 IRQ from remote wakes this. */
+		remaining = wait_for_completion_interruptible_timeout(
+				&channel->wrap_ready,
+				msecs_to_jiffies(CMDCHAN_WRAP_DONE_TIMEOUT_MS));
+		if (remaining > 0) {
+			ret = 0;
+			break;  /* remote did catch up; no need to retry */
+		}
+		if (remaining < 0) {
+			/* waiting was interrupted */
+			dev_err(easelcomm_miscdev.this_device,
+				"remote channel did not catch up: reason interrupted off=%llx seq=%llu\n",
+				channel->write_offset, channel->write_seqnbr);
+			ret = remaining;
+			goto exit;
+		}
+		/* remaining jiffies is 0; timed out */
+		dev_err(easelcomm_miscdev.this_device,
+			"remote channel did not catch up: reason timeout off=%llx seq=%llu\n",
+			channel->write_offset, channel->write_seqnbr);
+		ret = -ETIMEDOUT;
+	} while (attempted <= CMDCHAN_SEND_WRAP_RETRY_TIMES);
+
+exit:
+	return ret;
+}
+
+/*
  * Start the process of writing a new command to the remote command channel.
  * Wait for channel init'ed and grab the mutex.	 Wraparound the buffer if
  * needed.  Write the command header.
@@ -1111,38 +1218,7 @@ int easelcomm_start_cmd(
 	if (channel->write_offset + cmdbuf_size >
 		EASELCOMM_CMD_CHANNEL_SIZE - 8 -
 		sizeof(struct easelcomm_cmd_channel_header)) {
-		uint64_t wrap_marker = CMD_BUFFER_WRAP_MARKER;
-
-		/* Write the "buffer wrapped" marker in place of sequence # */
-		dev_dbg(easelcomm_miscdev.this_device, "cmdchan producer wrap at off=%llx seq=%llu\n",
-			channel->write_offset, channel->write_seqnbr);
-		ret = easelcomm_hw_remote_write(
-			&wrap_marker, sizeof(wrap_marker),
-			channel->write_offset);
-		if (ret)
-			goto error;
-
-		/*
-		 * Bump the producer seqnbr for the wrap marker (so consumer
-		 * knows its there) and send IRQ to remote to consume the new
-		 * data.
-		 *
-		 * Consumer will process entries up to and including the wrap
-		 * marker and then send a "wrapped" interrupt that wakes up
-		 * the wrap_ready completion.
-		 */
-		ret = easelcomm_cmd_channel_bump_producer_seqnbr(channel);
-		if (ret)
-			goto error;
-		ret = easelcomm_hw_send_data_interrupt();
-		if (ret)
-			goto error;
-
-		channel->write_offset =
-			(sizeof(struct easelcomm_cmd_channel_header) + 7)
-			& ~0x7;
-		/* Wait for remote to catch up.	 IRQ from remote wakes this. */
-		ret = wait_for_completion_interruptible(&channel->wrap_ready);
+		ret = easelcomm_cmd_channel_send_wrap(channel);
 		if (ret)
 			goto error;
 	}
@@ -1277,6 +1353,12 @@ static int easelcomm_send_message_ioctl(
 		goto out_freedesc;
 	}
 	if (msg_desc->message_size > EASELCOMM_MAX_MESSAGE_SIZE) {
+		dev_err(easelcomm_miscdev.this_device,
+			"%s: svc:%u msg size %d is larger than max size %d\n",
+			__func__,
+			service->service_id,
+			msg_desc->message_size,
+			EASELCOMM_MAX_MESSAGE_SIZE);
 		ret = -EINVAL;
 		goto out_freedesc;
 	}
@@ -1431,7 +1513,7 @@ static int easelcomm_wait_reply(
 	struct easelcomm_kmsg_desc orig_msg_desc;
 	struct easelcomm_message_metadata *orig_msg_metadata;
 	struct easelcomm_message_metadata *msg_metadata = NULL;
-	int ret;
+	int ret = 0;
 	bool has_timeout = false;
 	long remaining = 0;
 

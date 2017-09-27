@@ -86,6 +86,8 @@
 #define CSR_SCAN_IS_OVER_BSS_LIMIT(pMac)  \
 	((pMac)->scan.nBssLimit <= (csr_ll_count(&(pMac)->scan.scanResultList)))
 
+#define MIN_11D_AP_COUNT 3
+
 static void csr_set_default_scan_timing(tpAniSirGlobal pMac,
 					tSirScanType scanType,
 					tCsrScanRequest *pScanRequest);
@@ -1662,48 +1664,6 @@ csr_save_ies(tpAniSirGlobal pMac,
 }
 
 /**
- * csr_calc_other_rssi_count_weight() - Calculate channel weight based on other
- *                           APs RSSI and count for candiate selection.
- * @rssi: Best rssi on that channel
- * @count: No. of APs on that channel
- *
- * Return : uint32_t
- */
-static uint32_t csr_calc_other_rssi_count_weight(int32_t rssi, int32_t count)
-{
-	int32_t rssi_weight = 0;
-	int32_t count_weight = 0;
-	int32_t rssi_count_weight = 0;
-
-	rssi_weight = BEST_CANDIDATE_RSSI_WEIGHT * (rssi - MIN_RSSI);
-
-	do_div(rssi_weight, (MAX_RSSI - MIN_RSSI));
-
-	if (rssi_weight > BEST_CANDIDATE_RSSI_WEIGHT)
-		rssi_weight = BEST_CANDIDATE_RSSI_WEIGHT;
-	else if (rssi_weight < 0)
-		rssi_weight = 0;
-
-	count_weight = BEST_CANDIDATE_AP_COUNT_WEIGHT *
-		(count + BEST_CANDIDATE_MIN_COUNT);
-
-	do_div(count_weight,
-			(BEST_CANDIDATE_MAX_COUNT + BEST_CANDIDATE_MIN_COUNT));
-
-	if (count_weight > BEST_CANDIDATE_AP_COUNT_WEIGHT)
-		count_weight = BEST_CANDIDATE_AP_COUNT_WEIGHT;
-
-	rssi_count_weight =  ROAM_MAX_CHANNEL_WEIGHT -
-				(rssi_weight + count_weight);
-
-	QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
-	FL("rssi_weight=%d, count_weight=%d, rssi_count_weight=%d rssi=%d count=%d"),
-		rssi_weight, count_weight, rssi_count_weight, rssi, count);
-
-	return rssi_count_weight;
-}
-
-/**
  * _csr_calculate_bss_score () - Calculate BSS score based on AP capabilty
  *                              and channel condition for best candidate
  *                              selection
@@ -1721,10 +1681,11 @@ static int32_t _csr_calculate_bss_score(tSirBssDescription *bss_info,
 	int32_t ap_load = 0;
 	int32_t normalised_width = BEST_CANDIDATE_20MHZ;
 	int32_t normalised_rssi = 0;
-	int32_t channel_weight;
 	int32_t pcl_score = 0;
 	int32_t modified_rssi = 0;
 	int32_t temp_pcl_chan_weight = 0;
+	int32_t congestion = 0;
+	int32_t congestion_penalty = 0;
 
 	/*
 	 * Total weight of a BSSID is calculated on basis of 100 in which
@@ -1847,30 +1808,27 @@ static int32_t _csr_calculate_bss_score(tSirBssDescription *bss_info,
 		ap_load = (bss_info->qbss_chan_load *
 				BEST_CANDIDATE_MAX_WEIGHT);
 		do_div(ap_load, MAX_AP_LOAD);
+		congestion = ap_load;
 	}
-	/*
-	 * If doesn't announce its ap load, driver will take it as 50% of
-	 * CCA_WEIGHTAGE
-	 */
-	if (ap_load)
-		score += (MAX_CHANNEL_UTILIZATION - ap_load) * CCA_WEIGHTAGE;
-	else
-		score +=  DEFAULT_CHANNEL_UTILIZATION * CCA_WEIGHTAGE;
 
-	if (ap_cnt == 0)
-		channel_weight = ROAM_MAX_CHANNEL_WEIGHT;
-	else
-		channel_weight = csr_calc_other_rssi_count_weight(
-				best_rssi, ap_cnt);
+	if (congestion >= CONSIDERABLE_CHANNEL_CONGESTION &&
+		congestion <= HIGH_CHANNEL_CONGESTION)
+			congestion_penalty = 25;
+	else if (congestion > HIGH_CHANNEL_CONGESTION &&
+		congestion <= EXTREME_CHANNEL_CONGESTION)
+			congestion_penalty = 50;
+	else congestion_penalty = 0;
 
-	score += channel_weight * OTHER_AP_WEIGHT;
+	if (congestion_penalty)
+		score -= congestion_penalty * 10;
+
 	QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
-		FL("BSSID:"MAC_ADDRESS_STR" rssi=%d normalized_rssi=%d htcaps=%d vht=%d bw=%d channel=%d beamforming=%d ap_load=%d channel_weight=%d pcl_score %d Final Score %d "),
+		FL("BSSID:"MAC_ADDRESS_STR" rssi=%d normalized_rssi=%d htcaps=%d vht=%d bw=%d channel=%d beamforming=%d ap_load=%d pcl_score %d Final Score %d "),
 		MAC_ADDR_ARRAY(bss_info->bssId),
 		bss_info->rssi, normalised_rssi, bss_info->ht_caps_present,
 		bss_info->vht_caps_present, bss_info->chan_width,
 		bss_info->channelId,
-		bss_info->beacomforming_capable, ap_load, channel_weight,
+		bss_info->beacomforming_capable, ap_load,
 		pcl_score,
 		score);
 	return score;
@@ -3123,12 +3081,90 @@ csr_remove_from_tmp_list(tpAniSirGlobal mac_ctx,
 	} /* end of loop */
 }
 
+
+static bool is_us_country(uint8_t *country_code)
+{
+	if ((country_code[0] == 'U') &&
+	    (country_code[1] == 'S'))
+		return true;
+
+	return false;
+}
+
+static bool is_world_mode(uint8_t *country_code)
+{
+	if ((country_code[0] == '0') &&
+	    (country_code[1] == '0'))
+		return true;
+
+	return false;
+}
+
+static bool csr_elected_country_algo_fcc(tpAniSirGlobal mac_ctx)
+{
+	bool ctry_11d_found = false;
+	uint8_t max_votes = 0;
+	uint8_t i = 0;
+	uint8_t ctry_index;
+
+	if (!mac_ctx->scan.countryCodeCount) {
+		sme_warn("No AP with 11d Country code is present in scan list");
+		return ctry_11d_found;
+	}
+
+	max_votes = mac_ctx->scan.votes11d[0].votes;
+	if (is_us_country(mac_ctx->scan.votes11d[0].countryCode)) {
+		ctry_11d_found = true;
+		ctry_index = 0;
+		goto algo_done;
+	} else if (max_votes >= MIN_11D_AP_COUNT) {
+		ctry_11d_found = true;
+		ctry_index = 0;
+	}
+
+	for (i = 1; i < mac_ctx->scan.countryCodeCount; i++) {
+		if (is_us_country(mac_ctx->scan.votes11d[i].countryCode)) {
+			ctry_11d_found = true;
+			ctry_index = i;
+			goto algo_done;
+		}
+
+		if ((max_votes < mac_ctx->scan.votes11d[i].votes) &&
+		    (mac_ctx->scan.votes11d[i].votes >= MIN_11D_AP_COUNT)) {
+			sme_debug(" Votes for Country %c%c : %d",
+				  mac_ctx->scan.votes11d[i].countryCode[0],
+				  mac_ctx->scan.votes11d[i].countryCode[1],
+				  mac_ctx->scan.votes11d[i].votes);
+			max_votes = mac_ctx->scan.votes11d[i].votes;
+			ctry_index = i;
+			ctry_11d_found = true;
+		}
+	}
+
+algo_done:
+
+	if (ctry_11d_found) {
+		qdf_mem_copy(mac_ctx->scan.countryCodeElected,
+			     mac_ctx->scan.votes11d[ctry_index].countryCode,
+			     WNI_CFG_COUNTRY_CODE_LEN);
+
+		sme_debug("Selected Country is %c%c With count %d",
+			  mac_ctx->scan.votes11d[ctry_index].countryCode[0],
+			  mac_ctx->scan.votes11d[ctry_index].countryCode[1],
+			  mac_ctx->scan.votes11d[ctry_index].votes);
+	}
+
+	return ctry_11d_found;
+}
+
+
 static void csr_move_temp_scan_results_to_main_list(tpAniSirGlobal pMac,
 						    uint8_t reason,
 						    uint8_t sessionId)
 {
 	tCsrRoamSession *pSession;
 	uint32_t i;
+	bool found_11d_ctry = false;
 
 	/* remove the BSS descriptions from temporary list */
 	csr_remove_from_tmp_list(pMac, reason, sessionId);
@@ -3148,7 +3184,14 @@ static void csr_move_temp_scan_results_to_main_list(tpAniSirGlobal pMac,
 			return;
 		}
 	}
-	if (csr_elected_country_info(pMac))
+
+	if (is_us_country(pMac->scan.countryCodeCurrent) ||
+	    is_world_mode(pMac->scan.countryCodeCurrent))
+		found_11d_ctry = csr_elected_country_algo_fcc(pMac);
+	else
+		found_11d_ctry = csr_elected_country_info(pMac);
+
+	if (found_11d_ctry)
 		csr_learn_11dcountry_information(pMac, NULL, NULL, true);
 }
 
@@ -5643,7 +5686,7 @@ static bool csr_scan_filter_given_chnl_band(tpAniSirGlobal mac_ctx,
 	 * In case if no-concurrent IBSS session exist then scan
 	 * full band
 	 */
-	if ((dst_req->ChannelInfo.numOfChannels == 0)) {
+	if (dst_req->ChannelInfo.numOfChannels == 0) {
 		csr_get_cfg_valid_channels(mac_ctx, valid_chnl_list,
 				&valid_chnl_len);
 	} else {

@@ -1969,14 +1969,19 @@ static int __wlan_hdd_cfg80211_scan(struct wiphy *wiphy,
 			pHddCtx->last_scan_reject_timestamp =
 				jiffies_to_msecs(jiffies) +
 				SCAN_REJECT_THRESHOLD_TIME;
+			pHddCtx->scan_reject_cnt = 0;
 		} else {
-			hdd_debug("curr_session id %d curr_reason %d threshold time has elapsed? %d",
-				curr_session_id, curr_reason,
+			pHddCtx->scan_reject_cnt++;
+			hdd_debug("curr_session id %d curr_reason %d count %d threshold time has elapsed? %d",
+				curr_session_id, curr_reason, pHddCtx->scan_reject_cnt,
 				qdf_system_time_after(jiffies_to_msecs(jiffies),
 				pHddCtx->last_scan_reject_timestamp));
-			if (qdf_system_time_after(jiffies_to_msecs(jiffies),
+			if ((pHddCtx->scan_reject_cnt >=
+			   SCAN_REJECT_THRESHOLD) &&
+			   qdf_system_time_after(jiffies_to_msecs(jiffies),
 			   pHddCtx->last_scan_reject_timestamp)) {
 				pHddCtx->last_scan_reject_timestamp = 0;
+				pHddCtx->scan_reject_cnt = 0;
 				if (pHddCtx->config->enable_fatal_event) {
 					cds_flush_logs(WLAN_LOG_TYPE_FATAL,
 					   WLAN_LOG_INDICATOR_HOST_DRIVER,
@@ -1998,6 +2003,7 @@ static int __wlan_hdd_cfg80211_scan(struct wiphy *wiphy,
 	pHddCtx->last_scan_reject_timestamp = 0;
 	pHddCtx->last_scan_reject_session_id = 0xFF;
 	pHddCtx->last_scan_reject_reason = 0;
+	pHddCtx->scan_reject_cnt = 0;
 
 	/* Check whether SAP scan can be skipped or not */
 	if (pAdapter->device_mode == QDF_SAP_MODE &&
@@ -2580,7 +2586,7 @@ static int __wlan_hdd_cfg80211_vendor_scan(struct wiphy *wiphy,
 			tb[QCA_WLAN_VENDOR_ATTR_SCAN_FREQUENCIES], tmp)
 			n_channels++;
 	} else {
-		for (band = 0; band < NUM_NL80211_BANDS; band++)
+		for (band = 0; band < HDD_NUM_NL80211_BANDS; band++)
 			if (wiphy->bands[band])
 				n_channels += wiphy->bands[band]->n_channels;
 	}
@@ -2640,7 +2646,7 @@ static int __wlan_hdd_cfg80211_vendor_scan(struct wiphy *wiphy,
 			count++;
 		}
 	} else {
-		for (band = 0; band < NUM_NL80211_BANDS; band++) {
+		for (band = 0; band < HDD_NUM_NL80211_BANDS; band++) {
 			if (!wiphy->bands[band])
 				continue;
 			for (j = 0; j < wiphy->bands[band]->n_channels;
@@ -2682,7 +2688,7 @@ static int __wlan_hdd_cfg80211_vendor_scan(struct wiphy *wiphy,
 				request->ie_len);
 	}
 
-	for (count = 0; count < NUM_NL80211_BANDS; count++)
+	for (count = 0; count < HDD_NUM_NL80211_BANDS; count++)
 		if (wiphy->bands[count])
 			request->rates[count] =
 				(1 << wiphy->bands[count]->n_bitrates) - 1;
@@ -2692,7 +2698,7 @@ static int __wlan_hdd_cfg80211_vendor_scan(struct wiphy *wiphy,
 				    tb[QCA_WLAN_VENDOR_ATTR_SCAN_SUPP_RATES],
 				    tmp) {
 			band = nla_type(attr);
-			if (band >= NUM_NL80211_BANDS)
+			if (band >= HDD_NUM_NL80211_BANDS)
 				continue;
 			if (!wiphy->bands[band])
 				continue;

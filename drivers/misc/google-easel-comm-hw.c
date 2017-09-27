@@ -42,7 +42,7 @@
 #define APP_DMA_CHAN 1
 
 /* timeout for waiting for bootstrap MSI after hotplug */
-#define BOOTSTRAP_TIMEOUT msecs_to_jiffies(2000)
+#define BOOTSTRAP_TIMEOUT_MS 2000
 
 /* Signaled when server sents bootstrap MSI */
 static DECLARE_COMPLETION(bootstrap_done);
@@ -95,6 +95,11 @@ int easelcomm_hw_ap_setup_cmdchans(void)
 	struct mnh_inb_window inbound;
 	struct mnh_outb_region outbound;
 	int ret;
+
+	/* Command channel size shall not exceed the translation region size */
+	BUILD_BUG_ON_MSG(
+		EASELCOMM_CMD_CHANNEL_SIZE > HW_MNH_PCIE_OUTBOUND_SIZE,
+	       "Easelcomm command channel size exceeds translation region");
 
 	ret = mnh_get_rb_base(&easel_cmdchan_dma_addr);
 	if (WARN_ON(ret))
@@ -276,7 +281,7 @@ static int easelcomm_hw_ap_dma_callback(
 }
 
 /* AP/client PCIe ready, EP enumerated, can now use MNH host driver. */
-static int easelcomm_hw_ap_pcie_ready(void)
+static int easelcomm_hw_ap_pcie_ready(unsigned long bootstrap_timeout_jiffies)
 {
 	int ret = 0;
 	uint64_t temp_rb_base_val;
@@ -314,7 +319,7 @@ static int easelcomm_hw_ap_pcie_ready(void)
 	} else if (!temp_rb_base_val) {
 		/* wait for bootstrap completion */
 		ret = wait_for_completion_timeout(&bootstrap_done,
-						  BOOTSTRAP_TIMEOUT);
+					bootstrap_timeout_jiffies);
 		if (!ret) {
 			pr_err("%s: timeout waiting for bootstrap msi\n",
 			       __func__);
@@ -332,15 +337,23 @@ static int easelcomm_hw_ap_pcie_ready(void)
 }
 
 /* Callback on MNH host driver hotplug in/out events. */
-static int easelcomm_hw_ap_hotplug_callback(enum mnh_hotplug_event_t event)
+static int easelcomm_hw_ap_hotplug_callback(enum mnh_hotplug_event_t event,
+					    void *param)
 {
 	int ret = 0;
+	unsigned long timeout_ms = (unsigned long)param;
+	static enum mnh_hotplug_event_t state = MNH_HOTPLUG_OUT;
+
+	if (state == event)
+		return 0;
 
 	switch (event) {
 	case MNH_HOTPLUG_IN:
 		pr_debug("%s: mnh hotplug in\n", __func__);
-		ret = easelcomm_hw_ap_pcie_ready();
-	 break;
+		if (!timeout_ms)
+			timeout_ms = BOOTSTRAP_TIMEOUT_MS;
+		ret = easelcomm_hw_ap_pcie_ready(msecs_to_jiffies(timeout_ms));
+		break;
 	case MNH_HOTPLUG_OUT:
 		pr_debug("%s: mnh hotplug out\n", __func__);
 		reinit_completion(&bootstrap_done);
@@ -351,8 +364,13 @@ static int easelcomm_hw_ap_hotplug_callback(enum mnh_hotplug_event_t event)
 		easelcomm_pcie_hotplug_out();
 		break;
 	default:
+		ret = -EINVAL;
 		break;
 	}
+
+	if (!ret)
+		state = event;
+
 	return ret;
 }
 
@@ -470,6 +488,12 @@ void *easelcomm_hw_build_scatterlist(struct easelcomm_kbuf_desc *buf_desc,
 }
 EXPORT_SYMBOL(easelcomm_hw_build_scatterlist);
 
+int easelcomm_hw_verify_scatterlist(struct easelcomm_dma_xfer_info *xfer)
+{
+	return mnh_sg_verify(xfer->sg_local, xfer->sg_local_size,
+		xfer->sg_local_localdata);
+}
+
 /*
  * Return the number of scatter-gather entries in the MNH SG list.  Used to
  * determine whether both sides require only 1 block and can use single-block
@@ -477,7 +501,10 @@ EXPORT_SYMBOL(easelcomm_hw_build_scatterlist);
  */
 int easelcomm_hw_scatterlist_block_count(uint32_t scatterlist_size)
 {
-	return scatterlist_size / sizeof(struct mnh_sg_entry);
+	if (scatterlist_size == 0)
+		return 0;
+	scatterlist_size /= sizeof(struct mnh_sg_entry);
+	return scatterlist_size - 1; /* subtract the terminator entry */
 }
 EXPORT_SYMBOL(easelcomm_hw_scatterlist_block_count);
 

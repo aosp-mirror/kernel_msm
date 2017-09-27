@@ -694,8 +694,6 @@ void msm_isp47_preprocess_camif_irq(struct vfe_device *vfe_dev,
 {
 	if (irq_status0 & BIT(1))
 		vfe_dev->axi_data.src_info[VFE_PIX_0].accept_frame = false;
-	if (irq_status0 & BIT(0))
-		vfe_dev->axi_data.src_info[VFE_PIX_0].accept_frame = true;
 }
 
 void msm_vfe47_reg_update(struct vfe_device *vfe_dev,
@@ -1573,7 +1571,7 @@ void msm_vfe47_update_camif_state(struct vfe_device *vfe_dev,
 	val = msm_camera_io_r(vfe_dev->vfe_base + 0x47C);
 	if (update_state == ENABLE_CAMIF) {
 		vfe_dev->hw_info->vfe_ops.irq_ops.config_irq(vfe_dev,
-					0x15, 0x91,
+					0x17, 0x91,
 					MSM_ISP_IRQ_ENABLE);
 
 		if ((vfe_dev->hvx_cmd > HVX_DISABLE) &&

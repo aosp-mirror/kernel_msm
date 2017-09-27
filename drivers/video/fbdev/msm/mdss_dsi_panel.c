@@ -1118,14 +1118,26 @@ static int mdss_dsi_panel_low_power_config(struct mdss_panel_data *pdata,
 	pr_debug("%s: ctrl=%pK ndx=%d enable=%d\n", __func__, ctrl, ctrl->ndx,
 		enable);
 
+	if (enable && pinfo->persist_mode == MDSS_PANEL_LOW_PERSIST_MODE_ON) {
+		/* disable low persist mode in low power mode */
+		mdss_dsi_panel_apply_display_setting(pdata,
+					MDSS_PANEL_LOW_PERSIST_MODE_OFF);
+	}
+
 	if (pinfo->alpm_feature_enabled) {
 		enum alpm_mode_type mode;
 
-		/* if enabling LP but not going to ALPM mode, skip */
-		if (!enable || ctrl->alpm_mode != ALPM_MODE_OFF) {
+		/* only switch mode if saved mode is not off */
+		if (ctrl->alpm_mode != ALPM_MODE_OFF) {
 			mode = enable ? ctrl->alpm_mode : ALPM_MODE_OFF;
 			mdss_dsi_panel_set_alpm_mode(ctrl, mode, 0);
 		}
+	}
+
+	if (!enable && pinfo->persist_mode == MDSS_PANEL_LOW_PERSIST_MODE_ON) {
+		/* reenable low persist when coming out of low power mode */
+		mdss_dsi_panel_apply_display_setting(pdata,
+					MDSS_PANEL_LOW_PERSIST_MODE_ON);
 	}
 
 	pr_debug("%s:-\n", __func__);

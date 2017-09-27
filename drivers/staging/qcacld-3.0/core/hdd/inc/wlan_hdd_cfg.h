@@ -4157,6 +4157,39 @@ enum station_keepalive_method {
 #define CFG_NEIGHBOR_LOOKUP_RSSI_THRESHOLD_MAX       (120)
 #define CFG_NEIGHBOR_LOOKUP_RSSI_THRESHOLD_DEFAULT   (78)
 
+/*
+ * <ini>
+ * lookup_threshold_5g_offset - Lookup Threshold offset for 5G band
+ * @Min: -120
+ * @Max: +120
+ * @Default: 0
+ *
+ * This ini is  used to set the 5G band lookup threshold for roaming.
+ * It depends on another INI which is gNeighborLookupThreshold.
+ * gNeighborLookupThreshold is a legacy INI item which will be used to
+ * set the RSSI lookup threshold for both 2G and 5G bands. If the
+ * user wants to setup a different threshold for a 5G band, then user
+ * can use this offset value which will be summed up to the value of
+ * gNeighborLookupThreshold and used for 5G
+ * e.g: gNeighborLookupThreshold = -76dBm
+ *      lookup_threshold_5g_offset = 6dBm
+ *      Then the 5G band will be configured to -76+6 = -70dBm
+ * A default value of Zero to lookup_threshold_5g_offset will keep the
+ * thresholds same for both 2G and 5G bands
+ *
+ * Related: gNeighborLookupThreshold
+ *
+ * Supported Feature: Roaming
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_5G_RSSI_THRESHOLD_OFFSET_NAME      "lookup_threshold_5g_offset"
+#define CFG_5G_RSSI_THRESHOLD_OFFSET_MIN       (-120)
+#define CFG_5G_RSSI_THRESHOLD_OFFSET_MAX       (120)
+#define CFG_5G_RSSI_THRESHOLD_OFFSET_DEFAULT   (0)
+
 #define CFG_DELAY_BEFORE_VDEV_STOP_NAME              "gDelayBeforeVdevStop"
 #define CFG_DELAY_BEFORE_VDEV_STOP_MIN               (2)
 #define CFG_DELAY_BEFORE_VDEV_STOP_MAX               (200)
@@ -8092,6 +8125,20 @@ enum hdd_link_speed_rpt_type {
 #define CFG_FLOW_STEERING_ENABLED_DEFAULT     (0)
 
 /*
+ * Max number of MSDUs per HTT RX IN ORDER INDICATION msg.
+ * Note that this has a direct impact on the size of source CE rings.
+ * It is possible to go below 8, but would require testing; so we are
+ * restricting the lower limit to 8 artificially
+ *
+ * It is recommended that this value is a POWER OF 2.
+ *
+ * Values lower than 8 are for experimental purposes only.
+ */
+#define CFG_MAX_MSDUS_PER_RXIND_NAME          "maxMSDUsPerRxInd"
+#define CFG_MAX_MSDUS_PER_RXIND_MIN           (4)
+#define CFG_MAX_MSDUS_PER_RXIND_MAX           (32)
+#define CFG_MAX_MSDUS_PER_RXIND_DEFAULT       (CFG_MAX_MSDUS_PER_RXIND_MAX)
+/*
  * In static display use case when APPS is in stand alone power save mode enable
  * active offload mode which helps FW to filter out MC/BC data packets to avoid
  * APPS wake up and save more power.
@@ -9127,6 +9174,49 @@ enum dot11p_mode {
 #else
 #define CFG_RX_MODE_DEFAULT  (CFG_ENABLE_RX_THREAD | CFG_ENABLE_NAPI)
 #endif
+
+/*
+ * <ini>
+ * ce_service_max_yield_time - Control to set ce service max yield time (in usec)
+ *
+ * @Min: 500
+ * @Max: 10000
+ * @Default: 10000
+ *
+ * This ini is used to set ce service max yield time (in ms)
+ *
+ * Supported Feature: NAPI
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
+#define CFG_CE_SERVICE_MAX_YIELD_TIME_NAME     "ce_service_max_yield_time"
+#define CFG_CE_SERVICE_MAX_YIELD_TIME_MIN      (500)
+#define CFG_CE_SERVICE_MAX_YIELD_TIME_MAX      (10000)
+#define CFG_CE_SERVICE_MAX_YIELD_TIME_DEFAULT  (10000)
+
+/*
+ * <ini>
+ * ce_service_max_rx_ind_flush - Control to set ce service max rx ind flush
+ *
+ * @Min: 1
+ * @Max: 32
+ * @Default: 1
+ *
+ * This ini is used to set ce service max rx ind flush
+ *
+ * Supported Feature: NAPI
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
+#define CFG_CE_SERVICE_MAX_RX_IND_FLUSH_NAME     "ce_service_max_rx_ind_flush"
+#define CFG_CE_SERVICE_MAX_RX_IND_FLUSH_MIN      (1)
+#define CFG_CE_SERVICE_MAX_RX_IND_FLUSH_MAX      (32)
+#define CFG_CE_SERVICE_MAX_RX_IND_FLUSH_DEFAULT  (32)
+
 
 /* List of RPS CPU maps for different rx queues registered by WLAN driver
  * Ref - Kernel/Documentation/networking/scaling.txt
@@ -11897,6 +11987,7 @@ struct hdd_config {
 	bool tso_enable;
 	bool lro_enable;
 	bool flow_steering_enable;
+	uint8_t max_msdus_per_rxinorderind;
 	bool active_mode_offload;
 	bool bpf_packet_filter_enable;
 	/* parameter for defer timer for enabling TDLS on p2p listen */
@@ -11908,6 +11999,8 @@ struct hdd_config {
 #endif
 	uint8_t dot11p_mode;
 	uint8_t rx_mode;
+	uint32_t ce_service_max_yield_time;
+	uint8_t ce_service_max_rx_ind_flush;
 	uint8_t cpu_map_list[CFG_RPS_RX_QUEUE_CPU_MAP_LIST_LEN];
 #ifdef FEATURE_WLAN_EXTSCAN
 	bool     extscan_enabled;
@@ -12091,7 +12184,6 @@ struct hdd_config {
 	bool is_force_1x1;
 	uint16_t num_11b_tx_chains;
 	uint16_t num_11ag_tx_chains;
-
 	/* LCA(Last connected AP) disallow configs */
 	uint32_t disallow_duration;
 	uint32_t rssi_channel_penalization;
@@ -12102,6 +12194,7 @@ struct hdd_config {
 	uint8_t upper_brssi_thresh;
 	uint8_t lower_brssi_thresh;
 	bool enable_dtim_1chrx;
+	int8_t rssi_thresh_offset_5g;
 };
 
 #define VAR_OFFSET(_Struct, _Var) (offsetof(_Struct, _Var))

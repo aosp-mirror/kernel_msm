@@ -233,6 +233,7 @@ EXPORT_SYMBOL(mnh_ion_stage_firmware);
 int mnh_ion_stage_firmware_update(struct mnh_ion *ion, struct mnh_ion *ion_sec)
 {
 	int err;
+	int i;
 
 	dev_dbg(ion->device, "%s: staging update\n", __func__);
 	if (!ion || !ion_sec || !ion->client ||
@@ -244,6 +245,10 @@ int mnh_ion_stage_firmware_update(struct mnh_ion *ion, struct mnh_ion *ion_sec)
 	if (err)
 		return err;
 
+	for (i = 0; i < MAX_NR_MNH_FW_SLOTS; i++) {
+		ion->fw_array[i].cert_size =
+			ion_sec->fw_array[i].cert_size;
+	}
 	ion->is_fw_ready = true;
 
 	return 0;

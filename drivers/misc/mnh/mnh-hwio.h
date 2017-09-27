@@ -42,9 +42,9 @@ static inline uint32_t mnh_reg_read(uint32_t addr)
 	return data;
 }
 
-static inline void mnh_reg_write(uint32_t addr, uint32_t value)
+static inline int mnh_reg_write(uint32_t addr, uint32_t value)
 {
-	mnh_config_write(addr, 4, value);
+	return mnh_config_write(addr, 4, value);
 }
 
 #define HW_IN(bAddr, mod, reg) \

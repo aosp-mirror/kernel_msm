@@ -1351,6 +1351,14 @@ struct reg_table_entry g_registry_table[] = {
 			     CFG_NEIGHBOR_LOOKUP_RSSI_THRESHOLD_MAX,
 			     cb_notify_set_neighbor_lookup_rssi_threshold, 0),
 
+	REG_VARIABLE(CFG_5G_RSSI_THRESHOLD_OFFSET_NAME,
+		     WLAN_PARAM_SignedInteger, struct hdd_config,
+		     rssi_thresh_offset_5g,
+		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		     CFG_5G_RSSI_THRESHOLD_OFFSET_DEFAULT,
+		     CFG_5G_RSSI_THRESHOLD_OFFSET_MIN,
+		     CFG_5G_RSSI_THRESHOLD_OFFSET_MAX),
+
 	REG_DYNAMIC_VARIABLE(CFG_OPPORTUNISTIC_SCAN_THRESHOLD_DIFF_NAME,
 			     WLAN_PARAM_Integer,
 			     struct hdd_config, nOpportunisticThresholdDiff,
@@ -3578,6 +3586,13 @@ struct reg_table_entry g_registry_table[] = {
 		     CFG_FLOW_STEERING_ENABLED_MIN,
 		     CFG_FLOW_STEERING_ENABLED_MAX),
 
+	REG_VARIABLE(CFG_MAX_MSDUS_PER_RXIND_NAME, WLAN_PARAM_Integer,
+		     struct hdd_config, max_msdus_per_rxinorderind,
+		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		     CFG_MAX_MSDUS_PER_RXIND_DEFAULT,
+		     CFG_MAX_MSDUS_PER_RXIND_MIN,
+		     CFG_MAX_MSDUS_PER_RXIND_MAX),
+
 	REG_VARIABLE(CFG_ACTIVE_MODE_OFFLOAD, WLAN_PARAM_Integer,
 		     struct hdd_config, active_mode_offload,
 		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
@@ -4154,6 +4169,20 @@ struct reg_table_entry g_registry_table[] = {
 		CFG_RX_MODE_DEFAULT,
 		CFG_RX_MODE_MIN,
 		CFG_RX_MODE_MAX),
+
+	REG_VARIABLE(CFG_CE_SERVICE_MAX_YIELD_TIME_NAME, WLAN_PARAM_Integer,
+		struct hdd_config, ce_service_max_yield_time,
+		VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		CFG_CE_SERVICE_MAX_YIELD_TIME_DEFAULT,
+		CFG_CE_SERVICE_MAX_YIELD_TIME_MIN,
+		CFG_CE_SERVICE_MAX_YIELD_TIME_MAX),
+
+	REG_VARIABLE(CFG_CE_SERVICE_MAX_RX_IND_FLUSH_NAME, WLAN_PARAM_Integer,
+		struct hdd_config, ce_service_max_rx_ind_flush,
+		VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		CFG_CE_SERVICE_MAX_RX_IND_FLUSH_DEFAULT,
+		CFG_CE_SERVICE_MAX_RX_IND_FLUSH_MIN,
+		CFG_CE_SERVICE_MAX_RX_IND_FLUSH_MAX),
 
 	REG_VARIABLE_STRING(CFG_RPS_RX_QUEUE_CPU_MAP_LIST_NAME,
 				 WLAN_PARAM_String,
@@ -5758,6 +5787,9 @@ void hdd_cfg_print(hdd_context_t *pHddCtx)
 
 	hdd_debug("Name = [nNeighborLookupRssiThreshold] Value = [%u] ",
 		  pHddCtx->config->nNeighborLookupRssiThreshold);
+	hdd_debug("Name = [%s] Value = [%d] ",
+		  CFG_5G_RSSI_THRESHOLD_OFFSET_NAME,
+		  pHddCtx->config->rssi_thresh_offset_5g);
 	hdd_debug("Name = [delay_before_vdev_stop] Value = [%u] ",
 		  pHddCtx->config->delay_before_vdev_stop);
 	hdd_debug("Name = [nOpportunisticThresholdDiff] Value = [%u] ",
@@ -6032,6 +6064,12 @@ void hdd_cfg_print(hdd_context_t *pHddCtx)
 		  pHddCtx->config->tso_enable);
 	hdd_debug("Name = [LROEnable] value = [%d]",
 		  pHddCtx->config->lro_enable);
+	hdd_debug("Name = [%s] value = [%d]",
+		  CFG_FLOW_STEERING_ENABLED_NAME,
+		  pHddCtx->config->flow_steering_enable);
+	hdd_debug("Name = [%s] value = [%d]",
+		  CFG_MAX_MSDUS_PER_RXIND_NAME,
+		  pHddCtx->config->max_msdus_per_rxinorderind);
 	hdd_debug("Name = [active_mode_offload] value = [%d]",
 		  pHddCtx->config->active_mode_offload);
 	hdd_debug("Name = [gfine_time_meas_cap] value = [%u]",
@@ -6044,6 +6082,12 @@ void hdd_cfg_print(hdd_context_t *pHddCtx)
 		  pHddCtx->config->max_scan_count);
 	hdd_debug("Name = [%s] value = [%d]",
 		  CFG_RX_MODE_NAME, pHddCtx->config->rx_mode);
+	hdd_debug("Name = [%s] value = [%d]",
+		  CFG_CE_SERVICE_MAX_YIELD_TIME_NAME,
+		  pHddCtx->config->ce_service_max_yield_time);
+	hdd_debug("Name = [%s] value = [%d]",
+		  CFG_CE_SERVICE_MAX_RX_IND_FLUSH_NAME,
+		  pHddCtx->config->ce_service_max_rx_ind_flush);
 	hdd_debug("Name = [%s] Value = [%u]",
 		  CFG_CE_CLASSIFY_ENABLE_NAME,
 		  pHddCtx->config->ce_classify_enabled);
@@ -6343,7 +6387,10 @@ void hdd_cfg_print(hdd_context_t *pHddCtx)
 		pHddCtx->config->lower_brssi_thresh);
 	hdd_debug("Name = [%s] value = [%u]",
 		CFG_DTIM_1CHRX_ENABLE_NAME,
-	pHddCtx->config->enable_dtim_1chrx);
+		pHddCtx->config->enable_dtim_1chrx);
+	hdd_debug("Name = [%s] value = [%u]",
+		CFG_DOT11P_MODE_NAME,
+		pHddCtx->config->dot11p_mode);
 }
 
 /**
@@ -7763,6 +7810,8 @@ QDF_STATUS hdd_set_sme_config(hdd_context_t *pHddCtx)
 	}
 	smeConfig->csrConfig.neighborRoamConfig.nNeighborLookupRssiThreshold =
 		pConfig->nNeighborLookupRssiThreshold;
+	smeConfig->csrConfig.neighborRoamConfig.rssi_thresh_offset_5g =
+		pConfig->rssi_thresh_offset_5g;
 	smeConfig->csrConfig.neighborRoamConfig.delay_before_vdev_stop =
 		pConfig->delay_before_vdev_stop;
 	smeConfig->csrConfig.neighborRoamConfig.nOpportunisticThresholdDiff =

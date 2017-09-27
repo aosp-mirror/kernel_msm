@@ -522,6 +522,13 @@ static int easelcomm_client_handle_dma_request(
 	if (msg_metadata->dma_xfer.xfer_type == EASELCOMM_DMA_XFER_ABORT)
 		return dma_dir == EASELCOMM_DMA_DIR_TO_CLIENT ? -EIO : 0;
 
+	/* Sanity check that list is properly terminated */
+	if (easelcomm_hw_verify_scatterlist(&msg_metadata->dma_xfer)) {
+		dev_err(easelcomm_miscdev.this_device,
+			"sg fails verification\n");
+		goto abort;
+	}
+
 	/* Single-Block or Multi-Block DMA? */
 	if (msg_metadata->dma_xfer.xfer_type == EASELCOMM_DMA_XFER_SBLK) {
 		/* Perform the SBLK DMA transfer */
@@ -559,9 +566,10 @@ int easelcomm_receive_dma(
 	int ret = 0;
 
 	dev_dbg(easelcomm_miscdev.this_device,
-			"RECVDMA msg %u:r%llu buf_type=%d dma_buf_fd=%d\n",
+			"RECVDMA msg %u:r%llu buf_type=%d buf_size=%u dma_buf_fd=%d\n",
 			service->service_id, buf_desc->message_id,
-			buf_desc->buf_type, buf_desc->dma_buf_fd);
+			buf_desc->buf_type, buf_desc->buf_size,
+			buf_desc->dma_buf_fd);
 
 	msg_metadata =
 		easelcomm_find_remote_message(service, buf_desc->message_id);
@@ -648,9 +656,10 @@ int easelcomm_send_dma(
 	int ret = 0;
 
 	dev_dbg(easelcomm_miscdev.this_device,
-			"SENDDMA msg %u:l%llu buf_type=%d dma_buf_fd=%d\n",
+			"SENDDMA msg %u:l%llu buf_type=%d buf_size=%u dma_buf_fd=%d\n",
 			service->service_id, buf_desc->message_id,
-			buf_desc->buf_type, buf_desc->dma_buf_fd);
+			buf_desc->buf_type, buf_desc->buf_size,
+			buf_desc->dma_buf_fd);
 
 	msg_metadata =
 		easelcomm_find_local_message(service, buf_desc->message_id);

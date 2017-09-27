@@ -25,20 +25,37 @@
 
 #define REF_FREQ_KHZ    25000
 
-#define TOP_IN(reg)             HW_IN(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, reg)
-#define TOP_MASK(reg, fld)      HWIO_MIPI_TOP_##reg##_##fld##_FLDMASK
-#define TOP_OUTf(reg, fld, val) \
-	HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, reg, fld, val)
-#define TOP_OUTf_LOCAL(reg, fld, val, curr) \
-			((curr & ~HWIO_MIPI_TOP_##reg##_##fld##_FLDMASK) | \
-			((val << HWIO_MIPI_TOP_##reg##_##fld##_FLDSHFT) & \
-			HWIO_MIPI_TOP_##reg##_##fld##_FLDMASK))
+#define TOP_IN(reg) \
+	HW_IN(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, reg)
+#define TOP_MASK(reg, fld) \
+	HWIO_MIPI_TOP_##reg##_##fld##_FLDMASK
+#define TOP_OUT(...) \
+	HW_OUT(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, __VA_ARGS__)
+#define TOP_OUTf(...) \
+	HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, __VA_ARGS__)
 
-#define TX_IN(reg)		HW_IN(baddr,   MIPI_TX, reg)
-#define TX_MASK(reg, fld)	HWIO_MIPI_TX_##reg##_##fld##_FLDMASK
+#define TX_IN(device, reg) \
+	HW_IN(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, reg)
+#define TX_MASK(reg, fld) \
+	HWIO_MIPI_TX_##reg##_##fld##_FLDMASK
+#define TX_OUT(device, ...) \
+	HW_OUT(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, __VA_ARGS__)
+#define TX_OUTf(device, ...) \
+	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, __VA_ARGS__)
 
-#define RX_IN(reg)		HW_IN(baddr,   MIPI_RX, reg)
-#define RX_MASK(reg, fld)	HWIO_MIPI_RX_##reg##_##fld##_FLDMASK
+#define RX_IN(device, reg) \
+	HW_IN(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, reg)
+#define RX_MASK(reg, fld) \
+	HWIO_MIPI_RX_##reg##_##fld##_FLDMASK
+#define RX_OUT(device, ...) \
+	HW_OUT(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, __VA_ARGS__)
+#define RX_OUTf(device, ...) \
+	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, __VA_ARGS__)
+
+#define TX_DPHY_OUT(...) \
+	mnh_sm_mipi_tx_dphy_write_gen3(__VA_ARGS__)
+#define RX_DPHY_OUT(...) \
+	mnh_sm_mipi_rx_dphy_write_gen3(__VA_ARGS__)
 
 struct mipi_rate_config {
 	uint32_t rate;
@@ -181,92 +198,58 @@ static struct mipi_dev_ovr_cfg mipi_dev_ovr_cfgs[] = {
 static int mipi_debug;
 
 static void mnh_sm_mipi_rx_dphy_write_gen3(int command, int data,
-					   uint32_t device)
+					  uint32_t device)
 {
 	/* Write 4-bit testcode MSB */
-	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL0,
-		PHY_TESTCLK, 0);
-	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL1,
-		PHY_TESTEN, 0);
-	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL1,
-		PHY_TESTEN, 1);
-	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL0,
-		PHY_TESTCLK, 1);
-	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL1,
-		PHY_TESTDIN, 0);
-	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL0,
-		PHY_TESTCLK, 0);
-	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL1,
-		PHY_TESTEN, 0);
-	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL1,
-		PHY_TESTDIN, ((command & 0xF00) >> 8));
-	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL0,
-		PHY_TESTCLK, 1);
+	RX_OUTf(device, PHY_TEST_CTRL0, PHY_TESTCLK, 0);
+	RX_OUTf(device, PHY_TEST_CTRL1, PHY_TESTEN, 0);
+	RX_OUTf(device, PHY_TEST_CTRL1, PHY_TESTEN, 1);
+	RX_OUTf(device, PHY_TEST_CTRL0, PHY_TESTCLK, 1);
+	RX_OUTf(device, PHY_TEST_CTRL1, PHY_TESTDIN, 0);
+	RX_OUTf(device, PHY_TEST_CTRL0, PHY_TESTCLK, 0);
+	RX_OUTf(device, PHY_TEST_CTRL1, PHY_TESTEN, 0);
+	RX_OUTf(device, PHY_TEST_CTRL1, PHY_TESTDIN, ((command & 0xF00) >> 8));
+	RX_OUTf(device, PHY_TEST_CTRL0, PHY_TESTCLK, 1);
 
 	/* Write 8-bit testcode LSB */
-	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL0,
-		PHY_TESTCLK, 0);
-	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL1,
-		PHY_TESTEN, 1);
-	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL0,
-		PHY_TESTCLK, 1);
-	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL1,
-		PHY_TESTDIN, (command & 0xFF));
-	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL0,
-		PHY_TESTCLK, 0);
-	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL1,
-		PHY_TESTEN, 0);
+	RX_OUTf(device, PHY_TEST_CTRL0, PHY_TESTCLK, 0);
+	RX_OUTf(device, PHY_TEST_CTRL1, PHY_TESTEN, 1);
+	RX_OUTf(device, PHY_TEST_CTRL0, PHY_TESTCLK, 1);
+	RX_OUTf(device, PHY_TEST_CTRL1, PHY_TESTDIN, (command & 0xFF));
+	RX_OUTf(device, PHY_TEST_CTRL0, PHY_TESTCLK, 0);
+	RX_OUTf(device, PHY_TEST_CTRL1, PHY_TESTEN, 0);
 
 	/* Write the data */
-	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL1,
-		PHY_TESTDIN, data);
-	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL0,
-		PHY_TESTCLK, 1);
+	RX_OUTf(device, PHY_TEST_CTRL1, PHY_TESTDIN, data);
+	RX_OUTf(device, PHY_TEST_CTRL0, PHY_TESTCLK, 1);
 	udelay(1);
 }
 
 static void mnh_sm_mipi_tx_dphy_write_gen3(int command, int data,
-					   uint32_t device)
+					  uint32_t device)
 {
 	/* Write 4-bit testcode MSB */
-	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY0_TST_CTRL0,
-		PHY0_TESTCLK, 0);
-	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY0_TST_CTRL1,
-		PHY0_TESTEN, 0);
-	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY0_TST_CTRL1,
-		PHY0_TESTEN, 1);
-	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY0_TST_CTRL0,
-		PHY0_TESTCLK, 1);
-	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY0_TST_CTRL1,
-		PHY0_TESTDIN, 0);
-	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY0_TST_CTRL0,
-		PHY0_TESTCLK, 0);
-	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY0_TST_CTRL1,
-		PHY0_TESTEN, 0);
-	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY0_TST_CTRL1,
-		PHY0_TESTDIN, ((command & 0xF00) >> 8));
-	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY0_TST_CTRL0,
-		PHY0_TESTCLK, 1);
+	TX_OUTf(device, PHY0_TST_CTRL0, PHY0_TESTCLK, 0);
+	TX_OUTf(device, PHY0_TST_CTRL1, PHY0_TESTEN, 0);
+	TX_OUTf(device, PHY0_TST_CTRL1, PHY0_TESTEN, 1);
+	TX_OUTf(device, PHY0_TST_CTRL0, PHY0_TESTCLK, 1);
+	TX_OUTf(device, PHY0_TST_CTRL1, PHY0_TESTDIN, 0);
+	TX_OUTf(device, PHY0_TST_CTRL0, PHY0_TESTCLK, 0);
+	TX_OUTf(device, PHY0_TST_CTRL1, PHY0_TESTEN, 0);
+	TX_OUTf(device, PHY0_TST_CTRL1, PHY0_TESTDIN, ((command & 0xF00) >> 8));
+	TX_OUTf(device, PHY0_TST_CTRL0, PHY0_TESTCLK, 1);
 
 	/* Write 8-bit testcode LSB */
-	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY0_TST_CTRL0,
-		PHY0_TESTCLK, 0);
-	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY0_TST_CTRL1,
-		PHY0_TESTEN, 1);
-	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY0_TST_CTRL0,
-		PHY0_TESTCLK, 1);
-	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY0_TST_CTRL1,
-		PHY0_TESTDIN, (command & 0xFF));
-	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY0_TST_CTRL0,
-		PHY0_TESTCLK, 0);
-	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY0_TST_CTRL1,
-		PHY0_TESTEN, 0);
+	TX_OUTf(device, PHY0_TST_CTRL0, PHY0_TESTCLK, 0);
+	TX_OUTf(device, PHY0_TST_CTRL1, PHY0_TESTEN, 1);
+	TX_OUTf(device, PHY0_TST_CTRL0, PHY0_TESTCLK, 1);
+	TX_OUTf(device, PHY0_TST_CTRL1, PHY0_TESTDIN, (command & 0xFF));
+	TX_OUTf(device, PHY0_TST_CTRL0, PHY0_TESTCLK, 0);
+	TX_OUTf(device, PHY0_TST_CTRL1, PHY0_TESTEN, 0);
 
 	/* Write the data */
-	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY0_TST_CTRL1,
-		PHY0_TESTDIN, data);
-	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY0_TST_CTRL0,
-		PHY0_TESTCLK, 1);
+	TX_OUTf(device, PHY0_TST_CTRL1, PHY0_TESTDIN, data);
+	TX_OUTf(device, PHY0_TST_CTRL0, PHY0_TESTCLK, 1);
 
 	udelay(1);
 }
@@ -276,21 +259,21 @@ static void mnh_mipi_gen3_lprxpon_wa(struct device *dev, u32 device, int enable)
 {
 	dev_dbg(dev, "%s: dev %d\n", __func__, device);
 	if (enable == 1) {
-		mnh_sm_mipi_rx_dphy_write_gen3(0x1AE, 0x07, device);
-		mnh_sm_mipi_rx_dphy_write_gen3(0x1AD, 0xe0, device);
-		mnh_sm_mipi_rx_dphy_write_gen3(0x305, 0x06, device);
-		mnh_sm_mipi_rx_dphy_write_gen3(0x505, 0x06, device);
-		mnh_sm_mipi_rx_dphy_write_gen3(0x705, 0x06, device);
-		mnh_sm_mipi_rx_dphy_write_gen3(0x905, 0x06, device);
-		mnh_sm_mipi_rx_dphy_write_gen3(0xB05, 0x06, device);
+		RX_DPHY_OUT(0x1AE, 0x07, device);
+		RX_DPHY_OUT(0x1AD, 0xe0, device);
+		RX_DPHY_OUT(0x305, 0x06, device);
+		RX_DPHY_OUT(0x505, 0x06, device);
+		RX_DPHY_OUT(0x705, 0x06, device);
+		RX_DPHY_OUT(0x905, 0x06, device);
+		RX_DPHY_OUT(0xB05, 0x06, device);
 	} else {
-		mnh_sm_mipi_rx_dphy_write_gen3(0x1AE, 0x00, device);
-		mnh_sm_mipi_rx_dphy_write_gen3(0x1AD, 0x00, device);
-		mnh_sm_mipi_rx_dphy_write_gen3(0x305, 0x00, device);
-		mnh_sm_mipi_rx_dphy_write_gen3(0x505, 0x00, device);
-		mnh_sm_mipi_rx_dphy_write_gen3(0x705, 0x00, device);
-		mnh_sm_mipi_rx_dphy_write_gen3(0x905, 0x00, device);
-		mnh_sm_mipi_rx_dphy_write_gen3(0xB05, 0x00, device);
+		RX_DPHY_OUT(0x1AE, 0x00, device);
+		RX_DPHY_OUT(0x1AD, 0x00, device);
+		RX_DPHY_OUT(0x305, 0x00, device);
+		RX_DPHY_OUT(0x505, 0x00, device);
+		RX_DPHY_OUT(0x705, 0x00, device);
+		RX_DPHY_OUT(0x905, 0x00, device);
+		RX_DPHY_OUT(0xB05, 0x00, device);
 	}
 }
 
@@ -307,108 +290,100 @@ static int mnh_mipi_gen3_lookup_freq_code(uint32_t rate)
 			return i - 1;
 	}
 
-	return i;
+	return i - 1;
 }
 
 static int mnh_mipi_gen3_lookup_device_cfg_idx(uint32_t rate)
 {
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(mipi_dev_ovr_cfgs); i++)
-		if (rate == mipi_dev_ovr_cfgs[i].rate)
-			return i;
+	if ((rate < mipi_dev_ovr_cfgs[0].rate) ||
+	    (rate > mipi_dev_ovr_cfgs[ARRAY_SIZE(mipi_dev_ovr_cfgs)-1].rate))
+		return -EINVAL;
 
-	return -EINVAL;
+	for (i = 0; i < ARRAY_SIZE(mipi_dev_ovr_cfgs); i++) {
+		if (rate <= mipi_dev_ovr_cfgs[i].rate)
+			return i;
+	}
+
+	return i - 1;
 }
 
-static void mnh_mipi_gen3_host(struct device *dev, uint32_t device,
+static int mnh_mipi_gen3_host(struct device *dev, uint32_t device,
 			       uint32_t rate)
 {
 	uint32_t code_index, freq_range_code, osc_freq_code;
 
 	/* only support devices 0-2 */
 	if (device > 2)
-		return;
+		return -EINVAL;
 
 	dev_dbg(dev, "%s: dev %d, rate %d\n", __func__, device, rate);
 
-	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, N_LANES, N_LANES, 0x0);
+	RX_OUTf(device, N_LANES, N_LANES, 0x0);
 
 	/* clear interrupts */
-	HW_OUT(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, INT_MSK_PHY_FATAL,
-	       0xFFFFFFFF);
-	HW_OUT(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, INT_MSK_PKT_FATAL,
-	       0xFFFFFFFF);
-	HW_OUT(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, INT_MSK_FRAME_FATAL,
-	       0xFFFFFFFF);
-	HW_OUT(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, INT_MSK_PHY,
-	       0xFFFFFFFF);
-	HW_OUT(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, INT_MSK_PKT,
-	       0xFFFFFFFF);
-	HW_OUT(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, INT_MSK_LINE,
-	       0xFFFFFFFF);
+	RX_OUT(device, INT_MSK_PHY_FATAL, 0xFFFFFFFF);
+	RX_OUT(device, INT_MSK_PKT_FATAL, 0xFFFFFFFF);
+	RX_OUT(device, INT_MSK_FRAME_FATAL, 0xFFFFFFFF);
+	RX_OUT(device, INT_MSK_PHY, 0xFFFFFFFF);
+	RX_OUT(device, INT_MSK_PKT, 0xFFFFFFFF);
+	RX_OUT(device, INT_MSK_LINE, 0xFFFFFFFF);
 
 	/* enable clock to controller */
 	if (device == 0)
-		HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, CSI_CLK_CTRL,
-			CSI2_RX0_CG, 0x0);
+		TOP_OUTf(CSI_CLK_CTRL, CSI2_RX0_CG, 0x0);
 	else if (device == 1)
-		HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, CSI_CLK_CTRL,
-			CSI2_RX1_CG, 0x0);
+		TOP_OUTf(CSI_CLK_CTRL, CSI2_RX1_CG, 0x0);
 	else
-		HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, CSI_CLK_CTRL,
-			CSI2_RX2_CG, 0x0);
+		TOP_OUTf(CSI_CLK_CTRL, CSI2_RX2_CG, 0x0);
 
 	/* disable the PHY before changing settings */
-	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_SHUTDOWNZ,
-		PHY_SHUTDOWNZ, 0x0);
-	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, DPHY_RSTZ, DPHY_RSTZ,
-		0x0);
-	HW_OUT(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL0, 0x1);
+	RX_OUTf(device, PHY_SHUTDOWNZ, PHY_SHUTDOWNZ, 0x0);
+	RX_OUTf(device, DPHY_RSTZ, DPHY_RSTZ, 0x0);
+	RX_OUT(device, PHY_TEST_CTRL0, 0x1);
 	udelay(1);
-	HW_OUT(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_TEST_CTRL0, 0x0);
+	RX_OUT(device, PHY_TEST_CTRL0, 0x0);
 
 	/* get the PHY settings */
 	code_index = mnh_mipi_gen3_lookup_freq_code(rate);
+	if (code_index < 0)
+		return -EINVAL;
 	freq_range_code = mipi_rate_configs[code_index].freq_range_code;
 	osc_freq_code = mipi_rate_configs[code_index].osc_freq_code;
 
 	/* update PHY configuration */
 	if (device == 0)
-		HW_OUT(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, RX0_DPHY_CONFIG,
-		       0x8400 | freq_range_code);
+		TOP_OUT(RX0_DPHY_CONFIG, 0x8400 | freq_range_code);
 	else if (device == 1)
-		HW_OUT(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, RX1_DPHY_CONFIG,
-		       0x8400 | freq_range_code);
+		TOP_OUT(RX1_DPHY_CONFIG, 0x8400 | freq_range_code);
 	else
-		HW_OUT(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, RX2_DPHY_CONFIG,
-		       0x8400 | freq_range_code);
+		TOP_OUT(RX2_DPHY_CONFIG, 0x8400 | freq_range_code);
 
 	/* update PHY PLL settings */
-	mnh_sm_mipi_rx_dphy_write_gen3(0xe2, osc_freq_code & 0xFF, device);
-	mnh_sm_mipi_rx_dphy_write_gen3(0xe3, osc_freq_code >> 8, device);
-	mnh_sm_mipi_rx_dphy_write_gen3(0xe4, 0x01, device);
-	mnh_sm_mipi_rx_dphy_write_gen3(0x08, 0x20, device);
+	RX_DPHY_OUT(0xe2, osc_freq_code & 0xFF, device);
+	RX_DPHY_OUT(0xe3, osc_freq_code >> 8, device);
+	RX_DPHY_OUT(0xe4, 0x01, device);
+	RX_DPHY_OUT(0x08, 0x20, device);
 	udelay(1);
 
-	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, N_LANES, N_LANES, 0x3);
+	RX_OUTf(device, N_LANES, N_LANES, 0x3);
 	udelay(1);
 
 	/* b/63578602 */
 	mnh_mipi_gen3_lprxpon_wa(dev, device, 1);
 
 	/* release reset */
-	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, PHY_SHUTDOWNZ,
-		PHY_SHUTDOWNZ, 0x1);
+	RX_OUTf(device, PHY_SHUTDOWNZ, PHY_SHUTDOWNZ, 0x1);
 	udelay(20);
-	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, DPHY_RSTZ, DPHY_RSTZ,
-		0x1);
-	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(device), MIPI_RX, CSI2_RESETN,
-		CSI2_RESETN, 0x1);
+	RX_OUTf(device, DPHY_RSTZ, DPHY_RSTZ, 0x1);
+	RX_OUTf(device, CSI2_RESETN, CSI2_RESETN, 0x1);
 
 	udelay(30);
 
 	mnh_mipi_gen3_lprxpon_wa(dev, device, 0);
+
+	return 0;
 }
 
 static uint8_t mnh_mipi_get_vco_cntrl(uint32_t rate)
@@ -474,8 +449,8 @@ static void mnh_mipi_get_pll_coeffs(uint32_t rate, uint16_t *m, uint8_t *n)
 	*n = best_n;
 }
 
-static void mnh_mipi_gen3_device(struct device *dev, uint32_t device,
-				 uint32_t rate)
+static int mnh_mipi_gen3_device(struct device *dev, uint32_t device,
+				uint32_t rate)
 {
 	uint32_t code_index, freq_range_code, osc_freq_code;
 	struct mipi_dev_ovr_cfg *dev_ovr_cfg;
@@ -530,88 +505,73 @@ static void mnh_mipi_gen3_device(struct device *dev, uint32_t device,
 
 	/* only support devices 0-1 */
 	if (device > 1)
-		return;
+		return -EINVAL;
 
 	if (device == 0)
-		HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, CSI_CLK_CTRL,
-			CSI2_TX0_CG, 0x0);
+		TOP_OUTf(CSI_CLK_CTRL, CSI2_TX0_CG, 0x0);
 	else
-		HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, CSI_CLK_CTRL,
-			CSI2_TX1_CG, 0x0);
+		TOP_OUTf(CSI_CLK_CTRL, CSI2_TX1_CG, 0x0);
 
 	/* mipicsi_device_hw_init */
-	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY_RSTZ,
-		PHY_SHUTDOWNZ, 0x1);
+	TX_OUTf(device, PHY_RSTZ, PHY_SHUTDOWNZ, 0x1);
 
 	/* mipicsi_device_dphy_reset */
-	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY_RSTZ, PHY_RSTZ,
-		0x1);
+	TX_OUTf(device, PHY_RSTZ, PHY_RSTZ, 0x1);
 	udelay(1000);
-	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY_RSTZ, PHY_RSTZ,
-		0x0);
-	HW_OUT(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, CSI2_RESETN, 0x0);
+	TX_OUTf(device, PHY_RSTZ, PHY_RSTZ, 0x0);
+	TX_OUT(device, CSI2_RESETN, 0x0);
 	udelay(1);
-	HW_OUT(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, CSI2_RESETN, 0x1);
-	HW_OUT(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, INT_MASK_N_VPG,
-	       0xFFFFFFFF);
-	HW_OUT(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, INT_MASK_N_IDI,
-	       0xFFFFFFFF);
-	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY_RSTZ,
-		PHY_SHUTDOWNZ,
-		0x0);
+	TX_OUT(device, CSI2_RESETN, 0x1);
+	TX_OUT(device, INT_MASK_N_VPG, 0xFFFFFFFF);
+	TX_OUT(device, INT_MASK_N_IDI, 0xFFFFFFFF);
+	TX_OUTf(device, PHY_RSTZ, PHY_SHUTDOWNZ, 0x0);
 
 	/* disable clock gating */
 	if (device == 0) {
-		HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, TX0_DPHY_PLL_CNTRL,
-			PLL_SHADOW_CONTROL, 0x1);
-		HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, TX0_DPHY_PLL_CNTRL,
-			CLK_SEL, 0x1);
+		TOP_OUTf(TX0_DPHY_PLL_CNTRL, PLL_SHADOW_CONTROL, 0x1);
+		TOP_OUTf(TX0_DPHY_PLL_CNTRL, CLK_SEL, 0x1);
 	} else {
-		HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, TX1_DPHY_PLL_CNTRL,
-			PLL_SHADOW_CONTROL, 0x1);
-		HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, TX1_DPHY_PLL_CNTRL,
-			CLK_SEL, 0x1);
+		TOP_OUTf(TX1_DPHY_PLL_CNTRL, PLL_SHADOW_CONTROL, 0x1);
+		TOP_OUTf(TX1_DPHY_PLL_CNTRL, CLK_SEL, 0x1);
 	}
 
 	/* disable the PHY before changing settings */
-	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, CSI2_RESETN,
-		CSI2_RESETN_RW, 1);
-	HW_OUT(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY_RSTZ, 0x0);
-	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY_RSTZ,
-		PHY_ENABLECLK, 1);
-	HW_OUT(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY0_TST_CTRL0, 0x1);
+	TX_OUTf(device, CSI2_RESETN, CSI2_RESETN_RW, 1);
+	TX_OUT(device, PHY_RSTZ, 0x0);
+	TX_OUTf(device, PHY_RSTZ, PHY_ENABLECLK, 1);
+	TX_OUT(device, PHY0_TST_CTRL0, 0x1);
 	udelay(1);
-	HW_OUT(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY0_TST_CTRL0, 0x0);
+	TX_OUT(device, PHY0_TST_CTRL0, 0x0);
 
 	/* get the PHY settings */
 	code_index = mnh_mipi_gen3_lookup_freq_code(rate);
+	if (code_index < 0)
+		return -EINVAL;
 	freq_range_code = mipi_rate_configs[code_index].freq_range_code;
 	osc_freq_code = mipi_rate_configs[code_index].osc_freq_code;
 
 	/* update PHY configuration */
 	if (device == 0)
-		HW_OUT(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, TX0_DPHY_CONFIG,
-		       0x8400 | freq_range_code);
+		TOP_OUT(TX0_DPHY_CONFIG, 0x8400 | freq_range_code);
 	else
-		HW_OUT(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, TX1_DPHY_CONFIG,
-		       0x8400 | freq_range_code);
+		TOP_OUT(TX1_DPHY_CONFIG, 0x8400 | freq_range_code);
 
 	/* configure slew rate calibration */
 	if (rate > 1500) {
-		mnh_sm_mipi_tx_dphy_write_gen3(0x26B, 0x44, device);
-		mnh_sm_mipi_tx_dphy_write_gen3(0x272, 0x00, device);
+		TX_DPHY_OUT(0x26B, 0x44, device);
+		TX_DPHY_OUT(0x272, 0x00, device);
 	} else if (rate > 1000) {
-		mnh_sm_mipi_tx_dphy_write_gen3(0x270, 0xD0, device);
-		mnh_sm_mipi_tx_dphy_write_gen3(0x271, 0x07, device);
-		mnh_sm_mipi_tx_dphy_write_gen3(0x272, 0x10, device);
+		TX_DPHY_OUT(0x270, 0xD0, device);
+		TX_DPHY_OUT(0x271, 0x07, device);
+		TX_DPHY_OUT(0x272, 0x10, device);
 	} else if (rate > 500) {
-		mnh_sm_mipi_tx_dphy_write_gen3(0x270, 0xE2, device);
-		mnh_sm_mipi_tx_dphy_write_gen3(0x271, 0x04, device);
-		mnh_sm_mipi_tx_dphy_write_gen3(0x272, 0x11, device);
+		TX_DPHY_OUT(0x270, 0xE2, device);
+		TX_DPHY_OUT(0x271, 0x04, device);
+		TX_DPHY_OUT(0x272, 0x11, device);
 	} else {
-		mnh_sm_mipi_tx_dphy_write_gen3(0x270, 0x84, device);
-		mnh_sm_mipi_tx_dphy_write_gen3(0x271, 0x03, device);
-		mnh_sm_mipi_tx_dphy_write_gen3(0x272, 0x11, device);
+		TX_DPHY_OUT(0x270, 0x84, device);
+		TX_DPHY_OUT(0x271, 0x03, device);
+		TX_DPHY_OUT(0x272, 0x11, device);
 	}
 
 	/* get PLL coefficients and codes */
@@ -620,6 +580,8 @@ static void mnh_mipi_gen3_device(struct device *dev, uint32_t device,
 
 	/* mipi device configuration settings from lookup table */
 	mipi_dev_cfg_index = mnh_mipi_gen3_lookup_device_cfg_idx(rate);
+	if (mipi_dev_cfg_index < 0)
+		return -EINVAL;
 	dev_ovr_cfg = &mipi_dev_ovr_cfgs[mipi_dev_cfg_index];
 	dev_dbg(dev, "%s: Device configuration index: %d\n", __func__,
 		mipi_dev_cfg_index);
@@ -629,93 +591,73 @@ static void mnh_mipi_gen3_device(struct device *dev, uint32_t device,
 	pll_n -= 1;
 
 	/* configure PLL frequency multiplication and division factors */
-	mnh_sm_mipi_tx_dphy_write_gen3(0x17B, ((vco_cntrl & 0x3F) << 1) | 0x81,
+	TX_DPHY_OUT(0x17B, ((vco_cntrl & 0x3F) << 1) | 0x81,
 				       device);
-	mnh_sm_mipi_tx_dphy_write_gen3(0x178, 0x80 | ((pll_n & 0xF) << 3),
+	TX_DPHY_OUT(0x178, 0x80 | ((pll_n & 0xF) << 3),
 				       device);
-	mnh_sm_mipi_tx_dphy_write_gen3(0x179, pll_m & 0xFF, device);
-	mnh_sm_mipi_tx_dphy_write_gen3(0x17A, (pll_m >> 8) & 0x3, device);
+	TX_DPHY_OUT(0x179, pll_m & 0xFF, device);
+	TX_DPHY_OUT(0x17A, (pll_m >> 8) & 0x3, device);
 
 	/* configure rate-independent PLL settings */
-	mnh_sm_mipi_tx_dphy_write_gen3(0x15E, 0x10, device);
-	mnh_sm_mipi_tx_dphy_write_gen3(0x162, 0x04, device);
-	mnh_sm_mipi_tx_dphy_write_gen3(0x16E, 0x0C, device);
-	mnh_sm_mipi_tx_dphy_write_gen3(0x173, 0x02, device);
-	mnh_sm_mipi_tx_dphy_write_gen3(0x174, 0x00, device);
-	mnh_sm_mipi_tx_dphy_write_gen3(0x175, 0x60, device);
-	mnh_sm_mipi_tx_dphy_write_gen3(0x176, 0x03, device);
+	TX_DPHY_OUT(0x15E, 0x10, device);
+	TX_DPHY_OUT(0x162, 0x04, device);
+	TX_DPHY_OUT(0x16E, 0x0C, device);
+	TX_DPHY_OUT(0x173, 0x02, device);
+	TX_DPHY_OUT(0x174, 0x00, device);
+	TX_DPHY_OUT(0x175, 0x60, device);
+	TX_DPHY_OUT(0x176, 0x03, device);
 
 	/* TODO: Maybe do a read-modify-write */
 	if (rate <= 450)
-		mnh_sm_mipi_tx_dphy_write_gen3(0x1AC, 1 << 4, device);
+		TX_DPHY_OUT(0x1AC, 1 << 4, device);
 
 	/* Wait for 15ns */
 	udelay(1);
 
 	/* Timing register overrides */
 	if (!mipi_debug && dev_ovr_cfg->use_ovrd) {
-		mnh_sm_mipi_tx_dphy_write_gen3(0x5A, dev_ovr_cfg->reg_0x5A,
-					       device);
-		mnh_sm_mipi_tx_dphy_write_gen3(0x5B, dev_ovr_cfg->reg_0x5B,
-					       device);
-		mnh_sm_mipi_tx_dphy_write_gen3(0x5C, dev_ovr_cfg->reg_0x5C,
-					       device);
-		mnh_sm_mipi_tx_dphy_write_gen3(0x5D, dev_ovr_cfg->reg_0x5D,
-					       device);
-		/*
-		 * mnh_sm_mipi_tx_dphy_write_gen3(0x5E, dev_ovr_cfg->reg_0x5E,
-		 * device);
-		 */
-		mnh_sm_mipi_tx_dphy_write_gen3(0x5F, dev_ovr_cfg->reg_0x5F,
-					       device);
-		mnh_sm_mipi_tx_dphy_write_gen3(0x61, dev_ovr_cfg->reg_0x61,
-					       device);
-		mnh_sm_mipi_tx_dphy_write_gen3(0x62, dev_ovr_cfg->reg_0x62,
-					       device);
-		mnh_sm_mipi_tx_dphy_write_gen3(0x63, dev_ovr_cfg->reg_0x63,
-					       device);
-		/*
-		 * mnh_sm_mipi_tx_dphy_write_gen3(0x64, dev_ovr_cfg->reg_0x64,
-		 * device);
-		 */
-		mnh_sm_mipi_tx_dphy_write_gen3(0x65, dev_ovr_cfg->reg_0x65,
-					       device);
+		TX_DPHY_OUT(0x5A, dev_ovr_cfg->reg_0x5A, device);
+		TX_DPHY_OUT(0x5B, dev_ovr_cfg->reg_0x5B, device);
+		TX_DPHY_OUT(0x5C, dev_ovr_cfg->reg_0x5C, device);
+		TX_DPHY_OUT(0x5D, dev_ovr_cfg->reg_0x5D, device);
+		/* TX_DPHY_OUT(0x5E, dev_ovr_cfg->reg_0x5E, device); */
+		TX_DPHY_OUT(0x5F, dev_ovr_cfg->reg_0x5F, device);
+		TX_DPHY_OUT(0x61, dev_ovr_cfg->reg_0x61, device);
+		TX_DPHY_OUT(0x62, dev_ovr_cfg->reg_0x62, device);
+		TX_DPHY_OUT(0x63, dev_ovr_cfg->reg_0x63, device);
+		/* TX_DPHY_OUT(0x64, dev_ovr_cfg->reg_0x64, device); */
+		TX_DPHY_OUT(0x65, dev_ovr_cfg->reg_0x65, device);
 	}
 
 	/* Enable high speed drivers (required for Tlpx < 500ns) */
 	/* Clock lane driver */
-	mnh_sm_mipi_tx_dphy_write_gen3(0x304, (1 << 2) | (1 << 3), device);
+	TX_DPHY_OUT(0x304, (1 << 2) | (1 << 3), device);
 	/* Data lane 0 driver */
-	mnh_sm_mipi_tx_dphy_write_gen3(0x504, (1 << 2) | (1 << 3), device);
+	TX_DPHY_OUT(0x504, (1 << 2) | (1 << 3), device);
 	/* Data lane 1 driver */
-	mnh_sm_mipi_tx_dphy_write_gen3(0x704, (1 << 2) | (1 << 3), device);
+	TX_DPHY_OUT(0x704, (1 << 2) | (1 << 3), device);
 	/* Data lane 2 driver */
-	mnh_sm_mipi_tx_dphy_write_gen3(0x904, (1 << 2) | (1 << 3), device);
+	TX_DPHY_OUT(0x904, (1 << 2) | (1 << 3), device);
 	/* Data lane 3 driver */
-	mnh_sm_mipi_tx_dphy_write_gen3(0xB04, (1 << 2) | (1 << 3), device);
+	TX_DPHY_OUT(0xB04, (1 << 2) | (1 << 3), device);
 
 	/* Enable lanes */
-	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY_IF_CFG,
-		LANE_EN_NUM, 3);
+	TX_OUTf(device, PHY_IF_CFG, LANE_EN_NUM, 3);
 
 	/* Table A-4 High-Speed Transition Times: Data HS-LP */
-	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY_IF_CFG,
-		PHY_STOP_WAIT_TIME, dev_ovr_cfg->wait_time);
+	TX_OUTf(device, PHY_IF_CFG, PHY_STOP_WAIT_TIME, dev_ovr_cfg->wait_time);
 
 	/* enable the PHY */
-	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY_RSTZ,
-		PHY_ENABLECLK, 1);
+	TX_OUTf(device, PHY_RSTZ, PHY_ENABLECLK, 1);
 	udelay(1);
-	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY_RSTZ,
-		PHY_SHUTDOWNZ, 1);
+	TX_OUTf(device, PHY_RSTZ, PHY_SHUTDOWNZ, 1);
 	udelay(1);
-	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX, PHY_RSTZ, PHY_RSTZ, 1);
+	TX_OUTf(device, PHY_RSTZ, PHY_RSTZ, 1);
 
 	/* wait for data & clk lanes to reach the low-power state */
 	i = 0;
 	do {
-		data = HW_IN(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX,
-			     PHY_STATUS);
+		data = TX_IN(device, PHY_STATUS);
 		udelay(10);
 		i++;
 	} while ((i < 40) && ((data & 0x1550) != 0x1550));
@@ -730,8 +672,9 @@ static void mnh_mipi_gen3_device(struct device *dev, uint32_t device,
 
 	/* Enable ct clock, this takes immediate effect */
 	dev_dbg(dev, "%s: enabling ct. clock mode\n", __func__);
-	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(device), MIPI_TX,
-		LPCLK_CTRL, PHY_TXREQCLKHS_CON, 1);
+	TX_OUTf(device, LPCLK_CTRL, PHY_TXREQCLKHS_CON, 1);
+
+	return 0;
 }
 
 static int mnh_mipi_config_mux_sel(struct device *dev,
@@ -770,11 +713,11 @@ static int mnh_mipi_config_mux_sel(struct device *dev,
 	 * need to write once.
 	 */
 	if (rxdev == MIPI_RX0)
-		rx_mode = HW_IN(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, RX0_MODE);
+		rx_mode = TOP_IN(RX0_MODE);
 	else if (rxdev == MIPI_RX1)
-		rx_mode = HW_IN(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, RX1_MODE);
+		rx_mode = TOP_IN(RX1_MODE);
 	else if (rxdev == MIPI_RX2)
-		rx_mode = HW_IN(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, RX2_MODE);
+		rx_mode = TOP_IN(RX2_MODE);
 	else
 		rx_mode = 0; /* rx_mode register not required for IPU source */
 	/*
@@ -824,26 +767,19 @@ static int mnh_mipi_config_mux_sel(struct device *dev,
 	case MIPI_TX0:
 		switch (rxdev) { /* Source */
 		case MIPI_RX0: /* RX0 -> TX0 */
-			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
-			       MIPI_TOP, RX0_MODE, rx_mode);
-			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
-			       MIPI_TOP, TX0_MODE, tx_mode);
+			TOP_OUT(RX0_MODE, rx_mode);
+			TOP_OUT(TX0_MODE, tx_mode);
 			break;
 		case MIPI_RX1: /* RX1 -> TX0 */
-			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
-			       MIPI_TOP, RX1_MODE, rx_mode);
-			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
-			       MIPI_TOP, TX0_MODE, tx_mode);
+			TOP_OUT(RX1_MODE, rx_mode);
+			TOP_OUT(TX0_MODE, tx_mode);
 			break;
 		case MIPI_RX2: /* RX2 -> TX0 */
-			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
-			       MIPI_TOP, RX2_MODE, rx_mode);
-			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
-			       MIPI_TOP, TX0_MODE, tx_mode);
+			TOP_OUT(RX2_MODE, rx_mode);
+			TOP_OUT(TX0_MODE, tx_mode);
 			break;
 		case MIPI_RX_IPU: /* IPU -> TX0 */
-			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
-			       MIPI_TOP, TX0_MODE, tx_mode);
+			TOP_OUT(TX0_MODE, tx_mode);
 			break;
 		default:
 			dev_err(dev, "%s: invalid rx device %d!\n", __func__,
@@ -854,27 +790,20 @@ static int mnh_mipi_config_mux_sel(struct device *dev,
 	case MIPI_TX1:
 		switch (rxdev) {
 		case MIPI_RX0: /* RX0 -> TX1 */
-			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
-			       MIPI_TOP, RX0_MODE, rx_mode);
-			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
-			       MIPI_TOP, TX1_MODE, tx_mode);
+			TOP_OUT(RX0_MODE, rx_mode);
+			TOP_OUT(TX1_MODE, tx_mode);
 			break;
 		case MIPI_RX1: /* RX1 -> TX1 */
-			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
-			       MIPI_TOP, RX1_MODE, rx_mode);
-			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
-			       MIPI_TOP, TX1_MODE, tx_mode);
+			TOP_OUT(RX1_MODE, rx_mode);
+			TOP_OUT(TX1_MODE, tx_mode);
 			break;
 		case MIPI_RX2: /* RX2 -> TX1 */
-			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
-			       MIPI_TOP, RX2_MODE, rx_mode);
-			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
-			       MIPI_TOP, TX1_MODE, tx_mode);
+			TOP_OUT(RX2_MODE, rx_mode);
+			TOP_OUT(TX1_MODE, tx_mode);
 			break;
 		case MIPI_RX_IPU:
 			/* Configure IPU -> Tx1 */
-			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
-			       MIPI_TOP, TX1_MODE, tx_mode);
+			TOP_OUT(TX1_MODE, tx_mode);
 			break;
 		default:
 			dev_err(dev, "%s: invalid rx device %d!\n", __func__,
@@ -885,16 +814,13 @@ static int mnh_mipi_config_mux_sel(struct device *dev,
 	case MIPI_TX_IPU:
 		switch (rxdev) {
 		case MIPI_RX0: /* Rx0 -> IPU */
-			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
-			       MIPI_TOP, RX0_MODE, rx_mode);
+			TOP_OUT(RX0_MODE, rx_mode);
 			break;
 		case MIPI_RX1:
-			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
-			       MIPI_TOP, RX1_MODE, rx_mode);
+			TOP_OUT(RX1_MODE, rx_mode);
 			break;
 		case MIPI_RX2:
-			HW_OUT(HWIO_MIPI_TOP_BASE_ADDR,
-			       MIPI_TOP, RX2_MODE, rx_mode);
+			TOP_OUT(RX2_MODE, rx_mode);
 			break;
 		default:
 			dev_err(dev, "%s: invalid rx device %d!\n", __func__,
@@ -906,6 +832,7 @@ static int mnh_mipi_config_mux_sel(struct device *dev,
 		dev_err(dev, "%s: invalid tx device %d!\n", __func__, txdev);
 		return -EINVAL;
 	}
+
 	return 0;
 }
 
@@ -916,6 +843,7 @@ int mnh_mipi_config(struct device *dev, struct mnh_mipi_config config)
 	uint32_t rx_rate = config.rx_rate;
 	uint32_t tx_rate = config.tx_rate;
 	uint32_t vc_en_mask = config.vc_en_mask;
+	int ret = 0;
 
 	dev_dbg(dev, "%s: init rxdev %d, txdev %d, rx_rate %d, tx_rate %d, vc_en_mask 0x%1x\n",
 		__func__, rxdev, txdev, rx_rate, tx_rate, vc_en_mask);
@@ -927,7 +855,12 @@ int mnh_mipi_config(struct device *dev, struct mnh_mipi_config config)
 	case MIPI_RX2:
 		dev_dbg(dev, "%s: configuring host controller Rx%d\n",
 			 __func__, rxdev);
-		mnh_mipi_gen3_host(dev, rxdev, rx_rate);
+		ret = mnh_mipi_gen3_host(dev, rxdev, rx_rate);
+		if (ret) {
+			dev_err(dev, "%s: mnh_mipi_gen3_host failed (%d)\n",
+				 __func__, ret);
+			return ret;
+		}
 		break;
 	case MIPI_RX_IPU:
 		dev_dbg(dev, "%s: configuring IPU IDI Tx%d as MIPI source\n",
@@ -944,7 +877,12 @@ int mnh_mipi_config(struct device *dev, struct mnh_mipi_config config)
 	case MIPI_TX1:
 		dev_dbg(dev, "%s: configuring device controller Tx%d\n",
 			 __func__, txdev);
-		mnh_mipi_gen3_device(dev, txdev, tx_rate);
+		ret = mnh_mipi_gen3_device(dev, txdev, tx_rate);
+		if (ret) {
+			dev_err(dev, "%s: mnh_mipi_gen3_device failed (%d)\n",
+				 __func__, ret);
+			return ret;
+		}
 		break;
 	case MIPI_TX_IPU:
 		dev_dbg(dev, "%s: configuring IPU IDI Rx%d as MIPI sink\n",
@@ -956,9 +894,14 @@ int mnh_mipi_config(struct device *dev, struct mnh_mipi_config config)
 	}
 
 	/* configure mux select */
-	mnh_mipi_config_mux_sel(dev, &config);
+	ret = mnh_mipi_config_mux_sel(dev, &config);
+	if (ret) {
+		dev_err(dev, "%s: mnh_mipi_config_mux_sel failed (%d)\n",
+			 __func__, ret);
+		return ret;
+	}
 
-	return 0;
+	return ret;
 }
 EXPORT_SYMBOL_GPL(mnh_mipi_config);
 
@@ -966,80 +909,88 @@ int mnh_mipi_stop(struct device *dev, struct mnh_mipi_config config)
 {
 	uint32_t txdev = config.txdev;
 	uint32_t rxdev = config.rxdev;
+	int ret = 0;
 
 	dev_dbg(dev, "%s: stopping rxdev %d, txdev %d\n", __func__, rxdev,
 		 txdev);
 
 	/* Shutdown host */
-	mnh_mipi_stop_host(dev, rxdev);
+	ret = mnh_mipi_stop_host(dev, rxdev);
+	if (ret) {
+		dev_err(dev, "%s: mnh_mipi_stop_host failed (%d)\n",
+			 __func__, ret);
+		return ret;
+	}
 
 	/* Shutdown device */
-	mnh_mipi_stop_device(dev, txdev);
+	ret = mnh_mipi_stop_device(dev, txdev);
+	if (ret) {
+		dev_err(dev, "%s: mnh_mipi_stop_device failed (%d)\n",
+			 __func__, ret);
+		return ret;
+	}
 
-	return 0;
+	return ret;
 }
 EXPORT_SYMBOL_GPL(mnh_mipi_stop);
 
-void mnh_mipi_stop_device(struct device *dev, int txdev)
+int mnh_mipi_stop_device(struct device *dev, int txdev)
 {
+	int ret = 0;
+
 	/* shut down the PHY */
-	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(txdev), MIPI_TX, PHY_RSTZ,
-		PHY_RSTZ, 0);
-	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(txdev), MIPI_TX, PHY_RSTZ,
-		PHY_SHUTDOWNZ, 0);
-	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(txdev), MIPI_TX, PHY_RSTZ,
-		PHY_ENABLECLK, 0);
+	TX_OUTf(txdev, PHY_RSTZ, PHY_RSTZ, 0);
+	TX_OUTf(txdev, PHY_RSTZ, PHY_SHUTDOWNZ, 0);
+	TX_OUTf(txdev, PHY_RSTZ, PHY_ENABLECLK, 0);
 	/* shut down the controller logic */
-	HW_OUTf(HWIO_MIPI_TX_BASE_ADDR(txdev), MIPI_TX, CSI2_RESETN,
-		CSI2_RESETN_RW, 0);
+	TX_OUTf(txdev, CSI2_RESETN, CSI2_RESETN_RW, 0);
 	/* enable clock gating (disable clock) */
 	switch (txdev) {
 	case MIPI_TX0:
-		HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, CSI_CLK_CTRL,
-			CSI2_TX0_CG, 0x1);
+		TOP_OUTf(CSI_CLK_CTRL, CSI2_TX0_CG, 0x1);
 		break;
 	case MIPI_TX1:
-		HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, CSI_CLK_CTRL,
-			CSI2_TX1_CG, 0x1);
+		TOP_OUTf(CSI_CLK_CTRL, CSI2_TX1_CG, 0x1);
 		break;
 	default:
 		dev_err(dev, "%s invalid mipi device!\n", __func__);
+		ret = -EINVAL;
 		break;
 	}
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(mnh_mipi_stop_device);
 
-void mnh_mipi_stop_host(struct device *dev, int rxdev)
+int mnh_mipi_stop_host(struct device *dev, int rxdev)
 {
+	int ret = 0;
+
 	/* shut down the PHY */
 	/* see 7.3.1: Rx-DPHY databook */
-	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(rxdev), MIPI_RX, PHY_SHUTDOWNZ,
-		PHY_SHUTDOWNZ, 0x0);
-	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(rxdev), MIPI_RX, DPHY_RSTZ,
-		DPHY_RSTZ, 0x0);
-	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(rxdev), MIPI_RX, PHY_TEST_CTRL0,
-		PHY_TESTCLR, 0x1);
+	RX_OUTf(rxdev, PHY_SHUTDOWNZ, PHY_SHUTDOWNZ, 0x0);
+	RX_OUTf(rxdev, DPHY_RSTZ, DPHY_RSTZ, 0x0);
+	RX_OUTf(rxdev, PHY_TEST_CTRL0, PHY_TESTCLR, 0x1);
 	/* shut down the controller logic */
-	HW_OUTf(HWIO_MIPI_RX_BASE_ADDR(rxdev), MIPI_RX, CSI2_RESETN,
-		CSI2_RESETN, 0x0);
+	RX_OUTf(rxdev, CSI2_RESETN, CSI2_RESETN, 0x0);
 	/* enable clock gating (disable clock) */
 	switch (rxdev) {
 	case MIPI_RX0:
-		HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, CSI_CLK_CTRL,
-			CSI2_RX0_CG, 0x1);
+		TOP_OUTf(CSI_CLK_CTRL, CSI2_RX0_CG, 0x1);
 		break;
 	case MIPI_RX1:
-		HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, CSI_CLK_CTRL,
-			CSI2_RX1_CG, 0x1);
+		TOP_OUTf(CSI_CLK_CTRL, CSI2_RX1_CG, 0x1);
 		break;
 	case MIPI_RX2:
-		HW_OUTf(HWIO_MIPI_TOP_BASE_ADDR, MIPI_TOP, CSI_CLK_CTRL,
-			CSI2_RX2_CG, 0x1);
+		TOP_OUTf(CSI_CLK_CTRL, CSI2_RX2_CG, 0x1);
 		break;
 	default:
 		dev_err(dev, "%s invalid mipi host!\n", __func__);
+		ret = -EINVAL;
 		break;
 	}
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(mnh_mipi_stop_host);
 
@@ -1080,22 +1031,20 @@ int mnh_mipi_get_top_interrupts(struct device *dev,
 int mnh_mipi_get_device_interrupts(struct device *dev,
 			struct mipi_device_irq_st *int_status)
 {
-	uint32_t baddr = HWIO_MIPI_TX_BASE_ADDR(int_status->dev);
-
-	int_status->main = TX_IN(INT_ST_MAIN);
+	int_status->main = TX_IN(int_status->dev, INT_ST_MAIN);
 	dev_info(dev, "MIPI device controller %d interrupt main: %x\n",
 		 int_status->dev, int_status->main);
 
 	if (int_status->main & TX_MASK(INT_ST_MAIN, INT_ST_VPG)) {
-		int_status->vpg = TX_IN(INT_ST_VPG);
+		int_status->vpg = TX_IN(int_status->dev, INT_ST_VPG);
 		dev_info(dev, "CSI INT_ST_VPG: %x\n", int_status->vpg);
 	}
 	if (int_status->main & TX_MASK(INT_ST_MAIN, INT_ST_IDI)) {
-		int_status->idi = TX_IN(INT_ST_IDI);
+		int_status->idi = TX_IN(int_status->dev, INT_ST_IDI);
 		dev_info(dev, "CSI INT_ST_IDI: %x\n", int_status->idi);
 	}
 	if (int_status->main & TX_MASK(INT_ST_MAIN, INT_ST_PHY)) {
-		int_status->phy = TX_IN(INT_ST_PHY);
+		int_status->phy = TX_IN(int_status->dev, INT_ST_PHY);
 		dev_info(dev, "CSI INT_ST_PHY: %x\n", int_status->phy);
 	}
 	mnh_mipi_get_top_interrupts(dev, int_status);
@@ -1107,43 +1056,43 @@ EXPORT_SYMBOL_GPL(mnh_mipi_get_device_interrupts);
 int mnh_mipi_get_host_interrupts(struct device *dev,
 				 struct mipi_host_irq_st *int_status)
 {
-
-	uint32_t baddr = HWIO_MIPI_RX_BASE_ADDR(int_status->dev);
-
-	int_status->main = RX_IN(INT_ST_MAIN);
+	int_status->main = RX_IN(int_status->dev, INT_ST_MAIN);
 	dev_info(dev, "MIPI host controller %d interrupt main: %x\n",
 		 int_status->dev, int_status->main);
 
 	if (int_status->main & RX_MASK(INT_ST_MAIN, STATUS_INT_PHY_FATAL)) {
-		int_status->phy_fatal = RX_IN(INT_ST_PHY_FATAL);
+		int_status->phy_fatal = RX_IN(int_status->dev,
+					      INT_ST_PHY_FATAL);
 		dev_info(dev, "CSI INT PHY FATAL: %x\n",
 				int_status->phy_fatal);
 	}
 
 	if (int_status->main & RX_MASK(INT_ST_MAIN, STATUS_INT_PKT_FATAL)) {
-		int_status->pkt_fatal = RX_IN(INT_ST_PKT_FATAL);
+		int_status->pkt_fatal = RX_IN(int_status->dev,
+					      INT_ST_PKT_FATAL);
 		dev_info(dev, "CSI INT PKT FATAL: %x\n",
 				int_status->pkt_fatal);
 	}
 
 	if (int_status->main & RX_MASK(INT_ST_MAIN, STATUS_INT_FRAME_FATAL)) {
-		int_status->frame_fatal = RX_IN(INT_ST_FRAME_FATAL);
+		int_status->frame_fatal = RX_IN(int_status->dev,
+						INT_ST_FRAME_FATAL);
 		dev_info(dev, "CSI INT FRAME FATAL: %x\n",
 				int_status->frame_fatal);
 	}
 
 	if (int_status->main & RX_MASK(INT_ST_MAIN, STATUS_INT_PHY)) {
-		int_status->phy = RX_IN(INT_ST_PHY);
+		int_status->phy = RX_IN(int_status->dev, INT_ST_PHY);
 		dev_info(dev, "CSI INT PHY: %x\n", int_status->phy);
 	}
 
 	if (int_status->main & RX_MASK(INT_ST_MAIN, STATUS_INT_PKT)) {
-		int_status->pkt = RX_IN(INT_ST_PKT);
+		int_status->pkt = RX_IN(int_status->dev, INT_ST_PKT);
 		dev_info(dev, "CSI INT PKT: %x\n", int_status->pkt);
 	}
 
 	if (int_status->main & RX_MASK(INT_ST_MAIN, STATUS_INT_LINE)) {
-		int_status->line = RX_IN(INT_ST_LINE);
+		int_status->line = RX_IN(int_status->dev, INT_ST_LINE);
 		dev_info(dev, "CSI INT LINE: %x\n", int_status->line);
 	}
 
