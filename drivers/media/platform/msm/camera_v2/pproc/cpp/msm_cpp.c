@@ -2288,11 +2288,13 @@ static void msm_cpp_fw_version(struct cpp_device *cpp_dev)
 	msm_cpp_poll(cpp_dev->base, MSM_CPP_MSG_ID_TRAILER);
 }
 
-static int msm_cpp_validate_input(unsigned int cmd, void *arg,
+static int msm_cpp_validate_ioctl_input(unsigned int cmd, void *arg,
 	struct msm_camera_v4l2_ioctl_t **ioctl_ptr)
 {
 	switch (cmd) {
 	case MSM_SD_SHUTDOWN:
+	case VIDIOC_MSM_CPP_IOMMU_ATTACH:
+	case VIDIOC_MSM_CPP_IOMMU_DETACH:
 		break;
 	default: {
 		if (ioctl_ptr == NULL) {
@@ -2301,8 +2303,9 @@ static int msm_cpp_validate_input(unsigned int cmd, void *arg,
 		}
 
 		*ioctl_ptr = arg;
-		if ((*ioctl_ptr == NULL) ||
-			(*ioctl_ptr)->ioctl_ptr == NULL) {
+		if (((*ioctl_ptr) == NULL) ||
+			((*ioctl_ptr)->ioctl_ptr == NULL) ||
+			((*ioctl_ptr)->len == 0)) {
 			pr_err("Error invalid ioctl argument cmd %u", cmd);
 			return -EINVAL;
 		}
@@ -2334,7 +2337,7 @@ long msm_cpp_subdev_ioctl(struct v4l2_subdev *sd,
 		return -EINVAL;
 	}
 
-	rc = msm_cpp_validate_input(cmd, arg, &ioctl_ptr);
+	rc = msm_cpp_validate_ioctl_input(cmd, arg, &ioctl_ptr);
 	if (rc != 0) {
 		pr_err("input validation failed\n");
 		return rc;
@@ -2798,6 +2801,7 @@ STREAM_BUFF_END:
 				pr_err("%s:%dError iommu_attach_device failed\n",
 					__func__, __LINE__);
 				rc = -EINVAL;
+				break;
 			}
 			cpp_dev->iommu_state = CPP_IOMMU_STATE_ATTACHED;
 		} else {
@@ -2812,10 +2816,17 @@ STREAM_BUFF_END:
 			(cpp_dev->stream_cnt == 0)) {
 			iommu_detach_device(cpp_dev->domain,
 				cpp_dev->iommu_ctx);
+			if (rc < 0) {
+				pr_err("%s:%dError iommu detach failed\n",
+					__func__, __LINE__);
+				rc = -EINVAL;
+				break;
+			}
 			cpp_dev->iommu_state = CPP_IOMMU_STATE_DETACHED;
 		} else {
 			pr_err("%s:%d IOMMMU attach triggered in invalid state\n",
 				__func__, __LINE__);
+			rc = -EINVAL;
 		}
 		break;
 	}
@@ -3421,7 +3432,7 @@ static long msm_cpp_subdev_fops_compat_ioctl(struct file *file,
 	default:
 		pr_err_ratelimited("%s: unsupported compat type :%x LOAD %lu\n",
 				__func__, cmd, VIDIOC_MSM_CPP_LOAD_FIRMWARE);
-		break;
+		return -EINVAL;
 	}
 
 	switch (cmd) {
@@ -3447,7 +3458,7 @@ static long msm_cpp_subdev_fops_compat_ioctl(struct file *file,
 	default:
 		pr_err_ratelimited("%s: unsupported compat type :%d\n",
 				__func__, cmd);
-		break;
+		return -EINVAL;
 	}
 
 	up32_ioctl.id = kp_ioctl.id;
