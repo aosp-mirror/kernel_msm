@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -3488,6 +3488,14 @@ int msm_isp_update_axi_stream(struct vfe_device *vfe_dev, void *arg)
 	case UPDATE_STREAM_REQUEST_FRAMES_VER2: {
 		struct msm_vfe_axi_stream_cfg_update_info_req_frm *req_frm =
 			&update_cmd->req_frm_ver2;
+		if (HANDLE_TO_IDX(req_frm->stream_handle) >= VFE_AXI_SRC_MAX) {
+			pr_err("%s: Invalid stream handle \n", __func__);
+			rc = -EINVAL;
+			break;
+		}
+		stream_info = &axi_data->stream_info[HANDLE_TO_IDX(
+			req_frm->stream_handle)];
+
 		rc = msm_isp_request_frame(vfe_dev, stream_info,
 			req_frm->user_stream_id,
 			req_frm->frame_id,
