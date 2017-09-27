@@ -121,6 +121,11 @@ struct dsi_panel_reset_config {
 	u32 mode_sel_state;
 };
 
+struct dsi_panel_debug {
+	u8 reg_read_cmd;
+	size_t reg_read_len;
+};
+
 enum esd_check_status_mode {
 	ESD_MODE_REG_READ,
 	ESD_MODE_SW_BTA,
@@ -169,6 +174,7 @@ struct dsi_panel {
 	struct dsi_pinctrl_info pinctrl;
 	struct drm_panel_hdr_properties hdr_props;
 	struct drm_panel_esd_config esd_config;
+	struct dsi_panel_debug debug;
 
 	struct dsi_parser_utils utils;
 
@@ -219,6 +225,8 @@ void dsi_panel_put(struct dsi_panel *panel);
 int dsi_panel_drv_init(struct dsi_panel *panel, struct mipi_dsi_host *host);
 
 int dsi_panel_drv_deinit(struct dsi_panel *panel);
+
+void dsi_panel_debugfs_init(struct dsi_panel *panel, struct dentry *dir);
 
 int dsi_panel_get_mode_count(struct dsi_panel *panel);
 
