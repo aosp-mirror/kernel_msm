@@ -59,6 +59,23 @@
 	qcom,msm-ssc-sensors {
 		compatible = "qcom,msm-ssc-sensors";
 	};
+
+	qcom,pronto@a21b000 {
+		status = "disabled";
+	};
+
+	qcom,smem@87d00000 {
+		qcom,smd-wcnss {
+			status = "disabled";
+		};
+		qcom,smsm-wcnss {
+			status = "disabled";
+		};
+	};
+
+	qcom,smdtty {
+		status = "disabled";
+	};
 };
 
 &apc_vreg_corner {
@@ -141,6 +158,10 @@
 };
 
 &gdsc_venus_core0 {
+	status = "disabled";
+};
+
+&wcnss {
 	status = "disabled";
 };
 

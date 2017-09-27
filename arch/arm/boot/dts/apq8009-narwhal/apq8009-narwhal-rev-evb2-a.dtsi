@@ -80,6 +80,22 @@
 	i2c@78b8000 { /* BLSP1 QUP4 */
 		/delete-node/ lm36272@11;
 	};
+
+	/* wcnss */
+	qcom,pronto@a21b000 {
+		status = "ok";
+	};
+	qcom,smem@87d00000 {
+		qcom,smd-wcnss {
+			status = "ok";
+		};
+		qcom,smsm-wcnss {
+			status = "ok";
+		};
+	};
+	qcom,smdtty {
+		status = "ok";
+	};
 };
 
 &i2c_2 {
@@ -103,4 +119,8 @@
 
 &bt_nitrous {
 	status = "disabled";
+};
+
+&wcnss {
+	status = "ok";
 };
