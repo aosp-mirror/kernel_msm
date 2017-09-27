@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2007-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2002,2007-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -26,6 +26,7 @@
 #include "adreno.h"
 #include "adreno_pm4types.h"
 #include "adreno_ringbuffer.h"
+#include "adreno_trace.h"
 
 #include "a3xx_reg.h"
 
@@ -99,6 +100,9 @@ void adreno_ringbuffer_submit(struct adreno_ringbuffer *rb,
 			time->ticks = gpudev->alwayson_counter_read(adreno_dev);
 		else
 			time->ticks = 0;
+
+		/* Trace the GPU time to create a mapping to ftrace time */
+		trace_adreno_cmdbatch_sync(rb->drawctxt_active, time->ticks);
 
 		/* Get the kernel clock for time since boot */
 		time->ktime = local_clock();

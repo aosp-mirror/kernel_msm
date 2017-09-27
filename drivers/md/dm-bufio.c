@@ -756,7 +756,8 @@ static struct dm_buffer *__alloc_buffer_wait_no_callback(struct dm_bufio_client 
 	 * dm-bufio is resistant to allocation failures (it just keeps
 	 * one buffer reserved in cases all the allocations fail).
 	 * So set flags to not try too hard:
-	 *	GFP_NOIO: don't recurse into the I/O layer
+	 *	GFP_NOWAIT: don't wait; if we need to sleep we'll release our
+	 *		    mutex and wait ourselves.
 	 *	__GFP_NORETRY: don't retry and rather return failure
 	 *	__GFP_NOMEMALLOC: don't use emergency reserves
 	 *	__GFP_NOWARN: don't print a warning in case of failure
@@ -766,7 +767,7 @@ static struct dm_buffer *__alloc_buffer_wait_no_callback(struct dm_bufio_client 
 	 */
 	while (1) {
 		if (dm_bufio_cache_size_latch != 1) {
-			b = alloc_buffer(c, GFP_NOIO | __GFP_NORETRY | __GFP_NOMEMALLOC | __GFP_NOWARN);
+			b = alloc_buffer(c, GFP_NOWAIT | __GFP_NORETRY | __GFP_NOMEMALLOC | __GFP_NOWARN);
 			if (b)
 				return b;
 		}
@@ -1442,19 +1443,19 @@ static int shrink(struct shrinker *shrinker, struct shrink_control *sc)
 	unsigned long r;
 	unsigned long nr_to_scan = sc->nr_to_scan;
 
-	if (sc->gfp_mask & __GFP_IO)
-		dm_bufio_lock(c);
-	else if (!dm_bufio_trylock(c))
-		return !nr_to_scan ? 0 : -1;
+	if (nr_to_scan) {
+		if (sc->gfp_mask & __GFP_IO)
+			dm_bufio_lock(c);
+		else if (!dm_bufio_trylock(c))
+			return -1;
 
-	if (nr_to_scan)
 		__scan(c, nr_to_scan, sc);
+		dm_bufio_unlock(c);
+	}
 
-	r = c->n_buffers[LIST_CLEAN] + c->n_buffers[LIST_DIRTY];
+	r = ACCESS_ONCE(c->n_buffers[LIST_CLEAN]) + ACCESS_ONCE(c->n_buffers[LIST_DIRTY]);
 	if (r > INT_MAX)
 		r = INT_MAX;
-
-	dm_bufio_unlock(c);
 
 	return r;
 }
