@@ -435,9 +435,9 @@ static int s2mpb04_check_int_flags(struct s2mpb04_core *ddata)
 	if (ret)
 		return ret;
 
-	dev_info(ddata->dev,
-		 "%s: [0] = 0x%02x, [1] = 0x%02x, [2] = 0x%02x\n",
-		 __func__, flags[0], flags[1], flags[2]);
+	dev_dbg(ddata->dev,
+		"%s: [0] = 0x%02x, [1] = 0x%02x, [2] = 0x%02x\n",
+		__func__, flags[0], flags[1], flags[2]);
 
 	/* iterate through each interrupt */
 	for (i = 0; i < 3; i++) {
