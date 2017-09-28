@@ -579,6 +579,8 @@ enum {
 #define EXT4_GET_BLOCKS_NO_LOCK			0x0100
 	/* Do not put hole in extent cache */
 #define EXT4_GET_BLOCKS_NO_PUT_HOLE		0x0200
+        /* Write zeros to newly created written extents */
+#define EXT4_GET_BLOCKS_ZERO                    0x0200
 
 /*
  * Flags used by ext4_free_blocks
