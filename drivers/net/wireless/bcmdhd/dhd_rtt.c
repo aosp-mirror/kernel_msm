@@ -482,6 +482,10 @@ dhd_rtt_event_handler(dhd_pub_t *dhd, wl_event_msg_t *event, void *event_data)
 	if (event_type != WLC_E_PROXD) {
 		goto exit;
 	}
+	if (!event_data) {
+		DHD_ERROR(("%s: event_data:NULL\n", __FUNCTION__));
+		return -EINVAL;
+	}
 	kflags = in_softirq()? GFP_ATOMIC : GFP_KERNEL;
 	evp = (wl_proxd_event_data_t*)event_data;
 	DHD_RTT(("%s enter : mode: %s, reason :%d \n", __FUNCTION__,
