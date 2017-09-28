@@ -1957,9 +1957,23 @@ static struct platform_driver msm_hsl_platform_driver = {
 	},
 };
 
+static int msm_serial_enable = 0;
+static int __init cmdline_parse_console(char *str)
+{
+	if (strncmp(str, "ttyHSL", 6) == 0) {
+		msm_serial_enable = 1;
+		pr_info("enabling serial (console=%s)\n", str);
+	}
+	return 0;
+}
+early_param("console", cmdline_parse_console);
+
 static int __init msm_serial_hsl_init(void)
 {
 	int ret;
+
+	if (!msm_serial_enable)
+		return 0;
 
 	ret = uart_register_driver(&msm_hsl_uart_driver);
 	if (unlikely(ret))
