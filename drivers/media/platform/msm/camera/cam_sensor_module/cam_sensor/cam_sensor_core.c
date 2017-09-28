@@ -639,11 +639,27 @@ int cam_sensor_power_up(struct cam_sensor_ctrl_t *s_ctrl)
 	struct cam_camera_slave_info *slave_info;
 	struct cam_hw_soc_info *soc_info =
 		&s_ctrl->soc_info;
+	struct mnh_mipi_config mipi_config0 = {
+		.txdev = MIPI_TX0,
+		.rxdev = MIPI_RX0,
+		.rx_rate = 698,
+		.tx_rate = 698,
+		.mode = MIPI_MODE_BYPASS,
+		.vc_en_mask = MNH_MIPI_VC_ALL_EN_MASK,
+	};
 	struct mnh_mipi_config mipi_config1 = {
 		.txdev = MIPI_TX1,
 		.rxdev = MIPI_RX1,
 		.rx_rate = 1368,
 		.tx_rate = 1368,
+		.mode = MIPI_MODE_BYPASS,
+		.vc_en_mask = MNH_MIPI_VC_ALL_EN_MASK,
+	};
+	struct mnh_mipi_config mipi_config2 = {
+		.txdev = MIPI_TX1,
+		.rxdev = MIPI_RX2,
+		.rx_rate = 698,
+		.tx_rate = 698,
 		.mode = MIPI_MODE_BYPASS,
 		.vc_en_mask = MNH_MIPI_VC_ALL_EN_MASK,
 	};
@@ -663,7 +679,12 @@ int cam_sensor_power_up(struct cam_sensor_ctrl_t *s_ctrl)
 
 	rc2 = mnh_sm_set_state(MNH_STATE_ACTIVE);
 	if (!rc2) {
-		rc2 = mnh_sm_mipi_config(mipi_config1);
+		if (s_ctrl->id == 0)
+			rc2 = mnh_sm_mipi_config(mipi_config0);
+		else if (s_ctrl->id == 1)
+			rc2 = mnh_sm_mipi_config(mipi_config1);
+		else
+			rc2 = mnh_sm_mipi_config(mipi_config2);
 		if (rc2)
 			CAM_ERR(CAM_SENSOR, "configure easel failed:%d", rc2);
 	} else {
