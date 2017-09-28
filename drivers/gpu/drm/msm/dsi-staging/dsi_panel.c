@@ -1635,6 +1635,8 @@ error:
 static int dsi_panel_parse_misc_features(struct dsi_panel *panel,
 				     struct device_node *of_node)
 {
+	u32 val;
+
 	panel->ulps_enabled =
 		of_property_read_bool(of_node, "qcom,ulps-enabled");
 
@@ -1643,6 +1645,17 @@ static int dsi_panel_parse_misc_features(struct dsi_panel *panel,
 
 	panel->te_using_watchdog_timer = of_property_read_bool(of_node,
 					"qcom,mdss-dsi-te-using-wd");
+	panel->lp11_init =
+		of_property_read_bool(of_node, "qcom,mdss-dsi-lp11-init");
+	if (!of_property_read_u32(of_node,
+				  "qcom,mdss-dsi-init-delay-us",
+				  &val)) {
+		pr_debug("Panel init delay specified: %d\n", val);
+		panel->init_delay_us = val;
+	} else {
+		panel->init_delay_us = 0;
+	}
+
 	return 0;
 }
 
@@ -2974,6 +2987,9 @@ int dsi_panel_prepare(struct dsi_panel *panel)
 			goto error;
 		}
 	}
+
+	if (panel->init_delay_us)
+		usleep_range(panel->init_delay_us, panel->init_delay_us);
 
 	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_PRE_ON);
 	if (rc) {

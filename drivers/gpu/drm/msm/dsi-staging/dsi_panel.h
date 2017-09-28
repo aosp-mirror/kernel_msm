@@ -144,6 +144,7 @@ struct dsi_panel {
 	struct dsi_pinctrl_info pinctrl;
 	struct drm_panel_hdr_properties hdr_props;
 
+	u32 init_delay_us;
 	bool lp11_init;
 	bool ulps_enabled;
 	bool allow_phy_power_off;
