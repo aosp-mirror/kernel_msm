@@ -1299,7 +1299,6 @@ static bool match_fanout_group(struct packet_type *ptype, struct sock * sk)
 
 static int fanout_add(struct sock *sk, u16 id, u16 type_flags)
 {
-	struct packet_rollover *rollover = NULL;
 	struct packet_sock *po = pkt_sk(sk);
 	struct packet_fanout *f, *match;
 	u8 type = type_flags & 0xff;
@@ -1317,28 +1316,14 @@ static int fanout_add(struct sock *sk, u16 id, u16 type_flags)
 	default:
 		return -EINVAL;
 	}
-	mutex_lock(&fanout_mutex);
 
-	err = -EINVAL;
 	if (!po->running)
-		goto out;
+		return -EINVAL;
 
-	err = -EALREADY;
 	if (po->fanout)
-		goto out;
+		return -EALREADY;
 
-	if (type == PACKET_FANOUT_ROLLOVER ||
-	    (type_flags & PACKET_FANOUT_FLAG_ROLLOVER)) {
-		err = -ENOMEM;
-		rollover = kzalloc(sizeof(*rollover), GFP_KERNEL);
-		if (!rollover)
-			goto out;
-		atomic_long_set(&rollover->num, 0);
-		atomic_long_set(&rollover->num_huge, 0);
-		atomic_long_set(&rollover->num_failed, 0);
-		po->rollover = rollover;
-	}
-
+	mutex_lock(&fanout_mutex);
 	match = NULL;
 	list_for_each_entry(f, &fanout_list, list) {
 		if (f->id == id &&
@@ -1385,10 +1370,6 @@ static int fanout_add(struct sock *sk, u16 id, u16 type_flags)
 		}
 	}
 out:
-	if (err && rollover) {
-		kfree(rollover);
-		po->rollover = NULL;
-	}
 	mutex_unlock(&fanout_mutex);
 	return err;
 }
@@ -1398,21 +1379,17 @@ static void fanout_release(struct sock *sk)
 	struct packet_sock *po = pkt_sk(sk);
 	struct packet_fanout *f;
 
-	mutex_lock(&fanout_mutex);
-
 	f = po->fanout;
-	if (f) {
-		po->fanout = NULL;
+	if (!f)
+		return;
 
-		if (atomic_dec_and_test(&f->sk_ref)) {
-			list_del(&f->list);
-			dev_remove_pack(&f->prot_hook);
-			fanout_release_data(f);
-			kfree(f);
-		}
+	mutex_lock(&fanout_mutex);
+	po->fanout = NULL;
 
-		if (po->rollover)
-			kfree_rcu(po->rollover, rcu);
+	if (atomic_dec_and_test(&f->sk_ref)) {
+		list_del(&f->list);
+		dev_remove_pack(&f->prot_hook);
+		kfree(f);
 	}
 	mutex_unlock(&fanout_mutex);
 }
