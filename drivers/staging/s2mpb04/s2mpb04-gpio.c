@@ -15,6 +15,7 @@
  */
 
 #include <linux/bitops.h>
+#include <linux/delay.h>
 #include <linux/gpio/driver.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
@@ -76,6 +77,7 @@ static void s2mpb04_gpio_set(struct gpio_chip *gpio_chip, unsigned int offset,
 {
 	struct s2mpb04_gpio *s2mpb04_gpio = to_s2mpb04_gpio(gpio_chip);
 	struct s2mpb04_core *s2mpb04_core = s2mpb04_gpio->s2mpb04_core;
+	u8 data;
 
 	dev_dbg(s2mpb04_core->dev, "%s: offset %d, value %d\n", __func__,
 		offset, value);
@@ -86,12 +88,20 @@ static void s2mpb04_gpio_set(struct gpio_chip *gpio_chip, unsigned int offset,
 	 */
 	if ((offset == 1) && (value != 0)) {
 		s2mpb04_write_byte(s2mpb04_core, S2MPB04_REG_GPIO_CTRL, 0x40);
-	} else {
-		s2mpb04_update_bits(s2mpb04_core, S2MPB04_REG_GPIO_A,
-				    (1 << offset), ((value ? 1 : 0) << offset));
-		s2mpb04_update_bits(s2mpb04_core, S2MPB04_REG_GPIO_CTRL,
-				    (0x40 << offset), (0x40 << offset));
+
+		/* NOTE: B1 P1 has a schematic bug where output is not connected
+		 * to the correct rail. Check for this case by seeing if value
+		 * was pulled high. If not, then drive 1.8 output below */
+		usleep_range(100, 100);
+		s2mpb04_read_byte(s2mpb04_core, S2MPB04_REG_GPIO_Y, &data);
+		if (data & 0x2)
+			return;
 	}
+
+	s2mpb04_update_bits(s2mpb04_core, S2MPB04_REG_GPIO_A,
+			    (1 << offset), ((value ? 1 : 0) << offset));
+	s2mpb04_update_bits(s2mpb04_core, S2MPB04_REG_GPIO_CTRL,
+			    (0x40 << offset), (0x40 << offset));
 }
 
 static int s2mpb04_gpio_direction_output(struct gpio_chip *gpio_chip,
