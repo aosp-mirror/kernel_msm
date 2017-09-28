@@ -178,6 +178,7 @@ struct dsi_panel {
 
 	struct dsi_parser_utils utils;
 
+	u32 init_delay_us;
 	bool lp11_init;
 	bool ulps_enabled;
 	bool ulps_suspend_enabled;
