@@ -82,6 +82,10 @@
 				qcom,mdss-dsi-h-right-border = <0>;
 				qcom,mdss-dsi-v-top-border = <0>;
 				qcom,mdss-dsi-v-bottom-border = <0>;
+				/* TODO salidoa: please implement mdss-dsi-init-delay-us
+				 * per Documentation.
+				 */
+				qcom,mdss-dsi-init-delay-us = <10000>;
 				qcom,mdss-dsi-on-command = [
 					15 01 00 00 00 00 02 B0 AC
 					39 01 00 00 00 00 05 2A 00 00 04 37
@@ -93,17 +97,20 @@
 						0B 0B 0B 0B 0B 00 02 01
 						0B 07 0A 09 08
 					39 01 00 00 00 00 08 E5
-						00 36 00 36 00 36 10
-					39 01 00 00 00 00 1F E6
-						20 00 2D 20 00 2D 20 00
-						2D 20 00 2D 20 00 2D 10
-						BD 70 10 BD 70 01 DF 4E
-						01 DF 4E 01 DF 4E
+						00 3E 00 3F 00 3F 10
+					39 01 00 00 00 00 33 E6
+						20 03 30 20 00 33 20 00
+						33 20 00 33 20 00 33 20
+						00 33 10 BF 73 10 BF 20
+						00 33 20 00 33 20 00 33
+						20 00 33 20 00 33 10 BF
+						73 10 BF 73 01 E4 4F 01
+						E4 4F
 					39 01 00 00 00 00 1F E7
-						20 00 85 20 00 85 02 6B
-						1A 20 00 85 20 C4 C2 20
-						00 85 20 00 85 02 6B 1A
-						20 00 85 20 C4 C2
+						20 00 33 20 00 33 02 1C
+						17 20 00 33 20 8A A9 20
+						00 33 20 00 33 02 1C 17
+						20 00 33 20 8A A9
 					39 01 00 00 00 00 0D B4
 						2A 02 25 22 41 41 41 0A
 						10 50 11 00
@@ -135,7 +142,6 @@
 						14 34 13 22 32 22 22 22
 						24 24 30 22 22 33 22 43
 						12
-					39 01 00 00 00 00 06 C6 0F 03 03 00 00
 					39 01 00 00 00 00 05 CA 08 99 18 05
 					39 01 00 00 00 00 0F CB
 						80 5C 07 1B 34 54 4F 5A
@@ -156,15 +162,62 @@
 						7F 58 01 AF 4F FF FF FF
 						F9 F3 ED FF E7 E1 DB D5
 						3F CF C9 C3
+					39 01 00 00 00 00 37 DF
+						30 A0 3F 2A 40 8D 92 BA
+						CA 30 8B 3E F3 7C 8E 91
+						BB CD 3F DC 3F B0 9A 92
+						8C B7 C4 00 EF 3F 7A 9D
+						6A 8F A8 BC 80 4D 3E 83
+						7E 74 83 AD A8 00 F3 3F
+						10 7C 80 70 B2 BA
+					39 01 00 00 00 00 37 E0
+						30 A6 3F 7A 2D B0 BA D4
+						DE 30 93 3E 83 D5 C4 BC
+						D5 DF 3F DF 3F 10 E0 D0
+						C2 D6 E0 00 EF 3F 7A 9D
+						6A 8F A8 BC 80 4D 3E 83
+						7E 74 83 AD A8 00 F3 3F
+						10 7C 80 70 B2 BA
+					39 01 00 00 00 00 37 E1
+						30 D8 3F AB AE AF AB CA
+						DF 30 DF 3F BF B5 E6 C0
+						CE C5 BF 30 3F B7 AB BE
+						8F B3 C7 00 EF 3F 7A 9D
+						6A 8F A8 BC 80 4D 3E 83
+						7E 74 83 AD A8 00 F3 3F
+						10 7C 80 70 B2 BA
+					39 01 00 00 00 00 37 E2
+						30 37 7F C1 C9 C2 B8 C3
+						C4 30 1E 7F D1 CD C7 BA
+						C6 C5 3F 95 7F D2 CB C0
+						B1 BD BD 00 eF 3F 7A 9D
+						6A 8F A8 BC 80 4D 3E 83
+						7E 74 83 AD A8 00 FF 3F
+						10 7C 80 70 B2 BA
+					39 01 00 00 00 00 37 E3
+						30 EF 3F 7A 9D 6A 8F A8
+						BC 30 4D 3E 83 7E 74 83
+						AD A8 3F F3 3F 10 7C 80
+						70 B2 BA 00 EF 3F 7A 9D
+						6A 8F A8 BC 80 4D 3E 83
+						7E 74 83 AD A8 00 F3 3F
+						10 7C 80 70 B2 BA
+					39 01 00 00 00 00 1F E4
+						00 EF 3F 7A 9D 6A 8F A8
+						BC 80 4D 3E 83 7E 74 83
+						AD A8 00 F3 3F 10 7C 80
+						70 B2 BA 20 01 CC
 					15 01 00 00 00 00 02 35 00
-					05 01 00 00 86 00 01 11
 					39 01 00 00 00 00 03 51 03 FF
 					39 01 00 00 00 00 03 53 0C 30
 					39 01 00 00 00 00 07 55
 						04 70 DB 04 70 DB
-					15 01 00 00 00 00 02 B0 AC
+					// TODO salidoa: No delay between 11/29? or delay? 200 msec>?
+					05 01 00 00 C8 00 01 11
 					15 01 00 00 00 00 02 07 11
-					05 01 00 00 00 00 01 29
+					// TODO salidoa: write protect twice? 15 01 00 00 00 00 02 B0 AC
+					// TODO salidoa: check delay after 29?
+					05 01 00 00 C8 00 01 29
 				];
 				qcom,mdss-dsi-off-command = [
 					05 01 00 00 00 00 01 28
