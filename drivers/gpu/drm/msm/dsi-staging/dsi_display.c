@@ -1658,10 +1658,14 @@ static ssize_t dsi_host_transfer(struct mipi_dsi_host *host,
 	} else {
 		int ctrl_idx = (msg->flags & MIPI_DSI_MSG_UNICAST) ?
 				msg->ctrl : 0;
+		u32 flags = DSI_CTRL_CMD_FETCH_MEMORY;
+
+		if (msg->rx_buf)
+			flags |= DSI_CTRL_CMD_READ;
 
 		rc = dsi_ctrl_cmd_transfer(display->ctrl[ctrl_idx].ctrl, msg,
-					  DSI_CTRL_CMD_FETCH_MEMORY);
-		if (rc) {
+					   flags);
+		if (rc < 0) {
 			pr_err("[%s] cmd transfer failed, rc=%d\n",
 			       display->name, rc);
 			goto error_disable_cmd_engine;
@@ -1671,12 +1675,10 @@ static ssize_t dsi_host_transfer(struct mipi_dsi_host *host,
 error_disable_cmd_engine:
 	(void)dsi_display_cmd_engine_disable(display);
 error_disable_clks:
-	rc = dsi_display_clk_ctrl(display->dsi_clk_handle,
-			DSI_ALL_CLKS, DSI_CLK_OFF);
-	if (rc) {
-		pr_err("[%s] failed to disable all DSI clocks, rc=%d\n",
-		       display->name, rc);
-	}
+	if (dsi_display_clk_ctrl(display->dsi_clk_handle,
+				 DSI_ALL_CLKS, DSI_CLK_OFF))
+		pr_err("[%s] failed to disable all DSI clocks\n",
+		       display->name);
 	return rc;
 put_iova:
 	msm_gem_put_iova(display->tx_cmd_buf, aspace);
