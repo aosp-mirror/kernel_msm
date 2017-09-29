@@ -514,11 +514,17 @@ struct dsi_ctrl_hw_ops {
 	 * get_cmd_read_data() - get data read from the peripheral
 	 * @ctrl:           Pointer to the controller host hardware.
 	 * @rd_buf:         Buffer where data will be read into.
-	 * @total_read_len: Number of bytes to read.
+	 * @read_offset:    Offset from where to read.
+	 * @rx_byte:        Number of bytes to be read.
+	 * @pkt_size:       Size of response expected.
+	 * @hw_read_cnt:    Actual number of bytes read by HW.
 	 */
 	u32 (*get_cmd_read_data)(struct dsi_ctrl_hw *ctrl,
 				 u8 *rd_buf,
-				 u32 total_read_len);
+				 u32 read_offset,
+				 u32 rx_byte,
+				 u32 pkt_size,
+				 u32 *hw_read_cnt);
 
 	/**
 	 * wait_for_lane_idle() - wait for DSI lanes to go to idle state
@@ -695,6 +701,11 @@ struct dsi_ctrl_hw_ops {
 	u32 (*collect_misr)(struct dsi_ctrl_hw *ctrl,
 			    enum dsi_op_mode panel_mode);
 
+	/**
+	 * clear_rdbk_register() - Clear and reset read back register
+	 * @ctrl:         Pointer to the controller host hardware.
+	 */
+	void (*clear_rdbk_register)(struct dsi_ctrl_hw *ctrl);
 };
 
 /*
