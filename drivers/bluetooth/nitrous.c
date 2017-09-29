@@ -206,7 +206,7 @@ static irqreturn_t nitrous_host_wake_isr(int irq, void *dev)
 	struct nitrous_bt_lpm *lpm = platform_get_drvdata(pdev);
 
 	if (!lpm) {
-		pr_err("%s: missing lpm\n", __func__);
+		pr_err_ratelimited("%s: missing lpm\n", __func__);
 		return IRQ_HANDLED;
 	}
 
@@ -254,6 +254,9 @@ static int nitrous_lpm_init(struct nitrous_bt_lpm *lpm)
 			__func__);
 		goto err_request_irq;
 	}
+	/* The irq should be disabled at startup.
+	 * It will be controlled with nitrous_rfkill_set_power() */
+	disable_irq(lpm->irq_host_wake);
 
 	wake_lock_init(&lpm->dev_lock, WAKE_LOCK_SUSPEND, "bt_dev_tx_wake");
 	wake_lock_init(&lpm->host_lock, WAKE_LOCK_SUSPEND, "bt_host_rx_wake");
@@ -371,7 +374,7 @@ static int nitrous_rfkill_init(struct platform_device *pdev,
 		goto err_rfkill_register;
 
 	/* Power off chip at startup. */
-	nitrous_rfkill_set_power(lpm, true);
+	lpm->rfkill_blocked = true;
 	return 0;
 
 err_rfkill_register:
