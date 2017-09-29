@@ -1546,7 +1546,8 @@ static int dsi_panel_parse_cmd_sets_dt(struct dsi_panel_cmd_set *cmd,
 
 static int dsi_panel_parse_cmd_sets(
 		struct dsi_display_mode_priv_info *priv_info,
-		struct device_node *of_node)
+		struct device_node *of_node,
+		struct dsi_panel *panel)
 {
 	int rc = 0;
 	struct dsi_panel_cmd_set *set;
@@ -1567,7 +1568,8 @@ static int dsi_panel_parse_cmd_sets(
 			if (rc)
 				pr_err("failed to allocate cmd set %d, rc = %d\n",
 					i, rc);
-			set->state = DSI_CMD_SET_STATE_LP;
+			set->state = panel->hs_pps ? DSI_CMD_SET_STATE_HS :
+							DSI_CMD_SET_STATE_LP;
 		} else {
 			rc = dsi_panel_parse_cmd_sets_dt(set, i, of_node);
 			if (rc)
@@ -1669,6 +1671,8 @@ static int dsi_panel_parse_misc_features(struct dsi_panel *panel,
 	} else {
 		panel->init_delay_us = 0;
 	}
+	panel->hs_pps =
+		of_property_read_bool(of_node, "qcom,mdss-dsi-hs-pps");
 
 	return 0;
 }
@@ -3122,7 +3126,7 @@ int dsi_panel_get_mode(struct dsi_panel *panel,
 			goto parse_fail;
 		}
 
-		rc = dsi_panel_parse_cmd_sets(prv_info, child_np);
+		rc = dsi_panel_parse_cmd_sets(prv_info, child_np, panel);
 		if (rc) {
 			pr_err("failed to parse command sets, rc=%d\n", rc);
 			goto parse_fail;

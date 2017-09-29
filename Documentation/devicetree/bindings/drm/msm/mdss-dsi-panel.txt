@@ -516,6 +516,7 @@ Optional properties:
 					to identify the default topology for the
 					display. The first set is indexed by the
 					value 0.
+- qcom,mdss-dsi-hs-pps			boolean: Send PPS command in high speed (default false)
 
 Required properties for sub-nodes:	None
 Optional properties:

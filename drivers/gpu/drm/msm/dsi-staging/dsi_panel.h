@@ -151,6 +151,7 @@ struct dsi_panel {
 	struct dsi_panel_debug debug;
 
 	u32 init_delay_us;
+	bool hs_pps;
 	bool lp11_init;
 	bool ulps_enabled;
 	bool allow_phy_power_off;
