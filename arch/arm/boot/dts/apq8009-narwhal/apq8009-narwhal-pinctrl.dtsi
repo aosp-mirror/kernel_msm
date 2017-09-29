@@ -607,5 +607,32 @@
 				};
 			};
 		};
+
+		pmx_nitrous {
+			nitrous_active: nitrous_active {
+				mux {
+					pins = "gpio44", "gpio47", "gpio48";
+					function = "gpio";
+				};
+				config {
+					pins = "gpio44", "gpio47", "gpio48";
+					drive-strength = <4>;
+					bias-pull-up;
+				};
+			};
+
+			nitrous_suspend: nitrous_suspend {
+				mux {
+					pins = "gpio44", "gpio47", "gpio48";
+					function = "gpio";
+				};
+				config {
+					pins = "gpio44", "gpio47", "gpio48";
+					drive-strength = <4>;
+					bias-pull-up;
+				};
+			};
+		};
+
 	};
 };

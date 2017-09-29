@@ -59,5 +59,8 @@
 		interrupt-parent = <&msm_gpio>;
 		interrupts = <48 0>;
 		interrupt-names = "host_wake";
+		pinctrl-names = "default", "sleep";
+		pinctrl-0 = <&nitrous_active>;
+		pinctrl-1 = <&nitrous_suspend>;
 	};
 };
