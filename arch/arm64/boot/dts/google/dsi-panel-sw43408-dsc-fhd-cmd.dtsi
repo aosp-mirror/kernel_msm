@@ -39,7 +39,7 @@
 		qcom,mdss-dsi-te-dcs-command = <1>;
 		qcom,mdss-dsi-te-check-enable;
 		qcom,mdss-dsi-te-using-te-pin;
-		qcom,mdss-dsi-lp11-init;
+		// todo: salidoa qcom,mdss-dsi-lp11-init;
 		qcom,mdss-dsi-tx-eot-append;
 		qcom,mdss-dsi-force-clock-lane-hs = <1>;
 
@@ -65,6 +65,7 @@
 		qcom,mdss-pan-physical-width-dimension = <68>;
 		qcom,mdss-pan-physical-height-dimension = <136>;
 
+		qcom,mdss-dsi-init-delay-us = <10000>;
 		qcom,mdss-dsi-display-timings {
 			timing@0 {
 				qcom,mdss-dsi-panel-framerate = <60>;
@@ -162,6 +163,7 @@
 					39 01 00 00 00 00 07 55
 						04 70 DB 04 70 DB
 					15 01 00 00 00 00 02 B0 AC
+					15 01 00 00 00 00 02 07 11
 					05 01 00 00 00 00 01 29
 				];
 				qcom,mdss-dsi-off-command = [
