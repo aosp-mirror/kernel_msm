@@ -1821,36 +1821,18 @@ static int dsi_panel_alloc_cmd_packets(struct dsi_panel_cmd_set *cmd,
 }
 
 static int dsi_panel_parse_cmd_sets_sub(struct dsi_panel_cmd_set *cmd,
-					enum dsi_cmd_set_type type,
-					struct dsi_parser_utils *utils)
+					const char *data,
+					size_t length)
 {
 	int rc = 0;
-	u32 length = 0;
-	const char *data;
-	const char *state;
 	u32 packet_count = 0;
-
-	data = utils->get_property(utils->data, cmd_set_prop_map[type],
-			&length);
-	if (!data) {
-		pr_debug("%s commands not defined\n", cmd_set_prop_map[type]);
-		rc = -ENOTSUPP;
-		goto error;
-	}
-
-	pr_debug("type=%d, name=%s, length=%d\n", type,
-		cmd_set_prop_map[type], length);
-
-	print_hex_dump_debug("", DUMP_PREFIX_NONE,
-		       8, 1, data, length, false);
 
 	rc = dsi_panel_get_cmd_pkt_count(data, length, &packet_count);
 	if (rc) {
 		pr_err("commands failed, rc=%d\n", rc);
 		goto error;
 	}
-	pr_debug("[%s] packet-count=%d, %d\n", cmd_set_prop_map[type],
-		packet_count, length);
+	pr_debug("packet-count=%d, %d\n", packet_count, length);
 
 	rc = dsi_panel_alloc_cmd_packets(cmd, packet_count);
 	if (rc) {
@@ -1865,24 +1847,58 @@ static int dsi_panel_parse_cmd_sets_sub(struct dsi_panel_cmd_set *cmd,
 		goto error_free_mem;
 	}
 
-	state = utils->get_property(utils->data, cmd_set_state_map[type], NULL);
-	if (!state || !strcmp(state, "dsi_lp_mode")) {
-		cmd->state = DSI_CMD_SET_STATE_LP;
-	} else if (!strcmp(state, "dsi_hs_mode")) {
-		cmd->state = DSI_CMD_SET_STATE_HS;
-	} else {
-		pr_err("[%s] command state unrecognized-%s\n",
-		       cmd_set_state_map[type], state);
-		goto error_free_mem;
-	}
-
 	return rc;
 error_free_mem:
 	kfree(cmd->cmds);
 	cmd->cmds = NULL;
 error:
 	return rc;
+}
 
+static int dsi_panel_parse_cmd_sets_dt(struct dsi_panel_cmd_set *cmd,
+				       enum dsi_cmd_set_type type,
+				       struct dsi_parser_utils *utils)
+{
+	const char *data;
+	const char *state;
+	enum dsi_cmd_set_state st;
+	u32 length = 0;
+	int rc;
+
+	pr_debug("type=%d, name=%s, length=%d\n", type,
+		cmd_set_prop_map[type], length);
+
+	data = utils->get_property(utils->data, cmd_set_prop_map[type],
+				   &length);
+	if (!data) {
+		pr_debug("%s commands not defined\n", cmd_set_prop_map[type]);
+		return -ENOTSUPP;
+	}
+
+	pr_debug("type=%d, name=%s, length=%d\n", type,
+		 cmd_set_prop_map[type], length);
+
+	print_hex_dump_debug("", DUMP_PREFIX_NONE,
+		8, 1, data, length, false);
+
+	state = utils->get_property(utils->data, cmd_set_state_map[type], NULL);
+	if (!state || !strcmp(state, "dsi_lp_mode")) {
+		st = DSI_CMD_SET_STATE_LP;
+	} else if (!strcmp(state, "dsi_hs_mode")) {
+		st = DSI_CMD_SET_STATE_HS;
+	} else {
+		pr_err("[%s] command state unrecognized-%s\n",
+		       cmd_set_state_map[type], state);
+		return -ENOTSUPP;
+	}
+
+	rc = dsi_panel_parse_cmd_sets_sub(cmd, data, length);
+	if (rc)
+		return rc;
+
+	cmd->state = st;
+
+	return 0;
 }
 
 static int dsi_panel_parse_cmd_sets(
@@ -1910,7 +1926,7 @@ static int dsi_panel_parse_cmd_sets(
 					i, rc);
 			set->state = DSI_CMD_SET_STATE_LP;
 		} else {
-			rc = dsi_panel_parse_cmd_sets_sub(set, i, utils);
+			rc = dsi_panel_parse_cmd_sets_dt(set, i, utils);
 			if (rc)
 				pr_debug("failed to parse set %d\n", i);
 		}
@@ -2999,7 +3015,7 @@ int dsi_panel_parse_esd_reg_read_configs(struct dsi_panel *panel)
 	if (!esd_config)
 		return -EINVAL;
 
-	dsi_panel_parse_cmd_sets_sub(&esd_config->status_cmd,
+	dsi_panel_parse_cmd_sets_dt(&esd_config->status_cmd,
 				DSI_CMD_SET_PANEL_STATUS, utils);
 	if (!esd_config->status_cmd.count) {
 		pr_err("panel status command parsing failed\n");
@@ -3428,16 +3444,189 @@ static const struct file_operations panel_reg_fops = {
 	.release =	single_release,
 };
 
+struct debugfs_cmdset_entry {
+	struct dsi_panel *panel;
+	enum dsi_cmd_set_type type;
+};
+
+struct {
+	const char *label;
+	enum dsi_cmd_set_type type;
+} cmdset_list[] = {
+	{ "pre_on",		DSI_CMD_SET_PRE_ON },
+	{ "on",			DSI_CMD_SET_ON },
+	{ "post_on",		DSI_CMD_SET_POST_ON },
+	{ "pre_off",		DSI_CMD_SET_PRE_OFF },
+	{ "off",		DSI_CMD_SET_OFF },
+	{ "post_off",		DSI_CMD_SET_POST_OFF },
+	{ "panel_status",	DSI_CMD_SET_PANEL_STATUS },
+	{ "pps",		DSI_CMD_SET_PPS },
+};
+
+static inline ssize_t parse_cmdset(struct dsi_panel_cmd_set *set, char *buf,
+				   size_t count)
+{
+	char *tmp;
+	size_t len;
+	ssize_t rc;
+
+	/* calculate length for worst case (1 digit per byte + whitespace) */
+	len = (count + 1) / 2;
+	tmp = kmalloc(len, GFP_KERNEL);
+	if (!tmp)
+		return -ENOMEM;
+
+	rc = parse_byte_buf(tmp, len, buf);
+	if (rc <= 0) {
+		rc = -EINVAL;
+		goto done;
+	}
+
+	rc = dsi_panel_parse_cmd_sets_sub(set, tmp, rc);
+done:
+	kfree(tmp);
+
+	return rc;
+}
+
+ssize_t dsi_panel_debugfs_write_cmdset(struct file *file,
+				       const char __user *user_buf,
+				       size_t count, loff_t *ppos)
+{
+	struct seq_file *seq = file->private_data;
+	struct debugfs_cmdset_entry *entry = seq->private;
+	struct dsi_panel *panel = entry->panel;
+	struct dsi_panel_cmd_set tmp_set;
+	struct dsi_panel_cmd_set *set;
+	char *buf;
+	int rc = 0;
+
+	mutex_lock(&panel->panel_lock);
+	if (!panel->cur_mode || !panel->cur_mode->priv_info) {
+		pr_err("Invalid mode for panel [%s]\n", panel->name);
+		mutex_unlock(&panel->panel_lock);
+		return -EINVAL;
+	}
+
+	set = &panel->cur_mode->priv_info->cmd_sets[entry->type];
+	tmp_set = *set;
+
+	buf = kmalloc(count + 1, GFP_KERNEL);
+	if (!buf) {
+		rc = -ENOMEM;
+		goto done;
+	}
+
+	if (copy_from_user(buf, user_buf, count)) {
+		rc = -EFAULT;
+		goto done;
+	}
+	buf[count] = '\0';
+
+	rc = parse_cmdset(&tmp_set, buf, count);
+	if (rc)
+		goto done;
+
+	dsi_panel_destroy_cmd_packets(set);
+	*set = tmp_set;
+
+done:
+	kfree(buf);
+	mutex_unlock(&panel->panel_lock);
+
+	return rc ? : count;
+}
+
+int dsi_panel_debugfs_read_cmdset(struct seq_file *seq, void *data)
+{
+	struct debugfs_cmdset_entry *entry = seq->private;
+	struct dsi_panel *panel = entry->panel;
+	struct dsi_panel_cmd_set *set;
+	int i, j;
+
+	mutex_lock(&panel->panel_lock);
+	if (!panel->cur_mode || !panel->cur_mode->priv_info) {
+		pr_err("Invalid mode for panel [%s]\n", panel->name);
+		mutex_unlock(&panel->panel_lock);
+		return -EINVAL;
+	}
+	set = &panel->cur_mode->priv_info->cmd_sets[entry->type];
+
+	for (i = 0; i < set->count; i++) {
+		struct dsi_cmd_desc *cmd = set->cmds + i;
+		const char *txbuf = cmd->msg.tx_buf;
+
+		seq_printf(seq, "%02X %02X %02X %02X %02X %02zX %02zX",
+			   cmd->msg.type, cmd->last_command, cmd->msg.channel,
+			   cmd->msg.flags & MIPI_DSI_MSG_REQ_ACK ? 1 : 0,
+			   cmd->post_wait_ms,
+			   cmd->msg.tx_len >> 8, cmd->msg.tx_len & 0xff);
+
+		for (j = 0; j < cmd->msg.tx_len; j++)
+			seq_printf(seq, " %02X", txbuf[j]);
+		seq_puts(seq, "\n");
+	}
+	mutex_unlock(&panel->panel_lock);
+
+	return 0;
+}
+
+static int dsi_panel_debugfs_open_cmdset(struct inode *inode, struct file *f)
+{
+	return single_open(f, dsi_panel_debugfs_read_cmdset, inode->i_private);
+}
+
+static const struct file_operations panel_cmdset_fops = {
+	.owner =	THIS_MODULE,
+	.open =		dsi_panel_debugfs_open_cmdset,
+	.write =	dsi_panel_debugfs_write_cmdset,
+	.read =		seq_read,
+	.llseek =	seq_lseek,
+	.release =	single_release,
+};
+
+static void dsi_panel_debugfs_create_cmdsets(struct dentry *parent,
+					     struct dsi_panel *panel)
+{
+	struct device *dev = panel->parent;
+	struct debugfs_cmdset_entry *entry;
+	const size_t cmds_size = ARRAY_SIZE(cmdset_list);
+	struct dentry *r;
+	int i;
+
+	r = debugfs_create_dir("cmd_sets", parent);
+	if (IS_ERR(r))
+		return;
+
+	entry = devm_kzalloc(dev, cmds_size * sizeof(*entry), GFP_KERNEL);
+	if (!entry)
+		return;
+
+	for (i = 0; i < cmds_size; i++, entry++) {
+		const char *name = cmdset_list[i].label;
+
+		entry->type = cmdset_list[i].type;
+		entry->panel = panel;
+
+		debugfs_create_file(name, 0600, r, entry, &panel_cmdset_fops);
+	}
+}
+
 void dsi_panel_debugfs_init(struct dsi_panel *panel, struct dentry *dir)
 {
 	struct dentry *r;
 	struct dsi_panel_debug *pdbg = &panel->debug;
 	r = debugfs_create_dir("panel_reg", dir);
+	if (IS_ERR(r))
+		return;
+
 	/* default read of 2 bytes */
 	pdbg->reg_read_len = 2;
 	debugfs_create_u8("addr", 0600, r, &pdbg->reg_read_cmd);
 	debugfs_create_size_t("len", 0600, r, &pdbg->reg_read_len);
 	debugfs_create_file("payload", 0600, r, panel, &panel_reg_fops);
+
+	dsi_panel_debugfs_create_cmdsets(dir, panel);
 }
 
 int dsi_panel_drv_init(struct dsi_panel *panel,
