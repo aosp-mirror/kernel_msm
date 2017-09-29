@@ -3001,8 +3001,10 @@ int dsi_ctrl_cmd_transfer(struct dsi_ctrl *dsi_ctrl,
 
 	if (flags & DSI_CTRL_CMD_READ) {
 		rc = dsi_message_rx(dsi_ctrl, msg, flags);
-		if (rc <= 0)
-			pr_err("read message failed read length, rc=%d\n", rc);
+		if (rc < 0)
+			pr_err("read message failed read, rc=%d\n", rc);
+		else if (rc == 0)
+			pr_warn("empty message back\n");
 	} else {
 		rc = dsi_message_tx(dsi_ctrl, msg, flags);
 		if (rc)
