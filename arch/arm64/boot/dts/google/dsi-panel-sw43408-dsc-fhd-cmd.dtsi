@@ -65,6 +65,7 @@
 		qcom,mdss-pan-physical-width-dimension = <68>;
 		qcom,mdss-pan-physical-height-dimension = <136>;
 
+		qcom,mdss-dsi-hs-pps;
 		qcom,mdss-dsi-init-delay-us = <10000>;
 		qcom,mdss-dsi-display-timings {
 			timing@0 {
