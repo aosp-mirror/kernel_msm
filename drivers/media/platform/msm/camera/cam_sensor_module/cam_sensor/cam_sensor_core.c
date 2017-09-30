@@ -639,27 +639,39 @@ int cam_sensor_power_up(struct cam_sensor_ctrl_t *s_ctrl)
 	struct cam_camera_slave_info *slave_info;
 	struct cam_hw_soc_info *soc_info =
 		&s_ctrl->soc_info;
+	/*
+	 * Camera ID 0 - FNCAM
+	 * P1: RX1 -> TX0
+	 */
 	struct mnh_mipi_config mipi_config0 = {
 		.txdev = MIPI_TX0,
-		.rxdev = MIPI_RX0,
-		.rx_rate = 698,
-		.tx_rate = 698,
+		.rxdev = MIPI_RX1,
+		.rx_rate = 696,
+		.tx_rate = 696,
 		.mode = MIPI_MODE_BYPASS,
 		.vc_en_mask = MNH_MIPI_VC_ALL_EN_MASK,
 	};
+	/*
+	 * Camera ID 1 - RCAM
+	 * P1: RX2 -> TX1
+	 */
 	struct mnh_mipi_config mipi_config1 = {
 		.txdev = MIPI_TX1,
-		.rxdev = MIPI_RX1,
+		.rxdev = MIPI_RX2,
 		.rx_rate = 1368,
 		.tx_rate = 1368,
 		.mode = MIPI_MODE_BYPASS,
 		.vc_en_mask = MNH_MIPI_VC_ALL_EN_MASK,
 	};
+	/*
+	 * Camera ID 2 - FWCAM
+	 * P1: RX0 -> TX1
+	 */
 	struct mnh_mipi_config mipi_config2 = {
 		.txdev = MIPI_TX1,
-		.rxdev = MIPI_RX2,
-		.rx_rate = 698,
-		.tx_rate = 698,
+		.rxdev = MIPI_RX0,
+		.rx_rate = 696,
+		.tx_rate = 696,
 		.mode = MIPI_MODE_BYPASS,
 		.vc_en_mask = MNH_MIPI_VC_ALL_EN_MASK,
 	};
