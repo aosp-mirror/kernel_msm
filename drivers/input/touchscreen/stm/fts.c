@@ -1666,6 +1666,12 @@ static void fts_enter_pointer_event_handler(struct fts_ts_info *info, unsigned c
     if (y == info->board->y_axis_max)
         y--;
 
+    if (info->board->x_mirror)
+        x = info->board->x_axis_max - x - 1;
+
+    if (info->board->y_mirror)
+        y = info->board->y_axis_max - y - 1;
+
     input_mt_slot(info->input_dev, touchId);
 	switch(touchType){
 
@@ -3086,6 +3092,8 @@ static int parse_dt(struct device *dev, struct fts_hw_platform_data *bdata) {
     }
     bdata->x_axis_max = coords[0];
     bdata->y_axis_max = coords[1];
+    bdata->x_mirror = of_property_read_bool(np, "st,x-mirror");
+    bdata->y_mirror = of_property_read_bool(np, "st,y-mirror");
 
     return OK;
 }

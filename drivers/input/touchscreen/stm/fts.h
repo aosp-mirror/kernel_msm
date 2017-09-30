@@ -159,6 +159,8 @@ struct fts_hw_platform_data {
 	const char *avdd_reg_name;													///< name of the AVDD regulator
 	int x_axis_max;
 	int y_axis_max;
+	bool x_mirror;
+	bool y_mirror;
 };
 
 /*
