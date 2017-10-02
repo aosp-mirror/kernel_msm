@@ -452,8 +452,8 @@ int flash_burn(Firmware fw, int force_burn, int keep_cx) {
     u8 cmd;
     int res;
 
-    if (!force_burn && (ftsInfo.u16_fwVer >= fw.fw_ver) && (ftsInfo.u16_cfgId >= fw.config_id)) {
-        logError(1, "%s flash_burn: Firmware in the chip newer or equal to the one to burn! NO UPDATE ERROR %02X \n", tag, ERROR_FW_NO_UPDATE);
+    if (!force_burn && (ftsInfo.u16_fwVer == fw.fw_ver) && (ftsInfo.u16_cfgId == fw.config_id)) {
+        logError(1, "%s flash_burn: Firmware in the chip equal to the one to burn! NO UPDATE ERROR %02X \n", tag, ERROR_FW_NO_UPDATE);
         return (ERROR_FW_NO_UPDATE | ERROR_FLASH_BURN_FAILED);
     }
 
@@ -1230,16 +1230,15 @@ int flash_burn(Firmware fw, int force_burn, int keep_cx) {
 
     if (!force_burn) {
 		for(res = EXTERNAL_RELEASE_INFO_SIZE-1; res >=0; res--){
-			if(fw.externalRelease[res]>systemInfo.u8_releaseInfo[res])
+			if(fw.externalRelease[res]!=systemInfo.u8_releaseInfo[res])
 				goto start;
 		}
-        logError(1, "%s flash_burn: Firmware in the chip newer or equal to the one to burn! NO UPDATE ERROR %08X \n", tag, ERROR_FW_NO_UPDATE);
+        logError(1, "%s flash_burn: Firmware in the chip equal to the one to burn! NO UPDATE ERROR %08X \n", tag, ERROR_FW_NO_UPDATE);
         return (ERROR_FW_NO_UPDATE | ERROR_FLASH_BURN_FAILED);
     }else{
 		//burn procedure to update the CX memory, if not preset just skip it!
 		if(force_burn == CRC_CX && fw.sec2_size==0){
-			logError(1, "%s flash_burn: CRC in CX but fw does not contain CX data! NO UPDATE ERROR %08X \n", tag, ERROR_FW_NO_UPDATE);
-			return (ERROR_FW_NO_UPDATE | ERROR_FLASH_BURN_FAILED);
+			logError(1, "%s flash_burn: CRC in CX but fw does not contain CX data!\n");
 		}
 	}
 
