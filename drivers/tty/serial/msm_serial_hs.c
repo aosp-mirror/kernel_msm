@@ -1969,7 +1969,7 @@ static void msm_hs_sps_rx_callback(struct sps_event_notify *notify)
 
 	uport = &(msm_uport->uport);
 	msm_uport->notify = *notify;
-	MSM_HS_INFO("rx_cb: addr=0x%pa, size=0x%x, flags=0x%x\n",
+	MSM_HS_INFO("rx_cb: addr=0x%paP, size=0x%x, flags=0x%x\n",
 		&addr, notify->data.transfer.iovec.size,
 		notify->data.transfer.iovec.flags);
 

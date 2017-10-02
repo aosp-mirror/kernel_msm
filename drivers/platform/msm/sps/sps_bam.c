@@ -249,7 +249,7 @@ static irqreturn_t bam_isr(int irq, void *ctxt)
 							&ready);
 			} else {
 				SPS_DBG1(dev,
-					"sps:bam_isr: BAM is not ready and thus skip IRQ for bam:%pa IRQ #:%d.\n",
+					"sps:bam_isr: BAM is not ready and thus skip IRQ for bam:%paP IRQ #:%d.\n",
 					BAM_ID(dev), irq);
 			}
 		} else {
