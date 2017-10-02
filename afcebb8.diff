@@ -1,0 +1,38 @@
+From afcebb82f391776dc332a268d6a582f8de0b7a23 Mon Sep 17 00:00:00 2001
+From: Srinivas Girigowda <sgirigow@codeaurora.org>
+Date: Wed, 26 Jul 2017 12:17:20 +0530
+Subject: [PATCH] qcacld-2.0: Fix incorrect processing of encrypted auth frame
+
+qcacld-3.0 to qcacld-2.0 propagation.
+
+Fix incorrect processing of encrypted auth frame by allocating
+appropriate local buffer and using correct type for frame length.
+
+Change-Id: I0d17656230c4a032c6a190835343e5da737978eb
+CRs-Fixed: 2082544
+Bug: 67030205
+Signed-off-by: Srinivas Girigowda <sgirigow@codeaurora.org>
+---
+
+diff --git a/drivers/staging/qcacld-2.0/CORE/MAC/src/pe/lim/limSecurityUtils.c b/drivers/staging/qcacld-2.0/CORE/MAC/src/pe/lim/limSecurityUtils.c
+index 049c86a..909a300 100644
+--- a/drivers/staging/qcacld-2.0/CORE/MAC/src/pe/lim/limSecurityUtils.c
++++ b/drivers/staging/qcacld-2.0/CORE/MAC/src/pe/lim/limSecurityUtils.c
+@@ -734,7 +734,7 @@
+     {
+         tANI_U8 i   = ctx.i;
+         tANI_U8 j   = ctx.j;
+-        tANI_U8 len = (tANI_U8) frameLen;
++        tANI_U16 len = frameLen;
+ 
+         while (len-- > 0)
+         {
+@@ -816,7 +816,7 @@
+     // Compute CRC-32 and place them in last 4 bytes of encrypted body
+     limComputeCrc32(icv,
+                     (tANI_U8 *) pPlainBody,
+-                    (tANI_U8) (frameLen - SIR_MAC_WEP_ICV_LENGTH));
++                    (frameLen - SIR_MAC_WEP_ICV_LENGTH));
+ 
+     // Compare RX_ICV with computed ICV
+     for (i = 0; i < SIR_MAC_WEP_ICV_LENGTH; i++)
