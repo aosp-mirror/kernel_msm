@@ -51,8 +51,11 @@ ifeq ($(TARGET_PREBUILT_KERNEL),)
 
 KERNEL_GCC_NOANDROID_CHK := $(shell (echo "int main() {return 0;}" | $(KERNEL_CROSS_COMPILE)gcc -E -mno-android - > /dev/null 2>&1 ; echo $$?))
 ifeq ($(strip $(KERNEL_GCC_NOANDROID_CHK)),0)
-KERNEL_CFLAGS := KCFLAGS=-mno-android
+KERNEL_CFLAGS := "KCFLAGS=-mno-android -Werror"
+else
+KERNEL_CFLAGS := "KCFLAGS=-Werror"
 endif
+$(info KERNEL_CFLAGS: $(KERNEL_CFLAGS))
 
 KERNEL_SRC_DIR ?= kernel
 PWD_REL_TO_KERNEL_SRC ?= ..
