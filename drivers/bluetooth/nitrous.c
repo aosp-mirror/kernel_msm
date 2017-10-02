@@ -317,6 +317,7 @@ static int nitrous_rfkill_set_power(void *data, bool blocked)
 				IRQF_TRIGGER_LOW : IRQF_TRIGGER_HIGH);
 		if (unlikely(rc))
 			pr_err("%s: error setting irq type %d\n", __func__, rc);
+		lpm->rfkill_blocked = blocked;
 		enable_irq(lpm->irq_host_wake);
 	} else {
 		/* Disable host wake IRQ and release Rx wakelock*/
@@ -329,9 +330,9 @@ static int nitrous_rfkill_set_power(void *data, bool blocked)
 
 		/* Power down the BT chip */
 		gpio_set_value(lpm->gpio_power, 0);
-	}
 
-	lpm->rfkill_blocked = blocked;
+		lpm->rfkill_blocked = blocked;
+	}
 
 	return 0;
 }
