@@ -781,6 +781,15 @@ static int tcpm_set_current_limit(struct tcpc_dev *dev, u32 max_ma, u32 mv)
 		return ret;
 	}
 
+	ret = power_supply_set_property(pd->usb_psy,
+					POWER_SUPPLY_PROP_VOLTAGE_MIN,
+					&val);
+	if (ret < 0) {
+		pd_engine_log(pd, "unable to set min voltage to %d, ret=%d",
+			      mv, ret);
+		return ret;
+	}
+
 	val.intval = max_ma * 1000;
 	ret = power_supply_set_property(pd->usb_psy,
 					POWER_SUPPLY_PROP_PD_CURRENT_MAX,
