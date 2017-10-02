@@ -63,7 +63,7 @@
 		};
 		config {
 			drive-strength = <2>;
-			output-low;
+			bias-pull-up;
 		};
 	};
 };
