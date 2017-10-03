@@ -690,7 +690,7 @@ int cam_sensor_power_up(struct cam_sensor_ctrl_t *s_ctrl)
 	}
 
 	rc2 = mnh_sm_set_state(MNH_STATE_ACTIVE);
-	if (!rc2) {
+	if (!rc2 || (rc2 == -EHOSTUNREACH)) {
 		if (s_ctrl->id == 0)
 			rc2 = mnh_sm_mipi_config(mipi_config0);
 		else if (s_ctrl->id == 1)
