@@ -13,6 +13,7 @@
 
 #include <linux/kernel.h>
 #include <linux/pm_runtime.h>
+#include <linux/delay.h>
 
 #include "mdss_mdp.h"
 #include "mdss_panel.h"
