@@ -27,6 +27,7 @@
 struct s2mpb04_gpio {
 	struct gpio_chip gpio_chip;
 	struct s2mpb04_core *s2mpb04_core;
+	struct device *dev;
 	unsigned long int pin_used;
 };
 
@@ -77,31 +78,34 @@ static void s2mpb04_gpio_set(struct gpio_chip *gpio_chip, unsigned int offset,
 {
 	struct s2mpb04_gpio *s2mpb04_gpio = to_s2mpb04_gpio(gpio_chip);
 	struct s2mpb04_core *s2mpb04_core = s2mpb04_gpio->s2mpb04_core;
-	u8 data;
+	const void *ptr;
+	bool p1_workaround = false;
 
-	dev_dbg(s2mpb04_core->dev, "%s: offset %d, value %d\n", __func__,
-		offset, value);
+	/*
+	 * NOTE: B1 P1 has a schematic bug where output is not connected to the
+	 * correct rail. If the workaround is enabled, then we drive GPIO1 as
+	 * push-pull. Otherwise, and by default, it is an open-drain output.
+	 */
+	ptr = of_get_property(s2mpb04_gpio->dev->of_node, "p1_workaround",
+			      NULL);
+	if (ptr)
+		p1_workaround = true;
+
+	dev_dbg(s2mpb04_core->dev, "%s: offset %d, value %d, p1_workaround %d\n",
+		__func__, offset, value, p1_workaround);
 
 	/*
 	 * GPIO1 is an open-drain output and has to have the output disabled to
 	 * allow it to float high when value is not 0.
 	 */
-	if ((offset == 1) && (value != 0)) {
+	if (!p1_workaround && (offset == 1) && (value != 0)) {
 		s2mpb04_write_byte(s2mpb04_core, S2MPB04_REG_GPIO_CTRL, 0x40);
-
-		/* NOTE: B1 P1 has a schematic bug where output is not connected
-		 * to the correct rail. Check for this case by seeing if value
-		 * was pulled high. If not, then drive 1.8 output below */
-		usleep_range(100, 100);
-		s2mpb04_read_byte(s2mpb04_core, S2MPB04_REG_GPIO_Y, &data);
-		if (data & 0x2)
-			return;
+	} else {
+		s2mpb04_update_bits(s2mpb04_core, S2MPB04_REG_GPIO_A,
+				    (1 << offset), ((value ? 1 : 0) << offset));
+		s2mpb04_update_bits(s2mpb04_core, S2MPB04_REG_GPIO_CTRL,
+				    (0x40 << offset), (0x40 << offset));
 	}
-
-	s2mpb04_update_bits(s2mpb04_core, S2MPB04_REG_GPIO_A,
-			    (1 << offset), ((value ? 1 : 0) << offset));
-	s2mpb04_update_bits(s2mpb04_core, S2MPB04_REG_GPIO_CTRL,
-			    (0x40 << offset), (0x40 << offset));
 }
 
 static int s2mpb04_gpio_direction_output(struct gpio_chip *gpio_chip,
@@ -139,6 +143,7 @@ static int s2mpb04_gpio_probe(struct platform_device *pdev)
 	s2mpb04_gpio->s2mpb04_core = s2mpb04_core;
 	s2mpb04_gpio->gpio_chip = s2mpb04_gpio_chip;
 	s2mpb04_gpio->gpio_chip.parent = &pdev->dev;
+	s2mpb04_gpio->dev = &pdev->dev;
 
 	platform_set_drvdata(pdev, s2mpb04_gpio);
 
