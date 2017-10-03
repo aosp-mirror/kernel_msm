@@ -423,6 +423,15 @@
 	};
 };
 
+&firmware {
+	android {
+		fstab {
+			vendor {
+				fsmgr_flags = "wait,slotselect,verify";
+			};
+		};
+	};
+};
 
 &pmi8998_charger {
 	/delete-property/qcom,batteryless-platform;
