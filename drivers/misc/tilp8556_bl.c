@@ -148,7 +148,6 @@ static void lp8556_deferred_brightness_set(struct work_struct *work)
 {
        struct lp8556_bl *lp8556 = container_of(work, struct lp8556_bl, work_set);
        struct i2c_client *client = lp8556->client;
-       int err;
        u16 max_brightness, val;
        u8 writeBuf[2];
 
@@ -158,12 +157,11 @@ static void lp8556_deferred_brightness_set(struct work_struct *work)
        val = max_brightness * (lp8556->brightness + 1) / (MAX_LEVEL + 1);
 
        writeBuf[0] = LP8556_CFG1;
-       writeBuf[1] = (val>>8) & 0x0F | (reg_array[7] & 0xF0);
-       lp8556_write(client, &writeBuf, 2);
+       writeBuf[1] = ((val>>8) & 0x0F) | (reg_array[7] & 0xF0);
+       lp8556_write(client, writeBuf, 2);
        writeBuf[0] = LP8556_CFG0;
        writeBuf[1] = val & 0xFF;
-       lp8556_write(client, &writeBuf, 2);
-       return 0;
+       lp8556_write(client, writeBuf, 2);
 }
 
 static void lp8556_brightness_set(struct led_classdev *led_cdev,
