@@ -2755,7 +2755,7 @@ ssize_t dsi_panel_debugfs_write_cmdset(struct file *file,
 
 	rc = parse_cmdset(&tmp_set, buf, count);
 	if (rc)
-		return rc;
+		goto done;
 
 	for (i = 0; i < set->count; i++) {
 		struct dsi_cmd_desc *cmd = set->cmds + i;
