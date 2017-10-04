@@ -1830,7 +1830,8 @@ void wma_set_bsskey(tp_wma_handle wma_handle, tpSetBssKeyParams key_info)
 	key_info->status = QDF_STATUS_SUCCESS;
 
 out:
-	wma_send_msg(wma_handle, WMA_SET_BSSKEY_RSP, (void *)key_info, 0);
+	wma_send_msg_high_priority(wma_handle,
+			WMA_SET_BSSKEY_RSP, (void *)key_info, 0);
 }
 
 #ifdef QCA_IBSS_SUPPORT
@@ -2148,8 +2149,8 @@ void wma_set_stakey(tp_wma_handle wma_handle, tpSetStaKeyParams key_info)
 	key_info->status = QDF_STATUS_SUCCESS;
 out:
 	if (key_info->sendRsp)
-		wma_send_msg(wma_handle, WMA_SET_STAKEY_RSP, (void *)key_info,
-			     0);
+		wma_send_msg_high_priority(wma_handle, WMA_SET_STAKEY_RSP,
+			(void *)key_info, 0);
 }
 
 /**
@@ -2606,9 +2607,8 @@ void wma_send_beacon(tp_wma_handle wma, tpSendbeaconParams bcn_info)
 		if (!wma->interfaces[vdev_id].vdev_up) {
 			param.vdev_id = vdev_id;
 			param.assoc_id = 0;
-			status = wmi_unified_vdev_up_send(wma->wmi_handle,
-					bcn_info->bssId,
-					&param);
+			status = wma_send_vdev_up_to_fw(wma, &param,
+							bcn_info->bssId);
 			if (QDF_IS_STATUS_ERROR(status)) {
 				WMA_LOGE(FL("failed to send vdev up"));
 				cds_set_do_hw_mode_change_flag(false);

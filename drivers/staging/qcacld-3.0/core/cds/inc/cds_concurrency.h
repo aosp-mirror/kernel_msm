@@ -40,11 +40,7 @@
 
 #define MAX_NUMBER_OF_CONC_CONNECTIONS 3
 #define DBS_OPPORTUNISTIC_TIME    10
-#ifdef QCA_WIFI_3_0_EMU
 #define CONNECTION_UPDATE_TIMEOUT 3000
-#else
-#define CONNECTION_UPDATE_TIMEOUT 1000
-#endif
 
 /* Some max value greater than the max length of the channel list */
 #define MAX_WEIGHT_OF_PCL_CHANNELS 255
@@ -865,7 +861,8 @@ QDF_STATUS cds_get_mcc_session_id_on_mac(uint8_t mac_id, uint8_t session_id,
 uint8_t cds_get_mcc_operating_channel(uint8_t session_id);
 QDF_STATUS cds_get_pcl_for_existing_conn(enum cds_con_mode mode,
 			uint8_t *pcl_ch, uint32_t *len,
-			uint8_t *weight_list, uint32_t weight_len);
+			uint8_t *weight_list, uint32_t weight_len,
+			bool all_matching_cxn_to_del);
 QDF_STATUS cds_get_valid_chan_weights(struct sir_pcl_chan_weights *weight,
 			enum cds_con_mode mode);
 QDF_STATUS cds_set_hw_mode_on_channel_switch(uint8_t session_id);

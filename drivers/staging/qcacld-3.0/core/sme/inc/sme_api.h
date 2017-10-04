@@ -355,7 +355,6 @@ QDF_STATUS sme_roam_set_pmkid_cache(tHalHandle hHal, uint8_t sessionId,
 		tPmkidCacheInfo *pPMKIDCache,
 		uint32_t numItems,
 		bool update_entire_cache);
-
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD
 QDF_STATUS sme_roam_set_psk_pmk(tHalHandle hHal, uint8_t sessionId,
 		uint8_t *pPSK_PMK, size_t pmk_len);
@@ -710,6 +709,8 @@ uint16_t sme_get_neighbor_scan_max_chan_time(tHalHandle hHal,
 QDF_STATUS sme_set_neighbor_scan_period(tHalHandle hHal, uint8_t sessionId,
 		const uint16_t nNeighborScanPeriod);
 uint16_t sme_get_neighbor_scan_period(tHalHandle hHal, uint8_t sessionId);
+QDF_STATUS sme_set_neighbor_scan_min_period(tHalHandle h_hal,
+		uint8_t session_id, const uint16_t neighbor_scan_min_period);
 QDF_STATUS sme_set_roam_bmiss_first_bcnt(tHalHandle hHal,
 		uint8_t sessionId, const uint8_t nRoamBmissFirstBcnt);
 uint8_t sme_get_roam_bmiss_first_bcnt(tHalHandle hHal);
@@ -1725,6 +1726,17 @@ QDF_STATUS sme_ipa_uc_stat_request(tHalHandle hal,
 			uint32_t param_val, uint32_t req_cat);
 
 /**
+ * sme_set_smps_cfg() - set SMPS config params
+ * @vdev_id: virtual device for the command
+ * @param_id: parameter id
+ * @param_val: parameter value
+ *
+ * Return: QDF_STATUS_SUCCESS or non-zero on failure
+ */
+
+QDF_STATUS sme_set_smps_cfg(uint32_t vdev_id, uint32_t param_id,
+				uint32_t param_val);
+/**
  * sme_get_peer_info() - sme api to get peer info
  * @hal: hal handle for getting global mac struct
  * @req: peer info request struct send to wma
@@ -1785,13 +1797,74 @@ void sme_set_chan_info_callback(tHalHandle hal_handle,
 			void (*callback)(struct scan_chan_info *chan_info));
 
 /**
- * sme_send_limit_off_chan_cmd() - send limit off-channel command parameters
- * @hal: hal handle for getting global mac struct
- * @param:  pointer to sir_limit_off_chan
+ * sme_set_bmiss_bcnt() - set bmiss config parameters
+ * @vdev_id: virtual device for the command
+ * @first_cnt: bmiss first value
+ * @final_cnt: bmiss final value
  *
- * Return: 0 on success and non zero value on failure
+ * Return: QDF_STATUS_SUCCESS or non-zero on failure
  */
+QDF_STATUS sme_set_bmiss_bcnt(uint32_t vdev_id, uint32_t first_cnt,
+		uint32_t final_cnt);
 
-QDF_STATUS sme_send_limit_off_chan_cmd(tHalHandle hal,
-		struct sir_limit_off_chan *param);
+/**
+ * sme_set_del_pmkid_cache() - API to update PMKID cache
+ * @hal: HAL handle for device
+ * @session_id: Session id
+ * @pmk_cache_info: Pointer to PMK cache info
+ * @is_add: boolean that implies whether to add or delete PMKID entry
+ *
+ * Return: QDF_STATUS
+ */
+QDF_STATUS sme_set_del_pmkid_cache(tHalHandle hal, uint8_t session_id,
+				   tPmkidCacheInfo *pmk_cache_info,
+				   bool is_add);
+
+/**
+ * sme_send_hlp_ie_info() - API to send HLP IE info to fw
+ * @hal: HAL handle for device
+ * @session_id: Session id
+ * @profile: CSR Roam profile
+ * @if_addr: IP address
+ *
+ * This API is used to send HLP IE info along with IP address
+ * to fw if LFR3 is enabled.
+ *
+ * Return: QDF_STATUS
+ */
+void sme_send_hlp_ie_info(tHalHandle hal, uint8_t session_id,
+			  tCsrRoamProfile *profile, uint32_t if_addr);
+
+#if defined(WLAN_FEATURE_FILS_SK)
+/**
+ * sme_update_fils_config - Update FILS config to CSR roam session
+ * @hal: HAL handle for device
+ * @session_id: session id
+ * @src_profile: Source profile having latest FILS config
+ *
+ * API to update FILS config to roam csr session and update the same
+ * to fw if LFR3 is enabled.
+ *
+ * Return: QDF_STATUS
+ */
+QDF_STATUS sme_update_fils_config(tHalHandle hal, uint8_t session_id,
+				tCsrRoamProfile *src_profile);
+
+/**
+ * sme_free_join_rsp_fils_params - free fils params
+ * @roam_info: roam info
+ *
+ * Return: void
+ */
+void sme_free_join_rsp_fils_params(tCsrRoamInfo *roam_info);
+#else
+static inline QDF_STATUS sme_update_fils_config(tHalHandle hal,
+				uint8_t session_id,
+				tCsrRoamProfile *src_profile)
+{
+	return QDF_STATUS_SUCCESS;
+}
+static inline void sme_free_join_rsp_fils_params(tCsrRoamInfo *roam_info)
+{}
+#endif
 #endif /* #if !defined( __SME_API_H ) */

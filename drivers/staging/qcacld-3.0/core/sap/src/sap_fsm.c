@@ -51,7 +51,7 @@
 #include "cds_reg_service.h"
 #include "qdf_util.h"
 #include "cds_concurrency.h"
-
+#include "wma.h"
 /*----------------------------------------------------------------------------
  * Preprocessor Definitions and Constants
  * -------------------------------------------------------------------------*/
@@ -2208,6 +2208,7 @@ QDF_STATUS sap_goto_channel_sel(ptSapContext sap_context,
 	QDF_STATUS qdf_ret_status;
 	/* To be initialised if scan is required */
 	tCsrScanRequest scan_request;
+	uint32_t scan_req_id;
 	QDF_STATUS qdf_status = QDF_STATUS_SUCCESS;
 	tpAniSirGlobal mac_ctx;
 
@@ -2375,8 +2376,9 @@ QDF_STATUS sap_goto_channel_sel(ptSapContext sap_context,
 		sap_context->channelList = channel_list;
 		sap_context->num_of_channel = num_of_channels;
 #endif
+		wma_get_scan_id(&scan_req_id);
+		scan_request.scan_id = scan_req_id;
 		/* Set requestType to Full scan */
-
 		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_HIGH,
 			  FL("calling sme_scan_request"));
 #ifdef FEATURE_WLAN_AP_AP_ACS_OPTIMIZE
@@ -4752,8 +4754,8 @@ static QDF_STATUS sap_get_channel_list(ptSapContext sap_ctx,
 
 #ifdef FEATURE_WLAN_CH_AVOID
 		for (i = 0; i < NUM_CHANNELS; i++) {
-			if ((safe_channels[i].channelNumber ==
-			     CDS_CHANNEL_NUM(loop_count))) {
+			if (safe_channels[i].channelNumber ==
+			     CDS_CHANNEL_NUM(loop_count)) {
 				/* Check if channel is safe */
 				if (true == safe_channels[i].isSafe) {
 #endif
@@ -4866,7 +4868,7 @@ static QDF_STATUS sap_get_5ghz_channel_list(ptSapContext sapContext)
 	} else  {
 		status = cds_get_pcl_for_existing_conn(CDS_SAP_MODE,
 				pcl.pcl_list, &pcl.pcl_len, pcl.weight_list,
-				QDF_ARRAY_SIZE(pcl.weight_list));
+				QDF_ARRAY_SIZE(pcl.weight_list), true);
 	}
 	if (status != QDF_STATUS_SUCCESS) {
 		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_ERROR,

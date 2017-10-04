@@ -109,37 +109,44 @@ bool csr_is_supported_channel(tpAniSirGlobal pMac, uint8_t channelId);
 #define BEST_CANDIDATE_RSSI_WEIGHT 50
 #define MIN_RSSI (-100)
 #define MAX_RSSI 0
-#define BEST_CANDIDATE_AP_COUNT_WEIGHT 50
-#define BEST_CANDIDATE_MAX_COUNT 30
-#define BEST_CANDIDATE_MIN_COUNT 0
 #define ROAM_MAX_CHANNEL_WEIGHT 100
-#define DEFAULT_CHANNEL_UTILIZATION 50
 #define MAX_CHANNEL_UTILIZATION 100
+#define NSS_1X1_WEIGHTAGE 3
+#define MAX_ESTIMATED_AIR_TIME_FRACTION 255
+#define MAX_AP_LOAD 255
+
+#define LOW_CHANNEL_CONGESTION_WEIGHT 500
+#define MODERATE_CHANNEL_CONGESTION_WEIGHT 370
+#define CONSIDERABLE_CHANNEL_CONGESTION_WEIGHT 250
+#define HIGH_CHANNEL_CONGESTION_WEIGHT 120
+
+#define LOW_CHANNEL_CONGESTION 0
+#define MODERATE_CHANNEL_CONGESTION 25
+#define CONSIDERABLE_CHANNEL_CONGESTION 50
+#define HIGH_CHANNEL_CONGESTION 75
+#define EXTREME_CHANNEL_CONGESTION 100
 
 #define RSSI_WEIGHTAGE 25
 #define HT_CAPABILITY_WEIGHTAGE 7
 #define VHT_CAP_WEIGHTAGE 5
-#define BEAMFORMING_CAP_WEIGHTAGE 2
 #define CHAN_WIDTH_WEIGHTAGE 10
 #define CHAN_BAND_WEIGHTAGE 5
-#define WMM_WEIGHTAGE 0
-#define CCA_WEIGHTAGE 8
-#define OTHER_AP_WEIGHT 28
+#define NSS_WEIGHTAGE 5
+#define BEAMFORMING_CAP_WEIGHTAGE 2
 #define PCL_WEIGHT 10
+#define CHANNEL_CONGESTION_WEIGHTAGE 5
+#define RESERVED_WEIGHT 31
 
-#define MAX_AP_LOAD 255
-#define BEST_CANDIDATE_EXCELLENT_RSSI -40
-#define BEST_CANDIDATE_GOOD_RSSI -55
-#define BEST_CANDIDATE_POOR_RSSI -65
+#define EXCELLENT_RSSI -55
 #define BAD_RSSI  -80
-#define BEST_CANDIDATE_EXCELLENT_RSSI_WEIGHT 100
-#define BEST_CANDIDATE_GOOD_RSSI_WEIGHT 80
-#define BEST_CANDIDATE_BAD_RSSI_WEIGHT 60
+#define EXCELLENT_RSSI_WEIGHT 100
+#define RSSI_BUCKET 5
+#define RSSI_WEIGHT_BUCKET 250
+
 #define BEST_CANDIDATE_MAX_WEIGHT 100
 #define BEST_CANDIDATE_80MHZ 100
 #define BEST_CANDIDATE_40MHZ 70
 #define BEST_CANDIDATE_20MHZ 30
-#define BEST_CANDIDATE_PENALTY (3/10)
 #define BEST_CANDIDATE_MAX_BSS_SCORE 10000
 
 
@@ -1212,7 +1219,6 @@ bool csr_elected_country_info(tpAniSirGlobal pMac);
 void csr_add_vote_for_country_info(tpAniSirGlobal pMac, uint8_t *pCountryCode);
 void csr_clear_votes_for_country_info(tpAniSirGlobal pMac);
 
-#endif
 QDF_STATUS csr_send_ext_change_channel(tpAniSirGlobal mac_ctx,
 				uint32_t channel, uint8_t session_id);
 
@@ -1254,3 +1260,14 @@ QDF_STATUS csr_roam_set_bss_config_cfg(tpAniSirGlobal mac_ctx,
 		bool reset_country);
 void csr_prune_channel_list_for_mode(tpAniSirGlobal pMac,
 				     tCsrChannel *pChannelList);
+
+#ifdef WLAN_FEATURE_11W
+bool csr_is_mfpc_capable(struct sDot11fIERSN *rsn);
+#else
+static inline bool csr_is_mfpc_capable(struct sDot11fIERSN *rsn)
+{
+	return false;
+}
+#endif
+
+#endif /* CSR_INSIDE_API_H__ */

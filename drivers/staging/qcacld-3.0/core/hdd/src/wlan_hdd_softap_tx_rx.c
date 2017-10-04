@@ -109,7 +109,7 @@ void hdd_softap_tx_resume_timer_expired_handler(void *adapter_context)
 		return;
 	}
 
-	hdd_debug("Enabling queues");
+	hdd_info("Enabling queues");
 	wlan_hdd_netif_queue_control(pAdapter, WLAN_WAKE_ALL_NETIF_QUEUE,
 				     WLAN_CONTROL_PATH);
 }
@@ -130,7 +130,7 @@ hdd_softap_tx_resume_false(hdd_adapter_t *pAdapter, bool tx_resume)
 	if (true == tx_resume)
 		return;
 
-	hdd_debug("Disabling queues");
+	hdd_info("Disabling queues");
 	wlan_hdd_netif_queue_control(pAdapter, WLAN_STOP_ALL_NETIF_QUEUE,
 				     WLAN_DATA_FLOW_CONTROL);
 
@@ -182,7 +182,7 @@ void hdd_softap_tx_resume_cb(void *adapter_context, bool tx_resume)
 			qdf_mc_timer_stop(&pAdapter->tx_flow_control_timer);
 		}
 
-		hdd_debug("Enabling queues");
+		hdd_info("Enabling queues");
 		wlan_hdd_netif_queue_control(pAdapter,
 					WLAN_WAKE_ALL_NETIF_QUEUE,
 					WLAN_DATA_FLOW_CONTROL);
@@ -250,6 +250,7 @@ static int __hdd_softap_hard_start_xmit(struct sk_buff *skb,
 	hdd_ap_ctx_t *pHddApCtx = WLAN_HDD_GET_AP_CTX_PTR(pAdapter);
 	struct qdf_mac_addr *pDestMacAddress;
 	uint8_t STAId;
+	uint32_t num_seg;
 
 	++pAdapter->hdd_stats.hddTxRxStats.txXmitCalled;
 	/* Prevent this function from being called during SSR since TL
@@ -379,6 +380,12 @@ static int __hdd_softap_hard_start_xmit(struct sk_buff *skb,
 			goto drop_pkt_accounting;
 
 #if defined(IPA_OFFLOAD)
+	} else {
+		/*
+		 * Clear the IPA ownership after check it to avoid ipa_free_skb
+		 * is called when Tx completed for intra-BSS Tx packets
+		 */
+		qdf_nbuf_ipa_owned_clear(skb);
 	}
 #endif
 
@@ -389,11 +396,17 @@ static int __hdd_softap_hard_start_xmit(struct sk_buff *skb,
 	qdf_net_buf_debug_acquire_skb(skb, __FILE__, __LINE__);
 
 	pAdapter->stats.tx_bytes += skb->len;
+	pAdapter->aStaInfo[STAId].tx_bytes += skb->len;
 
-	if (qdf_nbuf_is_tso(skb))
-		pAdapter->stats.tx_packets += qdf_nbuf_get_tso_num_seg(skb);
-	else
+	if (qdf_nbuf_is_tso(skb)) {
+		num_seg = qdf_nbuf_get_tso_num_seg(skb);
+		pAdapter->stats.tx_packets += num_seg;
+		pAdapter->aStaInfo[STAId].tx_packets += num_seg;
+	} else {
 		++pAdapter->stats.tx_packets;
+		pAdapter->aStaInfo[STAId].tx_packets++;
+	}
+	pAdapter->aStaInfo[STAId].last_tx_rx_ts = qdf_system_ticks();
 
 	hdd_event_eapol_log(skb, QDF_TX);
 	qdf_dp_trace_log_pkt(pAdapter->sessionId, skb, QDF_TX);
@@ -667,6 +680,8 @@ QDF_STATUS hdd_softap_rx_packet_cbk(void *context, qdf_nbuf_t rxBuf)
 	struct sk_buff *skb = NULL;
 	hdd_context_t *pHddCtx = NULL;
 	bool proto_pkt_logged = false;
+	struct qdf_mac_addr src_mac;
+	uint8_t staid;
 
 	/* Sanity check on inputs */
 	if (unlikely((NULL == context) || (NULL == rxBuf))) {
@@ -707,6 +722,18 @@ QDF_STATUS hdd_softap_rx_packet_cbk(void *context, qdf_nbuf_t rxBuf)
 	++pAdapter->hdd_stats.hddTxRxStats.rxPackets[cpu_index];
 	++pAdapter->stats.rx_packets;
 	pAdapter->stats.rx_bytes += skb->len;
+
+	qdf_mem_copy(&src_mac, skb->data + QDF_NBUF_SRC_MAC_OFFSET,
+		sizeof(src_mac));
+	if (QDF_STATUS_SUCCESS ==
+		hdd_softap_get_sta_id(pAdapter, &src_mac, &staid)) {
+		if (staid < WLAN_MAX_STA_COUNT) {
+			pAdapter->aStaInfo[staid].rx_packets++;
+			pAdapter->aStaInfo[staid].rx_bytes += skb->len;
+			pAdapter->aStaInfo[staid].last_tx_rx_ts =
+				qdf_system_ticks();
+		}
+	}
 
 	hdd_event_eapol_log(skb, QDF_RX);
 	proto_pkt_logged = qdf_dp_trace_log_pkt(pAdapter->sessionId,
@@ -904,7 +931,7 @@ QDF_STATUS hdd_softap_register_sta(hdd_adapter_t *pAdapter,
 	}
 
 	/* Enable Tx queue */
-	hdd_debug("Enabling queues");
+	hdd_info("Enabling queues");
 	wlan_hdd_netif_queue_control(pAdapter,
 				   WLAN_START_ALL_NETIF_QUEUE_N_CARRIER,
 				   WLAN_CONTROL_PATH);

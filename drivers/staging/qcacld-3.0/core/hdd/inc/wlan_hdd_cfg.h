@@ -414,6 +414,31 @@ enum hdd_dot11_mode {
 
 /*
  * <ini>
+ * gRoamRestTimeMin - Set min neighbor scan timer period
+ * @Min: 3
+ * @Max: 300
+ * @Default: 200
+ *
+ * This is the min rest time after which firmware will check for traffic
+ * and if there no traffic it will move to a new channel to scan
+ * else it will stay on the home channel till gNeighborScanTimerPeriod time
+ * and then will move to a new channel to scan.
+ *
+ * Related: None
+ *
+ * Supported Feature: LFR Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_NEIGHBOR_SCAN_MIN_TIMER_PERIOD_NAME         "gRoamRestTimeMin"
+#define CFG_NEIGHBOR_SCAN_MIN_TIMER_PERIOD_MIN          (3)
+#define CFG_NEIGHBOR_SCAN_MIN_TIMER_PERIOD_MAX          (300)
+#define CFG_NEIGHBOR_SCAN_MIN_TIMER_PERIOD_DEFAULT      (200)
+
+/*
+ * <ini>
  * gOpportunisticThresholdDiff - Set oppurtunistic threshold diff
  * @Min: 0
  * @Max: 127
@@ -1696,7 +1721,7 @@ enum hdd_dot11_mode {
 #define CFG_FORCE_1X1_NAME      "gForce1x1Exception"
 #define CFG_FORCE_1X1_MIN       (0)
 #define CFG_FORCE_1X1_MAX       (1)
-#define CFG_FORCE_1X1_DEFAULT   (0)
+#define CFG_FORCE_1X1_DEFAULT   (1)
 
 /*
  * <ini>
@@ -1981,6 +2006,66 @@ enum hdd_dot11_mode {
 #define CFG_ROAM_DENSE_MIN_APS_MIN     (1)
 #define CFG_ROAM_DENSE_MIN_APS_MAX     (5)
 #define CFG_ROAM_DENSE_MIN_APS_DEFAULT (3)
+
+/*
+ * <ini>
+ * roam_bg_scan_bad_rssi_thresh - RSSI threshold for background roam
+ * @Min: -96
+ * @Max: 0
+ * @Default: -76
+ *
+ * If the DUT is connected to an AP with weak signal, then the bad RSSI
+ * threshold will be used as an opportunity to use the scan results
+ * from other scan clients and try to roam if there is a better AP
+ * available in the environment.
+ *
+ * Related: None
+ *
+ * Supported Feature: Roaming
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ROAM_BG_SCAN_BAD_RSSI_THRESHOLD_NAME  "roam_bg_scan_bad_rssi_thresh"
+#define CFG_ROAM_BG_SCAN_BAD_RSSI_THRESHOLD_MIN     (-96)
+#define CFG_ROAM_BG_SCAN_BAD_RSSI_THRESHOLD_MAX     (0)
+#define CFG_ROAM_BG_SCAN_BAD_RSSI_THRESHOLD_DEFAULT (-76)
+
+/*
+ * <ini>
+ * roam_bg_scan_client_bitmap - Bitmap used to identify the scan clients
+ * @Min: 0
+ * @Max: 0x3FF
+ * @Default: 0x
+ *
+ * This bitmap is used to define the client scans that need to be used
+ * by the roaming module to perform a background roaming.
+ * Currently supported bit positions are as follows:
+ * Bit 0 is reserved in the firmware.
+ * WMI_SCAN_CLIENT_NLO - 1
+ * WMI_SCAN_CLIENT_EXTSCAN - 2
+ * WMI_SCAN_CLIENT_ROAM - 3
+ * WMI_SCAN_CLIENT_P2P - 4
+ * WMI_SCAN_CLIENT_LPI - 5
+ * WMI_SCAN_CLIENT_NAN - 6
+ * WMI_SCAN_CLIENT_ANQP - 7
+ * WMI_SCAN_CLIENT_OBSS - 8
+ * WMI_SCAN_CLIENT_PLM - 9
+ * WMI_SCAN_CLIENT_HOST - 10
+ *
+ * Related: None
+ *
+ * Supported Feature: Roaming
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ROAM_BG_SCAN_CLIENT_BITMAP_NAME     "roam_bg_scan_client_bitmap"
+#define CFG_ROAM_BG_SCAN_CLIENT_BITMAP_MIN      (0)
+#define CFG_ROAM_BG_SCAN_CLIENT_BITMAP_MAX      (0x7FF)
+#define CFG_ROAM_BG_SCAN_CLIENT_BITMAP_DEFAULT  (0x424)
 
 /*
  * <ini>
@@ -4048,10 +4133,141 @@ enum station_keepalive_method {
 #define CFG_ESE_FEATURE_ENABLED_DEFAULT                     (0) /* disabled */
 #endif /* FEATURE_WLAN_ESE */
 
+/*
+ * <ini>
+ * MAWCEnabled - Enable/Disable Motion Aided Wireless Connectivity Global
+ * @Min: 0 - Disabled
+ * @Max: 1 - Enabled
+ * @Default: 1
+ *
+ * This ini is used to controls the MAWC feature globally.
+ * MAWC is Motion Aided Wireless Connectivity.
+ *
+ * Related: mawc_roam_enabled.
+ *
+ * Supported Feature: Roaming and PNO/NLO
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
 #define CFG_LFR_MAWC_FEATURE_ENABLED_NAME                   "MAWCEnabled"
 #define CFG_LFR_MAWC_FEATURE_ENABLED_MIN                    (0)
 #define CFG_LFR_MAWC_FEATURE_ENABLED_MAX                    (1)
-#define CFG_LFR_MAWC_FEATURE_ENABLED_DEFAULT                (0) /* disabled */
+#define CFG_LFR_MAWC_FEATURE_ENABLED_DEFAULT                (1)
+
+/*
+ * <ini>
+ * mawc_roam_enabled - Enable/Disable MAWC during roaming
+ * @Min: 0 - Disabled
+ * @Max: 1 - Enabled
+ * @Default: 1
+ *
+ * This ini is used to control MAWC during roaming.
+ *
+ * Related: MAWCEnabled.
+ *
+ * Supported Feature: MAWC Roaming
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_MAWC_ROAM_ENABLED_NAME            "mawc_roam_enabled"
+#define CFG_MAWC_ROAM_ENABLED_MIN             (0)
+#define CFG_MAWC_ROAM_ENABLED_MAX             (1)
+#define CFG_MAWC_ROAM_ENABLED_DEFAULT         (1)
+
+/*
+ * <ini>
+ * mawc_roam_traffic_threshold - Configure traffic threshold
+ * @Min: 0
+ * @Max: 0xFFFFFFFF
+ * @Default: 300
+ *
+ * This ini is used to configure the data traffic load in kBps to
+ * register CMC.
+ *
+ * Related: mawc_roam_enabled.
+ *
+ * Supported Feature: MAWC Roaming
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_MAWC_ROAM_TRAFFIC_THRESHOLD_NAME       "mawc_roam_traffic_threshold"
+#define CFG_MAWC_ROAM_TRAFFIC_THRESHOLD_MIN        (0)
+#define CFG_MAWC_ROAM_TRAFFIC_THRESHOLD_MAX        (0xFFFFFFFF)
+#define CFG_MAWC_ROAM_TRAFFIC_THRESHOLD_DEFAULT    (300)
+
+/*
+ * <ini>
+ * mawc_roam_ap_rssi_threshold - Best AP RSSI threshold
+ * @Min: -120
+ * @Max: 0
+ * @Default: -66
+ *
+ * This ini is used to specify the RSSI threshold to scan for the AP.
+ *
+ * Related: mawc_roam_enabled.
+ *
+ * Supported Feature: MAWC Roaming
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_MAWC_ROAM_AP_RSSI_THRESHOLD_NAME       "mawc_roam_ap_rssi_threshold"
+#define CFG_MAWC_ROAM_AP_RSSI_THRESHOLD_MIN        (-120)
+#define CFG_MAWC_ROAM_AP_RSSI_THRESHOLD_MAX        (0)
+#define CFG_MAWC_ROAM_AP_RSSI_THRESHOLD_DEFAULT    (-66)
+
+/*
+ * <ini>
+ * mawc_roam_rssi_high_adjust - Adjust MAWC roam high RSSI
+ * @Min: 3
+ * @Max: 5
+ * @Default: 5
+ *
+ * This ini is used for high RSSI threshold adjustment in stationary state
+ * to suppress the scan.
+ *
+ * Related: mawc_roam_enabled.
+ *
+ * Supported Feature: MAWC Roaming
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_MAWC_ROAM_RSSI_HIGH_ADJUST_NAME        "mawc_roam_rssi_high_adjust"
+#define CFG_MAWC_ROAM_RSSI_HIGH_ADJUST_MIN         (3)
+#define CFG_MAWC_ROAM_RSSI_HIGH_ADJUST_MAX         (5)
+#define CFG_MAWC_ROAM_RSSI_HIGH_ADJUST_DEFAULT     (5)
+
+/*
+ * <ini>
+ * mawc_roam_rssi_high_adjust - Adjust MAWC roam low RSSI
+ * @Min: 3
+ * @Max: 5
+ * @Default: 5
+ *
+ * This ini is used for low RSSI threshold adjustment in stationary state
+ * to suppress the scan.
+ *
+ * Related: mawc_roam_enabled.
+ *
+ * Supported Feature: MAWC Roaming
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_MAWC_ROAM_RSSI_LOW_ADJUST_NAME        "mawc_roam_rssi_low_adjust"
+#define CFG_MAWC_ROAM_RSSI_LOW_ADJUST_MIN         (3)
+#define CFG_MAWC_ROAM_RSSI_LOW_ADJUST_MAX         (5)
+#define CFG_MAWC_ROAM_RSSI_LOW_ADJUST_DEFAULT     (5)
 
 /*This parameter is used to set Wireless Extended Security Mode.*/
 #define CFG_ENABLE_WES_MODE_NAME                            "gWESModeEnabled"
@@ -4165,6 +4381,39 @@ enum station_keepalive_method {
 #define CFG_NEIGHBOR_LOOKUP_RSSI_THRESHOLD_MAX       (120)
 #define CFG_NEIGHBOR_LOOKUP_RSSI_THRESHOLD_DEFAULT   (78)
 
+/*
+ * <ini>
+ * lookup_threshold_5g_offset - Lookup Threshold offset for 5G band
+ * @Min: -120
+ * @Max: +120
+ * @Default: 0
+ *
+ * This ini is  used to set the 5G band lookup threshold for roaming.
+ * It depends on another INI which is gNeighborLookupThreshold.
+ * gNeighborLookupThreshold is a legacy INI item which will be used to
+ * set the RSSI lookup threshold for both 2G and 5G bands. If the
+ * user wants to setup a different threshold for a 5G band, then user
+ * can use this offset value which will be summed up to the value of
+ * gNeighborLookupThreshold and used for 5G
+ * e.g: gNeighborLookupThreshold = -76dBm
+ *      lookup_threshold_5g_offset = 6dBm
+ *      Then the 5G band will be configured to -76+6 = -70dBm
+ * A default value of Zero to lookup_threshold_5g_offset will keep the
+ * thresholds same for both 2G and 5G bands
+ *
+ * Related: gNeighborLookupThreshold
+ *
+ * Supported Feature: Roaming
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_5G_RSSI_THRESHOLD_OFFSET_NAME      "lookup_threshold_5g_offset"
+#define CFG_5G_RSSI_THRESHOLD_OFFSET_MIN       (-120)
+#define CFG_5G_RSSI_THRESHOLD_OFFSET_MAX       (120)
+#define CFG_5G_RSSI_THRESHOLD_OFFSET_DEFAULT   (0)
+
 #define CFG_DELAY_BEFORE_VDEV_STOP_NAME              "gDelayBeforeVdevStop"
 #define CFG_DELAY_BEFORE_VDEV_STOP_MIN               (2)
 #define CFG_DELAY_BEFORE_VDEV_STOP_MAX               (200)
@@ -4183,7 +4432,7 @@ enum station_keepalive_method {
 #define CFG_ROAM_BMISS_FINAL_BCNT_NAME                  "gRoamBmissFinalBcnt"
 #define CFG_ROAM_BMISS_FINAL_BCNT_MIN                   (5)
 #define CFG_ROAM_BMISS_FINAL_BCNT_MAX                   (100)
-#define CFG_ROAM_BMISS_FINAL_BCNT_DEFAULT               (10)
+#define CFG_ROAM_BMISS_FINAL_BCNT_DEFAULT               (20)
 
 #define CFG_ROAM_BEACON_RSSI_WEIGHT_NAME                "gRoamBeaconRssiWeight"
 #define CFG_ROAM_BEACON_RSSI_WEIGHT_MIN                 (0)
@@ -4543,6 +4792,36 @@ enum hdd_link_speed_rpt_type {
 #define CFG_VHT_ENABLE_2x2_CAP_FEATURE_MIN     (0)
 #define CFG_VHT_ENABLE_2x2_CAP_FEATURE_MAX     (1)
 #define CFG_VHT_ENABLE_2x2_CAP_FEATURE_DEFAULT (0)
+
+/*
+ * <ini>
+ * disable_high_ht_mcs_2x2 - disable high mcs index for 2nd stream in 2.4G
+ * @Min: 0
+ * @Max: 8
+ * @Default: 0
+ *
+ * This ini is used to disable high HT MCS index for 2.4G STA connection.
+ * It has been introduced to resolve IOT issue with one of the vendor.
+ *
+ * Note: This INI is not useful with 1x1 setting. If some platform supports
+ * only 1x1 then this INI is not useful.
+ *
+ * 0 - It won't disable any HT MCS index (just like normal HT MCS)
+ * 1 - It will disable 15th bit from HT RX MCS set (from 8-15 bits slot)
+ * 2 - It will disable 14th & 15th bits from HT RX MCS set
+ * 3 - It will disable 13th, 14th, & 15th bits from HT RX MCS set
+ * and so on.
+ *
+ * Related: STA
+ *
+ * Supported Feature: 11n
+ *
+ * Usage: External
+ */
+#define CFG_DISABLE_HIGH_HT_RX_MCS_2x2         "disable_high_ht_mcs_2x2"
+#define CFG_DISABLE_HIGH_HT_RX_MCS_2x2_MIN     (0)
+#define CFG_DISABLE_HIGH_HT_RX_MCS_2x2_MAX     (8)
+#define CFG_DISABLE_HIGH_HT_RX_MCS_2x2_DEFAULT (0)
 
 /*
  * <ini>
@@ -5837,6 +6116,24 @@ enum hdd_link_speed_rpt_type {
 
 /*
  * <ini>
+ * gSapGetPeerInfo - Enable/Disable remote peer info query support
+ * @Min: 0 - Disable remote peer info query support
+ * @Max: 1 - Enable remote peer info query support
+ * @Default: 0
+ *
+ * This ini is used to enable/disable remote peer info query support
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_SAP_GET_PEER_INFO                      "gSapGetPeerInfo"
+#define CFG_SAP_GET_PEER_INFO_MIN                   (0)
+#define CFG_SAP_GET_PEER_INFO_MAX                   (1)
+#define CFG_SAP_GET_PEER_INFO_DEFAULT               (0)
+
+/*
+ * <ini>
  * gDisableABGRateForTxData - disable abg rate for tx data
  * @Min: 0
  * @Max: 1
@@ -6484,9 +6781,9 @@ enum hdd_link_speed_rpt_type {
 /*
  * <ini>
  * gTDLSEnableDeferTime - Timer to defer for enabling TDLS on P2P listen.
- * @Min: 2000
+ * @Min: 500
  * @Max: 6000
- * @Default: 5000
+ * @Default: 2000
  *
  * This ini is used to set the timer to defer for enabling TDLS on P2P
  * listen (value in milliseconds).
@@ -6500,9 +6797,9 @@ enum hdd_link_speed_rpt_type {
  * </ini>
  */
 #define CFG_TDLS_ENABLE_DEFER_TIMER                "gTDLSEnableDeferTime"
-#define CFG_TDLS_ENABLE_DEFER_TIMER_MIN            (2000)
+#define CFG_TDLS_ENABLE_DEFER_TIMER_MIN            (500)
 #define CFG_TDLS_ENABLE_DEFER_TIMER_MAX            (6000)
-#define CFG_TDLS_ENABLE_DEFER_TIMER_DEFAULT        (5000)
+#define CFG_TDLS_ENABLE_DEFER_TIMER_DEFAULT        (2000)
 
 /* Enable/Disable LPWR Image(cMEM uBSP) Transition */
 #define CFG_ENABLE_LPWR_IMG_TRANSITION_NAME        "gEnableLpwrImgTransition"
@@ -9077,7 +9374,7 @@ enum dot11p_mode {
  * restart_beaconing_on_chan_avoid_event - control the beaconing entity to move
  * away from active LTE channels
  * @Min: 0
- * @Max: 1
+ * @Max: 2
  * @Default: 1
  *
  * This ini is used to control the beaconing entity (SAP/GO) to move away from
@@ -9086,6 +9383,8 @@ enum dot11p_mode {
  * from active LTE channels
  * restart_beaconing_on_chan_avoid_event=1: Allow beaconing entity move from
  * active LTE channels
+ * restart_beaconing_on_chan_avoid_event=2: Allow beaconing entity move from
+ * 2.4G active LTE channels only
  *
  * Related: None
  *
@@ -9095,10 +9394,16 @@ enum dot11p_mode {
  *
  * </ini>
  */
+enum restart_beaconing_on_ch_avoid_rule {
+	DO_NOT_RESTART,
+	RESTART,
+	RESTART_24G_ONLY,
+};
+
 #define CFG_RESTART_BEACONING_ON_CH_AVOID_NAME    "restart_beaconing_on_chan_avoid_event"
-#define CFG_RESTART_BEACONING_ON_CH_AVOID_MIN     (0)
-#define CFG_RESTART_BEACONING_ON_CH_AVOID_MAX     (1)
-#define CFG_RESTART_BEACONING_ON_CH_AVOID_DEFAULT (1)
+#define CFG_RESTART_BEACONING_ON_CH_AVOID_MIN     (DO_NOT_RESTART)
+#define CFG_RESTART_BEACONING_ON_CH_AVOID_MAX     (RESTART_24G_ONLY)
+#define CFG_RESTART_BEACONING_ON_CH_AVOID_DEFAULT (RESTART)
 /*
  * This parameter will avoid updating ap_sta_inactivity from hostapd.conf
  * file. If a station does not send anything in ap_max_inactivity seconds, an
@@ -9146,13 +9451,13 @@ enum dot11p_mode {
 
 /*
  * <ini>
- * ce_service_max_yield_time - Control to set ce service max yield time (in ms)
+ * ce_service_max_yield_time - Control to set ce service max yield time (in us)
  *
- * @Min: 1
- * @Max: 10
- * @Default: 10
+ * @Min: 500
+ * @Max: 10000
+ * @Default: 10000
  *
- * This ini is used to set ce service max yield time (in ms)
+ * This ini is used to set ce service max yield time (in us)
  *
  * Supported Feature: NAPI
  *
@@ -9161,9 +9466,9 @@ enum dot11p_mode {
  * </ini>
  */
 #define CFG_CE_SERVICE_MAX_YIELD_TIME_NAME     "ce_service_max_yield_time"
-#define CFG_CE_SERVICE_MAX_YIELD_TIME_MIN      (1)
-#define CFG_CE_SERVICE_MAX_YIELD_TIME_MAX      (10)
-#define CFG_CE_SERVICE_MAX_YIELD_TIME_DEFAULT  (10)
+#define CFG_CE_SERVICE_MAX_YIELD_TIME_MIN      (500)
+#define CFG_CE_SERVICE_MAX_YIELD_TIME_MAX      (10000)
+#define CFG_CE_SERVICE_MAX_YIELD_TIME_DEFAULT  (10000)
 
 /*
  * <ini>
@@ -10395,7 +10700,7 @@ enum dot11p_mode {
  * <ini>
  * g_mc_bc_active_bpf_mode - Control MC/BC active BPF mode
  * @Min: 0 (disabled)
- * @Max: 2 (adaptive)
+ * @Max: 1 (enabled)
  * @Default: 0 (disabled)
  *
  * This config item is used to control MC/BC BPF mode.
@@ -10414,7 +10719,7 @@ enum dot11p_mode {
  */
 #define CFG_ACTIVE_MC_BC_BPF_MODE_NAME    "gActiveMcBcBpfMode"
 #define CFG_ACTIVE_MC_BC_BPF_MODE_MIN     (ACTIVE_BPF_DISABLED)
-#define CFG_ACTIVE_MC_BC_BPF_MODE_MAX     (ACTIVE_BPF_MODE_COUNT - 1)
+#define CFG_ACTIVE_MC_BC_BPF_MODE_MAX     (ACTIVE_BPF_ENABLED)
 #define CFG_ACTIVE_MC_BC_BPF_MODE_DEFAULT (ACTIVE_BPF_DISABLED)
 
 enum hw_filter_mode {
@@ -11194,6 +11499,91 @@ enum hw_filter_mode {
 
 /*
  * <ini>
+ * mawc_nlo_enabled - For NLO/PNO, enable MAWC based scan
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * Enable/Disable the Motion Aided Wireless Connectivity
+ * based NLO using this parameter
+ *
+ * Related: NLO, PNO
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_MAWC_NLO_ENABLED_NAME	"mawc_nlo_enabled"
+#define CFG_MAWC_NLO_ENABLED_MIN	(0)
+#define CFG_MAWC_NLO_ENABLED_MAX	(1)
+#define CFG_MAWC_NLO_ENABLED_DEFAULT	(1)
+
+/*
+ * <ini>
+ * mawc_nlo_exp_backoff_ratio - Exponential back off ratio
+ * @Min: 0
+ * @Max: 300
+ * @Default: 3
+ *
+ * Configure the exponential back off ratio using this
+ * parameter for MAWC based NLO
+ * ratio of exponential backoff, next = current + current*ratio/100
+ *
+ * Related: NLO, PNO
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_MAWC_NLO_EXP_BACKOFF_RATIO_NAME     "mawc_nlo_exp_backoff_ratio"
+#define CFG_MAWC_NLO_EXP_BACKOFF_RATIO_MIN      (0)
+#define CFG_MAWC_NLO_EXP_BACKOFF_RATIO_MAX      (300)
+#define CFG_MAWC_NLO_EXP_BACKOFF_RATIO_DEFAULT  (3)
+
+/*
+ * <ini>
+ * mawc_nlo_init_scan_interval - Initial Scan Interval
+ * @Min: 1000
+ * @Max: 0xFFFFFFFF
+ * @Default: 10000
+ *
+ * Configure the initial scan interval  using this
+ * parameter for MAWC based NLO (Units in Milliseconds)
+ *
+ * Related: NLO, PNO
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_MAWC_NLO_INIT_SCAN_INTERVAL_NAME     "mawc_nlo_init_scan_interval"
+#define CFG_MAWC_NLO_INIT_SCAN_INTERVAL_MIN      (1000)
+#define CFG_MAWC_NLO_INIT_SCAN_INTERVAL_MAX      (0xFFFFFFFF)
+#define CFG_MAWC_NLO_INIT_SCAN_INTERVAL_DEFAULT  (10000)
+
+/*
+ * <ini>
+ * mawc_nlo_max_scan_interval - Maximum Scan Interval
+ * @Min: 1000
+ * @Max: 0xFFFFFFFF
+ * @Default: 60000
+ *
+ * Configure the maximum scan interval  using this
+ * parameter for MAWC based NLO (Units in Milliseconds)
+ *
+ * Related: NLO, PNO
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_MAWC_NLO_MAX_SCAN_INTERVAL_NAME     "mawc_nlo_max_scan_interval"
+#define CFG_MAWC_NLO_MAX_SCAN_INTERVAL_MIN      (1000)
+#define CFG_MAWC_NLO_MAX_SCAN_INTERVAL_MAX      (0xFFFFFFFF)
+#define CFG_MAWC_NLO_MAX_SCAN_INTERVAL_DEFAULT  (60000)
+
+/*
+ * <ini>
  * gAutoChannelSelectWeight - ACS channel weight
  * @Min: 0x1
  * @Max: 0xFFFFFFFF
@@ -11347,6 +11737,144 @@ enum hw_filter_mode {
 #define CFG_ITO_REPEAT_COUNT_MAX        (5)
 #define CFG_ITO_REPEAT_COUNT_DEFAULT    (0)
 
+/*
+ * <ini>
+ * gEnableLPRx - Enable/Disable LPRx
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini Enables or disables the LPRx in FW
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_LPRx_NAME       "gEnableLPRx"
+#define CFG_LPRx_MIN         (0)
+#define CFG_LPRx_MAX         (1)
+#define CFG_LPRx_DEFAULT     (1)
+
+/*
+ * <ini>
+ * gUpperBrssiThresh - Sets Upper threshold for beacon RSSI
+ * @Min: 36
+ * @Max: 66
+ * @Default: 46
+ *
+ * This ini sets Upper beacon threshold for beacon RSSI in FW
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+
+#define CFG_UPPER_BRSSI_THRESH_NAME             "gUpperBrssiThresh"
+#define CFG_UPPER_BRSSI_THRESH_MIN              (36)
+#define CFG_UPPER_BRSSI_THRESH_MAX              (66)
+#define CFG_UPPER_BRSSI_THRESH_DEFAULT          (46)
+
+/*
+ * <ini>
+ * gLowerrBrssiThresh - Sets Lower threshold for beacon RSSI
+ * @Min: 6
+ * @Max: 36
+ * @Default: 26
+ *
+ * This ini sets Lower beacon threshold for beacon RSSI in FW
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+
+#define CFG_LOWER_BRSSI_THRESH_NAME     "gLowerBrssiThresh"
+#define CFG_LOWER_BRSSI_THRESH_MIN      (6)
+#define CFG_LOWER_BRSSI_THRESH_MAX      (36)
+#define CFG_LOWER_BRSSI_THRESH_DEFAULT  (26)
+
+/*
+ * <ini>
+ * gDtim1ChRxEnable - Enable/Disable DTIM 1Chrx feature
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini Enables or Disables DTIM 1CHRX feature in FW
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+
+#define CFG_DTIM_1CHRX_ENABLE_NAME      "gDtim1ChRxEnable"
+#define CFG_DTIM_1CHRX_ENABLE_MIN       (0)
+#define CFG_DTIM_1CHRX_ENABLE_MAX       (1)
+#define CFG_DTIM_1CHRX_ENABLE_DEFAULT   (1)
+
+/*
+ * <ini>
+ * oce_sta_enable - Enable/disable oce feature for STA
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to enable/disable oce feature for STA
+ *
+ * Related: None
+ *
+ * Supported Feature: OCE
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_OCE_ENABLE_STA_NAME    "oce_sta_enable"
+#define CFG_OCE_ENABLE_STA_MIN     (0)
+#define CFG_OCE_ENABLE_STA_MAX     (1)
+#define CFG_OCE_ENABLE_STA_DEFAULT (1)
+
+/*
+ * <ini>
+ * oce_sap_enable - Enable/disable oce feature for SAP
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to enable/disable oce feature for SAP
+ *
+ * Related: None
+ *
+ * Supported Feature: OCE
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_OCE_ENABLE_SAP_NAME    "oce_sap_enable"
+#define CFG_OCE_ENABLE_SAP_MIN     (0)
+#define CFG_OCE_ENABLE_SAP_MAX     (1)
+#define CFG_OCE_ENABLE_SAP_DEFAULT (1)
+
+/*
+ * <ini>
+ * enable_11d_in_world_mode - enable 11d in world mode
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini enables 11d in world mode
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+
+#define CFG_ENABLE_11D_IN_WORLD_MODE_NAME "enable_11d_in_world_mode"
+#define CFG_ENABLE_11D_IN_WORLD_MODE_MIN     (0)
+#define CFG_ENABLE_11D_IN_WORLD_MODE_MAX     (1)
+#define CFG_ENABLE_11D_IN_WORLD_MODE_DEFAULT (0)
+
 /*---------------------------------------------------------------------------
    Type declarations
    -------------------------------------------------------------------------*/
@@ -11416,6 +11944,7 @@ struct hdd_config {
 	bool fFTResourceReqSupported;
 
 	uint16_t nNeighborScanPeriod;
+	uint16_t neighbor_scan_min_period;
 	uint8_t nNeighborLookupRssiThreshold;
 	uint8_t delay_before_vdev_stop;
 	uint8_t nOpportunisticThresholdDiff;
@@ -11489,6 +12018,11 @@ struct hdd_config {
 	uint32_t InfraUapsdBkSuspIntv;
 	bool isFastRoamIniFeatureEnabled;
 	bool MAWCEnabled;
+	bool mawc_roam_enabled;
+	uint32_t mawc_roam_traffic_threshold;
+	int8_t mawc_roam_ap_rssi_threshold;
+	uint8_t mawc_roam_rssi_high_adjust;
+	uint8_t mawc_roam_rssi_low_adjust;
 #ifdef FEATURE_WLAN_ESE
 	uint32_t InfraInactivityInterval;
 	bool isEseIniFeatureEnabled;
@@ -11653,6 +12187,7 @@ struct hdd_config {
 	bool enable_su_tx_bformer;
 	uint8_t vhtRxMCS2x2;
 	uint8_t vhtTxMCS2x2;
+	uint8_t disable_high_ht_mcs_2x2;
 	bool enable2x2;
 	uint32_t vdev_type_nss_2g;
 	uint32_t vdev_type_nss_5g;
@@ -11782,6 +12317,7 @@ struct hdd_config {
 	bool gEnableOverLapCh;
 	bool fRegChangeDefCountry;
 	uint16_t max_ht_mcs_txdata;
+	bool sap_get_peer_info;
 	bool disable_abg_rate_txdata;
 	uint8_t rate_for_tx_mgmt;
 	uint8_t rate_for_tx_mgmt_2g;
@@ -11945,7 +12481,7 @@ struct hdd_config {
 #endif
 	uint8_t dot11p_mode;
 	uint8_t rx_mode;
-	uint8_t ce_service_max_yield_time;
+	uint32_t ce_service_max_yield_time;
 	uint8_t ce_service_max_rx_ind_flush;
 	uint8_t cpu_map_list[CFG_RPS_RX_QUEUE_CPU_MAP_LIST_LEN];
 #ifdef FEATURE_WLAN_EXTSCAN
@@ -11994,6 +12530,8 @@ struct hdd_config {
 	uint32_t roam_dense_rssi_thresh_offset;
 	bool ignore_peer_ht_opmode;
 	uint32_t roam_dense_min_aps;
+	int8_t roam_bg_scan_bad_rssi_thresh;
+	uint32_t roam_bg_scan_client_bitmap;
 	bool enable_edca_params;
 	uint32_t edca_vo_cwmin;
 	uint32_t edca_vi_cwmin;
@@ -12078,7 +12616,8 @@ struct hdd_config {
 	enum active_bpf_mode active_mc_bc_bpf_mode;
 	enum hw_filter_mode hw_filter_mode;
 	bool sap_internal_restart;
-	bool restart_beaconing_on_chan_avoid_event;
+	enum restart_beaconing_on_ch_avoid_rule
+		restart_beaconing_on_chan_avoid_event;
 	bool enable_bcast_probe_rsp;
 	bool qcn_ie_support;
 	uint8_t fils_max_chan_guard_time;
@@ -12126,16 +12665,27 @@ struct hdd_config {
 	bool tx_orphan_enable;
 	uint8_t dfs_beacon_tx_enhanced;
 	uint8_t scan_backoff_multiplier;
+	bool mawc_nlo_enabled;
+	uint32_t mawc_nlo_exp_backoff_ratio;
+	uint32_t mawc_nlo_init_scan_interval;
+	uint32_t mawc_nlo_max_scan_interval;
 	bool is_force_1x1;
 	uint16_t num_11b_tx_chains;
 	uint16_t num_11ag_tx_chains;
-
 	/* LCA(Last connected AP) disallow configs */
 	uint32_t disallow_duration;
 	uint32_t rssi_channel_penalization;
 	uint32_t num_disallowed_aps;
 	bool is_ndi_mac_randomized;
 	uint8_t ito_repeat_count;
+	bool enable_lprx;
+	uint8_t upper_brssi_thresh;
+	uint8_t lower_brssi_thresh;
+	bool enable_dtim_1chrx;
+	bool oce_sta_enabled;
+	bool oce_sap_enabled;
+	bool enable_11d_in_world_mode;
+	int8_t rssi_thresh_offset_5g;
 };
 
 #define VAR_OFFSET(_Struct, _Var) (offsetof(_Struct, _Var))

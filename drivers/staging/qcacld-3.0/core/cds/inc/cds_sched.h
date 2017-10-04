@@ -308,7 +308,8 @@ typedef struct _cds_context_type {
 #ifdef FEATURE_WLAN_MCC_TO_SCC_SWITCH
 	void (*sap_restart_chan_switch_cb)(void *, uint32_t, uint32_t);
 #endif
-	QDF_STATUS (*sme_get_valid_channels)(void*, uint8_t *, uint32_t *);
+	QDF_STATUS (*sme_get_valid_channels)(void*, uint16_t cfg_id,
+		uint8_t *, uint32_t *);
 	void (*sme_get_nss_for_vdev)(void*, enum tQDF_ADAPTER_MODE,
 		uint8_t *, uint8_t *);
 
@@ -335,7 +336,8 @@ typedef struct _cds_context_type {
 	uint16_t unsafe_channel_list[NUM_CHANNELS];
 	/* current system preference */
 	uint8_t cur_conc_system_pref;
-
+	qdf_work_t cds_recovery_work;
+	qdf_workqueue_t *cds_recovery_wq;
 } cds_context_type, *p_cds_contextType;
 
 extern struct _cds_sched_context *gp_cds_sched_context;

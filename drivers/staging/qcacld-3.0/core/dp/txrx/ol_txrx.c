@@ -1029,14 +1029,14 @@ static void ol_txrx_stats_display_tso(ol_txrx_pdev_handle pdev)
 	int msdu_idx;
 	int seg_idx;
 
-	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
+	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_DEBUG,
 		"TSO Statistics:");
-	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
+	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_DEBUG,
 		"TSO pkts %lld, bytes %lld\n",
 		pdev->stats.pub.tx.tso.tso_pkts.pkts,
 		pdev->stats.pub.tx.tso.tso_pkts.bytes);
 
-	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
+	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_DEBUG,
 			"TSO Histogram for numbers of segments:\n"
 			"Single segment	%d\n"
 			"  2-5 segments	%d\n"
@@ -1051,7 +1051,7 @@ static void ol_txrx_stats_display_tso(ol_txrx_pdev_handle pdev)
 			pdev->stats.pub.tx.tso.tso_hist.pkts_16_20,
 			pdev->stats.pub.tx.tso.tso_hist.pkts_20_plus);
 
-	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
+	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_DEBUG,
 			"TSO History Buffer: Total size %d, current_index %d",
 			NUM_MAX_TSO_MSDUS,
 			TXRX_STATS_TSO_MSDU_IDX(pdev));
@@ -1059,7 +1059,7 @@ static void ol_txrx_stats_display_tso(ol_txrx_pdev_handle pdev)
 	for (msdu_idx = 0; msdu_idx < NUM_MAX_TSO_MSDUS; msdu_idx++) {
 		if (TXRX_STATS_TSO_MSDU_TOTAL_LEN(pdev, msdu_idx) == 0)
 			continue;
-		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
+		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_DEBUG,
 			"jumbo pkt idx: %d num segs %d gso_len %d total_len %d nr_frags %d",
 			msdu_idx,
 			TXRX_STATS_TSO_MSDU_NUM_SEG(pdev, msdu_idx),
@@ -1074,19 +1074,19 @@ static void ol_txrx_stats_display_tso(ol_txrx_pdev_handle pdev)
 			struct qdf_tso_seg_t tso_seg =
 				 TXRX_STATS_TSO_SEG(pdev, msdu_idx, seg_idx);
 
-			QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
+			QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_DEBUG,
 				 "seg idx: %d", seg_idx);
-			QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
+			QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_DEBUG,
 				 "tso_enable: %d",
 				 tso_seg.tso_flags.tso_enable);
-			QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
+			QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_DEBUG,
 				 "fin %d syn %d rst %d psh %d ack %d urg %d ece %d cwr %d ns %d",
 				 tso_seg.tso_flags.fin, tso_seg.tso_flags.syn,
 				 tso_seg.tso_flags.rst, tso_seg.tso_flags.psh,
 				 tso_seg.tso_flags.ack, tso_seg.tso_flags.urg,
 				 tso_seg.tso_flags.ece, tso_seg.tso_flags.cwr,
 				 tso_seg.tso_flags.ns);
-			QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
+			QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_DEBUG,
 				 "tcp_seq_num: 0x%x ip_id: %d",
 				 tso_seg.tso_flags.tcp_seq_num,
 				 tso_seg.tso_flags.ip_id);
@@ -1834,6 +1834,8 @@ static void ol_tx_free_descs_inuse(ol_txrx_pdev_handle pdev)
  */
 void ol_txrx_pdev_pre_detach(ol_txrx_pdev_handle pdev, int force)
 {
+	struct hif_opaque_softc *osc =  cds_get_context(QDF_MODULE_ID_HIF);
+
 	/* preconditions */
 	TXRX_ASSERT2(pdev);
 
@@ -1914,6 +1916,8 @@ void ol_txrx_pdev_pre_detach(ol_txrx_pdev_handle pdev, int force)
 	OL_RX_REORDER_TRACE_DETACH(pdev);
 	OL_RX_PN_TRACE_DETACH(pdev);
 
+	htt_pktlogmod_exit(pdev, osc);
+
 	/*
 	 * WDI event detach
 	 */
@@ -1939,16 +1943,12 @@ void ol_txrx_pdev_pre_detach(ol_txrx_pdev_handle pdev, int force)
  */
 void ol_txrx_pdev_detach(ol_txrx_pdev_handle pdev)
 {
-	struct hif_opaque_softc *osc =  cds_get_context(QDF_MODULE_ID_HIF);
-
 	/*checking to ensure txrx pdev structure is not NULL */
 	if (!pdev) {
 		ol_txrx_err(
 			   "NULL pdev passed to %s\n", __func__);
 		return;
 	}
-
-	htt_pktlogmod_exit(pdev, osc);
 
 	OL_RX_REORDER_TIMEOUT_CLEANUP(pdev);
 
@@ -2427,12 +2427,12 @@ ol_txrx_peer_attach(ol_txrx_vdev_handle vdev, uint8_t *peer_mac_addr)
 		cmp_wait_mac = true;
 
 	qdf_spin_lock_bh(&pdev->peer_ref_mutex);
-	/* check for duplicate exsisting peer */
+	/* check for duplicate existing peer */
 	TAILQ_FOREACH(temp_peer, &vdev->peer_list, peer_list_elem) {
 		if (!ol_txrx_peer_find_mac_addr_cmp(&temp_peer->mac_addr,
 			(union ol_txrx_align_mac_addr_t *)peer_mac_addr)) {
 			ol_txrx_info_high(
-				"vdev_id %d (%02x:%02x:%02x:%02x:%02x:%02x) already exsist.\n",
+				"vdev_id %d (%02x:%02x:%02x:%02x:%02x:%02x) already exists.\n",
 				vdev->vdev_id,
 				peer_mac_addr[0], peer_mac_addr[1],
 				peer_mac_addr[2], peer_mac_addr[3],
@@ -2451,7 +2451,7 @@ ol_txrx_peer_attach(ol_txrx_vdev_handle vdev, uint8_t *peer_mac_addr)
 					&temp_peer->mac_addr,
 					&vdev->last_peer_mac_addr)) {
 			ol_txrx_info_high(
-				"vdev_id %d (%02x:%02x:%02x:%02x:%02x:%02x) old peer exsist.\n",
+				"vdev_id %d (%02x:%02x:%02x:%02x:%02x:%02x) old peer exists.\n",
 				vdev->vdev_id,
 				vdev->last_peer_mac_addr.raw[0],
 				vdev->last_peer_mac_addr.raw[1],
@@ -2481,7 +2481,7 @@ ol_txrx_peer_attach(ol_txrx_vdev_handle vdev, uint8_t *peer_mac_addr)
 					   PEER_DELETION_TIMEOUT);
 		if (QDF_STATUS_SUCCESS != rc) {
 			ol_txrx_err(
-				"error waiting for peer(%d) deletion, status %d\n",
+				"error waiting for peer_id(%d) deletion, status %d\n",
 				vdev->wait_on_peer_id, (int) rc);
 			/* Added for debugging only */
 			wma_peer_debug_dump();
@@ -2531,20 +2531,12 @@ ol_txrx_peer_attach(ol_txrx_vdev_handle vdev, uint8_t *peer_mac_addr)
 	qdf_atomic_init(&peer->flush_in_progress);
 
 	qdf_atomic_init(&peer->ref_cnt);
-
 	/* keep one reference for attach */
 	OL_TXRX_PEER_INC_REF_CNT(peer);
 
-	/*
-	 * Set a flag to indicate peer create is pending in firmware and
-	 * increment ref_cnt so that peer will not get deleted while
-	 * peer create command is pending in firmware.
-	 * First peer_map event from firmware signifies successful
-	 * peer creation and it will be decremented in peer_map handling.
-	 */
+	/* Set a flag to indicate peer create is pending in firmware */
 	qdf_atomic_init(&peer->fw_create_pending);
 	qdf_atomic_set(&peer->fw_create_pending, 1);
-	OL_TXRX_PEER_INC_REF_CNT(peer);
 
 	peer->valid = 1;
 	qdf_timer_init(pdev->osdev, &peer->peer_unmap_timer,
@@ -3254,10 +3246,12 @@ int ol_txrx_peer_unref_delete(ol_txrx_peer_handle peer,
 			qdf_spin_unlock_bh(&pdev->peer_ref_mutex);
 		}
 
-		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_DEBUG,
-			   "[%s][%d]: Deleting peer %p (%pM) ref_cnt %d\n",
+		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_INFO_HIGH,
+			   "[%s][%d]: Deleting peer %p (%pM) peer->ref_cnt = %d %s",
 			   fname, line, peer, peer->mac_addr.raw,
-			   qdf_atomic_read(&peer->ref_cnt));
+			   qdf_atomic_read(&peer->ref_cnt),
+			   qdf_atomic_read(&peer->fw_create_pending) == 1 ?
+			   "(No Maps received)" : "");
 
 		ol_txrx_peer_tx_queue_free(pdev, peer);
 
@@ -3287,7 +3281,7 @@ int ol_txrx_peer_unref_delete(ol_txrx_peer_handle peer,
 		qdf_mem_free(peer);
 	} else {
 		qdf_spin_unlock_bh(&pdev->peer_ref_mutex);
-		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_DEBUG,
+		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_INFO_HIGH,
 			  "[%s][%d]: ref delete peer %p peer->ref_cnt = %d",
 			  fname, line, peer, rc);
 	}
@@ -3350,24 +3344,8 @@ QDF_STATUS ol_txrx_clear_peer(uint8_t sta_id)
 
 }
 
-void peer_unmap_timer_work_function(void *param)
-{
-	WMA_LOGE("Enter: %s", __func__);
-	wma_peer_debug_dump();
-	if (cds_is_self_recovery_enabled()) {
-		if (!cds_is_driver_recovering())
-			cds_trigger_recovery();
-		else
-			WMA_LOGE("%s: Recovery is in progress, ignore!",
-					__func__);
-	}
-	else {
-		QDF_BUG(0);
-	}
-}
-
 /**
- * peer_unmap_timer_handler() - peer unmap timer function
+ * peer_unmap_timer() - peer unmap timer function
  * @data: peer object pointer
  *
  * Return: none
@@ -3375,7 +3353,6 @@ void peer_unmap_timer_work_function(void *param)
 void peer_unmap_timer_handler(void *data)
 {
 	ol_txrx_peer_handle peer = (ol_txrx_peer_handle)data;
-	ol_txrx_pdev_handle txrx_pdev = cds_get_context(QDF_MODULE_ID_TXRX);
 
 	WMA_LOGE("%s: all unmap events not received for peer %p, ref_cnt %d",
 		 __func__, peer, qdf_atomic_read(&peer->ref_cnt));
@@ -3384,11 +3361,12 @@ void peer_unmap_timer_handler(void *data)
 		 peer->mac_addr.raw[0], peer->mac_addr.raw[1],
 		 peer->mac_addr.raw[2], peer->mac_addr.raw[3],
 		 peer->mac_addr.raw[4], peer->mac_addr.raw[5]);
-	if (!cds_is_driver_recovering()) {
-		qdf_create_work(0, &txrx_pdev->peer_unmap_timer_work,
-				peer_unmap_timer_work_function,
-				NULL);
-		qdf_sched_work(0, &txrx_pdev->peer_unmap_timer_work);
+	if (!cds_is_driver_recovering() && !cds_is_fw_down()) {
+		wma_peer_debug_dump();
+		if (cds_is_self_recovery_enabled())
+			cds_trigger_recovery();
+		else
+			QDF_BUG(0);
 	} else {
 		WMA_LOGE("%s: Recovery is in progress, ignore!", __func__);
 	}
@@ -4463,21 +4441,8 @@ inline void ol_txrx_flow_control_cb(ol_txrx_vdev_handle vdev,
 #ifdef IPA_OFFLOAD
 /**
  * ol_txrx_ipa_uc_get_resource() - Client request resource information
- * @pdev: handle to the HTT instance
- * @ce_sr_base_paddr: copy engine source ring base physical address
- * @ce_sr_ring_size: copy engine source ring size
- * @ce_reg_paddr: copy engine register physical address
- * @tx_comp_ring_base_paddr: tx comp ring base physical address
- * @tx_comp_ring_size: tx comp ring size
- * @tx_num_alloc_buffer: number of allocated tx buffer
- * @rx_rdy_ring_base_paddr: rx ready ring base physical address
- * @rx_rdy_ring_size: rx ready ring size
- * @rx_proc_done_idx_paddr: rx process done index physical address
- * @rx_proc_done_idx_vaddr: rx process done index virtual address
- * @rx2_rdy_ring_base_paddr: rx done ring base physical address
- * @rx2_rdy_ring_size: rx done ring size
- * @rx2_proc_done_idx_paddr: rx done index physical address
- * @rx2_proc_done_idx_vaddr: rx done index virtual address
+ * @pdev: txrx pdev
+ * @ipa_res: ipa resources
  *
  *  OL client will reuqest IPA UC related resource information
  *  Resource information will be distributted to IPA module
@@ -4490,20 +4455,15 @@ ol_txrx_ipa_uc_get_resource(ol_txrx_pdev_handle pdev,
 		 struct ol_txrx_ipa_resources *ipa_res)
 {
 	htt_ipa_uc_get_resource(pdev->htt_pdev,
-				&ipa_res->ce_sr_base_paddr,
+				&ipa_res->ce_sr,
+				&ipa_res->tx_comp_ring,
+				&ipa_res->rx_rdy_ring,
+				&ipa_res->rx2_rdy_ring,
+				&ipa_res->rx_proc_done_idx,
+				&ipa_res->rx2_proc_done_idx,
 				&ipa_res->ce_sr_ring_size,
 				&ipa_res->ce_reg_paddr,
-				&ipa_res->tx_comp_ring_base_paddr,
-				&ipa_res->tx_comp_ring_size,
-				&ipa_res->tx_num_alloc_buffer,
-				&ipa_res->rx_rdy_ring_base_paddr,
-				&ipa_res->rx_rdy_ring_size,
-				&ipa_res->rx_proc_done_idx_paddr,
-				&ipa_res->rx_proc_done_idx_vaddr,
-				&ipa_res->rx2_rdy_ring_base_paddr,
-				&ipa_res->rx2_rdy_ring_size,
-				&ipa_res->rx2_proc_done_idx_paddr,
-				&ipa_res->rx2_proc_done_idx_vaddr);
+				&ipa_res->tx_num_alloc_buffer);
 }
 
 /**

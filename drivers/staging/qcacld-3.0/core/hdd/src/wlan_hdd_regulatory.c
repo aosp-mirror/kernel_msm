@@ -380,7 +380,7 @@ static void hdd_process_regulatory_data(hdd_context_t *hdd_ctx,
 	struct regulatory_channel *cds_chan;
 	uint8_t band_capability;
 
-	band_capability = hdd_ctx->config->nBandCapability;
+	band_capability = hdd_ctx->curr_band;
 
 	for (band_num = 0; band_num < NUM_NL80211_BANDS; band_num++) {
 
@@ -502,7 +502,12 @@ int hdd_regulatory_init(hdd_context_t *hdd_ctx, struct wiphy *wiphy)
 
 	hdd_process_regulatory_data(hdd_ctx, wiphy, true);
 
-	reg_info->cc_src = SOURCE_DRIVER;
+	if (hdd_is_world_regdomain(reg_info->reg_domain))
+		reg_info->cc_src = SOURCE_CORE;
+	else
+		reg_info->cc_src = SOURCE_DRIVER;
+
+	sme_set_cc_src(hdd_ctx->hHal, reg_info->cc_src);
 
 	cds_put_default_country(reg_info->alpha2);
 
@@ -685,12 +690,14 @@ void hdd_reg_notifier(struct wiphy *wiphy,
 
 		if (NL80211_REGDOM_SET_BY_CORE == request->initiator) {
 			hdd_ctx->reg.cc_src = SOURCE_CORE;
+			sme_set_cc_src(hdd_ctx->hHal, SOURCE_CORE);
 			if (is_wiphy_custom_regulatory(wiphy))
 				reset = true;
 		} else if (NL80211_REGDOM_SET_BY_DRIVER == request->initiator) {
 			hdd_ctx->reg.cc_src = SOURCE_DRIVER;
 			sme_set_cc_src(hdd_ctx->hHal, SOURCE_DRIVER);
 		} else {
+			sme_set_cc_src(hdd_ctx->hHal, SOURCE_USERSPACE);
 			hdd_ctx->reg.cc_src = SOURCE_USERSPACE;
 			hdd_restore_custom_reg_settings(wiphy,
 							request->alpha2,

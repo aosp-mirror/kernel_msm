@@ -293,10 +293,10 @@ void pe_delete_fils_info(tpPESession session)
 		qdf_mem_free(fils_info->keyname_nai_data);
 	if (fils_info->fils_erp_reauth_pkt)
 		qdf_mem_free(fils_info->fils_erp_reauth_pkt);
-	if (fils_info->fils_r_rk)
-		qdf_mem_free(fils_info->fils_r_rk);
-	if (fils_info->fils_r_ik)
-		qdf_mem_free(fils_info->fils_r_ik);
+	if (fils_info->fils_rrk)
+		qdf_mem_free(fils_info->fils_rrk);
+	if (fils_info->fils_rik)
+		qdf_mem_free(fils_info->fils_rik);
 	if (fils_info->fils_eap_finish_pkt)
 		qdf_mem_free(fils_info->fils_eap_finish_pkt);
 	if (fils_info->fils_rmsk)
@@ -338,8 +338,8 @@ static void pe_init_fils_info(tpPESession session)
 	}
 	fils_info->keyname_nai_data = NULL;
 	fils_info->fils_erp_reauth_pkt = NULL;
-	fils_info->fils_r_rk = NULL;
-	fils_info->fils_r_ik = NULL;
+	fils_info->fils_rrk = NULL;
+	fils_info->fils_rik = NULL;
 	fils_info->fils_eap_finish_pkt = NULL;
 	fils_info->fils_rmsk = NULL;
 	fils_info->fils_pmk = NULL;
@@ -618,17 +618,18 @@ tpPESession pe_find_session_by_bss_idx(tpAniSirGlobal pMac, uint8_t bssIdx)
 
    \sa
    --------------------------------------------------------------------------*/
-tpPESession pe_find_session_by_session_id(tpAniSirGlobal pMac, uint8_t sessionId)
+tpPESession pe_find_session_by_session_id(tpAniSirGlobal pMac,
+					  uint8_t sessionId)
 {
 	if (sessionId >= pMac->lim.maxBssId) {
 		pe_err("Invalid sessionId: %d", sessionId);
 		return NULL;
 	}
-	if ((pMac->lim.gpSession[sessionId].valid == true)) {
-		return &pMac->lim.gpSession[sessionId];
-	}
-	return NULL;
 
+	if (pMac->lim.gpSession[sessionId].valid)
+		return &pMac->lim.gpSession[sessionId];
+
+	return NULL;
 }
 
 /**
