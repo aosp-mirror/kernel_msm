@@ -11052,6 +11052,7 @@ static void wlan_hdd_state_ctrl_param_destroy(void)
 	pr_info("Device node unregistered");
 }
 
+/*
 #ifndef MODULE
 static int hdd_wait_for_probe_complete(void)
 {
@@ -11068,12 +11069,14 @@ static int hdd_wait_for_probe_complete(void)
 	return 0;
 }
 #else
+ */
 static int hdd_wait_for_probe_complete(void)
 {
 	return 0;
 }
+/*
 #endif
-
+ */
 /**
  * __hdd_module_init - Module init helper
  *
