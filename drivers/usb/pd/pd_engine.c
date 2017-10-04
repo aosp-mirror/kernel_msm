@@ -1306,12 +1306,12 @@ static void pd_phy_shutdown(struct usbpd *pd)
 	(PDO_FIXED_DUAL_ROLE | PDO_FIXED_DATA_SWAP | PDO_FIXED_USB_COMM)
 
 static const u32 src_pdo[] = {
-	PDO_FIXED(5000, 500, PDO_FIXED_FLAGS),
 	PDO_FIXED(5000, 900, PDO_FIXED_FLAGS),
 };
 
 static const u32 snk_pdo[] = {
-	PDO_FIXED(5000, 500, PDO_FIXED_FLAGS),
+	PDO_FIXED(5000, 3000, PDO_FIXED_FLAGS),
+	PDO_FIXED(9000, 3000, PDO_FIXED_FLAGS),
 };
 
 static const struct tcpc_config pd_tcpc_config = {
@@ -1322,7 +1322,7 @@ static const struct tcpc_config pd_tcpc_config = {
 	.max_snk_mv = 9000,
 	.max_snk_ma = 3000,
 	.max_snk_mw = 27000,
-	.operating_snk_mw = 2500,
+	.operating_snk_mw = 7600,
 	.type = TYPEC_PORT_DRP,
 	.default_role = TYPEC_SINK,
 	.try_role_hw = true,
