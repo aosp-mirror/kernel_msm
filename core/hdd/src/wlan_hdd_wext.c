@@ -3472,7 +3472,7 @@ static void hdd_get_rssi_cb(int8_t rssi, uint32_t staId, void *pContext)
 	 */
 	spin_lock(&hdd_context_lock);
 
-	if (RSSI_CONTEXT_MAGIC != pStatsContext->magic) {
+	if (pStatsContext->magic != PEER_INFO_CONTEXT_MAGIC) {
 		/* the caller presumably timed out so there is nothing
 		 * we can do
 		 */
@@ -3592,7 +3592,7 @@ QDF_STATUS wlan_hdd_get_rssi(hdd_adapter_t *pAdapter, int8_t *rssi_value)
 
 	init_completion(&context.completion);
 	context.pAdapter = pAdapter;
-	context.magic = RSSI_CONTEXT_MAGIC;
+	context.magic = PEER_INFO_CONTEXT_MAGIC;
 
 	hstatus = sme_get_rssi(pHddCtx->hHal, hdd_get_rssi_cb,
 			       pHddStaCtx->conn_info.staId[0],
@@ -3893,6 +3893,128 @@ int wlan_hdd_get_link_speed(hdd_adapter_t *sta_adapter, uint32_t *link_speed)
 
 	return 0;
 }
+
+/**
+ * hdd_get_peer_rssi_cb() - get peer station's rssi callback
+ * @sta_rssi: pointer of peer information
+ * @context: get rssi callback context
+ *
+ * This function will fill rssi information to hostapd
+ * adapter
+ *
+ */
+static void hdd_get_peer_rssi_cb(struct sir_peer_info_resp *sta_rssi,
+							void *context)
+{
+	struct statsContext *get_rssi_context;
+	struct sir_peer_info *rssi_info;
+	uint8_t peer_num;
+	hdd_adapter_t *padapter;
+
+	if ((sta_rssi == NULL) || (context == NULL)) {
+		hdd_err("Bad param, sta_rssi [%p] context [%p]",
+			sta_rssi, context);
+		return;
+	}
+
+	spin_lock(&hdd_context_lock);
+	/*
+	 * there is a race condition that exists between this callback
+	 * function and the caller since the caller could time out either
+	 * before or while this code is executing.  we use a spinlock to
+	 * serialize these actions
+	 */
+	get_rssi_context = (struct statsContext *)context;
+	padapter = get_rssi_context->pAdapter;
+	if (get_rssi_context->magic != PEER_INFO_CONTEXT_MAGIC ||
+	    !padapter) {
+		/*
+		 * the caller presumably timed out so there is nothing
+		 * we can do
+		 */
+		spin_unlock(&hdd_context_lock);
+		hdd_warn("Invalid context, magic [%08x], adapter [%p]",
+			get_rssi_context->magic, padapter);
+		return;
+	}
+
+	peer_num = sta_rssi->count;
+	rssi_info = sta_rssi->info;
+	get_rssi_context->magic = 0;
+
+	hdd_debug("%d peers", peer_num);
+
+	if (peer_num > MAX_PEER_STA) {
+		hdd_warn("Exceed max peer sta to handle one time %d", peer_num);
+		peer_num = MAX_PEER_STA;
+	}
+
+	qdf_mem_copy(padapter->peer_sta_info.info, rssi_info,
+		peer_num * sizeof(*rssi_info));
+	padapter->peer_sta_info.sta_num = peer_num;
+
+	/* notify the caller */
+	complete(&get_rssi_context->completion);
+
+	/* serialization is complete */
+	spin_unlock(&hdd_context_lock);
+}
+
+int wlan_hdd_get_peer_rssi(hdd_adapter_t *adapter,
+					struct qdf_mac_addr *macaddress)
+{
+	QDF_STATUS status;
+	int ret;
+	static struct statsContext context;
+	struct sir_peer_info_req rssi_req;
+
+	if (!adapter || !macaddress) {
+		hdd_err("pAdapter [%p], macaddress [%p]", adapter, macaddress);
+		return -EFAULT;
+	}
+
+	init_completion(&context.completion);
+	context.magic = PEER_INFO_CONTEXT_MAGIC;
+
+	qdf_mem_copy(&(rssi_req.peer_macaddr), macaddress,
+				QDF_MAC_ADDR_SIZE);
+	rssi_req.sessionid = adapter->sessionId;
+	status = sme_get_peer_info(WLAN_HDD_GET_HAL_CTX(adapter),
+				rssi_req,
+				&context,
+				hdd_get_peer_rssi_cb);
+	if (status != QDF_STATUS_SUCCESS) {
+		hdd_err("Unable to retrieve statistics for rssi");
+		ret = -EFAULT;
+	} else {
+		if (!wait_for_completion_timeout(&context.completion,
+				msecs_to_jiffies(WLAN_WAIT_TIME_STATS))) {
+			hdd_err("SME timed out while retrieving rssi");
+			ret = -EFAULT;
+		} else {
+			ret = 0;
+		}
+	}
+
+	/*
+	 * either we never sent a request, we sent a request and received a
+	 * response or we sent a request and timed out.  if we never sent a
+	 * request or if we sent a request and got a response, we want to
+	 * clear the magic out of paranoia.  if we timed out there is a
+	 * race condition such that the callback function could be
+	 * executing at the same time we are. of primary concern is if the
+	 * callback function had already verified the "magic" but had not
+	 * yet set the completion variable when a timeout occurred. we
+	 * serialize these activities by invalidating the magic while
+	 * holding a shared spinlock which will cause us to block if the
+	 * callback is currently executing
+	 */
+	spin_lock(&hdd_context_lock);
+	context.magic = 0;
+	spin_unlock(&hdd_context_lock);
+	return ret;
+}
+
 
 /**
  * hdd_statistics_cb() - "Get statistics" callback function
@@ -7061,7 +7183,7 @@ static int __iw_set_mlme(struct net_device *dev,
 			(WLAN_HDD_GET_WEXT_STATE_PTR(pAdapter))->authKeyMgmt =
 				0;
 
-			hdd_debug("Disabling queues");
+			hdd_info("Disabling queues");
 			wlan_hdd_netif_queue_control(pAdapter,
 					WLAN_STOP_ALL_NETIF_QUEUE_N_CARRIER,
 					WLAN_CONTROL_PATH);
@@ -7127,12 +7249,13 @@ int wlan_hdd_update_phymode(struct net_device *net, tHalHandle hal,
 #endif
 	bool band_24 = false, band_5g = false;
 	bool ch_bond24 = false, ch_bond5g = false;
-	tSmeConfigParams smeconfig;
+	tSmeConfigParams *sme_config;
 	uint32_t chwidth = WNI_CFG_CHANNEL_BONDING_MODE_DISABLE;
 	uint32_t vhtchanwidth;
 	eCsrPhyMode phymode = -EIO, old_phymode;
 	enum hdd_dot11_mode hdd_dot11mode = phddctx->config->dot11Mode;
 	eCsrBand curr_band = eCSR_BAND_ALL;
+	int retval = 0;
 
 	old_phymode = sme_get_phy_mode(hal);
 
@@ -7331,72 +7454,86 @@ int wlan_hdd_update_phymode(struct net_device *net, tHalHandle hal,
 	}
 
 	if (phymode != -EIO) {
-		sme_get_config_param(hal, &smeconfig);
-		smeconfig.csrConfig.phyMode = phymode;
+		sme_config = qdf_mem_malloc(sizeof(*sme_config));
+		if (!sme_config) {
+			hdd_err("Failed to allocate memory for sme_config");
+			return -ENOMEM;
+		}
+		qdf_mem_zero(sme_config, sizeof(*sme_config));
+		sme_get_config_param(hal, sme_config);
+		sme_config->csrConfig.phyMode = phymode;
 #ifdef QCA_HT_2040_COEX
 		if (phymode == eCSR_DOT11_MODE_11n &&
 		    chwidth == WNI_CFG_CHANNEL_BONDING_MODE_DISABLE) {
-			smeconfig.csrConfig.obssEnabled = false;
+			sme_config->csrConfig.obssEnabled = false;
 			halStatus = sme_set_ht2040_mode(hal,
 							pAdapter->sessionId,
 							eHT_CHAN_HT20, false);
 			if (halStatus == QDF_STATUS_E_FAILURE) {
 				hdd_err("Failed to disable OBSS");
-				return -EIO;
+				retval = -EIO;
+				goto free;
 			}
 		} else if (phymode == eCSR_DOT11_MODE_11n &&
 			   chwidth == WNI_CFG_CHANNEL_BONDING_MODE_ENABLE) {
-			smeconfig.csrConfig.obssEnabled = true;
+			sme_config->csrConfig.obssEnabled = true;
 			halStatus = sme_set_ht2040_mode(hal,
 							pAdapter->sessionId,
 							eHT_CHAN_HT20, true);
 			if (halStatus == QDF_STATUS_E_FAILURE) {
 				hdd_err("Failed to enable OBSS");
-				return -EIO;
+				retval = -EIO;
+				goto free;
 			}
 		}
 #endif
-		smeconfig.csrConfig.eBand = curr_band;
-		smeconfig.csrConfig.bandCapability = curr_band;
+		sme_config->csrConfig.eBand = curr_band;
+		sme_config->csrConfig.bandCapability = curr_band;
 		if (curr_band == eCSR_BAND_24)
-			smeconfig.csrConfig.Is11hSupportEnabled = 0;
+			sme_config->csrConfig.Is11hSupportEnabled = 0;
 		else
-			smeconfig.csrConfig.Is11hSupportEnabled =
+			sme_config->csrConfig.Is11hSupportEnabled =
 				phddctx->config->Is11hSupportEnabled;
 		if (curr_band == eCSR_BAND_24)
-			smeconfig.csrConfig.channelBondingMode24GHz = chwidth;
+			sme_config->csrConfig.channelBondingMode24GHz = chwidth;
 		else if (curr_band == eCSR_BAND_24)
-			smeconfig.csrConfig.channelBondingMode5GHz = chwidth;
+			sme_config->csrConfig.channelBondingMode5GHz = chwidth;
 		else {
-			smeconfig.csrConfig.channelBondingMode24GHz = chwidth;
-			smeconfig.csrConfig.channelBondingMode5GHz = chwidth;
+			sme_config->csrConfig.channelBondingMode24GHz = chwidth;
+			sme_config->csrConfig.channelBondingMode5GHz = chwidth;
 		}
-		smeconfig.csrConfig.nVhtChannelWidth = vhtchanwidth;
-		sme_update_config(hal, &smeconfig);
+		sme_config->csrConfig.nVhtChannelWidth = vhtchanwidth;
+		sme_update_config(hal, sme_config);
 
 		phddctx->config->dot11Mode = hdd_dot11mode;
-		phddctx->config->nBandCapability = curr_band;
 		phddctx->config->nChannelBondingMode24GHz =
-			smeconfig.csrConfig.channelBondingMode24GHz;
+			sme_config->csrConfig.channelBondingMode24GHz;
 		phddctx->config->nChannelBondingMode5GHz =
-			smeconfig.csrConfig.channelBondingMode5GHz;
+			sme_config->csrConfig.channelBondingMode5GHz;
 		phddctx->config->vhtChannelWidth = vhtchanwidth;
 		if (hdd_update_config_cfg(phddctx) == false) {
 			hdd_err("could not update config_dat");
-			return -EIO;
+			retval = -EIO;
+			goto free;
 		}
-		if (phddctx->config->nChannelBondingMode5GHz)
-			phddctx->wiphy->bands[HDD_NL80211_BAND_5GHZ]->ht_cap.cap
-				|= IEEE80211_HT_CAP_SUP_WIDTH_20_40;
-		else
-			phddctx->wiphy->bands[HDD_NL80211_BAND_5GHZ]->ht_cap.cap
-				&= ~IEEE80211_HT_CAP_SUP_WIDTH_20_40;
+
+		if (band_5g) {
+			if (phddctx->config->nChannelBondingMode5GHz)
+				phddctx->wiphy->bands[HDD_NL80211_BAND_5GHZ]->ht_cap.cap
+					|= IEEE80211_HT_CAP_SUP_WIDTH_20_40;
+			else
+				phddctx->wiphy->bands[HDD_NL80211_BAND_5GHZ]->ht_cap.cap
+					&= ~IEEE80211_HT_CAP_SUP_WIDTH_20_40;
+		}
 
 		hdd_debug("New_Phymode= %d ch_bonding=%d band=%d VHT_ch_width=%u",
 			phymode, chwidth, curr_band, vhtchanwidth);
 	}
 
-	return 0;
+free:
+	if (sme_config)
+		qdf_mem_free(sme_config);
+	return retval;
 }
 
 /**
@@ -7496,7 +7633,7 @@ static int __iw_setint_getnone(struct net_device *dev,
 	tHalHandle hHal = WLAN_HDD_GET_HAL_CTX(pAdapter);
 	hdd_station_ctx_t *pHddStaCtx = WLAN_HDD_GET_STATION_CTX_PTR(pAdapter);
 	hdd_context_t *hdd_ctx;
-	tSmeConfigParams smeConfig;
+	tSmeConfigParams *sme_config;
 	int *value = (int *)extra;
 	int sub_cmd = value[0];
 	int set_value = value[1];
@@ -7506,12 +7643,17 @@ static int __iw_setint_getnone(struct net_device *dev,
 
 	ENTER_DEV(dev);
 
-	memset(&smeConfig, 0x00, sizeof(smeConfig));
+	sme_config = qdf_mem_malloc(sizeof(*sme_config));
+	if (!sme_config) {
+		hdd_err("failed to allocate memory for sme_config");
+		return -ENOMEM;
+	}
+	qdf_mem_zero(sme_config, sizeof(*sme_config));
 
 	hdd_ctx = WLAN_HDD_GET_CTX(pAdapter);
 	ret = wlan_hdd_validate_context(hdd_ctx);
 	if (0 != ret)
-		return ret;
+		goto free;
 
 	switch (sub_cmd) {
 	case WE_SET_11D_STATE:
@@ -7519,25 +7661,28 @@ static int __iw_setint_getnone(struct net_device *dev,
 		if (((ENABLE_11D == set_value)
 		    || (DISABLE_11D == set_value)) && hHal) {
 
-			sme_get_config_param(hHal, &smeConfig);
-			smeConfig.csrConfig.Is11dSupportEnabled =
+			sme_get_config_param(hHal, sme_config);
+			sme_config->csrConfig.Is11dSupportEnabled =
 				(bool) set_value;
 
 			hdd_debug("11D state=%d!!",
-				  smeConfig.csrConfig.
+				  sme_config->csrConfig.
 				  Is11dSupportEnabled);
 
-			sme_update_config(hHal, &smeConfig);
+			sme_update_config(hHal, sme_config);
 		} else {
-			return -EINVAL;
+			ret = -EINVAL;
+			goto free;
 		}
 		break;
 	}
 
 	case WE_WOWL:
 	{
-		if (!hHal)
-			return -EINVAL;
+		if (!hHal) {
+			ret = -EINVAL;
+			goto free;
+		}
 
 		switch (set_value) {
 		case 0x00:
@@ -7564,8 +7709,10 @@ static int __iw_setint_getnone(struct net_device *dev,
 	}
 	case WE_SET_POWER:
 	{
-		if (!hHal)
-			return -EINVAL;
+		if (!hHal) {
+			ret = -EINVAL;
+			goto free;
+		}
 
 		switch (set_value) {
 		case 1:
@@ -7595,8 +7742,10 @@ static int __iw_setint_getnone(struct net_device *dev,
 
 	case WE_SET_MAX_ASSOC:
 	{
-		if (!hHal)
-			return -EINVAL;
+		if (!hHal) {
+			ret = -EINVAL;
+			goto free;
+		}
 
 		if ((WNI_CFG_ASSOC_STA_LIMIT_STAMIN > set_value) ||
 		    (WNI_CFG_ASSOC_STA_LIMIT_STAMAX < set_value)) {
@@ -7619,8 +7768,10 @@ static int __iw_setint_getnone(struct net_device *dev,
 		break;
 
 	case WE_SET_DATA_INACTIVITY_TO:
-		if (!hHal)
-			return -EINVAL;
+		if (!hHal) {
+			ret = -EINVAL;
+			goto free;
+		}
 
 		if ((set_value < CFG_DATA_INACTIVITY_TIMEOUT_MIN) ||
 		    (set_value > CFG_DATA_INACTIVITY_TIMEOUT_MAX) ||
@@ -7632,8 +7783,10 @@ static int __iw_setint_getnone(struct net_device *dev,
 		}
 		break;
 	case WE_SET_WOW_DATA_INACTIVITY_TO:
-		if (!hHal)
-			return -EINVAL;
+		if (!hHal) {
+			ret = -EINVAL;
+			goto free;
+		}
 
 		if ((set_value < CFG_WOW_DATA_INACTIVITY_TIMEOUT_MIN) ||
 		    (set_value > CFG_WOW_DATA_INACTIVITY_TIMEOUT_MAX) ||
@@ -7646,8 +7799,10 @@ static int __iw_setint_getnone(struct net_device *dev,
 		break;
 	case WE_SET_MC_RATE:
 	{
-		if (!hHal)
-			return -EINVAL;
+		if (!hHal) {
+			ret = -EINVAL;
+			goto free;
+		}
 
 		ret = wlan_hdd_set_mc_rate(pAdapter, set_value);
 		break;
@@ -7656,8 +7811,10 @@ static int __iw_setint_getnone(struct net_device *dev,
 	{
 		struct qdf_mac_addr bssid;
 
-		if (!hHal)
-			return -EINVAL;
+		if (!hHal) {
+			ret = -EINVAL;
+			goto free;
+		}
 
 		qdf_copy_macaddr(&bssid, &pHddStaCtx->conn_info.bssId);
 		if (sme_set_tx_power
@@ -7665,7 +7822,8 @@ static int __iw_setint_getnone(struct net_device *dev,
 			    pAdapter->device_mode,
 			    set_value) != QDF_STATUS_SUCCESS) {
 			hdd_err("Setting tx power failed");
-			return -EIO;
+			ret = -EIO;
+			goto free;
 		}
 		break;
 	}
@@ -7674,8 +7832,10 @@ static int __iw_setint_getnone(struct net_device *dev,
 		struct qdf_mac_addr bssid;
 		struct qdf_mac_addr selfMac;
 
-		if (!hHal)
-			return -EINVAL;
+		if (!hHal) {
+			ret = -EINVAL;
+			goto free;
+		}
 
 		hdd_debug("Setting maximum tx power %d dBm",
 		       set_value);
@@ -7685,7 +7845,8 @@ static int __iw_setint_getnone(struct net_device *dev,
 		if (sme_set_max_tx_power(hHal, bssid, selfMac, set_value)
 		    != QDF_STATUS_SUCCESS) {
 			hdd_err("Setting maximum tx power failed");
-			return -EIO;
+			ret = -EIO;
+			goto free;
 		}
 
 		break;
@@ -7697,7 +7858,8 @@ static int __iw_setint_getnone(struct net_device *dev,
 		if (sme_set_max_tx_power_per_band(eCSR_BAND_24, set_value) !=
 		    QDF_STATUS_SUCCESS) {
 			hdd_err("Setting max tx power failed for 2.4 GHz band");
-			return -EIO;
+			ret = -EIO;
+			goto free;
 		}
 
 		break;
@@ -7709,7 +7871,8 @@ static int __iw_setint_getnone(struct net_device *dev,
 		if (sme_set_max_tx_power_per_band(eCSR_BAND_5G, set_value) !=
 		    QDF_STATUS_SUCCESS) {
 			hdd_err("Setting max tx power failed for 5.0 GHz band");
-			return -EIO;
+			ret = -EIO;
+			goto free;
 		}
 
 		break;
@@ -7734,8 +7897,10 @@ static int __iw_setint_getnone(struct net_device *dev,
 
 	case WE_SET_TM_LEVEL:
 	{
-		if (!hHal)
-			return -EINVAL;
+		if (!hHal) {
+			ret = -EINVAL;
+			goto free;
+		}
 
 		hdd_debug("Set Thermal Mitigation Level %d", set_value);
 		(void)sme_set_thermal_level(hHal, set_value);
@@ -7746,8 +7911,10 @@ static int __iw_setint_getnone(struct net_device *dev,
 	{
 		hdd_context_t *phddctx = WLAN_HDD_GET_CTX(pAdapter);
 
-		if (!hHal)
-			return -EINVAL;
+		if (!hHal) {
+			ret = -EINVAL;
+			goto free;
+		}
 
 		ret =
 			wlan_hdd_update_phymode(dev, hHal, set_value,
@@ -7757,8 +7924,10 @@ static int __iw_setint_getnone(struct net_device *dev,
 
 	case WE_SET_NSS:
 	{
-		if (!hHal)
-			return -EINVAL;
+		if (!hHal) {
+			ret = -EINVAL;
+			goto free;
+		}
 
 		hdd_debug("Set NSS = %d", set_value);
 		if ((set_value > 2) || (set_value <= 0)) {
@@ -7867,8 +8036,10 @@ static int __iw_setint_getnone(struct net_device *dev,
 
 	case WE_SET_SHORT_GI:
 	{
-		if (!hHal)
-			return -EINVAL;
+		if (!hHal) {
+			ret = -EINVAL;
+			goto free;
+		}
 
 		hdd_debug("WMI_VDEV_PARAM_SGI val %d", set_value);
 		ret = sme_update_ht_config(hHal, pAdapter->sessionId,
@@ -7883,8 +8054,10 @@ static int __iw_setint_getnone(struct net_device *dev,
 	{
 		uint32_t value;
 
-		if (!hHal)
-			return -EINVAL;
+		if (!hHal) {
+			ret = -EINVAL;
+			goto free;
+		}
 
 		hdd_debug("WMI_VDEV_PARAM_ENABLE_RTSCTS val 0x%x",
 		       set_value);
@@ -7896,10 +8069,12 @@ static int __iw_setint_getnone(struct net_device *dev,
 				RTSThreshold;
 		else if (((set_value & HDD_RTSCTS_EN_MASK) == 0)
 			 || ((set_value & HDD_RTSCTS_EN_MASK) ==
-			     HDD_CTS_ENABLE))
+			     HDD_CTS_ENABLE)) {
 			value = WNI_CFG_RTS_THRESHOLD_STAMAX;
-		else
-			return -EIO;
+		} else {
+			ret = -EIO;
+			goto free;
+		}
 
 		ret = wma_cli_set_command(pAdapter->sessionId,
 					  WMI_VDEV_PARAM_ENABLE_RTSCTS,
@@ -7909,7 +8084,8 @@ static int __iw_setint_getnone(struct net_device *dev,
 				    (hHal, WNI_CFG_RTS_THRESHOLD, value) !=
 				    QDF_STATUS_SUCCESS) {
 				hdd_err("FAILED TO SET RTSCTS");
-				return -EIO;
+				ret = -EIO;
+				goto free;
 			}
 		}
 
@@ -7921,15 +8097,18 @@ static int __iw_setint_getnone(struct net_device *dev,
 		bool chwidth = false;
 		hdd_context_t *phddctx = WLAN_HDD_GET_CTX(pAdapter);
 
-		if (!hHal)
-			return -EINVAL;
+		if (!hHal) {
+			ret = -EINVAL;
+			goto free;
+		}
 
 		/*updating channel bonding only on 5Ghz */
 		hdd_debug("WMI_VDEV_PARAM_CHWIDTH val %d",
 		       set_value);
 		if (set_value > eHT_CHANNEL_WIDTH_80MHZ) {
 			hdd_err("Invalid channel width 0->20 1->40 2->80");
-			return -EINVAL;
+			ret = -EINVAL;
+			goto free;
 		}
 
 		if ((WNI_CFG_CHANNEL_BONDING_MODE_DISABLE !=
@@ -7937,42 +8116,47 @@ static int __iw_setint_getnone(struct net_device *dev,
 							      nChannelBondingMode5GHz)))
 			chwidth = true;
 
-		sme_get_config_param(hHal, &smeConfig);
+		sme_get_config_param(hHal, sme_config);
 		switch (set_value) {
 		case eHT_CHANNEL_WIDTH_20MHZ:
-			smeConfig.csrConfig.channelBondingMode5GHz =
+			sme_config->csrConfig.channelBondingMode5GHz =
 				WNI_CFG_CHANNEL_BONDING_MODE_DISABLE;
 			break;
 		case eHT_CHANNEL_WIDTH_40MHZ:
-			if (chwidth)
-				smeConfig.csrConfig.
+			if (chwidth) {
+				sme_config->csrConfig.
 				channelBondingMode5GHz =
 					phddctx->config->
 					nChannelBondingMode5GHz;
-			else
-				return -EINVAL;
+			} else {
+				ret = -EINVAL;
+				goto free;
+			}
 
 			break;
 		case eHT_CHANNEL_WIDTH_80MHZ:
-			if (chwidth)
-				smeConfig.csrConfig.
+			if (chwidth) {
+				sme_config->csrConfig.
 				channelBondingMode5GHz =
 					phddctx->config->
 					nChannelBondingMode5GHz;
-			else
-				return -EINVAL;
+			} else {
+				ret = -EINVAL;
+				goto free;
+			}
 
 			break;
 
 		default:
-			return -EINVAL;
+			ret = -EINVAL;
+			goto free;
 		}
 
 		ret = wma_cli_set_command(pAdapter->sessionId,
 					  WMI_VDEV_PARAM_CHWIDTH,
 					  set_value, VDEV_CMD);
 		if (!ret)
-			sme_update_config(hHal, &smeConfig);
+			sme_update_config(hHal, sme_config);
 
 		break;
 	}
@@ -8333,8 +8517,10 @@ static int __iw_setint_getnone(struct net_device *dev,
 
 	case WE_PPS_PAID_MATCH:
 	{
-		if (pAdapter->device_mode != QDF_STA_MODE)
-			return -EINVAL;
+		if (pAdapter->device_mode != QDF_STA_MODE) {
+			ret = -EINVAL;
+			goto free;
+		}
 
 		hdd_debug("WMI_VDEV_PPS_PAID_MATCH val %d ",
 		       set_value);
@@ -8346,8 +8532,10 @@ static int __iw_setint_getnone(struct net_device *dev,
 
 	case WE_PPS_GID_MATCH:
 	{
-		if (pAdapter->device_mode != QDF_STA_MODE)
-			return -EINVAL;
+		if (pAdapter->device_mode != QDF_STA_MODE) {
+			ret = -EINVAL;
+			goto free;
+		}
 		hdd_debug("WMI_VDEV_PPS_GID_MATCH val %d ",
 		       set_value);
 		ret = wma_cli_set_command(pAdapter->sessionId,
@@ -8358,8 +8546,10 @@ static int __iw_setint_getnone(struct net_device *dev,
 
 	case WE_PPS_EARLY_TIM_CLEAR:
 	{
-		if (pAdapter->device_mode != QDF_STA_MODE)
-			return -EINVAL;
+		if (pAdapter->device_mode != QDF_STA_MODE) {
+			ret = -EINVAL;
+			goto free;
+		}
 		hdd_debug(" WMI_VDEV_PPS_EARLY_TIM_CLEAR val %d ",
 		       set_value);
 		ret = wma_cli_set_command(pAdapter->sessionId,
@@ -8370,8 +8560,10 @@ static int __iw_setint_getnone(struct net_device *dev,
 
 	case WE_PPS_EARLY_DTIM_CLEAR:
 	{
-		if (pAdapter->device_mode != QDF_STA_MODE)
-			return -EINVAL;
+		if (pAdapter->device_mode != QDF_STA_MODE) {
+			ret = -EINVAL;
+			goto free;
+		}
 		hdd_debug("WMI_VDEV_PPS_EARLY_DTIM_CLEAR val %d",
 		       set_value);
 		ret = wma_cli_set_command(pAdapter->sessionId,
@@ -8382,8 +8574,10 @@ static int __iw_setint_getnone(struct net_device *dev,
 
 	case WE_PPS_EOF_PAD_DELIM:
 	{
-		if (pAdapter->device_mode != QDF_STA_MODE)
-			return -EINVAL;
+		if (pAdapter->device_mode != QDF_STA_MODE) {
+			ret = -EINVAL;
+			goto free;
+		}
 		hdd_debug("WMI_VDEV_PPS_EOF_PAD_DELIM val %d ",
 		       set_value);
 		ret = wma_cli_set_command(pAdapter->sessionId,
@@ -8394,8 +8588,10 @@ static int __iw_setint_getnone(struct net_device *dev,
 
 	case WE_PPS_MACADDR_MISMATCH:
 	{
-		if (pAdapter->device_mode != QDF_STA_MODE)
-			return -EINVAL;
+		if (pAdapter->device_mode != QDF_STA_MODE) {
+			ret = -EINVAL;
+			goto free;
+		}
 		hdd_debug("WMI_VDEV_PPS_MACADDR_MISMATCH val %d ",
 		       set_value);
 		ret = wma_cli_set_command(pAdapter->sessionId,
@@ -8406,8 +8602,10 @@ static int __iw_setint_getnone(struct net_device *dev,
 
 	case WE_PPS_DELIM_CRC_FAIL:
 	{
-		if (pAdapter->device_mode != QDF_STA_MODE)
-			return -EINVAL;
+		if (pAdapter->device_mode != QDF_STA_MODE) {
+			ret = -EINVAL;
+			goto free;
+		}
 		hdd_debug("WMI_VDEV_PPS_DELIM_CRC_FAIL val %d ",
 		       set_value);
 		ret = wma_cli_set_command(pAdapter->sessionId,
@@ -8418,8 +8616,10 @@ static int __iw_setint_getnone(struct net_device *dev,
 
 	case WE_PPS_GID_NSTS_ZERO:
 	{
-		if (pAdapter->device_mode != QDF_STA_MODE)
-			return -EINVAL;
+		if (pAdapter->device_mode != QDF_STA_MODE) {
+			ret = -EINVAL;
+			goto free;
+		}
 		hdd_debug("WMI_VDEV_PPS_GID_NSTS_ZERO val %d ",
 		       set_value);
 		ret = wma_cli_set_command(pAdapter->sessionId,
@@ -8430,8 +8630,10 @@ static int __iw_setint_getnone(struct net_device *dev,
 
 	case WE_PPS_RSSI_CHECK:
 	{
-		if (pAdapter->device_mode != QDF_STA_MODE)
-			return -EINVAL;
+		if (pAdapter->device_mode != QDF_STA_MODE) {
+			ret = -EINVAL;
+			goto free;
+		}
 		hdd_debug("WMI_VDEV_PPS_RSSI_CHECK val %d ",
 		       set_value);
 		ret = wma_cli_set_command(pAdapter->sessionId,
@@ -8442,8 +8644,10 @@ static int __iw_setint_getnone(struct net_device *dev,
 
 	case WE_PPS_5G_EBT:
 	{
-		if (pAdapter->device_mode != QDF_STA_MODE)
-			return -EINVAL;
+		if (pAdapter->device_mode != QDF_STA_MODE) {
+			ret = -EINVAL;
+			goto free;
+		}
 
 		hdd_debug("WMI_VDEV_PPS_5G_EBT val %d", set_value);
 		ret = wma_cli_set_command(pAdapter->sessionId,
@@ -8521,8 +8725,10 @@ static int __iw_setint_getnone(struct net_device *dev,
 	{
 		hdd_context_t *hdd_ctx = WLAN_HDD_GET_CTX(pAdapter);
 
-		if (!hHal)
-			return -EINVAL;
+		if (!hHal) {
+			ret = -EINVAL;
+			goto free;
+		}
 
 		hdd_ctx->config->gEnableDebugLog = set_value;
 		sme_update_connect_debug(hHal, set_value);
@@ -8598,8 +8804,10 @@ static int __iw_setint_getnone(struct net_device *dev,
 	}
 	case WE_SET_SCAN_DISABLE:
 	{
-		if (!hHal)
-			return -EINVAL;
+		if (!hHal) {
+			ret = -EINVAL;
+			goto free;
+		}
 
 		hdd_debug("SET SCAN DISABLE %d", set_value);
 		sme_set_scan_disable(hHal, set_value);
@@ -8617,9 +8825,10 @@ static int __iw_setint_getnone(struct net_device *dev,
 	{
 		hdd_debug("Set Channel %d Session ID %d mode %d", set_value,
 				  pAdapter->sessionId, pAdapter->device_mode);
-		if (!hHal)
-			return -EINVAL;
-
+		if (!hHal) {
+			ret = -EINVAL;
+			goto free;
+		}
 
 		if ((QDF_STA_MODE == pAdapter->device_mode) ||
 		   (QDF_P2P_CLIENT_MODE == pAdapter->device_mode)) {
@@ -8644,7 +8853,8 @@ static int __iw_setint_getnone(struct net_device *dev,
 		if (!((set_value >= CFG_CONC_SYSTEM_PREF_MIN) &&
 				(set_value <= CFG_CONC_SYSTEM_PREF_MAX))) {
 			hdd_err("Invalid system preference %d", set_value);
-			return -EINVAL;
+			ret = -EINVAL;
+			goto free;
 		}
 
 		cds_set_cur_conc_system_pref(set_value);
@@ -8659,6 +8869,8 @@ static int __iw_setint_getnone(struct net_device *dev,
 	}
 	}
 	EXIT();
+free:
+	qdf_mem_free(sme_config);
 	return ret;
 }
 
@@ -8884,8 +9096,15 @@ static int __iw_setnone_getint(struct net_device *dev,
 	tHalHandle hHal = WLAN_HDD_GET_HAL_CTX(pAdapter);
 	int *value = (int *)extra;
 	int ret;
-	tSmeConfigParams smeConfig;
+	tSmeConfigParams *sme_config;
 	hdd_context_t *hdd_ctx;
+
+	sme_config = qdf_mem_malloc(sizeof(*sme_config));
+	if (!sme_config) {
+		hdd_err("failed to allocate memory for sme_config");
+		return -ENOMEM;
+	}
+	qdf_mem_zero(sme_config, sizeof(*sme_config));
 
 	ENTER_DEV(dev);
 
@@ -8897,9 +9116,9 @@ static int __iw_setnone_getint(struct net_device *dev,
 	switch (value[0]) {
 	case WE_GET_11D_STATE:
 	{
-		sme_get_config_param(hHal, &smeConfig);
+		sme_get_config_param(hHal, sme_config);
 
-		*value = smeConfig.csrConfig.Is11dSupportEnabled;
+		*value = sme_config->csrConfig.Is11dSupportEnabled;
 
 		hdd_debug("11D state=%d!!", *value);
 
@@ -8937,8 +9156,8 @@ static int __iw_setnone_getint(struct net_device *dev,
 
 	case WE_GET_NSS:
 	{
-		sme_get_config_param(hHal, &smeConfig);
-		*value = (smeConfig.csrConfig.enable2x2 == 0) ? 1 : 2;
+		sme_get_config_param(hHal, sme_config);
+		*value = (sme_config->csrConfig.enable2x2 == 0) ? 1 : 2;
 		 if (wma_is_current_hwmode_dbs())
 			 *value = *value-1;
 		hdd_debug("GET_NSS: Current NSS:%d", *value);
@@ -9356,6 +9575,7 @@ static int __iw_setnone_getint(struct net_device *dev,
 	}
 	}
 	EXIT();
+	qdf_mem_free(sme_config);
 	return ret;
 }
 
@@ -12095,7 +12315,8 @@ int hdd_set_band(struct net_device *dev, u8 ui_band)
 	}
 
 	if ((band == eCSR_BAND_24 && pHddCtx->config->nBandCapability == 2) ||
-	    (band == eCSR_BAND_5G && pHddCtx->config->nBandCapability == 1)) {
+	    (band == eCSR_BAND_5G && pHddCtx->config->nBandCapability == 1) ||
+	    (band == eCSR_BAND_ALL && pHddCtx->config->nBandCapability != 0)) {
 		hdd_err("band value %u violate INI settings %u",
 			  band, pHddCtx->config->nBandCapability);
 		return -EIO;
@@ -12106,6 +12327,8 @@ int hdd_set_band(struct net_device *dev, u8 ui_band)
 			pHddCtx->config->nBandCapability);
 		band = pHddCtx->config->nBandCapability;
 	}
+
+	pHddCtx->curr_band = band;
 
 	if (QDF_STATUS_SUCCESS != sme_get_freq_band(hHal, &currBand)) {
 		hdd_debug("Failed to get current band config");
@@ -13779,6 +14002,8 @@ static int hdd_set_wext(hdd_adapter_t *pAdapter)
 static void hdd_initialize_fils_info(hdd_wext_state_t *pwextBuf)
 {
 	pwextBuf->roamProfile.fils_con_info = NULL;
+	pwextBuf->roamProfile.hlp_ie = NULL;
+	pwextBuf->roamProfile.hlp_ie_len = 0;
 }
 #else
 static void hdd_initialize_fils_info(hdd_wext_state_t *pwextBuf)

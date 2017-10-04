@@ -810,7 +810,8 @@ static int hdd_set_grat_arp_keepalive(hdd_adapter_t *adapter)
  * This function performs the work initially trigged by a callback
  * from the IPv4 netdev notifier.  Since this means there has been a
  * change in IPv4 state for the interface, the ARP offload is
- * reconfigured.
+ * reconfigured. Also, Updates the HLP IE info with IP address info
+ * to fw if LFR3 is enabled
  *
  * Return: None
  */
@@ -823,6 +824,9 @@ static void __hdd_ipv4_notifier_work_queue(struct work_struct *work)
 	int status;
 	bool ndi_connected;
 	bool sta_associated;
+	hdd_wext_state_t *wext_state;
+	tCsrRoamProfile *roam_profile;
+	struct in_ifaddr *ifa;
 
 	hdd_debug("Configuring ARP Offload");
 
@@ -855,6 +859,13 @@ static void __hdd_ipv4_notifier_work_queue(struct work_struct *work)
 
 	if (pHddCtx->config->sta_keepalive_method == HDD_STA_KEEPALIVE_GRAT_ARP)
 		hdd_set_grat_arp_keepalive(pAdapter);
+
+	wext_state = WLAN_HDD_GET_WEXT_STATE_PTR(pAdapter);
+	roam_profile = &wext_state->roamProfile;
+	ifa = hdd_lookup_ifaddr(pAdapter);
+	if (ifa)
+		sme_send_hlp_ie_info(pHddCtx->hHal, pAdapter->sessionId,
+				     roam_profile, ifa->ifa_local);
 }
 
 /**
@@ -1274,7 +1285,7 @@ hdd_suspend_wlan(void (*callback)(void *callbackContext, bool suspended),
 		pAdapter = pAdapterNode->pAdapter;
 
 		/* stop all TX queues before suspend */
-		hdd_debug("Disabling queues");
+		hdd_info("Disabling queues");
 		wlan_hdd_netif_queue_control(pAdapter,
 					     WLAN_STOP_ALL_NETIF_QUEUE,
 					     WLAN_CONTROL_PATH);
@@ -1618,7 +1629,6 @@ int wlan_hdd_set_powersave(hdd_adapter_t *adapter,
 {
 	tHalHandle hal;
 	hdd_context_t *hdd_ctx;
-	bool force_trigger = false;
 
 	if (NULL == adapter) {
 		hdd_err("Adapter NULL");
@@ -1634,13 +1644,18 @@ int wlan_hdd_set_powersave(hdd_adapter_t *adapter,
 	hdd_debug("Allow power save: %d", allow_power_save);
 	hal = WLAN_HDD_GET_HAL_CTX(adapter);
 
-	if ((QDF_STA_MODE == adapter->device_mode) &&
+	/*
+	 * This is a workaround for defective AP's that send a disassoc
+	 * immediately after WPS connection completes. Defer powersave by a
+	 * small amount if the affected AP is detected.
+	 */
+	if (allow_power_save &&
+	    adapter->device_mode == QDF_STA_MODE &&
 	    !adapter->sessionCtx.station.ap_supports_immediate_power_save) {
 		/* override user's requested flag */
-		force_trigger = allow_power_save;
 		allow_power_save = false;
-		timeout = AUTO_PS_ENTRY_USER_TIMER_DEFAULT_VALUE;
-		hdd_debug("Defer power-save for few seconds...");
+		timeout = AUTO_PS_DEFER_TIMEOUT_MS;
+		hdd_debug("Defer power-save due to AP spec non-conformance");
 	}
 
 	if (allow_power_save) {
@@ -1675,7 +1690,7 @@ int wlan_hdd_set_powersave(hdd_adapter_t *adapter,
 			adapter->sessionId);
 		sme_ps_enable_disable(hal, adapter->sessionId, SME_PS_DISABLE);
 		sme_ps_enable_auto_ps_timer(WLAN_HDD_GET_HAL_CTX(adapter),
-			adapter->sessionId, timeout, force_trigger);
+			adapter->sessionId, timeout);
 	}
 
 	return 0;
@@ -1961,6 +1976,17 @@ next_adapter:
 
 		status = hdd_get_next_adapter(pHddCtx, pAdapterNode, &pNext);
 		pAdapterNode = pNext;
+	}
+
+	/* flush any pending powersave timers */
+	status = hdd_get_front_adapter(pHddCtx, &pAdapterNode);
+	while (pAdapterNode && QDF_IS_STATUS_SUCCESS(status)) {
+		pAdapter = pAdapterNode->pAdapter;
+
+		sme_ps_timer_flush_sync(pHddCtx->hHal, pAdapter->sessionId);
+
+		status = hdd_get_next_adapter(pHddCtx, pAdapterNode,
+					      &pAdapterNode);
 	}
 
 	/*

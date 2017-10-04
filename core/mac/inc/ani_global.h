@@ -333,6 +333,11 @@ typedef struct sLimTimers {
 	 */
 	TX_TIMER gLimActiveToPassiveChannelTimer;
 	TX_TIMER g_lim_periodic_auth_retry_timer;
+	/*
+	 * This timer is used for delay between shared auth failure and
+	 * open auth start
+	 */
+	TX_TIMER open_sys_auth_timer;
 
 /* ********************TIMER SECTION ENDS************************************************** */
 /* ALL THE FIELDS BELOW THIS CAN BE ZEROED OUT in lim_initialize */
@@ -896,23 +901,6 @@ struct vdev_type_nss {
 	uint8_t ocb;
 };
 
-/**
- * struct limit_off_chan_params - limit off channel parameters
- * @is_active: status of parameters.
- * @vdev_id: vdev_id
- * @max_offchan_time: max allowed off channel time
- * @rest_time: home channel time
- * @skip_dfs_chan: skip DFS channels during scan
- * Holds the limit off channel parameters.
- */
-struct limit_off_chan_params {
-	bool is_active;
-	uint32_t vdev_id;
-	uint32_t max_offchan_time;
-	uint32_t rest_time;
-	bool skip_dfs_chan;
-};
-
 /* ------------------------------------------------------------------- */
 /* / MAC Sirius parameter structure */
 typedef struct sAniSirGlobal {
@@ -986,11 +974,9 @@ typedef struct sAniSirGlobal {
 	bool sta_prefer_80MHz_over_160MHz;
 	enum  country_src reg_hint_src;
 	uint32_t rx_packet_drop_counter;
-	struct candidate_chan_info candidate_channel_info[QDF_MAX_NUM_CHAN];
 	bool snr_monitor_enabled;
 	/* channel information callback */
 	void (*chan_info_cb)(struct scan_chan_info *chan_info);
-	struct limit_off_chan_params limit_off_chan_params;
 } tAniSirGlobal;
 
 typedef enum {

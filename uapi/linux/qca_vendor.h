@@ -460,12 +460,14 @@ enum qca_vendor_attr_set_trace_level {
  * @QCA_WLAN_VENDOR_ATTR_GET_STATION_INVALID: Invalid attribute
  * @QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO: bss info
  * @QCA_WLAN_VENDOR_ATTR_GET_STATION_ASSOC_FAIL_REASON: assoc fail reason
+ * @QCA_WLAN_VENDOR_ATTR_GET_STATION_REMOTE: remote station info
  * @QCA_WLAN_VENDOR_ATTR_GET_STATION_AFTER_LAST: After last
  */
 enum qca_wlan_vendor_attr_get_station {
 	QCA_WLAN_VENDOR_ATTR_GET_STATION_INVALID = 0,
 	QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO,
 	QCA_WLAN_VENDOR_ATTR_GET_STATION_ASSOC_FAIL_REASON,
+	QCA_WLAN_VENDOR_ATTR_GET_STATION_REMOTE,
 
 	/* keep last */
 	QCA_WLAN_VENDOR_ATTR_GET_STATION_AFTER_LAST,
@@ -557,6 +559,35 @@ enum qca_wlan_auth_type {
  * @QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_ASSOC_FAIL_REASON:
  *  Status Code Corresponding to the Association Failure.
  *  Unsigned 32 bit value.
+ * @QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_REMOTE_MAX_PHY_RATE:
+ *  Max phy rate of remote station
+ * @QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_REMOTE_TX_PACKETS:
+ *  TX packets to remote station
+ * @QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_REMOTE_TX_BYTES:
+ *  TX bytes to remote station
+ * @QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_REMOTE_RX_PACKETS:
+ *  RX packets from remote station
+ * @QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_REMOTE_RX_BYTES:
+ *  RX bytes from remote station
+ * @QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_REMOTE_LAST_TX_RATE:
+ *  Last TX rate with remote station
+ * @QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_REMOTE_LAST_RX_RATE:
+ *  Last RX rate with remote station
+ * @QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_REMOTE_WMM:
+ *  Remote station enable/disable WMM
+ * @QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_REMOTE_SUPPORTED_MODE:
+ *  Remote staion connection mode
+ * @QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_REMOTE_AMPDU:
+ *  Remote station AMPDU enable/disable
+ * @QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_REMOTE_TX_STBC:
+ *  Remote station TX Space-time block coding enable/disable
+ * @QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_REMOTE_RX_STBC:
+ *  Remote station RX Space-time block coding enable/disable
+ * @QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_REMOTE_CH_WIDTH:
+ *  Remote station channel width
+ * @QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_REMOTE_SGI_ENABLE:
+ *  Remote station short GI enable/disable
+ * @QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_PAD: Attribute type for padding
  * @QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_AFTER_LAST: After last
  */
 enum qca_wlan_vendor_attr_get_station_info {
@@ -570,31 +601,28 @@ enum qca_wlan_vendor_attr_get_station_info {
 	QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_HT_OPERATION,
 	QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_VHT_OPERATION,
 	QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_ASSOC_FAIL_REASON,
+	QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_REMOTE_MAX_PHY_RATE,
+	QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_REMOTE_TX_PACKETS,
+	QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_REMOTE_TX_BYTES,
+	QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_REMOTE_RX_PACKETS,
+	QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_REMOTE_RX_BYTES,
+	QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_REMOTE_LAST_TX_RATE,
+	QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_REMOTE_LAST_RX_RATE,
+	QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_REMOTE_WMM,
+	QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_REMOTE_SUPPORTED_MODE,
+	QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_REMOTE_AMPDU,
+	QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_REMOTE_TX_STBC,
+	QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_REMOTE_RX_STBC,
+	QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_REMOTE_CH_WIDTH,
+	QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_REMOTE_SGI_ENABLE,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0))
+	QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_PAD,
+#endif
 	/* keep last */
 	QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_AFTER_LAST,
 	QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_MAX =
 		QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_AFTER_LAST - 1,
 };
-
-/* define short names for get station info attributes */
-#define LINK_INFO_STANDARD_NL80211_ATTR \
-	QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_LINK_STANDARD_NL80211_ATTR
-#define AP_INFO_STANDARD_NL80211_ATTR \
-	QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_AP_STANDARD_NL80211_ATTR
-#define INFO_ROAM_COUNT \
-	QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_ROAM_COUNT
-#define INFO_AKM \
-	QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_AKM
-#define WLAN802_11_MODE \
-	QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_802_11_MODE
-#define AP_INFO_HS20_INDICATION \
-	QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_AP_HS20_INDICATION
-#define HT_OPERATION \
-	QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_HT_OPERATION
-#define VHT_OPERATION \
-	QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_VHT_OPERATION
-#define INFO_ASSOC_FAIL_REASON \
-	QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_ASSOC_FAIL_REASON
 
 /**
  * enum qca_nl80211_vendor_subcmds_index - vendor sub commands index
@@ -2029,6 +2057,13 @@ enum qca_roaming_policy {
  * @QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_PTK_KCK: KCK of the PTK
  * @QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_PTK_KEK: KEK of the PTK
  * @QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_SUBNET_STATUS: subnet change status
+ * @QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_STATUS: AUTH status from AP
+ * @QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_RETAIN_CONNECTION: old connection is
+ * retained
+ * @QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_PMK: AUTH PMK
+ * @QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_PMKID: AUTH PMKID
+ * @QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_FILS_ERP_NEXT_SEQ_NUM: FILS erp next
+ * seq number
  */
 enum qca_wlan_vendor_attr_roam_auth {
 	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_INVALID = 0,
@@ -2040,6 +2075,27 @@ enum qca_wlan_vendor_attr_roam_auth {
 	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_PTK_KCK,
 	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_PTK_KEK,
 	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_SUBNET_STATUS,
+	/* Indicates the status of re-association requested by user space for
+	 * the BSSID specified by QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_BSSID.
+	 * Type u16.
+	 * Represents the status code from AP. Use
+	 * %WLAN_STATUS_UNSPECIFIED_FAILURE if the device cannot give you the
+	 * real status code for failures.
+	 */
+	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_STATUS,
+	/* This attribute indicates that the old association was maintained when
+	 * a re-association is requested by user space and that re-association
+	 * attempt fails (i.e., cannot connect to the requested BSS, but can
+	 * remain associated with the BSS with which the association was in
+	 * place when being requested to roam). Used along with
+	 * WLAN_VENDOR_ATTR_ROAM_AUTH_STATUS to indicate the current
+	 * re-association status. Type flag.
+	 * This attribute is applicable only for re-association failure cases.
+	 */
+	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_RETAIN_CONNECTION,
+	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_PMK,
+	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_PMKID,
+	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_FILS_ERP_NEXT_SEQ_NUM,
 	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_AFTER_LAST,
 	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_MAX =
 		QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_AFTER_LAST - 1
@@ -2669,12 +2725,24 @@ enum qca_wlan_vendor_attr_nd_offload {
  *	user space wpa_supplicant do it. Information from received P2P
  *	Requests are forwarded from firmware to host whenever the APPS
  *	processor exits power collapse state.
+ * @QCA_WLAN_VENDOR_FEATURE_OCE_STA: Device supports all OCE non-AP STA
+ *  specific features.
+ * @QCA_WLAN_VENDOR_FEATURE_OCE_AP: Device supports all OCE AP specific
+ *  features.
+ * @QCA_WLAN_VENDOR_FEATURE_OCE_STA_CFON: Device supports OCE STA-CFON
+ *  specific features only. If a Device sets this bit but not the
+ *  QCA_WLAN_VENDOR_FEATURE_OCE_AP, the userspace shall assume that
+ *  this Device may not support all OCE AP functionalities but can support
+ *  only OCE STA-CFON functionalities.
  */
 enum qca_wlan_vendor_features {
 	QCA_WLAN_VENDOR_FEATURE_KEY_MGMT_OFFLOAD = 0,
 	QCA_WLAN_VENDOR_FEATURE_SUPPORT_HW_MODE_ANY = 1,
 	QCA_WLAN_VENDOR_FEATURE_OFFCHANNEL_SIMULTANEOUS = 2,
 	QCA_WLAN_VENDOR_FEATURE_P2P_LISTEN_OFFLOAD	= 3,
+	QCA_WLAN_VENDOR_FEATURE_OCE_STA = 4,
+	QCA_WLAN_VENDOR_FEATURE_OCE_AP = 5,
+	QCA_WLAN_VENDOR_FEATURE_OCE_STA_CFON = 6,
 	/* Additional features need to be added above this */
 	NUM_QCA_WLAN_VENDOR_FEATURES
 };
@@ -3048,6 +3116,9 @@ enum qca_wlan_vendor_attr_config {
 	 * 1 - Enable , 0 - Disable.
 	 */
 	QCA_WLAN_VENDOR_ATTR_CONFIG_LRO = 50,
+
+	/* 8-bit unsigned value to set the total beacon miss count */
+	QCA_WLAN_VENDOR_ATTR_CONFIG_TOTAL_BEACON_MISS_COUNT = 52,
 
 	QCA_WLAN_VENDOR_ATTR_CONFIG_AFTER_LAST,
 	QCA_WLAN_VENDOR_ATTR_CONFIG_MAX =
