@@ -32,6 +32,7 @@
 #include <linux/syscalls.h>
 
 #include <asm/atomic.h>
+#include <asm/barrier.h>
 #include <asm/debug-monitors.h>
 #include <asm/traps.h>
 #include <asm/stacktrace.h>
@@ -406,6 +407,7 @@ static void cntvct_read_handler(unsigned int esr, struct pt_regs *regs)
 {
 	int rt = (esr & ESR_ELx_SYS64_ISS_RT_MASK) >> ESR_ELx_SYS64_ISS_RT_SHIFT;
 
+	isb();
 	if (rt != 31)
 		regs->regs[rt] = arch_counter_get_cntvct();
 	regs->pc += 4;
