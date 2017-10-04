@@ -461,7 +461,7 @@ static inline void *hif_get_ce_handle(struct hif_opaque_softc *hif_ctx, int ret)
 #define CONFIG_DISABLE_CDC_MAX_PERF_WAR 0
 
 void hif_ipa_get_ce_resource(struct hif_opaque_softc *hif_ctx,
-			     qdf_dma_addr_t *ce_sr_base_paddr,
+			     qdf_shared_mem_t **ce_sr,
 			     uint32_t *ce_sr_ring_size,
 			     qdf_dma_addr_t *ce_reg_paddr);
 
@@ -789,7 +789,7 @@ hif_reg_based_get_target_info(struct hif_opaque_softc *hif_ctx,
  * Return: void
  */
 void hif_set_ce_service_max_yield_time(struct hif_opaque_softc *hif,
-				       uint8_t ce_service_max_yield_time);
+				       uint32_t ce_service_max_yield_time);
 
 /**
  * hif_get_ce_service_max_yield_time() - get CE service max yield time
