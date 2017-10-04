@@ -1638,6 +1638,9 @@ static int mnh_sm_set_state_locked(int state)
 
 		ret = mnh_sm_poweroff();
 
+		/* enable pad isolation to the DRAM */
+		gpiod_set_value_cansleep(mnh_sm_dev->ddr_pad_iso_n_pin, 0);
+
 		disable_irq(mnh_sm_dev->ready_irq);
 		break;
 	case MNH_STATE_ACTIVE:
