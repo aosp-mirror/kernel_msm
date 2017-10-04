@@ -281,6 +281,90 @@ static void nitrous_lpm_cleanup(struct nitrous_bt_lpm *lpm)
 }
 
 /*
+ * Sysfs
+ */
+static ssize_t nitrous_host_wake_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct platform_device *pdev = container_of(dev,
+			struct platform_device, dev);
+	struct nitrous_bt_lpm *lpm = platform_get_drvdata(pdev);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n",
+			wake_lock_active(&lpm->host_lock));
+}
+
+static ssize_t nitrous_host_wake_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct platform_device *pdev = container_of(dev,
+			struct platform_device, dev);
+	struct nitrous_bt_lpm *lpm = platform_get_drvdata(pdev);
+	int enable, rc;
+	bool wake;
+
+	rc = kstrtoint(buf, 0, &enable);
+	if (rc) {
+		pr_err("%s invalid input for host_wake\n", __func__);
+		return rc;
+	}
+
+	wake = enable? true : false;
+	nitrous_uart_power(lpm->uart_port, &lpm->host_lock, wake);
+
+	return count;
+}
+
+static ssize_t nitrous_dev_wake_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct platform_device *pdev = container_of(dev,
+			struct platform_device, dev);
+	struct nitrous_bt_lpm *lpm = platform_get_drvdata(pdev);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n",
+			wake_lock_active(&lpm->dev_lock));
+}
+
+static ssize_t nitrous_dev_wake_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct platform_device *pdev = container_of(dev,
+			struct platform_device, dev);
+	struct nitrous_bt_lpm *lpm = platform_get_drvdata(pdev);
+	int enable, rc;
+	bool wake;
+
+	rc = kstrtoint(buf, 0, &enable);
+	if (rc) {
+		pr_err("%s invalid input for dev_wake\n", __func__);
+		return rc;
+	}
+
+	wake = enable? true : false;
+	nitrous_wake_device_locked(lpm, wake);
+
+	return count;
+}
+
+static DEVICE_ATTR(host_wake, 0660, nitrous_host_wake_show,
+		nitrous_host_wake_store);
+static DEVICE_ATTR(dev_wake, 0660, nitrous_dev_wake_show,
+		nitrous_dev_wake_store);
+
+static struct attribute *nitrous_dev_attrs[] = {
+	&dev_attr_host_wake.attr,
+	&dev_attr_dev_wake.attr,
+	NULL
+};
+
+static struct attribute_group nitrous_dev_attr_group = {
+	.attrs = nitrous_dev_attrs,
+};
+
+/*
  * Set BT power on/off (blocked is true: off; blocked is false: on)
  */
 static int nitrous_rfkill_set_power(void *data, bool blocked)
@@ -463,8 +547,15 @@ static int nitrous_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, lpm);
 	bt_lpm = lpm;
 
+	rc = sysfs_create_group(&dev->kobj, &nitrous_dev_attr_group);
+	if (rc) {
+		pr_err("%s: Can't create sysfs\n", __func__);
+		goto err_sysfs_create;
+	}
+
 	return rc;
 
+err_sysfs_create:
 err_rfkill_init:
 	nitrous_rfkill_cleanup(lpm);
 err_lpm_init:
@@ -489,6 +580,7 @@ static int nitrous_remove(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
+	sysfs_remove_group(&pdev->dev.kobj, &nitrous_dev_attr_group);
 	nitrous_rfkill_cleanup(lpm);
 	nitrous_lpm_cleanup(lpm);
 
