@@ -1660,14 +1660,11 @@ static void fts_enter_pointer_event_handler(struct fts_ts_info *info, unsigned c
 	z=PRESSURE_MAX;
 	distance = 0;		//if the tool is touching the display the distance should be 0
 
-    x = x * info->board->x_axis_max / systemInfo.u16_scrResX;
-    y = y * info->board->y_axis_max / systemInfo.u16_scrResY;
+    if (x == info->board->x_axis_max)
+        x--;
 
-    if (x >= info->board->x_axis_max)
-        x = info->board->x_axis_max - 1;
-
-    if (y >= info->board->y_axis_max)
-        y = info->board->y_axis_max - 1;
+    if (y == info->board->y_axis_max)
+        y--;
 
     input_mt_slot(info->input_dev, touchId);
 	switch(touchType){

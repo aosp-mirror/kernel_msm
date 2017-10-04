@@ -566,9 +566,9 @@ int readSysInfo(int request){
 
 	index+=8;																	//skip reserved area
 
-	u8ToU16(&data[index], &systemInfo.u16_scrResY);
-	index += 2;
 	u8ToU16(&data[index], &systemInfo.u16_scrResX);
+	index += 2;
+	u8ToU16(&data[index], &systemInfo.u16_scrResY);
 	index += 2;
 	logError(1, "%s Screen Resolution = %d x %d \n", tag, systemInfo.u16_scrResX, systemInfo.u16_scrResY);
 	systemInfo.u8_scrTxLen = data[index++];
