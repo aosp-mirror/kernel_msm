@@ -1389,6 +1389,8 @@ static int qpnp_pwm_config(struct pwm_chip *pwm_chip,
 		chip->pwm_config.pwm_period = period_ns / NSEC_PER_USEC;
 		chip->pwm_config.update_period = true;
 	}
+	if (chip->pwm_config.pwm_duty != duty_ns / NSEC_PER_USEC)
+		chip->pwm_config.update_period = true;
 
 	rc = _pwm_config(chip, LVL_NSEC, duty_ns, period_ns);
 
@@ -1638,6 +1640,8 @@ int pwm_config_us(struct pwm_device *pwm, int duty_us, int period_us)
 			pwm->period = (unsigned int)period_us * NSEC_PER_USEC;
 		chip->pwm_config.update_period = true;
 	}
+	if (chip->pwm_config.pwm_duty != duty_us)
+		chip->pwm_config.update_period = true;
 
 	rc = _pwm_config(chip, LVL_USEC, duty_us, period_us);
 
@@ -1703,6 +1707,8 @@ int pwm_lut_config(struct pwm_device *pwm, int period_us,
 		qpnp_lpg_save_period(chip);
 		chip->pwm_config.pwm_period = period_us;
 	}
+	// invalidate duty cycle so next pwm configuration forces update
+	chip->pwm_config.pwm_duty = -1;
 
 	rc = _pwm_lut_config(chip, period_us, duty_pct, lut_params);
 
