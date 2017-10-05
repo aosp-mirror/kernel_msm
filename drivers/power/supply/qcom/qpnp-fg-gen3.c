@@ -1803,7 +1803,8 @@ static int fg_charge_full_update(struct fg_chip *chip)
 			fg_dbg(chip, FG_STATUS, "Terminated charging @ SOC%d\n",
 				msoc);
 		}
-	} else if (msoc_raw <= recharge_soc && chip->charge_full) {
+	} else if ((msoc_raw <= recharge_soc || !chip->charge_done)
+			&& chip->charge_full) {
 		if (chip->dt.linearize_soc) {
 			chip->delta_soc = FULL_CAPACITY - msoc;
 
