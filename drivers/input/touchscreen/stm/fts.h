@@ -121,6 +121,9 @@
 #define AREA_MIN                            PRESSURE_MIN						///< min value of Major/minor axis reported
 #define AREA_MAX                            PRESSURE_MAX						///< Man value of Major/minor axis reported
 //**** END ****
+
+#define SKIP_PRESSURE
+
 /**@}*/
 /*********************************************************/
 
