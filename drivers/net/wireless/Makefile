@@ -68,3 +68,4 @@ obj-$(CONFIG_WCNSS_MEM_PRE_ALLOC) += cnss_prealloc/
 obj-$(CONFIG_CNSS_CRYPTO)	+= cnss_crypto/
 
 obj-$(CONFIG_BCMDHD)	+= bcmdhd/
+obj-$(CONFIG_WIFI_CONTROL_FUNC)	+= bcmdhd_wlan_control.o
