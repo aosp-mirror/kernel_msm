@@ -686,7 +686,7 @@
 };
 
 &pmi8998_wled {
-	/delete-property/ linux,default-trigger;
+	status = "disabled";
 };
 
 &soc {

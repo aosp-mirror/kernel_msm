@@ -569,6 +569,9 @@ QDF_STATUS wmi_unified_roam_scan_offload_mode_cmd(void *wmi_hdl,
 				struct roam_offload_scan_params *roam_req);
 #endif
 
+QDF_STATUS wmi_unified_roam_mawc_params_cmd(void *wmi_hdl,
+			struct wmi_mawc_roam_params *params);
+
 QDF_STATUS wmi_unified_roam_scan_offload_rssi_thresh_cmd(void *wmi_hdl,
 				struct roam_offload_scan_rssi_params *roam_req);
 
@@ -619,6 +622,9 @@ QDF_STATUS wmi_unified_pno_start_cmd(void *wmi_hdl,
 		   struct pno_scan_req_params *pno,
 		   uint32_t *gchannel_freq_list);
 #endif
+
+QDF_STATUS wmi_unified_nlo_mawc_cmd(void *wmi_hdl,
+		struct nlo_mawc_params *params);
 
 QDF_STATUS wmi_unified_set_ric_req_cmd(void *wmi_hdl, void *msg,
 			uint8_t is_add_ts);
@@ -1381,6 +1387,29 @@ QDF_STATUS wmi_unified_set_arp_stats_req(void *wmi_hdl,
 					 struct set_arp_stats *req_buf);
 QDF_STATUS wmi_unified_get_arp_stats_req(void *wmi_hdl,
 					 struct get_arp_stats *req_buf);
+/*
+ * wmi_unified_set_del_pmkid_cache() - set delete PMKID
+ * @wmi_hdl: wma handle
+ * @pmksa: pointer to pmk cache entry
+ * @vdev_id: vdev id
+ *
+ * Return: QDF_STATUS_SUCCESS on success and QDF_STATUS_E_FAILURE for failure
+ */
+QDF_STATUS wmi_unified_set_del_pmkid_cache(void *wmi_hdl,
+					wmi_pmk_cache *pmksa,
+					uint32_t vdev_id);
+
+#if defined (WLAN_FEATURE_FILS_SK)
+/*
+ * wmi_unified_roam_send_hlp_cmd() -send HLP command info
+ * @wmi_hdl: wma handle
+ * @req_buf: Pointer to HLP params
+ *
+ * Return: QDF_STATUS_SUCCESS on success and QDF_STATUS_E_FAILURE for failure
+ */
+QDF_STATUS wmi_unified_roam_send_hlp_cmd(void *wmi_hdl,
+					struct hlp_params *req_buf);
+#endif
 
 #ifdef WMI_INTERFACE_EVENT_LOGGING
 void wmi_print_cmd_log(wmi_unified_t wmi, uint32_t count,

@@ -57,6 +57,7 @@ MODULE_PARM_DESC(enable_waltest, "Enable to handle firmware waltest");
 
 enum cnss_debug_quirks {
 	LINK_DOWN_SELF_RECOVERY,
+	SKIP_DEVICE_BOOT,
 };
 
 unsigned long quirks;
@@ -1059,11 +1060,15 @@ static int cnss_qca6174_shutdown(struct cnss_plat_data *plat_priv)
 	if (!pci_priv)
 		return -ENODEV;
 
+	if (test_bit(CNSS_DRIVER_DEBUG, &plat_priv->driver_state))
+		goto skip_driver_remove;
+
 	if (!plat_priv->driver_ops)
 		return -EINVAL;
 
 	cnss_driver_call_remove(plat_priv);
 
+skip_driver_remove:
 	cnss_request_bus_bandwidth(CNSS_BUS_WIDTH_NONE);
 	cnss_pci_set_monitor_wake_intr(pci_priv, false);
 	cnss_pci_set_auto_suspended(pci_priv, 0);
@@ -1161,7 +1166,8 @@ static int cnss_qca6290_shutdown(struct cnss_plat_data *plat_priv)
 		return -ENODEV;
 
 	if (test_bit(CNSS_COLD_BOOT_CAL, &plat_priv->driver_state) ||
-	    test_bit(CNSS_FW_BOOT_RECOVERY, &plat_priv->driver_state))
+	    test_bit(CNSS_FW_BOOT_RECOVERY, &plat_priv->driver_state) ||
+	    test_bit(CNSS_DRIVER_DEBUG, &plat_priv->driver_state))
 		goto skip_driver_remove;
 
 	if (!plat_priv->driver_ops)
@@ -2232,13 +2238,15 @@ static int cnss_probe(struct platform_device *plat_dev)
 	if (ret)
 		goto reset_ctx;
 
-	ret = cnss_power_on_device(plat_priv);
-	if (ret)
-		goto free_res;
+	if (!test_bit(SKIP_DEVICE_BOOT, &quirks)) {
+		ret = cnss_power_on_device(plat_priv);
+		if (ret)
+			goto free_res;
 
-	ret = cnss_pci_init(plat_priv);
-	if (ret)
-		goto power_off;
+		ret = cnss_pci_init(plat_priv);
+		if (ret)
+			goto power_off;
+	}
 
 	ret = cnss_register_esoc(plat_priv);
 	if (ret)
@@ -2291,9 +2299,11 @@ unreg_bus_scale:
 unreg_esoc:
 	cnss_unregister_esoc(plat_priv);
 deinit_pci:
-	cnss_pci_deinit(plat_priv);
+	if (!test_bit(SKIP_DEVICE_BOOT, &quirks))
+		cnss_pci_deinit(plat_priv);
 power_off:
-	cnss_power_off_device(plat_priv);
+	if (!test_bit(SKIP_DEVICE_BOOT, &quirks))
+		cnss_power_off_device(plat_priv);
 free_res:
 	cnss_put_resources(plat_priv);
 reset_ctx:

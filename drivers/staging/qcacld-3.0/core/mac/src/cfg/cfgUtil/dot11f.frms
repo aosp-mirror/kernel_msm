@@ -1393,12 +1393,12 @@ IE RSN (EID_RSN)                          // 7.3.2.25
     // I don't see anything in the Standard limiting the number of Pairwise
     // Cypher Suites, other than the maximum length of an IE, which limits us
     // to 61.  However, that seems needlessly wasteful of space.
-    pwise_cipher_suites[4][0..4] COUNTIS pwise_cipher_suite_count;
+    pwise_cipher_suites[4][0..6] COUNTIS pwise_cipher_suite_count;
     // Optional count of AKM suite selectors
     OPTIONAL akm_suite_count, 2;
     // Again, I see nothing in the Standard explicitly limiting the number of
     // AKM suite selectors other than the maximum size of an IE.
-    akm_suites[4][0..4] COUNTIS akm_suite_count;
+    akm_suites[4][0..6] COUNTIS akm_suite_count;
     OPTIONAL RSN_Cap[2];
     // Finally, the IE may contain zero or more PMKIDs:
     OPTIONAL pmkid_count, 2;
@@ -2550,6 +2550,11 @@ IE QCN_IE (EID_VENDOR_SPECIFIC) OUI ( 0x8C, 0xFD, 0xF0, 0x01 )
     version[4];
 }
 
+IE ESP_information (EID_EXTN_ID_ELEMENT) OUI ( 0x0B )
+{
+    variable_data[0..96];
+}
+
 IE fils_indication (EID_FILS_INDICATION)
 {
    // FILS Information element
@@ -3101,10 +3106,8 @@ MULTIIE MBO_IE (EID_VENDOR_SPECIFIC) OUI ( 0x50, 0x6F, 0x9A, 0x16 )
    OPTIONALTLV reduced_wan_metrics;
 }
 
-IE vendor_vht_ie (EID_VENDOR_SPECIFIC) OUI (0x00, 0x90, 0x4c)
+IE vendor_vht_ie (EID_VENDOR_SPECIFIC) OUI (0x00, 0x90, 0x4c, 0x04, 0x08)
 {
-   type, 1;
-   sub_type, 1;
    OPTIE IE VHTCaps;
    OPTIE IE VHTOperation;
 }
@@ -3173,6 +3176,7 @@ FRAME Beacon                              // C.f. Sec. 7.2.3.1
     OPTIE  ESEVersion;
     OPTIE  MBO_IE;
     OPTIE  QCN_IE;
+    OPTIE  ESP_information;
 } // End frame Beacon.
 
 // Ok, here's  the story on  Beacon1 & Beacon2.   We presumably beacon  a lot
@@ -3263,6 +3267,7 @@ FRAME Beacon2
     OPTIE  QComVendorIE;
     OPTIE  ESEVersion;
     OPTIE  QCN_IE;
+    OPTIE  ESP_information;
 }
 
 // This frame is just Beacon with its Fixed Fields stripped out.  It's handy
@@ -3330,6 +3335,7 @@ FRAME BeaconIEs
     OPTIE  QComVendorIE;
     OPTIE  MBO_IE;
     OPTIE  QCN_IE;
+    OPTIE  ESP_information;
 } // End frame BeaconIEs.
 
 FRAME Disassociation                      // 7.3.3.3
@@ -3569,6 +3575,7 @@ FRAME ProbeResponse                       // 7.2.3.9
     OPTIE  ESEVersion;
     OPTIE  MBO_IE;
     OPTIE  QCN_IE;
+    OPTIE  ESP_information;
 } // End frame ProbeResponse.
 
 FRAME Authentication                      // 7.2.3.10

@@ -103,7 +103,7 @@ void hdd_tx_resume_timer_expired_handler(void *adapter_context)
 		return;
 	}
 
-	hdd_debug("Enabling queues");
+	hdd_info("Enabling queues");
 	wlan_hdd_netif_queue_control(pAdapter, WLAN_WAKE_ALL_NETIF_QUEUE,
 				     WLAN_CONTROL_PATH);
 }
@@ -124,7 +124,7 @@ hdd_tx_resume_false(hdd_adapter_t *pAdapter, bool tx_resume)
 		return;
 
 	/* Pause TX  */
-	hdd_debug("Disabling queues");
+	hdd_info("Disabling queues");
 	wlan_hdd_netif_queue_control(pAdapter, WLAN_STOP_ALL_NETIF_QUEUE,
 				     WLAN_DATA_FLOW_CONTROL);
 
@@ -192,7 +192,7 @@ void hdd_tx_resume_cb(void *adapter_context, bool tx_resume)
 						   tx_flow_control_timer)) {
 			qdf_mc_timer_stop(&pAdapter->tx_flow_control_timer);
 		}
-		hdd_debug("Enabling queues");
+		hdd_info("Enabling queues");
 		wlan_hdd_netif_queue_control(pAdapter,
 					     WLAN_WAKE_ALL_NETIF_QUEUE,
 					     WLAN_DATA_FLOW_CONTROL);
@@ -1222,10 +1222,15 @@ QDF_STATUS hdd_rx_packet_cbk(void *context, qdf_nbuf_t rxBuf)
 	pHddStaCtx = WLAN_HDD_GET_STATION_CTX_PTR(pAdapter);
 	if ((pHddStaCtx->conn_info.proxyARPService) &&
 	    cfg80211_is_gratuitous_arp_unsolicited_na(skb)) {
-		++pAdapter->hdd_stats.hddTxRxStats.rxDropped[cpu_index];
-		QDF_TRACE(QDF_MODULE_ID_HDD_DATA, QDF_TRACE_LEVEL_INFO,
-			  "%s: Dropping HS 2.0 Gratuitous ARP or Unsolicited NA",
-			  __func__);
+		uint32_t rx_dropped;
+
+		rx_dropped = ++pAdapter->hdd_stats.hddTxRxStats.
+							rxDropped[cpu_index];
+		/* rate limit error messages to 1/8th */
+		if ((rx_dropped & 0x07) == 0)
+			QDF_TRACE(QDF_MODULE_ID_HDD_DATA, QDF_TRACE_LEVEL_INFO,
+			  "%s: Dropping HS 2.0 Gratuitous ARP or Unsolicited NA count=%u",
+			  __func__, rx_dropped);
 		/* Remove SKB from internal tracking table before submitting
 		 * it to stack
 		 */
@@ -1273,7 +1278,8 @@ QDF_STATUS hdd_rx_packet_cbk(void *context, qdf_nbuf_t rxBuf)
 	}
 
 	/* hold configurable wakelock for unicast traffic */
-	if (pHddCtx->config->rx_wakelock_timeout)
+	if (pHddCtx->config->rx_wakelock_timeout &&
+	    pHddStaCtx->conn_info.uIsAuthenticated)
 		wake_lock = hdd_is_rx_wake_lock_needed(skb);
 
 	if (wake_lock) {
@@ -1530,6 +1536,24 @@ void wlan_hdd_netif_queue_control(hdd_adapter_t *adapter,
 			wlan_hdd_update_txq_timestamp(adapter->dev);
 			wlan_hdd_update_unpause_time(adapter);
 		}
+		adapter->pause_map |= (1 << reason);
+		spin_unlock_bh(&adapter->pause_map_lock);
+		break;
+
+	case WLAN_NETIF_PRIORITY_QUEUE_ON:
+		spin_lock_bh(&adapter->pause_map_lock);
+		temp_map = adapter->pause_map;
+		adapter->pause_map &= ~(1 << reason);
+		netif_wake_subqueue(adapter->dev, HDD_LINUX_AC_HI_PRIO);
+		wlan_hdd_update_pause_time(adapter, temp_map);
+		spin_unlock_bh(&adapter->pause_map_lock);
+		break;
+
+	case WLAN_NETIF_PRIORITY_QUEUE_OFF:
+		spin_lock_bh(&adapter->pause_map_lock);
+		netif_stop_subqueue(adapter->dev, HDD_LINUX_AC_HI_PRIO);
+		wlan_hdd_update_txq_timestamp(adapter->dev);
+		wlan_hdd_update_unpause_time(adapter);
 		adapter->pause_map |= (1 << reason);
 		spin_unlock_bh(&adapter->pause_map_lock);
 		break;

@@ -504,8 +504,8 @@ struct hdd_ipa_priv {
 	qdf_mutex_t ipa_lock;
 	struct ol_txrx_ipa_resources ipa_resource;
 	/* IPA UC doorbell registers paddr */
-	qdf_dma_addr_t tx_comp_doorbell_paddr;
-	qdf_dma_addr_t rx_ready_doorbell_paddr;
+	qdf_dma_addr_t tx_comp_doorbell_dmaaddr;
+	qdf_dma_addr_t rx_ready_doorbell_dmaaddr;
 	uint8_t vdev_to_iface[CSR_ROAM_SESSION_MAX];
 	bool vdev_offload_enabled[CSR_ROAM_SESSION_MAX];
 #ifdef FEATURE_METERING
@@ -560,36 +560,38 @@ struct hdd_ipa_priv {
 #define HDD_BW_GET_DIFF(_x, _y) (unsigned long)((ULONG_MAX - (_y)) + (_x) + 1)
 
 #if defined(QCA_WIFI_3_0) && defined(CONFIG_IPA3)
-#define HDD_IPA_WDI2_SET(pipe_in, ipa_ctxt) \
+#define HDD_IPA_WDI2_SET(pipe_in, ipa_ctxt, osdev) \
 do { \
 	pipe_in.u.ul.rdy_ring_rp_va = \
-		ipa_ctxt->ipa_resource.rx_proc_done_idx_vaddr; \
+		ipa_ctxt->ipa_resource.rx_proc_done_idx->vaddr; \
 	pipe_in.u.ul.rdy_comp_ring_base_pa = \
-		ipa_ctxt->ipa_resource.rx2_rdy_ring_base_paddr;\
+		qdf_mem_get_dma_addr(osdev, \
+			&ipa_ctxt->ipa_resource.rx2_rdy_ring->mem_info);\
 	pipe_in.u.ul.rdy_comp_ring_size = \
-		ipa_ctxt->ipa_resource.rx2_rdy_ring_size; \
+		ipa_ctxt->ipa_resource.rx2_rdy_ring->mem_info.size; \
 	pipe_in.u.ul.rdy_comp_ring_wp_pa = \
-		ipa_ctxt->ipa_resource.rx2_proc_done_idx_paddr; \
+		qdf_mem_get_dma_addr(osdev, \
+			&ipa_ctxt->ipa_resource.rx2_proc_done_idx->mem_info); \
 	pipe_in.u.ul.rdy_comp_ring_wp_va = \
-		ipa_ctxt->ipa_resource.rx2_proc_done_idx_vaddr; \
+		ipa_ctxt->ipa_resource.rx2_proc_done_idx->vaddr; \
 } while (0)
 
 #define HDD_IPA_CHECK_HW() ipa_uc_reg_rdyCB(NULL)
 
-#define IPA_RESOURCE_READY(ipa_resource) \
-	((0 == (ipa_resource).ce_sr_base_paddr) || \
-	 (0 == (ipa_resource).tx_comp_ring_base_paddr) || \
-	 (0 == (ipa_resource).rx_rdy_ring_base_paddr) || \
-	 (0 == (ipa_resource).rx2_rdy_ring_base_paddr))
+#define IPA_RESOURCE_READY(ipa_resource, osdev) \
+	((0 == qdf_mem_get_dma_addr(osdev, &ipa_resource->ce_sr->mem_info)) || \
+	 (0 == qdf_mem_get_dma_addr(osdev, &ipa_resource->tx_comp_ring->mem_info)) || \
+	 (0 == qdf_mem_get_dma_addr(osdev, &ipa_resource->rx_rdy_ring->mem_info)) || \
+	 (0 == qdf_mem_get_dma_addr(osdev, &ipa_resource->rx2_rdy_ring->mem_info)))
 #else
 /* Do nothing */
-#define HDD_IPA_WDI2_SET(pipe_in, ipa_ctxt)
+#define HDD_IPA_WDI2_SET(pipe_in, ipa_ctxt, osdev)
 #define HDD_IPA_CHECK_HW() 0
 
-#define IPA_RESOURCE_READY(ipa_resource) \
-	((0 == (ipa_resource).ce_sr_base_paddr) || \
-	 (0 == (ipa_resource).tx_comp_ring_base_paddr) || \
-	 (0 == (ipa_resource).rx_rdy_ring_base_paddr))
+#define IPA_RESOURCE_READY(ipa_resource, osdev) \
+	((0 == qdf_mem_get_dma_addr(osdev, &ipa_resource->ce_sr->mem_info)) || \
+	 (0 == qdf_mem_get_dma_addr(osdev, &ipa_resource->tx_comp_ring->mem_info)) || \
+	 (0 == qdf_mem_get_dma_addr(osdev, &ipa_resource->rx_rdy_ring->mem_info)))
 
 #endif /* IPA3 */
 
@@ -1802,6 +1804,13 @@ static int hdd_ipa_uc_handle_first_con(struct hdd_ipa_priv *hdd_ipa)
 			/* RM PROD request sync return
 			 * enable pipe immediately
 			 */
+			if (!hdd_ipa->ipa_pipes_down) {
+				HDD_IPA_LOG(QDF_TRACE_LEVEL_DEBUG,
+					"%s: IPA WDI Pipe already activated",
+					__func__);
+				return 0;
+			}
+
 			if (hdd_ipa_uc_enable_pipes(hdd_ipa)) {
 				HDD_IPA_LOG(QDF_TRACE_LEVEL_ERROR,
 					"%s: IPA WDI Pipe activation failed",
@@ -1809,6 +1818,10 @@ static int hdd_ipa_uc_handle_first_con(struct hdd_ipa_priv *hdd_ipa)
 				hdd_ipa->resource_loading = false;
 				return -EBUSY;
 			}
+		} else {
+			HDD_IPA_LOG(QDF_TRACE_LEVEL_INFO,
+				    "%s: IPA WDI Pipe activation deferred",
+					__func__);
 		}
 	} else {
 		/* RM Disabled
@@ -2047,7 +2060,7 @@ static void hdd_ipa_uc_loaded_handler(struct hdd_ipa_priv *ipa_ctxt)
 	/* Connect pipe */
 	ipa_connect_wdi_pipe(&ipa_ctxt->cons_pipe_in, &pipe_out);
 	ipa_ctxt->tx_pipe_handle = pipe_out.clnt_hdl;
-	ipa_ctxt->tx_comp_doorbell_paddr = pipe_out.uc_door_bell_pa;
+	ipa_ctxt->tx_comp_doorbell_dmaaddr = pipe_out.uc_door_bell_pa;
 	HDD_IPA_LOG(QDF_TRACE_LEVEL_ERROR,
 		"%s : TX PIPE Handle %d, DBPA 0x%llx",
 		__func__, ipa_ctxt->tx_pipe_handle,
@@ -2055,7 +2068,7 @@ static void hdd_ipa_uc_loaded_handler(struct hdd_ipa_priv *ipa_ctxt)
 
 	ipa_connect_wdi_pipe(&ipa_ctxt->prod_pipe_in, &pipe_out);
 	ipa_ctxt->rx_pipe_handle = pipe_out.clnt_hdl;
-	ipa_ctxt->rx_ready_doorbell_paddr = pipe_out.uc_door_bell_pa;
+	ipa_ctxt->rx_ready_doorbell_dmaaddr = pipe_out.uc_door_bell_pa;
 	HDD_IPA_LOG(QDF_TRACE_LEVEL_ERROR,
 		"%s : RX PIPE Handle %d, DBPA 0x%llx",
 		__func__, ipa_ctxt->rx_pipe_handle,
@@ -2085,6 +2098,7 @@ static void hdd_ipa_uc_op_cb(struct op_msg_type *op_msg, void *usr_ctxt)
 	struct hdd_ipa_priv *hdd_ipa;
 	hdd_context_t *hdd_ctx;
 	QDF_STATUS status = QDF_STATUS_SUCCESS;
+	qdf_device_t osdev = cds_get_context(QDF_MODULE_ID_QDF_DEVICE);
 
 	if (!op_msg || !usr_ctxt) {
 		HDD_IPA_LOG(QDF_TRACE_LEVEL_ERROR, "%s, INVALID ARG", __func__);
@@ -2094,6 +2108,13 @@ static void hdd_ipa_uc_op_cb(struct op_msg_type *op_msg, void *usr_ctxt)
 	if (HDD_IPA_UC_OPCODE_MAX <= msg->op_code) {
 		HDD_IPA_LOG(QDF_TRACE_LEVEL_ERROR,
 			    "%s, INVALID OPCODE %d", __func__, msg->op_code);
+		qdf_mem_free(op_msg);
+		return;
+	}
+
+	if (!osdev) {
+		HDD_IPA_LOG(QDF_TRACE_LEVEL_FATAL,
+			    "%s: qdf dev context is NULL", __func__);
 		qdf_mem_free(op_msg);
 		return;
 	}
@@ -2163,8 +2184,9 @@ static void hdd_ipa_uc_op_cb(struct op_msg_type *op_msg, void *usr_ctxt)
 			  "CE RING BASE: %pad\n"
 			  "CE RING SIZE: %d\n"
 			  "CE REG ADDR : %pad",
-			  &res->ce_sr_base_paddr,
-			  res->ce_sr_ring_size,
+			  qdf_mem_get_dma_addr_ptr(osdev,
+						   &res->ce_sr->mem_info),
+			  (int)res->ce_sr->mem_info.size,
 			  &res->ce_reg_paddr);
 		QDF_TRACE(QDF_MODULE_ID_HDD, QDF_TRACE_LEVEL_ERROR,
 			  "==== IPA_UC WLAN_HOST TX ====\n"
@@ -2172,10 +2194,11 @@ static void hdd_ipa_uc_op_cb(struct op_msg_type *op_msg, void *usr_ctxt)
 			  "COMP RING SIZE: %d\n"
 			  "NUM ALLOC BUF: %d\n"
 			  "COMP RING DBELL : %pad",
-			  &res->tx_comp_ring_base_paddr,
-			  res->tx_comp_ring_size,
+			  qdf_mem_get_dma_addr_ptr(osdev, &res->tx_comp_ring
+								->mem_info),
+			  (int)res->tx_comp_ring->mem_info.size,
 			  res->tx_num_alloc_buffer,
-			  &hdd_ipa->tx_comp_doorbell_paddr);
+			  &hdd_ipa->tx_comp_doorbell_dmaaddr);
 		QDF_TRACE(QDF_MODULE_ID_HDD, QDF_TRACE_LEVEL_ERROR,
 			  "==== IPA_UC WLAN_HOST RX ====\n"
 			  "IND RING BASE: %pad\n"
@@ -2185,10 +2208,12 @@ static void hdd_ipa_uc_op_cb(struct op_msg_type *op_msg, void *usr_ctxt)
 			  "NUM EXCP PKT : %llu\n"
 			  "NUM TX FWD OK : %llu\n"
 			  "NUM TX FWD ERR : %llu",
-			  &res->rx_rdy_ring_base_paddr,
-			  res->rx_rdy_ring_size,
-			  &hdd_ipa->rx_ready_doorbell_paddr,
-			  &res->rx_proc_done_idx_paddr,
+			  qdf_mem_get_dma_addr_ptr(osdev,
+						   &res->rx_rdy_ring->mem_info),
+			  (int)res->rx_rdy_ring->mem_info.size,
+			  &hdd_ipa->rx_ready_doorbell_dmaaddr,
+			  qdf_mem_get_dma_addr_ptr(osdev,
+					&res->rx_proc_done_idx->mem_info),
 			  hdd_ipa->stats.num_rx_excep,
 			  hdd_ipa->stats.num_tx_fwd_ok,
 			  hdd_ipa->stats.num_tx_fwd_err);
@@ -2686,6 +2711,7 @@ static void hdd_ipa_init_metering(struct hdd_ipa_priv *ipa_ctxt,
 }
 #endif
 
+#ifdef ENABLE_SMMU_S1_TRANSLATION
 /**
  * hdd_ipa_uc_ol_init() - Initialize IPA uC offload
  * @hdd_ctx: Global HDD context
@@ -2701,14 +2727,25 @@ QDF_STATUS hdd_ipa_uc_ol_init(hdd_context_t *hdd_ctx)
 	struct ipa_wdi_in_params pipe_in;
 	struct ipa_wdi_out_params pipe_out;
 	struct hdd_ipa_priv *ipa_ctxt = (struct hdd_ipa_priv *)hdd_ctx->hdd_ipa;
+	struct ol_txrx_ipa_resources *ipa_res = &ipa_ctxt->ipa_resource;
 	struct ol_txrx_pdev_t *pdev = NULL;
 	int ret;
 	QDF_STATUS stat = QDF_STATUS_SUCCESS;
+	qdf_device_t osdev = cds_get_context(QDF_MODULE_ID_QDF_DEVICE);
+	uint32_t tx_comp_db_dmaaddr = 0, rx_rdy_db_dmaaddr = 0;
 
 	if (!hdd_ipa_uc_is_enabled(hdd_ctx))
 		return stat;
 
 	ENTER();
+
+	if (!osdev) {
+		HDD_IPA_LOG(QDF_TRACE_LEVEL_FATAL,
+			    "%s: qdf dev context is NULL", __func__);
+		stat = QDF_STATUS_E_INVAL;
+		goto fail_return;
+	}
+
 	/* Do only IPA Pipe specific configuration here. All one time
 	 * initialization wrt IPA UC shall in hdd_ipa_init and those need
 	 * to be reinit at SSR shall in be SSR deinit / reinit functions.
@@ -2719,8 +2756,270 @@ QDF_STATUS hdd_ipa_uc_ol_init(hdd_context_t *hdd_ctx)
 		stat = QDF_STATUS_E_FAILURE;
 		goto fail_return;
 	}
-	ol_txrx_ipa_uc_get_resource(pdev, &ipa_ctxt->ipa_resource);
-	if (IPA_RESOURCE_READY(ipa_ctxt->ipa_resource)) {
+	ol_txrx_ipa_uc_get_resource(pdev, ipa_res);
+	if (IPA_RESOURCE_READY(ipa_res, pdev->osdev)) {
+		HDD_IPA_LOG(QDF_TRACE_LEVEL_FATAL,
+			"IPA UC resource alloc fail");
+		stat = QDF_STATUS_E_FAILURE;
+		goto fail_return;
+	}
+	qdf_mem_zero(&ipa_ctxt->cons_pipe_in, sizeof(struct ipa_wdi_in_params));
+	qdf_mem_zero(&ipa_ctxt->prod_pipe_in, sizeof(struct ipa_wdi_in_params));
+	qdf_mem_zero(&pipe_in, sizeof(struct ipa_wdi_in_params));
+	qdf_mem_zero(&pipe_out, sizeof(struct ipa_wdi_out_params));
+
+	/* TX PIPE */
+	pipe_in.sys.ipa_ep_cfg.nat.nat_en = IPA_BYPASS_NAT;
+	pipe_in.sys.ipa_ep_cfg.hdr.hdr_len = HDD_IPA_UC_WLAN_TX_HDR_LEN;
+	pipe_in.sys.ipa_ep_cfg.hdr.hdr_ofst_pkt_size_valid = 1;
+	pipe_in.sys.ipa_ep_cfg.hdr.hdr_ofst_pkt_size = 0;
+	pipe_in.sys.ipa_ep_cfg.hdr.hdr_additional_const_len =
+		HDD_IPA_UC_WLAN_8023_HDR_SIZE;
+	pipe_in.sys.ipa_ep_cfg.mode.mode = IPA_BASIC;
+	pipe_in.sys.client = IPA_CLIENT_WLAN1_CONS;
+	pipe_in.sys.desc_fifo_sz = hdd_ctx->config->IpaDescSize;
+	pipe_in.sys.priv = hdd_ctx->hdd_ipa;
+	pipe_in.sys.ipa_ep_cfg.hdr_ext.hdr_little_endian = true;
+	pipe_in.sys.notify = hdd_ipa_i2w_cb;
+	if (!hdd_ipa_is_rm_enabled(hdd_ctx)) {
+		HDD_IPA_LOG(QDF_TRACE_LEVEL_DEBUG,
+				"IPA RM DISABLED, IPA AWAKE");
+		pipe_in.sys.keep_ipa_awake = true;
+	}
+
+	pipe_in.smmu_enabled = qdf_mem_smmu_s1_enabled(osdev);
+	if (pipe_in.smmu_enabled) {
+		qdf_mem_copy(&pipe_in.u.dl_smmu.comp_ring,
+			     &ipa_res->tx_comp_ring->sgtable,
+			     sizeof(sgtable_t));
+
+		qdf_mem_copy(&pipe_in.u.dl_smmu.ce_ring,
+			     &ipa_res->ce_sr->sgtable,
+			     sizeof(sgtable_t));
+		pipe_in.u.dl_smmu.comp_ring_size =
+			ipa_res->tx_comp_ring->mem_info.size;
+		pipe_in.u.dl_smmu.ce_ring_size =
+			ipa_res->ce_sr_ring_size;
+		pipe_in.u.dl_smmu.ce_door_bell_pa =
+			ipa_res->ce_reg_paddr;
+		pipe_in.u.dl_smmu.num_tx_buffers =
+			ipa_res->tx_num_alloc_buffer;
+	} else {
+		pipe_in.u.dl.comp_ring_base_pa =
+			qdf_mem_get_dma_addr(osdev,
+				&ipa_res->tx_comp_ring->mem_info);
+		pipe_in.u.dl.ce_ring_base_pa =
+			qdf_mem_get_dma_addr(osdev,
+				&ipa_res->ce_sr->mem_info);
+		pipe_in.u.dl.comp_ring_size =
+			ipa_res->tx_comp_ring->mem_info.size;
+		pipe_in.u.dl.ce_door_bell_pa = ipa_res->ce_reg_paddr;
+		pipe_in.u.dl.ce_ring_size =
+			ipa_res->ce_sr_ring_size;
+		pipe_in.u.dl.num_tx_buffers =
+			ipa_res->tx_num_alloc_buffer;
+	}
+
+	qdf_mem_copy(&ipa_ctxt->cons_pipe_in, &pipe_in,
+		     sizeof(struct ipa_wdi_in_params));
+	hdd_ipa_uc_get_db_paddr(&ipa_ctxt->tx_comp_doorbell_dmaaddr,
+				IPA_CLIENT_WLAN1_CONS);
+
+	if (true == ipa_ctxt->uc_loaded) {
+		/* Connect WDI IPA PIPE */
+		ret = ipa_connect_wdi_pipe(&ipa_ctxt->cons_pipe_in, &pipe_out);
+		if (ret) {
+			HDD_IPA_LOG(QDF_TRACE_LEVEL_ERROR,
+				"ipa_connect_wdi_pipe falied for Tx: ret=%d",
+				ret);
+			stat = QDF_STATUS_E_FAILURE;
+			goto fail_return;
+		}
+
+		/* Micro Controller Doorbell register */
+		ipa_ctxt->tx_comp_doorbell_dmaaddr = pipe_out.uc_door_bell_pa;
+
+		/* WLAN TX PIPE Handle */
+		ipa_ctxt->tx_pipe_handle = pipe_out.clnt_hdl;
+
+		if (ipa_ctxt->tx_pipe_handle == 0) {
+			HDD_IPA_LOG(QDF_TRACE_LEVEL_ERROR,
+				"TX Handle zero");
+			QDF_BUG(0);
+		}
+
+		HDD_IPA_LOG(QDF_TRACE_LEVEL_INFO,
+			"CONS DB pipe out 0x%x TX PIPE Handle 0x%x",
+			(unsigned int)pipe_out.uc_door_bell_pa,
+			ipa_ctxt->tx_pipe_handle);
+		HDD_IPA_LOG(QDF_TRACE_LEVEL_DEBUG,
+			"TX : CRBPA 0x%x, CRS %d, CERBPA 0x%x, CEDPA 0x%x,"
+			" CERZ %d, NB %d, CDBPAD 0x%x",
+			(unsigned int)pipe_in.u.dl.comp_ring_base_pa,
+			pipe_in.u.dl.comp_ring_size,
+			(unsigned int)pipe_in.u.dl.ce_ring_base_pa,
+			(unsigned int)pipe_in.u.dl.ce_door_bell_pa,
+			pipe_in.u.dl.ce_ring_size,
+			pipe_in.u.dl.num_tx_buffers,
+			(unsigned int)ipa_ctxt->tx_comp_doorbell_dmaaddr);
+	}
+
+	/* RX PIPE */
+	pipe_in.sys.ipa_ep_cfg.nat.nat_en = IPA_BYPASS_NAT;
+	pipe_in.sys.ipa_ep_cfg.hdr.hdr_len = HDD_IPA_UC_WLAN_RX_HDR_LEN;
+	pipe_in.sys.ipa_ep_cfg.hdr.hdr_ofst_metadata_valid = 0;
+	pipe_in.sys.ipa_ep_cfg.hdr.hdr_metadata_reg_valid = 1;
+	pipe_in.sys.ipa_ep_cfg.mode.mode = IPA_BASIC;
+	pipe_in.sys.client = IPA_CLIENT_WLAN1_PROD;
+	pipe_in.sys.desc_fifo_sz = hdd_ctx->config->IpaDescSize +
+				   sizeof(struct sps_iovec);
+	pipe_in.sys.notify = hdd_ipa_w2i_cb;
+	if (!hdd_ipa_is_rm_enabled(hdd_ctx)) {
+		HDD_IPA_LOG(QDF_TRACE_LEVEL_ERROR,
+				"%s: IPA RM DISABLED, IPA AWAKE", __func__);
+		pipe_in.sys.keep_ipa_awake = true;
+	}
+
+	pipe_in.smmu_enabled = qdf_mem_smmu_s1_enabled(osdev);
+	if (pipe_in.smmu_enabled) {
+		qdf_mem_copy(&pipe_in.u.ul_smmu.rdy_ring,
+			     &ipa_res->rx_rdy_ring->sgtable,
+			     sizeof(sgtable_t));
+		pipe_in.u.ul_smmu.rdy_ring_size =
+			ipa_res->rx_rdy_ring->mem_info.size;
+		pipe_in.u.ul_smmu.rdy_ring_rp_pa =
+			ipa_res->rx_proc_done_idx->mem_info.pa;
+
+		pipe_in.u.ul_smmu.rdy_ring_rp_va =
+			ipa_res->rx_proc_done_idx->vaddr;
+
+		qdf_mem_copy(&pipe_in.u.ul_smmu.rdy_comp_ring,
+			     &ipa_res->rx2_rdy_ring->sgtable,
+			     sizeof(sgtable_t));
+
+		pipe_in.u.ul_smmu.rdy_comp_ring_size =
+			ipa_res->rx2_rdy_ring->mem_info.size;
+
+		pipe_in.u.ul_smmu.rdy_comp_ring_wp_pa =
+			ipa_res->rx2_proc_done_idx->mem_info.pa;
+
+		pipe_in.u.ul_smmu.rdy_comp_ring_wp_va =
+			ipa_res->rx2_proc_done_idx->vaddr;
+	} else {
+		pipe_in.u.ul.rdy_ring_base_pa =
+			ipa_res->rx_rdy_ring->mem_info.pa;
+		pipe_in.u.ul.rdy_ring_size =
+			ipa_res->rx_rdy_ring->mem_info.size;
+		pipe_in.u.ul.rdy_ring_rp_pa =
+			ipa_res->rx_proc_done_idx->mem_info.pa;
+		HDD_IPA_WDI2_SET(pipe_in, ipa_ctxt, osdev);
+	}
+
+	hdd_ipa_init_metering(ipa_ctxt, &pipe_in);
+
+	qdf_mem_copy(&ipa_ctxt->prod_pipe_in, &pipe_in,
+		     sizeof(struct ipa_wdi_in_params));
+	hdd_ipa_uc_get_db_paddr(&ipa_ctxt->rx_ready_doorbell_dmaaddr,
+				IPA_CLIENT_WLAN1_PROD);
+
+	if (true == ipa_ctxt->uc_loaded) {
+		ret = ipa_connect_wdi_pipe(&ipa_ctxt->prod_pipe_in, &pipe_out);
+		if (ret) {
+			HDD_IPA_LOG(QDF_TRACE_LEVEL_ERROR,
+				"ipa_connect_wdi_pipe failed for Rx: ret=%d",
+				ret);
+			stat = QDF_STATUS_E_FAILURE;
+			ret = ipa_disconnect_wdi_pipe(ipa_ctxt->tx_pipe_handle);
+			if (ret)
+				HDD_IPA_LOG(QDF_TRACE_LEVEL_ERROR,
+					    "disconnect failed for TX: ret=%d",
+					    ret);
+			goto fail_return;
+		}
+		ipa_ctxt->rx_ready_doorbell_dmaaddr = pipe_out.uc_door_bell_pa;
+		ipa_ctxt->rx_pipe_handle = pipe_out.clnt_hdl;
+		if (ipa_ctxt->rx_pipe_handle == 0) {
+			HDD_IPA_LOG(QDF_TRACE_LEVEL_ERROR,
+				"RX Handle zero");
+			QDF_BUG(0);
+		}
+
+		HDD_IPA_LOG(QDF_TRACE_LEVEL_INFO,
+			"PROD DB pipe out 0x%x RX PIPE Handle 0x%x",
+			(unsigned int)pipe_out.uc_door_bell_pa,
+			ipa_ctxt->rx_pipe_handle);
+		HDD_IPA_LOG(QDF_TRACE_LEVEL_DEBUG,
+			"RX : RRBPA 0x%x, RRS %d, PDIPA 0x%x, RDY_DB_PAD 0x%x",
+			(unsigned int)pipe_in.u.ul.rdy_ring_base_pa,
+			pipe_in.u.ul.rdy_ring_size,
+			(unsigned int)pipe_in.u.ul.rdy_ring_rp_pa,
+			(unsigned int)ipa_ctxt->rx_ready_doorbell_dmaaddr);
+	}
+
+	if (qdf_mem_smmu_s1_enabled(osdev)) {
+		pld_smmu_map(osdev->dev, ipa_ctxt->tx_comp_doorbell_dmaaddr,
+			     &tx_comp_db_dmaaddr, sizeof(uint32_t));
+		ipa_ctxt->tx_comp_doorbell_dmaaddr = tx_comp_db_dmaaddr;
+
+		pld_smmu_map(osdev->dev, ipa_ctxt->rx_ready_doorbell_dmaaddr,
+			     &rx_rdy_db_dmaaddr, sizeof(uint32_t));
+		ipa_ctxt->rx_ready_doorbell_dmaaddr = rx_rdy_db_dmaaddr;
+	}
+
+	ol_txrx_ipa_uc_set_doorbell_paddr(pdev,
+					  ipa_ctxt->tx_comp_doorbell_dmaaddr,
+					  ipa_ctxt->rx_ready_doorbell_dmaaddr);
+
+	ol_txrx_ipa_uc_register_op_cb(pdev,
+				      hdd_ipa_uc_op_event_handler,
+				      (void *)hdd_ctx);
+
+	HDD_IPA_LOG(QDF_TRACE_LEVEL_DEBUG,
+	     "ipa_uc_op_cb=0x%p, tx_comp_idx_paddr=0x%x, rx_rdy_idx_paddr=0x%x",
+	     pdev->ipa_uc_op_cb,
+	     (unsigned int)pdev->htt_pdev->ipa_uc_tx_rsc.tx_comp_idx_paddr,
+	     (unsigned int)pdev->htt_pdev->ipa_uc_rx_rsc.rx_rdy_idx_paddr);
+
+fail_return:
+	EXIT();
+	return stat;
+}
+#else
+QDF_STATUS hdd_ipa_uc_ol_init(hdd_context_t *hdd_ctx)
+{
+	struct ipa_wdi_in_params pipe_in;
+	struct ipa_wdi_out_params pipe_out;
+	struct hdd_ipa_priv *ipa_ctxt = (struct hdd_ipa_priv *)hdd_ctx->hdd_ipa;
+	struct ol_txrx_ipa_resources *ipa_res = &ipa_ctxt->ipa_resource;
+	struct ol_txrx_pdev_t *pdev = NULL;
+	int ret;
+	QDF_STATUS stat = QDF_STATUS_SUCCESS;
+	qdf_device_t osdev = cds_get_context(QDF_MODULE_ID_QDF_DEVICE);
+
+	if (!hdd_ipa_uc_is_enabled(hdd_ctx))
+		return stat;
+
+	ENTER();
+
+	if (!osdev) {
+		HDD_IPA_LOG(QDF_TRACE_LEVEL_FATAL,
+			    "%s: qdf dev context is NULL", __func__);
+		stat = QDF_STATUS_E_INVAL;
+		goto fail_return;
+	}
+
+	/* Do only IPA Pipe specific configuration here. All one time
+	 * initialization wrt IPA UC shall in hdd_ipa_init and those need
+	 * to be reinit at SSR shall in be SSR deinit / reinit functions.
+	 */
+	pdev = cds_get_context(QDF_MODULE_ID_TXRX);
+	if (!pdev) {
+		HDD_IPA_LOG(QDF_TRACE_LEVEL_FATAL, "pdev is NULL");
+		stat = QDF_STATUS_E_FAILURE;
+		goto fail_return;
+	}
+	ol_txrx_ipa_uc_get_resource(pdev, ipa_res);
+	if (IPA_RESOURCE_READY(ipa_res, pdev->osdev)) {
 		HDD_IPA_LOG(QDF_TRACE_LEVEL_FATAL,
 			"IPA UC resource alloc fail");
 		stat = QDF_STATUS_E_FAILURE;
@@ -2751,22 +3050,23 @@ QDF_STATUS hdd_ipa_uc_ol_init(hdd_context_t *hdd_ctx)
 	}
 
 	pipe_in.u.dl.comp_ring_base_pa =
-		ipa_ctxt->ipa_resource.tx_comp_ring_base_paddr;
+		qdf_mem_get_dma_addr(osdev,
+				&ipa_res->tx_comp_ring->mem_info);
 	/* IPA requires total byte counts of Tx comp ring */
 	pipe_in.u.dl.comp_ring_size =
-		ipa_ctxt->ipa_resource.tx_comp_ring_size *
-		sizeof(target_paddr_t);
+		ipa_res->tx_comp_ring->mem_info.size;
 	pipe_in.u.dl.ce_ring_base_pa =
-		ipa_ctxt->ipa_resource.ce_sr_base_paddr;
-	pipe_in.u.dl.ce_door_bell_pa = ipa_ctxt->ipa_resource.ce_reg_paddr;
+		qdf_mem_get_dma_addr(osdev,
+				&ipa_res->ce_sr->mem_info);
+	pipe_in.u.dl.ce_door_bell_pa = ipa_res->ce_reg_paddr;
 	pipe_in.u.dl.ce_ring_size =
-		ipa_ctxt->ipa_resource.ce_sr_ring_size;
+		ipa_res->ce_sr_ring_size;
 	pipe_in.u.dl.num_tx_buffers =
-		ipa_ctxt->ipa_resource.tx_num_alloc_buffer;
+		ipa_res->tx_num_alloc_buffer;
 
 	qdf_mem_copy(&ipa_ctxt->cons_pipe_in, &pipe_in,
 		     sizeof(struct ipa_wdi_in_params));
-	hdd_ipa_uc_get_db_paddr(&ipa_ctxt->tx_comp_doorbell_paddr,
+	hdd_ipa_uc_get_db_paddr(&ipa_ctxt->tx_comp_doorbell_dmaaddr,
 				IPA_CLIENT_WLAN1_CONS);
 
 	if (true == ipa_ctxt->uc_loaded) {
@@ -2781,7 +3081,7 @@ QDF_STATUS hdd_ipa_uc_ol_init(hdd_context_t *hdd_ctx)
 		}
 
 		/* Micro Controller Doorbell register */
-		ipa_ctxt->tx_comp_doorbell_paddr = pipe_out.uc_door_bell_pa;
+		ipa_ctxt->tx_comp_doorbell_dmaaddr = pipe_out.uc_door_bell_pa;
 
 		/* WLAN TX PIPE Handle */
 		ipa_ctxt->tx_pipe_handle = pipe_out.clnt_hdl;
@@ -2805,7 +3105,7 @@ QDF_STATUS hdd_ipa_uc_ol_init(hdd_context_t *hdd_ctx)
 			(unsigned int)pipe_in.u.dl.ce_door_bell_pa,
 			pipe_in.u.dl.ce_ring_size,
 			pipe_in.u.dl.num_tx_buffers,
-			(unsigned int)ipa_ctxt->tx_comp_doorbell_paddr);
+			(unsigned int)ipa_ctxt->tx_comp_doorbell_dmaaddr);
 	}
 
 	/* RX PIPE */
@@ -2825,18 +3125,18 @@ QDF_STATUS hdd_ipa_uc_ol_init(hdd_context_t *hdd_ctx)
 	}
 
 	pipe_in.u.ul.rdy_ring_base_pa =
-		ipa_ctxt->ipa_resource.rx_rdy_ring_base_paddr;
+		ipa_res->rx_rdy_ring->mem_info.pa;
 	pipe_in.u.ul.rdy_ring_size =
-		ipa_ctxt->ipa_resource.rx_rdy_ring_size;
+		ipa_res->rx_rdy_ring->mem_info.size;
 	pipe_in.u.ul.rdy_ring_rp_pa =
-		ipa_ctxt->ipa_resource.rx_proc_done_idx_paddr;
-	HDD_IPA_WDI2_SET(pipe_in, ipa_ctxt);
+		ipa_res->rx_proc_done_idx->mem_info.pa;
+	HDD_IPA_WDI2_SET(pipe_in, ipa_ctxt, osdev);
 
 	hdd_ipa_init_metering(ipa_ctxt, &pipe_in);
 
 	qdf_mem_copy(&ipa_ctxt->prod_pipe_in, &pipe_in,
 		     sizeof(struct ipa_wdi_in_params));
-	hdd_ipa_uc_get_db_paddr(&ipa_ctxt->rx_ready_doorbell_paddr,
+	hdd_ipa_uc_get_db_paddr(&ipa_ctxt->rx_ready_doorbell_dmaaddr,
 				IPA_CLIENT_WLAN1_PROD);
 
 	if (true == ipa_ctxt->uc_loaded) {
@@ -2853,7 +3153,7 @@ QDF_STATUS hdd_ipa_uc_ol_init(hdd_context_t *hdd_ctx)
 					    ret);
 			goto fail_return;
 		}
-		ipa_ctxt->rx_ready_doorbell_paddr = pipe_out.uc_door_bell_pa;
+		ipa_ctxt->rx_ready_doorbell_dmaaddr = pipe_out.uc_door_bell_pa;
 		ipa_ctxt->rx_pipe_handle = pipe_out.clnt_hdl;
 		if (ipa_ctxt->rx_pipe_handle == 0) {
 			HDD_IPA_LOG(QDF_TRACE_LEVEL_ERROR,
@@ -2870,12 +3170,12 @@ QDF_STATUS hdd_ipa_uc_ol_init(hdd_context_t *hdd_ctx)
 			(unsigned int)pipe_in.u.ul.rdy_ring_base_pa,
 			pipe_in.u.ul.rdy_ring_size,
 			(unsigned int)pipe_in.u.ul.rdy_ring_rp_pa,
-			(unsigned int)ipa_ctxt->rx_ready_doorbell_paddr);
+			(unsigned int)ipa_ctxt->rx_ready_doorbell_dmaaddr);
 	}
 
 	ol_txrx_ipa_uc_set_doorbell_paddr(pdev,
-					  ipa_ctxt->tx_comp_doorbell_paddr,
-					  ipa_ctxt->rx_ready_doorbell_paddr);
+					  ipa_ctxt->tx_comp_doorbell_dmaaddr,
+					  ipa_ctxt->rx_ready_doorbell_dmaaddr);
 
 	ol_txrx_ipa_uc_register_op_cb(pdev,
 				      hdd_ipa_uc_op_event_handler,
@@ -2891,6 +3191,7 @@ fail_return:
 	EXIT();
 	return stat;
 }
+#endif
 
 /**
  * hdd_ipa_uc_ol_deinit() - Disconnect IPA TX and RX pipes
@@ -3938,6 +4239,10 @@ static void hdd_ipa_forward(struct hdd_ipa_priv *hdd_ipa,
 	struct hdd_ipa_pm_tx_cb *pm_tx_cb;
 
 	qdf_spin_lock_bh(&hdd_ipa->pm_lock);
+
+	/* Set IPA ownership for intra-BSS Tx packets to avoid skb_orphan */
+	qdf_nbuf_ipa_owned_set(skb);
+
 	/* WLAN subsystem is in suspend, put int queue */
 	if (hdd_ipa->suspended) {
 		qdf_spin_unlock_bh(&hdd_ipa->pm_lock);
@@ -4344,7 +4649,11 @@ static void hdd_ipa_pm_flush(struct work_struct *work)
 		if (pm_tx_cb->exception) {
 			HDD_IPA_LOG(QDF_TRACE_LEVEL_ERROR,
 				"FLUSH EXCEPTION");
-			hdd_softap_hard_start_xmit(skb, pm_tx_cb->adapter->dev);
+			if (pm_tx_cb->adapter->dev)
+				hdd_softap_hard_start_xmit(skb,
+					  pm_tx_cb->adapter->dev);
+			else
+				ipa_free_skb(pm_tx_cb->ipa_tx_desc);
 		} else {
 			hdd_ipa_send_pkt_to_tl(pm_tx_cb->iface_context,
 				       pm_tx_cb->ipa_tx_desc);
@@ -5769,14 +6078,16 @@ static int __hdd_ipa_wlan_evt(hdd_adapter_t *adapter, uint8_t sta_id,
 				hdd_ipa_uc_handle_last_discon(hdd_ipa);
 			}
 
-			qdf_mutex_release(&hdd_ipa->event_lock);
-
 			if (hdd_ipa_uc_sta_is_enabled(hdd_ipa->hdd_ctx) &&
-			    hdd_ipa->sta_connected)
+			    hdd_ipa->sta_connected) {
+				qdf_mutex_release(&hdd_ipa->event_lock);
 				hdd_ipa_uc_offload_enable_disable(
 					hdd_get_adapter(hdd_ipa->hdd_ctx,
 							QDF_STA_MODE),
 					SIR_STA_RX_DATA_OFFLOAD, false);
+			} else {
+				qdf_mutex_release(&hdd_ipa->event_lock);
+			}
 		} else {
 			qdf_mutex_release(&hdd_ipa->event_lock);
 		}
@@ -6078,32 +6389,16 @@ static void hdd_ipa_cleanup_pending_event(struct hdd_ipa_priv *hdd_ipa)
 }
 
 /**
- * __hdd_ipa_cleanup - IPA cleanup function
+ * __hdd_ipa_flush - flush IPA exception path SKB's
  * @hdd_ctx: HDD global context
  *
- * Return: QDF_STATUS enumeration
+ * Return: none
  */
-static QDF_STATUS __hdd_ipa_cleanup(hdd_context_t *hdd_ctx)
+static void __hdd_ipa_flush(hdd_context_t *hdd_ctx)
 {
 	struct hdd_ipa_priv *hdd_ipa = hdd_ctx->hdd_ipa;
-	int i;
-	struct hdd_ipa_iface_context *iface_context = NULL;
 	qdf_nbuf_t skb;
 	struct hdd_ipa_pm_tx_cb *pm_tx_cb = NULL;
-
-	if (!hdd_ipa_is_enabled(hdd_ctx))
-		return QDF_STATUS_SUCCESS;
-
-	if (!hdd_ipa_uc_is_enabled(hdd_ctx)) {
-		unregister_inetaddr_notifier(&hdd_ipa->ipv4_notifier);
-		hdd_ipa_teardown_sys_pipe(hdd_ipa);
-	}
-
-	/* Teardown IPA sys_pipe for MCC */
-	if (hdd_ipa_uc_sta_is_enabled(hdd_ipa->hdd_ctx))
-		hdd_ipa_teardown_sys_pipe(hdd_ipa);
-
-	hdd_ipa_destroy_rm_resource(hdd_ipa);
 
 	cancel_work_sync(&hdd_ipa->pm_work);
 	qdf_spin_lock_bh(&hdd_ipa->pm_lock);
@@ -6119,6 +6414,37 @@ static QDF_STATUS __hdd_ipa_cleanup(hdd_context_t *hdd_ctx)
 		qdf_spin_lock_bh(&hdd_ipa->pm_lock);
 	}
 	qdf_spin_unlock_bh(&hdd_ipa->pm_lock);
+
+}
+
+/**
+ * __hdd_ipa_cleanup - IPA cleanup function
+ * @hdd_ctx: HDD global context
+ *
+ * Return: QDF_STATUS enumeration
+ */
+static QDF_STATUS __hdd_ipa_cleanup(hdd_context_t *hdd_ctx)
+{
+	struct hdd_ipa_priv *hdd_ipa = hdd_ctx->hdd_ipa;
+	int i;
+	struct hdd_ipa_iface_context *iface_context = NULL;
+
+	if (!hdd_ipa_is_enabled(hdd_ctx))
+		return QDF_STATUS_SUCCESS;
+
+	if (!hdd_ipa_uc_is_enabled(hdd_ctx)) {
+		unregister_inetaddr_notifier(&hdd_ipa->ipv4_notifier);
+		hdd_ipa_teardown_sys_pipe(hdd_ipa);
+	}
+
+	/* Teardown IPA sys_pipe for MCC */
+	if (hdd_ipa_uc_sta_is_enabled(hdd_ipa->hdd_ctx))
+		hdd_ipa_teardown_sys_pipe(hdd_ipa);
+
+	hdd_ipa_destroy_rm_resource(hdd_ipa);
+
+
+	__hdd_ipa_flush(hdd_ctx);
 
 	qdf_spinlock_destroy(&hdd_ipa->pm_lock);
 	qdf_spinlock_destroy(&hdd_ipa->q_lock);
@@ -6148,6 +6474,19 @@ static QDF_STATUS __hdd_ipa_cleanup(hdd_context_t *hdd_ctx)
 	hdd_ctx->hdd_ipa = NULL;
 
 	return QDF_STATUS_SUCCESS;
+}
+
+/**
+ * hdd_ipa_cleanup - SSR wrapper for __hdd_ipa_flush
+ * @hdd_ctx: HDD global context
+ *
+ * Return: None
+ */
+void hdd_ipa_flush(hdd_context_t *hdd_ctx)
+{
+	cds_ssr_protect(__func__);
+	__hdd_ipa_flush(hdd_ctx);
+	cds_ssr_unprotect(__func__);
 }
 
 /**

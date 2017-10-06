@@ -1241,14 +1241,11 @@ lim_send_assoc_rsp_mgmt_frame(tpAniSirGlobal mac_ctx,
 		    assoc_req->vendor_vht_ie.VHTCaps.present) {
 			pe_debug("Populate Vendor VHT IEs in Assoc Rsponse");
 			frm.vendor_vht_ie.present = 1;
-			frm.vendor_vht_ie.type =
-				pe_session->vendor_specific_vht_ie_type;
-			frm.vendor_vht_ie.sub_type =
-				pe_session->vendor_specific_vht_ie_sub_type;
-
 			frm.vendor_vht_ie.VHTCaps.present = 1;
 			populate_dot11f_vht_caps(mac_ctx, pe_session,
 				&frm.vendor_vht_ie.VHTCaps);
+			populate_dot11f_vht_operation(mac_ctx, pe_session,
+					&frm.vendor_vht_ie.VHTOperation);
 			is_vht = true;
 		}
 		populate_dot11f_ext_cap(mac_ctx, is_vht, &frm.ExtCap,
@@ -1832,11 +1829,6 @@ lim_send_assoc_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 			pe_session->is_vendor_specific_vhtcaps) {
 		pe_debug("Populate Vendor VHT IEs in Assoc Request");
 		frm->vendor_vht_ie.present = 1;
-		frm->vendor_vht_ie.type =
-			pe_session->vendor_specific_vht_ie_type;
-		frm->vendor_vht_ie.sub_type =
-			pe_session->vendor_specific_vht_ie_sub_type;
-
 		frm->vendor_vht_ie.VHTCaps.present = 1;
 		populate_dot11f_vht_caps(mac_ctx, pe_session,
 				&frm->vendor_vht_ie.VHTCaps);
@@ -2115,7 +2107,7 @@ void
 lim_send_auth_mgmt_frame(tpAniSirGlobal mac_ctx,
 			 tpSirMacAuthFrameBody auth_frame,
 			 tSirMacAddr peer_addr,
-			 uint8_t wep_bit,
+			 uint8_t wep_challenge_len,
 			 tpPESession session)
 {
 	uint8_t *frame, *body;
@@ -2135,7 +2127,7 @@ lim_send_auth_mgmt_frame(tpAniSirGlobal mac_ctx,
 
 	sme_sessionid = session->smeSessionId;
 
-	if (wep_bit == LIM_WEP_IN_FC) {
+	if (wep_challenge_len) {
 		/*
 		 * Auth frame3 to be sent with encrypted framebody
 		 *
@@ -2148,7 +2140,7 @@ lim_send_auth_mgmt_frame(tpAniSirGlobal mac_ctx,
 		pe_debug("Sending encrypted auth frame to " MAC_ADDRESS_STR,
 				MAC_ADDR_ARRAY(peer_addr));
 
-		body_len = LIM_ENCR_AUTH_BODY_LEN;
+		body_len = wep_challenge_len + LIM_ENCR_AUTH_INFO_LEN;
 		frame_len = sizeof(tSirMacMgmtHdr) + body_len;
 
 		goto alloc_packet;
@@ -2270,7 +2262,10 @@ alloc_packet:
 	lim_populate_mac_header(mac_ctx, frame, SIR_MAC_MGMT_FRAME,
 		SIR_MAC_MGMT_AUTH, peer_addr, session->selfMacAddr);
 	mac_hdr = (tpSirMacMgmtHdr) frame;
-	mac_hdr->fc.wep = wep_bit;
+	if (wep_challenge_len)
+		mac_hdr->fc.wep = LIM_WEP_IN_FC;
+	else
+		mac_hdr->fc.wep = LIM_NO_WEP_IN_FC;
 
 	/* Prepare BSSId */
 	if (LIM_IS_AP_ROLE(session))
@@ -2281,7 +2276,7 @@ alloc_packet:
 	/* Prepare Authentication frame body */
 	body = frame + sizeof(tSirMacMgmtHdr);
 
-	if (wep_bit == LIM_WEP_IN_FC) {
+	if (wep_challenge_len) {
 		qdf_mem_copy(body, (uint8_t *) auth_frame, body_len);
 
 		pe_debug("Sending Auth seq# 3 to " MAC_ADDRESS_STR,

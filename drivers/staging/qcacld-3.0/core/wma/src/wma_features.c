@@ -1120,6 +1120,8 @@ QDF_STATUS wma_get_peer_info(WMA_HANDLE handle,
 
 	cmd->stats_id = WMI_REQUEST_PEER_STAT;
 	cmd->vdev_id = peer_info_req->sessionid;
+	WMI_CHAR_ARRAY_TO_MAC_ADDR(peer_info_req->peer_macaddr.bytes,
+				&cmd->peer_macaddr);
 	wma_handle->get_sta_peer_info = true;
 
 	if (wmi_unified_cmd_send(wma_handle->wmi_handle, wmi_buf, len,
@@ -4560,9 +4562,6 @@ int wma_wow_wakeup_host_event(void *handle, uint8_t *event,
 	case WOW_REASON_RA_MATCH:
 #endif /* FEATURE_WLAN_RA_FILTERING */
 	case WOW_REASON_RECV_MAGIC_PATTERN:
-		if (wma_vdev)
-			wma_wow_stats_display(&wma_vdev->wow_stats);
-
 		WMA_LOGD("Wake up for Rx packet, dump starting from ethernet hdr");
 		if (!param_buf->wow_packet_buffer) {
 			WMA_LOGE("No wow packet buffer present");
@@ -6300,7 +6299,7 @@ void wma_aggr_qos_req(tp_wma_handle wma,
 	wmi_unified_aggr_qos_cmd(wma->wmi_handle,
 			   (struct aggr_add_ts_param *)pAggrQosRspMsg);
 	/* send reponse to upper layers from here only. */
-	wma_send_msg(wma, WMA_AGGR_QOS_RSP, pAggrQosRspMsg, 0);
+	wma_send_msg_high_priority(wma, WMA_AGGR_QOS_RSP, pAggrQosRspMsg, 0);
 }
 
 #ifdef FEATURE_WLAN_ESE
@@ -6365,7 +6364,7 @@ void wma_add_ts_req(tp_wma_handle wma, tAddTsParams *msg)
 #endif /* WLAN_FEATURE_ROAM_OFFLOAD */
 
 	}
-	wma_send_msg(wma, WMA_ADD_TS_RSP, msg, 0);
+	wma_send_msg_high_priority(wma, WMA_ADD_TS_RSP, msg, 0);
 }
 
 /**
@@ -6798,7 +6797,7 @@ static QDF_STATUS wma_send_gtk_offload_req(tp_wma_handle wma, uint8_t vdev_id,
 		qdf_mem_copy(offload_params.aKCK, params->aKCK,
 			GTK_OFFLOAD_KCK_BYTES);
 		qdf_mem_copy(offload_params.aKEK, params->aKEK,
-			GTK_OFFLOAD_KEK_BYTES);
+			params->kek_len);
 		qdf_mem_copy(&offload_params.ullKeyReplayCounter,
 			&params->ullKeyReplayCounter, GTK_REPLAY_COUNTER_BYTES);
 	} else {
@@ -6807,6 +6806,7 @@ static QDF_STATUS wma_send_gtk_offload_req(tp_wma_handle wma, uint8_t vdev_id,
 	}
 
 	enable_offload = params->ulFlags;
+	offload_params.kek_len = params->kek_len;
 
 	/* send the wmi command */
 	status = wmi_unified_send_gtk_offload_cmd(wma->wmi_handle,
@@ -8047,12 +8047,17 @@ static int __wma_bus_suspend(enum qdf_suspend_type type, uint32_t wow_flags)
 	WMA_HANDLE handle = cds_get_context(QDF_MODULE_ID_WMA);
 	qdf_device_t qdf_dev = cds_get_context(QDF_MODULE_ID_QDF_DEVICE);
 	tp_wma_handle wma = handle;
-	bool wow_mode = wma_is_wow_mode_selected(handle);
+	bool wow_mode;
 	bool can_suspend_link, is_unified_wow_supported;
 	QDF_STATUS status;
 
 	if (NULL == handle) {
 		WMA_LOGE("%s: wma context is NULL", __func__);
+		return -EFAULT;
+	}
+
+	if (NULL == qdf_dev) {
+		WMA_LOGE("%s: qdf_dev is NULL", __func__);
 		return -EFAULT;
 	}
 
@@ -8067,9 +8072,10 @@ static int __wma_bus_suspend(enum qdf_suspend_type type, uint32_t wow_flags)
 			return qdf_status_to_os_return(status);
 	}
 
+	wow_mode = wma_is_wow_mode_selected(handle);
 	if (type == QDF_SYSTEM_SUSPEND)
 		WMA_LOGD("%s: wow mode selected %d", __func__,
-				wma_is_wow_mode_selected(handle));
+				wow_mode);
 
 	if (!wow_mode)
 		return qdf_status_to_os_return(wma_suspend_target(handle, 0));
@@ -8137,11 +8143,22 @@ int wma_bus_suspend(uint32_t wow_flags)
 static int __wma_bus_resume(WMA_HANDLE handle)
 {
 	qdf_device_t qdf_dev = cds_get_context(QDF_MODULE_ID_QDF_DEVICE);
-	bool wow_mode = wma_is_wow_mode_selected(handle);
+	bool wow_mode;
 	tp_wma_handle wma = handle;
 	bool can_suspend_link, is_unified_wow_supported;
 	QDF_STATUS status;
 
+	if (NULL == handle) {
+		WMA_LOGE("%s: wma context is NULL", __func__);
+		return -EFAULT;
+	}
+
+	if (NULL == qdf_dev) {
+		WMA_LOGE("%s: qdf_dev is NULL", __func__);
+		return -EFAULT;
+	}
+
+	wow_mode = wma_is_wow_mode_selected(handle);
 	WMA_LOGD("%s: wow mode %d", __func__, wow_mode);
 
 	wma_peer_debug_log(DEBUG_INVALID_VDEV_ID, DEBUG_BUS_RESUME,

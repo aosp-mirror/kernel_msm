@@ -1043,7 +1043,6 @@ void wma_add_bss_ndi_mode(tp_wma_handle wma, tpAddBssParams add_bss)
 	struct wma_target_req *msg;
 	uint8_t vdev_id, peer_id;
 	QDF_STATUS status;
-	struct vdev_set_params param = {0};
 
 	WMA_LOGD("%s: enter", __func__);
 	if (NULL == wma_find_vdev_by_addr(wma, add_bss->bssId, &vdev_id)) {
@@ -1099,17 +1098,14 @@ void wma_add_bss_ndi_mode(tp_wma_handle wma, tpAddBssParams add_bss)
 	WMA_LOGD("%s: vdev start request for NDI sent to target", __func__);
 
 	/* Initialize protection mode to no protection */
-	param.if_id = vdev_id;
-	param.param_id = WMI_VDEV_PARAM_PROTECTION_MODE;
-	param.param_value = IEEE80211_PROT_NONE;
-	if (wmi_unified_vdev_set_param_send(wma->wmi_handle, &param))
-		WMA_LOGE("Failed to initialize protection mode");
-
+	wma_vdev_set_param(wma->wmi_handle, vdev_id,
+		WMI_VDEV_PARAM_PROTECTION_MODE, IEEE80211_PROT_NONE);
 
 	return;
+
 send_fail_resp:
 	add_bss->status = QDF_STATUS_E_FAILURE;
-	wma_send_msg(wma, WMA_ADD_BSS_RSP, (void *)add_bss, 0);
+	wma_send_msg_high_priority(wma, WMA_ADD_BSS_RSP, (void *)add_bss, 0);
 }
 
 /**
@@ -1279,7 +1275,7 @@ void wma_add_sta_ndi_mode(tp_wma_handle wma, tpAddStaParams add_sta)
 send_rsp:
 	WMA_LOGD(FL("Sending add sta rsp to umac (mac:%pM, status:%d)"),
 		 add_sta->staMac, add_sta->status);
-	wma_send_msg(wma, WMA_ADD_STA_RSP, (void *)add_sta, 0);
+	wma_send_msg_high_priority(wma, WMA_ADD_STA_RSP, (void *)add_sta, 0);
 }
 
 /**
@@ -1321,7 +1317,7 @@ send_del_rsp:
 	if (del_sta->respReqd) {
 		WMA_LOGD(FL("Sending del rsp to umac (status: %d)"),
 				del_sta->status);
-		wma_send_msg(wma, WMA_DELETE_STA_RSP, del_sta, 0);
+		wma_send_msg_high_priority(wma, WMA_DELETE_STA_RSP, del_sta, 0);
 	}
 }
 
