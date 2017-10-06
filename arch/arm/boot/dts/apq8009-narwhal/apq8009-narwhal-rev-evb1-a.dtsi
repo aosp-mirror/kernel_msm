@@ -128,3 +128,7 @@
 &wcnss {
 	status = "ok";
 };
+
+&bcmdhd_wlan {
+	status = "disabled";
+};

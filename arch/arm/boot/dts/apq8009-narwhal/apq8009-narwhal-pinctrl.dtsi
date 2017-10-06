@@ -634,5 +634,18 @@
 			};
 		};
 
+		pmx_bcmdhd_wlan {
+			bcmdhd_wlan_default: bcmdhd_wlan_default {
+				mux {
+					pins = "gpio43", "gpio65";
+					function = "gpio";
+				};
+				config {
+					pins = "gpio43", "gpio65";
+					drive-strength = <2>;
+					bias-pull-down;
+				};
+			};
+		};
 	};
 };

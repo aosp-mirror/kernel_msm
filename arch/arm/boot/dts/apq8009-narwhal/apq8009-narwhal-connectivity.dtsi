@@ -63,4 +63,16 @@
 		pinctrl-0 = <&nitrous_active>;
 		pinctrl-1 = <&nitrous_suspend>;
 	};
+
+	bcmdhd_wlan: bcmdhd_wlan {
+		compatible = "lge,bcmdhd_wlan";
+		status = "ok";
+		power-gpio = <&msm_gpio 43 0>;
+		host-wake-gpio = <&msm_gpio 65 0>;
+		interrupt-parent = <&msm_gpio>;
+		interrupts = <65 0>;
+		interrupt-names = "host_wake";
+		pinctrl-names = "default";
+		pinctrl-0 = <&bcmdhd_wlan_default>;
+	};
 };
