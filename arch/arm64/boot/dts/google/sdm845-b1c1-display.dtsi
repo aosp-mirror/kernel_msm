@@ -50,8 +50,8 @@
 		clock-names = "src_byte_clk", "src_pixel_clk";
 
 		pinctrl-names = "panel_active", "panel_suspend";
-		pinctrl-0 = <&sde_dsi_active &sde_te_active &sde_pmgpio_active>;
-		pinctrl-1 = <&sde_dsi_suspend &sde_te_suspend &sde_pmgpio_suspend>;
+		pinctrl-0 = <&sde_dsi_active &sde_te_active>;
+		pinctrl-1 = <&sde_dsi_suspend &sde_te_suspend>;
 		qcom,platform-reset-gpio = <&tlmm 6 0>;
 		qcom,platform-te-gpio = <&tlmm 10 0>;
 
