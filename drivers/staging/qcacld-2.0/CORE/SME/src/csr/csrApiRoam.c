@@ -105,10 +105,6 @@
 /* packet dump timer duration of 60 secs */
 #define PKT_DUMP_TIMER_DURATION 60
 
-#ifdef WLAN_FEATURE_ROAM_SCAN_OFFLOAD
-static tANI_BOOLEAN bRoamScanOffloadStarted = VOS_FALSE;
-#endif
-
 /*--------------------------------------------------------------------------
   Static Type declarations
   ------------------------------------------------------------------------*/
@@ -695,18 +691,6 @@ eHalStatus csrStop(tpAniSirGlobal pMac, tHalStopType stopType)
        csrRoamStateChange(pMac, eCSR_ROAMING_STATE_STOP, sessionId);
        pMac->roam.curSubState[sessionId] = eCSR_ROAM_SUBSTATE_NONE;
     }
-
-#ifdef WLAN_FEATURE_ROAM_SCAN_OFFLOAD
-    /* When HAL resets all the context information
-     * in HAL is lost, so we might need to send the
-     * scan offload request again when it comes
-     * out of reset for scan offload to be functional
-     */
-    if (HAL_STOP_TYPE_SYS_RESET == stopType)
-    {
-       bRoamScanOffloadStarted = VOS_FALSE;
-    }
-#endif
 
     return (eHAL_STATUS_SUCCESS);
 }
@@ -17300,7 +17284,7 @@ static void check_allowed_ssid_list(tSirRoamOffloadScanReq *req_buffer,
  *||====|=====================================================================||
  *||    V           | START | STOP | RESTART | UPDATE_CFG| ABORT_SCAN         ||
  *|| -------------------------------------------------------------------------||
- *|| RSO_START      | NO    | YES  |  NO     | NO        | NO                 ||
+ *|| RSO_START      | NO    | YES  |  NO     | YES       | NO                 ||
  *|| RSO_STOP       | YES   | YES  |  YES    | YES       | YES                ||
  *|| RSO_RESTART    | YES   | YES  |  NO     | YES       | YES                ||
  *|| RSO_UPDATE_CFG | YES   | NO   |  YES    | YES       | YES                ||
@@ -17312,7 +17296,7 @@ static void check_allowed_ssid_list(tSirRoamOffloadScanReq *req_buffer,
 #define RSO_RESTART_BIT     (1<<ROAM_SCAN_OFFLOAD_RESTART)
 #define RSO_UPDATE_CFG_BIT  (1<<ROAM_SCAN_OFFLOAD_UPDATE_CFG)
 #define RSO_ABORT_SCAN_BIT  (1<<ROAM_SCAN_OFFLOAD_ABORT_SCAN)
-#define RSO_START_ALLOW_MASK   (RSO_STOP_BIT)
+#define RSO_START_ALLOW_MASK   (RSO_STOP_BIT | RSO_UPDATE_CFG_BIT)
 #define RSO_STOP_ALLOW_MASK    (RSO_UPDATE_CFG_BIT | RSO_RESTART_BIT | \
 		RSO_STOP_BIT | RSO_START_BIT | RSO_ABORT_SCAN_BIT)
 #define RSO_RESTART_ALLOW_MASK (RSO_UPDATE_CFG_BIT | RSO_START_BIT | \
@@ -17422,7 +17406,7 @@ eHalStatus csrRoamOffloadScan(tpAniSirGlobal pMac, tANI_U8 sessionId,
         /* When roam synch is in progress for propagation, there is no
          * need to send down the STOP command since the firmware is not
          * expecting any WMI commands when the roam synch is in progress.*/
-         bRoamScanOffloadStarted = VOS_FALSE;
+         pNeighborRoamInfo->b_roam_scan_offload_started = false;
          return eHAL_STATUS_SUCCESS;
    }
 #endif
@@ -17443,7 +17427,7 @@ eHalStatus csrRoamOffloadScan(tpAniSirGlobal pMac, tANI_U8 sessionId,
        csr_roam_send_restart_cmd(pMac, sessionId, command, reason);
        goto cmd_sent;
    }
-   if ((VOS_TRUE == bRoamScanOffloadStarted) && (ROAM_SCAN_OFFLOAD_START == command))
+   if ((true == pNeighborRoamInfo->b_roam_scan_offload_started) && (ROAM_SCAN_OFFLOAD_START == command))
    {
      smsLog( pMac, LOGE,"Roam Scan Offload is already started");
      return eHAL_STATUS_FAILURE;
@@ -17832,9 +17816,9 @@ eHalStatus csrRoamOffloadScan(tpAniSirGlobal pMac, tANI_U8 sessionId,
    else
    {
         if (ROAM_SCAN_OFFLOAD_START == command)
-            bRoamScanOffloadStarted = VOS_TRUE;
+            pNeighborRoamInfo->b_roam_scan_offload_started = true;
         else if (ROAM_SCAN_OFFLOAD_STOP == command)
-            bRoamScanOffloadStarted = VOS_FALSE;
+            pNeighborRoamInfo->b_roam_scan_offload_started = false;
    }
 cmd_sent:
    /* update the last sent cmd */

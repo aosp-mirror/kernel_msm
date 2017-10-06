@@ -5673,6 +5673,7 @@ void csrNeighborRoamClose(tpAniSirGlobal pMac, tANI_U8 sessionId)
                                 &pNeighborRoamInfo->FTRoamInfo.preAuthDoneList);
     csrLLClose(&pNeighborRoamInfo->FTRoamInfo.preAuthDoneList);
 #endif /* WLAN_FEATURE_VOWIFI_11R */
+    pNeighborRoamInfo->b_roam_scan_offload_started = false;
 
     CSR_NEIGHBOR_ROAM_STATE_TRANSITION(eCSR_NEIGHBOR_ROAM_STATE_CLOSED,
                                        sessionId)
