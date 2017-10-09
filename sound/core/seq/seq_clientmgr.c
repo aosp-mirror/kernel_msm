@@ -1248,8 +1248,8 @@ static int snd_seq_ioctl_set_client_info(struct snd_seq_client *client,
 }
 
 
-/* 
- * CREATE PORT ioctl() 
+/*
+ * CREATE PORT ioctl()
  */
 static int snd_seq_ioctl_create_port(struct snd_seq_client *client,
 				     void __user *arg)
@@ -1257,6 +1257,7 @@ static int snd_seq_ioctl_create_port(struct snd_seq_client *client,
 	struct snd_seq_client_port *port;
 	struct snd_seq_port_info info;
 	struct snd_seq_port_callback *callback;
+	int port_idx;
 
 	if (copy_from_user(&info, arg, sizeof(info)))
 		return -EFAULT;
@@ -1270,7 +1271,9 @@ static int snd_seq_ioctl_create_port(struct snd_seq_client *client,
 		return -ENOMEM;
 
 	if (client->type == USER_CLIENT && info.kernel) {
-		snd_seq_delete_port(client, port->addr.port);
+		port_idx = port->addr.port;
+		snd_seq_port_unlock(port);
+		snd_seq_delete_port(client, port_idx);
 		return -EINVAL;
 	}
 	if (client->type == KERNEL_CLIENT) {
@@ -1292,6 +1295,7 @@ static int snd_seq_ioctl_create_port(struct snd_seq_client *client,
 
 	snd_seq_set_port_info(port, &info);
 	snd_seq_system_client_ev_port_start(port->addr.client, port->addr.port);
+	snd_seq_port_unlock(port);
 
 	if (copy_to_user(arg, &info, sizeof(info)))
 		return -EFAULT;
@@ -1299,8 +1303,8 @@ static int snd_seq_ioctl_create_port(struct snd_seq_client *client,
 	return 0;
 }
 
-/* 
- * DELETE PORT ioctl() 
+/*
+ * DELETE PORT ioctl()
  */
 static int snd_seq_ioctl_delete_port(struct snd_seq_client *client,
 				     void __user *arg)
@@ -1323,8 +1327,8 @@ static int snd_seq_ioctl_delete_port(struct snd_seq_client *client,
 }
 
 
-/* 
- * GET_PORT_INFO ioctl() (on any client) 
+/*
+ * GET_PORT_INFO ioctl() (on any client)
  */
 static int snd_seq_ioctl_get_port_info(struct snd_seq_client *client,
 				       void __user *arg)
