@@ -19,7 +19,6 @@
 	qcom,fg-sys-term-current = <(-575)>;
 	qcom,fg-cutoff-voltage = <3400>;
 	qcom,hold-soc-while-full;
-	qcom,linearize-soc;
 };
 
 &pmi8998_charger {
