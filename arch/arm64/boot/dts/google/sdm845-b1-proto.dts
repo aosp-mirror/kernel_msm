@@ -28,3 +28,7 @@
 &s2mpb04_gpio {
 	p1_workaround;
 };
+
+&cam_csiphy3 {
+	status = "disabled";
+};
