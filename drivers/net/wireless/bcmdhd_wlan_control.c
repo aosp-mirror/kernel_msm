@@ -72,6 +72,9 @@ struct bcm_wlan_control {
 	int power_enabled;
 	struct custom_locales *custom_locales;
 	int custom_locales_size;
+	unsigned char mac_addrs[ETHER_ADDR_LEN];
+	bool valid_mac_addrs;
+	struct work_struct fw_work;
 };
 
 static struct bcm_wlan_control *wlan_ctrl = NULL;
@@ -213,17 +216,26 @@ static int bcm_wifi_carddetect(int val)
 static int bcm_wifi_get_mac_addr(unsigned char *buf)
 {
 	struct bcm_wlan_control *ctrl = wlan_ctrl;
-	char *file = WLAN_MAC_ADDRS_FILE;
-	const struct firmware *firmware;
-	uint rand_mac;
-	static unsigned char mymac[ETHER_ADDR_LEN] = {0,};
-	const unsigned char nullmac[ETHER_ADDR_LEN] = {0,};
-	int ret = 0;
 
 	if (!ctrl || !buf)
 		return -EAGAIN;
 
-	memset(buf, 0x00, ETHER_ADDR_LEN);
+	if (!ctrl->valid_mac_addrs)
+		return -EAGAIN;
+
+	memcpy(buf, ctrl->mac_addrs, ETHER_ADDR_LEN);
+	return 0;
+}
+
+static int bcm_wifi_read_mac_file(struct bcm_wlan_control *ctrl)
+{
+	char *file = WLAN_MAC_ADDRS_FILE;
+	const struct firmware *firmware;
+	uint rand_mac;
+	int ret = 0;
+
+	if (!ctrl)
+		return -EAGAIN;
 
 	ret = request_firmware(&firmware, file, ctrl->dev);
 	if (ret) {
@@ -239,37 +251,48 @@ static int bcm_wifi_get_mac_addr(unsigned char *buf)
 		goto random_mac;
 	}
 
-	memcpy(buf, &firmware->data[0], ETHER_ADDR_LEN);
-	pr_info("%s: MAC ADDRESS %02X:%02X:%02X:%02X:%02X:%02X\n", __func__,
-			buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]);
+	memcpy(ctrl->mac_addrs, &firmware->data[0], ETHER_ADDR_LEN);
+	ctrl->valid_mac_addrs = true;
 
+	pr_info("%s: MAC ADDRESS %02X:%02X:%02X:%02X:%02X:%02X\n", __func__,
+			ctrl->mac_addrs[0],
+			ctrl->mac_addrs[1],
+			ctrl->mac_addrs[2],
+			ctrl->mac_addrs[3],
+			ctrl->mac_addrs[4],
+			ctrl->mac_addrs[5]);
+	ctrl->valid_mac_addrs = true;
 	release_firmware(firmware);
-	return ret;
+	return 0;
 
 random_mac:
-	if (memcmp(mymac, nullmac, ETHER_ADDR_LEN) != 0) {
-		/* Mac displayed from UI is never updated..
-		   So, mac obtained on initial time is used */
-		memcpy(buf, mymac, ETHER_ADDR_LEN);
-		return 0;
-	}
-
 	prandom_seed((uint)jiffies);
 	rand_mac = prandom_u32();
-	buf[0] = 0x00;
-	buf[1] = 0x90;
-	buf[2] = 0x4c;
-	buf[3] = (unsigned char)rand_mac;
-	buf[4] = (unsigned char)(rand_mac >> 8);
-	buf[5] = (unsigned char)(rand_mac >> 16);
-
-	memcpy(mymac, buf, ETHER_ADDR_LEN);
+	ctrl->mac_addrs[0] = 0x00;
+	ctrl->mac_addrs[1] = 0x90;
+	ctrl->mac_addrs[2] = 0x4c;
+	ctrl->mac_addrs[3] = (unsigned char)rand_mac;
+	ctrl->mac_addrs[4] = (unsigned char)(rand_mac >> 8);
+	ctrl->mac_addrs[5] = (unsigned char)(rand_mac >> 16);
+	ctrl->valid_mac_addrs = true;
 
 	WARN(1, "%s; Random MAC ADDRESS %02X:%02X:%02X:%02X:%02X:%02X\n",
 			__func__,
-			buf[0], buf[1], buf[2], buf[3], buf[4], buf[5] );
-
+			ctrl->mac_addrs[0],
+			ctrl->mac_addrs[1],
+			ctrl->mac_addrs[2],
+			ctrl->mac_addrs[3],
+			ctrl->mac_addrs[4],
+			ctrl->mac_addrs[5]);
 	return 0;
+}
+
+static void bcm_wifi_fw_work_func(struct work_struct *work)
+{
+	struct bcm_wlan_control *ctrl =
+		container_of(work, struct bcm_wlan_control, fw_work);
+
+	bcm_wifi_read_mac_file(ctrl);
 }
 
 static void *bcm_wifi_get_country_code(char *ccode, u32 flags)
@@ -325,6 +348,38 @@ static struct platform_device bcm_wifi_device = {
 	.dev            = {
 		.platform_data = &bcm_platform_data,
 	},
+};
+
+static ssize_t bcm_wifi_read_mac_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct platform_device *pdev = container_of(dev,
+			struct platform_device, dev);
+	struct bcm_wlan_control *ctrl = platform_get_drvdata(pdev);
+	int enable, rc;
+
+	rc = kstrtoint(buf, 0, &enable);
+	if (rc) {
+		pr_err("%s: invalid input for read_mac\n", __func__);
+		return rc;
+	}
+
+	if (enable)
+		schedule_work(&ctrl->fw_work);
+
+	return count;
+}
+
+static DEVICE_ATTR(read_mac, 0660, NULL, bcm_wifi_read_mac_store);
+
+static struct attribute *bcm_wifi_attrs[] = {
+	&dev_attr_read_mac.attr,
+	NULL
+};
+
+static struct attribute_group bcm_wifi_attr_group = {
+	.attrs = bcm_wifi_attrs,
 };
 
 static int bcm_wifi_read_country_codes_from_dt(struct bcm_wlan_control *ctrl)
@@ -469,6 +524,13 @@ static int bcm_wifi_probe(struct platform_device *pdev)
 	if (rc)
 		return rc;
 
+	INIT_WORK(&ctrl->fw_work, bcm_wifi_fw_work_func);
+	rc = sysfs_create_group(&dev->kobj, &bcm_wifi_attr_group);
+	if (rc) {
+		pr_err("%s: failed to create sysfs\n", __func__);
+		goto err_sysfs_create;
+	}
+
 	/* register wifi platform device */
 	wifi_resource[0].start = gpio_to_irq(ctrl->gpio_hostwake);
 	wifi_resource[0].end   = gpio_to_irq(ctrl->gpio_hostwake);
@@ -481,13 +543,17 @@ static int bcm_wifi_probe(struct platform_device *pdev)
 	pr_info("WLAN control for BCMDHD probed!\n");
 	return 0;
 
+err_sysfs_create:
 err_bcm_wifi_device:
+	sysfs_remove_group(&dev->kobj, &bcm_wifi_attr_group);
 	return rc;
 }
 
 static int bcm_wifi_remove(struct platform_device *pdev)
 {
+	sysfs_remove_group(&pdev->dev.kobj, &bcm_wifi_attr_group);
 	wlan_ctrl = NULL;
+	platform_set_drvdata(pdev, NULL);
 
 	return 0;
 }
