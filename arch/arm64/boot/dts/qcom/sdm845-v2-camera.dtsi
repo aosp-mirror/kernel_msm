@@ -124,7 +124,7 @@
 	cam_csiphy3: qcom,csiphy@ac68000 {
 		cell-index = <3>;
 		compatible = "qcom,csiphy-v1.0", "qcom,csiphy";
-		reg = <0xac67000 0x1000>;
+		reg = <0xac68000 0x1000>;
 		reg-names = "csiphy";
 		reg-cam-base = <0x68000>;
 		interrupts = <0 448 0>;
