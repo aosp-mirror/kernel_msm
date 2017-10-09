@@ -232,7 +232,6 @@ enum esr_timer_config {
 struct fg_dt_props {
 	bool	force_load_profile;
 	bool	hold_soc_while_full;
-	bool	linearize_soc;
 	bool	auto_recharge_soc;
 	int	cutoff_volt_mv;
 	int	empty_volt_mv;
