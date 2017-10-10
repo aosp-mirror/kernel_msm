@@ -74,6 +74,7 @@ struct bcm_wlan_control {
 	int custom_locales_size;
 	unsigned char mac_addrs[ETHER_ADDR_LEN];
 	bool valid_mac_addrs;
+	bool auto_read_mac;
 	struct work_struct fw_work;
 };
 
@@ -88,6 +89,8 @@ static struct wlan_mem_prealloc wlan_mem_array[PREALLOC_WLAN_SEC_NUM] = {
 
 static void *wlan_static_scan_buf0 = NULL;
 static void *wlan_static_scan_buf1 = NULL;
+
+static int bcm_wifi_read_mac_file(struct bcm_wlan_control *ctrl);
 
 static void *bcm_wifi_mem_prealloc(int section, unsigned long size)
 {
@@ -220,8 +223,10 @@ static int bcm_wifi_get_mac_addr(unsigned char *buf)
 	if (!ctrl || !buf)
 		return -EAGAIN;
 
-	if (!ctrl->valid_mac_addrs)
-		return -EAGAIN;
+	if (!ctrl->valid_mac_addrs && ctrl->auto_read_mac) {
+		if (bcm_wifi_read_mac_file(ctrl))
+			return -EAGAIN;
+	}
 
 	memcpy(buf, ctrl->mac_addrs, ETHER_ADDR_LEN);
 	return 0;
@@ -480,6 +485,7 @@ static int read_and_request_gpio(struct device *dev,
 static int bcm_wifi_populate_dt(struct bcm_wlan_control *ctrl)
 {
 	struct device *dev = ctrl->dev;
+	struct device_node *np = dev->of_node;
 	int rc;
 
 	rc = read_and_request_gpio(dev, "power-gpio", &ctrl->gpio_power,
@@ -497,6 +503,8 @@ static int bcm_wifi_populate_dt(struct bcm_wlan_control *ctrl)
 	rc = bcm_wifi_read_country_codes_from_dt(ctrl);
 	if (rc < 0)
 		return rc;
+
+	ctrl->auto_read_mac = of_property_read_bool(np, "auto-read-mac");
 
 	return 0;
 }
