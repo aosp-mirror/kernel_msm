@@ -582,21 +582,22 @@ static int dhd_wifi_platform_load_sdio(void)
 
 		do {
 			sema_init(&dhd_chipup_sem, 0);
+
+			err = wifi_platform_set_power(adapter, TRUE, WIFI_TURNON_DELAY);
+			if (err) {
+				/* WL_REG_ON state unknown, Power off forcely */
+				wifi_platform_set_power(adapter, FALSE, WIFI_TURNOFF_DELAY);
+				continue;
+			}
+
 			err = dhd_bus_reg_sdio_notify(&dhd_chipup_sem);
 			if (err) {
 				DHD_ERROR(("%s dhd_bus_reg_sdio_notify fail(%d)\n\n",
 					__FUNCTION__, err));
 				return err;
 			}
-			err = wifi_platform_set_power(adapter, TRUE, WIFI_TURNON_DELAY);
-			if (err) {
-				/* WL_REG_ON state unknown, Power off forcely */
-				wifi_platform_set_power(adapter, FALSE, WIFI_TURNOFF_DELAY);
-				continue;
-			} else {
-				wifi_platform_bus_enumerate(adapter, TRUE);
-				err = 0;
-			}
+			wifi_platform_bus_enumerate(adapter, TRUE);
+			err = 0;
 
 			if (down_timeout(&dhd_chipup_sem, msecs_to_jiffies(POWERUP_WAIT_MS)) == 0) {
 				dhd_bus_unreg_sdio_notify();
