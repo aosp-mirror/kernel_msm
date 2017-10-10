@@ -74,6 +74,7 @@
 		interrupt-names = "host_wake";
 		pinctrl-names = "default";
 		pinctrl-0 = <&bcmdhd_wlan_default>;
+		auto-read-mac;
 		custom-locales =
 			"",  "XZ", "11", /* unknown or empty */
 			"CK", "XZ", "11", /* Cook Island (13.4.27)*/
