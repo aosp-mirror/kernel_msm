@@ -7218,6 +7218,7 @@ dhdsdio_probe(uint16 venid, uint16 devid, uint16 bus_no, uint16 slot,
 		}
 	}
 #ifdef CUSTOMER_HW4
+#ifdef CUSTOM_USE_RANDOM_MAC_BOOT
 	else {
 		/* Set ramdom MAC address during boot time */
 		get_random_bytes(&bus->dhd->mac.octet[3], 3);
@@ -7226,6 +7227,7 @@ dhdsdio_probe(uint16 venid, uint16 devid, uint16 bus_no, uint16 slot,
 		bus->dhd->mac.octet[1] = 0x90;
 		bus->dhd->mac.octet[2] = 0x4C;
 	}
+#endif /* CUSTOM_USE_RANDOM_MAC_BOOT */
 #endif /* CUSTOMER_HW4 */
 	/* Ok, have the per-port tell the stack we're open for business */
 	if (dhd_register_if(bus->dhd, 0, TRUE) != 0) {
