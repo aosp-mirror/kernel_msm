@@ -318,7 +318,7 @@ static int msm_pcm_playback_prepare(struct snd_pcm_substream *substream)
 	}
 
 	avs_ver = q6core_get_avs_version();
-	if(avs_ver == Q6_SUBSYS_AVS2_8) {
+	if(avs_ver == Q6_SUBSYS_AVS2_6) {
 		ret = q6asm_send_cal(prtd->audio_client);
 		if (ret < 0)
 			pr_debug("%s : Send cal failed : %d", __func__, ret);
