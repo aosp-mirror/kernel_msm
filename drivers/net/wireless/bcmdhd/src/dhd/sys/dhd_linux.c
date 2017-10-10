@@ -664,6 +664,13 @@ module_param(dhd_use_idsup, uint, 0);
 uint dhd_dscpmap_enable = 1;
 module_param(dhd_dscpmap_enable, uint, 0644);
 #endif /* CUSTOM_DSCP_TO_PRIO_MAPPING */
+
+#ifdef CUSTOM_BCMDHD_KICKSTART
+static int dhd_kickstart_handler(const char *kmessage, struct kernel_param *kp);
+static int dhd_kickstart = 0;
+module_param_call(kickstart, dhd_kickstart_handler, param_get_int,
+		&dhd_kickstart, S_IRUSR | S_IWUSR | S_IRGRP);
+#endif
 extern char dhd_version[];
 
 int dhd_net_bus_devreset(struct net_device *dev, uint8 flag);
@@ -6378,6 +6385,20 @@ dhd_free(dhd_pub_t *dhdp)
 	}
 }
 
+#ifdef CUSTOM_BCMDHD_KICKSTART
+static int dhd_kickstart_handler(const char *kmessage,
+		struct kernel_param *kp)
+{
+	int err;
+
+	err = param_set_int(kmessage, kp);
+	if (!err)
+		err = dhd_wifi_platform_register_drv();
+	return err;
+}
+
+#else
+
 static void __exit
 dhd_module_cleanup(void)
 {
@@ -6401,7 +6422,6 @@ dhd_module_init(void)
 	return err;
 }
 
-
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 0)
 #if defined(CONFIG_DEFERRED_INITCALLS)
 deferred_module_init(dhd_module_init);
@@ -6415,6 +6435,7 @@ module_init(dhd_module_init);
 #endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 0) */
 
 module_exit(dhd_module_cleanup);
+#endif /* CUSTOM_BCMDHD_KICKSTART */
 
 /*
  * OS specific functions required to implement DHD driver in OS independent way

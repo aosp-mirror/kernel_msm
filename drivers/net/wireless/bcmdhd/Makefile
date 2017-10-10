@@ -411,6 +411,9 @@ ifneq ($(CONFIG_BCM4330),)
   DHDCFLAGS += -DWAIT_DEQUEUE
 endif
 
+# Kickstart for built-in bcmdhd
+  DHDCFLAGS += -DCUSTOM_BCMDHD_KICKSTART
+
 
 #########
 # Others
