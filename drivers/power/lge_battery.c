@@ -448,8 +448,7 @@ static void bm_watch_work(struct work_struct *work)
 		goto error;
 	}
 
-	if (bm->bm_active)
-		bm_check_therm_charging(bm, batt_temp, batt_volt);
+	bm_check_therm_charging(bm, batt_temp, batt_volt);
 
 	rc = bm_get_property(bm->batt_psy,
 			     POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
