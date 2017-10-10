@@ -16,29 +16,8 @@
 #include "sdm845-b1-common.dtsi"
 
 / {
-	model = "Google Inc. MSM sdm845 B1 proto Board";
+	model = "Google Inc. MSM sdm845 B1 proto v1.1 Board";
 	compatible = "google,b1c1-sdm845", "qcom,sdm845";
-	qcom,board-id = <0x00020305 0>;
+	qcom,board-id = <0x00020405 0>;
 };
 
-/*
- * B1 P1 requires a SW workaround for easel because of a schematic error. This
- * will be resolved in P1.1 schematic and is not needed there.
- */
-&s2mpb04_gpio {
-	p1_workaround;
-};
-
-/*
- * B1 P1 requires the speaker amp to be strictly in i2s (instead of tdm mode)
- * This will be resolved in P1.1 schematic and is not needed there.
- */
-&soc {
-	sound-tavil {
-		qcom,model = "sdm845-tavil-snd-card";
-	};
-};
-
-&cam_csiphy3 {
-	status = "disabled";
-};
