@@ -856,6 +856,7 @@ static const struct tcpc_config pd_tcpc_config = {
 	.type = TYPEC_PORT_DRP,
 	.default_role = TYPEC_SINK,
 	.alt_modes = NULL,
+	.try_role_hw = true,
 };
 
 static void init_tcpc_dev(struct tcpc_dev *pd_tcpc_dev)
