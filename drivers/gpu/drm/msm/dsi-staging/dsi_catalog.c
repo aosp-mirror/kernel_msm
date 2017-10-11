@@ -60,6 +60,7 @@ static void dsi_catalog_cmn_init(struct dsi_ctrl_hw *ctrl,
 	ctrl->ops.collect_misr = dsi_ctrl_hw_cmn_collect_misr;
 	ctrl->ops.get_cmd_read_data = dsi_ctrl_hw_cmn_get_cmd_read_data;
 	ctrl->ops.clear_rdbk_register = dsi_ctrl_hw_cmn_clear_rdbk_reg;
+	ctrl->ops.debug_bus = dsi_ctrl_hw_cmn_debug_bus;
 
 	switch (version) {
 	case DSI_CTRL_VERSION_1_4:

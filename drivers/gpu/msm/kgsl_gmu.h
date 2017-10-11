@@ -166,7 +166,6 @@ enum gpu_idle_level {
  *	and GPU register set, the offset will be used when accessing
  *	gmu registers using offset defined in GPU register space.
  * @pdc_reg_virt: starting kernel virtual address for RPMh PDC registers
- * @cpr_reg_virt: starting kernel virtual address for RPMh CPR controller
  * @gmu_interrupt_num: GMU interrupt number
  * @fw_image: descriptor of GMU memory that has GMU image in it
  * @hfi_mem: pointer to HFI shared memory
@@ -194,6 +193,7 @@ enum gpu_idle_level {
  * @pcl: GPU BW scaling client
  * @ccl: CNOC BW scaling client
  * @idle_level: Minimal GPU idle power level
+ * @fault_count: GMU fault count
  */
 struct gmu_device {
 	unsigned int ver;
@@ -203,7 +203,6 @@ struct gmu_device {
 	unsigned int reg_len;
 	unsigned int gmu2gpu_offset;
 	void __iomem *pdc_reg_virt;
-	void __iomem *cpr_reg_virt;
 	unsigned int gmu_interrupt_num;
 	struct gmu_memdesc fw_image;
 	struct gmu_memdesc *hfi_mem;
@@ -228,6 +227,7 @@ struct gmu_device {
 	unsigned int pcl;
 	unsigned int ccl;
 	unsigned int idle_level;
+	unsigned int fault_count;
 };
 
 bool kgsl_gmu_isenabled(struct kgsl_device *device);

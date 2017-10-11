@@ -837,6 +837,21 @@ clk_enable_fail:
 }
 EXPORT_SYMBOL(sde_rsc_client_vote);
 
+#if defined(CONFIG_DEBUG_FS)
+void sde_rsc_debug_dump(u32 mux_sel)
+{
+	struct sde_rsc_priv *rsc;
+
+	rsc = rsc_prv_list[SDE_RSC_INDEX];
+	if (!rsc)
+		return;
+
+	/* this must be called with rsc clocks enabled */
+	if (rsc->hw_ops.debug_dump)
+		rsc->hw_ops.debug_dump(rsc, mux_sel);
+}
+#endif /* defined(CONFIG_DEBUG_FS) */
+
 static int _sde_debugfs_status_show(struct seq_file *s, void *data)
 {
 	struct sde_rsc_priv *rsc;
@@ -1239,6 +1254,12 @@ static int sde_rsc_probe(struct platform_device *pdev)
 		pr_err("sde rsc:power client create failed ret:%d\n", ret);
 		goto sde_rsc_fail;
 	}
+
+	/**
+	 * sde rsc should always vote through enable path, sleep vote is
+	 * set to "0" by default.
+	 */
+	sde_power_data_bus_state_update(&rsc->phandle, true);
 
 	rsc->disp_rsc = rpmh_get_byname(pdev, "disp_rsc");
 	if (IS_ERR_OR_NULL(rsc->disp_rsc)) {

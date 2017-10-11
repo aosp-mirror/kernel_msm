@@ -100,7 +100,7 @@ unsigned int a6xx_preemption_pre_ibsubmit(struct adreno_device *adreno_dev,
 		struct adreno_ringbuffer *rb,
 		unsigned int *cmds, struct kgsl_context *context);
 
-unsigned int a6xx_preemption_set_marker(unsigned int *cmds, int start);
+unsigned int a6xx_set_marker(unsigned int *cmds, int start);
 
 void a6xx_preemption_callback(struct adreno_device *adreno_dev, int bit);
 
@@ -109,6 +109,8 @@ int a6xx_preemption_context_init(struct kgsl_context *context);
 void a6xx_preemption_context_destroy(struct kgsl_context *context);
 
 void a6xx_snapshot(struct adreno_device *adreno_dev,
+		struct kgsl_snapshot *snapshot);
+void a6xx_snapshot_gmu(struct adreno_device *adreno_dev,
 		struct kgsl_snapshot *snapshot);
 
 void a6xx_crashdump_init(struct adreno_device *adreno_dev);

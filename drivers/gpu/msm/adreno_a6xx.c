@@ -567,7 +567,7 @@ static void a6xx_start(struct adreno_device *adreno_dev)
 		kgsl_regrmw(device, A6XX_PC_DBG_ECO_CNTL, 0, (1 << 8));
 
 	/* Enable the GMEM save/restore feature for preemption */
-	if (adreno_is_preemption_enabled(adreno_dev))
+	if (adreno_is_preemption_setup_enabled(adreno_dev))
 		kgsl_regwrite(device, A6XX_RB_CONTEXT_SWITCH_GMEM_SAVE_RESTORE,
 			0x1);
 
@@ -773,7 +773,7 @@ static int a6xx_post_start(struct adreno_device *adreno_dev)
 	struct adreno_ringbuffer *rb = adreno_dev->cur_rb;
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 
-	if (!adreno_is_preemption_enabled(adreno_dev))
+	if (!adreno_is_preemption_execution_enabled(adreno_dev))
 		return 0;
 
 	cmds = adreno_ringbuffer_allocspace(rb, 42);
@@ -871,16 +871,6 @@ static int _load_firmware(struct kgsl_device *device, const char *fwfile,
 
 #define RSC_CMD_OFFSET 2
 #define PDC_CMD_OFFSET 4
-static void _regread(void __iomem *regbase,
-		unsigned int offsetwords, unsigned int *value)
-{
-	void __iomem *reg;
-
-	reg = regbase + (offsetwords << 2);
-	*value = __raw_readl(reg);
-	/* Ensure read completes */
-	rmb();
-}
 
 static void _regwrite(void __iomem *regbase,
 		unsigned int offsetwords, unsigned int value)
@@ -1012,7 +1002,9 @@ static int timed_poll_check(struct kgsl_device *device,
 		kgsl_gmu_regread(device, offset, &value);
 		if ((value & mask) == expected_ret)
 			return 0;
-		cpu_relax();
+		/* Wait 100us to reduce unnecessary AHB bus traffic */
+		udelay(100);
+		cond_resched();
 	} while (!time_after(jiffies, t));
 
 	return -EINVAL;
@@ -1397,8 +1389,6 @@ static int a6xx_rpmh_power_on_gpu(struct kgsl_device *device)
 {
 	struct gmu_device *gmu = &device->gmu;
 	struct device *dev = &gmu->pdev->dev;
-	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
-	unsigned int tmp;
 	int val;
 
 	kgsl_gmu_regread(device, A6XX_GPU_CC_GX_DOMAIN_MISC, &val);
@@ -1428,19 +1418,6 @@ static int a6xx_rpmh_power_on_gpu(struct kgsl_device *device)
 
 	kgsl_gmu_regwrite(device, A6XX_GMU_RSCC_CONTROL_REQ, 0);
 
-	/* Turn on GFX rail CPR */
-	if (adreno_is_a630v2(adreno_dev)) {
-		_regread(gmu->cpr_reg_virt, CPR_CPRF_CPRF5_CTRL, &tmp);
-		tmp |= BIT(2);
-		_regwrite(gmu->cpr_reg_virt, CPR_CPRF_CPRF5_CTRL, tmp);
-
-		kgsl_gmu_regread(device, A6XX_GPU_CPR_FSM_CTL, &tmp);
-		tmp |= BIT(0);
-		kgsl_gmu_regwrite(device, A6XX_GPU_CPR_FSM_CTL, tmp);
-		/* Ensure write happens before exit the function */
-		wmb();
-	}
-
 	/* Enable the power counter because it was disabled before slumber */
 	kgsl_gmu_regwrite(device, A6XX_GMU_CX_GMU_POWER_COUNTER_ENABLE, 1);
 
@@ -1453,22 +1430,8 @@ error_rsc:
 static int a6xx_rpmh_power_off_gpu(struct kgsl_device *device)
 {
 	struct gmu_device *gmu = &device->gmu;
-	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
-	unsigned int tmp;
+	const struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 	int val;
-
-	/* Turn off GFX rail CPR */
-	if (adreno_is_a630v2(adreno_dev)) {
-		_regread(gmu->cpr_reg_virt, CPR_CPRF_CPRF5_CTRL, &tmp);
-		tmp &= ~BIT(2);
-		_regwrite(gmu->cpr_reg_virt, CPR_CPRF_CPRF5_CTRL, tmp);
-
-		kgsl_gmu_regread(device, A6XX_GPU_CPR_FSM_CTL, &tmp);
-		tmp &= ~BIT(0);
-		kgsl_gmu_regwrite(device, A6XX_GPU_CPR_FSM_CTL, tmp);
-		/* Ensure write completes before starting sleep seq */
-		wmb();
-	}
 
 	/* RSC sleep sequence */
 	kgsl_gmu_regwrite(device, A6XX_RSCC_TIMESTAMP_UNIT1_EN_DRV0, 1);
@@ -1980,9 +1943,7 @@ static int a6xx_gmu_suspend(struct kgsl_device *device)
 	/* If SPTP_RAC is on, turn off SPTP_RAC HS */
 	a6xx_sptprac_disable(adreno_dev);
 
-	/* Disconnect GPU from BUS. Clear and reconnected after reset */
-	/* adreno_vbif_clear_pending_transactions(device); */
-	/* Unnecessary: a6xx_soft_reset(adreno_dev); */
+	/* Disconnect GPU from BUS is not needed if CX GDSC goes off later */
 
 	/* Check no outstanding RPMh voting */
 	a6xx_complete_rpmh_votes(device);
@@ -2332,7 +2293,7 @@ static void a6xx_cp_callback(struct adreno_device *adreno_dev, int bit)
 {
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 
-	if (adreno_is_preemption_enabled(adreno_dev))
+	if (adreno_is_preemption_execution_enabled(adreno_dev))
 		a6xx_preemption_trigger(adreno_dev);
 
 	adreno_dispatcher_schedule(device);
@@ -2954,6 +2915,7 @@ struct adreno_gpudev adreno_a6xx_gpudev = {
 	.reg_offsets = &a6xx_reg_offsets,
 	.start = a6xx_start,
 	.snapshot = a6xx_snapshot,
+	.snapshot_gmu = a6xx_snapshot_gmu,
 	.irq = &a6xx_irq,
 	.snapshot_data = &a6xx_snapshot_data,
 	.irq_trace = trace_kgsl_a5xx_irq_status,
@@ -2984,7 +2946,7 @@ struct adreno_gpudev adreno_a6xx_gpudev = {
 	.preemption_post_ibsubmit = a6xx_preemption_post_ibsubmit,
 	.preemption_init = a6xx_preemption_init,
 	.preemption_schedule = a6xx_preemption_schedule,
-	.preemption_set_marker = a6xx_preemption_set_marker,
+	.set_marker = a6xx_set_marker,
 	.preemption_context_init = a6xx_preemption_context_init,
 	.preemption_context_destroy = a6xx_preemption_context_destroy,
 	.gx_is_on = a6xx_gx_is_on,

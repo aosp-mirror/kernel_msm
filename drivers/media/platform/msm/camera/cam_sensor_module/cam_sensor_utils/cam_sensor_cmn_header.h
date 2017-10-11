@@ -33,6 +33,7 @@
 #define CAM_CSIPHY_NAME    "cam-csiphy"
 #define CAM_FLASH_NAME     "cam-flash"
 #define CAM_EEPROM_NAME    "cam-eeprom"
+#define CAM_OIS_NAME       "cam-ois"
 
 #define MAX_SYSTEM_PIPELINE_DELAY 2
 
@@ -165,6 +166,11 @@ enum cam_eeprom_packet_opcodes {
 	CAM_EEPROM_PACKET_OPCODE_INIT
 };
 
+enum cam_ois_packet_opcodes {
+	CAM_OIS_PACKET_OPCODE_INIT,
+	CAM_OIS_PACKET_OPCODE_OIS_CONTROL
+};
+
 enum msm_bus_perf_setting {
 	S_INIT,
 	S_PREVIEW,
@@ -204,6 +210,8 @@ enum camera_vreg_type {
 
 enum cam_sensor_i2c_cmd_type {
 	CAM_SENSOR_I2C_WRITE_RANDOM,
+	CAM_SENSOR_I2C_WRITE_BURST,
+	CAM_SENSOR_I2C_WRITE_SEQ,
 	CAM_SENSOR_I2C_READ,
 	CAM_SENSOR_I2C_POLL
 };
@@ -222,14 +230,6 @@ struct camera_vreg_t {
 	uint32_t delay;
 	const char *custom_vreg_name;
 	enum camera_vreg_type type;
-};
-
-struct cam_sensor_module_power_setting {
-	enum msm_camera_power_seq_type seq_type;
-	unsigned short seq_val;
-	uint32_t config_val_low;
-	uint32_t config_val_high;
-	unsigned short delay;
 };
 
 struct msm_camera_gpio_num_info {
@@ -331,26 +331,6 @@ struct cam_sensor_power_setting {
 	long config_val;
 	unsigned short delay;
 	void *data[10];
-};
-
-struct cam_sensor_power_setting_array {
-	struct cam_sensor_power_setting  power_setting_a[MAX_POWER_CONFIG];
-	struct cam_sensor_power_setting *power_setting;
-	unsigned short size;
-	struct cam_sensor_power_setting  power_down_setting_a[MAX_POWER_CONFIG];
-	struct cam_sensor_power_setting *power_down_setting;
-	unsigned short size_down;
-};
-
-struct msm_camera_sensor_slave_info {
-	enum msm_sensor_camera_id_t camera_id;
-	unsigned short slave_addr;
-	enum i2c_freq_mode i2c_freq_mode;
-	enum camera_sensor_i2c_type addr_type;
-	struct msm_sensor_id_info_t sensor_id_info;
-	struct cam_sensor_power_setting_array power_setting_array;
-	unsigned char  is_init_params_valid;
-	enum msm_sensor_output_format_t output_format;
 };
 
 struct cam_sensor_board_info {

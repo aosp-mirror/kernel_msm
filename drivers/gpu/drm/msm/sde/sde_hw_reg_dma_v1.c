@@ -50,7 +50,6 @@
 			(cfg)->dma_buf->index)
 
 #define REG_DMA_DECODE_SEL 0x180AC060
-#define REG_DMA_LAST_CMD 0x180AC004
 #define SINGLE_REG_WRITE_OPCODE (BIT(28))
 #define REL_ADDR_OPCODE (BIT(27))
 #define HW_INDEX_REG_WRITE_OPCODE (BIT(28) | BIT(29))
@@ -471,7 +470,8 @@ static int write_kick_off_v1(struct sde_reg_dma_kickoff_cfg *cfg)
 			cfg->dma_buf->iova);
 	SDE_REG_WRITE(&hw, reg_dma_ctl_queue_off[cfg->ctl->idx] + 0x4,
 			cmd1);
-	SDE_REG_WRITE(&cfg->ctl->hw, REG_DMA_CTL_TRIGGER_OFF,
+	if (cfg->last_command)
+		SDE_REG_WRITE(&cfg->ctl->hw, REG_DMA_CTL_TRIGGER_OFF,
 			queue_sel[cfg->queue_select]);
 
 	return 0;
@@ -582,7 +582,7 @@ int reset_v1(struct sde_hw_ctl *ctl)
 	return 0;
 }
 
-static void sde_reg_dma_aspace_cb(void *cb_data, bool attach)
+static void sde_reg_dma_aspace_cb_locked(void *cb_data, bool is_detach)
 {
 	struct sde_reg_dma_buffer *dma_buf = NULL;
 	struct msm_gem_address_space *aspace = NULL;
@@ -597,14 +597,23 @@ static void sde_reg_dma_aspace_cb(void *cb_data, bool attach)
 	dma_buf = (struct sde_reg_dma_buffer *)cb_data;
 	aspace = dma_buf->aspace;
 
-	if (attach) {
-		rc = msm_gem_get_iova(dma_buf->buf, aspace, &dma_buf->iova);
+	if (is_detach) {
+		/* invalidate the stored iova */
+		dma_buf->iova = 0;
+
+		/* return the virtual address mapping */
+		msm_gem_put_vaddr_locked(dma_buf->buf);
+		msm_gem_vunmap(dma_buf->buf);
+
+	} else {
+		rc = msm_gem_get_iova_locked(dma_buf->buf, aspace,
+				&dma_buf->iova);
 		if (rc) {
 			DRM_ERROR("failed to get the iova rc %d\n", rc);
 			return;
 		}
 
-		dma_buf->vaddr = msm_gem_get_vaddr(dma_buf->buf);
+		dma_buf->vaddr = msm_gem_get_vaddr_locked(dma_buf->buf);
 		if (IS_ERR_OR_NULL(dma_buf->vaddr)) {
 			DRM_ERROR("failed to get va rc %d\n", rc);
 			return;
@@ -615,13 +624,6 @@ static void sde_reg_dma_aspace_cb(void *cb_data, bool attach)
 		dma_buf->iova = dma_buf->iova + offset;
 		dma_buf->vaddr = (void *)(((u8 *)dma_buf->vaddr) + offset);
 		dma_buf->next_op_allowed = DECODE_SEL_OP;
-	} else {
-		/* invalidate the stored iova */
-		dma_buf->iova = 0;
-
-		/* return the virtual address mapping */
-		msm_gem_put_vaddr(dma_buf->buf);
-		msm_gem_vunmap(dma_buf->buf);
 	}
 }
 
@@ -661,7 +663,7 @@ static struct sde_reg_dma_buffer *alloc_reg_dma_buf_v1(u32 size)
 
 	/* register to aspace */
 	rc = msm_gem_address_space_register_cb(aspace,
-			sde_reg_dma_aspace_cb,
+			sde_reg_dma_aspace_cb_locked,
 			(void *)dma_buf);
 	if (rc) {
 		DRM_ERROR("failed to register callback %d", rc);
@@ -694,8 +696,8 @@ static struct sde_reg_dma_buffer *alloc_reg_dma_buf_v1(u32 size)
 put_iova:
 	msm_gem_put_iova(dma_buf->buf, aspace);
 free_aspace_cb:
-	msm_gem_address_space_unregister_cb(aspace, sde_reg_dma_aspace_cb,
-			dma_buf);
+	msm_gem_address_space_unregister_cb(aspace,
+			sde_reg_dma_aspace_cb_locked, dma_buf);
 free_gem:
 	msm_gem_free_object(dma_buf->buf);
 fail:
@@ -713,7 +715,7 @@ static int dealloc_reg_dma_v1(struct sde_reg_dma_buffer *dma_buf)
 	if (dma_buf->buf) {
 		msm_gem_put_iova(dma_buf->buf, 0);
 		msm_gem_address_space_unregister_cb(dma_buf->aspace,
-				sde_reg_dma_aspace_cb, dma_buf);
+				sde_reg_dma_aspace_cb_locked, dma_buf);
 		mutex_lock(&reg_dma->drm_dev->struct_mutex);
 		msm_gem_free_object(dma_buf->buf);
 		mutex_unlock(&reg_dma->drm_dev->struct_mutex);
@@ -754,8 +756,8 @@ static int write_last_cmd(struct sde_reg_dma_setup_ops_cfg *cfg)
 
 	loc =  (u32 *)((u8 *)cfg->dma_buf->vaddr +
 			cfg->dma_buf->index);
-	loc[0] = REG_DMA_LAST_CMD;
-	loc[1] = BIT(0);
+	loc[0] = REG_DMA_DECODE_SEL;
+	loc[1] = 0;
 	cfg->dma_buf->index = sizeof(u32) * 2;
 	cfg->dma_buf->ops_completed = REG_WRITE_OP | DECODE_SEL_OP;
 	cfg->dma_buf->next_op_allowed = REG_WRITE_OP;
@@ -772,6 +774,11 @@ static int last_cmd_v1(struct sde_hw_ctl *ctl, enum sde_reg_dma_queue q)
 		DRM_ERROR("invalid param buf %pK ctl %pK q %d\n", last_cmd_buf,
 				ctl, q);
 		return -EINVAL;
+	}
+
+	if (!last_cmd_buf->iova) {
+		DRM_DEBUG("iova not set, possible secure session\n");
+		return 0;
 	}
 
 	cfg.dma_buf = last_cmd_buf;
