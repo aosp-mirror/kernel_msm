@@ -123,11 +123,11 @@
 	};
 };
 
-&smb1355 {
-	reg = <0xc>;
+&smb1355_charger_0 {
+	status = "ok";
 };
 
-&smb1355_charger {
+&smb1355_charger_1 {
 	status = "ok";
 };
 
