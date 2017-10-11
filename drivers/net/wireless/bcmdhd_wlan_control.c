@@ -158,7 +158,7 @@ static int bcm_init_wlan_mem(void)
 			goto err_mem_alloc;
 	}
 
-	pr_info("BCMDHD: preallocated %u bytes pool\n", __func__, total);
+	pr_info("BCMDHD: preallocated %u bytes pool\n", total);
 	return 0;
 
 err_mem_alloc:
