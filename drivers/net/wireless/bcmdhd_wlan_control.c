@@ -31,25 +31,37 @@
 #define WLAN_MAC_ADDRS_FILE    "mac_addrs.bin"
 #define ETHER_ADDR_LEN         6
 
-#define WLAN_STATIC_SCAN_BUF0           5
-#define WLAN_STATIC_SCAN_BUF1           6
-#define PREALLOC_WLAN_SEC_NUM           4
+#ifdef CONFIG_BROADCOM_WIFI_RESERVED_MEM
+/* dhd.h */
+enum dhd_prealloc_index {
+	DHD_PREALLOC_PROT = 0,
+	DHD_PREALLOC_RXBUF,
+	DHD_PREALLOC_DATABUF,
+	DHD_PREALLOC_OSL_BUF,
+	DHD_PREALLOC_WIPHY_ESCAN0 = 5,
+	DHD_PREALLOC_WIPHY_ESCAN1,
+	DHD_PREALLOC_DHD_INFO = 7,
+	DHD_PREALLOC_MAX_INDEX
+};
+
 #define PREALLOC_WLAN_BUF_NUM           160
 #define PREALLOC_WLAN_SECTION_HEADER    24
-
-#define WLAN_SECTION_SIZE_0     (PREALLOC_WLAN_BUF_NUM * 128)
-#define WLAN_SECTION_SIZE_1     (PREALLOC_WLAN_BUF_NUM * 128)
-#define WLAN_SECTION_SIZE_2     (PREALLOC_WLAN_BUF_NUM * 512)
-#define WLAN_SECTION_SIZE_3     (PREALLOC_WLAN_BUF_NUM * 1024)
 
 #define DHD_SKB_HDRSIZE         336
 #define DHD_SKB_1PAGE_BUFSIZE   ((PAGE_SIZE*1)-DHD_SKB_HDRSIZE)
 #define DHD_SKB_2PAGE_BUFSIZE   ((PAGE_SIZE*2)-DHD_SKB_HDRSIZE)
 #define DHD_SKB_4PAGE_BUFSIZE   ((PAGE_SIZE*4)-DHD_SKB_HDRSIZE)
-
 #define WLAN_SKB_BUF_NUM        17
+#define WLAN_SECTION_SKBUFF_IDX 4
 
-#define WLAN_SCAN_BUF_SIZE      65536
+#define WLAN_SECTION_SIZE_0     (PREALLOC_WLAN_BUF_NUM * 128)
+#define WLAN_SECTION_SIZE_1     (PREALLOC_WLAN_BUF_NUM * 128)
+#define WLAN_SECTION_SIZE_2     (PREALLOC_WLAN_BUF_NUM * 512)
+#define WLAN_SECTION_SIZE_3     (PREALLOC_WLAN_BUF_NUM * 1024)
+#define WLAN_SECTION_SIZE_4     0 /* static socket buffer */
+#define WLAN_SECTION_SIZE_5     65536
+#define WLAN_SECTION_SIZE_6     65536
+#define WLAN_SECTION_SIZE_7     (16 * 1024)
 
 static struct sk_buff *wlan_static_skb[WLAN_SKB_BUF_NUM];
 
@@ -57,6 +69,18 @@ struct wlan_mem_prealloc {
 	void *mem_ptr;
 	unsigned long size;
 };
+
+static struct wlan_mem_prealloc wlan_mem_array[DHD_PREALLOC_MAX_INDEX] = {
+	{NULL, (WLAN_SECTION_SIZE_0 + PREALLOC_WLAN_SECTION_HEADER)},
+	{NULL, (WLAN_SECTION_SIZE_1)},
+	{NULL, (WLAN_SECTION_SIZE_2)},
+	{NULL, (WLAN_SECTION_SIZE_3)},
+	{NULL, (WLAN_SECTION_SIZE_4)},
+	{NULL, (WLAN_SECTION_SIZE_5)},
+	{NULL, (WLAN_SECTION_SIZE_6)},
+	{NULL, (WLAN_SECTION_SIZE_7)},
+};
+#endif
 
 #define COUNTRY_BUF_SZ          4
 struct custom_locales {
@@ -80,28 +104,15 @@ struct bcm_wlan_control {
 
 static struct bcm_wlan_control *wlan_ctrl = NULL;
 
-static struct wlan_mem_prealloc wlan_mem_array[PREALLOC_WLAN_SEC_NUM] = {
-	{NULL, (WLAN_SECTION_SIZE_0 + PREALLOC_WLAN_SECTION_HEADER)},
-	{NULL, (WLAN_SECTION_SIZE_1 + PREALLOC_WLAN_SECTION_HEADER)},
-	{NULL, (WLAN_SECTION_SIZE_2 + PREALLOC_WLAN_SECTION_HEADER)},
-	{NULL, (WLAN_SECTION_SIZE_3 + PREALLOC_WLAN_SECTION_HEADER)}
-};
-
-static void *wlan_static_scan_buf0 = NULL;
-static void *wlan_static_scan_buf1 = NULL;
-
 static int bcm_wifi_read_mac_file(struct bcm_wlan_control *ctrl);
 
+#ifdef CONFIG_BROADCOM_WIFI_RESERVED_MEM
 static void *bcm_wifi_mem_prealloc(int section, unsigned long size)
 {
-	if (section == PREALLOC_WLAN_SEC_NUM)
+	if (WLAN_SECTION_SKBUFF_IDX == section)
 		return wlan_static_skb;
-	if (section == WLAN_STATIC_SCAN_BUF0)
-		return wlan_static_scan_buf0;
-	if (section == WLAN_STATIC_SCAN_BUF1)
-		return wlan_static_scan_buf1;
 
-	if ((section < 0) || (section > PREALLOC_WLAN_SEC_NUM))
+	if ((section < 0) || (section > DHD_PREALLOC_MAX_INDEX))
 		return NULL;
 
 	if (wlan_mem_array[section].size < size)
@@ -113,6 +124,7 @@ static void *bcm_wifi_mem_prealloc(int section, unsigned long size)
 static int bcm_init_wlan_mem(void)
 {
 	int i, num;
+	size_t total = 0;
 
 	for (i = 0; i < WLAN_SKB_BUF_NUM; i++)
 		wlan_static_skb[i] = NULL;
@@ -120,6 +132,7 @@ static int bcm_init_wlan_mem(void)
 	num = (WLAN_SKB_BUF_NUM - 1) >> 1;
 	for (i = 0; i < num; i++) {
 		wlan_static_skb[i] = dev_alloc_skb(DHD_SKB_1PAGE_BUFSIZE);
+		total += DHD_SKB_1PAGE_BUFSIZE;
 		if (!wlan_static_skb[i])
 			goto err_skb_alloc;
 	}
@@ -127,36 +140,26 @@ static int bcm_init_wlan_mem(void)
 	num = WLAN_SKB_BUF_NUM -1;
 	for (; i < num; i++) {
 		wlan_static_skb[i] = dev_alloc_skb(DHD_SKB_2PAGE_BUFSIZE);
+		total += DHD_SKB_2PAGE_BUFSIZE;
 		if (!wlan_static_skb[i])
 			goto err_skb_alloc;
 	}
 
 	wlan_static_skb[i] = dev_alloc_skb(DHD_SKB_4PAGE_BUFSIZE);
+	total += DHD_SKB_4PAGE_BUFSIZE;
 	if (!wlan_static_skb[i])
 		goto err_skb_alloc;
 
-	for (i = 0 ; i < PREALLOC_WLAN_SEC_NUM; i++) {
+	for (i = 0 ; i < DHD_PREALLOC_MAX_INDEX; i++) {
 		wlan_mem_array[i].mem_ptr =
 			kmalloc(wlan_mem_array[i].size, GFP_KERNEL);
+		total += wlan_mem_array[i].size;
 		if (!wlan_mem_array[i].mem_ptr)
 			goto err_mem_alloc;
 	}
 
-	wlan_static_scan_buf0 = kmalloc(WLAN_SCAN_BUF_SIZE, GFP_KERNEL);
-	if (!wlan_static_scan_buf0)
-		goto err_mem_alloc;
-
-	wlan_static_scan_buf1 = kmalloc(WLAN_SCAN_BUF_SIZE, GFP_KERNEL);
-	if (!wlan_static_scan_buf1)
-		goto err_static_scan_buf;
-
-	pr_info("%s: WIFI: MEM is pre-allocated\n", __func__);
+	pr_info("BCMDHD: preallocated %u bytes pool\n", __func__, total);
 	return 0;
-
-err_static_scan_buf:
-	pr_err("%s: failed to allocate scan_buf0\n", __func__);
-	kfree(wlan_static_scan_buf0);
-	wlan_static_scan_buf0 = NULL;
 
 err_mem_alloc:
 	pr_err("%s: failed to allocate mem_alloc\n", __func__);
@@ -175,6 +178,22 @@ err_skb_alloc:
 
 	return -ENOMEM;
 }
+
+static void bcm_deinit_wlan_mem(void)
+{
+	int i;
+
+	for (i = 0; i < DHD_PREALLOC_MAX_INDEX; i++) {
+		kfree(wlan_mem_array[i].mem_ptr);
+		wlan_mem_array[i].mem_ptr = NULL;
+	}
+
+	for (i = 0; i < WLAN_SKB_BUF_NUM; i++) {
+		dev_kfree_skb(wlan_static_skb[i]);
+		wlan_static_skb[i] = NULL;
+	}
+}
+#endif
 
 static int bcm_wifi_set_power(int enable)
 {
@@ -326,7 +345,9 @@ static void *bcm_wifi_get_country_code(char *ccode, u32 flags)
 }
 
 static struct wifi_platform_data bcm_platform_data = {
+#ifdef CONFIG_BROADCOM_WIFI_RESERVED_MEM
 	.mem_prealloc   = bcm_wifi_mem_prealloc,
+#endif
 	.set_power      = bcm_wifi_set_power,
 	.set_reset      = bcm_wifi_reset,
 	.set_carddetect = bcm_wifi_carddetect,
@@ -448,7 +469,7 @@ static int bcm_wifi_read_country_codes_from_dt(struct bcm_wlan_control *ctrl)
 		}
 	}
 
-	pr_info("%s: read custom locales %d\n", __func__,
+	pr_info("%s: read %d custom locales\n", __func__,
 			ctrl->custom_locales_size);
 	devm_kfree(dev, out_strs);
 	return 0;
@@ -528,9 +549,11 @@ static int bcm_wifi_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, ctrl);
 	wlan_ctrl = ctrl;
 
+#ifdef CONFIG_BROADCOM_WIFI_RESERVED_MEM
 	rc = bcm_init_wlan_mem();
 	if (rc)
 		return rc;
+#endif
 
 	INIT_WORK(&ctrl->fw_work, bcm_wifi_fw_work_func);
 	rc = sysfs_create_group(&dev->kobj, &bcm_wifi_attr_group);
@@ -552,6 +575,9 @@ static int bcm_wifi_probe(struct platform_device *pdev)
 	return 0;
 
 err_sysfs_create:
+#ifdef CONFIG_BROADCOM_WIFI_RESERVED_MEM
+	bcm_deinit_wlan_mem();
+#endif
 err_bcm_wifi_device:
 	sysfs_remove_group(&dev->kobj, &bcm_wifi_attr_group);
 	return rc;
@@ -559,6 +585,9 @@ err_bcm_wifi_device:
 
 static int bcm_wifi_remove(struct platform_device *pdev)
 {
+#ifdef CONFIG_BROADCOM_WIFI_RESERVED_MEM
+	bcm_deinit_wlan_mem();
+#endif
 	sysfs_remove_group(&pdev->dev.kobj, &bcm_wifi_attr_group);
 	wlan_ctrl = NULL;
 	platform_set_drvdata(pdev, NULL);
