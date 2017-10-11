@@ -51,10 +51,16 @@ struct usbpd {
 	bool			vbus_output;
 	bool			vconn_output;
 
-	bool			pd_allowed;
 	bool			vbus_present;
 	enum typec_cc_status	cc1;
 	enum typec_cc_status	cc2;
+	bool			is_cable_flipped;
+
+	bool			pending_update_usb_data;
+	bool			extcon_usb;
+	bool			extcon_usb_host;
+	bool			extcon_usb_cc;
+	bool			extcon_usb_ss;
 
 	struct mutex		lock; /* struct usbpd access lock */
 	struct workqueue_struct	*wq;
@@ -271,6 +277,48 @@ static void parse_cc_status(enum power_supply_typec_mode typec_mode,
 	}
 }
 
+static int update_usb_data_role(struct usbpd *pd)
+{
+	int ret;
+
+	ret = extcon_set_cable_state_(pd->extcon, EXTCON_USB_CC,
+				      pd->extcon_usb_cc);
+	if (ret < 0) {
+		pd_engine_log(pd, "unable to set extcon usb cc [%s], ret=%d",
+			      pd->extcon_usb_cc ? "Y" : "N", ret);
+		return ret;
+	}
+	ret = extcon_set_cable_state_(pd->extcon, EXTCON_USB_SPEED,
+				      pd->extcon_usb_ss);
+	if (ret < 0) {
+		pd_engine_log(pd, "unable to set extcon usb ss [%s], ret=%d",
+			      pd->extcon_usb_ss ? "Y" : "N", ret);
+		return ret;
+	}
+	ret = extcon_set_cable_state_(pd->extcon, EXTCON_USB_HOST,
+				      pd->extcon_usb_host);
+	if (ret < 0) {
+		pd_engine_log(pd, "unable to set extcon usb host [%s], ret=%d",
+			      pd->extcon_usb_host ? "Y" : "N", ret);
+		return ret;
+	}
+	ret = extcon_set_cable_state_(pd->extcon, EXTCON_USB, pd->extcon_usb);
+	if (ret < 0) {
+		pd_engine_log(pd, "unable to set extcon usb [%s], ret=%d",
+			      pd->extcon_usb ? "Y" : "N", ret);
+		return ret;
+	}
+
+	pd_engine_log(pd,
+		      "usb extcon: cc [%s], speed [%s], host [%s], usb [%s]",
+		      pd->extcon_usb_cc ? "Y" : "N",
+		      pd->extcon_usb_ss ? "Y" : "N",
+		      pd->extcon_usb_host ? "Y" : "N",
+		      pd->extcon_usb ? "Y" : "N");
+
+	return ret;
+}
+
 struct psy_changed_event {
 	struct work_struct work;
 	struct usbpd *pd;
@@ -281,7 +329,6 @@ static void psy_changed_handler(struct work_struct *work)
 	struct psy_changed_event *event = container_of(work,
 			struct psy_changed_event, work);
 	struct usbpd *pd = event->pd;
-	bool pd_allowed;
 	bool vbus_present;
 	enum typec_cc_status cc1;
 	enum typec_cc_status cc2;
@@ -289,17 +336,19 @@ static void psy_changed_handler(struct work_struct *work)
 	enum power_supply_typec_mode typec_mode;
 	enum typec_cc_orientation typec_cc_orientation;
 
+	bool apsd_done;
+
 	union power_supply_propval val;
 	int ret = 0;
 
 	ret = power_supply_get_property(pd->usb_psy,
-					POWER_SUPPLY_PROP_PD_ALLOWED, &val);
+					POWER_SUPPLY_PROP_PD_APSD_DONE, &val);
 	if (ret < 0) {
-		pd_engine_log(pd, "Unable to read PD_ALLOWED, ret=%d",
+		pd_engine_log(pd, "Unable to read APSD_DONE, ret=%d",
 			      ret);
 		return;
 	}
-	pd_allowed = val.intval;
+	apsd_done = !!val.intval;
 
 	ret = power_supply_get_property(pd->usb_psy,
 					POWER_SUPPLY_PROP_ONLINE, &val);
@@ -332,8 +381,9 @@ static void psy_changed_handler(struct work_struct *work)
 
 	parse_cc_status(typec_mode, typec_cc_orientation, &cc1, &cc2);
 
-	pd_engine_log(pd, "pd allowed [%s], vbus present [%s], typec_mode [%s], typec_orientation [%s], cc1 [%s], cc2 [%s]",
-		      pd_allowed ? "Y" : "N",
+	pd_engine_log(pd,
+		      "apsd done [%s], vbus present [%s], typec_mode [%s], typec_orientation [%s], cc1 [%s], cc2 [%s]",
+		      apsd_done ? "Y" : "N",
 		      vbus_present ? "Y" : "N",
 		      typec_mode_name[typec_mode],
 		      typec_cc_orientation_name[typec_cc_orientation],
@@ -342,12 +392,8 @@ static void psy_changed_handler(struct work_struct *work)
 
 	mutex_lock(&pd->lock);
 
-	if (pd_allowed != pd->pd_allowed) {
-		pd_engine_log(pd, "pd allowed: %s -> %s",
-			      pd->pd_allowed ? "True" : "False",
-			      pd_allowed ? "True" : "False");
-		pd->pd_allowed = pd_allowed;
-	}
+	pd->is_cable_flipped = typec_cc_orientation == TYPEC_CC_ORIENTATION_CC2;
+	pd->extcon_usb_cc = pd->is_cable_flipped;
 
 	if (vbus_present != pd->vbus_present) {
 		pd_engine_log(pd, "vbus present: %s -> %s",
@@ -368,6 +414,15 @@ static void psy_changed_handler(struct work_struct *work)
 		tcpm_cc_change(pd->tcpm_port);
 	}
 
+	if (apsd_done && pd->pending_update_usb_data) {
+		pd_engine_log(pd,
+			      "APSD is done now, update pending usb data role");
+		ret = update_usb_data_role(pd);
+		if (ret < 0)
+			goto unlock;
+		pd->pending_update_usb_data = false;
+	}
+unlock:
 	mutex_unlock(&pd->lock);
 }
 
@@ -707,11 +762,13 @@ static void pd_transmit_handler(struct work_struct *work)
 	tcpm_pd_transmit_complete(pd->tcpm_port, status);
 
 	if (signal)
-		pd_engine_log(pd, "pd tx type [%s], pdphy ret [%d], status [%s]",
+		pd_engine_log(pd,
+			      "pd tx type [%s], pdphy ret [%d], status [%s]",
 			      tcpm_transmit_type_name[type],
 			      ret, tcpm_transmit_status_name[status]);
 	else
-		pd_engine_log(pd, "pd tx header [%#x], type [%s], pdphy ret [%d], status [%s]",
+		pd_engine_log(pd,
+			      "pd tx header [%#x], type [%s], pdphy ret [%d], status [%s]",
 			      msg->header, tcpm_transmit_type_name[type],
 			      ret, tcpm_transmit_status_name[status]);
 
@@ -785,6 +842,61 @@ static int tcpm_start_drp_toggling(struct tcpc_dev *dev,
 unlock:
 	mutex_unlock(&pd->lock);
 	return ret;
+}
+
+#define EXTCON_USB_SUPER_SPEED	true
+static int tcpm_set_usb_data_role(struct tcpc_dev *dev, bool attached,
+				  enum typec_data_role data)
+{
+	struct usbpd *pd = container_of(dev, struct usbpd, tcpc_dev);
+	int ret;
+	union power_supply_propval val = {0};
+	bool apsd_done;
+
+	mutex_lock(&pd->lock);
+	pd->extcon_usb_cc = pd->is_cable_flipped;
+	pd->extcon_usb_ss = EXTCON_USB_SUPER_SPEED;
+
+	if (!attached) {
+		pd->extcon_usb = false;
+		pd->extcon_usb_host = false;
+	} else if (data == TYPEC_HOST) {
+		pd->extcon_usb = false;
+		pd->extcon_usb_host = true;
+	} else {
+		pd->extcon_usb = true;
+		pd->extcon_usb_host = false;
+	}
+
+	ret = power_supply_get_property(pd->usb_psy,
+					POWER_SUPPLY_PROP_PD_APSD_DONE,
+					&val);
+	if (ret < 0) {
+		pd_engine_log(pd, "Unable to read APSD_DONE, ret=%d", ret);
+		goto unlock;
+	}
+
+	if (val.intval == 0)
+		apsd_done = false;
+	else
+		apsd_done = true;
+
+	if (attached && data == TYPEC_DEVICE && !apsd_done) {
+		/* wait for APSD done */
+		pd_engine_log(pd,
+			      "APSD is not done, delay update usb data role");
+		pd->pending_update_usb_data = true;
+	} else {
+		pd_engine_log(pd,
+			      "APSD already done, update usb data role now");
+		ret = update_usb_data_role(pd);
+		if (ret < 0)
+			goto unlock;
+		pd->pending_update_usb_data = false;
+	}
+unlock:
+	mutex_unlock(&pd->lock);
+	return 0;
 }
 
 static void pd_phy_signal_rx(struct usbpd *pd, enum pd_sig_type type)
@@ -874,6 +986,7 @@ static void init_tcpc_dev(struct tcpc_dev *pd_tcpc_dev)
 	pd_tcpc_dev->set_pd_header = tcpm_set_pd_header;
 	pd_tcpc_dev->pd_transmit = tcpm_pd_transmit;
 	pd_tcpc_dev->start_drp_toggling = tcpm_start_drp_toggling;
+	pd_tcpc_dev->set_usb_data_role = tcpm_set_usb_data_role;
 	pd_tcpc_dev->mux = NULL;
 }
 
@@ -892,6 +1005,7 @@ static const unsigned int usbpd_extcon_cable[] = {
 	EXTCON_USB,
 	EXTCON_USB_HOST,
 	EXTCON_USB_CC,
+	EXTCON_USB_SPEED,
 	EXTCON_NONE,
 };
 
@@ -972,7 +1086,8 @@ struct usbpd *usbpd_create(struct device *parent)
 
 	pd->usb_psy = power_supply_get_by_name("usb");
 	if (!pd->usb_psy) {
-		pd_engine_log(pd, "Could not get USB power_supply, deferring probe");
+		pd_engine_log(pd,
+			      "Could not get USB power_supply, deferring probe");
 		ret = -EPROBE_DEFER;
 		goto del_wq;
 	}
