@@ -118,13 +118,13 @@ scm_version()
 		cat .scmversion
 		return
 	fi
-	git_all_proj=$(find . -name .git -type d)
+	git_all_proj=$(find . -name .git -type d | sort)
 	if [ ! -z "$git_all_proj" ] ; then
 		res=""
 		for git_path in $git_all_proj; do
 			git_path=${git_path%.git}
 			name=$(basename ${git_path})
-			if [ $name == "." ] ; then
+			if [ $name = "." ] ; then
 				name=""
 			else
 				name="_$name"
