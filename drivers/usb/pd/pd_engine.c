@@ -1234,7 +1234,7 @@ static void pd_phy_signal_rx(struct usbpd *pd, enum pd_sig_type type)
 	}
 }
 
-static void pd_phy_message_rx(struct usbpd *pd, enum pd_msg_type type,
+static void pd_phy_message_rx(struct usbpd *pd, enum pd_sop_type sop,
 			      u8 *buf, size_t len)
 {
 	struct pd_message msg;
@@ -1244,6 +1244,13 @@ static void pd_phy_message_rx(struct usbpd *pd, enum pd_msg_type type,
 			      len);
 		return;
 	}
+
+	if (sop != SOP_MSG) {
+		pd_engine_log(pd, "invalid msg type (%d) received; only SOP supported\n",
+			      sop);
+		return;
+	}
+
 	msg.header = cpu_to_le16(*((u16 *)buf));
 	buf += sizeof(u16);
 	len -= sizeof(u16);
