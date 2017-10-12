@@ -503,21 +503,34 @@ static void psy_changed_handler(struct work_struct *work)
 	int ret = 0;
 
 	ret = power_supply_get_property(pd->usb_psy,
+					POWER_SUPPLY_PROP_TYPEC_MODE, &val);
+        if (ret < 0) {
+		pd_engine_log(pd, "Unable to read TYPEC_MODE, ret=%d",
+			      ret);
+		return;
+	}
+	typec_mode = val.intval;
+
+	ret = power_supply_get_property(pd->usb_psy,
+					POWER_SUPPLY_PROP_PE_START, &val);
+	if (ret < 0) {
+		pd_engine_log(pd, "Unable to read PE_START, ret=%d",
+			      ret);
+		return;
+	}
+	apsd_done = !!val.intval;
+
+	/* Dont proceed as pmi might still be evaluating connecttions */
+	if (!apsd_done && !typec_mode != POWER_SUPPLY_TYPEC_NONE)
+		return;
+
+	ret = power_supply_get_property(pd->usb_psy,
 					POWER_SUPPLY_PROP_TYPE, &val);
 	if (ret < 0) {
 		pd_engine_log(pd, "Unable to read TYPE, ret=%d", ret);
 		return;
 	}
 	psy_type = val.intval;
-
-	ret = power_supply_get_property(pd->usb_psy,
-					POWER_SUPPLY_PROP_PD_APSD_DONE, &val);
-	if (ret < 0) {
-		pd_engine_log(pd, "Unable to read APSD_DONE, ret=%d",
-			      ret);
-		return;
-	}
-	apsd_done = !!val.intval;
 
 	ret = power_supply_get_property(pd->usb_psy,
 					POWER_SUPPLY_PROP_ONLINE, &val);
@@ -527,15 +540,6 @@ static void psy_changed_handler(struct work_struct *work)
 		return;
 	}
 	vbus_present = val.intval;
-
-	ret = power_supply_get_property(pd->usb_psy,
-					POWER_SUPPLY_PROP_TYPEC_MODE, &val);
-	if (ret < 0) {
-		pd_engine_log(pd, "Unable to read TYPEC_MODE, ret=%d",
-			      ret);
-		return;
-	}
-	typec_mode = val.intval;
 
 	ret = power_supply_get_property(pd->usb_psy,
 					POWER_SUPPLY_PROP_TYPEC_CC_ORIENTATION,
@@ -1163,10 +1167,10 @@ static int set_usb_data_role(struct usbpd *pd, bool attached,
 	}
 
 	ret = power_supply_get_property(pd->usb_psy,
-					POWER_SUPPLY_PROP_PD_APSD_DONE,
+					POWER_SUPPLY_PROP_PE_START,
 					&val);
 	if (ret < 0) {
-		pd_engine_log(pd, "Unable to read APSD_DONE, ret=%d", ret);
+		pd_engine_log(pd, "Unable to read PE_START, ret=%d", ret);
 		return ret;
 	}
 
