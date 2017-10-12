@@ -533,7 +533,7 @@ static void psy_changed_handler(struct work_struct *work)
 	psy_type = val.intval;
 
 	ret = power_supply_get_property(pd->usb_psy,
-					POWER_SUPPLY_PROP_ONLINE, &val);
+					POWER_SUPPLY_PROP_PRESENT, &val);
 	if (ret < 0) {
 		pd_engine_log(pd, "Unable to read ONLINE, ret=%d",
 			      ret);
