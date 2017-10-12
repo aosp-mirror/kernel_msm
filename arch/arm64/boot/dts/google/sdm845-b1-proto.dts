@@ -38,7 +38,3 @@
 		qcom,model = "sdm845-tavil-snd-card";
 	};
 };
-
-&cam_csiphy3 {
-	status = "disabled";
-};
