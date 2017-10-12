@@ -823,6 +823,15 @@ bool msm_gpio_irq_handler(unsigned int irq, struct irq_desc *desc)
 		if (val & BIT(g->intr_status_bit)) {
 			irq_pin = irq_find_mapping(gc->irqdomain, i);
 			handled += generic_handle_irq(irq_pin);
+			/*
+			 * we don't need to handle the irq
+			 * if it is already disabled
+			 */
+			if (!handled) {
+				struct irq_desc *desc = irq_to_desc(irq_pin);
+				if (irqd_irq_disabled(&desc->irq_data))
+					handled += 1;
+			}
 		}
 	}
 
