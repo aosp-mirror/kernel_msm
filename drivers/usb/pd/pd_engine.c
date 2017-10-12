@@ -850,7 +850,6 @@ static const char * const get_tcpm_transmit_status_name(
 	}
 }
 
-#define PD_TX_TIMEOUT_MS (PD_T_TCPC_TX_TIMEOUT - 10)
 static void pd_transmit_handler(struct work_struct *work)
 {
 	struct pd_transmit_work *pd_tx_work = container_of(work,
@@ -865,29 +864,29 @@ static void pd_transmit_handler(struct work_struct *work)
 
 	switch (type) {
 	case TCPC_TX_HARD_RESET:
-		ret = pd_phy_signal(HARD_RESET_SIG, PD_TX_TIMEOUT_MS);
+		ret = pd_phy_signal(HARD_RESET_SIG);
 		signal = true;
 		break;
 	case TCPC_TX_CABLE_RESET:
-		ret = pd_phy_signal(CABLE_RESET_SIG, PD_TX_TIMEOUT_MS);
+		ret = pd_phy_signal(CABLE_RESET_SIG);
 		signal = true;
 		break;
 	case TCPC_TX_SOP:
 		ret = pd_phy_write(msg->header, (u8 *)msg->payload,
 				   get_data_len(msg->header),
-				   SOP_MSG, PD_TX_TIMEOUT_MS);
+				   SOP_MSG);
 		signal = false;
 		break;
 	case TCPC_TX_SOP_PRIME:
 		ret = pd_phy_write(msg->header, (u8 *)msg->payload,
 				   get_data_len(msg->header),
-				   SOPI_MSG, PD_TX_TIMEOUT_MS);
+				   SOPI_MSG);
 		signal = false;
 		break;
 	case TCPC_TX_SOP_PRIME_PRIME:
 		ret = pd_phy_write(msg->header, (u8 *)msg->payload,
 				   get_data_len(msg->header),
-				   SOPII_MSG, PD_TX_TIMEOUT_MS);
+				   SOPII_MSG);
 		signal = false;
 		break;
 	default:
