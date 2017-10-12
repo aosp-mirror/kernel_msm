@@ -27,7 +27,7 @@
 #include <linux/usb/typec.h>
 #include <linux/usb/pd.h>
 #include <linux/workqueue.h>
-#include "../typec/tcpm.h"
+#include <linux/usb/tcpm.h>
 #include "usbpd.h"
 
 #define LOG_BUFFER_ENTRIES	1024
