@@ -116,11 +116,11 @@ extern bool msm_vidc_debug_timeout;
 
 
 struct dentry *msm_vidc_debugfs_init_drv(void);
+void msm_vidc_debugfs_deinit_drv(void);
 struct dentry *msm_vidc_debugfs_init_core(struct msm_vidc_core *core,
 		struct dentry *parent);
 struct dentry *msm_vidc_debugfs_init_inst(struct msm_vidc_inst *inst,
 		struct dentry *parent);
-void msm_vidc_debugfs_deinit_inst(struct msm_vidc_inst *inst);
 void msm_vidc_debugfs_update(struct msm_vidc_inst *inst,
 		enum msm_vidc_debugfs_event e);
 
