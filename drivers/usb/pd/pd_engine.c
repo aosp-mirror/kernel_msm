@@ -62,7 +62,6 @@ struct usbpd {
 	bool			extcon_usb;
 	bool			extcon_usb_host;
 	bool			extcon_usb_cc;
-	bool			extcon_usb_ss;
 
 	struct mutex		lock; /* struct usbpd access lock */
 	struct workqueue_struct	*wq;
@@ -396,25 +395,40 @@ static inline bool psy_support_usb_data(enum power_supply_type psy_type)
 	       (psy_type == POWER_SUPPLY_TYPE_USB_CDP);
 }
 
+static int update_extcon_prop(struct usbpd *pd, int extcon_type)
+{
+	int ret;
+	union extcon_property_value val;
+
+
+	val.intval = pd->extcon_usb_cc ? 1 : 0;
+	ret = extcon_set_property(pd->extcon, extcon_type,
+				  EXTCON_PROP_USB_TYPEC_POLARITY,
+				  val);
+	if (ret < 0) {
+		pd_engine_log(pd,
+			      "unable to set extcon usb polarity prop [%s], ret=%d",
+			      pd->extcon_usb_cc ? "Y" : "N", ret);
+		return ret;
+	}
+
+	val.intval = 1;
+	ret = extcon_set_property(pd->extcon, extcon_type,
+				  EXTCON_PROP_USB_SS,
+				  val);
+	if (ret < 0) {
+		pd_engine_log(pd, "unable to set extcon usb ss prop, ret=%d",
+			      ret);
+		return ret;
+	}
+
+	return ret;
+}
+
 static int update_usb_data_role(struct usbpd *pd)
 {
 	int ret;
 	bool extcon_usb;
-
-	ret = extcon_set_cable_state_(pd->extcon, EXTCON_USB_CC,
-				      pd->extcon_usb_cc);
-	if (ret < 0) {
-		pd_engine_log(pd, "unable to set extcon usb cc [%s], ret=%d",
-			      pd->extcon_usb_cc ? "Y" : "N", ret);
-		return ret;
-	}
-	ret = extcon_set_cable_state_(pd->extcon, EXTCON_USB_SPEED,
-				      pd->extcon_usb_ss);
-	if (ret < 0) {
-		pd_engine_log(pd, "unable to set extcon usb ss [%s], ret=%d",
-			      pd->extcon_usb_ss ? "Y" : "N", ret);
-		return ret;
-	}
 
 	/* Turn on USB data (device role) only when a valid power supply that
 	 * supports USB data connection is connected, i.e. SDP or CDP
@@ -431,47 +445,53 @@ static int update_usb_data_role(struct usbpd *pd)
 	 * turning on the other one.
 	 */
 	if (!pd->extcon_usb_host) {
-		ret = extcon_set_cable_state_(pd->extcon, EXTCON_USB_HOST,
+		ret = extcon_set_state_sync(pd->extcon, EXTCON_USB_HOST,
 					      pd->extcon_usb_host);
 		if (ret < 0) {
 			pd_engine_log(pd,
-				"unable to set extcon usb host [%s], ret=%d",
-				      pd->extcon_usb_host ? "Y" : "N", ret);
+				      "unable to turn off extcon usb host, ret=%d",
+				      ret);
 			return ret;
 		}
+	}
 
-		ret = extcon_set_cable_state_(pd->extcon, EXTCON_USB,
+	if (!extcon_usb) {
+		ret = extcon_set_state_sync(pd->extcon, EXTCON_USB,
 					      extcon_usb);
 		if (ret < 0) {
 			pd_engine_log(pd,
-				      "unable to set extcon usb [%s], ret=%d",
-				      extcon_usb ? "Y" : "N", ret);
+				      "unable to turn off extcon usb device, ret=%d",
+				      ret);
 			return ret;
 		}
-	} else {
-		ret = extcon_set_cable_state_(pd->extcon, EXTCON_USB,
-					      extcon_usb);
-		if (ret < 0) {
-			pd_engine_log(pd,
-				      "unable to set extcon usb [%s], ret=%d",
-				      extcon_usb ? "Y" : "N", ret);
-			return ret;
-		}
+	}
 
-		ret = extcon_set_cable_state_(pd->extcon, EXTCON_USB_HOST,
-					      pd->extcon_usb_host);
+	/*
+	 * Shouldnt be turning on extcon_usb and extcon_usb_host
+	 * at the same time.
+	 */
+	BUG_ON(extcon_usb && pd->extcon_usb_host);
+
+	if (extcon_usb || pd->extcon_usb_host) {
+		ret = update_extcon_prop(pd, extcon_usb ?
+					 EXTCON_USB : EXTCON_USB_HOST);
+		if (ret < 0)
+			return ret;
+
+		ret = extcon_set_state_sync(pd->extcon, extcon_usb ?
+					    EXTCON_USB : EXTCON_USB_HOST,
+					    1);
 		if (ret < 0) {
 			pd_engine_log(pd,
-				"unable to set extcon usb host [%s], ret=%d",
-				      pd->extcon_usb_host ? "Y" : "N", ret);
+				      "unable to turn on extcon [%s], ret=%d",
+				      extcon_usb ? "device" : "host", ret);
 			return ret;
 		}
 	}
 
 	pd_engine_log(pd,
-		      "usb extcon: cc [%s], speed [%s], host [%s], usb [%s]",
+		      "usb extcon: cc [%s], host [%s], usb [%s]",
 		      pd->extcon_usb_cc ? "Y" : "N",
-		      pd->extcon_usb_ss ? "Y" : "N",
 		      pd->extcon_usb_host ? "Y" : "N",
 		      extcon_usb ? "Y" : "N");
 
@@ -1003,7 +1023,7 @@ static int tcpm_set_in_pr_swap(struct tcpc_dev *dev, bool pr_swap)
 {
 	union power_supply_propval val = {0};
 	struct usbpd *pd = container_of(dev, struct usbpd, tcpc_dev);
-	int ret;
+	int ret = 0;
 
 	mutex_lock(&pd->lock);
 	if (pd->in_pr_swap != pr_swap) {
@@ -1153,7 +1173,6 @@ static int set_usb_data_role(struct usbpd *pd, bool attached,
 	bool apsd_done;
 
 	pd->extcon_usb_cc = pd->is_cable_flipped;
-	pd->extcon_usb_ss = EXTCON_USB_SUPER_SPEED;
 
 	if (!attached) {
 		pd->extcon_usb = false;
@@ -1334,8 +1353,6 @@ static void init_pd_phy_params(struct pd_phy_params *pdphy_params)
 static const unsigned int usbpd_extcon_cable[] = {
 	EXTCON_USB,
 	EXTCON_USB_HOST,
-	EXTCON_USB_CC,
-	EXTCON_USB_SPEED,
 	EXTCON_NONE,
 };
 
@@ -1407,6 +1424,16 @@ struct usbpd *usbpd_create(struct device *parent)
 		pd_engine_log(pd, "failed to register extcon device");
 		goto exit_debugfs;
 	}
+
+	/* Support reporting polarity and speed via properties */
+	extcon_set_property_capability(pd->extcon, EXTCON_USB,
+				       EXTCON_PROP_USB_TYPEC_POLARITY);
+	extcon_set_property_capability(pd->extcon, EXTCON_USB,
+				       EXTCON_PROP_USB_SS);
+	extcon_set_property_capability(pd->extcon, EXTCON_USB_HOST,
+				       EXTCON_PROP_USB_TYPEC_POLARITY);
+	extcon_set_property_capability(pd->extcon, EXTCON_USB_HOST,
+				       EXTCON_PROP_USB_SS);
 
 	pd->wq = create_singlethread_workqueue(dev_name(&pd->dev));
 	if (!pd->wq) {
