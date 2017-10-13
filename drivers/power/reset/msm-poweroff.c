@@ -123,6 +123,7 @@ static void set_dload_mode(int on)
 
 }
 
+#if 0
 static void enable_emergency_dload_mode(void)
 {
 	int ret;
@@ -147,6 +148,7 @@ static void enable_emergency_dload_mode(void)
 	if (ret)
 		pr_err("Failed to set secure EDLOAD mode: %d\n", ret);
 }
+#endif
 
 static int dload_set(const char *val, struct kernel_param *kp)
 {
@@ -248,9 +250,11 @@ static void msm_restart_prepare(const char *cmd)
 				lge_set_restart_reason(0x6f656d00 | (code & 0xff));
 
 			poff = PON_POWER_OFF_WARM_RESET;
+#if 0
 		} else if (!strncmp(cmd, "edl", 3)) {
 			enable_emergency_dload_mode();
 			poff = PON_POWER_OFF_WARM_RESET;
+#endif
 		} else {
 			lge_set_restart_reason(0x77665501);
 			reason = BOOT_OTHER;
