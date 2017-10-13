@@ -41,7 +41,7 @@
 static struct device_attribute power_supply_attrs[];
 static struct delayed_work healthd_init_delaywork;	
 static bool healthd_init_done;
-#define WAIT_HEALTHD_INIT_DELAY 1500
+#define WAIT_HEALTHD_INIT_DELAY 2500
 
 static void healthd_init_delay_work(struct work_struct *work)
 {
@@ -106,10 +106,9 @@ static ssize_t power_supply_show_property(struct device *dev,
 				value.intval = POWER_SUPPLY_TYPE_USB;
 			else if (usb_fake_online && (psy->type == POWER_SUPPLY_TYPE_UNKNOWN))
 				value.intval = POWER_SUPPLY_TYPE_USB_DCP;
-			else if (!usb_fake_online)
-				value.intval = POWER_SUPPLY_TYPE_UNKNOWN;
 			else
 				value.intval = psy->type;
+			pr_info("power_supply_sysfs: online: %d, usb_type: %s \n", usb_fake_online, type_text[value.intval]);
 		} else
 			value.intval = psy->type;
 	} else {
