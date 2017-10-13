@@ -33,7 +33,3 @@ obj-$(CONFIG_SND_SOC_INT_CODEC) += snd-soc-int-codec.o
 snd-soc-ext-codec-objs := sdm660-external.o sdm660-ext-dai-links.o
 obj-$(CONFIG_SND_SOC_EXT_CODEC) += snd-soc-sdm660-common.o
 obj-$(CONFIG_SND_SOC_EXT_CODEC) += snd-soc-ext-codec.o
-
-# for POLARIS sound card driver
-snd-soc-polaris-objs := polaris.o
-obj-$(CONFIG_SND_SOC_POLARIS) += snd-soc-polaris.o
