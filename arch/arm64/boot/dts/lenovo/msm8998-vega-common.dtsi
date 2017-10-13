@@ -430,6 +430,7 @@
 		qcom,batt-id-range-pct = <15>;
 		goog,dc-batt-id = <200>;
 		#include "2912653_Goertek_Cowboycos_4000mAh_averaged_MasterSlave_Jun12th2017_PMI8998GUI20058.dtsi"
+		#include "3066604_Goertek_L17D1P33_4000mAh_averaged_MasterSlave_Aug22nd2017_PMI8998GUI20058.dtsi"
 	};
 };
 
