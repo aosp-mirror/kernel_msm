@@ -2267,24 +2267,6 @@ struct pno_scan_req_params {
 	uint8_t *voui;
 };
 
-/**
- * struct nlo_mawc_params - Motion Aided Wireless Connectivity based
- *                          Network List Offload configuration
- * @vdev_id: VDEV ID on which the configuration needs to be applied
- * @enable: flag to enable or disable
- * @exp_backoff_ratio: ratio of exponential backoff
- * @init_scan_interval: initial scan interval(msec)
- * @max_scan_interval:  max scan interval(msec)
- */
-struct nlo_mawc_params {
-	uint8_t vdev_id;
-	bool enable;
-	uint32_t exp_backoff_ratio;
-	uint32_t init_scan_interval;
-	uint32_t max_scan_interval;
-};
-
-
 #define WMI_WLAN_EXTSCAN_MAX_CHANNELS                 36
 #define WMI_WLAN_EXTSCAN_MAX_BUCKETS                  16
 #define WMI_WLAN_EXTSCAN_MAX_HOTLIST_APS              128
@@ -3178,6 +3160,18 @@ struct gtk_offload_params {
 	uint32_t kek_len;
 	uint64_t ullKeyReplayCounter;
 	struct qdf_mac_addr bssid;
+};
+
+/**
+ * struct mcast_filter_params - mcast filter parameters
+ * @multicast_addr_cnt: num of addresses
+ * @multicast_addr: address array
+ * @action: operation to perform
+ */
+struct mcast_filter_params {
+	uint32_t multicast_addr_cnt;
+	struct qdf_mac_addr multicast_addr[WMI_MAX_NUM_MULTICAST_ADDRESS];
+	uint8_t action;
 };
 
 /**
@@ -7097,24 +7091,5 @@ struct wmi_limit_off_chan_param {
 	uint32_t rest_time;
 	bool skip_dfs_chans;
 };
-
-/**
- * struct wmi_mawc_roam_params - Motion Aided wireless connectivity params
- * @vdev_id: VDEV on which the parameters should be applied
- * @enable: MAWC roaming feature enable/disable
- * @traffic_load_threshold: Traffic threshold in kBps for MAWC roaming
- * @best_ap_rssi_threshold: AP RSSI Threshold for MAWC roaming
- * @rssi_stationary_high_adjust: High RSSI adjustment value to supress scan
- * @rssi_stationary_low_adjust: Low RSSI adjustment value to supress scan
- */
-struct wmi_mawc_roam_params {
-	uint8_t vdev_id;
-	bool enable;
-	uint32_t traffic_load_threshold;
-	uint32_t best_ap_rssi_threshold;
-	uint8_t rssi_stationary_high_adjust;
-	uint8_t rssi_stationary_low_adjust;
-};
-
 #endif /* _WMI_UNIFIED_PARAM_H_ */
 

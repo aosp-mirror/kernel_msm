@@ -3614,8 +3614,8 @@ QDF_STATUS send_set_sta_keep_alive_cmd_tlv(wmi_unified_t wmi_handle,
 		if ((NULL == params->hostv4addr) ||
 			(NULL == params->destv4addr) ||
 			(NULL == params->destmac)) {
-			WMI_LOGE("%s: received null pointer, hostv4addr:%p "
-			   "destv4addr:%p destmac:%p ", __func__,
+			WMI_LOGE("%s: received null pointer, hostv4addr:%pK "
+			   "destv4addr:%pK destmac:%pK ", __func__,
 			   params->hostv4addr, params->destv4addr, params->destmac);
 			wmi_buf_free(buf);
 			return QDF_STATUS_E_FAILURE;
@@ -4891,63 +4891,6 @@ send_roam_scan_mode_cmd:
 	return status;
 }
 
-QDF_STATUS send_roam_mawc_params_cmd_tlv(wmi_unified_t wmi_handle,
-		struct wmi_mawc_roam_params *params)
-{
-	wmi_buf_t buf = NULL;
-	QDF_STATUS status;
-	int len;
-	uint8_t *buf_ptr;
-	wmi_roam_configure_mawc_cmd_fixed_param *wmi_roam_mawc_params;
-
-	len = sizeof(*wmi_roam_mawc_params);
-	buf = wmi_buf_alloc(wmi_handle, len);
-	if (!buf) {
-		WMI_LOGE("%s : wmi_buf_alloc failed", __func__);
-		return QDF_STATUS_E_NOMEM;
-	}
-
-	buf_ptr = (uint8_t *) wmi_buf_data(buf);
-	wmi_roam_mawc_params =
-		(wmi_roam_configure_mawc_cmd_fixed_param *) buf_ptr;
-	WMITLV_SET_HDR(&wmi_roam_mawc_params->tlv_header,
-		       WMITLV_TAG_STRUC_wmi_roam_configure_mawc_cmd_fixed_param,
-		       WMITLV_GET_STRUCT_TLVLEN
-			       (wmi_roam_configure_mawc_cmd_fixed_param));
-	wmi_roam_mawc_params->vdev_id = params->vdev_id;
-	if (params->enable)
-		wmi_roam_mawc_params->enable = 1;
-	else
-		wmi_roam_mawc_params->enable = 0;
-	wmi_roam_mawc_params->traffic_load_threshold =
-		params->traffic_load_threshold;
-	wmi_roam_mawc_params->best_ap_rssi_threshold =
-		params->best_ap_rssi_threshold;
-	wmi_roam_mawc_params->rssi_stationary_high_adjust =
-		params->rssi_stationary_high_adjust;
-	wmi_roam_mawc_params->rssi_stationary_low_adjust =
-		params->rssi_stationary_low_adjust;
-
-	status = wmi_unified_cmd_send(wmi_handle, buf,
-				      len, WMI_ROAM_CONFIGURE_MAWC_CMDID);
-	if (QDF_IS_STATUS_ERROR(status)) {
-		WMI_LOGE("WMI_ROAM_CONFIGURE_MAWC_CMDID failed, Error %d",
-			status);
-		goto error;
-	}
-	WMI_LOGD(FL("MAWC roam en=%d, vdev=%d, tr=%d, ap=%d, high=%d, low=%d"),
-		wmi_roam_mawc_params->enable, wmi_roam_mawc_params->vdev_id,
-		wmi_roam_mawc_params->traffic_load_threshold,
-		wmi_roam_mawc_params->best_ap_rssi_threshold,
-		wmi_roam_mawc_params->rssi_stationary_high_adjust,
-		wmi_roam_mawc_params->rssi_stationary_low_adjust);
-
-	return QDF_STATUS_SUCCESS;
-error:
-	wmi_buf_free(buf);
-
-	return status;
-}
 
 /**
  * send_roam_scan_offload_rssi_thresh_cmd_tlv() - set scan offload
@@ -6521,62 +6464,6 @@ static void wmi_set_pno_channel_prediction(uint8_t *buf_ptr,
 			channel_prediction_cfg->top_k_num,
 			channel_prediction_cfg->stationary_threshold,
 			channel_prediction_cfg->full_scan_period_ms);
-}
-
-/**
- * send_nlo_mawc_cmd_tlv() - Send MAWC NLO configuration
- * @wmi_handle: wmi handle
- * @params: configuration parameters
- *
- * Return: QDF_STATUS
- */
-QDF_STATUS send_nlo_mawc_cmd_tlv(wmi_unified_t wmi_handle,
-		struct nlo_mawc_params *params)
-{
-	wmi_buf_t buf = NULL;
-	QDF_STATUS status;
-	int len;
-	uint8_t *buf_ptr;
-	wmi_nlo_configure_mawc_cmd_fixed_param *wmi_nlo_mawc_params;
-
-	len = sizeof(*wmi_nlo_mawc_params);
-	buf = wmi_buf_alloc(wmi_handle, len);
-	if (!buf) {
-		WMI_LOGE("%s : wmi_buf_alloc failed", __func__);
-		return QDF_STATUS_E_NOMEM;
-	}
-
-	buf_ptr = (uint8_t *) wmi_buf_data(buf);
-	wmi_nlo_mawc_params =
-		(wmi_nlo_configure_mawc_cmd_fixed_param *) buf_ptr;
-	WMITLV_SET_HDR(&wmi_nlo_mawc_params->tlv_header,
-		       WMITLV_TAG_STRUC_wmi_nlo_configure_mawc_cmd_fixed_param,
-		       WMITLV_GET_STRUCT_TLVLEN
-			       (wmi_nlo_configure_mawc_cmd_fixed_param));
-	wmi_nlo_mawc_params->vdev_id = params->vdev_id;
-	if (params->enable)
-		wmi_nlo_mawc_params->enable = 1;
-	else
-		wmi_nlo_mawc_params->enable = 0;
-	wmi_nlo_mawc_params->exp_backoff_ratio = params->exp_backoff_ratio;
-	wmi_nlo_mawc_params->init_scan_interval = params->init_scan_interval;
-	wmi_nlo_mawc_params->max_scan_interval = params->max_scan_interval;
-
-	status = wmi_unified_cmd_send(wmi_handle, buf,
-				      len, WMI_NLO_CONFIGURE_MAWC_CMDID);
-	if (QDF_IS_STATUS_ERROR(status)) {
-		WMI_LOGE("WMI_NLO_CONFIGURE_MAWC_CMDID failed, Error %d",
-			status);
-		wmi_buf_free(buf);
-		return QDF_STATUS_E_FAILURE;
-	}
-	WMI_LOGD(FL("MAWC NLO en=%d, vdev=%d, ratio=%d, SCAN init=%d, max=%d"),
-		wmi_nlo_mawc_params->enable, wmi_nlo_mawc_params->vdev_id,
-		wmi_nlo_mawc_params->exp_backoff_ratio,
-		wmi_nlo_mawc_params->init_scan_interval,
-		wmi_nlo_mawc_params->max_scan_interval);
-
-	return QDF_STATUS_SUCCESS;
 }
 
 /**
@@ -8845,6 +8732,82 @@ QDF_STATUS send_add_clear_mcbc_filter_cmd_tlv(wmi_unified_t wmi_handle,
 	err = wmi_unified_cmd_send(wmi_handle, buf,
 				   sizeof(*cmd),
 				   WMI_SET_MCASTBCAST_FILTER_CMDID);
+	if (err) {
+		WMI_LOGE("Failed to send set_param cmd");
+		wmi_buf_free(buf);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	return QDF_STATUS_SUCCESS;
+}
+
+/**
+ * send_multiple_add_clear_mcbc_filter_cmd_tlv() - send multiple  mcast filter
+ *						   command to fw
+ * @wmi_handle: wmi handle
+ * @vdev_id: vdev id
+ * @mcast_filter_params: mcast filter params
+ *
+ * Return: QDF_STATUS_SUCCESS for success or error code
+ */
+QDF_STATUS send_multiple_add_clear_mcbc_filter_cmd_tlv(wmi_unified_t wmi_handle,
+				     uint8_t vdev_id,
+				     struct mcast_filter_params *filter_param)
+
+{
+	WMI_SET_MULTIPLE_MCAST_FILTER_CMD_fixed_param *cmd;
+	uint8_t *buf_ptr;
+	wmi_buf_t buf;
+	int err;
+	int i;
+	uint8_t *mac_addr_src_ptr = NULL;
+	wmi_mac_addr *mac_addr_dst_ptr;
+	uint32_t len = sizeof(*cmd) + WMI_TLV_HDR_SIZE +
+		sizeof(wmi_mac_addr) * filter_param->multicast_addr_cnt;
+
+	buf = wmi_buf_alloc(wmi_handle, len);
+	if (!buf) {
+		WMI_LOGE("Failed to allocate memory");
+		return QDF_STATUS_E_NOMEM;
+	}
+
+	buf_ptr = (A_UINT8 *) wmi_buf_data(buf);
+	cmd = (WMI_SET_MULTIPLE_MCAST_FILTER_CMD_fixed_param *)
+		wmi_buf_data(buf);
+	qdf_mem_zero(cmd, sizeof(*cmd));
+
+	WMITLV_SET_HDR(&cmd->tlv_header,
+	       WMITLV_TAG_STRUC_wmi_set_multiple_mcast_filter_cmd_fixed_param,
+	       WMITLV_GET_STRUCT_TLVLEN
+	       (WMI_SET_MULTIPLE_MCAST_FILTER_CMD_fixed_param));
+	cmd->operation =
+		((filter_param->action == 0) ? WMI_MULTIPLE_MCAST_FILTER_DELETE
+					: WMI_MULTIPLE_MCAST_FILTER_ADD);
+	cmd->vdev_id = vdev_id;
+	cmd->num_mcastaddrs = filter_param->multicast_addr_cnt;
+
+	buf_ptr += sizeof(*cmd);
+	WMITLV_SET_HDR(buf_ptr, WMITLV_TAG_ARRAY_FIXED_STRUC,
+		       sizeof(wmi_mac_addr) *
+			       filter_param->multicast_addr_cnt);
+
+	if (filter_param->multicast_addr_cnt == 0)
+		goto send_cmd;
+
+	mac_addr_src_ptr = (uint8_t *)&filter_param->multicast_addr;
+	mac_addr_dst_ptr = (wmi_mac_addr *)
+			(buf_ptr + WMI_TLV_HDR_SIZE);
+
+	for (i = 0; i < filter_param->multicast_addr_cnt; i++) {
+		WMI_CHAR_ARRAY_TO_MAC_ADDR(mac_addr_src_ptr, mac_addr_dst_ptr);
+		mac_addr_src_ptr += ATH_MAC_LEN;
+		mac_addr_dst_ptr++;
+	}
+
+send_cmd:
+	err = wmi_unified_cmd_send(wmi_handle, buf,
+				   len,
+				   WMI_SET_MULTIPLE_MCAST_FILTER_CMDID);
 	if (err) {
 		WMI_LOGE("Failed to send set_param cmd");
 		wmi_buf_free(buf);
@@ -13850,7 +13813,6 @@ struct wmi_ops tlv_ops =  {
 			 send_set_passpoint_network_list_cmd_tlv,
 	.send_roam_scan_offload_rssi_thresh_cmd =
 			send_roam_scan_offload_rssi_thresh_cmd_tlv,
-	.send_roam_mawc_params_cmd = send_roam_mawc_params_cmd_tlv,
 	.send_roam_scan_filter_cmd =
 			send_roam_scan_filter_cmd_tlv,
 	.send_set_epno_network_list_cmd =
@@ -13875,7 +13837,6 @@ struct wmi_ops tlv_ops =  {
 #ifdef FEATURE_WLAN_SCAN_PNO
 	.send_pno_start_cmd = send_pno_start_cmd_tlv,
 #endif
-	.send_nlo_mawc_cmd = send_nlo_mawc_cmd_tlv,
 	.send_set_ric_req_cmd = send_set_ric_req_cmd_tlv,
 	.send_process_ll_stats_clear_cmd = send_process_ll_stats_clear_cmd_tlv,
 	.send_process_ll_stats_set_cmd = send_process_ll_stats_set_cmd_tlv,
@@ -13924,6 +13885,8 @@ struct wmi_ops tlv_ops =  {
 		send_enable_disable_packet_filter_cmd_tlv,
 	.send_config_packet_filter_cmd = send_config_packet_filter_cmd_tlv,
 	.send_add_clear_mcbc_filter_cmd = send_add_clear_mcbc_filter_cmd_tlv,
+	.send_multiple_add_clear_mcbc_filter_cmd =
+		send_multiple_add_clear_mcbc_filter_cmd_tlv,
 	.send_gtk_offload_cmd = send_gtk_offload_cmd_tlv,
 	.send_process_gtk_offload_getinfo_cmd =
 			send_process_gtk_offload_getinfo_cmd_tlv,
