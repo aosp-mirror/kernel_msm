@@ -4565,7 +4565,7 @@ void wlan_hdd_save_gtk_offload_params(hdd_adapter_t *adapter,
 }
 #endif
 
-#ifdef WLAN_FEATURE_FILS_SK
+#if defined(WLAN_FEATURE_FILS_SK) && defined(WLAN_FEATURE_ROAM_OFFLOAD)
 /**
  * wlan_hdd_add_fils_params_roam_auth_event() - Adds FILS params in roam auth
  * @skb: SK buffer
@@ -10296,6 +10296,10 @@ static int __wlan_hdd_cfg80211_get_nud_stats(struct wiphy *wiphy,
 	if (0 != err)
 		return err;
 
+	err = hdd_validate_adapter(adapter);
+	if (err)
+		return err;
+
 	arp_stats_params.pkt_type = WLAN_NUD_STATS_ARP_PKT_TYPE;
 	arp_stats_params.vdev_id = adapter->sessionId;
 
@@ -14995,6 +14999,7 @@ static int wlan_hdd_cfg80211_connect_start(hdd_adapter_t *pAdapter,
 					       connect);
 		hdd_prevent_suspend_timeout(HDD_WAKELOCK_TIMEOUT_CONNECT,
 					    WIFI_POWER_EVENT_WAKELOCK_CONNECT);
+
 		qdf_status = sme_roam_connect(WLAN_HDD_GET_HAL_CTX(pAdapter),
 					  pAdapter->sessionId, pRoamProfile,
 					  &roamId);
@@ -17872,6 +17877,8 @@ static int __wlan_hdd_cfg80211_flush_pmksa(struct wiphy *wiphy,
 		hdd_err("Cannot flush PMKIDCache");
 		status = -EINVAL;
 	}
+
+	sme_set_del_pmkid_cache(halHandle, pAdapter->sessionId, NULL, false);
 	EXIT();
 	return status;
 }
@@ -18924,6 +18931,7 @@ void wlan_hdd_clear_link_layer_stats(hdd_adapter_t *adapter)
 }
 
 #if defined(WLAN_FEATURE_FILS_SK) &&\
+	defined(CFG80211_FILS_SK_OFFLOAD_SUPPORT) &&\
 	(defined(CFG80211_UPDATE_CONNECT_PARAMS) ||\
 		(LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)))
 
@@ -19047,8 +19055,11 @@ static int __wlan_hdd_cfg80211_update_connect_params(
 			req->fils_erp_rrk_len, req->fils_erp_realm_len,
 			roam_profile->fils_con_info->key_nai_length);
 
-	if (!adapter->fast_roaming_allowed) {
-		hdd_debug("LFR3 not enabled on this interface");
+	if (!adapter->fast_roaming_allowed ||
+	    !hdd_ctx->config->is_fils_roaming_supported) {
+		hdd_debug("LFR3: %d, FILS support %d",
+			  adapter->fast_roaming_allowed,
+			  hdd_ctx->config->is_fils_roaming_supported);
 		return 0;
 	}
 
@@ -19340,6 +19351,7 @@ static struct cfg80211_ops wlan_hdd_cfg80211_ops = {
 	.abort_scan = wlan_hdd_cfg80211_abort_scan,
 #endif
 #if defined(WLAN_FEATURE_FILS_SK) &&\
+	defined(CFG80211_FILS_SK_OFFLOAD_SUPPORT) &&\
 	(defined(CFG80211_UPDATE_CONNECT_PARAMS) ||\
 		(LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)))
 	.update_connect_params = wlan_hdd_cfg80211_update_connect_params,

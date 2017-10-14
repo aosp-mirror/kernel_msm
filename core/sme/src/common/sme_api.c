@@ -6327,6 +6327,11 @@ QDF_STATUS sme_set_gtk_offload(tHalHandle hHal,
 
 	*request_buf = *pGtkOffload;
 
+	/* If FILS Roaming is not supported by fw, disable GTK Offload */
+	if (pSession->is_fils_connection &&
+	    !pMac->is_fils_roaming_supported)
+		request_buf->ulFlags = GTK_OFFLOAD_DISABLE;
+
 	msg.type = WMA_GTK_OFFLOAD_REQ;
 	msg.reserved = 0;
 	msg.bodyptr = request_buf;
@@ -8681,7 +8686,7 @@ QDF_STATUS sme_update_fils_config(tHalHandle hal, uint8_t session_id,
 	}
 
 	csr_update_fils_config(mac, session_id, src_profile);
-	if (mac->roam.configParam.isRoamOffloadEnabled) {
+	if (csr_roamIsRoamOffloadEnabled(mac)) {
 		sme_debug("Updating fils config to fw");
 		csr_roam_offload_scan(mac, session_id,
 				      ROAM_SCAN_OFFLOAD_UPDATE_CFG,
@@ -10951,19 +10956,6 @@ void sme_update_enable_ssr(tHalHandle hHal, bool enableSSR)
 		WMA_SetEnableSSR(enableSSR);
 		sme_release_global_lock(&pMac->sme);
 	}
-}
-
-QDF_STATUS sme_check_ch_in_band(tpAniSirGlobal mac_ctx, uint8_t start_ch,
-		uint8_t ch_cnt)
-{
-	uint8_t i;
-
-	for (i = 0; i < ch_cnt; i++) {
-		if (QDF_STATUS_SUCCESS != csr_is_valid_channel(mac_ctx,
-					(start_ch + i*4)))
-			return QDF_STATUS_E_FAILURE;
-	}
-	return QDF_STATUS_SUCCESS;
 }
 
 /*convert the ini value to the ENUM used in csr and MAC for CB state*/
@@ -16237,8 +16229,11 @@ void sme_update_tgt_services(tHalHandle hal, struct wma_tgt_services *cfg)
 	mac_ctx->lteCoexAntShare = cfg->lte_coex_ant_share;
 	mac_ctx->beacon_offload = cfg->beacon_offload;
 	mac_ctx->pmf_offload = cfg->pmf_offload;
+	mac_ctx->is_fils_roaming_supported =
+				cfg->is_fils_roaming_supported;
 	QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
-		FL("mac_ctx->pmf_offload: %d"), mac_ctx->pmf_offload);
+		  FL("mac_ctx->pmf_offload: %d fils_roam support %d"),
+		  mac_ctx->pmf_offload, mac_ctx->is_fils_roaming_supported);
 
 }
 
@@ -18001,8 +17996,11 @@ QDF_STATUS sme_set_del_pmkid_cache(tHalHandle hal, uint8_t session_id,
 				   tPmkidCacheInfo *pmk_cache_info,
 				   bool is_add)
 {
-	wmi_pmk_cache *pmk_cache;
+	wmi_pmk_cache *pmk_cache = NULL;
 	cds_msg_t msg;
+
+	if (!pmk_cache_info)
+		goto send_flush_cmd;
 
 	pmk_cache = qdf_mem_malloc(sizeof(*pmk_cache));
 	if (!pmk_cache) {
@@ -18037,13 +18035,17 @@ QDF_STATUS sme_set_del_pmkid_cache(tHalHandle hal, uint8_t session_id,
 	qdf_mem_copy(pmk_cache->pmk, pmk_cache_info->pmk,
 		     pmk_cache->pmk_len);
 
+send_flush_cmd:
 	msg.type = SIR_HAL_SET_DEL_PMKID_CACHE;
 	msg.reserved = session_id;
 	msg.bodyptr = pmk_cache;
 	if (QDF_STATUS_SUCCESS !=
 	    cds_mq_post_message(QDF_MODULE_ID_WMA, &msg)) {
 		sme_err("Not able to post message to WDA");
-		qdf_mem_free(pmk_cache);
+
+		if (pmk_cache)
+			qdf_mem_free(pmk_cache);
+
 		return QDF_STATUS_E_FAILURE;
 	}
 
