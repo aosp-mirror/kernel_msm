@@ -1356,8 +1356,6 @@ static void hdd_send_association_event(struct net_device *dev,
 #endif
 	}
 	cds_dump_concurrency_info();
-	/* Send SCC/MCC Switching event to IPA */
-	hdd_ipa_send_mcc_scc_msg(pHddCtx, pHddCtx->mcc_mode);
 
 	msg = NULL;
 	/* During the WLAN uninitialization, supplicant is stopped before the
@@ -1985,6 +1983,8 @@ static void hdd_send_re_assoc_event(struct net_device *dev,
 	uint8_t *final_req_ie = NULL;
 	tCsrRoamConnectedProfile roam_profile;
 	tHalHandle hal_handle = WLAN_HDD_GET_HAL_CTX(pAdapter);
+	int chan_no;
+	int freq;
 
 	qdf_mem_zero(&roam_profile, sizeof(roam_profile));
 
@@ -2037,8 +2037,15 @@ static void hdd_send_re_assoc_event(struct net_device *dev,
 	qdf_mem_copy(rspRsnIe, pFTAssocRsp, len);
 	qdf_mem_zero(rspRsnIe + len, IW_GENERIC_IE_MAX - len);
 
-	chan = ieee80211_get_channel(pAdapter->wdev.wiphy,
-			(int)pCsrRoamInfo->pBssDesc->channelId);
+	chan_no = pCsrRoamInfo->pBssDesc->channelId;
+	if (chan_no <= 14)
+		freq = ieee80211_channel_to_frequency(chan_no,
+							NL80211_BAND_2GHZ);
+	else
+		freq = ieee80211_channel_to_frequency(chan_no,
+							NL80211_BAND_5GHZ);
+	chan = ieee80211_get_channel(pAdapter->wdev.wiphy, freq);
+
 	sme_roam_get_connect_profile(hal_handle, pAdapter->sessionId,
 		&roam_profile);
 
@@ -5109,6 +5116,7 @@ hdd_sme_roam_callback(void *pContext, tCsrRoamInfo *pRoamInfo, uint32_t roamId,
 		cds_set_connection_in_progress(false);
 		hdd_set_roaming_in_progress(false);
 		pAdapter->roam_ho_fail = false;
+		pHddStaCtx->ft_carrier_on = false;
 		complete(&pAdapter->roaming_comp_var);
 		break;
 

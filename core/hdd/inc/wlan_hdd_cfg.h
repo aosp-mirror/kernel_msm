@@ -4133,141 +4133,10 @@ enum station_keepalive_method {
 #define CFG_ESE_FEATURE_ENABLED_DEFAULT                     (0) /* disabled */
 #endif /* FEATURE_WLAN_ESE */
 
-/*
- * <ini>
- * MAWCEnabled - Enable/Disable Motion Aided Wireless Connectivity Global
- * @Min: 0 - Disabled
- * @Max: 1 - Enabled
- * @Default: 1
- *
- * This ini is used to controls the MAWC feature globally.
- * MAWC is Motion Aided Wireless Connectivity.
- *
- * Related: mawc_roam_enabled.
- *
- * Supported Feature: Roaming and PNO/NLO
- *
- * Usage: Internal/External
- *
- * </ini>
- */
 #define CFG_LFR_MAWC_FEATURE_ENABLED_NAME                   "MAWCEnabled"
 #define CFG_LFR_MAWC_FEATURE_ENABLED_MIN                    (0)
 #define CFG_LFR_MAWC_FEATURE_ENABLED_MAX                    (1)
-#define CFG_LFR_MAWC_FEATURE_ENABLED_DEFAULT                (1)
-
-/*
- * <ini>
- * mawc_roam_enabled - Enable/Disable MAWC during roaming
- * @Min: 0 - Disabled
- * @Max: 1 - Enabled
- * @Default: 1
- *
- * This ini is used to control MAWC during roaming.
- *
- * Related: MAWCEnabled.
- *
- * Supported Feature: MAWC Roaming
- *
- * Usage: Internal/External
- *
- * </ini>
- */
-#define CFG_MAWC_ROAM_ENABLED_NAME            "mawc_roam_enabled"
-#define CFG_MAWC_ROAM_ENABLED_MIN             (0)
-#define CFG_MAWC_ROAM_ENABLED_MAX             (1)
-#define CFG_MAWC_ROAM_ENABLED_DEFAULT         (1)
-
-/*
- * <ini>
- * mawc_roam_traffic_threshold - Configure traffic threshold
- * @Min: 0
- * @Max: 0xFFFFFFFF
- * @Default: 300
- *
- * This ini is used to configure the data traffic load in kBps to
- * register CMC.
- *
- * Related: mawc_roam_enabled.
- *
- * Supported Feature: MAWC Roaming
- *
- * Usage: Internal/External
- *
- * </ini>
- */
-#define CFG_MAWC_ROAM_TRAFFIC_THRESHOLD_NAME       "mawc_roam_traffic_threshold"
-#define CFG_MAWC_ROAM_TRAFFIC_THRESHOLD_MIN        (0)
-#define CFG_MAWC_ROAM_TRAFFIC_THRESHOLD_MAX        (0xFFFFFFFF)
-#define CFG_MAWC_ROAM_TRAFFIC_THRESHOLD_DEFAULT    (300)
-
-/*
- * <ini>
- * mawc_roam_ap_rssi_threshold - Best AP RSSI threshold
- * @Min: -120
- * @Max: 0
- * @Default: -66
- *
- * This ini is used to specify the RSSI threshold to scan for the AP.
- *
- * Related: mawc_roam_enabled.
- *
- * Supported Feature: MAWC Roaming
- *
- * Usage: Internal/External
- *
- * </ini>
- */
-#define CFG_MAWC_ROAM_AP_RSSI_THRESHOLD_NAME       "mawc_roam_ap_rssi_threshold"
-#define CFG_MAWC_ROAM_AP_RSSI_THRESHOLD_MIN        (-120)
-#define CFG_MAWC_ROAM_AP_RSSI_THRESHOLD_MAX        (0)
-#define CFG_MAWC_ROAM_AP_RSSI_THRESHOLD_DEFAULT    (-66)
-
-/*
- * <ini>
- * mawc_roam_rssi_high_adjust - Adjust MAWC roam high RSSI
- * @Min: 3
- * @Max: 5
- * @Default: 5
- *
- * This ini is used for high RSSI threshold adjustment in stationary state
- * to suppress the scan.
- *
- * Related: mawc_roam_enabled.
- *
- * Supported Feature: MAWC Roaming
- *
- * Usage: Internal/External
- *
- * </ini>
- */
-#define CFG_MAWC_ROAM_RSSI_HIGH_ADJUST_NAME        "mawc_roam_rssi_high_adjust"
-#define CFG_MAWC_ROAM_RSSI_HIGH_ADJUST_MIN         (3)
-#define CFG_MAWC_ROAM_RSSI_HIGH_ADJUST_MAX         (5)
-#define CFG_MAWC_ROAM_RSSI_HIGH_ADJUST_DEFAULT     (5)
-
-/*
- * <ini>
- * mawc_roam_rssi_high_adjust - Adjust MAWC roam low RSSI
- * @Min: 3
- * @Max: 5
- * @Default: 5
- *
- * This ini is used for low RSSI threshold adjustment in stationary state
- * to suppress the scan.
- *
- * Related: mawc_roam_enabled.
- *
- * Supported Feature: MAWC Roaming
- *
- * Usage: Internal/External
- *
- * </ini>
- */
-#define CFG_MAWC_ROAM_RSSI_LOW_ADJUST_NAME        "mawc_roam_rssi_low_adjust"
-#define CFG_MAWC_ROAM_RSSI_LOW_ADJUST_MIN         (3)
-#define CFG_MAWC_ROAM_RSSI_LOW_ADJUST_MAX         (5)
-#define CFG_MAWC_ROAM_RSSI_LOW_ADJUST_DEFAULT     (5)
+#define CFG_LFR_MAWC_FEATURE_ENABLED_DEFAULT                (0) /* disabled */
 
 /*This parameter is used to set Wireless Extended Security Mode.*/
 #define CFG_ENABLE_WES_MODE_NAME                            "gWESModeEnabled"
@@ -7163,6 +7032,34 @@ enum hdd_link_speed_rpt_type {
 #define CFG_IPA_LOW_BANDWIDTH_MBPS_MIN           (0)
 #define CFG_IPA_LOW_BANDWIDTH_MBPS_MAX           (100)
 #define CFG_IPA_LOW_BANDWIDTH_MBPS_DEFAULT       (100)
+
+/*
+ * <ini>
+ * gIPAMccTxDescSize - hdd_ipa_tx_desc pool size for MCC TX
+ * @Min: 512
+ * @Max: 4096
+ * @Default: 1024
+ *
+ * This ini is used to specify hdd_ipa_tx_desc pool size for MCC TX path.
+ * The pool is maintained to have a one-to-one mapping with desc from IPA
+ * driver so that when wlan TX completes, wlan driver could replenish the
+ * correct desc to IPA driver. Note that in MCC TX case, desc size is limited
+ * to global tx desc pool size. Therefore the real hdd_ipa_tx_desc pool size
+ * is the minimum of this ini and global tx desc pool size.
+ *
+ *
+ * Related: STA/SAP
+ *
+ * Supported Feature: IPA offload
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
+#define CFG_IPA_MCC_TX_DESC_SIZE                 "gIPAMccTxDescSize"
+#define CFG_IPA_MCC_TX_DESC_SIZE_MIN             (512)
+#define CFG_IPA_MCC_TX_DESC_SIZE_MAX             (4096)
+#define CFG_IPA_MCC_TX_DESC_SIZE_DEFAULT         (1024)
 
 /*
  * Firmware uart print
@@ -11485,91 +11382,6 @@ enum hw_filter_mode {
 
 /*
  * <ini>
- * mawc_nlo_enabled - For NLO/PNO, enable MAWC based scan
- * @Min: 0
- * @Max: 1
- * @Default: 1
- *
- * Enable/Disable the Motion Aided Wireless Connectivity
- * based NLO using this parameter
- *
- * Related: NLO, PNO
- *
- * Usage: Internal/External
- *
- * </ini>
- */
-#define CFG_MAWC_NLO_ENABLED_NAME	"mawc_nlo_enabled"
-#define CFG_MAWC_NLO_ENABLED_MIN	(0)
-#define CFG_MAWC_NLO_ENABLED_MAX	(1)
-#define CFG_MAWC_NLO_ENABLED_DEFAULT	(1)
-
-/*
- * <ini>
- * mawc_nlo_exp_backoff_ratio - Exponential back off ratio
- * @Min: 0
- * @Max: 300
- * @Default: 3
- *
- * Configure the exponential back off ratio using this
- * parameter for MAWC based NLO
- * ratio of exponential backoff, next = current + current*ratio/100
- *
- * Related: NLO, PNO
- *
- * Usage: Internal/External
- *
- * </ini>
- */
-#define CFG_MAWC_NLO_EXP_BACKOFF_RATIO_NAME     "mawc_nlo_exp_backoff_ratio"
-#define CFG_MAWC_NLO_EXP_BACKOFF_RATIO_MIN      (0)
-#define CFG_MAWC_NLO_EXP_BACKOFF_RATIO_MAX      (300)
-#define CFG_MAWC_NLO_EXP_BACKOFF_RATIO_DEFAULT  (3)
-
-/*
- * <ini>
- * mawc_nlo_init_scan_interval - Initial Scan Interval
- * @Min: 1000
- * @Max: 0xFFFFFFFF
- * @Default: 10000
- *
- * Configure the initial scan interval  using this
- * parameter for MAWC based NLO (Units in Milliseconds)
- *
- * Related: NLO, PNO
- *
- * Usage: Internal/External
- *
- * </ini>
- */
-#define CFG_MAWC_NLO_INIT_SCAN_INTERVAL_NAME     "mawc_nlo_init_scan_interval"
-#define CFG_MAWC_NLO_INIT_SCAN_INTERVAL_MIN      (1000)
-#define CFG_MAWC_NLO_INIT_SCAN_INTERVAL_MAX      (0xFFFFFFFF)
-#define CFG_MAWC_NLO_INIT_SCAN_INTERVAL_DEFAULT  (10000)
-
-/*
- * <ini>
- * mawc_nlo_max_scan_interval - Maximum Scan Interval
- * @Min: 1000
- * @Max: 0xFFFFFFFF
- * @Default: 60000
- *
- * Configure the maximum scan interval  using this
- * parameter for MAWC based NLO (Units in Milliseconds)
- *
- * Related: NLO, PNO
- *
- * Usage: Internal/External
- *
- * </ini>
- */
-#define CFG_MAWC_NLO_MAX_SCAN_INTERVAL_NAME     "mawc_nlo_max_scan_interval"
-#define CFG_MAWC_NLO_MAX_SCAN_INTERVAL_MIN      (1000)
-#define CFG_MAWC_NLO_MAX_SCAN_INTERVAL_MAX      (0xFFFFFFFF)
-#define CFG_MAWC_NLO_MAX_SCAN_INTERVAL_DEFAULT  (60000)
-
-/*
- * <ini>
  * gAutoChannelSelectWeight - ACS channel weight
  * @Min: 0x1
  * @Max: 0xFFFFFFFF
@@ -12004,11 +11816,6 @@ struct hdd_config {
 	uint32_t InfraUapsdBkSuspIntv;
 	bool isFastRoamIniFeatureEnabled;
 	bool MAWCEnabled;
-	bool mawc_roam_enabled;
-	uint32_t mawc_roam_traffic_threshold;
-	int8_t mawc_roam_ap_rssi_threshold;
-	uint8_t mawc_roam_rssi_high_adjust;
-	uint8_t mawc_roam_rssi_low_adjust;
 #ifdef FEATURE_WLAN_ESE
 	uint32_t InfraInactivityInterval;
 	bool isEseIniFeatureEnabled;
@@ -12275,6 +12082,7 @@ struct hdd_config {
 	uint32_t IpaHighBandwidthMbps;
 	uint32_t IpaMediumBandwidthMbps;
 	uint32_t IpaLowBandwidthMbps;
+	uint32_t IpaMccTxDescSize;
 #ifdef FEATURE_WLAN_MCC_TO_SCC_SWITCH
 	uint32_t WlanMccToSccSwitchMode;
 #endif
@@ -12650,10 +12458,6 @@ struct hdd_config {
 	bool tx_orphan_enable;
 	uint8_t dfs_beacon_tx_enhanced;
 	uint8_t scan_backoff_multiplier;
-	bool mawc_nlo_enabled;
-	uint32_t mawc_nlo_exp_backoff_ratio;
-	uint32_t mawc_nlo_init_scan_interval;
-	uint32_t mawc_nlo_max_scan_interval;
 	bool is_force_1x1;
 	uint16_t num_11b_tx_chains;
 	uint16_t num_11ag_tx_chains;

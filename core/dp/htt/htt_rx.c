@@ -683,18 +683,17 @@ static void htt_rx_ring_refill_retry(void *arg)
 	qdf_atomic_sub(num, &pdev->rx_ring.refill_debt);
 	filled = htt_rx_ring_fill_n(pdev, num);
 
-	qdf_spin_unlock_bh(&(pdev->rx_ring.refill_lock));
-
 	if (filled > num) {
 		/* we served ourselves and some other debt */
 		/* sub is safer than  = 0 */
 		qdf_atomic_sub(filled - num, &pdev->rx_ring.refill_debt);
 	} else if (num == filled) { /* nothing to be done */
 	} else {
+		qdf_atomic_add(num - filled, &pdev->rx_ring.refill_debt);
 		/* we could not fill all, timer must have been started */
 		pdev->refill_retry_timer_doubles++;
 	}
-
+	qdf_spin_unlock_bh(&(pdev->rx_ring.refill_lock));
 }
 #endif
 
@@ -3307,13 +3306,14 @@ int htt_rx_msdu_buff_in_order_replenish(htt_pdev_handle pdev, uint32_t num)
 	pdev->rx_buff_fill_n_invoked++;
 	filled = htt_rx_ring_fill_n(pdev, num);
 
-	qdf_spin_unlock_bh(&(pdev->rx_ring.refill_lock));
-
 	if (filled > num) {
 		/* we served ourselves and some other debt */
 		/* sub is safer than  = 0 */
 		qdf_atomic_sub(filled - num, &pdev->rx_ring.refill_debt);
+	} else {
+		qdf_atomic_add(num - filled, &pdev->rx_ring.refill_debt);
 	}
+	qdf_spin_unlock_bh(&(pdev->rx_ring.refill_lock));
 
 	return filled;
 }
@@ -3526,7 +3526,7 @@ qdf_nbuf_t htt_rx_hash_list_lookup(struct htt_pdev_t *pdev,
 		qdf_print("rx hash: %s: no entry found for %p!\n",
 			  __func__, (void *)paddr);
 		if (cds_is_self_recovery_enabled())
-			cds_trigger_recovery();
+			cds_trigger_recovery(CDS_RX_HASH_NO_ENTRY_FOUND);
 		else
 			HTT_ASSERT_ALWAYS(0);
 	}

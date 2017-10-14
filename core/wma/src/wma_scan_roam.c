@@ -780,50 +780,6 @@ QDF_STATUS wma_update_channel_list(WMA_HANDLE handle,
 	return qdf_status;
 }
 
-/**
- * wma_roam_scan_mawc_params() - send roam scan mode request to fw
- * @wma_handle: wma handle
- * @roam_req: roam request param
- *
- * Fill the MAWC roaming parameters and send
- * WMI_ROAM_CONFIGURE_MAWC_CMDID TLV to firmware.
- *
- * Return: QDF status
- */
-QDF_STATUS wma_roam_scan_mawc_params(tp_wma_handle wma_handle,
-		tSirRoamOffloadScanReq *roam_req)
-{
-	struct wmi_mawc_roam_params *params;
-	QDF_STATUS status;
-
-	if (!roam_req) {
-		WMA_LOGE("No MAWC parameters to send");
-		return QDF_STATUS_E_INVAL;
-	}
-	params = qdf_mem_malloc(sizeof(*params));
-	if (!params) {
-		WMA_LOGE("No memory allocated for MAWC roam params");
-		return QDF_STATUS_E_NOMEM;
-	}
-	params->vdev_id = roam_req->sessionId;
-	params->enable = roam_req->mawc_roam_params.mawc_enabled &&
-		roam_req->mawc_roam_params.mawc_roam_enabled;
-	params->traffic_load_threshold =
-		roam_req->mawc_roam_params.mawc_roam_traffic_threshold;
-	params->best_ap_rssi_threshold =
-		roam_req->mawc_roam_params.mawc_roam_ap_rssi_threshold -
-		WMA_NOISE_FLOOR_DBM_DEFAULT;
-	params->rssi_stationary_high_adjust =
-		roam_req->mawc_roam_params.mawc_roam_rssi_high_adjust;
-	params->rssi_stationary_low_adjust =
-		roam_req->mawc_roam_params.mawc_roam_rssi_low_adjust;
-	status = wmi_unified_roam_mawc_params_cmd(
-			wma_handle->wmi_handle, params);
-	qdf_mem_free(params);
-
-	return status;
-}
-
 #ifdef WLAN_FEATURE_FILS_SK
 /**
  * wma_roam_scan_fill_fils_params() - API to fill FILS params in RSO command
@@ -1917,8 +1873,8 @@ QDF_STATUS wma_process_roaming_config(tp_wma_handle wma_handle,
 		qdf_mem_free(roam_req);
 		return QDF_STATUS_E_PERM;
 	}
-	WMA_LOGD("%s: RSO Command:%d, reason:%d",
-			__func__, roam_req->Command, roam_req->reason);
+	WMA_LOGD("%s: roaming in progress set to false for vdev %d",
+			__func__, roam_req->sessionId);
 	wma_handle->interfaces[roam_req->sessionId].roaming_in_progress = false;
 	switch (roam_req->Command) {
 	case ROAM_SCAN_OFFLOAD_START:
@@ -3391,7 +3347,6 @@ void wma_set_pno_channel_prediction(uint8_t *buf_ptr,
 QDF_STATUS wma_pno_start(tp_wma_handle wma, tpSirPNOScanReq pno)
 {
 	struct pno_scan_req_params *params;
-	struct nlo_mawc_params *mawc_params = NULL;
 	uint32_t i;
 	uint32_t num_channels;
 	uint32_t *channel_list = NULL;
@@ -3494,25 +3449,12 @@ QDF_STATUS wma_pno_start(tp_wma_handle wma, tpSirPNOScanReq pno)
 		WMA_LOGD("PNO start request sent successfully for vdev %d",
 			 pno->sessionId);
 	}
-	mawc_params = qdf_mem_malloc(sizeof(*mawc_params));
-	if (mawc_params == NULL) {
-		WMA_LOGE("%s : MAWC Memory allocation failed", __func__);
-		status = QDF_STATUS_E_NOMEM;
-		goto exit_pno_start;
-	}
-	mawc_params->vdev_id = pno->sessionId;
-	mawc_params->enable = pno->mawc_params.mawc_nlo_enabled;
-	mawc_params->exp_backoff_ratio = pno->mawc_params.exp_backoff_ratio;
-	mawc_params->init_scan_interval = pno->mawc_params.init_scan_interval;
-	mawc_params->max_scan_interval = pno->mawc_params.max_scan_interval;
 
 exit_pno_start:
 	if (channel_list)
 		qdf_mem_free(channel_list);
 	if (params)
 		qdf_mem_free(params);
-	if (mawc_params)
-		qdf_mem_free(mawc_params);
 	return status;
 }
 
