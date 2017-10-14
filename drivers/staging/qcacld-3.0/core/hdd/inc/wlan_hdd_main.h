@@ -180,27 +180,27 @@
 
 #define WLAN_CHIP_VERSION   "WCNSS"
 
-#define hdd_log_rate_limited(rate, level, args...) \
+#define hdd_log_ratelimited(rate, level, args...) \
 		QDF_TRACE_RATE_LIMITED(rate, QDF_MODULE_ID_HDD, level, ## args)
-#define hdd_log_rate_limited_fl(rate, level, format, args...) \
-		hdd_log_rate_limited(rate, level, FL(format), ## args)
-#define hdd_alert_rate_limited(rate, format, args...) \
-		hdd_log_rate_limited_fl(rate, QDF_TRACE_LEVEL_FATAL,\
+#define hdd_log_ratelimited_fl(rate, level, format, args...) \
+		hdd_log_ratelimited(rate, level, FL(format), ## args)
+#define hdd_alert_ratelimited(rate, format, args...) \
+		hdd_log_ratelimited_fl(rate, QDF_TRACE_LEVEL_FATAL,\
 			format, ## args)
-#define hdd_err_rate_limited(rate, format, args...) \
-		hdd_log_rate_limited_fl(rate, QDF_TRACE_LEVEL_ERROR,\
+#define hdd_err_ratelimited(rate, format, args...) \
+		hdd_log_ratelimited_fl(rate, QDF_TRACE_LEVEL_ERROR,\
 			format, ## args)
-#define hdd_warn_rate_limited(rate, format, args...) \
-		hdd_log_rate_limited_fl(rate, QDF_TRACE_LEVEL_WARN,\
+#define hdd_warn_ratelimited(rate, format, args...) \
+		hdd_log_ratelimited_fl(rate, QDF_TRACE_LEVEL_WARN,\
 			format, ## args)
-#define hdd_notice_rate_limited(rate, format, args...) \
-		hdd_log_rate_limited_fl(rate, QDF_TRACE_LEVEL_INFO,\
+#define hdd_notice_ratelimited(rate, format, args...) \
+		hdd_log_ratelimited_fl(rate, QDF_TRACE_LEVEL_INFO,\
 			format, ## args)
-#define hdd_info_rate_limited(rate, format, args...) \
-		hdd_log_rate_limited_fl(rate, QDF_TRACE_LEVEL_INFO,\
+#define hdd_info_ratelimited(rate, format, args...) \
+		hdd_log_ratelimited_fl(rate, QDF_TRACE_LEVEL_INFO,\
 			format, ## args)
-#define hdd_debug_rate_limited(rate, format, args...) \
-		hdd_log_rate_limited_fl(rate, QDF_TRACE_LEVEL_DEBUG,\
+#define hdd_debug_ratelimited(rate, format, args...) \
+		hdd_log_ratelimited_fl(rate, QDF_TRACE_LEVEL_DEBUG,\
 			format, ## args)
 
 #define hdd_log(level, args...) QDF_TRACE(QDF_MODULE_ID_HDD, level, ## args)
@@ -2069,6 +2069,17 @@ QDF_STATUS hdd_set_ibss_power_save_params(hdd_adapter_t *pAdapter);
 QDF_STATUS wlan_hdd_restart_driver(hdd_context_t *pHddCtx);
 void hdd_exchange_version_and_caps(hdd_context_t *pHddCtx);
 int wlan_hdd_validate_context(hdd_context_t *pHddCtx);
+
+/**
+ * hdd_validate_adapter() - Validate the given adapter
+ * @adapter: the adapter to validate
+ *
+ * This function validates the given adapter, and ensures that it is open.
+ *
+ * Return: Errno
+ */
+int hdd_validate_adapter(hdd_adapter_t *adapter);
+
 /**
  * wlan_hdd_validate_context_in_loading() - check the HDD context in loading
  * @hdd_ctx:	HDD context pointer

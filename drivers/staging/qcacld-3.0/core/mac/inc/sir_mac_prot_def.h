@@ -161,12 +161,10 @@
 #define SIR_MAC_QOS_DEF_BA_REQ      4
 #define SIR_MAC_QOS_DEF_BA_RSP      5
 
-#ifdef ANI_SUPPORT_11H
 #define SIR_MAC_ACTION_MEASURE_REQUEST_ID      0
 #define SIR_MAC_ACTION_MEASURE_REPORT_ID       1
 #define SIR_MAC_ACTION_TPC_REQUEST_ID          2
 #define SIR_MAC_ACTION_TPC_REPORT_ID           3
-#endif /* ANI_SUPPORT_11H */
 #define SIR_MAC_ACTION_CHANNEL_SWITCH_ID       4
 
 #ifdef ANI_SUPPORT_11H
@@ -555,6 +553,7 @@
 #define SIR_MAC_MAX_NUM_OF_DEFAULT_KEYS      4
 #define SIR_MAC_KEY_LENGTH                   13 /* WEP Maximum key length size */
 #define SIR_MAC_AUTH_CHALLENGE_LENGTH        253
+#define SIR_MAC_SAP_AUTH_CHALLENGE_LENGTH    128
 #define SIR_MAC_WEP_IV_LENGTH                4
 #define SIR_MAC_WEP_ICV_LENGTH               4
 #define SIR_MAC_CHALLENGE_ID_LEN             2
@@ -619,6 +618,20 @@
 
 #define SIR_MAC_VENDOR_AP_1_OUI             "\x00\x0C\x43"
 #define SIR_MAC_VENDOR_AP_1_OUI_LEN         3
+
+#define SIR_MAC_VENDOR_AP_2_OUI             "\x00\x10\x18"
+#define SIR_MAC_VENDOR_AP_2_OUI_LEN         3
+
+#define SIR_MAC_VENDOR_AP_2_DATA            "\x02\xFF\xF0\x2C\x00\x00"
+#define SIR_MAC_VENDOR_AP_2_DATA_2          "\x02\xFF\x04\x0C\x00\x00"
+#define SIR_MAC_VENDOR_AP_2_DATA_LEN        6
+
+#define SIR_MAC_VENDOR_AP_3_OUI             "\x00\x03\x7F"
+#define SIR_MAC_VENDOR_AP_3_OUI_LEN         3
+
+#define SIR_MAC_VENDOR_AP_4_OUI             "\x8C\xFD\xF0"
+#define SIR_MAC_VENDOR_AP_4_OUI_LEN         3
+
 /* / Status Code (present in Management response frames) enum */
 
 typedef enum eSirMacStatusCodes {
