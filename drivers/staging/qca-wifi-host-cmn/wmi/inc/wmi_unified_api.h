@@ -569,9 +569,6 @@ QDF_STATUS wmi_unified_roam_scan_offload_mode_cmd(void *wmi_hdl,
 				struct roam_offload_scan_params *roam_req);
 #endif
 
-QDF_STATUS wmi_unified_roam_mawc_params_cmd(void *wmi_hdl,
-			struct wmi_mawc_roam_params *params);
-
 QDF_STATUS wmi_unified_roam_scan_offload_rssi_thresh_cmd(void *wmi_hdl,
 				struct roam_offload_scan_rssi_params *roam_req);
 
@@ -622,9 +619,6 @@ QDF_STATUS wmi_unified_pno_start_cmd(void *wmi_hdl,
 		   struct pno_scan_req_params *pno,
 		   uint32_t *gchannel_freq_list);
 #endif
-
-QDF_STATUS wmi_unified_nlo_mawc_cmd(void *wmi_hdl,
-		struct nlo_mawc_params *params);
 
 QDF_STATUS wmi_unified_set_ric_req_cmd(void *wmi_hdl, void *msg,
 			uint8_t is_add_ts);
@@ -752,6 +746,19 @@ QDF_STATUS wmi_unified_add_clear_mcbc_filter_cmd(void *wmi_hdl,
 					 uint8_t vdev_id,
 					 struct qdf_mac_addr multicast_addr,
 					 bool clearList);
+
+/**
+ * wmi_unified_multiple_add_clear_mcbc_filter_cmd() - send multiple mcast
+ *						      filter command to fw
+ * @wmi_handle: wmi handle
+ * @vdev_id: vdev id
+ * @mcast_filter_params: mcast filter params
+ *
+ * Return: QDF_STATUS_SUCCESS on success and QDF_STATUS_E_FAILURE for failure
+ */
+QDF_STATUS wmi_unified_multiple_add_clear_mcbc_filter_cmd(void *wmi_hdl,
+				uint8_t vdev_id,
+				struct mcast_filter_params *filter_param);
 
 QDF_STATUS wmi_unified_send_gtk_offload_cmd(void *wmi_hdl, uint8_t vdev_id,
 					   struct gtk_offload_params *params,

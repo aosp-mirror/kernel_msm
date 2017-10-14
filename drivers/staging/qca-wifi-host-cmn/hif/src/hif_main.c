@@ -145,12 +145,6 @@ bool hif_can_suspend_link(struct hif_opaque_softc *hif_ctx)
 	return scn->linkstate_vote == 0;
 }
 
-#ifndef CONFIG_WIN
-#define QCA9984_HOST_INTEREST_ADDRESS -1
-#define QCA9888_HOST_INTEREST_ADDRESS -1
-#define IPQ4019_HOST_INTEREST_ADDRESS -1
-#endif
-
 /**
  * hif_hia_item_address(): hif_hia_item_address
  * @target_type: target_type
@@ -722,6 +716,11 @@ int hif_get_device_type(uint32_t device_id,
 		HIF_ERROR("%s: Unsupported device ID!", __func__);
 		ret = -ENODEV;
 		break;
+	}
+
+	if (*target_type == TARGET_TYPE_UNKNOWN) {
+		HIF_ERROR("%s: Unsupported target_type!", __func__);
+		ret = -ENODEV;
 	}
 end:
 	return ret;

@@ -1617,17 +1617,6 @@ QDF_STATUS wmi_unified_roam_scan_offload_rssi_thresh_cmd(void *wmi_hdl,
 	return QDF_STATUS_E_FAILURE;
 }
 
-QDF_STATUS wmi_unified_roam_mawc_params_cmd(
-			void *wmi_hdl, struct wmi_mawc_roam_params *params)
-{
-	wmi_unified_t wmi_handle = (wmi_unified_t) wmi_hdl;
-
-	if (wmi_handle->ops->send_roam_mawc_params_cmd)
-		return wmi_handle->ops->send_roam_mawc_params_cmd(
-				wmi_handle, params);
-
-	return QDF_STATUS_E_FAILURE;
-}
 /**
  * wmi_unified_roam_scan_filter_cmd() - send roam scan whitelist,
  *                                      blacklist and preferred list
@@ -1906,24 +1895,6 @@ QDF_STATUS wmi_unified_pno_start_cmd(void *wmi_hdl,
 	return QDF_STATUS_E_FAILURE;
 }
 #endif
-
-/**
- * wmi_unified_nlo_mawc_cmd() - NLO MAWC cmd configuration
- * @wmi_hdl: wmi handle
- * @params: Configuration parameters
- *
- * Return: QDF_STATUS_SUCCESS on success and QDF_STATUS_E_FAILURE for failure
- */
-QDF_STATUS wmi_unified_nlo_mawc_cmd(void *wmi_hdl,
-		struct nlo_mawc_params *params)
-{
-	wmi_unified_t wmi_handle = (wmi_unified_t) wmi_hdl;
-
-	if (wmi_handle->ops->send_nlo_mawc_cmd)
-		return wmi_handle->ops->send_nlo_mawc_cmd(wmi_handle, params);
-
-	return QDF_STATUS_E_FAILURE;
-}
 
 /* wmi_unified_set_ric_req_cmd() - set ric request element
  * @wmi_hdl: wmi handle
@@ -2648,6 +2619,19 @@ QDF_STATUS wmi_unified_add_clear_mcbc_filter_cmd(void *wmi_hdl,
 	if (wmi_handle->ops->send_add_clear_mcbc_filter_cmd)
 		return wmi_handle->ops->send_add_clear_mcbc_filter_cmd(wmi_handle,
 			    vdev_id, multicast_addr, clearList);
+
+	return QDF_STATUS_E_FAILURE;
+}
+
+QDF_STATUS wmi_unified_multiple_add_clear_mcbc_filter_cmd(void *wmi_hdl,
+				     uint8_t vdev_id,
+				     struct mcast_filter_params *filter_param)
+{
+	wmi_unified_t wmi_handle = (wmi_unified_t) wmi_hdl;
+
+	if (wmi_handle->ops->send_multiple_add_clear_mcbc_filter_cmd)
+		return wmi_handle->ops->send_multiple_add_clear_mcbc_filter_cmd(
+				wmi_handle, vdev_id, filter_param);
 
 	return QDF_STATUS_E_FAILURE;
 }
