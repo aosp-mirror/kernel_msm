@@ -338,6 +338,11 @@ static int wlan_hdd_probe(struct device *dev, void *bdev, const struct hif_bus_i
 	int ret = 0;
 
 	mutex_lock(&hdd_init_deinit_lock);
+	if (!reinit)
+		hdd_start_driver_ops_timer(eHDD_DRV_OP_PROBE);
+	else
+		hdd_start_driver_ops_timer(eHDD_DRV_OP_REINIT);
+
 	pr_info("%s: %sprobing driver v%s\n", WLAN_MODULE_NAME,
 		reinit ? "re-" : "", QWLAN_VERSIONSTR);
 
@@ -387,6 +392,7 @@ static int wlan_hdd_probe(struct device *dev, void *bdev, const struct hif_bus_i
 	cds_set_driver_in_bad_state(false);
 	probe_fail_cnt = 0;
 	re_init_fail_cnt = 0;
+	hdd_stop_driver_ops_timer();
 	mutex_unlock(&hdd_init_deinit_lock);
 	return 0;
 
@@ -409,6 +415,7 @@ err_hdd_deinit:
 	hdd_remove_pm_qos(dev);
 
 	cds_clear_fw_state(CDS_FW_STATE_DOWN);
+	hdd_stop_driver_ops_timer();
 	mutex_unlock(&hdd_init_deinit_lock);
 	return ret;
 }
@@ -477,6 +484,24 @@ static inline void hdd_wlan_ssr_shutdown_event(void)
 #endif
 
 /**
+ * hdd_send_hang_reason() - Send hang reason to the userspace
+ *
+ * Return: None
+ */
+static void hdd_send_hang_reason(void)
+{
+	uint32_t reason = 0;
+	hdd_context_t *hdd_ctx = cds_get_context(QDF_MODULE_ID_HDD);
+
+	if (wlan_hdd_validate_context(hdd_ctx))
+		return;
+
+	cds_get_recovery_reason(&reason);
+	cds_reset_recovery_reason();
+	wlan_hdd_send_hang_reason_event(hdd_ctx, reason);
+}
+
+/**
  * wlan_hdd_shutdown() - wlan_hdd_shutdown
  *
  * This is routine is called by platform driver to shutdown the
@@ -507,6 +532,7 @@ static void wlan_hdd_shutdown(void)
 	/* this is for cases, where shutdown invoked from platform */
 	cds_set_recovery_in_progress(true);
 	hdd_wlan_ssr_shutdown_event();
+	hdd_send_hang_reason();
 
 	if (!cds_wait_for_external_threads_completion(__func__))
 		hdd_err("Host is not ready for SSR, attempting anyway");
@@ -1065,7 +1091,11 @@ static void wlan_hdd_pld_remove(struct device *dev,
 {
 	ENTER();
 	mutex_lock(&hdd_init_deinit_lock);
+	hdd_start_driver_ops_timer(eHDD_DRV_OP_REMOVE);
+
 	wlan_hdd_remove(dev);
+
+	hdd_stop_driver_ops_timer();
 	mutex_unlock(&hdd_init_deinit_lock);
 	EXIT();
 }
@@ -1082,7 +1112,11 @@ static void wlan_hdd_pld_shutdown(struct device *dev,
 {
 	ENTER();
 	mutex_lock(&hdd_init_deinit_lock);
+	hdd_start_driver_ops_timer(eHDD_DRV_OP_SHUTDOWN);
+
 	wlan_hdd_shutdown();
+
+	hdd_stop_driver_ops_timer();
 	mutex_unlock(&hdd_init_deinit_lock);
 	EXIT();
 }
@@ -1234,6 +1268,7 @@ static void wlan_hdd_pld_uevent(struct device *dev,
 	switch (uevent->uevent) {
 	case PLD_RECOVERY:
 		cds_set_recovery_in_progress(true);
+		hdd_pld_ipa_uc_shutdown_pipes();
 		break;
 	case PLD_FW_DOWN:
 		cds_set_fw_state(CDS_FW_STATE_DOWN);

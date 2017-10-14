@@ -3094,19 +3094,6 @@ struct connected_pno_band_rssi_pref {
 };
 
 /**
- * struct sir_nlo_mawc_params - MAWC based NLO configuration
- * @mawc_nlo_enabled: enable/disable MAWC based NLO
- * @exp_backoff_ratio: MAWC based NLO exponential backoff ratio
- * @init_scan_interval: MAWC based NLO initial scan interval
- * @max_scan_interval: MAWC based NLO maximum scan interval
- */
-struct sir_nlo_mawc_params {
-	bool mawc_nlo_enabled;
-	uint32_t exp_backoff_ratio;
-	uint32_t init_scan_interval;
-	uint32_t max_scan_interval;
-};
-/**
  * struct sSirPNOScanReq - PNO Scan request structure
  * @enable: flag to enable or disable
  * @modePNO: PNO Mode
@@ -3140,7 +3127,6 @@ typedef struct sSirPNOScanReq {
 	uint32_t delay_start_time;
 	uint8_t fast_scan_max_cycles;
 	uint32_t scan_backoff_multiplier;
-	struct sir_nlo_mawc_params mawc_params;
 	uint32_t        active_min_time;
 	uint32_t        active_max_time;
 	uint32_t        passive_min_time;
@@ -3396,29 +3382,11 @@ struct lca_disallow_config_params{
     uint32_t num_disallowed_aps;
 };
 
-/**
- * struct mawc_params - Motion Aided Wireless Connectivity configuration
- * @MAWCEnabled: Global configuration for MAWC (Roaming/PNO/ExtScan)
- * @mawc_roam_enabled: MAWC roaming enable/disable
- * @mawc_roam_traffic_threshold: Traffic threshold in kBps for MAWC roaming
- * @mawc_roam_ap_rssi_threshold: AP RSSI threshold for MAWC roaming
- * @mawc_roam_rssi_high_adjust: High Adjustment value for suppressing scan
- * @mawc_roam_rssi_low_adjust: Low Adjustment value for suppressing scan
- */
-struct mawc_params {
-	bool mawc_enabled;
-	bool mawc_roam_enabled;
-	uint32_t mawc_roam_traffic_threshold;
-	int8_t mawc_roam_ap_rssi_threshold;
-	uint8_t mawc_roam_rssi_high_adjust;
-	uint8_t mawc_roam_rssi_low_adjust;
-};
-
 typedef struct sSirRoamOffloadScanReq {
 	uint16_t message_type;
 	uint16_t length;
 	bool RoamScanOffloadEnabled;
-	struct mawc_params mawc_roam_params;
+	bool MAWCEnabled;
 	int8_t LookupThreshold;
 	int8_t rssi_thresh_offset_5g;
 	uint8_t delay_before_vdev_stop;

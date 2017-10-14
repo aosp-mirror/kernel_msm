@@ -608,7 +608,7 @@ tSmeCmd *sme_get_command_buffer(tpAniSirGlobal pMac)
 				false,
 				pMac->sme.enableSelfRecovery ? true : false);
 		else if (pMac->sme.enableSelfRecovery)
-			cds_trigger_recovery();
+			cds_trigger_recovery(CDS_GET_MSG_BUFF_FAILURE);
 		else
 			QDF_BUG(0);
 	}
@@ -9035,10 +9035,8 @@ QDF_STATUS sme_update_is_mawc_ini_feature_enabled(tHalHandle hHal,
 	if (QDF_IS_STATUS_SUCCESS(status)) {
 		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
 			  "%s: MAWCEnabled is changed from %d to %d", __func__,
-			  pMac->roam.configParam.csr_mawc_config.mawc_enabled,
-			  MAWCEnabled);
-		pMac->roam.configParam.csr_mawc_config.mawc_enabled =
-			MAWCEnabled;
+			  pMac->roam.configParam.MAWCEnabled, MAWCEnabled);
+		pMac->roam.configParam.MAWCEnabled = MAWCEnabled;
 		sme_release_global_lock(&pMac->sme);
 	}
 
@@ -12154,7 +12152,7 @@ void active_list_cmd_timeout_handle(void *userData)
 
 	if (mac_ctx->sme.enableSelfRecovery) {
 		sme_save_active_cmd_stats(hal);
-		cds_trigger_recovery();
+		cds_trigger_recovery(CDS_ACTIVE_LIST_TIMEOUT);
 	} else {
 		if (!mac_ctx->roam.configParam.enable_fatal_event &&
 		   !(cds_is_load_or_unload_in_progress() ||
