@@ -270,7 +270,10 @@ struct tcpm_port {
 
 	/* Requested current / voltage */
 	u32 current_limit;
-	u32 supply_voltage;
+	u32 supply_min_mv;
+	u32 supply_max_mv;
+	u32 requested_min_mv;
+	u32 requested_max_mv;
 
 	u32 bist_request;
 
@@ -693,14 +696,22 @@ static u32 tcpm_get_current_limit(struct tcpm_port *port)
 	return limit;
 }
 
-static int tcpm_set_current_limit(struct tcpm_port *port, u32 max_ma, u32 mv)
+static int tcpm_set_current_limit(struct tcpm_port *port, u32 max_ma,
+				  u32 min_mv, u32 max_mv)
 {
 	int ret = -EOPNOTSUPP;
 
-	tcpm_log(port, "Setting voltage/current limit %u mV %u mA", mv, max_ma);
+	tcpm_log(port, "Setting voltage/current limit max_mv %u mV min_mv %u mV %u mA"
+		 , max_mv, min_mv, max_ma);
 
 	if (port->tcpc->set_current_limit)
-		ret = port->tcpc->set_current_limit(port->tcpc, max_ma, mv);
+		ret = port->tcpc->set_current_limit(port->tcpc, max_ma, min_mv,
+						    max_mv);
+
+	if (!ret) {
+		port->supply_min_mv = min_mv;
+		port->supply_max_mv = max_mv;
+	}
 
 	return ret;
 }
@@ -1362,7 +1373,9 @@ static void tcpm_pd_ctrl_request(struct tcpm_port *port,
 			if (port->vbus_present) {
 				tcpm_set_current_limit(port,
 						       port->current_limit,
-						       port->supply_voltage);
+						       port->requested_min_mv,
+						       port->requested_max_mv)
+						       ;
 				port->explicit_contract = true;
 				tcpm_set_state(port, SNK_READY, 0);
 			} else {
@@ -1778,7 +1791,8 @@ static int tcpm_pd_build_request(struct tcpm_port *port, u32 *rdo)
 	}
 
 	port->current_limit = ma;
-	port->supply_voltage = mv;
+	port->requested_max_mv = mv;
+	port->requested_min_mv = mv;
 
 	return 0;
 }
@@ -1992,7 +2006,7 @@ static void tcpm_reset_port(struct tcpm_port *port)
 	port->tcpc->set_pd_rx(port->tcpc, false);
 	tcpm_init_vbus(port);	/* also disables charging */
 	tcpm_init_vconn(port);
-	tcpm_set_current_limit(port, 0, 0);
+	tcpm_set_current_limit(port, 0, 0, 0);
 	tcpm_set_polarity(port, TYPEC_POLARITY_CC1);
 	tcpm_set_attached_state(port, false);
 	port->try_src_count = 0;
@@ -2145,6 +2159,7 @@ static void run_state_machine(struct tcpm_port *port)
 	int ret;
 	enum typec_pwr_opmode opmode;
 	unsigned int msecs;
+	u32 min_mv, max_mv, max_ma;
 
 	port->enter_state = port->state;
 	switch (port->state) {
@@ -2428,7 +2443,7 @@ static void run_state_machine(struct tcpm_port *port)
 		if (port->vbus_present) {
 			tcpm_set_current_limit(port,
 					       tcpm_get_current_limit(port),
-					       5000);
+					       5000, 5000);
 			tcpm_set_charge(port, true);
 			tcpm_set_state(port, SNK_WAIT_CAPABILITIES, 0);
 			break;
@@ -2490,6 +2505,10 @@ static void run_state_machine(struct tcpm_port *port)
 		}
 		break;
 	case SNK_TRANSITION_SINK:
+		min_mv = min(port->supply_min_mv, port->requested_min_mv);
+		max_mv = max(port->supply_max_mv, port->requested_max_mv);
+		max_ma = (PD_P_SNKSTDBY * 1000) / max_mv;
+		tcpm_set_current_limit(port, max_ma, min_mv, max_mv);
 	case SNK_TRANSITION_SINK_VBUS:
 		tcpm_set_state(port, hard_reset_state(port),
 			       PD_T_PS_TRANSITION);
@@ -2912,7 +2931,7 @@ static void _tcpm_cc_change(struct tcpm_port *port, enum typec_cc_status cc1,
 			 (cc1 != old_cc1 || cc2 != old_cc2))
 			tcpm_set_current_limit(port,
 					       tcpm_get_current_limit(port),
-					       5000);
+					       5000, 5000);
 		break;
 
 	case AUDIO_ACC_ATTACHED:

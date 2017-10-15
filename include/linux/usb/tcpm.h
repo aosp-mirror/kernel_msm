@@ -166,7 +166,8 @@ struct tcpc_dev {
 			    enum typec_cc_polarity polarity);
 	int (*set_vconn)(struct tcpc_dev *dev, bool on);
 	int (*set_vbus)(struct tcpc_dev *dev, bool on, bool charge);
-	int (*set_current_limit)(struct tcpc_dev *dev, u32 max_ma, u32 mv);
+	int (*set_current_limit)(struct tcpc_dev *dev, u32 max_ma, u32 min_mv,
+				 u32 max_mv);
 	int (*set_pd_rx)(struct tcpc_dev *dev, bool on);
 	int (*set_roles)(struct tcpc_dev *dev, bool attached,
 			 enum typec_role role, enum typec_data_role data);
