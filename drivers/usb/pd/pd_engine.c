@@ -1329,6 +1329,22 @@ static void pd_phy_shutdown(struct usbpd *pd)
 	pd_engine_log(pd, "pd phy shutdown");
 }
 
+static void set_pd_capable(struct tcpc_dev *dev, bool capable)
+{
+	union power_supply_propval val = {0};
+	struct usbpd *pd = container_of(dev, struct usbpd, tcpc_dev);
+	int ret = 0;
+
+	val.intval = capable ? 1 : 0;
+	ret = power_supply_set_property(pd->usb_psy,
+					POWER_SUPPLY_PROP_PD_ACTIVE,
+					&val);
+	if (ret < 0) {
+		pd_engine_log(pd, "unable to set pd capable to %s, ret=%d",
+                              capable ? "true" : "false", ret);
+        }
+}
+
 #define PDO_FIXED_FLAGS \
 	(PDO_FIXED_DUAL_ROLE | PDO_FIXED_DATA_SWAP | PDO_FIXED_USB_COMM)
 
@@ -1373,6 +1389,7 @@ static void init_tcpc_dev(struct tcpc_dev *pd_tcpc_dev)
 	pd_tcpc_dev->pd_transmit = tcpm_pd_transmit;
 	pd_tcpc_dev->start_drp_toggling = tcpm_start_drp_toggling;
 	pd_tcpc_dev->set_in_pr_swap = tcpm_set_in_pr_swap;
+	pd_tcpc_dev->set_pd_capable = set_pd_capable;
 	pd_tcpc_dev->mux = NULL;
 }
 
