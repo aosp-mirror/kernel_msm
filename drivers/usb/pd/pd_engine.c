@@ -76,6 +76,7 @@ struct usbpd {
 	bool in_pr_swap;
 
 	bool apsd_done;
+	bool pd_capable;
 };
 
 /*
@@ -795,20 +796,8 @@ static int tcpm_set_current_limit(struct tcpc_dev *dev, u32 max_ma, u32 mv)
 	struct usbpd *pd = container_of(dev, struct usbpd, tcpc_dev);
 	int ret = 0;
 
-	if (max_ma > 0) {
-		val.intval = POWER_SUPPLY_PD_ACTIVE;
-		ret = power_supply_set_property(pd->usb_psy,
-				POWER_SUPPLY_PROP_PD_ACTIVE, &val);
-	} else if (max_ma == 0) {
-		val.intval = POWER_SUPPLY_PD_INACTIVE;
-		ret = power_supply_set_property(pd->usb_psy,
-				POWER_SUPPLY_PROP_PD_ACTIVE, &val);
-	}
-
-	if (ret < 0) {
-		pd_engine_log(pd, "unable to set pd active to %d, ret=%d",
-					  val.intval, ret);
-	}
+	if (!pd->pd_capable)
+		return 0;
 
 	val.intval = mv * 1000;
 	ret = power_supply_set_property(pd->usb_psy,
@@ -1330,6 +1319,27 @@ static void pd_phy_shutdown(struct usbpd *pd)
 	pd_engine_log(pd, "pd phy shutdown");
 }
 
+static void set_pd_capable(struct tcpc_dev *dev, bool capable)
+{
+	union power_supply_propval val = {0};
+	struct usbpd *pd = container_of(dev, struct usbpd, tcpc_dev);
+	int ret = 0;
+
+	if (pd->pd_capable == capable)
+		return;
+
+	val.intval = capable ? POWER_SUPPLY_PD_ACTIVE :
+				POWER_SUPPLY_PD_INACTIVE;
+	pd->pd_capable = capable;
+	ret = power_supply_set_property(pd->usb_psy,
+					POWER_SUPPLY_PROP_PD_ACTIVE,
+					&val);
+	if (ret < 0) {
+		pd_engine_log(pd, "unable to set pd capable to %s, ret=%d",
+			      capable ? "true" : "false", ret);
+	}
+}
+
 #define PDO_FIXED_FLAGS \
 	(PDO_FIXED_DUAL_ROLE | PDO_FIXED_DATA_SWAP | PDO_FIXED_USB_COMM)
 
@@ -1371,6 +1381,7 @@ static void init_tcpc_dev(struct tcpc_dev *pd_tcpc_dev)
 	pd_tcpc_dev->pd_transmit = tcpm_pd_transmit;
 	pd_tcpc_dev->start_drp_toggling = tcpm_start_drp_toggling;
 	pd_tcpc_dev->set_in_pr_swap = tcpm_set_in_pr_swap;
+	pd_tcpc_dev->set_pd_capable = set_pd_capable;
 }
 
 static void init_pd_phy_params(struct pd_phy_params *pdphy_params)
