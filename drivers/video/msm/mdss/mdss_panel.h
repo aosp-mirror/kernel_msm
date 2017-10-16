@@ -728,6 +728,9 @@ struct mdss_panel_data {
 
 	struct device_node *cfg_np; /* NULL if config node is not present */
 	struct mdss_panel_data *next;
+
+	int panel_te_gpio;
+	struct completion te_done;
 };
 
 struct mdss_panel_debugfs_info {
