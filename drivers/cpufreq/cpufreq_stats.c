@@ -94,12 +94,102 @@ static struct uid_entry *find_or_register_uid(uid_t uid)
 	return uid_entry;
 }
 
+static int account_thread_stats(struct task_struct *task,
+		u64 **total_time_in_state, unsigned int *max_state)
+{
+	unsigned long flags;
+	unsigned int i;
+	u64 *tmp;
+
+	if (*max_state < task->max_state) {
+		tmp = krealloc(*total_time_in_state,
+			       task->max_state * sizeof(u64),
+			       GFP_ATOMIC);
+		if (!tmp)
+			return -ENOMEM;
+		*total_time_in_state = tmp;
+		memset(*total_time_in_state + *max_state, 0,
+		       (task->max_state - *max_state) *
+		       sizeof(u64));
+		*max_state = task->max_state;
+	}
+	spin_lock_irqsave(&task_time_in_state_lock, flags);
+	if (task->time_in_state) {
+		for (i = 0; i < task->max_state; ++i) {
+			(*total_time_in_state)[i] +=
+				atomic_read(&task->time_in_state[i]);
+		}
+	}
+	spin_unlock_irqrestore(&task_time_in_state_lock, flags);
+	return 0;
+}
+
+static int single_uid_time_in_state_show(struct seq_file *m, void  *ptr)
+{
+	struct uid_entry *uid_entry;
+	struct task_struct *task, *temp;
+	unsigned int i, max_state;
+	u64 *total_time_in_state;
+	uid_t uid = from_kuid_munged(current_user_ns(), *(kuid_t *)m->private);
+
+	if (uid == overflowuid)
+		return -EINVAL;
+	if (!cpufreq_stats_initialized)
+		return 0;
+
+	rt_mutex_lock(&uid_lock);
+
+	uid_entry = find_or_register_uid(uid);
+	if (!uid_entry) {
+		rt_mutex_unlock(&uid_lock);
+		return -ENOMEM;
+	}
+	max_state = uid_entry->dead_max_state;
+	total_time_in_state = kcalloc(max_state, sizeof(u64), GFP_KERNEL);
+	if (!total_time_in_state) {
+		rt_mutex_unlock(&uid_lock);
+		return -ENOMEM;
+	}
+	memcpy(total_time_in_state, uid_entry->dead_time_in_state,
+	       max_state * sizeof(u64));
+
+	rt_mutex_unlock(&uid_lock);
+
+	rcu_read_lock();
+	do_each_thread(temp, task) {
+		int err;
+		uid_t tsk_uid = from_kuid_munged(
+			current_user_ns(), task_uid(task));
+		if (tsk_uid != uid)
+			continue;
+
+		err = account_thread_stats(task,
+					   &total_time_in_state,
+					   &max_state);
+		if (err) {
+			rcu_read_unlock();
+			kfree(total_time_in_state);
+			return err;
+		}
+	} while_each_thread(temp, task);
+	rcu_read_unlock();
+
+	for (i = 0; i < max_state; ++i) {
+		total_time_in_state[i] =
+			cputime_to_clock_t(total_time_in_state[i]);
+	}
+
+	seq_write(m, total_time_in_state, max_state * sizeof(u64));
+	kfree(total_time_in_state);
+	return 0;
+}
+
 
 static int uid_time_in_state_show(struct seq_file *m, void *v)
 {
 	struct uid_entry *uid_entry;
 	struct task_struct *task, *temp;
-	unsigned long bkt, flags;
+	unsigned long bkt;
 	struct cpufreq_policy *last_policy = NULL;
 	int i;
 
@@ -136,29 +226,10 @@ static int uid_time_in_state_show(struct seq_file *m, void *v)
 		if (!uid_entry)
 			continue;
 
-		if (uid_entry->alive_max_state < task->max_state) {
-			uid_entry->alive_time_in_state = krealloc(
-				uid_entry->alive_time_in_state,
-				task->max_state *
-				sizeof(uid_entry->alive_time_in_state[0]),
-				GFP_ATOMIC);
-			memset(uid_entry->alive_time_in_state +
-				uid_entry->alive_max_state,
-				0, (task->max_state -
-				uid_entry->alive_max_state) *
-				sizeof(uid_entry->alive_time_in_state[0]));
-			uid_entry->alive_max_state = task->max_state;
-		}
-
-		spin_lock_irqsave(&task_time_in_state_lock, flags);
-		if (task->time_in_state) {
-			for (i = 0; i < task->max_state; ++i) {
-				uid_entry->alive_time_in_state[i] +=
-					atomic_read(&task->time_in_state[i]);
-			}
-		}
-		spin_unlock_irqrestore(&task_time_in_state_lock, flags);
-
+		account_thread_stats(
+			task,
+			&(uid_entry->alive_time_in_state),
+			&(uid_entry->alive_max_state));
 	} while_each_thread(temp, task);
 	rcu_read_unlock();
 
@@ -649,6 +720,12 @@ static int process_notifier(struct notifier_block *self,
 static int uid_time_in_state_open(struct inode *inode, struct file *file)
 {
 	return single_open(file, uid_time_in_state_show, PDE_DATA(inode));
+}
+
+int single_uid_time_in_state_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, single_uid_time_in_state_show,
+			&(inode->i_uid));
 }
 
 static const struct file_operations uid_time_in_state_fops = {
