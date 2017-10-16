@@ -126,9 +126,9 @@ static void __timerfd_remove_cancel(struct timerfd_ctx *ctx)
 
 static void timerfd_remove_cancel(struct timerfd_ctx *ctx)
 {
-   spin_lock(&ctx->cancel_lock);
-   __timerfd_remove_cancel(ctx);
-   spin_unlock(&ctx->cancel_lock);
+	spin_lock(&ctx->cancel_lock);
+	__timerfd_remove_cancel(ctx);
+	spin_unlock(&ctx->cancel_lock);
 }
 
 static bool timerfd_canceled(struct timerfd_ctx *ctx)
@@ -427,7 +427,7 @@ SYSCALL_DEFINE2(timerfd_create, int, clockid, int, flags)
 	return ufd;
 }
 
-static int do_timerfd_settime(int ufd, int flags, 
+static int do_timerfd_settime(int ufd, int flags,
 		const struct itimerspec *new,
 		struct itimerspec *old)
 {

@@ -26,6 +26,7 @@
 #include <sound/initval.h>
 #include <sound/control.h>
 #include <sound/q6audio-v2.h>
+#include <sound/q6core.h>
 #include <sound/timer.h>
 #include <asm/dma.h>
 #include <linux/dma-mapping.h>
@@ -275,7 +276,7 @@ static int msm_pcm_playback_prepare(struct snd_pcm_substream *substream)
 	struct msm_audio *prtd = runtime->private_data;
 	struct msm_plat_data *pdata;
 	struct snd_pcm_hw_params *params;
-	int ret;
+	int ret, avs_ver = -EINVAL;
 	uint16_t bits_per_sample = 16;
 
 	pdata = (struct msm_plat_data *)
@@ -316,9 +317,12 @@ static int msm_pcm_playback_prepare(struct snd_pcm_substream *substream)
 		return -ENOMEM;
 	}
 
-	ret = q6asm_send_cal(prtd->audio_client);
-	if (ret < 0)
-		pr_debug("%s : Send cal failed : %d", __func__, ret);
+	avs_ver = q6core_get_avs_version();
+	if(avs_ver == Q6_SUBSYS_AVS2_6) {
+		ret = q6asm_send_cal(prtd->audio_client);
+		if (ret < 0)
+			pr_debug("%s : Send cal failed : %d", __func__, ret);
+	}
 
 	pr_debug("%s: session ID %d\n", __func__,
 			prtd->audio_client->session);
