@@ -550,7 +550,7 @@ static void psy_changed_handler(struct work_struct *work)
 		return;
 
 	ret = power_supply_get_property(pd->usb_psy,
-					POWER_SUPPLY_PROP_TYPE, &val);
+					POWER_SUPPLY_PROP_REAL_TYPE, &val);
 	if (ret < 0) {
 		pd_engine_log(pd, "Unable to read TYPE, ret=%d", ret);
 		return;
