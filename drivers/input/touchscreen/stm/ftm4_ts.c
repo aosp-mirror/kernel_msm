@@ -2419,7 +2419,7 @@ static int touch_fb_notifier_callback(struct notifier_block *self,
 		container_of(self, struct fts_ts_info, fb_notif);
 	struct fb_event *ev = (struct fb_event *)data;
 
-	if (ev && ev->data && event == FB_EVENT_BLANK) {
+	if (ev && ev->data && event == FB_EARLY_EVENT_BLANK) {
 		int *blank = (int *)ev->data;
 
 		if (*blank == FB_BLANK_UNBLANK)
