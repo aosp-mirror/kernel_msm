@@ -212,6 +212,7 @@ typedef struct sCsrNeighborRoamControlInfo
     tANI_U8                     currentRoamBmissFinalBcnt;
     tANI_U8                     currentRoamBeaconRssiWeight;
     tANI_U8                     lastSentCmd;
+    bool                        b_roam_scan_offload_started;
 } tCsrNeighborRoamControlInfo, *tpCsrNeighborRoamControlInfo;
 
 /* All the necessary Function declarations are here */
