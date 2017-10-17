@@ -2282,6 +2282,71 @@ void populate_dot11f_fils_params(tpAniSirGlobal mac_ctx,
 			     fils_info->key_auth, fils_info->key_auth_len);
 	}
 }
+/**
+ * update_esp_data: update ESP params from beacon/probe response
+ * @esp_information: pointer to sir_esp_information
+ * @esp_indication: pointer to tDot11fIEESP_information
+ *
+ * The Estimated Service Parameters element is
+ * used by a AP to provide information to another STA which
+ * can then use the information as input to an algorithm to
+ * generate an estimate of throughput between the two STAs.
+ * The ESP Information List field contains from 1 to 4 ESP
+ * Information fields(each field 24 bits), each corresponding
+ * to an access category for which estimated service parameters
+ * information is provided.
+ *
+ * Return: None
+ */
+
+static void update_esp_data(struct sir_esp_information *esp_information,
+		tDot11fIEESP_information *esp_indication)
+{
+
+	uint8_t *data;
+	int i = 0;
+	int total_elements;
+	struct sir_esp_info *esp_info;
+
+	data = esp_indication->variable_data;
+	total_elements  = esp_indication->num_variable_data;
+	esp_information->is_present = esp_indication->present;
+	do_div(total_elements, ESP_INFORMATION_LIST_LENGTH);
+
+	if (total_elements > 4) {
+		pe_err("No of Air time fractions are greater than supported");
+		return;
+	}
+
+	for (i = 0; i < total_elements; i++) {
+		esp_info = (struct sir_esp_info *)data;
+		if (esp_info->access_category == ESP_AC_BK) {
+			qdf_mem_copy(&esp_information->esp_info_AC_BK,
+					data, 3);
+			data = data + ESP_INFORMATION_LIST_LENGTH;
+			continue;
+		}
+		if (esp_info->access_category == ESP_AC_BE) {
+			qdf_mem_copy(&esp_information->esp_info_AC_BE,
+					data, 3);
+			data = data + ESP_INFORMATION_LIST_LENGTH;
+			continue;
+		}
+		if (esp_info->access_category == ESP_AC_VI) {
+			qdf_mem_copy(&esp_information->esp_info_AC_VI,
+					data, 3);
+			data = data + ESP_INFORMATION_LIST_LENGTH;
+			continue;
+		}
+		if (esp_info->access_category == ESP_AC_VO) {
+			qdf_mem_copy(&esp_information->esp_info_AC_VO,
+					data, 3);
+			data = data + ESP_INFORMATION_LIST_LENGTH;
+			break;
+		}
+	}
+	return;
+}
 
 /**
  * update_fils_data: update fils params from beacon/probe response
@@ -2349,6 +2414,11 @@ sir_convert_fils_data_to_probersp_struct(tpSirProbeRespBeacon probe_resp,
 		tDot11fProbeResponse *pr)
 {
 }
+
+static void update_esp_data(struct sir_esp_information *esp_information,
+		tDot11fIEESP_information *esp_indication)
+{
+}
 #endif
 
 void sir_copy_caps_info(tpAniSirGlobal mac_ctx, tDot11fFfCapabilities caps,
@@ -2370,6 +2440,24 @@ void sir_copy_caps_info(tpAniSirGlobal mac_ctx, tDot11fFfCapabilities caps,
 	pProbeResp->capabilityInfo.dsssOfdm = caps.dsssOfdm;
 	pProbeResp->capabilityInfo.delayedBA = caps.delayedBA;
 	pProbeResp->capabilityInfo.immediateBA = caps.immediateBA;
+}
+
+/**
+ * sir_convert_esp_data_to_probersp_struct: update ESP params from probe resp
+ * @probe_resp: pointer to tpSirProbeRespBeacon
+ * @pr: pointer to tDot11fProbeResponse
+ *
+ * Return: None
+ */
+static void
+sir_convert_esp_data_to_probersp_struct(tpSirProbeRespBeacon probe_resp,
+					tDot11fProbeResponse *pr)
+{
+	if (!pr->ESP_information.present)
+		return;
+
+	update_esp_data(&probe_resp->esp_information,
+			&pr->ESP_information);
 }
 
 tSirRetStatus sir_convert_probe_frame2_struct(tpAniSirGlobal pMac,
@@ -2638,11 +2726,14 @@ tSirRetStatus sir_convert_probe_frame2_struct(tpAniSirGlobal pMac,
 		}
 	}
 
+	sir_convert_esp_data_to_probersp_struct(pProbeResp, pr);
 	sir_convert_fils_data_to_probersp_struct(pProbeResp, pr);
 	qdf_mem_free(pr);
 	return eSIR_SUCCESS;
 
 } /* End sir_convert_probe_frame2_struct. */
+
+
 
 tSirRetStatus
 sir_convert_assoc_req_frame2_struct(tpAniSirGlobal pMac,
@@ -3952,6 +4043,24 @@ sir_convert_fils_data_to_beacon_struct(tpSirProbeRespBeacon beacon_struct,
 }
 #endif
 
+/**
+ * sir_convert_esp_data_to_beacon_struct: update ESP params from beacon
+ * @beacon_struct: pointer to tpSirProbeRespBeacon
+ * @beacon: pointer to tDot11fBeacon
+ *
+ * Return: None
+ */
+static void
+sir_convert_esp_data_to_beacon_struct(tpSirProbeRespBeacon beacon_struct,
+					tDot11fBeacon *beacon)
+{
+	if (!beacon->ESP_information.present)
+		return;
+
+	update_esp_data(&beacon_struct->esp_information,
+			&beacon->ESP_information);
+}
+
 tSirRetStatus
 sir_convert_beacon_frame2_struct(tpAniSirGlobal pMac,
 				 uint8_t *pFrame,
@@ -4307,6 +4416,7 @@ sir_convert_beacon_frame2_struct(tpAniSirGlobal pMac,
 		}
 	}
 
+	sir_convert_esp_data_to_beacon_struct(pBeaconStruct, pBeacon);
 	sir_convert_fils_data_to_beacon_struct(pBeaconStruct, pBeacon);
 	qdf_mem_free(pBeacon);
 	return eSIR_SUCCESS;

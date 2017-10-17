@@ -218,6 +218,7 @@
 	qcom,fg-recharge-soc-thr = <97>;
 	qcom,fg-auto-recharge-soc;
 	qcom,hold-soc-while-full;
+	qcom,linearize-soc;
 	qcom,fg-esr-tight-lt-filter-micro-pct = <30000>;
 	qcom,fg-esr-broad-lt-filter-micro-pct = <30000>;
 	qcom,fg-batt-temp-compensation;

@@ -2583,6 +2583,19 @@ QDF_STATUS wmi_unified_add_clear_mcbc_filter_cmd(void *wmi_hdl,
 	return QDF_STATUS_E_FAILURE;
 }
 
+QDF_STATUS wmi_unified_multiple_add_clear_mcbc_filter_cmd(void *wmi_hdl,
+				     uint8_t vdev_id,
+				     struct mcast_filter_params *filter_param)
+{
+	wmi_unified_t wmi_handle = (wmi_unified_t) wmi_hdl;
+
+	if (wmi_handle->ops->send_multiple_add_clear_mcbc_filter_cmd)
+		return wmi_handle->ops->send_multiple_add_clear_mcbc_filter_cmd(
+				wmi_handle, vdev_id, filter_param);
+
+	return QDF_STATUS_E_FAILURE;
+}
+
 /**
  * wmi_unified_send_gtk_offload_cmd() - send GTK offload command to fw
  * @wmi_handle: wmi handle
@@ -3372,22 +3385,20 @@ QDF_STATUS wmi_unified_roam_scan_offload_cmd(void *wmi_hdl,
 /**
  * wmi_unified_send_roam_scan_offload_ap_cmd() - set roam ap profile in fw
  * @wmi_hdl: wmi handle
- * @ap_profile_p: ap profile
- * @vdev_id: vdev id
+ * @ap_profile: ap profile params
  *
  * Send WMI_ROAM_AP_PROFILE to firmware
  *
  * Return: QDF_STATUS_SUCCESS on success and QDF_STATUS_E_FAILURE for failure
  */
 QDF_STATUS wmi_unified_send_roam_scan_offload_ap_cmd(void *wmi_hdl,
-					    wmi_ap_profile *ap_profile_p,
-					    uint32_t vdev_id)
+					   struct ap_profile_params *ap_profile)
 {
 	wmi_unified_t wmi_handle = (wmi_unified_t) wmi_hdl;
 
 	if (wmi_handle->ops->send_roam_scan_offload_ap_profile_cmd)
-		return wmi_handle->ops->send_roam_scan_offload_ap_profile_cmd(wmi_handle,
-				  ap_profile_p, vdev_id);
+		return wmi_handle->ops->send_roam_scan_offload_ap_profile_cmd(
+				  wmi_handle, ap_profile);
 
 	return QDF_STATUS_E_FAILURE;
 }

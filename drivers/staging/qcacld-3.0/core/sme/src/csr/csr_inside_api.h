@@ -94,13 +94,13 @@
 #define CSR_ROAMING_DFS_CHANNEL_ENABLED_NORMAL     (1)
 #define CSR_ROAMING_DFS_CHANNEL_ENABLED_ACTIVE     (2)
 
-#define CSR_ACTIVE_SCAN_LIST_CMD_TIMEOUT (1000*30)
+#define CSR_ACTIVE_SCAN_LIST_CMD_TIMEOUT (1000 * 30)
 
-/* ***************************************************************************
+/*
  * The MAX BSSID Count should be lower than the command timeout value and it
- * can be of a fraction of 3/4 to 1/2 of the total command timeout value.
- * ***************************************************************************/
-#define CSR_MAX_BSSID_COUNT     (SME_ACTIVE_LIST_CMD_TIMEOUT_VALUE/2000)
+ * can be of a fraction of 1/3 to 1/2 of the total command timeout value.
+ */
+#define CSR_MAX_BSSID_COUNT     (SME_ACTIVE_LIST_CMD_TIMEOUT_VALUE / 3000)
 #define CSR_CUSTOM_CONC_GO_BI    100
 extern uint8_t csr_wpa_oui[][CSR_WPA_OUI_SIZE];
 bool csr_is_supported_channel(tpAniSirGlobal pMac, uint8_t channelId);
@@ -109,12 +109,16 @@ bool csr_is_supported_channel(tpAniSirGlobal pMac, uint8_t channelId);
 #define BEST_CANDIDATE_RSSI_WEIGHT 50
 #define MIN_RSSI (-100)
 #define MAX_RSSI 0
-#define BEST_CANDIDATE_AP_COUNT_WEIGHT 50
-#define BEST_CANDIDATE_MAX_COUNT 30
-#define BEST_CANDIDATE_MIN_COUNT 0
 #define ROAM_MAX_CHANNEL_WEIGHT 100
-#define DEFAULT_CHANNEL_UTILIZATION 50
 #define MAX_CHANNEL_UTILIZATION 100
+#define NSS_1X1_WEIGHTAGE 3
+#define MAX_ESTIMATED_AIR_TIME_FRACTION 255
+#define MAX_AP_LOAD 255
+
+#define LOW_CHANNEL_CONGESTION_WEIGHT 500
+#define MODERATE_CHANNEL_CONGESTION_WEIGHT 370
+#define CONSIDERABLE_CHANNEL_CONGESTION_WEIGHT 250
+#define HIGH_CHANNEL_CONGESTION_WEIGHT 120
 
 #define LOW_CHANNEL_CONGESTION 0
 #define MODERATE_CHANNEL_CONGESTION 25
@@ -122,31 +126,42 @@ bool csr_is_supported_channel(tpAniSirGlobal pMac, uint8_t channelId);
 #define HIGH_CHANNEL_CONGESTION 75
 #define EXTREME_CHANNEL_CONGESTION 100
 
-#define RSSI_WEIGHTAGE 25
-#define HT_CAPABILITY_WEIGHTAGE 7
-#define VHT_CAP_WEIGHTAGE 5
-#define BEAMFORMING_CAP_WEIGHTAGE 2
-#define CHAN_WIDTH_WEIGHTAGE 10
-#define CHAN_BAND_WEIGHTAGE 5
-#define WMM_WEIGHTAGE 0
-#define CCA_WEIGHTAGE 8
-#define OTHER_AP_WEIGHT 28
-#define PCL_WEIGHT 10
-
-#define MAX_AP_LOAD 255
-#define BEST_CANDIDATE_EXCELLENT_RSSI -40
-#define BEST_CANDIDATE_GOOD_RSSI -55
-#define BEST_CANDIDATE_POOR_RSSI -65
+#define EXCELLENT_RSSI -55
 #define BAD_RSSI  -80
-#define BEST_CANDIDATE_EXCELLENT_RSSI_WEIGHT 100
-#define BEST_CANDIDATE_GOOD_RSSI_WEIGHT 80
-#define BEST_CANDIDATE_BAD_RSSI_WEIGHT 60
-#define BEST_CANDIDATE_MAX_WEIGHT 100
+#define EXCELLENT_RSSI_WEIGHT 100
+#define RSSI_BUCKET 5
+#define RSSI_WEIGHT_BUCKET 250
+
 #define BEST_CANDIDATE_80MHZ 100
 #define BEST_CANDIDATE_40MHZ 70
 #define BEST_CANDIDATE_20MHZ 30
-#define BEST_CANDIDATE_PENALTY (3/10)
 #define BEST_CANDIDATE_MAX_BSS_SCORE 10000
+
+#define WLAN_20MHZ_BW_INDEX                  0
+#define WLAN_SCORE_40MHZ_BW_INDEX            1
+#define WLAN_SCORE_80MHZ_BW_INDEX            2
+#define WLAN_SCORE_160MHZ_BW_INDEX           3
+#define WLAN_SCORE_MAX_BW_INDEX              4
+
+#define WLAN_NSS_1x1_INDEX                   0
+#define WLAN_NSS_2x2_INDEX                   1
+#define WLAN_NSS_3x3_INDEX                   2
+#define WLAN_NSS_4x4_INDEX                   3
+#define WLAN_MAX_NSS_INDEX                   4
+
+#define WLAN_BAND_2G_INDEX                   0
+#define WLAN_BAND_5G_INDEX                   1
+/* 2 and 3 are reserved */
+#define WLAN_MAX_BAND_INDEX                  4
+
+#define WLAN_ESP_QBSS_INDEX_0                   0
+#define WLAN_ESP_QBSS_INDEX_3                   3
+#define WLAN_ESP_QBSS_INDEX_7                   7
+#define WLAN_ESP_QBSS_OFFSET_INDEX_7_4          4
+#define WLAN_ESP_QBSS_INDEX_11                  11
+#define WLAN_ESP_QBSS_OFFSET_INDEX_11_8         8
+#define WLAN_ESP_QBSS_MAX_INDEX                 15
+#define WLAN_ESP_QBSS_OFFSET_INDEX_15_12        12
 
 
 enum csr_scancomplete_nextcommand {
