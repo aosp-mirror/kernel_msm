@@ -36,6 +36,7 @@
 #include <linux/hardirq.h>
 #include <linux/jiffies.h>
 #include <linux/workqueue.h>
+#include <linux/vmalloc.h>
 #include <linux/htc_debug_tools.h>
 
 #include "internal.h"
@@ -581,7 +582,7 @@ void pstore_get_records(int quiet)
 							big_oops_buf_sz);
 
 			if (unzipped_len > 0) {
-				kfree(buf);
+				vfree(buf);
 				buf = big_oops_buf;
 				size = unzipped_len;
 				compressed = false;
@@ -596,7 +597,7 @@ void pstore_get_records(int quiet)
 				  compressed, (size_t)size, time, psi);
 		if (unzipped_len < 0) {
 			/* Free buffer other than big oops */
-			kfree(buf);
+			vfree(buf);
 			buf = NULL;
 		} else
 			unzipped_len = -1;

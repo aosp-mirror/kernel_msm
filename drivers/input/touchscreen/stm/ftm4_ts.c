@@ -1208,9 +1208,10 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 			(EventID == EVENTID_MOTION_POINTER) ||
 			(EventID == EVENTID_LEAVE_POINTER))
 			info->finger[TouchID].state = EventID;
+
+		input_sync(info->input_dev);
 	}
 
-	input_sync(info->input_dev);
 
 #if defined(CONFIG_INPUT_BOOSTER)
 	if ((EventID == EVENTID_ENTER_POINTER)

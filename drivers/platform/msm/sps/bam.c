@@ -834,7 +834,7 @@ static inline void bam_write_reg(void *base, enum bam_regs reg,
 		return;
 	}
 	iowrite32(val, dev->base + offset);
-	SPS_DBG(dev, "sps:bam 0x%p(va) write reg 0x%x w_val 0x%x.\n",
+	SPS_DBG(dev, "sps:bam 0x%pP(va) write reg 0x%x w_val 0x%x.\n",
 			dev->base, offset, val);
 }
 
@@ -870,7 +870,7 @@ static inline void bam_write_reg_field(void *base, enum bam_regs reg,
 	tmp &= ~mask;		/* clear written bits */
 	val = tmp | (val << shift);
 	iowrite32(val, dev->base + offset);
-	SPS_DBG(dev, "sps:bam 0x%p(va) write reg 0x%x w_val 0x%x.\n",
+	SPS_DBG(dev, "sps:bam 0x%pP(va) write reg 0x%x w_val 0x%x.\n",
 			dev->base, offset, val);
 }
 

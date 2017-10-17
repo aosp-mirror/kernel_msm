@@ -9,7 +9,6 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-#include <linux/alarmtimer.h>
 #include <linux/delay.h>
 #include <linux/fb.h>
 #include <linux/gpio.h>
@@ -28,8 +27,14 @@
 
 #define HTC_BATT_NAME "htc_battery"
 
-/* mutex for static data htc_batt_info and htc_batt_timer */
-static struct mutex htc_battery_lock;
+/*
+ * Protects access to the following static data:
+ *
+ * htc_batt_info
+ * htc_batt_timer
+ * g_htc_battery_probe_done
+ */
+DEFINE_MUTEX(htc_battery_lock);
 
 static int full_level_dis_chg = 100;
 module_param_named(
@@ -134,7 +139,6 @@ struct htc_battery_timer {
 	struct timer_list batt_timer;
 	struct workqueue_struct *batt_wq;
 	unsigned int time_out;
-	struct alarm batt_check_wakeup_alarm;
 };
 
 static struct htc_battery_info htc_batt_info;
@@ -470,6 +474,11 @@ static int update_ibat_setting(void)
 	return ibat_ma * 1000;
 }
 
+/*
+ * Accesses htc_batt_timer and g_htc_battery_probe_done.
+ *
+ * Caller must hold htc_battery_lock.
+ */
 int htc_batt_schedule_batt_info_update(void)
 {
 	if (!g_htc_battery_probe_done)
@@ -786,13 +795,6 @@ static int htc_battery_probe_process(void)
 	if (!htc_batt_info.usb_psy)
 		return -EPROBE_DEFER;
 
-	htc_batt_info.htc_batt_cb.notifier_call = htc_notifier_batt_callback;
-	rc = power_supply_reg_notifier(&htc_batt_info.htc_batt_cb);
-	if (rc < 0) {
-		BATT_ERR("Couldn't register psy notifier rc = %d\n", rc);
-		return rc;
-	}
-
 	rc = power_supply_get_property(htc_batt_info.bms_psy,
 				       POWER_SUPPLY_PROP_BATTERY_TYPE, &ret);
 	if (rc < 0) {
@@ -906,16 +908,17 @@ static int htc_battery_probe_process(void)
 	return 0;
 }
 
+/*
+ * htc_batt_timer.batt_timer can only be started after htc_batt_timer.batt_wq
+ * is initialized and g_htc_battery_probe_done is set to true, so the timer
+ * callback is properly synchronized with code that acquires htc_battery_lock.
+ *
+ * This timer callback *cannot* acquire htc_battery_lock because otherwise it
+ * will deadlock with the del_timer_sync() in batt_worker().
+ */
 static void batt_regular_timer_handler(unsigned long data)
 {
 	htc_batt_schedule_batt_info_update();
-}
-
-static enum alarmtimer_restart
-batt_check_alarm_handler(struct alarm *alarm, ktime_t time)
-{
-	/* BATT_LOG("alarm handler, but do nothing."); */
-	return 0;
 }
 
 /* accesses htc_batt_info, needs htc_battery_lock */
@@ -937,31 +940,46 @@ static int htc_battery_probe(struct platform_device *pdev)
 {
 	int rc = 0;
 
-	mutex_init(&htc_battery_lock);
 	mutex_lock(&htc_battery_lock);
-
-	INIT_WORK(&htc_batt_timer.batt_work, batt_worker);
-	INIT_WORK(&htc_batt_info.batt_update_work, htc_battery_update_work);
-	init_timer(&htc_batt_timer.batt_timer);
-	htc_batt_timer.batt_timer.function = batt_regular_timer_handler;
-	alarm_init(&htc_batt_timer.batt_check_wakeup_alarm, ALARM_REALTIME,
-		   batt_check_alarm_handler);
-	htc_batt_timer.batt_wq = create_singlethread_workqueue("batt_timer");
-
-	htc_batt_timer.time_out = BATT_TIMER_UPDATE_TIME;
-	batt_set_check_timer(htc_batt_timer.time_out);
 
 	rc = htc_battery_probe_process();
 	if (rc < 0)
-		goto done;
+		goto err_unlock;
+
+	INIT_WORK(&htc_batt_timer.batt_work, batt_worker);
+	INIT_WORK(&htc_batt_info.batt_update_work, htc_battery_update_work);
+	setup_timer(&htc_batt_timer.batt_timer, batt_regular_timer_handler, 0);
+	htc_batt_timer.batt_wq = create_singlethread_workqueue("batt_timer");
+	if (!htc_batt_timer.batt_wq) {
+		BATT_LOG("%s: create_singlethread_workqueue failed.\n",
+			 __func__);
+		goto err_unlock;
+	}
+
+	htc_batt_timer.time_out = BATT_TIMER_UPDATE_TIME;
+
+	htc_batt_info.htc_batt_cb.notifier_call = htc_notifier_batt_callback;
+	rc = power_supply_reg_notifier(&htc_batt_info.htc_batt_cb);
+	if (rc  < 0) {
+		BATT_LOG("%s: power_supply_reg_notifier failed.\n", __func__);
+		goto err_destroy_workqueue;
+	}
 
 	rc = htc_battery_fb_register();
-	if (rc < 0)
-		goto done;
+	if (rc  < 0) {
+		BATT_LOG("%s: htc_battery_fb_register failed.\n", __func__);
+		goto err_power_supply_unreg_notifier;
+	}
 
 	g_htc_battery_probe_done = true;
+	batt_set_check_timer(htc_batt_timer.time_out);
+	goto err_unlock;
 
-done:
+err_power_supply_unreg_notifier:
+	power_supply_unreg_notifier(&htc_batt_info.htc_batt_cb);
+err_destroy_workqueue:
+	destroy_workqueue(htc_batt_timer.batt_wq);
+err_unlock:
 	mutex_unlock(&htc_battery_lock);
 	return rc;
 }
@@ -981,6 +999,8 @@ static struct platform_driver htc_battery_driver = {
 
 static int __init htc_battery_init(void)
 {
+	int ret;
+
 	wake_lock_init(&htc_batt_info.charger_exist_lock,
 		       WAKE_LOCK_SUSPEND, "charger_exist_lock");
 
@@ -1010,8 +1030,17 @@ static int __init htc_battery_init(void)
 	htc_batt_info.batt_thermal_limit_vol = 4200;
 	htc_batt_info.vbus = 0;
 
-	platform_device_register(&htc_battery_pdev);
-	platform_driver_register(&htc_battery_driver);
+	ret = platform_device_register(&htc_battery_pdev);
+	if (ret < 0) {
+		BATT_LOG("%s: device registration failed.\n", __func__);
+		return ret;
+	}
+
+	ret = platform_driver_register(&htc_battery_driver);
+	if (ret < 0) {
+		BATT_LOG("%s: driver registration failed.\n", __func__);
+		return ret;
+	}
 
 	BATT_LOG("%s done.\n", __func__);
 
@@ -1022,6 +1051,7 @@ static void __exit htc_battery_exit(void)
 {
 	platform_device_unregister(&htc_battery_pdev);
 	platform_driver_unregister(&htc_battery_driver);
+	BATT_LOG("%s done.\n", __func__);
 }
 
 module_init(htc_battery_init);
