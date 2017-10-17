@@ -545,10 +545,6 @@ static void psy_changed_handler(struct work_struct *work)
 	}
 	apsd_done = !!val.intval;
 
-	/* Dont proceed as pmi might still be evaluating connecttions */
-	if (!apsd_done && !typec_mode != POWER_SUPPLY_TYPEC_NONE)
-		return;
-
 	ret = power_supply_get_property(pd->usb_psy,
 					POWER_SUPPLY_PROP_REAL_TYPE, &val);
 	if (ret < 0) {
@@ -588,6 +584,12 @@ static void psy_changed_handler(struct work_struct *work)
 		      get_typec_cc_orientation_name(typec_cc_orientation),
 		      get_typec_cc_status_name(cc1),
 		      get_typec_cc_status_name(cc2));
+
+	/* Dont proceed as pmi might still be evaluating connecttions */
+	if (!apsd_done && (typec_mode != POWER_SUPPLY_TYPEC_NONE)) {
+		pd_engine_log(pd, "Skipping update as PE_START not set yet");
+		return;
+	}
 
 	mutex_lock(&pd->lock);
 
