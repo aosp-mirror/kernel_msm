@@ -66,6 +66,11 @@ struct usbpd {
 	struct mutex		lock; /* struct usbpd access lock */
 	struct workqueue_struct	*wq;
 
+	enum typec_role cur_pwr_role;
+	enum typec_data_role cur_data_role;
+
+	bool in_hard_reset;
+
 	/* debugfs logging */
 	struct dentry *dentry;
 	struct mutex logbuffer_lock;	/* log buffer access lock */
@@ -694,6 +699,9 @@ static int tcpm_set_cc(struct tcpc_dev *dev, enum typec_cc_status cc)
 	if (ret < 0)
 		pd_engine_log(pd, "unable to set POWER_ROLE, ret=%d",
 			      ret);
+	else
+		pd_engine_log(pd, "set POWER_ROLE to %d",
+			      cc);
 
 unlock:
 	mutex_unlock(&pd->lock);
@@ -1271,6 +1279,10 @@ static int tcpm_set_roles(struct tcpc_dev *dev, bool attached,
 
 	ret = set_usb_data_role(pd, attached, role, data);
 
+	if (!ret) {
+		pd->cur_pwr_role = role;
+		pd->cur_data_role = data;
+	}
 unlock:
 	mutex_unlock(&pd->lock);
 	return ret;
@@ -1345,6 +1357,51 @@ static void set_pd_capable(struct tcpc_dev *dev, bool capable)
         }
 }
 
+static void set_in_hard_reset(struct tcpc_dev *dev, bool status)
+{
+	union power_supply_propval val = {0};
+	struct usbpd *pd = container_of(dev, struct usbpd, tcpc_dev);
+	int ret = 0;
+
+	mutex_lock(&pd->lock);
+
+	if (status == pd->in_hard_reset)
+		goto unlock;
+
+	val.intval = status ? 1 : 0;
+	ret = power_supply_set_property(pd->usb_psy,
+					POWER_SUPPLY_PROP_PD_IN_HARD_RESET,
+					&val);
+	if (ret < 0) {
+		pd_engine_log(pd,
+			      "unable to set hard reset status to %s, ret=%d",
+			      status ? "true" : "false", ret);
+		goto unlock;
+	}
+
+	switch (pd->cur_pwr_role) {
+	case TYPEC_SINK:
+		val.intval = POWER_SUPPLY_TYPEC_PR_SINK;
+		break;
+	case TYPEC_SOURCE:
+		val.intval = POWER_SUPPLY_TYPEC_PR_SOURCE;
+		break;
+	default:
+		goto unlock;
+	}
+	ret = power_supply_set_property(pd->usb_psy,
+					POWER_SUPPLY_PROP_TYPEC_POWER_ROLE,
+					&val);
+	if (ret < 0)
+		pd_engine_log(pd, "unable to set POWER_ROLE, ret=%d",
+			      ret);
+
+	pd->in_hard_reset = status;
+
+unlock:
+	mutex_unlock(&pd->lock);
+}
+
 #define PDO_FIXED_FLAGS \
 	(PDO_FIXED_DUAL_ROLE | PDO_FIXED_DATA_SWAP | PDO_FIXED_USB_COMM)
 
@@ -1390,6 +1447,7 @@ static void init_tcpc_dev(struct tcpc_dev *pd_tcpc_dev)
 	pd_tcpc_dev->start_drp_toggling = tcpm_start_drp_toggling;
 	pd_tcpc_dev->set_in_pr_swap = tcpm_set_in_pr_swap;
 	pd_tcpc_dev->set_pd_capable = set_pd_capable;
+	pd_tcpc_dev->set_in_hard_reset = set_in_hard_reset;
 	pd_tcpc_dev->mux = NULL;
 }
 
