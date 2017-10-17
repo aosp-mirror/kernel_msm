@@ -2237,12 +2237,14 @@ static void dwc3_ext_event_notify(struct dwc3_msm *mdwc)
 		mdwc->init = true;
 		pm_runtime_set_autosuspend_delay(mdwc->dev, 1000);
 		pm_runtime_use_autosuspend(mdwc->dev);
-		if (!work_busy(&mdwc->sm_work.work))
-			schedule_delayed_work(&mdwc->sm_work, 0);
+		if (!work_busy(&mdwc->sm_work.work)) {
+			queue_delayed_work(system_freezable_wq, &mdwc->sm_work,
+					   0);
+		}
 		return;
 	}
 
-	schedule_delayed_work(&mdwc->sm_work, 0);
+	queue_delayed_work(system_freezable_wq, &mdwc->sm_work, 0);
 }
 
 static void dwc3_resume_work(struct work_struct *w)
@@ -4006,7 +4008,7 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 	}
 
 	if (work)
-		schedule_delayed_work(&mdwc->sm_work, delay);
+		queue_delayed_work(system_freezable_wq, &mdwc->sm_work, delay);
 
 ret:
 	return;

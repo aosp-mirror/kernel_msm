@@ -432,6 +432,7 @@ static int msm_fd_open(struct file *file)
 	ctx->vb2_q.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
 	ctx->vb2_q.io_modes = VB2_USERPTR;
 	ctx->vb2_q.timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_COPY;
+	mutex_init(&ctx->lock);
 	ret = vb2_queue_init(&ctx->vb2_q);
 	if (ret < 0) {
 		dev_err(device->dev, "Error queue init\n");
@@ -482,7 +483,9 @@ static int msm_fd_release(struct file *file)
 	msm_cpp_vbif_register_error_handler((void *)ctx,
 		VBIF_CLIENT_FD, NULL);
 
+	mutex_lock(&ctx->lock);
 	vb2_queue_release(&ctx->vb2_q);
+	mutex_unlock(&ctx->lock);
 
 	vfree(ctx->stats);
 
@@ -512,7 +515,9 @@ static unsigned int msm_fd_poll(struct file *file,
 	struct fd_ctx *ctx = msm_fd_ctx_from_fh(file->private_data);
 	unsigned int ret;
 
+	mutex_lock(&ctx->lock);
 	ret = vb2_poll(&ctx->vb2_q, file, wait);
+	mutex_unlock(&ctx->lock);
 
 	if (atomic_read(&ctx->subscribed_for_event)) {
 		poll_wait(file, &ctx->fh.wait, wait);
@@ -750,9 +755,9 @@ static int msm_fd_reqbufs(struct file *file,
 	int ret;
 	struct fd_ctx *ctx = msm_fd_ctx_from_fh(fh);
 
-	mutex_lock(&ctx->fd_device->recovery_lock);
+	mutex_lock(&ctx->lock);
 	ret = vb2_reqbufs(&ctx->vb2_q, req);
-	mutex_unlock(&ctx->fd_device->recovery_lock);
+	mutex_unlock(&ctx->lock);
 	return ret;
 }
 
@@ -768,9 +773,9 @@ static int msm_fd_qbuf(struct file *file, void *fh,
 	int ret;
 	struct fd_ctx *ctx = msm_fd_ctx_from_fh(fh);
 
-	mutex_lock(&ctx->fd_device->recovery_lock);
+	mutex_lock(&ctx->lock);
 	ret = vb2_qbuf(&ctx->vb2_q, pb);
-	mutex_unlock(&ctx->fd_device->recovery_lock);
+	mutex_unlock(&ctx->lock);
 	return ret;
 
 }
@@ -787,9 +792,9 @@ static int msm_fd_dqbuf(struct file *file,
 	int ret;
 	struct fd_ctx *ctx = msm_fd_ctx_from_fh(fh);
 
-	mutex_lock(&ctx->fd_device->recovery_lock);
+	mutex_lock(&ctx->lock);
 	ret = vb2_dqbuf(&ctx->vb2_q, pb, file->f_flags & O_NONBLOCK);
-	mutex_unlock(&ctx->fd_device->recovery_lock);
+	mutex_unlock(&ctx->lock);
 	return ret;
 }
 
@@ -805,7 +810,9 @@ static int msm_fd_streamon(struct file *file,
 	struct fd_ctx *ctx = msm_fd_ctx_from_fh(fh);
 	int ret;
 
+	mutex_lock(&ctx->lock);
 	ret = vb2_streamon(&ctx->vb2_q, buf_type);
+	mutex_unlock(&ctx->lock);
 	if (ret < 0)
 		dev_err(ctx->fd_device->dev, "Stream on fails\n");
 
@@ -824,7 +831,9 @@ static int msm_fd_streamoff(struct file *file,
 	struct fd_ctx *ctx = msm_fd_ctx_from_fh(fh);
 	int ret;
 
+	mutex_lock(&ctx->lock);
 	ret = vb2_streamoff(&ctx->vb2_q, buf_type);
+	mutex_unlock(&ctx->lock);
 	if (ret < 0)
 		dev_err(ctx->fd_device->dev, "Stream off fails\n");
 
@@ -1055,14 +1064,18 @@ static int msm_fd_s_ctrl(struct file *file, void *fh, struct v4l2_control *a)
 			a->value = ctx->format.size->work_size;
 		break;
 	case V4L2_CID_FD_WORK_MEMORY_FD:
+		mutex_lock(&ctx->fd_device->recovery_lock);
 		if (ctx->work_buf.fd != -1)
 			msm_fd_hw_unmap_buffer(&ctx->work_buf);
 		if (a->value >= 0) {
 			ret = msm_fd_hw_map_buffer(&ctx->mem_pool,
 				a->value, &ctx->work_buf);
-			if (ret < 0)
+			if (ret < 0) {
+				mutex_unlock(&ctx->fd_device->recovery_lock);
 				return ret;
+			}
 		}
+		mutex_unlock(&ctx->fd_device->recovery_lock);
 		break;
 	default:
 		return -EINVAL;
