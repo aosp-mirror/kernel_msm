@@ -353,3 +353,13 @@
 		};
 	};
 };
+
+&android_fstab {
+	persist {
+		compatible = "android,persist";
+		dev = "/dev/block/platform/soc/1d84000.ufshc/by-name/persist";
+		type = "ext4";
+		mnt_flags = "nosuid,nodev,noatime,barrier=1";
+		fsmgr_flags = "wait";
+	};
+};
