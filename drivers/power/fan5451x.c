@@ -921,8 +921,6 @@ static ssize_t store_addr_register(struct device *dev,
 
 	return size;
 }
-static DEVICE_ATTR(addr_register,
-		S_IRUGO | S_IWUSR, show_addr_register, store_addr_register);
 
 static ssize_t show_status_register(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -957,8 +955,6 @@ static ssize_t store_status_register(struct device *dev,
 
 	return size;
 }
-static DEVICE_ATTR(status_register,
-		S_IRUGO | S_IWUSR, show_status_register, store_status_register);
 
 static ssize_t show_chip_param(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -1003,7 +999,6 @@ static ssize_t show_chip_param(struct device *dev,
 		chip->step_dwn_iusb_ma, chip->step_dwn_thr_mv,
 		chip->wlc_chg_on_min, chip->wlc_chg_off_min);
 }
-static DEVICE_ATTR(chip_param, S_IRUGO, show_chip_param, NULL);
 
 static ssize_t show_wlc_thermal_param(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -1033,8 +1028,26 @@ static ssize_t store_wlc_thermal_param(struct device *dev,
 
 	return size;
 }
+
+static DEVICE_ATTR(addr_register,
+		S_IRUGO | S_IWUSR, show_addr_register, store_addr_register);
+static DEVICE_ATTR(status_register,
+		S_IRUGO | S_IWUSR, show_status_register, store_status_register);
+static DEVICE_ATTR(chip_param, S_IRUGO, show_chip_param, NULL);
 static DEVICE_ATTR(wlc_thermal_param, S_IRUGO | S_IWUSR,
 		show_wlc_thermal_param, store_wlc_thermal_param);
+
+static struct attribute *fan5451x_dev_attrs[] = {
+	&dev_attr_addr_register.attr,
+	&dev_attr_status_register.attr,
+	&dev_attr_chip_param.attr,
+	&dev_attr_wlc_thermal_param.attr,
+	NULL
+};
+
+static struct attribute_group fan5451x_dev_attr_group = {
+	.attrs = fan5451x_dev_attrs,
+};
 
 static int fan5451x_debugfs_get_retail_mode(void *data, u64 *val)
 {
@@ -2032,19 +2045,11 @@ static int fan5451x_probe(struct i2c_client *client,
 	}
 	enable_irq_wake(client->irq);
 
-	ret = device_create_file(&client->dev, &dev_attr_addr_register);
-	if (ret)
-		goto err_sysfs_addr_register;
-	ret = device_create_file(&client->dev, &dev_attr_status_register);
-	if (ret)
-		goto err_sysfs_status_register;
-	ret = device_create_file(&client->dev, &dev_attr_chip_param);
-	if (ret)
-		goto err_sysfs_chip_param;
-	ret = device_create_file(&client->dev,
-			&dev_attr_wlc_thermal_param);
-	if (ret)
-		goto err_sysfs_wlc_thermal_param;
+	ret = sysfs_create_group(&client->dev.kobj, &fan5451x_dev_attr_group);
+	if (ret) {
+		pr_err("failed to create sysfs\n");
+		goto err_sysfs_create;
+	}
 
 	fan5451x_create_debugfs_entries(chip);
 
@@ -2052,13 +2057,7 @@ static int fan5451x_probe(struct i2c_client *client,
 
 	return 0;
 
-err_sysfs_wlc_thermal_param:
-	device_remove_file(&client->dev, &dev_attr_chip_param);
-err_sysfs_chip_param:
-	device_remove_file(&client->dev, &dev_attr_status_register);
-err_sysfs_status_register:
-	device_remove_file(&client->dev, &dev_attr_addr_register);
-err_sysfs_addr_register:
+err_sysfs_create:
 	disable_irq_wake(client->irq);
 	free_irq(client->irq, chip);
 err_psy_unreg:
@@ -2078,12 +2077,10 @@ static int fan5451x_remove(struct i2c_client *client)
 	struct fan5451x_chip *chip = i2c_get_clientdata(client);
 
 	debugfs_remove_recursive(chip->dent);
+	sysfs_remove_group(&client->dev.kobj, &fan5451x_dev_attr_group);
+
 	cancel_delayed_work_sync(&chip->wlc_present_work);
 	cancel_delayed_work_sync(&chip->wlc_tx_recheck_work);
-	device_remove_file(&client->dev, &dev_attr_addr_register);
-	device_remove_file(&client->dev, &dev_attr_status_register);
-	device_remove_file(&client->dev, &dev_attr_chip_param);
-	device_remove_file(&client->dev, &dev_attr_wlc_thermal_param);
 
 	disable_irq_wake(client->irq);
 	free_irq(client->irq, chip);
