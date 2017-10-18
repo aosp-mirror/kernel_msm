@@ -69,7 +69,11 @@ struct usbpd {
 	enum typec_role cur_pwr_role;
 	enum typec_data_role cur_data_role;
 
+	/* Flag gets set when hard_reset is being performed */
 	bool in_hard_reset;
+
+	/* Flag gets set when a pd_capable partner is attached */
+	bool pd_capable;
 
 	/* debugfs logging */
 	struct dentry *dentry;
@@ -820,18 +824,24 @@ static int tcpm_set_current_limit(struct tcpc_dev *dev, u32 max_ma, u32 min_mv,
 		return ret;
 	}
 
-	val.intval = max_ma * 1000;
-	ret = power_supply_set_property(pd->usb_psy,
-					POWER_SUPPLY_PROP_PD_CURRENT_MAX,
-					&val);
-	if (ret < 0) {
-		pd_engine_log(pd, "unable to set pd current max to %d, ret=%d",
-			      max_ma, ret);
-		return ret;
+	/*
+	 * smb-lib manages the current limits when pd capable partner is
+	 * not attached.
+	 */
+	if (pd->pd_capable) {
+		val.intval = max_ma * 1000;
+		ret = power_supply_set_property(pd->usb_psy,
+						POWER_SUPPLY_PROP_PD_CURRENT_MAX,
+						&val);
+		if (ret < 0) {
+			pd_engine_log(pd, "unable to set pd current max to %d, ret=%d",
+				      max_ma, ret);
+			return ret;
+		}
 	}
 
-	pd_engine_log(pd, "max_ma := %d, min_mv := %d, max_mv := %d", max_ma,
-		      min_mv, max_mv);
+	pd_engine_log(pd, "max_ma := %d, min_mv := %d, max_mv := %d, pd_capable := %c",
+		      max_ma, min_mv, max_mv, pd->pd_capable ? 'Y' : 'N');
 	return ret;
 }
 
@@ -1350,6 +1360,10 @@ static void set_pd_capable(struct tcpc_dev *dev, bool capable)
 	int ret = 0;
 
 	val.intval = capable ? 1 : 0;
+
+	if (pd->pd_capable == capable)
+		return;
+
 	ret = power_supply_set_property(pd->usb_psy,
 					POWER_SUPPLY_PROP_PD_ACTIVE,
 					&val);
@@ -1357,6 +1371,8 @@ static void set_pd_capable(struct tcpc_dev *dev, bool capable)
 		pd_engine_log(pd, "unable to set pd capable to %s, ret=%d",
                               capable ? "true" : "false", ret);
         }
+
+	pd->pd_capable = capable;
 }
 
 static void set_in_hard_reset(struct tcpc_dev *dev, bool status)
