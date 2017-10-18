@@ -32230,6 +32230,11 @@ static int wma_sap_ofl_add_sta_handler(void *handle, u_int8_t *data,
 	sta_add_event = param_buf->fixed_param;
 	buf_ptr = (u_int8_t *)param_buf->bufp;
 
+	if (sta_add_event->data_len > MAX_CONNECT_REQ_LENGTH) {
+		WMA_LOGE("%s: Received data_len %d greater than max",
+			 __func__, sta_add_event->data_len);
+		return 0;
+	}
 	add_sta_req = vos_mem_malloc(sizeof(*add_sta_req));
 	if (!add_sta_req) {
 		WMA_LOGE("%s: Failed to alloc memory for sap_ofl_add_sta_event",
