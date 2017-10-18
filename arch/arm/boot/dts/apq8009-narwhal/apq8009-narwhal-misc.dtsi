@@ -11,9 +11,9 @@
  */
 
 &soc {
-	load-sw-control {
+	load_sw_control: load_sw_control {
 		compatible = "lge,load-sw-control";
-		status = "ok";
+		status = "disabled";
 		pinctrl-names = "default","suspend";
 		pinctrl-0 = <&load_sw_active>;
 		pinctrl-1 = <&load_sw_suspend>;

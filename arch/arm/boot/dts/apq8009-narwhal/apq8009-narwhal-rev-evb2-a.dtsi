@@ -128,3 +128,7 @@
 &bcmdhd_wlan {
 	status = "disabled";
 };
+
+&load_sw_control {
+	status = "ok";
+};
