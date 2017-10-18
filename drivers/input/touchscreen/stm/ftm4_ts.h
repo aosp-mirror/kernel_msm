@@ -12,6 +12,7 @@
 #include <linux/input/input_booster.h>
 #endif
 #include <linux/atomic.h>
+#include <linux/pm_qos.h>
 #include <linux/power_supply.h>
 
 #include <linux/printk.h>
@@ -443,6 +444,8 @@ struct fts_ts_info {
 	unsigned int checksum_error;
 
 	struct delayed_work psy_work;
+
+	struct pm_qos_request pm_qos_req;
 
 	int (*stop_device)(struct fts_ts_info *info);
 	int (*start_device)(struct fts_ts_info *info);

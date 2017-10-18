@@ -1266,6 +1266,8 @@ static irqreturn_t fts_interrupt_handler(int irq, void *handle)
 	unsigned char regAdd[4] = {0xB6, 0x00, 0x23, READ_ALL_EVENT};
 	unsigned short evtcount = 0;
 
+	/* prevent CPU from entering deep sleep */
+	pm_qos_update_request(&info->pm_qos_req, 100);
 	evtcount = 0;
 
 	fts_read_reg(info, &regAdd[0], 3, (unsigned char *)&evtcount, 2);
@@ -1281,6 +1283,7 @@ static irqreturn_t fts_interrupt_handler(int irq, void *handle)
 				  FTS_EVENT_SIZE * evtcount);
 		fts_event_handler_type_b(info, info->data, evtcount);
 	}
+	pm_qos_update_request(&info->pm_qos_req, PM_QOS_DEFAULT_VALUE);
 	return IRQ_HANDLED;
 }
 
@@ -2032,6 +2035,9 @@ static int fts_input_open(struct input_dev *dev)
 		fts_command(info, FTS_CMD_HOVER_ON);
 	}
 
+	pm_qos_add_request(&info->pm_qos_req, PM_QOS_CPU_DMA_LATENCY,
+			PM_QOS_DEFAULT_VALUE);
+
 out:
 	return 0;
 }
@@ -2041,6 +2047,8 @@ static void fts_input_close(struct input_dev *dev)
 	struct fts_ts_info *info = input_get_drvdata(dev);
 
 	tsp_debug_info(&info->client->dev, "%s\n", __func__);
+
+	pm_qos_remove_request(&info->pm_qos_req);
 
 #ifdef USE_OPEN_DWORK
 	cancel_delayed_work(&info->open_work);
