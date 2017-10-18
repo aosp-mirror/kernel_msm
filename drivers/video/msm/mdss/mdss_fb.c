@@ -2229,86 +2229,6 @@ static void mdss_panel_validate_debugfs_info(struct msm_fb_data_type *mfd)
 	}
 }
 
-int mdss_set_short_cmd(struct msm_fb_data_type* mfd, char cmd0, char cmd1)
-{
-	int ret = 0;
-	struct mdss_panel_data* pdata;
-	struct mdss_panel_info* pinfo;
-	struct mdss_dsi_ctrl_pdata* ctrl_pdata = NULL;
-	struct dcs_cmd_req cmdreq;
-	static char cmd[2] = {0};//2 bytes cmd size
-	static struct dsi_cmd_desc dsi_cmd = {
-		{DTYPE_DCS_WRITE, 1, 0, 0, 1, sizeof(cmd)},cmd};
-
-	if (!mfd)
-	{
-		pr_err("mfd NULL!\n");
-		return -EINVAL;
-	}
-
-	cmd[0] = cmd0;
-	cmd[1] = cmd1;
-	pdata = dev_get_platdata(&mfd->pdev->dev);
-	if (!pdata)
-	{
-		pr_err("no panel connected!\n");
-		return -EINVAL;
-	}
-
-	pinfo = &pdata->panel_info;
-	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata, panel_data);
-
-	memset(&cmdreq, 0, sizeof(cmdreq));
-	cmdreq.cmds = &dsi_cmd;
-	cmdreq.cmds_cnt = 1;
-	cmdreq.flags = CMD_REQ_COMMIT | CMD_CLK_CTRL;
-	cmdreq.rlen = 0;
-	cmdreq.cb = NULL;
-
-	ret = mdss_dsi_cmdlist_put(ctrl_pdata, &cmdreq);
-
-	return ret;
-}
-EXPORT_SYMBOL(mdss_set_short_cmd);
-
-int mdss_fb_get_register_value(struct msm_fb_data_type* mfd, int reg, int *val)
-{
-	struct mdss_panel_data* pdata;
-	struct mdss_panel_info* pinfo;
-	int ret = 0;
-	struct mdss_dsi_ctrl_pdata* ctrl_pdata = NULL;
-	char* rx_buf = NULL;
-
-	if (!mfd)
-	{
-		pr_err("mfd NULL!\n");
-		return -EINVAL;
-	}
-	pdata = dev_get_platdata(&mfd->pdev->dev);
-	if (!pdata)
-	{
-		pr_err("no panel connected!\n");
-		return -EINVAL;
-	}
-
-	pinfo = &pdata->panel_info;
-	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata, panel_data);
-	rx_buf = kzalloc(2, GFP_KERNEL);//malloc 2 bytes buffer
-
-	if (!rx_buf)
-	{
-		pr_err("not enough memory to hold panel reg dump\n");
-		return -ENOMEM;;
-	}
-
-	ret = mdss_dsi_panel_cmd_read(ctrl_pdata, reg, 0x00, NULL, rx_buf, 1);
-	*val = rx_buf[0];
-
-	kfree(rx_buf);
-
-	return ret;
-}
-EXPORT_SYMBOL(mdss_fb_get_register_value);
 static int mdss_fb_blank_blank(struct msm_fb_data_type *mfd,
 	int req_power_state)
 {
@@ -2370,7 +2290,6 @@ static int mdss_fb_blank_unblank(struct msm_fb_data_type *mfd)
 {
 	int ret = 0;
 	int cur_power_state;
-	int reg_val = 0;
 
 	if (!mfd)
 		return -EINVAL;
@@ -2451,16 +2370,6 @@ static int mdss_fb_blank_unblank(struct msm_fb_data_type *mfd)
 	}
 
 error:
-		/*read 0x0d status reg to check whether the panel has been set to all pixel off, set 0x13 cmd to normal mode*/
-		reg_val = -1;
-		mdss_fb_get_register_value(mfd, 0x0d, &reg_val);
-		if (0x08 == reg_val)
-		{
-			pr_err("read 0x0d error:%d\n",reg_val);
-			mdss_set_short_cmd(mfd, 0x13, 0x00);
-			mdss_fb_get_register_value(mfd, 0x0d, &reg_val);
-			pr_err("read 0x0d after set to normal mode:%d\n",reg_val);
-		}
 	return ret;
 }
 
