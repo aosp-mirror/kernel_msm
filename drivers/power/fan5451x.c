@@ -33,7 +33,6 @@
 #include <linux/qpnp/qpnp-adc.h>
 #include <linux/power/fan5451x.h>
 #include <linux/wakelock.h>
-#include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/alarmtimer.h>
 
@@ -1029,40 +1028,28 @@ static ssize_t store_wlc_thermal_param(struct device *dev,
 	return size;
 }
 
-static DEVICE_ATTR(addr_register,
-		S_IRUGO | S_IWUSR, show_addr_register, store_addr_register);
-static DEVICE_ATTR(status_register,
-		S_IRUGO | S_IWUSR, show_status_register, store_status_register);
-static DEVICE_ATTR(chip_param, S_IRUGO, show_chip_param, NULL);
-static DEVICE_ATTR(wlc_thermal_param, S_IRUGO | S_IWUSR,
-		show_wlc_thermal_param, store_wlc_thermal_param);
-
-static struct attribute *fan5451x_dev_attrs[] = {
-	&dev_attr_addr_register.attr,
-	&dev_attr_status_register.attr,
-	&dev_attr_chip_param.attr,
-	&dev_attr_wlc_thermal_param.attr,
-	NULL
-};
-
-static struct attribute_group fan5451x_dev_attr_group = {
-	.attrs = fan5451x_dev_attrs,
-};
-
-static int fan5451x_debugfs_get_retail_mode(void *data, u64 *val)
+static int show_retail_mode(struct device *dev,
+		struct device_attribute *attr, char *buf)
 {
-	struct fan5451x_chip *chip = data;
+	struct fan5451x_chip *chip = dev_get_drvdata(dev);
 
-	*val = (u64)chip->retail_enable;
-
-	return 0;
+	return snprintf(buf, PAGE_SIZE, "%d\n", chip->retail_enable);
 }
 
-static int fan5451x_debugfs_set_retail_mode(void *data, u64 val)
+static int store_retail_mode(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
 {
-	struct fan5451x_chip *chip = data;
+	struct fan5451x_chip *chip = dev_get_drvdata(dev);
+	int val;
+	int ret;
 
-	chip->retail_enable = !!(int)val;
+	ret = kstrtoint(buf, 10, &val);
+	if (ret) {
+		pr_err("invalid value\n");
+		return ret;
+	}
+
+	chip->retail_enable = !!val;
 	pr_info("set retail mode = %d\n", chip->retail_enable);
 
 	fan5451x_update_reg(chip->client, REG_CON2,
@@ -1070,33 +1057,31 @@ static int fan5451x_debugfs_set_retail_mode(void *data, u64 val)
 	fan5451x_set_appropriate_vddmax(chip);
 	power_supply_changed(&chip->batt_psy);
 
-	return 0;
+	return size;
 }
 
-DEFINE_SIMPLE_ATTRIBUTE(fan5451x_debugfs_retail_mode_fops,
-		fan5451x_debugfs_get_retail_mode,
-		fan5451x_debugfs_set_retail_mode,
-		 "%llu\n");
+static DEVICE_ATTR(addr_register,
+		S_IRUGO | S_IWUSR, show_addr_register, store_addr_register);
+static DEVICE_ATTR(status_register,
+		S_IRUGO | S_IWUSR, show_status_register, store_status_register);
+static DEVICE_ATTR(chip_param, S_IRUGO, show_chip_param, NULL);
+static DEVICE_ATTR(wlc_thermal_param, S_IRUGO | S_IWUSR,
+		show_wlc_thermal_param, store_wlc_thermal_param);
+static DEVICE_ATTR(retail_mode, S_IRUGO | S_IWUSR,
+		show_retail_mode, store_retail_mode);
 
-static void fan5451x_create_debugfs_entries(
-		struct fan5451x_chip *chip)
-{
-	struct dentry *file;
+static struct attribute *fan5451x_dev_attrs[] = {
+	&dev_attr_addr_register.attr,
+	&dev_attr_status_register.attr,
+	&dev_attr_chip_param.attr,
+	&dev_attr_wlc_thermal_param.attr,
+	&dev_attr_retail_mode.attr,
+	NULL
+};
 
-	chip->dent = debugfs_create_dir("fan5451x", NULL);
-	if (IS_ERR(chip->dent)) {
-		pr_err("fan5451x driver couldn't create debugfs\n");
-		return;
-	}
-
-	file = debugfs_create_file("retail_mode", S_IRUSR | S_IWUSR,
-			chip->dent, (void *)chip,
-			&fan5451x_debugfs_retail_mode_fops);
-	if (IS_ERR(file)) {
-		pr_err("fan5451x couldn't create retail_mode node\n");
-		return;
-	}
-}
+static struct attribute_group fan5451x_dev_attr_group = {
+	.attrs = fan5451x_dev_attrs,
+};
 
 static int fan5451x_gpio_init(struct fan5451x_chip *chip)
 {
@@ -2051,8 +2036,6 @@ static int fan5451x_probe(struct i2c_client *client,
 		goto err_sysfs_create;
 	}
 
-	fan5451x_create_debugfs_entries(chip);
-
 	pr_info("FAN5451x initialized\n");
 
 	return 0;
@@ -2076,7 +2059,6 @@ static int fan5451x_remove(struct i2c_client *client)
 {
 	struct fan5451x_chip *chip = i2c_get_clientdata(client);
 
-	debugfs_remove_recursive(chip->dent);
 	sysfs_remove_group(&client->dev.kobj, &fan5451x_dev_attr_group);
 
 	cancel_delayed_work_sync(&chip->wlc_present_work);
