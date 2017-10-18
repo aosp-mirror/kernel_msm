@@ -752,6 +752,19 @@ static void failsafe(struct tas2557_priv *pTAS2557)
 
 	if (hrtimer_active(&pTAS2557->mtimer))
 		hrtimer_cancel(&pTAS2557->mtimer);
+
+	if (pTAS2557->failsafe_retry < 10) {
+		pTAS2557->failsafe_retry++;
+		msleep(100);
+		dev_err(pTAS2557->dev, "I2C COMM error, restart SmartAmp.\n");
+		schedule_delayed_work(&pTAS2557->irq_work,
+				      msecs_to_jiffies(100));
+		return;
+	} else {
+		pTAS2557->failsafe_retry = 0;
+		dev_err(pTAS2557->dev, "I2C COMM error, give up retry\n");
+	}
+
 	pTAS2557->enableIRQ(pTAS2557, channel_both, false);
 	tas2557_dev_load_data(pTAS2557, channel_both, p_tas2557_shutdown_data);
 	pTAS2557->mbPowerUp = false;
@@ -761,6 +774,7 @@ static void failsafe(struct tas2557_priv *pTAS2557)
 	pTAS2557->write(pTAS2557, channel_both, TAS2557_SPK_CTRL_REG, 0x04);
 	if (pTAS2557->mpFirmware != NULL)
 		tas2557_clear_firmware(pTAS2557->mpFirmware);
+	pTAS2557->failsafe_retry = 0;
 }
 
 int tas2557_checkPLL(struct tas2557_priv *pTAS2557)
@@ -959,6 +973,7 @@ int tas2557_enable(struct tas2557_priv *pTAS2557, bool bEnable)
 		goto end;
 	if ((nValue&0xff) != TAS2557_SAFE_GUARD_PATTERN) {
 		dev_err(pTAS2557->dev, "ERROR Left channel safe guard failure!\n");
+		pTAS2557->mnErrCode |= ERROR_DEVA_I2C_COMM;
 		nResult = -EPIPE;
 		goto end;
 	}
@@ -967,6 +982,7 @@ int tas2557_enable(struct tas2557_priv *pTAS2557, bool bEnable)
 		goto end;
 	if ((nValue&0xff) != TAS2557_SAFE_GUARD_PATTERN) {
 		dev_err(pTAS2557->dev, "ERROR right channel safe guard failure!\n");
+		pTAS2557->mnErrCode |= ERROR_DEVB_I2C_COMM;
 		nResult = -EPIPE;
 		goto end;
 	}
@@ -1049,9 +1065,7 @@ end:
 	if (nResult < 0) {
 		/* TAS2557_RELOAD_FIRMWARE_START */
 		if (pTAS2557->mnErrCode & (ERROR_DEVA_I2C_COMM | ERROR_DEVB_I2C_COMM | ERROR_PRAM_CRCCHK | ERROR_YRAM_CRCCHK))
-			tas2557_set_program(pTAS2557,
-					    pTAS2557->mnCurrentProgram,
-					    pTAS2557->mnCurrentConfiguration);
+			failsafe(pTAS2557);
 		/* TAS2557_RELOAD_FIRMWARE_END */
 	}
 
@@ -2226,9 +2240,7 @@ end:
 	if (nResult < 0) {
 		/* TAS2557_RELOAD_FIRMWARE_START */
 		if (pTAS2557->mnErrCode & (ERROR_DEVA_I2C_COMM | ERROR_DEVB_I2C_COMM | ERROR_PRAM_CRCCHK | ERROR_YRAM_CRCCHK))
-			tas2557_set_program(pTAS2557,
-					    pTAS2557->mnCurrentProgram,
-					    pTAS2557->mnCurrentConfiguration);
+			failsafe(pTAS2557);
 		/* TAS2557_RELOAD_FIRMWARE_END */
 	}
 

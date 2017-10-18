@@ -545,6 +545,7 @@ struct tas2557_priv {
 	int mnCurrentReg;
 	struct mutex file_lock;
 #endif
+	int failsafe_retry;
 	const char *cal_file_name;
 	spinlock_t irq_lock;
 };
