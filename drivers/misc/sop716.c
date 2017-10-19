@@ -42,10 +42,10 @@ struct sop716_info {
 	struct i2c_client *client;
 	struct device *dev;
 
-	int reset_pin;
-	int interrupt_pin;
-	int bslen_pin;
-	int gpio_temp_1_pin;
+	int gpio_reset;
+	int gpio_interrupt;
+	int gpio_bslen;
+	int gpio_temp_1;
 
 	int hands_alignment_status;
 	int reset_status;
@@ -115,7 +115,7 @@ static ssize_t sop716_reset_store(struct device *dev,
 	}
 
 	si->reset_status = status;
-	gpio_set_value(si->reset_pin, si->reset_status);
+	gpio_set_value(si->gpio_reset, si->reset_status);
 
 	pr_debug("%s: count:%d reset:%d\n", __func__, count, si->reset_status);
 
@@ -561,31 +561,31 @@ static int sop716_config_gpios(struct i2c_client *client)
 	int err;
 
 	/* Interrupt pin : input */
-	err = sop716_read_and_request_gpio(dev, "soprod,interrupt",
-			&si->interrupt_pin, GPIOF_IN, "interrupt");
+	err = sop716_read_and_request_gpio(dev, "lge,gpio-interrupt",
+			&si->gpio_interrupt, GPIOF_IN, "interrupt");
 	if (err)
 		return err;
 
 	/* bslen */
-	err = sop716_read_and_request_gpio(dev, "soprod,bslen",
-			&si->bslen_pin, GPIOF_OUT_INIT_LOW, "bslen");
+	err = sop716_read_and_request_gpio(dev, "lge,gpio-bslen",
+			&si->gpio_bslen, GPIOF_OUT_INIT_LOW, "bslen");
 	if (err)
 		return err;
 
 	msleep(100);
 
 	/* gpio temp 1 */
-	err = sop716_read_and_request_gpio(dev, "soprod,gpio_temp_1",
-			&si->gpio_temp_1_pin, GPIOF_OUT_INIT_LOW,
-			"gpio_temp_1");
+	err = sop716_read_and_request_gpio(dev, "lge,gpio-temp-1",
+			&si->gpio_temp_1, GPIOF_OUT_INIT_LOW,
+			"temp_1");
 	if (err)
 		return err;
 
 	msleep(100);
 
 	/* reset signal high --> low */
-	err = sop716_read_and_request_gpio(dev, "soprod,reset",
-			&si->reset_pin, GPIOF_OUT_INIT_LOW, "reset");
+	err = sop716_read_and_request_gpio(dev, "lge,gpio-reset",
+			&si->gpio_reset, GPIOF_OUT_INIT_LOW, "reset");
 	if (err)
 		return err;
 
@@ -598,28 +598,28 @@ static void sop716_firmware_update(struct sop716_info *si)
 {
 	extern int msp430_firmware_update_start(struct device *dev);
 
-	gpio_direction_output(si->bslen_pin, 1);
+	gpio_direction_output(si->gpio_bslen, 1);
 	msleep(100);
-	gpio_set_value(si->reset_pin, 1);
-	gpio_set_value(si->bslen_pin, 1);
+	gpio_set_value(si->gpio_reset, 1);
+	gpio_set_value(si->gpio_bslen, 1);
 	msleep(100);
-	gpio_set_value(si->bslen_pin, 0);
+	gpio_set_value(si->gpio_bslen, 0);
 	msleep(100);
-	gpio_set_value(si->bslen_pin, 1);
+	gpio_set_value(si->gpio_bslen, 1);
 	msleep(100);
-	gpio_set_value(si->reset_pin, 0);
+	gpio_set_value(si->gpio_reset, 0);
 	msleep(100);
-	gpio_set_value(si->bslen_pin, 0);
+	gpio_set_value(si->gpio_bslen, 0);
 	msleep(100);
 
 	msp430_firmware_update_start(si->dev);
-	gpio_set_value(si->bslen_pin, 1);
+	gpio_set_value(si->gpio_bslen, 1);
 	msleep(100);
-	gpio_set_value(si->bslen_pin, 0);
+	gpio_set_value(si->gpio_bslen, 0);
 	msleep(100);
-	gpio_set_value(si->reset_pin, 1);
+	gpio_set_value(si->gpio_reset, 1);
 	msleep(100);
-	gpio_set_value(si->reset_pin, 0);
+	gpio_set_value(si->gpio_reset, 0);
 	msleep(100);
 }
 
