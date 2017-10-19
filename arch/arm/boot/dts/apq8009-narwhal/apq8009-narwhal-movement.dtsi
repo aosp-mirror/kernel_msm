@@ -39,13 +39,13 @@
 };
 
 &i2c_6 {
-	lge,soprod_movement@40 {
+	lge,soprod_movement@48 {
 		compatible = "lge,soprod_movement";
 		reg = <0x48>;
 		status = "ok";
-		soprod,reset = <&msm_gpio 33 0x0>;
-		soprod,interrupt = <&msm_gpio 34 0x0>;
-		soprod,bslen = <&msm_gpio 16 0x0>;
-		soprod,gpio_temp_1 = <&msm_gpio 22 0x0>;
+		lge,gpio-reset = <&msm_gpio 33 0x0>;
+		lge,gpio-interrupt = <&msm_gpio 34 0x0>;
+		lge,gpio-bslen = <&msm_gpio 16 0x0>;
+		lge,gpio-temp-1 = <&msm_gpio 22 0x0>;
 	};
 };
