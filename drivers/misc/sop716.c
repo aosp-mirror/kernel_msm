@@ -745,7 +745,7 @@ static void __exit sop716_movement_exit(void)
 	i2c_del_driver(&sop716_movement_driver);
 }
 
-subsys_initcall(sop716_movement_init);
+module_init(sop716_movement_init);
 module_exit(sop716_movement_exit);
 
 MODULE_DESCRIPTION("Soprod 716 movement");
