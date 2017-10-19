@@ -1,0 +1,72 @@
+
+qcom,3066604_goertek_l17d1p33_4000mah_averaged_masterslave_aug22nd2017 {
+	qcom, = <24>;
+	/* #3066604_Goertek_L17D1P33_4000mAh_averaged_MasterSlave_Aug22nd2017*/
+	qcom,max-voltage-uv = <4400000>;
+	qcom,fg-cc-cv-threshold-mv = <4390>;
+	qcom,fastchg-current-ma = <2800>;
+	qcom,nom-batt-capacity-mah = <4000>;
+	qcom,batt-id-kohm = <10>;
+	qcom,battery-beta = <3380>;
+	qcom,battery-type = "3066604_goertek_l17d1p33_4000mah_averaged_masterslave_aug22nd2017";
+	qcom,checksum = <0xE887>;
+	qcom,gui-version = "PMI8998GUI - 2.0.0.58";
+	qcom,fg-profile-data = [
+		 D1 1F 38 05
+		 D8 0A E4 05
+		 6E 1D F5 EC
+		 4A 0B 6A 15
+		 66 19 53 22
+		 6D 3C B6 4B
+		 5B 00 00 00
+		 11 00 00 00
+		 00 00 D3 C5
+		 57 C4 13 C2
+		 16 00 08 00
+		 AE DA D3 E4
+		 09 FD 89 F2
+		 1E 02 37 13
+		 CF 04 35 2A
+		 1B 06 09 20
+		 27 00 14 00
+		 24 20 09 05
+		 F6 0A C9 05
+		 56 1D 4D F2
+		 50 03 55 0C
+		 68 19 BA 22
+		 98 45 E4 52
+		 5A 00 00 00
+		 0D 00 00 00
+		 00 00 40 CC
+		 13 AB 0C C3
+		 12 00 00 00
+		 82 EA D3 E4
+		 89 FD D7 EB
+		 05 E2 30 0A
+		 21 EC FA 1A
+		 A8 33 CC FF
+		 07 10 00 00
+		 CB 0F 66 46
+		 12 00 40 00
+		 94 01 0A FA
+		 FF 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+	];
+};
