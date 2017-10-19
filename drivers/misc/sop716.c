@@ -895,7 +895,6 @@ int __init sop716_movement_init(void)
 
 	return i2c_add_driver(&sop716_movement_driver);
 }
-EXPORT_SYMBOL(sop716_movement_init);
 subsys_initcall(sop716_movement_init);
 
 static void __exit sop716_movement_exit(void)
