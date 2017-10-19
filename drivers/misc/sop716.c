@@ -47,17 +47,10 @@ struct sop716_info {
 	int bslen_pin;
 	int gpio_temp_1_pin;
 
-	struct mutex lock;
-	struct work_struct movement_work;
-
 	int hands_alignment_status;
-	int sop_align_position;
-	int init_sop_demo_first;
 	int reset_status;
-	int align_key_state;
-	int align_hand_state;
 
-	struct timer_list demo_timer;
+	struct work_struct fw_work;
 };
 
 static int sop716_write(struct sop716_info *si, u8 reg, u8 length, u8 *val);
@@ -93,14 +86,6 @@ static ssize_t sop716_hands_alignment_store(struct device *dev,
 	pr_debug("%s: count:%d hands_alignment:%d\n", __func__, count, status);
 
 	return count;
-}
-
-static ssize_t sop716_hands_position_show(struct device *dev,
-			struct device_attribute *attr, char *buf)
-{
-	struct sop716_info *si = dev_get_drvdata(dev);
-
-	return snprintf(buf, PAGE_SIZE, "%d", si->sop_align_position);
 }
 
 static ssize_t sop716_reset_show(struct device *dev,
@@ -188,8 +173,8 @@ static ssize_t sop716_time_store(struct device *dev,
 		return -EINVAL;
 	}
 
-	pr_debug("%s: cnt:%d op:%d %02d:%02d:%02d %02d-%02d-%02d\n", __func__,
-			count, option, hour, minute, second, year, month, day);
+	pr_info("sop set time: %04d-%02d-%02d %02d:%02d:%02d\n",
+			year + 2000, month, day, hour, minute, second);
 
 	data[0] = CMD_SOP716_SET_CURRENT_TIME;
 	data[1] = hour;
@@ -200,10 +185,12 @@ static ssize_t sop716_time_store(struct device *dev,
 	data[6] = day;
 	data[7] = option;
 
-	sop716_write(si, SOP716_I2C_DATA_LENGTH_TIME,
+	rc = sop716_write(si, SOP716_I2C_DATA_LENGTH_TIME,
 			SOP716_I2C_DATA_LENGTH_TIME, data);
+	if (rc < 0)
+		pr_err("%s: cannot set time\n", __func__);
 
-	return count;
+	return rc < 0? rc : count;
 }
 
 /* Code for CMD_SOP716_MOTOR_MOVE_ONE */
@@ -355,9 +342,22 @@ static ssize_t sop716_get_time_show(struct device *dev,
 {
 	u8 data[SOP716_I2C_DATA_LENGTH_TIME-1];
 	struct sop716_info *si = dev_get_drvdata(dev);
+	int err;
 
-	sop716_read(si, CMD_SOP716_READ_CURRENT_TIME,
+	err = sop716_read(si, CMD_SOP716_READ_CURRENT_TIME,
 			SOP716_I2C_DATA_LENGTH_TIME-1, data);
+	if (err < 0) {
+		pr_err("%s: cannot read time from sop716\n", __func__);
+		return err;
+	}
+
+	pr_info("sop get time: %04d-%02d-%02d %02d:%02d:%02d\n",
+			data[4] + 2000,
+			data[5],
+			data[6],
+			data[1],
+			data[2],
+			data[3]);
 
 	return snprintf(buf, PAGE_SIZE, "%dh%dm%ds, 20%d-%d-%d\n",
 			data[1], data[2], data[3], data[4], data[5], data[6]);
@@ -444,6 +444,25 @@ static ssize_t sop716_get_battery_level_show(struct device *dev,
 	return snprintf(buf, PAGE_SIZE, "%d mV\n", (data[1] * 256) + data[2]);
 }
 
+static ssize_t sop716_update_fw_store(struct device *dev,
+			struct device_attribute *attr, const char *buf,
+			size_t count)
+{
+	struct sop716_info *si = dev_get_drvdata(dev);
+	int err, value;
+
+	err = kstrtoint(buf, 10, &value);
+	if (err) {
+		pr_err("%s: invalid value\n", __func__);
+		return err;
+	}
+
+	if (value)
+		schedule_work(&si->fw_work);
+
+	return count;
+}
+
 static DEVICE_ATTR(set_hands_alignment, S_IRUGO | S_IWUSR,
 		sop716_hands_alignment_show, sop716_hands_alignment_store);
 static DEVICE_ATTR(set_reset, S_IRUGO | S_IWUSR,
@@ -452,8 +471,6 @@ static DEVICE_ATTR(set_time, S_IWUSR, NULL, sop716_time_store);
 static DEVICE_ATTR(motor_init, S_IWUSR, NULL, sop716_motor_init_store);
 static DEVICE_ATTR(motor_move, S_IWUSR, NULL, sop716_motor_move_store);
 static DEVICE_ATTR(motor_move_all, S_IWUSR, NULL, sop716_motor_move_all_store);
-static DEVICE_ATTR(get_hands_position, S_IRUGO,
-		sop716_hands_position_show, NULL);
 static DEVICE_ATTR(get_time, S_IRUGO, sop716_get_time_show, NULL);
 static DEVICE_ATTR(get_version, S_IRUGO, sop716_get_version_show, NULL);
 static DEVICE_ATTR(battery_check_period, S_IRUGO | S_IWUSR,
@@ -461,6 +478,7 @@ static DEVICE_ATTR(battery_check_period, S_IRUGO | S_IWUSR,
 		sop716_battery_check_period_store);
 static DEVICE_ATTR(get_battery_level, S_IRUGO,
 		sop716_get_battery_level_show, NULL);
+static DEVICE_ATTR(update_fw, S_IWUSR, NULL, sop716_update_fw_store);
 
 static struct attribute *sop716_dev_attrs[] = {
 	&dev_attr_set_hands_alignment.attr,
@@ -469,11 +487,11 @@ static struct attribute *sop716_dev_attrs[] = {
 	&dev_attr_motor_init.attr,
 	&dev_attr_motor_move.attr,
 	&dev_attr_motor_move_all.attr,
-	&dev_attr_get_hands_position.attr,
 	&dev_attr_get_time.attr,
 	&dev_attr_get_version.attr,
 	&dev_attr_battery_check_period.attr,
 	&dev_attr_get_battery_level.attr,
+	&dev_attr_update_fw.attr,
 	NULL
 };
 
@@ -576,7 +594,7 @@ static int sop716_config_gpios(struct i2c_client *client)
 	return 0;
 }
 
-static void sop_firmware_update(struct sop716_info *si)
+static void sop716_firmware_update(struct sop716_info *si)
 {
 	extern int msp430_firmware_update_start(struct device *dev);
 
@@ -605,205 +623,29 @@ static void sop_firmware_update(struct sop716_info *si)
 	msleep(100);
 }
 
-static void sop716_movement_work(struct work_struct *work)
+static void sop716_update_fw_work(struct work_struct *work)
 {
 	struct sop716_info *si = container_of(work,
-			struct sop716_info, movement_work);
-	struct timespec my_time;
-	struct tm my_date;
+			struct sop716_info, fw_work);
+	u8 data[SOP716_I2C_DATA_LENGTH] = {0, };
 
-	my_time = __current_kernel_time();
-	time_to_tm(my_time.tv_sec, sys_tz.tz_minuteswest * 60 * (-1), &my_date);
+	sop716_read(si, CMD_SOP716_READ_FW_VERSION,
+			SOP716_I2C_DATA_LENGTH-1, data);
+	pr_info("sop firmware version: v%d.%d\n", data[1], data[2]);
 
-	pr_info("sop kernel time: %04d-%02d-%02d %02d:%02d:%02d\n",
-			1900+(u8)my_date.tm_year, my_date.tm_mon+1,
-			my_date.tm_mday, my_date.tm_hour, my_date.tm_min,
-			my_date.tm_sec);
-
-	if (si->sop_align_position == 0) {
-		u8 align_data[SOP716_I2C_DATA_LENGTH] = {
-			CMD_SOP716_MOTOR_MOVE_ALL,
-			45,
-			135,
-			64
-		};
-
-		si->sop_align_position++;
-		sop716_write(si, SOP716_I2C_DATA_LENGTH,
-				SOP716_I2C_DATA_LENGTH, align_data);
-	} else if (si->sop_align_position == 1) {
-		u8 align_data[SOP716_I2C_DATA_LENGTH_TIME] = {
-			CMD_SOP716_SET_CURRENT_TIME,
-			0xFF,
-			0xFF,
-			0,
-			0,
-			0,
-			0,
-			0
-		};
-
-		si->sop_align_position = 0;
-		sop716_write(si, SOP716_I2C_DATA_LENGTH,
-				SOP716_I2C_DATA_LENGTH, align_data);
-	} else if (si->sop_align_position == 2) {
+	if( !(data[1] == MAJOR_VER && data[2] == MINOR_VER)) {
 		u8 align_data[SOP716_I2C_DATA_LENGTH] = {
 			CMD_SOP716_MOTOR_MOVE_ALL,
 			0,
-			0,
-			0
 		};
 
-		mod_timer(&si->demo_timer, jiffies + (2 * HZ));
-
-		sop716_write(si, SOP716_I2C_DATA_LENGTH,
-				SOP716_I2C_DATA_LENGTH, align_data);
-	} else if (si->sop_align_position == 3) {
-		u8 align_data[SOP716_I2C_DATA_LENGTH] = {
-			CMD_SOP716_MOTOR_MOVE_ALL,
-			179,
-			179,
-			96
-		};
-		u8 align_data2[SOP716_I2C_DATA_LENGTH] = {
-			CMD_SOP716_MOTOR_MOVE_ALL,
-			0,
-			0,
-			96
-		};
-
-		mod_timer(&si->demo_timer, jiffies + (4 * HZ));
-
+		pr_info("sop firmware update: v%d.%d -> v%d.%d\n",
+				data[1], data[2], MAJOR_VER, MINOR_VER);
 		sop716_write(si, SOP716_I2C_DATA_LENGTH,
 				SOP716_I2C_DATA_LENGTH, align_data);
 		msleep(200);
-		sop716_write(si, SOP716_I2C_DATA_LENGTH,
-				SOP716_I2C_DATA_LENGTH, align_data2);
-	} else if (si->sop_align_position == 4) {
-		u8 align_data[SOP716_I2C_DATA_LENGTH] = {
-			CMD_SOP716_MOTOR_MOVE_ALL,
-			179,
-			179,
-			224
-		};
-		u8 align_data2[SOP716_I2C_DATA_LENGTH] = {
-			CMD_SOP716_MOTOR_MOVE_ALL,
-			0,
-			0,
-			96
-		};
-
-
-		mod_timer(&si->demo_timer, jiffies + (33 * HZ));
-
-		sop716_write(si, SOP716_I2C_DATA_LENGTH,
-				SOP716_I2C_DATA_LENGTH, align_data);
-		msleep(200);
-		sop716_write(si, SOP716_I2C_DATA_LENGTH,
-				SOP716_I2C_DATA_LENGTH, align_data2);
-	} else if (si->sop_align_position == 5) {
-		u8 data[SOP716_I2C_DATA_LENGTH-1];
-
-		sop716_read(si, CMD_SOP716_READ_FW_VERSION,
-				SOP716_I2C_DATA_LENGTH-1, data);
-		pr_info("sop firmware version: v%d.%d\n", data[1], data[2]);
-
-		if (!(data[1] == MAJOR_VER && data[2] == MINOR_VER)) {
-			struct timespec system_time;
-			struct tm movement_time;
-			u8 time_data[SOP716_I2C_DATA_LENGTH_TIME] = {0, };
-			pr_info("sop_firmware_update : v%d.%d -> v%d.%d\n",
-					data[1], data[2], MAJOR_VER, MINOR_VER);
-			sop_firmware_update(si);
-			system_time = __current_kernel_time();
-			time_to_tm(system_time.tv_sec,
-					sys_tz.tz_minuteswest * 60 * (-1),
-					&movement_time);
-			time_data[0] = CMD_SOP716_SET_CURRENT_TIME;
-			time_data[1] = movement_time.tm_hour;
-			time_data[2] = movement_time.tm_min;
-			time_data[3] = movement_time.tm_sec;
-			time_data[4] = movement_time.tm_year;
-			time_data[5] = movement_time.tm_mon;
-			time_data[6] = movement_time.tm_mday;
-			sop716_write(si, SOP716_I2C_DATA_LENGTH,
-					SOP716_I2C_DATA_LENGTH, time_data);
-		} else {
-			struct tm movement_time;
-			struct timespec system_time;
-			u8 time_data[SOP716_I2C_DATA_LENGTH_TIME] = {
-				CMD_SOP716_SET_CURRENT_TIME,
-				0xFF,
-				0xFF,
-				0,
-				0,
-				0,
-				0,
-				0
-			};
-
-			sop716_write(si, SOP716_I2C_DATA_LENGTH,
-					SOP716_I2C_DATA_LENGTH, time_data);
-
-			sop716_read(si, CMD_SOP716_READ_CURRENT_TIME,
-					SOP716_I2C_DATA_LENGTH_TIME-1, time_data);
-			movement_time.tm_hour = time_data[1];
-			movement_time.tm_min  = time_data[2];
-			movement_time.tm_sec  = time_data[3];
-			movement_time.tm_year = time_data[4] + 2000;
-			movement_time.tm_mon  = time_data[5];
-			movement_time.tm_mday = time_data[6];
-			system_time.tv_sec = mktime(movement_time.tm_year,
-					movement_time.tm_mon,
-					movement_time.tm_mday,
-					movement_time.tm_hour,
-					movement_time.tm_min,
-					movement_time.tm_sec) +
-				sys_tz.tz_minuteswest * 60;
-			system_time.tv_nsec = 0;
-			do_settimeofday(&system_time);
-		}
-
-		mod_timer(&si->demo_timer, jiffies + (13 * HZ));
+		sop716_firmware_update(si);
 	}
-}
-
-static void sop716_demo_start(unsigned long data)
-{
-	struct sop716_info *si = (struct sop716_info *)data;
-
-	pr_debug("+sop_demo_start\n");
-
-	if (si->init_sop_demo_first == 0) {
-		si->init_sop_demo_first++;
-		mod_timer(&si->demo_timer, jiffies + (6 * HZ));
-	} else if (si->init_sop_demo_first == 1) {
-		si->init_sop_demo_first++;
-		si->sop_align_position = 2;
-		schedule_work(&si->movement_work);
-	} else if (si->init_sop_demo_first == 2) {
-		si->init_sop_demo_first++;
-		si->sop_align_position = 3;
-		schedule_work(&si->movement_work);
-	} else if (si->init_sop_demo_first == 3) {
-		si->init_sop_demo_first++;
-		si->sop_align_position = 4;
-		schedule_work(&si->movement_work);
-	} else if (si->init_sop_demo_first == 4) {
-		si->init_sop_demo_first++;
-		si->sop_align_position = 5;
-		schedule_work(&si->movement_work);
-	} else {
-		if (si->align_key_state == 0) {
-			si->sop_align_position = 1;
-			schedule_work(&si->movement_work);
-		} else {
-			si->sop_align_position = 0;
-			schedule_work(&si->movement_work);
-			si->align_hand_state = 1;
-		}
-	}
-	pr_debug("-sop_demo_start\n");
 }
 
 static int sop716_movement_probe(struct i2c_client *client,
@@ -812,7 +654,7 @@ static int sop716_movement_probe(struct i2c_client *client,
 	struct sop716_info *si;
 	int err;
 
-	pr_debug("+sop716_movement_probe\n");
+	pr_debug("%s\n", __func__);
 
 	si = devm_kzalloc(&client->dev, sizeof(struct sop716_info),
 			GFP_KERNEL);
@@ -841,22 +683,14 @@ static int sop716_movement_probe(struct i2c_client *client,
 	if (err)
 		return err;
 
+	INIT_WORK(&si->fw_work, sop716_update_fw_work);
 	err = sysfs_create_group(&client->dev.kobj, &sop716_dev_attr_group);
 	if (err) {
 		pr_err("%s: cannot create sysfs\n", __func__);
 		goto err_sysfs_create;
 	}
 
-	INIT_WORK(&si->movement_work, sop716_movement_work);
-
-	/* demo start */
-	init_timer(&si->demo_timer);
-	si->demo_timer.function = sop716_demo_start;
-	si->demo_timer.data = (unsigned long)si;
-	si->demo_timer.expires = jiffies + 1;
-	add_timer(&si->demo_timer);
-
-	pr_info("SOP716 movement probed\n");
+	pr_info("sop716 movement probed\n");
 	return 0;
 
 err_sysfs_create:
@@ -867,9 +701,6 @@ err_sysfs_create:
 
 static int sop716_movement_remove(struct i2c_client *client)
 {
-	struct sop716_info *si = i2c_get_clientdata(client);
-
-	del_timer_sync(&si->demo_timer);
 	sysfs_remove_group(&client->dev.kobj, &sop716_dev_attr_group);
 	i2c_set_clientdata(client, NULL);
 
