@@ -208,6 +208,109 @@ static ssize_t auto_hibern8_store(struct device *dev,
 	return count;
 }
 
+static ssize_t
+manual_gc_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	u32 status = MANUAL_GC_OFF;
+	int err = 0;
+
+	if (hba->manual_gc.state == MANUAL_GC_DISABLE)
+		return scnprintf(buf, PAGE_SIZE, "%s", "disabled\n");
+
+	pm_runtime_get_sync(hba->dev);
+
+	down_read(&hba->query_lock);
+	if (!ufshcd_is_link_hibern8(hba))
+		err = ufshcd_query_attr_retry(hba, UPIU_QUERY_OPCODE_READ_ATTR,
+			QUERY_ATTR_IDN_MANUAL_GC_STATUS, 0, 0, &status);
+	up_read(&hba->query_lock);
+	pm_runtime_mark_last_busy(hba->dev);
+	pm_runtime_put_noidle(hba->dev);
+	if (err) {
+		hba->manual_gc.state = MANUAL_GC_DISABLE;
+		return scnprintf(buf, PAGE_SIZE, "%s", "disabled\n");
+	}
+
+	return scnprintf(buf, PAGE_SIZE, "%s",
+			status == MANUAL_GC_OFF ? "off\n" : "on\n");
+}
+
+static ssize_t
+manual_gc_store(struct device *dev, struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	enum query_opcode opcode;
+	u32 value;
+	int err;
+
+	if (kstrtou32(buf, 0, &value))
+		return -EINVAL;
+
+	if (value >= MANUAL_GC_MAX)
+		return -EINVAL;
+
+	if (value == MANUAL_GC_DISABLE || value == MANUAL_GC_ENABLE) {
+		hba->manual_gc.state = value;
+		return count;
+	}
+	if (hba->manual_gc.state == MANUAL_GC_DISABLE)
+		return count;
+
+	pm_runtime_get_sync(hba->dev);
+
+	down_read(&hba->query_lock);
+	if (ufshcd_is_link_hibern8(hba)) {
+		up_read(&hba->query_lock);
+		pm_runtime_put_noidle(hba->dev);
+		return -EAGAIN;
+	}
+	up_read(&hba->query_lock);
+
+	ufshcd_hold(hba, false);
+
+	opcode = (value == MANUAL_GC_ON) ? UPIU_QUERY_OPCODE_SET_FLAG:
+					UPIU_QUERY_OPCODE_CLEAR_FLAG;
+	err = ufshcd_query_flag_retry(hba, opcode,
+				QUERY_FLAG_IDN_MANUAL_GC_CONT, NULL);
+	ufshcd_release(hba, false);
+	if (err || !ufshcd_is_auto_hibern8_supported(hba)) {
+		pm_runtime_mark_last_busy(hba->dev);
+		pm_runtime_put_noidle(hba->dev);
+		hba->manual_gc.state = MANUAL_GC_DISABLE;
+	} else {
+		/* pm_runtime_put_sync in delay_ms */
+		hrtimer_start(&hba->manual_gc.hrtimer,
+			ms_to_ktime(hba->manual_gc.delay_ms),
+			HRTIMER_MODE_REL);
+	}
+	return count;
+}
+
+static ssize_t
+manual_gc_hold_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+
+	return snprintf(buf, PAGE_SIZE, "%lu\n", hba->manual_gc.delay_ms);
+}
+
+static ssize_t
+manual_gc_hold_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	unsigned long value;
+
+	if (kstrtoul(buf, 0, &value))
+		return -EINVAL;
+
+	hba->manual_gc.delay_ms = value;
+	return count;
+}
+
 static DEVICE_ATTR_RW(rpm_lvl);
 static DEVICE_ATTR_RO(rpm_target_dev_state);
 static DEVICE_ATTR_RO(rpm_target_link_state);
@@ -215,6 +318,8 @@ static DEVICE_ATTR_RW(spm_lvl);
 static DEVICE_ATTR_RO(spm_target_dev_state);
 static DEVICE_ATTR_RO(spm_target_link_state);
 static DEVICE_ATTR_RW(auto_hibern8);
+static DEVICE_ATTR_RW(manual_gc);
+static DEVICE_ATTR_RW(manual_gc_hold);
 
 static struct attribute *ufs_sysfs_ufshcd_attrs[] = {
 	&dev_attr_rpm_lvl.attr,
@@ -224,6 +329,8 @@ static struct attribute *ufs_sysfs_ufshcd_attrs[] = {
 	&dev_attr_spm_target_dev_state.attr,
 	&dev_attr_spm_target_link_state.attr,
 	&dev_attr_auto_hibern8.attr,
+	&dev_attr_manual_gc.attr,
+	&dev_attr_manual_gc_hold.attr,
 	NULL
 };
 
