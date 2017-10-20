@@ -53,6 +53,7 @@ struct sop716_info {
 	int tz_minuteswest;
 
 	bool update_sysclock_on_boot;
+	bool watch_mode;
 
 	struct work_struct fw_work;
 	struct work_struct sysclock_work;
@@ -197,6 +198,8 @@ static ssize_t sop716_time_store(struct device *dev,
 	if (rc < 0)
 		pr_err("%s: cannot set time\n", __func__);
 
+	si->watch_mode = true;
+
 	return rc < 0? rc : count;
 }
 
@@ -245,6 +248,8 @@ static ssize_t sop716_motor_move_store(struct device *dev,
 
 	sop716_write(si, SOP716_I2C_DATA_LENGTH, SOP716_I2C_DATA_LENGTH, data);
 
+	si->watch_mode = false;
+
 	return count;
 }
 
@@ -291,6 +296,8 @@ static ssize_t sop716_motor_move_all_store(struct device *dev,
 	data[3] = option;
 
 	sop716_write(si, SOP716_I2C_DATA_LENGTH, SOP716_I2C_DATA_LENGTH, data);
+
+	si->watch_mode = false;
 
 	return count;
 }
@@ -339,6 +346,8 @@ static ssize_t sop716_motor_init_store(struct device *dev,
 	data[3] = num_of_steps;
 
 	sop716_write(si, SOP716_I2C_DATA_LENGTH, SOP716_I2C_DATA_LENGTH, data);
+
+	si->watch_mode = false;
 
 	return count;
 }
@@ -541,6 +550,50 @@ static ssize_t sop716_update_sysclock_store(struct device *dev,
 	return count;
 }
 
+static ssize_t sop716_watch_mode_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct sop716_info *si = dev_get_drvdata(dev);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", si->watch_mode);
+}
+
+static ssize_t sop716_watch_mode_store(struct device *dev,
+			struct device_attribute *attr, const char *buf,
+			size_t count)
+{
+	struct sop716_info *si = dev_get_drvdata(dev);
+	int value = 0;
+	int err;
+	u8 data[SOP716_I2C_DATA_LENGTH_TIME] = {
+		CMD_SOP716_SET_CURRENT_TIME,
+		0xFF,
+		0xFF,
+		0,
+	};
+
+
+	if (si->watch_mode)
+		return count;
+
+	err = kstrtoint(buf, 10, &value);
+	if (err || !value) {
+		pr_err("%s: invalid value\n", __func__);
+		return err;
+	}
+
+	err = sop716_write(si, SOP716_I2C_DATA_LENGTH_TIME,
+			SOP716_I2C_DATA_LENGTH_TIME, data);
+	if (err < 0) {
+		pr_err("%s: cannot set watch mode\n", __func__);
+		return err;
+	}
+
+	si->watch_mode = true;
+
+	return count;
+}
+
 static DEVICE_ATTR(set_hands_alignment, S_IRUGO | S_IWUSR,
 		sop716_hands_alignment_show, sop716_hands_alignment_store);
 static DEVICE_ATTR(set_reset, S_IRUGO | S_IWUSR,
@@ -559,6 +612,8 @@ static DEVICE_ATTR(get_battery_level, S_IRUGO,
 static DEVICE_ATTR(update_fw, S_IWUSR, NULL, sop716_update_fw_store);
 static DEVICE_ATTR(update_sysclock, S_IWUSR, NULL,
 		sop716_update_sysclock_store);
+static DEVICE_ATTR(watch_mode, S_IWUSR | S_IRUGO, sop716_watch_mode_show,
+		sop716_watch_mode_store);
 
 static struct attribute *sop716_dev_attrs[] = {
 	&dev_attr_set_hands_alignment.attr,
@@ -573,6 +628,7 @@ static struct attribute *sop716_dev_attrs[] = {
 	&dev_attr_get_battery_level.attr,
 	&dev_attr_update_fw.attr,
 	&dev_attr_update_sysclock.attr,
+	&dev_attr_watch_mode.attr,
 	NULL
 };
 
@@ -726,6 +782,8 @@ static void sop716_update_fw_work(struct work_struct *work)
 			CMD_SOP716_MOTOR_MOVE_ALL,
 			0,
 		};
+
+		si->watch_mode = false;
 
 		pr_info("sop firmware update: v%d.%d -> v%d.%d\n",
 				data[1], data[2], MAJOR_VER, MINOR_VER);
