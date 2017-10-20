@@ -21,6 +21,7 @@
 #include <linux/string.h>
 #include <linux/timer.h>
 #include <linux/time.h>
+#include <linux/rtc.h>
 
 #define SOP716_I2C_DATA_LENGTH       4
 #define SOP716_I2C_DATA_LENGTH_TIME  8
@@ -49,9 +50,15 @@ struct sop716_info {
 
 	int hands_alignment_status;
 	int reset_status;
+	int tz_minuteswest;
+
+	bool update_sysclock_on_boot;
 
 	struct work_struct fw_work;
+	struct work_struct sysclock_work;
 };
+
+struct sop716_info *sop716_info;
 
 static int sop716_write(struct sop716_info *si, u8 reg, u8 length, u8 *val);
 static int sop716_read(struct sop716_info *si, u8 reg, u8 length, u8 *val);
@@ -463,6 +470,77 @@ static ssize_t sop716_update_fw_store(struct device *dev,
 	return count;
 }
 
+static int sop716_hctosys(struct sop716_info *si)
+{
+	struct rtc_time tm;
+	struct timespec tv = {
+		.tv_nsec = NSEC_PER_SEC >> 1,
+	};
+	u8 time_data[SOP716_I2C_DATA_LENGTH_TIME] = {0, };
+	int err;
+
+	err = sop716_read(si, CMD_SOP716_READ_CURRENT_TIME,
+			SOP716_I2C_DATA_LENGTH_TIME-1, time_data);
+	if (err < 0) {
+		pr_err("%s: cannot read time from device\n", __func__);
+		return err;
+	}
+
+	tm.tm_hour = time_data[1];
+	tm.tm_min  = time_data[2];
+	tm.tm_sec  = time_data[3];
+	tm.tm_year = time_data[4] + 100;
+	tm.tm_mon  = time_data[5] - 1;
+	tm.tm_mday = time_data[6];
+
+	err = rtc_valid_tm(&tm);
+	if (err) {
+		pr_err("%s: invalid date/time\n", __func__);
+		return err;
+	}
+
+	rtc_tm_to_time(&tm, &tv.tv_sec);
+
+	/* Convert to UTC */
+	tv.tv_sec += si->tz_minuteswest * 60;
+
+	/* It will override the system clock */
+	err = do_settimeofday(&tv);
+
+	rtc_time_to_tm(tv.tv_sec, &tm);
+
+	dev_info(si->dev, "setting system clock to "
+			  "%d-%02d-%02d %02d:%02d:%02d UTC (%u)\n",
+			tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+			tm.tm_hour, tm.tm_min, tm.tm_sec,
+			(unsigned int) tv.tv_sec);
+
+	return err;
+}
+
+static ssize_t sop716_update_sysclock_store(struct device *dev,
+			struct device_attribute *attr, const char *buf,
+			size_t count)
+{
+	struct sop716_info *si = dev_get_drvdata(dev);
+	int err, value;
+
+	err = kstrtoint(buf, 10, &value);
+	if (err) {
+		pr_err("%s: invalid value\n", __func__);
+		return err;
+	}
+
+	if (value) {
+		/* read the sys_tz and use it */
+		si->tz_minuteswest = sys_tz.tz_minuteswest;
+
+		schedule_work(&si->sysclock_work);
+	}
+
+	return count;
+}
+
 static DEVICE_ATTR(set_hands_alignment, S_IRUGO | S_IWUSR,
 		sop716_hands_alignment_show, sop716_hands_alignment_store);
 static DEVICE_ATTR(set_reset, S_IRUGO | S_IWUSR,
@@ -479,6 +557,8 @@ static DEVICE_ATTR(battery_check_period, S_IRUGO | S_IWUSR,
 static DEVICE_ATTR(get_battery_level, S_IRUGO,
 		sop716_get_battery_level_show, NULL);
 static DEVICE_ATTR(update_fw, S_IWUSR, NULL, sop716_update_fw_store);
+static DEVICE_ATTR(update_sysclock, S_IWUSR, NULL,
+		sop716_update_sysclock_store);
 
 static struct attribute *sop716_dev_attrs[] = {
 	&dev_attr_set_hands_alignment.attr,
@@ -492,6 +572,7 @@ static struct attribute *sop716_dev_attrs[] = {
 	&dev_attr_battery_check_period.attr,
 	&dev_attr_get_battery_level.attr,
 	&dev_attr_update_fw.attr,
+	&dev_attr_update_sysclock.attr,
 	NULL
 };
 
@@ -529,6 +610,13 @@ static int sop716_read(struct sop716_info *si, u8 reg, u8 length, u8 *val)
 
 static int sop716_parse_dt(struct i2c_client *client)
 {
+	struct device *dev = &client->dev;
+	struct device_node *node = dev->of_node;
+	struct sop716_info *si = i2c_get_clientdata(client);
+
+	si->update_sysclock_on_boot = of_property_read_bool(node,
+			"lge,update-syslock-on-boot");
+
 	return 0;
 }
 
@@ -648,6 +736,14 @@ static void sop716_update_fw_work(struct work_struct *work)
 	}
 }
 
+static void sop716_update_sysclock_work(struct work_struct *work)
+{
+	struct sop716_info *si = container_of(work,
+			struct sop716_info, sysclock_work);
+
+	sop716_hctosys(si);
+}
+
 static int sop716_movement_probe(struct i2c_client *client,
 					const struct i2c_device_id *id)
 {
@@ -684,11 +780,15 @@ static int sop716_movement_probe(struct i2c_client *client,
 		return err;
 
 	INIT_WORK(&si->fw_work, sop716_update_fw_work);
+	INIT_WORK(&si->sysclock_work, sop716_update_sysclock_work);
+
 	err = sysfs_create_group(&client->dev.kobj, &sop716_dev_attr_group);
 	if (err) {
 		pr_err("%s: cannot create sysfs\n", __func__);
 		goto err_sysfs_create;
 	}
+
+	sop716_info = si;
 
 	pr_info("sop716 movement probed\n");
 	return 0;
@@ -703,6 +803,7 @@ static int sop716_movement_remove(struct i2c_client *client)
 {
 	sysfs_remove_group(&client->dev.kobj, &sop716_dev_attr_group);
 	i2c_set_clientdata(client, NULL);
+	sop716_info = NULL;
 
 	return 0;
 }
@@ -747,6 +848,28 @@ static void __exit sop716_movement_exit(void)
 
 module_init(sop716_movement_init);
 module_exit(sop716_movement_exit);
+
+static int __init sop716_hctosys_init(void)
+{
+	struct sop716_info *si = sop716_info;
+	int err;
+
+	if (!si) {
+		pr_err("%s: unable to open sop716 device\n", __func__);
+		return -ENODEV;
+	}
+
+	if (!si->update_sysclock_on_boot)
+		return 0;
+
+	/* TODO: update tz_minuteswest before sop716_hctosys() */
+
+	err = sop716_hctosys(si);
+
+	return err;
+}
+
+late_initcall_sync(sop716_hctosys_init);
 
 MODULE_DESCRIPTION("Soprod 716 movement");
 MODULE_LICENSE("GPL v2");
