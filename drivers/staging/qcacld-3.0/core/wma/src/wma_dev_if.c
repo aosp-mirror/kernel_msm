@@ -610,7 +610,11 @@ out:
 		qdf_mem_free(iface->addBssStaContext);
 	if (iface->staKeyParams)
 		qdf_mem_free(iface->staKeyParams);
+
+	wma_vdev_deinit(iface);
 	qdf_mem_zero(iface, sizeof(*iface));
+	wma_vdev_init(iface);
+
 	del_sta_self_req_param->status = status;
 	if (generate_rsp)
 		wma_send_del_sta_self_resp(del_sta_self_req_param);
@@ -1216,6 +1220,8 @@ void wma_remove_peer(tp_wma_handle wma, uint8_t *bssid,
 	uint8_t *peer_addr = bssid;
 	struct peer_flush_params param = {0};
 	uint8_t *peer_mac_addr;
+	QDF_STATUS qdf_status;
+	bool start_peer_unmap_timer = true;
 
 	peer_mac_addr = ol_txrx_peer_get_peer_mac_addr(peer);
 	if (peer_mac_addr == NULL) {
@@ -1251,8 +1257,15 @@ void wma_remove_peer(tp_wma_handle wma, uint8_t *bssid,
 			   DEBUG_INVALID_PEER_ID, peer_addr, peer,
 			   0,
 			   qdf_atomic_read(&peer->ref_cnt));
-	wmi_unified_peer_delete_send(wma->wmi_handle, peer_addr,
-						vdev_id);
+
+	qdf_status = wmi_unified_peer_delete_send(wma->wmi_handle, peer_addr,
+						  vdev_id);
+
+	if (qdf_status) {
+		WMA_LOGE("%s Peer delete could not be sent to firmware %d",
+			 __func__, qdf_status);
+		start_peer_unmap_timer = false;
+	}
 
 peer_detach:
 	WMA_LOGD("%s: Remove peer %p with peer_addr %pM vdevid %d peer_count %d",
@@ -1263,7 +1276,7 @@ peer_detach:
 		if (roam_synch_in_progress)
 			ol_txrx_peer_detach_force_delete(peer);
 		else
-			ol_txrx_peer_detach(peer);
+			ol_txrx_peer_detach(peer, start_peer_unmap_timer);
 	}
 
 	wma->interfaces[vdev_id].peer_count--;
@@ -1362,7 +1375,7 @@ QDF_STATUS wma_create_peer(tp_wma_handle wma, ol_txrx_pdev_handle pdev,
 	if (wmi_unified_peer_create_send(wma->wmi_handle,
 					 &param) != QDF_STATUS_SUCCESS) {
 		WMA_LOGE("%s : Unable to create peer in Target", __func__);
-		ol_txrx_peer_detach(peer);
+		ol_txrx_peer_detach(peer, false);
 		goto err;
 	}
 	WMA_LOGD("%s: Created peer %p ref_cnt %d with peer_addr %pM vdev_id %d, peer_count - %d",
@@ -2173,6 +2186,24 @@ ol_txrx_vdev_handle wma_vdev_attach(tp_wma_handle wma_handle,
 				self_sta_req->fils_max_chan_guard_time);
 		if (QDF_IS_STATUS_ERROR(ret))
 			WMA_LOGE("Failed to set WMI_VDEV_PARAM_FILS_MAX_CHANNEL_GUARD_TIME");
+
+		/* Pass down the Probe Request tx delay(in ms) to FW */
+		ret = wma_vdev_set_param(
+				wma_handle->wmi_handle,
+				self_sta_req->session_id,
+				WMI_VDEV_PARAM_PROBE_DELAY,
+				PROBE_REQ_TX_DELAY);
+		if (QDF_IS_STATUS_ERROR(ret))
+			WMA_LOGE("Failed to set WMI_VDEV_PARAM_PROBE_DELAY");
+
+		/* Pass down the probe request tx time gap(in ms) to FW */
+		ret = wma_vdev_set_param(
+				wma_handle->wmi_handle,
+				self_sta_req->session_id,
+				WMI_VDEV_PARAM_REPEAT_PROBE_TIME,
+				PROBE_REQ_TX_TIME_GAP);
+		if (QDF_IS_STATUS_ERROR(ret))
+			WMA_LOGE("Failed to set WMI_VDEV_PARAM_REPEAT_PROBE_TIME");
 	}
 
 	/* Initialize BMISS parameters */
@@ -3093,7 +3124,10 @@ void wma_vdev_resp_timer(void *data)
 			qdf_mem_free(iface->addBssStaContext);
 		if (iface->staKeyParams)
 			qdf_mem_free(iface->staKeyParams);
+
+		wma_vdev_deinit(iface);
 		qdf_mem_zero(iface, sizeof(*iface));
+		wma_vdev_init(iface);
 	} else if (tgt_req->msg_type == WMA_ADD_BSS_REQ) {
 		tpAddBssParams params = (tpAddBssParams) tgt_req->user_data;
 
@@ -4940,7 +4974,7 @@ void wma_delete_bss_ho_fail(tp_wma_handle wma, tpDeleteBssParams params)
 	}
 
 	if (peer)
-		ol_txrx_peer_detach(peer);
+		ol_txrx_peer_detach(peer, true);
 	iface->peer_count--;
 	WMA_LOGD("%s: Removed peer %p with peer_addr %pM vdevid %d peer_count %d",
 		 __func__, peer, params->bssid,  params->smesessionId,

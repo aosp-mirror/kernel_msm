@@ -1356,8 +1356,6 @@ static void hdd_send_association_event(struct net_device *dev,
 #endif
 	}
 	cds_dump_concurrency_info();
-	/* Send SCC/MCC Switching event to IPA */
-	hdd_ipa_send_mcc_scc_msg(pHddCtx, pHddCtx->mcc_mode);
 
 	msg = NULL;
 	/* During the WLAN uninitialization, supplicant is stopped before the
@@ -1932,6 +1930,38 @@ static inline void hdd_send_roamed_ind(struct net_device *dev,
 }
 #endif
 
+#if defined(WLAN_FEATURE_ROAM_OFFLOAD)
+void hdd_save_gtk_params(hdd_adapter_t *adapter,
+			 tCsrRoamInfo *csr_roam_info, bool is_reassoc)
+{
+	uint8_t *kek;
+	uint32_t kek_len;
+
+#if defined(WLAN_FEATURE_FILS_SK)
+	if (is_reassoc) {
+		kek = csr_roam_info->kek;
+		kek_len = csr_roam_info->kek_len;
+	} else {
+		/*
+		 * This should come for FILS case only.
+		 * Caller should make sure fils_join_rsp is
+		 * not NULL, if there is need to use else where.
+		 */
+		kek = csr_roam_info->fils_join_rsp->kek;
+		kek_len = csr_roam_info->fils_join_rsp->kek_len;
+	}
+#else
+	kek = csr_roam_info->kek;
+	kek_len = csr_roam_info->kek_len;
+#endif
+
+	wlan_hdd_save_gtk_offload_params(adapter, NULL, kek, kek_len,
+					 csr_roam_info->replay_ctr,
+					 true, GTK_OFFLOAD_ENABLE);
+
+	hdd_debug("Kek len %d", kek_len);
+}
+#endif
 /**
  * hdd_send_re_assoc_event() - send reassoc event
  * @dev: pointer to net device
@@ -1958,6 +1988,8 @@ static void hdd_send_re_assoc_event(struct net_device *dev,
 	uint8_t *final_req_ie = NULL;
 	tCsrRoamConnectedProfile roam_profile;
 	tHalHandle hal_handle = WLAN_HDD_GET_HAL_CTX(pAdapter);
+	int chan_no;
+	int freq;
 
 	qdf_mem_zero(&roam_profile, sizeof(roam_profile));
 
@@ -2010,8 +2042,15 @@ static void hdd_send_re_assoc_event(struct net_device *dev,
 	qdf_mem_copy(rspRsnIe, pFTAssocRsp, len);
 	qdf_mem_zero(rspRsnIe + len, IW_GENERIC_IE_MAX - len);
 
-	chan = ieee80211_get_channel(pAdapter->wdev.wiphy,
-			(int)pCsrRoamInfo->pBssDesc->channelId);
+	chan_no = pCsrRoamInfo->pBssDesc->channelId;
+	if (chan_no <= 14)
+		freq = ieee80211_channel_to_frequency(chan_no,
+							NL80211_BAND_2GHZ);
+	else
+		freq = ieee80211_channel_to_frequency(chan_no,
+							NL80211_BAND_5GHZ);
+	chan = ieee80211_get_channel(pAdapter->wdev.wiphy, freq);
+
 	sme_roam_get_connect_profile(hal_handle, pAdapter->sessionId,
 		&roam_profile);
 
@@ -2057,11 +2096,7 @@ static void hdd_send_re_assoc_event(struct net_device *dev,
 		(u8 *)pCsrRoamInfo->pbFrames + pCsrRoamInfo->nBeaconLength,
 		pCsrRoamInfo->nAssocReqLength);
 
-	wlan_hdd_save_gtk_offload_params(pAdapter, NULL,
-			pCsrRoamInfo->kek,
-			pCsrRoamInfo->kek_len,
-			pCsrRoamInfo->replay_ctr,
-			true, GTK_OFFLOAD_ENABLE);
+	hdd_save_gtk_params(pAdapter, pCsrRoamInfo, true);
 
 	hdd_debug("ReAssoc Req IE dump");
 	QDF_TRACE_HEX_DUMP(QDF_MODULE_ID_HDD, QDF_TRACE_LEVEL_DEBUG,
@@ -2071,7 +2106,6 @@ static void hdd_send_re_assoc_event(struct net_device *dev,
 			assoc_req_ies, pCsrRoamInfo->nAssocReqLength,
 			rspRsnIe, rspRsnLength,
 			pCsrRoamInfo);
-	hdd_debug("Kek len %d", pCsrRoamInfo->kek_len);
 
 	hdd_update_hlp_info(dev, pCsrRoamInfo);
 
@@ -5087,6 +5121,7 @@ hdd_sme_roam_callback(void *pContext, tCsrRoamInfo *pRoamInfo, uint32_t roamId,
 		cds_set_connection_in_progress(false);
 		hdd_set_roaming_in_progress(false);
 		pAdapter->roam_ho_fail = false;
+		pHddStaCtx->ft_carrier_on = false;
 		complete(&pAdapter->roaming_comp_var);
 		break;
 

@@ -180,27 +180,27 @@
 
 #define WLAN_CHIP_VERSION   "WCNSS"
 
-#define hdd_log_rate_limited(rate, level, args...) \
+#define hdd_log_ratelimited(rate, level, args...) \
 		QDF_TRACE_RATE_LIMITED(rate, QDF_MODULE_ID_HDD, level, ## args)
-#define hdd_log_rate_limited_fl(rate, level, format, args...) \
-		hdd_log_rate_limited(rate, level, FL(format), ## args)
-#define hdd_alert_rate_limited(rate, format, args...) \
-		hdd_log_rate_limited_fl(rate, QDF_TRACE_LEVEL_FATAL,\
+#define hdd_log_ratelimited_fl(rate, level, format, args...) \
+		hdd_log_ratelimited(rate, level, FL(format), ## args)
+#define hdd_alert_ratelimited(rate, format, args...) \
+		hdd_log_ratelimited_fl(rate, QDF_TRACE_LEVEL_FATAL,\
 			format, ## args)
-#define hdd_err_rate_limited(rate, format, args...) \
-		hdd_log_rate_limited_fl(rate, QDF_TRACE_LEVEL_ERROR,\
+#define hdd_err_ratelimited(rate, format, args...) \
+		hdd_log_ratelimited_fl(rate, QDF_TRACE_LEVEL_ERROR,\
 			format, ## args)
-#define hdd_warn_rate_limited(rate, format, args...) \
-		hdd_log_rate_limited_fl(rate, QDF_TRACE_LEVEL_WARN,\
+#define hdd_warn_ratelimited(rate, format, args...) \
+		hdd_log_ratelimited_fl(rate, QDF_TRACE_LEVEL_WARN,\
 			format, ## args)
-#define hdd_notice_rate_limited(rate, format, args...) \
-		hdd_log_rate_limited_fl(rate, QDF_TRACE_LEVEL_INFO,\
+#define hdd_notice_ratelimited(rate, format, args...) \
+		hdd_log_ratelimited_fl(rate, QDF_TRACE_LEVEL_INFO,\
 			format, ## args)
-#define hdd_info_rate_limited(rate, format, args...) \
-		hdd_log_rate_limited_fl(rate, QDF_TRACE_LEVEL_INFO,\
+#define hdd_info_ratelimited(rate, format, args...) \
+		hdd_log_ratelimited_fl(rate, QDF_TRACE_LEVEL_INFO,\
 			format, ## args)
-#define hdd_debug_rate_limited(rate, format, args...) \
-		hdd_log_rate_limited_fl(rate, QDF_TRACE_LEVEL_DEBUG,\
+#define hdd_debug_ratelimited(rate, format, args...) \
+		hdd_log_ratelimited_fl(rate, QDF_TRACE_LEVEL_DEBUG,\
 			format, ## args)
 
 #define hdd_log(level, args...) QDF_TRACE(QDF_MODULE_ID_HDD, level, ## args)
@@ -315,6 +315,19 @@
 #define WLAN_NUD_STATS_LEN 800
 /* ARP packet type for NUD debug stats */
 #define WLAN_NUD_STATS_ARP_PKT_TYPE 1
+
+/*
+ * @eHDD_DRV_OP_PROBE: Refers to .probe operation
+ * @eHDD_DRV_OP_REMOVE: Refers to .remove operation
+ * @eHDD_DRV_OP_SHUTDOWN: Refers to .shutdown operation
+ * @eHDD_DRV_OP_REINIT: Refers to .reinit operation
+ */
+enum {
+	eHDD_DRV_OP_PROBE = 0,
+	eHDD_DRV_OP_REMOVE,
+	eHDD_DRV_OP_SHUTDOWN,
+	eHDD_DRV_OP_REINIT
+};
 
 /*
  * @eHDD_SCAN_REJECT_DEFAULT: default value
@@ -2069,6 +2082,17 @@ QDF_STATUS hdd_set_ibss_power_save_params(hdd_adapter_t *pAdapter);
 QDF_STATUS wlan_hdd_restart_driver(hdd_context_t *pHddCtx);
 void hdd_exchange_version_and_caps(hdd_context_t *pHddCtx);
 int wlan_hdd_validate_context(hdd_context_t *pHddCtx);
+
+/**
+ * hdd_validate_adapter() - Validate the given adapter
+ * @adapter: the adapter to validate
+ *
+ * This function validates the given adapter, and ensures that it is open.
+ *
+ * Return: Errno
+ */
+int hdd_validate_adapter(hdd_adapter_t *adapter);
+
 /**
  * wlan_hdd_validate_context_in_loading() - check the HDD context in loading
  * @hdd_ctx:	HDD context pointer
@@ -2472,7 +2496,16 @@ int hdd_wlan_start_modules(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter,
 int hdd_wlan_stop_modules(hdd_context_t *hdd_ctx, bool ftm_mode);
 int hdd_start_adapter(hdd_adapter_t *adapter);
 void hdd_populate_random_mac_addr(hdd_context_t *hdd_ctx, uint32_t num);
-
+/**
+ * hdd_is_interface_up()- Checkfor interface up before ssr
+ * @hdd_ctx: HDD context
+ *
+ * check  if there are any wlan interfaces before SSR accordingly start
+ * the interface.
+ *
+ * Return: 0 if interface was opened else false
+ */
+bool hdd_is_interface_up(hdd_adapter_t *adapter);
 /**
  * hdd_get_bss_entry() - Get the bss entry matching the chan, bssid and ssid
  * @wiphy: wiphy
@@ -2707,4 +2740,34 @@ static inline void hdd_update_hlp_info(struct net_device *dev,
 				       tCsrRoamInfo *roam_info)
 {}
 #endif
+
+/**
+ * hdd_drv_ops_inactivity_handler() - Timeout handler for driver ops
+ * inactivity timer
+ *
+ * Return: None
+ */
+void hdd_drv_ops_inactivity_handler(void);
+
+/**
+ * hdd_start_driver_ops_timer() - Starts driver ops inactivity timer
+ * @drv_op: Enum indicating driver op
+ *
+ * Return: none
+ */
+void hdd_start_driver_ops_timer(int drv_op);
+
+/**
+ * hdd_stop_driver_ops_timer() - Stops driver ops inactivity timer
+ *
+ * Return: none
+ */
+void hdd_stop_driver_ops_timer(void);
+
+/**
+ * hdd_pld_ipa_uc_shutdown_pipes() - Disconnect IPA WDI pipes during PDR
+ *
+ * Return: None
+ */
+void hdd_pld_ipa_uc_shutdown_pipes(void);
 #endif /* end #if !defined(WLAN_HDD_MAIN_H) */

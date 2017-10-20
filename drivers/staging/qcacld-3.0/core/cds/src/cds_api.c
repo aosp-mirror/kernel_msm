@@ -462,11 +462,14 @@ QDF_STATUS cds_open(void)
 			  "%s: HTCHandle is null!", __func__);
 		goto err_wma_close;
 	}
-	if (htc_wait_target(HTCHandle)) {
+
+	qdf_status = htc_wait_target(HTCHandle);
+	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
 		QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_FATAL,
 			  "%s: Failed to complete BMI phase", __func__);
 
-		if (!cds_is_fw_down())
+		if (qdf_status != QDF_STATUS_E_NOMEM
+				&& !cds_is_fw_down())
 			QDF_BUG(0);
 
 		goto err_wma_close;
@@ -903,6 +906,10 @@ QDF_STATUS cds_post_disable(void)
 	hif_disable_isr(hif_ctx);
 	hif_reset_soc(hif_ctx);
 
+	if (gp_cds_context->htc_ctx) {
+		htc_stop(gp_cds_context->htc_ctx);
+	}
+
 	ol_txrx_pdev_pre_detach(txrx_pdev, 1);
 
 	return QDF_STATUS_SUCCESS;
@@ -931,7 +938,6 @@ QDF_STATUS cds_close(v_CONTEXT_t cds_context)
 	hdd_lro_destroy();
 
 	if (gp_cds_context->htc_ctx) {
-		htc_stop(gp_cds_context->htc_ctx);
 		htc_destroy(gp_cds_context->htc_ctx);
 		gp_cds_context->htc_ctx = NULL;
 	}
@@ -1778,7 +1784,9 @@ static QDF_STATUS cds_force_assert_target(qdf_device_t qdf_ctx)
 		  "Self Recovery not supported via Platform driver assert");
 
 	cds_set_recovery_in_progress(false);
-	QDF_BUG(0);
+
+	if (!cds_is_fw_down())
+		QDF_BUG(0);
 
 	return QDF_STATUS_E_INVAL;
 }
@@ -1859,12 +1867,51 @@ static void cds_trigger_recovery_work(void *param)
 }
 
 /**
+ * cds_get_recovery_reason() - get self recovery reason
+ * @reason: recovery reason
+ *
+ * Return: None
+ */
+void cds_get_recovery_reason(enum cds_hang_reason *reason)
+{
+	if (!gp_cds_context) {
+		cds_err("gp_cds_context is null");
+		return;
+	}
+
+	*reason = gp_cds_context->recovery_reason;
+}
+
+/**
+ * cds_reset_recovery_reason() - reset the reason to unspecified
+ *
+ * Return: None
+ */
+void cds_reset_recovery_reason(void)
+{
+	if (!gp_cds_context) {
+		cds_err("gp_cds_context is null");
+		return;
+	}
+
+	gp_cds_context->recovery_reason = CDS_REASON_UNSPECIFIED;
+}
+
+/**
  * cds_trigger_recovery() - trigger self recovery
+ * @reason: recovery reason
  *
  * Return: none
  */
-void cds_trigger_recovery(void)
+void cds_trigger_recovery(enum cds_hang_reason reason)
 {
+	if (!gp_cds_context) {
+		cds_err("gp_cds_context is null");
+		return;
+	}
+
+	gp_cds_context->recovery_reason = reason;
+
 	if (in_atomic()) {
 		qdf_queue_work(0, gp_cds_context->cds_recovery_wq,
 				&gp_cds_context->cds_recovery_work);
@@ -2592,6 +2639,7 @@ QDF_STATUS cds_register_dp_cb(struct cds_dp_cbacks *dp_cbs)
 	cds_ctx->hdd_en_lro_in_cc_cb = dp_cbs->hdd_en_lro_in_cc_cb;
 	cds_ctx->hdd_disable_lro_in_cc_cb = dp_cbs->hdd_disble_lro_in_cc_cb;
 	cds_ctx->hdd_set_rx_mode_rps_cb = dp_cbs->hdd_set_rx_mode_rps_cb;
+	cds_ctx->hdd_ipa_set_mcc_mode_cb = dp_cbs->hdd_ipa_set_mcc_mode_cb;
 	return QDF_STATUS_SUCCESS;
 }
 
@@ -2616,6 +2664,7 @@ QDF_STATUS cds_deregister_dp_cb(void)
 	cds_ctx->hdd_en_lro_in_cc_cb = NULL;
 	cds_ctx->hdd_disable_lro_in_cc_cb = NULL;
 	cds_ctx->hdd_set_rx_mode_rps_cb = NULL;
+	cds_ctx->hdd_ipa_set_mcc_mode_cb = NULL;
 
 	return QDF_STATUS_SUCCESS;
 }

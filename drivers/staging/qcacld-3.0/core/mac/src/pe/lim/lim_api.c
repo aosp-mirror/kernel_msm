@@ -730,6 +730,7 @@ static void pe_shutdown_notifier_cb(void *ctx)
 	tpPESession session;
 	uint8_t i;
 
+	lim_deactivate_timers(mac_ctx);
 	for (i = 0; i < mac_ctx->lim.maxBssId; i++) {
 		session = &mac_ctx->lim.gpSession[i];
 		if (session->valid == true) {
@@ -739,7 +740,6 @@ static void pe_shutdown_notifier_cb(void *ctx)
 #ifdef WLAN_FEATURE_11W
 			qdf_mc_timer_stop(&session->pmfComebackTimer);
 #endif
-			lim_deactivate_timers(mac_ctx);
 		}
 	}
 }
@@ -2128,6 +2128,8 @@ QDF_STATUS pe_roam_synch_callback(tpAniSirGlobal mac_ctx,
 		ft_session_ptr->bRoamSynchInProgress = false;
 		return status;
 	}
+
+	add_bss_params->bssIdx = roam_sync_ind_ptr->roamedVdevId;
 	ft_session_ptr->bssIdx = (uint8_t) add_bss_params->bssIdx;
 
 	curr_sta_ds->bssId = add_bss_params->bssIdx;

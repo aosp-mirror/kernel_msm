@@ -97,17 +97,6 @@
 #define ROAMING_OFFLOAD_TIMER_STOP	2
 #define CSR_ROAMING_OFFLOAD_TIMEOUT_PERIOD    (5 * QDF_MC_TIMER_TO_SEC_UNIT)
 
-/*
- * MAWC_ROAM_TRAFFIC_THRESHOLD_DEFAULT - Indicates the traffic thresold in kBps
- * MAWC_ROAM_AP_RSSI_THRESHOLD_DEFAULT - indicates the AP RSSI threshold
- * MAWC_ROAM_RSSI_HIGH_ADJUST_DEFAULT - Adjustable high value to suppress scan
- * MAWC_ROAM_RSSI_LOW_ADJUST_DEFAULT - Adjustable low value to suppress scan
- */
-#define MAWC_ROAM_TRAFFIC_THRESHOLD_DEFAULT  300
-#define MAWC_ROAM_AP_RSSI_THRESHOLD_DEFAULT  (-66)
-#define MAWC_ROAM_RSSI_HIGH_ADJUST_DEFAULT   5
-#define MAWC_ROAM_RSSI_LOW_ADJUST_DEFAULT    5
-
 /* Static Type declarations */
 static tCsrRoamSession csr_roam_roam_session[CSR_ROAM_SESSION_MAX];
 
@@ -1652,16 +1641,6 @@ static void init_config_param(tpAniSirGlobal pMac)
 
 	pMac->roam.configParam.nInitialDwellTime = 0;
 	pMac->roam.configParam.initial_scan_no_dfs_chnl = 0;
-	pMac->roam.configParam.csr_mawc_config.mawc_enabled = true;
-	pMac->roam.configParam.csr_mawc_config.mawc_roam_enabled = true;
-	pMac->roam.configParam.csr_mawc_config.mawc_roam_traffic_threshold =
-		MAWC_ROAM_TRAFFIC_THRESHOLD_DEFAULT;
-	pMac->roam.configParam.csr_mawc_config.mawc_roam_ap_rssi_threshold =
-		MAWC_ROAM_AP_RSSI_THRESHOLD_DEFAULT;
-	pMac->roam.configParam.csr_mawc_config.mawc_roam_rssi_high_adjust =
-		MAWC_ROAM_RSSI_HIGH_ADJUST_DEFAULT;
-	pMac->roam.configParam.csr_mawc_config.mawc_roam_rssi_low_adjust =
-		MAWC_ROAM_RSSI_LOW_ADJUST_DEFAULT;
 }
 
 eCsrBand csr_get_current_band(tHalHandle hHal)
@@ -2535,9 +2514,8 @@ QDF_STATUS csr_change_default_config_param(tpAniSirGlobal pMac,
 			pParam->bFastRoamInConIniFeatureEnabled;
 		pMac->roam.configParam.isFastRoamIniFeatureEnabled =
 			pParam->isFastRoamIniFeatureEnabled;
-		qdf_mem_copy(&pMac->roam.configParam.csr_mawc_config,
-				&pParam->csr_mawc_config,
-				sizeof(pParam->csr_mawc_config));
+		pMac->roam.configParam.MAWCEnabled = pParam->MAWCEnabled;
+
 #ifdef FEATURE_WLAN_ESE
 		pMac->roam.configParam.isEseIniFeatureEnabled =
 			pParam->isEseIniFeatureEnabled;
@@ -3069,9 +3047,6 @@ QDF_STATUS csr_get_config_param(tpAniSirGlobal pMac, tCsrConfigParam *pParam)
 		pMac->roam.configParam.rssi_channel_penalization;
 	pParam->num_disallowed_aps =
 		pMac->roam.configParam.num_disallowed_aps;
-	qdf_mem_copy(&pParam->csr_mawc_config,
-		&pMac->roam.configParam.csr_mawc_config,
-		sizeof(pParam->csr_mawc_config));
 
 	return QDF_STATUS_SUCCESS;
 }
@@ -4284,14 +4259,19 @@ QDF_STATUS csr_roam_prepare_bss_config(tpAniSirGlobal pMac,
 	 * Join timeout: if we find a BeaconInterval in the BssDescription,
 	 * then set the Join Timeout to be 10 x the BeaconInterval.
 	 */
-	if (pBssDesc->beaconInterval)
+	if (pBssDesc->beaconInterval) {
 		/* Make sure it is bigger than the minimal */
 		pBssConfig->uJoinTimeOut =
 			QDF_MAX(10 * pBssDesc->beaconInterval,
 				CSR_JOIN_FAILURE_TIMEOUT_MIN);
-	else
+		/* make sure it is less than max allowed */
+		pBssConfig->uJoinTimeOut =
+			QDF_MIN(pBssConfig->uJoinTimeOut,
+				WNI_CFG_JOIN_FAILURE_TIMEOUT_STAMAX);
+	} else {
 		pBssConfig->uJoinTimeOut =
 			CSR_JOIN_FAILURE_TIMEOUT_DEFAULT;
+	}
 	/* validate CB */
 	if ((pBssConfig->uCfgDot11Mode == eCSR_CFG_DOT11_MODE_11N)
 	    || (pBssConfig->uCfgDot11Mode == eCSR_CFG_DOT11_MODE_11AC)
@@ -11164,6 +11144,11 @@ csr_roam_chk_lnk_disassoc_ind(tpAniSirGlobal mac_ctx, tSirSmeRsp *msg_ptr)
 		qdf_mem_free(cmd);
 		return;
 	}
+
+	/* Update the disconnect stats */
+	session->disconnect_stats.disconnection_cnt++;
+	session->disconnect_stats.disassoc_by_peer++;
+
 	if (csr_is_conn_state_infra(mac_ctx, sessionId))
 		session->connectState = eCSR_ASSOC_STATE_TYPE_NOT_CONNECTED;
 #ifndef WLAN_MDM_CODE_REDUCTION_OPT
@@ -11272,6 +11257,30 @@ csr_roam_chk_lnk_deauth_ind(tpAniSirGlobal mac_ctx, tSirSmeRsp *msg_ptr)
 	if (!session) {
 		sme_err("session %d not found", sessionId);
 		return;
+	}
+
+	/* Update the disconnect stats */
+	switch (pDeauthInd->reasonCode) {
+	case eSIR_MAC_DISASSOC_DUE_TO_INACTIVITY_REASON:
+		session->disconnect_stats.disconnection_cnt++;
+		session->disconnect_stats.peer_kickout++;
+		break;
+	case eSIR_MAC_UNSPEC_FAILURE_REASON:
+	case eSIR_MAC_PREV_AUTH_NOT_VALID_REASON:
+	case eSIR_MAC_DEAUTH_LEAVING_BSS_REASON:
+	case eSIR_MAC_CLASS2_FRAME_FROM_NON_AUTH_STA_REASON:
+	case eSIR_MAC_CLASS3_FRAME_FROM_NON_ASSOC_STA_REASON:
+	case eSIR_MAC_STA_NOT_PRE_AUTHENTICATED_REASON:
+		session->disconnect_stats.disconnection_cnt++;
+		session->disconnect_stats.deauth_by_peer++;
+		break;
+	case eSIR_BEACON_MISSED:
+		session->disconnect_stats.disconnection_cnt++;
+		session->disconnect_stats.bmiss++;
+		break;
+	default:
+		/* Unknown reason code */
+		break;
 	}
 
 	if (csr_is_conn_state_infra(mac_ctx, sessionId))
@@ -12978,6 +12987,7 @@ static ePhyChanBondState csr_get_cb_mode_from_ies(tpAniSirGlobal pMac,
 	ePhyChanBondState eRet = PHY_SINGLE_CHANNEL_CENTERED;
 	uint8_t centerChn;
 	uint32_t ChannelBondingMode;
+	struct ch_params_s ch_params = {0};
 
 	if (CDS_IS_CHANNEL_24GHZ(primaryChn)) {
 		ChannelBondingMode =
@@ -13042,12 +13052,14 @@ static ePhyChanBondState csr_get_cb_mode_from_ies(tpAniSirGlobal pMac,
 		break;
 	}
 
-	if ((PHY_SINGLE_CHANNEL_CENTERED != eRet) &&
-	    (QDF_STATUS_SUCCESS != sme_check_ch_in_band(pMac,
-							centerChn - 2, 2))) {
-		sme_err("Invalid center channel (%d), disable 40MHz mode",
-			centerChn);
-		eRet = PHY_SINGLE_CHANNEL_CENTERED;
+	if (PHY_SINGLE_CHANNEL_CENTERED != eRet) {
+		ch_params.ch_width = CH_WIDTH_MAX;
+		cds_set_channel_params(primaryChn, 0, &ch_params);
+		if (ch_params.ch_width == CH_WIDTH_20MHZ) {
+			sme_err("40Mhz not supported for channel %d, continue with 20Mhz",
+				primaryChn);
+			eRet = PHY_SINGLE_CHANNEL_CENTERED;
+		}
 	}
 	return eRet;
 }
@@ -15532,6 +15544,11 @@ QDF_STATUS csr_send_mb_disassoc_req_msg(tpAniSirGlobal pMac, uint32_t sessionId,
 	pMsg->reasonCode = reasonCode;
 	pMsg->process_ho_fail = (pSession->disconnect_reason ==
 		eCSR_DISCONNECT_REASON_ROAM_HO_FAIL) ? true : false;
+
+	/* Update the disconnect stats */
+	pSession->disconnect_stats.disconnection_cnt++;
+	pSession->disconnect_stats.disconnection_by_app++;
+
 	/*
 	 * The state will be DISASSOC_HANDOFF only when we are doing
 	 * handoff. Here we should not send the disassoc over the air
@@ -15725,6 +15742,10 @@ QDF_STATUS csr_send_mb_deauth_req_msg(tpAniSirGlobal pMac, uint32_t sessionId,
 	/* Set the peer MAC address before sending the message to LIM */
 	qdf_mem_copy(&pMsg->peer_macaddr.bytes, bssId, QDF_MAC_ADDR_SIZE);
 	pMsg->reasonCode = reasonCode;
+
+	/* Update the disconnect stats */
+	pSession->disconnect_stats.disconnection_cnt++;
+	pSession->disconnect_stats.disconnection_by_app++;
 
 	return cds_send_mb_message_to_mac(pMsg);
 }
@@ -18320,16 +18341,8 @@ csr_create_roam_scan_offload_request(tpAniSirGlobal mac_ctx,
 		roam_info->cfgParams.nRoamBmissFinalBcnt;
 	req_buf->RoamBeaconRssiWeight =
 		roam_info->cfgParams.nRoamBeaconRssiWeight;
-	qdf_mem_copy(&req_buf->mawc_roam_params,
-		&mac_ctx->roam.configParam.csr_mawc_config,
-		sizeof(req_buf->mawc_roam_params));
-	sme_debug("MAWC:global=%d,roam=%d,traffic=%d,ap_rssi=%d,high=%d,low=%d",
-			req_buf->mawc_roam_params.mawc_enabled,
-			req_buf->mawc_roam_params.mawc_roam_enabled,
-			req_buf->mawc_roam_params.mawc_roam_traffic_threshold,
-			req_buf->mawc_roam_params.mawc_roam_ap_rssi_threshold,
-			req_buf->mawc_roam_params.mawc_roam_rssi_high_adjust,
-			req_buf->mawc_roam_params.mawc_roam_rssi_low_adjust);
+	/* MAWC feature */
+	req_buf->MAWCEnabled = mac_ctx->roam.configParam.MAWCEnabled;
 #ifdef FEATURE_WLAN_ESE
 	req_buf->IsESEAssoc =
 		csr_roam_is_ese_assoc(mac_ctx, session_id) &&
@@ -18967,17 +18980,19 @@ QDF_STATUS csr_update_fils_config(tpAniSirGlobal mac, uint8_t session_id,
  * @str: Source string
  * @dst: Destination string
  * @c: Character before which all characters need to be copied
+ * @max_dst_len: Maximum length destination can accomodate.
  *
  * Return: length of the copied string, if success. zero otherwise.
  */
-static uint32_t copy_all_before_char(char *str, char *dst, char c)
+static uint32_t copy_all_before_char(char *str, char *dst,
+		char c, uint16_t max_dst_len)
 {
 	uint32_t len = 0;
 
 	if (!str)
 		return len;
 
-	while (*str != '\0' && *str != c) {
+	while (*str != '\0' && *str != c && (len < max_dst_len)) {
 		*dst++ = *str++;
 		len++;
 	}
@@ -19016,7 +19031,8 @@ static void csr_update_fils_params_rso(tpAniSirGlobal mac,
 	req_buffer->is_fils_connection = true;
 	roam_fils_params->username_length =
 			copy_all_before_char(fils_info->keyname_nai,
-				roam_fils_params->username, '@');
+				roam_fils_params->username, '@',
+				WMI_FILS_MAX_USERNAME_LENGTH);
 
 	roam_fils_params->next_erp_seq_num =
 			(fils_info->sequence_number + 1);
@@ -19098,6 +19114,14 @@ csr_roam_offload_scan(tpAniSirGlobal mac_ctx, uint8_t session_id,
 	    && (ROAM_SCAN_OFFLOAD_START == command)) {
 		sme_err("Roam Scan Offload is already started");
 		return QDF_STATUS_E_FAILURE;
+	}
+
+	/* Roaming is not supported currently for FILS akm */
+	if (session->pCurRoamProfile && CSR_IS_AUTH_TYPE_FILS(
+	    session->pCurRoamProfile->AuthType.authType[0]) &&
+				!mac_ctx->is_fils_roaming_supported) {
+		sme_info("FILS Roaming not suppprted by fw");
+		return QDF_STATUS_SUCCESS;
 	}
 
 	/*
@@ -20949,7 +20973,7 @@ void csr_roam_fill_tdls_info(tpAniSirGlobal mac_ctx, tCsrRoamInfo *roam_info,
 }
 #endif
 
-#if defined(WLAN_FEATURE_FILS_SK)
+#if defined(WLAN_FEATURE_FILS_SK) && defined(WLAN_FEATURE_ROAM_OFFLOAD)
 static void csr_copy_fils_join_rsp_roam_info(tCsrRoamInfo *roam_info,
 				      roam_offload_synch_ind *roam_synch_data)
 {

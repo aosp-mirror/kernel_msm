@@ -548,7 +548,7 @@ typedef struct tagCsrConfig {
 	bool ssidHidden;
 	tCsr11rConfig csr11rConfig;
 	uint8_t isFastRoamIniFeatureEnabled;
-	struct mawc_params csr_mawc_config;
+	uint8_t MAWCEnabled;
 	uint8_t isRoamOffloadScanEnabled;
 	bool bFastRoamInConIniFeatureEnabled;
 #ifdef FEATURE_WLAN_ESE
@@ -883,6 +883,24 @@ struct csr_roam_stored_profile {
 	bool clear_flag;
 };
 
+/**
+ * struct csr_disconnect_stats - Disconnect Stats per session
+ * @disconnection_cnt: total no. of disconnections
+ * @disconnection_by_app: diconnections triggered by application
+ * @disassoc_by_peer: disassoc sent by peer
+ * @deauth_by_peer: deauth sent by peer
+ * @bmiss: disconnect triggered by beacon miss
+ * @peer_kickout: disconnect triggered by peer kickout
+ */
+struct csr_disconnect_stats {
+	uint32_t disconnection_cnt;
+	uint32_t disconnection_by_app;
+	uint32_t disassoc_by_peer;
+	uint32_t deauth_by_peer;
+	uint32_t bmiss;
+	uint32_t peer_kickout;
+};
+
 typedef struct tagCsrRoamSession {
 	uint8_t sessionId;      /* Session ID */
 	bool sessionActive;     /* true if it is used */
@@ -1001,6 +1019,7 @@ typedef struct tagCsrRoamSession {
 	bool is_fils_connection;
 	uint16_t fils_seq_num;
 	bool ignore_assoc_disallowed;
+	struct csr_disconnect_stats disconnect_stats;
 } tCsrRoamSession;
 
 typedef struct tagCsrRoamStruct {

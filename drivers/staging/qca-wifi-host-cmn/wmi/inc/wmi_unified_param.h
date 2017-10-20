@@ -98,6 +98,7 @@
 #define WMI_MSEC_TO_USEC(msec)       (msec * 1000) /* msec to usec */
 #define WMI_NLO_FREQ_THRESH          1000       /* in MHz */
 
+#define WMI_SVC_MSG_MAX_SIZE   1536
 #define MAX_UTF_EVENT_LENGTH	2048
 #define MAX_WMI_UTF_LEN	252
 #define MAX_WMI_QVIT_LEN	252
@@ -1227,6 +1228,63 @@ struct seg_hdr_info {
 };
 
 /**
+ * struct tx_send_params - TX parameters
+ * @pwr: Tx frame transmission power
+ * @mcs_mask: Modulation and coding index mask for transmission
+ *	      bit  0 -> CCK 1 Mbps rate is allowed
+ *	      bit  1 -> CCK 2 Mbps rate is allowed
+ *	      bit  2 -> CCK 5.5 Mbps rate is allowed
+ *	      bit  3 -> CCK 11 Mbps rate is allowed
+ *	      bit  4 -> OFDM BPSK modulation, 1/2 coding rate is allowed
+ *	      bit  5 -> OFDM BPSK modulation, 3/4 coding rate is allowed
+ *	      bit  6 -> OFDM QPSK modulation, 1/2 coding rate is allowed
+ *	      bit  7 -> OFDM QPSK modulation, 3/4 coding rate is allowed
+ *	      bit  8 -> OFDM 16-QAM modulation, 1/2 coding rate is allowed
+ *	      bit  9 -> OFDM 16-QAM modulation, 3/4 coding rate is allowed
+ *	      bit 10 -> OFDM 64-QAM modulation, 2/3 coding rate is allowed
+ *	      bit 11 -> OFDM 64-QAM modulation, 3/4 coding rate is allowed
+ * @nss_mask: Spatial streams permitted
+ *	      bit 0: if set, Nss = 1 (non-MIMO) is permitted
+ *	      bit 1: if set, Nss = 2 (2x2 MIMO) is permitted
+ *	      bit 2: if set, Nss = 3 (3x3 MIMO) is permitted
+ *	      bit 3: if set, Nss = 4 (4x4 MIMO) is permitted
+ *	      bit 4: if set, Nss = 5 (5x5 MIMO) is permitted
+ *	      bit 5: if set, Nss = 6 (6x6 MIMO) is permitted
+ *	      bit 6: if set, Nss = 7 (7x7 MIMO) is permitted
+ *	      bit 7: if set, Nss = 8 (8x8 MIMO) is permitted
+ *            If no bits are set, target will choose what NSS type to use
+ * @retry_limit: Maximum number of retries before ACK
+ * @chain_mask: Chains to be used for transmission
+ * @bw_mask: Bandwidth to be used for transmission
+ *	     bit  0 -> 5MHz
+ *	     bit  1 -> 10MHz
+ *	     bit  2 -> 20MHz
+ *	     bit  3 -> 40MHz
+ *	     bit  4 -> 80MHz
+ *	     bit  5 -> 160MHz
+ *	     bit  6 -> 80_80MHz
+ * @preamble_type: Preamble types for transmission
+ *	     bit 0: if set, OFDM
+ *	     bit 1: if set, CCK
+ *	     bit 2: if set, HT
+ *	     bit 3: if set, VHT
+ *	     bit 4: if set, HE
+ * @frame_type: Data or Management frame
+ *	        Data:1 Mgmt:0
+ */
+struct tx_send_params {
+	uint32_t pwr:8,
+		 mcs_mask:12,
+		 nss_mask:8,
+		 retry_limit:4;
+	uint32_t chain_mask:8,
+		 bw_mask:7,
+		 preamble_type:5,
+		 frame_type:1,
+		 reserved:11;
+};
+
+/**
  * struct wmi_mgmt_params - wmi mgmt cmd paramters
  * @tx_frame: management tx frame
  * @frm_len: frame length
@@ -1238,6 +1296,9 @@ struct seg_hdr_info {
  * @wmi_desc: command descriptor
  * @desc_id: descriptor id relyaed back by target
  * @macaddr - macaddr of peer
+ * @qdf_ctx: qdf context for qdf_nbuf_map
+ * @tx_param: TX send parameters
+ * @tx_params_valid: Flag that indicates if TX params are valid
  */
 struct wmi_mgmt_params {
 	void *tx_frame;
@@ -1248,6 +1309,8 @@ struct wmi_mgmt_params {
 	uint16_t desc_id;
 	uint8_t *macaddr;
 	void *qdf_ctx;
+	struct tx_send_params tx_param;
+	bool tx_params_valid;
 };
 
 /**
@@ -2204,24 +2267,6 @@ struct pno_scan_req_params {
 	uint8_t *voui;
 };
 
-/**
- * struct nlo_mawc_params - Motion Aided Wireless Connectivity based
- *                          Network List Offload configuration
- * @vdev_id: VDEV ID on which the configuration needs to be applied
- * @enable: flag to enable or disable
- * @exp_backoff_ratio: ratio of exponential backoff
- * @init_scan_interval: initial scan interval(msec)
- * @max_scan_interval:  max scan interval(msec)
- */
-struct nlo_mawc_params {
-	uint8_t vdev_id;
-	bool enable;
-	uint32_t exp_backoff_ratio;
-	uint32_t init_scan_interval;
-	uint32_t max_scan_interval;
-};
-
-
 #define WMI_WLAN_EXTSCAN_MAX_CHANNELS                 36
 #define WMI_WLAN_EXTSCAN_MAX_BUCKETS                  16
 #define WMI_WLAN_EXTSCAN_MAX_HOTLIST_APS              128
@@ -3093,10 +3138,11 @@ struct periodic_tx_pattern {
 	uint8_t ucPattern[WMI_PERIODIC_TX_PTRN_MAX_SIZE];
 };
 
-#define WMI_GTK_OFFLOAD_KEK_BYTES       64
-#define WMI_GTK_OFFLOAD_KCK_BYTES       16
-#define WMI_GTK_OFFLOAD_ENABLE          0
-#define WMI_GTK_OFFLOAD_DISABLE         1
+#define WMI_GTK_OFFLOAD_KEK_BYTES_LEGACY 16
+#define WMI_GTK_OFFLOAD_KEK_BYTES        64
+#define WMI_GTK_OFFLOAD_KCK_BYTES        16
+#define WMI_GTK_OFFLOAD_ENABLE            0
+#define WMI_GTK_OFFLOAD_DISABLE           1
 
 /**
  * struct gtk_offload_params - gtk offload parameters
@@ -3114,6 +3160,18 @@ struct gtk_offload_params {
 	uint32_t kek_len;
 	uint64_t ullKeyReplayCounter;
 	struct qdf_mac_addr bssid;
+};
+
+/**
+ * struct mcast_filter_params - mcast filter parameters
+ * @multicast_addr_cnt: num of addresses
+ * @multicast_addr: address array
+ * @action: operation to perform
+ */
+struct mcast_filter_params {
+	uint32_t multicast_addr_cnt;
+	struct qdf_mac_addr multicast_addr[WMI_MAX_NUM_MULTICAST_ADDRESS];
+	uint8_t action;
 };
 
 /**
@@ -7033,24 +7091,5 @@ struct wmi_limit_off_chan_param {
 	uint32_t rest_time;
 	bool skip_dfs_chans;
 };
-
-/**
- * struct wmi_mawc_roam_params - Motion Aided wireless connectivity params
- * @vdev_id: VDEV on which the parameters should be applied
- * @enable: MAWC roaming feature enable/disable
- * @traffic_load_threshold: Traffic threshold in kBps for MAWC roaming
- * @best_ap_rssi_threshold: AP RSSI Threshold for MAWC roaming
- * @rssi_stationary_high_adjust: High RSSI adjustment value to supress scan
- * @rssi_stationary_low_adjust: Low RSSI adjustment value to supress scan
- */
-struct wmi_mawc_roam_params {
-	uint8_t vdev_id;
-	bool enable;
-	uint32_t traffic_load_threshold;
-	uint32_t best_ap_rssi_threshold;
-	uint8_t rssi_stationary_high_adjust;
-	uint8_t rssi_stationary_low_adjust;
-};
-
 #endif /* _WMI_UNIFIED_PARAM_H_ */
 

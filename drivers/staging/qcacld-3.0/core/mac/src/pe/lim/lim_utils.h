@@ -701,7 +701,25 @@ void lim_update_obss_scanparams(tpPESession session,
 void lim_init_obss_params(tpAniSirGlobal mac_ctx, tpPESession session);
 #ifdef WLAN_FEATURE_HOST_ROAM
 uint32_t lim_create_timers_host_roam(tpAniSirGlobal mac_ctx);
+/**
+ * lim_delete_timers_host_roam() - Delete timers used in host based roaming
+ * @mac_ctx: Global MAC context
+ *
+ * Delete reassoc and preauth timers
+ *
+ * Return: none
+ */
 void lim_delete_timers_host_roam(tpAniSirGlobal mac_ctx);
+/**
+ * lim_deactivate_timers_host_roam() - deactivate timers used in host based
+ * roaming
+ * @mac_ctx: Global MAC context
+ *
+ * Delete reassoc and preauth timers
+ *
+ * Return: none
+ */
+void lim_deactivate_timers_host_roam(tpAniSirGlobal mac_ctx);
 void lim_deactivate_and_change_timer_host_roam(tpAniSirGlobal mac_ctx,
 		uint32_t timer_id);
 #else
@@ -711,6 +729,7 @@ static inline uint32_t lim_create_timers_host_roam(tpAniSirGlobal mac_ctx)
 }
 static inline void lim_delete_timers_host_roam(tpAniSirGlobal mac_ctx)
 {}
+static inline void lim_deactivate_timers_host_roam(tpAniSirGlobal mac_ctx) {}
 static inline void lim_deactivate_and_change_timer_host_roam(
 		tpAniSirGlobal mac_ctx, uint32_t timer_id)
 {}
@@ -795,4 +814,16 @@ void lim_assoc_rej_add_to_rssi_based_reject_list(tpAniSirGlobal mac_ctx,
 bool lim_check_if_vendor_oui_match(tpAniSirGlobal mac_ctx,
 				uint8_t *oui, uint8_t oui_len,
 				uint8_t *ie, uint8_t ie_len);
+
+/**
+ * lim_get_min_session_txrate() - Get the minimum rate supported in the session
+ * @session: Pointer to PE session
+ *
+ * This API will find the minimum rate supported by the given PE session and
+ * return the enum rateid corresponding to the rate.
+ *
+ * Return: enum rateid
+ */
+enum rateid lim_get_min_session_txrate(tpPESession session);
+
 #endif /* __LIM_UTILS_H */

@@ -511,43 +511,6 @@ void lim_print_msg_name(tpAniSirGlobal pMac, uint16_t logLevel, uint32_t msgType
 	pe_debug("Msg: %s", lim_msg_str(msgType));
 }
 
-void lim_send_open_system_auth(void *ctx, uint32_t param)
-{
-	tLimMlmAuthReq *auth_req;
-	tpPESession session_entry;
-	tpAniSirGlobal mac_ctx = (tpAniSirGlobal)ctx;
-	uint8_t session_id;
-
-	session_id = mac_ctx->lim.limTimers.open_sys_auth_timer.sessionId;
-	session_entry = pe_find_session_by_session_id(mac_ctx, session_id);
-
-	if (!session_entry)
-		return;
-	/* Trigger MAC based Authentication */
-	auth_req = qdf_mem_malloc(sizeof(tLimMlmAuthReq));
-	if (!auth_req) {
-		pe_err("mlmAuthReq :Memory alloc failed");
-		lim_handle_sme_join_result(mac_ctx,
-					eSIR_SME_AUTH_TIMEOUT_RESULT_CODE,
-					eSIR_MAC_AUTH_ALGO_NOT_SUPPORTED_STATUS,
-					session_entry);
-		tx_timer_deactivate(&mac_ctx->lim.limTimers.
-				    open_sys_auth_timer);
-		return;
-	}
-	sir_copy_mac_addr(auth_req->peerMacAddr, session_entry->bssId);
-	auth_req->authType = eSIR_OPEN_SYSTEM;
-	/* Update PE session Id */
-	auth_req->sessionId = session_id;
-	if (wlan_cfg_get_int(mac_ctx, WNI_CFG_AUTHENTICATE_FAILURE_TIMEOUT,
-	    (uint32_t *) &auth_req->authFailureTimeout) != eSIR_SUCCESS) {
-		pe_err("Fail:retrieve AuthFailureTimeout");
-	}
-	lim_post_mlm_message(mac_ctx, LIM_MLM_AUTH_REQ, (uint32_t *) auth_req);
-	tx_timer_deactivate(&mac_ctx->lim.limTimers.open_sys_auth_timer);
-
-}
-
 /**
  * lim_init_mlm() -  This function is called by limProcessSmeMessages() to
  * initialize MLM state machine on STA
@@ -619,11 +582,7 @@ void lim_deactivate_timers(tpAniSirGlobal mac_ctx)
 	uint32_t n;
 	tLimTimers *lim_timer = &mac_ctx->lim.limTimers;
 
-	/* Deactivate Reassociation failure timer. */
-	tx_timer_deactivate(&lim_timer->gLimReassocFailureTimer);
-
-	/* Deactivate FT Preauth response timer */
-	tx_timer_deactivate(&lim_timer->gLimFTPreAuthRspTimer);
+	lim_deactivate_timers_host_roam(mac_ctx);
 
 	/* Deactivate Periodic Probe channel timers. */
 	tx_timer_deactivate(&lim_timer->gLimPeriodicProbeReqTimer);
@@ -679,12 +638,6 @@ void lim_deactivate_timers(tpAniSirGlobal mac_ctx)
 
 	tx_timer_deactivate(&lim_timer->gLimDeauthAckTimer);
 
-	/* Deactivate Reassociation failure timer. */
-	tx_timer_deactivate(&lim_timer->gLimReassocFailureTimer);
-
-	/* Deactivate FT Preauth response timer */
-	tx_timer_deactivate(&lim_timer->gLimFTPreAuthRspTimer);
-
 	tx_timer_deactivate(&lim_timer->
 			gLimP2pSingleShotNoaInsertTimer);
 
@@ -716,9 +669,9 @@ void lim_cleanup_mlm(tpAniSirGlobal mac_ctx)
 	if (mac_ctx->lim.gLimTimersCreated == 1) {
 		lim_timer = &mac_ctx->lim.limTimers;
 
-		lim_delete_timers_host_roam(mac_ctx);
-
 		lim_deactivate_timers(mac_ctx);
+
+		lim_delete_timers_host_roam(mac_ctx);
 		/* Delete Periodic Probe channel timers. */
 		tx_timer_delete(&lim_timer->gLimPeriodicProbeReqTimer);
 
@@ -7516,4 +7469,65 @@ bool lim_check_if_vendor_oui_match(tpAniSirGlobal mac_ctx,
 		return true;
 	else
 		return false;
+}
+
+enum rateid lim_get_min_session_txrate(tpPESession session)
+{
+	enum rateid rid = RATEID_DEFAULT;
+	uint8_t min_rate = SIR_MAC_RATE_54, curr_rate, i;
+	tSirMacRateSet *rateset = &session->rateSet;
+
+	if (!session)
+		return rid;
+
+	for (i = 0; i < rateset->numRates; i++) {
+		/* Ignore MSB - set to indicate basic rate */
+		curr_rate = rateset->rate[i] & 0x7F;
+		min_rate =  (curr_rate < min_rate) ? curr_rate : min_rate;
+	}
+	pe_debug("supported min_rate: %0x(%d)", min_rate, min_rate);
+
+	switch (min_rate) {
+	case SIR_MAC_RATE_1:
+		rid = RATEID_1MBPS;
+		break;
+	case SIR_MAC_RATE_2:
+		rid = RATEID_2MBPS;
+		break;
+	case SIR_MAC_RATE_5_5:
+		rid = RATEID_5_5MBPS;
+		break;
+	case SIR_MAC_RATE_11:
+		rid = RATEID_11MBPS;
+		break;
+	case SIR_MAC_RATE_6:
+		rid = RATEID_6MBPS;
+		break;
+	case SIR_MAC_RATE_9:
+		rid = RATEID_9MBPS;
+		break;
+	case SIR_MAC_RATE_12:
+		rid = RATEID_12MBPS;
+		break;
+	case SIR_MAC_RATE_18:
+		rid = RATEID_18MBPS;
+		break;
+	case SIR_MAC_RATE_24:
+		rid = RATEID_24MBPS;
+		break;
+	case SIR_MAC_RATE_36:
+		rid = RATEID_36MBPS;
+		break;
+	case SIR_MAC_RATE_48:
+		rid = RATEID_48MBPS;
+		break;
+	case SIR_MAC_RATE_54:
+		rid = RATEID_54MBPS;
+		break;
+	default:
+		rid = RATEID_DEFAULT;
+		break;
+	}
+
+	return rid;
 }

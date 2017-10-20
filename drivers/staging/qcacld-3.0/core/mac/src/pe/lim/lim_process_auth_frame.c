@@ -51,6 +51,7 @@
 #include "lim_ft.h"
 #include "cds_utils.h"
 #include "lim_process_fils.h"
+#include "lim_send_messages.h"
 
 /**
  * is_auth_valid
@@ -199,7 +200,7 @@ static void lim_process_auth_shared_system_algo(tpAniSirGlobal mac_ctx,
 		 */
 		if (!QDF_IS_STATUS_SUCCESS(cds_rand_get_bytes(0,
 				(uint8_t *) challenge_txt_arr,
-				SIR_MAC_AUTH_CHALLENGE_LENGTH)))
+				SIR_MAC_SAP_AUTH_CHALLENGE_LENGTH)))
 			pe_err("Challenge text preparation failed");
 		challenge = auth_node->challengeText;
 		qdf_mem_copy(challenge, (uint8_t *)challenge_txt_arr,
@@ -212,10 +213,10 @@ static void lim_process_auth_shared_system_algo(tpAniSirGlobal mac_ctx,
 			rx_auth_frm_body->authTransactionSeqNumber + 1;
 		auth_frame->authStatusCode = eSIR_MAC_SUCCESS_STATUS;
 		auth_frame->type = SIR_MAC_CHALLENGE_TEXT_EID;
-		auth_frame->length = SIR_MAC_AUTH_CHALLENGE_LENGTH;
+		auth_frame->length = SIR_MAC_SAP_AUTH_CHALLENGE_LENGTH;
 		qdf_mem_copy(auth_frame->challengeText,
 				auth_node->challengeText,
-				SIR_MAC_AUTH_CHALLENGE_LENGTH);
+				SIR_MAC_SAP_AUTH_CHALLENGE_LENGTH);
 		lim_send_auth_mgmt_frame(mac_ctx, auth_frame,
 				mac_hdr->sa, LIM_NO_WEP_IN_FC,
 				pe_session);
@@ -272,7 +273,7 @@ static void lim_process_auth_frame_type1(tpAniSirGlobal mac_ctx,
 {
 	tpDphHashNode sta_ds_ptr = NULL;
 	struct tLimPreAuthNode *auth_node;
-	uint8_t challenge_txt_arr[SIR_MAC_AUTH_CHALLENGE_LENGTH];
+	uint8_t challenge_txt_arr[SIR_MAC_SAP_AUTH_CHALLENGE_LENGTH];
 	uint32_t maxnum_preauth;
 	uint16_t associd = 0;
 
@@ -869,7 +870,7 @@ static void lim_process_auth_frame_type3(tpAniSirGlobal mac_ctx,
 		 */
 		if (!qdf_mem_cmp(rx_auth_frm_body->challengeText,
 					auth_node->challengeText,
-					SIR_MAC_AUTH_CHALLENGE_LENGTH)) {
+					SIR_MAC_SAP_AUTH_CHALLENGE_LENGTH)) {
 			/*
 			 * Challenge match. STA is autheticated
 			 * Delete Authentication response timer if running
@@ -1013,6 +1014,43 @@ static void lim_process_auth_frame_type4(tpAniSirGlobal mac_ctx,
 				rx_auth_frm_body->authStatusCode,
 				pe_session);
 	}
+}
+
+void lim_send_open_system_auth(void *ctx, uint32_t param)
+{
+	tLimMlmAuthReq *auth_req;
+	tpPESession session_entry;
+	tpAniSirGlobal mac_ctx = (tpAniSirGlobal)ctx;
+	uint8_t session_id;
+
+	session_id = mac_ctx->lim.limTimers.open_sys_auth_timer.sessionId;
+	session_entry = pe_find_session_by_session_id(mac_ctx, session_id);
+
+	if (!session_entry)
+		return;
+	/* Trigger MAC based Authentication */
+	auth_req = qdf_mem_malloc(sizeof(tLimMlmAuthReq));
+	if (!auth_req) {
+		pe_err("mlmAuthReq :Memory alloc failed");
+		lim_handle_sme_join_result(mac_ctx,
+					eSIR_SME_AUTH_TIMEOUT_RESULT_CODE,
+					eSIR_MAC_AUTH_ALGO_NOT_SUPPORTED_STATUS,
+					session_entry);
+		tx_timer_deactivate(&mac_ctx->lim.limTimers.
+				    open_sys_auth_timer);
+		return;
+	}
+	sir_copy_mac_addr(auth_req->peerMacAddr, session_entry->bssId);
+	auth_req->authType = eSIR_OPEN_SYSTEM;
+	/* Update PE session Id */
+	auth_req->sessionId = session_id;
+	if (wlan_cfg_get_int(mac_ctx, WNI_CFG_AUTHENTICATE_FAILURE_TIMEOUT,
+	    (uint32_t *) &auth_req->authFailureTimeout) != eSIR_SUCCESS) {
+		pe_err("Fail:retrieve AuthFailureTimeout");
+	}
+	lim_post_mlm_message(mac_ctx, LIM_MLM_AUTH_REQ, (uint32_t *) auth_req);
+	tx_timer_deactivate(&mac_ctx->lim.limTimers.open_sys_auth_timer);
+
 }
 
 /**
@@ -1163,7 +1201,7 @@ lim_process_auth_frame(tpAniSirGlobal mac_ctx, uint8_t *rx_pkt_info,
 			goto free;
 		}
 
-		if (frame_len < LIM_ENCR_AUTH_BODY_LEN) {
+		if (frame_len < LIM_ENCR_AUTH_BODY_LEN_SAP) {
 			/* Log error */
 			pe_err("Not enough size: %d to decry rx Auth frm",
 				frame_len);

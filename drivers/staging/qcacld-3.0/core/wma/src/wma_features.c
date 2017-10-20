@@ -1651,6 +1651,12 @@ int wma_nan_rsp_event_handler(void *handle, uint8_t *event_buf,
 	buf_ptr = (uint8_t *) nan_rsp_event_hdr;
 	alloc_len = sizeof(tSirNanEvent);
 	alloc_len += nan_rsp_event_hdr->data_len;
+	if (nan_rsp_event_hdr->data_len > ((WMI_SVC_MSG_MAX_SIZE -
+	    sizeof(*nan_rsp_event_hdr)) / sizeof(uint8_t))) {
+		WMA_LOGE("excess data length:%d", nan_rsp_event_hdr->data_len);
+		QDF_ASSERT(0);
+		return -EINVAL;
+	}
 	nan_rsp_event = (tSirNanEvent *) qdf_mem_malloc(alloc_len);
 	if (NULL == nan_rsp_event) {
 		WMA_LOGE("%s: Memory allocation failure", __func__);
@@ -4967,6 +4973,19 @@ static QDF_STATUS wma_configure_ssdp(tp_wma_handle wma, uint8_t vdev_id)
 }
 
 /**
+ * set_action_id_drop_pattern_for_spec_mgmt() - Set action id of action
+ * frames for spectrum mgmt frames to be droppped in fw.
+ *
+ * @action_id_per_category: Pointer to action id bitmaps.
+ */
+static void set_action_id_drop_pattern_for_spec_mgmt(
+					uint32_t *action_id_per_category)
+{
+	action_id_per_category[SIR_MAC_ACTION_SPECTRUM_MGMT]
+				= DROP_SPEC_MGMT_ACTION_FRAME_BITMAP;
+}
+
+/**
  * wma_register_action_frame_patterns() - register action frame map to fw
  * @handle: Pointer to wma handle
  * @vdev_id: VDEV ID
@@ -4980,36 +4999,49 @@ QDF_STATUS wma_register_action_frame_patterns(WMA_HANDLE handle,
 						uint8_t vdev_id)
 {
 	tp_wma_handle wma = handle;
-	struct action_wakeup_set_param cmd = {0};
+	struct action_wakeup_set_param *cmd;
 	int32_t err;
 	int i = 0;
 
-	cmd.vdev_id = vdev_id;
-	cmd.operation = WOW_ACTION_WAKEUP_OPERATION_SET;
+	cmd = qdf_mem_malloc(sizeof(*cmd));
+	if (!cmd) {
+		WMA_LOGE("failed to alloc memory");
+		return QDF_STATUS_E_FAILURE;
+	}
 
-	cmd.action_category_map[i++] = ALLOWED_ACTION_FRAMES_BITMAP0;
-	cmd.action_category_map[i++] = ALLOWED_ACTION_FRAMES_BITMAP1;
-	cmd.action_category_map[i++] = ALLOWED_ACTION_FRAMES_BITMAP2;
-	cmd.action_category_map[i++] = ALLOWED_ACTION_FRAMES_BITMAP3;
-	cmd.action_category_map[i++] = ALLOWED_ACTION_FRAMES_BITMAP4;
-	cmd.action_category_map[i++] = ALLOWED_ACTION_FRAMES_BITMAP5;
-	cmd.action_category_map[i++] = ALLOWED_ACTION_FRAMES_BITMAP6;
-	cmd.action_category_map[i++] = ALLOWED_ACTION_FRAMES_BITMAP7;
+	cmd->vdev_id = vdev_id;
+	cmd->operation = WOW_ACTION_WAKEUP_OPERATION_SET;
+
+	cmd->action_category_map[i++] = ALLOWED_ACTION_FRAMES_BITMAP0;
+	cmd->action_category_map[i++] = ALLOWED_ACTION_FRAMES_BITMAP1;
+	cmd->action_category_map[i++] = ALLOWED_ACTION_FRAMES_BITMAP2;
+	cmd->action_category_map[i++] = ALLOWED_ACTION_FRAMES_BITMAP3;
+	cmd->action_category_map[i++] = ALLOWED_ACTION_FRAMES_BITMAP4;
+	cmd->action_category_map[i++] = ALLOWED_ACTION_FRAMES_BITMAP5;
+	cmd->action_category_map[i++] = ALLOWED_ACTION_FRAMES_BITMAP6;
+	cmd->action_category_map[i++] = ALLOWED_ACTION_FRAMES_BITMAP7;
+
+	set_action_id_drop_pattern_for_spec_mgmt(cmd->action_per_category);
 
 	for (i = 0; i < WMI_SUPPORTED_ACTION_CATEGORY_ELE_LIST; i++) {
 		if (i < ALLOWED_ACTION_FRAME_MAP_WORDS)
 			WMA_LOGD("%s: %d action Wakeup pattern 0x%x in fw",
-				__func__, i, cmd.action_category_map[i]);
+				__func__, i, cmd->action_category_map[i]);
 		else
-			cmd.action_category_map[i] = 0;
+			cmd->action_category_map[i] = 0;
 	}
 
-	err = wmi_unified_action_frame_patterns_cmd(wma->wmi_handle, &cmd);
+	WMA_LOGD("Spectrum mgmt action id drop bitmap: 0x%x",
+			cmd->action_per_category[SIR_MAC_ACTION_SPECTRUM_MGMT]);
+
+	err = wmi_unified_action_frame_patterns_cmd(wma->wmi_handle, cmd);
 	if (err) {
 		WMA_LOGE("Failed to config wow action frame map, ret %d", err);
+		qdf_mem_free(cmd);
 		return QDF_STATUS_E_FAILURE;
 	}
 
+	qdf_mem_free(cmd);
 	return QDF_STATUS_SUCCESS;
 }
 
@@ -5270,7 +5302,7 @@ QDF_STATUS wma_enable_d0wow_in_fw(WMA_HANDLE handle)
 			wmi_get_host_credits(wma->wmi_handle),
 			wmi_get_pending_cmds(wma->wmi_handle));
 		if (!cds_is_driver_recovering())
-			cds_trigger_recovery();
+			cds_trigger_recovery(CDS_SUSPEND_TIMEOUT);
 		else
 			WMA_LOGE("%s: LOGP is in progress, ignore!", __func__);
 
@@ -5289,7 +5321,7 @@ QDF_STATUS wma_enable_d0wow_in_fw(WMA_HANDLE handle)
 			 __func__, host_credits, wmi_pending_cmds);
 		htc_dump_counter_info(wma->htc_handle);
 		if (!cds_is_driver_recovering())
-			cds_trigger_recovery();
+			cds_trigger_recovery(CDS_SUSPEND_TIMEOUT);
 		else
 			WMA_LOGE("%s: SSR in progress, ignore no credit issue",
 				 __func__);
@@ -5371,7 +5403,7 @@ QDF_STATUS wma_enable_wow_in_fw(WMA_HANDLE handle, uint32_t wow_flags)
 			 wmi_get_pending_cmds(wma->wmi_handle));
 		wmi_set_target_suspend(wma->wmi_handle, false);
 		if (!cds_is_driver_recovering()) {
-			cds_trigger_recovery();
+			cds_trigger_recovery(CDS_SUSPEND_TIMEOUT);
 		} else {
 			WMA_LOGE("%s: LOGP is in progress, ignore!", __func__);
 		}
@@ -5393,7 +5425,7 @@ QDF_STATUS wma_enable_wow_in_fw(WMA_HANDLE handle, uint32_t wow_flags)
 			 __func__, host_credits, wmi_pending_cmds);
 		htc_dump_counter_info(wma->htc_handle);
 		if (!cds_is_driver_recovering())
-			cds_trigger_recovery();
+			cds_trigger_recovery(CDS_SUSPEND_TIMEOUT);
 		else
 			WMA_LOGE("%s: SSR in progress, ignore no credit issue",
 				 __func__);
@@ -6137,7 +6169,7 @@ static QDF_STATUS wma_send_host_wakeup_ind_to_fw(tp_wma_handle wma)
 			 wmi_get_host_credits(wma->wmi_handle));
 		if (!cds_is_driver_recovering()) {
 			wmi_tag_crash_inject(wma->wmi_handle, true);
-			cds_trigger_recovery();
+			cds_trigger_recovery(CDS_RESUME_TIMEOUT);
 		} else {
 			WMA_LOGE("%s: SSR in progress, ignore resume timeout",
 				 __func__);
@@ -6193,7 +6225,7 @@ QDF_STATUS wma_disable_d0wow_in_fw(WMA_HANDLE handle)
 			wmi_get_host_credits(wma->wmi_handle));
 
 		if (!cds_is_driver_recovering())
-			cds_trigger_recovery();
+			cds_trigger_recovery(CDS_RESUME_TIMEOUT);
 		else
 			WMA_LOGE("%s: LOGP is in progress, ignore!", __func__);
 
@@ -8252,7 +8284,7 @@ static inline void wma_suspend_target_timeout(bool is_self_recovery_enabled)
 		WMA_LOGE("%s: Module in bad state; Ignoring suspend timeout",
 			 __func__);
 	else
-		cds_trigger_recovery();
+		cds_trigger_recovery(CDS_SUSPEND_TIMEOUT);
 }
 
 /**
@@ -8423,7 +8455,7 @@ QDF_STATUS wma_resume_target(WMA_HANDLE handle)
 			wmi_get_pending_cmds(wma->wmi_handle),
 			wmi_get_host_credits(wma->wmi_handle));
 		if (!cds_is_driver_recovering()) {
-			cds_trigger_recovery();
+			cds_trigger_recovery(CDS_RESUME_TIMEOUT);
 		} else {
 			WMA_LOGE("%s: SSR in progress, ignore resume timeout",
 				__func__);
@@ -9572,6 +9604,23 @@ QDF_STATUS wma_set_bpf_instructions(tp_wma_handle wma,
 		return QDF_STATUS_E_NOSUPPORT;
 	}
 
+	if (!bpf_set_offload) {
+		WMA_LOGE("%s: Invalid BPF instruction request", __func__);
+		return QDF_STATUS_E_INVAL;
+	}
+
+	if (bpf_set_offload->session_id >= wma->max_bssid) {
+		WMA_LOGE(FL("Invalid vdev_id: %d"),
+			bpf_set_offload->session_id);
+		return QDF_STATUS_E_INVAL;
+	}
+
+	if (!wma->interfaces[bpf_set_offload->session_id].vdev_up) {
+		WMA_LOGE("vdev %d is not up skipping BPF offload",
+			bpf_set_offload->session_id);
+		return QDF_STATUS_E_INVAL;
+	}
+
 	if (bpf_set_offload->total_length) {
 		len_aligned = roundup(bpf_set_offload->current_length,
 					sizeof(A_UINT32));
@@ -9613,6 +9662,8 @@ QDF_STATUS wma_set_bpf_instructions(tp_wma_handle wma,
 		wmi_buf_free(wmi_buf);
 		return QDF_STATUS_E_FAILURE;
 	}
+	WMA_LOGD(FL("BPF offload enabled in fw"));
+
 	return QDF_STATUS_SUCCESS;
 }
 

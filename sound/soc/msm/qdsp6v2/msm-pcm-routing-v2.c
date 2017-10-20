@@ -11138,7 +11138,7 @@ static int msm_routing_put_app_type_cfg_control(struct snd_kcontrol *kcontrol,
 
 static const struct snd_kcontrol_new app_type_cfg_controls[] = {
 	SOC_SINGLE_MULTI_EXT("App Type Config", SND_SOC_NOPM, 0,
-	0xFFFFFFFF, 0, 128, msm_routing_get_app_type_cfg_control,
+	0x7FFFFFFF, 0, 128, msm_routing_get_app_type_cfg_control,
 	msm_routing_put_app_type_cfg_control),
 };
 
@@ -15697,10 +15697,6 @@ static int msm_pcm_routing_close(struct snd_pcm_substream *substream)
 	bedai->active = 0;
 	bedai->sample_rate = 0;
 	bedai->channel = 0;
-	for (i = 0; i < MSM_FRONTEND_DAI_MAX; i++) {
-		if (bedai->passthr_mode[i] != LISTEN)
-			bedai->passthr_mode[i] = LEGACY_PCM;
-	}
 	mutex_unlock(&routing_lock);
 
 	return 0;

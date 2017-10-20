@@ -449,7 +449,7 @@ lim_send_probe_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 			   (uint16_t) sizeof(tSirMacMgmtHdr) + payload,
 			   TXRX_FRM_802_11_MGMT, ANI_TXDIR_TODS, 7,
 			   lim_tx_complete, frame, txflag, sme_sessionid,
-			   0);
+			   0, RATEID_DEFAULT);
 	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
 		pe_err("could not send Probe Request frame!");
 		/* Pkt will be freed up by the callback */
@@ -852,7 +852,7 @@ lim_send_probe_rsp_mgmt_frame(tpAniSirGlobal mac_ctx,
 				TXRX_FRM_802_11_MGMT,
 				ANI_TXDIR_TODS,
 				7, lim_tx_complete, frame, tx_flag,
-				sme_sessionid, 0);
+				sme_sessionid, 0, RATEID_DEFAULT);
 
 	/* Pkt will be freed up by the callback */
 	if (!QDF_IS_STATUS_SUCCESS(qdf_status))
@@ -1066,7 +1066,7 @@ lim_send_addts_req_action_frame(tpAniSirGlobal pMac,
 				TXRX_FRM_802_11_MGMT,
 				ANI_TXDIR_TODS,
 				7, lim_tx_complete, pFrame, txFlag,
-				smeSessionId, 0);
+				smeSessionId, 0, RATEID_DEFAULT);
 	MTRACE(qdf_trace(QDF_MODULE_ID_PE, TRACE_CODE_TX_COMPLETE,
 			 psessionEntry->peSessionId, qdf_status));
 
@@ -1411,7 +1411,7 @@ lim_send_assoc_rsp_mgmt_frame(tpAniSirGlobal mac_ctx,
 				TXRX_FRM_802_11_MGMT,
 				ANI_TXDIR_TODS,
 				7, lim_tx_complete, frame, tx_flag,
-				sme_session, 0);
+				sme_session, 0, RATEID_DEFAULT);
 	MTRACE(qdf_trace(QDF_MODULE_ID_PE, TRACE_CODE_TX_COMPLETE,
 			 pe_session->peSessionId, qdf_status));
 
@@ -1558,7 +1558,7 @@ lim_send_delts_req_action_frame(tpAniSirGlobal pMac,
 				TXRX_FRM_802_11_MGMT,
 				ANI_TXDIR_TODS,
 				7, lim_tx_complete, pFrame, txFlag,
-				smeSessionId, 0);
+				smeSessionId, 0, RATEID_DEFAULT);
 	MTRACE(qdf_trace(QDF_MODULE_ID_PE, TRACE_CODE_TX_COMPLETE,
 			 psessionEntry->peSessionId, qdf_status));
 	/* Pkt will be freed up by the callback */
@@ -1637,6 +1637,7 @@ lim_send_assoc_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 	uint8_t *bcn_ie = NULL;
 	uint32_t bcn_ie_len = 0;
 	uint32_t aes_block_size_len = 0;
+	enum rateid min_rid = RATEID_DEFAULT;
 
 	if (NULL == pe_session) {
 		pe_err("pe_session is NULL");
@@ -2028,13 +2029,14 @@ lim_send_assoc_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 	MTRACE(qdf_trace(QDF_MODULE_ID_PE, TRACE_CODE_TX_MGMT,
 			 pe_session->peSessionId, mac_hdr->fc.subType));
 
+	min_rid = lim_get_min_session_txrate(pe_session);
 	pe_debug("Sending Association Request length %d to ", bytes);
 	qdf_status = wma_tx_frameWithTxComplete(mac_ctx, packet,
 				(uint16_t) (sizeof(tSirMacMgmtHdr) + payload),
 				TXRX_FRM_802_11_MGMT, ANI_TXDIR_TODS, 7,
 				lim_tx_complete, frame,
 				lim_assoc_tx_complete_cnf,
-				tx_flag, sme_sessionid, false, 0);
+				tx_flag, sme_sessionid, false, 0, min_rid);
 	MTRACE(qdf_trace(QDF_MODULE_ID_PE, TRACE_CODE_TX_COMPLETE,
 		pe_session->peSessionId, qdf_status));
 
@@ -2119,6 +2121,7 @@ lim_send_auth_mgmt_frame(tpAniSirGlobal mac_ctx,
 	uint8_t sme_sessionid = 0;
 	uint16_t ft_ies_length = 0, auth_ack_status;
 	bool challenge_req = false;
+	enum rateid min_rid = RATEID_DEFAULT;
 
 	if (NULL == session) {
 		pe_err("Error: psession Entry is NULL");
@@ -2211,7 +2214,8 @@ lim_send_auth_mgmt_frame(tpAniSirGlobal mac_ctx,
 
 			challenge_req = true;
 			body_len = SIR_MAC_AUTH_FRAME_INFO_LEN +
-					SIR_MAC_AUTH_CHALLENGE_BODY_LEN;
+				   SIR_MAC_SAP_AUTH_CHALLENGE_LENGTH +
+				   SIR_MAC_CHALLENGE_ID_LEN;
 			frame_len = sizeof(tSirMacMgmtHdr) + body_len;
 		}
 		break;
@@ -2301,7 +2305,14 @@ alloc_packet:
 
 		if (challenge_req) {
 			if (body_len < SIR_MAC_AUTH_CHALLENGE_BODY_LEN) {
-				qdf_mem_copy(body, (uint8_t *)&auth_frame->type,
+				/* copy challenge IE id, len, challenge text */
+				*body = auth_frame->type;
+				body++;
+				body_len -= sizeof(uint8_t);
+				*body = auth_frame->length;
+				body++;
+				body_len -= sizeof(uint8_t);
+				qdf_mem_copy(body, auth_frame->challengeText,
 					     body_len);
 				pe_err("Incomplete challenge info: length: %d, expected: %d",
 				       body_len,
@@ -2315,10 +2326,11 @@ alloc_packet:
 				*body = auth_frame->length;
 				body++;
 				qdf_mem_copy(body, auth_frame->challengeText,
-					     SIR_MAC_AUTH_CHALLENGE_LENGTH);
-				body += SIR_MAC_AUTH_CHALLENGE_LENGTH;
+					     SIR_MAC_SAP_AUTH_CHALLENGE_LENGTH);
+				body += SIR_MAC_SAP_AUTH_CHALLENGE_LENGTH;
 
-				body_len -= SIR_MAC_AUTH_CHALLENGE_BODY_LEN;
+				body_len -= SIR_MAC_SAP_AUTH_CHALLENGE_LENGTH +
+							SIR_MAC_CHALLENGE_ID_LEN;
 			}
 		}
 
@@ -2386,12 +2398,15 @@ alloc_packet:
 			 session->peSessionId, mac_hdr->fc.subType));
 
 	mac_ctx->auth_ack_status = LIM_AUTH_ACK_NOT_RCD;
+
+	min_rid = lim_get_min_session_txrate(session);
 	qdf_status = wma_tx_frameWithTxComplete(mac_ctx, packet,
 					 (uint16_t)frame_len,
 					 TXRX_FRM_802_11_MGMT, ANI_TXDIR_TODS,
 					 7, lim_tx_complete, frame,
 					 lim_auth_tx_complete_cnf,
-					 tx_flag, sme_sessionid, false, 0);
+					 tx_flag, sme_sessionid, false, 0,
+					 min_rid);
 	MTRACE(qdf_trace(QDF_MODULE_ID_PE, TRACE_CODE_TX_COMPLETE,
 		session->peSessionId, qdf_status));
 	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
@@ -2731,7 +2746,8 @@ lim_send_disassoc_mgmt_frame(tpAniSirGlobal pMac,
 					 TXRX_FRM_802_11_MGMT,
 					 ANI_TXDIR_TODS, 7, lim_tx_complete,
 					 pFrame, lim_disassoc_tx_complete_cnf,
-					 txFlag, smeSessionId, false, 0);
+					 txFlag, smeSessionId, false, 0,
+					 RATEID_DEFAULT);
 		MTRACE(qdf_trace
 			       (QDF_MODULE_ID_PE, TRACE_CODE_TX_COMPLETE,
 			       psessionEntry->peSessionId, qdf_status));
@@ -2761,7 +2777,7 @@ lim_send_disassoc_mgmt_frame(tpAniSirGlobal pMac,
 					ANI_TXDIR_TODS,
 					7,
 					lim_tx_complete, pFrame, txFlag,
-					smeSessionId, 0);
+					smeSessionId, 0, RATEID_DEFAULT);
 		MTRACE(qdf_trace
 			       (QDF_MODULE_ID_PE, TRACE_CODE_TX_COMPLETE,
 			       psessionEntry->peSessionId, qdf_status));
@@ -2906,7 +2922,8 @@ lim_send_deauth_mgmt_frame(tpAniSirGlobal pMac,
 					 TXRX_FRM_802_11_MGMT,
 					 ANI_TXDIR_TODS, 7, lim_tx_complete,
 					 pFrame, lim_deauth_tx_complete_cnf,
-					 txFlag, smeSessionId, false, 0);
+					 txFlag, smeSessionId, false, 0,
+					 RATEID_DEFAULT);
 		MTRACE(qdf_trace
 			       (QDF_MODULE_ID_PE, TRACE_CODE_TX_COMPLETE,
 			       psessionEntry->peSessionId, qdf_status));
@@ -2949,7 +2966,7 @@ lim_send_deauth_mgmt_frame(tpAniSirGlobal pMac,
 				wma_tx_frame(pMac, pPacket, (uint16_t) nBytes,
 					   TXRX_FRM_802_11_MGMT, ANI_TXDIR_IBSS,
 					   7, lim_tx_complete, pFrame, txFlag,
-					   smeSessionId, 0);
+					   smeSessionId, 0, RATEID_DEFAULT);
 		} else {
 #endif
 		/* Queue Disassociation frame in high priority WQ */
@@ -2957,7 +2974,7 @@ lim_send_deauth_mgmt_frame(tpAniSirGlobal pMac,
 			wma_tx_frame(pMac, pPacket, (uint16_t) nBytes,
 				   TXRX_FRM_802_11_MGMT, ANI_TXDIR_TODS,
 				   7, lim_tx_complete, pFrame, txFlag,
-				   smeSessionId, 0);
+				   smeSessionId, 0, RATEID_DEFAULT);
 #ifdef FEATURE_WLAN_TDLS
 	}
 #endif
@@ -3087,7 +3104,7 @@ lim_send_meas_report_frame(tpAniSirGlobal pMac,
 	qdf_status =
 		wma_tx_frame(pMac, pPacket, (uint16_t) nBytes,
 			   TXRX_FRM_802_11_MGMT, ANI_TXDIR_TODS, 7,
-			   lim_tx_complete, pFrame, 0, 0);
+			   lim_tx_complete, pFrame, 0, 0, RATEID_DEFAULT);
 	MTRACE(qdf_trace
 		       (QDF_MODULE_ID_PE, TRACE_CODE_TX_COMPLETE,
 		       ((psessionEntry) ? psessionEntry->peSessionId : NO_SESSION),
@@ -3187,7 +3204,7 @@ lim_send_tpc_request_frame(tpAniSirGlobal pMac,
 	qdf_status =
 		wma_tx_frame(pMac, pPacket, (uint16_t) nBytes,
 			   TXRX_FRM_802_11_MGMT, ANI_TXDIR_TODS, 7,
-			   lim_tx_complete, pFrame, 0, 0);
+			   lim_tx_complete, pFrame, 0, 0, RATEID_DEFAULT);
 	MTRACE(qdf_trace
 		       (QDF_MODULE_ID_PE, TRACE_CODE_TX_COMPLETE,
 		       ((psessionEntry) ? psessionEntry->peSessionId : NO_SESSION),
@@ -3290,7 +3307,7 @@ lim_send_tpc_report_frame(tpAniSirGlobal pMac,
 	qdf_status =
 		wma_tx_frame(pMac, pPacket, (uint16_t) nBytes,
 			   TXRX_FRM_802_11_MGMT, ANI_TXDIR_TODS, 7,
-			   lim_tx_complete, pFrame, 0, 0);
+			   lim_tx_complete, pFrame, 0, 0, RATEID_DEFAULT);
 	MTRACE(qdf_trace
 		(QDF_MODULE_ID_PE, TRACE_CODE_TX_COMPLETE,
 		((psessionEntry) ? psessionEntry->peSessionId : NO_SESSION),
@@ -3420,7 +3437,7 @@ lim_send_channel_switch_mgmt_frame(tpAniSirGlobal pMac,
 				TXRX_FRM_802_11_MGMT,
 				ANI_TXDIR_TODS,
 				7, lim_tx_complete, pFrame, txFlag,
-				smeSessionId, 0);
+				smeSessionId, 0, RATEID_DEFAULT);
 	MTRACE(qdf_trace(QDF_MODULE_ID_PE, TRACE_CODE_TX_COMPLETE,
 			 psessionEntry->peSessionId, qdf_status));
 	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
@@ -3547,7 +3564,8 @@ lim_send_extended_chan_switch_action_frame(tpAniSirGlobal mac_ctx,
 						 ANI_TXDIR_TODS,
 						 7,
 						 lim_tx_complete, frame,
-						 txFlag, sme_session_id, 0);
+						 txFlag, sme_session_id, 0,
+						 RATEID_DEFAULT);
 	MTRACE(qdf_trace(QDF_MODULE_ID_PE, TRACE_CODE_TX_COMPLETE,
 			session_entry->peSessionId, qdf_status));
 	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
@@ -3691,7 +3709,7 @@ lim_p2p_oper_chan_change_confirm_action_frame(tpAniSirGlobal mac_ctx,
 			TXRX_FRM_802_11_MGMT, ANI_TXDIR_TODS,
 			7, lim_tx_complete, frame,
 			lim_oper_chan_change_confirm_tx_complete_cnf,
-			tx_flag, sme_session_id, false, 0);
+			tx_flag, sme_session_id, false, 0, RATEID_DEFAULT);
 
 	MTRACE(qdf_trace(QDF_MODULE_ID_PE, TRACE_CODE_TX_COMPLETE,
 			session_entry->peSessionId, qdf_status));
@@ -3794,7 +3812,7 @@ lim_send_vht_opmode_notification_frame(tpAniSirGlobal pMac,
 				TXRX_FRM_802_11_MGMT,
 				ANI_TXDIR_TODS,
 				7, lim_tx_complete, pFrame, txFlag,
-				smeSessionId, 0);
+				smeSessionId, 0, RATEID_DEFAULT);
 	MTRACE(qdf_trace(QDF_MODULE_ID_PE, TRACE_CODE_TX_COMPLETE,
 			 psessionEntry->peSessionId, qdf_status));
 	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
@@ -3929,7 +3947,7 @@ lim_send_neighbor_report_request_frame(tpAniSirGlobal pMac,
 				TXRX_FRM_802_11_MGMT,
 				ANI_TXDIR_TODS,
 				7, lim_tx_complete, pFrame, txFlag,
-				smeSessionId, 0);
+				smeSessionId, 0, RATEID_DEFAULT);
 	MTRACE(qdf_trace(QDF_MODULE_ID_PE, TRACE_CODE_TX_COMPLETE,
 			 psessionEntry->peSessionId, qdf_status));
 	if (QDF_STATUS_SUCCESS != qdf_status) {
@@ -4076,7 +4094,7 @@ lim_send_link_report_action_frame(tpAniSirGlobal pMac,
 				TXRX_FRM_802_11_MGMT,
 				ANI_TXDIR_TODS,
 				7, lim_tx_complete, pFrame, txFlag,
-				smeSessionId, 0);
+				smeSessionId, 0, RATEID_DEFAULT);
 	MTRACE(qdf_trace(QDF_MODULE_ID_PE, TRACE_CODE_TX_COMPLETE,
 			 psessionEntry->peSessionId, qdf_status));
 	if (QDF_STATUS_SUCCESS != qdf_status) {
@@ -4263,7 +4281,7 @@ lim_send_radio_measure_report_action_frame(tpAniSirGlobal pMac,
 				TXRX_FRM_802_11_MGMT,
 				ANI_TXDIR_TODS,
 				7, lim_tx_complete, pFrame, txFlag,
-				smeSessionId, 0);
+				smeSessionId, 0, RATEID_DEFAULT);
 	MTRACE(qdf_trace(QDF_MODULE_ID_PE, TRACE_CODE_TX_COMPLETE,
 			 psessionEntry->peSessionId, qdf_status));
 	if (QDF_STATUS_SUCCESS != qdf_status) {
@@ -4399,7 +4417,7 @@ tSirRetStatus lim_send_sa_query_request_frame(tpAniSirGlobal pMac, uint8_t *tran
 				TXRX_FRM_802_11_MGMT,
 				ANI_TXDIR_TODS,
 				7, lim_tx_complete, pFrame, txFlag,
-				smeSessionId, 0);
+				smeSessionId, 0, RATEID_DEFAULT);
 	if (QDF_STATUS_SUCCESS != qdf_status) {
 		pe_err("wma_tx_frame FAILED! Status [%d]", qdf_status);
 		nSirStatus = eSIR_FAILURE;
@@ -4531,7 +4549,7 @@ tSirRetStatus lim_send_sa_query_response_frame(tpAniSirGlobal pMac,
 				TXRX_FRM_802_11_MGMT,
 				ANI_TXDIR_TODS,
 				7, lim_tx_complete, pFrame, txFlag,
-				smeSessionId, 0);
+				smeSessionId, 0, RATEID_DEFAULT);
 	MTRACE(qdf_trace(QDF_MODULE_ID_PE, TRACE_CODE_TX_COMPLETE,
 			 psessionEntry->peSessionId, qdf_status));
 	if (QDF_STATUS_SUCCESS != qdf_status) {

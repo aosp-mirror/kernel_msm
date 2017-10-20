@@ -240,6 +240,7 @@ typedef enum {
     WMI_GRP_MONITOR,        /* 0x39 */
     WMI_GRP_REGULATORY,     /* 0x3a */
     WMI_GRP_HW_DATA_FILTER, /* 0x3b */
+    WMI_GRP_WLM,            /* 0x3c WLAN Latency Manager */
 } WMI_GRP_ID;
 
 #define WMI_CMD_GRP_START_ID(grp_id) (((grp_id) << 12) | 0x1)
@@ -368,12 +369,14 @@ typedef enum {
     WMI_PDEV_SET_DIVERSITY_GAIN_CMDID,
     /** Get chain RSSI and antena index command */
     WMI_PDEV_DIV_GET_RSSI_ANTID_CMDID,
-    /* get bss chan info */
+    /** get bss chan info */
     WMI_PDEV_BSS_CHAN_INFO_REQUEST_CMDID,
-    /* update pmk cache info */
+    /** update pmk cache info */
     WMI_PDEV_UPDATE_PMK_CACHE_CMDID,
-    /*  update fils HLP */
+    /**  update fils HLP */
     WMI_PDEV_UPDATE_FILS_HLP_PKT_CMDID,
+    /** update ctltable request **/
+    WMI_PDEV_UPDATE_CTLTABLE_REQUEST_CMDID,
 
     /* VDEV (virtual device) specific commands */
     /** vdev create */
@@ -588,6 +591,8 @@ typedef enum {
     WMI_ROAM_SET_MBO_PARAM_CMDID, /* DEPRECATED */
     /** configure packet error rate threshold for triggering roaming */
     WMI_ROAM_PER_CONFIG_CMDID,
+    /** configure BSS Transition Management (BTM) offload for roaming */
+    WMI_ROAM_BTM_CONFIG_CMDID,
 
     /** offload scan specific commands */
     /** set offload scan AP profile   */
@@ -910,6 +915,13 @@ typedef enum {
     /* set udp pkt filter for wlan HB */
     WMI_HB_SET_UDP_PKT_FILTER_CMDID,
 
+    /* OIC ping keep alive */
+    WMI_HB_OIC_PING_OFFLOAD_PARAM_CMDID,
+    WMI_HB_OIC_PING_OFFLOAD_SET_ENABLE_CMDID,
+
+    /* WMI commands related to DHCP Lease Renew Offload **/
+    WMI_HB_DHCP_LEASE_RENEW_OFFLOAD_CMDID,
+
     /** Wlan RMC commands*/
     /** enable/disable RMC */
     WMI_RMC_SET_MODE_CMDID = WMI_CMD_GRP_START_ID(WMI_GRP_RMC),
@@ -1056,6 +1068,9 @@ typedef enum {
     /** WMI commands related to HW data filtering **/
     WMI_HW_DATA_FILTER_CMDID = WMI_CMD_GRP_START_ID(WMI_GRP_HW_DATA_FILTER),
 
+    /** WMI commands related to WLAN latency module **/
+    WMI_WLM_CONFIG_CMDID = WMI_CMD_GRP_START_ID(WMI_GRP_WLM),
+
 } WMI_CMD_ID;
 
 typedef enum {
@@ -1139,6 +1154,9 @@ typedef enum {
 
     /** provide noise floor and cycle counts for a channel */
     WMI_PDEV_BSS_CHAN_INFO_EVENTID,
+
+    /** Response received the ctl table to host */
+    WMI_PDEV_UPDATE_CTLTABLE_EVENTID,
 
     /* VDEV specific events */
     /** VDEV started event in response to VDEV_START request */
@@ -1999,6 +2017,10 @@ typedef struct {
     A_UINT32 vht_supp_mcs; /* VHT Supported MCS Set field Rx/Tx same */
     A_UINT32 hw_min_tx_power;
     A_UINT32 hw_max_tx_power;
+    /* sys_cap_info:
+     * bits  1:0  - RXTX LED + RFKILL enable flags (see WMI_LEDRFKILL_FLAGS)
+     * bits 31:2  - reserved (must be set to zero)
+     */
     A_UINT32 sys_cap_info;
     A_UINT32 min_pkt_size_enable; /* Enterprise mode short pkt enable */
     /** Max beacon and Probe Response IE offload size (includes
@@ -2066,6 +2088,11 @@ typedef struct {
  *     wlan_dbs_hw_mode_list[];
  */
 } wmi_service_ready_event_fixed_param;
+
+typedef enum {
+    WMI_RXTX_LED_ENABLE         = 0x00000001,
+    WMI_RFKILL_ENABLE           = 0x00000002,
+} WMI_LEDRFKILL_FLAGS;
 
 #define WMI_SERVICE_SEGMENT_BM_SIZE32 4 /* 4x A_UINT32 = 128 bits */
 typedef struct {
@@ -3089,6 +3116,12 @@ typedef struct {
     A_UINT32 scan_id;
     /**id of VDEV that requested the scan */
     A_UINT32 vdev_id;
+    /** TSF Timestamp when the scan event (wmi_scan_event_type) is completed
+     * In case of AP it is TSF of the AP vdev
+     * In case of STA connected state this is the TSF of the AP
+     * In case of STA not connected it will be the free running HW timer
+     */
+    A_UINT32 tsf_timestamp;
 } wmi_scan_event_fixed_param;
 
 /* WMI Diag event */
@@ -4477,6 +4510,14 @@ typedef enum {
      *   0- Disable DTIM Synth
      */
     WMI_PDEV_PARAM_DTIM_SYNTH,
+    /** Configure auto detect power failure feature.
+     *   0 - FW will trigger crash if power failure happens.
+     *   1 - FW will send a failure notification to host, and the host
+     *       framework determines how to respond to the power failure
+     *   2 - Silently rejuvenate if power failure occurs.
+     *   3 - Feature disabled.
+    */
+    WMI_PDEV_AUTO_DETECT_POWER_FAILURE,
 } WMI_PDEV_PARAM;
 
 typedef struct {
@@ -4542,6 +4583,17 @@ typedef struct {
     A_UINT32 tlv_header; /* WMITLV_TAG_STRUC_wmi_pdev_bss_chan_info_request_fixed_param */
     A_UINT32 param;   /* 1 = read only, 2= read and clear */
 } wmi_pdev_bss_chan_info_request_fixed_param;
+
+typedef struct {
+    A_UINT32 tlv_header;    /* WMITLV_TAG_STRUC_wmi_pdev_update_ctltable_request_fixed_param */
+    A_UINT32 total_len;     /* the total number of ctl table bytes to be transferred */
+    A_UINT32 len;           /* the number of ctltable bytes in current payload */
+    A_UINT32 seq;           /* the number of current transfers */
+/*
+ * This TLV is followed by the following additional TLVs:
+ * ARRAY_BYTE TLV of ctltable_data
+ */
+} wmi_pdev_update_ctltable_request_fixed_param;
 
 #define WMI_FAST_DIVERSITY_BIT_OFFSET 0
 #define WMI_SLOW_DIVERSITY_BIT_OFFSET 1
@@ -4750,6 +4802,14 @@ typedef struct {
     A_UINT32 rx_bss_cycle_count_low;    /* low 31 bits of rx cycle cnt for my bss in 64bits format */
     A_UINT32 rx_bss_cycle_count_high;   /* high 31 bits of rx_cycle cnt for my bss in 64bits format */
 } wmi_pdev_bss_chan_info_event_fixed_param;
+
+typedef struct {
+    /* WMI event response update ctltable request to host */
+    A_UINT32 tlv_header;                /* WMITLV_TAG_STRUC_wmi_pdev_update_ctltable_event_fixed_param */
+    A_UINT32 total_len;                 /* the total number of bytes to be transferred */
+    A_UINT32 len;                       /* the number of FW received bytes from host */
+    A_UINT32 seq;                       /* the number of current transfers */
+} wmi_pdev_update_ctltable_event_fixed_param;
 
 typedef struct {
     A_UINT32 tlv_header; /* TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_pdev_l1ss_track_event_fixed_param  */
@@ -5049,6 +5109,7 @@ typedef struct {
     A_UINT32 vdev_id;
     /** peer MAC address */
     wmi_mac_addr peer_macaddr;
+    A_UINT32 pdev_id; /** pdev_id for identifying the MAC.  See macros starting with WMI_PDEV_ID_ for values. In non-DBDC case host should set it to 0. */
 /*
  * This TLV is (optionally) followed by other TLVs:
  *     wmi_inst_rssi_stats_params inst_rssi_params;
@@ -5114,6 +5175,24 @@ typedef struct {
     A_UINT32 tlv_header; /** TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_debug_mesg_flush_fixed_param*/
     A_UINT32 reserved0; /** placeholder for future */
 } wmi_debug_mesg_flush_fixed_param;
+
+typedef struct {
+    A_UINT32 tlv_header;        /** TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_debug_mesg_fw_data_stall_param */
+    A_UINT32 vdev_id_bitmap;    /** bitmap representation for vdev_id's where data stall happened */
+    A_UINT32 data_stall_type;   /** wlan_dbg_data_stall_type_e */
+    /** reason_code1:
+     * The information stored in reason_code1 varies based on the data stally
+     * type values:
+     * data_stall_type      | reason_code1
+     * -----------------------------------------------------
+     * HWSCHED_CMD_FLUSH    | flush req reason (0-40)
+     * RX_REFILL_FAILED     | ring_id (0-7)
+     * RX_FCS_LEN_ERROR     | exact error type
+     */
+    A_UINT32 reason_code1;
+    A_UINT32 reason_code2;      /** on which tid/hwq stall happened */
+    A_UINT32 recovery_type;     /** wlan_dbg_data_stall_recovery_type_e */
+} wmi_debug_mesg_fw_data_stall_param;
 
 typedef struct {
     A_UINT32 tlv_header; /** TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_debug_mesg_flush_complete_fixed_param*/
@@ -5618,6 +5697,8 @@ typedef struct {
     A_UINT32 num_chan_stats;
     /** number of MIB stats event structures (wmi_mib_stats) */
     A_UINT32 num_mib_stats;
+    A_UINT32 pdev_id; /** pdev_id for identifying the MAC.  See macros starting with WMI_PDEV_ID_ for values. In non-DBDC case host should set it to 0. */
+
 /* This TLV is followed by another TLV of array of bytes
  *   A_UINT8 data[];
  *  This data array contains
@@ -7925,12 +8006,24 @@ typedef struct {
      */
     A_UINT32 ext_csa_switch_count_offset; /* units = bytes */
 
+    /** Specify when to send the CSA switch count status from FW to host.
+     * See WMI_CSA_EVENT_BMAP* below for more information.
+     * E.g. if CSA switch count event is needed to be sent when the switch count
+     * is 0, 1, 4 and 5, set the bitmap to (0X80000033)
+     */
+    A_UINT32 csa_event_bitmap;
+
 /*
  * The TLVs follows:
  *    wmi_bcn_prb_info bcn_prb_info; <-- beacon probe capabilities and IEs
  *    A_UINT8  data[]; <-- Variable length data
  */
 } wmi_bcn_tmpl_cmd_fixed_param;
+
+#define WMI_CSA_EVENT_BMAP_VALID_MASK           0X80000000  /* Follow bitmap for sending the CSA switch count event */
+#define WMI_CSA_EVENT_BMAP_SWITCH_COUNT_ZERO    0           /* Send only when the switch count becomes zero, added for backward compatibility
+                                                            Same can also be achieved by setting bitmap to 0X80000001 */
+#define WMI_CSA_EVENT_BMAP_ALL                  0XFFFFFFFF  /* Send CSA switch count event for every update to switch count */
 
 typedef struct {
     A_UINT32 tlv_header; /** TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_prb_tmpl_cmd_fixed_param */
@@ -8870,6 +8963,10 @@ typedef struct {
  *               selected from 0 to 31 values)
  */
 #define WMI_PEER_SET_DEFAULT_ROUTING                    0x13
+/* peer NSS for VHT160 - Extended NSS support */
+#define WMI_PEER_NSS_VHT160                             0x14
+/* peer NSS for VHT160 - Extended NSS support */
+#define WMI_PEER_NSS_VHT80_80                           0x15
 
 /** mimo ps values for the parameter WMI_PEER_MIMO_PS_STATE  */
 #define WMI_PEER_MIMO_PS_NONE                          0x0
@@ -9125,17 +9222,19 @@ typedef struct {
      *  peer_ht_rates[] */
     A_UINT32 num_peer_ht_rates;
     /**
-     * Bitmap providing customized mapping of bandwidths to max Rx NSS
-     * for this peer.
-     * This is required since 802.11 standard currently facilitates peer to be
-     * able to advertise only a single max Rx NSS value across all bandwidths.
-     * Some QCA chipsets might need to be able to advertise a different max
-     * Rx NSS value for 160 MHz, than that for 80 MHz and lower.
+     * Bitmap providing the mapping of bandwidths to max Rx NSS for this peer
+     * in VHT160 / VHT80+80 Mode.
+     * As per the New IEEE 802.11 Update, the AP & Peer could advertise and
+     * handshake with the Max Rx NSS differing for different bandwidths
+     * instead of a single max Rx NSS Value.
+     * Some QCA chipsets have to advertise a different max Rx NSS value for
+     * 160 MHz and 80MHz.
      *
      *  bit[2:0] : Represents value of Rx NSS for VHT 160 MHz
-     *  bit[30:3]: Reserved
-     *  bit[31]  : MSB(0/1): 1 in case of valid data else all bits will be set
-     *             to 0 by host
+     *  bit[5:3] : Represents value of Rx NSS for VHT 80_80 MHz -
+     *             Extended NSS support
+     *  bit[30:6]: Reserved
+     *  bit[31]  : MSB(0/1): 1 in case of valid data sent from Host
      */
     A_UINT32 peer_bw_rxnss_override;
 
@@ -9457,6 +9556,44 @@ typedef struct {
      */
 } wmi_roam_scan_rssi_threshold_fixed_param;
 
+/**
+ * WMI_ROAM_BTM_CONFIG_CMDID : set BTM (BSS Transition Management. 802.11v) offload config
+ *  Applicable only when WMI_ROAM_SCAN_MODE is enabled with WMI_ROAM_SCAN_MODE_ROAMOFFLOAD
+ */
+
+/**
+ *  btm_config.flags
+ *  BIT 0     : Enable/Disable the BTM offload.
+ *  BIT 1-2   : Action on non matching candidate with cache. Used WMI_ROAM_BTM_OFLD_NON_MATCHING_CND_XXX
+ *  BIT 3-5   : Roaming handoff decisions. Use WMI_ROAM_BTM_OFLD_CNDS_MATCH_XXX
+ *  BIT 6-31  : Reserved
+ */
+#define WMI_ROAM_BTM_SET_ENABLE(flags, val)                    WMI_SET_BITS(flags, 0, 1, val)
+#define WMI_ROAM_BTM_GET_ENABLE(flags)                         WMI_GET_BITS(flags, 0, 1)
+#define WMI_ROAM_BTM_SET_NON_MATCHING_CND_ACTION(flags, val)   WMI_SET_BITS(flags, 1, 2, val)
+#define WMI_ROAM_BTM_GET_NON_MATCHING_CND_ACTION(flags)        WMI_GET_BITS(flags, 1, 2)
+#define WMI_ROAM_BTM_SET_CNDS_MATCH_CONDITION(flags, val)      WMI_SET_BITS(flags, 3, 3, val)
+#define WMI_ROAM_BTM_GET_CNDS_MATCH_CONDITION(flags)           WMI_GET_BITS(flags, 3, 3)
+
+/** WMI_ROAM_BTM_SET_NON_MATCHING_CNDS_ACTION definition: When BTM candidate is not matched with cache by WMI_ROAM_BTM_SET_CNDS_MATCH_CONDITION, determine what to do */
+#define WMI_ROAM_BTM_NON_MATCHING_CNDS_SCAN_CONSUME      0 /** Invoke roam scan and consume within firmware. Applicable only when ROAM_SCAN_MODE is enabled. If ROAM_SCAN_MODE is disabled, firmware won't scan and forward it to host */
+#define WMI_ROAM_BTM_NON_MATCHING_CNDS_NO_SCAN_FORWARD   1 /** Does not allow roam scan and forward BTM frame to host */
+/** reserved upto 3 */
+
+/** WMI_ROAM_BTM_SET_CNDS_MATCH_CONDITION definition: This is used to invoke WMI_ROAM_BTM_SET_NON_MATCHING_CND_ACTION when compared with cache. i.e this condition is not applied with fresh scan result */
+#define WMI_ROAM_BTM_CNDS_MATCH_EXACT                    0 /** Exactly matched with roam candidate list to BTM candidates */
+#define WMI_ROAM_BTM_CNDS_MATCH_AT_LEAST_TOP             1 /** At least one or more top priority bssid matched */
+/** reserved upto 7 */
+
+typedef struct {
+    /** TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_btm_config_fixed_param */
+    A_UINT32 tlv_header;
+    /** unique id identifying the VDEV on which BTM is enabled/disabled */
+    A_UINT32 vdev_id;
+    /** BTM configuration control flags */
+    A_UINT32 flags;
+} wmi_btm_config_fixed_param;
+
 #define WMI_ROAM_5G_BOOST_PENALIZE_ALGO_FIXED  0x0
 #define WMI_ROAM_5G_BOOST_PENALIZE_ALGO_LINEAR 0x1
 #define WMI_ROAM_5G_BOOST_PENALIZE_ALGO_LOG    0x2
@@ -9584,6 +9721,227 @@ typedef struct {
 /** looking for a PMF enabled AP */
 #define WMI_AP_PROFILE_FLAG_PMF    0x4
 
+/* the value used in wmi_roam_cnd_scoring_param->disable_bitmap */
+#define WLAN_ROAM_SCORING_RSSI_DISABLE                  0x00000001
+#define WLAN_ROAM_SCORING_HT_DISABLE                    0x00000002
+#define WLAN_ROAM_SCORING_VHT_DISABLE                   0x00000004
+#define WLAN_ROAM_SCORING_BW_DISABLE                    0x00000008
+#define WLAN_ROAM_SCORING_BAND_DISABLE                  0x00000010
+#define WLAN_ROAM_SCORING_NSS_DISABLE                   0x00000020
+#define WLAN_ROAM_SCORING_CHAN_CONGESTION_DISABLE       0x00000040
+#define WLAN_ROAM_SCORING_BEAMFORMING_DISABLE           0x00000080
+#define WLAN_ROAM_SCORING_PCL_DISABLE                   0x00000100
+#define WLAN_ROAM_SCORING_HE_DISABLE                    0x00000200
+#define WLAN_ROAM_SCORING_OCE_WAN_DISABLE               0x00000400
+#define WLAN_ROAM_SCORING_DISABLE_ALL                   0xFFFFFFFF
+#define WLAN_ROAM_SCORING_DEFAULT_PARAM_ALLOW           0x0
+
+#define WLAN_ROAM_MAX_SELECTION_SCORE                   10000
+
+#define WLAN_ROAM_SCORE_20MHZ_BW_INDEX                  0
+#define WLAN_ROAM_SCORE_40MHZ_BW_INDEX                  1
+#define WLAN_ROAM_SCORE_80MHZ_BW_INDEX                  2
+#define WLAN_ROAM_SCORE_160MHZ_BW_INDEX                 3
+#define WLAN_ROAM_SCORE_MAX_BW_INDEX                    4
+#define WMI_ROAM_GET_BW_SCORE_PERCENTAGE(value32, bw_index)                   WMI_GET_BITS(value32, (8 * (bw_index)), 8)
+#define WMI_ROAM_SET_BW_SCORE_PERCENTAGE(value32, score_pcnt, bw_index)       WMI_SET_BITS(value32, (8 * (bw_index)), 8, score_pcnt)
+
+#define WLAN_ROAM_SCORE_NSS_1x1_INDEX                   0
+#define WLAN_ROAM_SCORE_NSS_2x2_INDEX                   1
+#define WLAN_ROAM_SCORE_NSS_3x3_INDEX                   2
+#define WLAN_ROAM_SCORE_NSS_4x4_INDEX                   3
+#define WLAN_ROAM_SCORE_MAX_NSS_INDEX                   4
+#define WMI_ROAM_GET_NSS_SCORE_PERCENTAGE(value32, nss_index)                 WMI_GET_BITS(value32, (8 * (nss_index)), 8)
+#define WMI_ROAM_SET_NSS_SCORE_PERCENTAGE(value32, score_pcnt, nss_index)     WMI_SET_BITS(value32, (8 * (nss_index)), 8, score_pcnt)
+
+#define WLAN_ROAM_SCORE_BAND_2G_INDEX                   0
+#define WLAN_ROAM_SCORE_BAND_5G_INDEX                   1
+/* 2 and 3 are reserved */
+#define WLAN_ROAM_SCORE_MAX_BAND_INDEX                  4
+#define WMI_ROAM_GET_BAND_SCORE_PERCENTAGE(value32, band_index)                 WMI_GET_BITS(value32, (8 * (band_index)), 8)
+#define WMI_ROAM_SET_BAND_SCORE_PERCENTAGE(value32, score_pcnt, band_index)     WMI_SET_BITS(value32, (8 * (band_index)), 8, score_pcnt)
+
+#define WLAN_ROAM_SCORE_MAX_CHAN_CONGESTION_SLOT        16
+#define WLAN_ROAM_SCORE_DEFAULT_CONGESTION_SLOT         0
+
+#define WLAN_ROAM_SCORE_MAX_OCE_WAN_SLOT                16
+#define WLAN_ROAM_SCORE_DEFAULT_OCE_WAN_SLOT            0
+
+/**
+    best_rssi_threshold: Roamable AP RSSI equal or better than this threshold, full rssi score 100. Units in dBm.
+    good_rssi_threshold: Below this threshold, scoring linear percentage between rssi_good_pcnt and 100. Units in dBm.
+    bad_rssi_threshold:  Between good and bad rssi threshold, scoring linear percentage between rssi_bad_pcnt and rssi_good_pcnt. Units in dBm.
+    good_rssi_pcnt: Used to assigned scoring percentage of each slot between best to good rssi threshold. Units in percentage.
+    bad_rssi_pcnt: Used to assigned scoring percentage of each slot between good to bad rssi threshold. Units in percentage.
+    good_bucket_size : bucket size of slot in good zone.  Units in dB.
+    bad_bucket_size : bucket size of slot in bad zone. Units in dB.
+    rssi_pref_5g_rssi_thresh: Below rssi threshold, 5G AP have given preference of band percentage. Units in dBm.
+*/
+/**
+    The graph below explains how RSSI scoring percentage is calculated
+    as the RSSI improves.  In the graph, the derived parameters good_buckets
+    and bad_buckets are used.  These derived parameters are related to the
+    specified parameters as follows:
+        good_buckets =
+            (best_rssi_threshold - good_rssi_threshold) / good_bucket_size
+        bad_buckets =
+            (good_rssi_threshold - bad_rssi_threshold) / bad_bucket_size
+
+      |     (x0,y0) (x0 = best_rssi, y0 = 100)
+p 100 |-------o
+e     |       |<--------- (100 - good_rssi_pct)/good_buckets
+r     |       |___  ,---- good_bucket_size
+c     |           | |
+e     |           |_V_
+n     |               |
+t     |               |___o (x1,y1) (x1 = good_rssi, y1 = good_rssi_pcnt)
+   80 |                   |
+%     |                   |<------ (good_rssi_pcnt - bad_rssi_pcnt)/bad_buckets
+      |                   |_____
+      |                         |  ,-- bad_bucket_size
+      |                         |  |
+      |                         |__v__
+      |                               |
+      |                               |
+   40 |                               o------------
+      |                             (x2,y2) (x2 = bad_rssi, y2 = bad_rssi_pcnt)
+      +------o------------o-----------o------------->
+            -50         -70          -80          rssi dBm
+
+| excellent  |  good      | bad       | poor
+| zone       |  zone      | zone      | zone
+             V            V           V
+        BEST_THRES   GOOD_THRES     BAD_THRES
+ */
+typedef struct {
+    A_INT32  best_rssi_threshold;
+    A_INT32  good_rssi_threshold;
+    A_INT32  bad_rssi_threshold;
+    A_UINT32 good_rssi_pcnt;
+    A_UINT32 bad_rssi_pcnt;
+    A_UINT32 good_bucket_size;
+    A_UINT32 bad_bucket_size;
+    A_INT32  rssi_pref_5g_rssi_thresh;
+} wmi_roam_cnd_rssi_scoring;
+
+/**
+    Use macro WMI_ROAM_CND_GET/SET_BW_SCORE_PERCENTAGE to get and set the value respectively.
+    BITS 0-7   :- It contains scoring percentage of 20MHz   BW
+    BITS 8-15  :- It contains scoring percentage of 40MHz   BW
+    BITS 16-23 :- It contains scoring percentage of 80MHz   BW
+    BITS 24-31 :- It contains scoring percentage of 1600MHz BW
+
+    The value of each index must be 0-100
+ */
+typedef struct {
+    A_UINT32 score_pcnt;
+} wmi_roam_cnd_bw_scoring;
+
+/**
+    Use macro WMI_ROAM_CND_GET/SET_BAND_SCORE_PERCENTAGE to get and set the value respectively.
+    BITS 0-7   :- It contains scoring percentage of 2G
+    BITS 8-15  :- It contains scoring percentage of 5G
+    BITS 16-23 :- reserved
+    BITS 24-31 :- reserved
+
+    The value of each index must be 0-100
+ */
+typedef struct {
+    A_UINT32 score_pcnt;
+} wmi_roam_cnd_band_scoring;
+
+/**
+    Use macro WMI_ROAM_CND_GET/SET_NSS_SCORE_PERCENTAGE to get and set the value respectively.
+        BITS 0-7   :- It contains scoring percentage of 1x1
+        BITS 8-15  :- It contains scoring percentage of 2x2
+        BITS 16-23 :- It contains scoring percentage of 3x3
+        BITS 24-31 :- It contains scoring percentage of 4x4
+
+    The value of each index must be 0-100
+ */
+typedef struct {
+    A_UINT32 score_pcnt;
+} wmi_roam_cnd_nss_scoring;
+
+/**
+    score_pcnt: Contains roam score percentage of each slot of respective channel_congestion_pcnt.It is also used same BITS for slot(0-3)
+                BITS 0-7   :- the scoring pcnt when AP is not advertise QBSS/ESP info
+                BITS 8-15 :-  SLOT_1
+                BITS 16-23 :- SLOT_2
+                BITS 24-31 :- SLOT_3
+                BITS 32-      ...
+
+    num_slot will equally divide 100. e.g, if num_slot = 4
+    slot 0 = 0-25%, slot 1 = 26-50% slot 2 = 51-75%, slot 3 = 76-100%
+*/
+typedef struct {
+    A_UINT32 num_slot; /* max 15 */
+    A_UINT32 score_pcnt3_to_0;
+    A_UINT32 score_pcnt7_to_4;
+    A_UINT32 score_pcnt11_to_8;
+    A_UINT32 score_pcnt15_to_12;
+} wmi_roam_cnd_esp_qbss_scoring;
+
+/**
+    score_pcnt: Contains roam score percentage of each slot of respective channel_congestion_pcnt.It is also used same BITS for slot(0-3)
+                BITS 0-7   :- the scoring pcnt when AP is not advertise QBSS/ESP info
+                BITS 8-15 :-  SLOT_1
+                BITS 16-23 :- SLOT_2
+                BITS 24-31 :- SLOT_3
+                BITS 32-      ...
+
+    num_slot will equally divide 100. e.g, if num_slot = 4
+    slot 0 = 0-25%, slot 1 = 26-50% slot 2 = 51-75%, slot 3 = 76-100%
+*/
+typedef struct {
+    A_UINT32 num_slot; /* max 15  */
+    A_UINT32 score_pcnt3_to_0;
+    A_UINT32 score_pcnt7_to_4;
+    A_UINT32 score_pcnt11_to_8;
+    A_UINT32 score_pcnt15_to_12;
+} wmi_roam_cnd_oce_wan_scoring;
+
+/**
+    disable_bitmap :- Each bit will be either allow(0)/disallow(1) to considered the roam score param.
+    rssi_weightage_pcnt :- RSSI weightage out of total score in percentage
+    ht_weightage_pcnt :- HT weightage out of total score in percentage.
+    vht_weightage_pcnt :- VHT weightage out of total score in percentage.
+    he_weightage_pcnt :- 11ax weightage out of total score in percentage.
+    bw_weightage_pcnt :- Bandwidth weightage out of total score in percentage.
+    band_weightage_pcnt :- Band(2G/5G) weightage out of total score in percentage.
+    nss_weightage_pcnt:- NSS(1x1 / 2x2) weightage out of total score in percentage.
+    esp_qbss_weightage_pcnt: ESP/QBSS weightage out of total score in percentage.
+    beamforming_weightage_pcnt :- Beamforming weightage out of total score in percentage.
+    pcl_weightage_pcnt :- PCL weightage out of total score in percentage.
+    oce_wan_weightage_pcnt :- OCE WAN metrics weightage out of total score in percentage.
+    rssi_scoring :- RSSI scoring information.
+    bw_scoring :- channel BW scoring percentage information.
+    band_scoring : - band scording percentage information.
+    nss_scoring :- NSS scoring percentage information.
+    esp_qbss_scoring :- ESP/QBSS scoring percentage information
+    oce_wan_scoring : OCE WAN metrics percentage information
+*/
+typedef struct {
+    A_UINT32 tlv_header;     /** TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_roam_cnd_scoring_param */
+    A_UINT32 disable_bitmap;
+    A_INT32 rssi_weightage_pcnt;
+    A_INT32 ht_weightage_pcnt;
+    A_INT32 vht_weightage_pcnt;
+    A_INT32 he_weightage_pcnt;
+    A_INT32 bw_weightage_pcnt;
+    A_INT32 band_weightage_pcnt;
+    A_INT32 nss_weightage_pcnt;
+    A_INT32 esp_qbss_weightage_pcnt;
+    A_INT32 beamforming_weightage_pcnt;
+    A_INT32 pcl_weightage_pcnt;
+    A_INT32 oce_wan_weightage_pcnt;
+    wmi_roam_cnd_rssi_scoring rssi_scoring;
+    wmi_roam_cnd_bw_scoring bw_scoring;
+    wmi_roam_cnd_band_scoring band_scoring;
+    wmi_roam_cnd_nss_scoring nss_scoring;
+    wmi_roam_cnd_esp_qbss_scoring esp_qbss_scoring;
+    wmi_roam_cnd_oce_wan_scoring oce_wan_scoring;
+} wmi_roam_cnd_scoring_param;
 
 /** To match an open AP, the rs_authmode should be set to WMI_AUTH_NONE
  *  and WMI_AP_PROFILE_FLAG_CRYPTO should be clear.
@@ -9653,6 +10011,12 @@ typedef struct {
     A_UINT32 roam_dense_traffic_thres;
 } wmi_roam_dense_thres_param;
 
+/* Definition for flags in wmi_roam_bg_scan_roaming_param
+ * Bit 0: BG roaming enabled when we connect to 2G AP only and roaming to 5G AP only.
+ * Bit 1-31: Reserved
+ */
+#define WMI_ROAM_BG_SCAN_FLAGS_2G_TO_5G_ONLY   1
+
 typedef struct {
     /** TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_roam_bg_scan_roaming_param */
     A_UINT32 tlv_header;
@@ -9660,6 +10024,12 @@ typedef struct {
     A_UINT32 roam_bg_scan_bad_rssi_thresh;
     /** bitmap for which scan client will enable/disable background roaming. bit position is mapped to the enum WMI_SCAN_CLIENT_ID. 1 = enable, 0 = disable */
     A_UINT32 roam_bg_scan_client_bitmap;
+    /** roam scan rssi threshold for 2G band.
+     *  offset from roam_bg_scan_bad_rssi_thresh, in dB units
+     */
+    A_INT32 bad_rssi_thresh_offset_2g;
+    /* flags for background roaming */
+    A_UINT32 flags;
 } wmi_roam_bg_scan_roaming_param;
 
 /** Beacon filter wmi command info */
@@ -9730,6 +10100,7 @@ typedef struct {
 /*
  * Following this structure is the TLV:
  *     wmi_ap_profile ap_profile; <-- AP profile info
+ *     wmi_roam_cnd_scoring_param roam_cnd_scoring_param
  */
 } wmi_roam_ap_profile_fixed_param;
 
@@ -9891,6 +10262,7 @@ typedef struct {
  */
 #define WMI_ROAM_REASON_INVOKE_ROAM_FAIL 0x6
 #define WMI_ROAM_REASON_RSO_STATUS       0x7
+#define WMI_ROAM_REASON_BTM              0x8 /** Roaming because of BTM request received */
 /* reserved up through 0xF */
 
 /* subnet status: bits 4-5 */
@@ -9936,6 +10308,7 @@ typedef enum
 #define WMI_ROAM_NOTIF_ROAM_REASSOC      0x3 /** indicate that reassociation is done. sent only in non WOW state */
 #define WMI_ROAM_NOTIF_SCAN_MODE_SUCCESS 0x4 /** indicate that roaming scan mode is successful */
 #define WMI_ROAM_NOTIF_SCAN_MODE_FAIL    0x5 /** indicate that roaming scan mode is failed due to internal roaming state */
+#define WMI_ROAM_NOTIF_DISCONNECT        0x6 /** indicate that roaming not allowed due BTM req */
 
 /**whenever RIC request information change, host driver should pass all ric related information to firmware (now only support tsepc)
 * Once, 11r roaming happens, firmware can generate RIC request in reassoc request based on these informations
@@ -10596,6 +10969,9 @@ typedef enum wake_reason_e {
     WOW_REASON_CHIP_POWER_FAILURE_DETECT,
     WOW_REASON_11D_SCAN,
     WOW_REASON_THERMAL_CHANGE,
+    WOW_REASON_OIC_PING_OFFLOAD,
+    WOW_REASON_WLAN_DHCP_RENEW,
+
     WOW_REASON_DEBUG_TEST = 0xFF,
 } WOW_WAKE_REASON_TYPE;
 
@@ -11924,7 +12300,7 @@ typedef struct {
     /* unique id identifying the unit test cmd, generated by the caller */
     A_UINT32 diag_token;
 /**
- * TLV (tag length value) parameters follow the wmi_roam_chan_list
+ * TLV (tag length value) parameters follow the wmi_unit_test_cmd_fixed_param
  * structure. The TLV's are:
  *     A_UINT32 args[];
  **/
@@ -12738,27 +13114,27 @@ typedef struct {
 typedef struct {
     /** TLV tag and len; tag equals
      *  WMITLV_TAG_STRUC_wmi_hb_set_enable_cmd_fixed_param */
-    A_UINT32 tlv_header;
-    A_UINT32 vdev_id;
-    A_UINT32 enable;
-    A_UINT32 item;
-    A_UINT32 session;
+    A_UINT32 tlv_header;     /** TLV header*/
+    A_UINT32 vdev_id;        /** Vdev ID */
+    A_UINT32 enable;         /** 1: Enable, 0: Disable`*/
+    A_UINT32 item;           /** 1: UDP, 2: TCP */
+    A_UINT32 session;        /** Session ID from HOST */
 } wmi_hb_set_enable_cmd_fixed_param;
 
 typedef struct {
     /** TLV tag and len; tag equals
      *  WMITLV_TAG_STRUC_wmi_hb_set_tcp_params_cmd_fixed_param */
-    A_UINT32 tlv_header;
-    A_UINT32 vdev_id;
-    A_UINT32 srv_ip;
-    A_UINT32 dev_ip;
-    A_UINT32 seq;
-    A_UINT32 src_port;
-    A_UINT32 dst_port;
-    A_UINT32 interval;
-    A_UINT32 timeout;
-    A_UINT32 session;
-    wmi_mac_addr gateway_mac;
+    A_UINT32 tlv_header;      /** TLV header*/
+    A_UINT32 vdev_id;         /** Vdev ID */
+    A_UINT32 srv_ip;          /** Server IP address (IPv4) */
+    A_UINT32 dev_ip;          /** Device IP address (IPv4) */
+    A_UINT32 seq;             /** TCP Sequence no */
+    A_UINT32 src_port;        /** Source port */
+    A_UINT32 dst_port;        /** Destination port */
+    A_UINT32 interval;        /** Keep alive interval */
+    A_UINT32 timeout;         /** Timeout if keep alive fails */
+    A_UINT32 session;         /** Session ID from HOST */
+    wmi_mac_addr gateway_mac; /** Server Mac Address */
 } wmi_hb_set_tcp_params_cmd_fixed_param;
 
 typedef struct {
@@ -12806,11 +13182,138 @@ typedef enum {
 } WMI_HB_WAKEUP_REASON;
 
 typedef struct {
-    A_UINT32 tlv_header; /* TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_hb_ind_event_fixed_param */
-    A_UINT32 vdev_id;    /* unique id identifying the VDEV */
-    A_UINT32 session;    /* Session ID from driver */
-    A_UINT32 reason;     /* wakeup reason */
+    A_UINT32 tlv_header; /** TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_hb_ind_event_fixed_param */
+    A_UINT32 vdev_id;    /** unique id identifying the VDEV */
+    A_UINT32 session;    /** Session ID from HOST */
+    A_UINT32 reason;     /** wakeup reason */
 } wmi_hb_ind_event_fixed_param;
+
+typedef struct {
+    /** TLV tag and len; tag equals
+     *  WMITLV_TAG_STRUC_wmi_oic_set_enable_cmd_fixed_param */
+    A_UINT32 tlv_header;           /** TLV Header */
+    A_UINT32 vdev_id;              /** Vdev ID */
+    A_UINT32 session;              /** Session number from the HOST */
+    A_UINT32 srv_ip;               /** IPv4 address of the OCF server */
+    A_UINT32 dev_ip;               /** IPv4 address of the device */
+    A_UINT32 tcp_tx_seq;           /** TCP sequence number */
+    A_UINT32 src_port;             /** Source port */
+    A_UINT32 dst_port;             /** Destination port */
+    A_UINT32 protocol;             /** Protocol used: TCP:0, UDP:1 */
+    A_UINT32 wlan_hb_session;      /** Linked WLAN HB session. If a keepalive is configured for the TCP session, the session ID of the TCP keepalive */
+    A_UINT32 timeout_retries;      /** timeout[31:16]: TCP ACK timeout, time to wait for a TCP ACK in ms
+                                       retries[15:0]: Number of TCP level retries of OIC ping request */
+    wmi_mac_addr peer_macaddr;     /** MAC address of the OCF server */
+    A_UINT32 oic_ping_pkt0;        /** OIC ping packet content [Byte03:Byte00] */
+    A_UINT32 oic_ping_pkt1;        /** OIC ping packet content [Byte07:Byte04] */
+    A_UINT32 oic_ping_pkt2;        /** OIC ping packet content [Byte11:Byte08] */
+    A_UINT32 oic_ping_pkt3;        /** OIC ping packet content [Byte15:Byte12] */
+
+    A_UINT32 tls_cipher_suite_version; /** Cipher suite [31:16] as defined in https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml
+                                       TLS version  [15:00] */
+    A_UINT32 tls_tx_seq0;          /** Tx sequence number [31:00], incremented after every TLS packet transmission */
+    A_UINT32 tls_tx_seq1;          /** Tx sequence number [63:32] */
+    A_UINT32 tls_rx_seq0;          /** Rx sequence number [31:00], incremented after every TLS packet reception */
+    A_UINT32 tls_rx_seq1;          /** Rx sequence number [63:32] */
+    A_UINT32 tls_tx_key0;          /** client_write_key[Byte03:Byte00] refer Section 6.3 RFC 5246 */
+    A_UINT32 tls_tx_key1;          /** client_write_key[Byte07:Byte04] */
+    A_UINT32 tls_tx_key2;          /** client_write_key[Byte11:Byte08] */
+    A_UINT32 tls_tx_key3;          /** client_write_key[Byte15:Byte12] */
+    A_UINT32 tls_rx_key0;          /** server_write_key[Byte03:Byte00] */
+    A_UINT32 tls_rx_key1;          /** server_write_key[Byte07:Byte04] */
+    A_UINT32 tls_rx_key2;          /** server_write_key[Byte11:Byte08] */
+    A_UINT32 tls_rx_key3;          /** server_write_key[Byte15:Byte12] */
+    A_UINT32 tls_MAC_write_key0;   /** client_write_MAC_key[Byte03:Byte00] refer Section 6.3 RFC 5246 */
+    A_UINT32 tls_MAC_write_key1;   /** client_write_MAC_key[Byte07:Byte04] */
+    A_UINT32 tls_MAC_write_key2;   /** client_write_MAC_key[Byte11:Byte08] */
+    A_UINT32 tls_MAC_write_key3;   /** client_write_MAC_key[Byte15:Byte12] */
+    A_UINT32 tls_MAC_write_key4;   /** client_write_MAC_key[Byte19:Byte16] */
+    A_UINT32 tls_MAC_write_key5;   /** client_write_MAC_key[Byte23:Byte20] */
+    A_UINT32 tls_MAC_write_key6;   /** client_write_MAC_key[Byte27:Byte24] */
+    A_UINT32 tls_MAC_write_key7;   /** client_write_MAC_key[Byte31:Byte28] */
+    A_UINT32 tls_MAC_read_key0;    /** server_write_MAC_key[Byte03:Byte00] refer Section 6.3 RFC 5246 */
+    A_UINT32 tls_MAC_read_key1;    /** server_write_MAC_key[Byte07:Byte04] */
+    A_UINT32 tls_MAC_read_key2;    /** server_write_MAC_key[Byte11:Byte08] */
+    A_UINT32 tls_MAC_read_key3;    /** server_write_MAC_key[Byte15:Byte12] */
+    A_UINT32 tls_MAC_read_key4;    /** server_write_MAC_key[Byte19:Byte16] */
+    A_UINT32 tls_MAC_read_key5;    /** server_write_MAC_key[Byte23:Byte20] */
+    A_UINT32 tls_MAC_read_key6;    /** server_write_MAC_key[Byte27:Byte24] */
+    A_UINT32 tls_MAC_read_key7;    /** server_write_MAC_key[Byte31:Byte28] */
+    A_UINT32 tls_client_IV0;       /** CBC Mode: CBC_residue [Byte03:Byte00] refer section 6.2.3.2. CBC Block Cipher in RFC 5246
+                                   GCM Mode: GCMNonce.salt [Byte03:Byte00] refer Section 3 of RFC 5288 */
+    A_UINT32 tls_client_IV1;       /** CBC Mode: CBC_residue [Byte7:Byte4] */
+    A_UINT32 tls_client_IV2;       /** CBC Mode: CBC_residue [Byte11:Byte8] */
+    A_UINT32 tls_client_IV3;       /** CBC Mode: CBC_residue [Byte15:Byte12] */
+    A_UINT32 tls_server_IV0;       /** CBC Mode: CBC_residue [Byte3:Byte0] refer section 6.2.3.2. CBC Block Cipher in RFC 5246
+                                   GCM Mode: GCMNonce.salt [Byte4: Byte0] refer Section 3 of RFC 5288 */
+    A_UINT32 tls_server_IV1;       /** CBC Mode: CBC_residue [Byte7:Byte4] */
+    A_UINT32 tls_server_IV2;       /** CBC Mode: CBC_residue [Byte11:Byte8] */
+    A_UINT32 tls_server_IV3;       /** CBC Mode: CBC_residue [Byte15:Byte12] */
+} wmi_oic_ping_offload_params_cmd_fixed_param;
+
+typedef struct {
+    /** TLV tag and len; tag equals
+     *  WMITLV_TAG_STRUC_wmi_oic_set_enable_cmd_fixed_param */
+    A_UINT32 tlv_header; /** TLV Header*/
+    A_UINT32 vdev_id;    /** Interface number */
+    A_UINT32 session;    /** Session ID*/
+    A_UINT32 enable;     /** 1: Enable , 0: Disable */
+} wmi_oic_ping_offload_set_enable_cmd_fixed_param;
+
+/** wlan OIC events */
+typedef enum {
+    WMI_WLAN_OIC_REASON_UNKNOWN      = 0, /** Unknown */
+    WMI_WLAN_OIC_REASON_HOST_WAKE    = 1, /** No error , but host is woken up due to other reasons */
+    WMI_WLAN_OIC_REASON_TCP_TIMEOUT  = 2, /** TCP Timeout */
+    WMI_WLAN_OIC_REASON_PING_TIMEOUT = 3, /** OIC Ping resposnse timeout */
+    WMI_WLAN_OIC_REASON_TLS_ERROR    = 4, /** TLS decryption error */
+} WMI_OIC_WAKEUP_REASON;
+
+typedef struct {
+    A_UINT32 tlv_header;           /** TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_oic_ind_event_fixed_param */
+    A_UINT32 vdev_id;              /** unique id identifying the VDEV */
+    A_UINT32 session;              /** Session ID from driver */
+    A_UINT32 reason;               /** wakeup reason as per WMI_OIC_WAKEUP_REASON */
+    A_UINT32 tcp_tx_seq;           /** Current TCP sequence number */
+    A_UINT32 tcp_ack_num;          /** Current TCP Acknowledgement number */
+    A_UINT32 tls_tx_seq0;          /** Tx sequence number [31:00], incremented after every TLS packet transmission */
+    A_UINT32 tls_tx_seq1;          /** Tx sequence number [63:32] */
+    A_UINT32 tls_rx_seq0;          /** Rx sequence number [31:00], incremented after every TLS packet reception */
+    A_UINT32 tls_rx_seq1;          /** Rx sequence number [63:32] */
+    A_UINT32 tls_client_IV0;       /** CBC Mode: CBC_residue [Byte03:Byte00] refer section 6.2.3.2. CBC Block Cipher in RFC 5246 */
+    A_UINT32 tls_client_IV1;       /** CBC Mode: CBC_residue [Byte7:Byte4] */
+    A_UINT32 tls_client_IV2;       /** CBC Mode: CBC_residue [Byte11:Byte8] */
+    A_UINT32 tls_client_IV3;       /** CBC Mode: CBC_residue [Byte15:Byte12] */
+    A_UINT32 tls_server_IV0;       /** CBC Mode: CBC_residue [Byte3:Byte0] refer section 6.2.3.2. CBC Block Cipher in RFC 5246 */
+    A_UINT32 tls_server_IV1;       /** CBC Mode: CBC_residue [Byte7:Byte4] */
+    A_UINT32 tls_server_IV2;       /** CBC Mode: CBC_residue [Byte11:Byte8] */
+    A_UINT32 tls_server_IV3;       /** CBC Mode: CBC_residue [Byte15:Byte12] */
+} wmi_oic_ping_handoff_event;
+
+typedef struct {
+   /** TLV tag and len; tag equals
+    * WMITLV_TAG_STRUC_wmi_dhcp_lease_renew_offload_fixed_param */
+    A_UINT32 tlv_header;     /** TLV Header*/
+    A_UINT32 vdev_id;        /** Vdev ID */
+    A_UINT32 enable;         /** 1: Enable 0: Disable*/
+    A_UINT32 srv_ip;         /** DHCP Server IP address (IPv4) */
+    A_UINT32 client_ip;      /** Device IP address (IPv4) */
+    wmi_mac_addr srv_mac;    /** DHCP Server MAC address */
+    A_UINT32 parameter_list; /** Optional Parameter list. RFC 1533 gives the complete set of options defined for use with DHCP */
+} wmi_dhcp_lease_renew_offload_cmd_fixed_param;
+
+/** WLAN DHCP Lease Renew Events */
+typedef enum {
+    WMI_WLAN_DHCP_RENEW_REASON_UNKNOWN  = 0, /** Unknown */
+    WMI_WLAN_DHCP_RENEW_REASON_ACK_TIMEOUT  = 1, /** DHCP ACK Timeout */
+    WMI_WLAN_DHCP_RENEW_REASON_NACK     = 2, /** DHCP error */
+} WMI_DHCP_RENEW_WAKEUP_REASON;
+
+typedef struct {
+    A_UINT32 tlv_header; /** TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_dhcp_renew_ind_event_fixed_param */
+    A_UINT32 vdev_id;    /** unique id identifying the VDEV */
+    A_UINT32 reason;     /** wakeup reason as per enum WMI_DHCP_RENEW_WAKEUP_REASON*/
+} wmi_dhcp_lease_renew_event;
 
 /** WMI_STA_SMPS_PARAM_CMDID */
 typedef enum {
@@ -16896,7 +17399,7 @@ typedef struct {
     A_UINT32 num_chan;
 /**
  * TLV (tag length value) parameters follow the wmi_soc_set_pcl_cmd
-        12930    * structure. The TLV's are:
+ * structure. The TLV's are:
  *     A_UINT32 channel_weight[];  channel order & size will be as per the list provided in WMI_SCAN_CHAN_LIST_CMDID
  **/
 } wmi_pdev_set_pcl_cmd_fixed_param;
@@ -18653,6 +19156,7 @@ typedef enum wmi_hw_mode_config_type {
     WMI_HW_MODE_DBS_SBS     = 4, /* 3 PHYs, with 2 on the same band doing SBS
                                   * as in WMI_HW_MODE_SBS, and 3rd on the other band
                                   */
+    WMI_HW_MODE_DBS_OR_SBS  = 5, /* One PHY is on 5G and the other PHY can be in 2G or 5G. */
 } WMI_HW_MODE_CONFIG_TYPE;
 
 #define WMI_SUPPORT_11B_GET(flags) WMI_GET_BITS(flags, 0, 1)
@@ -19671,6 +20175,9 @@ static INLINE A_UINT8 *wmi_id_to_name(A_UINT32 wmi_command)
         WMI_RETURN_STRING(WMI_OEM_DMA_RING_CFG_REQ_CMDID);
         WMI_RETURN_STRING(WMI_PDEV_BSS_CHAN_INFO_REQUEST_CMDID);
         WMI_RETURN_STRING(WMI_VDEV_LIMIT_OFFCHAN_CMDID);
+        WMI_RETURN_STRING(WMI_ROAM_BTM_CONFIG_CMDID);
+        WMI_RETURN_STRING(WMI_WLM_CONFIG_CMDID);
+        WMI_RETURN_STRING(WMI_PDEV_UPDATE_CTLTABLE_REQUEST_CMDID);
     }
 
     return "Invalid WMI cmd";
@@ -20081,6 +20588,116 @@ typedef struct {
      * A_UINT8 payload[1];
      */
 } wmi_unit_test_event_fixed_param;
+
+/* Definition of latency levels */
+typedef enum {
+    WMI_WLM_LL_NORMAL = 0x0,
+    WMI_WLM_LL_MODERATE = 0x1,
+    WMI_WLM_LL_LOW = 0x2,
+    WMI_WLM_LL_ULTRA_LOW = 0x3,
+} WMI_WLM_LATENCY_LEVEL;
+
+/*
+* Lay out of flags in wmi_wlm_config_cmd_fixed_param
+*
+* |31  12|  11  |  10  |9    8|7    6|5    4|3    2|  1  |  0  |
+* +------+------+------+------+------+------+------+-----+-----+
+* | RSVD | SSLP | CSLP | RSVD | Roam | RSVD | DWLT | DFS | SUP |
+* +------+-------------+-------------+-------------------------+
+* |  WAL |      PS     |     Roam    |         Scan            |
+*
+*/
+/* bit 0-3 of flags is used for scan operation */
+/* bit 0: WLM_FLAGS_SCAN_SUPPRESS, suppress all scan and other bits would be ignored if bit is set */
+
+#define WLM_FLAGS_SCAN_SUPPRESS  1  /* suppress all scan request */
+
+/* bit 1: WLM_FLAGS_SCAN_SKIP_DFS, skip dfs channel if bit is set */
+
+#define WLM_FLAGS_SCAN_SKIP_DFS  1  /* skip dfs channel operation */
+
+/* bit 2-3: define policy of dwell time/duration of each foreign channel
+   (b2 b3)
+   (0  0 ): Default dwell time
+   (0  1 ): WLM_FLAGS_STICK_SCAN_DWELL_TIME : Stick to original active/passive dwell time, but split
+   foreign channel dwell times into fitting into min (dl_latency, ul_latency). Note it can increase
+   overall scan duration.
+   (1  0 ): WLM_FLAGS_SHRINK_SCAN_DWELL_TIME: Shrink active/passive dwell time to
+   min(dl_latency, ul_latency, dwell_time). It may reduce overall scan duration, but it may decrease
+   the accuracy of scan result.
+   (1  1 ): reserved
+*/
+#define WLM_FLAGS_DEFAULT_SCAN_DWELL_TIME   0 /* Default scan dwell time */
+#define WLM_FLAGS_STICK_SCAN_DWELL_TIME     1 /* Shrink off channel time but extend overall scan duration */
+#define WLM_FLAGS_SHRINK_SCAN_DWELL_TIME    2 /* Shrink scan off channel time */
+
+/* bit 4-5: reserved for scan */
+
+/* bit 6-7 of flags is used for roaming operation */
+/* bit 6-7: define roaming policy:
+   (b6 b7)
+   (0  0 ): WLM_FLAGS_ROAM_ALLOW: Default behavior, allow roaming in all scenarios
+   (0  1 ): WLM_FLAGS_ROAM_SUPPRESS: Disallow all roaming
+   (1  0 ): WLM_FLAGS_ALLOW_FINAL_BMISS_ROAM: Allow final bmiss roaming only
+   (1  1 ): reserved
+*/
+#define WLM_FLAGS_ROAM_ALLOW     0
+#define WLM_FLAGS_ROAM_SUPPRESS  1
+#define WLM_FLAGS_ALLOW_FINAL_BMISS_ROAM 2
+
+/* bit 8-9: reserved for roaming */
+
+/* bit 10-11 of flags is used for powersave operation */
+/* bit 10: WLM_FLAGS_PS_DISABLE_CSS_COLLAPSE, disable css power collapse if bit is set */
+
+#define WLM_FLAGS_PS_DISABLE_CSS_COLLAPSE  1  /* disable css power collapse */
+
+/* bit 11: WLM_FLAGS_PS_DISABLE_SYS_SLEEP, disable sys sleep if bit is set */
+
+#define WLM_FLAGS_PS_DISABLE_SYS_SLEEP  1  /* disable sys sleep */
+
+
+/* bit 12-31 of flags is reserved for powersave and WAL */
+
+#define WLM_FLAGS_SCAN_IS_SUPPRESS(flag)                  WMI_GET_BITS(flag, 0, 1)
+#define WLM_FLAGS_SCAN_SET_SUPPRESS(flag, val)            WMI_SET_BITS(flag, 0, 1, val)
+#define WLM_FLAGS_SCAN_IS_SKIP_DFS(flag)                  WMI_GET_BITS(flag, 1, 1)
+#define WLM_FLAGS_SCAN_SET_SKIP_DFS(flag, val)            WMI_SET_BITS(flag, 1, 1, val)
+#define WLM_FLAGS_SCAN_GET_DWELL_TIME_POLICY(flag)        WMI_GET_BITS(flag, 2, 2)
+#define WLM_FLAGS_SCAN_SET_DWELL_TIME_POLICY(flag, val)   WMI_SET_BITS(flag, 2, 2, val)
+#define WLM_FLAGS_ROAM_GET_POLICY(flag)                   WMI_GET_BITS(flag, 6, 2)
+#define WLM_FLAGS_ROAM_SET_POLICY(flag, val)              WMI_SET_BITS(flag, 6, 2, val)
+#define WLM_FLAGS_PS_IS_CSS_CLPS_DISABLED(flag)           WMI_GET_BITS(flag, 10, 1)
+#define WLM_FLAGS_PS_SET_CSS_CLPS_DISABLE(flag, val)      WMI_SET_BITS(flag, 10, 1, val)
+#define WLM_FLAGS_PS_IS_SYS_SLP_DISABLED(flag)            WMI_GET_BITS(flag, 11, 1)
+#define WLM_FLAGS_PS_SET_SYS_SLP_DISABLE(flag, val)       WMI_SET_BITS(flag, 11, 1, val)
+
+typedef struct {
+    /** TLV tag and len; tag equals
+    * WMI_WLM_CONFIG_CMD_fixed_param */
+    A_UINT32 tlv_header;
+    /* VDEV identifier */
+    A_UINT32 vdev_id;
+    /* Refer to WMI_WLM_LATENCY_LEVEL
+    * Once latency change detected, WLM will notify modules e.g. STAPS or SCAN/ROAM,
+    * who subscribed this event. And subscribers, like SCAN, may disable/cutoff offchan
+    * operation to support lower latency of WLAN.
+    */
+    A_UINT32 latency_level;
+    /* represent uplink latency in ms
+    * This parameter will be used by STAPS module to decide timing parameters, like
+    * ITO or SPEC wakeup interval. For SCAN/ROAM, it may used to calculate offchan
+    * durations.
+    */
+    A_UINT32 ul_latency;
+    /* represent downlink latency in ms
+    * Similar usage as ul_latency
+    */
+    A_UINT32 dl_latency;
+    /* flags for each client of WLM, refer to WLM_FLAGS_ definitions above */
+    A_UINT32 flags;
+} wmi_wlm_config_cmd_fixed_param;
+
 
 /* ADD NEW DEFS HERE */
 
