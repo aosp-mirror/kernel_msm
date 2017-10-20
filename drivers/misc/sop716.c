@@ -863,6 +863,26 @@ static int sop716_movement_remove(struct i2c_client *client)
 	return 0;
 }
 
+static void sop716_movement_shutdown(struct i2c_client *client)
+{
+	struct sop716_info *si = i2c_get_clientdata(client);
+	int err;
+	u8 data[SOP716_I2C_DATA_LENGTH_TIME] = {
+		CMD_SOP716_SET_CURRENT_TIME,
+		0xFF,
+		0xFF,
+		0,
+	};
+
+	if (si->watch_mode)
+		return;
+
+	err = sop716_write(si, SOP716_I2C_DATA_LENGTH_TIME,
+			SOP716_I2C_DATA_LENGTH_TIME, data);
+	if (err < 0)
+		pr_err("%s: cannot set watch mode\n", __func__);
+}
+
 static struct of_device_id sop716_match_table[] = {
 	{ .compatible = "lge,soprod_movement", },
 	{},
@@ -880,8 +900,9 @@ static struct i2c_driver sop716_movement_driver = {
 		.owner = THIS_MODULE,
 		.of_match_table = sop716_match_table,
 	},
-	.probe = sop716_movement_probe,
-	.remove = sop716_movement_remove,
+	.probe    = sop716_movement_probe,
+	.remove   = sop716_movement_remove,
+	.shutdown = sop716_movement_shutdown,
 	.id_table = sop716_id,
 };
 
