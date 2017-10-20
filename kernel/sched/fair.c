@@ -5652,7 +5652,7 @@ long group_norm_util(struct energy_env *eenv, struct sched_group *sg)
 }
 
 static int __find_new_capacity(unsigned long util,
-			       const struct sched_group_energy const *sge)
+			       const struct sched_group_energy * const sge)
 {
 	int idx;
 
@@ -5665,7 +5665,7 @@ static int __find_new_capacity(unsigned long util,
 }
 
 static int find_new_capacity(struct energy_env *eenv,
-			     const struct sched_group_energy const *sge)
+			     const struct sched_group_energy * const sge)
 {
 	int idx;
 	unsigned long util = group_max_util(eenv);
