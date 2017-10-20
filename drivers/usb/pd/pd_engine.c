@@ -1071,6 +1071,11 @@ static int tcpm_start_drp_toggling(struct tcpc_dev *dev,
 
 	pd_engine_log(pd, "start toggling");
 
+	/* Force a recheck of the CC status since cc lines are
+	 * assumed to be open.
+	 */
+	psy_changed(&pd->psy_nb, PSY_EVENT_PROP_CHANGED, pd->usb_psy);
+
 unlock:
 	mutex_unlock(&pd->lock);
 	return ret;
