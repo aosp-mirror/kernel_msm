@@ -13,3 +13,16 @@ Description:
 		Contains the number of UFS I/O requests which took more
 		or euqal to the defined slow I/O water mark time.
 		Can be reset by writing any value.
+
+What:		/sys/devices/platform/soc/<....>ufshc/manual_gc
+Date:		April, 2018
+Contact:	"Jaegeuk Kim" <jaegeuk@google.com>
+Description:
+		Control UFS to give a time for internal Garbage Collections,
+		given manual_gc_hold seconds.
+
+What:		/sys/devices/platform/soc/<....>ufshc/manual_gc_hold
+Date:		April, 2018
+Contact:	"Jaegeuk Kim" <jaegeuk@google.com>
+Description:
+		Give the seconds to UFS for internal GCs.
