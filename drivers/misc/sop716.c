@@ -56,6 +56,7 @@ struct sop716_info {
 
 	struct work_struct fw_work;
 	struct work_struct sysclock_work;
+	struct mutex lock;
 };
 
 struct sop716_info *sop716_info;
@@ -89,8 +90,10 @@ static ssize_t sop716_reset_store(struct device *dev,
 		return -EINVAL;
 	}
 
+	mutex_lock(&si->lock);
 	si->reset_status = status;
 	gpio_set_value(si->gpio_reset, si->reset_status);
+	mutex_unlock(&si->lock);
 
 	pr_debug("%s: count:%d reset:%d\n", __func__, count, si->reset_status);
 
@@ -160,12 +163,14 @@ static ssize_t sop716_time_store(struct device *dev,
 	data[6] = day;
 	data[7] = option;
 
+	mutex_lock(&si->lock);
 	rc = sop716_write(si, SOP716_I2C_DATA_LENGTH_TIME,
 			SOP716_I2C_DATA_LENGTH_TIME, data);
 	if (rc < 0)
 		pr_err("%s: cannot set time\n", __func__);
 
 	si->watch_mode = true;
+	mutex_unlock(&si->lock);
 
 	return rc < 0? rc : count;
 }
@@ -213,9 +218,11 @@ static ssize_t sop716_motor_move_store(struct device *dev,
 	data[2] = motor_dest;
 	data[3] = option;
 
+	mutex_lock(&si->lock);
 	sop716_write(si, SOP716_I2C_DATA_LENGTH, SOP716_I2C_DATA_LENGTH, data);
 
 	si->watch_mode = false;
+	mutex_unlock(&si->lock);
 
 	return count;
 }
@@ -262,9 +269,11 @@ static ssize_t sop716_motor_move_all_store(struct device *dev,
 	data[2] = motor2;
 	data[3] = option;
 
+	mutex_lock(&si->lock);
 	sop716_write(si, SOP716_I2C_DATA_LENGTH, SOP716_I2C_DATA_LENGTH, data);
 
 	si->watch_mode = false;
+	mutex_unlock(&si->lock);
 
 	return count;
 }
@@ -312,9 +321,11 @@ static ssize_t sop716_motor_init_store(struct device *dev,
 	data[2] = direction;
 	data[3] = num_of_steps;
 
+	mutex_lock(&si->lock);
 	sop716_write(si, SOP716_I2C_DATA_LENGTH, SOP716_I2C_DATA_LENGTH, data);
 
 	si->watch_mode = false;
+	mutex_unlock(&si->lock);
 
 	return count;
 }
@@ -327,8 +338,10 @@ static ssize_t sop716_get_time_show(struct device *dev,
 	struct sop716_info *si = dev_get_drvdata(dev);
 	int err;
 
+	mutex_lock(&si->lock);
 	err = sop716_read(si, CMD_SOP716_READ_CURRENT_TIME,
 			SOP716_I2C_DATA_LENGTH_TIME-1, data);
+	mutex_unlock(&si->lock);
 	if (err < 0) {
 		pr_err("%s: cannot read time from sop716\n", __func__);
 		return err;
@@ -353,8 +366,10 @@ static ssize_t sop716_get_version_show(struct device *dev,
 	u8 data[SOP716_I2C_DATA_LENGTH-1];
 	struct sop716_info *si = dev_get_drvdata(dev);
 
+	mutex_lock(&si->lock);
 	sop716_read(si, CMD_SOP716_READ_FW_VERSION,
 			SOP716_I2C_DATA_LENGTH-1, data);
+	mutex_unlock(&si->lock);
 
 	return snprintf(buf, PAGE_SIZE, "v%d.%d\n", data[1], data[2]);
 }
@@ -366,8 +381,10 @@ static ssize_t sop716_battery_check_period_show(struct device *dev,
 	u8 data[SOP716_I2C_DATA_LENGTH-1];
 	struct sop716_info *si = dev_get_drvdata(dev);
 
+	mutex_lock(&si->lock);
 	sop716_read(si, CMD_SOP716_READ_BATTERY_CHECK_PERIOD,
 			SOP716_I2C_DATA_LENGTH-1, data);
+	mutex_unlock(&si->lock);
 
 	return snprintf(buf, PAGE_SIZE, "%d sec\n", data[1]*256 + data[2]);
 }
@@ -408,8 +425,10 @@ static ssize_t sop716_battery_check_period_store(struct device *dev,
 	data[1] = 0;
 	data[2] = interval;
 
+	mutex_lock(&si->lock);
 	sop716_write(si, SOP716_I2C_DATA_LENGTH-1, SOP716_I2C_DATA_LENGTH-1,
 			data);
+	mutex_unlock(&si->lock);
 
 	return count;
 }
@@ -421,8 +440,10 @@ static ssize_t sop716_get_battery_level_show(struct device *dev,
 	u8 data[SOP716_I2C_DATA_LENGTH-1];
 	struct sop716_info *si = dev_get_drvdata(dev);
 
+	mutex_lock(&si->lock);
 	sop716_read(si, CMD_SOP716_READ_BATTERY_LEVEL,
 			SOP716_I2C_DATA_LENGTH-1, data);
+	mutex_unlock(&si->lock);
 
 	return snprintf(buf, PAGE_SIZE, "%d mV\n", (data[1] * 256) + data[2]);
 }
@@ -455,11 +476,12 @@ static int sop716_hctosys(struct sop716_info *si)
 	u8 time_data[SOP716_I2C_DATA_LENGTH_TIME] = {0, };
 	int err;
 
+	mutex_lock(&si->lock);
 	err = sop716_read(si, CMD_SOP716_READ_CURRENT_TIME,
 			SOP716_I2C_DATA_LENGTH_TIME-1, time_data);
 	if (err < 0) {
 		pr_err("%s: cannot read time from device\n", __func__);
-		return err;
+		goto out;
 	}
 
 	tm.tm_hour = time_data[1];
@@ -472,7 +494,7 @@ static int sop716_hctosys(struct sop716_info *si)
 	err = rtc_valid_tm(&tm);
 	if (err) {
 		pr_err("%s: invalid date/time\n", __func__);
-		return err;
+		goto out;
 	}
 
 	rtc_tm_to_time(&tm, &tv.tv_sec);
@@ -491,6 +513,8 @@ static int sop716_hctosys(struct sop716_info *si)
 			tm.tm_hour, tm.tm_min, tm.tm_sec,
 			(unsigned int) tv.tv_sec);
 
+out:
+	mutex_unlock(&si->lock);
 	return err;
 }
 
@@ -549,8 +573,10 @@ static ssize_t sop716_watch_mode_store(struct device *dev,
 		return err;
 	}
 
+	mutex_lock(&si->lock);
 	err = sop716_write(si, SOP716_I2C_DATA_LENGTH_TIME,
 			SOP716_I2C_DATA_LENGTH_TIME, data);
+	mutex_unlock(&si->lock);
 	if (err < 0) {
 		pr_err("%s: cannot set watch mode\n", __func__);
 		return err;
@@ -737,6 +763,7 @@ static void sop716_update_fw_work(struct work_struct *work)
 			struct sop716_info, fw_work);
 	u8 data[SOP716_I2C_DATA_LENGTH] = {0, };
 
+	mutex_lock(&si->lock);
 	sop716_read(si, CMD_SOP716_READ_FW_VERSION,
 			SOP716_I2C_DATA_LENGTH-1, data);
 	pr_info("sop firmware version: v%d.%d\n", data[1], data[2]);
@@ -756,6 +783,7 @@ static void sop716_update_fw_work(struct work_struct *work)
 		msleep(200);
 		sop716_firmware_update(si);
 	}
+	mutex_unlock(&si->lock);
 }
 
 static void sop716_update_sysclock_work(struct work_struct *work)
@@ -803,6 +831,8 @@ static int sop716_movement_probe(struct i2c_client *client,
 	INIT_WORK(&si->fw_work, sop716_update_fw_work);
 	INIT_WORK(&si->sysclock_work, sop716_update_sysclock_work);
 
+	mutex_init(&si->lock);
+
 	err = sysfs_create_group(&client->dev.kobj, &sop716_dev_attr_group);
 	if (err) {
 		pr_err("%s: cannot create sysfs\n", __func__);
@@ -815,6 +845,7 @@ static int sop716_movement_probe(struct i2c_client *client,
 	return 0;
 
 err_sysfs_create:
+	mutex_destroy(&si->lock);
 	i2c_set_clientdata(client, NULL);
 
 	return err;
@@ -822,6 +853,9 @@ err_sysfs_create:
 
 static int sop716_movement_remove(struct i2c_client *client)
 {
+	struct sop716_info *si = i2c_get_clientdata(client);
+
+	mutex_destroy(&si->lock);
 	sysfs_remove_group(&client->dev.kobj, &sop716_dev_attr_group);
 	i2c_set_clientdata(client, NULL);
 	sop716_info = NULL;
