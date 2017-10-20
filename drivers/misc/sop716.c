@@ -48,7 +48,6 @@ struct sop716_info {
 	int gpio_bslen;
 	int gpio_temp_1;
 
-	int hands_alignment_status;
 	int reset_status;
 	int tz_minuteswest;
 
@@ -63,38 +62,6 @@ struct sop716_info *sop716_info;
 
 static int sop716_write(struct sop716_info *si, u8 reg, u8 length, u8 *val);
 static int sop716_read(struct sop716_info *si, u8 reg, u8 length, u8 *val);
-
-static ssize_t sop716_hands_alignment_show(struct device *dev,
-			struct device_attribute *attr, char *buf)
-{
-	struct sop716_info *si = dev_get_drvdata(dev);
-
-	return snprintf(buf, PAGE_SIZE, "%d", si->hands_alignment_status);
-}
-
-static ssize_t sop716_hands_alignment_store(struct device *dev,
-			struct device_attribute *attr, const char *buf,
-			size_t count)
-{
-	struct sop716_info *si = dev_get_drvdata(dev);
-	int status, rc;
-
-	rc = kstrtoint(buf, 10, &status);
-	if (rc) {
-		pr_err("%s: kstrtoint failed. rc:%d\n", __func__, rc);
-		return rc;
-	}
-
-	if (status > 1 || status < 0) {
-		pr_err("%s: Error!!! hands_alignment:%d\n", __func__, status);
-		return -EINVAL;
-	}
-
-	si->hands_alignment_status = status;
-	pr_debug("%s: count:%d hands_alignment:%d\n", __func__, count, status);
-
-	return count;
-}
 
 static ssize_t sop716_reset_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
@@ -594,8 +561,6 @@ static ssize_t sop716_watch_mode_store(struct device *dev,
 	return count;
 }
 
-static DEVICE_ATTR(set_hands_alignment, S_IRUGO | S_IWUSR,
-		sop716_hands_alignment_show, sop716_hands_alignment_store);
 static DEVICE_ATTR(set_reset, S_IRUGO | S_IWUSR,
 		sop716_reset_show, sop716_reset_store);
 static DEVICE_ATTR(set_time, S_IWUSR, NULL, sop716_time_store);
@@ -616,7 +581,6 @@ static DEVICE_ATTR(watch_mode, S_IWUSR | S_IRUGO, sop716_watch_mode_show,
 		sop716_watch_mode_store);
 
 static struct attribute *sop716_dev_attrs[] = {
-	&dev_attr_set_hands_alignment.attr,
 	&dev_attr_set_reset.attr,
 	&dev_attr_set_time.attr,
 	&dev_attr_motor_init.attr,
@@ -825,7 +789,6 @@ static int sop716_movement_probe(struct i2c_client *client,
 
 	si->client = client;
 	si->dev = &client->dev;
-	si->hands_alignment_status = 1;
 
 	i2c_set_clientdata(client, si);
 
