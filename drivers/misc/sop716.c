@@ -36,6 +36,8 @@
 #define CMD_SOP716_READ_BATTERY_LEVEL        8
 #define CMD_SOP716_READ_BATTERY_CHECK_PERIOD 9
 
+#define SOP716_CMD_READ_RETRY                10
+
 #define MAJOR_VER 1
 #define MINOR_VER 12
 
@@ -706,8 +708,6 @@ static int sop716_config_gpios(struct i2c_client *client)
 	if (err)
 		return err;
 
-	msleep(100);
-
 	/* gpio temp 1 */
 	err = sop716_read_and_request_gpio(dev, "lge,gpio-temp-1",
 			&si->gpio_temp_1, GPIOF_OUT_INIT_LOW,
@@ -715,15 +715,11 @@ static int sop716_config_gpios(struct i2c_client *client)
 	if (err)
 		return err;
 
-	msleep(100);
-
 	/* reset signal high --> low */
 	err = sop716_read_and_request_gpio(dev, "lge,gpio-reset",
 			&si->gpio_reset, GPIOF_OUT_INIT_LOW, "reset");
 	if (err)
 		return err;
-
-	msleep(100);
 
 	return 0;
 }
@@ -732,28 +728,30 @@ static void sop716_firmware_update(struct sop716_info *si)
 {
 	extern int msp430_firmware_update_start(struct device *dev);
 
-	gpio_direction_output(si->gpio_bslen, 1);
-	msleep(100);
+	usleep_range(1, 1000);
 	gpio_set_value(si->gpio_reset, 1);
+	usleep_range(1, 1000);
 	gpio_set_value(si->gpio_bslen, 1);
+	usleep_range(1, 1000);
+	gpio_set_value(si->gpio_bslen, 0);
+	usleep_range(1, 1000);
+	gpio_set_value(si->gpio_bslen, 1);
+	usleep_range(1, 1000);
+	gpio_set_value(si->gpio_reset, 0); /* bootloader starts */
+	/*
+	 * BSLEN must remain logically high long enough for the
+	 * boot code to detect its level and enter the BSL sequence
+	 */
 	msleep(100);
 	gpio_set_value(si->gpio_bslen, 0);
-	msleep(100);
-	gpio_set_value(si->gpio_bslen, 1);
-	msleep(100);
-	gpio_set_value(si->gpio_reset, 0);
-	msleep(100);
-	gpio_set_value(si->gpio_bslen, 0);
-	msleep(100);
+	usleep_range(1, 1000);
 
 	msp430_firmware_update_start(si->dev);
-	gpio_set_value(si->gpio_bslen, 1);
-	msleep(100);
+
 	gpio_set_value(si->gpio_bslen, 0);
-	msleep(100);
 	gpio_set_value(si->gpio_reset, 1);
-	msleep(100);
-	gpio_set_value(si->gpio_reset, 0);
+	usleep_range(1, 1000);
+	gpio_set_value(si->gpio_reset, 0); /* user program starts */
 	msleep(100);
 }
 
@@ -761,28 +759,81 @@ static void sop716_update_fw_work(struct work_struct *work)
 {
 	struct sop716_info *si = container_of(work,
 			struct sop716_info, fw_work);
-	u8 data[SOP716_I2C_DATA_LENGTH] = {0, };
+	u8 data[SOP716_I2C_DATA_LENGTH_TIME] = {0, };
+	int major, minor;
+	int err;
+	int retry = SOP716_CMD_READ_RETRY;
 
 	mutex_lock(&si->lock);
 	sop716_read(si, CMD_SOP716_READ_FW_VERSION,
 			SOP716_I2C_DATA_LENGTH-1, data);
-	pr_info("sop firmware version: v%d.%d\n", data[1], data[2]);
 
-	if( !(data[1] == MAJOR_VER && data[2] == MINOR_VER)) {
-		u8 align_data[SOP716_I2C_DATA_LENGTH] = {
-			CMD_SOP716_MOTOR_MOVE_ALL,
-			0,
-		};
+	major = (int)data[1];
+	minor = (int)data[2];
 
-		si->watch_mode = false;
+	pr_info("sop firmware version: v%d.%d\n", major, minor);
+	if (major == MAJOR_VER && minor == MINOR_VER)
+		goto out;
 
-		pr_info("sop firmware update: v%d.%d -> v%d.%d\n",
-				data[1], data[2], MAJOR_VER, MINOR_VER);
-		sop716_write(si, SOP716_I2C_DATA_LENGTH,
-				SOP716_I2C_DATA_LENGTH, align_data);
-		msleep(200);
-		sop716_firmware_update(si);
+	/* Update FW */
+	si->watch_mode = false;
+
+	/* Set the position 0 */
+	memset(data, 0, sizeof(data));
+	data[0] = CMD_SOP716_MOTOR_MOVE_ALL;
+	sop716_write(si, SOP716_I2C_DATA_LENGTH,
+			SOP716_I2C_DATA_LENGTH, data);
+
+	/* save current time */
+	err = sop716_read(si, CMD_SOP716_READ_CURRENT_TIME,
+			SOP716_I2C_DATA_LENGTH_TIME-1, data);
+	if (err < 0)
+		pr_err("%s: cannot read current time\n", __func__);
+
+	pr_info("sop get time: %04d-%02d-%02d %02d:%02d:%02d\n",
+		data[4] + 2000,
+		data[5],
+		data[6],
+		data[1],
+		data[2],
+		data[3]);
+
+	/* wait for hands move */
+	msleep(2000); /* 2 seconds */
+
+	sop716_firmware_update(si);
+
+	/* boot up time: about 400ms */
+	msleep(400);
+
+	/* restore time */
+	data[0] = CMD_SOP716_SET_CURRENT_TIME;
+	data[7] = 0;
+	while (retry--) {
+		err = sop716_write(si, SOP716_I2C_DATA_LENGTH_TIME,
+				SOP716_I2C_DATA_LENGTH_TIME, data);
+		if (!err)
+			break;
+
+		msleep(100);
 	}
+
+	if (err < 0)
+		pr_err("%s: cannot set time\n", __func__);
+
+	si->watch_mode = true;
+
+	/* FIXME: delay */
+	msleep(100);
+	sop716_read(si, CMD_SOP716_READ_FW_VERSION,
+			SOP716_I2C_DATA_LENGTH-1, data);
+
+	/* FIXME: delay */
+	msleep(100);
+
+	pr_info("sop firmware update: v%d.%d -> v%d.%d\n",
+			major, minor, data[1], data[2]);
+out:
 	mutex_unlock(&si->lock);
 }
 
