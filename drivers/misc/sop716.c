@@ -57,6 +57,7 @@ struct sop716_info {
 
 	int reset_status;
 	int tz_minuteswest;
+	int batt_check_interval;
 
 	bool update_sysclock_on_boot;
 	bool watch_mode;
@@ -449,7 +450,7 @@ static ssize_t sop716_get_time_show(struct device *dev,
 		return err;
 	}
 
-	pr_info("sop get time: %04d-%02d-%02d %02d:%02d:%02d\n",
+	pr_debug("sop get time: %04d-%02d-%02d %02d:%02d:%02d\n",
 			data[4] + 2000,
 			data[5],
 			data[6],
@@ -457,8 +458,9 @@ static ssize_t sop716_get_time_show(struct device *dev,
 			data[2],
 			data[3]);
 
-	return snprintf(buf, PAGE_SIZE, "%dh%dm%ds, 20%d-%d-%d\n",
-			data[1], data[2], data[3], data[4], data[5], data[6]);
+	return snprintf(buf, PAGE_SIZE, "%04d-%02d-%02d %02d:%02d:%02d\n",
+			data[4] + 2000, data[5], data[6],
+			data[1], data[2], data[3]);
 }
 
 /* Code for CMD_SOP716_READ_FW_VERSION */
@@ -479,14 +481,9 @@ static ssize_t sop716_get_version_show(struct device *dev,
 static ssize_t sop716_battery_check_period_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
-	u8 data[SOP716_I2C_DATA_LENGTH];
 	struct sop716_info *si = dev_get_drvdata(dev);
 
-	mutex_lock(&si->lock);
-	sop716_read(si, CMD_SOP716_READ_BATTERY_CHECK_PERIOD, data);
-	mutex_unlock(&si->lock);
-
-	return snprintf(buf, PAGE_SIZE, "%d sec\n", data[1]*256 + data[2]);
+	return snprintf(buf, PAGE_SIZE, "%d sec\n", si->batt_check_interval);
 }
 
 static ssize_t sop716_battery_check_period_store(struct device *dev,
@@ -495,39 +492,42 @@ static ssize_t sop716_battery_check_period_store(struct device *dev,
 {
 	struct sop716_info *si = dev_get_drvdata(dev);
 	u8 data[SOP716_I2C_DATA_LENGTH];
-	u8 tmp[4];
 	int interval;
 	int rc = 0;
 
-	if (count != 3 && count != 4) {
-		pr_err("%s: Error!!! invalid input count!\n", __func__);
+	if (!count) {
+		pr_err("%s: invalid input\n", __func__);
 		return -EINVAL;
 	 }
 
-	snprintf(tmp, 4, buf);
-	rc = kstrtoint(tmp, 10, &interval);
-
+	rc = kstrtoint(buf, 10, &interval);
 	if (rc) {
-		pr_err("%s: Error!!! invalid input format! rc:%d\n",
-				__func__, rc);
+		pr_err("%s: invalid value\n", __func__);
 		return rc;
 	 }
 
-	if ((interval < 0 || interval > 240)) {
-		pr_err("%s: Error!!! invalid input format!\n", __func__);
+	if ((interval < 1 || interval > 7200)) {
+		pr_err("%s: out of range %d\n", __func__, interval);
 		return -EINVAL;
 	}
 
-	pr_debug("%s: cnt:%d interval:%d\n",
-			__func__, count, interval);
+	pr_debug("%s: interval:%d\n", __func__, interval);
 
 	data[0] = CMD_SOP716_BATTERY_CHECK_PERIOD;
-	data[1] = 0;
-	data[2] = interval;
+	data[1] = (interval >> 8) & 0xff;
+	data[2] = interval & 0xff;
 
 	mutex_lock(&si->lock);
 	sop716_write(si, CMD_SOP716_BATTERY_CHECK_PERIOD, data);
+
+	sop716_read(si, CMD_SOP716_READ_BATTERY_CHECK_PERIOD, data);
 	mutex_unlock(&si->lock);
+
+	if (interval != ((data[1] << 8) + data[2])) {
+		pr_err("%s: cannot update the interval\n", __func__);
+		return -EINVAL;
+	}
+	si->batt_check_interval = interval;
 
 	return count;
 }
@@ -543,7 +543,7 @@ static ssize_t sop716_get_battery_level_show(struct device *dev,
 	sop716_read(si, CMD_SOP716_READ_BATTERY_LEVEL, data);
 	mutex_unlock(&si->lock);
 
-	return snprintf(buf, PAGE_SIZE, "%d mV\n", (data[1] * 256) + data[2]);
+	return snprintf(buf, PAGE_SIZE, "%d mV\n", (data[1] << 8) + data[2]);
 }
 
 static ssize_t sop716_update_fw_store(struct device *dev,
