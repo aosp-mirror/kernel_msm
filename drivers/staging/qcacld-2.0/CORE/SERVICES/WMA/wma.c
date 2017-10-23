@@ -18717,6 +18717,16 @@ static int wma_tbttoffset_update_event_handler(void *handle, u_int8_t *event,
 	}
 
 	tbtt_offset_event = param_buf->fixed_param;
+
+	if (param_buf->num_tbttoffset_list >
+			(UINT_MAX - sizeof(u_int32_t) -
+				sizeof(wmi_tbtt_offset_event_fixed_param))/
+			 sizeof(u_int32_t)) {
+		WMA_LOGE("%s: Received offset list  %d greater than maximum limit",
+			 __func__, param_buf->num_tbttoffset_list);
+		return -EINVAL;
+	}
+
 	buf = vos_mem_malloc(sizeof(wmi_tbtt_offset_event_fixed_param) +
 			sizeof (u_int32_t) +
 			(param_buf->num_tbttoffset_list * sizeof (u_int32_t)));
