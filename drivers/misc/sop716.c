@@ -23,8 +23,7 @@
 #include <linux/time.h>
 #include <linux/rtc.h>
 
-#define SOP716_I2C_DATA_LENGTH       4
-#define SOP716_I2C_DATA_LENGTH_TIME  8
+#define SOP716_I2C_DATA_LENGTH               8
 
 #define CMD_SOP716_SET_CURRENT_TIME          0
 #define CMD_SOP716_MOTOR_MOVE_ONE            1
@@ -35,11 +34,17 @@
 #define CMD_SOP716_BATTERY_CHECK_PERIOD      7
 #define CMD_SOP716_READ_BATTERY_LEVEL        8
 #define CMD_SOP716_READ_BATTERY_CHECK_PERIOD 9
+#define CMD_SOP716_MAX                       10
 
 #define SOP716_CMD_READ_RETRY                10
 
 #define MAJOR_VER 1
 #define MINOR_VER 12
+
+struct sop716_command {
+	char *desc;
+	u8 size;
+};
 
 struct sop716_info {
 	struct i2c_client *client;
@@ -56,6 +61,8 @@ struct sop716_info {
 	bool update_sysclock_on_boot;
 	bool watch_mode;
 
+	struct sop716_command *cmds;
+
 	struct work_struct fw_work;
 	struct work_struct sysclock_work;
 	struct mutex lock;
@@ -63,8 +70,103 @@ struct sop716_info {
 
 struct sop716_info *sop716_info;
 
-static int sop716_write(struct sop716_info *si, u8 reg, u8 length, u8 *val);
-static int sop716_read(struct sop716_info *si, u8 reg, u8 length, u8 *val);
+static inline int REG_CMD(struct sop716_command *cmd, u8 reg, char *desc,
+		u8 size)
+{
+	if (reg >= CMD_SOP716_MAX) {
+		pr_err("%s: unknown command %d\n", __func__, reg);
+		return -EINVAL;
+	}
+
+	cmd[reg].desc = desc;
+	cmd[reg].size = size;
+
+	return 0;
+}
+
+static int sop716_register_commands(struct sop716_info *si)
+{
+	int err;
+
+	si->cmds = devm_kzalloc(si->dev,
+			sizeof(struct sop716_command) * CMD_SOP716_MAX,
+			GFP_KERNEL);
+	if (!si->cmds) {
+		pr_err("%s: no mem\n", __func__);
+		return -ENOMEM;
+	}
+
+	err = REG_CMD(si->cmds, CMD_SOP716_SET_CURRENT_TIME,
+			"set time", 8);
+	err |= REG_CMD(si->cmds, CMD_SOP716_MOTOR_MOVE_ONE,
+			"motor move one", 4);
+	err |= REG_CMD(si->cmds, CMD_SOP716_MOTOR_MOVE_ALL,
+			"motor move all", 4);
+	err |= REG_CMD(si->cmds, CMD_SOP716_MOTOR_INIT,
+			"motor init", 4);
+	err |= REG_CMD(si->cmds, CMD_SOP716_READ_CURRENT_TIME,
+			"read time", 6);
+	err |= REG_CMD(si->cmds, CMD_SOP716_READ_FW_VERSION,
+			"read fw version", 2);
+	err |= REG_CMD(si->cmds, CMD_SOP716_BATTERY_CHECK_PERIOD,
+			"battery check period", 3);
+	err |= REG_CMD(si->cmds, CMD_SOP716_READ_BATTERY_LEVEL,
+			"read battery level" , 2);
+	err |= REG_CMD(si->cmds, CMD_SOP716_READ_BATTERY_CHECK_PERIOD,
+			"read battery check period", 2);
+
+	return err;
+}
+
+static int sop716_write(struct sop716_info *si, u8 reg, u8 *val)
+{
+	int ret;
+
+	pr_debug("%s: reg:%d val:%d\n", __func__, val[0], *val);
+
+	if (reg >= CMD_SOP716_MAX) {
+		pr_err("%s: unknown command %d\n", __func__, reg);
+		return -EINVAL;
+	}
+
+	/* sop716 writes size instead of reg */
+	ret = i2c_smbus_write_i2c_block_data(si->client,
+			si->cmds[reg].size, si->cmds[reg].size, val);
+	if (ret < 0)
+		pr_err("%s: cannot write i2c: reg %d (%s)\n",
+				__func__, reg, si->cmds[reg].desc);
+
+	return ret;
+}
+
+static int sop716_read(struct sop716_info *si, u8 reg, u8 *val)
+{
+	int ret;
+
+	pr_debug("%s: reg:%d val:%d\n", __func__, reg, *val);
+
+	if (reg >= CMD_SOP716_MAX) {
+		pr_err("%s: unknown command %d\n", __func__, reg);
+		return -EINVAL;
+	}
+
+	/* read size + data, So "size + 1" need to be added  */
+	ret = i2c_smbus_read_i2c_block_data(si->client,
+			reg, si->cmds[reg].size + 1, val);
+	if (ret < 0) {
+		pr_err("%s: cannot read i2c: reg %d (%s)\n",
+				__func__, reg, si->cmds[reg].desc);
+		return ret;
+	}
+
+	if ((ret - 1) != val[0]) {
+		pr_err("%s: error: cmd %d, size %d, ret %d, val[0] %d\n",
+				__func__, reg, si->cmds[reg].size, ret, val[0]);
+		return -EINVAL;
+
+	}
+	return ret;
+}
 
 static ssize_t sop716_reset_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
@@ -108,7 +210,7 @@ static ssize_t sop716_time_store(struct device *dev,
 			size_t count)
 {
 	struct sop716_info *si = dev_get_drvdata(dev);
-	u8 data[SOP716_I2C_DATA_LENGTH_TIME];
+	u8 data[SOP716_I2C_DATA_LENGTH];
 	u8 tmp[4];
 	int hour, minute, second, year, month, day, option;
 	int rc = 0;
@@ -166,8 +268,7 @@ static ssize_t sop716_time_store(struct device *dev,
 	data[7] = option;
 
 	mutex_lock(&si->lock);
-	rc = sop716_write(si, SOP716_I2C_DATA_LENGTH_TIME,
-			SOP716_I2C_DATA_LENGTH_TIME, data);
+	rc = sop716_write(si, CMD_SOP716_SET_CURRENT_TIME, data);
 	if (rc < 0)
 		pr_err("%s: cannot set time\n", __func__);
 
@@ -221,7 +322,7 @@ static ssize_t sop716_motor_move_store(struct device *dev,
 	data[3] = option;
 
 	mutex_lock(&si->lock);
-	sop716_write(si, SOP716_I2C_DATA_LENGTH, SOP716_I2C_DATA_LENGTH, data);
+	sop716_write(si, CMD_SOP716_MOTOR_MOVE_ONE, data);
 
 	si->watch_mode = false;
 	mutex_unlock(&si->lock);
@@ -272,7 +373,7 @@ static ssize_t sop716_motor_move_all_store(struct device *dev,
 	data[3] = option;
 
 	mutex_lock(&si->lock);
-	sop716_write(si, SOP716_I2C_DATA_LENGTH, SOP716_I2C_DATA_LENGTH, data);
+	sop716_write(si, CMD_SOP716_MOTOR_MOVE_ALL, data);
 
 	si->watch_mode = false;
 	mutex_unlock(&si->lock);
@@ -324,7 +425,7 @@ static ssize_t sop716_motor_init_store(struct device *dev,
 	data[3] = num_of_steps;
 
 	mutex_lock(&si->lock);
-	sop716_write(si, SOP716_I2C_DATA_LENGTH, SOP716_I2C_DATA_LENGTH, data);
+	sop716_write(si, CMD_SOP716_MOTOR_INIT, data);
 
 	si->watch_mode = false;
 	mutex_unlock(&si->lock);
@@ -336,13 +437,12 @@ static ssize_t sop716_motor_init_store(struct device *dev,
 static ssize_t sop716_get_time_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
-	u8 data[SOP716_I2C_DATA_LENGTH_TIME-1];
+	u8 data[SOP716_I2C_DATA_LENGTH];
 	struct sop716_info *si = dev_get_drvdata(dev);
 	int err;
 
 	mutex_lock(&si->lock);
-	err = sop716_read(si, CMD_SOP716_READ_CURRENT_TIME,
-			SOP716_I2C_DATA_LENGTH_TIME-1, data);
+	err = sop716_read(si, CMD_SOP716_READ_CURRENT_TIME, data);
 	mutex_unlock(&si->lock);
 	if (err < 0) {
 		pr_err("%s: cannot read time from sop716\n", __func__);
@@ -365,12 +465,11 @@ static ssize_t sop716_get_time_show(struct device *dev,
 static ssize_t sop716_get_version_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
-	u8 data[SOP716_I2C_DATA_LENGTH-1];
+	u8 data[SOP716_I2C_DATA_LENGTH];
 	struct sop716_info *si = dev_get_drvdata(dev);
 
 	mutex_lock(&si->lock);
-	sop716_read(si, CMD_SOP716_READ_FW_VERSION,
-			SOP716_I2C_DATA_LENGTH-1, data);
+	sop716_read(si, CMD_SOP716_READ_FW_VERSION, data);
 	mutex_unlock(&si->lock);
 
 	return snprintf(buf, PAGE_SIZE, "v%d.%d\n", data[1], data[2]);
@@ -380,12 +479,11 @@ static ssize_t sop716_get_version_show(struct device *dev,
 static ssize_t sop716_battery_check_period_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
-	u8 data[SOP716_I2C_DATA_LENGTH-1];
+	u8 data[SOP716_I2C_DATA_LENGTH];
 	struct sop716_info *si = dev_get_drvdata(dev);
 
 	mutex_lock(&si->lock);
-	sop716_read(si, CMD_SOP716_READ_BATTERY_CHECK_PERIOD,
-			SOP716_I2C_DATA_LENGTH-1, data);
+	sop716_read(si, CMD_SOP716_READ_BATTERY_CHECK_PERIOD, data);
 	mutex_unlock(&si->lock);
 
 	return snprintf(buf, PAGE_SIZE, "%d sec\n", data[1]*256 + data[2]);
@@ -396,7 +494,7 @@ static ssize_t sop716_battery_check_period_store(struct device *dev,
 			size_t count)
 {
 	struct sop716_info *si = dev_get_drvdata(dev);
-	u8 data[SOP716_I2C_DATA_LENGTH-1];
+	u8 data[SOP716_I2C_DATA_LENGTH];
 	u8 tmp[4];
 	int interval;
 	int rc = 0;
@@ -428,8 +526,7 @@ static ssize_t sop716_battery_check_period_store(struct device *dev,
 	data[2] = interval;
 
 	mutex_lock(&si->lock);
-	sop716_write(si, SOP716_I2C_DATA_LENGTH-1, SOP716_I2C_DATA_LENGTH-1,
-			data);
+	sop716_write(si, CMD_SOP716_BATTERY_CHECK_PERIOD, data);
 	mutex_unlock(&si->lock);
 
 	return count;
@@ -439,12 +536,11 @@ static ssize_t sop716_battery_check_period_store(struct device *dev,
 static ssize_t sop716_get_battery_level_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
-	u8 data[SOP716_I2C_DATA_LENGTH-1];
+	u8 data[SOP716_I2C_DATA_LENGTH];
 	struct sop716_info *si = dev_get_drvdata(dev);
 
 	mutex_lock(&si->lock);
-	sop716_read(si, CMD_SOP716_READ_BATTERY_LEVEL,
-			SOP716_I2C_DATA_LENGTH-1, data);
+	sop716_read(si, CMD_SOP716_READ_BATTERY_LEVEL, data);
 	mutex_unlock(&si->lock);
 
 	return snprintf(buf, PAGE_SIZE, "%d mV\n", (data[1] * 256) + data[2]);
@@ -475,12 +571,11 @@ static int sop716_hctosys(struct sop716_info *si)
 	struct timespec tv = {
 		.tv_nsec = NSEC_PER_SEC >> 1,
 	};
-	u8 time_data[SOP716_I2C_DATA_LENGTH_TIME] = {0, };
+	u8 time_data[SOP716_I2C_DATA_LENGTH] = {0, };
 	int err;
 
 	mutex_lock(&si->lock);
-	err = sop716_read(si, CMD_SOP716_READ_CURRENT_TIME,
-			SOP716_I2C_DATA_LENGTH_TIME-1, time_data);
+	err = sop716_read(si, CMD_SOP716_READ_CURRENT_TIME, time_data);
 	if (err < 0) {
 		pr_err("%s: cannot read time from device\n", __func__);
 		goto out;
@@ -558,7 +653,7 @@ static ssize_t sop716_watch_mode_store(struct device *dev,
 	struct sop716_info *si = dev_get_drvdata(dev);
 	int value = 0;
 	int err;
-	u8 data[SOP716_I2C_DATA_LENGTH_TIME] = {
+	u8 data[SOP716_I2C_DATA_LENGTH] = {
 		CMD_SOP716_SET_CURRENT_TIME,
 		0xFF,
 		0xFF,
@@ -576,8 +671,7 @@ static ssize_t sop716_watch_mode_store(struct device *dev,
 	}
 
 	mutex_lock(&si->lock);
-	err = sop716_write(si, SOP716_I2C_DATA_LENGTH_TIME,
-			SOP716_I2C_DATA_LENGTH_TIME, data);
+	err = sop716_write(si, CMD_SOP716_SET_CURRENT_TIME, data);
 	mutex_unlock(&si->lock);
 	if (err < 0) {
 		pr_err("%s: cannot set watch mode\n", __func__);
@@ -627,34 +721,6 @@ static struct attribute *sop716_dev_attrs[] = {
 static struct attribute_group sop716_dev_attr_group = {
 	.attrs = sop716_dev_attrs,
 };
-
-static int sop716_write(struct sop716_info *si, u8 reg, u8 length, u8 *val)
-{
-	int ret;
-
-	pr_debug("%s: reg:%d val:%d\n", __func__, val[0], *val);
-
-	ret = i2c_smbus_write_i2c_block_data(si->client, reg, length, val);
-	if (ret < 0)
-		pr_err("%s: i2c_smbus_write_byte failed error %d\n",
-				__func__, ret);
-
-	return ret;
-}
-
-static int sop716_read(struct sop716_info *si, u8 reg, u8 length, u8 *val)
-{
-	int ret;
-
-	pr_debug("%s: reg:%d val:%d\n", __func__, reg, *val);
-
-	ret = i2c_smbus_read_i2c_block_data(si->client, reg, length, val);
-	if (ret < 0)
-		pr_err("%s: i2c_smbus_read_byte failed error:%d register:%d\n",
-				__func__, ret, reg);
-
-	return ret;
-}
 
 static int sop716_parse_dt(struct i2c_client *client)
 {
@@ -759,14 +825,13 @@ static void sop716_update_fw_work(struct work_struct *work)
 {
 	struct sop716_info *si = container_of(work,
 			struct sop716_info, fw_work);
-	u8 data[SOP716_I2C_DATA_LENGTH_TIME] = {0, };
+	u8 data[SOP716_I2C_DATA_LENGTH] = {0, };
 	int major, minor;
 	int err;
 	int retry = SOP716_CMD_READ_RETRY;
 
 	mutex_lock(&si->lock);
-	sop716_read(si, CMD_SOP716_READ_FW_VERSION,
-			SOP716_I2C_DATA_LENGTH-1, data);
+	sop716_read(si, CMD_SOP716_READ_FW_VERSION, data);
 
 	major = (int)data[1];
 	minor = (int)data[2];
@@ -781,12 +846,10 @@ static void sop716_update_fw_work(struct work_struct *work)
 	/* Set the position 0 */
 	memset(data, 0, sizeof(data));
 	data[0] = CMD_SOP716_MOTOR_MOVE_ALL;
-	sop716_write(si, SOP716_I2C_DATA_LENGTH,
-			SOP716_I2C_DATA_LENGTH, data);
+	sop716_write(si, CMD_SOP716_MOTOR_MOVE_ALL, data);
 
 	/* save current time */
-	err = sop716_read(si, CMD_SOP716_READ_CURRENT_TIME,
-			SOP716_I2C_DATA_LENGTH_TIME-1, data);
+	err = sop716_read(si, CMD_SOP716_READ_CURRENT_TIME, data);
 	if (err < 0)
 		pr_err("%s: cannot read current time\n", __func__);
 
@@ -810,8 +873,7 @@ static void sop716_update_fw_work(struct work_struct *work)
 	data[0] = CMD_SOP716_SET_CURRENT_TIME;
 	data[7] = 0;
 	while (retry--) {
-		err = sop716_write(si, SOP716_I2C_DATA_LENGTH_TIME,
-				SOP716_I2C_DATA_LENGTH_TIME, data);
+		err = sop716_write(si, CMD_SOP716_SET_CURRENT_TIME, data);
 		if (!err)
 			break;
 
@@ -825,8 +887,7 @@ static void sop716_update_fw_work(struct work_struct *work)
 
 	/* FIXME: delay */
 	msleep(100);
-	sop716_read(si, CMD_SOP716_READ_FW_VERSION,
-			SOP716_I2C_DATA_LENGTH-1, data);
+	sop716_read(si, CMD_SOP716_READ_FW_VERSION, data);
 
 	/* FIXME: delay */
 	msleep(100);
@@ -879,6 +940,10 @@ static int sop716_movement_probe(struct i2c_client *client,
 	if (err)
 		return err;
 
+	err = sop716_register_commands(si);
+	if (err)
+		return err;
+
 	INIT_WORK(&si->fw_work, sop716_update_fw_work);
 	INIT_WORK(&si->sysclock_work, sop716_update_sysclock_work);
 
@@ -918,7 +983,7 @@ static void sop716_movement_shutdown(struct i2c_client *client)
 {
 	struct sop716_info *si = i2c_get_clientdata(client);
 	int err;
-	u8 data[SOP716_I2C_DATA_LENGTH_TIME] = {
+	u8 data[SOP716_I2C_DATA_LENGTH] = {
 		CMD_SOP716_SET_CURRENT_TIME,
 		0xFF,
 		0xFF,
@@ -928,8 +993,7 @@ static void sop716_movement_shutdown(struct i2c_client *client)
 	if (si->watch_mode)
 		return;
 
-	err = sop716_write(si, SOP716_I2C_DATA_LENGTH_TIME,
-			SOP716_I2C_DATA_LENGTH_TIME, data);
+	err = sop716_write(si, CMD_SOP716_SET_CURRENT_TIME, data);
 	if (err < 0)
 		pr_err("%s: cannot set watch mode\n", __func__);
 }
