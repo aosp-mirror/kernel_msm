@@ -1231,6 +1231,7 @@ static int mdss_fb_probe(struct platform_device *pdev)
 
 	INIT_DELAYED_WORK(&mfd->idle_notify_work, __mdss_fb_idle_notify_work);
 	INIT_DELAYED_WORK(&mfd->idle_3bit_work, __mdss_fb_idle_3bit_work);
+	wake_lock_init(&mfd->wlock, WAKE_LOCK_SUSPEND, "mdss_fb");
 
 	return rc;
 }
@@ -1823,6 +1824,7 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 	int ret = 0;
 	int cur_power_state, req_power_state = MDSS_PANEL_POWER_OFF;
 	char trace_buffer[32];
+	static int is_prv_unblank = false;
 
 	if (!mfd || !op_enable)
 		return -EPERM;
@@ -1864,9 +1866,10 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 	case FB_BLANK_UNBLANK:
 		pr_debug("unblank called. cur pwr state=%d\n", cur_power_state);
 		
-		cancel_delayed_work_sync(&mfd->idle_3bit_work);
+		//cancel_delayed_work_sync(&mfd->idle_3bit_work);
 		mdss_fb_set_3bit_color_mode(mfd, false); 
 		ret = mdss_fb_blank_unblank(mfd);
+		is_prv_unblank = true;
 		break;
 	case BLANK_FLAG_ULP:
 		req_power_state = MDSS_PANEL_POWER_LP2;
@@ -1877,7 +1880,16 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 		}
 
 		ret = mdss_fb_blank_blank(mfd, req_power_state);
-		schedule_delayed_work(&mfd->idle_3bit_work, msecs_to_jiffies(300));
+		//schedule_delayed_work(&mfd->idle_3bit_work, 0);
+		if (is_prv_unblank == true) {
+			if (!wake_lock_active(&mfd->wlock))
+				wake_lock(&mfd->wlock);
+
+				mdss_fb_set_3bit_color_mode(mfd, true);
+				is_prv_unblank = false;
+			if (wake_lock_active(&mfd->wlock))
+				wake_unlock(&mfd->wlock);
+		}
 		break;
 	case BLANK_FLAG_LP:
 		req_power_state = MDSS_PANEL_POWER_LP1;
@@ -1894,7 +1906,16 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 		}
 
 		ret = mdss_fb_blank_blank(mfd, req_power_state);
-		schedule_delayed_work(&mfd->idle_3bit_work, msecs_to_jiffies(300));
+		//schedule_delayed_work(&mfd->idle_3bit_work, 0);
+		if (is_prv_unblank == true) {
+			if (!wake_lock_active(&mfd->wlock))
+				wake_lock(&mfd->wlock);
+
+				mdss_fb_set_3bit_color_mode(mfd, true);
+				is_prv_unblank = false;
+			if (wake_lock_active(&mfd->wlock))
+				wake_unlock(&mfd->wlock);
+		}
 		break;
 	case FB_BLANK_HSYNC_SUSPEND:
 	case FB_BLANK_POWERDOWN:
@@ -1902,6 +1923,7 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 		req_power_state = MDSS_PANEL_POWER_OFF;
 		pr_debug("blank powerdown called\n");
 		ret = mdss_fb_blank_blank(mfd, req_power_state);
+		is_prv_unblank = false;
 		break;
 	}
 

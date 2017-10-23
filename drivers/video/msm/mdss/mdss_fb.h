@@ -20,6 +20,7 @@
 #include <linux/types.h>
 #include <linux/notifier.h>
 #include <linux/leds.h>
+#include <linux/wakelock.h>
 
 #include "mdss_panel.h"
 #include "mdss_mdp_splash_logo.h"
@@ -275,6 +276,7 @@ struct msm_fb_data_type {
 	u32 idle_state;
 	struct delayed_work idle_notify_work;
 	struct delayed_work idle_3bit_work;
+	struct wake_lock wlock;
 
 	bool atomic_commit_pending;
 
