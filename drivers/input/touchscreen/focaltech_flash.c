@@ -114,6 +114,10 @@ static unsigned char CTPM_FW_BLACK_T_A[] = {
 	#include "FTS_FW/CEI_EFWA_3207_0x04_V0x01_20170425_app.i"
 };
 
+static unsigned char CTPM_FW_BLACK_O_A[] = {
+	#include "FTS_FW/CEI_EFWA_3207_0x05_V0x01_20170918_app.i"
+};
+
  struct fts_Upgrade_Info fts_updateinfo[] =
 {
 	{0x55,FTS_MAX_POINTS_5,AUTO_CLB_NEED,50, 30, 0x79, 0x03, 10, 2000}, //,"FT5x06"
@@ -3246,6 +3250,10 @@ int fts_ctpm_auto_upgrade_for_cci(struct i2c_client *client, const u8 tp_id, boo
 		case TP_ID_BLACK_T_A:
 			CTPM_FW = CTPM_FW_BLACK_T_A;
 			fw_size = sizeof(CTPM_FW_BLACK_T_A);
+			break;
+		case TP_ID_BLACK_O_A:
+			CTPM_FW = CTPM_FW_BLACK_O_A;
+			fw_size = sizeof(CTPM_FW_BLACK_O_A);
 			break;
 		default:
 			pr_err("[fts]tp is not correct\n");

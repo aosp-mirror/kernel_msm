@@ -1449,6 +1449,9 @@ int check_TP_ID(char *buf, ssize_t buf_len, u8 tp_id) {
 		case TP_ID_BLACK_T_B:
 			buf_len += sprintf(buf + buf_len, "TP is EFWx Truly\n");
 			break;
+		case TP_ID_BLACK_O_A:
+			buf_len += sprintf(buf + buf_len, "TP is EFWx Ofilm\n");
+			break;
 		default:
 			buf_len += sprintf(buf + buf_len, "TP isn't correct\n");
 			break;
