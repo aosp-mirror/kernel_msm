@@ -3409,6 +3409,13 @@ static int wma_extscan_rsp_handler(tp_wma_handle wma, uint8_t *buf)
 	}
 
 	event = (wmi_extscan_start_stop_event_fixed_param *)buf;
+
+	if (event->vdev_id >= wma->max_bssid) {
+		WMA_LOGE("%s: max vdev id's %d reached",
+			  __func__, event->vdev_id);
+		return -EINVAL;
+	}
+
 	vdev_id = event->vdev_id;
 	extscan_ind = vos_mem_malloc(sizeof(*extscan_ind));
 	if (!extscan_ind) {
