@@ -185,7 +185,7 @@ static inline void gic_write_sre(u32 val)
 
 static inline void gic_write_bpr1(u32 val)
 {
-	asm volatile("msr_s " __stringify(ICC_BPR1_EL1) ", %0" : : "r" (val));
+	asm volatile("msr_s " __stringify(ICC_BPR1_EL1) ", %x0" : : "rZ" (val));
 }
 
 #define gic_read_typer(c)		readq_relaxed_no_log(c)
