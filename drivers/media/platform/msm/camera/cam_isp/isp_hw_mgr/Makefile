@@ -12,3 +12,6 @@ ccflags-y += -Idrivers/media/platform/msm/camera/cam_smmu/
 obj-$(CONFIG_SPECTRA_CAMERA) += hw_utils/ isp_hw/
 obj-$(CONFIG_SPECTRA_CAMERA) += cam_isp_hw_mgr.o cam_ife_hw_mgr.o
 
+# TODO: remove me b/62058353
+subdir-ccflags-y += \
+	-Wno-enum-conversion \

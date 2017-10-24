@@ -186,3 +186,9 @@ msm_drm-$(CONFIG_DRM_MSM) += \
 	msm_debugfs.o
 
 obj-$(CONFIG_DRM_MSM)	+= msm_drm.o
+
+# TODO: remove me b/62058353
+subdir-ccflags-y += \
+	-Wno-header-guard \
+	-Wno-pointer-bool-conversion \
+	-Wno-duplicate-decl-specifier \

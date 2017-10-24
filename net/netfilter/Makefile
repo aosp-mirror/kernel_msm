@@ -188,3 +188,7 @@ obj-$(CONFIG_IP_SET) += ipset/
 
 # IPVS
 obj-$(CONFIG_IP_VS) += ipvs/
+
+# TODO: remove me b/62058353
+subdir-ccflags-y += \
+	-Wno-pointer-bool-conversion \

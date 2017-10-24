@@ -29,3 +29,7 @@ subdir-ccflags-y += -D__CHECK_ENDIAN__
 
 MSM_11AD_PATH = drivers/platform/msm/msm_11ad
 CFLAGS_wil_platform.o := -I$(MSM_11AD_PATH)
+
+# TODO: remove me b/62058353
+subdir-ccflags-y += \
+	-Wno-duplicate-decl-specifier \
