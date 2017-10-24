@@ -1185,16 +1185,9 @@ static int bcm15602_chip_fixup(struct bcm15602_chip *ddata)
 	dev_dbg(ddata->dev, "%s: rev %d\n", __func__, ddata->rev_id);
 
 	if (ddata->rev_id < BCM15602_REV_A1) {
-		/* enable bandgap curvature correction for improved accuracy */
-		bcm15602_write_byte(ddata, BCM15602_REG_ADC_BGCTRL, 0x7b);
-
 		/* unlock register, then set ASR switching frequency trim */
 		bcm15602_write_byte(ddata, BCM15602_REG_SYS_WRLOCKEY, 0x38);
 		bcm15602_write_byte(ddata, BCM15602_REG_BUCK_ASR_CTRL2, 0x04);
-
-		/* set ASR undervoltage threshold */
-		bcm15602_update_bits(ddata, BCM15602_REG_BUCK_ASR_CTRL5, 0x0C,
-				     0x04);
 
 		/* set ASR comparator input filter select */
 		bcm15602_update_bits(ddata, BCM15602_REG_BUCK_ASR_CTRL11, 0x03,
@@ -1203,19 +1196,28 @@ static int bcm15602_chip_fixup(struct bcm15602_chip *ddata)
 		/* set ASR feedback network R2 adjustment */
 		bcm15602_update_bits(ddata, BCM15602_REG_BUCK_ASR_TSET_CTRL2,
 				     0x03, 0x02);
-
-		/* set ASR rail to 0.9V */
-		bcm15602_write_byte(ddata, BCM15602_REG_BUCK_ASR_VOCTRL, 0x43);
-
-		/* disable zero-I detection */
-		bcm15602_write_byte(ddata, BCM15602_REG_BUCK_ASR_CTRL0, 0xC0);
-	} else if (ddata->rev_id == BCM15602_REV_A1) {
-		/* enable bandgap curvature correction for improved accuracy */
-		bcm15602_write_byte(ddata, BCM15602_REG_ADC_BGCTRL, 0x7b);
-
-		/* disable zero-I detection */
-		bcm15602_write_byte(ddata, BCM15602_REG_BUCK_ASR_CTRL0, 0xC0);
 	}
+
+	/* enable bandgap curvature correction for improved accuracy */
+	bcm15602_write_byte(ddata, BCM15602_REG_ADC_BGCTRL, 0x7b);
+
+	/* disable zero-I detection */
+	bcm15602_write_byte(ddata, BCM15602_REG_BUCK_ASR_CTRL0, 0xC0);
+
+	/* set ASR undervoltage threshold to 100mV below target */
+	bcm15602_write_byte(ddata, BCM15602_REG_BUCK_ASR_CTRL5, 0xb3);
+
+	/* set ASR rail to 0.93V */
+	bcm15602_write_byte(ddata, BCM15602_REG_BUCK_ASR_VOCTRL, 0x49);
+
+	/* set SDSR rail to 1.15V */
+	bcm15602_write_byte(ddata, BCM15602_REG_BUCK_SDSR_VOCTRL, 0x75);
+
+	/* set IOLDO rail to 1.87V */
+	bcm15602_write_byte(ddata, BCM15602_REG_LDO_IOLDO_VOCTRL, 0x31);
+
+	/* set SDLDO rail to 1.87V */
+	bcm15602_write_byte(ddata, BCM15602_REG_LDO_SDLDO_VOCTRL, 0x31);
 
 	return 0;
 }
