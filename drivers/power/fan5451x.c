@@ -126,7 +126,9 @@ struct fan5451x_chip {
 	struct qpnp_adc_tm_btm_param vbat_param_rechg;
 	struct qpnp_adc_tm_chip *adc_tm_dev;
 	int ibat_offset_ma;
+	int iusb_step_chg_ma;
 	int step_dwn_offset_ma;
+	int step_dwn_iusb_ma;
 	unsigned int step_dwn_thr_mv;
 	/* wlc fake online */
 	int wlc_fake_online;
@@ -679,7 +681,7 @@ static void fan5451x_wlc_fake_online(struct fan5451x_chip *chip, int set)
 
 static inline void fan5451x_vbat_measure(struct fan5451x_chip *chip)
 {
-	if (chip->step_dwn_offset_ma && chip->step_dwn_thr_mv) {
+	if (chip->step_dwn_thr_mv) {
 		if (chip->usb_present || chip->wlc_present) {
 			chip->vbat_param.high_thr = chip->step_dwn_thr_mv * 1000;
 			chip->vbat_param.state_request = ADC_TM_HIGH_THR_ENABLE;
@@ -689,6 +691,7 @@ static inline void fan5451x_vbat_measure(struct fan5451x_chip *chip)
 			qpnp_adc_tm_disable_chan_meas(chip->adc_tm_dev,
 						&chip->vbat_param);
 			chip->ibat_offset_ma = 0;
+			chip->iusb_step_chg_ma = 0;
 			fan5451x_set_appropriate_current(chip);
 		}
 	}
@@ -982,6 +985,8 @@ static ssize_t show_chip_param(struct device *dev,
 		"ext_set_vddmax_mv:%d\n"
 		"ext_batt_health:%d\n"
 		"step_dwn_offset_ma:%d\n"
+		"iusb_step_chg_ma:%d\n"
+		"step_dwn_iusb_ma:%d\n"
 		"step_dwn_thr_mv:%d\n"
 		"wlc_chg_on_min:%d\n"
 		"wlc_chg_off_min:%d\n",
@@ -992,7 +997,8 @@ static ssize_t show_chip_param(struct device *dev,
 		chip->fctmr, chip->set_ibat_ma, chip->ext_set_ibat_ma,
 		chip->set_vddmax_mv, chip->ext_set_vddmax_mv,
 		chip->ext_batt_health,
-		chip->step_dwn_offset_ma, chip->step_dwn_thr_mv,
+		chip->step_dwn_offset_ma, chip->iusb_step_chg_ma,
+		chip->step_dwn_iusb_ma, chip->step_dwn_thr_mv,
 		chip->wlc_chg_on_min, chip->wlc_chg_off_min);
 }
 static DEVICE_ATTR(chip_param, S_IRUGO, show_chip_param, NULL);
@@ -1196,6 +1202,11 @@ static void fan5451x_batt_external_power_changed(struct power_supply *psy)
 		}
 	}
 
+	if (chip->iusb_step_chg_ma) {
+		fan5451x_set_ibus(chip, chip->step_dwn_iusb_ma);
+		goto skip_current_config;
+	}
+
 	if (usb_present) {
 		chip->usb_psy->get_property(chip->usb_psy,
 				POWER_SUPPLY_PROP_CURRENT_MAX, &ret);
@@ -1213,6 +1224,7 @@ static void fan5451x_batt_external_power_changed(struct power_supply *psy)
 			fan5451x_set_ibus(chip, current_ma);
 	}
 
+skip_current_config:
 	/* Cable removed */
 	if (!usb_present && !wlc_present && !chip->wlc_fake_online) {
 		chip->eoc = false;
@@ -1221,7 +1233,6 @@ static void fan5451x_batt_external_power_changed(struct power_supply *psy)
 		fan5451x_batfet_enable(chip, CHARGE, 1);
 	}
 
-skip_current_config:
 	power_supply_changed(&chip->batt_psy);
 }
 
@@ -1561,17 +1572,20 @@ fan5451x_vbat_notification(enum qpnp_tm_state state, void *ctx)
 {
 	struct fan5451x_chip *chip = ctx;
 
+	pr_info("Current state of vbat sense notification is %d\n", state);
 	if (state >= ADC_TM_STATE_NUM) {
 		pr_err("invalid notification %d\n", state);
 		return;
 	}
 	if (state == ADC_TM_HIGH_STATE) {
 		chip->ibat_offset_ma = chip->step_dwn_offset_ma;
+		chip->iusb_step_chg_ma = chip->step_dwn_iusb_ma;
 		chip->vbat_param.state_request = ADC_TM_LOW_THR_ENABLE;
 		chip->vbat_param.low_thr =
 			(chip->step_dwn_thr_mv - STEP_OFFSET_MV) * 1000;
 	} else {
 		chip->ibat_offset_ma = 0;
+		chip->iusb_step_chg_ma = 0;
 		chip->vbat_param.state_request = ADC_TM_HIGH_THR_ENABLE;
 		chip->vbat_param.high_thr = chip->step_dwn_thr_mv * 1000;
 	}
@@ -1796,6 +1810,7 @@ static int fan5451x_parse_dt(struct fan5451x_chip *chip)
 	OF_PROP_READ(chip, vinlim, "vinlim", ret, 0);
 	OF_PROP_READ(chip, fctmr, "fctmr", ret, 0);
 	OF_PROP_READ(chip, step_dwn_offset_ma, "step-dwn-offset-ma", ret, 1);
+	OF_PROP_READ(chip, step_dwn_iusb_ma, "step-dwn-iusb-ma", ret, 1);
 	OF_PROP_READ(chip, step_dwn_thr_mv, "step-dwn-thr-mv", ret, 1);
 	OF_PROP_READ(chip, wlc_chg_on_min, "wlc-chg-on-min", ret, 1);
 	OF_PROP_READ(chip, wlc_chg_off_min, "wlc-chg-off-min", ret, 1);
@@ -1947,7 +1962,7 @@ static int fan5451x_probe(struct i2c_client *client,
 	INIT_DELAYED_WORK(&chip->wlc_present_work,
 			fan5451x_wlc_present_work);
 
-	if (chip->step_dwn_offset_ma && chip->step_dwn_thr_mv) {
+	if (chip->step_dwn_thr_mv) {
 		chip->vbat_param.timer_interval = ADC_MEAS1_INTERVAL_8S;
 		chip->vbat_param.btm_ctx = chip;
 		chip->vbat_param.threshold_notification =
