@@ -1,0 +1,23 @@
+What:		/sys/devices/platform/<I2C controller address>/rainbow_enable
+Date:		October 2017
+Contact:	Xu Han <xuhanyz@google.com>
+Description:
+		Write to this file to enable/disable rainbow sensor vd6281
+		0 - Enable
+		1 - Disable
+
+What:		/sys/devices/platform/<I2C controller address>/rainbow_write_byte
+Date:		October 2017
+Contact:	Xu Han <xuhanyz@google.com>
+Description:
+		Write to this file to write a byte to rainbow sensor vd6281. The
+		1st byte is the address and 2nd byte is the data. A negative error
+		is returned in case of failure.
+
+What:		/sys/devices/platform/<I2C controller address>/rainbow_read_byte
+Date:		October 2017
+Contact:	Xu Han <xuhanyz@google.com>
+Description:
+		Write to this file to read a byte to rainbow sensor vd6281. The
+		1st byte is the address to read. Read data is returned in case of
+		success. A negative error is returned in case of failure.
