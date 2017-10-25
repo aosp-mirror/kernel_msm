@@ -25,13 +25,13 @@
 		nfc_enable_default: nfc_enable_default {
 			/* default state */
 			mux {
-				/* 12: NFC ENABLE, 24:ESE Enable, 122:ESE WAKEUP INT */
-				pins = "gpio12", "gpio24", "gpio122";
+				/* 25: NFC ENABLE, 23: NFC_SE_PWR_REQ */
+				pins = "gpio25", "gpio23";
 				function = "gpio";
 			};
 
 			config {
-				pins = "gpio12", "gpio24", "gpio122";
+				pins = "gpio25", "gpio23";
 				drive-strength = <2>; /* 2 MA */
 				bias-pull-down;
 			};
@@ -48,7 +48,7 @@
 		interrupts = <63 0>;
 		st,reset_gpio = <&tlmm 12 0x00>;
 		st,irq_gpio = <&tlmm 63 0x00>;
-		status = "ok";
+		status = "disabled";
 		pinctrl-names = "default";
 		pinctrl-0 = <&nfc_int_default &nfc_enable_default>;
 	};

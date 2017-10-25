@@ -38,3 +38,39 @@
 		qcom,model = "sdm845-tavil-snd-card";
 	};
 };
+
+&mdss_mdp {
+	qcom,sde-vsync-source = <0>;
+};
+
+&sde_te_active {
+	mux {
+		pins = "gpio10";
+	};
+	config {
+		pins = "gpio10";
+	};
+};
+
+&sde_te_suspend {
+	mux {
+		pins = "gpio10";
+	};
+	config {
+		pins = "gpio10";
+	};
+};
+
+&nfc_enable_default {
+	mux {
+		/* 12: NFC ENABLE , 23: NFC_SE_PWR_REQ, 122:ESE WAKEUP INT */
+		pins = "gpio12", "gpio23", "gpio122";
+	};
+	config {
+		pins = "gpio12", "gpio23", "gpio122";
+	};
+};
+
+&st21nfc {
+	status = "ok";
+};

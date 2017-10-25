@@ -22,7 +22,38 @@
 	csiphy-sd-index = <2>;
 };
 
+&mdss_mdp {
+	qcom,sde-vsync-source = <0>;
+};
+
 &dsi_sw43402_cmd_display {
 	qcom,dsi-display-active;
 };
 
+&sde_te_active {
+	mux {
+		pins = "gpio10";
+	};
+	config {
+		pins = "gpio10";
+	};
+};
+
+&sde_te_suspend {
+	mux {
+		pins = "gpio10";
+	};
+	config {
+		pins = "gpio10";
+	};
+};
+
+&nfc_enable_default {
+	mux {
+		/* 12: NFC ENABLE, 24:ESE Enable, 122:ESE WAKEUP INT */
+		pins = "gpio12", "gpio24", "gpio122";
+	};
+	config {
+		pins = "gpio12", "gpio24", "gpio122";
+	};
+};

@@ -14,6 +14,25 @@
 #include "dsi-panel-sw43402-dsc-qhd-cmd.dtsi"
 #include "dsi-panel-sw43408-dsc-fhd-cmd.dtsi"
 
+&sde_te_active {
+	mux {
+		pins = "gpio12";
+	};
+	config {
+		pins = "gpio12";
+	};
+};
+
+&sde_te_suspend {
+	mux {
+		pins = "gpio12";
+	};
+	config {
+		pins = "gpio12";
+	};
+};
+
+
 &soc {
 	dsi_sw43402_cmd_display: qcom,dsi-display@50 {
 		compatible = "qcom,dsi-display";
@@ -30,7 +49,6 @@
 		pinctrl-0 = <&sde_dsi_active &sde_te_active &sde_pmgpio_active>;
 		pinctrl-1 = <&sde_dsi_suspend &sde_te_suspend &sde_pmgpio_suspend>;
 		qcom,platform-reset-gpio = <&tlmm 6 0>;
-		qcom,platform-te-gpio = <&tlmm 10 0>;
 
 		qcom,dsi-panel = <&dsi_sw43402_dsc_qhd_cmd>;
 
@@ -53,7 +71,6 @@
 		pinctrl-0 = <&sde_dsi_active &sde_te_active>;
 		pinctrl-1 = <&sde_dsi_suspend &sde_te_suspend>;
 		qcom,platform-reset-gpio = <&tlmm 6 0>;
-		qcom,platform-te-gpio = <&tlmm 10 0>;
 
 		qcom,dsi-panel = <&dsi_sw43408_dsc_fhd_cmd>;
 
@@ -64,7 +81,7 @@
 
 /*
  * Reset is GPIO6
- * VSYNC/TE is GPIO10
+ * VSYNC/TE is GPIO12 (vsync-source 2)
  * VDDI is 1p8, L14A source (first one up)
  * VPNL (POLED_VCI??) is 3.0 L28A source. (second one up)
  * POLED_GPO0 is also PM845 GPIO2 - > (do not drive)
@@ -83,6 +100,7 @@
 
 &mdss_mdp {
 	connectors = <&sde_rscc &sde_wb>;
+	qcom,sde-vsync-source = <2>;
 };
 
 &dsi_sw43402_dsc_qhd_cmd {
@@ -95,7 +113,6 @@
 	qcom,mdss-dsi-bl-max-level = <223>;
 
 	qcom,platform-reset-gpio = <&tlmm 6 0>;
-	qcom,platform-te-gpio = <&tlmm 10 0>;
 	qcom,mdss-dsi-display-timings {
 		timing@0 {
 			qcom,mdss-dsi-panel-phy-timings =
@@ -118,7 +135,6 @@
 	qcom,mdss-dsi-bl-max-level = <0x332>;
 
 	qcom,platform-reset-gpio = <&tlmm 6 0>;
-	qcom,platform-te-gpio = <&tlmm 10 0>;
 	qcom,mdss-dsi-display-timings {
 		timing@0 {
 			qcom,mdss-dsi-panel-phy-timings =
