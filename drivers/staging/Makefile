@@ -48,3 +48,4 @@ obj-$(CONFIG_WILC1000)		+= wilc1000/
 obj-$(CONFIG_MOST)		+= most/
 obj-$(CONFIG_QCA_CLD_WLAN)	+= qcacld-3.0/
 obj-$(CONFIG_SERVICE_FS)	+= servicefs/
+obj-$(CONFIG_WLAN_MAC_CMDLINE)  += wlan-mac/
