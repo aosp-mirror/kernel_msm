@@ -13011,7 +13011,6 @@ void __hdd_wlan_exit(void)
 
    hdd_close_tx_queues(pHddCtx);
    //Do all the cleanup before deregistering the driver
-   memdump_deinit();
    hdd_driver_memdump_deinit();
    hdd_wlan_exit(pHddCtx);
    EXIT();
@@ -14136,6 +14135,7 @@ static int hdd_initialize_mac_address(hdd_context_t *hdd_ctx)
 	}
 	return 0;
 }
+
 /**---------------------------------------------------------------------------
 
   \brief hdd_wlan_startup() - HDD init function
@@ -14690,7 +14690,6 @@ int hdd_wlan_startup(struct device *dev, v_VOID_t *hif_sc)
       vos_set_load_in_progress(VOS_MODULE_ID_VOSS, FALSE);
       pHddCtx->isLoadInProgress = FALSE;
 
-      memdump_init();
       hdd_driver_memdump_init();
       hddLog(LOGE, FL("FTM driver loaded"));
       complete(&wlan_start_comp);
@@ -15136,7 +15135,6 @@ int hdd_wlan_startup(struct device *dev, v_VOID_t *hif_sc)
    pHddCtx->isLoadInProgress = FALSE;
    vos_set_load_unload_in_progress(VOS_MODULE_ID_VOSS, FALSE);
    vos_set_load_in_progress(VOS_MODULE_ID_VOSS, FALSE);
-   memdump_init();
    hdd_driver_memdump_init();
    if (pHddCtx->cfg_ini->goptimize_chan_avoid_event) {
        hal_status = sme_enable_disable_chanavoidind_event(pHddCtx->hHal, 0);
@@ -17471,22 +17469,6 @@ void hdd_get_fw_version(hdd_context_t *hdd_ctx,
 	*minor_spid = (hdd_ctx->target_fw_version & 0xf000000) >> 24;
 	*siid = (hdd_ctx->target_fw_version & 0xf00000) >> 20;
 	*crmid = hdd_ctx->target_fw_version & 0x7fff;
-}
-
-/**
- * hdd_is_memdump_supported() - to check if memdump feature support
- *
- * This function is used to check if memdump feature is supported in
- * the host driver
- *
- * Return: true if supported and false otherwise
- */
-bool hdd_is_memdump_supported(void)
-{
-#ifdef WLAN_FEATURE_MEMDUMP
-	return true;
-#endif
-	return false;
 }
 
 #ifdef QCA_CONFIG_SMP
