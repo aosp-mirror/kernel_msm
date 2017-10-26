@@ -76,6 +76,9 @@ Required properties
 				mixer number corresponding to the array index.
 
 Optional properties:
+- qcom,sde-vsync-source		GPIO VSYNC/TE Source for the SDE encoder.  For
+				example, on SDM845 use 0 for GPIO10, 1 for
+				GPIO11, and 2 for GPIO12.
 - clock-rate:		List of clock rates in Hz.
 - clock-max-rate:	List of maximum clock rate in Hz that this device supports.
 - qcom,platform-supply-entries:	A node that lists the elements of the supply. There

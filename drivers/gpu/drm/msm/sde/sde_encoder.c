@@ -151,6 +151,7 @@ enum sde_enc_rc_states {
  *	Virtual encoder defers as much as possible to the physical encoders.
  *	Virtual encoder registers itself with the DRM Framework as the encoder.
  * @base:		drm_encoder base class for registration with DRM
+ * @vsync_source	Source of vsync for connected display
  * @enc_spin_lock:	Virtual-Encoder-Wide Spin Lock for IRQ purposes
  * @bus_scaling_client:	Client handle to the bus scaling interface
  * @num_phys_encs:	Actual number of physical encoders contained.
@@ -200,6 +201,7 @@ enum sde_enc_rc_states {
  */
 struct sde_encoder_virt {
 	struct drm_encoder base;
+	uint32_t vsync_source;
 	spinlock_t enc_spinlock;
 	uint32_t bus_scaling_client;
 
@@ -1230,7 +1232,12 @@ static void _sde_encoder_update_vsync_source(struct sde_encoder_virt *sde_enc,
 		else if (disp_info->is_te_using_watchdog_timer)
 			vsync_cfg.vsync_source = SDE_VSYNC_SOURCE_WD_TIMER_0;
 		else
-			vsync_cfg.vsync_source = SDE_VSYNC0_SOURCE_GPIO;
+			/* TODO(b/68321698) Revert this:
+			 *   drm: msm: Add vsync-source device tree config...
+			 * and replace with QC implementation of moving
+			 * vsync_source into device tree.
+			 */
+			vsync_cfg.vsync_source = sde_enc->vsync_source;
 		vsync_cfg.is_dummy = is_dummy;
 
 		hw_mdptop->ops.setup_vsync_source(hw_mdptop, &vsync_cfg);
@@ -3532,6 +3539,7 @@ struct drm_encoder *sde_encoder_init(
 	int drm_enc_mode = DRM_MODE_ENCODER_NONE;
 	char name[SDE_NAME_SIZE];
 	int ret = 0;
+	struct device_node *np = dev->dev->of_node;
 
 	sde_enc = kzalloc(sizeof(*sde_enc), GFP_KERNEL);
 	if (!sde_enc) {
@@ -3569,6 +3577,10 @@ struct drm_encoder *sde_encoder_init(
 			sde_encoder_off_work);
 	sde_enc->idle_timeout = IDLE_TIMEOUT;
 	memcpy(&sde_enc->disp_info, disp_info, sizeof(*disp_info));
+
+	if (of_property_read_u32(np, "qcom,sde-vsync-source",
+				 &sde_enc->vsync_source))
+		SDE_ERROR("No vsync-source found in DT\n");
 
 	SDE_DEBUG_ENC(sde_enc, "created\n");
 
