@@ -1823,14 +1823,7 @@ struct hdd_context_s
     struct hdd_ll_stats_context ll_stats_context;
 #endif /* End of WLAN_FEATURE_LINK_LAYER_STATS */
 
-#ifdef WLAN_FEATURE_MEMDUMP
-    uint8_t *fw_dump_loc;
-    uint32_t dump_loc_paddr;
-    vos_timer_t memdump_cleanup_timer;
     struct mutex memdump_lock;
-    bool memdump_in_progress;
-    bool memdump_init_done;
-#endif /* WLAN_FEATURE_MEMDUMP */
     uint16_t driver_dump_size;
     uint8_t *driver_dump_mem;
 
@@ -2200,8 +2193,6 @@ static inline bool hdd_scan_random_mac_addr_supported(void)
 void hdd_get_fw_version(hdd_context_t *hdd_ctx,
 			uint32_t *major_spid, uint32_t *minor_spid,
 			uint32_t *siid, uint32_t *crmid);
-
-bool hdd_is_memdump_supported(void);
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,28))
 static inline void
