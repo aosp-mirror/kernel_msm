@@ -91,4 +91,11 @@ config QPNP_QNOVO
 	  module. It also allows userspace code to read diagnostics of voltage
 	  and current measured during certain phases of the pulses.
 
+config CHARGER_P9221
+	tristate "IDT P9221 wireless power receiver driver"
+	depends on I2C
+	help
+	  This driver provides support for the IDT P9221 wireless
+	  power receiver.
+
 endmenu
