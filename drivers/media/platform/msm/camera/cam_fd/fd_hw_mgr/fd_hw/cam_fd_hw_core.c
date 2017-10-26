@@ -12,6 +12,7 @@
 
 #include "cam_fd_hw_core.h"
 #include "cam_fd_hw_soc.h"
+#include "cam_trace.h"
 
 #define CAM_FD_REG_VAL_PAIR_SIZE 256
 
@@ -30,6 +31,7 @@ static uint32_t cam_fd_cdm_write_reg_val_pair(uint32_t *buffer,
 static void cam_fd_hw_util_cdm_callback(uint32_t handle, void *userdata,
 	enum cam_cdm_cb_status status, uint32_t cookie)
 {
+	trace_cam_cdm_cb("FD", status);
 	CAM_DBG(CAM_FD, "CDM hdl=%x, udata=%pK, status=%d, cookie=%d",
 		handle, userdata, status, cookie);
 }
@@ -124,13 +126,8 @@ static int cam_fd_hw_util_fdwrapper_sync_reset(struct cam_hw_info *fd_hw)
 
 	time_left = wait_for_completion_timeout(&fd_core->reset_complete,
 		msecs_to_jiffies(CAM_FD_HW_HALT_RESET_TIMEOUT));
-	if (time_left <= 0) {
-		CAM_ERR(CAM_FD, "HW reset wait failed time_left=%d", time_left);
-		return -EPERM;
-	}
-
-	cam_fd_soc_register_write(soc_info, CAM_FD_REG_CORE,
-		hw_static_info->core_regs.control, 0x0);
+	if (time_left <= 0)
+		CAM_WARN(CAM_FD, "HW reset timeout time_left=%d", time_left);
 
 	CAM_DBG(CAM_FD, "FD Wrapper SW Sync Reset complete");
 
@@ -148,9 +145,6 @@ static int cam_fd_hw_util_fdwrapper_halt(struct cam_hw_info *fd_hw)
 	/* Before triggering halt to HW, clear halt complete */
 	reinit_completion(&fd_core->halt_complete);
 
-	cam_fd_soc_register_write(soc_info, CAM_FD_REG_CORE,
-		hw_static_info->core_regs.control, 0x1);
-
 	if (hw_static_info->enable_errata_wa.single_irq_only) {
 		cam_fd_soc_register_write(soc_info, CAM_FD_REG_WRAPPER,
 			hw_static_info->wrapper_regs.irq_mask,
@@ -162,13 +156,8 @@ static int cam_fd_hw_util_fdwrapper_halt(struct cam_hw_info *fd_hw)
 
 	time_left = wait_for_completion_timeout(&fd_core->halt_complete,
 		msecs_to_jiffies(CAM_FD_HW_HALT_RESET_TIMEOUT));
-	if (time_left <= 0) {
-		CAM_ERR(CAM_FD, "HW halt wait failed time_left=%d", time_left);
-		return -EPERM;
-	}
-
-	cam_fd_soc_register_write(soc_info, CAM_FD_REG_CORE,
-		hw_static_info->core_regs.control, 0x0);
+	if (time_left <= 0)
+		CAM_WARN(CAM_FD, "HW halt timeout time_left=%d", time_left);
 
 	CAM_DBG(CAM_FD, "FD Wrapper Halt complete");
 
@@ -397,12 +386,22 @@ static int cam_fd_hw_util_processcmd_prestart(struct cam_hw_info *fd_hw,
 	prestart_args->pre_config_buf_size =
 		prestart_args->size - available_size;
 
-	/*
-	 * Currently, no post config commands, we trigger HW start directly
-	 * from start(). Start trigger command can be inserted into CDM
-	 * as post config commands.
-	 */
-	prestart_args->post_config_buf_size = 0;
+	/* Insert start trigger command into CDM as post config commands. */
+	num_cmds = cam_fd_cdm_write_reg_val_pair(reg_val_pair, 0,
+		hw_static_info->core_regs.control, 0x2);
+	size = ctx_hw_private->cdm_ops->cdm_required_size_reg_random(
+		num_cmds/2);
+	if ((size * 4) > available_size) {
+		CAM_ERR(CAM_FD, "Insufficient size:%d , expected size:%d",
+			available_size, size);
+		return -ENOMEM;
+	}
+	ctx_hw_private->cdm_ops->cdm_write_regrandom(cmd_buf_addr, num_cmds/2,
+		reg_val_pair);
+	cmd_buf_addr += size;
+	available_size -= (size * 4);
+
+	prestart_args->post_config_buf_size = size * 4;
 
 	CAM_DBG(CAM_FD, "PreConfig [%pK %d], PostConfig[%pK %d]",
 		prestart_args->cmd_buf_addr, prestart_args->pre_config_buf_size,
@@ -572,6 +571,8 @@ irqreturn_t cam_fd_hw_irq(int irq_num, void *data)
 			reg_value, num_irqs);
 		return -EINVAL;
 	}
+
+	trace_cam_irq_activated("FD", irq_type);
 
 	cam_fd_soc_register_write(soc_info, CAM_FD_REG_WRAPPER,
 		hw_static_info->wrapper_regs.irq_clear,
@@ -774,6 +775,8 @@ int cam_fd_hw_reset(void *hw_priv, void *reset_core_args, uint32_t arg_size)
 {
 	struct cam_hw_info *fd_hw = (struct cam_hw_info *)hw_priv;
 	struct cam_fd_core *fd_core;
+	struct cam_fd_hw_static_info *hw_static_info;
+	struct cam_hw_soc_info *soc_info;
 	int rc;
 
 	if (!fd_hw) {
@@ -782,6 +785,8 @@ int cam_fd_hw_reset(void *hw_priv, void *reset_core_args, uint32_t arg_size)
 	}
 
 	fd_core = (struct cam_fd_core *)fd_hw->core_info;
+	hw_static_info = fd_core->hw_static_info;
+	soc_info = &fd_hw->soc_info;
 
 	spin_lock(&fd_core->spin_lock);
 	if (fd_core->core_state == CAM_FD_CORE_STATE_RESET_PROGRESS) {
@@ -795,11 +800,23 @@ int cam_fd_hw_reset(void *hw_priv, void *reset_core_args, uint32_t arg_size)
 	fd_core->core_state = CAM_FD_CORE_STATE_RESET_PROGRESS;
 	spin_unlock(&fd_core->spin_lock);
 
+	cam_fd_soc_register_write(soc_info, CAM_FD_REG_WRAPPER,
+		hw_static_info->wrapper_regs.cgc_disable, 0x1);
+
+	rc = cam_fd_hw_util_fdwrapper_halt(fd_hw);
+	if (rc) {
+		CAM_ERR(CAM_FD, "Failed in HALT rc=%d", rc);
+		return rc;
+	}
+
 	rc = cam_fd_hw_util_fdwrapper_sync_reset(fd_hw);
 	if (rc) {
 		CAM_ERR(CAM_FD, "Failed in RESET rc=%d", rc);
 		return rc;
 	}
+
+	cam_fd_soc_register_write(soc_info, CAM_FD_REG_WRAPPER,
+		hw_static_info->wrapper_regs.cgc_disable, 0x0);
 
 	spin_lock(&fd_core->spin_lock);
 	fd_core->core_state = CAM_FD_CORE_STATE_IDLE;
@@ -893,9 +910,6 @@ int cam_fd_hw_start(void *hw_priv, void *hw_start_args, uint32_t arg_size)
 		goto error;
 	}
 
-	cam_fd_soc_register_write(&fd_hw->soc_info, CAM_FD_REG_CORE,
-		hw_static_info->core_regs.control, 0x2);
-
 	return 0;
 error:
 	spin_lock(&fd_core->spin_lock);
@@ -909,6 +923,8 @@ int cam_fd_hw_halt_reset(void *hw_priv, void *stop_args, uint32_t arg_size)
 {
 	struct cam_hw_info *fd_hw = (struct cam_hw_info *)hw_priv;
 	struct cam_fd_core *fd_core;
+	struct cam_fd_hw_static_info *hw_static_info;
+	struct cam_hw_soc_info *soc_info;
 	int rc;
 
 	if (!fd_hw) {
@@ -917,6 +933,8 @@ int cam_fd_hw_halt_reset(void *hw_priv, void *stop_args, uint32_t arg_size)
 	}
 
 	fd_core = (struct cam_fd_core *)fd_hw->core_info;
+	hw_static_info = fd_core->hw_static_info;
+	soc_info = &fd_hw->soc_info;
 
 	spin_lock(&fd_core->spin_lock);
 	if ((fd_core->core_state == CAM_FD_CORE_STATE_POWERDOWN) ||
@@ -931,6 +949,9 @@ int cam_fd_hw_halt_reset(void *hw_priv, void *stop_args, uint32_t arg_size)
 	fd_core->core_state = CAM_FD_CORE_STATE_RESET_PROGRESS;
 	spin_unlock(&fd_core->spin_lock);
 
+	cam_fd_soc_register_write(soc_info, CAM_FD_REG_WRAPPER,
+		hw_static_info->wrapper_regs.cgc_disable, 0x1);
+
 	rc = cam_fd_hw_util_fdwrapper_halt(fd_hw);
 	if (rc) {
 		CAM_ERR(CAM_FD, "Failed in HALT rc=%d", rc);
@@ -943,6 +964,9 @@ int cam_fd_hw_halt_reset(void *hw_priv, void *stop_args, uint32_t arg_size)
 		CAM_ERR(CAM_FD, "Failed in RESET rc=%d", rc);
 		return rc;
 	}
+
+	cam_fd_soc_register_write(soc_info, CAM_FD_REG_WRAPPER,
+		hw_static_info->wrapper_regs.cgc_disable, 0x0);
 
 	spin_lock(&fd_core->spin_lock);
 	fd_core->core_state = CAM_FD_CORE_STATE_IDLE;

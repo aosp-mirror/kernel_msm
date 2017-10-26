@@ -38,6 +38,8 @@
 #define DSI_CTRL_TX_TO_MS     200
 
 #define TO_ON_OFF(x) ((x) ? "ON" : "OFF")
+
+#define CEIL(x, y)              (((x) + ((y)-1)) / (y))
 /**
  * enum dsi_ctrl_driver_ops - controller driver ops
  */
@@ -895,6 +897,38 @@ static int dsi_ctrl_copy_and_pad_cmd(struct dsi_ctrl *dsi_ctrl,
 	return rc;
 }
 
+static void dsi_ctrl_wait_for_video_done(struct dsi_ctrl *dsi_ctrl)
+{
+	u32 v_total = 0, v_blank = 0, sleep_ms = 0, fps = 0, ret;
+	struct dsi_mode_info *timing;
+
+	if (dsi_ctrl->host_config.panel_mode != DSI_OP_VIDEO_MODE)
+		return;
+
+	dsi_ctrl->hw.ops.clear_interrupt_status(&dsi_ctrl->hw,
+				DSI_VIDEO_MODE_FRAME_DONE);
+
+	dsi_ctrl_enable_status_interrupt(dsi_ctrl,
+				DSI_SINT_VIDEO_MODE_FRAME_DONE, NULL);
+	reinit_completion(&dsi_ctrl->irq_info.vid_frame_done);
+	ret = wait_for_completion_timeout(
+			&dsi_ctrl->irq_info.vid_frame_done,
+			msecs_to_jiffies(DSI_CTRL_TX_TO_MS));
+	if (ret <= 0)
+		pr_debug("wait for video done failed\n");
+	dsi_ctrl_disable_status_interrupt(dsi_ctrl,
+				DSI_SINT_VIDEO_MODE_FRAME_DONE);
+
+	timing = &(dsi_ctrl->host_config.video_timing);
+	v_total = timing->v_sync_width + timing->v_back_porch +
+			timing->v_front_porch + timing->v_active;
+	v_blank = timing->v_sync_width + timing->v_back_porch;
+	fps = timing->refresh_rate;
+
+	sleep_ms = CEIL((v_blank * 1000), (v_total * fps)) + 1;
+	udelay(sleep_ms * 1000);
+}
+
 static int dsi_message_tx(struct dsi_ctrl *dsi_ctrl,
 			  const struct mipi_dsi_msg *msg,
 			  u32 flags)
@@ -976,6 +1010,7 @@ static int dsi_message_tx(struct dsi_ctrl *dsi_ctrl,
 	}
 
 	if (!(flags & DSI_CTRL_CMD_DEFER_TRIGGER)) {
+		dsi_ctrl_wait_for_video_done(dsi_ctrl);
 		dsi_ctrl_enable_status_interrupt(dsi_ctrl,
 					DSI_SINT_CMD_MODE_DMA_DONE, NULL);
 		reinit_completion(&dsi_ctrl->irq_info.cmd_dma_done);
@@ -1161,6 +1196,7 @@ static int dsi_message_rx(struct dsi_ctrl *dsi_ctrl,
 			diff = 0;
 			rlen -= current_read_len;
 		}
+
 		dlen -= 2; /* 2 bytes of CRC */
 		dlen -= diff;
 		buff += dlen;
@@ -1781,8 +1817,55 @@ int dsi_ctrl_async_timing_update(struct dsi_ctrl *dsi_ctrl,
 
 	host_mode = &dsi_ctrl->host_config.video_timing;
 	memcpy(host_mode, timing, sizeof(*host_mode));
-
+	dsi_ctrl->hw.ops.set_timing_db(&dsi_ctrl->hw, true);
 	dsi_ctrl->hw.ops.set_video_timing(&dsi_ctrl->hw, host_mode);
+
+exit:
+	mutex_unlock(&dsi_ctrl->ctrl_lock);
+	return rc;
+}
+
+/**
+ * dsi_ctrl_timing_db_update() - update only controller Timing DB
+ * @dsi_ctrl:          DSI controller handle.
+ * @enable:            Enable/disable Timing DB register
+ *
+ *  Update timing db register value during dfps usecases
+ *
+ * Return: error code.
+ */
+int dsi_ctrl_timing_db_update(struct dsi_ctrl *dsi_ctrl,
+		bool enable)
+{
+	int rc = 0;
+
+	if (!dsi_ctrl) {
+		pr_err("Invalid dsi_ctrl\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&dsi_ctrl->ctrl_lock);
+
+	rc = dsi_ctrl_check_state(dsi_ctrl, DSI_CTRL_OP_ASYNC_TIMING,
+			DSI_CTRL_ENGINE_ON);
+	if (rc) {
+		pr_err("[DSI_%d] Controller state check failed, rc=%d\n",
+		       dsi_ctrl->cell_index, rc);
+		goto exit;
+	}
+
+	/*
+	 * Add HW recommended delay for dfps feature.
+	 * When prefetch is enabled, MDSS HW works on 2 vsync
+	 * boundaries i.e. mdp_vsync and panel_vsync.
+	 * In the current implementation we are only waiting
+	 * for mdp_vsync. We need to make sure that interface
+	 * flush is after panel_vsync. So, added the recommended
+	 * delays after dfps update.
+	 */
+	usleep_range(2000, 2010);
+
+	dsi_ctrl->hw.ops.set_timing_db(&dsi_ctrl->hw, enable);
 
 exit:
 	mutex_unlock(&dsi_ctrl->ctrl_lock);
@@ -2282,7 +2365,7 @@ int dsi_ctrl_update_host_config(struct dsi_ctrl *ctrl,
 		goto error;
 	}
 
-	if (!(flags & DSI_MODE_FLAG_SEAMLESS)) {
+	if (!(flags & (DSI_MODE_FLAG_SEAMLESS | DSI_MODE_FLAG_VRR))) {
 		rc = dsi_ctrl_update_link_freqs(ctrl, config, clk_handle);
 		if (rc) {
 			pr_err("[%s] failed to update link frequencies, rc=%d\n",

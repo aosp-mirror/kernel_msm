@@ -35,7 +35,6 @@
 #include "pil-q6v5.h"
 #include "pil-msa.h"
 
-#define MAX_VDD_MSS_UV		1150000
 #define PROXY_TIMEOUT_MS	10000
 #define MAX_SSR_REASON_LEN	256U
 #define STOP_ACK_TIMEOUT_MS	1000
@@ -217,6 +216,22 @@ static int pil_subsys_init(struct modem_data *drv,
 	drv->subsys_desc.wdog_bite_handler = modem_wdog_bite_intr_handler;
 
 	drv->q6->desc.modem_ssr = false;
+	drv->q6->desc.signal_aop = of_property_read_bool(pdev->dev.of_node,
+						"qcom,signal-aop");
+	if (drv->q6->desc.signal_aop) {
+		drv->q6->desc.cl.dev = &pdev->dev;
+		drv->q6->desc.cl.tx_block = true;
+		drv->q6->desc.cl.tx_tout = 1000;
+		drv->q6->desc.cl.knows_txdone = false;
+		drv->q6->desc.mbox = mbox_request_channel(&drv->q6->desc.cl, 0);
+		if (IS_ERR(drv->q6->desc.mbox)) {
+			ret = PTR_ERR(drv->q6->desc.mbox);
+			dev_err(&pdev->dev, "Failed to get mailbox channel %pK %d\n",
+				drv->q6->desc.mbox, ret);
+			goto err_subsys;
+		}
+	}
+
 	drv->subsys = subsys_register(&drv->subsys_desc);
 	if (IS_ERR(drv->subsys)) {
 		ret = PTR_ERR(drv->subsys);
@@ -316,19 +331,6 @@ static int pil_mss_loadable_init(struct modem_data *drv,
 		q6->vreg = devm_regulator_get(&pdev->dev, "vdd_mss");
 		if (IS_ERR(q6->vreg))
 			return PTR_ERR(q6->vreg);
-
-		ret = regulator_set_voltage(q6->vreg, VDD_MSS_UV,
-						MAX_VDD_MSS_UV);
-		if (ret)
-			dev_err(&pdev->dev, "Failed to set vreg voltage(rc:%d)\n",
-									ret);
-
-		ret = regulator_set_load(q6->vreg, 100000);
-		if (ret < 0) {
-			dev_err(&pdev->dev, "Failed to set vreg mode(rc:%d)\n",
-									ret);
-			return ret;
-		}
 	}
 
 	q6->vreg_mx = devm_regulator_get(&pdev->dev, "vdd_mx");

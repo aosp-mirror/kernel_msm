@@ -95,14 +95,6 @@
 	status = "ok";
 };
 
-&ufsphy_card {
-	status = "disabled";
-};
-
-&ufshc_card {
-	status = "disabled";
-};
-
 &pcie0 {
 	status = "disabled";
 };

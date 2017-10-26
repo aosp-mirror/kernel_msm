@@ -95,7 +95,14 @@ ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
 		sdm670-usbc-external-codec-cdp-overlay.dtbo \
 		sdm670-usbc-external-codec-mtp-overlay.dtbo \
 		sdm670-usbc-external-codec-pm660a-cdp-overlay.dtbo \
-		sdm670-usbc-external-codec-pm660a-mtp-overlay.dtbo
+		sdm670-usbc-external-codec-pm660a-mtp-overlay.dtbo \
+		sda670-cdp-overlay.dtbo \
+		sda670-mtp-overlay.dtbo \
+		sda670-pm660a-cdp-overlay.dtbo \
+		sda670-pm660a-mtp-overlay.dtbo \
+		qcs605-cdp-overlay.dtbo \
+		qcs605-mtp-overlay.dtbo \
+		qcs605-external-codec-mtp-overlay.dtbo
 
 sdm670-cdp-overlay.dtbo-base := sdm670.dtb
 sdm670-mtp-overlay.dtbo-base := sdm670.dtb
@@ -114,6 +121,14 @@ sdm670-usbc-external-codec-cdp-overlay.dtbo-base := sdm670.dtb
 sdm670-usbc-external-codec-mtp-overlay.dtbo-base := sdm670.dtb
 sdm670-usbc-external-codec-pm660a-cdp-overlay.dtbo-base := sdm670.dtb
 sdm670-usbc-external-codec-pm660a-mtp-overlay.dtbo-base := sdm670.dtb
+sda670-cdp-overlay.dtbo-base := sda670.dtb
+sda670-mtp-overlay.dtbo-base := sda670.dtb
+sda670-pm660a-cdp-overlay.dtbo-base := sda670.dtb
+sda670-pm660a-mtp-overlay.dtbo-base := sda670.dtb
+qcs605-cdp-overlay.dtbo-base := qcs605.dtb
+qcs605-mtp-overlay.dtbo-base := qcs605.dtb
+qcs605-external-codec-mtp-overlay.dtbo-base := qcs605.dtb
+
 else
 dtb-$(CONFIG_ARCH_SDM670) += sdm670-rumi.dtb \
 	sdm670-mtp.dtb \
@@ -131,7 +146,19 @@ dtb-$(CONFIG_ARCH_SDM670) += sdm670-rumi.dtb \
 	sdm670-usbc-external-codec-pm660a-mtp.dtb \
 	sdm670-usbc-mtp.dtb \
 	sdm670-usbc-pm660a-cdp.dtb \
-	sdm670-usbc-pm660a-mtp.dtb
+	sdm670-usbc-pm660a-mtp.dtb \
+	sda670-mtp.dtb \
+	sda670-cdp.dtb \
+	sda670-pm660a-mtp.dtb \
+	sda670-pm660a-cdp.dtb \
+	qcs605-mtp.dtb \
+	qcs605-cdp.dtb \
+	qcs605-external-codec-mtp.dtb
+endif
+
+ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
+else
+dtb-$(CONFIG_ARCH_MSM8953) += msm8953-mtp.dtb
 endif
 
 endif #CONFIG_BOARD_B1C1
