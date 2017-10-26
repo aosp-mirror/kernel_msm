@@ -1072,20 +1072,27 @@ int wma_vdev_start_resp_handler(void *handle, uint8_t *cmd_param_info,
 
 			param.vdev_id = resp_event->vdev_id;
 			param.assoc_id = iface->aid;
-			status = wmi_unified_vdev_up_send(wma->wmi_handle,
-						 iface->bssid,
-						 &param);
-			if (QDF_IS_STATUS_ERROR(status)) {
-				WMA_LOGE("%s:vdev_up failed vdev_id %d",
-					 __func__, resp_event->vdev_id);
-				wma->interfaces[resp_event->vdev_id].vdev_up =
-					false;
-				WMA_LOGD(FL("Setting vdev_up flag to false"));
-				cds_set_do_hw_mode_change_flag(false);
+
+			if (iface->vdev_up == true) {
+				WMA_LOGD(FL("vdev id %d is already UP for %pM"),
+					 param.vdev_id, iface->bssid);
+				status = QDF_STATUS_SUCCESS;
 			} else {
-				wma->interfaces[resp_event->vdev_id].vdev_up =
-					true;
-				WMA_LOGD(FL("Setting vdev_up flag to true"));
+				status = wmi_unified_vdev_up_send(wma->wmi_handle,
+							 iface->bssid,
+							 &param);
+				if (QDF_IS_STATUS_ERROR(status)) {
+					WMA_LOGE(FL("vdev_up failed vdev_id %d"),
+						 resp_event->vdev_id);
+					wma->interfaces[resp_event->vdev_id].vdev_up =
+						false;
+					WMA_LOGD(FL("Setting vdev_up flag to false"));
+					cds_set_do_hw_mode_change_flag(false);
+				} else {
+					wma->interfaces[resp_event->vdev_id].vdev_up =
+						true;
+					WMA_LOGD(FL("Setting vdev_up flag to true"));
+				}
 			}
 		}
 
@@ -1100,15 +1107,21 @@ int wma_vdev_start_resp_handler(void *handle, uint8_t *cmd_param_info,
 	} else if (req_msg->msg_type == WMA_OCB_SET_CONFIG_CMD) {
 		param.vdev_id = resp_event->vdev_id;
 		param.assoc_id = iface->aid;
-		if (wmi_unified_vdev_up_send(wma->wmi_handle,
+
+		if (iface->vdev_up == true) {
+			WMA_LOGD(FL("vdev id %d is already UP for %pM"),
+				  param.vdev_id, iface->bssid);
+		} else {
+			if (wmi_unified_vdev_up_send(wma->wmi_handle,
 					     iface->bssid,
 					     &param) != QDF_STATUS_SUCCESS) {
-			WMA_LOGE(FL("failed to send vdev up"));
-			cds_set_do_hw_mode_change_flag(false);
-			return -EEXIST;
+				WMA_LOGE(FL("failed to send vdev up"));
+				cds_set_do_hw_mode_change_flag(false);
+				return -EEXIST;
+			}
+			iface->vdev_up = true;
+			WMA_LOGD(FL("Setting vdev_up flag to true"));
 		}
-		iface->vdev_up = true;
-		WMA_LOGD(FL("Setting vdev_up flag to true"));
 
 		wma_ocb_start_resp_ind_cont(wma);
 	}
