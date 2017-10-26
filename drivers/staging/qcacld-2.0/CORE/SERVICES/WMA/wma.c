@@ -17060,6 +17060,8 @@ static wmi_buf_t wma_setup_install_key_cmd(tp_wma_handle wma_handle,
 	cmd->key_ix = key_params->key_idx;
 	WMI_CHAR_ARRAY_TO_MAC_ADDR(key_params->peer_mac,
 				   &cmd->peer_macaddr);
+	vos_mem_copy(&cmd->key_rsc_counter,
+		&key_params->key_rsc[0], sizeof(uint64_t));
 	if (key_params->unicast)
 		cmd->key_flags |= PAIRWISE_USAGE;
 	else
@@ -17190,6 +17192,9 @@ static wmi_buf_t wma_setup_install_key_cmd(tp_wma_handle wma_handle,
 		 key_params->key_idx, key_params->key_type, key_params->key_len,
 		 key_params->unicast, key_params->peer_mac,
 		 key_params->def_key_idx);
+	WMA_LOGD("keyrsc param key_seq_counter_h:0x%x key_seq_counter_l: 0x%x",
+		cmd->key_rsc_counter.key_seq_counter_h,
+		cmd->key_rsc_counter.key_seq_counter_l);
 
 	return buf;
 }
@@ -17263,6 +17268,10 @@ static void wma_set_bsskey(tp_wma_handle wma_handle, tpSetBssKeyParams key_info)
 			key_params.key_idx = key_info->key[i].keyId;
 
 		key_params.key_len = key_info->key[i].keyLength;
+		vos_mem_copy(key_params.key_rsc,
+			key_info->key[i].keyRsc,
+			SIR_MAC_MAX_KEY_RSC_LEN);
+
 		if (key_info->encType == eSIR_ED_TKIP) {
 			vos_mem_copy(key_params.key_data,
 				     key_info->key[i].key, 16);
