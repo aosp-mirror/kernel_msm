@@ -25,7 +25,6 @@
 		qcom,msm-codec-type = "internal";
 		qcom,msm-ext-pa = "primary";
 		qcom,msm-mclk-freq = <9600000>;
-		qcom,msm-micbias1-ext-cap;
 		qcom,split-a2dp;
 		qcom,msm-afe-clk-ver = <1>;
 		qcom,audio-routing =
