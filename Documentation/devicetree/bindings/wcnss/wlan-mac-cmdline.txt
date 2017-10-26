@@ -1,0 +1,25 @@
+* WLAN MAC address helper driver
+
+This driver retrieves the WLAN MAC address(es) from the kernel
+command-line when the system starts.
+
+The driver looks for a DT node called 'board-info', and expects the
+following properties within:
+
+- goog,wlan-mac-0-cmdline-arg:
+    The key string specifing the command-line argument for the first
+    WLAN MAC address.
+
+Optional properties:
+- goog,wlan-mac-1-cmdline-arg:
+    The key string specifing the command-line argument for the second
+    WLAN MAC address.
+
+Example:
+
+/ {
+	board-info {
+		goog,wlan-mac-0-cmdline-arg = "wifimac0";
+		goog,wlan-mac-1-cmdline-arg = "wifimac1";
+	};
+};

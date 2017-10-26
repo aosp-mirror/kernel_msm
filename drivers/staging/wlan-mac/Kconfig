@@ -1,0 +1,9 @@
+#
+# WLAN Mac Configuraiton
+#
+config WLAN_MAC_CMDLINE
+	bool "Read WiFi MAC addresses from the kernel command-line."
+	default n
+	help
+	  Say Y here if you want to read the WiFi MAC addresses from
+          the kernel command-line.
