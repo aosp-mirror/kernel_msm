@@ -15,6 +15,7 @@
 #include <linux/gpio.h>
 #include <linux/kernel.h>
 #include <linux/delay.h>
+#include <linux/firmware.h>
 #include <linux/i2c.h>
 #include <linux/of.h>
 #include <linux/of_gpio.h>
@@ -22,6 +23,8 @@
 #include <linux/timer.h>
 #include <linux/time.h>
 #include <linux/rtc.h>
+
+#include "sop716_firmware.h"
 
 #define SOP716_I2C_DATA_LENGTH               8
 
@@ -37,9 +40,6 @@
 #define CMD_SOP716_MAX                       10
 
 #define SOP716_CMD_READ_RETRY                10
-
-#define MAJOR_VER 1
-#define MINOR_VER 12
 
 struct sop716_command {
 	char *desc;
@@ -790,9 +790,9 @@ static int sop716_config_gpios(struct i2c_client *client)
 	return 0;
 }
 
-static void sop716_firmware_update(struct sop716_info *si)
+static void sop716_firmware_update(struct sop716_info *si, const u8 *fw)
 {
-	extern int msp430_firmware_update_start(struct device *dev);
+	int err;
 
 	usleep_range(1, 1000);
 	gpio_set_value(si->gpio_reset, 1);
@@ -812,13 +812,15 @@ static void sop716_firmware_update(struct sop716_info *si)
 	gpio_set_value(si->gpio_bslen, 0);
 	usleep_range(1, 1000);
 
-	msp430_firmware_update_start(si->dev);
-
-	gpio_set_value(si->gpio_bslen, 0);
-	gpio_set_value(si->gpio_reset, 1);
-	usleep_range(1, 1000);
-	gpio_set_value(si->gpio_reset, 0); /* user program starts */
-	msleep(100);
+	err = sop716fw_update_firmware(si->client, fw);
+	if (err) {
+		pr_warn("%s: failed to update firmware\n", __func__);
+		gpio_set_value(si->gpio_bslen, 0);
+		gpio_set_value(si->gpio_reset, 1);
+		usleep_range(1, 1000);
+		gpio_set_value(si->gpio_reset, 0); /* user program starts */
+		msleep(100);
+	}
 }
 
 static void sop716_update_fw_work(struct work_struct *work)
@@ -826,18 +828,31 @@ static void sop716_update_fw_work(struct work_struct *work)
 	struct sop716_info *si = container_of(work,
 			struct sop716_info, fw_work);
 	u8 data[SOP716_I2C_DATA_LENGTH] = {0, };
-	int major, minor;
+	u8 major, minor, img_major, img_minor;
 	int err;
 	int retry = SOP716_CMD_READ_RETRY;
+	const struct firmware *fw_entry = NULL;
+
+	err = request_firmware(&fw_entry, "sop716.fw", si->dev);
+	if (err) {
+		pr_err("%s: cannot read firmware\n", __func__);
+		return;
+	};
+
+	sop716fw_validate_firmware(fw_entry->data, &img_major, &img_minor);
+	if (!img_major && !img_minor) {
+		pr_err("%s: wrong firmware file\n", __func__);
+	}
 
 	mutex_lock(&si->lock);
 	sop716_read(si, CMD_SOP716_READ_FW_VERSION, data);
 
-	major = (int)data[1];
-	minor = (int)data[2];
+	major = data[1];
+	minor = data[2];
 
-	pr_info("sop firmware version: v%d.%d\n", major, minor);
-	if (major == MAJOR_VER && minor == MINOR_VER)
+	pr_info("sop firmware version: device v%d.%d, image v%d.%d\n",
+			major, minor, img_major, img_minor);
+	if (major == img_major && minor == img_minor)
 		goto out;
 
 	/* Update FW */
@@ -864,7 +879,7 @@ static void sop716_update_fw_work(struct work_struct *work)
 	/* wait for hands move */
 	msleep(2000); /* 2 seconds */
 
-	sop716_firmware_update(si);
+	sop716_firmware_update(si, fw_entry->data);
 
 	/* boot up time: about 400ms */
 	msleep(400);
@@ -896,6 +911,7 @@ static void sop716_update_fw_work(struct work_struct *work)
 			major, minor, data[1], data[2]);
 out:
 	mutex_unlock(&si->lock);
+	release_firmware(fw_entry);
 }
 
 static void sop716_update_sysclock_work(struct work_struct *work)
