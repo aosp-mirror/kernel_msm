@@ -45,6 +45,11 @@
 		qca,bt-vdd-pa-current-level = <1>; /* LPM/PFM */
 		qca,bt-vdd-ldo-current-level = <1>; /* LPM/PFM */
 	};
+
+	board-info {
+		goog,wlan-mac-0-cmdline-arg = "wifimac0";
+		goog,wlan-mac-1-cmdline-arg = "wifimac1";
+	};
 };
 
 &qusb_phy0 {
