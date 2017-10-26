@@ -189,7 +189,6 @@ static int audio_effects_shared_ioctl(struct file *file, unsigned cmd,
 			pr_err("%s: Read buffer Allocation failed rc = %d\n",
 				__func__, rc);
 			rc = -ENOMEM;
-			mutex_unlock(&effects->lock);
 			goto readbuf_fail;
 		}
 		atomic_set(&effects->out_count, effects->config.output.num_buf);
@@ -204,7 +203,6 @@ static int audio_effects_shared_ioctl(struct file *file, unsigned cmd,
 		if (rc < 0) {
 			pr_err("%s: pcm read block config failed\n", __func__);
 			rc = -EINVAL;
-			mutex_unlock(&effects->lock);
 			goto cfg_fail;
 		}
 		pr_debug("%s: dec: sample_rate: %d, num_channels: %d, bit_width: %d\n",
@@ -219,7 +217,6 @@ static int audio_effects_shared_ioctl(struct file *file, unsigned cmd,
 			pr_err("%s: pcm write format block config failed\n",
 				__func__);
 			rc = -EINVAL;
-			mutex_unlock(&effects->lock);
 			goto cfg_fail;
 		}
 
@@ -353,6 +350,7 @@ ioctl_fail:
 readbuf_fail:
 	q6asm_audio_client_buf_free_contiguous(IN,
 					effects->ac);
+	mutex_unlock(&effects->lock);
 	return rc;
 cfg_fail:
 	q6asm_audio_client_buf_free_contiguous(IN,
@@ -360,6 +358,7 @@ cfg_fail:
 	q6asm_audio_client_buf_free_contiguous(OUT,
 					effects->ac);
 	effects->buf_alloc = 0;
+	mutex_unlock(&effects->lock);
 	return rc;
 }
 
