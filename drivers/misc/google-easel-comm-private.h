@@ -199,15 +199,15 @@ static inline char *easelcomm_msgid_prefix(
 /* Handle DMA_SG command */
 extern void easelcomm_handle_cmd_dma_sg(
 	struct easelcomm_service *service, char *command_args,
-	int command_arg_len);
+	size_t command_arg_len);
 /* Handle DMA_XFER command */
 extern void easelcomm_handle_cmd_dma_xfer(
 	struct easelcomm_service *service, char *command_args,
-	int command_arg_len);
+	size_t command_arg_len);
 /* Handle DMA_DONE command */
 extern void easelcomm_handle_cmd_dma_done(
 	struct easelcomm_service *service, char *command_args,
-	int command_arg_len);
+	size_t command_arg_len);
 /* Handle RECVDMA ioctl */
 extern int easelcomm_receive_dma(
 	struct easelcomm_service *service,
@@ -232,7 +232,7 @@ extern struct easelcomm_message_metadata *easelcomm_find_remote_message(
 /* Start a new command to be sent to remote */
 extern int easelcomm_start_cmd(
 	struct easelcomm_service *service, int command_code,
-	int command_arg_len);
+	size_t command_arg_len);
 /* Add command arguments to the in-progress command */
 extern int easelcomm_append_cmd_args(
 	struct easelcomm_service *service, void *cmd_args,

@@ -581,7 +581,7 @@ static void easelcomm_handle_cmd_ack_shutdown(void)
  */
 static void easelcomm_handle_cmd_send_msg(
 	struct easelcomm_service *service, char *command_args,
-	int command_arg_len)
+	size_t command_arg_len)
 {
 	struct easelcomm_kmsg *cmd_msg;
 	struct easelcomm_kmsg *new_msg;
@@ -680,7 +680,7 @@ static void easelcomm_cmd_channel_remote_set_ready(void)
  * channel.
  */
 static void easelcomm_handle_cmd_link_init(
-	char *command_args, int command_arg_len)
+	char *command_args, size_t command_arg_len)
 {
 	dev_dbg(easelcomm_miscdev.this_device, "recv cmd LINK_INIT\n");
 	easelcomm_cmd_channel_remote_set_ready();
@@ -1191,12 +1191,12 @@ exit:
  */
 int easelcomm_start_cmd(
 	struct easelcomm_service *service, int command_code,
-	int command_arg_len)
+	size_t command_arg_len)
 {
 	struct easelcomm_cmd_channel_remote *channel =
 		&cmd_channel_remote;
 	struct easelcomm_cmd_header cmdhdr;
-	unsigned int cmdbuf_size =
+	size_t cmdbuf_size =
 	    sizeof(struct easelcomm_cmd_header) + command_arg_len;
 	int ret;
 
@@ -1222,13 +1222,14 @@ int easelcomm_start_cmd(
 			goto error;
 	}
 
-	dev_dbg(easelcomm_miscdev.this_device, "cmdchan producer sending cmd seq#%llu svc=%u cmd=%u arglen=%u off=%llx\n",
+	dev_dbg(easelcomm_miscdev.this_device,
+		"cmdchan producer sending cmd seq#%llu svc=%u cmd=%u arglen=%zu off=%llx\n",
 		channel->write_seqnbr, service->service_id, command_code,
 		command_arg_len, channel->write_offset);
 	cmdhdr.service_id = service->service_id;
 	cmdhdr.sequence_nbr = channel->write_seqnbr;
 	cmdhdr.command_code = command_code;
-	cmdhdr.command_arg_len = command_arg_len;
+	cmdhdr.command_arg_len = (uint32_t)command_arg_len;
 
 	/*
 	 * Send the command header. Subsequent calls to

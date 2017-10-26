@@ -30,7 +30,7 @@
  */
 void easelcomm_handle_cmd_dma_sg(
 	struct easelcomm_service *service, char *command_args,
-	int command_arg_len)
+	size_t command_arg_len)
 {
 	struct easelcomm_dma_sg_header *sg_header;
 	void *cmd_sg;
@@ -106,7 +106,7 @@ EXPORT_SYMBOL(easelcomm_handle_cmd_dma_sg);
  */
 void easelcomm_handle_cmd_dma_xfer(
 	struct easelcomm_service *service, char *command_args,
-	int command_arg_len)
+	size_t command_arg_len)
 {
 	struct easelcomm_dma_xfer_arg *dma_xfer;
 	struct easelcomm_message_metadata *msg_metadata;
@@ -158,7 +158,7 @@ EXPORT_SYMBOL(easelcomm_handle_cmd_dma_xfer);
  */
 void easelcomm_handle_cmd_dma_done(
 	struct easelcomm_service *service, char *command_args,
-	int command_arg_len)
+	size_t command_arg_len)
 {
 	struct easelcomm_dma_done_arg *dma_done_arg;
 	struct easelcomm_message_metadata *msg_metadata;
