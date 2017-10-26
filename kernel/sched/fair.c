@@ -4731,16 +4731,19 @@ find_min_capacity(struct energy_env *eenv)
 static int find_new_capacity(struct energy_env *eenv)
 {
 	const struct sched_group_energy const *sge = eenv->sg->sge;
+	int idx, max_idx = sge->nr_cap_states - 1;
 	unsigned long util = group_max_util(eenv);
-	int idx;
+
+	/* default is max_cap if we don't find a match */
+	eenv->cap_idx = max_idx;
 
 	for (idx = 0; idx < sge->nr_cap_states; idx++) {
-		if (sge->cap_states[idx].cap >= util)
+		if (sge->cap_states[idx].cap >= util) {
+			/* Keep track of SG's capacity index */
+			eenv->cap_idx = idx;
 			break;
+		}
 	}
-	/* Keep track of SG's capacity index */
-	eenv->cap_idx = idx;
-
 	/* Update SG's capacity based on boost value of the current task */
 	eenv->cap_idx = find_min_capacity(eenv);
 
