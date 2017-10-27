@@ -6386,6 +6386,13 @@ dhd_free(dhd_pub_t *dhdp)
 }
 
 #ifdef CUSTOM_BCMDHD_KICKSTART
+static void dhd_kickstart_work_func(struct work_struct *work)
+{
+	dhd_wifi_platform_register_drv();
+}
+
+static DECLARE_WORK(dhd_kickstart_work, dhd_kickstart_work_func);
+
 static int dhd_kickstart_handler(const char *kmessage,
 		struct kernel_param *kp)
 {
@@ -6393,7 +6400,8 @@ static int dhd_kickstart_handler(const char *kmessage,
 
 	err = param_set_int(kmessage, kp);
 	if (!err)
-		err = dhd_wifi_platform_register_drv();
+		schedule_work(&dhd_kickstart_work);
+
 	return err;
 }
 
