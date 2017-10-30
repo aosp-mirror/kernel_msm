@@ -34,6 +34,7 @@ struct adsp_loader_private {
 	void *pil_h;
 	struct kobject *boot_adsp_obj;
 	struct attribute_group *attr_group;
+	struct work_struct do_work;
 };
 
 static struct kobj_attribute adsp_boot_attribute =
@@ -146,20 +147,43 @@ fail:
 	return;
 }
 
+static void adsp_loader_do_work(struct work_struct *work)
+{
+	pr_debug("%s: going to call adsp_loader_do\n", __func__);
+	adsp_loader_do(adsp_private);
+}
 
 static ssize_t adsp_boot_store(struct kobject *kobj,
 	struct kobj_attribute *attr,
 	const char *buf,
 	size_t count)
 {
+	struct adsp_loader_private *priv = NULL;
 	int boot = 0;
-	sscanf(buf, "%du", &boot);
+	int ret;
+
+	if (!adsp_private) {
+		pr_err("%s: no device\n", __func__);
+		return -ENODEV;
+	}
+
+	priv = platform_get_drvdata(adsp_private);
+	if (!priv) {
+		pr_err("%s: no private data\n", __func__);
+		return -ENODEV;
+	}
+
+	ret = kstrtoint(buf, 10, &boot);
+	if (ret) {
+		pr_err("%s: invalid value\n", __func__);
+		return ret;
+	}
 
 	if (boot == BOOT_CMD) {
-		pr_debug("%s: going to call adsp_loader_do\n", __func__);
-		adsp_loader_do(adsp_private);
+		schedule_work(&priv->do_work);
 	} else if (boot == IMAGE_UNLOAD_CMD) {
 		pr_debug("%s: going to call adsp_unloader\n", __func__);
+		flush_work(&priv->do_work);
 		adsp_loader_unload(adsp_private);
 	}
 	return count;
@@ -207,6 +231,8 @@ static int adsp_loader_init_sysfs(struct platform_device *pdev)
 		ret = -ENOMEM;
 		goto error_return;
 	}
+
+	INIT_WORK(&priv->do_work, adsp_loader_do_work);
 
 	priv->attr_group->attrs = attrs;
 
@@ -258,6 +284,8 @@ static int adsp_loader_remove(struct platform_device *pdev)
 		kobject_del(priv->boot_adsp_obj);
 		priv->boot_adsp_obj = NULL;
 	}
+
+	adsp_private = NULL;
 
 	return 0;
 }
