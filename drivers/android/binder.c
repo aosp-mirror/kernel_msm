@@ -1566,6 +1566,42 @@ static struct binder_ref *binder_get_ref_olocked(struct binder_proc *proc,
 	return NULL;
 }
 
+static void dump_ref_desc_tree(struct binder_ref *new_ref)
+{
+	struct binder_proc *proc = new_ref->proc;
+	uint32_t desc = new_ref->data.desc;
+	struct rb_node *n, *p;
+	int i = 0;
+
+	pr_info("BUG.%d:%d: dump of refs_by_desc rb tree, new desc=%u\n",
+			proc->pid, current->pid, desc);
+	for (n = rb_first(&proc->refs_by_desc); n != NULL; n = rb_next(n)) {
+		struct binder_ref *left=NULL, *right=NULL, *parent=NULL;
+		struct binder_ref *ref;
+
+		ref = rb_entry(n, struct binder_ref, rb_node_desc);
+		if (n->rb_left)
+			left = rb_entry(n->rb_left, struct binder_ref,
+					rb_node_desc);
+		if (n->rb_right)
+			right = rb_entry(n->rb_right, struct binder_ref,
+					 rb_node_desc);
+		p = rb_parent(n);
+		if (p)
+			parent = rb_entry(p, struct binder_ref, rb_node_desc);
+
+		pr_info("%d: id %d desc %u%s%s n %d s %d w %d l %d r %d p %d\n",
+			i++, ref->data.debug_id, ref->data.desc,
+			(n == proc->refs_by_desc.rb_node) ? " (ROOT)" : "",
+			(ref->data.desc == desc) ? " (MATCH)" : "",
+			ref->node->debug_id,
+			ref->data.strong, ref->data.weak,
+			left ? left->data.debug_id : -1,
+			right ? right->data.debug_id : -1,
+			parent ? parent->data.debug_id : -1);
+	}
+}
+
 /**
  * binder_get_ref_for_node_olocked() - get the ref associated with given node
  * @proc:	binder_proc that owns the ref
@@ -1633,8 +1669,10 @@ static struct binder_ref *binder_get_ref_for_node_olocked(
 			p = &(*p)->rb_left;
 		else if (new_ref->data.desc > ref->data.desc)
 			p = &(*p)->rb_right;
-		else
+		else {
+			dump_ref_desc_tree(new_ref);
 			BUG();
+		}
 	}
 	rb_link_node(&new_ref->rb_node_desc, parent, p);
 	rb_insert_color(&new_ref->rb_node_desc, &proc->refs_by_desc);
