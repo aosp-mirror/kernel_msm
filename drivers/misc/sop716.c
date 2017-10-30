@@ -41,6 +41,8 @@
 
 #define SOP716_CMD_READ_RETRY                10
 
+#define SOP716_RESET_DELAY_MS                400
+
 struct sop716_command {
 	char *desc;
 	u8 size;
@@ -66,6 +68,7 @@ struct sop716_info {
 
 	struct work_struct fw_work;
 	struct work_struct sysclock_work;
+	struct work_struct init_work;
 	struct mutex lock;
 };
 
@@ -169,12 +172,12 @@ static int sop716_read(struct sop716_info *si, u8 reg, u8 *val)
 	return ret;
 }
 
-static ssize_t sop716_reset_show(struct device *dev,
-			struct device_attribute *attr, char *buf)
+static void sop716_hw_reset(struct sop716_info *si)
 {
-	struct sop716_info *si = dev_get_drvdata(dev);
-
-	return snprintf(buf, PAGE_SIZE, "%d", si->reset_status);
+	gpio_set_value(si->gpio_reset, 1);
+	usleep_range(1, 1000);
+	gpio_set_value(si->gpio_reset, 0);
+	msleep(SOP716_RESET_DELAY_MS);
 }
 
 static ssize_t sop716_reset_store(struct device *dev,
@@ -182,26 +185,22 @@ static ssize_t sop716_reset_store(struct device *dev,
 			size_t count)
 {
 	struct sop716_info *si = dev_get_drvdata(dev);
-	int status, rc;
+	int reset;
+	int rc;
 
-	rc = kstrtoint(buf, 10, &status);
+	rc = kstrtoint(buf, 10, &reset);
 	if (rc) {
-		pr_err("%s: kstrtoint failed. rc:%d\n", __func__, rc);
+		pr_err("%s: invalid value\n", __func__);
 		return rc;
 	}
 
-	if (status > 1 || status < 0) {
-		pr_err("%s: Error!!! reset_status:%d\n", __func__, status);
-		return -EINVAL;
+	if (reset) {
+		mutex_lock(&si->lock);
+		sop716_hw_reset(si);
+		mutex_unlock(&si->lock);
 	}
 
-	mutex_lock(&si->lock);
-	si->reset_status = status;
-	gpio_set_value(si->gpio_reset, si->reset_status);
-	mutex_unlock(&si->lock);
-
-	pr_debug("%s: count:%d reset:%d\n", __func__, count, si->reset_status);
-
+	pr_debug("%s: reset %d\n", __func__, reset);
 	return count;
 }
 
@@ -683,8 +682,7 @@ static ssize_t sop716_watch_mode_store(struct device *dev,
 	return count;
 }
 
-static DEVICE_ATTR(set_reset, S_IRUGO | S_IWUSR,
-		sop716_reset_show, sop716_reset_store);
+static DEVICE_ATTR(reset, S_IWUSR, NULL, sop716_reset_store);
 static DEVICE_ATTR(set_time, S_IWUSR, NULL, sop716_time_store);
 static DEVICE_ATTR(motor_init, S_IWUSR, NULL, sop716_motor_init_store);
 static DEVICE_ATTR(motor_move, S_IWUSR, NULL, sop716_motor_move_store);
@@ -703,7 +701,7 @@ static DEVICE_ATTR(watch_mode, S_IWUSR | S_IRUGO, sop716_watch_mode_show,
 		sop716_watch_mode_store);
 
 static struct attribute *sop716_dev_attrs[] = {
-	&dev_attr_set_reset.attr,
+	&dev_attr_reset.attr,
 	&dev_attr_set_time.attr,
 	&dev_attr_motor_init.attr,
 	&dev_attr_motor_move.attr,
@@ -881,8 +879,8 @@ static void sop716_update_fw_work(struct work_struct *work)
 
 	sop716_firmware_update(si, fw_entry->data);
 
-	/* boot up time: about 400ms */
-	msleep(400);
+	/* boot up time */
+	msleep(SOP716_RESET_DELAY_MS);
 
 	/* restore time */
 	data[0] = CMD_SOP716_SET_CURRENT_TIME;
@@ -920,6 +918,16 @@ static void sop716_update_sysclock_work(struct work_struct *work)
 			struct sop716_info, sysclock_work);
 
 	sop716_hctosys(si);
+}
+
+static void sop716_init_work(struct work_struct *work)
+{
+	struct sop716_info *si = container_of(work,
+			struct sop716_info, init_work);
+
+	mutex_lock(&si->lock);
+	sop716_hw_reset(si);
+	mutex_unlock(&si->lock);
 }
 
 static int sop716_movement_probe(struct i2c_client *client,
@@ -962,6 +970,7 @@ static int sop716_movement_probe(struct i2c_client *client,
 
 	INIT_WORK(&si->fw_work, sop716_update_fw_work);
 	INIT_WORK(&si->sysclock_work, sop716_update_sysclock_work);
+	INIT_WORK(&si->init_work, sop716_init_work);
 
 	mutex_init(&si->lock);
 
@@ -972,6 +981,9 @@ static int sop716_movement_probe(struct i2c_client *client,
 	}
 
 	sop716_info = si;
+
+	/* hw init */
+	schedule_work(&si->init_work);
 
 	pr_info("sop716 movement probed\n");
 	return 0;
