@@ -43,12 +43,12 @@ struct cam_fd_dev {
 	bool                  probe_done;
 };
 
-static struct cam_fd_dev g_fd_dev;
+static struct cam_fd_dev *g_fd_dev;
 
 static int cam_fd_dev_open(struct v4l2_subdev *sd,
 	struct v4l2_subdev_fh *fh)
 {
-	struct cam_fd_dev *fd_dev = &g_fd_dev;
+	struct cam_fd_dev *fd_dev = g_fd_dev;
 
 	if (!fd_dev->probe_done) {
 		CAM_ERR(CAM_FD, "FD Dev not initialized, fd_dev=%pK", fd_dev);
@@ -66,7 +66,7 @@ static int cam_fd_dev_open(struct v4l2_subdev *sd,
 static int cam_fd_dev_close(struct v4l2_subdev *sd,
 	struct v4l2_subdev_fh *fh)
 {
-	struct cam_fd_dev *fd_dev = &g_fd_dev;
+	struct cam_fd_dev *fd_dev = g_fd_dev;
 
 	if (!fd_dev->probe_done) {
 		CAM_ERR(CAM_FD, "FD Dev not initialized, fd_dev=%pK", fd_dev);
@@ -93,16 +93,16 @@ static int cam_fd_dev_probe(struct platform_device *pdev)
 	struct cam_hw_mgr_intf hw_mgr_intf;
 	struct cam_node *node;
 
-	g_fd_dev.sd.internal_ops = &cam_fd_subdev_internal_ops;
+	g_fd_dev->sd.internal_ops = &cam_fd_subdev_internal_ops;
 
 	/* Initialze the v4l2 subdevice first. (create cam_node) */
-	rc = cam_subdev_probe(&g_fd_dev.sd, pdev, CAM_FD_DEV_NAME,
+	rc = cam_subdev_probe(&g_fd_dev->sd, pdev, CAM_FD_DEV_NAME,
 		CAM_FD_DEVICE_TYPE);
 	if (rc) {
 		CAM_ERR(CAM_FD, "FD cam_subdev_probe failed, rc=%d", rc);
 		return rc;
 	}
-	node = (struct cam_node *) g_fd_dev.sd.token;
+	node = (struct cam_node *) g_fd_dev->sd.token;
 
 	rc = cam_fd_hw_mgr_init(pdev->dev.of_node, &hw_mgr_intf);
 	if (rc) {
@@ -112,8 +112,8 @@ static int cam_fd_dev_probe(struct platform_device *pdev)
 	}
 
 	for (i = 0; i < CAM_CTX_MAX; i++) {
-		rc = cam_fd_context_init(&g_fd_dev.fd_ctx[i],
-			&g_fd_dev.base_ctx[i], &node->hw_mgr_intf);
+		rc = cam_fd_context_init(&g_fd_dev->fd_ctx[i],
+			&g_fd_dev->base_ctx[i], &node->hw_mgr_intf);
 		if (rc) {
 			CAM_ERR(CAM_FD, "FD context init failed i=%d, rc=%d",
 				i, rc);
@@ -121,15 +121,15 @@ static int cam_fd_dev_probe(struct platform_device *pdev)
 		}
 	}
 
-	rc = cam_node_init(node, &hw_mgr_intf, g_fd_dev.base_ctx, CAM_CTX_MAX,
+	rc = cam_node_init(node, &hw_mgr_intf, g_fd_dev->base_ctx, CAM_CTX_MAX,
 		CAM_FD_DEV_NAME);
 	if (rc) {
 		CAM_ERR(CAM_FD, "FD node init failed, rc=%d", rc);
 		goto deinit_ctx;
 	}
 
-	mutex_init(&g_fd_dev.lock);
-	g_fd_dev.probe_done = true;
+	mutex_init(&g_fd_dev->lock);
+	g_fd_dev->probe_done = true;
 
 	CAM_DBG(CAM_FD, "Camera FD probe complete");
 
@@ -137,11 +137,11 @@ static int cam_fd_dev_probe(struct platform_device *pdev)
 
 deinit_ctx:
 	for (--i; i >= 0; i--) {
-		if (cam_fd_context_deinit(&g_fd_dev.fd_ctx[i]))
+		if (cam_fd_context_deinit(&g_fd_dev->fd_ctx[i]))
 			CAM_ERR(CAM_FD, "FD context %d deinit failed", i);
 	}
 unregister_subdev:
-	if (cam_subdev_remove(&g_fd_dev.sd))
+	if (cam_subdev_remove(&g_fd_dev->sd))
 		CAM_ERR(CAM_FD, "Failed in subdev remove");
 
 	return rc;
@@ -152,7 +152,7 @@ static int cam_fd_dev_remove(struct platform_device *pdev)
 	int i, rc;
 
 	for (i = 0; i < CAM_CTX_MAX; i++) {
-		rc = cam_fd_context_deinit(&g_fd_dev.fd_ctx[i]);
+		rc = cam_fd_context_deinit(&g_fd_dev->fd_ctx[i]);
 		if (rc)
 			CAM_ERR(CAM_FD, "FD context %d deinit failed, rc=%d",
 				i, rc);
@@ -162,12 +162,12 @@ static int cam_fd_dev_remove(struct platform_device *pdev)
 	if (rc)
 		CAM_ERR(CAM_FD, "Failed in hw mgr deinit, rc=%d", rc);
 
-	rc = cam_subdev_remove(&g_fd_dev.sd);
+	rc = cam_subdev_remove(&g_fd_dev->sd);
 	if (rc)
 		CAM_ERR(CAM_FD, "Unregister failed, rc=%d", rc);
 
-	mutex_destroy(&g_fd_dev.lock);
-	g_fd_dev.probe_done = false;
+	mutex_destroy(&g_fd_dev->lock);
+	g_fd_dev->probe_done = false;
 
 	return rc;
 }
@@ -179,7 +179,7 @@ static const struct of_device_id cam_fd_dt_match[] = {
 	{}
 };
 
-static struct platform_driver cam_fd_driver = {
+struct platform_driver cam_fd_driver = {
 	.probe = cam_fd_dev_probe,
 	.remove = cam_fd_dev_remove,
 	.driver = {
@@ -191,12 +191,17 @@ static struct platform_driver cam_fd_driver = {
 
 static int __init cam_fd_dev_init_module(void)
 {
+	g_fd_dev = kzalloc(sizeof(struct cam_fd_dev), GFP_KERNEL);
+	if (!g_fd_dev)
+		return -ENOMEM;
 	return platform_driver_register(&cam_fd_driver);
 }
 
 static void __exit cam_fd_dev_exit_module(void)
 {
 	platform_driver_unregister(&cam_fd_driver);
+	kfree(g_fd_dev);
+	g_fd_dev = NULL;
 }
 
 module_init(cam_fd_dev_init_module);
