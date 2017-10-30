@@ -2161,56 +2161,65 @@ static void fts_user_report_event_handler(struct fts_ts_info *info, unsigned cha
 
 /**
  * Bottom Half Interrupt Handler function
- * This handler is called each time there is at least one new event in the FIFO and the interrupt pin of the IC goes low.
- * It will read all the events from the FIFO and dispatch them to the proper event handler according the event ID
+ * This handler is called each time there is at least one new event in the FIFO
+ * and the interrupt pin of the IC goes low. It will read all the events from
+ * the FIFO and dispatch them to the proper event handler according the event ID
  */
 static void fts_event_handler(struct work_struct *work) {
-    struct fts_ts_info *info;
-    int error=0, count=0;
-    unsigned char regAdd;
-    unsigned char data[FIFO_EVENT_SIZE] = {0};
-    unsigned char eventId;
+	struct fts_ts_info *info;
+	int error = 0, count = 0;
+	unsigned char regAdd = FIFO_CMD_READALL;
+	unsigned char data[FIFO_EVENT_SIZE * FIFO_DEPTH];
+	unsigned char eventId;
+	const unsigned char EVENTS_REMAINING_POS = 7;
+	const unsigned char EVENTS_REMAINING_MASK = 0x1F;
+	unsigned char events_remaining = 0;
+	unsigned char *evt_data;
 
-    event_dispatch_handler_t event_handler;
+	event_dispatch_handler_t event_handler;
 
-    info = container_of(work, struct fts_ts_info, work);
+	info = container_of(work, struct fts_ts_info, work);
 
+	wake_lock_timeout(&info->wakelock, HZ);
 
+	/* Read the first FIFO event and the number of events remaining */
+	error = fts_writeReadU8UX(regAdd, 0, 0, data, FIFO_EVENT_SIZE,
+				  DUMMY_FIFO);
+	events_remaining = data[EVENTS_REMAINING_POS] & EVENTS_REMAINING_MASK;
+	events_remaining = (events_remaining > FIFO_DEPTH - 1) ?
+				FIFO_DEPTH - 1 : events_remaining;
 
-	//read the FIFO and parsing events
+	/* Drain the rest of the FIFO, up to 31 events */
+	if (error == OK && events_remaining > 0) {
+		error = fts_writeReadU8UX(regAdd, 0, 0, &data[FIFO_EVENT_SIZE],
+					  FIFO_EVENT_SIZE * events_remaining,
+					  DUMMY_FIFO);
+	}
+	if (error != OK) {
+		logError(1,
+		    "Error (%d) while reading from FIFO in fts_event_handler",
+		    error);
+	} else {
+		for (count = 0; count < events_remaining + 1; count++) {
+			evt_data = &data[count * FIFO_EVENT_SIZE];
 
-    wake_lock_timeout(&info->wakelock, HZ);
+			if (evt_data[0] == EVT_ID_NOEVENT)
+				break;
 
-    regAdd = FIFO_CMD_READONE;
+			eventId = evt_data[0] >> 4;
 
-	for (count = 0; count < FIFO_DEPTH; count++)
-	{
-		error = fts_writeReadU8UX(regAdd, 0, 0, data, FIFO_EVENT_SIZE, DUMMY_FIFO);
-		if (error == OK && data[0] != EVT_ID_NOEVENT)
-			eventId = data[0] >> 4;
-		else{
-			//logError(0, "%s %s NO event = %02X %02X %02X %02X %02X %02X %02X %02X \n", tag, __func__, data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7]);
-			break;
+			/* Ensure event ID is within bounds */
+			if (eventId < NUM_EVT_ID) {
+				event_handler =
+					info->event_dispatch_table[eventId];
+				event_handler(info, (evt_data));
+			}
 		}
-		//if(data[7]&0x20)
-		//logError(1, "%s %s overflow ID = %02X  Last = %02X \n", tag, __func__, data[0], data[7]);
-
-
-
-
-		if (eventId < NUM_EVT_ID) {												//this check prevent array out of index in case of no sense event ID
-			event_handler = info->event_dispatch_table[eventId];
-			event_handler(info, (data));
-		}
-
 	}
 	input_sync(info->input_dev);
 
-
-    //re-enable interrupts
-
-    fts_interrupt_enable(info);
-
+	/* Re-enable interrupts */
+	fts_interrupt_enable(info);
 }
 /** @}*/
 
