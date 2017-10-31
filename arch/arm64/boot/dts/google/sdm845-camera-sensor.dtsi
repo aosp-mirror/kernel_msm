@@ -180,6 +180,7 @@
 		sensor-position-pitch = <0>;
 		sensor-position-yaw = <180>;
 		actuator-src = <&actuator_front>;
+		led-flash-src = <&led_flash_front>;
 		cam_vio-supply = <&pm8998_lvs1>;
 		cam_vana-supply = <&pmi8998_bob>;
 		cam_vdig-supply = <&pm8998_s3>;
@@ -223,6 +224,7 @@
 		sensor-position-roll = <90>;
 		sensor-position-pitch = <0>;
 		sensor-position-yaw = <180>;
+		led-flash-src = <&led_flash_rear>;
 		cam_vdig-supply = <&pm8998_s3>;
 		cam_vio-supply = <&pm8998_lvs1>;
 		cam_vana-supply = <&pmi8998_bob>;
