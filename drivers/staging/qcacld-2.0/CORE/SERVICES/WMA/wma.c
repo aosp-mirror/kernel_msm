@@ -5313,6 +5313,12 @@ static void wma_send_bcn_buf_ll(tp_wma_handle wma,
 		WMA_LOGE("%s: Invalid beacon buffer", __func__);
 		return;
 	}
+	if (WMI_UNIFIED_NOA_ATTR_NUM_DESC_GET(p2p_noa_info) >
+			WMI_P2P_MAX_NOA_DESCRIPTORS) {
+		WMA_LOGE("%s: Too many descriptors %d", __func__,
+			 WMI_UNIFIED_NOA_ATTR_NUM_DESC_GET(p2p_noa_info));
+		return;
+	}
 
 	wmi_buf = wmi_buf_alloc(wma->wmi_handle, sizeof(*cmd));
 	if (!wmi_buf) {
