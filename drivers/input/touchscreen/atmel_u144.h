@@ -782,16 +782,16 @@ struct mxt_data {
 };
 
 #define TOUCH_INFO_MSG(fmt, args...) \
-	printk(KERN_INFO "Touch atmel: " fmt, ##args)
+	pr_info("Touch atmel: " fmt, ##args)
 #define TOUCH_DEBUG_MSG(fmt, args...) \
-	printk(KERN_DEBUG "Touch atmel: " fmt, ##args)
+	pr_debug("Touch atmel: " fmt, ##args)
 #define TOUCH_WARN_MSG(fmt, args...) \
-	printk(KERN_WARNING "Touch atmel: " fmt, ##args)
+	pr_warn("Touch atmel: " fmt, ##args)
 #define TOUCH_ERR_MSG(fmt, args...) \
-	printk(KERN_ERR "Touch atmel: [%s %d] " fmt, \
+	pr_err("Touch atmel: [%s %d] " fmt, \
 			__FUNCTION__, __LINE__, ##args)
 #define TOUCH_PATCH_INFO_MSG(fmt, args...) \
-	printk(KERN_INFO "Touch atmel: Patch: " fmt, ##args)
+	pr_info("Touch atmel: Patch: " fmt, ##args)
 
 int mxt_initialize_t100_input_device(struct mxt_data *data);
 int mxt_request_firmware_work(const struct firmware *fw,void *context);
