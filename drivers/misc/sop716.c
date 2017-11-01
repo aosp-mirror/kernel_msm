@@ -916,8 +916,16 @@ static void sop716_update_sysclock_work(struct work_struct *work)
 {
 	struct sop716_info *si = container_of(work,
 			struct sop716_info, sysclock_work);
+	int err;
 
-	sop716_hctosys(si);
+	err = sop716_hctosys(si);
+	if (err) {
+		/* try it again with reset */
+		mutex_lock(&si->lock);
+		sop716_hw_reset(si);
+		mutex_unlock(&si->lock);
+		sop716_hctosys(si);
+	}
 }
 
 static void sop716_init_work(struct work_struct *work)
