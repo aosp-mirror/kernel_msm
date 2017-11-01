@@ -451,6 +451,7 @@ struct mxt_platform_data {
 	unsigned int lcd_x;
 	unsigned int lcd_y;
 	u8 fw_ver[3];
+	u8 fw_ver_ic[2];
 	u8 product[10];
 	unsigned int ref_reg_weight_val;
 	unsigned int butt_check_enable;

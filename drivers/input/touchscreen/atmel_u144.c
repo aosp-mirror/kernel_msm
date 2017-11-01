@@ -2126,10 +2126,12 @@ static int mxt_probe_regulators(struct mxt_data *data)
 static void mxt_read_fw_version(struct mxt_data *data)
 {
 	TOUCH_INFO_MSG("==================================\n");
-	TOUCH_INFO_MSG("Firmware Version = %d.%02d.%02d \n",
+	TOUCH_INFO_MSG("Firmware Version(Image) = %d.%02d \n",
 			data->pdata->fw_ver[0],
-			data->pdata->fw_ver[1],
-			data->pdata->fw_ver[2]);
+			data->pdata->fw_ver[1]);
+	TOUCH_INFO_MSG("Firmware Version(IC) = %d.%02d \n",
+			data->pdata->fw_ver_ic[0],
+			data->pdata->fw_ver_ic[1]);
 	TOUCH_INFO_MSG("FW Product       = %s \n", data->pdata->product);
 	TOUCH_INFO_MSG("Binary Version   = %u.%u.%02X \n",
 			data->info->version >> 4,
@@ -2145,9 +2147,8 @@ static void mxt_read_fw_version(struct mxt_data *data)
 /* Firmware Version is returned as Major.Minor.Build */
 static ssize_t mxt_fw_version_show(struct mxt_data *data, char *buf)
 {
-	return (ssize_t)scnprintf(buf, PAGE_SIZE, "%u.%u.%02X\n",
-		 data->info->version >> 4, data->info->version & 0xf,
-		 data->info->build);
+	return (ssize_t)scnprintf(buf, PAGE_SIZE, "%d.%02d\n",
+		 data->pdata->fw_ver_ic[0], data->pdata->fw_ver_ic[1]);
 }
 
 /* Hardware Version is returned as FamilyID.VariantID */
@@ -2176,10 +2177,12 @@ static ssize_t mxt_info_show(struct mxt_data *data, char *buf)
 
 	mxt_read_fw_version(data);
 
-	ret += sprintf(buf+ret, "Firmware Version = %d.%02d.%02d\n",
+	ret += sprintf(buf+ret, "Firmware Version(Image)= %d.%02d\n",
 			data->pdata->fw_ver[0],
-			data->pdata->fw_ver[1],
-			data->pdata->fw_ver[2]);
+			data->pdata->fw_ver[1]);
+	ret += sprintf(buf+ret, "Firmware Version(IC)= %d.%02d\n",
+			data->pdata->fw_ver_ic[0],
+			data->pdata->fw_ver_ic[1]);
 	ret += sprintf(buf+ret, "FW Product       = %s\n",
 			data->pdata->product);
 	ret += sprintf(buf+ret, "Binary Version   = %u.%u.%02X\n",
@@ -3862,6 +3865,7 @@ static int mxt_write_config(struct mxt_data *data)
 static int mxt_config_initialize(struct mxt_data *data)
 {
 	int ret = 0;
+	struct mxt_object *object = NULL;
 
 	TOUCH_INFO_MSG("%s \n", __func__);
 
@@ -3876,6 +3880,16 @@ static int mxt_config_initialize(struct mxt_data *data)
 		if (ret)
 			TOUCH_ERR_MSG("Failed to initialize\n");
 	}
+
+	object = mxt_get_object(data, MXT_SPT_USERDATA_T38);
+	if (!object) {
+		TOUCH_ERR_MSG("Failed to get object\n");
+		return -EINVAL;
+	}
+
+	ret = __mxt_read_reg(data->client,
+			object->start_address + 3, 2, &data->pdata->fw_ver_ic);
+
 out:
 	return ret;
 }
