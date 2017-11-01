@@ -1129,16 +1129,12 @@ VOS_STATUS WLANTL_MSDUReorder
    ucFwdIdx  = (v_U8_t)WDA_GET_RX_REORDER_FWD_IDX(pvBDHeader);
    CSN       = (v_U16_t)WDA_GET_RX_REORDER_CUR_PKT_SEQ_NO(pvBDHeader);
 
-
-
-#ifdef WLANTL_HAL_VOLANS
    /* Replay check code : check whether replay check is needed or not */
    if(VOS_TRUE == pClientSTA->ucIsReplayCheckValid)
    {
            /* Getting 48-bit replay counter from the RX BD */
-           ullreplayCounter = WDA_DS_GetReplayCounter(aucBDHeader);
+           ullreplayCounter = WDA_DS_GetReplayCounter(pvBDHeader);
    }
-#endif 
 
 #ifdef WLANTL_REORDER_DEBUG_MSG_ENABLE
    TLLOGE(VOS_TRACE(VOS_MODULE_ID_TL, VOS_TRACE_LEVEL_ERROR,"opCode %d SI %d, FI %d, CI %d seqNo %d", ucOpCode, ucSlotIdx, ucFwdIdx, currentReorderInfo->ucCIndex, CSN));
