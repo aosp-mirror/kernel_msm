@@ -49,6 +49,9 @@
 	qcom,mdss-dsi-panel-timings = [00 15 05 05 20 1F 05 05 03 03 04 00];
 	qcom,mdss-dsi-t-clk-post = <0x0B>;
 	qcom,mdss-dsi-t-clk-pre = <0x23>;
+	qcom,mdss-dsi-bl-max-level = <225>;
+	qcom,alpm-bl-threshold = <21>;
+	qcom,alpm-dim-threshold = <6>;
 };
 
 &dsi_sw43402_dsc_qhd_cmd_rev2 {
@@ -58,6 +61,9 @@
 	qcom,mdss-dsi-panel-timings = [00 15 05 05 20 1F 05 05 03 03 04 00];
 	qcom,mdss-dsi-t-clk-post = <0x0B>;
 	qcom,mdss-dsi-t-clk-pre = <0x23>;
+	qcom,mdss-dsi-bl-max-level = <225>;
+	qcom,alpm-bl-threshold = <21>;
+	qcom,alpm-dim-threshold = <6>;
 };
 
 &dsi_sw43402_dsc_qhd_cmd {
@@ -67,6 +73,9 @@
 	qcom,mdss-dsi-panel-timings = [00 15 05 05 20 1F 05 05 03 03 04 00];
 	qcom,mdss-dsi-t-clk-post = <0x0B>;
 	qcom,mdss-dsi-t-clk-pre = <0x23>;
+	qcom,mdss-dsi-bl-max-level = <225>;
+	qcom,alpm-bl-threshold = <21>;
+	qcom,alpm-dim-threshold = <6>;
 };
 
 &dsi_sw49408_dsc_qhd_cmd {
