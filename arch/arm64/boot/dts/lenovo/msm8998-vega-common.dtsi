@@ -683,7 +683,7 @@
 				qcom,use-blink;
 				qcom,start-idx = <1>;
 				qcom,idx-len = <18>;
-				qcom,duty-pcts = [00 10 00 10 00 10 00 00 00 00 00 00 00 00 00 00 00 00];
+				qcom,duty-pcts = [00 64 00 64 00 64 00 00 00 00 00 00 00 00 00 00 00 00];
 				qcom,ramp-step-ms = <83>;
 			};
 
@@ -706,11 +706,11 @@
 				qcom,use-blink;
 				qcom,start-idx = <1>;
 				qcom,idx-len = <40>;
-				qcom,duty-pcts = [ 09 0B 0C 0E 0F 10 11 12
-						   12 13 13 13 12 12 11 10
-						   0F 0E 0C 0B 09 08 07 05
-						   04 03 02 01 00 00 00 00
-						   00 01 02 03 04 05 07 08 ];
+				qcom,duty-pcts = [ 32 3A 41 49 4F 55 5A 5F
+						   62 63 64 63 62 5F 5A 55
+						   4F 49 41 3A 32 2A 23 1B
+						   15 0F 0A 05 02 01 00 01
+						   02 05 0A 0F 15 1B 23 2A ];
 				qcom,ramp-step-ms = <25>;
 			};
 		};
