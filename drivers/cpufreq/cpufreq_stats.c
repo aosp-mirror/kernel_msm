@@ -42,6 +42,8 @@ struct uid_entry {
 	unsigned int alive_max_state;
 	u64 *dead_time_in_state;
 	u64 *alive_time_in_state;
+	u64 *dead_concurrent_active_time;
+	u64 *alive_concurrent_active_time;
 	struct hlist_node hash;
 };
 
@@ -266,6 +268,81 @@ static int uid_time_in_state_show(struct seq_file *m, void *v)
 		kfree(uid_entry->alive_time_in_state);
 		uid_entry->alive_time_in_state = NULL;
 		uid_entry->alive_max_state = 0;
+	}
+
+	rt_mutex_unlock(&uid_lock);
+	return 0;
+}
+
+static int uid_concurrent_active_time_show(struct seq_file *m, void *v)
+{
+	struct uid_entry *uid_entry;
+	struct task_struct *task, *temp;
+	unsigned long bkt, flags;
+	int i, num_possible_cpus = num_possible_cpus();
+
+	if (!cpufreq_stats_initialized)
+		return 0;
+
+	seq_printf(m, "active: %i\n", num_possible_cpus);
+
+	rt_mutex_lock(&uid_lock);
+
+	rcu_read_lock();
+	do_each_thread(temp, task) {
+
+		uid_entry = find_or_register_uid(from_kuid_munged(
+			current_user_ns(), task_uid(task)));
+		if (!uid_entry)
+			continue;
+
+		if (!uid_entry->alive_concurrent_active_time)
+			uid_entry->alive_concurrent_active_time = kzalloc(
+				num_possible_cpus *
+				sizeof(uid_entry->alive_concurrent_active_time),
+				GFP_ATOMIC);
+
+		spin_lock_irqsave(&task_concurrent_active_time_lock, flags);
+
+		if (task->concurrent_active_time &&
+			uid_entry->alive_concurrent_active_time) {
+			for (i = 0; i < num_possible_cpus; ++i) {
+				uid_entry->alive_concurrent_active_time[i] +=
+					atomic_read(&task->concurrent_active_time[i]);
+			}
+		}
+		spin_unlock_irqrestore(&task_concurrent_active_time_lock, flags);
+
+	} while_each_thread(temp, task);
+	rcu_read_unlock();
+
+	hash_for_each(uid_hash_table, bkt, uid_entry, hash) {
+		if (!uid_entry->alive_concurrent_active_time &&
+			!uid_entry->dead_concurrent_active_time)
+			continue;
+
+		seq_printf(m, "%d:", uid_entry->uid);
+
+		for (i = 0; i < num_possible_cpus; ++i) {
+			u64 total_concurrent_active_time = 0;
+
+			if (uid_entry->dead_concurrent_active_time)
+				total_concurrent_active_time =
+					uid_entry->dead_concurrent_active_time[i];
+			if (uid_entry->alive_concurrent_active_time)
+				total_concurrent_active_time +=
+					uid_entry->alive_concurrent_active_time[i];
+			seq_printf(m, " %lu", (unsigned long)
+				cputime_to_clock_t(total_concurrent_active_time));
+		}
+
+		seq_putc(m, '\n');
+
+
+		if (uid_entry->alive_concurrent_active_time) {
+			kfree(uid_entry->alive_concurrent_active_time);
+			uid_entry->alive_concurrent_active_time = NULL;
+		}
 	}
 
 	rt_mutex_unlock(&uid_lock);
@@ -716,6 +793,7 @@ void cpufreq_task_stats_remove_uids(uid_t uid_start, uid_t uid_end)
 			if (uid_start == uid_entry->uid) {
 				hash_del(&uid_entry->hash);
 				kfree(uid_entry->dead_time_in_state);
+				kfree(uid_entry->dead_concurrent_active_time);
 				kfree(uid_entry);
 			}
 		}
@@ -824,7 +902,21 @@ static int process_notifier(struct notifier_block *self,
 	task->time_in_state = NULL;
 	spin_unlock_irqrestore(&task_time_in_state_lock, flags);
 
+	if (!uid_entry->dead_concurrent_active_time) {
+		uid_entry->dead_concurrent_active_time = kzalloc(
+			num_possible_cpus() *
+			sizeof(uid_entry->dead_concurrent_active_time[0]),
+			GFP_ATOMIC);
+	}
+
 	spin_lock_irqsave(&task_concurrent_active_time_lock, flags);
+	if (task->concurrent_active_time) {
+		for (i = 0; i < num_possible_cpus(); ++i) {
+			uid_entry->dead_concurrent_active_time[i] +=
+				atomic_read(&task->concurrent_active_time[i]);
+		}
+	}
+
 	temp_concurrent_active_time = task->concurrent_active_time;
 	task->concurrent_active_time = NULL;
 	spin_unlock_irqrestore(&task_concurrent_active_time_lock, flags);
@@ -855,6 +947,18 @@ int single_uid_time_in_state_open(struct inode *inode, struct file *file)
 
 static const struct file_operations uid_time_in_state_fops = {
 	.open		= uid_time_in_state_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
+
+static int uid_concurrent_active_time_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, uid_concurrent_active_time_show, PDE_DATA(inode));
+}
+
+static const struct file_operations uid_concurrent_active_time_fops = {
+	.open		= uid_concurrent_active_time_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
 	.release	= single_release,
@@ -922,6 +1026,9 @@ static int __init cpufreq_stats_init(void)
 
 	proc_create_data("uid_time_in_state", 0444, NULL,
 		&uid_time_in_state_fops, NULL);
+
+	proc_create_data("uid_concurrent_active_time", 0444, NULL,
+		&uid_concurrent_active_time_fops, NULL);
 
 	profile_event_register(PROFILE_TASK_EXIT, &process_notifier_block);
 
