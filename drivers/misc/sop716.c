@@ -850,8 +850,10 @@ static void sop716_update_fw_work(struct work_struct *work)
 
 	pr_info("sop firmware version: device v%d.%d, image v%d.%d\n",
 			major, minor, img_major, img_minor);
-	if (major == img_major && minor == img_minor)
+	if (major == img_major && minor == img_minor) {
+		msleep(100);
 		goto out;
+	}
 
 	/* Update FW */
 	si->watch_mode = false;
