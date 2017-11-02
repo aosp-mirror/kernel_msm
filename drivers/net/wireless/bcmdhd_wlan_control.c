@@ -212,7 +212,7 @@ static int bcm_wifi_set_power(int enable)
 
 		/* WLAN chip to reset */
 		msleep(150);
-		pr_info("%s: WIFI ON\n", __func__);
+		pr_info("%s: WiFi ON\n", __func__);
 	} else {
 		gpio_set_value(ctrl->gpio_power, 0);
 		ctrl->power_enabled = 0;
@@ -397,10 +397,52 @@ static ssize_t bcm_wifi_read_mac_store(struct device *dev,
 	return count;
 }
 
-static DEVICE_ATTR(read_mac, 0660, NULL, bcm_wifi_read_mac_store);
+static ssize_t bcm_wifi_power_on_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct platform_device *pdev = container_of(dev,
+			struct platform_device, dev);
+	struct bcm_wlan_control *ctrl = platform_get_drvdata(pdev);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", ctrl->power_enabled);
+}
+
+static ssize_t bcm_wifi_power_on_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct platform_device *pdev = container_of(dev,
+			struct platform_device, dev);
+	struct bcm_wlan_control *ctrl = platform_get_drvdata(pdev);
+	int enable, rc;
+
+	rc = kstrtoint(buf, 10, &enable);
+	if (rc) {
+		pr_err("%s: invalid input for power_on\n", __func__);
+		return rc;
+	}
+
+	enable = !!enable;
+	if (enable == ctrl->power_enabled) {
+		pr_debug("%s: already WiFi %s\n", __func__,
+				enable? "ON" : "OFF");
+		return count;
+	}
+
+	gpio_set_value(ctrl->gpio_power, enable);
+	ctrl->power_enabled = enable;
+	pr_info("%s: WiFi %s\n", __func__, enable? "ON" : "OFF");
+
+	return count;
+}
+
+static DEVICE_ATTR(read_mac, 0440, NULL, bcm_wifi_read_mac_store);
+static DEVICE_ATTR(power_on, 0660,
+		bcm_wifi_power_on_show, bcm_wifi_power_on_store);
 
 static struct attribute *bcm_wifi_attrs[] = {
 	&dev_attr_read_mac.attr,
+	&dev_attr_power_on.attr,
 	NULL
 };
 
