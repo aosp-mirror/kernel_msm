@@ -51,7 +51,7 @@ enum mnh_lpddr_freq_type {
 
 /**
  * CPU clock controller
- * @index: int with frquency table index info.
+ * @index: int with frequency table index info.
  * Return: 0 on success, an error code otherwise.
  *
  * 1PLL(CPU_IPU PLL) for CPU/IPU clocks. Since CPU and IPU clocks are derived
@@ -66,7 +66,7 @@ int mnh_cpu_freq_change(int index);
 
 /**
  * IPU clock controller
- * @index: int with frquency table index info.
+ * @index: int with frequency table index info.
  * Return: 0 on success, an error code otherwise.
  *
  * Until IPU clock is configured, IPU clock is driven from PCIe or CPU_IPU PLL,
@@ -78,7 +78,7 @@ int mnh_ipu_freq_change(int index);
 
 /**
  * LPDDR clock control driver
- * @index: int with frquency table index info.
+ * @index: int with frequency table index info.
  * Return: 0 on success, an error code otherwise.
  *
  * LPDDR clock is controlled by LPC instead of using direct PLL configuration.
@@ -89,14 +89,58 @@ int mnh_ipu_freq_change(int index);
 int mnh_lpddr_freq_change(int index);
 
 /**
- * LPDDR clock control driver
+ * Enable LPDDR sys200 mode
+ * @enable: bool flag
  * Return: 0 on success, an error code otherwise.
  *
  * LPDDR clock is derived from sys200 clk instead of separate lpddr clk
  */
-int mnh_lpddr_sys200_mode(void);
+int mnh_lpddr_sys200_mode(bool enable);
 
+/**
+ * Enable CPU/IPU sys200 mode
+ * @enable: bool flag
+ * Return: 0 on success, an error code otherwise.
+ *
+ * CPU and IPU clocks are derived from sys200 clk instead of CPU_IPU PLL
+ */
 int mnh_cpu_ipu_sys200_mode(void);
+
+/**
+ * Initial clock gating
+ * @enable: bool flag
+ * Return: 0 on success, an error code otherwise.
+ *
+ * Enable or disable clock gating of unused peripherals during boot
+ */
+int mnh_clock_init_gating(bool enabled);
+
+/**
+ * Bypass mode clock gating
+ * @enable: bool flag
+ * Return: 0 on success, an error code otherwise.
+ *
+ * Enable or disable clock gating on a subset of peripherals that are not used
+ * during bypass mode
+ */
+int mnh_bypass_clock_gating(bool enabled);
+
+/**
+ * IPU clock gating
+ * @enable: bool flag
+ * Return: 0 on success, an error code otherwise.
+ *
+ * Enable or disable IPU clock gating for power savings
+ */
+int mnh_ipu_clock_gating(bool enabled);
+
+/**
+ * IPU reset
+ * Return: 0 on success, an error code otherwise.
+ *
+ * Assert, and then deassert reset to IPU
+ */
+int mnh_ipu_reset(void);
 
 /**
  * Setup interface for controlling clocks
@@ -109,8 +153,5 @@ int mnh_clk_init(struct device *dev, uint32_t baseadress);
  * Clean up the interface
  */
 void mnh_clk_clean(struct device *dev);
-
-/* Cold reset Monette Hill SOC */
-int mnh_sm_cold_reset(struct device *dev);
 
 #endif /* __MNH_CLK */
