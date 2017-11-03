@@ -472,6 +472,18 @@
 		};
 	};
 
+	rpm-regulator-ldoa25 {
+		pm8998_l25: regulator-l25 {
+			regulator-min-microvolt = <3312000>;
+			regulator-max-microvolt = <3312000>;
+		};
+
+		pm8998_l25_pin_ctrl: regulator-l25-pin-ctrl {
+			regulator-min-microvolt = <3312000>;
+			regulator-max-microvolt = <3312000>;
+		};
+	};
+
 	rpm-regulator-ldoa28 {
 		status = "okay";
 		pm8998_l28: regulator-l28 {
