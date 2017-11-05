@@ -126,6 +126,18 @@ static unsigned int p_tas2557_shutdown_data[] = {
 	0xFFFFFFFF, 0xFFFFFFFF
 };
 
+
+static void force_vbob_pwm_mode(struct tas2557_priv *pTAS2557, bool enable)
+{
+	if (pTAS2557->vbob_regulator == NULL)
+		return;
+
+	if (regulator_set_mode(pTAS2557->vbob_regulator, enable ?
+			       REGULATOR_MODE_FAST : REGULATOR_MODE_NORMAL))
+		dev_err(pTAS2557->dev, "failed to set BoB to %s\n",
+			enable ? "FAST" : "NORMAL");
+}
+
 static int tas2557_dev_load_data(struct tas2557_priv *pTAS2557,
 	enum channel chl, unsigned int *pData)
 {
@@ -1067,6 +1079,12 @@ end:
 		if (pTAS2557->mnErrCode & (ERROR_DEVA_I2C_COMM | ERROR_DEVB_I2C_COMM | ERROR_PRAM_CRCCHK | ERROR_YRAM_CRCCHK))
 			failsafe(pTAS2557);
 		/* TAS2557_RELOAD_FIRMWARE_END */
+	} else {
+		if ((pTAS2557->bob_fast_profile != UINT_MAX) &&
+		    (pTAS2557->bob_fast_profile ==
+		     pTAS2557->mnCurrentConfiguration)) {
+			force_vbob_pwm_mode(pTAS2557, pTAS2557->mbPowerUp);
+		}
 	}
 
 	return nResult;
@@ -2284,6 +2302,11 @@ int tas2557_set_config(struct tas2557_priv *pTAS2557, int config)
 	dev_dbg(pTAS2557->dev, "%s, load new conf %s\n", __func__, pConfiguration->mpName);
 	nResult = tas2557_load_configuration(pTAS2557, nConfiguration, false);
 
+	if ((pTAS2557->bob_fast_profile != UINT_MAX) && (pTAS2557->mbPowerUp)) {
+		force_vbob_pwm_mode(pTAS2557,
+				    pTAS2557->bob_fast_profile ==
+				    pTAS2557->mnCurrentConfiguration);
+	}
 end:
 
 	return nResult;
@@ -2936,6 +2959,21 @@ int tas2557_parse_dt(struct device *dev, struct tas2557_priv *pTAS2557)
 	else
 		dev_dbg(pTAS2557->dev, "ti,cal-file-name=%s\n",
 			pTAS2557->cal_file_name);
+
+	rc = of_property_read_u32(np, "ti,bob-fast-profile", &value);
+
+	if (rc) {
+		dev_dbg(pTAS2557->dev, "ti,bob-fast-profile not set\n");
+		pTAS2557->bob_fast_profile = UINT_MAX;
+	} else {
+		pTAS2557->bob_fast_profile = value;
+		dev_info(pTAS2557->dev, "ti,bob-fast-profile set to %d\n",
+			 pTAS2557->bob_fast_profile);
+		pTAS2557->vbob_regulator = devm_regulator_get(pTAS2557->dev,
+							      "pm8998_bob");
+		if (pTAS2557->vbob_regulator == NULL)
+			dev_err(pTAS2557->dev, "failed to get BoB regulator\n");
+	}
 end:
 
 	return ret;
