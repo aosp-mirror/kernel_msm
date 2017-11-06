@@ -385,10 +385,9 @@ static int kgsl_cmdbatch_add_sync_fence(struct kgsl_device *device,
 
 		return ret;
 	} else {
+		trace_syncpoint_fence(cmdbatch, event->handle->name);
 		spin_unlock_irqrestore(&event->handle_lock, flags);
 	}
-
-	trace_syncpoint_fence(cmdbatch, event->handle->name);
 
 	return 0;
 }
