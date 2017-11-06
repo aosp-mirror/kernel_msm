@@ -356,3 +356,19 @@
 		fsmgr_flags = "wait";
 	};
 };
+
+&reserved_memory {
+	easel_mem: easel_mem@96600000 {
+		compatible = "removed-dma-pool";
+		reg = <0 0x96600000 0 0x4000000>;
+		label = "easel_mem";
+	};
+};
+
+&qcom_ion {
+	qcom,ion-heap@30 {
+		reg = <30>;
+		memory-region = <&easel_mem>;
+		qcom,ion-heap-type = "CARVEOUT";
+	};
+};
