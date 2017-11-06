@@ -1782,20 +1782,13 @@ void
 dhd_aoe_arp_clr(dhd_pub_t *dhd, int idx)
 {
 	int ret = 0;
-	int iov_len = 0;
-	char iovbuf[DHD_IOVAR_BUF_SIZE];
 
 	if (dhd == NULL) return;
 	if (dhd->arp_version == 1)
 		idx = 0;
 
-	iov_len = bcm_mkiovar("arp_table_clear", 0, 0, iovbuf, sizeof(iovbuf));
-	if (!iov_len) {
-		DHD_ERROR(("%s: Insufficient iovar buffer size %zu \n",
-			__FUNCTION__, sizeof(iovbuf)));
-		return;
-	}
-	if ((ret  = dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, iovbuf, iov_len, TRUE, idx)) < 0)
+	ret = dhd_iovar(dhd, idx, "arp_table_clear", NULL, 0, NULL, 0, TRUE);
+	if (ret < 0)
 		DHD_ERROR(("%s failed code %d\n", __FUNCTION__, ret));
 }
 
@@ -1803,56 +1796,37 @@ void
 dhd_aoe_hostip_clr(dhd_pub_t *dhd, int idx)
 {
 	int ret = 0;
-	int iov_len = 0;
-	char iovbuf[DHD_IOVAR_BUF_SIZE];
 
 	if (dhd == NULL) return;
 	if (dhd->arp_version == 1)
 		idx = 0;
 
-	iov_len = bcm_mkiovar("arp_hostip_clear", 0, 0, iovbuf, sizeof(iovbuf));
-	if (!iov_len) {
-		DHD_ERROR(("%s: Insufficient iovar buffer size %zu \n",
-			__FUNCTION__, sizeof(iovbuf)));
-		return;
-	}
-	if ((ret  = dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, iovbuf, iov_len, TRUE, idx)) < 0)
+	ret = dhd_iovar(dhd, idx, "arp_hostip_clear", NULL, 0, NULL, 0, TRUE);
+	if (ret < 0)
 		DHD_ERROR(("%s failed code %d\n", __FUNCTION__, ret));
 }
 
 void
 dhd_arp_offload_add_ip(dhd_pub_t *dhd, uint32 ipaddr, int idx)
 {
-	int iov_len = 0;
-	char iovbuf[DHD_IOVAR_BUF_SIZE];
-	int retcode;
-
+	int ret = 0;
 
 	if (dhd == NULL) return;
 	if (dhd->arp_version == 1)
 		idx = 0;
-	iov_len = bcm_mkiovar("arp_hostip", (char *)&ipaddr,
-		sizeof(ipaddr), iovbuf, sizeof(iovbuf));
-	if (!iov_len) {
-		DHD_ERROR(("%s: Insufficient iovar buffer size %zu \n",
-			__FUNCTION__, sizeof(iovbuf)));
-		return;
-	}
-	retcode = dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, iovbuf, iov_len, TRUE, idx);
 
-	if (retcode)
-		DHD_TRACE(("%s: ARP ip addr add failed, retcode = %d\n",
-		__FUNCTION__, retcode));
+	ret = dhd_iovar(dhd, idx, "arp_hostip", (char *)&ipaddr, sizeof(ipaddr),
+			NULL, 0, TRUE);
+	if (ret)
+		DHD_TRACE(("%s: ARP ip addr add failed, ret = %d\n", __FUNCTION__, ret));
 	else
-		DHD_TRACE(("%s: sARP H ipaddr entry added \n",
-		__FUNCTION__));
+		DHD_TRACE(("%s: sARP H ipaddr entry added \n", __FUNCTION__));
 }
 
 int
 dhd_arp_get_arp_hostip_table(dhd_pub_t *dhd, void *buf, int buflen, int idx)
 {
-	int retcode, i;
-	int iov_len;
+	int ret, i;
 	uint32 *ptr32 = buf;
 	bool clr_bottom = FALSE;
 
@@ -1862,14 +1836,11 @@ dhd_arp_get_arp_hostip_table(dhd_pub_t *dhd, void *buf, int buflen, int idx)
 	if (dhd->arp_version == 1)
 		idx = 0;
 
-	iov_len = bcm_mkiovar("arp_hostip", 0, 0, buf, buflen);
-	BCM_REFERENCE(iov_len);
-	retcode = dhd_wl_ioctl_cmd(dhd, WLC_GET_VAR, buf, buflen, FALSE, idx);
+	ret = dhd_iovar(dhd, idx, "arp_hostip", NULL, 0, (char *)buf, buflen,
+			FALSE);
 
-	if (retcode) {
-		DHD_TRACE(("%s: ioctl WLC_GET_VAR error %d\n",
-		__FUNCTION__, retcode));
-
+	if (ret) {
+		DHD_TRACE(("%s: ioctl WLC_GET_VAR error %d\n", __FUNCTION__, ret));
 		return -1;
 	}
 

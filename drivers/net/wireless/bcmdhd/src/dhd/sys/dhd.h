@@ -701,7 +701,8 @@ extern int dhd_keep_alive_onoff(dhd_pub_t *dhd);
 #endif /* KEEP_ALIVE */
 
 extern bool dhd_is_concurrent_mode(dhd_pub_t *dhd);
-extern int dhd_iovar(dhd_pub_t *pub, int ifidx, char *name, char *cmd_buf, uint cmd_len, int set);
+int dhd_iovar(dhd_pub_t *pub, int ifidx, char *name, char *param_buf, uint param_len,
+		char *res_buf, uint res_len, int set);
 typedef enum cust_gpio_modes {
 	WLAN_RESET_ON,
 	WLAN_RESET_OFF,

@@ -84,11 +84,26 @@ s32 wldev_iovar_getbuf(
 	void *param, s32 paramlen, void *buf, s32 buflen, struct mutex* buf_sync)
 {
 	s32 ret = 0;
-	if (buf_sync) {
+
+	if (buf_sync)
 		mutex_lock(buf_sync);
+
+	if (buf && (buflen > 0)) {
+		/* initialize the response buffer */
+		memset(buf, 0, buflen);
+	} else {
+		ret = BCME_BADARG;
+		goto exit;
 	}
-	wldev_mkiovar(iovar_name, param, paramlen, buf, buflen);
+
+	ret = wldev_mkiovar(iovar_name, param, paramlen, buf, buflen);
+	if (!ret) {
+		ret = BCME_BUFTOOSHORT;
+		goto exit;
+	}
+
 	ret = wldev_ioctl(dev, WLC_GET_VAR, buf, buflen, FALSE);
+exit:
 	if (buf_sync)
 		mutex_unlock(buf_sync);
 	return ret;
@@ -157,6 +172,11 @@ s32 wldev_mkiovar_bsscfg(
 	u32 prefixlen;
 	u32 namelen;
 	u32 iolen;
+
+	/* initialize buffer */
+	if (!iovar_buf || buflen == 0)
+		return BCME_BADARG;
+	memset(iovar_buf, 0, buflen);
 
 	if (bssidx == 0) {
 		return wldev_mkiovar((s8*)iovar_name, (s8 *)param, paramlen,
@@ -272,6 +292,7 @@ int wldev_get_link_speed(
 
 	if (!plink_speed)
 		return -ENOMEM;
+	*plink_speed = 0;
 	error = wldev_ioctl(dev, WLC_GET_RATE, plink_speed, sizeof(int), 0);
 	if (unlikely(error))
 		return error;
@@ -306,6 +327,7 @@ int wldev_get_ssid(
 
 	if (!pssid)
 		return -ENOMEM;
+	memset(pssid, 0, sizeof(wlc_ssid_t));
 	error = wldev_ioctl(dev, WLC_GET_SSID, pssid, sizeof(wlc_ssid_t), 0);
 	if (unlikely(error))
 		return error;
@@ -318,6 +340,7 @@ int wldev_get_band(
 {
 	int error;
 
+	*pband = 0;
 	error = wldev_ioctl(dev, WLC_GET_BAND, pband, sizeof(uint), 0);
 	return error;
 }

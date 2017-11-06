@@ -1809,7 +1809,6 @@ wl_chanim_stats(struct net_device *dev, u8 *chan_idle)
 	chanim_stats_t *stats;
 
 	memset(&param, 0, sizeof(param));
-	memset(result, 0, sizeof(result));
 
 	param.buflen = htod32(sizeof(wl_chanim_stats_t));
 	param.count = htod32(WL_CHANIM_COUNT_ONE);
@@ -2761,7 +2760,7 @@ wl_android_iolist_resume(struct net_device *dev, struct list_head *head)
 static int
 wl_android_set_miracast(struct net_device *dev, char *command, int total_len)
 {
-	int mode, val;
+	int mode, val = 0;
 	int ret = 0;
 	struct io_cfg config;
 
@@ -2948,14 +2947,10 @@ nlmsg_failure:
 
 int wl_keep_alive_set(struct net_device *dev, char* extra, int total_len)
 {
-	char 				buf[256];
-	const char 			*str;
 	wl_mkeep_alive_pkt_t	mkeep_alive_pkt;
-	wl_mkeep_alive_pkt_t	*mkeep_alive_pktp;
-	int					buf_len;
-	int					str_len;
-	int res 				= -1;
+	int ret;
 	uint period_msec = 0;
+	char *buf;
 
 	if (extra == NULL)
 	{
@@ -2971,36 +2966,28 @@ int wl_keep_alive_set(struct net_device *dev, char* extra, int total_len)
 
 	memset(&mkeep_alive_pkt, 0, sizeof(wl_mkeep_alive_pkt_t));
 
-	str = "mkeep_alive";
-	str_len = strlen(str);
-	strncpy(buf, str, str_len);
-	buf[ str_len ] = '\0';
-	mkeep_alive_pktp = (wl_mkeep_alive_pkt_t *) (buf + str_len + 1);
 	mkeep_alive_pkt.period_msec = period_msec;
-	buf_len = str_len + 1;
 	mkeep_alive_pkt.version = htod16(WL_MKEEP_ALIVE_VERSION);
 	mkeep_alive_pkt.length = htod16(WL_MKEEP_ALIVE_FIXED_LEN);
 
 	/* Setup keep alive zero for null packet generation */
 	mkeep_alive_pkt.keep_alive_id = 0;
 	mkeep_alive_pkt.len_bytes = 0;
-	buf_len += WL_MKEEP_ALIVE_FIXED_LEN;
-	/* Keep-alive attributes are set in local	variable (mkeep_alive_pkt), and
-	 * then memcpy'ed into buffer (mkeep_alive_pktp) since there is no
-	 * guarantee that the buffer is properly aligned.
-	 */
-	memcpy((char *)mkeep_alive_pktp, &mkeep_alive_pkt, WL_MKEEP_ALIVE_FIXED_LEN);
 
-	if ((res = wldev_ioctl(dev, WLC_SET_VAR, buf, buf_len, TRUE)) < 0)
-	{
-		DHD_ERROR(("%s:keep_alive set failed. res[%d]\n", __FUNCTION__, res));
+	buf = kmalloc(WLC_IOCTL_SMLEN, GFP_KERNEL);
+	if (!buf) {
+		DHD_ERROR(("%s: buffer alloc failed\n", __FUNCTION__));
+		return BCME_NOMEM;
 	}
+
+	ret = wldev_iovar_setbuf(dev, "mkeep_alive", (char *)&mkeep_alive_pkt,
+			WL_MKEEP_ALIVE_FIXED_LEN, buf, WLC_IOCTL_SMLEN, NULL);
+	if (ret < 0)
+		DHD_ERROR(("%s:keep_alive set failed:%d\n", __FUNCTION__, ret));
 	else
-	{
-		DHD_ERROR(("%s:keep_alive set ok. res[%d]\n", __FUNCTION__, res));
-	}
-
-	return res;
+		DHD_TRACE(("%s:keep_alive set ok\n", __FUNCTION__));
+	kfree(buf);
+	return ret;
 }
 
 int wl_android_priv_cmd(struct net_device *net, struct ifreq *ifr, int cmd)
