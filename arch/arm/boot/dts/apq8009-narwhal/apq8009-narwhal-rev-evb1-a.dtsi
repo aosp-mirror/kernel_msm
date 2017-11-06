@@ -17,20 +17,6 @@
 };
 
 &dsi_sharp_nt35350_cmd {
-	qcom,mdss-dsi-on-command = [
-		15 01 00 00 00 00 02 FF 10
-		15 01 00 00 00 00 02 B3 00
-		15 01 00 00 00 00 02 BB 10
-		15 01 00 00 00 00 02 FF 24
-		15 01 00 00 00 00 02 FB 01
-		39 01 00 00 00 00 02 8A 80
-		39 01 00 00 00 00 02 8B 00
-		39 01 00 00 00 00 02 8D 01
-		39 01 00 00 00 00 02 8C 00
-		15 01 00 00 00 00 02 FF 10
-		05 01 00 00 64 00 01 11 /* Sleep out */
-		05 01 00 00 00 00 01 29 /* Display On */
-		];
 	/delete-property/ qcom,mdss-dsi-te-pin-select;
 	/delete-property/ qcom,mdss-dsi-te-check-enable;
 	/delete-property/ qcom,mdss-dsi-te-using-te-pin;
