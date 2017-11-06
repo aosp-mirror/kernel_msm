@@ -398,6 +398,8 @@ struct smb_charger {
 	/* IPD */
 	unsigned int		vadc_ipd_channel;
 	struct qpnp_vadc_chip	*vadc_ipd;
+
+	int			adaptor_icl_max;//adaptor input current limit max value
 };
 
 int smblib_read(struct smb_charger *chg, u16 addr, u8 *val);

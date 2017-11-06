@@ -47,4 +47,5 @@ void destroy_votable(struct votable *votable);
 void lock_votable(struct votable *votable);
 void unlock_votable(struct votable *votable);
 
+#define ADAPTOR_ICL_MAX_ERR_VAL		-1
 #endif /* __PMIC_VOTER_H */

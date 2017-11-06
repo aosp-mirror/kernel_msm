@@ -505,8 +505,20 @@ static int usb_icl_vote_callback(struct votable *votable, void *data,
 	if (!chip->main_psy)
 		return 0;
 
-	if (client == NULL)
-		icl_ua = INT_MAX;
+	if (client == NULL){
+		rc = power_supply_get_property(chip->main_psy,
+				POWER_SUPPLY_PROP_ICL_MAX,
+				&pval);
+		if (rc < 0) {
+			pr_err("Couldn't get adaptor icl max value rc=%d\n", rc);
+			return rc;
+		}
+
+		if(pval.intval == ADAPTOR_ICL_MAX_ERR_VAL)
+			icl_ua = INT_MAX;
+		else
+			icl_ua = pval.intval;
+	}
 
 	/*
 	 * Disable parallel for new ICL vote - the call to split_settled will
