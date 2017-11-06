@@ -497,6 +497,8 @@ static tANI_U32 GetContainerIesLen(tpAniSirGlobal pCtx,
         pBufRemaining += *(pBufRemaining + 1) + 2;
     }
 
+    if (len > 0xFF)
+        return DOT11F_INTERNAL_ERROR;
     *pnConsumed = len;
     return DOT11F_PARSE_SUCCESS;
 
