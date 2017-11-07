@@ -396,7 +396,7 @@ static int __hdd_hostapd_stop(struct net_device *dev)
 		return ret;
 
 	if (!sap_ctx) {
-		hdd_err("invalid sap ctx: %p", sap_ctx);
+		hdd_err("invalid sap ctx: %pK", sap_ctx);
 		return -ENODEV;
 	}
 
@@ -632,7 +632,7 @@ static void hdd_hostapd_inactivity_timer_cb(void *context)
 		 */
 		pHostapdAdapter = netdev_priv(dev);
 		if (WLAN_HDD_ADAPTER_MAGIC != pHostapdAdapter->magic) {
-			hdd_err("invalid adapter: %p", pHostapdAdapter);
+			hdd_err("invalid adapter: %pK", pHostapdAdapter);
 			return;
 		}
 		pHddApCtx = WLAN_HDD_GET_AP_CTX_PTR(pHostapdAdapter);
@@ -730,7 +730,7 @@ static void hdd_issue_stored_joinreq(hdd_adapter_t *sta_adapter,
 		hdd_context_t *hdd_ctx)
 {
 	tHalHandle hal_handle;
-	uint32_t roam_id;
+	uint32_t roam_id = INVALID_ROAM_ID;
 
 	if (NULL == sta_adapter) {
 		hdd_err("Invalid station adapter, ignore issueing join req");
@@ -741,7 +741,7 @@ static void hdd_issue_stored_joinreq(hdd_adapter_t *sta_adapter,
 	if (true ==  cds_is_sta_connection_pending()) {
 		MTRACE(qdf_trace(QDF_MODULE_ID_HDD,
 				TRACE_CODE_HDD_ISSUE_JOIN_REQ,
-				sta_adapter->sessionId, roam_id));
+				sta_adapter->sessionId, 0));
 		if (QDF_STATUS_SUCCESS !=
 			sme_issue_stored_joinreq(hal_handle,
 				&roam_id,
@@ -1508,7 +1508,7 @@ QDF_STATUS hdd_hostapd_sap_event_cb(tpSap_Event pSapEvent,
 		else
 			pHddApCtx->dfs_cac_block_tx = true;
 
-		hdd_debug("The value of dfs_cac_block_tx[%d] for ApCtx[%p]:%d",
+		hdd_debug("The value of dfs_cac_block_tx[%d] for ApCtx[%pK]:%d",
 				pHddApCtx->dfs_cac_block_tx, pHddApCtx,
 				pHostapdAdapter->sessionId);
 
@@ -2712,30 +2712,44 @@ void hdd_sap_restart_with_channel_switch(hdd_adapter_t *ap_adapter,
 }
 #endif
 
-int
-static __iw_softap_set_ini_cfg(struct net_device *dev,
-			       struct iw_request_info *info,
-			       union iwreq_data *wrqu, char *extra)
+static int __iw_softap_set_ini_cfg(struct net_device *dev,
+				   struct iw_request_info *info,
+				   union iwreq_data *wrqu,
+				   char *extra)
 {
-	QDF_STATUS vstatus;
-	int ret = 0;            /* success */
-	hdd_adapter_t *pAdapter = (netdev_priv(dev));
-	hdd_context_t *pHddCtx;
+	QDF_STATUS status;
+	int errno;
+	hdd_adapter_t *adapter;
+	hdd_context_t *hdd_ctx;
+	char *value;
+	size_t len;
 
 	ENTER_DEV(dev);
 
-	pHddCtx = WLAN_HDD_GET_CTX(pAdapter);
-	ret = wlan_hdd_validate_context(pHddCtx);
-	if (ret)
-		return ret;
+	adapter = netdev_priv(dev);
+	errno = hdd_validate_adapter(adapter);
+	if (errno)
+		return errno;
 
-	hdd_debug("Received data %s", extra);
+	hdd_ctx = WLAN_HDD_GET_CTX(adapter);
+	errno = wlan_hdd_validate_context(hdd_ctx);
+	if (errno)
+		return errno;
 
-	vstatus = hdd_execute_global_config_command(pHddCtx, extra);
-	if (QDF_STATUS_SUCCESS != vstatus)
-		ret = -EINVAL;
+	/* ensure null termination */
+	len = min_t(size_t, wrqu->data.length, QCSAP_IOCTL_MAX_STR_LEN);
+	value = qdf_mem_malloc(len + 1);
+	if (!value)
+		return -ENOMEM;
 
-	return ret;
+	qdf_mem_copy(value, extra, len);
+	hdd_debug("Received data %s", value);
+	status = hdd_execute_global_config_command(hdd_ctx, value);
+	qdf_mem_free(value);
+
+	EXIT();
+
+	return qdf_status_to_os_return(status);
 }
 
 int
@@ -6460,7 +6474,7 @@ hdd_adapter_t *hdd_wlan_create_ap_dev(hdd_context_t *pHddCtx,
 		pHostapdAdapter->magic = WLAN_HDD_ADAPTER_MAGIC;
 		pHostapdAdapter->sessionId = HDD_SESSION_ID_INVALID;
 
-		hdd_debug("pWlanHostapdDev = %p, pHostapdAdapter = %p, concurrency_mode=0x%x",
+		hdd_debug("pWlanHostapdDev = %pK, pHostapdAdapter = %pK, concurrency_mode=0x%x",
 		       pWlanHostapdDev,
 		       pHostapdAdapter,
 		       (int)cds_get_concurrency_mode());
@@ -6832,44 +6846,11 @@ static void wlan_hdd_check_11gmode(u8 *pIe, u8 *require_ht, u8 *require_vht,
 	}
 }
 
-/**
- * wlan_hdd_add_ie() - add ie
- * @pHostapdAdapter: Pointer to hostapd adapter
- * @genie: Pointer to ie to be added
- * @total_ielen: Pointer to store total ie length
- * @oui: Pointer to oui
- * @oui_size: Size of oui
- *
- * Return: 0 for success non-zero for failure
- */
-static int wlan_hdd_add_ie(hdd_adapter_t *pHostapdAdapter, uint8_t *genie,
-			   uint16_t *total_ielen, uint8_t *oui,
-			   uint8_t oui_size)
-{
-	uint16_t ielen = 0;
-	uint8_t *pIe = NULL;
-	beacon_data_t *pBeacon = pHostapdAdapter->sessionCtx.ap.beacon;
-
-	pIe = wlan_hdd_get_vendor_oui_ie_ptr(oui, oui_size,
-					     pBeacon->tail, pBeacon->tail_len);
-
-	if (pIe) {
-		ielen = pIe[1] + 2;
-		if ((*total_ielen + ielen) <= MAX_GENIE_LEN) {
-			qdf_mem_copy(&genie[*total_ielen], pIe, ielen);
-		} else {
-			hdd_err("**Ie Length is too big***");
-			return -EINVAL;
-		}
-		*total_ielen += ielen;
-	}
-	return 0;
-}
 
 /**
- * wlan_hdd_add_hostapd_conf_vsie() - configure vsie in sap mode
+ * wlan_hdd_add_hostapd_conf_vsie() - configure Vendor IE in sap mode
  * @pHostapdAdapter: Pointer to hostapd adapter
- * @genie: Pointer to vsie
+ * @genie: Pointer to Vendor IE
  * @total_ielen: Pointer to store total ie length
  *
  * Return: none
@@ -6883,6 +6864,7 @@ static void wlan_hdd_add_hostapd_conf_vsie(hdd_adapter_t *pHostapdAdapter,
 	uint8_t *ptr = pBeacon->tail;
 	uint8_t elem_id, elem_len;
 	uint16_t ielen = 0;
+	bool skip_ie;
 
 	if (NULL == ptr || 0 == left)
 		return;
@@ -6896,32 +6878,25 @@ static void wlan_hdd_add_hostapd_conf_vsie(hdd_adapter_t *pHostapdAdapter,
 				elem_id, elem_len, left);
 			return;
 		}
-		if (IE_EID_VENDOR == elem_id &&
-				(elem_len >= WPS_OUI_TYPE_SIZE)) {
-			/* skipping the VSIE's which we don't want to include or
-			 * it will be included by existing code
+		if (IE_EID_VENDOR == elem_id) {
+			/*
+			 * skipping the Vendor IE's which we don't want to
+			 * include or it will be included by existing code.
 			 */
-			if ((memcmp(&ptr[2], WPS_OUI_TYPE, WPS_OUI_TYPE_SIZE) !=
-			     0) &&
-#ifdef WLAN_FEATURE_WFD
-			    (memcmp(&ptr[2], WFD_OUI_TYPE, WFD_OUI_TYPE_SIZE) !=
-			     0) &&
-#endif
-			    (memcmp
-				     (&ptr[2], WHITELIST_OUI_TYPE,
-				     WPA_OUI_TYPE_SIZE) != 0)
-			    &&
-			    (memcmp
-				     (&ptr[2], BLACKLIST_OUI_TYPE,
-				     WPA_OUI_TYPE_SIZE) != 0)
-			    &&
-			    (memcmp
-				     (&ptr[2], "\x00\x50\xf2\x02",
-				     WPA_OUI_TYPE_SIZE) != 0)
-			    && (memcmp(&ptr[2], WPA_OUI_TYPE, WPA_OUI_TYPE_SIZE)
-				!= 0)
-			    && (memcmp(&ptr[2], P2P_OUI_TYPE, P2P_OUI_TYPE_SIZE)
-				!= 0)) {
+			if (elem_len >= WPS_OUI_TYPE_SIZE &&
+			    (!qdf_mem_cmp(&ptr[2], WHITELIST_OUI_TYPE,
+					  WPA_OUI_TYPE_SIZE) ||
+			     !qdf_mem_cmp(&ptr[2], BLACKLIST_OUI_TYPE,
+					  WPA_OUI_TYPE_SIZE) ||
+			     !qdf_mem_cmp(&ptr[2], "\x00\x50\xf2\x02",
+					  WPA_OUI_TYPE_SIZE) ||
+			     !qdf_mem_cmp(&ptr[2], WPA_OUI_TYPE,
+					  WPA_OUI_TYPE_SIZE)))
+				skip_ie = true;
+			else
+				skip_ie = false;
+
+			if (!skip_ie) {
 				ielen = ptr[1] + 2;
 				if ((*total_ielen + ielen) <= MAX_GENIE_LEN) {
 					qdf_mem_copy(&genie[*total_ielen], ptr,
@@ -7151,21 +7126,6 @@ int wlan_hdd_cfg80211_update_apies(hdd_adapter_t *adapter)
 	wlan_hdd_add_extra_ie(adapter, genie, &total_ielen,
 			      WLAN_EID_INTERWORKING);
 
-	if (0 != wlan_hdd_add_ie(adapter, genie,
-		&total_ielen, WPS_OUI_TYPE, WPS_OUI_TYPE_SIZE)) {
-		hdd_err("Adding WPS IE failed");
-		ret = -EINVAL;
-		goto done;
-	}
-#ifdef WLAN_FEATURE_WFD
-	if (0 != wlan_hdd_add_ie(adapter, genie,
-		&total_ielen, WFD_OUI_TYPE, WFD_OUI_TYPE_SIZE)) {
-		hdd_err("Adding WFD IE failed");
-		ret = -EINVAL;
-		goto done;
-	}
-#endif
-
 #ifdef FEATURE_WLAN_WAPI
 	if (QDF_SAP_MODE == adapter->device_mode) {
 		wlan_hdd_add_extra_ie(adapter, genie, &total_ielen,
@@ -7173,24 +7133,8 @@ int wlan_hdd_cfg80211_update_apies(hdd_adapter_t *adapter)
 	}
 #endif
 
-	if (adapter->device_mode == QDF_SAP_MODE ||
-		adapter->device_mode == QDF_P2P_GO_MODE)
-		wlan_hdd_add_hostapd_conf_vsie(adapter, genie,
-					       &total_ielen);
-
-	if (wlan_hdd_add_ie(adapter, genie,
-		&total_ielen, P2P_OUI_TYPE, P2P_OUI_TYPE_SIZE) != 0) {
-		hdd_err("Adding P2P IE failed");
-		ret = -EINVAL;
-		goto done;
-	}
-
-	if (wlan_hdd_add_ie(adapter, genie, &total_ielen,
-			    MBO_OUI_TYPE, MBO_OUI_TYPE_SIZE)) {
-		hdd_err("Adding mbo ie failed");
-		ret = -EINVAL;
-		goto done;
-	}
+	wlan_hdd_add_hostapd_conf_vsie(adapter, genie,
+				       &total_ielen);
 
 	wlan_hdd_add_sap_obss_scan_ie(adapter, genie, &total_ielen);
 
@@ -8649,7 +8593,7 @@ static int __wlan_hdd_cfg80211_start_ap(struct wiphy *wiphy,
 	if (0 != status)
 		return status;
 
-	hdd_debug("pAdapter = %p, Device mode %s(%d) sub20 %d",
+	hdd_debug("pAdapter = %pK, Device mode %s(%d) sub20 %d",
 		pAdapter, hdd_device_mode_to_string(pAdapter->device_mode),
 		pAdapter->device_mode, cds_is_sub_20_mhz_enabled());
 
@@ -9017,7 +8961,7 @@ void hdd_sap_indicate_disconnect_for_sta(hdd_adapter_t *adapter)
 
 	for (sta_id = 0; sta_id < WLAN_MAX_STA_COUNT; sta_id++) {
 		if (adapter->aStaInfo[sta_id].isUsed) {
-			hdd_debug("sta_id: %d isUsed: %d %p",
+			hdd_debug("sta_id: %d isUsed: %d %pK",
 				 sta_id, adapter->aStaInfo[sta_id].isUsed,
 				 adapter);
 

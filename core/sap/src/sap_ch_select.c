@@ -590,7 +590,8 @@ uint8_t sap_select_preferred_channel_from_channel_list(uint8_t best_chnl,
 		return SAP_CHANNEL_NOT_SELECTED;
 
 	for (i = 0; i < sap_ctx->acs_cfg->ch_list_count; i++) {
-		if (sap_ctx->acs_cfg->ch_list[i] == best_chnl) {
+		if ((sap_ctx->acs_cfg->ch_list[i] == best_chnl) &&
+		!(CDS_IS_DFS_CH(best_chnl) && cds_disallow_mcc(best_chnl))) {
 			QDF_TRACE(QDF_MODULE_ID_SAP,
 				QDF_TRACE_LEVEL_INFO_HIGH,
 				"Best channel is: %d",
@@ -1646,7 +1647,7 @@ static void sap_compute_spect_weight(tSapChSelSpectInfo *pSpectInfoParams,
 
 				QDF_TRACE(QDF_MODULE_ID_SAP,
 					  QDF_TRACE_LEVEL_INFO_HIGH,
-					  "In %s, bssdes.ch_self=%d, bssdes.ch_ID=%d, bssdes.rssi=%d, SpectCh.bssCount=%d, pScanResult=%p, ChannelWidth %d, secondaryChanOffset %d, center frequency %d",
+					  "In %s, bssdes.ch_self=%d, bssdes.ch_ID=%d, bssdes.rssi=%d, SpectCh.bssCount=%d, pScanResult=%pK, ChannelWidth %d, secondaryChanOffset %d, center frequency %d",
 					  __func__,
 					  pScanResult->BssDescriptor.
 					  channelIdSelf,

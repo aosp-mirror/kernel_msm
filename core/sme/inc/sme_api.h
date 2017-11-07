@@ -79,6 +79,7 @@
 #define SME_SESSION_ID_ANY        50
 
 #define SME_INVALID_COUNTRY_CODE "XX"
+#define INVALID_ROAM_ID 0
 
 #define SME_SET_CHANNEL_REG_POWER(reg_info_1, val) do {	\
 	reg_info_1 &= 0xff00ffff;	      \
@@ -659,6 +660,16 @@ QDF_STATUS sme_config_fast_roaming(tHalHandle hal, uint8_t session_id,
 QDF_STATUS sme_update_is_mawc_ini_feature_enabled(tHalHandle hHal,
 		const bool MAWCEnabled);
 QDF_STATUS sme_stop_roaming(tHalHandle hHal, uint8_t sessionId, uint8_t reason);
+
+/**
+ * sme_indicate_disconnect_inprogress() - Indicate to csr that disconnect is in
+ * progress
+ * @hal: The handle returned by mac_open
+ * @session_id: sessionId on which disconenct has started
+ *
+ * Return: void
+ */
+void sme_indicate_disconnect_inprogress(tHalHandle hal, uint8_t session_id);
 QDF_STATUS sme_start_roaming(tHalHandle hHal, uint8_t sessionId,
 		uint8_t reason);
 QDF_STATUS sme_update_enable_fast_roam_in_concurrency(tHalHandle hHal,
@@ -1599,7 +1610,8 @@ QDF_STATUS sme_congestion_register_callback(tHalHandle hal,
 tCsrScanResultInfo *sme_scan_get_result_for_bssid(tHalHandle hal_handle,
 						  struct qdf_mac_addr *bssid);
 
-QDF_STATUS sme_delete_all_tdls_peers(tHalHandle hal, uint8_t session_id);
+QDF_STATUS sme_delete_all_tdls_peers(tHalHandle hal, uint8_t session_id,
+		bool disable_tdls_state);
 
 /**
  * sme_set_random_mac() - Set random mac address filter
