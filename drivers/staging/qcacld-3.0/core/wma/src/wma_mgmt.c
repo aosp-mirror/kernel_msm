@@ -103,6 +103,12 @@ static void wma_send_bcn_buf_ll(tp_wma_handle wma,
 		WMA_LOGE("%s: Invalid beacon buffer", __func__);
 		return;
 	}
+	if (WMI_UNIFIED_NOA_ATTR_NUM_DESC_GET(p2p_noa_info) >
+			WMI_P2P_MAX_NOA_DESCRIPTORS) {
+		WMA_LOGE("%s: Too many descriptors %d", __func__,
+			WMI_UNIFIED_NOA_ATTR_NUM_DESC_GET(p2p_noa_info));
+		return;
+	}
 
 	qdf_spin_lock_bh(&bcn->lock);
 
@@ -260,7 +266,9 @@ int wma_beacon_swba_handler(void *handle, uint8_t *event, uint32_t len)
 		return -EINVAL;
 	}
 
-	for (; vdev_map; vdev_id++, vdev_map >>= 1) {
+	WMA_LOGD("vdev_map = %d", vdev_map);
+	for (; vdev_map && vdev_id < wma->max_bssid;
+			vdev_id++, vdev_map >>= 1) {
 		if (!(vdev_map & 0x1))
 			continue;
 		if (!ol_cfg_is_high_latency(pdev->ctrl_pdev))
@@ -500,6 +508,12 @@ int wma_unified_bcntx_status_event_handler(void *handle,
 	resp_event = param_buf->fixed_param;
 
 	WMA_LOGD("%s", __func__);
+
+	if (resp_event->vdev_id >= wma->max_bssid) {
+		WMA_LOGE("%s: received invalid vdev_id %d",
+			 __func__, resp_event->vdev_id);
+		return -EINVAL;
+	}
 
 	/* Check for valid handle to ensure session is not
 	 * deleted in any race
@@ -2451,7 +2465,7 @@ int wma_tbttoffset_update_event_handler(void *handle, uint8_t *event,
 		return -EINVAL;
 	}
 
-	for (; (vdev_map); vdev_map >>= 1, if_id++) {
+	for (; (if_id < wma->max_bssid && vdev_map); vdev_map >>= 1, if_id++) {
 		if (!(vdev_map & 0x1) || (!(intf[if_id].handle)))
 			continue;
 
@@ -2585,7 +2599,7 @@ void wma_send_beacon(tp_wma_handle wma, tpSendbeaconParams bcn_info)
 
 		if (bcn_info->p2pIeOffset) {
 			p2p_ie = bcn_info->beacon + bcn_info->p2pIeOffset;
-			WMA_LOGD("%s: p2pIe is present - vdev_id %hu, p2p_ie = %p, p2p ie len = %hu",
+			WMA_LOGD("%s: p2pIe is present - vdev_id %hu, p2p_ie = %pK, p2p ie len = %hu",
 				__func__, vdev_id, p2p_ie, p2p_ie[1]);
 			if (wma_p2p_go_set_beacon_ie(wma, vdev_id,
 							 p2p_ie) < 0) {
@@ -3489,6 +3503,16 @@ static int wma_mgmt_rx_process(void *handle, uint8_t *data,
 					 rx_pkt->pkt_meta.mpdu_hdr_len;
 
 	rx_pkt->pkt_meta.roamCandidateInd = 0;
+
+	/*
+	 * If the mpdu_data_len is greater than Max (2k), drop the frame
+	 */
+	if (rx_pkt->pkt_meta.mpdu_data_len > WMA_MAX_MGMT_MPDU_LEN) {
+		WMA_LOGE("Data Len %d greater than max, dropping frame",
+			 rx_pkt->pkt_meta.mpdu_data_len);
+		qdf_mem_free(rx_pkt);
+		return -EINVAL;
+	}
 
 	/* Why not just use rx_event->hdr.buf_len? */
 	wbuf = qdf_nbuf_alloc(NULL, roundup(hdr->buf_len, 4), 0, 4, false);

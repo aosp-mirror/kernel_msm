@@ -2913,7 +2913,7 @@ bool cds_is_connection_in_progress(uint8_t *session_id,
 			&& (eConnectionState_Connecting ==
 				(WLAN_HDD_GET_STATION_CTX_PTR(adapter))->
 					conn_info.connState)) {
-			cds_debug("%p(%d) Connection is in progress",
+			cds_debug("%pK(%d) Connection is in progress",
 				WLAN_HDD_GET_STATION_CTX_PTR(adapter),
 				adapter->sessionId);
 			if (session_id && reason) {
@@ -2931,7 +2931,7 @@ bool cds_is_connection_in_progress(uint8_t *session_id,
 					WLAN_HDD_GET_HAL_CTX(adapter),
 					adapter->sessionId)) ||
 				hdd_is_roaming_in_progress(adapter)) {
-			cds_debug("%p(%d) Reassociation in progress",
+			cds_debug("%pK(%d) Reassociation in progress",
 				WLAN_HDD_GET_STATION_CTX_PTR(adapter),
 				adapter->sessionId);
 			if (session_id && reason) {
@@ -7187,7 +7187,7 @@ static bool cds_sta_p2pgo_concur_handle(hdd_adapter_t *sta_adapter,
 			if (true == cds_is_sta_connection_pending()) {
 				MTRACE(qdf_trace(QDF_MODULE_ID_HDD,
 					TRACE_CODE_HDD_CLEAR_JOIN_REQ,
-					sta_adapter->sessionId, *roam_id));
+					sta_adapter->sessionId, 0));
 				ret = sme_clear_joinreq_param(
 					WLAN_HDD_GET_HAL_CTX(sta_adapter),
 					sta_adapter->sessionId);
@@ -7200,7 +7200,7 @@ static bool cds_sta_p2pgo_concur_handle(hdd_adapter_t *sta_adapter,
 			}
 			MTRACE(qdf_trace(QDF_MODULE_ID_HDD,
 					TRACE_CODE_HDD_STORE_JOIN_REQ,
-					sta_adapter->sessionId, *roam_id));
+					sta_adapter->sessionId, 0));
 			/* store the scan cache here */
 			ret = sme_store_joinreq_param(
 					WLAN_HDD_GET_HAL_CTX(sta_adapter),

@@ -160,7 +160,7 @@ static void hdd_get_tsm_stats_cb(tAniTrafStrmMetrics tsm_metrics,
 	hdd_adapter_t *adapter = NULL;
 
 	if (NULL == context) {
-		hdd_err("Bad param, context [%p]", context);
+		hdd_err("Bad param, context [%pK]", context);
 		return;
 	}
 
@@ -181,7 +181,7 @@ static void hdd_get_tsm_stats_cb(tAniTrafStrmMetrics tsm_metrics,
 		 * nothing we can do
 		 */
 		spin_unlock(&hdd_context_lock);
-		hdd_warn("Invalid context, adapter [%p] magic [%08x]",
+		hdd_warn("Invalid context, adapter [%pK] magic [%08x]",
 			  adapter, stats_context->magic);
 		return;
 	}
@@ -2435,7 +2435,7 @@ static void hdd_get_link_status_cb(uint8_t status, void *context)
 	hdd_adapter_t *adapter;
 
 	if (NULL == context) {
-		hdd_err("Bad context [%p]", context);
+		hdd_err("Bad context [%pK]", context);
 		return;
 	}
 
@@ -2451,7 +2451,7 @@ static void hdd_get_link_status_cb(uint8_t status, void *context)
 		 * nothing we can do
 		 */
 		spin_unlock(&hdd_context_lock);
-		hdd_warn("Invalid context, adapter [%p] magic [%08x]",
+		hdd_warn("Invalid context, adapter [%pK] magic [%08x]",
 			  adapter, pLinkContext->magic);
 		return;
 	}
@@ -4482,7 +4482,7 @@ static int drv_cmd_fast_reassoc(hdd_adapter_t *adapter,
 	uint8_t *value = command;
 	uint8_t channel = 0;
 	tSirMacAddr targetApBssid;
-	uint32_t roamId = 0;
+	uint32_t roamId = INVALID_ROAM_ID;
 	tCsrRoamModifyProfileFields modProfileFields;
 	tCsrHandoffRequest handoffInfo;
 	hdd_station_ctx_t *pHddStaCtx;

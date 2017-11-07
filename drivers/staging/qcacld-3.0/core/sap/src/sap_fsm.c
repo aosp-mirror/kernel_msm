@@ -3369,13 +3369,19 @@ static QDF_STATUS sap_cac_start_notify(tHalHandle hHal)
 	for (intf = 0; intf < SAP_MAX_NUM_SESSION; intf++) {
 		ptSapContext pSapContext =
 			(ptSapContext) pMac->sap.sapCtxList[intf].pSapContext;
+		tCsrRoamProfile *profile;
+
 		if (((QDF_SAP_MODE == pMac->sap.sapCtxList[intf].sapPersona)
 		    ||
 		    (QDF_P2P_GO_MODE == pMac->sap.sapCtxList[intf].sapPersona))
 		    && pMac->sap.sapCtxList[intf].pSapContext != NULL &&
 		    (false == pSapContext->isCacStartNotified)) {
+			/* Don't start CAC for non-dfs channel, its violation */
+			profile = &pSapContext->csr_roamProfile;
+			if (!CDS_IS_DFS_CH(profile->operationChannel))
+				continue;
 			QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_MED,
-				  "sapdfs: Signaling eSAP_DFS_CAC_START to HDD for sapctx[%p]",
+				  "sapdfs: Signaling eSAP_DFS_CAC_START to HDD for sapctx[%pK]",
 				  pSapContext);
 
 			qdf_status = sap_signal_hdd_event(pSapContext, NULL,
@@ -3461,6 +3467,8 @@ static QDF_STATUS sap_cac_end_notify(tHalHandle hHal, tCsrRoamInfo *roamInfo)
 	for (intf = 0; intf < SAP_MAX_NUM_SESSION; intf++) {
 		ptSapContext pSapContext =
 			(ptSapContext) pMac->sap.sapCtxList[intf].pSapContext;
+		tCsrRoamProfile *profile;
+
 		if (((QDF_SAP_MODE == pMac->sap.sapCtxList[intf].sapPersona)
 		    ||
 		    (QDF_P2P_GO_MODE == pMac->sap.sapCtxList[intf].sapPersona))
@@ -3468,6 +3476,10 @@ static QDF_STATUS sap_cac_end_notify(tHalHandle hHal, tCsrRoamInfo *roamInfo)
 		    (false == pSapContext->isCacEndNotified) &&
 		    (pSapContext->sapsMachine == eSAP_DFS_CAC_WAIT)) {
 			pSapContext = pMac->sap.sapCtxList[intf].pSapContext;
+			/* Don't check CAC for non-dfs channel */
+			profile = &pSapContext->csr_roamProfile;
+			if (!CDS_IS_DFS_CH(profile->operationChannel))
+				continue;
 
 			/* If this is an end notification of a pre cac, the
 			 * SAP must not start beaconing and must delete the
@@ -3499,7 +3511,7 @@ static QDF_STATUS sap_cac_end_notify(tHalHandle hHal, tCsrRoamInfo *roamInfo)
 			pSapContext->isCacEndNotified = true;
 			pMac->sap.SapDfsInfo.sap_radar_found_status = false;
 			QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_MED,
-				  "sapdfs: Start beacon request on sapctx[%p]",
+				  "sapdfs: Start beacon request on sapctx[%pK]",
 				  pSapContext);
 
 			/* Start beaconing on the new channel */
@@ -3631,7 +3643,7 @@ static QDF_STATUS sap_fsm_state_disconnected(ptSapContext sap_ctx,
 			FL("from state eSAP_DISCONNECTED => SAP_DFS_CAC_WAIT"));
 		if (mac_ctx->sap.SapDfsInfo.is_dfs_cac_timer_running != true) {
 			QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_MED,
-			    FL("sapdfs: starting dfs cac timer on sapctx[%p]"),
+			    FL("sapdfs: starting dfs cac timer on sapctx[%pK]"),
 			    sap_ctx);
 			sap_start_dfs_cac_timer(sap_ctx);
 		}
@@ -3846,6 +3858,8 @@ static QDF_STATUS sap_fsm_state_dfs_cac_wait(ptSapContext sap_ctx,
 
 		for (intf = 0; intf < SAP_MAX_NUM_SESSION; intf++) {
 			ptSapContext t_sap_ctx;
+			tCsrRoamProfile *profile;
+
 			t_sap_ctx = mac_ctx->sap.sapCtxList[intf].pSapContext;
 			if (((QDF_SAP_MODE ==
 				 mac_ctx->sap.sapCtxList[intf].sapPersona) ||
@@ -3853,8 +3867,11 @@ static QDF_STATUS sap_fsm_state_dfs_cac_wait(ptSapContext sap_ctx,
 				mac_ctx->sap.sapCtxList[intf].sapPersona)) &&
 			    t_sap_ctx != NULL &&
 			    t_sap_ctx->sapsMachine != eSAP_DISCONNECTED) {
+				profile = &t_sap_ctx->csr_roamProfile;
+				if (!CDS_IS_DFS_CH(profile->operationChannel))
+					continue;
 				/* SAP to be moved to DISCONNECTING state */
-				sap_ctx->sapsMachine = eSAP_DISCONNECTING;
+				t_sap_ctx->sapsMachine = eSAP_DISCONNECTING;
 				/*
 				 * eSAP_DFS_CHANNEL_CAC_RADAR_FOUND:
 				 * A Radar is found on current DFS Channel
@@ -4068,6 +4085,8 @@ static QDF_STATUS sap_fsm_state_started(ptSapContext sap_ctx,
 		 */
 		for (intf = 0; intf < SAP_MAX_NUM_SESSION; intf++) {
 			ptSapContext temp_sap_ctx;
+			tCsrRoamProfile *profile;
+
 			if (((QDF_SAP_MODE ==
 				mac_ctx->sap.sapCtxList[intf].sapPersona) ||
 			    (QDF_P2P_GO_MODE ==
@@ -4075,9 +4094,16 @@ static QDF_STATUS sap_fsm_state_started(ptSapContext sap_ctx,
 			    mac_ctx->sap.sapCtxList[intf].pSapContext != NULL) {
 				temp_sap_ctx =
 				    mac_ctx->sap.sapCtxList[intf].pSapContext;
+				/*
+				 * Radar won't come on non-dfs channel, so
+				 * no need to move them
+				 */
+				profile = &temp_sap_ctx->csr_roamProfile;
+				if (!CDS_IS_DFS_CH(profile->operationChannel))
+					continue;
 				QDF_TRACE(QDF_MODULE_ID_SAP,
 					  QDF_TRACE_LEVEL_INFO_MED,
-					  FL("sapdfs: Sending CSAIE for sapctx[%p]"),
+					  FL("sapdfs: Sending CSAIE for sapctx[%pK]"),
 					  temp_sap_ctx);
 
 				qdf_status = wlansap_dfs_send_csa_ie_request(
@@ -4152,7 +4178,7 @@ static QDF_STATUS sap_fsm_state_disconnecting(ptSapContext sap_ctx,
 		}
 	} else if (msg == eWNI_SME_CHANNEL_CHANGE_REQ) {
 		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_MED,
-			  FL("sapdfs: Send channel change request on sapctx[%p]"),
+			  FL("sapdfs: Send channel change request on sapctx[%pK]"),
 			  sap_ctx);
 		/*
 		 * Most likely, radar has been detected and SAP wants to
@@ -4214,7 +4240,7 @@ QDF_STATUS sap_fsm(ptSapContext sap_ctx, ptWLAN_SAPEvent sap_event)
 	}
 
 	QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_DEBUG,
-		  FL("sap_ctx=%p, state_var=%d, msg=0x%x"),
+		  FL("sap_ctx=%pK, state_var=%d, msg=0x%x"),
 		  sap_ctx, state_var, msg);
 
 	switch (state_var) {
@@ -5005,7 +5031,7 @@ void sap_dfs_cac_timer_callback(void *data)
 	 * CAC Complete, post eSAP_DFS_CHANNEL_CAC_END to sap_fsm
 	 */
 	QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_MED,
-			"sapdfs: Sending eSAP_DFS_CHANNEL_CAC_END for target_channel = %d on sapctx[%p]",
+			"sapdfs: Sending eSAP_DFS_CHANNEL_CAC_END for target_channel = %d on sapctx[%pK]",
 			sapContext->channel, sapContext);
 
 	sapEvent.event = eSAP_DFS_CHANNEL_CAC_END;
@@ -5269,12 +5295,20 @@ uint8_t sap_get_total_number_sap_intf(tHalHandle hHal)
 	return intf_count;
 }
 
-/*
+/**
+ * is_concurrent_sap_ready_for_channel_change() - to check all saps are ready
+ *						  for channel change
+ * @hHal: HAL pointer
+ * @sapContext: sap context for which this function has been called
+ *
  * This function will find the concurrent sap context apart from
  * passed sap context and return its channel change ready status
+ *
+ *
+ * Return: true if other SAP personas are ready to channel switch else false
  */
 bool is_concurrent_sap_ready_for_channel_change(tHalHandle hHal,
-						ptSapContext sapContext)
+				ptSapContext sapContext)
 {
 	tpAniSirGlobal pMac = PMAC_STRUCT(hHal);
 	ptSapContext pSapContext;
@@ -5291,18 +5325,67 @@ bool is_concurrent_sap_ready_for_channel_change(tHalHandle hHal,
 			if (pSapContext == sapContext) {
 				QDF_TRACE(QDF_MODULE_ID_SAP,
 					  QDF_TRACE_LEVEL_ERROR,
-					  FL("sapCtx matched [%p]"),
+					  FL("sapCtx matched [%pK]"),
 					  sapContext);
 				continue;
 			} else {
 				QDF_TRACE(QDF_MODULE_ID_SAP,
 					  QDF_TRACE_LEVEL_ERROR,
 					  FL
-						  ("concurrent sapCtx[%p] didn't matche with [%p]"),
+						  ("concurrent sapCtx[%pK] didn't matche with [%pK]"),
 					  pSapContext, sapContext);
 				return pSapContext->is_sap_ready_for_chnl_chng;
 			}
 		}
 	}
+	return false;
+}
+
+/**
+ * sap_is_conc_sap_doing_scc_dfs() - check if conc SAPs are doing SCC DFS
+ * @hal: pointer to hal
+ * @sap_context: current SAP persona's channel
+ *
+ * If provided SAP's channel is DFS then Loop through each SAP or GO persona and
+ * check if other beaconing entity's channel is same DFS channel. If they are
+ * same then concurrent sap is doing SCC DFS.
+ *
+ * Return: true if two or more beaconing entitity doing SCC DFS else false
+ */
+bool sap_is_conc_sap_doing_scc_dfs(tHalHandle hal, ptSapContext given_sapctx)
+{
+	tpAniSirGlobal mac = PMAC_STRUCT(hal);
+	ptSapContext sap_ctx;
+	uint8_t intf = 0, scc_dfs_counter = 0;
+
+	/*
+	 * current SAP persona's channel itself is not DFS, so no need to check
+	 * what other persona's channel is
+	 */
+	if (!CDS_IS_DFS_CH(given_sapctx->csr_roamProfile.operationChannel)) {
+		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_DEBUG,
+			  FL("skip this loop as provided channel is non-dfs"));
+		return false;
+	}
+
+	for (intf = 0; intf < SAP_MAX_NUM_SESSION; intf++) {
+		if ((QDF_SAP_MODE != mac->sap.sapCtxList[intf].sapPersona) &&
+		    (QDF_P2P_GO_MODE != mac->sap.sapCtxList[intf].sapPersona))
+			continue;
+		if (!mac->sap.sapCtxList[intf].pSapContext)
+			continue;
+		sap_ctx = (ptSapContext) mac->sap.sapCtxList[intf].pSapContext;
+		/* if same SAP contexts then skip to next context */
+		if (sap_ctx == given_sapctx)
+			continue;
+		if (given_sapctx->csr_roamProfile.operationChannel ==
+				sap_ctx->csr_roamProfile.operationChannel)
+			scc_dfs_counter++;
+	}
+
+	/* Found atleast two of the beaconing entities doing SCC DFS */
+	if (scc_dfs_counter)
+		return true;
+
 	return false;
 }
