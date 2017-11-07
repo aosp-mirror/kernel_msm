@@ -8408,8 +8408,10 @@ static ol_txrx_vdev_handle wma_vdev_attach(tp_wma_handle wma_handle,
 						txrx_vdev_type);
 	wma_handle->interfaces[self_sta_req->sessionId].pause_bitmap = 0;
 
-	WMA_LOGD("vdev_id %hu, txrx_vdev_handle = %p", self_sta_req->sessionId,
+	WMA_LOGE("vdev_id %hu, txrx_vdev_handle = %pK", self_sta_req->sessionId,
 			txrx_vdev_handle);
+	WMA_LOGE("mac adress "
+		MAC_ADDRESS_STR, MAC_ADDR_ARRAY(self_sta_req->selfMacAddr));
 
 	if (NULL == txrx_vdev_handle) {
 		WMA_LOGP("%s: ol_txrx_vdev_attach failed", __func__);
