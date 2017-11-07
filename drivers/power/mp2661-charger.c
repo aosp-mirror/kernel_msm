@@ -431,7 +431,7 @@ static int mp2661_fix_charging_status(struct mp2661_chg *chip)
         current_now_ma = mp2661_get_prop_current_now(chip) / 1000;
         if(current_now_ma < 0)
         {
-            pr_info("fix charging status");
+            pr_info("fix charging status\n");
             status = POWER_SUPPLY_STATUS_DISCHARGING;
         }
     }
@@ -461,7 +461,7 @@ static int mp2661_fix_charging_status(struct mp2661_chg *chip)
             usb_present = mp2661_is_chg_plugged_in(chip);
             if(!usb_present)
             {
-                pr_info("unplugin usb in continue check");
+                pr_info("unplugin usb in continue check\n");
                 status = POWER_SUPPLY_STATUS_DISCHARGING;
                 break;
             }
@@ -469,12 +469,12 @@ static int mp2661_fix_charging_status(struct mp2661_chg *chip)
 
         if(retry_times >= CONTINUE_IBAT_MAX_COUNT)
         {
-            pr_info("fix charging status after some times check");
+            pr_info("fix charging status after some times check\n");
             status = POWER_SUPPLY_STATUS_DISCHARGING;
         }
         else if(!chip->ibat_continue_check_flag && (0 == consective_charging_count))
         {
-            pr_info("fix charging status after some time");
+            pr_info("fix charging status after some time\n");
             status = POWER_SUPPLY_STATUS_DISCHARGING;
         }
     }
@@ -516,15 +516,7 @@ static int mp2661_get_prop_batt_status(struct mp2661_chg *chip)
         }
         else
         {
-            /* fix charging status according to battery current in healthd*/
-            if(strncmp(current->comm, "healthd", 7))
-            {
-                status = POWER_SUPPLY_STATUS_CHARGING;
-            }
-            else
-            {
-                status = mp2661_fix_charging_status(chip);
-            }
+            status = POWER_SUPPLY_STATUS_CHARGING;
         }
     }
     else
@@ -1380,6 +1372,7 @@ static int mp2661_is_chg_plugged_in(struct mp2661_chg *chip)
 bool mp2661_global_is_chg_plugged_in(void)
 {
     int rc;
+    int status;
 
     if (!global_mp2661)
     {
@@ -1388,7 +1381,27 @@ bool mp2661_global_is_chg_plugged_in(void)
     }
 
     rc = (bool)mp2661_is_chg_plugged_in(global_mp2661);
-    return rc;
+    if(0 == rc)
+    {
+        return 0;
+    }
+
+    /* about usb online status, do two rules to adjust it:
+     * First, when temp is in hot/cold area, it display icon
+     * second, when usb connect is not well, it do not display icon
+     */
+    if((global_mp2661->batt_temp_status != BAT_TEMP_STATUS_HOT)
+        && (global_mp2661->batt_temp_status != BAT_TEMP_STATUS_COLD)
+        && (!strncmp(current->comm, "healthd", 7)))
+    {
+        status = mp2661_fix_charging_status(global_mp2661);
+        if(POWER_SUPPLY_STATUS_DISCHARGING == status)
+        {
+            return 0;
+        }
+    }
+
+    return 1;
 }
 
 static int mp2661_battery_set_property(struct power_supply *psy,
