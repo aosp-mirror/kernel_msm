@@ -139,8 +139,8 @@
 		cam_vaf-supply = <&actuator_regulator>;
 		regulator-names = "cam_vaf";
 		rgltr-cntrl-support;
-		rgltr-min-voltage = <2800000>;
-		rgltr-max-voltage = <2800000>;
+		rgltr-min-voltage = <2864000>;
+		rgltr-max-voltage = <2864000>;
 		rgltr-load-current = <0>;
 	};
 
@@ -176,9 +176,9 @@
 		compatible = "qcom,cam-sensor";
 		reg = <0x0>;
 		csiphy-sd-index = <0>;
-		sensor-position-roll = <90>;
+		sensor-position-roll = <270>;
 		sensor-position-pitch = <0>;
-		sensor-position-yaw = <180>;
+		sensor-position-yaw = <0>;
 		actuator-src = <&actuator_front>;
 		led-flash-src = <&led_flash_front>;
 		cam_vio-supply = <&pm8998_lvs1>;
@@ -221,10 +221,11 @@
 		compatible = "qcom,cam-sensor";
 		reg = <0x1>;
 		csiphy-sd-index = <1>;
-		sensor-position-roll = <90>;
+		sensor-position-roll = <270>;
 		sensor-position-pitch = <0>;
 		sensor-position-yaw = <180>;
 		led-flash-src = <&led_flash_rear>;
+		actuator-src = <&actuator_rear>;
 		cam_vdig-supply = <&pm8998_s3>;
 		cam_vio-supply = <&pm8998_lvs1>;
 		cam_vana-supply = <&pmi8998_bob>;
