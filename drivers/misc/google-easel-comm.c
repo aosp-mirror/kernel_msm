@@ -77,9 +77,7 @@ struct easelcomm_user_state {
 };
 
 /* max delay in msec waiting for remote to wrap command channel */
-#define CMDCHAN_WRAP_DONE_TIMEOUT_MS 500  /* TODO: set to 2000 (b/65052892) */
-/* additional retry times for asking remote to wrap command channel */
-#define CMDCHAN_SEND_WRAP_RETRY_TIMES 3   /* TODO: remove (b/65052892) */
+#define CMDCHAN_WRAP_DONE_TIMEOUT_MS 1000
 /* max delay in msec waiting for remote to ack link shutdown */
 #define LINK_SHUTDOWN_ACK_TIMEOUT 500
 /* max delay in msec waiting for remote to return flush done */
@@ -1119,8 +1117,7 @@ static int easelcomm_cmd_channel_send_wrap(
 	long remaining;
 	uint64_t wrap_marker = CMD_BUFFER_WRAP_MARKER;
 
-	/* TODO: remove retry code once b/65052892 is fixed */
-	do {
+	{
 		if (attempted > 0) {
 			dev_warn(easelcomm_miscdev.this_device,
 				 "%s: retrying after %d attempts",
@@ -1162,7 +1159,10 @@ static int easelcomm_cmd_channel_send_wrap(
 				msecs_to_jiffies(CMDCHAN_WRAP_DONE_TIMEOUT_MS));
 		if (remaining > 0) {
 			ret = 0;
-			break;  /* remote did catch up; no need to retry */
+			dev_dbg(easelcomm_miscdev.this_device,
+				"cmdchan wrap completed, new off=%llx\n",
+				channel->write_offset);
+			goto exit;
 		}
 		if (remaining < 0) {
 			/* waiting was interrupted */
@@ -1177,7 +1177,7 @@ static int easelcomm_cmd_channel_send_wrap(
 			"remote channel did not catch up: reason timeout off=%llx seq=%llu\n",
 			channel->write_offset, channel->write_seqnbr);
 		ret = -ETIMEDOUT;
-	} while (attempted <= CMDCHAN_SEND_WRAP_RETRY_TIMES);
+	}
 
 exit:
 	return ret;
