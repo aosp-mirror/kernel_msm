@@ -542,6 +542,8 @@ int fts_wait_for_ready(struct fts_ts_info *info)
 	while (fts_read_reg(info, &addr, 1,
 				(unsigned char *)data, FTS_EVENT_SIZE)) {
 		if (data[0] == EVENTID_CONTROLLER_READY) {
+			info->flash_corruption_info.cfg_broken = false;
+			info->flash_corruption_info.cx_broken = false;
 			rc = 0;
 			break;
 		}
@@ -1818,7 +1820,9 @@ static int fts_probe(struct i2c_client *client, const struct i2c_device_id *idp)
 	retval = fts_init(info);
 	info->reinit_done = true;
 	mutex_unlock(&info->device_mutex);
-	if (info->flash_corruption_info.fw_broken) {
+	if (info->flash_corruption_info.fw_broken ||
+	    info->flash_corruption_info.cfg_broken ||
+	    info->flash_corruption_info.cx_broken) {
 		tsp_debug_err(&info->client->dev,
 			      "Attempt to recover corrupt/missing firmware.");
 	} else if (retval < 0) {
