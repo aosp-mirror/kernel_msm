@@ -1444,7 +1444,7 @@ void csr_abort_command(tpAniSirGlobal pMac, tSmeCmd *pCommand, bool fStopping)
 			/* We need to inform the requester before dropping
 			 * the scan command
 			 */
-			sme_debug("Drop scan reason %d callback %p",
+			sme_debug("Drop scan reason %d callback %pK",
 				pCommand->u.scanCmd.reason,
 				pCommand->u.scanCmd.callback);
 			if (NULL != pCommand->u.scanCmd.callback) {
@@ -4281,6 +4281,12 @@ QDF_STATUS csr_roam_prepare_bss_config(tpAniSirGlobal pMac,
 				pBssDesc->channelId, pIes);
 	else
 		pBssConfig->cbMode = PHY_SINGLE_CHANNEL_CENTERED;
+
+	if (CDS_IS_CHANNEL_24GHZ(pBssDesc->channelId) &&
+	    pProfile->force_24ghz_in_ht20) {
+		pBssConfig->cbMode = PHY_SINGLE_CHANNEL_CENTERED;
+		sme_debug("force_24ghz_in_ht20 is set so set cbMode to 0");
+	}
 
 	return QDF_STATUS_SUCCESS;
 }
@@ -7807,6 +7813,7 @@ QDF_STATUS csr_roam_copy_profile(tpAniSirGlobal pMac,
 	/*Save the WPS info */
 	pDstProfile->bWPSAssociation = pSrcProfile->bWPSAssociation;
 	pDstProfile->bOSENAssociation = pSrcProfile->bOSENAssociation;
+	pDstProfile->force_24ghz_in_ht20 = pSrcProfile->force_24ghz_in_ht20;
 	pDstProfile->uapsd_mask = pSrcProfile->uapsd_mask;
 	pDstProfile->beaconInterval = pSrcProfile->beaconInterval;
 	pDstProfile->privacy = pSrcProfile->privacy;
@@ -8205,6 +8212,7 @@ QDF_STATUS csr_roam_connect(tpAniSirGlobal pMac, uint32_t sessionId,
 
 	/* Initialize the count before proceeding with the Join requests */
 	pSession->join_bssid_count = 0;
+	pSession->discon_in_progress = false;
 	pSession->is_fils_connection = csr_is_fils_connection(pProfile);
 	sme_debug(
 		"called  BSSType = %s (%d) authtype = %d  encryType = %d",
@@ -14852,8 +14860,11 @@ QDF_STATUS csr_send_join_req_msg(tpAniSirGlobal pMac, uint32_t sessionId,
 		csr_join_req->staPersona = (uint8_t) pProfile->csrPersona;
 		csr_join_req->wps_registration = pProfile->bWPSAssociation;
 		csr_join_req->cbMode = (uint8_t) pSession->bssParams.cbMode;
-		sme_debug("CSR PERSONA: %d CSR CbMode: %d",
-			  pProfile->csrPersona, pSession->bssParams.cbMode);
+		csr_join_req->force_24ghz_in_ht20 =
+			pProfile->force_24ghz_in_ht20;
+		sme_debug("CSR PERSONA: %d CSR CbMode: %d force 24ghz ht20 %d",
+			  pProfile->csrPersona, pSession->bssParams.cbMode,
+			  csr_join_req->force_24ghz_in_ht20);
 		csr_join_req->uapsdPerAcBitmask = pProfile->uapsd_mask;
 		pSession->uapsd_mask = pProfile->uapsd_mask;
 		status =
@@ -21035,9 +21046,11 @@ static QDF_STATUS csr_process_roam_sync_callback(tpAniSirGlobal mac_ctx,
 		 */
 		csr_roam_roaming_offload_timer_action(mac_ctx,
 				0, session_id, ROAMING_OFFLOAD_TIMER_STOP);
-		if (!CSR_IS_ROAM_JOINED(mac_ctx, session_id)) {
+		if (session->discon_in_progress ||
+		    !CSR_IS_ROAM_JOINED(mac_ctx, session_id)) {
 			QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
-				FL("LFR3: Session not in connected state"));
+				FL("LFR3: Session not in connected state or disconnect is in progress %d"),
+				session->discon_in_progress);
 			return QDF_STATUS_E_FAILURE;
 		}
 		csr_roam_call_callback(mac_ctx, session_id, NULL, 0,

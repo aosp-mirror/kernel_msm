@@ -1702,8 +1702,9 @@ __lim_process_sme_join_req(tpAniSirGlobal mac_ctx, uint32_t *msg_buf)
 		/*Store Persona */
 		session->pePersona = sme_join_req->staPersona;
 		QDF_TRACE(QDF_MODULE_ID_PE, QDF_TRACE_LEVEL_DEBUG,
-			  FL("PE PERSONA=%d cbMode %u"),
-			  session->pePersona, sme_join_req->cbMode);
+			  FL("PE PERSONA=%d cbMode %u force_24ghz_in_ht20 %d"),
+			  session->pePersona, sme_join_req->cbMode,
+			  sme_join_req->force_24ghz_in_ht20);
 		/* Copy The channel Id to the session Table */
 		session->currentOperChannel = bss_desc->channelId;
 		if (IS_5G_CH(session->currentOperChannel))
@@ -1740,6 +1741,8 @@ __lim_process_sme_join_req(tpAniSirGlobal mac_ctx, uint32_t *msg_buf)
 		/*Phy mode */
 		session->gLimPhyMode = bss_desc->nwType;
 		handle_ht_capabilityand_ht_info(mac_ctx, session);
+		session->force_24ghz_in_ht20 =
+			sme_join_req->force_24ghz_in_ht20;
 		/* cbMode is already merged value of peer and self -
 		 * done by csr in csr_get_cb_mode_from_ies */
 		session->htSupportedChannelWidthSet =
@@ -5599,9 +5602,21 @@ lim_update_ibss_prop_add_ies(tpAniSirGlobal pMac, uint8_t **pDstData_buff,
 		qdf_mem_copy(vendor_ie, pModifyIE->pIEBuffer,
 				pModifyIE->ieBufferlength);
 	} else {
-		uint16_t new_length = pModifyIE->ieBufferlength + *pDstDataLen;
-		uint8_t *new_ptr = qdf_mem_malloc(new_length);
+		uint16_t new_length;
+		uint8_t *new_ptr;
 
+		/*
+		 * check for uint16 overflow before using sum of two numbers as
+		 * length of size to malloc
+		 */
+		if (USHRT_MAX - pModifyIE->ieBufferlength < *pDstDataLen) {
+			pe_err("U16 overflow due to %d + %d",
+				pModifyIE->ieBufferlength, *pDstDataLen);
+			return false;
+		}
+
+		new_length = pModifyIE->ieBufferlength + *pDstDataLen;
+		new_ptr = qdf_mem_malloc(new_length);
 		if (NULL == new_ptr) {
 			pe_err("Memory allocation failed");
 			return false;
@@ -5654,7 +5669,7 @@ static void lim_process_modify_add_ies(tpAniSirGlobal mac_ctx,
 	if ((0 == modify_add_ies->modifyIE.ieBufferlength) ||
 		(0 == modify_add_ies->modifyIE.ieIDLen) ||
 		(NULL == modify_add_ies->modifyIE.pIEBuffer)) {
-		pe_err("Invalid request pIEBuffer %p ieBufferlength %d ieIDLen %d ieID %d. update Type %d",
+		pe_err("Invalid request pIEBuffer %pK ieBufferlength %d ieIDLen %d ieID %d. update Type %d",
 				modify_add_ies->modifyIE.pIEBuffer,
 				modify_add_ies->modifyIE.ieBufferlength,
 				modify_add_ies->modifyIE.ieID,
@@ -5775,8 +5790,18 @@ static void lim_process_update_add_ies(tpAniSirGlobal mac_ctx,
 		if (update_ie->append) {
 			/*
 			 * In case of append, allocate new memory
-			 * with combined length
+			 * with combined length.
+			 * Multiple back to back append commands
+			 * can lead to a huge length.So, check
+			 * for the validity of the length.
 			 */
+			if (addn_ie->probeRespDataLen >
+				(USHRT_MAX - update_ie->ieBufferlength)) {
+				pe_err("IE Length overflow, curr:%d, new:%d",
+					addn_ie->probeRespDataLen,
+					update_ie->ieBufferlength);
+				goto end;
+			}
 			new_length = update_ie->ieBufferlength +
 				addn_ie->probeRespDataLen;
 			new_ptr = qdf_mem_malloc(new_length);

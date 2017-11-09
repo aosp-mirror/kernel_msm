@@ -2531,6 +2531,7 @@ int wma_roam_synch_event_handler(void *handle, uint8_t *event,
 	int status = -EINVAL;
 	tSirRoamOffloadScanReq *roam_req;
 	qdf_time_t roam_synch_received = qdf_get_system_timestamp();
+	uint32_t roam_synch_data_len;
 
 	WMA_LOGD("LFR3:%s", __func__);
 	if (!event) {
@@ -2547,6 +2548,12 @@ int wma_roam_synch_event_handler(void *handle, uint8_t *event,
 	synch_event = param_buf->fixed_param;
 	if (!synch_event) {
 		WMA_LOGE("%s: received null event data from target", __func__);
+		goto cleanup_label;
+	}
+
+	if (synch_event->vdev_id >= wma->max_bssid) {
+		WMA_LOGE("%s: received invalid vdev_id %d",
+			 __func__, synch_event->vdev_id);
 		goto cleanup_label;
 	}
 
@@ -2570,17 +2577,30 @@ int wma_roam_synch_event_handler(void *handle, uint8_t *event,
 	 * Maximum number during the addition would be (3 * MAX_LIMIT(UINT32) +
 	 * few fixed fields).
 	 */
-	if (sizeof(*synch_event) + synch_event->bcn_probe_rsp_len +
-			synch_event->reassoc_rsp_len +
-			synch_event->reassoc_req_len +
-			sizeof(wmi_channel) + sizeof(wmi_key_material) +
-			sizeof(uint32_t) > WMI_SVC_MSG_MAX_SIZE) {
-		WMA_LOGE("excess synch payload: LEN bcn:%d, req:%d, rsp:%d",
-				synch_event->bcn_probe_rsp_len,
-				synch_event->reassoc_req_len,
-				synch_event->reassoc_rsp_len);
+	WMA_LOGD("synch payload: LEN bcn:%d, req:%d, rsp:%d",
+			synch_event->bcn_probe_rsp_len,
+			synch_event->reassoc_req_len,
+			synch_event->reassoc_rsp_len);
+	if (synch_event->bcn_probe_rsp_len > WMI_SVC_MSG_MAX_SIZE)
 		goto cleanup_label;
-	}
+	if (synch_event->reassoc_rsp_len >
+		(WMI_SVC_MSG_MAX_SIZE - synch_event->bcn_probe_rsp_len))
+		goto cleanup_label;
+	if (synch_event->reassoc_req_len >
+		WMI_SVC_MSG_MAX_SIZE - (synch_event->bcn_probe_rsp_len +
+			synch_event->reassoc_rsp_len))
+		goto cleanup_label;
+	roam_synch_data_len = synch_event->bcn_probe_rsp_len +
+		synch_event->reassoc_rsp_len + synch_event->reassoc_req_len;
+	/*
+	 * Below is the check for the entire size of the message received from'
+	 * the firmware.
+	 */
+	if (roam_synch_data_len > WMI_SVC_MSG_MAX_SIZE -
+		(sizeof(*synch_event) + sizeof(wmi_channel) +
+		 sizeof(wmi_key_material) + sizeof(uint32_t)))
+		goto cleanup_label;
+	roam_synch_data_len += sizeof(roam_offload_synch_ind);
 
 	cds_host_diag_log_work(&wma->roam_ho_wl,
 			       WMA_ROAM_HO_WAKE_LOCK_DURATION,
@@ -2589,10 +2609,8 @@ int wma_roam_synch_event_handler(void *handle, uint8_t *event,
 				      WMA_ROAM_HO_WAKE_LOCK_DURATION);
 
 	wma->interfaces[synch_event->vdev_id].roam_synch_in_progress = true;
-	len = sizeof(roam_offload_synch_ind) +
-	      synch_event->bcn_probe_rsp_len + synch_event->reassoc_rsp_len +
-	      synch_event->reassoc_req_len;
-	roam_synch_ind_ptr = (roam_offload_synch_ind *)qdf_mem_malloc(len);
+	roam_synch_ind_ptr =
+		(roam_offload_synch_ind *)qdf_mem_malloc(roam_synch_data_len);
 	if (!roam_synch_ind_ptr) {
 		WMA_LOGE("%s: failed to allocate memory for roam_synch_event",
 			 __func__);
@@ -2600,7 +2618,7 @@ int wma_roam_synch_event_handler(void *handle, uint8_t *event,
 		status = -ENOMEM;
 		goto cleanup_label;
 	}
-	qdf_mem_zero(roam_synch_ind_ptr, len);
+	qdf_mem_zero(roam_synch_ind_ptr, roam_synch_data_len);
 	status = wma_fill_roam_synch_buffer(wma,
 			roam_synch_ind_ptr, param_buf);
 	if (status != 0)
@@ -3809,6 +3827,12 @@ int wma_nlo_match_evt_handler(void *handle, uint8_t *event,
 	nlo_event = param_buf->fixed_param;
 	WMA_LOGD("PNO match event received for vdev %d", nlo_event->vdev_id);
 
+	if (nlo_event->vdev_id >= wma->max_bssid) {
+		WMA_LOGE("Invalid vdev id in the NLO event %d",
+				nlo_event->vdev_id);
+		return -EINVAL;
+	}
+
 	node = &wma->interfaces[nlo_event->vdev_id];
 	if (node)
 		node->nlo_match_evt_received = true;
@@ -3851,6 +3875,10 @@ int wma_nlo_scan_cmp_evt_handler(void *handle, uint8_t *event,
 	WMA_LOGD("PNO scan completion event received for vdev %d",
 		 nlo_event->vdev_id);
 
+	if (nlo_event->vdev_id >= wma->max_bssid) {
+		WMA_LOGE("Invalid vdev id from firmware");
+		return -EINVAL;
+	}
 	node = &wma->interfaces[nlo_event->vdev_id];
 
 	/* Handle scan completion event only after NLO match event. */
@@ -4097,6 +4125,14 @@ int wma_extscan_operations_event_handler(void *handle,
 	case WMI_EXTSCAN_CYCLE_STARTED_EVENT:
 		WMA_LOGD("%s: received WMI_EXTSCAN_CYCLE_STARTED_EVENT",
 			 __func__);
+
+		if (oprn_event->num_buckets > param_buf->num_bucket_id) {
+			WMA_LOGE("FW mesg num_buk %d more than TLV hdr %d",
+				 oprn_event->num_buckets,
+				 param_buf->num_bucket_id);
+			return -EINVAL;
+		}
+
 		cds_host_diag_log_work(&wma->extscan_wake_lock,
 				       WMA_EXTSCAN_CYCLE_WAKE_LOCK_DURATION,
 				       WIFI_POWER_EVENT_WAKELOCK_EXT_SCAN);
@@ -5994,6 +6030,12 @@ int wma_scan_event_callback(WMA_HANDLE handle, uint8_t *data,
 
 	param_buf = (WMI_SCAN_EVENTID_param_tlvs *) data;
 	wmi_event = param_buf->fixed_param;
+
+	if (wmi_event->vdev_id >= wma_handle->max_bssid) {
+		WMA_LOGE("Invalid vdev id from firmware");
+		return -EINVAL;
+	}
+
 	vdev_id = wmi_event->vdev_id;
 	scan_id = wma_handle->interfaces[vdev_id].scan_info.scan_id;
 
@@ -6143,6 +6185,10 @@ int wma_roam_event_callback(WMA_HANDLE handle, uint8_t *event_buf,
 			   (wmi_event->reason == WMI_ROAM_REASON_INVALID) ?
 				wmi_event->notif : wmi_event->rssi);
 
+	if (wmi_event->vdev_id >= wma_handle->max_bssid) {
+		WMA_LOGE("Invalid vdev id from firmware");
+		return -EINVAL;
+	}
 
 	DPTRACE(qdf_dp_trace_record_event(QDF_DP_TRACE_EVENT_RECORD,
 		wmi_event->vdev_id, QDF_PROTO_TYPE_EVENT, QDF_ROAM_EVENTID));
