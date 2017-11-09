@@ -194,10 +194,8 @@ static int drv2624_set_go_bit(struct drv2624_data *drv2624, unsigned char val)
 
 	val &= 0x01;
 
-	dev_dbg(drv2624->dev, "%s: val %d\n", __func__, val);
-
 	do {
-		ret = drv2624_reg_write(drv2624, DRV2624_REG_GO, val);
+		ret = drv2624_set_bits(drv2624, DRV2624_REG_GO, 0x01, val);
 		if (ret >= 0) {
 			usleep_range(1000, 1100);
 			/* Only poll GO bit for STOP */
