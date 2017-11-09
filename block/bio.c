@@ -565,6 +565,14 @@ inline int bio_phys_segments(struct request_queue *q, struct bio *bio)
 }
 EXPORT_SYMBOL(bio_phys_segments);
 
+static inline void bio_clone_crypt_key(struct bio *dst, const struct bio *src)
+{
+#ifdef CONFIG_PFK
+	dst->bi_crypt_key = src->bi_crypt_key;
+	dst->bi_dun = src->bi_dun;
+#endif
+}
+
 /**
  * 	__bio_clone_fast - clone a bio that shares the original bio's biovec
  * 	@bio: destination bio
@@ -589,6 +597,8 @@ void __bio_clone_fast(struct bio *bio, struct bio *bio_src)
 	bio->bi_opf = bio_src->bi_opf;
 	bio->bi_iter = bio_src->bi_iter;
 	bio->bi_io_vec = bio_src->bi_io_vec;
+
+	bio_clone_crypt_key(bio, bio_src);
 
 	bio_clone_blkcg_association(bio, bio_src);
 }
@@ -695,6 +705,8 @@ struct bio *bio_clone_bioset(struct bio *bio_src, gfp_t gfp_mask,
 			return NULL;
 		}
 	}
+
+	bio_clone_crypt_key(bio, bio_src);
 
 	bio_clone_blkcg_association(bio, bio_src);
 

@@ -66,7 +66,20 @@ struct bio {
 #endif
 	};
 
+#ifdef CONFIG_PFK
+	/* Encryption key to use (NULL if none) */
+	const struct blk_encryption_key	*bi_crypt_key;
+#endif
+	u64			bi_dun;
+
 	unsigned short		bi_vcnt;	/* how many bio_vec's */
+
+	/*
+	 * When using dircet-io (O_DIRECT), we can't get the inode from a bio
+	 * by walking bio->bi_io_vec->bv_page->mapping->host
+	 * since the page is anon.
+	 */
+	struct inode            *bi_dio_inode;
 
 	/*
 	 * Everything starting with bi_max_vecs will be preserved by bio_reset()

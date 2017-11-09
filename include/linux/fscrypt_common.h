@@ -20,6 +20,10 @@
 
 #define FS_CRYPTO_BLOCK_SIZE		16
 
+/* iv sector for security/pfe/pfk_fscrypt.c and f2fs */
+#define PG_DUN(i,p)                                            \
+	((((i)->i_ino & 0xffffffff) << 32) | ((p)->index & 0xffffffff))
+
 struct fscrypt_info;
 
 struct fscrypt_ctx {
@@ -101,6 +105,11 @@ static inline bool fscrypt_valid_enc_modes(u32 contents_mode,
 	if (contents_mode == FS_ENCRYPTION_MODE_AES_256_XTS &&
 	    filenames_mode == FS_ENCRYPTION_MODE_AES_256_CTS)
 		return true;
+
+	if (contents_mode == FS_ENCRYPTION_MODE_PRIVATE &&
+		filenames_mode == FS_ENCRYPTION_MODE_AES_256_CTS)
+		return true;
+
 
 	return false;
 }

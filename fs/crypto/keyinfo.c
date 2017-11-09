@@ -14,6 +14,7 @@
 #include <crypto/aes.h>
 #include <crypto/sha.h>
 #include "fscrypt_private.h"
+#include "fscrypt_ice.h"
 
 static struct crypto_shash *essiv_hash_tfm;
 
@@ -81,7 +82,7 @@ out:
 }
 
 static int validate_user_key(struct fscrypt_info *crypt_info,
-			struct fscrypt_context *ctx, u8 *raw_key,
+			struct fscrypt_context *ctx,
 			const char *prefix, int min_keysize)
 {
 	char *description;
@@ -129,7 +130,24 @@ static int validate_user_key(struct fscrypt_info *crypt_info,
 		res = -ENOKEY;
 		goto out;
 	}
-	res = derive_key_aes(ctx->nonce, master_key, raw_key);
+	/* If we don't need to derive, we still want to do everything
+	 * up until now to validate the key. It's cleaner to fail now
+	 * than to fail in block I/O. */
+	if (!is_private_mode(crypt_info)) {
+		res = derive_key_aes(ctx->nonce, master_key,
+				crypt_info->ci_raw_key);
+	} else {
+		/*
+		 * Inline encryption: no key derivation required because IVs are
+		 * assigned based on iv_sector.
+		 */
+		BUILD_BUG_ON(sizeof(crypt_info->ci_raw_key) !=
+				sizeof(master_key->raw));
+		memcpy(crypt_info->ci_raw_key,
+			master_key->raw, sizeof(crypt_info->ci_raw_key));
+		res = 0;
+	}
+
 out:
 	up_read(&keyring_key->sem);
 	key_put(keyring_key);
@@ -148,6 +166,7 @@ static const struct {
 					     FS_AES_128_CBC_KEY_SIZE },
 	[FS_ENCRYPTION_MODE_AES_128_CTS] = { "cts(cbc(aes))",
 					     FS_AES_128_CTS_KEY_SIZE },
+	[FS_ENCRYPTION_MODE_PRIVATE] = { "bugon", 0 },
 };
 
 static int determine_cipher_type(struct fscrypt_info *ci, struct inode *inode,
@@ -163,8 +182,10 @@ static int determine_cipher_type(struct fscrypt_info *ci, struct inode *inode,
 	}
 
 	if (S_ISREG(inode->i_mode)) {
+		ci->ci_mode = CI_DATA_MODE;
 		mode = ci->ci_data_mode;
 	} else if (S_ISDIR(inode->i_mode) || S_ISLNK(inode->i_mode)) {
+		ci->ci_mode = CI_FNAME_MODE;
 		mode = ci->ci_filename_mode;
 	} else {
 		WARN_ONCE(1, "fscrypt: filesystem tried to load encryption info for inode %lu, which is not encryptable (file type %d)\n",
@@ -184,6 +205,7 @@ static void put_crypt_info(struct fscrypt_info *ci)
 
 	crypto_free_skcipher(ci->ci_ctfm);
 	crypto_free_cipher(ci->ci_essiv_tfm);
+	memset(ci, 0, sizeof(*ci)); /* sanitizes ->ci_raw_key */
 	kmem_cache_free(fscrypt_info_cachep, ci);
 }
 
@@ -260,7 +282,6 @@ int fscrypt_get_encryption_info(struct inode *inode)
 	struct crypto_skcipher *ctfm;
 	const char *cipher_str;
 	int keysize;
-	u8 *raw_key = NULL;
 	int res;
 
 	if (inode->i_crypt_info)
@@ -311,25 +332,31 @@ int fscrypt_get_encryption_info(struct inode *inode)
 	 * This cannot be a stack buffer because it is passed to the scatterlist
 	 * crypto API as part of key derivation.
 	 */
-	res = -ENOMEM;
-	raw_key = kmalloc(FS_MAX_KEY_SIZE, GFP_NOFS);
-	if (!raw_key)
-		goto out;
-
-	res = validate_user_key(crypt_info, &ctx, raw_key, FS_KEY_DESC_PREFIX,
-				keysize);
+	res = validate_user_key(crypt_info, &ctx, FS_KEY_DESC_PREFIX, keysize);
 	if (res && inode->i_sb->s_cop->key_prefix) {
-		int res2 = validate_user_key(crypt_info, &ctx, raw_key,
-					     inode->i_sb->s_cop->key_prefix,
-					     keysize);
+		int res2 = validate_user_key(crypt_info, &ctx,
+				inode->i_sb->s_cop->key_prefix,
+				keysize);
 		if (res2) {
 			if (res2 == -ENOKEY)
 				res = -ENOKEY;
 			goto out;
 		}
+		res = 0;
 	} else if (res) {
 		goto out;
 	}
+	if (is_private_mode(crypt_info)) {
+		if (!fscrypt_is_ice_capable(inode->i_sb)) {
+			printk(KERN_WARNING "%s: ICE support not available\n",
+					__func__);
+			res = -EINVAL;
+			goto out;
+		}
+		/* Let's encrypt/decrypt by ICE */
+		goto do_ice;
+	}
+
 	ctfm = crypto_alloc_skcipher(cipher_str, 0, 0);
 	if (!ctfm || IS_ERR(ctfm)) {
 		res = ctfm ? PTR_ERR(ctfm) : -ENOMEM;
@@ -344,26 +371,28 @@ int fscrypt_get_encryption_info(struct inode *inode)
 	 * if the provided key is longer than keysize, we use the first
 	 * keysize bytes of the derived key only
 	 */
-	res = crypto_skcipher_setkey(ctfm, raw_key, keysize);
+	res = crypto_skcipher_setkey(ctfm, crypt_info->ci_raw_key, keysize);
 	if (res)
 		goto out;
 
 	if (S_ISREG(inode->i_mode) &&
 	    crypt_info->ci_data_mode == FS_ENCRYPTION_MODE_AES_128_CBC) {
-		res = init_essiv_generator(crypt_info, raw_key, keysize);
+		res = init_essiv_generator(crypt_info, crypt_info->ci_raw_key,
+								keysize);
 		if (res) {
 			pr_debug("%s: error %d (inode %lu) allocating essiv tfm\n",
 				 __func__, res, inode->i_ino);
 			goto out;
 		}
 	}
+	memset(crypt_info->ci_raw_key, 0, sizeof(crypt_info->ci_raw_key));
+do_ice:
 	if (cmpxchg(&inode->i_crypt_info, NULL, crypt_info) == NULL)
 		crypt_info = NULL;
 out:
 	if (res == -ENOKEY)
 		res = 0;
 	put_crypt_info(crypt_info);
-	kzfree(raw_key);
 	return res;
 }
 EXPORT_SYMBOL(fscrypt_get_encryption_info);

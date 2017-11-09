@@ -6,6 +6,7 @@
 #include <linux/bio.h>
 #include <linux/blkdev.h>
 #include <linux/scatterlist.h>
+#include <linux/pfk.h>
 
 #include <trace/events/block.h>
 
@@ -725,6 +726,11 @@ static void blk_account_io_merge(struct request *req)
 	}
 }
 
+static bool crypto_not_mergeable(const struct bio *bio, const struct bio *nxt)
+{
+	return (!pfk_allow_merge_bio(bio, nxt));
+}
+
 /*
  * Has to be called with the request spinlock acquired
  */
@@ -750,6 +756,9 @@ static int attempt_merge(struct request_queue *q, struct request *req,
 
 	if (req_op(req) == REQ_OP_WRITE_SAME &&
 	    !blk_write_same_mergeable(req->bio, next->bio))
+		return 0;
+
+	if (crypto_not_mergeable(req->bio, next->bio))
 		return 0;
 
 	/*
@@ -860,6 +869,9 @@ bool blk_rq_merge_ok(struct request *rq, struct bio *bio)
 	/* must be using the same buffer */
 	if (req_op(rq) == REQ_OP_WRITE_SAME &&
 	    !blk_write_same_mergeable(rq->bio, bio))
+		return false;
+
+	if (crypto_not_mergeable(rq->bio, bio))
 		return false;
 
 	return true;
