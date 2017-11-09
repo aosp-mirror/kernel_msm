@@ -565,7 +565,7 @@ static int haptics_init(struct drv2624_data *drv2624)
 	mutex_init(&drv2624->lock);
 
 	drv2624->drv2624_wq =
-		alloc_workqueue("drv2624_wq", WQ_HIGHPRI | WQ_UNBOUND, 1);
+		alloc_ordered_workqueue("drv2624_wq", WQ_HIGHPRI);
 	if (!drv2624->drv2624_wq) {
 		dev_err(drv2624->dev,
 			"drv2624: fail to alloc_workqueue for drv2624_wq\n");
