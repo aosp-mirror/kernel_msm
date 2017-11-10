@@ -921,7 +921,7 @@ static void laf_function_cleanup(struct android_usb_function *f)
 
 static int
 laf_function_bind_config(struct android_usb_function *f,
-							struct usb_configuration *c)
+		struct usb_configuration *c)
 {
 	return laf_bind_config(c);
 }
@@ -931,8 +931,6 @@ static void laf_android_function_enable(struct android_usb_function *f)
 	struct laf_data *data = f->config;
 
 	data->enabled = true;
-
-	pr_err("laf_android_function_enable");
 }
 
 static void laf_android_function_disable(struct android_usb_function *f)
@@ -943,11 +941,11 @@ static void laf_android_function_disable(struct android_usb_function *f)
 }
 
 static struct android_usb_function laf_function = {
-	.name			= "laf",
-	.enable			= laf_android_function_enable,
-	.disable		= laf_android_function_disable,
-	.init			= laf_function_init,
-	.cleanup		= laf_function_cleanup,
+	.name		= "laf",
+	.enable		= laf_android_function_enable,
+	.disable	= laf_android_function_disable,
+	.init		= laf_function_init,
+	.cleanup	= laf_function_cleanup,
 	.bind_config	= laf_function_bind_config,
 };
 
