@@ -660,6 +660,8 @@ int  proc_time_in_state_show(struct seq_file *m, struct pid_namespace *ns,
 	struct pid *pid, struct task_struct *p);
 int  proc_concurrent_active_time_show(struct seq_file *m,
 	struct pid_namespace *ns, struct pid *pid, struct task_struct *p);
+int  proc_concurrent_policy_time_show(struct seq_file *m,
+	struct pid_namespace *ns, struct pid *pid, struct task_struct *p);
 int single_uid_time_in_state_open(struct inode *inode, struct file *file);
 #else
 static inline void acct_update_power(struct task_struct *p,
