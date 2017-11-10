@@ -243,6 +243,18 @@ static int mnh_sm_get_val_from_buf(const char *buf, unsigned long *val)
 		return -EINVAL;
 }
 
+static int mnh_sm_get_token_val_from_buf(char **buf, unsigned long *val)
+{
+	uint8_t *token;
+	const char *delim = ";";
+
+	token = strsep(buf, delim);
+	if ((token) && (!(kstrtoul(token, 0, val))))
+		return 0;
+	else
+		return -EINVAL;
+}
+
 static ssize_t stage_fw_show(struct device *dev,
 			     struct device_attribute *attr,
 			     char *buf)
@@ -1198,22 +1210,22 @@ static ssize_t mipi_config_store(struct device *dev,
 	int ret;
 	struct mnh_mipi_config cfg = {.vc_en_mask = MNH_MIPI_VC_ALL_EN_MASK};
 
-	ret = mnh_sm_get_val_from_buf(buf, &val);
+	ret = mnh_sm_get_token_val_from_buf((char **)&buf, &val);
 	if (ret)
 		goto mipi_config_arg_fail;
 	cfg.rxdev = val;
 
-	ret = mnh_sm_get_val_from_buf(buf, &val);
+	ret = mnh_sm_get_token_val_from_buf((char **)&buf, &val);
 	if (ret)
 		goto mipi_config_arg_fail;
 	cfg.rx_rate = val;
 
-	ret = mnh_sm_get_val_from_buf(buf, &val);
+	ret = mnh_sm_get_token_val_from_buf((char **)&buf, &val);
 	if (ret)
 		goto mipi_config_arg_fail;
 	cfg.txdev = val;
 
-	ret = mnh_sm_get_val_from_buf(buf, &val);
+	ret = mnh_sm_get_token_val_from_buf((char **)&buf, &val);
 	if (ret)
 		goto mipi_config_arg_fail;
 	cfg.tx_rate = val;
