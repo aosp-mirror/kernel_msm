@@ -60,7 +60,7 @@ struct wl_ibss;
 #define WL_DBG_ERR	(1 << 0)
 
 /* 0 invalidates all debug messages.  default is 1 */
-#define WL_DBG_LEVEL 0xFF
+#define WL_DBG_LEVEL 0x03
 
 #ifdef CUSTOMER_HW4
 #define CFG80211_ERROR_TEXT		"CFG80211-INFO2) "
@@ -119,7 +119,7 @@ do {									\
 #ifdef WL_TRACE_HW4
 #undef WL_TRACE_HW4
 #endif
-#ifdef CUSTOMER_HW4
+#ifdef CUSTOMER_HW4_DBG
 #define	WL_TRACE_HW4(args)					\
 do {										\
 	if (wl_dbg_level & WL_DBG_ERR) {				\
@@ -129,7 +129,7 @@ do {										\
 } while (0)
 #else
 #define	WL_TRACE_HW4			WL_TRACE
-#endif /* CUSTOMER_HW4 */
+#endif /* CUSTOMER_HW4_DBG */
 #if (WL_DBG_LEVEL > 0)
 #define	WL_DBG(args)								\
 do {									\

@@ -9664,7 +9664,7 @@ wl_notify_scan_status(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 
 	WL_DBG(("Enter \n"));
 	if (!wl_get_drv_status(cfg, SCANNING, ndev)) {
-		WL_ERR(("scan is not ready \n"));
+		WL_SCAN(("scan is not ready \n"));
 		return err;
 	}
 	ndev = cfgdev_to_wlc_ndev(cfgdev, cfg);
