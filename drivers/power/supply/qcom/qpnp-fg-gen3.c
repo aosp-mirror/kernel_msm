@@ -941,7 +941,7 @@ static int fg_get_batt_profile(struct fg_chip *chip)
 #endif
 
 	profile_node = of_batterydata_get_best_profile(batt_node,
-				chip->batt_id_ohms / 1000, NULL);
+				(chip->batt_id_ohms + 500) / 1000, NULL);
 	if (IS_ERR(profile_node))
 		return PTR_ERR(profile_node);
 
