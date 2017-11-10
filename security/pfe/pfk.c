@@ -38,7 +38,7 @@
  */
 
 /* Uncomment the line below to enable debug messages */
-#define DEBUG 1
+/* #define DEBUG 1 */
 #define pr_fmt(fmt)	"pfk [%s]: " fmt, __func__
 
 #include <linux/module.h>
@@ -51,11 +51,14 @@
 #include <crypto/ice.h>
 
 #include <linux/pfk.h>
+#include <linux/ecryptfs.h>
 
 #include "pfk_kc.h"
 #include "objsec.h"
+#include "ecryptfs_kernel.h"
 #include "pfk_ice.h"
 #include "pfk_fscrypt.h"
+#include "pfk_ecryptfs.h"
 #include "pfk_internal.h"
 
 static bool pfk_ready;
@@ -65,7 +68,7 @@ static bool pfk_ready;
 #define PFK_SUPPORTED_SALT_SIZE 32
 
 /* Various PFE types and function tables to support each one of them */
-enum pfe_type {FSCRYPT_PFE, INVALID_PFE};
+enum pfe_type {ECRYPTFS_PFE, FSCRYPT_PFE, INVALID_PFE};
 
 typedef int (*pfk_parse_inode_type)(const struct bio *bio,
 		const struct inode *inode,
@@ -78,10 +81,12 @@ typedef bool (*pfk_allow_merge_bio_type)(const struct bio *bio1,
 		const struct inode *inode2);
 
 static const pfk_parse_inode_type pfk_parse_inode_ftable[] = {
+	/* ECRYPTFS_PFE */	&pfk_ecryptfs_parse_inode,
 	/* FSCRYPT_PFE */	&pfk_fscrypt_parse_inode,
 };
 
 static const pfk_allow_merge_bio_type pfk_allow_merge_bio_ftable[] = {
+	/* ECRYPTFS_PFE */	&pfk_ecryptfs_allow_merge_bio,
 	/* FSCRYPT_PFE */	&pfk_fscrypt_allow_merge_bio,
 };
 
@@ -96,14 +101,21 @@ static int __init pfk_init(void)
 {
 	int ret = 0;
 
-	ret = pfk_fscrypt_init();
+	ret = pfk_ecryptfs_init();
 	if (ret != 0)
 		goto fail;
+
+	ret = pfk_fscrypt_init();
+	if (ret != 0) {
+		pfk_ecryptfs_deinit();
+		goto fail;
+	}
 
 	ret = pfk_kc_init();
 	if (ret != 0) {
 		pr_err("could init pfk key cache, error %d\n", ret);
 		pfk_fscrypt_deinit();
+		pfk_ecryptfs_deinit();
 		goto fail;
 	}
 
@@ -125,6 +137,9 @@ static enum pfe_type pfk_get_pfe_type(const struct inode *inode)
 {
 	if (!inode)
 		return INVALID_PFE;
+
+	if (pfk_is_ecryptfs_type(inode))
+		return ECRYPTFS_PFE;
 
 	if (pfk_is_fscrypt_type(inode))
 		return FSCRYPT_PFE;

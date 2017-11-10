@@ -36,6 +36,7 @@
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
 #include <asm/unaligned.h>
+#include <linux/ecryptfs.h>
 #include "ecryptfs_kernel.h"
 
 #define DECRYPT		0
@@ -343,9 +344,9 @@ static int crypt_scatterlist(struct ecryptfs_crypt_stat *crypt_stat,
 	       || !(crypt_stat->flags & ECRYPTFS_STRUCT_INITIALIZED));
 	if (unlikely(ecryptfs_verbosity > 0)) {
 		ecryptfs_printk(KERN_DEBUG, "Key size [%zd]; key:\n",
-				crypt_stat->key_size);
+				ecryptfs_get_key_size_to_enc_data(crypt_stat));
 		ecryptfs_dump_hex(crypt_stat->key,
-				  crypt_stat->key_size);
+				ecryptfs_get_key_size_to_enc_data(crypt_stat));
 	}
 
 	init_completion(&ecr.completion);
@@ -364,7 +365,7 @@ static int crypt_scatterlist(struct ecryptfs_crypt_stat *crypt_stat,
 	/* Consider doing this once, when the file is opened */
 	if (!(crypt_stat->flags & ECRYPTFS_KEY_SET)) {
 		rc = crypto_skcipher_setkey(crypt_stat->tfm, crypt_stat->key,
-					    crypt_stat->key_size);
+				ecryptfs_get_key_size_to_enc_data(crypt_stat));
 		if (rc) {
 			ecryptfs_printk(KERN_ERR,
 					"Error setting key; rc = [%d]\n",
@@ -459,6 +460,30 @@ out:
 	return rc;
 }
 
+static void init_ecryption_parameters(bool *hw_crypt, bool *cipher_supported,
+				struct ecryptfs_crypt_stat *crypt_stat)
+{
+	if (!hw_crypt || !cipher_supported)
+		return;
+
+	*cipher_supported = false;
+	*hw_crypt = false;
+
+	if (get_events() && get_events()->is_cipher_supported_cb) {
+		*cipher_supported =
+			get_events()->is_cipher_supported_cb(crypt_stat);
+		if (*cipher_supported) {
+
+			/**
+			 * we should apply external algorythm
+			 * assume that is_hw_crypt() cbck is supplied
+			 */
+			if (get_events()->is_hw_crypt_cb)
+				*hw_crypt = get_events()->is_hw_crypt_cb();
+		}
+	}
+}
+
 /**
  * ecryptfs_encrypt_page
  * @page: Page mapped from the eCryptfs inode for the file; contains
@@ -484,11 +509,18 @@ int ecryptfs_encrypt_page(struct page *page)
 	loff_t extent_offset;
 	loff_t lower_offset;
 	int rc = 0;
+	bool is_hw_crypt;
+	bool is_cipher_supported;
+
 
 	ecryptfs_inode = page->mapping->host;
 	crypt_stat =
 		&(ecryptfs_inode_to_private(ecryptfs_inode)->crypt_stat);
 	BUG_ON(!(crypt_stat->flags & ECRYPTFS_ENCRYPTED));
+
+	init_ecryption_parameters(&is_hw_crypt,
+		&is_cipher_supported, crypt_stat);
+
 	enc_extent_page = alloc_page(GFP_USER);
 	if (!enc_extent_page) {
 		rc = -ENOMEM;
@@ -496,24 +528,51 @@ int ecryptfs_encrypt_page(struct page *page)
 				"encrypted extent\n");
 		goto out;
 	}
+	if (is_hw_crypt) {
+		/* no need for encryption */
+	} else {
+		for (extent_offset = 0;
+			extent_offset <
+			(PAGE_SIZE / crypt_stat->extent_size);
+			extent_offset++) {
 
-	for (extent_offset = 0;
-	     extent_offset < (PAGE_SIZE / crypt_stat->extent_size);
-	     extent_offset++) {
-		rc = crypt_extent(crypt_stat, enc_extent_page, page,
-				  extent_offset, ENCRYPT);
-		if (rc) {
-			printk(KERN_ERR "%s: Error encrypting extent; "
-			       "rc = [%d]\n", __func__, rc);
-			goto out;
+			if (is_cipher_supported) {
+				if (!get_events()->encrypt_cb) {
+					rc = -EPERM;
+					goto out;
+				}
+				rc = get_events()->encrypt_cb(page,
+					enc_extent_page,
+					ecryptfs_inode_to_lower(
+						ecryptfs_inode),
+						extent_offset);
+			} else {
+				rc = crypt_extent(crypt_stat,
+					enc_extent_page, page,
+					extent_offset, ENCRYPT);
+			}
+			if (rc) {
+				ecryptfs_printk(KERN_ERR,
+				"%s: Error encrypting; rc = [%d]\n",
+				__func__, rc);
+				goto out;
+			}
 		}
 	}
 
 	lower_offset = lower_offset_for_page(crypt_stat, page);
-	enc_extent_virt = kmap(enc_extent_page);
+	if (is_hw_crypt)
+		enc_extent_virt = kmap(page);
+	else
+		enc_extent_virt = kmap(enc_extent_page);
+
 	rc = ecryptfs_write_lower(ecryptfs_inode, enc_extent_virt, lower_offset,
 				  PAGE_SIZE);
-	kunmap(enc_extent_page);
+	if (!is_hw_crypt)
+			kunmap(enc_extent_page);
+	else
+			kunmap(page);
+
 	if (rc < 0) {
 		ecryptfs_printk(KERN_ERR,
 			"Error attempting to write lower page; rc = [%d]\n",
@@ -552,6 +611,8 @@ int ecryptfs_decrypt_page(struct page *page)
 	unsigned long extent_offset;
 	loff_t lower_offset;
 	int rc = 0;
+	bool is_cipher_supported;
+	bool is_hw_crypt;
 
 	ecryptfs_inode = page->mapping->host;
 	crypt_stat =
@@ -570,13 +631,33 @@ int ecryptfs_decrypt_page(struct page *page)
 		goto out;
 	}
 
+	init_ecryption_parameters(&is_hw_crypt,
+		&is_cipher_supported, crypt_stat);
+
+	if (is_hw_crypt) {
+		rc = 0;
+		return rc;
+	}
+
 	for (extent_offset = 0;
 	     extent_offset < (PAGE_SIZE / crypt_stat->extent_size);
 	     extent_offset++) {
-		rc = crypt_extent(crypt_stat, page, page,
+		if (is_cipher_supported) {
+			if (!get_events()->decrypt_cb) {
+				rc = -EPERM;
+				goto out;
+			}
+
+			rc = get_events()->decrypt_cb(page, page,
+				ecryptfs_inode_to_lower(ecryptfs_inode),
+				extent_offset);
+
+		} else
+			rc = crypt_extent(crypt_stat, page, page,
 				  extent_offset, DECRYPT);
+
 		if (rc) {
-			printk(KERN_ERR "%s: Error encrypting extent; "
+			ecryptfs_printk(KERN_ERR, "%s: Error decrypting extent;"
 			       "rc = [%d]\n", __func__, rc);
 			goto out;
 		}
@@ -605,7 +686,7 @@ int ecryptfs_init_crypt_ctx(struct ecryptfs_crypt_stat *crypt_stat)
 			"Initializing cipher [%s]; strlen = [%d]; "
 			"key_size_bits = [%zd]\n",
 			crypt_stat->cipher, (int)strlen(crypt_stat->cipher),
-			crypt_stat->key_size << 3);
+			ecryptfs_get_key_size_to_enc_data(crypt_stat) << 3);
 	mutex_lock(&crypt_stat->cs_tfm_mutex);
 	if (crypt_stat->tfm) {
 		rc = 0;
@@ -687,7 +768,7 @@ int ecryptfs_compute_root_iv(struct ecryptfs_crypt_stat *crypt_stat)
 		goto out;
 	}
 	rc = ecryptfs_calculate_md5(dst, crypt_stat, crypt_stat->key,
-				    crypt_stat->key_size);
+			ecryptfs_get_key_size_to_enc_data(crypt_stat));
 	if (rc) {
 		ecryptfs_printk(KERN_WARNING, "Error attempting to compute "
 				"MD5 while generating root IV\n");
@@ -712,6 +793,31 @@ static void ecryptfs_generate_new_key(struct ecryptfs_crypt_stat *crypt_stat)
 		ecryptfs_dump_hex(crypt_stat->key,
 				  crypt_stat->key_size);
 	}
+}
+
+static int ecryptfs_generate_new_salt(struct ecryptfs_crypt_stat *crypt_stat)
+{
+	size_t salt_size = 0;
+
+	salt_size = ecryptfs_get_salt_size_for_cipher(crypt_stat);
+
+	if (0 == salt_size)
+		return 0;
+
+	if (!ecryptfs_check_space_for_salt(crypt_stat->key_size, salt_size)) {
+		ecryptfs_printk(KERN_WARNING, "not enough space for salt\n");
+		crypt_stat->flags |= ECRYPTFS_SECURITY_WARNING;
+		return -EINVAL;
+	}
+
+	get_random_bytes(crypt_stat->key + crypt_stat->key_size, salt_size);
+	if (unlikely(ecryptfs_verbosity > 0)) {
+		ecryptfs_printk(KERN_DEBUG, "Generated new session salt:\n");
+		ecryptfs_dump_hex(crypt_stat->key + crypt_stat->key_size,
+				  salt_size);
+	}
+
+	return 0;
 }
 
 /**
@@ -816,7 +922,6 @@ int ecryptfs_new_file_context(struct inode *ecryptfs_inode)
 	struct ecryptfs_mount_crypt_stat *mount_crypt_stat =
 	    &ecryptfs_superblock_to_private(
 		    ecryptfs_inode->i_sb)->mount_crypt_stat;
-	int cipher_name_len;
 	int rc = 0;
 
 	ecryptfs_set_default_crypt_stat_vals(crypt_stat, mount_crypt_stat);
@@ -830,15 +935,19 @@ int ecryptfs_new_file_context(struct inode *ecryptfs_inode)
 		       "to the inode key sigs; rc = [%d]\n", rc);
 		goto out;
 	}
-	cipher_name_len =
-		strlen(mount_crypt_stat->global_default_cipher_name);
-	memcpy(crypt_stat->cipher,
+	strlcpy(crypt_stat->cipher,
 	       mount_crypt_stat->global_default_cipher_name,
-	       cipher_name_len);
-	crypt_stat->cipher[cipher_name_len] = '\0';
+	       sizeof(crypt_stat->cipher));
+
+	strlcpy(crypt_stat->cipher_mode,
+			mount_crypt_stat->global_default_cipher_mode,
+			sizeof(crypt_stat->cipher_mode));
+
 	crypt_stat->key_size =
 		mount_crypt_stat->global_default_cipher_key_size;
 	ecryptfs_generate_new_key(crypt_stat);
+	ecryptfs_generate_new_salt(crypt_stat);
+
 	rc = ecryptfs_init_crypt_ctx(crypt_stat);
 	if (rc)
 		ecryptfs_printk(KERN_ERR, "Error initializing cryptographic "
@@ -964,7 +1073,8 @@ ecryptfs_cipher_code_str_map[] = {
 	{"twofish", RFC2440_CIPHER_TWOFISH},
 	{"cast6", RFC2440_CIPHER_CAST_6},
 	{"aes", RFC2440_CIPHER_AES_192},
-	{"aes", RFC2440_CIPHER_AES_256}
+	{"aes", RFC2440_CIPHER_AES_256},
+	{"aes_xts", RFC2440_CIPHER_AES_XTS_256}
 };
 
 /**
@@ -991,6 +1101,11 @@ u8 ecryptfs_code_for_cipher_string(char *cipher_name, size_t key_bytes)
 			break;
 		case 32:
 			code = RFC2440_CIPHER_AES_256;
+		}
+	} else if (strcmp(cipher_name, "aes_xts") == 0) {
+		switch (key_bytes) {
+		case 32:
+			code = RFC2440_CIPHER_AES_XTS_256;
 		}
 	} else {
 		for (i = 0; i < ARRAY_SIZE(ecryptfs_cipher_code_str_map); i++)
@@ -1031,9 +1146,24 @@ int ecryptfs_read_and_validate_header_region(struct inode *inode)
 	u8 file_size[ECRYPTFS_SIZE_AND_MARKER_BYTES];
 	u8 *marker = file_size + ECRYPTFS_FILE_SIZE_BYTES;
 	int rc;
+	unsigned int ra_pages_org;
+	struct file *lower_file = NULL;
+
+	if (!inode)
+		return -EIO;
+	lower_file = ecryptfs_inode_to_private(inode)->lower_file;
+	if (!lower_file)
+		return -EIO;
+
+	/*disable read a head mechanism for a while */
+	ra_pages_org = lower_file->f_ra.ra_pages;
+	lower_file->f_ra.ra_pages = 0;
 
 	rc = ecryptfs_read_lower(file_size, 0, ECRYPTFS_SIZE_AND_MARKER_BYTES,
 				 inode);
+	lower_file->f_ra.ra_pages = ra_pages_org;
+	/* restore read a head mechanism */
+
 	if (rc < ECRYPTFS_SIZE_AND_MARKER_BYTES)
 		return rc >= 0 ? -EINVAL : rc;
 	rc = ecryptfs_validate_marker(marker);
@@ -1427,6 +1557,11 @@ int ecryptfs_read_metadata(struct dentry *ecryptfs_dentry)
 	struct ecryptfs_mount_crypt_stat *mount_crypt_stat =
 		&ecryptfs_superblock_to_private(
 			ecryptfs_dentry->d_sb)->mount_crypt_stat;
+	unsigned int ra_pages_org;
+	struct file *lower_file =
+		ecryptfs_inode_to_private(ecryptfs_inode)->lower_file;
+	if (!lower_file)
+		return -EIO;
 
 	ecryptfs_copy_mount_wide_flags_to_inode_flags(crypt_stat,
 						      mount_crypt_stat);
@@ -1438,8 +1573,14 @@ int ecryptfs_read_metadata(struct dentry *ecryptfs_dentry)
 		       __func__);
 		goto out;
 	}
+	/*disable read a head mechanism */
+	ra_pages_org = lower_file->f_ra.ra_pages;
+	lower_file->f_ra.ra_pages = 0;
+
 	rc = ecryptfs_read_lower(page_virt, 0, crypt_stat->extent_size,
 				 ecryptfs_inode);
+	lower_file->f_ra.ra_pages = ra_pages_org; /* restore it back */
+
 	if (rc >= 0)
 		rc = ecryptfs_read_headers_virt(page_virt, crypt_stat,
 						ecryptfs_dentry,

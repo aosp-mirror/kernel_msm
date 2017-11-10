@@ -119,3 +119,28 @@ void ecryptfs_dump_hex(char *data, int bytes)
 		printk("\n");
 }
 
+void ecryptfs_dump_salt_hex(char *data, int key_size,
+		const struct ecryptfs_crypt_stat *crypt_stat)
+{
+	size_t salt_size = ecryptfs_get_salt_size_for_cipher(crypt_stat);
+
+	if (0 == salt_size)
+		return;
+
+	if (!ecryptfs_check_space_for_salt(key_size, salt_size))
+		return;
+
+	ecryptfs_printk(KERN_DEBUG, "Decrypted session salt key:\n");
+	ecryptfs_dump_hex(data + key_size, salt_size);
+}
+
+void ecryptfs_dump_cipher(struct ecryptfs_crypt_stat *stat)
+{
+	if (!stat)
+		return;
+
+	ecryptfs_printk(KERN_DEBUG,
+				"ecryptfs cipher is %s\n", stat->cipher);
+	ecryptfs_printk(KERN_DEBUG, "ecryptfs cipher mode is %s\n",
+				stat->cipher_mode);
+}
