@@ -19,6 +19,8 @@
 
 #ifdef CONFIG_MNH_SM_HOST
 #include "mnh-sm.h"
+
+int cam_sensor_config_easel(struct cam_sensor_ctrl_t *s_ctrl);
 #endif
 
 static void cam_sensor_update_req_mgr(
@@ -722,6 +724,9 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 	case CAM_START_DEV: {
 		if (s_ctrl->i2c_data.streamon_settings.is_settings_valid &&
 			(s_ctrl->i2c_data.streamon_settings.request_id == 0)) {
+#ifdef CONFIG_MNH_SM_HOST
+			cam_sensor_config_easel(s_ctrl);
+#endif
 			rc = cam_sensor_apply_settings(s_ctrl, 0,
 				CAM_SENSOR_PACKET_OPCODE_SENSOR_STREAMON);
 			if (rc < 0) {
@@ -862,14 +867,10 @@ int cam_sensor_power(struct v4l2_subdev *sd, int on)
 	return 0;
 }
 
-int cam_sensor_power_up(struct cam_sensor_ctrl_t *s_ctrl)
+#ifdef CONFIG_MNH_SM_HOST
+int cam_sensor_config_easel(struct cam_sensor_ctrl_t *s_ctrl)
 {
 	int rc;
-	struct cam_sensor_power_ctrl_t *power_info;
-	struct cam_camera_slave_info *slave_info;
-	struct cam_hw_soc_info *soc_info =
-		&s_ctrl->soc_info;
-#ifdef CONFIG_MNH_SM_HOST
 	/*
 	 * Camera ID 0 - FNCAM
 	 * P1: RX1 -> TX0
@@ -906,7 +907,33 @@ int cam_sensor_power_up(struct cam_sensor_ctrl_t *s_ctrl)
 		.mode = MIPI_MODE_BYPASS,
 		.vc_en_mask = MNH_MIPI_VC_ALL_EN_MASK,
 	};
+
+	if (!s_ctrl) {
+		CAM_ERR(CAM_SENSOR, "failed: %pK", s_ctrl);
+		return -EINVAL;
+	}
+
+	if (s_ctrl->id == 0)
+		rc = mnh_sm_mipi_config(mipi_config0);
+	else if (s_ctrl->id == 1)
+		rc = mnh_sm_mipi_config(mipi_config1);
+	else
+		rc = mnh_sm_mipi_config(mipi_config2);
+	if (rc)
+		CAM_ERR(CAM_SENSOR, "configure easel failed:%d", rc);
+
+	return rc;
+}
 #endif
+
+int cam_sensor_power_up(struct cam_sensor_ctrl_t *s_ctrl)
+{
+	int rc;
+	struct cam_sensor_power_ctrl_t *power_info;
+	struct cam_camera_slave_info *slave_info;
+	struct cam_hw_soc_info *soc_info =
+		&s_ctrl->soc_info;
+
 	if (!s_ctrl) {
 		CAM_ERR(CAM_SENSOR, "failed: %pK", s_ctrl);
 		return -EINVAL;
@@ -921,22 +948,11 @@ int cam_sensor_power_up(struct cam_sensor_ctrl_t *s_ctrl)
 	}
 
 #ifdef CONFIG_MNH_SM_HOST
-	{
-		int rc2 = mnh_sm_set_state(MNH_STATE_ACTIVE);
-		if (!rc2 || (rc2 == -EHOSTUNREACH)) {
-			if (s_ctrl->id == 0)
-				rc2 = mnh_sm_mipi_config(mipi_config0);
-			else if (s_ctrl->id == 1)
-				rc2 = mnh_sm_mipi_config(mipi_config1);
-			else
-				rc2 = mnh_sm_mipi_config(mipi_config2);
-			if (rc2)
-				CAM_ERR(CAM_SENSOR, "configure easel failed:%d", rc2);
-		} else {
-			CAM_WARN(CAM_SENSOR, "power up easel failed:%d", rc2);
-		}
-	}
+	rc =  mnh_sm_set_state(MNH_STATE_ACTIVE);
+	if (rc && (rc != -EHOSTUNREACH))
+		CAM_WARN(CAM_SENSOR, "power up easel failed:%d", rc);
 #endif
+
 	rc = cam_sensor_core_power_up(power_info, soc_info);
 	if (rc < 0) {
 		CAM_ERR(CAM_SENSOR, "power up the core is failed:%d", rc);
@@ -973,19 +989,17 @@ int cam_sensor_power_down(struct cam_sensor_ctrl_t *s_ctrl)
 		return -EINVAL;
 	}
 
+#ifdef CONFIG_MNH_SM_HOST
+	rc = mnh_sm_set_state(MNH_STATE_OFF);
+	if (rc)
+		CAM_WARN(CAM_SENSOR, "power down easel failed:%d", rc);
+#endif
+
 	rc = msm_camera_power_down(power_info, soc_info);
 	if (rc < 0) {
 		CAM_ERR(CAM_SENSOR, "power down the core is failed:%d", rc);
 		return rc;
 	}
-
-#ifdef CONFIG_MNH_SM_HOST
-	{
-		int rc2 = mnh_sm_set_state(MNH_STATE_OFF);
-		if (rc2)
-			CAM_WARN(CAM_SENSOR, "power down easel failed:%d", rc2);
-	}
-#endif
 
 	if (s_ctrl->io_master_info.master_type == CCI_MASTER)
 		camera_io_release(&(s_ctrl->io_master_info));
