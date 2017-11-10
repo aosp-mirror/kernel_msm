@@ -6737,9 +6737,6 @@ hdd_adapter_t* hdd_wlan_create_ap_dev( hdd_context_t *pHddCtx, tSirMacAddr macAd
         vos_mem_copy(pWlanHostapdDev->dev_addr, (void *)macAddr,sizeof(tSirMacAddr));
         vos_mem_copy(pHostapdAdapter->macAddressCurrent.bytes, (void *)macAddr, sizeof(tSirMacAddr));
 
-	hddLog(VOS_TRACE_LEVEL_ERROR, "mac adress for AP mode "
-				 MAC_ADDRESS_STR, MAC_ADDR_ARRAY(macAddr));
-
         pHostapdAdapter->offloads_configured = FALSE;
         pWlanHostapdDev->destructor = free_netdev;
         pWlanHostapdDev->ieee80211_ptr = &pHostapdAdapter->wdev ;

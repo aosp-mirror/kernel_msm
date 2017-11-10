@@ -9675,12 +9675,6 @@ static int __hdd_set_mac_address(struct net_device *dev, void *addr)
 
 	ENTER();
 
-	hddLog(VOS_TRACE_LEVEL_ERROR, "Inside __hdd_set_mac_address %p", addr);
-	if (addr)
-		hddLog(VOS_TRACE_LEVEL_ERROR, "mac adress "
-				 MAC_ADDRESS_STR, MAC_ADDR_ARRAY((char *)addr));
-
-
 	hdd_ctx = WLAN_HDD_GET_CTX(pAdapter);
 	ret = wlan_hdd_validate_context(hdd_ctx);
 	if (0 != ret)
@@ -10073,9 +10067,6 @@ static hdd_adapter_t* hdd_alloc_station_adapter( hdd_context_t *pHddCtx, tSirMac
 
       vos_mem_copy(pWlanDev->dev_addr, (void *)macAddr, sizeof(tSirMacAddr));
       vos_mem_copy( pAdapter->macAddressCurrent.bytes, macAddr, sizeof(tSirMacAddr));
-      hddLog(VOS_TRACE_LEVEL_ERROR, "mac adress for STA mode "
-             MAC_ADDRESS_STR, MAC_ADDR_ARRAY(macAddr));
-
       pWlanDev->watchdog_timeo = HDD_TX_TIMEOUT;
       /*
        * kernel will consume ethernet header length buffer for hard_header,
