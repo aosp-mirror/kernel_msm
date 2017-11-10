@@ -91,15 +91,15 @@
 		ti,smart-loop = <0>; /* 0-closeloop, 1-openloop */
 		ti,actuator = <1>; /* 0-ERM, 1-LRA */
 		ti,rated-voltage = <77>; /* 1.8 Vrms */
-		ti,odclamp-voltage = <236>; /* 5.0 Vpeak */
+		ti,odclamp-voltage = <165>; /* 3.5 Vpeak */
 		ti,lra-frequency = <155>; /* f0 = 155Hz */
 		ti,ol-lra-frequency = <155>; /* off-f0 in OL */
-		ti,bemf-factor = <150>;
-		ti,bemf-gain = <0>;
-		ti,voltage-comp = <18>;
+		ti,bemf-factor = <188>;
+		ti,bemf-gain = <1>;
+		ti,voltage-comp = <9>;
 		ti,blanking-time = <2>; /* 50 us */
 		ti,idiss-time = <2>; /* 50 us */
-		ti,zc-det-time = <3>; /* 390 us*/
+		ti,zc-det-time = <0>; /* 100 us*/
 		ti,lra-wave-shape = <0>; /* Square wave */
 		ti,waveform-interval = <1>; /* 1 ms */
 		status = "ok";
