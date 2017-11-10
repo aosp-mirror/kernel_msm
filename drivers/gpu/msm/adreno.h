@@ -140,6 +140,8 @@
 #define ADRENO_QUIRK_DISABLE_LMLOADKILL BIT(5)
 /* Allow HFI to use registers to send message to GMU */
 #define ADRENO_QUIRK_HFI_USE_REG BIT(6)
+/* Only set protected SECVID registers once */
+#define ADRENO_QUIRK_SECVID_SET_ONCE BIT(7)
 
 /* Flags to control command packet settings */
 #define KGSL_CMD_FLAGS_NONE             0
@@ -208,6 +210,7 @@ enum adreno_gpurev {
 #define ADRENO_IOMMU_PAGE_FAULT BIT(3)
 #define ADRENO_PREEMPT_FAULT BIT(4)
 #define ADRENO_GMU_FAULT BIT(5)
+#define ADRENO_CTX_DETATCH_TIMEOUT_FAULT BIT(6)
 
 #define ADRENO_SPTP_PC_CTRL 0
 #define ADRENO_PPD_CTRL     1

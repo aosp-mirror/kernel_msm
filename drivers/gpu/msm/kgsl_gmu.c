@@ -10,6 +10,7 @@
  * GNU General Public License for more details.
  *
  */
+#include <linux/module.h>
 #include <linux/types.h>
 #include <linux/device.h>
 #include <linux/iommu.h>
@@ -24,6 +25,13 @@
 #include "kgsl_hfi.h"
 #include "a6xx_reg.h"
 #include "adreno.h"
+
+#undef MODULE_PARAM_PREFIX
+#define MODULE_PARAM_PREFIX "kgsl_gmu."
+
+static bool nogmu;
+module_param(nogmu, bool, 0444);
+MODULE_PARM_DESC(nogmu, "Disable the GMU");
 
 #define GMU_CONTEXT_USER		0
 #define GMU_CONTEXT_KERNEL		1
@@ -109,9 +117,9 @@ bool kgsl_gmu_isenabled(struct kgsl_device *device)
 	struct gmu_device *gmu = &device->gmu;
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 
-	if (gmu->pdev && ADRENO_FEATURE(adreno_dev, ADRENO_GPMU))
+	if (!nogmu && gmu->pdev &&
+		ADRENO_FEATURE(adreno_dev, ADRENO_GPMU))
 		return true;
-
 	return false;
 }
 
@@ -799,6 +807,15 @@ static irqreturn_t gmu_irq_handler(int irq, void *data)
 	if (status & GMU_INT_HOST_AHB_BUS_ERR)
 		dev_err_ratelimited(&gmu->pdev->dev,
 				"AHB bus error interrupt received\n");
+	if (status & GMU_INT_FENCE_ERR) {
+		unsigned int fence_status;
+
+		adreno_read_gmureg(ADRENO_DEVICE(device),
+			ADRENO_REG_GMU_AHB_FENCE_STATUS, &fence_status);
+		dev_err_ratelimited(&gmu->pdev->dev,
+			"FENCE error interrupt received %x\n", fence_status);
+	}
+
 	if (status & ~GMU_AO_INT_MASK)
 		dev_err_ratelimited(&gmu->pdev->dev,
 				"Unhandled GMU interrupts 0x%lx\n",
@@ -1266,7 +1283,7 @@ static int gmu_enable_gdsc(struct gmu_device *gmu)
 	return ret;
 }
 
-#define CX_GDSC_TIMEOUT	500	/* ms */
+#define CX_GDSC_TIMEOUT	5000	/* ms */
 static int gmu_disable_gdsc(struct gmu_device *gmu)
 {
 	int ret;
@@ -1285,7 +1302,7 @@ static int gmu_disable_gdsc(struct gmu_device *gmu)
 	/*
 	 * After GX GDSC is off, CX GDSC must be off
 	 * Voting off alone from GPU driver cannot
-	 * Guarantee CX GDSC off. Polling with 10ms
+	 * Guarantee CX GDSC off. Polling with 5s
 	 * timeout to ensure
 	 */
 	t = jiffies + msecs_to_jiffies(CX_GDSC_TIMEOUT);
@@ -1355,6 +1372,31 @@ static void gmu_snapshot(struct kgsl_device *device)
 	gmu->fault_count++;
 }
 
+static void gmu_change_gpu_pwrlevel(struct kgsl_device *device,
+	unsigned int new_level) {
+
+	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
+	unsigned int old_level = pwr->active_pwrlevel;
+
+	/*
+	 * Update the level according to any thermal,
+	 * max/min, or power constraints.
+	 */
+	new_level = kgsl_pwrctrl_adjust_pwrlevel(device, new_level);
+
+	/*
+	 * If thermal cycling is required and the new level hits the
+	 * thermal limit, kick off the cycling.
+	 */
+	kgsl_pwrctrl_set_thermal_cycle(device, new_level);
+
+	pwr->active_pwrlevel = new_level;
+	pwr->previous_pwrlevel = old_level;
+
+	/* Request adjusted DCVS level */
+	kgsl_clk_set_rate(device, pwr->active_pwrlevel);
+}
+
 /* To be called to power on both GPU and GMU */
 int gmu_start(struct kgsl_device *device)
 {
@@ -1389,8 +1431,7 @@ int gmu_start(struct kgsl_device *device)
 			goto error_gmu;
 
 		/* Request default DCVS level */
-		kgsl_pwrctrl_pwrlevel_change(device, pwr->default_pwrlevel);
-
+		gmu_change_gpu_pwrlevel(device, pwr->default_pwrlevel);
 		msm_bus_scale_client_update_request(gmu->pcl, 0);
 		break;
 
@@ -1409,7 +1450,7 @@ int gmu_start(struct kgsl_device *device)
 		if (ret)
 			goto error_gmu;
 
-		kgsl_pwrctrl_pwrlevel_change(device, pwr->default_pwrlevel);
+		gmu_change_gpu_pwrlevel(device, pwr->default_pwrlevel);
 		break;
 
 	case KGSL_STATE_RESET:
@@ -1431,7 +1472,7 @@ int gmu_start(struct kgsl_device *device)
 				goto error_gmu;
 
 			/* Send DCVS level prior to reset*/
-			kgsl_pwrctrl_pwrlevel_change(device,
+			gmu_change_gpu_pwrlevel(device,
 				pwr->default_pwrlevel);
 		} else {
 			/* GMU fast boot */
