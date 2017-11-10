@@ -325,8 +325,8 @@ static int rradc_post_process_batt_id(struct rradc_chip *chip,
 
 	current_value = prop->channel_data;
 	r_id = ((int64_t)adc_code * FG_ADC_RR_FS_VOLTAGE_MV);
-	r_id = div64_s64(r_id, (FG_MAX_ADC_READINGS * current_value));
-	*result_ohms = (r_id * FG_ADC_SCALE_MILLI_FACTOR);
+	r_id *= FG_ADC_SCALE_MILLI_FACTOR;
+	*result_ohms = div64_s64(r_id, (FG_MAX_ADC_READINGS * current_value));
 
 	return 0;
 }
