@@ -78,6 +78,22 @@ unsigned int phy_tune1;
 module_param(phy_tune1, uint, 0644);
 MODULE_PARM_DESC(phy_tune1, "QUSB PHY v2 TUNE1");
 
+unsigned int phy_tune2;
+module_param(phy_tune2, uint, 0644);
+MODULE_PARM_DESC(phy_tune2, "QUSB PHY v2 TUNE2");
+
+unsigned int phy_tune3;
+module_param(phy_tune3, uint, 0644);
+MODULE_PARM_DESC(phy_tune3, "QUSB PHY v2 TUNE3");
+
+unsigned int phy_tune4;
+module_param(phy_tune4, uint, 0644);
+MODULE_PARM_DESC(phy_tune4, "QUSB PHY v2 TUNE4");
+
+unsigned int phy_tune5;
+module_param(phy_tune5, uint, 0644);
+MODULE_PARM_DESC(phy_tune5, "QUSB PHY v2 TUNE5");
+
 enum qusb_phy_reg {
 	PORT_TUNE1,
 	PLL_COMMON_STATUS_ONE,
@@ -476,6 +492,30 @@ static int qusb_phy_init(struct usb_phy *phy)
 						__func__, phy_tune1);
 		writel_relaxed(phy_tune1,
 				qphy->base + qphy->phy_reg[PORT_TUNE1]);
+	}
+	if (phy_tune2) {
+		pr_debug("%s(): (modparam) TUNE2 val:0x%02x\n",
+						__func__, phy_tune2);
+		writel_relaxed(phy_tune2,
+				qphy->base + qphy->phy_reg[PORT_TUNE1] + 0x4);
+	}
+	if (phy_tune3) {
+		pr_debug("%s(): (modparam) TUNE3 val:0x%02x\n",
+						__func__, phy_tune3);
+		writel_relaxed(phy_tune3,
+				qphy->base + qphy->phy_reg[PORT_TUNE1] + 0x8);
+	}
+	if (phy_tune4) {
+		pr_debug("%s(): (modparam) TUNE4 val:0x%02x\n",
+						__func__, phy_tune4);
+		writel_relaxed(phy_tune4,
+				qphy->base + qphy->phy_reg[PORT_TUNE1] + 0xC);
+	}
+	if (phy_tune5) {
+		pr_debug("%s(): (modparam) TUNE5 val:0x%02x\n",
+						__func__, phy_tune5);
+		writel_relaxed(phy_tune5,
+				qphy->base + qphy->phy_reg[PORT_TUNE1] + 0x10);
 	}
 
 	/* ensure above writes are completed before re-enabling PHY */
