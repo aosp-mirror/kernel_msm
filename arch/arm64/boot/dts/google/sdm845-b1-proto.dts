@@ -71,6 +71,6 @@
 	};
 };
 
-&st21nfc {
-	status = "ok";
+&nq {
+	status = "disabled";
 };

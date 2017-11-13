@@ -48,6 +48,10 @@
 	};
 };
 
+&nq {
+	status = "disabled";
+};
+
 &nfc_enable_default {
 	mux {
 		/* 12: NFC ENABLE, 24:ESE Enable, 122:ESE WAKEUP INT */
