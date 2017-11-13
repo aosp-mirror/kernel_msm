@@ -3918,6 +3918,8 @@ QDF_STATUS send_setup_install_key_cmd_tlv(wmi_unified_t wmi_handle,
 	key_data = (A_UINT8 *) (buf_ptr + WMI_TLV_HDR_SIZE);
 	qdf_mem_copy((void *)key_data,
 		     (const void *)key_params->key_data, key_params->key_len);
+	qdf_mem_copy(&cmd->key_rsc_counter, &key_params->key_rsc_counter,
+		     sizeof(wmi_key_seq_counter));
 	cmd->key_len = key_params->key_len;
 
 	status = wmi_unified_cmd_send(wmi_handle, buf, len,
@@ -10413,8 +10415,8 @@ QDF_STATUS send_set_base_macaddr_indicate_cmd_tlv(wmi_unified_t wmi_handle,
  * Return: 0 on successfully enabling/disabling the events
  */
 QDF_STATUS send_log_supported_evt_cmd_tlv(wmi_unified_t wmi_handle,
-		uint8_t *event,
-		uint32_t len)
+					  uint8_t *event,
+					  uint32_t len)
 {
 	uint32_t num_of_diag_events_logs;
 	wmi_diag_event_log_config_fixed_param *cmd;
@@ -10435,6 +10437,15 @@ QDF_STATUS send_log_supported_evt_cmd_tlv(wmi_unified_t wmi_handle,
 	}
 	wmi_event = param_buf->fixed_param;
 	num_of_diag_events_logs = wmi_event->num_of_diag_events_logs;
+
+	if (num_of_diag_events_logs >
+	    param_buf->num_diag_events_logs_list) {
+		WMI_LOGE("message number of events %d is more than tlv hdr content %d",
+			 num_of_diag_events_logs,
+			 param_buf->num_diag_events_logs_list);
+		return QDF_STATUS_E_INVAL;
+	}
+
 	evt_args = param_buf->diag_events_logs_list;
 	if (!evt_args) {
 		WMI_LOGE("%s: Event list is empty, num_of_diag_events_logs=%d",
