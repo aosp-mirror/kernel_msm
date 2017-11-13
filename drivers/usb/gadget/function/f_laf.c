@@ -425,6 +425,7 @@ static ssize_t laf_write(struct file *fp, const char __user *buf,
 {
 	struct laf_dev *dev = fp->private_data;
 	struct usb_request *req = NULL;
+	size_t req_length = count;
 	int xfer;
 	int ret;
 
@@ -438,7 +439,7 @@ static ssize_t laf_write(struct file *fp, const char __user *buf,
 		return -EBUSY;
 	}
 
-	while (count > 0) {
+	while (req_length > 0) {
 		if (atomic_read(&dev->error)) {
 			pr_err("%s: dev->error\n", __func__);
 			ret = -EIO;
@@ -455,10 +456,10 @@ static ssize_t laf_write(struct file *fp, const char __user *buf,
 		if (!req)
 			continue;
 
-		if (count > LAF_BULK_BUFFER_SIZE)
+		if (req_length > LAF_BULK_BUFFER_SIZE)
 			xfer = LAF_BULK_BUFFER_SIZE;
 		else
-			xfer = count;
+			xfer = req_length;
 		if (copy_from_user(req->buf, buf, xfer)) {
 			ret = -EFAULT;
 			break;
@@ -473,7 +474,7 @@ static ssize_t laf_write(struct file *fp, const char __user *buf,
 		}
 
 		buf += xfer;
-		count -= xfer;
+		req_length -= xfer;
 
 		/* request handled */
 		req = NULL;
@@ -484,7 +485,7 @@ static ssize_t laf_write(struct file *fp, const char __user *buf,
 		laf_req_put(dev, &dev->tx_idle, req);
 
 	laf_unlock(&dev->write_excl);
-	return ret;
+	return ret? ret: count;
 }
 
 static int laf_open(struct inode *ip, struct file *fp)
