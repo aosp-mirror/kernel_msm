@@ -351,7 +351,8 @@ static ssize_t laf_read(struct file *fp, char __user *buf,
 	}
 
 	if (unlikely(count > LAF_BULK_BUFFER_SIZE)) {
-		pr_err("%s: out of range\n", __func__);
+		pr_err("%s: out of range (%ul:%ul)\n", __func__,
+				count, LAF_BULK_BUFFER_SIZE);
 		return -EINVAL;
 	}
 
@@ -490,11 +491,15 @@ static ssize_t laf_write(struct file *fp, const char __user *buf,
 
 static int laf_open(struct inode *ip, struct file *fp)
 {
-	if (!_laf_dev)
+	if (!_laf_dev) {
+		pr_err("%s: no device\n", __func__);
 		return -ENODEV;
+	}
 
-	if (laf_lock(&_laf_dev->open_excl))
+	if (laf_lock(&_laf_dev->open_excl)) {
+		pr_err("%s: already opened\n", __func__);
 		return -EBUSY;
+	}
 
 	fp->private_data = _laf_dev;
 
