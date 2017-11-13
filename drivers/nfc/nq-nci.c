@@ -354,7 +354,6 @@ static int nqx_ese_pwr(struct nqx_dev *nqx_dev, unsigned long int arg)
 				usleep_range(1000, 1100);
 			}
 			gpio_set_value(nqx_dev->ese_gpio, 1);
-			usleep_range(1000, 1100);
 			if (gpio_get_value(nqx_dev->ese_gpio)) {
 				dev_dbg(&nqx_dev->client->dev, "ese_gpio is enabled\n");
 				r = 0;
@@ -407,7 +406,6 @@ static int nqx_ese_pwr(struct nqx_dev *nqx_dev, unsigned long int arg)
 			 * there's no need to send the i2c commands
 			 */
 			gpio_set_value(nqx_dev->ese_gpio, 0);
-			usleep_range(1000, 1100);
 		}
 
 		if (!gpio_get_value(nqx_dev->ese_gpio)) {
