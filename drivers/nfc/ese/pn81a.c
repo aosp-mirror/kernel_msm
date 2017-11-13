@@ -318,7 +318,7 @@ static int pn81a_probe(struct spi_device *spi)
 skip_gpio:
 	mutex_init(&ese_dev->mutex);
 	ret = of_property_read_string(np, "nxp,nfcc", &ese_dev->nfcc_name);
-	if (IS_ERR_VALUE(ret)) {
+	if (ret < 0) {
 		dev_err(&spi->dev,
 			"%s: nxp,nfcc invalid or missing in device tree (%d)\n",
 			__func__, ret);
