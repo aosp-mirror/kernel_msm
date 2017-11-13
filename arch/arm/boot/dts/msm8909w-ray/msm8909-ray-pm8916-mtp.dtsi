@@ -1,0 +1,223 @@
+/*
+ * Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&soc {
+	i2c@78b9000 {
+		focaltech@38 {
+			compatible = "focaltech,fts";
+			reg = <0x38>;
+			interrupt-parent = <&msm_gpio>;
+			interrupts = <13 0x2002>;
+			vdd-supply = <&pm8916_l11>;
+			vcc_i2c-supply = <&pm8916_l16>;
+			focaltech,name = "fts";
+			focaltech,family-id = <0x0e>;
+			focaltech,reset-gpio = <&msm_gpio 12 0x00>;
+			focaltech,irq-gpio =<&msm_gpio 13 0x00>;
+			//focaltech,id1-gpio = <&msm_gpio 109 0x00>;
+			//focaltech,id2-gpio = <&msm_gpio 114 0x00>;
+			//focaltech,id3-gpio = <&msm_gpio 121 0x00>;
+			/* pins used by touchscreen */
+			pinctrl-names = "pmx_ts_active","pmx_ts_suspend","pmx_ts_release";
+			pinctrl-0 = <&ts_int_active &ts_reset_active>;
+			pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
+			pinctrl-2 = <&ts_release>;
+			focaltech,display-coords = <0 0 454 454>;       //for android wear
+			focaltech,panel-coords = <0 0 454 454>;
+			focaltech,button-map= <70 150 907>;
+			focaltech,no-force-update;
+			focaltech,i2c-pull-up;
+			focaltech,group-id = <1>;
+			focaltech,hard-reset-delay-ms = <20>;
+			focaltech,soft-reset-delay-ms = <300>;
+			focaltech,num-max-touches = <2>;
+			focaltech,fw-name = "CEI_FNW1_3207_V0x02_20160115_app.i";
+			focaltech,fw-delay-aa-ms = <50>;
+			focaltech,fw-delay-55-ms = <30>;
+			focaltech,fw-upgrade-id1 = <0x79>;
+			focaltech,fw-upgrade-id2 = <0x03>;
+			focaltech,fw-delay-readid-ms = <10>;
+			focaltech,fw-delay-era-flsh-ms = <2000>;
+		};
+
+		pixart_pat9127@75 {
+			compatible = "pixart,pat9127";
+			reg = <0x75>;
+			interrupt-parent = <&msm_gpio>;
+			interrupts = <27 0x2008>;
+			vddio-supply = <&pm8916_l16>;
+			pixart,pwr-reset-gpio = <&msm_gpio 50 0x00>;
+			pixart,irq-gpio = <&msm_gpio 27 0x00>;
+			pinctrl-names = "pmx_rot_switch_idsel",
+					"pmx_rot_switch_active",
+					"pmx_rot_switch_suspend",
+					"pmx_rot_switch_release";
+			pinctrl-0 = <&pix_int_idsel>;
+			pinctrl-1 = <&pix_int_active>;
+			pinctrl-2 = <&pix_int_suspend>;
+			pinctrl-3 = <&pix_release>;
+
+			pixart,inverse-x;
+		};
+
+	};
+};
+
+&audio_codec_mtp {
+	qcom,model = "msm8909-pm8916-snd-card";
+	pinctrl-names =
+		"all_off",
+		"pri_i2s_act",
+		"us_eu_gpio_act",
+		"pri_i2s_us_eu_gpio_act",
+		"dmic_lines_sus", //for dmic
+		"dmic_lines_act"; //for dmic
+	pinctrl-0 = <&cdc_pdm_lines_sus &cross_conn_det_sus  &dmic_clk_sus &dmic_data_sus>;
+	pinctrl-1 = <&cdc_pdm_lines_act &cross_conn_det_sus  &dmic_clk_act &dmic_data_act>;
+	pinctrl-2 = <&cdc_pdm_lines_sus &cross_conn_det_act  &dmic_clk_sus &dmic_data_sus>;
+	pinctrl-3 = <&cdc_pdm_lines_act &cross_conn_det_act  &dmic_clk_sus &dmic_data_sus>;
+	pinctrl-4 = <&cdc_pdm_lines_act &cross_conn_det_sus  &dmic_clk_sus &dmic_data_sus>;
+	pinctrl-5 = <&cdc_pdm_lines_act &cross_conn_det_sus  &dmic_clk_act &dmic_data_act>;
+	asoc-codec = <&stub_codec>, <&pm8916_tombak_dig>;
+	asoc-codec-names = "msm-stub-codec.1", "cajon_codec";
+};
+
+&sdhc_1 {
+	vdd-supply = <&pm8916_l8>;
+	vdd-io-supply = <&pm8916_l5>;
+};
+
+&sdhc_2 {
+	vdd-supply = <&pm8916_l11>;
+	vdd-io-supply = <&pm8916_l12>;
+};
+
+&dsi_auo_qvga_cmd {
+	qcom,mdss-dsi-pwm-gpio = <&pm8916_mpps 4 0>;
+};
+
+&dsi_auo_cx_qvga_cmd {
+	qcom,mdss-dsi-pwm-gpio = <&pm8916_mpps 4 0>;
+};
+&dsi_hx8394d_480_vid {
+	qcom,mdss-dsi-pwm-gpio = <&pm8916_mpps 4 0>;
+};
+
+&dsi_hx8394d_720_vid {
+	qcom,mdss-dsi-pwm-gpio = <&pm8916_mpps 4 0>;
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+};
+
+&dsi_hx8394d_qhd_vid {
+	qcom,mdss-dsi-pwm-gpio = <&pm8916_mpps 2 0>;
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+};
+
+&pm8916_chg {
+	status = "ok";
+	qcom,charging-disabled;
+};
+
+&pm8916_bms {
+	status = "ok";
+	qcom,battery-data = <&mtp_batterydata>;
+	qcom,batt-aging-comp;
+};
+
+&spmi_bus {
+	qcom,pm8916@0 {
+		qcom,leds@a300 {
+			status = "okay";
+			qcom,led_mpp_4 {
+				label = "mpp";
+				linux,name = "button-backlight";
+				linux,default-trigger = "none";
+				qcom,default-state = "off";
+				qcom,max-current = <40>;
+				qcom,current-setting = <5>;
+				qcom,id = <6>;
+				qcom,mode = "manual";
+				qcom,source-sel = <1>;
+				qcom,mode-ctrl = <0x60>;
+			};
+		};
+	};
+
+	qcom,pm8916@1 {
+		qcom,vibrator@c000 {
+			status = "okay";
+			qcom,vib-timeout-ms = <15000>;
+			qcom,vib-vtg-level-mV = <3100>;
+		};
+	};
+};
+
+&pm8916_mpps {
+	mpp@a000 { /* MPP 1 */
+		/* VDD_PX */
+		status = "disabled";
+	};
+
+	mpp@a100 { /* MPP 2 */
+		/* HR LED */
+		status = "disabled";
+	};
+
+	mpp@a200 { /* MPP 3 */
+		/* VREF DAC */
+		/* status = "disabled"; */
+		qcom,pin-num = <3>;
+		qcom,mode = <4>;		/* A-input */
+		qcom,invert = <0>;		/* No Invert */
+		qcom,output-type = <0>;		/* CMOS */
+		qcom,vin-sel = <3>;		/* PM8926_L6 1.8v */
+		qcom,src-sel = <0>;		/* MPP Constant */
+		qcom,ain-route = <2>;		/* QPNP_PIN_AIN_AMUX_CH6 = 1 */
+		qcom,master-en = <1>;		/* Enable MPP */
+	};
+
+	mpp@a300 { /* MPP 4 */
+		/* Backlight PWM */
+		qcom,mode = <1>;		/* Digital output */
+		qcom,invert = <0>;		/* Disable invert */
+		qcom,src-sel = <4>;		/* DTEST1 */
+		qcom,vin-sel = <0>;		/* VPH_PWR */
+		qcom,master-en = <1>;		/* Enable MPP */
+	};
+};
+
+&pm8916_gpios {
+	gpio@c000 { /* GPIO 1 */
+		/* Battery UICC Alarm */
+		status = "disabled";
+	};
+
+	gpio@c100 { /* GPIO 2 */
+		/* NFC_CLK_REQ */
+		qcom,mode = <0>; /* QPNP_PIN_MODE_DIG_IN */
+		qcom,pull = <5>; /* QPNP_PIN_PULL_NO */
+		qcom,vin-sel = <2>; /* QPNP_PIN_VIN2 */
+		qcom,src-sel = <2>; /* QPNP_PIN_SEL_FUNC_1 */
+		qcom,master-en = <1>;
+	};
+
+	gpio@c200 { /* GPIO 3 */
+		/* External regulator control for WTR */
+		status = "disabled";
+	};
+
+	gpio@c300 { /* GPIO 4 */
+		/* External regulator control for APC */
+		status = "disabled";
+	};
+};
