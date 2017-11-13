@@ -616,6 +616,15 @@ struct reg_table_entry g_registry_table[] = {
 		     CFG_ENABLE_LTE_COEX_DEFAULT,
 		     CFG_ENABLE_LTE_COEX_MIN,
 		     CFG_ENABLE_LTE_COEX_MAX),
+
+	REG_VARIABLE(CFG_VC_MODE_BITMAP, WLAN_PARAM_HexInteger,
+		     struct hdd_config, vc_mode_cfg_bitmap,
+		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		     CFG_VC_MODE_BITMAP_DEFAULT,
+		     CFG_VC_MODE_BITMAP_MIN,
+		     CFG_VC_MODE_BITMAP_MAX),
+
+
 /*
  * <ini>
  * gApAutoChannelSelection - Force ACS from ini
@@ -3615,6 +3624,14 @@ struct reg_table_entry g_registry_table[] = {
 		     CFG_ENABLE_NON_DFS_CHAN_ON_RADAR_MIN,
 		     CFG_ENABLE_NON_DFS_CHAN_ON_RADAR_MAX),
 
+	REG_VARIABLE(CFG_P2P_LISTEN_DEFER_INTERVAL_NAME, WLAN_PARAM_Integer,
+		     struct hdd_config, p2p_listen_defer_interval,
+		     VAR_FLAGS_OPTIONAL |
+		     VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		     CFG_P2P_LISTEN_DEFER_INTERVAL_DEFAULT,
+		     CFG_P2P_LISTEN_DEFER_INTERVAL_MIN,
+		     CFG_P2P_LISTEN_DEFER_INTERVAL_MAX),
+
 	REG_VARIABLE(CFG_MULTICAST_HOST_FW_MSGS, WLAN_PARAM_Integer,
 		     struct hdd_config, multicast_host_fw_msgs,
 		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
@@ -6517,6 +6534,11 @@ void hdd_cfg_print(hdd_context_t *pHddCtx)
 	hdd_debug("Name = [%s] value = [%u]",
 		CFG_DTIM_1CHRX_ENABLE_NAME,
 		pHddCtx->config->enable_dtim_1chrx);
+	hdd_debug("Name = [%s] value = [0x%x]", CFG_VC_MODE_BITMAP,
+		pHddCtx->config->vc_mode_cfg_bitmap);
+	hdd_debug("Name = [%s] value = [%u]",
+		CFG_DOT11P_MODE_NAME,
+		pHddCtx->config->dot11p_mode);
 }
 
 /**

@@ -2374,6 +2374,7 @@ free_mem:
 	EXIT();
 	return status;
 }
+
 #undef SCAN_FAILURE
 
 /**
@@ -3674,6 +3675,8 @@ void hdd_cleanup_scan_queue(hdd_context_t *hdd_ctx)
 	hdd_adapter_t *adapter;
 	uint8_t source;
 	bool aborted = true;
+	QDF_STATUS status;
+	hdd_adapter_list_node_t *adapter_node = NULL, *next_node = NULL;
 
 	if (NULL == hdd_ctx) {
 		hdd_err("HDD context is Null");
@@ -3716,6 +3719,17 @@ void hdd_cleanup_scan_queue(hdd_context_t *hdd_ctx)
 	}
 	qdf_spin_unlock(&hdd_ctx->hdd_scan_req_q_lock);
 
+	status = hdd_get_front_adapter(hdd_ctx, &adapter_node);
+	while (NULL != adapter_node && QDF_IS_STATUS_SUCCESS(status)) {
+		adapter = adapter_node->pAdapter;
+		if (adapter->scan_info.mScanPending) {
+			adapter->scan_info.mScanPending = false;
+			complete(&adapter->scan_info.abortscan_event_var);
+		}
+		status = hdd_get_next_adapter(hdd_ctx, adapter_node,
+					      &next_node);
+		adapter_node = next_node;
+	}
 }
 
 /**

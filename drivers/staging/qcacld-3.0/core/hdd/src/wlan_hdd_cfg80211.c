@@ -236,6 +236,9 @@ static const struct ieee80211_channel hdd_channels_5_ghz[] = {
 	HDD5GHZCHAN(5785, 157, 0),
 	HDD5GHZCHAN(5805, 161, 0),
 	HDD5GHZCHAN(5825, 165, 0),
+};
+
+static const struct ieee80211_channel hdd_channels_dot11p[] = {
 	HDD5GHZCHAN(5852, 170, 0),
 	HDD5GHZCHAN(5855, 171, 0),
 	HDD5GHZCHAN(5860, 172, 0),
@@ -825,7 +828,7 @@ int wlan_hdd_send_avoid_freq_event(hdd_context_t *pHddCtx,
 static enum qca_wlan_vendor_hang_reason
 hdd_convert_hang_reason(enum cds_hang_reason reason)
 {
-	uint32_t ret_val;
+	u32 ret_val;
 
 	switch (reason) {
 	case CDS_RX_HASH_NO_ENTRY_FOUND:
@@ -895,7 +898,7 @@ int wlan_hdd_send_hang_reason_event(hdd_context_t *hdd_ctx,
 	hang_reason = hdd_convert_hang_reason(reason);
 
 	if (nla_put_u32(vendor_event, QCA_WLAN_VENDOR_ATTR_HANG_REASON,
-			(uint32_t) hang_reason)) {
+			(uint32_t)hang_reason)) {
 		hdd_err("QCA_WLAN_VENDOR_ATTR_HANG_REASON put fail");
 		kfree_skb(vendor_event);
 		return -EINVAL;
@@ -906,6 +909,7 @@ int wlan_hdd_send_hang_reason_event(hdd_context_t *hdd_ctx,
 	EXIT();
 	return 0;
 }
+
 #undef HANG_REASON_INDEX
 
 /* vendor specific events */
@@ -6624,6 +6628,11 @@ __wlan_hdd_cfg80211_set_ns_offload(struct wiphy *wiphy,
 		return -EINVAL;
 	}
 
+	if (!pHddCtx->config->active_mode_offload) {
+		hdd_warn("Active mode offload is disabled");
+		return -EINVAL;
+	}
+
 	if (nla_parse(tb, QCA_WLAN_VENDOR_ATTR_ND_OFFLOAD_MAX,
 			(struct nlattr *)data,
 			data_len, ns_offload_set_policy)) {
@@ -11931,6 +11940,7 @@ int wlan_hdd_cfg80211_init(struct device *dev,
 {
 	int i, j;
 	hdd_context_t *pHddCtx = wiphy_priv(wiphy);
+	int len = 0;
 
 	ENTER();
 
@@ -12073,18 +12083,43 @@ int wlan_hdd_cfg80211_init(struct device *dev,
 		 (eHDD_DOT11_MODE_11b_ONLY != pCfg->dot11Mode) &&
 		 (eHDD_DOT11_MODE_11g_ONLY != pCfg->dot11Mode))) {
 		wiphy->bands[HDD_NL80211_BAND_5GHZ] = &wlan_hdd_band_5_ghz;
-		wiphy->bands[HDD_NL80211_BAND_5GHZ]->channels =
+
+		if (pCfg->dot11p_mode) {
+			wiphy->bands[HDD_NL80211_BAND_5GHZ]->channels =
+				qdf_mem_malloc(sizeof(hdd_channels_5_ghz) +
+						sizeof(hdd_channels_dot11p));
+			if (wiphy->bands[HDD_NL80211_BAND_5GHZ]->channels ==
+								NULL) {
+				hdd_err("Not enough memory to for channels");
+				goto mem_fail;
+			}
+			wiphy->bands[HDD_NL80211_BAND_5GHZ]->n_channels =
+					QDF_ARRAY_SIZE(hdd_channels_5_ghz) +
+					QDF_ARRAY_SIZE(hdd_channels_dot11p);
+
+			qdf_mem_copy(wiphy->bands[HDD_NL80211_BAND_5GHZ]->
+					channels, &hdd_channels_5_ghz[0],
+					sizeof(hdd_channels_5_ghz));
+			len = sizeof(hdd_channels_5_ghz);
+			qdf_mem_copy((char *)wiphy->
+					bands[HDD_NL80211_BAND_5GHZ]->channels
+						+ len,
+						&hdd_channels_dot11p[0],
+					sizeof(hdd_channels_dot11p));
+
+		} else {
+			wiphy->bands[HDD_NL80211_BAND_5GHZ]->channels =
 			qdf_mem_malloc(sizeof(hdd_channels_5_ghz));
-		if (wiphy->bands[HDD_NL80211_BAND_5GHZ]->channels == NULL) {
-			hdd_err("Not enough memory to allocate channels");
-			qdf_mem_free(wiphy->
-				bands[HDD_NL80211_BAND_2GHZ]->channels);
-			wiphy->bands[HDD_NL80211_BAND_2GHZ]->channels = NULL;
-			return -ENOMEM;
+			if (wiphy->bands[HDD_NL80211_BAND_5GHZ]->channels ==
+								NULL) {
+				hdd_err("Not enough memory to for channels");
+				goto mem_fail;
+			}
+			qdf_mem_copy(wiphy->
+				bands[HDD_NL80211_BAND_5GHZ]->channels,
+				&hdd_channels_5_ghz[0],
+				sizeof(hdd_channels_5_ghz));
 		}
-		qdf_mem_copy(wiphy->bands[HDD_NL80211_BAND_5GHZ]->channels,
-			&hdd_channels_5_ghz[0],
-			sizeof(hdd_channels_5_ghz));
 	}
 
 	for (i = 0; i < NUM_NL80211_BANDS; i++) {
@@ -12161,6 +12196,13 @@ int wlan_hdd_cfg80211_init(struct device *dev,
 
 	EXIT();
 	return 0;
+
+mem_fail:
+	if (wiphy->bands[HDD_NL80211_BAND_2GHZ]->channels != NULL) {
+		qdf_mem_free(wiphy->bands[HDD_NL80211_BAND_2GHZ]->channels);
+		wiphy->bands[HDD_NL80211_BAND_2GHZ]->channels = NULL;
+	}
+	return -ENOMEM;
 }
 
 /**
@@ -13439,13 +13481,21 @@ static int __wlan_hdd_cfg80211_add_key(struct wiphy *wiphy,
 		return -EINVAL;
 	}
 
-	hdd_debug("called with key index = %d & key length %d", key_index, params->key_len);
+	if (CSR_MAX_RSC_LEN < params->seq_len) {
+		hdd_err("Invalid seq length %d", params->seq_len);
+
+		return -EINVAL;
+	}
+
+	hdd_debug("key index %d, key length %d, seq length %d",
+		  key_index, params->key_len, params->seq_len);
 
 	/*extract key idx, key len and key */
 	qdf_mem_zero(&setKey, sizeof(tCsrRoamSetKey));
 	setKey.keyId = key_index;
 	setKey.keyLength = params->key_len;
 	qdf_mem_copy(&setKey.Key[0], params->key, params->key_len);
+	qdf_mem_copy(&setKey.keyRsc[0], params->seq, params->seq_len);
 
 	switch (params->cipher) {
 	case WLAN_CIPHER_SUITE_WEP40:
