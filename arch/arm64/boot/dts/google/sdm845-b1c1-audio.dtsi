@@ -62,6 +62,7 @@
 			"RX_BIAS", "MCLK",
 			"MADINPUT", "MCLK",
 			"DMIC1", "MIC BIAS1",
+			"AMIC1", "Flicker Mic",
 			"MIC BIAS1", "Digital Mic0",
 			"DMIC2", "MIC BIAS3",
 			"MIC BIAS3", "Digital Mic1",
