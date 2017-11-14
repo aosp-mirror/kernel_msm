@@ -122,7 +122,7 @@ static void fts_control_ta_detect_pin(struct fts_ts_info *info)
 
 	ta_pin = gpio_get_value(info->board->ta_detect_pin);
 
-	tsp_debug_info(&info->client->dev,
+	tsp_debug_dbg(&info->client->dev,
 			"%s: ta_detect_pin status = %d.\n",
 			__func__, ta_pin);
 }
@@ -140,7 +140,7 @@ static void fts_external_power_changed(struct power_supply *psy)
 		power_supply_get_property(info->usb_psy,
 					  POWER_SUPPLY_PROP_ONLINE, &prop);
 		if (info->charger_connected != prop.intval) {
-			tsp_debug_info(&info->client->dev,
+			tsp_debug_dbg(&info->client->dev,
 				"%s: charger_connected transition: %d => %d.\n",
 				__func__, info->charger_connected, prop.intval);
 			info->charger_connected = prop.intval;
@@ -879,6 +879,113 @@ static void fts_debug_msg_event_handler(struct fts_ts_info *info,
 	       data[4], data[5], data[6], data[7]);
 }
 
+static void fts_error_event_handler(struct fts_ts_info *info,
+					unsigned char data[])
+{
+	unsigned char error_type = data[1];
+
+	if (error_type == EVENTID_ERROR_M3)
+		tsp_debug_info(&info->client->dev, "EVENTID_ERROR_M3");
+	else if (error_type == EVENTID_ERROR_AFE)
+		tsp_debug_info(&info->client->dev, "EVENTID_ERROR_AFE");
+	else if (error_type == EVENTID_ERROR_FLASH_CORRUPTION)
+		tsp_debug_info(&info->client->dev,
+			"EVENTID_ERROR_FLASH_CORRUPTION");
+	else if (error_type == EVENTID_ERROR_ITO)
+		tsp_debug_info(&info->client->dev, "EVENTID_ERROR_ITO");
+	else if (error_type == EVENTID_ERROR_OSC_TRIM)
+		tsp_debug_info(&info->client->dev, "EVENTID_ERROR_OSC_TRIM");
+	else if (error_type == EVENTID_ERROR_RTOS)
+		tsp_debug_info(&info->client->dev, "EVENTID_ERROR_RTOS");
+	else if (error_type == EVENTID_ERROR_CX_TUNE)
+		tsp_debug_info(&info->client->dev, "EVENTID_ERROR_CX_TUNE");
+	else if (error_type == EVENTID_ERROR_LIB)
+		tsp_debug_info(&info->client->dev, "EVENTID_ERROR_LIB");
+	else
+		fts_debug_msg_event_handler(info, data);
+}
+
+static void fts_status_event_handler(struct fts_ts_info *info,
+					unsigned char status,
+					unsigned char data[])
+{
+	if (status == STATUS_EVENT_MUTUAL_AUTOTUNE_DONE) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received Mutual Autotune Done Event\n");
+	} else if (status == STATUS_EVENT_SELF_AUTOTUNE_DONE) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received Self Autotune Done Event\n");
+	} else if (status == STATUS_EVENT_FLASH_WRITE_CONFIG) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received Flash Write Config Event\n");
+	} else if (status == STATUS_EVENT_FLASH_WRITE_CXTUNE_VALUE) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received Flash Write CX Tune Event\n");
+	} else if (status == STATUS_EVENT_FORCE_CALIBRATION) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received Force Cal Event [ %x ]\n",
+			data[4]);
+	} else if (status == STATUS_EVENT_FORCE_CAL_DONE) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received Force Cal Done Event\n");
+	} else if (status == STATUS_EVENT_RESERVED) {
+		tsp_debug_dbg(&info->client->dev,
+			"[FTS] Received Reserved Event\n");
+	} else if (status == STATUS_EVENT_LOCKDOWN_FOR_LGD) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received Lockdown Event\n");
+	} else if (status == STATUS_EVENT_FRAME_DROP) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received Frame Drop Event\n");
+	} else if (status == STATUS_EVENT_WATER_MODE) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received Water Mode Event [ %s ]\n",
+			(data[2] == 0) ? "OFF" : "ON");
+	} else if (status == STATUS_EVENT_PURE_AUTOTUNE_FLAG_WRITE_FINISH) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received Pure Autotune Write Finish Event\n");
+	} else if (status == STATUS_EVENT_PURE_AUTOTUNE_FLAG_CLEAR_FINISH) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received Pure Autotune Clear Finish Event\n");
+	} else if (status == STATUS_EVENT_BASIC_AUTOTUNE_PROTECTION) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received Basic Autotune Protection Event [ %x ]\n",
+			data[2]);
+	} else if (status == STATUS_EVENT_FLASH_WRITE_AUTOTUNE_VALUE) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received Flash Write Autotune Value Event\n");
+	} else if (status == STATUS_EVENT_F_CAL_AFTER_AUTOTUNE_PROTECTION) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received F Cal After Autotune Event\n");
+	} else if (status == STATUS_EVENT_CHARGER_CONNECTED) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received Charger Connected Event\n");
+	} else if (status == STATUS_EVENT_CHARGER_DISCONNECTED) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received Charger Disconnected Event\n");
+	} else if (status == STATUS_EVENT_WIRELESS_CHARGER_ON) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received Wireless Charger On Event\n");
+	} else if (status == STATUS_EVENT_WIRELESS_CHARGER_OFF) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received Wireless Charger Off Event\n");
+	} else if (status == STATUS_EVENT_REBOOT_BY_ESD) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received ESD detected Event need to Reset\n");
+		schedule_delayed_work(&info->reset_work, msecs_to_jiffies(10));
+	} else if (status == STATUS_EVENT_VR_MODE_ENABLED) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received VR Mode Enabled Event\n");
+		info->vr_mode = 1;
+	} else if (status == STATUS_EVENT_VR_MODE_DISABLED) {
+		tsp_debug_info(&info->client->dev,
+			"[FTS] Received VR Mode Disabled Event\n");
+		info->vr_mode = 0;
+	} else
+		fts_debug_msg_event_handler(info,
+				  data);
+}
+
 static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 					      unsigned char data[],
 					      unsigned char LeftEvent)
@@ -937,23 +1044,8 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 			break;
 
 		case EVENTID_ERROR:
-			if (data[1 + EventNum *
-					FTS_EVENT_SIZE] == 0x08) {
-				/* Get Auto tune fail event */
-				if (data[2 + EventNum *
-						FTS_EVENT_SIZE] == 0x00) {
-					tsp_debug_err(&info->client->dev,
-							"[FTS] Fail Mutual Auto tune\n");
-				} else if (data[2 + EventNum *
-							FTS_EVENT_SIZE] == 0x01) {
-					tsp_debug_err(&info->client->dev,
-							"[FTS] Fail Self Auto tune\n");
-				}
-			} else if (data[1 + EventNum *
-							FTS_EVENT_SIZE] == 0x09)
-				/*  Get detect SYNC fail event */
-				tsp_debug_err(&info->client->dev,
-						"[FTS] Fail detect SYNC\n");
+			fts_error_event_handler(info,
+					&data[EventNum * FTS_EVENT_SIZE]);
 			break;
 
 		case EVENTID_HOVER_ENTER_POINTER:
@@ -1111,51 +1203,10 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 			}
 			break;
 		case EVENTID_STATUS_EVENT:
-			if (status == STATUS_EVENT_GLOVE_MODE) {
-
-			} else if (status == STATUS_EVENT_RAW_DATA_READY) {
-				unsigned char regAdd[4] = {0xB0, 0x01, 0x29, 0x01};
-
-				fts_write_reg(info, &regAdd[0], 4);
-
-				tsp_debug_info(&info->client->dev,
-						"[FTS] Received the Raw Data Ready Event\n");
-			} else if (status == STATUS_EVENT_FORCE_CAL_MUTUAL) {
-				tsp_debug_info(&info->client->dev,
-						"[FTS] Received Force Calibration Mutual only Event\n");
-			} else if (status == STATUS_EVENT_FORCE_CAL_SELF) {
-				tsp_debug_info(&info->client->dev,
-						"[FTS] Received Force Calibration Self only Event\n");
-			} else if (status == STATUS_EVENT_WATERMODE_ON) {
-				tsp_debug_info(&info->client->dev,
-						"[FTS] Received Water Mode On Event\n");
-			} else if (status == STATUS_EVENT_WATERMODE_OFF) {
-				tsp_debug_info(&info->client->dev,
-						"[FTS] Received Water Mode Off Event\n");
-			} else if (status == STATUS_EVENT_MUTUAL_CAL_FRAME_CHECK) {
-				tsp_debug_info(&info->client->dev,
-						"[FTS] Received Mutual Calib Frame Check Event\n");
-			} else if (status == STATUS_EVENT_SELF_CAL_FRAME_CHECK) {
-				tsp_debug_info(&info->client->dev,
-						"[FTS] Received Self Calib Frame Check Event\n");
-			} else if (status == FTS_EVENT_REBOOT_BY_ESD) {
-				tsp_debug_info(&info->client->dev,
-						"[FTS] Received ESD detected Event need to Reset\n");
-				schedule_delayed_work(&info->reset_work,
-					msecs_to_jiffies(10));
-			} else if (status == FTS_EVENT_VR_MODE_ENABLED) {
-				tsp_debug_info(&info->client->dev,
-						"[FTS] Received VR Mode Enabled Event\n");
-				info->vr_mode = 1;
-			} else if (status == FTS_EVENT_VR_MODE_DISABLED) {
-				tsp_debug_info(&info->client->dev,
-						"[FTS] Received VR Mode Disabled Event\n");
-				info->vr_mode = 0;
-			} else {
-				fts_debug_msg_event_handler(info,
-						  &data[EventNum *
+			fts_status_event_handler(info,
+						status,
+						&data[EventNum *
 							FTS_EVENT_SIZE]);
-			}
 			break;
 
 #ifdef FEATURE_FTS_PRODUCTION_CODE
