@@ -469,9 +469,11 @@ int nfc_ioctl_power_states(struct file *filp, unsigned long arg)
 			dev_dbg(&nqx_dev->client->dev, "ese_gpio invalid, set en_gpio to low\n");
 			gpio_set_value(nqx_dev->en_gpio, 0);
 		}
-		r = nqx_clock_deselect(nqx_dev);
-		if (r < 0)
-			dev_err(&nqx_dev->client->dev, "unable to disable clock\n");
+		if (gpio_is_valid(nqx_dev->clkreq_gpio)) {
+			r = nqx_clock_deselect(nqx_dev);
+			if (r < 0)
+				dev_err(&nqx_dev->client->dev, "unable to disable clock\n");
+		}
 		nqx_dev->nfc_ven_enabled = false;
 		/* hardware dependent delay */
 		msleep(100);
@@ -484,9 +486,11 @@ int nfc_ioctl_power_states(struct file *filp, unsigned long arg)
 		if (gpio_is_valid(nqx_dev->firm_gpio))
 			gpio_set_value(nqx_dev->firm_gpio, 0);
 		gpio_set_value(nqx_dev->en_gpio, 1);
-		r = nqx_clock_select(nqx_dev);
-		if (r < 0)
-			dev_err(&nqx_dev->client->dev, "unable to enable clock\n");
+		if (gpio_is_valid(nqx_dev->clkreq_gpio)) {
+			r = nqx_clock_select(nqx_dev);
+			if (r < 0)
+				dev_err(&nqx_dev->client->dev, "unable to enable clock\n");
+		}
 		nqx_dev->nfc_ven_enabled = true;
 		msleep(20);
 	} else if (arg == 2) {
@@ -736,10 +740,13 @@ static int nfc_parse_dt(struct device *dev, struct nqx_platform_data *pdata)
 
 	r = of_property_read_string(np, "qcom,clk-src", &pdata->clk_src_name);
 
-	pdata->clkreq_gpio = of_get_named_gpio(np, "qcom,nq-clkreq", 0);
+	if (r) {
+		pdata->clkreq_gpio = -EINVAL;
+		return 0;
+	} else {
+		pdata->clkreq_gpio = of_get_named_gpio(np, "qcom,nq-clkreq", 0);
+	}
 
-	if (r)
-		return -EINVAL;
 	return r;
 }
 
@@ -930,7 +937,6 @@ static int nqx_probe(struct i2c_client *client,
 	} else {
 		dev_err(&client->dev,
 			"%s: clkreq gpio not provided\n", __func__);
-		goto err_ese_gpio;
 	}
 
 	nqx_dev->en_gpio = platform_data->en_gpio;
