@@ -76,21 +76,80 @@
 		/delete-property/ qcom,hph-en1-gpio;
 		/delete-property/ qcom,wsa-devs;
 		/delete-property/ qcom,wsa-aux-dev-prefix;
+
+		pinctrl-names = "quat-mi2s-active", "quat-mi2s-sleep",
+				"quat-tdm-active", "quat-tdm-sleep";
+		pinctrl-0 = <&quat_mi2s_active &quat_mi2s_sd0_active
+					&quat_mi2s_sd1_active>;
+		pinctrl-1 = <&quat_mi2s_sleep &quat_mi2s_sd0_sleep
+					&quat_mi2s_sd1_sleep>;
+		pinctrl-2 = <&quat_tdm_active &quat_tdm_dout_active
+					&quat_tdm_din_active>;
+		pinctrl-3 = <&quat_tdm_sleep &quat_tdm_dout_sleep
+					&quat_tdm_din_sleep>;
 	};
 
 	wcd_usbc_analog_en1_gpio: msm_cdc_pinctrl@49 {
 		status = "disabled";
 	};
+
+	qcom,msm-dai-tdm-quat-rx {
+		compatible = "qcom,msm-dai-tdm";
+		qcom,msm-cpudai-tdm-group-id = <37168>;
+		qcom,msm-cpudai-tdm-group-num-ports = <1>;
+		qcom,msm-cpudai-tdm-group-port-id = <36912>;
+		qcom,msm-cpudai-tdm-clk-rate = <12288000>;
+		qcom,msm-cpudai-tdm-clk-internal = <1>;
+		qcom,msm-cpudai-tdm-sync-mode = <0>;
+		qcom,msm-cpudai-tdm-sync-src = <1>;
+		qcom,msm-cpudai-tdm-data-out = <0>;
+		qcom,msm-cpudai-tdm-invert-sync = <0>;
+		qcom,msm-cpudai-tdm-data-delay = <1>;
+		dai_quat_tdm_rx_0: qcom,msm-dai-q6-tdm-quat-rx-0 {
+			compatible = "qcom,msm-dai-q6-tdm";
+			qcom,msm-cpudai-tdm-dev-id = <36912>;
+			qcom,msm-cpudai-tdm-data-align = <0>;
+			qcom,msm-cpudai-tdm-header-start-offset = <0>;
+			qcom,msm-cpudai-tdm-header-width = <2>;
+			qcom,msm-cpudai-tdm-header-num-frame-repeat = <8>;
+		};
+	};
+
+	qcom,msm-dai-tdm-quat-tx {
+		compatible = "qcom,msm-dai-tdm";
+		qcom,msm-cpudai-tdm-group-id = <37169>;
+		qcom,msm-cpudai-tdm-group-num-ports = <1>;
+		qcom,msm-cpudai-tdm-group-port-id = <36913>;
+		qcom,msm-cpudai-tdm-clk-rate = <12288000>;
+		qcom,msm-cpudai-tdm-clk-internal = <1>;
+		qcom,msm-cpudai-tdm-sync-mode = <0>;
+		qcom,msm-cpudai-tdm-sync-src = <1>;
+		qcom,msm-cpudai-tdm-data-out = <0>;
+		qcom,msm-cpudai-tdm-invert-sync = <1>;
+		qcom,msm-cpudai-tdm-data-delay = <1>;
+		dai_quat_tdm_tx_0: qcom,msm-dai-q6-tdm-quat-tx-0 {
+			compatible = "qcom,msm-dai-q6-tdm";
+			qcom,msm-cpudai-tdm-dev-id = <36913>;
+			qcom,msm-cpudai-tdm-data-align = <0>;
+		};
+	};
 };
 
 /* path to speaker boosters */
-&dai_mi2s3 {
-	/* AP in SD0 (gpio60), AP out SD1 (gpio61); */
-	/* SD0; in; ("rx-lines" is playback path): mask=1 */
-	/* SD1; out ("tx-lines" is capture path): mask=2 */
+&dai_quat_tdm_rx_0 {
 	pinctrl-names = "default", "sleep";
-	pinctrl-0 = <&quat_mi2s_mclk_active &quat_mi2s_active &quat_mi2s_sd0_active &quat_mi2s_sd1_active>;
-	pinctrl-1 = <&quat_mi2s_mclk_sleep &quat_mi2s_sleep &quat_mi2s_sd0_sleep &quat_mi2s_sd1_sleep>;
+	pinctrl-2 = <&quat_tdm_active &quat_tdm_dout_active
+			&quat_tdm_din_active>;
+	pinctrl-3 = <&quat_tdm_sleep &quat_tdm_dout_sleep
+			&quat_tdm_din_sleep>;
+};
+
+&dai_quat_tdm_tx_0 {
+	pinctrl-names = "default", "sleep";
+	pinctrl-2 = <&quat_tdm_active &quat_tdm_dout_active
+			&quat_tdm_din_active>;
+	pinctrl-3 = <&quat_tdm_sleep &quat_tdm_dout_sleep
+			&quat_tdm_din_sleep>;
 };
 
 /* speaker boosters */
@@ -100,7 +159,7 @@
 		compatible = "cirrus,cs35l36";
 		reg = <0x40>;
 		reset-gpios = <&tlmm 75 0>;
-		irq-gpio = <&tlmm 40 0x01>;
+		irq-gpio = <&tlmm 40 0>;
 		VA-supply = <&pm8998_s4>;
 		interrupt-parent = <&tlmm>;
 		interrupts = <40 IRQ_TYPE_LEVEL_LOW>;
@@ -130,6 +189,7 @@
 		cirrus,asp-tx-config {
 			cirrus,tx1-config = /bits/ 8 <0x00 0x18>;
 			cirrus,tx2-config = /bits/ 8 <0x01 0x19>;
+			cirrus,tx3-config = /bits/ 8 <0x02 0x28>;
 		};
 	};
 
@@ -137,7 +197,7 @@
 		compatible = "cirrus,cs35l36";
 		reg = <0x41>;
 		reset-gpios = <&tlmm 75 0>;
-		irq-gpio = <&tlmm 40 0x01>;
+		irq-gpio = <&tlmm 40 0>;
 		VA-supply = <&pm8998_s4>;
 		interrupt-parent = <&tlmm>;
 		interrupts = <40 IRQ_TYPE_LEVEL_LOW>;
@@ -163,8 +223,9 @@
 		};
 
 		cirrus,asp-tx-config {
-			cirrus,tx1-config = /bits/ 8 <0x00 0x18>;
-			cirrus,tx2-config = /bits/ 8 <0x01 0x19>;
+			cirrus,tx4-config = /bits/ 8 <0x03 0x18>;
+			cirrus,tx5-config = /bits/ 8 <0x04 0x19>;
+			cirrus,tx6-config = /bits/ 8 <0x05 0x28>;
 		};
 	};
 };

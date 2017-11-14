@@ -74,3 +74,25 @@
 &nq {
 	status = "disabled";
 };
+
+/* path to speaker boosters */
+&dai_mi2s3 {
+	/* AP in SD0 (gpio60), AP out SD1 (gpio61); */
+	/* SD0; in; ("rx-lines" is playback path): mask=1 */
+	/* SD1; out ("tx-lines" is capture path): mask=2 */
+	pinctrl-names = "default", "sleep";
+	pinctrl-0 = <&quat_mi2s_mclk_active &quat_mi2s_active
+			&quat_mi2s_sd0_active &quat_mi2s_sd1_active>;
+	pinctrl-1 = <&quat_mi2s_mclk_sleep &quat_mi2s_sleep
+			&quat_mi2s_sd0_sleep &quat_mi2s_sd1_sleep>;
+};
+
+&dai_quat_tdm_rx_0 {
+	pinctrl-2 = <>;
+	pinctrl-3 = <>;
+};
+
+&dai_quat_tdm_tx_0 {
+	pinctrl-2 = <>;
+	pinctrl-3 = <>;
+};
