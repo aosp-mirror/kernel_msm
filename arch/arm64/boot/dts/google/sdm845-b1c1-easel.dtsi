@@ -195,4 +195,35 @@
 		ready-gpio = <&tlmm 52 0x00>;
 		boot-mode-gpio = <&tlmm 11 0x00>;
 	};
+
+	mnh_thermal: mnh_thermal {
+		compatible = "intel,mnh_thermal";
+		#thermal-sensor-cells = <1>;
+	};
+
+	thermal-zones {
+		mnh_ipu1 {
+			polling-delay-passive = <1000>;/* milliseconds */
+			polling-delay = <0>;/* milliseconds */
+			thermal-sensors = <&mnh_thermal 0>;
+		};
+
+		mnh_ipu2 {
+			polling-delay-passive = <1000>;/* milliseconds */
+			polling-delay = <0>;/* milliseconds */
+			thermal-sensors = <&mnh_thermal 1>;
+		};
+
+		mnh_cpu {
+			polling-delay-passive = <1000>;/* milliseconds */
+			polling-delay = <0>;/* milliseconds */
+			thermal-sensors = <&mnh_thermal 2>;
+		};
+
+		mnh_lpddr {
+			polling-delay-passive = <1000>;/* milliseconds */
+			polling-delay = <0>;/* milliseconds */
+			thermal-sensors = <&mnh_thermal 3>;
+		};
+	};
 };
