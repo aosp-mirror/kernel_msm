@@ -176,7 +176,7 @@
 		compatible = "qcom,cam-sensor";
 		reg = <0x0>;
 		csiphy-sd-index = <0>;
-		sensor-position-roll = <270>;
+		sensor-position-roll = <90>;
 		sensor-position-pitch = <0>;
 		sensor-position-yaw = <0>;
 		actuator-src = <&actuator_front>;
@@ -266,7 +266,7 @@
 		compatible = "qcom,cam-sensor";
 		reg = <0x02>;
 		csiphy-sd-index = <1>;
-		sensor-position-roll = <270>;
+		sensor-position-roll = <90>;
 		sensor-position-pitch = <0>;
 		sensor-position-yaw = <0>;
 		//eeprom-src = <&eeprom_front>;
