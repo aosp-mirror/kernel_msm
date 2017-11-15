@@ -52,6 +52,7 @@ struct bezel_data {
 	u16 step_threshold2;
 	u8 thickness;
 	u32 sq_rad_position;
+	bool ignore_multi_touch;
 	bool bezel_touch_status;
 };
 

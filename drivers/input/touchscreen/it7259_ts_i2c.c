@@ -1719,6 +1719,10 @@ static irqreturn_t it7259_ts_threaded_handler(int irq, void *devid)
 		input_mt_report_slot_state(input_dev, MT_TOOL_FINGER,
 					finger_status != 0);
 
+#ifdef	CONFIG_BEZEL_SUPPORT
+                if(ts_data->bdata->ignore_multi_touch && (finger_status != 0) && (finger > 0))
+                       continue;
+#endif
 		x = pt_data.fd[finger].xLo +
 			(((u16)(pt_data.fd[finger].hi & 0x0F)) << 8);
 		y = pt_data.fd[finger].yLo +
@@ -1745,11 +1749,26 @@ static irqreturn_t it7259_ts_threaded_handler(int irq, void *devid)
 				sq_disp_position = (u32)(virtual_radius * virtual_radius);
 
 				if(sq_rad_position > sq_disp_position) {
-					bezel_report_wheel(x, y, ts_data->bdata);
-					if(ts_data->bdata->step_threshold2 ==
-						ts_data->bdata->angular_dist_thresh)
-					ts_data->bdata->bezel_touch_status = true;
-                                        bezel_count++;
+					/* touch has happened in bezel area;
+					 * if bezel_touch_status is not true,
+                                         *  this is first touch on bezel
+                                         *  and if finger == 0, start ignoring all multi-touch
+					 */
+					if((!ts_data->bdata->bezel_touch_status) && (finger == 0) &&
+						(!ts_data->bdata->ignore_multi_touch))
+						ts_data->bdata->ignore_multi_touch = true;
+                                        /* if finger 1 has come on bezel, don't handle.
+					 * need to find better place to do this check.*/
+					if(finger == 0) {
+						bezel_report_wheel(x, y, ts_data->bdata);
+						if(ts_data->bdata->step_threshold2 ==
+								ts_data->bdata->angular_dist_thresh)
+							ts_data->bdata->bezel_touch_status = true;
+						bezel_count++;
+					}
+					else {
+                                            pr_err("ignored multi-touch on bezel by finger %d\n", finger);
+                                        }
 				} else
 #endif
 				{
@@ -1781,9 +1800,12 @@ static irqreturn_t it7259_ts_threaded_handler(int irq, void *devid)
 	}
 #ifdef	CONFIG_BEZEL_SUPPORT
         /*input_report_rel(input_dev, BTN_TOOL_FINGER, bezel_count > 0);*/
-	if(!(bezel_count > 0)) {
+	if( (!(bezel_count > 0)) ) {
 		bezel_reset();
 		ts_data->bdata->bezel_touch_status = false;
+		if(ts_data->bdata->ignore_multi_touch) {
+			ts_data->bdata->ignore_multi_touch = false;
+		}
 	}
 #endif
 
