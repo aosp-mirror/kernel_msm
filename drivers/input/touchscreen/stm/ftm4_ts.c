@@ -994,6 +994,7 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 	unsigned char NumTouches = 0;
 	unsigned char TouchID = 0, EventID = 0, status = 0;
 	unsigned char LastLeftEvent = 0;
+	unsigned int  slotsReported = 0;
 	int x = 0, y = 0, z = 0;
 	int bw = 0, bh = 0, palm = 0;
 	int orient = 0;
@@ -1038,6 +1039,18 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 			EventID = data[EventNum * FTS_EVENT_SIZE] & 0xFF;
 			status = data[1 + EventNum * FTS_EVENT_SIZE] & 0xFF;
 		}
+
+		/* If a slot is reported more than once within an irq, sync
+		 * between the events. This should be an uncommon occurrence.
+		 */
+		if (slotsReported & (1 << TouchID)) {
+			input_sync(info->input_dev);
+			slotsReported = 0;
+			tsp_debug_err(&info->client->dev,
+				      "%s: Syncing between duplicate slots.\n",
+				      __func__);
+		}
+		slotsReported |= (1 << TouchID);
 
 		switch (EventID) {
 		case EVENTID_NO_EVENT:
@@ -1261,10 +1274,9 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 			(EventID == EVENTID_MOTION_POINTER) ||
 			(EventID == EVENTID_LEAVE_POINTER))
 			info->finger[TouchID].state = EventID;
-
-		input_sync(info->input_dev);
 	}
 
+	input_sync(info->input_dev);
 
 #if defined(CONFIG_INPUT_BOOSTER)
 	if ((EventID == EVENTID_ENTER_POINTER)
