@@ -1597,6 +1597,15 @@ VOS_STATUS vos_pkt_walk_packet_chain( vos_pkt_t *pPacket,
    }
 }
 
+
+bool vos_is_pkt_chain(vos_pkt_t *pPacket)
+{
+   if (pPacket->pNext != NULL)
+      return true;
+   else
+      return false;
+}
+
 /**--------------------------------------------------------------------------
 
   \brief vos_pkt_get_data_vector() - Get data vectors from a voss Packet

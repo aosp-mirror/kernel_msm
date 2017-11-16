@@ -565,6 +565,14 @@ VOS_STATUS vos_pkt_walk_packet_chain( vos_pkt_t *pPacket, vos_pkt_t **ppChainedP
                                       v_BOOL_t unchainPacket );
 
 
+/**
+ * vos_is_pkt_chain() - Check for chain of packets
+ * @pPacket: pointer to chain of packet list
+ *
+ * Return: true if chain of packets or false otherwise
+ */
+bool vos_is_pkt_chain(vos_pkt_t *pPacket);
+
 /**--------------------------------------------------------------------------
   
   \brief vos_pkt_get_data_vector() - Get data vectors from a voss Packet

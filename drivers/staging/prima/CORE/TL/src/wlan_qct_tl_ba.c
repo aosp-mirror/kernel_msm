@@ -220,66 +220,6 @@ v_VOID_t WLANTL_ReorderingAgingTimerExpierCB
       fwIdx = ReorderInfo->ucCIndex - 1;
    }
 
-   /* Do replay check before giving packets to upper layer 
-      replay check code : check whether replay check is needed or not */
-   if(VOS_TRUE == pClientSTA->ucIsReplayCheckValid)
-   {
-       v_U64_t    ullpreviousReplayCounter = 0;
-       v_U64_t    ullcurrentReplayCounter = 0;
-       v_U8_t     ucloopCounter = 0;
-       v_BOOL_t   status = 0;
-
-       /*Do replay check for all packets which are in Reorder buffer */
-       for(ucloopCounter = 0; ucloopCounter < WLANTL_MAX_WINSIZE; ucloopCounter++)
-       {
-         /*Get previous reply counter*/
-         ullpreviousReplayCounter = pClientSTA->ullReplayCounter[ucTID];
-
-         /*Get current replay counter of packet in reorder buffer*/
-         ullcurrentReplayCounter = ReorderInfo->reorderBuffer->ullReplayCounter[ucloopCounter];
-
-         /*Check for holes, if a hole is found in Reorder buffer then
-           no need to do replay check on it, skip the current
-           hole and do replay check on other packets*/
-         if(NULL != (ReorderInfo->reorderBuffer->arrayBuffer[ucloopCounter]))
-         {
-           status = WLANTL_IsReplayPacket(ullcurrentReplayCounter, ullpreviousReplayCounter); 
-           if(VOS_TRUE == status)
-           {
-               /*Increment the debug counter*/
-               pClientSTA->ulTotalReplayPacketsDetected++;
-
-               /*A replay packet found*/
-               VOS_TRACE( VOS_MODULE_ID_TL, VOS_TRACE_LEVEL_ERROR,
-                "WLANTL_ReorderingAgingTimerExpierCB: total dropped replay packets on STA ID %X is [0x%X]",
-                ucSTAID, pClientSTA->ulTotalReplayPacketsDetected);
-
-               VOS_TRACE( VOS_MODULE_ID_TL, VOS_TRACE_LEVEL_ERROR,
-                "WLANTL_ReorderingAgingTimerExpierCB: replay packet found with PN : [0x%llX]",
-                ullcurrentReplayCounter);
-
-               VOS_TRACE( VOS_MODULE_ID_TL, VOS_TRACE_LEVEL_ERROR,
-                "WLANTL_ReorderingAgingTimerExpierCB: Drop the replay packet with PN : [0x%llX]",
-                ullcurrentReplayCounter);
-
-               ReorderInfo->reorderBuffer->arrayBuffer[ucloopCounter] = NULL;
-               ReorderInfo->reorderBuffer->ullReplayCounter[ucloopCounter] = 0;
-           }
-           else
-           {
-              /*Not a replay packet update previous replay counter*/
-              pClientSTA->ullReplayCounter[ucTID] = ullcurrentReplayCounter;
-           }
-         }
-         else
-         {
-              /* A hole detected in Reorder buffer*/
-              //BAMSGERROR("WLANTL_ReorderingAgingTimerExpierCB,hole detected\n",0,0,0);
-               
-         }
-       } 
-   }
-
    cIndex = ReorderInfo->ucCIndex;
    status = WLANTL_ChainFrontPkts(fwIdx, opCode, 
                                   &vosDataBuff, ReorderInfo, NULL);
@@ -312,6 +252,12 @@ v_VOID_t WLANTL_ReorderingAgingTimerExpierCB
          TLLOGE(VOS_TRACE(VOS_MODULE_ID_TL, VOS_TRACE_LEVEL_ERROR,"WLANTL_ReorderingAgingTimerExpierCB, Release LOCK Fail"));
       }
       return;
+   }
+
+   /* Do replay check before giving packets to upper layer
+      replay check code : check whether replay check is needed or not */
+   if(VOS_TRUE == pClientSTA->ucIsReplayCheckValid) {
+      WLANTL_ReorderReplayCheck(pClientSTA, &vosDataBuff, ucTID);
    }
 
    pCurrent = vosDataBuff;
@@ -754,6 +700,12 @@ WLANTL_BaSessionDel
     TLLOG2(VOS_TRACE( VOS_MODULE_ID_TL, VOS_TRACE_LEVEL_INFO_HIGH,
              "WLAN TL: Chaining was successful sending all pkts to HDD : %x",
               vosDataBuff ));
+
+    /* Do replay check before giving packets to upper layer
+       replay check code : check whether replay check is needed or not */
+    if(VOS_TRUE == pClientSTA->ucIsReplayCheckValid) {
+      WLANTL_ReorderReplayCheck(pClientSTA, &vosDataBuff, ucTid);
+    }
 
     if ( WLAN_STA_SOFTAP == pClientSTA->wSTADesc.wSTAType )
     {
@@ -1899,3 +1851,44 @@ void WLANTL_FillReplayCounter
    return;
 }/*WLANTL_FillReplayCounter*/
 
+void WLANTL_ReorderReplayCheck(WLANTL_STAClientType *pClientSTA,
+                               vos_pkt_t **vosDataBuff, v_U8_t ucTid)
+{
+   vos_pkt_t *pVosCurPkt;
+   vos_pkt_t *pNextVosPkt;
+   vos_pkt_t *pVosHeadPkt = NULL;
+   vos_pkt_t *pfreeVosPkt = NULL;
+   v_U64_t   prevReplayCounter = 0;
+   v_BOOL_t status;
+
+   pVosCurPkt = *vosDataBuff;
+
+   do {
+      vos_pkt_walk_packet_chain(pVosCurPkt, &pNextVosPkt, VOS_FALSE);
+      prevReplayCounter = pClientSTA->ullReplayCounter[ucTid];
+      status =  WLANTL_IsReplayPacket(pVosCurPkt->pn_num,
+                                      prevReplayCounter);
+      if(VOS_FALSE == status) {
+         pClientSTA->ullReplayCounter[ucTid] = pVosCurPkt->pn_num;
+         pVosHeadPkt = pVosCurPkt;
+      } else {
+         VOS_TRACE(VOS_MODULE_ID_TL, VOS_TRACE_LEVEL_ERROR,
+                   "%s: Non-AMSDU Drop the replay packet PN: [0x%llX]",
+                   __func__, pVosCurPkt->pn_num);
+         pClientSTA->ulTotalReplayPacketsDetected++;
+
+         pfreeVosPkt = pVosCurPkt;
+         pfreeVosPkt->pNext = NULL;
+         vos_pkt_return_packet(pfreeVosPkt);
+
+         if (pVosHeadPkt != NULL) {
+            pVosHeadPkt->pNext = pNextVosPkt;
+         }
+         else {
+            *vosDataBuff = pNextVosPkt;
+         }
+      }
+
+      pVosCurPkt = pNextVosPkt;
+   } while (pVosCurPkt);
+}
