@@ -71,6 +71,28 @@
 		};
 
 	};
+
+	i2c@78b7000 {
+		nq-nci@29 {
+			compatible = "qcom,nq-nci";
+			reg = <0x29>;
+			qcom,nq-irq = <&msm_gpio 35 0x00>;
+			qcom,nq-ven = <&msm_gpio 33 0x00>;
+			qcom,nq-firm = <&msm_gpio 34 0x00>;
+			qcom,nq-clkreq = <&pm8916_gpios 2 0x00>;
+			interrupt-parent = <&msm_gpio>;
+			qcom,clk-src = "BBCLK2";
+			interrupts = <35 0>;
+			interrupt-names = "nfc_irq";
+			pinctrl-names = "nfc_active","nfc_suspend";
+			pinctrl-0 = <&nfc_int_active &nfc_disable_active>;
+			pinctrl-1 = <&nfc_int_suspend &nfc_disable_suspend>;
+			clocks = <&clock_rpm clk_bb_clk2_pin>;
+			clock-names = "ref_clk";
+			vdd-supply = <&pm8916_l15>;
+		};
+	};
+
 };
 
 &audio_codec_mtp {
