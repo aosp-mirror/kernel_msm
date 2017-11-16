@@ -29,6 +29,9 @@
 #include <linux/regulator/machine.h>
 #include <linux/regulator/of_regulator.h>
 #include <linux/qpnp/power-on.h>
+#include <linux/power_supply.h>
+#include <linux/timer.h>
+#include <linux/wakelock.h>
 
 #define CREATE_MASK(NUM_BITS, POS) \
 	((unsigned char) (((1 << (NUM_BITS)) - 1) << (POS)))
@@ -154,6 +157,9 @@
 
 #define QPNP_POFF_REASON_UVLO			13
 
+#define PON_INT_RT_STS	 0x810
+#define CBLPWR_ON		 0x04
+
 enum qpnp_pon_version {
 	QPNP_PON_GEN1_V1,
 	QPNP_PON_GEN1_V2,
@@ -165,6 +171,12 @@ enum pon_type {
 	PON_RESIN,
 	PON_CBLPWR,
 	PON_KPDPWR_RESIN,
+};
+
+enum cblpwr_timer_type {
+	CBLPWR_NOTIMER,
+	CBLPWR_TIMER_IRQ,
+	CBLPWR_TIMER_REINIT,
 };
 
 struct qpnp_pon_config {
@@ -216,8 +228,15 @@ struct qpnp_pon {
 	u8			pon_ver;
 	u8			warm_reset_reason1;
 	u8			warm_reset_reason2;
-	bool			is_spon;
-	bool			store_hard_reset_reason;
+	bool		is_spon;
+	bool		store_hard_reset_reason;
+
+	/* extend */
+	int						timer_id;
+	int						last_cblpwr;
+	struct power_supply		*usb_psy;
+	struct delayed_work		delaywork_cblpwr;
+	struct wake_lock 		cblpwr_wlock;
 };
 
 static struct qpnp_pon *sys_reset_dev;
@@ -844,14 +863,43 @@ static irqreturn_t qpnp_kpdpwr_resin_bark_irq(int irq, void *_pon)
 	return IRQ_HANDLED;
 }
 
+void qpnp_pon_cblpwr_online(struct qpnp_pon *pon)
+{
+	union power_supply_propval data;
+
+	//send online to UI
+	data.intval = 1;
+	pon->usb_psy->set_property(pon->usb_psy, POWER_SUPPLY_PROP_TECHNOLOGY, &data);
+
+	mdelay(1000);
+	pon->last_cblpwr = 1;
+	power_supply_set_present(pon->usb_psy, 1);
+	pr_info("qpnp_cblpwr_irq: set usb present: 1 \n");
+}
+
+#define TIMER_IRQ	150
 static irqreturn_t qpnp_cblpwr_irq(int irq, void *_pon)
 {
-	int rc;
+	int vbus;
 	struct qpnp_pon *pon = _pon;
 
-	rc = qpnp_pon_input_dispatch(pon, PON_CBLPWR);
-	if (rc)
-		dev_err(&pon->spmi->dev, "Unable to send input event\n");
+	if (pon->timer_id == CBLPWR_TIMER_REINIT)
+		return IRQ_HANDLED;
+
+	vbus = !!irq_read_line(irq);
+	pr_info("qpnp_cblpwr_irq: vbus=%d \n", vbus);
+
+	if (!wake_lock_active(&pon->cblpwr_wlock)) {
+		wake_lock(&pon->cblpwr_wlock);
+		pr_info("cblpwr_wake_lock \n");
+	}
+
+	if ((pon->timer_id == CBLPWR_NOTIMER) && vbus)
+		qpnp_pon_cblpwr_online(pon);
+
+	pon->timer_id = CBLPWR_TIMER_IRQ;
+	cancel_delayed_work(&pon->delaywork_cblpwr);
+	schedule_delayed_work(&pon->delaywork_cblpwr, TIMER_IRQ);
 
 	return IRQ_HANDLED;
 }
@@ -1164,6 +1212,9 @@ qpnp_pon_request_irqs(struct qpnp_pon *pon, struct qpnp_pon_config *cfg)
 							cfg->state_irq);
 			return rc;
 		}
+		//Wake up system to notify charger state change
+		enable_irq_wake(cfg->state_irq);
+		
 		break;
 	case PON_KPDPWR_RESIN:
 		if (cfg->use_bark) {
@@ -1927,6 +1978,75 @@ static int read_gen2_pon_off_reason(struct qpnp_pon *pon, u16 *reason,
 	return 0;
 }
 
+u8 qpnp_pon_detect_cblpwr(struct qpnp_pon *pon)
+{
+	u8 cblpwr = 0;
+
+	spmi_ext_register_readl(pon->spmi->ctrl, pon->spmi->sid, PON_INT_RT_STS, &cblpwr, 1);
+	cblpwr = ((cblpwr & CBLPWR_ON) >> 2);
+	pr_info("qpnp_pon_detect_cblpwr: cblpwr=%d \n", cblpwr);
+	
+	return cblpwr;
+}
+
+#define TIMER_REINIT	1000
+void qpnp_pon_cblpwr_init(struct qpnp_pon *pon)
+{
+	pon->usb_psy = power_supply_get_by_name("usb");
+	if (pon->usb_psy == NULL) {
+		pr_err("cblpwr_init: can't find usb device \n");
+		//if usb is still not ready, delay 10 sec to check again
+		schedule_delayed_work(&pon->delaywork_cblpwr, TIMER_REINIT);
+		pon->timer_id = CBLPWR_TIMER_REINIT;
+	} else if (qpnp_pon_detect_cblpwr(pon)) {
+		qpnp_pon_cblpwr_online(pon);
+		schedule_delayed_work(&pon->delaywork_cblpwr, TIMER_IRQ);
+		pon->timer_id = CBLPWR_TIMER_IRQ;
+	} else
+		pon->timer_id = CBLPWR_NOTIMER;
+}
+
+void qpnp_pon_timer_trigger_usb(struct work_struct *work)
+{
+	u8 cblpwr;
+	int rc;
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct qpnp_pon *pon = container_of(dwork, struct qpnp_pon, delaywork_cblpwr);
+	union power_supply_propval data;
+
+	cblpwr = qpnp_pon_detect_cblpwr(pon);
+	pr_info("qpnp_pon_timer_trigger_usb: cblpwr=%d, last_cblpwr=%d, timer_id=%d \n", cblpwr, pon->last_cblpwr, pon->timer_id);
+
+	if (pon->timer_id == CBLPWR_TIMER_REINIT) {
+		qpnp_pon_cblpwr_init(pon);
+		return;
+	} 
+
+	if ((cblpwr == 0) && (pon->last_cblpwr == 1)) {
+		//send offline to UI,USB
+		data.intval = 0;
+		pon->usb_psy->set_property(pon->usb_psy, POWER_SUPPLY_PROP_TECHNOLOGY, &data);
+		pon->last_cblpwr = 0;
+		power_supply_set_present(pon->usb_psy, 0);
+		pr_info("qpnp_pon_timer_trigger_usb: set usb present: 0 \n");
+	} else if ((cblpwr == 1) && (pon->last_cblpwr == 0)) {
+		qpnp_pon_cblpwr_online(pon);
+		cancel_delayed_work(&pon->delaywork_cblpwr);
+		schedule_delayed_work(&pon->delaywork_cblpwr, TIMER_IRQ);
+		return;
+	}
+
+	pon->timer_id = CBLPWR_NOTIMER;
+	if (wake_lock_active(&pon->cblpwr_wlock)) {
+		wake_unlock(&pon->cblpwr_wlock);
+		pr_info("cblpwr_wake_unlock \n");
+	}
+
+	rc = qpnp_pon_input_dispatch(pon, PON_CBLPWR);
+	if (rc)
+		dev_err(&pon->spmi->dev, "Unable to send input event\n");
+}
+
 static int qpnp_pon_probe(struct spmi_device *spmi)
 {
 	struct qpnp_pon *pon;
@@ -1965,6 +2085,12 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 		return -ENXIO;
 	}
 	pon->base = pon_resource->start;
+
+	pon->timer_id = CBLPWR_NOTIMER;
+	pon->last_cblpwr = 0;
+	//Init timer and delayed_work
+	wake_lock_init(&pon->cblpwr_wlock, WAKE_LOCK_SUSPEND, "qpnp-power-on");
+	INIT_DEFERRABLE_WORK(&pon->delaywork_cblpwr, qpnp_pon_timer_trigger_usb);
 
 	/* get the total number of pon configurations */
 	for_each_available_child_of_node(spmi->dev.of_node, node) {
@@ -2271,6 +2397,9 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 					"qcom,store-hard-reset-reason");
 
 	qpnp_pon_debugfs_init(spmi);
+
+	qpnp_pon_cblpwr_init(pon);
+
 	return 0;
 }
 
@@ -2291,6 +2420,8 @@ static int qpnp_pon_remove(struct spmi_device *spmi)
 		list_del(&pon->list);
 		spin_unlock_irqrestore(&spon_list_slock, flags);
 	}
+	cancel_delayed_work(&pon->delaywork_cblpwr);
+	wake_lock_destroy(&pon->cblpwr_wlock);	
 	return 0;
 }
 
