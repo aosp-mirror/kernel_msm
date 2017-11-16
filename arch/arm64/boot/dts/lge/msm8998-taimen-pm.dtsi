@@ -219,6 +219,7 @@
 	qcom,fg-auto-recharge-soc;
 	qcom,hold-soc-while-full;
 	qcom,linearize-soc;
+	qcom,cl-max-decrement = <5>;
 	qcom,fg-esr-tight-lt-filter-micro-pct = <30000>;
 	qcom,fg-esr-broad-lt-filter-micro-pct = <30000>;
 	qcom,fg-batt-temp-compensation;
