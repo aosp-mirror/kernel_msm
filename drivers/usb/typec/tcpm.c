@@ -1288,33 +1288,48 @@ static void vdm_state_machine_work(struct work_struct *work)
 	mutex_unlock(&port->lock);
 }
 
-static const char * const pdo_err[] = {
-	"",
+enum pdo_err {
+	PDO_NO_ERR,
+	PDO_ERR_NO_VSAFE5V,
+	PDO_ERR_VSAFE5V_NOT_FIRST,
+	PDO_ERR_PDO_TYPE_NOT_IN_ORDER,
+	PDO_ERR_FIXED_NOT_SORTED,
+	PDO_ERR_VARIABLE_BATT_NOT_SORTED,
+	PDO_ERR_DUPE_PDO,
+};
+
+static const char * const pdo_err_msg[] = {
+	[PDO_ERR_NO_VSAFE5V] =
 	" err: source/sink caps should atleast have vSafe5V",
+	[PDO_ERR_VSAFE5V_NOT_FIRST] =
 	" err: vSafe5V Fixed Supply Object Shall always be the first object",
+	[PDO_ERR_PDO_TYPE_NOT_IN_ORDER] =
 	" err: PDOs should be in the following order: Fixed; Battery; Variable",
+	[PDO_ERR_FIXED_NOT_SORTED] =
 	" err: Fixed supply pdos should be in increasing order of their fixed voltage",
+	[PDO_ERR_VARIABLE_BATT_NOT_SORTED] =
 	" err: Variable/Battery supply pdos should be in increasing order of their minimum voltage",
+	[PDO_ERR_DUPE_PDO] =
 	" err: Variable/Batt supply pdos cannot have same min/max voltage",
 };
 
-static int tcpm_caps_err(struct tcpm_port *port, const u32 *pdo,
-			      unsigned int nr_pdo)
+static enum pdo_err tcpm_caps_err(struct tcpm_port *port, const u32 *pdo,
+				  unsigned int nr_pdo)
 {
 	unsigned int i;
 
 	/* Should at least contain vSafe5v */
 	if (nr_pdo < 1)
-		return 1;
+		return PDO_ERR_NO_VSAFE5V;
 
 	/* The vSafe5V Fixed Supply Object Shall always be the first object */
 	if (pdo_type(pdo[0]) != PDO_TYPE_FIXED ||
 	    pdo_fixed_voltage(pdo[0]) != VSAFE5V)
-		return 2;
+		return PDO_ERR_VSAFE5V_NOT_FIRST;
 
 	for (i = 1; i < nr_pdo; i++) {
 		if (pdo_type(pdo[i]) < pdo_type(pdo[i - 1])) {
-			return 3;
+			return PDO_ERR_PDO_TYPE_NOT_IN_ORDER;
 		} else if (pdo_type(pdo[i]) == pdo_type(pdo[i - 1])) {
 			enum pd_pdo_type type = pdo_type(pdo[i]);
 
@@ -1327,7 +1342,7 @@ static int tcpm_caps_err(struct tcpm_port *port, const u32 *pdo,
 			case PDO_TYPE_FIXED:
 				if (pdo_fixed_voltage(pdo[i]) <=
 				    pdo_fixed_voltage(pdo[i - 1]))
-					return 4;
+					return PDO_ERR_FIXED_NOT_SORTED;
 				break;
 			/*
 			 * The Battery Supply Objects and Variable
@@ -1338,12 +1353,12 @@ static int tcpm_caps_err(struct tcpm_port *port, const u32 *pdo,
 			case PDO_TYPE_BATT:
 				if (pdo_min_voltage(pdo[i]) <
 				    pdo_min_voltage(pdo[i - 1]))
-					return 5;
+					return PDO_ERR_VARIABLE_BATT_NOT_SORTED;
 				else if ((pdo_min_voltage(pdo[i]) ==
 					  pdo_min_voltage(pdo[i - 1])) &&
 					 (pdo_max_voltage(pdo[i]) ==
 					  pdo_min_voltage(pdo[i - 1])))
-					return 6;
+					return PDO_ERR_DUPE_PDO;
 				break;
 			default:
 				tcpm_log_force(port, " Unknown pdo type");
@@ -1351,22 +1366,21 @@ static int tcpm_caps_err(struct tcpm_port *port, const u32 *pdo,
 		}
 	}
 
-	return 0;
+	return PDO_NO_ERR;
 }
 
 static int tcpm_validate_caps(struct tcpm_port *port, const u32 *pdo,
 			      unsigned int nr_pdo)
 {
-	int err_index = tcpm_caps_err(port, pdo, nr_pdo);
+	enum pdo_err err_index = tcpm_caps_err(port, pdo, nr_pdo);
 
-	if (err_index) {
-		tcpm_log_force(port, " %s", pdo_err[err_index]);
+	if (err_index != PDO_NO_ERR) {
+		tcpm_log_force(port, " %s", pdo_err_msg[err_index]);
 		return -EINVAL;
 	}
 
 	return 0;
 }
-
 
 /*
  * PD (data, control) command handling functions
