@@ -193,3 +193,5 @@ subdir-ccflags-y += \
 	-Wno-header-guard \
 	-Wno-pointer-bool-conversion \
 	-Wno-duplicate-decl-specifier \
+
+CFLAGS_sde_crtc.o += -Wframe-larger-than=3072
