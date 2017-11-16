@@ -72,11 +72,23 @@ static const struct regmap_config s2mpb04_regmap_config = {
 
 int s2mpb04_toggle_pon(struct s2mpb04_core *ddata)
 {
-	dev_err(ddata->dev, "%s: toggling PON\n", __func__);
+	unsigned long timeout;
+
+	dev_info(ddata->dev, "%s: toggling PON\n", __func__);
+
+	reinit_completion(&ddata->init_complete);
 
 	gpio_set_value_cansleep(ddata->pdata->pon_gpio, 0);
 	usleep_range(20, 25);
 	gpio_set_value_cansleep(ddata->pdata->pon_gpio, 1);
+
+	/* wait for chip to come out of reset, signaled by resetb interrupt */
+	timeout = wait_for_completion_timeout(&ddata->init_complete,
+					      S2MPB04_SHUTDOWN_RESET_TIMEOUT);
+	if (!timeout)
+		dev_err(ddata->dev,
+			"%s: timeout waiting for device to return from reset\n",
+			__func__);
 
 	return 0;
 }
@@ -484,6 +496,8 @@ static void s2mpb04_reset_work(struct work_struct *data)
 			__func__);
 	else
 		s2mpb04_chip_init(ddata);
+
+	complete(&ddata->init_complete);
 }
 
 /* irq handler for resetb pin */
@@ -495,7 +509,9 @@ static irqreturn_t s2mpb04_resetb_irq_handler(int irq, void *cookie)
 		dev_dbg(ddata->dev, "%s: completing reset\n", __func__);
 		complete(&ddata->reset_complete);
 	} else {
-		dev_err(ddata->dev, "%s: unexpected device reset\n", __func__);
+		dev_err(ddata->dev, "%s: device reset\n", __func__);
+		reinit_completion(&ddata->init_complete);
+		reinit_completion(&ddata->reset_complete);
 		schedule_work(&ddata->reset_work);
 	}
 
@@ -626,6 +642,7 @@ static int s2mpb04_probe(struct i2c_client *client,
 	INIT_WORK(&ddata->reset_work, s2mpb04_reset_work);
 
 	/* initialize completions */
+	init_completion(&ddata->init_complete);
 	init_completion(&ddata->reset_complete);
 	init_completion(&ddata->adc_conv_complete);
 

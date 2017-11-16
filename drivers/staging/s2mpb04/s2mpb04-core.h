@@ -145,6 +145,9 @@ struct s2mpb04_core {
 	struct work_struct reset_work;
 
 	/* completion used for initialization */
+	struct completion init_complete;
+
+	/* completion used for unexpected resets */
 	struct completion reset_complete;
 
 	/* flags used for serialization */

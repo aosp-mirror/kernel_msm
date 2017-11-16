@@ -289,6 +289,9 @@ void s2mpb04_regulator_notify(enum s2mpb04_regulator_ids rid,
 	    !_s2mpb04_regulator->rdevs[rid])
 		return;
 
+	if (!s2mpb04_regulator_is_enabled(_s2mpb04_regulator->rdevs[rid]))
+		return;
+
 	dev_err(_s2mpb04_regulator->dev, "%s: rid %d, event 0x%lx\n", __func__,
 		rid, event);
 
