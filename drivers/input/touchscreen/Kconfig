@@ -976,6 +976,15 @@ config TOUCHSCREEN_ZFORCE
 	  To compile this driver as a module, choose M here: the
 	  module will be called zforce_ts.
 
+config TOUCHSCREEN_RM_TS
+	tristate "Raydium touchscreens"
+	depends on I2C
+	help
+	Say Y here if you have a raydium touchscreen.
+	Raydium controllers are multi touch controllers which can
+	report 2 touches at a time.
+
+	If unsure, say N.
 config TOUCHSCREEN_FT5X06_PSENSOR
        tristate "FocalTech proximity feature support"
        depends on TOUCHSCREEN_FT5X06 && SENSORS

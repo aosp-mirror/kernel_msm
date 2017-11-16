@@ -13,41 +13,22 @@
 
 &soc {
 	i2c@78b9000 {
-		focaltech@38 {
-			compatible = "focaltech,fts";
-			reg = <0x38>;
+		raydium@39 {
+			compatible = "raydium,raydium-ts";
+			reg = <0x39>;
 			interrupt-parent = <&msm_gpio>;
 			interrupts = <13 0x2002>;
-			vdd-supply = <&pm8916_l11>;
 			vcc_i2c-supply = <&pm8916_l16>;
-			focaltech,name = "fts";
-			focaltech,family-id = <0x0e>;
-			focaltech,reset-gpio = <&msm_gpio 12 0x00>;
-			focaltech,irq-gpio =<&msm_gpio 13 0x00>;
-			//focaltech,id1-gpio = <&msm_gpio 109 0x00>;
-			//focaltech,id2-gpio = <&msm_gpio 114 0x00>;
-			//focaltech,id3-gpio = <&msm_gpio 121 0x00>;
-			/* pins used by touchscreen */
+			raydium,reset-gpio = <&msm_gpio 12 0x00>;
+			raydium,irq-gpio =<&msm_gpio 13 0x00>;
 			pinctrl-names = "pmx_ts_active","pmx_ts_suspend","pmx_ts_release";
 			pinctrl-0 = <&ts_int_active &ts_reset_active>;
 			pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
 			pinctrl-2 = <&ts_release>;
-			focaltech,display-coords = <0 0 454 454>;       //for android wear
-			focaltech,panel-coords = <0 0 454 454>;
-			focaltech,button-map= <70 150 907>;
-			focaltech,no-force-update;
-			focaltech,i2c-pull-up;
-			focaltech,group-id = <1>;
-			focaltech,hard-reset-delay-ms = <20>;
-			focaltech,soft-reset-delay-ms = <300>;
-			focaltech,num-max-touches = <2>;
-			focaltech,fw-name = "CEI_FNW1_3207_V0x02_20160115_app.i";
-			focaltech,fw-delay-aa-ms = <50>;
-			focaltech,fw-delay-55-ms = <30>;
-			focaltech,fw-upgrade-id1 = <0x79>;
-			focaltech,fw-upgrade-id2 = <0x03>;
-			focaltech,fw-delay-readid-ms = <10>;
-			focaltech,fw-delay-era-flsh-ms = <2000>;
+			raydium,display-coords = <0 0 390 390>;
+			raydium,hard-reset-delay-ms = <5>;
+			raydium,soft-reset-delay-ms = <360>;
+			raydium,num-max-touches = <2>;
 		};
 
 		pixart_pat9127@75 {
