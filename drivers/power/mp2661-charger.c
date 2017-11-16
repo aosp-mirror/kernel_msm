@@ -1392,7 +1392,8 @@ bool mp2661_global_is_chg_plugged_in(void)
      */
     if((global_mp2661->batt_temp_status != BAT_TEMP_STATUS_HOT)
         && (global_mp2661->batt_temp_status != BAT_TEMP_STATUS_COLD)
-        && (!strncmp(current->comm, "healthd", 7)))
+        && (!strncmp(current->comm, "healthd", 7))
+        && (!global_mp2661->repeat_charging_detect_flag))
     {
         status = mp2661_fix_charging_status(global_mp2661);
         if(POWER_SUPPLY_STATUS_DISCHARGING == status)
