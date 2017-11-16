@@ -362,6 +362,13 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 			pr_err("gpio request failed\n");
 			return rc;
 		}
+
+		msleep(1);
+		if (gpio_is_valid(ctrl_pdata->disp_avdden_gpio)) {
+			gpio_direction_output(ctrl_pdata->disp_avdden_gpio, 0);
+			gpio_set_value((ctrl_pdata->disp_avdden_gpio), 1);
+		}
+
 		if (!pinfo->cont_splash_enabled) {
 			if (gpio_is_valid(ctrl_pdata->disp_en_gpio))
 				gpio_set_value((ctrl_pdata->disp_en_gpio), 1);
@@ -371,6 +378,15 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 					pdata->panel_info.rst_seq[i]);
 				if (pdata->panel_info.rst_seq[++i])
 					usleep_range(pinfo->rst_seq[i] * 1000, pinfo->rst_seq[i] * 1000);
+			}
+
+			if (gpio_is_valid(ctrl_pdata->tp_reset_gpio)){
+				gpio_direction_output(ctrl_pdata->tp_reset_gpio, 0);
+				gpio_set_value((ctrl_pdata->tp_reset_gpio), 0);
+				msleep(10);
+				gpio_set_value((ctrl_pdata->tp_reset_gpio), 1);
+				msleep(20);
+				gpio_free(ctrl_pdata->tp_reset_gpio);
 			}
 
 			if (gpio_is_valid(ctrl_pdata->bklt_en_gpio))
@@ -390,6 +406,10 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 			pr_debug("%s: Reset panel done\n", __func__);
 		}
 	} else {
+		if (gpio_is_valid(ctrl_pdata->disp_avdden_gpio))
+			gpio_set_value((ctrl_pdata->disp_avdden_gpio), 0);
+		msleep(11);
+
 		if (gpio_is_valid(ctrl_pdata->bklt_en_gpio)) {
 			gpio_set_value((ctrl_pdata->bklt_en_gpio), 0);
 			gpio_free(ctrl_pdata->bklt_en_gpio);

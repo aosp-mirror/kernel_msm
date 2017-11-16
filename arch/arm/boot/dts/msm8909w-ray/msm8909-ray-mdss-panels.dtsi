@@ -25,6 +25,7 @@
 #include "ray-dsi-panel-auo-amoled-cmd.dtsi"
 #include "ray-dsi-panel-boe-amoled-cmd.dtsi"
 #include "ray-dsi-panel-auo-cln020-amoled-cmd.dtsi"
+#include "dsi-panel-auo-x120-amoled-cmd.dtsi"
 
 &soc {
 	dsi_panel_pwr_supply: dsi_panel_pwr_supply {
