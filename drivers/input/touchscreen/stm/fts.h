@@ -31,7 +31,7 @@
 #ifndef _LINUX_FTS_I2C_H_
 #define _LINUX_FTS_I2C_H_
 
-#include <linux/wakelock.h>
+#include <linux/device.h>
 #include "fts_lib/ftsSoftware.h"
 #include "fts_lib/ftsHardware.h"
 
@@ -197,66 +197,62 @@ typedef void (*event_dispatch_handler_t)
  * - fwupdate_stat   Store the result of a fw update triggered by the host \n
  * - notifier        Used for be notified from a suspend/resume event \n
  * - sensor_sleep    true suspend was called, false resume was called \n
- * - wakelock        Wake Lock struct \n
+ * - wakesrc         Wakeup Source struct \n
  * - input_report_mutex  mutex for handling the pressure of keys \n
  * - series_of_switches  to store the enabling status of a particular feature from the host \n
  */
 struct fts_ts_info{
-        struct device            *dev;											///< Pointer to the structure device
+	struct device		*dev;		/* Pointer to the device */
 #ifdef I2C_INTERFACE
-		struct i2c_client        *client;										///< I2C client structure
+	struct i2c_client	*client;	/* I2C client structure */
 #else
-		struct spi_device        *client;										///< SPI client structure
+	struct spi_device	*client;	/* SPI client structure */
 #endif
-		struct input_dev         *input_dev;									///< Input device structure
+	struct input_dev	*input_dev;	/* Input device structure */
 
-        struct work_struct        work;											///< Event work thread
-		struct work_struct        suspend_work;									///< Suspend work thread
-		struct work_struct        resume_work;									///< Resume work thread
-        struct workqueue_struct  *event_wq;										///< Workqueue used for event handler, suspend and resume work threads
+	struct work_struct	work;		/* Event work thread */
+	struct work_struct	suspend_work;	/* Suspend work thread */
+	struct work_struct	resume_work;	/* Resume work thread */
+	struct workqueue_struct	*event_wq;	/* Used for event handler, */
+						/* suspend, resume threads */
 
 #ifndef FW_UPDATE_ON_PROBE
-        struct delayed_work        fwu_work;									///< Delayed work thread for fw update process
-        struct workqueue_struct	   *fwu_workqueue;								///< Fw update work queue
+	struct delayed_work	fwu_work;	/* Work for fw update */
+	struct workqueue_struct	*fwu_workqueue;	/* Fw update work queue */
 #endif
-        event_dispatch_handler_t *event_dispatch_table;							///< Event dispatch table handlers
+	event_dispatch_handler_t *event_dispatch_table; /* Dispatch table */
 
-        struct attribute_group    attrs;										///< SysFS attributes
+	struct attribute_group	attrs;		/* SysFS attributes */
 
-        unsigned int              mode;											///< Device operating mode (bitmask: msb indicate if active or lpm)
-        unsigned long             touch_id;										///< Bitmask for touch id (mapped to input slots)
+	unsigned int		mode;		/* Device operating mode */
+						/* MSB - active or lpm */
+	unsigned long		touch_id;	/* Bitmask for touch id */
 #ifdef STYLUS_MODE
-		unsigned long             stylus_id;									///< Bitmask for tracking the stylus touches (mapped using the touchId)
+	unsigned long		stylus_id;	/* Bitmask for the stylus */
 #endif
 
+	struct fts_hw_platform_data	*board;	/* HW info from device tree */
+	struct regulator	*vdd_reg;	/* DVDD power regulator */
+	struct regulator	*avdd_reg;	/* AVDD power regulator */
 
-        struct fts_hw_platform_data *board;										///< HW info retrieved from device tree
-        struct regulator *vdd_reg;												///< DVDD power regulator
-        struct regulator *avdd_reg;												///< AVDD power regulator
+	int			resume_bit;	/* Indicate if screen off/on */
+	int			fwupdate_stat;	/* Result of a fw update */
 
+	struct notifier_block	notifier;	/* Notify on suspend/resume */
+	bool			sensor_sleep;	/* True if suspend called */
+	struct wakeup_source	wakesrc;	/* Wake Lock struct */
 
-		int resume_bit;															///< Indicate if screen off/on
-		int fwupdate_stat;														///< Store the result of a fw update triggered by the host
+	/* input lock */
+	struct mutex	input_report_mutex;	/* Mutex for pressure report */
 
-
-		struct notifier_block notifier;											///< Used for be notified from a suspend/resume event
-		bool sensor_sleep;														///< if true suspend was called while if false resume was called
-		struct wake_lock wakelock;												///< Wake Lock struct
-
-		/* input lock */
-		struct mutex input_report_mutex;										///< mutex for handling the	report of the pressure of keys
-
-		//switches for features
-		int gesture_enabled;													///< if set, the gesture mode will be enabled during the suspend
-		int glove_enabled;														///< if set, the glove mode will be enabled when allowed
-		int charger_enabled;													///< if set, the charger mode will be enabled when allowed
-		int stylus_enabled;														///< if set, the stylus mode will be enabled when allowed
-		int cover_enabled;														///< if set, the cover mode will be enabled when allowed
-		int grip_enabled;														///< if set, the grip mode mode will be enabled when allowed
-
+	/* switches for features */
+	int		gesture_enabled;	/* Gesture during suspend */
+	int		glove_enabled;		/* Glove mode */
+	int		charger_enabled;	/* Charger mode */
+	int		stylus_enabled;		/* Stylus mode */
+	int		cover_enabled;		/* Cover mode */
+	int		grip_enabled;		/* Grip mode */
 };
-
-
 
 int fts_chip_powercycle(struct fts_ts_info *info);
 extern int input_register_notifier_client(struct notifier_block * nb);

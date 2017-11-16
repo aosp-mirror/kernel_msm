@@ -44,7 +44,7 @@
 #include <linux/i2c-dev.h>
 #include <linux/spi/spi.h>
 #include <linux/completion.h>
-#include <linux/wakelock.h>
+#include <linux/device.h>
 
 #include <linux/gpio.h>
 #include <linux/of_gpio.h>
@@ -2180,7 +2180,7 @@ static void fts_event_handler(struct work_struct *work) {
 
 	info = container_of(work, struct fts_ts_info, work);
 
-	wake_lock_timeout(&info->wakelock, HZ);
+	__pm_wakeup_event(&info->wakesrc, jiffies_to_msecs(HZ));
 
 	/* Read the first FIFO event and the number of events remaining */
 	error = fts_writeReadU8UX(regAdd, 0, 0, data, FIFO_EVENT_SIZE,
@@ -2766,50 +2766,44 @@ static int fts_mode_handler(struct fts_ts_info *info,int force){
  * Resume work function which perform a system reset, clean all the touches from the linux input system and prepare the ground for enabling the sensing
  */
 static void fts_resume_work(struct work_struct *work) {
-    struct fts_ts_info *info;
+			    struct fts_ts_info *info;
 
+	info = container_of(work, struct fts_ts_info, resume_work);
 
-    info = container_of(work, struct fts_ts_info, resume_work);
+	__pm_wakeup_event(&info->wakesrc, jiffies_to_msecs(HZ));
 
+	info->resume_bit = 1;
 
-    wake_lock_timeout(&info->wakelock, HZ);
+	fts_system_reset();
 
+	release_all_touches(info);
 
-		info->resume_bit = 1;
+	fts_mode_handler(info, 0);
 
-		fts_system_reset();
+	info->sensor_sleep = false;
 
-		release_all_touches(info);
-
-		fts_mode_handler(info,0);
-
-        info->sensor_sleep = false;
-
-		fts_enableInterrupt();
+	fts_enableInterrupt();
 }
 
 /**
  * Suspend work function which clean all the touches from Linux input system and prepare the ground to disabling the sensing or enter in gesture mode
  */
 static void fts_suspend_work(struct work_struct *work) {
-    struct fts_ts_info *info;
+			     struct fts_ts_info *info;
 
+	info = container_of(work, struct fts_ts_info, suspend_work);
 
-    info = container_of(work, struct fts_ts_info, suspend_work);
+	__pm_wakeup_event(&info->wakesrc, jiffies_to_msecs(HZ));
 
+	info->resume_bit = 0;
 
-    wake_lock_timeout(&info->wakelock, HZ);
+	fts_mode_handler(info, 0);
 
+	release_all_touches(info);
 
-    info->resume_bit = 0;
+	info->sensor_sleep = true;
 
-    fts_mode_handler(info,0);
-
-    release_all_touches(info);
-
-    info->sensor_sleep = true;
-
-    fts_enableInterrupt();
+	fts_enableInterrupt();
 }
 /** @}*/
 
@@ -3197,7 +3191,7 @@ static int fts_probe(struct spi_device *client) {
     info->client->irq = gpio_to_irq(info->board->irq_gpio);
 
     logError(1, "%s SET Event Handler: \n", tag);
-    wake_lock_init(&info->wakelock, WAKE_LOCK_SUSPEND, "fts_tp");
+	wakeup_source_init(&info->wakesrc, "fts_tp");
     info->event_wq = alloc_workqueue("fts-event-queue", WQ_UNBOUND|WQ_HIGHPRI|WQ_CPU_INTENSIVE, 1);
     if (!info->event_wq) {
         logError(1, "%s ERROR: Cannot create work thread\n", tag);
@@ -3394,7 +3388,7 @@ ProbeErrorExit_5_1:
 
 ProbeErrorExit_4:
     //destroy_workqueue(info->fwu_workqueue);
-    wake_lock_destroy(&info->wakelock);
+	wakeup_source_trash(&info->wakesrc);
 
     fts_enable_reg(info, false);
 
@@ -3440,7 +3434,7 @@ static int fts_remove(struct spi_device *client) {
 
     /* Remove the work thread */
     destroy_workqueue(info->event_wq);
-    wake_lock_destroy(&info->wakelock);
+	wakeup_source_trash(&info->wakesrc);
 #ifndef FW_UPDATE_ON_PROBE
     destroy_workqueue(info->fwu_workqueue);
 #endif
