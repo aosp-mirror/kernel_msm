@@ -19,12 +19,12 @@
 #ifndef __LINUX_IOMMU_H
 #define __LINUX_IOMMU_H
 
+#include <linux/scatterlist.h>
+#include <linux/device.h>
+#include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/err.h>
 #include <linux/of.h>
-#include <linux/types.h>
-#include <linux/scatterlist.h>
-#include <trace/events/iommu.h>
 
 #define IOMMU_READ	(1 << 0)
 #define IOMMU_WRITE	(1 << 1)
@@ -32,6 +32,7 @@
 #define IOMMU_NOEXEC	(1 << 3)
 #define IOMMU_MMIO	(1 << 4) /* e.g. things like MSI doorbells */
 #define IOMMU_PRIV	(1 << 5)
+#define IOMMU_GUARD	(1 << 28) /* Guard Page */
 /* Use upstream device's bus attribute */
 #define IOMMU_USE_UPSTREAM_HINT	(1 << 6)
 
@@ -87,6 +88,8 @@ struct iommu_pgtbl_info {
 #define IOMMU_DOMAIN_DMA	(__IOMMU_DOMAIN_PAGING |	\
 				 __IOMMU_DOMAIN_DMA_API)
 
+
+#define IOMMU_DOMAIN_NAME_LEN 32
 struct iommu_domain {
 	unsigned type;
 	const struct iommu_ops *ops;
@@ -95,6 +98,7 @@ struct iommu_domain {
 	void *handler_token;
 	struct iommu_domain_geometry geometry;
 	void *iova_cookie;
+	char name[IOMMU_DOMAIN_NAME_LEN];
 };
 
 enum iommu_cap {
@@ -143,6 +147,7 @@ enum iommu_attr {
 	DOMAIN_ATTR_PAGE_TABLE_FORCE_COHERENT,
 	DOMAIN_ATTR_CB_STALL_DISABLE,
 	DOMAIN_ATTR_UPSTREAM_IOVA_ALLOCATOR,
+	DOMAIN_ATTR_MMU500_ERRATA_MIN_ALIGN,
 	DOMAIN_ATTR_MAX,
 };
 
@@ -279,6 +284,9 @@ extern int iommu_map(struct iommu_domain *domain, unsigned long iova,
 		     phys_addr_t paddr, size_t size, int prot);
 extern size_t iommu_unmap(struct iommu_domain *domain, unsigned long iova,
 		       size_t size);
+extern size_t iommu_map_sg(struct iommu_domain *domain, unsigned long iova,
+				struct scatterlist *sg, unsigned int nents,
+				int prot);
 extern size_t default_iommu_map_sg(struct iommu_domain *domain, unsigned long iova,
 				struct scatterlist *sg,unsigned int nents,
 				int prot);
@@ -338,58 +346,9 @@ extern void iommu_domain_window_disable(struct iommu_domain *domain, u32 wnd_nr)
 
 extern uint64_t iommu_iova_to_pte(struct iommu_domain *domain,
 	    dma_addr_t iova);
-/**
- * report_iommu_fault() - report about an IOMMU fault to the IOMMU framework
- * @domain: the iommu domain where the fault has happened
- * @dev: the device where the fault has happened
- * @iova: the faulting address
- * @flags: mmu fault flags (e.g. IOMMU_FAULT_READ/IOMMU_FAULT_WRITE/...)
- *
- * This function should be called by the low-level IOMMU implementations
- * whenever IOMMU faults happen, to allow high-level users, that are
- * interested in such events, to know about them.
- *
- * This event may be useful for several possible use cases:
- * - mere logging of the event
- * - dynamic TLB/PTE loading
- * - if restarting of the faulting device is required
- *
- * Returns 0 on success and an appropriate error code otherwise (if dynamic
- * PTE/TLB loading will one day be supported, implementations will be able
- * to tell whether it succeeded or not according to this return value).
- *
- * Specifically, -ENOSYS is returned if a fault handler isn't installed
- * (though fault handlers can also return -ENOSYS, in case they want to
- * elicit the default behavior of the IOMMU drivers).
 
- * Client fault handler returns -EBUSY to signal to the IOMMU driver
- * that the client will take responsibility for any further fault
- * handling, including clearing fault status registers or retrying
- * the faulting transaction.
- */
-static inline int report_iommu_fault(struct iommu_domain *domain,
-		struct device *dev, unsigned long iova, int flags)
-{
-	int ret = -ENOSYS;
-
-	/*
-	 * if upper layers showed interest and installed a fault handler,
-	 * invoke it.
-	 */
-	if (domain->handler)
-		ret = domain->handler(domain, dev, iova, flags,
-						domain->handler_token);
-
-	trace_io_page_fault(dev, iova, flags);
-	return ret;
-}
-
-static inline size_t iommu_map_sg(struct iommu_domain *domain,
-				  unsigned long iova, struct scatterlist *sg,
-				  unsigned int nents, int prot)
-{
-	return domain->ops->map_sg(domain, iova, sg, nents, prot);
-}
+extern int report_iommu_fault(struct iommu_domain *domain, struct device *dev,
+			      unsigned long iova, int flags);
 
 extern void iommu_trigger_fault(struct iommu_domain *domain,
 				unsigned long flags);

@@ -99,6 +99,8 @@ struct sde_encoder_virt_ops {
  *				encoder. Can be switched at enable time. Based
  *				on split_role and current mode (CMD/VID).
  * @mode_fixup:			DRM Call. Fixup a DRM mode.
+ * @cont_splash_mode_set:	mode set with specific HW resources during
+ *                              cont splash enabled state.
  * @mode_set:			DRM Call. Set a DRM mode.
  *				This likely caches the mode, for use at enable.
  * @enable:			DRM Call. Enable a DRM mode.
@@ -147,6 +149,8 @@ struct sde_encoder_phys_ops {
 	void (*mode_set)(struct sde_encoder_phys *encoder,
 			struct drm_display_mode *mode,
 			struct drm_display_mode *adjusted_mode);
+	void (*cont_splash_mode_set)(struct sde_encoder_phys *encoder,
+			struct drm_display_mode *adjusted_mode);
 	void (*enable)(struct sde_encoder_phys *encoder);
 	void (*disable)(struct sde_encoder_phys *encoder);
 	int (*atomic_check)(struct sde_encoder_phys *encoder,
@@ -160,7 +164,7 @@ struct sde_encoder_phys_ops {
 	int (*wait_for_commit_done)(struct sde_encoder_phys *phys_enc);
 	int (*wait_for_tx_complete)(struct sde_encoder_phys *phys_enc);
 	int (*wait_for_vblank)(struct sde_encoder_phys *phys_enc);
-	void (*prepare_for_kickoff)(struct sde_encoder_phys *phys_enc,
+	int (*prepare_for_kickoff)(struct sde_encoder_phys *phys_enc,
 			struct sde_encoder_kickoff_params *params);
 	void (*handle_post_kickoff)(struct sde_encoder_phys *phys_enc);
 	void (*trigger_flush)(struct sde_encoder_phys *phys_enc);
@@ -296,6 +300,7 @@ static inline int sde_encoder_phys_inc_pending(struct sde_encoder_phys *phys)
  * @hw_intf:	Hardware interface to the intf registers
  * @timing_params: Current timing parameter
  * @rot_fetch:	Prefill for inline rotation
+ * @error_count: Number of consecutive kickoffs that experienced an error
  * @rot_fetch_valid: true if rot_fetch is updated (reset in enc enable)
  */
 struct sde_encoder_phys_vid {
@@ -303,6 +308,7 @@ struct sde_encoder_phys_vid {
 	struct sde_hw_intf *hw_intf;
 	struct intf_timing_params timing_params;
 	struct intf_prog_fetch rot_fetch;
+	int error_count;
 	bool rot_fetch_valid;
 };
 

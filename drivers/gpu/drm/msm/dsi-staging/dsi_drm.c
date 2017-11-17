@@ -65,7 +65,7 @@ static void convert_to_dsi_mode(const struct drm_display_mode *drm_mode,
 		dsi_mode->dsi_mode_flags |= DSI_MODE_FLAG_VRR;
 }
 
-static void convert_to_drm_mode(const struct dsi_display_mode *dsi_mode,
+void dsi_convert_to_drm_mode(const struct dsi_display_mode *dsi_mode,
 				struct drm_display_mode *drm_mode)
 {
 	memset(drm_mode, 0, sizeof(*drm_mode));
@@ -129,6 +129,9 @@ static void dsi_bridge_pre_enable(struct drm_bridge *bridge)
 		return;
 	}
 
+	if (!c_bridge || !c_bridge->display)
+		pr_err("Incorrect bridge details\n");
+
 	/* By this point mode should have been validated through mode_fixup */
 	rc = dsi_display_set_mode(c_bridge->display,
 			&(c_bridge->dsi_mode), 0x0);
@@ -157,11 +160,16 @@ static void dsi_bridge_pre_enable(struct drm_bridge *bridge)
 	rc = dsi_display_enable(c_bridge->display);
 	if (rc) {
 		pr_err("[%d] DSI display enable failed, rc=%d\n",
-		       c_bridge->id, rc);
+				c_bridge->id, rc);
 		(void)dsi_display_unprepare(c_bridge->display);
 	}
 	SDE_ATRACE_END("dsi_display_enable");
 	SDE_ATRACE_END("dsi_bridge_pre_enable");
+
+	rc = dsi_display_splash_res_cleanup(c_bridge->display);
+	if (rc)
+		pr_err("Continuous splash pipeline cleanup failed, rc=%d\n",
+									rc);
 }
 
 static void dsi_bridge_enable(struct drm_bridge *bridge)
@@ -290,7 +298,7 @@ static bool dsi_bridge_mode_fixup(struct drm_bridge *bridge,
 			dsi_mode.dsi_mode_flags |= DSI_MODE_FLAG_DMS;
 	}
 
-	convert_to_drm_mode(&dsi_mode, adjusted_mode);
+	dsi_convert_to_drm_mode(&dsi_mode, adjusted_mode);
 
 	return true;
 }
@@ -330,6 +338,11 @@ int dsi_conn_get_mode_info(const struct drm_display_mode *drm_mode,
 			sizeof(dsi_mode.priv_info->dsc));
 	}
 
+	if (dsi_mode.priv_info->roi_caps.enabled) {
+		memcpy(&mode_info->roi_caps, &dsi_mode.priv_info->roi_caps,
+			sizeof(dsi_mode.priv_info->roi_caps));
+	}
+
 	return 0;
 }
 
@@ -344,8 +357,7 @@ static const struct drm_bridge_funcs dsi_bridge_ops = {
 };
 
 int dsi_conn_post_init(struct drm_connector *connector,
-		void *info,
-		void *display)
+		void *info, void *display, struct msm_mode_info *mode_info)
 {
 	struct dsi_display *dsi_display = display;
 	struct dsi_panel *panel;
@@ -444,23 +456,23 @@ int dsi_conn_post_init(struct drm_connector *connector,
 		break;
 	}
 
-	if (panel->roi_caps.enabled) {
+	if (mode_info && mode_info->roi_caps.enabled) {
 		sde_kms_info_add_keyint(info, "partial_update_num_roi",
-				panel->roi_caps.num_roi);
+				mode_info->roi_caps.num_roi);
 		sde_kms_info_add_keyint(info, "partial_update_xstart",
-				panel->roi_caps.align.xstart_pix_align);
+				mode_info->roi_caps.align.xstart_pix_align);
 		sde_kms_info_add_keyint(info, "partial_update_walign",
-				panel->roi_caps.align.width_pix_align);
+				mode_info->roi_caps.align.width_pix_align);
 		sde_kms_info_add_keyint(info, "partial_update_wmin",
-				panel->roi_caps.align.min_width);
+				mode_info->roi_caps.align.min_width);
 		sde_kms_info_add_keyint(info, "partial_update_ystart",
-				panel->roi_caps.align.ystart_pix_align);
+				mode_info->roi_caps.align.ystart_pix_align);
 		sde_kms_info_add_keyint(info, "partial_update_halign",
-				panel->roi_caps.align.height_pix_align);
+				mode_info->roi_caps.align.height_pix_align);
 		sde_kms_info_add_keyint(info, "partial_update_hmin",
-				panel->roi_caps.align.min_height);
+				mode_info->roi_caps.align.min_height);
 		sde_kms_info_add_keyint(info, "partial_update_roimerge",
-				panel->roi_caps.merge_rois);
+				mode_info->roi_caps.merge_rois);
 	}
 
 end:
@@ -554,7 +566,7 @@ int dsi_connector_get_modes(struct drm_connector *connector,
 		struct drm_display_mode *m;
 
 		memset(&drm_mode, 0x0, sizeof(drm_mode));
-		convert_to_drm_mode(&modes[i], &drm_mode);
+		dsi_convert_to_drm_mode(&modes[i], &drm_mode);
 		m = drm_mode_duplicate(connector->dev, &drm_mode);
 		if (!m) {
 			pr_err("failed to add mode %ux%u\n",

@@ -63,16 +63,10 @@
 #define LINESTATE_DP			BIT(0)
 #define LINESTATE_DM			BIT(1)
 
-/* eud related registers */
-#define EUD_SW_ATTACH_DET	0x1018
-#define EUD_INT1_EN_MASK	0x0024
+#define BIAS_CTRL_2_OVERRIDE_VAL	0x28
 
-/* EUD interrupt mask bits */
-#define EUD_INT_RX		BIT(0)
-#define EUD_INT_TX		BIT(1)
-#define EUD_INT_VBUS		BIT(2)
-#define EUD_INT_CHGR		BIT(3)
-#define EUD_INT_SAFE_MODE	BIT(4)
+/* PERIPH_SS_PHY_REFGEN_NORTH_BG_CTRL register bits */
+#define BANDGAP_BYPASS			BIT(0)
 
 unsigned int phy_tune1;
 module_param(phy_tune1, uint, 0644);
@@ -101,6 +95,7 @@ enum qusb_phy_reg {
 	INTR_CTRL,
 	PLL_CORE_INPUT_OVERRIDE,
 	TEST1,
+	BIAS_CTRL_2,
 	USB2_PHY_REG_MAX,
 };
 
@@ -108,8 +103,8 @@ struct qusb_phy {
 	struct usb_phy		phy;
 	struct mutex		lock;
 	void __iomem		*base;
-	void __iomem		*eud_base;
 	void __iomem		*efuse_reg;
+	void __iomem		*refgen_north_bg_reg;
 
 	struct clk		*ref_clk_src;
 	struct clk		*ref_clk;
@@ -518,6 +513,11 @@ static int qusb_phy_init(struct usb_phy *phy)
 				qphy->base + qphy->phy_reg[PORT_TUNE1] + 0x10);
 	}
 
+	if (qphy->refgen_north_bg_reg)
+		if (readl_relaxed(qphy->refgen_north_bg_reg) & BANDGAP_BYPASS)
+			writel_relaxed(BIAS_CTRL_2_OVERRIDE_VAL,
+				qphy->base + qphy->phy_reg[BIAS_CTRL_2]);
+
 	/* ensure above writes are completed before re-enabling PHY */
 	wmb();
 
@@ -707,22 +707,6 @@ static int qusb_phy_dpdm_regulator_enable(struct regulator_dev *rdev)
 			return ret;
 		}
 		qphy->dpdm_enable = true;
-
-		if (qphy->eud_base) {
-			if (qphy->cfg_ahb_clk)
-				clk_prepare_enable(qphy->cfg_ahb_clk);
-			writel_relaxed(BIT(0),
-					qphy->eud_base + EUD_SW_ATTACH_DET);
-			/* to flush above write before next write */
-			wmb();
-
-			writel_relaxed(EUD_INT_VBUS | EUD_INT_CHGR,
-					qphy->eud_base + EUD_INT1_EN_MASK);
-			/* to flush above write before turning off clk */
-			wmb();
-			if (qphy->cfg_ahb_clk)
-				clk_disable_unprepare(qphy->cfg_ahb_clk);
-		}
 	}
 
 	return ret;
@@ -737,16 +721,6 @@ static int qusb_phy_dpdm_regulator_disable(struct regulator_dev *rdev)
 				__func__, qphy->dpdm_enable);
 
 	if (qphy->dpdm_enable) {
-		if (qphy->eud_base) {
-			if (qphy->cfg_ahb_clk)
-				clk_prepare_enable(qphy->cfg_ahb_clk);
-			writel_relaxed(0, qphy->eud_base + EUD_SW_ATTACH_DET);
-			/* to flush above write before turning off clk */
-			wmb();
-			if (qphy->cfg_ahb_clk)
-				clk_disable_unprepare(qphy->cfg_ahb_clk);
-		}
-
 		ret = qusb_phy_enable_power(qphy, false);
 		if (ret < 0) {
 			dev_dbg(qphy->phy.dev,
@@ -854,15 +828,10 @@ static int qusb_phy_probe(struct platform_device *pdev)
 	}
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
-							"eud_base");
-	if (res) {
-		qphy->eud_base = devm_ioremap(dev, res->start,
-					resource_size(res));
-		if (IS_ERR(qphy->eud_base)) {
-			dev_dbg(dev, "couldn't ioremap eud_base\n");
-			qphy->eud_base = NULL;
-		}
-	}
+					"refgen_north_bg_reg_addr");
+	if (res)
+		qphy->refgen_north_bg_reg = devm_ioremap(dev, res->start,
+						resource_size(res));
 
 	/* ref_clk_src is needed irrespective of SE_CLK or DIFF_CLK usage */
 	qphy->ref_clk_src = devm_clk_get(dev, "ref_clk_src");
@@ -981,7 +950,7 @@ static int qusb_phy_probe(struct platform_device *pdev)
 		if (qphy->phy_reg) {
 			qphy->qusb_phy_reg_offset_cnt =
 				size / sizeof(*qphy->phy_reg);
-			if (qphy->qusb_phy_reg_offset_cnt > USB2_PHY_REG_MAX) {
+			if (qphy->qusb_phy_reg_offset_cnt != USB2_PHY_REG_MAX) {
 				dev_err(dev, "invalid reg offset count\n");
 				return -EINVAL;
 			}
@@ -1079,21 +1048,6 @@ static int qusb_phy_probe(struct platform_device *pdev)
 	ret = usb_add_phy_dev(&qphy->phy);
 	if (ret)
 		return ret;
-
-	/* ldo24 is turned on and eud is pet irrespective of cable
-	 * cable connection status by boot sw. Assume usb cable is not
-	 * connected and perform detach pet. If usb cable is connected,
-	 * eud hw will be pet in the dpdm callback.
-	 */
-	if (qphy->eud_base) {
-		if (qphy->cfg_ahb_clk)
-			clk_prepare_enable(qphy->cfg_ahb_clk);
-
-		writel_relaxed(0, qphy->eud_base + EUD_SW_ATTACH_DET);
-
-		if (qphy->cfg_ahb_clk)
-			clk_disable_unprepare(qphy->cfg_ahb_clk);
-	}
 
 	ret = qusb_phy_regulator_init(qphy);
 	if (ret)

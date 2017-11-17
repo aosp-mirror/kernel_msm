@@ -73,14 +73,14 @@ static const struct kgsl_hwcg_reg a630_hwcg_regs[] = {
 	{A6XX_RBBM_CLOCK_CNTL2_SP1, 0x02022220},
 	{A6XX_RBBM_CLOCK_CNTL2_SP2, 0x02022220},
 	{A6XX_RBBM_CLOCK_CNTL2_SP3, 0x02022220},
-	{A6XX_RBBM_CLOCK_DELAY_SP0, 0x0000F3CF},
-	{A6XX_RBBM_CLOCK_DELAY_SP1, 0x0000F3CF},
-	{A6XX_RBBM_CLOCK_DELAY_SP2, 0x0000F3CF},
-	{A6XX_RBBM_CLOCK_DELAY_SP3, 0x0000F3CF},
-	{A6XX_RBBM_CLOCK_HYST_SP0, 0x00000080},
-	{A6XX_RBBM_CLOCK_HYST_SP1, 0x00000080},
-	{A6XX_RBBM_CLOCK_HYST_SP2, 0x00000080},
-	{A6XX_RBBM_CLOCK_HYST_SP3, 0x00000080},
+	{A6XX_RBBM_CLOCK_DELAY_SP0, 0x00000080},
+	{A6XX_RBBM_CLOCK_DELAY_SP1, 0x00000080},
+	{A6XX_RBBM_CLOCK_DELAY_SP2, 0x00000080},
+	{A6XX_RBBM_CLOCK_DELAY_SP3, 0x00000080},
+	{A6XX_RBBM_CLOCK_HYST_SP0, 0x0000F3CF},
+	{A6XX_RBBM_CLOCK_HYST_SP1, 0x0000F3CF},
+	{A6XX_RBBM_CLOCK_HYST_SP2, 0x0000F3CF},
+	{A6XX_RBBM_CLOCK_HYST_SP3, 0x0000F3CF},
 	{A6XX_RBBM_CLOCK_CNTL_TP0, 0x02222222},
 	{A6XX_RBBM_CLOCK_CNTL_TP1, 0x02222222},
 	{A6XX_RBBM_CLOCK_CNTL_TP2, 0x02222222},
@@ -105,10 +105,10 @@ static const struct kgsl_hwcg_reg a630_hwcg_regs[] = {
 	{A6XX_RBBM_CLOCK_HYST2_TP1, 0x77777777},
 	{A6XX_RBBM_CLOCK_HYST2_TP2, 0x77777777},
 	{A6XX_RBBM_CLOCK_HYST2_TP3, 0x77777777},
-	{A6XX_RBBM_CLOCK_HYST3_TP0, 0x07777777},
-	{A6XX_RBBM_CLOCK_HYST3_TP1, 0x07777777},
-	{A6XX_RBBM_CLOCK_HYST3_TP2, 0x07777777},
-	{A6XX_RBBM_CLOCK_HYST3_TP3, 0x07777777},
+	{A6XX_RBBM_CLOCK_HYST3_TP0, 0x77777777},
+	{A6XX_RBBM_CLOCK_HYST3_TP1, 0x77777777},
+	{A6XX_RBBM_CLOCK_HYST3_TP2, 0x77777777},
+	{A6XX_RBBM_CLOCK_HYST3_TP3, 0x77777777},
 	{A6XX_RBBM_CLOCK_HYST4_TP0, 0x00077777},
 	{A6XX_RBBM_CLOCK_HYST4_TP1, 0x00077777},
 	{A6XX_RBBM_CLOCK_HYST4_TP2, 0x00077777},
@@ -143,20 +143,20 @@ static const struct kgsl_hwcg_reg a630_hwcg_regs[] = {
 	{A6XX_RBBM_CLOCK_CNTL2_RB1, 0x00002222},
 	{A6XX_RBBM_CLOCK_CNTL2_RB2, 0x00002222},
 	{A6XX_RBBM_CLOCK_CNTL2_RB3, 0x00002222},
-	{A6XX_RBBM_CLOCK_CNTL_CCU0, 0x00000000},
-	{A6XX_RBBM_CLOCK_CNTL_CCU1, 0x00000000},
-	{A6XX_RBBM_CLOCK_CNTL_CCU2, 0x00000000},
-	{A6XX_RBBM_CLOCK_CNTL_CCU3, 0x00000000},
+	{A6XX_RBBM_CLOCK_CNTL_CCU0, 0x00002220},
+	{A6XX_RBBM_CLOCK_CNTL_CCU1, 0x00002220},
+	{A6XX_RBBM_CLOCK_CNTL_CCU2, 0x00002220},
+	{A6XX_RBBM_CLOCK_CNTL_CCU3, 0x00002220},
 	{A6XX_RBBM_CLOCK_HYST_RB_CCU0, 0x00040F00},
 	{A6XX_RBBM_CLOCK_HYST_RB_CCU1, 0x00040F00},
 	{A6XX_RBBM_CLOCK_HYST_RB_CCU2, 0x00040F00},
 	{A6XX_RBBM_CLOCK_HYST_RB_CCU3, 0x00040F00},
-	{A6XX_RBBM_CLOCK_CNTL_RAC, 0x00022022},
-	{A6XX_RBBM_CLOCK_CNTL2_RAC, 0x00005550},
-	{A6XX_RBBM_CLOCK_DELAY_RAC, 0x00010011},
+	{A6XX_RBBM_CLOCK_CNTL_RAC, 0x05022022},
+	{A6XX_RBBM_CLOCK_CNTL2_RAC, 0x00005555},
+	{A6XX_RBBM_CLOCK_DELAY_RAC, 0x00000011},
 	{A6XX_RBBM_CLOCK_HYST_RAC, 0x00445044},
-	{A6XX_RBBM_CLOCK_CNTL_TSE_RAS_RBBM, 0x04222220},
-	{A6XX_RBBM_CLOCK_MODE_GPC, 0x00202222},
+	{A6XX_RBBM_CLOCK_CNTL_TSE_RAS_RBBM, 0x04222222},
+	{A6XX_RBBM_CLOCK_MODE_GPC, 0x00222222},
 	{A6XX_RBBM_CLOCK_MODE_VFD, 0x00002222},
 	{A6XX_RBBM_CLOCK_HYST_TSE_RAS_RBBM, 0x00000000},
 	{A6XX_RBBM_CLOCK_HYST_GPC, 0x04104004},
@@ -765,7 +765,7 @@ static void _set_ordinals(struct adreno_device *adreno_dev,
 		*cmds++ = lower_32_bits(gpuaddr);
 		*cmds++ = upper_32_bits(gpuaddr);
 		/* Size is in dwords */
-		*cmds++ = 0;
+		*cmds++ = sizeof(a6xx_pwrup_reglist) >> 2;
 	}
 
 	/* Pad rest of the cmds with 0's */
@@ -1225,7 +1225,6 @@ static int a6xx_oob_set(struct adreno_device *adreno_dev,
 		unsigned int clear_mask)
 {
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
-	struct gmu_device *gmu = &device->gmu;
 	int ret = 0;
 
 	if (!kgsl_gmu_isenabled(device))
@@ -1239,9 +1238,7 @@ static int a6xx_oob_set(struct adreno_device *adreno_dev,
 			GPU_START_TIMEOUT,
 			check_mask)) {
 		ret = -ETIMEDOUT;
-		dev_err(&gmu->pdev->dev,
-			"OOB set timed out, mask %x\n", set_mask);
-		WARN_ON(true);
+		WARN(1, "OOB set timed out, mask %x\n", set_mask);
 	}
 
 	kgsl_gmu_regwrite(device, A6XX_GMU_GMU2HOST_INTR_CLR, clear_mask);
@@ -1858,8 +1855,7 @@ static int a6xx_wait_for_lowest_idle(struct adreno_device *adreno_dev)
 			return 0;
 	}
 
-	dev_err(&gmu->pdev->dev,
-			"Timeout waiting for lowest idle level: %d\n", reg);
+	WARN(1, "Timeout waiting for lowest idle level: %d\n", reg);
 	return -ETIMEDOUT;
 }
 
@@ -2964,6 +2960,41 @@ static int a6xx_enable_pwr_counters(struct adreno_device *adreno_dev,
 	return 0;
 }
 
+static void a6xx_efuse_speed_bin(struct adreno_device *adreno_dev)
+{
+	unsigned int val;
+	unsigned int speed_bin[3];
+	struct kgsl_device *device = &adreno_dev->dev;
+
+	if (of_property_read_u32_array(device->pdev->dev.of_node,
+		"qcom,gpu-speed-bin", speed_bin, 3))
+		return;
+
+	adreno_efuse_read_u32(adreno_dev, speed_bin[0], &val);
+
+	adreno_dev->speed_bin = (val & speed_bin[1]) >> speed_bin[2];
+}
+
+static const struct {
+	int (*check)(struct adreno_device *adreno_dev);
+	void (*func)(struct adreno_device *adreno_dev);
+} a6xx_efuse_funcs[] = {
+	{ adreno_is_a615, a6xx_efuse_speed_bin },
+};
+
+static void a6xx_check_features(struct adreno_device *adreno_dev)
+{
+	unsigned int i;
+
+	if (adreno_efuse_map(adreno_dev))
+		return;
+	for (i = 0; i < ARRAY_SIZE(a6xx_efuse_funcs); i++) {
+		if (a6xx_efuse_funcs[i].check(adreno_dev))
+			a6xx_efuse_funcs[i].func(adreno_dev);
+	}
+
+	adreno_efuse_unmap(adreno_dev);
+}
 static void a6xx_platform_setup(struct adreno_device *adreno_dev)
 {
 	uint64_t addr;
@@ -2990,6 +3021,9 @@ static void a6xx_platform_setup(struct adreno_device *adreno_dev)
 	} else
 		gpudev->vbif_xin_halt_ctrl0_mask =
 				A6XX_VBIF_XIN_HALT_CTRL0_MASK;
+
+	/* Check efuse bits for various capabilties */
+	a6xx_check_features(adreno_dev);
 }
 
 

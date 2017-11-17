@@ -152,6 +152,13 @@ struct sde_hw_ctl_ops {
 
 	int (*reset)(struct sde_hw_ctl *c);
 
+	/**
+	 * hard_reset - force reset on ctl_path
+	 * @ctx    : ctl path ctx pointer
+	 * @enable : whether to enable/disable hard reset
+	 */
+	void (*hard_reset)(struct sde_hw_ctl *c, bool enable);
+
 	/*
 	 * wait_reset_status - checks ctl reset status
 	 * @ctx       : ctl path ctx pointer
@@ -245,6 +252,24 @@ struct sde_hw_ctl {
 	/* ops */
 	struct sde_hw_ctl_ops ops;
 };
+
+/**
+ * sde_unstage_pipe_for_cont_splash - Unstage pipes for continuous splash
+ * @data: pointer to sde splash data
+ * @mmio: mapped register io address of MDP
+ * @return: error code
+ */
+int sde_unstage_pipe_for_cont_splash(struct sde_splash_data *data,
+		void __iomem *mmio);
+
+/**
+ * sde_get_ctl_top_for_cont_splash - retrieve the current LM blocks
+ * @mmio: mapped register io address of MDP
+ * @top: pointer to the current "ctl_top" structure thats needs update
+ * @index: ctl_top index
+ */
+void sde_get_ctl_top_for_cont_splash(void __iomem *mmio,
+		struct ctl_top *top, int index);
 
 /**
  * sde_hw_ctl - convert base object sde_hw_base to container

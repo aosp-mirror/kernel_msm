@@ -115,5 +115,8 @@ all.config
 # Kdevelop4
 *.kdev4
 
+# fetched Android config fragments
+kernel/configs/android-*.cfg
+
 # Qualcomm out-of-tree audio drivers
 /techpack/audio
