@@ -401,7 +401,7 @@ int mdss_dsi_panel_power_ctrl(struct mdss_panel_data *pdata,
 
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
-
+	if (ctrl_pdata->ulps_mode) return 0;
 	/*
 	 * If a dynamic mode switch is pending, the regulators should not
 	 * be turned off or on.
