@@ -747,5 +747,6 @@ config INPUT_DRV2667_HAPTICS
 	  module will be called drv260x-haptics.
 
 source "drivers/input/misc/ots_pat9125/Kconfig"
+source "drivers/input/misc/ots_pat9126/Kconfig"
 
 endif
