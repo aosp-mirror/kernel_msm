@@ -335,6 +335,7 @@ struct usbpd {
 
 	u32			sink_caps[7];
 	int			num_sink_caps;
+	bool			limit_pdos;
 
 	struct power_supply	*usb_psy;
 	struct notifier_block	psy_nb;
@@ -555,6 +556,40 @@ static int pd_select_pdo(struct usbpd *pd, int pdo_pos, int uv, int ua)
 	return 0;
 }
 
+static void pd_limit_src_caps(struct usbpd *pd)
+{
+	int i, j=0, k;
+	for (i = 0; i < PD_MAX_DATA_OBJ; i++) {
+		bool keep;
+		u32 pdo = pd->received_pdos[i];
+
+		/* Only check PD_SRC_PDO_TYPE_FIXED pdo */
+		if (PD_SRC_PDO_TYPE(pdo) == PD_SRC_PDO_TYPE_FIXED) {
+			keep = false;
+			for (k = 0; k < pd->num_sink_caps; k++) {
+				u32 c,v;
+				c = PD_SRC_PDO_FIXED_MAX_CURR(pd->sink_caps[k]);
+				v = PD_SRC_PDO_FIXED_VOLTAGE(pd->sink_caps[k]);
+				if (PD_SRC_PDO_FIXED_VOLTAGE(pdo) == v) {
+					if (PD_SRC_PDO_FIXED_MAX_CURR(pdo) > c)
+						pdo = (pdo & ~0x3FF) | c;
+					keep = true;
+					break;
+				}
+			}
+		} else {
+			keep = true;
+		}
+		if (keep) {
+			usbpd_dbg(&pd->dev, "pdo[%d]:0x%08x\n", j, pdo);
+			pd->received_pdos[j++] = pdo;
+		}
+	}
+
+	for (; j < PD_MAX_DATA_OBJ; j++)
+		pd->received_pdos[j] = 0;
+}
+
 static int pd_eval_src_caps(struct usbpd *pd)
 {
 	int obj_cnt;
@@ -581,8 +616,12 @@ static int pd_eval_src_caps(struct usbpd *pd)
 			pd->spec_rev = USBPD_REV_30;
 	}
 
+	if (pd->limit_pdos)
+		pd_limit_src_caps(pd);
+
 	/* Select the first PDO (vSafe5V) immediately. */
-	pd_select_pdo(pd, 1, 0, 0);
+	pd_select_pdo(pd, 1, 0, pd->limit_pdos ?
+		      PD_SRC_PDO_FIXED_MAX_CURR(pd->received_pdos[0]) * 10000 : 0);
 
 	return 0;
 }
@@ -3343,6 +3382,9 @@ struct usbpd *usbpd_create(struct device *parent)
 				sizeof(default_snk_caps));
 		pd->num_sink_caps = ARRAY_SIZE(default_snk_caps);
 	}
+
+	pd->limit_pdos = device_property_present(parent, "qcom,limit-pdos");
+	usbpd_info(&pd->dev, "limit_pdos:%d\n", pd->limit_pdos);
 
 	/*
 	 * Register the Android dual-role class (/sys/class/dual_role_usb/).
