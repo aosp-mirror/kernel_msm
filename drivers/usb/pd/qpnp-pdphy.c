@@ -688,6 +688,7 @@ static irqreturn_t pdphy_msg_rx_irq_thread(int irq, void *data)
 
 	if (!size || size > 31) {
 		dev_err(pdphy->dev, "%s: invalid size %d\n", __func__, size);
+		ret = -EINVAL;
 		goto done;
 	}
 
@@ -699,6 +700,7 @@ static irqreturn_t pdphy_msg_rx_irq_thread(int irq, void *data)
 	if (frame_type != SOP_MSG) {
 		dev_err(pdphy->dev, "%s:unsupported frame type %d\n",
 			__func__, frame_type);
+		ret = -EINVAL;
 		goto done;
 	}
 
@@ -725,11 +727,12 @@ static irqreturn_t pdphy_msg_rx_irq_thread(int irq, void *data)
 	if (pdphy->msg_rx_cb)
 		pdphy->msg_rx_cb(pdphy->usbpd, frame_type, buf, size + 1);
 
-	print_hex_dump_debug("rx msg:", DUMP_PREFIX_NONE, 32, 4, buf, size + 1,
-		false);
 	pdphy->rx_bytes += size + 1;
 done:
 	pdphy->rx_busy = false;
+	if (!ret)
+		print_hex_dump_debug("rx msg:", DUMP_PREFIX_NONE, 32, 4, buf,
+			size + 1, false);
 	return IRQ_HANDLED;
 }
 
