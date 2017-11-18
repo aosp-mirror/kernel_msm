@@ -37,15 +37,22 @@ static void set_wifi_mac(void)
 	unsigned int mac_found = 0;
 
 	node = of_find_node_by_path(CDB_PATH);
-	if (!node) {
+	if (!node)
 		pr_err("[WLAN] CDB Node not created under %s", CDB_PATH);
-	} else {
+	else
 		mac_addr = (unsigned char *)
 				of_get_property(node, WIFI_MAC_1, &size);
 
-		if (mac_addr &&
-				sscanf(mac_addr, "%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx",
-						&mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]) == 6) {
+	if (mac_addr) {
+		if (sscanf(mac_addr,
+			   "%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx",
+			   &mac[0], &mac[1], &mac[2], &mac[3], &mac[4],
+			   &mac[5]) == 6) {
+			mac_found = 1;
+		} else if (sscanf(mac_addr,
+				  "%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx",
+				  &mac[0], &mac[1], &mac[2], &mac[3], &mac[4],
+				  &mac[5]) == 6) {
 			mac_found = 1;
 		}
 	}
