@@ -134,7 +134,7 @@ static struct device_attribute attrs[] = {
 	__ATTR(attn_state, S_IRUGO,
 			rmidev_sysfs_attn_state_show,
 			NULL),
-	__ATTR(pid, S_IRUGO | S_IRUGO | S_IWUSR | S_IWGRP,
+	__ATTR(pid, S_IRUGO | S_IRUGO | S_IWUSR,
 			rmidev_sysfs_pid_show,
 			rmidev_sysfs_pid_store),
 	__ATTR(term, S_IWUSR,
