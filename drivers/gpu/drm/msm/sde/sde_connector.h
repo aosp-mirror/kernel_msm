@@ -161,15 +161,6 @@ struct sde_connector_ops {
 			uint32_t event_idx, bool enable, void *display);
 
 	/**
-	 * set_backlight - set backlight level
-	 * @connector: Pointer to drm connector structure
-	 * @display: Pointer to private display structure
-	 * @bl_lvel: Backlight level
-	 */
-	int (*set_backlight)(struct drm_connector *connector,
-			void *display, u32 bl_lvl);
-
-	/**
 	 * soft_reset - perform a soft reset on the connector
 	 * @display: Pointer to private display structure
 	 * Return: Zero on success, -ERROR otherwise
@@ -373,7 +364,6 @@ struct sde_connector_evt {
  * @bl_scale_dirty: Flag to indicate PP BL scale value(s) is changed
  * @bl_scale: BL scale value for ABA feature
  * @bl_scale_ad: BL scale value for AD feature
- * @unset_bl_level: BL level that needs to be set later
  * @allow_bl_update: Flag to indicate if BL update is allowed currently or not
  * @qsync_mode: Cached Qsync mode, 0=disabled, 1=continuous mode
  * @qsync_updated: Qsync settings were updated
@@ -423,7 +413,6 @@ struct sde_connector {
 	bool bl_scale_dirty;
 	u32 bl_scale;
 	u32 bl_scale_ad;
-	u32 unset_bl_level;
 	bool allow_bl_update;
 
 	u32 qsync_mode;
