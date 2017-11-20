@@ -78,6 +78,7 @@ struct fan5451x_chip {
 	int vfloat;
 	int vrechg_hyst;
 	int ibus;
+	int current_ibus;
 	int iin;
 	int iochrg;
 	int set_iterm;
@@ -466,8 +467,10 @@ static int fan5451x_set_ibus(struct fan5451x_chip *chip, int ma)
 	else if (ma > chip->register_base.ibus_max_ma)
 		ma = chip->register_base.ibus_max_ma;
 
+	ma = min(ma, chip->ibus);
+
 	reg_val = (ma - chip->register_base.ibus_min_ma) / IBUS_STEP_MA;
-	chip->ibus = reg_val * IBUS_STEP_MA + chip->register_base.ibus_min_ma;
+	chip->current_ibus = reg_val * IBUS_STEP_MA + chip->register_base.ibus_min_ma;
 
 	return fan5451x_write_reg(chip->client,
 			chip->register_base.reg_ibus, reg_val);
@@ -969,6 +972,7 @@ static ssize_t show_chip_param(struct device *dev,
 		"vfloat:%d\n"
 		"vrechg-hyst:%d\n"
 		"ibus:%d\n"
+		"current_ibus:%d\n"
 		"iin:%d\n"
 		"iochrg:%d\n"
 		"set_iterm:%d\n"
@@ -991,7 +995,7 @@ static ssize_t show_chip_param(struct device *dev,
 		"wlc_chg_on_min:%d\n"
 		"wlc_chg_off_min:%d\n",
 		chip->vbatmin, chip->vfloat, chip->vrechg_hyst,
-		chip->ibus, chip->iin,
+		chip->ibus, chip->current_ibus, chip->iin,
 		chip->iochrg, chip->set_iterm, chip->iterm, chip->prechg,
 		chip->vbusovp, chip->vbuslim, chip->vinovp, chip->vinlim,
 		chip->fctmr, chip->set_ibat_ma, chip->ext_set_ibat_ma,
@@ -1583,11 +1587,13 @@ fan5451x_vbat_notification(enum qpnp_tm_state state, void *ctx)
 		chip->vbat_param.state_request = ADC_TM_LOW_THR_ENABLE;
 		chip->vbat_param.low_thr =
 			(chip->step_dwn_thr_mv - STEP_OFFSET_MV) * 1000;
+		fan5451x_set_ibus(chip, chip->step_dwn_iusb_ma);
 	} else {
 		chip->ibat_offset_ma = 0;
 		chip->iusb_step_chg_ma = 0;
 		chip->vbat_param.state_request = ADC_TM_HIGH_THR_ENABLE;
 		chip->vbat_param.high_thr = chip->step_dwn_thr_mv * 1000;
+		fan5451x_set_ibus(chip, chip->ibus);
 	}
 	fan5451x_set_appropriate_current(chip);
 	qpnp_adc_tm_channel_measure(chip->adc_tm_dev,
