@@ -38,12 +38,12 @@
 
 
 #ifdef FW_H_FILE
-#define PATH_FILE_FW			"NULL"
+#define PATH_FILE_FW	"NULL"
 #else
 #ifdef FTM3_CHIP
-#define PATH_FILE_FW			"st_fts.bin"									///< FW bin file name
+#define PATH_FILE_FW	"st_fts.bin"	/* FW bin file name */
 #else
-#define PATH_FILE_FW			"st_fts.ftb"									///< new FW bin file name
+#define PATH_FILE_FW	"ftm5_fw.ftb"	/* new FW bin file name */
 #endif
 #endif
 

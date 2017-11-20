@@ -53,11 +53,11 @@
 #define ENGINEERING_CODE														///< if defined allow to have some procedures at the boot or from file node to assure that touch works under any condition that usually are disabled in the MP stage of the project
 #define COMPUTE_CX_ON_PHONE														///< initialization of CX memory allowed on the phone
 
-#define FW_H_FILE																///< include the FW data as header file
+/*#define FW_H_FILE*/			/* include the FW data as header file */
 #ifdef FW_H_FILE
-	#define FW_SIZE_NAME myArray_size											///< name of the variable in the FW header file which specified the dimension of the FW data array
-	#define FW_ARRAY_NAME myArray												///< name of the variable in the FW header file which specified the FW data array
-	//#define FW_UPDATE_ON_PROBE												///< if defined the FW update will be execute on the probe, if not it will be executed EXP_FN_WORK_DELAY_MS ms after the probe is completed
+#define FW_SIZE_NAME myArray_size	/* FW data array size */
+#define FW_ARRAY_NAME myArray		/* FW data array name */
+/*#define FW_UPDATE_ON_PROBE*/		/* No delay updating FW */
 #endif
 
 #ifndef FW_UPDATE_ON_PROBE
