@@ -89,9 +89,9 @@ struct dsi_backlight_config {
 	u32 bl_min_level;
 	u32 bl_max_level;
 	u32 brightness_max_level;
-	u32 bl_level;
 	u32 bl_scale;
 	u32 bl_scale_ad;
+	u32 bl_actual;
 
 	int en_gpio;
 	/* PWM params */
@@ -102,7 +102,8 @@ struct dsi_backlight_config {
 
 	/* WLED params */
 	struct led_trigger *wled;
-	struct backlight_device *bd;
+
+	struct backlight_device *bl_device;
 };
 
 struct dsi_reset_seq {
@@ -294,5 +295,7 @@ struct dsi_panel *dsi_panel_ext_bridge_get(struct device *parent,
 				int topology_override);
 
 void dsi_panel_ext_bridge_put(struct dsi_panel *panel);
+
+int dsi_backlight_register(struct dsi_backlight_config *bl);
 
 #endif /* _DSI_PANEL_H_ */

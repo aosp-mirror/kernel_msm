@@ -689,6 +689,7 @@ static int dsi_panel_bl_register(struct dsi_panel *panel)
 		goto error;
 	}
 
+	rc = dsi_backlight_register(bl);
 error:
 	return rc;
 }

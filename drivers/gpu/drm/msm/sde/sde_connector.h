@@ -162,8 +162,6 @@ struct sde_connector_ops {
 	void (*enable_event)(struct drm_connector *connector,
 			uint32_t event_idx, bool enable, void *display);
 
-	int (*set_backlight)(void *display, u32 bl_lvl);
-
 	/**
 	 * soft_reset - perform a soft reset on the connector
 	 * @display: Pointer to private display structure
