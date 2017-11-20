@@ -33,6 +33,7 @@ static irqreturn_t bad_chained_irq(int irq, void *dev_id)
  */
 struct irqaction chained_action = {
 	.handler = bad_chained_irq,
+	.name = "chained-irq",
 };
 
 /**
