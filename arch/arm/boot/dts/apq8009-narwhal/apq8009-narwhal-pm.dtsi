@@ -181,11 +181,11 @@
 		vbatmin = <3000>;    //CC start voltage 3.0V
 		vfloat = <4400>;     //vbatmax
 		vrechg-hyst = <100>; //rechg = vfloat - (vrechg-hyst)
-		ibus = <500>;        //iusb for vbus
+		ibus = <175>;        //iusb for vbus
 		iin = <325>;         //iusb for wlc
 		iochrg = <200>;      //CC current
-		iterm = <40>;        //term current
-		prechg = <200>;      //pre charge current
+		iterm = <25>;        //term current
+		prechg = <50>;      //pre charge current
 		topoff-enable = <0>; //post charging flag
 		vbusovp = <10500>;   //ovd for usb
 		vbuslim = <4560>;    //uvd for usb
