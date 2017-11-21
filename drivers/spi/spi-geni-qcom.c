@@ -331,7 +331,8 @@ static int select_xfer_mode(struct spi_master *spi,
 }
 
 static struct msm_gpi_tre *setup_config0_tre(struct spi_transfer *xfer,
-				struct spi_geni_master *mas, u16 mode,
+				struct spi_geni_master *mas,
+				struct spi_master *spi, u16 mode,
 				u32 cs_clk_delay, u32 inter_words_delay)
 {
 	struct msm_gpi_tre *c0_tre = &mas->gsi[mas->num_xfers].config0_tre;
@@ -354,8 +355,9 @@ static struct msm_gpi_tre *setup_config0_tre(struct spi_transfer *xfer,
 	if (mode & SPI_CPHA)
 		flags |= GSI_CPHA;
 
-	if (xfer->cs_change)
-		flags |= GSI_CS_TOGGLE;
+	if (!list_is_last(&xfer->transfer_list, &spi->cur_msg->transfers))
+		if (xfer->cs_change)
+			flags |= GSI_CS_TOGGLE;
 
 	word_len = xfer->bits_per_word - MIN_WORD_LEN;
 	pack |= (GSI_TX_PACK_EN | GSI_RX_PACK_EN);
@@ -552,7 +554,7 @@ static int setup_gsi_xfer(struct spi_transfer *xfer,
 		mas->cur_word_len = xfer->bits_per_word;
 		mas->cur_speed_hz = xfer->speed_hz;
 		tx_nent++;
-		c0_tre = setup_config0_tre(xfer, mas, spi_slv->mode,
+		c0_tre = setup_config0_tre(xfer, mas, spi, spi_slv->mode,
 					cs_clk_delay, inter_words_delay);
 		if (IS_ERR_OR_NULL(c0_tre)) {
 			dev_err(mas->dev, "%s:Err setting c0tre:%d\n",
@@ -584,8 +586,10 @@ static int setup_gsi_xfer(struct spi_transfer *xfer,
 	}
 
 	cs |= spi_slv->chip_select;
-	if (!list_is_last(&xfer->transfer_list, &spi->cur_msg->transfers))
-		go_flags |= FRAGMENTATION;
+	if (list_is_last(&xfer->transfer_list, &spi->cur_msg->transfers))
+		if (xfer->cs_change)
+			go_flags |= FRAGMENTATION;
+
 	go_tre = setup_go_tre(cmd, cs, rx_len, go_flags, mas);
 
 	sg_init_table(xfer_tx_sg, tx_nent);
