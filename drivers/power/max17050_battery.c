@@ -700,6 +700,7 @@ static enum power_supply_property max17050_battery_props[] = {
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_CAPACITY,
+	POWER_SUPPLY_PROP_CAPACITY_RAW,
 	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_CURRENT_AVG,
@@ -751,6 +752,9 @@ static int max17050_get_property(struct power_supply *psy,
 		}
 		else
 			val->intval = chip->fake_capacity;
+		break;
+	case POWER_SUPPLY_PROP_CAPACITY_RAW:
+		val->intval = max17050_scale_clamp_soc(chip);
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
 		if (chip->use_ext_temp && chip->ext_battery) {
