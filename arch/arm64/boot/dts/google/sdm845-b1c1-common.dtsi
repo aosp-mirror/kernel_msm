@@ -376,3 +376,8 @@
 &usb0 {
 	google,switch-vbus = <250>;
 };
+
+&pmi8998_pdphy {
+	vbus-supply = <&smb2_vbus>;
+	ext-vbus-supply = <&ext_5v_boost>;
+};
