@@ -1232,6 +1232,19 @@ static int smb2_init_vbus_regulator(struct smb2 *chip)
 	if (!chg->vbus_vreg)
 		return -ENOMEM;
 
+	if (of_property_read_bool(chg->dev->of_node,
+				  "google,boost_to_5_1V")) {
+		rc = smblib_masked_write(chg, CFG_OTG_OUTPUT_REG,
+					 OTG_OUT_5_1_V,
+					 OTG_OUT_5_1_V);
+		if (rc < 0) {
+			dev_err(chg->dev,
+				"Unable to boost smb2-vbus to 5.1V rc=%d\n",
+				rc);
+			return rc;
+		}
+	}
+
 	cfg.dev = chg->dev;
 	cfg.driver_data = chip;
 
