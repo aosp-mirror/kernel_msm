@@ -49,7 +49,10 @@ struct usbpd {
 
 	struct regulator	*vbus;
 	struct regulator	*vconn;
+	struct regulator        *ext_vbus;
 	bool			vbus_output;
+	bool			external_vbus;
+	bool			external_vbus_update;
 	bool			vconn_output;
 
 	bool			vbus_present;
@@ -82,6 +85,7 @@ struct usbpd {
 	int logbuffer_tail;
 	u8 *logbuffer[LOG_BUFFER_ENTRIES];
 	bool in_pr_swap;
+	struct notifier_block ext_vbus_nb;
 };
 
 /*
@@ -512,6 +516,78 @@ struct psy_changed_event {
 	struct usbpd *pd;
 };
 
+
+static int update_vbus_locked(struct usbpd *pd, bool vbus_output)
+{
+	int ret = 0;
+
+	if (pd->vbus_output == vbus_output)
+		return ret;
+
+	if (vbus_output) {
+		ret = regulator_enable(pd->external_vbus ?
+					pd->ext_vbus : pd->vbus);
+		if (ret) {
+			pd_engine_log(pd, "unable to turn on %s vbus ret = %d"
+				      , pd->external_vbus ? "external" : "pmic"
+				      , ret);
+			return ret;
+		}
+	} else {
+		ret = regulator_disable(pd->external_vbus ?
+					pd->ext_vbus : pd->vbus);
+		if (ret) {
+			pd_engine_log(pd, "unable to turn off %s vbus ret = %d"
+				      , pd->external_vbus ? "external" : "pmic"
+				      , ret);
+			return ret;
+		}
+	}
+	pd->vbus_output = vbus_output;
+	/*
+	 * No interrupt will be trigerred for the vbus change.
+	 * Manually inform tcpm to check the vbus change.
+	 */
+	tcpm_vbus_change(pd->tcpm_port);
+	return ret;
+}
+
+static int update_external_vbus_locked(struct usbpd *pd, bool external_vbus)
+{
+	int ret = 0;
+
+	if (pd->external_vbus == external_vbus)
+		return ret;
+
+	/*
+	 * update the value and exit when vbus is not on.
+	 */
+	if (!pd->vbus_output)
+		goto exit;
+
+	/*
+	 * Turn on the other regulator before turning off the other one.
+	 */
+	ret = regulator_enable(external_vbus ? pd->ext_vbus : pd->vbus);
+	if (ret) {
+		pd_engine_log(pd, "unable to turn on %s vbus ret = %d"
+			      , external_vbus ? "external" : "pmic"
+			      , ret);
+		return ret;
+	}
+	ret = regulator_disable(external_vbus ? pd->vbus : pd->ext_vbus);
+	if (ret) {
+		pd_engine_log(pd, "unable to turn off %s vbus ret = %d"
+			      , external_vbus ? "pmic" : "external"
+			      , ret);
+		return ret;
+	}
+
+exit:
+	pd->external_vbus = external_vbus;
+	return ret;
+}
+
 static void psy_changed_handler(struct work_struct *work)
 {
 	struct psy_changed_event *event = container_of(work,
@@ -580,14 +656,15 @@ static void psy_changed_handler(struct work_struct *work)
 	parse_cc_status(typec_mode, typec_cc_orientation, &cc1, &cc2);
 
 	pd_engine_log(pd,
-		      "type [%s], apsd done [%s], vbus present [%s], typec_mode [%s], typec_orientation [%s], cc1 [%s], cc2 [%s]",
+		      "type [%s], apsd done [%s], vbus present [%s], typec_mode [%s], typec_orientation [%s], cc1 [%s], cc2 [%s] external_vbus [%s]",
 		      get_psy_type_name(psy_type),
 		      apsd_done ? "Y" : "N",
 		      vbus_present ? "Y" : "N",
 		      get_typec_mode_name(typec_mode),
 		      get_typec_cc_orientation_name(typec_cc_orientation),
 		      get_typec_cc_status_name(cc1),
-		      get_typec_cc_status_name(cc2));
+		      get_typec_cc_status_name(cc2),
+		      pd->external_vbus_update ? "Y" : "N");
 
 	/* Dont proceed as pmi might still be evaluating connecttions */
 	if (!apsd_done && (typec_mode != POWER_SUPPLY_TYPEC_NONE)) {
@@ -619,6 +696,10 @@ static void psy_changed_handler(struct work_struct *work)
 		pd->cc2 = cc2;
 		tcpm_cc_change(pd->tcpm_port);
 	}
+
+	if (update_external_vbus_locked(pd, pd->external_vbus_update))
+		goto unlock;
+
 
 	if (apsd_done && pd->pending_update_usb_data) {
 		pd_engine_log(pd,
@@ -772,23 +853,10 @@ static int tcpm_set_vbus(struct tcpc_dev *dev, bool on, bool charge)
 
 	mutex_lock(&pd->lock);
 
-	if (on != pd->vbus_output) {
-		if (on)
-			ret = regulator_enable(pd->vbus);
-		else
-			ret = regulator_disable(pd->vbus);
-		if (ret < 0) {
-			pd_engine_log(pd, "unable to turn %s vbus, ret=%d",
-				      on ? "on" : "off", ret);
-			goto unlock;
-		}
-		pd->vbus_output = on;
-		/*
-		 * No interrupt will be trigerred for the vbus change.
-		 * Manually inform tcpm to check the vbus change.
-		 */
-		tcpm_vbus_change(pd->tcpm_port);
-	}
+	ret = update_vbus_locked(pd, on);
+
+	if (ret)
+		goto unlock;
 
 	pd_engine_log(pd, "set vbus: %s", on ? "on" : "off");
 
@@ -1485,6 +1553,18 @@ static void init_pd_phy_params(struct pd_phy_params *pdphy_params)
 					 FRAME_FILTER_EN_HARD_RESET;
 }
 
+static int update_ext_vbus(struct notifier_block *self, unsigned long action,
+			   void *dev)
+{
+	struct usbpd *pd = container_of(self, struct usbpd, ext_vbus_nb);
+
+	pd->external_vbus_update = (action == EXT_VBUS_ON) ? true : false;
+	pd_engine_log(pd, "EXT_VBUS_%s", (action == EXT_VBUS_ON) ? "ON" :
+					 "OFF");
+	psy_changed(&pd->psy_nb, PSY_EVENT_PROP_CHANGED, pd->usb_psy);
+	return NOTIFY_OK;
+}
+
 static const unsigned int usbpd_extcon_cable[] = {
 	EXTCON_USB,
 	EXTCON_USB_HOST,
@@ -1546,6 +1626,12 @@ struct usbpd *usbpd_create(struct device *parent)
 		goto exit_debugfs;
 	}
 
+	pd->ext_vbus = devm_regulator_get(parent, "ext-vbus");
+	if (IS_ERR(pd->ext_vbus)) {
+		ret = PTR_ERR(pd->ext_vbus);
+		goto exit_debugfs;
+	}
+
 	pd->extcon = devm_extcon_dev_allocate(parent, usbpd_extcon_cable);
 	if (IS_ERR(pd->extcon)) {
 		pd_engine_log(pd, "failed to allocate extcon device");
@@ -1584,6 +1670,9 @@ struct usbpd *usbpd_create(struct device *parent)
 		goto del_wq;
 	}
 
+	pd->ext_vbus_nb.notifier_call = update_ext_vbus;
+	ext_vbus_register_notify(&pd->ext_vbus_nb);
+
 	/*
 	 * TCPM callbacks may access pd->usb_psy. Therefore, tcpm_register_port
 	 * must be called after pd->usb_psy is initialized.
@@ -1609,6 +1698,7 @@ struct usbpd *usbpd_create(struct device *parent)
 unreg_tcpm:
 	tcpm_unregister_port(pd->tcpm_port);
 put_psy:
+	ext_vbus_unregister_notify(&pd->ext_vbus_nb);
 	power_supply_put(pd->usb_psy);
 del_wq:
 	destroy_workqueue(pd->wq);
@@ -1635,6 +1725,7 @@ void usbpd_destroy(struct usbpd *pd)
 		return;
 	power_supply_unreg_notifier(&pd->psy_nb);
 	tcpm_unregister_port(pd->tcpm_port);
+	ext_vbus_unregister_notify(&pd->ext_vbus_nb);
 	power_supply_put(pd->usb_psy);
 	destroy_workqueue(pd->wq);
 	pd_engine_debugfs_exit(pd);
