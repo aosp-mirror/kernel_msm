@@ -194,7 +194,10 @@ void sme_set_ft_ies(tHalHandle hal_ptr, uint32_t session_id,
 		 * reassoc req. This is the new FT Roaming in place At
 		 * this juncture we'r ready to start sending Reassoc req
 		 */
-		sme_debug("New Reassoc Req: %p in state %d",
+
+		ft_ies_length = QDF_MIN(ft_ies_length, MAX_FTIE_SIZE);
+
+		sme_debug("New Reassoc Req: %pK in state %d",
 			ft_ies, session->ftSmeContext.FTState);
 		if ((session->ftSmeContext.reassoc_ft_ies) &&
 			(session->ftSmeContext.reassoc_ft_ies_length)) {

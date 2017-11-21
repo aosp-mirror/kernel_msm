@@ -563,7 +563,10 @@ ol_tx_prepare_ll_fast(struct ol_txrx_pdev_t *pdev,
 	}
 
 	htt_tx_desc = tx_desc->htt_tx_desc;
+
+#if defined(HELIUMPLUS)
 	qdf_mem_zero(tx_desc->htt_frag_desc, sizeof(struct msdu_ext_desc_t));
+#endif
 
 	/* Make sure frags num is set to 0 */
 	/*
@@ -632,7 +635,7 @@ ol_tx_prepare_ll_fast(struct ol_txrx_pdev_t *pdev,
 			htt_tx_desc_frag(pdev->htt_pdev, tx_desc->htt_frag_desc,
 					 i - 1, frag_paddr, frag_len);
 #if defined(HELIUMPLUS_DEBUG)
-			qdf_print("%s:%d: htt_fdesc=%p frag=%d frag_paddr=0x%0llx len=%zu",
+			qdf_print("%s:%d: htt_fdesc=%pK frag=%d frag_paddr=0x%0llx len=%zu",
 				  __func__, __LINE__, tx_desc->htt_frag_desc,
 				  i-1, frag_paddr, frag_len);
 			ol_txrx_dump_pkt(netbuf, frag_paddr, 64);
@@ -978,7 +981,12 @@ ol_tx_ll_wrapper(ol_txrx_vdev_handle vdev, qdf_nbuf_t msdu_list)
 
 #ifdef QCA_LL_LEGACY_TX_FLOW_CONTROL
 
+#ifdef FEATURE_WLAN_LL_LEGACY_TX_FLOW_CT
+#define OL_TX_VDEV_PAUSE_QUEUE_SEND_MARGIN 0
+#else
 #define OL_TX_VDEV_PAUSE_QUEUE_SEND_MARGIN 400
+#endif
+
 #define OL_TX_VDEV_PAUSE_QUEUE_SEND_PERIOD_MS 5
 static void ol_tx_vdev_ll_pause_queue_send_base(struct ol_txrx_vdev_t *vdev)
 {
@@ -1035,9 +1043,11 @@ static void ol_tx_vdev_ll_pause_queue_send_base(struct ol_txrx_vdev_t *vdev)
 	}
 	if (vdev->ll_pause.txq.depth) {
 		qdf_timer_stop(&vdev->ll_pause.timer);
-		qdf_timer_start(&vdev->ll_pause.timer,
+		if (!qdf_atomic_read(&vdev->delete.detaching)) {
+			qdf_timer_start(&vdev->ll_pause.timer,
 					OL_TX_VDEV_PAUSE_QUEUE_SEND_PERIOD_MS);
-		vdev->ll_pause.is_q_timer_on = true;
+			vdev->ll_pause.is_q_timer_on = true;
+		}
 		if (vdev->ll_pause.txq.depth >= vdev->ll_pause.max_q_depth)
 			vdev->ll_pause.q_overflow_cnt++;
 	}
@@ -1077,9 +1087,11 @@ ol_tx_vdev_pause_queue_append(struct ol_txrx_vdev_t *vdev,
 
 	if (start_timer) {
 		qdf_timer_stop(&vdev->ll_pause.timer);
-		qdf_timer_start(&vdev->ll_pause.timer,
+		if (!qdf_atomic_read(&vdev->delete.detaching)) {
+			qdf_timer_start(&vdev->ll_pause.timer,
 					OL_TX_VDEV_PAUSE_QUEUE_SEND_PERIOD_MS);
-		vdev->ll_pause.is_q_timer_on = true;
+			vdev->ll_pause.is_q_timer_on = true;
+		}
 	}
 	qdf_spin_unlock_bh(&vdev->ll_pause.mutex);
 
@@ -1251,7 +1263,8 @@ void ol_tx_vdev_ll_pause_queue_send(void *context)
 	struct ol_txrx_vdev_t *vdev = (struct ol_txrx_vdev_t *)context;
 	struct ol_txrx_pdev_t *pdev = vdev->pdev;
 
-	if (pdev->tx_throttle.current_throttle_level != THROTTLE_LEVEL_0 &&
+	if (pdev &&
+	    pdev->tx_throttle.current_throttle_level != THROTTLE_LEVEL_0 &&
 	    pdev->tx_throttle.current_throttle_phase == THROTTLE_PHASE_OFF)
 		return;
 	ol_tx_vdev_ll_pause_queue_send_base(vdev);
@@ -2014,11 +2027,11 @@ void ol_txrx_dump_frag_desc(char *msg, struct ol_tx_desc_t *tx_desc)
 	uint32_t                *frag_ptr_i_p;
 	int                     i;
 
-	qdf_print("OL TX Descriptor 0x%p msdu_id %d\n",
+	qdf_print("OL TX Descriptor 0x%pK msdu_id %d\n",
 		 tx_desc, tx_desc->id);
-	qdf_print("HTT TX Descriptor vaddr: 0x%p paddr: %pad",
+	qdf_print("HTT TX Descriptor vaddr: 0x%pK paddr: %pad",
 		 tx_desc->htt_tx_desc, &tx_desc->htt_tx_desc_paddr);
-	qdf_print("%s %d: Fragment Descriptor 0x%p (paddr=%pad)",
+	qdf_print("%s %d: Fragment Descriptor 0x%pK (paddr=%pad)",
 		 __func__, __LINE__, tx_desc->htt_frag_desc,
 		 &tx_desc->htt_frag_desc_paddr);
 

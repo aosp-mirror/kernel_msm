@@ -71,10 +71,6 @@ config WLAN_OFFLOAD_PACKETS
 	bool "Enable offload packets feature"
 	default n
 
-config WLAN_FEATURE_MEMDUMP
-	bool "Enable MEMDUMP feature"
-	default n
-
 config FEATURE_TSO
 	bool "Enable TCP Segmentation Offload"
 	depends on HELIUMPLUS
@@ -136,4 +132,7 @@ config ICMP_DISABLE_PS
 	bool "Enable ICMP packet disable powersave feature"
 	default n
 
+config CONFIG_BUILD_TIMESTAMP
+	bool "Embed timestamp in wlan version"
+	default n
 endif # QCA_CLD_WLAN

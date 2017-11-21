@@ -175,6 +175,8 @@ struct hdd_conn_flag {
  * @signal: holds rssi info
  * @assoc_status_code: holds assoc fail reason
  * @congestion: holds congestion percentage
+ * @last_ssid: holds last ssid
+ * @last_auth_type: holds last auth type
  */
 typedef struct connection_info_s {
 	eConnectionState connState;
@@ -207,6 +209,8 @@ typedef struct connection_info_s {
 	int8_t signal;
 	int32_t assoc_status_code;
 	uint32_t cca;
+	tCsrSSIDInfo last_ssid;
+	eCsrAuthType last_auth_type;
 } connection_info_t;
 
 /* Forward declarations */
@@ -349,9 +353,24 @@ QDF_STATUS hdd_roam_deregister_sta(hdd_adapter_t *adapter, uint8_t sta_id);
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD
 void hdd_wma_send_fastreassoc_cmd(hdd_adapter_t *adapter,
 				  const tSirMacAddr bssid, int channel);
+/**
+ * hdd_save_gtk_params() - Save GTK offload params
+ * @adapter: HDD adapter
+ * @csr_roam_info: CSR roam info
+ * @is_reassoc: boolean to indicate roaming
+ *
+ * Return: None
+ */
+void hdd_save_gtk_params(hdd_adapter_t *adapter,
+			 tCsrRoamInfo *csr_roam_info, bool is_reassoc);
 #else
 static inline void hdd_wma_send_fastreassoc_cmd(hdd_adapter_t *adapter,
 		const tSirMacAddr bssid, int channel)
+{
+}
+static inline void hdd_save_gtk_params(hdd_adapter_t *adapter,
+				       tCsrRoamInfo *csr_roam_info,
+				       bool is_reassoc)
 {
 }
 #endif

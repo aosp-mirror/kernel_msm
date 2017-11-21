@@ -55,6 +55,8 @@
 #endif
 #include "epping_main.h"
 #include "sdio_api.h"
+#include "pld_sdio.h"
+#include "targaddrs.h"
 
 #ifndef ATH_BUS_PM
 #ifdef CONFIG_PM
@@ -169,14 +171,18 @@ static A_STATUS hif_sdio_probe(void *context, void *hif_handle)
 	scn->ol_sc = *ol_sc;
 	ol_sc->target_info.target_type = target_type;
 
-#ifndef TARGET_DUMP_FOR_NON_QC_PLATFORM
-	scn->ramdump_base = ioremap(RAMDUMP_ADDR, RAMDUMP_SIZE);
-	scn->ramdump_size = RAMDUMP_SIZE;
-	if (scn->ramdump_base == NULL) {
-		scn->ramdump_base = 0;
-		scn->ramdump_size = 0;
+	scn->ramdump_base = pld_hif_sdio_get_virt_ramdump_mem(
+					scn->aps_osdev.device,
+					&scn->ramdump_size);
+	if (scn->ramdump_base == NULL || !scn->ramdump_size) {
+		QDF_TRACE(QDF_MODULE_ID_HIF, QDF_TRACE_LEVEL_ERROR,
+			"%s: Failed to get RAM dump memory address or size!\n",
+			__func__);
+	} else {
+		QDF_TRACE(QDF_MODULE_ID_HIF, QDF_TRACE_LEVEL_INFO,
+			"%s: ramdump base 0x%pK size %d\n", __func__,
+			scn->ramdump_base, (int)scn->ramdump_size);
 	}
-#endif
 
 	if (athdiag_procfs_init(scn) != 0) {
 		QDF_TRACE(QDF_MODULE_ID_HIF, QDF_TRACE_LEVEL_ERROR,
@@ -191,6 +197,8 @@ static A_STATUS hif_sdio_probe(void *context, void *hif_handle)
 	return 0;
 
 err_attach1:
+	if (scn->ramdump_base)
+		pld_hif_sdio_release_ramdump_mem(scn->ramdump_base);
 	qdf_mem_free(ol_sc);
 err_attach:
 	qdf_mem_free(scn);
@@ -222,6 +230,11 @@ static A_STATUS hif_sdio_remove(void *context, void *hif_handle)
 #ifndef TARGET_DUMP_FOR_NON_QC_PLATFORM
 	iounmap(scn->ramdump_base);
 #endif
+
+	if (ol_sc) {
+		qdf_mem_free(ol_sc);
+		ol_sc = NULL;
+	}
 
 	if (scn) {
 		qdf_mem_free(scn);
@@ -282,7 +295,6 @@ static char *dev_info = "ath_hif_sdio";
  */
 static int init_ath_hif_sdio(void)
 {
-	static int probed;
 	QDF_STATUS status;
 	struct osdrv_callbacks osdrv_callbacks;
 
@@ -293,10 +305,6 @@ static int init_ath_hif_sdio(void)
 	osdrv_callbacks.device_suspend_handler = hif_sdio_suspend;
 	osdrv_callbacks.device_resume_handler = hif_sdio_resume;
 	osdrv_callbacks.device_power_change_handler = hif_sdio_power_change;
-
-	if (probed)
-		return -ENODEV;
-	probed++;
 
 	QDF_TRACE(QDF_MODULE_ID_HIF, QDF_TRACE_LEVEL_INFO, "%s %d", __func__,
 		  __LINE__);
@@ -356,6 +364,15 @@ int hif_sdio_bus_resume(struct hif_softc *hif_ctx)
  */
 void hif_sdio_close(struct hif_softc *hif_sc)
 {
+	if (ol_sc) {
+		qdf_mem_free(ol_sc);
+		ol_sc = NULL;
+	}
+
+	if (scn) {
+		qdf_mem_free(scn);
+		scn = NULL;
+	}
 }
 
 /**
@@ -528,15 +545,28 @@ void hif_trigger_dump(struct hif_opaque_softc *scn, uint8_t cmd_id, bool start)
 }
 
 /**
- * hif_check_fw_reg() - hif_check_fw_reg
- * @scn: scn
- * @state:
+ * hif_check_fw_reg() - check fw selfrecovery indication
+ * @hif_ctx: hif_opaque_softc
  *
  * Return: int
  */
-int hif_check_fw_reg(struct hif_opaque_softc *scn)
+int hif_check_fw_reg(struct hif_opaque_softc *hif_ctx)
 {
-	return 0;
+	int ret = 1;
+	uint32_t fw_indication = 0;
+	struct hif_sdio_softc *scn = HIF_GET_SDIO_SOFTC(hif_ctx);
+
+	if (hif_diag_read_access(hif_ctx, FW_INDICATOR_ADDRESS,
+				 &fw_indication) != QDF_STATUS_SUCCESS) {
+		HIF_ERROR("%s Get fw indication failed\n", __func__);
+		return 1;
+	}
+	HIF_INFO("%s: fw indication is 0x%x def 0x%x.\n", __func__,
+		fw_indication, FW_IND_HELPER);
+	if (fw_indication & FW_IND_HELPER)
+		ret = 0;
+
+	return ret;
 }
 
 /**

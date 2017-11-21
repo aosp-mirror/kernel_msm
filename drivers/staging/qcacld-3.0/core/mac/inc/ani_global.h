@@ -175,6 +175,7 @@ enum log_event_indicator {
  * @WLAN_LOG_REASON_SCAN_NOT_ALLOWED: scan not allowed due to connection states
  * @WLAN_LOG_REASON_HB_FAILURE: station triggered heart beat failure with AP
  * @WLAN_LOG_REASON_ROAM_HO_FAILURE: Handover failed during LFR3 roaming
+ * @WLAN_LOG_REASON_DISCONNECT: Disconnect because of some failure
  */
 enum log_event_host_reason_code {
 	WLAN_LOG_REASON_CODE_UNUSED,
@@ -190,7 +191,8 @@ enum log_event_host_reason_code {
 	WLAN_LOG_REASON_NO_SCAN_RESULTS,
 	WLAN_LOG_REASON_SCAN_NOT_ALLOWED,
 	WLAN_LOG_REASON_HB_FAILURE,
-	WLAN_LOG_REASON_ROAM_HO_FAILURE
+	WLAN_LOG_REASON_ROAM_HO_FAILURE,
+	WLAN_LOG_REASON_DISCONNECT
 };
 
 
@@ -395,6 +397,8 @@ typedef struct sAniSirLim {
 	/* abort scan is used to abort an on-going scan */
 	uint8_t abortScan;
 	tLimScanChnInfo scanChnInfo;
+
+	struct lim_scan_channel_status scan_channel_status;
 
 	/* ////////////////////////////////////     SCAN/LEARN RELATED START /////////////////////////////////////////// */
 	tSirMacAddr gSelfMacAddr;       /* added for BT-AMP Support */
@@ -843,6 +847,41 @@ struct mgmt_frm_reg_info {
 	uint8_t matchData[1];
 };
 
+/**
+ * struct ani_action_oui_extension - action oui extn contents
+ * @item: list element
+ * @extension: wmi extnsion contents
+ *
+ * This structure encapsulates the wmi extension and list item to
+ * create list of wmi extensions
+ */
+struct ani_action_oui_extension {
+	qdf_list_node_t item;
+	struct wmi_action_oui_extension extension;
+};
+
+/**
+ * struct ani_action_oui - each action oui info
+ * @action_id: type of action oui
+ * @oui_ext_list: list of action oui extensions
+ * @oui_ext_list_lock: lock to control access to @oui_ext_list
+ */
+struct ani_action_oui {
+	enum wmi_action_oui_id action_id;
+	qdf_list_t oui_ext_list;
+	qdf_mutex_t oui_ext_list_lock;
+};
+
+/**
+ * struct action_oui_info - all action ouis info
+ * @total_action_oui_extns: total no of oui extensions from all action ouis
+ * @action_oui: array of action oui pointers
+ */
+struct action_oui_info {
+	uint32_t total_action_oui_extns;
+	struct ani_action_oui *action_oui[WMI_ACTION_OUI_MAXIMUM_ID];
+};
+
 typedef struct sRrmContext {
 	tRrmSMEContext rrmSmeContext;
 	tRrmPEContext rrmPEContext;
@@ -932,6 +971,7 @@ typedef struct sAniSirGlobal {
 	uint8_t lteCoexAntShare;
 	uint8_t beacon_offload;
 	bool pmf_offload;
+	bool is_fils_roaming_supported;
 	uint32_t fEnableDebugLog;
 	uint16_t mgmtSeqNum;
 	bool enable5gEBT;
@@ -951,10 +991,12 @@ typedef struct sAniSirGlobal {
 	/* 802.11p enable */
 	bool enable_dot11p;
 
+	bool allow_adj_ch_bcn;
 	/* DBS capability based on INI and FW capability */
 	uint8_t hw_dbs_capable;
 	/* Based on INI parameter */
 	uint32_t dual_mac_feature_disable;
+	uint32_t sta_sap_scc_on_dfs_chan;
 	sir_mgmt_frame_ind_callback mgmt_frame_ind_cb;
 	sir_p2p_ack_ind_callback p2p_ack_ind_cb;
 	bool first_scan_done;
@@ -967,6 +1009,10 @@ typedef struct sAniSirGlobal {
 	bool snr_monitor_enabled;
 	/* channel information callback */
 	void (*chan_info_cb)(struct scan_chan_info *chan_info);
+
+	/* action ouis info */
+	bool enable_action_oui;
+	struct action_oui_info *oui_info;
 } tAniSirGlobal;
 
 typedef enum {

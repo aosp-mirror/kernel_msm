@@ -293,10 +293,10 @@ void pe_delete_fils_info(tpPESession session)
 		qdf_mem_free(fils_info->keyname_nai_data);
 	if (fils_info->fils_erp_reauth_pkt)
 		qdf_mem_free(fils_info->fils_erp_reauth_pkt);
-	if (fils_info->fils_r_rk)
-		qdf_mem_free(fils_info->fils_r_rk);
-	if (fils_info->fils_r_ik)
-		qdf_mem_free(fils_info->fils_r_ik);
+	if (fils_info->fils_rrk)
+		qdf_mem_free(fils_info->fils_rrk);
+	if (fils_info->fils_rik)
+		qdf_mem_free(fils_info->fils_rik);
 	if (fils_info->fils_eap_finish_pkt)
 		qdf_mem_free(fils_info->fils_eap_finish_pkt);
 	if (fils_info->fils_rmsk)
@@ -338,8 +338,8 @@ static void pe_init_fils_info(tpPESession session)
 	}
 	fils_info->keyname_nai_data = NULL;
 	fils_info->fils_erp_reauth_pkt = NULL;
-	fils_info->fils_r_rk = NULL;
-	fils_info->fils_r_ik = NULL;
+	fils_info->fils_rrk = NULL;
+	fils_info->fils_rik = NULL;
 	fils_info->fils_eap_finish_pkt = NULL;
 	fils_info->fils_rmsk = NULL;
 	fils_info->fils_pmk = NULL;
@@ -406,6 +406,7 @@ pe_create_session(tpAniSirGlobal pMac, uint8_t *bssid, uint8_t *sessionId,
 	QDF_STATUS status;
 	uint8_t i;
 	tpPESession session_ptr;
+
 	for (i = 0; i < pMac->lim.maxBssId; i++) {
 		/* Find first free room in session table */
 		if (pMac->lim.gpSession[i].valid == true)
@@ -541,6 +542,9 @@ pe_create_session(tpAniSirGlobal pMac, uint8_t *bssid, uint8_t *sessionId,
 	pe_init_pmf_comeback_timer(pMac, session_ptr, *sessionId);
 	session_ptr->deauthmsgcnt = 0;
 	session_ptr->disassocmsgcnt = 0;
+	session_ptr->ht_client_cnt = 0;
+	/* following is invalid value since seq number is 12 bit */
+	session_ptr->prev_auth_seq_num = 0xFFFF;
 
 	return &pMac->lim.gpSession[i];
 }
@@ -593,6 +597,7 @@ tpPESession pe_find_session_by_bssid(tpAniSirGlobal pMac, uint8_t *bssid,
 tpPESession pe_find_session_by_bss_idx(tpAniSirGlobal pMac, uint8_t bssIdx)
 {
 	uint8_t i;
+
 	for (i = 0; i < pMac->lim.maxBssId; i++) {
 		/* If BSSID matches return corresponding tables address */
 		if ((pMac->lim.gpSession[i].valid)
@@ -704,6 +709,7 @@ void pe_delete_session(tpAniSirGlobal mac_ctx, tpPESession session)
 	if (LIM_IS_AP_ROLE(session)) {
 		qdf_mc_timer_stop(&session->protection_fields_reset_timer);
 		qdf_mc_timer_destroy(&session->protection_fields_reset_timer);
+		lim_del_pmf_sa_query_timer(mac_ctx, session);
 	}
 
 	/* Delete FT related information */

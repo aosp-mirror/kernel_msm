@@ -619,6 +619,12 @@
 
 #define SIR_MAC_VENDOR_AP_1_OUI             "\x00\x0C\x43"
 #define SIR_MAC_VENDOR_AP_1_OUI_LEN         3
+
+#define SIR_MAC_VENDOR_AP_3_OUI             "\x00\x03\x7F"
+#define SIR_MAC_VENDOR_AP_3_OUI_LEN         3
+
+#define SIR_MAC_VENDOR_AP_4_OUI             "\x8C\xFD\xF0"
+#define SIR_MAC_VENDOR_AP_4_OUI_LEN         3
 /* / Status Code (present in Management response frames) enum */
 
 typedef enum eSirMacStatusCodes {
@@ -668,7 +674,11 @@ typedef enum eSirMacStatusCodes {
 	eSIR_MAC_QOS_UNSPECIFIED_FAILURE_STATUS = 32,   /* Unspecified, QoS-related failure */
 	eSIR_MAC_QAP_NO_BANDWIDTH_STATUS = 33,  /* Association denied because QoS AP has insufficient bandwidth to handle another */
 	/* QoS STA */
-	eSIR_MAC_XS_FRAME_LOSS_STATUS = 34,     /* Association denied due to excessive frame loss rates and/or poor conditions on cur- */
+	/*
+	 * Association denied due to excessive frame loss rates
+	 * and/or poor conditions/RSSI on cur channel
+	 */
+	eSIR_MAC_XS_FRAME_LOSS_POOR_CHANNEL_RSSI_STATUS = 34,
 	/* rent operating channel */
 	eSIR_MAC_STA_QOS_NOT_SUPPORTED_STATUS = 35,     /* Association (with QoS BSS) denied because the requesting STA does not support the */
 	/* QoS facility */

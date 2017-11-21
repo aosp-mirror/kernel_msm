@@ -97,6 +97,18 @@ enum hdd_wmm_user_mode {
 #define HDD_AC_BE 0x8
 
 /**
+ * enum hdd_wmm_linuxac: AC/Queue Index values for Linux Qdisc to
+ * operate on different traffic.
+ */
+enum hdd_wmm_linuxac {
+	HDD_LINUX_AC_VO = 0,
+	HDD_LINUX_AC_VI = 1,
+	HDD_LINUX_AC_BE = 2,
+	HDD_LINUX_AC_BK = 3,
+	HDD_LINUX_AC_HI_PRIO = 4,
+};
+
+/**
  * struct hdd_wmm_qos_context - HDD WMM QoS Context
  *
  * This structure holds the context for a single flow which has either
@@ -162,7 +174,7 @@ struct hdd_wmm_ac_status {
 	bool wmmAcIsUapsdEnabled;
 	uint32_t wmmAcUapsdServiceInterval;
 	uint32_t wmmAcUapsdSuspensionInterval;
-	sme_QosWmmDirType wmmAcUapsdDirection;
+	sme_qos_wmm_dir_type wmmAcUapsdDirection;
 
 #ifdef FEATURE_WLAN_ESE
 	uint32_t wmmInactivityTime;

@@ -46,7 +46,7 @@
 #define QDF_NBUF_PKT_TRAC_TYPE_MGMT_ACTION	0x08
 #define QDF_NBUF_PKT_TRAC_TYPE_ARP		0x10
 #define QDF_NBUF_PKT_TRAC_TYPE_ICMP		0x20
-#define QDF_NBUF_PKT_TRAC_TYPE_ICMPV6	0x40
+#define QDF_NBUF_PKT_TRAC_TYPE_ICMPv6		0x40
 
 #define QDF_NBUF_PKT_TRAC_MAX_STRING		12
 #define QDF_NBUF_PKT_TRAC_PROTO_STRING		4
@@ -231,7 +231,7 @@ struct mon_rx_status {
  * @QDF_PROTO_TYPE_ARP - ARP
  * @QDF_PROTO_TYPE_MGMT - MGMT
  * @QDF_PROTO_TYPE_ICMP - ICMP
- * @QDF_PROTO_TYPE_ICMPV6 - ICMPV6
+ * @QDF_PROTO_TYPE_ICMPv6 - ICMPv6
  * QDF_PROTO_TYPE_EVENT - EVENT
  */
 enum qdf_proto_type {
@@ -240,7 +240,7 @@ enum qdf_proto_type {
 	QDF_PROTO_TYPE_ARP,
 	QDF_PROTO_TYPE_MGMT,
 	QDF_PROTO_TYPE_ICMP,
-	QDF_PROTO_TYPE_ICMPV6,
+	QDF_PROTO_TYPE_ICMPv6,
 	QDF_PROTO_TYPE_EVENT,
 	QDF_PROTO_TYPE_MAX
 };
@@ -679,6 +679,8 @@ void qdf_net_buf_debug_delete_node(qdf_nbuf_t net_buf);
 void qdf_net_buf_debug_acquire_skb(qdf_nbuf_t net_buf,
 			uint8_t *file_name, uint32_t line_num);
 void qdf_net_buf_debug_release_skb(qdf_nbuf_t net_buf);
+void qdf_netbuf_free_debug_add(qdf_nbuf_t net_buf, uint8_t *file_name,
+			       uint32_t line_num);
 
 /* nbuf allocation rouines */
 
@@ -700,15 +702,20 @@ qdf_nbuf_alloc_debug(qdf_device_t osdev, qdf_size_t size, int reserve,
 	return net_buf;
 }
 
-static inline void qdf_nbuf_free(qdf_nbuf_t net_buf)
+#define qdf_nbuf_free(d)			\
+	qdf_nbuf_free_debug(d, __FILE__, __LINE__)
+static inline void qdf_nbuf_free_debug(qdf_nbuf_t net_buf,
+				       uint8_t *file_name, uint32_t line_num)
 {
 	if (qdf_nbuf_is_tso(net_buf) &&
 			qdf_nbuf_get_users(net_buf) > 1)
 		goto free_buf;
 
 	/* Remove SKB from internal QDF tracking table */
-	if (qdf_likely(net_buf))
+	if (qdf_likely(net_buf)) {
+		qdf_netbuf_free_debug_add(net_buf, file_name, line_num);
 		qdf_net_buf_debug_delete_node(net_buf);
+	}
 
 free_buf:
 	__qdf_nbuf_free(net_buf);
@@ -836,10 +843,9 @@ static inline qdf_nbuf_t qdf_nbuf_copy(qdf_nbuf_t buf)
  * Return: data pointer of this buf where new data has to be
  *         put, or NULL if there is not enough room in this buf.
  */
-
 static inline void qdf_nbuf_init_fast(qdf_nbuf_t nbuf)
 {
-	atomic_set(&nbuf->users, 1);
+	qdf_nbuf_users_set(&nbuf->users, 1);
 	nbuf->data = nbuf->head + NET_SKB_PAD;
 	skb_reset_tail_pointer(nbuf);
 }
@@ -2329,5 +2335,37 @@ qdf_nbuf_reg_free_cb(qdf_nbuf_free_t cb_func_ptr)
 {
 	 __qdf_nbuf_reg_free_cb(cb_func_ptr);
 }
+
+#ifdef CONFIG_MCL
+/**
+ * qdf_nbuf_init_replenish_timer - Initialize the alloc replenish timer
+ *
+ * This function initializes the nbuf alloc fail replenish timer.
+ *
+ * Return: void
+ */
+static inline void
+qdf_nbuf_init_replenish_timer(void)
+{
+	__qdf_nbuf_init_replenish_timer();
+}
+
+/**
+ * qdf_nbuf_deinit_replenish_timer - Deinitialize the alloc replenish timer
+ *
+ * This function deinitializes the nbuf alloc fail replenish timer.
+ *
+ * Return: void
+ */
+static inline void
+qdf_nbuf_deinit_replenish_timer(void)
+{
+	__qdf_nbuf_deinit_replenish_timer();
+}
+#else
+
+static inline void qdf_nbuf_init_replenish_timer(void) {}
+static inline void qdf_nbuf_deinit_replenish_timer(void) {}
+#endif /* CONFIG_MCL */
 
 #endif /* _QDF_NBUF_H */

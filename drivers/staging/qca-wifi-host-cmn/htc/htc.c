@@ -62,7 +62,7 @@ static void destroy_htc_tx_ctrl_packet(HTC_PACKET *pPacket)
 	qdf_nbuf_t netbuf;
 
 	netbuf = (qdf_nbuf_t) GET_HTC_PACKET_NET_BUF_CONTEXT(pPacket);
-	AR_DEBUG_PRINTF(ATH_DEBUG_TRC, ("free ctrl netbuf :0x%p\n", netbuf));
+	AR_DEBUG_PRINTF(ATH_DEBUG_TRC, ("free ctrl netbuf :0x%pK\n", netbuf));
 	if (netbuf != NULL)
 		qdf_nbuf_free(netbuf);
 	qdf_mem_free(pPacket);
@@ -86,7 +86,7 @@ static HTC_PACKET *build_htc_tx_ctrl_packet(qdf_device_t osdev)
 			break;
 		}
 		AR_DEBUG_PRINTF(ATH_DEBUG_TRC,
-				("alloc ctrl netbuf :0x%p\n", netbuf));
+				("alloc ctrl netbuf :0x%pK\n", netbuf));
 		SET_HTC_PACKET_NET_BUF_CONTEXT(pPacket, netbuf);
 	} while (false);
 
@@ -144,6 +144,8 @@ static void htc_cleanup(HTC_TARGET *target)
 	HTC_PACKET *pPacket;
 	int i;
 	HTC_ENDPOINT *endpoint;
+	HTC_PACKET_QUEUE *pkt_queue;
+	qdf_nbuf_t netbuf;
 
 	if (target->hif_dev != NULL) {
 		hif_detach_htc(target->hif_dev);
@@ -158,13 +160,22 @@ static void htc_cleanup(HTC_TARGET *target)
 		qdf_mem_free(pPacket);
 	}
 
+	LOCK_HTC_TX(target);
 	pPacket = target->pBundleFreeList;
+	target->pBundleFreeList = NULL;
+	UNLOCK_HTC_TX(target);
 	while (pPacket) {
 		HTC_PACKET *pPacketTmp = (HTC_PACKET *) pPacket->ListLink.pNext;
-
+		netbuf = GET_HTC_PACKET_NET_BUF_CONTEXT(pPacket);
+		if (netbuf)
+			qdf_nbuf_free(netbuf);
+		pkt_queue = pPacket->pContext;
+		if (pkt_queue)
+			qdf_mem_free(pkt_queue);
 		qdf_mem_free(pPacket);
 		pPacket = pPacketTmp;
 	}
+
 #ifdef TODO_FIXME
 	while (true) {
 		pPacket = htc_alloc_control_tx_packet(target);
@@ -252,7 +263,7 @@ HTC_HANDLE htc_create(void *ol_sc, struct htc_init_info *pInfo,
 		HTC_ERROR("%s: ol_sc = NULL", __func__);
 		return NULL;
 	}
-	HTC_TRACE("+htc_create ..  HIF :%p", ol_sc);
+	HTC_TRACE("+htc_create ..  HIF :%pK", ol_sc);
 
 	A_REGISTER_MODULE_DEBUG_INFO(htc);
 
@@ -321,7 +332,7 @@ HTC_HANDLE htc_create(void *ol_sc, struct htc_init_info *pInfo,
 
 	htc_recv_init(target);
 
-	HTC_TRACE("-htc_create: (0x%p)", target);
+	HTC_TRACE("-htc_create: (0x%pK)", target);
 
 	return (HTC_HANDLE) target;
 }
@@ -331,7 +342,7 @@ void htc_destroy(HTC_HANDLE HTCHandle)
 	HTC_TARGET *target = GET_HTC_TARGET_FROM_HANDLE(HTCHandle);
 
 	AR_DEBUG_PRINTF(ATH_DEBUG_TRC,
-			("+htc_destroy ..  Destroying :0x%p\n", target));
+			("+htc_destroy ..  Destroying :0x%pK\n", target));
 	hif_stop(htc_get_hif_device(HTCHandle));
 	if (target)
 		htc_cleanup(target);
@@ -353,7 +364,7 @@ static void htc_control_tx_complete(void *Context, HTC_PACKET *pPacket)
 	HTC_TARGET *target = (HTC_TARGET *) Context;
 
 	AR_DEBUG_PRINTF(ATH_DEBUG_TRC,
-			("+-htc_control_tx_complete 0x%p (l:%d)\n", pPacket,
+			("+-htc_control_tx_complete 0x%pK (l:%d)\n", pPacket,
 			 pPacket->ActualLength));
 	htc_free_control_tx_packet(target, pPacket);
 }
@@ -509,7 +520,7 @@ QDF_STATUS htc_wait_target(HTC_HANDLE HTCHandle)
 	HTC_PACKET *rx_bundle_packet, *temp_bundle_packet;
 
 	AR_DEBUG_PRINTF(ATH_DEBUG_TRC,
-			("htc_wait_target - Enter (target:0x%p)\n", HTCHandle));
+			("htc_wait_target - Enter (target:0x%pK)\n", HTCHandle));
 	AR_DEBUG_PRINTF(ATH_DEBUG_RSVD1, ("+HWT\n"));
 
 	do {
@@ -553,6 +564,7 @@ QDF_STATUS htc_wait_target(HTC_HANDLE HTCHandle)
 			(int)HTC_GET_FIELD(rdy_msg, HTC_READY_MSG, CREDITSIZE);
 		target->MaxMsgsPerHTCBundle =
 			(uint8_t) pReadyMsg->MaxMsgsPerHTCBundle;
+		UPDATE_ALT_CREDIT(target, pReadyMsg->AltDataCreditSize);
 		/* for old fw this value is set to 0. But the minimum value
 		 * should be 1, i.e., no bundling
 		 */
@@ -585,7 +597,9 @@ QDF_STATUS htc_wait_target(HTC_HANDLE HTCHandle)
 
 				temp_bundle_packet = rx_bundle_packet;
 			}
+			LOCK_HTC_TX(target);
 			target->pBundleFreeList = temp_bundle_packet;
+			UNLOCK_HTC_TX(target);
 		}
 
 		/* done processing */
@@ -902,17 +916,15 @@ void *htc_get_targetdef(HTC_HANDLE htc_handle)
  * Return: None
  */
 void htc_ipa_get_ce_resource(HTC_HANDLE htc_handle,
-			     qdf_dma_addr_t *ce_sr_base_paddr,
+			     qdf_shared_mem_t **ce_sr,
 			     uint32_t *ce_sr_ring_size,
 			     qdf_dma_addr_t *ce_reg_paddr)
 {
 	HTC_TARGET *target = GET_HTC_TARGET_FROM_HANDLE(htc_handle);
 
-	if (target->hif_dev != NULL) {
+	if (target->hif_dev)
 		hif_ipa_get_ce_resource(target->hif_dev,
-					ce_sr_base_paddr,
-					ce_sr_ring_size, ce_reg_paddr);
-	}
+					ce_sr, ce_sr_ring_size, ce_reg_paddr);
 }
 #endif /* IPA_OFFLOAD */
 

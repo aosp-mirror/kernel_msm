@@ -194,7 +194,7 @@ void ol_rx_trigger_restore(htt_pdev_handle htt_pdev, qdf_nbuf_t head_msdu,
 	while (head_msdu) {
 		next = qdf_nbuf_next(head_msdu);
 		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_INFO,
-			  "freeing %p\n", head_msdu);
+			  "freeing %pK\n", head_msdu);
 		qdf_nbuf_free(head_msdu);
 		head_msdu = next;
 	}
@@ -381,7 +381,7 @@ static void process_reorder(ol_txrx_pdev_handle pdev,
 			    qdf_nbuf_t head_msdu,
 			    qdf_nbuf_t tail_msdu,
 			    int num_mpdu_ranges,
-			    int num_pdus,
+			    int num_mpdus,
 			    bool rx_ind_release)
 {
 	htt_pdev_handle htt_pdev = pdev->htt_pdev;
@@ -756,7 +756,7 @@ ol_rx_sec_ind_handler(ol_txrx_pdev_handle pdev,
 		return;
 	}
 	ol_txrx_dbg(
-		"sec spec for peer %p (%02x:%02x:%02x:%02x:%02x:%02x): %s key of type %d\n",
+		"sec spec for peer %pK (%02x:%02x:%02x:%02x:%02x:%02x): %s key of type %d\n",
 		peer,
 		peer->mac_addr.raw[0], peer->mac_addr.raw[1],
 		peer->mac_addr.raw[2], peer->mac_addr.raw[3],
@@ -792,6 +792,8 @@ ol_rx_sec_ind_handler(ol_txrx_pdev_handle pdev,
 			peer->tids_last_pn[i].pn128[0] =
 				qdf_cpu_to_le64(
 					peer->tids_last_pn[i].pn128[0]);
+			if (sec_index == txrx_sec_ucast)
+				peer->tids_rekey_flag[i] = 1;
 		}
 	}
 }
@@ -1136,6 +1138,30 @@ ol_rx_filter(struct ol_txrx_vdev_t *vdev,
 	return FILTER_STATUS_REJECT;
 }
 
+#ifdef WLAN_FEATURE_TSF_PLUS
+static inline void ol_rx_timestamp(ol_pdev_handle pdev,
+				   void *rx_desc, qdf_nbuf_t msdu)
+{
+	struct htt_rx_ppdu_desc_t *rx_ppdu_desc;
+
+	if (!ol_cfg_is_ptp_rx_opt_enabled(pdev))
+		return;
+
+	if (!rx_desc || !msdu)
+		return;
+
+	rx_ppdu_desc = (struct htt_rx_ppdu_desc_t *)((uint8_t *)(rx_desc) -
+			HTT_RX_IND_HL_BYTES + HTT_RX_IND_HDR_PREFIX_BYTES);
+	msdu->tstamp = ns_to_ktime((u_int64_t)rx_ppdu_desc->tsf32 *
+				   NSEC_PER_USEC);
+}
+#else
+static inline void ol_rx_timestamp(ol_pdev_handle pdev,
+				   void *rx_desc, qdf_nbuf_t msdu)
+{
+}
+#endif
+
 void
 ol_rx_deliver(struct ol_txrx_vdev_t *vdev,
 	      struct ol_txrx_peer_t *peer, unsigned int tid,
@@ -1177,7 +1203,7 @@ ol_rx_deliver(struct ol_txrx_vdev_t *vdev,
 		if (OL_RX_DECAP(vdev, peer, msdu, &info) != A_OK) {
 			discard = 1;
 			ol_txrx_dbg(
-				"decap error %p from peer %p (%02x:%02x:%02x:%02x:%02x:%02x) len %d\n",
+				"decap error %pK from peer %pK (%02x:%02x:%02x:%02x:%02x:%02x) len %d\n",
 				msdu, peer,
 				peer->mac_addr.raw[0], peer->mac_addr.raw[1],
 				peer->mac_addr.raw[2], peer->mac_addr.raw[3],
@@ -1316,6 +1342,8 @@ DONE:
 			OL_RX_ERR_STATISTICS_1(pdev, vdev, peer, rx_desc,
 					       OL_RX_ERR_NONE);
 			TXRX_STATS_MSDU_INCR(vdev->pdev, rx.delivered, msdu);
+
+			ol_rx_timestamp(pdev->ctrl_pdev, rx_desc, msdu);
 			OL_TXRX_LIST_APPEND(deliver_list_head,
 					    deliver_list_tail, msdu);
 		}
@@ -1352,7 +1380,7 @@ ol_rx_discard(struct ol_txrx_vdev_t *vdev,
 
 		msdu_list = qdf_nbuf_next(msdu_list);
 		ol_txrx_dbg(
-			"discard rx %p from partly-deleted peer %p (%02x:%02x:%02x:%02x:%02x:%02x)\n",
+			"discard rx %pK from partly-deleted peer %pK (%02x:%02x:%02x:%02x:%02x:%02x)\n",
 			msdu, peer,
 			peer->mac_addr.raw[0], peer->mac_addr.raw[1],
 			peer->mac_addr.raw[2], peer->mac_addr.raw[3],
@@ -1447,7 +1475,7 @@ ol_rx_in_order_indication_handler(ol_txrx_pdev_handle pdev,
 	}
 
 #if defined(HELIUMPLUS_DEBUG)
-	qdf_print("%s %d: rx_ind_msg 0x%p peer_id %d tid %d is_offload %d\n",
+	qdf_print("%s %d: rx_ind_msg 0x%pK peer_id %d tid %d is_offload %d\n",
 		  __func__, __LINE__, rx_ind_msg, peer_id, tid, is_offload);
 #endif
 
@@ -1485,8 +1513,7 @@ ol_rx_in_order_indication_handler(ol_txrx_pdev_handle pdev,
 	ol_rx_ind_record_event(filled, OL_RX_INDICATION_BUF_REPLENISH);
 
 	if (!head_msdu) {
-		ol_txrx_warn("%s: No packet to send to HDD",
-			     __func__);
+		ol_txrx_dbg("No packet to send to HDD");
 		return;
 	}
 
@@ -1622,10 +1649,18 @@ ol_rx_offload_paddr_deliver_ind_handler(htt_pdev_handle htt_pdev,
 	int msdu_iter = 0;
 
 	while (msdu_count) {
-		htt_rx_offload_paddr_msdu_pop_ll(htt_pdev, msg_word, msdu_iter,
+		if (htt_rx_offload_paddr_msdu_pop_ll(
+						htt_pdev, msg_word, msdu_iter,
 						 &vdev_id, &peer_id, &tid,
 						 &fw_desc, &head_buf,
-						 &tail_buf);
+						 &tail_buf)) {
+			msdu_iter++;
+			msdu_count--;
+			QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_INFO,
+				  "skip msg_word %pK, msdu #%d, continue next",
+				  msg_word, msdu_iter);
+			continue;
+		}
 
 		peer = ol_txrx_peer_find_by_id(htt_pdev->txrx_pdev, peer_id);
 		if (peer) {

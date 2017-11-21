@@ -149,6 +149,9 @@ ol_pdev_handle ol_pdev_cfg_attach(qdf_device_t osdev,
 	cfg_ctx->rx_fwd_disabled = 0;
 	cfg_ctx->is_packet_log_enabled = 0;
 	cfg_ctx->is_full_reorder_offload = cfg_param.is_full_reorder_offload;
+#ifdef WLAN_FEATURE_TSF_PLUS
+	cfg_ctx->is_ptp_rx_opt_enabled = 0;
+#endif
 	cfg_ctx->ipa_uc_rsc.uc_offload_enabled =
 		cfg_param.is_uc_offload_enabled;
 	cfg_ctx->ipa_uc_rsc.tx_max_buf_cnt = cfg_param.uc_tx_buffer_count;
@@ -182,6 +185,7 @@ ol_pdev_handle ol_pdev_cfg_attach(qdf_device_t osdev,
 int ol_cfg_is_high_latency(ol_pdev_handle pdev)
 {
 	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)pdev;
+
 	return cfg->is_high_latency;
 }
 
@@ -198,18 +202,21 @@ int ol_cfg_max_peer_id(ol_pdev_handle pdev)
 int ol_cfg_max_vdevs(ol_pdev_handle pdev)
 {
 	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)pdev;
+
 	return cfg->max_vdev;
 }
 
 int ol_cfg_rx_pn_check(ol_pdev_handle pdev)
 {
 	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)pdev;
+
 	return cfg->rx_pn_check;
 }
 
 int ol_cfg_rx_fwd_check(ol_pdev_handle pdev)
 {
 	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)pdev;
+
 	return cfg->pn_rx_fwd_check;
 }
 
@@ -227,6 +234,7 @@ int ol_cfg_rx_fwd_check(ol_pdev_handle pdev)
 void ol_set_cfg_rx_fwd_disabled(ol_pdev_handle pdev, uint8_t disable_rx_fwd)
 {
 	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)pdev;
+
 	cfg->rx_fwd_disabled = disable_rx_fwd;
 }
 
@@ -240,12 +248,14 @@ void ol_set_cfg_rx_fwd_disabled(ol_pdev_handle pdev, uint8_t disable_rx_fwd)
 void ol_set_cfg_packet_log_enabled(ol_pdev_handle pdev, uint8_t val)
 {
 	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)pdev;
+
 	cfg->is_packet_log_enabled = val;
 }
 
 uint8_t ol_cfg_is_packet_log_enabled(ol_pdev_handle pdev)
 {
 	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)pdev;
+
 	return cfg->is_packet_log_enabled;
 }
 
@@ -256,6 +266,7 @@ int ol_cfg_rx_fwd_disabled(ol_pdev_handle pdev)
 	return 1;
 #else
 	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)pdev;
+
 	return cfg->rx_fwd_disabled;
 #endif
 }
@@ -263,36 +274,42 @@ int ol_cfg_rx_fwd_disabled(ol_pdev_handle pdev)
 int ol_cfg_rx_fwd_inter_bss(ol_pdev_handle pdev)
 {
 	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)pdev;
+
 	return cfg->rx_fwd_inter_bss;
 }
 
 enum wlan_frm_fmt ol_cfg_frame_type(ol_pdev_handle pdev)
 {
 	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)pdev;
+
 	return cfg->frame_type;
 }
 
 int ol_cfg_max_thruput_mbps(ol_pdev_handle pdev)
 {
 	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)pdev;
+
 	return cfg->max_thruput_mbps;
 }
 
 int ol_cfg_netbuf_frags_max(ol_pdev_handle pdev)
 {
 	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)pdev;
+
 	return cfg->max_nbuf_frags;
 }
 
 int ol_cfg_tx_free_at_download(ol_pdev_handle pdev)
 {
 	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)pdev;
+
 	return cfg->tx_free_at_download;
 }
 
 void ol_cfg_set_tx_free_at_download(ol_pdev_handle pdev)
 {
 	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)pdev;
+
 	cfg->tx_free_at_download = 1;
 }
 
@@ -301,6 +318,7 @@ void ol_cfg_set_tx_free_at_download(ol_pdev_handle pdev)
 uint16_t ol_cfg_target_tx_credit(ol_pdev_handle pdev)
 {
 	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)pdev;
+
 	return cfg->target_tx_credit;
 }
 #else
@@ -321,32 +339,53 @@ uint16_t ol_cfg_target_tx_credit(ol_pdev_handle pdev)
 int ol_cfg_tx_download_size(ol_pdev_handle pdev)
 {
 	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)pdev;
+
 	return cfg->tx_download_size;
 }
 
 int ol_cfg_rx_host_defrag_timeout_duplicate_check(ol_pdev_handle pdev)
 {
 	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)pdev;
+
 	return cfg->defrag_timeout_check;
 }
 
 int ol_cfg_throttle_period_ms(ol_pdev_handle pdev)
 {
 	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)pdev;
+
 	return cfg->throttle_period_ms;
 }
 
 int ol_cfg_throttle_duty_cycle_level(ol_pdev_handle pdev, int level)
 {
 	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)pdev;
+
 	return cfg->dutycycle_level[level];
 }
 
 int ol_cfg_is_full_reorder_offload(ol_pdev_handle pdev)
 {
 	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)pdev;
+
 	return cfg->is_full_reorder_offload;
 }
+
+#ifdef WLAN_FEATURE_TSF_PLUS
+void ol_set_cfg_ptp_rx_opt_enabled(ol_pdev_handle pdev, u_int8_t val)
+{
+	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)pdev;
+
+	cfg->is_ptp_rx_opt_enabled = val;
+}
+
+u_int8_t ol_cfg_is_ptp_rx_opt_enabled(ol_pdev_handle pdev)
+{
+	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)pdev;
+
+	return cfg->is_ptp_rx_opt_enabled;
+}
+#endif
 
 /**
  * ol_cfg_is_rx_thread_enabled() - return rx_thread is enable/disable
@@ -357,6 +396,7 @@ int ol_cfg_is_full_reorder_offload(ol_pdev_handle pdev)
 int ol_cfg_is_rx_thread_enabled(ol_pdev_handle pdev)
 {
 	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)pdev;
+
 	return cfg->enable_rxthread;
 }
 
@@ -370,6 +410,7 @@ int ol_cfg_is_rx_thread_enabled(ol_pdev_handle pdev)
 int ol_cfg_get_tx_flow_stop_queue_th(ol_pdev_handle pdev)
 {
 	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)pdev;
+
 	return cfg->tx_flow_stop_queue_th;
 }
 
@@ -382,6 +423,7 @@ int ol_cfg_get_tx_flow_stop_queue_th(ol_pdev_handle pdev)
 int ol_cfg_get_tx_flow_start_queue_offset(ol_pdev_handle pdev)
 {
 	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)pdev;
+
 	return cfg->tx_flow_start_queue_offset;
 }
 
@@ -391,36 +433,42 @@ int ol_cfg_get_tx_flow_start_queue_offset(ol_pdev_handle pdev)
 unsigned int ol_cfg_ipa_uc_offload_enabled(ol_pdev_handle pdev)
 {
 	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)pdev;
+
 	return (unsigned int)cfg->ipa_uc_rsc.uc_offload_enabled;
 }
 
 unsigned int ol_cfg_ipa_uc_tx_buf_size(ol_pdev_handle pdev)
 {
 	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)pdev;
+
 	return cfg->ipa_uc_rsc.tx_buf_size;
 }
 
 unsigned int ol_cfg_ipa_uc_tx_max_buf_cnt(ol_pdev_handle pdev)
 {
 	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)pdev;
+
 	return cfg->ipa_uc_rsc.tx_max_buf_cnt;
 }
 
 unsigned int ol_cfg_ipa_uc_rx_ind_ring_size(ol_pdev_handle pdev)
 {
 	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)pdev;
+
 	return cfg->ipa_uc_rsc.rx_ind_ring_size;
 }
 
 unsigned int ol_cfg_ipa_uc_tx_partition_base(ol_pdev_handle pdev)
 {
 	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)pdev;
+
 	return cfg->ipa_uc_rsc.tx_partition_base;
 }
 
 void ol_cfg_set_ipa_uc_tx_partition_base(ol_pdev_handle pdev, uint32_t val)
 {
 	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)pdev;
+
 	cfg->ipa_uc_rsc.tx_partition_base = val;
 }
 #endif /* IPA_OFFLOAD */
@@ -435,6 +483,7 @@ void ol_cfg_set_ipa_uc_tx_partition_base(ol_pdev_handle pdev, uint32_t val)
 bool ol_cfg_is_ce_classify_enabled(ol_pdev_handle pdev)
 {
 	struct txrx_pdev_cfg_t *cfg = (struct txrx_pdev_cfg_t *)pdev;
+
 	return cfg->ce_classify_enabled;
 }
 

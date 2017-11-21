@@ -172,7 +172,8 @@ sme_rrm_send_beacon_report_xmit_ind(tpAniSirGlobal mac_ctx,
 {
 	tpSirBssDescription bss_desc = NULL;
 	tpSirBeaconReportXmitInd beacon_rep;
-	uint16_t length, ie_len, tot_len;
+	uint16_t length;
+	uint32_t size;
 	uint8_t  i = 0, j = 0, counter = 0;
 	tCsrScanResultInfo *cur_result = NULL;
 	QDF_STATUS status = QDF_STATUS_E_FAILURE;
@@ -207,18 +208,13 @@ sme_rrm_send_beacon_report_xmit_ind(tpAniSirGlobal mac_ctx,
 			bss_desc = &cur_result->BssDescriptor;
 			if (bss_desc == NULL)
 				break;
-			ie_len = GET_IE_LEN_IN_BSS(bss_desc->length);
-			tot_len = ie_len + sizeof(*bss_desc);
-			beacon_rep->pBssDescription[i] =
-				qdf_mem_malloc(tot_len);
+			size =  bss_desc->length + sizeof(bss_desc->length);
+			beacon_rep->pBssDescription[i] = qdf_mem_malloc(size);
 			if (NULL ==
 				beacon_rep->pBssDescription[i])
 				break;
 			qdf_mem_copy(beacon_rep->pBssDescription[i],
-				bss_desc, sizeof(tSirBssDescription));
-			qdf_mem_copy(
-				&beacon_rep->pBssDescription[i]->ieFields[0],
-				bss_desc->ieFields, ie_len);
+				bss_desc, size);
 			bss_desc_to_free[i] =
 				beacon_rep->pBssDescription[i];
 			sme_debug("RRM Result Bssid = " MAC_ADDRESS_STR
@@ -728,6 +724,7 @@ static QDF_STATUS sme_rrm_issue_scan_req(tpAniSirGlobal mac_ctx)
 				max_chan_time);
 		}
 
+		scan_req.scan_adaptive_dwell_mode = WMI_DWELL_MODE_STATIC;
 		/*
 		 * For RRM scans timing is very important especially when the
 		 * request is for limited channels. There is no need for
@@ -758,12 +755,12 @@ static QDF_STATUS sme_rrm_issue_scan_req(tpAniSirGlobal mac_ctx)
 		scan_req.ChannelInfo.ChannelList =
 			&sme_rrm_ctx->channelList.ChannelList[
 				sme_rrm_ctx->currentIndex];
-		sme_debug(FL("Duration %d On channel %d "),
+		sme_debug(FL("Duration %d On channel %d dwellmode %d"),
 			scan_req.maxChnTime,
 			sme_rrm_ctx->channelList.ChannelList[
-				sme_rrm_ctx->currentIndex]);
-		/* set requestType to full scan */
-		scan_req.requestType = eCSR_SCAN_REQUEST_FULL_SCAN;
+			sme_rrm_ctx->currentIndex],
+			scan_req.scan_adaptive_dwell_mode);
+		scan_req.requestType = eCSR_SCAN_RRM;
 		wma_get_scan_id(&scan_req_id);
 		scan_req.scan_id = scan_req_id;
 		status = sme_scan_request(mac_ctx, (uint8_t) session_id,

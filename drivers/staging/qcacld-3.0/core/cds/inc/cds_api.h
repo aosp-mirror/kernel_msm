@@ -48,7 +48,6 @@
 #include <cds_sched.h>
 #include <qdf_threads.h>
 #include <qdf_mc_timer.h>
-#include <cds_pack_align.h>
 
 /* Amount of time to wait for WMA to perform an asynchronous activity.
  * This value should be larger than the timeout used by WMI to wait for
@@ -64,15 +63,18 @@
  * CDS_DRIVER_STATE_UNLOADING: Driver remove is in progress.
  * CDS_DRIVER_STATE_RECOVERING: Recovery in progress.
  * CDS_DRIVER_STATE_BAD: Driver in bad state.
+ * CDS_DRIVER_STATE_FW_READY:
+ * CDS_DRIVER_STATE_MODULE_STOPPING: Module stop in progress.
  */
 enum cds_driver_state {
-	CDS_DRIVER_STATE_UNINITIALIZED	= 0,
-	CDS_DRIVER_STATE_LOADED		= BIT(0),
-	CDS_DRIVER_STATE_LOADING	= BIT(1),
-	CDS_DRIVER_STATE_UNLOADING	= BIT(2),
-	CDS_DRIVER_STATE_RECOVERING	= BIT(3),
-	CDS_DRIVER_STATE_BAD		= BIT(4),
-	CDS_DRIVER_STATE_FW_READY	= BIT(5),
+	CDS_DRIVER_STATE_UNINITIALIZED	 = 0,
+	CDS_DRIVER_STATE_LOADED		 = BIT(0),
+	CDS_DRIVER_STATE_LOADING	 = BIT(1),
+	CDS_DRIVER_STATE_UNLOADING	 = BIT(2),
+	CDS_DRIVER_STATE_RECOVERING	 = BIT(3),
+	CDS_DRIVER_STATE_BAD		 = BIT(4),
+	CDS_DRIVER_STATE_FW_READY	 = BIT(5),
+	CDS_DRIVER_STATE_MODULE_STOPPING = BIT(6),
 };
 
 #define __CDS_IS_DRIVER_STATE(_state, _mask) (((_state) & (_mask)) == (_mask))
@@ -96,7 +98,8 @@ enum cds_fw_state {
  * @sme_get_nss_for_vdev: gets the nss allowed for the vdev type
  */
 struct cds_sme_cbacks {
-	QDF_STATUS (*sme_get_valid_channels)(void*, uint8_t *, uint32_t *);
+	QDF_STATUS (*sme_get_valid_channels)(void*, uint16_t,
+		uint8_t *, uint32_t *);
 	void (*sme_get_nss_for_vdev)(void*, enum tQDF_ADAPTER_MODE,
 		uint8_t *, uint8_t *);
 };
@@ -109,10 +112,11 @@ struct cds_sme_cbacks {
  * @hdd_set_rx_mode_rps_cb: enable/disable RPS in SAP mode
  */
 struct cds_dp_cbacks {
-	void (*ol_txrx_update_mac_id_cb)(uint8_t , uint8_t);
+	void (*ol_txrx_update_mac_id_cb)(uint8_t, uint8_t);
 	void (*hdd_en_lro_in_cc_cb)(struct hdd_context_s *);
 	void (*hdd_disble_lro_in_cc_cb)(struct hdd_context_s *);
 	void (*hdd_set_rx_mode_rps_cb)(struct hdd_context_s *, void *, bool);
+	void (*hdd_ipa_set_mcc_mode_cb)(bool);
 };
 
 void cds_set_driver_state(enum cds_driver_state);
@@ -211,6 +215,38 @@ static inline bool cds_is_load_or_unload_in_progress(void)
 	return __CDS_IS_DRIVER_STATE(state, CDS_DRIVER_STATE_LOADING) ||
 		__CDS_IS_DRIVER_STATE(state, CDS_DRIVER_STATE_UNLOADING);
 }
+
+/**
+ * cds_is_module_stop_in_progress() - Is module stopping
+ *
+ * Return: true if module stop is in progress.
+ */
+static inline bool cds_is_module_stop_in_progress(void)
+{
+	enum cds_driver_state state = cds_get_driver_state();
+
+	return __CDS_IS_DRIVER_STATE(state, CDS_DRIVER_STATE_MODULE_STOPPING);
+}
+
+/**
+ * cds_is_module_state_transitioning() - Is module state transitioning
+ *
+ * Return: true if module stop is in progress.
+ */
+static inline int cds_is_module_state_transitioning(void)
+{
+	if (cds_is_load_or_unload_in_progress() || cds_is_driver_recovering() ||
+		cds_is_module_stop_in_progress()) {
+		pr_info("%s: Load/Unload %d or recovery %d or module_stop %d is in progress",
+			__func__, cds_is_load_or_unload_in_progress(),
+				cds_is_driver_recovering(),
+				cds_is_module_stop_in_progress());
+		return true;
+	} else {
+		return false;
+	}
+}
+
 
 /**
  * cds_is_fw_down() - Is FW down or not
@@ -321,6 +357,21 @@ static inline void cds_set_unload_in_progress(uint8_t value)
 }
 
 /**
+ * cds_set_module_stop_in_progress() - Setting module stop in progress
+ *
+ * @value: value to set
+ *
+ * Return: none
+ */
+static inline void cds_set_module_stop_in_progress(bool value)
+{
+	if (value)
+		cds_set_driver_state(CDS_DRIVER_STATE_MODULE_STOPPING);
+	else
+		cds_clear_driver_state(CDS_DRIVER_STATE_MODULE_STOPPING);
+}
+
+/**
  * cds_is_driver_loaded() - Is driver loaded
  *
  * Return: true if driver is loaded or false otherwise.
@@ -371,7 +422,28 @@ bool cds_is_packet_log_enabled(void);
 
 uint64_t cds_get_monotonic_boottime(void);
 
-void cds_trigger_recovery(void);
+/**
+ * cds_get_recovery_reason() - get self recovery reason
+ * @reason: cds hang reason
+ *
+ * Return: None
+ */
+void cds_get_recovery_reason(enum cds_hang_reason *reason);
+
+/**
+ * cds_reset_recovery_reason() - reset the reason to unspecified
+ *
+ * Return: None
+ */
+void cds_reset_recovery_reason(void);
+
+/**
+ * cds_trigger_recovery() - trigger self recovery
+ * @reason: recovery reason
+ *
+ * Return: none
+ */
+void cds_trigger_recovery(enum cds_hang_reason reason);
 
 void cds_set_wakelock_logging(bool value);
 bool cds_is_wakelock_enabled(void);
@@ -389,6 +461,22 @@ void cds_get_and_reset_log_completion(uint32_t *is_fatal,
 		bool *recovery_needed);
 bool cds_is_log_report_in_progress(void);
 bool cds_is_fatal_event_enabled(void);
+
+#ifdef WLAN_FEATURE_TSF_PLUS
+bool cds_is_ptp_rx_opt_enabled(void);
+bool cds_is_ptp_tx_opt_enabled(void);
+#else
+static inline bool cds_is_ptp_rx_opt_enabled(void)
+{
+	return false;
+}
+
+static inline bool cds_is_ptp_tx_opt_enabled(void)
+{
+	return false;
+}
+#endif
+
 uint32_t cds_get_log_indicator(void);
 void cds_set_fatal_event(bool value);
 void cds_wlan_flush_host_logs_for_fatal(void);
@@ -436,4 +524,47 @@ void cds_print_htc_credit_history(uint32_t count, qdf_abstract_print * print,
 				  void *print_priv);
 #endif
 
+/**
+ * cds_smmu_mem_map_setup() - Check SMMU S1 stage enable
+ *                            status and setup wlan driver
+ * @osdev: Parent device instance
+ *
+ * This API checks if SMMU S1 translation is enabled in
+ * platform driver or not and sets it accordingly in driver.
+ *
+ * Return: none
+ */
+void cds_smmu_mem_map_setup(qdf_device_t osdev);
+
+/**
+ * cds_smmu_map_unmap() - Map / Unmap DMA buffer to IPA UC
+ * @map: Map / unmap operation
+ * @num_buf: Number of buffers in array
+ * @buf_arr: Buffer array of DMA mem mapping info
+ *
+ * This API maps/unmaps WLAN-IPA buffers if SMMU S1 translation
+ * is enabled.
+ *
+ * Return: Status of map operation
+ */
+int cds_smmu_map_unmap(bool map, uint32_t num_buf, qdf_mem_info_t *buf_arr);
+
+/**
+ * cds_get_mcc_to_scc_switch_mode() - get mcc to scc swith mode
+ *
+ * Get the mcc to scc swith mode from ini
+ *
+ * Return: current mcc to scc swith mode
+ */
+uint32_t cds_get_mcc_to_scc_switch_mode(void);
+
+/**
+ * cds_is_sta_sap_scc_allowed_on_dfs_channel() - get the status sta, sap scc on
+ * dfs channel
+ *
+ * Get the status of sta, sap scc on dfs channel
+ *
+ * Return: true if sta, sap scc is allowed on dfs channel otherwise false
+ */
+bool cds_is_sta_sap_scc_allowed_on_dfs_channel(void);
 #endif /* if !defined __CDS_API_H */

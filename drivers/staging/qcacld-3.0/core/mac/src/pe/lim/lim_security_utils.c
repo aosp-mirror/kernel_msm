@@ -375,7 +375,7 @@ void lim_delete_pre_auth_node(tpAniSirGlobal pMac, tSirMacAddr macAddr)
 
 		pMac->lim.pLimPreAuthList = pTempNode->next;
 
-		pe_debug("first node to delete, Release data entry: %p id %d peer",
+		pe_debug("first node to delete, Release data entry: %pK id %d peer",
 			       pTempNode, pTempNode->authNodeIdx);
 		lim_print_mac_addr(pMac, macAddr, LOGD);
 		lim_release_pre_auth_node(pMac, pTempNode);
@@ -393,7 +393,7 @@ void lim_delete_pre_auth_node(tpAniSirGlobal pMac, tSirMacAddr macAddr)
 
 			pPrevNode->next = pTempNode->next;
 
-			pe_debug("subsequent node to delete, Release data entry: %p id %d peer",
+			pe_debug("subsequent node to delete, Release data entry: %pK id %d peer",
 				       pTempNode, pTempNode->authNodeIdx);
 			lim_print_mac_addr(pMac, macAddr, LOGD);
 			lim_release_pre_auth_node(pMac, pTempNode);
@@ -634,6 +634,7 @@ lim_rc4(uint8_t *pDest, uint8_t *pSrc, uint8_t *seed, uint32_t keyLength,
 		k = 0;
 		for (i = 0; i < 256; i++) {
 			uint8_t temp;
+
 			if (k < LIM_SEED_LENGTH)
 				j = (uint8_t) (j + ctx.sbox[i] + seed[k]);
 			temp = ctx.sbox[i];
@@ -705,6 +706,7 @@ lim_decrypt_auth_frame(tpAniSirGlobal pMac, uint8_t *pKey, uint8_t *pEncrBody,
 {
 	uint8_t seed[LIM_SEED_LENGTH], icv[SIR_MAC_WEP_ICV_LENGTH];
 	int i;
+
 	keyLength += 3;
 
 	/* Bytes 0-2 of seed is received IV */

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -150,6 +150,7 @@ static const char *pcl_type_to_string(uint8_t idx)
 void clean_report(hdd_context_t *hdd_ctx)
 {
 	uint32_t idx = 0;
+
 	while (idx < NUMBER_OF_SCENARIO) {
 		qdf_mem_zero(&report[idx], sizeof(struct report_t));
 		idx++;
@@ -160,6 +161,7 @@ void clean_report(hdd_context_t *hdd_ctx)
 void print_report(hdd_context_t *hdd_ctx)
 {
 	uint32_t idx = 0;
+
 	pr_info("+----------Report start -----------+\n");
 	while (idx < report_idx) {
 		pr_info("Idx:[%d]\nTitle:%s\nResult:[%s]\n\t1st_person[%s]\n\t2nd_persona[%s]\n\t3rd_persona[%s]\n\tDBS[%s]\n\tsystem_config[%s]\n\treason[%s]\n\tpcl[%s]\n",
@@ -221,7 +223,7 @@ void fill_report(hdd_context_t *hdd_ctx, char *title,
 		wma_is_hw_dbs_capable() ? "enable" : "disable");
 	snprintf(report[report_idx].system_conf,
 		MAX_ALLOWED_CHAR_IN_REPORT, "%s",
-		system_config_to_string(hdd_ctx->config->conc_system_pref));
+		system_config_to_string(cds_get_cur_conc_system_pref()));
 	snprintf(report[report_idx].result_code,
 		MAX_ALLOWED_CHAR_IN_REPORT, "%s",
 		status ? "PASS" : "FAIL");
@@ -623,8 +625,7 @@ static void wlan_hdd_map_subtypes_hdd_wma(enum cds_con_mode *dst,
 void wlan_hdd_one_connection_scenario(hdd_context_t *hdd_ctx)
 {
 	enum cds_con_mode sub_type;
-	enum cds_conc_priority_mode system_pref =
-			hdd_ctx->config->conc_system_pref;
+	enum cds_conc_priority_mode system_pref;
 	uint8_t pcl[QDF_MAX_NUM_CHAN] = {0},
 		weight_list[QDF_MAX_NUM_CHAN] = {0};
 	uint32_t pcl_len = 0;
@@ -634,7 +635,8 @@ void wlan_hdd_one_connection_scenario(hdd_context_t *hdd_ctx)
 	QDF_STATUS ret;
 	struct cds_sme_cbacks sme_cbacks;
 
-	sme_cbacks.sme_get_valid_channels = sme_get_cfg_valid_channels;
+	system_pref = cds_get_cur_conc_system_pref();
+	sme_cbacks.sme_get_valid_channels = sme_cfg_get_str;
 	sme_cbacks.sme_get_nss_for_vdev = sme_get_vdev_type_nss;
 	/* flush the entire table first */
 	ret = cds_init_policy_mgr(&sme_cbacks);
@@ -680,8 +682,7 @@ void wlan_hdd_two_connections_scenario(hdd_context_t *hdd_ctx,
 	uint32_t pcl_len = 0;
 	enum cds_chain_mode chain_mask = first_chain_mask;
 	enum cds_con_mode sub_type, next_sub_type, dummy_type;
-	enum cds_conc_priority_mode system_pref =
-			hdd_ctx->config->conc_system_pref;
+	enum cds_conc_priority_mode system_pref;
 	enum cds_pcl_type pcl_type;
 	enum cds_one_connection_mode second_index;
 	char reason[20] = {0};
@@ -689,11 +690,13 @@ void wlan_hdd_two_connections_scenario(hdd_context_t *hdd_ctx,
 	QDF_STATUS ret;
 	struct cds_sme_cbacks sme_cbacks;
 
+	system_pref = cds_get_cur_conc_system_pref();
+
 	for (sub_type = CDS_STA_MODE;
 		sub_type < CDS_MAX_NUM_OF_MODE; sub_type++) {
 		type = wlan_hdd_valid_type_of_persona(sub_type);
 
-		sme_cbacks.sme_get_valid_channels = sme_get_cfg_valid_channels;
+		sme_cbacks.sme_get_valid_channels = sme_cfg_get_str;
 		sme_cbacks.sme_get_nss_for_vdev = sme_get_vdev_type_nss;
 		/* flush the entire table first */
 		ret = cds_init_policy_mgr(&sme_cbacks);
@@ -763,14 +766,15 @@ void wlan_hdd_three_connections_scenario(hdd_context_t *hdd_ctx,
 	enum cds_chain_mode chain_mask_2;
 	enum cds_con_mode sub_type_1, sub_type_2, next_sub_type;
 	enum cds_con_mode dummy_type_1, dummy_type_2;
-	enum cds_conc_priority_mode system_pref =
-			hdd_ctx->config->conc_system_pref;
+	enum cds_conc_priority_mode system_pref;
 	enum cds_pcl_type pcl_type;
 	enum cds_two_connection_mode third_index;
 	char reason[20] = {0};
 	bool status = false;
 	QDF_STATUS ret;
 	struct cds_sme_cbacks sme_cbacks;
+
+	system_pref = cds_get_cur_conc_system_pref();
 
 	/* let's set the chain_mask, mac_ids*/
 	if (chain_mask == CDS_TWO_TWO) {
@@ -795,7 +799,7 @@ void wlan_hdd_three_connections_scenario(hdd_context_t *hdd_ctx,
 
 		type_1 = wlan_hdd_valid_type_of_persona(sub_type_1);
 
-		sme_cbacks.sme_get_valid_channels = sme_get_cfg_valid_channels;
+		sme_cbacks.sme_get_valid_channels = sme_cfg_get_str;
 		sme_cbacks.sme_get_nss_for_vdev = sme_get_vdev_type_nss;
 		/* flush the entire table first */
 		ret = cds_init_policy_mgr(&sme_cbacks);

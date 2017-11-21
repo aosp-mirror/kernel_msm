@@ -58,7 +58,7 @@ typedef enum {
 } eRfBandMode;
 
 extern cfgstatic_string cfg_static_string[CFG_MAX_STATIC_STRING];
-extern cgstatic cfg_static[CFG_PARAM_MAX_NUM] ;
+extern cgstatic cfg_static[CFG_PARAM_MAX_NUM];
 
 /* --------------------------------------------------------------------- */
 uint32_t cfg_need_restart(tpAniSirGlobal pMac, uint16_t cfgId)
@@ -892,7 +892,7 @@ static void notify(tpAniSirGlobal pMac, uint16_t cfgId, uint32_t ntfMask)
 	if ((ntfMask & CFG_CTL_NTF_LIM) != 0)
 		lim_post_msg_api(pMac, &mmhMsg);
 
-	if ((ntfMask & CFG_CTL_NTF_HAL) != 0)
+	if ((ntfMask & CFG_CTL_NTF_TARGET) != 0)
 		wma_post_ctrl_msg(pMac, &mmhMsg);
 
 	/* notify ARQ */

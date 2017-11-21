@@ -2134,6 +2134,7 @@ static int hif_enable_pci(struct hif_pci_softc *sc,
 		goto err_iomap;
 	}
 	sc->mem = mem;
+	sc->mem_len = pci_resource_len(pdev, BAR_NUM);
 	sc->pdev = pdev;
 	sc->dev = &pdev->dev;
 	sc->devid = id->device;
@@ -2568,10 +2569,15 @@ static void hif_runtime_prevent_linkdown(struct hif_softc *scn, bool flag)
  */
 void hif_pci_prevent_linkdown(struct hif_softc *scn, bool flag)
 {
-	HIF_DBG("wlan: %s pcie power collapse",
-			(flag ? "disable" : "enable"));
+	int errno;
+
+	HIF_DBG("wlan: %s pcie power collapse", flag ? "disable" : "enable");
 	hif_runtime_prevent_linkdown(scn, flag);
-	pld_wlan_pm_control(scn->qdf_dev->dev, flag);
+
+	errno = pld_wlan_pm_control(scn->qdf_dev->dev, flag);
+	if (errno)
+		HIF_ERROR("%s: Failed pld_wlan_pm_control; errno %d",
+			  __func__, errno);
 }
 #else
 void hif_pci_prevent_linkdown(struct hif_softc *scn, bool flag)
@@ -3368,7 +3374,7 @@ void hif_target_dump_access_log(void)
 
 	for (idx = 0; idx < len; idx++) {
 		cur_idx = (start_idx + idx) % PCIE_ACCESS_LOG_NUM;
-		HIF_ERROR("%s: idx:%d sn:%u wr:%d addr:%p val:%u.",
+		HIF_ERROR("%s: idx:%d sn:%u wr:%d addr:%pK val:%u.",
 		       __func__, idx,
 		       pcie_access_log[cur_idx].seqnum,
 		       pcie_access_log[cur_idx].is_write,
@@ -4120,3 +4126,16 @@ void hif_runtime_lock_deinit(struct hif_opaque_softc *hif_ctx,
 	qdf_mem_free(context);
 }
 #endif /* FEATURE_RUNTIME_PM */
+
+int hif_pci_addr_in_boundary(struct hif_softc *scn, uint32_t offset)
+{
+	struct hif_pci_softc *sc = HIF_GET_PCI_SOFTC(scn);
+
+	if (unlikely(offset + sizeof(unsigned int) > sc->mem_len)) {
+		HIF_TRACE("Refusing to read memory at 0x%x - 0x%x (max 0x%x)\n",
+			  offset, offset + sizeof(unsigned int), sc->mem_len);
+		return -EINVAL;
+	}
+
+	return 0;
+}

@@ -517,7 +517,7 @@ typedef struct {
 	uint8_t nss;
 	uint8_t nss_2g;
 	uint8_t nss_5g;
-	uint8_t beacon_tx_rate;
+	uint16_t beacon_tx_rate;
 	uint32_t tx_aggregation_size;
 	uint32_t rx_aggregation_size;
 } tAddBssParams, *tpAddBssParams;
@@ -1170,6 +1170,7 @@ struct add_sta_self_params {
 	bool enable_bcast_probe_rsp;
 	uint8_t fils_max_chan_guard_time;
 	uint16_t pkt_err_disconn_th;
+	uint8_t oce_feature_bitmap;
 };
 
 /**

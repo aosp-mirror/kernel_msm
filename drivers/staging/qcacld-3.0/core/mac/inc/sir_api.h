@@ -119,7 +119,17 @@ typedef uint8_t tSirVersionString[SIR_VERSION_STRING_LEN];
 	(QOS_MAP_LEN_MIN + 2 * QOS_MAP_MAX_EX)
 #define NUM_CHAINS_MAX  2
 
+#ifdef ACS_FW_REPORT_PARAM
+#define SIR_MAX_SUPPORTED_ACS_CHANNEL_LIST SIR_MAX_SUPPORTED_CHANNEL_LIST
+#define ACS_FW_REPORT_PARAM_CONFIGURED true
+#else
+#define SIR_MAX_SUPPORTED_ACS_CHANNEL_LIST 1
+#define ACS_FW_REPORT_PARAM_CONFIGURED false
+#endif
+
 #define MAX_LEN_UDP_RESP_OFFLOAD 128
+
+#define MAX_RSSI_AVOID_BSSID_LIST    10
 
 /* Maximum number of realms present in fils indication element */
 #define SIR_MAX_REALM_COUNT 7
@@ -127,6 +137,9 @@ typedef uint8_t tSirVersionString[SIR_VERSION_STRING_LEN];
 #define SIR_REALM_LEN 2
 /* Cache ID length */
 #define CACHE_ID_LEN 2
+
+/* Maximum peer station number query one time */
+#define MAX_PEER_STA 12
 
 /**
  * enum sir_conn_update_reason: Reason for conc connection update
@@ -187,7 +200,10 @@ typedef enum {
 #define SIR_BTK_KEY_LEN 32
 #define SIR_KCK_KEY_LEN 16
 #define SIR_KEK_KEY_LEN 16
+#define SIR_KEK_KEY_LEN_FILS 64
 #define SIR_REPLAY_CTR_LEN 8
+#define SIR_PMK_LEN  48
+#define SIR_PMKID_LEN 16
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD
 #define SIR_UAPSD_BITOFFSET_ACVO     0
 #define SIR_UAPSD_BITOFFSET_ACVI     1
@@ -327,7 +343,6 @@ typedef enum eSirResultCodes {
 	eSIR_SME_SEND_ACTION_FAIL,
 	eSIR_SME_DEAUTH_STATUS,
 	eSIR_PNO_SCAN_SUCCESS,
-	eSIR_SME_TDLS_FAILURE,
 	eSIR_DONOT_USE_RESULT_CODE = SIR_MAX_ENUM_SIZE
 } tSirResultCodes;
 
@@ -730,7 +745,7 @@ typedef struct sSirSmeStartBssReq {
 
 	bool obssEnabled;
 	uint8_t sap_dot11mc;
-	uint8_t beacon_tx_rate;
+	uint16_t beacon_tx_rate;
 	bool vendor_vht_sap;
 
 } tSirSmeStartBssReq, *tpSirSmeStartBssReq;
@@ -807,7 +822,8 @@ typedef struct sSirBssDescription {
 #endif
 	uint8_t air_time_fraction;
 	uint8_t nss;
-	uint16_t reservedPadding3;
+	uint8_t oce_wan_present;
+	uint8_t oce_wan_down_cap;
 	/* Please keep the structure 4 bytes aligned above the ieFields */
 	uint32_t ieFields[1];
 
@@ -899,6 +915,8 @@ typedef struct sSirSmeScanReq {
 	 * WNI_CFG_PASSIVE_MAXIMUM_CHANNEL_TIME) is used.
 	 */
 	uint32_t maxChannelTime;
+	uint32_t scan_probe_repeat_time;
+	uint32_t scan_num_probes;
 	enum wmi_dwelltime_adaptive_mode scan_adaptive_dwell_mode;
 	/**
 	 * returnAfterFirstMatch can take following values:
@@ -998,7 +1016,7 @@ typedef struct sSirSmeScanReq {
 	   up to uIEFieldLen (can be 0)
 	   -----------------------------
 	   ... variable size upto num_vendor_oui
-	   struct vendor_oui voui;
+	   of type uint32_t
 	   -----------------------------------*/
 } tSirSmeScanReq, *tpSirSmeScanReq;
 
@@ -1277,6 +1295,7 @@ typedef struct sSirSmeJoinReq {
 #endif
 	bool ignore_assoc_disallowed;
 	bool enable_bcast_probe_rsp;
+	bool force_24ghz_in_ht20;
 	tSirBssDescription bssDescription;
 	/*
 	 * WARNING: Pls make bssDescription as last variable in struct
@@ -1427,6 +1446,9 @@ typedef struct sSirSmeAssocInd {
 	uint8_t max_mcs_idx;
 	uint8_t rx_mcs_map;
 	uint8_t tx_mcs_map;
+
+	tDot11fIEHTCaps HTCaps;
+	tDot11fIEVHTCaps VHTCaps;
 } tSirSmeAssocInd, *tpSirSmeAssocInd;
 
 /* / Definition for Association confirm */
@@ -2320,6 +2342,49 @@ typedef struct sLimScanChn {
 	uint8_t channelId;
 } tLimScanChn;
 
+/**
+ * struct lim_channel_status
+ * @channelfreq: Channel freq
+ * @noise_floor: Noise Floor value
+ * @rx_clear_count: rx clear count
+ * @cycle_count: cycle count
+ * @chan_tx_pwr_range: channel tx power per range in 0.5dBm steps
+ * @chan_tx_pwr_throughput: channel tx power per throughput
+ * @rx_frame_count: rx frame count (cumulative)
+ * @bss_rx_cycle_count: BSS rx cycle count
+ * @rx_11b_mode_data_duration: b-mode data rx time (units are microseconds)
+ * @tx_frame_count: BSS tx cycle count	3045
+ * @mac_clk_mhz: sample frequency
+ * @channel_id: channel index
+ * @cmd_flags: indicate which stat event is this status coming from
+ */
+struct lim_channel_status {
+	uint32_t    channelfreq;
+	uint32_t    noise_floor;
+	uint32_t    rx_clear_count;
+	uint32_t    cycle_count;
+	uint32_t    chan_tx_pwr_range;
+	uint32_t    chan_tx_pwr_throughput;
+	uint32_t    rx_frame_count;
+	uint32_t    bss_rx_cycle_count;
+	uint32_t    rx_11b_mode_data_duration;
+	uint32_t    tx_frame_count;
+	uint32_t    mac_clk_mhz;
+	uint32_t    channel_id;
+	uint32_t    cmd_flags;
+};
+
+/**
+ * struct lim_scan_channel_status
+ * @total_channel: total number of be scanned channel
+ * @channel_status_list: channel status info store in this array
+ */
+struct lim_scan_channel_status {
+	uint8_t total_channel;
+	struct lim_channel_status
+	 channel_status_list[SIR_MAX_SUPPORTED_ACS_CHANNEL_LIST];
+};
+
 typedef struct sSmeGetScanChnRsp {
 	/* Message Type */
 	uint16_t mesgType;
@@ -3034,6 +3099,19 @@ struct connected_pno_band_rssi_pref {
 };
 
 /**
+ * struct sir_nlo_mawc_params - MAWC based NLO configuration
+ * @mawc_nlo_enabled: enable/disable MAWC based NLO
+ * @exp_backoff_ratio: MAWC based NLO exponential backoff ratio
+ * @init_scan_interval: MAWC based NLO initial scan interval
+ * @max_scan_interval: MAWC based NLO maximum scan interval
+ */
+struct sir_nlo_mawc_params {
+	bool mawc_nlo_enabled;
+	uint32_t exp_backoff_ratio;
+	uint32_t init_scan_interval;
+	uint32_t max_scan_interval;
+};
+/**
  * struct sSirPNOScanReq - PNO Scan request structure
  * @enable: flag to enable or disable
  * @modePNO: PNO Mode
@@ -3067,6 +3145,7 @@ typedef struct sSirPNOScanReq {
 	uint32_t delay_start_time;
 	uint8_t fast_scan_max_cycles;
 	uint32_t scan_backoff_multiplier;
+	struct sir_nlo_mawc_params mawc_params;
 	uint32_t        active_min_time;
 	uint32_t        active_max_time;
 	uint32_t        passive_min_time;
@@ -3092,7 +3171,7 @@ typedef struct sSirPNOScanReq {
 	bool ie_whitelist;
 	uint32_t probe_req_ie_bitmap[PROBE_REQ_BITMAP_LEN];
 	uint32_t num_vendor_oui;
-	/* followed by one or more struct vendor_oui */
+	/* followed by one or more vendor ouis of type uint32_t */
 } tSirPNOScanReq, *tpSirPNOScanReq;
 
 /* Preferred Network Found Indication */
@@ -3291,24 +3370,24 @@ struct roam_ext_params {
 	int dense_min_aps_cnt;
 	int initial_dense_status;
 	int traffic_threshold;
+	uint8_t num_rssi_rejection_ap;
+	struct rssi_disallow_bssid rssi_rejection_ap[MAX_RSSI_AVOID_BSSID_LIST];
 	int8_t bg_scan_bad_rssi_thresh;
 	uint8_t roam_bad_rssi_thresh_offset_2g;
 	uint32_t bg_scan_client_bitmap;
 };
 
-
-#define RSSI_WEIGHTAGE 30
-#define HT_CAPABILITY_WEIGHTAGE 7
-#define VHT_CAP_WEIGHTAGE 5
-#define HE_CAP_WEIGHTAGE 2
-#define CHAN_WIDTH_WEIGHTAGE 5
-#define CHAN_BAND_WEIGHTAGE 5
-#define NSS_WEIGHTAGE 5
+#define RSSI_WEIGHTAGE 20
+#define HT_CAPABILITY_WEIGHTAGE 2
+#define VHT_CAP_WEIGHTAGE 1
+#define CHAN_WIDTH_WEIGHTAGE 17
+#define CHAN_BAND_WEIGHTAGE 2
+#define NSS_WEIGHTAGE 16
 #define BEAMFORMING_CAP_WEIGHTAGE 2
 #define PCL_WEIGHT 10
 #define CHANNEL_CONGESTION_WEIGHTAGE 5
-#define OCE_WAN_WEIGHTAGE 2
-#define RESERVED_WEIGHT 22
+#define OCE_WAN_WEIGHTAGE 0
+
 #define BEST_CANDIDATE_MAX_WEIGHT 100
 #define MAX_INDEX_SCORE 100
 #define MAX_INDEX_PER_INI 4
@@ -3406,6 +3485,7 @@ struct sir_per_slot_scoring {
 };
 
 struct sir_score_config {
+	bool enable_scoring_for_roam;
 	struct sir_weight_config weight_cfg;
 	struct sir_rssi_cfg_score rssi_score;
 	struct sir_per_slot_scoring esp_qbss_scoring;
@@ -3436,27 +3516,47 @@ struct pmkid_mode_bits {
  * @num_disallowed_aps: Maximum number of AP's in LCA list
  *
  */
-struct lca_disallow_config_params{
+struct lca_disallow_config_params {
     uint32_t disallow_duration;
     uint32_t rssi_channel_penalization;
     uint32_t num_disallowed_aps;
+};
+
+/**
+ * struct mawc_params - Motion Aided Wireless Connectivity configuration
+ * @MAWCEnabled: Global configuration for MAWC (Roaming/PNO/ExtScan)
+ * @mawc_roam_enabled: MAWC roaming enable/disable
+ * @mawc_roam_traffic_threshold: Traffic threshold in kBps for MAWC roaming
+ * @mawc_roam_ap_rssi_threshold: AP RSSI threshold for MAWC roaming
+ * @mawc_roam_rssi_high_adjust: High Adjustment value for suppressing scan
+ * @mawc_roam_rssi_low_adjust: Low Adjustment value for suppressing scan
+ */
+struct mawc_params {
+	bool mawc_enabled;
+	bool mawc_roam_enabled;
+	uint32_t mawc_roam_traffic_threshold;
+	int8_t mawc_roam_ap_rssi_threshold;
+	uint8_t mawc_roam_rssi_high_adjust;
+	uint8_t mawc_roam_rssi_low_adjust;
 };
 
 typedef struct sSirRoamOffloadScanReq {
 	uint16_t message_type;
 	uint16_t length;
 	bool RoamScanOffloadEnabled;
-	bool MAWCEnabled;
+	struct mawc_params mawc_roam_params;
 	int8_t LookupThreshold;
 	int8_t rssi_thresh_offset_5g;
 	uint8_t delay_before_vdev_stop;
 	uint8_t OpportunisticScanThresholdDiff;
 	uint8_t RoamRescanRssiDiff;
 	uint8_t RoamRssiDiff;
+	int32_t rssi_abs_thresh;
 	uint8_t ChannelCacheType;
 	uint8_t Command;
 	uint8_t reason;
 	uint16_t NeighborScanTimerPeriod;
+	uint16_t neighbor_scan_min_timer_period;
 	uint16_t NeighborRoamScanRefreshPeriod;
 	uint16_t NeighborScanChannelMinTime;
 	uint16_t NeighborScanChannelMaxTime;
@@ -3501,6 +3601,10 @@ typedef struct sSirRoamOffloadScanReq {
 	enum wmi_dwelltime_adaptive_mode roamscan_adaptive_dwell_mode;
 	tSirAddie assoc_ie;
 	struct lca_disallow_config_params lca_config_params;
+#ifdef WLAN_FEATURE_FILS_SK
+	bool is_fils_connection;
+	struct roam_fils_params roam_fils_params;
+#endif
 	struct scoring_param score_params;
 } tSirRoamOffloadScanReq, *tpSirRoamOffloadScanReq;
 
@@ -3629,9 +3733,10 @@ typedef struct {
 * WMA_GTK_OFFLOAD_REQ
 *--------------------------------------------------------------------------*/
 typedef struct {
-	uint32_t ulFlags;       /* optional flags */
-	uint8_t aKCK[16];       /* Key confirmation key */
-	uint8_t aKEK[16];       /* key encryption key */
+	uint32_t ulFlags;                    /* optional flags */
+	uint8_t aKCK[SIR_KCK_KEY_LEN];       /* Key confirmation key */
+	uint8_t aKEK[SIR_KEK_KEY_LEN_FILS];       /* key encryption key */
+	uint32_t kek_len;
 	uint64_t ullKeyReplayCounter;   /* replay counter */
 	struct qdf_mac_addr bssid;
 } tSirGtkOffloadParams, *tpSirGtkOffloadParams;
@@ -4108,6 +4213,8 @@ typedef struct sSirScanOffloadReq {
 	tSirScanType scanType;
 	uint32_t minChannelTime;
 	uint32_t maxChannelTime;
+	uint32_t scan_probe_repeat_time;
+	uint32_t scan_num_probes;
 	uint32_t scan_id;
 	uint32_t scan_requestor_id;
 	/* in units of milliseconds, ignored when not connected */
@@ -4154,7 +4261,7 @@ typedef struct sSirScanOffloadReq {
 	  up to uIEFieldLen (can be 0)
 	  -----------------------------
 	  ... variable size upto num_vendor_oui
-	  struct vendor_oui voui;
+	  of type uint32_t
 	  ------------------------*/
 } tSirScanOffloadReq, *tpSirScanOffloadReq;
 
@@ -4405,6 +4512,17 @@ struct sir_peer_info_ext {
 struct sir_peer_info_ext_resp {
 	uint8_t count;
 	struct sir_peer_info_ext info[0];
+};
+
+/**
+ * @sta_num: number of peer station which has valid info
+ * @info: peer information
+ *
+ * all SAP peer station's information saved in adapter
+ */
+struct sir_peer_sta_info {
+	uint8_t sta_num;
+	struct sir_peer_info info[MAX_PEER_STA];
 };
 
 typedef struct sSirAddPeriodicTxPtrn {
@@ -4752,13 +4870,23 @@ typedef struct sSirSmeRoamOffloadSynchInd {
 	uint8_t roamReason;
 	uint32_t chan_freq;
 	uint8_t kck[SIR_KCK_KEY_LEN];
-	uint8_t kek[SIR_KEK_KEY_LEN];
+	uint32_t kek_len;
+	uint8_t kek[SIR_KEK_KEY_LEN_FILS];
+	uint32_t   pmk_len;
+	uint8_t    pmk[SIR_PMK_LEN];
+	uint8_t    pmkid[SIR_PMKID_LEN];
+	bool update_erp_next_seq_num;
+	uint16_t next_erp_seq_num;
 	uint8_t replay_ctr[SIR_REPLAY_CTR_LEN];
 	void *add_bss_params;
 	tpSirSmeJoinRsp join_rsp;
 	uint16_t aid;
 	struct sir_hw_mode_trans_ind hw_mode_trans_ind;
 	uint8_t nss;
+	struct qdf_mac_addr dst_mac;
+	struct qdf_mac_addr src_mac;
+	uint16_t hlp_data_len;
+	uint8_t hlp_data[FILS_MAX_HLP_DATA_LEN];
 } roam_offload_synch_ind;
 
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD
@@ -5424,7 +5552,7 @@ typedef struct {
 	bool ie_whitelist;
 	uint32_t probe_req_ie_bitmap[PROBE_REQ_BITMAP_LEN];
 	uint32_t num_vendor_oui;
-	/* Followed by 0 or more struct vendor_oui */
+	/* Followed by 0 or more vendor_ouis of type uint32_t */
 } tSirScanMacOui, *tpSirScanMacOui;
 
 enum {
@@ -6495,56 +6623,6 @@ struct chip_pwr_save_fail_detected_params {
 };
 
 #define MAX_NUM_FW_SEGMENTS 4
-
-/**
- * struct fw_dump_seg_req - individual segment details
- * @seg_id - segment id.
- * @seg_start_addr_lo - lower address of the segment.
- * @seg_start_addr_hi - higher address of the segment.
- * @seg_length - length of the segment.
- * @dst_addr_lo - lower address of the destination buffer.
- * @dst_addr_hi - higher address of the destination buffer.
- *
- * This structure carries the information to firmware about the
- * individual segments. This structure is part of firmware memory
- * dump request.
- */
-struct fw_dump_seg_req {
-	uint8_t seg_id;
-	uint32_t seg_start_addr_lo;
-	uint32_t seg_start_addr_hi;
-	uint32_t seg_length;
-	uint32_t dst_addr_lo;
-	uint32_t dst_addr_hi;
-};
-
-/**
- * struct fw_dump_req - firmware memory dump request details.
- * @request_id - request id.
- * @num_seg - requested number of segments.
- * @fw_dump_seg_req - individual segment information.
- *
- * This structure carries information about the firmware
- * memory dump request.
- */
-struct fw_dump_req {
-	uint32_t request_id;
-	uint32_t num_seg;
-	struct fw_dump_seg_req segment[MAX_NUM_FW_SEGMENTS];
-};
-
-/**
- * struct fw_dump_rsp - firmware dump response details.
- * @request_id - request id.
- * @dump_complete - copy completion status.
- *
- * This structure is used to store the firmware dump copy complete
- * response from the firmware.
- */
-struct fw_dump_rsp {
-	uint32_t request_id;
-	uint32_t dump_complete;
-};
 
 /**
  * DEFAULT_SCAN_IE_ID - Identifier for the collection of IE's added
@@ -7998,6 +8076,7 @@ struct sir_del_all_tdls_peers {
 	uint16_t msg_type;
 	uint16_t msg_len;
 	struct qdf_mac_addr bssid;
+	bool disable_tdls_state;
 };
 
 /**
@@ -8164,6 +8243,23 @@ struct sir_peer_set_rx_blocksize {
 	uint32_t rx_block_ack_win_limit;
 };
 
+/**
+ * struct sir_rssi_disallow_lst - Structure holding Rssi based avoid candidate
+ * list
+ * @node: Node pointer
+ * @bssid: BSSID of the AP
+ * @retry_delay: Retry delay received during last rejection in ms
+ * @ expected_rssi: RSSI at which STA can initate
+ * @time_during_rejection: Timestamp during last rejection in millisec
+ */
+struct sir_rssi_disallow_lst {
+	qdf_list_node_t node;
+	struct qdf_mac_addr bssid;
+	uint32_t retry_delay;
+	int8_t expected_rssi;
+	qdf_time_t time_during_rejection;
+};
+
 /*
  * struct scan_chan_info - channel info
  * @freq: radio frequence
@@ -8182,5 +8278,21 @@ struct scan_chan_info {
 	uint32_t rx_clear_count;
 	uint32_t tx_frame_count;
 	uint32_t clock_freq;
+};
+
+/**
+ * struct sir_limit_off_chan - limit off-channel command parameters
+ * @vdev_id: vdev id
+ * @is_tos_active: status of the traffic (active/inactive)
+ * @max_off_chan_time: max allowed off channel time
+ * @rest_time: home channel time
+ * @skip_dfs_chans: skip dfs channels during scan
+ */
+struct sir_limit_off_chan {
+	uint8_t vdev_id;
+	bool is_tos_active;
+	uint32_t max_off_chan_time;
+	uint32_t rest_time;
+	bool skip_dfs_chans;
 };
 #endif /* __SIR_API_H */

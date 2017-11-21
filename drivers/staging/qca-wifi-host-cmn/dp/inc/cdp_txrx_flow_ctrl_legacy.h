@@ -54,6 +54,8 @@ enum netif_action_type {
 	WLAN_NETIF_TX_DISABLE_N_CARRIER,
 	WLAN_NETIF_CARRIER_ON,
 	WLAN_NETIF_CARRIER_OFF,
+	WLAN_NETIF_PRIORITY_QUEUE_ON,
+	WLAN_NETIF_PRIORITY_QUEUE_OFF,
 	WLAN_NETIF_ACTION_TYPE_MAX,
 };
 
@@ -75,10 +77,20 @@ enum netif_reason_type {
 	WLAN_VDEV_STOP,
 	WLAN_PEER_UNAUTHORISED,
 	WLAN_THERMAL_MITIGATION,
+	WLAN_DATA_FLOW_CONTROL_PRIORITY,
 	WLAN_REASON_TYPE_MAX,
 };
 
 #ifdef QCA_LL_LEGACY_TX_FLOW_CONTROL
+
+/**
+ * ol_txrx_tx_flow_control_is_pause_fp - is tx paused by flow control
+ * function from txrx to OS shim
+ * @osif_dev - the virtual device's OS shim object
+ *
+ * Return: true if tx is paused by flow control
+ */
+typedef bool (*ol_txrx_tx_flow_control_is_pause_fp)(void *osif_dev);
 /**
  * ol_txrx_tx_flow_control_fp - tx flow control notification
  * function from txrx to OS shim
@@ -88,14 +100,32 @@ enum netif_reason_type {
 typedef void (*ol_txrx_tx_flow_control_fp)(void *osif_dev,
 			 bool tx_resume);
 
+/**
+ * ol_txrx_register_tx_flow_control() - register tx flow control callback
+ * @vdev_id: vdev_id
+ * @flowControl: flow control callback
+ * @osif_fc_ctx: callback context
+ * @flow_control_is_pause: is vdev paused by flow control
+ *
+ * Return: 0 for sucess or error code
+ */
 int ol_txrx_register_tx_flow_control(uint8_t vdev_id,
 		 ol_txrx_tx_flow_control_fp flowControl,
-		 void *osif_fc_ctx);
+		 void *osif_fc_ctx,
+		 ol_txrx_tx_flow_control_is_pause_fp flow_control_is_pause);
 
 int ol_txrx_deregister_tx_flow_control_cb(uint8_t vdev_id);
 
 void ol_txrx_flow_control_cb(ol_txrx_vdev_handle vdev,
 			 bool tx_resume);
+
+/**
+ * ol_txrx_flow_control_is_pause() - is osif paused by flow control
+ * @vdev: vdev handle
+ *
+ * Return: true if osif is paused by flow control
+ */
+bool ol_txrx_flow_control_is_pause(ol_txrx_vdev_handle vdev);
 bool
 ol_txrx_get_tx_resource(uint8_t sta_id,
 			 unsigned int low_watermark,

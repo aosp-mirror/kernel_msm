@@ -663,6 +663,7 @@ __lim_handle_beacon(tpAniSirGlobal pMac, tpSirMsgQ pMsg,
 {
 	/* checking for global SME state... */
 	uint8_t *pRxPacketInfo;
+
 	lim_get_b_dfrom_rx_packet(pMac, pMsg->bodyptr,
 				  (uint32_t **) &pRxPacketInfo);
 
@@ -897,6 +898,7 @@ lim_handle80211_frames(tpAniSirGlobal pMac, tpSirMsgQ limMsg, uint8_t *pDeferMsg
 	tpPESession psessionEntry = NULL;
 	uint8_t sessionId;
 	bool isFrmFt = false;
+	uint8_t channel;
 
 	*pDeferMsg = false;
 	lim_get_b_dfrom_rx_packet(pMac, limMsg->bodyptr,
@@ -904,9 +906,11 @@ lim_handle80211_frames(tpAniSirGlobal pMac, tpSirMsgQ limMsg, uint8_t *pDeferMsg
 
 	pHdr = WMA_GET_RX_MAC_HEADER(pRxPacketInfo);
 	isFrmFt = WMA_GET_RX_FT_DONE(pRxPacketInfo);
+	channel = WMA_GET_RX_CH(pRxPacketInfo);
 	fc = pHdr->fc;
 
-	if (pMac->sap.SapDfsInfo.is_dfs_cac_timer_running) {
+	if (IS_5G_CH(channel) &&
+	    pMac->sap.SapDfsInfo.is_dfs_cac_timer_running) {
 		psessionEntry = pe_find_session_by_bssid(pMac,
 					pHdr->bssId, &sessionId);
 		if (psessionEntry &&
@@ -1822,6 +1826,9 @@ static void lim_process_messages(tpAniSirGlobal mac_ctx, tpSirMsgQ msg)
 #endif
 	case WMA_RX_SCAN_EVENT:
 		lim_process_rx_scan_event(mac_ctx, msg->bodyptr);
+		break;
+	case WMA_RX_CHN_STATUS_EVENT:
+		lim_process_rx_channel_status_event(mac_ctx, msg->bodyptr);
 		break;
 	case WMA_IBSS_PEER_INACTIVITY_IND:
 		lim_process_ibss_peer_inactivity(mac_ctx, msg->bodyptr);

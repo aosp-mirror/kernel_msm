@@ -40,12 +40,12 @@
 #include "hif_hw_version.h"
 #if defined(HIF_PCI) || defined(HIF_SNOC) || defined(HIF_AHB)
 #include "ce_tasklet.h"
+#include "ce_api.h"
 #endif
 #include "qdf_trace.h"
 #include "qdf_status.h"
 #include "hif_debug.h"
 #include "mp_dev.h"
-#include "ce_api.h"
 #include "hif_napi.h"
 
 void hif_dump(struct hif_opaque_softc *hif_ctx, uint8_t cmd_id, bool start)
@@ -144,12 +144,6 @@ bool hif_can_suspend_link(struct hif_opaque_softc *hif_ctx)
 	QDF_BUG(scn);
 	return scn->linkstate_vote == 0;
 }
-
-#ifndef CONFIG_WIN
-#define QCA9984_HOST_INTEREST_ADDRESS -1
-#define QCA9888_HOST_INTEREST_ADDRESS -1
-#define IPQ4019_HOST_INTEREST_ADDRESS -1
-#endif
 
 /**
  * hif_hia_item_address(): hif_hia_item_address
@@ -723,6 +717,11 @@ int hif_get_device_type(uint32_t device_id,
 		ret = -ENODEV;
 		break;
 	}
+
+	if (*target_type == TARGET_TYPE_UNKNOWN) {
+		HIF_ERROR("%s: Unsupported target_type!", __func__);
+		ret = -ENODEV;
+	}
 end:
 	return ret;
 }
@@ -788,27 +787,42 @@ struct hif_target_info *hif_get_target_info_handle(
 
 }
 
-#if defined(FEATURE_LRO)
 /**
- * hif_lro_flush_cb_register - API to register for LRO Flush Callback
+ * hif_get_rx_ctx_id - Returns NAPI instance ID based on CE ID
+ * @ctx_id: Rx CE context ID
+ * @hif_hdl: HIF Context
+ *
+ * Return: LRO instance ID
+ */
+int hif_get_rx_ctx_id(int ctx_id, struct hif_opaque_softc *hif_hdl)
+{
+	if (hif_napi_enabled(hif_hdl, -1))
+		return NAPI_PIPE2ID(ctx_id);
+	else
+		return ctx_id;
+}
+
+/**
+ * hif_offld_flush_cb_register - API to register for LRO Flush Callback
  * @scn: HIF Context
- * @handler: Function pointer to be called by HIF
- * @data: Private data to be used by the module registering to HIF
+ * @offld_flush_handler: Flush handler
+ * @offld_init_handler: Init handler of Rx offload
  *
  * Return: void
  */
-void hif_lro_flush_cb_register(struct hif_opaque_softc *scn,
-			       void (lro_flush_handler)(void *),
-			       void *(lro_init_handler)(void))
+void hif_offld_flush_cb_register(struct hif_opaque_softc *scn,
+			       void (offld_flush_handler)(void *),
+			       void *(offld_init_handler)(void))
 {
 	if (hif_napi_enabled(scn, -1))
-		hif_napi_lro_flush_cb_register(scn, lro_flush_handler,
-					       lro_init_handler);
+		hif_napi_offld_flush_cb_register(scn, offld_flush_handler,
+					       offld_init_handler);
 	else
-		ce_lro_flush_cb_register(scn, lro_flush_handler,
-					lro_init_handler);
+		ce_lro_flush_cb_register(scn, offld_flush_handler,
+					offld_init_handler);
 }
 
+#if defined(FEATURE_LRO)
 /**
  * hif_get_lro_info - Returns LRO instance for instance ID
  * @ctx_id: LRO instance ID
@@ -828,40 +842,21 @@ void *hif_get_lro_info(int ctx_id, struct hif_opaque_softc *hif_hdl)
 	return data;
 }
 
-/**
- * hif_get_rx_ctx_id - Returns LRO instance ID based on underlying LRO instance
- * @ctx_id: LRO context ID
- * @hif_hdl: HIF Context
- *
- * Return: LRO instance ID
- */
-int hif_get_rx_ctx_id(int ctx_id, struct hif_opaque_softc *hif_hdl)
-{
-	if (hif_napi_enabled(hif_hdl, -1))
-		return NAPI_PIPE2ID(ctx_id);
-	else
-		return ctx_id;
-}
 
+#endif
 /**
- * hif_lro_flush_cb_deregister - API to deregister for LRO Flush Callbacks
+ * hif_offld_flush_cb_deregister - API to deregister offload Flush Callbacks
  * @hif_hdl: HIF Context
- * @lro_deinit_cb: LRO deinit callback
+ * @offld_deinit_cb: Rx offload deinit callback
  *
  * Return: void
  */
-void hif_lro_flush_cb_deregister(struct hif_opaque_softc *hif_hdl,
-				 void (lro_deinit_cb)(void *))
+void hif_offld_flush_cb_deregister(struct hif_opaque_softc *hif_hdl,
+				 void (offld_deinit_cb)(void *))
 {
-	hif_napi_lro_flush_cb_deregister(hif_hdl, lro_deinit_cb);
-	ce_lro_flush_cb_deregister(hif_hdl, lro_deinit_cb);
+	hif_napi_lro_flush_cb_deregister(hif_hdl, offld_deinit_cb);
+	ce_lro_flush_cb_deregister(hif_hdl, offld_deinit_cb);
 }
-#else /* !defined(FEATURE_LRO) */
-int hif_get_rx_ctx_id(int ctx_id, struct hif_opaque_softc *hif_hdl)
-{
-	return 0;
-}
-#endif
 
 /**
  * hif_get_target_status - API to get target status

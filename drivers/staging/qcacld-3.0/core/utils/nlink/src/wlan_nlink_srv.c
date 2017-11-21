@@ -76,7 +76,7 @@ int nl_srv_init(void *wiphy)
 	wiphy_ptr = wiphy;
 	radio_idx = cnss_logger_device_register(wiphy, THIS_MODULE->name);
 	QDF_TRACE(QDF_MODULE_ID_HDD, QDF_TRACE_LEVEL_ERROR,
-		  "%s: radio_index: %d, wiphy_ptr: %p",
+		  "%s: radio_index: %d, wiphy_ptr: %pK",
 		  __func__, radio_idx, wiphy_ptr);
 
 	if (radio_idx >= 0)
@@ -499,22 +499,17 @@ int nl_srv_bcast(struct sk_buff *skb, int mcgroup_id, int app_id)
 	struct nlmsghdr *nlh = (struct nlmsghdr *)skb->data;
 	void *msg = NLMSG_DATA(nlh);
 	uint32_t msg_len = nlmsg_len(nlh);
-	uint8_t *tempbuf;
 	int status;
 
-	tempbuf = (uint8_t *)qdf_mem_malloc(msg_len);
-	qdf_mem_copy(tempbuf, msg, msg_len);
-	status = send_msg_to_cld80211(mcgroup_id, 0, app_id, tempbuf, msg_len);
+	status = send_msg_to_cld80211(mcgroup_id, 0, app_id, msg, msg_len);
 	if (status) {
 		QDF_TRACE(QDF_MODULE_ID_HDD, QDF_TRACE_LEVEL_ERROR,
 			"send msg to cld80211 fails for app id %d", app_id);
 		dev_kfree_skb(skb);
-		qdf_mem_free(tempbuf);
 		return -EPERM;
 	}
 
 	dev_kfree_skb(skb);
-	qdf_mem_free(tempbuf);
 	return 0;
 }
 
@@ -539,23 +534,18 @@ int nl_srv_ucast(struct sk_buff *skb, int dst_pid, int flag,
 	struct nlmsghdr *nlh = (struct nlmsghdr *)skb->data;
 	void *msg = NLMSG_DATA(nlh);
 	uint32_t msg_len = nlmsg_len(nlh);
-	uint8_t *tempbuf;
 	int status;
 
-	tempbuf = (uint8_t *)qdf_mem_malloc(msg_len);
-	qdf_mem_copy(tempbuf, msg, msg_len);
 	status = send_msg_to_cld80211(mcgroup_id, dst_pid, app_id,
-					tempbuf, msg_len);
+					msg, msg_len);
 	if (status) {
 		QDF_TRACE(QDF_MODULE_ID_HDD, QDF_TRACE_LEVEL_ERROR,
 			"send msg to cld80211 fails for app id %d", app_id);
 		dev_kfree_skb(skb);
-		qdf_mem_free(tempbuf);
 		return -EPERM;
 	}
 
 	dev_kfree_skb(skb);
-	qdf_mem_free(tempbuf);
 	return 0;
 }
 #else
@@ -642,7 +632,7 @@ static void nl_srv_rcv_skb(struct sk_buff *skb)
 		if (nlh->nlmsg_len < sizeof(*nlh) || skb->len < nlh->nlmsg_len) {
 			QDF_TRACE(QDF_MODULE_ID_HDD, QDF_TRACE_LEVEL_WARN,
 				  "NLINK: Invalid "
-				  "Netlink message: skb[%p], len[%d], nlhdr[%p], nlmsg_len[%d]",
+				  "Netlink message: skb[%pK], len[%d], nlhdr[%pK], nlmsg_len[%d]",
 				  skb, skb->len, nlh, nlh->nlmsg_len);
 			return;
 		}

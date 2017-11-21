@@ -847,7 +847,8 @@ static bool lim_chk_n_process_wpa_rsn_ie(tpAniSirGlobal mac_ctx,
 						session);
 					return false;
 				}
-			} else if (assoc_req->wpaPresent) {
+			} /* end - if(assoc_req->rsnPresent) */
+			if ((!assoc_req->rsnPresent) && assoc_req->wpaPresent) {
 				/* Unpack the WPA IE */
 				if (assoc_req->wpa.length) {
 					/* OUI is not taken care */
@@ -896,31 +897,7 @@ static bool lim_chk_n_process_wpa_rsn_ie(tpAniSirGlobal mac_ctx,
 						session);
 					return false;
 				} /* end - if(assoc_req->wpa.length) */
-			} else if (assoc_req->wapiPresent) {
-				pe_debug("Assoc req wapiPresent");
-			} else {
-				/*
-				 * When client send AssocReq without any
-				 * cipher IE,We must reject it here,
-				 * otherwise hostapd will not trigger
-				 * eapol and will not delete it, remains
-				 * connected/not-authenticated state
-				 * and block sta scan as checking in
-				 * cds_is_connection_in_progress.
-				 */
-				pe_warn("Re/Assoc rejected from: "
-					MAC_ADDRESS_STR
-					" without cipher suite IE",
-					MAC_ADDR_ARRAY(hdr->sa));
-				lim_send_assoc_rsp_mgmt_frame(mac_ctx,
-					eSIR_MAC_CIPHER_SUITE_REJECTED_STATUS,
-					1,
-					hdr->sa,
-					sub_type,
-					0,
-					session);
-				return false;
-			}
+			} /* end - if(assoc_req->wpaPresent) */
 		}
 		/*
 		 * end of if(session->pLimStartBssReq->privacy
@@ -1158,6 +1135,7 @@ static bool lim_chk_wmm(tpAniSirGlobal mac_ctx, tpSirMacMgmtHdr hdr,
 			uint8_t sub_type, tHalBitVal qos_mode)
 {
 	tHalBitVal wme_mode;
+
 	limGetWmeMode(session, &wme_mode);
 	if ((qos_mode == eHAL_SET) || (wme_mode == eHAL_SET)) {
 		/*
@@ -1166,6 +1144,7 @@ static bool lim_chk_wmm(tpAniSirGlobal mac_ctx, tpSirMacMgmtHdr hdr,
 		 */
 		if (assoc_req->addtsPresent) {
 			uint8_t tspecIdx = 0;
+
 			if (lim_admit_control_add_ts(mac_ctx, hdr->sa,
 				&(assoc_req->addtsReq),
 				&(assoc_req->qosCapability),
@@ -1790,6 +1769,20 @@ void lim_process_assoc_req_frame(tpAniSirGlobal mac_ctx, uint8_t *rx_pkt_info,
 			sub_type, GET_LIM_SYSTEM_ROLE(session),
 			MAC_ADDR_ARRAY(hdr->sa));
 			return;
+		} else if (!sta_ds->rmfEnabled && (sub_type == LIM_REASSOC)) {
+			/*
+			 * SAP should send reassoc response with reject code
+			 * to avoid IOT issues. as per the specification SAP
+			 * should do 4-way handshake after reassoc response and
+			 * some STA doesn't like 4way handshake after reassoc
+			 * where some STA does expect 4-way handshake.
+			 */
+			lim_send_assoc_rsp_mgmt_frame(mac_ctx,
+					eSIR_MAC_OUTSIDE_SCOPE_OF_SPEC_STATUS,
+					sta_ds->assocId, sta_ds->staAddr,
+					sub_type, sta_ds, session);
+			pe_err("Rejecting reassoc req from STA");
+			return;
 		} else if (!sta_ds->rmfEnabled) {
 			/*
 			 * Do this only for non PMF case.
@@ -2305,6 +2298,9 @@ void lim_send_mlm_assoc_ind(tpAniSirGlobal mac_ctx,
 		 * processing in hostapd
 		 */
 		if (assoc_req->HTCaps.present) {
+			qdf_mem_copy(&assoc_ind->HTCaps, &assoc_req->HTCaps,
+				     sizeof(tDot11fIEHTCaps));
+
 			rsn_len = assoc_ind->addIE.length;
 			if (assoc_ind->addIE.length + DOT11F_IE_HTCAPS_MIN_LEN
 				+ 2 < SIR_MAC_MAX_IE_LENGTH) {
@@ -2418,6 +2414,8 @@ void lim_send_mlm_assoc_ind(tpAniSirGlobal mac_ctx,
 		fill_mlm_assoc_ind_vht(assoc_req, sta_ds, assoc_ind);
 
 		/* updates VHT information in assoc indication */
+		 qdf_mem_copy(&assoc_ind->VHTCaps, &assoc_req->VHTCaps,
+			      sizeof(tDot11fIEVHTCaps));
 		lim_fill_assoc_ind_vht_info(mac_ctx, session_entry, assoc_req,
 			assoc_ind);
 		lim_post_sme_message(mac_ctx, LIM_MLM_ASSOC_IND,
