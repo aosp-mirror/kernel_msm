@@ -381,3 +381,7 @@
 	vbus-supply = <&smb2_vbus>;
 	ext-vbus-supply = <&ext_5v_boost>;
 };
+
+&pmi8998_charger {
+	google,boost_to_5_1V;
+};
