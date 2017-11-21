@@ -3488,6 +3488,7 @@ QDF_STATUS wma_wni_cfg_dnld(tp_wma_handle wma_handle)
 	return qdf_status;
 }
 
+#define BIG_ENDIAN_MAX_DEBUG_BUF   500
 /**
  * wma_unified_debug_print_event_handler() - debug print event handler
  * @handle: wma handle
@@ -3513,7 +3514,12 @@ int wma_unified_debug_print_event_handler(void *handle, uint8_t *datap,
 
 #ifdef BIG_ENDIAN_HOST
 	{
-		char dbgbuf[500] = { 0 };
+		if (datalen > BIG_ENDIAN_MAX_DEBUG_BUF) {
+			WMA_LOGE("%s Invalid data len %d, limiting to max",
+				 __func__, datalen);
+			datalen = BIG_ENDIAN_MAX_DEBUG_BUF;
+		}
+		char dbgbuf[BIG_ENDIAN_MAX_DEBUG_BUF] = { 0 };
 
 		memcpy(dbgbuf, data, datalen);
 		SWAPME(dbgbuf, datalen);
@@ -5993,6 +5999,42 @@ static inline void wma_get_event_bitmap_idx(WOW_WAKE_EVENT_TYPE event,
 		*bit_idx = event % (wow_bitmap_size * 8);
 	}
 }
+
+/**
+ * wma_set_vc_mode_config() - set voltage corner mode config to FW.
+ * @wma_handle:	pointer to wma handle.
+ * @vc_bitmap:	value needs to set to firmware.
+ *
+ * At the time of driver startup, set operating voltage corner mode
+ * for differenet phymode and bw configurations.
+ *
+ * Return: QDF_STATUS.
+ */
+QDF_STATUS wma_set_vc_mode_config(void *wma_handle,
+		uint32_t vc_bitmap)
+{
+	int32_t ret;
+	tp_wma_handle wma = (tp_wma_handle)wma_handle;
+	struct pdev_params pdevparam;
+
+	pdevparam.param_id = WMI_PDEV_UPDATE_WDCVS_ALGO;
+	pdevparam.param_value = vc_bitmap;
+
+	ret = wmi_unified_pdev_param_send(wma->wmi_handle,
+			&pdevparam,
+			WMA_WILDCARD_PDEV_ID);
+	if (ret) {
+		WMA_LOGE("Fail to Set Voltage Corner config (0x%x)",
+			vc_bitmap);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	WMA_LOGD("Successfully Set Voltage Corner config (0x%x)",
+		vc_bitmap);
+
+	return QDF_STATUS_SUCCESS;
+}
+
 
 void wma_set_wow_event_bitmap(WOW_WAKE_EVENT_TYPE event,
 			      uint32_t wow_bitmap_size,

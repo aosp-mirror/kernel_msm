@@ -113,6 +113,18 @@ enum pld_platform_cap_flag {
 };
 
 /**
+ * enum pld_cc_src - platform country code source
+ * @PLD_SOURCE_CORE: coutry code from core
+ * @PLD_SOURCE_11D: counry code from 11d
+ * @PLD_SOURCE_USER: country code from user
+ */
+enum pld_cc_src {
+	PLD_SOURCE_CORE,
+	PLD_SOURCE_11D,
+	PLD_SOURCE_USER
+};
+
+/**
  * struct pld_platform_cap - platform capabilities
  * @cap_flag: capabilities flag
  *
@@ -529,4 +541,6 @@ unsigned int pld_socinfo_get_serial_number(struct device *dev);
 int pld_is_qmi_disable(struct device *dev);
 int pld_force_assert_target(struct device *dev);
 bool pld_is_fw_dump_skipped(struct device *dev);
+void pld_set_cc_source(struct device *dev, enum pld_cc_src cc_source);
+enum pld_cc_src pld_get_cc_source(struct device *dev);
 #endif

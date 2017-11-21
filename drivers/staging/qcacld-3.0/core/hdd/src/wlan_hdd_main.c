@@ -5709,6 +5709,7 @@ static int hdd_context_deinit(hdd_context_t *hdd_ctx)
  */
 static void hdd_context_destroy(hdd_context_t *hdd_ctx)
 {
+	cds_set_context(QDF_MODULE_ID_HDD, NULL);
 
 	wlan_hdd_deinit_tx_rx_histogram(hdd_ctx);
 
@@ -5840,6 +5841,8 @@ static void hdd_wlan_exit(hdd_context_t *hdd_ctx)
 	}
 
 	hdd_wlan_stop_modules(hdd_ctx, false);
+
+	qdf_nbuf_deinit_replenish_timer();
 
 	qdf_spinlock_destroy(&hdd_ctx->hdd_adapter_lock);
 	qdf_spinlock_destroy(&hdd_ctx->sta_update_info_lock);
@@ -7808,8 +7811,6 @@ static hdd_context_t *hdd_context_create(struct device *dev)
 
 	hdd_override_ini_config(hdd_ctx);
 
-	((cds_context_type *) (p_cds_context))->pHDDContext = (void *)hdd_ctx;
-
 	ret = hdd_context_init(hdd_ctx);
 
 	if (ret)
@@ -7838,6 +7839,8 @@ static hdd_context_t *hdd_context_create(struct device *dev)
 	 */
 	if (cds_is_multicast_logging())
 		wlan_logging_set_log_level();
+
+	cds_set_context(QDF_MODULE_ID_HDD, hdd_ctx);
 
 skip_multicast_logging:
 	hdd_set_trace_level_for_each(hdd_ctx);
@@ -9195,6 +9198,9 @@ static int hdd_features_init(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter)
 	if (hdd_lro_init(hdd_ctx))
 		hdd_warn("Unable to initialize LRO in fw");
 
+	if (sme_set_vc_mode_config(hdd_ctx->config->vc_mode_cfg_bitmap))
+		hdd_warn("Error in setting Voltage Corner mode config to FW");
+
 	if (hdd_adaptive_dwelltime_init(hdd_ctx))
 		hdd_warn("Unable to send adaptive dwelltime setting to FW");
 
@@ -9800,6 +9806,8 @@ int hdd_wlan_startup(struct device *dev)
 	qdf_mc_timer_init(&hdd_ctx->iface_change_timer, QDF_TIMER_TYPE_SW,
 			  hdd_iface_change_callback, (void *)hdd_ctx);
 
+	qdf_nbuf_init_replenish_timer();
+
 	mutex_init(&hdd_ctx->iface_change_lock);
 
 	ret = hdd_init_netlink_services(hdd_ctx);
@@ -9938,6 +9946,7 @@ err_hdd_free_context:
 	else
 		hdd_start_complete(ret);
 
+	qdf_nbuf_deinit_replenish_timer();
 	qdf_mc_timer_destroy(&hdd_ctx->iface_change_timer);
 	mutex_destroy(&hdd_ctx->iface_change_lock);
 	hdd_context_destroy(hdd_ctx);
