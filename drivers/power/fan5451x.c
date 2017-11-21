@@ -124,7 +124,6 @@ struct fan5451x_chip {
 	unsigned int ext_batt_health;
 	/* step charging */
 	struct qpnp_adc_tm_btm_param vbat_param;
-	struct qpnp_adc_tm_btm_param vbat_param_rechg;
 	struct qpnp_adc_tm_chip *adc_tm_dev;
 	int ibat_offset_ma;
 	int iusb_step_chg_ma;
@@ -139,6 +138,7 @@ struct fan5451x_chip {
 	/* retail mode */
 	struct dentry *dent;
 	bool retail_enable;
+	int prev_capacity;
 };
 
 enum {
@@ -152,6 +152,7 @@ static enum alarmtimer_restart fan5451x_wlc_thermal_ctrl_callback(
 static void fan5451x_wlc_thermal_ctrl(struct fan5451x_chip *chip, int control);
 static int fan5451x_batfet_enable(struct fan5451x_chip *chip, int reason,
 		int enable);
+static void save_prev_rawcap(struct fan5451x_chip *chip);
 
 static int fan5451x_read_reg(struct i2c_client *client, u8 reg)
 {
@@ -333,7 +334,6 @@ static int fan5451x_set_iterm(struct fan5451x_chip *chip, int ma)
 #define VFLOAT_MAX_MV 4720
 #define VFLOAT_STEP_MV 10
 #define VFLOAT_MAX_RETAIL 4100
-#define VFLOAT_RECHG_RETAIL 3750
 
 static int fan5451x_set_vfloat(struct fan5451x_chip *chip, int mv)
 {
@@ -347,20 +347,6 @@ static int fan5451x_set_vfloat(struct fan5451x_chip *chip, int mv)
 	reg_val = (mv - VFLOAT_MIN_MV) / VFLOAT_STEP_MV;
 	chip->vfloat = reg_val * VFLOAT_STEP_MV + VFLOAT_MIN_MV;
 	return fan5451x_write_reg(chip->client, REG_VFLOAT, reg_val);
-}
-
-static inline void fan5451x_vbat_rechg_measure(struct fan5451x_chip *chip)
-{
-	int rechg_mv = chip->vfloat - chip->vrechg_hyst;
-
-	if (chip->retail_enable)
-		rechg_mv = VFLOAT_RECHG_RETAIL;
-
-	chip->vbat_param_rechg.state_request = ADC_TM_LOW_THR_ENABLE;
-	chip->vbat_param_rechg.low_thr = rechg_mv * 1000;
-	pr_info("start rechg measure volt = %d\n", rechg_mv);
-	qpnp_adc_tm_channel_measure(chip->adc_tm_dev,
-				&chip->vbat_param_rechg);
 }
 
 static int fan5451x_set_appropriate_vddmax(struct fan5451x_chip *chip)
@@ -412,13 +398,10 @@ static int fan5451x_set_appropriate_vddmax(struct fan5451x_chip *chip)
 			fan5451x_batfet_enable(chip, CHARGE, 0);
 			if (!chip->retail_enable)
 				fan5451x_wlc_fake_online(chip, 1);
+			save_prev_rawcap(chip);
 			chip->eoc = true;
 		}
 	}
-	/* in case of eoc, update rechg_measure */
-	if (chip->eoc)
-		fan5451x_vbat_rechg_measure(chip);
-
 	return ret;
 }
 
@@ -888,8 +871,8 @@ static irqreturn_t fan5451x_irq_thread(int irq, void *handle)
 			fan5451x_batfet_enable(chip, CHARGE, 0);
 			if (!chip->retail_enable)
 				fan5451x_wlc_fake_online(chip, 1);
+			save_prev_rawcap(chip);
 			chip->eoc = true;
-			fan5451x_vbat_rechg_measure(chip);
 		}
 	} else if (intr[1] & INT1_RCHGN)
 		pr_info("Rechg IRQ\n");
@@ -1390,12 +1373,82 @@ static int get_prop_batt_health(struct fan5451x_chip *chip)
 	return POWER_SUPPLY_HEALTH_GOOD;
 }
 
+#define RECHG_CAPACITY		99
+#define RECHG_RETAIL_CAPACITY	40
+static void check_recharge(struct fan5451x_chip *chip)
+{
+	union power_supply_propval ret = {0,};
+	bool is_rechg = false;
+	int rawcap;
+
+	if (chip->enable && chip->eoc) {
+		chip->bms_psy->get_property(chip->bms_psy,
+				POWER_SUPPLY_PROP_CAPACITY_RAW, &ret);
+		rawcap = ret.intval;
+
+		/* check recharge condition */
+		if (chip->full) {
+			if (rawcap <= RECHG_CAPACITY)
+				is_rechg = true;
+		} else {
+			if (chip->retail_enable) {
+				if (rawcap <= RECHG_RETAIL_CAPACITY)
+					is_rechg = true;
+			} else {
+				if (rawcap <= chip->prev_capacity - 1)
+					is_rechg = true;
+			}
+		}
+	}
+
+	/* do recharge */
+	if (is_rechg) {
+		pr_info("Resuming charging at %d%% soc \n", rawcap);
+
+		chip->eoc = false;
+		chip->full = false;
+
+		fan5451x_batfet_enable(chip, CHARGE, 1);
+		/* in case of retail mode,
+		   wlc_fake_online was not set to provide system current. */
+		if (!chip->retail_enable)
+			fan5451x_wlc_fake_online(chip, 0);
+		else {
+			/* After raising EOC IRQ, RCHGDIS needs to enable for recharging.
+			 * As soon as setting 0 to RCHGDIS, battery is charged
+			 * due to vbat < vfloat - 150mV. */
+			fan5451x_update_reg(chip->client,
+					REG_CON2, 0, CON2_RCHGDIS);
+			msleep(300);
+			fan5451x_update_reg(chip->client,
+					REG_CON2, CON2_RCHGDIS, CON2_RCHGDIS);
+		}
+
+		power_supply_changed(&chip->batt_psy);
+	}
+
+}
+
+static void save_prev_rawcap(struct fan5451x_chip *chip)
+{
+	union power_supply_propval ret = {0,};
+
+	if (chip->bms_psy) {
+		chip->bms_psy->get_property(chip->bms_psy,
+				POWER_SUPPLY_PROP_CAPACITY_RAW, &ret);
+
+		chip->prev_capacity = ret.intval;
+	}
+}
+
 #define DEFAULT_CAPACITY	50
 static int get_prop_capacity(struct fan5451x_chip *chip)
 {
 	union power_supply_propval ret = {0,};
 
 	if (chip->bms_psy) {
+		check_recharge(chip);
+
 		chip->bms_psy->get_property(chip->bms_psy,
 				POWER_SUPPLY_PROP_CAPACITY, &ret);
 
@@ -1600,37 +1653,6 @@ fan5451x_vbat_notification(enum qpnp_tm_state state, void *ctx)
 					&chip->vbat_param);
 }
 
-static void
-fan5451x_vbat_rechg_notification(enum qpnp_tm_state state, void *ctx)
-{
-	struct fan5451x_chip *chip = ctx;
-	int volt;
-
-	if (state >= ADC_TM_STATE_NUM) {
-		pr_err("invalid notification %d\n", state);
-		return;
-	}
-
-	volt = get_prop_battery_voltage_now(chip);
-	pr_info("SW Rechg occur!! volt(%d)\n", volt);
-	chip->eoc = false;
-	chip->full = false;
-	fan5451x_batfet_enable(chip, CHARGE, 1);
-	if (!chip->retail_enable)
-		fan5451x_wlc_fake_online(chip, 0);
-	else {
-		/* After raising EOC IRQ, RCHGDIS needs to enable for recharging.
-		 * As soon as setting 0 to RCHGDIS, battery is charged
-		 * due to vbat < vfloat - 150mV. */
-		fan5451x_update_reg(chip->client,
-				REG_CON2, 0, CON2_RCHGDIS);
-		msleep(300);
-		fan5451x_update_reg(chip->client,
-				REG_CON2, CON2_RCHGDIS, CON2_RCHGDIS);
-	}
-	power_supply_changed(&chip->batt_psy);
-}
-
 #define WS_RECHECK_DELAY_MS 6000
 static void
 fan5451x_wlc_tx_recheck_work(struct work_struct *work)
@@ -1731,7 +1753,6 @@ fan5451x_eoc_check_work(struct work_struct *work)
 			fan5451x_wlc_fake_online(chip, 1);
 			chip->eoc = true;
 			chip->full = true;
-			fan5451x_vbat_rechg_measure(chip);
 			power_supply_changed(&chip->batt_psy);
 			goto stop_eoc;
 		} else {
@@ -1975,13 +1996,6 @@ static int fan5451x_probe(struct i2c_client *client,
 					fan5451x_vbat_notification;
 		chip->vbat_param.channel = VBAT_SNS;
 	}
-
-	/* for detecting recharging voltage */
-	chip->vbat_param_rechg.timer_interval = ADC_MEAS1_INTERVAL_8S;
-	chip->vbat_param_rechg.btm_ctx = chip;
-	chip->vbat_param_rechg.threshold_notification =
-				fan5451x_vbat_rechg_notification;
-	chip->vbat_param_rechg.channel = VBAT_SNS;
 
 	/* Set initial state */
 	chip->usb_present = fan5451x_usb_chg_plugged_in(chip);
