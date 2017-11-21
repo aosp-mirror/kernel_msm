@@ -372,3 +372,7 @@
 		qcom,ion-heap-type = "CARVEOUT";
 	};
 };
+
+&usb0 {
+	google,switch-vbus = <250>;
+};
