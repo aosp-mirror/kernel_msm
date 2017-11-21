@@ -46,6 +46,9 @@ Optional properties:
 - qcom,default-sink-caps: List of 32-bit values representing the nominal sink
 			capabilities in voltage (millivolts) and current
 			(milliamps) pairs.
+- qcom,limit-pdos: 	Indicates whether to remove unsupported voltage and
+			reduce current from received pdos based on
+			qcom,default-sink-caps.
 
 Example:
 	qcom,qpnp-pdphy@1700 {
