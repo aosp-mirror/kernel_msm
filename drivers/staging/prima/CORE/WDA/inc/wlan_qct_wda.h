@@ -771,6 +771,8 @@ tBssSystemRole wdaGetGlobalSystemRole(tpAniSirGlobal pMac);
 #define WLANWDA_HO_IS_AN_AMPDU                    0x4000
 #define WLANWDA_HO_LAST_MPDU_OF_AMPDU             0x400
 
+#define WDA_MAX_MGMT_MPDU_LEN             2000
+
 /* WDA_IS_RX_AN_AMPDU ********************************************************/
 #  define WDA_IS_RX_AN_AMPDU(pRxMeta)       \
    ( ((WDI_DS_RxMetaInfoType*)(pRxMeta))->rxpFlags & WLANWDA_HO_IS_AN_AMPDU )
