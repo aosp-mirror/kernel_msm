@@ -21,3 +21,8 @@
 	qcom,board-id = <0x00020405 0>;
 };
 
+/* Workaround: Disable front normal camera, which has some MIPI issue. */
+&sensor_front {
+	status = "disabled";
+};
+
