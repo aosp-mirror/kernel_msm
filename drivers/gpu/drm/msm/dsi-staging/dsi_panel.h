@@ -304,4 +304,6 @@ void dsi_panel_ext_bridge_put(struct dsi_panel *panel);
 
 int dsi_backlight_register(struct dsi_backlight_config *bl);
 
+int dsi_backlight_update_dpms(struct dsi_backlight_config *bl, int power_state);
+
 #endif /* _DSI_PANEL_H_ */

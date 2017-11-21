@@ -4006,6 +4006,10 @@ int dsi_panel_enable(struct dsi_panel *panel)
 	}
 	panel->panel_initialized = true;
 	mutex_unlock(&panel->panel_lock);
+
+	if (!rc)
+		rc = dsi_backlight_update_dpms(&panel->bl_config,
+					       SDE_MODE_DPMS_ON);
 	return rc;
 }
 
@@ -4043,14 +4047,16 @@ int dsi_panel_pre_disable(struct dsi_panel *panel)
 	mutex_lock(&panel->panel_lock);
 
 	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_PRE_OFF);
-	if (rc) {
+	if (rc)
 		pr_err("[%s] failed to send DSI_CMD_SET_PRE_OFF cmds, rc=%d\n",
 		       panel->name, rc);
-		goto error;
-	}
 
-error:
 	mutex_unlock(&panel->panel_lock);
+
+	if (!rc)
+		rc = dsi_backlight_update_dpms(&panel->bl_config,
+					       SDE_MODE_DPMS_OFF);
+
 	return rc;
 }
 

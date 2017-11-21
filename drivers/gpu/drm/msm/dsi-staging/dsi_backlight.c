@@ -120,3 +120,33 @@ int dsi_backlight_register(struct dsi_backlight_config *bl)
 	display_count++;
 	return 0;
 }
+
+int dsi_backlight_update_dpms(struct dsi_backlight_config *bl, int power_mode)
+{
+	struct backlight_device *bd = bl->bl_device;
+	int rc = 0;
+
+	if (!bd)
+		return 0;
+
+	mutex_lock(&bd->ops_lock);
+	switch (power_mode) {
+	case SDE_MODE_DPMS_ON:
+		bd->props.power = FB_BLANK_UNBLANK;
+		bd->props.state &= ~BL_CORE_FBBLANK;
+		break;
+	case SDE_MODE_DPMS_OFF:
+		bd->props.power = FB_BLANK_POWERDOWN;
+		bd->props.state |= BL_CORE_FBBLANK;
+		break;
+	default:
+		rc = -EINVAL;
+		break;
+	}
+
+	if (!rc)
+		backlight_update_status(bd);
+	mutex_unlock(&bd->ops_lock);
+
+	return rc;
+}
