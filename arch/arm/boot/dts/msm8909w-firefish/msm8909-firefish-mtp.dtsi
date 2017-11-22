@@ -167,6 +167,15 @@
 		pinctrl-0 = <&gpio_key_active>;
 		pinctrl-1 = <&gpio_key_suspend>;
 
+		stem_1 {
+			label = "STEM_1";
+			gpios = <&msm_gpio 91 0x1>;
+			linux,input-type = <1>;
+			linux,code = <265>;
+			gpio-key,wakeup;
+			debounce-interval = <15>;
+		};
+
 		stem_2 {
 			label = "STEM_2";
 			gpios = <&msm_gpio 90 0x1>;
