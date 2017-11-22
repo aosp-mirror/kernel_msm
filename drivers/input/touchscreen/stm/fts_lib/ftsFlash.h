@@ -1,12 +1,12 @@
 /*
 
 **************************************************************************
-**                        STMicroelectronics							**
+**                        STMicroelectronics                            **
 **************************************************************************
-**                        marco.cali@st.com								**
+**                        marco.cali@st.com                             **
 **************************************************************************
 *                                                                        *
-*			FTS API for Flashing the IC							 *
+*                       FTS API for Flashing the IC                      *
 *                                                                        *
 **************************************************************************
 **************************************************************************
@@ -40,25 +40,14 @@
 #ifdef FW_H_FILE
 #define PATH_FILE_FW	"NULL"
 #else
-#ifdef FTM3_CHIP
-#define PATH_FILE_FW	"st_fts.bin"	/* FW bin file name */
-#else
 #define PATH_FILE_FW	"ftm5_fw.ftb"	/* new FW bin file name */
 #endif
-#endif
 
-#ifndef FTM3_CHIP
-#ifdef FTI
 #define FLASH_CHUNK			64*1024												///< Max number of bytes that the DMA can burn on the flash in one shot in FTI
 #define DMA_CHUNK			32													///< Max number of bytes that can be written in I2C to the DMA
-#else
-#define FLASH_CHUNK			64*1024												///< Max number of bytes that the DMA can burn on the flash in one shot
-#define DMA_CHUNK			2*1024												///< Max number of bytes that can be written in I2C to the DMA
-#endif
-#endif
 
 /**
- * Define which kind of erase age by page should be performed
+ * Define which kind of erase page by page should be performed
  */
 typedef enum{
 	ERASE_ALL =0,																///< erase all the pages
@@ -80,12 +69,10 @@ typedef struct {
 	u16 cx_ver;																	///< Cx version of the FW file
 	u8 externalRelease[EXTERNAL_RELEASE_INFO_SIZE];								///< External Release Info of the FW file
 	int data_size;																///< dimension of data (the actual data to be burnt)
-#ifndef FTM3_CHIP
 	u32 sec0_size;																///< dimension of section 0 (FW) in .ftb file
 	u32 sec1_size;																///< dimension of section 1 (Config) in .ftb file
 	u32 sec2_size;																///< dimension of section 2 (Cx) in .ftb file
 	u32 sec3_size;																///< dimension of section 3 (TBD) in .ftb file
-#endif
 } Firmware;
 
 /** @}*/
@@ -93,29 +80,12 @@ typedef struct {
 /** @addtogroup flash_command
  * @{
  */
-#ifdef FTM3_CHIP
-int flash_status(void);
-int flash_status_ready(void);
-int wait_for_flash_ready(void);
-int fillMemory(u32 address, u8 * data, int size);
-#else
+
 int wait_for_flash_ready(u8 type);
-#ifndef FTI
-int fts_warm_boot(void);
-#else
 int hold_m3(void);
-#ifdef SONIA
-int flash_disable_remapping(void);
-#endif
-#endif
 int flash_erase_unlock(void);
 int flash_full_erase(void);
-#ifndef FTI
-int flash_erase_page_by_page(int keep_cx);
-#else
 int flash_erase_page_by_page(ErasePage keep_cx);
-#endif
-#endif
 
 int flash_unlock(void);
 int getFirmwareVersion(u16 * fw_vers, u16* config_id);

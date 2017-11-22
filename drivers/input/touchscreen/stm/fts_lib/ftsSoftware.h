@@ -255,8 +255,8 @@ typedef enum {
 #define LOAD_CX_SS_FORCE					0x17								///< Load SS Init Data for Force
 #define LOAD_SYNC_FRAME_RAW					0x30								///< Load a Synchronized Raw Frame
 #define LOAD_SYNC_FRAME_FILTER				0x31								///< Load a Synchronized Filter Frame
-#define LOAD_SYNC_FRAME_STRENGTH			0x32								///< Load a Synchronized Strength Frame
-#define LOAD_SYNC_FRAME_BASELINE			0x33								///< Load a Synchronized Baseline Frame
+#define LOAD_SYNC_FRAME_BASELINE	0x32	/* Synched Baseline Frame */
+#define LOAD_SYNC_FRAME_STRENGTH	0x33	/* Synched Strength Frame */
 #define LOAD_PANEL_CX_TOT_MS_TOUCH			0x50								///< Load TOT MS Init Data for Active Mode
 #define LOAD_PANEL_CX_TOT_MS_LOW_POWER		0x51								///< Load TOT MS Init Data for Low Power Mode
 #define LOAD_PANEL_CX_TOT_SS_TOUCH			0x52								///< Load TOT SS Init Data for Active Mode
@@ -352,17 +352,10 @@ typedef enum {
  * Important addresses of data stored into Config memory (and sometimes their dimensions)
  * @{
  */
-#ifndef FTI
-#define ADDR_CONFIG_ID						0x0001								///< Starting Address of the config ID
-#define CONFIG_ID_BYTE						2									///< Number of bytes of config ID
-#define ADDR_CONFIG_SENSE_LEN				0x0014								///< Address where is stored the number of sense channels
-#define ADDR_CONFIG_FORCE_LEN				0x0015								///< Address where is stored the number of force channels
-#else
 #define ADDR_CONFIG_ID						0x0010								///< Starting Address of the config ID
 #define CONFIG_ID_BYTE						2									///< Number of bytes of config ID
 #define ADDR_CONFIG_SENSE_LEN				0x0030								///< Address where is stored the number of sense channels
 #define ADDR_CONFIG_FORCE_LEN				0x0031								///< Address where is stored the number of force channels
-#endif
 /** @}*/
 
 /** @}*/

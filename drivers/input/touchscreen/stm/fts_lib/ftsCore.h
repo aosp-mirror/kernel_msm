@@ -28,11 +28,8 @@
 //HW DATA
 #define GPIO_NOT_DEFINED					-1									///< value assumed by reset_gpio when the reset pin of the IC is not connected
 
-#ifdef FTI
+
 #define ADDR_SIZE_HW_REG					BITS_32								///< value of AddrSize for Hw register in FTI @see AddrSize
-#else
-#define ADDR_SIZE_HW_REG					BITS_16								///< value of AddrSize for Hw register
-#endif
 
 #define DATA_HEADER							4									///< size in byte of the header loaded with the data in the frambuffer
 
@@ -51,10 +48,14 @@ typedef enum{
 * System Info Data collect the most important informations about hw and fw
 * @{
 */
-#define SYS_INFO_SIZE						206									///< Size in bytes of System Info data
-#define DIE_INFO_SIZE						16									///< num bytes of die info
-#define EXTERNAL_RELEASE_INFO_SIZE			8									///< num bytes of external release in config
-#define RELEASE_INFO_SIZE					EXTERNAL_RELEASE_INFO_SIZE+8		///< num bytes of release info in sys info (first bytes are external release)
+/* Size in bytes of System Info data */
+#define SYS_INFO_SIZE			208
+/* Num bytes of die info */
+#define DIE_INFO_SIZE			16
+/* Num bytes of external release in config */
+#define EXTERNAL_RELEASE_INFO_SIZE	8
+/* Num bytes of release info in sys info (first bytes are external release) */
+#define RELEASE_INFO_SIZE		(EXTERNAL_RELEASE_INFO_SIZE+8)
 /** @}*/
 
 // RETRY MECHANISM
@@ -166,11 +167,10 @@ int writeSysCmd(u8 sys_cmd, u8 *sett, int size);
 int readSysInfo(int request);
 int readConfig(u16 offset, u8* outBuf, int len);
 int fts_disableInterrupt(void);
-#ifndef FTM3_CHIP
 int fts_disableInterruptNoSync(void);
-#endif
 int fts_enableInterrupt(void);
 int fts_crc_check(void);
 int requestSyncFrame(u8 type);
 
 #endif /* FTS_CORE_H */
+

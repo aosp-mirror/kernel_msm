@@ -64,11 +64,12 @@ int initTestToDo()
 	limit_file.data = NULL;
 	strcpy(limit_file.name, " ");
 
+#ifdef COMPUTE_CX_ON_PHONE
 	tests.MutualRaw = 1;
 	tests.MutualRawGap = 0;
-	tests.MutualCx1 = 1;
-	tests.MutualCx2 = 1;
-	tests.MutualCx2Adj = 1;
+	tests.MutualCx1 = 0;
+	tests.MutualCx2 = 0;
+	tests.MutualCx2Adj = 0;
 	tests.MutualCxTotal = 1;
 	tests.MutualCxTotalAdj = 1;
 
@@ -91,7 +92,7 @@ int initTestToDo()
 	tests.SelfForceIx2 = 0;
 	tests.SelfForceIx2Adj = 0;
 	tests.SelfForceIxTotal = 1;
-	tests.SelfForceIxTotalAdj = 1;
+	tests.SelfForceIxTotalAdj = 0;
 	tests.SelfForceCx1 = 0;
 	tests.SelfForceCx2 = 0;
 	tests.SelfForceCx2Adj = 0;
@@ -104,12 +105,60 @@ int initTestToDo()
 	tests.SelfSenseIx2 = 0;
 	tests.SelfSenseIx2Adj = 0;
 	tests.SelfSenseIxTotal = 1;
-	tests.SelfSenseIxTotalAdj = 1;
+	tests.SelfSenseIxTotalAdj = 0;
 	tests.SelfSenseCx1 = 0;
 	tests.SelfSenseCx2 = 0;
 	tests.SelfSenseCx2Adj = 0;
 	tests.SelfSenseCxTotal = 0;
 	tests.SelfSenseCxTotalAdj = 0;
+#else
+	tests.MutualRaw = 1;
+	tests.MutualRawGap = 0;
+	tests.MutualCx1 = 0;
+	tests.MutualCx2 = 0;
+	tests.MutualCx2Adj = 0;
+	tests.MutualCxTotal = 0;
+	tests.MutualCxTotalAdj = 0;
+
+#ifdef PHONE_KEY
+	tests.MutualKeyRaw = 1;
+#else
+	tests.MutualKeyRaw = 0;
+#endif
+	tests.MutualKeyCx1 = 0;
+	tests.MutualKeyCx2 = 0;
+#ifdef PHONE_KEY
+	tests.MutualKeyCxTotal = 0;
+#else
+	tests.MutualKeyCxTotal = 0;
+#endif
+
+	tests.SelfForceRaw = 1;
+	tests.SelfForceRawGap = 0;
+	tests.SelfForceIx1 = 0;
+	tests.SelfForceIx2 = 0;
+	tests.SelfForceIx2Adj = 0;
+	tests.SelfForceIxTotal = 0;
+	tests.SelfForceIxTotalAdj = 0;
+	tests.SelfForceCx1 = 0;
+	tests.SelfForceCx2 = 0;
+	tests.SelfForceCx2Adj = 0;
+	tests.SelfForceCxTotal = 0;
+	tests.SelfForceCxTotalAdj = 0;
+
+	tests.SelfSenseRaw = 1;
+	tests.SelfSenseRawGap = 0;
+	tests.SelfSenseIx1 = 0;
+	tests.SelfSenseIx2 = 0;
+	tests.SelfSenseIx2Adj = 0;
+	tests.SelfSenseIxTotal = 0;
+	tests.SelfSenseIxTotalAdj = 0;
+	tests.SelfSenseCx1 = 0;
+	tests.SelfSenseCx2 = 0;
+	tests.SelfSenseCx2Adj = 0;
+	tests.SelfSenseCxTotal = 0;
+	tests.SelfSenseCxTotalAdj = 0;
+#endif
 
 	return OK;
 }

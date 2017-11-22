@@ -1,12 +1,12 @@
 /*
 
  **************************************************************************
- **                        STMicroelectronics							 **
+ **                        STMicroelectronics                            **
  **************************************************************************
- **                        marco.cali@st.com							 **
+ **                        marco.cali@st.com                             **
  **************************************************************************
  *                                                                        *
- *			FTS API for Flashing the IC							  *
+ *                      FTS API for Flashing the IC                       *
  *                                                                        *
  **************************************************************************
  **************************************************************************
@@ -219,354 +219,15 @@ int flashProcedure(const char* path, int force, int keep_cx) {
     return res;
 }
 
-
-#ifdef FTM3_CHIP
-/**
-* Read the flash status from register
-* @return the content of the flash status register
-*/
-int flash_status() {
-    u8 cmd[2] = {FLASH_CMD_READSTATUS, 0x00};
-    u8 readData;
-
-    logError(0, "%s Reading flash_status... \n", tag);
-    if (fts_writeRead(cmd, 2, &readData, FLASH_STATUS_BYTES) < 0) {
-        logError(1, "%s flash_status: ERROR % 08X\n", tag, ERROR_BUS_R);
-        return ERROR_BUS_R;
-    }
-
-    readData &= 0x01;
-    //logError(0, "%s flash_status = %d \n", tag,readData);
-    return (int) readData;
-
-}
-
-/**
-* Read the status of the flash from register and convert it in usable value
-* @return FLASH_READY if the flash was ready or an error code which specify the type of error encountered
-*/
-int flash_status_ready() {
-
-    int status = flash_status();
-
-    if (status == ERROR_BUS_R) {
-        logError(1, "%s flash_status_ready: ERROR % 08X\n", tag, ERROR_BUS_R);
-        return ERROR_BUS_R;
-    }
-
-    if (status != FLASH_READY) {
-        logError(1, "%s flash_status_ready: flash busy or unknown STATUS = % 02X\n", tag, status);
-        return ERROR_FLASH_UNKNOWN;
-    }
-
-    return FLASH_READY;
-
-}
-
-/**
-* Poll the flash status register, waiting for the Flash to become ready
-* @return OK if success or an error code which specify the type of error encountered
-*/
-static int wait_for_flash_ready() {
-    int status;
-    int(*code)(void);
-
-    code = flash_status_ready;
-
-    logError(0, "%s Waiting for flash ready... \n", tag);
-    status = attempt_function(code, FLASH_WAIT_BEFORE_RETRY, FLASH_RETRY_COUNT);
-
-    if (status != FLASH_READY) {
-        logError(1, "%s wait_for_flash_ready: ERROR %08X\n", tag, ERROR_FLASH_NOT_READY);
-        return (status | ERROR_FLASH_NOT_READY);
-    }
-
-    logError(0, "%s Flash ready! \n", tag);
-    return OK;
-}
-
-/**
-* Unlock the flash to be programmed
-* @return OK if success or an error code which specify the type of error encountered
-*/
-int flash_unlock() {
-
-    int status;
-    u8 cmd[3] = {FLASH_CMD_UNLOCK, FLASH_UNLOCK_CODE0, FLASH_UNLOCK_CODE1}; //write the command to perform the unlock
-
-    logError(0, "%s Try to unlock flash... \n", tag);
-    status = wait_for_flash_ready();
-
-    if (status != OK) {
-        logError(1, "%s flash_unlock: ERROR %08X\n", tag, ERROR_FLASH_NOT_READY);
-        return (status | ERROR_FLASH_NOT_READY); //Flash not ready within the chosen time, better exit!
-    }
-
-    logError(0, "%s Command unlock ... \n", tag);
-    if (fts_write(cmd, sizeof (cmd)) < 0) {
-        logError(1, "%s flash_unlock: ERROR %08X\n", tag, ERROR_BUS_W);
-        return ERROR_BUS_W;
-    }
-
-    status = wait_for_flash_ready();
-
-    if (status != OK) {
-        logError(1, "%s flash_unlock: ERROR %08X\n", tag, ERROR_FLASH_NOT_READY);
-        return (status | ERROR_FLASH_NOT_READY); //Flash not ready within the chosen time, better exit!
-    }
-
-    logError(0, "%s Unlock flash DONE! \n", tag);
-
-    return OK;
-
-}
-
-/**
-* Parse the raw data read from a FW file in order to fill properly the fields of a Firmware variable
-* @param fw_data raw FW data loaded from system
-* @param fw_size size of fw_data
-* @param fwData pointer to a Firmware variable which will contain the processed data
-* @param keep_cx if 1, the CX area will be loaded and burnt otherwise will be skipped and the area will be untouched
-* @return OK if success or an error code which specify the type of error encountered
-*/
-static int parseBinFile(u8* fw_data, int fw_size, Firmware *fwData, int keep_cx) {
-	int dimension;
-
-	if (keep_cx) {
-	        dimension = FW_SIZE - FW_CX_SIZE;
-	        logError(1, "%s parseBinFile: Selected 124k Configuration!\n", tag);
-	} else {
-		dimension = FW_SIZE;
-		logError(1, "%s parseBinFile: Selected 128k Configuration!\n", tag);
-	}
-
-        if (fw_size - FW_HEADER_SIZE != FW_SIZE || fw_data == NULL) {
-            logError(1, "%s parseBinFile: Read only %d instead of %d... ERROR %08X\n", tag, fw_size - FW_HEADER_SIZE, FW_SIZE, ERROR_FILE_PARSE);
-	    kfree(fw_data);
-            return ERROR_FILE_PARSE;
-        } else {
-            fwData->data = (u8*) kmalloc(dimension * sizeof (u8), GFP_KERNEL);
-            if (fwData->data == NULL) {
-                logError(1, "%s parseBinFile: ERROR %08X\n", tag, ERROR_ALLOC);
-		kfree(fw_data);
-                return ERROR_ALLOC;
-            }
-
-            memcpy(fwData->data, ((u8 *) (fw_data) + FW_HEADER_SIZE), dimension);
-            fwData->data_size = dimension;
-
-	    fwData->fw_ver = (u16) (((fwData->data[FW_VER_MEMH_BYTE1] & 0x00FF) << 8) + (fwData->data[FW_VER_MEMH_BYTE0] & 0x00FF));
-	    fwData->config_id = (u16) (((fwData->data[(FW_CODE_SIZE) + FW_OFF_CONFID_MEMH_BYTE1] & 0x00FF) << 8) + (fwData->data[(FW_CODE_SIZE) + FW_OFF_CONFID_MEMH_BYTE0] & 0x00FF));
-
-	    logError(0, "%s parseBinFile: FW VERS File = %04X\n", tag, fwData->fw_ver);
-	    logError(0, "%s parseBinFile: CONFIG ID File = %04X\n", tag, fwData->config_id);
-
-            logError(0, "%s READ FW DONE %d bytes!\n", tag, fwData->data_size);
-	    kfree(fw_data);
-            return OK;
-        }
-}
-
-
-/**
-* Copy the FW data that will be burnt in the Flash into the Memory
-* @param address address in memory where to copy the data, possible values are FLASH_ADDR_CODE, FLASH_ADDR_CONFIG, FLASH_ADDR_CX
-* @param data pointer to an array of byte which contain the data that should be copied into the memory
-* @param size size of data
-* @return OK if success or an error code which specify the type of error encountered
-*/
-int fillMemory(u32 address, u8 * data, int size) {
-
-    int remaining = size;
-    int toWrite = 0;
-
-    u8* buff = (u8*) kmalloc((MEMORY_CHUNK + 3) * sizeof (u8), GFP_KERNEL);
-    if (buff == NULL) {
-        logError(1, "%s fillMemory: ERROR %02X\n", tag, ERROR_ALLOC);
-        return ERROR_ALLOC;
-    }
-
-    while (remaining > 0) {
-        if (remaining >= MEMORY_CHUNK) {
-            if ((address + MEMORY_CHUNK) < FLASH_ADDR_SWITCH_CMD) {
-                buff[0] = FLASH_CMD_WRITE_LOWER_64;
-                toWrite = MEMORY_CHUNK;
-                remaining -= MEMORY_CHUNK;
-            } else {
-                if (address < FLASH_ADDR_SWITCH_CMD) {
-                    int delta = FLASH_ADDR_SWITCH_CMD - address;
-                    buff[0] = FLASH_CMD_WRITE_LOWER_64;
-                    toWrite = delta;
-                    remaining -= delta;
-                } else {
-                    buff[0] = FLASH_CMD_WRITE_UPPER_64;
-                    toWrite = MEMORY_CHUNK;
-                    remaining -= MEMORY_CHUNK;
-                }
-            }
-        } else {
-            if ((address + remaining) < FLASH_ADDR_SWITCH_CMD) {
-                buff[0] = FLASH_CMD_WRITE_LOWER_64;
-                toWrite = remaining;
-                remaining = 0;
-            } else {
-                if (address < FLASH_ADDR_SWITCH_CMD) {
-                    int delta = FLASH_ADDR_SWITCH_CMD - address;
-                    buff[0] = FLASH_CMD_WRITE_LOWER_64;
-                    toWrite = delta;
-                    remaining -= delta;
-                } else {
-                    buff[0] = FLASH_CMD_WRITE_UPPER_64;
-                    toWrite = remaining;
-                    remaining = 0;
-                }
-            }
-        }
-
-        buff[1] = (u8) ((address & 0x0000FF00) >> 8);
-        buff[2] = (u8) (address & 0x000000FF);
-        memcpy(buff + 3, data, toWrite);
-        logError(0, "%s Command = %02X , address = %02X %02X, bytes = %d \n", tag, buff[0], buff[1], buff[2], toWrite);
-        if (fts_write(buff, 3 + toWrite) < 0) {
-            logError(1, "%s fillMemory: ERROR %08X\n", tag, ERROR_BUS_W);
-	    kfree(buff);
-            return ERROR_BUS_W;
-        }
-
-        address += toWrite;
-        data += toWrite;
-
-    }
-    kfree(buff);
-    return OK;
-}
-
-/**
-* Execute the procedure to burn a FW in FTM3 IC
-* @param fw structure which contain the FW to be burnt
-* @param force_burn if 1, the flashing procedure will be forced and executed regardless the additional info, otherwise the FW in the file will be burnt only if it is newer than the one running in the IC
-* @param keep_cx if >0, the CX area will be preserved otherwise will be cleared
-* @return OK if success or an error code which specify the type of error encountered
-*/
-int flash_burn(Firmware fw, int force_burn, int keep_cx) {
-    u8 cmd;
-    int res;
-
-    if (!force_burn && (ftsInfo.u16_fwVer == fw.fw_ver) && (ftsInfo.u16_cfgId == fw.config_id)) {
-        logError(1, "%s flash_burn: Firmware in the chip equal to the one to burn! NO UPDATE ERROR %02X \n", tag, ERROR_FW_NO_UPDATE);
-        return (ERROR_FW_NO_UPDATE | ERROR_FLASH_BURN_FAILED);
-    }
-
-    //programming procedure start
-
-    logError(0, "%s Programming Procedure for flashing started: \n\n", tag);
-
-    logError(0, "%s 1) SYSTEM RESET: \n", tag);
-    res = fts_system_reset();
-    if (res < 0) {
-        logError(1, "%s    system reset FAILED!\n", tag);
-        if (res != (ERROR_SYSTEM_RESET_FAIL | ERROR_TIMEOUT)) //if there is no firmware i will not get the controller ready event and there will be a timeout but i can keep going, but if there is an I2C error i have to exit
-            return (res | ERROR_FLASH_BURN_FAILED);
-    } else
-        logError(0, "%s   system reset COMPLETED!\n\n", tag);
-
-    logError(0, "%s 2) FLASH UNLOCK: \n", tag);
-    res = flash_unlock();
-    if (res < 0) {
-        logError(1, "%s   flash unlock FAILED! ERROR %08X\n", tag, ERROR_FLASH_BURN_FAILED);
-        return (res | ERROR_FLASH_BURN_FAILED);
-    } else {
-        logError(0, "%s   flash unlock COMPLETED!\n\n", tag);
-    }
-
-    //Write the lower part of the Program RAM
-    logError(0, "%s 3) PREPARING DATA FOR FLASH BURN: \n", tag);
-
-    res = fillMemory(FLASH_ADDR_CODE, fw.data, fw.data_size);
-    if (res < 0) {
-        logError(1, "%s   Error During filling the memory! ERROR %08X \n", tag, ERROR_FLASH_BURN_FAILED);
-        return (res | ERROR_FLASH_BURN_FAILED);
-    }
-    logError(0, "%s   Data copy COMPLETED!\n\n", tag);
-
-    logError(0, "%s 4) ERASE FLASH: \n", tag);
-    res = wait_for_flash_ready();
-    if (res < 0) {
-        logError(1, "%s   Flash not ready! ERROR %08X\n", tag, ERROR_FLASH_BURN_FAILED);
-        return (res | ERROR_FLASH_BURN_FAILED);
-    }
-
-    logError(0, "%s Command erase ... \n", tag);
-    cmd = FLASH_CMD_ERASE;
-    if (fts_write(&cmd, 1) < 0) {
-        logError(1, "%s   Error during erasing flash! ERROR %08X\n", tag, ERROR_FLASH_BURN_FAILED);
-        return (ERROR_BUS_W | ERROR_FLASH_BURN_FAILED);
-    }
-
-    res = wait_for_flash_ready();
-    if (res < 0) {
-        logError(1, "%s   Flash not ready 2! ERROR %08X\n", tag, ERROR_FLASH_BURN_FAILED);
-        return (res | ERROR_FLASH_BURN_FAILED);
-    }
-
-    logError(0, "%s   Flash erase COMPLETED!\n\n", tag);
-
-    logError(0, "%s 5) BURN FLASH: \n", tag);
-    logError(0, "%s Command burn ... \n", tag);
-    cmd = FLASH_CMD_BURN;
-    if (fts_write(&cmd, 1) < 0) {
-        logError(1, "%s   Error during burning data! ERROR %08X \n", tag, ERROR_FLASH_BURN_FAILED);
-        return (ERROR_BUS_W | ERROR_FLASH_BURN_FAILED);
-    }
-
-    res = wait_for_flash_ready();
-    if (res < 0) {
-        logError(1, "%s   Flash not ready! ERROR %08X\n", tag, ERROR_FLASH_BURN_FAILED);
-        return (res | ERROR_FLASH_BURN_FAILED);
-    }
-
-    logError(0, "%s   Flash burn COMPLETED!\n\n", tag);
-
-    logError(0, "%s 6) SYSTEM RESET: \n", tag);
-    res = fts_system_reset();
-    if (res < 0) {
-        logError(1, "%s    system reset FAILED! ERROR %08X\n", tag, ERROR_FLASH_BURN_FAILED);
-        return (res | ERROR_FLASH_BURN_FAILED);
-    }
-    logError(0, "%s   system reset COMPLETED!\n\n", tag);
-
-
-    logError(0, "%s 7) FINAL CHECK: \n", tag);
-    res = readChipInfo(0);
-    if (res < 0) {
-        logError(1, "%s flash_burn: Unable to retrieve Chip INFO! ERROR %08X\n", tag, ERROR_FLASH_BURN_FAILED);
-        return (res | ERROR_FLASH_BURN_FAILED);
-    }
-
-    if ((ftsInfo.u16_fwVer != fw.fw_ver) && (ftsInfo.u16_cfgId != fw.config_id)) {
-        logError(1, "%s   Firmware in the chip different from the one that was burn! fw: %x != %x , conf: %x != %x\n", tag, ftsInfo.u16_fwVer, fw.fw_ver, ftsInfo.u16_cfgId, fw.config_id);
-        return ERROR_FLASH_BURN_FAILED;
-    }
-
-    logError(0, "%s   Final check OK! fw: %02X , conf: %02X \n", tag, ftsInfo.u16_fwVer, ftsInfo.u16_cfgId);
-
-    return OK;
-}
-
-
-#else
-
 /**
 * Poll the Flash Status Registers after the execution of a command to check if the Flash becomes ready within a timeout
 * @param type register to check according to the previous command sent
 * @return OK if success or an error code which specify the type of error encountered
 */
 int wait_for_flash_ready(u8 type) {
-#ifndef FTI
-    u8 cmd[2] = {FLASH_CMD_READ_REGISTER, type};
-#else
+
     u8 cmd[5] = {FTS_CMD_HW_REG_R, 0x20, 0x00, 0x00, type};
-#endif
+
     u8 readData[2] ={0};
     int i, res = -1;
 
@@ -596,27 +257,6 @@ int wait_for_flash_ready(u8 type) {
     return OK;
 }
 
-#ifndef FTI
-/**
-* Execute a warm boot
-* @return OK if success or an error code which specify the type of error encountered
-*/
-int fts_warm_boot() {
-
-    u8 cmd[4] = {FTS_CMD_HW_REG_W, 0x00, 0x00, WARM_BOOT_VALUE}; //write the command to perform the warm boot
-    u16ToU8_be(ADDR_WARM_BOOT, &cmd[1]);
-
-    logError(0, "%s Command warm boot ... \n", tag);
-    if (fts_write(cmd, sizeof (cmd)) < OK) {
-        logError(1, "%s flash_unlock: ERROR % 08X\n", tag, ERROR_BUS_W);
-        return ERROR_BUS_W;
-    }
-
-    logError(0, "%s Warm boot DONE! \n", tag);
-
-    return OK;
-}
-#else
 
 /**
  * Put the M3 in hold
@@ -679,32 +319,7 @@ int hold_m3(){
 }
 
 
-#ifdef SONIA
-int flash_disable_remapping(){
-	int ret;
-    u8 cmd[2] = {0x00, 0x00};
 
-    logError(0, "%s Starting disable reppaming... \n", tag);
-	ret = fts_writeReadU8UX(FTS_CMD_HW_REG_R,ADDR_SIZE_HW_REG,ADDR_BOOT_OPTION,cmd,1,DUMMY_HW_REG);
-	if(ret<OK){
-		cmd[1]=cmd[0]&0xFE;
-		logError(0, "%s %s Read: %02X -> Write: %02X \n", tag, __func__, cmd[0], cmd[1]);
-		ret = fts_writeU8UX(FTS_CMD_HW_REG_W, ADDR_SIZE_HW_REG, ADDR_BOOT_OPTION, &cmd[1], 1);
-		if(ret<OK){
-			logError(1, "%s %s:Writing ERROR %08X\n", tag, __func__, ret);
-			return ret;
-		}
-	}else{
-		logError(1, "%s %s: Reading ERROR %08X\n", tag, __func__, ret);
-        return ret;
-	}
-
-    logError(0, "%s Remapping disabled DONE! \n", tag);
-	return OK;
-}
-#endif
-
-#endif
 
 /**
 * Parse the raw data read from a FW file in order to fill properly the fields of a Firmware variable
@@ -861,11 +476,8 @@ END:
 * @return OK if success or an error code which specify the type of error encountered
 */
 int flash_unlock() {
-#ifndef FTI
-    u8 cmd[3] = {FLASH_CMD_UNLOCK, FLASH_UNLOCK_CODE0, FLASH_UNLOCK_CODE1}; //write the command to perform the unlock
-#else
     u8 cmd[6] = {FTS_CMD_HW_REG_W, 0x20, 0x00, 0x00, FLASH_UNLOCK_CODE0, FLASH_UNLOCK_CODE1};
-#endif
+
     logError(0, "%s Command unlock ... \n", tag);
     if (fts_write(cmd, ARRAY_SIZE(cmd)) < OK) {
         logError(1, "%s flash_unlock: ERROR %08X\n", tag, ERROR_BUS_W);
@@ -875,7 +487,6 @@ int flash_unlock() {
     logError(0, "%s Unlock flash DONE! \n", tag);
 
     return OK;
-
 }
 
 /**
@@ -883,11 +494,8 @@ int flash_unlock() {
 * @return OK if success or an error code which specify the type of error encountered
 */
 int flash_erase_unlock() {
-#ifndef FTI
-    u8 cmd[3] = {FLASH_CMD_WRITE_REGISTER, FLASH_ERASE_UNLOCK_CODE0, FLASH_ERASE_UNLOCK_CODE1}; //write the command to perform the unlock for erasing the flash
-#else
     u8 cmd[6] = {FTS_CMD_HW_REG_W, 0x20, 0x00, 0x00, FLASH_ERASE_UNLOCK_CODE0, FLASH_ERASE_UNLOCK_CODE1};
-#endif
+
     logError(0, "%s Try to erase unlock flash... \n", tag);
 
     logError(0, "%s Command erase unlock ... \n", tag);
@@ -899,7 +507,6 @@ int flash_erase_unlock() {
     logError(0, "%s Erase Unlock flash DONE! \n", tag);
 
     return OK;
-
 }
 
 /**
@@ -908,9 +515,7 @@ int flash_erase_unlock() {
 */
 int flash_full_erase() {
     int status;
-#ifndef FTI
-    u8 cmd[3] = {FLASH_CMD_WRITE_REGISTER, FLASH_ERASE_CODE0, FLASH_ERASE_CODE1}; //write the command to erase the flash
-#else
+
 	u8 cmd1[6] = {FTS_CMD_HW_REG_W, 0x20, 0x00, 0x00, FLASH_ERASE_CODE0+1, 0x00 };
     u8 cmd[6] = {FTS_CMD_HW_REG_W, 0x20, 0x00, 0x00, FLASH_ERASE_CODE0, FLASH_ERASE_CODE1};
 
@@ -918,7 +523,6 @@ int flash_full_erase() {
 		logError(1, "%s flash_erase_page_by_page: ERROR %08X\n", tag, ERROR_BUS_W);
 		return ERROR_BUS_W;
     }
-#endif
 
     logError(0, "%s Command full erase sent ... \n", tag);
     if (fts_write(cmd, ARRAY_SIZE(cmd)) < OK) {
@@ -944,57 +548,6 @@ int flash_full_erase() {
 * @param keep_cx if SKIP_PANEL_INIT the Panel Init pages will be skipped, if > SKIP_PANEL_CX_INIT Cx and Panel Init pages otherwise all the pages will be deleted
 * @return OK if success or an error code which specify the type of error encountered
 */
-#ifndef FTI
-int flash_erase_page_by_page(int keep_cx) {
-
-    u8 status,i=0;
-#ifndef FTI
-    u8 cmd[4] = {FLASH_CMD_WRITE_REGISTER, FLASH_ERASE_CODE0, 0x00, 0x00}; //write the command to erase the flash
-#else
-	u8 cmd1[6] = {FLASH_CMD_WRITE_REGISTER, 0x20, 0x00, 0x00, FLASH_ERASE_CODE0+1, 0x00 };
-	u8 cmd[6] = {FLASH_CMD_WRITE_REGISTER,  0x20, 0x00, 0x00, FLASH_ERASE_CODE0, 0x00 };
-#endif
-    for(i=0; i<FLASH_NUM_PAGE; i++){
-		if(i>=FLASH_CX_PAGE_START && i<=FLASH_CX_PAGE_END && keep_cx>1){
-			logError(0, "%s Skipping erase Cx page %d! \n", tag,i);
-			continue;
-		}
-
-		if(i>=FLASH_PANEL_PAGE_START && i<=FLASH_PANEL_PAGE_END && keep_cx>0){
-			logError(0, "%s Skipping erase Panel Init page %d! \n", tag,i);
-			continue;
-		}
-
-#ifndef FTI
-		cmd[2] = (0x3F&i)|FLASH_ERASE_START;
-#else
-		cmd[5] = (0x1F&i)|FLASH_ERASE_START;
-		if (fts_write(cmd1, ARRAY_SIZE(cmd1)) < OK) {
-		logError(1, "%s flash_erase_page_by_page: ERROR %08X\n", tag, ERROR_BUS_W);
-		return ERROR_BUS_W;
-	}
-#endif
-		logError(0, "%s Command erase page %d sent ... \n", tag,i);
-	if (fts_write(cmd, ARRAY_SIZE(cmd)) < OK) {
-		logError(1, "%s flash_erase_page_by_page: ERROR %08X\n", tag, ERROR_BUS_W);
-		return ERROR_BUS_W;
-	}
-
-	status = wait_for_flash_ready(FLASH_ERASE_CODE0);
-
-	if (status != OK) {
-
-		logError(1, "%s flash_erase_page_by_page: ERROR % 08X\n", tag, ERROR_FLASH_NOT_READY);
-		return (status | ERROR_FLASH_NOT_READY); //Flash not ready within the chosen time, better exit!
-	}
-
-     }
-
-     logError(0, "%s Erase flash page by page DONE! \n", tag);
-
-    return OK;
-}
-#else
 int flash_erase_page_by_page(ErasePage keep_cx) {
 
     u8 status,i=0;
@@ -1050,7 +603,6 @@ int flash_erase_page_by_page(ErasePage keep_cx) {
 
     return OK;
 }
-#endif
 
 /**
 * Start the DMA procedure which actually transfer and burn the data loaded from memory into the Flash
@@ -1059,12 +611,7 @@ int flash_erase_page_by_page(ErasePage keep_cx) {
 static int start_flash_dma(void)
 {
     int status;
-
-#ifndef FTI
-    u8 cmd[3] = {FLASH_CMD_WRITE_REGISTER, FLASH_DMA_CODE0, FLASH_DMA_CODE1}; //write the command to erase the flash
-#else
     u8 cmd[6] = {FLASH_CMD_WRITE_REGISTER, 0x20, 0x00, 0x00, FLASH_DMA_CODE0, FLASH_DMA_CODE1}; //write the command to erase the flash
-#endif
 
     logError(0, "%s Command flash DMA ... \n", tag);
     if (fts_write(cmd, ARRAY_SIZE(cmd)) < OK) {
@@ -1112,11 +659,8 @@ static int fillFlash(u32 address, u8 *data, int size) {
 
     while (remaining > 0) {
 		byteBlock = 0;
-#ifndef FTI
-        addr =0;
-#else
 		addr = 0x00100000;
-#endif
+
         while (byteBlock < FLASH_CHUNK && remaining > 0) {
 			index = 0;
             if (remaining >= DMA_CHUNK) {
@@ -1148,17 +692,12 @@ static int fillFlash(u32 address, u8 *data, int size) {
                 }
             }
 
-#ifndef FTI
-			buff[index++] = FLASH_CMD_WRITE_64K;
-            buff[index++] = (u8) ((addr & 0x0000FF00) >> 8);
-            buff[index++] = (u8) (addr & 0x000000FF);
-#else
 			buff[index++] = FTS_CMD_HW_REG_W;
 			buff[index++] = (u8) ((addr & 0xFF000000) >> 24);
 			buff[index++] = (u8) ((addr & 0x00FF0000) >> 16);
 			buff[index++] = (u8) ((addr & 0x0000FF00) >> 8);
             buff[index++] = (u8) (addr & 0x000000FF);
-#endif
+
             memcpy(&buff[index], data, toWrite);
             //logError(0, "%s Command = %02X , address = %02X %02X , bytes = %d, data =  %02X %02X, %02X %02X \n", tag, buff[0], buff[1], buff[2], toWrite, buff[3], buff[4], buff[3 + toWrite-2], buff[3 + toWrite-1]);
             if (fts_write(buff, index + toWrite) < OK) {
@@ -1178,11 +717,9 @@ static int fillFlash(u32 address, u8 *data, int size) {
 		index = 0;
 
         buff2[index++] = FLASH_CMD_WRITE_REGISTER;
-#ifdef FTI
 		buff2[index++] = 0x20;
         buff2[index++] = 0x00;
 		buff2[index++] = 0x00;
-#endif
         buff2[index++] = FLASH_DMA_CONFIG;
         buff2[index++] = 0x00;
         buff2[index++] = 0x00;
@@ -1193,11 +730,9 @@ static int fillFlash(u32 address, u8 *data, int size) {
         buff2[index++] = (u8) (byteBlock & 0x000000FF);
         buff2[index++] = (u8) ((byteBlock & 0x0000FF00)>> 8);
 		buff2[index++] = 0x00;
-#ifndef FTI
-		logError(0, "%s Command = %02X , address = %02X %02X, words =  %02X %02X \n", tag, buff2[0], buff2[5], buff2[4], buff2[7], buff2[6]);
-#else
+
 		logError(0, "%s DMA Command = %02X , address = %02X %02X, words =  %02X %02X \n", tag, buff2[0], buff2[8], buff2[7], buff2[10], buff2[9]);
-#endif
+
 		if (fts_write(buff2, index) < OK) {
             logError(1, "%s   Error during filling Flash! ERROR %08X \n", tag, ERROR_BUS_W);
 			kfree(buff);
@@ -1230,15 +765,23 @@ int flash_burn(Firmware fw, int force_burn, int keep_cx) {
 
     if (!force_burn) {
 		for(res = EXTERNAL_RELEASE_INFO_SIZE-1; res >=0; res--){
-			if(fw.externalRelease[res]!=systemInfo.u8_releaseInfo[res])
+			if (fw.externalRelease[res] >
+			    systemInfo.u8_releaseInfo[res])
 				goto start;
 		}
-        logError(1, "%s flash_burn: Firmware in the chip equal to the one to burn! NO UPDATE ERROR %08X \n", tag, ERROR_FW_NO_UPDATE);
+		logError(1,
+			 "%s flash_burn: Firmware in the chip newer or equal to the one to burn! NO UPDATE ERROR %08X\n",
+			 tag, ERROR_FW_NO_UPDATE);
         return (ERROR_FW_NO_UPDATE | ERROR_FLASH_BURN_FAILED);
     }else{
-		//burn procedure to update the CX memory, if not preset just skip it!
-		if(force_burn == CRC_CX && fw.sec2_size==0){
-			logError(1, "%s flash_burn: CRC in CX but fw does not contain CX data!\n");
+		/* burn procedure to update the CX memory, if not present just
+		 * skip it!
+		 */
+		if (force_burn == CRC_CX && fw.sec2_size == 0) {
+			logError(1,
+				 "%s flash_burn: CRC in CX but fw does not contain CX data! NO UPDATE ERROR %08X\n",
+				 tag, ERROR_FW_NO_UPDATE);
+			return (ERROR_FW_NO_UPDATE | ERROR_FLASH_BURN_FAILED);
 		}
 	}
 
@@ -1255,15 +798,6 @@ start:
     } else
         logError(0, "%s   system reset COMPLETED!\n\n", tag);
 
-#ifndef FTI
-    logError(0, "%s 2) WARM BOOT: \n", tag);
-    res = fts_warm_boot();
-    if (res < OK) {
-        logError(1, "%s    warm boot FAILED!\n", tag);
-	return (res | ERROR_FLASH_BURN_FAILED);
-    } else
-        logError(0, "%s    warm boot COMPLETED!\n\n", tag);
-#else
     logError(0, "%s 2) HOLD M3 : \n", tag);
     res = hold_m3();
     if (res < OK) {
@@ -1271,20 +805,6 @@ start:
 	return (res | ERROR_FLASH_BURN_FAILED);
     } else
         logError(0, "%s    hold_m3 COMPLETED!\n\n", tag);
-
-#ifdef SONIA
-	logError(0, "%s 2.1) REMAP DISABLE : \n", tag);
-    res = flash_disable_remapping();
-    if (res < OK) {
-        logError(1, "%s    remap_disable FAILED!\n", tag);
-	return (res | ERROR_FLASH_BURN_FAILED);
-    } else
-        logError(0, "%s    remap_disable COMPLETED!\n\n", tag);
-#endif
-
-#endif
-
-
 
     logError(0, "%s 3) FLASH UNLOCK: \n", tag);
     res = flash_unlock();
@@ -1306,13 +826,13 @@ start:
     }
 
     logError(0, "%s 5) FLASH ERASE: \n", tag);
-    if(keep_cx>0){
-		if(fw.sec2_size!=0)
+	if (keep_cx > 0) {
+		if (fw.sec2_size != 0)
 			res = flash_erase_page_by_page(SKIP_PANEL_INIT);
 		else
 			res = flash_erase_page_by_page(SKIP_PANEL_CX_INIT);
-    }else
-	res = flash_full_erase();
+	} else
+		res = flash_full_erase();
 
     if (res < 0) {
         logError(1, "%s   flash erase FAILED! ERROR %08X\n", tag, ERROR_FLASH_BURN_FAILED);
@@ -1337,7 +857,7 @@ start:
     }
      logError(1, "%s   load config DONE!\n", tag);
 
-	if(fw.sec2_size!=0){
+	if (fw.sec2_size != 0) {
 		logError(0, "%s 7.1) LOAD CX: \n", tag);
 		res = fillFlash(FLASH_ADDR_CX, &(fw.data[fw.sec0_size+fw.sec1_size]), fw.sec2_size);
 		if (res < OK) {
@@ -1378,5 +898,3 @@ start:
 
     return OK;
 }
-
-#endif

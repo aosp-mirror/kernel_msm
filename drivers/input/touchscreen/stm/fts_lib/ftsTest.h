@@ -116,10 +116,10 @@
 #define MS_KEY_TOTAL_CX_MAP_MAX			"MS_KEY_TOTAL_CX_MAX"
 
 //CONSTANT TOTAL IX
-#define SS_IX1_FORCE_W                  "SS_IX1_FORCE_W"
-#define SS_IX2_FORCE_W                  "SS_IX2_FORCE_W"
-#define SS_IX1_SENSE_W                  "SS_IX1_SENSE_W"
-#define SS_IX2_SENSE_W                  "SS_IX2_SENSE_W"
+#define SS_IX1_FORCE_W                  "IX1_FORCE_W"
+#define SS_IX2_FORCE_W                  "IX2_FORCE_W"
+#define SS_IX1_SENSE_W                  "IX1_SENSE_W"
+#define SS_IX2_SENSE_W                  "IX2_SENSE_W"
 /** @}*/
 
 

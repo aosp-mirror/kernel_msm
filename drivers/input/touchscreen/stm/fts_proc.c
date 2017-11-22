@@ -26,6 +26,7 @@
 #include <linux/fs.h>
 #include <linux/seq_file.h>
 #include <linux/delay.h>
+#include <linux/uaccess.h>
 #include "fts.h"
 #include "fts_lib/ftsCompensation.h"
 #include "fts_lib/ftsCore.h"
@@ -106,14 +107,11 @@
 
 //FW Update
 #define CMD_GETFWVER										0x40				///< Get the FW version of the IC
-#define CMD_FLASHSTATUS										0x41				///< Read the flash status
 #define CMD_FLASHUNLOCK										0x42				///< Unlock the flash
 #define CMD_READFWFILE										0x43				///< Try to read the FW file, need to pass: keep_cx
 #define CMD_FLASHPROCEDURE									0x44				///< Perform a full flashing procedure: need to pass: force keep_cx
-#ifndef FTM3_CHIP
 #define CMD_FLASHERASEUNLOCK								0x45				///< Unlock the erase of the flash
 #define CMD_FLASHERASEPAGE									0x46				///< Erase page by page the flash, need to pass: keep_cx, if keep_cx>SKIP_PANEL_INIT Panel Init Page will be skipped, if >SKIP_PANEL_CX_INIT Cx and Panel Init Pages will be skipped otherwise if =ERASE_ALL all the pages will be deleted
-#endif
 
 //MP test
 #define CMD_ITOTEST											0x50				///< Perform an ITO test
@@ -349,7 +347,8 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 {
 	int numberParam = 0;
 	struct fts_ts_info *info = dev_get_drvdata(getDev());
-	char *p = (char *) buf;
+	char *p = NULL;
+	char pbuf[count];
 	char path[100]={0};
 	int res = -1, j, index = 0;
 	int size = 6;
@@ -383,7 +382,13 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 	/*for(temp = 0; temp<count; temp++){
 		logError(0,"%s p[%d] = %02X \n",tag, temp, p[temp]);
 	}*/
+	if (access_ok(VERIFY_READ, buf, count) < OK ||
+	    copy_from_user(pbuf, buf, count) != 0) {
+		res = ERROR_ALLOC;
+		goto END;
+	}
 
+	p = pbuf;
 	if(count>MESSAGE_MIN_HEADER_SIZE-1 && p[0]== MESSAGE_START_BYTE){
 		logError(0,"%s Enter in Byte Mode! \n",tag);
 		byte_call = 1;
@@ -500,13 +505,6 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 	//elaborate input
 	if (numberParam >= 1)
 	{
-		res = fts_disableInterrupt();
-		if (res < 0)
-		{
-			logError(0, "%s %s: ERROR %08X \n", tag, __func__, res);
-			res = (res | ERROR_DISABLE_INTER);
-			goto END;
-		}
 		switch (funcToTest[0])
 		{
 		case CMD_VERSION_BYTE:
@@ -519,6 +517,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 				readData[0] = (u8)(FTS_TS_DRV_VER >>24);
 				readData[1] = (u8)(FTS_TS_DRV_VER >>16);
 				logError(0, "%s %s: Version = %02X%02X \n", tag, __func__,readData[0],readData[1]);
+				res = OK;
 			}else{
 				res = ERROR_ALLOC;
 				logError(1, "%s %s: Impossible allocate memory... ERROR %08X \n", tag, __func__, res);
@@ -1135,7 +1134,6 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 			}
 			break;
 
-
 		case CMD_GETFWVER:
 			res = getFirmwareVersion(&fw_version, &config_id);
 			if (res < OK)
@@ -1147,22 +1145,6 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 				size += (4) * sizeof (u8);
 			}
 			break;
-
-#ifdef FTM3_CHIP
-		case CMD_FLASHSTATUS:
-			res = flash_status(); //return 0 = flash ready, 1 = flash busy, <0 error
-			if (res < OK)
-			{
-				logError(1, "%s Error reading flash status ERROR %02X\n", tag, res);
-			} else
-			{
-				logError(0, "%s Flash Status: %d \n", tag, res);
-				size += (1 * sizeof (u8));
-				temp = res; //need to store the value for further display
-				res = OK; //set res =ok for returning code
-			}
-			break;
-#endif
 
 		case CMD_FLASHUNLOCK:
 			res = flash_unlock();
@@ -1213,7 +1195,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 				res = ERROR_OP_NOT_ALLOW;
 			}
 			break;
-#ifndef FTM3_CHIP
+
 		case CMD_FLASHERASEUNLOCK:
 			res = flash_erase_unlock();
 			if (res < OK)
@@ -1243,7 +1225,6 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 				res = ERROR_OP_NOT_ALLOW;
 			}
 			break;
-#endif
 
 			/*ITO TEST*/
 		case CMD_ITOTEST:
@@ -1675,7 +1656,6 @@ END: //here start the reporting phase, assembling the data to send in the file n
 
 			case CMD_GETFORCELEN:
 			case CMD_GETSENSELEN:
-			case CMD_FLASHSTATUS:
 				snprintf(&driver_test_buff[index], 3, "%02X", (u8) temp);
 				index+=2;
 

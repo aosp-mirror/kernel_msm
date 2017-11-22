@@ -42,16 +42,22 @@
 * @{
 */
 //**** CODE CONFIGURATION ****
-#define FTS_TS_DRV_NAME                     "fts"								///< driver name
-#define FTS_TS_DRV_VERSION                  "5.1.2"								///< driver version string format
-#define FTS_TS_DRV_VER						0x05010200							///< driver version u32 format
+#define FTS_TS_DRV_NAME		"fts"		/* driver name */
+#define FTS_TS_DRV_VERSION	"5.2.1"		/* driver version string */
+#define FTS_TS_DRV_VER		0x05020100	/* driver version u32 format */
 
 #define DEBUG																	///< define to print more logs in the kernel log and better follow the code flow
 
 #define DRIVER_TEST																///< if defined allow to use and test special functions of the driver and fts_lib from comand shell (usefull for enginering/debug operations)
 
-#define ENGINEERING_CODE														///< if defined allow to have some procedures at the boot or from file node to assure that touch works under any condition that usually are disabled in the MP stage of the project
-#define COMPUTE_CX_ON_PHONE														///< initialization of CX memory allowed on the phone
+/* Comment 2 flags to disable auto-tune in MP test and device boot-up */
+/* if defined allow to have some procedures at the boot or from file node to
+ * assure that touch works under any condition that usually are disabled in the
+ * MP stage of the project
+ */
+/* #define ENGINEERING_CODE */
+/* Initialization of CX memory allowed on the phone */
+/* #define COMPUTE_CX_ON_PHONE */
 
 /*#define FW_H_FILE*/			/* include the FW data as header file */
 #ifdef FW_H_FILE

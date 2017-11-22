@@ -40,10 +40,9 @@ SysInfo systemInfo;																///< Global System Info variable, accessible 
 static int reset_gpio = GPIO_NOT_DEFINED;										///< gpio number of the rest pin, the value is  GPIO_NOT_DEFINED if the reset pin is not connected
 static int system_reseted_up = 0;												///< flag checked during resume to understand if there was a system reset and restore the proper state
 static int system_reseted_down = 0;												///< flag checked during suspend to understand if there was a system reset and restore the proper state
-#ifndef FTM3
 static int disable_irq_count = 0;												///< count the number of call to disable_irq
 spinlock_t fts_int;																///< spinlock to controll the access to the disable_irq_counter
-#endif
+
 
 /**
 * Initialize core variables of the library. Must be called during the probe before any other lib function
@@ -93,9 +92,8 @@ int fts_system_reset()
 	for (i = 0; i < RETRY_SYSTEM_RESET && res < 0; i++)
 	{
 		resetErrorList();
-#ifndef FTM3_CHIP
 		fts_disableInterrupt();			//disable interrupt before resetting to be able to get boot events
-#endif
+
 		if (reset_gpio == GPIO_NOT_DEFINED)
 		{
 			res = fts_writeU8UX(FTS_CMD_HW_REG_W, ADDR_SIZE_HW_REG, ADDR_SYSTEM_RESET,data,ARRAY_SIZE(data));
@@ -111,7 +109,6 @@ int fts_system_reset()
 			logError(1, "%s fts_system_reset: ERROR %08X\n", tag, ERROR_BUS_W);
 		} else
 		{
-			//mdelay(5);															//do not remove this delay, wait for fw to be ready
 			res = pollForEvent(&event_to_search, 1, readData, GENERAL_TIMEOUT);
 			if (res < OK)
 			{
@@ -666,7 +663,7 @@ int readSysInfo(int request){
 	u8ToU16(&data[index], &systemInfo.u16_ssPrxRxStrenAddr);
 	index += 2;
 	u8ToU16(&data[index], &systemInfo.u16_ssPrxRxBaselineAddr);
-	//index += 2;
+	index += 2;
 
 	logError(1, "%s Parsed %d bytes! \n", tag, index);
 
@@ -716,20 +713,6 @@ int readConfig(u16 offset, u8* outBuf, int len){
  */
 int fts_disableInterrupt()
 {
-#ifdef FTM3
-	int ret;
-	u8 data[1] = {IER_DISABLE};				//disable interrupt
-	//u16ToU8_be(IER_ADDR, &cmd[1]);
-
-	ret = fts_writeU8UX(FTS_CMD_HW_REG_W,ADDR_SIZE_HW_REG, ADDR_IER, data, ARRAY_SIZE(data));
-	if ( ret < OK)
-	{
-		logError(1, "%s %s: ERROR %08X\n", tag, __func__, ret);
-		return ret;
-	}
-	logError(0, "%s Interrupt Disabled! \n", tag);
-	return OK;
-#else
 	unsigned long flag;
 	if(getClient()!=NULL){
 		spin_lock_irqsave(&fts_int,flag);
@@ -746,11 +729,10 @@ int fts_disableInterrupt()
 		logError(1, "%s %s: Impossible get client irq... ERROR %08X\n", tag, __func__, ERROR_OP_NOT_ALLOW);
 		return ERROR_OP_NOT_ALLOW;
 	}
-#endif
+
 }
 
 
-#ifndef FTM3_CHIP
 /**
  * Disable the interrupt async so the ISR of the driver can not be called
  * @return OK if success or an error code which specify the type of error encountered
@@ -774,7 +756,7 @@ int fts_disableInterruptNoSync()
 		return ERROR_OP_NOT_ALLOW;
 	}
 }
-#endif
+
 
 
 /**
@@ -783,21 +765,6 @@ int fts_disableInterruptNoSync()
  */
 int fts_enableInterrupt()
 {
-
-#ifdef FTM3
-	int ret;
-	u8 data[1] = {IER_ENABLE};				//enable interrupt
-	//u16ToU8_be(IER_ADDR, &cmd[1]);
-
-	ret = fts_writeU8UX(FTS_CMD_HW_REG_W,ADDR_SIZE_HW_REG, ADDR_IER, data, ARRAY_SIZE(data));
-	if ( ret < OK)
-	{
-		logError(1, "%s %s: ERROR %08X\n", tag, __func__, ret);
-		return ret;
-	}
-	logError(0, "%s Interrupt Enabled!\n", tag);
-	return OK;
-#else
 	unsigned long flag;
 	if(getClient()!=NULL){
 		spin_lock_irqsave(&fts_int,flag);
@@ -815,7 +782,6 @@ int fts_enableInterrupt()
 		logError(1, "%s %s: Impossible get client irq... ERROR %08X\n", tag, __func__, ERROR_OP_NOT_ALLOW);
 		return ERROR_OP_NOT_ALLOW;
 	}
-#endif
 }
 
 /**
@@ -826,9 +792,8 @@ int fts_crc_check() {
     u8 val;
     u8 crc_status;
     int res;
-#ifndef FTM3_CHIP
     u8 error_to_search[6] = {EVT_TYPE_ERROR_CRC_CFG_HEAD, EVT_TYPE_ERROR_CRC_CFG, EVT_TYPE_ERROR_CRC_CX, EVT_TYPE_ERROR_CRC_CX_HEAD, EVT_TYPE_ERROR_CRC_CX_SUB, EVT_TYPE_ERROR_CRC_CX_SUB_HEAD} ;
-#endif
+
 
     res = fts_writeReadU8UX(FTS_CMD_HW_REG_R, ADDR_SIZE_HW_REG, ADDR_CRC, &val, 1, DUMMY_HW_REG);		//read 2 bytes because the first one is a dummy byte!
     if (res < OK) {
@@ -843,7 +808,6 @@ int fts_crc_check() {
 		return CRC_CODE;
     }
 
-#ifndef FTM3_CHIP
     logError(1, "%s %s: Verifying if Config CRC Error...\n", tag, __func__);
 	res = fts_system_reset();
 	if (res >= OK) {
@@ -870,8 +834,6 @@ int fts_crc_check() {
 		return res;
 	}
 
-#endif
-
 	return OK;
 }
 
@@ -891,7 +853,9 @@ int requestSyncFrame(u8 type) {
 	while (retry2 < RETRY_MAX_REQU_DATA) {
 		logError(0, "%s %s: Reading count...\n", tag, __func__);
 
-		ret = fts_writeReadU8UX(FTS_CMD_FRAMEBUFFER_R, BITS_16, ADDR_FRAMEBUFFER, readData, 4, DUMMY_FRAMEBUFFER);
+		ret = fts_writeReadU8UX(FTS_CMD_FRAMEBUFFER_R, BITS_16,
+					ADDR_FRAMEBUFFER, readData, DATA_HEADER,
+					DUMMY_FRAMEBUFFER);
 		if (ret < OK) {
 			logError(0, "%s %s: Error while reading count! ERROR %08X \n", tag, __func__, ret|ERROR_REQU_DATA);
 			ret |= ERROR_REQU_DATA;

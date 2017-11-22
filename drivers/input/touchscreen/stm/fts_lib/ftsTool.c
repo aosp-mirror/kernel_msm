@@ -237,7 +237,8 @@ int u32ToU8_be(u32 src, u8* dst)
 }
 
 /**
-* Execute a function passed as argment and retry it defined number of times if not successfull
+* Execute a function passed as argment and retry it defined number of times if
+* not successful
 * @param code pointer to a function which return an int and doesn't have any parameters
 * @param wait_before_retry interval of time in ms to wait between one trial and another one
 * @param retry_count max number of retry to attemp

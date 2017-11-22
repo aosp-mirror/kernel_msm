@@ -116,11 +116,7 @@ extern struct mutex gestureMask_mutex;
 static u8 key_mask =0x00;														///< store the last update of the key mask published by the IC
 #endif
 
-
-#ifndef FTM3
 extern spinlock_t fts_int;
-#endif
-
 
 static void fts_interrupt_enable(struct fts_ts_info *info);
 static int fts_init_sensing(struct fts_ts_info *info);
@@ -618,9 +614,7 @@ static ssize_t fts_grip_mode_store(struct device *dev, struct device_attribute *
 			if(res<OK){
 				logError(1, "%s %s: Error during fts_mode_handler! ERROR %08X\n", tag, __func__, res);
 			}
-	        }
-
-
+		}
 	}
 
 	return count;
@@ -687,9 +681,7 @@ static ssize_t fts_charger_mode_store(struct device *dev, struct device_attribut
 			if(res<OK){
 				logError(1, "%s %s: Error during fts_mode_handler! ERROR %08X\n", tag, __func__, res);
 			}
-	        }
-
-
+		}
 	}
 
 	return count;
@@ -756,9 +748,7 @@ static ssize_t fts_glove_mode_store(struct device *dev, struct device_attribute 
 			if(res<OK){
 				logError(1, "%s %s: Error during fts_mode_handler! ERROR %08X\n", tag, __func__, res);
 			}
-	        }
-
-
+		}
 	}
 
 	return count;
@@ -833,7 +823,7 @@ static ssize_t fts_cover_mode_store(struct device *dev, struct device_attribute 
 			if(res<OK){
 				logError(1, "%s %s: Error during fts_mode_handler! ERROR %08X\n", tag, __func__, res);
 			}
-	        }
+		}
 	}
 
 	return count;
@@ -1257,6 +1247,7 @@ static ssize_t stm_fts_cmd_show(struct device *dev, struct device_attribute *att
 				if(systemInfo.u16_cxVer!=systemInfo.u16_cxMemVer){
 					res = ERROR_OP_NOT_ALLOW;
 					logError(0, "%s Miss match in CX version! MP test not allowed with wrong CX memory! ERROR %08X \n", tag, res);
+					break;
 				}
 #endif
 				res = production_test_main(LIMITS_FILE, 1, init_type, &tests);
@@ -2230,17 +2221,17 @@ static void fts_event_handler(struct work_struct *work) {
 *	The function perform a fw update of the IC in case of crc error or a new fw version and then understand if the IC need to be re-initialized again.
 *	@return  OK if success or an error code which specify the type of error encountered
 */
-static int fts_fw_update(struct fts_ts_info *info){
-#ifndef FTM3_CHIP
-    u8 error_to_search[4] = {EVT_TYPE_ERROR_CRC_CX_HEAD, EVT_TYPE_ERROR_CRC_CX, EVT_TYPE_ERROR_CRC_CX_SUB_HEAD, EVT_TYPE_ERROR_CRC_CX_SUB } ;
-#endif
-    int retval = 0;
-    int retval1 = 0;
-    int ret;
-    int crc_status = 0;
-    int error = 0;
+static int fts_fw_update(struct fts_ts_info *info)
+{
+	u8 error_to_search[4] = {EVT_TYPE_ERROR_CRC_CX_HEAD,
+		EVT_TYPE_ERROR_CRC_CX, EVT_TYPE_ERROR_CRC_CX_SUB_HEAD,
+		EVT_TYPE_ERROR_CRC_CX_SUB};
+	int retval = 0;
+	int retval1 = 0;
+	int ret;
+	int crc_status = 0;
+	int error = 0;
 	int init_type = NO_INIT;
-
 
     logError(1, "%s Fw Auto Update is starting... \n", tag);
 
@@ -2253,34 +2244,21 @@ static int fts_fw_update(struct fts_ts_info *info){
         crc_status = 0;
         logError(1, "%s %s: NO CRC Error or Impossible to read CRC register! \n", tag, __func__);
     }
-#ifdef FTM3_CHIP
-    retval = flashProcedure(PATH_FILE_FW, crc_status, !crc_status);
-#else
     retval = flashProcedure(PATH_FILE_FW, crc_status, 1);
-#endif
     if ((retval & 0xFF000000) == ERROR_FLASH_PROCEDURE) {
         logError(1, "%s %s: firmware update failed and retry! ERROR %08X\n", tag, __func__, retval);
-        fts_chip_powercycle(info); // power reset
-#ifdef FTM3_CHIP
-        retval1 = flashProcedure(PATH_FILE_FW, crc_status, !crc_status);
-#else
+	fts_chip_powercycle(info); // power reset
         retval1 = flashProcedure(PATH_FILE_FW, crc_status, 1);
-#endif
         if ((retval1 & 0xFF000000) == ERROR_FLASH_PROCEDURE) {
             logError(1, "%s %s: firmware update failed again!  ERROR %08X\n", tag, __func__, retval1);
             logError(1, "%s Fw Auto Update Failed!\n", tag);
         }
     }
 
-#ifndef FTM3_CHIP
 	logError(1, "%s %s: Verifying if CX CRC Error...\n", tag, __func__, ret);
 	ret = fts_system_reset();
 	if (ret >= OK) {
-#if defined(ENGINEERING_CODE) || defined(COMPUTE_CX_ON_PHONE)
 		ret = pollForErrorType(error_to_search, 4);
-#else
-		ret = ERROR_TIMEOUT;
-#endif
 		if (ret < OK) {
 			logError(1, "%s %s: No Cx CRC Error Found! \n", tag, __func__);
 			logError(1, "%s %s: Verifying if Panel CRC Error... \n", tag, __func__);
@@ -2298,13 +2276,27 @@ static int fts_fw_update(struct fts_ts_info *info){
 		}
 		else {
 			logError(1, "%s %s: Cx CRC Error FOUND! CRC ERROR = %02X\n", tag, __func__, ret);
+#if defined(ENGINEERING_CODE) || defined(COMPUTE_CX_ON_PHONE)
 			init_type = SPECIAL_FULL_PANEL_INIT;
+#else
+			/* This path of the code is used only in case there is a
+			 * CRC error in code or config which not allow the fw to
+			 * compute the CRC in the CX before
+			 */
+			logError(1,
+				 "%s %s: Try to recovery with CX in fw file...\n",
+				 tag, __func__, ret);
+			flashProcedure(PATH_FILE_FW, CRC_CX, 1);
+			logError(1,
+				 "%s %s: Refresh panel init data...\n",
+				 tag, __func__, ret);
+			init_type = SPECIAL_PANEL_INIT;
+#endif
 		}
 	}
 	else {
 		logError(1, "%s %s: Error while executing system reset! ERROR %08X\n", tag, __func__, ret); //better skip initialization because the real state is unknown
 	}
-#endif
 
 #ifdef ENGINEERING_CODE
     if((init_type == NO_INIT))
@@ -2504,11 +2496,7 @@ int fts_chip_powercycle(struct fts_ts_info *info) {
 
     logError(1, "%s %s: Power Cycle Starting... \n", tag, __func__);
     logError(1, "%s %s: Disabling IRQ... \n", tag, __func__);	//if IRQ pin is short with DVDD a call to the ISR will triggered when the regulator is turned off
-#ifdef FTM3_CHIP
-	disable_irq_nosync(info->client->irq);
-#else
 	fts_disableInterrupt();
-#endif
 
     if (info->vdd_reg) {
         error = regulator_disable(info->vdd_reg);
@@ -2529,23 +2517,6 @@ int fts_chip_powercycle(struct fts_ts_info *info) {
     else
 	mdelay(300);
 
-#ifndef FTI
-	//in FTM3 and FTM4 power up first the analog and then the digital
-    if (info->avdd_reg) {
-        error = regulator_enable(info->avdd_reg);
-        if (error < 0) {
-            logError(1, "%s %s: Failed to enable AVDD regulator\n", tag, __func__);
-        }
-    }
-
-    if (info->vdd_reg) {
-        error = regulator_enable(info->vdd_reg);
-        if (error < 0) {
-            logError(1, "%s %s: Failed to enable DVDD regulator\n", tag, __func__);
-        }
-    }
-
-#else
 	//in FTI power up first the digital and then the analog
 	if (info->vdd_reg) {
         error = regulator_enable(info->vdd_reg);
@@ -2563,9 +2534,6 @@ int fts_chip_powercycle(struct fts_ts_info *info) {
         }
     }
 
-
-#endif
-
     mdelay(5); //time needed by the regulators for reaching the regime values
 
 
@@ -2575,11 +2543,6 @@ int fts_chip_powercycle(struct fts_ts_info *info) {
     }
 
     release_all_touches(info);
-
-    logError(1, "%s %s: Enabling IRQ... \n", tag, __func__);
-#ifdef FTM3_CHIP
-	enable_irq(info->client->irq);
-#endif
 
     logError(1, "%s %s: Power Cycle Finished! ERROR CODE = %08x\n", tag, __func__, error);
     setSystemResetedUp(1);
@@ -2739,8 +2702,12 @@ static int fts_mode_handler(struct fts_ts_info *info,int force){
 
 			}
 #endif
-			//if some selective scan want to be enabled can be choose to do an or of the following options
-			//settings[0] = ACTIVE_MULTI_TOUCH | ACTIVE_KEY | ACTIVE_HOVER | ACTIVE_PROXIMITY | ACTIVE_FORCE;
+			/* If some selective scan want to be enabled can be done
+			 * an or of the following options
+			 */
+			//settings[0] = ACTIVE_MULTI_TOUCH | ACTIVE_KEY |
+			//		ACTIVE_HOVER | ACTIVE_PROXIMITY |
+			//		ACTIVE_FORCE;
 			settings[0]=0xFF;		//enable all the possible scans mode supported by the config
 			logError(0, "%s %s: Sense ON! \n", tag, __func__);
 			res |= setScanMode(SCAN_MODE_ACTIVE,settings[0]);
@@ -2766,7 +2733,7 @@ static int fts_mode_handler(struct fts_ts_info *info,int force){
  * Resume work function which perform a system reset, clean all the touches from the linux input system and prepare the ground for enabling the sensing
  */
 static void fts_resume_work(struct work_struct *work) {
-			    struct fts_ts_info *info;
+	struct fts_ts_info *info;
 
 	info = container_of(work, struct fts_ts_info, resume_work);
 
@@ -2789,7 +2756,7 @@ static void fts_resume_work(struct work_struct *work) {
  * Suspend work function which clean all the touches from Linux input system and prepare the ground to disabling the sensing or enter in gesture mode
  */
 static void fts_suspend_work(struct work_struct *work) {
-			     struct fts_ts_info *info;
+	struct fts_ts_info *info;
 
 	info = container_of(work, struct fts_ts_info, suspend_work);
 
@@ -2919,43 +2886,43 @@ regulator_put:
  * @return OK if success or an error code which specify the type of error encountered
  */
 static int fts_enable_reg(struct fts_ts_info *info, bool enable) {
-    int retval;
+	int retval;
 
-    if (!enable) {
-        retval = 0;
-        goto disable_pwr_reg;
-    }
+	if (!enable) {
+		retval = 0;
+		goto disable_pwr_reg;
+	}
 
-    if (info->avdd_reg) {
-        retval = regulator_enable(info->avdd_reg);
-        if (retval < 0) {
-            logError(1, "%s %s: Failed to enable bus regulator\n", tag,
-                    __func__);
-            goto exit;
-        }
-    }
+	if (info->vdd_reg) {
+		retval = regulator_enable(info->vdd_reg);
+		if (retval < 0) {
+			logError(1, "%s %s: Failed to enable bus regulator\n",
+				 tag, __func__);
+			goto exit;
+		}
+	}
 
-    if (info->vdd_reg) {
-        retval = regulator_enable(info->vdd_reg);
-        if (retval < 0) {
-            logError(1, "%s %s: Failed to enable power regulator\n", tag,
-                    __func__);
-            goto disable_bus_reg;
-        }
-    }
+	if (info->avdd_reg) {
+		retval = regulator_enable(info->avdd_reg);
+		if (retval < 0) {
+			logError(1, "%s %s: Failed to enable power regulator\n",
+				 tag, __func__);
+			goto disable_bus_reg;
+		}
+	}
 
-    return OK;
+	return OK;
 
 disable_pwr_reg:
-    if (info->vdd_reg)
-        regulator_disable(info->vdd_reg);
+	if (info->avdd_reg)
+		regulator_disable(info->avdd_reg);
 
 disable_bus_reg:
-    if (info->avdd_reg)
-        regulator_disable(info->avdd_reg);
+	if (info->vdd_reg)
+		regulator_disable(info->vdd_reg);
 
 exit:
-    return retval;
+	return retval;
 }
 
 /**
@@ -3115,7 +3082,8 @@ static int fts_probe(struct spi_device *client) {
     int skip_5_1 = 0;
 	u16 bus_type;
 
-    logError(1, "%s %s: driver probe begin!\n", tag, __func__);
+	logError(1, "%s %s: driver probe begin!\n", tag, __func__);
+	logError(1, "%s driver ver. %s\n", tag, FTS_TS_DRV_VERSION);
 
 	logError(1, "%s SET Bus Functionality : \n", tag);
 #ifdef I2C_INTERFACE
@@ -3289,9 +3257,7 @@ static int fts_probe(struct spi_device *client) {
 	mutex_init(&gestureMask_mutex);
 #endif
 
-#ifndef FTM3
 	spin_lock_init(&fts_int);
-#endif
 
     /* register the multi-touch input device */
     error = input_register_device(info->input_dev);
