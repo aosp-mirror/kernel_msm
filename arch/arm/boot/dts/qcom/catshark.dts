@@ -67,10 +67,6 @@
 	};
 };
 
-&i2c_1 {
-	status = "disabled";
-};
-
 &spi_0 {
 	status = "disabled";
 };
