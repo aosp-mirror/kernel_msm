@@ -1209,6 +1209,21 @@ static int qcedev_vbuf_ablk_cipher(struct qcedev_async_req *areq,
 	struct qcedev_cipher_op_req *saved_req;
 	struct	qcedev_cipher_op_req *creq = &areq->cipher_op_req;
 
+	/* Verify Destination Address's */
+	if (creq->in_place_op != 1) {
+		for (i = 0, total = 0; i < QCEDEV_MAX_BUFFERS; i++) {
+			if ((areq->cipher_op_req.vbuf.dst[i].vaddr != 0) &&
+						(total < creq->data_len)) {
+				total += creq->vbuf.dst[i].len;
+			}
+		}
+	} else  {
+		for (i = 0, total = 0; i < creq->entries; i++) {
+			if (total < creq->data_len) {
+				total += creq->vbuf.src[i].len;
+			}
+		}
+	}
 	total = 0;
 
 	if (areq->cipher_op_req.mode == QCEDEV_AES_MODE_CTR)
@@ -1702,11 +1717,6 @@ long qcedev_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 			}
 		}
 
-		if (handle->sha_ctxt.diglen > QCEDEV_MAX_SHA_DIGEST) {
-			pr_err("Invalid sha_ctxt.diglen %d\n",
-					handle->sha_ctxt.diglen);
-			return -EINVAL;
-		}
 		memcpy(&qcedev_areq.sha_op_req.digest[0],
 			&handle->sha_ctxt.digest[0],
 			min_t(uint32_t,
