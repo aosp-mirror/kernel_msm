@@ -3,6 +3,8 @@
 #include "msm8909-pm8916.dtsi"
 #include "msm8909-pm8916-mtp.dtsi"
 #include "msm8909w.dtsi"
+#include "dsi-panel-rm69080-wqvga-cmd.dtsi"
+#include "dsi-panel-rm67162-wqvga-cmd.dtsi"
 
 &soc {
         i2c@78b5000 { /* BLSP1 QUP1 */
