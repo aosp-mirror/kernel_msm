@@ -17,6 +17,8 @@ config OF_TOUCHSCREEN
 	def_tristate INPUT
 	depends on INPUT && OF
 
+source "drivers/input/touchscreen/focaltech_touch/Kconfig"
+
 config TOUCHSCREEN_88PM860X
 	tristate "Marvell 88PM860x touchscreen"
 	depends on MFD_88PM860X
