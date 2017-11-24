@@ -45,7 +45,7 @@
 #define SPI_ERROR_FLAGS_EN		0x030c
 
 /* QUP_CONFIG fields */
-#define QUP_CONFIG_SPI_MODE		(1 << 8)
+#define QUP_CONFIG_SPI_MODE		((1 << 8)|0x03)
 #define QUP_CONFIG_CLOCK_AUTO_GATE	BIT(13)
 #define QUP_CONFIG_NO_INPUT		BIT(7)
 #define QUP_CONFIG_NO_OUTPUT		BIT(6)

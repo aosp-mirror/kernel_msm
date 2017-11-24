@@ -1,0 +1,43 @@
+choice
+    depends on SENSORS_SSP_BBD
+    prompt "Choose serial connection with chip"
+    default BCM_GPS_SPI_DRIVER
+
+config BCM_GPS_TTY_DRIVER
+    bool  "TTY"
+    depends on TTY
+    help
+       Support for BRCM GPS UART driver.
+
+config BCM_GPS_I2C_DRIVER
+     bool "I2C"
+     default n
+     depends on I2C
+     help
+        Support for BRCM GPS I2C driver.
+
+config BCM_GPS_SPI_DRIVER
+    bool "SPI"
+    depends on SPI
+    help
+        Support for BRCM GPS SPI driver.
+endchoice
+
+config BCM_GPS_HOSTWAKE_DRIVER
+    tristate "BCM_GPS_HOSTWAKE_DRIVER"
+    depends on SPI
+    help
+        GPS SPI hostwake driver.
+
+config SENSORS_SSP_BBD
+    tristate "SENSORS_SSP_BBD"
+    depends on SPI
+    help
+       SENSORS_SSP_BBD driver.
+
+config SENSORS_SSP_BBD_47720
+    tristate "SENSORS_SSP_BBD_47720"
+    depends on SPI
+    help
+      SENSORS_SSP_BBD_4774 driver.
+
