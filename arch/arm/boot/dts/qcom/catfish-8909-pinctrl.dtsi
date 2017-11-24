@@ -1,0 +1,93 @@
+/* add catfish/catshark pinctrl info*/
+
+&soc {
+	msm_gpio: pinctrl@1000000 {
+
+		pmx_i2c_6 {
+			i2c_6_active: i2c_6_active {
+				mux {
+					pins = "gpio10", "gpio11";
+					function = "blsp_i2c6";
+				};
+				config {
+					pins = "gpio10", "gpio11";
+					drive-strength = <2>;
+					bias-pull-up;
+				};
+			};
+			i2c_6_sleep: i2c_6_sleep {
+				mux {
+					pins = "gpio10", "gpio11";
+					function = "blsp_i2c6";
+				};
+				config {
+					pins = "gpio10", "gpio11";
+					drive-strength = <2>;
+					bias-pull-up;
+				};
+			};
+		};
+
+		/* add pingrp for touchscreen */
+		pmx_ts_int_active {
+			ts_int_active: ts_int_active {
+				mux {
+					pins = "gpio65";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio65";
+					drive-strength = <2>;
+					bias-pull-up;
+				};
+			};
+		};
+
+		pmx_ts_int_suspend {
+			ts_int_suspend: ts_int_suspend {
+				mux {
+					pins = "gpio65";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio65";
+					drive-strength = <2>;
+					bias-pull-up;
+				};
+			};
+		};
+
+		pmx_ts_reset_active {
+			ts_reset_active: ts_reset_active {
+				mux {
+					pins = "gpio23";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio23";
+					drive-strength = <2>;
+					bias-pull-up;
+				};
+			};
+		};
+
+		pmx_ts_reset_suspend {
+			ts_reset_suspend: ts_reset_suspend {
+				mux {
+					pins = "gpio23";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio23";
+					drive-strength = <2>;
+					bias-pull-up;
+				};
+			};
+		};
+
+	};
+};

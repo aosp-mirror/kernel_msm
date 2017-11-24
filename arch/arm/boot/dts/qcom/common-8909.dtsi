@@ -5,6 +5,8 @@
 #include "msm8909w.dtsi"
 #include "dsi-panel-rm69080-wqvga-cmd.dtsi"
 #include "dsi-panel-rm67162-wqvga-cmd.dtsi"
+#include "catfish-8909-pinctrl.dtsi"
+#include "catfish-8909-bus.dtsi"
 
 &soc {
         i2c@78b5000 { /* BLSP1 QUP1 */
@@ -32,8 +34,39 @@
                         qcom,apsd-disabled;
                         qcom,thermal-mitigation = <1500 900 500 100>;
                 };
-
         };
+		i2c@78ba000 { /* BLSP1 QUP6 */
+			/*touch*/
+			focaltech@38{
+				compatible = "focaltech,fts";
+				reg = <0x38>;
+				interrupt-parent = <&msm_gpio>;
+				interrupts = <65 0x2008>;
+				vdd-supply = <&pm8916_l17>;
+				vddio-supply = <&pm8916_l6>;
+				focaltech,reset-gpio = <&msm_gpio 23 0x00>;
+				focaltech,irq-gpio = <&msm_gpio 65 0x2008>;
+				focaltech,switch-gpio = <&msm_gpio 75 0x00>;
+				focaltech,display-coords =  <0 0 400 400>;
+				focaltech,max-touch-number = <2> ;
+
+				pinctrl-names = "default","sleep";
+				pinctrl-0 = <&ts_int_active &ts_reset_active>;
+				pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
+
+				/*touch no need info in this project*/
+				/*
+				focaltech,have-key;
+				focaltech,key-number = <3>;
+				focaltech,keys = <139 102 158>;
+				focaltech,key-y-coord = <2000>;
+				focaltech,key-x-coords = <200 600 800>;
+				*/
+				/*focaltech,display-coords =  <0 0 720 1280>;
+				focaltech,key-y-coord = <1350>;
+				focaltech,key-x-coords = <180 350 540>;*/
+			};
+		};
 };
 
 &msm_gpio {
@@ -65,5 +98,8 @@
 };
 
 &i2c_1 {
+	status = "ok";
+};
+&i2c_6 {
 	status = "ok";
 };
