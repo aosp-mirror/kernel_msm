@@ -27,24 +27,25 @@
 			pinctrl-0 = <&smb_stat_default>;
 			pinctrl-1 = <&smb_stat_suspend>;
 
-			qcom,float-voltage-mv = <4320>;
+			qcom,float-voltage-mv = <4360>;
 			qcom,recharge-thresh-mv = <80>;
 			qcom,aicl-disabled;
 			qcom,hot-bat-decidegc = <560>;
 			qcom,warm-bat-decidegc = <450>;
 			qcom,cool-bat-decidegc = <170>;
 			qcom,cold-bat-decidegc = <0>;
-			qcom,fastchg-ma = <100>;
-/*
-			qcom,soft-temp-vfloat-comp-mv = <80>;
-			qcom,soft-temp-current-comp-ma = <100>;
-*/
-			cei,max-ac-current-ma = <300>;
+			qcom,fastchg-ma = <300>;
+			qcom,soft-temp-vfloat-comp-mv = <160>;
+			qcom,soft-temp-current-comp-ma = <300>;
+			cei,max-ac-current-ma = <500>;
 			cei,prechg-current-ma = <20>;
 			cei,chg-en-active = <0>;
-			cei,sys-voltage = <0>;
-			cei,sys-voltage-threshold = <0>;
+			cei,sys-voltage = <2>;
+			cei,sys-voltage-threshold = <2>;
+/*
 			cei,cool-temp-vfloat-comp-mv = <120>;
+*/
+			cei,cool-temp-float-voltage-mv = <4000>;
 			cei,cool-temp-current-comp-ma = <100>;
 			qcom,bms-psy-name = "bms";
 		};
