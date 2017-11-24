@@ -46,6 +46,7 @@
 #ifdef CONFIG_COMPAT
 #include <linux/compat.h>
 #endif
+#include <linux/miscdevice.h>
 
 MODULE_DESCRIPTION("Diag Char Driver");
 MODULE_LICENSE("GPL v2");
@@ -3494,6 +3495,131 @@ static ssize_t diagchar_write(struct file *file, const char __user *buf,
 	return err;
 }
 
+static ssize_t diagtest_write(struct file *file, const char __user *buf,
+					size_t count, loff_t *ppos)
+{
+	int err = 0;
+	int pkt_type = 0;
+	int payload_len = 0;
+	const char __user *payload_buf = NULL;
+	int i;
+	unsigned char *ks_payload_buf =
+			kzalloc(sizeof(unsigned char)*count*2+1, GFP_KERNEL);
+	char temp[3];
+
+	/* Print the buffer from ks_payload_buf, for debugging. */
+	if (!ks_payload_buf) {
+		/* no memory for debug, go ahead and try to process it */
+		goto exit_dbg_print;
+	}
+
+	err = copy_from_user((&ks_payload_buf[0]), buf, count);
+	if (!err) {
+		for (i = count-1; i >= 0; i--) {
+			snprintf(temp, sizeof(temp), "%02X", ks_payload_buf[i]);
+			ks_payload_buf[i*2] = temp[0];
+			ks_payload_buf[i*2+1] = temp[1];
+		}
+
+		ks_payload_buf[count*2] = 0x00;
+		pr_debug("count:%d, %s\n", (int)count, ks_payload_buf);
+	}
+	kfree(ks_payload_buf);
+exit_dbg_print:
+
+	/*
+	 * The data coming from the user space should at least have the
+	 * packet type header.
+	 */
+	if (count < sizeof(int)) {
+		pr_err("diag: In %s, client is sending short data, len: %d\n",
+			__func__, (int)count);
+		return -EBADMSG;
+	}
+
+	err = copy_from_user((&pkt_type), buf, sizeof(int));
+	if (err)
+		return err;
+
+	payload_buf = buf + sizeof(int);
+	payload_len = count - sizeof(int);
+
+	if (pkt_type == DCI_PKT_TYPE)
+		return diag_user_process_dci_apps_data(payload_buf,
+						       payload_len, pkt_type);
+	else if (pkt_type == DCI_DATA_TYPE)
+		return diag_user_process_dci_data(payload_buf, payload_len);
+	else if (pkt_type == USER_SPACE_RAW_DATA_TYPE)
+		return (err = diag_user_process_raw_data(payload_buf,
+						       payload_len)) ?
+						       err : count;
+	else if (pkt_type == USER_SPACE_DATA_TYPE)
+		return diag_user_process_userspace_data(payload_buf,
+							payload_len);
+
+	if (pkt_type & (DATA_TYPE_DCI_LOG | DATA_TYPE_DCI_EVENT)) {
+		err = diag_user_process_dci_apps_data(payload_buf,
+						      payload_len, pkt_type);
+		if (err)
+			return err;
+		/* Strip the DCI_LOG / DCI_EVENT bits. */
+		if (pkt_type & DATA_TYPE_DCI_LOG)
+			pkt_type ^= DATA_TYPE_DCI_LOG;
+		if (pkt_type & DATA_TYPE_DCI_EVENT)
+			pkt_type ^= DATA_TYPE_DCI_EVENT;
+	}
+
+	switch (pkt_type) {
+	case DATA_TYPE_EVENT:
+	case DATA_TYPE_F3:
+	case DATA_TYPE_LOG:
+	case DATA_TYPE_DELAYED_RESPONSE:
+	case DATA_TYPE_RESPONSE:
+		return diag_user_process_apps_data(payload_buf, payload_len,
+						   pkt_type);
+	}
+
+	pr_err_ratelimited("diag: In %s, invalid pkt_type: %d\n", __func__,
+			   pkt_type);
+	return -EINVAL;
+}
+
+static ssize_t diagtest_read(struct file *file, char __user *buf,
+			     size_t count, loff_t *ppos)
+{
+	pr_debug("diagtest_read count");
+	return 0;
+}
+
+static int diagtest_open(struct inode *inode, struct file *file)
+{
+	pr_debug("diagtest_open driver->logging_mask = %x\n",
+	       driver->logging_mask);
+	diagfwd_mux_open(0, DIAG_USB_MODE);
+	return 0;
+}
+
+static int diagtest_release(struct inode *inode, struct file *file)
+{
+	pr_debug("diagtest_release");
+	diagfwd_mux_close(0, DIAG_USB_MODE);
+	return 0;
+}
+
+static const struct file_operations diagsmdfops = {
+	.owner = THIS_MODULE,
+	.read = diagtest_read,
+	.write = diagtest_write,
+	.open = diagtest_open,
+	.release = diagtest_release
+};
+
+struct miscdevice diagtest = {
+	.minor = MISC_DYNAMIC_MINOR,
+	.name = "diagtest",
+	.fops = &diagsmdfops,
+};
+
 void diag_ws_init(void)
 {
 	driver->dci_ws.ref_count = 0;
@@ -3905,6 +4031,7 @@ static int __init diagchar_init(void)
 	ret = diagchar_setup_cdev(dev);
 	if (ret)
 		goto fail;
+	misc_register(&diagtest);
 	mutex_init(&driver->diag_id_mutex);
 	INIT_LIST_HEAD(&driver->diag_id_list);
 	diag_add_diag_id_to_list(DIAG_ID_APPS, "APPS", APPS_DATA, APPS_DATA);

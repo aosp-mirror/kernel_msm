@@ -1323,7 +1323,7 @@ end:
 	mutex_unlock(&driver->diag_hdlc_mutex);
 }
 
-static int diagfwd_mux_open(int id, int mode)
+int diagfwd_mux_open(int id, int mode)
 {
 	uint8_t i;
 	unsigned long flags;
@@ -1357,7 +1357,7 @@ static int diagfwd_mux_open(int id, int mode)
 	return 0;
 }
 
-static int diagfwd_mux_close(int id, int mode)
+int diagfwd_mux_close(int id, int mode)
 {
 	uint8_t i;
 
