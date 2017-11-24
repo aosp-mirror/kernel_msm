@@ -3877,6 +3877,21 @@ static bool sdhci_msm_is_bootdevice(struct device *dev)
 	 */
 	return true;
 }
+static struct sdhci_msm_host *wifi_host = NULL;
+void sdhci_msm_set_carddetect(bool val)
+{
+	bool card_present = val;
+	pr_info("sdhci-msm: %s @%d card_present=%d\n", __func__, __LINE__, card_present);
+	if(card_present) {
+		wifi_host->mmc->rescan_disable = 0;
+		if (NULL != wifi_host) {
+			pr_info("card present trigger mmc_detect_change\n");
+			mmc_detect_change(wifi_host->mmc, 0);
+		}
+	}else
+		wifi_host->mmc->rescan_disable = 1;
+}
+EXPORT_SYMBOL(sdhci_msm_set_carddetect);
 
 static int sdhci_msm_probe(struct platform_device *pdev)
 {
@@ -4306,6 +4321,14 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	}
 
 	sdhci_msm_cmdq_init(host, pdev);
+/* Set the wifi host by Jerry Start */
+	ret = of_alias_get_id(pdev->dev.of_node, "sdhc");
+	if(ret == 2)
+	{
+		wifi_host = msm_host;
+		msm_host->mmc->pm_flags |= MMC_PM_IGNORE_PM_NOTIFY;
+	}
+/* Set the wifi host by Jerry End */
 	ret = sdhci_add_host(host);
 	if (ret) {
 		dev_err(&pdev->dev, "Add host failed (%d)\n", ret);

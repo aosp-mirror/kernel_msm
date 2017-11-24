@@ -1549,6 +1549,7 @@ static void sdhci_set_power(struct sdhci_host *host, unsigned char mode,
 	if (mode != MMC_POWER_OFF) {
 		switch (1 << vdd) {
 		case MMC_VDD_165_195:
+		case MMC_VDD_20_21:
 			pwr = SDHCI_POWER_180;
 			break;
 		case MMC_VDD_29_30:
@@ -1560,7 +1561,12 @@ static void sdhci_set_power(struct sdhci_host *host, unsigned char mode,
 			pwr = SDHCI_POWER_330;
 			break;
 		default:
-			BUG();
+			if (host->mmc->index == 1) {
+				if (vdd != 0)
+					pwr = SDHCI_POWER_180;
+			} else {
+				BUG();
+			}
 		}
 	}
 
@@ -4261,6 +4267,7 @@ int sdhci_add_host(struct sdhci_host *host)
 				   SDHCI_MAX_CURRENT_180_SHIFT) *
 				   SDHCI_MAX_CURRENT_MULTIPLIER;
 	}
+	ocr_avail |=  MMC_VDD_20_21;  //add for bcm wifi
 
 	/* If OCR set by external regulators, use it instead */
 	if (mmc->ocr_avail)

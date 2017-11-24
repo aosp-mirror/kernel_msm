@@ -3776,6 +3776,8 @@ void mmc_rescan(struct work_struct *work)
 		return;
 	}
 	spin_unlock_irqrestore(&host->lock, flags);
+	if (host->rescan_entered == 1)   //for bcmdhd rescan
+		host->rescan_entered = 0;
 
 	/* If there is a non-removable card registered, only scan once */
 	if ((host->caps & MMC_CAP_NONREMOVABLE) && host->rescan_entered)
