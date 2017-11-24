@@ -117,6 +117,7 @@ struct smb23x_chip {
 	int				charger_plugin;
 	int				reg_addr;
 	int				reg_print_count;
+	int				cfg_cool_temp_vfloat_mv;
 	struct workqueue_struct	*workqueue;
 	struct timer_list			timer_init_register;
 	struct delayed_work		delaywork_init_register;
@@ -401,7 +402,8 @@ enum {
 
 enum {
 	NORMAL = 0,
-	LOW,
+	LOW1,
+	LOW2,
 	HIGH,
 };
 
@@ -716,6 +718,11 @@ static int smb23x_parse_dt(struct smb23x_chip *chip)
 	if (rc < 0)
 		chip->cfg_cool_temp_comp_ma = -EINVAL;
 
+	rc = of_property_read_u32(node, "cei,cool-temp-float-voltage-mv",
+					&chip->cfg_cool_temp_vfloat_mv);
+	if (rc < 0)
+		chip->cfg_cool_temp_vfloat_mv = -EINVAL;
+
 	return 0;
 }
 
@@ -998,6 +1005,7 @@ static int smb23x_soft_temp_behavior(struct smb23x_chip *chip, int temp_comp_mv,
 static int check_charger_thermal_state(struct smb23x_chip *chip, int batt_temp)
 {
 	int rc;
+	u8 tmp;
 
 	if (chip->charger_plugin == 0)
 		return (-EINVAL);
@@ -1028,7 +1036,8 @@ static int check_charger_thermal_state(struct smb23x_chip *chip, int batt_temp)
 		}
 
 		chip->index_soft_temp_comp_mv = HIGH;
-	} else if ((LOW != chip->index_soft_temp_comp_mv) && (batt_temp < 250)) {
+	} else if ((LOW2 != chip->index_soft_temp_comp_mv) && (batt_temp < 150)) {
+		//The cool float voltage is too low that can't use the "Float voltage compensation" setting
 		rc = smb23x_enable_volatile_writes(chip);
 		if (rc < 0) {
 			pr_err("Enable volatile writes failed, rc=%d\n", rc);
@@ -1047,13 +1056,41 @@ static int check_charger_thermal_state(struct smb23x_chip *chip, int batt_temp)
 			return rc;
 		}
 
-		rc = smb23x_vfloat_compensation(chip, chip->cfg_cool_temp_comp_mv);
+		tmp = (chip->cfg_cool_temp_vfloat_mv - MIN_FLOAT_MV) / FLOAT_STEP_MV;
+		rc = smb23x_masked_write(chip, CFG_REG_3, FLOAT_VOLTAGE_MASK, tmp);
 		if (rc < 0) {
-			pr_err("Set float voltage compensation failed, rc=%d\n", rc);
+			pr_err("Set float voltage failed, rc=%d\n", rc);
 			return rc;
 		}
 
-		chip->index_soft_temp_comp_mv = LOW;
+		chip->index_soft_temp_comp_mv = LOW2;
+	} else if ((LOW1 != chip->index_soft_temp_comp_mv) && (batt_temp < 250)) {
+		rc = smb23x_enable_volatile_writes(chip);
+		if (rc < 0) {
+			pr_err("Enable volatile writes failed, rc=%d\n", rc);
+			return rc;
+		}
+
+		rc = smb23x_soft_temp_behavior(chip, chip->cfg_cool_temp_comp_mv, chip->cfg_cool_temp_comp_ma);
+		if (rc < 0) {
+			pr_err("Set soft temp limit behavior failed, rc=%d\n", rc);
+			return rc;
+		}
+
+		rc = smb23x_fastchg_current_compensation(chip, chip->cfg_cool_temp_comp_ma);
+		if (rc < 0) {
+			pr_err("Set fast charge current in soft-limit mode failed, rc=%d\n", rc);
+			return rc;
+		}
+
+		tmp = (chip->cfg_vfloat_mv - MIN_FLOAT_MV) / FLOAT_STEP_MV;
+		rc = smb23x_masked_write(chip, CFG_REG_3, FLOAT_VOLTAGE_MASK, tmp);
+		if (rc < 0) {
+			pr_err("Set float voltage failed, rc=%d\n", rc);
+			return rc;
+		}
+
+		chip->index_soft_temp_comp_mv = LOW1;
 	}
 
 	return 0;
@@ -2143,8 +2180,6 @@ static int smb23x_get_prop_batt_capacity(struct smb23x_chip *chip)
 static int smb23x_get_prop_batt_temp(struct smb23x_chip *chip)
 {
 	union power_supply_propval ret = {0, };
-	static int charge_disable_count = 0;
-	int charge_current;
 
 	if (chip->bms_psy == NULL)
 		chip->bms_psy = power_supply_get_by_name((char *)chip->bms_psy_name);
@@ -2168,32 +2203,6 @@ static int smb23x_get_prop_batt_temp(struct smb23x_chip *chip)
 		chip->charge_disable_reason &= ~THERMAL;
 		pr_info("batt_temp=%d, start charging. disable_reason=0x%x \n", chip->last_temp, chip->charge_disable_reason);
 		smb23x_charging_enable(chip, 1);
-	}
-
-	//Stop charging if SOC is 100 and 0 < batt_A <= 20 mA; start charging if batt_V < 4250 mV
-	if ((smb23x_get_prop_batt_capacity(chip) == 100)) {
-		charge_current = smb23x_get_prop_batt_current(chip);
-		if ((charge_current > 0) && 
-					(charge_current <= 20000) && 
-					!(chip->charge_disable_reason & BATT_FULL)) {
-			if (charge_disable_count < 5) {
-				charge_disable_count++;
-			} else {
-				charge_disable_count = 0;
-				chip->charge_disable_reason |= BATT_FULL;
-				pr_info("batt full, stop charging. disable_reason=0x%x \n", chip->charge_disable_reason);
-				smb23x_charging_enable(chip, 0);
-			}
-		} else if ((smb23x_get_prop_batt_voltage(chip) < 4250000) &&
-					(chip->charge_disable_reason & BATT_FULL)) {
-			chip->charge_disable_reason &= ~BATT_FULL;
-			pr_info("batt not full, start charging. disable_reason=0x%x \n", chip->charge_disable_reason);
-			smb23x_charging_enable(chip, 1);
-		} else
-			charge_disable_count = 0;
-	} else {
-		charge_disable_count = 0;
-		chip->charge_disable_reason &= ~BATT_FULL;
 	}
 
 	return ret.intval;
