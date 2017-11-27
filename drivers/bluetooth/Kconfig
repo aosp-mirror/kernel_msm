@@ -262,4 +262,11 @@ config MSM_BT_POWER
 	  Provides a parameter to switch on/off power from PMIC
 	  to Bluetooth device.
 
+config MSM_BT_BLUESLEEP
+	tristate "MSM Bluesleep driver"
+	depends on BT && SERIAL_MSM_HS
+	default m
+	help
+		Bluetooth MSM bluesleep driver.
+		This driver provides support for BTS sleep.
 endmenu

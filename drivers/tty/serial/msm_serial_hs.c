@@ -3638,7 +3638,7 @@ static struct platform_driver msm_serial_hs_platform_driver = {
 	.remove = msm_hs_remove,
 	.driver = {
 		.name = "msm_serial_hs",
-		.pm   = &msm_hs_dev_pm_ops,
+/*		.pm   = &msm_hs_dev_pm_ops,*/
 		.of_match_table = msm_hs_match_table,
 	},
 };
