@@ -962,7 +962,8 @@ static int fb_notifier_callback(struct notifier_block *self,
 		blank = evdata->data;
 		if (*blank == FB_BLANK_UNBLANK)
 			fts_ts_resume(&fts_data->client->dev);
-		else if (*blank == FB_BLANK_POWERDOWN)
+		/*else if (*blank == FB_BLANK_POWERDOWN)*/
+		else if (*blank == FB_BLANK_VSYNC_SUSPEND || *blank == FB_BLANK_POWERDOWN)
 			fts_ts_suspend(&fts_data->client->dev);
 	}
 
