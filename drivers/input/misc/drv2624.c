@@ -235,7 +235,7 @@ static void drv2624_stop(struct drv2624_data *drv2624)
 		drv2624_set_go_bit(drv2624, STOP);
 		drv2624->work_mode = WORK_IDLE;
 		drv2624->vibrator_playing = false;
-		wake_unlock(&drv2624->wklock);
+		pm_relax(drv2624->dev);
 	}
 }
 
@@ -262,7 +262,7 @@ static void drv2624_haptics_work(struct work_struct *work)
 
 	drv2624_stop(drv2624);
 
-	wake_lock(&drv2624->wklock);
+	pm_stay_awake(drv2624->dev);
 	drv2624->vibrator_playing = true;
 	drv2624_enable_irq(drv2624, true);
 
@@ -271,7 +271,7 @@ static void drv2624_haptics_work(struct work_struct *work)
 		dev_warn(drv2624->dev, "Start playback failed\n");
 		drv2624->vibrator_playing = false;
 		drv2624_disable_irq(drv2624);
-		wake_unlock(&drv2624->wklock);
+		pm_relax(drv2624->dev);
 	} else {
 		drv2624->led_dev.brightness = LED_FULL;
 		drv2624->work_mode |= WORK_VIBRATOR;
@@ -398,7 +398,7 @@ static void vibrator_work_routine(struct work_struct *work)
 		if ((mode != MODE_RTP) && drv2624->vibrator_playing) {
 			dev_info(drv2624->dev, "release wklock\n");
 			drv2624->vibrator_playing = false;
-			wake_unlock(&drv2624->wklock);
+			pm_relax(drv2624->dev);
 		}
 
 		drv2624->work_mode &= ~WORK_IRQ;
@@ -566,7 +566,7 @@ static int haptics_init(struct drv2624_data *drv2624)
 		return ret;
 	}
 
-	wake_lock_init(&drv2624->wklock, WAKE_LOCK_SUSPEND, "vibrator");
+	device_init_wakeup(drv2624->dev, false);
 	mutex_init(&drv2624->lock);
 
 	drv2624->drv2624_wq =
@@ -1644,7 +1644,6 @@ static int drv2624_i2c_remove(struct i2c_client *client)
 
 	led_classdev_unregister(&drv2624->led_dev);
 
-	wake_lock_destroy(&drv2624->wklock);
 	mutex_destroy(&drv2624->lock);
 
 	return 0;
