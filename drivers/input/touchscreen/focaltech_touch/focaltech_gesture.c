@@ -404,7 +404,7 @@ static int fts_gesture_fw(void)
 ***********************************************************************/
 int fts_gesture_readdata(struct i2c_client *client)
 {
-	u8 buf[FTS_GESTRUE_POINTS * 4] = { 0 };
+	u8 *buf = NULL;
 	int ret = -1;
 	int i = 0;
 	int gestrue_id = 0;
@@ -412,6 +412,13 @@ int fts_gesture_readdata(struct i2c_client *client)
 	u8 pointnum;
 
 	FTS_FUNC_ENTER();
+
+	buf = (u8*)kmalloc(FTS_GESTRUE_POINTS*4*sizeof(u8),GFP_KERNEL);
+	if(!buf) {
+		pr_err("malloc error");
+		return -1;
+	}
+
 	/* init variable before read gesture point */
 	memset(fts_gesture_data.header, 0, FTS_GESTRUE_POINTS_HEADER);
 	memset(fts_gesture_data.coordinate_x, 0, FTS_GESTRUE_POINTS * sizeof(u16));
@@ -448,50 +455,12 @@ int fts_gesture_readdata(struct i2c_client *client)
 							   | (((s16) buf[3 + (4 * i + 2)]) & 0xFF);
 		}
 		FTS_FUNC_EXIT();
-		return 0;
 	} else {
 		FTS_ERROR("[GESTURE]IC 0x%x need gesture lib to support gestures.",
 			  chip_types.chip_idh);
-		return 0;
 	}
-#if 0
-	/* other IC's gestrue in driver, need gesture library */
-	if (0x24 == buf[0]) {
-		gestrue_id = 0x24;
-		fts_gesture_report(fts_input_dev, gestrue_id);
-		FTS_DEBUG("[GESTURE]%d check_gesture gestrue_id", gestrue_id);
-		FTS_FUNC_EXIT();
-		return -1;
-	}
-
-	/* Host Driver recognize gesture */
-	pointnum = buf[1];
-	read_bytes = ((int)pointnum) * 4 + 2;
-	buf[0] = FTS_REG_GESTURE_OUTPUT_ADDRESS;
-	ret = fts_gesture_read_buffer(client, buf, read_bytes);
-	if (ret < 0) {
-		FTS_ERROR("[GESTURE]Driver recognize gesture - Read gesture touch data failed!!");
-		FTS_FUNC_EXIT();
-		return ret;
-	}
-
-	/*
-	* Host Driver recognize gesture, need gesture lib.a
-	* Not use now for compatibility
-	*/
-	gestrue_id = fetch_object_sample(buf, pointnum);
-	fts_gesture_report(fts_input_dev, gestrue_id);
-	FTS_DEBUG("[GESTURE]%d read gestrue_id", gestrue_id);
-
-	for (i = 0; i < pointnum; i++) {
-		fts_gesture_data.coordinate_x[i] = (((s16) buf[0 + (4 * i + 8)]) & 0x0F) << 8
-						   | (((s16) buf[1 + (4 * i + 8)]) & 0xFF);
-		fts_gesture_data.coordinate_y[i] = (((s16) buf[2 + (4 * i + 8)]) & 0x0F) << 8
-						   | (((s16) buf[3 + (4 * i + 8)]) & 0xFF);
-	}
-	FTS_FUNC_EXIT();
-	return -1;
-#endif
+	kfree(buf);
+	return 0;
 }
 
 /*****************************************************************************
