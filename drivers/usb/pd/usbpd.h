@@ -14,6 +14,7 @@
 #define _USBPD_H
 
 #include <linux/device.h>
+#include <linux/notifier.h>
 
 struct usbpd;
 
@@ -74,6 +75,11 @@ struct pd_phy_params {
 	enum power_role power_role;
 	u8		frame_filter_val;
 };
+
+#define EXT_VBUS_ON 1
+#define EXT_VBUS_OFF 0
+extern void ext_vbus_register_notify(struct notifier_block *nb);
+extern void ext_vbus_unregister_notify(struct notifier_block *nb);
 
 #if IS_ENABLED(CONFIG_QPNP_USB_PDPHY)
 int pd_phy_open(struct pd_phy_params *params);
