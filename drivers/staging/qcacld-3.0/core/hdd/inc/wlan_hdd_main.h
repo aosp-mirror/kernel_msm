@@ -1838,6 +1838,10 @@ struct hdd_context_s {
 	struct vdev_spectral_configure_params ss_config;
 	int sscan_pid;
 #endif
+#ifdef WLAN_POWER_DEBUGFS
+	/* mutex lock to block concurrent access */
+	struct mutex power_stats_lock;
+#endif
 };
 
 int hdd_validate_channel_and_bandwidth(hdd_adapter_t *adapter,
