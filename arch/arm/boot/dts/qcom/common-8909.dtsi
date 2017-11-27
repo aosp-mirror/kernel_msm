@@ -8,6 +8,27 @@
 #include "catfish-8909-pinctrl.dtsi"
 #include "catfish-8909-bus.dtsi"
 
+/ {
+	bt_pwr {
+                compatible = "bcm,bcm4358";
+                bt_reg_on = <&msm_gpio 34 0>;       /* out bt reg_on pin */
+                pinctrl-names = "default","sleep";
+                pinctrl-0 = <&gpio_bt_reg_on_active>;
+                pinctrl-1 = <&gpio_bt_reg_on_sleep>;
+        };
+
+        btsleep {
+                compatible = "bcm,bluesleep";
+                interrupt-parent = <&msm_gpio>;
+                interrupts = <31 0x2002>;
+                bt_host_wake = <&msm_gpio 31 0>;    /* in bt wakeup AP */
+                bt_ext_wake = <&msm_gpio 32 0>;     /* out AP wakeup bt */
+                pinctrl-names = "default","sleep";
+                pinctrl-0 = <&gpio_bt_host_wake_active &gpio_bt_dev_wake_active>;
+                pinctrl-1 = <&gpio_bt_host_wake_sleep &gpio_bt_dev_wake_sleep>;
+        };
+};
+
 &soc {
         i2c@78b5000 { /* BLSP1 QUP1 */
                 /*linear charger*/
@@ -152,4 +173,10 @@
 };
 &i2c_6 {
 	status = "ok";
+};
+&blsp1_uart2 {
+        status = "ok";
+        pinctrl-names = "default", "sleep";
+        pinctrl-0 = <&blsp1_uart2_active>;
+        pinctrl-1 = <&blsp1_uart2_sleep>;
 };

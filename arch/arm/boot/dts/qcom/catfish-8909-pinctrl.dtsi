@@ -1,6 +1,31 @@
 /* add catfish/catshark pinctrl info*/
 
 &soc {
+	uart2 {
+                blsp1_uart2_active: blsp1_uart2_active {
+                        mux {
+                                pins = "gpio20", "gpio21", "gpio111", "gpio112";
+                                function = "blsp_uart2";
+                        };
+                        config {
+                                pins = "gpio20", "gpio21", "gpio111", "gpio112";
+                                drive-strength = <2>;
+                                bias-disable;
+                        };
+                };
+                blsp1_uart2_sleep: blsp1_uart2_sleep {
+                        mux {
+                                pins = "gpio20", "gpio21", "gpio111", "gpio112";
+                                function = "gpio";
+                        };
+                        config {
+                                pins = "gpio20", "gpio21", "gpio111", "gpio112";
+                                drive-strength = <2>;
+                                bias-pull-down;
+                        };
+                };
+        };
+
 	msm_gpio: pinctrl@1000000 {
 
 		pmx_i2c_6 {
@@ -164,5 +189,81 @@
 				};
 			};
 		};
+
+		tlmm_gpio_key {
+                        gpio_bt_host_wake_active: gpio_bt_host_wake_active {
+                                mux {
+                                        pins = "gpio31";
+                                        function = "gpio";
+                                };
+                                config {
+                                        pins = "gpio31";
+                                        drive-strength = <2>;
+                                        bias-pull-down;
+                                };
+                        };
+
+                        gpio_bt_host_wake_sleep: gpio_bt_host_wake_sleep {
+                                mux {
+                                        pins = "gpio31";
+                                        function = "gpio";
+                                };
+                                config {
+                                        pins = "gpio31";
+                                        drive-strength = <2>;
+                                        bias-pull-down;
+                                };
+                        };
+
+			gpio_bt_dev_wake_active: gpio_bt_dev_wake_active {
+                                mux {
+                                        pins = "gpio32";
+                                        function = "gpio";
+                                };
+                                config {
+                                        pins = "gpio32";
+                                        drive-strength = <2>;
+                                        output-high;
+                                        bias-disable;
+                                };
+                        };
+
+                        gpio_bt_dev_wake_sleep: gpio_bt_dev_wake_sleep {
+                                mux {
+                                        pins = "gpio32";
+                                        function = "gpio";
+                                };
+                                config {
+                                        pins = "gpio32";
+                                        drive-strength = <2>;
+                                        output-high;
+                                        bias-disable;
+                                };
+                        };
+
+			 gpio_bt_reg_on_active: gpio_bt_reg_on_active {
+                                mux {
+                                        pins = "gpio34";
+                                        function = "gpio";
+                                };
+                                config {
+                                        pins = "gpio34";
+                                        drive-strength = <2>;
+                                        bias-pull-down;
+                                };
+                        };
+
+                        gpio_bt_reg_on_sleep: gpio_bt_reg_on_sleep {
+                                mux {
+                                        pins = "gpio34";
+                                        function = "gpio";
+                                };
+                                config {
+                                        pins = "gpio34";
+                                        drive-strength = <2>;
+                                        bias-pull-down;
+                                };
+                        };
+                };
 	};
 };
