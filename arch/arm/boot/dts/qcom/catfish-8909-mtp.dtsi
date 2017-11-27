@@ -1,0 +1,13 @@
+&pm8916_gpios {
+	gpio@c300 { /* GPIO 4 */
+                /* External regulator control for APC */
+               qcom,mode = <1>; /* Output */
+               qcom,pull = <5>; /* No Pull */
+               qcom,vin-sel = <3>; /* VIN0 GPIO_LV */
+               qcom,src-sel = <2>; /* Special Function 1 */
+               qcom,invert = <0>; /* Invert */
+               qcom,master-en = <1>; /* Enable GPIO */
+               status = "okay";
+
+        };
+}
