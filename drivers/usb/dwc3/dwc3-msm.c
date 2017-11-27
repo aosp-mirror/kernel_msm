@@ -46,6 +46,7 @@
 #include "dbm.h"
 #include "debug.h"
 #include "xhci.h"
+#include "../pd/usbpd.h"
 
 #define SDP_CONNETION_CHECK_TIME 10000 /* in ms */
 
@@ -336,6 +337,8 @@ struct dwc3_msm {
 	struct mutex suspend_resume_mutex;
 
 	enum usb_device_speed override_usb_speed;
+	u32 auto_vbus_src_sel;
+
 	u32			*gsi_reg;
 	int			gsi_reg_offset_cnt;
 	bool			gsi_io_coherency_disabled;
@@ -3581,6 +3584,13 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	mdwc->charging_disabled = of_property_read_bool(node,
 				"qcom,charging-disabled");
 
+	ret = of_property_read_u32(node, "google,switch-vbus",
+				   &mdwc->auto_vbus_src_sel);
+	if (ret) {
+		dev_dbg(&pdev->dev, "setting auto_vbus_src_sel to zero.\n");
+		mdwc->auto_vbus_src_sel = 0;
+	}
+
 	ret = of_property_read_u32(node, "qcom,lpm-to-suspend-delay-ms",
 				&mdwc->lpm_to_suspend_delay);
 	if (ret) {
@@ -3991,6 +4001,50 @@ static int dwc3_msm_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static bool dwc3_is_root_hub_direct_child(struct usb_device *udev,
+					  struct dwc3 *dwc)
+{
+	return udev->parent &&
+	       !udev->parent->parent &&
+	       udev->dev.parent->parent == &dwc->xhci->dev;
+}
+
+static bool dwc3_use_external_vbus_booster(struct usb_device *udev,
+					   struct dwc3 *dwc,
+					   struct dwc3_msm *mdwc)
+{
+	unsigned max_power;
+
+	if (!udev->actconfig)
+		return false;
+
+	if (udev->speed >= USB_SPEED_SUPER)
+		max_power = udev->actconfig->desc.bMaxPower * 8;
+	else
+		max_power = udev->actconfig->desc.bMaxPower * 2;
+
+	if (dwc3_is_root_hub_direct_child(udev, dwc) &&
+	    udev->descriptor.bDeviceClass != USB_CLASS_HUB &&
+	    max_power < mdwc->auto_vbus_src_sel)
+		return true;
+
+	return false;
+}
+
+static BLOCKING_NOTIFIER_HEAD(ext_vbus_notifier_list);
+
+void ext_vbus_register_notify(struct notifier_block *nb)
+{
+	blocking_notifier_chain_register(&ext_vbus_notifier_list, nb);
+}
+EXPORT_SYMBOL_GPL(ext_vbus_register_notify);
+
+void ext_vbus_unregister_notify(struct notifier_block *nb)
+{
+	blocking_notifier_chain_unregister(&ext_vbus_notifier_list, nb);
+}
+EXPORT_SYMBOL_GPL(ext_vbus_unregister_notify);
+
 static int dwc3_msm_host_notifier(struct notifier_block *nb,
 	unsigned long event, void *ptr)
 {
@@ -4006,8 +4060,7 @@ static int dwc3_msm_host_notifier(struct notifier_block *nb,
 	 * i.e. dwc -> xhci -> root_hub -> udev
 	 * root_hub's udev->parent==NULL, so traverse struct device hierarchy
 	 */
-	if (udev->parent && !udev->parent->parent &&
-			udev->dev.parent->parent == &dwc->xhci->dev) {
+	if (dwc3_is_root_hub_direct_child(udev, dwc)) {
 		if (event == USB_DEVICE_ADD && udev->actconfig) {
 			if (!dwc3_msm_is_ss_rhport_connected(mdwc)) {
 				/*
@@ -4032,6 +4085,16 @@ static int dwc3_msm_host_notifier(struct notifier_block *nb,
 			mdwc->max_rh_port_speed = USB_SPEED_UNKNOWN;
 			dwc3_msm_update_bus_bw(mdwc, mdwc->default_bus_vote);
 		}
+	}
+
+	if (mdwc->auto_vbus_src_sel) {
+		if (event == USB_DEVICE_ADD &&
+		    dwc3_use_external_vbus_booster(udev, dwc, mdwc))
+			blocking_notifier_call_chain(&ext_vbus_notifier_list,
+						     EXT_VBUS_ON, NULL);
+		else
+			blocking_notifier_call_chain(&ext_vbus_notifier_list,
+						     EXT_VBUS_OFF, NULL);
 	}
 
 	return NOTIFY_DONE;
