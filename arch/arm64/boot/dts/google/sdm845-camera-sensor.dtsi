@@ -342,7 +342,7 @@
 		compatible = "qcom,cam-sensor";
 		reg = <0x1>;
 		csiphy-sd-index = <1>;
-		sensor-position-roll = <270>;
+		sensor-position-roll = <90>;
 		sensor-position-pitch = <0>;
 		sensor-position-yaw = <180>;
 		led-flash-src = <&led_flash_rear>;
