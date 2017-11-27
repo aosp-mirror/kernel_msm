@@ -88,6 +88,23 @@
 				focaltech,key-x-coords = <180 350 540>;*/
 			};
 		};
+		spi@78b9000 { /* BLSP1 QUP5 */
+			gps@0 {
+				compatible = "ssp,BCM4773";
+				reg = <0>;
+				spi-max-frequency = <20000000>;
+				interrupt-parent = <&msm_gpio>;
+				interrupts = <94 0x4>;
+				spi-cpol;
+				spi-cpha;
+				pinctrl-names = "default","sleep";
+				pinctrl-0 = <&gps_mcu_req_default &gps_mcu_resp_default &gps_host_req_default &gpio_gps_on_active>;
+				pinctrl-1 = <&gps_mcu_req_sleep &gps_mcu_resp_sleep &gps_host_req_sleep &gpio_gps_on_sleep>;
+				ssp-host-req = <&msm_gpio 94 0x4>;
+				ssp-mcu-req = <&msm_gpio 27 0>;
+				ssp-mcu-resp = <&msm_gpio 28 0>;
+			};
+		};
 };
 
 &spi_4 { /* BLSP1 QUP4 */
