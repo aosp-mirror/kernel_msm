@@ -69,6 +69,53 @@
 		};
 };
 
+&spi_4 { /* BLSP1 QUP4 */
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	sensorhub@0 {
+		compatible = "nanohub,nanohub_spi";
+		reg = <0>;
+
+		spi-max-frequency = <8000000>;
+		spi-cpol;
+		spi-cpha;
+
+		interrupt-parent = <&msm_gpio>;
+		interrupts = <97 0x2008>;
+		sensorhub,irq1-gpio   = <&msm_gpio 97 0x2008>;
+		sensorhub,irq2-gpio   = <&msm_gpio 96 0x2008>;
+		sensorhub,wakeup-gpio = <&msm_gpio 71 0>;
+		sensorhub,spi-cs-gpio = <&msm_gpio 14 0>;
+		sensorhub,nreset-gpio = <&msm_gpio 72 0>;
+		sensorhub,nreset_active_high;
+		sensorhub,boot0-gpio  = <&msm_gpio 70 0>;
+		sensorhub,hub-flag-int-gpio  = <&msm_gpio 73 0>;
+		sensorhub,mode-flag1-gpio  = <&msm_gpio 8 0>;
+		sensorhub,mode-flag2-gpio  = <&msm_gpio 9 0>;
+		sensorhub,mode-flag3-gpio  = <&msm_gpio 99 0>;
+		sensorhub,mode-flag4-gpio  = <&msm_gpio 110 0>;
+
+		sensorhub,bl-addr = <0x08000000>;
+		sensorhub,kernel-addr = <0x0800C000>;
+		sensorhub,flash-banks = <0 0x08000000 0x04000>,
+			<3 0x0800C000 0x04000>,
+			<4 0x08010000 0x10000>,
+			<5 0x08020000 0x20000>,
+			<6 0x08040000 0x20000>;
+
+		sensorhub,num-flash-banks = <5>;
+		sensorhub,shared-flash-banks =  <2 0x08008000 0x04000>;
+		sensorhub,num-shared-flash-banks = <1>;
+		sensorhub,custom-flash-addr = <0x08060000>;
+		sensorhub,custom-flash-len = <0x20000>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&sensorhub_ctrl_active>;
+		status = "ok";
+	};
+};
+
 &msm_gpio {
         /delete-node/ smb_int_pin;
         smb_int_default: smb_int_default {
@@ -99,6 +146,9 @@
 
 &i2c_1 {
 	status = "ok";
+};
+&i2c_4 {
+	status = "disabled";
 };
 &i2c_6 {
 	status = "ok";
