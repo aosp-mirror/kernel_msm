@@ -18,6 +18,8 @@
 
 extern bool noirqdebug;
 
+extern struct irqaction chained_action;
+
 /*
  * Bits used by threaded handlers:
  * IRQTF_RUNTHREAD - signals that the interrupt handler thread should run
@@ -197,6 +199,11 @@ static inline void kstat_incr_irqs_this_cpu(unsigned int irq, struct irq_desc *d
 {
 	__this_cpu_inc(*desc->kstat_irqs);
 	__this_cpu_inc(kstat.irqs_sum);
+}
+
+static inline int irq_desc_is_chained(struct irq_desc *desc)
+{
+	return (desc->action && desc->action == &chained_action);
 }
 
 #ifdef CONFIG_PM_SLEEP
