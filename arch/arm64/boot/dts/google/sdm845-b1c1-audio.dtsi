@@ -125,7 +125,7 @@
 		qcom,msm-cpudai-tdm-sync-mode = <0>;
 		qcom,msm-cpudai-tdm-sync-src = <1>;
 		qcom,msm-cpudai-tdm-data-out = <0>;
-		qcom,msm-cpudai-tdm-invert-sync = <1>;
+		qcom,msm-cpudai-tdm-invert-sync = <0>;
 		qcom,msm-cpudai-tdm-data-delay = <1>;
 		dai_quat_tdm_tx_0: qcom,msm-dai-q6-tdm-quat-tx-0 {
 			compatible = "qcom,msm-dai-q6-tdm";
