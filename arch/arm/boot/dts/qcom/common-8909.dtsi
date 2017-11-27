@@ -7,6 +7,7 @@
 #include "dsi-panel-rm67162-wqvga-cmd.dtsi"
 #include "catfish-8909-pinctrl.dtsi"
 #include "catfish-8909-bus.dtsi"
+#include "catfish-8909-mtp.dtsi"
 
 / {
 	bt_pwr {
