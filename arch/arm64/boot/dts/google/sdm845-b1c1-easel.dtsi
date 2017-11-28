@@ -15,7 +15,7 @@
 / {
 	aliases {
 		serial1 = &qupv3_se3_2uart;
-		spi10 = &qupv3_se11_spi;
+		spi10 = &qupv3_se0_spi;
 	};
 };
 
@@ -161,7 +161,7 @@
 	};
 };
 
-&qupv3_se11_spi {
+&qupv3_se0_spi {
 	status = "okay";
 	mnh-spi@0 {
 		compatible = "intel,mnh-spi";

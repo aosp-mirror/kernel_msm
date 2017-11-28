@@ -26,3 +26,22 @@
 	status = "disabled";
 };
 
+/* B1 P1 has easel spi connected to se11 */
+/ {
+	aliases {
+		spi10 = &qupv3_se11_spi;
+	};
+};
+&qupv3_se0_spi {
+	status = "disabled";
+};
+&qupv3_se11_spi {
+	status = "okay";
+	mnh-spi@0 {
+		compatible = "intel,mnh-spi";
+		reg = <0>;
+		spi-max-frequency = <25000000>;
+		spi-cpol;
+		spi-cpha;
+	};
+};
