@@ -216,6 +216,8 @@ typedef  enum  {
     WMI_SERVICE_MAWC_SUPPORT = 134, /* Support for MAWC service */
     WMI_SERVICE_VDEV_LATENCY_CONFIG=135, /* support for vdev latency config */
     WMI_SERVICE_PDEV_UPDATE_CTLTABLE_SUPPORT=136, /* support for pdev update ctl table */
+    WMI_SERVICE_PKTLOG_SUPPORT_OVER_HTT=137, /* upload pktlog data over HTT communication channel */
+    WMI_SERVICE_VDEV_MULTI_GROUP_KEY_SUPPORT=138, /* Support for vdev level multi group key */
 
     /******* ADD NEW SERVICES HERE *******/
 
