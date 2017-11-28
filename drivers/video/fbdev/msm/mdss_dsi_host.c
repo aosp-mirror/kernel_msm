@@ -1487,10 +1487,14 @@ static int mdss_dsi_wait4video_eng_busy(struct mdss_dsi_ctrl_pdata *ctrl)
 {
 	int ret = 0;
 	u32 v_total = 0, v_blank = 0, sleep_ms = 0, fps = 0;
-	struct mdss_panel_info *pinfo = &ctrl->panel_data.panel_info;
+	struct mdss_panel_info *pinfo;
 
-	if (ctrl->panel_mode == DSI_CMD_MODE)
+	/* for dsi 2.1 and above dma scheduling is used */
+	if ((!ctrl) || (ctrl->panel_mode == DSI_CMD_MODE) ||
+		(ctrl->shared_data->hw_rev > MDSS_DSI_HW_REV_200))
 		return ret;
+
+	pinfo = &ctrl->panel_data.panel_info;
 
 	if (ctrl->ctrl_state & CTRL_STATE_MDP_ACTIVE) {
 		mdss_dsi_wait4video_done(ctrl);
@@ -1511,6 +1515,61 @@ static int mdss_dsi_wait4video_eng_busy(struct mdss_dsi_ctrl_pdata *ctrl)
 	return ret;
 }
 
+static void mdss_dsi_schedule_dma_cmd(struct mdss_dsi_ctrl_pdata *ctrl)
+{
+	u32 v_blank, val = 0x0;
+	struct mdss_panel_info *pinfo;
+
+	/* for dsi 2.0 and below dma scheduling is not supported */
+	if ((!ctrl) || (ctrl->panel_mode == DSI_CMD_MODE) ||
+		(ctrl->shared_data->hw_rev < MDSS_DSI_HW_REV_201))
+		return;
+
+	pinfo = &ctrl->panel_data.panel_info;
+	v_blank = pinfo->lcdc.v_back_porch + pinfo->lcdc.v_pulse_width;
+
+	/* DMA_SCHEDULE_CTRL */
+	val = MIPI_INP(ctrl->ctrl_io.base + 0x100);
+	val = val | (1 << 28); /* DMA_SCHEDULE_EN */
+	MIPI_OUTP(ctrl->ctrl_io.base + 0x100, val);
+	val |= (pinfo->yres + v_blank);
+	MIPI_OUTP(ctrl->ctrl_io.base + 0x100, val); /* DMA_SCHEDULE_LINE */
+	wmb();
+
+	pr_debug("%s schedule at line %x", __func__, val);
+	MDSS_XLOG(ctrl->ndx, val);
+}
+
+static void mdss_dsi_wait4active_region(struct mdss_dsi_ctrl_pdata *ctrl)
+{
+	int in_blanking = 0;
+	int retry_count = 0;
+
+	/* for dsi 2.1 and above dma scheduling is used */
+	if ((!ctrl) || (ctrl->panel_mode != DSI_VIDEO_MODE) ||
+		(ctrl->shared_data->hw_rev > MDSS_DSI_HW_REV_200))
+		return;
+
+	while (retry_count != MAX_BTA_WAIT_RETRY) {
+		mdss_dsi_wait4video_eng_busy(ctrl);
+		in_blanking = ctrl->mdp_callback->fxn(
+			ctrl->mdp_callback->data,
+			MDP_INTF_CALLBACK_CHECK_LINE_COUNT);
+
+		if (in_blanking) {
+			pr_debug("%s: not in active region\n", __func__);
+			retry_count++;
+		} else
+			break;
+	};
+
+	if (retry_count == MAX_BTA_WAIT_RETRY)
+		MDSS_XLOG_TOUT_HANDLER("mdp", "dsi0_ctrl",
+			"dsi0_phy", "dsi1_ctrl", "dsi1_phy",
+			"vbif", "vbif_nrt", "dbg_bus",
+			"vbif_dbg_bus", "dsi_dbg_bus", "panic");
+}
+
 /**
  * mdss_dsi_bta_status_check() - Check dsi panel status through bta check
  * @ctrl_pdata: pointer to the dsi controller structure
@@ -1526,8 +1585,6 @@ int mdss_dsi_bta_status_check(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 	int ret = 0;
 	unsigned long flag;
 	int ignore_underflow = 0;
-	int retry_count = 0;
-	int in_blanking = 0;
 
 	if (ctrl_pdata == NULL) {
 		pr_err("%s: Invalid input data\n", __func__);
@@ -1553,24 +1610,8 @@ int mdss_dsi_bta_status_check(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 	reinit_completion(&ctrl_pdata->bta_comp);
 	mdss_dsi_enable_irq(ctrl_pdata, DSI_BTA_TERM);
 	spin_unlock_irqrestore(&ctrl_pdata->mdp_lock, flag);
-wait:
-	mdss_dsi_wait4video_eng_busy(ctrl_pdata);
-	if (ctrl_pdata->panel_mode == DSI_VIDEO_MODE) {
-		in_blanking = ctrl_pdata->mdp_callback->fxn(
-			ctrl_pdata->mdp_callback->data,
-			MDP_INTF_CALLBACK_CHECK_LINE_COUNT);
-		/* Try for maximum of 5 attempts */
-		if (in_blanking && (retry_count < MAX_BTA_WAIT_RETRY)) {
-			pr_debug("%s: not in active region\n", __func__);
-			retry_count++;
-			goto wait;
-		}
-	}
-	if (retry_count == MAX_BTA_WAIT_RETRY)
-		MDSS_XLOG_TOUT_HANDLER("mdp", "dsi0_ctrl",
-			"dsi0_phy", "dsi1_ctrl", "dsi1_phy",
-			"vbif", "vbif_nrt", "dbg_bus",
-			"vbif_dbg_bus", "dsi_dbg_bus", "panic");
+
+	mdss_dsi_wait4active_region(ctrl_pdata);
 
 	/* mask out overflow errors */
 	if (ignore_underflow)
@@ -1990,7 +2031,7 @@ do_send:
 			goto end;
 		}
 
-		mdss_dsi_wait4video_eng_busy(ctrl);
+		mdss_dsi_wait4active_region(ctrl);
 
 		mdss_dsi_enable_irq(ctrl, DSI_CMD_TERM);
 		if (use_dma_tpg)
@@ -2028,7 +2069,7 @@ skip_max_pkt_size:
 			wmb(); /* make sure the RDBK registers are cleared */
 		}
 
-		mdss_dsi_wait4video_eng_busy(ctrl);	/* video mode only */
+		mdss_dsi_wait4active_region(ctrl);
 		mdss_dsi_enable_irq(ctrl, DSI_CMD_TERM);
 		/* transmit read comamnd to client */
 		if (use_dma_tpg)
@@ -2193,6 +2234,10 @@ static int mdss_dsi_cmd_dma_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 	MIPI_OUTP((ctrl->ctrl_base) + 0x04c, len);
 	wmb();
 
+	/* schedule dma cmds at start of blanking region */
+	mdss_dsi_schedule_dma_cmd(ctrl);
+
+	/* DSI_CMD_MODE_DMA_SW_TRIGGER */
 	MIPI_OUTP((ctrl->ctrl_base) + 0x090, 0x01);
 	wmb();
 	MDSS_XLOG(ctrl->dma_addr, len);

@@ -751,6 +751,21 @@ int htt_htc_attach(struct htt_pdev_t *pdev, uint16_t service_id)
 	return 0;               /* success */
 }
 
+void htt_log_rx_ring_info(htt_pdev_handle pdev)
+{
+	if (!pdev) {
+		QDF_TRACE(QDF_MODULE_ID_HTT, QDF_TRACE_LEVEL_ERROR,
+			  "%s: htt pdev is NULL", __func__);
+		return;
+	}
+	QDF_TRACE(QDF_MODULE_ID_HTT, QDF_TRACE_LEVEL_DEBUG,
+		  "%s: Data Stall Detected with reason 4 (=FW_RX_REFILL_FAILED)."
+		  "src htt rx ring:  space for %d elements, filled with %d buffers, buffers in the ring %d, refill debt %d",
+		  __func__, pdev->rx_ring.size, pdev->rx_ring.fill_level,
+		  pdev->rx_ring.fill_cnt,
+		  qdf_atomic_read(&pdev->rx_ring.refill_debt));
+}
+
 #if HTT_DEBUG_LEVEL > 5
 void htt_display(htt_pdev_handle pdev, int indent)
 {
@@ -762,12 +777,12 @@ void htt_display(htt_pdev_handle pdev, int indent)
 	qdf_print("%*srx ring: space for %d elems, filled with %d buffers\n",
 		  indent + 4, " ",
 		  pdev->rx_ring.size, pdev->rx_ring.fill_level);
-	qdf_print("%*sat %p (%llx paddr)\n", indent + 8, " ",
+	qdf_print("%*sat %pK (%llx paddr)\n", indent + 8, " ",
 		  pdev->rx_ring.buf.paddrs_ring,
 		  (unsigned long long)pdev->rx_ring.base_paddr);
-	qdf_print("%*snetbuf ring @ %p\n", indent + 8, " ",
+	qdf_print("%*snetbuf ring @ %pK\n", indent + 8, " ",
 		  pdev->rx_ring.buf.netbufs_ring);
-	qdf_print("%*sFW_IDX shadow register: vaddr = %p, paddr = %llx\n",
+	qdf_print("%*sFW_IDX shadow register: vaddr = %pK, paddr = %llx\n",
 		  indent + 8, " ",
 		  pdev->rx_ring.alloc_idx.vaddr,
 		  (unsigned long long)pdev->rx_ring.alloc_idx.paddr);

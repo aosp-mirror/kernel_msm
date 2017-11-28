@@ -479,6 +479,13 @@ struct reg_table_entry g_registry_table[] = {
 		     CFG_CHANNEL_BONDING_MODE_MIN,
 		     CFG_CHANNEL_BONDING_MODE_MAX),
 
+	REG_VARIABLE(CFG_OVERRIDE_HT40_20_24GHZ_NAME, WLAN_PARAM_Integer,
+		     struct hdd_config, override_ht20_40_24g,
+		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		     CFG_OVERRIDE_HT40_20_24GHZ_DEFAULT,
+		     CFG_OVERRIDE_HT40_20_24GHZ_MIN,
+		     CFG_OVERRIDE_HT40_20_24GHZ_MAX),
+
 	REG_VARIABLE(CFG_CHANNEL_BONDING_MODE_5GHZ_NAME, WLAN_PARAM_Integer,
 		     struct hdd_config, nChannelBondingMode5GHz,
 		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK,
@@ -609,6 +616,15 @@ struct reg_table_entry g_registry_table[] = {
 		     CFG_ENABLE_LTE_COEX_DEFAULT,
 		     CFG_ENABLE_LTE_COEX_MIN,
 		     CFG_ENABLE_LTE_COEX_MAX),
+
+	REG_VARIABLE(CFG_VC_MODE_BITMAP, WLAN_PARAM_HexInteger,
+		     struct hdd_config, vc_mode_cfg_bitmap,
+		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		     CFG_VC_MODE_BITMAP_DEFAULT,
+		     CFG_VC_MODE_BITMAP_MIN,
+		     CFG_VC_MODE_BITMAP_MAX),
+
+
 /*
  * <ini>
  * gApAutoChannelSelection - Force ACS from ini
@@ -3608,6 +3624,14 @@ struct reg_table_entry g_registry_table[] = {
 		     CFG_ENABLE_NON_DFS_CHAN_ON_RADAR_MIN,
 		     CFG_ENABLE_NON_DFS_CHAN_ON_RADAR_MAX),
 
+	REG_VARIABLE(CFG_P2P_LISTEN_DEFER_INTERVAL_NAME, WLAN_PARAM_Integer,
+		     struct hdd_config, p2p_listen_defer_interval,
+		     VAR_FLAGS_OPTIONAL |
+		     VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		     CFG_P2P_LISTEN_DEFER_INTERVAL_DEFAULT,
+		     CFG_P2P_LISTEN_DEFER_INTERVAL_MIN,
+		     CFG_P2P_LISTEN_DEFER_INTERVAL_MAX),
+
 	REG_VARIABLE(CFG_MULTICAST_HOST_FW_MSGS, WLAN_PARAM_Integer,
 		     struct hdd_config, multicast_host_fw_msgs,
 		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
@@ -5790,6 +5814,9 @@ void hdd_cfg_print(hdd_context_t *pHddCtx)
 				pHddCtx->config->sap_p2p_11ac_override);
 	hdd_debug("Name = [ChannelBondingMode] Value = [%u]",
 		  pHddCtx->config->nChannelBondingMode24GHz);
+	hdd_debug("Name = [%s] Value = [%u] ",
+		  CFG_OVERRIDE_HT40_20_24GHZ_NAME,
+		  pHddCtx->config->override_ht20_40_24g);
 	hdd_debug("Name = [ChannelBondingMode] Value = [%u]",
 		  pHddCtx->config->nChannelBondingMode5GHz);
 	hdd_debug("Name = [dot11Mode] Value = [%u]",
@@ -6507,6 +6534,11 @@ void hdd_cfg_print(hdd_context_t *pHddCtx)
 	hdd_debug("Name = [%s] value = [%u]",
 		CFG_DTIM_1CHRX_ENABLE_NAME,
 		pHddCtx->config->enable_dtim_1chrx);
+	hdd_debug("Name = [%s] value = [0x%x]", CFG_VC_MODE_BITMAP,
+		pHddCtx->config->vc_mode_cfg_bitmap);
+	hdd_debug("Name = [%s] value = [%u]",
+		CFG_DOT11P_MODE_NAME,
+		pHddCtx->config->dot11p_mode);
 }
 
 /**
@@ -7008,7 +7040,7 @@ QDF_STATUS hdd_hex_string_to_u16_array(char *str,
 	if (str == NULL || int_array == NULL || len == NULL)
 		return QDF_STATUS_E_INVAL;
 
-	hdd_debug("str %p intArray %p intArrayMaxLen %d",
+	hdd_debug("str %pK intArray %pK intArrayMaxLen %d",
 		s, int_array, int_array_max_len);
 
 	*len = 0;
@@ -7020,7 +7052,7 @@ QDF_STATUS hdd_hex_string_to_u16_array(char *str,
 		 */
 		if (sscanf(s, "%x", &val) == 1) {
 			int_array[*len] = (uint16_t) val;
-			hdd_debug("s %p val %x intArray[%d]=0x%x",
+			hdd_debug("s %pK val %x intArray[%d]=0x%x",
 				s, val, *len, int_array[*len]);
 			*len += 1;
 		}

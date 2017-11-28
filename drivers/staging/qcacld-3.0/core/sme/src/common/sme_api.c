@@ -1976,7 +1976,7 @@ QDF_STATUS sme_set_plm_request(tHalHandle hHal, tpSirPlmReq pPlmReq)
 	QDF_STATUS status;
 	bool ret = false;
 	tpAniSirGlobal pMac = PMAC_STRUCT(hHal);
-	uint8_t ch_list[WNI_CFG_VALID_CHANNEL_LIST] = { 0 };
+	uint8_t ch_list[WNI_CFG_VALID_CHANNEL_LIST_LEN] = { 0 };
 	uint8_t count, valid_count = 0;
 	cds_msg_t msg;
 	tCsrRoamSession *pSession = CSR_GET_SESSION(pMac, pPlmReq->sessionId);
@@ -7794,7 +7794,7 @@ QDF_STATUS sme_8023_multicast_list(tHalHandle hHal, uint8_t sessionId,
 	tCsrRoamSession *pSession = NULL;
 
 	QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
-		"%s: ulMulticastAddrCnt: %d, multicastAddr[0]: %p", __func__,
+		"%s: ulMulticastAddrCnt: %d, multicastAddr[0]: %pK", __func__,
 		  pMulticastAddrs->ulMulticastAddrCnt,
 		  pMulticastAddrs->multicastAddr[0].bytes);
 
@@ -9097,6 +9097,23 @@ QDF_STATUS sme_stop_roaming(tHalHandle hal, uint8_t session_id, uint8_t reason)
 	roam_info->last_sent_cmd = ROAM_SCAN_OFFLOAD_STOP;
 
 	return QDF_STATUS_SUCCESS;
+}
+
+void sme_indicate_disconnect_inprogress(tHalHandle hal, uint8_t session_id)
+{
+	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal);
+	QDF_STATUS status = QDF_STATUS_SUCCESS;
+	tCsrRoamSession *session;
+
+	status = sme_acquire_global_lock(&mac_ctx->sme);
+	if (QDF_IS_STATUS_SUCCESS(status)) {
+		if (CSR_IS_SESSION_VALID(mac_ctx, session_id)) {
+			session = CSR_GET_SESSION(mac_ctx, session_id);
+			if (session)
+				session->discon_in_progress = true;
+		}
+		sme_release_global_lock(&mac_ctx->sme);
+	}
 }
 
 /**
@@ -18059,7 +18076,8 @@ send_flush_cmd:
  *
  * Return: QDF_STATUS
  */
-QDF_STATUS sme_delete_all_tdls_peers(tHalHandle hal, uint8_t session_id)
+QDF_STATUS sme_delete_all_tdls_peers(tHalHandle hal, uint8_t session_id,
+		bool disable_tdls_state)
 {
 	struct sir_del_all_tdls_peers *msg;
 	QDF_STATUS status = QDF_STATUS_SUCCESS;
@@ -18079,6 +18097,8 @@ QDF_STATUS sme_delete_all_tdls_peers(tHalHandle hal, uint8_t session_id)
 
 	qdf_mem_copy(msg->bssid.bytes, session->connectedProfile.bssid.bytes,
 		     sizeof(struct qdf_mac_addr));
+
+	msg->disable_tdls_state = disable_tdls_state;
 
 	status = cds_send_mb_message_to_mac(msg);
 
@@ -18452,6 +18472,33 @@ void sme_set_chan_info_callback(tHalHandle hal_handle,
 	tpAniSirGlobal mac = PMAC_STRUCT(hal_handle);
 
 	mac->chan_info_cb = callback;
+}
+
+/**
+ * sme_set_vc_mode_config() - Set voltage corner config to FW
+ * @bitmap:	Bitmap that referes to voltage corner config with
+ * different phymode and bw configuration
+ *
+ * Return: QDF_STATUS
+ */
+QDF_STATUS sme_set_vc_mode_config(uint32_t vc_bitmap)
+{
+	void *wma_handle;
+
+	wma_handle = cds_get_context(QDF_MODULE_ID_WMA);
+	if (!wma_handle) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+				"wma_handle is NULL");
+		return QDF_STATUS_E_FAILURE;
+	}
+	if (QDF_STATUS_SUCCESS !=
+		wma_set_vc_mode_config(wma_handle, vc_bitmap)) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+			"%s: Failed to set Voltage Control config to FW",
+			__func__);
+		return QDF_STATUS_E_FAILURE;
+	}
+	return QDF_STATUS_SUCCESS;
 }
 
 /**
