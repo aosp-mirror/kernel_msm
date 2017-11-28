@@ -264,7 +264,33 @@
                                         bias-pull-down;
                                 };
                         };
-                };
+
+			gpio_wl_reg_on_active: gpio_wl_reg_on_active {
+				mux {
+					pins = "gpio33";
+					function = "gpio";
+				};
+				config {
+					pins = "gpio33";
+					drive-strength = <2>;
+					bias-pull-down;
+				};
+			};
+
+			gpio_wl_reg_on_sleep: gpio_wl_reg_on_sleep {
+				mux {
+					pins = "gpio33";
+					function = "gpio";
+				};
+				config {
+					pins = "gpio33";
+					drive-strength = <2>;
+					bias-pull-down;
+				};
+			};
+
+         };
+
 		spi5 {
 			spi5_default: spi5_default {
 				mux {
