@@ -41,7 +41,7 @@
                         pinctrl-names = "default";
                         pinctrl-0 = <&smb_int_default &smb_susp_default>;
                         qcom,bms-psy-name = "bms";
-                        qcom,float-voltage-mv = <4320>;
+                        qcom,float-voltage-mv = <4400>;
                         qcom,charging-timeout = <180>;  /* 180 270 360 */
                         qcom,recharge-thresh-mv = <150>; /* select 80 or 150mv */
                         qcom,iterm-ma = <50>; /* 20 30 50 75 */
