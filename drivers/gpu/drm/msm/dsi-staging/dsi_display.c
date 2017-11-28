@@ -974,6 +974,9 @@ int dsi_display_set_power(struct drm_connector *connector,
 	case SDE_MODE_DPMS_LP2:
 		rc = dsi_panel_set_lp2(display->panel);
 		break;
+	case SDE_MODE_DPMS_OFF:
+		/* nothing to do */
+		break;
 	default:
 		rc = dsi_panel_set_nolp(display->panel);
 		break;

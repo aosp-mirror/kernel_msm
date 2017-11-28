@@ -20,6 +20,9 @@
 
 #define BL_NODE_NAME_SIZE 32
 
+#define BL_STATE_LP		BL_CORE_DRIVER1
+#define BL_STATE_LP2		BL_CORE_DRIVER2
+
 static int dsi_backlight_update_dcs(struct dsi_backlight_config *bl, u32 bl_lvl)
 {
 	int rc = 0;
@@ -177,15 +180,26 @@ int dsi_backlight_update_dpms(struct dsi_backlight_config *bl, int power_mode)
 	if (!bd)
 		return 0;
 
+	pr_info("power_mode:%d state:0x%0x\n", power_mode, bd->props.state);
+
 	mutex_lock(&bd->ops_lock);
 	switch (power_mode) {
 	case SDE_MODE_DPMS_ON:
 		bd->props.power = FB_BLANK_UNBLANK;
-		bd->props.state &= ~BL_CORE_FBBLANK;
+		bd->props.state &= ~(BL_CORE_FBBLANK | BL_STATE_LP |
+				     BL_STATE_LP2);
 		break;
 	case SDE_MODE_DPMS_OFF:
 		bd->props.power = FB_BLANK_POWERDOWN;
+		bd->props.state &= ~(BL_STATE_LP | BL_STATE_LP2);
 		bd->props.state |= BL_CORE_FBBLANK;
+		break;
+	case SDE_MODE_DPMS_LP1:
+		bd->props.state |= BL_STATE_LP;
+		bd->props.state &= ~BL_STATE_LP2;
+		break;
+	case SDE_MODE_DPMS_LP2:
+		bd->props.state |= BL_STATE_LP | BL_STATE_LP2;
 		break;
 	default:
 		rc = -EINVAL;
