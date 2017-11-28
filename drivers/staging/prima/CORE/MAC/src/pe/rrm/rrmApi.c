@@ -656,14 +656,25 @@ rrmProcessBeaconReportReq( tpAniSirGlobal pMac,
    pSmeBcnReportReq->channelList.numChannels = num_channels;
    if( pBeaconReq->measurement_request.Beacon.num_APChannelReport )
    {
-      tANI_U8 *pChanList = pSmeBcnReportReq->channelList.channelNumber;
-      for( num_APChanReport = 0 ; num_APChanReport < pBeaconReq->measurement_request.Beacon.num_APChannelReport ; num_APChanReport++ )
-      {
-         vos_mem_copy(pChanList,
-          pBeaconReq->measurement_request.Beacon.APChannelReport[num_APChanReport].channelList,
-          pBeaconReq->measurement_request.Beacon.APChannelReport[num_APChanReport].num_channelList);
+      tANI_U8 *ch_lst = pSmeBcnReportReq->channelList.channelNumber;
+      tANI_U8 len;
+      tANI_U16 ch_ctr = 0;
+      for(num_APChanReport = 0;
+          num_APChanReport <
+          pBeaconReq->measurement_request.Beacon.num_APChannelReport;
+          num_APChanReport++) {
+              len = pBeaconReq->measurement_request.Beacon.
+                  APChannelReport[num_APChanReport].num_channelList;
+              if (ch_ctr + len >
+                 sizeof(pSmeBcnReportReq->channelList.channelNumber))
+                      break;
 
-         pChanList += pBeaconReq->measurement_request.Beacon.APChannelReport[num_APChanReport].num_channelList;
+              vos_mem_copy(&ch_lst[ch_ctr],
+                           pBeaconReq->measurement_request.Beacon.
+                           APChannelReport[num_APChanReport].channelList,
+                           len);
+
+              ch_ctr += len;
       }
    }
 

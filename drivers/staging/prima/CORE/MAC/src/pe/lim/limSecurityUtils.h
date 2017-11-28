@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2015, 2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -42,6 +42,12 @@
 #define LIM_ENCR_AUTH_BODY_LEN  (sizeof(tSirMacAuthFrameBody) + \
                                 SIR_MAC_WEP_IV_LENGTH + \
                                 SIR_MAC_WEP_ICV_LENGTH)
+
+#define LIM_ENCR_AUTH_INFO_LEN  (SIR_MAC_AUTH_FRAME_INFO_LEN +\
+                                 SIR_MAC_WEP_IV_LENGTH + \
+                                 SIR_MAC_WEP_ICV_LENGTH + \
+                                 SIR_MAC_CHALLENGE_ID_LEN)
+
 struct tLimPreAuthNode;
 
 tANI_U8        limIsAuthAlgoSupported(tpAniSirGlobal, tAniAuthType, tpPESession);
@@ -59,7 +65,7 @@ tANI_U8 limDeleteOpenAuthPreAuthNode(tpAniSirGlobal pMac);
 
 // Encryption/Decryption related functions
 tCfgWepKeyEntry    *limLookUpKeyMappings(tSirMacAddr);
-void               limComputeCrc32(tANI_U8 *, tANI_U8 *, tANI_U8);
+void               limComputeCrc32(tANI_U8 *, tANI_U8 *, tANI_U16);
 void               limRC4(tANI_U8 *, tANI_U8 *, tANI_U8 *, tANI_U32, tANI_U16);
 void               limEncryptAuthFrame(tpAniSirGlobal, tANI_U8, tANI_U8 *, tANI_U8 *, tANI_U8 *, tANI_U32);
 tANI_U8                 limDecryptAuthFrame(tpAniSirGlobal, tANI_U8 *, tANI_U8 *, tANI_U8 *, tANI_U32, tANI_U16);

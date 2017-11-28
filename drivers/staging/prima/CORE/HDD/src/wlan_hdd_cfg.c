@@ -3430,6 +3430,20 @@ REG_VARIABLE( CFG_EXTSCAN_ENABLE, WLAN_PARAM_Integer,
                CFG_DISABLE_SCAN_DURING_SCO_DEFAULT,
                CFG_DISABLE_SCAN_DURING_SCO_MIN,
                CFG_DISABLE_SCAN_DURING_SCO_MAX ),
+
+  REG_VARIABLE(CFG_MAX_SCHED_SCAN_PLAN_INT_NAME, WLAN_PARAM_Integer,
+               hdd_config_t, max_sched_scan_plan_interval,
+               VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+               CFG_MAX_SCHED_SCAN_PLAN_INT_DEFAULT,
+               CFG_MAX_SCHED_SCAN_PLAN_INT_MIN,
+               CFG_MAX_SCHED_SCAN_PLAN_INT_MAX),
+
+  REG_VARIABLE(CFG_MAX_SCHED_SCAN_PLAN_ITRNS_NAME, WLAN_PARAM_Integer,
+               hdd_config_t, max_sched_scan_plan_iterations,
+               VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+               CFG_MAX_SCHED_SCAN_PLAN_ITRNS_DEFAULT,
+               CFG_MAX_SCHED_SCAN_PLAN_ITRNS_MIN,
+               CFG_MAX_SCHED_SCAN_PLAN_ITRNS_MAX),
 };
 
 /*
@@ -3857,12 +3871,11 @@ static void print_hdd_cfg(hdd_context_t *pHddCtx)
   VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO_HIGH,
           "Name = [disableBarWakeUp] Value = [%u] ",
           pHddCtx->cfg_ini->disableBarWakeUp);
+
   VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO_HIGH,
         "Name = [gDisableScanDuringSco] Value = [%u] ",
          pHddCtx->cfg_ini->disable_scan_during_sco);
 }
-
-
 
 #define CFG_VALUE_MAX_LEN 256
 #define CFG_ENTRY_MAX_LEN (32+CFG_VALUE_MAX_LEN)
@@ -5444,7 +5457,7 @@ v_BOOL_t hdd_update_config_dat( hdd_context_t *pHddCtx )
        fStatus = FALSE;
        hddLog(LOGE, "Could not pass on WNI_CFG_DISABLE_BAR_WAKE_UP_HOST to CCM");
    }
-   
+
    if (ccmCfgSetInt(pHddCtx->hHal, WNI_CFG_DISABLE_SCAN_DURING_SCO,
                pConfig->disable_scan_during_sco,
                NULL, eANI_BOOLEAN_FALSE) == eHAL_STATUS_FAILURE)
@@ -5585,7 +5598,7 @@ VOS_STATUS hdd_set_sme_config( hdd_context_t *pHddCtx )
    smeConfig->csrConfig.fEnableBypass11d          = pConfig->enableBypass11d;
    smeConfig->csrConfig.fEnableDFSChnlScan        = pConfig->enableDFSChnlScan;
    smeConfig->csrConfig.disable_scan_during_sco   =
-                                              pConfig->disable_scan_during_sco;   
+                                              pConfig->disable_scan_during_sco;
 #if  defined (WLAN_FEATURE_VOWIFI_11R) || defined (FEATURE_WLAN_ESE) || defined(FEATURE_WLAN_LFR)
    smeConfig->csrConfig.nRoamPrefer5GHz           = pConfig->nRoamPrefer5GHz;
    smeConfig->csrConfig.nRoamIntraBand            = pConfig->nRoamIntraBand;

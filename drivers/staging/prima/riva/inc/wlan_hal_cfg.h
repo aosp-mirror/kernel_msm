@@ -279,7 +279,6 @@
 
 #define QWLAN_HAL_CFG_MAX_PARAMS                             225
 
-
 /* Total number of Integer CFGs. This is used while allocating the memory for TLV */
 #define QWLAN_HAL_CFG_INTEGER_PARAM                     225
 

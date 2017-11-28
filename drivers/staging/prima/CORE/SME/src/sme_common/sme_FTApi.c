@@ -116,6 +116,9 @@ void sme_SetFTIEs( tHalHandle hHal, tANI_U8 sessionId, const tANI_U8 *ft_ies,
     {
         case eFT_START_READY:
         case eFT_AUTH_REQ_READY:
+#if defined WLAN_FEATURE_VOWIFI_11R_DEBUG
+            smsLog( pMac, LOG1, FL("ft_ies_length: %d"), ft_ies_length);
+#endif
             if ((pMac->ft.ftSmeContext.auth_ft_ies) && 
                     (pMac->ft.ftSmeContext.auth_ft_ies_length))
             {
@@ -123,7 +126,7 @@ void sme_SetFTIEs( tHalHandle hHal, tANI_U8 sessionId, const tANI_U8 *ft_ies,
                 vos_mem_free(pMac->ft.ftSmeContext.auth_ft_ies);
                 pMac->ft.ftSmeContext.auth_ft_ies_length = 0; 
             }
-
+            ft_ies_length = VOS_MIN(ft_ies_length, MAX_FTIE_SIZE);
             // Save the FT IEs
             pMac->ft.ftSmeContext.auth_ft_ies = vos_mem_malloc(ft_ies_length);
             if ( NULL == pMac->ft.ftSmeContext.auth_ft_ies )
@@ -138,9 +141,6 @@ void sme_SetFTIEs( tHalHandle hHal, tANI_U8 sessionId, const tANI_U8 *ft_ies,
                           ft_ies,ft_ies_length);
             pMac->ft.ftSmeContext.FTState = eFT_AUTH_REQ_READY;
 
-#if defined WLAN_FEATURE_VOWIFI_11R_DEBUG
-            smsLog( pMac, LOG1, "ft_ies_length=%d", ft_ies_length);
-#endif
             break;
 
         case eFT_AUTH_COMPLETE:
@@ -216,12 +216,7 @@ eHalStatus sme_FTSendUpdateKeyInd(tHalHandle hHal, tCsrRoamSetKey * pFTKeyInfo)
     tAniEdType edType;
     tpAniSirGlobal pMac = PMAC_STRUCT( hHal );
 #if defined WLAN_FEATURE_VOWIFI_11R_DEBUG
-    int i = 0;
-
     smsLog(pMac, LOG1, FL("keyLength %d"), pFTKeyInfo->keyLength);
-
-    for (i=0; i<pFTKeyInfo->keyLength; i++)
-      smsLog(pMac, LOG1, FL("%02x"), pFTKeyInfo->Key[i]);
 #endif
 
     msgLen = sizeof(tSirFTUpdateKeyInfo);
@@ -262,23 +257,7 @@ eHalStatus sme_FTSendUpdateKeyInd(tHalHandle hHal, tCsrRoamSetKey * pFTKeyInfo)
     keymaterial->key[ 0 ].keyLength = pFTKeyInfo->keyLength;
 
     if ( pFTKeyInfo->keyLength && pFTKeyInfo->Key )
-    {
         vos_mem_copy(&keymaterial->key[ 0 ].key, pFTKeyInfo->Key, pFTKeyInfo->keyLength);
-        if(pFTKeyInfo->keyLength == 16)
-        {
-          smsLog(pMac, LOG1, "SME Set Update Ind keyIdx (%d) encType(%d) key = "
-          "%02X-%02X-%02X-%02X-%02X-%02X-%02X-%02X-%02X-%02X-%02X-%02X-%02X-%02X-%02X-%02X",
-          pMsg->keyMaterial.key[0].keyId, (tAniEdType)pMsg->keyMaterial.edType,
-          pMsg->keyMaterial.key[0].key[0], pMsg->keyMaterial.key[0].key[1],
-          pMsg->keyMaterial.key[0].key[2], pMsg->keyMaterial.key[0].key[3],
-          pMsg->keyMaterial.key[0].key[4], pMsg->keyMaterial.key[0].key[5],
-          pMsg->keyMaterial.key[0].key[6], pMsg->keyMaterial.key[0].key[7],
-          pMsg->keyMaterial.key[0].key[8], pMsg->keyMaterial.key[0].key[9],
-          pMsg->keyMaterial.key[0].key[10], pMsg->keyMaterial.key[0].key[11],
-          pMsg->keyMaterial.key[0].key[12], pMsg->keyMaterial.key[0].key[13],
-          pMsg->keyMaterial.key[0].key[14], pMsg->keyMaterial.key[0].key[15]);
-        }
-    }
 
     vos_mem_copy( &pMsg->bssId[ 0 ],
                   &pFTKeyInfo->peerMac[ 0 ],

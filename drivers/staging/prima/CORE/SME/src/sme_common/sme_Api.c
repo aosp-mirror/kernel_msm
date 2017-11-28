@@ -2956,6 +2956,7 @@ eHalStatus sme_ScanRequest(tHalHandle hHal, tANI_U8 sessionId, tCsrScanRequest *
 
     if (pMac->isCoexScoIndSet && pMac->scan.disable_scan_during_sco &&
         csrIsConnStateDisconnected(pMac, sessionId)) {
+        csrScanFlushResult(pMac);
         pMac->scan.disable_scan_during_sco_timer_info.callback = callback;
         pMac->scan.disable_scan_during_sco_timer_info.dev = pContext;
         pMac->scan.disable_scan_during_sco_timer_info.scan_id= *pScanRequestID;
@@ -8658,7 +8659,7 @@ eHalStatus sme_8023MulticastList (tHalHandle hHal, tANI_U8 sessionId, tpSirRcvFl
 
     if(pSession == NULL )
     {
-        VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, "%s: Unable to find "
+        VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_WARN, "%s: Unable to find "
             "the right session", __func__);
         return eHAL_STATUS_FAILURE;
     }

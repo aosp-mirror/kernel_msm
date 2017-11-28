@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -408,6 +408,11 @@ static int hdd_hostapd_driver_command(hdd_adapter_t *pAdapter,
        hdd_context_t *pHddCtx = WLAN_HDD_GET_CTX(pAdapter);
        tANI_U8 filterType = 0;
        tANI_U8 *value;
+
+       ret = hdd_drv_cmd_validate(command, 8);
+       if (ret)
+           goto exit;
+
        value = command + 9;
 
        /* Convert the value from ascii to integer */
@@ -448,6 +453,10 @@ static int hdd_hostapd_driver_command(hdd_adapter_t *pAdapter,
    }
    else if (strncasecmp(command, "DISABLE_CA_EVENT", 16) == 0)
    {
+       ret = hdd_drv_cmd_validate(command, 16);
+       if (ret)
+           goto exit;
+
        ret = hdd_enable_disable_ca_event(pHddCtx, command, 16);
    }
 
@@ -3976,12 +3985,13 @@ static int __iw_set_ap_genie(struct net_device *dev,
         return 0;
     }
 
-    if (wrqu->data.length > DOT11F_IE_RSN_MAX_LEN) {
-       VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-               "%s: WPARSN Ie input length is more than max[%d]", __func__,
-                wrqu->data.length);
-       return -EINVAL;
-    }
+    if (wrqu->data.length > DOT11F_IE_RSN_MAX_LEN)
+    {
+        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
+                  "%s: WPARSN Ie input length is more than max[%d]", __func__,
+                  wrqu->data.length);
+        return -EINVAL;
+   }
 
     switch (genie[0])
     {
