@@ -415,13 +415,13 @@ static inline void hdmi_tx_send_audio_notification(
 		struct hdmi_tx_ctrl *hdmi_ctrl, int val)
 {
 	if (hdmi_ctrl && hdmi_ctrl->ext_audio_data.intf_ops.hpd) {
-	u32 flags = 0;
+		u32 flags = 0;
 
-	if (!hdmi_tx_is_dvi_mode(hdmi_ctrl))
-		flags |= MSM_EXT_DISP_HPD_AUDIO;
+		if (!hdmi_tx_is_dvi_mode(hdmi_ctrl))
+			flags |= MSM_EXT_DISP_HPD_AUDIO;
 
-	if (flags)
-		hdmi_ctrl->ext_audio_data.intf_ops.hpd(
+		if (flags)
+			hdmi_ctrl->ext_audio_data.intf_ops.hpd(
 				hdmi_ctrl->ext_pdev,
 				hdmi_ctrl->ext_audio_data.type, val, flags);
 	}
@@ -450,8 +450,6 @@ static inline void hdmi_tx_ack_state(
 			!hdmi_tx_is_dvi_mode(hdmi_ctrl))
 		hdmi_ctrl->ext_audio_data.intf_ops.notify(hdmi_ctrl->ext_pdev,
 				val);
-
-	hdmi_tx_send_audio_notification(hdmi_ctrl, val);
 }
 
 static struct hdmi_tx_ctrl *hdmi_tx_get_drvdata_from_panel_data(
@@ -1577,12 +1575,14 @@ static void hdmi_tx_hdcp_cb_work(struct work_struct *work)
 			rc = hdmi_tx_config_avmute(hdmi_ctrl, false);
 		}
 
-		if (hdmi_ctrl->hdcp1_use_sw_keys && hdmi_ctrl->hdcp14_present)
-			hdcp1_set_enc(true);
+		if (hdmi_ctrl->hdcp1_use_sw_keys && hdmi_ctrl->hdcp14_present) {
+			if (!hdmi_ctrl->hdcp22_present)
+				hdcp1_set_enc(true);
+		}
 		break;
 	case HDCP_STATE_AUTH_FAIL:
 		if (hdmi_ctrl->hdcp1_use_sw_keys && hdmi_ctrl->hdcp14_present) {
-			if (hdmi_ctrl->auth_state)
+			if (hdmi_ctrl->auth_state && !hdmi_ctrl->hdcp22_present)
 				hdcp1_set_enc(false);
 		}
 
@@ -2197,6 +2197,7 @@ static int hdmi_tx_read_sink_info(struct hdmi_tx_ctrl *hdmi_ctrl)
 	int status = 0;
 	void *data;
 	struct dss_io_data *io;
+	u32 sink_max_pclk;
 
 	if (!hdmi_ctrl) {
 		DEV_ERR("%s: invalid input\n", __func__);
@@ -2222,6 +2223,9 @@ static int hdmi_tx_read_sink_info(struct hdmi_tx_ctrl *hdmi_ctrl)
 	DSS_REG_W_ND(io, HDMI_DDC_ARBITRATION,
 		DSS_REG_R(io, HDMI_DDC_ARBITRATION) & ~(BIT(4)));
 
+	/* Set/Reset HDMI max TMDS clock supported by source */
+	hdmi_edid_set_max_pclk_rate(data, hdmi_ctrl->max_pclk_khz);
+
 	if (!hdmi_ctrl->custom_edid && !hdmi_ctrl->sim_mode) {
 		hdmi_ddc_config(&hdmi_ctrl->ddc_ctrl);
 
@@ -2236,16 +2240,22 @@ static int hdmi_tx_read_sink_info(struct hdmi_tx_ctrl *hdmi_ctrl)
 	/* parse edid if a valid edid buffer is present */
 	if (hdmi_ctrl->custom_edid || !hdmi_ctrl->sim_mode) {
 		status = hdmi_edid_parser(data);
-		if (status)
+		if (status) {
 			DEV_ERR("%s: edid parse failed\n", __func__);
-		else
+		} else {
 			/*
-			 * Updata HDMI max supported TMDS clock, consider
-			 * both sink and source capicity.
+			 * Update HDMI max supported TMDS clock, consider
+			 * both sink and source capacity. For DVI sink,
+			 * could not get max TMDS clock from EDID, so just
+			 * use source capacity.
 			 */
-			hdmi_edid_set_max_pclk_rate(data,
-			  min(hdmi_edid_get_sink_caps_max_tmds_clk(data) / 1000,
-			      hdmi_ctrl->max_pclk_khz));
+			sink_max_pclk =
+				hdmi_edid_get_sink_caps_max_tmds_clk(data);
+			if (sink_max_pclk != 0)
+				hdmi_edid_set_max_pclk_rate(data,
+				  min(sink_max_pclk / 1000,
+				      hdmi_ctrl->max_pclk_khz));
+		}
 	}
 bail:
 	if (hdmi_tx_enable_power(hdmi_ctrl, HDMI_TX_DDC_PM, false))
@@ -4033,6 +4043,7 @@ static int hdmi_tx_pre_evt_handle_update_fps(struct hdmi_tx_ctrl *hdmi_ctrl)
 static int hdmi_tx_post_evt_handle_unblank(struct hdmi_tx_ctrl *hdmi_ctrl)
 {
 	hdmi_tx_ack_state(hdmi_ctrl, true);
+	hdmi_tx_send_audio_notification(hdmi_ctrl, true);
 	return 0;
 }
 
