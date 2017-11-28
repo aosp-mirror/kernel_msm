@@ -29,6 +29,10 @@
 #include <linux/compat.h>
 #endif
 
+#include <linux/regulator/consumer.h>
+
+#define NFC_KERNEL_BU 1
+
 struct nqx_platform_data {
 	unsigned int irq_gpio;
 	unsigned int en_gpio;
@@ -76,6 +80,7 @@ struct nqx_dev {
 	size_t kbuflen;
 	u8 *kbuf;
 	struct nqx_platform_data *pdata;
+	struct regulator *pvdd_reg;
 };
 
 static int nfcc_reboot(struct notifier_block *notifier, unsigned long val,
@@ -725,6 +730,22 @@ static int nqx_probe(struct i2c_client *client,
 			"failed to allocate memory for nqx_dev->kbuf\n");
 		r = -ENOMEM;
 		goto err_free_dev;
+	}
+
+	nqx_dev->pvdd_reg = regulator_get(&client->dev, "vdd");
+	if (IS_ERR(nqx_dev->pvdd_reg)) {
+		dev_err(&client->dev, "%s: could not get nxp,pn5xx-pvdd\n", __func__);
+		nqx_dev->pvdd_reg = NULL;
+	}
+
+	if (nqx_dev->pvdd_reg != NULL)
+	{
+		r = regulator_set_voltage(nqx_dev->pvdd_reg, 1800000, 1800000);
+		r = regulator_set_optimum_mode(nqx_dev->pvdd_reg, 200000);
+		r = regulator_enable(nqx_dev->pvdd_reg);
+		if (r < 0){
+			dev_err(&client->dev, "%s: not able to enable pvdd\n", __func__);
+		}
 	}
 
 	if (gpio_is_valid(platform_data->en_gpio)) {
