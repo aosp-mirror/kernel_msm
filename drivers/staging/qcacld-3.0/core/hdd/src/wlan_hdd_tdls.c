@@ -209,13 +209,42 @@ static u8 wlan_hdd_tdls_hash_key(const u8 *mac)
 }
 
 /**
+ * wlan_hdd_tdls_get_adapter() - check system state and return hdd adapter
+ * @hdd_ctx: hdd context
+ *
+ * If TDLS possible, return the corresponding hdd adapter
+ * to enable TDLS in the system.
+ *
+ * Return: hdd adapter pointer or NULL.
+ */
+static hdd_adapter_t *wlan_hdd_tdls_get_adapter(hdd_context_t *hdd_ctx)
+{
+	uint32_t vdev_id;
+
+	if (cds_get_connection_count() > 1)
+		return NULL;
+
+	vdev_id = cds_mode_specific_vdev_id(CDS_STA_MODE);
+	if (CDS_INVALID_VDEV_ID != vdev_id)
+		return hdd_get_adapter_by_vdev(hdd_ctx, vdev_id);
+
+	vdev_id = cds_mode_specific_vdev_id(CDS_P2P_CLIENT_MODE);
+	if (CDS_INVALID_VDEV_ID != vdev_id)
+		return hdd_get_adapter_by_vdev(hdd_ctx, vdev_id);
+
+	return NULL;
+
+}
+
+/**
  * wlan_hdd_tdls_disable_offchan_and_teardown_links - Disable offchannel
  * and teardown TDLS links
  * @hddCtx : pointer to hdd context
- *
+ * @disable_tdls_state: disable FW tdls state
  * Return: None
  */
-void wlan_hdd_tdls_disable_offchan_and_teardown_links(hdd_context_t *hddctx)
+void wlan_hdd_tdls_disable_offchan_and_teardown_links(hdd_context_t *hddctx,
+		bool disable_tdls_state)
 {
 	u16 connected_tdls_peers = 0;
 	u8 staidx;
@@ -227,7 +256,7 @@ void wlan_hdd_tdls_disable_offchan_and_teardown_links(hdd_context_t *hddctx)
 		return;
 	}
 
-	adapter = hdd_get_adapter(hddctx, QDF_STA_MODE);
+	adapter = wlan_hdd_tdls_get_adapter(hddctx);
 
 	if (adapter == NULL) {
 		hdd_debug("Station Adapter Not Found");
@@ -259,7 +288,8 @@ void wlan_hdd_tdls_disable_offchan_and_teardown_links(hdd_context_t *hddctx)
 	hdd_set_tdls_offchannelmode(adapter, DISABLE_CHANSWITCH);
 
 	/* Send Msg to PE for deleting all the TDLS peers */
-	sme_delete_all_tdls_peers(hddctx->hHal, adapter->sessionId);
+	sme_delete_all_tdls_peers(hddctx->hHal, adapter->sessionId,
+			disable_tdls_state);
 
 	for (staidx = 0; staidx < hddctx->max_num_tdls_sta;
 							staidx++) {
@@ -315,7 +345,7 @@ void hdd_update_tdls_ct_and_teardown_links(hdd_context_t *hdd_ctx)
 {
 	/* set tdls connection tracker state */
 	cds_set_tdls_ct_mode(hdd_ctx);
-	wlan_hdd_tdls_disable_offchan_and_teardown_links(hdd_ctx);
+	wlan_hdd_tdls_disable_offchan_and_teardown_links(hdd_ctx, true);
 }
 
 /**
@@ -362,7 +392,7 @@ static void wlan_hdd_tdls_check_power_save_prohibited(hdd_adapter_t *pAdapter)
 
 	if ((NULL == pAdapter) ||
 	    (WLAN_HDD_ADAPTER_MAGIC != pAdapter->magic)) {
-		hdd_err("invalid pAdapter: %p", pAdapter);
+		hdd_err("invalid pAdapter: %pK", pAdapter);
 		return;
 	}
 
@@ -1879,34 +1909,6 @@ int wlan_hdd_tdls_set_params(struct net_device *dev,
 }
 
 /**
- * wlan_hdd_tdls_get_adapter() - check system state and return hdd adapter
- * @hdd_ctx: hdd context
- *
- * If TDLS possible, return the corresponding hdd adapter
- * to enable TDLS in the system.
- *
- * Return: hdd adapter pointer or NULL.
- */
-static hdd_adapter_t *wlan_hdd_tdls_get_adapter(hdd_context_t *hdd_ctx)
-{
-	uint32_t vdev_id;
-
-	if (cds_get_connection_count() > 1)
-		return NULL;
-
-	vdev_id = cds_mode_specific_vdev_id(CDS_STA_MODE);
-	if (CDS_INVALID_VDEV_ID != vdev_id)
-		return hdd_get_adapter_by_vdev(hdd_ctx, vdev_id);
-
-	vdev_id = cds_mode_specific_vdev_id(CDS_P2P_CLIENT_MODE);
-	if (CDS_INVALID_VDEV_ID != vdev_id)
-		return hdd_get_adapter_by_vdev(hdd_ctx, vdev_id);
-
-	return NULL;
-
-}
-
-/**
  * wlan_hdd_update_tdls_info - update tdls status info
  * @adapter: ptr to device adapter.
  * @tdls_prohibited: indicates whether tdls is prohibited.
@@ -1996,7 +1998,7 @@ void wlan_hdd_update_tdls_info(hdd_adapter_t *adapter, bool tdls_prohibited,
 	    !tdls_prohibited) {
 		hdd_warn("Concurrency not allowed in TDLS! set state cnt %d",
 			hdd_ctx->set_state_info.set_state_cnt);
-		wlan_hdd_tdls_disable_offchan_and_teardown_links(hdd_ctx);
+		wlan_hdd_tdls_disable_offchan_and_teardown_links(hdd_ctx, true);
 		tdls_prohibited = true;
 		hdd_ctx->tdls_mode = eTDLS_SUPPORT_NOT_ENABLED;
 		tdls_param->vdev_id = hdd_ctx->set_state_info.vdev_id;
@@ -2179,7 +2181,7 @@ void wlan_hdd_check_conc_and_update_tdls_state(hdd_context_t *hdd_ctx,
 				return;
 			}
 			wlan_hdd_tdls_disable_offchan_and_teardown_links(
-								hdd_ctx);
+								hdd_ctx, true);
 			return;
 		}
 		wlan_hdd_update_tdls_info(temp_adapter, false, false);
@@ -2485,7 +2487,7 @@ uint16_t wlan_hdd_tdls_connected_peers(hdd_adapter_t *pAdapter)
 
 	if ((NULL == pAdapter) ||
 	    (WLAN_HDD_ADAPTER_MAGIC != pAdapter->magic)) {
-		hdd_err("invalid pAdapter: %p", pAdapter);
+		hdd_err("invalid pAdapter: %pK", pAdapter);
 		return 0;
 	}
 	pHddCtx = WLAN_HDD_GET_CTX(pAdapter);
@@ -2936,7 +2938,7 @@ int wlan_hdd_tdls_scan_callback(hdd_adapter_t *pAdapter, struct wiphy *wiphy,
 		if (connectedTdlsPeers) {
 			hdd_debug("teardown all the active tdls links");
 			wlan_hdd_tdls_disable_offchan_and_teardown_links(
-					pHddCtx);
+					pHddCtx, false);
 		}
 	}
 
@@ -2995,7 +2997,7 @@ void wlan_hdd_tdls_timer_restart(hdd_adapter_t *pAdapter,
 	hdd_station_ctx_t *pHddStaCtx;
 
 	if (NULL == pAdapter || WLAN_HDD_ADAPTER_MAGIC != pAdapter->magic) {
-		hdd_err("invalid pAdapter: %p", pAdapter);
+		hdd_err("invalid pAdapter: %pK", pAdapter);
 		return;
 	}
 
@@ -6344,7 +6346,7 @@ void hdd_tdls_notify_p2p_roc(hdd_context_t *hdd_ctx,
 		if (!buf_sta) {
 			hdd_debug("teardown tdls links");
 			wlan_hdd_tdls_disable_offchan_and_teardown_links(
-					hdd_ctx);
+					hdd_ctx, false);
 		}
 	}
 

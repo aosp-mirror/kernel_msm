@@ -1294,6 +1294,7 @@ typedef struct sSirSmeJoinReq {
 #endif
 	bool ignore_assoc_disallowed;
 	bool enable_bcast_probe_rsp;
+	bool force_24ghz_in_ht20;
 	tSirBssDescription bssDescription;
 	/*
 	 * WARNING: Pls make bssDescription as last variable in struct
@@ -7966,6 +7967,7 @@ struct sir_del_all_tdls_peers {
 	uint16_t msg_type;
 	uint16_t msg_len;
 	struct qdf_mac_addr bssid;
+	bool disable_tdls_state;
 };
 
 /**
