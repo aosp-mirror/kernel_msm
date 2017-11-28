@@ -5,6 +5,7 @@
 menu "Character devices"
 
 source "drivers/tty/Kconfig"
+source "drivers/char/broadcom/bbd2.0/Kconfig"
 
 config DEVMEM
 	bool "Memory device driver"
