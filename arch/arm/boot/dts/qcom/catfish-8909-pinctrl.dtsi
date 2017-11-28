@@ -1,32 +1,32 @@
 /* add catfish/catshark pinctrl info*/
 
 &soc {
-	uart2 {
-                blsp1_uart2_active: blsp1_uart2_active {
-                        mux {
-                                pins = "gpio20", "gpio21", "gpio111", "gpio112";
-                                function = "blsp_uart2";
-                        };
-                        config {
-                                pins = "gpio20", "gpio21", "gpio111", "gpio112";
-                                drive-strength = <2>;
-                                bias-disable;
-                        };
-                };
-                blsp1_uart2_sleep: blsp1_uart2_sleep {
-                        mux {
-                                pins = "gpio20", "gpio21", "gpio111", "gpio112";
-                                function = "gpio";
-                        };
-                        config {
-                                pins = "gpio20", "gpio21", "gpio111", "gpio112";
-                                drive-strength = <2>;
-                                bias-pull-down;
-                        };
-                };
-        };
-
 	msm_gpio: pinctrl@1000000 {
+
+		uart2 {
+			blsp1_uart2_active: blsp1_uart2_active {
+				mux {
+					pins = "gpio20", "gpio21", "gpio111", "gpio112";
+					function = "blsp_uart2";
+				};
+				config {
+					pins = "gpio20", "gpio21", "gpio111", "gpio112";
+					drive-strength = <2>;
+					bias-disable;
+				};
+			};
+			blsp1_uart2_sleep: blsp1_uart2_sleep {
+				mux {
+					pins = "gpio20", "gpio21", "gpio111", "gpio112";
+					function = "gpio";
+				};
+				config {
+					pins = "gpio20", "gpio21", "gpio111", "gpio112";
+					drive-strength = <2>;
+					bias-pull-down;
+				};
+			};
+		};
 
 		pmx_i2c_6 {
 			i2c_6_active: i2c_6_active {
