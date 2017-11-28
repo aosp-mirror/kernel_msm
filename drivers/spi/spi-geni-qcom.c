@@ -355,10 +355,6 @@ static struct msm_gpi_tre *setup_config0_tre(struct spi_transfer *xfer,
 	if (mode & SPI_CPHA)
 		flags |= GSI_CPHA;
 
-	if (!list_is_last(&xfer->transfer_list, &spi->cur_msg->transfers))
-		if (xfer->cs_change)
-			flags |= GSI_CS_TOGGLE;
-
 	word_len = xfer->bits_per_word - MIN_WORD_LEN;
 	pack |= (GSI_TX_PACK_EN | GSI_RX_PACK_EN);
 	ret = get_spi_clk_cfg(mas->cur_speed_hz, mas, &idx, &div);
@@ -586,9 +582,9 @@ static int setup_gsi_xfer(struct spi_transfer *xfer,
 	}
 
 	cs |= spi_slv->chip_select;
-	if (list_is_last(&xfer->transfer_list, &spi->cur_msg->transfers))
-		if (xfer->cs_change)
-			go_flags |= FRAGMENTATION;
+	if (!list_is_last(&xfer->transfer_list, &spi->cur_msg->transfers) ==
+	    !xfer->cs_change)
+		go_flags |= FRAGMENTATION;
 
 	go_tre = setup_go_tre(cmd, cs, rx_len, go_flags, mas);
 
@@ -916,13 +912,9 @@ static void setup_fifo_xfer(struct spi_transfer *xfer,
 		m_cmd = SPI_RX_ONLY;
 
 	spi_tx_cfg &= ~CS_TOGGLE;
-	if (list_is_last(&xfer->transfer_list, &spi->cur_msg->transfers)) {
-		if (xfer->cs_change)
-			m_param |= FRAGMENTATION;
-	} else {
-		if (xfer->cs_change)
-			spi_tx_cfg |= CS_TOGGLE;
-	}
+	if (!list_is_last(&xfer->transfer_list, &spi->cur_msg->transfers) ==
+	    !xfer->cs_change)
+		m_param |= FRAGMENTATION;
 	if (!(mas->cur_word_len % MIN_WORD_LEN)) {
 		trans_len =
 			((xfer->len << 3) / mas->cur_word_len) & TRANS_LEN_MSK;
