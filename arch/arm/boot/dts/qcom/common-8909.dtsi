@@ -88,6 +88,10 @@
 				focaltech,key-y-coord = <1350>;
 				focaltech,key-x-coords = <180 350 540>;*/
 			};
+			drv2605@5a {
+				compatible = "ti,drv2605";
+				reg = <0x5a>;
+			};
 		};
 		spi@78b9000 { /* BLSP1 QUP5 */
 			gps@0 {
