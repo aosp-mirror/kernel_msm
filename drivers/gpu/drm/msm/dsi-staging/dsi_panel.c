@@ -3097,6 +3097,9 @@ struct {
 	{ "post_off",		DSI_CMD_SET_POST_OFF },
 	{ "panel_status",	DSI_CMD_SET_PANEL_STATUS },
 	{ "pps",		DSI_CMD_SET_PPS },
+	{ "lp1",		DSI_CMD_SET_LP1 },
+	{ "lp2",		DSI_CMD_SET_LP2 },
+	{ "no_lp",		DSI_CMD_SET_NOLP },
 };
 
 static inline ssize_t parse_cmdset(struct dsi_panel_cmd_set *set, char *buf,
@@ -3708,6 +3711,11 @@ int dsi_panel_set_lp1(struct dsi_panel *panel)
 		       panel->name, rc);
 exit:
 	mutex_unlock(&panel->panel_lock);
+
+	if (!rc)
+		rc = dsi_backlight_update_dpms(&panel->bl_config,
+					       SDE_MODE_DPMS_LP1);
+
 	return rc;
 }
 
@@ -3730,6 +3738,11 @@ int dsi_panel_set_lp2(struct dsi_panel *panel)
 		       panel->name, rc);
 exit:
 	mutex_unlock(&panel->panel_lock);
+
+	if (!rc)
+		rc = dsi_backlight_update_dpms(&panel->bl_config,
+					       SDE_MODE_DPMS_LP2);
+
 	return rc;
 }
 
@@ -3760,6 +3773,10 @@ int dsi_panel_set_nolp(struct dsi_panel *panel)
 		       panel->name, rc);
 exit:
 	mutex_unlock(&panel->panel_lock);
+
+	if (!rc)
+		rc = dsi_backlight_update_dpms(&panel->bl_config,
+					       SDE_MODE_DPMS_ON);
 	return rc;
 }
 
