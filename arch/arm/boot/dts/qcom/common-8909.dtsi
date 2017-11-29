@@ -192,6 +192,12 @@
 &i2c_6 {
 	status = "ok";
 };
+&i2c_5 {
+	status = "disabled";
+};
+&spi_5 {
+	status = "ok";
+};
 &blsp1_uart2 {
         status = "ok";
         pinctrl-names = "default", "sleep";
