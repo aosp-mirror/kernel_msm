@@ -11,18 +11,11 @@
  */
 
 /{
-	/* Taimen's battery */
 	b1_batterydata: qcom,battery-data {
-		qcom,batt-id-range-pct = <15>;
-		#include "b1-atl-3135.dtsi"
-		#include "b1-lishen-3135.dtsi"
-		#include "b1-liwinon-3135.dtsi"
+		qcom,batt-id-range-pct = <10>;
 	};
 };
 
 &pmi8998_fg {
 	qcom,battery-data = <&b1_batterydata>;
-	qcom,cl-max-decrement = <5>;
-	qcom,linearize-soc;
 };
-

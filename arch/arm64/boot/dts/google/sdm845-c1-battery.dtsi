@@ -11,17 +11,11 @@
  */
 
 /{
-	/* Taimen's battery */
-	b1c1_batterydata: qcom,battery-data {
-		qcom,batt-id-range-pct = <20>;
-		#include "lge_blt35_lgc_3620mah.dtsi"
-		#include "lge_blt35_tocad_3620mah.dtsi"
+	c1_batterydata: qcom,battery-data {
+		qcom,batt-id-range-pct = <10>;
 	};
 };
 
 &pmi8998_fg {
-        qcom,battery-data = <&b1c1_batterydata>;
-	qcom,cl-max-decrement = <5>;
-	qcom,linearize-soc;
+	qcom,battery-data = <&c1_batterydata>;
 };
-

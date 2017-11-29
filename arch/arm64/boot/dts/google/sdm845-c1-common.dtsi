@@ -1,0 +1,18 @@
+/* Copyright (c) 2017 Google, Inc.
+ *
+ * This software is licensed under the terms of the GNU General Public
+ * License version 2, as published by the Free Software Foundation, and
+ * may be copied, distributed, and modified under those terms.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ */
+
+#include "../qcom/sdm845-v2.dtsi"
+#include "sdm845-b1c1-common.dtsi"
+
+#include "sdm845-c1-touch.dtsi"
+#include "sdm845-b1c1-audio.dtsi"
