@@ -10,6 +10,14 @@
 #include "catfish-8909-mtp.dtsi"
 
 / {
+        bcmdhd {
+                compatible = "android,bcmdhd_wlan";
+                interrupt-parent = <&msm_gpio>;
+                interrupts = <35 0x2008>;
+                wl_reg_on = <&msm_gpio 33 0>;           /* wifi reg_on pin */
+                wl_host_wake = <&msm_gpio 35 0>;        /* wifi oob pin */
+        };
+
 	bt_pwr {
                 compatible = "bcm,bcm4358";
                 bt_reg_on = <&msm_gpio 34 0>;       /* out bt reg_on pin */
