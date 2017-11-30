@@ -310,7 +310,6 @@ static inline void fsnotify_change(struct dentry *dentry, unsigned int ia_valid)
 	}
 }
 
-#if defined(CONFIG_FSNOTIFY)	/* notify helpers */
 
 /*
  * fsnotify_oldname_init - save off the old filename before we change it
@@ -338,7 +337,5 @@ static inline const char *fsnotify_oldname_init(const unsigned char *name)
 static inline void fsnotify_oldname_free(const unsigned char *old_name)
 {
 }
-
-#endif	/*  CONFIG_FSNOTIFY */
 
 #endif	/* _LINUX_FS_NOTIFY_H */
