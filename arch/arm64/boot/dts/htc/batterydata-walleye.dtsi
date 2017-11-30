@@ -20,6 +20,7 @@
 	qcom,fg-cutoff-voltage = <3400>;
 	qcom,hold-soc-while-full;
 	qcom,linearize-soc;
+	qcom,cl-max-decrement = <5>;
 };
 
 &pmi8998_charger {

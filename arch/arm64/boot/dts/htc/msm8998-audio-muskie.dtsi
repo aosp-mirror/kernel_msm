@@ -113,6 +113,7 @@
 				ti,echo-ref = <0>;   /* 0, left channel; 1, right channel; 2, both */
 				ti,i2s-bits = <24>;   /* support 16, 24, 32 */
 				ti,bypass-tmax = <0>;   /* 0, not bypass; 1, bypass */
+				ti,bob-fast-profile = <1>; /* 1:voice_handset */
 				status = "ok";
 		};
 	};

@@ -56,6 +56,8 @@
 			<32400 24>; /* Decoder UHD */
 
 		/* Regulators */
+		supply-names = "smmu-vdd", "venus", "venus-core0";
+		supply = <&gdsc_bimc_smmu &gdsc_venus &gdsc_venus_core0>
 		smmu-vdd-supply = <&gdsc_bimc_smmu>;
 		venus-supply = <&gdsc_venus>;
 		venus-core0-supply = <&gdsc_venus_core0>;

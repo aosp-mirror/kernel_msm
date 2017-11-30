@@ -536,6 +536,9 @@ struct tas2557_priv {
 	*/
 	bool mbBypassTMax;
 
+	unsigned int bob_fast_profile;
+	struct regulator *vbob_regulator;
+
 #ifdef CONFIG_TAS2557_CODEC_STEREO
 	struct mutex codec_lock;
 #endif
@@ -545,6 +548,7 @@ struct tas2557_priv {
 	int mnCurrentReg;
 	struct mutex file_lock;
 #endif
+	int failsafe_retry;
 	const char *cal_file_name;
 	spinlock_t irq_lock;
 };

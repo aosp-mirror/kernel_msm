@@ -87,7 +87,7 @@ static ssize_t asr_curr_show(struct device *dev,
 
 	return snprintf(data, PAGE_SIZE, "%d\n", asr_curr);
 }
-DEVICE_ATTR_RO(asr_curr);
+static DEVICE_ATTR_RO(asr_curr);
 
 static ssize_t sdsr_curr_show(struct device *dev,
 			      struct device_attribute *mattr,
@@ -100,7 +100,7 @@ static ssize_t sdsr_curr_show(struct device *dev,
 
 	return snprintf(data, PAGE_SIZE, "%d\n", sdsr_curr);
 }
-DEVICE_ATTR_RO(sdsr_curr);
+static DEVICE_ATTR_RO(sdsr_curr);
 
 static ssize_t sdldo_curr_show(struct device *dev,
 			       struct device_attribute *mattr,
@@ -113,7 +113,7 @@ static ssize_t sdldo_curr_show(struct device *dev,
 
 	return snprintf(data, PAGE_SIZE, "%d\n", sdldo_curr);
 }
-DEVICE_ATTR_RO(sdldo_curr);
+static DEVICE_ATTR_RO(sdldo_curr);
 
 static ssize_t ioldo_curr_show(struct device *dev,
 			       struct device_attribute *mattr,
@@ -126,7 +126,7 @@ static ssize_t ioldo_curr_show(struct device *dev,
 
 	return snprintf(data, PAGE_SIZE, "%d\n", ioldo_curr);
 }
-DEVICE_ATTR_RO(ioldo_curr);
+static DEVICE_ATTR_RO(ioldo_curr);
 
 static ssize_t vbat_show(struct device *dev,
 			 struct device_attribute *mattr,
@@ -140,7 +140,7 @@ static ssize_t vbat_show(struct device *dev,
 	return snprintf(data, PAGE_SIZE, "%d\n",
 			chan_data * BCM15602_ADC_SCALE_VBAT);
 }
-DEVICE_ATTR_RO(vbat);
+static DEVICE_ATTR_RO(vbat);
 
 static ssize_t temperature_show(struct device *dev,
 				struct device_attribute *mattr,
@@ -153,7 +153,7 @@ static ssize_t temperature_show(struct device *dev,
 
 	return snprintf(data, PAGE_SIZE, "%d\n", PTAT_CODE_TO_TEMP(chan_data));
 }
-DEVICE_ATTR_RO(temperature);
+static DEVICE_ATTR_RO(temperature);
 
 /* shows power in mW */
 static ssize_t total_power_show(struct device *dev,
@@ -176,7 +176,7 @@ static ssize_t total_power_show(struct device *dev,
 
 	return snprintf(data, PAGE_SIZE, "%ld\n", total_power);
 }
-DEVICE_ATTR_RO(total_power);
+static DEVICE_ATTR_RO(total_power);
 
 static ssize_t hk_status_show(struct device *dev,
 			      struct device_attribute *mattr,
@@ -190,7 +190,7 @@ static ssize_t hk_status_show(struct device *dev,
 
 	return snprintf(data, PAGE_SIZE, "0x%04x\n", status);
 }
-DEVICE_ATTR_RO(hk_status);
+static DEVICE_ATTR_RO(hk_status);
 
 static ssize_t asr_vsel_show(struct device *dev,
 			     struct device_attribute *mattr,
@@ -221,6 +221,7 @@ static ssize_t asr_vsel_store(struct device *dev,
 	if (vsel == 0) {
 		bcm15602_update_bits(ddata, BCM15602_REG_BUCK_ASR_CTRL0, 0x1,
 				     0x0);
+		return count;
 	} else if ((vsel < 565) || (vsel > 1200)) {
 		dev_err(dev, "%s: Not a valid voltage level, must be 0 or 565-1200\n",
 			__func__);
@@ -233,7 +234,213 @@ static ssize_t asr_vsel_store(struct device *dev,
 
 	return count;
 }
-DEVICE_ATTR_RW(asr_vsel);
+static DEVICE_ATTR_RW(asr_vsel);
+
+static ssize_t ioldo_vsel_show(struct device *dev,
+			       struct device_attribute *mattr,
+			       char *data)
+{
+	struct bcm15602_chip *ddata = dev_get_drvdata(dev);
+	u8 reg_data;
+	int voctrl, vstep, vbase; /* in mV */
+
+	bcm15602_read_byte(ddata, BCM15602_REG_LDO_IOLDO_VOCTRL,
+			   &reg_data);
+	vbase = (reg_data & 0x80) ? 1725 : 1380;
+	vstep = (reg_data & 0x80) ? 25 : 10;
+	voctrl = reg_data & 0x3F;
+	dev_info(dev, "%s: vbase=%d, vstep=%d, voctrl=%d",
+		 __func__, vbase, vstep, voctrl);
+
+	return snprintf(data, PAGE_SIZE, "%d\n", vbase + voctrl * vstep);
+}
+
+static ssize_t ioldo_vsel_store(struct device *dev,
+				struct device_attribute *mattr,
+				const char *data, size_t count)
+{
+	struct bcm15602_chip *ddata = dev_get_drvdata(dev);
+	u8 reg_data;
+	int vsel, voctrl, vstep, vbase; /* in mV */
+
+	if (kstrtoint(data, 0, &vsel)) {
+		dev_err(dev, "%s: Not a valid int\n", __func__);
+		return -EINVAL;
+	}
+
+	if (vsel == 0) {
+		bcm15602_update_bits(ddata, BCM15602_REG_LDO_IOLDO_ENCTRL, 0x1,
+				     0x0);
+		return count;
+	} else if ((vsel < 1380) || (vsel > 1800)) {
+		dev_err(dev, "%s: Not a valid voltage level, must be 0 or 1380-1800\n",
+			__func__);
+		return -EINVAL;
+	}
+
+	bcm15602_read_byte(ddata, BCM15602_REG_LDO_IOLDO_VOCTRL,
+			   &reg_data);
+	vbase = (reg_data & 0x80) ? 1725 : 1380;
+	vstep = (reg_data & 0x80) ? 25 : 10;
+	voctrl = reg_data & 0x3F;
+
+	voctrl = ((vsel - vbase) + vstep - 1) / vstep;
+	bcm15602_update_bits(ddata, BCM15602_REG_LDO_IOLDO_VOCTRL, 0x3F,
+			     voctrl);
+	bcm15602_update_bits(ddata, BCM15602_REG_LDO_IOLDO_ENCTRL, 0x1, 0x1);
+
+	return count;
+}
+static DEVICE_ATTR_RW(ioldo_vsel);
+
+static ssize_t sdldo_vsel_show(struct device *dev,
+			       struct device_attribute *mattr,
+			       char *data)
+{
+	struct bcm15602_chip *ddata = dev_get_drvdata(dev);
+	u8 reg_data;
+	int voctrl, vstep, vbase; /* in mV */
+
+	bcm15602_read_byte(ddata, BCM15602_REG_LDO_SDLDO_VOCTRL,
+			   &reg_data);
+	vbase = (reg_data & 0x80) ? 1725 : 1380;
+	vstep = (reg_data & 0x80) ? 25 : 10;
+	voctrl = reg_data & 0x3F;
+	dev_info(dev, "%s: vbase=%d, vstep=%d, voctrl=%d", __func__, vbase,
+		 vstep, voctrl);
+
+	return snprintf(data, PAGE_SIZE, "%d\n", vbase + voctrl * vstep);
+}
+
+static ssize_t sdldo_vsel_store(struct device *dev,
+				struct device_attribute *mattr,
+				const char *data, size_t count)
+{
+	struct bcm15602_chip *ddata = dev_get_drvdata(dev);
+	u8 reg_data;
+	int vsel, voctrl, vstep, vbase; /* in mV */
+
+	if (kstrtoint(data, 0, &vsel)) {
+		dev_err(dev, "%s: Not a valid int\n", __func__);
+		return -EINVAL;
+	}
+
+	if (vsel == 0) {
+		bcm15602_update_bits(ddata, BCM15602_REG_LDO_SDLDO_ENCTRL, 0x1,
+				     0x0);
+		return count;
+	} else if ((vsel < 1380) || (vsel > 1800)) {
+		dev_err(dev, "%s: Not a valid voltage level, must be 0 or 1380-1800\n",
+			__func__);
+		return -EINVAL;
+	}
+
+	bcm15602_read_byte(ddata, BCM15602_REG_LDO_SDLDO_VOCTRL,
+			   &reg_data);
+	vbase = (reg_data & 0x80) ? 1725 : 1380;
+	vstep = (reg_data & 0x80) ? 25 : 10;
+	voctrl = reg_data & 0x3F;
+
+	voctrl = ((vsel - vbase) + vstep - 1) / vstep;
+	bcm15602_update_bits(ddata, BCM15602_REG_LDO_SDLDO_VOCTRL, 0x3F,
+			     voctrl);
+	bcm15602_update_bits(ddata, BCM15602_REG_LDO_SDLDO_ENCTRL, 0x1, 0x1);
+
+	return count;
+}
+static DEVICE_ATTR_RW(sdldo_vsel);
+
+static ssize_t sdsr_vsel_show(struct device *dev,
+			      struct device_attribute *mattr,
+			      char *data)
+{
+	struct bcm15602_chip *ddata = dev_get_drvdata(dev);
+	u8 reg_data;
+	int voctrl, vstep, vbase; /* in mV */
+
+	bcm15602_read_byte(ddata, BCM15602_REG_BUCK_SDSR_CTRL1, &reg_data);
+	switch ((reg_data & 0xC0) >> 6) {
+	case 0:
+		vbase = 565;
+		vstep = 5;
+		break;
+	case 1:
+		vbase = 678;
+		vstep = 6;
+		break;
+	case 2:
+		vbase = 1130;
+		vstep = 10;
+		break;
+	case 3:
+		vbase = 1695;
+		vstep = 15;
+		break;
+	default:
+		return -EINVAL;
+	}
+	bcm15602_read_byte(ddata, BCM15602_REG_BUCK_SDSR_VOCTRL, &reg_data);
+	voctrl = reg_data & 0x7F;
+
+	dev_info(dev, "%s: vbase=%d, vstep=%d, voctrl=%d", __func__, vbase,
+		 vstep, voctrl);
+
+	return snprintf(data, PAGE_SIZE, "%d\n", vbase + voctrl * vstep);
+}
+
+static ssize_t sdsr_vsel_store(struct device *dev,
+			       struct device_attribute *mattr,
+			       const char *data, size_t count)
+{
+	struct bcm15602_chip *ddata = dev_get_drvdata(dev);
+	u8 reg_data;
+	int vsel, voctrl, vstep, vbase;
+
+	if (kstrtoint(data, 0, &vsel)) {
+		dev_err(dev, "%s: Not a valid int\n", __func__);
+		return -EINVAL;
+	}
+
+	if (vsel == 0) {
+		bcm15602_update_bits(ddata, BCM15602_REG_BUCK_SDSR_CTRL0, 0x1,
+				     0x0);
+		return count;
+	} else if ((vsel < 565) || (vsel > 1200)) {
+		dev_err(dev, "%s: Not a valid voltage level, must be 0 or 565-1200\n",
+			__func__);
+		return -EINVAL;
+	}
+
+	bcm15602_read_byte(ddata, BCM15602_REG_BUCK_SDSR_CTRL1, &reg_data);
+	switch ((reg_data & 0xC0) >> 6) {
+	case 0:
+		vbase = 565;
+		vstep = 5;
+		break;
+	case 1:
+		vbase = 678;
+		vstep = 6;
+		break;
+	case 2:
+		vbase = 1130;
+		vstep = 10;
+		break;
+	case 3:
+		vbase = 1695;
+		vstep = 15;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	voctrl = ((vsel - vbase) + vstep - 1) / vstep;
+	bcm15602_write_byte(ddata, BCM15602_REG_BUCK_SDSR_VOCTRL, voctrl &
+			    0x7F);
+	bcm15602_update_bits(ddata, BCM15602_REG_BUCK_SDSR_CTRL0, 0x1, 0x1);
+
+	return count;
+}
+static DEVICE_ATTR_RW(sdsr_vsel);
 
 static ssize_t dump_regs_show(struct device *dev,
 			      struct device_attribute *mattr,
@@ -245,7 +452,7 @@ static ssize_t dump_regs_show(struct device *dev,
 
 	return snprintf(data, PAGE_SIZE, "ok\n");
 }
-DEVICE_ATTR_RO(dump_regs);
+static DEVICE_ATTR_RO(dump_regs);
 
 static ssize_t toggle_pon_show(struct device *dev,
 			       struct device_attribute *mattr,
@@ -257,7 +464,7 @@ static ssize_t toggle_pon_show(struct device *dev,
 
 	return snprintf(data, PAGE_SIZE, "ok\n");
 }
-DEVICE_ATTR_RO(toggle_pon);
+static DEVICE_ATTR_RO(toggle_pon);
 
 static ssize_t reg_read_show(struct device *dev,
 			     struct device_attribute *attr,
@@ -293,7 +500,7 @@ static ssize_t reg_read_store(struct device *dev,
 
 	return count;
 }
-DEVICE_ATTR_RW(reg_read);
+static DEVICE_ATTR_RW(reg_read);
 
 static ssize_t reg_write_store(struct device *dev,
 			       struct device_attribute *attr,
@@ -330,7 +537,7 @@ static ssize_t reg_write_store(struct device *dev,
 
 	return count;
 }
-DEVICE_ATTR_WO(reg_write);
+static DEVICE_ATTR_WO(reg_write);
 
 static struct attribute *bcm15602_attrs[] = {
 	&dev_attr_asr_curr.attr,
@@ -342,6 +549,9 @@ static struct attribute *bcm15602_attrs[] = {
 	&dev_attr_total_power.attr,
 	&dev_attr_hk_status.attr,
 	&dev_attr_asr_vsel.attr,
+	&dev_attr_ioldo_vsel.attr,
+	&dev_attr_sdldo_vsel.attr,
+	&dev_attr_sdsr_vsel.attr,
 	&dev_attr_dump_regs.attr,
 	&dev_attr_toggle_pon.attr,
 	&dev_attr_reg_read.attr,

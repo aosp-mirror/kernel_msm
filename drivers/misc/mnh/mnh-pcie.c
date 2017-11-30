@@ -2022,10 +2022,14 @@ int mnh_pci_suspend(void)
 
 	/* disable IRQs */
 #ifdef CONFIG_MNH_PCIE_MULTIPLE_MSI
-	for (i = MSI_GENERIC_START; i <= MSI_GENERIC_END; i++)
-		disable_irq(pdev->irq + i);
-	disable_irq(pdev->irq + MSI_DMA_READ);
-	disable_irq(pdev->irq + MSI_DMA_WRITE);
+	{
+		int i;
+
+		for (i = MSI_GENERIC_START; i <= MSI_GENERIC_END; i++)
+			disable_irq(pdev->irq + i);
+		disable_irq(pdev->irq + MSI_DMA_READ);
+		disable_irq(pdev->irq + MSI_DMA_WRITE);
+	}
 #else
 	disable_irq(pdev->irq);
 #endif
@@ -2057,10 +2061,14 @@ int mnh_pci_resume(void)
 
 	/* enable IRQs */
 #ifdef CONFIG_MNH_PCIE_MULTIPLE_MSI
-	for (i = MSI_GENERIC_START; i <= MSI_GENERIC_END; i++)
-		enable_irq(pdev->irq + i);
-	enable_irq(pdev->irq + MSI_DMA_READ);
-	enable_irq(pdev->irq + MSI_DMA_WRITE);
+	{
+		int i;
+
+		for (i = MSI_GENERIC_START; i <= MSI_GENERIC_END; i++)
+			enable_irq(pdev->irq + i);
+		enable_irq(pdev->irq + MSI_DMA_READ);
+		enable_irq(pdev->irq + MSI_DMA_WRITE);
+	}
 #else
 	enable_irq(pdev->irq);
 #endif

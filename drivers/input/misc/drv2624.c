@@ -49,6 +49,8 @@
 
 static struct drv2624_data *drv2624_plat_data;
 
+static bool drv2624_is_volatile_reg(struct device *dev, unsigned int reg);
+
 static int drv2624_reg_read(struct drv2624_data *drv2624, unsigned char reg)
 {
 	unsigned int val;
@@ -109,7 +111,10 @@ static int drv2624_set_bits(struct drv2624_data *drv2624,
 {
 	int ret;
 
-	ret = regmap_update_bits(drv2624->regmap, reg, mask, val);
+	if (drv2624_is_volatile_reg(drv2624->dev, reg))
+		ret = regmap_write_bits(drv2624->regmap, reg, mask, val);
+	else
+		ret = regmap_update_bits(drv2624->regmap, reg, mask, val);
 	if (ret < 0) {
 		dev_err(drv2624->dev,
 			"%s reg=%x, mask=0x%x, value=0x%x error %d\n",

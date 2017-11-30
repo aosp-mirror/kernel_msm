@@ -860,17 +860,19 @@ VL53L0_Error VL53L0_perform_ref_spad_management(VL53L0_DEV Dev,
                 break;
             }
 
-            (refSpadCount_int)++;
 
             /* Cannot combine Aperture and Non-Aperture spads, so
              * ensure the current spad is of the correct type.
              */
             if (is_aperture((uint32_t)startSelect + nextGoodSpad) !=
                     needAptSpads) {
-                Status = VL53L0_ERROR_REF_SPAD_INIT;
+                /* At this point we have enabled the maximum
+                 * number of Aperture spads.
+                 */
+                complete = 1;
                 break;
             }
-
+            (refSpadCount_int)++;
             currentSpadIndex = nextGoodSpad;
             Status = enable_spad_bit(
                     Dev->Data.SpadData.RefSpadEnables,

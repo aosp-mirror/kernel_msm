@@ -100,7 +100,7 @@
 
 #define read_cpuid(reg) ({						\
 	u64 __val;							\
-	asm("mrs_s	%0, " __stringify(reg) : "=r" (__val));		\
+	mrs_s_nv((reg), __val);						\
 	__val;								\
 })
 

@@ -2,7 +2,7 @@
 #ifndef _MNH_DDR_33_100_400_600_
 #define _MNH_DDR_33_100_400_600_
 #include "mnh-ddr.h"
-struct mnh_ddr_reg_config mnh_ddr_33_100_400_600 = {
+static const struct mnh_ddr_reg_config mnh_ddr_33_100_400_600 = {
 	{
 		0x131b007d /* fsp 0 */,
 		0x1311007d /* fsp 1 */,

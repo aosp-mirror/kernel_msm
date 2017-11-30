@@ -73,6 +73,10 @@
 			<465000000 8490000>; /* imem @ turbo freq 406 Mhz */
 
 		/* Regulators */
+		supply-names = "smmu-vdd", "venus", "venus-core0",
+			"venus-core1";
+		supply = <&gdsc_bimc_smmu &gdsc_venus &gdsc_venus_core0
+			&gdsc_venus_core1>;
 		smmu-vdd-supply = <&gdsc_bimc_smmu>;
 		venus-supply = <&gdsc_venus>;
 		venus-core0-supply = <&gdsc_venus_core0>;

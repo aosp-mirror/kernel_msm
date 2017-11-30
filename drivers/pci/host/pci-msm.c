@@ -5756,28 +5756,44 @@ static int arch_setup_msi_irq_default(struct pci_dev *pdev,
 		struct msi_desc *desc, int nvec)
 {
 	int irq;
+	int index;
+	int count;
+	int lastirq = -1;
 	struct msi_msg msg;
 	struct msm_pcie_dev_t *dev = PCIE_BUS_PRIV_DATA(pdev->bus);
 
-	PCIE_DBG(dev, "RC%d\n", dev->rc_idx);
+	PCIE_DBG(dev, "RC%d nvec %d\n", dev->rc_idx, nvec);
 
-	irq = msm_pcie_create_irq(dev);
+	/* create up to nvec consecutive irq mappings */
+	for (count = 0; count < nvec; count++) {
+		irq = msm_pcie_create_irq(dev);
 
-	PCIE_DBG(dev, "IRQ %d is allocated.\n", irq);
+		if (irq < 0)
+			return irq;
+		else if ((lastirq != -1) && (irq != (lastirq + 1))) {
+			msm_pcie_destroy_irq(irq);
+			break;
+		}
 
-	if (irq < 0)
-		return irq;
+		PCIE_DBG(dev, "irq %d allocated\n", irq);
 
-	PCIE_DBG(dev, "irq %d allocated\n", irq);
+		lastirq = irq;
+	}
 
-	irq_set_chip_data(irq, pdev);
-	irq_set_msi_desc(irq, desc);
+	/* update irq mapping with descriptors, work backwards */
+	for (index = count; index > 0; index--, irq--) {
+		irq_set_msi_desc(irq, desc);
+		irq_set_chip_data(irq, pdev);
 
-	/* write msi vector and data */
-	msg.address_hi = 0;
-	msg.address_lo = MSM_PCIE_MSI_PHY;
-	msg.data = irq - irq_find_mapping(dev->irq_domain, 0);
-	write_msi_msg(irq, &msg);
+		/* write msi vector and data */
+		msg.address_hi = 0;
+		msg.address_lo = MSM_PCIE_MSI_PHY;
+		msg.data = irq - irq_find_mapping(dev->irq_domain, index - 1);
+		write_msi_msg(irq, &msg);
+	}
+
+	if (count != nvec)
+		return count;
 
 	return 0;
 }
@@ -5983,7 +5999,6 @@ static const struct irq_domain_ops msm_pcie_msi_ops = {
 int32_t msm_pcie_irq_init(struct msm_pcie_dev_t *dev)
 {
 	int rc;
-	int msi_start =  0;
 	struct device *pdev = &dev->pdev->dev;
 
 	PCIE_DBG(dev, "RC%d\n", dev->rc_idx);
@@ -6113,8 +6128,6 @@ int32_t msm_pcie_irq_init(struct msm_pcie_dev_t *dev)
 
 			return PTR_ERR(dev->irq_domain);
 		}
-
-		msi_start = irq_create_mapping(dev->irq_domain, 0);
 	}
 
 	return 0;

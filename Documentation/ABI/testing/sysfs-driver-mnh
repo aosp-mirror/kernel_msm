@@ -1,0 +1,62 @@
+What:		/sys/devices/virtual/misc/mnh_sm/mnh_clk/cpu_freq
+Date:		November 2017
+Contact:	Trevor Bunker <trevorbunker@google.com>
+Description:
+		Reads to this file return the current MNH CPU frequency in MHz.
+		Writes to this file will change the MNH CPU frequency. The only
+		accepted values for inputs are "200", "400", "600", "800", and
+		"950".
+
+What:		/sys/devices/virtual/misc/mnh_sm/mnh_clk/ipu_freq
+Date:		November 2017
+Contact:	Trevor Bunker <trevorbunker@google.com>
+Description:
+		Reads to this file return the current MNH IPU frequency in MHz.
+		Writes to this file will change the MNH IPU frequency. The only
+		accepted values for inputs are "100", "200", "300", "400", and
+		"425".
+
+What:		/sys/devices/virtual/misc/mnh_sm/mnh_clk/lpddr_freq
+Date:		November 2017
+Contact:	Trevor Bunker <trevorbunker@google.com>
+Description:
+		Reads to this file return the current MNH LPDDR Frequency Set
+		Point (FSP).  Writes to this file will change the MNH LPDDR
+		FSP. The only accepted values for inputs are "0" "1", "2", and
+		"3".
+
+What:		/sys/devices/virtual/misc/mnh_sm/mnh_clk/ipu_clk_src
+Date:		November 2017
+Contact:	Trevor Bunker <trevorbunker@google.com>
+Description:
+		Reads to this file return the current IPU clock source setting.
+		The valid values are: "0", for CPU_IPU PLL; and "1" for IPU
+		PLL.
+
+What:		/sys/devices/virtual/misc/mnh_sm/mnh_clk/sys200_mode
+Date:		November 2017
+Contact:	Trevor Bunker <trevorbunker@google.com>
+Description:
+		Reads to this file return a boolean indicating if the MNH
+		device is operating in sys200 mode. By writing a "1" to this
+		file, you can force the MNH device to enter sys200 mode.
+		However, the only way to leave sys200 mode is to set the CPU,
+		IPU, or LPDDR frequencies with the sysfs files listed above.
+
+What:		/sys/devices/virtual/misc/mnh_sm/mnh_clk/ipu_clock_gating
+Date:		November 2017
+Contact:	Trevor Bunker <trevorbunker@google.com>
+Description:
+		Reads to this file return a boolean indicating if the IPU is
+		clock gated. By writing a "0" or "1" to this file, you can
+		either disable or enable, respectively, IPU clock gating.
+
+What:		/sys/devices/virtual/misc/mnh_sm/mnh_clk/bypass_clock_gating
+Date:		November 2017
+Contact:	Trevor Bunker <trevorbunker@google.com>
+Description:
+		A small subset of peripherals can be clock gated during MNH
+		bypass mode for power savings.  Reads to this file return a
+		boolean indicating if this subset is clock gated. By writing a
+		"0" or "1" to this file, you can either disable or enable,
+		respectively, clock gating to this subset.

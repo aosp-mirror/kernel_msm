@@ -14,8 +14,6 @@
 *
 */
 
-/* #define DEBUG */
-
 #include "mnh-clk.h"
 #include "mnh-hwio.h"
 #include "mnh-hwio-bases.h"
@@ -73,40 +71,40 @@
 
 #define WRITE_DDR_REG_CONFIG(ddrblock, regindex) \
 do { \
-	if (_state.ddrblock[regindex]) { \
-		mnh_reg_write(_state.ddrblock##_base + \
+	if (_state->ddrblock[regindex]) { \
+		mnh_reg_write(_state->ddrblock##_base + \
 				(regindex * sizeof(u32)), \
-			      _state.ddrblock[regindex]); \
+			      _state->ddrblock[regindex]); \
 	} \
 } while (0)
 
 #define WRITE_DDR_PHY_CONFIG(fsp, regindex)    \
 do { \
-	if (_state.phy[fsp][regindex]) { \
-		mnh_reg_write(_state.phy_base + (regindex * sizeof(u32)), \
-			      _state.phy[fsp][regindex]); \
+	if (_state->phy[fsp][regindex]) { \
+		mnh_reg_write(_state->phy_base + (regindex * sizeof(u32)), \
+			      _state->phy[fsp][regindex]); \
 	} \
 } while (0)
 
 #define WRITE_SET_ELEMENT(regindex, regvalue)	\
-	mnh_reg_write(_state.phy_base + (regindex * sizeof(u32)),\
+	mnh_reg_write(_state->phy_base + (regindex * sizeof(u32)),\
 		regvalue)
 
 #define WRITE_SCU_FSP(fsp) \
 do { \
-	_state.fsps[fsp] &= 0xFFFFFF00;\
-	_state.fsps[fsp] |= 0x7d;\
-	MNH_SCU_OUTx(LPDDR4_FSP_SETTING, fsp, _state.fsps[fsp]); \
+	_state->fsps[fsp] &= 0xFFFFFF00;\
+	_state->fsps[fsp] |= 0x7d;\
+	MNH_SCU_OUTx(LPDDR4_FSP_SETTING, fsp, _state->fsps[fsp]); \
 } while (0)
 
 #define SAVE_CURRENT_FSP() \
 do { \
-	_state.suspend_fsp = \
+	_state->suspend_fsp = \
 		MNH_SCU_INf(LPDDR4_LOW_POWER_STS, LPDDR4_CUR_FSP); \
-	dev_dbg(dev, "%s: saved fsp: %d\n", __func__, _state.suspend_fsp); \
+	dev_dbg(dev, "%s: saved fsp: %d\n", __func__, _state->suspend_fsp); \
 } while (0)
 
-#define SAVED_FSP() _state.suspend_fsp
+#define SAVED_FSP() _state->suspend_fsp
 
 #define WRITE_CLK_FROM_FSP(fsp) \
 do { \
@@ -128,14 +126,14 @@ do { \
 } while (0)
 
 #define SAVE_DDR_REG_CONFIG(ddrblock, regindex) \
-	_state.ddrblock[regindex] = \
-		mnh_reg_read(_state.ddrblock##_base + (regindex * sizeof(u32)))
+	_state->ddrblock[regindex] = \
+		mnh_reg_read(_state->ddrblock##_base + (regindex * sizeof(u32)))
 
 #define SAVE_DDR_PHY_REG_CONFIG(fsp, regindex) \
-	_state.phy[fsp][regindex] = \
-		mnh_reg_read(_state.phy_base + (regindex * sizeof(u32)))
+	_state->phy[fsp][regindex] = \
+		mnh_reg_read(_state->phy_base + (regindex * sizeof(u32)))
 
-#define CLR_START(ddrblock) (_state.ddrblock[0] &= (0xFFFFFFFE))
+#define CLR_START(ddrblock) (_state->ddrblock[0] &= (0xFFFFFFFE))
 
 /* timeout for training all FSPs */
 #define TRAINING_TIMEOUT msecs_to_jiffies(45)
@@ -150,7 +148,7 @@ do { \
 #define LP_CMD_SBIT 5
 #define INIT_DONE_SBIT 4
 
-struct mnh_ddr_internal_state _state;
+static struct mnh_ddr_internal_state *_state;
 
 /* read entire int_status */
 u64 mnh_ddr_int_status(struct device *dev)
@@ -254,33 +252,33 @@ static void mnh_ddr_disable_lp(struct device *dev)
 	mnh_ddr_send_lp_cmd(dev, LP_CMD_EXIT_LP);
 }
 
-static void mnh_ddr_init_internal_state(struct mnh_ddr_reg_config *cfg)
+static void mnh_ddr_init_internal_state(const struct mnh_ddr_reg_config *cfg)
 {
-	_state.ctl_base = HWIO_DDR_CTL_BASE_ADDR;
-	_state.pi_base = HWIO_DDR_PI_BASE_ADDR;
-	_state.phy_base = HWIO_DDR_PHY_BASE_ADDR;
+	_state->ctl_base = HWIO_DDR_CTL_BASE_ADDR;
+	_state->pi_base = HWIO_DDR_PI_BASE_ADDR;
+	_state->phy_base = HWIO_DDR_PHY_BASE_ADDR;
 
-	memcpy(&(_state.fsps[0]),
+	memcpy(&(_state->fsps[0]),
 		&(cfg->fsps[0]),
 		MNH_DDR_NUM_FSPS * sizeof(u32));
 
-	memcpy(&(_state.ctl[0]),
+	memcpy(&(_state->ctl[0]),
 		 &(cfg->ctl[0]),
 		 MNH_DDR_NUM_CTL_REG * sizeof(u32));
 
-	memcpy(&(_state.phy[0][0]),
+	memcpy(&(_state->phy[0][0]),
 		&(cfg->phy[0]),
 		MNH_DDR_NUM_PHY_REG * sizeof(u32));
 
-	memcpy(&(_state.pi[0]),
+	memcpy(&(_state->pi[0]),
 		&(cfg->pi[0]),
 		MNH_DDR_NUM_PI_REG * sizeof(u32));
 
-	_state.suspend_fsp = 0;
-	_state.tref[0] = cfg->ctl[56] & 0xFFFF;
-	_state.tref[1] = cfg->ctl[57] & 0xFFFF;
-	_state.tref[2] = cfg->ctl[58] & 0xFFFF;
-	_state.tref[3] = cfg->ctl[59] & 0xFFFF;
+	_state->suspend_fsp = 0;
+	_state->tref[0] = cfg->ctl[56] & 0xFFFF;
+	_state->tref[1] = cfg->ctl[57] & 0xFFFF;
+	_state->tref[2] = cfg->ctl[58] & 0xFFFF;
+	_state->tref[3] = cfg->ctl[59] & 0xFFFF;
 }
 
 void mnh_ddr_init_clocks(struct device *dev)
@@ -353,10 +351,10 @@ int mnh_ddr_suspend(struct device *dev, struct gpio_desc *iso_n)
 	 * If we're not actually hot, the MNH side will adjust
 	 * the rate downward.
 	 */
-	MNH_DDR_CTL_OUTf(56, TREF_F0, _state.tref[0]);
-	MNH_DDR_CTL_OUTf(57, TREF_F1, _state.tref[1]);
-	MNH_DDR_CTL_OUTf(58, TREF_F2, _state.tref[2]);
-	MNH_DDR_CTL_OUTf(59, TREF_F3, _state.tref[3]);
+	MNH_DDR_CTL_OUTf(56, TREF_F0, _state->tref[0]);
+	MNH_DDR_CTL_OUTf(57, TREF_F1, _state->tref[1]);
+	MNH_DDR_CTL_OUTf(58, TREF_F2, _state->tref[2]);
+	MNH_DDR_CTL_OUTf(59, TREF_F3, _state->tref[3]);
 
 	/* resume to fsp3 */
 	mnh_lpddr_freq_change(LPDDR_FREQ_FSP3);
@@ -469,7 +467,12 @@ int mnh_ddr_po_init(struct device *dev, struct gpio_desc *iso_n)
 {
 	int index, setindex;
 	unsigned long timeout;
-	struct mnh_ddr_reg_config *cfg = &mnh_ddr_33_100_400_600;
+	const struct mnh_ddr_reg_config *cfg = &mnh_ddr_33_100_400_600;
+
+	_state = devm_kzalloc(dev, sizeof(struct mnh_ddr_internal_state),
+			      GFP_KERNEL);
+	if (!_state)
+		return -ENOMEM;
 
 	mnh_ddr_init_internal_state(cfg);
 

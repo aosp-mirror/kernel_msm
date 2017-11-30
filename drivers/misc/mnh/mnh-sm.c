@@ -55,6 +55,8 @@
 
 #define MNH_SCU_INf(reg, fld) \
 HW_INf(HWIO_SCU_BASE_ADDR, SCU, reg, fld)
+#define MNH_SCU_INx(reg, inst) \
+HW_INx(HWIO_SCU_BASE_ADDR, SCU, reg, inst)
 #define MNH_SCU_OUTf(reg, fld, val) \
 HW_OUTf(HWIO_SCU_BASE_ADDR, SCU, reg, fld, val)
 #define MNH_SCU_OUT(reg, val) \
@@ -299,6 +301,22 @@ static ssize_t poweron_show(struct device *dev,
 }
 
 static DEVICE_ATTR_RO(poweron);
+
+static ssize_t dump_scu_show(struct device *dev,
+			    struct device_attribute *attr,
+			    char *buf)
+{
+	int i;
+
+	for (i = 0; i < HWIO_SCU_PIN_CFG_REGNUM; i++) {
+		dev_info(mnh_sm_dev->dev,
+			 "PIN_CFG%d: 0x%08x\n", i,
+			 MNH_SCU_INx(PIN_CFG, i));
+	}
+
+	return 0;
+}
+static DEVICE_ATTR_RO(dump_scu);
 
 static ssize_t poweroff_show(struct device *dev,
 			     struct device_attribute *attr,
@@ -1319,6 +1337,7 @@ static DEVICE_ATTR_WO(ddr_mbist);
 static struct attribute *mnh_sm_attrs[] = {
 	&dev_attr_stage_fw.attr,
 	&dev_attr_poweron.attr,
+	&dev_attr_dump_scu.attr,
 	&dev_attr_poweroff.attr,
 	&dev_attr_state.attr,
 	&dev_attr_download.attr,
@@ -1471,8 +1490,7 @@ static int mnh_sm_download(void)
 	}
 
 	/* set the boot_args mask */
-	mnh_config_write(HWIO_SCU_GP_ADDR(HWIO_SCU_BASE_ADDR, 2), 4,
-			 mnh_boot_args);
+	MNH_SCU_OUT(GP_BOOT_ARGS, mnh_boot_args);
 
 	/* set the default power mode */
 	MNH_SCU_OUT(GP_POWER_MODE, mnh_power_mode);
@@ -1550,6 +1568,12 @@ static int mnh_sm_suspend(void)
  */
 static int mnh_sm_resume(void)
 {
+	/* set the boot_args mask */
+	MNH_SCU_OUT(GP_BOOT_ARGS, mnh_boot_args);
+
+	/* set the default power mode */
+	MNH_SCU_OUT(GP_POWER_MODE, mnh_power_mode);
+
 	mnh_resume_firmware();
 	return 0;
 }
@@ -1597,11 +1621,88 @@ static void mnh_sm_print_boot_trace(struct device (*dev))
  */
 static void mnh_sm_enter_low_power_mode(void)
 {
+	/* disable clocks for unused system components */
 	MNH_SCU_OUTf(CCU_CLK_CTL, CPU_CLKEN, 0);
 	MNH_SCU_OUTf(CCU_CLK_CTL, BTSRAM_CLKEN, 0);
 	MNH_SCU_OUTf(CCU_CLK_CTL, BTROM_CLKEN, 0);
 	MNH_SCU_OUTf(CCU_CLK_CTL, LP4_REFCLKEN, 0);
 	MNH_SCU_OUTf(CCU_CLK_CTL, IPU_CLKEN, 0);
+
+	/* disable clocks for unused peripherals */
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, PVT_CLKEN, 0);
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, PCIE_REFCLKEN, 0);
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, I2C3_CLKEN_SW, 0);
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, I2C2_CLKEN_SW, 0);
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, I2C1_CLKEN_SW, 0);
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, I2C0_CLKEN_SW, 0);
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, UART1_CLKEN_SW, 0);
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, UART0_CLKEN_SW, 0);
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, SPIS_CLKEN_SW, 0);
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, SPIM_CLKEN_SW, 0);
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, PERI_DMA_CLKEN_SW, 0);
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, TIMER_CLKEN_SW, 0);
+	MNH_SCU_OUTf(PERIPH_CLK_CTRL, WDT_CLKEN_SW, 0);
+
+	/* reset unused peripherals */
+	MNH_SCU_OUTf(RSTC, I2C3_RST, 1);
+	MNH_SCU_OUTf(RSTC, I2C2_RST, 1);
+	MNH_SCU_OUTf(RSTC, I2C1_RST, 1);
+	MNH_SCU_OUTf(RSTC, I2C0_RST, 1);
+	MNH_SCU_OUTf(RSTC, UART1_RST, 1);
+	MNH_SCU_OUTf(RSTC, UART0_RST, 1);
+	MNH_SCU_OUTf(RSTC, SPIS_RST, 1);
+	MNH_SCU_OUTf(RSTC, SPIM_RST, 1);
+	MNH_SCU_OUTf(RSTC, PERI_DMA_RST, 1);
+	MNH_SCU_OUTf(RSTC, TIMER_RST, 1);
+	MNH_SCU_OUTf(RSTC, WDT_RST, 1);
+	MNH_SCU_OUTf(RSTC, PMON_RST, 1);
+	MNH_SCU_OUTf(RSTC, MIPIRXPHY_RST, 1);
+	MNH_SCU_OUTf(RSTC, MIPITXPHY_RST, 1);
+	MNH_SCU_OUTf(RSTC, LP4PHY_RST, 1);
+	MNH_SCU_OUTf(RSTC, LP4CTL_RST, 1);
+	MNH_SCU_OUTf(RSTC, IPU_RST, 1);
+	MNH_SCU_OUTf(RSTC, CPU_RST, 1);
+
+	/* Shutdown unused memories */
+	MNH_SCU_OUTf(MEM_PWR_MGMNT, BTROM_SLP, 1);
+	MNH_SCU_OUTf(MEM_PWR_MGMNT, BTSRAM_SD, 1);
+	MNH_SCU_OUTf(MEM_PWR_MGMNT, LP4C_MEM_SD, 1);
+	MNH_SCU_OUTf(MEM_PWR_MGMNT, CPU_L2MEM_SD, 1);
+	MNH_SCU_OUTf(MEM_PWR_MGMNT, CPU_L1MEM_SD, 1);
+	MNH_SCU_OUTf(MEM_PWR_MGMNT, IPU_MEM_SD, 1);
+
+	/* switch to SYS200 clock */
+	MNH_SCU_OUTf(CCU_CLK_DIV, LPDDR4_REFCLK_DIV, 0xB);
+	MNH_SCU_OUTf(CCU_CLK_DIV, AXI_FABRIC_CLK_DIV, 1);
+	MNH_SCU_OUTf(CCU_CLK_DIV, PCIE_AXI_CLK_DIV, 3);
+	MNH_SCU_OUTf(CCU_CLK_CTL, CPU_IPU_SYS200_MODE, 1);
+	MNH_SCU_OUTf(CCU_CLK_CTL, LP4_AXI_SYS200_MODE, 1);
+	MNH_SCU_OUTf(LPDDR4_LOW_POWER_CFG, LP4_FSP_SW_OVERRIDE, 1);
+
+	/* disable PLLs */
+	MNH_SCU_OUTf(PLL_PASSCODE, PASSCODE, 0x4CD9);
+	MNH_SCU_OUTf(IPU_PLL_CTRL, FRZ_PLL_IN, 1);
+	MNH_SCU_OUTf(IPU_PLL_CTRL, PD, 1);
+	MNH_SCU_OUTf(IPU_PLL_CTRL, FOUTPOSTDIVPD, 1);
+	MNH_SCU_OUTf(IPU_PLL_CTRL, FRZ_PLL_IN, 0);
+	MNH_SCU_OUTf(CPU_IPU_PLL_CTRL, FRZ_PLL_IN, 1);
+	MNH_SCU_OUTf(CPU_IPU_PLL_CTRL, PD, 1);
+	MNH_SCU_OUTf(CPU_IPU_PLL_CTRL, FOUTPOSTDIVPD, 1);
+	MNH_SCU_OUTf(CPU_IPU_PLL_CTRL, FRZ_PLL_IN, 0);
+	MNH_SCU_OUTf(LPDDR4_REFCLK_PLL_CTRL, FRZ_PLL_IN, 1);
+	MNH_SCU_OUTf(LPDDR4_REFCLK_PLL_CTRL, PD, 1);
+	MNH_SCU_OUTf(LPDDR4_REFCLK_PLL_CTRL, FOUTPOSTDIVPD, 1);
+	MNH_SCU_OUTf(LPDDR4_REFCLK_PLL_CTRL, FRZ_PLL_IN, 0);
+	MNH_SCU_OUTf(PLL_PASSCODE, PASSCODE, 0x0);
+
+	/* enable pad isolation to the DRAM */
+	gpiod_set_value_cansleep(mnh_sm_dev->ddr_pad_iso_n_pin, 0);
+
+	/* disable DRAM power */
+	mnh_pwr_set_state(MNH_PWR_S1);
+
+	mnh_sm_dev->ddr_status = MNH_DDR_OFF;
+	mnh_sm_dev->firmware_downloaded = false;
 }
 
 static int mnh_sm_set_state_locked(int state)
@@ -1630,6 +1731,9 @@ static int mnh_sm_set_state_locked(int state)
 		reinit_completion(&mnh_sm_dev->powered_complete);
 
 		ret = mnh_sm_poweroff();
+
+		/* enable pad isolation to the DRAM */
+		gpiod_set_value_cansleep(mnh_sm_dev->ddr_pad_iso_n_pin, 0);
 
 		disable_irq(mnh_sm_dev->ready_irq);
 		break;
@@ -1691,6 +1795,8 @@ static int mnh_sm_set_state_locked(int state)
 			reinit_completion(&mnh_sm_dev->powered_complete);
 
 			ret = mnh_sm_suspend();
+
+			disable_irq(mnh_sm_dev->ready_irq);
 		}
 		break;
 	default:
@@ -2051,7 +2157,7 @@ static irqreturn_t mnh_sm_ready_irq_handler(int irq, void *cookie)
 			 __func__);
 		reinit_completion(&mnh_sm_dev->suspend_complete);
 	} else {
-		dev_dbg(mnh_sm_dev->dev, "%s: mnh device is ready to suspend\n",
+		dev_info(mnh_sm_dev->dev, "%s: mnh device is ready to suspend\n",
 			__func__);
 		complete(&mnh_sm_dev->suspend_complete);
 	}

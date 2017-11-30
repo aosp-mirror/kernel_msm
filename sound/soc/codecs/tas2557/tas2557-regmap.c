@@ -696,6 +696,9 @@ static void irq_work_routine(struct work_struct *work)
 	mutex_lock(&pTAS2557->file_lock);
 #endif
 
+	if (pTAS2557->mnErrCode & (ERROR_DEVA_I2C_COMM | ERROR_DEVB_I2C_COMM | ERROR_FAILSAFE))
+		goto program;
+
 	if (pTAS2557->system_suspend)
 		goto end;
 
@@ -1186,6 +1189,7 @@ static int tas2557_i2c_probe(struct i2c_client *pClient,
 	pTAS2557->hw_reset = tas2557_hw_reset;
 	pTAS2557->suspend = tas2557_suspend;
 	pTAS2557->resume = tas2557_resume;
+	pTAS2557->failsafe_retry = 0;
 
 	mutex_init(&pTAS2557->dev_lock);
 
