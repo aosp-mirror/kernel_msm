@@ -92,7 +92,7 @@
 			config {
 				pins = "gpio114";
 				drive-strength = <2>;
-				bias-pull-down;
+				bias-disable;
 			};
 		};
 	};
