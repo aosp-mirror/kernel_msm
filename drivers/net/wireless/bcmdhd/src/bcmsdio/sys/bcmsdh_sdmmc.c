@@ -951,7 +951,7 @@ sdioh_request_word(sdioh_info_t *sd, uint cmd_type, uint rw, uint func, uint add
 		if (err_ret)
 #endif /* MMC_SDIO_ABORT */
 		{
-			sd_err(("bcmsdh_sdmmc: Failed to %s word, Err: 0x%08x",
+			sd_err(("bcmsdh_sdmmc: Failed to %s word, Err: %d\n",
 				rw ? "Write" : "Read", err_ret));
 		}
 	}

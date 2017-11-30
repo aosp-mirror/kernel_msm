@@ -994,7 +994,7 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 				dhd->early_suspended = 1;
 #endif
 				/* Kernel suspended */
-				DHD_ERROR(("%s: force extra Suspend setting \n", __FUNCTION__));
+				DHD_ERROR(("%s: Suspended\n", __FUNCTION__));
 
 #ifndef SUPPORT_PM2_ONLY
 				dhd_wl_ioctl_cmd(dhd, WLC_SET_PM, (char *)&power_mode,
@@ -1048,14 +1048,14 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 						sizeof(intr_width), NULL, 0, TRUE);
 				if (ret < 0) {
 					DHD_ERROR(("failed to set intr_width (%d)\n", ret));
-                }
+				}
 #endif /* DYNAMIC_SWOOB_DURATION */
-			} else {
+		} else {
 #ifdef PKT_FILTER_SUPPORT
 				dhd->early_suspended = 0;
 #endif
 				/* Kernel resumed  */
-				DHD_ERROR(("%s: Remove extra suspend setting \n", __FUNCTION__));
+				DHD_ERROR(("%s: Resumed\n", __FUNCTION__));
 #ifdef DYNAMIC_SWOOB_DURATION
 				intr_width = 0;
 				ret = dhd_iovar(dhd, 0, "bus:intr_width", (char *)&intr_width,
