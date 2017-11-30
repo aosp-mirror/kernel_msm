@@ -37,6 +37,14 @@ enum {
 };
 
 /**
+ * enum flat_binder_object_shifts: shift values for flat_binder_object_flags
+ * @FLAT_BINDER_FLAG_SCHED_POLICY_SHIFT: shift for getting scheduler policy.
+ *
+ */
+enum flat_binder_object_shifts {
+	FLAT_BINDER_FLAG_SCHED_POLICY_SHIFT = 9,
+};
+/**
  * enum flat_binder_object_flags - flags for use in flat_binder_object.flags
  */
 enum flat_binder_object_flags {
@@ -48,7 +56,7 @@ enum flat_binder_object_flags {
 	 * in these bits depend on the scheduler policy encoded in
 	 * @FLAT_BINDER_FLAG_SCHED_POLICY_MASK.
 	 *
-	 * For SCHED_NORMAL, the valid range is between [-20..19]
+	 * For SCHED_NORMAL/SCHED_BATCH, the valid range is between [-20..19]
 	 * For SCHED_FIFO/SCHED_RR, the value can run between [1..99]
 	 */
 	FLAT_BINDER_FLAG_PRIORITY_MASK = 0xff,
@@ -67,16 +75,15 @@ enum flat_binder_object_flags {
 	 * 10b: SCHED_RR
 	 * 11b: SCHED_BATCH
 	 */
-	FLAT_BINDER_FLAG_SCHED_POLICY_MASK = 0x600,
-};
-
-/**
- * enum flat_binder_object_shifts: shift values for flat_binder_object_flags
- * @FLAT_BINDER_FLAG_SCHED_POLICY_SHIFT: shift for getting scheduler policy.
- *
- */
-enum flat_binder_object_shifts {
-	FLAT_BINDER_FLAG_SCHED_POLICY_SHIFT = 9,
+	FLAT_BINDER_FLAG_SCHED_POLICY_MASK =
+		3U << FLAT_BINDER_FLAG_SCHED_POLICY_SHIFT,
+	/**
+	 * @FLAT_BINDER_FLAG_INHERIT_RT: whether the node inherits RT policy
+	 *
+	 * Only when set, calls into this node will inherit a real-time
+	 * scheduling policy from the caller (for synchronous transactions).
+	 */
+	FLAT_BINDER_FLAG_INHERIT_RT = 0x800,
 };
 
 #ifdef BINDER_IPC_32BIT
@@ -241,7 +248,6 @@ struct binder_node_debug_info {
 #define BINDER_SET_CONTEXT_MGR		_IOW('b', 7, __s32)
 #define BINDER_THREAD_EXIT		_IOW('b', 8, __s32)
 #define BINDER_VERSION			_IOWR('b', 9, struct binder_version)
-#define BINDER_SET_INHERIT_FIFO_PRIO	_IO('b', 10)
 #define BINDER_GET_NODE_DEBUG_INFO	_IOWR('b', 11, struct binder_node_debug_info)
 
 /*

@@ -112,6 +112,7 @@ struct fusb302_chip {
 
 	struct workqueue_struct *wq;
 	struct delayed_work bc_lvl_handler;
+	struct work_struct set_current_limit;
 
 	atomic_t pm_suspend;
 	atomic_t i2c_busy;
@@ -139,6 +140,10 @@ struct fusb302_chip {
 	struct usb_controller *uc;
 	struct usb_typec_ctrl *utc;
 	struct power_supply *batt_psy;
+
+	/* Current limit to be set */
+	u32 max_ma;
+	u32 mv;
 };
 
 static struct fusb302_chip *__fusb302_chip;
@@ -870,10 +875,29 @@ static int tcpm_set_current_limit(struct tcpc_dev *dev, u32 max_ma, u32 mv)
 {
 	struct fusb302_chip *chip = container_of(dev, struct fusb302_chip,
 						 tcpc_dev);
+
+	flush_work(&chip->set_current_limit);
+	mutex_lock(&chip->lock);
+	chip->max_ma = max_ma;
+	chip->mv = mv;
+	queue_work(chip->wq, &chip->set_current_limit);
+	mutex_unlock(&chip->lock);
+
+	return 0;
+
+}
+
+static void fusb302_set_current_limit(struct work_struct *work)
+{
+	struct fusb302_chip *chip = container_of(work, struct fusb302_chip,
+						 set_current_limit);
 	int ret = 0;
+	u32 max_ma, mv;
 	enum usb_typec_current sink_current, pre_sink_current;
 
 	mutex_lock(&chip->lock);
+	max_ma = chip->max_ma;
+	mv = chip->mv;
 
 	fusb302_log("current limit: %d ma, %d mv\n",
 		    max_ma, mv);
@@ -916,8 +940,6 @@ static int tcpm_set_current_limit(struct tcpc_dev *dev, u32 max_ma, u32 mv)
 	}
 
 	mutex_unlock(&chip->lock);
-
-	return 0;
 }
 
 static int fusb302_pd_tx_flush(struct fusb302_chip *chip)
@@ -1917,6 +1939,7 @@ static int fusb302_probe(struct i2c_client *client,
 	if (!chip->wq)
 		return -ENOMEM;
 	INIT_DELAYED_WORK(&chip->bc_lvl_handler, fusb302_bc_lvl_handler_work);
+	INIT_WORK(&chip->set_current_limit, fusb302_set_current_limit);
 	init_tcpc_dev(&chip->tcpc_dev);
 
 	ret = init_regulators(chip);
