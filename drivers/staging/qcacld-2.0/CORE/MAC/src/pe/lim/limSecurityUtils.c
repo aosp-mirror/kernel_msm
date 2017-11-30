@@ -534,8 +534,6 @@ limRestoreFromAuthState(tpAniSirGlobal pMac, tSirResultCodes resultCode, tANI_U1
                       (tANI_U32 *) &mlmAuthCnf);
 } /*** end limRestoreFromAuthState() ***/
 
-
-
 /**
  * limLookUpKeyMappings()
  *
@@ -595,7 +593,10 @@ limEncryptAuthFrame(tpAniSirGlobal pMac, tANI_U8 keyId, tANI_U8 *pKey, tANI_U8 *
                     tANI_U8 *pEncrBody, tANI_U32 keyLength)
 {
     tANI_U8  seed[LIM_SEED_LENGTH], icv[SIR_MAC_WEP_ICV_LENGTH];
+    tANI_U16 framelen;
 
+    framelen = ((tpSirMacAuthFrameBody)pPlainText)->length +
+                 SIR_MAC_AUTH_FRAME_INFO_LEN + SIR_MAC_CHALLENGE_ID_LEN;
     keyLength += 3;
 
     // Bytes 0-2 of seed is IV
@@ -606,15 +607,15 @@ limEncryptAuthFrame(tpAniSirGlobal pMac, tANI_U8 keyId, tANI_U8 *pKey, tANI_U8 *
     vos_mem_copy((tANI_U8 *) &seed[3], pKey, keyLength - 3);
 
     // Compute CRC-32 and place them in last 4 bytes of plain text
-    limComputeCrc32(icv, pPlainText, sizeof(tSirMacAuthFrameBody));
+    limComputeCrc32(icv, pPlainText, framelen);
 
-    vos_mem_copy( pPlainText + sizeof(tSirMacAuthFrameBody),
+    vos_mem_copy( pPlainText + framelen,
                   icv, SIR_MAC_WEP_ICV_LENGTH);
 
     // Run RC4 on plain text with the seed
     limRC4(pEncrBody + SIR_MAC_WEP_IV_LENGTH,
            (tANI_U8 *) pPlainText, seed, keyLength,
-           LIM_ENCR_AUTH_BODY_LEN - SIR_MAC_WEP_IV_LENGTH);
+           framelen + SIR_MAC_WEP_IV_LENGTH);
 
     // Prepare IV
     pEncrBody[0] = seed[0];
@@ -734,7 +735,7 @@ limRC4(tANI_U8 *pDest, tANI_U8 *pSrc, tANI_U8 *seed, tANI_U32 keyLength, tANI_U1
     {
         tANI_U8 i   = ctx.i;
         tANI_U8 j   = ctx.j;
-        tANI_U8 len = (tANI_U8) frameLen;
+        tANI_U16 len = frameLen;
 
         while (len-- > 0)
         {
@@ -816,7 +817,7 @@ limDecryptAuthFrame(tpAniSirGlobal pMac, tANI_U8 *pKey, tANI_U8 *pEncrBody,
     // Compute CRC-32 and place them in last 4 bytes of encrypted body
     limComputeCrc32(icv,
                     (tANI_U8 *) pPlainBody,
-                    (tANI_U8) (frameLen - SIR_MAC_WEP_ICV_LENGTH));
+                    (frameLen - SIR_MAC_WEP_ICV_LENGTH));
 
     // Compare RX_ICV with computed ICV
     for (i = 0; i < SIR_MAC_WEP_ICV_LENGTH; i++)
