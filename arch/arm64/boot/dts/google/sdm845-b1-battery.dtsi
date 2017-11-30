@@ -22,6 +22,7 @@
 
 &pmi8998_fg {
 	qcom,battery-data = <&b1_batterydata>;
+	qcom,cl-max-decrement = <5>;
 	qcom,linearize-soc;
 };
 
