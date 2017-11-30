@@ -263,8 +263,8 @@
 				<PON_POWER_OFF_WARM_RESET>;
 			qcom,pon_1 {  /* KPD_PWR_N */
 				qcom,support-reset = <1>;
-				qcom,s1-timer = <6720>;
-				qcom,s2-timer = <1000>;
+				qcom,s1-timer = <10256>;
+				qcom,s2-timer = <2000>;
 				qcom,s2-type = <8>;
 			};
 			qcom,pon_2 {  /* RESIN_N */
