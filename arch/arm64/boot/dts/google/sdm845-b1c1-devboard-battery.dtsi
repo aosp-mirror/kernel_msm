@@ -21,5 +21,6 @@
 
 &pmi8998_fg {
         qcom,battery-data = <&b1c1_batterydata>;
+	qcom,linearize-soc;
 };
 
