@@ -22,8 +22,6 @@
 		qcom,mdss-dsi-border-color = <0>;
 		qcom,mdss-dsi-traffic-mode = "burst_mode";
 		qcom,mdss-dsi-lane-map = "lane_map_0123";
-		qcom,mdss-dsi-bllp-eof-power-mode;
-		qcom,mdss-dsi-bllp-power-mode;
 		/* qcom,partial-update-enabled = "single-roi"; */
 		/* qcom,panel-roi-alignment = <1440 16 1440 16 1440 16>; */
 		qcom,mdss-dsi-lane-0-state;
@@ -43,30 +41,16 @@
 		qcom,mdss-dsi-tx-eot-append;
 		qcom,mdss-dsi-force-clock-lane-hs = <1>;
 
-		/* TODO: salidoa: Check if these lp-mode settings belong in
-		 * the timing section
-		 */
-		qcom,mdss-dsi-lp-mode-on = [15 01 00 00 00 00 02 53 08];
-		qcom,mdss-dsi-lp-mode-off = [15 01 00 00 00 00 02 53 00];
-		qcom,mdss-dsi-lp-change-state = "dsi_hs_mode";
-		qcom,mode-control-dsi-state = "dsi_lp_mode";
-
-		qcom,alpm-off-command = [
-			05 01 00 00 00 00 01 38    /* IDLE off */
-		];
-		qcom,alpm-low-command = [
-			05 01 00 00 00 00 01 39    /* IDLE on */
-			15 01 00 00 00 00 02 51 40 /* brightness control */
-		];
-		qcom,alpm-high-command = [
-			05 01 00 00 00 00 01 39    /* IDLE on */
-			15 01 00 00 00 00 02 51 80 /* brightness control */
-		];
-		qcom,mdss-pan-physical-width-dimension = <68>;
-		qcom,mdss-pan-physical-height-dimension = <136>;
+		qcom,mdss-pan-physical-width-dimension = <62>;
+		qcom,mdss-pan-physical-height-dimension = <124>;
 
 		qcom,mdss-dsi-hs-pps;
 		qcom,mdss-dsi-init-delay-us = <10000>;
+
+		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+		qcom,mdss-dsi-bl-min-level = <0xf0>;
+		qcom,mdss-dsi-bl-max-level = <0x332>;
+
 		qcom,mdss-dsi-display-timings {
 			timing@0 {
 				qcom,mdss-dsi-panel-framerate = <60>;
@@ -325,6 +309,9 @@
 				qcom,mdss-dsc-bit-per-pixel = <8>;
 				qcom,mdss-dsc-block-prediction-enable;
 
+				/* 2xLM, 2xDSC Enc, 1xDSI Intf */
+				qcom,display-topology = <2 2 1>;
+				qcom,default-topology-index = <0>;
 			};
 		};
 

@@ -65,6 +65,10 @@
 		qcom,mdss-pan-physical-width-dimension = <68>;
 		qcom,mdss-pan-physical-height-dimension = <136>;
 
+		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+		qcom,mdss-dsi-bl-min-level = <23>;
+		qcom,mdss-dsi-bl-max-level = <223>;
+
 		qcom,mdss-dsi-display-timings {
 			timing@0 {
 				qcom,mdss-dsi-panel-framerate = <60>;
@@ -125,6 +129,10 @@
 				qcom,mdss-dsc-bit-per-pixel = <8>;
 				qcom,mdss-dsc-block-prediction-enable;
 
+
+				/* 2xLM, 2xDSC Enc, 1xDSI Intf */
+				qcom,display-topology = <2 2 1>;
+				qcom,default-topology-index = <0>;
 			};
 		};
 
