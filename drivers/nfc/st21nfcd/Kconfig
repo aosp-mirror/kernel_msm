@@ -1,0 +1,9 @@
+config NFC_ST21NFCD
+	tristate "STMicroelectronics ST21NFCD NFC driver"
+	depends on I2C
+	---help---
+	  STMicroelectronics ST21NFCD core driver. It implements the chipset
+	  NCI logic and hooks into the NFC kernel APIs. Physical layers will
+	  register against it.
+
+	  Say N if unsure.
