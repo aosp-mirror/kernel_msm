@@ -828,8 +828,8 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 		}
 		break;
 	default:
-		pr_err("%s: Unknown bl_ctrl configuration\n",
-			__func__);
+		pr_err_once("%s: Unknown bl_ctrl configuration\n",
+				__func__);
 		break;
 	}
 }
