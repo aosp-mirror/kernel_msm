@@ -24,6 +24,15 @@
 #define BL_STATE_LP		BL_CORE_DRIVER1
 #define BL_STATE_LP2		BL_CORE_DRIVER2
 
+struct dsi_backlight_pwm_config {
+	bool pwm_pmi_control;
+	u32 pwm_pmic_bank;
+	u32 pwm_period_usecs;
+	int pwm_gpio;
+};
+
+static int dsi_panel_pwm_bl_register(struct dsi_backlight_config *bl);
+
 static int dsi_backlight_update_dcs(struct dsi_backlight_config *bl, u32 bl_lvl)
 {
 	int rc = 0;
@@ -47,27 +56,6 @@ static int dsi_backlight_update_dcs(struct dsi_backlight_config *bl, u32 bl_lvl)
 	rc = mipi_dsi_dcs_set_display_brightness(dsi, bl_lvl, num_params);
 	if (rc < 0)
 		pr_err("failed to update dcs backlight:%d\n", bl_lvl);
-
-	return rc;
-}
-
-static int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
-{
-	int rc = 0;
-	struct dsi_backlight_config *bl = &panel->bl_config;
-
-	pr_debug("backlight type:%d lvl:%d\n", bl->type, bl_lvl);
-	switch (bl->type) {
-	case DSI_BACKLIGHT_WLED:
-		rc = backlight_device_set_brightness(bl->bl_device, bl_lvl);
-		break;
-	case DSI_BACKLIGHT_DCS:
-		rc = dsi_backlight_update_dcs(bl, bl_lvl);
-		break;
-	default:
-		pr_err("Backlight type(%d) not supported\n", bl->type);
-		rc = -ENOTSUPP;
-	}
 
 	return rc;
 }
@@ -121,11 +109,11 @@ static int dsi_backlight_update_status(struct backlight_device *bd)
 		return 0;
 
 	mutex_lock(&panel->panel_lock);
-	if (dsi_panel_initialized(panel)) {
+	if (dsi_panel_initialized(panel) && bl->update_bl) {
 		pr_info("req:%d bl:%d state:0x%x\n",
 			bd->props.brightness, bl_lvl, bd->props.state);
 
-		rc = dsi_panel_set_backlight(panel, bl_lvl);
+		rc = bl->update_bl(bl, bl_lvl);
 		if (rc) {
 			pr_err("unable to set backlight (%d)\n", rc);
 			goto done;
@@ -277,50 +265,49 @@ int dsi_panel_bl_register(struct dsi_panel *panel)
 {
 	int rc = 0;
 	struct dsi_backlight_config *bl = &panel->bl_config;
+	int (*register_func)(struct dsi_backlight_config *) = NULL;
 
 	switch (bl->type) {
 	case DSI_BACKLIGHT_WLED:
+		break;
 	case DSI_BACKLIGHT_DCS:
+		bl->update_bl = dsi_backlight_update_dcs;
+		break;
+	case DSI_BACKLIGHT_PWM:
+		register_func = dsi_panel_pwm_bl_register;
 		break;
 	default:
 		pr_err("Backlight type(%d) not supported\n", bl->type);
 		rc = -ENOTSUPP;
-		goto error;
+		break;
 	}
 
-	rc = dsi_backlight_register(bl);
-error:
+	if (register_func)
+		rc = register_func(bl);
+	if (!rc)
+		rc = dsi_backlight_register(bl);
+
 	return rc;
 }
 
-
 int dsi_panel_bl_unregister(struct dsi_panel *panel)
 {
-	int rc = 0;
 	struct dsi_backlight_config *bl = &panel->bl_config;
 
-	switch (bl->type) {
-	case DSI_BACKLIGHT_WLED:
-	case DSI_BACKLIGHT_DCS:
-		break;
-	default:
-		pr_err("Backlight type(%d) not supported\n", bl->type);
-		rc = -ENOTSUPP;
-		goto error;
-	}
+	if (bl->unregister)
+		bl->unregister(bl);
 
 	if (bl->bl_device)
 		sysfs_remove_groups(&bl->bl_device->dev.kobj, bl_device_groups);
 
-error:
-	return rc;
+	return 0;
 }
 
-static int dsi_panel_bl_parse_pwm_config(struct dsi_panel *panel)
+static int dsi_panel_bl_parse_pwm_config(struct dsi_panel *panel,
+				struct dsi_backlight_pwm_config *config)
 {
 	int rc = 0;
 	u32 val;
-	struct dsi_backlight_config *config = &panel->bl_config;
 	struct dsi_parser_utils *utils = &panel->utils;
 
 	rc = utils->read_u32(utils->data, "qcom,dsi-bl-pmic-bank-select",
@@ -353,6 +340,33 @@ static int dsi_panel_bl_parse_pwm_config(struct dsi_panel *panel)
 
 error:
 	return rc;
+}
+
+static void dsi_panel_pwm_bl_unregister(struct dsi_backlight_config *bl)
+{
+	kfree(bl->priv);
+}
+
+static int dsi_panel_pwm_bl_register(struct dsi_backlight_config *bl)
+{
+	struct dsi_panel *panel = container_of(bl, struct dsi_panel, bl_config);
+	struct dsi_backlight_pwm_config *pwm_cfg;
+	int rc;
+
+	pwm_cfg = kzalloc(sizeof(*pwm_cfg), GFP_KERNEL);
+	if (!pwm_cfg)
+		return -ENOMEM;
+
+	rc = dsi_panel_bl_parse_pwm_config(panel, pwm_cfg);
+	if (rc) {
+		kfree(pwm_cfg);
+		return rc;
+	}
+
+	bl->priv = pwm_cfg;
+	bl->unregister = dsi_panel_pwm_bl_unregister;
+
+	return 0;
 }
 
 int dsi_panel_bl_parse_config(struct dsi_backlight_config *bl)
@@ -409,15 +423,6 @@ int dsi_panel_bl_parse_config(struct dsi_backlight_config *bl)
 		bl->brightness_max_level = 255;
 	} else {
 		bl->brightness_max_level = val;
-	}
-
-	if (bl->type == DSI_BACKLIGHT_PWM) {
-		rc = dsi_panel_bl_parse_pwm_config(panel);
-		if (rc) {
-			pr_err("[%s] failed to parse pwm config, rc=%d\n",
-			       panel->name, rc);
-			goto error;
-		}
 	}
 
 	panel->bl_config.en_gpio = utils->get_named_gpio(utils->data,
