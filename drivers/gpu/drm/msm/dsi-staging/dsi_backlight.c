@@ -24,6 +24,15 @@
 #define BL_STATE_LP		BL_CORE_DRIVER1
 #define BL_STATE_LP2		BL_CORE_DRIVER2
 
+struct dsi_backlight_pwm_config {
+	bool pwm_pmi_control;
+	u32 pwm_pmic_bank;
+	u32 pwm_period_usecs;
+	int pwm_gpio;
+};
+
+static int dsi_panel_pwm_bl_register(struct dsi_backlight_config *bl);
+
 static int dsi_backlight_update_dcs(struct dsi_backlight_config *bl, u32 bl_lvl)
 {
 	int rc = 0;
@@ -50,27 +59,6 @@ static int dsi_backlight_update_dcs(struct dsi_backlight_config *bl, u32 bl_lvl)
 		pr_err("failed to update dcs backlight:%d\n", bl_lvl);
 
 	mutex_unlock(&panel->panel_lock);
-	return rc;
-}
-
-static int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
-{
-	int rc = 0;
-	struct dsi_backlight_config *bl = &panel->bl_config;
-
-	pr_debug("backlight type:%d lvl:%d\n", bl->type, bl_lvl);
-	switch (bl->type) {
-	case DSI_BACKLIGHT_WLED:
-		led_trigger_event(bl->wled, bl_lvl);
-		break;
-	case DSI_BACKLIGHT_DCS:
-		dsi_backlight_update_dcs(bl, bl_lvl);
-		break;
-	default:
-		pr_err("Backlight type(%d) not supported\n", bl->type);
-		rc = -ENOTSUPP;
-	}
-
 	return rc;
 }
 
@@ -122,11 +110,11 @@ static int dsi_backlight_update_status(struct backlight_device *bd)
 	if (bl_lvl == bl->bl_actual)
 		goto done;
 
-	if (dsi_panel_initialized(panel)) {
+	if (dsi_panel_initialized(panel) && bl->update_bl) {
 		pr_info("req:%d bl:%d state:0x%x\n",
 			bd->props.brightness, bl_lvl, bd->props.state);
 
-		rc = dsi_panel_set_backlight(panel, bl_lvl);
+		rc = bl->update_bl(bl, bl_lvl);
 		if (rc) {
 			pr_err("unable to set backlight (%d)\n", rc);
 			goto done;
@@ -203,12 +191,36 @@ static struct attribute *bl_device_attrs[] = {
 ATTRIBUTE_GROUPS(bl_device);
 
 #ifdef CONFIG_LEDS_TRIGGERS
-static int dsi_panel_led_bl_register(struct dsi_panel *panel,
-				struct dsi_backlight_config *bl)
+static int dsi_panel_update_backlight_led(struct dsi_backlight_config *bl,
+					  u32 bl_lvl)
 {
+	struct led_trigger *wled = bl->priv;
+	if (!wled)
+		return -EINVAL;
+
+	if (bl_lvl != bl->bl_actual)
+		led_trigger_event(wled, bl_lvl);
+
+	return 0;
+}
+
+static void dsi_panel_led_bl_unregister(struct dsi_backlight_config *bl)
+{
+	struct led_trigger *wled = bl->priv;
+
+	if (wled) {
+		led_trigger_unregister_simple(wled);
+		bl->priv = NULL;
+	}
+}
+
+static int dsi_panel_led_bl_register(struct dsi_backlight_config *bl)
+{
+	struct dsi_panel *panel = container_of(bl, struct dsi_panel, bl_config);
+	struct led_trigger *wled;
 	int rc = 0;
 
-	led_trigger_register_simple("bkl-trigger", &bl->wled);
+	led_trigger_register_simple("bkl-trigger", &wled);
 
 	/* LED APIs don't tell us directly whether a classdev has yet
 	 * been registered to service this trigger. Until classdev is
@@ -217,27 +229,30 @@ static int dsi_panel_led_bl_register(struct dsi_panel *panel,
 	 * when they do register, but that is too late for FBCon.
 	 * Check the cdev list directly and defer if appropriate.
 	 */
-	if (!bl->wled) {
+	if (!wled) {
 		pr_err("[%s] backlight registration failed\n", panel->name);
 		rc = -EINVAL;
 	} else {
-		read_lock(&bl->wled->leddev_list_lock);
-		if (list_empty(&bl->wled->led_cdevs))
+		read_lock(&wled->leddev_list_lock);
+		if (list_empty(&wled->led_cdevs))
 			rc = -EPROBE_DEFER;
-		read_unlock(&bl->wled->leddev_list_lock);
+		read_unlock(&wled->leddev_list_lock);
 
 		if (rc) {
 			pr_info("[%s] backlight %s not ready, defer probe\n",
-				panel->name, bl->wled->name);
-			led_trigger_unregister_simple(bl->wled);
+				panel->name, wled->name);
+			led_trigger_unregister_simple(wled);
 		}
+
+		bl->priv = wled;
+		bl->update_bl = dsi_panel_update_backlight_led;
+		bl->unregister = dsi_panel_led_bl_unregister;
 	}
 
 	return rc;
 }
 #else
-static int dsi_panel_led_bl_register(struct dsi_panel *panel,
-				struct dsi_backlight_config *bl)
+static int dsi_panel_led_bl_register(struct dsi_backlight_config *bl)
 {
 	return 0;
 }
@@ -318,50 +333,46 @@ int dsi_panel_bl_register(struct dsi_panel *panel)
 {
 	int rc = 0;
 	struct dsi_backlight_config *bl = &panel->bl_config;
+	int (*register_func)(struct dsi_backlight_config *) = NULL;
 
 	switch (bl->type) {
 	case DSI_BACKLIGHT_WLED:
-		rc = dsi_panel_led_bl_register(panel, bl);
+		register_func = dsi_panel_led_bl_register;
 		break;
 	case DSI_BACKLIGHT_DCS:
+		bl->update_bl = dsi_backlight_update_dcs;
+		break;
+	case DSI_BACKLIGHT_PWM:
+		register_func = dsi_panel_pwm_bl_register;
 		break;
 	default:
 		pr_err("Backlight type(%d) not supported\n", bl->type);
 		rc = -ENOTSUPP;
-		goto error;
+		break;
 	}
 
-	rc = dsi_backlight_register(bl);
-error:
+	if (register_func)
+		rc = register_func(bl);
+	if (!rc)
+		rc = dsi_backlight_register(bl);
+
 	return rc;
 }
 
-
 int dsi_panel_bl_unregister(struct dsi_panel *panel)
 {
-	int rc = 0;
 	struct dsi_backlight_config *bl = &panel->bl_config;
 
-	switch (bl->type) {
-	case DSI_BACKLIGHT_WLED:
-		led_trigger_unregister_simple(bl->wled);
-		break;
-	case DSI_BACKLIGHT_DCS:
-		break;
-	default:
-		pr_err("Backlight type(%d) not supported\n", bl->type);
-		rc = -ENOTSUPP;
-		goto error;
-	}
+	if (bl->unregister)
+		bl->unregister(bl);
 
 	if (bl->bl_device)
 		sysfs_remove_groups(&bl->bl_device->dev.kobj, bl_device_groups);
 
-error:
-	return rc;
+	return 0;
 }
 
-static int dsi_panel_bl_parse_pwm_config(struct dsi_backlight_config *config,
+static int dsi_panel_bl_parse_pwm_config(struct dsi_backlight_pwm_config *config,
 					 struct device_node *of_node)
 {
 	int rc = 0;
@@ -397,6 +408,34 @@ static int dsi_panel_bl_parse_pwm_config(struct dsi_backlight_config *config,
 
 error:
 	return rc;
+}
+
+static void dsi_panel_pwm_bl_unregister(struct dsi_backlight_config *bl)
+{
+	kfree(bl->priv);
+}
+
+static int dsi_panel_pwm_bl_register(struct dsi_backlight_config *bl)
+{
+	struct dsi_panel *panel = container_of(bl, struct dsi_panel, bl_config);
+	struct dsi_backlight_pwm_config *pwm_cfg;
+	int rc;
+
+	pwm_cfg = kzalloc(sizeof(*pwm_cfg), GFP_KERNEL);
+	if (!pwm_cfg)
+		return -ENOMEM;
+
+
+	rc = dsi_panel_bl_parse_pwm_config(pwm_cfg, panel->panel_of_node);
+	if (rc) {
+		kfree(pwm_cfg);
+		return rc;
+	}
+
+	bl->priv = pwm_cfg;
+	bl->unregister = dsi_panel_pwm_bl_unregister;
+
+	return 0;
 }
 
 int dsi_panel_bl_parse_config(struct dsi_backlight_config *bl,
@@ -453,15 +492,6 @@ int dsi_panel_bl_parse_config(struct dsi_backlight_config *bl,
 		bl->brightness_max_level = 255;
 	} else {
 		bl->brightness_max_level = val;
-	}
-
-	if (bl->type == DSI_BACKLIGHT_PWM) {
-		rc = dsi_panel_bl_parse_pwm_config(bl, of_node);
-		if (rc) {
-			pr_err("[%s] failed to parse pwm config, rc=%d\n",
-			       panel->name, rc);
-			goto error;
-		}
 	}
 
 	bl->en_gpio = of_get_named_gpio(of_node,
