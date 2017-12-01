@@ -14,11 +14,59 @@
 
 #define pr_fmt(fmt)	"%s:%d: " fmt, __func__, __LINE__
 #include <linux/backlight.h>
+#include <linux/of_gpio.h>
 
 #include "dsi_panel.h"
 
 #define BL_NODE_NAME_SIZE 32
 
+static int dsi_backlight_update_dcs(struct dsi_backlight_config *bl, u32 bl_lvl)
+{
+	int rc = 0;
+	struct dsi_panel *panel;
+	struct mipi_dsi_device *dsi;
+	size_t num_params;
+
+	if (!bl || (bl_lvl > 0xffff)) {
+		pr_err("invalid params\n");
+		return -EINVAL;
+	}
+
+	panel = container_of(bl, struct dsi_panel, bl_config);
+	/* if no change in backlight, abort */
+	if (bl_lvl == bl->bl_actual)
+		return 0;
+
+	dsi = &panel->mipi_device;
+
+	num_params = bl->bl_max_level > 0xFF ? 2 : 1;
+	rc = mipi_dsi_dcs_set_display_brightness(dsi, bl_lvl, num_params);
+	if (rc < 0)
+		pr_err("failed to update dcs backlight:%d\n", bl_lvl);
+
+	return rc;
+}
+
+static int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
+{
+	int rc = 0;
+	struct dsi_backlight_config *bl = &panel->bl_config;
+
+	pr_debug("backlight type:%d lvl:%d\n", bl->type, bl_lvl);
+	switch (bl->type) {
+	case DSI_BACKLIGHT_WLED:
+		rc = backlight_device_set_brightness(bl->bl_device, bl_lvl);
+		break;
+	case DSI_BACKLIGHT_DCS:
+		rc = dsi_backlight_update_dcs(bl, bl_lvl);
+		break;
+	default:
+		pr_err("Backlight type(%d) not supported\n", bl->type);
+		rc = -ENOTSUPP;
+	}
+
+	return rc;
+}
 
 static u32 dsi_backlight_calculate(struct dsi_backlight_config *bl,
 				   int brightness)
@@ -95,7 +143,7 @@ static const struct backlight_ops dsi_backlight_ops = {
 	.get_brightness = dsi_backlight_get_brightness,
 };
 
-int dsi_backlight_register(struct dsi_backlight_config *bl)
+static int dsi_backlight_register(struct dsi_backlight_config *bl)
 {
 	static int display_count;
 	char bl_node_name[BL_NODE_NAME_SIZE];
@@ -149,4 +197,177 @@ int dsi_backlight_update_dpms(struct dsi_backlight_config *bl, int power_mode)
 	mutex_unlock(&bd->ops_lock);
 
 	return rc;
+}
+
+int dsi_panel_bl_register(struct dsi_panel *panel)
+{
+	int rc = 0;
+	struct dsi_backlight_config *bl = &panel->bl_config;
+
+	switch (bl->type) {
+	case DSI_BACKLIGHT_WLED:
+	case DSI_BACKLIGHT_DCS:
+		break;
+	default:
+		pr_err("Backlight type(%d) not supported\n", bl->type);
+		rc = -ENOTSUPP;
+		goto error;
+	}
+
+	rc = dsi_backlight_register(bl);
+error:
+	return rc;
+}
+
+
+int dsi_panel_bl_unregister(struct dsi_panel *panel)
+{
+	int rc = 0;
+	struct dsi_backlight_config *bl = &panel->bl_config;
+
+	switch (bl->type) {
+	case DSI_BACKLIGHT_WLED:
+	case DSI_BACKLIGHT_DCS:
+		break;
+	default:
+		pr_err("Backlight type(%d) not supported\n", bl->type);
+		rc = -ENOTSUPP;
+		goto error;
+	}
+
+error:
+	return rc;
+}
+
+static int dsi_panel_bl_parse_pwm_config(struct dsi_panel *panel)
+{
+       int rc = 0;
+       u32 val;
+       struct dsi_backlight_config *config = &panel->bl_config;
+       struct dsi_parser_utils *utils = &panel->utils;
+
+       rc = utils->read_u32(utils->data, "qcom,bl-pmic-pwm-period-usecs",
+                                 &val);
+       if (rc) {
+               pr_err("bl-pmic-pwm-period-usecs is not defined, rc=%d\n", rc);
+               goto error;
+       }
+       config->pwm_period_usecs = val;
+
+error:
+       return rc;
+}
+
+int dsi_panel_bl_parse_config(struct dsi_backlight_config *bl)
+{
+       struct dsi_panel *panel = container_of(bl, struct dsi_panel, bl_config);
+       int rc = 0;
+       u32 val = 0;
+       const char *bl_type;
+       const char *data;
+       struct dsi_parser_utils *utils = &panel->utils;
+       char *bl_name;
+
+       if (!strcmp(panel->type, "primary"))
+               bl_name = "qcom,mdss-dsi-bl-pmic-control-type";
+       else
+               bl_name = "qcom,mdss-dsi-sec-bl-pmic-control-type";
+
+       bl_type = utils->get_property(utils->data, bl_name, NULL);
+       if (!bl_type) {
+               bl->type = DSI_BACKLIGHT_UNKNOWN;
+       } else if (!strcmp(bl_type, "bl_ctrl_pwm")) {
+               bl->type = DSI_BACKLIGHT_PWM;
+       } else if (!strcmp(bl_type, "bl_ctrl_wled")) {
+               bl->type = DSI_BACKLIGHT_WLED;
+       } else if (!strcmp(bl_type, "bl_ctrl_dcs")) {
+               bl->type = DSI_BACKLIGHT_DCS;
+       } else if (!strcmp(bl_type, "bl_ctrl_external")) {
+               bl->type = DSI_BACKLIGHT_EXTERNAL;
+       } else {
+               pr_debug("[%s] bl-pmic-control-type unknown-%s\n",
+                        panel->name, bl_type);
+               bl->type = DSI_BACKLIGHT_UNKNOWN;
+       }
+
+       data = utils->get_property(utils->data, "qcom,bl-update-flag", NULL);
+       if (!data) {
+               bl->bl_update = BL_UPDATE_NONE;
+       } else if (!strcmp(data, "delay_until_first_frame")) {
+               bl->bl_update = BL_UPDATE_DELAY_UNTIL_FIRST_FRAME;
+       } else {
+               pr_debug("[%s] No valid bl-update-flag: %s\n",
+                                               panel->name, data);
+               bl->bl_update = BL_UPDATE_NONE;
+       }
+
+       bl->bl_scale = MAX_BL_SCALE_LEVEL;
+       bl->bl_scale_ad = MAX_AD_BL_SCALE_LEVEL;
+
+       rc = utils->read_u32(utils->data, "qcom,mdss-dsi-bl-min-level", &val);
+       if (rc) {
+               pr_debug("[%s] bl-min-level unspecified, defaulting to zero\n",
+                        panel->name);
+               bl->bl_min_level = 0;
+       } else {
+               bl->bl_min_level = val;
+       }
+
+       rc = utils->read_u32(utils->data, "qcom,mdss-dsi-bl-max-level", &val);
+       if (rc) {
+               pr_debug("[%s] bl-max-level unspecified, defaulting to max level\n",
+                        panel->name);
+               bl->bl_max_level = MAX_BL_LEVEL;
+       } else {
+               bl->bl_max_level = val;
+       }
+
+       rc = utils->read_u32(utils->data, "qcom,mdss-brightness-max-level",
+               &val);
+       if (rc) {
+               pr_debug("[%s] brigheness-max-level unspecified, defaulting to 255\n",
+                        panel->name);
+               bl->brightness_max_level = 255;
+       } else {
+               bl->brightness_max_level = val;
+       }
+
+       rc = utils->read_u32(utils->data,
+                       "qcom,mdss-dsi-bl-default-level", &val);
+       if (rc) {
+               bl->brightness_default_level =
+                       bl->brightness_max_level;
+               pr_debug("set default brightness to max level\n");
+       } else {
+               bl->brightness_default_level = val;
+       }
+
+       if (bl->type == DSI_BACKLIGHT_PWM) {
+               rc = dsi_panel_bl_parse_pwm_config(panel);
+               if (rc) {
+                       pr_err("[%s] failed to parse pwm config, rc=%d\n",
+                              panel->name, rc);
+                       goto error;
+               }
+       }
+
+       bl->en_gpio = utils->get_named_gpio(utils->data,
+                                             "qcom,platform-bklight-en-gpio",
+                                             0);
+       if (!gpio_is_valid(bl->en_gpio)) {
+               if (bl->en_gpio == -EPROBE_DEFER) {
+                       pr_debug("[%s] failed to get bklt gpio, rc=%d\n",
+                                               panel->name, rc);
+                       rc = -EPROBE_DEFER;
+                       goto error;
+               } else {
+                       pr_debug("[%s] failed to get bklt gpio, rc=%d\n",
+                                               panel->name, rc);
+                       rc = 0;
+                       goto error;
+               }
+       }
+
+error:
+       return rc;
 }
