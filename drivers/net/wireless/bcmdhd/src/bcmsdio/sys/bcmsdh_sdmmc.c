@@ -894,6 +894,7 @@ sdioh_request_word(sdioh_info_t *sd, uint cmd_type, uint rw, uint func, uint add
 	int err_ret = SDIOH_API_RC_FAIL;
 #if defined(MMC_SDIO_ABORT)
 	int sdio_abort_retry = MMC_SDIO_ABORT_RETRY_LIMIT;
+	int err_ret_sdio_abort = SDIOH_API_RC_FAIL;
 #endif
 
 	if (func == 0) {
@@ -931,29 +932,35 @@ sdioh_request_word(sdioh_info_t *sd, uint cmd_type, uint rw, uint func, uint add
 	sdio_release_host(sd->func[func]);
 
 	if (err_ret) {
+		sd_err(("bcmsdh_sdmmc: Failed to %s word F%d:@0x%05x=%04x, "
+			"Err: %d\n",
+			rw ? "Write" : "Read", func, addr, *word, err_ret));
+
 #if defined(MMC_SDIO_ABORT)
-		/* Any error on CMD53 transaction should abort that function using function 0. */
+		/*
+		 * Any error on CMD53 transaction should abort that function
+		 * using function 0.
+		 */
 		while (sdio_abort_retry--) {
 			if (sd->func[0]) {
 				sdio_claim_host(sd->func[0]);
 				/*
-				 * this sdio_f0_writeb() can be replaced with another api
-				 * depending upon MMC driver change.
+				 * this sdio_f0_writeb() can be replaced with
+				 * another api depending upon MMC driver change.
 				 * As of this time, this is temporaray one
 				 */
 				sdio_writeb(sd->func[0],
-					func, SDIOD_CCCR_IOABORT, &err_ret);
+					func, SDIOD_CCCR_IOABORT,
+					&err_ret_sdio_abort);
 				sdio_release_host(sd->func[0]);
 			}
 			if (!err_ret)
 				break;
 		}
-		if (err_ret)
+		if (sd->func[0] && err_ret_sdio_abort)
+			sd_err(("bcmsdh_sdmmc: Failed to abort IO, Err: %d\n",
+						err_ret_sdio_abort));
 #endif /* MMC_SDIO_ABORT */
-		{
-			sd_err(("bcmsdh_sdmmc: Failed to %s word, Err: %d\n",
-				rw ? "Write" : "Read", err_ret));
-		}
 	}
 
 	return ((err_ret == 0) ? SDIOH_API_RC_SUCCESS : SDIOH_API_RC_FAIL);
