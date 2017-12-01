@@ -264,6 +264,14 @@ htt_t2h_lp_msg_handler(void *context, adf_nbuf_t htt_t2h_msg )
             peer_mac_addr = htt_t2h_mac_addr_deswizzle(
                 (u_int8_t *) (msg_word+1), &mac_addr_deswizzle_buf[0]);
 
+            if (peer_id > ol_cfg_max_peer_id(pdev->ctrl_pdev)) {
+                adf_os_print("%s: HTT_T2H_MSG_TYPE_PEER_MAP,"
+                            "invalid peer_id, %u\n",
+                            __FUNCTION__,
+                            peer_id);
+                break;
+            }
+
             ol_rx_peer_map_handler(
                 pdev->txrx_pdev, peer_id, vdev_id, peer_mac_addr, 1/*can tx*/);
             break;
@@ -272,6 +280,14 @@ htt_t2h_lp_msg_handler(void *context, adf_nbuf_t htt_t2h_msg )
         {
             u_int16_t peer_id;
             peer_id = HTT_RX_PEER_UNMAP_PEER_ID_GET(*msg_word);
+
+            if (peer_id > ol_cfg_max_peer_id(pdev->ctrl_pdev)) {
+                adf_os_print("%s: HTT_T2H_MSG_TYPE_PEER_UNMAP,"
+                            "invalid peer_id, %u\n",
+                            __FUNCTION__,
+                            peer_id);
+                break;
+            }
 
             ol_rx_peer_unmap_handler(pdev->txrx_pdev, peer_id);
             break;
