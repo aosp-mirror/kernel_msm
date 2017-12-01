@@ -747,12 +747,6 @@ try_again:
 	 * it.
 	 */
 	if (!powered_resume && (rocr & ocr & R4_18V_PRESENT)) {
-		/*
-		 * R4_18V_PRESENT is not a flag for voltage range
-		 * So mask ocr with ocr_avail_sdio to avoid
-		 * unexpected behavior
-		 */
-		ocr &= host->ocr_avail_sdio;
 		err = mmc_set_signal_voltage(host, MMC_SIGNAL_VOLTAGE_180,
 					ocr);
 		if (err == -EAGAIN) {
