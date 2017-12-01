@@ -135,7 +135,7 @@
 	/delete-property/vdd-supply;
 	vdd-io-supply = <&pm8916_l12>;
 	qcom,vdd-io-always-on;
-	qcom,vdd-io-voltage-level = <1800000 2950000>;
+	qcom,vdd-io-voltage-level = <1800000 1800000>;
 	qcom,vdd-io-current-level = <200 22000>;
 
 	pinctrl-names = "active", "sleep";
@@ -146,6 +146,7 @@
 
 	qcom,bus-width = <4>;
 	qcom,nonremovable;
+	qcom,core_3_0v_support = <1>;
 	status = "ok";
 };
 
