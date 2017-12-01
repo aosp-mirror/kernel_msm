@@ -276,8 +276,6 @@ int dsi_panel_unprepare(struct dsi_panel *panel);
 
 int dsi_panel_post_unprepare(struct dsi_panel *panel);
 
-int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl);
-
 int dsi_panel_update_pps(struct dsi_panel *panel);
 
 int dsi_panel_send_qsync_on_dcs(struct dsi_panel *panel,
@@ -302,8 +300,9 @@ int dsi_panel_parse_esd_reg_read_configs(struct dsi_panel *panel);
 
 void dsi_panel_ext_bridge_put(struct dsi_panel *panel);
 
-int dsi_backlight_register(struct dsi_backlight_config *bl);
-
 int dsi_backlight_update_dpms(struct dsi_backlight_config *bl, int power_state);
 
+int dsi_panel_bl_register(struct dsi_panel *panel);
+int dsi_panel_bl_unregister(struct dsi_panel *panel);
+int dsi_panel_bl_parse_config(struct dsi_backlight_config *bl);
 #endif /* _DSI_PANEL_H_ */
