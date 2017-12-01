@@ -13,6 +13,10 @@
 /{
 	b1_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <10>;
+		/* all B1 proto battery have the same RID
+		 * so just use one profile for now
+		 */
+		#include "batterydata-qcom-b1-proto-desay-atl-3135.dtsi"
 	};
 };
 
