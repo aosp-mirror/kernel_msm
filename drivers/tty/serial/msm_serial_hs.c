@@ -258,6 +258,7 @@ struct msm_hs_port {
 	atomic_t client_count;
 	bool obs; /* out of band sleep flag */
 	atomic_t client_req_state;
+	int sys_suspend_noirq_cnt;
 	void *ipc_msm_hs_log_ctxt;
 	void *ipc_msm_hs_pwr_ctxt;
 	int ipc_debug_mask;
@@ -1381,8 +1382,9 @@ static void msm_hs_disconnect_rx(struct uart_port *uport)
 	if (msm_uport->rx.flush == FLUSH_NONE)
 		msm_uport->rx.flush = FLUSH_STOP;
 
-	if (sps_is_pipe_empty(sps_pipe_handle, &prod_empty)) {
-		MSM_HS_WARN("%s():Pipe Not Empty, ret=%d, flush=%d\n",
+	if (!sps_is_pipe_empty(sps_pipe_handle, &prod_empty)) {
+		if (prod_empty == false)
+		MSM_HS_WARN("%s():Pipe Not Empty, prod=%d, flush=%d\n",
 			__func__, prod_empty, msm_uport->rx.flush);
 	}
 	disconnect_rx_endpoint(msm_uport);
@@ -3298,6 +3300,7 @@ static int msm_hs_pm_resume(struct device *dev)
 	LOG_USR_MSG(msm_uport->ipc_msm_hs_pwr_ctxt,
 		"%s:PM State:Active client_count %d\n", __func__, client_count);
 exit_pm_resume:
+	msm_uport->sys_suspend_noirq_cnt = 0;
 	mutex_unlock(&msm_uport->mtx);
 	return ret;
 }
@@ -3307,14 +3310,11 @@ static int msm_hs_pm_sys_suspend_noirq(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	struct msm_hs_port *msm_uport = get_matching_hs_port(pdev);
-	enum msm_hs_pm_state prev_pwr_state;
 	int clk_cnt, client_count, ret = 0;
 
 	if (IS_ERR_OR_NULL(msm_uport))
 		return -ENODEV;
-
 	mutex_lock(&msm_uport->mtx);
-
 	/*
 	 * If there is an active clk request or an impending userspace request
 	 * fail the suspend callback.
@@ -3322,19 +3322,40 @@ static int msm_hs_pm_sys_suspend_noirq(struct device *dev)
 	clk_cnt = atomic_read(&msm_uport->resource_count);
 	client_count = atomic_read(&msm_uport->client_count);
 	if (msm_uport->pm_state == MSM_HS_PM_ACTIVE) {
-		MSM_HS_WARN("%s:Fail Suspend.clk_cnt:%d,clnt_count:%d\n",
-				 __func__, clk_cnt, client_count);
-		ret = -EBUSY;
-		goto exit_suspend_noirq;
-	}
+		if (clk_cnt == 0 && client_count == 0)
+			msm_uport->sys_suspend_noirq_cnt++;
+		/*Serve force suspend post autosuspend timer expires
+		 */
+		if (msm_uport->sys_suspend_noirq_cnt >= 2) {
+			msm_uport->pm_state = MSM_HS_PM_SYS_SUSPENDED;
+			msm_uport->sys_suspend_noirq_cnt = 0;
+			mutex_unlock(&msm_uport->mtx);
 
-	prev_pwr_state = msm_uport->pm_state;
-	msm_uport->pm_state = MSM_HS_PM_SYS_SUSPENDED;
-	LOG_USR_MSG(msm_uport->ipc_msm_hs_pwr_ctxt,
-		"%s:PM State:Sys-Suspended client_count %d\n", __func__,
-								client_count);
-exit_suspend_noirq:
+			msm_hs_pm_suspend(dev);
+			/*
+			 * Synchronize RT-pm and system-pm, RT-PM thinks that
+			 * we are active. The three calls below let the RT-PM
+			 * know that we are suspended already without calling
+			 * suspend callback
+			 */
+			pm_runtime_disable(dev);
+			pm_runtime_set_suspended(dev);
+			pm_runtime_enable(dev);
+
+			/*To Balance out exit time Mutex unlock */
+			mutex_lock(&msm_uport->mtx);
+		} else {
+			ret = -EBUSY;
+		}
+	}
 	mutex_unlock(&msm_uport->mtx);
+	if (ret)
+		MSM_HS_WARN("%s:Fail Suspend.clk_cnt:%d,clnt_count:%d\n",
+			__func__, clk_cnt, client_count);
+	else
+		LOG_USR_MSG(msm_uport->ipc_msm_hs_pwr_ctxt,
+			"%s:PM State:Sys-Suspended client_count %d\n",
+			__func__, client_count);
 	return ret;
 };
 
@@ -3823,8 +3844,7 @@ static void msm_hs_shutdown(struct uart_port *uport)
 	}
 	msm_hs_unconfig_uart_gpios(uport);
 	LOG_USR_MSG(msm_uport->ipc_msm_hs_pwr_ctxt,
-		"%s:UART port closed, Client_Count=%d\n",
-		__func__, atomic_read(&msm_uport->client_count));
+		"%s:UART port closed, Client_Count 0\n", __func__);
 }
 
 static void __exit msm_serial_hs_exit(void)
