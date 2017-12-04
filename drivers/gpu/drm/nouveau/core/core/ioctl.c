@@ -514,10 +514,16 @@ nvkm_ioctl(struct nouveau_client *client, bool supervisor,
 		nv_ioctl(client, "vers %d type %02x path %d owner %02x\n",
 			 args->v0.version, args->v0.type, args->v0.path_nr,
 			 args->v0.owner);
-		ret = nvkm_ioctl_path(client->root, args->v0.type,
-				      args->v0.path_nr, args->v0.path,
-				      data, size, args->v0.owner,
-				     &args->v0.route, &args->v0.token);
+		if (args->v0.path_nr >= ARRAY_SIZE(args->v0.path)) {
+			ret = -EINVAL;
+			nv_ioctl(client, "path_nr %d is out-of-bound\n",
+				args->v0.path_nr);
+		} else
+			ret = nvkm_ioctl_path(client->root, args->v0.type,
+					      args->v0.path_nr, args->v0.path,
+					      data, size, args->v0.owner,
+					      &args->v0.route,
+					      &args->v0.token);
 	}
 
 	nv_ioctl(client, "return %d\n", ret);
