@@ -145,7 +145,7 @@ extern int fscrypt_zeroout_range(const struct inode *, pgoff_t, sector_t,
 /* fscrypt_ice.c */
 extern int fscrypt_using_hardware_encryption(const struct inode *inode);
 extern void fscrypt_set_ice_dun(const struct inode *inode,
-		struct bio *bio, u64 dun, bool no_merge);
+		struct bio *bio, u64 dun);
 extern bool fscrypt_mergeable_bio(struct bio *bio, u64 dun, bool bio_encrypted);
 
 #endif	/* _LINUX_FSCRYPT_SUPP_H */

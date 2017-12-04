@@ -900,7 +900,7 @@ static int ufs_qcom_crypto_req_setup(struct ufs_hba *hba,
 
 	/* Use request LBA or given dun as the DUN value */
 	if (req->bio) {
-		if (req->bio->bi_dun) {
+		if (bio_dun(req->bio)) {
 			/* dun @bio can be split, so we have to adjust offset */
 			*dun = bio_dun(req->bio);
 		} else {

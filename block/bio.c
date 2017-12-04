@@ -569,7 +569,7 @@ static inline void bio_clone_crypt_key(struct bio *dst, const struct bio *src)
 {
 #ifdef CONFIG_PFK
 	dst->bi_crypt_key = src->bi_crypt_key;
-	dst->bi_dun = src->bi_dun;
+	dst->bi_iter.bi_dun = src->bi_iter.bi_dun;
 #endif
 }
 

@@ -70,7 +70,7 @@ int fscrypt_is_aes_xts_cipher(const struct inode *inode)
 /*
  * returns true if encryption info in both inodes is equal
  */
-int fscrypt_is_ice_encryption_info_equal(const struct inode *inode1,
+bool fscrypt_is_ice_encryption_info_equal(const struct inode *inode1,
 					const struct inode *inode2)
 {
 	char *key1 = NULL;
@@ -79,20 +79,20 @@ int fscrypt_is_ice_encryption_info_equal(const struct inode *inode1,
 	char *salt2 = NULL;
 
 	if (!inode1 || !inode2)
-		return 0;
+		return false;
 
 	if (inode1 == inode2)
-		return 1;
+		return true;
 
 	/* both do not belong to ice, so we don't care, they are equal for us */
 	if (!fscrypt_should_be_processed_by_ice(inode1) &&
 			!fscrypt_should_be_processed_by_ice(inode2))
-		return 1;
+		return true;
 
 	/* one belongs to ice, the other does not -> not equal */
 	if (fscrypt_should_be_processed_by_ice(inode1) ^
 			fscrypt_should_be_processed_by_ice(inode2))
-		return 0;
+		return false;
 
 	key1 = fscrypt_get_ice_encryption_key(inode1);
 	key2 = fscrypt_get_ice_encryption_key(inode2);
@@ -105,22 +105,20 @@ int fscrypt_is_ice_encryption_info_equal(const struct inode *inode1,
 		 fscrypt_get_ice_encryption_key_size(inode2)) ||
 		(fscrypt_get_ice_encryption_salt_size(inode1) !=
 		 fscrypt_get_ice_encryption_salt_size(inode2)))
-		return 0;
+		return false;
 
-	return ((memcmp(key1, key2,
+	if ((memcmp(key1, key2,
 			fscrypt_get_ice_encryption_key_size(inode1)) == 0) &&
 		(memcmp(salt1, salt2,
-			fscrypt_get_ice_encryption_salt_size(inode1)) == 0));
+			fscrypt_get_ice_encryption_salt_size(inode1)) == 0))
+		return true;
+	return false;
 }
 
-void fscrypt_set_ice_dun(const struct inode *inode, struct bio *bio, u64 dun,
-							bool no_merge)
+void fscrypt_set_ice_dun(const struct inode *inode, struct bio *bio, u64 dun)
 {
-	if (fscrypt_should_be_processed_by_ice(inode)) {
-		bio->bi_dun = dun;
-		if (no_merge)
-			bio->bi_opf |= REQ_NOMERGE_FLAGS;
-	}
+	if (fscrypt_should_be_processed_by_ice(inode))
+		bio->bi_iter.bi_dun = dun;
 }
 EXPORT_SYMBOL(fscrypt_set_ice_dun);
 

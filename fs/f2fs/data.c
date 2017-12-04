@@ -376,7 +376,7 @@ int f2fs_submit_page_bio(struct f2fs_io_info *fio)
 	bio = __bio_alloc(fio->sbi, fio->new_blkaddr, 1, is_read_io(fio->op));
 
 	if (f2fs_may_encrypt_bio(inode, fio))
-		fscrypt_set_ice_dun(inode, bio, PG_DUN(inode, fio->page), true);
+		fscrypt_set_ice_dun(inode, bio, PG_DUN(inode, fio->page));
 
 	if (bio_add_page(bio, page, PAGE_SIZE, 0) < PAGE_SIZE) {
 		bio_put(bio);
@@ -452,7 +452,7 @@ alloc_new:
 		io->bio = __bio_alloc(sbi, fio->new_blkaddr,
 						BIO_MAX_PAGES, false);
 		if (bio_encrypted)
-			fscrypt_set_ice_dun(inode, io->bio, dun, true);
+			fscrypt_set_ice_dun(inode, io->bio, dun);
 		io->fio = *fio;
 	}
 
@@ -514,7 +514,7 @@ static int f2fs_submit_page_read(struct inode *inode, struct page *page,
 		return PTR_ERR(bio);
 
 	if (f2fs_may_encrypt_bio(inode, NULL))
-		fscrypt_set_ice_dun(inode, bio, PG_DUN(inode, page), true);
+		fscrypt_set_ice_dun(inode, bio, PG_DUN(inode, page));
 
 	if (bio_add_page(bio, page, PAGE_SIZE, 0) < PAGE_SIZE) {
 		bio_put(bio);
@@ -1321,7 +1321,7 @@ submit_and_realloc:
 				goto set_error_page;
 			}
 			if (bio_encrypted)
-				fscrypt_set_ice_dun(inode, bio, dun, true);
+				fscrypt_set_ice_dun(inode, bio, dun);
 		}
 
 		if (bio_add_page(bio, page, blocksize, 0) < blocksize)

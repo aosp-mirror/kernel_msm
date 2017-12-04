@@ -37,7 +37,7 @@ int fscrypt_is_aes_xts_cipher(const struct inode *inode);
 char *fscrypt_get_ice_encryption_key(const struct inode *inode);
 char *fscrypt_get_ice_encryption_salt(const struct inode *inode);
 
-int fscrypt_is_ice_encryption_info_equal(const struct inode *inode1,
+bool fscrypt_is_ice_encryption_info_equal(const struct inode *inode1,
 					const struct inode *inode2);
 
 static inline size_t fscrypt_get_ice_encryption_key_size(
@@ -89,7 +89,7 @@ static inline int fscrypt_is_xts_cipher(const struct inode *inode)
 	return 0;
 }
 
-static inline int fscrypt_is_ice_encryption_info_equal(
+static inline bool fscrypt_is_ice_encryption_info_equal(
 					const struct inode *inode1,
 					const struct inode *inode2)
 {

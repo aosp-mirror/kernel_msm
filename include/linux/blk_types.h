@@ -70,8 +70,6 @@ struct bio {
 	/* Encryption key to use (NULL if none) */
 	const struct blk_encryption_key	*bi_crypt_key;
 #endif
-	u64			bi_dun;
-
 	unsigned short		bi_vcnt;	/* how many bio_vec's */
 
 	/*
