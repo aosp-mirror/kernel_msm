@@ -16,3 +16,4 @@ vmlinux
 System.map
 "
 IN_KERNEL_MODULES=1
+KCFLAGS='-fno-tree-vrp'
