@@ -954,7 +954,7 @@ sdioh_request_word(sdioh_info_t *sd, uint cmd_type, uint rw, uint func, uint add
 					&err_ret_sdio_abort);
 				sdio_release_host(sd->func[0]);
 			}
-			if (!err_ret)
+			if (!err_ret_sdio_abort)
 				break;
 		}
 		if (sd->func[0] && err_ret_sdio_abort)
