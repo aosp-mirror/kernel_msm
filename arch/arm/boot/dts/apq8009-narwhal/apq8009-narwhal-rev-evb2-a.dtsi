@@ -89,9 +89,9 @@
 };
 
 &i2c_6 {
-	lge,soprod_movement@40 {
-		soprod,reset = <&msm_gpio 21 0x0>;
-		soprod,interrupt = <&msm_gpio 20 0x0>;
+	lge,soprod_movement@48 {
+		lge,gpio-reset = <&msm_gpio 21 0x0>;
+		lge,gpio-interrupt = <&msm_gpio 20 0x0>;
 	};
 };
 
