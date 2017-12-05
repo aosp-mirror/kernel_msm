@@ -458,5 +458,67 @@
 				};
 			};
 		};
+		cdc-dmic-lines {
+			cdc_dmic_lines_act: dmic_lines_on {
+				mux {
+					pins = "gpio4";
+					function = "dmic0_clk";
+				};
+
+				config {
+					pins = "gpio4";
+					drive-strength = <8>;
+				};
+			};
+			cdc_dmic_lines_act_ex: dmic_lines_on_ex {
+				mux {
+					pins = "gpio5";
+					function = "dmic0_data";
+				};
+
+				config {
+					pins = "gpio5";
+					drive-strength = <8>;
+				};
+			};
+			cdc_dmic_lines_sus: dmic_lines_off {
+				mux {
+					pins = "gpio4";
+					function = "dmic0_clk";
+				};
+
+				config {
+					pins = "gpio4";
+					drive-strength = <2>;
+					bias-disable;
+				};
+			};
+			cdc_dmic_lines_sus_ex: dmic_lines_off_ex {
+				mux {
+					pins = "gpio5";
+					function = "dmic0_data";
+				};
+
+				config {
+					pins = "gpio5";
+					drive-strength = <2>;
+					bias-disable;
+				};
+			};
+		};
+		cross-conn-det{
+			cross_conn_det_act: lines_on {
+				/delete-node/ mux;
+				/delete-node/ config;
+			};
+
+			cross_conn_det_sus: lines_off {
+				/delete-node/ mux;
+				/delete-node/ config;
+			};
+		};
+		/delete-node/ tpiu_setb_1;
+		/delete-node/ tpiu_setb_2;
+		/delete-node/ vdd_spkdrv;
 	};
 };

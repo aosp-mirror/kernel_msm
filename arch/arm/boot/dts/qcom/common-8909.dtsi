@@ -219,3 +219,62 @@
 &pm8916_tombak_dig{
         aw87318-en-gpio = <&msm_gpio 22 0>;
 };
+&blsp1_uart1 {
+	status = "disabled";
+};
+&audio_codec_mtp {
+	qcom,model = "msm8909-pm8916-snd-card";
+	qcom,audio-routing =
+		"RX_BIAS", "MCLK",
+		"SPK_RX_BIAS", "MCLK",
+		"INT_LDO_H", "MCLK",
+		"MIC BIAS External", "Handset Mic",
+		"MIC BIAS Internal2", "Headset Mic",
+		"MIC BIAS External", "Secondary Mic",
+		"AMIC1", "MIC BIAS External",
+		"AMIC2", "MIC BIAS Internal2",
+		"AMIC3", "MIC BIAS External",
+		"DMIC1", "MIC BIAS Internal1",
+		"MIC BIAS Internal1", "Digital Mic1",
+		"DMIC2", "MIC BIAS Internal1",
+		"MIC BIAS Internal1", "Digital Mic2";
+	qcom,msm-gpios =
+		"pri_i2s",
+		"us_eu_gpio",
+		"cdc_dmic_lines";
+	qcom,pinctrl-names =
+		"all_off",
+		"pri_i2s_act",
+		"us_eu_gpio_act",
+		"pri_i2s_us_eu_gpio_act",
+		"cdc_lines_dmic_act",
+		"pri_i2s_dmic_lines_act",
+		"us_eu_gpio_dmic_lines_act",
+		"pri_i2s_us_eu_gpio_dmic_lines_act";
+	pinctrl-names =
+		"all_off",
+		"pri_i2s_act",
+		"us_eu_gpio_act",
+		"pri_i2s_us_eu_gpio_act",
+		"cdc_lines_dmic_act",
+		"pri_i2s_dmic_lines_act",
+		"us_eu_gpio_dmic_lines_act",
+		"pri_i2s_us_eu_gpio_dmic_lines_act";
+	pinctrl-0 = <&cdc_pdm_lines_sus &cross_conn_det_sus
+					&cdc_dmic_lines_sus &cdc_dmic_lines_sus_ex>;
+	pinctrl-1 = <&cdc_pdm_lines_act &cross_conn_det_sus
+					&cdc_dmic_lines_sus &cdc_dmic_lines_sus_ex>;
+	pinctrl-2 = <&cdc_pdm_lines_sus &cross_conn_det_act
+					&cdc_dmic_lines_sus &cdc_dmic_lines_sus_ex>;
+	pinctrl-3 = <&cdc_pdm_lines_act &cross_conn_det_act
+					&cdc_dmic_lines_sus &cdc_dmic_lines_sus_ex>;
+	pinctrl-4 = <&cdc_pdm_lines_sus &cross_conn_det_sus
+					&cdc_dmic_lines_act &cdc_dmic_lines_act_ex>;
+	pinctrl-5 = <&cdc_pdm_lines_act &cross_conn_det_sus
+					&cdc_dmic_lines_act &cdc_dmic_lines_act_ex>;
+	pinctrl-6 = <&cdc_pdm_lines_sus &cross_conn_det_act
+					&cdc_dmic_lines_act &cdc_dmic_lines_act_ex>;
+	pinctrl-7 = <&cdc_pdm_lines_act &cross_conn_det_act
+					&cdc_dmic_lines_act &cdc_dmic_lines_act_ex>;
+	asoc-codec = <&stub_codec>, <&pm8916_tombak_dig>;
+};
