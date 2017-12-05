@@ -423,6 +423,8 @@ struct mdss_dsi_ctrl_pdata {
 	int panel_mode;
 	int irq_cnt;
 	int disp_te_gpio;
+	int disp_avdden_gpio;
+	int tp_reset_gpio;
 	int rst_gpio;
 	int disp_en_gpio;
 	int bklt_en_gpio;

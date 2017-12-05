@@ -25,6 +25,7 @@
 #include "firefish-dsi-panel-auo-amoled-cmd.dtsi"
 #include "firefish-dsi-panel-boe-amoled-cmd.dtsi"
 #include "firefish-dsi-panel-auo-cln020-amoled-cmd.dtsi"
+#include "dsi-panel-auo-h139-amoled-cmd.dtsi"
 
 &soc {
 	dsi_panel_pwr_supply: dsi_panel_pwr_supply {
