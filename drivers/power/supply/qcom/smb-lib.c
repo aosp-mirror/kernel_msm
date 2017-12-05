@@ -2569,8 +2569,16 @@ int smblib_set_prop_pd_current_max(struct smb_charger *chg,
 {
 	int rc;
 
-	if (chg->pd_active)
-		rc = vote(chg->usb_icl_votable, PD_VOTER, true, val->intval);
+	if (chg->pd_active) {
+		if(chg->adaptor_icl_max == ADAPTOR_ICL_MAX_ERR_VAL)
+			rc = vote(chg->usb_icl_votable, PD_VOTER, true, val->intval);
+		else{
+			if (val->intval > chg->adaptor_icl_max)
+				rc = vote(chg->usb_icl_votable, PD_VOTER, true, chg->adaptor_icl_max);
+			else
+				rc = vote(chg->usb_icl_votable, PD_VOTER, true, val->intval);
+		}
+	}
 	else
 		rc = -EPERM;
 
@@ -3675,7 +3683,10 @@ static void smblib_force_legacy_icl(struct smb_charger *chg, int pst)
 	case POWER_SUPPLY_TYPE_USB_DCP:
 		typec_mode = smblib_get_prop_typec_mode(chg);
 		rp_ua = get_rp_based_dcp_current(chg, typec_mode);
-		vote(chg->usb_icl_votable, LEGACY_UNKNOWN_VOTER, true, rp_ua);
+		if(chg->adaptor_icl_max == ADAPTOR_ICL_MAX_ERR_VAL)
+			vote(chg->usb_icl_votable, LEGACY_UNKNOWN_VOTER, true, rp_ua);
+		else
+			vote(chg->usb_icl_votable, LEGACY_UNKNOWN_VOTER, true, chg->adaptor_icl_max);
 		break;
 	case POWER_SUPPLY_TYPE_USB_FLOAT:
 		/*
@@ -3686,7 +3697,10 @@ static void smblib_force_legacy_icl(struct smb_charger *chg, int pst)
 		break;
 	case POWER_SUPPLY_TYPE_USB_HVDCP:
 	case POWER_SUPPLY_TYPE_USB_HVDCP_3:
-		vote(chg->usb_icl_votable, LEGACY_UNKNOWN_VOTER, true, 3000000);
+		if(chg->adaptor_icl_max == ADAPTOR_ICL_MAX_ERR_VAL)
+			vote(chg->usb_icl_votable, LEGACY_UNKNOWN_VOTER, true, 3000000);
+		else
+			vote(chg->usb_icl_votable, LEGACY_UNKNOWN_VOTER, true, chg->adaptor_icl_max);
 		break;
 	default:
 		smblib_err(chg, "Unknown APSD %d; forcing 500mA\n", pst);
