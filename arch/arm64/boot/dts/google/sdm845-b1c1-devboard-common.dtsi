@@ -89,3 +89,106 @@
 		bias-pull-down;
 	};
 };
+
+/* override thermistors config for devborad only */
+&pm8998_vadc {
+	chan@4d {
+		label = "msm_therm";
+	};
+
+	chan@4e {
+		label = "emmc_therm";
+	};
+
+	chan@4f {
+		label = "pa_therm";
+	};
+
+	chan@51 {
+		label = "quiet_therm";
+	};
+};
+
+&pm8998_adc_tm {
+	chan@4d {
+		label = "msm_therm";
+	};
+
+	chan@4e {
+		label = "emmc_therm";
+	};
+
+	chan@4f {
+		label = "pa_therm";
+	};
+
+	chan@51 {
+		label = "quiet_therm";
+	};
+};
+
+&thermal_zones {
+	/delete-node/sdm-therm-adc;
+	/delete-node/usbc-therm-adc;
+	/delete-node/pmi_therm-adc;
+
+	msm-therm-adc {
+		polling-delay-passive = <0>;
+		polling-delay = <0>;
+		thermal-sensors = <&pm8998_adc_tm 0x4d>;
+		thermal-governor = "user_space";
+
+		trips {
+			active-config0 {
+				temperature = <65000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+		};
+	};
+
+	emmc-therm-adc {
+		polling-delay-passive = <0>;
+		polling-delay = <0>;
+		thermal-sensors = <&pm8998_adc_tm 0x4e>;
+		thermal-governor = "user_space";
+
+		trips {
+			active-config0 {
+				temperature = <65000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+		};
+	};
+
+	pa_therm-adc {
+		polling-delay-passive = <0>;
+		polling-delay = <0>;
+		thermal-sensors = <&pm8998_adc_tm 0x4f>;
+		thermal-governor = "user_space";
+
+		trips {
+			active-config0 {
+				temperature = <65000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+		};
+	};
+
+	quiet-therm-adc {
+		polling-delay-passive = <0>;
+		polling-delay = <0>;
+		thermal-sensors = <&pm8998_adc_tm 0x51>;
+		thermal-governor = "user_space";
+
+		trips {
+			active-config0 {
+				temperature = <65000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+		};
+	};
+};
