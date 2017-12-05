@@ -246,6 +246,7 @@ struct msm8x16_wcd_pdata {
 	u32 mclk_rate;
 	u32 is_lpass;
 	u32 dig_cdc_addr;
+	int aw87318_en_gpio;
 };
 
 enum msm8x16_wcd_micbias_num {

@@ -1729,6 +1729,7 @@ static struct msm8x16_wcd_pdata *msm8x16_wcd_populate_dt_pdata(
 	const char *static_prop_name = "qcom,cdc-static-supplies";
 	const char *ond_prop_name = "qcom,cdc-on-demand-supplies";
 	const char *addr_prop_name = "qcom,dig-cdc-base-addr";
+	struct property * prop = NULL;
 
 	pdata = devm_kzalloc(dev, sizeof(*pdata), GFP_KERNEL);
 	if (!pdata)
@@ -1805,6 +1806,29 @@ static struct msm8x16_wcd_pdata *msm8x16_wcd_populate_dt_pdata(
 		dev_dbg(dev, "%s: could not find %s entry in dt\n",
 				__func__, addr_prop_name);
 		pdata->dig_cdc_addr = MSM8X16_DIGITAL_CODEC_BASE_ADDR;
+	}
+
+	prop = of_find_property(dev->of_node, "aw87318-en-gpio", NULL);
+	if(prop && prop->length) {
+		pdata->aw87318_en_gpio = of_get_named_gpio_flags(
+			dev->of_node, "aw87318-en-gpio", 0, NULL);
+		ret = gpio_request(pdata->aw87318_en_gpio, "AW87318_pa_en");
+		if(ret) {
+			pr_err("%s: fail to request gpio %d\n", __func__, pdata->aw87318_en_gpio);
+			pdata->aw87318_en_gpio = -1;
+			goto err;
+		}
+		ret = gpio_direction_output(pdata->aw87318_en_gpio, 0);
+		if(ret) {
+			pdata->aw87318_en_gpio = -1;
+			pr_err("%s: fail set gpio direction\n", __func__);
+			goto err;
+		}
+		pr_info( "%s: aw87318_en_gpio = %d\n", __func__, pdata->aw87318_en_gpio);
+	} else {
+		dev_err(dev, "%s: cound not find aw87318-en-gpio pin\n", __func__);
+		pdata->aw87318_en_gpio = -1;
+		goto err;
 	}
 
 	return pdata;
@@ -3064,6 +3088,49 @@ static int msm8x16_wcd_codec_enable_adc(struct snd_soc_dapm_widget *w,
 	return 0;
 }
 
+static DEFINE_SPINLOCK(pa_lock);
+static int aw87318_enable_spk_pa(struct snd_soc_dapm_widget *w,
+				     struct snd_kcontrol *kcontrol, int event)
+{
+	struct snd_soc_codec *codec = w->codec;
+	struct msm8x16_wcd_pdata* pdata;
+	int i, j = 0;
+	int en_gpio = -1;
+
+	if(codec->dev && codec->dev->platform_data) {
+		pdata = (struct msm8x16_wcd_pdata*) codec->dev->platform_data;
+		en_gpio = pdata->aw87318_en_gpio;
+		pr_debug( "%s: AW87318 pa {dis,en}able gpio: %d\n", __func__, en_gpio);
+	} else {
+		pr_err( "%s: failt to get platform_data\n", __func__);
+		return -1;
+	}
+	switch (event) {
+	case SND_SOC_DAPM_PRE_PMU:
+		spin_lock_irq(&pa_lock);
+		// PA need 7 up edges
+		for ( i = 0; i < 13; ++i ) {
+			// loop 1000 times consume about 2us
+			for (j = 0; j <1000; ++j );
+			if(i & 0x1)
+				gpio_set_value(en_gpio, 0);
+			else
+				gpio_set_value(en_gpio, 1);
+		}
+		spin_unlock_irq(&pa_lock);
+		pr_debug("%s:AW87318 PA enabled\n", __func__);
+		break;
+	case SND_SOC_DAPM_POST_PMD:
+		gpio_direction_output(pdata->aw87318_en_gpio, 0);
+		pr_debug("%s:AW87318 PA disabled\n", __func__);
+		break;
+	default:
+		pr_debug("%s:invalid event: %d\n", __func__, event);
+		return -2;
+	}
+	return 0;
+}
+
 static int msm8x16_wcd_codec_enable_spk_pa(struct snd_soc_dapm_widget *w,
 				     struct snd_kcontrol *kcontrol, int event)
 {
@@ -4194,8 +4261,10 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"HPHL DAC", NULL, "RX1 CHAIN"},
 
 	{"SPK_OUT", NULL, "SPK PA"},
+	{"SPK_OUT", NULL, "AW87318 SPK PA"},
 	{"SPK PA", NULL, "SPK_RX_BIAS"},
 	{"SPK PA", NULL, "SPK"},
+	{"AW87318 SPK PA", NULL, "SPK"},
 	{"SPK", "Switch", "SPK DAC"},
 	{"SPK DAC", NULL, "RX3 CHAIN"},
 	{"SPK DAC", NULL, "VDD_SPKDRV"},
@@ -4810,6 +4879,10 @@ static const struct snd_soc_dapm_widget msm8x16_wcd_dapm_widgets[] = {
 
 	/* Lineout */
 	SND_SOC_DAPM_OUTPUT("LINEOUT"),
+
+	SND_SOC_DAPM_PGA_E("AW87318 SPK PA", 0,
+			0, 0 , NULL, 0, aw87318_enable_spk_pa,
+			SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
 
 	SND_SOC_DAPM_PGA_E("SPK PA", MSM8X16_WCD_A_ANALOG_SPKR_DRV_CTL,
 			6, 0 , NULL, 0, msm8x16_wcd_codec_enable_spk_pa,
