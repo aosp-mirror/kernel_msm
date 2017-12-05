@@ -6606,6 +6606,7 @@ static int wma_roam_synch_event_handler(void *handle, u_int8_t *event, u_int32_t
 	wmi_key_material *key = NULL;
 	int size=0;
 	tSirRoamOffloadSynchInd *pRoamOffloadSynchInd;
+	uint32_t roam_synch_data_len;
 
 	WMA_LOGD("LFR3:%s", __func__);
 	if (!event) {
@@ -6625,6 +6626,12 @@ static int wma_roam_synch_event_handler(void *handle, u_int8_t *event, u_int32_t
 	 return -EINVAL;
 	}
 
+	if (synch_event->vdev_id >= wma->max_bssid) {
+		WMA_LOGE("%s: received invalid vdev_id %d",
+			 __func__, synch_event->vdev_id);
+		return -EINVAL;
+	}
+
 	if(wma->interfaces[synch_event->vdev_id].roam_synch_in_progress ==
 		VOS_TRUE) {
 	  WMA_LOGE("%s: Ignoring RSI since one is already in progress",
@@ -6632,29 +6639,43 @@ static int wma_roam_synch_event_handler(void *handle, u_int8_t *event, u_int32_t
 	  return -EINVAL;
 	}
 
-	/*
-	 * All below length fields are unsigned and hence positive numbers.
-	 * Maximum number during the addition would be (3 * MAX_LIMIT(UINT32) +
-	 * few fixed fields).
-	 */
-	if ((sizeof(*synch_event) + synch_event->bcn_probe_rsp_len +
-			synch_event->reassoc_rsp_len +
-			sizeof(wmi_channel) + sizeof(wmi_key_material) +
-			sizeof(uint32_t)) > WMA_SVC_MSG_MAX_SIZE) {
-		WMA_LOGE("excess synch payload: LEN bcn:%d, rsp:%d",
-				synch_event->bcn_probe_rsp_len,
-				synch_event->reassoc_rsp_len);
-		VOS_ASSERT(0);
+	WMA_LOGD("synch payload: LEN bcn:%d, req:%d, rsp:%d",
+		 synch_event->bcn_probe_rsp_len,
+		 synch_event->reassoc_req_len,
+		 synch_event->reassoc_rsp_len);
+
+	if (synch_event->bcn_probe_rsp_len > WMA_SVC_MSG_MAX_SIZE)
 		return -EINVAL;
-	}
+	if (synch_event->reassoc_rsp_len >
+	    (WMA_SVC_MSG_MAX_SIZE - synch_event->bcn_probe_rsp_len))
+		return -EINVAL;
+	if (synch_event->reassoc_req_len >
+	    WMA_SVC_MSG_MAX_SIZE - (synch_event->bcn_probe_rsp_len +
+	    synch_event->reassoc_rsp_len))
+		return -EINVAL;
+
+	roam_synch_data_len = synch_event->bcn_probe_rsp_len +
+				synch_event->reassoc_rsp_len +
+				synch_event->reassoc_req_len;
+	/*
+	 * Below is the check for the entire size of the message received from'
+	 * the firmware.
+	 */
+	if (roam_synch_data_len > WMA_SVC_MSG_MAX_SIZE -
+	    (sizeof(*synch_event) + sizeof(wmi_channel) +
+	    sizeof(wmi_key_material) + sizeof(uint32_t)))
+		return -EINVAL;
+
+	if (sizeof(tSirRoamOffloadSynchInd) >
+	    (WMA_SVC_MSG_MAX_SIZE - roam_synch_data_len))
+		return -EINVAL;
+	roam_synch_data_len += sizeof(tSirRoamOffloadSynchInd);
 
 	adf_os_spin_lock_bh(&wma->roam_synch_lock);
 	wma->interfaces[synch_event->vdev_id].roam_synch_in_progress = VOS_TRUE;
 	adf_os_spin_unlock_bh(&wma->roam_synch_lock);
-	len = sizeof(tSirRoamOffloadSynchInd) +
-		synch_event->bcn_probe_rsp_len +
-		synch_event->reassoc_rsp_len;
-	pRoamOffloadSynchInd = (tSirRoamOffloadSynchInd *)vos_mem_malloc(len);
+	pRoamOffloadSynchInd =
+		(tSirRoamOffloadSynchInd *)vos_mem_malloc(roam_synch_data_len);
 	if (!pRoamOffloadSynchInd) {
 	 WMA_LOGE("%s: failed to allocate memory for roam_synch_event", __func__);
 	 return -ENOMEM;
