@@ -81,3 +81,11 @@
 		status = "disabled";
 	};
 };
+
+/* devboard doesn't have easel PMIC, so we need a pull-down on resetb */
+&s2mpb04_resetb_default {
+	config {
+		/delete-property/ bias-disable;
+		bias-pull-down;
+	};
+};
