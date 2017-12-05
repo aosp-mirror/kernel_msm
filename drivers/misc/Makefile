@@ -79,6 +79,7 @@ google-easel-objs               += google-easel-comm.o google-easel-comm-dma.o g
 
 obj-y                           += st33/
 
+CFLAGS_lkdtm_rodata.o		+= $(DISABLE_LTO)
 OBJCOPYFLAGS :=
 OBJCOPYFLAGS_lkdtm_rodata_objcopy.o := \
 			--set-section-flags .text=alloc,readonly \
