@@ -196,6 +196,31 @@ static void param_set_mask(struct snd_pcm_hw_params *p, int n, unsigned bit)
 	}
 }
 
+static int msm8952_dmic_event(struct snd_soc_dapm_widget *w,
+			      struct snd_kcontrol *kcontrol, int event)
+{
+	int ret = 0;
+	pr_debug("%s: event = %d\n", __func__, event);
+	switch (event) {
+	case SND_SOC_DAPM_PRE_PMU:
+		ret = msm_gpioset_activate(CLIENT_WCD_INT, "cdc_dmic_lines");
+		if (ret < 0) {
+			pr_err("%s: gpio set cannot be activated %sd",
+			       __func__, "cdc_lines_dmic_act");
+			return false;
+		}
+		break;
+	case SND_SOC_DAPM_POST_PMD:
+		ret = msm_gpioset_suspend(CLIENT_WCD_INT, "cdc_dmic_lines");
+		if (ret)
+			pr_err("%s: failed to disable the dmic gpios: %d\n",
+			       __func__, ret);
+		break;
+	default:
+		return -EINVAL;
+	}
+	return 0;
+}
 static const struct snd_soc_dapm_widget msm8952_dapm_widgets[] = {
 
 	SND_SOC_DAPM_SUPPLY_S("MCLK", -1, SND_SOC_NOPM, 0, 0,
@@ -203,8 +228,8 @@ static const struct snd_soc_dapm_widget msm8952_dapm_widgets[] = {
 	SND_SOC_DAPM_MIC("Handset Mic", NULL),
 	SND_SOC_DAPM_MIC("Headset Mic", NULL),
 	SND_SOC_DAPM_MIC("Secondary Mic", NULL),
-	SND_SOC_DAPM_MIC("Digital Mic1", NULL),
-	SND_SOC_DAPM_MIC("Digital Mic2", NULL),
+	SND_SOC_DAPM_MIC("Digital Mic1", msm8952_dmic_event),
+	SND_SOC_DAPM_MIC("Digital Mic2", msm8952_dmic_event),
 	SND_SOC_DAPM_SUPPLY("VDD_WSA_SWITCH", SND_SOC_NOPM, 0, 0,
 	msm8952_wsa_switch_event,
 	SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
