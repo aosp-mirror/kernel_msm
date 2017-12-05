@@ -162,7 +162,7 @@ static int cam_eeprom_power_up(struct cam_eeprom_ctrl_t *e_ctrl,
 		power_info->power_setting_size);
 	if (rc) {
 		CAM_ERR(CAM_EEPROM,
-			"failed to fill vreg params for power up rc:%d", rc);
+			"failed to fill power up vreg params rc:%d", rc);
 		return rc;
 	}
 
@@ -173,7 +173,7 @@ static int cam_eeprom_power_up(struct cam_eeprom_ctrl_t *e_ctrl,
 		power_info->power_down_setting_size);
 	if (rc) {
 		CAM_ERR(CAM_EEPROM,
-			"failed to fill vreg params power down rc:%d", rc);
+			"failed to fill power down vreg params  rc:%d", rc);
 		return rc;
 	}
 
@@ -592,7 +592,8 @@ static int32_t cam_eeprom_init_pkt_parser(struct cam_eeprom_ctrl_t *e_ctrl,
 					sizeof(struct cam_cmd_i2c_info);
 				processed_cmd_buf_in_bytes +=
 					cmd_length_in_bytes;
-				cmd_buf += cmd_length_in_bytes/4;
+				cmd_buf += cmd_length_in_bytes/
+					sizeof(uint32_t);
 				break;
 			case CAMERA_SENSOR_CMD_TYPE_PWR_UP:
 			case CAMERA_SENSOR_CMD_TYPE_PWR_DOWN:
@@ -601,7 +602,8 @@ static int32_t cam_eeprom_init_pkt_parser(struct cam_eeprom_ctrl_t *e_ctrl,
 					cmd_length_in_bytes, power_info);
 				processed_cmd_buf_in_bytes +=
 					cmd_length_in_bytes;
-				cmd_buf += cmd_length_in_bytes/4;
+				cmd_buf += cmd_length_in_bytes/
+					sizeof(uint32_t);
 				if (rc) {
 					CAM_ERR(CAM_EEPROM, "Failed");
 					return rc;
@@ -617,7 +619,7 @@ static int32_t cam_eeprom_init_pkt_parser(struct cam_eeprom_ctrl_t *e_ctrl,
 					&cmd_length_in_bytes, &num_map);
 				processed_cmd_buf_in_bytes +=
 					cmd_length_in_bytes;
-				cmd_buf += cmd_length_in_bytes/4;
+				cmd_buf += cmd_length_in_bytes/sizeof(uint32_t);
 				break;
 			default:
 				break;
