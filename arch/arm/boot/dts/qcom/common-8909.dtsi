@@ -216,3 +216,6 @@
         pinctrl-0 = <&blsp1_uart2_active>;
         pinctrl-1 = <&blsp1_uart2_sleep>;
 };
+&pm8916_tombak_dig{
+        aw87318-en-gpio = <&msm_gpio 22 0>;
+};
