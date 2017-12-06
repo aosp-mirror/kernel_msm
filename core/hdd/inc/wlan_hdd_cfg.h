@@ -67,6 +67,38 @@
 #define MAX_PRB_REQ_VENDOR_OUI_INI_LEN 160
 #define VENDOR_SPECIFIC_IE_BITMAP 0x20000000
 
+/*
+ * Maximum ini string length of actions oui extensions,
+ * (n * 83) + (n - 1) spaces + 1 (terminating character),
+ * where n is the no of oui extensions
+ * currently, max no of oui extensions is 10
+ */
+#define MAX_ACTION_OUI_STRING_LEN 840
+
+/**
+ * enum hdd_action_oui_token_type - string token types expected for action ouis
+ * @HDD_ACTION_OUI_TOKEN: oui string
+ * @HDD_ACTION_OUI_DATA_LENGTH_TOKEN: data length string
+ * @HDD_ACTION_OUI_DATA_TOKEN: OUI data string
+ * @HDD_ACTION_OUI_DATA_MASK_TOKEN: data mask string
+ * @HDD_ACTION_OUI_INFO_MASK_TOKEN: info mask string
+ * @HDD_ACTION_OUI_MAC_ADDR_TOKEN: mac addr string
+ * @HDD_ACTION_OUI_MAC_MASK_TOKEN: mac mask string
+ * @HDD_ACTION_OUI_CAPABILITY_TOKEN: capability string
+ * @HDD_ACTION_OUI_END_TOKEN: end of one oui extension
+ */
+enum hdd_action_oui_token_type {
+	HDD_ACTION_OUI_TOKEN = 1 << 0,
+	HDD_ACTION_OUI_DATA_LENGTH_TOKEN = 1 << 1,
+	HDD_ACTION_OUI_DATA_TOKEN = 1 << 2,
+	HDD_ACTION_OUI_DATA_MASK_TOKEN = 1 << 3,
+	HDD_ACTION_OUI_INFO_MASK_TOKEN = 1 << 4,
+	HDD_ACTION_OUI_MAC_ADDR_TOKEN = 1 << 5,
+	HDD_ACTION_OUI_MAC_MASK_TOKEN = 1 << 6,
+	HDD_ACTION_OUI_CAPABILITY_TOKEN = 1 << 7,
+	HDD_ACTION_OUI_END_TOKEN = 1 << 8,
+};
+
 /* Defines for all of the things we read from the configuration (registry). */
 /*
  * <ini>
@@ -434,7 +466,7 @@ enum hdd_dot11_mode {
 #define CFG_NEIGHBOR_SCAN_TIMER_PERIOD_NAME             "gNeighborScanTimerPeriod"
 #define CFG_NEIGHBOR_SCAN_TIMER_PERIOD_MIN              (3)
 #define CFG_NEIGHBOR_SCAN_TIMER_PERIOD_MAX              (300)
-#define CFG_NEIGHBOR_SCAN_TIMER_PERIOD_DEFAULT          (200)
+#define CFG_NEIGHBOR_SCAN_TIMER_PERIOD_DEFAULT          (100)
 
 /*
  * <ini>
@@ -459,7 +491,7 @@ enum hdd_dot11_mode {
 #define CFG_NEIGHBOR_SCAN_MIN_TIMER_PERIOD_NAME         "gRoamRestTimeMin"
 #define CFG_NEIGHBOR_SCAN_MIN_TIMER_PERIOD_MIN          (3)
 #define CFG_NEIGHBOR_SCAN_MIN_TIMER_PERIOD_MAX          (300)
-#define CFG_NEIGHBOR_SCAN_MIN_TIMER_PERIOD_DEFAULT      (200)
+#define CFG_NEIGHBOR_SCAN_MIN_TIMER_PERIOD_DEFAULT      (50)
 
 /*
  * <ini>
@@ -5196,6 +5228,24 @@ enum hdd_link_speed_rpt_type {
 #define CFG_ENABLE_SSR_MAX                  (1)
 #define CFG_ENABLE_SSR_DEFAULT              (1)
 
+/**
+ * <ini>
+ * gEnableDataStallDetection - Enable/Disable Data stall detection
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to enable/disable data stall detection
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_ENABLE_DATA_STALL_DETECTION           "gEnableDataStallDetection"
+#define CFG_ENABLE_DATA_STALL_DETECTION_MIN       (0)
+#define CFG_ENABLE_DATA_STALL_DETECTION_MAX       (1)
+#define CFG_ENABLE_DATA_STALL_DETECTION_DEFAULT   (1)
+
 /*
  * <ini>
  * gEnableOverLapCh - Enables Overlap Channel. If set, allow overlapping
@@ -8358,6 +8408,20 @@ enum hdd_link_speed_rpt_type {
 #define CFG_FLOW_STEERING_ENABLED_DEFAULT     (0)
 
 /*
+ * Max number of MSDUs per HTT RX IN ORDER INDICATION msg.
+ * Note that this has a direct impact on the size of source CE rings.
+ * It is possible to go below 8, but would require testing; so we are
+ * restricting the lower limit to 8 artificially
+ *
+ * It is recommended that this value is a POWER OF 2.
+ *
+ * Values lower than 8 are for experimental purposes only.
+ */
+#define CFG_MAX_MSDUS_PER_RXIND_NAME          "maxMSDUsPerRxInd"
+#define CFG_MAX_MSDUS_PER_RXIND_MIN           (4)
+#define CFG_MAX_MSDUS_PER_RXIND_MAX           (32)
+#define CFG_MAX_MSDUS_PER_RXIND_DEFAULT       (32)
+/*
  * In static display use case when APPS is in stand alone power save mode enable
  * active offload mode which helps FW to filter out MC/BC data packets to avoid
  * APPS wake up and save more power.
@@ -8680,6 +8744,33 @@ enum dot11p_mode {
  */
 #define CFG_DBS_SCAN_SELECTION_NAME          "gdbs_scan_selection"
 #define CFG_DBS_SCAN_SELECTION_DEFAULT       ""
+
+/*
+ * <ini>
+
+ * g_sta_sap_scc_on_dfs_chan - Allow STA+SAP SCC on DFS channel with
+ * master mode support disabled.
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to allow STA+SAP SCC on DFS channel with master mode
+ * support disabled.
+ * 0 - Disallow STA+SAP SCC on DFS channel
+ * 1 - Allow STA+SAP SCC on DFS channel with master mode disabled
+ *
+ * Related: None.
+ *
+ * Supported Feature: Non-DBS, DBS
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_STA_SAP_SCC_ON_DFS_CHAN              "g_sta_sap_scc_on_dfs_chan"
+#define CFG_STA_SAP_SCC_ON_DFS_CHAN_MIN          (0)
+#define CFG_STA_SAP_SCC_ON_DFS_CHAN_MAX          (1)
+#define CFG_STA_SAP_SCC_ON_DFS_CHAN_DEFAULT      (0)
 
 /*
  * gPNOChannelPrediction will allow user to enable/disable the
@@ -9536,6 +9627,33 @@ enum restart_beaconing_on_ch_avoid_rule {
 #define CFG_INDOOR_CHANNEL_SUPPORT_MIN      (0)
 #define CFG_INDOOR_CHANNEL_SUPPORT_MAX      (1)
 #define CFG_INDOOR_CHANNEL_SUPPORT_DEFAULT  (0)
+
+/*
+ * <ini>
+ * g_mark_indoor_as_disable - Enable/Disable Indoor channel
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to mark the Indoor channel as
+ * disable when SAP start and revert it on SAP stop,
+ * so SAP will not turn on indoor channel and
+ * sta will not scan/associate and roam on indoor
+ * channels.
+ *
+ * Related: If g_mark_indoor_as_disable set, turn the
+ * indoor channels to disable and update Wiphy & fw.
+ *
+ * Supported Feature: SAP/STA
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_MARK_INDOOR_AS_DISABLE_NAME     "g_mark_indoor_as_disable"
+#define CFG_MARK_INDOOR_AS_DISABLE_MIN      (0)
+#define CFG_MARK_INDOOR_AS_DISABLE_MAX      (1)
+#define CFG_MARK_INDOOR_AS_DISABLE_DEFAULT  (0)
 
 /*
  * Force softap to 11n, when gSapForce11NFor11AC is set to 1 from ini
@@ -11193,6 +11311,214 @@ enum hw_filter_mode {
 #define CFG_MBO_CAND_RSSI_BTC_THRESHOLD_MAX     (0)
 
 /*
+ * Start of action oui inis
+ *
+ * To enable action oui feature, set gEnableActionOUI
+ *
+ * Each action oui is expected in the following format:
+ * <Extension 1> <Extension 2> ..... <Extension 10> (maximum 10)
+ *
+ * whereas, each Extension is separated by space and have the following format:
+ * <Token1> <Token2> <Token3> <Token4> <Token5> <Token6> <Token7> <Token8>
+ * where each Token is a string of hexa-decimal digits and
+ * following are the details about each token
+ *
+ * Token1 = OUI
+ * Token2 = Data_Length
+ * Token3 = Data
+ * Token4 = Data_Mask
+ * Token5 = Info_Presence_Bit
+ * Token6 = MAC_Address
+ * Token7 = Mac_Address Mask
+ * Token8 = Capability
+ *
+ * <OUI> is mandatory and it can be either 3 or 5 bytes means 6 or 10
+ * hexa-decimal characters
+ *
+ * <Data_Length> is mandatory field and should give length of
+ * the <Data> if present else zero
+ *
+ * Presence of <Data> is controlled by <Data_Length>, if <Data_Length> is 0,
+ * then <Data> is not expected else Data of the size Data Length bytes are
+ * expected which means the length of Data string is 2 * Data Length,
+ * since every byte constitutes two hexa-decimal characters.
+ *
+ * <Data_Mask> is mandatory if <Data> is present and length of the
+ * Data mask string depends on the <Data Length>
+ * If <Data Length> is 06, then length of Data Mask string is
+ * 2 characters (represents 1 byte)
+ * data_mask_length = ((Data_Length - (Data_Length % 8)) / 8) +
+ *                    ((Data_Length % 8) ? 1 : 0)
+ * and <Data_Mask> has to be constructed from left to right.
+ *
+ * Presence of <Mac_Address> and <Capability> is
+ * controlled by <Info_Presence_Bit> which is mandatory
+ * <Info_Presence_Bit> will give the information for
+ *   OUI – bit 0 (set/reset don't effect the behaviour,
+ *                always enabled in the code)
+ *   Mac Address present – bit 1
+ *   NSS – bit 2
+ *   HT check – bit 3
+ *   VHT check – bit 4
+ *   Band info – bit 5
+ *   reserved – bit 6 (should always be zero)
+ *   reserved – bit 7 (should always be zero)
+ * and should be constructed from right to left (b7b6b5b4b3b2b1b0)
+ *
+ * <Mac_Address_Mask> for <Mac_Address> should be constructed from left to right
+ *
+ * <Capability> is 1 byte long and it contains the below info
+ *   NSS – 4 bits starting from LSB (b0 – b3)
+ *   HT enabled – bit 4
+ *   VHT enabled – bit 5
+ *   2G band – bit 6
+ *   5G band – bit 7
+ * and should be constructed from right to left (b7b6b5b4b3b2b1b0)
+ * <Capability> is present if atleast one of the bit is set
+ * from b2 - b6 in <Info_Presence_Bit>
+ *
+ * Example 1:
+ *
+ * OUI is 00-10-18, data length is 05 (hex form), data is 02-11-04-5C-DE and
+ * need to consider first 3 bytes and last byte of data for comparision
+ * mac-addr EE-1A-59-FE-FD-AF is present and first 3 bytes and last byte of
+ * mac address should be considered for comparision
+ * capability is not present
+ * then action OUI for gActionOUIITOExtension is as follows:
+ *
+ * gActionOUIITOExtension=001018 05 0211045CDE E8 03 EE1A59FEFDAF E4
+ *
+ * data mask calculation in above example:
+ * Data[0] = 02 ---- d0 = 1
+ * Data[1] = 11 ---- d1 = 1
+ * Data[2] = 04 ---- d2 = 1
+ * Data[3] = 5C ---- d3 = 0
+ * Data[4] = DE ---- d4 = 1
+ * data_mask = d0d1d2d3d4 + append with zeros to complete 8-bit = 11101000 = E8
+ *
+ * mac mask calculation in above example:
+ * mac_addr[0] = EE ---- m0 = 1
+ * mac_addr[1] = 1A ---- m1 = 1
+ * mac_addr[2] = 59 ---- m2 = 1
+ * mac_addr[3] = FE ---- m3 = 0
+ * mac_addr[4] = FD ---- m4 = 0
+ * mac_addr[5] = AF ---- m5 = 1
+ * mac_mask = m0m1m2m3m4m5 + append with zeros to complete 8-bit = 11100100 = E4
+ *
+ * Example 2:
+ *
+ * OUI is 00-10-18, data length is 00 and no Mac Address and capability
+ *
+ * gActionOUIITOExtension=001018 00 01
+ *
+ */
+
+/*
+ * <ini>
+ * gEnableActionOUI - Enable/Disable action oui feature
+ * @Min: 0 (disable)
+ * @Max: 1 (enable)
+ * @Default: 1 (enable)
+ *
+ * This ini is used to enable the action oui feature to control
+ * mode of connection, connected AP's in-activity time, Tx rate etc.,
+ *
+ * Related: If gEnableActionOUI is set, then at least one of the following inis
+ * must be set with the proper action oui extensions:
+ * gActionOUIConnect1x1, gActionOUIITOExtension, gActionOUICCKM1X1
+ *
+ * Supported Feature: action ouis
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ENABLE_ACTION_OUI         "gEnableActionOUI"
+#define CFG_ENABLE_ACTION_OUI_MIN     (0)
+#define CFG_ENABLE_ACTION_OUI_MAX     (1)
+#define CFG_ENABLE_ACTION_OUI_DEFAULT (1)
+
+/*
+ * <ini>
+ * gActionOUIConnect1x1 - Used to specify action OUIs for 1x1 connection
+ * @Default: 000C43 00 25 42 001018 06 02FFF02C0000 BC 25 42 001018 06 02FF040C0000 BC 25 42 00037F 00 35 6C
+ *
+ * Default OUIs: (All values in Hex)
+ * OUI 1 : 000C43
+ *   OUI data Len : 00
+ *   Info Mask : 25 - Check for NSS and Band
+ *   Capabilities: 42 - NSS == 2 && Band == 2G
+ * OUI 2 : 001018
+ *   OUI data Len : 06
+ *   OUI Data : 02FFF02C0000
+ *   OUI data Mask: BC - 10111100
+ *   Info Mask : 25 - Check for NSS and Band
+ *   Capabilities: 42 - NSS == 2 && Band == 2G
+ * OUI 3 : 001018
+ *   OUI data Len : 06
+ *   OUI Data : 02FF040C0000
+ *   OUI data Mask: BC - 10111100
+ *   Info Mask : 25 - Check for NSS and Band
+ *   Capabilities: 42 - NSS == 2 && Band == 2G
+ * OUI 4 : 00037F
+ *   OUI data Len : 00
+ *   Info Mask : 35 - Check for NSS, VHT Caps and Band
+ *   Capabilities: 6C - (NSS == 3 or 4) && VHT Caps Preset && Band == 2G
+ *
+ * This ini is used to specify the AP OUIs with which only 1x1 connection
+ * is allowed.
+ *
+ * Related: None
+ *
+ * Supported Feature: Action OUIs
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ACTION_OUI_CONNECT_1X1_NAME    "gActionOUIConnect1x1"
+#define CFG_ACTION_OUI_CONNECT_1X1_DEFAULT "000C43 00 25 42 001018 06 02FFF02C0000 BC 25 42 001018 06 02FF040C0000 BC 25 42 00037F 00 35 6C"
+
+/*
+ * <ini>
+ * gActionOUIITOExtension - Used to extend in-activity time for specified APs
+ * @Default: Empty string
+ *
+ * This ini is used to specify AP OUIs using which station's in-activity time
+ * can be extended with the respective APs
+ *
+ * Related: None
+ *
+ * Supported Feature: Action OUIs
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ACTION_OUI_ITO_EXTENSION_NAME    "gActionOUIITOExtension"
+#define CFG_ACTION_OUI_ITO_EXTENSION_DEFAULT ""
+
+/*
+ * <ini>
+ * gActionOUICCKM1X1 - Used to specify action OUIs to control station's TX rates
+ *
+ * This ini is used to specify AP OUIs for which station's CCKM TX rates
+ * should be 1x1 only.
+ *
+ * Related: None
+ *
+ * Supported Feature: Action OUIs
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ACTION_OUI_CCKM_1X1_NAME    "gActionOUICCKM1X1"
+#define CFG_ACTION_OUI_CCKM_1X1_DEFAULT ""
+
+/* End of action oui inis */
+
+/*
  * <ini>
  * g_sap_chanswitch_beacon_cnt - channel switch beacon count
  * @Min: 1
@@ -12116,6 +12442,7 @@ struct hdd_config {
 	uint8_t retryLimitOne;
 	uint8_t retryLimitTwo;
 	bool enableSSR;
+	bool enable_data_stall_det;
 	uint32_t cfgMaxMediumTime;
 	bool enableVhtFor24GHzBand;
 	bool enable_sap_vendor_vht;
@@ -12337,6 +12664,7 @@ struct hdd_config {
 	bool tso_enable;
 	bool lro_enable;
 	bool flow_steering_enable;
+	uint8_t max_msdus_per_rxinorderind;
 	bool active_mode_offload;
 	bool bpf_packet_filter_enable;
 	/* parameter for defer timer for enabling TDLS on p2p listen */
@@ -12361,6 +12689,7 @@ struct hdd_config {
 	bool ce_classify_enabled;
 	uint32_t dual_mac_feature_disable;
 	uint8_t dbs_scan_selection[CFG_DBS_SCAN_PARAM_LENGTH];
+	uint32_t sta_sap_scc_on_dfs_chan;
 	bool     tx_chain_mask_cck;
 	uint8_t  tx_chain_mask_1ss;
 	bool smart_chainmask_enabled;
@@ -12446,6 +12775,8 @@ struct hdd_config {
 	uint32_t tgt_gtx_usr_cfg;
 	enum cfg_sub_20_channel_width enable_sub_20_channel_width;
 	bool indoor_channel_support;
+	/* control marking indoor channel passive to disable */
+	bool disable_indoor_channel;
 	/* parameter to force sap into 11n */
 	bool sap_force_11n_for_11ac;
 	uint16_t sap_tx_leakage_threshold;
@@ -12550,6 +12881,10 @@ struct hdd_config {
 	bool enable_11d_in_world_mode;
 	int8_t rssi_thresh_offset_5g;
 	bool is_fils_roaming_supported;
+	bool enable_action_oui;
+	uint8_t action_oui_connect_1x1[MAX_ACTION_OUI_STRING_LEN];
+	uint8_t action_oui_ito_extension[MAX_ACTION_OUI_STRING_LEN];
+	uint8_t action_oui_cckm_1x1[MAX_ACTION_OUI_STRING_LEN];
 };
 
 #define VAR_OFFSET(_Struct, _Var) (offsetof(_Struct, _Var))
@@ -12697,6 +13032,18 @@ void hdd_free_probe_req_ouis(hdd_context_t *hdd_ctx);
 
 QDF_STATUS hdd_update_mac_config(hdd_context_t *pHddCtx);
 QDF_STATUS hdd_set_sme_config(hdd_context_t *pHddCtx);
+
+/**
+ * hdd_set_all_sme_action_ouis() - parse all action oui ini strings
+ * @hdd_ctx: the pointer to hdd context
+ *
+ * This is a wrapper function which actually invokes internal functions to
+ * parse each action oui ini string and sends the extracted extensions to sme
+ *
+ * Return: None
+ */
+void hdd_set_all_sme_action_ouis(hdd_context_t *hdd_ctx);
+
 QDF_STATUS hdd_set_sme_chan_list(hdd_context_t *hdd_ctx);
 bool hdd_update_config_cfg(hdd_context_t *pHddCtx);
 QDF_STATUS hdd_cfg_get_global_config(hdd_context_t *pHddCtx, char *pBuf,

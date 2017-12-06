@@ -1222,25 +1222,16 @@ lim_send_assoc_rsp_mgmt_frame(tpAniSirGlobal mac_ctx,
 			populate_dot11f_vht_operation(mac_ctx, pe_session,
 					&frm.VHTOperation);
 			is_vht = true;
-		} else {
-			/*
-			 * 2G-AS platform: SAP associates with HT (11n)clients
-			 * as 2x1 in 2G and 2X2 in 5G
-			 * Non-2G-AS platform: SAP associates with HT (11n)
-			 * clients as 2X2 in 2G and 5G
-			 * 5G-AS: Don’t care
-			 */
-			if (frm.HTCaps.present && mac_ctx->hw_dbs_capable &&
-				mac_ctx->lteCoexAntShare &&
-				IS_24G_CH(pe_session->currentOperChannel))
-				frm.HTCaps.supportedMCSSet[1] = 0;
 		}
+
 		if (pe_session->vhtCapability &&
 		    pe_session->vendor_vht_sap &&
 		    (assoc_req != NULL) &&
 		    assoc_req->vendor_vht_ie.VHTCaps.present) {
 			pe_debug("Populate Vendor VHT IEs in Assoc Rsponse");
 			frm.vendor_vht_ie.present = 1;
+			frm.vendor_vht_ie.sub_type =
+				pe_session->vendor_specific_vht_ie_sub_type;
 			frm.vendor_vht_ie.VHTCaps.present = 1;
 			populate_dot11f_vht_caps(mac_ctx, pe_session,
 				&frm.vendor_vht_ie.VHTCaps);
@@ -1830,6 +1821,8 @@ lim_send_assoc_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 			pe_session->is_vendor_specific_vhtcaps) {
 		pe_debug("Populate Vendor VHT IEs in Assoc Request");
 		frm->vendor_vht_ie.present = 1;
+		frm->vendor_vht_ie.sub_type =
+			pe_session->vendor_specific_vht_ie_sub_type;
 		frm->vendor_vht_ie.VHTCaps.present = 1;
 		populate_dot11f_vht_caps(mac_ctx, pe_session,
 				&frm->vendor_vht_ie.VHTCaps);

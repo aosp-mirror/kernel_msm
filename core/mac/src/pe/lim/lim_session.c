@@ -542,6 +542,8 @@ pe_create_session(tpAniSirGlobal pMac, uint8_t *bssid, uint8_t *sessionId,
 	session_ptr->deauthmsgcnt = 0;
 	session_ptr->disassocmsgcnt = 0;
 	session_ptr->ht_client_cnt = 0;
+	/* following is invalid value since seq number is 12 bit */
+	session_ptr->prev_auth_seq_num = 0xFFFF;
 
 	return &pMac->lim.gpSession[i];
 }
@@ -705,6 +707,7 @@ void pe_delete_session(tpAniSirGlobal mac_ctx, tpPESession session)
 	if (LIM_IS_AP_ROLE(session)) {
 		qdf_mc_timer_stop(&session->protection_fields_reset_timer);
 		qdf_mc_timer_destroy(&session->protection_fields_reset_timer);
+		lim_del_pmf_sa_query_timer(mac_ctx, session);
 	}
 
 	/* Delete FT related information */

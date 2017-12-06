@@ -276,6 +276,7 @@ enum ds_mode {
 #define WMA_VDEV_STOP_REQUEST_TIMEOUT  (6000)   /* 6 seconds */
 #define WMA_VDEV_HW_MODE_REQUEST_TIMEOUT (5000) /* 5 seconds */
 #define WMA_VDEV_PLCY_MGR_CMD_TIMEOUT (3000)    /* 3 seconds */
+#define WMA_VDEV_SET_KEY_REQUEST_TIMEOUT (1000) /* 1 second */
 
 #define WMA_TGT_INVALID_SNR (0)
 
@@ -1045,6 +1046,7 @@ typedef struct {
  * @in_bmps : Whether bmps for this interface has been enabled
  * @vdev_start_wakelock: wakelock to protect vdev start op with firmware
  * @vdev_stop_wakelock: wakelock to protect vdev stop op with firmware
+ * @vdev_set_key_wakelock: wakelock to protect vdev set key op with firmware
  */
 struct wma_txrx_node {
 	uint8_t addr[IEEE80211_ADDR_LEN];
@@ -1132,6 +1134,7 @@ struct wma_txrx_node {
 	bool beacon_filter_enabled;
 	qdf_wake_lock_t vdev_start_wakelock;
 	qdf_wake_lock_t vdev_stop_wakelock;
+	qdf_wake_lock_t vdev_set_key_wakelock;
 };
 
 #if defined(QCA_WIFI_FTM)
@@ -2683,5 +2686,15 @@ int wma_chan_info_event_handler(void *handle, u_int8_t *event_buf,
  */
 QDF_STATUS wma_config_bmiss_bcnt_params(uint32_t vdev_id, uint32_t first_cnt,
 		uint32_t final_cnt);
+
+/**
+ * wma_send_action_oui() - send of action oui extensions to firmware
+ * @handle: wma handle
+ * @action_oui: action oui buffer containg extensions to be send
+ *
+ * Return: QDF_STATUS
+ */
+QDF_STATUS wma_send_action_oui(WMA_HANDLE handle,
+			       struct wmi_action_oui *action_oui);
 
 #endif

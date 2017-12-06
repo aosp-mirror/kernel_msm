@@ -458,6 +458,12 @@ static int __hdd_netdev_notifier_call(struct notifier_block *nb,
 		QDF_ASSERT(0);
 		return NOTIFY_DONE;
 	}
+
+	if (hdd_ctx->driver_status == DRIVER_MODULES_CLOSED) {
+		hdd_err("%s: Driver module is closed", __func__);
+		return NOTIFY_DONE;
+	}
+
 	if (cds_is_driver_recovering() || cds_is_driver_in_bad_state())
 		return NOTIFY_DONE;
 
@@ -502,6 +508,14 @@ static int __hdd_netdev_notifier_call(struct notifier_block *nb,
 			cds_flush_work(&adapter->scan_block_work);
 			hdd_debug("Scan is not Pending from user");
 		}
+		/*
+		 * After NETDEV_GOING_DOWN, kernel calls hdd_stop.Irrespective
+		 * of return status of hdd_stop call, kernel resets the IFF_UP
+		 * flag after which driver does not send the cfg80211_scan_done.
+		 * Ensure to cleanup the scan queue in NETDEV_GOING_DOWN
+		 */
+
+		hdd_cleanup_scan_queue(hdd_ctx, adapter);
 		break;
 
 	default:
@@ -1822,10 +1836,18 @@ static void hdd_mon_mode_ether_setup(struct net_device *dev)
 static int __hdd_mon_open(struct net_device *dev)
 {
 	int ret;
+	hdd_adapter_t *adapter = WLAN_HDD_GET_PRIV_PTR(dev);
 
 	ENTER_DEV(dev);
+
+	if (WLAN_HDD_ADAPTER_MAGIC != adapter->magic) {
+		hdd_err("Invalid magic");
+		return -EINVAL;
+	}
+
 	hdd_mon_mode_ether_setup(dev);
 	ret = hdd_set_mon_rx_cb(dev);
+	set_bit(DEVICE_IFACE_OPENED, &adapter->event_flags);
 	return ret;
 }
 
@@ -2206,11 +2228,14 @@ static int __hdd_open(struct net_device *dev)
 		return -EBUSY;
 	}
 
-	if (!hdd_wait_for_recovery_completion()) {
-		hdd_err("Recovery failed");
-		return -EIO;
+	if (cds_is_driver_recovering()) {
+		hdd_err("WLAN is currently recovering; Please try again.");
+		return -EBUSY;
 	}
+
 	mutex_lock(&hdd_init_deinit_lock);
+
+	hdd_start_driver_ops_timer(eHDD_DRV_OP_IFF_UP);
 
 	/*
 	  * This scenario can be hit in cases where in the wlan driver after
@@ -2266,6 +2291,7 @@ static int __hdd_open(struct net_device *dev)
 
 
 err_hdd_hdd_init_deinit_lock:
+	hdd_stop_driver_ops_timer();
 	mutex_unlock(&hdd_init_deinit_lock);
 	return ret;
 }
@@ -4037,6 +4063,7 @@ QDF_STATUS hdd_stop_adapter(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter,
 	unsigned long rc;
 	hdd_scaninfo_t *scan_info = NULL;
 	void *sap_ctx;
+	tsap_Config_t *sap_config;
 
 	ENTER();
 
@@ -4135,6 +4162,10 @@ QDF_STATUS hdd_stop_adapter(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter,
 
 	case QDF_SAP_MODE:
 		hdd_ipa_flush(hdd_ctx);
+		sap_config = &adapter->sessionCtx.ap.sapConfig;
+		if (sap_config)
+			wlansap_reset_sap_config_add_ie(sap_config,
+							eUPDATE_IE_ALL);
 	case QDF_P2P_GO_MODE:
 		if (hdd_ctx->config->conc_custom_rule1 &&
 			(QDF_SAP_MODE == adapter->device_mode)) {
@@ -4334,6 +4365,9 @@ QDF_STATUS hdd_reset_all_adapters(hdd_context_t *hdd_ctx)
 		}
 		adapter->sessionCtx.station.hdd_ReassocScenario = false;
 
+		/* Cleanup pending roc request */
+		wlan_hdd_cleanup_remain_on_channel_ctx(adapter);
+
 		hdd_deinit_tx_rx(adapter);
 		hdd_lro_disable(hdd_ctx, adapter);
 
@@ -4382,6 +4416,8 @@ bool hdd_check_for_opened_interfaces(hdd_context_t *hdd_ctx)
 	status = hdd_get_front_adapter(hdd_ctx, &adapter_node);
 	while ((NULL != adapter_node) && (QDF_STATUS_SUCCESS == status)) {
 		if (test_bit(DEVICE_IFACE_OPENED,
+		    &adapter_node->pAdapter->event_flags) ||
+		    test_bit(SME_SESSION_OPENED,
 		    &adapter_node->pAdapter->event_flags)) {
 			hdd_debug("Still other ifaces are up cannot close modules");
 			close_modules = false;
@@ -4956,7 +4992,8 @@ QDF_STATUS hdd_start_all_adapters(hdd_context_t *hdd_ctx)
 
 			hdd_register_tx_flow_control(adapter,
 					hdd_tx_resume_timer_expired_handler,
-					hdd_tx_resume_cb);
+					hdd_tx_resume_cb,
+					hdd_tx_flow_control_is_pause);
 			if (adapter->device_mode == QDF_STA_MODE) {
 				hdd_debug("Sending the Lpass start notification after re_init");
 				hdd_lpass_notify_start(hdd_ctx, adapter);
@@ -4980,6 +5017,12 @@ QDF_STATUS hdd_start_all_adapters(hdd_context_t *hdd_ctx)
 					 (const u8 *)&bcastMac.bytes[0],
 					 GFP_KERNEL);
 #endif
+			break;
+		case QDF_MONITOR_MODE:
+			hdd_init_station_mode(adapter);
+			hdd_set_mon_rx_cb(adapter->dev);
+			wlan_hdd_set_mon_chan(adapter, adapter->mon_chan,
+					      adapter->mon_bandwidth);
 			break;
 
 		default:
@@ -5682,6 +5725,8 @@ static void hdd_roc_context_destroy(hdd_context_t *hdd_ctx)
  */
 static int hdd_context_deinit(hdd_context_t *hdd_ctx)
 {
+	qdf_wake_lock_destroy(&hdd_ctx->monitor_mode_wakelock);
+
 	wlan_hdd_cfg80211_deinit(hdd_ctx->wiphy);
 
 	hdd_roc_context_destroy(hdd_ctx);
@@ -5823,11 +5868,13 @@ static void hdd_wlan_exit(hdd_context_t *hdd_ctx)
 		 * the expectation is that by the time Request Full Power has
 		 * completed, all scans will be cancelled
 		 */
-		hdd_cleanup_scan_queue(hdd_ctx);
+		hdd_cleanup_scan_queue(hdd_ctx, NULL);
 		hdd_abort_mac_scan_all_adapters(hdd_ctx);
 		hdd_abort_sched_scan_all_adapters(hdd_ctx);
 		hdd_stop_all_adapters(hdd_ctx);
 	}
+
+	unregister_netdevice_notifier(&hdd_netdev_notifier);
 
 	/*
 	 * Close the scheduler before calling cds_close to make sure
@@ -5844,6 +5891,12 @@ static void hdd_wlan_exit(hdd_context_t *hdd_ctx)
 
 	qdf_nbuf_deinit_replenish_timer();
 
+	if (QDF_GLOBAL_MONITOR_MODE ==  hdd_get_conparam()) {
+		hdd_info("Release wakelock for monitor mode!");
+		qdf_wake_lock_release(&hdd_ctx->monitor_mode_wakelock,
+				WIFI_POWER_EVENT_WAKELOCK_MONITOR_MODE);
+	}
+
 	qdf_spinlock_destroy(&hdd_ctx->hdd_adapter_lock);
 	qdf_spinlock_destroy(&hdd_ctx->sta_update_info_lock);
 	qdf_spinlock_destroy(&hdd_ctx->connection_status_lock);
@@ -5858,9 +5911,6 @@ static void hdd_wlan_exit(hdd_context_t *hdd_ctx)
 
 	hdd_runtime_suspend_context_deinit(hdd_ctx);
 	hdd_close_all_adapters(hdd_ctx, false);
-
-	unregister_netdevice_notifier(&hdd_netdev_notifier);
-
 	hdd_ipa_cleanup(hdd_ctx);
 
 	/* Free up RoC request queue and flush workqueue */
@@ -5880,7 +5930,6 @@ static void hdd_wlan_exit(hdd_context_t *hdd_ctx)
 	wlan_hdd_deinit_chan_info(hdd_ctx);
 	hdd_exit_netlink_services(hdd_ctx);
 	mutex_destroy(&hdd_ctx->iface_change_lock);
-	qdf_mem_free(hdd_ctx->target_hw_name);
 	hdd_context_destroy(hdd_ctx);
 }
 
@@ -7701,6 +7750,9 @@ static int hdd_context_init(hdd_context_t *hdd_ctx)
 	if (ret)
 		goto roc_destroy;
 
+	qdf_wake_lock_create(&hdd_ctx->monitor_mode_wakelock,
+			     "monitor_mode_wakelock");
+
 	return 0;
 
 roc_destroy:
@@ -7750,6 +7802,34 @@ static int ie_whitelist_attrs_init(hdd_context_t *hdd_ctx)
 	return ret;
 }
 
+
+
+/**
+ * hdd_iface_change_callback() - Function invoked when stop modules expires
+ * @priv: pointer to hdd context
+ *
+ * This function is invoked when the timer waiting for the interface change
+ * expires, it shall cut-down the power to wlan and stop all the modules.
+ *
+ * Return: void
+ */
+static void hdd_iface_change_callback(void *priv)
+{
+	hdd_context_t *hdd_ctx = (hdd_context_t *) priv;
+	int ret;
+	int status = wlan_hdd_validate_context(hdd_ctx);
+
+	if (status)
+		return;
+
+	ENTER();
+	hdd_debug("Interface change timer expired close the modules!");
+	ret = hdd_wlan_stop_modules(hdd_ctx, false);
+	if (ret)
+		hdd_err("Failed to stop modules");
+	EXIT();
+}
+
 /**
  * hdd_context_create() - Allocate and inialize HDD context.
  * @dev:	Device Pointer to the underlying device
@@ -7781,6 +7861,11 @@ static hdd_context_t *hdd_context_create(struct device *dev)
 		ret = -ENOMEM;
 		goto err_out;
 	}
+
+	qdf_mc_timer_init(&hdd_ctx->iface_change_timer, QDF_TIMER_TYPE_SW,
+			  hdd_iface_change_callback, (void *)hdd_ctx);
+
+	mutex_init(&hdd_ctx->iface_change_lock);
 
 	hdd_ctx->pcds_context = p_cds_context;
 	hdd_ctx->parent_dev = dev;
@@ -7856,6 +7941,8 @@ err_free_config:
 err_free_hdd_context:
 	hdd_free_probe_req_ouis(hdd_ctx);
 	wiphy_free(hdd_ctx->wiphy);
+	qdf_mc_timer_destroy(&hdd_ctx->iface_change_timer);
+	mutex_destroy(&hdd_ctx->iface_change_lock);
 
 err_out:
 	return ERR_PTR(ret);
@@ -7958,7 +8045,8 @@ int hdd_start_station_adapter(hdd_adapter_t *adapter)
 
 	hdd_register_tx_flow_control(adapter,
 		hdd_tx_resume_timer_expired_handler,
-		hdd_tx_resume_cb);
+		hdd_tx_resume_cb,
+		hdd_tx_flow_control_is_pause);
 
 	EXIT();
 	return 0;
@@ -7987,7 +8075,8 @@ int hdd_start_ap_adapter(hdd_adapter_t *adapter)
 
 	hdd_register_tx_flow_control(adapter,
 		hdd_softap_tx_resume_timer_expired_handler,
-		hdd_softap_tx_resume_cb);
+		hdd_softap_tx_resume_cb,
+		hdd_tx_flow_control_is_pause);
 
 	EXIT();
 	return 0;
@@ -8283,6 +8372,8 @@ static int hdd_update_cds_config(hdd_context_t *hdd_ctx)
 	cds_cfg->max_station = hdd_ctx->config->maxNumberOfPeers;
 	cds_cfg->sub_20_channel_width = WLAN_SUB_20_CH_WIDTH_NONE;
 	cds_cfg->flow_steering_enabled = hdd_ctx->config->flow_steering_enable;
+	cds_cfg->max_msdus_per_rxinorderind =
+		hdd_ctx->config->max_msdus_per_rxinorderind;
 	cds_cfg->self_recovery_enabled = hdd_ctx->config->enableSelfRecovery;
 	cds_cfg->fw_timeout_crash = hdd_ctx->config->fw_timeout_crash;
 	cds_cfg->active_uc_bpf_mode = hdd_ctx->config->active_uc_bpf_mode;
@@ -8784,6 +8875,28 @@ static int hdd_set_ani_enabled(hdd_context_t *hdd_ctx)
 }
 
 /**
+ * hdd_send_all_sme_action_ouis() - send all action oui extensions to firmware
+ * @hdd_ctx: pointer to hdd context
+ *
+ * Return: None
+ */
+static void hdd_send_all_sme_action_ouis(hdd_context_t *hdd_ctx)
+{
+	QDF_STATUS qdf_status;
+	uint32_t i;
+
+	if (!hdd_ctx->config->enable_action_oui)
+		return;
+
+	for (i = 0; i < WMI_ACTION_OUI_MAXIMUM_ID; i++) {
+		qdf_status = sme_send_action_oui(hdd_ctx->hHal, i);
+		/* print the error and continue for another action */
+		if (!QDF_IS_STATUS_SUCCESS(qdf_status))
+			hdd_err("Failed to send action OUI: %u", i);
+	}
+}
+
+/**
  * hdd_pre_enable_configure() - Configurations prior to cds_enable
  * @hdd_ctx:	HDD context
  *
@@ -8820,6 +8933,8 @@ static int hdd_pre_enable_configure(hdd_context_t *hdd_ctx)
 		ret = qdf_status_to_os_return(status);
 		goto out;
 	}
+
+	hdd_set_all_sme_action_ouis(hdd_ctx);
 
 	ret = sme_cli_set_command(0, WMI_PDEV_PARAM_TX_CHAIN_MASK_1SS,
 				  hdd_ctx->config->tx_chain_mask_1ss,
@@ -9190,6 +9305,10 @@ static int hdd_features_init(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter)
 	else
 		hdd_set_idle_ps_config(hdd_ctx, false);
 
+	/* Send Enable/Disable data stall detection cmd to FW */
+	sme_cli_set_command(0, WMI_PDEV_PARAM_DATA_STALL_DETECT_ENABLE,
+		hdd_ctx->config->enable_data_stall_det, PDEV_CMD);
+
 	if (hdd_ctx->config->enable_go_cts2self_for_sta)
 		sme_set_cts2self_for_p2p_go(hdd_ctx->hHal);
 
@@ -9411,6 +9530,8 @@ int hdd_configure_cds(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter)
 	if (0 != wlan_hdd_set_wow_pulse(hdd_ctx, true))
 		hdd_debug("Failed to set wow pulse");
 
+	hdd_send_all_sme_action_ouis(hdd_ctx);
+
 	return 0;
 
 hdd_features_deinit:
@@ -9443,6 +9564,8 @@ static int hdd_deconfigure_cds(hdd_context_t *hdd_ctx)
 	/* De-register the SME callbacks */
 	hdd_deregister_cb(hdd_ctx);
 	hdd_encrypt_decrypt_deinit(hdd_ctx);
+
+	sme_destroy_config(hdd_ctx->hHal);
 
 	/* De-init Policy Manager */
 	if (!QDF_IS_STATUS_SUCCESS(cds_deinit_policy_mgr())) {
@@ -9585,6 +9708,11 @@ int hdd_wlan_stop_modules(hdd_context_t *hdd_ctx, bool ftm_mode)
 		ret = -EINVAL;
 	}
 
+	if (hdd_ctx->target_hw_name) {
+		qdf_mem_free(hdd_ctx->target_hw_name);
+		hdd_ctx->target_hw_name = NULL;
+	}
+
 	hdd_hif_close(hif_ctx);
 
 	ol_cds_free();
@@ -9611,31 +9739,6 @@ done:
 
 }
 
-/**
- * hdd_iface_change_callback() - Function invoked when stop modules expires
- * @priv: pointer to hdd context
- *
- * This function is invoked when the timer waiting for the interface change
- * expires, it shall cut-down the power to wlan and stop all the modules.
- *
- * Return: void
- */
-static void hdd_iface_change_callback(void *priv)
-{
-	hdd_context_t *hdd_ctx = (hdd_context_t *) priv;
-	int ret;
-	int status = wlan_hdd_validate_context(hdd_ctx);
-
-	if (status)
-		return;
-
-	ENTER();
-	hdd_debug("Interface change timer expired close the modules!");
-	ret = hdd_wlan_stop_modules(hdd_ctx, false);
-	if (ret)
-		hdd_err("Failed to stop modules");
-	EXIT();
-}
 
 /**
  * hdd_state_info_dump() - prints state information of hdd layer
@@ -9801,12 +9904,8 @@ int hdd_wlan_startup(struct device *dev)
 	if (IS_ERR(hdd_ctx))
 		return PTR_ERR(hdd_ctx);
 
-	qdf_mc_timer_init(&hdd_ctx->iface_change_timer, QDF_TIMER_TYPE_SW,
-			  hdd_iface_change_callback, (void *)hdd_ctx);
 
 	qdf_nbuf_init_replenish_timer();
-
-	mutex_init(&hdd_ctx->iface_change_lock);
 
 	ret = hdd_init_netlink_services(hdd_ctx);
 	if (ret)
@@ -9945,8 +10044,6 @@ err_hdd_free_context:
 		hdd_start_complete(ret);
 
 	qdf_nbuf_deinit_replenish_timer();
-	qdf_mc_timer_destroy(&hdd_ctx->iface_change_timer);
-	mutex_destroy(&hdd_ctx->iface_change_lock);
 	hdd_context_destroy(hdd_ctx);
 	return -EIO;
 
@@ -10243,6 +10340,8 @@ void hdd_softap_sta_disassoc(hdd_adapter_t *adapter,
 	if (pDelStaParams->peerMacAddr.bytes[0] & 0x1)
 		return;
 
+	wlan_hdd_get_peer_rssi(adapter, &pDelStaParams->peerMacAddr,
+			       HDD_WLAN_GET_PEER_RSSI_SOURCE_DRIVER);
 	wlansap_disassoc_sta(WLAN_HDD_GET_SAP_CTX_PTR(adapter),
 			     pDelStaParams);
 }
@@ -11511,12 +11610,15 @@ static void hdd_cleanup_present_mode(hdd_context_t *hdd_ctx,
 	driver_status = hdd_ctx->driver_status;
 
 	switch (curr_mode) {
-	case QDF_GLOBAL_MISSION_MODE:
 	case QDF_GLOBAL_MONITOR_MODE:
+		hdd_info("Release wakelock for monitor mode!");
+		qdf_wake_lock_release(&hdd_ctx->monitor_mode_wakelock,
+				      WIFI_POWER_EVENT_WAKELOCK_MONITOR_MODE);
+	case QDF_GLOBAL_MISSION_MODE:
 	case QDF_GLOBAL_FTM_MODE:
 		if (driver_status != DRIVER_MODULES_CLOSED) {
 			hdd_abort_mac_scan_all_adapters(hdd_ctx);
-			hdd_cleanup_scan_queue(hdd_ctx);
+			hdd_cleanup_scan_queue(hdd_ctx, NULL);
 			hdd_stop_all_adapters(hdd_ctx);
 		}
 		hdd_deinit_all_adapters(hdd_ctx, false);
@@ -11676,6 +11778,12 @@ static int __con_mode_handler(const char *kmessage, struct kernel_param *kp,
 			ret = -EINVAL;
 			goto reset_flags;
 		}
+	}
+
+	if (con_mode == QDF_GLOBAL_MONITOR_MODE) {
+		hdd_info("Acquire wakelock for monitor mode!");
+		qdf_wake_lock_acquire(&hdd_ctx->monitor_mode_wakelock,
+				      WIFI_POWER_EVENT_WAKELOCK_MONITOR_MODE);
 	}
 
 	hdd_info("Mode successfully changed to %s", kmessage);
@@ -12086,6 +12194,9 @@ void hdd_start_driver_ops_timer(int drv_op)
 		break;
 	case eHDD_DRV_OP_REINIT:
 		memcpy(drv_ops_string, "reinit", sizeof("reinit"));
+		break;
+	case eHDD_DRV_OP_IFF_UP:
+		memcpy(drv_ops_string, "iff_up", sizeof("iff_up"));
 		break;
 	}
 

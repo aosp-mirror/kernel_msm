@@ -2589,8 +2589,6 @@ tSirRetStatus sir_convert_probe_frame2_struct(tpAniSirGlobal pMac,
 	if (pr->WMMParams.present) {
 		pProbeResp->wmeEdcaPresent = 1;
 		convert_wmm_params(pMac, &pProbeResp->edcaParams, &pr->WMMParams);
-		pe_debug("WMM Parameter present in Probe Response Frame!");
-		       __print_wmm_params(pMac, &pr->WMMParams);
 	}
 
 	if (pr->WMMInfoAp.present) {
@@ -2650,6 +2648,8 @@ tSirRetStatus sir_convert_probe_frame2_struct(tpAniSirGlobal pMac,
 	pProbeResp->Vendor3IEPresent = pr->Vendor3IE.present;
 
 	pProbeResp->vendor_vht_ie.present = pr->vendor_vht_ie.present;
+	if (pr->vendor_vht_ie.present)
+		pProbeResp->vendor_vht_ie.sub_type = pr->vendor_vht_ie.sub_type;
 	if (pr->vendor_vht_ie.VHTCaps.present) {
 		qdf_mem_copy(&pProbeResp->vendor_vht_ie.VHTCaps,
 				&pr->vendor_vht_ie.VHTCaps,
@@ -2881,6 +2881,7 @@ sir_convert_assoc_req_frame2_struct(tpAniSirGlobal pMac,
 
 	pAssocReq->vendor_vht_ie.present = ar->vendor_vht_ie.present;
 	if (ar->vendor_vht_ie.present) {
+		pAssocReq->vendor_vht_ie.sub_type = ar->vendor_vht_ie.sub_type;
 		if (ar->vendor_vht_ie.VHTCaps.present) {
 			qdf_mem_copy(&pAssocReq->vendor_vht_ie.VHTCaps,
 				     &ar->vendor_vht_ie.VHTCaps,
@@ -3189,6 +3190,8 @@ sir_convert_assoc_resp_frame2_struct(tpAniSirGlobal pMac,
 	}
 
 	pAssocRsp->vendor_vht_ie.present = ar->vendor_vht_ie.present;
+	if (ar->vendor_vht_ie.present)
+		pAssocRsp->vendor_vht_ie.sub_type = ar->vendor_vht_ie.sub_type;
 	if (ar->OBSSScanParameters.present) {
 		qdf_mem_copy(&pAssocRsp->obss_scanparams,
 				&ar->OBSSScanParameters,
@@ -3921,6 +3924,9 @@ sir_parse_beacon_ie(tpAniSirGlobal pMac,
 	pBeaconStruct->Vendor1IEPresent = pBies->Vendor1IE.present;
 	pBeaconStruct->Vendor3IEPresent = pBies->Vendor3IE.present;
 	pBeaconStruct->vendor_vht_ie.present = pBies->vendor_vht_ie.present;
+	if (pBies->vendor_vht_ie.present)
+		pBeaconStruct->vendor_vht_ie.sub_type =
+						pBies->vendor_vht_ie.sub_type;
 
 	if (pBies->vendor_vht_ie.VHTCaps.present) {
 		pBeaconStruct->vendor_vht_ie.VHTCaps.present = 1;
@@ -4226,8 +4232,6 @@ sir_convert_beacon_frame2_struct(tpAniSirGlobal pMac,
 		pBeaconStruct->wmeEdcaPresent = 1;
 		convert_wmm_params(pMac, &pBeaconStruct->edcaParams,
 				   &pBeacon->WMMParams);
-		pe_debug("WMM Parameter present in Beacon Frame!");
-		       __print_wmm_params(pMac, &pBeacon->WMMParams);
 	}
 
 	if (pBeacon->WMMInfoAp.present) {
@@ -4309,8 +4313,11 @@ sir_convert_beacon_frame2_struct(tpAniSirGlobal pMac,
 	pBeaconStruct->Vendor3IEPresent = pBeacon->Vendor3IE.present;
 
 	pBeaconStruct->vendor_vht_ie.present = pBeacon->vendor_vht_ie.present;
-	if (pBeacon->vendor_vht_ie.present)
+	if (pBeacon->vendor_vht_ie.present) {
+		pBeaconStruct->vendor_vht_ie.sub_type =
+			pBeacon->vendor_vht_ie.sub_type;
 		pe_debug("Vendor Specific VHT caps present in Beacon Frame!");
+	}
 
 	if (pBeacon->vendor_vht_ie.VHTCaps.present) {
 		qdf_mem_copy(&pBeaconStruct->vendor_vht_ie.VHTCaps,

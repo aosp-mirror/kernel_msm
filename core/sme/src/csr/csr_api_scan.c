@@ -1688,8 +1688,8 @@ csr_save_ies(tpAniSirGlobal pMac,
  *
  * Return : int32_t
  */
-static int32_t _csr_calculate_bss_score(tSirBssDescription *bss_info,
-		int pcl_chan_weight, int nss)
+static int32_t _csr_calculate_bss_score(tpAniSirGlobal mac_ctx,
+	tSirBssDescription *bss_info, int pcl_chan_weight, int nss)
 {
 	int32_t score = 0;
 	int32_t ap_load = 0;
@@ -1701,6 +1701,8 @@ static int32_t _csr_calculate_bss_score(tSirBssDescription *bss_info,
 	int32_t congestion = 0;
 	int32_t rssi_diff = 0;
 	int32_t rssi_weight = 0;
+	uint32_t dot11mode;
+	bool is_vht = false;
 
 	/*
 	 * Total weight of a BSSID is calculated on basis of 100 in which
@@ -1716,6 +1718,17 @@ static int32_t _csr_calculate_bss_score(tSirBssDescription *bss_info,
 	 * CHANNEL_CONGESTION: 5
 	 * Reserved : 31
 	 */
+
+	dot11mode = csr_translate_to_wni_cfg_dot11_mode(mac_ctx,
+			mac_ctx->roam.configParam.uCfgDot11Mode);
+	if (CDS_IS_CHANNEL_24GHZ(bss_info->channelId)) {
+		if (IS_DOT11_MODE_VHT(dot11mode) &&
+			mac_ctx->roam.configParam.enableVhtFor24GHz)
+			is_vht = true;
+	} else if (IS_DOT11_MODE_VHT(dot11mode)) {
+			is_vht = true;
+	}
+
 	/*
 	 * Further bucketization of rssi is also done out of 25 score.
 	 * RSSI > -55=> weight = 2500
@@ -1766,15 +1779,15 @@ static int32_t _csr_calculate_bss_score(tSirBssDescription *bss_info,
 		score += pcl_score * BEST_CANDIDATE_MAX_WEIGHT;
 	}
 	/* If AP supports HT caps, extra 10% score will be added */
-	if (bss_info->ht_caps_present)
+	if (IS_DOT11_MODE_HT(dot11mode) && bss_info->ht_caps_present)
 		score += BEST_CANDIDATE_MAX_WEIGHT * HT_CAPABILITY_WEIGHTAGE;
 
 	/* If AP supports VHT caps, Extra 6% score will be added to score */
-	if (bss_info->vht_caps_present)
+	if (is_vht && bss_info->vht_caps_present)
 		score += BEST_CANDIDATE_MAX_WEIGHT * VHT_CAP_WEIGHTAGE;
 
 	/* If AP supports beam forming, extra 2% score will be added to score.*/
-	if (bss_info->beacomforming_capable)
+	if (is_vht && bss_info->beacomforming_capable)
 		score += BEST_CANDIDATE_MAX_WEIGHT * BEAMFORMING_CAP_WEIGHTAGE;
 
 	/*
@@ -1785,9 +1798,11 @@ static int32_t _csr_calculate_bss_score(tSirBssDescription *bss_info,
 	 * 20MHZ = 30 weightage is given out of 100.
 	 * Channel width weightage is given as CHAN_WIDTH_WEIGHTAGE (10%).
 	 */
-	if (bss_info->chan_width == eHT_CHANNEL_WIDTH_80MHZ)
+	if (is_vht && (bss_info->chan_width == eHT_CHANNEL_WIDTH_80MHZ))
 		normalised_width = BEST_CANDIDATE_80MHZ;
-	else if (bss_info->chan_width == eHT_CHANNEL_WIDTH_40MHZ)
+	else if (IS_DOT11_MODE_HT(dot11mode) &&
+		((bss_info->chan_width == eHT_CHANNEL_WIDTH_80MHZ) ||
+		 (bss_info->chan_width == eHT_CHANNEL_WIDTH_40MHZ)))
 		normalised_width = BEST_CANDIDATE_40MHZ;
 	else
 		normalised_width = BEST_CANDIDATE_20MHZ;
@@ -1853,7 +1868,7 @@ static int32_t _csr_calculate_bss_score(tSirBssDescription *bss_info,
 		score += BEST_CANDIDATE_MAX_WEIGHT * NSS_WEIGHTAGE;
 
 	QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
-		FL("BSSID:"MAC_ADDRESS_STR" rssi=%d htcaps=%d vht=%d bw=%d channel=%d beamforming=%d ap_load=%d est_air_time_percentage=%d pcl_score %d Final Score %d ap_NSS %d  nss %d"),
+		FL("BSSID:"MAC_ADDRESS_STR" rssi=%d htcaps=%d vht=%d bw=%d channel=%d beamforming=%d ap_load=%d est_air_time_percentage=%d pcl_score %d Final Score %d ap_NSS %d nss %d dot11mode %d is_vht %d"),
 		MAC_ADDR_ARRAY(bss_info->bssId),
 		bss_info->rssi, bss_info->ht_caps_present,
 		bss_info->vht_caps_present, bss_info->chan_width,
@@ -1861,7 +1876,7 @@ static int32_t _csr_calculate_bss_score(tSirBssDescription *bss_info,
 		bss_info->beacomforming_capable, ap_load,
 		est_air_time_percentage,
 		pcl_score,
-		score, ap_nss, nss);
+		score, ap_nss, nss, dot11mode, is_vht);
 
 	return score;
 }
@@ -1890,7 +1905,7 @@ static void csr_calculate_bss_score(tpAniSirGlobal pMac,
 		nss = 2;
 
 	if (channel_id < NUM_CHANNELS)
-		score = _csr_calculate_bss_score(bss_info,
+		score = _csr_calculate_bss_score(pMac, bss_info,
 			pcl_chan_weight, nss);
 
 	pBss->bss_score = score;
@@ -7284,14 +7299,10 @@ QDF_STATUS csr_abort_scan_from_active_list(tpAniSirGlobal mac_ctx,
 			if ((cmd->command == scan_cmd_type) &&
 			    ((cmd->u.scanCmd.scanID == scan_id) ||
 			    (cmd->sessionId == session_id))) {
-				if (abort_reason ==
-				    eCSR_SCAN_ABORT_DUE_TO_BAND_CHANGE)
-					cmd->u.scanCmd.abort_scan_indication =
-					eCSR_SCAN_ABORT_DUE_TO_BAND_CHANGE;
-
+				cmd->u.scanCmd.abort_scan_indication =
+						abort_reason;
 				csr_send_scan_abort(mac_ctx, cmd->sessionId,
 						    cmd->u.scanCmd.scanID);
-
 			}
 		}
 	}

@@ -2263,7 +2263,7 @@ uint32_t cds_mode_specific_vdev_id(enum cds_con_mode mode)
 	return vdev_id;
 }
 
-static uint8_t cds_mode_specific_get_channel(enum cds_con_mode mode)
+uint8_t cds_mode_specific_get_channel(enum cds_con_mode mode)
 {
 	uint32_t conn_index;
 	uint8_t channel = 0;
@@ -3916,8 +3916,8 @@ void cds_incr_active_session(enum tQDF_ADAPTER_MODE mode,
 	hdd_context_t *hdd_ctx;
 	cds_context_type *cds_ctx;
 	hdd_adapter_t *sap_adapter;
-
 	hdd_ctx = cds_get_context(QDF_MODULE_ID_HDD);
+
 	if (!hdd_ctx) {
 		cds_err("HDD context is NULL");
 		return;
@@ -5027,6 +5027,71 @@ void cds_update_with_safe_channel_list(uint8_t *pcl_channels, uint32_t *len,
 }
 
 /**
+ * cds_remove_dfs_passive_channels_from_pcl() - set weight of dfs and passive
+ * channels to 0
+ * @pcl_channels: preferred channel list
+ * @len: length of preferred channel list
+ * @weight_list: preferred channel weight list
+ * @weight_len: length of weight list
+ * This function set the weight of dfs and passive channels to 0
+ *
+ * Return: None
+ */
+void cds_remove_dfs_passive_channels_from_pcl(uint8_t *pcl_channels,
+		uint32_t *len, uint8_t *weight_list, uint32_t weight_len)
+{
+	uint8_t i;
+	uint32_t orig_channel_count = 0;
+	qdf_device_t qdf_ctx = cds_get_context(QDF_MODULE_ID_QDF_DEVICE);
+	hdd_context_t *hdd_ctx;
+	bool sta_sap_scc_on_dfs_chan;
+	uint32_t sap_count;
+	enum channel_state channel_state;
+
+	hdd_ctx = cds_get_context(QDF_MODULE_ID_HDD);
+	if (!hdd_ctx) {
+		cds_err("HDD context is NULL");
+		return;
+	}
+
+	if (!qdf_ctx) {
+		cds_err("qdf_ctx is NULL");
+		return;
+	}
+
+	sta_sap_scc_on_dfs_chan = cds_is_sta_sap_scc_allowed_on_dfs_channel();
+	sap_count = cds_mode_specific_connection_count(CDS_SAP_MODE, NULL);
+
+	cds_debug("sta_sap_scc_on_dfs_chan %u, sap_count %u",
+			sta_sap_scc_on_dfs_chan, sap_count);
+
+	if (!sta_sap_scc_on_dfs_chan || !sap_count)
+		return;
+
+	if (len)
+		orig_channel_count = QDF_MIN(*len, QDF_MAX_NUM_CHAN);
+	else {
+		cds_err("invalid number of channel length");
+		return;
+	}
+
+	cds_debug("Set weight of DFS/passive channels to 0");
+
+	for (i = 0; i < orig_channel_count; i++) {
+		channel_state = cds_get_channel_state(pcl_channels[i]);
+		if ((channel_state == CHANNEL_STATE_DISABLE) ||
+				(channel_state == CHANNEL_STATE_INVALID))
+			/* Set weight of inactive channels to 0 */
+			weight_list[i] = 0;
+
+		cds_debug("chan[%d] - %d, weight[%d] - %d",
+				i, pcl_channels[i], i, weight_list[i]);
+	}
+
+	return;
+}
+
+/**
  * cds_get_channel_list() - provides the channel list
  * suggestion for new connection
  * @pcl:	The preferred channel list enum
@@ -5057,6 +5122,7 @@ static QDF_STATUS cds_get_channel_list(enum cds_pcl_type pcl,
 	bool skip_dfs_channel = false;
 	hdd_context_t *hdd_ctx;
 	uint32_t i = 0, j = 0;
+	bool sta_sap_scc_on_dfs_chan;
 
 	hdd_ctx = cds_get_context(QDF_MODULE_ID_HDD);
 	if (!hdd_ctx) {
@@ -5091,8 +5157,12 @@ static QDF_STATUS cds_get_channel_list(enum cds_pcl_type pcl,
 	 * if you have atleast one STA connection then don't fill DFS channels
 	 * in the preferred channel list
 	 */
-	if (((mode == CDS_SAP_MODE) || (mode == CDS_P2P_GO_MODE)) &&
-	    (cds_mode_specific_connection_count(CDS_STA_MODE, NULL) > 0)) {
+	sta_sap_scc_on_dfs_chan = cds_is_sta_sap_scc_allowed_on_dfs_channel();
+	cds_debug("sta_sap_scc_on_dfs_chan %u", sta_sap_scc_on_dfs_chan);
+
+	if ((((mode == CDS_SAP_MODE) || (mode == CDS_P2P_GO_MODE)) &&
+		(cds_mode_specific_connection_count(CDS_STA_MODE, NULL) > 0)) ||
+		!sta_sap_scc_on_dfs_chan) {
 		cds_debug("STA present, skip DFS channels from pcl for SAP/Go");
 		skip_dfs_channel = true;
 	}
@@ -5356,6 +5426,9 @@ static QDF_STATUS cds_get_channel_list(enum cds_pcl_type pcl,
 	/* check the channel avoidance list */
 	cds_update_with_safe_channel_list(pcl_channels, len,
 				pcl_weights, weight_len);
+
+	cds_remove_dfs_passive_channels_from_pcl(pcl_channels, len,
+			pcl_weights, weight_len);
 
 	return status;
 }
@@ -5822,6 +5895,8 @@ bool cds_allow_concurrency(enum cds_con_mode mode,
 	cds_context_type *cds_ctx;
 	QDF_STATUS ret;
 	struct sir_pcl_list pcl;
+	bool is_sta_sap_on_dfs_chan;
+
 
 	hdd_ctx = cds_get_context(QDF_MODULE_ID_HDD);
 	if (!hdd_ctx) {
@@ -5879,7 +5954,10 @@ bool cds_allow_concurrency(enum cds_con_mode mode,
 		if (!cds_is_5g_channel_allowed(channel, list, CDS_SAP_MODE))
 			goto done;
 
-		if ((CDS_P2P_GO_MODE == mode) || (CDS_SAP_MODE == mode)) {
+		is_sta_sap_on_dfs_chan =
+			cds_is_sta_sap_scc_allowed_on_dfs_channel();
+		if (!is_sta_sap_on_dfs_chan && ((mode == CDS_P2P_GO_MODE) ||
+					(mode == CDS_SAP_MODE))) {
 			if (CDS_IS_DFS_CH(channel))
 				match = cds_disallow_mcc(channel);
 		}
@@ -10430,4 +10508,47 @@ uint8_t cds_get_cur_conc_system_pref(void)
 		return CDS_THROUGHPUT;
 	}
 	return cds_ctx->cur_conc_system_pref;
+}
+
+/**
+ * cds_is_valid_channel_for_channel_switch() - check for valid channel for
+ * channel switch
+ * @channel: channel to be validated
+ * This function validates whether the given channel is valid for channel
+ * switch.
+ *
+ * Return: true or false
+ */
+bool cds_is_valid_channel_for_channel_switch(uint8_t channel)
+{
+	bool sta_sap_scc_on_dfs_chan;
+	uint32_t sap_count;
+	enum channel_state state;
+	hdd_context_t *hdd_ctx;
+	bool is_safe;
+
+	hdd_ctx = cds_get_context(QDF_MODULE_ID_HDD);
+
+	if (!hdd_ctx) {
+		cds_err("HDD context is NULL");
+		return true;
+	}
+
+	sta_sap_scc_on_dfs_chan = cds_is_sta_sap_scc_allowed_on_dfs_channel();
+	sap_count = cds_mode_specific_connection_count(CDS_SAP_MODE, NULL);
+	state = cds_get_channel_state(channel);
+	is_safe = cds_is_safe_channel(channel);
+
+	cds_debug("is_safe %u, sta_sap_scc_on_dfs_chan %u, sap_count %u, channel %u, state %u",
+			is_safe, sta_sap_scc_on_dfs_chan, sap_count, channel,
+			state);
+
+	if (is_safe && ((state == CHANNEL_STATE_ENABLE) || (sap_count == 0) ||
+		((state == CHANNEL_STATE_DFS) && sta_sap_scc_on_dfs_chan))) {
+		cds_debug("Valid channel for channel switch");
+		return true;
+	}
+
+	cds_debug("Invalid channel for channel switch");
+	return false;
 }
