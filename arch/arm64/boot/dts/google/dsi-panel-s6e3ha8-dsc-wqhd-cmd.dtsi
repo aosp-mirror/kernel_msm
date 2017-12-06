@@ -12,6 +12,7 @@
 
 &mdss_mdp {
 	dsi_s6e3ha8_dsc_wqhd_cmd: qcom,mdss_dsi_s6e3ha8 {
+		compatible = "google,s6e3ha8_panel";
 		qcom,mdss-dsi-panel-name = "S6E3HA8 6.3 command mode panel";
 		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
 		qcom,mdss-dsi-virtual-channel-id = <0>;

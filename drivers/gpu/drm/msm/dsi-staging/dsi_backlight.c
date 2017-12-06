@@ -16,6 +16,7 @@
 #include <linux/backlight.h>
 #include <linux/of_gpio.h>
 #include <linux/sysfs.h>
+#include <video/mipi_display.h>
 
 #include "dsi_panel.h"
 
@@ -107,7 +108,7 @@ static int dsi_backlight_update_status(struct backlight_device *bd)
 		brightness = 0;
 
 	bl_lvl = dsi_backlight_calculate(bl, brightness);
-	if (bl_lvl == bl->bl_actual)
+	if (bl_lvl == bl->bl_actual && bl->last_state == bd->props.state)
 		goto done;
 
 	if (dsi_panel_initialized(panel) && bl->update_bl) {
@@ -121,6 +122,7 @@ static int dsi_backlight_update_status(struct backlight_device *bd)
 		}
 	}
 	bl->bl_actual = bl_lvl;
+	bl->last_state = bd->props.state;
 
 done:
 	return rc;
@@ -329,26 +331,106 @@ int dsi_backlight_update_dpms(struct dsi_backlight_config *bl, int power_mode)
 	return rc;
 }
 
+#define DSI_PANEL_S6E3HA8_HLPM_OFF    0x20
+#define DSI_PANEL_S6E3HA8_HLPM_LOW    0x23
+#define DSI_PANEL_S6E3HA8_HLPM_HIGH   0x22
+
+static u8 dsi_panel_s6e3ha8_bl_to_mode(const struct dsi_backlight_config *bl,
+				       u32 bl_lvl, unsigned int state)
+{
+	u8 mode;
+
+	if ((state & (BL_CORE_FBBLANK | BL_CORE_SUSPENDED)) ||
+	    !(state & BL_STATE_LP) || bl_lvl == 0) {
+		mode = DSI_PANEL_S6E3HA8_HLPM_OFF;
+	} else {
+		const int bl_threshold = bl->bl_min_level +
+				(bl->bl_max_level - bl->bl_min_level) / 2;
+
+		mode = bl_lvl > bl_threshold ? DSI_PANEL_S6E3HA8_HLPM_HIGH :
+				DSI_PANEL_S6E3HA8_HLPM_LOW;
+	}
+
+	return mode;
+}
+
+static int dsi_panel_s6e3ha8_bl_update(struct dsi_backlight_config *bl,
+				       u32 bl_lvl)
+{
+	struct dsi_panel *panel = container_of(bl, struct dsi_panel, bl_config);
+	struct mipi_dsi_device *dsi = &panel->mipi_device;
+	struct backlight_properties *props = &bl->bl_device->props;
+	u8 current_mode, target_mode;
+
+	/* if display off, there's nothing to do */
+	if (props->state & (BL_CORE_FBBLANK | BL_CORE_SUSPENDED))
+		return 0;
+
+	current_mode = dsi_panel_s6e3ha8_bl_to_mode(bl, bl->bl_actual,
+						    bl->last_state);
+	target_mode = dsi_panel_s6e3ha8_bl_to_mode(bl, bl_lvl, props->state);
+
+	if (target_mode != current_mode) {
+		u8 payload[2] = { MIPI_DCS_WRITE_CONTROL_DISPLAY, target_mode };
+		int rc;
+
+		pr_debug("changing mode 0x%x -> 0x%x\n",
+			 current_mode, target_mode);
+		mutex_lock(&panel->panel_lock);
+		rc = mipi_dsi_dcs_write_buffer(dsi, payload, sizeof(payload));
+		mutex_unlock(&panel->panel_lock);
+		if (rc < 0)
+			return rc;
+	}
+
+	/* no need to send backlight command if HLPM active */
+	if (target_mode != DSI_PANEL_S6E3HA8_HLPM_OFF)
+		return 0;
+
+	return dsi_backlight_update_dcs(bl, bl_lvl);
+}
+
+static int dsi_panel_s6e3ha8_bl_register(struct dsi_backlight_config *bl)
+{
+	bl->update_bl = dsi_panel_s6e3ha8_bl_update;
+
+	return 0;
+}
+
+static const struct of_device_id dsi_backlight_dt_match[] = {
+	{
+		.compatible = "google,s6e3ha8_panel",
+		.data = dsi_panel_s6e3ha8_bl_register,
+	},
+	{}
+};
+
 int dsi_panel_bl_register(struct dsi_panel *panel)
 {
 	int rc = 0;
 	struct dsi_backlight_config *bl = &panel->bl_config;
+	const struct of_device_id *match;
 	int (*register_func)(struct dsi_backlight_config *) = NULL;
 
-	switch (bl->type) {
-	case DSI_BACKLIGHT_WLED:
-		register_func = dsi_panel_led_bl_register;
-		break;
-	case DSI_BACKLIGHT_DCS:
-		bl->update_bl = dsi_backlight_update_dcs;
-		break;
-	case DSI_BACKLIGHT_PWM:
-		register_func = dsi_panel_pwm_bl_register;
-		break;
-	default:
-		pr_err("Backlight type(%d) not supported\n", bl->type);
-		rc = -ENOTSUPP;
-		break;
+	match = of_match_node(dsi_backlight_dt_match, panel->panel_of_node);
+	if (match && match->data) {
+		register_func = match->data;
+	} else {
+		switch (bl->type) {
+		case DSI_BACKLIGHT_WLED:
+			register_func = dsi_panel_led_bl_register;
+			break;
+		case DSI_BACKLIGHT_DCS:
+			bl->update_bl = dsi_backlight_update_dcs;
+			break;
+		case DSI_BACKLIGHT_PWM:
+			register_func = dsi_panel_pwm_bl_register;
+			break;
+		default:
+			pr_err("Backlight type(%d) not supported\n", bl->type);
+			rc = -ENOTSUPP;
+			break;
+		}
 	}
 
 	if (register_func)

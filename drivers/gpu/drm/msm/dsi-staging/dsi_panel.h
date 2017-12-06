@@ -92,6 +92,7 @@ struct dsi_backlight_config {
 	u32 bl_scale;
 	u32 bl_scale_ad;
 	u32 bl_actual;
+	unsigned int last_state;
 
 	int en_gpio;
 
