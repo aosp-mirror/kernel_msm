@@ -31,23 +31,21 @@
 			raydium,num-max-touches = <2>;
 		};
 
-		pixart_pat9127@75 {
-			compatible = "pixart,pat9127";
+		pixart_pat9126@75 {
+			compatible = "pixart,pat9126";
 			reg = <0x75>;
 			interrupt-parent = <&msm_gpio>;
 			interrupts = <27 0x2008>;
+			vld-supply = <&pm8916_l18>;
 			vddio-supply = <&pm8916_l16>;
-			pixart,pwr-reset-gpio = <&msm_gpio 50 0x00>;
+			vdd-supply = <&pm8916_l14>;
 			pixart,irq-gpio = <&msm_gpio 27 0x00>;
-			pinctrl-names = "pmx_rot_switch_idsel",
-					"pmx_rot_switch_active",
+			pinctrl-names = "pmx_rot_switch_active",
 					"pmx_rot_switch_suspend",
 					"pmx_rot_switch_release";
-			pinctrl-0 = <&pix_int_idsel>;
-			pinctrl-1 = <&pix_int_active>;
-			pinctrl-2 = <&pix_int_suspend>;
-			pinctrl-3 = <&pix_release>;
-
+			pinctrl-0 = <&pix_int_active>;
+			pinctrl-1 = <&pix_int_suspend>;
+			pinctrl-2 = <&pix_release>;
 			pixart,inverse-x;
 		};
 
