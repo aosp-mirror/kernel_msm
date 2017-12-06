@@ -1165,8 +1165,8 @@ num_dev_failed:
 int cam_jpeg_hw_mgr_init(struct device_node *of_node, uint64_t *hw_mgr_hdl)
 {
 	int i, rc;
-	uint32_t num_dev;
-	uint32_t num_dma_dev;
+	uint32_t num_dev = 0;
+	uint32_t num_dma_dev = 0;
 	struct cam_hw_mgr_intf *hw_mgr_intf;
 	struct cam_iommu_handle cdm_handles;
 
