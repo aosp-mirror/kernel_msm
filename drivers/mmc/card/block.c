@@ -2960,9 +2960,14 @@ static void mmc_blk_cmdq_reset_all(struct mmc_host *host, int err)
 	q = mrq->req->q;
 	WARN_ON(!test_bit(CMDQ_STATE_ERR, &ctx_info->curr_state));
 
+#ifdef CONFIG_MMC_CLKGATE
 	pr_debug("%s: %s: active_reqs = %lu, clk_requests = %d\n",
 			mmc_hostname(host), __func__,
 			ctx_info->active_reqs, host->clk_requests);
+#else
+	pr_debug("%s: %s: active_reqs = %lu\n", mmc_hostname(host),
+			__func__, ctx_info->active_reqs );
+#endif
 
 	mmc_blk_cmdq_reset(host, false);
 
