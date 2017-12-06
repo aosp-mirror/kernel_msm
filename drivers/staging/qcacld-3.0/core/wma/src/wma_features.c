@@ -718,7 +718,7 @@ static QDF_STATUS wma_lphb_conf_tcp_pkt_filter(tp_wma_handle wma_handle,
 	hb_tcp_filter_fp.length = ts_lphb_tcp_filter->length;
 	hb_tcp_filter_fp.offset = ts_lphb_tcp_filter->offset;
 	hb_tcp_filter_fp.session = ts_lphb_tcp_filter->session;
-	memcpy((void *)&hb_tcp_filter_fp.filter,
+	qdf_mem_copy((void *)&hb_tcp_filter_fp.filter,
 	       (void *)&ts_lphb_tcp_filter->filter,
 	       WMI_WLAN_HB_MAX_FILTER_SIZE);
 
@@ -823,7 +823,7 @@ static QDF_STATUS wma_lphb_conf_udp_pkt_filter(tp_wma_handle wma_handle,
 	hb_udp_filter_fp.length = ts_lphb_udp_filter->length;
 	hb_udp_filter_fp.offset = ts_lphb_udp_filter->offset;
 	hb_udp_filter_fp.session = ts_lphb_udp_filter->session;
-	memcpy((void *)&hb_udp_filter_fp.filter,
+	qdf_mem_copy((void *)&hb_udp_filter_fp.filter,
 	       (void *)&ts_lphb_udp_filter->filter,
 	       WMI_WLAN_HB_MAX_FILTER_SIZE);
 
@@ -2478,8 +2478,8 @@ static int process_search_fft_report(struct spectral_phyerr_tlv *ptlv,
 	}
 
 	/* Doing copy as the contents may not be aligned */
-	memcpy(&fft_summary_A, (uint8_t *)phdr, sizeof(int));
-	memcpy(&fft_summary_B, (uint8_t *)((uint8_t *)phdr + sizeof(int)),
+	qdf_mem_copy(&fft_summary_A, (uint8_t *)phdr, sizeof(int));
+	qdf_mem_copy(&fft_summary_B, (uint8_t *)((uint8_t *)phdr + sizeof(int)),
 						sizeof(int));
 
 	relpwr_db       = ((fft_summary_B >> 26) & 0x3f);
@@ -2521,7 +2521,6 @@ static int process_search_fft_report(struct spectral_phyerr_tlv *ptlv,
 static void spectral_create_samp_msg(tp_wma_handle wma,
 			struct samp_msg_params *params)
 {
-	uint64_t temp_samp_msg_len   = 0;
 	static struct spectral_samp_msg spec_samp_msg;
 	struct samp_msg_data  *data        = NULL;
 	uint8_t *bin_pwr_data          = NULL;
@@ -2538,13 +2537,7 @@ static void spectral_create_samp_msg(tp_wma_handle wma,
 		return;
 	}
 
-	temp_samp_msg_len   = sizeof(struct spectral_samp_msg) -
-				(MAX_NUM_BINS * sizeof(uint8_t));
-	temp_samp_msg_len  += (params->pwr_count * sizeof(uint8_t));
 	chan_width = wma->interfaces[wma->ss_configs.vdev_id].chan_width;
-	if (chan_width == CH_WIDTH_160MHZ)
-		temp_samp_msg_len  += (params->pwr_count_sec80 *
-					sizeof(uint8_t));
 	bin_pwr_data        = *(params->bin_pwr_data);
 
 	memset(&spec_samp_msg, 0, sizeof(struct spectral_samp_msg));
@@ -2562,9 +2555,22 @@ static void spectral_create_samp_msg(tp_wma_handle wma,
 	data->spectral_upper_rssi     = params->upper_rssi;
 	data->spectral_lower_rssi     = params->lower_rssi;
 
-	memcpy(data->spectral_chain_ctl_rssi,
+	if (sizeof(params->chain_ctl_rssi) >
+		sizeof(data->spectral_chain_ctl_rssi))
+		qdf_mem_copy(data->spectral_chain_ctl_rssi,
+			params->chain_ctl_rssi,
+			sizeof(data->spectral_chain_ctl_rssi));
+	else
+		qdf_mem_copy(data->spectral_chain_ctl_rssi,
 			params->chain_ctl_rssi, sizeof(params->chain_ctl_rssi));
-	memcpy(data->spectral_chain_ext_rssi,
+
+	if (sizeof(params->chain_ext_rssi) >
+		sizeof(data->spectral_chain_ext_rssi))
+		qdf_mem_copy(data->spectral_chain_ext_rssi,
+			params->chain_ext_rssi,
+			sizeof(data->spectral_chain_ext_rssi));
+	else
+		qdf_mem_copy(data->spectral_chain_ext_rssi,
 			params->chain_ext_rssi, sizeof(params->chain_ext_rssi));
 
 	data->spectral_bwinfo         = params->bwinfo;
@@ -2578,7 +2584,6 @@ static void spectral_create_samp_msg(tp_wma_handle wma,
 	data->spectral_nb_upper           = params->nb_upper;
 	data->spectral_last_tstamp        = params->last_tstamp;
 	data->spectral_max_mag            = params->max_mag;
-	data->bin_pwr_count               = params->pwr_count;
 	data->lb_edge_extrabins           =
 		wma->ss_configs.rpt_mode == 2 ? 4 : 0;
 	data->rb_edge_extrabins           =
@@ -2588,7 +2593,14 @@ static void spectral_create_samp_msg(tp_wma_handle wma,
 
 	data->noise_floor = params->noise_floor;
 
-	memcpy(&data->bin_pwr[0], bin_pwr_data, params->pwr_count);
+	if (params->pwr_count > sizeof(data->bin_pwr)) {
+		data->bin_pwr_count = sizeof(data->bin_pwr);
+		params->pwr_count = sizeof(data->bin_pwr);
+	} else {
+		data->bin_pwr_count = params->pwr_count;
+	}
+
+	qdf_mem_copy(&data->bin_pwr[0], bin_pwr_data, data->bin_pwr_count);
 
 	spec_samp_msg.vhtop_ch_freq_seg1 = params->vhtop_ch_freq_seg1;
 	spec_samp_msg.vhtop_ch_freq_seg2 = params->vhtop_ch_freq_seg2;
@@ -2599,9 +2611,17 @@ static void spectral_create_samp_msg(tp_wma_handle wma,
 		data->spectral_data_len_sec80 = params->datalen_sec80;
 		data->spectral_max_index_sec80 = params->max_index_sec80;
 		data->spectral_max_mag_sec80 = params->max_mag_sec80;
-		data->bin_pwr_count_sec80 = params->pwr_count_sec80;
-		memcpy(&data->bin_pwr_sec80[0],
-			*(params->bin_pwr_data_sec80), params->pwr_count_sec80);
+
+		if (params->pwr_count_sec80 > sizeof(data->bin_pwr_sec80)) {
+			data->bin_pwr_count_sec80 = sizeof(data->bin_pwr_sec80);
+			params->pwr_count_sec80 = sizeof(data->bin_pwr_sec80);
+		} else {
+			data->bin_pwr_count_sec80 = params->pwr_count_sec80;
+		}
+
+		qdf_mem_copy(&data->bin_pwr_sec80[0],
+			*(params->bin_pwr_data_sec80),
+			data->bin_pwr_count_sec80);
 
 		/* Note: REVERSE_ORDER is not a known use case for secondary
 		 * 80 data at this point.
@@ -3094,10 +3114,19 @@ static QDF_STATUS spectral_phyerr_event_handler(void *handle,
 		}
 
 		if (phyerr.buf_len > 0) {
-			memcpy(&rfqual_info, &phyerr.rf_info,
-					sizeof(wmi_host_rf_info_t));
-			memcpy(&chan_info, &phyerr.chan_info,
-					sizeof(wmi_host_chan_info_t));
+			if (sizeof(phyerr.rf_info) > sizeof(rfqual_info))
+				qdf_mem_copy(&rfqual_info, &phyerr.rf_info,
+						sizeof(rfqual_info));
+			else
+				qdf_mem_copy(&rfqual_info, &phyerr.rf_info,
+						sizeof(phyerr.rf_info));
+
+			if (sizeof(phyerr.chan_info) > sizeof(chan_info))
+				qdf_mem_copy(&chan_info, &phyerr.chan_info,
+						sizeof(chan_info));
+			else
+				qdf_mem_copy(&chan_info, &phyerr.chan_info,
+						sizeof(phyerr.chan_info));
 
 			status = spectral_process_phyerr(wma, phyerr.bufp,
 							phyerr.buf_len,
@@ -10024,6 +10053,13 @@ int wma_unified_power_debug_stats_event_handler(void *handle,
 		return -EINVAL;
 	}
 
+	if (param_buf->num_debug_register > ((WMI_SVC_MSG_MAX_SIZE -
+		sizeof(wmi_pdev_chip_power_stats_event_fixed_param)) /
+		sizeof(uint32_t))) {
+		WMA_LOGE("excess payload: LEN num_debug_register:%u",
+				param_buf->num_debug_register);
+		return -EINVAL;
+	}
 	debug_registers = param_tlvs->debug_registers;
 	stats_registers_len =
 		(sizeof(uint32_t) * param_buf->num_debug_register);
@@ -10321,7 +10357,7 @@ void wma_spectral_scan_config(WMA_HANDLE wma_handle,
 		return;
 
 	/* save the copy of the config params */
-	memcpy(&wma->ss_configs, req, sizeof(*req));
+	qdf_mem_copy(&wma->ss_configs, req, sizeof(*req));
 
 	status = wmi_unified_vdev_spectral_configure_cmd_send(wma->wmi_handle,
 								req);
@@ -10354,6 +10390,14 @@ int wma_rx_aggr_failure_event_handler(void *handle, u_int8_t *event_buf,
 
 	rx_aggr_failure_info = param_buf->fixed_param;
 	hole_info = param_buf->failure_info;
+
+	if (rx_aggr_failure_info->num_failure_info > ((WMI_SVC_MSG_MAX_SIZE -
+	    sizeof(*rx_aggr_hole_event)) /
+	    sizeof(rx_aggr_hole_event->hole_info_array[0]))) {
+		WMA_LOGE("%s: Excess data from WMI num_failure_info %d",
+			 __func__, rx_aggr_failure_info->num_failure_info);
+		return -EINVAL;
+	}
 
 	alloc_len = sizeof(*rx_aggr_hole_event) +
 		(rx_aggr_failure_info->num_failure_info)*

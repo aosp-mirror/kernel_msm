@@ -67,6 +67,7 @@
 #include "cds_concurrency.h"
 #include "wmi_unified_param.h"
 #include "linux/ieee80211.h"
+#include "cds_reg_service.h"
 
 /* MCS Based rate table */
 /* HT MCS parameters with Nss = 1 */
@@ -1239,6 +1240,33 @@ static int wma_unified_link_peer_stats_event_handler(void *handle,
 		return -EINVAL;
 	}
 
+	do {
+		if (peer_stats->num_rates >
+			WMI_SVC_MSG_MAX_SIZE/sizeof(wmi_rate_stats)) {
+			excess_data = true;
+			break;
+		} else {
+			buf_len =
+				peer_stats->num_rates * sizeof(wmi_rate_stats);
+		}
+		if (fixed_param->num_peers >
+			WMI_SVC_MSG_MAX_SIZE/sizeof(wmi_peer_link_stats)) {
+			excess_data = true;
+			break;
+		} else {
+			buf_len += fixed_param->num_peers *
+				sizeof(wmi_peer_link_stats);
+		}
+	} while (0);
+
+	if (excess_data ||
+		(sizeof(*fixed_param) > WMI_SVC_MSG_MAX_SIZE - buf_len)) {
+		WMA_LOGE("excess wmi buffer: rates:%d, peers:%d",
+			peer_stats->num_rates, fixed_param->num_peers);
+		QDF_ASSERT(0);
+		return -EINVAL;
+	}
+
 	/*
 	 * num_rates - sum of the rates of all the peers
 	 */
@@ -1535,9 +1563,21 @@ static int wma_unified_link_radio_stats_event_handler(void *handle,
 		WMA_LOGA("%s: Invalid param_tlvs for Radio Stats", __func__);
 		return -EINVAL;
 	}
+	if (radio_stats->num_channels >
+		(NUM_24GHZ_CHANNELS + NUM_5GHZ_CHANNELS)) {
+		WMA_LOGE("%s: Too many channels %d",
+			__func__, radio_stats->num_channels);
+		return -EINVAL;
+	}
 
 	radio_stats_size = sizeof(tSirWifiRadioStat);
 	chan_stats_size = sizeof(tSirWifiChannelStats);
+	if (fixed_param->num_radio >
+		(UINT_MAX - sizeof(*link_stats_results))/radio_stats_size) {
+		WMA_LOGE("excess num_radio %d is leading to int overflow",
+			fixed_param->num_radio);
+		return -EINVAL;
+	}
 	link_stats_results_size = sizeof(*link_stats_results) +
 				  fixed_param->num_radio * radio_stats_size;
 
@@ -3251,6 +3291,13 @@ int wma_peer_info_event_handler(void *handle, u_int8_t *cmd_param_info,
 
 	WMA_LOGI("%s Recv WMI_PEER_STATS_INFO_EVENTID", __func__);
 	event = param_buf->fixed_param;
+	if (event->num_peers >
+		((WMI_SVC_MSG_MAX_SIZE -
+		  sizeof(wmi_peer_stats_info_event_fixed_param))/
+		 sizeof(wmi_peer_stats_info))) {
+		WMA_LOGE("Excess num of peers from fw %d", event->num_peers);
+		return -EINVAL;
+	}
 	buf_size = sizeof(wmi_peer_stats_info_event_fixed_param) +
 		sizeof(wmi_peer_stats_info) * event->num_peers;
 	buf = qdf_mem_malloc(buf_size);
