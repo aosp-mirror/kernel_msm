@@ -2875,7 +2875,7 @@ int mmc_regulator_set_ocr(struct mmc_host *mmc,
 			unsigned short vdd_bit)
 {
 	int			result = 0;
-	int			min_uV, max_uV;
+	int			min_uV = 0, max_uV = 0;
 
 	if (vdd_bit) {
 		mmc_ocrbitnum_to_vdd(vdd_bit, &min_uV, &max_uV);
