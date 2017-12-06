@@ -13,6 +13,7 @@
 #include "../qcom/dsi-panel-sim-video.dtsi"
 #include "dsi-panel-sw43402-dsc-qhd-cmd.dtsi"
 #include "dsi-panel-sw43408-dsc-fhd-cmd.dtsi"
+#include "dsi-panel-s6e3ha8-dsc-wqhd-cmd.dtsi"
 
 &sde_te_active {
 	mux {
@@ -94,6 +95,27 @@
 		vdd-supply = <&pm8998_l28>;
 	};
 
+	dsi_s6e3ha8_cmd_display: qcom,dsi-display@52 {
+		compatible = "qcom,dsi-display";
+		label = "dsi_s6e3ha8_cmd_display";
+		qcom,display-type = "primary";
+
+		qcom,dsi-ctrl = <&mdss_dsi0>;
+		qcom,dsi-phy = <&mdss_dsi_phy0>;
+		clocks = <&mdss_dsi0_pll BYTECLK_MUX_0_CLK>,
+			<&mdss_dsi0_pll PCLK_MUX_0_CLK>;
+		clock-names = "src_byte_clk", "src_pixel_clk";
+
+		pinctrl-names = "panel_active", "panel_suspend";
+		pinctrl-0 = <&sde_dsi_active &sde_te_active>;
+		pinctrl-1 = <&sde_dsi_suspend &sde_te_suspend>;
+
+		qcom,dsi-panel = <&dsi_s6e3ha8_dsc_wqhd_cmd>;
+
+		vddi-supply = <&pm8998_l14>;
+		vci-supply = <&pm8998_l28>;
+	};
+
 	sde_wb: qcom,wb-display@0 {
 		compatible = "qcom,wb-display";
 		cell-index = <0>;
@@ -162,6 +184,21 @@
 	};
 };
 
+&dsi_s6e3ha8_dsc_wqhd_cmd {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_s6e3ha8>;
+
+	qcom,platform-reset-gpio = <&tlmm 6 0>;
+
+	qcom,mdss-dsi-t-clk-post = <0x0D>;
+	qcom,mdss-dsi-t-clk-pre = <0x2F>;
+	qcom,mdss-dsi-display-timings {
+		timing@0 {
+			qcom,mdss-dsi-panel-phy-timings =
+					[00 1E 08 07 24 22 08 08 05 03 04 00];
+		};
+	};
+};
+
 &dsi_sim_vid {
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_vdd_no_labibb>;
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
@@ -184,6 +221,7 @@
 	qcom,disp-type-amoled;
 	qcom,led-strings-list = [02 03];
 	qcom,avdd-target-voltage-mv = <7600>;
+	qcom,en-cabc;
 };
 
 &labibb {
@@ -244,6 +282,31 @@
 			qcom,supply-enable-load = <857000>;
 			qcom,supply-disable-load = <0>;
 			qcom,supply-post-on-sleep = <10>;
+		};
+	};
+
+	dsi_panel_pwr_supply_s6e3ha8: dsi_panel_pwr_supply_s6e3ha8 {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		qcom,panel-supply-entry@0 {
+			reg = <0>;
+			qcom,supply-name = "vddi";
+			qcom,supply-min-voltage = <1800000>;
+			qcom,supply-max-voltage = <1800000>;
+			qcom,supply-enable-load = <100000>;
+			qcom,supply-disable-load = <100>;
+			qcom,supply-post-on-sleep = <10>;
+		};
+
+		qcom,panel-supply-entry@1 {
+			reg = <1>;
+			qcom,supply-name = "vci";
+			qcom,supply-min-voltage = <3000000>;
+			qcom,supply-max-voltage = <3000000>;
+			qcom,supply-enable-load = <100000>;
+			qcom,supply-disable-load = <100>;
+			qcom,supply-post-on-sleep = <0>;
 		};
 	};
 };
