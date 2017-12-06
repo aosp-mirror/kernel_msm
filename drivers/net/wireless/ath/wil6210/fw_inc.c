@@ -478,7 +478,7 @@ static int wil_fw_process(struct wil6210_priv *wil, const void *data,
 {
 	int rc = 0;
 	const struct wil_fw_record_head *hdr;
-	size_t s, hdr_sz;
+	size_t s, hdr_sz = 0;
 
 	for (hdr = data;; hdr = (const void *)hdr + s, size -= s) {
 		if (size < sizeof(*hdr))
