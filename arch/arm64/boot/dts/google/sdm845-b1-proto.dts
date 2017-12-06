@@ -39,6 +39,9 @@
 		spi-cpol;
 		spi-cpha;
 	};
+	ese@0 {
+		status = "disabled";
+	};
 };
 
 /*
