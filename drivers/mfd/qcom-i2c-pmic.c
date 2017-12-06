@@ -438,7 +438,7 @@ static irqreturn_t i2c_pmic_irq_handler(int irq, void *dev_id)
 static int i2c_pmic_parse_dt(struct i2c_pmic *chip)
 {
 	struct device_node *node = chip->dev->of_node;
-	int rc, i;
+	int rc = 0, i;
 	u32 temp;
 
 	if (!node) {
