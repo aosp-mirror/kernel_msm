@@ -2589,9 +2589,9 @@ static int dwc3_cleanup_done_reqs(struct dwc3 *dwc, struct dwc3_ep *dep,
 		const struct dwc3_event_depevt *event, int status)
 {
 	struct dwc3_request	*req, *n;
-	struct dwc3_trb		*trb;
+	struct dwc3_trb		*trb = NULL;
 	bool			ioc = false;
-	int			ret;
+	int			ret = -EINVAL;
 
 	list_for_each_entry_safe(req, n, &dep->started_list, list) {
 		unsigned length;
