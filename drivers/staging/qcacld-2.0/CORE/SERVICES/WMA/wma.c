@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -4678,6 +4678,11 @@ static int wma_unified_link_iface_stats_event_handler(void *handle,
 
 	if (!fixed_param || !link_stats || (link_stats->num_ac && !ac_stats)) {
 		WMA_LOGA("%s: Invalid param_tlvs for Iface Stats", __func__);
+		return -EINVAL;
+	}
+	if (link_stats->num_ac >= WIFI_AC_MAX) {
+		WMA_LOGE("%s: Excess data received from firmware num_ac %d",
+			__func__, link_stats->num_ac);
 		return -EINVAL;
 	}
 
