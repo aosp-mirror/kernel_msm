@@ -215,10 +215,15 @@ lim_collect_bss_description(tpAniSirGlobal pMac,
 		if (pBPR->HTCaps.supportedChannelWidthSet)
 			pBssDescr->chan_width = eHT_CHANNEL_WIDTH_40MHZ;
 	}
+
 	/* VHT Parameters */
-	if (pBPR->VHTCaps.present) {
+	if (IS_BSS_VHT_CAPABLE(pBPR->VHTCaps) ||
+	    IS_BSS_VHT_CAPABLE(pBPR->vendor_vht_ie.VHTCaps)) {
 		pBssDescr->vht_caps_present = 1;
-		if (pBPR->VHTCaps.muBeamformerCap)
+		if ((IS_BSS_VHT_CAPABLE(pBPR->VHTCaps) &&
+		     pBPR->VHTCaps.suBeamFormerCap) ||
+		    (IS_BSS_VHT_CAPABLE(pBPR->vendor_vht_ie.VHTCaps) &&
+		     pBPR->vendor_vht_ie.VHTCaps.suBeamFormerCap))
 			pBssDescr->beacomforming_capable = 1;
 	}
 	if (pBPR->VHTOperation.present)
@@ -296,22 +301,16 @@ lim_collect_bss_description(tpAniSirGlobal pMac,
 
 	/* SINR no longer reported by HW */
 	pBssDescr->sinr = 0;
-	pe_debug(MAC_ADDRESS_STR " rssi: normalized: %d, absolute: %d",
-		MAC_ADDR_ARRAY(pHdr->bssId), pBssDescr->rssi,
-		pBssDescr->rssi_raw);
-
 	pBssDescr->received_time = (uint64_t)qdf_mc_timer_get_system_time();
 	pBssDescr->tsf_delta = WMA_GET_RX_TSF_DELTA(pRxPacketInfo);
 	pBssDescr->seq_ctrl = pHdr->seqControl;
 
-	pe_debug("BSSID: "MAC_ADDRESS_STR " tsf_delta: %u ReceivedTime: %llu ssid: %s",
-		  MAC_ADDR_ARRAY(pHdr->bssId), pBssDescr->tsf_delta,
-		  pBssDescr->received_time,
-		  ((pBPR->ssidPresent) ? (char *)pBPR->ssId.ssId : ""));
-
-	pe_debug("Seq Ctrl: Frag Num: %d Seq Num: LO: %02x HI: %02x",
-		pBssDescr->seq_ctrl.fragNum, pBssDescr->seq_ctrl.seqNumLo,
-		pBssDescr->seq_ctrl.seqNumHi);
+	pe_debug(MAC_ADDRESS_STR
+		" rssi: norm %d abs %d tsf_delta %u RcvdTime %llu ssid %s",
+		MAC_ADDR_ARRAY(pHdr->bssId), pBssDescr->rssi,
+		pBssDescr->rssi_raw, pBssDescr->tsf_delta,
+		pBssDescr->received_time,
+		((pBPR->ssidPresent) ? (char *)pBPR->ssId.ssId : ""));
 
 	if (fScanning) {
 		rrm_get_start_tsf(pMac, pBssDescr->startTSF);

@@ -209,7 +209,7 @@ QDF_STATUS wlansap_context_get(ptSapContext ctx)
 	}
 	qdf_mutex_release(&sap_context_lock);
 
-	QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_ERROR,
+	QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_DEBUG,
 			"%s: sap session is not valid", __func__);
 	return QDF_STATUS_E_FAILURE;
 }
@@ -854,6 +854,7 @@ QDF_STATUS wlansap_start_bss(void *pCtx,     /* pwextCtx */
 	pSapCtx->enableOverLapCh = pConfig->enOverLapCh;
 	pSapCtx->acs_cfg = &pConfig->acs_cfg;
 	pSapCtx->isCacEndNotified = false;
+	pSapCtx->is_chan_change_inprogress = false;
 	/* Set the BSSID to your "self MAC Addr" read the mac address
 		from Configuation ITEM received from HDD */
 	pSapCtx->csr_roamProfile.BSSIDs.numOfBSSIDs = 1;
@@ -1689,6 +1690,7 @@ wlansap_set_channel_change_with_csa(void *p_cds_gctx, uint32_t targetChannel,
 	void *hHal = NULL;
 	bool valid;
 	QDF_STATUS status;
+	bool sta_sap_scc_on_dfs_chan;
 
 	sapContext = CDS_GET_SAP_CB(p_cds_gctx);
 	if (NULL == sapContext) {
@@ -1718,6 +1720,7 @@ wlansap_set_channel_change_with_csa(void *p_cds_gctx, uint32_t targetChannel,
 		cds_is_any_mode_active_on_band_along_with_session(
 					sapContext->sessionId, CDS_BAND_5));
 
+	sta_sap_scc_on_dfs_chan = cds_is_sta_sap_scc_allowed_on_dfs_channel();
 	/*
 	 * Now, validate if the passed channel is valid in the
 	 * current regulatory domain.
@@ -1727,8 +1730,10 @@ wlansap_set_channel_change_with_csa(void *p_cds_gctx, uint32_t targetChannel,
 			CHANNEL_STATE_ENABLE) ||
 		(cds_get_channel_state(targetChannel) ==
 			CHANNEL_STATE_DFS &&
-		!cds_is_any_mode_active_on_band_along_with_session(
-			sapContext->sessionId, CDS_BAND_5)))) {
+			(!cds_is_any_mode_active_on_band_along_with_session(
+				    sapContext->sessionId, CDS_BAND_5) ||
+			 sta_sap_scc_on_dfs_chan)))) {
+
 		/*
 		 * validate target channel switch w.r.t various concurrency
 		 * rules set.
@@ -3204,23 +3209,29 @@ wlansap_reset_sap_config_add_ie(tsap_Config_t *pConfig, eUpdateIEsType updateTyp
 	switch (updateType) {
 	case eUPDATE_IE_ALL:    /*only used to reset */
 	case eUPDATE_IE_PROBE_RESP:
-		qdf_mem_free(pConfig->pProbeRespIEsBuffer);
-		pConfig->probeRespIEsBufferLen = 0;
-		pConfig->pProbeRespIEsBuffer = NULL;
+		if (pConfig->pProbeRespIEsBuffer) {
+			qdf_mem_free(pConfig->pProbeRespIEsBuffer);
+			pConfig->probeRespIEsBufferLen = 0;
+			pConfig->pProbeRespIEsBuffer = NULL;
+		}
 		if (eUPDATE_IE_ALL != updateType)
 			break;
 
 	case eUPDATE_IE_ASSOC_RESP:
-		qdf_mem_free(pConfig->pAssocRespIEsBuffer);
-		pConfig->assocRespIEsLen = 0;
-		pConfig->pAssocRespIEsBuffer = NULL;
+		if (pConfig->pAssocRespIEsBuffer) {
+			qdf_mem_free(pConfig->pAssocRespIEsBuffer);
+			pConfig->assocRespIEsLen = 0;
+			pConfig->pAssocRespIEsBuffer = NULL;
+		}
 		if (eUPDATE_IE_ALL != updateType)
 			break;
 
 	case eUPDATE_IE_PROBE_BCN:
-		qdf_mem_free(pConfig->pProbeRespBcnIEsBuffer);
-		pConfig->probeRespBcnIEsLen = 0;
-		pConfig->pProbeRespBcnIEsBuffer = NULL;
+		if (pConfig->pProbeRespBcnIEsBuffer) {
+			qdf_mem_free(pConfig->pProbeRespBcnIEsBuffer);
+			pConfig->probeRespBcnIEsLen = 0;
+			pConfig->pProbeRespBcnIEsBuffer = NULL;
+		}
 		if (eUPDATE_IE_ALL != updateType)
 			break;
 

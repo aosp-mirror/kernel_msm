@@ -1968,7 +1968,7 @@ void ol_txrx_pdev_detach(ol_txrx_pdev_handle pdev)
 		TAILQ_REMOVE(&pdev->req_list, req, req_list_elem);
 		pdev->req_list_depth--;
 		ol_txrx_err(
-			"%d: %p,verbose(%d), concise(%d), up_m(0x%x), reset_m(0x%x)\n",
+			"%d: %pK,verbose(%d), concise(%d), up_m(0x%x), reset_m(0x%x)\n",
 			i++,
 			req,
 			req->base.print.verbose,
@@ -2093,6 +2093,7 @@ ol_txrx_vdev_attach(ol_txrx_pdev_handle pdev,
 			sizeof(union ol_txrx_align_mac_addr_t));
 	qdf_spinlock_create(&vdev->flow_control_lock);
 	vdev->osif_flow_control_cb = NULL;
+	vdev->osif_flow_control_is_pause = NULL;
 	vdev->osif_fc_ctx = NULL;
 
 	/* Default MAX Q depth for every VDEV */
@@ -2275,6 +2276,7 @@ ol_txrx_vdev_detach(ol_txrx_vdev_handle vdev,
 
 	qdf_spin_lock_bh(&vdev->flow_control_lock);
 	vdev->osif_flow_control_cb = NULL;
+	vdev->osif_flow_control_is_pause = NULL;
 	vdev->osif_fc_ctx = NULL;
 	qdf_spin_unlock_bh(&vdev->flow_control_lock);
 	qdf_spinlock_destroy(&vdev->flow_control_lock);
@@ -3795,7 +3797,7 @@ ol_txrx_fw_stats_handler(ol_txrx_pdev_handle pdev,
 
 	if (!found) {
 		ol_txrx_err(
-			"req(%p) from firmware can't be found in the list\n", req);
+			"req(%pK) from firmware can't be found in the list\n", req);
 		return;
 	}
 
@@ -4374,17 +4376,9 @@ static ol_txrx_vdev_handle ol_txrx_get_vdev_from_sta_id(uint8_t sta_id)
 	return peer->vdev;
 }
 
-/**
- * ol_txrx_register_tx_flow_control() - register tx flow control callback
- * @vdev_id: vdev_id
- * @flowControl: flow control callback
- * @osif_fc_ctx: callback context
- *
- * Return: 0 for sucess or error code
- */
 int ol_txrx_register_tx_flow_control(uint8_t vdev_id,
-				      ol_txrx_tx_flow_control_fp flowControl,
-				      void *osif_fc_ctx)
+	ol_txrx_tx_flow_control_fp flowControl, void *osif_fc_ctx,
+	ol_txrx_tx_flow_control_is_pause_fp flow_control_is_pause)
 {
 	ol_txrx_vdev_handle vdev = ol_txrx_get_vdev_from_vdev_id(vdev_id);
 
@@ -4396,6 +4390,7 @@ int ol_txrx_register_tx_flow_control(uint8_t vdev_id,
 
 	qdf_spin_lock_bh(&vdev->flow_control_lock);
 	vdev->osif_flow_control_cb = flowControl;
+	vdev->osif_flow_control_is_pause = flow_control_is_pause;
 	vdev->osif_fc_ctx = osif_fc_ctx;
 	qdf_spin_unlock_bh(&vdev->flow_control_lock);
 	return 0;
@@ -4420,6 +4415,7 @@ int ol_txrx_deregister_tx_flow_control_cb(uint8_t vdev_id)
 
 	qdf_spin_lock_bh(&vdev->flow_control_lock);
 	vdev->osif_flow_control_cb = NULL;
+	vdev->osif_flow_control_is_pause = NULL;
 	vdev->osif_fc_ctx = NULL;
 	qdf_spin_unlock_bh(&vdev->flow_control_lock);
 	return 0;
@@ -4506,6 +4502,15 @@ inline void ol_txrx_flow_control_cb(ol_txrx_vdev_handle vdev,
 	if ((vdev->osif_flow_control_cb) && (vdev->osif_fc_ctx))
 		vdev->osif_flow_control_cb(vdev->osif_fc_ctx, tx_resume);
 	qdf_spin_unlock_bh(&vdev->flow_control_lock);
+}
+
+bool ol_txrx_flow_control_is_pause(ol_txrx_vdev_handle vdev)
+{
+	bool is_pause = false;
+	if ((vdev->osif_flow_control_is_pause) && (vdev->osif_fc_ctx))
+		is_pause = vdev->osif_flow_control_is_pause(vdev->osif_fc_ctx);
+
+	return is_pause;
 }
 #endif /* QCA_LL_LEGACY_TX_FLOW_CONTROL */
 
