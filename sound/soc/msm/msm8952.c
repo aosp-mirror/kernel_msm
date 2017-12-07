@@ -577,6 +577,10 @@ static int msm_mi2s_sclk_ctl(struct snd_pcm_substream *substream, bool enable)
 						msm8952_get_clk_id(port_id);
 				mi2s_rx_clk.clk_freq_in_hz =
 						get_mi2s_rx_clk_val(port_id);
+				/*bt need 256KHz IBIT clk freq */
+			        if (port_id == AFE_PORT_ID_QUATERNARY_MI2S_RX) {
+					mi2s_rx_clk.clk_freq_in_hz = Q6AFE_LPASS_IBIT_CLK_256_KHZ;
+				}
 				ret = afe_set_lpass_clock_v2(port_id,
 							&mi2s_rx_clk);
 				break;
@@ -601,6 +605,10 @@ static int msm_mi2s_sclk_ctl(struct snd_pcm_substream *substream, bool enable)
 						msm8952_get_clk_id(port_id);
 				mi2s_tx_clk.clk_freq_in_hz =
 						Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ;
+				/*bt need 256KHz IBIT clk freq */
+			        if (port_id == AFE_PORT_ID_QUATERNARY_MI2S_TX) {
+					mi2s_tx_clk.clk_freq_in_hz = Q6AFE_LPASS_IBIT_CLK_256_KHZ;
+				}
 				ret = afe_set_lpass_clock_v2(port_id,
 							&mi2s_tx_clk);
 				break;
@@ -2390,7 +2398,9 @@ static struct snd_soc_dai_link msm8952_dai[] = {
 		.no_pcm = 1,
 		.dpcm_playback = 1,
 		.be_id = MSM_BACKEND_DAI_QUATERNARY_MI2S_RX,
-		.be_hw_params_fixup = msm_be_hw_params_fixup,
+
+		/* do not use 48k freq for BT SCO*/
+		/*.be_hw_params_fixup = msm_be_hw_params_fixup,*/
 		.ops = &msm8952_quat_mi2s_be_ops,
 		.ignore_pmdown_time = 1, /* dai link has playback support */
 		.ignore_suspend = 1,
@@ -2405,7 +2415,9 @@ static struct snd_soc_dai_link msm8952_dai[] = {
 		.no_pcm = 1,
 		.dpcm_capture = 1,
 		.be_id = MSM_BACKEND_DAI_QUATERNARY_MI2S_TX,
-		.be_hw_params_fixup = msm_be_hw_params_fixup,
+
+		/* do not use 48k freq for BT SCO*/
+		/* .be_hw_params_fixup = msm_be_hw_params_fixup,*/
 		.ops = &msm8952_quat_mi2s_be_ops,
 		.ignore_suspend = 1,
 	},
