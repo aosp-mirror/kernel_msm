@@ -1540,6 +1540,50 @@ int smblib_vbus_regulator_is_enabled(struct regulator_dev *rdev)
 	return ret;
 }
 
+int smblib_get_prop_input_current_max(struct smb_charger *chg,
+					union power_supply_propval *val)
+{
+	int rc;
+
+	rc = smblib_get_charge_param(chg, &chg->param.usb_icl, &val->intval);
+
+	return rc;
+}
+
+int smblib_set_prop_input_current_max(struct smb_charger *chg,
+					const union power_supply_propval *val)
+{
+	int rc;
+	bool override = true;
+
+	set_sdp_current(chg, 100000);
+	rc = smblib_set_charge_param(chg, &chg->param.usb_icl, val->intval);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't set HC ICL rc=%d\n", rc);
+		goto err_rc;
+	}
+
+	/* enforce override */
+	rc = smblib_masked_write(chg, USBIN_ICL_OPTIONS_REG,
+		USBIN_MODE_CHG_BIT, override ? USBIN_MODE_CHG_BIT : 0);
+
+	rc = smblib_icl_override(chg, override);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't set ICL override rc=%d\n", rc);
+		goto err_rc;
+	}
+
+	/* unsuspend after configuring current and override */
+	rc = smblib_set_usb_suspend(chg, false);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't resume input rc=%d\n", rc);
+		goto err_rc;
+	}
+
+err_rc:
+	return rc;
+}
+
 /********************
  * BATT PSY GETTERS *
  ********************/
