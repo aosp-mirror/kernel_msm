@@ -19,6 +19,7 @@ int fscrypt_using_hardware_encryption(const struct inode *inode)
 	return S_ISREG(inode->i_mode) && ci &&
 		ci->ci_data_mode == FS_ENCRYPTION_MODE_PRIVATE;
 }
+EXPORT_SYMBOL(fscrypt_using_hardware_encryption);
 
 /*
  * Retrieves encryption key from the inode
