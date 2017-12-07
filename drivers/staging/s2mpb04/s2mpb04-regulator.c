@@ -295,8 +295,6 @@ void s2mpb04_regulator_notify(enum s2mpb04_regulator_ids rid,
 	dev_err(_s2mpb04_regulator->dev, "%s: rid %d, event 0x%lx\n", __func__,
 		rid, event);
 
-	s2mpb04_regulator_disable(_s2mpb04_regulator->rdevs[rid]);
-
 	regulator_notifier_call_chain(_s2mpb04_regulator->rdevs[rid], event,
 				      NULL);
 }
