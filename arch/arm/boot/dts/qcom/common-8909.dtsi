@@ -224,6 +224,7 @@
 };
 &audio_codec_mtp {
 	qcom,model = "msm8909-pm8916-snd-card";
+        qcom,msm-ext-pa = "quaternary";
 	qcom,audio-routing =
 		"RX_BIAS", "MCLK",
 		"SPK_RX_BIAS", "MCLK",
@@ -241,7 +242,8 @@
 	qcom,msm-gpios =
 		"pri_i2s",
 		"us_eu_gpio",
-		"cdc_dmic_lines";
+		"cdc_dmic_lines",
+	        "quat_i2s";
 	qcom,pinctrl-names =
 		"all_off",
 		"pri_i2s_act",
@@ -250,7 +252,15 @@
 		"cdc_lines_dmic_act",
 		"pri_i2s_dmic_lines_act",
 		"us_eu_gpio_dmic_lines_act",
-		"pri_i2s_us_eu_gpio_dmic_lines_act";
+		"pri_i2s_us_eu_gpio_dmic_lines_act",
+		"quat_i2s_active",
+		"quat_i2s_pri_i2s",
+		"quat_i2s_pri_i2s_us_eu",
+		"quat_i2s_pri_i2s_us_en_dmic",
+		"quat_i2s_us_eu",
+		"quat_i2s_us_eu_dmic",
+		"quat_i2s_dmic",
+		"quat_i2s_dmic_pri_i2s";
 	pinctrl-names =
 		"all_off",
 		"pri_i2s_act",
@@ -259,22 +269,50 @@
 		"cdc_lines_dmic_act",
 		"pri_i2s_dmic_lines_act",
 		"us_eu_gpio_dmic_lines_act",
-		"pri_i2s_us_eu_gpio_dmic_lines_act";
+		"pri_i2s_us_eu_gpio_dmic_lines_act",
+		"quat_i2s_active",
+		"quat_i2s_pri_i2s",
+		"quat_i2s_pri_i2s_us_eu",
+		"quat_i2s_pri_i2s_us_en_dmic",
+		"quat_i2s_us_eu",
+		"quat_i2s_us_eu_dmic",
+		"quat_i2s_dmic",
+		"quat_i2s_dmic_pri_i2s";
 	pinctrl-0 = <&cdc_pdm_lines_sus &cross_conn_det_sus
-					&cdc_dmic_lines_sus &cdc_dmic_lines_sus_ex>;
+					&cdc_dmic_lines_sus &cdc_dmic_lines_sus_ex &ext_cdc_tlmm_lines_sus>;
 	pinctrl-1 = <&cdc_pdm_lines_act &cross_conn_det_sus
-					&cdc_dmic_lines_sus &cdc_dmic_lines_sus_ex>;
+					&cdc_dmic_lines_sus &cdc_dmic_lines_sus_ex &ext_cdc_tlmm_lines_sus>;
 	pinctrl-2 = <&cdc_pdm_lines_sus &cross_conn_det_act
-					&cdc_dmic_lines_sus &cdc_dmic_lines_sus_ex>;
+					&cdc_dmic_lines_sus &cdc_dmic_lines_sus_ex &ext_cdc_tlmm_lines_sus>;
 	pinctrl-3 = <&cdc_pdm_lines_act &cross_conn_det_act
-					&cdc_dmic_lines_sus &cdc_dmic_lines_sus_ex>;
+					&cdc_dmic_lines_sus &cdc_dmic_lines_sus_ex &ext_cdc_tlmm_lines_sus>;
 	pinctrl-4 = <&cdc_pdm_lines_sus &cross_conn_det_sus
-					&cdc_dmic_lines_act &cdc_dmic_lines_act_ex>;
+					&cdc_dmic_lines_act &cdc_dmic_lines_act_ex &ext_cdc_tlmm_lines_sus>;
 	pinctrl-5 = <&cdc_pdm_lines_act &cross_conn_det_sus
-					&cdc_dmic_lines_act &cdc_dmic_lines_act_ex>;
+					&cdc_dmic_lines_act &cdc_dmic_lines_act_ex &ext_cdc_tlmm_lines_sus>;
 	pinctrl-6 = <&cdc_pdm_lines_sus &cross_conn_det_act
-					&cdc_dmic_lines_act &cdc_dmic_lines_act_ex>;
+					&cdc_dmic_lines_act &cdc_dmic_lines_act_ex &ext_cdc_tlmm_lines_sus>;
 	pinctrl-7 = <&cdc_pdm_lines_act &cross_conn_det_act
-					&cdc_dmic_lines_act &cdc_dmic_lines_act_ex>;
+					&cdc_dmic_lines_act &cdc_dmic_lines_act_ex &ext_cdc_tlmm_lines_sus>;
+	pinctrl-8 = <&cdc_pdm_lines_sus &cross_conn_det_sus
+					&cdc_dmic_lines_sus &cdc_dmic_lines_sus_ex &ext_cdc_tlmm_lines_act>;
+	pinctrl-9 = <&cdc_pdm_lines_act &cross_conn_det_sus
+					&cdc_dmic_lines_sus &cdc_dmic_lines_sus_ex &ext_cdc_tlmm_lines_act>;
+	pinctrl-10 = <&cdc_pdm_lines_act &cross_conn_det_act
+					&cdc_dmic_lines_sus &cdc_dmic_lines_sus_ex &ext_cdc_tlmm_lines_act>;
+	pinctrl-11 = <&cdc_pdm_lines_act &cross_conn_det_act
+					&cdc_dmic_lines_act &cdc_dmic_lines_act_ex &ext_cdc_tlmm_lines_act>;
+	pinctrl-12 = <&cdc_pdm_lines_sus &cross_conn_det_act
+					&cdc_dmic_lines_sus &cdc_dmic_lines_sus_ex &ext_cdc_tlmm_lines_act>;
+	pinctrl-13 = <&cdc_pdm_lines_sus &cross_conn_det_act
+					&cdc_dmic_lines_act &cdc_dmic_lines_act_ex &ext_cdc_tlmm_lines_act>;
+	pinctrl-14 = <&cdc_pdm_lines_sus &cross_conn_det_sus
+					&cdc_dmic_lines_act &cdc_dmic_lines_act_ex &ext_cdc_tlmm_lines_act>;
+	pinctrl-15 = <&cdc_pdm_lines_act &cross_conn_det_sus
+					&cdc_dmic_lines_act &cdc_dmic_lines_act_ex &ext_cdc_tlmm_lines_act>;
 	asoc-codec = <&stub_codec>, <&pm8916_tombak_dig>;
+};
+&dai_mi2s3{
+	qcom,msm-mi2s-rx-lines = <2>;
+	qcom,msm-mi2s-tx-lines = <1>;
 };
