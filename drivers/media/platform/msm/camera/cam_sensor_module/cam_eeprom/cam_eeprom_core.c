@@ -62,6 +62,7 @@ static int cam_eeprom_read_memory(struct cam_eeprom_ctrl_t *e_ctrl,
 			i2c_reg_settings.addr_type = emap[j].page.addr_type;
 			i2c_reg_settings.data_type = emap[j].page.data_type;
 			i2c_reg_settings.size = 1;
+			i2c_reg_settings.delay = 0;
 			i2c_reg_array.reg_addr = emap[j].page.addr;
 			i2c_reg_array.reg_data = emap[j].page.data;
 			i2c_reg_array.delay = emap[j].page.delay;
@@ -79,6 +80,7 @@ static int cam_eeprom_read_memory(struct cam_eeprom_ctrl_t *e_ctrl,
 			i2c_reg_settings.addr_type = emap[j].pageen.addr_type;
 			i2c_reg_settings.data_type = emap[j].pageen.data_type;
 			i2c_reg_settings.size = 1;
+			i2c_reg_settings.delay = 0;
 			i2c_reg_array.reg_addr = emap[j].pageen.addr;
 			i2c_reg_array.reg_data = emap[j].pageen.data;
 			i2c_reg_array.delay = emap[j].pageen.delay;
@@ -443,6 +445,7 @@ static int32_t cam_eeprom_parse_memory_map(
 			map[*num_map + cnt].page.data_type =
 				i2c_random_wr->header.data_type;
 			map[*num_map + cnt].page.valid_size = 1;
+			map[*num_map + cnt].page.delay = 0;
 		}
 
 		*num_map += (i2c_random_wr->header.count - 1);
@@ -459,6 +462,7 @@ static int32_t cam_eeprom_parse_memory_map(
 		map[*num_map].mem.data_type = i2c_cont_rd->header.data_type;
 		map[*num_map].mem.valid_size =
 			i2c_cont_rd->header.count;
+		map[*num_map].mem.delay = 0;
 		cmd_buf += cmd_length_in_bytes / sizeof(int32_t);
 		processed_size +=
 			cmd_length_in_bytes;
@@ -592,10 +596,7 @@ static int32_t cam_eeprom_init_pkt_parser(struct cam_eeprom_ctrl_t *e_ctrl,
 				break;
 			case CAMERA_SENSOR_CMD_TYPE_PWR_UP:
 			case CAMERA_SENSOR_CMD_TYPE_PWR_DOWN:
-				cmd_length_in_bytes =
-					sizeof(struct cam_cmd_power) +
-					(sizeof(struct cam_power_settings) *
-					(cmm_hdr->first_word - 1));
+				cmd_length_in_bytes = total_cmd_buf_in_bytes;
 				rc = cam_sensor_update_power_settings(cmd_buf,
 					cmd_length_in_bytes, power_info);
 				processed_cmd_buf_in_bytes +=
