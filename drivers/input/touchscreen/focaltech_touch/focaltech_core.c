@@ -720,6 +720,7 @@ static irqreturn_t fts_ts_interrupt(int irq, void *dev_id)
 	struct fts_ts_data *fts_ts = dev_id;
 	int ret = -1;
 #if FTS_PLAM_EN
+	ktime_t cur_time;
 	u8 val;
 #endif
 
@@ -732,10 +733,28 @@ static irqreturn_t fts_ts_interrupt(int irq, void *dev_id)
 	fts_esdcheck_set_intr(1);
 #endif
 
+#if FTS_GESTURE_EN
+	if(fts_wq_data->is_ambient_mode == 1 && fts_wq_data->suspended) {
+#if FTS_PLAM_EN
+		cur_time = ktime_get();
+		if(cur_time.tv64 - fts_wq_data->last_plam_time.tv64 < 1600000000)
+			return IRQ_HANDLED;
+#endif
+		input_report_key(fts_input_dev, KEY_WAKEUP, 1);
+		input_sync(fts_input_dev);
+		input_report_key(fts_input_dev, KEY_WAKEUP, 0);
+		input_sync(fts_input_dev);
+		fts_i2c_write_reg(fts_wq_data->client, FTS_REG_GESTURE_EN, 0x01);
+		FTS_INFO("CLICK to wakeup system from ambient mode\n");
+		return IRQ_HANDLED;
+	}
+#endif
+
 #if FTS_PLAM_EN
 	fts_i2c_read_reg(fts_wq_data->client,
 					 FTS_REG_GESTURE_OUTPUT_ADDRESS, &val);
 	if (val == GESTURE_PLAM) {
+		fts_wq_data->last_plam_time =  ktime_get();
 		input_report_key(fts_input_dev, KEY_SLEEP, 1);
 		input_sync(fts_input_dev);
 		input_report_key(fts_input_dev, KEY_SLEEP, 0);
@@ -954,17 +973,30 @@ static int fb_notifier_callback(struct notifier_block *self,
 {
 	struct fb_event *evdata = data;
 	int *blank;
+	int cur_power_state;
 	struct fts_ts_data *fts_data =
 		container_of(self, struct fts_ts_data, fb_notif);
 
 	if (evdata && evdata->data && event == FB_EVENT_BLANK &&
 		fts_data && fts_data->client) {
 		blank = evdata->data;
+
+		cur_power_state = fts_data->panel_power_state;
+
+		if (cur_power_state == *blank) {
+			pr_err("[FTS] No change in power state\n");
+			return 0;
+		}
+		fts_data->panel_power_state = *blank;
+
 		if (*blank == FB_BLANK_UNBLANK)
 			fts_ts_resume(&fts_data->client->dev);
-		/*else if (*blank == FB_BLANK_POWERDOWN)*/
-		else if (*blank == FB_BLANK_VSYNC_SUSPEND || *blank == FB_BLANK_POWERDOWN)
+		else if (*blank == FB_BLANK_POWERDOWN)
 			fts_ts_suspend(&fts_data->client->dev);
+		else if (*blank == FB_BLANK_VSYNC_SUSPEND) {
+			fts_data->is_ambient_mode = 1;
+			fts_ts_suspend(&fts_data->client->dev);
+		}
 	}
 
 	return 0;
@@ -1289,6 +1321,12 @@ static int fts_ts_suspend(struct device *dev)
 		FTS_FUNC_EXIT();
 		return -1;
 	}
+	fts_release_all_finger();
+	if(data->is_ambient_mode == 1) {
+		fts_i2c_write_reg(fts_wq_data->client, FTS_REG_GESTURE_EN, 0x0);
+		data->suspended = true;
+		return 0;
+	}
 
 #if FTS_ESDCHECK_EN
 	fts_esdcheck_suspend();
@@ -1341,13 +1379,20 @@ static int fts_ts_resume(struct device *dev)
 	struct fts_ts_data *data = dev_get_drvdata(dev);
 
 	FTS_FUNC_ENTER();
+
 	if (!data->suspended) {
 		FTS_DEBUG("Already in awake state");
 		FTS_FUNC_EXIT();
 		return -1;
 	}
-
 	fts_release_all_finger();
+
+	if(data->is_ambient_mode == 1 && data->suspended) {
+		fts_i2c_write_reg(fts_wq_data->client, FTS_REG_GESTURE_EN, 0x0);
+		data->suspended = false;
+		data->is_ambient_mode = 0;
+		return 0;
+	}
 
 #if (!FTS_CHIP_IDC)
 	fts_reset_proc(200);
