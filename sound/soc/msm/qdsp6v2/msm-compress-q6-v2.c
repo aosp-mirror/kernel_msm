@@ -1444,6 +1444,8 @@ static int msm_compr_playback_open(struct snd_compr_stream *cstream)
 		kfree(prtd);
 		return -ENOMEM;
 	}
+
+        pdata->is_in_use[rtd->dai_link->be_id] = true;
 	prtd->codec = FORMAT_MP3;
 	prtd->bytes_received = 0;
 	prtd->bytes_sent = 0;
