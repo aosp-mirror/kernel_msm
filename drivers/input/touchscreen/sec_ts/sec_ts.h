@@ -43,8 +43,6 @@
 #include <linux/sec_sysfs.h>
 #endif
 
-#include "../../../i2c/busses/i2c-exynos5.h"
-
 #ifdef CONFIG_INPUT_BOOSTER
 #include <linux/input/input_booster.h>
 #endif
