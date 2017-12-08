@@ -50,3 +50,10 @@
 };
 
 #include "sdm845-b1c1-haptics-drv2624-overlay.dtsi"
+
+/* B1 P1.1 has the bottom speaker amp in inverted polarity */
+&cs35l36_codec1 {
+	cirrus,amp-pcm-inv;
+	cirrus,imon-pol-inv;
+	cirrus,vmon-pol-inv;
+};
