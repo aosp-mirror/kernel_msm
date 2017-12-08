@@ -103,6 +103,42 @@ fail:
 	return ret;
 }
 
+static int sdio_read_cccr_uhs(struct mmc_card *card)
+{
+	int ret;
+	unsigned char data;
+
+	card->scr.sda_spec3 = 1;
+	ret = mmc_io_rw_direct(card, 0, 0, SDIO_CCCR_UHS, 0, &data);
+	if (ret)
+		return ret;
+
+	if (mmc_host_uhs(card->host)) {
+		if (data & SDIO_UHS_DDR50)
+			card->sw_caps.sd3_bus_mode |= SD_MODE_UHS_DDR50;
+
+		if (data & SDIO_UHS_SDR50)
+			card->sw_caps.sd3_bus_mode |= SD_MODE_UHS_SDR50;
+
+		if (data & SDIO_UHS_SDR104)
+			card->sw_caps.sd3_bus_mode |= SD_MODE_UHS_SDR104;
+	}
+
+	ret = mmc_io_rw_direct(card, 0, 0,
+			SDIO_CCCR_DRIVE_STRENGTH, 0, &data);
+	if (ret)
+		return ret;
+
+	if (data & SDIO_DRIVE_SDTA)
+		card->sw_caps.sd3_drv_type |= SD_DRIVER_TYPE_A;
+	if (data & SDIO_DRIVE_SDTC)
+		card->sw_caps.sd3_drv_type |= SD_DRIVER_TYPE_C;
+	if (data & SDIO_DRIVE_SDTD)
+		card->sw_caps.sd3_drv_type |= SD_DRIVER_TYPE_D;
+
+	return 0;
+}
+
 static int sdio_read_cccr(struct mmc_card *card, u32 ocr)
 {
 	int ret;
@@ -158,39 +194,14 @@ static int sdio_read_cccr(struct mmc_card *card, u32 ocr)
 		card->scr.sda_spec3 = 0;
 		card->sw_caps.sd3_bus_mode = 0;
 		card->sw_caps.sd3_drv_type = 0;
-		if (cccr_vsn >= SDIO_CCCR_REV_3_00 && uhs) {
+		if (cccr_vsn >= SDIO_CCCR_REV_3_00) {
 			card->scr.sda_spec3 = 1;
-			ret = mmc_io_rw_direct(card, 0, 0,
-				SDIO_CCCR_UHS, 0, &data);
-			if (ret)
-				goto out;
 
-			if (mmc_host_uhs(card->host)) {
-				if (data & SDIO_UHS_DDR50)
-					card->sw_caps.sd3_bus_mode
-						|= SD_MODE_UHS_DDR50;
-
-				if (data & SDIO_UHS_SDR50)
-					card->sw_caps.sd3_bus_mode
-						|= SD_MODE_UHS_SDR50;
-
-				if (data & SDIO_UHS_SDR104)
-					card->sw_caps.sd3_bus_mode
-						|= SD_MODE_UHS_SDR104;
+			if (uhs) {
+				ret = sdio_read_cccr_uhs(card);
+				if (ret)
+					goto out;
 			}
-
-			ret = mmc_io_rw_direct(card, 0, 0,
-				SDIO_CCCR_DRIVE_STRENGTH, 0, &data);
-			if (ret)
-				goto out;
-
-			if (data & SDIO_DRIVE_SDTA)
-				card->sw_caps.sd3_drv_type |= SD_DRIVER_TYPE_A;
-			if (data & SDIO_DRIVE_SDTC)
-				card->sw_caps.sd3_drv_type |= SD_DRIVER_TYPE_C;
-			if (data & SDIO_DRIVE_SDTD)
-				card->sw_caps.sd3_drv_type |= SD_DRIVER_TYPE_D;
-
 			ret = mmc_io_rw_direct(card, 0, 0,
 				SDIO_CCCR_INTERRUPT_EXTENSION, 0, &data);
 			if (ret)
