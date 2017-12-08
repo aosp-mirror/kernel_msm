@@ -60,6 +60,7 @@ static void IRQHandlerF2(struct sdio_func *func);
 #endif /* !defined(OOB_INTR_ONLY) */
 static int sdioh_sdmmc_get_cisaddr(sdioh_info_t *sd, uint32 regaddr);
 extern int sdio_reset_comm(struct mmc_card *card);
+extern int sdio_power_cycle(struct mmc_card *card);
 
 #define DEFAULT_SDIO_F2_BLKSIZE		512
 #ifndef CUSTOM_SDIO_F2_BLKSIZE
@@ -1329,90 +1330,103 @@ sdioh_sdmmc_card_regwrite(sdioh_info_t *sd, int func, uint32 regaddr, int regsiz
 int
 sdioh_start(sdioh_info_t *sd, int stage)
 {
-	int ret;
+	int ret = 0;
 
 	if (!sd) {
 		sd_err(("%s Failed, sd is NULL\n", __FUNCTION__));
-		return (0);
+		return 0;
 	}
 
-	/* Need to do this stages as we can't enable the interrupt till
-		downloading of the firmware is complete, other wise polling
-		sdio access will come in way
-	*/
-	if (sd->func[0]) {
-			if (stage == 0) {
-		/* Since the power to the chip is killed, we will have
-			re enumerate the device again. Set the block size
-			and enable the fucntion 1 for in preparation for
-			downloading the code
-		*/
-		/* sdio_reset_comm() - has been fixed in latest kernel/msm.git for Linux
-		   2.6.27. The implementation prior to that is buggy, and needs broadcom's
-		   patch for it
-		*/
+	/*
+	 * Need to do this stages as we can't enable the interrupt till
+	 * downloading of the firmware is complete, other wise polling
+	 * sdio access will come in way
+	 */
+	if (!sd->func[0]) {
+		sd_err(("%s Failed, func[0] is NULL\n", __FUNCTION__));
+		return 0;
+	}
+
+	if (stage == 0) {
+		/*
+		 * Since the power to the chip is killed, we will have
+		 * re-enumerate the device again. Set the block size
+		 * and enable the fucntion 1 for in preparation for
+		 * downloading the code
+		 */
+		/*
+		 * sdio_reset_comm() - has been fixed in latest kernel/msm.git
+		 * for Linux 2.6.27. The implementation prior to that is buggy,
+		 * and needs broadcom's patch for it
+		 */
+#ifdef SDIO_POWER_CYCLE
+		/*
+		 * The first trial always fails when the SDIO clock gating
+		 * is enabled. So do the sdio power cycle to avoid the
+		 * failure
+		 */
+		sdio_power_cycle(sd->func[0]->card);
+#endif
 		if ((ret = sdio_reset_comm(sd->func[0]->card))) {
 			sd_err(("%s Failed, error = %d\n", __FUNCTION__, ret));
 			return ret;
 		}
-		else {
-			sd->num_funcs = 2;
-			sd->sd_blockmode = TRUE;
-			sd->use_client_ints = TRUE;
-			sd->client_block_size[0] = 64;
 
-			if (sd->func[1]) {
-				/* Claim host controller */
-				sdio_claim_host(sd->func[1]);
+		sd->num_funcs = 2;
+		sd->sd_blockmode = TRUE;
+		sd->use_client_ints = TRUE;
+		sd->client_block_size[0] = 64;
 
-				sd->client_block_size[1] = 64;
-				ret = sdio_set_block_size(sd->func[1], 64);
-				if (ret) {
-					sd_err(("bcmsdh_sdmmc: Failed to set F1 "
-						"blocksize(%d)\n", ret));
-				}
+		if (sd->func[1]) {
+			/* Claim host controller */
+			sdio_claim_host(sd->func[1]);
 
-				/* Release host controller F1 */
-				sdio_release_host(sd->func[1]);
+			sd->client_block_size[1] = 64;
+			ret = sdio_set_block_size(sd->func[1], 64);
+			if (ret) {
+				sd_err(("bcmsdh_sdmmc: Failed to set F1 "
+					"blocksize(%d)\n", ret));
 			}
 
-			if (sd->func[2]) {
-				/* Claim host controller F2 */
-				sdio_claim_host(sd->func[2]);
+			/* Release host controller F1 */
+			sdio_release_host(sd->func[1]);
+		}
 
-				sd->client_block_size[2] = sd_f2_blocksize;
-				ret = sdio_set_block_size(sd->func[2], sd_f2_blocksize);
-				if (ret) {
-					sd_err(("bcmsdh_sdmmc: Failed to set F2 "
-						"blocksize to %d(%d)\n", sd_f2_blocksize, ret));
-				}
+		if (!ret && sd->func[2]) {
+			/* Claim host controller F2 */
+			sdio_claim_host(sd->func[2]);
 
-				/* Release host controller F2 */
-				sdio_release_host(sd->func[2]);
+			sd->client_block_size[2] = sd_f2_blocksize;
+			ret = sdio_set_block_size(sd->func[2], sd_f2_blocksize);
+			if (ret) {
+				sd_err(("bcmsdh_sdmmc: Failed to set F2 "
+					"blocksize to %d(%d)\n",
+					sd_f2_blocksize, ret));
 			}
 
+			/* Release host controller F2 */
+			sdio_release_host(sd->func[2]);
+		}
+
+		if (!ret)
 			sdioh_sdmmc_card_enablefuncs(sd);
-			}
-		} else {
+	} else {
 #if !defined(OOB_INTR_ONLY)
-			sdio_claim_host(sd->func[0]);
-			if (sd->func[2])
-				sdio_claim_irq(sd->func[2], IRQHandlerF2);
-			if (sd->func[1])
-				sdio_claim_irq(sd->func[1], IRQHandler);
-			sdio_release_host(sd->func[0]);
+		sdio_claim_host(sd->func[0]);
+		if (sd->func[2])
+			sdio_claim_irq(sd->func[2], IRQHandlerF2);
+		if (sd->func[1])
+			sdio_claim_irq(sd->func[1], IRQHandler);
+		sdio_release_host(sd->func[0]);
 #else /* defined(OOB_INTR_ONLY) */
 #if defined(HW_OOB)
-			sdioh_enable_func_intr(sd);
+		sdioh_enable_func_intr(sd);
 #endif
-			bcmsdh_oob_intr_set(sd->bcmsdh, TRUE);
+		bcmsdh_oob_intr_set(sd->bcmsdh, TRUE);
 #endif /* !defined(OOB_INTR_ONLY) */
-		}
 	}
-	else
-		sd_err(("%s Failed\n", __FUNCTION__));
 
-	return (0);
+	return ret;
 }
 
 int
