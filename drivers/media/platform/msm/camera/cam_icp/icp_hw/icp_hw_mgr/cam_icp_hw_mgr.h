@@ -58,6 +58,15 @@
 #define CPAS_IPE1_BIT           0x2000
 #define CPAS_BPS_BIT            0x400
 
+#define ICP_PWR_CLP_BPS         0x00000001
+#define ICP_PWR_CLP_IPE0        0x00010000
+#define ICP_PWR_CLP_IPE1        0x00020000
+
+#define CAM_ICP_CTX_STATE_FREE      0x0
+#define CAM_ICP_CTX_STATE_IN_USE    0x1
+#define CAM_ICP_CTX_STATE_ACQUIRED  0x2
+#define CAM_ICP_CTX_STATE_RELEASE   0x3
+
 /**
  * struct icp_hfi_mem_info
  * @qtbl: Memory info of queue table
@@ -154,7 +163,7 @@ struct cam_ctx_clk_info {
  * @acquire_dev_cmd: Acquire command
  * @icp_dev_acquire_info: Acquire device info
  * @ctxt_event_cb: Context callback function
- * @in_use: Flag for context usage
+ * @state: context state
  * @role: Role of a context in case of chaining
  * @chain_ctx: Peer context
  * @hfi_frame_process: Frame process command
@@ -171,7 +180,7 @@ struct cam_icp_hw_ctx_data {
 	struct cam_acquire_dev_cmd acquire_dev_cmd;
 	struct cam_icp_acquire_dev_info *icp_dev_acquire_info;
 	cam_hw_event_cb_func ctxt_event_cb;
-	bool in_use;
+	uint32_t state;
 	uint32_t role;
 	struct cam_icp_hw_ctx_data *chain_ctx;
 	struct hfi_frame_process_info hfi_frame_process;
@@ -243,6 +252,7 @@ struct cam_icp_clk_info {
  * @ipe0_enable: Flag for IPE0
  * @ipe1_enable: Flag for IPE1
  * @bps_enable: Flag for BPS
+ * @core_info: 32 bit value , tells IPE0/1 and BPS
  */
 struct cam_icp_hw_mgr {
 	struct mutex hw_mgr_mutex;
@@ -279,9 +289,11 @@ struct cam_icp_hw_mgr {
 	bool ipe0_enable;
 	bool ipe1_enable;
 	bool bps_enable;
+	uint32_t core_info;
 };
 
 static int cam_icp_mgr_hw_close(void *hw_priv, void *hw_close_args);
 static int cam_icp_mgr_hw_open(void *hw_mgr_priv, void *download_fw_args);
-
+static int cam_icp_mgr_icp_resume(struct cam_icp_hw_mgr *hw_mgr);
+static int cam_icp_mgr_icp_power_collapse(struct cam_icp_hw_mgr *hw_mgr);
 #endif /* CAM_ICP_HW_MGR_H */
