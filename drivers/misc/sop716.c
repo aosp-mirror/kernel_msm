@@ -42,6 +42,7 @@
 #define SOP716_CMD_READ_RETRY                10
 
 #define SOP716_RESET_DELAY_MS                400
+#define SOP716_SETTLE_TIME_MS               2000
 
 struct sop716_command {
 	char *desc;
@@ -60,6 +61,12 @@ struct sop716_info {
 	int reset_status;
 	int tz_minuteswest;
 	int batt_check_interval;
+
+	int reset_delay_ms;
+	int hctosys_pre_delay_ms;
+	int hctosys_post_delay_ms;
+	int fw_ver_check_delay_ms;
+	int hands_settle_time_ms;
 
 	bool update_sysclock_on_boot;
 	bool watch_mode;
@@ -175,9 +182,9 @@ static int sop716_read(struct sop716_info *si, u8 reg, u8 *val)
 static void sop716_hw_reset(struct sop716_info *si)
 {
 	gpio_set_value(si->gpio_reset, 1);
-	usleep_range(1, 1000);
+	msleep(10);
 	gpio_set_value(si->gpio_reset, 0);
-	msleep(SOP716_RESET_DELAY_MS);
+	msleep(si->reset_delay_ms);
 }
 
 static ssize_t sop716_reset_store(struct device *dev,
@@ -574,9 +581,12 @@ static int sop716_hctosys(struct sop716_info *si)
 	int err;
 
 	mutex_lock(&si->lock);
+	msleep(si->hctosys_pre_delay_ms);
 	err = sop716_read(si, CMD_SOP716_READ_CURRENT_TIME, time_data);
+	msleep(si->hctosys_post_delay_ms);
 	if (err < 0) {
 		pr_err("%s: cannot read time from device\n", __func__);
+		sop716_hw_reset(si);
 		goto out;
 	}
 
@@ -725,10 +735,35 @@ static int sop716_parse_dt(struct i2c_client *client)
 	struct device *dev = &client->dev;
 	struct device_node *node = dev->of_node;
 	struct sop716_info *si = i2c_get_clientdata(client);
+	u32 val;
+	int ret;
 
 	si->update_sysclock_on_boot = of_property_read_bool(node,
 			"lge,update-syslock-on-boot");
 
+	ret = of_property_read_u32(node, "lge,reset-delay-ms", &val);
+	si->reset_delay_ms = ret? SOP716_RESET_DELAY_MS : val;
+
+	ret = of_property_read_u32(node, "lge,hctosys-pre-delay-ms", &val);
+	si->hctosys_pre_delay_ms = ret? 0 : val;
+
+	ret = of_property_read_u32(node, "lge,hctosys-post-delay-ms", &val);
+	si->hctosys_post_delay_ms = ret? 0 : val;
+
+	ret = of_property_read_u32(node, "lge,fw-ver-check-delay-ms", &val);
+	si->fw_ver_check_delay_ms = ret? 0 : val;
+
+	ret = of_property_read_u32(node, "lge,hands-settle-time-ms", &val);
+	si->hands_settle_time_ms = ret? SOP716_SETTLE_TIME_MS : val;
+
+	pr_info("sop716: hctosys pre-delay: %dms, hctosys post-delay: %dms\n",
+			si->hctosys_pre_delay_ms,
+			si->hctosys_post_delay_ms);
+	pr_info("sop716: reset-delay: %dms, fw ver check delay: %dms, "
+		"hands settle time: %dms\n",
+		 si->reset_delay_ms,
+		 si->fw_ver_check_delay_ms,
+		 si->hands_settle_time_ms);
 	return 0;
 }
 
@@ -843,17 +878,22 @@ static void sop716_update_fw_work(struct work_struct *work)
 	}
 
 	mutex_lock(&si->lock);
-	sop716_read(si, CMD_SOP716_READ_FW_VERSION, data);
+	err = sop716_read(si, CMD_SOP716_READ_FW_VERSION, data);
+	if (err < 0) {
+		sop716_hw_reset(si);
+		err = sop716_read(si, CMD_SOP716_READ_FW_VERSION, data);
+		if (err < 0)
+			pr_err("%s: fail: read fw version\n", __func__);
+	}
+	msleep(si->fw_ver_check_delay_ms);
 
 	major = data[1];
 	minor = data[2];
 
 	pr_info("sop firmware version: device v%d.%d, image v%d.%d\n",
 			major, minor, img_major, img_minor);
-	if (major == img_major && minor == img_minor) {
-		msleep(100);
+	if (major == img_major && minor == img_minor)
 		goto out;
-	}
 
 	/* Update FW */
 	si->watch_mode = false;
@@ -862,6 +902,9 @@ static void sop716_update_fw_work(struct work_struct *work)
 	memset(data, 0, sizeof(data));
 	data[0] = CMD_SOP716_MOTOR_MOVE_ALL;
 	sop716_write(si, CMD_SOP716_MOTOR_MOVE_ALL, data);
+
+	/* wait for hands move */
+	msleep(si->hands_settle_time_ms);
 
 	/* save current time */
 	err = sop716_read(si, CMD_SOP716_READ_CURRENT_TIME, data);
@@ -876,9 +919,6 @@ static void sop716_update_fw_work(struct work_struct *work)
 		data[2],
 		data[3]);
 
-	/* wait for hands move */
-	msleep(2000); /* 2 seconds */
-
 	sop716_firmware_update(si, fw_entry->data);
 
 	/* boot up time */
@@ -886,26 +926,20 @@ static void sop716_update_fw_work(struct work_struct *work)
 
 	/* restore time */
 	data[0] = CMD_SOP716_SET_CURRENT_TIME;
-	data[7] = 0;
-	while (retry--) {
+	data[7] = 8;
+	do {
 		err = sop716_write(si, CMD_SOP716_SET_CURRENT_TIME, data);
-		if (!err)
-			break;
-
 		msleep(100);
-	}
+	} while(retry-- && err);
 
 	if (err < 0)
 		pr_err("%s: cannot set time\n", __func__);
 
 	si->watch_mode = true;
 
-	/* FIXME: delay */
-	msleep(100);
 	sop716_read(si, CMD_SOP716_READ_FW_VERSION, data);
 
-	/* FIXME: delay */
-	msleep(100);
+	msleep(si->fw_ver_check_delay_ms);
 
 	pr_info("sop firmware update: v%d.%d -> v%d.%d\n",
 			major, minor, data[1], data[2]);
@@ -918,16 +952,9 @@ static void sop716_update_sysclock_work(struct work_struct *work)
 {
 	struct sop716_info *si = container_of(work,
 			struct sop716_info, sysclock_work);
-	int err;
 
-	err = sop716_hctosys(si);
-	if (err) {
-		/* try it again with reset */
-		mutex_lock(&si->lock);
-		sop716_hw_reset(si);
-		mutex_unlock(&si->lock);
-		sop716_hctosys(si);
-	}
+	if (sop716_hctosys(si))
+		sop716_hctosys(si); /* again one more */
 }
 
 static void sop716_init_work(struct work_struct *work)
@@ -1101,4 +1128,5 @@ static int __init sop716_hctosys_init(void)
 late_initcall_sync(sop716_hctosys_init);
 
 MODULE_DESCRIPTION("Soprod 716 movement");
+MODULE_AUTHOR("LGE");
 MODULE_LICENSE("GPL v2");
