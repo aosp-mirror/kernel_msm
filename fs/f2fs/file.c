@@ -2459,6 +2459,57 @@ static int f2fs_ioc_get_features(struct file *filp, unsigned long arg)
 	return put_user(sb_feature, (u32 __user *)arg);
 }
 
+int f2fs_dontmove_control(struct inode *inode, bool inc)
+{
+	struct f2fs_inode_info *fi = F2FS_I(inode);
+	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
+
+	/* Use i_current_depth for normal file as a risk signal. */
+	if (inc)
+		f2fs_i_depth_write(inode, fi->i_current_depth + 1);
+
+	if (fi->i_current_depth > sbi->gc_dontmove_threshold) {
+		f2fs_msg(sbi->sb, KERN_WARNING,
+			"%s: Enable GC = ino %lx after %x GC trials\n",
+			__func__, inode->i_ino, fi->i_current_depth);
+		return -EAGAIN;
+	}
+	return 0;
+}
+
+static int f2fs_ioc_set_dontmove(struct file *filp)
+{
+	struct inode *inode = file_inode(filp);
+	int ret;
+
+	if (!inode_owner_or_capable(inode))
+		return -EACCES;
+
+	if (!S_ISREG(inode->i_mode))
+		return -EINVAL;
+
+	if (f2fs_readonly(F2FS_I_SB(inode)->sb))
+		return -EROFS;
+
+	inode_lock(inode);
+
+	if (f2fs_dontmove_control(inode, false)) {
+		ret = -EAGAIN;
+		goto out;
+	}
+
+	ret = f2fs_convert_inline_inode(inode);
+	if (ret)
+		goto out;
+
+	set_inode_flag(inode, FI_DONTMOVE);
+	ret = F2FS_I(inode)->i_current_depth;
+	f2fs_update_time(F2FS_I_SB(inode), REQ_TIME);
+out:
+	inode_unlock(inode);
+	return ret;
+}
+
 long f2fs_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	if (unlikely(f2fs_cp_error(F2FS_I_SB(file_inode(filp)))))
@@ -2505,6 +2556,8 @@ long f2fs_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		return f2fs_ioc_flush_device(filp, arg);
 	case F2FS_IOC_GET_FEATURES:
 		return f2fs_ioc_get_features(filp, arg);
+	case F2FS_IOC_SET_DONTMOVE:
+		return f2fs_ioc_set_dontmove(filp);
 	default:
 		return -ENOTTY;
 	}
@@ -2578,6 +2631,7 @@ long f2fs_compat_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	case F2FS_IOC_MOVE_RANGE:
 	case F2FS_IOC_FLUSH_DEVICE:
 	case F2FS_IOC_GET_FEATURES:
+	case F2FS_IOC_SET_DONTMOVE:
 		break;
 	default:
 		return -ENOIOCTLCMD;
