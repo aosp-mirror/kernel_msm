@@ -593,7 +593,7 @@ static ssize_t get_lp_dump(struct device *dev, struct device_attribute *attr, ch
 			snprintf(buff, sizeof(buff),
 					"%d: %04x%04x%04x%04x\n",
 					string_addr, data0, data1, data2, data3);
-			strncat(buf, buff, sizeof(buff));
+			strncat(buf, buff, SEC_CMD_BUF_SIZE);
 		}
 	}
 
@@ -2342,7 +2342,7 @@ static void clear_cover_mode(void *device_data)
 			ts->flip_enable = false;
 		}
 
-		if (!ts->power_status == SEC_TS_STATE_POWER_OFF && ts->reinit_done) {
+		if (!(ts->power_status == SEC_TS_STATE_POWER_OFF) && ts->reinit_done) {
 			if (ts->flip_enable)
 				sec_ts_set_cover_type(ts, true);
 			else
@@ -2401,7 +2401,6 @@ static void drawing_test_enable(void *device_data)
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
 	struct sec_ts_data *ts = container_of(sec, struct sec_ts_data, sec);
 	char buff[SEC_CMD_STR_LEN] = { 0 };
-	int ret;
 
 	sec_cmd_set_default_result(sec);
 

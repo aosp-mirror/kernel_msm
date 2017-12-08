@@ -16,6 +16,11 @@ struct sec_ts_data *tsp_info;
 
 struct sec_ts_data *ts_dup;
 
+#ifndef CONFIG_SEC_SYSFS
+/* Declare extern sec_class */
+struct class *sec_class;
+#endif
+
 #ifdef USE_POWER_RESET_WORK
 static void sec_ts_reset_work(struct work_struct *work);
 #endif
@@ -1557,7 +1562,6 @@ static void sec_ts_set_input_prop(struct sec_ts_data *ts, struct input_dev *dev,
 static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
 	struct sec_ts_data *ts;
-	struct exynos5_i2c *i2c_master = (struct exynos5_i2c *)client->adapter->algo_data;
 	struct sec_ts_plat_data *pdata;
 	int ret = 0;
 	bool force_update = false;
@@ -1650,8 +1654,6 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 			goto err_allocate_input_dev_pad;
 		}
 	}
-
-	i2c_master->stop_after_trans = 1;
 
 	ts->touch_count = 0;
 	ts->sec_ts_i2c_write = sec_ts_i2c_write;
@@ -1807,6 +1809,10 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 		input_err(true, &ts->client->dev, "%s: Unable to request threaded irq\n", __func__);
 		goto err_irq;
 	}
+
+#ifndef CONFIG_SEC_SYSFS
+	sec_class = class_create(THIS_MODULE, "sec");
+#endif
 
 	/* need remove below resource @ remove driver */
 #if (1) //!defined(CONFIG_SAMSUNG_PRODUCT_SHIP)

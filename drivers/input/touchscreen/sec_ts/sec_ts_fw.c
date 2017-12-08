@@ -318,7 +318,7 @@ static int sec_ts_flashpagewrite(struct sec_ts_data *ts, u32 page_idx, u8 *page_
 
 static bool sec_ts_limited_flashpagewrite(struct sec_ts_data *ts, u32 page_idx, u8 *page_data)
 {
-	int ret;
+	int ret = 0;
 	u8 *tCmd;
 	u8 copy_data[3 + SEC_TS_FW_BLK_SIZE_MAX];
 	int copy_left = (int)ts->flash_page_size + 3;
