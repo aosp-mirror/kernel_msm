@@ -1344,3 +1344,9 @@ int sdio_reset_comm(struct mmc_card *card)
 	return mmc_power_restore_host(card->host);
 }
 EXPORT_SYMBOL(sdio_reset_comm);
+
+void sdio_power_cycle(struct mmc_card *card)
+{
+	mmc_power_cycle(card->host, card->ocr);
+}
+EXPORT_SYMBOL(sdio_power_cycle);
