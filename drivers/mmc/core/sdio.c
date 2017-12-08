@@ -903,6 +903,18 @@ try_again:
 			goto remove;
 	} else {
 		/*
+		 * Switch to wider bus (if supported).
+		 */
+		err = sdio_enable_4bit_bus(card);
+		if (err > 0) {
+			if (card->host->caps & MMC_CAP_8_BIT_DATA)
+				mmc_set_bus_width(card->host, MMC_BUS_WIDTH_8);
+			else if (card->host->caps & MMC_CAP_4_BIT_DATA)
+				mmc_set_bus_width(card->host, MMC_BUS_WIDTH_4);
+		} else if (err)
+			goto remove;
+
+		/*
 		 * Switch to high-speed (if supported).
 		 */
 		err = sdio_enable_hs(card);
@@ -915,18 +927,6 @@ try_again:
 		 * Change to the card's maximum speed.
 		 */
 		mmc_set_clock(host, mmc_sdio_get_max_clock(card));
-
-		/*
-		 * Switch to wider bus (if supported).
-		 */
-		err = sdio_enable_4bit_bus(card);
-		if (err > 0) {
-			if (card->host->caps & MMC_CAP_8_BIT_DATA)
-				mmc_set_bus_width(card->host, MMC_BUS_WIDTH_8);
-			else if (card->host->caps & MMC_CAP_4_BIT_DATA)
-				mmc_set_bus_width(card->host, MMC_BUS_WIDTH_4);
-		} else if (err)
-			goto remove;
 	}
 finish:
 	if (!oldcard)
