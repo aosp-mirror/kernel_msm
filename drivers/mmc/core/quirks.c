@@ -27,6 +27,10 @@
 #define SDIO_VENDOR_ID_STE		0x0020
 #endif
 
+#ifndef SDIO_VENDOR_ID_BRCM
+#define SDIO_VENDOR_ID_BRCM		0x02d0
+#endif
+
 #ifndef SDIO_DEVICE_ID_STE_CW1200
 #define SDIO_DEVICE_ID_STE_CW1200	0x2280
 #endif
@@ -79,6 +83,11 @@
 #define SDIO_DEVICE_ID_QCA9377		0x701
 #endif
 
+#ifndef SDIO_DEVICE_ID_BCM43430
+#define SDIO_DEVICE_ID_BCM43430		43430
+#endif
+
+
 
 /*
  * This hook just adds a quirk for all sdio devices
@@ -130,7 +139,10 @@ static const struct mmc_fixup mmc_fixup_methods[] = {
 		   add_quirk, MMC_QUIRK_QCA6574_SETTINGS),
 
 	SDIO_FIXUP(SDIO_VENDOR_ID_QCA9377, SDIO_DEVICE_ID_QCA9377,
-		add_quirk, MMC_QUIRK_QCA9377_SETTINGS),
+		   add_quirk, MMC_QUIRK_QCA9377_SETTINGS),
+
+	SDIO_FIXUP(SDIO_VENDOR_ID_BRCM, SDIO_DEVICE_ID_BCM43430,
+		   add_quirk, MMC_QUIRK_DISABLE_UHS),
 	END_FIXUP
 };
 
