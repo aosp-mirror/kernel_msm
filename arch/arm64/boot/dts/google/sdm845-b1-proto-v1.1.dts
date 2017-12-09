@@ -48,3 +48,5 @@
 		status = "disabled";
 	};
 };
+
+#include "sdm845-b1c1-haptics-drv2624-overlay.dtsi"

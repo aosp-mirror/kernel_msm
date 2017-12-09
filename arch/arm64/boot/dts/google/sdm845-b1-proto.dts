@@ -119,3 +119,5 @@
 	pinctrl-2 = <>;
 	pinctrl-3 = <>;
 };
+
+#include "sdm845-b1c1-haptics-drv2624-overlay.dtsi"
