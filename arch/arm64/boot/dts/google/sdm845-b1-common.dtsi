@@ -21,3 +21,7 @@
 	qcom,dsi-display-active;
 };
 
+&mdss_mdp {
+	/delete-property/ qcom,sde-has-dest-scaler;
+};
+

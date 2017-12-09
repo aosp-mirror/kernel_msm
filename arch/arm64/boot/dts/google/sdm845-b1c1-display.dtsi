@@ -153,6 +153,7 @@
 &mdss_mdp {
 	connectors = <&sde_rscc &sde_wb>;
 	qcom,sde-vsync-source = <2>;
+	/delete-property/ qcom,sde-has-dest-scaler;
 };
 
 &dsi_sw43402_dsc_qhd_cmd {
