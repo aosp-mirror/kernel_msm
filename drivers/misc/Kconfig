@@ -845,6 +845,15 @@ config GOOGLE_EASEL_AP
 	  Say 'y' if this kernel is for the AP/Android side of the link.  Say
 	  'n' if this kernel is for the Easel/MonetteHill side of the link.
 
+config CS40L20_HAPTIC
+	tristate "Cirrus Logic CS40L20 haptics support"
+	depends on I2C
+	select REGMAP_I2C
+	help
+	  Say Y to enable support for the CS CS40L20 haptics driver.
+
+	  To compile this driver as a module, choose M here.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
