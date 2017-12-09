@@ -194,6 +194,7 @@ struct dsi_display {
 	u32 cmd_buffer_size;
 	u32 cmd_buffer_iova;
 	void *vaddr;
+	struct msm_gem_address_space *aspace;
 
 	struct mipi_dsi_host host;
 	struct dsi_bridge    *bridge;
@@ -211,6 +212,11 @@ struct dsi_display {
 
 	bool misr_enable;
 	u32 misr_frame_count;
+	/* multiple dsi error handlers */
+	struct workqueue_struct *err_workq;
+	struct work_struct fifo_underflow_work;
+	struct work_struct fifo_overflow_work;
+	struct work_struct lp_rx_timeout_work;
 };
 
 int dsi_display_dev_probe(struct platform_device *pdev);

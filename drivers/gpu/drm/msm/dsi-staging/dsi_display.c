@@ -36,6 +36,8 @@
 
 #define MISR_BUFF_SIZE	256
 
+#define MAX_NAME_SIZE	64
+
 static DEFINE_MUTEX(dsi_display_list_lock);
 static LIST_HEAD(dsi_display_list);
 static char dsi_display_primary[MAX_CMDLINE_PARAM_LEN];
@@ -131,18 +133,19 @@ static int dsi_display_cmd_engine_enable(struct dsi_display *display)
 	int i;
 	struct dsi_display_ctrl *m_ctrl, *ctrl;
 
+	m_ctrl = &display->ctrl[display->cmd_master_idx];
+	mutex_lock(&m_ctrl->ctrl->ctrl_lock);
+
 	if (display->cmd_engine_refcount > 0) {
 		display->cmd_engine_refcount++;
-		return 0;
+		goto done;
 	}
-
-	m_ctrl = &display->ctrl[display->cmd_master_idx];
 
 	rc = dsi_ctrl_set_cmd_engine_state(m_ctrl->ctrl, DSI_CTRL_ENGINE_ON);
 	if (rc) {
 		pr_err("[%s] failed to enable cmd engine, rc=%d\n",
 		       display->name, rc);
-		goto error;
+		goto done;
 	}
 
 	for (i = 0; i < display->ctrl_count; i++) {
@@ -160,10 +163,11 @@ static int dsi_display_cmd_engine_enable(struct dsi_display *display)
 	}
 
 	display->cmd_engine_refcount++;
-	return rc;
+	goto done;
 error_disable_master:
 	(void)dsi_ctrl_set_cmd_engine_state(m_ctrl->ctrl, DSI_CTRL_ENGINE_OFF);
-error:
+done:
+	mutex_unlock(&m_ctrl->ctrl->ctrl_lock);
 	return rc;
 }
 
@@ -173,15 +177,17 @@ static int dsi_display_cmd_engine_disable(struct dsi_display *display)
 	int i;
 	struct dsi_display_ctrl *m_ctrl, *ctrl;
 
+	m_ctrl = &display->ctrl[display->cmd_master_idx];
+	mutex_lock(&m_ctrl->ctrl->ctrl_lock);
+
 	if (display->cmd_engine_refcount == 0) {
 		pr_err("[%s] Invalid refcount\n", display->name);
-		return 0;
+		goto done;
 	} else if (display->cmd_engine_refcount > 1) {
 		display->cmd_engine_refcount--;
-		return 0;
+		goto done;
 	}
 
-	m_ctrl = &display->ctrl[display->cmd_master_idx];
 	for (i = 0; i < display->ctrl_count; i++) {
 		ctrl = &display->ctrl[i];
 		if (!ctrl->ctrl || (ctrl == m_ctrl))
@@ -203,6 +209,8 @@ static int dsi_display_cmd_engine_disable(struct dsi_display *display)
 
 error:
 	display->cmd_engine_refcount = 0;
+done:
+	mutex_unlock(&m_ctrl->ctrl->ctrl_lock);
 	return rc;
 }
 
@@ -255,6 +263,9 @@ static int dsi_display_read_status(struct dsi_display_ctrl *ctrl,
 	if (!panel)
 		return -EINVAL;
 
+	/* acquire panel_lock to make sure no commands are in progress */
+	dsi_panel_acquire_panel_lock(panel);
+
 	config = &(panel->esd_config);
 	lenp = config->status_valid_params ?: config->status_cmds_rlen;
 	count = config->status_cmd.count;
@@ -281,6 +292,8 @@ static int dsi_display_read_status(struct dsi_display_ctrl *ctrl,
 	}
 
 error:
+	/* release panel_lock */
+	dsi_panel_release_panel_lock(panel);
 	return rc;
 }
 
@@ -713,6 +726,8 @@ static int dsi_display_debugfs_init(struct dsi_display *display)
 {
 	int rc = 0;
 	struct dentry *dir, *dump_file, *misr_data;
+	char name[MAX_NAME_SIZE];
+	int i;
 
 	dir = debugfs_create_dir(display->name, NULL);
 	if (IS_ERR_OR_NULL(dir)) {
@@ -744,6 +759,35 @@ static int dsi_display_debugfs_init(struct dsi_display *display)
 		pr_err("[%s] debugfs create misr datafile failed, rc=%d\n",
 		       display->name, rc);
 		goto error_remove_dir;
+	}
+
+	for (i = 0; i < display->ctrl_count; i++) {
+		struct msm_dsi_phy *phy = display->ctrl[i].phy;
+
+		if (!phy || !phy->name)
+			continue;
+
+		snprintf(name, ARRAY_SIZE(name),
+				"%s_allow_phy_power_off", phy->name);
+		dump_file = debugfs_create_bool(name, 0600, dir,
+				&phy->allow_phy_power_off);
+		if (IS_ERR_OR_NULL(dump_file)) {
+			rc = PTR_ERR(dump_file);
+			pr_err("[%s] debugfs create %s failed, rc=%d\n",
+			       display->name, name, rc);
+			goto error_remove_dir;
+		}
+
+		snprintf(name, ARRAY_SIZE(name),
+				"%s_regulator_min_datarate_bps", phy->name);
+		dump_file = debugfs_create_u32(name, 0600, dir,
+				&phy->regulator_min_datarate_bps);
+		if (IS_ERR_OR_NULL(dump_file)) {
+			rc = PTR_ERR(dump_file);
+			pr_err("[%s] debugfs create %s failed, rc=%d\n",
+			       display->name, name, rc);
+			goto error_remove_dir;
+		}
 	}
 
 	display->root = dir;
@@ -963,7 +1007,7 @@ static int dsi_display_phy_enable(struct dsi_display *display);
 /**
  * dsi_display_phy_idle_on() - enable DSI PHY while coming out of idle screen.
  * @dsi_display:         DSI display handle.
- * @enable:           enable/disable DSI PHY.
+ * @mmss_clamp:          True if clamp is enabled.
  *
  * Return: error code.
  */
@@ -1010,7 +1054,6 @@ static int dsi_display_phy_idle_on(struct dsi_display *display,
 /**
  * dsi_display_phy_idle_off() - disable DSI PHY while going to idle screen.
  * @dsi_display:         DSI display handle.
- * @enable:           enable/disable DSI PHY.
  *
  * Return: error code.
  */
@@ -1025,9 +1068,16 @@ static int dsi_display_phy_idle_off(struct dsi_display *display)
 		return -EINVAL;
 	}
 
-	if (!display->panel->allow_phy_power_off) {
-		pr_debug("panel doesn't support this feature\n");
-		return 0;
+	for (i = 0; i < display->ctrl_count; i++) {
+		struct msm_dsi_phy *phy = display->ctrl[i].phy;
+
+		if (!phy)
+			continue;
+
+		if (!phy->allow_phy_power_off) {
+			pr_debug("phy doesn't support this feature\n");
+			return 0;
+		}
 	}
 
 	m_ctrl = &display->ctrl[display->cmd_master_idx];
@@ -1076,6 +1126,13 @@ void dsi_display_enable_event(struct dsi_display *display,
 	case SDE_CONN_EVENT_CMD_DONE:
 		irq_status_idx = DSI_SINT_CMD_FRAME_DONE;
 		break;
+	case SDE_CONN_EVENT_VID_FIFO_OVERFLOW:
+	case SDE_CONN_EVENT_CMD_FIFO_UNDERFLOW:
+		if (event_info) {
+			for (i = 0; i < display->ctrl_count; i++)
+				display->ctrl[i].ctrl->recovery_cb =
+							*event_info;
+		}
 	default:
 		/* nothing to do */
 		pr_debug("[%s] unhandled event %d\n", display->name, event_idx);
@@ -1867,6 +1924,61 @@ error:
 	return rc;
 }
 
+static void dsi_display_aspace_cb_locked(void *cb_data, bool is_detach)
+{
+	struct dsi_display *display;
+	struct dsi_display_ctrl *display_ctrl;
+	int rc, cnt;
+
+	if (!cb_data) {
+		pr_err("aspace cb called with invalid cb_data\n");
+		return;
+	}
+	display = (struct dsi_display *)cb_data;
+
+	/*
+	 * acquire panel_lock to make sure no commands are in-progress
+	 * while detaching the non-secure context banks
+	 */
+	dsi_panel_acquire_panel_lock(display->panel);
+
+	if (is_detach) {
+		/* invalidate the stored iova */
+		display->cmd_buffer_iova = 0;
+
+		/* return the virtual address mapping */
+		msm_gem_put_vaddr_locked(display->tx_cmd_buf);
+		msm_gem_vunmap(display->tx_cmd_buf);
+
+	} else {
+		rc = msm_gem_get_iova_locked(display->tx_cmd_buf,
+				display->aspace, &(display->cmd_buffer_iova));
+		if (rc) {
+			pr_err("failed to get the iova rc %d\n", rc);
+			goto end;
+		}
+
+		display->vaddr =
+			(void *) msm_gem_get_vaddr_locked(display->tx_cmd_buf);
+
+		if (IS_ERR_OR_NULL(display->vaddr)) {
+			pr_err("failed to get va rc %d\n", rc);
+			goto end;
+		}
+	}
+
+	for (cnt = 0; cnt < display->ctrl_count; cnt++) {
+		display_ctrl = &display->ctrl[cnt];
+		display_ctrl->ctrl->cmd_buffer_size = display->cmd_buffer_size;
+		display_ctrl->ctrl->cmd_buffer_iova = display->cmd_buffer_iova;
+		display_ctrl->ctrl->vaddr = display->vaddr;
+	}
+
+end:
+	/* release panel_lock */
+	dsi_panel_release_panel_lock(display->panel);
+}
+
 static int dsi_host_attach(struct mipi_dsi_host *host,
 			   struct mipi_dsi_device *dsi)
 {
@@ -1884,7 +1996,6 @@ static ssize_t dsi_host_transfer(struct mipi_dsi_host *host,
 {
 	struct dsi_display *display = to_dsi_display(host);
 	struct dsi_display_ctrl *display_ctrl;
-	struct msm_gem_address_space *aspace = NULL;
 	int rc = 0, cnt = 0;
 
 	if (!host || !msg) {
@@ -1928,19 +2039,27 @@ static ssize_t dsi_host_transfer(struct mipi_dsi_host *host,
 			goto error_disable_cmd_engine;
 		}
 
-		aspace = msm_gem_smmu_address_space_get(display->drm_dev,
-				MSM_SMMU_DOMAIN_UNSECURE);
-		if (!aspace) {
+		display->aspace = msm_gem_smmu_address_space_get(
+				display->drm_dev, MSM_SMMU_DOMAIN_UNSECURE);
+		if (!display->aspace) {
 			pr_err("failed to get aspace\n");
 			rc = -EINVAL;
 			goto free_gem;
 		}
 
-		rc = msm_gem_get_iova(display->tx_cmd_buf, aspace,
+		/* register to aspace */
+		rc = msm_gem_address_space_register_cb(display->aspace,
+				dsi_display_aspace_cb_locked, (void *)display);
+		if (rc) {
+			pr_err("failed to register callback %d", rc);
+			goto free_gem;
+		}
+
+		rc = msm_gem_get_iova(display->tx_cmd_buf, display->aspace,
 					&(display->cmd_buffer_iova));
 		if (rc) {
 			pr_err("failed to get the iova rc %d\n", rc);
-			goto free_gem;
+			goto free_aspace_cb;
 		}
 
 		display->vaddr =
@@ -1994,7 +2113,10 @@ error_disable_clks:
 		       display->name);
 	return rc;
 put_iova:
-	msm_gem_put_iova(display->tx_cmd_buf, aspace);
+	msm_gem_put_iova(display->tx_cmd_buf, display->aspace);
+free_aspace_cb:
+	msm_gem_address_space_unregister_cb(display->aspace,
+			dsi_display_aspace_cb_locked, display);
 free_gem:
 	mutex_lock(&display->drm_dev->struct_mutex);
 	msm_gem_free_object(display->tx_cmd_buf);
@@ -3045,6 +3167,20 @@ static int dsi_display_set_mode_sub(struct dsi_display *display,
 				mode->dsi_mode_flags, display->dsi_clk_handle);
 		if (rc) {
 			pr_err("[%s] failed to update ctrl config, rc=%d\n",
+			       display->name, rc);
+			goto error;
+		}
+	}
+
+	for (i = 0; i < display->ctrl_count; i++) {
+		ctrl = &display->ctrl[i];
+
+		if (!ctrl->phy || !ctrl->ctrl)
+			continue;
+
+		rc = dsi_phy_set_clk_freq(ctrl->phy, &ctrl->ctrl->clk_freq);
+		if (rc) {
+			pr_err("[%s] failed to set phy clk freq, rc=%d\n",
 			       display->name, rc);
 			goto error;
 		}
@@ -4225,6 +4361,232 @@ error:
 	return rc;
 }
 
+static void dsi_display_handle_fifo_underflow(struct work_struct *work)
+{
+	struct dsi_display *display = NULL;
+
+	display =  container_of(work, struct dsi_display, fifo_underflow_work);
+	if (!display)
+		return;
+	pr_debug("handle DSI FIFO underflow error\n");
+
+	dsi_display_clk_ctrl(display->dsi_clk_handle,
+			DSI_ALL_CLKS, DSI_CLK_ON);
+	dsi_display_soft_reset(display);
+	dsi_display_clk_ctrl(display->dsi_clk_handle,
+			DSI_ALL_CLKS, DSI_CLK_OFF);
+}
+
+static void dsi_display_handle_fifo_overflow(struct work_struct *work)
+{
+	struct dsi_display *display = NULL;
+	struct dsi_display_ctrl *ctrl;
+	int i, rc;
+	int mask = BIT(20); /* clock lane */
+	int (*cb_func)(void *event_usr_ptr,
+		uint32_t event_idx, uint32_t instance_idx,
+		uint32_t data0, uint32_t data1,
+		uint32_t data2, uint32_t data3);
+	void *data;
+	u32 version = 0;
+
+	display =  container_of(work, struct dsi_display, fifo_overflow_work);
+	if (!display || !display->panel ||
+			(display->panel->panel_mode != DSI_OP_VIDEO_MODE))
+		return;
+
+	pr_debug("handle DSI FIFO overflow error\n");
+	dsi_display_clk_ctrl(display->dsi_clk_handle,
+			DSI_ALL_CLKS, DSI_CLK_ON);
+
+	/*
+	 * below recovery sequence is not applicable to
+	 * hw version 2.0.0, 2.1.0 and 2.2.0, so return early.
+	 */
+	ctrl = &display->ctrl[display->clk_master_idx];
+	version = dsi_ctrl_get_hw_version(ctrl->ctrl);
+	if (!version || (version < 0x20020001))
+		goto end;
+
+	/* reset ctrl and lanes */
+	for (i = 0 ; i < display->ctrl_count; i++) {
+		ctrl = &display->ctrl[i];
+		rc = dsi_ctrl_reset(ctrl->ctrl, mask);
+		rc = dsi_phy_lane_reset(ctrl->phy);
+	}
+
+	/* wait for display line count to be in active area */
+	ctrl = &display->ctrl[display->clk_master_idx];
+	if (ctrl->ctrl->recovery_cb.event_cb) {
+		cb_func = ctrl->ctrl->recovery_cb.event_cb;
+		data = ctrl->ctrl->recovery_cb.event_usr_ptr;
+		rc = cb_func(data, SDE_CONN_EVENT_VID_FIFO_OVERFLOW,
+				display->clk_master_idx, 0, 0, 0, 0);
+		if (rc < 0) {
+			pr_debug("sde callback failed\n");
+			goto end;
+		}
+	}
+
+	/* Enable Video mode for DSI controller */
+	for (i = 0 ; i < display->ctrl_count; i++) {
+		ctrl = &display->ctrl[i];
+		dsi_ctrl_vid_engine_en(ctrl->ctrl, true);
+	}
+	/*
+	 * Add sufficient delay to make sure
+	 * pixel transmission has started
+	 */
+	udelay(200);
+end:
+	dsi_display_clk_ctrl(display->dsi_clk_handle,
+			DSI_ALL_CLKS, DSI_CLK_OFF);
+}
+
+static void dsi_display_handle_lp_rx_timeout(struct work_struct *work)
+{
+	struct dsi_display *display = NULL;
+	struct dsi_display_ctrl *ctrl;
+	int i, rc;
+	int mask = (BIT(20) | (0xF << 16)); /* clock lane and 4 data lane */
+	int (*cb_func)(void *event_usr_ptr,
+		uint32_t event_idx, uint32_t instance_idx,
+		uint32_t data0, uint32_t data1,
+		uint32_t data2, uint32_t data3);
+	void *data;
+	u32 version = 0;
+
+	display =  container_of(work, struct dsi_display, fifo_overflow_work);
+	if (!display || (display->panel->panel_mode != DSI_OP_VIDEO_MODE))
+		return;
+	pr_debug("handle DSI LP RX Timeout error\n");
+
+	dsi_display_clk_ctrl(display->dsi_clk_handle,
+			DSI_ALL_CLKS, DSI_CLK_ON);
+
+	/*
+	 * below recovery sequence is not applicable to
+	 * hw version 2.0.0, 2.1.0 and 2.2.0, so return early.
+	 */
+	ctrl = &display->ctrl[display->clk_master_idx];
+	version = dsi_ctrl_get_hw_version(ctrl->ctrl);
+	if (!version || (version < 0x20020001))
+		goto end;
+
+	/* reset ctrl and lanes */
+	for (i = 0 ; i < display->ctrl_count; i++) {
+		ctrl = &display->ctrl[i];
+		rc = dsi_ctrl_reset(ctrl->ctrl, mask);
+		rc = dsi_phy_lane_reset(ctrl->phy);
+	}
+
+	ctrl = &display->ctrl[display->clk_master_idx];
+	if (ctrl->ctrl->recovery_cb.event_cb) {
+		cb_func = ctrl->ctrl->recovery_cb.event_cb;
+		data = ctrl->ctrl->recovery_cb.event_usr_ptr;
+		rc = cb_func(data, SDE_CONN_EVENT_VID_FIFO_OVERFLOW,
+				display->clk_master_idx, 0, 0, 0, 0);
+		if (rc < 0) {
+			pr_debug("Target is in suspend/shutdown\n");
+			goto end;
+		}
+	}
+
+	/* Enable Video mode for DSI controller */
+	for (i = 0 ; i < display->ctrl_count; i++) {
+		ctrl = &display->ctrl[i];
+		dsi_ctrl_vid_engine_en(ctrl->ctrl, true);
+	}
+
+	/*
+	 * Add sufficient delay to make sure
+	 * pixel transmission as started
+	 */
+	udelay(200);
+end:
+	dsi_display_clk_ctrl(display->dsi_clk_handle,
+			DSI_ALL_CLKS, DSI_CLK_OFF);
+}
+
+static int dsi_display_cb_error_handler(void *data,
+		uint32_t event_idx, uint32_t instance_idx,
+		uint32_t data0, uint32_t data1,
+		uint32_t data2, uint32_t data3)
+{
+	struct dsi_display *display =  data;
+
+	if (!display)
+		return -EINVAL;
+
+	switch (event_idx) {
+	case DSI_FIFO_UNDERFLOW:
+		queue_work(display->err_workq, &display->fifo_underflow_work);
+		break;
+	case DSI_FIFO_OVERFLOW:
+		queue_work(display->err_workq, &display->fifo_overflow_work);
+		break;
+	case DSI_LP_Rx_TIMEOUT:
+		queue_work(display->err_workq, &display->lp_rx_timeout_work);
+		break;
+	default:
+		pr_warn("unhandled error interrupt: %d\n", event_idx);
+		break;
+	}
+
+	return 0;
+}
+
+static void dsi_display_register_error_handler(struct dsi_display *display)
+{
+	int i = 0;
+	struct dsi_display_ctrl *ctrl;
+	struct dsi_event_cb_info event_info;
+
+	if (!display)
+		return;
+
+	display->err_workq = create_singlethread_workqueue("dsi_err_workq");
+	if (!display->err_workq) {
+		pr_err("failed to create dsi workq!\n");
+		return;
+	}
+
+	INIT_WORK(&display->fifo_underflow_work,
+				dsi_display_handle_fifo_underflow);
+	INIT_WORK(&display->fifo_overflow_work,
+				dsi_display_handle_fifo_overflow);
+	INIT_WORK(&display->lp_rx_timeout_work,
+				dsi_display_handle_lp_rx_timeout);
+
+	memset(&event_info, 0, sizeof(event_info));
+
+	event_info.event_cb = dsi_display_cb_error_handler;
+	event_info.event_usr_ptr = display;
+
+	for (i = 0; i < display->ctrl_count; i++) {
+		ctrl = &display->ctrl[i];
+		ctrl->ctrl->irq_info.irq_err_cb = event_info;
+	}
+}
+
+static void dsi_display_unregister_error_handler(struct dsi_display *display)
+{
+	int i = 0;
+	struct dsi_display_ctrl *ctrl;
+
+	if (!display)
+		return;
+
+	for (i = 0; i < display->ctrl_count; i++) {
+		ctrl = &display->ctrl[i];
+		memset(&ctrl->ctrl->irq_info.irq_err_cb,
+				0, sizeof(struct dsi_event_cb_info));
+	}
+
+	if (display->err_workq)
+		destroy_workqueue(display->err_workq);
+}
+
 int dsi_display_prepare(struct dsi_display *display)
 {
 	int rc = 0;
@@ -4302,6 +4664,8 @@ int dsi_display_prepare(struct dsi_display *display)
 		       display->name, rc);
 		goto error_phy_disable;
 	}
+	/* Set up DSI ERROR event callback */
+	dsi_display_register_error_handler(display);
 
 	rc = dsi_display_ctrl_host_enable(display);
 	if (rc) {
@@ -4762,6 +5126,9 @@ int dsi_display_unprepare(struct dsi_display *display)
 	if (rc)
 		pr_err("[%s] failed to disable Link clocks, rc=%d\n",
 		       display->name, rc);
+
+	/* Free up DSI ERROR event callback */
+	dsi_display_unregister_error_handler(display);
 
 	rc = dsi_display_ctrl_deinit(display);
 	if (rc)

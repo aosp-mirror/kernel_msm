@@ -29,14 +29,12 @@ static int poll_msec = 1000;
 module_param(poll_msec, int, 0444);
 #endif
 
-static bool panic_on_ce = 1;
-module_param_named(panic_on_ce, panic_on_ce, bool, 0664);
-
 #ifdef CONFIG_EDAC_KRYO3XX_ARM64_PANIC_ON_CE
-#define ARM64_ERP_PANIC_ON_CE 1
+static bool panic_on_ce = 1;
 #else
-#define ARM64_ERP_PANIC_ON_CE 0
+static bool panic_on_ce;
 #endif
+module_param_named(panic_on_ce, panic_on_ce, bool, 0664);
 
 #ifdef CONFIG_EDAC_KRYO3XX_ARM64_PANIC_ON_UE
 #define ARM64_ERP_PANIC_ON_UE 1

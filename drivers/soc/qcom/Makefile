@@ -79,6 +79,7 @@ obj-$(CONFIG_QCOM_SMCINVOKE) += smcinvoke.o
 obj-$(CONFIG_QMP_DEBUGFS_CLIENT) += qmp-debugfs-client.o
 obj-$(CONFIG_MSM_REMOTEQDSS) += remoteqdss.o
 obj-$(CONFIG_QSEE_IPC_IRQ_BRIDGE) += qsee_ipc_irq_bridge.o
+obj-$(CONFIG_QCOM_QDSS_BRIDGE) += qdss_bridge.o
 
 # TODO: remove me b/62058353
 subdir-ccflags-y += \
@@ -88,3 +89,4 @@ subdir-ccflags-y += \
   -Wno-enum-conversion \
   -Wno-strlcpy-strlcat-size \
   -Wno-gcc-compat \
+
