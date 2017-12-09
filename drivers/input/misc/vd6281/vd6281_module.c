@@ -14,13 +14,10 @@
 #include <linux/delay.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
-#include <linux/gpio.h>
 #include <linux/input.h>
 #include <linux/kernel.h>
 #include <linux/kobject.h>
 #include <linux/regulator/consumer.h>
-#include <linux/pinctrl/consumer.h>
-#include <linux/of_gpio.h>
 #include <linux/slab.h>
 
 
@@ -30,10 +27,7 @@ struct vd6281_ctrl_t {
 	struct i2c_client *client;
 	struct regulator *vdd;
 	const char *dev_name;
-	int irq_gpio;
 	struct mutex work_mutex;
-	struct pinctrl *pinctrl;
-	struct pinctrl_state *pinctrl_state_active;
 	int is_power_up;
 };
 
@@ -158,12 +152,7 @@ ATTRIBUTE_GROUPS(rainbow_dev);
 
 static int vd6281_parse_dt(struct device *dev, struct vd6281_ctrl_t *ctrl)
 {
-	struct device_node *dt = dev->of_node;
 	int rc = 0;
-
-	ctrl->irq_gpio = of_get_named_gpio(dt, "rainbow,int-gpio", 0);
-	if (!gpio_is_valid(ctrl->irq_gpio))
-		dev_warn(dev, "irq_gpio value is not valid\n");
 
 	ctrl->vdd = devm_regulator_get(dev, "vdd");
 	if (IS_ERR(ctrl->vdd)) {
