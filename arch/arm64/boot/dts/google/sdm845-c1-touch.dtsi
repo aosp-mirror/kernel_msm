@@ -10,3 +10,54 @@
  * GNU General Public License for more details.
  *
  */
+
+/* VDDI = 1.8v, AVDD = 3.0v ~ 3.3v */
+&pm8998_l19 {
+	regulator-min-microvolt = <3300000>;
+	regulator-max-microvolt = <3300000>;
+	qcom,init-voltage = <3300000>;
+	status = "okay";
+};
+
+&pm8998_l14 {
+	regulator-min-microvolt = <1800000>;
+	regulator-max-microvolt = <1800000>;
+	qcom,init-voltage = <1800000>;
+	qcom,init-mode = <RPMH_REGULATOR_MODE_LDO_HPM>;
+	status = "okay";
+};
+
+&rpmh_regulator_ldoa14 {
+	qcom,supported-modes = <RPMH_REGULATOR_MODE_LDO_HPM>;
+};
+
+/* AP Touch I2C SDA is gpio27, SCL is gpio28. (QUP2)
+ * Reset gpio99, int gpio125.
+ */
+
+&qupv3_se2_i2c {
+	status = "ok";
+	qcom,clk-freq-out = <400000>;
+
+	touchscreen@48 {
+		status = "ok";
+		compatible = "sec,sec_ts";
+		reg = <0x48>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <125 IRQ_TYPE_LEVEL_LOW>;
+		vdd-supply = <&pm8998_l14>; /* 1.8V */
+		avdd-supply = <&pm8998_l19>; /* 3.3V */
+		pinctrl-names = "pmx_ts_active", "pmx_ts_suspend";
+		pinctrl-0 = <&ts_active &ts_reset_active>;
+		pinctrl-1 = <&ts_suspend>;
+
+		sec,irq_gpio = <&tlmm 125 0>;	/* required */
+		//sec,irq_type = ?;		/* optional - IRQF flags - default is IRQF_TRIGGER_LOW | IRQF_ONESHOT */
+		sec,max_coords = <1440 2880>;	/* optional - Max values, like 4095? */
+		//sec,firmware_name = "s6sy761.fw"; /* optional, can be specified/indexed by value of tsp-id_gpio? */
+		sec,regulator_dvdd = "vdd";	/* required */
+		sec,regulator_avdd = "avdd";
+
+		sec,bringup = <1>;		/* optional, 1=no fw update, 2=transfer w/o update */
+	};
+};
