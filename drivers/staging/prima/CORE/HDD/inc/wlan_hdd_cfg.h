@@ -2147,7 +2147,7 @@ static __inline tANI_U32 defHddRateToDefCfgRate( tANI_U32 defRateIndex )
 #define CFG_LINK_LAYER_STATS_ENABLE                  "gEnableLLStats"
 #define CFG_LINK_LAYER_STATS_ENABLE_MIN              (0)
 #define CFG_LINK_LAYER_STATS_ENABLE_MAX              (1)
-#define CFG_LINK_LAYER_STATS_ENABLE_DEFAULT          (0)
+#define CFG_LINK_LAYER_STATS_ENABLE_DEFAULT          (1)
 #endif
 
 #ifdef WLAN_FEATURE_EXTSCAN
