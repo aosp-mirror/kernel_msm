@@ -478,7 +478,7 @@ static int cam_lrme_mgr_util_release(struct cam_lrme_hw_mgr *hw_mgr,
 	uint32_t device_index)
 {
 	int rc = 0;
-	struct cam_lrme_device *hw_device;
+	struct cam_lrme_device *hw_device = NULL;
 
 	rc = cam_lrme_mgr_util_get_device(hw_mgr, device_index, &hw_device);
 	if (rc) {
@@ -654,7 +654,7 @@ static int cam_lrme_mgr_hw_start(void *hw_mgr_priv, void *hw_start_args)
 	struct cam_lrme_hw_mgr *hw_mgr = hw_mgr_priv;
 	struct cam_hw_start_args *args =
 		(struct cam_hw_start_args *)hw_start_args;
-	struct cam_lrme_device *hw_device;
+	struct cam_lrme_device *hw_device = NULL;
 	uint32_t device_index;
 
 	if (!hw_mgr || !args) {
@@ -693,7 +693,7 @@ static int cam_lrme_mgr_hw_stop(void *hw_mgr_priv, void *stop_args)
 	struct cam_lrme_hw_mgr *hw_mgr = hw_mgr_priv;
 	struct cam_hw_stop_args *args =
 		(struct cam_hw_stop_args *)stop_args;
-	struct cam_lrme_device *hw_device;
+	struct cam_lrme_device *hw_device = NULL;
 	uint32_t device_index;
 
 	if (!hw_mgr_priv || !stop_args) {
@@ -735,7 +735,7 @@ static int cam_lrme_mgr_hw_prepare_update(void *hw_mgr_priv,
 	struct cam_lrme_hw_mgr *hw_mgr = hw_mgr_priv;
 	struct cam_hw_prepare_update_args *args =
 		(struct cam_hw_prepare_update_args *)hw_prepare_update_args;
-	struct cam_lrme_device *hw_device;
+	struct cam_lrme_device *hw_device = NULL;
 	struct cam_kmd_buf_info kmd_buf;
 	struct cam_lrme_hw_cmd_config_args config_args;
 	struct cam_lrme_frame_request *frame_req = NULL;
