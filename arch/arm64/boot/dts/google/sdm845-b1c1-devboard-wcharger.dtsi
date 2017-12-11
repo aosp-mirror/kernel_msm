@@ -1,0 +1,41 @@
+/*
+ * P9221 eval board on B1C1 dev board
+ * I2C pins 85/86 QUP_L0(5)
+ * INT GPIO 132
+ *
+ * Connect:
+ *   P9221 VOUT to DC_IN
+ *   P9221 J1-2 (INT) to J2-17
+ *   P9221 J1-3 (SCL) to J20-3
+ *   P9221 J1-4 (SDA) to J20-13
+ *   P9221 J1-5 (GND) to J20-1
+ */
+
+&tlmm {
+	p9221_int: p9221_int {
+		mux {
+			pins = "gpio132";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio132";
+			drive-strength = <2>;
+			bias-pull-up;
+		};
+	};
+};
+
+&qupv3_se5_i2c {
+	status = "okay";
+	p9221@61 {
+		compatible = "idt,p9221";
+		reg = <0x61>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&p9221_int>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <132 0>;
+		idt,irq_gpio = <&tlmm 132 0x00>;
+		status = "ok";
+	};
+};
+
