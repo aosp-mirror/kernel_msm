@@ -118,6 +118,20 @@
 				ssp-mcu-resp = <&msm_gpio 28 0>;
 			};
 		};
+	gpio_keys {
+		/delete-node/ camera_focus;
+		/delete-node/ camera_snapshot;
+		/delete-node/ vol_up;
+		multi_function_key {
+			label = "multi_function_key";
+			gpios = <&msm_gpio 98 0x1>;
+			linux,input-type = <1>;
+			linux,code = <139>; /*KEY_MENU*/
+			gpio-key,wakeup;
+			debounce-interval = <15>;
+		};
+	};
+
 };
 
 &spi_4 { /* BLSP1 QUP4 */

@@ -190,7 +190,7 @@
 			};
 		};
 
-		tlmm_gpio_key {
+		bt_gpio {
                         gpio_bt_host_wake_active: gpio_bt_host_wake_active {
                                 mux {
                                         pins = "gpio31";
@@ -545,5 +545,34 @@
 		/delete-node/ tpiu_setb_1;
 		/delete-node/ tpiu_setb_2;
 		/delete-node/ vdd_spkdrv;
+
+		/delete-node/ tlmm_gpio_key;
+		mutifunc_gpio_key {
+			gpio_key_active: gpio_key_active {
+				mux {
+					pins = "gpio98";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio98";
+					drive-strength = <2>;
+					bias-pull-up;
+				};
+			};
+
+			gpio_key_suspend: gpio_key_suspend {
+				mux {
+					pins = "gpio98";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio98";
+					drive-strength = <2>;
+					bias-pull-up;
+				};
+			};
+		};
 	};
 };
