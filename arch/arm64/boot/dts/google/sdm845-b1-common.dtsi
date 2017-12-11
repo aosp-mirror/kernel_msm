@@ -10,7 +10,6 @@
  * GNU General Public License for more details.
  */
 
-#include "../qcom/sdm845-v2.dtsi"
 #include "sdm845-b1c1-common.dtsi"
 
 #include "sdm845-b1-touch.dtsi"
