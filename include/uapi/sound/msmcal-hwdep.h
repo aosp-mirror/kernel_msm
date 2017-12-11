@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2015, 2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -20,6 +20,8 @@ enum wcd_cal_type {
 	WCD9XXX_MAD_CAL,
 	WCD9XXX_MBHC_CAL,
 	WCD9XXX_VBAT_CAL,
+	BG_CODEC_MIC_CAL,
+	BG_CODEC_SPEAKER_CAL,
 	WCD9XXX_MAX_CAL,
 };
 
