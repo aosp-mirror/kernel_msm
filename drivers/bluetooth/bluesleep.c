@@ -174,7 +174,6 @@ static void hsuart_power(int on)
 		return;
 	if (on) {
 		/* make sure port is active before enable it. */
-//		if (bsi->uport->state->port.count) {
 		if (bsi && bsi->uport && bsi->uport->state && bsi->uport->state->port.count) {
 			msm_hs_request_clock_on(bsi->uport);
 			msm_hs_set_mctrl(bsi->uport, TIOCM_RTS);
@@ -234,8 +233,8 @@ static void bluesleep_sleep_work(struct work_struct *work)
 		/* Add a timer to make sure that UART
 		 * would not be turned on&off very frequentently
 		 */
-//		mod_timer(&rx_timer, jiffies + (RX_TIMER_INTERVAL * HZ)); 
-//		set_bit(BT_RXTIMER, &flags);
+		mod_timer(&rx_timer, jiffies + (RX_TIMER_INTERVAL * HZ));
+		set_bit(BT_RXTIMER, &flags);
 		hsuart_power(HS_UART_ON);
 	} else {
 		if (debug_mask & DEBUG_SUSPEND)
