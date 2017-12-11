@@ -832,7 +832,11 @@ static int smb2_dc_get_prop(struct power_supply *psy,
 		rc = smblib_get_prop_dc_current_max(chg, val);
 		break;
 	case POWER_SUPPLY_PROP_REAL_TYPE:
+#ifdef CONFIG_QPNP_SMB2_WIPOWER
 		val->intval = POWER_SUPPLY_TYPE_WIPOWER;
+#else
+		val->intval = POWER_SUPPLY_TYPE_WIRELESS;
+#endif
 		break;
 	default:
 		return -EINVAL;
@@ -898,6 +902,9 @@ static int smb2_init_dc_psy(struct smb2 *chip)
 {
 	struct power_supply_config dc_cfg = {};
 	struct smb_charger *chg = &chip->chg;
+#ifndef CONFIG_QPNP_SMB2_WIPOWER
+	int rc;
+#endif
 
 	dc_cfg.drv_data = chip;
 	dc_cfg.of_node = chg->dev->of_node;
@@ -905,9 +912,17 @@ static int smb2_init_dc_psy(struct smb2 *chip)
 						  &dc_psy_desc,
 						  &dc_cfg);
 	if (IS_ERR(chg->dc_psy)) {
-		pr_err("Couldn't register USB power supply\n");
+		pr_err("Couldn't register DC power supply\n");
 		return PTR_ERR(chg->dc_psy);
 	}
+
+#ifndef CONFIG_QPNP_SMB2_WIPOWER
+	rc = smblib_write(chg, WI_PWR_OPTIONS_REG, 0x00);
+	if (rc < 0) {
+		pr_err("Failed to set WI_PWR_OPTIONS_REG (%d)\n", rc);
+		return rc;
+	}
+#endif
 
 	return 0;
 }
