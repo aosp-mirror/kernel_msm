@@ -4855,152 +4855,14 @@ static s32 wl_cfg80211_resume(struct wiphy *wiphy)
 	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
 	struct net_device *ndev = bcmcfg_to_prmry_ndev(cfg);
         s32 err = BCME_OK;
-#if ((LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 39)) || \
-	defined(WL_COMPAT_WIRELESS)) && !defined(OEM_ANDROID)
-	int pkt_filter_id = WL_WOWLAN_PKT_FILTER_ID_FIRST;
-#endif /* (KERNEL_VERSION(2, 6, 39) || WL_COMPAT_WIRELES) && !OEM_ANDROID */
 
 	if (unlikely(!wl_get_drv_status(cfg, READY, ndev))) {
 		WL_INFO(("device is not ready\n"));
 		return err;
 	}
 
-#if ((LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 39)) || \
-	defined(WL_COMPAT_WIRELESS)) && !defined(OEM_ANDROID)
-	while (pkt_filter_id <= WL_WOWLAN_PKT_FILTER_ID_LAST) {
-		/* delete wowlan pkt filter if any */
-		err = wldev_iovar_setbuf(ndev, "pkt_filter_delete", &pkt_filter_id,
-			sizeof(pkt_filter_id), cfg->ioctl_buf, WLC_IOCTL_SMLEN,
-			&cfg->ioctl_buf_sync);
-		/* pkt_filter_delete would return BCME_BADARG when pkt filter id
-		 * does not exist in filter list of firmware, ignore it.
-		 */
-		if (BCME_BADARG == err)
-			err = BCME_OK;
-
-		if (BCME_OK != err) {
-			WL_ERR(("pkt_filter_delete failed, id=%d, err=%d\n",
-				pkt_filter_id, err));
-		}
-		pkt_filter_id++;
- 	}
-#endif /* (KERNEL_VERSION(2, 6, 39) || WL_COMPAT_WIRELES) && !OEM_ANDROID */
-
 	return err;
 }
-
-#if ((LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 39)) || \
-	defined(WL_COMPAT_WIRELESS)) && !defined(OEM_ANDROID)
-static s32 wl_wowlan_config(struct wiphy *wiphy, struct cfg80211_wowlan *wow)
-{
-	s32 err = BCME_OK;
-	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
-	struct net_device *ndev = bcmcfg_to_prmry_ndev(cfg);
-
-	u32 i = 0, j = 0;
-	u32 buf_len = 0, pattern_size = 0;
-	wl_pkt_filter_t	*pkt_filterp = NULL;
-	wl_pkt_filter_enable_t	pkt_filter_enable;
-	u8 mask_bytes_len = 0, mask_byte_idx = 0, mask_bit_idx = 0;
-	const u32 max_buf_size = WL_PKT_FILTER_FIXED_LEN +
-		WL_PKT_FILTER_PATTERN_FIXED_LEN + (2 * WL_WOWLAN_MAX_PATTERN_LEN);
-
-	WL_DBG(("Enter\n"));
-
-	if (wow == NULL) {
-		WL_DBG(("wow config is null\n"));
-		return err;
-	}
-
-	/* configure wowlan pattern filters */
-	if (0 < wow->n_patterns) {
-
-		pkt_filterp = (wl_pkt_filter_t *) kzalloc(max_buf_size, GFP_KERNEL);
-		if (pkt_filterp == NULL) {
-			WL_ERR(("Error allocating buffer for pkt filters\n"));
-			return -ENOMEM;
-		}
-
-		WL_DBG(("Pattern count=%d\n", wow->n_patterns));
-		while (i < wow->n_patterns) {
-
-			/* reset buffers */
-			buf_len = 0;
-			memset(pkt_filterp, 0, max_buf_size);
-
-			/* copy filter id */
-			store32_ua(&pkt_filterp->id, (WL_WOWLAN_PKT_FILTER_ID_FIRST + i));
-
-			/* copy filter type */
-			store32_ua(&pkt_filterp->type, WL_PKT_FILTER_TYPE_PATTERN_MATCH);
-
-			/* copy size */
-			pattern_size = htod32(wow->patterns[i].pattern_len);
-			store32_ua(&pkt_filterp->u.pattern.size_bytes, pattern_size);
-
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 9, 0))
-			/* copy offset */
-			store32_ua(&pkt_filterp->u.pattern.offset, wow->patterns[i].pkt_offset);
-#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 9, 0) */
-
-			/* convert mask from bit to byte format */
-			j = 0;
-			mask_bit_idx = 0;
-			mask_byte_idx = 0;
-			mask_bytes_len = DIV_ROUND_UP(pattern_size, 8);
-			while ((mask_byte_idx < mask_bytes_len) &&
-					(mask_bit_idx < pattern_size)) {
-
-				if (isbitset(wow->patterns[i].mask[mask_byte_idx], mask_bit_idx++))
-					pkt_filterp->u.pattern.mask_and_pattern[j] = 0xFF;
-				j++;
-				if (mask_bit_idx >= 8) {
-					/* move to next mask byte */
-					mask_bit_idx = 0;
-					mask_byte_idx++;
-				}
-			}
-
-			/* copy pattern to be matched */
-			memcpy(&pkt_filterp->u.pattern.mask_and_pattern[pattern_size],
-				wow->patterns[i].pattern, pattern_size);
-
-			/* calculate filter buffer len */
-			buf_len += WL_PKT_FILTER_FIXED_LEN;
-			buf_len += (WL_PKT_FILTER_PATTERN_FIXED_LEN + (2 * pattern_size));
-
-			/* add pkt filter */
-			err = wldev_iovar_setbuf(ndev, "pkt_filter_add", pkt_filterp, buf_len,
-				cfg->ioctl_buf, WLC_IOCTL_MEDLEN, &cfg->ioctl_buf_sync);
-			if (BCME_OK != err) {
-				WL_ERR(("pkt_filter_add failed, id=%d, err=%d\n",
-					pkt_filterp->id, err));
-				goto exit;
-			}
-
-			/* enable pkt filter id */
-			pkt_filter_enable.id = pkt_filterp->id;
-			pkt_filter_enable.enable = TRUE;
-			err = wldev_iovar_setbuf(ndev, "pkt_filter_enable", &pkt_filter_enable,
-				sizeof(pkt_filter_enable),
-				cfg->ioctl_buf, WLC_IOCTL_SMLEN, &cfg->ioctl_buf_sync);
-			if (BCME_OK != err) {
-				WL_ERR(("pkt_filter_enable failed, id=%d, err=%d\n",
-					pkt_filterp->id, err));
-				goto exit;
-			}
-			i++; /* move to next pattern */
-		}
-	} else
-		WL_DBG(("wowlan filters not found\n"));
-
-exit:
-	if (pkt_filterp)
-		kfree(pkt_filterp);
-
-	return err;
-}
-#endif /* (KERNEL_VERSION(2, 6, 39) || WL_COMPAT_WIRELES) && !OEM_ANDROID */
 
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 39)) || \
 	defined(WL_COMPAT_WIRELESS)
@@ -5038,10 +4900,6 @@ static s32 wl_cfg80211_suspend(struct wiphy *wiphy)
 		}
 	}
 #endif /* DHD_CLEAR_ON_SUSPEND */
-	#if ((LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 39)) || \
-	defined(WL_COMPAT_WIRELESS)) && !defined(OEM_ANDROID)
-	err = wl_wowlan_config(wiphy, wow);
-#endif /* (KERNEL_VERSION(2, 6, 39) || WL_COMPAT_WIRELES) && !OEM_ANDROID */
 
 	return err;
 }
