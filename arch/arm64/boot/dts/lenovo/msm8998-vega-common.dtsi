@@ -664,6 +664,8 @@
 		compatible = "qcom,spmi-pmic";
 		pmi8998_fg: qpnp,fg {
 			compatible = "qcom,fg-gen3";
+			qcom,fg-sys-term-current = <(-200)>;
+			qcom,hold-soc-while-full;
 			qcom,fg-cutoff-voltage = <3400>;
 			qcom,fg-empty-voltage = <3400>;
 			qcom,fg-chg-term-current = <200>;
