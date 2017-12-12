@@ -143,6 +143,8 @@ module_param(max_clients, uint, 0000);
 static struct timer_list drain_timer;
 static int timer_in_progress;
 
+static struct timer_list wake_timer;
+
 /*
  * Diag Mask clear variable
  * Used for clearing masks upon
@@ -209,6 +211,11 @@ do {								\
 static void drain_timer_func(unsigned long data)
 {
 	queue_work(driver->diag_wq, &(driver->diag_drain_work));
+}
+
+static void wake_timer_func(unsigned long data)
+{
+	pm_relax(driver->diag_dev);
 }
 
 static void diag_drain_apps_data(struct diag_apps_data_t *data)
@@ -3654,6 +3661,8 @@ void diag_ws_on_notify(void)
 	 * interrupts.
 	 */
 	pm_stay_awake(driver->diag_dev);
+
+	mod_timer(&wake_timer, jiffies + msecs_to_jiffies(5000));
 }
 
 void diag_ws_on_read(int type, int pkt_len)
@@ -3919,6 +3928,7 @@ static int __init diagchar_init(void)
 	driver->hdlc_disabled = 0;
 	driver->dci_state = DIAG_DCI_NO_ERROR;
 	setup_timer(&drain_timer, drain_timer_func, 1234);
+	setup_timer(&wake_timer, wake_timer_func, 0);
 	driver->supports_sockets = 1;
 	driver->time_sync_enabled = 0;
 	driver->uses_time_api = 0;
