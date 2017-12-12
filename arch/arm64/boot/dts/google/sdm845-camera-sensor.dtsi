@@ -162,6 +162,12 @@
 		reg = <0x0>;
 		compatible = "qcom,ois";
 		cci-master = <0>;
+		cam_vaf-supply = <&actuator_regulator>;
+		regulator-names = "cam_vaf";
+		rgltr-cntrl-support;
+		rgltr-min-voltage = <2864000>;
+		rgltr-max-voltage = <2864000>;
+		rgltr-load-current = <0>;
 	};
 
 	eeprom_front: qcom,eeprom@0 {
