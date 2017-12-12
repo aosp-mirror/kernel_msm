@@ -331,7 +331,7 @@ cmd_cat = (cat $(filter-out FORCE,$^) > $@) || (rm -f $@; false)
 
 # Bzip2 and LZMA do not include size in file... so we have to fake that;
 # append the size as a 32-bit littleendian number as gzip does.
-size_append = printf $(shell						\
+define size_append
 dec_size=0;								\
 for F in $1; do								\
 	fsize=$$(stat -c "%s" $$F);					\
@@ -343,8 +343,8 @@ printf "%08x\n" $$dec_size |						\
 		for ch in $$ch3 $$ch2 $$ch1 $$ch0; do			\
 			printf '%s%03o' '\\' $$((0x$$ch)); 		\
 		done;							\
-	}								\
-)
+	}
+endef
 
 quiet_cmd_bzip2 = BZIP2   $@
 cmd_bzip2 = (cat $(filter-out FORCE,$^) | \
