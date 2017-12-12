@@ -1718,6 +1718,23 @@ static void mnh_sm_print_boot_trace(struct device (*dev))
 	dev_info(dev, "%s: MNH_BOOT_TRACE = 0x%x\n", __func__, val);
 }
 
+static void mnh_sm_enable_ready_irq(bool enable)
+{
+	/* irqs are automatically enabled during request_irq */
+	static bool is_enabled = true;
+
+	if (enable && !is_enabled) {
+		enable_irq(mnh_sm_dev->ready_irq);
+		is_enabled = true;
+	} else if (!enable && is_enabled) {
+		disable_irq(mnh_sm_dev->ready_irq);
+		is_enabled = false;
+	} else {
+		dev_warn(mnh_sm_dev->dev, "%s: ready_irq already %s\n",
+			 __func__, is_enabled ? "enabled" : "disabled");
+	}
+}
+
 /*
  * NOTE (b/64372955): Put Easel into a low-power mode for MIPI bypass. Ideally,
  * this would be done from Easel kernel, but if the Easel kernel fails for some
@@ -1839,7 +1856,7 @@ static int mnh_sm_set_state_locked(int state)
 		/* enable pad isolation to the DRAM */
 		gpiod_set_value_cansleep(mnh_sm_dev->ddr_pad_iso_n_pin, 0);
 
-		disable_irq(mnh_sm_dev->ready_irq);
+		mnh_sm_enable_ready_irq(false);
 		break;
 	case MNH_STATE_ACTIVE:
 		/* stage firmware copy to ION if valid update was received */
@@ -1865,7 +1882,7 @@ static int mnh_sm_set_state_locked(int state)
 			mnh_update_fw_version(mnh_sm_dev->ion[FW_PART_PRI]);
 		}
 
-		enable_irq(mnh_sm_dev->ready_irq);
+		mnh_sm_enable_ready_irq(true);
 		ret = mnh_sm_poweron();
 		if (ret)
 			break;
@@ -1909,7 +1926,7 @@ static int mnh_sm_set_state_locked(int state)
 
 			ret = mnh_sm_suspend();
 
-			disable_irq(mnh_sm_dev->ready_irq);
+			mnh_sm_enable_ready_irq(false);
 		}
 		break;
 	default:
@@ -1945,7 +1962,7 @@ static int mnh_sm_set_state_locked(int state)
 				reinit_completion(
 					&mnh_sm_dev->powered_complete);
 				mnh_sm_poweroff();
-				disable_irq(mnh_sm_dev->ready_irq);
+				mnh_sm_enable_ready_irq(false);
 				mnh_sm_dev->state = MNH_STATE_OFF;
 			}
 
@@ -2434,7 +2451,7 @@ static int mnh_sm_probe(struct platform_device *pdev)
 			error);
 		goto fail_probe_2;
 	}
-	disable_irq(mnh_sm_dev->ready_irq);
+	mnh_sm_enable_ready_irq(false);
 
 	/* request ddr pad isolation pin */
 	mnh_sm_dev->ddr_pad_iso_n_pin = devm_gpiod_get(&pdev->dev,
@@ -2451,9 +2468,9 @@ static int mnh_sm_probe(struct platform_device *pdev)
 	}
 
 	/* initialize mnh-pwr and get resources there */
-	enable_irq(mnh_sm_dev->ready_irq);
+	mnh_sm_enable_ready_irq(true);
 	error = mnh_pwr_init(pdev, dev);
-	disable_irq(mnh_sm_dev->ready_irq);
+	mnh_sm_enable_ready_irq(false);
 	if (error) {
 		dev_err(dev, "failed to initialize mnh-pwr (%d)\n", error);
 		goto fail_probe_2;
