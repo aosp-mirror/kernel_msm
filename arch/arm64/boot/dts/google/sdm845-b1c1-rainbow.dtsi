@@ -15,32 +15,14 @@
 	status = "disabled";
 };
 
-&tlmm {
-	/* VD6281 */
-	vd6281_int: vd6281_int {
-		mux {
-			pins = "gpio129";
-			function = "gpio";
-		};
-		config {
-			pins = "gpio129";
-			drive-strength = <2>;
-			bias-disable;
-		};
-	};
-};
-
 &qupv3_se5_i2c {
 	/* VD6281 */
 	status = "ok";
 	vd6281: vd6281@20 {
 		compatible = "st,vd6281";
 		reg = <0x20>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&vd6281_int>;
 		vdd-supply = <&pm8998_lvs1>;
 		regulator-names = "vdd";
-		rainbow,int-gpio = <&tlmm 129 0>;
 		status = "ok";
 	};
 };
