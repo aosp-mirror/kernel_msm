@@ -1834,6 +1834,9 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 
 	switch (blank_mode) {
 	case FB_BLANK_UNBLANK:
+		if (gpio_direction_output(75, 1)) {
+			pr_err("%s: invalid gpio_direction_output\n", __func__);
+		}
 		pr_debug("unblank called. cur pwr state=%d\n", cur_power_state);
 		ret = mdss_fb_blank_unblank(mfd);
 		break;
@@ -1870,6 +1873,9 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 		req_power_state = MDSS_PANEL_POWER_OFF;
 		pr_debug("blank powerdown called\n");
 		ret = mdss_fb_blank_blank(mfd, req_power_state);
+		if (gpio_direction_output(75, 0)) {
+			pr_err("%s: invalid gpio_direction_output\n", __func__);
+		}
 		break;
 	}
 
