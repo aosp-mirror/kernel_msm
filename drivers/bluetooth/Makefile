@@ -33,5 +33,6 @@ hci_uart-$(CONFIG_BT_HCIUART_3WIRE)	+= hci_h5.o
 hci_uart-$(CONFIG_BT_HCIUART_IBS)	+= hci_ibs.o
 hci_uart-objs				:= $(hci_uart-y)
 obj-$(CONFIG_MSM_BT_SLEEP)		+= nitrous.o
+obj-$(CONFIG_BT_ADDR)		+= bt_addr.o
 
 ccflags-y += -D__CHECK_ENDIAN__

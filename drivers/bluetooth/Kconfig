@@ -269,4 +269,10 @@ config MSM_BT_SLEEP
 	  Bluetooth MSM bluesleep driver.
 	  This driver provides support for BT sleep.
 
+config BT_ADDR
+	tristate "BT Address populate"
+	help
+	  This reads the Bluetooth device address in device tree and
+	  populate it for userspace.
+
 endmenu
