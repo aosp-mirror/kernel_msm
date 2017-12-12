@@ -60,6 +60,237 @@
 	uses-easel;
 };
 
+/* We need override the display on sequence for P1.1 devices. */
+&dsi_sw43408_dsc_fhd_cmd {
+	qcom,mdss-dsi-display-timings {
+		timing@0 {
+			qcom,mdss-dsi-on-command = [
+				07 01 00 00 00 00 01 11
+				15 01 00 00 00 00 02 B0 AC
+				39 01 00 00 00 00 05 2A 00 00 04 37
+				39 01 00 00 00 00 05 2B 00 00 08 6F
+				39 01 00 00 00 00 0E C8
+					0B 0B 0B 0B 0B 00 02 01
+					0B 07 0A 09 08
+				39 01 00 00 00 00 0E C9
+					0B 0B 0B 0B 0B 00 02 01
+					0B 07 0A 09 08
+				// Duty:  6VST
+				39 01 00 00 00 00 08 E5
+					00 3E 00 3E 00 3E 10
+				39 01 00 00 00 00 3D E6
+					20 00 31 20 00 31 20 00
+					31 20 00 31 20 00 31 20
+					00 31 10 BF 72 10 BF 72
+					01 E2 4E 01 E2 4E 20 00
+					31 20 00 31 20 00 31 20
+					00 31 20 00 31 20 00 31
+					10 BF 72 10 BF 72 01 E2
+					4E 01 E2 4E
+				39 01 00 00 00 00 1F E7
+					20 00 31 20 00 31 02 1A
+					16 20 00 31 20 88 A8 20
+					00 31 20 00 31 02 1A 16
+					20 00 31 20 88 A8
+				39 01 00 00 00 00 0D B4
+					2A 02 25 22 41 41 41 0A
+					10 50 11 00
+				// 1VST?
+				39 01 00 00 00 00 13 B5
+					75 60 2D 5D 80 00 0A 0B
+					00 05 0B 00 80 0D 0E 40
+					00 0C
+				//OSC 48.9MHz 60 Hz
+				39 01 00 00 00 00 0C B6
+					60 30 00 50 20 00 50 20
+					40 14 14
+				39 01 00 00 00 00 06 B7 00 05 00 04 37
+				39 01 00 00 00 00 10 B8
+					2C 01 2C 01 FF 24 01 2C
+					01 FF 33 01 1F 01 1F
+				39 01 00 00 00 00 13 BF
+					30 FF 11 33 00 00 00 00
+					00 00 00 00 00 00 33 01
+					00 20
+				39 01 00 00 00 00 04 C0 02 09 0F
+				39 01 00 00 00 00 19 C2
+					70 8A 0A 0A 44 8C 4C 44
+					8C 4C 0A ED AD 54 24 00
+					00 64 24 CB 64 97 17 64
+				39 01 00 00 00 00 12 C3
+					10 15 1F B9 AD 4D B0 50
+					B7 57 22 02 C8 20 83 0C
+					07
+				39 01 00 00 00 00 12 C4
+					14 34 13 22 32 22 22 22
+					24 24 30 22 22 33 22 43
+					12
+				// Command-video switch setting
+				39 01 00 00 00 00 06 C6 0F 03 03 00 00
+
+				39 01 00 00 00 00 05 CA 08 99 18 05
+				39 01 00 00 00 00 0F CB
+					80 5C 07 1A 34 54 4F 5A
+					33 19 60 00 00 00
+				39 01 00 00 00 00 13 CD
+					00 00 00 2A 2A 2A 2A 2A
+					2E 2E 32 32 32 23 2A 32
+					23 32
+				15 01 00 00 00 00 02 26 02
+				39 01 00 00 00 00 19 D0
+					E5 20 20 20 20 42 00 00
+					00 E5 42 00 00 00 08 00
+					C4 0D 0D 93 93 20 00 00
+				39 01 00 00 00 00 2D D1
+					BF A3 47 0B D3 6A D3 73
+					73 63 94 03 FF FF 7F AF
+					BF 7F FF 7F 05 FF 7F FF
+					7F 58 01 AF 4F FF FF FF
+					F9 F3 ED FF E7 E1 DB D5
+					3F CF C9 C3
+				39 01 00 00 00 00 37 D2
+					30 F4 3F 1F 4E 55 5F 8C
+					A1 30 DC 3F 3F 46 58 5C
+					8E 9F BF 6A 3F 20 46 5A
+					5C 87 9A 80 3B 7F D6 CE
+					BF B6 CC CD 80 07 3F D7
+					CC C2 BA CB CF 80 FF 3F
+					C2 C2 BF B4 CA CA
+				39 01 00 00 00 00 37 D3
+					30 F0 3F 32 4C 5D 61 92
+					A4 30 D8 3F 4C 4E 58 60
+					93 A5 BF 60 3F 2C 50 5A
+					5E 8D 9F 00 eF 3F 7A 9D
+					6A 8F A8 BC 80 4D 3E 83
+					7E 74 83 AD A8 00 FF 3F
+					10 7C 80 70 B2 BA
+				39 01 00 00 00 00 37 D4
+					30 EC 3F 45 4C 5C 65 98
+					A8 30 D6 3F 54 4C 5A 64
+					97 A8 BF 5B 3F 34 4C 5C
+					62 92 A4 80 3B 7F D6 CE
+					BF B6 CE CD 80 07 3F D7
+					CC C2 BA CB CF 80 FF 3F
+					C2 C2 BF B4 CA CA
+				39 01 00 00 00 00 37 D5
+					30 E4 3F 42 60 50 68 99
+					A8 30 CC 3F 64 64 59 65
+					99 AA BF 4C 3F 44 60 50
+					65 94 A4 00 eF 3F 7A 9D
+					6A 8F A8 BC 80 4D 3E 83
+					7E 74 83 AD A8 00 FF 3F
+					10 7C 80 70 B2 BA
+				39 01 00 00 00 00 37 D6
+					30 D4 3F 52 50 5E 6B 98
+					B2 30 C0 3F 72 58 5B 68
+					9A B0 BF 39 3F 40 58 5C
+					6A 97 AC 00 EF 3F 7A 9D
+					6A 8F A8 BC 80 4D 3E 83
+					7E 74 83 AD A8 00 FF 3F
+					10 7C 80 70 B2 BA
+				39 01 00 00 00 00 37 D7
+					30 BC 3F 66 4A 60 6A 9E
+					B4 30 A9 3F 94 56 5C 69
+					9E B2 BF 1B 3F 54 4C 66
+					6A 97 AE 00 EF 3F 7A 9D
+					6A 8F A8 BC 80 4D 3E 83
+					7E 74 83 AD A8 00 FF 3F
+					10 7C 80 70 B2 BA
+				39 01 00 00 00 00 37 D8
+					30 BE 3F 6B 58 5F 6D A1
+					B7 30 AB 3F C4 78 62 6B
+					A1 B6 BF 1E 3F 64 64 62
+					6E 9D B0 00 EF 3F 7A 9D
+					6A 8F A8 BC 80 4D 3E 83
+					7E 74 83 AD A8 00 FF 3F
+					10 7C 80 70 B2 BA
+				39 01 00 00 00 00 37 D9
+					30 71 3F 7C 7A 5C 6C A4
+					B8 30 63 3F CF C8 73 6C
+					A4 B9 3F BA 3F 7C 77 65
+					70 A1 B6 00 EF 3F 7A 9D
+					6A 8F A8 BC 80 4D 3E 83
+					7E 74 83 AD A8 00 FF 3F
+					10 7C 80 70 B2 BA
+				39 01 00 00 00 00 37 DD
+					30 83 3F 7C 7A AA 96 B2
+					C0 30 78 3F CF C8 73 BA
+					BE C8 3F D1 3F 7C 77 65
+					9B B9 C1 00 EF 3F 7A 9D
+					6A 8F A8 BC 80 4D 3E 83
+					7E 74 83 AD A8 00 FF 3F
+					10 7C 80 70 B2 BA
+				39 01 00 00 00 00 37 DE
+					B0 0A 3F 7C 7A AA 96 B2
+					C0 30 F5 3F CF C8 73 BA
+					BE C8 BF 59 3F 7C 77 65
+					9B B9 C1 00 EF 3F 7A 9D
+					6A 8F A8 BC 80 4D 3E 83
+					7E 74 83 AD A8 00 FF 3F
+					10 7C 80 70 B2 BA
+				39 01 00 00 00 00 37 DF
+					30 A0 3F 2A 40 8D 92 BA
+					CA 30 8B 3E F3 7C 8E 91
+					BB CD 3F DC 3F B0 9A 92
+					8C B7 C4 00 EF 3F 7A 9D
+					6A 8F A8 BC 80 4D 3E 83
+					7E 74 83 AD A8 00 F3 3F
+					10 7C 80 70 B2 BA
+				39 01 00 00 00 00 37 E0
+					30 A6 3F 7A 2D B0 BA D4
+					DE 30 93 3E 83 D5 C4 BC
+					D5 DF 3F DF 3F 10 E0 D0
+					C2 D6 E0 00 EF 3F 7A 9D
+					6A 8F A8 BC 80 4D 3E 83
+					7E 74 83 AD A8 00 F3 3F
+					10 7C 80 70 B2 BA
+				39 01 00 00 00 00 37 E1
+					30 D8 3F AB AE AF AB CA
+					DF 30 DF 3F BF B5 E6 C0
+					CE C5 BF 30 3F B7 AB BE
+					8F B3 C7 00 EF 3F 7A 9D
+					6A 8F A8 BC 80 4D 3E 83
+					7E 74 83 AD A8 00 F3 3F
+					10 7C 80 70 B2 BA
+				39 01 00 00 00 00 37 E2
+					B0 27 7F 41 6F 76 6F 95
+					9D B0 00 7F 51 6E 76 70
+					97 9E BF 9A 7F 62 6B 70
+					66 8D 92 00 eF 3F 7A 9D
+					6A 8F A8 BC 80 4D 3E 83
+					7E 74 83 AD A8 00 FF 3F
+					10 7C 80 70 B2 BA
+				39 01 00 00 00 00 37 E3
+					30 B3 3F 4A 6F 80 84 B3
+					C2 30 9B 3F 53 92 85 84
+					B5 C2 3F FF 3F 60 94 84
+					80 AC BC 00 EF 3F 7A 9D
+					6A 8F A8 BC 80 4D 3E 83
+					7E 74 83 AD A8 00 F3 3F
+					10 7C 80 70 B2 BA
+				39 01 00 00 00 00 1F E4
+					00 EF 3F 7A 9D 6A 8F A8
+					BC 80 4D 3E 83 7E 74 83
+					AD A8 00 F3 3F 10 7C 80
+					70 B2 BA 20 01 CC
+				// TE Enable: 0x39 0xCE 0x27 0x10 0x08 0x80
+				39 01 00 00 00 00 05 CE 27 10 08 80
+				15 01 00 00 00 00 02 35 00
+				39 01 00 00 00 00 03 53 0C 30
+				39 01 00 00 00 00 07 55
+					04 70 DB 04 70 DB
+				15 01 00 00 00 00 02 F3 AC
+				15 01 00 00 00 00 02 B0 AC
+				// TODO salidoa: No delay between 11/29? or delay? 200 msec>?
+				05 01 00 00 C8 00 01 11
+				// TODO salidoa: write protect twice? 15 01 00 00 00 00 02 B0 AC
+				// TODO salidoa: check delay after 29?
+				05 01 00 00 C8 00 01 29
+			];
+		};
+	};
+};
+
 #include "sdm845-b1c1-haptics-drv2624-overlay.dtsi"
 
 /* B1 P1.1 has the bottom speaker amp in inverted polarity */
