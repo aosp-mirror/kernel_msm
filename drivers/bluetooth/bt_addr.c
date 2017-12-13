@@ -20,6 +20,8 @@
 #include <linux/kernel.h>
 #include <linux/platform_device.h>
 #include <linux/of.h>
+#include <linux/random.h>
+#include <linux/time.h>
 
 #define BT_ADDR_PROP_NAME "linux,bt-dev-address"
 
@@ -32,24 +34,57 @@ static struct of_device_id bt_addr_match_table[] = {
 	{}
 };
 
+static void get_random_addr(char *buf)
+{
+	unsigned char addrs[6] = {0x00, 0x90, 0x4c, 0, 0, 0};
+	uint rand_addr;
+
+	prandom_seed((uint)ktime_get_ns());
+	rand_addr = prandom_u32();
+	addrs[3] = (unsigned char)rand_addr;
+	addrs[4] = (unsigned char)(rand_addr >> 8);
+	addrs[5] = (unsigned char)(rand_addr >> 16);
+
+	sprintf(buf, "%02x:%02x:%02x:%02x:%02x:%02x",
+			addrs[0], addrs[1], addrs[2],
+			addrs[3], addrs[4], addrs[5]);
+	buf[17] = '\0';
+	WARN(1, "%s: Random BT DEV ADDRESS %s\n", __func__, buf);
+}
+
 static int bt_addr_probe(struct platform_device *pdev)
 {
 	const char *str;
+	bool allow_random_addr = false;
+	struct device_node *np = pdev->dev.of_node;
+	int ret;
+
+	allow_random_addr = of_property_read_bool(np, "allow-random-addr");
 
 	if (!of_chosen) {
 		pr_err("%s: No chosen node!\n", __func__);
-		return -ENOENT;
+		ret = -ENOENT;
+		goto out;
 	}
 
 	if (of_property_read_string(of_chosen, BT_ADDR_PROP_NAME, &str)) {
 		pr_err("%s: No %s in device tree\n", __func__,
 				BT_ADDR_PROP_NAME);
-		return -ENOENT;
+		ret = -ENOENT;
+		goto out;
 	}
+
 	strlcpy(bdaddress, str, sizeof(bdaddress));
 	bdaddress[17] = '\0';
 
 	return 0;
+
+out:
+	if (allow_random_addr) {
+		get_random_addr(bdaddress);
+		return 0;
+	}
+	return ret;
 }
 
 static struct platform_driver bt_addr_platform_driver = {
