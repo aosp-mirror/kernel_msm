@@ -3,13 +3,21 @@ qcom,b1_proto_desay_atl_3135 {
 	/* #3141156_Google_B1atl_3135mAh_averaged_MasterSlave_Nov16th2017*/
 	qcom,max-voltage-uv = <4400000>;
 	qcom,nom-batt-capacity-mah = <3135>;
-	qcom,fastchg-current-ma = <1000>;
+	qcom,fastchg-current-ma = <3135>;
 	qcom,fg-cc-cv-threshold-mv = <4390>;
 	qcom,batt-id-kohm = <47>;
 	qcom,battery-beta = <4360>;
 	qcom,battery-type = "b1_proto_desay_atl_3135";
 	qcom,checksum = <0xBFC5>;
 	qcom,gui-version = "PMI8998GUI - 2.0.0.58";
+	/* hysteresis = 100000 */
+	qcom,step-chg-ranges = <
+		/* 20C =< temp < 42C */
+		3000000 4100000 3135000 /* 1.0C */
+		4100000 4200000 2194500 /* 0.7C */
+		4200000 4400000 1567500 /* 0.5C */
+		>;
+
 	qcom,fg-profile-data = [
 		 B2 1F 63 05
 		 AE 0A 0F 06

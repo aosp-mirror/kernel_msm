@@ -23,3 +23,7 @@
 &pmi8998_fg {
 	qcom,battery-data = <&b1_batterydata>;
 };
+
+&pmi8998_charger {
+	qcom,step-charging-enable;
+};
