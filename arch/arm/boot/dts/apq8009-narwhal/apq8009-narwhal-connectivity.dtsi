@@ -48,6 +48,10 @@
 };
 
 &soc {
+	bt_addr: bt_addr {
+		compatible = "lge,bt_addr";
+	};
+
 	bt_nitrous: bt_nitrous {
 		compatible = "goog,nitrous";
 		uart-port = <99>;
