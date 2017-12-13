@@ -1854,6 +1854,15 @@ static int mnh_sm_set_state_locked(int state)
 			mnh_ion_destroy_buffer(mnh_sm_dev->ion[fw_idx]);
 			mnh_update_fw_version(mnh_sm_dev->ion[FW_PART_PRI]);
 			mnh_sm_dev->update_status = FW_UPD_NONE;
+		} else if (mnh_sm_dev->ion &&
+			   !mnh_sm_dev->ion[FW_PART_PRI]->is_fw_ready) {
+			/* Request firmware and stage them to carveout buf. */
+			dev_info(mnh_sm_dev->dev, "%s: staging firmware\n",
+				 __func__);
+			mnh_ion_stage_firmware(mnh_sm_dev->ion[FW_PART_PRI]);
+
+			/* Extract firmware version from ramdisk image */
+			mnh_update_fw_version(mnh_sm_dev->ion[FW_PART_PRI]);
 		}
 
 		enable_irq(mnh_sm_dev->ready_irq);
