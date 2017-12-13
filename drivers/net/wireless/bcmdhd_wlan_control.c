@@ -30,6 +30,7 @@
 
 #define WLAN_MAC_ADDRS_FILE    "mac_addrs.bin"
 #define ETHER_ADDR_LEN         6
+#define WIFI_MAC_PROP_NAME     "linux,wifi-mac-address"
 
 #ifdef CONFIG_BROADCOM_WIFI_RESERVED_MEM
 /* dhd.h */
@@ -99,6 +100,7 @@ struct bcm_wlan_control {
 	unsigned char mac_addrs[ETHER_ADDR_LEN];
 	bool valid_mac_addrs;
 	bool auto_read_mac;
+	bool use_mac_in_dt;
 	struct work_struct fw_work;
 };
 
@@ -251,6 +253,45 @@ static int bcm_wifi_get_mac_addr(unsigned char *buf)
 	return 0;
 }
 
+static int bcm_wifi_read_mac_from_dt(struct bcm_wlan_control *ctrl)
+{
+	const char *str;
+	int ret;
+
+	if (!of_chosen) {
+		pr_err("%s: No chosen node!\n", __func__);
+		return -ENOENT;
+	}
+
+	if (of_property_read_string(of_chosen, WIFI_MAC_PROP_NAME, &str)) {
+		pr_err("%s: No %s in device tree\n", __func__,
+				WIFI_MAC_PROP_NAME);
+		return -ENOENT;
+	}
+
+	ret = sscanf(str, "%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx",
+			&ctrl->mac_addrs[0],
+			&ctrl->mac_addrs[1],
+			&ctrl->mac_addrs[2],
+			&ctrl->mac_addrs[3],
+			&ctrl->mac_addrs[4],
+			&ctrl->mac_addrs[5]);
+	if (6 != ret) {
+		pr_err("%s: Invalid Mac\n", __func__);
+		return -EINVAL;
+	}
+
+	pr_info("%s: MAC ADDRESS %02X:%02X:%02X:%02X:%02X:%02X\n", __func__,
+			ctrl->mac_addrs[0],
+			ctrl->mac_addrs[1],
+			ctrl->mac_addrs[2],
+			ctrl->mac_addrs[3],
+			ctrl->mac_addrs[4],
+			ctrl->mac_addrs[5]);
+	ctrl->valid_mac_addrs = true;
+	return 0;
+}
+
 static int bcm_wifi_read_mac_file(struct bcm_wlan_control *ctrl)
 {
 	char *file = WLAN_MAC_ADDRS_FILE;
@@ -260,6 +301,12 @@ static int bcm_wifi_read_mac_file(struct bcm_wlan_control *ctrl)
 
 	if (!ctrl)
 		return -EAGAIN;
+
+	if (ctrl->use_mac_in_dt) {
+		if (bcm_wifi_read_mac_from_dt(ctrl))
+			goto random_mac;
+		return 0;
+	}
 
 	ret = request_firmware(&firmware, file, ctrl->dev);
 	if (ret) {
@@ -276,7 +323,6 @@ static int bcm_wifi_read_mac_file(struct bcm_wlan_control *ctrl)
 	}
 
 	memcpy(ctrl->mac_addrs, &firmware->data[0], ETHER_ADDR_LEN);
-	ctrl->valid_mac_addrs = true;
 
 	pr_info("%s: MAC ADDRESS %02X:%02X:%02X:%02X:%02X:%02X\n", __func__,
 			ctrl->mac_addrs[0],
@@ -568,6 +614,7 @@ static int bcm_wifi_populate_dt(struct bcm_wlan_control *ctrl)
 		return rc;
 
 	ctrl->auto_read_mac = of_property_read_bool(np, "auto-read-mac");
+	ctrl->use_mac_in_dt = of_property_read_bool(np, "use-mac-in-dt");
 
 	return 0;
 }
