@@ -752,80 +752,94 @@ static int fillFlash(u32 address, u8 *data, int size) {
 }
 
 
-/**
-* Execute the procedure to burn a FW in FTM4/FTI IC
-* @param fw structure which contain the FW to be burnt
-* @param force_burn if >0, the flashing procedure will be forced and executed regardless the additional info, otherwise the FW in the file will be burnt only if it is newer than the one running in the IC
-* @param keep_cx if 1, the function preserve the CX/Panel Init area otherwise will be cleared
-* @return OK if success or an error code which specify the type of error encountered
-*/
+/*
+ * Execute the procedure to burn a FW on FTM5/FTI IC
+ *
+ * @param fw - structure which contain the FW to be burnt
+ * @param force_burn - if >0, the flashing procedure will be forced and executed
+ *	regardless the additional info, otherwise the FW in the file will be
+ *	burned only if it is different from the one running in the IC
+ * @param keep_cx - if 1, the function preserves the CX/Panel Init area.
+ *	Otherwise, it will be cleared.
+ *
+ * @return OK if success or an error code which specifies the type of error
+ *	encountered
+ */
 int flash_burn(Firmware fw, int force_burn, int keep_cx) {
-    int res;
+	int res;
 
+	if (!force_burn) {
+		/* Compare firmware, config, and CX versions */
+		if (fw.fw_ver != (uint32_t)systemInfo.u16_fwVer ||
+		    fw.config_id != (uint32_t)systemInfo.u16_cfgVer ||
+		    fw.cx_ver != (uint32_t)systemInfo.u16_cxVer)
+			goto start;
 
-    if (!force_burn) {
-		for(res = EXTERNAL_RELEASE_INFO_SIZE-1; res >=0; res--){
-			if (fw.externalRelease[res] >
+		/* Check for difference in release info */
+		for (res = EXTERNAL_RELEASE_INFO_SIZE - 1; res >= 0; res--) {
+			if (fw.externalRelease[res] !=
 			    systemInfo.u8_releaseInfo[res])
 				goto start;
 		}
+
 		logError(1,
-			 "%s flash_burn: Firmware in the chip newer or equal to the one to burn! NO UPDATE ERROR %08X\n",
+			 "%s flash_burn: Firmware in the chip matches the firmware to flash! NO UPDATE ERROR %08X\n",
 			 tag, ERROR_FW_NO_UPDATE);
-        return (ERROR_FW_NO_UPDATE | ERROR_FLASH_BURN_FAILED);
-    }else{
+		return (ERROR_FW_NO_UPDATE | ERROR_FLASH_BURN_FAILED);
+	} else if (force_burn == CRC_CX && fw.sec2_size == 0) {
 		/* burn procedure to update the CX memory, if not present just
 		 * skip it!
 		 */
-		if (force_burn == CRC_CX && fw.sec2_size == 0) {
-			logError(1,
-				 "%s flash_burn: CRC in CX but fw does not contain CX data! NO UPDATE ERROR %08X\n",
-				 tag, ERROR_FW_NO_UPDATE);
-			return (ERROR_FW_NO_UPDATE | ERROR_FLASH_BURN_FAILED);
-		}
+		logError(1,
+			 "%s flash_burn: CRC in CX but fw does not contain CX data! NO UPDATE ERROR %08X\n",
+			 tag, ERROR_FW_NO_UPDATE);
+		return (ERROR_FW_NO_UPDATE | ERROR_FLASH_BURN_FAILED);
 	}
 
-    //programming procedure start
+	/* Programming procedure start */
 start:
-    logError(0, "%s Programming Procedure for flashing started: \n\n", tag);
+	logError(0, "%s Programming Procedure for flashing started:\n", tag);
 
-    logError(0, "%s 1) SYSTEM RESET: \n", tag);
-    res = fts_system_reset();
-    if (res < 0) {
-        logError(1, "%s    system reset FAILED!\n", tag);
-        if (res != (ERROR_SYSTEM_RESET_FAIL | ERROR_TIMEOUT)) //if there is no firmware i will not get the controller ready event and there will be a timeout but i can keep going, but if there is an I2C error i have to exit
-            return (res | ERROR_FLASH_BURN_FAILED);
-    } else
-        logError(0, "%s   system reset COMPLETED!\n\n", tag);
+	logError(0, "%s 1) SYSTEM RESET:\n", tag);
+	res = fts_system_reset();
+	if (res < 0) {
+		logError(1, "%s    system reset FAILED!\n", tag);
+		/* If there is no firmware, there is no controller ready event
+		 * and there will be a timeout, we can keep going. But if
+		 * there is an I2C error, we must exit.
+		 */
+		if (res != (ERROR_SYSTEM_RESET_FAIL | ERROR_TIMEOUT))
+			return (res | ERROR_FLASH_BURN_FAILED);
+	} else
+		logError(0, "%s   system reset COMPLETED!\n", tag);
 
-    logError(0, "%s 2) HOLD M3 : \n", tag);
-    res = hold_m3();
-    if (res < OK) {
-        logError(1, "%s    hold_m3 FAILED!\n", tag);
-	return (res | ERROR_FLASH_BURN_FAILED);
-    } else
-        logError(0, "%s    hold_m3 COMPLETED!\n\n", tag);
+	logError(0, "%s 2) HOLD M3 :\n", tag);
+	res = hold_m3();
+	if (res < OK) {
+		logError(1, "%s    hold_m3 FAILED!\n", tag);
+		return (res | ERROR_FLASH_BURN_FAILED);
+	}
+	logError(0, "%s    hold_m3 COMPLETED!\n", tag);
 
-    logError(0, "%s 3) FLASH UNLOCK: \n", tag);
-    res = flash_unlock();
-    if (res < OK) {
-        logError(1, "%s   flash unlock FAILED! ERROR %08X\n", tag, ERROR_FLASH_BURN_FAILED);
-        return (res | ERROR_FLASH_BURN_FAILED);
-    } else {
-        logError(0, "%s   flash unlock COMPLETED!\n\n", tag);
-    }
+	logError(0, "%s 3) FLASH UNLOCK:\n", tag);
+	res = flash_unlock();
+	if (res < OK) {
+		logError(1, "%s   flash unlock FAILED! ERROR %08X\n", tag,
+			 ERROR_FLASH_BURN_FAILED);
+		return (res | ERROR_FLASH_BURN_FAILED);
+	}
+	logError(0, "%s   flash unlock COMPLETED!\n", tag);
 
+	logError(0, "%s 4) FLASH ERASE UNLOCK:\n", tag);
+	res = flash_erase_unlock();
+	if (res < 0) {
+		logError(1, "%s   flash unlock FAILED! ERROR %08X\n", tag,
+			 ERROR_FLASH_BURN_FAILED);
+		return (res | ERROR_FLASH_BURN_FAILED);
+	}
+	logError(0, "%s   flash unlock COMPLETED!\n", tag);
 
-    logError(0, "%s 4) FLASH ERASE UNLOCK: \n", tag);
-    res = flash_erase_unlock();
-    if (res < 0) {
-        logError(1, "%s   flash unlock FAILED! ERROR %08X\n", tag, ERROR_FLASH_BURN_FAILED);
-        return (res | ERROR_FLASH_BURN_FAILED);
-    } else {
-        logError(0, "%s   flash unlock COMPLETED!\n\n", tag);
-    }
-
-    logError(0, "%s 5) FLASH ERASE: \n", tag);
+	logError(0, "%s 5) FLASH ERASE:\n", tag);
 	if (keep_cx > 0) {
 		if (fw.sec2_size != 0)
 			res = flash_erase_page_by_page(SKIP_PANEL_INIT);
@@ -834,67 +848,78 @@ start:
 	} else
 		res = flash_full_erase();
 
-    if (res < 0) {
-        logError(1, "%s   flash erase FAILED! ERROR %08X\n", tag, ERROR_FLASH_BURN_FAILED);
-        return (res | ERROR_FLASH_BURN_FAILED);
-    } else {
-        logError(0, "%s   flash erase COMPLETED!\n\n", tag);
-    }
+	if (res < 0) {
+		logError(1, "%s   flash erase FAILED! ERROR %08X\n", tag,
+			 ERROR_FLASH_BURN_FAILED);
+		return (res | ERROR_FLASH_BURN_FAILED);
+	}
+	logError(0, "%s   flash erase COMPLETED!\n", tag);
 
-    logError(0, "%s 6) LOAD PROGRAM: \n", tag);
-    res = fillFlash(FLASH_ADDR_CODE, &fw.data[0], fw.sec0_size);
-    if (res < OK) {
-        logError(1, "%s   load program ERROR %08X\n", tag, ERROR_FLASH_BURN_FAILED);
-        return (res | ERROR_FLASH_BURN_FAILED);
-    }
-    logError(1, "%s   load program DONE!\n", tag);
+	logError(0, "%s 6) LOAD PROGRAM:\n", tag);
+	res = fillFlash(FLASH_ADDR_CODE, &fw.data[0], fw.sec0_size);
+	if (res < OK) {
+		logError(1, "%s   load program ERROR %08X\n", tag,
+			 ERROR_FLASH_BURN_FAILED);
+		return (res | ERROR_FLASH_BURN_FAILED);
+	}
+	logError(1, "%s   load program DONE!\n", tag);
 
-    logError(0, "%s 7) LOAD CONFIG: \n", tag);
-    res = fillFlash(FLASH_ADDR_CONFIG, &(fw.data[fw.sec0_size]), fw.sec1_size);
-    if (res < OK) {
-        logError(1, "%s   load config ERROR %08X\n", tag, ERROR_FLASH_BURN_FAILED);
-        return (res | ERROR_FLASH_BURN_FAILED);
-    }
-     logError(1, "%s   load config DONE!\n", tag);
+	logError(0, "%s 7) LOAD CONFIG:\n", tag);
+	res = fillFlash(FLASH_ADDR_CONFIG, &(fw.data[fw.sec0_size]),
+			fw.sec1_size);
+	if (res < OK) {
+		logError(1, "%s   load config ERROR %08X\n", tag,
+			 ERROR_FLASH_BURN_FAILED);
+		return (res | ERROR_FLASH_BURN_FAILED);
+	}
+	logError(1, "%s   load config DONE!\n", tag);
 
 	if (fw.sec2_size != 0) {
-		logError(0, "%s 7.1) LOAD CX: \n", tag);
-		res = fillFlash(FLASH_ADDR_CX, &(fw.data[fw.sec0_size+fw.sec1_size]), fw.sec2_size);
+		logError(0, "%s 7.1) LOAD CX:\n", tag);
+		res = fillFlash(FLASH_ADDR_CX,
+				&(fw.data[fw.sec0_size + fw.sec1_size]),
+				fw.sec2_size);
 		if (res < OK) {
-			logError(1, "%s   load cx ERROR %08X\n", tag, ERROR_FLASH_BURN_FAILED);
+			logError(1, "%s   load cx ERROR %08X\n", tag,
+				 ERROR_FLASH_BURN_FAILED);
 			return (res | ERROR_FLASH_BURN_FAILED);
 		}
 		logError(1, "%s   load cx DONE!\n", tag);
 	}
 
-    logError(0, "%s   Flash burn COMPLETED!\n\n", tag);
+	logError(0, "%s   Flash burn COMPLETED!\n", tag);
 
-    logError(0, "%s 8) SYSTEM RESET: \n", tag);
-    res = fts_system_reset();
-    if (res < 0) {
-        logError(1, "%s    system reset FAILED! ERROR %08X\n", tag, ERROR_FLASH_BURN_FAILED);
-        return (res | ERROR_FLASH_BURN_FAILED);
-    }
-    logError(0, "%s   system reset COMPLETED!\n\n", tag);
+	logError(0, "%s 8) SYSTEM RESET:\n", tag);
+	res = fts_system_reset();
+	if (res < 0) {
+		logError(1, "%s    system reset FAILED! ERROR %08X\n", tag,
+			 ERROR_FLASH_BURN_FAILED);
+		return (res | ERROR_FLASH_BURN_FAILED);
+	}
+	logError(0, "%s   system reset COMPLETED!\n", tag);
 
+	logError(0, "%s 9) FINAL CHECK:\n", tag);
+	res = readSysInfo(0);
+	if (res < 0) {
+		logError(1,
+			 "%s flash_burn: Unable to retrieve Chip INFO! ERROR %08X\n",
+			 tag, ERROR_FLASH_BURN_FAILED);
+		return (res | ERROR_FLASH_BURN_FAILED);
+	}
 
-    logError(0, "%s 9) FINAL CHECK: \n", tag);
-    res = readSysInfo(0);
-    if (res < 0) {
-        logError(1, "%s flash_burn: Unable to retrieve Chip INFO! ERROR %08X\n", tag, ERROR_FLASH_BURN_FAILED);
-        return (res | ERROR_FLASH_BURN_FAILED);
-    }
-
-
-	for(res=0;res<EXTERNAL_RELEASE_INFO_SIZE;res++){
-		if(fw.externalRelease[res]!=systemInfo.u8_releaseInfo[res]){ //external release is printed during readSysInfo
-			logError(1, "%s  Firmware in the chip different from the one that was burn! fw: %x != %x , conf: %x != %x\n", tag, systemInfo.u16_fwVer, fw.fw_ver, systemInfo.u16_cfgId, fw.config_id);
+	for (res = 0; res < EXTERNAL_RELEASE_INFO_SIZE; res++) {
+		if (fw.externalRelease[res] != systemInfo.u8_releaseInfo[res]) {
+			/* External release is printed during readSysInfo */
+			logError(1,
+				 "%s  Firmware in the chip different from the one that was burn! fw: %x != %x , conf: %x != %x\n",
+				 tag, systemInfo.u16_fwVer, fw.fw_ver,
+				 systemInfo.u16_cfgId, fw.config_id);
 			return ERROR_FLASH_BURN_FAILED;
 		}
 	}
 
+	logError(0, "%s   Final check OK! fw: %04X , conf: %04X\n", tag,
+		 systemInfo.u16_fwVer, systemInfo.u16_cfgId);
 
-    logError(0, "%s   Final check OK! fw: %04X , conf: %04X \n", tag, systemInfo.u16_fwVer, systemInfo.u16_cfgId);
-
-    return OK;
+	return OK;
 }

@@ -180,7 +180,14 @@ int errorHandler(u8 *event, int size){
 				break;
 			case EVT_TYPE_ERROR_ITO_KEYOPEN:
 				logError(1, "%s errorHandler: Key Open !\n", tag);
-			break;
+				break;
+
+			case EVT_TYPE_ERROR_FLASH_FAILED:
+				logError(1,
+					 "%s errorHandler: Previous flash failed!\n",
+					 tag);
+				info->reflash_fw = 1;
+				break;
 
 			default:
 				logError(1, "%s errorHandler: No Action taken! \n", tag);

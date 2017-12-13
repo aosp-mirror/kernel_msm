@@ -243,6 +243,7 @@ struct fts_ts_info{
 
 	int			resume_bit;	/* Indicate if screen off/on */
 	int			fwupdate_stat;	/* Result of a fw update */
+	int			reflash_fw;	/* Attempt to reflash fw */
 
 	struct notifier_block	notifier;	/* Notify on suspend/resume */
 	bool			sensor_sleep;	/* True if suspend called */

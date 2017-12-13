@@ -2217,65 +2217,79 @@ static void fts_event_handler(struct work_struct *work) {
 
 
 /**
-*	Implement the fw update and initialization flow of the IC that should be executed at every boot up.
-*	The function perform a fw update of the IC in case of crc error or a new fw version and then understand if the IC need to be re-initialized again.
-*	@return  OK if success or an error code which specify the type of error encountered
+*	Implement the fw update and initialization flow of the IC that should
+*	be executed at every boot up. The function perform a fw update of the
+*	IC in case of crc error or a new fw version and then understand if the
+*	IC need to be re-initialized again.
+*
+*	@return  OK if success or an error code which specify the type of error
+*	encountered
 */
 static int fts_fw_update(struct fts_ts_info *info)
 {
 	u8 error_to_search[4] = {EVT_TYPE_ERROR_CRC_CX_HEAD,
 		EVT_TYPE_ERROR_CRC_CX, EVT_TYPE_ERROR_CRC_CX_SUB_HEAD,
 		EVT_TYPE_ERROR_CRC_CX_SUB};
-	int retval = 0;
-	int retval1 = 0;
-	int ret;
-	int crc_status = 0;
-	int error = 0;
+	int ret = 0;
 	int init_type = NO_INIT;
 
-    logError(1, "%s Fw Auto Update is starting... \n", tag);
+	logError(1, "%s Fw Auto Update is starting...\n", tag);
 
-    // check CRC status
-    ret = fts_crc_check();
-    if (ret > OK ) {
-        logError(1, "%s %s: CRC Error or NO FW!\n", tag, __func__);
-        crc_status = ret;
-    } else {
-        crc_status = 0;
-        logError(1, "%s %s: NO CRC Error or Impossible to read CRC register! \n", tag, __func__);
-    }
-    retval = flashProcedure(PATH_FILE_FW, crc_status, 1);
-    if ((retval & 0xFF000000) == ERROR_FLASH_PROCEDURE) {
-        logError(1, "%s %s: firmware update failed and retry! ERROR %08X\n", tag, __func__, retval);
-	fts_chip_powercycle(info); // power reset
-        retval1 = flashProcedure(PATH_FILE_FW, crc_status, 1);
-        if ((retval1 & 0xFF000000) == ERROR_FLASH_PROCEDURE) {
-            logError(1, "%s %s: firmware update failed again!  ERROR %08X\n", tag, __func__, retval1);
-            logError(1, "%s Fw Auto Update Failed!\n", tag);
-        }
-    }
+	/* Check CRC status */
+	ret = fts_crc_check();
+	if (ret > OK) {
+		logError(1, "%s %s: CRC Error or NO FW!\n", tag, __func__);
+		info->reflash_fw = 1;
+	} else {
+		logError(1,
+			 "%s %s: NO CRC Error or Impossible to read CRC register!\n",
+			 tag, __func__);
+	}
+	ret = flashProcedure(PATH_FILE_FW, info->reflash_fw, 1);
+	if ((ret & 0xFF000000) == ERROR_FLASH_PROCEDURE) {
+		logError(1,
+			 "%s %s: firmware update failed; retrying. ERROR %08X\n",
+			 tag, __func__, ret);
+		/* Power cycle the touch IC */
+		fts_chip_powercycle(info);
+		ret = flashProcedure(PATH_FILE_FW, info->reflash_fw, 1);
+		if ((ret & 0xFF000000) == ERROR_FLASH_PROCEDURE) {
+			logError(1,
+				 "%s %s: firmware update failed again! ERROR %08X\n",
+				 tag, __func__, ret);
+			logError(1, "%s Fw Auto Update Failed!\n", tag);
+			return ret;
+		}
+	}
+	info->reflash_fw = 0;
 
-	logError(1, "%s %s: Verifying if CX CRC Error...\n", tag, __func__, ret);
+	logError(1, "%s %s: Verifying if CX CRC Error...\n", tag, __func__);
 	ret = fts_system_reset();
 	if (ret >= OK) {
 		ret = pollForErrorType(error_to_search, 4);
 		if (ret < OK) {
-			logError(1, "%s %s: No Cx CRC Error Found! \n", tag, __func__);
-			logError(1, "%s %s: Verifying if Panel CRC Error... \n", tag, __func__);
+			logError(1, "%s %s: No Cx CRC Error Found!\n", tag,
+				 __func__);
+			logError(1, "%s %s: Verifying if Panel CRC Error...\n",
+				 tag, __func__);
 			error_to_search[0] = EVT_TYPE_ERROR_CRC_PANEL_HEAD;
-			error_to_search[1] =  EVT_TYPE_ERROR_CRC_PANEL;
+			error_to_search[1] = EVT_TYPE_ERROR_CRC_PANEL;
 			ret = pollForErrorType(error_to_search, 2);
-			if(ret<OK){
-				logError(1, "%s %s: No Panel CRC Error Found! \n", tag, __func__);
+			if (ret < OK) {
+				logError(1,
+					 "%s %s: No Panel CRC Error Found!\n",
+					 tag, __func__);
 				init_type = NO_INIT;
-			}else
-			{
-				logError(1, "%s %s: Panel CRC Error FOUND! CRC ERROR = %02X\n", tag, __func__, ret);
+			} else {
+				logError(1,
+					 "%s %s: Panel CRC Error FOUND! CRC ERROR = %02X\n",
+					 tag, __func__, ret);
 				init_type = SPECIAL_PANEL_INIT;
 			}
-		}
-		else {
-			logError(1, "%s %s: Cx CRC Error FOUND! CRC ERROR = %02X\n", tag, __func__, ret);
+		} else {
+			logError(1,
+				 "%s %s: Cx CRC Error FOUND! CRC ERROR = %02X\n",
+				 tag, __func__, ret);
 #if defined(ENGINEERING_CODE) || defined(COMPUTE_CX_ON_PHONE)
 			init_type = SPECIAL_FULL_PANEL_INIT;
 #else
@@ -2293,42 +2307,53 @@ static int fts_fw_update(struct fts_ts_info *info)
 			init_type = SPECIAL_PANEL_INIT;
 #endif
 		}
-	}
-	else {
-		logError(1, "%s %s: Error while executing system reset! ERROR %08X\n", tag, __func__, ret); //better skip initialization because the real state is unknown
+	} else {
+		/* Skip initialization because the real state is unknown */
+		logError(1,
+			 "%s %s: Error while executing system reset! ERROR %08X\n",
+			 tag, __func__, ret);
 	}
 
 #ifdef ENGINEERING_CODE
-    if((init_type == NO_INIT))
-    {
-		if(systemInfo.u16_cxVer != systemInfo.u16_cxMemVer){
+	if (init_type == NO_INIT) {
+		if (systemInfo.u16_cxVer != systemInfo.u16_cxMemVer) {
 			init_type = SPECIAL_FULL_PANEL_INIT;
-			logError(0, "%s %s: Different CX Ver: %04X != %04X... Execute FULL Panel Init! \n", tag, __func__, systemInfo.u16_cxVer, systemInfo.u16_cxMemVer);
-		}else if(systemInfo.u8_fwCfgAfeVer != systemInfo.u8_panelCfgAfeVer){
+			logError(0,
+				 "%s %s: Different CX Ver: %04X != %04X... Execute FULL Panel Init!\n",
+				 tag, __func__, systemInfo.u16_cxVer,
+				 systemInfo.u16_cxMemVer);
+		} else if (systemInfo.u8_fwCfgAfeVer !=
+			   systemInfo.u8_panelCfgAfeVer) {
 			init_type = SPECIAL_PANEL_INIT;
-			logError(0, "%s %s: Different Panel Ver: %04X != %04X... Execute Panel Init! \n", tag, __func__, systemInfo.u8_fwCfgAfeVer, systemInfo.u8_panelCfgAfeVer);
-		}else{
-			init_type = NO_INIT;
+			logError(0,
+				 "%s %s: Different Panel Ver: %04X != %04X... Execute Panel Init!\n",
+				 tag, __func__, systemInfo.u8_fwCfgAfeVer,
+				 systemInfo.u8_panelCfgAfeVer);
 		}
 	}
 #endif
 
-    if (init_type != NO_INIT ) // initialization status not correct or after FW complete update, do initialization.
-    {
-        error = fts_chip_initialization(info, init_type);
-        if (error < OK) {
-            logError(1, "%s %s Cannot initialize the chip ERROR %08X\n", tag, __func__, error);
-        }
+	/* Reinitialize after a complete FW update or if the initialization
+	 * status is not correct.
+	 */
+	if (init_type != NO_INIT) {
+		ret = fts_chip_initialization(info, init_type);
+		if (ret < OK) {
+			logError(1,
+				 "%s %s Cannot initialize the chip ERROR %08X\n",
+				 tag, __func__, ret);
+		}
 	}
 
-	error = fts_init_sensing(info);
-	if (error < OK)
-	{
-		logError(1, "%s Cannot initialize the hardware device ERROR %08X\n", tag, error);
+	ret = fts_init_sensing(info);
+	if (ret < OK) {
+		logError(1,
+			 "%s Cannot initialize the hardware device ERROR %08X\n",
+			 tag, ret);
 	}
 
-    logError(1, "%s Fw Update Finished! error = %08X\n", tag, error);
-	return error;
+	logError(1, "%s Fw Update Finished! error = %08X\n", tag, ret);
+	return ret;
 }
 
 #ifndef FW_UPDATE_ON_PROBE

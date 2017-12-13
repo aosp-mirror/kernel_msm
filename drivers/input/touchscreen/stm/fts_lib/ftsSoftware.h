@@ -335,6 +335,7 @@ typedef enum {
 
 #define EVT_TYPE_ERROR_CRC_CX_HEAD			0xA0								///< CRC error in the CX Area Header
 #define EVT_TYPE_ERROR_CRC_CX				0xA1								///< CRC error in the CX Area
+#define EVT_TYPE_ERROR_FLASH_FAILED	0xA4	/* Flash error, cause unknown */
 #define EVT_TYPE_ERROR_CRC_CX_SUB_HEAD		0xA5								///< CRC error in the CX Subsection Area Header
 #define EVT_TYPE_ERROR_CRC_CX_SUB			0xA6								///< CRC error in the CX Subsection Area
 
