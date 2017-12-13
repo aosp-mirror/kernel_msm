@@ -122,3 +122,7 @@
 &load_sw_control {
 	status = "ok";
 };
+
+&bt_addr {
+	allow-random-addr;
+};

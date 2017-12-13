@@ -18,3 +18,7 @@
 
 	/delete-property/qcom,platform-enable-gpio;
 };
+
+&bt_addr {
+	allow-random-addr;
+};
