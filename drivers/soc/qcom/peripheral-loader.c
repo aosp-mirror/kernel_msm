@@ -146,19 +146,30 @@ struct pil_priv {
 int pil_do_ramdump(struct pil_desc *desc, void *ramdump_dev)
 {
 	struct pil_priv *priv = desc->priv;
-	int ret;
-	struct ramdump_segment ramdump_seg;
+	struct pil_seg *seg;
+	int count = 0, ret;
+	struct ramdump_segment *ramdump_segs, *s;
 
+	list_for_each_entry(seg, &priv->segs, list)
+		count++;
+
+	ramdump_segs = kcalloc(count, sizeof(*ramdump_segs), GFP_KERNEL);
+	if (!ramdump_segs)
+		return -ENOMEM;
 
 	if (desc->subsys_vmid > 0)
 		ret = pil_assign_mem_to_linux(desc, priv->region_start,
 				(priv->region_end - priv->region_start));
 
-	ramdump_seg.address = priv->region_start;
-	ramdump_seg.size = priv->region_end - priv->region_start;
+	s = ramdump_segs;
+	list_for_each_entry(seg, &priv->segs, list) {
+		s->address = seg->paddr;
+		s->size = seg->sz;
+		s++;
+	}
 
-	ret = do_elf_ramdump(ramdump_dev, &ramdump_seg, 1);
-
+	ret = do_elf_ramdump(ramdump_dev, ramdump_segs, count);
+	kfree(ramdump_segs);
 
 	if (ret)
 		pil_err(desc, "%s: Ramdump collection failed for subsys %s rc:%d\n",
