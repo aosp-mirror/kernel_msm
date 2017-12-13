@@ -250,6 +250,7 @@ struct msm_hs_port {
 	atomic_t client_req_state;
 	void *ipc_msm_hs_log_ctxt;
 	int ipc_debug_mask;
+	wake_peer_fn wake_peer;
 };
 
 static struct of_device_id msm_hs_match_table[] = {
@@ -1972,6 +1973,20 @@ static void msm_hs_sps_rx_callback(struct sps_event_notify *notify)
 	}
 }
 
+void msm_hs_set_wake_peer(struct uart_port *uport, wake_peer_fn wake_peer)
+{
+	struct msm_hs_port *msm_uport = UARTDM_TO_MSM(uport);
+	msm_uport->wake_peer = wake_peer;
+}
+
+static void msm_hs_wake_peer(struct uart_port *uport)
+{
+	struct msm_hs_port *msm_uport = UARTDM_TO_MSM(uport);
+
+	if (msm_uport->wake_peer)
+		msm_uport->wake_peer(uport);
+}
+
 /*
  *  Standard API, Current states of modem control inputs
  *
@@ -2254,8 +2269,6 @@ void msm_hs_resource_off(struct msm_hs_port *msm_uport)
 		msm_hs_write(uport, UART_DM_DMEN, data);
 		sps_tx_disconnect(msm_uport);
 	}
-	if (!atomic_read(&msm_uport->client_req_state))
-		msm_hs_enable_flow_control(uport, false);
 }
 
 void msm_hs_resource_on(struct msm_hs_port *msm_uport)
@@ -2271,7 +2284,7 @@ void msm_hs_resource_on(struct msm_hs_port *msm_uport)
 		data |= UARTDM_RX_BAM_ENABLE_BMSK;
 		msm_hs_write(uport, UART_DM_DMEN, data);
 	}
-
+	msm_hs_enable_flow_control(uport, false);
 	msm_hs_spsconnect_tx(msm_uport);
 	if (msm_uport->rx.flush == FLUSH_SHUTDOWN) {
 		msm_hs_spsconnect_rx(uport);
@@ -3638,7 +3651,7 @@ static struct platform_driver msm_serial_hs_platform_driver = {
 	.remove = msm_hs_remove,
 	.driver = {
 		.name = "msm_serial_hs",
-/*		.pm   = &msm_hs_dev_pm_ops, remove msm usrt pm and use bt uart control*/
+		.pm   = &msm_hs_dev_pm_ops,
 		.of_match_table = msm_hs_match_table,
 	},
 };
@@ -3667,6 +3680,7 @@ static struct uart_ops msm_hs_ops = {
 	.config_port = msm_hs_config_port,
 	.flush_buffer = NULL,
 	.ioctl = msm_hs_ioctl,
+	.wake_peer = msm_hs_wake_peer,
 };
 
 module_init(msm_serial_hs_init);
