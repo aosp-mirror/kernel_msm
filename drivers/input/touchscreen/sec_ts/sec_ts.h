@@ -36,7 +36,6 @@
 #include <linux/time.h>
 #include <linux/uaccess.h>
 #include <linux/vmalloc.h>
-#include <linux/wakelock.h>
 #include <linux/workqueue.h>
 
 #ifdef CONFIG_SEC_SYSFS
@@ -657,7 +656,7 @@ struct sec_ts_data {
 	volatile bool reset_is_on_going;
 #endif
 	struct completion resume_done;
-	struct wake_lock wakelock;
+	struct wakeup_source wakesrc;
 	struct sec_cmd_data sec;
 	short *pFrame;
 
