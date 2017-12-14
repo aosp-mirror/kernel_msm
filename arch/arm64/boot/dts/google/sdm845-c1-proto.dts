@@ -20,5 +20,3 @@
 	compatible = "google,b1c1-sdm845", "qcom,sdm845";
 	qcom,board-id = <0x00010305 0>;
 };
-
-#include "sdm845-b1c1-haptics-drv2624-overlay.dtsi"
