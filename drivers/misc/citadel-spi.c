@@ -66,22 +66,26 @@ static int citadel_wait_cmd_done(struct spi_device *spi)
 			return ret;
 		if (time_after(jiffies, to))
 			return -EBUSY;
-	} while (!(val & 0x01));
+	} while (!val);
 
-	return 0;
+	/* Return EAGAIN if unexpected bytes were received. */
+	return val & 0x01 ? 0 : -EAGAIN;
 }
 
 static int citadel_tpm_datagram(struct citadel_data *citadel,
 			       struct citadel_ioc_tpm_datagram *dg)
 {
 	int is_read;
+	int citadel_is_awake;
 	int ret;
 	int ignore_result = 0;
 	struct spi_device *spi = citadel->spi;
 	u32 command;
+	u32 response;
 	struct spi_message m;
 	struct spi_transfer spi_xfer = {
 		.tx_buf = &command,
+		.rx_buf = &response,
 		.len = 4,
 		.cs_change = 1,
 	};
@@ -104,13 +108,25 @@ static int citadel_tpm_datagram(struct citadel_data *citadel,
 	if (ret)
 		goto exit;
 
-	/* Wait for the reply bit to go high */
-	ret = citadel_wait_cmd_done(spi);
-	if (ret)
-		goto exit;
+	/* Verify that citadel is idle. If it isn't, deassert CS and return
+	 * -EAGAIN. 0xdf is what citadel sends when the SPI FIFO is empty,
+	 * and it is in the TPM wait mode. Once a command is sent to Citadel,
+	 * the last bit shows whether or not Citadel is ready to send the
+	 * response. This typically happens by a 0x01 byte, but may be
+	 * preceded by several 0x00 bytes while Citadel does any necessary
+	 * work. */
+	citadel_is_awake = response == be32_to_cpu(0xdfdfdfde);
+
+	if (citadel_is_awake) {
+		/* Wait for the reply bit to go high */
+		ret = citadel_wait_cmd_done(spi);
+		/* Reset CS in the case of unexpected bytes. */
+		if (ret)
+			citadel_is_awake = 0;
+	}
 
 	/* TODO: If there's no data, how do we disable the CS? */
-	if (!dg->len) {
+	if (!dg->len || !citadel_is_awake) {
 		/* For now, just transfer one more byte and throw it away */
 		is_read = 1;
 		dg->len = 1;
@@ -139,6 +155,12 @@ static int citadel_tpm_datagram(struct citadel_data *citadel,
 	ret = spi_sync_locked(spi, &m);
 	if (ret)
 		goto exit;
+
+	/* This condition typically happens when citadel is asleep. Toggling
+	 * CS should be sufficient to wake up citadel, but some time needs to
+	 * pass before it will be ready. */
+	if (!citadel_is_awake)
+		ret = -EAGAIN;
 
 	if (ignore_result)
 		goto exit;
