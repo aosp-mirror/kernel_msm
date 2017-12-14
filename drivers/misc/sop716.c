@@ -81,6 +81,8 @@ struct sop716_info {
 
 struct sop716_info *sop716_info;
 
+static void sop716_hw_reset(struct sop716_info *si);
+
 static inline int REG_CMD(struct sop716_command *cmd, u8 reg, char *desc,
 		u8 size)
 {
@@ -132,6 +134,7 @@ static int sop716_register_commands(struct sop716_info *si)
 static int sop716_write(struct sop716_info *si, u8 reg, u8 *val)
 {
 	int ret;
+	int retry = 1;
 
 	pr_debug("%s: reg:%d val:%d\n", __func__, val[0], *val);
 
@@ -141,8 +144,13 @@ static int sop716_write(struct sop716_info *si, u8 reg, u8 *val)
 	}
 
 	/* sop716 writes size instead of reg */
-	ret = i2c_smbus_write_i2c_block_data(si->client,
-			si->cmds[reg].size, si->cmds[reg].size, val);
+	do {
+		ret = i2c_smbus_write_i2c_block_data(si->client,
+				si->cmds[reg].size, si->cmds[reg].size, val);
+		if (ret < 0)
+			sop716_hw_reset(si);
+	} while (retry-- && ret < 0);
+
 	if (ret < 0)
 		pr_err("%s: cannot write i2c: reg %d (%s)\n",
 				__func__, reg, si->cmds[reg].desc);
@@ -153,6 +161,7 @@ static int sop716_write(struct sop716_info *si, u8 reg, u8 *val)
 static int sop716_read(struct sop716_info *si, u8 reg, u8 *val)
 {
 	int ret;
+	int retry = 1;
 
 	pr_debug("%s: reg:%d val:%d\n", __func__, reg, *val);
 
@@ -162,8 +171,13 @@ static int sop716_read(struct sop716_info *si, u8 reg, u8 *val)
 	}
 
 	/* read size + data, So "size + 1" need to be added  */
-	ret = i2c_smbus_read_i2c_block_data(si->client,
-			reg, si->cmds[reg].size + 1, val);
+	do {
+		ret = i2c_smbus_read_i2c_block_data(si->client,
+				reg, si->cmds[reg].size + 1, val);
+		if (ret < 0)
+			sop716_hw_reset(si);
+	} while (retry-- && ret < 0);
+
 	if (ret < 0) {
 		pr_err("%s: cannot read i2c: reg %d (%s)\n",
 				__func__, reg, si->cmds[reg].desc);
@@ -586,7 +600,6 @@ static int sop716_hctosys(struct sop716_info *si)
 	msleep(si->hctosys_post_delay_ms);
 	if (err < 0) {
 		pr_err("%s: cannot read time from device\n", __func__);
-		sop716_hw_reset(si);
 		goto out;
 	}
 
@@ -880,7 +893,6 @@ static void sop716_update_fw_work(struct work_struct *work)
 	mutex_lock(&si->lock);
 	err = sop716_read(si, CMD_SOP716_READ_FW_VERSION, data);
 	if (err < 0) {
-		sop716_hw_reset(si);
 		err = sop716_read(si, CMD_SOP716_READ_FW_VERSION, data);
 		if (err < 0)
 			pr_err("%s: fail: read fw version\n", __func__);
