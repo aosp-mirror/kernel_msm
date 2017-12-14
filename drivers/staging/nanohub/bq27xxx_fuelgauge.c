@@ -42,6 +42,7 @@
 #define BQ27200_FLAG_FC         BIT(5)
 #define BQ27200_FLAG_CHGS       BIT(7) /*Charge state flag*/
 
+#define SPM_TIMEOUT             10*60 //10minutes
 
 struct FuelGaugeCfgData {
 	uint32_t interval;
@@ -67,7 +68,7 @@ static enum power_supply_property bq274xx_battery_props[] = {
 struct Nanohub_FuelGauge_Info *m_fg_info;
 
 
-static unsigned int poll_interval = 10;
+static unsigned int poll_interval = 50;
 module_param(poll_interval, uint, 0644);
 MODULE_PARM_DESC(poll_interval,
 	"battery poll interval in seconds - 0 disables polling");
@@ -77,6 +78,20 @@ static int request_fuel_gauge_data(struct nanohub_data *data);
 
 void bq27x00_update(struct Nanohub_FuelGauge_Info *fg_info)
 {
+	struct timeval cur = {0, };
+	static struct timeval last = {0, };
+	static bool last_charging_status;
+#if FUEL_GAUGE_USE_FAKE_CAPACITY
+	static uint32_t timer_counter;
+#endif
+
+	do_gettimeofday(&cur);
+
+	if (cur.tv_sec == last.tv_sec &&
+		last_charging_status == fg_info->charger_online) {
+		return;
+	}
+
 	if (fg_info->requested == 0) {
 		if (poll_interval > 0) {
 			/* The timer does not have to be accurate. */
@@ -86,10 +101,61 @@ void bq27x00_update(struct Nanohub_FuelGauge_Info *fg_info)
 				poll_interval * HZ);
 		}
 	}
-	power_supply_changed(&fg_info->bat);
+
+#if FUEL_GAUGE_USE_FAKE_CAPACITY
+	pr_warn("nanohub: [FG] cache.capacity:%d, fake_capatity:%d, "
+			"cache.temperature:%d, cache.flags:%08x, "
+		    "charger_online:%d, timer_counter:%d\n",
+            fg_info->cache.capacity, fg_info->fake_capacity,
+			fg_info->cache.temperature, fg_info->cache.flags,
+            fg_info->charger_online, timer_counter);
+
+	/* Sync fake capacity to real capacity */
+	pr_info("nanohub: [FG] cur.tv_sec:%ld last.tv_sec:%ld\n",
+			cur.tv_sec, last.tv_sec);
+	if ((cur.tv_sec - last.tv_sec > SPM_TIMEOUT) && (last.tv_sec != 0)) {
+		fg_info->fake_capacity = fg_info->cache.capacity;
+		timer_counter = 0;
+	}
+	else {
+		if (fg_info->cache.capacity < fg_info->fake_capacity) {
+			fg_info->cache.capacity = fg_info->fake_capacity;
+			if (!fg_info->charger_online && timer_counter == 2) {
+				fg_info->fake_capacity--;
+				timer_counter = 0;
+			}
+			else {
+				if (fg_info->charger_online)
+					timer_counter = 0;
+				else
+					timer_counter ++;
+			}
+		}
+		else {
+			timer_counter = 0;
+			fg_info->fake_capacity = fg_info->cache.capacity;
+		}
+	}
+#else
+	pr_warn("nanohub: [FG] cache.capacity:%d, cache.temperature:%d, "
+			"cache.flags:%08x, charger_online:%d\n",
+            fg_info->cache.capacity, fg_info->cache.temperature,
+			fg_info->cache.flags, fg_info->charger_online);
+#endif
+
+	if (fg_info->last_capacity != fg_info->cache.capacity) {
+		if ((fg_info->charger_online &&
+		  fg_info->last_capacity < fg_info->cache.capacity) ||
+		  (!fg_info->charger_online &&
+		  fg_info->last_capacity > fg_info->cache.capacity)) {
+			power_supply_changed(&fg_info->bat);
+			fg_info->last_capacity = fg_info->cache.capacity;
+		}
+	}
+	last.tv_sec = cur.tv_sec;
+	last_charging_status = fg_info->charger_online;
 	fg_info->last_update = jiffies;
 
-	fg_info->requested = 0;
 }
 
 
@@ -97,9 +163,10 @@ static void fuelgauge_battery_poll(struct work_struct *work)
 {
 	struct Nanohub_FuelGauge_Info *fg_info =
 		container_of(work, struct Nanohub_FuelGauge_Info, work.work);
-
-	request_fuel_gauge_data(fg_info->hub_data);
-	fg_info->requested = 1;
+	if (!fg_info->requested) {
+		request_fuel_gauge_data(fg_info->hub_data);
+		fg_info->requested = 1;
+	}
 	if (poll_interval > 0) {
 		/* The timer does not have to be accurate.*/
 		set_timer_slack(&fg_info->work.timer, poll_interval * HZ / 4);
@@ -157,8 +224,8 @@ int store_fuelguage_cache(struct bq27x00_reg_cache *cache_data)
 		return -EINVAL;
 	memcpy(&(fg_info->cache), cache_data, sizeof(struct bq27x00_reg_cache));
 
-	/*pr_err("nanohub: store fuelgauge data.\n");*/
 	bq27x00_update(fg_info);
+	fg_info->requested = 0;
 	return 0;
 }
 
@@ -458,7 +525,23 @@ static void bq27x00_external_power_changed(struct power_supply *psy)
 {
 	struct Nanohub_FuelGauge_Info *fg_info =
 		container_of(psy, struct Nanohub_FuelGauge_Info, bat);
+	union power_supply_propval prop = {0,};
+	int rc, online = 0;
 
+	if (fg_info->bms_psy_name && !fg_info->bms_psy)
+		fg_info->bms_psy =
+			power_supply_get_by_name((char *)fg_info->bms_psy_name);
+
+	rc = fg_info->usb_psy->get_property(fg_info->usb_psy,
+				POWER_SUPPLY_PROP_ONLINE, &prop);
+	if (rc)
+		pr_err("nanohub: [FG] Couldn't read USB online property, rc=%d\n", rc);
+	else
+		online = prop.intval;
+
+	pr_debug("nanohub: [FG] %s: online = %d\n", __func__, online);
+
+	fg_info->charger_online = online;
 	cancel_delayed_work_sync(&fg_info->work);
 	schedule_delayed_work(&fg_info->work, 0);
 }
@@ -481,6 +564,10 @@ static void set_properties_array(
 }
 
 
+static char *batt_supplied_from[] = {
+	"usb",
+};
+
 int bq27x00_powersupply_init(struct device *dev,
 			struct nanohub_data *hub_data)
 {
@@ -492,6 +579,13 @@ int bq27x00_powersupply_init(struct device *dev,
 	struct bq27x00_reg_cache default_cache_data = {
 		2, 1, 365, 3710, 8, 295, 263, 0, 0, 263,
 		291, 91, 29100, 91, 0, 1, 400, 26800};
+	struct power_supply *usb_psy;
+
+	usb_psy = power_supply_get_by_name("usb");
+	if (!usb_psy) {
+		pr_debug("nanohub: [FG] USB psy not found; deferring probe\n");
+		return -EPROBE_DEFER;
+	}
 
 	fg_info = kzalloc(sizeof(struct Nanohub_FuelGauge_Info), GFP_KERNEL);
 
@@ -506,6 +600,8 @@ int bq27x00_powersupply_init(struct device *dev,
 		retval = -ENOMEM;
 		goto batt_failed_2;
 	}
+	fg_info->bms_psy_name = "bms";
+	fg_info->usb_psy = usb_psy;
 	fg_info->hub_data = hub_data;
 	fg_info->dev = dev;
 	fg_info->bat.name = name;
@@ -514,7 +610,11 @@ int bq27x00_powersupply_init(struct device *dev,
 		ARRAY_SIZE(bq274xx_battery_props));
 	fg_info->bat.get_property = bq27x00_battery_get_property;
 	fg_info->bat.external_power_changed = bq27x00_external_power_changed;
+	fg_info->bat.supplied_from = batt_supplied_from;
+	fg_info->bat.num_supplies = ARRAY_SIZE(batt_supplied_from);
+
 	fg_info->pre_interval = poll_interval;
+
 
 	INIT_DELAYED_WORK(&fg_info->work, fuelgauge_battery_poll);
 	mutex_init(&fg_info->lock);

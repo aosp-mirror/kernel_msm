@@ -21,6 +21,7 @@
 
 #include "main.h"
 
+#define FUEL_GAUGE_USE_FAKE_CAPACITY  0
 
 struct bq27x00_reg_cache {
 	uint8_t status;
@@ -64,6 +65,14 @@ struct Nanohub_FuelGauge_Info {
 	struct nanohub_data *hub_data;
 	struct delayed_work work;
 	bool requested;
+	struct power_supply	*usb_psy;
+	struct power_supply	*bms_psy;
+	const char *bms_psy_name;
+	bool charger_online;
+	uint16_t last_capacity;
+#if FUEL_GAUGE_USE_FAKE_CAPACITY
+	int fake_capacity;
+#endif
 };
 
 
