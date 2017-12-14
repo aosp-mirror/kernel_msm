@@ -121,6 +121,7 @@ int wlan_hdd_ftm_start(hdd_context_t *pAdapter);
 #include "wlan_hdd_debugfs.h"
 #include "sapInternal.h"
 #include <linux/random.h>
+#include <linux/of.h>
 
 #define MAC_FIRMWARE "wlan/prima/mac_addrs.bin"
 v_MACADDR_t mac_addrs[VOS_MAX_CONCURRENCY_PERSONA];
@@ -163,6 +164,9 @@ static char *country_code;
 static int   enable_11d = -1;
 static int   enable_dfs_chan_scan = -1;
 static int   gbcnMissRate = -1;
+
+static int   use_mac_in_dt = 0;
+#define WIFI_MAC_PROP_NAME     "linux,wifi-mac-address"
 
 #ifndef MODULE
 static int wlan_hdd_inited;
@@ -6365,6 +6369,40 @@ static void wlan_hdd_set_random_mac_addrs(tANI_U8* addrs)
     addrs[5] = (tANI_U8)(rand_mac >> 16);
 }
 
+/*
+ * TODO: now support for STA only
+ */
+static int wlan_hdd_get_intf_addr_from_dt(void)
+{
+    const char *str;
+    int ret;
+
+    if (!of_chosen) {
+        printk (KERN_ERR"%s : No chosen node!\n", __func__);
+        return -ENOENT;
+    }
+
+    if (of_property_read_string(of_chosen, WIFI_MAC_PROP_NAME, &str)) {
+        printk (KERN_ERR"%s : No %s in device tree\n", __func__,
+                WIFI_MAC_PROP_NAME);
+        return -ENOENT;
+    }
+
+    ret = sscanf(str, "%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx",
+            &mac_addrs[0].bytes[0],
+            &mac_addrs[0].bytes[1],
+            &mac_addrs[0].bytes[2],
+            &mac_addrs[0].bytes[3],
+            &mac_addrs[0].bytes[4],
+            &mac_addrs[0].bytes[5]);
+    if (6 != ret) {
+        printk (KERN_ERR"%s : Invalid MAC\n", __func__);
+        return -EINVAL;
+    }
+
+    return 0;
+}
+
 tANI_U8* wlan_hdd_get_intf_addr(hdd_context_t* pHddCtx)
 {
    int i;
@@ -6379,6 +6417,15 @@ tANI_U8* wlan_hdd_get_intf_addr(hdd_context_t* pHddCtx)
       return NULL;
 
    pHddCtx->cfg_ini->intfAddrMask |= (1 << i);
+
+   /* read MAC from device tree iff use_mac_in_dt */
+   if (use_mac_in_dt) {
+       if (wlan_hdd_get_intf_addr_from_dt())
+           goto random_mac;
+
+       /* return the address */
+       return &mac_addrs[i].bytes[0];
+   }
 
    /* read firmware */
    if (request_firmware (&fw_entry, MAC_FIRMWARE, pHddCtx->parent_dev)!= 0)
@@ -12449,3 +12496,5 @@ module_param(enable_11d, int,
 
 module_param(country_code, charp,
              S_IRUSR | S_IRGRP | S_IROTH);
+
+module_param(use_mac_in_dt, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
