@@ -1317,7 +1317,7 @@ int dhd_idletime = DHD_IDLETIME_TICKS;
 module_param(dhd_idletime, int, 0);
 
 /* Use polling */
-uint dhd_poll = TRUE;
+uint dhd_poll = FALSE;
 module_param(dhd_poll, uint, 0);
 
 /* Use interrupts */

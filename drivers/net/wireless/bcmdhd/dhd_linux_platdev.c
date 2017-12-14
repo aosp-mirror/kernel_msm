@@ -2,13 +2,13 @@
  * Linux platform device for DHD WLAN adapter
  *
  * Copyright (C) 1999-2016, Broadcom Corporation
- * 
+ *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
  * under the terms of the GNU General Public License version 2 (the "GPL"),
  * available at http://www.broadcom.com/licenses/GPLv2.php, with the
  * following added to such license:
- * 
+ *
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
@@ -16,7 +16,7 @@
  * the license of that module.  An independent module is a module which is not
  * derived from this software.  The special exception does not apply to any
  * modifications of the software.
- * 
+ *
  *      Notwithstanding the above, under no circumstances may you combine this
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
@@ -488,7 +488,7 @@ static int wifi_ctrlfunc_register_drv(void)
 		//bcm_wlan_set_plat_data();        //To adapt to the MSM8909W by Jerry
 #ifdef CUSTOMER_OOB
 		//adapter->irq_num = bcm_wlan_get_oob_irq();
-		//adapter->intr_flags = bcm_wlan_get_oob_irq_flags(); 
+		//adapter->intr_flags = bcm_wlan_get_oob_irq_flags();
 		adapter->irq_num = dhd_wlan_resources.start;
 		adapter->intr_flags = dhd_wlan_resources.flags & IRQF_TRIGGER_MASK;
 #endif
@@ -544,7 +544,7 @@ void wifi_ctrlfunc_unregister_drv(void)
 #endif /* !defined(CONFIG_DTS) */
 
 #if defined(CUSTOMER_HW) && defined(CUSTOMER_OOB)
-	bcm_wlan_free_oob_gpio(adapter->irq_num);
+	//bcm_wlan_free_oob_gpio(adapter->irq_num);
 #endif
 
 	kfree(dhd_wifi_platdata->adapters);
@@ -726,7 +726,7 @@ extern int dhd_dpc_prio;
 extern uint dhd_deferred_tx;
 #if defined(BCMLXSDMMC)
 extern struct semaphore dhd_registration_sem;
-#endif 
+#endif
 
 #ifdef BCMSDIO
 static int dhd_wifi_platform_load_sdio(void)
@@ -848,7 +848,7 @@ fail:
 	/* x86 bring-up PC needs no power-up operations */
 	err = dhd_bus_register();
 
-#endif 
+#endif
 
 	return err;
 }

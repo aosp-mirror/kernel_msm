@@ -221,6 +221,8 @@ static const u32 tuning_block_128[] = {
 static struct sdhci_msm_host *sdhci_slot[2];
 
 static int disable_slots;
+static int id_get;
+
 /* root can write, others read */
 module_param(disable_slots, int, S_IRUGO|S_IWUSR);
 
@@ -1640,11 +1642,13 @@ struct sdhci_msm_pltfm_data *sdhci_msm_populate_pdata(struct device *dev,
 		dev_err(dev, "failed to allocate memory for platform data\n");
 		goto out;
 	}
-
+	//add by Jerry Start
+	if(id_get != 2){
 	pdata->status_gpio = of_get_named_gpio_flags(np, "cd-gpios", 0, &flags);
 	if (gpio_is_valid(pdata->status_gpio) & !(flags & OF_GPIO_ACTIVE_LOW))
 		pdata->caps2 |= MMC_CAP2_CD_ACTIVE_HIGH;
-
+	}
+	//add by Jerry End
 	of_property_read_u32(np, "qcom,bus-width", &bus_width);
 	if (bus_width == 8)
 		pdata->mmc_bus_width = MMC_CAP_8_BIT_DATA;
@@ -2581,10 +2585,8 @@ static void sdhci_msm_check_power_status(struct sdhci_host *host, u32 req_type)
 	 */
 	if (done)
 		init_completion(&msm_host->pwr_irq_completion);
-	else if (!wait_for_completion_timeout(&msm_host->pwr_irq_completion,
-				msecs_to_jiffies(MSM_PWR_IRQ_TIMEOUT_MS)))
-		__WARN_printf("%s: request(%d) timed out waiting for pwr_irq\n",
-					mmc_hostname(host->mmc), req_type);
+	else
+		wait_for_completion(&msm_host->pwr_irq_completion);
 
 	pr_debug("%s: %s: request %d done\n", mmc_hostname(host->mmc),
 			__func__, req_type);
@@ -3973,8 +3975,10 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 			goto pltfm_free;
 		}
 
-		if (ret <= 2)
+		if (ret <= 2) {
 			sdhci_slot[ret-1] = msm_host;
+			id_get = ret;
+		}
 
 		msm_host->pdata = sdhci_msm_populate_pdata(&pdev->dev,
 							   msm_host);
@@ -4230,6 +4234,7 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	msm_host->mmc->caps |= MMC_CAP_WAIT_WHILE_BUSY;
 	msm_host->mmc->caps2 |= msm_host->pdata->caps2;
 	msm_host->mmc->caps2 |= MMC_CAP2_BOOTPART_NOACC;
+	msm_host->mmc->caps2 |= MMC_CAP2_FULL_PWR_CYCLE;
 	msm_host->mmc->caps2 |= MMC_CAP2_HS400_POST_TUNING;
 	msm_host->mmc->caps2 |= MMC_CAP2_CLK_SCALE;
 	msm_host->mmc->caps2 |= MMC_CAP2_SANITIZE;
@@ -4260,8 +4265,8 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	}
 
 	init_completion(&msm_host->pwr_irq_completion);
-
-	if (gpio_is_valid(msm_host->pdata->status_gpio)) {
+	if (id_get <=1){
+		if (gpio_is_valid(msm_host->pdata->status_gpio)) {
 		/*
 		 * Set up the card detect GPIO in active configuration before
 		 * configuring it as an IRQ. Otherwise, it can be in some
@@ -4280,8 +4285,10 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 			dev_err(&pdev->dev, "%s: Failed to request card detection IRQ %d\n",
 					__func__, ret);
 			goto vreg_deinit;
+			}
 		}
-	}
+	}else
+	sdhci_msm_setup_pins(msm_host->pdata, true);
 
 	if ((sdhci_readl(host, SDHCI_CAPABILITIES) & SDHCI_CAN_64BIT) &&
 		(dma_supported(mmc_dev(host->mmc), DMA_BIT_MASK(64)))) {

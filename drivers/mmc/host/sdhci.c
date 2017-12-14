@@ -1565,7 +1565,7 @@ static void sdhci_set_power(struct sdhci_host *host, unsigned char mode,
 				if (vdd != 0)
 					pwr = SDHCI_POWER_180;
 			} else {
-				BUG();
+					BUG();
 			}
 		}
 	}
@@ -4260,14 +4260,12 @@ int sdhci_add_host(struct sdhci_host *host)
 				   SDHCI_MAX_CURRENT_MULTIPLIER;
 	}
 	if (caps[0] & SDHCI_CAN_VDD_180) {
-		ocr_avail |= MMC_VDD_165_195;
-
+		ocr_avail |= MMC_VDD_165_195 | MMC_VDD_20_21; //Add MMC_VDD_20_21 for the BCM43436 wifi card
 		mmc->max_current_180 = ((max_current_caps &
 				   SDHCI_MAX_CURRENT_180_MASK) >>
 				   SDHCI_MAX_CURRENT_180_SHIFT) *
 				   SDHCI_MAX_CURRENT_MULTIPLIER;
 	}
-	ocr_avail |=  MMC_VDD_20_21;  //add for bcm wifi
 
 	/* If OCR set by external regulators, use it instead */
 	if (mmc->ocr_avail)
@@ -4280,6 +4278,8 @@ int sdhci_add_host(struct sdhci_host *host)
 	mmc->ocr_avail_sdio = ocr_avail;
 	if (host->ocr_avail_sdio)
 		mmc->ocr_avail_sdio &= host->ocr_avail_sdio;
+	else
+		host->ocr_avail_sdio = mmc->ocr_avail; //Jerry:fix the bug for the host->ocr_avail_sdio is NULL.
 	mmc->ocr_avail_sd = ocr_avail;
 	if (host->ocr_avail_sd)
 		mmc->ocr_avail_sd &= host->ocr_avail_sd;
