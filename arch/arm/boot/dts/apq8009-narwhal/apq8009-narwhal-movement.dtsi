@@ -52,5 +52,6 @@
 		lge,hctosys-post-delay-ms = <500>;
 		lge,fw-ver-check-delay-ms = <1000>;
 		lge,hands-settle-time-ms = <2000>;
+		lge,update-syslock-on-boot;
 	};
 };
