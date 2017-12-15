@@ -37,7 +37,11 @@
 #define CMD_SOP716_BATTERY_CHECK_PERIOD      7
 #define CMD_SOP716_READ_BATTERY_LEVEL        8
 #define CMD_SOP716_READ_BATTERY_CHECK_PERIOD 9
-#define CMD_SOP716_MAX                       10
+#define CMD_SOP716_SET_TIMEZONE              10
+#define CMD_SOP716_READ_TIMEZONE             11
+#define CMD_SOP716_SET_EOL_BATTERY_LEVEL     12
+#define CMD_SOP716_READ_EOL_BATTERY_LEVEL    13
+#define CMD_SOP716_MAX                       14
 
 #define SOP716_CMD_READ_RETRY                10
 
@@ -127,6 +131,14 @@ static int sop716_register_commands(struct sop716_info *si)
 			"read battery level" , 2);
 	err |= REG_CMD(si->cmds, CMD_SOP716_READ_BATTERY_CHECK_PERIOD,
 			"read battery check period", 2);
+	err |= REG_CMD(si->cmds, CMD_SOP716_SET_TIMEZONE,
+			"set timezone", 3);
+	err |= REG_CMD(si->cmds, CMD_SOP716_READ_TIMEZONE,
+			"read timezone", 2);
+	err |= REG_CMD(si->cmds, CMD_SOP716_SET_EOL_BATTERY_LEVEL,
+			"set eol battery level" , 5);
+	err |= REG_CMD(si->cmds, CMD_SOP716_READ_EOL_BATTERY_LEVEL,
+			"read eol battery level", 4);
 
 	return err;
 }
@@ -566,6 +578,129 @@ static ssize_t sop716_get_battery_level_show(struct device *dev,
 	return snprintf(buf, PAGE_SIZE, "%d mV\n", (data[1] << 8) + data[2]);
 }
 
+/* Code for CMD_SOP716_SET_TIMEZONE */
+static ssize_t sop716_timezone_store(struct device *dev,
+			struct device_attribute *attr, const char *buf,
+			size_t count)
+{
+	struct sop716_info *si = dev_get_drvdata(dev);
+	s8 data[SOP716_I2C_DATA_LENGTH];
+	s8 tmp[4];
+	int tz_minute, tz_hour;
+	int rc = 0;
+
+	if (count != 6 && count != 7) {
+		pr_err("%s: Error!!! invalid input count\n", __func__);
+		return -EINVAL;
+	 }
+
+	snprintf(tmp, 4, buf);
+	rc = kstrtoint(tmp, 10, &tz_minute);
+	snprintf(tmp, 4, buf + 3);
+	rc |= kstrtoint(tmp, 10, &tz_hour);
+	if (rc) {
+		pr_err("%s: Error!!! invalid input format! rc:%d\n",
+				__func__, rc);
+		return -EINVAL;
+	 }
+
+	if ((tz_minute < 0 || tz_minute > 59) ||
+	    (tz_hour < -12 || tz_hour > 14)) {
+		pr_err("%s: Error!!! invalid input format!\n", __func__);
+		return -EINVAL;
+	}
+
+	pr_info("%s: cnt:%d tz_minute:%d tz_hour:%d\n",
+			__func__, count, tz_minute, tz_hour);
+
+	data[0] = CMD_SOP716_SET_TIMEZONE;
+	data[1] = tz_minute;
+	data[2] = tz_hour;
+
+	mutex_lock(&si->lock);
+	sop716_write(si, CMD_SOP716_SET_TIMEZONE, data);
+	mutex_unlock(&si->lock);
+
+	return count;
+}
+
+/* Code for CMD_SOP716_READ_TIMEZONE */
+static ssize_t sop716_timezone_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	s8 data[SOP716_I2C_DATA_LENGTH];
+	struct sop716_info *si = dev_get_drvdata(dev);
+
+	mutex_lock(&si->lock);
+	sop716_read(si, CMD_SOP716_READ_TIMEZONE, data);
+	mutex_unlock(&si->lock);
+
+	return snprintf(buf, PAGE_SIZE, "%dh%dmin\n", data[2], data[1]);
+}
+
+/* Code for CMD_SOP716_SET_EOL_BATTERY_LEVEL */
+static ssize_t sop716_eol_battery_level_store(struct device *dev,
+			struct device_attribute *attr, const char *buf,
+			size_t count)
+{
+	struct sop716_info *si = dev_get_drvdata(dev);
+	u8 data[SOP716_I2C_DATA_LENGTH];
+	u8 tmp[5];
+	int eol_limit, eol_threshold;
+	int rc = 0;
+
+	if (count != 8 && count != 9) {
+		pr_err("%s: Error!!! invalid input count\n", __func__);
+		return -EINVAL;
+	 }
+
+	snprintf(tmp, 5, buf);
+	rc = kstrtoint(tmp, 10, &eol_limit);
+	snprintf(tmp, 5, buf + 4);
+	rc |= kstrtoint(tmp, 10, &eol_threshold);
+	if (rc) {
+		pr_err("%s: Error!!! invalid input format! rc:%d\n",
+				__func__, rc);
+		return -EINVAL;
+	 }
+
+	if ((eol_limit < 1500 || eol_limit > 4200) ||
+	    (eol_threshold < 1500 || eol_threshold > 4200)) {
+		pr_err("%s: Error!!! invalid input format!\n", __func__);
+		return -EINVAL;
+	}
+
+	pr_info("%s: cnt:%d eol_limit:%d eol_threshold:%d\n",
+			__func__, count, eol_limit, eol_threshold);
+
+	data[0] = CMD_SOP716_SET_EOL_BATTERY_LEVEL;
+	data[1] = (eol_limit >> 8) & 0xff;
+	data[2] = eol_limit & 0xff;
+	data[3] = (eol_threshold >> 8) & 0xff;
+	data[4] = eol_threshold & 0xff;
+
+	mutex_lock(&si->lock);
+	sop716_write(si, CMD_SOP716_SET_EOL_BATTERY_LEVEL, data);
+	mutex_unlock(&si->lock);
+
+	return count;
+}
+
+/* Code for CMD_SOP716_READ_EOL_BATTERY_LEVEL */
+static ssize_t sop716_eol_battery_level_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	u8 data[SOP716_I2C_DATA_LENGTH];
+	struct sop716_info *si = dev_get_drvdata(dev);
+
+	mutex_lock(&si->lock);
+	sop716_read(si, CMD_SOP716_READ_EOL_BATTERY_LEVEL, data);
+	mutex_unlock(&si->lock);
+
+	return snprintf(buf, PAGE_SIZE, "EOL limit:%dmV, threshold:%dmV\n",
+			(data[1] << 8) + data[2], (data[3] << 8) + data[4]);
+}
+
 static ssize_t sop716_update_fw_store(struct device *dev,
 			struct device_attribute *attr, const char *buf,
 			size_t count)
@@ -717,6 +852,11 @@ static DEVICE_ATTR(battery_check_period, S_IRUGO | S_IWUSR,
 		sop716_battery_check_period_store);
 static DEVICE_ATTR(get_battery_level, S_IRUGO,
 		sop716_get_battery_level_show, NULL);
+static DEVICE_ATTR(timezone, S_IWUSR | S_IRUGO,
+		sop716_timezone_show, sop716_timezone_store);
+static DEVICE_ATTR(eol_battery_level, S_IWUSR | S_IRUGO,
+		sop716_eol_battery_level_show,
+		sop716_eol_battery_level_store);
 static DEVICE_ATTR(update_fw, S_IWUSR, NULL, sop716_update_fw_store);
 static DEVICE_ATTR(update_sysclock, S_IWUSR, NULL,
 		sop716_update_sysclock_store);
@@ -733,6 +873,8 @@ static struct attribute *sop716_dev_attrs[] = {
 	&dev_attr_get_version.attr,
 	&dev_attr_battery_check_period.attr,
 	&dev_attr_get_battery_level.attr,
+	&dev_attr_timezone.attr,
+	&dev_attr_eol_battery_level.attr,
 	&dev_attr_update_fw.attr,
 	&dev_attr_update_sysclock.attr,
 	&dev_attr_watch_mode.attr,
