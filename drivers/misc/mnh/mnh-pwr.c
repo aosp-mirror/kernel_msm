@@ -379,7 +379,8 @@ static int mnh_pwr_down(void)
 {
 	int ret;
 
-	if (mnh_sm_get_boot_mode() == MNH_BOOT_MODE_PCIE) {
+	if ((mnh_pwr->state != MNH_PWR_S3) &&
+	    (mnh_sm_get_boot_mode() == MNH_BOOT_MODE_PCIE)) {
 		/* suspend pcie link */
 		ret = mnh_pwr_pcie_suspend();
 		if (ret) {
