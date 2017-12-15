@@ -26,27 +26,32 @@
 
 #include "sop716_firmware.h"
 
-#define SOP716_I2C_DATA_LENGTH               8
+#define SOP716_I2C_DATA_LENGTH              8
 
-#define CMD_SOP716_SET_CURRENT_TIME          0
-#define CMD_SOP716_MOTOR_MOVE_ONE            1
-#define CMD_SOP716_MOTOR_MOVE_ALL            2
-#define CMD_SOP716_MOTOR_INIT                3
-#define CMD_SOP716_READ_CURRENT_TIME         4
-#define CMD_SOP716_READ_FW_VERSION           5
-#define CMD_SOP716_BATTERY_CHECK_PERIOD      7
-#define CMD_SOP716_READ_BATTERY_LEVEL        8
-#define CMD_SOP716_READ_BATTERY_CHECK_PERIOD 9
-#define CMD_SOP716_SET_TIMEZONE              10
-#define CMD_SOP716_READ_TIMEZONE             11
-#define CMD_SOP716_SET_EOL_BATTERY_LEVEL     12
-#define CMD_SOP716_READ_EOL_BATTERY_LEVEL    13
-#define CMD_SOP716_MAX                       14
+#define SOP716_CMD_READ_RETRY               10
 
-#define SOP716_CMD_READ_RETRY                10
-
-#define SOP716_RESET_DELAY_MS                400
+#define SOP716_RESET_DELAY_MS               400
 #define SOP716_SETTLE_TIME_MS               2000
+#define SOP716_EOL_MIN_MV                   1500
+#define SOP716_EOL_MAX_MV                   4200
+
+enum sop716_cmd_ids {
+	CMD_SOP716_SET_CURRENT_TIME = 0,
+	CMD_SOP716_MOTOR_MOVE_ONE,
+	CMD_SOP716_MOTOR_MOVE_ALL,
+	CMD_SOP716_MOTOR_INIT,
+	CMD_SOP716_READ_CURRENT_TIME,
+	CMD_SOP716_READ_FW_VERSION, /* 5 */
+	CMD_SOP716_RESERVED_6,
+	CMD_SOP716_BATTERY_CHECK_INTERVAL,
+	CMD_SOP716_READ_BATTERY_LEVEL,
+	CMD_SOP716_READ_BATTERY_CHECK_INTERVAL,
+	CMD_SOP716_SET_TIMEZONE, /* 10 */
+	CMD_SOP716_READ_TIMEZONE,
+	CMD_SOP716_SET_EOL_BATTERY_LEVEL,
+	CMD_SOP716_READ_EOL_BATTERY_LEVEL,
+	CMD_SOP716_MAX
+};
 
 struct sop716_command {
 	char *desc;
@@ -83,7 +88,7 @@ struct sop716_info {
 	struct mutex lock;
 };
 
-struct sop716_info *sop716_info;
+static struct sop716_info *sop716_info;
 
 static void sop716_hw_reset(struct sop716_info *si);
 
@@ -125,12 +130,12 @@ static int sop716_register_commands(struct sop716_info *si)
 			"read time", 6);
 	err |= REG_CMD(si->cmds, CMD_SOP716_READ_FW_VERSION,
 			"read fw version", 2);
-	err |= REG_CMD(si->cmds, CMD_SOP716_BATTERY_CHECK_PERIOD,
-			"battery check period", 3);
+	err |= REG_CMD(si->cmds, CMD_SOP716_BATTERY_CHECK_INTERVAL,
+			"battery check interval", 3);
 	err |= REG_CMD(si->cmds, CMD_SOP716_READ_BATTERY_LEVEL,
 			"read battery level" , 2);
-	err |= REG_CMD(si->cmds, CMD_SOP716_READ_BATTERY_CHECK_PERIOD,
-			"read battery check period", 2);
+	err |= REG_CMD(si->cmds, CMD_SOP716_READ_BATTERY_CHECK_INTERVAL,
+			"read battery check interval", 2);
 	err |= REG_CMD(si->cmds, CMD_SOP716_SET_TIMEZONE,
 			"set timezone", 3);
 	err |= REG_CMD(si->cmds, CMD_SOP716_READ_TIMEZONE,
@@ -213,6 +218,26 @@ static void sop716_hw_reset(struct sop716_info *si)
 	msleep(si->reset_delay_ms);
 }
 
+static int sop716_read_tz_minutes(struct sop716_info *si)
+{
+	int ret;
+	int tz_minutes;
+	s8 data[SOP716_I2C_DATA_LENGTH] = {0, };
+
+	mutex_lock(&si->lock);
+	ret = sop716_read(si, CMD_SOP716_READ_TIMEZONE, data);
+	mutex_unlock(&si->lock);
+	if (ret < 0) {
+		pr_err("%s: error: read timezone\n", __func__);
+		return 0;
+	}
+
+	tz_minutes = (int)data[2]; /* hour */
+	tz_minutes = (tz_minutes * 60) + data[1];
+
+	return tz_minutes;
+}
+
 static ssize_t sop716_reset_store(struct device *dev,
 			struct device_attribute *attr, const char *buf,
 			size_t count)
@@ -237,68 +262,119 @@ static ssize_t sop716_reset_store(struct device *dev,
 	return count;
 }
 
-/* Code for CMD_SOP716_SET_CURRENT_TIME */
+static int convert_to_integers(char **str, const char *delimit,
+			      int result[], int items)
+{
+	char *p;
+	int rc = 0;
+	int i = 0;
+
+	while (i < items && (p = strsep(str, delimit)) != NULL) {
+		rc = kstrtoint(p, 10, &result[i++]);
+		if (rc) {
+			pr_err("%s: Invalid value\n", __func__);
+			return rc;
+		}
+	}
+
+	if (i != items) {
+		pr_err("%s: data is too short: %s\n", __func__, *str);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+/*
+ * Code for CMD_SOP716_SET_CURRENT_TIME
+ * input format: YYYY-MM-DD hh:mm:ss [option]
+ */
 static ssize_t sop716_time_store(struct device *dev,
 			struct device_attribute *attr, const char *buf,
 			size_t count)
 {
 	struct sop716_info *si = dev_get_drvdata(dev);
 	u8 data[SOP716_I2C_DATA_LENGTH];
-	u8 tmp[4];
-	int hour, minute, second, year, month, day, option;
+	char tmp[32];
+	char *date = NULL;
+	char *time = NULL;
+	char *opt = NULL;
+	char *p;
+	int user_data[7] = {0, };
+	int i = 0;
 	int rc = 0;
 
-	if (count != 18 && count != 19) {
-		pr_err("%s: Error!!! invalid input count!\n", __func__);
-		return -EINVAL;
-	 }
-
-	snprintf(tmp, 4, buf);
-	rc = kstrtoint(tmp, 10, &hour);
-	snprintf(tmp, 4, buf + 3);
-	rc |= kstrtoint(tmp, 10, &minute);
-	snprintf(tmp, 4, buf + 6);
-	rc |= kstrtoint(tmp, 10, &second);
-	snprintf(tmp, 3, buf + 9);
-	rc |= kstrtoint(tmp, 10, &year);
-	snprintf(tmp, 3, buf + 11);
-	rc |= kstrtoint(tmp, 10, &month);
-	snprintf(tmp, 3, buf + 13);
-	rc |= kstrtoint(tmp, 10, &day);
-	snprintf(tmp, 4, buf + 15);
-	rc |= kstrtoint(tmp, 10, &option);
-	if (rc) {
-		pr_err("%s: Error!!! invalid input format! rc:%d\n",
-				__func__, rc);
-		return rc;
-	 }
-
-	if ((hour < 0 || hour > 23) || (minute < 0 || minute > 59) ||
-	    (second < 0 || second > 59) || (option < 0 || option > 255)) {
-		if (!(hour == 0xFF && minute == 0xFF)) {
-			pr_err("%s: Error!!! invalid input format! "
-			       "op:%d h:%d m:%d s:%d\n", __func__,
-			       option, hour, minute, second);
-			return -EINVAL;
-		}
-	} else if ((year < 0 || year > 99) || (month < 1 || month > 12) ||
-		   (day < 1 || day > 31)) {
-		pr_err("%s: Error!!! invalid input format! y:%d m:%d d:%d\n",
-				__func__, year, month, day);
+	if (!count) {
+		pr_err("%s: invalid input count!\n", __func__);
 		return -EINVAL;
 	}
 
-	pr_info("sop set time: %04d-%02d-%02d %02d:%02d:%02d\n",
-			year + 2000, month, day, hour, minute, second);
+	strlcpy(tmp, buf, sizeof(tmp));
+	p = tmp;
+
+	date = strsep(&p, " ");
+	if (!date) {
+		pr_err("%s: No date info!\n", __func__);
+		return -EINVAL;
+	}
+	time = strsep(&p, " ");
+	if (!time) {
+		pr_err("%s: No time info\n", __func__);
+		return -EINVAL;
+	}
+	opt = strsep(&p, " ");
+
+	/* parse date */
+	rc = convert_to_integers(&date, "-", user_data, 3);
+	if (rc < 0) {
+		pr_err("%s: Invalid date info: %s\n", __func__, buf);
+		return -EINVAL;
+	}
+
+	/* parse time */
+	rc = convert_to_integers(&time, ":", &user_data[3], 3);
+	if (rc < 0) {
+		pr_err("%s: Invalid time info: %s\n", __func__, buf);
+		return -EINVAL;
+	}
+
+	if (opt) {
+		rc = kstrtoint(opt, 0, &user_data[i]);
+		if (rc < 0) {
+			pr_err("%s: Invalid opt: %s\n", __func__, buf);
+			return -EINVAL;
+		}
+	}
+
+	user_data[0] -= 2000;
+	if (user_data[0] < 0 || user_data[0] > 99 || // year
+	    user_data[1] < 1 || user_data[1] > 12 || // month
+	    user_data[2] < 1 || user_data[2] > 31 || // day
+	    user_data[3] < 0 || user_data[3] > 23 || // hour
+	    user_data[4] < 0 || user_data[4] > 59 || // minute
+	    user_data[5] < 0 || user_data[5] > 59 || // second
+	    user_data[6] < 0 || user_data[6] > 255) {
+		pr_err("%s: out of range: %s\n", __func__, buf);
+		return -EINVAL;
+	}
+
+	pr_info("sop set time: %04d-%02d-%02d %02d:%02d:%02d opt:%02x\n",
+			user_data[0] + 2000,
+			user_data[1],
+			user_data[2],
+			user_data[3],
+			user_data[4],
+			user_data[5],
+			user_data[6]);
 
 	data[0] = CMD_SOP716_SET_CURRENT_TIME;
-	data[1] = hour;
-	data[2] = minute;
-	data[3] = second;
-	data[4] = year;
-	data[5] = month;
-	data[6] = day;
-	data[7] = option;
+	data[1] = user_data[3]; //hour
+	data[2] = user_data[4]; //minute
+	data[3] = user_data[5]; //second
+	data[4] = user_data[0]; //year
+	data[5] = user_data[1]; //month
+	data[6] = user_data[2]; //day
+	data[7] = user_data[6]; //opt
 
 	mutex_lock(&si->lock);
 	rc = sop716_write(si, CMD_SOP716_SET_CURRENT_TIME, data);
@@ -311,47 +387,58 @@ static ssize_t sop716_time_store(struct device *dev,
 	return rc < 0? rc : count;
 }
 
-/* Code for CMD_SOP716_MOTOR_MOVE_ONE */
+/*
+ * CMD_SOP716_MOTOR_MOVE_ONE
+ * input format: type:position[:option]
+ */
 static ssize_t sop716_motor_move_store(struct device *dev,
 			struct device_attribute *attr, const char *buf,
 			size_t count)
 {
 	struct sop716_info *si = dev_get_drvdata(dev);
 	u8 data[SOP716_I2C_DATA_LENGTH];
-	u8 tmp[4];
-	int motor_type, motor_dest, option;
+	char tmp[16] = {0, };
+	char *str, *p;
+	int result[2];
+	int option = 0;
 	int rc = 0;
 
-	if (count != 9 && count != 10) {
-		pr_err("%s: Error!!! invalid input count!\n", __func__);
+	if (!count) {
+		pr_err("%s: invalid input count!\n", __func__);
 		return -EINVAL;
-	 }
+	}
 
-	snprintf(tmp, 4, buf);
-	rc = kstrtoint(tmp, 10, &motor_type);
-	snprintf(tmp, 4, buf + 3);
-	rc |= kstrtoint(tmp, 10, &motor_dest);
-	snprintf(tmp, 4, buf + 6);
-	rc |= kstrtoint(tmp, 10, &option);
-	if (rc) {
-		pr_err("%s: Error!!! invalid input format! rc:%d\n",
-				__func__, rc);
+	strlcpy(tmp, buf, sizeof(tmp));
+	str = tmp;
+
+	rc = convert_to_integers(&str, ":", result, 2);
+	if (rc < 0) {
+		pr_err("%s: Invalid arguments\n", __func__);
 		return rc;
-	 }
+	}
 
-	if ((motor_dest < 0 || motor_dest > 179) ||
-	    (option < 0 || option > 255) ||
-	    (motor_type < 0 || motor_type> 1 )) {
-		pr_err("%s: Error!!! invalid input format!\n", __func__);
+	p = strsep(&str, ":");
+	if (p) {
+		rc = kstrtoint(p, 0, &option);
+		if (rc) {
+			pr_err("%s: Invalid value: %s\n", __func__, buf);
+			return -EINVAL;
+		}
+	}
+
+	if (result[0] < 0 || result[0]> 1  ||   // motor type
+	    result[1] < 0 || result[1] > 179 || // motor position
+	    option < 0 || option > 255) {
+		pr_err("%s: out of range: %s\n", __func__, buf);
 		return -EINVAL;
 	}
 
 	pr_debug("%s: cnt:%d motortype:%d destination:%d option:%d\n",
-			__func__, count, motor_type, motor_dest, option);
+			__func__, count, result[0], result[1], option);
 
 	data[0] = CMD_SOP716_MOTOR_MOVE_ONE;
-	data[1] = motor_type;
-	data[2] = motor_dest;
+	data[1] = result[0];
+	data[2] = result[1];
 	data[3] = option;
 
 	mutex_lock(&si->lock);
@@ -363,46 +450,58 @@ static ssize_t sop716_motor_move_store(struct device *dev,
 	return count;
 }
 
-/* Code for CMD_SOP716_MOTOR_MOVE_ALL */
+/*
+ * CMD_SOP716_MOTOR_MOVE_ALL
+ * input format: motor1:motor2[:option]
+ */
 static ssize_t sop716_motor_move_all_store(struct device *dev,
 			struct device_attribute *attr, const char *buf,
 			size_t count)
 {
 	struct sop716_info *si = dev_get_drvdata(dev);
 	u8 data[SOP716_I2C_DATA_LENGTH];
-	u8 tmp[4];
-	int motor1, motor2, option;
+	char tmp[16] = {0, };
+	char *str, *p;
+	int result[2];
+	int option = 0;
 	int rc = 0;
 
-	if (count != 9 && count != 10) {
-		pr_err("%s: Error!!! invalid input count!\n", __func__);
+	if (!count) {
+		pr_err("%s: invalid input count!\n", __func__);
 		return -EINVAL;
-	 }
+	}
 
-	snprintf(tmp, 4, buf);
-	rc = kstrtoint(tmp, 10, &motor1);
-	snprintf(tmp, 4, buf + 3);
-	rc |= kstrtoint(tmp, 10, &motor2);
-	snprintf(tmp, 4, buf + 6);
-	rc |= kstrtoint(tmp, 10, &option);
-	if (rc) {
-		pr_err("%s: Error!!! invalid input format! rc:%d\n",
-				__func__, rc);
+	strlcpy(tmp, buf, sizeof(tmp));
+	str = tmp;
+
+	rc = convert_to_integers(&str, ":", result, 2);
+	if (rc < 0) {
+		pr_err("%s: invalid arguments\n", __func__);
 		return rc;
-	 }
+	}
 
-	if ((motor1 < 0 || motor1 > 179) || (motor2 < 0 || motor2 > 179) ||
-	    (option < 0 || option > 255)) {
-		pr_err("%s: Error!!! invalid input format!\n", __func__);
+	p = strsep(&str, ":");
+	if (p) {
+		rc = kstrtoint(p, 0, &option);
+		if (rc) {
+			pr_err("%s: Invalid value: %s\n", __func__, buf);
+			return -EINVAL;
+		}
+	}
+
+	if (result[0] < 0 || result[0] > 179 || // motor1
+	    result[1] < 0 || result[1] > 179 || // motor2
+	    option < 0 || option > 255) {
+		pr_err("%s: invalid input format!\n", __func__);
 		return -EINVAL;
 	}
 
 	pr_debug("%s: cnt:%d motor1:%d motor2:%d op:%d\n",
-			__func__, count, motor1, motor2, option);
+			__func__, count, result[0], result[1], option);
 
 	data[0] = CMD_SOP716_MOTOR_MOVE_ALL;
-	data[1] = motor1;
-	data[2] = motor2;
+	data[1] = result[0];
+	data[2] = result[1];
 	data[3] = option;
 
 	mutex_lock(&si->lock);
@@ -414,48 +513,49 @@ static ssize_t sop716_motor_move_all_store(struct device *dev,
 	return count;
 }
 
-/* Code for CMD_SOP716_MOTOR_INIT */
+/*
+ * CMD_SOP716_MOTOR_INIT
+ * input format: type:dir:steps
+ */
 static ssize_t sop716_motor_init_store(struct device *dev,
 			struct device_attribute *attr, const char *buf,
 			size_t count)
 {
 	struct sop716_info *si = dev_get_drvdata(dev);
 	u8 data[SOP716_I2C_DATA_LENGTH];
-	u8 tmp[4];
-	int motor_type, direction, num_of_steps;
+	char tmp[16] = {0, };
+	char *str;
+	int result[3];
 	int rc = 0;
 
-	if (count != 9 && count != 10) {
-		pr_err("%s: Error!!! invalid input count!\n", __func__);
+	if (!count) {
+		pr_err("%s: invalid input count!\n", __func__);
 		return -EINVAL;
-	 }
+	}
 
-	snprintf(tmp, 4, buf);
-	rc = kstrtoint(tmp, 10, &motor_type);
-	snprintf(tmp, 4, buf + 3);
-	rc |= kstrtoint(tmp, 10, &direction);
-	snprintf(tmp, 4, buf + 6);
-	rc |= kstrtoint(tmp, 10, &num_of_steps);
-	if (rc) {
-		pr_err("%s: Error!!! invalid input format! rc:%d\n",
-				__func__, rc);
-		return -EINVAL;
-	 }
+	strlcpy(tmp, buf, sizeof(tmp));
+	str = tmp;
 
-	if ((motor_type < 0 || motor_type > 1) ||
-	    (direction < 0 || direction > 1) ||
-	    (num_of_steps < 0 || num_of_steps > 255)) {
-		pr_err("%s: Error!!! invalid input format!\n", __func__);
+	rc = convert_to_integers(&str, ":", result, 3);
+	if (rc < 0) {
+		pr_err("%s: invalid arguments\n", __func__);
+		return rc;
+	}
+
+	if (result[0] < 0 || result[0] > 1 || // motor type
+	    result[1] < 0 || result[1] > 1 || // motor direction
+	    result[2] < 0 || result[2] > 255) { // motor steps
+		pr_err("%s: invalid input format!\n", __func__);
 		return -EINVAL;
 	}
 
 	pr_debug("%s: cnt:%d motor_type:%d direction:%d num_of_steps:%d\n",
-			__func__, count, motor_type, direction, num_of_steps);
+			__func__, count, result[0], result[1], result[2]);
 
 	data[0] = CMD_SOP716_MOTOR_INIT;
-	data[1] = motor_type;
-	data[2] = direction;
-	data[3] = num_of_steps;
+	data[1] = result[0];
+	data[2] = result[1];
+	data[3] = result[2];
 
 	mutex_lock(&si->lock);
 	sop716_write(si, CMD_SOP716_MOTOR_INIT, data);
@@ -467,7 +567,7 @@ static ssize_t sop716_motor_init_store(struct device *dev,
 }
 
 /* Code for CMD_SOP716_READ_CURRENT_TIME */
-static ssize_t sop716_get_time_show(struct device *dev,
+static ssize_t sop716_time_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
 	u8 data[SOP716_I2C_DATA_LENGTH];
@@ -496,7 +596,7 @@ static ssize_t sop716_get_time_show(struct device *dev,
 }
 
 /* Code for CMD_SOP716_READ_FW_VERSION */
-static ssize_t sop716_get_version_show(struct device *dev,
+static ssize_t sop716_version_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
 	u8 data[SOP716_I2C_DATA_LENGTH];
@@ -506,19 +606,20 @@ static ssize_t sop716_get_version_show(struct device *dev,
 	sop716_read(si, CMD_SOP716_READ_FW_VERSION, data);
 	mutex_unlock(&si->lock);
 
-	return snprintf(buf, PAGE_SIZE, "v%d.%d\n", data[1], data[2]);
+	return snprintf(buf, PAGE_SIZE, "%d.%d\n", data[1], data[2]);
 }
 
-/* Code for CMD_SOP716_BATTERY_CHECK_PERIOD */
-static ssize_t sop716_battery_check_period_show(struct device *dev,
+/* Code for CMD_SOP716_BATTERY_CHECK_INTERVAL */
+static ssize_t sop716_battery_check_interval_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
 	struct sop716_info *si = dev_get_drvdata(dev);
 
-	return snprintf(buf, PAGE_SIZE, "%d sec\n", si->batt_check_interval);
+	return snprintf(buf, PAGE_SIZE, "%d second(s)\n",
+			si->batt_check_interval);
 }
 
-static ssize_t sop716_battery_check_period_store(struct device *dev,
+static ssize_t sop716_battery_check_interval_store(struct device *dev,
 			struct device_attribute *attr, const char *buf,
 			size_t count)
 {
@@ -545,14 +646,14 @@ static ssize_t sop716_battery_check_period_store(struct device *dev,
 
 	pr_debug("%s: interval:%d\n", __func__, interval);
 
-	data[0] = CMD_SOP716_BATTERY_CHECK_PERIOD;
+	data[0] = CMD_SOP716_BATTERY_CHECK_INTERVAL;
 	data[1] = (interval >> 8) & 0xff;
 	data[2] = interval & 0xff;
 
 	mutex_lock(&si->lock);
-	sop716_write(si, CMD_SOP716_BATTERY_CHECK_PERIOD, data);
+	sop716_write(si, CMD_SOP716_BATTERY_CHECK_INTERVAL, data);
 
-	sop716_read(si, CMD_SOP716_READ_BATTERY_CHECK_PERIOD, data);
+	sop716_read(si, CMD_SOP716_READ_BATTERY_CHECK_INTERVAL, data);
 	mutex_unlock(&si->lock);
 
 	if (interval != ((data[1] << 8) + data[2])) {
@@ -565,7 +666,7 @@ static ssize_t sop716_battery_check_period_store(struct device *dev,
 }
 
 /* Code for CMD_SOP716_READ_BATTERY_LEVEL */
-static ssize_t sop716_get_battery_level_show(struct device *dev,
+static ssize_t sop716_battery_level_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
 	u8 data[SOP716_I2C_DATA_LENGTH];
@@ -578,44 +679,35 @@ static ssize_t sop716_get_battery_level_show(struct device *dev,
 	return snprintf(buf, PAGE_SIZE, "%d mV\n", (data[1] << 8) + data[2]);
 }
 
-/* Code for CMD_SOP716_SET_TIMEZONE */
-static ssize_t sop716_timezone_store(struct device *dev,
+static ssize_t sop716_tz_minutes_store(struct device *dev,
 			struct device_attribute *attr, const char *buf,
 			size_t count)
 {
 	struct sop716_info *si = dev_get_drvdata(dev);
 	s8 data[SOP716_I2C_DATA_LENGTH];
-	s8 tmp[4];
-	int tz_minute, tz_hour;
+	int tz_minutes;
 	int rc = 0;
 
-	if (count != 6 && count != 7) {
-		pr_err("%s: Error!!! invalid input count\n", __func__);
+	if (!count) {
+		pr_err("%s: invalid input count\n", __func__);
 		return -EINVAL;
 	 }
 
-	snprintf(tmp, 4, buf);
-	rc = kstrtoint(tmp, 10, &tz_minute);
-	snprintf(tmp, 4, buf + 3);
-	rc |= kstrtoint(tmp, 10, &tz_hour);
+	rc = kstrtoint(buf, 10, &tz_minutes);
 	if (rc) {
-		pr_err("%s: Error!!! invalid input format! rc:%d\n",
+		pr_err("%s: invalid input! rc:%d\n",
 				__func__, rc);
 		return -EINVAL;
 	 }
 
-	if ((tz_minute < 0 || tz_minute > 59) ||
-	    (tz_hour < -12 || tz_hour > 14)) {
-		pr_err("%s: Error!!! invalid input format!\n", __func__);
+	if (tz_minutes < -720 || tz_minutes > 840) {
+		pr_err("%s: out of range!\n", __func__);
 		return -EINVAL;
 	}
 
-	pr_info("%s: cnt:%d tz_minute:%d tz_hour:%d\n",
-			__func__, count, tz_minute, tz_hour);
-
 	data[0] = CMD_SOP716_SET_TIMEZONE;
-	data[1] = tz_minute;
-	data[2] = tz_hour;
+	data[2] = tz_minutes / 60; /* hour */
+	data[1] = tz_minutes - (((int)data[2]) * 60);
 
 	mutex_lock(&si->lock);
 	sop716_write(si, CMD_SOP716_SET_TIMEZONE, data);
@@ -624,82 +716,138 @@ static ssize_t sop716_timezone_store(struct device *dev,
 	return count;
 }
 
-/* Code for CMD_SOP716_READ_TIMEZONE */
-static ssize_t sop716_timezone_show(struct device *dev,
+static ssize_t sop716_tz_minutes_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
-	s8 data[SOP716_I2C_DATA_LENGTH];
 	struct sop716_info *si = dev_get_drvdata(dev);
+	int tz_minutes;
 
-	mutex_lock(&si->lock);
-	sop716_read(si, CMD_SOP716_READ_TIMEZONE, data);
-	mutex_unlock(&si->lock);
+	tz_minutes = sop716_read_tz_minutes(si);
 
-	return snprintf(buf, PAGE_SIZE, "%dh%dmin\n", data[2], data[1]);
+	return snprintf(buf, PAGE_SIZE, "%d\n", tz_minutes);
 }
 
-/* Code for CMD_SOP716_SET_EOL_BATTERY_LEVEL */
-static ssize_t sop716_eol_battery_level_store(struct device *dev,
+static ssize_t sop716_eol_limit_store(struct device *dev,
 			struct device_attribute *attr, const char *buf,
 			size_t count)
 {
 	struct sop716_info *si = dev_get_drvdata(dev);
 	u8 data[SOP716_I2C_DATA_LENGTH];
-	u8 tmp[5];
-	int eol_limit, eol_threshold;
+	int eol_limit;
 	int rc = 0;
 
-	if (count != 8 && count != 9) {
-		pr_err("%s: Error!!! invalid input count\n", __func__);
+	if (!count) {
+		pr_err("%s: invalid input count\n", __func__);
 		return -EINVAL;
 	 }
 
-	snprintf(tmp, 5, buf);
-	rc = kstrtoint(tmp, 10, &eol_limit);
-	snprintf(tmp, 5, buf + 4);
-	rc |= kstrtoint(tmp, 10, &eol_threshold);
+	rc = kstrtoint(buf, 10, &eol_limit);
 	if (rc) {
-		pr_err("%s: Error!!! invalid input format! rc:%d\n",
-				__func__, rc);
+		pr_err("%s: invalid input! rc:%d\n", __func__, rc);
 		return -EINVAL;
 	 }
 
-	if ((eol_limit < 1500 || eol_limit > 4200) ||
-	    (eol_threshold < 1500 || eol_threshold > 4200)) {
-		pr_err("%s: Error!!! invalid input format!\n", __func__);
+	if (eol_limit < SOP716_EOL_MIN_MV || eol_limit > SOP716_EOL_MAX_MV ) {
+		pr_err("%s: out of range!\n", __func__);
 		return -EINVAL;
 	}
 
-	pr_info("%s: cnt:%d eol_limit:%d eol_threshold:%d\n",
-			__func__, count, eol_limit, eol_threshold);
+	mutex_lock(&si->lock);
+	rc = sop716_read(si, CMD_SOP716_READ_EOL_BATTERY_LEVEL, data);
+	mutex_unlock(&si->lock);
+	if (rc < 0) {
+		pr_err("%s: failed to read EOL info\n", __func__);
+		return rc;
+	}
 
 	data[0] = CMD_SOP716_SET_EOL_BATTERY_LEVEL;
 	data[1] = (eol_limit >> 8) & 0xff;
 	data[2] = eol_limit & 0xff;
-	data[3] = (eol_threshold >> 8) & 0xff;
-	data[4] = eol_threshold & 0xff;
 
 	mutex_lock(&si->lock);
-	sop716_write(si, CMD_SOP716_SET_EOL_BATTERY_LEVEL, data);
+	rc = sop716_write(si, CMD_SOP716_SET_EOL_BATTERY_LEVEL, data);
 	mutex_unlock(&si->lock);
 
-	return count;
+	return (rc < 0)? rc : count;
 }
 
-/* Code for CMD_SOP716_READ_EOL_BATTERY_LEVEL */
-static ssize_t sop716_eol_battery_level_show(struct device *dev,
+static ssize_t sop716_eol_limit_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
 	u8 data[SOP716_I2C_DATA_LENGTH];
 	struct sop716_info *si = dev_get_drvdata(dev);
+	int rc;
 
 	mutex_lock(&si->lock);
-	sop716_read(si, CMD_SOP716_READ_EOL_BATTERY_LEVEL, data);
+	rc = sop716_read(si, CMD_SOP716_READ_EOL_BATTERY_LEVEL, data);
+	mutex_unlock(&si->lock);
+	if (rc < 0)
+		return rc;
+
+	return snprintf(buf, PAGE_SIZE, "%d mV\n", (data[1] << 8) + data[2]);
+}
+
+static ssize_t sop716_eol_threshold_store(struct device *dev,
+			struct device_attribute *attr, const char *buf,
+			size_t count)
+{
+	struct sop716_info *si = dev_get_drvdata(dev);
+	u8 data[SOP716_I2C_DATA_LENGTH];
+	int eol_threshold;
+	int rc = 0;
+
+	if (!count) {
+		pr_err("%s: invalid input count\n", __func__);
+		return -EINVAL;
+	 }
+
+	rc = kstrtoint(buf, 10, &eol_threshold);
+	if (rc) {
+		pr_err("%s: invalid input! rc:%d\n", __func__, rc);
+		return -EINVAL;
+	 }
+
+	if (eol_threshold < SOP716_EOL_MIN_MV ||
+	    eol_threshold > SOP716_EOL_MAX_MV) {
+		pr_err("%s: out of range!\n", __func__);
+		return -EINVAL;
+	}
+
+	mutex_lock(&si->lock);
+	rc = sop716_read(si, CMD_SOP716_READ_EOL_BATTERY_LEVEL, data);
+	mutex_unlock(&si->lock);
+	if (rc < 0) {
+		pr_err("%s: failed to read EOL info\n", __func__);
+		return rc;
+	}
+
+	data[0] = CMD_SOP716_SET_EOL_BATTERY_LEVEL;
+	data[3] = (eol_threshold >> 8) & 0xff;
+	data[4] = eol_threshold & 0xff;
+
+	mutex_lock(&si->lock);
+	rc = sop716_write(si, CMD_SOP716_SET_EOL_BATTERY_LEVEL, data);
 	mutex_unlock(&si->lock);
 
-	return snprintf(buf, PAGE_SIZE, "EOL limit:%dmV, threshold:%dmV\n",
-			(data[1] << 8) + data[2], (data[3] << 8) + data[4]);
+	return (rc < 0)? rc : count;
 }
+
+static ssize_t sop716_eol_threshold_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	u8 data[SOP716_I2C_DATA_LENGTH];
+	struct sop716_info *si = dev_get_drvdata(dev);
+	int rc;
+
+	mutex_lock(&si->lock);
+	rc = sop716_read(si, CMD_SOP716_READ_EOL_BATTERY_LEVEL, data);
+	mutex_unlock(&si->lock);
+	if (rc < 0)
+		return rc;
+
+	return snprintf(buf, PAGE_SIZE, "%d mV\n", (data[3] << 8) + data[4]);
+}
+
 
 static ssize_t sop716_update_fw_store(struct device *dev,
 			struct device_attribute *attr, const char *buf,
@@ -841,22 +989,23 @@ static ssize_t sop716_watch_mode_store(struct device *dev,
 }
 
 static DEVICE_ATTR(reset, S_IWUSR, NULL, sop716_reset_store);
-static DEVICE_ATTR(set_time, S_IWUSR, NULL, sop716_time_store);
+static DEVICE_ATTR(time, S_IWUSR | S_IRUGO,
+		sop716_time_show, sop716_time_store);
 static DEVICE_ATTR(motor_init, S_IWUSR, NULL, sop716_motor_init_store);
 static DEVICE_ATTR(motor_move, S_IWUSR, NULL, sop716_motor_move_store);
 static DEVICE_ATTR(motor_move_all, S_IWUSR, NULL, sop716_motor_move_all_store);
-static DEVICE_ATTR(get_time, S_IRUGO, sop716_get_time_show, NULL);
-static DEVICE_ATTR(get_version, S_IRUGO, sop716_get_version_show, NULL);
-static DEVICE_ATTR(battery_check_period, S_IRUGO | S_IWUSR,
-		sop716_battery_check_period_show,
-		sop716_battery_check_period_store);
-static DEVICE_ATTR(get_battery_level, S_IRUGO,
-		sop716_get_battery_level_show, NULL);
-static DEVICE_ATTR(timezone, S_IWUSR | S_IRUGO,
-		sop716_timezone_show, sop716_timezone_store);
-static DEVICE_ATTR(eol_battery_level, S_IWUSR | S_IRUGO,
-		sop716_eol_battery_level_show,
-		sop716_eol_battery_level_store);
+static DEVICE_ATTR(version, S_IRUGO, sop716_version_show, NULL);
+static DEVICE_ATTR(battery_check_interval, S_IRUGO | S_IWUSR,
+		sop716_battery_check_interval_show,
+		sop716_battery_check_interval_store);
+static DEVICE_ATTR(battery_level, S_IRUGO,
+		sop716_battery_level_show, NULL);
+static DEVICE_ATTR(tz_minutes, S_IWUSR | S_IRUGO,
+		sop716_tz_minutes_show, sop716_tz_minutes_store);
+static DEVICE_ATTR(eol_limit, S_IWUSR | S_IRUGO,
+		sop716_eol_limit_show, sop716_eol_limit_store);
+static DEVICE_ATTR(eol_threshold, S_IWUSR | S_IRUGO,
+		sop716_eol_threshold_show, sop716_eol_threshold_store);
 static DEVICE_ATTR(update_fw, S_IWUSR, NULL, sop716_update_fw_store);
 static DEVICE_ATTR(update_sysclock, S_IWUSR, NULL,
 		sop716_update_sysclock_store);
@@ -865,16 +1014,16 @@ static DEVICE_ATTR(watch_mode, S_IWUSR | S_IRUGO, sop716_watch_mode_show,
 
 static struct attribute *sop716_dev_attrs[] = {
 	&dev_attr_reset.attr,
-	&dev_attr_set_time.attr,
+	&dev_attr_time.attr,
 	&dev_attr_motor_init.attr,
 	&dev_attr_motor_move.attr,
 	&dev_attr_motor_move_all.attr,
-	&dev_attr_get_time.attr,
-	&dev_attr_get_version.attr,
-	&dev_attr_battery_check_period.attr,
-	&dev_attr_get_battery_level.attr,
-	&dev_attr_timezone.attr,
-	&dev_attr_eol_battery_level.attr,
+	&dev_attr_version.attr,
+	&dev_attr_battery_check_interval.attr,
+	&dev_attr_battery_level.attr,
+	&dev_attr_tz_minutes.attr,
+	&dev_attr_eol_limit.attr,
+	&dev_attr_eol_threshold.attr,
 	&dev_attr_update_fw.attr,
 	&dev_attr_update_sysclock.attr,
 	&dev_attr_watch_mode.attr,
@@ -1272,7 +1421,9 @@ static int __init sop716_hctosys_init(void)
 	if (!si->update_sysclock_on_boot)
 		return 0;
 
-	/* TODO: update tz_minuteswest before sop716_hctosys() */
+	/* Update tz_minuteswest before sop716_hctosys() */
+	si->tz_minuteswest = sop716_read_tz_minutes(si) * -1;
+	sys_tz.tz_minuteswest = si->tz_minuteswest;
 
 	err = sop716_hctosys(si);
 
