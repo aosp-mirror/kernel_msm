@@ -193,3 +193,17 @@
 		};
 	};
 };
+
+&qupv3_se7_spi {
+	status = "disable";
+};
+
+&qupv3_se8_spi {
+	status = "ok";
+};
+
+/ {
+	aliases {
+		spi0 = &qupv3_se8_spi;
+	};
+};

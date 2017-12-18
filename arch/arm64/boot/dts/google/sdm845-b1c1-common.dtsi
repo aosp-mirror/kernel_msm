@@ -132,7 +132,7 @@
 	status = "ok";
 };
 
-&qupv3_se8_spi {
+&qupv3_se7_spi {
 	status = "ok";
 };
 
