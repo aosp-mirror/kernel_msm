@@ -1974,8 +1974,8 @@ int nanohub_remove(struct iio_dev *iio_dev)
 int nanohub_shutdown(struct iio_dev *iio_dev)
 {
 	struct nanohub_data *data = iio_priv(iio_dev);
-
-	__nanohub_mode_set(data, HUB_MODE_POWEROFF);
+	if (HUB_MODE_BAND != atomic_read(&data->hub_mode))
+		__nanohub_mode_set(data, HUB_MODE_POWEROFF);
 	return 0;
 }
 
