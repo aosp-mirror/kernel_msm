@@ -401,7 +401,18 @@ static int mnh_firmware_waitdownloaded(void)
 	return -EIO;
 }
 
-static size_t mnh_get_firmware_buf(struct device *dev, uint32_t **buf)
+/**
+ * mnh_alloc_firmware_buf - Allocate temporary kernel buffer for mnh firmware
+ *
+ * Attempts allocation of a large, contiguous kernel buffer.  If the initial
+ * attempt weren't successful, try a smaller size until success.
+ *
+ * @dev: Device to allocate memory for.
+ * @buf: Address of pointer to allocated memory.
+ *
+ * Returns size of allocated memory in bytes.
+ */
+static size_t mnh_alloc_firmware_buf(struct device *dev, uint32_t **buf)
 {
 	size_t size = IMG_DOWNLOAD_MAX_SIZE;
 
@@ -414,6 +425,17 @@ static size_t mnh_get_firmware_buf(struct device *dev, uint32_t **buf)
 	}
 
 	return size;
+}
+
+/**
+ * mnh_free_firmware_buf - Free buffer allocated by mnh_alloc_firmware_buf()
+ *
+ * @dev: Device to free memory for.
+ * @buf: Pointer to allocated memory.
+ */
+static inline void mnh_free_firmware_buf(struct device *dev, uint32_t *buf)
+{
+	devm_kfree(dev, buf);
 }
 
 static int mnh_transfer_firmware_contig(size_t fw_size, dma_addr_t src_addr,
@@ -700,14 +722,17 @@ int mnh_download_firmware_legacy(void)
 	/* get double buffers for transferring firmware */
 	for (i = 0; i < 2; i++) {
 		mnh_sm_dev->firmware_buf_size[i] =
-			mnh_get_firmware_buf(mnh_sm_dev->dev,
-					     &mnh_sm_dev->firmware_buf[i]);
+			mnh_alloc_firmware_buf(mnh_sm_dev->dev,
+					       &mnh_sm_dev->firmware_buf[i]);
 		if (!mnh_sm_dev->firmware_buf_size[i]) {
 			dev_err(mnh_sm_dev->dev,
 				"%s: could not allocate a buffer for firmware transfers\n",
 				__func__);
-			return -ENOMEM;
+			goto free_ramdisk;
 		}
+		dev_dbg(mnh_sm_dev->dev,
+			"%s: firmware_buf_size[%d]=%zu",
+			__func__, i, mnh_sm_dev->firmware_buf_size[i]);
 	}
 
 	/* DMA transfer for SBL */
@@ -759,8 +784,12 @@ int mnh_download_firmware_legacy(void)
 	mnh_config_write(HW_MNH_PCIE_CLUSTER_ADDR_OFFSET + HW_MNH_PCIE_GP_3, 4,
 			 HW_MNH_DT_DOWNLOAD);
 
-	for (i = 0; i < 2; i++)
-		devm_kfree(mnh_sm_dev->dev, mnh_sm_dev->firmware_buf[i]);
+	for (i = 0; i < 2; i++) {
+		mnh_free_firmware_buf(mnh_sm_dev->dev,
+				      mnh_sm_dev->firmware_buf[i]);
+		mnh_sm_dev->firmware_buf_size[i] = 0;
+		mnh_sm_dev->firmware_buf[i] = NULL;
+	}
 
 	release_firmware(fip_img);
 	release_firmware(kernel_img);
@@ -777,6 +806,13 @@ int mnh_download_firmware_legacy(void)
 fail_downloading:
 	dev_err(mnh_sm_dev->dev, "FW downloading fails\n");
 	mnh_sm_dev->image_loaded = FW_IMAGE_DOWNLOAD_FAIL;
+free_ramdisk:
+	for (i = 0; i < 2; i++) {
+		mnh_free_firmware_buf(mnh_sm_dev->dev,
+				      mnh_sm_dev->firmware_buf[i]);
+		mnh_sm_dev->firmware_buf_size[i] = 0;
+		mnh_sm_dev->firmware_buf[i] = NULL;
+	}
 	release_firmware(ram_img);
 free_dt:
 	release_firmware(dt_img);

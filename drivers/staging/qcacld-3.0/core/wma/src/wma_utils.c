@@ -67,6 +67,7 @@
 #include "cds_concurrency.h"
 #include "wmi_unified_param.h"
 #include "linux/ieee80211.h"
+#include "cds_reg_service.h"
 
 /* MCS Based rate table */
 /* HT MCS parameters with Nss = 1 */
@@ -630,6 +631,8 @@ static tSirLLStatsResults *wma_get_ll_stats_ext_buf(uint32_t *len,
 {
 	tSirLLStatsResults *buf;
 	uint32_t buf_len;
+	uint32_t total_array_len, total_peer_len;
+	bool excess_data = false;
 
 	if (!len || !fixed_param) {
 		WMA_LOGE(FL("Invalid input parameters."));
@@ -692,22 +695,97 @@ static tSirLLStatsResults *wma_get_ll_stats_ext_buf(uint32_t *len,
 	 *     |         VO                    |
 	 *     ---------------------------------
 	 */
+
 	buf_len = sizeof(tSirLLStatsResults) +
-		  sizeof(struct sir_wifi_ll_ext_stats) +
-		  fixed_param->num_chan_cca_stats *
-		  sizeof(struct sir_wifi_chan_cca_stats) +
-		  peer_num *
-		  (sizeof(struct sir_wifi_ll_ext_peer_stats) +
-		   WLAN_MAX_AC *
-		   (sizeof(struct sir_wifi_tx) +
-		    sizeof(struct sir_wifi_rx)) +
-		    sizeof(uint32_t) * WLAN_MAX_AC *
-		    (fixed_param->tx_mpdu_aggr_array_len +
-		     fixed_param->tx_succ_mcs_array_len +
-		     fixed_param->tx_fail_mcs_array_len +
-		     fixed_param->tx_ppdu_delay_array_len +
-		     fixed_param->rx_mpdu_aggr_array_len +
-		     fixed_param->rx_mcs_array_len));
+		  sizeof(struct sir_wifi_ll_ext_stats);
+	do {
+		if (fixed_param->num_chan_cca_stats > (WMI_SVC_MSG_MAX_SIZE /
+		    sizeof(struct sir_wifi_chan_cca_stats))) {
+			excess_data = true;
+			break;
+		}
+		buf_len += (fixed_param->num_chan_cca_stats *
+				sizeof(struct sir_wifi_chan_cca_stats));
+		if (fixed_param->tx_mpdu_aggr_array_len >
+		    WMI_SVC_MSG_MAX_SIZE) {
+			excess_data = true;
+			break;
+		} else {
+			total_array_len = fixed_param->tx_mpdu_aggr_array_len;
+		}
+		if (fixed_param->tx_succ_mcs_array_len >
+		    (WMI_SVC_MSG_MAX_SIZE - total_array_len)) {
+			excess_data = true;
+			break;
+		} else {
+			total_array_len += fixed_param->tx_succ_mcs_array_len;
+		}
+		if (fixed_param->tx_fail_mcs_array_len >
+		    (WMI_SVC_MSG_MAX_SIZE - total_array_len)) {
+			excess_data = true;
+			break;
+		} else {
+			total_array_len += fixed_param->tx_fail_mcs_array_len;
+		}
+		if (fixed_param->tx_ppdu_delay_array_len >
+		    (WMI_SVC_MSG_MAX_SIZE - total_array_len)) {
+			excess_data = true;
+			break;
+		} else {
+			total_array_len += fixed_param->tx_ppdu_delay_array_len;
+		}
+		if (fixed_param->rx_mpdu_aggr_array_len >
+		    (WMI_SVC_MSG_MAX_SIZE - total_array_len)) {
+			excess_data = true;
+			break;
+		} else {
+			total_array_len += fixed_param->rx_mpdu_aggr_array_len;
+		}
+		if (fixed_param->rx_mcs_array_len >
+		    (WMI_SVC_MSG_MAX_SIZE - total_array_len)) {
+			excess_data = true;
+			break;
+		} else {
+			total_array_len += fixed_param->rx_mcs_array_len;
+		}
+
+		if (total_array_len > (WMI_SVC_MSG_MAX_SIZE /
+		    (sizeof(uint32_t) * WLAN_MAX_AC))) {
+			excess_data = true;
+			break;
+		} else {
+			total_peer_len = (sizeof(uint32_t) * WLAN_MAX_AC *
+					 total_array_len) +
+					 (WLAN_MAX_AC *
+					 (sizeof(struct sir_wifi_tx) +
+					 sizeof(struct sir_wifi_rx)));
+		}
+		if (total_peer_len > WMI_SVC_MSG_MAX_SIZE) {
+			excess_data = true;
+			break;
+		}
+		if (peer_num > (WMI_SVC_MSG_MAX_SIZE - total_peer_len) /
+				sizeof(struct sir_wifi_ll_ext_peer_stats)) {
+			excess_data = true;
+			break;
+		} else {
+			buf_len += peer_num *
+				   (sizeof(struct sir_wifi_ll_ext_peer_stats) +
+				    total_peer_len);
+		}
+	} while (0);
+
+	if (excess_data || (buf_len > WMI_SVC_MSG_MAX_SIZE)) {
+		WMA_LOGE("%s: excess wmi buffer: peer %d cca %d tx_mpdu %d tx_succ%d tx_fail %d tx_ppdu %d rx_mpdu %d rx_mcs %d",
+			 __func__, peer_num, fixed_param->num_chan_cca_stats,
+			 fixed_param->tx_mpdu_aggr_array_len,
+			 fixed_param->tx_succ_mcs_array_len,
+			 fixed_param->tx_fail_mcs_array_len,
+			 fixed_param->tx_ppdu_delay_array_len,
+			 fixed_param->rx_mpdu_aggr_array_len,
+			 fixed_param->rx_mcs_array_len);
+		return NULL;
+	}
 
 	buf = (tSirLLStatsResults *)qdf_mem_malloc(buf_len);
 	if (buf == NULL) {
@@ -1239,6 +1317,33 @@ static int wma_unified_link_peer_stats_event_handler(void *handle,
 		return -EINVAL;
 	}
 
+	do {
+		if (peer_stats->num_rates >
+			WMI_SVC_MSG_MAX_SIZE/sizeof(wmi_rate_stats)) {
+			excess_data = true;
+			break;
+		} else {
+			buf_len =
+				peer_stats->num_rates * sizeof(wmi_rate_stats);
+		}
+		if (fixed_param->num_peers >
+			WMI_SVC_MSG_MAX_SIZE/sizeof(wmi_peer_link_stats)) {
+			excess_data = true;
+			break;
+		} else {
+			buf_len += fixed_param->num_peers *
+				sizeof(wmi_peer_link_stats);
+		}
+	} while (0);
+
+	if (excess_data ||
+		(sizeof(*fixed_param) > WMI_SVC_MSG_MAX_SIZE - buf_len)) {
+		WMA_LOGE("excess wmi buffer: rates:%d, peers:%d",
+			peer_stats->num_rates, fixed_param->num_peers);
+		QDF_ASSERT(0);
+		return -EINVAL;
+	}
+
 	/*
 	 * num_rates - sum of the rates of all the peers
 	 */
@@ -1535,9 +1640,21 @@ static int wma_unified_link_radio_stats_event_handler(void *handle,
 		WMA_LOGA("%s: Invalid param_tlvs for Radio Stats", __func__);
 		return -EINVAL;
 	}
+	if (radio_stats->num_channels >
+		(NUM_24GHZ_CHANNELS + NUM_5GHZ_CHANNELS)) {
+		WMA_LOGE("%s: Too many channels %d",
+			__func__, radio_stats->num_channels);
+		return -EINVAL;
+	}
 
 	radio_stats_size = sizeof(tSirWifiRadioStat);
 	chan_stats_size = sizeof(tSirWifiChannelStats);
+	if (fixed_param->num_radio >
+		(UINT_MAX - sizeof(*link_stats_results))/radio_stats_size) {
+		WMA_LOGE("excess num_radio %d is leading to int overflow",
+			fixed_param->num_radio);
+		return -EINVAL;
+	}
 	link_stats_results_size = sizeof(*link_stats_results) +
 				  fixed_param->num_radio * radio_stats_size;
 
@@ -3251,6 +3368,13 @@ int wma_peer_info_event_handler(void *handle, u_int8_t *cmd_param_info,
 
 	WMA_LOGI("%s Recv WMI_PEER_STATS_INFO_EVENTID", __func__);
 	event = param_buf->fixed_param;
+	if (event->num_peers >
+		((WMI_SVC_MSG_MAX_SIZE -
+		  sizeof(wmi_peer_stats_info_event_fixed_param))/
+		 sizeof(wmi_peer_stats_info))) {
+		WMA_LOGE("Excess num of peers from fw %d", event->num_peers);
+		return -EINVAL;
+	}
 	buf_size = sizeof(wmi_peer_stats_info_event_fixed_param) +
 		sizeof(wmi_peer_stats_info) * event->num_peers;
 	buf = qdf_mem_malloc(buf_size);

@@ -1047,8 +1047,10 @@ static int mdss_dsi_post_panel_on(struct mdss_panel_data *pdata)
 
 	cmds = &ctrl->post_panel_on_cmds;
 	if (cmds->cmd_cnt) {
-		msleep(VSYNC_DELAY);	/* wait for a vsync passed */
-		mdss_dsi_panel_cmds_send(ctrl, cmds, CMD_REQ_COMMIT);
+		u32 flags = CMD_REQ_COMMIT | CMD_REQ_MDP_IDLE;
+
+		/* wait for frame transfer, before sending cmd */
+		mdss_dsi_panel_cmds_send(ctrl, cmds, flags);
 	}
 
 	if (pinfo->is_dba_panel && pinfo->is_pluggable) {
