@@ -185,6 +185,8 @@ static int sop716_read(struct sop716_info *si, u8 reg, u8 *val)
 {
 	int ret;
 	int retry = 1;
+	static u64 saved_ts_ns = 0ULL;
+	u64 off_ms;
 
 	pr_debug("%s: reg:%d val:%d\n", __func__, reg, *val);
 
@@ -193,6 +195,11 @@ static int sop716_read(struct sop716_info *si, u8 reg, u8 *val)
 		return -EINVAL;
 	}
 
+	/* FIXME: i2c error on subsequent i2c reads in 100ms */
+	off_ms = div_u64(ktime_get_boot_ns() - saved_ts_ns,  1000000);
+	if (off_ms < 100)
+		msleep(100 - off_ms);
+
 	/* read size + data, So "size + 1" need to be added  */
 	do {
 		ret = i2c_smbus_read_i2c_block_data(si->client,
@@ -200,6 +207,8 @@ static int sop716_read(struct sop716_info *si, u8 reg, u8 *val)
 		if (ret < 0)
 			sop716_hw_reset(si);
 	} while (retry-- && ret < 0);
+
+	saved_ts_ns = ktime_get_boot_ns();
 
 	if (ret < 0) {
 		pr_err("%s: cannot read i2c: reg %d (%s)\n",
