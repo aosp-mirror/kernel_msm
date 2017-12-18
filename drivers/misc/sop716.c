@@ -34,6 +34,9 @@
 #define SOP716_SETTLE_TIME_MS               2000
 #define SOP716_EOL_MIN_MV                   1500
 #define SOP716_EOL_MAX_MV                   4200
+#define SOP716_BATTERY_CHECK_INTERVAL       30
+#define SOP716_EOL_LIMIT_MV                 3700
+#define SOP716_EOL_THRESHOLD_MV             3900
 
 enum sop716_cmd_ids {
 	CMD_SOP716_SET_CURRENT_TIME = 0,
@@ -75,6 +78,9 @@ struct sop716_info {
 	int hctosys_post_delay_ms;
 	int fw_ver_check_delay_ms;
 	int hands_settle_time_ms;
+	int battery_check_interval;
+	int eol_limit_mv;
+	int eol_threshold_mv;
 
 	bool update_sysclock_on_boot;
 	bool watch_mode;
@@ -90,6 +96,7 @@ struct sop716_info {
 static struct sop716_info *sop716_info;
 
 static void sop716_hw_reset(struct sop716_info *si);
+static int sop716_restore_default_config(struct sop716_info *si);
 
 static inline int REG_CMD(struct sop716_command *cmd, u8 reg, char *desc,
 		u8 size)
@@ -235,6 +242,111 @@ static int sop716_read_tz_minutes(struct sop716_info *si)
 	tz_minutes = (tz_minutes * 60) + data[1];
 
 	return tz_minutes;
+}
+
+static int sop716_set_battery_check_interval(struct sop716_info *si,
+		int interval)
+{
+	u8 data[SOP716_I2C_DATA_LENGTH];
+	int rc;
+
+	pr_debug("%s: interval:%d\n", __func__, interval);
+
+	if ((interval < 1 || interval > 7200)) {
+		pr_err("%s: out of range %d\n", __func__, interval);
+		return -EINVAL;
+	}
+
+	data[0] = CMD_SOP716_BATTERY_CHECK_INTERVAL;
+	data[1] = (interval >> 8) & 0xff;
+	data[2] = interval & 0xff;
+
+	mutex_lock(&si->lock);
+	rc = sop716_write(si, CMD_SOP716_BATTERY_CHECK_INTERVAL, data);
+	if (rc < 0)
+		goto out;
+
+	rc = sop716_read(si, CMD_SOP716_READ_BATTERY_CHECK_INTERVAL, data);
+	if (rc < 0)
+		goto out;
+
+	if (interval != ((data[1] << 8) + data[2])) {
+		pr_err("%s: cannot update the interval\n", __func__);
+		rc = -EINVAL;
+		goto out;
+	}
+
+	si->battery_check_interval = interval;
+	rc = 0;
+
+out:
+	mutex_unlock(&si->lock);
+	return rc;
+}
+
+static int sop716_set_eol_limit(struct sop716_info *si, int eol_limit)
+{
+	u8 data[SOP716_I2C_DATA_LENGTH];
+	int rc = 0;
+
+	if (eol_limit < SOP716_EOL_MIN_MV || eol_limit > SOP716_EOL_MAX_MV ) {
+		pr_err("%s: out of range!\n", __func__);
+		return -EINVAL;
+	}
+
+	mutex_lock(&si->lock);
+	rc = sop716_read(si, CMD_SOP716_READ_EOL_BATTERY_LEVEL, data);
+	if (rc < 0) {
+		pr_err("%s: failed to read EOL info\n", __func__);
+		goto out;
+	}
+
+	data[0] = CMD_SOP716_SET_EOL_BATTERY_LEVEL;
+	data[1] = (eol_limit >> 8) & 0xff;
+	data[2] = eol_limit & 0xff;
+
+	rc = sop716_write(si, CMD_SOP716_SET_EOL_BATTERY_LEVEL, data);
+	if (rc < 0)
+		goto out;
+
+	si->eol_limit_mv = eol_limit;
+	rc = 0;
+out:
+	mutex_unlock(&si->lock);
+	return rc;
+}
+
+static int sop716_set_eol_threshold(struct sop716_info *si, int eol_threshold)
+{
+	u8 data[SOP716_I2C_DATA_LENGTH];
+	int rc = 0;
+
+	if (eol_threshold < SOP716_EOL_MIN_MV ||
+	    eol_threshold > SOP716_EOL_MAX_MV) {
+		pr_err("%s: out of range!\n", __func__);
+		return -EINVAL;
+	}
+
+	mutex_lock(&si->lock);
+	rc = sop716_read(si, CMD_SOP716_READ_EOL_BATTERY_LEVEL, data);
+	if (rc < 0) {
+		pr_err("%s: failed to read EOL info\n", __func__);
+		goto out;
+	}
+
+	data[0] = CMD_SOP716_SET_EOL_BATTERY_LEVEL;
+	data[3] = (eol_threshold >> 8) & 0xff;
+	data[4] = eol_threshold & 0xff;
+
+	rc = sop716_write(si, CMD_SOP716_SET_EOL_BATTERY_LEVEL, data);
+	if (rc < 0)
+		goto out;
+
+	si->eol_threshold_mv = eol_threshold;
+	rc = 0;
+out:
+	mutex_unlock(&si->lock);
+	return rc;
 }
 
 static ssize_t sop716_reset_store(struct device *dev,
@@ -633,7 +745,6 @@ static ssize_t sop716_battery_check_interval_store(struct device *dev,
 			size_t count)
 {
 	struct sop716_info *si = dev_get_drvdata(dev);
-	u8 data[SOP716_I2C_DATA_LENGTH];
 	int interval;
 	int rc = 0;
 
@@ -648,26 +759,10 @@ static ssize_t sop716_battery_check_interval_store(struct device *dev,
 		return rc;
 	 }
 
-	if ((interval < 1 || interval > 7200)) {
-		pr_err("%s: out of range %d\n", __func__, interval);
-		return -EINVAL;
-	}
-
-	pr_debug("%s: interval:%d\n", __func__, interval);
-
-	data[0] = CMD_SOP716_BATTERY_CHECK_INTERVAL;
-	data[1] = (interval >> 8) & 0xff;
-	data[2] = interval & 0xff;
-
-	mutex_lock(&si->lock);
-	sop716_write(si, CMD_SOP716_BATTERY_CHECK_INTERVAL, data);
-
-	sop716_read(si, CMD_SOP716_READ_BATTERY_CHECK_INTERVAL, data);
-	mutex_unlock(&si->lock);
-
-	if (interval != ((data[1] << 8) + data[2])) {
-		pr_err("%s: cannot update the interval\n", __func__);
-		return -EINVAL;
+	rc = sop716_set_battery_check_interval(si, interval);
+	if (rc < 0) {
+		pr_err("%s: failed to set batterh check interval\n", __func__);
+		return rc;
 	}
 
 	return count;
@@ -740,7 +835,6 @@ static ssize_t sop716_eol_limit_store(struct device *dev,
 			size_t count)
 {
 	struct sop716_info *si = dev_get_drvdata(dev);
-	u8 data[SOP716_I2C_DATA_LENGTH];
 	int eol_limit;
 	int rc = 0;
 
@@ -755,28 +849,13 @@ static ssize_t sop716_eol_limit_store(struct device *dev,
 		return -EINVAL;
 	 }
 
-	if (eol_limit < SOP716_EOL_MIN_MV || eol_limit > SOP716_EOL_MAX_MV ) {
-		pr_err("%s: out of range!\n", __func__);
-		return -EINVAL;
-	}
-
-	mutex_lock(&si->lock);
-	rc = sop716_read(si, CMD_SOP716_READ_EOL_BATTERY_LEVEL, data);
-	mutex_unlock(&si->lock);
-	if (rc < 0) {
-		pr_err("%s: failed to read EOL info\n", __func__);
+	rc = sop716_set_eol_limit(si, eol_limit);
+	if (rc) {
+		pr_err("%s: failed to set eol limit\n", __func__);
 		return rc;
 	}
 
-	data[0] = CMD_SOP716_SET_EOL_BATTERY_LEVEL;
-	data[1] = (eol_limit >> 8) & 0xff;
-	data[2] = eol_limit & 0xff;
-
-	mutex_lock(&si->lock);
-	rc = sop716_write(si, CMD_SOP716_SET_EOL_BATTERY_LEVEL, data);
-	mutex_unlock(&si->lock);
-
-	return (rc < 0)? rc : count;
+	return count;
 }
 
 static ssize_t sop716_eol_limit_show(struct device *dev,
@@ -800,7 +879,6 @@ static ssize_t sop716_eol_threshold_store(struct device *dev,
 			size_t count)
 {
 	struct sop716_info *si = dev_get_drvdata(dev);
-	u8 data[SOP716_I2C_DATA_LENGTH];
 	int eol_threshold;
 	int rc = 0;
 
@@ -815,29 +893,13 @@ static ssize_t sop716_eol_threshold_store(struct device *dev,
 		return -EINVAL;
 	 }
 
-	if (eol_threshold < SOP716_EOL_MIN_MV ||
-	    eol_threshold > SOP716_EOL_MAX_MV) {
-		pr_err("%s: out of range!\n", __func__);
-		return -EINVAL;
-	}
-
-	mutex_lock(&si->lock);
-	rc = sop716_read(si, CMD_SOP716_READ_EOL_BATTERY_LEVEL, data);
-	mutex_unlock(&si->lock);
-	if (rc < 0) {
-		pr_err("%s: failed to read EOL info\n", __func__);
+	rc = sop716_set_eol_threshold(si, eol_threshold);
+	if (rc) {
+		pr_err("%s: failed to set eol threshold\n", __func__);
 		return rc;
 	}
 
-	data[0] = CMD_SOP716_SET_EOL_BATTERY_LEVEL;
-	data[3] = (eol_threshold >> 8) & 0xff;
-	data[4] = eol_threshold & 0xff;
-
-	mutex_lock(&si->lock);
-	rc = sop716_write(si, CMD_SOP716_SET_EOL_BATTERY_LEVEL, data);
-	mutex_unlock(&si->lock);
-
-	return (rc < 0)? rc : count;
+	return count;
 }
 
 static ssize_t sop716_eol_threshold_show(struct device *dev,
@@ -1076,6 +1138,19 @@ static int sop716_parse_dt(struct i2c_client *client)
 		 si->reset_delay_ms,
 		 si->fw_ver_check_delay_ms,
 		 si->hands_settle_time_ms);
+
+	ret = of_property_read_u32(node, "lge,battery-check-interval", &val);
+	si->battery_check_interval = ret? SOP716_BATTERY_CHECK_INTERVAL : val;
+	pr_info("sop716: battery check interval %d second(s)\n",
+			si->battery_check_interval);
+
+	ret = of_property_read_u32(node, "lge,eol-limit-mv", &val);
+	si->eol_limit_mv = ret? SOP716_EOL_LIMIT_MV : val;
+
+	ret = of_property_read_u32(node, "lge,eol-threshold-mv", &val);
+	si->eol_threshold_mv = ret? SOP716_EOL_THRESHOLD_MV : val;
+	pr_info("sop716: EOL limit %dmv threshold %dmv\n",
+			si->eol_limit_mv, si->eol_threshold_mv);
 	return 0;
 }
 
@@ -1203,8 +1278,11 @@ static void sop716_update_fw_work(struct work_struct *work)
 
 	pr_info("sop firmware version: device v%d.%d, image v%d.%d\n",
 			major, minor, img_major, img_minor);
-	if (major == img_major && minor == img_minor)
-		goto out;
+	if (major == img_major && minor == img_minor) {
+		mutex_unlock(&si->lock);
+		release_firmware(fw_entry);
+		return;
+	}
 
 	/* Update FW */
 	si->watch_mode = false;
@@ -1254,9 +1332,10 @@ static void sop716_update_fw_work(struct work_struct *work)
 
 	pr_info("sop firmware update: v%d.%d -> v%d.%d\n",
 			major, minor, data[1], data[2]);
-out:
 	mutex_unlock(&si->lock);
 	release_firmware(fw_entry);
+
+	sop716_restore_default_config(si);
 }
 
 static void sop716_update_sysclock_work(struct work_struct *work)
@@ -1268,6 +1347,32 @@ static void sop716_update_sysclock_work(struct work_struct *work)
 		sop716_hctosys(si); /* again one more */
 }
 
+static int sop716_restore_default_config(struct sop716_info *si)
+{
+	int rc;
+
+	rc = sop716_set_battery_check_interval(si, si->battery_check_interval);
+	if (rc) {
+		pr_err("%s: faild to restore the battery check interval\n",
+				__func__);
+		return rc;
+	}
+
+	rc = sop716_set_eol_limit(si, si->eol_limit_mv);
+	if (rc) {
+		pr_err("%s: failed to restore eol limit\n", __func__);
+		return rc;
+	}
+
+	rc = sop716_set_eol_threshold(si, si->eol_threshold_mv);
+	if (rc) {
+		pr_err("%s: failed to restore eol threshold\n", __func__);
+		return rc;
+	}
+
+	return 0;
+}
+
 static void sop716_init_work(struct work_struct *work)
 {
 	struct sop716_info *si = container_of(work,
@@ -1276,6 +1381,8 @@ static void sop716_init_work(struct work_struct *work)
 	mutex_lock(&si->lock);
 	sop716_hw_reset(si);
 	mutex_unlock(&si->lock);
+
+	sop716_restore_default_config(si);
 }
 
 static int sop716_movement_probe(struct i2c_client *client,
