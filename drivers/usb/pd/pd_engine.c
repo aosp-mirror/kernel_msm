@@ -555,6 +555,7 @@ static int update_vbus_locked(struct usbpd *pd, bool vbus_output)
 static int update_external_vbus_locked(struct usbpd *pd, bool external_vbus)
 {
 	int ret = 0;
+	union power_supply_propval val = {0};
 
 	if (pd->external_vbus == external_vbus)
 		return ret;
@@ -564,6 +565,16 @@ static int update_external_vbus_locked(struct usbpd *pd, bool external_vbus)
 	 */
 	if (!pd->vbus_output)
 		goto exit;
+
+	val.intval = 1;
+	ret = power_supply_set_property(pd->usb_psy,
+					POWER_SUPPLY_PROP_OTG_FASTROLESWAP,
+					&val);
+	if (ret < 0) {
+		pd_engine_log(pd, "unable to set FASTROLESWAP, ret=%d",
+			      ret);
+		return ret;
+	}
 
 	/*
 	 * Turn on the other regulator before turning off the other one.
@@ -580,6 +591,16 @@ static int update_external_vbus_locked(struct usbpd *pd, bool external_vbus)
 		pd_engine_log(pd, "unable to turn off %s vbus ret = %d"
 			      , external_vbus ? "pmic" : "external"
 			      , ret);
+		return ret;
+	}
+
+	val.intval = 0;
+	ret = power_supply_set_property(pd->usb_psy,
+					POWER_SUPPLY_PROP_OTG_FASTROLESWAP,
+					&val);
+	if (ret < 0) {
+		pd_engine_log(pd, "unable to set FASTROLESWAP, ret=%d",
+			      ret);
 		return ret;
 	}
 
