@@ -69,7 +69,6 @@ struct sop716_info {
 
 	int reset_status;
 	int tz_minuteswest;
-	int batt_check_interval;
 
 	int reset_delay_ms;
 	int hctosys_pre_delay_ms;
@@ -614,9 +613,19 @@ static ssize_t sop716_battery_check_interval_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
 	struct sop716_info *si = dev_get_drvdata(dev);
+	u8 data[SOP716_I2C_DATA_LENGTH];
+	int interval;
+	int rc = 0;
 
-	return snprintf(buf, PAGE_SIZE, "%d second(s)\n",
-			si->batt_check_interval);
+	mutex_lock(&si->lock);
+	rc = sop716_read(si, CMD_SOP716_READ_BATTERY_CHECK_INTERVAL, data);
+	mutex_unlock(&si->lock);
+	if (rc < 0)
+		return rc;
+
+	interval = ((data[1] << 8) + data[2]);
+
+	return snprintf(buf, PAGE_SIZE, "%d second(s)\n", interval);
 }
 
 static ssize_t sop716_battery_check_interval_store(struct device *dev,
@@ -660,7 +669,6 @@ static ssize_t sop716_battery_check_interval_store(struct device *dev,
 		pr_err("%s: cannot update the interval\n", __func__);
 		return -EINVAL;
 	}
-	si->batt_check_interval = interval;
 
 	return count;
 }
