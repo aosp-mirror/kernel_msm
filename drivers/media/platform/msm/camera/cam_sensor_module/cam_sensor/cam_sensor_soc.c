@@ -172,6 +172,13 @@ static int32_t cam_sensor_driver_get_dt_data(struct cam_sensor_ctrl_t *s_ctrl)
 		sensordata->pos_yaw = 360;
 	}
 
+#ifdef CONFIG_MNH_SM_HOST
+	if (of_property_read_bool(of_node, "uses-easel"))
+		s_ctrl->uses_easel = true;
+	else
+		s_ctrl->uses_easel = false;
+#endif
+
 	return rc;
 
 FREE_SENSOR_DATA:

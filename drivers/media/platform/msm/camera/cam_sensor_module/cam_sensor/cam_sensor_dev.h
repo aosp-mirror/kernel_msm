@@ -109,6 +109,9 @@ struct cam_sensor_ctrl_t {
 	struct  cam_sensor_query_cap sensor_info;
 	struct intf_params bridge_intf;
 	char device_name[20];
+#ifdef CONFIG_MNH_SM_HOST
+	bool uses_easel;
+#endif
 };
 
 #endif /* _CAM_SENSOR_DEV_H_ */

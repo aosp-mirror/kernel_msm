@@ -771,7 +771,8 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 		if (s_ctrl->i2c_data.streamon_settings.is_settings_valid &&
 			(s_ctrl->i2c_data.streamon_settings.request_id == 0)) {
 #ifdef CONFIG_MNH_SM_HOST
-			cam_sensor_config_easel(s_ctrl);
+			if (s_ctrl->uses_easel)
+				cam_sensor_config_easel(s_ctrl);
 #endif
 			rc = cam_sensor_apply_settings(s_ctrl, 0,
 				CAM_SENSOR_PACKET_OPCODE_SENSOR_STREAMON);
@@ -994,9 +995,11 @@ int cam_sensor_power_up(struct cam_sensor_ctrl_t *s_ctrl)
 	}
 
 #ifdef CONFIG_MNH_SM_HOST
-	rc =  mnh_sm_set_state(MNH_STATE_ACTIVE);
-	if (rc && (rc != -EHOSTUNREACH))
-		CAM_WARN(CAM_SENSOR, "power up easel failed:%d", rc);
+	if (s_ctrl->uses_easel) {
+		rc =  mnh_sm_set_state(MNH_STATE_ACTIVE);
+		if (rc && (rc != -EHOSTUNREACH))
+			CAM_WARN(CAM_SENSOR, "power up easel failed:%d", rc);
+	}
 #endif
 
 	rc = cam_sensor_core_power_up(power_info, soc_info);
@@ -1032,9 +1035,11 @@ int cam_sensor_power_down(struct cam_sensor_ctrl_t *s_ctrl)
 	}
 
 #ifdef CONFIG_MNH_SM_HOST
-	rc = mnh_sm_set_state(MNH_STATE_OFF);
-	if (rc)
-		CAM_WARN(CAM_SENSOR, "power down easel failed:%d", rc);
+	if (s_ctrl->uses_easel) {
+		rc = mnh_sm_set_state(MNH_STATE_OFF);
+		if (rc)
+			CAM_WARN(CAM_SENSOR, "power down easel failed:%d", rc);
+	}
 #endif
 
 	rc = msm_camera_power_down(power_info, soc_info);
