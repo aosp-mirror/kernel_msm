@@ -663,7 +663,8 @@ void acct_update_power(struct task_struct *task, cputime_t cputime)
 			++active_cpu_cnt;
 
 	spin_lock_irqsave(&task_concurrent_active_time_lock, flags);
-	if (task->concurrent_active_time)
+	if (cpufreq_stats_initialized && !(task->flags & PF_EXITING) &&
+		task->concurrent_active_time)
 		atomic64_add(cputime,
 			&task->concurrent_active_time[active_cpu_cnt - 1]);
 	spin_unlock_irqrestore(&task_concurrent_active_time_lock, flags);
@@ -675,7 +676,8 @@ void acct_update_power(struct task_struct *task, cputime_t cputime)
 	policy_first_cpu = cpumask_first(policy->related_cpus);
 
 	spin_lock_irqsave(&task_concurrent_policy_time_lock, flags);
-	if (task->concurrent_policy_time)
+	if (cpufreq_stats_initialized && !(task->flags & PF_EXITING) &&
+		task->concurrent_policy_time)
 		atomic64_add(cputime,
 			&task->concurrent_policy_time[policy_first_cpu
 			+ policy_cpu_cnt - 1]);
