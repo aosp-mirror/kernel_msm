@@ -301,6 +301,24 @@ static const struct apsd_result *smblib_get_apsd_result(struct smb_charger *chg)
 	return result;
 }
 
+int smblib_get_prop_otg_fastroleswap(struct smb_charger *chg,
+				     union power_supply_propval *val)
+{
+	int rc = 0;
+	u8 stat = 0;
+
+	rc = smblib_read(chg, OTG_CFG_REG, &stat);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't read OTG quickstart rc=%d\n",
+				rc);
+	}
+	if (stat & QUICKSTART_OTG_FASTROLESWAP_BIT)
+		val->intval = 1;
+	else
+		val->intval = 0;
+	return rc;
+}
+
 /********************
  * REGISTER SETTERS *
  ********************/
@@ -500,6 +518,21 @@ static int smblib_set_usb_pd_allowed_voltage(struct smb_charger *chg,
 		return rc;
 	}
 
+	return rc;
+}
+
+int smblib_set_prop_otg_fastroleswap(struct smb_charger *chg,
+				     const union power_supply_propval *val)
+{
+	int rc;
+
+	rc = smblib_masked_write(chg, OTG_CFG_REG,
+			QUICKSTART_OTG_FASTROLESWAP_BIT,
+			val->intval ? QUICKSTART_OTG_FASTROLESWAP_BIT : 0);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't set OTG quickstart rc=%d\n",
+				rc);
+	}
 	return rc;
 }
 

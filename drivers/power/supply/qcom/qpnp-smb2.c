@@ -360,6 +360,7 @@ static enum power_supply_property smb2_usb_props[] = {
 	POWER_SUPPLY_PROP_PD_VOLTAGE_MIN,
 	POWER_SUPPLY_PROP_SDP_CURRENT_MAX,
 	POWER_SUPPLY_PROP_CONNECTOR_TYPE,
+	POWER_SUPPLY_PROP_OTG_FASTROLESWAP,
 };
 
 static int smb2_usb_get_prop(struct power_supply *psy,
@@ -478,6 +479,9 @@ static int smb2_usb_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CONNECTOR_TYPE:
 		val->intval = chg->connector_type;
 		break;
+	case POWER_SUPPLY_PROP_OTG_FASTROLESWAP:
+		rc = smblib_get_prop_otg_fastroleswap(chg, val);
+		break;
 	default:
 		pr_err("get prop %d is not supported in usb\n", psp);
 		rc = -EINVAL;
@@ -539,6 +543,9 @@ static int smb2_usb_set_prop(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_SDP_CURRENT_MAX:
 		rc = smblib_set_prop_sdp_current_max(chg, val);
+		break;
+	case POWER_SUPPLY_PROP_OTG_FASTROLESWAP:
+		rc = smblib_set_prop_otg_fastroleswap(chg, val);
 		break;
 	default:
 		pr_err("set prop %d is not supported\n", psp);

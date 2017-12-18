@@ -521,6 +521,10 @@ int smblib_set_prop_ship_mode(struct smb_charger *chg,
 				const union power_supply_propval *val);
 int smblib_set_prop_charge_qnovo_enable(struct smb_charger *chg,
 				const union power_supply_propval *val);
+int smblib_set_prop_otg_fastroleswap(struct smb_charger *chg,
+ 				const union power_supply_propval *val);
+int smblib_get_prop_otg_fastroleswap(struct smb_charger *chg,
+				union power_supply_propval *val);
 void smblib_suspend_on_debug_battery(struct smb_charger *chg);
 int smblib_rerun_apsd_if_required(struct smb_charger *chg);
 int smblib_get_prop_fcc_delta(struct smb_charger *chg,
