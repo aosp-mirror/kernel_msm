@@ -121,3 +121,8 @@
 };
 
 #include "sdm845-b1c1-haptics-drv2624-overlay.dtsi"
+
+/* Disable wchg on I2C10 */
+&p9221 {
+	status = "disabled";
+};

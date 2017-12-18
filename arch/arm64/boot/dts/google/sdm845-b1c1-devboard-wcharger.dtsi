@@ -39,3 +39,7 @@
 	};
 };
 
+/* Disable wchg on I2C10 */
+&p9221 {
+	status = "disabled";
+};

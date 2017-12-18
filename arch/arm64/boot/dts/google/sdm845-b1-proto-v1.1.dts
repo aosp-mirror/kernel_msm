@@ -57,3 +57,8 @@
 	cirrus,imon-pol-inv;
 	cirrus,vmon-pol-inv;
 };
+
+/* Disable wchg on I2C10 */
+&p9221 {
+	status = "disabled";
+};

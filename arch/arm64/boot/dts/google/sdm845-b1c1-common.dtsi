@@ -28,6 +28,7 @@
 #include "sdm845-b1c1-rainbow.dtsi"
 #include "sdm845-b1c1-fingerprint.dtsi"
 #include "sdm845-b1c1-regulator.dtsi"
+#include "sdm845-b1c1-wcharger.dtsi"
 #include "../qcom/smb1355.dtsi"
 
 / {

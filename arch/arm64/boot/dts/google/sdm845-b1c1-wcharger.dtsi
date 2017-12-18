@@ -1,0 +1,30 @@
+/*
+ * Wireless charger: INT on GPIO 124, I2C(10) on GPIO 55/56
+ */
+
+&tlmm {
+	p9221_int: p9221_int {
+		mux {
+			pins = "gpio124";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio124";
+			drive-strength = <2>;
+			bias-pull-up;
+		};
+	};
+};
+
+&qupv3_se10_i2c {
+	p9221: p9221@61 {
+		compatible = "idt,p9221";
+		reg = <0x61>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&p9221_int>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <124 0>;
+		idt,irq_gpio = <&tlmm 124 0x00>;
+		status = "ok";
+	};
+};
