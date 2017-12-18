@@ -222,6 +222,9 @@ struct mp2661_chg {
     /* continue check battery current */
     struct timer_list          usb_in_timer;
     bool                       ibat_continue_check_flag;
+
+    struct mutex               irq_complete;
+
 };
 
 struct mp2661_chg  *global_mp2661 = NULL;
@@ -1549,6 +1552,7 @@ static void mp2661_process_interrupt_work(struct work_struct *work)
     int capacity = -1;
     int vbatt_mv = 0;
 
+    mutex_lock(&chip->irq_complete);
     /* check charging status */
     status = mp2661_get_prop_batt_status(chip);
     if(chip->charging_status != status)
@@ -1725,6 +1729,8 @@ static void mp2661_process_interrupt_work(struct work_struct *work)
     {
         pr_info("battery ovp!\n");
     }
+
+    mutex_unlock(&chip->irq_complete);
 }
 
 static irqreturn_t mp2661_chg_stat_handler(int irq, void *dev_id)
@@ -2704,6 +2710,8 @@ static int mp2661_charger_probe(struct i2c_client *client,
 
     i2c_set_clientdata(client, chip);
 
+    mutex_init(&chip->irq_complete);
+
     chip->batt_psy.name        = "battery";
     chip->batt_psy.type        = POWER_SUPPLY_TYPE_BATTERY;
     chip->batt_psy.get_property    = mp2661_battery_get_property;
@@ -2787,6 +2795,8 @@ static int mp2661_charger_remove(struct i2c_client *client)
     {
         kthread_stop(chip->monitor_temp_task);
     }
+
+    mutex_destroy(&chip->irq_complete);
 
     return 0;
 }
