@@ -44,6 +44,17 @@
 	};
 };
 
+/* Easel is required for camera */
+&sensor_front {
+	uses-easel;
+};
+&sensor_front_aux {
+	uses-easel;
+};
+&sensor_rear {
+	uses-easel;
+};
+
 /*
  * B1 P1 requires a SW workaround for easel because of a schematic error. This
  * will be resolved in P1.1 schematic and is not needed there.

@@ -49,6 +49,17 @@
 	};
 };
 
+/* Easel is required for camera */
+&sensor_front {
+	uses-easel;
+};
+&sensor_front_aux {
+	uses-easel;
+};
+&sensor_rear {
+	uses-easel;
+};
+
 #include "sdm845-b1c1-haptics-drv2624-overlay.dtsi"
 
 /* B1 P1.1 has the bottom speaker amp in inverted polarity */
