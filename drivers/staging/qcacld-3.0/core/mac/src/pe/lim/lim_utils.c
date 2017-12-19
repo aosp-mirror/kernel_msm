@@ -401,10 +401,6 @@ char *lim_msg_str(uint32_t msgType)
 		return "WNI_CFG_DNLD_RSP";
 	case WNI_CFG_GET_REQ:
 		return "WNI_CFG_GET_REQ";
-	case WNI_CFG_SET_REQ:
-		return "WNI_CFG_SET_REQ";
-	case WNI_CFG_SET_REQ_NO_RSP:
-		return "WNI_CFG_SET_REQ_NO_RSP";
 	case eWNI_PMC_ENTER_IMPS_RSP:
 		return "eWNI_PMC_ENTER_IMPS_RSP";
 	case eWNI_PMC_EXIT_IMPS_RSP:
@@ -6640,9 +6636,14 @@ void lim_del_pmf_sa_query_timer(tpAniSirGlobal mac_ctx, tpPESession pe_session)
 				&pe_session->dph.dphHashTable);
 		if (NULL == sta_ds)
 			continue;
+		if (!sta_ds->rmfEnabled) {
+			pe_debug("no PMF timer for sta-idx:%d assoc-id:%d",
+				 sta_ds->staIndex, sta_ds->assocId);
+			continue;
+		}
 
-		pe_err("Deleting pmfSaQueryTimer for staid: %d",
-			sta_ds->staIndex);
+		pe_debug("Deleting pmfSaQueryTimer for sta-idx:%d assoc-id:%d",
+			sta_ds->staIndex, sta_ds->assocId);
 		tx_timer_deactivate(&sta_ds->pmfSaQueryTimer);
 		tx_timer_delete(&sta_ds->pmfSaQueryTimer);
 	}
@@ -7271,9 +7272,9 @@ QDF_STATUS lim_util_get_type_subtype(void *pkt, uint8_t *type,
 
 	hdr = WMA_GET_RX_MAC_HEADER(rxpktinfor);
 	if (hdr->fc.type == SIR_MAC_MGMT_FRAME) {
-		pe_debug("RxBd: %pK mHdr: %pK Type: %d Subtype: %d  SizesFC: %zu",
-		  rxpktinfor, hdr, hdr->fc.type, hdr->fc.subType,
-		  sizeof(tSirMacFrameCtl));
+		pe_debug("RxBd: %pK mHdr: %pK Type: %d Subtype: %d SizeFC: %zu",
+				rxpktinfor, hdr, hdr->fc.type, hdr->fc.subType,
+				sizeof(tSirMacFrameCtl));
 		*type = hdr->fc.type;
 		*subtype = hdr->fc.subType;
 	} else {

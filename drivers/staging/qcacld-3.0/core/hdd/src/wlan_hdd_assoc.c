@@ -252,10 +252,10 @@ bool hdd_conn_is_connected(hdd_station_ctx_t *pHddStaCtx)
  * hdd_conn_get_connected_band() - get current connection radio band
  * @pHddStaCtx:    pointer to global HDD Station context
  *
- * Return: eCSR_BAND_24 or eCSR_BAND_5G based on current AP connection
- *	eCSR_BAND_ALL if not connected
+ * Return: SIR_BAND_2_4_GHZ or SIR_BAND_5_GHZ based on current AP connection
+ *      SIR_BAND_ALL if not connected
  */
-eCsrBand hdd_conn_get_connected_band(hdd_station_ctx_t *pHddStaCtx)
+tSirRFBand hdd_conn_get_connected_band(hdd_station_ctx_t *pHddStaCtx)
 {
 	uint8_t staChannel = 0;
 
@@ -263,11 +263,11 @@ eCsrBand hdd_conn_get_connected_band(hdd_station_ctx_t *pHddStaCtx)
 		staChannel = pHddStaCtx->conn_info.operationChannel;
 
 	if (staChannel > 0 && staChannel < 14)
-		return eCSR_BAND_24;
+		return SIR_BAND_2_4_GHZ;
 	else if (staChannel >= 36 && staChannel <= 184)
-		return eCSR_BAND_5G;
-	else   /* If station is not connected return as eCSR_BAND_ALL */
-		return eCSR_BAND_ALL;
+		return SIR_BAND_5_GHZ;
+	else   /* If station is not connected return as SIR_BAND_ALL */
+		return SIR_BAND_ALL;
 }
 
 /**
@@ -1718,6 +1718,9 @@ static QDF_STATUS hdd_dis_connect_handler(hdd_adapter_t *pAdapter,
 
 	pAdapter->hdd_stats.hddTxRxStats.cont_txtimeout_cnt = 0;
 
+	hdd_debug("check for SAP restart");
+	cds_check_concurrent_intf_and_restart_sap(pAdapter);
+
 	/* Unblock anyone waiting for disconnect to complete */
 	complete(&pAdapter->disconnect_comp_var);
 
@@ -2618,6 +2621,10 @@ static QDF_STATUS hdd_association_completion_handler(hdd_adapter_t *pAdapter,
 					   eCSR_DISCONNECT_REASON_UNSPECIFIED);
 				}
 				return QDF_STATUS_E_FAILURE;
+			} else {
+				cfg80211_put_bss(
+					pHddCtx->wiphy,
+					bss);
 			}
 			if (pRoamInfo->u.pConnectedProfile->AuthType ==
 			    eCSR_AUTH_TYPE_FT_RSN
@@ -2833,10 +2840,6 @@ static QDF_STATUS hdd_association_completion_handler(hdd_adapter_t *pAdapter,
 				}
 			}
 			if (!hddDisconInProgress) {
-				cfg80211_put_bss(
-					pHddCtx->wiphy,
-					bss);
-
 				/*
 				 * Perform any WMM-related association
 				 * processing.
@@ -2945,6 +2948,11 @@ static QDF_STATUS hdd_association_completion_handler(hdd_adapter_t *pAdapter,
 		bool connect_timeout = false;
 		hdd_wext_state_t *pWextState =
 			WLAN_HDD_GET_WEXT_STATE_PTR(pAdapter);
+		if (pRoamInfo && pRoamInfo->is_fils_connection &&
+		    eCSR_ROAM_RESULT_SCAN_FOR_SSID_FAILURE == roamResult)
+			qdf_copy_macaddr(&pRoamInfo->bssid,
+					 &pWextState->req_bssId);
+
 		if (pRoamInfo)
 			hdd_err("wlan: connection failed with " MAC_ADDRESS_STR
 				 " result: %d and Status: %d",
@@ -4862,7 +4870,7 @@ hdd_sme_roam_callback(void *pContext, tCsrRoamInfo *pRoamInfo, uint32_t roamId,
 	switch (roamStatus) {
 	case eCSR_ROAM_SESSION_OPENED:
 		set_bit(SME_SESSION_OPENED, &pAdapter->event_flags);
-		complete(&pAdapter->session_open_comp_var);
+		qdf_event_set(&pAdapter->qdf_session_open_event);
 		hdd_debug("session %d opened", pAdapter->sessionId);
 		break;
 

@@ -552,6 +552,17 @@ static QDF_STATUS wma_self_peer_remove(tp_wma_handle wma_handle,
 	return QDF_STATUS_SUCCESS;
 }
 
+static void
+wma_ol_txrx_vdev_detach(tp_wma_handle wma_handle,
+		    uint8_t vdev_id)
+{
+	struct wma_txrx_node *iface = &wma_handle->interfaces[vdev_id];
+
+	ol_txrx_vdev_detach(iface->handle, NULL, NULL);
+	iface->handle = NULL;
+	iface->is_vdev_valid = false;
+}
+
 static QDF_STATUS wma_handle_vdev_detach(tp_wma_handle wma_handle,
 			struct del_sta_self_params *del_sta_self_req_param,
 			uint8_t generate_rsp)
@@ -569,10 +580,6 @@ static QDF_STATUS wma_handle_vdev_detach(tp_wma_handle wma_handle,
 
 	WMA_LOGD("vdev_id:%hu vdev_hdl:%pK", vdev_id, iface->handle);
 	if (!generate_rsp) {
-		WMA_LOGE("Call txrx detach w/o callback for vdev %d", vdev_id);
-		ol_txrx_vdev_detach(iface->handle, NULL, NULL);
-		iface->handle = NULL;
-		wma_handle->interfaces[vdev_id].is_vdev_valid = false;
 		goto out;
 	}
 
@@ -593,9 +600,7 @@ static QDF_STATUS wma_handle_vdev_detach(tp_wma_handle wma_handle,
 					 WMA_FW_RSP_EVENT_WAKE_LOCK_DURATION);
 	}
 	WMA_LOGD("Call txrx detach with callback for vdev %d", vdev_id);
-	ol_txrx_vdev_detach(iface->handle, NULL, NULL);
-	iface->handle = NULL;
-	wma_handle->interfaces[vdev_id].is_vdev_valid = false;
+	wma_ol_txrx_vdev_detach(wma_handle, vdev_id);
 
 	/*
 	 * send the response immediately if WMI_SERVICE_SYNC_DELETE_CMDS
@@ -605,7 +610,12 @@ static QDF_STATUS wma_handle_vdev_detach(tp_wma_handle wma_handle,
 				    WMI_SERVICE_SYNC_DELETE_CMDS))
 		wma_vdev_detach_callback(iface);
 	return status;
+
 out:
+	WMA_LOGE("Call txrx detach callback for vdev %d, generate_rsp %u",
+		vdev_id, generate_rsp);
+	wma_ol_txrx_vdev_detach(wma_handle, vdev_id);
+
 	if (iface->addBssStaContext)
 		qdf_mem_free(iface->addBssStaContext);
 	if (iface->staKeyParams)
@@ -890,7 +900,7 @@ static const wmi_channel_width mode_to_width[MODE_MAX] = {
  *
  * Return: channel width
  */
-static wmi_channel_width chanmode_to_chanwidth(WLAN_PHY_MODE chanmode)
+wmi_channel_width chanmode_to_chanwidth(WLAN_PHY_MODE chanmode)
 {
 	wmi_channel_width chan_width;
 
@@ -3249,6 +3259,7 @@ void wma_vdev_resp_timer(void *data)
 	} else if (tgt_req->msg_type == WMA_ADD_BSS_REQ) {
 		tpAddBssParams params = (tpAddBssParams) tgt_req->user_data;
 
+		params->status = QDF_STATUS_E_TIMEOUT;
 		WMA_LOGA("%s: WMA_ADD_BSS_REQ timedout", __func__);
 		WMA_LOGD("%s: bssid %pM vdev_id %d", __func__, params->bssId,
 			 tgt_req->vdev_id);
@@ -3962,6 +3973,8 @@ static void wma_add_bss_sta_mode(tp_wma_handle wma, tpAddBssParams add_bss)
 				pps_val, status);
 		wma_send_peer_assoc(wma, add_bss->nwType,
 					    &add_bss->staContext);
+		/* we just had peer assoc, so install key will be done later */
+		iface->is_waiting_for_key = true;
 		peer_assoc_sent = true;
 
 		if (add_bss->rmfEnabled)
@@ -5151,7 +5164,7 @@ static void wma_wait_tx_complete(tp_wma_handle wma,
 
 	while (ol_txrx_get_tx_pending(pdev) && max_wait_iterations) {
 		WMA_LOGW(FL("Waiting for outstanding packet to drain."));
-		qdf_wait_single_event(&wma->tx_queue_empty_event,
+		qdf_wait_for_event_completion(&wma->tx_queue_empty_event,
 				      WMA_TX_Q_RECHECK_TIMER_WAIT);
 		max_wait_iterations--;
 	}
@@ -5406,4 +5419,22 @@ int wma_fill_beacon_interval_reset_req(tp_wma_handle wma, uint8_t vdev_id,
 	qdf_timer_start(&req->event_timeout, timeout);
 
 	return 0;
+}
+
+QDF_STATUS wma_set_wlm_latency_level(void *wma_ptr,
+			struct wlm_latency_level_param *latency_params)
+{
+	QDF_STATUS ret;
+	tp_wma_handle wma = (tp_wma_handle)wma_ptr;
+
+	WMA_LOGD("%s: set latency level %d, flags flag 0x%x",
+		 __func__, latency_params->wlm_latency_level,
+		 latency_params->wlm_latency_flags);
+
+	ret = wmi_unified_wlm_latency_level_cmd(wma->wmi_handle,
+						latency_params);
+	if (QDF_IS_STATUS_ERROR(ret))
+		WMA_LOGW("Failed to set latency level");
+
+	return ret;
 }

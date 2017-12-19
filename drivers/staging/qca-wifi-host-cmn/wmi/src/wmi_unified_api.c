@@ -2363,6 +2363,18 @@ QDF_STATUS wmi_unified_nat_keepalive_en_cmd(void *wmi_hdl, uint8_t vdev_id)
 	return QDF_STATUS_E_FAILURE;
 }
 
+QDF_STATUS wmi_unified_wlm_latency_level_cmd(void *wmi_hdl,
+					struct wlm_latency_level_param *param)
+{
+	wmi_unified_t wmi_handle = (wmi_unified_t) wmi_hdl;
+
+	if (wmi_handle->ops->send_wlm_latency_level_cmd)
+		return wmi_handle->ops->send_wlm_latency_level_cmd(wmi_handle,
+								   param);
+
+	return QDF_STATUS_E_FAILURE;
+}
+
 /**
  * wmi_unified_csa_offload_enable() - send CSA offload enable command
  * @wmi_hdl: wmi handle
@@ -2992,29 +3004,6 @@ QDF_STATUS wmi_unified_update_tdls_peer_state_cmd(void *wmi_hdl,
 	if (wmi_handle->ops->send_update_tdls_peer_state_cmd)
 		return wmi_handle->ops->send_update_tdls_peer_state_cmd(wmi_handle,
 			    peerStateParams, ch_mhz);
-
-	return QDF_STATUS_E_FAILURE;
-}
-
-/**
- * wmi_unified_process_fw_mem_dump_cmd() - Function to request fw memory dump from
- * firmware
- * @wmi_handle:         Pointer to wmi handle
- * @mem_dump_req:       Pointer for mem_dump_req
- *
- * This function sends memory dump request to firmware
- *
- * Return: QDF_STATUS_SUCCESS on success and QDF_STATUS_E_FAILURE for failure
- *
- */
-QDF_STATUS wmi_unified_process_fw_mem_dump_cmd(void *wmi_hdl,
-					struct fw_dump_req_param *mem_dump_req)
-{
-	wmi_unified_t wmi_handle = (wmi_unified_t) wmi_hdl;
-
-	if (wmi_handle->ops->send_process_fw_mem_dump_cmd)
-		return wmi_handle->ops->send_process_fw_mem_dump_cmd(wmi_handle,
-			    mem_dump_req);
 
 	return QDF_STATUS_E_FAILURE;
 }

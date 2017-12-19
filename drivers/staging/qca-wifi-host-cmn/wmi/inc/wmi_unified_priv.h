@@ -38,6 +38,7 @@
 #include <wmi_unified.h>
 #endif
 #include "qdf_atomic.h"
+#include <qdf_threads.h>
 
 #define WMI_UNIFIED_MAX_EVENT 0x100
 #define WMI_MAX_CMDS 1024
@@ -166,6 +167,12 @@ struct fwdebug {
 	A_BOOL fwlog_open;
 };
 #endif /* WLAN_OPEN_SOURCE */
+
+struct wmi_wq_dbg_info {
+	uint32_t wd_msg_type_id;
+	qdf_workqueue_t *wmi_wq;
+	qdf_thread_t *task;
+};
 
 struct wmi_ops {
 QDF_STATUS (*send_vdev_create_cmd)(wmi_unified_t wmi_handle,
@@ -451,6 +458,9 @@ QDF_STATUS (*send_csa_offload_enable_cmd)(wmi_unified_t wmi_handle,
 			uint8_t vdev_id);
 
 QDF_STATUS (*send_pno_stop_cmd)(wmi_unified_t wmi_handle, uint8_t vdev_id);
+
+QDF_STATUS (*send_wlm_latency_level_cmd)(wmi_unified_t wmi_handle,
+					struct wlm_latency_level_param *param);
 
 #ifdef FEATURE_WLAN_SCAN_PNO
 QDF_STATUS (*send_pno_start_cmd)(wmi_unified_t wmi_handle,

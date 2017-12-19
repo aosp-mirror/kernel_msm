@@ -1540,9 +1540,9 @@ static void wma_process_cli_set_cmd(tp_wma_handle wma,
 		case WMI_PDEV_PARAM_TXPOWER_LIMIT2G:
 			wma->pdevconfig.txpow2g = privcmd->param_value;
 			if ((pMac->roam.configParam.bandCapability ==
-			     eCSR_BAND_ALL) ||
+			     SIR_BAND_ALL) ||
 			    (pMac->roam.configParam.bandCapability ==
-			     eCSR_BAND_24)) {
+			     SIR_BAND_2_4_GHZ)) {
 				if (cfg_set_int(pMac,
 						WNI_CFG_CURRENT_TX_POWER_LEVEL,
 						privcmd->param_value) !=
@@ -1556,9 +1556,9 @@ static void wma_process_cli_set_cmd(tp_wma_handle wma,
 		case WMI_PDEV_PARAM_TXPOWER_LIMIT5G:
 			wma->pdevconfig.txpow5g = privcmd->param_value;
 			if ((pMac->roam.configParam.bandCapability ==
-			     eCSR_BAND_ALL) ||
+			     SIR_BAND_ALL) ||
 			    (pMac->roam.configParam.bandCapability ==
-			     eCSR_BAND_5G)) {
+			     SIR_BAND_5_GHZ)) {
 				if (cfg_set_int(pMac,
 						WNI_CFG_CURRENT_TX_POWER_LEVEL,
 						privcmd->param_value) !=
@@ -2236,6 +2236,7 @@ void wma_vdev_init(struct wma_txrx_node *vdev)
 	qdf_wake_lock_create(&vdev->vdev_start_wakelock, "vdev_start");
 	qdf_wake_lock_create(&vdev->vdev_stop_wakelock, "vdev_stop");
 	qdf_wake_lock_create(&vdev->vdev_set_key_wakelock, "vdev_set_key");
+	vdev->is_waiting_for_key = false;
 }
 
 void wma_vdev_deinit(struct wma_txrx_node *vdev)
@@ -2243,6 +2244,7 @@ void wma_vdev_deinit(struct wma_txrx_node *vdev)
 	qdf_wake_lock_destroy(&vdev->vdev_start_wakelock);
 	qdf_wake_lock_destroy(&vdev->vdev_stop_wakelock);
 	qdf_wake_lock_destroy(&vdev->vdev_set_key_wakelock);
+	vdev->is_waiting_for_key = false;
 }
 
 /**
@@ -4733,17 +4735,17 @@ static void wma_update_hdd_cfg(tp_wma_handle wma_handle)
 	switch (wma_handle->phy_capability) {
 	case WMI_11G_CAPABILITY:
 	case WMI_11NG_CAPABILITY:
-		tgt_cfg.band_cap = eCSR_BAND_24;
+		tgt_cfg.band_cap = SIR_BAND_2_4_GHZ;
 		break;
 	case WMI_11A_CAPABILITY:
 	case WMI_11NA_CAPABILITY:
 	case WMI_11AC_CAPABILITY:
-		tgt_cfg.band_cap = eCSR_BAND_5G;
+		tgt_cfg.band_cap = SIR_BAND_5_GHZ;
 		break;
 	case WMI_11AG_CAPABILITY:
 	case WMI_11NAG_CAPABILITY:
 	default:
-		tgt_cfg.band_cap = eCSR_BAND_ALL;
+		tgt_cfg.band_cap = SIR_BAND_ALL;
 	}
 
 	tgt_cfg.max_intf_count = wma_handle->wlan_resource_config.num_vdevs;
@@ -6167,8 +6169,9 @@ QDF_STATUS wma_wait_for_ready_event(WMA_HANDLE handle)
 	QDF_STATUS qdf_status;
 
 	/* wait until WMI_READY_EVENTID received from FW */
-	qdf_status = qdf_wait_single_event(&(wma_handle->wma_ready_event),
-					   WMA_READY_EVENTID_TIMEOUT);
+	qdf_status = qdf_wait_for_event_completion(
+					&wma_handle->wma_ready_event,
+					WMA_READY_EVENTID_TIMEOUT);
 
 	if (QDF_STATUS_SUCCESS != qdf_status) {
 		WMA_LOGE("%s: Timeout waiting for ready event from FW",
@@ -6847,6 +6850,11 @@ static void wma_set_arp_req_stats(WMA_HANDLE handle,
 			 __func__);
 		return;
 	}
+	if (!wma_is_vdev_valid(req_buf->vdev_id)) {
+		WMA_LOGE("vdev id not active or not valid");
+		return;
+	}
+
 	arp_stats = (struct set_arp_stats *)req_buf;
 	status = wmi_unified_set_arp_stats_req(wma_handle->wmi_handle,
 					       arp_stats);
@@ -8246,7 +8254,7 @@ QDF_STATUS wma_send_pdev_set_pcl_cmd(tp_wma_handle wma_handle,
 		msg->weighed_valid_list[i] =
 			wma_map_pcl_weights(msg->weighed_valid_list[i]);
 		/* Dont allow roaming on 2G when 5G_ONLY configured */
-		if ((wma_handle->bandcapability == eCSR_BAND_5G) &&
+		if ((wma_handle->bandcapability == SIR_BAND_5_GHZ) &&
 			(msg->saved_chan_list[i] <= MAX_24GHZ_CHANNEL)) {
 			msg->weighed_valid_list[i] =
 				WEIGHT_OF_DISALLOWED_CHANNELS;

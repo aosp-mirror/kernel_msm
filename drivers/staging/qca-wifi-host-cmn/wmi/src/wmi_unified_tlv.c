@@ -8060,6 +8060,39 @@ static QDF_STATUS send_wow_timer_pattern_cmd_tlv(wmi_unified_t wmi_handle,
 	return QDF_STATUS_SUCCESS;
 }
 
+QDF_STATUS send_wlm_latency_level_cmd_tlv(wmi_unified_t wmi_handle,
+				struct wlm_latency_level_param *params)
+{
+	wmi_wlm_config_cmd_fixed_param *cmd;
+	wmi_buf_t buf;
+	uint32_t len = sizeof(*cmd);
+	static uint32_t ll[4] = {100, 60, 40, 20};
+
+	buf = wmi_buf_alloc(wmi_handle, len);
+	if (!buf) {
+		WMI_LOGP("%s: wmi_buf_alloc failed", __func__);
+		return QDF_STATUS_E_NOMEM;
+	}
+	cmd = (wmi_wlm_config_cmd_fixed_param *)wmi_buf_data(buf);
+	WMITLV_SET_HDR(&cmd->tlv_header,
+		       WMITLV_TAG_STRUC_wmi_wlm_config_cmd_fixed_param,
+		       WMITLV_GET_STRUCT_TLVLEN
+		       (wmi_wlm_config_cmd_fixed_param));
+	cmd->vdev_id = params->vdev_id;
+	cmd->latency_level = params->wlm_latency_level;
+	cmd->ul_latency = ll[params->wlm_latency_level];
+	cmd->dl_latency = ll[params->wlm_latency_level];
+	cmd->flags = params->wlm_latency_flags;
+	if (wmi_unified_cmd_send(wmi_handle, buf, len,
+				 WMI_WLM_CONFIG_CMDID)) {
+		WMI_LOGE("%s: Failed to send setting latency config command",
+			 __func__);
+		wmi_buf_free(buf);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	return 0;
+}
 /**
  * send_nat_keepalive_en_cmd_tlv() - enable NAT keepalive filter
  * @wmi_handle: wmi handle
@@ -10123,99 +10156,6 @@ QDF_STATUS send_update_tdls_peer_state_cmd_tlv(wmi_unified_t wmi_handle,
 	}
 
 
-	return QDF_STATUS_SUCCESS;
-}
-
-/*
- * send_process_fw_mem_dump_cmd_tlv() - Function to request fw memory dump from
- * firmware
- * @wmi_handle:         Pointer to wmi handle
- * @mem_dump_req:       Pointer for mem_dump_req
- *
- * This function sends memory dump request to firmware
- *
- * Return: QDF_STATUS_SUCCESS for success otherwise failure
- *
- */
-QDF_STATUS send_process_fw_mem_dump_cmd_tlv(wmi_unified_t wmi_handle,
-					struct fw_dump_req_param *mem_dump_req)
-{
-	wmi_get_fw_mem_dump_fixed_param *cmd;
-	wmi_fw_mem_dump *dump_params;
-	struct wmi_fw_dump_seg_req *seg_req;
-	int32_t len;
-	wmi_buf_t buf;
-	u_int8_t *buf_ptr;
-	int ret, loop;
-
-	/*
-	 * len = sizeof(fixed param) that includes tlv header +
-	 *       tlv header for array of struc +
-	 *       sizeof (each struct)
-	 */
-	len = sizeof(*cmd) + WMI_TLV_HDR_SIZE;
-	len += mem_dump_req->num_seg * sizeof(wmi_fw_mem_dump);
-	buf = wmi_buf_alloc(wmi_handle, len);
-
-	if (!buf) {
-		WMI_LOGE(FL("Failed allocate wmi buffer"));
-		return QDF_STATUS_E_NOMEM;
-	}
-
-	buf_ptr = (u_int8_t *) wmi_buf_data(buf);
-	qdf_mem_zero(buf_ptr, len);
-	cmd = (wmi_get_fw_mem_dump_fixed_param *) buf_ptr;
-
-	WMITLV_SET_HDR(&cmd->tlv_header,
-		WMITLV_TAG_STRUC_wmi_get_fw_mem_dump_fixed_param,
-		WMITLV_GET_STRUCT_TLVLEN(wmi_get_fw_mem_dump_fixed_param));
-
-	cmd->request_id = mem_dump_req->request_id;
-	cmd->num_fw_mem_dump_segs = mem_dump_req->num_seg;
-
-	/* TLV indicating array of structures to follow */
-	buf_ptr += sizeof(wmi_get_fw_mem_dump_fixed_param);
-	WMITLV_SET_HDR(buf_ptr, WMITLV_TAG_ARRAY_STRUC,
-		       sizeof(wmi_fw_mem_dump) *
-		       cmd->num_fw_mem_dump_segs);
-
-	buf_ptr += WMI_TLV_HDR_SIZE;
-	dump_params = (wmi_fw_mem_dump *) buf_ptr;
-
-	WMI_LOGI(FL("request_id:%d num_seg:%d"),
-		    mem_dump_req->request_id, mem_dump_req->num_seg);
-	for (loop = 0; loop < cmd->num_fw_mem_dump_segs; loop++) {
-		seg_req = (struct wmi_fw_dump_seg_req *)
-			  ((uint8_t *)(mem_dump_req->segment) +
-			    loop * sizeof(*seg_req));
-		WMITLV_SET_HDR(&dump_params->tlv_header,
-			    WMITLV_TAG_STRUC_wmi_fw_mem_dump_params,
-			    WMITLV_GET_STRUCT_TLVLEN(wmi_fw_mem_dump));
-		dump_params->seg_id = seg_req->seg_id;
-		dump_params->seg_start_addr_lo = seg_req->seg_start_addr_lo;
-		dump_params->seg_start_addr_hi = seg_req->seg_start_addr_hi;
-		dump_params->seg_length = seg_req->seg_length;
-		dump_params->dest_addr_lo = seg_req->dst_addr_lo;
-		dump_params->dest_addr_hi = seg_req->dst_addr_hi;
-		WMI_LOGI(FL("seg_number:%d"), loop);
-		WMI_LOGI(FL("seg_id:%d start_addr_lo:0x%x start_addr_hi:0x%x"),
-			 dump_params->seg_id, dump_params->seg_start_addr_lo,
-			 dump_params->seg_start_addr_hi);
-		WMI_LOGI(FL("seg_length:%d dst_addr_lo:0x%x dst_addr_hi:0x%x"),
-			 dump_params->seg_length, dump_params->dest_addr_lo,
-			 dump_params->dest_addr_hi);
-		dump_params++;
-	}
-
-	ret = wmi_unified_cmd_send(wmi_handle, buf, len,
-				   WMI_GET_FW_MEM_DUMP_CMDID);
-	if (ret) {
-		WMI_LOGE(FL("Failed to send get firmware mem dump request"));
-		wmi_buf_free(buf);
-		return QDF_STATUS_E_FAILURE;
-	}
-
-	WMI_LOGI(FL("Get firmware mem dump request sent successfully"));
 	return QDF_STATUS_SUCCESS;
 }
 
@@ -14535,6 +14475,7 @@ struct wmi_ops tlv_ops =  {
 	.send_wow_sta_ra_filter_cmd = send_wow_sta_ra_filter_cmd_tlv,
 #endif
 	.send_nat_keepalive_en_cmd = send_nat_keepalive_en_cmd_tlv,
+	.send_wlm_latency_level_cmd = send_wlm_latency_level_cmd_tlv,
 	.send_start_oem_data_cmd = send_start_oem_data_cmd_tlv,
 	.send_dfs_phyerr_filter_offload_en_cmd =
 		 send_dfs_phyerr_filter_offload_en_cmd_tlv,
@@ -14574,7 +14515,6 @@ struct wmi_ops tlv_ops =  {
 	.send_set_tdls_offchan_mode_cmd = send_set_tdls_offchan_mode_cmd_tlv,
 	.send_update_fw_tdls_state_cmd = send_update_fw_tdls_state_cmd_tlv,
 	.send_update_tdls_peer_state_cmd = send_update_tdls_peer_state_cmd_tlv,
-	.send_process_fw_mem_dump_cmd = send_process_fw_mem_dump_cmd_tlv,
 	.send_process_set_ie_info_cmd = send_process_set_ie_info_cmd_tlv,
 #ifdef CONFIG_MCL
 	.send_init_cmd = send_init_cmd_tlv,
@@ -14896,8 +14836,6 @@ static void populate_tlv_events_id(uint32_t *event_ids)
 	event_ids[wmi_iface_link_stats_event_id] = WMI_IFACE_LINK_STATS_EVENTID;
 	event_ids[wmi_peer_link_stats_event_id] = WMI_PEER_LINK_STATS_EVENTID;
 	event_ids[wmi_radio_link_stats_link] = WMI_RADIO_LINK_STATS_EVENTID;
-	event_ids[wmi_update_fw_mem_dump_event_id] =
-				WMI_UPDATE_FW_MEM_DUMP_EVENTID;
 	event_ids[wmi_diag_event_id_log_supported_event_id] =
 				WMI_DIAG_EVENT_LOG_SUPPORTED_EVENTID;
 	event_ids[wmi_nlo_match_event_id] = WMI_NLO_MATCH_EVENTID;

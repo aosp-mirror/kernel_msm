@@ -215,6 +215,7 @@
 /* Public Action for 20/40 BSS Coexistence */
 #define SIR_MAC_ACTION_2040_BSS_COEXISTENCE     0
 #define SIR_MAC_ACTION_EXT_CHANNEL_SWITCH_ID    4
+#define SIR_MAC_ACTION_MEASUREMENT_PILOT        7
 
 
 #ifdef WLAN_FEATURE_11W
@@ -457,6 +458,9 @@
 
 #define SIR_MAC_CISCO_OUI "\x00\x40\x96"
 #define SIR_MAC_CISCO_OUI_SIZE 3
+
+#define SIR_MAC_QCN_OUI_TYPE   "\x8c\xfd\xf0\x01"
+#define SIR_MAC_QCN_OUI_TYPE_SIZE  4
 
 /* min size of wme oui header: oui(3) + type + subtype + version */
 #define SIR_MAC_OUI_WME_HDR_MIN       6

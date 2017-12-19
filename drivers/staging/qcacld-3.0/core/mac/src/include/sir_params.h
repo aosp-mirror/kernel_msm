@@ -45,6 +45,20 @@
 #define WAKELOCK_DURATION_RECOMMENDED	1000
 #define WAKELOCK_DURATION_MAX		3000
 
+
+#define SYSTEM_TIME_MSEC_TO_USEC      1000
+#define SYSTEM_TIME_SEC_TO_MSEC       1000
+#define SYSTEM_TIME_NSEC_TO_USEC      1000
+
+/*
+ * Following time is used to program WOW_TIMER_PATTERN to FW so that FW will
+ * wake host up to do graceful disconnect in case PEER remains un-authorized
+ * for this long.
+ */
+#define SIR_INSTALL_KEY_TIMEOUT_SEC      70
+#define SIR_INSTALL_KEY_TIMEOUT_MS       \
+			(SIR_INSTALL_KEY_TIMEOUT_SEC * SYSTEM_TIME_SEC_TO_MSEC)
+
 /* defines for WPS config states */
 #define       SAP_WPS_DISABLED             0
 #define       SAP_WPS_ENABLED_UNCONFIGURED 1
@@ -683,6 +697,8 @@ typedef struct sSirMbMsgP2p {
 
 #define SIR_HAL_SET_DEL_PMKID_CACHE         (SIR_HAL_ITC_MSG_TYPES_BEGIN + 389)
 #define SIR_HAL_HLP_IE_INFO                 (SIR_HAL_ITC_MSG_TYPES_BEGIN + 390)
+#define SIR_HAL_NDP_SCH_UPDATE_IND          (SIR_HAL_ITC_MSG_TYPES_BEGIN + 391)
+
 #define SIR_HAL_MSG_TYPES_END               (SIR_HAL_MSG_TYPES_BEGIN + 0x1FF)
 /* CFG message types */
 #define SIR_CFG_MSG_TYPES_BEGIN        (SIR_CFG_MODULE_ID << 8)

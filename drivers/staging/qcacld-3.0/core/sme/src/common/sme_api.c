@@ -690,8 +690,9 @@ tListElem *csr_get_cmd_to_process(tpAniSirGlobal pMac, tDblLinkList *pList,
 	pCurEntry = csr_ll_peek_head(pList, LL_ACCESS_LOCK);
 	while (pCurEntry) {
 		pCommand = GET_BASE_ADDR(pCurEntry, tSmeCmd, Link);
-		if (pCommand->sessionId != sessionId) {
-			sme_debug("selected the command with different sessionId");
+		if (pCommand->sessionId != sessionId ||
+		    pCommand->command ==  eSmeCommandSetKey) {
+			sme_debug("selected the command with different sessionId or setkey");
 			return pCurEntry;
 		}
 
@@ -2998,6 +2999,7 @@ QDF_STATUS sme_process_msg(tHalHandle hHal, cds_msg_t *pMsg)
 	case eWNI_SME_NDP_END_RSP:
 	case eWNI_SME_NDP_END_IND:
 	case eWNI_SME_NDP_PEER_DEPARTED_IND:
+	case eWNI_SME_NDP_SCH_UPDATE_IND:
 		sme_ndp_msg_processor(pMac, pMsg);
 		break;
 	case eWNI_SME_LOST_LINK_INFO_IND:
@@ -6132,6 +6134,53 @@ QDF_STATUS sme_close_session(tHalHandle hHal, uint8_t sessionId,
 	return status;
 }
 
+void sme_print_commands(tHalHandle hal_handle)
+{
+	QDF_STATUS status;
+	tpAniSirGlobal pMac = PMAC_STRUCT(hal_handle);
+	tListElem *entry;
+	tSmeCmd *command;
+
+	status = sme_acquire_global_lock(&pMac->sme);
+	if (QDF_IS_STATUS_SUCCESS(status)) {
+		sme_err("Active sme commands:");
+		csr_ll_lock(&pMac->sme.smeCmdActiveList);
+		if (!csr_ll_is_list_empty(&pMac->sme.smeCmdActiveList,
+		    LL_ACCESS_NOLOCK)) {
+			entry = csr_ll_peek_head(&pMac->sme.smeCmdActiveList,
+						 false);
+			while (entry) {
+				command = GET_BASE_ADDR(entry, tSmeCmd, Link);
+				dump_csr_command_info(pMac, command);
+				entry = csr_ll_next(&pMac->sme.smeCmdActiveList,
+						    entry, LL_ACCESS_NOLOCK);
+			}
+		}
+		csr_ll_unlock(&pMac->sme.smeCmdActiveList);
+		sme_err("Pending sme commands:");
+		csr_ll_lock(&pMac->sme.smeCmdPendingList);
+		if (!csr_ll_is_list_empty(&pMac->sme.smeCmdPendingList,
+		    LL_ACCESS_NOLOCK)) {
+			entry = csr_ll_peek_head(&pMac->sme.smeCmdPendingList,
+						 false);
+			while (entry) {
+				command = GET_BASE_ADDR(entry, tSmeCmd, Link);
+				dump_csr_command_info(pMac, command);
+				entry = csr_ll_next(&pMac->sme.
+						    smeCmdPendingList,
+						    entry, LL_ACCESS_NOLOCK);
+			}
+		}
+		csr_ll_unlock(&pMac->sme.smeCmdPendingList);
+		sme_err("active scan commands:%d pending scan commands:%d",
+			csr_ll_count(&pMac->sme.smeScanCmdActiveList),
+			csr_ll_count(&pMac->sme.smeScanCmdPendingList));
+
+		sme_release_global_lock(&pMac->sme);
+	}
+
+}
+
 /**
  * sme_roam_update_apwpsie() - To update AP's WPS IE. This function should be
  * called after SME AP session is created
@@ -7517,11 +7566,35 @@ QDF_STATUS sme_get_cfg_valid_channels(tHalHandle hHal, uint8_t *aValidChannels,
 	return status;
 }
 
+static uint8_t *sme_hint_to_str(enum country_src src)
+{
+
+	switch (src) {
+	case SOURCE_CORE:
+		return "WORLD MODE";
+
+	case SOURCE_DRIVER:
+		return "BDF file";
+
+	case SOURCE_USERSPACE:
+		return "user-space";
+
+	case SOURCE_11D:
+		return "80211D IEs in beacons";
+
+	default:
+		return "unknown";
+	}
+}
+
 void sme_set_cc_src(tHalHandle hHal, enum country_src cc_src)
 {
 	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hHal);
 
 	mac_ctx->reg_hint_src = cc_src;
+
+	sme_debug("Country source is %s",
+		  sme_hint_to_str(cc_src));
 }
 
 /*
@@ -8069,7 +8142,8 @@ bool sme_is_channel_valid(tHalHandle hHal, uint8_t channel)
  *
  * Return QDF_STATUS
  */
-QDF_STATUS sme_set_freq_band(tHalHandle hHal, uint8_t sessionId, eCsrBand eBand)
+QDF_STATUS sme_set_freq_band(tHalHandle hHal, uint8_t sessionId,
+			     tSirRFBand eBand)
 {
 	QDF_STATUS status = QDF_STATUS_E_FAILURE;
 	tpAniSirGlobal pMac = PMAC_STRUCT(hHal);
@@ -8090,7 +8164,7 @@ QDF_STATUS sme_set_freq_band(tHalHandle hHal, uint8_t sessionId, eCsrBand eBand)
  *
  * Return QDF_STATUS
  */
-QDF_STATUS sme_get_freq_band(tHalHandle hHal, eCsrBand *pBand)
+QDF_STATUS sme_get_freq_band(tHalHandle hHal, tSirRFBand *pBand)
 {
 	QDF_STATUS status = QDF_STATUS_E_FAILURE;
 	tpAniSirGlobal pMac = PMAC_STRUCT(hHal);
@@ -8113,7 +8187,7 @@ QDF_STATUS sme_get_freq_band(tHalHandle hHal, eCsrBand *pBand)
  *
  * Return QDF_STATUS
  */
-QDF_STATUS sme_set_max_tx_power_per_band(eCsrBand band, int8_t dB)
+QDF_STATUS sme_set_max_tx_power_per_band(tSirRFBand band, int8_t dB)
 {
 	cds_msg_t msg;
 	tpMaxTxPowerPerBandParams pMaxTxPowerPerBandParams = NULL;
@@ -11485,6 +11559,35 @@ QDF_STATUS sme_send_cesium_enable_ind(tHalHandle hHal, uint32_t sessionId)
 		}
 		sme_release_global_lock(&pMac->sme);
 	}
+
+	return status;
+}
+
+QDF_STATUS sme_set_wlm_latency_level(tHalHandle hal, uint16_t session_id,
+				     uint16_t latency_level)
+{
+	QDF_STATUS status;
+	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal);
+	struct wlm_latency_level_param params;
+	void *wma = cds_get_context(QDF_MODULE_ID_WMA);
+
+	if (!mac_ctx->roam.configParam.wlm_latency_enable) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+			  "%s: WLM latency level setting is disabled",
+			   __func__);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	params.wlm_latency_level = latency_level;
+	params.wlm_latency_flags =
+		mac_ctx->roam.configParam.wlm_latency_flags[latency_level];
+	params.vdev_id = session_id;
+
+	status = wma_set_wlm_latency_level(wma, &params);
+	if (!QDF_IS_STATUS_SUCCESS(status))
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+			  "%s: failed to set latency level",
+			  __func__);
 
 	return status;
 }
@@ -16964,12 +17067,12 @@ void sme_set_pdev_ht_vht_ies(tHalHandle hal, bool enable2x2)
  * Return: None
  */
 void sme_update_vdev_type_nss(tHalHandle hal, uint8_t max_supp_nss,
-		uint32_t vdev_type_nss, eCsrBand band)
+		uint32_t vdev_type_nss, tSirRFBand band)
 {
 	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal);
 	struct vdev_type_nss *vdev_nss;
 
-	if (eCSR_BAND_5G == band)
+	if (SIR_BAND_5_GHZ == band)
 		vdev_nss = &mac_ctx->vdev_type_nss_5g;
 	else
 		vdev_nss = &mac_ctx->vdev_type_nss_2g;
@@ -18819,3 +18922,71 @@ QDF_STATUS sme_destroy_config(tHalHandle hal)
 
 	return status;
 }
+
+QDF_STATUS sme_fast_reassoc(tHalHandle hal, tCsrRoamProfile *profile,
+			    const tSirMacAddr bssid, int channel,
+			    uint8_t vdev_id, const tSirMacAddr connected_bssid)
+{
+	QDF_STATUS status;
+	struct wma_roam_invoke_cmd *fastreassoc;
+	cds_msg_t msg = {0};
+	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal);
+
+	fastreassoc = qdf_mem_malloc(sizeof(*fastreassoc));
+	if (NULL == fastreassoc) {
+		sme_err("qdf_mem_malloc failed for fastreassoc");
+		return QDF_STATUS_E_NOMEM;
+	}
+	/* if both are same then set the flag */
+	if (!qdf_mem_cmp(connected_bssid, bssid, ETH_ALEN)) {
+		fastreassoc->is_same_bssid = true;
+		sme_debug("bssid same, bssid[%pM]", bssid);
+	}
+	fastreassoc->vdev_id = vdev_id;
+	fastreassoc->bssid[0] = bssid[0];
+	fastreassoc->bssid[1] = bssid[1];
+	fastreassoc->bssid[2] = bssid[2];
+	fastreassoc->bssid[3] = bssid[3];
+	fastreassoc->bssid[4] = bssid[4];
+	fastreassoc->bssid[5] = bssid[5];
+
+	status = sme_get_beacon_frm(hal, profile, bssid,
+				    &fastreassoc->frame_buf,
+				    &fastreassoc->frame_len,
+				    &channel);
+
+	if (!channel) {
+		sme_err("channel retrieval from BSS desc fails!");
+		qdf_mem_free(fastreassoc);
+		return QDF_STATUS_E_FAULT;
+	}
+
+	fastreassoc->channel = channel;
+	if (QDF_STATUS_SUCCESS != status) {
+		sme_warn("sme_get_beacon_frm failed");
+		fastreassoc->frame_buf = NULL;
+		fastreassoc->frame_len = 0;
+	}
+
+	if (csr_is_auth_type_ese(mac_ctx->roam.roamSession[vdev_id].
+				connectedProfile.AuthType)) {
+		sme_debug("Beacon is not required for ESE");
+		if (fastreassoc->frame_len) {
+			qdf_mem_free(fastreassoc->frame_buf);
+			fastreassoc->frame_buf = NULL;
+			fastreassoc->frame_len = 0;
+		}
+	}
+
+	msg.type = SIR_HAL_ROAM_INVOKE;
+	msg.reserved = 0;
+	msg.bodyptr = fastreassoc;
+	status = cds_mq_post_message(QDF_MODULE_ID_WMA, &msg);
+	if (QDF_STATUS_SUCCESS != status) {
+		sme_err("Not able to post ROAM_INVOKE_CMD message to WMA");
+		qdf_mem_free(fastreassoc);
+	}
+
+	return status;
+}
+

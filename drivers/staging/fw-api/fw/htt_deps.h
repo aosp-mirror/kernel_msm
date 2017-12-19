@@ -1,8 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
- *
- * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
- *
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -25,25 +22,21 @@
  * to the Linux Foundation.
  */
 
-#ifndef QWLAN_VERSION_H
-#define QWLAN_VERSION_H
-/*===========================================================================
+/**
+ * @file htt_deps.h
+ *
+ * @details list other header files that contain the defs for data types,
+ *      constants, and compiler pragmas used in the HTT header files
+ */
 
-   FILE:
-   qwlan_version.h
+#ifndef _HTT_DEPS_H_
+#define _HTT_DEPS_H_
 
-   BRIEF DESCRIPTION:
-   WLAN Host Version file.
-   Build number automaticly updated by build scripts.
+#include <a_types.h>    /* A_UINT32 */
+#include <a_osapi.h>    /* PREPACK, POSTPACK */
+#ifdef ATHR_WIN_NWF
+#pragma warning(disable:4214) /* bit field types other than int */
+#endif
+#include "wlan_defs.h"
 
-   ===========================================================================*/
-
-#define QWLAN_VERSION_MAJOR            5
-#define QWLAN_VERSION_MINOR            1
-#define QWLAN_VERSION_PATCH            1
-#define QWLAN_VERSION_EXTRA            "W"
-#define QWLAN_VERSION_BUILD            41
-
-#define QWLAN_VERSIONSTR               "5.1.1.41W"
-
-#endif /* QWLAN_VERSION_H */
+#endif /* _HTT_DEPS_H_ */

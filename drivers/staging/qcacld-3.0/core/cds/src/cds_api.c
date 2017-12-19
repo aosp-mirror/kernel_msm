@@ -139,6 +139,7 @@ v_CONTEXT_t cds_init(void)
 	qdf_lock_stats_init();
 	qdf_mem_init();
 	qdf_mc_timer_manager_init();
+	qdf_event_list_init();
 
 	gp_cds_context = &g_cds_context;
 
@@ -188,6 +189,7 @@ void cds_deinit(void)
 	qdf_mem_exit();
 	qdf_lock_stats_deinit();
 	qdf_debugfs_exit();
+	qdf_event_list_destroy();
 
 	gp_cds_context->qdf_ctx = NULL;
 	gp_cds_context = NULL;
@@ -421,9 +423,10 @@ QDF_STATUS cds_open(void)
 		status = QDF_STATUS_E_FAILURE;
 		goto err_sched_close;
 	}
-	hdd_enable_fastpath(pHddCtx->config, scn);
-	hdd_wlan_update_target_info(pHddCtx, scn);
 
+	hdd_enable_fastpath(pHddCtx->config, scn);
+
+	/* Initialize BMI and Download firmware */
 	ol_ctx = cds_get_context(QDF_MODULE_ID_BMI);
 	/* Initialize BMI and Download firmware */
 	status = bmi_download_firmware(ol_ctx);
@@ -432,6 +435,9 @@ QDF_STATUS cds_open(void)
 			  "BMI FIALED status:%d", status);
 		goto err_bmi_close;
 	}
+
+	hdd_wlan_update_target_info(pHddCtx, scn);
+
 	htcInfo.pContext = ol_ctx;
 	htcInfo.TargetFailure = ol_target_failure;
 	htcInfo.TargetSendSuspendComplete = wma_target_suspend_acknowledge;
@@ -651,8 +657,9 @@ QDF_STATUS cds_pre_enable(v_CONTEXT_t cds_context)
 	}
 
 	/* Need to update time out of complete */
-	qdf_status = qdf_wait_single_event(&gp_cds_context->wmaCompleteEvent,
-					   CDS_WMA_TIMEOUT);
+	qdf_status = qdf_wait_for_event_completion(
+					&gp_cds_context->wmaCompleteEvent,
+					CDS_WMA_TIMEOUT);
 	if (qdf_status != QDF_STATUS_SUCCESS) {
 		if (qdf_status == QDF_STATUS_E_TIMEOUT) {
 			QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_ERROR,
@@ -806,8 +813,9 @@ err_wma_stop:
 		wma_setneedshutdown(cds_context);
 	} else {
 		qdf_status =
-			qdf_wait_single_event(&(gp_cds_context->wmaCompleteEvent),
-					      CDS_WMA_TIMEOUT);
+			qdf_wait_for_event_completion(
+					&gp_cds_context->wmaCompleteEvent,
+					CDS_WMA_TIMEOUT);
 		if (qdf_status != QDF_STATUS_SUCCESS) {
 			if (qdf_status == QDF_STATUS_E_TIMEOUT) {
 				QDF_TRACE(QDF_MODULE_ID_QDF,
@@ -852,17 +860,8 @@ QDF_STATUS cds_disable(v_CONTEXT_t cds_context)
 		cds_err("Invalid PE context return!");
 		return QDF_STATUS_E_INVAL;
 	}
-	qdf_status = sme_stop(handle, HAL_STOP_TYPE_SYS_DEEP_SLEEP);
-	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
-		cds_err("Failed to stop SME: %d", qdf_status);
-		QDF_ASSERT(QDF_IS_STATUS_SUCCESS(qdf_status));
-	}
-	qdf_status = mac_stop(handle, HAL_STOP_TYPE_SYS_DEEP_SLEEP);
 
-	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
-		cds_err("Failed to stop MAC");
-		QDF_ASSERT(QDF_IS_STATUS_SUCCESS(qdf_status));
-	}
+	umac_stop(cds_context);
 
 	return qdf_status;
 }
@@ -952,6 +951,11 @@ QDF_STATUS cds_post_disable(void)
 QDF_STATUS cds_close(v_CONTEXT_t cds_context)
 {
 	QDF_STATUS qdf_status;
+
+	qdf_status = cds_sched_close(cds_context);
+	QDF_ASSERT(QDF_IS_STATUS_SUCCESS(qdf_status));
+	if (QDF_IS_STATUS_ERROR(qdf_status))
+		cds_err("Failed to close CDS Scheduler");
 
 	qdf_status = wma_wmi_work_close(cds_context);
 	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
@@ -1840,7 +1844,7 @@ static QDF_STATUS cds_force_assert_target(qdf_device_t qdf_ctx)
 	}
 
 	/* wait for firmware assert to trigger a recovery event */
-	status = qdf_wait_single_event(&wma->recovery_event,
+	status = qdf_wait_for_event_completion(&wma->recovery_event,
 				       WMA_CRASH_INJECT_TIMEOUT);
 	if (QDF_IS_STATUS_ERROR(status)) {
 		cds_err("Failed target force assert wait; status:%d", status);

@@ -2550,8 +2550,208 @@ enum hdd_dot11_mode {
 #define CFG_IBSS_PS_1RX_CHAIN_IN_ATIM_WINDOW_MAX     (1)
 #define CFG_IBSS_PS_1RX_CHAIN_IN_ATIM_WINDOW_DEFAULT (0)
 
+/*
+ * <ini>
+ * wlm_latency_enable - WLM latency Enable
+ *
+ * @min: 0
+ * @max: 1
+ * @default: 0
+ *
+ * 0 - disable
+ * 1 - enable
+ *
+ * </ini>
+ */
+#define CFG_LATENCY_ENABLE_NAME    "wlm_latency_enable"
+#define CFG_LATENCY_ENABLE_MIN     (0)
+#define CFG_LATENCY_ENABLE_MAX     (1)
+#define CFG_LATENCY_ENABLE_DEFAULT (0)
 
+/*
+ * <ini>
+ * wlm_latency_level - WLM latency level
+ * Define 4 latency level to gain latency
+ *
+ * @min: 0
+ * @max: 3
+ * @defalut: 0
+ *
+ * 0 - normal
+ * 1 - moderate
+ * 2 - low
+ * 3 - ultralow
+ *
+ * </ini>
+ */
+#define CFG_LATENCY_LEVEL_NAME    "wlm_latency_level"
+#define CFG_LATENCY_LEVEL_MIN     (0)
+#define CFG_LATENCY_LEVEL_MAX     (3)
+#define CFG_LATENCY_LEVEL_DEFAULT (0)
 
+/*
+ * <ini>
+ * wlm_latency_flags_normal - WLM flags setting for normal level
+ *
+ * @min: 0x0
+ * @max: 0xffffffff
+ * @defalut: 0x0
+ *
+ * |31  12|  11  |  10  |9    8|7    6|5    4|3    2|  1  |  0  |
+ * +------+------+------+------+------+------+------+-----+-----+
+ * | RSVD | SSLP | CSLP | RSVD | Roam | RSVD | DWLT | DFS | SUP |
+ * +------+-------------+-------------+-------------------------+
+ * |  WAL |      PS     |     Roam    |         Scan            |
+ *
+ * bit 0: Avoid scan request from HLOS if setting
+ * bit 1: Skip DFS channel SCAN if setting
+ * bit 2-3: Define policy of dwell time/duration for each foreign channel
+ *     (b2 b3)
+ *     (0  0 ): Default scan dwell time
+ *     (0  1 ): Reserve
+ *     (1  0 ): Shrink off channel dwell time
+ *     (1  1 ): Reserve
+ * bit 4-5: Reserve for scan
+ * bit 6-7: Define roaming policy
+ *     (b6 b7)
+ *     (0  0 ): Default roaming behavior, allow roaming in all scenarios
+ *     (0  1 ): Disallow all roaming
+ *     (1  0 ): Allow roaming when final bmissed
+ *     (1  1 ): Reserve
+ * bit 8-9: Reserve for roaming
+ * bit 10: Disable css power collapse if setting
+ * bit 11: Disable sys sleep if setting
+ * bit 12-31: Reserve for future useage
+ *
+ * </ini>
+ */
+#define CFG_LATENCY_FLAGS_NORMAL_NAME    "wlm_latency_flags_normal"
+#define CFG_LATENCY_FLAGS_NORMAL_MIN     (0x0)
+#define CFG_LATENCY_FLAGS_NORMAL_MAX     (0xffffffff)
+#define CFG_LATENCY_FLAGS_NORMAL_DEFAULT (0x0)
+
+/*
+ * <ini>
+ * wlm_latency_flags_moderate - WLM flags setting for moderate level
+ *
+ * @min: 0x0
+ * @max: 0xffffffff
+ * @defalut: 0x8
+ *
+ * |31  12|  11  |  10  |9    8|7    6|5    4|3    2|  1  |  0  |
+ * +------+------+------+------+------+------+------+-----+-----+
+ * | RSVD | SSLP | CSLP | RSVD | Roam | RSVD | DWLT | DFS | SUP |
+ * +------+-------------+-------------+-------------------------+
+ * |  WAL |      PS     |     Roam    |         Scan            |
+ *
+ * bit 0: Avoid scan request from HLOS if setting
+ * bit 1: Skip DFS channel SCAN if setting
+ * bit 2-3: Define policy of dwell time/duration for each foreign channel
+ *     (b2 b3)
+ *     (0  0 ): Default scan dwell time
+ *     (0  1 ): Reserve
+ *     (1  0 ): Shrink off channel dwell time
+ *     (1  1 ): Reserve
+ * bit 4-5: Reserve for scan
+ * bit 6-7: Define roaming policy
+ *     (b6 b7)
+ *     (0  0 ): Default roaming behavior, allow roaming in all scenarios
+ *     (0  1 ): Disallow all roaming
+ *     (1  0 ): Allow roaming when final bmissed
+ *     (1  1 ): Reserve
+ * bit 8-9: Reserve for roaming
+ * bit 10: Disable css power collapse if setting
+ * bit 11: Disable sys sleep if setting
+ * bit 12-31: Reserve for future useage
+ *
+ * </ini>
+ */
+#define CFG_LATENCY_FLAGS_MODERATE_NAME    "wlm_latency_flags_moderate"
+#define CFG_LATENCY_FLAGS_MODERATE_MIN     (0x0)
+#define CFG_LATENCY_FLAGS_MODERATE_MAX     (0xffffffff)
+#define CFG_LATENCY_FLAGS_MODERATE_DEFAULT (0x8)
+
+/*
+ * <ini>
+ * wlm_latency_flags_low - WLM flags setting for low level
+ *
+ * @min: 0x0
+ * @max: 0xffffffff
+ * @defalut: 0xa
+ *
+ * |31  12|  11  |  10  |9    8|7    6|5    4|3    2|  1  |  0  |
+ * +------+------+------+------+------+------+------+-----+-----+
+ * | RSVD | SSLP | CSLP | RSVD | Roam | RSVD | DWLT | DFS | SUP |
+ * +------+-------------+-------------+-------------------------+
+ * |  WAL |      PS     |     Roam    |         Scan            |
+ *
+ * bit 0: Avoid scan request from HLOS if setting
+ * bit 1: Skip DFS channel SCAN if setting
+ * bit 2-3: Define policy of dwell time/duration for each foreign channel
+ *     (b2 b3)
+ *     (0  0 ): Default scan dwell time
+ *     (0  1 ): Reserve
+ *     (1  0 ): Shrink off channel dwell time
+ *     (1  1 ): Reserve
+ * bit 4-5: Reserve for scan
+ * bit 6-7: Define roaming policy
+ *     (b6 b7)
+ *     (0  0 ): Default roaming behavior, allow roaming in all scenarios
+ *     (0  1 ): Disallow all roaming
+ *     (1  0 ): Allow roaming when final bmissed
+ *     (1  1 ): Reserve
+ * bit 8-9: Reserve for roaming
+ * bit 10: Disable css power collapse if setting
+ * bit 11: Disable sys sleep if setting
+ * bit 12-31: Reserve for future useage
+ *
+ * </ini>
+ */
+#define CFG_LATENCY_FLAGS_LOW_NAME    "wlm_latency_flags_low"
+#define CFG_LATENCY_FLAGS_LOW_MIN     (0x0)
+#define CFG_LATENCY_FLAGS_LOW_MAX     (0xffffffff)
+#define CFG_LATENCY_FLAGS_LOW_DEFAULT (0xa)
+
+/*
+ * <ini>
+ * wlm_latency_flags_ultralow - WLM flags setting for ultralow level
+ *
+ * @min: 0x0
+ * @max: 0xffffffff
+ * @defalut: 0xc8a
+ *
+ * |31  12|  11  |  10  |9    8|7    6|5    4|3    2|  1  |  0  |
+ * +------+------+------+------+------+------+------+-----+-----+
+ * | RSVD | SSLP | CSLP | RSVD | Roam | RSVD | DWLT | DFS | SUP |
+ * +------+-------------+-------------+-------------------------+
+ * |  WAL |      PS     |     Roam    |         Scan            |
+ *
+ * bit 0: Avoid scan request from HLOS if setting
+ * bit 1: Skip DFS channel SCAN if setting
+ * bit 2-3: Define policy of dwell time/duration for each foreign channel
+ *     (b2 b3)
+ *     (0  0 ): Default scan dwell time
+ *     (0  1 ): Reserve
+ *     (1  0 ): Shrink off channel dwell time
+ *     (1  1 ): Reserve
+ * bit 4-5: Reserve for scan
+ * bit 6-7: Define roaming policy
+ *     (b6 b7)
+ *     (0  0 ): Default roaming behavior, allow roaming in all scenarios
+ *     (0  1 ): Disallow all roaming
+ *     (1  0 ): Allow roaming when final bmissed
+ *     (1  1 ): Reserve
+ * bit 8-9: Reserve for roaming
+ * bit 10: Disable css power collapse if setting
+ * bit 11: Disable sys sleep if setting
+ * bit 12-31: Reserve for future useage
+ *
+ * </ini>
+ */
+#define CFG_LATENCY_FLAGS_ULTRALOW_NAME    "wlm_latency_flags_ultralow"
+#define CFG_LATENCY_FLAGS_ULTRALOW_MIN     (0x0)
+#define CFG_LATENCY_FLAGS_ULTRALOW_MAX     (0xffffffff)
+#define CFG_LATENCY_FLAGS_ULTRALOW_DEFAULT (0xc8a)
 
 #define CFG_INTF0_MAC_ADDR_NAME                  "Intf0MacAddress"
 #define CFG_INTF0_MAC_ADDR_MIN                   "000000000000"
@@ -5117,7 +5317,7 @@ enum hdd_link_speed_rpt_type {
  */
 
 #define CFG_VHT_ENABLE_1x1_TX_CHAINMASK         "gSetTxChainmask1x1"
-#define CFG_VHT_ENABLE_1x1_TX_CHAINMASK_MIN     (1)
+#define CFG_VHT_ENABLE_1x1_TX_CHAINMASK_MIN     (0)
 #define CFG_VHT_ENABLE_1x1_TX_CHAINMASK_MAX     (2)
 #define CFG_VHT_ENABLE_1x1_TX_CHAINMASK_DEFAULT (1)
 
@@ -5145,7 +5345,7 @@ enum hdd_link_speed_rpt_type {
  */
 
 #define CFG_VHT_ENABLE_1x1_RX_CHAINMASK         "gSetRxChainmask1x1"
-#define CFG_VHT_ENABLE_1x1_RX_CHAINMASK_MIN     (1)
+#define CFG_VHT_ENABLE_1x1_RX_CHAINMASK_MIN     (0)
 #define CFG_VHT_ENABLE_1x1_RX_CHAINMASK_MAX     (2)
 #define CFG_VHT_ENABLE_1x1_RX_CHAINMASK_DEFAULT (1)
 
@@ -6953,7 +7153,7 @@ enum hdd_link_speed_rpt_type {
 #define CFG_TDLS_SCAN_ENABLE                       "gEnableTDLSScan"
 #define CFG_TDLS_SCAN_ENABLE_MIN                   (0)
 #define CFG_TDLS_SCAN_ENABLE_MAX                   (1)
-#define CFG_TDLS_SCAN_ENABLE_DEFAULT               (0)
+#define CFG_TDLS_SCAN_ENABLE_DEFAULT               (1)
 
 /*
  * <ini>
@@ -8919,6 +9119,30 @@ enum dot11p_mode {
 #define CFG_DOT11P_MODE_DEFAULT          (WLAN_HDD_11P_DISABLED)
 #define CFG_DOT11P_MODE_MIN              (WLAN_HDD_11P_DISABLED)
 #define CFG_DOT11P_MODE_MAX              (WLAN_HDD_11P_CONCURRENT)
+
+/*
+ * <ini>
+ * etsi_srd_chan_in_master_mode - Enable/disable ETSI SRD channels in
+ * master mode PCL and ACS functionality
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * etsi_srd_chan_in_master_mode is to enable/disable ETSI SRD channels in
+ * master mode PCL and ACS functionality
+ *
+ * Related: None
+ *
+ * Supported Feature: SAP/P2P-GO
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+#define CFG_ETSI_SRD_CHAN_IN_MASTER_MODE    "etsi_srd_chan_in_master_mode"
+#define CFG_ETSI_SRD_CHAN_IN_MASTER_MODE_DEF (0)
+#define CFG_ETSI_SRD_CHAN_IN_MASTER_MODE_MIN (0)
+#define CFG_ETSI_SRD_CHAN_IN_MASTER_MODE_MAX (1)
 
 /*
  * <ini>
@@ -13263,7 +13487,7 @@ enum hw_filter_mode {
  *
  * @Min: 0
  * @Max: 1
- * @Default: 0
+ * @Default: 1
  *
  * This ini is used to enable/disable scoring logic in FW for candidate
  * selection during roaming.
@@ -13276,7 +13500,7 @@ enum hw_filter_mode {
  * </ini>
  */
 #define CFG_ENABLE_SCORING_FOR_ROAM_NAME     "enable_scoring_for_roam"
-#define CFG_ENABLE_SCORING_FOR_ROAM_DEFAULT  (0)
+#define CFG_ENABLE_SCORING_FOR_ROAM_DEFAULT  (1)
 #define CFG_ENABLE_SCORING_FOR_ROAM_MIN      (0)
 #define CFG_ENABLE_SCORING_FOR_ROAM_MAX      (1)
 
@@ -13470,6 +13694,216 @@ enum hw_filter_mode {
 #define CFG_ENABLE_ESP_FEATURE_MAX     (1)
 #define CFG_ENABLE_ESP_FEATURE_DEFAULT (0)
 
+
+/*
+ * <ini>
+ * tx_chain_mask_2g - tx chain mask for 2g
+ * @Min: 0
+ * @Max: 3
+ * @Default: 0
+ *
+ * This ini will set tx chain mask for 2g. To use the ini, make sure:
+ * gSetTxChainmask1x1/gSetRxChainmask1x1 = 0,
+ * gDualMacFeatureDisable = 1
+ * gEnable2x2 = 0
+ *
+ * tx_chain_mask_2g=0 : don't care
+ * tx_chain_mask_2g=1 : for 2g tx use chain 0
+ * tx_chain_mask_2g=2 : for 2g tx use chain 1
+ * tx_chain_mask_2g=3 : for 2g tx can use either chain
+ *
+ * Related: None
+ *
+ * Supported Feature: All profiles
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_TX_CHAIN_MASK_2G_NAME    "tx_chain_mask_2g"
+#define CFG_TX_CHAIN_MASK_2G_MIN     (0)
+#define CFG_TX_CHAIN_MASK_2G_MAX     (3)
+#define CFG_TX_CHAIN_MASK_2G_DEFAULT (0)
+
+
+/*
+ * <ini>
+ * tx_chain_mask_5g - tx chain mask for 5g
+ * @Min: 0
+ * @Max: 3
+ * @Default: 0
+ *
+ * This ini will set tx chain mask for 5g. To use the ini, make sure:
+ * gSetTxChainmask1x1/gSetRxChainmask1x1 = 0,
+ * gDualMacFeatureDisable = 1
+ * gEnable2x2 = 0
+ *
+ * tx_chain_mask_5g=0 : don't care
+ * tx_chain_mask_5g=1 : for 5g tx use chain 0
+ * tx_chain_mask_5g=2 : for 5g tx use chain 1
+ * tx_chain_mask_5g=3 : for 5g tx can use either chain
+ *
+ * Related: None
+ *
+ * Supported Feature: All profiles
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_TX_CHAIN_MASK_5G_NAME    "tx_chain_mask_5g"
+#define CFG_TX_CHAIN_MASK_5G_MIN     (0)
+#define CFG_TX_CHAIN_MASK_5G_MAX     (3)
+#define CFG_TX_CHAIN_MASK_5G_DEFAULT (0)
+
+
+/*
+ * <ini>
+ * rx_chain_mask_2g - rx chain mask for 2g
+ * @Min: 0
+ * @Max: 3
+ * @Default: 0
+ *
+ * This ini will set rx chain mask for 2g. To use the ini, make sure:
+ * gSetTxChainmask1x1/gSetRxChainmask1x1 = 0,
+ * gDualMacFeatureDisable = 1
+ * gEnable2x2 = 0
+ *
+ * rx_chain_mask_2g=0 : don't care
+ * rx_chain_mask_2g=1 : for 2g rx use chain 0
+ * rx_chain_mask_2g=2 : for 2g rx use chain 1
+ * rx_chain_mask_2g=3 : for 2g rx can use either chain
+ *
+ * Related: None
+ *
+ * Supported Feature: All profiles
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_RX_CHAIN_MASK_2G_NAME    "rx_chain_mask_2g"
+#define CFG_RX_CHAIN_MASK_2G_MIN     (0)
+#define CFG_RX_CHAIN_MASK_2G_MAX     (3)
+#define CFG_RX_CHAIN_MASK_2G_DEFAULT (0)
+
+
+/*
+ * <ini>
+ * rx_chain_mask_5g - rx chain mask for 5g
+ * @Min: 0
+ * @Max: 3
+ * @Default: 0
+ *
+ * This ini will set rx chain mask for 5g. To use the ini, make sure:
+ * gSetTxChainmask1x1/gSetRxChainmask1x1 = 0,
+ * gDualMacFeatureDisable = 1
+ * gEnable2x2 = 0
+ *
+ * rx_chain_mask_5g=0 : don't care
+ * rx_chain_mask_5g=1 : for 5g rx use chain 0
+ * rx_chain_mask_5g=2 : for 5g rx use chain 1
+ * rx_chain_mask_5g=3 : for 5g rx can use either chain
+ *
+ * Related: None
+ *
+ * Supported Feature: All profiles
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_RX_CHAIN_MASK_5G_NAME    "rx_chain_mask_5g"
+#define CFG_RX_CHAIN_MASK_5G_MIN     (0)
+#define CFG_RX_CHAIN_MASK_5G_MAX     (3)
+#define CFG_RX_CHAIN_MASK_5G_DEFAULT (0)
+
+/*
+ * <ini>
+ * enable_mac_provision - Enable/disable MAC address provisioning feature
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to enable/disable MAC address provisioning feature
+ *
+ * Supported Feature: STA/SAP/P2P
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ENABLE_MAC_PROVISION_NAME    "enable_mac_provision"
+#define CFG_ENABLE_MAC_PROVISION_MIN     (0)
+#define CFG_ENABLE_MAC_PROVISION_MAX     (1)
+#define CFG_ENABLE_MAC_PROVISION_DEFAULT (0)
+
+/*
+ * <ini>
+ * provisioned_intf_pool - It is bit mask value of Interfaces
+ * @Min: 0
+ * @Max: 0xffffffff
+ * @Default: 0xffffffff
+ *
+ * This ini will contain the bitmask of all the interfaces
+ * which can use addresses from provisioned list. Using enum tQDF_ADAPTER_MODE
+ * for deciding the bit positions corresponding to each interface.
+ * Bit 0 : QDF_STA_MODE
+ * Bit 1 : QDF_SAP_MODE
+ * Bit 2 : QDF_P2P_CLIENT_MODE
+ * Bit 3 : QDF_P2P_GO_MODE
+ * Bit 4 : QDF_FTM_MODE
+ * Bit 5 : QDF_IBSS_MODE
+ * Bit 6 : QDF_MONITOR_MODE
+ * Bit 7 : QDF_P2P_DEVICE_MODE
+ * Bit 8 : QDF_OCB_MODE
+ * Bit 9 : QDF_EPPING_MODE
+ * Bit 10 : QDF_QVIT_MODE
+ * Bit 11 : QDF_NDI_MODE
+ * Bit 12 : QDF_MAX_NO_OF_MODE
+ * For example :
+ * If Bit 0 represents STA
+ * Bit 1 represents SAP
+ * Bit 2 represents P2P_CLIENT_MODE
+ * If only STA and SAP can use addresses from provisioned list then the value
+ * of ini should be 0x3 (00000011) as Bit 0  and Bit 1 should be set.
+ * If only STA and P2P_CLIENT_MODE can use addresses from provisioned
+ * list then the value of ini should be 0x5 (00000101) as Bit 0 and Bit 2
+ * should be set.
+ * Similarly, for only SAP and P2P_CLIENT_MODE ini should be 0x6 (00000110)
+ *
+ * Supported Feature: STA/SAP/P2P
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_PROVISION_INTERFACE_POOL_NAME    "provisioned_intf_pool"
+#define CFG_PROVISION_INTERFACE_POOL_MIN     (0)
+#define CFG_PROVISION_INTERFACE_POOL_MAX     (0xffffffff)
+#define CFG_PROVISION_INTERFACE_POOL_DEFAULT (0xffffffff)
+/*
+ * <ini>
+ * deriveded_intf_pool - It is bit mask value of Interfaces
+ * @Min: 0
+ * @Max: 0xffffffff
+ * @Default: 0xffffffff
+ *
+ * This ini will contain the bitmask of all the interfaces
+ * which can use addresses from derived list
+ *
+ *
+ * Supported Feature: STA/SAP/P2P
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_DERIVED_INTERFACE_POOL_NAME    "derived_intf_pool"
+#define CFG_DERIVED_INTERFACE_POOL_MIN     (0)
+#define CFG_DERIVED_INTERFACE_POOL_MAX     (0xffffffff)
+#define CFG_DERIVED_INTERFACE_POOL_DEFAULT (0xffffffff)
+
 /*---------------------------------------------------------------------------
    Type declarations
    -------------------------------------------------------------------------*/
@@ -13511,7 +13945,6 @@ struct hdd_config {
 	uint32_t AdHocChannel5G;
 	uint32_t AdHocChannel24G;
 	uint8_t intfAddrMask;
-	struct qdf_mac_addr intfMacAddr[QDF_MAX_CONCURRENCY_PERSONA];
 
 	bool apUapsdEnabled;
 	bool apRandomBssidEnabled;
@@ -14086,6 +14519,7 @@ struct hdd_config {
 	bool fastpath_enable;
 #endif
 	uint8_t dot11p_mode;
+	bool etsi_srd_chan_in_master_mode;
 	uint8_t rx_mode;
 	uint32_t ce_service_max_yield_time;
 	uint8_t ce_service_max_rx_ind_flush;
@@ -14302,6 +14736,12 @@ struct hdd_config {
 	bool enable_11d_in_world_mode;
 	int8_t rssi_thresh_offset_5g;
 	bool is_fils_roaming_supported;
+	uint16_t wlm_latency_enable;
+	uint16_t wlm_latency_level;
+	uint32_t wlm_latency_flags_normal;
+	uint32_t wlm_latency_flags_moderate;
+	uint32_t wlm_latency_flags_low;
+	uint32_t wlm_latency_flags_ultralow;
 	bool enable_action_oui;
 	uint8_t action_oui_connect_1x1[MAX_ACTION_OUI_STRING_LEN];
 	uint8_t action_oui_ito_extension[MAX_ACTION_OUI_STRING_LEN];
@@ -14346,6 +14786,13 @@ struct hdd_config {
 	bool probe_req_deferral_enabled;
 	bool fils_discovery_sap_enabled;
 	bool esp_for_roam_enabled;
+	uint8_t tx_chain_mask_2g;
+	uint8_t rx_chain_mask_2g;
+	uint8_t tx_chain_mask_5g;
+	uint8_t rx_chain_mask_5g;
+	bool mac_provision;
+	uint32_t provisioned_intf_pool;
+	uint32_t derived_intf_pool;
 };
 
 #define VAR_OFFSET(_Struct, _Var) (offsetof(_Struct, _Var))

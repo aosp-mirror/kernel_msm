@@ -243,6 +243,11 @@ static const struct ieee80211_channel hdd_channels_5_ghz[] = {
 	HDD5GHZCHAN(5825, 165, 0),
 };
 
+static const struct ieee80211_channel hdd_etsi_srd_chan[] = {
+	HDD5GHZCHAN(5845, 169, 0),
+	HDD5GHZCHAN(5865, 173, 0),
+};
+
 static const struct ieee80211_channel hdd_channels_dot11p[] = {
 	HDD5GHZCHAN(5852, 170, 0),
 	HDD5GHZCHAN(5855, 171, 0),
@@ -2058,6 +2063,7 @@ __wlan_hdd_cfg80211_get_supported_features(struct wiphy *wiphy,
 	fset |= WIFI_FEATURE_RSSI_MONITOR;
 	fset |= WIFI_FEATURE_TX_TRANSMIT_POWER;
 	fset |= WIFI_FEATURE_SET_TX_POWER_LIMIT;
+	fset |= WIFI_FEATURE_CONFIG_NDO;
 
 	if (hdd_link_layer_stats_supported())
 		fset |= WIFI_FEATURE_LINK_LAYER_STATS;
@@ -3940,7 +3946,7 @@ static void hdd_get_peer_txrx_rate_cb(struct sir_peer_info_ext_resp *peer_info,
 		return;
 	}
 
-	if (!peer_info->count || !peer_info->info) {
+	if (!peer_info->count) {
 		spin_unlock(&hdd_context_lock);
 		hdd_err("Fail to get remote peer info");
 		return;
@@ -5047,9 +5053,15 @@ void wlan_hdd_save_gtk_offload_params(hdd_adapter_t *adapter, uint8_t *kck_ptr,
 		qdf_mem_copy(hdd_sta_ctx->gtkOffloadReqParams.aKCK, kck_ptr,
 				NL80211_KCK_LEN);
 
-	if (kek_ptr)
+	if (kek_ptr) {
+		/* paranoia */
+		if (kek_len > SIR_KEK_KEY_LEN_FILS) {
+			kek_len = SIR_KEK_KEY_LEN_FILS;
+			QDF_ASSERT(0);
+		}
 		qdf_mem_copy(hdd_sta_ctx->gtkOffloadReqParams.aKEK, kek_ptr,
 				kek_len);
+	}
 	qdf_copy_macaddr(&hdd_sta_ctx->gtkOffloadReqParams.bssid,
 			 &hdd_sta_ctx->conn_info.bssId);
 	hdd_sta_ctx->gtkOffloadReqParams.kek_len = kek_len;
@@ -5230,13 +5242,15 @@ int wlan_hdd_send_roam_auth_event(hdd_adapter_t *adapter, uint8_t *bssid,
 			hdd_err("failed to send replay counter");
 			goto nla_put_failure;
 		}
-		if (nla_put(skb,
+		if (roam_info_ptr->kek_len > SIR_KEK_KEY_LEN_FILS ||
+		    nla_put(skb,
 			QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_PTK_KCK,
 			SIR_KCK_KEY_LEN, roam_info_ptr->kck) ||
 		    nla_put(skb,
 			QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_PTK_KEK,
 			roam_info_ptr->kek_len, roam_info_ptr->kek)) {
-			hdd_err("nla put fail");
+			hdd_err("nla put fail, kek_len %d",
+				roam_info_ptr->kek_len);
 			goto nla_put_failure;
 		}
 
@@ -5362,6 +5376,7 @@ wlan_hdd_wifi_config_policy[QCA_WLAN_VENDOR_ATTR_CONFIG_MAX + 1] = {
 	[QCA_WLAN_VENDOR_ATTR_CONFIG_SCAN_ENABLE] = {.type = NLA_U8 },
 	[QCA_WLAN_VENDOR_ATTR_CONFIG_TOTAL_BEACON_MISS_COUNT] = {
 			.type = NLA_U8},
+	[QCA_WLAN_VENDOR_ATTR_CONFIG_LATENCY_LEVEL] = {.type = NLA_U16 },
 };
 
 /**
@@ -5503,6 +5518,7 @@ __wlan_hdd_cfg80211_wifi_configuration_set(struct wiphy *wiphy,
 	uint32_t tx_fail_count;
 	uint32_t ant_div_usrcfg;
 	uint8_t bmiss_bcnt;
+	uint16_t latency_level;
 
 	ENTER_DEV(dev);
 
@@ -6068,6 +6084,32 @@ __wlan_hdd_cfg80211_wifi_configuration_set(struct wiphy *wiphy,
 		}
 
 	}
+
+	if (tb[QCA_WLAN_VENDOR_ATTR_CONFIG_LATENCY_LEVEL]) {
+		latency_level = nla_get_u16(
+			tb[QCA_WLAN_VENDOR_ATTR_CONFIG_LATENCY_LEVEL]);
+
+		if ((latency_level >
+		    QCA_WLAN_VENDOR_ATTR_CONFIG_LATENCY_LEVEL_MAX) ||
+		    (latency_level ==
+		    QCA_WLAN_VENDOR_ATTR_CONFIG_LATENCY_LEVEL_INVALID)) {
+			hdd_err("Invalid Wlan latency level value");
+			return -EINVAL;
+		}
+
+		/* Mapping the latency value to the level which fw expected
+		 * 0 - normal, 1 - moderate, 2 - low, 3 - ultralow
+		 */
+		latency_level = latency_level - 1;
+		qdf_status = sme_set_wlm_latency_level(hdd_ctx->hHal,
+						       adapter->sessionId,
+						       latency_level);
+		if (qdf_status != QDF_STATUS_SUCCESS) {
+			hdd_err("set Wlan latency level failed");
+			ret_val = -EINVAL;
+		}
+	}
+
 	if (adapter->device_mode == QDF_STA_MODE &&
 	    tb[QCA_WLAN_VENDOR_ATTR_CONFIG_DISABLE_FILS]) {
 		uint8_t disable_fils;
@@ -8836,7 +8878,7 @@ int wlan_hdd_request_pre_cac(uint8_t channel)
 		return -EINVAL;
 	}
 
-	mac_addr = wlan_hdd_get_intf_addr(hdd_ctx);
+	mac_addr = wlan_hdd_get_intf_addr(hdd_ctx, QDF_SAP_MODE);
 	if (!mac_addr) {
 		hdd_err("can't add virtual intf: Not getting valid mac addr");
 		return -EINVAL;
@@ -9193,11 +9235,11 @@ uint8_t hdd_get_sap_operating_band(hdd_context_t *hdd_ctx)
 		}
 		operating_channel = adapter->sessionCtx.ap.operatingChannel;
 		if (IS_24G_CH(operating_channel))
-			sap_operating_band = eCSR_BAND_24;
+			sap_operating_band = SIR_BAND_2_4_GHZ;
 		else if (IS_5G_CH(operating_channel))
-			sap_operating_band = eCSR_BAND_5G;
+			sap_operating_band = SIR_BAND_5_GHZ;
 		else
-			sap_operating_band = eCSR_BAND_ALL;
+			sap_operating_band = SIR_BAND_ALL;
 		status = hdd_get_next_adapter(hdd_ctx, adapter_node,
 				&next);
 		adapter_node = next;
@@ -10611,6 +10653,11 @@ static int __wlan_hdd_cfg80211_set_nud_stats(struct wiphy *wiphy,
 		QDF_TRACE(QDF_MODULE_ID_HDD, QDF_TRACE_LEVEL_ERROR,
 			  "%s STATS_SET_START ATTR", __func__);
 		return err;
+	}
+
+	if (adapter->sessionId == HDD_SESSION_ID_INVALID) {
+		hdd_err("Invalid session id");
+		return -EINVAL;
 	}
 
 	if (tb[STATS_SET_START]) {
@@ -12261,7 +12308,7 @@ hdd_context_t *hdd_cfg80211_wiphy_alloc(int priv_size)
  * This function is called from the supplicant through a
  * private ioctl to change the band value
  */
-int wlan_hdd_cfg80211_update_band(struct wiphy *wiphy, eCsrBand eBand)
+int wlan_hdd_cfg80211_update_band(struct wiphy *wiphy, tSirRFBand eBand)
 {
 	int i, j;
 	enum channel_state channelEnabledState;
@@ -12281,7 +12328,7 @@ int wlan_hdd_cfg80211_update_band(struct wiphy *wiphy, eCsrBand eBand)
 								 hw_value);
 
 			if (HDD_NL80211_BAND_2GHZ == i &&
-				eCSR_BAND_5G == eBand) {
+				SIR_BAND_5_GHZ == eBand) {
 				/* 5G only */
 #ifdef WLAN_ENABLE_SOCIAL_CHANNELS_5G_ONLY
 				/* Enable Social channels for P2P */
@@ -12297,7 +12344,7 @@ int wlan_hdd_cfg80211_update_band(struct wiphy *wiphy, eCsrBand eBand)
 					IEEE80211_CHAN_DISABLED;
 				continue;
 			} else if (HDD_NL80211_BAND_5GHZ == i &&
-					eCSR_BAND_24 == eBand) {
+					SIR_BAND_2_4_GHZ == eBand) {
 				/* 2G only */
 				band->channels[j].flags |=
 					IEEE80211_CHAN_DISABLED;
@@ -12555,16 +12602,25 @@ int wlan_hdd_cfg80211_init(struct device *dev,
 
 		} else {
 			wiphy->bands[HDD_NL80211_BAND_5GHZ]->channels =
-			qdf_mem_malloc(sizeof(hdd_channels_5_ghz));
+				qdf_mem_malloc(sizeof(hdd_channels_5_ghz) +
+				sizeof(hdd_etsi_srd_chan));
 			if (wiphy->bands[HDD_NL80211_BAND_5GHZ]->channels ==
 								NULL) {
 				hdd_err("Not enough memory to for channels");
 				goto mem_fail;
 			}
+			wiphy->bands[HDD_NL80211_BAND_5GHZ]->n_channels =
+					QDF_ARRAY_SIZE(hdd_channels_5_ghz) +
+					QDF_ARRAY_SIZE(hdd_etsi_srd_chan);
 			qdf_mem_copy(wiphy->
 				bands[HDD_NL80211_BAND_5GHZ]->channels,
 				&hdd_channels_5_ghz[0],
 				sizeof(hdd_channels_5_ghz));
+			len = sizeof(hdd_channels_5_ghz);
+			qdf_mem_copy((char *)
+				wiphy->bands[HDD_NL80211_BAND_5GHZ]->channels +
+				len, &hdd_etsi_srd_chan[0],
+				sizeof(hdd_etsi_srd_chan));
 		}
 	}
 
@@ -12577,7 +12633,7 @@ int wlan_hdd_cfg80211_init(struct device *dev,
 			struct ieee80211_supported_band *band = wiphy->bands[i];
 
 			if (HDD_NL80211_BAND_2GHZ == i &&
-				eCSR_BAND_5G == pCfg->nBandCapability) {
+				SIR_BAND_5_GHZ == pCfg->nBandCapability) {
 				/* 5G only */
 #ifdef WLAN_ENABLE_SOCIAL_CHANNELS_5G_ONLY
 				/* Enable social channels for P2P */
@@ -12591,7 +12647,7 @@ int wlan_hdd_cfg80211_init(struct device *dev,
 					IEEE80211_CHAN_DISABLED;
 				continue;
 			} else if (HDD_NL80211_BAND_5GHZ == i &&
-					eCSR_BAND_24 == pCfg->nBandCapability) {
+				   SIR_BAND_2_4_GHZ == pCfg->nBandCapability) {
 				/* 2G only */
 				band->channels[j].flags |=
 					IEEE80211_CHAN_DISABLED;
@@ -13352,6 +13408,11 @@ static int __wlan_hdd_cfg80211_change_iface(struct wiphy *wiphy,
 	status = wlan_hdd_validate_context(pHddCtx);
 	if (0 != status)
 		return status;
+
+	if (cds_is_fw_down()) {
+		hdd_err("Ignore if FW is already down");
+		return -EINVAL;
+	}
 
 	MTRACE(qdf_trace(QDF_MODULE_ID_HDD,
 			 TRACE_CODE_HDD_CFG80211_CHANGE_IFACE,
@@ -15257,7 +15318,7 @@ static bool wlan_hdd_handle_sap_sta_dfs_conc(hdd_adapter_t *adapter,
 	 * machine from disconnected to started and set this event.
 	 * wait for 10 secs to finish this.
 	 */
-	status = qdf_wait_single_event(&hostapd_state->qdf_event, 10000);
+	status = qdf_wait_for_event_completion(&hostapd_state->qdf_event, 10000);
 	if (!QDF_IS_STATUS_SUCCESS(status)) {
 		hdd_err("wait for qdf_event failed, STA not allowed!!");
 		return false;
@@ -15779,6 +15840,26 @@ static enum eAniAuthType wlan_hdd_get_fils_auth_type(
 	}
 }
 
+static bool wlan_hdd_fils_data_in_limits(struct cfg80211_connect_params *req)
+{
+	hdd_debug("seq=%d auth=%d lengths: user=%zu rrk=%zu realm=%zu",
+		  req->fils_erp_next_seq_num, req->auth_type,
+		  req->fils_erp_username_len, req->fils_erp_rrk_len,
+		  req->fils_erp_realm_len);
+	if (!req->fils_erp_rrk_len || !req->fils_erp_realm_len ||
+	    !req->fils_erp_username_len ||
+	    req->fils_erp_rrk_len > FILS_MAX_RRK_LENGTH ||
+	    req->fils_erp_realm_len > FILS_MAX_REALM_LEN ||
+	    req->fils_erp_username_len > FILS_MAX_KEYNAME_NAI_LENGTH) {
+		hdd_err("length incorrect, user=%zu rrk=%zu realm=%zu",
+			req->fils_erp_username_len, req->fils_erp_rrk_len,
+			req->fils_erp_realm_len);
+		return false;
+	}
+
+	return true;
+}
+
 /**
  * wlan_hdd_cfg80211_set_fils_config() - set fils config params during connect
  * @adapter: Pointer to adapter
@@ -15815,7 +15896,8 @@ static int wlan_hdd_cfg80211_set_fils_config(struct hdd_adapter_s *adapter,
 	 * auth type. Hence we need to allow the connection to go
 	 * through in that case as well. Below is_fils_connection
 	 * flag is propagated down to CSR and PE sessions through
-	 * the JOIN request.
+	 * the JOIN request. As the flag is used, do not free the
+	 * memory allocated to fils_con_info and return success.
 	 */
 	if (req->auth_type != NL80211_AUTHTYPE_FILS_SK) {
 		roam_profile->fils_con_info->is_fils_connection = false;
@@ -15833,17 +15915,8 @@ static int wlan_hdd_cfg80211_set_fils_config(struct hdd_adapter_s *adapter,
 		hdd_err("invalid auth type for fils %d", req->auth_type);
 		goto fils_conn_fail;
 	}
-
-	hdd_debug("seq=%d auth=%d lengths: user=%zu rrk=%zu realm=%zu",
-		req->fils_erp_next_seq_num, req->auth_type,
-		req->fils_erp_username_len, req->fils_erp_rrk_len,
-		req->fils_erp_realm_len);
-	if (req->fils_erp_rrk_len > WMI_FILS_MAX_RRK_LENGTH ||
-		req->fils_erp_realm_len > WMI_FILS_MAX_REALM_LENGTH ||
-		req->fils_erp_username_len > WMI_FILS_MAX_USERNAME_LENGTH) {
-		hdd_err("FILS info length limit exceeded");
-		goto fils_conn_fail;
-	}
+	if (!wlan_hdd_fils_data_in_limits(req))
+	    goto fils_conn_fail;
 
 	roam_profile->fils_con_info->is_fils_connection = true;
 	roam_profile->fils_con_info->sequence_number =
@@ -15874,17 +15947,11 @@ static int wlan_hdd_cfg80211_set_fils_config(struct hdd_adapter_s *adapter,
 			roam_profile->fils_con_info->key_nai_length);
 		goto fils_conn_fail;
 	}
-	if (req->fils_erp_username_len) {
-		buf = roam_profile->fils_con_info->keyname_nai;
-		qdf_mem_copy(buf,
-			req->fils_erp_username,
-			req->fils_erp_username_len);
-		buf += req->fils_erp_username_len;
-		qdf_mem_copy(buf, "@", sizeof(char));
-		buf += sizeof(char);
-		qdf_mem_copy(buf, req->fils_erp_realm,
-			req->fils_erp_realm_len);
-	}
+	buf = roam_profile->fils_con_info->keyname_nai;
+	qdf_mem_copy(buf, req->fils_erp_username, req->fils_erp_username_len);
+	buf += req->fils_erp_username_len;
+	*buf++ = '@';
+	qdf_mem_copy(buf, req->fils_erp_realm, req->fils_erp_realm_len);
 
 	return 0;
 
@@ -16438,6 +16505,11 @@ static int wlan_hdd_cfg80211_set_ie(hdd_adapter_t *pAdapter, const uint8_t *ie,
 			break;
 		case DOT11F_EID_RSN:
 			hdd_debug("Set RSN IE(len %d)", eLen + 2);
+			if (eLen > (MAX_WPA_RSN_IE_LEN - 2)) {
+				hdd_err("%s: Invalid WPA RSN IE length[%d]",
+					__func__, eLen);
+				return -EINVAL;
+			}
 			memset(pWextState->WPARSNIE, 0, MAX_WPA_RSN_IE_LEN);
 			memcpy(pWextState->WPARSNIE, genie - 2,
 			       (eLen + 2));
@@ -18081,13 +18153,7 @@ int __wlan_hdd_cfg80211_del_station(struct wiphy *wiphy,
 						pAdapter->aStaInfo[i].
 							macAddrSTA.bytes,
 						QDF_MAC_ADDR_SIZE);
-					if (hdd_ipa_uc_is_enabled(pHddCtx)) {
-						hdd_ipa_wlan_evt(pAdapter,
-						    pAdapter->aStaInfo[i].
-						    ucSTAId,
-						    HDD_IPA_CLIENT_DISCONNECT,
-						    mac);
-					}
+
 					hdd_debug("Delete STA with MAC::"
 						  MAC_ADDRESS_STR,
 					       MAC_ADDR_ARRAY(mac));
@@ -18106,7 +18172,7 @@ int __wlan_hdd_cfg80211_del_station(struct wiphy *wiphy,
 						pAdapter->aStaInfo[i].
 						isDeauthInProgress = true;
 						qdf_status =
-							qdf_wait_single_event(
+							qdf_wait_for_event_completion(
 							 &hapd_state->
 							 qdf_sta_disassoc_event,
 							 SME_CMD_TIMEOUT_VALUE);
@@ -18126,11 +18192,6 @@ int __wlan_hdd_cfg80211_del_station(struct wiphy *wiphy,
 					  MAC_ADDRESS_STR,
 				       MAC_ADDR_ARRAY(mac));
 				return -ENOENT;
-			}
-
-			if (hdd_ipa_uc_is_enabled(pHddCtx)) {
-				hdd_ipa_wlan_evt(pAdapter, staId,
-					HDD_IPA_CLIENT_DISCONNECT, mac);
 			}
 
 			if (pAdapter->aStaInfo[staId].isDeauthInProgress ==
@@ -18173,7 +18234,7 @@ int __wlan_hdd_cfg80211_del_station(struct wiphy *wiphy,
 				       MAC_ADDR_ARRAY(mac));
 				return -ENOENT;
 			}
-			qdf_status = qdf_wait_single_event(
+			qdf_status = qdf_wait_for_event_completion(
 					&hapd_state->
 					qdf_sta_disassoc_event,
 					SME_CMD_TIMEOUT_VALUE);
@@ -19756,17 +19817,8 @@ static int __wlan_hdd_cfg80211_update_connect_params(
 		fils_info->is_fils_connection = true;
 
 	if (changed & UPDATE_FILS_ERP_INFO) {
-		if ((req->fils_erp_username_len >
-		     FILS_MAX_KEYNAME_NAI_LENGTH) ||
-		    (req->fils_erp_rrk_len > FILS_MAX_RRK_LENGTH) ||
-		    (req->fils_erp_realm_len > FILS_MAX_REALM_LEN)) {
-			hdd_err("Invalid length: username len %zd, rrk len %zd realm len %zd",
-				req->fils_erp_username_len,
-				req->fils_erp_rrk_len,
-				req->fils_erp_realm_len);
-			return -EINVAL;
-		}
-
+		if (!wlan_hdd_fils_data_in_limits(req))
+		    return -EINVAL;
 		fils_info->key_nai_length = req->fils_erp_username_len +
 					    sizeof(char) +
 					    req->fils_erp_realm_len;
@@ -19804,12 +19856,9 @@ static int __wlan_hdd_cfg80211_update_connect_params(
 		roam_profile->fils_con_info->auth_type = auth_type;
 	}
 
-	hdd_debug("fils conn update: changed %x is_fils %d seq=%d auth=%d user_len=%zu rrk_len=%zu realm_len=%zu keyname nai len %d",
-			changed, roam_profile->fils_con_info->
-			is_fils_connection, req->fils_erp_next_seq_num,
-			req->auth_type, req->fils_erp_username_len,
-			req->fils_erp_rrk_len, req->fils_erp_realm_len,
-			roam_profile->fils_con_info->key_nai_length);
+	hdd_debug("fils conn update: changed %x is_fils %d keyname nai len %d",
+		  changed, roam_profile->fils_con_info->is_fils_connection,
+		  roam_profile->fils_con_info->key_nai_length);
 
 	if (!adapter->fast_roaming_allowed ||
 	    !hdd_ctx->config->is_fils_roaming_supported) {

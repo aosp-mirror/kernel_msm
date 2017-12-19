@@ -86,7 +86,7 @@
 #else
 #define WMA_MAX_SUPPORTED_STAS    12
 #endif
-#define WMA_MAX_SUPPORTED_BSS     5
+#define WMA_MAX_SUPPORTED_BSS     SIR_MAX_SUPPORTED_BSS
 
 #define WMA_MAX_MGMT_MPDU_LEN 2000
 
@@ -1159,6 +1159,7 @@ struct wma_txrx_node {
 	qdf_wake_lock_t vdev_stop_wakelock;
 	qdf_wake_lock_t vdev_set_key_wakelock;
 	struct roam_synch_frame_ind roam_synch_frame_ind;
+	bool is_waiting_for_key;
 };
 
 #if defined(QCA_WIFI_FTM)
@@ -2716,5 +2717,11 @@ QDF_STATUS wma_config_bmiss_bcnt_params(uint32_t vdev_id, uint32_t first_cnt,
  */
 QDF_STATUS wma_send_action_oui(WMA_HANDLE handle,
 			       struct wmi_action_oui *action_oui);
-
+/**
+ * chanmode_to_chanwidth() - get channel width through channel mode
+ * @chanmode:   channel phy mode
+ *
+ * Return: channel width
+ */
+wmi_channel_width chanmode_to_chanwidth(WLAN_PHY_MODE chanmode);
 #endif

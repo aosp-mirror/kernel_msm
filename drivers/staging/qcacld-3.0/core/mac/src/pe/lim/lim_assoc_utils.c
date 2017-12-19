@@ -863,7 +863,7 @@ void
 lim_reject_association(tpAniSirGlobal mac_ctx, tSirMacAddr peer_addr,
 			uint8_t sub_type, uint8_t add_pre_auth_context,
 			tAniAuthType auth_type, uint16_t sta_id,
-			uint8_t delete_sta, tSirResultCodes result_code,
+			uint8_t delete_sta, enum eSirMacStatusCodes result_code,
 			tpPESession session_entry)
 {
 	tpDphHashNode sta_ds;
@@ -2950,7 +2950,6 @@ void lim_handle_cnf_wait_timeout(tpAniSirGlobal pMac, uint16_t staId)
 					       true,
 					       pStaDs->mlmStaContext.authType,
 					       pStaDs->assocId, true,
-					       (tSirResultCodes)
 					       eSIR_MAC_UNSPEC_FAILURE_STATUS,
 					       psessionEntry);
 		}
@@ -3046,7 +3045,11 @@ lim_delete_dph_hash_entry(tpAniSirGlobal mac_ctx, tSirMacAddr sta_addr,
 					       session_entry);
 		}
 #ifdef WLAN_FEATURE_11W
-		tx_timer_delete(&sta_ds->pmfSaQueryTimer);
+		if (sta_ds->rmfEnabled) {
+			pe_debug("delete pmf timer sta-idx:%d assoc-id:%d",
+				 sta_ds->staIndex, sta_ds->assocId);
+			tx_timer_delete(&sta_ds->pmfSaQueryTimer);
+		}
 #endif
 	}
 

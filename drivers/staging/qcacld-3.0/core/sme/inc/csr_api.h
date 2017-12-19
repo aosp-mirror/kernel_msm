@@ -39,6 +39,7 @@
 #include "csr_link_list.h"
 
 #define CSR_INVALID_SCANRESULT_HANDLE       (NULL)
+#define CSR_NUM_WLM_LATENCY_LEVEL   4
 
 typedef enum {
 	/* never used */
@@ -647,6 +648,7 @@ typedef enum {
 	eCSR_ROAM_RESULT_NDP_END_RSP,
 	eCSR_ROAM_RESULT_NDP_PEER_DEPARTED_IND,
 	eCSR_ROAM_RESULT_NDP_END_IND,
+	eCSR_ROAM_RESULT_NDP_SCH_UPDATE_IND,
 	/* If Scan for SSID failed to found proper BSS */
 	eCSR_ROAM_RESULT_SCAN_FOR_SSID_FAILURE,
 	eCSR_ROAM_RESULT_INVOKE_FAILED,
@@ -809,13 +811,6 @@ typedef enum {
 	eCSR_SECURITY_SET_KEY_ACTION_SET_KEY,
 	eCSR_SECURITY_SET_KEY_ACTION_DELETE_KEY,
 } eCsrSetKeyAction;
-
-typedef enum {
-	eCSR_BAND_ALL,
-	eCSR_BAND_24,
-	eCSR_BAND_5G,
-	eCSR_BAND_MAX,
-} eCsrBand;
 
 typedef enum {
 	/*
@@ -1137,12 +1132,12 @@ typedef struct tagCsrConfigParam {
 	uint32_t channelBondingMode24GHz;
 	uint32_t channelBondingMode5GHz;
 	eCsrPhyMode phyMode;
-	eCsrBand eBand;
+	tSirRFBand eBand;
 	uint32_t RTSThreshold;
 	uint32_t HeartbeatThresh50;
 	uint32_t HeartbeatThresh24;
 	eCsrCBChoice cbChoice;
-	eCsrBand bandCapability;     /* indicate hw capability */
+	tSirRFBand bandCapability;
 	uint16_t TxRate;
 	eCsrRoamWmmUserModeType WMMSupportMode;
 	bool Is11eSupportEnabled;
@@ -1366,6 +1361,9 @@ typedef struct tagCsrConfigParam {
 	uint32_t num_disallowed_aps;
 	uint32_t scan_probe_repeat_time;
 	uint32_t scan_num_probes;
+	uint16_t wlm_latency_enable;
+	uint16_t wlm_latency_level;
+	uint32_t wlm_latency_flags[CSR_NUM_WLM_LATENCY_LEVEL];
 	struct sir_score_config bss_score_params;
 	uint8_t oce_feature_bitmap;
 } tCsrConfigParam;
@@ -1496,6 +1494,7 @@ typedef struct tagCsrRoamInfo {
 		struct ndp_initiator_rsp ndp_init_rsp_params;
 		struct ndi_create_rsp ndi_create_params;
 		struct ndi_delete_rsp ndi_delete_params;
+		struct ndp_sch_update_event sch_update_params;
 	} ndp;
 #endif
 	tDot11fIEHTCaps ht_caps;
@@ -1777,7 +1776,7 @@ QDF_STATUS csr_set_reg_info(tHalHandle hHal, uint8_t *apCntryCode);
 /* enum to string conversion for debug output */
 const char *get_e_roam_cmd_status_str(eRoamCmdStatus val);
 const char *get_e_csr_roam_result_str(eCsrRoamResult val);
-QDF_STATUS csr_set_phy_mode(tHalHandle hHal, uint32_t phyMode, eCsrBand eBand,
+QDF_STATUS csr_set_phy_mode(tHalHandle hHal, uint32_t phyMode, tSirRFBand eBand,
 			    bool *pfRestartNeeded);
 typedef void (*csr_roamLinkQualityIndCallback)
 	(eCsrRoamLinkQualityInd ind, void *pContext);
@@ -1799,8 +1798,8 @@ static inline QDF_STATUS csr_roam_issue_ft_preauth_req(tHalHandle hHal,
 	return QDF_STATUS_E_NOSUPPORT;
 }
 #endif
-QDF_STATUS csr_set_band(tHalHandle hHal, uint8_t sessionId, eCsrBand eBand);
-eCsrBand csr_get_current_band(tHalHandle hHal);
+QDF_STATUS csr_set_band(tHalHandle hHal, uint8_t sessionId, tSirRFBand eBand);
+tSirRFBand csr_get_current_band(tHalHandle hHal);
 typedef void (*csr_readyToSuspendCallback)(void *pContext, bool suspended);
 #ifdef WLAN_FEATURE_EXTWOW_SUPPORT
 typedef void (*csr_readyToExtWoWCallback)(void *pContext, bool status);

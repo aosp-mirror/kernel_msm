@@ -2159,6 +2159,11 @@ static int __wlan_hdd_cfg80211_scan(struct wiphy *wiphy,
 	} else {
 		scan_req.minChnTime = cfg_param->nActiveMinChnTime;
 		scan_req.maxChnTime = cfg_param->nActiveMaxChnTime;
+		if (pHddCtx->bt_a2dp_active && !wma_is_hw_dbs_capable() &&
+		    cds_is_sta_connected_in_2g())
+			sme_cfg_set_int(pHddCtx->hHal,
+					WNI_CFG_PASSIVE_MAXIMUM_CHANNEL_TIME,
+					PASSIVE_DWELL_TIME_BT_A2DP_ENABLED);
 	}
 
 	wlan_hdd_copy_bssid_scan_request(&scan_req, request);
@@ -2630,9 +2635,9 @@ static int __wlan_hdd_cfg80211_vendor_scan(struct wiphy *wiphy,
 	struct cfg80211_scan_request *request = NULL;
 	struct nlattr *attr;
 	enum nl80211_band band;
-	uint8_t n_channels = 0, n_ssid = 0, ie_len = 0;
+	uint8_t n_channels = 0, n_ssid = 0;
 	uint32_t tmp, count, j;
-	unsigned int len;
+	size_t len, ie_len;
 	struct ieee80211_channel *chan;
 	hdd_context_t *hdd_ctx = wiphy_priv(wiphy);
 	int ret;

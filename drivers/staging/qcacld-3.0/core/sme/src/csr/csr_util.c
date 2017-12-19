@@ -1509,7 +1509,7 @@ uint32_t csr_translate_to_wni_cfg_dot11_mode(tpAniSirGlobal pMac,
 		break;
 	default:
 		sme_warn("doesn't expect %d as csrDo11Mode", csrDot11Mode);
-		if (eCSR_BAND_24 == pMac->roam.configParam.eBand)
+		if (SIR_BAND_2_4_GHZ == pMac->roam.configParam.eBand)
 			ret = WNI_CFG_DOT11_MODE_11G;
 		else
 			ret = WNI_CFG_DOT11_MODE_11A;
@@ -1822,7 +1822,7 @@ bool csr_is_phy_mode_match(tpAniSirGlobal pMac, uint32_t phyMode,
 eCsrCfgDot11Mode csr_find_best_phy_mode(tpAniSirGlobal pMac, uint32_t phyMode)
 {
 	eCsrCfgDot11Mode cfgDot11ModeToUse;
-	eCsrBand eBand = pMac->roam.configParam.eBand;
+	tSirRFBand eBand = pMac->roam.configParam.eBand;
 
 	if ((0 == phyMode) ||
 	    (eCSR_DOT11_MODE_11ac & phyMode) ||
@@ -1838,7 +1838,7 @@ eCsrCfgDot11Mode csr_find_best_phy_mode(tpAniSirGlobal pMac, uint32_t phyMode)
 		if ((eCSR_DOT11_MODE_11n | eCSR_DOT11_MODE_11n_ONLY) & phyMode)
 			cfgDot11ModeToUse = eCSR_CFG_DOT11_MODE_11N;
 		else if (eCSR_DOT11_MODE_abg & phyMode) {
-			if (eCSR_BAND_24 != eBand)
+			if (SIR_BAND_2_4_GHZ != eBand)
 				cfgDot11ModeToUse = eCSR_CFG_DOT11_MODE_11A;
 			else
 				cfgDot11ModeToUse = eCSR_CFG_DOT11_MODE_11G;
@@ -2378,10 +2378,6 @@ bool csr_is_profile11r(tCsrRoamProfile *pProfile)
 				   pProfile->MDID.mdiePresent);
 }
 
-
-#ifdef FEATURE_WLAN_ESE
-
-/* Function to return true if the authtype is ESE */
 bool csr_is_auth_type_ese(eCsrAuthType AuthType)
 {
 	switch (AuthType) {
@@ -2393,6 +2389,8 @@ bool csr_is_auth_type_ese(eCsrAuthType AuthType)
 	}
 	return false;
 }
+
+#ifdef FEATURE_WLAN_ESE
 
 /* Function to return true if the profile is ESE */
 bool csr_is_profile_ese(tCsrRoamProfile *pProfile)

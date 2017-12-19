@@ -1507,13 +1507,13 @@ hdd_stop_sap_due_to_invalid_channel(struct work_struct *work)
 	 */
 	hdd_adapter_t *sap_adapter = container_of(work, hdd_adapter_t,
 						  sap_stop_bss_work);
-	hdd_debug("work started for sap session[%d]", sap_adapter->sessionId);
 	cds_ssr_protect(__func__);
 	if (sap_adapter == NULL) {
 	    cds_err("sap_adapter is NULL, no work needed");
 	    cds_ssr_unprotect(__func__);
 	    return;
 	}
+	hdd_debug("work started for sap session[%d]", sap_adapter->sessionId);
 	wlan_hdd_stop_sap(sap_adapter);
 	wlansap_set_invalid_session(WLAN_HDD_GET_SAP_CTX_PTR(sap_adapter));
 	wlansap_cleanup_cac_timer(WLAN_HDD_GET_SAP_CTX_PTR(sap_adapter));
@@ -4600,7 +4600,7 @@ static int __iw_get_channel_list(struct net_device *dev,
 	tHalHandle hal = WLAN_HDD_GET_HAL_CTX(hostapd_adapter);
 	struct channel_list_info *channel_list =
 					(struct channel_list_info *) extra;
-	eCsrBand cur_band = eCSR_BAND_ALL;
+	tSirRFBand cur_band = SIR_BAND_ALL;
 	hdd_context_t *hdd_ctx;
 	int ret;
 	bool is_dfs_mode_enabled = false;
@@ -4618,14 +4618,14 @@ static int __iw_get_channel_list(struct net_device *dev,
 	}
 	wrqu->data.length = sizeof(struct channel_list_info);
 
-	if (eCSR_BAND_24 == cur_band) {
+	if (SIR_BAND_2_4_GHZ == cur_band) {
 		band_start_channel = CHAN_ENUM_1;
 		band_end_channel = CHAN_ENUM_14;
-	} else if (eCSR_BAND_5G == cur_band) {
+	} else if (SIR_BAND_5_GHZ == cur_band) {
 		band_start_channel = CHAN_ENUM_36;
 		band_end_channel = CHAN_ENUM_184;
 	}
-	if (cur_band != eCSR_BAND_24) {
+	if (cur_band != SIR_BAND_2_4_GHZ) {
 		if (hdd_ctx->config->dot11p_mode)
 			band_end_channel = CHAN_ENUM_184;
 		else
@@ -4911,16 +4911,16 @@ static int __iw_set_ap_encodeext(struct net_device *dev,
 		/*Convert from 1-based to 0-based keying */
 		key_index--;
 	}
-	if (!ext->key_len)
-		return ret;
+
+	if (!ext->key_len || ext->key_len > CSR_MAX_KEY_LEN)
+		return -EINVAL;
 
 	qdf_mem_zero(&setKey, sizeof(tCsrRoamSetKey));
 
 	setKey.keyId = key_index;
 	setKey.keyLength = ext->key_len;
 
-	if (ext->key_len <= CSR_MAX_KEY_LEN)
-		qdf_mem_copy(&setKey.Key[0], ext->key, ext->key_len);
+	qdf_mem_copy(&setKey.Key[0], ext->key, ext->key_len);
 
 	if (ext->ext_flags & IW_ENCODE_EXT_GROUP_KEY) {
 		/*Key direction for group is RX only */
@@ -5344,7 +5344,7 @@ __iw_softap_stopbss(struct net_device *dev,
 			WLAN_HDD_GET_SAP_CTX_PTR(pHostapdAdapter));
 		if (QDF_IS_STATUS_SUCCESS(status)) {
 			qdf_status =
-				qdf_wait_single_event(&pHostapdState->
+				qdf_wait_for_event_completion(&pHostapdState->
 					qdf_stop_bss_event,
 					SME_CMD_TIMEOUT_VALUE);
 
@@ -6530,8 +6530,6 @@ QDF_STATUS hdd_init_ap_mode(hdd_adapter_t *pAdapter, bool reinit)
 		return qdf_status;
 	}
 
-	init_completion(&pAdapter->session_close_comp_var);
-	init_completion(&pAdapter->session_open_comp_var);
 
 	sema_init(&(WLAN_HDD_GET_AP_CTX_PTR(pAdapter))->semWpsPBCOverlapInd, 1);
 
@@ -6601,6 +6599,7 @@ hdd_adapter_t *hdd_wlan_create_ap_dev(hdd_context_t *pHddCtx,
 {
 	struct net_device *pWlanHostapdDev = NULL;
 	hdd_adapter_t *pHostapdAdapter = NULL;
+	QDF_STATUS qdf_status;
 
 	hdd_debug("iface_name = %s", iface_name);
 
@@ -6666,6 +6665,23 @@ hdd_adapter_t *hdd_wlan_create_ap_dev(hdd_context_t *pHddCtx,
 		spin_lock_init(&pHostapdAdapter->pause_map_lock);
 		pHostapdAdapter->start_time =
 			pHostapdAdapter->last_time = qdf_system_ticks();
+
+		qdf_status = qdf_event_create(
+				&pHostapdAdapter->qdf_session_open_event);
+		if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
+			hdd_err("failed to create session open QDF event!");
+			free_netdev(pHostapdAdapter->dev);
+			return NULL;
+		}
+
+		qdf_status = qdf_event_create(
+				&pHostapdAdapter->qdf_session_close_event);
+		if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
+			hdd_err("failed to create session close QDF event!");
+			free_netdev(pHostapdAdapter->dev);
+			return NULL;
+		}
+
 	}
 	return pHostapdAdapter;
 }
@@ -7902,6 +7918,11 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 	pConfig->chan_switch_hostapd_rate_enabled =
 			iniConfig->chan_switch_hostapd_rate_enabled;
 
+	if (iniConfig->WlanMccToSccSwitchMode !=
+			QDF_MCC_TO_SCC_SWITCH_DISABLE) {
+		pConfig->chan_switch_hostapd_rate_enabled = false;
+	}
+
 	pConfig->enOverLapCh = iniConfig->gEnableOverLapCh;
 	pConfig->dtim_period = pBeacon->dtim_period;
 	hdd_debug("acs_mode %d", pConfig->acs_cfg.acs_mode);
@@ -7917,6 +7938,8 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 		pConfig->acs_dfs_mode = wlan_hdd_get_dfs_mode(mode);
 	}
 
+	pConfig->user_config_channel = pConfig->channel;
+
 	hdd_debug("pConfig->channel %d, pConfig->acs_dfs_mode %d",
 		pConfig->channel, pConfig->acs_dfs_mode);
 
@@ -7929,6 +7952,12 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 						     pBeacon->tail_len,
 						     WLAN_EID_COUNTRY);
 		if (pIe) {
+			if (pIe[1] < IEEE80211_COUNTRY_IE_MIN_LEN) {
+				hdd_err("Invalid Country IE len: %d", pIe[1]);
+				ret = -EINVAL;
+				goto error;
+			}
+
 			pConfig->ieee80211d = 1;
 			qdf_mem_copy(pConfig->countryCode, &pIe[2], 3);
 			sme_set_reg_info(hHal, pConfig->countryCode);
@@ -8000,6 +8029,8 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 	wlansap_set_tx_leakage_threshold(hHal,
 		iniConfig->sap_tx_leakage_threshold);
 
+	wlansap_set_etsi_srd_chan_support(hHal,
+			iniConfig->etsi_srd_chan_in_master_mode);
 	capab_info = pMgmt_frame->u.beacon.capab_info;
 
 	pConfig->privacy = (pMgmt_frame->u.beacon.capab_info &
@@ -8410,7 +8441,7 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 
 	hdd_debug("Waiting for Scan to complete(auto mode) and BSS to start");
 
-	qdf_status = qdf_wait_single_event(&pHostapdState->qdf_event,
+	qdf_status = qdf_wait_for_event_completion(&pHostapdState->qdf_event,
 						SME_CMD_TIMEOUT_VALUE);
 
 	wlansap_reset_sap_config_add_ie(pConfig, eUPDATE_IE_ALL);
@@ -8623,7 +8654,7 @@ static int __wlan_hdd_cfg80211_stop_ap(struct wiphy *wiphy,
 		status = wlansap_stop_bss(WLAN_HDD_GET_SAP_CTX_PTR(pAdapter));
 		if (QDF_IS_STATUS_SUCCESS(status)) {
 			qdf_status =
-				qdf_wait_single_event(&pHostapdState->
+				qdf_wait_for_event_completion(&pHostapdState->
 					qdf_stop_bss_event,
 					SME_CMD_TIMEOUT_VALUE);
 

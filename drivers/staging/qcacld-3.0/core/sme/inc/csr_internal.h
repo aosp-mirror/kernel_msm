@@ -53,7 +53,7 @@
 /* session ID invalid */
 #define CSR_SESSION_ID_INVALID    0xFF
 /* No of sessions to be supported, and a session is for Infra, IBSS or BT-AMP */
-#define CSR_ROAM_SESSION_MAX      5
+#define CSR_ROAM_SESSION_MAX      SIR_MAX_SUPPORTED_BSS
 #define CSR_IS_SESSION_VALID(pMac, sessionId) \
 	(((sessionId) < CSR_ROAM_SESSION_MAX) && \
 	 ((pMac)->roam.roamSession[(sessionId)].sessionActive))
@@ -291,7 +291,7 @@ typedef struct tagBssConfigParam {
 	uint32_t uRTSThresh;
 	uint32_t uDeferThresh;
 	eCsrCfgDot11Mode uCfgDot11Mode;
-	eCsrBand eBand;
+	tSirRFBand eBand;
 	uint8_t standardRate[CSR_DOT11_SUPPORTED_RATES_MAX];
 	uint8_t extendedRate[CSR_DOT11_EXTENDED_SUPPORTED_RATES_MAX];
 	eCsrExposedTxRate txRate;
@@ -481,11 +481,11 @@ typedef struct tagCsrConfig {
 	uint32_t RTSThreshold;
 	eCsrPhyMode phyMode;
 	eCsrCfgDot11Mode uCfgDot11Mode;
-	eCsrBand eBand;
+	tSirRFBand eBand;
 	uint32_t HeartbeatThresh50;
 	uint32_t HeartbeatThresh24;
 	eCsrCBChoice cbChoice;
-	eCsrBand bandCapability;        /* indicate hw capability */
+	tSirRFBand bandCapability;
 	eCsrRoamWmmUserModeType WMMSupportMode;
 	bool Is11eSupportEnabled;
 	bool Is11dSupportEnabled;
@@ -663,6 +663,9 @@ typedef struct tagCsrConfig {
 	uint32_t num_disallowed_aps;
 	uint32_t scan_probe_repeat_time;
 	uint32_t scan_num_probes;
+	uint16_t wlm_latency_enable;
+	uint16_t wlm_latency_level;
+	uint32_t wlm_latency_flags[CSR_NUM_WLM_LATENCY_LEVEL];
 	struct sir_score_config bss_score_params;
 	uint8_t oce_feature_bitmap;
 } tCsrConfig;
@@ -1070,6 +1073,7 @@ typedef struct tagCsrRoamStruct {
 	uint16_t reassocRespLen;        /* length of reassociation response */
 	qdf_mc_timer_t packetdump_timer;
 	qdf_list_t rssi_disallow_bssid;
+	spinlock_t roam_state_lock;
 } tCsrRoamStruct;
 
 #define GET_NEXT_ROAM_ID(pRoamStruct)  (((pRoamStruct)->nextRoamId + 1 == 0) ? \
@@ -1167,27 +1171,27 @@ typedef struct tagCsrRoamStruct {
  * the 2.4 GHz band, meaning. it is NOT operating in the 5.0 GHz band.
  */
 #define CSR_IS_24_BAND_ONLY(pMac) \
-	(eCSR_BAND_24 == (pMac)->roam.configParam.eBand)
+	(SIR_BAND_2_4_GHZ == (pMac)->roam.configParam.eBand)
 
 #define CSR_IS_5G_BAND_ONLY(pMac) \
-	(eCSR_BAND_5G == (pMac)->roam.configParam.eBand)
+	(SIR_BAND_5_GHZ == (pMac)->roam.configParam.eBand)
 
 #define CSR_IS_RADIO_DUAL_BAND(pMac) \
-	(eCSR_BAND_ALL == (pMac)->roam.configParam.bandCapability)
+	(SIR_BAND_ALL == (pMac)->roam.configParam.bandCapability)
 
 #define CSR_IS_RADIO_BG_ONLY(pMac) \
-	(eCSR_BAND_24 == (pMac)->roam.configParam.bandCapability)
+	(SIR_BAND_2_4_GHZ == (pMac)->roam.configParam.bandCapability)
 
 /*
  * this function returns true if the NIC is operating exclusively in the 5.0 GHz
  * band, meaning. it is NOT operating in the 2.4 GHz band
  */
 #define CSR_IS_RADIO_A_ONLY(pMac) \
-	(eCSR_BAND_5G == (pMac)->roam.configParam.bandCapability)
+	(SIR_BAND_5_GHZ == (pMac)->roam.configParam.bandCapability)
 /* this function returns true if the NIC is operating in both bands. */
 #define CSR_IS_OPEARTING_DUAL_BAND(pMac) \
-	((eCSR_BAND_ALL == (pMac)->roam.configParam.bandCapability) && \
-		(eCSR_BAND_ALL == (pMac)->roam.configParam.eBand))
+	((SIR_BAND_ALL == (pMac)->roam.configParam.bandCapability) && \
+		(SIR_BAND_ALL == (pMac)->roam.configParam.eBand))
 /*
  * this function returns true if the NIC can operate in the 5.0 GHz band
  * (could operate in the 2.4 GHz band also)
@@ -1204,7 +1208,7 @@ typedef struct tagCsrRoamStruct {
 	(CSR_IS_OPEARTING_DUAL_BAND((pMac)) || \
 		CSR_IS_RADIO_BG_ONLY((pMac)) || CSR_IS_24_BAND_ONLY((pMac)))
 #define CSR_GET_BAND(ch_num) \
-	((CDS_IS_CHANNEL_24GHZ(ch_num)) ? eCSR_BAND_24 : eCSR_BAND_5G)
+	((CDS_IS_CHANNEL_24GHZ(ch_num)) ? SIR_BAND_2_4_GHZ : SIR_BAND_5_GHZ)
 #define CSR_IS_11D_INFO_FOUND(pMac) \
 	(0 != (pMac)->scan.channelOf11dInfo)
 #define CSR_IS_ROAMING(pSession) \

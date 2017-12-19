@@ -1001,9 +1001,9 @@ WLAN_PHY_MODE wma_chan_phy_mode(u8 chan, enum phy_ch_width chan_width,
 				break;
 			}
 		}
-	} else if (CDS_IS_CHANNEL_DSRC(chan))
+	} else if (cds_is_dsrc_channel(cds_chan_to_freq(chan))) {
 		phymode = MODE_11A;
-	else {
+	} else {
 		if (((CH_WIDTH_5MHZ == chan_width) ||
 		     (CH_WIDTH_10MHZ == chan_width)) &&
 		    ((WNI_CFG_DOT11_MODE_11A == dot11_mode) ||
@@ -1752,6 +1752,33 @@ static QDF_STATUS wma_wow_sta_ra_filter(tp_wma_handle wma, uint8_t vdev_id)
 }
 #endif /* FEATURE_WLAN_RA_FILTERING */
 
+/**
+ * wma_wow_set_wake_time() - set timer pattern tlv, so that firmware will wake
+ * up host after specified time is elapsed
+ * @wma_handle: wma handle
+ * @vdev_id: vdev id
+ * @cookie: value to identify reason why host set up wake call.
+ * @time: time in ms
+ *
+ * Return: QDF status
+ */
+QDF_STATUS wma_wow_set_wake_time(WMA_HANDLE wma_handle, uint8_t vdev_id,
+				 uint32_t cookie, uint32_t time)
+{
+	int ret;
+	tp_wma_handle wma = (tp_wma_handle)wma_handle;
+
+	WMA_LOGD(FL("send timer patter with time: %d and vdev = %d to fw"),
+		 time, vdev_id);
+	ret = wmi_unified_wow_timer_pattern_cmd(wma->wmi_handle, vdev_id,
+						cookie, time);
+	if (ret) {
+		WMA_LOGE(FL("Failed to send timer patter to fw"));
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	return QDF_STATUS_SUCCESS;
+}
 /**
  * wmi_unified_nat_keepalive_enable() - enable NAT keepalive filter
  * @wma: wma handle
@@ -4916,6 +4943,23 @@ int wma_wow_wakeup_host_event(void *handle, uint8_t *event,
 		/* Just update stats and exit */
 		WMA_LOGD("Host woken up because of chip power save failure");
 		break;
+	case WOW_REASON_TIMER_INTR_RECV:
+		/*
+		 * Right now firmware is not returning any cookie host has
+		 * programmed. So do not check for cookie.
+		 */
+		WMA_LOGE("WOW_REASON_TIMER_INTR_RECV received, indicating key exchange did not finish. Initiate disconnect");
+		if (param_buf->wow_packet_buffer) {
+			WMA_LOGD("wow_packet_buffer dump");
+			qdf_trace_hex_dump(QDF_MODULE_ID_WMA,
+				QDF_TRACE_LEVEL_DEBUG,
+				param_buf->wow_packet_buffer, wow_buf_pkt_len);
+			wma_peer_sta_kickout_event_handler(handle,
+				wmi_cmd_struct_ptr, wow_buf_pkt_len);
+		} else {
+		    WMA_LOGD("No wow_packet_buffer present");
+		}
+		break;
 	default:
 		break;
 	}
@@ -5247,6 +5291,8 @@ QDF_STATUS wma_register_action_frame_patterns(WMA_HANDLE handle,
 	cmd->action_category_map[i++] = ALLOWED_ACTION_FRAMES_BITMAP7;
 
 	set_action_id_drop_pattern_for_spec_mgmt(cmd->action_per_category);
+	cmd->action_per_category[SIR_MAC_ACTION_PUBLIC_USAGE] =
+			DROP_PUBLIC_ACTION_FRAME_BITMAP;
 
 	for (i = 0; i < WMI_SUPPORTED_ACTION_CATEGORY_ELE_LIST; i++) {
 		if (i < ALLOWED_ACTION_FRAME_MAP_WORDS)
@@ -5258,6 +5304,8 @@ QDF_STATUS wma_register_action_frame_patterns(WMA_HANDLE handle,
 
 	WMA_LOGD("Spectrum mgmt action id drop bitmap: 0x%x",
 			cmd->action_per_category[SIR_MAC_ACTION_SPECTRUM_MGMT]);
+	WMA_LOGD("Public action id drop bitmap: 0x%x",
+			cmd->action_per_category[SIR_MAC_ACTION_PUBLIC_USAGE]);
 
 	err = wmi_unified_action_frame_patterns_cmd(wma->wmi_handle, cmd);
 	if (err) {
@@ -5519,7 +5567,7 @@ QDF_STATUS wma_enable_d0wow_in_fw(WMA_HANDLE handle)
 		return status;
 	}
 
-	status = qdf_wait_single_event(&wma->target_suspend,
+	status = qdf_wait_for_event_completion(&wma->target_suspend,
 		WMA_TGT_SUSPEND_COMPLETE_TIMEOUT);
 	if (QDF_IS_STATUS_ERROR(status)) {
 		WMA_LOGE("Failed to receive D0-WoW enable HTC ACK from FW! "
@@ -5619,7 +5667,7 @@ QDF_STATUS wma_enable_wow_in_fw(WMA_HANDLE handle, uint32_t wow_flags)
 
 	wmi_set_target_suspend(wma->wmi_handle, true);
 
-	if (qdf_wait_single_event(&wma->target_suspend,
+	if (qdf_wait_for_event_completion(&wma->target_suspend,
 				  WMA_TGT_SUSPEND_COMPLETE_TIMEOUT)
 	    != QDF_STATUS_SUCCESS) {
 		WMA_LOGE("Failed to receive WoW Enable Ack from FW");
@@ -6382,7 +6430,7 @@ static QDF_STATUS wma_send_host_wakeup_ind_to_fw(tp_wma_handle wma)
 
 	WMA_LOGD("Host wakeup indication sent to fw");
 
-	qdf_status = qdf_wait_single_event(&(wma->wma_resume_event),
+	qdf_status = qdf_wait_for_event_completion(&(wma->wma_resume_event),
 					   WMA_RESUME_TIMEOUT);
 	if (QDF_STATUS_SUCCESS != qdf_status) {
 		WMA_LOGP("%s: Timeout waiting for resume event from FW",
@@ -6438,7 +6486,7 @@ QDF_STATUS wma_disable_d0wow_in_fw(WMA_HANDLE handle)
 		return status;
 	}
 
-	status = qdf_wait_single_event(&(wma->wma_resume_event),
+	status = qdf_wait_for_event_completion(&(wma->wma_resume_event),
 				WMA_RESUME_TIMEOUT);
 	if (QDF_IS_STATUS_ERROR(status)) {
 		WMA_LOGP("%s: Timeout waiting for resume event from FW!",
@@ -8346,7 +8394,7 @@ static QDF_STATUS wma_post_runtime_suspend_msg(WMA_HANDLE handle)
 	if (qdf_status != QDF_STATUS_SUCCESS)
 		goto failure;
 
-	if (qdf_wait_single_event(&wma->runtime_suspend,
+	if (qdf_wait_for_event_completion(&wma->runtime_suspend,
 			WMA_TGT_SUSPEND_COMPLETE_TIMEOUT) !=
 			QDF_STATUS_SUCCESS) {
 		WMA_LOGE("Failed to get runtime suspend event");
@@ -8359,6 +8407,40 @@ msg_timed_out:
 	wma_post_runtime_resume_msg(wma);
 failure:
 	return QDF_STATUS_E_AGAIN;
+}
+
+/**
+ * wma_check_and_set_wake_timer(): checks all interfaces and if any interface
+ * has install_key pending, sets timer pattern in fw to wake up host after
+ * specified time has elapsed.
+ * @wma: wma handle
+ * @time: time after which host wants to be awaken.
+ *
+ * Return: None
+ */
+static void wma_check_and_set_wake_timer(tp_wma_handle wma, uint32_t time)
+{
+	int i;
+	struct wma_txrx_node *iface;
+
+	if (!WMI_SERVICE_EXT_IS_ENABLED(wma->wmi_service_bitmap,
+		wma->wmi_service_ext_bitmap,
+		WMI_SERVICE_WOW_WAKEUP_BY_TIMER_PATTERN)) {
+		WMA_LOGD("TIME_PATTERN is not enabled");
+		return;
+	}
+
+	for (i = 0; i < wma->max_bssid; i++) {
+		iface = &wma->interfaces[i];
+		if (iface->is_vdev_valid && iface->is_waiting_for_key) {
+			/*
+			 * right now cookie is dont care, since FW disregards
+			 * that.
+			 */
+			wma_wow_set_wake_time((WMA_HANDLE)wma, i, 0, time);
+			break;
+		}
+	}
 }
 
 /**
@@ -8425,6 +8507,7 @@ static int __wma_bus_suspend(enum qdf_suspend_type type, uint32_t wow_flags)
 		return qdf_status_to_os_return(status);
 	}
 
+	wma_check_and_set_wake_timer(handle, SIR_INSTALL_KEY_TIMEOUT_MS);
 	status = wma_enable_wow_in_fw(handle, wow_flags);
 
 	return qdf_status_to_os_return(status);
@@ -8621,7 +8704,7 @@ QDF_STATUS wma_suspend_target(WMA_HANDLE handle, int disable_target_intr)
 
 	wmi_set_target_suspend(wma_handle->wmi_handle, true);
 
-	if (qdf_wait_single_event(&wma_handle->target_suspend,
+	if (qdf_wait_for_event_completion(&wma_handle->target_suspend,
 				  WMA_TGT_SUSPEND_COMPLETE_TIMEOUT)
 	    != QDF_STATUS_SUCCESS) {
 		WMA_LOGE("Failed to get ACK from firmware for pdev suspend");
@@ -8753,7 +8836,7 @@ QDF_STATUS wma_resume_target(WMA_HANDLE handle)
 	if (QDF_IS_STATUS_ERROR(qdf_status))
 		WMA_LOGE("Failed to send WMI_PDEV_RESUME_CMDID command");
 
-	qdf_status = qdf_wait_single_event(&(wma->wma_resume_event),
+	qdf_status = qdf_wait_for_event_completion(&(wma->wma_resume_event),
 			WMA_RESUME_TIMEOUT);
 	if (QDF_STATUS_SUCCESS != qdf_status) {
 		WMA_LOGP("%s: Timeout waiting for resume event from FW",

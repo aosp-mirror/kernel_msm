@@ -400,6 +400,7 @@ csr_issue_11d_scan(tpAniSirGlobal mac_ctx, tSmeCmd *scan_cmd,
 	chn_info->ChannelList = qdf_mem_malloc(num_chn);
 	if (NULL == chn_info->ChannelList) {
 		sme_err("Failed to allocate memory");
+		csr_release_command(mac_ctx, scan_11d_cmd);
 		return QDF_STATUS_E_NOMEM;
 	}
 	qdf_mem_copy(chn_info->ChannelList,
@@ -413,7 +414,7 @@ csr_issue_11d_scan(tpAniSirGlobal mac_ctx, tSmeCmd *scan_cmd,
 	tmp_rq.BSSType = eCSR_BSS_TYPE_ANY;
 	tmp_rq.scan_id = scan_11d_cmd->u.scanCmd.scanID;
 
-	status = qdf_mc_timer_init(&scan_cmd->u.scanCmd.csr_scan_timer,
+	status = qdf_mc_timer_init(&scan_11d_cmd->u.scanCmd.csr_scan_timer,
 			QDF_TIMER_TYPE_SW,
 			csr_scan_active_list_timeout_handle, scan_11d_cmd);
 
@@ -454,6 +455,7 @@ csr_issue_11d_scan(tpAniSirGlobal mac_ctx, tSmeCmd *scan_cmd,
 	chn_info->ChannelList = NULL;
 	if (!QDF_IS_STATUS_SUCCESS(status)) {
 		sme_err("csr_scan_copy_request failed");
+		csr_release_command_scan(mac_ctx, scan_11d_cmd);
 		return QDF_STATUS_E_FAILURE;
 	}
 
@@ -465,6 +467,7 @@ csr_issue_11d_scan(tpAniSirGlobal mac_ctx, tSmeCmd *scan_cmd,
 	if (!QDF_IS_STATUS_SUCCESS(status)) {
 		sme_err("Failed to send message status = %d",
 			status);
+		csr_release_command_scan(mac_ctx, scan_11d_cmd);
 		return QDF_STATUS_E_FAILURE;
 	}
 	return QDF_STATUS_SUCCESS;
@@ -1197,6 +1200,32 @@ QDF_STATUS csr_scan_handle_search_for_ssid(tpAniSirGlobal pMac,
 	return status;
 }
 
+#ifdef WLAN_FEATURE_FILS_SK
+static
+bool csr_handle_fils_scan_for_ssid_failure(tCsrRoamProfile *roam_profile,
+					   tCsrRoamInfo *roam_info)
+{
+	if (roam_profile && roam_profile->fils_con_info &&
+	    roam_profile->fils_con_info->is_fils_connection) {
+		sme_debug("send roam_info for FILS connection failure, seq %d",
+			   roam_profile->fils_con_info->sequence_number);
+		roam_info->is_fils_connection = true;
+		roam_info->fils_seq_num =
+				roam_profile->fils_con_info->sequence_number;
+		return true;
+	}
+
+	return false;
+}
+#else
+static
+bool csr_handle_fils_scan_for_ssid_failure(tCsrRoamProfile *roam_profile,
+					   tCsrRoamInfo *roam_info)
+{
+	return false;
+}
+#endif
+
 QDF_STATUS csr_scan_handle_search_for_ssid_failure(tpAniSirGlobal pMac,
 						   tSmeCmd *pCommand)
 {
@@ -1205,6 +1234,8 @@ QDF_STATUS csr_scan_handle_search_for_ssid_failure(tpAniSirGlobal pMac,
 	tCsrRoamProfile *pProfile = pCommand->u.scanCmd.pToRoamProfile;
 	tCsrRoamSession *pSession = CSR_GET_SESSION(pMac, sessionId);
 	eCsrRoamResult roam_result;
+	tCsrRoamInfo *roam_info = NULL;
+	struct tag_csrscan_result *scan_result;
 
 	if (!pSession) {
 		sme_err("session %d not found", sessionId);
@@ -1252,31 +1283,42 @@ QDF_STATUS csr_scan_handle_search_for_ssid_failure(tpAniSirGlobal pMac,
 		roam_result = eCSR_ROAM_RESULT_IBSS_START_FAILED;
 		goto roam_completion;
 	}
+
+	roam_info = qdf_mem_malloc(sizeof(tCsrRoamInfo));
+	if (!roam_info) {
+		sme_err("Failed to allocate memory for roam_info");
+		goto roam_completion;
+	}
+
+	if (pCommand->u.roamCmd.pRoamBssEntry) {
+		scan_result = GET_BASE_ADDR(pCommand->u.roamCmd.pRoamBssEntry,
+					    struct tag_csrscan_result, Link);
+		roam_info->pBssDesc = &scan_result->Result.BssDescriptor;
+	}
+	roam_info->statusCode = pSession->joinFailStatusCode.statusCode;
+	roam_info->reasonCode = pSession->joinFailStatusCode.reasonCode;
+
 	/* Only indicate assoc_completion if we indicate assoc_start. */
 	if (pSession->bRefAssocStartCnt > 0) {
-		tCsrRoamInfo *pRoamInfo = NULL, roamInfo;
-
-		qdf_mem_set(&roamInfo, sizeof(tCsrRoamInfo), 0);
-		pRoamInfo = &roamInfo;
-		if (pCommand->u.roamCmd.pRoamBssEntry) {
-			struct tag_csrscan_result *pScanResult = GET_BASE_ADDR(
-				pCommand->u.roamCmd.pRoamBssEntry,
-				struct tag_csrscan_result, Link);
-			roamInfo.pBssDesc = &pScanResult->Result.BssDescriptor;
-		}
-		roamInfo.statusCode = pSession->joinFailStatusCode.statusCode;
-		roamInfo.reasonCode = pSession->joinFailStatusCode.reasonCode;
 		pSession->bRefAssocStartCnt--;
-		csr_roam_call_callback(pMac, sessionId, pRoamInfo,
+		csr_roam_call_callback(pMac, sessionId, roam_info,
 				       pCommand->u.scanCmd.roamId,
 				       eCSR_ROAM_ASSOCIATION_COMPLETION,
 				       eCSR_ROAM_RESULT_SCAN_FOR_SSID_FAILURE);
 	} else {
-		csr_roam_call_callback(pMac, sessionId, NULL,
+		if (!csr_handle_fils_scan_for_ssid_failure(
+		    pProfile, roam_info)) {
+			qdf_mem_free(roam_info);
+			roam_info = NULL;
+		}
+		csr_roam_call_callback(pMac, sessionId, roam_info,
 				       pCommand->u.scanCmd.roamId,
 				       eCSR_ROAM_ASSOCIATION_FAILURE,
 				       eCSR_ROAM_RESULT_SCAN_FOR_SSID_FAILURE);
 	}
+
+	if (roam_info)
+		qdf_mem_free(roam_info);
 roam_completion:
 	csr_roam_completion(pMac, sessionId, NULL, pCommand, roam_result,
 			    false);
@@ -6224,8 +6266,8 @@ static void csr_scan_copy_request_valid_channels_only(tpAniSirGlobal mac_ctx,
 		 * that is the only way to find p2p peers.
 		 * This can happen only if band is set to 5Ghz mode.
 		 */
-		if (src_req->ChannelInfo.ChannelList[index] <
-		    CDS_MIN_11P_CHANNEL &&
+		if (!cds_is_dsrc_channel(cds_chan_to_freq(
+			src_req->ChannelInfo.ChannelList[index])) &&
 			((csr_roam_is_valid_channel(mac_ctx,
 			src_req->ChannelInfo.ChannelList[index])) ||
 			((eCSR_SCAN_P2P_DISCOVERY == src_req->requestType) &&
@@ -6266,13 +6308,13 @@ static void csr_scan_copy_request_valid_channels_only(tpAniSirGlobal mac_ctx,
 						ChannelList[index]) &&
 					mac_ctx->roam.configParam.
 					sta_roam_policy.sap_operating_band ==
-						eCSR_BAND_24) ||
+						SIR_BAND_2_4_GHZ) ||
 						(CDS_IS_CHANNEL_5GHZ(
 							src_req->ChannelInfo.
 							ChannelList[index]) &&
 					mac_ctx->roam.configParam.
 					sta_roam_policy.sap_operating_band ==
-						eCSR_BAND_5G))) {
+						SIR_BAND_5_GHZ))) {
 					QDF_TRACE(QDF_MODULE_ID_SME,
 						QDF_TRACE_LEVEL_DEBUG,
 					      FL("ignoring unsafe channel %d"),
@@ -6340,7 +6382,7 @@ static bool csr_scan_filter_given_chnl_band(tpAniSirGlobal mac_ctx,
 		 * Don't allow DSRC channel when IBSS or SAP DFS concurrent
 		 * connection is up
 		 */
-		if (valid_chnl_list[i] >= CDS_MIN_11P_CHANNEL)
+		if (cds_is_dsrc_channel(cds_chan_to_freq(valid_chnl_list[i])))
 			continue;
 		if (CDS_IS_CHANNEL_5GHZ(channel) &&
 			CDS_IS_CHANNEL_24GHZ(valid_chnl_list[i])) {
@@ -6488,10 +6530,10 @@ QDF_STATUS csr_scan_copy_request(tpAniSirGlobal mac_ctx,
 					cds_get_channel_state(src_req->
 							ChannelInfo.
 							ChannelList[index]);
-				if (src_req->ChannelInfo.ChannelList[index] <
-						CDS_MIN_11P_CHANNEL &&
-					((CHANNEL_STATE_ENABLE ==
-						channel_state) ||
+				if (!cds_is_dsrc_channel(cds_chan_to_freq(
+					src_req->ChannelInfo.ChannelList[index]
+					)) && ((CHANNEL_STATE_ENABLE ==
+					channel_state) ||
 					((CHANNEL_STATE_DFS == channel_state) &&
 					!skip_dfs_chnl))) {
 					dst_req->ChannelInfo.ChannelList
@@ -6519,8 +6561,9 @@ QDF_STATUS csr_scan_copy_request(tpAniSirGlobal mac_ctx,
 			new_index = 0;
 			for (index = 0; index < src_req->ChannelInfo.
 					numOfChannels; index++) {
-				if (src_req->ChannelInfo.ChannelList[index] <
-						CDS_MIN_11P_CHANNEL) {
+				if (!cds_is_dsrc_channel(cds_chan_to_freq(
+					src_req->ChannelInfo.ChannelList[index]
+					))) {
 					dst_req->ChannelInfo.
 						ChannelList[new_index] =
 						src_req->ChannelInfo.
@@ -7834,10 +7877,12 @@ QDF_STATUS csr_scan_save_preferred_network_found(tpAniSirGlobal pMac,
 		 * a part of PNO is updated to the supplicant. Specially
 		 * applicable in case of AP configured in 11A only mode.
 		 */
-		if ((pMac->roam.configParam.bandCapability == eCSR_BAND_ALL) ||
-			(pMac->roam.configParam.bandCapability == eCSR_BAND_24))
+		if ((pMac->roam.configParam.bandCapability == SIR_BAND_ALL) ||
+			(pMac->roam.configParam.bandCapability ==
+			 SIR_BAND_2_4_GHZ))
 			pBssDescr->channelId = 1;
-		else if (pMac->roam.configParam.bandCapability == eCSR_BAND_5G)
+		else if (pMac->roam.configParam.bandCapability ==
+			 SIR_BAND_5_GHZ)
 			pBssDescr->channelId = 36;
 	}
 	if ((pBssDescr->channelId > 0) && (pBssDescr->channelId < 15)) {

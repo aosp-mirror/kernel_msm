@@ -156,6 +156,12 @@ static inline struct qdf_mem_header *qdf_mem_get_header(void *ptr)
 	return (struct qdf_mem_header *)ptr - 1;
 }
 
+static inline struct qdf_mem_header *qdf_mem_dma_get_header(void *ptr,
+							    qdf_size_t size)
+{
+	return (struct qdf_mem_header *) ((uint8_t *) ptr + size);
+}
+
 static inline uint64_t *qdf_mem_get_trailer(struct qdf_mem_header *header)
 {
 	return (uint64_t *)((void *)(header + 1) + header->size);
@@ -170,6 +176,18 @@ static inline void *qdf_mem_get_ptr(struct qdf_mem_header *header)
 #define QDF_MEM_DEBUG_SIZE \
 	(sizeof(struct qdf_mem_header) + sizeof(WLAN_MEM_TRAILER))
 
+/* number of bytes needed for the qdf dma memory debug information */
+#define QDF_DMA_MEM_DEBUG_SIZE \
+	(sizeof(struct qdf_mem_header))
+
+static void qdf_mem_trailer_init(struct qdf_mem_header *header)
+{
+	QDF_BUG(header);
+	if (!header)
+		return;
+	*qdf_mem_get_trailer(header) = WLAN_MEM_TRAILER;
+}
+
 static void qdf_mem_header_init(struct qdf_mem_header *header, qdf_size_t size,
 				const char *file, uint32_t line)
 {
@@ -183,7 +201,6 @@ static void qdf_mem_header_init(struct qdf_mem_header *header, qdf_size_t size,
 	header->line = line;
 	header->size = size;
 	header->header = WLAN_MEM_HEADER;
-	*qdf_mem_get_trailer(header) = WLAN_MEM_TRAILER;
 }
 
 enum qdf_mem_validation_bitmap {
@@ -224,6 +241,17 @@ static bool qdf_mem_validate_list_node(qdf_list_node_t *qdf_node)
 }
 
 static enum qdf_mem_validation_bitmap
+qdf_mem_trailer_validate(struct qdf_mem_header *header,
+			enum qdf_mem_domain domain)
+{
+	enum qdf_mem_validation_bitmap error_bitmap = 0;
+
+	if (*qdf_mem_get_trailer(header) != WLAN_MEM_TRAILER)
+			error_bitmap |= QDF_MEM_BAD_TRAILER;
+	return error_bitmap;
+}
+
+static enum qdf_mem_validation_bitmap
 qdf_mem_header_validate(struct qdf_mem_header *header,
 			enum qdf_mem_domain domain)
 {
@@ -234,8 +262,6 @@ qdf_mem_header_validate(struct qdf_mem_header *header,
 
 	if (header->size > QDF_MEM_MAX_MALLOC)
 		error_bitmap |= QDF_MEM_BAD_SIZE;
-	else if (*qdf_mem_get_trailer(header) != WLAN_MEM_TRAILER)
-		error_bitmap |= QDF_MEM_BAD_TRAILER;
 
 	if (header->freed == true)
 		error_bitmap |= QDF_MEM_DOUBLE_FREE;
@@ -1090,6 +1116,7 @@ void *qdf_mem_malloc_debug(size_t size, const char *file, uint32_t line)
 	}
 
 	qdf_mem_header_init(header, size, file, line);
+	qdf_mem_trailer_init(header);
 	ptr = qdf_mem_get_ptr(header);
 
 	qdf_spin_lock_irqsave(&qdf_mem_list_lock);
@@ -1132,6 +1159,7 @@ void qdf_mem_free_debug(void *ptr, const char *file, uint32_t line)
 	qdf_spin_lock_irqsave(&qdf_mem_list_lock);
 	header = qdf_mem_get_header(ptr);
 	error_bitmap = qdf_mem_header_validate(header, domain);
+	error_bitmap |= qdf_mem_trailer_validate(header, domain);
 	if (!error_bitmap) {
 		header->freed = true;
 		list_del_init(&header->node);
@@ -1472,19 +1500,35 @@ void qdf_mem_move(void *dst_addr, const void *src_addr, uint32_t num_bytes)
 qdf_export_symbol(qdf_mem_move);
 
 #if defined(A_SIMOS_DEVHOST) || defined(HIF_SDIO) || defined(HIF_USB)
+/**
+ * qdf_mem_dma_alloc() - allocates memory for dma
+ * @osdev: OS device handle
+ * @dev: Pointer to device handle
+ * @size: Size to be allocated
+ * @phy_addr: Physical address
+ *
+ * Return: pointer of allocated memory or null if memory alloc fails
+ */
 static inline void *qdf_mem_dma_alloc(qdf_device_t osdev, void *dev,
-					 qdf_size_t size, qdf_dma_addr_t *paddr)
+				      qdf_size_t size,
+				      qdf_dma_addr_t *phy_addr)
 {
 	void *vaddr;
 
-	vaddr = kzmalloc(size, qdf_mem_malloc_flags());
-	*paddr = (uintptr_t)vaddr;
+	vaddr = qdf_mem_malloc(size);
+	*phy_addr = ((uintptr_t) vaddr);
 	/* using this type conversion to suppress "cast from pointer to integer
 	 * of different size" warning on some platforms
 	 */
-	BUILD_BUG_ON(sizeof(*paddr) < sizeof(vaddr));
-
+	BUILD_BUG_ON(sizeof(*phy_addr) < sizeof(vaddr));
 	return vaddr;
+}
+
+inline void
+qdf_mem_dma_free(void *dev, qdf_size_t size, void *vaddr, qdf_dma_addr_t paddr)
+{
+	qdf_mem_free(vaddr);
+	return;
 }
 #else
 static inline void *qdf_mem_dma_alloc(qdf_device_t osdev, void *dev,
@@ -1492,10 +1536,16 @@ static inline void *qdf_mem_dma_alloc(qdf_device_t osdev, void *dev,
 {
 	return dma_alloc_coherent(dev, size, paddr, qdf_mem_malloc_flags());
 }
+
+inline void
+qdf_mem_dma_free(void *dev, qdf_size_t size, void *vaddr, qdf_dma_addr_t paddr)
+{
+	dma_free_coherent(dev, size, vaddr, paddr);
+}
 #endif
 
 #ifdef MEMORY_DEBUG
-void *__qdf_mem_alloc_consistent(qdf_device_t osdev, void *dev,
+void *qdf_mem_alloc_consistent_debug(qdf_device_t osdev, void *dev,
 				 qdf_size_t size, qdf_dma_addr_t *paddr,
 				 const char *file, uint32_t line)
 {
@@ -1503,30 +1553,27 @@ void *__qdf_mem_alloc_consistent(qdf_device_t osdev, void *dev,
 	qdf_list_t *mem_list = qdf_mem_dma_active_list();
 	struct qdf_mem_header *header;
 	void *vaddr;
-	unsigned long start, duration;
 
 	if (!size || size > QDF_MEM_MAX_MALLOC) {
 		qdf_err("Cannot malloc %zu bytes @ %s:%d", size, file, line);
 		return NULL;
 	}
 
-	start = qdf_mc_timer_get_system_time();
-	header = qdf_mem_dma_alloc(osdev, dev, size + QDF_MEM_DEBUG_SIZE,
+	vaddr = qdf_mem_dma_alloc(osdev, dev, size + QDF_DMA_MEM_DEBUG_SIZE,
 				   paddr);
-	duration = qdf_mc_timer_get_system_time() - start;
 
-	if (duration > QDF_MEM_WARN_THRESHOLD)
-		qdf_warn("Malloc slept; %lums, %zuB @ %s:%d",
-			 duration, size, file, line);
-
-	if (!header) {
+	if (!vaddr) {
 		qdf_warn("Failed to malloc %zuB @ %s:%d", size, file, line);
 		return NULL;
 	}
 
+	header = qdf_mem_dma_get_header(vaddr, size);
+	/* For DMA buffers we only add trailers, this function will init
+	 * the header structure at the tail
+	 * Prefix the header into DMA buffer causes SMMU faults, so
+	 * do not prefix header into the DMA buffers
+	 */
 	qdf_mem_header_init(header, size, file, line);
-	vaddr = qdf_mem_get_ptr(header);
-	*paddr += sizeof(*header);
 
 	qdf_spin_lock_irqsave(&qdf_mem_dma_list_lock);
 	status = qdf_list_insert_front(mem_list, &header->node);
@@ -1538,38 +1585,8 @@ void *__qdf_mem_alloc_consistent(qdf_device_t osdev, void *dev,
 
 	return vaddr;
 }
-#else
-void *__qdf_mem_alloc_consistent(qdf_device_t osdev, void *dev,
-				 qdf_size_t size, qdf_dma_addr_t *paddr,
-				 const char *file, uint32_t line)
-{
-	void *vaddr = qdf_mem_dma_alloc(osdev, dev, size, paddr);
 
-	if (vaddr)
-		qdf_mem_dma_inc(size);
-
-	return vaddr;
-}
-#endif /* MEMORY_DEBUG */
-qdf_export_symbol(__qdf_mem_alloc_consistent);
-
-#if defined(A_SIMOS_DEVHOST) ||  defined(HIF_SDIO) || defined(HIF_USB)
-inline void
-qdf_mem_dma_free(void *dev, qdf_size_t size, void *vaddr, qdf_dma_addr_t paddr)
-{
-	kfree(vaddr);
-}
-
-#else
-inline void
-qdf_mem_dma_free(void *dev, qdf_size_t size, void *vaddr, qdf_dma_addr_t paddr)
-{
-	dma_free_coherent(dev, size, vaddr, paddr);
-}
-#endif
-
-#ifdef MEMORY_DEBUG
-void __qdf_mem_free_consistent(qdf_device_t osdev, void *dev,
+void qdf_mem_free_consistent_debug(qdf_device_t osdev, void *dev,
 			       qdf_size_t size, void *vaddr,
 			       qdf_dma_addr_t paddr, qdf_dma_context_t memctx,
 			       const char *file, uint32_t line)
@@ -1582,11 +1599,13 @@ void __qdf_mem_free_consistent(qdf_device_t osdev, void *dev,
 	if (qdf_unlikely(!vaddr))
 		return;
 
-	if (qdf_unlikely((qdf_size_t)vaddr <= sizeof(*header)))
-		panic("Failed to free invalid memory location %pK", vaddr);
-
 	qdf_spin_lock_irqsave(&qdf_mem_dma_list_lock);
-	header = qdf_mem_get_header(vaddr);
+	/* For DMA buffers we only add trailers, this function will retrive
+	 * the header structure at the tail
+	 * Prefix the header into DMA buffer causes SMMU faults, so
+	 * do not prefix header into the DMA buffers
+	 */
+	header = qdf_mem_dma_get_header(vaddr, size);
 	error_bitmap = qdf_mem_header_validate(header, domain);
 	if (!error_bitmap) {
 		header->freed = true;
@@ -1598,11 +1617,24 @@ void __qdf_mem_free_consistent(qdf_device_t osdev, void *dev,
 	qdf_mem_header_assert_valid(header, domain, error_bitmap, file, line);
 
 	qdf_mem_dma_dec(header->size);
-	qdf_mem_dma_free(dev, size + QDF_MEM_DEBUG_SIZE, header,
-			 paddr - sizeof(*header));
+	qdf_mem_dma_free(dev, size + QDF_DMA_MEM_DEBUG_SIZE, vaddr, paddr);
 }
+
 #else
-void __qdf_mem_free_consistent(qdf_device_t osdev, void *dev,
+
+void *qdf_mem_alloc_consistent_debug(qdf_device_t osdev, void *dev,
+				 qdf_size_t size, qdf_dma_addr_t *paddr,
+				 const char *file, uint32_t line)
+{
+	void *vaddr = qdf_mem_dma_alloc(osdev, dev, size, paddr);
+
+	if (vaddr)
+		qdf_mem_dma_inc(size);
+
+	return vaddr;
+}
+
+void qdf_mem_free_consistent_debug(qdf_device_t osdev, void *dev,
 			       qdf_size_t size, void *vaddr,
 			       qdf_dma_addr_t paddr, qdf_dma_context_t memctx,
 			       const char *file, uint32_t line)
@@ -1611,7 +1643,8 @@ void __qdf_mem_free_consistent(qdf_device_t osdev, void *dev,
 	qdf_mem_dma_free(dev, size, vaddr, paddr);
 }
 #endif /* MEMORY_DEBUG */
-qdf_export_symbol(__qdf_mem_free_consistent);
+qdf_export_symbol(qdf_mem_alloc_consistent_debug);
+qdf_export_symbol(qdf_mem_free_consistent_debug);
 
 /**
  * qdf_mem_dma_sync_single_for_device() - assign memory to device

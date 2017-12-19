@@ -772,8 +772,8 @@ static tSirLLStatsResults *wma_get_ll_stats_ext_buf(uint32_t *len,
 			excess_data = true;
 			break;
 		}
-		if (peer_num > (WMI_SVC_MSG_MAX_SIZE - total_peer_len) /
-				sizeof(struct sir_wifi_ll_ext_peer_stats)) {
+		if (peer_num > WMI_SVC_MSG_MAX_SIZE / (total_peer_len +
+		    sizeof(struct sir_wifi_ll_ext_peer_stats))) {
 			excess_data = true;
 			break;
 		} else {
@@ -1500,9 +1500,9 @@ static int wma_unified_radio_tx_power_level_stats_event_handler(void *handle,
 	    sizeof(*fixed_param)) / sizeof(uint32_t))) {
 		WMA_LOGE("%s: excess tx_power buffers:%d", __func__,
 			fixed_param->num_tx_power_levels);
-		QDF_ASSERT(0);
 		return -EINVAL;
 	}
+
 	rs_results = (tSirWifiRadioStat *) &link_stats_results->results[0] +
 							 fixed_param->radio_id;
 	tx_power_level_values = (uint8_t *) param_tlvs->tx_time_per_power_level;
@@ -1512,6 +1512,18 @@ static int wma_unified_radio_tx_power_level_stats_event_handler(void *handle,
 	if (!rs_results->total_num_tx_power_levels) {
 		link_stats_results->nr_received++;
 		goto post_stats;
+	}
+
+	if ((fixed_param->power_level_offset >
+	    rs_results->total_num_tx_power_levels) ||
+	    (fixed_param->num_tx_power_levels >
+	    rs_results->total_num_tx_power_levels -
+	    fixed_param->power_level_offset)) {
+		WMA_LOGE("%s: Invalid offset %d total_num %d num %d",
+			 __func__, fixed_param->power_level_offset,
+			 rs_results->total_num_tx_power_levels,
+			 fixed_param->num_tx_power_levels);
+		return -EINVAL;
 	}
 
 	if (!rs_results->tx_time_per_power_level) {
@@ -1704,11 +1716,18 @@ static int wma_unified_link_radio_stats_event_handler(void *handle,
 	rs_results->onTimePnoScan = radio_stats->on_time_pno_scan;
 	rs_results->onTimeHs20 = radio_stats->on_time_hs20;
 	rs_results->total_num_tx_power_levels = 0;
-	rs_results->tx_time_per_power_level = NULL;
+	if (rs_results->tx_time_per_power_level) {
+		qdf_mem_free(rs_results->tx_time_per_power_level);
+		rs_results->tx_time_per_power_level = NULL;
+	}
+	if (rs_results->channels) {
+		qdf_mem_free(rs_results->channels);
+		rs_results->channels = NULL;
+	}
+
 	rs_results->numChannels = radio_stats->num_channels;
 	rs_results->on_time_host_scan = radio_stats->on_time_host_scan;
 	rs_results->on_time_lpi_scan = radio_stats->on_time_lpi_scan;
-	rs_results->channels = NULL;
 
 	if (rs_results->numChannels) {
 		rs_results->channels = (tSirWifiChannelStats *) qdf_mem_malloc(

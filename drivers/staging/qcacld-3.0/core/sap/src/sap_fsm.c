@@ -2651,8 +2651,9 @@ QDF_STATUS sap_open_session(tHalHandle hHal, ptSapContext sapContext,
 		return QDF_STATUS_E_FAILURE;
 	}
 
-	status = qdf_wait_single_event(&sapContext->sap_session_opened_evt,
-					SME_CMD_TIMEOUT_VALUE);
+	status = qdf_wait_for_event_completion(
+			&sapContext->sap_session_opened_evt,
+			SME_CMD_TIMEOUT_VALUE);
 
 	if (!QDF_IS_STATUS_SUCCESS(status)) {
 		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_ERROR,
@@ -2670,6 +2671,9 @@ QDF_STATUS sap_open_session(tHalHandle hHal, ptSapContext sapContext,
 	sapContext->is_pre_cac_on = false;
 	sapContext->pre_cac_complete = false;
 	sapContext->chan_before_pre_cac = 0;
+	sapContext->enable_etsi_srd_chan_support =
+		pMac->sap.enable_etsi_srd_chan_support;
+
 	return QDF_STATUS_SUCCESS;
 }
 
