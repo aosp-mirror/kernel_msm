@@ -7858,7 +7858,7 @@ static void ufshcd_init_desc_sizes(struct ufs_hba *hba)
 	if (err)
 		hba->desc_size.geom_desc = QUERY_DESC_GEOMETRY_DEF_SIZE;
 
-	err = ufshcd_read_desc_length(hba, QUERY_DESC_IDN_INTERCONNECT, 0,
+	err = ufshcd_read_desc_length(hba, QUERY_DESC_IDN_HEALTH, 0,
 		&hba->desc_size.health_desc);
 	if (err)
 		hba->desc_size.health_desc = QUERY_DESC_HEALTH_DEF_SIZE;
