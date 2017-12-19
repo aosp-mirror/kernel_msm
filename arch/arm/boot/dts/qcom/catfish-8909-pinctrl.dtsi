@@ -574,5 +574,61 @@
 				};
 			};
 		};
+		gpio_nfc{
+
+			gpio_nfc_rst_active: gpio_nfc_rst_active {
+				mux {
+					pins = "gpio36";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio36";
+					drive-strength = <2>;
+					output-low;
+				};
+			};
+
+			gpio_nfc_rst_sleep: gpio_nfc_rst_sleep {
+				mux {
+					pins = "gpio36";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio36";
+					drive-strength = <2>;
+					output-low;
+				};
+			};
+			gpio_nfc_irq_active: gpio_nfc_irq_active {
+				mux {
+					pins = "gpio92";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio92";
+					drive-strength = <2>;
+					bias-disable;
+					/* input-enable; */
+				};
+			};
+
+			gpio_nfc_irq_sleep: gpio_nfc_irq_sleep {
+				mux {
+					pins = "gpio92";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio92";
+					drive-strength = <2>;
+					bias-disable;
+					/* input-enable; */
+				};
+			};
+		};
+
 	};
 };
