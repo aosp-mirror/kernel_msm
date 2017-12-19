@@ -26,7 +26,7 @@
 	qcom,platform-te-gpio = <&msm_gpio 24 0>;
 
 	qcom,platform-reset-gpio = <&msm_gpio 25 0>;
-	qcom,platform-enable-gpio = <&msm_gpio 38 0>;
+	qcom,platform-enable-gpio = <&msm_gpio 49 0>;
 	/delete-property/qcom,platform-bklight-en-gpio;
 
 	vddio-supply = <&pm8916_l6>;

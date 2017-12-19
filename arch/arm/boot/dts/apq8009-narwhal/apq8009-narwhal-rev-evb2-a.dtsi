@@ -13,6 +13,7 @@
 #include "apq8009-narwhal.dtsi"
 
 &dsi_sharp_nt35350_cmd {
+	qcom,platform-enable-gpio = <&msm_gpio 38 0>;
 	/delete-property/ qcom,mdss-dsi-te-pin-select;
 	/delete-property/ qcom,mdss-dsi-te-check-enable;
 	/delete-property/ qcom,mdss-dsi-te-using-te-pin;
@@ -21,6 +22,27 @@
 };
 
 &soc {
+	msm_gpio: pinctrl@1000000 {
+		pmx_mdss {
+			mdss_enable_active: mdss_enable_active {
+				mux {
+					pins = "gpio38";
+				};
+				config {
+					pins = "gpio38";
+				};
+			};
+			mdss_enable_suspend: mdss_enable_suspend {
+				mux {
+					pins = "gpio38";
+				};
+				config {
+					pins = "gpio38";
+				};
+			};
+		};
+	};
+
 	i2c@78b6000 { /* BLSP1 QUP2 */
 		backlight_dsv_qup2: lm36272@11 {
 			compatible = "leds,lm36272";
