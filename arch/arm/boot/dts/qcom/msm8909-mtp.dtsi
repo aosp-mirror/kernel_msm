@@ -160,15 +160,6 @@
 			debounce-interval = <15>;
 		};
 
-		camera_snapshot {
-			label = "camera_snapshot";
-			gpios = <&msm_gpio 92 0x1>;
-			linux,input-type = <1>;
-			linux,code = <0x2fe>;
-			gpio-key,wakeup;
-			debounce-interval = <15>;
-		};
-
 		vol_up {
 			label = "volume_up";
 			gpios = <&msm_gpio 90 0x1>;

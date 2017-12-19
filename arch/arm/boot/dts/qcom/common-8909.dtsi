@@ -60,6 +60,17 @@
                 };
         };
 		i2c@78ba000 { /* BLSP1 QUP6 */
+      st21nfc@08 {
+            compatible = "st,st21nfcd";
+            reg = <0x08>;
+            st,vdd_ana-supply = <&pm8916_l6>;
+            st,vcc_i2c-supply = <&pm8916_l6>;
+            pinctrl-names = "default","sleep";
+            pinctrl-0 = <&gpio_nfc_rst_active &gpio_nfc_irq_active>;
+            pinctrl-1 = <&gpio_nfc_rst_sleep &gpio_nfc_irq_sleep>;
+            st,irq_gpio = <&msm_gpio 92 0x2001>;
+            st,reset_gpio = <&msm_gpio 36 0x00>;
+     };
 			/*touch*/
 			focaltech@38{
 				compatible = "focaltech,fts";
