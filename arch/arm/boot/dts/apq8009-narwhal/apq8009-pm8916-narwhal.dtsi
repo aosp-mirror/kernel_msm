@@ -58,10 +58,10 @@
 	};
 
 	qcom,pm8916@1 {
-		qcom,vibrator@c000 {
+		pm8916_vib: qcom,vibrator@c000 {
 			status = "okay";
 			qcom,vib-timeout-ms = <15000>;
-			qcom,vib-vtg-level-mV = <2900>;
+			qcom,vib-vtg-level-mV = <2700>;
 		};
 	};
 };

@@ -159,3 +159,7 @@
 &bt_addr {
 	allow-random-addr;
 };
+
+&pm8916_vib {
+	qcom,vib-vtg-level-mV = <2900>;
+};
