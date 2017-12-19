@@ -36,7 +36,7 @@
 #define CONFIG_BCMDHD_FW_PATH     "/vendor/firmware/fw_bcmdhd.bin"
 #endif
 #ifndef CONFIG_BCMDHD_FW_PATH
-#define CONFIG_BCMDHD_NVRAM_PATH  "/etc/wifi/bcmdhd.cal"
+#define CONFIG_BCMDHD_NVRAM_PATH  "vendor/etc/wifi/bcmdhd.cal"
 #endif
 
 #if defined(DHD_DEBUG)
