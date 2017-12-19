@@ -8070,14 +8070,8 @@ static void ufshcd_set_active_icc_lvl(struct ufs_hba *hba)
 {
 	int ret;
 	int buff_len = hba->desc_size.pwr_desc;
-	u8 *desc_buf = NULL;
+	u8 desc_buf[hba->desc_size.pwr_desc];
 	u32 icc_level;
-
-	if (buff_len) {
-		desc_buf = kmalloc(buff_len, GFP_KERNEL);
-		if (!desc_buf)
-			return;
-	}
 
 	ret = ufshcd_read_power_desc(hba, desc_buf, buff_len);
 	if (ret) {
@@ -8565,17 +8559,8 @@ out:
 static int ufs_read_device_desc_data(struct ufs_hba *hba)
 {
 	int err;
-	u8 *desc_buf = NULL;
+	u8 desc_buf[hba->desc_size.dev_desc];
 
-	if (hba->desc_size.dev_desc) {
-		desc_buf = kmalloc(hba->desc_size.dev_desc, GFP_KERNEL);
-		if (!desc_buf) {
-			err = -ENOMEM;
-			dev_err(hba->dev,
-				"%s: Failed to allocate desc_buf\n", __func__);
-			return err;
-		}
-	}
 	err = ufshcd_read_device_desc(hba, desc_buf, hba->desc_size.dev_desc);
 	if (err)
 		return err;
@@ -10504,17 +10489,9 @@ static ssize_t health_attr_show(struct device *dev,
 {
 	struct ufs_hba *hba = dev_get_drvdata(dev);
 	int buff_len = hba->desc_size.health_desc;
-	u8 *desc_buf = NULL;
+	u8 desc_buf[hba->desc_size.health_desc];
 	int err;
 
-	if (buff_len) {
-		desc_buf = kmalloc(buff_len, GFP_KERNEL);
-		if (!desc_buf) {
-			dev_err(hba->dev,
-				"%s: Failed to allocate desc_buf\n", __func__);
-			return 0;
-		}
-	}
 	pm_runtime_get_sync(hba->dev);
 	err = ufshcd_read_desc(hba, QUERY_DESC_IDN_HEALTH, 0,
 					desc_buf, buff_len);
