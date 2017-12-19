@@ -121,6 +121,10 @@
 	};
 };
 
+&spi_0 {
+	status = "disabled";
+};
+
 &sdhc_2 {
 	status = "disabled";
 };

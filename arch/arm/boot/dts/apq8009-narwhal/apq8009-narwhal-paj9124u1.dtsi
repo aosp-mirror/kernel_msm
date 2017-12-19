@@ -1,0 +1,33 @@
+/*
+ * Copyright(C) 2017 LGE, Inc.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/*
+ * apq8009-narwhal-paj9124u1: rotating side button config
+ */
+
+&spi_0  {
+	pinctrl-names = "spi_default", "spi_sleep";
+	pinctrl-0 = <&spi0_default>;
+	pinctrl-1 = <&spi0_sleep>;
+	paj9124u1: paj9124u1@0 {
+		compatible = "paj9124u1";
+		reg = <0>;
+		interrupt-parent = <&msm_gpio>;
+		interrupts = <39 0x00>;
+		spi-max-frequency = <2000000>;
+		pixart,vld-supply = <&pm8916_l17>;
+		pixart,vdd-supply = <&pm8916_l16>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&paj9124u1_motion_gpio>;
+	};
+};

@@ -21,12 +21,12 @@
 #include "apq8009-narwhal-sound.dtsi"
 #include "apq8009-narwhal-misc.dtsi"
 #include "apq8009-narwhal-connectivity.dtsi"
+#include "apq8009-narwhal-paj9124u1.dtsi"
 
 /{
 	aliases {
 		/delete-property/i2c1;
 		/delete-property/i2c3;
-		/delete-property/spi0;
 		i2c6 = &i2c_6; /* I2C6 controller device */
 	};
 
@@ -50,7 +50,6 @@
 &soc {
 	/delete-node/ i2c@78b5000; /* i2c_1 */
 	/delete-node/ i2c@78b7000; /* i2c_3 */
-	/delete-node/ spi@78ba000; /* spi_0 */
 
 	qcom,venus@1de0000 {
 		status = "disabled";

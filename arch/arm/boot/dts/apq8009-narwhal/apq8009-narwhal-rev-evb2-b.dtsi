@@ -22,3 +22,7 @@
 &bt_addr {
 	allow-random-addr;
 };
+
+&spi_0 {
+	status = "disabled";
+};

@@ -13,12 +13,16 @@
 #include "apq8009-narwhal.dtsi"
 
 &mdss_dsi0 {
-        pinctrl-0 = <&mdss_reset_active &mdss_te_active>;
-        pinctrl-1 = <&mdss_reset_suspend &mdss_te_suspend>;
+	pinctrl-0 = <&mdss_reset_active &mdss_te_active>;
+	pinctrl-1 = <&mdss_reset_suspend &mdss_te_suspend>;
 
-        /delete-property/qcom,platform-enable-gpio;
+	/delete-property/qcom,platform-enable-gpio;
 };
 
 &bt_addr {
-        allow-random-addr;
+	allow-random-addr;
+};
+
+&spi_0 {
+	status = "disabled";
 };
