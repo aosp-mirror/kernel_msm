@@ -1393,8 +1393,10 @@ static int max17050_probe(struct i2c_client *client,
 	chip->battery.get_property = max17050_get_property;
 	chip->battery.properties = max17050_battery_props;
 	chip->battery.num_properties = ARRAY_SIZE(max17050_battery_props);
-	chip->battery.external_power_changed =
-		max17050_external_power_changed;
+	if (chip->pdata->dynamic_soc) {
+		chip->battery.external_power_changed =
+			max17050_external_power_changed;
+	}
 	chip->battery.supplied_to = pm_batt_supplied_to;
 	chip->battery.num_supplicants =
 		ARRAY_SIZE(pm_batt_supplied_to);
