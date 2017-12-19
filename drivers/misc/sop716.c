@@ -204,7 +204,7 @@ static int sop716_read(struct sop716_info *si, u8 reg, u8 *val)
 	do {
 		ret = i2c_smbus_read_i2c_block_data(si->client,
 				reg, si->cmds[reg].size + 1, val);
-		if (ret < 0)
+		if ((ret < 0) || ((ret - 1) != val[0]))
 			sop716_hw_reset(si);
 	} while (retry-- && ret < 0);
 
@@ -770,7 +770,7 @@ static ssize_t sop716_battery_check_interval_store(struct device *dev,
 
 	rc = sop716_set_battery_check_interval(si, interval);
 	if (rc < 0) {
-		pr_err("%s: failed to set batterh check interval\n", __func__);
+		pr_err("%s: failed to set battery check interval\n", __func__);
 		return rc;
 	}
 
@@ -1275,11 +1275,8 @@ static void sop716_update_fw_work(struct work_struct *work)
 
 	mutex_lock(&si->lock);
 	err = sop716_read(si, CMD_SOP716_READ_FW_VERSION, data);
-	if (err < 0) {
-		err = sop716_read(si, CMD_SOP716_READ_FW_VERSION, data);
-		if (err < 0)
-			pr_err("%s: fail: read fw version\n", __func__);
-	}
+	if (err < 0)
+		pr_err("%s: failed to read fw version\n", __func__);
 	msleep(si->fw_ver_check_delay_ms);
 
 	major = data[1];
@@ -1362,7 +1359,7 @@ static int sop716_restore_default_config(struct sop716_info *si)
 
 	rc = sop716_set_battery_check_interval(si, si->battery_check_interval);
 	if (rc) {
-		pr_err("%s: faild to restore the battery check interval\n",
+		pr_err("%s: failed to restore the battery check interval\n",
 				__func__);
 		return rc;
 	}
