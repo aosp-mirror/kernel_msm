@@ -11,3 +11,7 @@
  */
 
 #include "apq8009-narwhal.dtsi"
+
+&bt_addr {
+	allow-random-addr;
+};
