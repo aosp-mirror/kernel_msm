@@ -15,13 +15,42 @@
 #include "../qcom/msm8909-pm8916.dtsi"
 #include "../qcom/msm8909w.dtsi"
 #include "apq8009-narwhal-pinctrl.dtsi"
-#include "apq8009-narwhal-input.dtsi"
+#include "apq8009-narwhal-pm.dtsi"
 #include "apq8009-pm8916-narwhal.dtsi"
+#include "apq8009-narwhal-input.dtsi"
 #include "apq8009-narwhal-panel.dtsi"
 #include "apq8009-narwhal-sound.dtsi"
 #include "apq8009-narwhal-misc.dtsi"
 #include "apq8009-narwhal-connectivity.dtsi"
 #include "apq8009-narwhal-paj9124u1.dtsi"
+
+&soc {
+	i2c_6: i2c@78ba000 { /* BLSP1 QUP6 */
+		status = "disabled";
+		compatible = "qcom,i2c-msm-v2";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg-names = "qup_phys_addr";
+		reg = <0x78ba000 0x1000>;
+		interrupt-names = "qup_irq";
+		interrupts = <0 100 0>;
+		qcom,clk-freq-out = <100000>; //100Khz
+		qcom,clk-freq-in  = <19200000>;
+		clock-names = "iface_clk", "core_clk";
+		clocks = <&clock_gcc clk_gcc_blsp1_ahb_clk>,
+			<&clock_gcc clk_gcc_blsp1_qup6_i2c_apps_clk>;
+
+		pinctrl-names = "i2c_active", "i2c_sleep";
+		pinctrl-0 = <&i2c_6_active>;
+		pinctrl-1 = <&i2c_6_sleep>;
+		qcom,noise-rjct-scl = <0>;
+		qcom,noise-rjct-sda = <0>;
+		dmas = <&dma_blsp1 14 64 0x20000020 0x20>,
+			<&dma_blsp1 15 32 0x20000020 0x20>;
+		dma-names = "tx", "rx";
+		qcom,master-id = <86>;
+	};
+};
 
 /{
 	aliases {
@@ -34,6 +63,8 @@
 		firmware_android: android {};
 	};
 };
+
+#include "apq8009-narwhal-movement.dtsi"
 
 &external_image_mem {
 	reg = <0x0 0x87a00000 0x0 0x0600000>;
@@ -171,6 +202,10 @@
 
 &i2c_2 {
 	status = "disabled";
+};
+
+&i2c_5 {
+	qcom,clk-freq-out = <400000>;
 };
 
 &firmware_android {

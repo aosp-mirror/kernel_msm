@@ -10,9 +10,6 @@
  * GNU General Public License for more details.
  */
 
-#include "apq8009-narwhal-pm.dtsi"
-#include "apq8009-narwhal-movement.dtsi"
-
 / {
 	reserved-memory {
 		ramoops_mem: ramoops_region@8aa00000 {

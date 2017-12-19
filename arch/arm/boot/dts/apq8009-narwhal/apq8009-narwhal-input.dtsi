@@ -10,40 +10,38 @@
  * GNU General Public License for more details.
  */
 
-&soc {
-	i2c@78b9000 { /* BLSP1 QUP5 */
-		qcom,clk-freq-out = <400000>;
-
-		synaptics@20 {
-			status = "disabled";
-		};
-
-		atmel_u114: atmel_u144@4a {
-			compatible = "atmel,u144";
-			status = "okay";
-			reg = <0x4a>;
-			interrupt-parent = <&msm_gpio>;
-			interrupts = <13 0x2008>;
-			vdd_ana-supply = <0>;
-			vcc_i2c-supply = <&pm8916_l16>;
-			vcc_dig-supply = <&pm8916_l10>;
-			power-supplies = <&usb_otg>;
-			atmel,reset-gpio = <&msm_gpio 12 0x00>;
-			atmel,irq-gpio = <&msm_gpio 13 0x2008>;
-			atmel,numtouch = <2>; /*multi-touch count*/
-			atmel,irqflags = <0x00000002>;
-			atmel,fw_name = "atmel_touch.fw";
-			atmel,lcd_x = <359>;
-			atmel,lcd_y = <359>;
-			atmel,palm-enabled;
-			atmel,wakeup;
-
-			pinctrl-names = "pmx_ts_active","pmx_ts_suspend";
-			pinctrl-0 = <&ts_int_active &ts_reset_active>;
-			pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
-		};
+&i2c_5 { /* i2c@78b9000 */
+	synaptics@20 {
+		status = "disabled";
 	};
 
+	atmel_u114: atmel_u144@4a {
+		compatible = "atmel,u144";
+		status = "okay";
+		reg = <0x4a>;
+		interrupt-parent = <&msm_gpio>;
+		interrupts = <13 0x2008>;
+		vdd_ana-supply = <0>;
+		vcc_i2c-supply = <&pm8916_l16>;
+		vcc_dig-supply = <&pm8916_l10>;
+		power-supplies = <&usb_otg>;
+		atmel,reset-gpio = <&msm_gpio 12 0x00>;
+		atmel,irq-gpio = <&msm_gpio 13 0x2008>;
+		atmel,numtouch = <2>; /*multi-touch count*/
+		atmel,irqflags = <0x00000002>;
+		atmel,fw_name = "atmel_touch.fw";
+		atmel,lcd_x = <359>;
+		atmel,lcd_y = <359>;
+		atmel,palm-enabled;
+		atmel,wakeup;
+
+		pinctrl-names = "pmx_ts_active","pmx_ts_suspend";
+		pinctrl-0 = <&ts_int_active &ts_reset_active>;
+		pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
+	};
+};
+
+&soc {
 	gpio_keys {
 		compatible = "gpio-keys";
 		input-name = "gpio-keys";

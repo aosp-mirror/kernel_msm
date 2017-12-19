@@ -108,94 +108,92 @@
 	};
 };
 
-&soc {
-	i2c@78b8000 {
-		max17050@36 {
-			status = "ok";
-			compatible = "maxim,max17050";
-			reg = <0x36>;
-			interrupt-parent = <&msm_gpio>;
-			interrupts = <58 2>;
-			pinctrl-names = "default";
-			pinctrl-0 = <&fuel_int_default>;
-			spmi_handle = <&spmi_bus>;
+&i2c_4 { /* i2c@78b8000 */
+	max17050@36 {
+		status = "ok";
+		compatible = "maxim,max17050";
+		reg = <0x36>;
+		interrupt-parent = <&msm_gpio>;
+		interrupts = <58 2>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&fuel_int_default>;
+		spmi_handle = <&spmi_bus>;
 
-			maxim,use-external-bms-storage;
-			maxim,bms-storage-offsets = /bits/ 16 <
-				0x40b0 0x40b1 0x40b2 0x40b3
-				0x40b4 0x40b5 0x40b6>;
+		maxim,use-external-bms-storage;
+		maxim,bms-storage-offsets = /bits/ 16 <
+			0x40b0 0x40b1 0x40b2 0x40b3
+			0x40b4 0x40b5 0x40b6>;
 
-			maxim,rsns-microohm = <10000>;
-			maxim,ext_batt_psy;
-			maxim,full-soc = <95>;
-			maxim,empty-soc = <1>;
+		maxim,rsns-microohm = <10000>;
+		maxim,ext_batt_psy;
+		maxim,full-soc = <95>;
+		maxim,empty-soc = <1>;
 
-			maxim,model = [94 A0 AE 60 B7 40 B8 50
-					BA C0 BB D0 BD 20 BE 00
-					C0 10 C1 50 C4 50 C7 E0
-					CB 00 CE 40 D3 30 D9 70
-					00 50 02 20 17 80 0E 40
-					11 30 0D 00 26 60 0F 10
-					13 40 0A F0 07 70 08 30
-					06 F0 07 E0 06 C0 06 C0
-					01 00 01 00 01 00 01 00
-					01 00 01 00 01 00 01 00
-					01 00 01 00 01 00 01 00
-					01 00 01 00 01 00 01 00];
+		maxim,model = [94 A0 AE 60 B7 40 B8 50
+				BA C0 BB D0 BD 20 BE 00
+				C0 10 C1 50 C4 50 C7 E0
+				CB 00 CE 40 D3 30 D9 70
+				00 50 02 20 17 80 0E 40
+				11 30 0D 00 26 60 0F 10
+				13 40 0A F0 07 70 08 30
+				06 F0 07 E0 06 C0 06 C0
+				01 00 01 00 01 00 01 00
+				01 00 01 00 01 00 01 00
+				01 00 01 00 01 00 01 00
+				01 00 01 00 01 00 01 00];
 
-			maxim,config = <0x2104>;
-			maxim,filtercfg = <0x87A4>;
-			maxim,relaxcfg = <0x506B>;
-			maxim,learncfg = <0x2603>;
-			maxim,fullsocthr = <0x5F00>;
-			maxim,iavg_empty = <0x0175>;
-			maxim,rcomp0 = <0x0037>;
-			maxim,tempco = <0x2D3A>;
-			maxim,ichgterm = <0x00A0>;
-			maxim,tgain = <0xE932>;
-			maxim,toff = <0x2381>;
-			maxim,vempty = <0xA05F>;
-			maxim,qrtable00 = <0x2A00>;
-			maxim,qrtable10 = <0x1483>;
-			maxim,qrtable20 = <0x0A00>;
-			maxim,qrtable30 = <0x0780>;
-			maxim,capacity = <0x01D3>;
-			maxim,vf_fullcap = <0x01D3>;
-			maxim,cycles = <0x0060>;
-			maxim,dpacc = <0x0C80>;
-			maxim,param-version = <0x4>;
-			maxim,dynamic_soc;
-		};
+		maxim,config = <0x2104>;
+		maxim,filtercfg = <0x87A4>;
+		maxim,relaxcfg = <0x506B>;
+		maxim,learncfg = <0x2603>;
+		maxim,fullsocthr = <0x5F00>;
+		maxim,iavg_empty = <0x0175>;
+		maxim,rcomp0 = <0x0037>;
+		maxim,tempco = <0x2D3A>;
+		maxim,ichgterm = <0x00A0>;
+		maxim,tgain = <0xE932>;
+		maxim,toff = <0x2381>;
+		maxim,vempty = <0xA05F>;
+		maxim,qrtable00 = <0x2A00>;
+		maxim,qrtable10 = <0x1483>;
+		maxim,qrtable20 = <0x0A00>;
+		maxim,qrtable30 = <0x0780>;
+		maxim,capacity = <0x01D3>;
+		maxim,vf_fullcap = <0x01D3>;
+		maxim,cycles = <0x0060>;
+		maxim,dpacc = <0x0C80>;
+		maxim,param-version = <0x4>;
+		maxim,dynamic_soc;
+	};
 
-		fan5451x_chg: fan5451x@6b {
-			status = "ok";
-			compatible = "fcs,fan5451x";
-			reg = <0x6b>;
-			interrupt-parent = <&msm_gpio>;
-			interrupts = <92 0>;
+	fan5451x_chg: fan5451x@6b {
+		status = "ok";
+		compatible = "fcs,fan5451x";
+		reg = <0x6b>;
+		interrupt-parent = <&msm_gpio>;
+		interrupts = <92 0>;
 
-			qcom,chg-vadc = <&pm8916_vadc>;
-			qcom,chg-adc_tm = <&pm8916_adc_tm>;
-			stat-gpio = <&msm_gpio 85 0x00>;
-			disable-gpio = <&msm_gpio 84 0x00>;
+		qcom,chg-vadc = <&pm8916_vadc>;
+		qcom,chg-adc_tm = <&pm8916_adc_tm>;
+		stat-gpio = <&msm_gpio 85 0x00>;
+		disable-gpio = <&msm_gpio 84 0x00>;
 
-			vbatmin = <3000>;    //CC start voltage 3.0V
-			vfloat = <4400>;     //vbatmax
-			vrechg-hyst = <100>; //rechg = vfloat - (vrechg-hyst)
-			ibus = <500>;        //iusb for vbus
-			iin = <325>;         //iusb for wlc
-			iochrg = <200>;      //CC current
-			iterm = <40>;        //term current
-			prechg = <200>;      //pre charge current
-			topoff-enable = <0>; //post charging flag
-			vbusovp = <10500>;   //ovd for usb
-			vbuslim = <4560>;    //uvd for usb
-			vinovp = <10500>;    //ovd for wireless
-			vinlim = <4560>;     //uvd for wireless
-			fctmr = <0>;         //fast charge timer off
-			fcs,embedded-battery;
-			support-sw-eoc;
-		};
+		vbatmin = <3000>;    //CC start voltage 3.0V
+		vfloat = <4400>;     //vbatmax
+		vrechg-hyst = <100>; //rechg = vfloat - (vrechg-hyst)
+		ibus = <500>;        //iusb for vbus
+		iin = <325>;         //iusb for wlc
+		iochrg = <200>;      //CC current
+		iterm = <40>;        //term current
+		prechg = <200>;      //pre charge current
+		topoff-enable = <0>; //post charging flag
+		vbusovp = <10500>;   //ovd for usb
+		vbuslim = <4560>;    //uvd for usb
+		vinovp = <10500>;    //ovd for wireless
+		vinlim = <4560>;     //uvd for wireless
+		fctmr = <0>;         //fast charge timer off
+		fcs,embedded-battery;
+		support-sw-eoc;
 	};
 };
 

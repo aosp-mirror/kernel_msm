@@ -10,39 +10,31 @@
  * GNU General Public License for more details.
  */
 
-&soc {
-	i2c_6: i2c@78ba000 { /* BLSP1 QUP6 */
-		status = "ok";
-		compatible = "qcom,i2c-msm-v2";
-		#address-cells = <1>;
-		#size-cells = <0>;
-		reg-names = "qup_phys_addr";
-		reg = <0x78ba000 0x1000>;
-		interrupt-names = "qup_irq";
-		interrupts = <0 100 0>;
-		qcom,clk-freq-out = <100000>; //100Khz
-		qcom,clk-freq-in  = <19200000>;
-		clock-names = "iface_clk", "core_clk";
-		clocks = <&clock_gcc clk_gcc_blsp1_ahb_clk>,
-			<&clock_gcc clk_gcc_blsp1_qup6_i2c_apps_clk>;
-
-		pinctrl-names = "i2c_active", "i2c_sleep";
-		pinctrl-0 = <&i2c_6_active>;
-		pinctrl-1 = <&i2c_6_sleep>;
-		qcom,noise-rjct-scl = <0>;
-		qcom,noise-rjct-sda = <0>;
-		dmas = <&dma_blsp1 14 64 0x20000020 0x20>,
-			<&dma_blsp1 15 32 0x20000020 0x20>;
-		dma-names = "tx", "rx";
-		qcom,master-id = <86>;
+&i2c_6 {
+	movement_on_i2c6: lge,soprod_movement@48 {
+		compatible = "lge,soprod_movement";
+		reg = <0x48>;
+		status = "disabled";
+		lge,gpio-reset = <&msm_gpio 33 0x0>;
+		lge,gpio-interrupt = <&msm_gpio 34 0x0>;
+		lge,gpio-bslen = <&msm_gpio 16 0x0>;
+		lge,gpio-temp-1 = <&msm_gpio 22 0x0>;
+		lge,reset-delay-ms = <1000>;
+		lge,hctosys-pre-delay-ms = <1500>;
+		lge,hctosys-post-delay-ms = <500>;
+		lge,fw-ver-check-delay-ms = <1000>;
+		lge,hands-settle-time-ms = <2000>;
+		lge,eol-limit-mv = <3500>;
+		lge,eol-threshold-mv = <3700>;
+		lge,update-syslock-on-boot;
 	};
 };
 
-&i2c_6 {
-	lge,soprod_movement@48 {
+&i2c_4 {
+	movement_on_i2c4: lge,soprod_movement@48 {
 		compatible = "lge,soprod_movement";
 		reg = <0x48>;
-		status = "ok";
+		status = "okay";
 		lge,gpio-reset = <&msm_gpio 33 0x0>;
 		lge,gpio-interrupt = <&msm_gpio 34 0x0>;
 		lge,gpio-bslen = <&msm_gpio 16 0x0>;

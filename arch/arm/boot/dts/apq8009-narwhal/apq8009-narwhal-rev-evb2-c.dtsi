@@ -23,6 +23,18 @@
 	allow-random-addr;
 };
 
+&i2c_6 {
+	status = "ok";
+};
+
 &spi_0 {
 	status = "disabled";
+};
+
+&movement_on_i2c4 {
+	status = "disabled";
+};
+
+&movement_on_i2c6 {
+	status = "ok";
 };
