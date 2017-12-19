@@ -1157,6 +1157,12 @@ int ipa2_reset_hdr(void)
 			IPADBG("Trying to remove hdr %s offset=%u\n",
 				entry->name, entry->offset_entry->offset);
 			if (!entry->offset_entry->offset) {
+				if (entry->is_hdr_proc_ctx) {
+					mutex_unlock(&ipa_ctx->lock);
+					WARN_ON(1);
+					IPAERR("default header is proc ctx\n");
+					return -EFAULT;
+				}
 				IPADBG("skip default header\n");
 				continue;
 			}
