@@ -20,6 +20,7 @@
 #include <linux/of.h>
 #include <linux/of_gpio.h>
 #include <linux/string.h>
+#include <linux/sysfs.h>
 #include <linux/timer.h>
 #include <linux/time.h>
 #include <linux/rtc.h>
@@ -1396,6 +1397,7 @@ static int sop716_movement_probe(struct i2c_client *client,
 {
 	struct sop716_info *si;
 	int err;
+	struct kobject *kobj = NULL;
 
 	pr_debug("%s\n", __func__);
 
@@ -1435,6 +1437,15 @@ static int sop716_movement_probe(struct i2c_client *client,
 
 	mutex_init(&si->lock);
 
+	if (client->dev.kobj.kset)
+		kobj = &client->dev.kobj.kset->kobj;
+
+	err = sysfs_create_link(kobj, &client->dev.kobj, "sop716");
+	if (err < 0) {
+		pr_err("%s: cannot create link\n", __func__);
+		goto err_sysfs_create_link;
+	}
+
 	err = sysfs_create_group(&client->dev.kobj, &sop716_dev_attr_group);
 	if (err) {
 		pr_err("%s: cannot create sysfs\n", __func__);
@@ -1450,6 +1461,9 @@ static int sop716_movement_probe(struct i2c_client *client,
 	return 0;
 
 err_sysfs_create:
+	sysfs_remove_link(&client->dev.kobj, "sop716");
+
+err_sysfs_create_link:
 	mutex_destroy(&si->lock);
 	i2c_set_clientdata(client, NULL);
 
@@ -1462,6 +1476,7 @@ static int sop716_movement_remove(struct i2c_client *client)
 
 	mutex_destroy(&si->lock);
 	sysfs_remove_group(&client->dev.kobj, &sop716_dev_attr_group);
+	sysfs_remove_link(&client->dev.kobj, "sop716");
 	i2c_set_clientdata(client, NULL);
 	sop716_info = NULL;
 
