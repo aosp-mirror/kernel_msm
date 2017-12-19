@@ -46,3 +46,7 @@
 &load_sw_control {
 	status = "disabled";
 };
+
+&sdhc_2 {
+	vdd-io-supply = <&pm8916_l12>;
+};

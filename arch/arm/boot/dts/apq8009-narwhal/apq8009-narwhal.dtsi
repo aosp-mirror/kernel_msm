@@ -163,7 +163,7 @@
 
 &sdhc_2 {
 	/delete-property/vdd-supply;
-	vdd-io-supply = <&pm8916_l12>;
+	vdd-io-supply = <&pm8916_l5>;
 	qcom,vdd-io-always-on;
 	qcom,vdd-io-voltage-level = <1800000 1800000>;
 	qcom,vdd-io-current-level = <200 22000>;
