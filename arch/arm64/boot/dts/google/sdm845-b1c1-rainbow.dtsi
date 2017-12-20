@@ -11,15 +11,12 @@
  * GNU General Public License for more details.
  */
 
-&qupv3_se5_spi {
-	status = "disabled";
-};
-
-&qupv3_se5_i2c {
+&cam_cci {
 	/* VD6281 */
 	status = "ok";
-	vd6281: vd6281@20 {
-		compatible = "st,vd6281";
+	vd6281: qcom,rainbow@20 {
+		compatible = "qcom,rainbow";
+		cci-master = <0>;
 		reg = <0x20>;
 		vdd-supply = <&pm8998_lvs1>;
 		regulator-names = "vdd";
