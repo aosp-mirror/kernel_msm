@@ -1,0 +1,82 @@
+/* Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/* B1C1 memory includes go here */
+
+&reserved_memory {
+
+	/*
+	 Reverved memory carveout is defined in TZ project:
+	 ssg/securemsm/trustzone/qsee/mink/oem/config/sdm845/oem_config.xml
+	 */
+
+	/delete-node/ modem_region@8cc00000;
+	/delete-node/ pil_video_region@94200000;
+	/delete-node/ cdsp_regions@94700000;
+	/delete-node/ pil_mba_region@0x94f00000;
+	/delete-node/ pil_slpi_region@95100000;
+	/delete-node/ spss_region@96500000;
+
+	/*
+	 the following carveout items are still defined in sdm845.dtsi:
+	 region          address    size
+	 ==========      ========== =========
+	 hyp_region:     0x85700000  0x600000
+	 xbl_region:     0x85e00000  0x100000
+	 removed_region: 0x85fc0000 0x2f40000
+	 pil_camera_mem: 0x8ab00000  0x500000
+	 pil_adsp_mem:   0x8b100000 0x1a00000
+	 wlan_fw_region: 0x8cb00000  0x100000
+	 */
+
+	pil_modem_mem: modem_region@8cc00000 {
+		compatible = "removed-dma-pool";
+		no-map;
+		reg = <0 0x8cc00000 0 0xa600000>;
+	};
+
+	pil_video_mem: pil_video_region@97200000 {
+		compatible = "removed-dma-pool";
+		no-map;
+		reg = <0 0x97200000 0 0x500000>;
+	};
+
+	pil_cdsp_mem: cdsp_regions@97700000 {
+		compatible = "removed-dma-pool";
+		no-map;
+		reg = <0 0x97700000 0 0x800000>;
+	};
+
+	pil_mba_mem: pil_mba_region@0x97f00000 {
+		compatible = "removed-dma-pool";
+		no-map;
+		reg = <0 0x97f00000 0 0x200000>;
+	};
+
+	pil_slpi_mem: pil_slpi_region@98100000 {
+		compatible = "removed-dma-pool";
+		no-map;
+		reg = <0 0x98100000 0 0x1400000>;
+	};
+
+	pil_spss_mem: spss_region@99500000 {
+		compatible = "removed-dma-pool";
+		no-map;
+		reg = <0 0x99500000 0 0x100000>;
+	};
+
+	easel_mem: easel_mem@99600000 {
+		compatible = "removed-dma-pool";
+		reg = <0 0x99600000 0 0x4000000>;
+		label = "easel_mem";
+	};
+};
