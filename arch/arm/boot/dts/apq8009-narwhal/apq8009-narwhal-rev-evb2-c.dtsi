@@ -50,3 +50,7 @@
 &sdhc_2 {
 	vdd-io-supply = <&pm8916_l12>;
 };
+
+&audio_codec_narwhal {
+	/delete-property/ qcom,msm-micbias1-ext-cap;
+};
