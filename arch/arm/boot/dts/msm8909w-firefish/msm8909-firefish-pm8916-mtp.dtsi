@@ -46,7 +46,6 @@
 			pinctrl-0 = <&pix_int_active>;
 			pinctrl-1 = <&pix_int_suspend>;
 			pinctrl-2 = <&pix_release>;
-			pixart,inverse-x;
 		};
 
 	};
