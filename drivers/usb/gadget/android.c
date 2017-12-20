@@ -54,7 +54,9 @@
 #include "u_ctrl_hsic.c"
 #include "u_data_hsic.c"
 #include "f_ccid.c"
+#ifdef CONFIG_USB_ANDROID_F_MTP
 #include "f_mtp.c"
+#endif
 #include "f_accessory.c"
 #include "f_charger.c"
 #define USB_ETH_RNDIS y
@@ -2067,6 +2069,7 @@ static struct android_usb_function charger_function = {
 };
 
 
+#ifdef CONFIG_USB_ANDROID_F_MTP
 static int
 mtp_function_init(struct android_usb_function *f,
 		struct usb_composite_dev *cdev)
@@ -2137,6 +2140,7 @@ static struct android_usb_function ptp_function = {
 	.bind_config	= ptp_function_bind_config,
 	.ctrlrequest	= ptp_function_ctrlrequest,
 };
+#endif
 
 /* rndis transport string */
 static char rndis_transports[MAX_XPORT_STR_LEN];
@@ -3107,8 +3111,10 @@ static struct android_usb_function *supported_functions[] = {
 	[ANDROID_SERIAL] = &serial_function,
 	[ANDROID_CCID] = &ccid_function,
 	[ANDROID_ACM] = &acm_function,
+#ifdef CONFIG_USB_ANDROID_F_MTP
 	[ANDROID_MTP] = &mtp_function,
 	[ANDROID_PTP] = &ptp_function,
+#endif
 	[ANDROID_RNDIS] = &rndis_function,
 	[ANDROID_RNDIS_BAM] = &rndis_qc_function,
 	[ANDROID_ECM] = &ecm_function,
@@ -3142,9 +3148,11 @@ static struct android_usb_function *default_functions[] = {
 	&serial_function,
 	&ccid_function,
 	&acm_function,
+#ifdef CONFIG_USB_ANDROID_F_MTP
 	&mtp_function,
-	&laf_function,
 	&ptp_function,
+#endif
+	&laf_function,
 	&rndis_function,
 	&rndis_qc_function,
 	&ecm_function,

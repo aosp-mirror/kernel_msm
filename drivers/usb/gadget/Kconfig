@@ -433,7 +433,14 @@ config USB_ANDROID_RNDIS_DWORD_ALIGNED
 	boolean "Use double word aligned"
 	depends on USB_G_ANDROID
 	help
-		Provides dword aligned for DMA controller.
+	  Provides dword aligned for DMA controller.
+
+config USB_ANDROID_F_MTP
+	boolean "USB MTP Gadget"
+	depends on USB_G_ANDROID
+	default y
+	help
+	  USB gadget MTP support
 
 source "drivers/usb/gadget/legacy/Kconfig"
 
