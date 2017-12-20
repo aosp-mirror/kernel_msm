@@ -87,3 +87,38 @@
 		spi0 = &qupv3_se8_spi;
 	};
 };
+
+&cam_sensor_front2_active {
+		mux {
+			pins = "gpio9", "gpio93";
+		};
+		config {
+			pins = "gpio9", "gpio93";
+		};
+};
+
+&cam_sensor_front2_suspend {
+		mux {
+			pins = "gpio9", "gpio93";
+		};
+		config {
+			pins = "gpio9", "gpio93";
+		};
+};
+
+&sensor_rear {
+	csiphy-sd-index = <1>;
+};
+
+&sensor_front_aux {
+	gpios = <&tlmm 15 0>,
+		<&tlmm 9 0>,
+		<&tlmm 93 0>;
+};
+
+&sensor_front {
+	csiphy-sd-index = <0>;
+	gpios = <&tlmm 14 0>,
+		<&tlmm 21 0>,
+		<&tlmm 8 0>;
+};

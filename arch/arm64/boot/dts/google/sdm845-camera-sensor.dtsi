@@ -71,12 +71,12 @@
 	cam_sensor_front2_active: cam_sensor_front2_active {
 		/* RESET  AVDD_LDO*/
 		mux {
-			pins = "gpio9", "gpio93";
+			pins = "gpio9", "gpio14";
 			function = "gpio";
 		};
 
 		config {
-			pins = "gpio9", "gpio93";
+			pins = "gpio9", "gpio14";
 			bias-disable; /* No PULL */
 			drive-strength = <2>; /* 2 MA */
 		};
@@ -85,12 +85,12 @@
 	cam_sensor_front2_suspend: cam_sensor_front2_suspend {
 		/* RESET  AVDD_LDO*/
 		mux {
-			pins = "gpio9", "gpio93";
+			pins = "gpio9", "gpio14";
 			function = "gpio";
 		};
 
 		config {
-			pins = "gpio9", "gpio93";
+			pins = "gpio9", "gpio14";
 			bias-pull-down; /* PULL DOWN */
 			drive-strength = <2>; /* 2 MA */
 		};
@@ -294,7 +294,7 @@
 		cell-index = <0>;
 		compatible = "qcom,cam-sensor";
 		reg = <0x0>;
-		csiphy-sd-index = <0>;
+		csiphy-sd-index = <2>;
 		sensor-position-roll = <90>;
 		sensor-position-pitch = <0>;
 		sensor-position-yaw = <0>;
@@ -317,7 +317,7 @@
 				&cam_sensor_front_active>;
 		pinctrl-1 = <&cam_sensor_mclk1_suspend
 				&cam_sensor_front_suspend>;
-		gpios = <&tlmm 14 0>,
+		gpios = <&tlmm 15 0>,
 			<&tlmm 21 0>,
 			<&tlmm 8 0>;
 		gpio-reset = <1>;
@@ -340,7 +340,7 @@
 		cell-index = <1>;
 		compatible = "qcom,cam-sensor";
 		reg = <0x1>;
-		csiphy-sd-index = <1>;
+		csiphy-sd-index = <0>;
 		sensor-position-roll = <90>;
 		sensor-position-pitch = <0>;
 		sensor-position-yaw = <180>;
@@ -411,7 +411,7 @@
 				 &cam_sensor_front2_suspend>;
 		gpios = <&tlmm 15 0>,
 			<&tlmm 9 0>,
-			<&tlmm 93 0>;
+			<&tlmm 14 0>;
 		gpio-reset = <1>;
 		gpio-vana = <2>;
 		gpio-req-tbl-num = <0 1 2>;
