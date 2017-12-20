@@ -29,6 +29,9 @@
 #include <linux/regulator/machine.h>
 #include <linux/regulator/of_regulator.h>
 #include <linux/qpnp/power-on.h>
+#include <linux/proc_fs.h>
+#include <asm/uaccess.h>
+
 
 #define CREATE_MASK(NUM_BITS, POS) \
 	((unsigned char) (((1 << (NUM_BITS)) - 1) << (POS)))
@@ -1938,6 +1941,88 @@ static int read_gen2_pon_off_reason(struct qpnp_pon *pon, u16 *reason,
 	return 0;
 }
 
+static int qpnp_pmic_register_show(struct seq_file *s, void *p)
+{
+    char buf[2] ={0};
+    u8	 pon_sts = 0;
+    u16  poff_sts = 0;
+    int  rc = -1;
+    int  pon_index = 0;
+    int  poff_index = 0;
+    int  is_cold_boot = 0;
+    int  reason_index_offset = 0;
+    struct qpnp_pon *pon = sys_reset_dev;
+
+
+    if (!pon) return rc;
+
+    /* 1:PON reason */
+    rc = spmi_ext_register_readl(pon->spmi->ctrl, pon->spmi->sid,
+					QPNP_PON_REASON1(pon), &pon_sts, 1);
+    if (rc) {
+        seq_printf(s, "PMIC@Power-on reason: read fail!\n");
+        return rc;
+    }
+
+    pon_index = ffs(pon_sts) - 1;
+    is_cold_boot = !qpnp_pon_is_warm_reset();
+    seq_printf(s, "PMIC@%s Boot!\n", is_cold_boot ? "Cold" : "Warm");
+
+    if (pon_index >= ARRAY_SIZE(qpnp_pon_reason) || pon_index < 0) {
+        seq_printf(s,"PMIC@Power-On  reason: Unknown!\n");
+    } else {
+        pon->pon_trigger_reason = pon_index;
+        seq_printf(s,"PMIC@Power-On  reason:%s\n", qpnp_pon_reason[pon_index]);
+    }
+
+
+    /* 2: POFF reason */
+    if (!is_pon_gen1(pon) && pon->subtype != PON_1REG) {
+        rc = read_gen2_pon_off_reason(pon, &poff_sts, &reason_index_offset);
+    }
+    else {
+        rc = spmi_ext_register_readl(pon->spmi->ctrl, pon->spmi->sid,
+			QPNP_POFF_REASON1(pon), buf, 2);
+    }
+
+    if (rc) {
+        seq_printf(s,"PMIC@Power-Off reason: read fail!\n");
+        return rc;
+    }
+
+    poff_sts = buf[0] | (buf[1] << 8);
+    poff_index = ffs(poff_sts) - 1 + reason_index_offset;
+    if (poff_index >= ARRAY_SIZE(qpnp_poff_reason) || poff_index < 0) {
+		seq_printf(s,"PMIC@Power-Off reason: Unknown\n");
+		return rc;
+    } else {
+		pon->pon_power_off_reason = poff_index;
+		seq_printf(s, "PMIC@Power-Off reason:%s\r\n", qpnp_poff_reason[poff_index]);
+    }
+
+    /* 3: DMESG*/
+    printk(KERN_ALERT "PMIC@%s Boot!\nPMIC@Power-On  reason:%s\nPMIC@Power-Off reason:%s\r\n",
+                        is_cold_boot ? "Cold" : "Warm",
+                        qpnp_pon_reason[pon_index],
+                        qpnp_poff_reason[poff_index]);
+    return 0;
+}
+
+
+static int qpnp_pmic_register_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, qpnp_pmic_register_show, NULL);
+}
+
+static const struct file_operations qpnp_pon_pmic_register_fops = {
+	.owner   = THIS_MODULE,
+	.open    = qpnp_pmic_register_open,
+	.read	 = seq_read,
+	.llseek  = seq_lseek,
+	.release = seq_release,
+
+};
+
 static int qpnp_pon_probe(struct spmi_device *spmi)
 {
 	struct qpnp_pon *pon;
@@ -2286,6 +2371,11 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 					"qcom,store-hard-reset-reason");
 
 	qpnp_pon_debugfs_init(spmi);
+	if (!proc_create("pmic_register", S_IRUGO, NULL, &qpnp_pon_pmic_register_fops))
+	{
+		printk(KERN_ERR "PMIC@: cannot create /proc/pmic_register.\n");
+	}
+
 	return 0;
 }
 
