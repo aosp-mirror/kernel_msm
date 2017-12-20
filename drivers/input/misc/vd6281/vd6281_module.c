@@ -14,38 +14,84 @@
 #include <linux/delay.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
+#include <linux/gpio.h>
 #include <linux/input.h>
 #include <linux/kernel.h>
 #include <linux/kobject.h>
 #include <linux/regulator/consumer.h>
+#include <linux/pinctrl/consumer.h>
+#include <linux/of_gpio.h>
 #include <linux/slab.h>
+#include "cam_sensor_dev.h"
 
+#define VD6281_DEV_NAME	"vd6281"
 
-#define VD6281_DRV_NAME	"vd6281"
-
-struct vd6281_ctrl_t {
-	struct i2c_client *client;
+struct rainbow_ctrl_t {
+	struct platform_device *pdev;
+	struct cam_hw_soc_info soc_info;
+	struct mutex cam_sensor_mutex;
+	enum cci_i2c_master_t cci_i2c_master;
+	struct camera_io_master io_master_info;
+	uint32_t id;
+	struct device_node *of_node;
+	struct cam_subdev v4l2_dev_str;
+	int  is_power_up;
 	struct regulator *vdd;
-	const char *dev_name;
-	struct mutex work_mutex;
-	int is_power_up;
 };
 
-static int vd6281_power_up(struct vd6281_ctrl_t *ctrl)
+int vd6281_write_data(struct rainbow_ctrl_t *ctrl,
+					uint32_t addr, uint32_t data)
 {
-	return regulator_enable(ctrl->vdd);
+	int rc = 0;
+	struct cam_sensor_i2c_reg_setting write_setting;
+	struct cam_sensor_i2c_reg_array i2c_reg_array;
+
+	i2c_reg_array.reg_addr = addr;
+	i2c_reg_array.reg_data = data;
+	i2c_reg_array.delay = 1;
+	write_setting.reg_setting = &i2c_reg_array;
+	write_setting.addr_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+	write_setting.data_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+	write_setting.size = 1;
+	write_setting.delay = 0;
+
+	rc = camera_io_dev_write(&(ctrl->io_master_info), &write_setting);
+	return rc;
 }
 
-static int vd6281_power_down(struct vd6281_ctrl_t *ctrl)
+static int vd6281_power_up(struct rainbow_ctrl_t *ctrl)
 {
-	return regulator_disable(ctrl->vdd);
+	int rc;
+
+	rc = regulator_enable(ctrl->vdd);
+	if (rc < 0)
+		pr_err("%s regulator_enable failed: rc: %d", __func__, rc);
+	rc = camera_io_init(&(ctrl->io_master_info));
+	if (rc < 0)
+		pr_err("%s cci_release failed: rc: %d", __func__, rc);
+
+	return rc;
+}
+
+static int vd6281_power_down(struct rainbow_ctrl_t *ctrl)
+{
+	int rc;
+
+	rc = camera_io_release(&(ctrl->io_master_info));
+	if (rc < 0)
+		pr_err("%s cci_release failed: rc: %d", __func__, rc);
+	rc = regulator_disable(ctrl->vdd);
+	if (rc < 0)
+		pr_err("%s regulator_disable failed: rc: %d", __func__, rc);
+
+	return rc;
 }
 
 static ssize_t rainbow_enable_show(struct device *dev,
 	struct device_attribute *attr,
 	char *buf)
 {
-	struct vd6281_ctrl_t *ctrl = dev_get_drvdata(dev);
+	struct rainbow_ctrl_t *ctrl = dev_get_drvdata(dev);
 
 	return scnprintf(buf, PAGE_SIZE, "%d\n", ctrl->is_power_up);
 }
@@ -54,16 +100,15 @@ static ssize_t rainbow_enable_store(struct device *dev,
 		struct device_attribute *attr,
 		const char *buf, size_t count)
 {
-	struct vd6281_ctrl_t *ctrl = dev_get_drvdata(dev);
+	struct rainbow_ctrl_t *ctrl = dev_get_drvdata(dev);
 	int rc;
 	bool value;
 
 	rc = kstrtobool(buf, &value);
-
 	if (rc)
 		return rc;
 
-	mutex_lock(&ctrl->work_mutex);
+	mutex_lock(&ctrl->cam_sensor_mutex);
 
 	if (value == 1)
 		rc = vd6281_power_up(ctrl);
@@ -73,7 +118,7 @@ static ssize_t rainbow_enable_store(struct device *dev,
 	if (rc == 0)
 		ctrl->is_power_up = (int)value;
 
-	mutex_unlock(&ctrl->work_mutex);
+	mutex_unlock(&ctrl->cam_sensor_mutex);
 
 	return rc;
 }
@@ -82,34 +127,38 @@ static ssize_t rainbow_read_byte_store(struct device *dev,
 		struct device_attribute *attr,
 		const char *buf, size_t count)
 {
-	struct vd6281_ctrl_t *ctrl = dev_get_drvdata(dev);
+	struct rainbow_ctrl_t *ctrl = dev_get_drvdata(dev);
 	unsigned long value;
+	uint32_t read_data = 0;
 	int rc;
 
 	rc = kstrtoul(buf, 0, &value);
-
 	if (rc)
 		return rc;
 
-	mutex_lock(&ctrl->work_mutex);
+	mutex_lock(&ctrl->cam_sensor_mutex);
 
-	rc = i2c_smbus_read_byte_data(ctrl->client, value & 0xFF);
+	rc = camera_io_dev_read(&(ctrl->io_master_info), value & 0xFF,
+		&read_data, CAMERA_SENSOR_I2C_TYPE_BYTE,
+		CAMERA_SENSOR_I2C_TYPE_BYTE);
 
-	if (rc < 0)
-		dev_err(dev, "%s I2C read failed: %d.", __func__, rc);
+	mutex_unlock(&ctrl->cam_sensor_mutex);
 
-	mutex_unlock(&ctrl->work_mutex);
+	if (rc < 0) {
+		dev_err(dev, "%s I2C read failed: %d.\n", __func__, rc);
+		return rc;
+	}
 
-	dev_dbg(dev, "I2C read addr: 0x%lx, data: 0x%x", value, rc);
+	dev_dbg(dev, "I2C read addr: 0x%lx, data: 0x%x\n", value, read_data);
 
-	return rc;
+	return read_data;
 }
 
 static ssize_t rainbow_write_byte_store(struct device *dev,
 		struct device_attribute *attr,
 		const char *buf, size_t count)
 {
-	struct vd6281_ctrl_t *ctrl = dev_get_drvdata(dev);
+	struct rainbow_ctrl_t *ctrl = dev_get_drvdata(dev);
 	unsigned long value;
 	int rc;
 	u8 addr;
@@ -123,14 +172,14 @@ static ssize_t rainbow_write_byte_store(struct device *dev,
 	addr = (value >> 8) & 0xFF;
 	data = value & 0xFF;
 
-	mutex_lock(&ctrl->work_mutex);
+	mutex_lock(&ctrl->cam_sensor_mutex);
 
-	rc = i2c_smbus_write_byte_data(ctrl->client, addr, data);
+	rc = vd6281_write_data(ctrl, addr, data);
+
+	mutex_unlock(&ctrl->cam_sensor_mutex);
 
 	if (rc < 0)
 		dev_err(dev, "%s I2C write failed: %d.", __func__, rc);
-
-	mutex_unlock(&ctrl->work_mutex);
 
 	dev_dbg(dev, "I2C write addr: 0x%x, data: 0x%x", addr, data);
 
@@ -150,136 +199,135 @@ static struct attribute *rainbow_dev_attrs[] = {
 
 ATTRIBUTE_GROUPS(rainbow_dev);
 
-static int vd6281_parse_dt(struct device *dev, struct vd6281_ctrl_t *ctrl)
+int32_t vd6281_update_i2c_info(struct rainbow_ctrl_t *ctrl)
 {
+	int32_t rc = 0;
+
+	ctrl->cci_i2c_master = MASTER_0;
+	ctrl->io_master_info.cci_client->sid = 0x40 >> 1;
+	ctrl->io_master_info.cci_client->retries = 3;
+	ctrl->io_master_info.cci_client->id_map = 0;
+	ctrl->io_master_info.cci_client->i2c_freq_mode = I2C_STANDARD_MODE;
+
+	return rc;
+}
+
+static int vd6281_parse_dt(struct device *dev)
+{
+	struct rainbow_ctrl_t *ctrl = dev_get_drvdata(dev);
 	int rc = 0;
+
+	/* Initialize mutex */
+	mutex_init(&ctrl->cam_sensor_mutex);
 
 	ctrl->vdd = devm_regulator_get(dev, "vdd");
 	if (IS_ERR(ctrl->vdd)) {
 		ctrl->vdd = NULL;
-		dev_err(dev, "Unable to get vdd\n");
+		dev_err(dev, "unable to get vdd\n");
 		rc = -ENOENT;
 	}
 
 	return rc;
 }
 
-static int vd6281_probe(struct i2c_client *client,
-				   const struct i2c_device_id *id)
+static int32_t vd6281_platform_remove(struct platform_device *pdev)
 {
-	int rc = 0;
-	struct vd6281_ctrl_t *vd6281_ctrl = NULL;
-	int read_data = 0;
+	struct rainbow_ctrl_t  *ctrl;
+	int32_t rc = 0;
 
-	if (!i2c_check_functionality(client->adapter, I2C_FUNC_SMBUS_BYTE)) {
-		dev_err(&client->dev, "i2c_check_functionality failed\n");
-		return -EIO;
+	ctrl = platform_get_drvdata(pdev);
+	if (!ctrl) {
+		pr_err("rainbow device is NULL");
+		return 0;
 	}
 
-	vd6281_ctrl = kzalloc(sizeof(struct vd6281_ctrl_t), GFP_KERNEL);
-	if (!vd6281_ctrl)
+	mutex_destroy(&ctrl->cam_sensor_mutex);
+	sysfs_remove_groups(&pdev->dev.kobj, rainbow_dev_groups);
+	kfree(ctrl->io_master_info.cci_client);
+	ctrl->io_master_info.cci_client = NULL;
+	devm_kfree(&pdev->dev, ctrl);
+
+	return rc;
+}
+
+static int32_t vd6281_driver_platform_probe(
+	struct platform_device *pdev)
+{
+	int32_t rc = 0;
+	struct rainbow_ctrl_t *ctrl = NULL;
+
+	/* Create sensor control structure */
+	ctrl = devm_kzalloc(&pdev->dev,
+		sizeof(struct rainbow_ctrl_t), GFP_KERNEL);
+	if (!ctrl)
 		return -ENOMEM;
 
-	vd6281_ctrl->client = client;
+	if (cam_cci_get_subdev() == NULL) {
+		dev_err(&pdev->dev, "wait cci driver probe\n");
+		return -EPROBE_DEFER;
+	}
 
-	if (client->dev.of_node)
-		rc = vd6281_parse_dt(&client->dev, vd6281_ctrl);
+	/*fill in platform device*/
+	ctrl->v4l2_dev_str.pdev = pdev;
+	ctrl->soc_info.pdev = pdev;
+	ctrl->soc_info.dev = &pdev->dev;
+	ctrl->soc_info.dev_name = pdev->name;
+	ctrl->io_master_info.master_type = CCI_MASTER;
 
+	ctrl->io_master_info.cci_client = kzalloc(sizeof(
+		struct cam_sensor_cci_client), GFP_KERNEL);
+	if (!(ctrl->io_master_info.cci_client))
+		return -ENOMEM;
+
+	platform_set_drvdata(pdev, ctrl);
+	v4l2_set_subdevdata(&ctrl->v4l2_dev_str.sd, ctrl);
+	dev_set_drvdata(&pdev->dev, ctrl);
+
+	rc = vd6281_parse_dt(&(pdev->dev));
 	if (rc)
-		goto error;
+		dev_err(&pdev->dev, "paring rainbow dt failed rc %d", rc);
 
-	/* setup device name */
-	vd6281_ctrl->dev_name = dev_name(&client->dev);
+	vd6281_update_i2c_info(ctrl);
 
-	/* setup device data */
-	dev_set_drvdata(&client->dev, vd6281_ctrl);
+	/* Fill platform device id*/
+	pdev->id = ctrl->soc_info.index;
 
-	/* setup client data */
-	i2c_set_clientdata(client, vd6281_ctrl);
-
-	rc = vd6281_power_up(vd6281_ctrl);
-	if (rc < 0) {
-		dev_err(&client->dev, "failed to power up\n");
-		goto error;
-	}
-
-	/* Test reading device ID at 0x00 */
-	read_data = i2c_smbus_read_byte_data(client, 0x00);
-
-	dev_dbg(&client->dev, "device ID or return code: 0x%x(%d)",
-		read_data, read_data);
-
-	if (read_data < 0) {
-		dev_err(&client->dev,
-			"i2c read failed: %d maybe due to HW delay up to 10 us",
-			read_data);
-	}
-
-	rc = vd6281_power_down(vd6281_ctrl);
-	if (rc < 0) {
-		dev_err(&client->dev, "failed to power down\n");
-		goto error;
-	}
-
-	rc = sysfs_create_groups(&client->dev.kobj, rainbow_dev_groups);
-	if (rc) {
-		dev_err(&client->dev, "failed to create sysfs files");
-		goto error;
-	}
-
-	mutex_init(&vd6281_ctrl->work_mutex);
-
-	return rc;
-
-error:
-	kfree(vd6281_ctrl);
+	rc = sysfs_create_groups(&pdev->dev.kobj, rainbow_dev_groups);
+	if (rc)
+		dev_err(&pdev->dev, "failed to create sysfs files");
 
 	return rc;
 }
 
-static int vd6281_remove(struct i2c_client *client)
-{
-	struct vd6281_ctrl_t *ctrl = i2c_get_clientdata(client);
-
-	sysfs_remove_groups(&client->dev.kobj, rainbow_dev_groups);
-	mutex_destroy(&ctrl->work_mutex);
-	vd6281_power_down(ctrl);
-	kfree(ctrl);
-
-	return 0;
-}
-
-static const struct i2c_device_id vd6281_id[] = {
-	{ VD6281_DRV_NAME, 0 },
-	{ },
-};
-MODULE_DEVICE_TABLE(i2c, vd6281_id);
-
-static const struct of_device_id st_vd6281_dt_match[] = {
-	{ .compatible = "st,vd6281"},
-	{ },
+static const struct of_device_id vd6281_driver_dt_match[] = {
+	{.compatible = "qcom,rainbow"},
+	{}
 };
 
-static struct i2c_driver vd6281_driver = {
+MODULE_DEVICE_TABLE(of, vd6281_driver_dt_match);
+
+static struct platform_driver vd6281_platform_driver = {
+	.probe = vd6281_driver_platform_probe,
 	.driver = {
-		.name	= VD6281_DRV_NAME,
-		.owner	= THIS_MODULE,
-		.of_match_table = st_vd6281_dt_match,
+		.name = VD6281_DEV_NAME,
+		.owner = THIS_MODULE,
+		.of_match_table = vd6281_driver_dt_match,
 	},
-	.probe	= vd6281_probe,
-	.remove	= vd6281_remove,
-	.id_table = vd6281_id,
-
+	.remove = vd6281_platform_remove,
 };
 
 static int __init vd6281_init(void)
 {
-	return i2c_add_driver(&vd6281_driver);
+	int rc = 0;
+
+	rc = platform_driver_register(&vd6281_platform_driver);
+
+	return rc;
 }
 
 static void __exit vd6281_exit(void)
 {
-	i2c_del_driver(&vd6281_driver);
+	platform_driver_unregister(&vd6281_platform_driver);
 }
 
 MODULE_DESCRIPTION("ST rainbow sensor");
