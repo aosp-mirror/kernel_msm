@@ -96,7 +96,7 @@ static bool mxt_enable_irq(struct mxt_data *data)
 {
 	bool old;
 
-	spin_lock(&data->lock);
+	mutex_lock(&data->irq_lock);
 	old = data->irq_enabled;
 
 	if (!data->irq_enabled) {
@@ -104,7 +104,7 @@ static bool mxt_enable_irq(struct mxt_data *data)
 		data->irq_enabled = true;
 	}
 
-	spin_unlock(&data->lock);
+	mutex_unlock(&data->irq_lock);
 
 	return old;
 }
@@ -113,14 +113,14 @@ static bool mxt_disable_irq(struct mxt_data *data)
 {
 	bool old;
 
-	spin_lock(&data->lock);
+	mutex_lock(&data->irq_lock);
 	old = data->irq_enabled;
 
 	if (data->irq_enabled) {
 		disable_irq(data->irq);
 		data->irq_enabled = false;
 	}
-	spin_unlock(&data->lock);
+	mutex_unlock(&data->irq_lock);
 
 	return old;
 }
@@ -4111,7 +4111,7 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 
 	mutex_init(&data->i2c_suspend_lock);
 	mutex_init(&data->fw_update_lock);
-	spin_lock_init(&data->lock);
+	mutex_init(&data->irq_lock);
 
 	wake_lock_init(&touch_wake_lock, WAKE_LOCK_SUSPEND,
 			"touch_wakelock");
@@ -4194,7 +4194,9 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		TOUCH_ERR_MSG("Failed to register interrupt\n");
 		goto err_request_irq;
 	}
+	mutex_lock(&data->irq_lock);
 	data->irq_enabled = true;
+	mutex_unlock(&data->irq_lock);
 
 	TOUCH_INFO_MSG("%s success...\n", __func__);
 
@@ -4210,6 +4212,7 @@ err_mxt_touch_sysfs_init_and_add:
 err_init_t100_input_device:
 	mxt_regulator_disable(data);
 err_probe_regulators:
+	mutex_destroy(&data->irq_lock);
 	mutex_destroy(&data->fw_update_lock);
 	mutex_destroy(&data->i2c_suspend_lock);
 
@@ -4231,6 +4234,7 @@ static int mxt_remove(struct i2c_client *client)
 	mxt_regulator_disable(data);
 	mxt_free_object_table(data);
 
+	mutex_destroy(&data->irq_lock);
 	mutex_destroy(&data->fw_update_lock);
 	mutex_destroy(&data->i2c_suspend_lock);
 
