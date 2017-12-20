@@ -2529,8 +2529,12 @@ static ssize_t mxt_idle_mode_store(struct mxt_data *data,
 	int idle = 0;
 	int ret;
 
-	if (data->suspended)
-		return -EPERM;
+	if (data->suspended) {
+		TOUCH_DEBUG_MSG("%s: requested %s in suspended\n",
+				__func__, buf);
+		return count;
+
+	}
 
 	ret = kstrtoint(buf, 0, &idle);
 	if (ret) {
