@@ -324,7 +324,7 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 {
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 	struct mdss_panel_info *pinfo = NULL;
-	int i, rc = 0;
+	int rc = 0;
 
 	if (pdata == NULL) {
 		pr_err("%s: Invalid input data\n", __func__);
@@ -373,22 +373,21 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 			if (gpio_is_valid(ctrl_pdata->disp_en_gpio))
 				gpio_set_value((ctrl_pdata->disp_en_gpio), 1);
 
-			for (i = 0; i < pdata->panel_info.rst_seq_len; ++i) {
-				gpio_set_value((ctrl_pdata->rst_gpio),
-					pdata->panel_info.rst_seq[i]);
-				if (pdata->panel_info.rst_seq[++i])
-					usleep_range(pinfo->rst_seq[i] * 1000, pinfo->rst_seq[i] * 1000);
-			}
-
+			//reset and tp_ext pin control
+			gpio_set_value((ctrl_pdata->rst_gpio), 0);
 			if (gpio_is_valid(ctrl_pdata->tp_reset_gpio)){
 				gpio_direction_output(ctrl_pdata->tp_reset_gpio, 0);
 				gpio_set_value((ctrl_pdata->tp_reset_gpio), 0);
-				msleep(10);
+			}
+			msleep(15);
+			
+			gpio_set_value((ctrl_pdata->rst_gpio), 1);
+			if (gpio_is_valid(ctrl_pdata->tp_reset_gpio)){
 				gpio_set_value((ctrl_pdata->tp_reset_gpio), 1);
-				msleep(20);
 				gpio_free(ctrl_pdata->tp_reset_gpio);
 			}
-
+			msleep(25);
+				
 			if (gpio_is_valid(ctrl_pdata->bklt_en_gpio))
 				gpio_set_value((ctrl_pdata->bklt_en_gpio), 1);
 		}

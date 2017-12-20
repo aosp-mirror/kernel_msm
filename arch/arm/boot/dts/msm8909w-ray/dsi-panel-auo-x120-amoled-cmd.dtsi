@@ -43,20 +43,11 @@
 		qcom,mdss-dsi-border-color = <0>;
 		qcom,mdss-dsi-pixel-packing = "tight";
 		qcom,mdss-dsi-pixel-alignment = <0>;
-		qcom,mdss-dsi-on-command = [05 01 00 00 01 00 02 00 00
+		qcom,mdss-dsi-on-command = [05 01 00 00 03 00 02 00 00
 				15 01 00 00 00 00 02 FE 01
 				15 01 00 00 00 00 02 0A F0
 				15 01 00 00 00 00 02 FE 0A
 				15 01 00 00 00 00 02 29 92
-				15 01 00 00 00 00 02 FE 0C
-				15 01 00 00 00 00 02 00 5B
-				15 01 00 00 00 00 02 01 5A
-				15 01 00 00 00 00 02 02 39
-				15 01 00 00 00 00 02 03 01
-				15 01 00 00 00 00 02 04 01
-				15 01 00 00 00 00 02 05 02
-				15 01 00 00 00 00 02 07 32
-				15 01 00 00 00 00 02 08 11
 				15 01 00 00 00 00 02 FE 00												
 				29 01 00 00 00 00 05 2A 00 02 01 87
 				29 01 00 00 00 00 05 2B 00 00 01 85
@@ -65,10 +56,10 @@
 				05 01 00 00 00 00 02 12 00
 				15 01 00 00 00 00 02 35 00
 				15 01 00 00 00 00 02 53 20
-				05 01 00 00 96 00 02 11 00
+				05 01 00 00 c8 00 02 11 00
 	            05 01 00 00 00 00 02 29 00];
 		qcom,mdss-dsi-off-command = [05 01 00 00 00 00 02 28 00
-				05 01 00 00 78 00 02 10 00];
+				05 01 00 00 96 00 02 10 00];
 		qcom,mdss-dsi-on-command-state = "dsi_hs_mode";
 		qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
 		qcom,mdss-dsi-h-sync-pulse = <1>;
@@ -90,6 +81,6 @@
 		qcom,mdss-dsi-dma-trigger = "trigger_sw";
 		qcom,mdss-dsi-mdp-trigger = "none";
 		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
-		qcom,mdss-dsi-reset-sequence = <0 10>, <1 10>;
+		qcom,mdss-dsi-reset-sequence = <0 15>, <1 25>;
 	};
 };
