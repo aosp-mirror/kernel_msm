@@ -12,8 +12,11 @@
 
 #include "apq8009-narwhal.dtsi"
 
-&dsi_sharp_nt35350_cmd {
+&mdss_dsi0 {
 	qcom,platform-enable-gpio = <&msm_gpio 38 0>;
+};
+
+&dsi_sharp_nt35350_cmd {
 	/delete-property/ qcom,mdss-dsi-te-pin-select;
 	/delete-property/ qcom,mdss-dsi-te-check-enable;
 	/delete-property/ qcom,mdss-dsi-te-using-te-pin;
