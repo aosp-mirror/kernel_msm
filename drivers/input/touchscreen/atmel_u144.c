@@ -854,6 +854,9 @@ static void mxt_delay_cal_func(struct work_struct *work_delay_cal)
 			to_delayed_work(work_delay_cal),
 			struct mxt_data, work_delay_cal);
 
+	if (data->suspended)
+		return;
+
 	TOUCH_INFO_MSG("Delayed work Calibration\n");
 	/* Recalibrate since chip has been in deep sleep */
 	mxt_t6_command(data, MXT_COMMAND_CALIBRATE, 1, false);
@@ -2524,7 +2527,7 @@ static ssize_t mxt_idle_mode_store(struct mxt_data *data,
 	int ret;
 
 	if (data->suspended)
-		return -ENODEV;
+		return -EPERM;
 
 	ret = kstrtoint(buf, 0, &idle);
 	if (ret) {
@@ -2846,6 +2849,9 @@ static void mxt_start(struct mxt_data *data)
 	}
 
 	mutex_lock(&data->fw_update_lock);
+	/* force reset the idle state */
+	mxt_patchevent_unset(PATCH_EVENT_IDLE);
+
 	mxt_enable_irq(data);
 	mxt_regulator_enable(data);
 
@@ -2863,6 +2869,8 @@ static void mxt_stop(struct mxt_data *data)
 
 	if (data->suspended || data->in_bootloader)
 		return;
+
+	cancel_delayed_work_sync(&data->work_delay_cal);
 
 	mxt_disable_irq(data);
 
