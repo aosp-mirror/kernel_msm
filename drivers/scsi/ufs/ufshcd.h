@@ -1054,11 +1054,11 @@ struct ufs_hba {
 
 	struct reset_control *core_reset;
 
+	int latency_hist_enabled;
+	struct io_latency_state io_lat_read;
+	struct io_latency_state io_lat_write;
 	struct ufs_desc_size desc_size;
 	bool restore_needed;
-
-	int latency_hist_enabled;
-	struct io_latency_state io_lat_s;
 
 	/* To monitor slow UFS I/O requests. */
 	u64 slowio_us;
