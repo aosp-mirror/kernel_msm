@@ -11,8 +11,33 @@
  */
 
 /{
+
+
 	c1_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <10>;
+		/* Include B1 battery profile as placeholders for each
+		 * resistance value.
+		 * C1 step
+		 * -----------
+		 * Desay using LGC cell - 33k
+		 * LGC using LGC cell - 82k
+		 * Desay using Coslight cell (proto only) - 270k
+		 */
+		#include "batterydata-dummy33k.dtsi"
+		#include "batterydata-dummy82k.dtsi"
+		#include "batterydata-dummy270k.dtsi"
+		/*
+		 * C1 regular
+		 * --------------
+		 * Desay using ATL cell - 10k
+		 * Sunwoda using ATL cell - 47k
+		 * Sunwoda using Coslight cell - 68k
+		 * Desay using Coslight cell - 180k
+		 */
+		#include "batterydata-dummy10k.dtsi"
+		#include "batterydata-dummy47k.dtsi"
+		#include "batterydata-dummy68k.dtsi"
+		#include "batterydata-dummy180k.dtsi"
 	};
 };
 

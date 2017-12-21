@@ -14,9 +14,18 @@
 	b1_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <10>;
 		/* all B1 proto battery have the same RID
-		 * so just use one profile for now
+		 * so just use one real profile for now.  When
+		 * EVT is characterized, will replace with those.
+		 * Desay using Lishen cell - 10k
+		 * Sunwoda using Lishen cell - 22k
+		 * Desay using ATL cell - 47k
+		 * Sunwoda using Liwinon cell - 100k
 		 */
+		#include "batterydata-dummy10k.dtsi"
+		#include "batterydata-dummy22k.dtsi"
+		/* 47k */
 		#include "batterydata-qcom-b1-proto-desay-atl-3135.dtsi"
+		#include "batterydata-dummy100k.dtsi"
 	};
 };
 
