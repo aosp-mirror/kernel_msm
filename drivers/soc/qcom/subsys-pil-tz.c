@@ -42,9 +42,17 @@
 
 #define ERR_READY	0
 #define PBL_DONE	1
+#define QDSP6SS_NMI_STATUS	0x44
 
 #define desc_to_data(d) container_of(d, struct pil_tz_data, desc)
 #define subsys_to_data(d) container_of(d, struct pil_tz_data, subsys_desc)
+
+struct pil_map_fw_info {
+	void *region;
+	unsigned long attrs;
+	phys_addr_t base_addr;
+	struct device *dev;
+};
 
 /**
  * struct reg_info - regulator info
@@ -109,6 +117,7 @@ struct pil_tz_data {
 	void __iomem *irq_mask;
 	void __iomem *err_status;
 	void __iomem *err_status_spare;
+	void __iomem *reg_base;
 	u32 bits_arr[2];
 };
 
@@ -584,7 +593,8 @@ static void pil_remove_proxy_vote(struct pil_desc *pil)
 }
 
 static int pil_init_image_trusted(struct pil_desc *pil,
-		const u8 *metadata, size_t size)
+		const u8 *metadata, size_t size, phys_addr_t mdata_phys,
+		void *region)
 {
 	struct pil_tz_data *d = desc_to_data(pil);
 	struct pas_init_image_req {
@@ -593,11 +603,15 @@ static int pil_init_image_trusted(struct pil_desc *pil,
 	} request;
 	u32 scm_ret = 0;
 	void *mdata_buf;
-	dma_addr_t mdata_phys;
 	int ret;
-	unsigned long attrs = 0;
-	struct device dev = {0};
 	struct scm_desc desc = {0};
+	struct pil_map_fw_info map_fw_info = {
+		.attrs = pil->attrs,
+		.region = region,
+		.base_addr = mdata_phys,
+		.dev = pil->dev,
+	};
+	void *map_data = pil->map_data ? pil->map_data : &map_fw_info;
 
 	if (d->subsys_desc.no_auth)
 		return 0;
@@ -605,15 +619,10 @@ static int pil_init_image_trusted(struct pil_desc *pil,
 	ret = scm_pas_enable_bw();
 	if (ret)
 		return ret;
-	arch_setup_dma_ops(&dev, 0, 0, NULL, 0);
 
-	dev.coherent_dma_mask =
-		DMA_BIT_MASK(sizeof(dma_addr_t) * 8);
-	attrs |= DMA_ATTR_STRONGLY_ORDERED;
-	mdata_buf = dma_alloc_attrs(&dev, size, &mdata_phys, GFP_KERNEL,
-					attrs);
+	mdata_buf = pil->map_fw_mem(mdata_phys, size, map_data);
 	if (!mdata_buf) {
-		pr_err("scm-pas: Allocation for metadata failed.\n");
+		dev_err(pil->dev, "Failed to map memory for metadata.\n");
 		scm_pas_disable_bw();
 		return -ENOMEM;
 	}
@@ -635,7 +644,7 @@ static int pil_init_image_trusted(struct pil_desc *pil,
 		scm_ret = desc.ret[0];
 	}
 
-	dma_free_attrs(&dev, size, mdata_buf, mdata_phys, attrs);
+	pil->unmap_fw_mem(mdata_buf, size, map_data);
 	scm_pas_disable_bw();
 	if (ret)
 		return ret;
@@ -855,9 +864,6 @@ static void log_failure_reason(const struct pil_tz_data *d)
 
 	strlcpy(reason, smem_reason, min(size, MAX_SSR_REASON_LEN));
 	pr_err("%s subsystem failure reason: %s.\n", name, reason);
-
-	smem_reason[0] = '\0';
-	wmb();
 }
 
 static int subsys_shutdown(const struct subsys_desc *subsys, bool force_stop)
@@ -925,8 +931,19 @@ static void subsys_crash_shutdown(const struct subsys_desc *subsys)
 static irqreturn_t subsys_err_fatal_intr_handler (int irq, void *dev_id)
 {
 	struct pil_tz_data *d = subsys_to_data(dev_id);
+	u32 nmi_status = 0;
 
-	pr_err("Fatal error on %s!\n", d->subsys_desc.name);
+	if (d->reg_base)
+		nmi_status = readl_relaxed(d->reg_base +
+						QDSP6SS_NMI_STATUS);
+
+	if (nmi_status & 0x04)
+		pr_err("%s: Fatal error on the %s due to TZ NMI\n",
+			__func__, d->subsys_desc.name);
+	else
+		pr_err("%s Fatal error on the %s\n",
+			__func__, d->subsys_desc.name);
+
 	if (subsys_get_crash_status(d->subsys)) {
 		pr_err("%s: Ignoring error fatal, restart in progress\n",
 							d->subsys_desc.name);
@@ -1061,6 +1078,13 @@ static int pil_tz_driver_probe(struct platform_device *pdev)
 
 	d->keep_proxy_regs_on = of_property_read_bool(pdev->dev.of_node,
 						"qcom,keep-proxy-regs-on");
+
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "base_reg");
+	d->reg_base = devm_ioremap_resource(&pdev->dev, res);
+	if (IS_ERR(d->reg_base)) {
+		dev_err(&pdev->dev, "Failed to ioremap base register\n");
+		d->reg_base = NULL;
+	}
 
 	rc = of_property_read_string(pdev->dev.of_node, "qcom,firmware-name",
 				      &d->desc.name);

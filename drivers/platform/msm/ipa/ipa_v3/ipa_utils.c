@@ -1205,25 +1205,25 @@ static const struct ipa_ep_configuration ipa3_ep_mapping
 			false,
 			IPA_DPS_HPS_SEQ_TYPE_INVALID,
 			QMB_MASTER_SELECT_DDR,
-			{ 18, 12, 6, 9, IPA_EE_AP } },
+			{ 18, 11, 6, 9, IPA_EE_AP } },
 	[IPA_4_0][IPA_CLIENT_WLAN2_CONS]          = {
 			true, IPA_v4_0_GROUP_UL_DL,
 			false,
 			IPA_DPS_HPS_SEQ_TYPE_INVALID,
 			QMB_MASTER_SELECT_DDR,
-			{ 20, 14, 9, 9, IPA_EE_AP } },
+			{ 20, 13, 9, 9, IPA_EE_AP } },
 	[IPA_4_0][IPA_CLIENT_WLAN3_CONS]          = {
 			true, IPA_v4_0_GROUP_UL_DL,
 			false,
 			IPA_DPS_HPS_SEQ_TYPE_INVALID,
 			QMB_MASTER_SELECT_DDR,
-			{ 21, 15, 9, 9, IPA_EE_AP } },
+			{ 21, 14, 9, 9, IPA_EE_AP } },
 	[IPA_4_0][IPA_CLIENT_USB_CONS]            = {
 			true, IPA_v4_0_GROUP_UL_DL,
 			false,
 			IPA_DPS_HPS_SEQ_TYPE_INVALID,
 			QMB_MASTER_SELECT_PCIE,
-			{ 19, 13, 9, 9, IPA_EE_AP } },
+			{ 19, 12, 9, 9, IPA_EE_AP } },
 	[IPA_4_0][IPA_CLIENT_USB_DPL_CONS]        = {
 			true, IPA_v4_0_GROUP_UL_DL,
 			false,
@@ -1291,19 +1291,19 @@ static const struct ipa_ep_configuration ipa3_ep_mapping
 			false,
 			IPA_DPS_HPS_SEQ_TYPE_INVALID,
 			QMB_MASTER_SELECT_PCIE,
-			{ 18, 12, 6, 9, IPA_EE_AP } },
+			{ 18, 11, 6, 9, IPA_EE_AP } },
 	[IPA_4_0][IPA_CLIENT_TEST3_CONS]          = {
 			true, IPA_v4_0_GROUP_UL_DL,
 			false,
 			IPA_DPS_HPS_SEQ_TYPE_INVALID,
 			QMB_MASTER_SELECT_DDR,
-			{ 20, 14, 9, 9, IPA_EE_AP } },
+			{ 20, 13, 9, 9, IPA_EE_AP } },
 	[IPA_4_0][IPA_CLIENT_TEST4_CONS]          = {
 			true, IPA_v4_0_GROUP_UL_DL,
 			false,
 			IPA_DPS_HPS_SEQ_TYPE_INVALID,
 			QMB_MASTER_SELECT_PCIE,
-			{ 21, 15, 9, 9, IPA_EE_AP } },
+			{ 21, 14, 9, 9, IPA_EE_AP } },
 	/* Dummy consumer (pipe 31) is used in L2TP rt rule */
 	[IPA_4_0][IPA_CLIENT_DUMMY_CONS]          = {
 			true, IPA_v4_0_GROUP_UL_DL,
@@ -1404,7 +1404,7 @@ static const struct ipa_ep_configuration ipa3_ep_mapping
 			false,
 			IPA_DPS_HPS_SEQ_TYPE_INVALID,
 			QMB_MASTER_SELECT_DDR,
-			{ 19, 13, 9, 9, IPA_EE_AP } },
+			{ 19, 12, 9, 9, IPA_EE_AP } },
 	[IPA_4_0_MHI][IPA_CLIENT_USB_DPL_CONS]        = {
 			true, IPA_v4_0_MHI_GROUP_DDR,
 			false,
@@ -1446,13 +1446,13 @@ static const struct ipa_ep_configuration ipa3_ep_mapping
 			false,
 			IPA_DPS_HPS_SEQ_TYPE_INVALID,
 			QMB_MASTER_SELECT_PCIE,
-			{ 20, 14, 9, 9, IPA_EE_AP } },
+			{ 20, 13, 9, 9, IPA_EE_AP } },
 	[IPA_4_0_MHI][IPA_CLIENT_MEMCPY_DMA_ASYNC_CONS] = {
 			true, IPA_v4_0_MHI_GROUP_DMA,
 			false,
 			IPA_DPS_HPS_SEQ_TYPE_INVALID,
 			QMB_MASTER_SELECT_PCIE,
-			{ 21, 15, 9, 9, IPA_EE_AP } },
+			{ 21, 14, 9, 9, IPA_EE_AP } },
 	[IPA_4_0_MHI][IPA_CLIENT_Q6_LTE_WIFI_AGGR_CONS] = {
 			true, IPA_v4_0_GROUP_UL_DL,
 			false,
@@ -1477,19 +1477,19 @@ static const struct ipa_ep_configuration ipa3_ep_mapping
 			false,
 			IPA_DPS_HPS_SEQ_TYPE_INVALID,
 			QMB_MASTER_SELECT_PCIE,
-			{ 18, 12, 6, 9, IPA_EE_AP } },
+			{ 18, 11, 6, 9, IPA_EE_AP } },
 	[IPA_4_0_MHI][IPA_CLIENT_TEST3_CONS]          = {
 			true, IPA_v4_0_GROUP_UL_DL,
 			false,
 			IPA_DPS_HPS_SEQ_TYPE_INVALID,
 			QMB_MASTER_SELECT_DDR,
-			{ 20, 14, 9, 9, IPA_EE_AP } },
+			{ 20, 13, 9, 9, IPA_EE_AP } },
 	[IPA_4_0_MHI][IPA_CLIENT_TEST4_CONS]          = {
 			true, IPA_v4_0_GROUP_UL_DL,
 			false,
 			IPA_DPS_HPS_SEQ_TYPE_INVALID,
 			QMB_MASTER_SELECT_PCIE,
-			{ 21, 15, 9, 9, IPA_EE_AP } },
+			{ 21, 14, 9, 9, IPA_EE_AP } },
 	/* Dummy consumer (pipe 31) is used in L2TP rt rule */
 	[IPA_4_0_MHI][IPA_CLIENT_DUMMY_CONS]          = {
 			true, IPA_v4_0_GROUP_UL_DL,
@@ -4188,7 +4188,9 @@ void ipa3_proxy_clk_unvote(void)
 	mutex_lock(&ipa3_ctx->q6_proxy_clk_vote_mutex);
 	if (ipa3_ctx->q6_proxy_clk_vote_valid) {
 		IPA_ACTIVE_CLIENTS_DEC_SPECIAL("PROXY_CLK_VOTE");
-		ipa3_ctx->q6_proxy_clk_vote_valid = false;
+		ipa3_ctx->q6_proxy_clk_vote_cnt--;
+		if (ipa3_ctx->q6_proxy_clk_vote_cnt == 0)
+			ipa3_ctx->q6_proxy_clk_vote_valid = false;
 	}
 	mutex_unlock(&ipa3_ctx->q6_proxy_clk_vote_mutex);
 }
@@ -4204,8 +4206,10 @@ void ipa3_proxy_clk_vote(void)
 		return;
 
 	mutex_lock(&ipa3_ctx->q6_proxy_clk_vote_mutex);
-	if (!ipa3_ctx->q6_proxy_clk_vote_valid) {
+	if (!ipa3_ctx->q6_proxy_clk_vote_valid ||
+		(ipa3_ctx->q6_proxy_clk_vote_cnt > 0)) {
 		IPA_ACTIVE_CLIENTS_INC_SPECIAL("PROXY_CLK_VOTE");
+		ipa3_ctx->q6_proxy_clk_vote_cnt++;
 		ipa3_ctx->q6_proxy_clk_vote_valid = true;
 	}
 	mutex_unlock(&ipa3_ctx->q6_proxy_clk_vote_mutex);
@@ -4499,6 +4503,7 @@ int ipa3_bind_api_controller(enum ipa_hw_type ipa_hw_type,
 	api_ctrl->ipa_enable_wdi3_pipes = ipa3_enable_wdi3_pipes;
 	api_ctrl->ipa_disable_wdi3_pipes = ipa3_disable_wdi3_pipes;
 	api_ctrl->ipa_tz_unlock_reg = ipa3_tz_unlock_reg;
+	api_ctrl->ipa_get_smmu_params = ipa3_get_smmu_params;
 
 	return 0;
 }

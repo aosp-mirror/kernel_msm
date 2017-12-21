@@ -216,7 +216,6 @@ struct sde_kms {
 	struct sde_rm rm;
 	bool rm_init;
 	struct sde_splash_data splash_data;
-	bool cont_splash_en;
 	struct sde_hw_vbif *hw_vbif[VBIF_MAX];
 	struct sde_hw_mdp *hw_mdp;
 	int dsi_display_count;
@@ -242,6 +241,23 @@ struct vsync_info {
  * Return: Whether or not the 'sdeclient' module parameter was set on boot up
  */
 bool sde_is_custom_client(void);
+
+/**
+ * sde_kms_power_resource_is_enabled - whether or not power resource is enabled
+ * @dev: Pointer to drm device
+ * Return: true if power resource is enabled; false otherwise
+ */
+static inline bool sde_kms_power_resource_is_enabled(struct drm_device *dev)
+{
+	struct msm_drm_private *priv;
+
+	if (!dev || !dev->dev_private)
+		return false;
+
+	priv = dev->dev_private;
+
+	return sde_power_resource_is_enabled(&priv->phandle);
+}
 
 /**
  * sde_kms_is_suspend_state - whether or not the system is pm suspended

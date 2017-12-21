@@ -246,6 +246,10 @@ struct dwc3_msm {
 	struct notifier_block	dwc3_cpu_notifier;
 	struct notifier_block	usbdev_nb;
 	bool			hc_died;
+	/* for usb connector either type-C or microAB */
+	bool			type_c;
+	/* whether to vote for VBUS reg in host mode */
+	bool			no_vbus_vote_type_c;
 
 	struct extcon_dev	*extcon_vbus;
 	struct extcon_dev	*extcon_id;
@@ -2900,7 +2904,7 @@ static int dwc3_msm_eud_notifier(struct notifier_block *nb,
 	return NOTIFY_DONE;
 }
 
-static int dwc3_msm_extcon_register(struct dwc3_msm *mdwc)
+static int dwc3_msm_extcon_register(struct dwc3_msm *mdwc, int start_idx)
 {
 	struct device_node *node = mdwc->dev->of_node;
 	struct extcon_dev *edev;
@@ -2909,8 +2913,11 @@ static int dwc3_msm_extcon_register(struct dwc3_msm *mdwc)
 	if (!of_property_read_bool(node, "extcon"))
 		return 0;
 
-	/* Use first phandle (mandatory) for USB vbus status notification */
-	edev = extcon_get_edev_by_phandle(mdwc->dev, 0);
+	/*
+	 * Use mandatory phandle (index 0 for type-C; index 3 for microUSB)
+	 * for USB vbus status notification
+	 */
+	edev = extcon_get_edev_by_phandle(mdwc->dev, start_idx);
 	if (IS_ERR(edev) && PTR_ERR(edev) != -ENODEV)
 		return PTR_ERR(edev);
 
@@ -2925,9 +2932,12 @@ static int dwc3_msm_extcon_register(struct dwc3_msm *mdwc)
 		}
 	}
 
-	/* Use second phandle (optional) for USB ID status notification */
-	if (of_count_phandle_with_args(node, "extcon", NULL) > 1) {
-		edev = extcon_get_edev_by_phandle(mdwc->dev, 1);
+	/*
+	 * Use optional phandle (index 1 for type-C; index 4 for microUSB)
+	 * for USB ID status notification
+	 */
+	if (of_count_phandle_with_args(node, "extcon", NULL) > start_idx + 1) {
+		edev = extcon_get_edev_by_phandle(mdwc->dev, start_idx + 1);
 		if (IS_ERR(edev) && PTR_ERR(edev) != -ENODEV) {
 			ret = PTR_ERR(edev);
 			goto err;
@@ -2955,12 +2965,12 @@ static int dwc3_msm_extcon_register(struct dwc3_msm *mdwc)
 	}
 
 	edev = NULL;
-	/* Use third phandle (optional) for EUD based detach/attach events */
+	/* Use optional phandle (index 2) for EUD based detach/attach events */
 	if (of_count_phandle_with_args(node, "extcon", NULL) > 2) {
 		edev = extcon_get_edev_by_phandle(mdwc->dev, 2);
 		if (IS_ERR(edev) && PTR_ERR(edev) != -ENODEV) {
 			ret = PTR_ERR(edev);
-			goto err1;
+			goto err2;
 		}
 	}
 
@@ -3417,10 +3427,6 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	if (of_property_read_bool(node, "qcom,disable-dev-mode-pm"))
 		pm_runtime_get_noresume(mdwc->dev);
 
-	ret = dwc3_msm_extcon_register(mdwc);
-	if (ret)
-		goto put_dwc3;
-
 	ret = of_property_read_u32(node, "qcom,pm-qos-latency",
 				&mdwc->pm_qos_latency);
 	if (ret) {
@@ -3428,14 +3434,33 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 		mdwc->pm_qos_latency = 0;
 	}
 
+	mdwc->no_vbus_vote_type_c = of_property_read_bool(node,
+					"qcom,no-vbus-vote-with-type-C");
+
+	/* Mark type-C as true by default */
+	mdwc->type_c = true;
+
 	mdwc->usb_psy = power_supply_get_by_name("usb");
 	if (!mdwc->usb_psy) {
 		dev_warn(mdwc->dev, "Could not get usb power_supply\n");
 		pval.intval = -EINVAL;
 	} else {
 		power_supply_get_property(mdwc->usb_psy,
+			POWER_SUPPLY_PROP_CONNECTOR_TYPE, &pval);
+		if (pval.intval == POWER_SUPPLY_CONNECTOR_MICRO_USB)
+			mdwc->type_c = false;
+		power_supply_get_property(mdwc->usb_psy,
 			POWER_SUPPLY_PROP_PRESENT, &pval);
 	}
+
+	/*
+	 * Extcon phandles starting indices in DT:
+	 * type-C : 0
+	 * microUSB : 3
+	 */
+	ret = dwc3_msm_extcon_register(mdwc, mdwc->type_c ? 0 : 3);
+	if (ret)
+		goto put_psy;
 
 	mutex_init(&mdwc->suspend_resume_mutex);
 	/* Update initial VBUS/ID state from extcon */
@@ -3465,6 +3490,12 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 
 	return 0;
 
+put_psy:
+	if (mdwc->usb_psy)
+		power_supply_put(mdwc->usb_psy);
+
+	if (cpu_to_affin)
+		unregister_cpu_notifier(&mdwc->dwc3_cpu_notifier);
 put_dwc3:
 	if (mdwc->bus_perf_client)
 		msm_bus_scale_unregister_client(mdwc->bus_perf_client);
@@ -3487,6 +3518,8 @@ static int dwc3_msm_remove(struct platform_device *pdev)
 	int ret_pm;
 
 	device_remove_file(&pdev->dev, &dev_attr_mode);
+	if (mdwc->usb_psy)
+		power_supply_put(mdwc->usb_psy);
 
 	if (cpu_to_affin)
 		unregister_cpu_notifier(&mdwc->dwc3_cpu_notifier);
@@ -3742,7 +3775,8 @@ static int dwc3_otg_start_host(struct dwc3_msm *mdwc, int on)
 	 * IS_ERR: regulator could not be obtained, so skip using it
 	 * Valid pointer otherwise
 	 */
-	if (!mdwc->vbus_reg) {
+	if (!mdwc->vbus_reg && (!mdwc->type_c ||
+				(mdwc->type_c && !mdwc->no_vbus_vote_type_c))) {
 		mdwc->vbus_reg = devm_regulator_get_optional(mdwc->dev,
 					"vbus_dwc3");
 		if (IS_ERR(mdwc->vbus_reg) &&
@@ -3767,7 +3801,7 @@ static int dwc3_otg_start_host(struct dwc3_msm *mdwc, int on)
 		pm_runtime_get_sync(mdwc->dev);
 		dbg_event(0xFF, "StrtHost gync",
 			atomic_read(&mdwc->dev->power.usage_count));
-		if (!IS_ERR(mdwc->vbus_reg))
+		if (!IS_ERR_OR_NULL(mdwc->vbus_reg))
 			ret = regulator_enable(mdwc->vbus_reg);
 		if (ret) {
 			dev_err(mdwc->dev, "unable to enable vbus_reg\n");
@@ -3791,7 +3825,7 @@ static int dwc3_otg_start_host(struct dwc3_msm *mdwc, int on)
 			dev_err(mdwc->dev,
 				"%s: failed to add XHCI pdev ret=%d\n",
 				__func__, ret);
-			if (!IS_ERR(mdwc->vbus_reg))
+			if (!IS_ERR_OR_NULL(mdwc->vbus_reg))
 				regulator_disable(mdwc->vbus_reg);
 			mdwc->hs_phy->flags &= ~PHY_HOST_MODE;
 			mdwc->ss_phy->flags &= ~PHY_HOST_MODE;
@@ -3832,7 +3866,7 @@ static int dwc3_otg_start_host(struct dwc3_msm *mdwc, int on)
 		dev_dbg(mdwc->dev, "%s: turn off host\n", __func__);
 
 		usb_unregister_atomic_notify(&mdwc->usbdev_nb);
-		if (!IS_ERR(mdwc->vbus_reg))
+		if (!IS_ERR_OR_NULL(mdwc->vbus_reg))
 			ret = regulator_disable(mdwc->vbus_reg);
 		if (ret) {
 			dev_err(mdwc->dev, "unable to disable vbus_reg\n");
@@ -4017,7 +4051,10 @@ static int dwc3_msm_gadget_vbus_draw(struct dwc3_msm *mdwc, unsigned int mA)
 
 	psy_type = get_psy_type(mdwc);
 	if (psy_type == POWER_SUPPLY_TYPE_USB_FLOAT) {
-		pval.intval = -ETIMEDOUT;
+		if (!mA)
+			pval.intval = -ETIMEDOUT;
+		else
+			pval.intval = 1000 * mA;
 		goto set_prop;
 	}
 

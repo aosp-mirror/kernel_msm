@@ -37,6 +37,7 @@
  *				   and transfer it.
  * @DSI_CTRL_CMD_LAST_COMMAND:     Trigger the DMA cmd transfer if this is last
  *				   command in the batch.
+ * @DSI_CTRL_CMD_NON_EMBEDDED_MODE:Trasfer cmd packets in non embedded mode.
  */
 #define DSI_CTRL_CMD_READ             0x1
 #define DSI_CTRL_CMD_BROADCAST        0x2
@@ -45,6 +46,15 @@
 #define DSI_CTRL_CMD_FIFO_STORE       0x10
 #define DSI_CTRL_CMD_FETCH_MEMORY     0x20
 #define DSI_CTRL_CMD_LAST_COMMAND     0x40
+#define DSI_CTRL_CMD_NON_EMBEDDED_MODE 0x80
+
+/* DSI embedded mode fifo size
+ * If the command is greater than 256 bytes it is sent in non-embedded mode.
+ */
+#define DSI_EMBEDDED_MODE_DMA_MAX_SIZE_BYTES 256
+
+/* max size supported for dsi cmd transfer using TPG */
+#define DSI_CTRL_MAX_CMD_FIFO_STORE_SIZE 64
 
 /**
  * enum dsi_power_state - defines power states for dsi controller.
@@ -191,8 +201,9 @@ struct dsi_ctrl_interrupts {
  *                       Origin is top left of this CTRL.
  * @tx_cmd_buf:          Tx command buffer.
  * @cmd_buffer_iova:     cmd buffer mapped address.
- * @vaddr:		 CPU virtual address of cmd buffer.
  * @cmd_buffer_size:     Size of command buffer.
+ * @vaddr:               CPU virtual address of cmd buffer.
+ * @secure_mode:         Indicates if secure-session is in progress
  * @debugfs_root:        Root for debugfs entries.
  * @misr_enable:         Frame MISR enable/disable
  * @misr_cache:          Cached Frame MISR value
@@ -236,6 +247,7 @@ struct dsi_ctrl {
 	u32 cmd_buffer_iova;
 	u32 cmd_len;
 	void *vaddr;
+	u32 secure_mode;
 
 	/* Debug Information */
 	struct dentry *debugfs_root;
@@ -674,5 +686,21 @@ int dsi_ctrl_get_hw_version(struct dsi_ctrl *dsi_ctrl);
  * @on:		variable to control video engine ON/OFF.
  */
 int dsi_ctrl_vid_engine_en(struct dsi_ctrl *dsi_ctrl, bool on);
+
+/**
+ * @dsi_ctrl:        DSI controller handle.
+ * cmd_len:	     Length of command.
+ * flags:	     Config mode flags.
+ */
+void dsi_message_setup_tx_mode(struct dsi_ctrl *dsi_ctrl, u32 cmd_len,
+		u32 *flags);
+
+/**
+ * @dsi_ctrl:        DSI controller handle.
+ * cmd_len:	     Length of command.
+ * flags:	     Config mode flags.
+ */
+int dsi_message_validate_tx_mode(struct dsi_ctrl *dsi_ctrl, u32 cmd_len,
+		u32 *flags);
 
 #endif /* _DSI_CTRL_H_ */

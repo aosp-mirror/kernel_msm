@@ -429,6 +429,20 @@ void sde_connector_schedule_status_work(struct drm_connector *connector,
 	}
 }
 
+void sde_connector_helper_bridge_disable(struct drm_connector *connector)
+{
+	int rc;
+
+	if (!connector)
+		return;
+
+	/* trigger a final connector pre-kickoff for power mode updates */
+	rc = sde_connector_pre_kickoff(connector);
+	if (rc)
+		SDE_ERROR("conn %d final pre kickoff failed %d\n",
+				connector->base.id, rc);
+}
+
 static int _sde_connector_update_power_locked(struct sde_connector *c_conn)
 {
 	struct drm_connector *connector;
@@ -480,12 +494,10 @@ static int _sde_connector_update_power_locked(struct sde_connector *c_conn)
 	return rc;
 }
 
-static int _sde_connector_update_bl_scale(struct sde_connector *c_conn, int idx)
+static int _sde_connector_update_bl_scale(struct sde_connector *c_conn)
 {
-	struct drm_connector conn;
 	struct dsi_display *dsi_display;
 	struct dsi_backlight_config *bl_config;
-	uint64_t value;
 	int rc = 0;
 
 	if (!c_conn) {
@@ -493,7 +505,6 @@ static int _sde_connector_update_bl_scale(struct sde_connector *c_conn, int idx)
 		return -EINVAL;
 	}
 
-	conn = c_conn->base;
 	dsi_display = c_conn->display;
 	if (!dsi_display || !dsi_display->panel) {
 		SDE_ERROR("Invalid params(s) dsi_display %pK, panel %pK\n",
@@ -503,22 +514,16 @@ static int _sde_connector_update_bl_scale(struct sde_connector *c_conn, int idx)
 	}
 
 	bl_config = &dsi_display->panel->bl_config;
-	value = sde_connector_get_property(conn.state, idx);
 
-	if (idx == CONNECTOR_PROP_BL_SCALE) {
-		if (value > MAX_BL_SCALE_LEVEL)
-			bl_config->bl_scale = MAX_BL_SCALE_LEVEL;
-		else
-			bl_config->bl_scale = (u32)value;
-	} else if (idx == CONNECTOR_PROP_AD_BL_SCALE) {
-		if (value > MAX_AD_BL_SCALE_LEVEL)
-			bl_config->bl_scale_ad = MAX_AD_BL_SCALE_LEVEL;
-		else
-			bl_config->bl_scale_ad = (u32)value;
-	} else {
-		SDE_DEBUG("invalid idx %d\n", idx);
-		return 0;
-	}
+	if (c_conn->bl_scale > MAX_BL_SCALE_LEVEL)
+		bl_config->bl_scale = MAX_BL_SCALE_LEVEL;
+	else
+		bl_config->bl_scale = c_conn->bl_scale;
+
+	if (c_conn->bl_scale_ad > MAX_AD_BL_SCALE_LEVEL)
+		bl_config->bl_scale_ad = MAX_AD_BL_SCALE_LEVEL;
+	else
+		bl_config->bl_scale_ad = c_conn->bl_scale_ad;
 
 	SDE_DEBUG("bl_scale = %u, bl_scale_ad = %u, bl_level = %u\n",
 		bl_config->bl_scale, bl_config->bl_scale_ad,
@@ -560,12 +565,18 @@ int sde_connector_pre_kickoff(struct drm_connector *connector)
 			break;
 		case CONNECTOR_PROP_BL_SCALE:
 		case CONNECTOR_PROP_AD_BL_SCALE:
-			_sde_connector_update_bl_scale(c_conn, idx);
+			_sde_connector_update_bl_scale(c_conn);
 			break;
 		default:
 			/* nothing to do for most properties */
 			break;
 		}
+	}
+
+	/* Special handling for postproc properties */
+	if (c_conn->bl_scale_dirty) {
+		_sde_connector_update_bl_scale(c_conn);
+		c_conn->bl_scale_dirty = false;
 	}
 
 	if (!c_conn->ops.pre_kickoff)
@@ -581,23 +592,26 @@ int sde_connector_pre_kickoff(struct drm_connector *connector)
 	return rc;
 }
 
-void sde_connector_clk_ctrl(struct drm_connector *connector, bool enable)
+int sde_connector_clk_ctrl(struct drm_connector *connector, bool enable)
 {
 	struct sde_connector *c_conn;
 	struct dsi_display *display;
 	u32 state = enable ? DSI_CLK_ON : DSI_CLK_OFF;
+	int rc = 0;
 
 	if (!connector) {
 		SDE_ERROR("invalid connector\n");
-		return;
+		return -EINVAL;
 	}
 
 	c_conn = to_sde_connector(connector);
 	display = (struct dsi_display *) c_conn->display;
 
 	if (display && c_conn->ops.clk_ctrl)
-		c_conn->ops.clk_ctrl(display->mdp_clk_handle,
+		rc = c_conn->ops.clk_ctrl(display->mdp_clk_handle,
 				DSI_ALL_CLKS, state);
+
+	return rc;
 }
 
 static void sde_connector_destroy(struct drm_connector *connector)
@@ -625,6 +639,8 @@ static void sde_connector_destroy(struct drm_connector *connector)
 		drm_property_unreference_blob(c_conn->blob_dither);
 	if (c_conn->blob_mode_info)
 		drm_property_unreference_blob(c_conn->blob_mode_info);
+	if (c_conn->blob_ext_hdr)
+		drm_property_unreference_blob(c_conn->blob_ext_hdr);
 	msm_property_destroy(&c_conn->property_info);
 
 	if (c_conn->bl_device)
@@ -1002,6 +1018,9 @@ static int sde_connector_atomic_set_property(struct drm_connector *connector,
 		}
 		break;
 	case CONNECTOR_PROP_RETIRE_FENCE:
+		if (!val)
+			goto end;
+
 		rc = sde_fence_create(&c_conn->retire_fence, &fence_fd, 0);
 		if (rc) {
 			SDE_ERROR("fence create failed rc:%d\n", rc);
@@ -1022,6 +1041,19 @@ static int sde_connector_atomic_set_property(struct drm_connector *connector,
 		rc = _sde_connector_set_roi_v1(c_conn, c_state, (void *)val);
 		if (rc)
 			SDE_ERROR_CONN(c_conn, "invalid roi_v1, rc: %d\n", rc);
+		break;
+	/* CONNECTOR_PROP_BL_SCALE and CONNECTOR_PROP_AD_BL_SCALE are
+	 * color-processing properties. These two properties require
+	 * special handling since they don't quite fit the current standard
+	 * atomic set property framework.
+	 */
+	case CONNECTOR_PROP_BL_SCALE:
+		c_conn->bl_scale = val;
+		c_conn->bl_scale_dirty = true;
+		break;
+	case CONNECTOR_PROP_AD_BL_SCALE:
+		c_conn->bl_scale_ad = val;
+		c_conn->bl_scale_dirty = true;
 		break;
 	default:
 		break;
@@ -1082,12 +1114,14 @@ static int sde_connector_atomic_get_property(struct drm_connector *connector,
 	c_state = to_sde_connector_state(state);
 
 	idx = msm_property_index(&c_conn->property_info, property);
-	if (idx == CONNECTOR_PROP_RETIRE_FENCE)
-		rc = sde_fence_create(&c_conn->retire_fence, val, 0);
-	else
+	if (idx == CONNECTOR_PROP_RETIRE_FENCE) {
+		*val = ~0;
+		rc = 0;
+	} else {
 		/* get cached property value */
 		rc = msm_property_atomic_get(&c_conn->property_info,
 				&c_state->property_state, property, val);
+	}
 
 	/* allow for custom override */
 	if (c_conn->ops.get_property)
@@ -1655,16 +1689,15 @@ int sde_connector_set_blob_data(struct drm_connector *conn,
 			SDE_DEBUG_CONN(c_conn, "invalid connector state\n");
 		}
 
-		if (!c_conn->ops.post_init) {
-			SDE_ERROR_CONN(c_conn, "post_init not defined\n");
-			goto exit;
-		}
-
-		rc = c_conn->ops.post_init(conn, info, c_conn->display,
-				&mode_info);
-		if (rc) {
-			SDE_ERROR_CONN(c_conn, "post-init failed, %d\n", rc);
-			goto exit;
+		if (c_conn->ops.set_info_blob) {
+			rc = c_conn->ops.set_info_blob(conn, info,
+					c_conn->display, &mode_info);
+			if (rc) {
+				SDE_ERROR_CONN(c_conn,
+						"set_info_blob failed, %d\n",
+						rc);
+				goto exit;
+			}
 		}
 
 		blob = c_conn->blob_caps;
@@ -1801,6 +1834,14 @@ struct drm_connector *sde_connector_init(struct drm_device *dev,
 			CONNECTOR_PROP_COUNT, CONNECTOR_PROP_BLOBCOUNT,
 			sizeof(struct sde_connector_state));
 
+	if (c_conn->ops.post_init) {
+		rc = c_conn->ops.post_init(&c_conn->base, display);
+		if (rc) {
+			SDE_ERROR("post-init failed, %d\n", rc);
+			goto error_cleanup_fence;
+		}
+	}
+
 	msm_property_install_blob(&c_conn->property_info,
 			"capabilities",
 			DRM_MODE_PROP_IMMUTABLE,
@@ -1853,10 +1894,19 @@ struct drm_connector *sde_connector_init(struct drm_device *dev,
 	_sde_connector_install_dither_property(dev, sde_kms, c_conn);
 
 	if (connector_type == DRM_MODE_CONNECTOR_DisplayPort) {
+		struct drm_msm_ext_hdr_properties hdr = {0};
+
 		msm_property_install_blob(&c_conn->property_info,
 				"ext_hdr_properties",
 				DRM_MODE_PROP_IMMUTABLE,
 				CONNECTOR_PROP_EXT_HDR_INFO);
+
+		/* set default values to avoid reading uninitialized data */
+		msm_property_set_blob(&c_conn->property_info,
+			      &c_conn->blob_ext_hdr,
+			      &hdr,
+			      sizeof(hdr),
+			      CONNECTOR_PROP_EXT_HDR_INFO);
 	}
 
 	msm_property_install_volatile_range(&c_conn->property_info,
@@ -1876,6 +1926,10 @@ struct drm_connector *sde_connector_init(struct drm_device *dev,
 	msm_property_install_range(&c_conn->property_info, "ad_bl_scale",
 		0x0, 0, MAX_AD_BL_SCALE_LEVEL, MAX_AD_BL_SCALE_LEVEL,
 		CONNECTOR_PROP_AD_BL_SCALE);
+
+	c_conn->bl_scale_dirty = false;
+	c_conn->bl_scale = MAX_BL_SCALE_LEVEL;
+	c_conn->bl_scale_ad = MAX_AD_BL_SCALE_LEVEL;
 
 	/* enum/bitmask properties */
 	msm_property_install_enum(&c_conn->property_info, "topology_name",
@@ -1916,6 +1970,8 @@ error_destroy_property:
 		drm_property_unreference_blob(c_conn->blob_dither);
 	if (c_conn->blob_mode_info)
 		drm_property_unreference_blob(c_conn->blob_mode_info);
+	if (c_conn->blob_ext_hdr)
+		drm_property_unreference_blob(c_conn->blob_ext_hdr);
 
 	msm_property_destroy(&c_conn->property_info);
 error_cleanup_fence:

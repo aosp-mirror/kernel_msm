@@ -470,7 +470,7 @@ int sde_power_data_bus_set_quota(struct sde_power_handle *phandle,
 
 	pclient->ab[bus_client] = ab_quota;
 	pclient->ib[bus_client] = ib_quota;
-	trace_sde_perf_update_bus(bus_client, ab_quota, ib_quota);
+	trace_sde_perf_update_bus(bus_client, bus_id, ab_quota, ib_quota);
 
 	list_for_each_entry(client, &phandle->power_client_clist, list) {
 		for (i = 0; i < SDE_POWER_HANDLE_DATA_BUS_CLIENT_MAX; i++) {
@@ -981,6 +981,16 @@ data_bus_hdl_err:
 	phandle->current_usecase_ndx = prev_usecase_ndx;
 	mutex_unlock(&phandle->phandle_lock);
 	return rc;
+}
+
+int sde_power_resource_is_enabled(struct sde_power_handle *phandle)
+{
+	if (!phandle) {
+		pr_err("invalid input argument\n");
+		return false;
+	}
+
+	return phandle->current_usecase_ndx != VOTE_INDEX_DISABLE;
 }
 
 int sde_power_clk_set_rate(struct sde_power_handle *phandle, char *clock_name,

@@ -741,7 +741,7 @@ static void _sde_crtc_setup_dim_layer_cfg(struct drm_crtc *crtc,
 	for (i = 0; i < sde_crtc->num_mixers; i++) {
 		split_dim_layer.flags = dim_layer->flags;
 
-		sde_kms_rect_intersect(&cstate->lm_bounds[i], &dim_layer->rect,
+		sde_kms_rect_intersect(&cstate->lm_roi[i], &dim_layer->rect,
 					&split_dim_layer.rect);
 		if (sde_kms_rect_is_null(&split_dim_layer.rect)) {
 			/*
@@ -764,8 +764,25 @@ static void _sde_crtc_setup_dim_layer_cfg(struct drm_crtc *crtc,
 		} else {
 			split_dim_layer.rect.x =
 					split_dim_layer.rect.x -
-						cstate->lm_bounds[i].x;
+						cstate->lm_roi[i].x;
+			split_dim_layer.rect.y =
+					split_dim_layer.rect.y -
+						cstate->lm_roi[i].y;
 		}
+
+		SDE_EVT32_VERBOSE(DRMID(crtc),
+				cstate->lm_roi[i].x,
+				cstate->lm_roi[i].y,
+				cstate->lm_roi[i].w,
+				cstate->lm_roi[i].h,
+				dim_layer->rect.x,
+				dim_layer->rect.y,
+				dim_layer->rect.w,
+				dim_layer->rect.h,
+				split_dim_layer.rect.x,
+				split_dim_layer.rect.y,
+				split_dim_layer.rect.w,
+				split_dim_layer.rect.h);
 
 		SDE_DEBUG("split_dim_layer - LM:%d, rect:{%d,%d,%d,%d}}\n",
 			i, split_dim_layer.rect.x, split_dim_layer.rect.y,
@@ -787,6 +804,21 @@ void sde_crtc_get_crtc_roi(struct drm_crtc_state *state,
 
 	crtc_state = to_sde_crtc_state(state);
 	*crtc_roi = &crtc_state->crtc_roi;
+}
+
+bool sde_crtc_is_crtc_roi_dirty(struct drm_crtc_state *state)
+{
+	struct sde_crtc_state *cstate;
+	struct sde_crtc *sde_crtc;
+
+	if (!state || !state->crtc)
+		return false;
+
+	sde_crtc = to_sde_crtc(state->crtc);
+	cstate = to_sde_crtc_state(state);
+
+	return msm_property_is_dirty(&sde_crtc->property_info,
+			&cstate->property_state, CRTC_PROP_ROI_V1);
 }
 
 static int _sde_crtc_set_roi_v1(struct drm_crtc_state *state,
@@ -877,6 +909,8 @@ static int _sde_crtc_set_crtc_roi(struct drm_crtc *crtc,
 	struct sde_crtc_state *crtc_state;
 	struct sde_rect *crtc_roi;
 	int i, num_attached_conns = 0;
+	bool is_crtc_roi_dirty;
+	bool is_any_conn_roi_dirty;
 
 	if (!crtc || !state)
 		return -EINVAL;
@@ -885,7 +919,11 @@ static int _sde_crtc_set_crtc_roi(struct drm_crtc *crtc,
 	crtc_state = to_sde_crtc_state(state);
 	crtc_roi = &crtc_state->crtc_roi;
 
+	is_crtc_roi_dirty = sde_crtc_is_crtc_roi_dirty(state);
+	is_any_conn_roi_dirty = false;
+
 	for_each_connector_in_state(state->state, conn, conn_state, i) {
+		struct sde_connector *sde_conn;
 		struct sde_connector_state *sde_conn_state;
 		struct sde_rect conn_roi;
 
@@ -900,7 +938,14 @@ static int _sde_crtc_set_crtc_roi(struct drm_crtc *crtc,
 		}
 		++num_attached_conns;
 
+		sde_conn = to_sde_connector(conn_state->connector);
 		sde_conn_state = to_sde_connector_state(conn_state);
+
+		is_any_conn_roi_dirty = is_any_conn_roi_dirty ||
+				msm_property_is_dirty(
+						&sde_conn->property_info,
+						&sde_conn_state->property_state,
+						CONNECTOR_PROP_ROI_V1);
 
 		/*
 		 * current driver only supports same connector and crtc size,
@@ -921,7 +966,23 @@ static int _sde_crtc_set_crtc_roi(struct drm_crtc *crtc,
 				conn_roi.w, conn_roi.h);
 	}
 
+	/*
+	 * Check against CRTC ROI and Connector ROI not being updated together.
+	 * This restriction should be relaxed when Connector ROI scaling is
+	 * supported.
+	 */
+	if (is_any_conn_roi_dirty != is_crtc_roi_dirty) {
+		SDE_ERROR("connector/crtc rois not updated together\n");
+		return -EINVAL;
+	}
+
 	sde_kms_rect_merge_rectangles(&crtc_state->user_roi_list, crtc_roi);
+
+	/* clear the ROI to null if it matches full screen anyways */
+	if (crtc_roi->x == 0 && crtc_roi->y == 0 &&
+			crtc_roi->w == state->adjusted_mode.hdisplay &&
+			crtc_roi->h == state->adjusted_mode.vdisplay)
+		memset(crtc_roi, 0, sizeof(*crtc_roi));
 
 	SDE_DEBUG("%s: crtc roi (%d,%d,%d,%d)\n", sde_crtc->name,
 			crtc_roi->x, crtc_roi->y, crtc_roi->w, crtc_roi->h);
@@ -1186,8 +1247,6 @@ static int _sde_crtc_check_rois(struct drm_crtc *crtc,
 	struct sde_crtc *sde_crtc;
 	struct sde_crtc_state *sde_crtc_state;
 	struct msm_mode_info mode_info;
-	struct drm_connector *conn;
-	struct drm_connector_state *conn_state;
 	int rc, lm_idx, i;
 
 	if (!crtc || !state)
@@ -1196,6 +1255,7 @@ static int _sde_crtc_check_rois(struct drm_crtc *crtc,
 	memset(&mode_info, 0, sizeof(mode_info));
 
 	sde_crtc = to_sde_crtc(crtc);
+	sde_crtc_state = to_sde_crtc_state(state);
 
 	if (hweight_long(state->connector_mask) != 1) {
 		SDE_ERROR("invalid connector count(%d) for crtc: %d\n",
@@ -1204,8 +1264,17 @@ static int _sde_crtc_check_rois(struct drm_crtc *crtc,
 		return -EINVAL;
 	}
 
-	for_each_connector_in_state(state->state, conn, conn_state, i) {
-		rc = sde_connector_get_mode_info(conn_state, &mode_info);
+	/*
+	 * check connector array cached at modeset time since incoming atomic
+	 * state may not include any connectors if they aren't modified
+	 */
+	for (i = 0; i < ARRAY_SIZE(sde_crtc_state->connectors); i++) {
+		struct drm_connector *conn = sde_crtc_state->connectors[i];
+
+		if (!conn || !conn->state)
+			continue;
+
+		rc = sde_connector_get_mode_info(conn->state, &mode_info);
 		if (rc) {
 			SDE_ERROR("failed to get mode info\n");
 			return -EINVAL;
@@ -1216,7 +1285,6 @@ static int _sde_crtc_check_rois(struct drm_crtc *crtc,
 	if (!mode_info.roi_caps.enabled)
 		return 0;
 
-	sde_crtc_state = to_sde_crtc_state(state);
 	if (sde_crtc_state->user_roi_list.num_rects >
 					mode_info.roi_caps.num_roi) {
 		SDE_ERROR("roi count is more than supported limit, %d > %d\n",
@@ -3048,6 +3116,11 @@ static void sde_crtc_atomic_begin(struct drm_crtc *crtc,
 		return;
 	}
 
+	if (!sde_kms_power_resource_is_enabled(crtc->dev)) {
+		SDE_ERROR("power resource is not enabled\n");
+		return;
+	}
+
 	SDE_DEBUG("crtc%d\n", crtc->base.id);
 
 	sde_crtc = to_sde_crtc(crtc);
@@ -3134,6 +3207,11 @@ static void sde_crtc_atomic_flush(struct drm_crtc *crtc,
 	if (!crtc->state->enable) {
 		SDE_DEBUG("crtc%d -> enable %d, skip atomic_flush\n",
 				crtc->base.id, crtc->state->enable);
+		return;
+	}
+
+	if (!sde_kms_power_resource_is_enabled(crtc->dev)) {
+		SDE_ERROR("power resource is not enabled\n");
 		return;
 	}
 
@@ -3343,12 +3421,13 @@ static int _sde_crtc_commit_kickoff_rot(struct drm_crtc *crtc,
 
 		if (!master_ctl || master_ctl->idx > ctl->idx)
 			master_ctl = ctl;
+
+		if (ctl->ops.setup_sbuf_cfg)
+			ctl->ops.setup_sbuf_cfg(ctl, &cstate->sbuf_cfg);
 	}
 
 	/* only update sbuf_cfg and flush for master ctl */
-	if (master_ctl && master_ctl->ops.setup_sbuf_cfg &&
-			master_ctl->ops.update_pending_flush) {
-		master_ctl->ops.setup_sbuf_cfg(master_ctl, &cstate->sbuf_cfg);
+	if (master_ctl && master_ctl->ops.update_pending_flush) {
 		master_ctl->ops.update_pending_flush(master_ctl, flush_mask);
 
 		/* explicitly trigger rotator for async modes */
@@ -3474,7 +3553,7 @@ static int _sde_crtc_reset_hw(struct drm_crtc *crtc,
 	}
 
 	/* reset both previous... */
-	for_each_plane_in_state(old_state->state, plane, pstate, i) {
+	drm_atomic_crtc_state_for_each_plane_state(plane, pstate, old_state) {
 		if (pstate->crtc != crtc)
 			continue;
 
@@ -3947,12 +4026,6 @@ static void sde_crtc_handle_power_event(u32 event_type, void *arg)
 
 		sde_cp_crtc_post_ipc(crtc);
 
-		event.type = DRM_EVENT_SDE_POWER;
-		event.length = sizeof(power_on);
-		power_on = 1;
-		msm_mode_object_event_notify(&crtc->base, crtc->dev, &event,
-				(u8 *)&power_on);
-
 		for (i = 0; i < sde_crtc->num_mixers; ++i) {
 			m = &sde_crtc->mixers[i];
 			if (!m->hw_lm || !m->hw_lm->ops.setup_misr ||
@@ -4051,6 +4124,12 @@ static void sde_crtc_disable(struct drm_crtc *crtc)
 		SDE_ERROR("invalid crtc\n");
 		return;
 	}
+
+	if (!sde_kms_power_resource_is_enabled(crtc->dev)) {
+		SDE_ERROR("power resource is not enabled\n");
+		return;
+	}
+
 	sde_crtc = to_sde_crtc(crtc);
 	cstate = to_sde_crtc_state(crtc->state);
 	priv = crtc->dev->dev_private;
@@ -4164,6 +4243,11 @@ static void sde_crtc_enable(struct drm_crtc *crtc)
 		return;
 	}
 	priv = crtc->dev->dev_private;
+
+	if (!sde_kms_power_resource_is_enabled(crtc->dev)) {
+		SDE_ERROR("power resource is not enabled\n");
+		return;
+	}
 
 	SDE_DEBUG("crtc%d\n", crtc->base.id);
 	SDE_EVT32_VERBOSE(DRMID(crtc));
@@ -4474,6 +4558,17 @@ static int sde_crtc_atomic_check(struct drm_crtc *crtc,
 					sde_crtc->name, plane->base.id, rc);
 			goto end;
 		}
+
+		/* identify attached planes that are not in the delta state */
+		if (!drm_atomic_get_existing_plane_state(state->state, plane)) {
+			rc = sde_plane_confirm_hw_rsvps(plane, pstate);
+			if (rc) {
+				SDE_ERROR("crtc%d confirmation hw failed %d\n",
+						crtc->base.id, rc);
+				goto end;
+			}
+		}
+
 		if (cnt >= SDE_PSTATES_MAX)
 			continue;
 
@@ -5106,6 +5201,9 @@ static int sde_crtc_atomic_set_property(struct drm_crtc *crtc,
 		cstate->bw_split_vote = true;
 		break;
 	case CRTC_PROP_OUTPUT_FENCE:
+		if (!val)
+			goto exit;
+
 		ret = _sde_crtc_get_output_fence(crtc, state, &fence_fd);
 		if (ret) {
 			SDE_ERROR("fence create failed rc:%d\n", ret);
@@ -5179,7 +5277,8 @@ static int sde_crtc_atomic_get_property(struct drm_crtc *crtc,
 
 	i = msm_property_index(&sde_crtc->property_info, property);
 	if (i == CRTC_PROP_OUTPUT_FENCE) {
-		ret = _sde_crtc_get_output_fence(crtc, state, val);
+		*val = ~0;
+		ret = 0;
 	} else {
 		ret = msm_property_atomic_get(&sde_crtc->property_info,
 			&cstate->property_state, property, val);
@@ -5836,8 +5935,15 @@ static int _sde_crtc_event_enable(struct sde_kms *kms,
 	priv = kms->dev->dev_private;
 	ret = 0;
 	if (crtc_drm->enabled) {
-		sde_power_resource_enable(&priv->phandle, kms->core_client,
-				true);
+		ret = sde_power_resource_enable(&priv->phandle,
+				kms->core_client, true);
+		if (ret) {
+			SDE_ERROR("failed to enable power resource %d\n", ret);
+			SDE_EVT32(ret, SDE_EVTLOG_ERROR);
+			kfree(node);
+			return ret;
+		}
+
 		INIT_LIST_HEAD(&node->irq.list);
 		ret = node->func(crtc_drm, true, &node->irq);
 		sde_power_resource_enable(&priv->phandle, kms->core_client,
@@ -5891,7 +5997,15 @@ static int _sde_crtc_event_disable(struct sde_kms *kms,
 		return 0;
 	}
 	priv = kms->dev->dev_private;
-	sde_power_resource_enable(&priv->phandle, kms->core_client, true);
+	ret = sde_power_resource_enable(&priv->phandle, kms->core_client, true);
+	if (ret) {
+		SDE_ERROR("failed to enable power resource %d\n", ret);
+		SDE_EVT32(ret, SDE_EVTLOG_ERROR);
+		list_del(&node->list);
+		kfree(node);
+		return ret;
+	}
+
 	ret = node->func(crtc_drm, false, &node->irq);
 	list_del(&node->list);
 	kfree(node);

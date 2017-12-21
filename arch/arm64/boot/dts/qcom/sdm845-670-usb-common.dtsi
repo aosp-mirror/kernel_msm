@@ -36,7 +36,7 @@
 		qcom,dwc-usb3-msm-tx-fifo-size = <21288>;
 		qcom,num-gsi-evt-buffs = <0x3>;
 		qcom,use-pdc-interrupts;
-		extcon = <0>, <0>, <&eud>;
+		extcon = <0>, <0>, <&eud>, <0>, <0>;
 
 		clocks = <&clock_gcc GCC_USB30_PRIM_MASTER_CLK>,
 			 <&clock_gcc GCC_CFG_NOC_USB3_PRIM_AXI_CLK>,
@@ -136,7 +136,9 @@
 			 0x230 /* QUSB2PHY_INTR_CTRL */
 			 0x0a8 /* QUSB2PHY_PLL_CORE_INPUT_OVERRIDE */
 			 0x254 /* QUSB2PHY_TEST1 */
-			 0x198>; /* PLL_BIAS_CONTROL_2 */
+			 0x198 /* PLL_BIAS_CONTROL_2 */
+			 0x228 /* QUSB2PHY_SQ_CTRL1 */
+			 0x22c>; /* QUSB2PHY_SQ_CTRL2 */
 
 		qcom,qusb-phy-init-seq =
 			/* <value reg_offset> */
@@ -421,7 +423,9 @@
 			 0x230 /* QUSB2PHY_INTR_CTRL */
 			 0x0a8 /* QUSB2PHY_PLL_CORE_INPUT_OVERRIDE */
 			 0x254 /* QUSB2PHY_TEST1 */
-			 0x198>; /* PLL_BIAS_CONTROL_2 */
+			 0x198 /* PLL_BIAS_CONTROL_2 */
+			 0x228 /* QUSB2PHY_SQ_CTRL1 */
+			 0x22c>; /* QUSB2PHY_SQ_CTRL2 */
 
 		qcom,qusb-phy-init-seq =
 			/* <value reg_offset> */
