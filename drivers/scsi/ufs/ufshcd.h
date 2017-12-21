@@ -908,9 +908,10 @@ struct ufs_hba {
 
 	bool full_init_linereset;
 	struct pinctrl *pctrl;
-	
-	int			latency_hist_enabled;
-	struct io_latency_state io_lat_s;
+
+	int latency_hist_enabled;
+	struct io_latency_state io_lat_read;
+	struct io_latency_state io_lat_write;
 
 	/* To monitor slow UFS I/O requests. */
 	u64 slowio_us;
