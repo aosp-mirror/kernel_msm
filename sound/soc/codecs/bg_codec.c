@@ -417,7 +417,7 @@ static int bg_put_hwd_state(struct snd_kcontrol *kcontrol,
 			ret = -EINVAL;
 			goto exit;
 		}
-		bg_cdc->hw_params.active_session |= active_session_id;
+		bg_cdc->hw_params.active_session = active_session_id;
 		/* Send command to BG for HW params */
 		ret = _bg_codec_hw_params(bg_cdc);
 		if (ret < 0) {
@@ -435,13 +435,6 @@ static int bg_put_hwd_state(struct snd_kcontrol *kcontrol,
 			(ucontrol->value.integer.value[0] == 0)) {
 		/*hwd was on, this is a command to stop it*/
 		bg_cdc->hwd_started = false;
-		active_session_id = get_active_session_id(dai_id);
-		if (active_session_id == 0) {
-			pr_err("%s:Invalid dai id %d", __func__, dai_id);
-			ret = -EINVAL;
-			goto exit;
-		}
-		bg_cdc->hw_params.active_session &= (~active_session_id);
 		ret = _bg_codec_stop(bg_cdc, dai_id);
 		if (ret < 0) {
 			pr_err("bg_codec_stop failed for dai %d\n", dai_id);
@@ -518,7 +511,7 @@ static int bg_cdc_hw_params(struct snd_pcm_substream *substream,
 		 __func__, dai->name, dai->id, params_rate(params),
 		 params_width(params), params_channels(params));
 
-	bg_cdc->hw_params.active_session |= get_active_session_id(dai->id);
+	bg_cdc->hw_params.active_session = get_active_session_id(dai->id);
 	if (bg_cdc->hw_params.active_session == 0) {
 		pr_err("%s:Invalid dai id %d", __func__, dai->id);
 		return -EINVAL;
