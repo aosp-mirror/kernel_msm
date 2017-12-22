@@ -10,7 +10,6 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/types.h>
@@ -205,6 +204,12 @@ int pktzr_cmd_set_params(void *payload, uint32_t size,
 int pktzr_cmd_data(void *payload, uint32_t size, void *priv_data)
 {
 	return pktzr_send_pkt(payload, size, priv_data, PKTZR_CMD_DATA, false);
+}
+
+int pktzr_cmd_init_params(void *payload, uint32_t size,
+				struct pktzr_cmd_rsp *rsp)
+{
+	return pktzr_send_pkt(payload, size, rsp, PKTZR_CMD_INIT_PARAM, true);
 }
 
 int pktzr_init(void *pdev, struct bg_glink_ch_cfg *ch_info, int num_channels,
