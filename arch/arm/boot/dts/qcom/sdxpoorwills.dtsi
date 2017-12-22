@@ -13,6 +13,7 @@
 #include <dt-bindings/soc/qcom,tcs-mbox.h>
 #include "skeleton.dtsi"
 #include <dt-bindings/clock/qcom,rpmh.h>
+#include <dt-bindings/clock/qcom,cpu-a7.h>
 #include <dt-bindings/clock/qcom,gcc-sdxpoorwills.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/regulator/qcom,rpmh-regulator.h>
@@ -169,6 +170,20 @@
 		};
 	};
 
+	msm_cpufreq: qcom,msm-cpufreq {
+		compatible = "qcom,msm-cpufreq";
+		clocks = <&clock_cpu APCS_CLK>;
+		clock-names = "cpu0_clk";
+
+		qcom,cpufreq-table-0 =
+				<  153600 >,
+				<  300000 >,
+				<  345600 >,
+				<  576000 >,
+				< 1094400 >,
+				< 1497600 >;
+	};
+
 	clock_gcc: qcom,gcc@100000 {
 		compatible = "qcom,gcc-sdxpoorwills";
 		reg = <0x100000 0x1f0000>;
@@ -306,10 +321,10 @@
 		};
 };
 
-	restart@4ab000 {
+	restart@c264000 {
 		compatible = "qcom,pshold";
-		reg = <0x4ab000 0x4>,
-			<0x193d100 0x4>;
+		reg = <0x0c264000 0x4>,
+			<0x01fd3000 0x4>;
 		reg-names = "pshold-base", "tcsr-boot-misc-detect";
 	};
 
@@ -711,3 +726,4 @@
 #include "sdxpoorwills-bus.dtsi"
 #include "sdxpoorwills-thermal.dtsi"
 #include "sdxpoorwills-audio.dtsi"
+#include "sdxpoorwills-ion.dtsi"

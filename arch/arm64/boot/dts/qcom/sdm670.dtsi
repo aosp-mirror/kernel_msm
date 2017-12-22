@@ -354,7 +354,7 @@
 				1324800    84
 				1516800    96
 				1612800   114
-				1708000   139
+				1708800   139
 			>;
 			idle-cost-data = <
 				12 10 8 6
@@ -395,7 +395,7 @@
 				1324800   13
 				1516800   15
 				1612800   16
-				1708000   19
+				1708800   19
 			>;
 			idle-cost-data = <
 				4 3 2 1
@@ -446,6 +446,11 @@
 		android {
 			compatible = "android,firmware";
 
+			vbmeta {
+				compatible = "android,vbmeta";
+				parts = "vbmeta,boot,system,vendor,dtbo";
+			};
+
 			fstab {
 				compatible = "android,fstab";
 				vendor {
@@ -464,10 +469,22 @@
 		#size-cells = <2>;
 		ranges;
 
-		removed_regions: removed_regions@85700000 {
+		hyp_region: hyp_region@85700000 {
 			compatible = "removed-dma-pool";
 			no-map;
-			reg = <0 0x85700000 0 0x3800000>;
+			reg = <0 0x85700000 0 0x600000>;
+		};
+
+		xbl_region: xbl_region@85e00000 {
+			compatible = "removed-dma-pool";
+			no-map;
+			reg = <0 0x85e00000 0 0x100000>;
+		};
+
+		removed_region: removed_region@85fc0000 {
+			compatible = "removed-dma-pool";
+			no-map;
+			reg = <0 0x85fc0000 0 0x2f40000>;
 		};
 
 		pil_camera_mem: camera_region@8ab00000 {
@@ -687,6 +704,14 @@
 		      <0x17a60000 0x100000>;    /* GICR * 8 */
 		interrupts = <1 9 4>;
 		interrupt-parent = <&intc>;
+	};
+
+	pdc: interrupt-controller@b220000{
+		compatible = "qcom,pdc-sdm670";
+		reg = <0xb220000 0x400>;
+		#interrupt-cells = <3>;
+		interrupt-parent = <&intc>;
+		interrupt-controller;
 	};
 
 	timer {
@@ -1047,7 +1072,7 @@
 		vdd_l3_mx_ao-supply = <&pm660l_s1_level_ao>;
 		vdd_pwrcl_mx_ao-supply = <&pm660l_s1_level_ao>;
 
-		qcom,mx-turbo-freq = <3300000001 3300000001 3300000001>;
+		qcom,mx-turbo-freq = <1440000000 1708000000 3300000001>;
 		l3-devs = <&l3_cpu0 &l3_cpu6>;
 
 		clock-names = "xo_ao";
@@ -2479,6 +2504,7 @@
 		vdd-3.3-ch0-supply = <&pm660_l19>;
 		qcom,vdd-3.3-ch0-config = <3000000 3312000>;
 		qcom,wlan-msa-memory = <0x100000>;
+		qcom,wlan-msa-fixed-region = <&wlan_msa_mem>;
 		qcom,smmu-s1-bypass;
 	};
 
@@ -2787,6 +2813,7 @@
 };
 
 &bps_gdsc {
+	qcom,support-hw-trigger;
 	status = "ok";
 };
 
@@ -2799,10 +2826,12 @@
 };
 
 &ipe_0_gdsc {
+	qcom,support-hw-trigger;
 	status = "ok";
 };
 
 &ipe_1_gdsc {
+	qcom,support-hw-trigger;
 	status = "ok";
 };
 
