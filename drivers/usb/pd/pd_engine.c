@@ -105,7 +105,7 @@ static void _pd_engine_log(struct usbpd *pd, const char *fmt, va_list args)
 
 	if (!pd->logbuffer[pd->logbuffer_head]) {
 		pd->logbuffer[pd->logbuffer_head] =
-			kzalloc(LOG_BUFFER_ENTRY_SIZE, GFP_KERNEL);
+			kzalloc(LOG_BUFFER_ENTRY_SIZE, GFP_ATOMIC);
 		if (!pd->logbuffer[pd->logbuffer_head])
 			return;
 	}
