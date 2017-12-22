@@ -122,6 +122,34 @@ struct cam_cmd_i2c_info {
 } __attribute__((packed));
 
 /**
+ * struct cam_cmd_get_ois_data - Contains OIS data read cmd
+ *
+ * @reg_addr            :    register addr to read data from
+ * @reg_data            :    number of bytes to read
+ * @query_size_handle   :    handle to user space query_size address
+ * @query_data_handle   :    handle to user space query_data address
+ */
+struct cam_cmd_get_ois_data {
+	uint32_t           reg_addr;
+	uint32_t           reg_data;
+	uint64_t           query_size_handle;
+	uint64_t           query_data_handle;
+} __attribute__((packed));
+
+/**
+ * struct cam_ois_shift - Contains OIS shift data
+ *
+ * @ois_shift_x         :    shift in x dim
+ * @ois_shift_y         :    shift in y dim
+ * @time_readout        :    time that the shift is read out
+ */
+struct cam_ois_shift {
+	int16_t             ois_shift_x;
+	int16_t             ois_shift_y;
+	int64_t             time_readout;
+} __attribute__((packed));
+
+/**
  * struct cam_ois_opcode - Contains OIS opcode
  *
  * @prog            :    OIS FW prog register address
