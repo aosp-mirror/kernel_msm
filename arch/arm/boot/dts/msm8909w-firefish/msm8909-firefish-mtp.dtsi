@@ -520,6 +520,7 @@
 	qcom,platform-te-gpio = <&msm_gpio 24 0>;
 
 	qcom,platform-avdden-gpio = <&msm_gpio 26 0>;
+	qcom,platform-tpreset-gpio = <&msm_gpio 12 0>;
 };
 
 /* CoreSight */
