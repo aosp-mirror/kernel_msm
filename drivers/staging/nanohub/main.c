@@ -706,7 +706,6 @@ int __nanohub_mode_set(struct nanohub_data *data, enum HUB_MODE mode)
 		return -EINVAL;
 	}
 
-	/*pr_err("nanohub: mode set = %d\n", mode);*/
 	switch (mode) {
 	case HUB_MODE_POWEROFF: /*0000*/
 		gpio_set_value(pdata->mode1_gpio, 0);
@@ -777,12 +776,12 @@ int __nanohub_mode_set(struct nanohub_data *data, enum HUB_MODE mode)
 		gpio_set_value(pdata->mode2_gpio, 1);
 		gpio_set_value(pdata->mode3_gpio, 1);
 		gpio_set_value(pdata->mode4_gpio, 1);
-		pr_err("HUB_MODE_TEST\n");
+		pr_info("HUB_MODE_TEST\n");
 		/*atomic_set(&data->hub_mode, HUB_MODE_TEST);*/
 		break;
 
 	case HUB_MODE_RESEND:   /*send mode again if mcu needed*/
-		pr_err("HUB_MODE_RESEND\n");
+		pr_info("HUB_MODE_RESEND\n");
 		/*atomic_set(&data->hub_mode, HUB_MODE_RESEND);*/
 		break;
 
