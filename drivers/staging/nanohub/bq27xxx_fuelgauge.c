@@ -89,6 +89,7 @@ void bq27x00_update(struct Nanohub_FuelGauge_Info *fg_info)
 
 	if (cur.tv_sec == last.tv_sec &&
 		last_charging_status == fg_info->charger_online) {
+		fg_info->last_update = jiffies;
 		return;
 	}
 

@@ -756,6 +756,22 @@ int __nanohub_mode_set(struct nanohub_data *data, enum HUB_MODE mode)
 		/*atomic_set(&data->hub_mode, HUB_MODE_REQUEST_FUELGAUGE);*/
 		break;
 
+	case HUB_MODE_AP_CMD_SUSPEND: /*0110*/
+		gpio_set_value(pdata->mode1_gpio, 0);
+		gpio_set_value(pdata->mode2_gpio, 1);
+		gpio_set_value(pdata->mode3_gpio, 1);
+		gpio_set_value(pdata->mode4_gpio, 0);
+		atomic_set(&data->hub_mode, HUB_MODE_AP_CMD_SUSPEND);
+		break;
+
+	case HUB_MODE_AP_CMD_RESUME: /*0111*/
+		gpio_set_value(pdata->mode1_gpio, 0);
+		gpio_set_value(pdata->mode2_gpio, 1);
+		gpio_set_value(pdata->mode3_gpio, 1);
+		gpio_set_value(pdata->mode4_gpio, 1);
+		atomic_set(&data->hub_mode, HUB_MODE_AP_CMD_RESUME);
+		break;
+
 	case HUB_MODE_TEST:    /*1111*/
 		gpio_set_value(pdata->mode1_gpio, 1);
 		gpio_set_value(pdata->mode2_gpio, 1);
@@ -1986,7 +2002,7 @@ int nanohub_suspend(struct iio_dev *iio_dev)
 
 	pr_info("nanohub: suspend\n");
 
-	/*__nanohub_mode_set(data, 2);*/
+	__nanohub_mode_set(data, HUB_MODE_AP_CMD_SUSPEND);
 	ret = nanohub_wakeup_lock(data, LOCK_MODE_SUSPEND_RESUME);
 	if (!ret) {
 		int cnt;
@@ -2023,7 +2039,7 @@ int nanohub_resume(struct iio_dev *iio_dev)
 
 	pr_info("nanohub: resume\n");
 
-	/*__nanohub_mode_set(data, HUB_MODE_NORMAL);*/
+	__nanohub_mode_set(data, HUB_MODE_AP_CMD_RESUME);
 
 	disable_irq_wake(data->irq1);
 	nanohub_wakeup_unlock(data);
