@@ -183,4 +183,12 @@
 		qcom,msm-codec-glink-edge = "bg";
 	};
 
+	bg_cdc: bg_codec {
+		status = "disabled";
+		compatible = "qcom,bg-codec";
+		qcom,bg-glink {
+			compatible = "qcom,bg-cdc-glink";
+			qcom,msm-glink-channels = <4>;
+		};
+	};
 };
