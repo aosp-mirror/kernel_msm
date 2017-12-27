@@ -52,7 +52,7 @@ struct pixart_pat9126_data {
 };
 
 /*IRQ Flags*/
-struct irq_desc *pat9126_irq_desc = NULL;
+bool is_initialized = false;
 
 /*Persist Flags*/
 static int already_calibrated = 0;
@@ -974,13 +974,12 @@ static int pat9126_i2c_probe(struct i2c_client *client,
 		return err;
 	}
 
-	pat9126_irq_desc = irq_to_desc(data->irq);
-
 	if (already_calibrated == 1 && en_irq_cnt == 0) {
 		pr_err("[PAT9126]: Probe Enable Irq. \n");
 		err = devm_request_threaded_irq(dev, client->irq, NULL, pat9126_irq,
 				 IRQF_ONESHOT | IRQF_TRIGGER_LOW,
 				"pixart_pat9126_irq", data);
+		is_initialized = true;
 
 		if (err) {
 			dev_err(dev, "Req irq %d failed, errno:%d\n", client->irq, err);
@@ -990,7 +989,7 @@ static int pat9126_i2c_probe(struct i2c_client *client,
 	} else
 		en_irq_cnt = 0;
 
-	err = sysfs_create_group(&(input->dev.kobj), &pat9126_attr_grp);
+	err = sysfs_create_group(&client->dev.kobj, &pat9126_attr_grp);
 	if (err) {
 		dev_err(dev, "Failed to create sysfs group, errno:%d\n", err);
 		goto err_sysfs_create;
@@ -1051,13 +1050,14 @@ static int pat9126_suspend(struct device *dev)
 	struct pixart_pat9126_data *data =
 		(struct pixart_pat9126_data *) dev_get_drvdata(dev);
 
-	printk(KERN_ERR "[PAT9126]%s, start\n", __func__);
-	if(pat9126_irq_desc->action == NULL) {
-		printk(KERN_DEBUG "[PAT9126]%s: Not initialize yet \n.", __func__);
+	printk(KERN_DEBUG "[PAT9126]%s, start\n", __func__);
+
+	if(!is_initialized) {
+		printk(KERN_DEBUG "[PAT9126]%s: Not initialize yet. \n", __func__);
 		return 0;
 	}
 	else
-		printk(KERN_DEBUG "[PAT9126]%s: Already initialized \n.", __func__);
+		printk(KERN_DEBUG "[PAT9126]%s: Already initialized. \n", __func__);
 
 	if (dis_irq_cnt == 0){
 		disable_irq(data->client->irq);
@@ -1076,6 +1076,10 @@ static int pat9126_suspend(struct device *dev)
 	}
 	en_irq_cnt = 0;
 
+	/* disable write protect */
+	ots_write_read(data->client, PIXART_PAT9126_WRITE_PROTECT_REG,
+			PIXART_PAT9126_DISABLE_WRITE_PROTECT);
+
 	/*Write Register for Suspend Mode*/
 	ret = ots_disable_mot(data->client,
 		PIXART_PAT9126_SLEEP_MODE_DETECT_FREQ_DEFAULT);
@@ -1083,6 +1087,9 @@ static int pat9126_suspend(struct device *dev)
 		pr_err("[PAT9126]: Disable Motion FAIL.");
 	}
 
+	/* enable write protect */
+	ots_write_read(data->client, PIXART_PAT9126_WRITE_PROTECT_REG,
+			PIXART_PAT9126_ENABLE_WRITE_PROTECT);
 	return 0;
 }
 
@@ -1093,20 +1100,28 @@ static int pat9126_resume(struct device *dev)
 	struct pixart_pat9126_data *data =
 		(struct pixart_pat9126_data *) dev_get_drvdata(dev);
 
-	printk(KERN_ERR "[PAT9126]%s, start\n", __func__);
+	printk(KERN_DEBUG "[PAT9126]%s, start\n", __func__);
 
-	if( pat9126_irq_desc->action == NULL) {
+	if(!is_initialized) {
 		printk(KERN_DEBUG "[PAT9126]%s: Not initialize yet. \n", __func__);
 		return 0;
 	}
 	else
 		printk(KERN_DEBUG "[PAT9126]%s: Already initialized. \n", __func__);
 
+	/* disable write protect */
+	ots_write_read(data->client, PIXART_PAT9126_WRITE_PROTECT_REG,
+			PIXART_PAT9126_DISABLE_WRITE_PROTECT);
+
 	ret = ots_enable_mot(data->client);
 	if (ret != 0){
 		pr_err("[PAT9126]: Enable Motion FAIL. \n");
 		return 0;
 	}
+
+	/* enable write protect */
+	ots_write_read(data->client, PIXART_PAT9126_WRITE_PROTECT_REG,
+			PIXART_PAT9126_ENABLE_WRITE_PROTECT);
 
 	if (en_irq_cnt == 0){
 		if (data->pinctrl) {

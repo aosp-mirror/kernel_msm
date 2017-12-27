@@ -7,7 +7,7 @@
 #include "pixart_platform.h"
 #include "pixart_ots.h"
 
-static void ots_write_read(struct i2c_client *client, u8 address, u8 wdata)
+void ots_write_read(struct i2c_client *client, u8 address, u8 wdata)
 {
 	u8 read_value;
 
