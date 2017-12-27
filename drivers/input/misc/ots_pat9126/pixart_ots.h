@@ -112,5 +112,6 @@ bool ots_sensor_init(struct i2c_client *client, int16_t res_x);
 int ots_disable_mot(struct i2c_client *client, int16_t detect_freq);
 int ots_enable_mot(struct i2c_client *client);
 void ots_read_motion(struct i2c_client *client, int16_t *dx16, int16_t *dy16);
+void ots_write_read(struct i2c_client *client, u8 address, u8 wdata);
 
 #endif
