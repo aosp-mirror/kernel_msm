@@ -22,10 +22,6 @@
 #include "bl.h"
 #include "comms.h"
 #include "bq27xxx_fuelgauge.h"
-#if defined(CONFIG_FB)
-#include <linux/notifier.h>
-#include <linux/fb.h>
-#endif
 
 #define SPI_TIMEOUT		65535
 #define SPI_MIN_DMA		48
@@ -37,11 +33,6 @@ struct nanohub_spi_data {
 	int cs;
 	uint16_t rx_length;
 	uint16_t rx_offset;
-
-#if defined(CONFIG_FB)
-	struct notifier_block fb_notif;
-#endif
-
 };
 
 static uint8_t bl_checksum(const uint8_t *bytes, int length)
@@ -433,39 +424,6 @@ void nanohub_spi_comms_init(struct nanohub_spi_data *spi_data)
 	sema_init(&spi_data->spi_sem, 1);
 }
 
-#if defined(CONFIG_FB)
-/*******************************************************************************
-*  Name: fb_notifier_callback
-*  Brief:
-*  Input:
-*  Output:
-*  Return:
-*******************************************************************************/
-static int fb_notifier_callback(struct notifier_block *self,
-				unsigned long event, void *data)
-{
-	struct fb_event *evdata = data;
-	int *blank;
-	struct nanohub_spi_data *spi_data =
-		container_of(self, struct nanohub_spi_data, fb_notif);
-
-	if (event == FB_EARLY_EVENT_BLANK) {
-		blank = evdata->data;
-		if (*blank == FB_BLANK_POWERDOWN)
-			__nanohub_mode_set(&spi_data->data, HUB_MODE_AMBIENT);
-	}
-	if (event == FB_EVENT_BLANK) {
-		blank = evdata->data;
-		if (*blank == FB_BLANK_UNBLANK)
-			__nanohub_mode_set(&spi_data->data, HUB_MODE_NORMAL);
-	}
-	/*pr_err("[test] nanohub: callback event=%d blank=%d\n",
-		(int)event, (int)(*blank));*/
-	return 0;
-
-}
-#endif
-
 static int nanohub_spi_probe(struct spi_device *spi)
 {
 	struct nanohub_spi_data *spi_data;
@@ -514,12 +472,7 @@ static int nanohub_spi_probe(struct spi_device *spi)
 	nanohub_spi_bl_init(spi_data);
 
 	nanohub_reset(&spi_data->data);
-#if defined(CONFIG_FB)
-	spi_data->fb_notif.notifier_call = fb_notifier_callback;
-	if (fb_register_client(&spi_data->fb_notif))
-		pr_err("nanohub Unable to register fb_notifier:");
-#endif
-	pr_err("nanohub: spi probe end successfully\n");
+	pr_info("nanohub: spi probe end successfully\n");
 
 	return 0;
 }
@@ -536,11 +489,6 @@ static int nanohub_spi_remove(struct spi_device *spi)
 		gpio_direction_output(spi_data->cs, 1);
 		gpio_free(spi_data->cs);
 	}
-
-#if defined(CONFIG_FB)
-		if (fb_unregister_client(&spi_data->fb_notif))
-			pr_err("Error occurred while unregistering fb_notifier.");
-#endif
 
 	return nanohub_remove(iio_dev);
 }
