@@ -68,7 +68,7 @@ static enum power_supply_property bq274xx_battery_props[] = {
 struct Nanohub_FuelGauge_Info *m_fg_info;
 
 
-static unsigned int poll_interval = 50;
+static unsigned int poll_interval = 60;
 module_param(poll_interval, uint, 0644);
 MODULE_PARM_DESC(poll_interval,
 	"battery poll interval in seconds - 0 disables polling");
@@ -91,16 +91,6 @@ void bq27x00_update(struct Nanohub_FuelGauge_Info *fg_info)
 		last_charging_status == fg_info->charger_online) {
 		fg_info->last_update = jiffies;
 		return;
-	}
-
-	if (fg_info->requested == 0) {
-		if (poll_interval > 0) {
-			/* The timer does not have to be accurate. */
-			set_timer_slack(&fg_info->work.timer,
-				poll_interval * HZ / 4);
-			schedule_delayed_work(&fg_info->work,
-				poll_interval * HZ);
-		}
 	}
 
 #if FUEL_GAUGE_USE_FAKE_CAPACITY
@@ -165,13 +155,9 @@ static void fuelgauge_battery_poll(struct work_struct *work)
 	struct Nanohub_FuelGauge_Info *fg_info =
 		container_of(work, struct Nanohub_FuelGauge_Info, work.work);
 	if (!fg_info->requested) {
+		pr_warn("nanohub: [FG] request data frome sensorhub.\n");
 		request_fuel_gauge_data(fg_info->hub_data);
 		fg_info->requested = 1;
-	}
-	if (poll_interval > 0) {
-		/* The timer does not have to be accurate.*/
-		set_timer_slack(&fg_info->work.timer, poll_interval * HZ / 4);
-		schedule_delayed_work(&fg_info->work, poll_interval * HZ);
 	}
 }
 
@@ -226,6 +212,14 @@ int store_fuelguage_cache(struct bq27x00_reg_cache *cache_data)
 	memcpy(&(fg_info->cache), cache_data, sizeof(struct bq27x00_reg_cache));
 
 	bq27x00_update(fg_info);
+	if (poll_interval > 0) {
+		/* The timer does not have to be accurate. */
+		cancel_delayed_work_sync(&fg_info->work);
+		set_timer_slack(&fg_info->work.timer,
+			poll_interval * HZ / 4);
+		schedule_delayed_work(&fg_info->work,
+			poll_interval * HZ);
+	}
 	fg_info->requested = 0;
 	return 0;
 }
@@ -444,7 +438,8 @@ static int bq27x00_battery_get_property(struct power_supply *psy,
 		container_of(psy, struct Nanohub_FuelGauge_Info, bat);
 
 	mutex_lock(&fg_info->lock);
-		if (time_is_before_jiffies(fg_info->last_update + 5 * HZ)) {
+		if (time_is_before_jiffies(fg_info->last_update +
+				(poll_interval / 2 ) * HZ)) {
 			cancel_delayed_work_sync(&fg_info->work);
 			fuelgauge_battery_poll(&fg_info->work.work);
 		}
