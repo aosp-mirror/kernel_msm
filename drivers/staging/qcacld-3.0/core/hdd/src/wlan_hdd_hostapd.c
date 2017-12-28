@@ -63,6 +63,7 @@
 #include "wlan_hdd_misc.h"
 #include <cds_utils.h>
 #include "pld_common.h"
+#include "wlan_hdd_regulatory.h"
 
 #include "wma.h"
 #ifdef WLAN_DEBUG
@@ -1347,6 +1348,55 @@ static int calcuate_max_phy_rate(int mode, int nss, int ch_width,
 }
 
 /**
+ * hdd_convert_dot11mode_from_phymode() - get dot11 mode from phymode
+ * @phymode: phymode of sta associated to SAP
+ *
+ * The function is to convert the phymode to corresponding dot11 mode
+ *
+ * Return: dot11mode.
+ */
+
+
+static int hdd_convert_dot11mode_from_phymode(int phymode)
+{
+
+	switch (phymode) {
+
+	case MODE_11A:
+		return QCA_WLAN_802_11_MODE_11A;
+
+	case MODE_11B:
+		return QCA_WLAN_802_11_MODE_11B;
+
+	case MODE_11G:
+	case MODE_11GONLY:
+		return QCA_WLAN_802_11_MODE_11G;
+
+	case MODE_11NA_HT20:
+	case MODE_11NG_HT20:
+	case MODE_11NA_HT40:
+	case MODE_11NG_HT40:
+		return QCA_WLAN_802_11_MODE_11N;
+
+	case MODE_11AC_VHT20:
+	case MODE_11AC_VHT40:
+	case MODE_11AC_VHT80:
+	case MODE_11AC_VHT20_2G:
+	case MODE_11AC_VHT40_2G:
+	case MODE_11AC_VHT80_2G:
+#ifdef CONFIG_160MHZ_SUPPORT
+	case MODE_11AC_VHT80_80:
+	case MODE_11AC_VHT160:
+#endif
+		return QCA_WLAN_802_11_MODE_11AC;
+
+	default:
+		return QCA_WLAN_802_11_MODE_INVALID;
+	}
+
+}
+
+/**
  * hdd_fill_station_info() - fill stainfo once connected
  * @stainfo: peer stainfo associate to SAP
  * @event: associate/reassociate event received
@@ -1355,9 +1405,20 @@ static int calcuate_max_phy_rate(int mode, int nss, int ch_width,
  *
  * Return: None.
  */
-static void hdd_fill_station_info(hdd_station_info_t *stainfo,
-		tSap_StationAssocReassocCompleteEvent *event)
+static void hdd_fill_station_info(hdd_adapter_t *pHostapdAdapter,
+				  tSap_StationAssocReassocCompleteEvent *event)
 {
+	hdd_station_info_t *stainfo = &pHostapdAdapter->aStaInfo[event->staId];
+	uint8_t i = 0;
+
+	if (!stainfo) {
+		hdd_err("invalid stainfo");
+		return;
+	}
+
+	stainfo->freq = cds_chan_to_freq(event->chan_info.chan_id);
+	stainfo->dot11_mode =
+		hdd_convert_dot11mode_from_phymode(event->chan_info.info);
 	stainfo->nss = event->chan_info.nss;
 	stainfo->rate_flags = event->chan_info.rate_flags;
 	stainfo->ampdu = event->ampdu;
@@ -1383,6 +1444,23 @@ static void hdd_fill_station_info(hdd_station_info_t *stainfo,
 				stainfo->rx_mcs_map);
 	/* expect max_phy_rate report in kbps */
 	stainfo->max_phy_rate *= 100;
+
+	if (event->vht_caps.present)
+		hdd_copy_vht_caps(&stainfo->vht_caps, &event->vht_caps);
+	if (event->ht_caps.present)
+		hdd_copy_ht_caps(&stainfo->ht_caps, &event->ht_caps);
+
+	while (i < WLAN_MAX_STA_COUNT) {
+		if (pHostapdAdapter->cache_sta_info[i].isUsed != TRUE)
+			break;
+		i++;
+	}
+	if (i < WLAN_MAX_STA_COUNT)
+		qdf_mem_copy(&pHostapdAdapter->cache_sta_info[i],
+			     stainfo, sizeof(hdd_station_info_t));
+	else
+		hdd_debug("reached max staid, stainfo can't be cached");
+
 	hdd_debug("cap %d %d %d %d %d %d %d %d %d %x %d",
 			stainfo->ampdu,
 			stainfo->sgi_enable,
@@ -1439,6 +1517,8 @@ QDF_STATUS hdd_hostapd_sap_event_cb(tpSap_Event pSapEvent,
 	struct ch_params_s sap_ch_param = {0};
 	eCsrPhyMode phy_mode;
 	bool legacy_phymode;
+	tSap_StationDisassocCompleteEvent *disconnect_event;
+	hdd_station_info_t *stainfo;
 
 	dev = (struct net_device *)usrDataForCallback;
 	if (!dev) {
@@ -1531,7 +1611,8 @@ QDF_STATUS hdd_hostapd_sap_event_cb(tpSap_Event pSapEvent,
 
 			hdd_register_tx_flow_control(pHostapdAdapter,
 				hdd_softap_tx_resume_timer_expired_handler,
-				hdd_softap_tx_resume_cb);
+				hdd_softap_tx_resume_cb,
+				hdd_tx_flow_control_is_pause);
 
 			/* @@@ need wep logic here to set privacy bit */
 			qdf_status =
@@ -1927,11 +2008,8 @@ QDF_STATUS hdd_hostapd_sap_event_cb(tpSap_Event pSapEvent,
 				       MAC_ADDR_ARRAY(wrqu.addr.sa_data));
 		}
 
-		if (QDF_IS_STATUS_SUCCESS(qdf_status)) {
-			hdd_fill_station_info(
-				&pHostapdAdapter->aStaInfo[event->staId],
-				event);
-		}
+		if (QDF_IS_STATUS_SUCCESS(qdf_status))
+			hdd_fill_station_info(pHostapdAdapter, event);
 
 		pHostapdAdapter->aStaInfo[event->staId].ecsa_capable =
 			event->ecsa_capable;
@@ -2032,6 +2110,28 @@ QDF_STATUS hdd_hostapd_sap_event_cb(tpSap_Event pSapEvent,
 		}
 		hdd_green_ap_add_sta(pHddCtx);
 		break;
+
+	case eSAP_STA_LOSTLINK_DETECTED:
+		disconnect_event =
+			&pSapEvent->sapevt.sapStationDisassocCompleteEvent;
+
+		wlan_hdd_get_peer_rssi(pHostapdAdapter,
+				       &disconnect_event->staMac,
+				       HDD_WLAN_GET_PEER_RSSI_SOURCE_DRIVER);
+
+		/*
+		 * For user initiated disconnect, reason_code is updated while
+		 * issuing the disconnect from HDD.
+		 */
+		if (disconnect_event->reason != eSAP_USR_INITATED_DISASSOC) {
+			stainfo = hdd_get_stainfo(
+					pHostapdAdapter->cache_sta_info,
+					disconnect_event->staMac);
+			if (stainfo)
+				stainfo->reason_code =
+					disconnect_event->reason_code;
+		}
+		return QDF_STATUS_SUCCESS;
 
 	case eSAP_STA_DISASSOC_EVENT:
 		memcpy(wrqu.addr.sa_data,
@@ -4305,6 +4405,7 @@ static __iw_softap_disassoc_sta(struct net_device *dev,
 	uint8_t *peerMacAddr;
 	int ret;
 	struct tagCsrDelStaParams del_sta_params;
+	hdd_station_info_t *stainfo;
 
 	ENTER_DEV(dev);
 
@@ -4330,6 +4431,12 @@ static __iw_softap_disassoc_sta(struct net_device *dev,
 			(SIR_MAC_MGMT_DISASSOC >> 4),
 			&del_sta_params);
 	hdd_softap_sta_disassoc(pHostapdAdapter, &del_sta_params);
+
+	stainfo = hdd_get_stainfo(pHostapdAdapter->cache_sta_info,
+				  del_sta_params.peerMacAddr);
+	if (stainfo)
+		stainfo->reason_code = del_sta_params.reason_code;
+
 	EXIT();
 	return 0;
 }
@@ -5594,7 +5701,8 @@ __iw_get_peer_rssi(struct net_device *dev, struct iw_request_info *info,
 			hdd_err("String to Hex conversion Failed");
 	}
 
-	ret = wlan_hdd_get_peer_rssi(adapter, &macaddress);
+	ret = wlan_hdd_get_peer_rssi(adapter, &macaddress,
+				     HDD_WLAN_GET_PEER_RSSI_SOURCE_USER);
 	if (ret) {
 		hdd_err("Unable to retrieve peer rssi: %d", ret);
 		return ret;
@@ -7651,8 +7759,7 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 				       struct cfg80211_beacon_data *params,
 				       const u8 *ssid, size_t ssid_len,
 				       enum nl80211_hidden_ssid hidden_ssid,
-				       bool check_for_concurrency,
-				       bool update_beacon)
+				       bool check_for_concurrency)
 {
 	tsap_Config_t *pConfig;
 	beacon_data_t *pBeacon = NULL;
@@ -7677,13 +7784,9 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 	uint16_t prev_rsn_length = 0;
 	enum dfs_mode mode;
 	bool disable_fw_tdls_state = false;
+	uint8_t ignore_cac = 0;
 
 	ENTER();
-
-	if (!update_beacon && cds_is_connection_in_progress(NULL, NULL)) {
-		hdd_err("Can't start BSS: connection is in progress");
-		return -EINVAL;
-	}
 
 	disable_fw_tdls_state = true;
 	wlan_hdd_check_conc_and_update_tdls_state(pHddCtx,
@@ -7710,6 +7813,17 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 
 	clear_bit(ACS_PENDING, &pHostapdAdapter->event_flags);
 	clear_bit(ACS_IN_PROGRESS, &pHddCtx->g_event_flags);
+
+	/* Mark the indoor channel (passive) to disable */
+	if (iniConfig->disable_indoor_channel) {
+		hdd_update_indoor_channel(pHddCtx, true);
+		if (QDF_IS_STATUS_ERROR(
+		    sme_update_channel_list(pHddCtx->hHal))) {
+			hdd_update_indoor_channel(pHddCtx, false);
+			hdd_err("Can't start BSS: update channel list failed");
+			return -EINVAL;
+		}
+	}
 
 	pConfig = &pHostapdAdapter->sessionCtx.ap.sapConfig;
 
@@ -7807,7 +7921,15 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 				goto error;
 			}
 		}
-		wlansap_set_dfs_ignore_cac(hHal, iniConfig->ignoreCAC);
+
+		if (iniConfig->ignoreCAC ||
+				((iniConfig->WlanMccToSccSwitchMode !=
+				  QDF_MCC_TO_SCC_SWITCH_DISABLE) &&
+				 iniConfig->sta_sap_scc_on_dfs_chan))
+			ignore_cac = 1;
+
+		wlansap_set_dfs_ignore_cac(hHal, ignore_cac);
+
 		wlansap_set_dfs_restrict_japan_w53(hHal,
 			iniConfig->gDisableDfsJapanW53);
 		wlansap_set_dfs_preferred_channel_location(hHal,
@@ -8280,6 +8402,11 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 error:
 	if (sme_config)
 		qdf_mem_free(sme_config);
+	/* Revert the indoor to passive marking if START BSS fails */
+	if (iniConfig->disable_indoor_channel) {
+		hdd_update_indoor_channel(pHddCtx, false);
+		sme_update_channel_list(pHddCtx->hHal);
+	}
 	clear_bit(SOFTAP_INIT_DONE, &pHostapdAdapter->event_flags);
 	if (pHostapdAdapter->sessionCtx.ap.sapConfig.acs_cfg.ch_list) {
 		qdf_mem_free(pHostapdAdapter->sessionCtx.ap.sapConfig.
@@ -8568,6 +8695,8 @@ static int __wlan_hdd_cfg80211_start_ap(struct wiphy *wiphy,
 	int status;
 	struct sme_sta_inactivity_timeout  *sta_inactivity_timer;
 	uint8_t channel;
+	bool sta_sap_scc_on_dfs_chan;
+	uint16_t sta_cnt;
 
 	ENTER();
 
@@ -8592,17 +8721,13 @@ static int __wlan_hdd_cfg80211_start_ap(struct wiphy *wiphy,
 
 	pHddCtx = WLAN_HDD_GET_CTX(pAdapter);
 	status = wlan_hdd_validate_context(pHddCtx);
+
 	if (0 != status)
 		return status;
 
 	hdd_debug("pAdapter = %pK, Device mode %s(%d) sub20 %d",
 		pAdapter, hdd_device_mode_to_string(pAdapter->device_mode),
 		pAdapter->device_mode, cds_is_sub_20_mhz_enabled());
-
-	if (cds_is_connection_in_progress(NULL, NULL)) {
-		hdd_err("Can't start BSS: connection is in progress");
-		return -EBUSY;
-	}
 
 	if (cds_is_hw_mode_change_in_progress()) {
 		status = qdf_wait_for_connection_update();
@@ -8615,6 +8740,21 @@ static int __wlan_hdd_cfg80211_start_ap(struct wiphy *wiphy,
 	channel_width = wlan_hdd_get_channel_bw(params->chandef.width);
 	channel = ieee80211_frequency_to_channel(
 				params->chandef.chan->center_freq);
+
+	sta_sap_scc_on_dfs_chan = cds_is_sta_sap_scc_allowed_on_dfs_channel();
+	sta_cnt = cds_mode_specific_connection_count(CDS_STA_MODE, NULL);
+
+	hdd_debug("sta_sap_scc_on_dfs_chan %u, sta_cnt %u",
+			sta_sap_scc_on_dfs_chan, sta_cnt);
+
+	/* if sta_sap_scc_on_dfs_chan ini is set, DFS master capability is
+	 * assumed disabled in the driver.
+	 */
+	if (channel && (cds_get_channel_state(channel) == CHANNEL_STATE_DFS) &&
+			sta_sap_scc_on_dfs_chan && !sta_cnt) {
+		hdd_err("SAP not allowed on DFS channel!!");
+		return -EINVAL;
+	}
 
 	if (cds_is_sap_mandatory_chan_list_enabled()) {
 		if (!cds_get_sap_mandatory_chan_list_len())
@@ -8760,7 +8900,7 @@ static int __wlan_hdd_cfg80211_start_ap(struct wiphy *wiphy,
 			wlan_hdd_cfg80211_start_bss(pAdapter,
 				&params->beacon,
 				params->ssid, params->ssid_len,
-				params->hidden_ssid, true, false);
+				params->hidden_ssid, true);
 
 		if (status != 0) {
 			hdd_err("Error Start bss Failed");
@@ -8887,7 +9027,7 @@ static int __wlan_hdd_cfg80211_change_beacon(struct wiphy *wiphy,
 	pAdapter->sessionCtx.ap.beacon = new;
 	hdd_debug("update beacon for P2P GO/SAP");
 	status = wlan_hdd_cfg80211_start_bss(pAdapter, params, NULL,
-					0, 0, false, true);
+					0, 0, false);
 
 	EXIT();
 	return status;

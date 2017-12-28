@@ -385,8 +385,8 @@ static void lim_handle_join_rsp_status(tpAniSirGlobal mac_ctx,
 			bss_ies, bss_ie_len) != NULL);
 
 		if (mac_ctx->roam.configParam.is_force_1x1 &&
-			is_vendor_ap_1_present && (session_entry->nss == 2) &&
-			(mac_ctx->lteCoexAntShare == 0 ||
+		    is_vendor_ap_1_present && (session_entry->nss == 2) &&
+		    (mac_ctx->lteCoexAntShare == 0 ||
 				IS_5G_CH(session_entry->currentOperChannel))) {
 			/* SET vdev param */
 			pe_debug("sending SMPS intolrent vdev_param");
@@ -2384,6 +2384,7 @@ void lim_handle_delete_bss_rsp(tpAniSirGlobal pMac, tpSirMsgQ MsgQ)
 		qdf_mem_free(MsgQ->bodyptr);
 		return;
 	}
+
 	/*
 	 * During DEL BSS handling, the PE Session will be deleted, but it is
 	 * better to clear this flag if the session is hanging around due

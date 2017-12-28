@@ -838,9 +838,8 @@ tSirRetStatus pe_close(tpAniSirGlobal pMac)
 
 	qdf_spinlock_destroy(&pMac->sys.bbt_mgmt_lock);
 	for (i = 0; i < pMac->lim.maxBssId; i++) {
-		if (pMac->lim.gpSession[i].valid == true) {
+		if (pMac->lim.gpSession[i].valid == true)
 			pe_delete_session(pMac, &pMac->lim.gpSession[i]);
-		}
 	}
 	qdf_mem_free(pMac->lim.limTimers.gpLimCnfWaitTimer);
 	pMac->lim.limTimers.gpLimCnfWaitTimer = NULL;
@@ -1910,27 +1909,9 @@ lim_roam_fill_bss_descr(tpAniSirGlobal pMac,
 	}
 	bss_desc_ptr->channelIdSelf = bss_desc_ptr->channelId;
 
-	if ((bss_desc_ptr->channelId > 0) && (bss_desc_ptr->channelId < 15)) {
-		int i;
-		/* *
-		 * 11b or 11g packet
-		 * 11g if extended Rate IE is present or
-		 * if there is an A rate in suppRate IE
-		 * */
-		for (i = 0; i < parsed_frm_ptr->supportedRates.numRates; i++) {
-			if (sirIsArate(parsed_frm_ptr->supportedRates.rate[i] &
-						0x7f)) {
-				bss_desc_ptr->nwType = eSIR_11G_NW_TYPE;
-				break;
-			}
-		}
-		if (parsed_frm_ptr->extendedRatesPresent) {
-			bss_desc_ptr->nwType = eSIR_11G_NW_TYPE;
-		}
-	} else {
-		/* 11a packet */
-		bss_desc_ptr->nwType = eSIR_11A_NW_TYPE;
-	}
+	bss_desc_ptr->nwType = lim_get_nw_type(pMac, bss_desc_ptr->channelId,
+					       SIR_MAC_MGMT_FRAME,
+					       parsed_frm_ptr);
 
 	bss_desc_ptr->sinr = 0;
 	bss_desc_ptr->beaconInterval = parsed_frm_ptr->beaconInterval;

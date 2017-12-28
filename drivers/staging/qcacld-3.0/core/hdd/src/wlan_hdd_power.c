@@ -1456,7 +1456,6 @@ QDF_STATUS hdd_wlan_shutdown(void)
 	hdd_debug("Invoking packetdump deregistration API");
 	wlan_deregister_txrx_packetdump();
 
-	hdd_cleanup_scan_queue(pHddCtx);
 	hdd_reset_all_adapters(pHddCtx);
 
 	/* Flush cached rx frame queue */
@@ -1586,17 +1585,18 @@ QDF_STATUS hdd_wlan_re_init(void)
 	}
 	bug_on_reinit_failure = pHddCtx->config->bug_on_reinit_failure;
 
-	/* The driver should always be initialized in STA mode after SSR */
-	hdd_set_conparam(0);
 	/* Try to get an adapter from mode ID */
 	pAdapter = hdd_get_adapter(pHddCtx, QDF_STA_MODE);
 	if (!pAdapter) {
 		pAdapter = hdd_get_adapter(pHddCtx, QDF_SAP_MODE);
 		if (!pAdapter) {
 			pAdapter = hdd_get_adapter(pHddCtx, QDF_IBSS_MODE);
-			if (!pAdapter)
-				hdd_err("Failed to get Adapter!");
-
+			if (!pAdapter) {
+				pAdapter = hdd_get_adapter(pHddCtx,
+							   QDF_MONITOR_MODE);
+				if (!pAdapter)
+					hdd_err("Failed to get adapter");
+			}
 		}
 	}
 
@@ -1690,8 +1690,6 @@ int wlan_hdd_set_powersave(hdd_adapter_t *adapter,
 	if (allow_power_save &&
 	    adapter->device_mode == QDF_STA_MODE &&
 	    !adapter->sessionCtx.station.ap_supports_immediate_power_save) {
-		/* override user's requested flag */
-		allow_power_save = false;
 		timeout = AUTO_PS_DEFER_TIMEOUT_MS;
 		hdd_debug("Defer power-save due to AP spec non-conformance");
 	}
@@ -1712,8 +1710,13 @@ int wlan_hdd_set_powersave(hdd_adapter_t *adapter,
 			 * Enter Power Save command received from GUI
 			 * this means DHCP is completed
 			 */
-			sme_ps_enable_disable(hal, adapter->sessionId,
-					SME_PS_ENABLE);
+			if (timeout)
+				sme_ps_enable_auto_ps_timer(hal,
+							    adapter->sessionId,
+							    timeout);
+			else
+				sme_ps_enable_disable(hal, adapter->sessionId,
+						      SME_PS_ENABLE);
 		} else {
 			hdd_debug("Power Save is not enabled in the cfg");
 		}
@@ -1727,8 +1730,6 @@ int wlan_hdd_set_powersave(hdd_adapter_t *adapter,
 		sme_ps_disable_auto_ps_timer(WLAN_HDD_GET_HAL_CTX(adapter),
 			adapter->sessionId);
 		sme_ps_enable_disable(hal, adapter->sessionId, SME_PS_DISABLE);
-		sme_ps_enable_auto_ps_timer(WLAN_HDD_GET_HAL_CTX(adapter),
-			adapter->sessionId, timeout);
 	}
 
 	return 0;
@@ -2197,9 +2198,9 @@ static int __wlan_hdd_cfg80211_set_power_mgmt(struct wiphy *wiphy,
 	ENTER();
 
 	if (timeout < 0) {
-		hdd_debug("User space timeout: %d; Using default instead: %d",
-			timeout, AUTO_PS_ENTRY_USER_TIMER_DEFAULT_VALUE);
-		timeout = AUTO_PS_ENTRY_USER_TIMER_DEFAULT_VALUE;
+		hdd_debug("User space timeout: %d; Enter full power or power save",
+			  timeout);
+		timeout = 0;
 	}
 
 	if (QDF_GLOBAL_FTM_MODE == hdd_get_conparam()) {

@@ -41,6 +41,7 @@
 #include <ol_txrx.h>
 #include <cdp_txrx_peer_ops.h>
 #include <cds_utils.h>
+#include <wlan_hdd_regulatory.h>
 
 #ifdef IPA_OFFLOAD
 #include <wlan_hdd_ipa.h>
@@ -535,7 +536,8 @@ static void __hdd_softap_tx_timeout(struct net_device *dev)
 		QDF_TRACE(QDF_MODULE_ID_HDD_DATA, QDF_TRACE_LEVEL_ERROR,
 			  "Detected data stall due to continuous TX timeouts");
 		adapter->hdd_stats.hddTxRxStats.cont_txtimeout_cnt = 0;
-		ol_txrx_post_data_stall_event(
+		if (hdd_ctx->config->enable_data_stall_det)
+			ol_txrx_post_data_stall_event(
 					DATA_STALL_LOG_INDICATOR_HOST_DRIVER,
 					DATA_STALL_LOG_HOST_SOFTAP_TX_TIMEOUT,
 					0xFF, 0XFF,
@@ -1014,6 +1016,13 @@ QDF_STATUS hdd_softap_stop_bss(hdd_adapter_t *pAdapter)
 			}
 		}
 	}
+
+	/* Mark the indoor channel (passive) to enable */
+	if (pHddCtx->config->disable_indoor_channel) {
+		hdd_update_indoor_channel(pHddCtx, false);
+		sme_update_channel_list(pHddCtx->hHal);
+	}
+
 	return qdf_status;
 }
 

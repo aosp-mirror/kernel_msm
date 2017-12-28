@@ -56,6 +56,7 @@
 #include "lim_ft_defs.h"
 #include "lim_session.h"
 #include "cds_reg_service.h"
+#include "cds_concurrency.h"
 #include "nan_datapath.h"
 #include "wma.h"
 
@@ -400,10 +401,6 @@ char *lim_msg_str(uint32_t msgType)
 		return "WNI_CFG_DNLD_RSP";
 	case WNI_CFG_GET_REQ:
 		return "WNI_CFG_GET_REQ";
-	case WNI_CFG_SET_REQ:
-		return "WNI_CFG_SET_REQ";
-	case WNI_CFG_SET_REQ_NO_RSP:
-		return "WNI_CFG_SET_REQ_NO_RSP";
 	case eWNI_PMC_ENTER_IMPS_RSP:
 		return "eWNI_PMC_ENTER_IMPS_RSP";
 	case eWNI_PMC_EXIT_IMPS_RSP:
@@ -544,39 +541,6 @@ tSirRetStatus lim_init_mlm(tpAniSirGlobal pMac)
 	return eSIR_SUCCESS;
 } /*** end lim_init_mlm() ***/
 
-#ifdef WLAN_FEATURE_11W
-/**
- * lim_deactivate_del_sta() - This function deactivate/delete associates STA
- * @mac_ctx: pointer to Global Mac Structure
- * @bss_entry: index for bss_entry
- * @psession_entry: pointer to session entry
- * @sta_ds: pointer to tpDphHashNode
- *
- * Function deactivate/delete associates STA
- *
- * Return: none
- */
-static void lim_deactivate_del_sta(tpAniSirGlobal mac_ctx, uint32_t bss_entry,
-		tpPESession psession_entry, tpDphHashNode sta_ds)
-{
-	uint32_t sta_entry;
-
-	for (sta_entry = 1; sta_entry < mac_ctx->lim.gLimAssocStaLimit;
-				sta_entry++) {
-		psession_entry = &mac_ctx->lim.gpSession[bss_entry];
-		sta_ds = dph_get_hash_entry(mac_ctx, sta_entry,
-					&psession_entry->dph.dphHashTable);
-		if (NULL == sta_ds)
-			continue;
-
-		pe_err("Deleting pmfSaQueryTimer for staid: %d",
-				sta_ds->staIndex);
-		tx_timer_deactivate(&sta_ds->pmfSaQueryTimer);
-		tx_timer_delete(&sta_ds->pmfSaQueryTimer);
-	}
-}
-#endif
-
 void lim_deactivate_timers(tpAniSirGlobal mac_ctx)
 {
 	uint32_t n;
@@ -659,11 +623,6 @@ void lim_cleanup_mlm(tpAniSirGlobal mac_ctx)
 {
 	uint32_t n;
 	tLimPreAuthNode **pAuthNode;
-#ifdef WLAN_FEATURE_11W
-	uint32_t bss_entry;
-	tpDphHashNode sta_ds = NULL;
-	tpPESession psession_entry = NULL;
-#endif
 	tLimTimers *lim_timer = NULL;
 
 	if (mac_ctx->lim.gLimTimersCreated == 1) {
@@ -738,21 +697,6 @@ void lim_cleanup_mlm(tpAniSirGlobal mac_ctx)
 
 		mac_ctx->lim.gLimTimersCreated = 0;
 	}
-#ifdef WLAN_FEATURE_11W
-	/*
-	 * When SSR is triggered, we need to loop through
-	 * each STA associated per BSSId and deactivate/delete
-	 * the pmfSaQueryTimer for it
-	 */
-	for (bss_entry = 0; bss_entry < mac_ctx->lim.maxBssId;
-					bss_entry++) {
-		if (!mac_ctx->lim.gpSession[bss_entry].valid)
-			continue;
-		lim_deactivate_del_sta(mac_ctx, bss_entry,
-				psession_entry, sta_ds);
-	}
-#endif
-
 } /*** end lim_cleanup_mlm() ***/
 
 /**
@@ -5098,6 +5042,7 @@ bool lim_is_channel_valid_for_channel_switch(tpAniSirGlobal pMac, uint8_t channe
 	uint8_t index;
 	uint32_t validChannelListLen = WNI_CFG_VALID_CHANNEL_LIST_LEN;
 	tSirMacChanNum validChannelList[WNI_CFG_VALID_CHANNEL_LIST_LEN];
+	bool status;
 
 	if (wlan_cfg_get_str(pMac, WNI_CFG_VALID_CHANNEL_LIST,
 			     (uint8_t *) validChannelList,
@@ -5108,8 +5053,13 @@ bool lim_is_channel_valid_for_channel_switch(tpAniSirGlobal pMac, uint8_t channe
 	}
 
 	for (index = 0; index < validChannelListLen; index++) {
-		if (validChannelList[index] == channel)
-			return true;
+
+		if (validChannelList[index] != channel)
+			continue;
+
+		status = cds_is_valid_channel_for_channel_switch(channel);
+
+		return status;
 	}
 
 	/* channel does not belong to list of valid channels */
@@ -6715,6 +6665,28 @@ tSirRetStatus lim_strip_ie(tpAniSirGlobal mac_ctx,
 	return eSIR_SUCCESS;
 }
 
+#ifdef WLAN_FEATURE_11W
+void lim_del_pmf_sa_query_timer(tpAniSirGlobal mac_ctx, tpPESession pe_session)
+{
+	uint32_t associated_sta;
+	tpDphHashNode sta_ds = NULL;
+
+	for (associated_sta = 1;
+			associated_sta < mac_ctx->lim.gLimAssocStaLimit;
+			associated_sta++) {
+		sta_ds = dph_get_hash_entry(mac_ctx, associated_sta,
+				&pe_session->dph.dphHashTable);
+		if (NULL == sta_ds)
+			continue;
+
+		pe_err("Deleting pmfSaQueryTimer for staid: %d",
+			sta_ds->staIndex);
+		tx_timer_deactivate(&sta_ds->pmfSaQueryTimer);
+		tx_timer_delete(&sta_ds->pmfSaQueryTimer);
+	}
+}
+#endif
+
 tSirRetStatus lim_strip_supp_op_class_update_struct(tpAniSirGlobal mac_ctx,
 		uint8_t *addn_ie, uint16_t *addn_ielen,
 		tDot11fIESuppOperatingClasses *dst)
@@ -7337,9 +7309,9 @@ QDF_STATUS lim_util_get_type_subtype(void *pkt, uint8_t *type,
 
 	hdr = WMA_GET_RX_MAC_HEADER(rxpktinfor);
 	if (hdr->fc.type == SIR_MAC_MGMT_FRAME) {
-		pe_debug("RxBd: %pK mHdr: %pK Type: %d Subtype: %d  SizesFC: %zu",
-		  rxpktinfor, hdr, hdr->fc.type, hdr->fc.subType,
-		  sizeof(tSirMacFrameCtl));
+		pe_debug("RxBd: %pK mHdr: %pK Type: %d Subtype: %d SizeFC: %zu",
+				rxpktinfor, hdr, hdr->fc.type, hdr->fc.subType,
+				sizeof(tSirMacFrameCtl));
 		*type = hdr->fc.type;
 		*subtype = hdr->fc.subType;
 	} else {

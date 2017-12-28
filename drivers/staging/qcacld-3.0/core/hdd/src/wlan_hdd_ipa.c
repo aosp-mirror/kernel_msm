@@ -6165,6 +6165,12 @@ static int __hdd_ipa_wlan_evt(hdd_adapter_t *adapter, uint8_t sta_id,
 			return 0;
 		}
 		qdf_mutex_acquire(&hdd_ipa->event_lock);
+		if (!hdd_ipa->sap_num_connected_sta) {
+			hdd_err("%s: Evt: %d, Client already disconnected",
+				msg_ex->name, meta.msg_type);
+			qdf_mutex_release(&hdd_ipa->event_lock);
+			return 0;
+		}
 		if (!hdd_ipa_uc_find_add_assoc_sta(hdd_ipa, false, sta_id)) {
 			HDD_IPA_LOG(QDF_TRACE_LEVEL_ERROR,
 				    "%s: STA ID %d NOT found, not valid",
@@ -6510,6 +6516,9 @@ static void __hdd_ipa_flush(hdd_context_t *hdd_ctx)
 	struct hdd_ipa_priv *hdd_ipa = hdd_ctx->hdd_ipa;
 	qdf_nbuf_t skb;
 	struct hdd_ipa_pm_tx_cb *pm_tx_cb = NULL;
+
+	if (!hdd_ipa_is_enabled(hdd_ctx))
+		return;
 
 	cancel_work_sync(&hdd_ipa->pm_work);
 	qdf_spin_lock_bh(&hdd_ipa->pm_lock);

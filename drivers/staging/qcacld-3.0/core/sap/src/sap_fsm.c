@@ -2200,6 +2200,7 @@ QDF_STATUS sap_goto_channel_sel(ptSapContext sap_context,
 #endif
 	tHalHandle h_hal;
 	uint8_t con_ch;
+	bool sta_sap_scc_on_dfs_chan;
 
 	h_hal = cds_get_context(QDF_MODULE_ID_SME);
 	if (NULL == h_hal) {
@@ -2290,11 +2291,20 @@ QDF_STATUS sap_goto_channel_sel(ptSapContext sap_context,
 					FL("SAP can't start (no MCC)"));
 				return QDF_STATUS_E_ABORTED;
 			}
-			if (con_ch && !CDS_IS_DFS_CH(con_ch)) {
+
+			sta_sap_scc_on_dfs_chan =
+				cds_is_sta_sap_scc_allowed_on_dfs_channel();
+
+			if (con_ch && cds_is_safe_channel(con_ch) &&
+					(!CDS_IS_DFS_CH(con_ch) ||
+					 (CDS_IS_DFS_CH(con_ch) &&
+					  sta_sap_scc_on_dfs_chan))) {
+
 				QDF_TRACE(QDF_MODULE_ID_SAP,
-					QDF_TRACE_LEVEL_ERROR,
-					"%s: Override ch %d to %d due to CC Intf",
-					__func__, sap_context->channel, con_ch);
+						QDF_TRACE_LEVEL_ERROR,
+						"%s: Override ch %d to %d due to CC Intf",
+						__func__, sap_context->channel,
+						con_ch);
 				sap_context->channel = con_ch;
 				cds_set_channel_params(sap_context->channel, 0,
 						&sap_context->ch_params);
@@ -2969,6 +2979,27 @@ QDF_STATUS sap_signal_hdd_event(ptSapContext sap_ctx,
 		reassoc_complete->max_mcs_idx = csr_roaminfo->max_mcs_idx;
 		reassoc_complete->rx_mcs_map = csr_roaminfo->rx_mcs_map;
 		reassoc_complete->tx_mcs_map = csr_roaminfo->tx_mcs_map;
+		if (csr_roaminfo->ht_caps.present)
+			reassoc_complete->ht_caps = csr_roaminfo->ht_caps;
+		if (csr_roaminfo->vht_caps.present)
+			reassoc_complete->vht_caps = csr_roaminfo->vht_caps;
+
+		break;
+
+	case eSAP_STA_LOSTLINK_DETECTED:
+		if (!csr_roaminfo) {
+			QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_ERROR,
+				  FL("Invalid CSR Roam Info"));
+			return QDF_STATUS_E_INVAL;
+		}
+		sap_ap_event.sapHddEventCode = eSAP_STA_LOSTLINK_DETECTED;
+		disassoc_comp =
+			&sap_ap_event.sapevt.sapStationDisassocCompleteEvent;
+
+		qdf_copy_macaddr(&disassoc_comp->staMac,
+				 &csr_roaminfo->peerMac);
+		disassoc_comp->reason_code = csr_roaminfo->reasonCode;
+
 		break;
 
 	case eSAP_STA_DISASSOC_EVENT:
@@ -3285,6 +3316,7 @@ QDF_STATUS sap_close_session(tHalHandle hHal,
 
 	sapContext->isCacStartNotified = false;
 	sapContext->isCacEndNotified = false;
+	sapContext->is_chan_change_inprogress = false;
 	pMac->sap.sapCtxList[sapContext->sessionId].pSapContext = NULL;
 	sapContext->isSapSessionOpen = false;
 	sapContext->pre_cac_complete = false;
@@ -3948,9 +3980,9 @@ static QDF_STATUS sap_fsm_state_starting(ptSapContext sap_ctx,
 		 * (both without substates)
 		 */
 		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_HIGH,
-			  FL("from state channel = %d %s => %s ch_width %d"),
-			  sap_ctx->channel, "eSAP_STARTING", "eSAP_STARTED",
-			  sap_ctx->ch_params.ch_width);
+			FL("from state channel = %d %s => %s ch_width %d"),
+			sap_ctx->channel, "eSAP_STARTING", "eSAP_STARTED",
+			sap_ctx->ch_params.ch_width);
 		sap_ctx->sapsMachine = eSAP_STARTED;
 
 		/* Action code for transition */
@@ -3958,6 +3990,10 @@ static QDF_STATUS sap_fsm_state_starting(ptSapContext sap_ctx,
 				eSAP_START_BSS_EVENT,
 				(void *) eSAP_STATUS_SUCCESS);
 
+		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_HIGH,
+			FL("ap_ctx->ch_params.ch_width %d, channel %d"),
+			sap_ctx->ch_params.ch_width,
+			cds_get_channel_state(sap_ctx->channel));
 		/*
 		 * The upper layers have been informed that AP is up and
 		 * running, however, the AP is still not beaconing, until
@@ -3979,12 +4015,19 @@ static QDF_STATUS sap_fsm_state_starting(ptSapContext sap_ctx,
 				is_dfs = true;
 		}
 
+		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_HIGH,
+				FL("is_dfs %d"), is_dfs);
 		if (is_dfs) {
 			sap_dfs_info = &mac_ctx->sap.SapDfsInfo;
+
 			if ((false == sap_dfs_info->ignore_cac) &&
-			    (eSAP_DFS_DO_NOT_SKIP_CAC ==
-					sap_dfs_info->cac_state) &&
-			    !sap_ctx->pre_cac_complete) {
+					(eSAP_DFS_DO_NOT_SKIP_CAC ==
+					 sap_dfs_info->cac_state) &&
+					!sap_ctx->pre_cac_complete) {
+				QDF_TRACE(QDF_MODULE_ID_SAP,
+						QDF_TRACE_LEVEL_INFO_HIGH,
+						FL("start cac timer"));
+
 				/* Move the device in CAC_WAIT_STATE */
 				sap_ctx->sapsMachine = eSAP_DFS_CAC_WAIT;
 
@@ -4000,6 +4043,9 @@ static QDF_STATUS sap_fsm_state_starting(ptSapContext sap_ctx,
 				qdf_status = sap_cac_start_notify(hal);
 
 			} else {
+				QDF_TRACE(QDF_MODULE_ID_SAP,
+						QDF_TRACE_LEVEL_INFO_HIGH,
+						FL("skip cac timer"));
 				wlansap_start_beacon_req(sap_ctx);
 			}
 		}
@@ -4195,6 +4241,13 @@ static QDF_STATUS sap_fsm_state_disconnecting(ptSapContext sap_ctx,
 			  "eSAP_DISCONNECTING ", msg, sap_event->u2);
 		if (sap_event->u2 == eCSR_ROAM_RESULT_CHANNEL_CHANGE_FAILURE)
 			qdf_status = sap_goto_disconnecting(sap_ctx);
+	} else if ((msg == eSAP_HDD_STOP_INFRA_BSS) &&
+			(sap_ctx->is_chan_change_inprogress)) {
+		/* stop bss is recieved while processing channel change */
+		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO,
+			  FL("in state %s, event msg %d result %d"),
+			  "eSAP_DISCONNECTING ", msg, sap_event->u2);
+		sap_goto_disconnecting(sap_ctx);
 	} else {
 		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_ERROR,
 			  FL("in state %s, invalid event msg %d"),
