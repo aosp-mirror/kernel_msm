@@ -25,7 +25,7 @@
 #include "custom_app_event.h"
 
 
-#define DBG_ENABLE 0
+#define DBG_ENABLE 1
 #define WAKEUP_TIMEOUT_MS       1000
 
 #define BQ27XXX_FLAG_DSC        BIT(0)
