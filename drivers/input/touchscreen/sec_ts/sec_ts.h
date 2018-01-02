@@ -765,6 +765,7 @@ struct sec_ts_plat_data {
 	int tsp_icid;
 	int tsp_id;
 	int tsp_vsync;
+	int switch_gpio;
 
 	bool regulator_boot_on;
 	bool support_mt_pressure;
