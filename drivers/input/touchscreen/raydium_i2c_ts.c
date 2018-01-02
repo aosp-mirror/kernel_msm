@@ -2323,8 +2323,8 @@ static void raydium_work_handler(struct work_struct *work)
 				}
 				
 				input_mt_report_pointer_emulation(raydium_ts->input_dev, false);				
-				input_report_key(raydium_ts->input_dev, KEY_SLEEP, true); //press sleep key
-				input_sync(raydium_ts->input_dev);
+				//input_report_key(raydium_ts->input_dev, KEY_SLEEP, true); //press sleep key
+				//input_sync(raydium_ts->input_dev);
 				
 				printk(KERN_INFO "[touch]palm_status = %d.\n", palm_status);
 				pre_palm_status = RAYDIUM_PALM_MODE_ENABLE;
@@ -2334,8 +2334,8 @@ static void raydium_work_handler(struct work_struct *work)
 		} else if ((palm_status == RAYDIUM_PALM_MODE_DISABLE) && (pre_palm_status == RAYDIUM_PALM_MODE_ENABLE)) 
 		{
 			printk(KERN_INFO "[touch]leave palm mode.\n");
-			input_report_key(raydium_ts->input_dev, KEY_SLEEP, false); //release sleep key
-			input_sync(raydium_ts->input_dev);
+			//input_report_key(raydium_ts->input_dev, KEY_SLEEP, false); //release sleep key
+			//input_sync(raydium_ts->input_dev);
 			
 			pre_palm_status = RAYDIUM_PALM_MODE_DISABLE;
 			raydium_ts->is_palm = 0;
