@@ -76,6 +76,13 @@ struct ol_txrx_stats_req {
     } wait;
 };
 
+struct ol_txrx_stats_req_internal {
+    struct ol_txrx_stats_req base;
+    TAILQ_ENTRY(ol_txrx_stats_req_internal) req_list_elem;
+    int serviced; /* state of this request */
+    int offset;
+};
+
 #ifndef TXRX_DEBUG_LEVEL
 #define TXRX_DEBUG_LEVEL 0 /* no debug info */
 #endif
