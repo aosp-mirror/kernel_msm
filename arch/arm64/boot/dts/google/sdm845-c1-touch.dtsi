@@ -43,11 +43,7 @@
 		status = "ok";
 		compatible = "sec,sec_ts";
 		reg = <0x48>;
-		interrupt-parent = <&tlmm>;
-		interrupts = <125 IRQ_TYPE_LEVEL_LOW>;
-		vdd-supply = <&pm8998_l14>; /* 1.8V */
-		avdd-supply = <&pm8998_l19>; /* 3.3V */
-		pinctrl-names = "pmx_ts_active", "pmx_ts_suspend";
+		pinctrl-names = "on_state", "off_state";
 		pinctrl-0 = <&ts_active &ts_reset_active>;
 		pinctrl-1 = <&ts_suspend>;
 
@@ -55,8 +51,8 @@
 		//sec,irq_type = ?;		/* optional - IRQF flags - default is IRQF_TRIGGER_LOW | IRQF_ONESHOT */
 		sec,max_coords = <1440 2880>;	/* optional - Max values, like 4095? */
 		//sec,firmware_name = "s6sy761.fw"; /* optional, can be specified/indexed by value of tsp-id_gpio? */
-		sec,regulator_dvdd = "vdd";	/* required */
-		sec,regulator_avdd = "avdd";
+		sec,regulator_dvdd = "pm8998_l14";	/* required */
+		sec,regulator_avdd = "pm8998_l19";
 
 		sec,bringup = <1>;		/* optional, 1=no fw update, 2=transfer w/o update */
 	};
