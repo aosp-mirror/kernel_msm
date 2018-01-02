@@ -1281,6 +1281,31 @@ static int sec_ts_parse_dt(struct i2c_client *client)
 	else
 		input_err(true, dev, "%s: Failed to get tsp-id gpio\n", __func__);
 
+	pdata->switch_gpio = of_get_named_gpio(np,
+					       "sec,switch_gpio", 0);
+	if (gpio_is_valid(pdata->switch_gpio)) {
+		ret = gpio_request_one(pdata->switch_gpio,
+				       GPIOF_OUT_INIT_LOW,
+				       "sec,tsp_i2c_switch");
+		if (ret) {
+			input_err(true, dev,
+				  "%s: Failed to request gpio %d\n",
+				  __func__, pdata->switch_gpio);
+			return -EINVAL;
+		}
+
+		ret = gpio_direction_output(pdata->switch_gpio, 0);
+		if (ret) {
+			input_err(true, dev,
+				  "%s: Failed to set gpio %d direction\n",
+				  __func__, pdata->switch_gpio);
+			return -EINVAL;
+		}
+	} else {
+		input_err(true, dev, "%s: Failed to get switch_gpio\n",
+			  __func__);
+	}
+
 	count = of_property_count_strings(np, "sec,firmware_name");
 	if (count <= 0) {
 		pdata->firmware_name = NULL;
