@@ -2082,10 +2082,6 @@ static void mxt_regulator_disable(struct mxt_data *data)
 	if (data->regulator_status == 0)
 		return;
 
-	/* RST PIN is Set to HIGH */
-	if (gpio_is_valid(data->pdata->gpio_reset))
-		gpio_set_value(data->pdata->gpio_reset, 0);
-
 	/* vdd_dig disable */
 	if (data->vcc_dig) {
 		error = regulator_disable(data->vcc_dig);
