@@ -325,7 +325,7 @@ static void sec_ts_check_rawdata(struct work_struct *work)
 
 	ts->tsp_dump_lock = 1;
 	input_info(true, &ts->client->dev, "%s: start ##\n", __func__);
-	sec_ts_run_rawdata_all((void *)ts);
+	sec_ts_run_rawdata_all((void *)ts, false);
 	msleep(100);
 
 	input_info(true, &ts->client->dev, "%s: done ##\n", __func__);
