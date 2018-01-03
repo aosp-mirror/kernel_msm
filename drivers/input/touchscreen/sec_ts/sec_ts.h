@@ -688,8 +688,8 @@ struct sec_ts_data {
 
 #ifdef CONFIG_TOUCHSCREEN_DUMP_MODE
 	struct delayed_work ghost_check;
-	u8 tsp_dump_lock;
 #endif
+	u8 tsp_dump_lock;
 
 	int nv;
 	int cal_count;
@@ -801,7 +801,7 @@ int sec_ts_read_information(struct sec_ts_data *ts);
 #ifdef PAT_CONTROL
 void set_pat_magic_number(struct sec_ts_data *ts);
 #endif
-void sec_ts_run_rawdata_all(struct sec_ts_data *ts);
+void sec_ts_run_rawdata_all(struct sec_ts_data *ts, bool full_read);
 int execute_selftest(struct sec_ts_data *ts, bool save_result);
 int sec_ts_read_raw_data(struct sec_ts_data *ts,
 		struct sec_cmd_data *sec, struct sec_ts_test_mode *mode);

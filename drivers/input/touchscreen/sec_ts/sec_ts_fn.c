@@ -42,6 +42,8 @@ static void get_rawcap(void *device_data);
 static void run_delta_read(void *device_data);
 static void run_delta_read_all(void *device_data);
 static void get_delta(void *device_data);
+static void run_rawdata_stdev_read(void *device_data);
+static void run_rawdata_read_all(void *device_data);
 static void run_self_reference_read(void *device_data);
 static void run_self_reference_read_all(void *device_data);
 static void run_self_rawcap_read(void *device_data);
@@ -123,6 +125,8 @@ static struct sec_cmd sec_cmds[] = {
 	{SEC_CMD("run_delta_read", run_delta_read),},
 	{SEC_CMD("run_delta_read_all", run_delta_read_all),},
 	{SEC_CMD("get_delta", get_delta),},
+	{SEC_CMD("run_rawdata_stdev_read", run_rawdata_stdev_read),},
+	{SEC_CMD("run_rawdata_read_all", run_rawdata_read_all),},
 	{SEC_CMD("run_self_reference_read", run_self_reference_read),},
 	{SEC_CMD("run_self_reference_read_all", run_self_reference_read_all),},
 	{SEC_CMD("run_self_rawcap_read", run_self_rawcap_read),},
@@ -1760,6 +1764,227 @@ static void get_delta(void *device_data)
 	input_info(true, &ts->client->dev, "%s: %s\n", __func__, buff);
 }
 
+static int sec_ts_read_frame_stdev(struct sec_ts_data *ts,
+		u8 type, short *min, short *max)
+{
+	unsigned char *pRead = NULL;
+	short *pFrameAll = NULL;
+	int *pFrameAvg = NULL;
+	int *pFrameStd = NULL;
+	u8 inval_type = TYPE_INVALID_DATA;
+	int node_tot = 0;
+	int ret = 0;
+	int i = 0;
+	int j = 0;
+	int frame_len_byte = 0;
+	int frame_cnt = 0;
+	int frame_tot = 0;
+	int tmp = 0;
+
+	const unsigned int str_size = 10 * (ts->tx_count + 1);
+	unsigned char *pStr = NULL;
+	unsigned char pTmp[16] = { 0 };
+
+	input_info(true, &ts->client->dev, "%s\n", __func__);
+
+	frame_tot = 100;
+
+	/* set data length, allocation buffer memory */
+
+	ret = -ENOMEM;
+	pStr = kzalloc(str_size, GFP_KERNEL);
+	if (!pStr)
+		goto ErrorNomem;
+
+	/* each node data 2bytes : 1frame bytes = node_tot * 2 */
+	node_tot = ts->rx_count * ts->tx_count;
+	frame_len_byte = node_tot * 2;
+
+	pRead = kzalloc(frame_len_byte, GFP_KERNEL);
+	if (!pRead)
+		goto ErrorAllocpRead;
+
+	/* memory whole frame data : 1frame bytes * total frame */
+	pFrameAll = kzalloc(frame_len_byte * frame_tot, GFP_KERNEL);
+	if (!pFrameAll)
+		goto ErrorAllocpFrameAll;
+
+	/* float type : type size is double */
+	pFrameAvg = kzalloc(frame_len_byte * 2, GFP_KERNEL);
+	if (!pFrameAvg)
+		goto ErrorAllocpFrameAvg;
+
+	pFrameStd = kzalloc(frame_len_byte * 2, GFP_KERNEL);
+	if (!pFrameStd)
+		goto ErrorAllocpFrameStd;
+
+	/* fix touch mode */
+	ret = sec_ts_fix_tmode(ts, TOUCH_SYSTEM_MODE_TOUCH,
+			       TOUCH_MODE_STATE_TOUCH);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev, "%s: failed to fix tmode\n",
+				__func__);
+		goto ErrorFixmode;
+	}
+
+	/* set OPCODE and data type */
+	ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_MUTU_RAW_TYPE, &type, 1);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev,
+			  "%s: Set rawdata type failed\n", __func__);
+		goto ErrorDataType;
+	}
+
+	sec_ts_delay(50);
+
+	for (frame_cnt = 0; frame_cnt < frame_tot; frame_cnt++) {
+		/* read data */
+		ret = ts->sec_ts_i2c_read(ts, SEC_TS_READ_TOUCH_RAWDATA, pRead,
+					  frame_len_byte);
+		if (ret < 0) {
+			input_err(true, &ts->client->dev,
+				  "%s: read rawdata failed!\n", __func__);
+			goto ErrorRelease;
+		}
+
+		memset(ts->pFrame, 0x00, frame_len_byte);
+
+		for (i = 0; i < frame_len_byte; i += 2) {
+			ts->pFrame[i / 2] = pRead[i + 1] + (pRead[i] << 8);
+			pFrameAvg[i / 2] += ts->pFrame[i / 2];
+		}
+
+		memcpy(pFrameAll + (frame_len_byte * frame_cnt) / sizeof(short),
+		       ts->pFrame, frame_len_byte);
+	}
+
+	/* get total frame average of each node */
+	for (j = 0; j < node_tot; j++) {
+		pFrameAvg[j] = pFrameAvg[j] * 1000;
+		pFrameAvg[j] = pFrameAvg[j] / frame_tot;
+	}
+
+	input_info(true, &ts->client->dev, "%s: FrameAvg x 1000\n", __func__);
+
+	/* print frame average x 1000 of each node */
+	for (i = 0; i < ts->rx_count; i++) {
+		memset(pStr, 0x0, str_size);
+		snprintf(pTmp, sizeof(pTmp), "Rx%02d | ", i);
+		strlcat(pStr, pTmp, str_size);
+
+		for (j = 0; j < ts->tx_count; j++) {
+			snprintf(pTmp, sizeof(pTmp), " %8d",
+				 pFrameAvg[(j * ts->rx_count) + i]);
+
+			if (i > 0) {
+				if (pFrameAvg[(j * ts->rx_count) + i] < *min)
+					*min =
+					    pFrameAvg[(j * ts->rx_count) + i];
+
+				if (pFrameAvg[(j * ts->rx_count) + i] > *max)
+					*max =
+					    pFrameAvg[(j * ts->rx_count) + i];
+			}
+			strlcat(pStr, pTmp, str_size);
+		}
+		input_info(true, &ts->client->dev, "%s\n", pStr);
+	}
+
+	/* get standard deviation */
+	for (i = 0; i < frame_tot; i++) {
+		for (j = 0; j < node_tot; j++) {
+			tmp = pFrameAll[node_tot * i + j] * 1000;
+			pFrameStd[j] = pFrameStd[j] +
+			    (tmp - pFrameAvg[j]) * (tmp - pFrameAvg[j]);
+		}
+	}
+
+	for (j = 0; j < node_tot; j++)
+		pFrameStd[j] = int_sqrt(pFrameStd[j] / frame_tot);
+
+	/* print standard deviation x 1000 of each node */
+	input_info(true, &ts->client->dev, "%s: FrameStd x 1000\n", __func__);
+
+	for (i = 0; i < ts->rx_count; i++) {
+		memset(pStr, 0x0, str_size);
+		snprintf(pTmp, sizeof(pTmp), "Rx%02d | ", i);
+		strlcat(pStr, pTmp, str_size);
+
+		for (j = 0; j < ts->tx_count; j++) {
+			snprintf(pTmp, sizeof(pTmp), " %8d",
+				 pFrameStd[(j * ts->rx_count) + i]);
+
+			if (i > 0) {
+				if (pFrameStd[(j * ts->rx_count) + i] < *min)
+					*min =
+					    pFrameStd[(j * ts->rx_count) + i];
+
+				if (pFrameStd[(j * ts->rx_count) + i] > *max)
+					*max =
+					    pFrameStd[(j * ts->rx_count) + i];
+			}
+			strlcat(pStr, pTmp, str_size);
+		}
+		input_info(true, &ts->client->dev, "%s\n", pStr);
+	}
+	// SQRT(VAR)
+
+ErrorRelease:
+	/* release data monitory (unprepare AFE data memory) */
+	ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_MUTU_RAW_TYPE, &inval_type,
+				   1);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev,
+			  "%s: Set rawdata type failed\n", __func__);
+		goto ErrorFixmode;
+	}
+
+ErrorDataType:
+	/* release mode fix */
+	ret = sec_ts_release_tmode(ts);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev, "%s: failed to release tmode\n",
+				__func__);
+	}
+
+ErrorFixmode:
+	kfree(pFrameStd);
+
+ErrorAllocpFrameStd:
+	kfree(pFrameAvg);
+
+ErrorAllocpFrameAvg:
+	kfree(pFrameAll);
+
+ErrorAllocpFrameAll:
+	kfree(pRead);
+
+ErrorAllocpRead:
+	kfree(pStr);
+
+ErrorNomem:
+	if (ret < 0)
+		sec_cmd_set_cmd_result(&ts->sec, "NG", 2);
+	else
+		sec_cmd_set_cmd_result(&ts->sec, "OK", 2);
+
+	return ret;
+}
+
+static void run_rawdata_stdev_read(void *device_data)
+{
+	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
+	struct sec_ts_data *ts = container_of(sec, struct sec_ts_data, sec);
+	struct sec_ts_test_mode mode;
+
+	sec_cmd_set_default_result(sec);
+
+	memset(&mode, 0x00, sizeof(struct sec_ts_test_mode));
+	mode.type = TYPE_RAW_DATA;
+
+	sec_ts_read_frame_stdev(ts, mode.type, &mode.min, &mode.max);
+}
+
 /* self reference : send TX power in TX channel, receive in TX channel */
 static void run_self_reference_read(void *device_data)
 {
@@ -1853,35 +2078,6 @@ static void run_self_delta_read_all(void *device_data)
 
 	sec_ts_read_raw_data(ts, sec, &mode);
 }
-
-#if defined(CONFIG_TOUCHSCREEN_DUMP_MODE)
-void sec_ts_run_rawdata_all(struct sec_ts_data *ts)
-{
-	short min, max;
-	int ret;
-
-	sec_ts_fix_tmode(ts, TOUCH_SYSTEM_MODE_TOUCH, TOUCH_MODE_STATE_TOUCH);
-	ret = sec_ts_read_frame(ts, TYPE_OFFSET_DATA_SEC, &min, &max);
-	if (ret < 0) {
-		input_err(true, &ts->client->dev, "%s: 19,Offset error ## ret:%d\n", __func__, ret);
-	} else {
-		input_err(true, &ts->client->dev, "%s: 19,Offset Max/Min %d,%d ##\n", __func__, max, min);
-		sec_ts_release_tmode(ts);
-	}
-
-	sec_ts_delay(20);
-
-	sec_ts_fix_tmode(ts, TOUCH_SYSTEM_MODE_TOUCH, TOUCH_MODE_STATE_TOUCH);
-	ret = sec_ts_read_frame(ts, TYPE_RAW_DATA, &min, &max);
-	if (ret < 0) {
-		input_err(true, &ts->client->dev, "%s: 0,Ambient error ## ret:%d\n", __func__, ret);
-	} else {
-		input_err(true, &ts->client->dev, "%s: 0,Ambient Max/Min %d,%d ##\n", __func__, max, min);
-		sec_ts_release_tmode(ts);
-	}
-
-}
-#endif
 
 /* Use TSP NV area
  * buff[0] : offset from user NVM storage
@@ -4534,4 +4730,151 @@ void sec_ts_fn_remove(struct sec_ts_data *ts)
 
 	sec_cmd_exit(&ts->sec, SEC_CLASS_DEVT_TSP);
 
+}
+
+/*
+ * sec_ts_run_rawdata_all : read all raw data
+ *
+ * when you want to read full raw data (full_read : true)
+ * "mutual/self 3, 5, 29, 1, 19" data will be saved in log
+ *
+ * otherwise, (full_read : false, especially on boot time)
+ * only "mutual 3, 5, 29" data will be saved in log
+ */
+void sec_ts_run_rawdata_all(struct sec_ts_data *ts, bool full_read)
+{
+	short min, max;
+	int ret, i, read_num;
+	u8 test_type[5] = {TYPE_AMBIENT_DATA, TYPE_DECODED_DATA,
+		TYPE_SIGNAL_DATA, TYPE_OFFSET_DATA_SEC, TYPE_OFFSET_DATA_SDC};
+#ifdef USE_PRESSURE_SENSOR
+	short pressure[3] = { 0 };
+	u8 cal_data[18] = { 0 };
+#endif
+
+	ts->tsp_dump_lock = 1;
+	input_info(true, &ts->client->dev,
+			"%s: start (wet:%d)##\n",
+			__func__, ts->wet_mode);
+
+	ret = sec_ts_fix_tmode(ts, TOUCH_SYSTEM_MODE_TOUCH,
+			       TOUCH_MODE_STATE_TOUCH);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev, "%s: failed to fix tmode\n",
+				__func__);
+		goto out;
+	}
+
+	if (full_read) {
+		read_num = 5;
+	} else {
+		read_num = 3;
+		test_type[read_num - 1] = TYPE_OFFSET_DATA_SDC;
+	}
+
+	for (i = 0; i < read_num; i++) {
+		ret = sec_ts_read_frame(ts, test_type[i], &min, &max);
+		if (ret < 0)
+			input_info(true, &ts->client->dev,
+					"%s: mutual %d : error ## ret:%d\n",
+					__func__, test_type[i], ret);
+		else
+			input_info(true, &ts->client->dev,
+					"%s: mutual %d : Max/Min %d,%d ##\n",
+					__func__, test_type[i], max, min);
+		sec_ts_delay(20);
+
+		if (full_read) {
+			ret = sec_ts_read_channel(ts, test_type[i], &min, &max);
+			if (ret < 0)
+				input_info(true, &ts->client->dev,
+						"%s: self %d : error ## ret:%d\n",
+						__func__, test_type[i], ret);
+			else
+				input_info(true, &ts->client->dev,
+						"%s: self %d : Max/Min %d,%d ##\n",
+						__func__, test_type[i], max,
+						min);
+			sec_ts_delay(20);
+		}
+	}
+
+#ifdef USE_PRESSURE_SENSOR
+	ret = sec_ts_fix_tmode(ts, TOUCH_SYSTEM_MODE_TOUCH,
+			       TOUCH_MODE_STATE_TOUCH);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev, "%s: failed to fix tmode\n",
+				__func__);
+		goto out;
+	}
+
+	/* run pressure offset data read */
+	read_pressure_data(ts, TYPE_OFFSET_DATA_SEC, pressure);
+	sec_ts_delay(20);
+
+	/* run pressure rawdata read */
+	read_pressure_data(ts, TYPE_RAW_DATA, pressure);
+	sec_ts_delay(20);
+
+	/* run pressure raw delta read  */
+	read_pressure_data(ts, TYPE_REMV_AMB_DATA, pressure);
+	sec_ts_delay(20);
+
+	/* run pressure sigdata read */
+	read_pressure_data(ts, TYPE_SIGNAL_DATA, pressure);
+	sec_ts_delay(20);
+
+	ret = ts->sec_ts_i2c_read(ts, SEC_TS_CMD_SET_GET_PRESSURE, cal_data,
+				  18);
+	ts->pressure_left = ((cal_data[16] << 8) | cal_data[17]);
+	ts->pressure_center = ((cal_data[8] << 8) | cal_data[9]);
+	ts->pressure_right = ((cal_data[0] << 8) | cal_data[1]);
+	input_info(true, &ts->client->dev, "%s: pressure cal data - Left: %d, Center: %d, Right: %d\n",
+			__func__, ts->pressure_left, ts->pressure_center,
+			ts->pressure_right);
+#endif
+	sec_ts_release_tmode(ts);
+
+out:
+	input_info(true, &ts->client->dev, "%s: ito : %02X %02X %02X %02X\n",
+			__func__, ts->ito_test[0], ts->ito_test[1]
+			, ts->ito_test[2], ts->ito_test[3]);
+
+	input_info(true, &ts->client->dev, "%s: done (wet:%d)##\n",
+			__func__, ts->wet_mode);
+	ts->tsp_dump_lock = 0;
+
+	sec_ts_locked_release_all_finger(ts);
+}
+
+static void run_rawdata_read_all(void *device_data)
+{
+	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
+	struct sec_ts_data *ts = container_of(sec, struct sec_ts_data, sec);
+	char buff[16] = { 0 };
+
+	sec_cmd_set_default_result(sec);
+
+	if (ts->tsp_dump_lock == 1) {
+		input_err(true, &ts->client->dev, "%s: already checking now\n",
+			  __func__);
+		snprintf(buff, sizeof(buff), "NG");
+		sec->cmd_state = SEC_CMD_STATUS_FAIL;
+		goto out;
+	}
+	if (ts->power_status == SEC_TS_STATE_POWER_OFF) {
+		input_err(true, &ts->client->dev, "%s: IC is power off\n",
+			  __func__);
+		snprintf(buff, sizeof(buff), "NG");
+		sec->cmd_state = SEC_CMD_STATUS_FAIL;
+		goto out;
+	}
+
+	sec_ts_run_rawdata_all(ts, true);
+
+	snprintf(buff, sizeof(buff), "OK");
+	sec->cmd_state = SEC_CMD_STATUS_OK;
+out:
+	sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
+	input_info(true, &ts->client->dev, "%s: %s\n", __func__, buff);
 }
