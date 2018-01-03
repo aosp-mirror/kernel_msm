@@ -2160,12 +2160,10 @@ static ssize_t dsi_host_transfer(struct mipi_dsi_host *host,
 error_disable_cmd_engine:
 	(void)dsi_display_cmd_engine_disable(display);
 error_disable_clks:
-	rc = dsi_display_clk_ctrl(display->dsi_clk_handle,
-			DSI_ALL_CLKS, DSI_CLK_OFF);
-	if (rc) {
-		pr_err("[%s] failed to disable all DSI clocks, rc=%d\n",
-		       display->name, rc);
-	}
+	if (dsi_display_clk_ctrl(display->dsi_clk_handle,
+				 DSI_ALL_CLKS, DSI_CLK_OFF))
+		pr_err("[%s] failed to disable all DSI clocks\n",
+		       display->name);
 error:
 	return rc;
 }
