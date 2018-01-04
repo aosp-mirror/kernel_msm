@@ -173,6 +173,7 @@ static struct sensors_classdev __maybe_unused sensors_proximity_cdev = {
 * Static function prototypes
 *******************************************************************************/
 int fts_ts_start(struct device *dev);
+int fts_ts_resume(struct device *dev);
 
 int fts_get_hwid(void);
 
@@ -1340,6 +1341,69 @@ int fts_ts_disable(struct device *dev)
 }
 
 /*******************************************************************************
+*  Name: fts_ts_open
+*  Brief:
+*  Input:
+*  Output:
+*  Return:
+*******************************************************************************/
+static int fts_ts_open(struct input_dev *input_dev)
+{
+	struct fts_ts_data *data;
+	int err = 0;
+
+	pr_err("[fts]%s, start\n", __func__);
+	//pr_err("[fts]%s, input_dev: %d\n", __func__, input_dev);
+	if (input_dev == NULL){
+		pr_err("[fts]%s, input_dev is NULL\n", __func__);
+	}
+	else {
+		data = input_get_drvdata(input_dev);
+	}
+	pr_err("[fts]%s, after input\n", __func__);
+
+	err = fts_ts_resume(&(data->client->dev));
+	//printk(KERN_ERR "[fts]%s, finish, err : %d\n", __func__, err);
+	pr_err("[fts]%s, finish, err : %d\n", __func__, err);
+	if (err < 0) {
+		printk(KERN_ERR "[fts]%s, TP power on fail, err : %d\n", __func__, err);
+		pr_err("[fts]%s, TP power on fail, err : %d\n", __func__, err);
+		return err;
+	}
+	ts_pwr_disabled = false;
+
+	return 0;
+}
+
+/*******************************************************************************
+*  Name: fts_ts_close
+*  Brief:
+*  Input:
+*  Output:
+*  Return:
+*******************************************************************************/
+static void fts_ts_close(struct input_dev *input_dev)
+{
+	struct fts_ts_data *data;
+	int err = 0;
+
+	pr_err("[fts]%s, start\n", __func__);
+
+	data = input_get_drvdata(input_dev);
+	pr_err("[fts]%s, after input\n", __func__);
+
+	err = fts_ts_disable(&data->client->dev);
+	//printk(KERN_ERR "[fts]%s, finish, err : %d\n", __func__, err);
+	pr_err("[fts]%s, finish, err : %d\n", __func__, err);
+	if (err < 0) {
+		printk(KERN_ERR "[fts]%s, TP power disable fail, err : %d\n", __func__, err);
+		pr_err("[fts]%s, TP power disable fail, err : %d\n", __func__, err);
+		return;
+	}
+	ts_pwr_disabled = true;
+}
+
+/*******************************************************************************
 *  Name: fts_ts_suspend
 *  Brief:
 *  Input:
@@ -1358,6 +1422,7 @@ int fts_ts_suspend(struct device *dev)
 	}
 
 	printk(KERN_ERR "[fts]%s, start\n", __func__);
+	pr_err("[fts]%s, start\n", __func__);
 
 	if (data->suspended) {
 		dev_info(dev, "Already in suspend state\n");
@@ -1411,6 +1476,8 @@ int fts_ts_resume(struct device *dev)
 		dev_dbg(dev, "Already in awake state\n");
 		return 0;
 	}
+
+	pr_err("[fts]%s, start\n", __func__);
 
 #ifdef CONFIG_TOUCHSCREEN_FTS_PSENSOR
 	if (fts_psensor_support_enabled() && data->pdata->psensor_support &&
@@ -2027,6 +2094,9 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	input_dev->name = "fts_ts";
 	input_dev->id.bustype = BUS_I2C;
 	input_dev->dev.parent = &client->dev;
+
+	input_dev->open = fts_ts_open;
+	input_dev->close = fts_ts_close;
 
 	input_set_drvdata(input_dev, data);
 	i2c_set_clientdata(client, data);
