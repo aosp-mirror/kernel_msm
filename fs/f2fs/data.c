@@ -174,15 +174,22 @@ static bool __same_bdev(struct f2fs_sb_info *sbi,
  */
 static struct bio *__bio_alloc(struct f2fs_sb_info *sbi, block_t blk_addr,
 				struct writeback_control *wbc,
-				int npages, bool is_read)
+				int npages, bool is_read,
+				enum page_type type, enum temp_type temp)
 {
 	struct bio *bio;
 
 	bio = f2fs_bio_alloc(sbi, npages, true);
 
 	f2fs_target_device(sbi, blk_addr, bio);
-	bio->bi_end_io = is_read ? f2fs_read_end_io : f2fs_write_end_io;
-	bio->bi_private = is_read ? NULL : sbi;
+	if (is_read) {
+		bio->bi_end_io = f2fs_read_end_io;
+		bio->bi_private = NULL;
+	} else {
+		bio->bi_end_io = f2fs_write_end_io;
+		bio->bi_private = sbi;
+		bio->bi_write_hint = io_type_to_rw_hint(sbi, type, temp);
+	}
 	if (wbc)
 		wbc_init_bio(wbc, bio);
 
@@ -195,12 +202,11 @@ static inline void __submit_bio(struct f2fs_sb_info *sbi,
 	if (!is_read_io(bio_op(bio))) {
 		unsigned int start;
 
-		if (f2fs_sb_mounted_blkzoned(sbi->sb) &&
-			current->plug && (type == DATA || type == NODE))
-			blk_finish_plug(current->plug);
-
 		if (type != DATA && type != NODE)
 			goto submit_io;
+
+		if (f2fs_sb_has_blkzoned(sbi->sb) && current->plug)
+			blk_finish_plug(current->plug);
 
 		start = bio->bi_iter.bi_size >> F2FS_BLKSIZE_BITS;
 		start %= F2FS_IO_SIZE(sbi);
@@ -377,12 +383,13 @@ int f2fs_submit_page_bio(struct f2fs_io_info *fio)
 			fio->encrypted_page : fio->page;
 	struct inode *inode = fio->page->mapping->host;
 
+	verify_block_addr(fio, fio->new_blkaddr);
 	trace_f2fs_submit_page_bio(page, fio);
 	f2fs_trace_ios(fio, 0);
 
 	/* Allocate a new bio */
 	bio = __bio_alloc(fio->sbi, fio->new_blkaddr, fio->io_wbc,
-				1, is_read_io(fio->op));
+				1, is_read_io(fio->op), fio->type, fio->temp);
 
 	if (f2fs_may_encrypt_bio(inode, fio))
 		fscrypt_set_ice_dun(inode, bio, PG_DUN(inode, fio->page));
@@ -428,8 +435,8 @@ next:
 	}
 
 	if (fio->old_blkaddr != NEW_ADDR)
-		verify_block_addr(sbi, fio->old_blkaddr);
-	verify_block_addr(sbi, fio->new_blkaddr);
+		verify_block_addr(fio, fio->old_blkaddr);
+	verify_block_addr(fio, fio->new_blkaddr);
 
 	bio_page = fio->encrypted_page ? fio->encrypted_page : fio->page;
 	inode = fio->page->mapping->host;
@@ -459,7 +466,8 @@ alloc_new:
 			goto out_fail;
 		}
 		io->bio = __bio_alloc(sbi, fio->new_blkaddr, fio->io_wbc,
-						BIO_MAX_PAGES, false);
+						BIO_MAX_PAGES, false,
+						fio->type, fio->temp);
 		if (bio_encrypted)
 			fscrypt_set_ice_dun(inode, io->bio, dun);
 		io->fio = *fio;
@@ -853,14 +861,6 @@ alloc:
 	return 0;
 }
 
-static inline bool __force_buffered_io(struct inode *inode, int rw)
-{
-	return ((f2fs_encrypted_file(inode) &&
-			!fscrypt_using_hardware_encryption(inode)) ||
-			(rw == WRITE && test_opt(F2FS_I_SB(inode), LFS)) ||
-			F2FS_I_SB(inode)->s_ndevs);
-}
-
 int f2fs_preallocate_blocks(struct kiocb *iocb, struct iov_iter *from)
 {
 	struct inode *inode = file_inode(iocb->ki_filp);
@@ -891,9 +891,8 @@ int f2fs_preallocate_blocks(struct kiocb *iocb, struct iov_iter *from)
 	map.m_seg_type = NO_CHECK_TYPE;
 
 	if (direct_io) {
-		/* map.m_seg_type = rw_hint_to_seg_type(iocb->ki_hint); */
-		map.m_seg_type = rw_hint_to_seg_type(WRITE_LIFE_NOT_SET);
-		flag = __force_buffered_io(inode, WRITE) ?
+		map.m_seg_type = rw_hint_to_seg_type(iocb->ki_hint);
+		flag = f2fs_force_buffered_io(inode, WRITE) ?
 					F2FS_GET_BLOCK_PRE_AIO :
 					F2FS_GET_BLOCK_PRE_DIO;
 		goto map_blocks;
@@ -1137,6 +1136,31 @@ out:
 	return err;
 }
 
+bool f2fs_overwrite_io(struct inode *inode, loff_t pos, size_t len)
+{
+	struct f2fs_map_blocks map;
+	block_t last_lblk;
+	int err;
+
+	if (pos + len > i_size_read(inode))
+		return false;
+
+	map.m_lblk = F2FS_BYTES_TO_BLK(pos);
+	map.m_next_pgofs = NULL;
+	map.m_next_extent = NULL;
+	map.m_seg_type = NO_CHECK_TYPE;
+	last_lblk = F2FS_BLK_ALIGN(pos + len);
+
+	while (map.m_lblk < last_lblk) {
+		map.m_len = last_lblk - map.m_lblk;
+		err = f2fs_map_blocks(inode, &map, 0, F2FS_GET_BLOCK_DEFAULT);
+		if (err || map.m_len == 0)
+			return false;
+		map.m_lblk += map.m_len;
+	}
+	return true;
+}
+
 static int __get_data_block(struct inode *inode, sector_t iblock,
 			struct buffer_head *bh, int create, int flag,
 			pgoff_t *next_pgofs, int seg_type)
@@ -1174,8 +1198,7 @@ static int get_data_block_dio(struct inode *inode, sector_t iblock,
 	return __get_data_block(inode, iblock, bh_result, create,
 						F2FS_GET_BLOCK_DEFAULT, NULL,
 						rw_hint_to_seg_type(
-							WRITE_LIFE_NOT_SET));
-						/* inode->i_write_hint)); */
+							inode->i_write_hint));
 }
 
 static int get_data_block_bmap(struct inode *inode, sector_t iblock,
@@ -2351,16 +2374,19 @@ static ssize_t f2fs_direct_IO(struct kiocb *iocb, struct iov_iter *iter)
 {
 	struct address_space *mapping = iocb->ki_filp->f_mapping;
 	struct inode *inode = mapping->host;
+	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
 	size_t count = iov_iter_count(iter);
 	loff_t offset = iocb->ki_pos;
 	int rw = iov_iter_rw(iter);
 	int err;
+	enum rw_hint hint = iocb->ki_hint;
+	int whint_mode = F2FS_OPTION(sbi).whint_mode;
 
 	err = check_direct_IO(inode, iter, offset);
 	if (err)
 		return err;
 
-	if (__force_buffered_io(inode, rw))
+	if (f2fs_force_buffered_io(inode, rw))
 		return 0;
 
 	trace_f2fs_direct_IO_enter(inode, offset, count, rw);
@@ -2388,11 +2414,24 @@ static ssize_t f2fs_direct_IO(struct kiocb *iocb, struct iov_iter *iter)
 						 current->comm);
 	}
 
-	down_read(&F2FS_I(inode)->dio_rwsem[rw]);
+	if (rw == WRITE && whint_mode == WHINT_MODE_OFF)
+		iocb->ki_hint = WRITE_LIFE_NOT_SET;
+
+	if (!down_read_trylock(&F2FS_I(inode)->dio_rwsem[rw])) {
+		if (iocb->ki_flags & IOCB_NOWAIT) {
+			iocb->ki_hint = hint;
+			err = -EAGAIN;
+			goto out;
+		}
+		down_read(&F2FS_I(inode)->dio_rwsem[rw]);
+	}
+
 	err = blockdev_direct_IO(iocb, inode, iter, get_data_block_dio);
 	up_read(&F2FS_I(inode)->dio_rwsem[rw]);
 
 	if (rw == WRITE) {
+		if (whint_mode == WHINT_MODE_OFF)
+			iocb->ki_hint = hint;
 		if (err > 0) {
 			f2fs_update_iostat(F2FS_I_SB(inode), APP_DIRECT_IO,
 									err);
@@ -2401,7 +2440,7 @@ static ssize_t f2fs_direct_IO(struct kiocb *iocb, struct iov_iter *iter)
 			f2fs_write_failed(mapping, offset + count);
 		}
 	}
-
+out:
 	if (trace_android_fs_dataread_start_enabled() &&
 	    (rw == READ))
 		trace_android_fs_dataread_end(inode, offset, count);
