@@ -624,6 +624,8 @@ typedef struct sap_Config {
 	uint8_t sap_chanswitch_mode;
 	uint16_t reduced_beacon_interval;
 	bool dfs_beacon_tx_enhanced;
+	bool chan_switch_hostapd_rate_enabled;
+	uint32_t user_config_channel;
 } tsap_Config_t;
 
 #ifdef FEATURE_WLAN_AP_AP_ACS_OPTIMIZE
