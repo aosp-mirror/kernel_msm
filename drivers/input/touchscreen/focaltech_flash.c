@@ -99,7 +99,7 @@
 * Static variables
 *******************************************************************************/
 static unsigned char CTPM_FW_BLACK_G_B[] = {
-	#include "FTS_FW/CEI_EFWA_3207_0x01_V0x04_20170615_app.i"
+	#include "FTS_FW/CEI_EFWA_3207_0x01_V0x07_20171120_app.i"
 };
 
 static unsigned char CTPM_FW_BLACK_G_A[] = {
