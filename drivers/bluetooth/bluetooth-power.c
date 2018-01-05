@@ -154,7 +154,6 @@ static int bluetooth_power_rfkill_probe(struct platform_device *pdev)
 	struct rfkill *rfkill;
 	int ret;
 
-	pr_err(" %s enter\n", __func__);
 	rfkill = rfkill_alloc("bt_power", &pdev->dev, RFKILL_TYPE_BLUETOOTH,
 			      &bluetooth_power_rfkill_ops,
 			      pdev->dev.platform_data);
@@ -182,7 +181,6 @@ static int bluetooth_power_rfkill_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, rfkill);
 
-	pr_err(" %s exit\n", __func__);
 	return 0;
 }
 
@@ -223,7 +221,6 @@ static int bt_power_probe(struct platform_device *pdev)
 {
 	int ret = 0;
 
-	pr_err(" %s enter\n", __func__);
 	dev_dbg(&pdev->dev, "%s\n", __func__);
 	bt_power_pdata =
 		kzalloc(sizeof(struct bluetooth_power_platform_data), GFP_KERNEL);
@@ -260,7 +257,6 @@ static int bt_power_probe(struct platform_device *pdev)
 
 	btpdev = pdev;
 
-	pr_err(" %s exit\n", __func__);
 	return 0;
 
 free_pdata:

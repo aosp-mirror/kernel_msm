@@ -249,10 +249,10 @@ static int nitrous_rfkill_set_power(void *data, bool blocked)
 		pr_err("%s: missing lpm\n", __func__);
 		return -EINVAL;
 	}
-	pr_info("%s: %s (blocked=%d)\n", __func__, blocked ? "off" : "on",
+	pr_debug("%s: %s (blocked=%d)\n", __func__, blocked ? "off" : "on",
 		blocked);
 	if (blocked == lpm->rfkill_blocked) {
-		pr_info("%s already in requsted state. Ignoring.\n", __func__);
+		pr_debug("%s already in requsted state. Ignoring.\n", __func__);
 		return 0;
 	}
 	if (!blocked) {
@@ -522,7 +522,7 @@ static int nitrous_resume(struct device *dev)
 		disable_irq_wake(lpm->irq_host_wake);
 		/* Handle pending host wake irq. */
 		if (lpm->pending_irq) {
-			pr_info("%s: pending host_wake irq\n", __func__);
+			pr_debug("%s: pending host_wake irq\n", __func__);
 			nitrous_wake_uart(lpm, true);
 			lpm->pending_irq = false;
 		}
