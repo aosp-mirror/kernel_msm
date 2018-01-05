@@ -723,7 +723,6 @@ static irqreturn_t fts_ts_interrupt(int irq, void *dev_id)
 	ktime_t cur_time;
 	u8 val;
 #endif
-
 	if (!fts_ts) {
 		FTS_ERROR("[INTR]: Invalid fts_ts");
 		return IRQ_HANDLED;
@@ -737,7 +736,7 @@ static irqreturn_t fts_ts_interrupt(int irq, void *dev_id)
 	if(fts_wq_data->is_ambient_mode == 1 && fts_wq_data->suspended) {
 #if FTS_PLAM_EN
 		cur_time = ktime_get();
-		if(cur_time.tv64 - fts_wq_data->last_plam_time.tv64 < 1600000000)
+		if(cur_time.tv64 - fts_wq_data->last_plam_time.tv64 < 1000000000)
 			return IRQ_HANDLED;
 #endif
 		input_report_key(fts_input_dev, KEY_WAKEUP, 1);
@@ -754,6 +753,8 @@ static irqreturn_t fts_ts_interrupt(int irq, void *dev_id)
 	fts_i2c_read_reg(fts_wq_data->client,
 					 FTS_REG_GESTURE_OUTPUT_ADDRESS, &val);
 	if (val == GESTURE_PLAM) {
+		if(fts_wq_data->suspended)
+			return IRQ_HANDLED;
 		fts_wq_data->last_plam_time =  ktime_get();
 		input_report_key(fts_input_dev, KEY_SLEEP, 1);
 		input_sync(fts_input_dev);
@@ -982,9 +983,9 @@ static int fb_notifier_callback(struct notifier_block *self,
 		blank = evdata->data;
 
 		cur_power_state = fts_data->panel_power_state;
+		FTS_INFO("[FTS] power state  %d -> %d \n",cur_power_state,(int)*blank);
 
 		if (cur_power_state == *blank) {
-			pr_err("[FTS] No change in power state\n");
 			return 0;
 		}
 		fts_data->panel_power_state = *blank;
@@ -1185,6 +1186,7 @@ static int fts_ts_probe(struct i2c_client *client,
 #if FTS_ESDCHECK_EN
 	fts_esdcheck_init();
 #endif
+	device_init_wakeup(&data->client->dev, 1);
 
 	fts_irq_enable();
 
@@ -1322,8 +1324,12 @@ static int fts_ts_suspend(struct device *dev)
 		return -1;
 	}
 	fts_release_all_finger();
+	FTS_INFO("[FTS] fts_ts_suspend data->is_ambient_mode = %d , data->suspended =%d \n",data->is_ambient_mode ,data->suspended);
 	if(data->is_ambient_mode == 1) {
 		fts_i2c_write_reg(fts_wq_data->client, FTS_REG_GESTURE_EN, 0x0);
+		retval = enable_irq_wake(fts_wq_data->client->irq);
+		if (retval)
+			FTS_ERROR("%s: set_irq_wake failed", __func__);
 		data->suspended = true;
 		return 0;
 	}
@@ -1377,6 +1383,7 @@ static int fts_ts_suspend(struct device *dev)
 static int fts_ts_resume(struct device *dev)
 {
 	struct fts_ts_data *data = dev_get_drvdata(dev);
+	int err;
 
 	FTS_FUNC_ENTER();
 
@@ -1386,9 +1393,14 @@ static int fts_ts_resume(struct device *dev)
 		return -1;
 	}
 	fts_release_all_finger();
+	FTS_INFO("[FTS] fts_ts_resume data->is_ambient_mode = %d , data->suspended =%d \n",data->is_ambient_mode ,data->suspended);
 
 	if(data->is_ambient_mode == 1 && data->suspended) {
 		fts_i2c_write_reg(fts_wq_data->client, FTS_REG_GESTURE_EN, 0x0);
+		err = disable_irq_wake(data->client->irq);
+		if (err)
+			FTS_ERROR("%s: disable_irq_wake failed", __func__);
+
 		data->suspended = false;
 		data->is_ambient_mode = 0;
 		return 0;
@@ -1406,8 +1418,6 @@ static int fts_ts_resume(struct device *dev)
 
 #if FTS_GESTURE_EN
 	if (fts_gesture_resume(data->client) == 0) {
-		int err;
-
 		err = disable_irq_wake(data->client->irq);
 		if (err)
 			FTS_ERROR("%s: disable_irq_wake failed", __func__);
