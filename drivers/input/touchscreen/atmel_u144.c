@@ -4,7 +4,7 @@
  * Copyright (C) 2010 Samsung Electronics Co.Ltd
  * Copyright (C) 2011-2012 Atmel Corporation
  * Copyright (C) 2012 Google, Inc.
- * Copyright (C) 2013-2016 LG Electronics, Inc.
+ * Copyright (C) 2013-2018 LG Electronics, Inc.
  *
  *
  * This program is free software; you can redistribute  it and/or modify it
@@ -57,6 +57,15 @@ static struct bus_type touch_subsys = {
 static struct device device_touch = {
 	.id = 0,
 	.bus = &touch_subsys,
+};
+
+enum {
+	MXT_DBG_LVL_NONE = 0,
+	MXT_DBG_LVL_COORDINATE = 1,
+	MXT_DBG_LVL_MSG_DUMP = 2,
+	MXT_DBG_LVL_MSG_T57 = 4,
+	MXT_DBG_LVL_EVENT = 8,
+	MXT_DBG_LVL_MAX = 16
 };
 
 struct mxt_touch_attribute {
@@ -758,7 +767,7 @@ static void mxt_proc_t6_messages(struct mxt_data *data, u8 *msg)
 	}
 
 	if (status & MXT_T6_STATUS_RESET && data->suspended) {
-		TOUCH_DEBUG_MSG("RESET Detected. Start Recover\n");
+		TOUCH_INFO_MSG("RESET Detected. Start Recover\n");
 
 		if (mxt_patchevent_get(PATCH_EVENT_TA)) {
 			TOUCH_DEBUG_MSG("In charging\n");
@@ -774,7 +783,7 @@ static void mxt_proc_t6_messages(struct mxt_data *data, u8 *msg)
 			else
 				mxt_patch_event(data, ACTIVE_IN_NOCHG);
 		}
-		TOUCH_DEBUG_MSG("Recover Complete\n");
+		TOUCH_INFO_MSG("Recover Complete\n");
 	}
 }
 
@@ -929,8 +938,8 @@ static void mxt_proc_t57_messages(struct mxt_data *data, u8 *message)
 	touch_area = (message[4] << 8 | message[3]);
 	anti_touch_area = (message[6] << 8 | message[5]);
 
-	if (data->t57_debug_enabled)
-		TOUCH_DEBUG_MSG("T57 :%3d %3d %3d\n",
+	if (data->debug_enabled & MXT_DBG_LVL_MSG_T57)
+		TOUCH_INFO_MSG("T57 :%3d %3d %3d\n",
 				area, touch_area, anti_touch_area);
 }
 
@@ -981,7 +990,7 @@ static int mxt_proc_t25_message(struct mxt_data *data, u8 *message)
 
 static void mxt_proc_t80_messages(struct mxt_data *data, u8 *message)
 {
-	if (data->debug_enabled)
+	if (data->debug_enabled & MXT_DBG_LVL_MSG_DUMP)
 		print_hex_dump(KERN_ERR, "MXT MSG:", DUMP_PREFIX_NONE, 16, 1,
 		       message, data->T5_msg_size, false);
 }
@@ -1078,26 +1087,28 @@ static void mxt_proc_t100_message(struct mxt_data *data, u8 *message)
 		else if ((status & MXT_T100_STATUS_MASK) == MXT_T100_MOVE)
 			data->ts_data.curr_data[id].status = FINGER_MOVED;
 
-#ifdef MXT_TOUCHSCREEN_MSG_INFO_PRINT
-		if ((status & MXT_T100_STATUS_MASK) == MXT_T100_PRESS)
-			TOUCH_DEBUG_MSG("touch_pressed    <%d> :"
-				" x[%4d] y[%4d] A[%3d] P[%3d]"
-				" WM[%3d] Wm[%3d]\n",
-				id, x, y, area, amplitude,
-				data->ts_data.curr_data[id].touch_major,
-				data->ts_data.curr_data[id].touch_minor);
-#endif
+		if ((status & MXT_T100_STATUS_MASK) == MXT_T100_PRESS) {
+			if (data->debug_enabled & MXT_DBG_LVL_COORDINATE) {
+				TOUCH_INFO_MSG("touch_pressed    <%d> :"
+					" x[%4d] y[%4d] A[%3d] P[%3d]"
+					" WM[%3d] Wm[%3d]\n",
+					id, x, y, area, amplitude,
+					data->ts_data.curr_data[id].touch_major,
+					data->ts_data.curr_data[id].touch_minor);
+			}
+		}
 	} else if ((status & MXT_T100_STATUS_MASK) == MXT_T100_RELEASE){
 		/* Touch Release */
 		data->ts_data.curr_data[id].id = id;
 		data->ts_data.curr_data[id].status = FINGER_RELEASED;
-#ifdef MXT_TOUCHSCREEN_MSG_INFO_PRINT
-		TOUCH_DEBUG_MSG("touch_release    <%d> : x[%4d] y[%4d]\n",
-				id, x, y);
-#endif
+
+		if (data->debug_enabled & MXT_DBG_LVL_COORDINATE) {
+			TOUCH_INFO_MSG("touch_release    <%d> : x[%4d] y[%4d]\n",
+					id, x, y);
+		}
 	}
 
-	if (data->debug_enabled) {
+	if (data->debug_enabled & MXT_DBG_LVL_EVENT) {
 		TOUCH_INFO_MSG( "T100_message[%u] %s%s%s%s%s%s%s%s%s"
 			" %s%s%s%s%s (0x%02X) x:%u y:%u z:%u area:%u amp:%u"
 			" vec:%u h:%u w:%u\n",
@@ -1311,7 +1322,7 @@ static int mxt_proc_message(struct mxt_data *data, u8 *message)
 {
 	u8 report_id = message[0];
 	u8 type = 0;
-	bool dump = data->debug_enabled;
+	bool dump = data->debug_enabled & MXT_DBG_LVL_MSG_DUMP;
 
 	if (report_id == MXT_RPTID_NOMSG)
 		return 0;
@@ -2433,46 +2444,28 @@ static ssize_t mxt_check_fw_store(struct mxt_data *data, const char *buf,
 
 static ssize_t mxt_debug_enable_show(struct mxt_data *data, char *buf)
 {
-	int count = 0;
-	char c = 0;
-
-	c = data->debug_enabled ? '1' : '0';
-	count = sprintf(buf, "%c\n", c);
-
-	return count;
+	return snprintf(buf, PAGE_SIZE, "%d\n", data->debug_enabled);
 }
 
 static ssize_t mxt_debug_enable_store(struct mxt_data *data,
 		const char *buf, size_t count)
 {
-	int i = 0;
+	int ret;
+	unsigned int v;
 
-	if (sscanf(buf, "%u", &i) == 1 && i < 2) {
-		data->debug_enabled = (i == 1);
-
-		TOUCH_INFO_MSG("%s\n", i ? "debug enabled" : "debug disabled");
-		return count;
+	ret = kstrtouint(buf, 0, &v);
+	if (ret < 0) {
+		TOUCH_ERR_MSG("%s: Invalid input\n", __func__);
+		return ret;
 	}
 
-	TOUCH_ERR_MSG("debug_enabled write error\n");
-	return -EINVAL;
-}
-
-static ssize_t mxt_t57_debug_enable_store(struct mxt_data *data,
-		const char *buf, size_t count)
-{
-	int i = 0;
-
-	if (sscanf(buf, "%u", &i) == 1 && i < 2) {
-		data->t57_debug_enabled = (i == 1);
-
-		TOUCH_DEBUG_MSG("%s\n", i ?
-				"t57 debug enabled" : "t57 debug disabled");
-		return count;
+	if (v >= MXT_DBG_LVL_MAX) {
+		TOUCH_ERR_MSG("%s: out of range %d\n", __func__, v);
+		return -EINVAL;
 	}
 
-	TOUCH_ERR_MSG("t57_debug_enabled write error\n");
-	return -EINVAL;
+	data->debug_enabled = v;
+	return count;
 }
 
 static ssize_t mxt_patch_debug_enable_show(struct mxt_data *data, char *buf)
@@ -2738,7 +2731,6 @@ static MXT_TOUCH_ATTR(mxt_info, S_IRUGO, mxt_info_show, NULL);
 static MXT_TOUCH_ATTR(object, S_IRUGO, mxt_object_show, NULL);
 static MXT_TOUCH_ATTR(object_ctrl, S_IWUSR, NULL, mxt_object_control);
 static MXT_TOUCH_ATTR(debug_enable, S_IWUSR | S_IRUSR, mxt_debug_enable_show, mxt_debug_enable_store);
-static MXT_TOUCH_ATTR(t57_debug_enable, S_IWUSR | S_IRUSR, NULL, mxt_t57_debug_enable_store);
 static MXT_TOUCH_ATTR(patch_debug_enable, S_IWUSR | S_IRUSR, mxt_patch_debug_enable_show, mxt_patch_debug_enable_store);
 static MXT_TOUCH_ATTR(update_patch, S_IWUSR, NULL, mxt_update_patch_store);
 static MXT_TOUCH_ATTR(update_fw, S_IWUSR, NULL, mxt_update_fw_store);
@@ -2760,7 +2752,6 @@ static struct attribute *mxt_touch_attribute_list[] = {
 	&mxt_touch_attr_object.attr,
 	&mxt_touch_attr_object_ctrl.attr,
 	&mxt_touch_attr_debug_enable.attr,
-	&mxt_touch_attr_t57_debug_enable.attr,
 	&mxt_touch_attr_patch_debug_enable.attr,
 	&mxt_touch_attr_update_patch.attr,
 	&mxt_touch_attr_update_fw.attr,
@@ -3775,7 +3766,7 @@ static int mxt_write_config(struct mxt_data *data)
 	for (index = 0; index < fw_info->cfg_len; ) {
 		if (index + (u16)sizeof(struct mxt_cfg_data) >=
 				fw_info->cfg_len) {
-			TOUCH_DEBUG_MSG("index(%d) of cfg_data exceeded total"
+			TOUCH_ERR_MSG("index(%d) of cfg_data exceeded total"
 					" size(%d)!!\n",
 				index + (u16)sizeof(struct mxt_cfg_data),
 				fw_info->cfg_len);
@@ -3788,7 +3779,7 @@ static int mxt_write_config(struct mxt_data *data)
 
 		index += (u16)sizeof(struct mxt_cfg_data) + cfg_data->size;
 		if (index > fw_info->cfg_len) {
-			TOUCH_DEBUG_MSG("index(%d) of cfg_data exceeded total"
+			TOUCH_ERR_MSG("index(%d) of cfg_data exceeded total"
 					" size(%d) in T%d object!!\n",
 				index, fw_info->cfg_len, cfg_data->type);
 			return -EINVAL;

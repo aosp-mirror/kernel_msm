@@ -660,8 +660,7 @@ struct mxt_data {
 	struct mutex i2c_suspend_lock;
 	struct mutex fw_update_lock;
 
-	bool debug_enabled;
-	bool t57_debug_enabled;
+	u32 debug_enabled;
 	u8 max_reportid;
 	u32 config_crc;
 	u32 info_crc;
