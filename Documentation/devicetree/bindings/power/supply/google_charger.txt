@@ -1,0 +1,15 @@
+google_charger
+~~~~~~~~~~~~~~
+
+Required properties :
+ - compatible : "google,charger"
+ - google,chg-update-interval: delay in ms to wait before re-running the work item
+ - google,chg-battery-capacity: the nominal capacity used to compute the effective
+     1C charge rate
+ - google,chg-temp-nb-limits: size of google,chg-temp-limits array
+ - google,chg-temp-limits: the temperature buckets limits defining the indexes of
+     the constant charge limits (row index in google,chg-cc-limits)
+ - google,chg-cv-nb-limits: size of google,chg-cv-limits array
+ - google,chg-cv-limits: steps voltage limits (column index in google,chg-cc-limits)
+ - google,chg-cc-limits: the array of constant current charge rates given in % of
+     google,chg-battery-capacity
