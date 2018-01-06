@@ -349,11 +349,16 @@ static int update_userspace_power(struct sched_params __user *argp)
 	int ret;
 	struct cpu_activity_info *node;
 	struct cpu_static_info *sp, *clear_sp;
-	int mpidr = (argp->cluster << 8);
-	int cpumask = argp->cpumask;
+	int cpumask, cluster, mpidr;
 	int cpu = num_possible_cpus();
 
-	pr_debug("cpumask %d, cluster: %d\n", argp->cpumask, argp->cluster);
+	get_user(cpumask, &argp->cpumask);
+	get_user(cluster, &argp->cluster);
+	mpidr = cluster << 8;
+
+	pr_debug("%s: cpumask %d, cluster: %d\n", __func__, cpumask,
+					cluster);
+
 	for (i = 0; i < MAX_CORES_PER_CLUSTER; i++, cpumask >>= 1) {
 		if (!(cpumask & 0x01))
 			continue;
@@ -397,12 +402,12 @@ static int update_userspace_power(struct sched_params __user *argp)
 	/* Copy the same power values for all the cpus in the cpumask
 	 * argp->cpumask within the cluster (argp->cluster)
 	 */
+	get_user(cpumask, &argp->cpumask);
 	spin_lock(&update_lock);
-	cpumask = argp->cpumask;
 	for (i = 0; i < MAX_CORES_PER_CLUSTER; i++, cpumask >>= 1) {
 		if (!(cpumask & 0x01))
 			continue;
-		mpidr = (argp->cluster << CLUSTER_OFFSET_FOR_MPIDR);
+		mpidr = (cluster << CLUSTER_OFFSET_FOR_MPIDR);
 		mpidr |= i;
 		for_each_possible_cpu(cpu) {
 			if (!(cpu_logical_map(cpu) == mpidr))
