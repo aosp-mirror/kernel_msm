@@ -26,11 +26,16 @@
 #include <linux/leds.h>
 #include <linux/sysfs.h>
 #include <linux/firmware.h>
+#include <linux/gpio.h>
+#include <linux/gpio/consumer.h>
+#include <linux/delay.h>
+#include <linux/of_device.h>
+#include <linux/platform_device.h>
+#include <linux/platform_data/cs40l20.h>
 
 #include "cs40l20.h"
 
 struct cs40l20_private {
-	struct led_classdev led_dev;
 	struct device *dev;
 	struct regmap *regmap;
 	struct regulator_bulk_data supplies[2];
@@ -42,6 +47,10 @@ struct cs40l20_private {
 	unsigned int cp_trigger_index;
 	unsigned int num_waves;
 	bool vibe_init_success;
+	struct gpio_desc *reset_gpio;
+	struct cs40l20_platform_data pdata;
+	struct list_head coeff_desc_head;
+	struct led_classdev led_dev;
 };
 
 static const char *const cs40l20_supplies[] = {
@@ -49,157 +58,221 @@ static const char *const cs40l20_supplies[] = {
 	"VP",
 };
 
-static int cs40l20_index_get(struct cs40l20_private *cs40l20,
-			     unsigned int index_reg)
+static struct cs40l20_private *cs40l20_get_private(struct device *dev)
 {
-	int ret;
-	unsigned int val;
-
-	mutex_lock(&cs40l20->lock);
-
-	switch (index_reg) {
-	case CS40L20_VIBEGEN_GPIO1_RINDEX:
-	case CS40L20_VIBEGEN_GPIO1_FINDEX:
-		ret = regmap_read(cs40l20->regmap, index_reg, &val);
-		if (!ret)
-			ret = val;
-		break;
-	default:
-		ret = cs40l20->cp_trigger_index;
-	}
-
-	mutex_unlock(&cs40l20->lock);
-
-	return ret;
-}
-
-static int cs40l20_index_set(struct cs40l20_private *cs40l20,
-			     unsigned int index_reg, unsigned int index)
-{
-	int ret;
-
-	mutex_lock(&cs40l20->lock);
-
-	if (index > (cs40l20->num_waves - 1)) {
-		ret = -EACCES;
-	} else {
-		switch (index_reg) {
-		case CS40L20_VIBEGEN_GPIO1_RINDEX:
-		case CS40L20_VIBEGEN_GPIO1_FINDEX:
-			ret = regmap_write(cs40l20->regmap, index_reg, index);
-			break;
-		default:
-			cs40l20->cp_trigger_index = index;
-			ret = 0;
-		}
-	}
-
-	mutex_unlock(&cs40l20->lock);
-
-	return ret;
+	return dev_get_drvdata(dev);
 }
 
 static ssize_t cs40l20_cp_trigger_index_show(struct device *dev,
 					     struct device_attribute *attr,
 					     char *buf)
 {
-	struct cs40l20_private *cs40l20 = dev_get_drvdata(dev);
+	struct cs40l20_private *cs40l20 = cs40l20_get_private(dev);
 
-	return snprintf(buf, PAGE_SIZE, "%d\n", cs40l20_index_get(cs40l20, 0));
+	return snprintf(buf, PAGE_SIZE, "%d\n", cs40l20->cp_trigger_index);
 }
 
 static ssize_t cs40l20_cp_trigger_index_store(struct device *dev,
 					      struct device_attribute *attr,
 					      const char *buf, size_t count)
 {
-	struct cs40l20_private *cs40l20 = dev_get_drvdata(dev);
-	int ret, index;
+	struct cs40l20_private *cs40l20 = cs40l20_get_private(dev);
+	int ret;
+	unsigned int index;
 
-	ret = kstrtoint(buf, 10, &index);
-	if (ret) {
-		pr_err("Invalid input: %d\n", ret);
-		goto err;
-	}
+	ret = kstrtou32(buf, 10, &index);
+	if (ret)
+		return -EINVAL;
 
-	ret = cs40l20_index_set(cs40l20, 0, index);
-	if (ret) {
-		pr_err("Failed to set index to %d: %d\n", index, ret);
-		goto err;
-	}
+	if (index > (cs40l20->num_waves - 1))
+		return -EINVAL;
+
+	cs40l20->cp_trigger_index = index;
 
 	return count;
-err:
-	return ret;
+}
+
+static unsigned int cs40l20_dsp_reg(struct cs40l20_private *cs40l20,
+				    const char *coeff_name)
+{
+	struct cs40l20_coeff_desc *coeff_desc;
+
+	list_for_each_entry(coeff_desc, &cs40l20->coeff_desc_head, list) {
+		if (strcmp(coeff_desc->name, coeff_name))
+			continue;
+		if (coeff_desc->block_type != CS40L20_XM_UNPACKED_TYPE)
+			continue;
+
+		return coeff_desc->reg;
+	}
+
+	/* return an identifiable register that is known to be read-only */
+	return CS40L20_DEVID;
 }
 
 static ssize_t cs40l20_gpio1_rise_index_show(struct device *dev,
 					     struct device_attribute *attr,
 					     char *buf)
 {
-	struct cs40l20_private *cs40l20 = dev_get_drvdata(dev);
+	struct cs40l20_private *cs40l20 = cs40l20_get_private(dev);
+	int ret;
+	unsigned int val;
 
-	return snprintf(buf, PAGE_SIZE, "%d\n",
-			cs40l20_index_get(cs40l20,
-					  CS40L20_VIBEGEN_GPIO1_RINDEX));
+	mutex_lock(&cs40l20->lock);
+	ret = regmap_read(cs40l20->regmap,
+			  cs40l20_dsp_reg(cs40l20, "INDEXBUTTONPRESS"), &val);
+	mutex_unlock(&cs40l20->lock);
+
+	if (ret) {
+		pr_err("Failed to read index\n");
+		return ret;
+	}
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", val);
 }
 
 static ssize_t cs40l20_gpio1_rise_index_store(struct device *dev,
 					      struct device_attribute *attr,
 					      const char *buf, size_t count)
 {
-	struct cs40l20_private *cs40l20 = dev_get_drvdata(dev);
-	int ret, index;
+	struct cs40l20_private *cs40l20 = cs40l20_get_private(dev);
+	int ret;
+	unsigned int index;
 
-	ret = kstrtoint(buf, 10, &index);
-	if (ret) {
-		pr_err("Invalid input: %d\n", ret);
-		goto err;
-	}
+	ret = kstrtou32(buf, 10, &index);
+	if (ret)
+		return -EINVAL;
 
-	ret = cs40l20_index_set(cs40l20, CS40L20_VIBEGEN_GPIO1_RINDEX, index);
+	if (index > (cs40l20->num_waves - 1))
+		return -EINVAL;
+
+	mutex_lock(&cs40l20->lock);
+	ret = regmap_write(cs40l20->regmap,
+			   cs40l20_dsp_reg(cs40l20, "INDEXBUTTONPRESS"), index);
+	mutex_unlock(&cs40l20->lock);
+
 	if (ret) {
-		pr_err("Failed to set index to %d: %d\n", index, ret);
-		goto err;
+		pr_err("Failed to write index\n");
+		return ret;
 	}
 
 	return count;
-err:
-	return ret;
 }
 
 static ssize_t cs40l20_gpio1_fall_index_show(struct device *dev,
 					     struct device_attribute *attr,
 					     char *buf)
 {
-	struct cs40l20_private *cs40l20 = dev_get_drvdata(dev);
+	struct cs40l20_private *cs40l20 = cs40l20_get_private(dev);
+	int ret;
+	unsigned int val;
 
-	return snprintf(buf, PAGE_SIZE, "%d\n",
-			cs40l20_index_get(cs40l20,
-					  CS40L20_VIBEGEN_GPIO1_FINDEX));
+	mutex_lock(&cs40l20->lock);
+	ret = regmap_read(cs40l20->regmap,
+			  cs40l20_dsp_reg(cs40l20, "INDEXBUTTONRELEASE"), &val);
+	mutex_unlock(&cs40l20->lock);
+
+	if (ret) {
+		pr_err("Failed to read index\n");
+		return ret;
+	}
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", val);
 }
 
 static ssize_t cs40l20_gpio1_fall_index_store(struct device *dev,
 					      struct device_attribute *attr,
 					      const char *buf, size_t count)
 {
-	struct cs40l20_private *cs40l20 = dev_get_drvdata(dev);
-	int ret, index;
+	struct cs40l20_private *cs40l20 = cs40l20_get_private(dev);
+	int ret;
+	unsigned int index;
 
-	ret = kstrtoint(buf, 10, &index);
-	if (ret) {
-		pr_err("Invalid input: %d\n", ret);
-		goto err;
-	}
+	ret = kstrtou32(buf, 10, &index);
+	if (ret)
+		return -EINVAL;
 
-	ret = cs40l20_index_set(cs40l20, CS40L20_VIBEGEN_GPIO1_FINDEX, index);
+	if (index > (cs40l20->num_waves - 1))
+		return -EINVAL;
+
+	mutex_lock(&cs40l20->lock);
+	ret = regmap_write(cs40l20->regmap,
+			   cs40l20_dsp_reg(cs40l20, "INDEXBUTTONRELEASE"),
+			   index);
+	mutex_unlock(&cs40l20->lock);
+
 	if (ret) {
-		pr_err("Failed to set index to %d: %d\n", index, ret);
-		goto err;
+		pr_err("Failed to write index\n");
+		return ret;
 	}
 
 	return count;
-err:
-	return ret;
+}
+
+static ssize_t cs40l20_f0_measured_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct cs40l20_private *cs40l20 = cs40l20_get_private(dev);
+	int ret;
+	unsigned int val;
+
+	mutex_lock(&cs40l20->lock);
+	ret = regmap_read(cs40l20->regmap,
+			  cs40l20_dsp_reg(cs40l20, "F0_MEASURED"), &val);
+	mutex_unlock(&cs40l20->lock);
+
+	if (ret) {
+		pr_err("Failed to read measured f0\n");
+		return ret;
+	}
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", val);
+}
+
+static ssize_t cs40l20_f0_stored_show(struct device *dev,
+				      struct device_attribute *attr, char *buf)
+{
+	struct cs40l20_private *cs40l20 = cs40l20_get_private(dev);
+	int ret;
+	unsigned int val;
+
+	mutex_lock(&cs40l20->lock);
+	ret = regmap_read(cs40l20->regmap,
+			  cs40l20_dsp_reg(cs40l20, "F0_STORED"), &val);
+	mutex_unlock(&cs40l20->lock);
+
+	if (ret) {
+		pr_err("Failed to read stored f0\n");
+		return ret;
+	}
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", val);
+}
+
+static ssize_t cs40l20_f0_stored_store(struct device *dev,
+					      struct device_attribute *attr,
+					      const char *buf, size_t count)
+{
+	struct cs40l20_private *cs40l20 = cs40l20_get_private(dev);
+	int ret;
+	unsigned int val;
+
+	ret = kstrtou32(buf, 10, &val);
+	if (ret)
+		return -EINVAL;
+
+	mutex_lock(&cs40l20->lock);
+	ret = regmap_write(cs40l20->regmap,
+			   cs40l20_dsp_reg(cs40l20, "F0_STORED"), val);
+	mutex_unlock(&cs40l20->lock);
+
+	if (ret) {
+		pr_err("Failed to store f0\n");
+		return ret;
+	}
+
+	return count;
 }
 
 static DEVICE_ATTR(cp_trigger_index, 0660, cs40l20_cp_trigger_index_show,
@@ -208,11 +281,16 @@ static DEVICE_ATTR(gpio1_rise_index, 0660, cs40l20_gpio1_rise_index_show,
 		   cs40l20_gpio1_rise_index_store);
 static DEVICE_ATTR(gpio1_fall_index, 0660, cs40l20_gpio1_fall_index_show,
 		   cs40l20_gpio1_fall_index_store);
+static DEVICE_ATTR(f0_measured, 0660, cs40l20_f0_measured_show, NULL);
+static DEVICE_ATTR(f0_stored, 0660, cs40l20_f0_stored_show,
+		   cs40l20_f0_stored_store);
 
 static struct attribute *cs40l20_dev_attrs[] = {
 	&dev_attr_cp_trigger_index.attr,
 	&dev_attr_gpio1_rise_index.attr,
 	&dev_attr_gpio1_fall_index.attr,
+	&dev_attr_f0_measured.attr,
+	&dev_attr_f0_stored.attr,
 	NULL,
 };
 
@@ -229,8 +307,10 @@ static void cs40l20_vibe_start_worker(struct work_struct *work)
 
 	mutex_lock(&cs40l20->lock);
 
-	control_reg = (cs40l20->cp_trigger_index == 0) ?
-	    CS40L20_VIBEGEN_TRIG_MS : CS40L20_VIBEGEN_TRIG_INDEX;
+	if (cs40l20->cp_trigger_index)
+		control_reg = cs40l20_dsp_reg(cs40l20, "TRIGGERINDEX");
+	else
+		control_reg = cs40l20_dsp_reg(cs40l20, "TRIGGER_MS");
 
 	ret = regmap_write(cs40l20->regmap,
 			   control_reg, cs40l20->cp_trigger_index);
@@ -250,7 +330,8 @@ static void cs40l20_vibe_stop_worker(struct work_struct *work)
 
 	mutex_lock(&cs40l20->lock);
 
-	ret = regmap_write(cs40l20->regmap, CS40L20_VIBEGEN_STOP, 1);
+	ret = regmap_write(cs40l20->regmap,
+			   cs40l20_dsp_reg(cs40l20, "ENDPLAYBACK"), 1);
 	if (ret)
 		dev_err(cs40l20->dev, "Failed to stop playback\n");
 	else
@@ -259,11 +340,12 @@ static void cs40l20_vibe_stop_worker(struct work_struct *work)
 	mutex_unlock(&cs40l20->lock);
 }
 
-static void cs40l20_vibe_state_change(struct led_classdev *led_cdev,
-				      enum led_brightness brightness)
+/* vibration callback for LED device */
+static void cs40l20_vibe_brightness_set(struct led_classdev *led_cdev,
+		enum led_brightness brightness)
 {
 	struct cs40l20_private *cs40l20 =
-	    container_of(led_cdev, struct cs40l20_private, led_dev);
+		container_of(led_cdev, struct cs40l20_private, led_dev);
 
 	switch (brightness) {
 	case LED_OFF:
@@ -274,15 +356,16 @@ static void cs40l20_vibe_state_change(struct led_classdev *led_cdev,
 	}
 }
 
-static void cs40l20_vibe_init(struct cs40l20_private *cs40l20)
+static void cs40l20_create_led(struct cs40l20_private *cs40l20)
 {
 	int ret;
 	struct led_classdev *led_dev = &cs40l20->led_dev;
 	struct device *dev = cs40l20->dev;
 
-	led_dev->name = "vibrator";
+	led_dev->name = CS40L20_DEVICE_NAME;
 	led_dev->max_brightness = LED_FULL;
-	led_dev->brightness_set = cs40l20_vibe_state_change;
+	led_dev->brightness_set = cs40l20_vibe_brightness_set;
+	led_dev->default_trigger = "transient";
 
 	ret = led_classdev_register(dev, led_dev);
 	if (ret) {
@@ -290,26 +373,125 @@ static void cs40l20_vibe_init(struct cs40l20_private *cs40l20)
 		return;
 	}
 
+	ret = sysfs_create_group(&cs40l20->dev->kobj, &cs40l20_dev_attr_group);
+	if (ret) {
+		dev_err(dev, "Failed to create sysfs group: %d\n", ret);
+		return;
+	}
+}
+
+static void cs40l20_vibe_init(struct cs40l20_private *cs40l20)
+{
+	cs40l20_create_led(cs40l20);
+
 	mutex_init(&cs40l20->lock);
 
 	cs40l20->vibe_workqueue =
 	    alloc_ordered_workqueue("vibe_workqueue", WQ_HIGHPRI);
 	if (!cs40l20->vibe_workqueue) {
-		dev_err(dev, "Failed to allocate workqueue\n");
-		ret = -ENOMEM;
+		dev_err(cs40l20->dev, "Failed to allocate workqueue\n");
 		return;
 	}
 
 	INIT_WORK(&cs40l20->vibe_start_work, cs40l20_vibe_start_worker);
 	INIT_WORK(&cs40l20->vibe_stop_work, cs40l20_vibe_stop_worker);
 
-	ret = sysfs_create_group(&cs40l20->dev->kobj, &cs40l20_dev_attr_group);
+	cs40l20->vibe_init_success = true;
+}
+
+static int cs40l20_coeff_init(struct cs40l20_private *cs40l20)
+{
+	int ret, i;
+	struct regmap *regmap = cs40l20->regmap;
+	struct device *dev = cs40l20->dev;
+	struct cs40l20_coeff_desc *coeff_desc;
+	unsigned int val, num_algos, algo_id, xm_base, ym_base;
+	unsigned int reg = CS40L20_XM_FW_ID;
+
+	ret = regmap_read(regmap, CS40L20_XM_FW_REV, &val);
 	if (ret) {
-		dev_err(dev, "Failed to create sysfs group: %d\n", ret);
-		return;
+		dev_err(dev, "Failed to read firmware revision\n");
+		return ret;
 	}
 
-	cs40l20->vibe_init_success = true;
+	if (val < CS40L20_FW_REV_MIN) {
+		dev_err(dev, "Unsupported firmware revision: 0x%06X\n", val);
+		return -EINVAL;
+	}
+
+	ret = regmap_read(regmap, CS40L20_XM_NUM_ALGOS, &num_algos);
+	if (ret) {
+		dev_err(dev, "Failed to read number of algorithms\n");
+		return ret;
+	}
+
+	if (num_algos > CS40L20_NUM_ALGOS_MAX) {
+		dev_err(dev, "Invalid number of algorithms\n");
+		return -EINVAL;
+	}
+
+	/* add one extra iteration to account for system algorithm */
+	for (i = 0; i < (num_algos + 1); i++) {
+		ret = regmap_read(regmap, reg, &algo_id);
+		if (ret) {
+			dev_err(dev, "Failed to read algo. %d ID\n", i);
+			return ret;
+		}
+
+		ret = regmap_read(regmap, reg + 8, &xm_base);
+		if (ret) {
+			dev_err(dev, "Failed to read algo. %d XM_BASE\n", i);
+			return ret;
+		}
+
+		ret = regmap_read(regmap, reg + 16, &ym_base);
+		if (ret) {
+			dev_err(dev, "Failed to read algo. %d YM_BASE\n", i);
+			return ret;
+		}
+
+		list_for_each_entry(coeff_desc,
+			&cs40l20->coeff_desc_head, list) {
+
+			if (coeff_desc->parent_id != algo_id)
+				continue;
+
+			switch (coeff_desc->block_type) {
+			case CS40L20_XM_UNPACKED_TYPE:
+				coeff_desc->reg = CS40L20_DSP1_XMEM_UNPACK24_0
+					+ xm_base * 4
+					+ coeff_desc->block_offset * 4;
+					break;
+			case CS40L20_YM_UNPACKED_TYPE:
+				coeff_desc->reg = CS40L20_DSP1_YMEM_UNPACK24_0
+					+ ym_base * 4
+					+ coeff_desc->block_offset * 4;
+					break;
+			}
+
+			dev_dbg(dev, "Found control %s at 0x%08X\n",
+				coeff_desc->name, coeff_desc->reg);
+		}
+
+		/* system algo. contains one extra register (num. algos.) */
+		if (i)
+			reg += CS40L20_XM_ALGO_ENTRY_SIZE;
+		else
+			reg += (CS40L20_XM_ALGO_ENTRY_SIZE + 4);
+	}
+
+	ret = regmap_read(regmap, reg, &val);
+	if (ret) {
+		dev_err(dev, "Failed to read list terminator\n");
+		return ret;
+	}
+
+	if (val != CS40L20_XM_LIST_TERM) {
+		dev_err(dev, "Invalid list terminator: 0x%X\n", val);
+		return -EINVAL;
+	}
+
+	return 0;
 }
 
 static void cs40l20_dsp_start(struct cs40l20_private *cs40l20)
@@ -327,55 +509,73 @@ static void cs40l20_dsp_start(struct cs40l20_private *cs40l20)
 		return;
 	}
 
-	ret = regmap_read(regmap, CS40L20_VIBEGEN_FW_STATE, &val);
+	ret = regmap_read(regmap, cs40l20_dsp_reg(cs40l20, "HALO_STATE"),
+			  &val);
 	if (ret) {
 		dev_err(dev, "Failed to read haptics algorithm status\n");
 		return;
 	}
 
-	if (val == CS40L20_VIBEGEN_FW_RUN) {
+	if (val == CS40L20_HALO_STATE_RUNNING) {
 		dev_info(dev, "Haptics algorithm started\n");
 	} else {
 		dev_err(dev, "Failed to start haptics algorithm\n");
 		return;
 	}
 
-	ret = regmap_write(regmap, CS40L20_VIBEGEN_TIME_MS,
-			   CS40L20_VIBEGEN_TIME_MS_MAX);
+	ret = regmap_write(regmap, cs40l20_dsp_reg(cs40l20, "TIMEOUT_MS"),
+			   CS40L20_TIMEOUT_MS_MAX);
 	if (ret) {
 		dev_err(dev, "Failed to extend playback timeout\n");
 		return;
 	}
 
-	ret = regmap_read(regmap, CS40L20_VIBEGEN_NUM_WAVES, &val);
+	ret = regmap_read(regmap, cs40l20_dsp_reg(cs40l20, "NUMBEROFWAVES"),
+			  &val);
 	if (ret) {
-		dev_err(dev, "Failed to read number of waveforms\n");
+		dev_err(dev, "Failed to count wavetable entries\n");
 		return;
 	}
 
 	if (val) {
-		dev_info(dev, "Found %d waveforms\n", val);
+		dev_info(dev, "Counted %d entries in wavetable\n", val);
 		cs40l20->num_waves = val;
 	} else {
-		dev_err(dev, "Failed to find waveforms\n");
+		dev_err(dev, "Wavetable is empty\n");
 		return;
 	}
 
 	cs40l20_vibe_init(cs40l20);
 }
 
+static int cs40l20_raw_write(struct cs40l20_private *cs40l20, unsigned int reg,
+		const void *val, size_t val_len, size_t limit)
+{
+	int ret = 0, i;
+
+	/* split "val" into smaller writes not to exceed "limit" in length */
+	for (i = 0; i < val_len; i += limit) {
+		ret = regmap_raw_write(cs40l20->regmap, (reg + i), (val + i),
+				       (val_len - i) > limit ?
+				       limit : (val_len - i));
+		if (ret)
+			break;
+	}
+
+	return ret;
+}
+
 static void cs40l20_waveform_load(const struct firmware *fw, void *context)
 {
-	struct cs40l20_private *cs40l20 = context;
-	struct regmap *regmap = cs40l20->regmap;
-	struct device *dev = cs40l20->dev;
 	int ret;
+	struct cs40l20_private *cs40l20 = (struct cs40l20_private *)context;
+	struct device *dev = cs40l20->dev;
 	unsigned int pos = CS40L20_WT_FILE_HEADER_SIZE;
 	unsigned int block_type, block_length;
 
 	if (!fw) {
-		dev_err(dev, "Failed to request waveform file\n");
-		return;
+		dev_warn(dev, "Using default wavetable\n");
+		goto skip_loading;
 	}
 
 	if (memcmp(fw->data, "WMDR", 4)) {
@@ -383,26 +583,29 @@ static void cs40l20_waveform_load(const struct firmware *fw, void *context)
 		goto err_rls_fw;
 	}
 
+	dev_info(dev, "Found custom wavetable\n");
+
 	while (pos < fw->size) {
+
 		/* block offset is not used here */
 		pos += CS40L20_WT_DBLK_OFFSET_SIZE;
 
 		block_type = fw->data[pos]
-		    + (fw->data[pos + 1] << 8);
+			+ (fw->data[pos + 1] << 8);
 		pos += (CS40L20_WT_DBLK_TYPE_SIZE
 			+ CS40L20_WT_DBLK_UNUSED_SIZE);
 
 		block_length = fw->data[pos]
-		    + (fw->data[pos + 1] << 8)
-		    + (fw->data[pos + 2] << 16)
-		    + (fw->data[pos + 3] << 24);
+			+ (fw->data[pos + 1] << 8)
+			+ (fw->data[pos + 2] << 16)
+			+ (fw->data[pos + 3] << 24);
 		pos += CS40L20_WT_DBLK_LENGTH_SIZE;
 
 		if (block_type == CS40L20_XM_UNPACKED_TYPE) {
-			ret = regmap_raw_write_async(regmap,
-						     CS40L20_VIBEGEN_WAVE_TABLE,
-						     &fw->data[pos],
-						     block_length);
+			ret = cs40l20_raw_write(cs40l20,
+					cs40l20_dsp_reg(cs40l20, "WAVETABLE"),
+					&fw->data[pos], block_length,
+					CS40L20_MAX_WLEN);
 			if (ret) {
 				dev_err(dev,
 					"Failed to write XM_UNPACKED memory\n");
@@ -413,32 +616,88 @@ static void cs40l20_waveform_load(const struct firmware *fw, void *context)
 		pos += block_length;
 	}
 
-	ret = regmap_async_complete(regmap);
-	if (ret) {
-		dev_err(dev, "Failed to complete async write\n");
-		goto err_rls_fw;
-	}
-
-	ret = regmap_async_complete(regmap);
-	if (ret) {
-		dev_err(dev, "Failed to complete async write\n");
-		goto err_rls_fw;
-	}
-
+skip_loading:
 	cs40l20_dsp_start(cs40l20);
 err_rls_fw:
 	release_firmware(fw);
 }
 
+static int cs40l20_algo_parse(struct cs40l20_private *cs40l20,
+		const unsigned char *data)
+{
+	struct cs40l20_coeff_desc *coeff_desc;
+	unsigned int pos = 0;
+	unsigned int algo_id, algo_desc_length, coeff_count;
+	unsigned int block_offset, block_type, block_length;
+	unsigned char algo_name_length;
+	int i;
+
+	/* record algorithm ID */
+	algo_id = *(data + pos)
+			+ (*(data + pos + 1) << 8)
+			+ (*(data + pos + 2) << 16)
+			+ (*(data + pos + 3) << 24);
+	pos += CS40L20_ALGO_ID_SIZE;
+
+	/* skip past algorithm name */
+	algo_name_length = *(data + pos);
+	pos += ((algo_name_length / 4) * 4) + 4;
+
+	/* skip past algorithm description */
+	algo_desc_length = *(data + pos)
+			+ (*(data + pos + 1) << 8);
+	pos += ((algo_desc_length / 4) * 4) + 4;
+
+	/* record coefficient count */
+	coeff_count = *(data + pos)
+			+ (*(data + pos + 1) << 8)
+			+ (*(data + pos + 2) << 16)
+			+ (*(data + pos + 3) << 24);
+	pos += CS40L20_COEFF_COUNT_SIZE;
+
+	for (i = 0; i < coeff_count; i++) {
+		block_offset = *(data + pos)
+				+ (*(data + pos + 1) << 8);
+		pos += CS40L20_COEFF_OFFSET_SIZE;
+
+		block_type = *(data + pos)
+				+ (*(data + pos + 1) << 8);
+		pos += CS40L20_COEFF_TYPE_SIZE;
+
+		block_length = *(data + pos)
+				+ (*(data + pos + 1) << 8)
+				+ (*(data + pos + 2) << 16)
+				+ (*(data + pos + 3) << 24);
+		pos += CS40L20_COEFF_LENGTH_SIZE;
+
+		coeff_desc = devm_kzalloc(cs40l20->dev, sizeof(*coeff_desc),
+					  GFP_KERNEL);
+		if (!coeff_desc)
+			return -ENOMEM;
+
+		coeff_desc->parent_id = algo_id;
+		coeff_desc->block_offset = block_offset;
+		coeff_desc->block_type = block_type;
+
+		memcpy(coeff_desc->name, data + pos + 1, *(data + pos));
+		coeff_desc->name[*(data + pos)] = '\0';
+
+		list_add(&coeff_desc->list, &cs40l20->coeff_desc_head);
+
+		pos += block_length;
+	}
+
+	return 0;
+}
+
 static void cs40l20_firmware_load(const struct firmware *fw, void *context)
 {
-	struct cs40l20_private *cs40l20 = context;
-	struct regmap *regmap = cs40l20->regmap;
-	struct device *dev = cs40l20->dev;
 	int ret;
+	struct cs40l20_private *cs40l20 = (struct cs40l20_private *)context;
+	struct device *dev = cs40l20->dev;
 	unsigned int pos = CS40L20_FW_FILE_HEADER_SIZE;
 	unsigned int block_offset, block_length;
-	char block_type;
+	unsigned char block_type;
 
 	if (!fw) {
 		dev_err(dev, "Failed to request firmware file\n");
@@ -451,27 +710,28 @@ static void cs40l20_firmware_load(const struct firmware *fw, void *context)
 	}
 
 	while (pos < fw->size) {
+
 		block_offset = fw->data[pos]
-		    + (fw->data[pos + 1] << 8)
-		    + (fw->data[pos + 2] << 16);
+			+ (fw->data[pos + 1] << 8)
+			+ (fw->data[pos + 2] << 16);
 		pos += CS40L20_FW_DBLK_OFFSET_SIZE;
 
 		block_type = fw->data[pos];
 		pos += CS40L20_FW_DBLK_TYPE_SIZE;
 
 		block_length = fw->data[pos]
-		    + (fw->data[pos + 1] << 8)
-		    + (fw->data[pos + 2] << 16)
-		    + (fw->data[pos + 3] << 24);
+			+ (fw->data[pos + 1] << 8)
+			+ (fw->data[pos + 2] << 16)
+			+ (fw->data[pos + 3] << 24);
 		pos += CS40L20_FW_DBLK_LENGTH_SIZE;
 
 		switch (block_type) {
 		case CS40L20_PM_PACKED_TYPE:
-			ret = regmap_raw_write_async(regmap,
-						     CS40L20_DSP1_PMEM_0
-						     + block_offset * 5,
-						     &fw->data[pos],
-						     block_length);
+			ret = cs40l20_raw_write(cs40l20,
+						CS40L20_DSP1_PMEM_0
+						+ block_offset * 5,
+						&fw->data[pos], block_length,
+						CS40L20_MAX_WLEN);
 			if (ret) {
 				dev_err(dev,
 					"Failed to write PM_PACKED memory\n");
@@ -479,11 +739,11 @@ static void cs40l20_firmware_load(const struct firmware *fw, void *context)
 			}
 			break;
 		case CS40L20_XM_PACKED_TYPE:
-			ret = regmap_raw_write_async(regmap,
-						     CS40L20_DSP1_XMEM_PACK_0
-						     + block_offset * 3,
-						     &fw->data[pos],
-						     block_length);
+			ret = cs40l20_raw_write(cs40l20,
+						CS40L20_DSP1_XMEM_PACK_0
+						+ block_offset * 3,
+						&fw->data[pos], block_length,
+						CS40L20_MAX_WLEN);
 			if (ret) {
 				dev_err(dev,
 					"Failed to write XM_PACKED memory\n");
@@ -491,14 +751,22 @@ static void cs40l20_firmware_load(const struct firmware *fw, void *context)
 			}
 			break;
 		case CS40L20_YM_PACKED_TYPE:
-			ret = regmap_raw_write_async(regmap,
-						     CS40L20_DSP1_YMEM_PACK_0
-						     + block_offset * 3,
-						     &fw->data[pos],
-						     block_length);
+			ret = cs40l20_raw_write(cs40l20,
+						CS40L20_DSP1_YMEM_PACK_0
+						+ block_offset * 3,
+						&fw->data[pos], block_length,
+						CS40L20_MAX_WLEN);
 			if (ret) {
 				dev_err(dev,
 					"Failed to write YM_PACKED memory\n");
+				goto err_rls_fw;
+			}
+			break;
+		case CS40L20_ALGO_INFO_TYPE:
+			ret = cs40l20_algo_parse(cs40l20, &fw->data[pos]);
+			if (ret) {
+				dev_err(dev,
+					"Failed to parse algorithm: %d\n", ret);
 				goto err_rls_fw;
 			}
 			break;
@@ -507,11 +775,9 @@ static void cs40l20_firmware_load(const struct firmware *fw, void *context)
 		pos += block_length;
 	}
 
-	ret = regmap_async_complete(regmap);
-	if (ret) {
-		dev_err(dev, "Failed to complete async write\n");
+	ret = cs40l20_coeff_init(cs40l20);
+	if (ret)
 		goto err_rls_fw;
-	}
 
 	request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG, "cs40l20.bin",
 				dev, GFP_KERNEL, cs40l20,
@@ -520,56 +786,122 @@ err_rls_fw:
 	release_firmware(fw);
 }
 
-static int cs40l20_dsp_boot(struct cs40l20_private *cs40l20)
+static int cs40l20_boost_config(struct cs40l20_private *cs40l20,
+				int boost_ind, int boost_cap, int boost_ipk)
 {
 	int ret;
+	unsigned char bst_lbst_val, bst_cbst_range, bst_ipk_scaled;
 	struct regmap *regmap = cs40l20->regmap;
 	struct device *dev = cs40l20->dev;
-	unsigned int i;
 
-	ret = regmap_update_bits(regmap, CS40L20_DSP1_CCM_CORE_CTRL,
-				 CS40L20_DSP1_RESET_MASK,
-				 1 << CS40L20_DSP1_RESET_SHIFT);
+	switch (boost_ind) {
+	case 1000:	/* 1.0 uH */
+		bst_lbst_val = 0;
+		break;
+	case 1200:	/* 1.2 uH */
+		bst_lbst_val = 1;
+		break;
+	case 1500:	/* 1.5 uH */
+		bst_lbst_val = 2;
+		break;
+	case 2200:	/* 2.2 uH */
+		bst_lbst_val = 3;
+		break;
+	default:
+		dev_err(dev, "Invalid boost inductor value: %d nH\n",
+				boost_ind);
+		return -EINVAL;
+	}
+
+	switch (boost_cap) {
+	case 0 ... 19:
+		bst_cbst_range = 0;
+		break;
+	case 20 ... 50:
+		bst_cbst_range = 1;
+		break;
+	case 51 ... 100:
+		bst_cbst_range = 2;
+		break;
+	case 101 ... 200:
+		bst_cbst_range = 3;
+		break;
+	default:	/* 201 uF and greater */
+		bst_cbst_range = 4;
+	}
+
+	ret = regmap_update_bits(regmap, CS40L20_BSTCVRT_COEFF,
+			CS40L20_BST_K1_MASK,
+			cs40l20_bst_k1_table[bst_lbst_val][bst_cbst_range]
+				<< CS40L20_BST_K1_SHIFT);
 	if (ret) {
-		dev_err(dev, "Failed to reset DSP\n");
-		goto err;
+		dev_err(dev, "Failed to write boost K1 coefficient\n");
+		return ret;
 	}
 
-	ret = regmap_write(regmap, CS40L20_MPU_UNLOCK_ADDR,
-			   CS40L20_MPU_UNLOCK_CODE1);
+	ret = regmap_update_bits(regmap, CS40L20_BSTCVRT_COEFF,
+			CS40L20_BST_K2_MASK,
+			cs40l20_bst_k2_table[bst_lbst_val][bst_cbst_range]
+				<< CS40L20_BST_K2_SHIFT);
 	if (ret) {
-		dev_err(dev, "Failed to unlock DSP MPU (step 1 of 2)\n");
-		goto err;
+		dev_err(dev, "Failed to write boost K2 coefficient\n");
+		return ret;
 	}
 
-	ret = regmap_write(regmap, CS40L20_MPU_UNLOCK_ADDR,
-			   CS40L20_MPU_UNLOCK_CODE2);
+	ret = regmap_update_bits(regmap, CS40L20_BSTCVRT_SLOPE_LBST,
+			CS40L20_BST_SLOPE_MASK,
+			cs40l20_bst_slope_table[bst_lbst_val]
+				<< CS40L20_BST_SLOPE_SHIFT);
 	if (ret) {
-		dev_err(dev, "Failed to unlock DSP MPU (step 2 of 2)\n");
-		goto err;
+		dev_err(dev, "Failed to write boost slope coefficient\n");
+		return ret;
 	}
 
-	for (i = CS40L20_MPU_START; i <= CS40L20_MPU_STOP; i += 4) {
-		ret = regmap_write(regmap, i, 0xFFFFFFFF);
-
-		if (ret) {
-			dev_err(dev, "Failed to free DSP memory\n");
-			goto err;
-		}
-	}
-
-	ret = regmap_write(regmap, CS40L20_MPU_UNLOCK_ADDR, 0);
+	ret = regmap_update_bits(regmap, CS40L20_BSTCVRT_SLOPE_LBST,
+			CS40L20_BST_LBST_VAL_MASK,
+			bst_lbst_val << CS40L20_BST_LBST_VAL_SHIFT);
 	if (ret) {
-		dev_err(dev, "Failed to lock DSP MPU\n");
-		goto err;
+		dev_err(dev, "Failed to write boost inductor value\n");
+		return ret;
 	}
 
-	request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG, "cs40l20.wmfw",
-				dev, GFP_KERNEL, cs40l20,
-				cs40l20_firmware_load);
-err:
-	return ret;
+	if ((boost_ipk < 1600) || (boost_ipk > 4500)) {
+		dev_err(dev, "Invalid boost inductor peak current: %d mA\n",
+				boost_ipk);
+		return -EINVAL;
+	}
+	bst_ipk_scaled = ((boost_ipk - 1600) / 50) + 0x10;
+
+	ret = regmap_update_bits(regmap, CS40L20_BSTCVRT_PEAK_CUR,
+			CS40L20_BST_IPK_MASK,
+			bst_ipk_scaled << CS40L20_BST_IPK_SHIFT);
+	if (ret) {
+		dev_err(dev, "Failed to write boost inductor peak current\n");
+		return ret;
+	}
+
+	return 0;
 }
+
+static const struct reg_sequence cs40l20_mpu_config[] = {
+	{CS40L20_DSP1_MPU_LOCK_CONFIG,	CS40L20_MPU_UNLOCK_CODE1},
+	{CS40L20_DSP1_MPU_LOCK_CONFIG,	CS40L20_MPU_UNLOCK_CODE2},
+	{CS40L20_DSP1_MPU_XM_ACCESS0,	0xFFFFFFFF},
+	{CS40L20_DSP1_MPU_YM_ACCESS0,	0xFFFFFFFF},
+	{CS40L20_DSP1_MPU_WNDW_ACCESS0,	0xFFFFFFFF},
+	{CS40L20_DSP1_MPU_XREG_ACCESS0,	0xFFFFFFFF},
+	{CS40L20_DSP1_MPU_YREG_ACCESS0,	0xFFFFFFFF},
+	{CS40L20_DSP1_MPU_WNDW_ACCESS1,	0xFFFFFFFF},
+	{CS40L20_DSP1_MPU_XREG_ACCESS1,	0xFFFFFFFF},
+	{CS40L20_DSP1_MPU_YREG_ACCESS1,	0xFFFFFFFF},
+	{CS40L20_DSP1_MPU_WNDW_ACCESS2,	0xFFFFFFFF},
+	{CS40L20_DSP1_MPU_XREG_ACCESS2,	0xFFFFFFFF},
+	{CS40L20_DSP1_MPU_YREG_ACCESS2,	0xFFFFFFFF},
+	{CS40L20_DSP1_MPU_WNDW_ACCESS3,	0xFFFFFFFF},
+	{CS40L20_DSP1_MPU_XREG_ACCESS3,	0xFFFFFFFF},
+	{CS40L20_DSP1_MPU_YREG_ACCESS3,	0xFFFFFFFF},
+	{CS40L20_DSP1_MPU_LOCK_CONFIG,	0x00000000}
+};
 
 static int cs40l20_init(struct cs40l20_private *cs40l20)
 {
@@ -580,30 +912,104 @@ static int cs40l20_init(struct cs40l20_private *cs40l20)
 	cs40l20->cp_trigger_index = 0;
 	cs40l20->vibe_init_success = false;
 
+	if (cs40l20->pdata.refclk_gpio2) {
+		ret = regmap_update_bits(regmap, CS40L20_GPIO_PAD_CONTROL,
+				CS40L20_GP2_CTRL_MASK,
+				CS40L20_GP2_CTRL_MCLK
+					<< CS40L20_GP2_CTRL_SHIFT);
+		if (ret) {
+			dev_err(dev, "Failed to select GPIO2 function\n");
+			return ret;
+		}
+
+		ret = regmap_update_bits(regmap, CS40L20_PLL_CLK_CTRL,
+				CS40L20_PLL_REFCLK_SEL_MASK,
+				CS40L20_PLL_REFCLK_SEL_MCLK
+					<< CS40L20_PLL_REFCLK_SEL_SHIFT);
+		if (ret) {
+			dev_err(dev, "Failed to select clock source\n");
+			return ret;
+		}
+	}
+
+	ret = cs40l20_boost_config(cs40l20, cs40l20->pdata.boost_ind,
+			cs40l20->pdata.boost_cap, cs40l20->pdata.boost_ipk);
+	if (ret)
+		return ret;
+
 	ret = regmap_update_bits(regmap, CS40L20_DAC_PCM1_SRC,
 				 CS40L20_DAC_PCM1_SRC_MASK,
 				 CS40L20_DAC_PCM1_SRC_DSP1TX1
 				 << CS40L20_DAC_PCM1_SRC_SHIFT);
 	if (ret) {
 		dev_err(dev, "Failed to route DSP to amplifier\n");
-		goto err;
+		return ret;
 	}
 
 	ret = regmap_update_bits(regmap, CS40L20_PWR_CTRL1,
-				 CS40L20_GLOBAL_EN_MASK,
-				 1 << CS40L20_GLOBAL_EN_SHIFT);
+			CS40L20_GLOBAL_EN_MASK, 1 << CS40L20_GLOBAL_EN_SHIFT);
 	if (ret) {
 		dev_err(dev, "Failed to enable device\n");
-		goto err;
+		return ret;
 	}
 
-	ret = cs40l20_dsp_boot(cs40l20);
+	ret = regmap_update_bits(regmap, CS40L20_DSP1_CCM_CORE_CTRL,
+			CS40L20_DSP1_RESET_MASK, 1 << CS40L20_DSP1_RESET_SHIFT);
 	if (ret) {
-		dev_err(dev, "Failed to boot DSP\n");
-		goto err;
+		dev_err(dev, "Failed to reset DSP\n");
+		return ret;
 	}
-err:
-	return ret;
+
+	ret = regmap_multi_reg_write(regmap, cs40l20_mpu_config,
+			ARRAY_SIZE(cs40l20_mpu_config));
+	if (ret) {
+		dev_err(dev, "Failed to configure MPU\n");
+		return ret;
+	}
+
+	INIT_LIST_HEAD(&cs40l20->coeff_desc_head);
+
+	request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG, "cs40l20.wmfw",
+			dev, GFP_KERNEL, cs40l20, cs40l20_firmware_load);
+
+	return 0;
+}
+
+static int cs40l20_handle_of_data(struct i2c_client *i2c_client,
+		struct cs40l20_platform_data *pdata)
+{
+	struct device_node *np = i2c_client->dev.of_node;
+	struct device *dev = &i2c_client->dev;
+	int ret;
+	unsigned int out_val;
+
+	if (!np)
+		return 0;
+
+	ret = of_property_read_u32(np, "cirrus,boost-ind-nanohenry", &out_val);
+	if (ret) {
+		dev_err(dev, "Boost inductor value not specified\n");
+		return -EINVAL;
+	}
+	pdata->boost_ind = out_val;
+
+	ret = of_property_read_u32(np, "cirrus,boost-cap-microfarad", &out_val);
+	if (ret) {
+		dev_err(dev, "Boost capacitance not specified\n");
+		return -EINVAL;
+	}
+	pdata->boost_cap = out_val;
+
+	ret = of_property_read_u32(np, "cirrus,boost-ipk-milliamp", &out_val);
+	if (ret) {
+		dev_err(dev, "Boost inductor peak current not specified\n");
+		return -EINVAL;
+	}
+	pdata->boost_ipk = out_val;
+
+	pdata->refclk_gpio2 = of_property_read_bool(np, "cirrus,refclk-gpio2");
+
+	return 0;
 }
 
 static struct regmap_config cs40l20_regmap = {
@@ -623,10 +1029,11 @@ static struct regmap_config cs40l20_regmap = {
 static int cs40l20_i2c_probe(struct i2c_client *i2c_client,
 			     const struct i2c_device_id *id)
 {
+	int ret, i;
 	struct cs40l20_private *cs40l20;
 	struct device *dev = &i2c_client->dev;
-	int ret;
-	unsigned int reg_devid, reg_revid, reg_otpid, i;
+	struct cs40l20_platform_data *pdata = dev_get_platdata(dev);
+	unsigned int reg_devid, reg_revid, reg_otpid;
 
 	cs40l20 = devm_kzalloc(dev, sizeof(struct cs40l20_private), GFP_KERNEL);
 	if (!cs40l20)
@@ -655,12 +1062,40 @@ static int cs40l20_i2c_probe(struct i2c_client *i2c_client,
 		return ret;
 	}
 
+	if (pdata) {
+		cs40l20->pdata = *pdata;
+	} else {
+		pdata = devm_kzalloc(dev, sizeof(struct cs40l20_platform_data),
+				GFP_KERNEL);
+		if (!pdata)
+			return -ENOMEM;
+
+		if (i2c_client->dev.of_node) {
+			ret = cs40l20_handle_of_data(i2c_client, pdata);
+			if (ret)
+				return ret;
+
+		}
+		cs40l20->pdata = *pdata;
+	}
 	ret = regulator_bulk_enable(cs40l20->num_supplies, cs40l20->supplies);
 	if (ret) {
 		dev_err(dev, "Failed to enable core supplies: %d\n", ret);
 		return ret;
 	}
 
+	cs40l20->reset_gpio = devm_gpiod_get_optional(dev, "reset",
+			GPIOD_OUT_LOW);
+	if (IS_ERR(cs40l20->reset_gpio))
+		return PTR_ERR(cs40l20->reset_gpio);
+
+	/* satisfy reset pulse width specification (with margin) */
+	usleep_range(2000, 2100);
+
+	gpiod_set_value_cansleep(cs40l20->reset_gpio, 1);
+
+	/* satisfy control port delay specification (with margin) */
+	usleep_range(1000, 1100);
 	ret = regmap_read(cs40l20->regmap, CS40L20_DEVID, &reg_devid);
 	if (ret) {
 		dev_err(dev, "Failed to read device ID\n");
@@ -688,13 +1123,13 @@ static int cs40l20_i2c_probe(struct i2c_client *i2c_client,
 	dev_info(dev, "Cirrus Logic CS40L20 revision %02X\n", reg_revid >> 8);
 
 	ret = cs40l20_init(cs40l20);
-	if (ret) {
-		dev_err(dev, "Failed to initialize device: %d\n", ret);
+	if (ret)
 		goto err;
-	}
 
-	return ret;
+	return 0;
 err:
+	gpiod_set_value_cansleep(cs40l20->reset_gpio, 0);
+
 	regulator_bulk_disable(cs40l20->num_supplies, cs40l20->supplies);
 	return ret;
 }
@@ -702,17 +1137,12 @@ err:
 static int cs40l20_i2c_remove(struct i2c_client *i2c_client)
 {
 	struct cs40l20_private *cs40l20 = i2c_get_clientdata(i2c_client);
-	int ret;
-
-	ret = regmap_update_bits(cs40l20->regmap, CS40L20_DSP1_CCM_CORE_CTRL,
-				 CS40L20_DSP1_EN_MASK, 0);
-	if (ret)
-		dev_err(cs40l20->dev, "Failed to disable DSP: %d\n", ret);
-
-	regulator_bulk_disable(cs40l20->num_supplies, cs40l20->supplies);
 
 	if (cs40l20->vibe_init_success) {
 		led_classdev_unregister(&cs40l20->led_dev);
+
+		sysfs_remove_group(&cs40l20->dev->kobj,
+				&cs40l20_dev_attr_group);
 
 		cancel_work_sync(&cs40l20->vibe_start_work);
 		cancel_work_sync(&cs40l20->vibe_stop_work);
@@ -720,10 +1150,11 @@ static int cs40l20_i2c_remove(struct i2c_client *i2c_client)
 		destroy_workqueue(cs40l20->vibe_workqueue);
 
 		mutex_destroy(&cs40l20->lock);
-
-		sysfs_remove_group(&cs40l20->dev->kobj,
-				   &cs40l20_dev_attr_group);
 	}
+
+	gpiod_set_value_cansleep(cs40l20->reset_gpio, 0);
+
+	regulator_bulk_disable(cs40l20->num_supplies, cs40l20->supplies);
 
 	return 0;
 }
