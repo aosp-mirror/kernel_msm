@@ -154,8 +154,11 @@ static void fuelgauge_battery_poll(struct work_struct *work)
 {
 	struct Nanohub_FuelGauge_Info *fg_info =
 		container_of(work, struct Nanohub_FuelGauge_Info, work.work);
+
+	pr_warn("nanohub: [FG] %s  fg_info->requested:%d \n", __func__, fg_info->requested);
+
 	if (!fg_info->requested) {
-		pr_warn("nanohub: [FG] request data frome sensorhub.\n");
+		pr_warn("nanohub: [FG] request data from sensorhub.\n");
 		request_fuel_gauge_data(fg_info->hub_data);
 		fg_info->requested = 1;
 	}
@@ -182,7 +185,7 @@ int dump_fuelgauge_cache(struct bq27x00_reg_cache *cache_data)
 	pr_info("nanohub: [FG] cache: FullChargeCapacity = %d\n",
 		cache_data->FullChargeCapacity);
 	pr_info("nanohub: [FG] cache: AverageCurrent = %d\n",
-		cache_data->AverageCurrent);
+		(int)((s16)cache_data->AverageCurrent));
 	pr_info("nanohub: [FG] cache: RemainingCapacityUnfiltered = %d\n",
 		cache_data->RemainingCapacityUnfiltered);
 	pr_info("nanohub: [FG] cache: FullChargeCapacityUnfiltered = %d\n",
@@ -194,7 +197,7 @@ int dump_fuelgauge_cache(struct bq27x00_reg_cache *cache_data)
 	pr_info("nanohub: [FG] cache: capacity = %d\n",
 		cache_data->capacity);
 	pr_info("nanohub: [FG] cache: power_avg = %d\n",
-		cache_data->power_avg);
+		(int)((s16)cache_data->power_avg));
 	pr_info("nanohub: [FG] cache: health = %d\n",
 		cache_data->health);
 	pr_info("nanohub: [FG] cache: charge_design_full = %d\n",
@@ -438,11 +441,12 @@ static int bq27x00_battery_get_property(struct power_supply *psy,
 		container_of(psy, struct Nanohub_FuelGauge_Info, bat);
 
 	mutex_lock(&fg_info->lock);
-		if (time_is_before_jiffies(fg_info->last_update +
-				(poll_interval / 2 ) * HZ)) {
-			cancel_delayed_work_sync(&fg_info->work);
-			fuelgauge_battery_poll(&fg_info->work.work);
-		}
+	if (time_is_before_jiffies(fg_info->last_update + (poll_interval / 2 ) * HZ)) {
+		pr_warn("nanohub : [FG] %s fg_info->last_update:%lu\n",
+			__func__, fg_info->last_update);
+		cancel_delayed_work_sync(&fg_info->work);
+		fuelgauge_battery_poll(&fg_info->work.work);
+	}
 	mutex_unlock(&fg_info->lock);
 
 	if (psp != POWER_SUPPLY_PROP_PRESENT && fg_info->cache.flags < 0)
