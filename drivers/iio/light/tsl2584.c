@@ -121,6 +121,7 @@ struct tsl2584_chip {
 	struct workqueue_struct *als_wq;
 	struct mutex io_lock;
 	bool cal_status;
+	int flush_count;
 };
 
 static struct sensors_classdev sensors_light_cdev = {
@@ -935,6 +936,18 @@ static int tsl258x_als_set_enable(struct sensors_classdev *sensors_cdev,
 }
 
 
+static int tsl258x_als_flush(struct sensors_classdev *sensors_cdev)
+{
+	struct tsl2584_chip *als_data = container_of(sensors_cdev,
+						struct tsl2584_chip, als_cdev);
+
+	input_event(als_data->ls_input_dev, EV_SYN, SYN_CONFIG,
+						als_data->flush_count++);
+	input_sync(als_data->ls_input_dev);
+
+	return 0;
+}
+
 static int tsl258x_als_poll_delay_set(struct sensors_classdev *sensors_cdev,
                 unsigned int delay_msec)
 {
@@ -993,9 +1006,17 @@ static void tsl258x_als_work_func(struct work_struct *work)
 	struct tsl2584_chip *ps_data = container_of(work, struct tsl2584_chip, als_work);
 	struct iio_dev *indio_dev = i2c_get_clientdata(ps_data->client);
 	int als_lux_last = 0;
+	ktime_t timestamp;
+
+	timestamp = ktime_get_boottime();
+
 	mutex_lock(&ps_data->io_lock);
 	als_lux_last = taos_get_lux(indio_dev);
 	input_report_abs(ps_data->ls_input_dev, ABS_MISC, als_lux_last);
+	input_event(ps_data->ls_input_dev, EV_SYN, SYN_TIME_SEC,
+			ktime_to_timespec(timestamp).tv_sec);
+	input_event(ps_data->ls_input_dev, EV_SYN, SYN_TIME_NSEC,
+			ktime_to_timespec(timestamp).tv_nsec);
 	input_sync(ps_data->ls_input_dev);
 	mutex_unlock(&ps_data->io_lock);
 }
@@ -1068,6 +1089,7 @@ static int taos_probe(struct i2c_client *clientp,
 	chip->als_cdev = sensors_light_cdev;
 	chip->als_cdev.sensors_enable = tsl258x_als_set_enable;
 	chip->als_cdev.sensors_poll_delay = tsl258x_als_poll_delay_set;
+	chip->als_cdev.sensors_flush = tsl258x_als_flush;
 	chip->als_wq = create_singlethread_workqueue("als_wq");
 	INIT_WORK(&chip->als_work, tsl258x_als_work_func);
 	hrtimer_init(&chip->als_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
