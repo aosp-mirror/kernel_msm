@@ -940,6 +940,11 @@ int mnh_mipi_stop_device(struct device *dev, int txdev)
 {
 	int ret = 0;
 
+	if ((txdev < MIPI_TX0) || (txdev > MIPI_TX1)) {
+		dev_err(dev, "%s: invalid mipi device %d\n", __func__, txdev);
+		return -EINVAL;
+	}
+
 	/* shut down the PHY */
 	TX_OUTf(txdev, PHY_RSTZ, PHY_RSTZ, 0);
 	TX_OUTf(txdev, PHY_RSTZ, PHY_SHUTDOWNZ, 0);
@@ -967,6 +972,11 @@ EXPORT_SYMBOL_GPL(mnh_mipi_stop_device);
 int mnh_mipi_stop_host(struct device *dev, int rxdev)
 {
 	int ret = 0;
+
+	if ((rxdev < MIPI_RX0) || (rxdev > MIPI_RX2)) {
+		dev_err(dev, "%s: invalid mipi host %d\n", __func__, rxdev);
+		return -EINVAL;
+	}
 
 	/* shut down the PHY */
 	/* see 7.3.1: Rx-DPHY databook */
