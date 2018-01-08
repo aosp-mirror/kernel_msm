@@ -66,21 +66,21 @@
 				qcom,mdss-dsi-v-top-border = <0>;
 				qcom,mdss-dsi-v-bottom-border = <0>;
 				qcom,mdss-dsi-on-command = [
-					07 01 00 00 00 00 01 11    /* enable DSC */
-					05 01 00 00 0A 00 02 11 00 /* sleep out */
+					07 01 00 00 00 00 01 01    /* Compression Enable */
+					05 01 00 00 78 00 02 11 00 /* sleep out, Wait 120 ms */
 					05 01 00 00 00 00 02 35 00 /* TE on */
 					05 01 00 00 00 00 02 29 00 /* display on */
 				];
 				qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
 				qcom,mdss-dsi-off-command = [
-					05 01 00 00 23 00 02 28 00 /* display off */
+					05 01 00 00 0A 00 02 28 00 /* display off */
 					05 01 00 00 78 00 02 10 00 /* sleep in */
 				];
 				qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
 
 				qcom,compression-mode = "dsc";
-				qcom,mdss-dsc-slice-height = <74>;
-				qcom,mdss-dsc-slice-width = <360>;
+				qcom,mdss-dsc-slice-height = <40>;
+				qcom,mdss-dsc-slice-width = <720>;
 				qcom,mdss-dsc-slice-per-pkt = <1>;
 				qcom,mdss-dsc-bit-per-component = <8>;
 				qcom,mdss-dsc-bit-per-pixel = <8>;
