@@ -5,6 +5,19 @@
  * HAP_PMIC_EN: PM845 GPIO 15
  */
 
+&tlmm {
+	cs40l20_rst:cs40l20_rst {
+		mux {
+			pins = "gpio87";
+			function = "gpio";
+		};
+		config {
+			drive-strength = <2>;
+			output-low;
+		};
+	};
+};
+
 &qupv3_se5_spi {
 	status = "disabled";
 };
@@ -14,7 +27,12 @@
 	qcom,clk-freq-out = <1000000>;
 	cs40l20@43 {
 		compatible = "cirrus,cs40l20";
+		pinctrl-names = "default";
+		pinctrl-0 = <&cs40l20_rst>;
 		reg = <0x43>;
+		cirrus,boost-ind-nanohenry = <1000>;
+		cirrus,boost-cap-microfarad = <4>;
+		cirrus,boost-ipk-milliamp = <3500>;
 		status = "ok";
 	};
 };
