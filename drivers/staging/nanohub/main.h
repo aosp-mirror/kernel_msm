@@ -96,7 +96,8 @@ struct nanohub_data {
 	struct notifier_block fb_notif;
 #endif
 	atomic_t download_bl_status;
-	atomic_t hub_mode;
+	atomic_t hub_mode_ap_pwr_down;
+	atomic_t hub_mode_ap_active;
 };
 
 enum NRESET_POLARITY {
@@ -119,17 +120,17 @@ enum {
 	LOCK_MODE_SUSPEND_RESUME,
 };
 
-enum HUB_MODE {
-	HUB_MODE_POWEROFF = 0,
-	HUB_MODE_BAND,
-	HUB_MODE_AMBIENT,
-	HUB_MODE_NORMAL,
-	HUB_MODE_FLASH_ERASE,
-	HUB_MODE_REQUEST_FUELGAUGE,
-	HUB_MODE_AP_CMD_SUSPEND,
-	HUB_MODE_AP_CMD_RESUME,
-	HUB_MODE_TEST = 15,
-	HUB_MODE_RESEND,
+enum AP_GPIO_CMD {
+	GPIO_CMD_POWEROFF = 0,
+	GPIO_CMD_BAND,
+	GPIO_CMD_AMBIENT,
+	GPIO_CMD_NORMAL,
+	GPIO_CMD_FLASH_ERASE,
+	GPIO_CMD_REQUEST_FUELGAUGE,
+	GPIO_CMD_SUSPEND,
+	GPIO_CMD_RESUME,
+	GPIO_CMD_TEST = 15,
+	GPIO_CMD_RESEND,
 };
 
 enum DOWNLOAD_BL_STATUS {
@@ -151,7 +152,7 @@ int nanohub_shutdown(struct iio_dev *iio_dev);
 
 int nanohub_suspend(struct iio_dev *iio_dev);
 int nanohub_resume(struct iio_dev *iio_dev);
-int __nanohub_mode_set(struct nanohub_data *data, enum HUB_MODE mode);
+int __nanohub_send_AP_cmd(struct nanohub_data *data, enum AP_GPIO_CMD mode);
 
 static inline int nanohub_irq1_fired(struct nanohub_data *data)
 {

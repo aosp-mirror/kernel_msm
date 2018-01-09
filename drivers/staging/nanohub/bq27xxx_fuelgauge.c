@@ -345,11 +345,7 @@ int enable_fuelgauge(struct nanohub_data *data, int on)
 
 static int request_fuel_gauge_data(struct nanohub_data *data)
 {
-	if (HUB_MODE_POWEROFF != atomic_read(&data->hub_mode) &&
-		HUB_MODE_BAND != atomic_read(&data->hub_mode))
-		return __nanohub_mode_set(data, HUB_MODE_REQUEST_FUELGAUGE);
-	else
-		return 0;
+	return __nanohub_send_AP_cmd(data, GPIO_CMD_REQUEST_FUELGAUGE);
 }
 
 static int bq27x00_battery_status(

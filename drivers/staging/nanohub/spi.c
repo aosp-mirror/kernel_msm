@@ -430,8 +430,6 @@ static int nanohub_spi_probe(struct spi_device *spi)
 	struct iio_dev *iio_dev;
 	int error;
 
-	pr_info("nanohub: start to probe spi\n");
-
 	iio_dev = iio_device_alloc(sizeof(struct nanohub_spi_data));
 
 	iio_dev = nanohub_probe(&spi->dev, iio_dev);
@@ -456,7 +454,6 @@ static int nanohub_spi_probe(struct spi_device *spi)
 	} else {
 		pr_err("nanohub: spi_cs_gpio is not valid\n");
 	}
-	pr_info("nanohub: spi_cs_gpio\n");
 
 	spi_data->device = spi;
 	nanohub_spi_comms_init(spi_data);
@@ -472,8 +469,6 @@ static int nanohub_spi_probe(struct spi_device *spi)
 	nanohub_spi_bl_init(spi_data);
 
 	nanohub_reset(&spi_data->data);
-	pr_info("nanohub: spi probe end successfully\n");
-
 	return 0;
 }
 

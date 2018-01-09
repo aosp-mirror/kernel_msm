@@ -697,98 +697,15 @@ static ssize_t nanohub_try_hw_reset(struct device *dev,
 
 	return ret < 0 ? ret : count;
 }
-int __nanohub_mode_set(struct nanohub_data *data, enum HUB_MODE mode)
+
+int __nanohub_set_mode_pin(struct nanohub_data *data, enum AP_GPIO_CMD mode)
 {
 	const struct nanohub_platform_data *pdata = data->pdata;
+	gpio_set_value(pdata->mode1_gpio, (mode & 0x08) ? 1 : 0);
+	gpio_set_value(pdata->mode2_gpio, (mode & 0x04) ? 1 : 0);
+	gpio_set_value(pdata->mode3_gpio, (mode & 0x02) ? 1 : 0);
+	gpio_set_value(pdata->mode4_gpio, (mode & 0x01) ? 1 : 0);
 
-	if ((mode < HUB_MODE_POWEROFF) || (mode > HUB_MODE_RESEND)) {
-		pr_err("nanohub: invalid mode = %d\n", mode);
-		return -EINVAL;
-	}
-
-	switch (mode) {
-	case HUB_MODE_POWEROFF: /*0000*/
-		gpio_set_value(pdata->mode1_gpio, 0);
-		gpio_set_value(pdata->mode2_gpio, 0);
-		gpio_set_value(pdata->mode3_gpio, 0);
-		gpio_set_value(pdata->mode4_gpio, 0);
-		atomic_set(&data->hub_mode, HUB_MODE_POWEROFF);
-		break;
-
-	case HUB_MODE_BAND:     /*0001*/
-		gpio_set_value(pdata->mode1_gpio, 0);
-		gpio_set_value(pdata->mode2_gpio, 0);
-		gpio_set_value(pdata->mode3_gpio, 0);
-		gpio_set_value(pdata->mode4_gpio, 1);
-		atomic_set(&data->hub_mode, HUB_MODE_BAND);
-		break;
-
-	case HUB_MODE_AMBIENT:	/*0010*/
-		gpio_set_value(pdata->mode1_gpio, 0);
-		gpio_set_value(pdata->mode2_gpio, 0);
-		gpio_set_value(pdata->mode3_gpio, 1);
-		gpio_set_value(pdata->mode4_gpio, 0);
-		atomic_set(&data->hub_mode, HUB_MODE_AMBIENT);
-		break;
-
-	case HUB_MODE_NORMAL:   /*0011*/
-		gpio_set_value(pdata->mode1_gpio, 0);
-		gpio_set_value(pdata->mode2_gpio, 0);
-		gpio_set_value(pdata->mode3_gpio, 1);
-		gpio_set_value(pdata->mode4_gpio, 1);
-		atomic_set(&data->hub_mode, HUB_MODE_NORMAL);
-		break;
-
-	case HUB_MODE_FLASH_ERASE:   /*0100*/
-		gpio_set_value(pdata->mode1_gpio, 0);
-		gpio_set_value(pdata->mode2_gpio, 1);
-		gpio_set_value(pdata->mode3_gpio, 0);
-		gpio_set_value(pdata->mode4_gpio, 0);
-		/*atomic_set(&data->hub_mode, HUB_MODE_FLASH_ERASE);*/
-		break;
-
-	case HUB_MODE_REQUEST_FUELGAUGE: /*0101*/
-		gpio_set_value(pdata->mode1_gpio, 0);
-		gpio_set_value(pdata->mode2_gpio, 1);
-		gpio_set_value(pdata->mode3_gpio, 0);
-		gpio_set_value(pdata->mode4_gpio, 1);
-		/*atomic_set(&data->hub_mode, HUB_MODE_REQUEST_FUELGAUGE);*/
-		break;
-
-	case HUB_MODE_AP_CMD_SUSPEND: /*0110*/
-		gpio_set_value(pdata->mode1_gpio, 0);
-		gpio_set_value(pdata->mode2_gpio, 1);
-		gpio_set_value(pdata->mode3_gpio, 1);
-		gpio_set_value(pdata->mode4_gpio, 0);
-		atomic_set(&data->hub_mode, HUB_MODE_AP_CMD_SUSPEND);
-		break;
-
-	case HUB_MODE_AP_CMD_RESUME: /*0111*/
-		gpio_set_value(pdata->mode1_gpio, 0);
-		gpio_set_value(pdata->mode2_gpio, 1);
-		gpio_set_value(pdata->mode3_gpio, 1);
-		gpio_set_value(pdata->mode4_gpio, 1);
-		atomic_set(&data->hub_mode, HUB_MODE_AP_CMD_RESUME);
-		break;
-
-	case HUB_MODE_TEST:    /*1111*/
-		gpio_set_value(pdata->mode1_gpio, 1);
-		gpio_set_value(pdata->mode2_gpio, 1);
-		gpio_set_value(pdata->mode3_gpio, 1);
-		gpio_set_value(pdata->mode4_gpio, 1);
-		pr_info("HUB_MODE_TEST\n");
-		/*atomic_set(&data->hub_mode, HUB_MODE_TEST);*/
-		break;
-
-	case HUB_MODE_RESEND:   /*send mode again if mcu needed*/
-		pr_info("HUB_MODE_RESEND\n");
-		/*atomic_set(&data->hub_mode, HUB_MODE_RESEND);*/
-		break;
-
-	default:
-		pr_err("invalued num1 %d\n", mode);
-		break;
-	}
 	if (gpio_get_value(pdata->int_gpio) != 0) {
 		gpio_set_value(pdata->int_gpio, 0);
 		usleep_range(10000, 15000);
@@ -797,6 +714,48 @@ int __nanohub_mode_set(struct nanohub_data *data, enum HUB_MODE mode)
 		/*creat a intterupt(high rise edge) to mcu*/
 	usleep_range(1000, 1500);
 	gpio_set_value(pdata->int_gpio, 0);
+
+	gpio_set_value(pdata->mode1_gpio, 0);
+	gpio_set_value(pdata->mode2_gpio, 0);
+	gpio_set_value(pdata->mode3_gpio, 0);
+	gpio_set_value(pdata->mode4_gpio, 0);
+	return 0;
+}
+
+int __nanohub_send_AP_cmd(struct nanohub_data *data, enum AP_GPIO_CMD mode)
+{
+	if ((mode < GPIO_CMD_POWEROFF) || (mode > GPIO_CMD_RESEND)) {
+		pr_err("nanohub: invalid mode = %d\n", mode);
+		return -EINVAL;
+	}
+
+	switch (mode) {
+	case GPIO_CMD_POWEROFF: /*0000*/
+	case GPIO_CMD_BAND:     /*0001*/
+		atomic_set(&data->hub_mode_ap_pwr_down, mode);    /* Only remember the state after AP pwr off */
+		break;
+
+	case GPIO_CMD_AMBIENT:	/*0010*/
+	case GPIO_CMD_NORMAL:   /*0011*/
+	case GPIO_CMD_SUSPEND:  /*0110*/
+	case GPIO_CMD_RESUME:   /*0111*/
+		__nanohub_set_mode_pin(data, mode);
+		atomic_set(&data->hub_mode_ap_active, mode);
+		break;
+
+	case GPIO_CMD_FLASH_ERASE:       /*0100*/
+	case GPIO_CMD_REQUEST_FUELGAUGE: /*0101*/
+	case GPIO_CMD_TEST:              /*1111*/
+		__nanohub_set_mode_pin(data, mode);
+		break;
+
+	case GPIO_CMD_RESEND:   /*send mode again if mcu needed*/
+		__nanohub_set_mode_pin(data, atomic_read(&data->hub_mode_ap_active));
+		break;
+
+	default:
+		break;
+	}
 
 	return 0;
 }
@@ -809,7 +768,7 @@ static ssize_t nanohub_mode_set(struct device *dev,
 	int mode = 0;
 
 	if (sscanf(buf, "%d\n", &mode) > 0)
-		__nanohub_mode_set(data, mode);
+		__nanohub_send_AP_cmd(data, mode);
 
 	return count;
 }
@@ -1341,10 +1300,7 @@ static irqreturn_t nanohub_irq2(int irq, void *dev_id)
 	struct nanohub_data *data = (struct nanohub_data *)dev_id;
 
 	nanohub_handle_irq2(data);
-	if (HUB_MODE_POWEROFF != atomic_read(&data->hub_mode) &&
-		HUB_MODE_BAND != atomic_read(&data->hub_mode)) {
-		__nanohub_mode_set(data, HUB_MODE_RESEND);
-	}
+	__nanohub_send_AP_cmd(data, GPIO_CMD_RESEND);
 
 	return IRQ_HANDLED;
 }
@@ -1446,13 +1402,6 @@ static int nanohub_kthread(void *arg)
 	nanohub_set_state(data, ST_IDLE);
 
 	while (!kthread_should_stop()) {
-		if (HUB_MODE_POWEROFF == atomic_read(&data->hub_mode) ||
-			HUB_MODE_BAND == atomic_read(&data->hub_mode)) {
-			nanohub_set_state(data, ST_RUNNING);
-			msleep_interruptible(WAKEUP_TIMEOUT_MS);
-			continue;
-		}
-
 		switch (nanohub_get_state(data)) {
 		case ST_IDLE:
 			wait_event_interruptible(data->kthread_wait,
@@ -1895,7 +1844,8 @@ struct iio_dev *nanohub_probe(struct device *dev, struct iio_dev *iio_dev)
 	atomic_set(&data->wakeup_lock_cnt, 0);
 	atomic_set(&data->wakeup_acquired, 0);
 	atomic_set(&data->download_bl_status, DOWNLOAD_BL_NOT_START);
-	atomic_set(&data->hub_mode, HUB_MODE_NORMAL);
+	atomic_set(&data->hub_mode_ap_active, GPIO_CMD_NORMAL);
+	atomic_set(&data->hub_mode_ap_pwr_down, GPIO_CMD_POWEROFF);
 	init_waitqueue_head(&data->wakeup_wait);
 
 	ret = nanohub_request_gpios(data);
@@ -1922,7 +1872,7 @@ struct iio_dev *nanohub_probe(struct device *dev, struct iio_dev *iio_dev)
 	bq27x00_powersupply_init(dev, data);
 	pr_info("nanohub: nanohub_probe end successfully\n");
 
-	__nanohub_mode_set(data, HUB_MODE_NORMAL);
+	__nanohub_send_AP_cmd(data, GPIO_CMD_NORMAL);
 
 	return iio_dev;
 
@@ -1945,7 +1895,6 @@ int nanohub_reset(struct nanohub_data *data)
 {
 	const struct nanohub_platform_data *pdata = data->pdata;
 
-	pr_info("nanohub: reset\n");
 	if (pdata->nreset_polarity == NRESET_ACTIVE_LOW) {
 		gpio_set_value(pdata->nreset_gpio, 1);
 	} else {
@@ -1960,7 +1909,7 @@ int nanohub_reset(struct nanohub_data *data)
 	else
 		nanohub_unmask_interrupt(data, 2);
 
-	__nanohub_mode_set(data, HUB_MODE_RESEND);
+	__nanohub_send_AP_cmd(data, GPIO_CMD_RESEND);
 
 	return 0;
 }
@@ -1974,7 +1923,7 @@ int nanohub_remove(struct iio_dev *iio_dev)
 	nanohub_notify_thread(data);
 	kthread_stop(data->thread);
 
-	__nanohub_mode_set(data, HUB_MODE_POWEROFF);
+	__nanohub_send_AP_cmd(data, GPIO_CMD_POWEROFF);
 
 	nanohub_destroy_devices(data);
 	iio_device_unregister(iio_dev);
@@ -1989,8 +1938,10 @@ int nanohub_remove(struct iio_dev *iio_dev)
 int nanohub_shutdown(struct iio_dev *iio_dev)
 {
 	struct nanohub_data *data = iio_priv(iio_dev);
-	if (HUB_MODE_BAND != atomic_read(&data->hub_mode))
-		__nanohub_mode_set(data, HUB_MODE_POWEROFF);
+	if (GPIO_CMD_BAND != atomic_read(&data->hub_mode_ap_pwr_down))
+		__nanohub_set_mode_pin(data, GPIO_CMD_POWEROFF);
+	else
+		__nanohub_set_mode_pin(data, GPIO_CMD_BAND);
 	return 0;
 }
 
@@ -1999,9 +1950,7 @@ int nanohub_suspend(struct iio_dev *iio_dev)
 	struct nanohub_data *data = iio_priv(iio_dev);
 	int ret;
 
-	pr_info("nanohub: suspend\n");
-
-	__nanohub_mode_set(data, HUB_MODE_AP_CMD_SUSPEND);
+	__nanohub_send_AP_cmd(data, GPIO_CMD_SUSPEND);
 	ret = nanohub_wakeup_lock(data, LOCK_MODE_SUSPEND_RESUME);
 	if (!ret) {
 		int cnt;
@@ -2036,9 +1985,7 @@ int nanohub_resume(struct iio_dev *iio_dev)
 {
 	struct nanohub_data *data = iio_priv(iio_dev);
 
-	pr_info("nanohub: resume\n");
-
-	__nanohub_mode_set(data, HUB_MODE_AP_CMD_RESUME);
+	__nanohub_send_AP_cmd(data, GPIO_CMD_RESUME);
 
 	disable_irq_wake(data->irq1);
 	nanohub_wakeup_unlock(data);
@@ -2049,8 +1996,6 @@ int nanohub_resume(struct iio_dev *iio_dev)
 static int __init nanohub_init(void)
 {
 	int ret = 0;
-
-	pr_info("nanohub: init\n");
 
 	sensor_class = class_create(THIS_MODULE, "nanohub");
 	if (IS_ERR(sensor_class)) {
@@ -2072,7 +2017,6 @@ static int __init nanohub_init(void)
 		ret = nanohub_i2c_init();
 #endif
 #ifdef CONFIG_NANOHUB_SPI
-	pr_info("nanohub: nanohub_spi_init\n");
 	if (ret == 0)
 		ret = nanohub_spi_init();
 #endif
@@ -2083,7 +2027,6 @@ static int __init nanohub_init(void)
 
 static void __exit nanohub_cleanup(void)
 {
-	pr_info("nanohub: cleanup\n");
 
 #ifdef CONFIG_NANOHUB_I2C
 	nanohub_i2c_cleanup();
