@@ -816,7 +816,7 @@
 
 		trips {
 			low-vbat {
-				temperature = <2900>;
+				temperature = <2800>;
 				hysteresis = <0>;
 				type = "passive";
 			};
