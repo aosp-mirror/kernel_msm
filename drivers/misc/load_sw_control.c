@@ -115,9 +115,6 @@ static int load_sw_probe(struct platform_device *pdev)
 	lsw_dev->force_high = of_property_read_bool(np, "load-sw-force-high");
 	pr_info("force-high = %d\n", lsw_dev->force_high);
 
-	if (lsw_dev->force_high)
-		gpio_set_value(lsw_dev->gpio, 1);
-
 	platform_set_drvdata(pdev, lsw_dev);
 
 	ret = device_create_file(&pdev->dev, &dev_attr_control);
@@ -150,7 +147,8 @@ static void load_sw_shutdown(struct platform_device *pdev)
 {
 	struct load_sw_device *lsw_dev = platform_get_drvdata(pdev);
 
-	if (SYSTEM_RESTART != system_state && lsw_dev->need_to_control) {
+	if (SYSTEM_RESTART != system_state &&
+			(lsw_dev->need_to_control || lsw_dev->force_high)) {
 		gpio_set_value(lsw_dev->gpio, 1);
 		printk("Load switch will be opened after shutdown!!\n");
 	}
