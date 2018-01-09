@@ -427,3 +427,40 @@
 	qcom,fg-cutoff-voltage = <3300>;
 	qcom,fg-empty-voltage = <3100>;
 };
+
+&tlmm {
+	/**
+	 * HS enumeration WAR: Add an external pull down resistor (1 K
+	 * ~ 1.2 K to USB_DP pin via an external switch controlled by
+	 * GPIO104 to enable pull down resistance needed for HS
+	 * enumeration.
+	 */
+	atest_usb13_active: atest_usb13_active {
+		mux {
+			pins = "gpio104";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio104";
+			drive-strength = <12>;
+			bias-pull-up;
+		};
+	};
+	atest_usb13_suspend: atest_usb13_suspend {
+		mux {
+			pins = "gpio104";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio104";
+			bias-pull-down;
+			drive-strength = <2>;
+		};
+	};
+};
+
+&qusb_phy0 {
+	pinctrl-names = "atest_usb13_suspend", "atest_usb13_active";
+	pinctrl-0 = <&atest_usb13_suspend>;
+	pinctrl-1 = <&atest_usb13_active>;
+};
