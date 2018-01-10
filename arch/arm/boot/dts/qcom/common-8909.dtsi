@@ -81,7 +81,7 @@
 				vddio-supply = <&pm8916_l6>;
 				focaltech,reset-gpio = <&msm_gpio 23 0x00>;
 				focaltech,irq-gpio = <&msm_gpio 65 0x2008>;
-				focaltech,switch-gpio = <&msm_gpio 75 0x00>;
+				focaltech,switch-gpio = <&msm_gpio 93 0x00>;
 				focaltech,display-coords =  <0 0 400 400>;
 				focaltech,max-touch-number = <2> ;
 
