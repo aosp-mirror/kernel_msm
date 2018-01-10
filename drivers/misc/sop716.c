@@ -1385,10 +1385,6 @@ static void sop716_init_work(struct work_struct *work)
 	struct sop716_info *si = container_of(work,
 			struct sop716_info, init_work);
 
-	mutex_lock(&si->lock);
-	sop716_hw_reset(si);
-	mutex_unlock(&si->lock);
-
 	sop716_restore_default_config(si);
 }
 
@@ -1485,21 +1481,7 @@ static int sop716_movement_remove(struct i2c_client *client)
 
 static void sop716_movement_shutdown(struct i2c_client *client)
 {
-	struct sop716_info *si = i2c_get_clientdata(client);
-	int err;
-	u8 data[SOP716_I2C_DATA_LENGTH] = {
-		CMD_SOP716_SET_CURRENT_TIME,
-		0xFF,
-		0xFF,
-		0,
-	};
-
-	if (si->watch_mode)
-		return;
-
-	err = sop716_write(si, CMD_SOP716_SET_CURRENT_TIME, data);
-	if (err < 0)
-		pr_err("%s: cannot set watch mode\n", __func__);
+	return;
 }
 
 static struct of_device_id sop716_match_table[] = {
