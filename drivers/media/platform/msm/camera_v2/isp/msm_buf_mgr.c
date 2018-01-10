@@ -140,6 +140,12 @@ static int msm_isp_prepare_isp_buf(struct msm_isp_buf_mgr *buf_mgr,
 	else
 		domain_num = buf_mgr->iommu_domain_num_secure;
 
+	if (qbuf_buf->num_planes > MAX_PLANES_PER_STREAM) {
+		pr_err("%s: Invalid num_planes %d\n",
+			__func__, qbuf_buf->num_planes);
+		return -EINVAL;
+	}
+
 	for (i = 0; i < qbuf_buf->num_planes; i++) {
 		mapped_info = &buf_info->mapped_info[i];
 		mapped_info->handle =
@@ -197,6 +203,12 @@ static void msm_isp_unprepare_v4l2_buf(
 		domain_num = buf_mgr->iommu_domain_num;
 	else
 		domain_num = buf_mgr->iommu_domain_num_secure;
+
+	if (buf_info->num_planes > MAX_PLANES_PER_STREAM) {
+		pr_err("%s: Invalid num_planes %d\n",
+			__func__, buf_info->num_planes);
+		return;
+	}
 
 	for (i = 0; i < buf_info->num_planes; i++) {
 		mapped_info = &buf_info->mapped_info[i];
