@@ -40,7 +40,10 @@
 			15 01 00 00 00 00 02 FF 10
 			15 01 00 00 00 00 02 B3 00
 			15 01 00 00 00 00 02 BB 10
-			05 01 00 00 64 00 01 11 /* Sleep out */
+			15 01 00 00 00 00 02 35 00
+			05 01 00 00 3C 00 01 11 /* Sleep out */
+			];
+		qcom,mdss-dsi-panel-on-command = [
 			05 01 00 00 00 00 01 29 /* Display On */
 			];
 		qcom,mdss-dsi-post-panel-on-command = [
@@ -50,9 +53,10 @@
 		qcom,mdss-dsi-off-command = [
 			15 01 00 00 00 00 02 FF 10
 			05 01 00 00 32 00 01 28
-			05 01 00 00 55 00 01 10
+			05 01 00 00 5A 00 01 10
 			];
 		qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
+		qcom,mdss-dsi-panel-on-command-state = "dsi_lp_mode";
 		qcom,mdss-dsi-post-panel-on-command-state = "dsi_hs_mode";
 		qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
 		qcom,mdss-dsi-h-sync-pulse = <1>;
@@ -76,7 +80,8 @@
 		qcom,mdss-dsi-bl-max-level = <255>;
 		qcom,mdss-dsi-dma-trigger = "trigger_sw";
 		qcom,mdss-dsi-mdp-trigger = "none";
-		qcom,mdss-dsi-reset-sequence = <1 10>, <0 1>, <1 1>;
+		qcom,mdss-dsi-reset-sequence = <1 1>, <0 1>, <1 5>;
+		qcom,mdss-dsi-lp11-init;
 		qcom,mdss-pan-physical-width-dimension = <30>;
 		qcom,mdss-pan-physical-height-dimension = <30>;
 	};
