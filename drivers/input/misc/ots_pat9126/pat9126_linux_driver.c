@@ -1051,9 +1051,29 @@ static int pat9126_suspend(struct device *dev)
 		(struct pixart_pat9126_data *) dev_get_drvdata(dev);
 
 	printk(KERN_DEBUG "[PAT9126]%s, start\n", __func__);
-
+	if (data->pinctrl) {
+		rc = pinctrl_select_state(data->pinctrl,
+				data->pinctrl_state_active);
+		if (rc < 0)
+			dev_err(dev, "Could not set pin to active state %d\n", rc);
+	}
 	if(!is_initialized) {
 		printk(KERN_DEBUG "[PAT9126]%s: Not initialize yet. \n", __func__);
+		/* disable write protect */
+		ots_write_read(data->client, PIXART_PAT9126_WRITE_PROTECT_REG,
+				PIXART_PAT9126_DISABLE_WRITE_PROTECT);
+
+		/*Write Register for Suspend Mode*/
+		ret = ots_disable_mot(data->client,
+			PIXART_PAT9126_SLEEP_MODE_DETECT_FREQ_DEFAULT);
+		if (ret != 0){
+			pr_err("[PAT9126]: Disable Motion FAIL.");
+		}
+
+		/* enable write protect */
+		ots_write_read(data->client, PIXART_PAT9126_WRITE_PROTECT_REG,
+				PIXART_PAT9126_ENABLE_WRITE_PROTECT);
+
 		return 0;
 	}
 	else
@@ -1061,13 +1081,6 @@ static int pat9126_suspend(struct device *dev)
 
 	if (dis_irq_cnt == 0){
 		disable_irq(data->client->irq);
-		if (data->pinctrl) {
-			rc = pinctrl_select_state(data->pinctrl,
-					data->pinctrl_state_suspend);
-			if (rc < 0)
-				dev_err(dev, "Could not set pin to suspend state %d\n",
-										rc);
-		}
 		dis_irq_cnt++;
 	}
 	else {
@@ -1101,9 +1114,28 @@ static int pat9126_resume(struct device *dev)
 		(struct pixart_pat9126_data *) dev_get_drvdata(dev);
 
 	printk(KERN_DEBUG "[PAT9126]%s, start\n", __func__);
-
+	if (data->pinctrl) {
+		rc = pinctrl_select_state(data->pinctrl,
+				data->pinctrl_state_active);
+		if (rc < 0)
+			dev_err(dev, "Could not set pin to active state %d\n", rc);
+	}
 	if(!is_initialized) {
 		printk(KERN_DEBUG "[PAT9126]%s: Not initialize yet. \n", __func__);
+		/* disable write protect */
+		ots_write_read(data->client, PIXART_PAT9126_WRITE_PROTECT_REG,
+				PIXART_PAT9126_DISABLE_WRITE_PROTECT);
+
+		ret = ots_enable_mot(data->client);
+		if (ret != 0){
+			pr_err("[PAT9126]: Enable Motion FAIL. \n");
+			return 0;
+		}
+
+		/* enable write protect */
+		ots_write_read(data->client, PIXART_PAT9126_WRITE_PROTECT_REG,
+				PIXART_PAT9126_ENABLE_WRITE_PROTECT);
+
 		return 0;
 	}
 	else
@@ -1124,13 +1156,6 @@ static int pat9126_resume(struct device *dev)
 			PIXART_PAT9126_ENABLE_WRITE_PROTECT);
 
 	if (en_irq_cnt == 0){
-		if (data->pinctrl) {
-			rc = pinctrl_select_state(data->pinctrl,
-					data->pinctrl_state_active);
-			if (rc < 0)
-				dev_err(dev, "Could not set pin to active state %d\n",
-										rc);
-		}
 		enable_irq(data->client->irq);
 		en_irq_cnt++;
 	}
