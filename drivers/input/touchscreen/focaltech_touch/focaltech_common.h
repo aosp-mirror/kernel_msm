@@ -83,7 +83,7 @@
  * point report check
  * default: disable
  */
-#define FTS_POINT_REPORT_CHECK_EN               0
+#define FTS_POINT_REPORT_CHECK_EN               1
 
 
 /*****************************************************************************
