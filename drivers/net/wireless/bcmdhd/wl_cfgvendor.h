@@ -413,9 +413,6 @@ typedef enum gscan_complete_event {
 	WIFI_SCAN_BUFFER_THR_BREACHED
 } gscan_complete_event_t;
 
-/* Capture the BRCM_VENDOR_SUBCMD_PRIV_STRINGS* here */
-#define BRCM_VENDOR_SCMD_CAPA	"cap"
-
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(3, 13, 0)) || defined(WL_VENDOR_EXT_SUPPORT)
 extern int wl_cfgvendor_attach(struct wiphy *wiphy, dhd_pub_t *dhd);
 extern int wl_cfgvendor_detach(struct wiphy *wiphy);
