@@ -338,6 +338,7 @@ struct dsi_panel_timing {
 	char t_clk_post;
 	char t_clk_pre;
 	struct dsi_panel_cmds on_cmds;
+	struct dsi_panel_cmds panel_on_cmds;
 	struct dsi_panel_cmds post_panel_on_cmds;
 	struct dsi_panel_cmds switch_cmds;
 };
@@ -464,6 +465,7 @@ struct mdss_dsi_ctrl_pdata {
 	struct mdss_intf_recovery *recovery;
 
 	struct dsi_panel_cmds on_cmds;
+	struct dsi_panel_cmds panel_on_cmds;
 	struct dsi_panel_cmds post_dms_on_cmds;
 	struct dsi_panel_cmds post_panel_on_cmds;
 	struct dsi_panel_cmds off_cmds;

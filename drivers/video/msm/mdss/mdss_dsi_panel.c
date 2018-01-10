@@ -467,11 +467,10 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 			return rc;
 		}
 		if (!pinfo->cont_splash_enabled) {
-			if (gpio_is_valid(ctrl_pdata->disp_en_gpio))
-				gpio_set_value((ctrl_pdata->disp_en_gpio), 1);
-
-			if (pinfo->use_dsv)
-				lm36272_dsv_ctrl(1);
+			if (!pinfo->use_dsv) {
+				if (gpio_is_valid(ctrl_pdata->disp_en_gpio))
+					gpio_set_value((ctrl_pdata->disp_en_gpio), 1);
+			}
 
 			for (i = 0; i < pdata->panel_info.rst_seq_len; ++i) {
 				gpio_set_value((ctrl_pdata->rst_gpio),
@@ -901,6 +900,10 @@ static int mdss_dsi_post_panel_on(struct mdss_panel_data *pdata)
 	pinfo = &pdata->panel_info;
 	if (pinfo->dcs_cmd_by_left && ctrl->ndx != DSI_CTRL_LEFT)
 			goto end;
+
+	cmds = &ctrl->panel_on_cmds;
+	if (cmds->cmd_cnt)
+		mdss_dsi_panel_cmds_send(ctrl, cmds, CMD_REQ_COMMIT);
 
 	cmds = &ctrl->post_panel_on_cmds;
 	if (cmds->cmd_cnt) {
@@ -2126,6 +2129,7 @@ int mdss_dsi_panel_timing_switch(struct mdss_dsi_ctrl_pdata *ctrl,
 		pinfo->mipi.dsi_phy_db.timing_8996[i] = pt->phy_timing_8996[i];
 
 	ctrl->on_cmds = pt->on_cmds;
+	ctrl->panel_on_cmds = pt->panel_on_cmds;
 	ctrl->post_panel_on_cmds = pt->post_panel_on_cmds;
 
 	ctrl->panel_data.current_timing = timing;
@@ -2265,6 +2269,10 @@ static int  mdss_dsi_panel_config_res_properties(struct device_node *np,
 	mdss_dsi_parse_dcs_cmds(np, &pt->on_cmds,
 		"qcom,mdss-dsi-on-command",
 		"qcom,mdss-dsi-on-command-state");
+
+	mdss_dsi_parse_dcs_cmds(np, &pt->panel_on_cmds,
+		"qcom,mdss-dsi-panel-on-command",
+		"qcom,mdss-dsi-panel-on-command-state");
 
 	mdss_dsi_parse_dcs_cmds(np, &pt->post_panel_on_cmds,
 		"qcom,mdss-dsi-post-panel-on-command",

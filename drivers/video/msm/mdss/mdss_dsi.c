@@ -315,6 +315,13 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 					__func__, ret);
 	}
 
+	if (pdata->panel_info.use_dsv) {
+		if (gpio_is_valid(ctrl_pdata->disp_en_gpio))
+			gpio_set_value((ctrl_pdata->disp_en_gpio), 1);
+
+		lm36272_dsv_ctrl(1);
+	}
+
 	return ret;
 }
 
@@ -1478,7 +1485,7 @@ int mdss_dsi_on(struct mdss_panel_data *pdata)
 		tmp |= (1<<28);
 		MIPI_OUTP((ctrl_pdata->ctrl_base) + 0xac, tmp);
 		wmb();
-		mdelay(2);
+		usleep_range(5000, 5000);
 		pr_debug("%s: lp11 reset!!\n", __func__);
 
 		mdss_dsi_panel_reset(pdata, 1);
@@ -1622,7 +1629,8 @@ static int mdss_dsi_unblank(struct mdss_panel_data *pdata)
 	}
 
 	if ((pdata->panel_info.type == MIPI_CMD_PANEL) &&
-		mipi->vsync_enable && mipi->hw_vsync_mode) {
+	    mipi->vsync_enable && mipi->hw_vsync_mode &&
+	    !pdata->panel_info.use_dsv) {
 		mdss_dsi_set_tear_on(ctrl_pdata);
 	}
 
@@ -1688,7 +1696,8 @@ static int mdss_dsi_blank(struct mdss_panel_data *pdata, int power_state)
 	}
 
 	if ((pdata->panel_info.type == MIPI_CMD_PANEL) &&
-		mipi->vsync_enable && mipi->hw_vsync_mode) {
+	    mipi->vsync_enable && mipi->hw_vsync_mode &&
+	    !pdata->panel_info.use_dsv) {
 		mdss_dsi_set_tear_off(ctrl_pdata);
 	}
 
