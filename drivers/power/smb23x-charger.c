@@ -217,6 +217,7 @@ static int hot_bat_decidegc_table[] = {
 #define SAFETY_TIMER_MASK	SMB_MASK(4, 3)
 #define SAFETY_TIMER_OFFSET	3
 #define SAFETY_TIMER_DISABLE	SMB_MASK(4, 3)
+#define SYSTEM_VOLTAGE_MASK	SMB_MASK(1,0)
 
 #define CFG_REG_5		0x05
 #define BAT_THERM_DIS_BIT	BIT(7)
@@ -231,6 +232,7 @@ static int hot_bat_decidegc_table[] = {
 #define CFG_REG_6		0x06
 #define CHG_INHIBIT_THRESH_MASK	SMB_MASK(7, 6)
 #define INHIBIT_THRESH_OFFSET	6
+#define SYSTEM_VOLTAGE_THRESHOLD_MASK	SMB_MASK(5,4)
 #define BMD_ALGO_MASK		SMB_MASK(1, 0)
 #define BMD_ALGO_THERM_IO	SMB_MASK(1, 0)
 
@@ -1059,6 +1061,22 @@ static int smb23x_hw_init(struct smb23x_chip *chip)
 			pr_err("Set safety timer failed, rc=%d\n", rc);
 			return rc;
 		}
+	}
+
+	/* system voltage setting */
+	rc = smb23x_masked_write(chip, CFG_REG_4,
+				SYSTEM_VOLTAGE_MASK, 2);
+	if (rc < 0) {
+		pr_err("Set system voltage failed, rc=%d\n", rc);
+		return rc;
+	}
+
+	/* system voltage threshold setting */
+	rc = smb23x_masked_write(chip, CFG_REG_6,
+				SYSTEM_VOLTAGE_THRESHOLD_MASK, 32);
+	if (rc < 0) {
+		pr_err("Set system voltage threshold failed, rc=%d\n", rc);
+		return rc;
 	}
 
 	/*
