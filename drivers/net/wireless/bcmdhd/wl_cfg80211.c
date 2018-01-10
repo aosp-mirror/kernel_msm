@@ -1055,7 +1055,7 @@ static void wl_add_remove_pm_enable_work(struct bcm_cfg80211 *cfg,
 	 */
 	if (delayed_work_pending(&cfg->pm_enable_work)) {
 		cancel_delayed_work_sync(&cfg->pm_enable_work);
-		DHD_OS_WAKE_UNLOCK(cfg->pub);
+		//DHD_OS_WAKE_UNLOCK(cfg->pub);
 	}
 
 	if (type == WL_PM_WORKQ_SHORT) {
@@ -1064,7 +1064,7 @@ static void wl_add_remove_pm_enable_work(struct bcm_cfg80211 *cfg,
 		wq_duration = (WL_PM_ENABLE_TIMEOUT*2);
 	}
 	if (wq_duration) {
-		DHD_OS_WAKE_LOCK(cfg->pub);
+		//DHD_OS_WAKE_LOCK(cfg->pub);
 		schedule_delayed_work(&cfg->pm_enable_work,
 				msecs_to_jiffies((const unsigned int)wq_duration));
 	}
@@ -16160,7 +16160,7 @@ _Pragma("GCC diagnostic ignored \"-Wcast-qual\"")
 	4 && __GNUC_MINOR__ >= 6))
 	_Pragma("GCC diagnostic pop")
 #endif
-	DHD_OS_WAKE_UNLOCK(cfg->pub);
+	//DHD_OS_WAKE_UNLOCK(cfg->pub);
 }
 
 u8
