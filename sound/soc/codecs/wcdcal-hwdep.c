@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015, 2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -24,7 +24,7 @@ const int cal_size_info[WCD9XXX_MAX_CAL] = {
 	[WCD9XXX_MBHC_CAL] = 4096,
 	[WCD9XXX_MAD_CAL] = 4096,
 	[WCD9XXX_VBAT_CAL] = 72,
-	[BG_CODEC_MIC_CAL] = 18,
+	[BG_CODEC_MIC_CAL] = 20,
 	[BG_CODEC_SPEAKER_CAL] = 3077,
 };
 
