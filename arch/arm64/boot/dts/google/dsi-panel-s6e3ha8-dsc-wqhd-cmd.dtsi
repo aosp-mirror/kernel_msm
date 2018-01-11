@@ -40,7 +40,7 @@
 
 		qcom,mdss-dsi-te-check-enable;
 		qcom,mdss-dsi-te-using-te-pin;
-		qcom,esd-check-enabled;
+		/* qcom,esd-check-enabled; */
 		qcom,mdss-dsi-panel-status-check-mode = "te_signal_check";
 
 		qcom,mdss-dsi-lp11-init;
@@ -67,9 +67,10 @@
 				qcom,mdss-dsi-v-bottom-border = <0>;
 				qcom,mdss-dsi-on-command = [
 					07 01 00 00 00 00 01 01    /* Compression Enable */
-					05 01 00 00 78 00 02 11 00 /* sleep out, Wait 120 ms */
+					05 01 00 00 78 00 01 11    /* sleep out, Wait 120 ms */
+					15 01 00 00 00 00 02 53 20 /* Write Control Display */
 					05 01 00 00 00 00 02 35 00 /* TE on */
-					05 01 00 00 00 00 02 29 00 /* display on */
+					05 01 00 00 00 00 01 29    /* display on */
 				];
 				qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
 				qcom,mdss-dsi-off-command = [
