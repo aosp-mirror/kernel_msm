@@ -41,6 +41,16 @@
     qcom,ibat-monitor {
       qcom,mitigation-freq-khz = <1132800>;
       qcom,soc-low-threshold = <2>;
+
     };
   };
 };
+
+&spmi_bus {
+	qcom,pm8998@0 {
+		qcom,power-on@800 {
+			qcom,warm-reset-poweroff-type = <PON_POWER_OFF_HARD_RESET>;
+		};
+	};
+};
+
