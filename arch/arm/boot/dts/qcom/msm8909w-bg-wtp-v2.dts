@@ -164,6 +164,11 @@
 		vdd-ldo2-supply = <&pm660_l15>;
 	};
 
+	qcom,bg-daemon {
+		compatible = "qcom,bg-daemon";
+		qcom,bg-reset-gpio = <&pm660_gpios 5 0>;
+	};
+
 	qcom,bcl {
 		compatible = "qcom,bcl";
 		qcom,bcl-enable;
