@@ -15,9 +15,10 @@
 
 struct lm36272_platform_data {
 	void (*platform_init)(void);
-	int bl_gpio;
 	int dsv_p_gpio;
 	int dsv_n_gpio;
+	u32 dsv_on_delay[3];
+	u32 dsv_off_delay[2];
 	int min_brightness;
 	int max_brightness;
 	int default_brightness;
