@@ -705,6 +705,7 @@ int __nanohub_set_mode_pin(struct nanohub_data *data, enum AP_GPIO_CMD mode)
 	gpio_set_value(pdata->mode2_gpio, (mode & 0x04) ? 1 : 0);
 	gpio_set_value(pdata->mode3_gpio, (mode & 0x02) ? 1 : 0);
 	gpio_set_value(pdata->mode4_gpio, (mode & 0x01) ? 1 : 0);
+	usleep_range(10000, 15000);
 
 	if (gpio_get_value(pdata->int_gpio) != 0) {
 		gpio_set_value(pdata->int_gpio, 0);
@@ -712,7 +713,7 @@ int __nanohub_set_mode_pin(struct nanohub_data *data, enum AP_GPIO_CMD mode)
 	}
 	gpio_set_value(pdata->int_gpio, 1);
 		/*creat a intterupt(high rise edge) to mcu*/
-	usleep_range(1000, 1500);
+	usleep_range(20000, 25000);
 	gpio_set_value(pdata->int_gpio, 0);
 
 	gpio_set_value(pdata->mode1_gpio, 0);
