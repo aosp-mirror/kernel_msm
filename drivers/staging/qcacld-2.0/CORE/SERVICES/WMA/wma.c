@@ -6259,7 +6259,8 @@ static int wma_nan_rsp_event_handler(void *handle, u_int8_t *event_buf,
 	alloc_len = sizeof(tSirNanEvent);
 	alloc_len += nan_rsp_event_hdr->data_len;
 	if (nan_rsp_event_hdr->data_len > ((WMA_SVC_MSG_MAX_SIZE -
-	    sizeof(*nan_rsp_event_hdr)) / sizeof(u_int8_t))) {
+	    sizeof(*nan_rsp_event_hdr)) / sizeof(u_int8_t)) ||
+	    nan_rsp_event_hdr->data_len > param_buf->num_data)  {
 		WMA_LOGE("excess data length:%d", nan_rsp_event_hdr->data_len);
 		VOS_ASSERT(0);
 		return -EINVAL;
