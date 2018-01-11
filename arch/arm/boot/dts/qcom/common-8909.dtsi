@@ -53,7 +53,7 @@
                         qcom,cool-bat-decidegc = <50>;
                         qcom,cold-bat-decidegc = <(-50)>;
                         qcom,soft-temp-vfloat-comp-mv = <200>;
-                        qcom,soft-temp-current-comp-ma = <400>;
+                        qcom,soft-temp-current-comp-ma = <50>;
                         qcom,chg-inhibit-disabled;
                         qcom,apsd-disabled;
                         qcom,thermal-mitigation = <1500 900 500 100>;
