@@ -3889,7 +3889,7 @@ static int wma_extscan_hotlist_match_event_handler(void *handle,
 		numap = WMA_EXTSCAN_MAX_HOTLIST_ENTRIES;
 	}
 	buf_len = sizeof(wmi_extscan_hotlist_match_event_fixed_param) +
-			(4 * sizeof(uint32_t)) +
+			WMI_TLV_HDR_SIZE +
 			(numap * sizeof(wmi_extscan_wlan_descriptor));
 	if (buf_len > len) {
 		WMA_LOGE("Invalid buf len from FW %d numap %d", len, numap);
