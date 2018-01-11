@@ -655,6 +655,12 @@
 	/delete-node/qcom,smb138x@8;
 };
 &spmi_bus {
+	qcom,pm8998@0 {
+		qcom,power-on@800 {
+			qcom,warm-reset-poweroff-type = <PON_POWER_OFF_HARD_RESET>;
+		};
+	};
+
 	qcom,pmi8998@2 {
 		compatible = "qcom,spmi-pmic";
 		pmi8998_fg: qpnp,fg {
