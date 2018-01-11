@@ -501,7 +501,11 @@ static ssize_t sop716_time_store(struct device *dev,
 	if (rc < 0)
 		pr_err("%s: cannot set time\n", __func__);
 
-	si->watch_mode = true;
+	/*
+	 * Do not set the watch mode if opt is not moving hands
+	 */
+	if (8 != user_data[6])
+		si->watch_mode = true;
 	mutex_unlock(&si->lock);
 
 	return rc < 0? rc : count;
