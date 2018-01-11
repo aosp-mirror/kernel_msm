@@ -422,7 +422,6 @@ static ssize_t sop716_time_store(struct device *dev,
 	char *opt = NULL;
 	char *p;
 	int user_data[7] = {0, };
-	int i = 0;
 	int rc = 0;
 
 	if (!count) {
@@ -460,7 +459,7 @@ static ssize_t sop716_time_store(struct device *dev,
 	}
 
 	if (opt) {
-		rc = kstrtoint(opt, 0, &user_data[i]);
+		rc = kstrtoint(opt, 0, &user_data[6]);
 		if (rc < 0) {
 			pr_err("%s: Invalid opt: %s\n", __func__, buf);
 			return -EINVAL;
