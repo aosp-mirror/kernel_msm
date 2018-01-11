@@ -207,3 +207,30 @@
 		spi0 = &qupv3_se8_spi;
 	};
 };
+
+&ctdl_ap_irq {
+	mux {
+		pins = "gpio96";
+	};
+
+	config {
+		pins = "gpio96";
+	};
+};
+
+&ap_ctdl_irq {
+	mux {
+		pins = "gpio94";
+	};
+
+	config {
+		pins = "gpio94";
+	};
+};
+
+&qupv3_se4_spi {
+	citadel@0 {
+		interrupts = <96 0x0>;
+		citadel,ctdl_ap_irq = <&tlmm 96 0x0>;
+	};
+};
