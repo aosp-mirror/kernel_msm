@@ -1,4 +1,4 @@
-/* Copyright (c) 2017 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -13,11 +13,6 @@
 
 #ifndef __BG_CODEC_H_
 #define __BG_CODEC_H_
-
-#include <linux/kernel.h>
-#include <linux/platform_device.h>
-#include <linux/kthread.h>
-#include <linux/uaccess.h>
 
 static uint8_t smart_pa_init_params[] = {
 	0xea, 0x06, 0x2a, 0x00, 0x50, 0x41, 0x31, 0x5f, 0x30, 0x30, 0xea, 0x06,
