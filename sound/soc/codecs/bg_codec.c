@@ -23,6 +23,7 @@
 #include <linux/delay.h>
 #include <linux/pm_runtime.h>
 #include <linux/kernel.h>
+#include <linux/suspend.h>
 #include <linux/gpio.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
@@ -34,6 +35,7 @@
 #include "bg_codec.h"
 #include "pktzr.h"
 #include "wcdcal-hwdep.h"
+#include <trace/events/power.h>
 
 #define SAMPLE_RATE_48KHZ 48000
 
@@ -44,6 +46,8 @@
 				  SNDRV_PCM_FMTBIT_S24_LE | \
 				  SNDRV_PCM_FMTBIT_S24_3LE)
 #define BG_BLOB_DATA_SIZE 3136
+
+#define SPEAK_VREG_NAME "vdd-spkr"
 
 enum {
 	BG_AIF1_PB = 0,
@@ -90,7 +94,11 @@ struct bg_cdc_priv {
 	int src[NUM_CODEC_DAIS];
 	bool hwd_started;
 	bool bg_cal_updated;
+	struct regulator *spkr_vreg;
+	uint16_t num_sessions;
 };
+
+struct bg_cdc_priv *bg_cdc_global;
 
 struct codec_ssn_rt_setup_t {
 	/* active session_id */
@@ -146,6 +154,52 @@ static uint32_t get_active_session_id(int dai_id)
 	}
 	pr_debug("active_session selected %x", active_session);
 	return active_session;
+}
+
+static int bg_cdc_enable_regulator(struct regulator *spkr_vreg, bool enable)
+{
+	int ret = 0;
+
+	if (enable) {
+		ret = regulator_set_voltage(
+			spkr_vreg, 1800000, 1800000);
+		if (ret) {
+			pr_err("VDD-speaker set voltage failed error=%d\n",
+					 ret);
+			goto err_vreg_regulator;
+		} else {
+			ret = regulator_enable(spkr_vreg);
+			if (ret) {
+				pr_err("VDD-speaker voltage enable\n"
+					 "\nfailed error=%d\n", ret);
+				goto err_vreg_regulator;
+			}
+			/* Set regulator to normal mode */
+			ret = regulator_set_optimum_mode(spkr_vreg,
+							100000);
+			if (ret < 0) {
+				pr_err("Failed to set spkr_vreg mode%d\n", ret);
+				goto err_vreg_regulator;
+			}
+		}
+	} else {
+		/* Set regulator to standby mode */
+		ret = regulator_set_optimum_mode(spkr_vreg, 0);
+		if (ret < 0) {
+			pr_err("Failed to set spkr_vreg mode %d\n", ret);
+			goto err_vreg_regulator;
+		}
+		ret = regulator_disable(spkr_vreg);
+		if (ret < 0) {
+			pr_err("Failed to set spkr_vreg mode %d\n", ret);
+			goto err_vreg_regulator;
+		}
+	}
+	return 0;
+
+err_vreg_regulator:
+	regulator_put(spkr_vreg);
+	return ret;
 }
 
 static int bg_cdc_cal(struct bg_cdc_priv *bg_cdc)
@@ -241,6 +295,11 @@ static int _bg_codec_hw_params(struct bg_cdc_priv *bg_cdc)
 	int ret = 0;
 
 	if (!bg_cdc->bg_cal_updated) {
+		ret = bg_cdc_enable_regulator(bg_cdc->spkr_vreg, true);
+		if (ret < 0) {
+			pr_err("%s: enable_regulator failed %d\n", __func__, ret);
+			return ret;
+		}
 		ret =  bg_cdc_cal(bg_cdc);
 		if (ret < 0) {
 			pr_err("%s:failed to send cal data", __func__);
@@ -276,8 +335,7 @@ static int _bg_codec_start(struct bg_cdc_priv *bg_cdc, int dai_id)
 	codec_start.active_session = get_active_session_id(dai_id);
 	if (codec_start.active_session == 0) {
 		pr_err("%s:Invalid dai id %d", __func__, dai_id);
-		ret = -EINVAL;
-		goto exit;
+		return  -EINVAL;
 	}
 	codec_start.route_to_bg = bg_cdc->src[dai_id];
 	pr_debug("%s active_session %x route_to_bg %d\n",
@@ -287,13 +345,12 @@ static int _bg_codec_start(struct bg_cdc_priv *bg_cdc, int dai_id)
 	if (!rsp.buf)
 		return -ENOMEM;
 	ret = pktzr_cmd_start(&codec_start, sizeof(codec_start), &rsp);
-	if (ret < 0) {
-		pr_err("pktzr cmd start failed\n");
-		goto exit;
-	}
-exit:
-	if (rsp.buf)
-		kzfree(rsp.buf);
+	if (ret < 0)
+		pr_err("pktzr cmd start failed %d\n", ret);
+
+	bg_cdc->num_sessions++;
+
+	kfree(rsp.buf);
 	return ret;
 }
 
@@ -304,11 +361,11 @@ static int _bg_codec_stop(struct bg_cdc_priv *bg_cdc, int dai_id)
 	int ret = 0;
 
 	rsp.buf = NULL;
+
 	codec_start.active_session = get_active_session_id(dai_id);
 	if (codec_start.active_session == 0) {
 		pr_err("%s:Invalid dai id %d", __func__, dai_id);
 		ret = -EINVAL;
-		goto exit;
 	}
 	codec_start.route_to_bg = bg_cdc->src[dai_id];
 	pr_debug("%s active_session %x route_to_bg %d\n",
@@ -318,13 +375,22 @@ static int _bg_codec_stop(struct bg_cdc_priv *bg_cdc, int dai_id)
 	if (!rsp.buf)
 		return -ENOMEM;
 	ret = pktzr_cmd_stop(&codec_start, sizeof(codec_start), &rsp);
-	if (ret < 0) {
-		pr_err("pktzr cmd stop failed\n");
-		goto exit;
+	if (ret < 0)
+		pr_err("pktzr cmd stop failed with error %d\n", ret);
+
+	if (bg_cdc->num_sessions > 0)
+		bg_cdc->num_sessions--;
+
+	if (bg_cdc->num_sessions == 0) {
+		/* Reset the regulator mode if this is the last session*/
+		ret = regulator_set_optimum_mode(bg_cdc->spkr_vreg, 10);
+		if (ret < 0) {
+			pr_err("Failed to set spkr_vreg mode%d\n", ret);
+			regulator_put(bg_cdc->spkr_vreg);
+		}
 	}
-exit:
-	if (rsp.buf)
-		kzfree(rsp.buf);
+
+	kfree(rsp.buf);
 	return ret;
 }
 
@@ -597,7 +663,6 @@ static int bg_cdc_set_channel_map(struct snd_soc_dai *dai,
 	return 0;
 }
 
-
 static int bg_cdc_get_channel_map(struct snd_soc_dai *dai,
 				  unsigned int *tx_num, unsigned int *tx_slot,
 				  unsigned int *rx_num, unsigned int *rx_slot)
@@ -788,6 +853,19 @@ static int bg_cdc_codec_probe(struct snd_soc_codec *codec)
 	struct bg_cdc_priv *bg_cdc = dev_get_drvdata(codec->dev);
 	int ret;
 
+	if (of_get_property(
+		codec->dev->of_node,
+		SPEAK_VREG_NAME "-supply", NULL)) {
+		bg_cdc->spkr_vreg = regulator_get(codec->dev, SPEAK_VREG_NAME);
+		if (IS_ERR(bg_cdc->spkr_vreg)) {
+			ret = PTR_ERR(bg_cdc->spkr_vreg);
+			pr_err("VDD-speaker get failed error=%d\n", ret);
+			return ret;
+		}
+		pr_err("got regulator handle\n");
+	}
+
+
 	schedule_delayed_work(&bg_cdc->bg_cdc_pktzr_init_work,
 				msecs_to_jiffies(400));
 
@@ -819,9 +897,120 @@ static int bg_cdc_codec_remove(struct snd_soc_codec *codec)
 	return 0;
 }
 
+#if 0
+static int bg_cdc_suspend(struct snd_soc_codec *codec)
+{
+	struct bg_cdc_priv *bg_cdc = dev_get_drvdata(codec->dev);
+
+	/* Do not remove the regulator vote if a session is active */
+	if (bg_cdc->num_sessions > 0) {
+		pr_debug("audio session in progress not de voting\n");
+		return 0;
+	}
+
+	bg_cdc_enable_regulator(bg_cdc->spkr_vreg, false);
+	bg_cdc->bg_cal_updated = false;
+	return 0;
+}
+
+static int bg_cdc_resume(struct snd_soc_codec *codec)
+{
+	struct bg_hw_params hw_params;
+	struct pktzr_cmd_rsp rsp;
+	struct bg_cdc_priv *bg_cdc = dev_get_drvdata(codec->dev);
+	int ret = 0;
+
+	pr_err("%s:\n",__func__);
+	if ( !bg_cdc->bg_cal_updated) {
+		bg_cdc_enable_regulator(bg_cdc->spkr_vreg, true);
+			/* Send open command */
+	rsp.buf_size = sizeof(struct graphite_basic_rsp_result);
+	rsp.buf = kzalloc(rsp.buf_size, GFP_KERNEL);
+	memcpy(&hw_params, &bg_cdc->hw_params, sizeof(hw_params));
+	/* Send command to BG to start session */
+	ret = pktzr_cmd_open(&hw_params, sizeof(hw_params), &rsp);
+	if (ret < 0)
+		pr_err("pktzr cmd open failed\n");
+
+	if (rsp.buf)
+		kzfree(rsp.buf);
+
+		bg_cdc_cal(bg_cdc);
+	}
+	return 0;
+}
+#endif
+
+static int bg_cdc_suspend_pm(struct bg_cdc_priv *bg_cdc)
+{
+
+	/* Do not remove the regulator vote if a session is active */
+	pr_err("%s:entry\n",__func__);
+	if (bg_cdc->num_sessions > 0) {
+		pr_debug("audio session in progress not de voting\n");
+		return 0;
+	}
+
+	bg_cdc_enable_regulator(bg_cdc->spkr_vreg, false);
+	bg_cdc->bg_cal_updated = false;
+	pr_err("%s:exit\n",__func__);
+	return 0;
+}
+
+static int bg_cdc_resume_pm(struct bg_cdc_priv *bg_cdc )
+{
+	struct bg_hw_params hw_params;
+	struct pktzr_cmd_rsp rsp;
+	int ret = 0;
+
+	pr_err("%s:entry\n",__func__);
+	if ( !bg_cdc->bg_cal_updated) {
+		bg_cdc_enable_regulator(bg_cdc->spkr_vreg, true);
+			/* Send open command */
+	rsp.buf_size = sizeof(struct graphite_basic_rsp_result);
+	rsp.buf = kzalloc(rsp.buf_size, GFP_KERNEL);
+	memcpy(&hw_params, &bg_cdc->hw_params, sizeof(hw_params));
+	/* Send command to BG to start session */
+	ret = pktzr_cmd_open(&hw_params, sizeof(hw_params), &rsp);
+	if (ret < 0)
+		pr_err("pktzr cmd open failed\n");
+
+	if (rsp.buf)
+		kzfree(rsp.buf);
+
+		bg_cdc_cal(bg_cdc);
+	}
+	pr_err("%s:exit\n",__func__);
+	return 0;
+}
+
+
+
+static int bg_pm_event(struct notifier_block *this,
+				unsigned long event, void *ptr)
+{
+	switch (event) {
+	case PM_POST_HIBERNATION:
+	case PM_POST_SUSPEND:
+		return bg_cdc_resume_pm(bg_cdc_global);
+	case PM_HIBERNATION_PREPARE:
+	case PM_SUSPEND_PREPARE:
+		return bg_cdc_suspend_pm(bg_cdc_global);
+	default:
+		return NOTIFY_DONE;
+	}
+}
+
+static struct notifier_block bg_pm_notifier = {
+	.notifier_call = bg_pm_event,
+};
+
+
 static struct snd_soc_codec_driver soc_codec_dev_bg_cdc = {
 	.probe = bg_cdc_codec_probe,
 	.remove = bg_cdc_codec_remove,
+/*	.suspend = bg_cdc_suspend,
+	.resume = bg_cdc_resume,*/
 	.controls = bg_snd_controls,
 	.num_controls = ARRAY_SIZE(bg_snd_controls),
 };
@@ -880,6 +1069,7 @@ static int bg_cdc_probe(struct platform_device *pdev)
 	if (!bg_cdc)
 		return -ENOMEM;
 
+	bg_cdc_global = bg_cdc;
 	bg_cdc->dev = &pdev->dev;
 	dev_set_drvdata(&pdev->dev, bg_cdc);
 
@@ -896,6 +1086,7 @@ static int bg_cdc_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&bg_cdc->bg_cdc_pktzr_init_work,
 		  bg_cdc_pktzr_init);
 	schedule_work(&bg_cdc->bg_cdc_add_child_devices_work);
+	register_pm_notifier(&bg_pm_notifier);
 
 	dev_dbg(&pdev->dev, "%s: BG driver probe done\n", __func__);
 	return ret;
