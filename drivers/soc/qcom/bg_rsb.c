@@ -588,14 +588,19 @@ static void bgrsb_calibration(struct work_struct *work)
 	pr_debug("RSB Calibbered\n");
 }
 
-int split_bg_work(struct bgrsb_priv *dev, char *str)
+static int split_bg_work(struct bgrsb_priv *dev, char *str)
 {
 	long val;
 	int ret;
 	char *tmp;
 
 	tmp = strsep(&str, ":");
+	if (!tmp)
+		return -EINVAL;
+
 	ret = kstrtol(tmp, 10, &val);
+	if (ret < 0)
+		return ret;
 
 	switch (val) {
 	case BGRSB_POWER_DISABLE:
@@ -610,17 +615,29 @@ int split_bg_work(struct bgrsb_priv *dev, char *str)
 		break;
 	case BGRSB_POWER_CALIBRATION:
 		tmp = strsep(&str, ":");
+		if (!tmp)
+			return -EINVAL;
+
 		ret = kstrtol(tmp, 10, &val);
+		if (ret < 0)
+			return ret;
+
 		dev->calbrtion_intrvl = (uint32_t)val;
 
 		tmp = strsep(&str, ":");
+		if (!tmp)
+			return -EINVAL;
+
 		ret = kstrtol(tmp, 10, &val);
+		if (ret < 0)
+			return ret;
+
 		dev->calbrtion_cpi = (uint32_t)val;
 
 		queue_work(dev->bgrsb_wq, &dev->rsb_calibration_work);
 		break;
 	}
-	return ret;
+	return 0;
 }
 
 static int store_enable(struct device *pdev, struct device_attribute *attr,
