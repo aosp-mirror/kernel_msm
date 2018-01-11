@@ -174,9 +174,12 @@ void lm36272_backlight_ctrl(int level)
 		return;
 	}
 
+	mutex_lock(&ldev->bl_mutex);
 	if (level == 0) {
-		if (ldev->status == BL_OFF)
+		if (ldev->status == BL_OFF) {
+			mutex_unlock(&ldev->bl_mutex);
 			return;
+		}
 
 		lm36272_set_main_current_level(ldev->client, 0);
 		lm36272_write_reg(ldev->client, 0x08, 0x00);
@@ -189,6 +192,7 @@ void lm36272_backlight_ctrl(int level)
 		lm36272_set_main_current_level(ldev->client, level);
 		ldev->status = BL_ON;
 	}
+	mutex_unlock(&ldev->bl_mutex);
 }
 EXPORT_SYMBOL_GPL(lm36272_backlight_ctrl);
 
@@ -204,9 +208,7 @@ static void lm36272_lcd_backlight_set_level(struct led_classdev *led_cdev,
 	if (level > MAX_BRIGHTNESS_LM36272)
 		level = MAX_BRIGHTNESS_LM36272;
 
-	mutex_lock(&ldev->bl_mutex);
 	lm36272_backlight_ctrl(level);
-	mutex_unlock(&ldev->bl_mutex);
 }
 
 static int lm36272_parse_dt(struct device *dev,
