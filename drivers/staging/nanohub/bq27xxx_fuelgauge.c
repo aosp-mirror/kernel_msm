@@ -168,6 +168,8 @@ static void fuelgauge_battery_poll(struct work_struct *work)
 int dump_fuelgauge_cache(struct bq27x00_reg_cache *cache_data)
 {
 #if DBG_ENABLE
+	pr_info("nanohub: [FG] cache: control = 0x%04x\n",
+		cache_data->control);
 	pr_info("nanohub: [FG] cache: status = %d\n",
 		cache_data->status);
 	pr_info("nanohub: [FG] cache: present = %d\n",
@@ -190,6 +192,8 @@ int dump_fuelgauge_cache(struct bq27x00_reg_cache *cache_data)
 		cache_data->RemainingCapacityUnfiltered);
 	pr_info("nanohub: [FG] cache: FullChargeCapacityUnfiltered = %d\n",
 		cache_data->FullChargeCapacityUnfiltered);
+	pr_info("nanohub: [FG] cache: FullChargeCapacityFiltered = %d\n",
+		cache_data->FullChargeCapacityFiltered);
 	pr_info("nanohub: [FG] cache: StateOfChargeUnfiltered = %d\n",
 		cache_data->StateOfChargeUnfiltered);
 	pr_info("nanohub: [FG] cache: charge_full = %d\n",

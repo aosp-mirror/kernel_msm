@@ -27,7 +27,7 @@ struct bq27x00_reg_cache {
 	uint8_t status;
 	uint8_t present;
 
-	/*uint16_t control;*/
+	uint16_t control;
 	uint16_t temperature;
 	uint16_t voltage;
 	uint16_t flags;
@@ -38,6 +38,7 @@ struct bq27x00_reg_cache {
 	/*uint16_t StateOfCharge;*/
 	uint16_t RemainingCapacityUnfiltered;
 	uint16_t FullChargeCapacityUnfiltered;
+	uint16_t FullChargeCapacityFiltered;
 	uint16_t StateOfChargeUnfiltered;
 
 	/*uint16_t time_to_empty;
