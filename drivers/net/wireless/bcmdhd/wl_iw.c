@@ -60,7 +60,7 @@ typedef const struct si_pub	si_t;
 #define WL_SOFTAP_LEVEL	0x0080
 #define WL_TRACE_LEVEL	0x0100
 
-uint iw_msg_level = WL_ERROR_LEVEL;
+uint iw_msg_level = WL_ERROR_LEVEL | WL_PNO_LEVEL;
 
 #define WL_ERROR(x)		do {if (iw_msg_level & WL_ERROR_LEVEL) printf x;} while (0)
 #define WL_SCAN(x)		do {if (iw_msg_level & WL_SCAN_LEVEL) printf x;} while (0)
