@@ -1,4 +1,4 @@
-/* Copyright (c) 2017, LGE Inc. All rights reserved.
+/* Copyright (c) 2017-2018, LGE Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -40,7 +40,8 @@
 
 enum {
 	BL_OFF = 0,
-	BL_ON
+	BL_ON,
+	BL_OFF_PENDING
 };
 
 enum {
@@ -51,6 +52,10 @@ enum {
 struct lm36272_device {
 	struct led_classdev led_dev;
 	struct i2c_client *client;
+#ifdef CONFIG_FB
+	struct notifier_block fb_notifier;
+#endif
+	int fb_blank;
 	int dsv_p_gpio;
 	int dsv_n_gpio;
 	u32 *dsv_on_delay;
@@ -165,6 +170,29 @@ static void lm36272_set_main_current_level(struct i2c_client *client, int level)
 				__func__, level, cal_value);
 }
 
+static void lm36272_backlight_ctrl_internal(struct lm36272_device *ldev,
+		int level)
+{
+	if (0 == level) {
+		if (ldev->status == BL_OFF) {
+			mutex_unlock(&ldev->bl_mutex);
+			return;
+		}
+
+		lm36272_set_main_current_level(ldev->client, 0);
+		lm36272_write_reg(ldev->client, 0x08, 0x00);
+		ldev->status = BL_OFF;
+		pr_info("backlight off\n");
+	} else {
+		if (ldev->status == BL_OFF)
+			lm36272_write_reg(ldev->client, 0x02, 0x60);
+
+		usleep_range(1000, 1000);
+		lm36272_set_main_current_level(ldev->client, level);
+		ldev->status = BL_ON;
+	}
+}
+
 void lm36272_backlight_ctrl(int level)
 {
 	struct lm36272_device *ldev = this;
@@ -175,22 +203,13 @@ void lm36272_backlight_ctrl(int level)
 	}
 
 	mutex_lock(&ldev->bl_mutex);
-	if (level == 0) {
-		if (ldev->status == BL_OFF) {
-			mutex_unlock(&ldev->bl_mutex);
-			return;
-		}
-
-		lm36272_set_main_current_level(ldev->client, 0);
-		lm36272_write_reg(ldev->client, 0x08, 0x00);
-		ldev->status = BL_OFF;
+	if (0 == level &&
+	    (FB_BLANK_NORMAL != ldev->fb_blank ||
+	     FB_BLANK_POWERDOWN != ldev->fb_blank)) {
+		ldev->status = BL_OFF_PENDING;
+		pr_info("pending backlight off\n");
 	} else {
-		if (ldev->status == BL_OFF)
-			lm36272_write_reg(ldev->client, 0x02, 0x60);
-
-		usleep_range(1000, 1000);
-		lm36272_set_main_current_level(ldev->client, level);
-		ldev->status = BL_ON;
+		lm36272_backlight_ctrl_internal(ldev, level);
 	}
 	mutex_unlock(&ldev->bl_mutex);
 }
@@ -314,6 +333,43 @@ out:
 	return rc;
 }
 
+#ifdef CONFIG_FB
+static int fb_notifier_callback(struct notifier_block *self,
+		unsigned long event, void *data)
+{
+	struct lm36272_device *ldev;
+	struct fb_event *evdata = data;
+	int fb_blank = 0;
+
+	if (!evdata) {
+		pr_err("%s: event data not available\n", __func__);
+		return NOTIFY_BAD;
+	}
+
+	if (FB_EVENT_BLANK != event)
+		return 0;
+
+	ldev = container_of(self, struct lm36272_device, fb_notifier);
+
+	mutex_lock(&ldev->bl_mutex);
+	fb_blank = *(int *)evdata->data;
+
+	if (BL_OFF_PENDING == ldev->status) {
+		if (FB_BLANK_NORMAL == fb_blank ||
+		    FB_BLANK_POWERDOWN == fb_blank) {
+			/* backlight off */
+			lm36272_backlight_ctrl_internal(ldev, 0);
+		} else {
+			ldev->status = BL_ON;
+		}
+	}
+	ldev->fb_blank = fb_blank;
+	mutex_unlock(&ldev->bl_mutex);
+
+	return 0;
+}
+#endif
+
 static int lm36272_probe(struct i2c_client *client,
 		const struct i2c_device_id *id)
 {
@@ -391,10 +447,19 @@ static int lm36272_probe(struct i2c_client *client,
 
 	mutex_init(&ldev->bl_mutex);
 
+#ifdef CONFIG_FB
+	ldev->fb_notifier.notifier_call = fb_notifier_callback;
+	err = fb_register_client(&ldev->fb_notifier);
+	if (err < 0) {
+		dev_err(&client->dev, "Failed to register fb client\n");
+		goto err_fb_client;
+	}
+#endif
+
 	err = led_classdev_register(&client->dev, &ldev->led_dev);
 	if (err < 0) {
 		dev_err(&client->dev, "Failed to register led class\n");
-		return err;
+		goto err_led_classdev;
 	}
 
 	/* set the default brightness */
@@ -404,6 +469,16 @@ static int lm36272_probe(struct i2c_client *client,
 	dev_info(&client->dev, "probe done\n");
 
 	return 0;
+
+err_led_classdev:
+#ifdef CONFIG_FB
+	fb_unregister_client(&ldev->fb_notifier);
+err_fb_client:
+#endif
+	mutex_destroy(&ldev->bl_mutex);
+	this = NULL;
+
+	return err;
 }
 
 static int lm36272_remove(struct i2c_client *client)
@@ -411,6 +486,10 @@ static int lm36272_remove(struct i2c_client *client)
 	struct lm36272_device *ldev = i2c_get_clientdata(client);
 
 	led_classdev_unregister(&ldev->led_dev);
+#ifdef CONFIG_FB
+	fb_unregister_client(&ldev->fb_notifier);
+#endif
+	mutex_destroy(&ldev->bl_mutex);
 	this = NULL;
 
 	return 0;
