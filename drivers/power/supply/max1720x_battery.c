@@ -23,13 +23,15 @@
 #include <linux/of.h>
 #include <linux/power_supply.h>
 #include <linux/regmap.h>
+#include <linux/slab.h>
 #include <linux/time.h>
 
 #define MAX1720X_TRECALL_MS 5
 #define MAX1720X_TPOR_MS 150
 #define MAX1720X_TNV_WRITE_MS 1000
 #define MAX1720X_TBLOCK_MS 1000
-#define MAX170X_I2C_DRIVER_NAME "max1720x_fg_irq"
+#define MAX1720X_I2C_DRIVER_NAME "max1720x_fg_irq"
+#define MAX1720X_N_OF_HISTORY_PAGES 203
 
 enum max1720x_register {
 	/* ModelGauge m5 Register */
@@ -175,6 +177,12 @@ enum MAX1720X_COMMAND_bits {
 	MAX1720X_COMMAND_HARDWARE_RESET = 0x000F,
 	MAX1720X_COMMAND_QUERY_REMAINING_UPDATES = 0xE2FA,
 	MAX1720X_COMMAND_COPY_NV_BLOCK = 0xE904,
+	MAX1720X_COMMAND_HISTORY_RECALL_WRITE_0 = 0xE2FB,
+	MAX1720X_COMMAND_HISTORY_RECALL_WRITE_1 = 0xE2FC,
+	MAX1720X_COMMAND_HISTORY_RECALL_VALID_0 = 0xE2FC,
+	MAX1720X_COMMAND_HISTORY_RECALL_VALID_1 = 0xE2FD,
+	MAX1720X_COMMAND_HISTORY_RECALL_VALID_2 = 0xE2FE,
+	MAX1720X_READ_HISTORY_CMD_BASE = 0xE226,
 };
 
 /** NV RAM is never manipulated directly but rather shadow RAM.
@@ -193,8 +201,12 @@ enum max1720x_nvram {
 	MAX1720X_NVRAM_RSENSE = 0xCF,
 	MAX1720X_NVRAM_DEVICENAME4 = 0xDF,
 	MAX1720X_NVRAM_END = 0xE0,
+	MAX1720X_NVRAM_HISTORY_WRITE_STATUS_START = 0xE1,
+	MAX1720X_NVRAM_HISTORY_WRITE_STATUS_END = 0xEA,
+	MAX1720X_NVRAM_HISTORY_VALID_STATUS_START = 0xEB,
+	MAX1720X_NVRAM_HISTORY_VALID_STATUS_END = 0xE4,
 	MAX1720X_NVRAM_REMAINING_UPDATES = 0xED,
-	MAX1720X_NVRAM_HISTORY_END = 0xF0,
+	MAX1720X_NVRAM_HISTORY_END = 0xEF,
 };
 #define NVRAM_SHORT_INDEX(reg) (reg - MAX1720X_NVRAM_START)
 #define NVRAM_BYTE_INDEX(reg) (NVRAM_SHORT_INDEX(reg) * sizeof(short))
@@ -204,6 +216,14 @@ enum max1720x_nvram {
 
 #define MAX1720X_NPACKCFG_IDX NVRAM_SHORT_INDEX(MAX1720X_NVRAM_PACKCFG)
 #define MAX1720X_NVCFG0_IDX NVRAM_SHORT_INDEX(MAX1720X_NVRAM_NVCFG0)
+#define MAX1720X_HISTORY_PAGE_SIZE \
+		(MAX1720X_NVRAM_HISTORY_END - MAX1720X_NVRAM_END + 1)
+
+#define MAX1720X_N_OF_HISTORY_FLAGS_REG				\
+	(MAX1720X_NVRAM_HISTORY_END -				\
+		MAX1720X_NVRAM_HISTORY_WRITE_STATUS_START + 1 + \
+		MAX1720X_NVRAM_HISTORY_WRITE_STATUS_END -	\
+		MAX1720X_NVRAM_END + 1)
 
 struct max1720x_chip {
 	struct device *dev;
@@ -217,6 +237,9 @@ struct max1720x_chip {
 	u16 RSense;
 	u16 RConfig;
 	bool init_complete;
+	u16 *history;
+	int history_count;
+	int history_index;
 };
 
 #define REGMAP_READ(regmap, what, dst)				\
@@ -329,6 +352,233 @@ static inline int reg_to_seconds(s16 val)
 	/* LSB: 5.625 seconds */
 	return val * 5625 / 1000;
 }
+
+static void max1720x_read_log_write_status(struct max1720x_chip *chip,
+					   u16 *buffer)
+{
+	int i;
+	u32 data;
+
+	REGMAP_WRITE(chip->regmap, MAX1720X_COMMAND,
+		     MAX1720X_COMMAND_HISTORY_RECALL_WRITE_0);
+	msleep(MAX1720X_TRECALL_MS);
+	for (i = MAX1720X_NVRAM_HISTORY_WRITE_STATUS_START;
+	     i <= MAX1720X_NVRAM_HISTORY_END; i++) {
+		REGMAP_READ(chip->regmap_nvram, i, data);
+		*buffer++ = (u16) data;
+	}
+	REGMAP_WRITE(chip->regmap, MAX1720X_COMMAND,
+		     MAX1720X_COMMAND_HISTORY_RECALL_WRITE_1);
+	msleep(MAX1720X_TRECALL_MS);
+	for (i = MAX1720X_NVRAM_END;
+	     i <= MAX1720X_NVRAM_HISTORY_WRITE_STATUS_END; i++) {
+		REGMAP_READ(chip->regmap_nvram, i, data);
+		*buffer++ = (u16) data;
+	}
+}
+
+static void max1720x_read_log_valid_status(struct max1720x_chip *chip,
+					   u16 *buffer)
+{
+	int i;
+	u32 data;
+
+	REGMAP_WRITE(chip->regmap, MAX1720X_COMMAND,
+		     MAX1720X_COMMAND_HISTORY_RECALL_VALID_0);
+	msleep(MAX1720X_TRECALL_MS);
+	for (i = MAX1720X_NVRAM_HISTORY_VALID_STATUS_START;
+	     i <= MAX1720X_NVRAM_HISTORY_END; i++) {
+		REGMAP_READ(chip->regmap_nvram, i, data);
+		*buffer++ = (u16) data;
+	}
+	REGMAP_WRITE(chip->regmap, MAX1720X_COMMAND,
+		     MAX1720X_COMMAND_HISTORY_RECALL_VALID_1);
+	msleep(MAX1720X_TRECALL_MS);
+	for (i = MAX1720X_NVRAM_END; i <= MAX1720X_NVRAM_HISTORY_END; i++) {
+		REGMAP_READ(chip->regmap_nvram, i, data);
+		*buffer++ = (u16) data;
+	}
+	REGMAP_WRITE(chip->regmap, MAX1720X_COMMAND,
+		     MAX1720X_COMMAND_HISTORY_RECALL_VALID_2);
+	msleep(MAX1720X_TRECALL_MS);
+	for (i = MAX1720X_NVRAM_END;
+	     i <= MAX1720X_NVRAM_HISTORY_VALID_STATUS_END; i++) {
+		REGMAP_READ(chip->regmap_nvram, i, data);
+		*buffer++ = (u16) data;
+	}
+}
+
+static int get_battery_history_status(struct max1720x_chip *chip,
+				      bool *page_status)
+{
+	u16 *write_status, *valid_status;
+	int i, addr_offset, bit_offset;
+	int valid_history_entry_count = 0;
+
+	write_status = kmalloc_array(MAX1720X_N_OF_HISTORY_FLAGS_REG,
+				     sizeof(u16), GFP_KERNEL);
+	if (!write_status)
+		return -ENOMEM;
+
+	valid_status = kmalloc_array(MAX1720X_N_OF_HISTORY_FLAGS_REG,
+				     sizeof(u16), GFP_KERNEL);
+	if (!valid_status) {
+		kfree(write_status);
+		return -ENOMEM;
+	}
+
+	max1720x_read_log_write_status(chip, write_status);
+	max1720x_read_log_valid_status(chip, valid_status);
+
+	/* Figure out the pages with valid history entry */
+	for (i = 0; i < MAX1720X_N_OF_HISTORY_PAGES; i++) {
+		addr_offset = i / 8;
+		bit_offset = i % 8;
+		page_status[i] =
+		    ((write_status[addr_offset] & BIT(bit_offset)) ||
+		     (write_status[addr_offset] & BIT(bit_offset + 8))) &&
+		    ((valid_status[addr_offset] & BIT(bit_offset)) ||
+		     (valid_status[addr_offset] & BIT(bit_offset + 8)));
+		if (page_status[i])
+			valid_history_entry_count++;
+	}
+	chip->history_count = valid_history_entry_count;
+	kfree(write_status);
+	kfree(valid_status);
+	return 0;
+}
+
+static void get_battery_history(struct max1720x_chip *chip,
+				bool *page_status, u16 *history)
+{
+	int i, j, index = 0;
+	u32 data;
+
+	for (i = 0; i < MAX1720X_N_OF_HISTORY_PAGES; i++) {
+		if (!page_status[i])
+			continue;
+		REGMAP_WRITE(chip->regmap, MAX1720X_COMMAND,
+			     MAX1720X_READ_HISTORY_CMD_BASE + i);
+		msleep(MAX1720X_TRECALL_MS);
+		for (j = 0; j < MAX1720X_HISTORY_PAGE_SIZE; j++) {
+			REGMAP_READ(chip->regmap_nvram, MAX1720X_NVRAM_END + j,
+				    data);
+			history[index * MAX1720X_HISTORY_PAGE_SIZE + j] = data;
+		}
+		index++;
+	}
+}
+
+static ssize_t max1720x_history_count_show(struct device *dev,
+					   struct device_attribute *attr,
+					   char *buf)
+{
+
+	struct power_supply *psy;
+	struct max1720x_chip *chip;
+	int length, ret;
+	bool *page_status;
+
+	psy = container_of(dev, struct power_supply, dev);
+	chip = power_supply_get_drvdata(psy);
+
+	page_status = kcalloc(MAX1720X_N_OF_HISTORY_PAGES,
+			      sizeof(bool), GFP_KERNEL);
+	if (!page_status)
+		return -ENOMEM;
+
+	ret = get_battery_history_status(chip, page_status);
+	if (ret) {
+		kfree(page_status);
+		return ret;
+	}
+
+	length = scnprintf(buf, PAGE_SIZE, "%i\n", chip->history_count);
+	kfree(page_status);
+	return length;
+}
+
+static const DEVICE_ATTR(history_count, 0444,
+			 max1720x_history_count_show, NULL);
+
+static ssize_t max1720x_history_show(struct device *dev,
+				     struct device_attribute *attr, char *buf)
+{
+	struct power_supply *psy;
+	struct max1720x_chip *chip;
+	int i, ret;
+	int length = 0;
+	bool *page_status = NULL;
+
+	psy = container_of(dev, struct power_supply, dev);
+	chip = power_supply_get_drvdata(psy);
+
+	/*
+	 * Total history size can be up to 6.7KB, which is greater than
+	 * PAGE_SIZE, which is 4K. Complete history may need to be queried
+	 * in two calls.
+	 * If chip->histry is NULL, the history needs to be recalled from
+	 * fuel gauge. Otherwise, no recall is needed. Simply return the
+	 * rest of the history.
+	 */
+	if (chip->history == NULL) {
+		chip->history_index = 0;
+		page_status = kcalloc(MAX1720X_N_OF_HISTORY_PAGES,
+				      sizeof(bool), GFP_KERNEL);
+		if (!page_status)
+			return -ENOMEM;
+
+		ret = get_battery_history_status(chip, page_status);
+		if (ret) {
+			kfree(page_status);
+			return ret;
+		}
+
+		if (chip->history_count == 0) {
+			dev_info(chip->dev,
+				 "No battery history has been recorded\n");
+			kfree(page_status);
+			return 0;
+		}
+		chip->history = kmalloc_array(chip->history_count *
+					      MAX1720X_HISTORY_PAGE_SIZE,
+					      sizeof(u16), GFP_KERNEL);
+		if (!chip->history) {
+			kfree(page_status);
+			return -ENOMEM;
+		}
+
+		get_battery_history(chip, page_status, chip->history);
+	}
+
+	/*
+	 * The 81 in the next line is arrived with 16*5: one history log
+	 * is 16 of u16. We print each u16 to 4 chars and we leave one space
+	 * between the hex data in the buffer. And lastly we need a new line
+	 * for every history log. (16x4 + 16x1 + 1) = 81.
+	 */
+	for (; (chip->history_index < chip->history_count)
+	     && (length < (PAGE_SIZE - 81)); chip->history_index++) {
+		for (i = 0; i < MAX1720X_HISTORY_PAGE_SIZE; i++) {
+			length += scnprintf(buf + length,
+				PAGE_SIZE - length, "%04x ",
+				chip->history[chip->history_index *
+					      MAX1720X_HISTORY_PAGE_SIZE + i]);
+		}
+		length += scnprintf(buf + length, PAGE_SIZE - length, "\n");
+	}
+	if (chip->history_index >= chip->history_count) {
+		kfree(chip->history);
+		kfree(page_status);
+		chip->history = NULL;
+		chip->history_index = 0;
+		chip->history_count = 0;
+	}
+
+	return length;
+}
+
+static const DEVICE_ATTR(history, 0444, max1720x_history_show, NULL);
 
 static enum power_supply_property max1720x_battery_props[] = {
 	POWER_SUPPLY_PROP_CAPACITY,
@@ -572,7 +822,6 @@ update_dst:
 	return 1;
 }
 
-
 static void max1720x_handle_dt_config(struct max1720x_chip *chip)
 {
 	struct device_node *node = chip->dev->of_node;
@@ -756,7 +1005,7 @@ static void max1720x_init_worker(struct work_struct *work)
 		rtn = request_threaded_irq(chip->primary->irq, NULL,
 					   max1720x_fg_irq_thread_fn,
 					   IRQF_TRIGGER_LOW | IRQF_ONESHOT,
-					   MAX170X_I2C_DRIVER_NAME, chip);
+					   MAX1720X_I2C_DRIVER_NAME, chip);
 		if (rtn != 0) {
 			dev_err(chip->dev, "Unable to register IRQ handler\n");
 			return;
@@ -827,6 +1076,20 @@ static int max1720x_probe(struct i2c_client *client,
 
 	INIT_WORK(&chip->work, max1720x_init_worker);
 	schedule_work(&chip->work);
+
+	chip->history_index = 0;
+	ret = device_create_file(&chip->psy->dev, &dev_attr_history_count);
+	if (ret) {
+		dev_err(dev, "Failed to create history_count attribute\n");
+		goto i2c_unregister;
+	}
+
+	ret = device_create_file(&chip->psy->dev, &dev_attr_history);
+	if (ret) {
+		dev_err(dev, "Failed to create history attribute\n");
+		goto i2c_unregister;
+	}
+
 	goto out;
 
 i2c_unregister:
