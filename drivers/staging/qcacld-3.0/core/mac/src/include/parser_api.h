@@ -192,7 +192,7 @@ struct sir_fils_indication {
 	struct public_key_identifier key_identifier;
 };
 #endif
-#define ESP_INFORMATION_LIST_LENGTH 24
+#define ESP_INFORMATION_LIST_LENGTH 3
 /*
  * enum access_category: tells about access category in ESP paramameter
  * @ESP_AC_BK: ESP access category for background
@@ -351,6 +351,8 @@ typedef struct sSirProbeRespBeacon {
 	uint8_t MBO_capability;
 	bool assoc_disallowed;
 	uint8_t assoc_disallowed_reason;
+	bool oce_wan_present;
+	uint8_t oce_wan_downlink_av_cap;
 	tSirQCNIE QCN_IE;
 #ifdef WLAN_FEATURE_FILS_SK
 	struct sir_fils_indication fils_ind;
