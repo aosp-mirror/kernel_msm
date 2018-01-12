@@ -63,6 +63,13 @@ static inline void cpu_set_reserved_ttbr0(void)
 	: "r" (ttbr));
 }
 
+static inline void cpu_switch_mm(pgd_t *pgd, struct mm_struct *mm)
+{
+	BUG_ON(pgd == swapper_pg_dir);
+	cpu_set_reserved_ttbr0();
+	cpu_do_switch_mm(virt_to_phys(pgd),mm);
+}
+
 /*
  * TCR.T0SZ value to use when the ID map is active. Usually equals
  * TCR_T0SZ(VA_BITS), unless system RAM is positioned very high in
@@ -167,7 +174,8 @@ switch_mm(struct mm_struct *prev, struct mm_struct *next,
 	 * Update the saved TTBR0_EL1 of the scheduled-in task as the previous
 	 * value may have not been initialised yet (activate_mm caller) or the
 	 * ASID has changed since the last run (following the context switch
-	 * of another thread of the same process).
+	 * of another thread of the same process). Avoid setting the reserved
+	 * TTBR0_EL1 to swapper_pg_dir (init_mm; e.g. via idle_task_exit).
 	 */
 	if (next != &init_mm)
 		update_saved_ttbr0(tsk, next);
