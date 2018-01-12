@@ -6777,6 +6777,11 @@ static void wma_set_arp_req_stats(WMA_HANDLE handle,
 			 __func__);
 		return;
 	}
+	if (!wma_is_vdev_valid(req_buf->vdev_id)) {
+		WMA_LOGE("vdev id not active or not valid");
+		return;
+	}
+
 	arp_stats = (struct set_arp_stats *)req_buf;
 	status = wmi_unified_set_arp_stats_req(wma_handle->wmi_handle,
 					       arp_stats);
@@ -6795,6 +6800,10 @@ static void wma_get_arp_req_stats(WMA_HANDLE handle,
 	if (!wma_handle || !wma_handle->wmi_handle) {
 		WMA_LOGE("%s: WMA is closed, cannot send per roam config",
 			 __func__);
+		return;
+	}
+	if (!wma_is_vdev_valid(req_buf->vdev_id)) {
+		WMA_LOGE("vdev not active or not valid");
 		return;
 	}
 
@@ -7808,6 +7817,8 @@ QDF_STATUS wma_mc_process_msg(void *cds_context, cds_msg_t *msg)
 		wma_config_guard_time(wma_handle,
 				      (struct sir_guard_time_request *)
 				      msg->bodyptr);
+		qdf_mem_free(msg->bodyptr);
+		break;
 	case WMA_IPA_OFFLOAD_ENABLE_DISABLE:
 		wma_ipa_offload_enable_disable(wma_handle,
 			(struct sir_ipa_offload_enable_disable *)msg->bodyptr);

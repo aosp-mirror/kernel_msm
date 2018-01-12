@@ -1641,6 +1641,29 @@ static void init_config_param(tpAniSirGlobal pMac)
 
 	pMac->roam.configParam.nInitialDwellTime = 0;
 	pMac->roam.configParam.initial_scan_no_dfs_chnl = 0;
+
+	qdf_mem_zero(&pMac->roam.configParam.bss_score_params,
+		     sizeof(struct sir_score_config));
+	pMac->roam.configParam.bss_score_params.weight_cfg.rssi_weightage =
+		RSSI_WEIGHTAGE;
+	pMac->roam.configParam.bss_score_params.weight_cfg.ht_caps_weightage =
+		HT_CAPABILITY_WEIGHTAGE;
+	pMac->roam.configParam.bss_score_params.weight_cfg.vht_caps_weightage =
+		VHT_CAP_WEIGHTAGE;
+	pMac->roam.configParam.bss_score_params.
+		weight_cfg.chan_width_weightage = CHAN_WIDTH_WEIGHTAGE;
+	pMac->roam.configParam.bss_score_params.
+		weight_cfg.chan_band_weightage = CHAN_BAND_WEIGHTAGE;
+	pMac->roam.configParam.bss_score_params.weight_cfg.nss_weightage =
+		NSS_WEIGHTAGE;
+	pMac->roam.configParam.bss_score_params.weight_cfg.
+		beamforming_cap_weightage = BEAMFORMING_CAP_WEIGHTAGE;
+	pMac->roam.configParam.bss_score_params.weight_cfg.pcl_weightage =
+		PCL_WEIGHT;
+	pMac->roam.configParam.bss_score_params.weight_cfg.
+		channel_congestion_weightage = CHANNEL_CONGESTION_WEIGHTAGE;
+	pMac->roam.configParam.bss_score_params.weight_cfg.oce_wan_weightage =
+						OCE_WAN_WEIGHTAGE;
 }
 
 eCsrBand csr_get_current_band(tHalHandle hHal)
@@ -2500,6 +2523,8 @@ QDF_STATUS csr_change_default_config_param(tpAniSirGlobal pMac,
 		pMac->roam.configParam.isFastTransitionEnabled =
 			pParam->isFastTransitionEnabled;
 		pMac->roam.configParam.RoamRssiDiff = pParam->RoamRssiDiff;
+		pMac->roam.configParam.rssi_abs_thresh =
+						pParam->rssi_abs_thresh;
 		pMac->roam.configParam.nRoamPrefer5GHz =
 			pParam->nRoamPrefer5GHz;
 		pMac->roam.configParam.nRoamIntraBand = pParam->nRoamIntraBand;
@@ -2789,6 +2814,10 @@ QDF_STATUS csr_change_default_config_param(tpAniSirGlobal pMac,
 		pMac->roam.configParam.num_disallowed_aps =
 			pParam->num_disallowed_aps;
 
+		qdf_mem_copy(&pMac->roam.configParam.bss_score_params,
+			     &pParam->bss_score_params,
+			     sizeof(struct sir_score_config));
+
 	}
 	return status;
 }
@@ -2873,6 +2902,7 @@ QDF_STATUS csr_get_config_param(tpAniSirGlobal pMac, tCsrConfigParam *pParam)
 		     sizeof(tCsr11rConfigParams));
 	pParam->isFastTransitionEnabled = cfg_params->isFastTransitionEnabled;
 	pParam->RoamRssiDiff = cfg_params->RoamRssiDiff;
+	pParam->rssi_abs_thresh = cfg_params->rssi_abs_thresh;
 	pParam->nRoamPrefer5GHz = cfg_params->nRoamPrefer5GHz;
 	pParam->nRoamIntraBand = cfg_params->nRoamIntraBand;
 	pParam->isWESModeEnabled = cfg_params->isWESModeEnabled;
@@ -3051,6 +3081,10 @@ QDF_STATUS csr_get_config_param(tpAniSirGlobal pMac, tCsrConfigParam *pParam)
 		pMac->roam.configParam.rssi_channel_penalization;
 	pParam->num_disallowed_aps =
 		pMac->roam.configParam.num_disallowed_aps;
+
+	qdf_mem_copy(&pParam->bss_score_params,
+		&pMac->roam.configParam.bss_score_params,
+		sizeof(struct sir_score_config));
 
 	return QDF_STATUS_SUCCESS;
 }
@@ -10407,6 +10441,13 @@ csr_update_key_cmd(tpAniSirGlobal mac_ctx, tCsrRoamSession *session,
 		}
 		qdf_mem_copy(session->eseCckmInfo.btk, set_key->Key,
 			     SIR_BTK_KEY_LEN);
+		/*
+		 * KRK and BTK are updated by upper layer back to back. Send
+		 * updated KRK and BTK together to FW here.
+		 */
+		csr_roam_offload_scan(mac_ctx, session->sessionId,
+				      ROAM_SCAN_OFFLOAD_UPDATE_CFG,
+				      REASON_ROAM_PSK_PMK_CHANGED);
 		break;
 #endif
 #endif /* FEATURE_WLAN_ESE */
@@ -13472,7 +13513,7 @@ static void csr_populate_supported_rates_from_hostapd(tSirMacRateSet *opr_rates,
  *
  * Return: void
  */
-static void
+static QDF_STATUS
 csr_roam_get_bss_start_parms(tpAniSirGlobal pMac,
 			     tCsrRoamProfile *pProfile,
 			     tCsrRoamStartBssParams *pParam,
@@ -13500,6 +13541,7 @@ csr_roam_get_bss_start_parms(tpAniSirGlobal pMac,
 			 "For P2P (persona %d) dot11_mode is 11B",
 			  pProfile->csrPersona);
 		QDF_ASSERT(0);
+		return QDF_STATUS_E_INVAL;
 	}
 
 	nw_type = csr_convert_mode_to_nw_type(pParam->uCfgDot11Mode, band);
@@ -13522,6 +13564,7 @@ csr_roam_get_bss_start_parms(tpAniSirGlobal pMac,
 			sme_err(
 				"sees an unknown pSirNwType (%d)",
 				nw_type);
+			return QDF_STATUS_E_INVAL;
 		case eSIR_11A_NW_TYPE:
 			csr_populate_basic_rates(opr_rates, true, true);
 			if (eCSR_OPERATING_CHANNEL_ANY != tmp_opr_ch) {
@@ -13585,6 +13628,7 @@ csr_roam_get_bss_start_parms(tpAniSirGlobal pMac,
 		pProfile->ch_params.center_freq_seg1;
 	pParam->ch_params.sec_ch_offset =
 		pProfile->ch_params.sec_ch_offset;
+	return QDF_STATUS_SUCCESS;
 }
 
 static void
@@ -13937,6 +13981,13 @@ QDF_STATUS csr_roam_set_psk_pmk(tpAniSirGlobal pMac, uint32_t sessionId,
 	}
 	qdf_mem_copy(pSession->psk_pmk, pPSK_PMK, sizeof(pSession->psk_pmk));
 	pSession->pmk_len = pmk_len;
+
+	if (csr_is_auth_type_ese(pMac->roam.roamSession[sessionId].
+				connectedProfile.AuthType)) {
+		sme_debug("PMK update is not required for ESE");
+		return QDF_STATUS_SUCCESS;
+	}
+
 	csr_roam_offload_scan(pMac, sessionId,
 			      ROAM_SCAN_OFFLOAD_UPDATE_CFG,
 			      REASON_ROAM_PSK_PMK_CHANGED);
@@ -18323,6 +18374,7 @@ csr_create_roam_scan_offload_request(tpAniSirGlobal mac_ctx,
 	req_buf->RoamRescanRssiDiff =
 		roam_info->cfgParams.nRoamRescanRssiDiff;
 	req_buf->RoamRssiDiff = mac_ctx->roam.configParam.RoamRssiDiff;
+	req_buf->rssi_abs_thresh = mac_ctx->roam.configParam.rssi_abs_thresh;
 	req_buf->reason = reason;
 	req_buf->NeighborScanTimerPeriod =
 		roam_info->cfgParams.neighborScanPeriod;
@@ -19068,6 +19120,88 @@ static inline void csr_update_fils_params_rso(tpAniSirGlobal mac,
 #endif
 
 /**
+ * csr_update_score_params() - API to update Score params in RSO
+ * @mac_ctx: Mac context
+ * @req_buffer: RSO request buffer
+ *
+ * Return: None
+ */
+static void csr_update_score_params(tpAniSirGlobal mac_ctx,
+	tSirRoamOffloadScanReq *req_buffer)
+{
+	struct scoring_param *req_score_params;
+	struct rssi_scoring *req_rssi_score;
+	struct sir_score_config *bss_score_params;
+	struct sir_weight_config *weight_config;
+	struct sir_rssi_cfg_score *rssi_score;
+
+	req_score_params = &req_buffer->score_params;
+	req_rssi_score = &req_score_params->rssi_scoring;
+
+	bss_score_params = &mac_ctx->roam.configParam.bss_score_params;
+	weight_config = &bss_score_params->weight_cfg;
+	rssi_score = &bss_score_params->rssi_score;
+
+	if (!bss_score_params->enable_scoring_for_roam)
+		req_score_params->disable_bitmap =
+			WLAN_ROAM_SCORING_DISABLE_ALL;
+
+	req_score_params->rssi_weightage = weight_config->rssi_weightage;
+	req_score_params->ht_weightage = weight_config->ht_caps_weightage;
+	req_score_params->vht_weightage = weight_config->vht_caps_weightage;
+	req_score_params->he_weightage = weight_config->he_caps_weightage;
+	req_score_params->bw_weightage = weight_config->chan_width_weightage;
+	req_score_params->band_weightage = weight_config->chan_band_weightage;
+	req_score_params->nss_weightage = weight_config->nss_weightage;
+	req_score_params->esp_qbss_weightage =
+		weight_config->channel_congestion_weightage;
+	req_score_params->beamforming_weightage =
+		weight_config->beamforming_cap_weightage;
+	req_score_params->pcl_weightage =
+		weight_config->pcl_weightage;
+	req_score_params->oce_wan_weightage = weight_config->oce_wan_weightage;
+
+	req_score_params->bw_index_score =
+		bss_score_params->bandwidth_weight_per_index;
+	req_score_params->band_index_score =
+		bss_score_params->band_weight_per_index;
+	req_score_params->nss_index_score =
+		bss_score_params->nss_weight_per_index;
+
+	req_rssi_score->best_rssi_threshold = rssi_score->best_rssi_threshold;
+	req_rssi_score->good_rssi_threshold = rssi_score->good_rssi_threshold;
+	req_rssi_score->bad_rssi_threshold = rssi_score->bad_rssi_threshold;
+	req_rssi_score->good_rssi_pcnt = rssi_score->good_rssi_pcnt;
+	req_rssi_score->bad_rssi_pcnt = rssi_score->bad_rssi_pcnt;
+	req_rssi_score->good_bucket_size = rssi_score->good_rssi_bucket_size;
+	req_rssi_score->bad_bucket_size = rssi_score->bad_rssi_bucket_size;
+	req_rssi_score->rssi_pref_5g_rssi_thresh =
+			rssi_score->rssi_pref_5g_rssi_thresh;
+
+	req_score_params->esp_qbss_scoring.num_slot =
+		bss_score_params->esp_qbss_scoring.num_slot;
+	req_score_params->esp_qbss_scoring.score_pcnt3_to_0 =
+		bss_score_params->esp_qbss_scoring.score_pcnt3_to_0;
+	req_score_params->esp_qbss_scoring.score_pcnt7_to_4 =
+		bss_score_params->esp_qbss_scoring.score_pcnt7_to_4;
+	req_score_params->esp_qbss_scoring.score_pcnt11_to_8 =
+		bss_score_params->esp_qbss_scoring.score_pcnt11_to_8;
+	req_score_params->esp_qbss_scoring.score_pcnt15_to_12 =
+		bss_score_params->esp_qbss_scoring.score_pcnt15_to_12;
+
+	req_score_params->oce_wan_scoring.num_slot =
+		bss_score_params->oce_wan_scoring.num_slot;
+	req_score_params->oce_wan_scoring.score_pcnt3_to_0 =
+		bss_score_params->oce_wan_scoring.score_pcnt3_to_0;
+	req_score_params->oce_wan_scoring.score_pcnt7_to_4 =
+		bss_score_params->oce_wan_scoring.score_pcnt7_to_4;
+	req_score_params->oce_wan_scoring.score_pcnt11_to_8 =
+		bss_score_params->oce_wan_scoring.score_pcnt11_to_8;
+	req_score_params->oce_wan_scoring.score_pcnt15_to_12 =
+		bss_score_params->oce_wan_scoring.score_pcnt15_to_12;
+
+}
+/**
  * csr_roam_offload_scan() - populates roam offload scan request and sends to
  * WMA
  *
@@ -19288,6 +19422,7 @@ csr_roam_offload_scan(tpAniSirGlobal mac_ctx, uint8_t session_id,
 				session->nAddIEAssocLength);
 		csr_update_driver_assoc_ies(mac_ctx, session, req_buf);
 		csr_update_fils_params_rso(mac_ctx, session, req_buf);
+		csr_update_score_params(mac_ctx, req_buf);
 	}
 
 	QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
@@ -19971,7 +20106,13 @@ QDF_STATUS csr_roam_channel_change_req(tpAniSirGlobal pMac,
 	 */
 	qdf_mem_zero(&param, sizeof(tCsrRoamStartBssParams));
 
-	csr_roam_get_bss_start_parms(pMac, profile, &param, skip_hostapd_rate);
+	status = csr_roam_get_bss_start_parms(pMac, profile, &param,
+		skip_hostapd_rate);
+
+	if (status != QDF_STATUS_SUCCESS) {
+		sme_err("Failed to get bss parameters");
+		return status;
+	}
 
 	pMsg = qdf_mem_malloc(sizeof(tSirChanChangeRequest));
 	if (!pMsg)
@@ -19982,14 +20123,13 @@ QDF_STATUS csr_roam_channel_change_req(tpAniSirGlobal pMac,
 	pMsg->targetChannel = profile->ChannelInfo.ChannelList[0];
 	pMsg->sec_ch_offset = ch_params->sec_ch_offset;
 	pMsg->ch_width = profile->ch_params.ch_width;
-	pMsg->dot11mode = csr_translate_to_wni_cfg_dot11_mode(pMac,
-					pMac->roam.configParam.uCfgDot11Mode);
+	pMsg->dot11mode = param.uCfgDot11Mode;
 	if (IS_24G_CH(pMsg->targetChannel) &&
 	   (false == pMac->roam.configParam.enableVhtFor24GHz) &&
 	   (WNI_CFG_DOT11_MODE_11AC == pMsg->dot11mode ||
 	    WNI_CFG_DOT11_MODE_11AC_ONLY == pMsg->dot11mode))
 		pMsg->dot11mode = WNI_CFG_DOT11_MODE_11N;
-
+	pMsg->nw_type = param.sirNwType;
 	pMsg->center_freq_seg_0 = ch_params->center_freq_seg0;
 	pMsg->center_freq_seg_1 = ch_params->center_freq_seg1;
 	qdf_mem_copy(pMsg->bssid, bssid.bytes, QDF_MAC_ADDR_SIZE);
