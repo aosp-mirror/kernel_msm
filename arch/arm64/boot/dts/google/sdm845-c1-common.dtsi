@@ -21,3 +21,9 @@
 	qcom,dsi-display-active;
 };
 
+/* This overylay is required in order for acdbloader to load different files */
+&soc {
+	sound-tavil {
+		qcom,model = "sdm845-tavil-c1-snd-card";
+	};
+};
