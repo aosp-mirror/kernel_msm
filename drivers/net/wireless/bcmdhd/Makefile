@@ -18,11 +18,18 @@ DHDCFLAGS = -Wall -Wstrict-prototypes -Dlinux -DBCMDRIVER -DSDTEST       \
 	-I$(src) -I$(src)/include
 #DHDCFLAGS += -DDHD_DEBUG
 
+#Gscan
+DHDCFLAGS += -DGSCAN_SUPPORT
+DHDCFLAGS += -DWL_VENDOR_EXT_SUPPORT
+ifneq ($(CONFIG_DHD_USE_SCHED_SCAN),)
+DHDCFLAGS += -DWL_SCHED_SCAN
+endif
+
 DHDOFILES = aiutils.o siutils.o sbutils.o bcmutils.o bcmwifi_channels.o \
 	dhd_linux.o dhd_linux_platdev.o dhd_linux_sched.o dhd_pno.o \
 	dhd_common.o dhd_ip.o dhd_linux_wq.o dhd_custom_gpio.o \
 	bcmevent.o hndpmu.o linux_osl.o wldev_common.o wl_android.o \
-	hnd_pktq.o hnd_pktpool.o dhd_config.o
+	hnd_pktq.o hnd_pktpool.o dhd_config.o wl_cfgvendor.o
 
 ifneq ($(CONFIG_BCMDHD_SDIO),)
 DHDCFLAGS += \

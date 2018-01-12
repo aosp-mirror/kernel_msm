@@ -25,6 +25,12 @@ config BCMDHD_WEXT
 	select WEXT_PRIV
 	help
 	  Enables WEXT support
+config DHD_USE_SCHED_SCAN
+        bool "Use CFG80211 sched scan"
+        depends on BCMDHD && CFG80211
+        default y
+        ---help---
+          Use CFG80211 sched scan
 
 choice
 	prompt "Enable Chip Interface"
