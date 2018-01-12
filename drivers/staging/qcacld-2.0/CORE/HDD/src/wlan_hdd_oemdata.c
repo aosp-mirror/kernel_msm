@@ -893,6 +893,7 @@ static int oem_msg_callback(tAniMsgHdr *msg_hdr, int len, int pid)
 static void oem_cmd_handler(const void *data, int data_len, void *ctx, int pid)
 {
 	tAniMsgHdr *msg_hdr;
+	int msg_len;
 	int ret;
 	struct nlattr *tb[CLD80211_ATTR_MAX + 1];
 
@@ -902,6 +903,10 @@ static void oem_cmd_handler(const void *data, int data_len, void *ctx, int pid)
 		return;
 	}
 
+	/*
+	 * audit note: it is ok to pass a NULL policy here since only
+	 * one attribute is parsed and it is explicitly validated
+	 */
 	if (nla_parse(tb, CLD80211_ATTR_MAX, data, data_len, NULL)) {
 		hddLog(LOGE, FL("Invalid ATTR"));
 		return;
@@ -912,14 +917,22 @@ static void oem_cmd_handler(const void *data, int data_len, void *ctx, int pid)
 		return;
 	}
 
-	msg_hdr = (tAniMsgHdr *)nla_data(tb[CLD80211_ATTR_DATA]);
-	if (!msg_hdr) {
-		hddLog(LOGE, FL("msg_hdr null"));
+	msg_len = nla_len(tb[CLD80211_ATTR_DATA]);
+	if (msg_len < sizeof(*msg_hdr)) {
+		hddLog(LOGE, FL("runt ATTR_DATA size %d"), msg_len);
 		send_oem_err_rsp_nlink_msg(pid, OEM_ERR_NULL_MESSAGE_HEADER);
 		return;
 	}
-        oem_msg_callback(msg_hdr, nla_len(tb[CLD80211_ATTR_DATA]), pid);
 
+	msg_hdr = nla_data(tb[CLD80211_ATTR_DATA]);
+	if (msg_len < (sizeof(*msg_hdr) + msg_hdr->length)) {
+		hddLog(LOGE, FL("Invalid nl msg len %d, msg hdr len %d"),
+			msg_len, msg_hdr->length);
+		send_oem_err_rsp_nlink_msg(pid, OEM_ERR_INVALID_MESSAGE_LENGTH);
+		return;
+	}
+
+    oem_msg_callback(msg_hdr, nla_len(tb[CLD80211_ATTR_DATA]), pid);
 	return;
 }
 
