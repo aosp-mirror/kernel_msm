@@ -362,6 +362,9 @@
 
 &soc {
 	/delete-node/ msm_cdc_pinctrl@64;
+	/delete-node/ sound-tavil;
+	/delete-node/ qcom,wcd-dsp-mgr;
+
 	gpio_keys {
 		compatible = "gpio-keys";
 		input-name = "gpio-keys";
@@ -427,6 +430,14 @@
 		record-size = <0 0x00008000>;
 		ftrace-size = <0 0x00020000>;
 		memory-region = <&ramoops_mem>;
+	};
+};
+
+&slim_aud {
+	/delete-node/ tavil_codec;
+
+	tasha_codec {
+		/delete-node/ swr_master; /* Don't enable WSA */
 	};
 };
 
