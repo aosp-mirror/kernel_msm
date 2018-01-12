@@ -628,6 +628,9 @@
 
 	sound-9335 {
 		/delete-property/ qcom,us-euro-gpios;
+		/delete-property/ qcom,wsa-devs;
+		/delete-property/ qcom,wsa-aux-dev-prefix;
+		qcom,wsa-max-devs = <0>;
 	};
 
 	wcd_rst_gpio: msm_cdc_pinctrl@116 {
@@ -653,6 +656,8 @@
 					   "cdc-vdd-tx-h",
 					   "cdc-vdd-rx-h",
 					   "cdc-vddpx-1";
+
+		/delete-node/ swr_master; /* Don't enable WSA */
 	};
 };
 
