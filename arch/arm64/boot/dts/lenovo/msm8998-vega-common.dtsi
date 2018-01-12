@@ -683,7 +683,7 @@
 			qcom,fg-chg-term-current = <200>;
 			qcom,fg-jeita-thresholds = <0 15 43 50>;
 			qcom,fg-rsense-sel = <0>; /* SRC_SEL_BATFET */
-			qcom,battery-thermal-coefficients = [99 50 ff];
+			qcom,battery-thermal-coefficients = [9d 50 ff];
 		};
 
 		pmi8998_charger: qcom,qpnp-smb2 {
