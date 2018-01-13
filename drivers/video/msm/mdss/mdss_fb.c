@@ -4721,6 +4721,26 @@ EXPORT_SYMBOL(mdss_fb_get_phys_info);
 int __init mdss_fb_init(void)
 {
 	int rc = -ENODEV;
+	long gpio = 75;
+	struct gpio_desc *desc;
+	int status;
+
+	desc = gpio_to_desc(gpio);
+	if (!desc) {
+		pr_warn("%s: invalid gpio_todesc \n", __func__);
+	}
+	status = gpio_request(gpio, "spigpio75");
+	if (status) {
+		pr_warn("%s: invalid gpio_request\n", __func__);
+	}
+	status = gpiod_export(desc, true);
+	if (status) {
+		pr_warn("%s: invalid GPIO %ld\n", __func__, gpio);
+	}
+	status = gpio_direction_output(75, 1);
+	if (status) {
+		pr_warn("%s: invalid gpio_direction_output\n", __func__);
+	}
 
 	if (fb_get_options("msmfb", NULL))
 		return rc;
