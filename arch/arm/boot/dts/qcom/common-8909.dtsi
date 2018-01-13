@@ -341,3 +341,16 @@
 	qcom,msm-mi2s-rx-lines = <2>;
 	qcom,msm-mi2s-tx-lines = <1>;
 };
+&spmi_bus {
+	qcom,pm8916@0 {
+		pm8916_pon: qcom,power-on@800 {
+			compatible = "qcom,qpnp-power-on";
+			qcom,pon_1 {
+				qcom,support-reset = <1>;
+				qcom,s1-timer = <6720>;
+				qcom,s2-timer = <1000>;
+				qcom,s2-type = <7>;
+			};
+		};
+	};
+};
