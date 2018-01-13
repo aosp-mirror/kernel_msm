@@ -757,7 +757,8 @@ static int bbd_resume(void)
 #ifdef DEBUG_1HZ_STAT
 	bbd_enable_stat();
 #endif
-	wake_lock_timeout(&bbd.bbd_wake_lock, HZ/2);
+    //modify 100ms
+	wake_lock_timeout(&bbd.bbd_wake_lock, msecs_to_jiffies(100));
 
 	return 0;
 }
