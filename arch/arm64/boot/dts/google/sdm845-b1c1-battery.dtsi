@@ -1,0 +1,32 @@
+
+#include "../qcom/smb1355.dtsi"
+
+&smb1355_charger_0 {
+	status = "ok";
+};
+
+&smb1355_charger_1 {
+	status = "ok";
+};
+
+&pmi8998_pdphy {
+	vbus-supply = <&smb2_vbus>;
+	ext-vbus-supply = <&ext_5v_boost>;
+};
+
+&pmi8998_charger {
+	google,boost_to_5_1V;
+};
+
+&pmi8998_fg {
+	qcom,battery-thermal-coefficients = [d8 50 ff];
+	qcom,cl-max-decrement = <5>;
+	qcom,linearize-soc;
+	qcom,fg-cutoff-voltage = <3300>;
+	qcom,fg-empty-voltage = <3100>;
+};
+
+&pmi8998_charger {
+	qcom,step-charging-enable;
+};
+
