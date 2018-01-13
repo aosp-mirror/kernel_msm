@@ -727,7 +727,7 @@ __msm_geni_serial_console_write(struct uart_port *uport, const char *s,
 }
 
 static void msm_geni_serial_console_write(struct console *co, const char *s,
-			      unsigned int count)
+			      unsigned count)
 {
 	struct uart_port *uport;
 	struct msm_geni_serial_port *port;
@@ -2036,7 +2036,7 @@ static int __init msm_geni_console_setup(struct console *co, char *options)
 
 static void
 msm_geni_serial_early_console_write(struct console *con, const char *s,
-			unsigned int n)
+			unsigned n)
 {
 	struct earlycon_device *dev = con->data;
 
