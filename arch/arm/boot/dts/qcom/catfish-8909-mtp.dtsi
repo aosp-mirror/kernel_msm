@@ -23,10 +23,10 @@
 			1 &intc 0 221 0>;
 	interrupt-names = "hc_irq", "pwr_irq";
 	qcom,bus-width = <4>;
-
-	vdd-supply = <&pm8916_l11>;
-	qcom,vdd-voltage-level = <1800000 2950000>;
-	qcom,vdd-current-level = <15000 400000>;
+	/delete-property/ cd-gpios;
+	/delete-property/ vdd-supply;
+	/delete-property/ qcom,vdd-voltage-level;
+	/delete-property/ qcom,vdd-current-level;
 
 	vdd-io-supply = <&pm8916_l12>;
 	qcom,vdd-io-always-on;
