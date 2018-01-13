@@ -991,22 +991,25 @@ int sec_ts_read_raw_data(struct sec_ts_data *ts,
 	int ii;
 	int ret = 0;
 	char temp[SEC_CMD_STR_LEN] = { 0 };
+	const unsigned int buff_size = ts->tx_count * ts->rx_count *
+					CMD_RESULT_WORD_LEN;
 	char *buff;
 
-	buff = kzalloc(ts->tx_count * ts->rx_count * CMD_RESULT_WORD_LEN, GFP_KERNEL);
+	buff = kzalloc(buff_size, GFP_KERNEL);
 	if (!buff)
 		goto error_alloc_mem;
 
 	if (ts->power_status == SEC_TS_STATE_POWER_OFF) {
-		input_err(true, &ts->client->dev, "%s: [ERROR] Touch is stopped\n",
-				__func__);
+		input_err(true, &ts->client->dev,
+			  "%s: [ERROR] Touch is stopped\n", __func__);
 		goto error_power_state;
 	}
 
 	input_info(true, &ts->client->dev, "%s: %d, %s\n",
 			__func__, mode->type, mode->allnode ? "ALL" : "");
 
-	ret = sec_ts_fix_tmode(ts, TOUCH_SYSTEM_MODE_TOUCH, TOUCH_MODE_STATE_TOUCH);
+	ret = sec_ts_fix_tmode(ts, TOUCH_SYSTEM_MODE_TOUCH,
+			       TOUCH_MODE_STATE_TOUCH);
 	if (ret < 0) {
 		input_err(true, &ts->client->dev, "%s: failed to fix tmode\n",
 				__func__);
@@ -1014,9 +1017,11 @@ int sec_ts_read_raw_data(struct sec_ts_data *ts,
 	}
 
 	if (mode->frame_channel)
-		ret = sec_ts_read_channel(ts, mode->type, &mode->min, &mode->max);
+		ret = sec_ts_read_channel(ts, mode->type, &mode->min,
+					  &mode->max);
 	else
-		ret = sec_ts_read_frame(ts, mode->type, &mode->min, &mode->max);
+		ret = sec_ts_read_frame(ts, mode->type, &mode->min,
+					&mode->max);
 	if (ret < 0) {
 		input_err(true, &ts->client->dev, "%s: failed to read frame\n",
 				__func__);
@@ -1025,34 +1030,40 @@ int sec_ts_read_raw_data(struct sec_ts_data *ts,
 
 	if (mode->allnode) {
 		if (mode->frame_channel) {
+			strlcat(buff, "\n      ", buff_size);
 			for (ii = 0; ii < (ts->rx_count + ts->tx_count); ii++) {
-				snprintf(temp, CMD_RESULT_WORD_LEN, "%d,", ts->pFrame[ii]);
-				strncat(buff, temp, CMD_RESULT_WORD_LEN);
-
-				memset(temp, 0x00, SEC_CMD_STR_LEN);
+				snprintf(temp, sizeof(temp), "%3d,",
+					 ts->pFrame[ii]);
+				strlcat(buff, temp, buff_size);
+				if (ii >= ts->tx_count - 1)
+					strlcat(buff, "\n", buff_size);
+				memset(temp, 0x00, sizeof(temp));
 			}
 		} else {
+			strlcat(buff, "\n", buff_size);
 			for (ii = 0; ii < (ts->rx_count * ts->tx_count); ii++) {
-				snprintf(temp, CMD_RESULT_WORD_LEN, "%d,", ts->pFrame[ii]);
-				strncat(buff, temp, CMD_RESULT_WORD_LEN);
-
-				memset(temp, 0x00, SEC_CMD_STR_LEN);
+				snprintf(temp, sizeof(temp), "%3d,",
+					 ts->pFrame[ii]);
+				strlcat(buff, temp, buff_size);
+				if (ii % ts->tx_count == (ts->tx_count - 1))
+					strlcat(buff, "\n", buff_size);
+				memset(temp, 0x00, sizeof(temp));
 			}
 		}
 	} else {
-		snprintf(buff, SEC_CMD_STR_LEN, "%d,%d", mode->min, mode->max);
+		snprintf(buff, buff_size, "%3d,%3d", mode->min, mode->max);
 	}
 
 	ret = sec_ts_release_tmode(ts);
 	if (ret < 0) {
-		input_err(true, &ts->client->dev, "%s: failed to release tmode\n",
-				__func__);
+		input_err(true, &ts->client->dev,
+			  "%s: failed to release tmode\n", __func__);
 		goto error_test_fail;
 	}
 
 	if (!sec)
 		goto out_rawdata;
-	sec_cmd_set_cmd_result(sec, buff, strnlen(buff, ts->tx_count * ts->rx_count * CMD_RESULT_WORD_LEN));
+	sec_cmd_set_cmd_result(sec, buff, strnlen(buff, buff_size));
 	sec->cmd_state = SEC_CMD_STATUS_OK;
 
 out_rawdata:
@@ -1765,12 +1776,12 @@ static void get_delta(void *device_data)
 }
 
 static int sec_ts_read_frame_stdev(struct sec_ts_data *ts,
-		u8 type, short *min, short *max)
+	struct sec_cmd_data *sec, u8 type, short *min, short *max)
 {
 	unsigned char *pRead = NULL;
 	short *pFrameAll = NULL;
 	int *pFrameAvg = NULL;
-	int *pFrameStd = NULL;
+	u64 *pFrameStd = NULL;
 	u8 inval_type = TYPE_INVALID_DATA;
 	int node_tot = 0;
 	int ret = 0;
@@ -1784,6 +1795,9 @@ static int sec_ts_read_frame_stdev(struct sec_ts_data *ts,
 	const unsigned int str_size = 10 * (ts->tx_count + 1);
 	unsigned char *pStr = NULL;
 	unsigned char pTmp[16] = { 0 };
+	const unsigned int buff_size = ts->tx_count * ts->rx_count *
+					CMD_RESULT_WORD_LEN;
+	char *pBuff;
 
 	input_info(true, &ts->client->dev, "%s\n", __func__);
 
@@ -1792,9 +1806,13 @@ static int sec_ts_read_frame_stdev(struct sec_ts_data *ts,
 	/* set data length, allocation buffer memory */
 
 	ret = -ENOMEM;
+	pBuff = kzalloc(buff_size, GFP_KERNEL);
+	if (!pBuff)
+		goto ErrorNomem;
+
 	pStr = kzalloc(str_size, GFP_KERNEL);
 	if (!pStr)
-		goto ErrorNomem;
+		goto ErrorAllocpStr;
 
 	/* each node data 2bytes : 1frame bytes = node_tot * 2 */
 	node_tot = ts->rx_count * ts->tx_count;
@@ -1814,7 +1832,8 @@ static int sec_ts_read_frame_stdev(struct sec_ts_data *ts,
 	if (!pFrameAvg)
 		goto ErrorAllocpFrameAvg;
 
-	pFrameStd = kzalloc(frame_len_byte * 2, GFP_KERNEL);
+	/* 64-bit to prevent overflow */
+	pFrameStd = kzalloc(frame_len_byte * 4, GFP_KERNEL);
 	if (!pFrameStd)
 		goto ErrorAllocpFrameStd;
 
@@ -1873,18 +1892,8 @@ static int sec_ts_read_frame_stdev(struct sec_ts_data *ts,
 		strlcat(pStr, pTmp, str_size);
 
 		for (j = 0; j < ts->tx_count; j++) {
-			snprintf(pTmp, sizeof(pTmp), " %8d",
+			snprintf(pTmp, sizeof(pTmp), " %6d",
 				 pFrameAvg[(j * ts->rx_count) + i]);
-
-			if (i > 0) {
-				if (pFrameAvg[(j * ts->rx_count) + i] < *min)
-					*min =
-					    pFrameAvg[(j * ts->rx_count) + i];
-
-				if (pFrameAvg[(j * ts->rx_count) + i] > *max)
-					*max =
-					    pFrameAvg[(j * ts->rx_count) + i];
-			}
 			strlcat(pStr, pTmp, str_size);
 		}
 		input_info(true, &ts->client->dev, "%s\n", pStr);
@@ -1905,14 +1914,16 @@ static int sec_ts_read_frame_stdev(struct sec_ts_data *ts,
 	/* print standard deviation x 1000 of each node */
 	input_info(true, &ts->client->dev, "%s: FrameStd x 1000\n", __func__);
 
+	*min = *max = pFrameStd[0];
+
 	for (i = 0; i < ts->rx_count; i++) {
 		memset(pStr, 0x0, str_size);
 		snprintf(pTmp, sizeof(pTmp), "Rx%02d | ", i);
 		strlcat(pStr, pTmp, str_size);
 
 		for (j = 0; j < ts->tx_count; j++) {
-			snprintf(pTmp, sizeof(pTmp), " %8d",
-				 pFrameStd[(j * ts->rx_count) + i]);
+			snprintf(pTmp, sizeof(pTmp), " %6d",
+				 (int)pFrameStd[(j * ts->rx_count) + i]);
 
 			if (i > 0) {
 				if (pFrameStd[(j * ts->rx_count) + i] < *min)
@@ -1928,6 +1939,41 @@ static int sec_ts_read_frame_stdev(struct sec_ts_data *ts,
 		input_info(true, &ts->client->dev, "%s\n", pStr);
 	}
 	// SQRT(VAR)
+
+	/* Rotate 90 degrees for readability */
+	for (i = 0; i < ts->tx_count; i++) {
+		for (j = 0; j < ts->rx_count; j++) {
+			if (pFrameStd[(i * ts->rx_count) + j] > 32767)
+				/* Reduce to short data type and allow high
+				 * values to saturate.
+				 */
+				ts->pFrame[(j * ts->tx_count) + i] = 32767;
+			else {
+				ts->pFrame[(j * ts->tx_count) + i] =
+					(short)(pFrameStd[(i * ts->rx_count) +
+						j]);
+			}
+		}
+	}
+
+	for (i = 0; i < node_tot; i++) {
+		if (i == 0)
+			strlcat(pBuff, "\n", buff_size);
+
+		snprintf(pTmp, sizeof(pTmp), "%d,", ts->pFrame[i]);
+		strlcat(pBuff, pTmp, buff_size);
+
+		if (i % ts->tx_count == ts->tx_count - 1)
+			strlcat(pBuff, "\n", buff_size);
+
+		memset(pTmp, 0x00, sizeof(pTmp));
+	}
+
+	if (!sec)
+		goto ErrorRelease;
+
+	sec_cmd_set_cmd_result(sec, pBuff, strnlen(pBuff, buff_size));
+	sec->cmd_state = SEC_CMD_STATUS_OK;
 
 ErrorRelease:
 	/* release data monitory (unprepare AFE data memory) */
@@ -1962,6 +2008,9 @@ ErrorAllocpFrameAll:
 ErrorAllocpRead:
 	kfree(pStr);
 
+ErrorAllocpStr:
+	kfree(pBuff);
+
 ErrorNomem:
 	if (ret < 0)
 		sec_cmd_set_cmd_result(&ts->sec, "NG", 2);
@@ -1982,7 +2031,7 @@ static void run_rawdata_stdev_read(void *device_data)
 	memset(&mode, 0x00, sizeof(struct sec_ts_test_mode));
 	mode.type = TYPE_RAW_DATA;
 
-	sec_ts_read_frame_stdev(ts, mode.type, &mode.min, &mode.max);
+	sec_ts_read_frame_stdev(ts, sec, mode.type, &mode.min, &mode.max);
 }
 
 /* self reference : send TX power in TX channel, receive in TX channel */
@@ -2722,7 +2771,17 @@ int execute_selftest(struct sec_ts_data *ts, bool save_result)
 
 
 		if (i / 4 == 4) {
-			if ((rBuff[i + 3] & 0x30) != 0)// RX, RX open check.
+			/* RX, RX open check. */
+			if ((rBuff[i + 3] & 0x30) != 0)
+				rc = 0;
+			/* TX, RX GND(VDD) short check. */
+			else if ((rBuff[i + 3] & 0xC0) != 0)
+				rc = 0;
+			/* RX-RX, TX-TX short check. */
+			else if ((rBuff[i + 2] & 0x30) != 0)
+				rc = 0;
+			/* TX-RX short check. */
+			else if ((rBuff[i + 2] & 0x40) != 0)
 				rc = 0;
 			else
 				rc = 1;
