@@ -23,6 +23,7 @@
 #include <linux/of_gpio.h>
 #include <linux/leds.h>
 #include <linux/platform_data/leds-lm36272.h>
+#include <linux/pm_wakeup.h>
 
 #define LM36272_BL_DEV "lcd-backlight"
 #define I2C_BL_NAME "leds_lm36272"
@@ -31,6 +32,7 @@
 #define LM36272_BRT_MSB_SHIFT	3
 #define MAX_BRIGHTNESS_LM36272	255
 #define MIN_BRIGHTNESS_LM36272	0
+#define DIM_BRIGHTENSS_LM36272  1
 
 #define DSV_PRE_ON_DEALY_US 1000
 #define DSV_P_ON_DELAY_US   2000
@@ -41,7 +43,8 @@
 enum {
 	BL_OFF = 0,
 	BL_ON,
-	BL_OFF_PENDING
+	BL_OFF_PENDING,
+	BL_DIM_PENDING
 };
 
 enum {
@@ -62,11 +65,18 @@ struct lm36272_device {
 	u32 *dsv_off_delay;
 	int min_brightness;
 	int max_brightness;
+	int dim_brightness;
+	bool dim_enabled;
 	int default_brightness;
 	int status;
 	struct mutex bl_mutex;
 	int blmap_size;
 	u16 *blmap;
+
+	struct work_struct bl_work;
+	int level_saved;
+	int level_target;
+	struct wakeup_source ws_dev;
 };
 
 static const struct i2c_device_id lm36272_bl_id[] = {
@@ -190,7 +200,10 @@ static void lm36272_backlight_ctrl_internal(struct lm36272_device *ldev,
 		usleep_range(1000, 1000);
 		lm36272_set_main_current_level(ldev->client, level);
 		ldev->status = BL_ON;
+		if (ldev->dim_enabled && ldev->dim_brightness == level)
+			pr_info("backlight dim\n");
 	}
+	ldev->level_saved = level;
 }
 
 void lm36272_backlight_ctrl(int level)
@@ -208,8 +221,24 @@ void lm36272_backlight_ctrl(int level)
 	     FB_BLANK_POWERDOWN != ldev->fb_blank)) {
 		ldev->status = BL_OFF_PENDING;
 		pr_info("pending backlight off\n");
-	} else {
+	} else if (!ldev->dim_enabled) {
 		lm36272_backlight_ctrl_internal(ldev, level);
+	} else if (ldev->dim_brightness == level &&
+		   FB_BLANK_VSYNC_SUSPEND != ldev->fb_blank) {
+		ldev->status = BL_DIM_PENDING;
+		pr_info("pending backlight dim\n");
+	} else {
+		if (level >= (ldev->level_saved - 5)) {
+			mutex_unlock(&ldev->bl_mutex);
+			cancel_work_sync(&ldev->bl_work);
+			mutex_lock(&ldev->bl_mutex);
+			lm36272_backlight_ctrl_internal(ldev, level);
+		} else {
+			mutex_unlock(&ldev->bl_mutex);
+			ldev->level_target = level;
+			schedule_work(&ldev->bl_work);
+			mutex_lock(&ldev->bl_mutex);
+		}
 	}
 	mutex_unlock(&ldev->bl_mutex);
 }
@@ -280,6 +309,13 @@ static int lm36272_parse_dt(struct device *dev,
 			&pdata->max_brightness);
 	if (rc)
 		pdata->max_brightness = MAX_BRIGHTNESS_LM36272;
+
+	rc = of_property_read_u32(np, "lm36272,dim-brightness",
+			&pdata->dim_brightness);
+	if (rc)
+		pdata->dim_brightness = DIM_BRIGHTENSS_LM36272;
+
+	pdata->dim_enabled = of_property_read_bool(np, "lm36272,dim-enabled");
 
 	rc = of_property_read_u32(np, "lm36272,blmap-size",
 			&pdata->blmap_size);
@@ -362,6 +398,14 @@ static int fb_notifier_callback(struct notifier_block *self,
 		} else {
 			ldev->status = BL_ON;
 		}
+	} else if (ldev->dim_enabled && BL_DIM_PENDING == ldev->status) {
+		if (FB_BLANK_VSYNC_SUSPEND == fb_blank) {
+			/* backlight dim */
+			ldev->level_target = 1;
+			schedule_work(&ldev->bl_work);
+		} else {
+			ldev->status = BL_ON;
+		}
 	}
 	ldev->fb_blank = fb_blank;
 	mutex_unlock(&ldev->bl_mutex);
@@ -369,6 +413,33 @@ static int fb_notifier_callback(struct notifier_block *self,
 	return 0;
 }
 #endif
+
+static void lm36272_bl_work(struct work_struct *work)
+{
+	struct lm36272_device *ldev = container_of(work,
+			struct lm36272_device, bl_work);
+	int level;
+	bool exit = false;
+
+	mutex_lock(&ldev->bl_mutex);
+	__pm_stay_awake(&ldev->ws_dev);
+	level = ldev->level_saved;
+
+	while (level > ldev->level_target) {
+		level -= 5;
+		if (level <= ldev->level_target) {
+			level = ldev->level_target;
+			exit = true;
+		}
+
+		lm36272_backlight_ctrl_internal(ldev, level);
+		if (exit)
+			break;
+		usleep_range(9000,10000);
+	}
+	__pm_relax(&ldev->ws_dev);
+	mutex_unlock(&ldev->bl_mutex);
+}
 
 static int lm36272_probe(struct i2c_client *client,
 		const struct i2c_device_id *id)
@@ -433,6 +504,10 @@ static int lm36272_probe(struct i2c_client *client,
 	ldev->max_brightness = pdata->max_brightness;
 	if (ldev->max_brightness > MAX_BRIGHTNESS_LM36272)
 		ldev->max_brightness = MAX_BRIGHTNESS_LM36272;
+	ldev->dim_brightness = clamp(pdata->dim_brightness,
+				     MIN_BRIGHTNESS_LM36272,
+				     MAX_BRIGHTNESS_LM36272);
+	ldev->dim_enabled = pdata->dim_enabled;
 	ldev->default_brightness = pdata->default_brightness;
 	ldev->blmap_size = pdata->blmap_size;
 
@@ -455,6 +530,9 @@ static int lm36272_probe(struct i2c_client *client,
 		goto err_fb_client;
 	}
 #endif
+
+	INIT_WORK(&ldev->bl_work, lm36272_bl_work);
+	wakeup_source_init(&ldev->ws_dev, "backlight_ws_dev");
 
 	err = led_classdev_register(&client->dev, &ldev->led_dev);
 	if (err < 0) {

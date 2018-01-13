@@ -21,6 +21,8 @@ struct lm36272_platform_data {
 	u32 dsv_off_delay[2];
 	int min_brightness;
 	int max_brightness;
+	int dim_brightness;
+	bool dim_enabled;
 	int default_brightness;
 	int blmap_size;
 	u16 *blmap;
