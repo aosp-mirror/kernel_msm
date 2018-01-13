@@ -3,6 +3,12 @@
 &soc {
 	msm_gpio: pinctrl@1000000 {
 
+		/delete-node/ spi0;
+		/delete-node/ pmx_i2c_2;
+		/delete-node/ pmx_i2c_3;
+		/delete-node/ pmx_i2c_4;
+		/delete-node/ pmx_i2c_5;
+
 		uart2 {
 			blsp1_uart2_active: blsp1_uart2_active {
 				mux {

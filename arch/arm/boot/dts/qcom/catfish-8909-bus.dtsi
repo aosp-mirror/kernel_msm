@@ -1,12 +1,30 @@
 /*add catfish/catshark bus info*/
 / {
 	aliases {
+		/delete-property/ i2c2;
+		/delete-property/ i2c3;
+		/delete-property/ i2c4;
+		/delete-property/ i2c5;
+		/delete-property/ spi0;
 		i2c6 = &i2c_6;
 		spi4 = &spi_4;
-                spi5 = &spi_5; /* SPI5 GPS controller device */
+		spi5 = &spi_5; /* SPI5 GPS controller device */
 	};
 };
 &soc {
+	i2c@78b8000 {
+		/delete-node/ smb1357-charger@57;
+		/delete-node/ smb358-charger@57;
+	};
+	i2c@78b9000 {
+		/delete-node/ synaptics@20;
+	};
+	/delete-node/ spi@78ba000;
+	/delete-node/ i2c@78b6000;
+	/delete-node/ i2c@78b7000;
+	/delete-node/ i2c@78b8000;
+	/delete-node/ i2c@78b9000;
+
 	i2c_6: i2c@78ba000 { /* BLSP1 QUP6 */
 		compatible = "qcom,i2c-msm-v2";
 		#address-cells = <1>;

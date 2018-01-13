@@ -217,20 +217,8 @@
 &i2c_1 {
 	status = "ok";
 };
-&i2c_4 {
-	status = "disabled";
-};
-&i2c_2 {
-	status = "disabled";
-};
-&i2c_3 {
-	status = "disabled";
-};
 &i2c_6 {
 	status = "ok";
-};
-&i2c_5 {
-	status = "disabled";
 };
 &spi_5 {
 	status = "ok";
