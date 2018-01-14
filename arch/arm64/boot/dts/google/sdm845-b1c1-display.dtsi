@@ -78,8 +78,7 @@
 		clock-names = "src_byte_clk", "src_pixel_clk";
 
 		pinctrl-names = "panel_active", "panel_suspend";
-		pinctrl-0 = <&sde_dsi_active &sde_te_active &sde_pmgpio_active
-			     &se8_spiflash>;
+		pinctrl-0 = <&sde_dsi_active &sde_te_active &sde_pmgpio_active>;
 		pinctrl-1 = <&sde_dsi_suspend &sde_te_suspend &sde_pmgpio_suspend>;
 
 		qcom,dsi-panel = <&dsi_sw43402_dsc_qhd_cmd>;
@@ -121,7 +120,7 @@
 		clock-names = "src_byte_clk", "src_pixel_clk";
 
 		pinctrl-names = "panel_active", "panel_suspend";
-		pinctrl-0 = <&sde_dsi_active &sde_te_active>;
+		pinctrl-0 = <&sde_dsi_active &sde_te_active  &se8_spiflash>;
 		pinctrl-1 = <&sde_dsi_suspend &sde_te_suspend>;
 
 		qcom,dsi-panel = <&dsi_s6e3ha8_dsc_wqhd_cmd>;
