@@ -16,6 +16,7 @@
 
 #include "sdm845-c1-touch.dtsi"
 #include "sdm845-b1c1-audio.dtsi"
+#include "sdm845-c1-battery.dtsi"
 
 &dsi_s6e3ha8_cmd_display {
 	qcom,dsi-display-active;
