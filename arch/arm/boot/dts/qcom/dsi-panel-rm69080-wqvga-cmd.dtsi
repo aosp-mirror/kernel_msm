@@ -14,7 +14,6 @@
 	dsi_rm69080_wqvga_cmd: qcom,mdss_dsi_rm69080_wqvga_cmd {
 		qcom,mdss-dsi-panel-name = "rm69080 wqvga cmd mode dsi panel";
 		qcom,mdss-dsi-panel-controller = <&mdss_dsi0>;
-		//qcom,ulps-enabled;
 		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
 		qcom,mdss-dsi-panel-destination = "display_1";
 		qcom,mdss-dsi-panel-framerate = <60>;
@@ -28,15 +27,11 @@
 		qcom,mdss-dsi-color-order = "rgb_swap_rgb";
 		qcom,mdss-dsi-underflow-color = <0xff>;
 		qcom,mdss-dsi-border-color = <0>;
-		qcom,mdss-dsi-on-command = [15 01 00 00 00 00 02 FE 05
-			15 01 00 00 00 00 02 05 00
-			15 01 00 00 00 00 02 FE 07
-			15 01 00 00 00 00 02 07 6D
-			15 01 00 00 00 00 02 FE 0A
-			15 01 00 00 00 00 02 1C 1B
+		qcom,mdss-dsi-on-command = [15 01 00 00 00 00 02 FE 01
+			15 01 00 00 00 00 02 0A F0
 			15 01 00 00 00 00 02 FE 00
 			15 01 00 00 00 00 02 35 00
-			15 01 00 00 00 00 02 51 00
+			15 01 00 00 00 00 02 53 20
 			05 01 00 00 96 00 02 11 00
 			05 01 00 00 00 00 02 29 00];
 		qcom,mdss-dsi-off-command = [05 01 00 00 00 00 02 28 00
@@ -45,11 +40,11 @@
 		qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
 		qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
 		qcom,mdss-dsi-idle-on-command = [15 01 00 00 00 00 02 FE 00
-							15 01 00 00 00 00 02 39 00];
+				05 01 00 00 00 00 02 39 00];
 		qcom,mdss-dsi-idle-off-command = [15 01 00 00 00 00 02 FE 00
-							15 01 00 00 00 00 02 38 00];
-		qcom,mdss-dsi-idle-on-command-state = "dsi_idle_on_mode";
-		qcom,mdss-dsi-idle-off-command-state = "dsi_idle_out_mode";
+				05 01 00 00 00 00 02 38 00];
+		qcom,mdss-dsi-idle-on-command-state = "dsi_hs_mode";
+		qcom,mdss-dsi-idle-off-command-state = "dsi_hs_mode";
 		qcom,mdss-dsi-traffic-mode = "burst_mode";
 		qcom,mdss-dsi-lane-map = "lane_map_0123";
 		qcom,mdss-dsi-bllp-eof-power-mode;
@@ -68,7 +63,5 @@
 		qcom,mdss-dsi-mdp-trigger = "none";
 		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 		qcom,mdss-dsi-reset-sequence = <1 20>, <0 20>, <1 20>;
-		/* clk = totlaH * totalV * ppp* 66fps */
-		qcom,mdss-dsi-panel-clockrate = <221000000>;
 	};
 };
