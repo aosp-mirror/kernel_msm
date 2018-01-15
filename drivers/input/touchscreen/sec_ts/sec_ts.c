@@ -607,11 +607,26 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 			p_event_status = (struct sec_ts_event_status *)event_buff;
 
 			/* tchsta == 0 && ttype == 0 && eid == 0 : buffer empty */
-			if (p_event_status->stype > 0)
-				input_info(true, &ts->client->dev, "%s: STATUS %x %x %x %x %x %x %x %x\n", __func__,
-						event_buff[0], event_buff[1], event_buff[2],
-						event_buff[3], event_buff[4], event_buff[5],
-						event_buff[6], event_buff[7]);
+			if (p_event_status->stype > 0) {
+				/* Demote 'vendor' messages */
+				if (p_event_status->stype ==
+				    TYPE_STATUS_EVENT_VENDOR_INFO)
+					input_dbg(true, &ts->client->dev,
+						"%s: STATUS %x %x %x %x %x %x %x %x\n",
+						__func__, event_buff[0],
+						event_buff[1], event_buff[2],
+						event_buff[3], event_buff[4],
+						event_buff[5], event_buff[6],
+						event_buff[7]);
+				else
+					input_info(true, &ts->client->dev,
+						"%s: STATUS %x %x %x %x %x %x %x %x\n",
+						__func__, event_buff[0],
+						event_buff[1], event_buff[2],
+						event_buff[3], event_buff[4],
+						event_buff[5], event_buff[6],
+						event_buff[7]);
+			}
 
 			/* watchdog reset -> send SENSEON command */ /*=>?????*/
 			if ((p_event_status->stype == TYPE_STATUS_EVENT_INFO) &&
