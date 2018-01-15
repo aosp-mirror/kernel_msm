@@ -52,7 +52,7 @@ void sec_cmd_set_default_result(struct sec_cmd_data *data)
 
 void sec_cmd_set_cmd_result(struct sec_cmd_data *data, char *buff, int len)
 {
-	strncat(data->cmd_result, buff, len);
+	strlcat(data->cmd_result, buff, SEC_CMD_RESULT_STR_LEN);
 }
 
 #ifndef USE_SEC_CMD_QUEUE
