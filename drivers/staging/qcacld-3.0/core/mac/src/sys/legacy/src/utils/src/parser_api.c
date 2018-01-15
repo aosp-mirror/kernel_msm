@@ -2436,6 +2436,24 @@ void sir_copy_caps_info(tpAniSirGlobal mac_ctx, tDot11fFfCapabilities caps,
 	pProbeResp->capabilityInfo.immediateBA = caps.immediateBA;
 }
 
+/**
+ * sir_convert_esp_data_to_probersp_struct: update ESP params from probe resp
+ * @probe_resp: pointer to tpSirProbeRespBeacon
+ * @pr: pointer to tDot11fProbeResponse
+ *
+ * Return: None
+ */
+static void
+sir_convert_esp_data_to_probersp_struct(tpSirProbeRespBeacon probe_resp,
+					tDot11fProbeResponse *pr)
+{
+	if (!pr->ESP_information.present)
+		return;
+
+	update_esp_data(&probe_resp->esp_information,
+			&pr->ESP_information);
+}
+
 tSirRetStatus sir_convert_probe_frame2_struct(tpAniSirGlobal pMac,
 					      uint8_t *pFrame,
 					      uint32_t nFrame,
@@ -2685,6 +2703,11 @@ tSirRetStatus sir_convert_probe_frame2_struct(tpAniSirGlobal pMac,
 			pProbeResp->assoc_disallowed_reason =
 				pr->MBO_IE.assoc_disallowed.reason_code;
 		}
+		if (pr->MBO_IE.reduced_wan_metrics.present) {
+			pProbeResp->oce_wan_present = true;
+			pProbeResp->oce_wan_downlink_av_cap =
+				pr->MBO_IE.reduced_wan_metrics.downlink_av_cap;
+		}
 	}
 
 	if (pr->QCN_IE.present) {
@@ -2698,11 +2721,14 @@ tSirRetStatus sir_convert_probe_frame2_struct(tpAniSirGlobal pMac,
 		}
 	}
 
+	sir_convert_esp_data_to_probersp_struct(pProbeResp, pr);
 	sir_convert_fils_data_to_probersp_struct(pProbeResp, pr);
 	qdf_mem_free(pr);
 	return eSIR_SUCCESS;
 
 } /* End sir_convert_probe_frame2_struct. */
+
+
 
 tSirRetStatus
 sir_convert_assoc_req_frame2_struct(tpAniSirGlobal pMac,
@@ -4368,6 +4394,12 @@ sir_convert_beacon_frame2_struct(tpAniSirGlobal pMac,
 			pBeaconStruct->assoc_disallowed = true;
 			pBeaconStruct->assoc_disallowed_reason =
 				pBeacon->MBO_IE.assoc_disallowed.reason_code;
+		}
+		if (pBeacon->MBO_IE.reduced_wan_metrics.present) {
+			pBeaconStruct->oce_wan_present = true;
+			pBeaconStruct->oce_wan_downlink_av_cap =
+				pBeacon->MBO_IE.
+					reduced_wan_metrics.downlink_av_cap;
 		}
 	}
 

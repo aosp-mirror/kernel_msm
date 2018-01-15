@@ -803,7 +803,6 @@ typedef struct sSirBssDescription {
 	uint8_t QBSSLoad_present;
 	uint8_t qbss_chan_load;
 	uint16_t QBSSLoad_avail;
-	uint16_t qbss_stacount;
 	/* To achieve 8-byte alignment with ESE enabled */
 	uint32_t reservedPadding5;
 	/* whether it is from a probe rsp */
@@ -824,6 +823,8 @@ typedef struct sSirBssDescription {
 #endif
 	uint8_t air_time_fraction;
 	uint8_t nss;
+	uint8_t oce_wan_present;
+	uint8_t oce_wan_down_cap;
 	/* Please keep the structure 4 bytes aligned above the ieFields */
 	uint32_t ieFields[1];
 
@@ -3363,6 +3364,125 @@ struct roam_ext_params {
 	uint32_t bg_scan_client_bitmap;
 };
 
+#define RSSI_WEIGHTAGE 20
+#define HT_CAPABILITY_WEIGHTAGE 2
+#define VHT_CAP_WEIGHTAGE 1
+#define CHAN_WIDTH_WEIGHTAGE 17
+#define CHAN_BAND_WEIGHTAGE 2
+#define NSS_WEIGHTAGE 16
+#define BEAMFORMING_CAP_WEIGHTAGE 2
+#define PCL_WEIGHT 10
+#define CHANNEL_CONGESTION_WEIGHTAGE 5
+#define OCE_WAN_WEIGHTAGE 0
+
+#define BEST_CANDIDATE_MAX_WEIGHT 100
+#define MAX_INDEX_SCORE 100
+#define MAX_INDEX_PER_INI 4
+
+
+#define WLAN_GET_BITS(_val, _index, _num_bits)                         \
+	    (((_val) >> (_index)) & ((1 << (_num_bits)) - 1))
+
+#define WLAN_SET_BITS(_var, _index, _num_bits, _val) do {               \
+	    (_var) &= ~(((1 << (_num_bits)) - 1) << (_index));              \
+	    (_var) |= (((_val) & ((1 << (_num_bits)) - 1)) << (_index));    \
+	    } while (0)
+
+#define WLAN_GET_SCORE_PERCENTAGE(value32, bw_index) \
+	WLAN_GET_BITS(value32, (8 * (bw_index)), 8)
+#define WLAN_SET_SCORE_PERCENTAGE(value32, score_pcnt, bw_index) \
+	WLAN_SET_BITS(value32, (8 * (bw_index)), 8, score_pcnt)
+
+
+
+/**
+ * struct sir_weight_config - weight params to
+ * calculate best candidate
+ * @rssi_weightage: RSSI weightage
+ * @ht_caps_weightage: HT caps weightage
+ * @vht_caps_weightage: VHT caps weightage
+ * @he_caps_weightage: HE caps weightage
+ * @chan_width_weightage: Channel width weightage
+ * @chan_band_weightage: Channel band weightage
+ * @nss_weightage: NSS weightage
+ * @beamforming_cap_weightage: Beamforming caps weightage
+ * @pcl_weightage: PCL weightage
+ * @channel_congestion_weightage: channel congestion weightage
+ * @oce_wan_weightage: OCE WAN metrics weightage
+ */
+struct  sir_weight_config {
+	uint8_t rssi_weightage;
+	uint8_t ht_caps_weightage;
+	uint8_t vht_caps_weightage;
+	uint8_t he_caps_weightage;
+	uint8_t chan_width_weightage;
+	uint8_t chan_band_weightage;
+	uint8_t nss_weightage;
+	uint8_t beamforming_cap_weightage;
+	uint8_t pcl_weightage;
+	uint8_t channel_congestion_weightage;
+	uint8_t oce_wan_weightage;
+};
+
+struct sir_rssi_cfg_score  {
+	uint32_t best_rssi_threshold;
+	uint32_t good_rssi_threshold;
+	uint32_t bad_rssi_threshold;
+	uint32_t good_rssi_pcnt;
+	uint32_t bad_rssi_pcnt;
+	uint32_t good_rssi_bucket_size;
+	uint32_t bad_rssi_bucket_size;
+	uint32_t rssi_pref_5g_rssi_thresh;
+};
+
+/**
+ * struct sir_per_slot_scoring - define % score for differents slots for a
+ *                             scoring param.
+ * num_slot: number of slots in which the param will be divided.
+ *           Max 15. index 0 is used for 'not_present. Num_slot will
+ *           equally divide 100. e.g, if num_slot = 4 slot 0 = 0-25%, slot
+ *           1 = 26-50% slot 2 = 51-75%, slot 3 = 76-100%
+ * score_pcnt3_to_0: Conatins score percentage for slot 0-3
+ *             BITS 0-7   :- the scoring pcnt when not present
+ *             BITS 8-15  :- SLOT_1
+ *             BITS 16-23 :- SLOT_2
+ *             BITS 24-31 :- SLOT_3
+ * score_pcnt7_to_4: Conatins score percentage for slot 4-7
+ *             BITS 0-7   :- SLOT_4
+ *             BITS 8-15  :- SLOT_5
+ *             BITS 16-23 :- SLOT_6
+ *             BITS 24-31 :- SLOT_7
+ * score_pcnt11_to_8: Conatins score percentage for slot 8-11
+ *             BITS 0-7   :- SLOT_8
+ *             BITS 8-15  :- SLOT_9
+ *             BITS 16-23 :- SLOT_10
+ *             BITS 24-31 :- SLOT_11
+ * score_pcnt15_to_12: Conatins score percentage for slot 12-15
+ *             BITS 0-7   :- SLOT_12
+ *             BITS 8-15  :- SLOT_13
+ *             BITS 16-23 :- SLOT_14
+ *             BITS 24-31 :- SLOT_15
+ */
+struct sir_per_slot_scoring {
+	uint32_t num_slot;
+	uint32_t score_pcnt3_to_0;
+	uint32_t score_pcnt7_to_4;
+	uint32_t score_pcnt11_to_8;
+	uint32_t score_pcnt15_to_12;
+};
+
+struct sir_score_config {
+	bool enable_scoring_for_roam;
+	struct sir_weight_config weight_cfg;
+	struct sir_rssi_cfg_score rssi_score;
+	struct sir_per_slot_scoring esp_qbss_scoring;
+	struct sir_per_slot_scoring oce_wan_scoring;
+	uint32_t bandwidth_weight_per_index;
+	uint32_t nss_weight_per_index;
+	uint32_t band_weight_per_index;
+};
+
+
 /**
  * struct pmkid_mode_bits - Bit flags for PMKID usage in RSN IE
  * @fw_okc: Opportunistic key caching enable in firmware
@@ -3400,6 +3520,7 @@ typedef struct sSirRoamOffloadScanReq {
 	uint8_t OpportunisticScanThresholdDiff;
 	uint8_t RoamRescanRssiDiff;
 	uint8_t RoamRssiDiff;
+	int32_t rssi_abs_thresh;
 	uint8_t ChannelCacheType;
 	uint8_t Command;
 	uint8_t reason;
@@ -3453,6 +3574,7 @@ typedef struct sSirRoamOffloadScanReq {
 	bool is_fils_connection;
 	struct roam_fils_params roam_fils_params;
 #endif
+	struct scoring_param score_params;
 } tSirRoamOffloadScanReq, *tpSirRoamOffloadScanReq;
 
 typedef struct sSirRoamOffloadScanRsp {
@@ -4524,6 +4646,7 @@ typedef struct sSirChanChangeRequest {
 	uint8_t center_freq_seg_1;
 	uint8_t bssid[QDF_MAC_ADDR_SIZE];
 	uint32_t dot11mode;
+	tSirNwType nw_type;
 	tSirMacRateSet operational_rateset;
 	tSirMacRateSet extended_rateset;
 } tSirChanChangeRequest, *tpSirChanChangeRequest;
