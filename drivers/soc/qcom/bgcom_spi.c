@@ -454,9 +454,6 @@ int bgcom_ahb_read(void *handle, uint32_t ahb_start_addr,
 		pr_err("Invalid param\n");
 		return -EINVAL;
 	}
-	if (bgcom_resume(&handle))
-		return -EBUSY;
-
 	if (!is_bgcom_ready())
 		return -ENODEV;
 
@@ -513,9 +510,6 @@ int bgcom_ahb_write(void *handle, uint32_t ahb_start_addr,
 		return -EINVAL;
 	}
 
-	if (bgcom_resume(&handle))
-		return -EBUSY;
-
 	if (!is_bgcom_ready())
 		return -ENODEV;
 
@@ -560,9 +554,6 @@ int bgcom_fifo_write(void *handle, uint32_t num_words,
 		return -EINVAL;
 	}
 
-	if (bgcom_resume(&handle))
-		return -EBUSY;
-
 	if (!is_bgcom_ready())
 		return -ENODEV;
 
@@ -604,9 +595,6 @@ int bgcom_fifo_read(void *handle, uint32_t num_words,
 		pr_err("Invalid param\n");
 		return -EINVAL;
 	}
-
-	if (bgcom_resume(&handle))
-		return -EBUSY;
 
 	if (!is_bgcom_ready())
 		return -ENODEV;
@@ -657,9 +645,6 @@ int bgcom_reg_write(void *handle, uint8_t reg_start_addr,
 		pr_err("Invalid param\n");
 		return -EINVAL;
 	}
-
-	if (bgcom_resume(&handle))
-		return -EBUSY;
 
 	if (!is_bgcom_ready())
 		return -ENODEV;
