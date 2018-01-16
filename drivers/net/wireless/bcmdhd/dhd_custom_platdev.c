@@ -35,6 +35,7 @@
 #include <linux/wlan_plat.h>
 #include <linux/mmc/host.h>
 #include <linux/if.h>
+#include <linux/unistd.h>
 
 #if defined(CONFIG_ARCH_MSM)
 #if defined(CONFIG_64BIT)
@@ -296,6 +297,8 @@ err_skb_alloc:
 	return -ENOMEM;
 }
 #endif /* CONFIG_DHD_USE_STATIC_BUF */
+
+#define WIFIMAC_ADDR_PATH "/persist/wifi_nv.bin"
 
 int dhd_wifi_init_gpio(void)
 {
@@ -580,9 +583,42 @@ __setup("androidboot.wifimacaddr=", dhd_mac_addr_setup);
 static int dhd_wifi_get_mac_addr(unsigned char *buf)
 {
 	uint rand_mac;
+	struct file *fp = NULL;
+	mm_segment_t fs;
+	unsigned char source_addr[18];
+	loff_t pos = 0;
+	unsigned char *head, *end;
+	int i = 0;
 
 	if (!buf)
 		return -EFAULT;
+	fp = filp_open(WIFIMAC_ADDR_PATH, O_RDONLY,  0444);
+	if (IS_ERR(fp)){
+		printk("Can not access wifi mac file : %s\n",WIFIMAC_ADDR_PATH);
+		return -EFAULT;
+	}else{
+		fs = get_fs();
+		set_fs(KERNEL_DS);
+		vfs_read(fp, source_addr, 18, &pos);
+		source_addr[17] = ':';
+
+		head = end = source_addr;
+		for(i=0; i<6; i++) {
+			while (end && (*end != ':') )
+				end++;
+			if (end && (*end == ':') )
+				*end = '\0';
+			buf[i] = simple_strtoul(head, NULL, 16 );
+			if (end) {
+				end++;
+				head = end;
+			}
+			pr_debug("%s wifi mac %02x %d\n", __func__, buf[i], __LINE__);
+			memcpy(brcm_mac_addr, buf, IFHWADDRLEN);
+		}
+		set_fs(fs);
+		filp_close(fp, NULL);
+	}
 
 	if ((brcm_mac_addr[4] == 0) && (brcm_mac_addr[5] == 0)) {
 		prandom_seed((uint)jiffies);
