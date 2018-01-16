@@ -734,6 +734,7 @@ int __nanohub_send_AP_cmd(struct nanohub_data *data, enum AP_GPIO_CMD mode)
 	case GPIO_CMD_POWEROFF: /*0000*/
 	case GPIO_CMD_BAND:     /*0001*/
 		atomic_set(&data->hub_mode_ap_pwr_down, mode);    /* Only remember the state after AP pwr off */
+		__nanohub_set_mode_pin(data, mode);
 		break;
 
 	case GPIO_CMD_AMBIENT:	/*0010*/
