@@ -1019,9 +1019,6 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 
 	/* Ensure low persistence mode is set as before */
 	mdss_dsi_panel_apply_display_setting(pdata, pinfo->persist_mode);
-
-	if (pinfo->err_detect_enabled)
-		mdss_dsi_err_detect_irq_control(ctrl, true);
 end:
 	pr_debug("%s:-\n", __func__);
 	return ret;
@@ -1060,6 +1057,9 @@ static int mdss_dsi_post_panel_on(struct mdss_panel_data *pdata)
 		msleep(vsync_period);
 		mdss_dba_utils_hdcp_enable(pinfo->dba_data, true);
 	}
+
+	if (pinfo->err_detect_enabled)
+		mdss_dsi_err_detect_irq_control(ctrl, true);
 
 end:
 	pr_debug("%s:-\n", __func__);
