@@ -19,6 +19,7 @@
 	pinctrl-names = "spi_default", "spi_sleep";
 	pinctrl-0 = <&spi0_default>;
 	pinctrl-1 = <&spi0_sleep>;
+	cs-gpios = <&msm_gpio 10 0x00>;
 	paj9124u1: paj9124u1@0 {
 		compatible = "paj9124u1";
 		reg = <0>;
