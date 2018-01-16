@@ -242,6 +242,10 @@
 	qcom,fg-empty-voltage = <3200>;
 };
 
+&pmi8998_bcl {
+	qcom,vbat-too-low-threshold = <4>; /* 2.8V */
+};
+
 &pmi8998_pdphy {
 	vbus-supply = <&smb138x_vbus>;
 };
