@@ -306,7 +306,7 @@
 						 <12000 2250>; /* 12V @ 2.25A */
 		};
 
-		bcl@4200 {
+		pmi8998_bcl: bcl@4200 {
 			compatible = "qcom,msm-bcl-lmh";
 			reg = <0x4200 0xff>,
 				<0x4300 0xff>;
