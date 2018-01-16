@@ -32,3 +32,7 @@
 &pmi8998_fg {
 	qcom,battery-data = <&b1_batterydata>;
 };
+
+&max1720x_fg {
+	#include "batterydata-maxim-b1-proto.dtsi"
+};

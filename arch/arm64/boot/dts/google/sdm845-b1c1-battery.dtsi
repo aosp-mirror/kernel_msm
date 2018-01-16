@@ -29,3 +29,40 @@
 	qcom,fg-jeita-thresholds = <0 5 50 55>;
 	qcom,fg-force-load-profile;
 };
+
+&tlmm {
+	fg {
+		fg_int_default: fg_int_default {
+			mux {
+				/* GPIO 62 Maxim FG status change Interrupt */
+				pins = "gpio62";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio62";
+				drive-strength = <2>; /* 2 MA */
+				bias-pull-up;
+			};
+		};
+
+	};
+};
+
+/* smart battery: maxim fuel gauge */
+&qupv3_se12_i2c {
+	status = "ok";
+	max1720x_fg: max1720x@36 {
+		compatible = "maxim,max1720x";
+		reg-names = "m5db", "nvram";
+		reg = <0x36 0x0b>;
+		interrupt-parent = <&tlmm>;
+		interrupt-names = "fg_irq";
+		interrupts = <62 IRQ_TYPE_LEVEL_LOW>;
+		fg,irq-gpio = <&tlmm 62 0x00>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&fg_int_default>;
+		/* maxim,force-flash-config; */
+		maxim,force-load-config;
+	};
+};
