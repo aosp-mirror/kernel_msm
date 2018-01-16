@@ -22,6 +22,7 @@
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/sort.h>
+#include <linux/uaccess.h>
 
 #define UID_HASH_BITS 10
 
@@ -64,6 +65,30 @@ static int cpufreq_last_max_state;
 static unsigned int *cpufreq_states;
 static bool cpufreq_stats_initialized;
 static struct proc_dir_entry *uid_cpupower;
+
+/* STOPSHIP: uid_cpupower_enable is used to enable/disable concurrent_*_time
+ * This varible will be used in P/H experiments and should be removed before
+ * launch.
+ *
+ * Because it is being used to test performance and power, it should have a
+ * minimum impact on both. For these performance reasons, it will not be guarded
+ * by a lock or protective barriers. This limits what it can safely
+ * enable/disable.
+ *
+ * It is safe to check it before updating any concurrent_*_time stats. If there
+ * are changes uid_cpupower_enable state while we are updating the stats, we
+ * will simply ignore the changes until the next attempt to update the stats.
+ * This may result in a couple ms where the uid_cpupower_enable is in one state
+ * and the code is acting in another. Since the P/H experiments are done over
+ * the course of many days, a couple ms delay should not be an issue.
+ *
+ * It is not safe to delete the associated proc files without additional locking
+ * mechanisms that would hurt performance. Leaving the files empty but intact
+ * will not have any impact on the P/H experiments provided that userspace does
+ * not attempt to read them. Since the P/H experiment will also disable the code
+ * that reads these files from userspace, this is not a concern.
+ */
+static char uid_cpupower_enable;
 
 struct cpufreq_stats_attribute {
 	struct attribute attr;
@@ -362,7 +387,7 @@ static int concurrent_active_time_show(struct seq_file *m, void *v)
 	unsigned long bkt, flags;
 	int i;
 
-	if (!cpufreq_stats_initialized)
+	if (!cpufreq_stats_initialized || !uid_cpupower_enable)
 		return 0;
 
 	seq_write(m, &num_possible_cpus, sizeof(num_possible_cpus));
@@ -448,7 +473,7 @@ static int concurrent_policy_time_show(struct seq_file *m, void *v)
 	unsigned long bkt, flags;
 	int i, cnt = 0, num_possible_cpus = num_possible_cpus();
 
-	if (!cpufreq_stats_initialized)
+	if (!cpufreq_stats_initialized || !uid_cpupower_enable)
 		return 0;
 
 	for_each_possible_cpu(i) {
@@ -532,6 +557,35 @@ static int concurrent_policy_time_show(struct seq_file *m, void *v)
 
 	rt_mutex_unlock(&uid_lock);
 	return 0;
+}
+
+static int uid_cpupower_enable_show(struct seq_file *m, void *v)
+{
+	seq_putc(m, uid_cpupower_enable);
+	seq_putc(m, '\n');
+
+	return 0;
+}
+
+static ssize_t uid_cpupower_enable_write(struct file *file,
+	const char __user *buffer, size_t count, loff_t *ppos)
+{
+	char enable;
+
+	if (count >= sizeof(enable))
+		count = sizeof(enable);
+
+	if (copy_from_user(&enable, buffer, count))
+		return -EFAULT;
+
+	if (enable == '0')
+		uid_cpupower_enable = 0;
+	else if (enable == '1')
+		uid_cpupower_enable = 1;
+	else
+		return -EINVAL;
+
+	return count;
 }
 
 static int cpufreq_stats_update(struct cpufreq_stats *stats)
@@ -737,30 +791,32 @@ void acct_update_power(struct task_struct *task, cputime_t cputime)
 		spin_unlock_irqrestore(&task_time_in_state_lock, flags);
 	}
 
-	for_each_possible_cpu(cpu)
-		if (!idle_cpu(cpu))
-			++active_cpu_cnt;
+	if (uid_cpupower_enable) {
+		for_each_possible_cpu(cpu)
+			if (!idle_cpu(cpu))
+				++active_cpu_cnt;
 
-	spin_lock_irqsave(&task_concurrent_active_time_lock, flags);
-	if (cpufreq_stats_initialized && !(task->flags & PF_EXITING) &&
-		task->concurrent_active_time)
-		atomic64_add(cputime,
-			&task->concurrent_active_time[active_cpu_cnt - 1]);
-	spin_unlock_irqrestore(&task_concurrent_active_time_lock, flags);
+		spin_lock_irqsave(&task_concurrent_active_time_lock, flags);
+		if (cpufreq_stats_initialized && !(task->flags & PF_EXITING) &&
+			task->concurrent_active_time)
+			atomic64_add(cputime,
+				&task->concurrent_active_time[active_cpu_cnt - 1]);
+		spin_unlock_irqrestore(&task_concurrent_active_time_lock, flags);
 
-	for_each_cpu(cpu, policy->related_cpus)
-		if (!idle_cpu(cpu))
-			++policy_cpu_cnt;
+		for_each_cpu(cpu, policy->related_cpus)
+			if (!idle_cpu(cpu))
+				++policy_cpu_cnt;
 
-	policy_first_cpu = cpumask_first(policy->related_cpus);
+		policy_first_cpu = cpumask_first(policy->related_cpus);
 
-	spin_lock_irqsave(&task_concurrent_policy_time_lock, flags);
-	if (cpufreq_stats_initialized && !(task->flags & PF_EXITING) &&
-		task->concurrent_policy_time)
-		atomic64_add(cputime,
-			&task->concurrent_policy_time[policy_first_cpu
-			+ policy_cpu_cnt - 1]);
-	spin_unlock_irqrestore(&task_concurrent_policy_time_lock, flags);
+		spin_lock_irqsave(&task_concurrent_policy_time_lock, flags);
+		if (cpufreq_stats_initialized && !(task->flags & PF_EXITING) &&
+			task->concurrent_policy_time)
+			atomic64_add(cputime,
+				&task->concurrent_policy_time[policy_first_cpu
+				+ policy_cpu_cnt - 1]);
+		spin_unlock_irqrestore(&task_concurrent_policy_time_lock, flags);
+	}
 
 	cpufreq_cpu_put(policy);
 
@@ -1090,39 +1146,44 @@ static int process_notifier(struct notifier_block *self,
 	task->time_in_state = NULL;
 	spin_unlock_irqrestore(&task_time_in_state_lock, flags);
 
-	if (!uid_entry->dead_concurrent_active_time) {
-		uid_entry->dead_concurrent_active_time = kzalloc(
-			num_possible_cpus() *
-			sizeof(uid_entry->dead_concurrent_active_time[0]),
-			GFP_ATOMIC);
-	}
-
-	spin_lock_irqsave(&task_concurrent_active_time_lock, flags);
-	if (task->concurrent_active_time) {
-		for (i = 0; i < num_possible_cpus(); ++i) {
-			uid_entry->dead_concurrent_active_time[i] +=
-				atomic_read(&task->concurrent_active_time[i]);
+	if (uid_cpupower_enable) {
+		if (!uid_entry->dead_concurrent_active_time) {
+			uid_entry->dead_concurrent_active_time = kzalloc(
+				num_possible_cpus() *
+				sizeof(uid_entry->dead_concurrent_active_time[0]),
+				GFP_ATOMIC);
 		}
+
+		spin_lock_irqsave(&task_concurrent_active_time_lock, flags);
+		if (task->concurrent_active_time) {
+			for (i = 0; i < num_possible_cpus(); ++i) {
+				uid_entry->dead_concurrent_active_time[i] +=
+					atomic_read(&task->concurrent_active_time[i]);
+			}
+		}
+
+		if (!uid_entry->dead_concurrent_policy_time) {
+			uid_entry->dead_concurrent_policy_time = kzalloc(
+				num_possible_cpus() *
+				sizeof(uid_entry->dead_concurrent_policy_time[0]),
+				GFP_ATOMIC);
+		}
+
+		spin_lock_irqsave(&task_concurrent_policy_time_lock, flags);
+		if (task->concurrent_policy_time) {
+			for (i = 0; i < num_possible_cpus(); ++i) {
+				uid_entry->dead_concurrent_policy_time[i] +=
+					atomic_read(&task->concurrent_policy_time[i]);
+			}
+		}
+	} else {
+		spin_lock_irqsave(&task_concurrent_active_time_lock, flags);
+		spin_lock_irqsave(&task_concurrent_policy_time_lock, flags);
 	}
 
 	temp_concurrent_active_time = task->concurrent_active_time;
 	task->concurrent_active_time = NULL;
 	spin_unlock_irqrestore(&task_concurrent_active_time_lock, flags);
-
-	if (!uid_entry->dead_concurrent_policy_time) {
-		uid_entry->dead_concurrent_policy_time = kzalloc(
-			num_possible_cpus() *
-			sizeof(uid_entry->dead_concurrent_policy_time[0]),
-			GFP_ATOMIC);
-	}
-
-	spin_lock_irqsave(&task_concurrent_policy_time_lock, flags);
-	if (task->concurrent_policy_time) {
-		for (i = 0; i < num_possible_cpus(); ++i) {
-			uid_entry->dead_concurrent_policy_time[i] +=
-				atomic_read(&task->concurrent_policy_time[i]);
-		}
-	}
 
 	temp_concurrent_policy_time = task->concurrent_policy_time;
 	task->concurrent_policy_time = NULL;
@@ -1188,6 +1249,18 @@ static const struct file_operations concurrent_policy_time_fops = {
 	.read		= seq_read,
 	.llseek		= seq_lseek,
 	.release	= single_release,
+};
+
+static int uid_cpupower_enable_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, uid_cpupower_enable_show, PDE_DATA(inode));
+}
+
+static const struct file_operations uid_cpupower_enable_fops = {
+	.open		= uid_cpupower_enable_open,
+	.read		= seq_read,
+	.release	= single_release,
+	.write		= uid_cpupower_enable_write,
 };
 
 static struct notifier_block notifier_policy_block = {
@@ -1264,6 +1337,9 @@ static int __init cpufreq_stats_init(void)
 		pr_warn("%s: failed to create uid_cputime proc entry\n",
 			__func__);
 	} else {
+		proc_create_data("enable", 0666, uid_cpupower,
+			&uid_cpupower_enable_fops, NULL);
+
 		proc_create_data("time_in_state", 0444, uid_cpupower,
 			&time_in_state_fops, NULL);
 
@@ -1272,6 +1348,8 @@ static int __init cpufreq_stats_init(void)
 
 		proc_create_data("concurrent_policy_time", 0444, uid_cpupower,
 			&concurrent_policy_time_fops, NULL);
+
+		uid_cpupower_enable = 1;
 	}
 
 	cpufreq_stats_initialized = true;
