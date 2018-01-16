@@ -92,17 +92,31 @@
 
 	.if	\el == 0
 	mrs	x21, sp_el0
-	get_thread_info tsk			// Ensure MDSCR_EL1.SS is clear,
+#ifdef CONFIG_THREAD_INFO_IN_TASK
+	ldr_this_cpu	tsk, __entry_task, x20  // Ensure MDSCR_EL1.SS is clear,
+	ldr	x19, [tsk, #TSK_TI_FLAGS]	// since we can unmask debug
+#else
+	mov	tsk, sp
+	and	tsk, tsk, #~(THREAD_SIZE - 1)	// Ensure MDSCR_EL1.SS is clear,
 	ldr	x19, [tsk, #TI_FLAGS]		// since we can unmask debug
+#endif
 	disable_step_tsk x19, x20		// exceptions when scheduling.
 	.else
 	add	x21, sp, #S_FRAME_SIZE
 	get_thread_info tsk
 	/* Save the task's original addr_limit and set USER_DS (TASK_SIZE_64) */
+#ifdef CONFIG_THREAD_INFO_IN_TASK
+	ldr	x20, [tsk, #TSK_TI_ADDR_LIMIT]
+#else
 	ldr	x20, [tsk, #TI_ADDR_LIMIT]
+#endif
 	str	x20, [sp, #S_ORIG_ADDR_LIMIT]
 	mov	x20, #TASK_SIZE_64
+#ifdef CONFIG_THREAD_INFO_IN_TASK
+	str	x20, [tsk, #TSK_TI_ADDR_LIMIT]
+#else
 	str	x20, [tsk, #TI_ADDR_LIMIT]
+#endif
 	ALTERNATIVE(nop, SET_PSTATE_UAO(0), ARM64_HAS_UAO, CONFIG_ARM64_UAO)
 	.endif /* \el == 0 */
 	mrs	x22, elr_el1
@@ -147,6 +161,13 @@ alternative_endif
 	.endif
 
 	/*
+	 * Set sp_el0 to current thread_info.
+	 */
+	.if	\el == 0
+	msr	sp_el0, tsk
+	.endif
+
+	/*
 	 * Registers that may be useful after this macro is invoked:
 	 *
 	 * x21 - aborted SP
@@ -159,7 +180,11 @@ alternative_endif
 	.if	\el != 0
 	/* Restore the task's original addr_limit. */
 	ldr	x20, [sp, #S_ORIG_ADDR_LIMIT]
+#ifdef CONFIG_THREAD_INFO_IN_TASK
+	str	x20, [tsk, #TSK_TI_ADDR_LIMIT]
+#else
 	str	x20, [tsk, #TI_ADDR_LIMIT]
+#endif
 
 	/* No need to restore UAO, it will be restored from SPSR_EL1 */
 	.endif
@@ -440,9 +465,17 @@ el1_irq:
 
 #ifdef CONFIG_PREEMPT
 	get_thread_info tsk
+#ifdef CONFIG_THREAD_INFO_IN_TASK
+	ldr	w24, [tsk, #TSK_TI_PREEMPT]	// get preempt count
+#else
 	ldr	w24, [tsk, #TI_PREEMPT]		// get preempt count
+#endif
 	cbnz	w24, 1f				// preempt count != 0
+#ifdef CONFIG_THREAD_INFO_IN_TASK
+	ldr	x0, [tsk, #TSK_TI_FLAGS]	// get flags
+#else
 	ldr	x0, [tsk, #TI_FLAGS]		// get flags
+#endif
 	tbz	x0, #TIF_NEED_RESCHED, 1f	// needs rescheduling?
 	bl	el1_preempt
 1:
@@ -457,7 +490,11 @@ ENDPROC(el1_irq)
 el1_preempt:
 	mov	x24, lr
 1:	bl	preempt_schedule_irq		// irq en/disable is done inside
+#ifdef CONFIG_THREAD_INFO_IN_TASK
+	ldr	x0, [tsk, #TSK_TI_FLAGS]	// get new tasks TI_FLAGS
+#else
 	ldr	x0, [tsk, #TI_FLAGS]		// get new tasks TI_FLAGS
+#endif
 	tbnz	x0, #TIF_NEED_RESCHED, 1b	// needs rescheduling?
 	ret	x24
 #endif
@@ -722,6 +759,12 @@ ENTRY(cpu_switch_to)
 	mov	v15.16b, v15.16b
 #endif
 	mov	sp, x9
+#ifdef CONFIG_THREAD_INFO_IN_TASK
+	msr	sp_el0, x1
+#else
+	and	x9, x9, #~(THREAD_SIZE - 1)
+	msr	sp_el0, x9
+#endif
 	ret
 ENDPROC(cpu_switch_to)
 
@@ -732,7 +775,11 @@ ENDPROC(cpu_switch_to)
 ret_fast_syscall:
 	disable_irq				// disable interrupts
 	str	x0, [sp, #S_X0]			// returned x0
+#ifdef CONFIG_THREAD_INFO_IN_TASK
+	ldr	x1, [tsk, #TSK_TI_FLAGS]	// re-check for syscall tracing
+#else
 	ldr	x1, [tsk, #TI_FLAGS]		// re-check for syscall tracing
+#endif
 	and	x2, x1, #_TIF_SYSCALL_WORK
 	cbnz	x2, ret_fast_syscall_trace
 	and	x2, x1, #_TIF_WORK_MASK
@@ -764,7 +811,11 @@ work_resched:
  */
 ret_to_user:
 	disable_irq				// disable interrupts
+#ifdef CONFIG_THREAD_INFO_IN_TASK
+	ldr	x1, [tsk, #TSK_TI_FLAGS]
+#else
 	ldr	x1, [tsk, #TI_FLAGS]
+#endif
 	and	x2, x1, #_TIF_WORK_MASK
 	cbnz	x2, work_pending
 	enable_step_tsk x1, x2
@@ -797,7 +848,11 @@ el0_svc_naked:					// compat entry point
 	enable_dbg_and_irq
 	ct_user_exit 1
 
+#ifdef CONFIG_THREAD_INFO_IN_TASK
+	ldr	x16, [tsk, #TSK_TI_FLAGS]	// check for syscall hooks
+#else
 	ldr	x16, [tsk, #TI_FLAGS]		// check for syscall hooks
+#endif
 	tst	x16, #_TIF_SYSCALL_WORK
 	b.ne	__sys_trace
 	cmp     scno, sc_nr                     // check upper syscall limit
