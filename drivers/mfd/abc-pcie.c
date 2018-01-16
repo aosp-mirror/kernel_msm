@@ -10,7 +10,9 @@
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
  */
-
+#if IS_ENABLED(CONFIG_ARM64_DMA_USE_IOMMU)
+#include <asm/dma-iommu.h>
+#endif
 #include <linux/delay.h>
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
@@ -360,6 +362,54 @@ int set_outbound_iatu(struct outb_region outb)
 	writel(val, abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
 	return 0;
 }
+
+#if IS_ENABLED(CONFIG_ARM64_DMA_USE_IOMMU)
+static void setup_smmu(struct pci_dev *pdev)
+{
+	struct dma_iommu_mapping *mapping;
+	int atomic_ctx = 1;
+	int bypass_enable = 1;
+	int ret;
+
+/* Following taken from msm_11ad.c */
+#define SMMU_BASE	0x10000000 /* Device address range base */
+#define SMMU_SIZE	0x40000000 /* Device address range size */
+
+	mapping = arm_iommu_create_mapping(&platform_bus_type,
+					SMMU_BASE, SMMU_SIZE);
+
+	if (IS_ERR_OR_NULL(mapping)) {
+		ret = PTR_ERR(mapping) ?: -ENODEV;
+		dev_err(&pdev->dev,
+			"Failed to create IOMMU mapping (%d)\n", ret);
+		return;
+	}
+
+	ret = iommu_domain_set_attr(
+		mapping->domain, DOMAIN_ATTR_ATOMIC, &atomic_ctx);
+	if (ret) {
+		dev_err(&pdev->dev,
+			"Set atomic attribute to SMMU failed (%d)\n", ret);
+	}
+
+	ret = iommu_domain_set_attr(mapping->domain,
+				   DOMAIN_ATTR_S1_BYPASS,
+				   &bypass_enable);
+	if (ret) {
+		dev_err(&pdev->dev,
+			"Set bypass attribute to SMMU failed (%d)\n", ret);
+	}
+
+	ret = arm_iommu_attach_device(&pdev->dev, mapping);
+	if (ret) {
+		dev_err(&pdev->dev,
+			"arm_iommu_attach_device failed (%d)\n", ret);
+		return;
+	}
+
+	dev_info(&pdev->dev, "attached to IOMMU\n");
+}
+#endif
 
 dma_addr_t abc_dma_map_single(void *ptr,  size_t size,
 		enum dma_data_direction dir)
@@ -932,6 +982,10 @@ exit_loop:
 #endif
 
 	pci_set_drvdata(pdev, abc);
+
+#if IS_ENABLED(CONFIG_ARM64_DMA_USE_IOMMU)
+	setup_smmu(pdev);
+#endif
 
 	err = abc_pcie_init_child_devices(pdev);
 	if (err < 0)
