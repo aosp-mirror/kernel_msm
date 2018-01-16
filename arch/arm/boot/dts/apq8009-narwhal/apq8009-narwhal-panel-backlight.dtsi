@@ -21,6 +21,8 @@
 			lm36272,min-brightness = <0>;
 			lm36272,default-brightness = <177>;
 			lm36272,max-brightness = <255>;
+			lm36272,dim-brightness = <1>;
+			lm36272,dim-enabled;
 			lm36272,blmap-size = <256>;
 			lm36272,blmap = <
 				0 558 558 568 573 578 583 588 593 598               /* 0-9 */
