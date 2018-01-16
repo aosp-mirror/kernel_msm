@@ -22,7 +22,7 @@
 #define FTS_TOOL_H
 
 
-char* printHex(char* label, u8* buff, int count);
+char* printHex(char* label, u8* buff, int count, u8* result);
 int u8ToU16(u8* src, u16* dst);
 int u8ToU16_be(u8* src, u16* dst);
 int u8ToU16n(u8* src, int src_length, u16* dst);
@@ -30,6 +30,7 @@ int u16ToU8(u16 src, u8* dst);
 int u16ToU8_be(u16 src, u8* dst);
 int u16ToU8n_be(u16* src, int src_length, u8* dst);
 int u8ToU32(u8* src, u32* dst);
+int u8ToU32_be(u8* src, u32* dst);
 int u32ToU8(u32 src, u8* dst);
 int u32ToU8_be(u32 src, u8* dst);
 int u8ToU64_be(u8 *src, u64 *dest, int size);

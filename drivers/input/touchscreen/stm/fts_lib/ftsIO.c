@@ -68,6 +68,18 @@ int openChannel(void *clt)
 	return OK;
 }
 
+#ifdef I2C_INTERFACE
+/**
+* Change the I2C slave address which will be used during the transaction (For Debug Only)
+* @param sad new slave address id
+* @return OK
+*/
+int changeSAD(u8 sad){
+	I2CSAD = sad;
+	return OK;
+}
+#endif
+
 
 /**
 * Retrieve the pointer to the device struct of the IC

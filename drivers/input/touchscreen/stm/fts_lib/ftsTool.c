@@ -46,24 +46,21 @@
 * @param label string to attach at the beginning
 * @param buff pointer to the byte array that should be printed as HEX string
 * @param count size of buff
-* @return pointer to the array of characters that compose the HEX string. This point should be free outside when the string is no more needed
+* @param result pointer to the array of characters that compose the HEX final string
+* @return pointer to the array of characters that compose the HEX string, (same address of result)
+* @warning result MUST be allocated outside the function and should be big enough to contain the data converted as HEX!
 */
-char* printHex(char* label, u8* buff, int count)
+char* printHex(char* label, u8* buff, int count, u8* result)
 {
 	int i, offset;
-	char *result = NULL;
 
 	offset = strlen(label);
-	result = (char*) kmalloc(((offset + 3 * count) + 1) * sizeof (char), GFP_KERNEL);
-	if (result != NULL)
-	{
-		strcpy(result, label);
+	strncpy(result, label,offset);
 
-		for (i = 0; i < count; i++)
-		{
-			snprintf(&result[offset + i * 3], 4, "%02X ", buff[i]);
-		}
-		strcat(result, "\n");
+	for (i = 0; i < count; i++)
+	{
+		snprintf(&result[offset], 4, "%02X ", buff[i]); //this append automatically a null terminator char
+		offset+=3;
 	}
 	return result;
 }
@@ -202,6 +199,18 @@ int u16ToU8(u16 src, u8* dst)
 int u8ToU32(u8* src, u32* dst)
 {
 	*dst = (u32) (((src[3] & 0xFF) << 24) + ((src[2] & 0xFF) << 16) + ((src[1] & 0xFF) << 8) + (src[0] & 0xFF));
+	return OK;
+}
+
+/**
+* Convert an array of bytes to a u32, src has MSB first (big endian).
+* @param src array of bytes to convert
+* @param dst pointer to the destination u32 variable. 
+* @return OK
+*/
+int u8ToU32_be(u8* src, u32* dst)
+{
+	*dst = (u32) (((src[0] & 0xFF) << 24) + ((src[1] & 0xFF) << 16) + ((src[2] & 0xFF) << 8) + (src[3] & 0xFF));
 	return OK;
 }
 
@@ -598,19 +607,14 @@ int u8ToU64_be(u8 *src, u64 *dest, int size)
 {
 	int i = 0;
 	//u64 temp =0;
-	if(size>sizeof(u64)){
+	if (size > sizeof(u64))
 		return ERROR_OP_NOT_ALLOW;
-	}else{
+
 	*dest = 0;
-
 	for (i = 0; i < size; i++)
-	{
 		*dest |= (u64)(src[i]) << ((size - 1 - i)*8);
-	}
-
 
 	return OK;
-	}
 }
 
 /**

@@ -95,6 +95,7 @@ typedef enum {
 #define SCAN_MODE_ACTIVE					0x00								///< Select the Active scanning mode
 #define SCAN_MODE_LOW_POWER					0x01								///< Select the low power scanning mode
 #define SCAN_MODE_JIG_1						0x02								///< Select the Jig test 1
+#define SCAN_MODE_LOCKED					0x03								///< Select the Scan mode which will be locked
 /** @}*/
 
 //Active mode option (bitmask)
@@ -104,10 +105,23 @@ typedef enum {
 * @{
 */
 #define ACTIVE_MULTI_TOUCH					0x01								///< Bit 0 MS/SS scan
-#define ACTIVE_KEY							0x02								///< Bit 1 Key scan
+#define ACTIVE_KEY						0x02								///< Bit 1 Key scan
 #define ACTIVE_HOVER						0x04								///< Bit 2 Hover scan
 #define ACTIVE_PROXIMITY					0x08								///< Bit 3 Proximity scan
 #define ACTIVE_FORCE						0x10								///< Bit 4 Force scan
+/** @}*/
+
+//Locked mode option (locked mode)
+/** @defgroup locked_opt Locked Mode Option  
+* @ingroup scan_opt
+* Options to enable and lock specific scanning with the SCAN_MODE_LOCKED option 
+* @{ 
+*/
+#define LOCKED_ACTIVE						0x00								///< Active Scan Mode
+#define LOCKED_HOVER						0x01								///< Hover Scan Mode 
+#define LOCKED_IDLE						0x02								///< Idle Scan Mode
+#define LOCKED_LP_DETECT					0x10								///< Low Power SS
+#define LOCKED_LP_ACTIVE					0x11								///< Low Power MS
 /** @}*/
 
 //FEATURE SELECT OPTION (0xA2)
@@ -182,6 +196,7 @@ typedef enum {
 #define SYS_CMD_ITO							0x04								///< ITO test
 #define SYS_CMD_SAVE_FLASH					0x05								///< Saving to flash
 #define SYS_CMD_LOAD_DATA					0x06								///< Load Host data memory
+#define SYS_CMD_SPECIAL_TUNING				0x08								///< Perform some special tuning
 /** @} */
 
 //System command settings
@@ -199,14 +214,20 @@ typedef enum {
 
 
 //Force Cal and Cx auto tuning
-#define CAL_MS_TOUCH						0x00								///< Mutual Sense Touch
-#define CAL_MS_LOW_POWER					0x01								///< Mutual Sense Touch in low power mode
-#define CAL_SS_TOUCH						0x02								///< Self Sense Touch
-#define CAL_SS_IDLE							0x03								///< Self Sense Touch in idle mode
-#define CAL_MS_KEY							0x04								///< Mutual Sense Key
-#define CAL_SS_KEY							0x05								///< Self Sense Key
-#define CAL_MS_FORCE						0x06								///< Mutual Sense Force
-#define CAL_SS_FORCE						0x07								///< Self Sense Force
+/** @defgroup forcecal_cx_opt	 Force Cal and Tuning Option 
+* @ingroup sys_cmd
+* Valid bitmask for triggering forcecal or performing manual autotune 
+* @{ 
+*/
+#define CAL_MS_TOUCH						0x01								///< Mutual Sense Touch
+#define CAL_MS_LOW_POWER					0x02								///< Mutual Sense Touch in low power mode
+#define CAL_SS_TOUCH						0x04								///< Self Sense Touch
+#define CAL_SS_IDLE						0x08								///< Self Sense Touch in idle mode
+#define CAL_MS_KEY						0x10								///< Mutual Sense Key
+#define CAL_SS_KEY						0x20								///< Self Sense Key
+#define CAL_MS_FORCE						0x40								///< Mutual Sense Force
+#define CAL_SS_FORCE						0x80								///< Self Sense Force
+/** @} */
 
 //ITO checks (position of the bit in the mask)
 /** @defgroup ito_opt	 ITO Test Option
@@ -255,8 +276,8 @@ typedef enum {
 #define LOAD_CX_SS_FORCE					0x17								///< Load SS Init Data for Force
 #define LOAD_SYNC_FRAME_RAW					0x30								///< Load a Synchronized Raw Frame
 #define LOAD_SYNC_FRAME_FILTER				0x31								///< Load a Synchronized Filter Frame
-#define LOAD_SYNC_FRAME_BASELINE	0x32	/* Synched Baseline Frame */
-#define LOAD_SYNC_FRAME_STRENGTH	0x33	/* Synched Strength Frame */
+#define LOAD_SYNC_FRAME_STRENGTH			0x33								///< Load a Synchronized Strength Frame
+#define LOAD_SYNC_FRAME_BASELINE			0x32								///< Load a Synchronized Baseline Frame
 #define LOAD_PANEL_CX_TOT_MS_TOUCH			0x50								///< Load TOT MS Init Data for Active Mode
 #define LOAD_PANEL_CX_TOT_MS_LOW_POWER		0x51								///< Load TOT MS Init Data for Low Power Mode
 #define LOAD_PANEL_CX_TOT_SS_TOUCH			0x52								///< Load TOT SS Init Data for Active Mode
@@ -265,6 +286,17 @@ typedef enum {
 #define LOAD_PANEL_CX_TOT_SS_KEY			0x55								///< Load TOT SS Init Data for Key
 #define LOAD_PANEL_CX_TOT_MS_FORCE			0x56								///< Load TOT MS Init Data for Force
 #define LOAD_PANEL_CX_TOT_SS_FORCE			0x57								///< Load TOT SS Init Data for Force
+/** @}*/
+
+//Special Tuning
+/** @defgroup spcl_tun_opt	 Special Tuning Option 
+* @ingroup sys_cmd
+* Valid special tuning operations which the fw can perform (bitmask) 
+* @{ 
+*/
+#define	SPECIAL_TUNING_LP_TIMER				0x01								///< Perform LP Timer calibration
+#define SPECIAL_TUNING_IOFF					0x02								///< Perform Ioff calibration
+
 /** @}*/
 
 //EVENT ID
@@ -357,6 +389,11 @@ typedef enum {
 #define CONFIG_ID_BYTE						2									///< Number of bytes of config ID
 #define ADDR_CONFIG_SENSE_LEN				0x0030								///< Address where is stored the number of sense channels
 #define ADDR_CONFIG_FORCE_LEN				0x0031								///< Address where is stored the number of force channels
+#define ADDR_CONFIG_AUTOCAL					0x0040								///< Address where is stored the Auto Calibration register
+#define ADDR_CONFIG_T_CYCLE					0x00ED								///< Address where is stored the MS T cycle
+#define ADDR_CONFIG_MNM						0x01F0								///< Address where is stored the MNM register
+#define ADDR_CONFIG_MRN						0x01F1								///< Address where is stored the MRN register 
+#define ADDR_CONFIG_R0_CYCLE				0x01F2								///< Address where is stored the first R cycle
 /** @}*/
 
 /** @}*/

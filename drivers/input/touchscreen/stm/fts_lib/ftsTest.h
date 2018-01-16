@@ -29,7 +29,7 @@
 #define LIMITS_FILE						"NULL"
 #endif
 
-#define WAIT_FOR_FRESH_FRAMES			100										///< Time in ms to wait after start to sensing before reading a frame
+#define WAIT_FOR_FRESH_FRAMES			200										///< Time in ms to wait after start to sensing before reading a frame
 #define WAIT_AFTER_SENSEOFF				50										///< Time in ms to wait after stop sensing and before reading a frame from memory
 
 #define NO_INIT							0										///< No Initialization required during the MP
@@ -63,6 +63,14 @@
  */
 #define MS_RAW_MIN_MAX					"MS_RAW_DATA_MIN_MAX"
 #define MS_RAW_GAP						"MS_RAW_DATA_GAP"
+#define MS_RAW_ADJH						"MS_RAW_DATA_ADJ_HORIZONTAL"
+#define MS_RAW_ADJV						"MS_RAW_DATA_ADJ_VERTICAL"
+#define MS_RAW_ITO_ADJH					"MS_RAW_ITO_DATA_ADJ_HORIZONTAL"
+#define MS_RAW_ITO_ADJV					"MS_RAW_ITO_DATA_ADJ_VERTICAL"
+#define MS_RAW_LP_MIN_MAX				"MS_RAW_LOWPOWER_DATA_MIN_MAX"
+#define MS_RAW_LP_GAP					"MS_RAW_LOWPOWER_DATA_GAP"
+#define MS_RAW_LP_ADJH					"MS_RAW_LOWPOWER_DATA_ADJ_HORIZONTAL"
+#define MS_RAW_LP_ADJV					"MS_RAW_LOWPOWER_DATA_ADJ_VERTICAL"
 #define MS_CX1_MIN_MAX					"MS_TOUCH_ACTIVE_CX1_MIN_MAX"
 #define MS_CX2_MAP_MIN					"MS_TOUCH_ACTIVE_CX2_MIN"
 #define MS_CX2_MAP_MAX					"MS_TOUCH_ACTIVE_CX2_MAX"
@@ -76,6 +84,10 @@
 #define SS_RAW_SENSE_MIN_MAX			"SS_RAW_DATA_SENSE_MIN_MAX"
 #define SS_RAW_FORCE_GAP				"SS_RAW_DATA_FORCE_GAP"
 #define SS_RAW_SENSE_GAP				"SS_RAW_DATA_SENSE_GAP"
+#define SS_RAW_LP_FORCE_MIN_MAX			"SS_RAW_LOWPOWER_DATA_FORCE_MIN_MAX"
+#define SS_RAW_LP_SENSE_MIN_MAX			"SS_RAW_LOWPOWER_DATA_SENSE_MIN_MAX"
+#define SS_RAW_LP_FORCE_GAP				"SS_RAW_LOWPOWER_DATA_FORCE_GAP"
+#define SS_RAW_LP_SENSE_GAP				"SS_RAW_LOWPOWER_DATA_SENSE_GAP"
 #define SS_IX1_FORCE_MIN_MAX			"SS_TOUCH_ACTIVE_IX1_FORCE_MIN_MAX"
 #define SS_IX1_SENSE_MIN_MAX			"SS_TOUCH_ACTIVE_IX1_SENSE_MIN_MAX"
 #define SS_CX1_FORCE_MIN_MAX			"SS_TOUCH_ACTIVE_CX1_FORCE_MIN_MAX"
@@ -130,6 +142,12 @@
 typedef struct {
 	int MutualRaw;																///< MS Raw min/Max test
     int MutualRawGap;															///< MS Raw Gap(max-min) test
+	int MutualRawAdj;															///< MS Raw Adjacent test
+	int MutualRawLP;															///< MS Low Power Raw min/Max test
+    int MutualRawGapLP;															///< MS Low Power Raw Gap(max-min) test
+	int MutualRawAdjLP;															///< MS Low Power Raw Adjacent test
+	int MutualRawAdjITO;														///< MS Raw Adjacent test during ITO test
+	
 	int MutualCx1;																///< MS Cx1 min/Max test
 	int MutualCx2;																///< MS Cx2 min/Max (for each node) test
 	int MutualCx2Adj;															///< MS Vertical and Horizontal Adj Cx2 min/Max (for each node) test
@@ -143,6 +161,9 @@ typedef struct {
 
 	int SelfForceRaw;															///< SS Force Raw min/Max test
     int SelfForceRawGap;														///< SS Force Raw Gap(max-min) test
+	int SelfForceRawLP;															///< SS Low Power Force Raw min/Max test
+    int SelfForceRawGapLP;														///< SS Low Power Force Raw Gap(max-min) test
+	
 	int SelfForceIx1;															///< SS Force Ix1 min/Max test
 	int SelfForceIx2;															///< SS Force Ix2 min/Max (for each node) test
 	int SelfForceIx2Adj;														///< SS Vertical Adj Force Ix2 min/Max (for each node) test
@@ -156,6 +177,9 @@ typedef struct {
 
 	int SelfSenseRaw;															///< SS Sense Raw min/Max test
     int SelfSenseRawGap;														///< SS Sense Raw Gap(max-min) test
+	int SelfSenseRawLP;															///< SS Low Power Sense Raw min/Max test
+    int SelfSenseRawGapLP;														///< SS Low Power Sense Raw Gap(max-min) test
+	
 	int SelfSenseIx1;															///< SS Sense Ix1 min/Max test
 	int SelfSenseIx2;															///< SS Sense Ix2 min/Max (for each node) test
 	int SelfSenseIx2Adj;														///< SS Horizontal Adj Sense Ix2 min/Max (for each node) test
@@ -211,12 +235,14 @@ int checkLimitsMapAdjTotal(u16 *data, int row, int column, int *max);
  * The parameters of these functions allow to customize their behavior in order to satisfy different scenarios
  * @{
  */
-int production_test_ito(void);
+int production_test_ito(char* path_limits, TestToDo *todo);
 int production_test_initialization(u8 type);
 int production_test_main(char * pathThresholds, int stop_on_fail, int saveInit, TestToDo *todo);
 int production_test_ms_raw(char *path_limits, int stop_on_fail, TestToDo *todo);
+int production_test_ms_raw_lp(char *path_limits, int stop_on_fail, TestToDo *todo);
 int production_test_ms_cx(char *path_limits, int stop_on_fail, TestToDo *todo);
 int production_test_ss_raw(char *path_limits, int stop_on_fail, TestToDo *todo);
+int production_test_ss_raw_lp(char *path_limits, int stop_on_fail, TestToDo *todo);
 int production_test_ss_ix_cx(char *path_limits, int stop_on_fail, TestToDo *todo);
 int production_test_data(char *path_limits, int stop_on_fail, TestToDo *todo);
 int production_test_ms_key_cx(char *path_limits, int stop_on_fail, TestToDo *todo);
@@ -231,6 +257,7 @@ int parseProductionTestLimits(char *path, LimitFile *file, char *label, int **da
 int readLine(char *data, char *line, int size, int *n);
 int getLimitsFile(char *path, LimitFile *file);
 int freeLimitsFile(LimitFile *file);
+int freeCurrentLimitsFile(void);
 /**@}*/
 
 #endif

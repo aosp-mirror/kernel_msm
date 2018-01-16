@@ -23,6 +23,7 @@
 #define FTS_FRAME_H
 
 #include "ftsSoftware.h"
+#include "ftsCore.h"
 
 
 
@@ -31,22 +32,23 @@
 
 
 #define RETRY_FRAME_DATA_READ					2								///< max number of attempts to read a frame
+#define SYNCFRAME_DATA_HEADER					DATA_HEADER+12					///< number of bytes of Sync Frame Header
 
 /**
-* Possible types of MS frames
+* Possible types of MS frames 
 */
 typedef enum{
-	MS_RAW = 0,																	///< Mutual Sense Raw Frame
+	MS_RAW = 0,																	///< Mutual Sense Raw Frame									
 	MS_FILTER = 1,																///< Mutual Sense Filtered Frame
-	MS_STRENGHT = 2,															///< Mutual Sense Strength Frame (Baseline-Raw)
+	MS_STRENGTH = 2,															///< Mutual Sense Strength Frame (Baseline-Raw)
 	MS_BASELINE = 3,															///< Mutual Sense Baseline Frame
 	MS_KEY_RAW = 4,																///< Mutual Sense Key Raw Frame
 	MS_KEY_FILTER = 5,															///< Mutual Sense Key Filter Frame
-	MS_KEY_STRENGHT = 6,														///< Mutual Sense Key Strength Frame (Baseline-Raw)
+	MS_KEY_STRENGTH = 6,														///< Mutual Sense Key Strength Frame (Baseline-Raw)
 	MS_KEY_BASELINE = 7,														///< Mutual Sense Key Baseline Frame
 	FRC_RAW = 8,																///< Force Raw Frame
 	FRC_FILTER = 9,																///< Force Filtered Frame
-	FRC_STRENGHT = 10,															///< Force Strength Frame (Baseline-Raw)
+	FRC_STRENGTH = 10,															///< Force Strength Frame (Baseline-Raw)
 	FRC_BASELINE = 11															///< Force Baseline Frame
 } MSFrameType;
 
@@ -57,15 +59,15 @@ typedef enum{
 typedef enum{
 	SS_RAW = 0,																	///< Self Sense Raw Frame
 	SS_FILTER = 1,																///< Self Sense Filtered Frame
-	SS_STRENGHT = 2,															///< Self Sense Strength Frame (Baseline-Raw)
+	SS_STRENGTH = 2,															///< Self Sense Strength Frame (Baseline-Raw)
 	SS_BASELINE = 3,															///< Self Sense Baseline Frame
 	SS_HVR_RAW = 4,																///< Self Sense Hover Raw Frame
 	SS_HVR_FILTER = 5,															///< Self Sense Hover Filter Frame
-	SS_HVR_STRENGHT = 6,														///< Self Sense Hover Strength Frame (Baseline-Raw)
+	SS_HVR_STRENGTH = 6,														///< Self Sense Hover Strength Frame (Baseline-Raw)
 	SS_HVR_BASELINE = 7,														///< Self Sense Hover Baseline Frame
 	SS_PRX_RAW = 8,																///< Self Sense Proximity Raw Frame
 	SS_PRX_FILTER = 9,															///< Self Sense Proximity Filtered Frame
-	SS_PRX_STRENGHT = 10,														///< Self Sense Proximity Strength Frame (Baseline-Raw)
+	SS_PRX_STRENGTH = 10,														///< Self Sense Proximity Strength Frame (Baseline-Raw)
 	SS_PRX_BASELINE = 11														///< Self Sense Proximity Baseline Frame
 }SSFrameType;
 
@@ -95,4 +97,6 @@ int getSenseLen(void);
 int getForceLen(void);
 int getMSFrame3(MSFrameType type, MutualSenseFrame *frame);
 int getSSFrame3(SSFrameType type, SelfSenseFrame *frame);
+int readSyncDataHeader(u8 type, DataHeader *msHeader, DataHeader *ssHeader, u64 *address);
+int getSyncFrame(u8 type, MutualSenseFrame *msFrame,SelfSenseFrame *ssFrame);
 #endif

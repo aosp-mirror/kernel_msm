@@ -42,9 +42,9 @@
 * @{
 */
 //**** CODE CONFIGURATION ****
-#define FTS_TS_DRV_NAME		"fts"		/* driver name */
-#define FTS_TS_DRV_VERSION	"5.2.1"		/* driver version string */
-#define FTS_TS_DRV_VER		0x05020100	/* driver version u32 format */
+#define FTS_TS_DRV_NAME		"fts"			/* driver name */
+#define FTS_TS_DRV_VERSION	"5.2.5_Google_B1"	/* driver version string */
+#define FTS_TS_DRV_VER		0x05020500		/* driver version u32 format */
 
 #define DEBUG																	///< define to print more logs in the kernel log and better follow the code flow
 
@@ -58,6 +58,7 @@
 /* #define ENGINEERING_CODE */
 /* Initialization of CX memory allowed on the phone */
 /* #define COMPUTE_CX_ON_PHONE */
+/* #define PRE_SAVED_METHOD */
 
 /*#define FW_H_FILE*/			/* include the FW data as header file */
 #ifdef FW_H_FILE
@@ -67,7 +68,9 @@
 #endif
 
 #ifndef FW_UPDATE_ON_PROBE
-#define LIMITS_H_FILE															///< include the Production Limit File as header file, can be commented to use a .csv file instead
+/* Include the Production Limit File as header file, can be commented to use a
+ * .csv file instead */
+/* #define LIMITS_H_FILE */
 #ifdef LIMITS_H_FILE
 	#define LIMITS_SIZE_NAME myArray2_size										///< name of the variable in the limits header file which specified the dimension of the limits data array
 	#define LIMITS_ARRAY_NAME myArray2											///< name of the variable in the limits header file which specified the limits data array
@@ -89,8 +92,8 @@
 
 
 //**** FEATURES USED IN THE IC ****
-
-#define PHONE_KEY																///< enable the support of keys
+/* Enable the support of keys */
+/* #define PHONE_KEY */
 
 #define GESTURE_MODE															///< enable the support of the gestures
 #ifdef GESTURE_MODE

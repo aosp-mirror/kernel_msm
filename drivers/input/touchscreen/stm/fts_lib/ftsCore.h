@@ -78,21 +78,19 @@ typedef struct {
 	u16 u16_chip1Ver;															///< Dev1 version
 	u16 u16_chip1Id;															///< Dev1 ID
 	u16 u16_fwVer;																///< Fw version
-	u16 u16_fwId;																///< Fw ID
+	u16 u16_svnRev;																///< SVN Revision
 	u16 u16_cfgVer;																///< Config Version
-	u16 u16_cfgId;																///< Config ID
+	u16 u16_cfgProjectId;														///< Config Project ID
 	u16 u16_cxVer;																///< Cx Version
-	u16 u16_cxId;																///< Cx ID
-	u8 u8_fwCfgAfeVer;															///< AFE version in Config
+	u16 u16_cxProjectId;														///< Cx Project ID
+	u8 u8_cfgAfeVer;															///< AFE version in Config
+	u8 u8_cxAfeVer;																///< AFE version in CX
 	u8 u8_panelCfgAfeVer;														///< AFE version in PanelMem
 	u8 u8_protocol;																///< Touch Report Protocol
 	u8 u8_dieInfo[DIE_INFO_SIZE];												///< Die information
 	u8 u8_releaseInfo[RELEASE_INFO_SIZE];										///< Release information
-	u16 u16_cxFormatVer_rev;													///< Cx Format Version Revision
-	u8 u8_cxFormatVer_minor;													///< Cx Format Version Minor
-	u8 u8_cxFormatVer_major;													///< Cx Format Version Minor
-	u16 u16_cxMemVer;															///< Cx Version in Cx Memory
-	u16 u16_cxMemId;															///< Cx Id in Cx Memory
+	u32 u32_fwCrc;																///< Crc of FW
+	u32 u32_cfgCrc;																///< Crc of config
 
 	u16 u16_scrResX;															///< X resolution on main screen
 	u16 u16_scrResY;															///< Y resolution on main screen
@@ -166,11 +164,14 @@ int defaultSysInfo(int i2cError);
 int writeSysCmd(u8 sys_cmd, u8 *sett, int size);
 int readSysInfo(int request);
 int readConfig(u16 offset, u8* outBuf, int len);
+int writeConfig(u16 offset, u8* data, int len);
 int fts_disableInterrupt(void);
 int fts_disableInterruptNoSync(void);
+int fts_resetDisableIrqCount(void);
 int fts_enableInterrupt(void);
 int fts_crc_check(void);
 int requestSyncFrame(u8 type);
+int setActiveScanFrequency(u32 freq);
 
 #endif /* FTS_CORE_H */
 

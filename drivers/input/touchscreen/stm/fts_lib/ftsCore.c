@@ -40,7 +40,7 @@ SysInfo systemInfo;																///< Global System Info variable, accessible 
 static int reset_gpio = GPIO_NOT_DEFINED;										///< gpio number of the rest pin, the value is  GPIO_NOT_DEFINED if the reset pin is not connected
 static int system_reseted_up = 0;												///< flag checked during resume to understand if there was a system reset and restore the proper state
 static int system_reseted_down = 0;												///< flag checked during suspend to understand if there was a system reset and restore the proper state
-static int disable_irq_count = 0;												///< count the number of call to disable_irq
+static int disable_irq_count = 1;												///< count the number of call to disable_irq, start with 1 because at the boot IRQ are already disabled
 spinlock_t fts_int;																///< spinlock to controll the access to the disable_irq_counter
 
 
@@ -188,7 +188,7 @@ int pollForEvent(int * event_to_search, int event_bytes, u8* readData, int time_
 	StopWatch clock;
 
 	u8 cmd[1] = {FIFO_CMD_READONE};
-	char* temp = NULL;
+	char temp[128] = {0};
 
 	find = 0;
 	retry = 0;
@@ -201,10 +201,8 @@ int pollForEvent(int * event_to_search, int event_bytes, u8* readData, int time_
 		//Log of errors
 		if (readData[0] == EVT_ID_ERROR)
 		{
-			temp = printHex("ERROR EVENT = ", readData, FIFO_EVENT_SIZE);
-			if (temp != NULL)
-				logError(1, "%s %s", tag, temp);
-			kfree(temp);
+			logError(1, "%s %s\n", tag, printHex("ERROR EVENT = ", readData, FIFO_EVENT_SIZE, temp));
+			memset(temp, 0, 128);	
 			count_err++;
 			err_handling = errorHandler(readData, FIFO_EVENT_SIZE);
 			if ((err_handling & 0xF0FF0000) == ERROR_HANDLER_STOP_PROC)
@@ -216,10 +214,8 @@ int pollForEvent(int * event_to_search, int event_bytes, u8* readData, int time_
 		{
 			if (readData[0] != EVT_ID_NOEVENT)
 			{
-				temp = printHex("READ EVENT = ", readData, FIFO_EVENT_SIZE);
-				if (temp != NULL)
-					logError(1, "%s %s", tag, temp);
-				kfree(temp);
+				logError(1, "%s %s\n", tag, printHex("READ EVENT = ", readData, FIFO_EVENT_SIZE, temp));
+				memset(temp, 0, 128);
 			}
 			if (readData[0] == EVT_ID_CONTROLLER_READY && event_to_search[0] != EVT_ID_CONTROLLER_READY)
 			{
@@ -247,20 +243,18 @@ int pollForEvent(int * event_to_search, int event_bytes, u8* readData, int time_
 	stopStopWatch(&clock);
 	if ((retry >= time_to_count) && find != 1)
 	{
-		logError(1, "%s pollForEvent: ERROR %02X \n", tag, ERROR_TIMEOUT);
+		logError(1, "%s pollForEvent: ERROR %08X\n", tag, ERROR_TIMEOUT);
 		return ERROR_TIMEOUT;
 	}
 	else if (find == 1)
 	{
-		temp = printHex("FOUND EVENT = ", readData, FIFO_EVENT_SIZE);
-		if (temp != NULL)
-			logError(0, "%s %s", tag, temp);
-		kfree(temp);
-		logError(0, "%s Event found in %d ms (%d iterations)! Number of errors found = %d \n", tag, elapsedMillisecond(&clock), retry, count_err);
+		logError(0, "%s %s\n", tag, printHex("FOUND EVENT = ", readData, FIFO_EVENT_SIZE, temp));
+		memset(temp, 0, 128);
+		logError(0, "%s Event found in %d ms (%d iterations)! Number of errors found = %d\n", tag, elapsedMillisecond(&clock), retry, count_err);
 		return count_err;
 	} else
 	{
-		logError(1, "%s pollForEvent: ERROR %02X \n", tag, ERROR_BUS_R);
+		logError(1, "%s pollForEvent: ERROR %08X\n", tag, ERROR_BUS_R);
 		return ERROR_BUS_R;
 	}
 }
@@ -394,7 +388,8 @@ int writeSysCmd(u8 sys_cmd, u8 *sett, int size){
 		cmd[2+ret] = sett[ret];
 		logError(0,"%02X ", cmd[2+ret]);
 	}
-	logError(0,"\n%s %s: Writing Sys command...\n", tag, __func__);
+	logError(0, "\n");
+	logError(0, "%s %s: Writing Sys command...\n", tag, __func__);
 	if(sys_cmd!= SYS_CMD_LOAD_DATA){
 		ret = fts_writeFwCmd(cmd,2+size);
 	}else{
@@ -429,15 +424,15 @@ int defaultSysInfo(int i2cError){
 	logError(0, "%s Setting default System Info... \n", tag);
 
 	if(i2cError==1){
-		systemInfo.u16_fwVer=0xFFFF;
-		systemInfo.u16_cfgId=0xFFFF;
+		systemInfo.u16_fwVer = 0xFFFF;
+		systemInfo.u16_cfgProjectId = 0xFFFF;
 		for(i=0; i< RELEASE_INFO_SIZE; i++){
 			systemInfo.u8_releaseInfo[i]=0xFF;
 		}
 		systemInfo.u16_cxVer = 0xFFFF;
 	}else{
 		systemInfo.u16_fwVer=0x0000;
-		systemInfo.u16_cfgId=0x0000;
+		systemInfo.u16_cfgProjectId=0x0000;
 		for(i=0; i< RELEASE_INFO_SIZE; i++){
 			systemInfo.u8_releaseInfo[i]=0x00;
 		}
@@ -447,10 +442,8 @@ int defaultSysInfo(int i2cError){
 	systemInfo.u8_scrRxLen = 0;
 	systemInfo.u8_scrTxLen = 0;
 
-
 	logError(0, "%s default System Info DONE! \n", tag);
 	return OK;
-
 }
 
 /**
@@ -462,6 +455,7 @@ int readSysInfo(int request){
 	int ret, i, index = 0;
 	u8 sett = LOAD_SYS_INFO;
 	u8 data[SYS_INFO_SIZE] = {0};
+	char temp[256] = {0};
 
 	if (request == 1)
 	{
@@ -513,54 +507,54 @@ int readSysInfo(int request){
 	u8ToU16(&data[index], &systemInfo.u16_fwVer);
 	index += 2;
 	logError(1, "%s FW VER = %04X \n", tag, systemInfo.u16_fwVer);
-	u8ToU16(&data[index], &systemInfo.u16_fwId);
+	u8ToU16(&data[index], &systemInfo.u16_svnRev);
 	index += 2;
-	logError(1, "%s FW ID = %04X \n", tag, systemInfo.u16_fwId);
+	logError(1, "%s SVN REV = %04X \n", tag, systemInfo.u16_svnRev);
 	u8ToU16(&data[index], &systemInfo.u16_cfgVer);
 	index += 2;
 	logError(1, "%s CONFIG VER = %04X \n", tag, systemInfo.u16_cfgVer);
-	u8ToU16(&data[index], &systemInfo.u16_cfgId);
+	u8ToU16(&data[index], &systemInfo.u16_cfgProjectId);
 	index += 2;
-	logError(1, "%s CONFIG ID = %04X \n", tag, systemInfo.u16_cfgId);
+	logError(1, "%s CONFIG PROJECT ID = %04X \n", tag, systemInfo.u16_cfgProjectId);
 	u8ToU16(&data[index], &systemInfo.u16_cxVer);
 	index += 2;
 	logError(1, "%s CX VER = %04X \n", tag, systemInfo.u16_cxVer);
-	u8ToU16(&data[index], &systemInfo.u16_cxId);
+	u8ToU16(&data[index], &systemInfo.u16_cxProjectId);
 	index += 2;
-	logError(1, "%s CX ID = %04X \n", tag, systemInfo.u16_cxId);
-	systemInfo.u8_fwCfgAfeVer = data[index++];
+	logError(1, "%s CX PROJECT ID = %04X \n", tag, systemInfo.u16_cxProjectId);
+	systemInfo.u8_cfgAfeVer = data[index++];
+	systemInfo.u8_cxAfeVer =  data[index++];
 	systemInfo.u8_panelCfgAfeVer = data[index++];
-	logError(1, "%s AFE VER CFG = %02X - AFE VER PANEL = %02X \n", tag, systemInfo.u8_fwCfgAfeVer, systemInfo.u8_panelCfgAfeVer);
+	logError(1, "%s AFE VER: CFG = %02X - CX = %02X - PANEL = %02X \n", tag, systemInfo.u8_cfgAfeVer, systemInfo.u8_cxAfeVer, systemInfo.u8_panelCfgAfeVer);
 	systemInfo.u8_protocol = data[index++];
 	logError(1, "%s Protocol = %02X \n", tag, systemInfo.u8_protocol);
-	index+= 1;																	//skip reserved area
+	//index+= 1;																	//skip reserved area
 
-	logError(1, "%s Die Info =  ", tag);
+	//logError(1, "%s Die Info =  ", tag);
 	for (i = 0; i < DIE_INFO_SIZE;i++) {
 		systemInfo.u8_dieInfo[i] = data[index++];
-		logError(1, "%02X ", systemInfo.u8_dieInfo[i]);
+		//logError(1, "%02X ", systemInfo.u8_dieInfo[i]);
 	}
-	logError(1, "\n");
-
-	logError(1, "%s Release Info =  ", tag);
+	//logError(1, "\n");
+	logError(1,"%s %s \n", tag, printHex("Die Info =  ",systemInfo.u8_dieInfo,DIE_INFO_SIZE,temp));
+	memset(temp,0,256);
+	
+	
+	//logError(1, "%s Release Info =  ", tag);
 	for (i = 0; i < RELEASE_INFO_SIZE;i++) {
 		systemInfo.u8_releaseInfo[i] = data[index++];
-		logError(1, "%02X ", systemInfo.u8_releaseInfo[i]);
+		//logError(1, "%02X ", systemInfo.u8_releaseInfo[i]);
 	}
-	logError(1, "\n");
-
-	u8ToU16(&data[index], &systemInfo.u16_cxFormatVer_rev);
-	index += 2;
-	logError(1, "%s CX FORMAT VER = %04X \n", tag, systemInfo.u16_cxFormatVer_rev);
-	systemInfo.u8_cxFormatVer_minor = data[index++];
-	systemInfo.u8_cxFormatVer_major = data[index++];
-	logError(1, "%s CX FORMAT MAJOR = %02X - CX FORMAT MINOR = %02X \n", tag, systemInfo.u8_cxFormatVer_major, systemInfo.u8_cxFormatVer_minor);
-	u8ToU16(&data[index], &systemInfo.u16_cxMemVer);
-	index += 2;
-	u8ToU16(&data[index], &systemInfo.u16_cxMemId);
-	index += 2;
-	logError(1, "%s CX MEM VER = %04X - CX MEM ID = %04X \n", tag, systemInfo.u16_cxMemVer, systemInfo.u16_cxMemId);
-
+	//logError(1, "\n");
+	
+	logError(1,"%s %s \n", tag, printHex("Release Info =  ", systemInfo.u8_releaseInfo, RELEASE_INFO_SIZE, temp));
+	memset(temp, 0, 256);
+	
+	u8ToU32(&data[index], &systemInfo.u32_fwCrc);
+	index += 4;
+	u8ToU32(&data[index], &systemInfo.u32_cfgCrc);
+	index += 4;
+	
 	index+=8;																	//skip reserved area
 
 	u8ToU16(&data[index], &systemInfo.u16_scrResX);
@@ -694,17 +688,38 @@ FAIL:
 int readConfig(u16 offset, u8* outBuf, int len){
 	int ret;
 	u64 final_address = offset+ADDR_CONFIG_OFFSET;
-
-	logError(0, "%s %s: Starting to read config memory at %08X ...",tag,__func__,final_address);
+	
+	logError(0, "%s %s: Starting to read config memory at %08X ...\n", tag, __func__, final_address);
 	ret = fts_writeReadU8UX(FTS_CMD_CONFIG_R, BITS_16, final_address, outBuf, len, DUMMY_CONFIG);
 	if(ret<OK){
-		logError(1, "%s %s: Impossible to read Config Memory... ERROR %08X!",tag,__func__,ret);
+		logError(1, "%s %s: Impossible to read Config Memory... ERROR %08X!\n", tag, __func__, ret);
+		return ret;
+	}
+	
+	logError(0, "%s %s: Read config memory FINISHED!\n", tag, __func__);
+	return OK;
+}
+
+/**
+ * Write data into the Config Memory
+ * @param offset Starting address in the Config Memory where write the data
+ * @param data pointer of a byte array which contain the data to write 
+ * @param len number of bytes to write
+ * @return OK if success or an error code which specify the type of error encountered
+ */
+int writeConfig(u16 offset, u8* data, int len) {
+	int ret;
+	u64 final_address = offset+ADDR_CONFIG_OFFSET;
+	
+	logError(0, "%s %s: Starting to write config memory at %08X ... \n", tag, __func__, final_address);
+	ret = fts_writeU8UX(FTS_CMD_CONFIG_W, BITS_16, final_address, data, len);
+	if(ret<OK){
+		logError(1, "%s %s: Impossible to write Config Memory... ERROR %08X!\n", tag, __func__, ret);
 		return ret;
 	}
 
-	logError(0, "%s %s: Read config memory FINISHED!",tag,__func__);
+	logError(0, "%s %s: Write config memory FINISHED!\n", tag, __func__);
 	return OK;
-
 }
 
 /**
@@ -718,7 +733,7 @@ int fts_disableInterrupt()
 		spin_lock_irqsave(&fts_int,flag);
 		logError(0, "%s Number of disable = %d \n", tag, disable_irq_count);
 		if(disable_irq_count==0){
-			logError(0, "%s Excecuting Disable... \n", tag);
+			logError(0, "%s Executing Disable...\n", tag);
 			disable_irq_nosync(getClient()->irq);
 			disable_irq_count++;
 		}// disable_irq is re-entrant so it is required to keep track of the number of calls of this when reenabling
@@ -743,10 +758,10 @@ int fts_disableInterruptNoSync()
 		spin_lock_irq(&fts_int);
 		logError(0, "%s Number of disable = %d \n", tag, disable_irq_count);
 		if(disable_irq_count==0){
-			logError(0, "%s Excecuting Disable... \n", tag);
+			logError(0, "%s Executing Disable...\n", tag);
 			disable_irq_nosync(getClient()->irq);
 			disable_irq_count++;
-		}// disable_irq is re-entrant so it is required to keep track of the number of calls of this when reenabling
+		}// disable_irq is re-entrant so it is required to keep track of the number of calls of this when reenabling			
 
 		spin_unlock(&fts_int);
 		logError(0, "%s Interrupt No Sync Disabled!\n", tag);
@@ -757,7 +772,14 @@ int fts_disableInterruptNoSync()
 	}
 }
 
-
+/**
+ * Reset the disable_irq count
+ * @return OK 
+ */
+int fts_resetDisableIrqCount() {
+	disable_irq_count = 0;
+	return OK;
+}
 
 /**
  * Enable the interrupt so the ISR of the driver can be called
@@ -770,7 +792,7 @@ int fts_enableInterrupt()
 		spin_lock_irqsave(&fts_int,flag);
 		logError(0, "%s Number of re-enable = %d \n", tag, disable_irq_count);
 		while(disable_irq_count>0){							//loop N times according on the pending number of disable_irq to truly re-enable the int
-			logError(0, "%s Excecuting Enable... \n", tag);
+			logError(0, "%s Executing Enable...\n", tag);
 			enable_irq(getClient()->irq);
 			disable_irq_count--;
 		}
@@ -864,10 +886,7 @@ int requestSyncFrame(u8 type) {
 		}
 
 		if(readData[0]!=HEADER_SIGNATURE){
-			logError(1, "%s %s: Invalid Signature while reading count! ERROR %08X \n", tag, __func__, ret|ERROR_REQU_DATA);
-			ret|=ERROR_REQU_DATA;
-			retry2++;
-			continue;
+			logError(1, "%s %s: Invalid Signature while reading count! ERROR %08X \n", tag, __func__, ret | ERROR_REQU_DATA);
 		}
 
 		count = (readData[3]<<8)|readData[2];
@@ -882,10 +901,10 @@ int requestSyncFrame(u8 type) {
 			time_to_count = TIMEOUT_REQU_DATA / TIMEOUT_RESOLUTION;
 			while (count == new_count && retry < time_to_count) {
 				ret = fts_writeReadU8UX(FTS_CMD_FRAMEBUFFER_R, BITS_16, ADDR_FRAMEBUFFER, readData, DATA_HEADER, DUMMY_FRAMEBUFFER);
-				if(ret>=OK && readData[0]== HEADER_SIGNATURE){
+				if((ret >= OK) && (readData[0] == HEADER_SIGNATURE) && (readData[1] == type)) {
 					new_count = ((readData[3]<<8)|readData[2]);
-				}else{
-					logError(0, "%s %s: invalid Signature or can not read count... ERROR %08X \n", tag, __func__,ret);
+				} else {
+					logError(0, "%s %s: invalid Signature or can not read count... ERROR %08X\n", tag, __func__, ret);
 				}
 				retry++;
 				mdelay(TIMEOUT_RESOLUTION);
@@ -904,4 +923,73 @@ int requestSyncFrame(u8 type) {
 	}
 	logError(1, "%s %s: Request Data failed! ERROR %08X \n", tag, __func__, ret);
 	return ret;
+}
+
+/**
+ * Set the Active Scanning Frequency to a defined value
+ * @param freq scanning frequency to set in Hz
+ * @return OK if success or an error code which specify the type of error encountered
+ * @warning The scan frequency can be set only for the MS scan!
+ */
+int setActiveScanFrequency(u32 freq) {
+	
+	int res;
+	u8 temp[2]={0};
+	u16 t_cycle;
+	
+	logError(0, "%s %s: Setting the scanning frequency to %uHz...\n", tag, __func__,freq);
+	
+	//read MRN register
+	res = readConfig(ADDR_CONFIG_MRN,temp,1);
+	if(res<OK){
+		logError(1, "%s %s: error while reading mrn count! ERROR %08X\n", tag, __func__,res);
+		return res;
+	}
+	
+	//setting r count to 0 (= 1 R cycle used) and write it back
+	temp[0]&=(~0x03);
+	res = writeConfig(ADDR_CONFIG_MRN,temp,1);
+	if(res<OK){
+		logError(1, "%s %s: error while writing mrn count! ERROR %08X\n", tag, __func__,res);
+		return res;
+	}
+	
+	/* set first R cycle slot according the specified frequency */
+	//read T cycle
+	res = readConfig(ADDR_CONFIG_T_CYCLE,temp,2);
+	if(res<OK){
+		logError(1, "%s %s: error while reading T cycle! ERROR %08X\n", tag, __func__,res);
+		return res;
+	}
+	t_cycle = ((u16)(temp[1]<<8))|temp[0]; 
+	
+	
+	//compute the value of R cycle according the formula scan_freq = 30Mhz/(2*(T_cycle+R_cycle))
+	temp[0] = (30000000)/(freq*2)-t_cycle;
+	//write R cycle in Config Area
+	logError(0, "%s %s: T cycle  = %d (0x%04X) => R0 cycle = %d (0x%02X) \n", tag, __func__,t_cycle,t_cycle,temp[0],temp[0]);
+	res = writeConfig(ADDR_CONFIG_R0_CYCLE,temp,1);
+	if(res<OK){
+		logError(1, "%s %s: error while writing R0 cycle! ERROR %08X\n", tag, __func__,res);
+		return res;
+	}
+	
+	logError(0, "%s %s: Saving Config into the flash ... \n", tag, __func__);
+	//save config
+	temp[0] = SAVE_FW_CONF;
+	res = writeSysCmd(SYS_CMD_SAVE_FLASH, temp, 1);
+	if(res<OK){
+		logError(1, "%s %s: error while saving config into the flash! ERROR %08X\n", tag, __func__,res);
+		return res;
+	}
+	
+	//system reset
+	res = fts_system_reset();
+	if(res<OK){
+		logError(1, "%s %s: error at system reset! ERROR %08X\n", tag, __func__,res);
+		return res;
+	}
+	
+	logError(0, "%s %s: Setting the scanning frequency FINISHED! \n", tag, __func__);
+	return OK;
 }

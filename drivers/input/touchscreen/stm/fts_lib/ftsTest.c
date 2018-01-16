@@ -64,56 +64,17 @@ int initTestToDo()
 	limit_file.data = NULL;
 	strcpy(limit_file.name, " ");
 
-#ifdef COMPUTE_CX_ON_PHONE
+
+	tests.MutualRawAdjITO = 1;		
+	
 	tests.MutualRaw = 1;
 	tests.MutualRawGap = 0;
-	tests.MutualCx1 = 0;
-	tests.MutualCx2 = 0;
-	tests.MutualCx2Adj = 0;
-	tests.MutualCxTotal = 1;
-	tests.MutualCxTotalAdj = 1;
-
-#ifdef PHONE_KEY
-	tests.MutualKeyRaw = 1;
-#else
-	tests.MutualKeyRaw = 0;
-#endif
-	tests.MutualKeyCx1 = 0;
-	tests.MutualKeyCx2 = 0;
-#ifdef PHONE_KEY
-	tests.MutualKeyCxTotal = 1;
-#else
-	tests.MutualKeyCxTotal = 0;
-#endif
-
-	tests.SelfForceRaw = 1;
-	tests.SelfForceRawGap = 0;
-	tests.SelfForceIx1 = 0;
-	tests.SelfForceIx2 = 0;
-	tests.SelfForceIx2Adj = 0;
-	tests.SelfForceIxTotal = 1;
-	tests.SelfForceIxTotalAdj = 0;
-	tests.SelfForceCx1 = 0;
-	tests.SelfForceCx2 = 0;
-	tests.SelfForceCx2Adj = 0;
-	tests.SelfForceCxTotal = 0;
-	tests.SelfForceCxTotalAdj = 0;
-
-	tests.SelfSenseRaw = 1;
-	tests.SelfSenseRawGap = 0;
-	tests.SelfSenseIx1 = 0;
-	tests.SelfSenseIx2 = 0;
-	tests.SelfSenseIx2Adj = 0;
-	tests.SelfSenseIxTotal = 1;
-	tests.SelfSenseIxTotalAdj = 0;
-	tests.SelfSenseCx1 = 0;
-	tests.SelfSenseCx2 = 0;
-	tests.SelfSenseCx2Adj = 0;
-	tests.SelfSenseCxTotal = 0;
-	tests.SelfSenseCxTotalAdj = 0;
-#else
-	tests.MutualRaw = 1;
-	tests.MutualRawGap = 0;
+	tests.MutualRawAdj = 0;
+	
+	tests.MutualRawLP = 1;
+	tests.MutualRawGapLP = 0;
+	tests.MutualRawAdjLP = 0;
+	
 	tests.MutualCx1 = 0;
 	tests.MutualCx2 = 0;
 	tests.MutualCx2Adj = 0;
@@ -135,6 +96,10 @@ int initTestToDo()
 
 	tests.SelfForceRaw = 1;
 	tests.SelfForceRawGap = 0;
+	
+	tests.SelfForceRawLP = 1;
+	tests.SelfForceRawGapLP = 0;
+	
 	tests.SelfForceIx1 = 0;
 	tests.SelfForceIx2 = 0;
 	tests.SelfForceIx2Adj = 0;
@@ -148,6 +113,10 @@ int initTestToDo()
 
 	tests.SelfSenseRaw = 1;
 	tests.SelfSenseRawGap = 0;
+	
+	tests.SelfSenseRawLP = 1;
+	tests.SelfSenseRawGapLP = 0;
+	
 	tests.SelfSenseIx1 = 0;
 	tests.SelfSenseIx2 = 0;
 	tests.SelfSenseIx2Adj = 0;
@@ -158,7 +127,6 @@ int initTestToDo()
 	tests.SelfSenseCx2Adj = 0;
 	tests.SelfSenseCxTotal = 0;
 	tests.SelfSenseCxTotalAdj = 0;
-#endif
 
 	return OK;
 }
@@ -734,27 +702,44 @@ int checkLimitsMapAdjTotal(u16 *data, int row, int column, int *max)
 		}
 	}
 
-	return count; //if count is 0 = OK, test completed successfully
+	return count; //if count is 0 = OK, test completed successfully 
 }
 
 /**
- * Perform an ITO test setting all the possible options (see @link ito_opt ITO Options @endlink)
- * @return the number of elements that overcome the specified interval (0 = OK)
+ * Perform an ITO test setting all the possible options (see @link ito_opt ITO Options @endlink) and checking MS Raw ADJ if enabled
+ * @param path_limits name of Production Limit file to load or "NULL" if the limits data should be loaded by a .h file
+ * @param todo pointer to a TestToDo variable which select the test to do 
+ * @return OK if success or an error code which specify the type of error encountered
  */
-int production_test_ito()
+int production_test_ito(char* path_limits, TestToDo *todo)
 {
 	int res = OK;
-	u8 sett[2] = {0xFF, 0xFF};
+	u8 sett[2] = {0x00, 0x00};
+	MutualSenseFrame msRawFrame;
+	int *thresholds = NULL;
+	u16 *adj = NULL;
+	int trows, tcolumns;
 
 	logError(0, "%s ITO Production test is starting...\n", tag);
 
 	res = fts_system_reset();
 	if (res < 0)
 	{
-		logError(1, "%s production_test_ito: ERROR %08X \n", tag, ERROR_PROD_TEST_ITO);
+		logError(1, "%s %s: ERROR %08X \n", tag,__func__, ERROR_PROD_TEST_ITO);
 		return (res | ERROR_PROD_TEST_ITO);
 	}
-
+	
+	sett[0] = SPECIAL_TUNING_IOFF;
+	logError(0, "%s Trimming Ioff... \n", tag);
+	res = writeSysCmd(SYS_CMD_SPECIAL_TUNING, sett, 2);
+	if (res < OK)
+	{
+		logError(1, "%s production_test_ito: Trimm Ioff ERROR %08X \n", tag, (res | ERROR_PROD_TEST_ITO));
+		return (res | ERROR_PROD_TEST_ITO);
+	}
+	
+	sett[0] = 0xFF;
+	sett[1] = 0xFF;
 	logError(0, "%s ITO Check command sent... \n", tag);
 	res = writeSysCmd(SYS_CMD_ITO, sett, 2);
 	if (res < OK)
@@ -763,9 +748,95 @@ int production_test_ito()
 		return (res | ERROR_PROD_TEST_ITO);
 	}
 
+	logError(0, "%s ITO Command = OK! \n", tag);
 
+	logError(0, "%s MS RAW ITO ADJ TEST: \n", tag);
+	if (todo->MutualRawAdjITO == 1)
+	{
+		logError(0, "%s Collecting MS Raw data... \n", tag);
+		res |= getMSFrame3(MS_RAW, &msRawFrame);
+		if (res < OK)
+		{
+			logError(1, "%s %s: getMSFrame failed... ERROR %08X \n", tag, __func__, ERROR_PROD_TEST_ITO);
+			goto ERROR;
+		}
+		logError(0, "%s MS RAW ITO ADJ HORIZONTAL TEST: \n", tag);
+		res = computeAdjHorizTotal(msRawFrame.node_data, msRawFrame.header.force_node, msRawFrame.header.sense_node, &adj);
+		if (res < OK)
+		{
+			logError(1, "%s %s: computeAdjHoriz failed... ERROR %08X \n", tag, __func__, ERROR_PROD_TEST_ITO);
+			goto ERROR;
+		}
+
+		res = parseProductionTestLimits(path_limits, &limit_file, MS_RAW_ITO_ADJH, &thresholds, &trows, &tcolumns);
+		if (res < OK || (trows != msRawFrame.header.force_node || tcolumns != msRawFrame.header.sense_node - 1))
+		{
+			logError(1, "%s %s: parseProductionTestLimits MS_RAW_ITO_ADJH failed... ERROR %08X \n", tag, __func__, ERROR_PROD_TEST_DATA);
+			goto ERROR;
+		}
+
+
+		res = checkLimitsMapAdjTotal(adj, msRawFrame.header.force_node, msRawFrame.header.sense_node - 1, thresholds);
+		if (res != OK)
+		{
+			logError(1, "%s production_test_data: checkLimitsAdj MS RAW ITO ADJH failed... ERROR COUNT = %d \n", tag, res);
+			logError(0, "%s MS RAW ITO ADJ HORIZONTAL TEST:.................FAIL \n\n", tag);
+			print_frame_short("MS Raw ITO frame =", array1dTo2d_short(msRawFrame.node_data, msRawFrame.node_data_size, msRawFrame.header.sense_node), msRawFrame.header.force_node, msRawFrame.header.sense_node);
+			res = ERROR_PROD_TEST_ITO;
+			goto ERROR;
+		} else
+			logError(0, "%s MS RAW ITO ADJ HORIZONTAL TEST:.................OK  \n", tag);
+
+		kfree(thresholds);
+		thresholds = NULL;
+
+		kfree(adj);
+		adj = NULL;
+
+		logError(0, "%s MS RAW ITO ADJ VERTICAL TEST: \n", tag);
+		res = computeAdjVertTotal(msRawFrame.node_data, msRawFrame.header.force_node, msRawFrame.header.sense_node, &adj);
+		if (res < OK)
+		{
+			logError(1, "%s %s: computeAdjVert failed... ERROR %08X \n", tag, __func__, ERROR_PROD_TEST_ITO);
+			goto ERROR;
+		}
+
+		res = parseProductionTestLimits(path_limits, &limit_file, MS_RAW_ITO_ADJV, &thresholds, &trows, &tcolumns);
+		if (res < OK || (trows != msRawFrame.header.force_node - 1 || tcolumns != msRawFrame.header.sense_node))
+		{
+			logError(1, "%s %s: parseProductionTestLimits MS_RAW_ITO_ADJV failed... ERROR %08X \n", tag, __func__, ERROR_PROD_TEST_ITO);
+			goto ERROR;
+		}
+
+
+		res = checkLimitsMapAdjTotal(adj, msRawFrame.header.force_node - 1, msRawFrame.header.sense_node, thresholds);
+		if (res != OK)
+		{
+			logError(1, "%s %s: checkLimitsAdj MS RAW ITO ADJV failed... ERROR COUNT = %d \n", tag, __func__, res);
+			logError(0, "%s MS RAW ITO ADJ VERTICAL TEST:.................FAIL \n\n", tag);
+			print_frame_short("MS Raw ITO frame =", array1dTo2d_short(msRawFrame.node_data, msRawFrame.node_data_size, msRawFrame.header.sense_node), msRawFrame.header.force_node, msRawFrame.header.sense_node);
+			res = ERROR_PROD_TEST_ITO;
+			goto ERROR;
+		} else
+			logError(0, "%s MS RAW ITO ADJ VERTICAL TEST:.................OK  \n", tag);
+		
+		kfree(thresholds);
+		thresholds = NULL;
+
+		kfree(adj);
+		adj = NULL;
+
+
+	} else
+		logError(0, "%s MS RAW ITO ADJ TEST:.................SKIPPED  \n", tag);
+	
+ERROR:
+	if(thresholds != NULL) kfree(thresholds);
+	if(adj != NULL)	kfree(adj);
+	if(msRawFrame.node_data != NULL) kfree(msRawFrame.node_data);
+	freeLimitsFile(&limit_file);
 	res |= fts_system_reset();
-	if (res < 0)
+	if (res < OK)
 	{
 		logError(1, "%s production_test_ito: ERROR %08X \n", tag, ERROR_PROD_TEST_ITO);
 		res = (res | ERROR_PROD_TEST_ITO);
@@ -837,7 +908,7 @@ int production_test_main(char * pathThresholds, int stop_on_fail, int saveInit, 
 	logError(0, "%s \n", tag);
 
 	logError(0, "%s ITO TEST: \n", tag);
-	res = production_test_ito();
+	res = production_test_ito(pathThresholds, todo);
 	if (res < 0)
 	{
 		logError(0, "%s Error during ITO TEST! ERROR %08X\n", tag, res);
@@ -922,19 +993,21 @@ int production_test_ms_raw(char *path_limits, int stop_on_fail, TestToDo *todo)
 
 	int *thresholds = NULL;
 	int trows, tcolumns;
+	
+	u16 *adj = NULL;
 
 	//******************************* Mutual Sense Test *******************************/
 	logError(0, "%s \n", tag);
 	logError(0, "%s MS RAW DATA TEST is starting...\n", tag);
-	if (todo->MutualRaw == 1 || todo->MutualRawGap == 1)
+	if (todo->MutualRaw == 1 || todo->MutualRawGap == 1 || todo->MutualRawAdj == 1)
 	{
 
-		ret = setScanMode(SCAN_MODE_ACTIVE, 0xFF);
+		ret = setScanMode(SCAN_MODE_LOCKED, LOCKED_ACTIVE);
 		mdelay(WAIT_FOR_FRESH_FRAMES);
 		ret |= setScanMode(SCAN_MODE_ACTIVE, 0x00);
 		mdelay(WAIT_AFTER_SENSEOFF);
 		ret |= getMSFrame3(MS_RAW, &msRawFrame);
-		if (ret < 0)
+		if (ret < OK)
 		{
 			logError(1, "%s production_test_data: getMSFrame failed... ERROR %08X \n", tag, ERROR_PROD_TEST_DATA);
 			return (ret | ERROR_PROD_TEST_DATA);
@@ -944,7 +1017,7 @@ int production_test_ms_raw(char *path_limits, int stop_on_fail, TestToDo *todo)
 		if (todo->MutualRaw == 1)
 		{
 			ret = parseProductionTestLimits(path_limits, &limit_file, MS_RAW_MIN_MAX, &thresholds, &trows, &tcolumns);
-			if (ret < 0 || (trows != 1 || tcolumns != 2))
+			if (ret < OK || (trows != 1 || tcolumns != 2))
 			{
 				logError(1, "%s production_test_data: parseProductionTestLimits MS_RAW_MIN_MAX failed... ERROR %08X \n", tag, ERROR_PROD_TEST_DATA);
 				ret |= ERROR_PROD_TEST_DATA;
@@ -991,6 +1064,81 @@ int production_test_ms_raw(char *path_limits, int stop_on_fail, TestToDo *todo)
 			thresholds = NULL;
 		} else
 			logError(0, "%s MS RAW GAP TEST:.................SKIPPED  \n", tag);
+		
+		logError(0, "%s \n", tag);
+		logError(0, "%s MS RAW ADJ TEST: \n", tag);
+		if (todo->MutualRawAdj == 1)
+		{
+			logError(0, "%s MS RAW ADJ HORIZONTAL TEST: \n", tag);
+			ret = computeAdjHorizTotal(msRawFrame.node_data,msRawFrame.header.force_node,msRawFrame.header.sense_node,&adj);
+			if (ret < OK)
+			{
+				logError(1, "%s production_test_data: computeAdjHoriz failed... ERROR %08X \n", tag, ERROR_PROD_TEST_DATA);
+				ret |= ERROR_PROD_TEST_DATA;
+				goto ERROR_LIMITS;
+			}
+			
+			ret = parseProductionTestLimits(path_limits, &limit_file, MS_RAW_ADJH, &thresholds, &trows, &tcolumns);
+			if (ret < OK || (trows != msRawFrame.header.force_node || tcolumns != msRawFrame.header.sense_node-1))
+			{
+				logError(1, "%s production_test_data: parseProductionTestLimits MS_RAW_ADJH failed... ERROR %08X \n", tag, ERROR_PROD_TEST_DATA);
+				ret |= ERROR_PROD_TEST_DATA;
+				goto ERROR_LIMITS;
+			}
+
+
+			ret = checkLimitsMapAdjTotal(adj, msRawFrame.header.force_node, msRawFrame.header.sense_node-1, thresholds);
+			if (ret != OK)
+			{
+				logError(1, "%s production_test_data: checkLimitsAdj MS RAW ADJH failed... ERROR COUNT = %d \n", tag, ret);
+				logError(0, "%s MS RAW ADJ HORIZONTAL TEST:.................FAIL \n\n", tag);
+				count_fail += 1;
+				if (stop_on_fail == 1) goto ERROR;
+			} else
+				logError(0, "%s MS RAW ADJ HORIZONTAL TEST:.................OK  \n", tag);
+			
+			kfree(thresholds);
+			thresholds = NULL;
+			
+			kfree(adj);
+			adj = NULL;
+			
+			logError(0, "%s MS RAW ADJ VERTICAL TEST: \n", tag);
+			ret = computeAdjVertTotal(msRawFrame.node_data,msRawFrame.header.force_node,msRawFrame.header.sense_node,&adj);
+			if (ret < OK)
+			{
+				logError(1, "%s production_test_data: computeAdjVert failed... ERROR %08X \n", tag, ERROR_PROD_TEST_DATA);
+				ret |= ERROR_PROD_TEST_DATA;
+				goto ERROR_LIMITS;
+			}
+			
+			ret = parseProductionTestLimits(path_limits, &limit_file, MS_RAW_ADJV, &thresholds, &trows, &tcolumns);
+			if (ret < OK || (trows != msRawFrame.header.force_node-1 || tcolumns != msRawFrame.header.sense_node))
+			{
+				logError(1, "%s production_test_data: parseProductionTestLimits MS_RAW_ADJV failed... ERROR %08X \n", tag, ERROR_PROD_TEST_DATA);
+				ret |= ERROR_PROD_TEST_DATA;
+				goto ERROR_LIMITS;
+			}
+
+
+			ret = checkLimitsMapAdjTotal(adj, msRawFrame.header.force_node-1, msRawFrame.header.sense_node, thresholds);
+			if (ret != OK)
+			{
+				logError(1, "%s production_test_data: checkLimitsAdj MS RAW ADJV failed... ERROR COUNT = %d \n", tag, ret);
+				logError(0, "%s MS RAW ADJ VERTICAL TEST:.................FAIL \n\n", tag);
+				count_fail += 1;
+				if (stop_on_fail == 1) goto ERROR;
+			} else
+				logError(0, "%s MS RAW ADJ VERTICAL TEST:.................OK  \n", tag);
+			kfree(thresholds);
+			thresholds = NULL;
+			
+			kfree(adj);
+			adj = NULL;
+			
+			
+		} else
+			logError(0, "%s MS RAW ADJ TEST:.................SKIPPED  \n", tag);
 
 	} else
 		logError(0, "%s MS RAW FRAME TEST:.................SKIPPED  \n", tag);
@@ -1013,13 +1161,24 @@ int production_test_ms_raw(char *path_limits, int stop_on_fail, TestToDo *todo)
 	} else
 		logError(0, "%s MS KEY RAW TEST:.................SKIPPED  \n", tag);
 
+	ret = production_test_ms_raw_lp(path_limits, stop_on_fail, todo);
+	if (ret < 0) {
+		logError(1, "%s production_test_data: production_test_ms_raw_lp failed... ERROR = %08X \n", tag, ret);
+		count_fail += 1;
+		if (count_fail == 1) {
+			logError(0, "%s MS RAW DATA TEST:.................FAIL fails_count = %d\n\n", tag, count_fail);
+			goto ERROR_LIMITS;
+		}
+	}
 
 ERROR:
 	logError(0, "%s \n", tag);
 	if (count_fail == 0)
 	{
-		kfree(msRawFrame.node_data);
-		msRawFrame.node_data = NULL;
+		if(msRawFrame.node_data != NULL) {
+			kfree(msRawFrame.node_data);
+			msRawFrame.node_data = NULL;
+		}
 		logError(0, "%s MS RAW DATA TEST finished!.................OK\n", tag);
 		return OK;
 	} else
@@ -1029,7 +1188,204 @@ ERROR:
 
 		if (msRawFrame.node_data != NULL) kfree(msRawFrame.node_data);
 		if (thresholds != NULL) kfree(thresholds);
+		if (adj!= NULL)	kfree(adj);
 		logError(0, "%s MS RAW DATA TEST:.................FAIL fails_count = %d\n\n", tag, count_fail);
+		return (ERROR_PROD_TEST_DATA | ERROR_TEST_CHECK_FAIL);
+	}
+
+
+ERROR_LIMITS:
+	if (msRawFrame.node_data != NULL) kfree(msRawFrame.node_data);
+	if (thresholds != NULL) kfree(thresholds);
+	return ret;
+}
+
+
+/**
+ * Perform all the test selected in a TestTodo variable related to MS low power raw data
+ * @param path_limits name of Production Limit file to load or "NULL" if the limits data should be loaded by a .h file
+ * @param stop_on_fail if 1, the test flow stops at the first data check failure otherwise it keeps going performing all the selected test
+ * @param todo pointer to a TestToDo variable which select the test to do
+ * @return OK if success or an error code which specify the type of error encountered
+ */
+int production_test_ms_raw_lp(char *path_limits, int stop_on_fail, TestToDo *todo)
+{
+
+	int ret, count_fail = 0;
+	MutualSenseFrame msRawFrame;
+
+
+	int *thresholds = NULL;
+	int trows, tcolumns;
+	
+	u16 *adj = NULL;
+
+	//******************************* Mutual Sense Test *******************************/
+	logError(0, "%s \n", tag);
+	logError(0, "%s MS RAW LP DATA TEST: \n", tag);
+	if (todo->MutualRawLP == 1 || todo->MutualRawGapLP == 1 || todo->MutualRawAdjLP == 1)
+	{
+
+		ret = setScanMode(SCAN_MODE_LOCKED, LOCKED_LP_ACTIVE);
+		mdelay(WAIT_FOR_FRESH_FRAMES);
+		ret |= setScanMode(SCAN_MODE_ACTIVE, 0x00);
+		mdelay(WAIT_AFTER_SENSEOFF);
+		ret |= getMSFrame3(MS_RAW, &msRawFrame);
+		if (ret < 0)
+		{
+			logError(1, "%s production_test_data: getMSFrame failed... ERROR %08X \n", tag, ERROR_PROD_TEST_DATA);
+			return (ret | ERROR_PROD_TEST_DATA);
+		}
+
+		logError(0, "%s MS RAW LP MIN MAX TEST:  \n", tag);
+		if (todo->MutualRawLP == 1)
+		{
+			ret = parseProductionTestLimits(path_limits, &limit_file, MS_RAW_LP_MIN_MAX, &thresholds, &trows, &tcolumns);
+			if (ret < 0 || (trows != 1 || tcolumns != 2))
+			{
+				logError(1, "%s production_test_data: parseProductionTestLimits MS_RAW_LP_MIN_MAX failed... ERROR %08X \n", tag, ERROR_PROD_TEST_DATA);
+				ret |= ERROR_PROD_TEST_DATA;
+				goto ERROR_LIMITS;
+			}
+
+
+			ret = checkLimitsMinMax(msRawFrame.node_data, msRawFrame.header.force_node, msRawFrame.header.sense_node, thresholds[0], thresholds[1]);
+			if (ret != OK)
+			{
+				logError(1, "%s production_test_data: checkLimitsMinMax MS RAW LP failed... ERROR COUNT = %d \n", tag, ret);
+				logError(0, "%s MS RAW LP MIN MAX TEST:.................FAIL \n\n", tag);
+				count_fail += 1;
+				if (stop_on_fail == 1) goto ERROR;
+			} else
+				logError(0, "%s MS RAW LP MIN MAX TEST:.................OK  \n", tag);
+			kfree(thresholds);
+			thresholds = NULL;
+		} else
+			logError(0, "%s MS RAW LP MIN MAX TEST:.................SKIPPED  \n", tag);
+
+		logError(0, "%s \n", tag);
+		logError(0, "%s MS RAW LP GAP TEST: \n", tag);
+		if (todo->MutualRawGapLP == 1)
+		{
+			ret = parseProductionTestLimits(path_limits, &limit_file, MS_RAW_LP_GAP, &thresholds, &trows, &tcolumns);
+			if (ret < 0 || (trows != 1 || tcolumns != 1))
+			{
+				logError(1, "%s production_test_data: parseProductionTestLimits MS_RAW_LP_GAP failed... ERROR %08X \n", tag, ERROR_PROD_TEST_DATA);
+				ret |= ERROR_PROD_TEST_DATA;
+				goto ERROR_LIMITS;
+			}
+
+			ret = checkLimitsGap(msRawFrame.node_data, msRawFrame.header.force_node, msRawFrame.header.sense_node, thresholds[0]);
+			if (ret != OK)
+			{
+				logError(1, "%s production_test_data: checkLimitsGap MS RAW LP failed... ERROR = %08X \n", tag, ret);
+				count_fail += 1;
+				if (stop_on_fail == 1) goto ERROR;
+
+			} else
+				logError(0, "%s MS RAW LP GAP TEST:.................OK \n\n", tag);
+			kfree(thresholds);
+			thresholds = NULL;
+		} else
+			logError(0, "%s MS RAW LP GAP TEST:.................SKIPPED  \n", tag);
+		
+		logError(0, "%s \n", tag);
+		logError(0, "%s MS RAW LP ADJ TEST: \n", tag);
+		if (todo->MutualRawAdjLP == 1)
+		{
+			logError(0, "%s MS RAW LP ADJ HORIZONTAL TEST: \n", tag);
+			ret = computeAdjHorizTotal(msRawFrame.node_data,msRawFrame.header.force_node,msRawFrame.header.sense_node,&adj);
+			if (ret < 0)
+			{
+				logError(1, "%s production_test_data: computeAdjHoriz failed... ERROR %08X \n", tag, ERROR_PROD_TEST_DATA);
+				ret |= ERROR_PROD_TEST_DATA;
+				goto ERROR_LIMITS;
+			}
+			
+			ret = parseProductionTestLimits(path_limits, &limit_file, MS_RAW_LP_ADJH, &thresholds, &trows, &tcolumns);
+			if (ret < 0 || (trows != msRawFrame.header.force_node || tcolumns != msRawFrame.header.sense_node-1))
+			{
+				logError(1, "%s production_test_data: parseProductionTestLimits MS_RAW_LP_ADJH failed... ERROR %08X \n", tag, ERROR_PROD_TEST_DATA);
+				ret |= ERROR_PROD_TEST_DATA;
+				goto ERROR_LIMITS;
+			}
+
+
+			ret = checkLimitsMapAdjTotal(adj, msRawFrame.header.force_node, msRawFrame.header.sense_node-1, thresholds);
+			if (ret != OK)
+			{
+				logError(1, "%s production_test_data: checkLimitsAdj MS RAW LP ADJH failed... ERROR COUNT = %d \n", tag, ret);
+				logError(0, "%s MS RAW LP ADJ HORIZONTAL TEST:.................FAIL \n\n", tag);
+				count_fail += 1;
+				if (stop_on_fail == 1) goto ERROR;
+			} else
+				logError(0, "%s MS RAW LP ADJ HORIZONTAL TEST:.................OK  \n", tag);
+			
+			kfree(thresholds);
+			thresholds = NULL;
+			
+			kfree(adj);
+			adj = NULL;
+			
+			logError(0, "%s MS RAW LP ADJ VERTICAL TEST: \n", tag);
+			ret = computeAdjVertTotal(msRawFrame.node_data,msRawFrame.header.force_node,msRawFrame.header.sense_node,&adj);
+			if (ret < 0)
+			{
+				logError(1, "%s production_test_data: computeAdjVert failed... ERROR %08X \n", tag, ERROR_PROD_TEST_DATA);
+				ret |= ERROR_PROD_TEST_DATA;
+				goto ERROR_LIMITS;
+			}
+			
+			ret = parseProductionTestLimits(path_limits, &limit_file, MS_RAW_LP_ADJV, &thresholds, &trows, &tcolumns);
+			if (ret < 0 || (trows != msRawFrame.header.force_node-1 || tcolumns != msRawFrame.header.sense_node))
+			{
+				logError(1, "%s production_test_data: parseProductionTestLimits MS_RAW_ADJV failed... ERROR %08X \n", tag, ERROR_PROD_TEST_DATA);
+				ret |= ERROR_PROD_TEST_DATA;
+				goto ERROR_LIMITS;
+			}
+
+
+			ret = checkLimitsMapAdjTotal(adj, msRawFrame.header.force_node-1, msRawFrame.header.sense_node, thresholds);
+			if (ret != OK)
+			{
+				logError(1, "%s production_test_data: checkLimitsAdj MS RAW ADJV failed... ERROR COUNT = %d \n", tag, ret);
+				logError(0, "%s MS RAW LP ADJ VERTICAL TEST:.................FAIL \n\n", tag);
+				count_fail += 1;
+				if (stop_on_fail == 1) goto ERROR;
+			} else
+				logError(0, "%s MS RAW LP ADJ VERTICAL TEST:.................OK  \n", tag);
+			kfree(thresholds);
+			thresholds = NULL;
+			
+			kfree(adj);
+			adj = NULL;
+			
+			
+		} else
+			logError(0, "%s MS RAW LP ADJ TEST:.................SKIPPED  \n", tag);
+
+	} else
+		logError(0, "%s MS RAW LP FRAME TEST:.................SKIPPED  \n", tag);
+
+ERROR:
+	logError(0, "%s \n", tag);
+	if (count_fail == 0)
+	{
+		if(msRawFrame.node_data != NULL){
+			kfree(msRawFrame.node_data);
+			msRawFrame.node_data = NULL;
+		}
+		logError(0, "%s MS RAW DATA TEST finished!.................OK\n", tag);
+		return OK;
+	} else
+	{
+		if (msRawFrame.node_data != NULL){ 
+			print_frame_short("MS Raw LP frame =", array1dTo2d_short(msRawFrame.node_data, msRawFrame.node_data_size, msRawFrame.header.sense_node), msRawFrame.header.force_node, msRawFrame.header.sense_node);
+			kfree(msRawFrame.node_data);
+		}
+		if (thresholds != NULL) kfree(thresholds);
+		if (adj!= NULL)	kfree(adj);
+		logError(0, "%s MS RAW LP DATA TEST:.................FAIL fails_count = %d\n\n", tag, count_fail);
 		return (ERROR_PROD_TEST_DATA | ERROR_TEST_CHECK_FAIL);
 	}
 
@@ -1673,14 +2029,14 @@ int production_test_ss_raw(char *path_limits, int stop_on_fail, TestToDo *todo)
 	int *thresholds = NULL;
 	int trows, tcolumns;
 
-	//MS SS TEST
+	//SS TEST
 	logError(0, "%s \n", tag);
 	logError(0, "%s SS RAW Testes are starting... \n", tag);
 
 	//******************************* Self Sense Test *******************************/
 
 	logError(0, "%s Getting SS Frame... \n", tag);
-	ret = setScanMode(SCAN_MODE_ACTIVE, 0xFF);
+	ret = setScanMode(SCAN_MODE_LOCKED, LOCKED_ACTIVE);
 	mdelay(WAIT_FOR_FRESH_FRAMES);
 	ret |= setScanMode(SCAN_MODE_ACTIVE, 0x00);
 	mdelay(WAIT_AFTER_SENSEOFF);
@@ -1692,7 +2048,7 @@ int production_test_ss_raw(char *path_limits, int stop_on_fail, TestToDo *todo)
 	}
 
 	//SS RAW (PROXIMITY) FORCE TEST
-	logError(0, "%s SS RAW (PROXIMITY) FORCE TEST:  \n", tag);
+	logError(0, "%s SS RAW FORCE TEST:  \n", tag);
 
 
 
@@ -1702,7 +2058,7 @@ int production_test_ss_raw(char *path_limits, int stop_on_fail, TestToDo *todo)
 		columns = 1; //there are no data for the sense channels due to the fact that the force frame is analized
 		rows = ssRawFrame.header.force_node;
 
-		logError(0, "%s SS RAW (PROXIMITY) FORCE MIN MAX TEST:  \n", tag);
+		logError(0, "%s SS RAW FORCE MIN MAX TEST:  \n", tag);
 		if (todo->SelfForceRaw == 1)
 		{
 
@@ -1717,7 +2073,7 @@ int production_test_ss_raw(char *path_limits, int stop_on_fail, TestToDo *todo)
 			ret = checkLimitsMinMax(ssRawFrame.force_data, rows, columns, thresholds[0], thresholds[1]);
 			if (ret != OK)
 			{
-				logError(1, "%s production_test_data: checkLimitsMinMax SS RAW (PROXIMITY) FORCE failed... ERROR COUNT = %d \n", tag, ret);
+				logError(1, "%s production_test_data: checkLimitsMinMax SS RAW FORCE failed... ERROR COUNT = %d \n", tag, ret);
 				logError(0, "%s SS RAW (PROXIMITY) FORCE MIN MAX TEST:.................FAIL \n\n", tag);
 				count_fail += 1;
 				print_frame_short("SS Raw force frame =", array1dTo2d_short(ssRawFrame.force_data, rows*columns, columns), rows, columns);
@@ -1727,15 +2083,15 @@ int production_test_ss_raw(char *path_limits, int stop_on_fail, TestToDo *todo)
 					goto ERROR_LIMITS;
 				}
 			} else
-				logError(0, "%s SS RAW (PROXIMITY) FORCE MIN MAX TEST:.................OK \n\n", tag);
+				logError(0, "%s SS RAW FORCE MIN MAX TEST:.................OK \n\n", tag);
 
 			kfree(thresholds);
 			thresholds = NULL;
 		} else
-			logError(0, "%s SS RAW (PROXIMITY) FORCE MIN MAX TEST:.................SKIPPED \n\n", tag);
+			logError(0, "%s SS RAW FORCE MIN MAX TEST:.................SKIPPED \n\n", tag);
 
 		logError(0, "%s \n", tag);
-		logError(0, "%s SS RAW (PROXIMITY) FORCE GAP TEST:  \n", tag);
+		logError(0, "%s SS RAW FORCE GAP TEST:  \n", tag);
 		if (todo->SelfForceRawGap == 1)
 		{
 
@@ -1750,8 +2106,8 @@ int production_test_ss_raw(char *path_limits, int stop_on_fail, TestToDo *todo)
 			ret = checkLimitsGap(ssRawFrame.force_data, rows, columns, thresholds[0]);
 			if (ret != OK)
 			{
-				logError(1, "%s production_test_data: checkLimitsGap SS RAW (PROXIMITY) FORCE GAP failed... ERROR = %08X \n", tag, ret);
-				logError(0, "%s SS RAW (PROXIMITY) FORCE GAP TEST:.................FAIL \n\n", tag);
+				logError(1, "%s production_test_data: checkLimitsGap SS RAW FORCE GAP failed... ERROR = %08X \n", tag, ret);
+				logError(0, "%s SS RAW FORCE GAP TEST:.................FAIL \n\n", tag);
 				count_fail += 1;
 				print_frame_short("SS Raw force frame =", array1dTo2d_short(ssRawFrame.force_data, rows*columns, columns), rows, columns);
 				if (stop_on_fail)
@@ -1760,28 +2116,28 @@ int production_test_ss_raw(char *path_limits, int stop_on_fail, TestToDo *todo)
 					goto ERROR_LIMITS;
 				}
 			} else
-				logError(0, "%s SS RAW (PROXIMITY) FORCE GAP TEST:.................OK \n\n", tag);
+				logError(0, "%s SS RAW FORCE GAP TEST:.................OK \n\n", tag);
 
 			kfree(thresholds);
 			thresholds = NULL;
 		} else
-			logError(0, "%s SS RAW (PROXIMITY) FORCE GAP TEST:.................SKIPPED \n\n", tag);
+			logError(0, "%s SS RAW FORCE GAP TEST:.................SKIPPED \n\n", tag);
 
 		kfree(ssRawFrame.force_data);
 		ssRawFrame.force_data = NULL;
 	} else
-		logError(0, "%s SS RAW (PROXIMITY) FORCE TEST:.................SKIPPED \n\n", tag);
+		logError(0, "%s SS RAW FORCE TEST:.................SKIPPED \n\n", tag);
 
 	logError(0, "%s \n", tag);
 	//SS RAW (PROXIMITY) SENSE TEST
-	logError(0, "%s SS RAW (PROXIMITY) SENSE TEST:  \n", tag);
+	logError(0, "%s SS RAW SENSE TEST:  \n", tag);
 
 	if (todo->SelfSenseRaw == 1 || todo->SelfSenseRawGap == 1)
 	{
 		columns = ssRawFrame.header.sense_node;
 		rows = 1; // there are no data for the force channels due to the fact that the sense frame is analized
 
-		logError(0, "%s SS RAW (PROXIMITY) SENSE MIN MAX TEST:  \n", tag);
+		logError(0, "%s SS RAW SENSE MIN MAX TEST:  \n", tag);
 		if (todo->SelfSenseRaw == 1)
 		{
 			ret = parseProductionTestLimits(path_limits, &limit_file, SS_RAW_SENSE_MIN_MAX, &thresholds, &trows, &tcolumns);
@@ -1795,8 +2151,8 @@ int production_test_ss_raw(char *path_limits, int stop_on_fail, TestToDo *todo)
 			ret = checkLimitsMinMax(ssRawFrame.sense_data, rows, columns, thresholds[0], thresholds[1]);
 			if (ret != OK)
 			{
-				logError(1, "%s production_test_data: checkLimitsMinMax SS RAW (PROXIMITY) SENSE failed... ERROR COUNT = %d \n", tag, ret);
-				logError(0, "%s SS RAW (PROXIMITY) SENSE MIN MAX TEST:.................FAIL \n", tag);
+				logError(1, "%s production_test_data: checkLimitsMinMax SS RAW SENSE failed... ERROR COUNT = %d \n", tag, ret);
+				logError(0, "%s SS RAW SENSE MIN MAX TEST:.................FAIL \n", tag);
 				count_fail += 1;
 				print_frame_short("SS Raw sense frame =", array1dTo2d_short(ssRawFrame.sense_data, rows*columns, columns), rows, columns);
 				if (stop_on_fail)
@@ -1805,15 +2161,15 @@ int production_test_ss_raw(char *path_limits, int stop_on_fail, TestToDo *todo)
 					goto ERROR_LIMITS;
 				}
 			} else
-				logError(0, "%s SS RAW (PROXIMITY) SENSE MIN MAX TEST:.................OK \n", tag);
+				logError(0, "%s SS RAW SENSE MIN MAX TEST:.................OK \n", tag);
 
 			kfree(thresholds);
 			thresholds = NULL;
 		} else
-			logError(0, "%s SS RAW (PROXIMITY) SENSE MIN MAX TEST:.................SKIPPED \n", tag);
+			logError(0, "%s SS RAW SENSE MIN MAX TEST:.................SKIPPED \n", tag);
 
 		logError(0, "%s \n", tag);
-		logError(0, "%s SS RAW (PROXIMITY) SENSE GAP TEST:  \n", tag);
+		logError(0, "%s SS RAW SENSE GAP TEST:  \n", tag);
 		if (todo->SelfSenseRawGap == 1)
 		{
 			ret = parseProductionTestLimits(path_limits, &limit_file, SS_RAW_SENSE_GAP, &thresholds, &trows, &tcolumns);
@@ -1827,8 +2183,8 @@ int production_test_ss_raw(char *path_limits, int stop_on_fail, TestToDo *todo)
 			ret = checkLimitsGap(ssRawFrame.sense_data, rows, columns, thresholds[0]);
 			if (ret != OK)
 			{
-				logError(1, "%s production_test_data: checkLimitsGap SS RAW (PROXIMITY) SENSE GAP failed... ERROR = %08X \n", tag, ret);
-				logError(0, "%s SS RAW (PROXIMITY) SENSE GAP TEST:.................FAIL \n", tag);
+				logError(1, "%s production_test_data: checkLimitsGap SS RAW SENSE GAP failed... ERROR = %08X \n", tag, ret);
+				logError(0, "%s SS RAW SENSE GAP TEST:.................FAIL \n", tag);
 				count_fail += 1;
 				print_frame_short("SS Raw sense frame =", array1dTo2d_short(ssRawFrame.sense_data, rows*columns, columns), rows, columns);
 				if (stop_on_fail)
@@ -1837,17 +2193,24 @@ int production_test_ss_raw(char *path_limits, int stop_on_fail, TestToDo *todo)
 					goto ERROR_LIMITS;
 				}
 			} else
-				logError(0, "%s SS RAW (PROXIMITY) SENSE GAP TEST:.................OK \n", tag);
+				logError(0, "%s SS RAW SENSE GAP TEST:.................OK \n", tag);
 
 			kfree(thresholds);
 			thresholds = NULL;
 		} else
-			logError(0, "%s SS RAW (PROXIMITY) SENSE GAP TEST:.................SKIPPED \n", tag);
+			logError(0, "%s SS RAW SENSE GAP TEST:.................SKIPPED \n", tag);
 
 		kfree(ssRawFrame.sense_data);
 		ssRawFrame.sense_data = NULL;
 	}
 
+	ret = production_test_ss_raw_lp(path_limits, stop_on_fail, todo);
+	if (ret < OK)
+	{
+		logError(1, "%s production_test_data: production_test_ss_raw_lp failed... ERROR = %08X \n", tag, ret);
+		count_fail += 1;
+	}
+	
 	logError(0, "%s \n", tag);
 	if (count_fail == 0)
 	{
@@ -1856,6 +2219,219 @@ int production_test_ss_raw(char *path_limits, int stop_on_fail, TestToDo *todo)
 	} else
 	{
 		logError(0, "%s SS RAW testes finished!.................FAILED  fails_count = %d\n\n", tag, count_fail);
+		return (ERROR_TEST_CHECK_FAIL | ERROR_PROD_TEST_DATA);
+	}
+
+ERROR_LIMITS:
+	if (ssRawFrame.force_data != NULL) kfree(ssRawFrame.force_data);
+	if (ssRawFrame.sense_data != NULL) kfree(ssRawFrame.sense_data);
+	if (thresholds != NULL) kfree(thresholds);
+	return ret;
+
+}
+
+
+/**
+ * Perform all the test selected in a TestTodo variable related to SS raw data low power
+ * @param path_limits name of Production Limit file to load or "NULL" if the limits data should be loaded by a .h file
+ * @param stop_on_fail if 1, the test flow stops at the first data check failure otherwise it keeps going performing all the selected test
+ * @param todo pointer to a TestToDo variable which select the test to do
+ * @return OK if success or an error code which specify the type of error encountered
+ */
+int production_test_ss_raw_lp(char *path_limits, int stop_on_fail, TestToDo *todo)
+{
+	int ret;
+	int count_fail = 0;
+	int rows, columns;
+
+	SelfSenseFrame ssRawFrame;
+
+	int *thresholds = NULL;
+	int trows, tcolumns;
+
+	//SS TEST
+	logError(0, "%s \n", tag);
+	logError(0, "%s SS RAW LP Testes are starting... \n", tag);
+
+	//******************************* Self Sense Test *******************************/
+
+	logError(0, "%s Getting SS LP Frame... \n", tag);
+	ret = setScanMode(SCAN_MODE_LOCKED, LOCKED_LP_DETECT);
+	mdelay(WAIT_FOR_FRESH_FRAMES);
+	ret |= setScanMode(SCAN_MODE_ACTIVE, 0x00);
+	mdelay(WAIT_AFTER_SENSEOFF);
+	ret |= getSSFrame3(SS_RAW, &ssRawFrame);
+	if (ret < 0)
+	{
+		logError(1, "%s production_test_data: getSSFrame failed... ERROR %08X \n", tag, ERROR_PROD_TEST_DATA);
+		return (ret | ERROR_PROD_TEST_DATA);
+	}
+
+	//SS RAW (PROXIMITY) FORCE TEST
+	logError(0, "%s SS RAW LP FORCE TEST:  \n", tag);
+
+
+
+	if (todo->SelfForceRawLP == 1 || todo->SelfForceRawGapLP == 1)
+	{
+
+		columns = 1; //there are no data for the sense channels due to the fact that the force frame is analized
+		rows = ssRawFrame.header.force_node;
+
+		logError(0, "%s SS RAW LP FORCE MIN MAX TEST:  \n", tag);
+		if (todo->SelfForceRawLP == 1)
+		{
+
+			ret = parseProductionTestLimits(path_limits, &limit_file, SS_RAW_LP_FORCE_MIN_MAX, &thresholds, &trows, &tcolumns);
+			if (ret < 0 || (trows != 1 || tcolumns != 2))
+			{
+				logError(1, "%s production_test_data: parseProductionTestLimits SS_RAW_FORCE_MIN_MAX failed... ERROR %08X \n", tag, ERROR_PROD_TEST_DATA);
+				ret |= ERROR_PROD_TEST_DATA;
+				goto ERROR_LIMITS;
+			}
+
+			ret = checkLimitsMinMax(ssRawFrame.force_data, rows, columns, thresholds[0], thresholds[1]);
+			if (ret != OK)
+			{
+				logError(1, "%s production_test_data: checkLimitsMinMax SS RAW FORCE failed... ERROR COUNT = %d \n", tag, ret);
+				logError(0, "%s SS RAW LP FORCE MIN MAX TEST:.................FAIL \n\n", tag);
+				count_fail += 1;
+				print_frame_short("SS Raw LP force frame =", array1dTo2d_short(ssRawFrame.force_data, rows*columns, columns), rows, columns);
+				if (stop_on_fail)
+				{
+					ret = ERROR_PROD_TEST_DATA | ERROR_TEST_CHECK_FAIL;
+					goto ERROR_LIMITS;
+				}
+			} else
+				logError(0, "%s SS RAW LP FORCE MIN MAX TEST:.................OK \n\n", tag);
+
+			kfree(thresholds);
+			thresholds = NULL;
+		} else
+			logError(0, "%s SS RAW LP FORCE MIN MAX TEST:.................SKIPPED \n\n", tag);
+
+		logError(0, "%s \n", tag);
+		logError(0, "%s SS RAW LP FORCE GAP TEST:  \n", tag);
+		if (todo->SelfForceRawGapLP == 1)
+		{
+
+			ret = parseProductionTestLimits(path_limits, &limit_file, SS_RAW_LP_FORCE_GAP, &thresholds, &trows, &tcolumns);
+			if (ret < OK || (trows != 1 || tcolumns != 1))
+			{
+				logError(1, "%s production_test_data: parseProductionTestLimits SS_RAW_FORCE_GAP failed... ERROR %08X \n", tag, ERROR_PROD_TEST_DATA);
+				ret |= ERROR_PROD_TEST_DATA;
+				goto ERROR_LIMITS;
+			}
+
+			ret = checkLimitsGap(ssRawFrame.force_data, rows, columns, thresholds[0]);
+			if (ret != OK)
+			{
+				logError(1, "%s production_test_data: checkLimitsGap SS RAW FORCE GAP failed... ERROR = %08X \n", tag, ret);
+				logError(0, "%s SS RAW LP FORCE GAP TEST:.................FAIL \n\n", tag);
+				count_fail += 1;
+				print_frame_short("SS Raw LP force frame =", array1dTo2d_short(ssRawFrame.force_data, rows*columns, columns), rows, columns);
+				if (stop_on_fail)
+				{
+					ret = ERROR_PROD_TEST_DATA | ERROR_TEST_CHECK_FAIL;
+					goto ERROR_LIMITS;
+				}
+			} else
+				logError(0, "%s SS RAW LP FORCE GAP TEST:.................OK \n\n", tag);
+
+			kfree(thresholds);
+			thresholds = NULL;
+		} else
+			logError(0, "%s SS RAW LP FORCE GAP TEST:.................SKIPPED \n\n", tag);
+
+		kfree(ssRawFrame.force_data);
+		ssRawFrame.force_data = NULL;
+	} else
+		logError(0, "%s SS RAW LP FORCE TEST:.................SKIPPED \n\n", tag);
+
+	logError(0, "%s \n", tag);
+	//SS RAW (PROXIMITY) SENSE TEST
+	logError(0, "%s SS RAW LP SENSE TEST:  \n", tag);
+
+	if (todo->SelfSenseRawLP == 1 || todo->SelfSenseRawGapLP == 1)
+	{
+		columns = ssRawFrame.header.sense_node;
+		rows = 1; // there are no data for the force channels due to the fact that the sense frame is analized
+
+		logError(0, "%s SS RAW LP SENSE MIN MAX TEST:  \n", tag);
+		if (todo->SelfSenseRawLP == 1)
+		{
+			ret = parseProductionTestLimits(path_limits, &limit_file, SS_RAW_LP_SENSE_MIN_MAX, &thresholds, &trows, &tcolumns);
+			if (ret < OK || (trows != 1 || tcolumns != 2))
+			{
+				logError(1, "%s production_test_data: parseProductionTestLimits SS_RAW_SENSE_MIN_MAX failed... ERROR %08X \n", tag, ERROR_PROD_TEST_DATA);
+				ret |= ERROR_PROD_TEST_DATA;
+				goto ERROR_LIMITS;
+			}
+
+			ret = checkLimitsMinMax(ssRawFrame.sense_data, rows, columns, thresholds[0], thresholds[1]);
+			if (ret != OK)
+			{
+				logError(1, "%s production_test_data: checkLimitsMinMax SS RAW SENSE failed... ERROR COUNT = %d \n", tag, ret);
+				logError(0, "%s SS RAW LP SENSE MIN MAX TEST:.................FAIL \n", tag);
+				count_fail += 1;
+				print_frame_short("SS Raw LP sense frame =", array1dTo2d_short(ssRawFrame.sense_data, rows*columns, columns), rows, columns);
+				if (stop_on_fail)
+				{
+					ret = ERROR_PROD_TEST_DATA | ERROR_TEST_CHECK_FAIL;
+					goto ERROR_LIMITS;
+				}
+			} else
+				logError(0, "%s SS RAW SENSE MIN MAX TEST:.................OK \n", tag);
+
+			kfree(thresholds);
+			thresholds = NULL;
+		} else
+			logError(0, "%s SS RAW LP SENSE MIN MAX TEST:.................SKIPPED \n", tag);
+
+		logError(0, "%s \n", tag);
+		logError(0, "%s SS RAW LP SENSE GAP TEST:  \n", tag);
+		if (todo->SelfSenseRawGapLP == 1)
+		{
+			ret = parseProductionTestLimits(path_limits, &limit_file, SS_RAW_LP_SENSE_GAP, &thresholds, &trows, &tcolumns);
+			if (ret < OK || (trows != 1 || tcolumns != 1))
+			{
+				logError(1, "%s production_test_data: parseProductionTestLimits SS_RAW_SENSE_GAP failed... ERROR %08X \n", tag, ERROR_PROD_TEST_DATA);
+				ret |= ERROR_PROD_TEST_DATA;
+				goto ERROR_LIMITS;
+			}
+
+			ret = checkLimitsGap(ssRawFrame.sense_data, rows, columns, thresholds[0]);
+			if (ret != OK)
+			{
+				logError(1, "%s production_test_data: checkLimitsGap SS RAW SENSE GAP failed... ERROR = %08X \n", tag, ret);
+				logError(0, "%s SS RAW LP SENSE GAP TEST:.................FAIL \n", tag);
+				count_fail += 1;
+				print_frame_short("SS Raw LP sense frame =", array1dTo2d_short(ssRawFrame.sense_data, rows*columns, columns), rows, columns);
+				if (stop_on_fail)
+				{
+					ret = ERROR_PROD_TEST_DATA | ERROR_TEST_CHECK_FAIL;
+					goto ERROR_LIMITS;
+				}
+			} else
+				logError(0, "%s SS RAW LP SENSE GAP TEST:.................OK \n", tag);
+
+			kfree(thresholds);
+			thresholds = NULL;
+		} else
+			logError(0, "%s SS RAW LP SENSE GAP TEST:.................SKIPPED \n", tag);
+
+		kfree(ssRawFrame.sense_data);
+		ssRawFrame.sense_data = NULL;
+	}
+
+	logError(0, "%s \n", tag);
+	if (count_fail == 0)
+	{
+		logError(0, "%s SS RAW LP testes finished!.................OK\n\n", tag);
+		return OK;
+	} else
+	{
+		logError(0, "%s SS RAW LP testes finished!.................FAILED  fails_count = %d\n\n", tag, count_fail);
 		return (ERROR_TEST_CHECK_FAIL | ERROR_PROD_TEST_DATA);
 	}
 
@@ -2919,6 +3495,15 @@ int freeLimitsFile(LimitFile *file)
 }
 
 /**
+ * Reset and release the memory which store the current Limit File previously loaded
+ * @return OK if success or an error code which specify the type of error encountered
+ */
+int freeCurrentLimitsFile()
+{
+	return freeLimitsFile(&limit_file);
+}
+
+/**
  * Parse the raw data read from a Production test limit file in order to find the specified information
  * If no limits file data are passed, the function loads and stores the limit file from the system
  * @param path name of Production Test Limit file to load or "NULL" if the limits data should be loaded by a .h file
@@ -2931,20 +3516,17 @@ int freeLimitsFile(LimitFile *file)
  */
 int parseProductionTestLimits(char *path, LimitFile *file, char *label, int **data, int *row, int *column)
 {
-
 	int find = 0;
 	char *token = NULL;
 	int i = 0;
 	int j = 0;
 	int z = 0;
 
-
 	char *line2 = NULL;
 	char line[800];
 	char *buf = NULL;
 	int n, size, pointer = 0, ret = OK;
 	char *data_file = NULL;
-
 
 	if (file == NULL || strcmp(path, file->name) != 0 || file->size == 0)
 	{

@@ -214,14 +214,19 @@ static ssize_t fts_fwupdate_show(struct device *dev, struct device_attribute *at
 
 /***************************************** UTILITIES (current fw_ver/conf_id, active mode, file fw_ver/conf_id)  ***************************************************/
 /**
-* File node to show on terminal fw_version and config_id \n
-* cat appid			show on the terminal fw_version.config_id of the FW running in the IC
+* File node to show on terminal external release version in Little Endian \n
+* (first the less significant byte) \n
+* cat appid	show the external release version of the FW running in the IC
 */
-static ssize_t fts_fw_ver_config_id_show(struct device *dev, struct device_attribute *attr, char *buf) {
-    int error;
-
-    error = snprintf(buf, PAGE_SIZE, "%x.%x\n", systemInfo.u16_fwVer, systemInfo.u16_cfgId);
-    return error;
+static ssize_t fts_appid_show(struct device *dev, struct device_attribute *attr,
+	char *buf) {
+	int error;
+	char temp[100];
+	
+	error = snprintf(buf, PAGE_SIZE, "%s\n", printHex("EXT Release = ",
+			systemInfo.u8_releaseInfo,EXTERNAL_RELEASE_INFO_SIZE, temp));
+	
+	return error;
 }
 
 /**
@@ -248,20 +253,21 @@ static ssize_t fts_mode_active_show(struct device *dev, struct device_attribute 
  */
 static ssize_t fts_fw_test_show(struct device *dev, struct device_attribute *attr, char *buf) {
 
-    Firmware fw;
-    int ret;
+	Firmware fw;
+	int ret;
+	char temp[100]={0};
 
-    fw.data = NULL;
-    ret=readFwFile(PATH_FILE_FW, &fw, 0);
+	fw.data = NULL;
+	ret=readFwFile(PATH_FILE_FW, &fw, 0);
 
-    if(ret<OK){
-	logError(1, "%s Error during reading FW file! ERROR %08X\n", tag, ret);
-    }else
-	logError(1, "%s fw_version = %04X, config_version = %04X, size = %d bytes\n", tag, fw.fw_ver, fw.config_id, fw.data_size);
+	if(ret < OK) {
+		logError(1, "%s Error during reading FW file! ERROR %08X\n", tag, ret);
+	} else {
+		logError(1, "%s %s, size = %d bytes\n", tag, printHex("EXT Release = ", systemInfo.u8_releaseInfo,EXTERNAL_RELEASE_INFO_SIZE,temp), fw.data_size);
+	}
 
-
-    kfree(fw.data);
-    return 0;
+	kfree(fw.data);
+	return 0;
 }
 
 
@@ -308,7 +314,7 @@ static ssize_t fts_strength_frame_show(struct device *dev, struct device_attribu
 	mdelay(WAIT_AFTER_SENSEOFF);
 	flushFIFO();
 
-	res = getMSFrame3(MS_STRENGHT, &frame);
+	res = getMSFrame3(MS_STRENGTH, &frame);
 	if(res<OK){
 		logError(1,"%s %s: could not get the frame! ERROR %08X \n",tag,__func__,res);
 		goto END;
@@ -1234,22 +1240,18 @@ static ssize_t stm_fts_cmd_show(struct device *dev, struct device_attribute *att
         switch (typeOfComand[0]) {
                 /*ITO TEST*/
             case 0x01:
-                res = production_test_ito();
+                res = production_test_ito(LIMITS_FILE, &tests);
                 break;
                 /*PRODUCTION TEST*/
             case 0x00:
 
-#ifdef COMPUTE_CX_ON_PHONE
-				logError(0, "%s Performing full init! \n", tag, res);
-				init_type = SPECIAL_FULL_PANEL_INIT;
 
-#else
-				if(systemInfo.u16_cxVer!=systemInfo.u16_cxMemVer){
+				if(systemInfo.u8_cfgAfeVer != systemInfo.u8_cxAfeVer) {
 					res = ERROR_OP_NOT_ALLOW;
 					logError(0, "%s Miss match in CX version! MP test not allowed with wrong CX memory! ERROR %08X \n", tag, res);
 					break;
 				}
-#endif
+
 				res = production_test_main(LIMITS_FILE, 1, init_type, &tests);
 				break;
                 /*read mutual raw*/
@@ -1520,7 +1522,7 @@ END: //here start the reporting phase, assembling the data to send in the file n
 }
 
 static DEVICE_ATTR(fwupdate, (S_IRUGO | S_IWUSR | S_IWGRP), fts_fwupdate_show, fts_fwupdate_store);
-static DEVICE_ATTR(appid, (S_IRUGO), fts_fw_ver_config_id_show, NULL);
+static DEVICE_ATTR(appid, (S_IRUGO), fts_appid_show, NULL);
 static DEVICE_ATTR(mode_active, (S_IRUGO), fts_mode_active_show, NULL);
 static DEVICE_ATTR(fw_file_test, (S_IRUGO), fts_fw_test_show, NULL);
 static DEVICE_ATTR(stm_fts_cmd, (S_IRUGO | S_IWUSR | S_IWGRP), stm_fts_cmd_show, stm_fts_cmd_store);
@@ -2232,8 +2234,14 @@ static int fts_fw_update(struct fts_ts_info *info)
 		EVT_TYPE_ERROR_CRC_CX_SUB};
 	int ret = 0;
 	int init_type = NO_INIT;
+#ifdef PRE_SAVED_METHOD
+	int keep_cx = 1;
+#else
+	int keep_cx = 0;
+#endif
+    
 
-	logError(1, "%s Fw Auto Update is starting...\n", tag);
+    logError(1, "%s Fw Auto Update is starting... \n", tag);
 
 	/* Check CRC status */
 	ret = fts_crc_check();
@@ -2245,14 +2253,14 @@ static int fts_fw_update(struct fts_ts_info *info)
 			 "%s %s: NO CRC Error or Impossible to read CRC register!\n",
 			 tag, __func__);
 	}
-	ret = flashProcedure(PATH_FILE_FW, info->reflash_fw, 1);
+	ret = flashProcedure(PATH_FILE_FW, info->reflash_fw, keep_cx);
 	if ((ret & 0xFF000000) == ERROR_FLASH_PROCEDURE) {
 		logError(1,
 			 "%s %s: firmware update failed; retrying. ERROR %08X\n",
 			 tag, __func__, ret);
 		/* Power cycle the touch IC */
 		fts_chip_powercycle(info);
-		ret = flashProcedure(PATH_FILE_FW, info->reflash_fw, 1);
+		ret = flashProcedure(PATH_FILE_FW, info->reflash_fw, keep_cx);
 		if ((ret & 0xFF000000) == ERROR_FLASH_PROCEDURE) {
 			logError(1,
 				 "%s %s: firmware update failed again! ERROR %08X\n",
@@ -2290,9 +2298,7 @@ static int fts_fw_update(struct fts_ts_info *info)
 			logError(1,
 				 "%s %s: Cx CRC Error FOUND! CRC ERROR = %02X\n",
 				 tag, __func__, ret);
-#if defined(ENGINEERING_CODE) || defined(COMPUTE_CX_ON_PHONE)
-			init_type = SPECIAL_FULL_PANEL_INIT;
-#else
+
 			/* This path of the code is used only in case there is a
 			 * CRC error in code or config which not allow the fw to
 			 * compute the CRC in the CX before
@@ -2300,12 +2306,10 @@ static int fts_fw_update(struct fts_ts_info *info)
 			logError(1,
 				 "%s %s: Try to recovery with CX in fw file...\n",
 				 tag, __func__, ret);
-			flashProcedure(PATH_FILE_FW, CRC_CX, 1);
+			flashProcedure(PATH_FILE_FW, CRC_CX, 0);
 			logError(1,
 				 "%s %s: Refresh panel init data...\n",
 				 tag, __func__, ret);
-			init_type = SPECIAL_PANEL_INIT;
-#endif
 		}
 	} else {
 		/* Skip initialization because the real state is unknown */
@@ -2314,24 +2318,20 @@ static int fts_fw_update(struct fts_ts_info *info)
 			 tag, __func__, ret);
 	}
 
-#ifdef ENGINEERING_CODE
 	if (init_type == NO_INIT) {
-		if (systemInfo.u16_cxVer != systemInfo.u16_cxMemVer) {
+#ifdef PRE_SAVED_METHOD
+		if (systemInfo.u8_cfgAfeVer != systemInfo.u8_cxAfeVer) {
 			init_type = SPECIAL_FULL_PANEL_INIT;
-			logError(0,
-				 "%s %s: Different CX Ver: %04X != %04X... Execute FULL Panel Init!\n",
-				 tag, __func__, systemInfo.u16_cxVer,
-				 systemInfo.u16_cxMemVer);
-		} else if (systemInfo.u8_fwCfgAfeVer !=
-			   systemInfo.u8_panelCfgAfeVer) {
-			init_type = SPECIAL_PANEL_INIT;
-			logError(0,
-				 "%s %s: Different Panel Ver: %04X != %04X... Execute Panel Init!\n",
-				 tag, __func__, systemInfo.u8_fwCfgAfeVer,
-				 systemInfo.u8_panelCfgAfeVer);
-		}
-	}
+			logError(0, "%s %s: Different CX AFE Ver: %02X != %02X... Execute FULL Panel Init!\n", tag, __func__, systemInfo.u8_cfgAfeVer, systemInfo.u8_cxAfeVer);
+		} else
 #endif
+			if (systemInfo.u8_cfgAfeVer != systemInfo.u8_panelCfgAfeVer) {
+				init_type = SPECIAL_PANEL_INIT;
+				logError(0, "%s %s: Different Panel AFE Ver: %02X != %02X... Execute Panel Init! \n", tag, __func__, systemInfo.u8_cfgAfeVer, systemInfo.u8_panelCfgAfeVer);
+			} else {
+				init_type = NO_INIT;
+			}
+	}
 
 	/* Reinitialize after a complete FW update or if the initialization
 	 * status is not correct.
@@ -2583,12 +2583,12 @@ int fts_chip_powercycle(struct fts_ts_info *info) {
 static int fts_init_sensing(struct fts_ts_info *info) {
     int error = 0;
 
-    error |= fb_register_client(&info->notifier);								//register the suspend/resume function
-	error |= fts_interrupt_install(info);										//register event handler
-	error |= fts_mode_handler(info,0);											//enable the features and the sensing
-	error |= fts_enableInterrupt();												//enable the interrupt
-
-
+    error |= fb_register_client(&info->notifier);	// register the suspend/resume function
+	error |= fts_interrupt_install(info);		// register event handler
+	error |= fts_mode_handler(info,0);		// enable the features and the sensing
+	//error |= fts_enableInterrupt();		// enable the interrupt
+	error |= fts_resetDisableIrqCount();
+			
     if (error < OK)
         logError(1, "%s %s Init after Probe error (ERROR = %08X)\n", tag, __func__, error);
 

@@ -42,6 +42,7 @@ struct device * getDev(void);
 
 
 /*************** NEW I2C API ****************/
+int changeSAD(u8 sad);
 int fts_read(u8* outBuf, int byteToRead);
 int fts_writeRead(u8* cmd, int cmdLength, u8* outBuf, int byteToRead);
 int fts_write(u8 *cmd, int cmdLength);

@@ -54,40 +54,6 @@
 
 extern SysInfo systemInfo;														///< forward declaration of the global variable of containing System Info Data
 
-/**
- * Read the fw version and config id from the chip
- * @param fw_vers pointer to the variable which will contains the fw version
- * @param config_id pointer to the variable which will contains the config id
- * @return OK if success or an error code which specify the type of error encountered
- */
-int getFirmwareVersion(u16* fw_vers, u16* config_id) {
-    u8 fwvers[DCHIP_FW_VER_BYTE];
-    u8 confid[CONFIG_ID_BYTE];
-    int res;
-
-    res = fts_writeReadU8UX(FTS_CMD_HW_REG_R, ADDR_SIZE_HW_REG, ADDR_DCHIP_FW_VER, fwvers, DCHIP_FW_VER_BYTE, DUMMY_HW_REG);
-    if (res < OK) {
-        logError(1, "%s getFirmwareVersion: unable to read fw_version ERROR %08X\n", tag, ERROR_FW_VER_READ);
-        return (res | ERROR_FW_VER_READ);
-    }
-
-    u8ToU16(fwvers, fw_vers); //fw version use big endian
-    if (*fw_vers != 0) { // if fw_version is 00 00 means that there is no firmware running in the chip therefore will be impossible find the config_id
-        res = readConfig(ADDR_CONFIG_ID, confid, CONFIG_ID_BYTE);
-        if (res < OK) {
-            logError(1, "%s getFirmwareVersion: unable to read config_id ERROR %08X\n", tag, ERROR_FW_VER_READ);
-            return (res | ERROR_FW_VER_READ);
-        }
-        u8ToU16(confid, config_id); //config id use little endian
-    } else {
-        *config_id = 0x0000;
-    }
-
-    logError(0, "%s FW VERS = %04X\n", tag, *fw_vers);
-    logError(0, "%s CONFIG ID = %04X\n", tag, *config_id);
-    return OK;
-
-}
 
 /**
 * Retrieve the actual FW data from the system (bin file or header file)
@@ -371,7 +337,7 @@ int parseBinFile(u8* fw_data, int fw_size, Firmware *fwData, int keep_cx)
 		}
 		index += FW_BYTES_ALLIGN;
 		u8ToU32(&fw_data[index], &temp);
-		logError(1, "%s parseBinFile: Fw ID = %08X\n", tag, temp);
+		logError(1, "%s parseBinFile: FILE SVN REV = %08X\n", tag, temp);
 
 		index += FW_BYTES_ALLIGN;
 		u8ToU32(&fw_data[index], &temp);
@@ -381,11 +347,11 @@ int parseBinFile(u8* fw_data, int fw_size, Firmware *fwData, int keep_cx)
 		index += FW_BYTES_ALLIGN;
 		u8ToU32(&fw_data[index], &temp);
 		fwData->config_id = temp;
-		logError(1, "%s parseBinFile: FILE Config ID = %08X\n", tag, temp);
+		logError(1, "%s parseBinFile: FILE Config Project ID = %08X\n", tag, temp);
 
 		index += FW_BYTES_ALLIGN;
 		u8ToU32(&fw_data[index], &temp);
-		logError(1, "%s parseBinFile: Config Version = %08X\n", tag, temp);
+		logError(1, "%s parseBinFile: FILE Config Version = %08X\n", tag, temp);
 
 		index += FW_BYTES_ALLIGN * 2; //skip reserved data
 
@@ -608,7 +574,7 @@ int flash_erase_page_by_page(ErasePage keep_cx) {
 * Start the DMA procedure which actually transfer and burn the data loaded from memory into the Flash
 * @return OK if success or an error code which specify the type of error encountered
 */
-static int start_flash_dma(void)
+int start_flash_dma(void)
 {
     int status;
     u8 cmd[6] = {FLASH_CMD_WRITE_REGISTER, 0x20, 0x00, 0x00, FLASH_DMA_CODE0, FLASH_DMA_CODE1}; //write the command to erase the flash
@@ -638,7 +604,7 @@ static int start_flash_dma(void)
 * @param size size of data
 * @return OK if success or an error code which specify the type of error encountered
 */
-static int fillFlash(u32 address, u8 *data, int size) {
+int fillFlash(u32 address, u8 *data, int size) {
 
     int remaining = size, index = 0;
     int toWrite = 0;
@@ -766,19 +732,12 @@ static int fillFlash(u32 address, u8 *data, int size) {
  *	encountered
  */
 int flash_burn(Firmware fw, int force_burn, int keep_cx) {
-	int res;
+    int res;
+	
 
-	if (!force_burn) {
-		/* Compare firmware, config, and CX versions */
-		if (fw.fw_ver != (uint32_t)systemInfo.u16_fwVer ||
-		    fw.config_id != (uint32_t)systemInfo.u16_cfgVer ||
-		    fw.cx_ver != (uint32_t)systemInfo.u16_cxVer)
-			goto start;
-
-		/* Check for difference in release info */
-		for (res = EXTERNAL_RELEASE_INFO_SIZE - 1; res >= 0; res--) {
-			if (fw.externalRelease[res] !=
-			    systemInfo.u8_releaseInfo[res])
+    if (!force_burn) {
+		for(res = EXTERNAL_RELEASE_INFO_SIZE-1; res >=0; res--){
+			if(fw.externalRelease[res]>systemInfo.u8_releaseInfo[res])
 				goto start;
 		}
 
@@ -790,6 +749,12 @@ int flash_burn(Firmware fw, int force_burn, int keep_cx) {
 		/* burn procedure to update the CX memory, if not present just
 		 * skip it!
 		 */
+		for (res = EXTERNAL_RELEASE_INFO_SIZE - 1; res >= 0; res--) {
+			if (fw.externalRelease[res] > systemInfo.u8_releaseInfo[res])
+				// Avoid loading the CX because it is missing in the bin file, it just need to update to last fw+cfg because a new release
+				force_burn = 0;
+				goto start;
+		}
 		logError(1,
 			 "%s flash_burn: CRC in CX but fw does not contain CX data! NO UPDATE ERROR %08X\n",
 			 tag, ERROR_FW_NO_UPDATE);
@@ -845,10 +810,13 @@ start:
 			res = flash_erase_page_by_page(SKIP_PANEL_INIT);
 		else
 			res = flash_erase_page_by_page(SKIP_PANEL_CX_INIT);
-	} else
-		res = flash_full_erase();
+	} else {
+		res = flash_erase_page_by_page(SKIP_PANEL_INIT);
+		if(fw.sec2_size==0)
+			logError(1, "%s WARNING!!! Erasing CX memory but no CX in fw file! touch will not work right after fw update! \n", tag);
+	}
 
-	if (res < 0) {
+	if (res < OK) {
 		logError(1, "%s   flash erase FAILED! ERROR %08X\n", tag,
 			 ERROR_FLASH_BURN_FAILED);
 		return (res | ERROR_FLASH_BURN_FAILED);
@@ -874,7 +842,7 @@ start:
 	}
 	logError(1, "%s   load config DONE!\n", tag);
 
-	if (fw.sec2_size != 0) {
+	if (fw.sec2_size != 0 && (force_burn == CRC_CX || keep_cx <= 0)) {
 		logError(0, "%s 7.1) LOAD CX:\n", tag);
 		res = fillFlash(FLASH_ADDR_CX,
 				&(fw.data[fw.sec0_size + fw.sec1_size]),
@@ -911,15 +879,13 @@ start:
 		if (fw.externalRelease[res] != systemInfo.u8_releaseInfo[res]) {
 			/* External release is printed during readSysInfo */
 			logError(1,
-				 "%s  Firmware in the chip different from the one that was burn! fw: %x != %x , conf: %x != %x\n",
-				 tag, systemInfo.u16_fwVer, fw.fw_ver,
-				 systemInfo.u16_cfgId, fw.config_id);
+				 "%s  Firmware in the chip different from the one that was burn!\n",
+				 tag);
 			return ERROR_FLASH_BURN_FAILED;
 		}
 	}
 
-	logError(0, "%s   Final check OK! fw: %04X , conf: %04X\n", tag,
-		 systemInfo.u16_fwVer, systemInfo.u16_cfgId);
+	logError(0, "%s   Final check OK!\n", tag);
 
 	return OK;
 }

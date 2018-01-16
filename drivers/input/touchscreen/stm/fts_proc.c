@@ -121,10 +121,19 @@
 #define CMD_SSRAWTEST										0x54				///< Perform SS raw test: need to pass stop_on_fail
 #define CMD_SSINITDATATEST									0x55				///< Perform SS Init data test: need to pass stop_on_fail
 #define CMD_MAINTEST										0x56				///< Perform a full Mass production test: need to pass stop_on_fail saveInit
-
+#define CMD_FREELIMIT										0x57				///< Free (if any) limit file which was loaded during any test procedure
 
 //Diagnostic
 #define CMD_DIAGNOSTIC										0x60				///< Perform a series of commands and collect severals data to detect any malfunction
+
+#define CMD_CHANGE_SAD										0x70				///< Allow to change the SAD address (for debugging)
+
+//Debug functionalities requested by Google for B1 Project
+#define CMD_TRIGGER_FORCECAL								0x80				///< Trigger manually forcecal for MS and SS
+#define CMD_BASELINE_ADAPTATION								0x81				///< Enable/Disable Baseline adaptation, need to pass: enable
+#define CMD_FREQ_HOP										0x82				///< Enable/Disable Frequency hopping, need to pass: enable
+#define CMD_SET_OPERATING_FREQ								0x83				///< Set a defined scanning frequency in Hz passed as 4 bytes in big endian, need to pass: freq3 freq2 freq1 freq0
+#define CMD_READ_SYNC_FRAME									0x84				///< Read Sync Frame which contain MS and SS data, need to pass: frameType (this parameter can be LOAD_SYNC_FRAME_STRENGTH or LOAD_SYNC_FRAME_BASELINE)
 
 static u8 bin_output = 0;														///< Select the output type of the scriptless protocol (binary = 1  or hex string = 0)
 /** @}*/
@@ -173,6 +182,7 @@ typedef struct{
 
 
 extern TestToDo tests;
+extern SysInfo systemInfo;
 
 static int limit = 0;															///< store the amount of data to print into the shell
 static int chunk =0;															///< store the chuk of data that should be printed in this iteration
@@ -369,8 +379,6 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 	TotSelfSenseData totComData;
 
 	u64 address;
-	u16 fw_version;
-	u16 config_id;
 
 	Firmware fw;
 	LimitFile lim;
@@ -548,15 +556,11 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 #ifdef FW_UPDATE_ON_PROBE
 			fileSize|=0x00080000;
 #endif
-
-#ifdef ENGINEERING_CODE
+			
+#ifdef PRE_SAVED_METHOD
 			fileSize|=0x00100000;
-#endif
-
-#ifdef COMPUTE_CX_ON_PHONE
-			fileSize|=0x00200000;
-#endif
-
+#endif		
+			
 #ifdef USE_GESTURE_MASK
 			fileSize|=0x00100000;
 #endif
@@ -610,8 +614,6 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 						mess.dummy = 0;
 					}else
 						mess.dummy = 1;
-
-
 
 				u8ToU16_be(&cmd[numberParam - 3], &byteToRead);
 				logError(0, "%s bytesToRead = %d \n", tag, byteToRead+mess.dummy);
@@ -935,7 +937,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 				mdelay(WAIT_FOR_FRESH_FRAMES);
 				setScanMode(SCAN_MODE_ACTIVE,0x00);
 				mdelay(WAIT_AFTER_SENSEOFF);
-				flushFIFO(); //delete the events related to some touch (allow to call this function while touching the screen without having a flooding of the FIFO)
+				//flushFIFO(); //delete the events related to some touch (allow to call this function while touching the screen without having a flooding of the FIFO)
 				res = getMSFrame3((MSFrameType) cmd[1], &frameMS);
 				if (res < 0)
 				{
@@ -964,7 +966,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 			if (numberParam == 2)
 			{
 				logError(0, "%s Get 1 SS Frame \n", tag);
-				flushFIFO(); //delete the events related to some touch (allow to call this function while touching the screen without having a flooding of the FIFO)
+				//flushFIFO(); //delete the events related to some touch (allow to call this function while touching the screen without having a flooding of the FIFO)
 				setScanMode(SCAN_MODE_ACTIVE,0xFF);
 				mdelay(WAIT_FOR_FRESH_FRAMES);
 				setScanMode(SCAN_MODE_ACTIVE,0x00);
@@ -1135,15 +1137,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 			break;
 
 		case CMD_GETFWVER:
-			res = getFirmwareVersion(&fw_version, &config_id);
-			if (res < OK)
-			{
-				logError(1, "%s Error reading firmware version and config id ERROR %02X\n", tag, res);
-			} else
-			{
-				logError(0, "%s getFirmwareVersion Finished! \n", tag);
-				size += (4) * sizeof (u8);
-			}
+			size += (EXTERNAL_RELEASE_INFO_SIZE) * sizeof (u8);
 			break;
 
 		case CMD_FLASHUNLOCK:
@@ -1228,7 +1222,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 
 			/*ITO TEST*/
 		case CMD_ITOTEST:
-			res = production_test_ito();
+			res = production_test_ito(LIMITS_FILE, &tests);
 			break;
 
 			/*Initialization*/
@@ -1294,6 +1288,10 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 				logError(1, "%s Wrong number of parameters! \n", tag);
 				res = ERROR_OP_NOT_ALLOW;
 			}
+			break;
+
+		case CMD_FREELIMIT:
+			res = freeCurrentLimitsFile();
 			break;
 
 		case CMD_POWERCYCLE:
@@ -1461,7 +1459,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 						case 2:
 							j = snprintf(&driver_test_buff[index],fileSize-index,"MS STRENGTH FRAME =");
 							index+=j;
-							res |= getMSFrame3(MS_STRENGHT,&frameMS);
+							res |= getMSFrame3(MS_STRENGTH,&frameMS);
 							break;
 						case 1:
 							j = snprintf(&driver_test_buff[index],fileSize-index,"MS BASELINE FRAME =");
@@ -1497,7 +1495,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 						case 2:
 							j = snprintf(&driver_test_buff[index],fileSize-index,"SS STRENGTH FRAME = \n");
 							index+=j;
-							res |= getSSFrame3(SS_STRENGHT,&frameSS);
+							res |= getSSFrame3(SS_STRENGTH,&frameSS);
 							break;
 						case 1:
 							j = snprintf(&driver_test_buff[index],fileSize-index,"SS BASELINE FRAME = \n");
@@ -1564,6 +1562,136 @@ END_DIAGNOSTIC:
 			printed = 0;
 			goto ERROR;
 		break;
+		
+		case CMD_CHANGE_SAD:
+			res= changeSAD(cmd[1]);
+			break;
+			
+		case CMD_TRIGGER_FORCECAL:
+			cmd[0]=CAL_MS_TOUCH|CAL_SS_TOUCH;
+			cmd[1]= 0x00;
+			fts_disableInterrupt();
+			res = writeSysCmd(SYS_CMD_FORCE_CAL,cmd,2);
+			res |= fts_enableInterrupt();
+			if(res<OK){
+				logError(1, "%s can not trigger Force Cal! ERROR %08X \n", tag,res);
+			}else{
+				logError(0, "%s MS and SS force cal triggered! \n", tag);
+			}
+			break;
+			
+		case CMD_BASELINE_ADAPTATION:
+			//need to pass: enable
+			if(numberParam == 2){
+				if(cmd[1]== 0x01){
+					logError(1, "%s Enabling Baseline adaptation... \n", tag);
+				}else{
+					logError(1, "%s Disabling Baseline adaptation... \n", tag);
+					cmd[1]=0x00;	//set to zero to disable baseline adaptation
+				}
+				
+				res = writeConfig(ADDR_CONFIG_AUTOCAL,&cmd[1],1);
+				if(res<OK){
+					logError(1, "%s Baseline adaptation operation FAILED! ERROR %08X \n", tag,res);
+				}else{
+					logError(0, "%s Baseline adaptation operation OK!\n", tag);
+				}
+				
+			}else{
+				logError(1, "%s Wrong number of parameters! \n", tag);
+				res = ERROR_OP_NOT_ALLOW;
+			}
+			break;
+			
+		case CMD_FREQ_HOP:
+			//need to pass: enable
+			if(numberParam == 2){
+				
+				logError(1, "%s Reading MNM register... \n", tag);
+				res = readConfig(ADDR_CONFIG_MNM,&cmd[2],1);
+				if(res<OK){
+					logError(1, "%s Reading MNM register... ERROR %08X! \n", tag,res);
+					break;
+				}
+				
+				if(cmd[1]== 0x01){
+					logError(0, "%s Enabling Frequency Hopping... %02X => %02X \n", tag, cmd[2],cmd[2]|0x01);
+					cmd[2]|=0x01;		//set bit 0 to enable Frequency Hopping
+				}else{
+					logError(0, "%s Disabling Frequency Hopping... %02X => %02X \n", tag, cmd[2],cmd[2]&(~0x01));
+					cmd[2]&=(~0x01);	//reset bit 0 to disable Frequency Hopping
+				}
+				
+				res = writeConfig(ADDR_CONFIG_MNM,&cmd[2],1);
+				if(res<OK){
+					logError(1, "%s Frequency Hopping operation FAILED! ERROR %08X \n", tag,res);
+				}else{
+					logError(0, "%s Frequency Hopping operation OK!\n", tag);
+				}
+				
+			}else{
+				logError(1, "%s Wrong number of parameters! \n", tag);
+				res = ERROR_OP_NOT_ALLOW;
+			}
+			break;
+			
+		case CMD_READ_SYNC_FRAME:
+			//need to pass: frameType (this parameter can be LOAD_SYNC_FRAME_STRENGTH or LOAD_SYNC_FRAME_BASELINE)
+			if(numberParam == 2){
+				
+				logError(1, "%s Reading Sync Frame... \n", tag);
+				res = getSyncFrame(cmd[1],&frameMS, &frameSS);
+				if (res < OK)
+				{
+					logError(0, "%s Error while taking the Sync Frame frame... ERROR %08X \n", tag, res);
+
+				} else
+				{
+					logError(0, "%s The total frames size is %d words\n", tag, res);
+					size += (res * sizeof (short) + 4);			//+4 to add force and sense channels for MS and SS
+					/* set res to OK because if getSyncFrame is 
+					   successful res = number of words read
+					 */
+					res = OK;
+					
+					print_frame_short("MS frame =", array1dTo2d_short(frameMS.node_data, frameMS.node_data_size, frameMS.header.sense_node), frameMS.header.force_node, frameMS.header.sense_node);
+					print_frame_short("SS force frame =", array1dTo2d_short(frameSS.force_data, frameSS.header.force_node, 1), frameSS.header.force_node, 1);
+					print_frame_short("SS sense frame =", array1dTo2d_short(frameSS.sense_data, frameSS.header.sense_node, frameSS.header.sense_node), 1, frameSS.header.sense_node);
+				}
+				
+			}else{
+				logError(1, "%s Wrong number of parameters! \n", tag);
+				res = ERROR_OP_NOT_ALLOW;
+			}
+			break;
+			
+		case CMD_SET_OPERATING_FREQ:
+			//need to pass: freq3 freq2 freq1 freq0
+			if(numberParam == 5){
+				res = fts_disableInterrupt();
+				if(res>=OK){
+				
+					logError(1, "%s Setting Scan Freq... \n", tag);
+					u8ToU32_be(&cmd[1],&fileSize);//fileSize is used just as container variable, sorry for the name!
+
+					res = setActiveScanFrequency(fileSize);
+					if (res < OK)
+					{
+						logError(0, "%s Error while setting the scan frequency... ERROR %08X \n", tag, res);
+					}else{
+						// setActiveScan Frequency leave the chip in reset state but with the new scan freq set
+						//need to enable the scan mode and re-enable the interrupts
+						res |= setScanMode(SCAN_MODE_LOCKED, LOCKED_ACTIVE);	//this is a choice to force the IC to use the freq set
+						res |= fts_enableInterrupt();
+						logError(0, "%s Setting Scan Freq... res = %08X \n", tag, res);
+					}
+				}
+			}else{
+				logError(1, "%s Wrong number of parameters! \n", tag);
+				res = ERROR_OP_NOT_ALLOW;
+			}
+			
+			break;
 
 		default:
 			logError(1, "%s COMMAND ID NOT VALID!!! \n", tag);
@@ -1863,16 +1991,56 @@ END: //here start the reporting phase, assembling the data to send in the file n
 				break;
 
 			case CMD_GETFWVER:
-				snprintf(&driver_test_buff[index], 5, "%04X", fw_version);
-				index+=4;
-
-				snprintf(&driver_test_buff[index], 5, "%04X", config_id);
-				index+=4;
+				for(j=0; j< EXTERNAL_RELEASE_INFO_SIZE; j++){
+					snprintf(&driver_test_buff[index], 3, "%02X",systemInfo.u8_releaseInfo[j]);
+					index+=2;
+				}
 				break;
 
 			case CMD_READCOMPDATAHEAD:
 				snprintf(&driver_test_buff[index], 3, "%02X", dataHead.type);
 				index+=2;
+				break;
+				
+			case CMD_READ_SYNC_FRAME:
+				
+				snprintf(&driver_test_buff[index], 3, "%02X", (u8) frameMS.header.force_node);
+				index+=2;
+
+				snprintf(&driver_test_buff[index], 3, "%02X", (u8) frameMS.header.sense_node);
+				index+=2;
+				
+				snprintf(&driver_test_buff[index], 3, "%02X", (u8) frameSS.header.force_node);
+				index+=2;
+
+				snprintf(&driver_test_buff[index], 3, "%02X", (u8) frameSS.header.sense_node);
+				index+=2;
+				
+				//Copying mutual data 
+				for (j = 0; j < frameMS.node_data_size; j++)
+				{
+					snprintf(&driver_test_buff[index], 5, "%02X%02X", (frameMS.node_data[j]&0xFF00)>>8, frameMS.node_data[j]&0xFF);
+					index+=4;
+				}
+				
+				// Copying self data Force
+				for (j = 0; j < frameSS.header.force_node; j++)
+				{
+					snprintf(&driver_test_buff[index], 5, "%02X%02X", (frameSS.force_data[j]&0xFF00)>>8,frameSS.force_data[j]&0xFF);
+					index+=4;
+				}
+
+
+				// Copying self  data Sense
+				for (j = 0; j < frameSS.header.sense_node; j++)
+				{
+					snprintf(&driver_test_buff[index], 5, "%02X%02X", (frameSS.sense_data[j]&0xFF00)>>8,frameSS.sense_data[j]&0xFF);
+					index+=4;
+				}
+
+				kfree(frameMS.node_data);
+				kfree(frameSS.force_data);
+				kfree(frameSS.sense_data);
 				break;
 
 
