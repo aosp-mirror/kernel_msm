@@ -17,6 +17,7 @@ DHDCFLAGS = -Wall -Wstrict-prototypes -Dlinux -DBCMDRIVER -DSDTEST       \
 	-DENABLE_INSMOD_NO_FW_LOAD                                            \
 	-I$(src) -I$(src)/include
 #DHDCFLAGS += -DDHD_DEBUG
+DHDCFLAGS += -DGET_CUSTOM_MAC_ENABLE
 
 #Gscan
 DHDCFLAGS += -DGSCAN_SUPPORT
