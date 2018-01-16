@@ -239,6 +239,7 @@
 				(-60)  (-40)  (-40)  (-30)
 				(-30)>;
 	qcom,fg-cutoff-voltage = <3400>;
+	qcom,fg-empty-voltage = <3200>;
 };
 
 &pmi8998_pdphy {
