@@ -24,6 +24,7 @@
 #include <linux/leds.h>
 #include <linux/platform_data/leds-lm36272.h>
 #include <linux/pm_wakeup.h>
+#include <linux/sysfs.h>
 
 #define LM36272_BL_DEV "lcd-backlight"
 #define I2C_BL_NAME "leds_lm36272"
@@ -57,6 +58,7 @@ struct lm36272_device {
 	int fb_blank;
 	int status;
 	struct mutex bl_mutex;
+	bool direct_control; /* allow the backlight control directly */
 
 	struct work_struct bl_work;
 	int level_saved;
@@ -210,6 +212,11 @@ void lm36272_backlight_ctrl(int level)
 	new_level = clamp(level, pdata->min_brightness, pdata->max_brightness);
 
 	mutex_lock(&ldev->bl_mutex);
+	if (ldev->direct_control) {
+		lm36272_backlight_ctrl_internal(ldev, new_level);
+		goto out;
+	}
+
 	if (0 == new_level &&
 	    (FB_BLANK_NORMAL != ldev->fb_blank ||
 	     FB_BLANK_POWERDOWN != ldev->fb_blank)) {
@@ -234,6 +241,7 @@ void lm36272_backlight_ctrl(int level)
 			mutex_lock(&ldev->bl_mutex);
 		}
 	}
+out:
 	mutex_unlock(&ldev->bl_mutex);
 }
 EXPORT_SYMBOL_GPL(lm36272_backlight_ctrl);
@@ -428,6 +436,50 @@ static void lm36272_bl_work(struct work_struct *work)
 	mutex_unlock(&ldev->bl_mutex);
 }
 
+static ssize_t lm36272_direct_control_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct lm36272_device *ldev = this;
+
+	if (!ldev)
+		return -ENODEV;
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", ldev->direct_control);
+}
+
+static ssize_t lm36272_direct_control_store(struct device *dev,
+		struct device_attribute *attr, const char *buf,
+		size_t count)
+{
+	struct lm36272_device *ldev = this;
+	int v;
+	int err;
+
+	if (!ldev)
+		return -ENODEV;
+
+	err = kstrtoint(buf, 0, &v);
+	if (err < 0) {
+		pr_err("%s: invalid value\n", __func__);
+		return -EINVAL;
+	}
+
+	ldev->direct_control = !!v;
+	return count;
+}
+
+static DEVICE_ATTR(direct_control, S_IWUSR | S_IRUGO,
+		   lm36272_direct_control_show, lm36272_direct_control_store);
+
+static struct attribute *lm36272_dev_attrs[] = {
+	&dev_attr_direct_control.attr,
+	NULL
+};
+
+static struct attribute_group lm36272_dev_attr_group = {
+	.attrs = lm36272_dev_attrs,
+};
+
 static int lm36272_probe(struct i2c_client *client,
 		const struct i2c_device_id *id)
 {
@@ -519,6 +571,13 @@ static int lm36272_probe(struct i2c_client *client,
 		goto err_led_classdev;
 	}
 
+	err = sysfs_create_group(&ldev->led_dev.dev->kobj,
+				 &lm36272_dev_attr_group);
+	if (err) {
+		dev_err(&client->dev, "Failed to create sysfs\n");
+		goto err_sysfs_create;
+	}
+
 	/* set the default brightness */
 	lm36272_lcd_backlight_set_level(&ldev->led_dev,
 			pdata->default_brightness);
@@ -527,6 +586,8 @@ static int lm36272_probe(struct i2c_client *client,
 
 	return 0;
 
+err_sysfs_create:
+	led_classdev_unregister(&ldev->led_dev);
 err_led_classdev:
 #ifdef CONFIG_FB
 	fb_unregister_client(&ldev->fb_notifier);
@@ -542,6 +603,7 @@ static int lm36272_remove(struct i2c_client *client)
 {
 	struct lm36272_device *ldev = i2c_get_clientdata(client);
 
+	sysfs_remove_group(&ldev->led_dev.dev->kobj, &lm36272_dev_attr_group);
 	led_classdev_unregister(&ldev->led_dev);
 #ifdef CONFIG_FB
 	fb_unregister_client(&ldev->fb_notifier);
