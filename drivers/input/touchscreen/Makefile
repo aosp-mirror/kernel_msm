@@ -97,4 +97,3 @@ fts_ts-$(CONFIG_TOUCHSCREEN_FT3207) += focaltech_core.o focaltech_ctl.o focaltec
 					test_lib.o ini.o Global.o Config_FT6X36.o Test_FT6X36.o DetailThreshold.o focaltech_gesture.o
 
 ldflagobj-$(CONFIG_TOUCHSCREEN_FT3207) += fts_ts.o
-obj-$(CONFIG_TOUCHSCREEN_FT3207) s-$(CONFIG_TOUCHSCREEN_FT3207) +=--whole-archive $(extlibs) --no-whole-archive
