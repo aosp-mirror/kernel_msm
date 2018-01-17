@@ -176,6 +176,10 @@
 #define SEC_TS_CMD_WAKEUP_GESTURE_MODE		0x39
 #define SEC_TS_WRITE_POSITION_FILTER		0x3A
 #define SEC_TS_CMD_WET_MODE			0x3B
+#define SEC_TS_CMD_WRITE_DIGI_GAIN		0x40
+#define SEC_TS_CMD_DISABLE_BASELINE_ADAPT	0x43
+#define SEC_TS_CMD_DISABLE_DF			0x44
+#define SEC_TS_CMD_RESET_BASELINE		0x47
 #define SEC_TS_CMD_ERASE_FLASH			0x45
 #define SEC_TS_READ_ID				0x52
 #define SEC_TS_READ_BOOT_STATUS			0x55
@@ -189,6 +193,8 @@
 #define SEC_TS_READ_TOUCH_SELF_RAWDATA		0x73
 #define SEC_TS_READ_SELFTEST_RESULT		0x80
 #define SEC_TS_CMD_CALIBRATION_AMBIENT		0x81
+#define SEC_TS_CMD_P2PTEST			0x82
+#define SEC_TS_CMD_SET_P2PTEST_MODE		0x83
 #define SEC_TS_CMD_NVM				0x85
 #define SEC_TS_CMD_STATEMANAGE_ON		0x8E
 #define SEC_TS_CMD_CALIBRATION_OFFSET_SDC	0x8F
@@ -296,6 +302,7 @@
 /* SEC_TS_VENDOR_INFO : Vendor acknowledge event */
 #define SEC_TS_VENDOR_ACK_OFFSET_CAL_DONE	0x40
 #define SEC_TS_VENDOR_ACK_SELF_TEST_DONE	0x41
+#define SEC_TS_VENDOR_ACK_P2P_TEST_DONE		0x42
 
 /* SEC_TS_STATUS_EVENT_USER_INPUT */
 #define SEC_TS_EVENT_FORCE_KEY	0x1
@@ -418,6 +425,8 @@ enum {
 	TYPE_REMV_AMB_DATA		= 6,	/*  TYPE_RAW_DATA - TYPE_AMBIENT_DATA */
 	TYPE_OFFSET_DATA_SEC	= 19,	/* Cap Offset in SEC Manufacturing Line */
 	TYPE_OFFSET_DATA_SDC	= 29,	/* Cap Offset in SDC Manufacturing Line */
+	TYPE_NOI_P2P_MIN		= 30,	/* Peak-to-peak noise Min */
+	TYPE_NOI_P2P_MAX		= 31,	/* Peak-to-peak noise Max */
 	TYPE_INVALID_DATA		= 0xFF,	/* Invalid data type for release factory mode */
 };
 
@@ -803,6 +812,7 @@ void set_pat_magic_number(struct sec_ts_data *ts);
 #endif
 void sec_ts_run_rawdata_all(struct sec_ts_data *ts, bool full_read);
 int execute_selftest(struct sec_ts_data *ts, bool save_result);
+int execute_p2ptest(struct sec_ts_data *ts);
 int sec_ts_read_raw_data(struct sec_ts_data *ts,
 		struct sec_cmd_data *sec, struct sec_ts_test_mode *mode);
 
