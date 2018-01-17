@@ -73,6 +73,12 @@ struct wiphy;
 #define CFG80211_REPORT_BETTER_BSS_IN_SCHED_SCAN 1
 #define CFG80211_CONNECT_TIMEOUT 1
 #define CFG80211_CONNECT_TIMEOUT_REASON_CODE 1
+/* Indicate backport support for DBS scan control */
+#define CFG80211_SCAN_DBS_CONTROL_SUPPORT 1
+
+/* Indicate backport support for per chain rssi scan */
+#define CFG80211_SCAN_PER_CHAIN_RSSI_SUPPORT 1
+
 
 /*
  * wireless hardware capability structures
