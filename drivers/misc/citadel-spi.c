@@ -16,6 +16,7 @@
 
 #include <linux/init.h>
 #include <linux/module.h>
+#include <linux/interrupt.h>
 #include <linux/ioctl.h>
 #include <linux/fs.h>
 #include <linux/device.h>
@@ -23,10 +24,13 @@
 #include <linux/slab.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
+#include <linux/of_gpio.h>
+#include <linux/poll.h>
 #include <linux/uaccess.h>
 #include <linux/cdev.h>
 #include <linux/spi/spi.h>
 #include <linux/citadel.h>
+#include <linux/wait.h>
 
 #define CITADEL_TPM_READ	0x80000000
 
@@ -38,6 +42,9 @@ struct citadel_data {
 	dev_t			devt;
 	struct cdev		cdev;
 	struct spi_device	*spi;
+	int			ctdl_ap_irq;
+	int			ap_ctdl_irq;
+	wait_queue_head_t	waitq;
 	atomic_t		users;
 	void			*tx_buf;
 	void			*rx_buf;
@@ -266,6 +273,13 @@ static int citadel_open(struct inode *inode, struct file *filp)
 	return 0;
 }
 
+static unsigned int citadel_poll(struct file *filp, poll_table *wait)
+{
+	struct citadel_data *citadel = filp->private_data;
+	poll_wait(filp, &citadel->waitq, wait);
+	return gpio_get_value(citadel->ctdl_ap_irq) ? POLLIN : 0;
+}
+
 static int citadel_release(struct inode *inode, struct file *filp)
 {
 	struct citadel_data *citadel = filp->private_data;
@@ -280,6 +294,7 @@ static const struct file_operations citadel_fops = {
 	.write =		citadel_write,
 	.read =			citadel_read,
 	.open =			citadel_open,
+	.poll =			citadel_poll,
 	.release =		citadel_release,
 	.unlocked_ioctl =	citadel_ioctl,
 	.llseek =		no_llseek,
@@ -292,6 +307,36 @@ static const struct of_device_id citadel_dt_ids[] = {
 };
 MODULE_DEVICE_TABLE(of, citadel_dt_ids);
 #endif
+
+static irqreturn_t citadel_irq_handler(int irq, void *handle)
+{
+	struct citadel_data *citadel = (struct citadel_data *)handle;
+	wake_up_interruptible(&citadel->waitq);
+	return IRQ_HANDLED;
+}
+
+static int citadel_request_named_gpio(struct citadel_data *citadel,
+				      const char *label, int *gpio)
+{
+	struct device *dev = &citadel->spi->dev;
+	struct device_node *np = dev->of_node;
+	int rc = of_get_named_gpio(np, label, 0);
+
+	if (rc < 0) {
+		dev_err(dev, "failed to get '%s'\n", label);
+		return rc;
+	}
+	*gpio = rc;
+
+	rc = devm_gpio_request(dev, *gpio, label);
+	if (rc) {
+		dev_err(dev, "failed to request gpio %d\n", *gpio);
+		return rc;
+	}
+	dev_dbg(dev, "%s %d\n", label, *gpio);
+
+	return 0;
+}
 
 static int citadel_probe(struct spi_device *spi)
 {
@@ -322,11 +367,36 @@ static int citadel_probe(struct spi_device *spi)
 		ret = -ENOMEM;
 		goto free_citadel;
 	}
+	init_waitqueue_head(&citadel->waitq);
 	atomic_set(&citadel->users, 0);
 	citadel->spi = spi;
 	devt = MKDEV(MAJOR(citadel_devt), minor);
 	citadel->devt = devt;
 	spi_set_drvdata(spi, citadel);
+
+	ret = citadel_request_named_gpio(citadel, "citadel,ctdl_ap_irq",
+					 &citadel->ctdl_ap_irq);
+	if (ret) {
+		dev_err(&spi->dev,
+			"citadel_request_named_gpio "
+			"citadel,ctdl_ap_irq failed.\n");
+		goto free_citadel;
+	}
+
+	ret = devm_request_irq(&citadel->spi->dev,
+			       gpio_to_irq(citadel->ctdl_ap_irq),
+			       citadel_irq_handler,
+			       IRQF_NO_SUSPEND | IRQF_TRIGGER_RISING |
+			       IRQF_ONESHOT,
+			       dev_name(&spi->dev),
+			       citadel);
+	if (ret) {
+		dev_err(&spi->dev,
+			"devm_request_irq  citadel,ctdl_ap_irq failed.\n");
+		goto free_citadel;
+	}
+
+	enable_irq_wake(gpio_to_irq(citadel->ctdl_ap_irq));
 
 	dev = device_create(citadel_class, &spi->dev, devt, NULL,
 			    "citadel%u", minor);
