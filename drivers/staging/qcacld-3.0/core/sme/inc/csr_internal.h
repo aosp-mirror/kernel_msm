@@ -556,6 +556,7 @@ typedef struct tagCsrConfig {
 #endif
 	uint8_t isFastTransitionEnabled;
 	uint8_t RoamRssiDiff;
+	int32_t rssi_abs_thresh;
 	bool nRoamPrefer5GHz;
 	bool nRoamIntraBand;
 	bool isWESModeEnabled;
@@ -661,6 +662,7 @@ typedef struct tagCsrConfig {
 	uint32_t num_disallowed_aps;
 	uint32_t scan_probe_repeat_time;
 	uint32_t scan_num_probes;
+	struct sir_score_config bss_score_params;
 } tCsrConfig;
 
 typedef struct tagCsrChannelPowerInfo {

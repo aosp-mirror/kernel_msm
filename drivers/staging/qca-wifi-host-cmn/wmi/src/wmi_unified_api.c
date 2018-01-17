@@ -2946,29 +2946,6 @@ QDF_STATUS wmi_unified_update_tdls_peer_state_cmd(void *wmi_hdl,
 }
 
 /**
- * wmi_unified_process_fw_mem_dump_cmd() - Function to request fw memory dump from
- * firmware
- * @wmi_handle:         Pointer to wmi handle
- * @mem_dump_req:       Pointer for mem_dump_req
- *
- * This function sends memory dump request to firmware
- *
- * Return: QDF_STATUS_SUCCESS on success and QDF_STATUS_E_FAILURE for failure
- *
- */
-QDF_STATUS wmi_unified_process_fw_mem_dump_cmd(void *wmi_hdl,
-					struct fw_dump_req_param *mem_dump_req)
-{
-	wmi_unified_t wmi_handle = (wmi_unified_t) wmi_hdl;
-
-	if (wmi_handle->ops->send_process_fw_mem_dump_cmd)
-		return wmi_handle->ops->send_process_fw_mem_dump_cmd(wmi_handle,
-			    mem_dump_req);
-
-	return QDF_STATUS_E_FAILURE;
-}
-
-/**
  * wmi_unified_process_set_ie_info_cmd() - Function to send IE info to firmware
  * @wmi_handle:    Pointer to WMi handle
  * @ie_data:       Pointer for ie data
@@ -3425,22 +3402,20 @@ QDF_STATUS wmi_unified_roam_scan_offload_cmd(void *wmi_hdl,
 /**
  * wmi_unified_send_roam_scan_offload_ap_cmd() - set roam ap profile in fw
  * @wmi_hdl: wmi handle
- * @ap_profile_p: ap profile
- * @vdev_id: vdev id
+ * @ap_profile: ap profile params
  *
  * Send WMI_ROAM_AP_PROFILE to firmware
  *
  * Return: QDF_STATUS_SUCCESS on success and QDF_STATUS_E_FAILURE for failure
  */
 QDF_STATUS wmi_unified_send_roam_scan_offload_ap_cmd(void *wmi_hdl,
-					    wmi_ap_profile *ap_profile_p,
-					    uint32_t vdev_id)
+					   struct ap_profile_params *ap_profile)
 {
 	wmi_unified_t wmi_handle = (wmi_unified_t) wmi_hdl;
 
 	if (wmi_handle->ops->send_roam_scan_offload_ap_profile_cmd)
-		return wmi_handle->ops->send_roam_scan_offload_ap_profile_cmd(wmi_handle,
-				  ap_profile_p, vdev_id);
+		return wmi_handle->ops->send_roam_scan_offload_ap_profile_cmd(
+				  wmi_handle, ap_profile);
 
 	return QDF_STATUS_E_FAILURE;
 }

@@ -90,7 +90,6 @@ static inline void populate_qbss_load_status(tSirBssDescription *pBssDescr,
 		pBssDescr->QBSSLoad_present = true;
 		pBssDescr->QBSSLoad_avail = pBPR->QBSSLoad.avail;
 		pBssDescr->qbss_chan_load = pBPR->QBSSLoad.chautil;
-		pBssDescr->qbss_stacount = pBPR->QBSSLoad.stacount;
 	}
 }
 #else
@@ -332,6 +331,11 @@ lim_collect_bss_description(tpAniSirGlobal pMac,
 	}
 
 	populate_qbss_load_status(pBssDescr, pBPR);
+
+	if (pBPR->oce_wan_present) {
+		pBssDescr->oce_wan_present = 1;
+		pBssDescr->oce_wan_down_cap = pBPR->oce_wan_downlink_av_cap;
+	}
 	lim_update_bss_with_fils_data(pBPR, pBssDescr);
 	/* Copy IE fields */
 	qdf_mem_copy((uint8_t *) &pBssDescr->ieFields,
