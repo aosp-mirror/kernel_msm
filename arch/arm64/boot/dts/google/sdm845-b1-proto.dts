@@ -170,6 +170,23 @@
 		};
 };
 
+&eeprom_front {
+	pinctrl-0 = <&cam_sensor_mclk1_active
+		&cam_sensor_front_active>;
+	pinctrl-1 = <&cam_sensor_mclk1_suspend
+		&cam_sensor_front_suspend>;
+	gpios = <&tlmm 14 0>,
+		<&tlmm 21 0>,
+		<&tlmm 8 0>;
+	clocks = <&clock_camcc CAM_CC_MCLK1_CLK>;
+};
+
+&eeprom_front_aux {
+	gpios = <&tlmm 15 0>,
+		<&tlmm 9 0>,
+		<&tlmm 93 0>;
+};
+
 &sensor_rear {
 	csiphy-sd-index = <1>;
 };
@@ -182,7 +199,12 @@
 
 &sensor_front {
 	csiphy-sd-index = <0>;
+	pinctrl-0 = <&cam_sensor_mclk1_active
+			&cam_sensor_front_active>;
+	pinctrl-1 = <&cam_sensor_mclk1_suspend
+			&cam_sensor_front_suspend>;
 	gpios = <&tlmm 14 0>,
 		<&tlmm 21 0>,
 		<&tlmm 8 0>;
+	clocks = <&clock_camcc CAM_CC_MCLK1_CLK>;
 };

@@ -186,11 +186,11 @@
 		rgltr-load-current = <0 80000 105000 0>;
 		gpio-no-mux = <0>;
 		pinctrl-names = "cam_default", "cam_suspend";
-		pinctrl-0 = <&cam_sensor_mclk1_active
+		pinctrl-0 = <&cam_sensor_mclk2_active
 				&cam_sensor_front_active>;
-		pinctrl-1 = <&cam_sensor_mclk1_suspend
+		pinctrl-1 = <&cam_sensor_mclk2_suspend
 				&cam_sensor_front_suspend>;
-		gpios = <&tlmm 14 0>,
+		gpios = <&tlmm 15 0>,
 			<&tlmm 21 0>,
 			<&tlmm 8 0>;
 		gpio-reset = <1>;
@@ -204,7 +204,7 @@
 		sensor-mode = <0>;
 		cci-master = <1>;
 		status = "ok";
-		clocks = <&clock_camcc CAM_CC_MCLK1_CLK>;
+		clocks = <&clock_camcc CAM_CC_MCLK2_CLK>;
 		clock-names = "cam_clk";
 		clock-cntl-level = "turbo";
 		clock-rates = <24000000>;
@@ -272,7 +272,7 @@
 				&cam_sensor_front2_suspend>;
 		gpios = <&tlmm 15 0>,
 			<&tlmm 9 0>,
-			<&tlmm 93 0>;
+			<&tlmm 14 0>;
 		gpio-reset = <1>;
 		gpio-vana = <2>;
 		gpio-req-tbl-num = <0 1 2>;
@@ -313,9 +313,9 @@
 		rgltr-load-current = <0 80000 105000 0>;
 		gpio-no-mux = <0>;
 		pinctrl-names = "cam_default", "cam_suspend";
-		pinctrl-0 = <&cam_sensor_mclk1_active
+		pinctrl-0 = <&cam_sensor_mclk2_active
 				&cam_sensor_front_active>;
-		pinctrl-1 = <&cam_sensor_mclk1_suspend
+		pinctrl-1 = <&cam_sensor_mclk2_suspend
 				&cam_sensor_front_suspend>;
 		gpios = <&tlmm 15 0>,
 			<&tlmm 21 0>,
@@ -330,7 +330,7 @@
 		sensor-mode = <0>;
 		cci-master = <1>;
 		status = "ok";
-		clocks = <&clock_camcc CAM_CC_MCLK1_CLK>;
+		clocks = <&clock_camcc CAM_CC_MCLK2_CLK>;
 		clock-names = "cam_clk";
 		clock-cntl-level = "turbo";
 		clock-rates = <24000000>;
