@@ -433,7 +433,7 @@ wpt_status WDTS_TxPacketComplete(void *pContext, wpt_packet *pFrame, wpt_status 
   // Do Sanity checks
   if(NULL == pContext || NULL == pFrame){
     VOS_TRACE(VOS_MODULE_ID_WDI, VOS_TRACE_LEVEL_WARN,
-                 "%s: Tx complete cannot proceed(%p:%p)",
+                 "%s: Tx complete cannot proceed(%pK:%pK)",
                  __func__, pContext, pFrame);
     return eWLAN_PAL_STATUS_E_FAILURE;
   }

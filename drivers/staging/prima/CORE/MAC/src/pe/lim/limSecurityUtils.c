@@ -433,7 +433,7 @@ limDeletePreAuthNode(tpAniSirGlobal pMac, tSirMacAddr macAddr)
 
         limLog(pMac, LOG1, FL(" first node to delete"));
         limLog(pMac, LOG1,
-               FL(" Release data entry:%p idx %d peer: " MAC_ADDRESS_STR),
+               FL(" Release data entry:%pK idx %d peer: " MAC_ADDRESS_STR),
                                          pTempNode, pTempNode->authNodeIdx,
                                                    MAC_ADDR_ARRAY(macAddr));
         limReleasePreAuthNode(pMac, pTempNode);
@@ -455,7 +455,7 @@ limDeletePreAuthNode(tpAniSirGlobal pMac, tSirMacAddr macAddr)
 
             limLog(pMac, LOG1, FL(" subsequent node to delete"));
             limLog(pMac, LOG1,
-                   FL("Release data entry: %p id %d peer: "MAC_ADDRESS_STR),
+                   FL("Release data entry: %pK id %d peer: "MAC_ADDRESS_STR),
                    pTempNode, pTempNode->authNodeIdx, MAC_ADDR_ARRAY(macAddr));
             limReleasePreAuthNode(pMac, pTempNode);
 

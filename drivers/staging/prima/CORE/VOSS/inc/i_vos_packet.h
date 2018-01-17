@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013,2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -126,6 +126,8 @@ struct vos_pkt_t
 
    // user data pointers
    v_VOID_t *pvUserData[ VOS_PKT_USER_DATA_ID_MAX ];
+
+   v_U64_t pn_num;
 
    // magic number for verifying this is really a struct vos_pkt_t
    v_U32_t magic;

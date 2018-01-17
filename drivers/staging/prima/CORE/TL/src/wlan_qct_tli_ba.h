@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013,2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -394,4 +394,14 @@ void WLANTL_FillReplayCounter
    v_U8_t                 ucSlotIndex
 );
 
+/**
+ * WLANTL_ReorderReplayCheck - Do reorder PN replay check
+ * @pClientSTA: pointer to sta context
+ * @vosDataBuff: pointer to address of data buffer
+ * @ucTid: Tid value
+ *
+ * Return: None
+ */
+void WLANTL_ReorderReplayCheck(WLANTL_STAClientType *pClientSTA,
+                               vos_pkt_t **vosDataBuff, v_U8_t ucTid);
 #endif /* #ifndef WLAN_QCT_TLI_H */
