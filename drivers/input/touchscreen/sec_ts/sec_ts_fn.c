@@ -43,6 +43,7 @@ static void run_delta_read(void *device_data);
 static void run_delta_read_all(void *device_data);
 static void get_delta(void *device_data);
 static void run_rawdata_stdev_read(void *device_data);
+static void run_rawdata_p2p_read_all(void *device_data);
 static void run_rawdata_read_all(void *device_data);
 static void run_self_reference_read(void *device_data);
 static void run_self_reference_read_all(void *device_data);
@@ -70,6 +71,9 @@ static void get_pressure_threshold(void *device_data);
 static void set_pressure_user_level(void *device_data);
 static void get_pressure_user_level(void *device_data);
 #endif
+static void run_fs_cal_pre_press(void *device_data);
+static void run_fs_cal_get_average(void *device_data);
+static void run_fs_cal_post_press(void *device_data);
 static void run_trx_short_test(void *device_data);
 static void set_tsp_test_result(void *device_data);
 static void get_tsp_test_result(void *device_data);
@@ -126,6 +130,7 @@ static struct sec_cmd sec_cmds[] = {
 	{SEC_CMD("run_delta_read_all", run_delta_read_all),},
 	{SEC_CMD("get_delta", get_delta),},
 	{SEC_CMD("run_rawdata_stdev_read", run_rawdata_stdev_read),},
+	{SEC_CMD("run_rawdata_p2p_read_all", run_rawdata_p2p_read_all),},
 	{SEC_CMD("run_rawdata_read_all", run_rawdata_read_all),},
 	{SEC_CMD("run_self_reference_read", run_self_reference_read),},
 	{SEC_CMD("run_self_reference_read_all", run_self_reference_read_all),},
@@ -153,6 +158,9 @@ static struct sec_cmd sec_cmds[] = {
 	{SEC_CMD("set_pressure_user_level", set_pressure_user_level),},
 	{SEC_CMD("get_pressure_user_level", get_pressure_user_level),},
 #endif
+	{SEC_CMD("run_fs_cal_pre_press", run_fs_cal_pre_press),},
+	{SEC_CMD("run_fs_cal_get_average", run_fs_cal_get_average),},
+	{SEC_CMD("run_fs_cal_post_press", run_fs_cal_post_press),},
 	{SEC_CMD("run_trx_short_test", run_trx_short_test),},
 	{SEC_CMD("set_tsp_test_result", set_tsp_test_result),},
 	{SEC_CMD("get_tsp_test_result", get_tsp_test_result),},
@@ -848,7 +856,8 @@ static int sec_ts_read_frame(struct sec_ts_data *ts, u8 type, short *min,
 
 		ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SET_POWER_MODE, &para, 1);
 		if (ret < 0) {
-			input_err(true, &ts->client->dev, "%s: Set rawdata type failed\n", __func__);
+			input_err(true, &ts->client->dev,
+				  "%s: Set powermode failed\n", __func__);
 			enable_irq(ts->client->irq);
 			goto ErrorRelease;
 		}
@@ -1725,7 +1734,7 @@ static void run_delta_read(void *device_data)
 	sec_cmd_set_default_result(sec);
 
 	memset(&mode, 0x00, sizeof(struct sec_ts_test_mode));
-	mode.type = TYPE_RAW_DATA;
+	mode.type = TYPE_SIGNAL_DATA;
 
 	sec_ts_read_raw_data(ts, sec, &mode);
 }
@@ -1739,7 +1748,7 @@ static void run_delta_read_all(void *device_data)
 	sec_cmd_set_default_result(sec);
 
 	memset(&mode, 0x00, sizeof(struct sec_ts_test_mode));
-	mode.type = TYPE_RAW_DATA;
+	mode.type = TYPE_SIGNAL_DATA;
 	mode.allnode = TEST_MODE_ALL_NODE;
 
 	sec_ts_read_raw_data(ts, sec, &mode);
@@ -1776,7 +1785,8 @@ static void get_delta(void *device_data)
 }
 
 static int sec_ts_read_frame_stdev(struct sec_ts_data *ts,
-	struct sec_cmd_data *sec, u8 type, short *min, short *max)
+	struct sec_cmd_data *sec, u8 type, short *min, short *max,
+	bool get_average_only)
 {
 	unsigned char *pRead = NULL;
 	short *pFrameAll = NULL;
@@ -1878,8 +1888,10 @@ static int sec_ts_read_frame_stdev(struct sec_ts_data *ts,
 	}
 
 	/* get total frame average of each node */
+	/* in the case of getting only average, *1000 not needed */
 	for (j = 0; j < node_tot; j++) {
-		pFrameAvg[j] = pFrameAvg[j] * 1000;
+		if (!get_average_only)
+			pFrameAvg[j] = pFrameAvg[j] * 1000;
 		pFrameAvg[j] = pFrameAvg[j] / frame_tot;
 	}
 
@@ -1897,6 +1909,20 @@ static int sec_ts_read_frame_stdev(struct sec_ts_data *ts,
 			strlcat(pStr, pTmp, str_size);
 		}
 		input_info(true, &ts->client->dev, "%s\n", pStr);
+	}
+
+	/* when only getting average, put average in
+	 * ts->pFrame and goto set cmd_result
+	 */
+	if (get_average_only) {
+		for (i = 0; i < ts->tx_count; i++) {
+			for (j = 0; j < ts->rx_count; j++) {
+				ts->pFrame[(j * ts->tx_count) + i] =
+					(short)(pFrameAvg[(i * ts->rx_count) +
+							  j]);
+			}
+		}
+		goto SetCmdResult;
 	}
 
 	/* get standard deviation */
@@ -1956,6 +1982,7 @@ static int sec_ts_read_frame_stdev(struct sec_ts_data *ts,
 		}
 	}
 
+SetCmdResult:
 	for (i = 0; i < node_tot; i++) {
 		if (i == 0)
 			strlcat(pBuff, "\n", buff_size);
@@ -2031,7 +2058,118 @@ static void run_rawdata_stdev_read(void *device_data)
 	memset(&mode, 0x00, sizeof(struct sec_ts_test_mode));
 	mode.type = TYPE_RAW_DATA;
 
-	sec_ts_read_frame_stdev(ts, sec, mode.type, &mode.min, &mode.max);
+	sec_ts_read_frame_stdev(ts, sec, mode.type, &mode.min, &mode.max,
+				false);
+}
+
+static int sec_ts_read_frame_p2p(struct sec_ts_data *ts,
+		struct sec_cmd_data *sec, struct sec_ts_test_mode mode)
+{
+	const unsigned int frame_size = ts->rx_count * ts->tx_count * 2;
+	short *temp = NULL;
+	unsigned short readbytes;
+	int i;
+	int ret = -1;
+	char tmp[SEC_CMD_STR_LEN] = { 0 };
+	char para = TO_TOUCH_MODE;
+	const unsigned int buff_size = ts->tx_count * ts->rx_count *
+					CMD_RESULT_WORD_LEN;
+	char *buff;
+
+	buff = kzalloc(buff_size, GFP_KERNEL);
+	if (!buff)
+		goto ErrorAllocbuff;
+
+	if (ts->power_status == SEC_TS_STATE_POWER_OFF) {
+		input_err(true, &ts->client->dev,
+			  "%s: [ERROR] Touch is stopped\n", __func__);
+		goto ErrorPowerState;
+	}
+
+	memset(&mode, 0x00, sizeof(struct sec_ts_test_mode));
+
+	disable_irq(ts->client->irq);
+
+	ret = execute_p2ptest(ts);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev, "%s: P2P test failed\n",
+			  __func__);
+		goto ErrorP2PTest;
+	}
+
+	/* get min data */
+	mode.type = TYPE_NOI_P2P_MIN;
+	sec_ts_read_frame(ts, mode.type, &mode.min, &mode.max);
+
+	readbytes = ts->rx_count * ts->tx_count;
+
+	/* 2 bytes for each node data */
+	temp = kzalloc(frame_size, GFP_KERNEL);
+	if (!temp)
+		goto ErrorAlloctemp;
+
+	memcpy(temp, ts->pFrame, frame_size);
+	memset(ts->pFrame, 0x00, frame_size);
+
+	/* get max data */
+	mode.type = TYPE_NOI_P2P_MAX;
+	sec_ts_read_frame(ts, mode.type, &mode.min, &mode.max);
+
+	for (i = 0; i < readbytes; i++)
+		/* get p2p by subtract min from max data */
+		ts->pFrame[i] = ts->pFrame[i] - temp[i];
+
+	strlcat(buff, "\n", buff_size);
+	for (i = 0; i < readbytes; i++) {
+		tmp[0] = 0;
+		snprintf(tmp, sizeof(tmp), "%3d,", ts->pFrame[i]);
+		strlcat(buff, tmp, buff_size);
+		if (i % ts->tx_count == (ts->tx_count - 1))
+			strlcat(buff, "\n", buff_size);
+	}
+
+	if (!sec)
+		goto ErrorSetResult;
+
+	sec_cmd_set_cmd_result(sec, buff, strnlen(buff, buff_size));
+	sec->cmd_state = SEC_CMD_STATUS_OK;
+
+ErrorSetResult:
+	kfree(temp);
+ErrorAlloctemp:
+ErrorP2PTest:
+	ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SET_POWER_MODE, &para, 1);
+	if (ret < 0)
+		input_err(true, &ts->client->dev, "%s: Set powermode failed\n",
+			  __func__);
+
+	enable_irq(ts->client->irq);
+ErrorPowerState:
+	kfree(buff);
+ErrorAllocbuff:
+	if (!sec)
+		return ret;
+
+	if (ret < 0) {
+		snprintf(tmp, sizeof(tmp), "%s", "NG");
+		sec_cmd_set_cmd_result(sec, tmp, SEC_CMD_STR_LEN);
+		sec->cmd_state = SEC_CMD_STATUS_FAIL;
+	}
+
+	return ret;
+}
+
+static void run_rawdata_p2p_read_all(void *device_data)
+{
+	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
+	struct sec_ts_data *ts = container_of(sec, struct sec_ts_data, sec);
+	struct sec_ts_test_mode mode;
+
+	sec_cmd_set_default_result(sec);
+
+	memset(&mode, 0x00, sizeof(struct sec_ts_test_mode));
+
+	sec_ts_read_frame_p2p(ts, sec, mode);
 }
 
 /* self reference : send TX power in TX channel, receive in TX channel */
@@ -2106,7 +2244,7 @@ static void run_self_delta_read(void *device_data)
 	sec_cmd_set_default_result(sec);
 
 	memset(&mode, 0x00, sizeof(struct sec_ts_test_mode));
-	mode.type = TYPE_RAW_DATA;
+	mode.type = TYPE_SIGNAL_DATA;
 	mode.frame_channel = TEST_MODE_READ_CHANNEL;
 
 	sec_ts_read_raw_data(ts, sec, &mode);
@@ -2121,7 +2259,7 @@ static void run_self_delta_read_all(void *device_data)
 	sec_cmd_set_default_result(sec);
 
 	memset(&mode, 0x00, sizeof(struct sec_ts_test_mode));
-	mode.type = TYPE_RAW_DATA;
+	mode.type = TYPE_SIGNAL_DATA;
 	mode.frame_channel = TEST_MODE_READ_CHANNEL;
 	mode.allnode = TEST_MODE_ALL_NODE;
 
@@ -2700,6 +2838,45 @@ static void rearrange_sft_result(u8 *data, int length)
 	}
 }
 
+int execute_p2ptest(struct sec_ts_data *ts)
+{
+	int rc;
+	u8 tpara[2] = {0x0F, 0x11};
+
+	input_info(true, &ts->client->dev, "%s: P2P test start!\n", __func__);
+	rc = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SET_P2PTEST_MODE, tpara, 2);
+	if (rc < 0) {
+		input_err(true, &ts->client->dev,
+			  "%s: Send P2Ptest Mode cmd failed!\n", __func__);
+		goto err_exit;
+	}
+
+	sec_ts_delay(15);
+
+	tpara[0] = 0x00;
+	tpara[1] = 0x64;
+	rc = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_P2PTEST, tpara, 2);
+	if (rc < 0) {
+		input_err(true, &ts->client->dev,
+			  "%s: Send P2Ptest cmd failed!\n", __func__);
+		goto err_exit;
+	}
+
+	sec_ts_delay(1000);
+
+	rc = sec_ts_wait_for_ready(ts, SEC_TS_VENDOR_ACK_P2P_TEST_DONE);
+	if (rc < 0) {
+		input_err(true, &ts->client->dev,
+			  "%s: P2Ptest execution time out!\n", __func__);
+		goto err_exit;
+	}
+
+	input_info(true, &ts->client->dev, "%s: P2P test done!\n", __func__);
+
+err_exit:
+	return rc;
+}
+
 int execute_selftest(struct sec_ts_data *ts, bool save_result)
 {
 	int rc;
@@ -2797,6 +2974,161 @@ int execute_selftest(struct sec_ts_data *ts, bool save_result)
 err_exit:
 	kfree(rBuff);
 	return rc;
+}
+
+static void run_fs_cal_pre_press(void *device_data)
+{
+	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
+	struct sec_ts_data *ts = container_of(sec, struct sec_ts_data, sec);
+	char buff[SEC_CMD_STR_LEN] = {0};
+	int ret = 0;
+	u8 off[1] = {STATE_MANAGE_OFF};
+
+	sec_cmd_set_default_result(sec);
+
+	input_info(true, &ts->client->dev, "%s: initial sequence for fs cal\n",
+		   __func__);
+
+	if (ts->power_status == SEC_TS_STATE_POWER_OFF) {
+		input_err(true, &ts->client->dev, "%s: Touch is stopped!\n",
+			  __func__);
+		goto ErrorPowerOff;
+	}
+
+	ret = sec_ts_fix_tmode(ts, TOUCH_SYSTEM_MODE_TOUCH,
+			       TOUCH_MODE_STATE_TOUCH);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev, "%s: fail to fix tmode\n",
+			  __func__);
+		goto ErrorSendingCmd;
+	}
+
+	ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_DISABLE_BASELINE_ADAPT, off,
+				   1);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev,
+			  "%s: fail to disable baselineAdapt\n", __func__);
+		goto ErrorSendingCmd;
+	}
+
+	ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_DISABLE_DF, off, 1);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev, "%s: fail to disable df\n",
+			  __func__);
+		goto ErrorSendingCmd;
+	}
+
+	ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_RESET_BASELINE, NULL, 0);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev, "%s: fail to fix tmode\n",
+			  __func__);
+		goto ErrorSendingCmd;
+	}
+
+	input_info(true, &ts->client->dev, "%s: ready to press\n", __func__);
+
+	snprintf(buff, sizeof(buff), "%s", "OK");
+	sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
+	sec->cmd_state = SEC_CMD_STATUS_OK;
+
+	return;
+
+ErrorSendingCmd:
+ErrorPowerOff:
+	snprintf(buff, sizeof(buff), "%s", "NG");
+	sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
+	sec->cmd_state = SEC_CMD_STATUS_NOT_APPLICABLE;
+}
+
+static void run_fs_cal_get_average(void *device_data)
+{
+	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
+	struct sec_ts_data *ts = container_of(sec, struct sec_ts_data, sec);
+	struct sec_ts_test_mode mode;
+	const bool only_average = true;
+	char buff[SEC_CMD_STR_LEN] = { 0 };
+
+	input_info(true, &ts->client->dev, "%s: fs cal with stim pad\n",
+		   __func__);
+
+	if (ts->power_status == SEC_TS_STATE_POWER_OFF) {
+		input_err(true, &ts->client->dev, "%s: Touch is stopped!\n",
+			  __func__);
+		snprintf(buff, sizeof(buff), "NG");
+		sec->cmd_state = SEC_CMD_STATUS_FAIL;
+		return;
+	}
+
+	sec_cmd_set_default_result(sec);
+
+	if (sec->cmd_param[0] < 0 || sec->cmd_param[0] > 1) {
+		snprintf(buff, sizeof(buff), "NG");
+		sec->cmd_state = SEC_CMD_STATUS_FAIL;
+		return;
+	}
+
+	memset(&mode, 0x00, sizeof(struct sec_ts_test_mode));
+	mode.type = TYPE_SIGNAL_DATA;
+
+	if (sec->cmd_param[0] == 0) {
+		sec_ts_read_frame_stdev(ts, sec, mode.type, &mode.min,
+					&mode.max, only_average);
+		//sec_ts_write_signal_cal_table(ts);
+	} else {
+		sec_ts_read_frame_stdev(ts, sec, mode.type, &mode.min,
+					&mode.max, only_average);
+	}
+}
+
+static void run_fs_cal_post_press(void *device_data)
+{
+	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
+	struct sec_ts_data *ts = container_of(sec, struct sec_ts_data, sec);
+	char buff[SEC_CMD_STR_LEN] = {0};
+	int ret = 0;
+	u8 on[1] = {STATE_MANAGE_ON};
+
+	if (ts->power_status == SEC_TS_STATE_POWER_OFF) {
+		input_err(true, &ts->client->dev, "%s: Touch is stopped!\n",
+			  __func__);
+		goto ErrorPowerOff;
+	}
+
+	sec_cmd_set_default_result(sec);
+
+	ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_DISABLE_DF, on, 1);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev, "%s: fail to enable df\n",
+			  __func__);
+		goto ErrorSendingCmd;
+	}
+
+	ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_DISABLE_BASELINE_ADAPT, on,
+				   1);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev,
+			  "%s: fail to enable baselineAdapt\n", __func__);
+		goto ErrorSendingCmd;
+	}
+
+	ret = sec_ts_release_tmode(ts);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev, "%s: fail to release tmode\n",
+			  __func__);
+		goto ErrorSendingCmd;
+	}
+
+	snprintf(buff, sizeof(buff), "%s", "OK");
+	sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
+	sec->cmd_state = SEC_CMD_STATUS_OK;
+
+	return;
+
+ErrorSendingCmd:
+ErrorPowerOff:
+	snprintf(buff, sizeof(buff), "%s", "NG");
+	sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
+	sec->cmd_state = SEC_CMD_STATUS_NOT_APPLICABLE;
 }
 
 static void run_trx_short_test(void *device_data)
