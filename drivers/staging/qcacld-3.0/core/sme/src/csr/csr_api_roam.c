@@ -1641,6 +1641,29 @@ static void init_config_param(tpAniSirGlobal pMac)
 
 	pMac->roam.configParam.nInitialDwellTime = 0;
 	pMac->roam.configParam.initial_scan_no_dfs_chnl = 0;
+
+	qdf_mem_zero(&pMac->roam.configParam.bss_score_params,
+		     sizeof(struct sir_score_config));
+	pMac->roam.configParam.bss_score_params.weight_cfg.rssi_weightage =
+		RSSI_WEIGHTAGE;
+	pMac->roam.configParam.bss_score_params.weight_cfg.ht_caps_weightage =
+		HT_CAPABILITY_WEIGHTAGE;
+	pMac->roam.configParam.bss_score_params.weight_cfg.vht_caps_weightage =
+		VHT_CAP_WEIGHTAGE;
+	pMac->roam.configParam.bss_score_params.
+		weight_cfg.chan_width_weightage = CHAN_WIDTH_WEIGHTAGE;
+	pMac->roam.configParam.bss_score_params.
+		weight_cfg.chan_band_weightage = CHAN_BAND_WEIGHTAGE;
+	pMac->roam.configParam.bss_score_params.weight_cfg.nss_weightage =
+		NSS_WEIGHTAGE;
+	pMac->roam.configParam.bss_score_params.weight_cfg.
+		beamforming_cap_weightage = BEAMFORMING_CAP_WEIGHTAGE;
+	pMac->roam.configParam.bss_score_params.weight_cfg.pcl_weightage =
+		PCL_WEIGHT;
+	pMac->roam.configParam.bss_score_params.weight_cfg.
+		channel_congestion_weightage = CHANNEL_CONGESTION_WEIGHTAGE;
+	pMac->roam.configParam.bss_score_params.weight_cfg.oce_wan_weightage =
+						OCE_WAN_WEIGHTAGE;
 }
 
 eCsrBand csr_get_current_band(tHalHandle hHal)
@@ -2500,6 +2523,8 @@ QDF_STATUS csr_change_default_config_param(tpAniSirGlobal pMac,
 		pMac->roam.configParam.isFastTransitionEnabled =
 			pParam->isFastTransitionEnabled;
 		pMac->roam.configParam.RoamRssiDiff = pParam->RoamRssiDiff;
+		pMac->roam.configParam.rssi_abs_thresh =
+						pParam->rssi_abs_thresh;
 		pMac->roam.configParam.nRoamPrefer5GHz =
 			pParam->nRoamPrefer5GHz;
 		pMac->roam.configParam.nRoamIntraBand = pParam->nRoamIntraBand;
@@ -2672,11 +2697,9 @@ QDF_STATUS csr_change_default_config_param(tpAniSirGlobal pMac,
 			pParam->roam_bg_scan_bad_rssi_thresh;
 		pMac->roam.configParam.roam_params.bg_scan_client_bitmap =
 			pParam->roam_bg_scan_client_bitmap;
-
-		pMac->roam.configParam.roam_params.bg_scan_bad_rssi_thresh =
-			pParam->roam_bg_scan_bad_rssi_thresh;
-		pMac->roam.configParam.roam_params.bg_scan_client_bitmap =
-			pParam->roam_bg_scan_client_bitmap;
+		pMac->roam.configParam.roam_params.
+			roam_bad_rssi_thresh_offset_2g =
+			pParam->roam_bad_rssi_thresh_offset_2g;
 
 		pMac->roam.configParam.scan_adaptive_dwell_mode =
 			pParam->scan_adaptive_dwell_mode;
@@ -2791,6 +2814,10 @@ QDF_STATUS csr_change_default_config_param(tpAniSirGlobal pMac,
 		pMac->roam.configParam.num_disallowed_aps =
 			pParam->num_disallowed_aps;
 
+		qdf_mem_copy(&pMac->roam.configParam.bss_score_params,
+			     &pParam->bss_score_params,
+			     sizeof(struct sir_score_config));
+
 	}
 	return status;
 }
@@ -2875,6 +2902,7 @@ QDF_STATUS csr_get_config_param(tpAniSirGlobal pMac, tCsrConfigParam *pParam)
 		     sizeof(tCsr11rConfigParams));
 	pParam->isFastTransitionEnabled = cfg_params->isFastTransitionEnabled;
 	pParam->RoamRssiDiff = cfg_params->RoamRssiDiff;
+	pParam->rssi_abs_thresh = cfg_params->rssi_abs_thresh;
 	pParam->nRoamPrefer5GHz = cfg_params->nRoamPrefer5GHz;
 	pParam->nRoamIntraBand = cfg_params->nRoamIntraBand;
 	pParam->isWESModeEnabled = cfg_params->isWESModeEnabled;
@@ -2934,6 +2962,8 @@ QDF_STATUS csr_get_config_param(tpAniSirGlobal pMac, tCsrConfigParam *pParam)
 		cfg_params->roam_params.bg_scan_bad_rssi_thresh;
 	pParam->roam_bg_scan_client_bitmap =
 		cfg_params->roam_params.bg_scan_client_bitmap;
+	pParam->roam_bad_rssi_thresh_offset_2g =
+		cfg_params->roam_params.roam_bad_rssi_thresh_offset_2g;
 
 	pParam->scan_adaptive_dwell_mode =
 			cfg_params->scan_adaptive_dwell_mode;
@@ -3051,6 +3081,10 @@ QDF_STATUS csr_get_config_param(tpAniSirGlobal pMac, tCsrConfigParam *pParam)
 		pMac->roam.configParam.rssi_channel_penalization;
 	pParam->num_disallowed_aps =
 		pMac->roam.configParam.num_disallowed_aps;
+
+	qdf_mem_copy(&pParam->bss_score_params,
+		&pMac->roam.configParam.bss_score_params,
+		sizeof(struct sir_score_config));
 
 	return QDF_STATUS_SUCCESS;
 }
@@ -7869,6 +7903,8 @@ QDF_STATUS csr_roam_copy_profile(tpAniSirGlobal pMac,
 		pDstProfile->extended_rates.numRates =
 			pSrcProfile->extended_rates.numRates;
 	}
+	pDstProfile->chan_switch_hostapd_rate_enabled =
+			pSrcProfile->chan_switch_hostapd_rate_enabled;
 end:
 	if (!QDF_IS_STATUS_SUCCESS(status)) {
 		csr_release_profile(pMac, pDstProfile);
@@ -10405,6 +10441,13 @@ csr_update_key_cmd(tpAniSirGlobal mac_ctx, tCsrRoamSession *session,
 		}
 		qdf_mem_copy(session->eseCckmInfo.btk, set_key->Key,
 			     SIR_BTK_KEY_LEN);
+		/*
+		 * KRK and BTK are updated by upper layer back to back. Send
+		 * updated KRK and BTK together to FW here.
+		 */
+		csr_roam_offload_scan(mac_ctx, session->sessionId,
+				      ROAM_SCAN_OFFLOAD_UPDATE_CFG,
+				      REASON_ROAM_PSK_PMK_CHANGED);
 		break;
 #endif
 #endif /* FEATURE_WLAN_ESE */
@@ -13412,112 +13455,50 @@ csr_convert_mode_to_nw_type(eCsrCfgDot11Mode dot11_mode, eCsrBand band)
 }
 
 /**
- * csr_merge_supported_and_extended_rates() - merge supported rates and
- * extended rates
- * @rates:              merged rates
- * @supported_rates:    supported rates
- * @extended_rates:     extended rates
+ * csr_populate_supported_rates_from_hostapd() - populates operational
+ * and extended rates.
+ * from hostapd.conf file
+ * @opr_rates:          rate struct to populate operational rates
+ * @ext_rates:          rate struct to populate extended rates
+ * @profile:            bss profile
  *
- * Return: None
+ * Return: void
  */
-static void csr_merge_supported_and_extended_rates(
-		struct merged_mac_rate_set *rates,
-		tSirMacRateSet *supported_rates,
-		tSirMacRateSet *extended_rates)
+static void csr_populate_supported_rates_from_hostapd(tSirMacRateSet *opr_rates,
+		tSirMacRateSet *ext_rates,
+		tCsrRoamProfile *profile)
 {
-	int i;
+	int i = 0;
 
 	QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
 			FL("supported_rates: %d extended_rates: %d"),
-			supported_rates->numRates, extended_rates->numRates);
+			profile->supported_rates.numRates,
+			profile->extended_rates.numRates);
 
-	if (supported_rates->numRates > SIR_MAC_RATESET_EID_MAX)
-		supported_rates->numRates = SIR_MAC_RATESET_EID_MAX;
+	if (profile->supported_rates.numRates > SIR_MAC_RATESET_EID_MAX)
+		profile->supported_rates.numRates = SIR_MAC_RATESET_EID_MAX;
 
-	if (extended_rates->numRates > SIR_MAC_RATESET_EID_MAX)
-		extended_rates->numRates = SIR_MAC_RATESET_EID_MAX;
+	if (profile->extended_rates.numRates > SIR_MAC_RATESET_EID_MAX)
+		profile->extended_rates.numRates = SIR_MAC_RATESET_EID_MAX;
 
-	qdf_mem_copy(rates->rate,
-			supported_rates->rate,
-			supported_rates->numRates);
-	rates->num_rates = supported_rates->numRates;
-
-	qdf_mem_copy(rates->rate + rates->num_rates,
-			extended_rates->rate,
-			extended_rates->numRates);
-	rates->num_rates += extended_rates->numRates;
-
-	for (i = 0; i < rates->num_rates; i++)
-		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
-			FL("Merge rate is %2x"), rates->rate[i]);
-}
-
-/**
- * csr_populate_intersection_driver_and_hostpd_rates() - populate
- * intersection of driver rates and hostapd rates
- * @pParam:             csr roam start bss params
- * @driver_rates:       rates generated by driver
- * @hostapd_rates:      rates generated by hostapd
- *
- * Return: None
- */
-static void csr_populate_intersection_driver_and_hostpd_rates(
-		struct tagCsrRoamStartBssParams *param,
-		struct merged_mac_rate_set *driver_rates,
-		struct merged_mac_rate_set *hostapd_rates)
-{
-	int i, j;
-	struct merged_mac_rate_set rates;
-	uint8_t driver_rate, hostapd_rate;
-	tSirMacRateSet *opr_rates = &param->operationalRateSet;
-	tSirMacRateSet *ext_rates = &param->extendedRateSet;
-
-	rates.num_rates = 0;
-
-	for (i = 0; i < driver_rates->num_rates; i++) {
-		driver_rate = driver_rates->rate[i];
-		if (CSR_IS_BASIC_RATE(driver_rate))
-			BITS_OFF(driver_rate,
-				CSR_DOT11_BASIC_RATE_MASK);
-
-		for (j = 0; j < hostapd_rates->num_rates; j++) {
-			hostapd_rate = hostapd_rates->rate[j];
-			if (CSR_IS_BASIC_RATE(hostapd_rate))
-				BITS_OFF(hostapd_rate,
-					CSR_DOT11_BASIC_RATE_MASK);
-
-			if (driver_rate == hostapd_rate) {
-				if (CSR_IS_BASIC_RATE(driver_rates->rate[i]) ||
-				    CSR_IS_BASIC_RATE(hostapd_rates->rate[j]))
-					BITS_ON(driver_rate,
-						CSR_DOT11_BASIC_RATE_MASK);
-
-				rates.rate[rates.num_rates++] = driver_rate;
-				break;
-			}
-		}
+	if (profile->supported_rates.numRates) {
+		opr_rates->numRates = profile->supported_rates.numRates;
+		qdf_mem_copy(opr_rates->rate,
+				profile->supported_rates.rate,
+				profile->supported_rates.numRates);
+		for (i = 0; i < opr_rates->numRates; i++)
+			QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
+			FL("Supported Rate is %2x"), opr_rates->rate[i]);
 	}
-
-	for (i = 0; i < rates.num_rates; i++)
-		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
-			FL("Intersection rate is %2x"), rates.rate[i]);
-
-	opr_rates->numRates = 0;
-	ext_rates->numRates = 0;
-	if (rates.num_rates <= MAX_NUM_SUPPORTED_RATES) {
-		opr_rates->numRates = rates.num_rates;
-		qdf_mem_copy(opr_rates->rate,
-				rates.rate,
-				opr_rates->numRates);
-	} else {
-		opr_rates->numRates = MAX_NUM_SUPPORTED_RATES;
-		qdf_mem_copy(opr_rates->rate,
-				rates.rate,
-				MAX_NUM_SUPPORTED_RATES);
-		ext_rates->numRates = rates.num_rates - MAX_NUM_SUPPORTED_RATES;
+	if (profile->extended_rates.numRates) {
+		ext_rates->numRates =
+			profile->extended_rates.numRates;
 		qdf_mem_copy(ext_rates->rate,
-				rates.rate + MAX_NUM_SUPPORTED_RATES,
-				ext_rates->numRates);
+				profile->extended_rates.rate,
+				profile->extended_rates.numRates);
+		for (i = 0; i < ext_rates->numRates; i++)
+			QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
+			FL("Extended Rate is %2x"), ext_rates->rate[i]);
 	}
 }
 
@@ -13532,7 +13513,7 @@ static void csr_populate_intersection_driver_and_hostpd_rates(
  *
  * Return: void
  */
-static void
+static QDF_STATUS
 csr_roam_get_bss_start_parms(tpAniSirGlobal pMac,
 			     tCsrRoamProfile *pProfile,
 			     tCsrRoamStartBssParams *pParam,
@@ -13560,16 +13541,30 @@ csr_roam_get_bss_start_parms(tpAniSirGlobal pMac,
 			 "For P2P (persona %d) dot11_mode is 11B",
 			  pProfile->csrPersona);
 		QDF_ASSERT(0);
+		return QDF_STATUS_E_INVAL;
 	}
 
 	nw_type = csr_convert_mode_to_nw_type(pParam->uCfgDot11Mode, band);
 	ext_rates->numRates = 0;
-
-	switch (nw_type) {
+	/*
+	 * hostapd.conf will populate its basic and extended rates
+	 * as per hw_mode, but if acs in ini is enabled driver should
+	 * ignore basic and extended rates from hostapd.conf and should
+	 * populate default rates.
+	 */
+	if (!cds_is_sub_20_mhz_enabled() && !skip_hostapd_rate &&
+			(pProfile->supported_rates.numRates ||
+			pProfile->extended_rates.numRates)) {
+		csr_populate_supported_rates_from_hostapd(opr_rates,
+				ext_rates, pProfile);
+		pParam->operationChn = tmp_opr_ch;
+	} else {
+		switch (nw_type) {
 		default:
 			sme_err(
 				"sees an unknown pSirNwType (%d)",
 				nw_type);
+			return QDF_STATUS_E_INVAL;
 		case eSIR_11A_NW_TYPE:
 			csr_populate_basic_rates(opr_rates, true, true);
 			if (eCSR_OPERATING_CHANNEL_ANY != tmp_opr_ch) {
@@ -13622,35 +13617,7 @@ csr_roam_get_bss_start_parms(tpAniSirGlobal pMac,
 				opr_ch = tmp_opr_ch;
 			break;
 		}
-
-	pParam->operationChn = opr_ch;
-
-	if (pProfile->supported_rates.numRates ||
-	    pProfile->extended_rates.numRates) {
-		struct merged_mac_rate_set rates_driver, rates_hostapd;
-
-		qdf_mem_zero(&rates_driver,
-			sizeof(struct merged_mac_rate_set));
-		qdf_mem_zero(&rates_hostapd,
-			sizeof(struct merged_mac_rate_set));
-
-		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
-				"Merge rates driver");
-		csr_merge_supported_and_extended_rates(&rates_driver,
-				opr_rates,
-				ext_rates);
-
-		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
-				"Merge rates hostapd");
-		csr_merge_supported_and_extended_rates(&rates_hostapd,
-				&pProfile->supported_rates,
-				&pProfile->extended_rates);
-
-		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
-				"Populate rates intersection");
-		csr_populate_intersection_driver_and_hostpd_rates(pParam,
-				&rates_driver,
-				&rates_hostapd);
+		pParam->operationChn = opr_ch;
 	}
 
 	pParam->sirNwType = nw_type;
@@ -13661,6 +13628,7 @@ csr_roam_get_bss_start_parms(tpAniSirGlobal pMac,
 		pProfile->ch_params.center_freq_seg1;
 	pParam->ch_params.sec_ch_offset =
 		pProfile->ch_params.sec_ch_offset;
+	return QDF_STATUS_SUCCESS;
 }
 
 static void
@@ -13854,6 +13822,7 @@ void csr_roam_prepare_bss_params(tpAniSirGlobal pMac, uint32_t sessionId,
 	uint8_t Channel;
 	ePhyChanBondState cbMode = PHY_SINGLE_CHANNEL_CENTERED;
 	tCsrRoamSession *pSession = CSR_GET_SESSION(pMac, sessionId);
+	bool skip_hostapd_rate = !pProfile->chan_switch_hostapd_rate_enabled;
 
 	if (!pSession) {
 		sme_err("session %d not found", sessionId);
@@ -13869,7 +13838,8 @@ void csr_roam_prepare_bss_params(tpAniSirGlobal pMac, uint32_t sessionId,
 		}
 	} else {
 		csr_roam_get_bss_start_parms(pMac, pProfile,
-					     &pSession->bssParams, false);
+					     &pSession->bssParams,
+					     skip_hostapd_rate);
 		/* Use the first SSID */
 		if (pProfile->SSIDs.numOfSSIDs)
 			qdf_mem_copy(&pSession->bssParams.ssId,
@@ -14011,6 +13981,13 @@ QDF_STATUS csr_roam_set_psk_pmk(tpAniSirGlobal pMac, uint32_t sessionId,
 	}
 	qdf_mem_copy(pSession->psk_pmk, pPSK_PMK, sizeof(pSession->psk_pmk));
 	pSession->pmk_len = pmk_len;
+
+	if (csr_is_auth_type_ese(pMac->roam.roamSession[sessionId].
+				connectedProfile.AuthType)) {
+		sme_debug("PMK update is not required for ESE");
+		return QDF_STATUS_SUCCESS;
+	}
+
 	csr_roam_offload_scan(pMac, sessionId,
 			      ROAM_SCAN_OFFLOAD_UPDATE_CFG,
 			      REASON_ROAM_PSK_PMK_CHANGED);
@@ -18397,6 +18374,7 @@ csr_create_roam_scan_offload_request(tpAniSirGlobal mac_ctx,
 	req_buf->RoamRescanRssiDiff =
 		roam_info->cfgParams.nRoamRescanRssiDiff;
 	req_buf->RoamRssiDiff = mac_ctx->roam.configParam.RoamRssiDiff;
+	req_buf->rssi_abs_thresh = mac_ctx->roam.configParam.rssi_abs_thresh;
 	req_buf->reason = reason;
 	req_buf->NeighborScanTimerPeriod =
 		roam_info->cfgParams.neighborScanPeriod;
@@ -19142,6 +19120,88 @@ static inline void csr_update_fils_params_rso(tpAniSirGlobal mac,
 #endif
 
 /**
+ * csr_update_score_params() - API to update Score params in RSO
+ * @mac_ctx: Mac context
+ * @req_buffer: RSO request buffer
+ *
+ * Return: None
+ */
+static void csr_update_score_params(tpAniSirGlobal mac_ctx,
+	tSirRoamOffloadScanReq *req_buffer)
+{
+	struct scoring_param *req_score_params;
+	struct rssi_scoring *req_rssi_score;
+	struct sir_score_config *bss_score_params;
+	struct sir_weight_config *weight_config;
+	struct sir_rssi_cfg_score *rssi_score;
+
+	req_score_params = &req_buffer->score_params;
+	req_rssi_score = &req_score_params->rssi_scoring;
+
+	bss_score_params = &mac_ctx->roam.configParam.bss_score_params;
+	weight_config = &bss_score_params->weight_cfg;
+	rssi_score = &bss_score_params->rssi_score;
+
+	if (!bss_score_params->enable_scoring_for_roam)
+		req_score_params->disable_bitmap =
+			WLAN_ROAM_SCORING_DISABLE_ALL;
+
+	req_score_params->rssi_weightage = weight_config->rssi_weightage;
+	req_score_params->ht_weightage = weight_config->ht_caps_weightage;
+	req_score_params->vht_weightage = weight_config->vht_caps_weightage;
+	req_score_params->he_weightage = weight_config->he_caps_weightage;
+	req_score_params->bw_weightage = weight_config->chan_width_weightage;
+	req_score_params->band_weightage = weight_config->chan_band_weightage;
+	req_score_params->nss_weightage = weight_config->nss_weightage;
+	req_score_params->esp_qbss_weightage =
+		weight_config->channel_congestion_weightage;
+	req_score_params->beamforming_weightage =
+		weight_config->beamforming_cap_weightage;
+	req_score_params->pcl_weightage =
+		weight_config->pcl_weightage;
+	req_score_params->oce_wan_weightage = weight_config->oce_wan_weightage;
+
+	req_score_params->bw_index_score =
+		bss_score_params->bandwidth_weight_per_index;
+	req_score_params->band_index_score =
+		bss_score_params->band_weight_per_index;
+	req_score_params->nss_index_score =
+		bss_score_params->nss_weight_per_index;
+
+	req_rssi_score->best_rssi_threshold = rssi_score->best_rssi_threshold;
+	req_rssi_score->good_rssi_threshold = rssi_score->good_rssi_threshold;
+	req_rssi_score->bad_rssi_threshold = rssi_score->bad_rssi_threshold;
+	req_rssi_score->good_rssi_pcnt = rssi_score->good_rssi_pcnt;
+	req_rssi_score->bad_rssi_pcnt = rssi_score->bad_rssi_pcnt;
+	req_rssi_score->good_bucket_size = rssi_score->good_rssi_bucket_size;
+	req_rssi_score->bad_bucket_size = rssi_score->bad_rssi_bucket_size;
+	req_rssi_score->rssi_pref_5g_rssi_thresh =
+			rssi_score->rssi_pref_5g_rssi_thresh;
+
+	req_score_params->esp_qbss_scoring.num_slot =
+		bss_score_params->esp_qbss_scoring.num_slot;
+	req_score_params->esp_qbss_scoring.score_pcnt3_to_0 =
+		bss_score_params->esp_qbss_scoring.score_pcnt3_to_0;
+	req_score_params->esp_qbss_scoring.score_pcnt7_to_4 =
+		bss_score_params->esp_qbss_scoring.score_pcnt7_to_4;
+	req_score_params->esp_qbss_scoring.score_pcnt11_to_8 =
+		bss_score_params->esp_qbss_scoring.score_pcnt11_to_8;
+	req_score_params->esp_qbss_scoring.score_pcnt15_to_12 =
+		bss_score_params->esp_qbss_scoring.score_pcnt15_to_12;
+
+	req_score_params->oce_wan_scoring.num_slot =
+		bss_score_params->oce_wan_scoring.num_slot;
+	req_score_params->oce_wan_scoring.score_pcnt3_to_0 =
+		bss_score_params->oce_wan_scoring.score_pcnt3_to_0;
+	req_score_params->oce_wan_scoring.score_pcnt7_to_4 =
+		bss_score_params->oce_wan_scoring.score_pcnt7_to_4;
+	req_score_params->oce_wan_scoring.score_pcnt11_to_8 =
+		bss_score_params->oce_wan_scoring.score_pcnt11_to_8;
+	req_score_params->oce_wan_scoring.score_pcnt15_to_12 =
+		bss_score_params->oce_wan_scoring.score_pcnt15_to_12;
+
+}
+/**
  * csr_roam_offload_scan() - populates roam offload scan request and sends to
  * WMA
  *
@@ -19306,9 +19366,10 @@ csr_roam_offload_scan(tpAniSirGlobal mac_ctx, uint8_t session_id,
 		roam_params_dst->traffic_threshold,
 		roam_params_dst->initial_dense_status,
 		mac_ctx->scan.roam_candidate_count[session_id]);
-	sme_debug("BG Scan Bad RSSI:%d, bitmap:0x%x",
+	sme_debug("BG Scan Bad RSSI:%d, bitmap:0x%x Offset for 2G to 5G Roam %d",
 			roam_params_dst->bg_scan_bad_rssi_thresh,
-			roam_params_dst->bg_scan_client_bitmap);
+			roam_params_dst->bg_scan_client_bitmap,
+			roam_params_dst->roam_bad_rssi_thresh_offset_2g);
 
 	for (i = 0; i < roam_params_dst->num_bssid_avoid_list; i++) {
 		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
@@ -19361,6 +19422,7 @@ csr_roam_offload_scan(tpAniSirGlobal mac_ctx, uint8_t session_id,
 				session->nAddIEAssocLength);
 		csr_update_driver_assoc_ies(mac_ctx, session, req_buf);
 		csr_update_fils_params_rso(mac_ctx, session, req_buf);
+		csr_update_score_params(mac_ctx, req_buf);
 	}
 
 	QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
@@ -19795,7 +19857,20 @@ QDF_STATUS csr_queue_sme_command(tpAniSirGlobal pMac, tSmeCmd *pCommand,
 		    pMac->scan.max_scan_count) {
 			sme_err("scan pending list count %d",
 				pMac->sme.smeScanCmdPendingList.Count);
-			csr_scan_call_callback(pMac, pCommand, eCSR_SCAN_ABORT);
+			if (pCommand->command == eSmeCommandScan) {
+				csr_scan_call_callback(pMac, pCommand,
+						       eCSR_SCAN_ABORT);
+			} else {
+				remainOnChanCallback callback =
+					     pCommand->u.remainChlCmd.callback;
+				if (callback) {
+					callback(pMac,
+					  pCommand->u.remainChlCmd.callbackCtx,
+					  QDF_STATUS_E_FAILURE,
+					  pCommand->u.remainChlCmd.scan_id);
+				}
+			}
+
 			return QDF_STATUS_E_FAILURE;
 		}
 		sme_debug(
@@ -20021,6 +20096,7 @@ QDF_STATUS csr_roam_channel_change_req(tpAniSirGlobal pMac,
 	QDF_STATUS status = QDF_STATUS_SUCCESS;
 	tSirChanChangeRequest *pMsg;
 	tCsrRoamStartBssParams param;
+	bool skip_hostapd_rate = !profile->chan_switch_hostapd_rate_enabled;
 
 	/*
 	 * while changing the channel, use basic rates given by driver
@@ -20030,7 +20106,13 @@ QDF_STATUS csr_roam_channel_change_req(tpAniSirGlobal pMac,
 	 */
 	qdf_mem_zero(&param, sizeof(tCsrRoamStartBssParams));
 
-	csr_roam_get_bss_start_parms(pMac, profile, &param, true);
+	status = csr_roam_get_bss_start_parms(pMac, profile, &param,
+		skip_hostapd_rate);
+
+	if (status != QDF_STATUS_SUCCESS) {
+		sme_err("Failed to get bss parameters");
+		return status;
+	}
 
 	pMsg = qdf_mem_malloc(sizeof(tSirChanChangeRequest));
 	if (!pMsg)
@@ -20041,14 +20123,13 @@ QDF_STATUS csr_roam_channel_change_req(tpAniSirGlobal pMac,
 	pMsg->targetChannel = profile->ChannelInfo.ChannelList[0];
 	pMsg->sec_ch_offset = ch_params->sec_ch_offset;
 	pMsg->ch_width = profile->ch_params.ch_width;
-	pMsg->dot11mode = csr_translate_to_wni_cfg_dot11_mode(pMac,
-					pMac->roam.configParam.uCfgDot11Mode);
+	pMsg->dot11mode = param.uCfgDot11Mode;
 	if (IS_24G_CH(pMsg->targetChannel) &&
 	   (false == pMac->roam.configParam.enableVhtFor24GHz) &&
 	   (WNI_CFG_DOT11_MODE_11AC == pMsg->dot11mode ||
 	    WNI_CFG_DOT11_MODE_11AC_ONLY == pMsg->dot11mode))
 		pMsg->dot11mode = WNI_CFG_DOT11_MODE_11N;
-
+	pMsg->nw_type = param.sirNwType;
 	pMsg->center_freq_seg_0 = ch_params->center_freq_seg0;
 	pMsg->center_freq_seg_1 = ch_params->center_freq_seg1;
 	qdf_mem_copy(pMsg->bssid, bssid.bytes, QDF_MAC_ADDR_SIZE);

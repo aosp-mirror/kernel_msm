@@ -151,6 +151,8 @@ static uint8_t *htt_t2h_mac_addr_deswizzle(uint8_t *tgt_mac_addr,
 #endif
 }
 
+#define MAX_TARGET_TX_CREDIT    204800
+
 /* Target to host Msg/event  handler  for low priority messages*/
 static void htt_t2h_lp_msg_handler(void *context, qdf_nbuf_t htt_t2h_msg,
 				   bool free_msg_buf)
@@ -190,7 +192,7 @@ static void htt_t2h_lp_msg_handler(void *context, qdf_nbuf_t htt_t2h_msg,
 	{
 		uint16_t peer_id;
 		uint8_t tid;
-		int seq_num_start, seq_num_end;
+		uint16_t seq_num_start, seq_num_end;
 		enum htt_rx_flush_action action;
 
 		peer_id = HTT_RX_FLUSH_PEER_ID_GET(*msg_word);
@@ -208,7 +210,7 @@ static void htt_t2h_lp_msg_handler(void *context, qdf_nbuf_t htt_t2h_msg,
 	}
 	case HTT_T2H_MSG_TYPE_RX_OFFLOAD_DELIVER_IND:
 	{
-		int msdu_cnt;
+		uint16_t msdu_cnt;
 
 		msdu_cnt =
 			HTT_RX_OFFLOAD_DELIVER_IND_MSDU_CNT_GET(*msg_word);
@@ -316,6 +318,14 @@ static void htt_t2h_lp_msg_handler(void *context, qdf_nbuf_t htt_t2h_msg,
 			(uint8_t *) (msg_word + 1),
 			&mac_addr_deswizzle_buf[0]);
 
+		if (peer_id > ol_cfg_max_peer_id(pdev->ctrl_pdev)) {
+			qdf_print("%s: HTT_T2H_MSG_TYPE_PEER_MAP,"
+				"invalid peer_id, %u\n",
+				__FUNCTION__,
+				peer_id);
+			break;
+		}
+
 		ol_rx_peer_map_handler(pdev->txrx_pdev, peer_id,
 				       vdev_id, peer_mac_addr,
 				       1 /*can tx */);
@@ -326,6 +336,14 @@ static void htt_t2h_lp_msg_handler(void *context, qdf_nbuf_t htt_t2h_msg,
 		uint16_t peer_id;
 
 		peer_id = HTT_RX_PEER_UNMAP_PEER_ID_GET(*msg_word);
+		if (peer_id > ol_cfg_max_peer_id(pdev->ctrl_pdev)) {
+			qdf_print("%s: HTT_T2H_MSG_TYPE_PEER_UNMAP,"
+				"invalid peer_id, %u\n",
+				__FUNCTION__,
+				peer_id);
+			break;
+		}
+
 		ol_rx_peer_unmap_handler(pdev->txrx_pdev, peer_id);
 		break;
 	}
@@ -404,12 +422,23 @@ static void htt_t2h_lp_msg_handler(void *context, qdf_nbuf_t htt_t2h_msg,
 	{
 		uint32_t htt_credit_delta_abs;
 		int32_t htt_credit_delta;
-		int sign;
+		int sign, old_credit;
 
 		htt_credit_delta_abs =
 			HTT_TX_CREDIT_DELTA_ABS_GET(*msg_word);
 		sign = HTT_TX_CREDIT_SIGN_BIT_GET(*msg_word) ? -1 : 1;
 		htt_credit_delta = sign * htt_credit_delta_abs;
+
+		old_credit = qdf_atomic_read(&pdev->htt_tx_credit.target_delta);
+		if (((old_credit + htt_credit_delta) > MAX_TARGET_TX_CREDIT) ||
+			((old_credit + htt_credit_delta) < -MAX_TARGET_TX_CREDIT)) {
+			qdf_print("%s: invalid credit update,old_credit=%d,"
+				"htt_credit_delta=%d\n",
+				__func__,
+				old_credit,
+				htt_credit_delta);
+			break;
+		}
 
 		if (pdev->cfg.is_high_latency &&
 		    !pdev->cfg.default_tx_comp_req) {
@@ -585,6 +614,9 @@ static void htt_t2h_rx_in_order_indication_handler(
 }
 #endif
 
+#define HTT_TX_COMPL_HEAD_SZ			4
+#define HTT_TX_COMPL_BYTES_PER_MSDU_ID		2
+
 /**
  * Generic Target to host Msg/event  handler  for low priority messages
  * Low priority message are handler in a different handler called from
@@ -673,12 +705,29 @@ void htt_t2h_msg_handler(void *context, HTC_PACKET *pkt)
 	}
 	case HTT_T2H_MSG_TYPE_TX_COMPL_IND:
 	{
+		int old_credit;
 		int num_msdus;
 		enum htt_tx_status status;
+		int msg_len = qdf_nbuf_len(htt_t2h_msg);
 
 		/* status - no enum translation needed */
 		status = HTT_TX_COMPL_IND_STATUS_GET(*msg_word);
 		num_msdus = HTT_TX_COMPL_IND_NUM_GET(*msg_word);
+
+		/*
+		 * each desc id will occupy 2 bytes.
+		 * the 4 is for htt msg header
+		 */
+		if ((num_msdus * HTT_TX_COMPL_BYTES_PER_MSDU_ID +
+			HTT_TX_COMPL_HEAD_SZ) > msg_len) {
+			qdf_print("%s: num_msdus(%d) is invalid,"
+				"adf_nbuf_len = %d\n",
+				__FUNCTION__,
+				num_msdus,
+				msg_len);
+			break;
+		}
+
 		if (num_msdus & 0x1) {
 			struct htt_tx_compl_ind_base *compl =
 				(void *)msg_word;
@@ -699,22 +748,33 @@ void htt_t2h_msg_handler(void *context, HTC_PACKET *pkt)
 		}
 
 		if (pdev->cfg.is_high_latency) {
-			if (!pdev->cfg.default_tx_comp_req) {
-				int credit_delta;
-
-				qdf_atomic_add(num_msdus,
-					       &pdev->htt_tx_credit.
-								target_delta);
-				credit_delta = htt_tx_credit_update(pdev);
-
-				if (credit_delta) {
-					ol_tx_target_credit_update(
-							pdev->txrx_pdev,
-							credit_delta);
-				}
+			old_credit = qdf_atomic_read(
+						&pdev->htt_tx_credit.target_delta);
+			if (((old_credit + num_msdus) > MAX_TARGET_TX_CREDIT) ||
+				((old_credit + num_msdus) < -MAX_TARGET_TX_CREDIT)) {
+				qdf_print("%s: invalid credit update,old_credit=%d,"
+					"num_msdus=%d\n",
+					__func__,
+					old_credit,
+					num_msdus);
 			} else {
-				ol_tx_target_credit_update(pdev->txrx_pdev,
-							   num_msdus);
+				if (!pdev->cfg.default_tx_comp_req) {
+					int credit_delta;
+
+					qdf_atomic_add(num_msdus,
+						       &pdev->htt_tx_credit.
+							target_delta);
+					credit_delta = htt_tx_credit_update(pdev);
+
+					if (credit_delta) {
+						ol_tx_target_credit_update(
+								pdev->txrx_pdev,
+								credit_delta);
+					}
+				} else {
+					ol_tx_target_credit_update(pdev->txrx_pdev,
+								   num_msdus);
+				}
 			}
 		}
 
@@ -727,7 +787,7 @@ void htt_t2h_msg_handler(void *context, HTC_PACKET *pkt)
 	{
 		uint16_t peer_id;
 		uint8_t tid, pn_ie_cnt, *pn_ie = NULL;
-		int seq_num_start, seq_num_end;
+		uint16_t seq_num_start, seq_num_end;
 
 		/*First dword */
 		peer_id = HTT_RX_PN_IND_PEER_ID_GET(*msg_word);
@@ -754,8 +814,23 @@ void htt_t2h_msg_handler(void *context, HTC_PACKET *pkt)
 	case HTT_T2H_MSG_TYPE_TX_INSPECT_IND:
 	{
 		int num_msdus;
+		int msg_len = qdf_nbuf_len(htt_t2h_msg);
 
 		num_msdus = HTT_TX_COMPL_IND_NUM_GET(*msg_word);
+		/*
+		 * each desc id will occupy 2 bytes.
+		 * the 4 is for htt msg header
+		 */
+		if ((num_msdus * HTT_TX_COMPL_BYTES_PER_MSDU_ID +
+			HTT_TX_COMPL_HEAD_SZ) > msg_len) {
+			qdf_print("%s: num_msdus(%d) is invalid,"
+				"adf_nbuf_len = %d\n",
+				__FUNCTION__,
+				num_msdus,
+				msg_len);
+			break;
+		}
+
 		if (num_msdus & 0x1) {
 			struct htt_tx_compl_ind_base *compl =
 				(void *)msg_word;
@@ -901,6 +976,21 @@ void htt_t2h_msg_handler_fast(void *context, qdf_nbuf_t *cmpl_msdus,
 			/* status - no enum translation needed */
 			status = HTT_TX_COMPL_IND_STATUS_GET(*msg_word);
 			num_msdus = HTT_TX_COMPL_IND_NUM_GET(*msg_word);
+
+			/*
+			 * each desc id will occupy 2 bytes.
+			 * the 4 is for htt msg header
+			 */
+			if ((num_msdus * HTT_TX_COMPL_BYTES_PER_MSDU_ID +
+				HTT_TX_COMPL_HEAD_SZ) > msg_len) {
+				qdf_print("%s: num_msdus(%d) is invalid,"
+					"adf_nbuf_len = %d\n",
+					__FUNCTION__,
+					num_msdus,
+					msg_len);
+				break;
+			}
+
 			if (num_msdus & 0x1) {
 				struct htt_tx_compl_ind_base *compl =
 					(void *)msg_word;
@@ -960,6 +1050,20 @@ void htt_t2h_msg_handler_fast(void *context, qdf_nbuf_t *cmpl_msdus,
 			int num_msdus;
 
 			num_msdus = HTT_TX_COMPL_IND_NUM_GET(*msg_word);
+			/*
+			 * each desc id will occupy 2 bytes.
+			 * the 4 is for htt msg header
+			 */
+			if ((num_msdus * HTT_TX_COMPL_BYTES_PER_MSDU_ID +
+				HTT_TX_COMPL_HEAD_SZ) > msg_len) {
+				qdf_print("%s: num_msdus(%d) is invalid,"
+					"adf_nbuf_len = %d\n",
+					__FUNCTION__,
+					num_msdus,
+					msg_len);
+				break;
+			}
+
 			if (num_msdus & 0x1) {
 				struct htt_tx_compl_ind_base *compl =
 					(void *)msg_word;
@@ -1317,7 +1421,7 @@ htt_t2h_dbg_stats_hdr_parse(uint8_t *stats_info_list,
 void
 htt_rx_frag_ind_flush_seq_num_range(htt_pdev_handle pdev,
 				    qdf_nbuf_t rx_frag_ind_msg,
-				    int *seq_num_start, int *seq_num_end)
+				    uint16_t *seq_num_start, uint16_t *seq_num_end)
 {
 	uint32_t *msg_word;
 

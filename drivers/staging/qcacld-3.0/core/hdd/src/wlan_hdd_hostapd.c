@@ -4870,16 +4870,16 @@ static int __iw_set_ap_encodeext(struct net_device *dev,
 		/*Convert from 1-based to 0-based keying */
 		key_index--;
 	}
-	if (!ext->key_len)
-		return ret;
+
+	if (!ext->key_len || ext->key_len > CSR_MAX_KEY_LEN)
+		return -EINVAL;
 
 	qdf_mem_zero(&setKey, sizeof(tCsrRoamSetKey));
 
 	setKey.keyId = key_index;
 	setKey.keyLength = ext->key_len;
 
-	if (ext->key_len <= CSR_MAX_KEY_LEN)
-		qdf_mem_copy(&setKey.Key[0], ext->key, ext->key_len);
+	qdf_mem_copy(&setKey.Key[0], ext->key, ext->key_len);
 
 	if (ext->ext_flags & IW_ENCODE_EXT_GROUP_KEY) {
 		/*Key direction for group is RX only */
@@ -7851,6 +7851,13 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 	/* Protection parameter to enable or disable */
 	pConfig->protEnabled = iniConfig->apProtEnabled;
 
+	pConfig->chan_switch_hostapd_rate_enabled =
+			iniConfig->chan_switch_hostapd_rate_enabled;
+	if (iniConfig->WlanMccToSccSwitchMode !=
+			QDF_MCC_TO_SCC_SWITCH_DISABLE) {
+		pConfig->chan_switch_hostapd_rate_enabled = false;
+	}
+
 	pConfig->enOverLapCh = iniConfig->gEnableOverLapCh;
 	pConfig->dtim_period = pBeacon->dtim_period;
 	hdd_debug("acs_mode %d", pConfig->acs_cfg.acs_mode);
@@ -7866,6 +7873,8 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 		pConfig->acs_dfs_mode = wlan_hdd_get_dfs_mode(mode);
 	}
 
+	pConfig->user_config_channel = pConfig->channel;
+
 	hdd_debug("pConfig->channel %d, pConfig->acs_dfs_mode %d",
 		pConfig->channel, pConfig->acs_dfs_mode);
 
@@ -7878,6 +7887,12 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 						     pBeacon->tail_len,
 						     WLAN_EID_COUNTRY);
 		if (pIe) {
+			if (pIe[1] < IEEE80211_COUNTRY_IE_MIN_LEN) {
+				hdd_err("Invalid Country IE len: %d", pIe[1]);
+				ret = -EINVAL;
+				goto error;
+			}
+
 			pConfig->ieee80211d = 1;
 			qdf_mem_copy(pConfig->countryCode, &pIe[2], 3);
 			sme_set_reg_info(hHal, pConfig->countryCode);
@@ -8253,7 +8268,12 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 			pConfig->ch_width_orig = CH_WIDTH_20MHZ;
 	}
 
-	if (wlan_hdd_setup_driver_overrides(pHostapdAdapter)) {
+	if (cds_is_force_scc() &&
+			cds_mode_specific_get_channel(CDS_STA_MODE)) {
+		pConfig->channel = cds_mode_specific_get_channel(CDS_STA_MODE);
+		hdd_debug("force SCC is enabled and STA is active, override the SAP channel to %d",
+				pConfig->channel);
+	} else if (wlan_hdd_setup_driver_overrides(pHostapdAdapter)) {
 		ret = -EINVAL;
 		goto error;
 	}
@@ -8301,6 +8321,8 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 	       (int)pConfig->RSNWPAReqIELength, pConfig->UapsdEnable);
 	hdd_debug("ProtEnabled = %d, OBSSProtEnabled = %d",
 	       pConfig->protEnabled, pConfig->obssProtEnabled);
+	hdd_debug("ChanSwitchHostapdRateEnabled = %d",
+			pConfig->chan_switch_hostapd_rate_enabled);
 
 	if (test_bit(SOFTAP_BSS_STARTED, &pHostapdAdapter->event_flags)) {
 		wlansap_reset_sap_config_add_ie(pConfig, eUPDATE_IE_ALL);
