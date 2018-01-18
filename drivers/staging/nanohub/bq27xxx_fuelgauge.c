@@ -42,7 +42,7 @@
 #define BQ27200_FLAG_FC         BIT(5)
 #define BQ27200_FLAG_CHGS       BIT(7) /*Charge state flag*/
 
-#define SPM_TIMEOUT             10*60 //10minutes
+#define SPM_TIMEOUT             (10*60) /* 10minutes */
 
 struct FuelGaugeCfgData {
 	uint32_t interval;
@@ -97,9 +97,9 @@ void bq27x00_update(struct Nanohub_FuelGauge_Info *fg_info)
 	pr_warn("nanohub: [FG] cache.capacity:%d, fake_capatity:%d, "
 			"cache.temperature:%d, cache.flags:%08x, "
 		    "charger_online:%d, timer_counter:%d\n",
-            fg_info->cache.capacity, fg_info->fake_capacity,
+			fg_info->cache.capacity, fg_info->fake_capacity,
 			fg_info->cache.temperature, fg_info->cache.flags,
-            fg_info->charger_online, timer_counter);
+			fg_info->charger_online, timer_counter);
 
 	/* Sync fake capacity to real capacity */
 	pr_info("nanohub: [FG] cur.tv_sec:%ld last.tv_sec:%ld\n",
@@ -107,22 +107,19 @@ void bq27x00_update(struct Nanohub_FuelGauge_Info *fg_info)
 	if ((cur.tv_sec - last.tv_sec > SPM_TIMEOUT) && (last.tv_sec != 0)) {
 		fg_info->fake_capacity = fg_info->cache.capacity;
 		timer_counter = 0;
-	}
-	else {
+	} else {
 		if (fg_info->cache.capacity < fg_info->fake_capacity) {
 			fg_info->cache.capacity = fg_info->fake_capacity;
 			if (!fg_info->charger_online && timer_counter == 2) {
 				fg_info->fake_capacity--;
 				timer_counter = 0;
-			}
-			else {
+			} else {
 				if (fg_info->charger_online)
 					timer_counter = 0;
 				else
-					timer_counter ++;
+					timer_counter++;
 			}
-		}
-		else {
+		} else {
 			timer_counter = 0;
 			fg_info->fake_capacity = fg_info->cache.capacity;
 		}
@@ -130,7 +127,7 @@ void bq27x00_update(struct Nanohub_FuelGauge_Info *fg_info)
 #else
 	pr_warn("nanohub: [FG] cache.capacity:%d, cache.temperature:%d, "
 			"cache.flags:%08x, charger_online:%d\n",
-            fg_info->cache.capacity, fg_info->cache.temperature,
+			fg_info->cache.capacity, fg_info->cache.temperature,
 			fg_info->cache.flags, fg_info->charger_online);
 #endif
 
@@ -155,7 +152,8 @@ static void fuelgauge_battery_poll(struct work_struct *work)
 	struct Nanohub_FuelGauge_Info *fg_info =
 		container_of(work, struct Nanohub_FuelGauge_Info, work.work);
 
-	pr_warn("nanohub: [FG] %s  fg_info->requested:%d \n", __func__, fg_info->requested);
+	pr_warn("nanohub: [FG] %s  fg_info->requested:%d\n",
+			__func__, fg_info->requested);
 
 	if (!fg_info->requested) {
 		pr_warn("nanohub: [FG] request data from sensorhub.\n");
@@ -441,7 +439,8 @@ static int bq27x00_battery_get_property(struct power_supply *psy,
 		container_of(psy, struct Nanohub_FuelGauge_Info, bat);
 
 	mutex_lock(&fg_info->lock);
-	if (time_is_before_jiffies(fg_info->last_update + (poll_interval / 2 ) * HZ)) {
+	if (time_is_before_jiffies(fg_info->last_update +
+			(poll_interval / 2) * HZ)) {
 		pr_warn("nanohub : [FG] %s fg_info->last_update:%lu\n",
 			__func__, fg_info->last_update);
 		cancel_delayed_work_sync(&fg_info->work);
@@ -520,7 +519,6 @@ static int bq27x00_battery_get_property(struct power_supply *psy,
 	return ret;
 }
 
-
 static void bq27x00_external_power_changed(struct power_supply *psy)
 {
 	struct Nanohub_FuelGauge_Info *fg_info =
@@ -577,8 +575,8 @@ int bq27x00_powersupply_init(struct device *dev,
 	int num = 0;
 	struct Nanohub_FuelGauge_Info *fg_info;
 	struct bq27x00_reg_cache default_cache_data = {
-		2, 1, 365, 3710, 8, 295, 263, 0, 0, 263,
-		291, 91, 29100, 91, 0, 1, 400, 26800};
+		2, 1, 8330, 365, 3710, 136, 380, 300, 402, 0,
+		263, 291, 292, 77, 29100, 75, 0, 1, 415, 26800};
 	struct power_supply *usb_psy;
 
 	usb_psy = power_supply_get_by_name("usb");
