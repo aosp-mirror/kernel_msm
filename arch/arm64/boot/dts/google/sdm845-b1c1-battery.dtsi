@@ -27,4 +27,5 @@
 	qcom,fg-empty-voltage = <3100>;
 	qcom,fg-jeita-hyst-temp = <2>;
 	qcom,fg-jeita-thresholds = <0 5 50 55>;
+	qcom,fg-force-load-profile;
 };
