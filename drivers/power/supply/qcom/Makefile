@@ -8,7 +8,9 @@ obj-$(CONFIG_QPNP_SMB2)		+= step-chg-jeita.o battery.o qpnp-smb2.o smb-lib.o pmi
 obj-$(CONFIG_SMB138X_CHARGER)	+= step-chg-jeita.o smb138x-charger.o smb-lib.o pmic-voter.o storm-watch.o battery.o
 obj-$(CONFIG_QPNP_QNOVO)	+= qpnp-qnovo.o battery.o
 obj-$(CONFIG_CHARGER_P9221)	+= p9221_charger.o
+obj-$(CONFIG_QPNP_TYPEC)	+= qpnp-typec.o
 
 # TODO: remove me b/62058353
 subdir-ccflags-y += \
 	-Wno-duplicate-decl-specifier \
+
