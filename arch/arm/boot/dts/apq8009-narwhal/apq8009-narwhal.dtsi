@@ -200,6 +200,10 @@
 	qcom,no-set-vbus-power;
 };
 
+&android_usb {
+	/delete-property/qcom,pm-qos-latency;
+};
+
 &i2c_2 {
 	status = "disabled";
 };
