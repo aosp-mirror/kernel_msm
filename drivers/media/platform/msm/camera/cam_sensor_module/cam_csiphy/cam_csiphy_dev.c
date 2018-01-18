@@ -236,7 +236,7 @@ static struct platform_driver csiphy_driver = {
 	},
 };
 
-static int32_t __init cam_csiphy_init_module(void)
+static int __init cam_csiphy_init_module(void)
 {
 	return platform_driver_register(&csiphy_driver);
 }
