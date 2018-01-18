@@ -4234,10 +4234,15 @@ static void smblib_handle_typec_removal(struct smb_charger *chg)
 			rc);
 
 	/* enable DRP */
-	rc = smblib_masked_write(chg, TYPE_C_INTRPT_ENB_SOFTWARE_CTRL_REG,
-				 TYPEC_POWER_ROLE_CMD_MASK, 0);
-	if (rc < 0)
-		smblib_err(chg, "Couldn't enable DRP rc=%d\n", rc);
+	if (chg->typec_pr_disabled)
+		smblib_err(chg, "Skip enable DRP due to typec_pr_disabled=true\n");
+	else {
+		rc = smblib_masked_write(chg,
+					 TYPE_C_INTRPT_ENB_SOFTWARE_CTRL_REG,
+					 TYPEC_POWER_ROLE_CMD_MASK, 0);
+		if (rc < 0)
+			smblib_err(chg, "Couldn't enable DRP rc=%d\n", rc);
+	}
 
 	/* HW controlled CC_OUT */
 	rc = smblib_masked_write(chg, TAPER_TIMER_SEL_CFG_REG,
