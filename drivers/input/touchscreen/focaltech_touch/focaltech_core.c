@@ -1147,6 +1147,7 @@ static int fts_ts_probe(struct i2c_client *client,
 		FTS_ERROR("Read chip id failed!");
 		goto free_gpio;
 	}
+	client->irq = gpio_to_irq(pdata->irq_gpio);
 
 	err = request_threaded_irq(client->irq, NULL, fts_ts_interrupt,
 							   pdata->irq_gpio_flags | IRQF_ONESHOT | IRQF_TRIGGER_FALLING,
@@ -1211,7 +1212,7 @@ static int fts_ts_probe(struct i2c_client *client,
 	data->early_suspend.resume = fts_ts_late_resume;
 	register_early_suspend(&data->early_suspend);
 #endif
-	enable_irq_wake(client->irq);
+	enable_irq(client->irq);
 
 	FTS_FUNC_EXIT();
 	return 0;
@@ -1326,12 +1327,12 @@ static int fts_ts_suspend(struct device *dev)
 		return -1;
 	}
 	fts_release_all_finger();
-	printk(KERN_DEBUG "[FTS] fts_ts_suspend data->is_ambient_mode = %d , data->suspended =%d \n",data->is_ambient_mode ,data->suspended);
+	printk(KERN_DEBUG "[FTS] fts_ts_suspend data->is_ambient_mode = %d,\
+		data->suspended =%d\n", data->is_ambient_mode, data->suspended);
 	if(data->is_ambient_mode == 1) {
 		fts_i2c_write_reg(fts_wq_data->client, FTS_REG_GESTURE_EN, 0x0);
-		retval = enable_irq_wake(fts_wq_data->client->irq);
-		if (retval)
-			FTS_ERROR("%s: set_irq_wake failed", __func__);
+		if (device_may_wakeup(&fts_wq_data->client->dev))
+			enable_irq_wake(fts_wq_data->client->irq);
 		data->suspended = true;
 		return 0;
 	}
@@ -1341,16 +1342,12 @@ static int fts_ts_suspend(struct device *dev)
 #endif
 
 #if FTS_GESTURE_EN
-	retval = fts_gesture_suspend(data->client);
-	if (retval == 0) {
-		/* Enter into gesture mode(suspend) */
-		retval = enable_irq_wake(fts_wq_data->client->irq);
-		if (retval)
-			FTS_ERROR("%s: set_irq_wake failed", __func__);
-		data->suspended = true;
-		FTS_FUNC_EXIT();
-		return 0;
-	}
+	fts_gesture_suspend(data->client);
+	if (device_may_wakeup(&fts_wq_data->client->dev))
+		enable_irq_wake(fts_wq_data->client->irq);
+	data->suspended = true;
+	FTS_FUNC_EXIT();
+	return 0;
 #endif
 
 #if FTS_PSENSOR_EN
@@ -1385,7 +1382,6 @@ static int fts_ts_suspend(struct device *dev)
 static int fts_ts_resume(struct device *dev)
 {
 	struct fts_ts_data *data = dev_get_drvdata(dev);
-	int err;
 
 	FTS_FUNC_ENTER();
 
@@ -1395,18 +1391,6 @@ static int fts_ts_resume(struct device *dev)
 		return -1;
 	}
 	fts_release_all_finger();
-	printk(KERN_DEBUG "[FTS] fts_ts_resume data->is_ambient_mode = %d , data->suspended =%d \n",data->is_ambient_mode ,data->suspended);
-
-	if(data->is_ambient_mode == 1 && data->suspended) {
-		fts_i2c_write_reg(fts_wq_data->client, FTS_REG_GESTURE_EN, 0x0);
-		err = disable_irq_wake(data->client->irq);
-		if (err)
-			FTS_ERROR("%s: disable_irq_wake failed", __func__);
-
-		data->suspended = false;
-		data->is_ambient_mode = 0;
-		return 0;
-	}
 
 #if (!FTS_CHIP_IDC)
 	fts_reset_proc(200);
@@ -1418,15 +1402,26 @@ static int fts_ts_resume(struct device *dev)
 	fts_esdcheck_resume();
 #endif
 
-#if FTS_GESTURE_EN
-	if (fts_gesture_resume(data->client) == 0) {
-		err = disable_irq_wake(data->client->irq);
-		if (err)
-			FTS_ERROR("%s: disable_irq_wake failed", __func__);
+	printk(KERN_DEBUG "[FTS] fts_ts_resume data->is_ambient_mode = %d,\
+		data->suspended =%d\n", data->is_ambient_mode, data->suspended);
+
+	if (data->is_ambient_mode == 1 && data->suspended) {
+		fts_i2c_write_reg(fts_wq_data->client, FTS_REG_GESTURE_EN, 0x0);
+		if (device_may_wakeup(&fts_wq_data->client->dev))
+			disable_irq_wake(fts_wq_data->client->irq);
 		data->suspended = false;
-		FTS_FUNC_EXIT();
+		data->is_ambient_mode = 0;
 		return 0;
 	}
+
+#if FTS_GESTURE_EN
+	fts_gesture_resume(data->client);
+	fts_i2c_write_reg(fts_wq_data->client, FTS_REG_GESTURE_EN, 0x0);
+	if (device_may_wakeup(&fts_wq_data->client->dev))
+		disable_irq_wake(fts_wq_data->client->irq);
+	data->suspended = false;
+	FTS_FUNC_EXIT();
+	return 0;
 #endif
 
 #if FTS_PSENSOR_EN
