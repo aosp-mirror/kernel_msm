@@ -38,6 +38,25 @@
 #include "compat_msm_ion.h"
 #include <soc/qcom/secure_buffer.h>
 
+#ifdef CONFIG_CFI_CLANG
+static inline void __cfi_dma_flush_area(const void *p, size_t s)
+{
+	__dma_flush_area(p, s);
+}
+static inline void __cfi_dma_inv_area(const void *p, size_t s)
+{
+	__dma_inv_area(p, s);
+}
+static inline void __cfi_dma_clean_area(const void *p, size_t s)
+{
+	__dma_clean_area(p, s);
+}
+
+#define __dma_flush_area __cfi_dma_flush_area
+#define __dma_inv_area __cfi_dma_inv_area
+#define __dma_clean_area __cfi_dma_clean_area
+#endif
+
 #define ION_COMPAT_STR	"qcom,msm-ion"
 
 static struct ion_device *idev;
