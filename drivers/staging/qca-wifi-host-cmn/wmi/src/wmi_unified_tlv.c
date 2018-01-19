@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -4014,6 +4014,95 @@ send_sar_limits:
 
 end:
 	return qdf_status;
+}
+
+static QDF_STATUS get_sar_limit_cmd_tlv(wmi_unified_t wmi_handle)
+{
+	wmi_sar_get_limits_cmd_fixed_param *cmd;
+	wmi_buf_t wmi_buf;
+	uint32_t len;
+	QDF_STATUS status;
+
+	WMI_LOGD(FL("Enter"));
+
+	len = sizeof(*cmd);
+	wmi_buf = wmi_buf_alloc(wmi_handle, len);
+	if (!wmi_buf) {
+		WMI_LOGP(FL("failed to allocate memory for msg"));
+		return QDF_STATUS_E_NOMEM;
+	}
+
+	cmd = (wmi_sar_get_limits_cmd_fixed_param *)wmi_buf_data(wmi_buf);
+
+	WMITLV_SET_HDR(&cmd->tlv_header,
+		       WMITLV_TAG_STRUC_wmi_sar_get_limits_cmd_fixed_param,
+		       WMITLV_GET_STRUCT_TLVLEN
+				(wmi_sar_get_limits_cmd_fixed_param));
+
+	cmd->reserved = 0;
+
+	status = wmi_unified_cmd_send(wmi_handle, wmi_buf, len,
+				      WMI_SAR_GET_LIMITS_CMDID);
+	if (QDF_IS_STATUS_ERROR(status)) {
+		WMI_LOGE(FL("Failed to send get SAR limit cmd: %d"), status);
+		wmi_buf_free(wmi_buf);
+	}
+
+	WMI_LOGD(FL("Exit"));
+
+	return status;
+}
+
+static QDF_STATUS extract_sar_limit_event_tlv(wmi_unified_t wmi_handle,
+					      uint8_t *evt_buf,
+					      struct sar_limit_event *event)
+{
+	wmi_sar_get_limits_event_fixed_param *fixed_param;
+	WMI_SAR_GET_LIMITS_EVENTID_param_tlvs *param_buf;
+	wmi_sar_get_limit_event_row *row_in;
+	struct sar_limit_event_row *row_out;
+	uint32_t row;
+
+	if (!evt_buf) {
+		WMI_LOGE(FL("input event is NULL"));
+		return QDF_STATUS_E_INVAL;
+	}
+	if (!event) {
+		WMI_LOGE(FL("output event is NULL"));
+		return QDF_STATUS_E_INVAL;
+	}
+
+	param_buf = (WMI_SAR_GET_LIMITS_EVENTID_param_tlvs *)evt_buf;
+
+	fixed_param = param_buf->fixed_param;
+	if (!fixed_param) {
+		WMI_LOGE(FL("Invalid fixed param"));
+		return QDF_STATUS_E_INVAL;
+	}
+
+	event->sar_enable = fixed_param->sar_enable;
+	event->num_limit_rows = fixed_param->num_limit_rows;
+
+	if (event->num_limit_rows > MAX_SAR_LIMIT_ROWS_SUPPORTED) {
+		QDF_ASSERT(0);
+		WMI_LOGE(FL("Num rows %d exceeds max of %d"),
+			 event->num_limit_rows,
+			 MAX_SAR_LIMIT_ROWS_SUPPORTED);
+		event->num_limit_rows = MAX_SAR_LIMIT_ROWS_SUPPORTED;
+	}
+
+	row_in = param_buf->sar_get_limits;
+	row_out = &event->sar_limit_row[0];
+	for (row = 0; row < event->num_limit_rows; row++) {
+		row_out->band_id = row_in->band_id;
+		row_out->chain_id = row_in->chain_id;
+		row_out->mod_id = row_in->mod_id;
+		row_out->limit_value = row_in->limit_value;
+		row_out++;
+		row_in++;
+	}
+
+	return QDF_STATUS_SUCCESS;
 }
 
 /**
@@ -12029,6 +12118,16 @@ error:
 
 	return status;
 }
+
+/**
+ * send_set_arp_stats_req_cmd_tlv() - set connectivity stats command
+ * @wmi_handle: wmi handle
+ * @req_buf: connecitivity stats
+ *
+ * Set connectivity stats.
+ *
+ * Return: QDF status
+ */
 QDF_STATUS send_set_arp_stats_req_cmd_tlv(wmi_unified_t wmi_handle,
 					  struct set_arp_stats *req_buf)
 {
@@ -12039,6 +12138,10 @@ QDF_STATUS send_set_arp_stats_req_cmd_tlv(wmi_unified_t wmi_handle,
 	wmi_vdev_set_arp_stats_cmd_fixed_param *wmi_set_arp;
 
 	len = sizeof(wmi_vdev_set_arp_stats_cmd_fixed_param);
+	if (req_buf->pkt_type_bitmap) {
+		len += WMI_TLV_HDR_SIZE;
+		len += sizeof(wmi_vdev_set_connectivity_check_stats);
+	}
 	buf = wmi_buf_alloc(wmi_handle, len);
 	if (!buf) {
 		WMI_LOGE("%s : wmi_buf_alloc failed", __func__);
@@ -12053,14 +12156,47 @@ QDF_STATUS send_set_arp_stats_req_cmd_tlv(wmi_unified_t wmi_handle,
 		       WMITLV_GET_STRUCT_TLVLEN
 		       (wmi_vdev_set_arp_stats_cmd_fixed_param));
 
-	/* fill in per roam config values */
 	wmi_set_arp->vdev_id = req_buf->vdev_id;
 
 	wmi_set_arp->set_clr = req_buf->flag;
 	wmi_set_arp->pkt_type = req_buf->pkt_type;
 	wmi_set_arp->ipv4 = req_buf->ip_addr;
 
-	/* Send per roam config parameters */
+	WMI_LOGD("NUD Stats: vdev_id %u set_clr %u pkt_type:%u ipv4 %u",
+		 wmi_set_arp->vdev_id, wmi_set_arp->set_clr,
+		 wmi_set_arp->pkt_type, wmi_set_arp->ipv4);
+
+	/*
+	 * pkt_type_bitmap should be non-zero to ensure
+	 * presence of additional stats.
+	 */
+	if (req_buf->pkt_type_bitmap) {
+		wmi_vdev_set_connectivity_check_stats *wmi_set_connect_stats;
+
+		buf_ptr += sizeof(wmi_vdev_set_arp_stats_cmd_fixed_param);
+		WMITLV_SET_HDR(buf_ptr,
+		       WMITLV_TAG_ARRAY_STRUC,
+		       sizeof(wmi_vdev_set_connectivity_check_stats));
+		buf_ptr += WMI_TLV_HDR_SIZE;
+		wmi_set_connect_stats =
+			(wmi_vdev_set_connectivity_check_stats *)buf_ptr;
+		WMITLV_SET_HDR(&wmi_set_connect_stats->tlv_header,
+		    WMITLV_TAG_STRUC_wmi_vdev_set_connectivity_check_stats,
+		    WMITLV_GET_STRUCT_TLVLEN(
+					wmi_vdev_set_connectivity_check_stats));
+		wmi_set_connect_stats->pkt_type_bitmap =
+						req_buf->pkt_type_bitmap;
+		wmi_set_connect_stats->tcp_src_port = req_buf->tcp_src_port;
+		wmi_set_connect_stats->tcp_dst_port = req_buf->tcp_dst_port;
+		wmi_set_connect_stats->icmp_ipv4 = req_buf->icmp_ipv4;
+
+		WMI_LOGD("Connectivity Stats: pkt_type_bitmap %u tcp_src_port:%u tcp_dst_port %u icmp_ipv4 %u",
+			 wmi_set_connect_stats->pkt_type_bitmap,
+			 wmi_set_connect_stats->tcp_src_port,
+			 wmi_set_connect_stats->tcp_dst_port,
+			 wmi_set_connect_stats->icmp_ipv4);
+	}
+
 	status = wmi_unified_cmd_send(wmi_handle, buf,
 				      len, WMI_VDEV_SET_ARP_STAT_CMDID);
 	if (QDF_IS_STATUS_ERROR(status)) {
@@ -14596,6 +14732,8 @@ struct wmi_ops tlv_ops =  {
 	.send_encrypt_decrypt_send_cmd =
 				send_encrypt_decrypt_send_cmd_tlv,
 	.send_sar_limit_cmd = send_sar_limit_cmd_tlv,
+	.get_sar_limit_cmd = get_sar_limit_cmd_tlv,
+	.extract_sar_limit_event = extract_sar_limit_event_tlv,
 	.send_per_roam_config_cmd = send_per_roam_config_cmd_tlv,
 	.send_action_oui_cmd = send_action_oui_cmd_tlv,
 	.wmi_set_htc_tx_tag = wmi_set_htc_tx_tag_tlv,
@@ -14962,6 +15100,8 @@ static void populate_tlv_events_id(uint32_t *event_ids)
 				WMI_SOC_SET_DUAL_MAC_CONFIG_RESP_EVENTID;
 	event_ids[wmi_update_rcpi_event_id] = WMI_UPDATE_RCPI_EVENTID;
 	event_ids[wmi_get_arp_stats_req_id] = WMI_VDEV_GET_ARP_STATS_EVENTID;
+	event_ids[wmi_sar_get_limits_event_id] = WMI_SAR_GET_LIMITS_EVENTID;
+}
 }
 
 /**

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -691,8 +691,10 @@ tListElem *csr_get_cmd_to_process(tpAniSirGlobal pMac, tDblLinkList *pList,
 	while (pCurEntry) {
 		pCommand = GET_BASE_ADDR(pCurEntry, tSmeCmd, Link);
 		if (pCommand->sessionId != sessionId ||
-		    pCommand->command ==  eSmeCommandSetKey) {
-			sme_debug("selected the command with different sessionId or setkey");
+		    pCommand->command ==  eSmeCommandSetKey ||
+		    pCommand->command ==  eSmeCommandWmStatusChange) {
+			sme_debug("selected the command with different sessionId or cmd %d",
+				  pCommand->command);
 			return pCurEntry;
 		}
 
@@ -2474,7 +2476,7 @@ QDF_STATUS sme_process_msg(tHalHandle hHal, cds_msg_t *pMsg)
 		return status;
 	}
 	if (!SME_IS_START(pMac)) {
-		sme_warn("message type %d in stop state ignored", pMsg->type);
+		sme_debug("message type %d in stop state ignored", pMsg->type);
 		if (pMsg->bodyptr)
 			qdf_mem_free(pMsg->bodyptr);
 		goto release_lock;
@@ -2999,7 +3001,6 @@ QDF_STATUS sme_process_msg(tHalHandle hHal, cds_msg_t *pMsg)
 	case eWNI_SME_NDP_END_RSP:
 	case eWNI_SME_NDP_END_IND:
 	case eWNI_SME_NDP_PEER_DEPARTED_IND:
-	case eWNI_SME_NDP_SCH_UPDATE_IND:
 		sme_ndp_msg_processor(pMac, pMsg);
 		break;
 	case eWNI_SME_LOST_LINK_INFO_IND:
@@ -4062,7 +4063,7 @@ QDF_STATUS sme_roam_stop_bss(tHalHandle hHal, uint8_t sessionId)
 	if (QDF_IS_STATUS_SUCCESS(status)) {
 		if (CSR_IS_SESSION_VALID(pMac, sessionId))
 			status = csr_roam_issue_stop_bss_cmd(pMac, sessionId,
-							true);
+							false);
 		else
 			status = QDF_STATUS_E_INVAL;
 		sme_release_global_lock(&pMac->sme);
@@ -9202,13 +9203,12 @@ QDF_STATUS sme_stop_roaming(tHalHandle hal, uint8_t session_id, uint8_t reason)
 	}
 
 	session = CSR_GET_SESSION(mac_ctx, session_id);
-	if (session->pCurRoamProfile &&
-		!session->pCurRoamProfile->roaming_allowed_on_iface) {
-		sme_debug("Roaming was never started on session %d",
-				session_id);
+
+	roam_info = &mac_ctx->roam.neighborRoamInfo[session_id];
+	if (!roam_info->b_roam_scan_offload_started) {
+		sme_debug("Roaming already disabled for session %d", session_id);
 		return QDF_STATUS_SUCCESS;
 	}
-	roam_info = &mac_ctx->roam.neighborRoamInfo[session_id];
 	req = qdf_mem_malloc(sizeof(*req));
 	if (!req) {
 		sme_err("failed to allocated memory");
@@ -12342,8 +12342,7 @@ void active_list_cmd_timeout_handle(void *userData)
 		sme_save_active_cmd_stats(hal);
 		cds_trigger_recovery(CDS_ACTIVE_LIST_TIMEOUT);
 	} else {
-		if (!mac_ctx->roam.configParam.enable_fatal_event &&
-		   !(cds_is_load_or_unload_in_progress() ||
+		if (!(cds_is_load_or_unload_in_progress() ||
 		    cds_is_driver_recovering() || cds_is_driver_in_bad_state()))
 			QDF_BUG(0);
 		else
@@ -17308,6 +17307,9 @@ QDF_STATUS sme_set_default_scan_ie(tHalHandle hal, uint16_t session_id,
 	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal);
 	struct hdd_default_scan_ie *set_ie_params;
 
+	if (!ie_data)
+		return QDF_STATUS_E_INVAL;
+
 	status = sme_acquire_global_lock(&mac_ctx->sme);
 	if (QDF_IS_STATUS_SUCCESS(status)) {
 		set_ie_params = qdf_mem_malloc(sizeof(*set_ie_params));
@@ -17325,6 +17327,21 @@ QDF_STATUS sme_set_default_scan_ie(tHalHandle hal, uint16_t session_id,
 	}
 
 	return status;
+}
+
+QDF_STATUS sme_get_sar_power_limits(tHalHandle hal,
+				    wma_sar_cb callback, void *context)
+{
+	void *wma_handle;
+
+	wma_handle = cds_get_context(QDF_MODULE_ID_WMA);
+	if (!wma_handle) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+				"wma handle is NULL");
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	return wma_get_sar_limit(wma_handle, callback, context);
 }
 
 QDF_STATUS sme_set_sar_power_limits(tHalHandle hal,
@@ -18988,5 +19005,33 @@ QDF_STATUS sme_fast_reassoc(tHalHandle hal, tCsrRoamProfile *profile,
 	}
 
 	return status;
+}
+
+void sme_enable_roaming_on_connected_sta(tHalHandle hal)
+{
+	uint8_t session_id;
+	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal);
+	QDF_STATUS status;
+
+	session_id = csr_get_roam_enabled_sta_sessionid(mac_ctx);
+	if (session_id != CSR_SESSION_ID_INVALID)
+		return;
+
+	session_id = csr_get_connected_infra(mac_ctx);
+	if (session_id == CSR_SESSION_ID_INVALID) {
+		sme_debug("No STA in connected state");
+		return;
+	}
+
+	sme_debug("Roaming not enabled on any STA, enable roaming on session %d",
+		  session_id);
+	status = sme_acquire_global_lock(&mac_ctx->sme);
+	if (QDF_IS_STATUS_SUCCESS(status)) {
+		csr_roam_offload_scan(mac_ctx, session_id,
+				      ROAM_SCAN_OFFLOAD_START,
+				      REASON_CTX_INIT);
+		sme_release_global_lock(&mac_ctx->sme);
+	}
+
 }
 

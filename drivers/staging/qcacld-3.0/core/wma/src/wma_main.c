@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -777,9 +777,6 @@ static int32_t wma_set_priv_cfg(tp_wma_handle wma_handle,
 		ol_txrx_pdev_handle pdev;
 		uint8_t reset_stats = privcmd->param_value;
 
-		WMA_LOGE("%s: reset_stats=%d",
-			 "WMA_VDEV_TXRX_GET_IPA_UC_SHARING_STATS_CMDID",
-			 reset_stats);
 		pdev = cds_get_context(QDF_MODULE_ID_TXRX);
 		if (!pdev) {
 			WMA_LOGE("pdev NULL for uc stat");
@@ -826,20 +823,12 @@ static int32_t wma_set_priv_cfg(tp_wma_handle wma_handle,
 static void wma_set_dtim_period(tp_wma_handle wma,
 				struct set_dtim_params *dtim_params)
 {
-	QDF_STATUS ret;
-	uint8_t vdev_id = dtim_params->session_id;
 	struct wma_txrx_node *iface =
-		&wma->interfaces[vdev_id];
+		&wma->interfaces[dtim_params->session_id];
 
 	WMA_LOGD("%s: set dtim_period %d", __func__,
 			dtim_params->dtim_period);
 	iface->dtimPeriod = dtim_params->dtim_period;
-	ret = wma_vdev_set_param(wma->wmi_handle,
-			vdev_id,
-			WMI_VDEV_PARAM_LISTEN_INTERVAL,
-			dtim_params->dtim_period);
-	if (QDF_IS_STATUS_ERROR(ret))
-		WMA_LOGW("Failed to set listen interval");
 
 }
 /**
@@ -2279,7 +2268,7 @@ static int wma_rx_service_available_event(void *handle, uint8_t *cmd_param_info,
 	wma_handle->wmi_service_ext_offset = ev->wmi_service_segment_offset;
 	qdf_mem_copy(wma_handle->wmi_service_ext_bitmap,
 				&ev->wmi_service_segment_bitmap[0],
-				WMI_SERVICE_EXT_BM_SIZE32);
+				WMI_SERVICE_EXT_BM_SIZE32 * sizeof(A_UINT32));
 
 	return 0;
 }
@@ -3119,6 +3108,12 @@ static int wma_pdev_set_hw_mode_resp_evt_handler(void *handle,
 	}
 
 	wmi_event = param_buf->fixed_param;
+	if (wmi_event->num_vdev_mac_entries >
+	    param_buf->num_wmi_pdev_set_hw_mode_response_vdev_mac_mapping) {
+		WMA_LOGE("Invalid num_vdev_mac_entries: %d",
+				wmi_event->num_vdev_mac_entries);
+		goto fail;
+	}
 	hw_mode_resp->status = wmi_event->status;
 	hw_mode_resp->cfgd_hw_mode_index = wmi_event->cfgd_hw_mode_index;
 	hw_mode_resp->num_vdev_mac_entries = wmi_event->num_vdev_mac_entries;
@@ -3294,6 +3289,13 @@ static int wma_pdev_hw_mode_transition_evt_handler(void *handle,
 	wmi_event = param_buf->fixed_param;
 	vdev_mac_entry =
 		param_buf->wmi_pdev_set_hw_mode_response_vdev_mac_mapping;
+	if (wmi_event->num_vdev_mac_entries >
+	    param_buf->num_wmi_pdev_set_hw_mode_response_vdev_mac_mapping) {
+		WMA_LOGE("Invalid num_vdev_mac_entries: %d",
+			 wmi_event->num_vdev_mac_entries);
+		qdf_mem_free(hw_mode_trans_ind);
+		return -EINVAL;
+	}
 	wma_process_pdev_hw_mode_trans_ind(wma, wmi_event, vdev_mac_entry,
 		hw_mode_trans_ind);
 	/* Pass the message to PE */
@@ -3594,6 +3596,13 @@ QDF_STATUS wma_start(void *cds_ctx)
 			wma_handle);
 	if (qdf_status != QDF_STATUS_SUCCESS) {
 		WMA_LOGE("Failed to initialize log completion timeout");
+		goto end;
+	}
+
+	status = wma_sar_register_event_handlers(wma_handle);
+	if (!QDF_IS_STATUS_SUCCESS(status)) {
+		WMA_LOGE("Failed to register SAR event handlers");
+		qdf_status = QDF_STATUS_E_FAILURE;
 		goto end;
 	}
 
@@ -6875,6 +6884,10 @@ static void wma_get_arp_req_stats(WMA_HANDLE handle,
 			 __func__);
 		return;
 	}
+	if (!wma_is_vdev_valid(req_buf->vdev_id)) {
+		WMA_LOGE("vdev not active or not valid");
+		return;
+	}
 
 	arp_stats = (struct get_arp_stats *)req_buf;
 	status = wmi_unified_get_arp_stats_req(wma_handle->wmi_handle,
@@ -7896,6 +7909,8 @@ QDF_STATUS wma_mc_process_msg(void *cds_context, cds_msg_t *msg)
 		wma_config_guard_time(wma_handle,
 				      (struct sir_guard_time_request *)
 				      msg->bodyptr);
+		qdf_mem_free(msg->bodyptr);
+		break;
 	case WMA_IPA_OFFLOAD_ENABLE_DISABLE:
 		wma_ipa_offload_enable_disable(wma_handle,
 			(struct sir_ipa_offload_enable_disable *)msg->bodyptr);

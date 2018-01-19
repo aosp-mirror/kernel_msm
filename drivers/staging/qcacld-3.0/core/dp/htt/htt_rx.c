@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -419,7 +419,7 @@ htt_rx_paddr_mark_high_bits(qdf_dma_addr_t paddr)
 	return paddr;
 }
 
-#ifdef HTT_PADDR64
+#if HTT_PADDR64
 static inline qdf_dma_addr_t htt_paddr_trim_to_37(qdf_dma_addr_t paddr)
 {
 	qdf_dma_addr_t ret = paddr;
@@ -481,11 +481,30 @@ htt_rx_in_ord_paddr_get(uint32_t *u32p)
 	return paddr;
 }
 #else
+#if HTT_PADDR64
+static qdf_dma_addr_t
+htt_rx_in_ord_paddr_get(uint32_t *u32p)
+{
+	qdf_dma_addr_t paddr = 0;
+
+	paddr = (qdf_dma_addr_t)HTT_RX_IN_ORD_PADDR_IND_PADDR_GET(*u32p);
+	if (sizeof(qdf_dma_addr_t) > 4) {
+		u32p++;
+		/* 32 bit architectures dont like <<32 */
+		paddr |= (((qdf_dma_addr_t)
+			  HTT_RX_IN_ORD_PADDR_IND_PADDR_GET(*u32p))
+			  << 16 << 16);
+	}
+	return paddr;
+}
+#else
 static inline qdf_dma_addr_t
 htt_rx_in_ord_paddr_get(uint32_t *u32p)
 {
 	return HTT_RX_IN_ORD_PADDR_IND_PADDR_GET(*u32p);
 }
+
+#endif
 #endif /* ENABLE_DEBUG_ADDRESS_MARKING */
 
 /* full_reorder_offload case: this function is called with lock held */
@@ -1851,7 +1870,7 @@ static unsigned char htt_rx_get_rate(uint32_t l_sig_rate_select,
 					uint32_t l_sig_rate, uint8_t *preamble)
 {
 	char ret = 0x0;
-	*preamble = LONG_PREAMBLE;
+	*preamble = SHORT_PREAMBLE;
 	if (l_sig_rate_select == 0) {
 		switch (l_sig_rate) {
 		case 0x8:
@@ -1901,14 +1920,12 @@ static unsigned char htt_rx_get_rate(uint32_t l_sig_rate_select,
 			break;
 		case 0x5:
 			ret = 0x4;
-			*preamble = SHORT_PREAMBLE;
 			break;
 		case 0x6:
 			ret = 0xB;
 			break;
 		case 0x7:
 			ret = 0x16;
-			*preamble = SHORT_PREAMBLE;
 			break;
 		default:
 			break;

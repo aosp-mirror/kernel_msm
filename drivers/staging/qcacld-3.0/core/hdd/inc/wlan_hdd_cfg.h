@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -1344,13 +1344,14 @@ enum hdd_dot11_mode {
 /*
  * <ini>
  * hostscan_adaptive_dwell_mode - Enable adaptive dwell mode
- * during host scan
+ * during host scan with conneciton
  * @Min: 0
  * @Max: 4
- * @Default: 1
+ * @Default: 2
  *
  * This ini will set the algo used in dwell time optimization
- * during host scan. see enum wmi_dwelltime_adaptive_mode.
+ * during host scan with connection.
+ * See enum wmi_dwelltime_adaptive_mode.
  * Acceptable values for this:
  * 0: Default (Use firmware default mode)
  * 1: Conservative optimization
@@ -1369,7 +1370,38 @@ enum hdd_dot11_mode {
 #define CFG_ADAPTIVE_SCAN_DWELL_MODE_NAME        "hostscan_adaptive_dwell_mode"
 #define CFG_ADAPTIVE_SCAN_DWELL_MODE_MIN         (0)
 #define CFG_ADAPTIVE_SCAN_DWELL_MODE_MAX         (4)
-#define CFG_ADAPTIVE_SCAN_DWELL_MODE_DEFAULT     (1)
+#define CFG_ADAPTIVE_SCAN_DWELL_MODE_DEFAULT     (2)
+
+/*
+ * <ini>
+ * hostscan_adaptive_dwell_mode_no_conn - Enable adaptive dwell mode
+ * during host scan without connection
+ * @Min: 0
+ * @Max: 4
+ * @Default: 1
+ *
+ * This ini will set the algo used in dwell time optimization
+ * during host scan without connection.
+ * See enum wmi_dwelltime_adaptive_mode.
+ * Acceptable values for this:
+ * 0: Default (Use firmware default mode)
+ * 1: Conservative optimization
+ * 2: Moderate optimization
+ * 3: Aggressive optimization
+ * 4: Static
+ *
+ * Related: None
+ *
+ * Supported Feature: Scan
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ADAPTIVE_SCAN_DWELL_MODE_NC_NAME    "hostscan_adaptive_dwell_mode_no_conn"
+#define CFG_ADAPTIVE_SCAN_DWELL_MODE_NC_MIN     (0)
+#define CFG_ADAPTIVE_SCAN_DWELL_MODE_NC_MAX     (4)
+#define CFG_ADAPTIVE_SCAN_DWELL_MODE_NC_DEFAULT (1)
 
 /*
  * <ini>
@@ -9080,7 +9112,7 @@ enum hdd_link_speed_rpt_type {
  *
  * <----- fine_time_meas_cap (in bits) ----->
  *+----------+-----+-----+------+------+-------+-------+-----+-----+
- *|   9-31   |  8  |  7  |   5  |   4  |   3   |   2   |  1  |  0  |
+ *|   8-31   |  7  |  6  |   5  |   4  |   3   |   2   |  1  |  0  |
  *+----------+-----+-----+------+------+-------+-------+-----+-----+
  *| reserved | SAP | SAP |P2P-GO|P2P-GO|P2P-CLI|P2P-CLI| STA | STA |
  *|          |resp |init |resp  |init  |resp   |init   |resp |init |
@@ -11947,6 +11979,8 @@ enum hw_filter_mode {
  * <ini>
  * gActionOUIConnect1x1 - Used to specify action OUIs for 1x1 connection
  * @Default: 000C43 00 25 42 001018 06 02FFF02C0000 BC 25 42 001018 06 02FF040C0000 BC 25 42 00037F 00 35 6C
+ * Note: User should strictly add new action OUIs at the end of this
+ * default value.
  *
  * Default OUIs: (All values in Hex)
  * OUI 1 : 000C43
@@ -11987,7 +12021,28 @@ enum hw_filter_mode {
 /*
  * <ini>
  * gActionOUIITOExtension - Used to extend in-activity time for specified APs
- * @Default: Empty string
+ * @Default: 00037F 06 01010000FF7F FC 01 000AEB 02 0100 C0 01 000B86 03 010408 E0 01
+ * Note: User should strictly add new action OUIs at the end of this
+ * default value.
+ *
+ * Default OUIs: (All values in Hex)
+ * OUI 1: 00037F
+ *   OUI data Len: 06
+ *   OUI Data: 01010000FF7F
+ *   OUI data Mask: FC - 11111100
+ *   Info Mask : 01 - only OUI present in Info mask
+ *
+ * OUI 2: 000AEB
+ *   OUI data Len: 02
+ *   OUI Data: 0100
+ *   OUI data Mask: C0 - 11000000
+ *   Info Mask : 01 - only OUI present in Info mask
+ *
+ * OUI 3: 000B86
+ *   OUI data Len: 03
+ *   OUI Data: 010408
+ *   OUI data Mask: E0 - 11100000
+ *   Info Mask : 01 - only OUI present in Info mask
  *
  * This ini is used to specify AP OUIs using which station's in-activity time
  * can be extended with the respective APs
@@ -12001,7 +12056,7 @@ enum hw_filter_mode {
  * </ini>
  */
 #define CFG_ACTION_OUI_ITO_EXTENSION_NAME    "gActionOUIITOExtension"
-#define CFG_ACTION_OUI_ITO_EXTENSION_DEFAULT ""
+#define CFG_ACTION_OUI_ITO_EXTENSION_DEFAULT "00037F 06 01010000FF7F FC 01 000AEB 02 0100 C0 01 000B86 03 010408 E0 01"
 
 /*
  * <ini>
@@ -12040,7 +12095,7 @@ enum hw_filter_mode {
  */
 #define CFG_SAP_CH_SWITCH_BEACON_CNT         "g_sap_chanswitch_beacon_cnt"
 #define CFG_SAP_CH_SWITCH_BEACON_CNT_MIN     (1)
-#define CFG_SAP_CH_SWITCH_BEACON_CNT_MAX     (5)
+#define CFG_SAP_CH_SWITCH_BEACON_CNT_MAX     (10)
 #define CFG_SAP_CH_SWITCH_BEACON_CNT_DEFAULT (5)
 
 /*
@@ -12203,7 +12258,7 @@ enum hw_filter_mode {
  * </ini>
  */
 #define CFG_IS_BSSID_HINT_PRIORITY_NAME    "g_is_bssid_hint_priority"
-#define CFG_IS_BSSID_HINT_PRIORITY_DEFAULT (1)
+#define CFG_IS_BSSID_HINT_PRIORITY_DEFAULT (0)
 #define CFG_IS_BSSID_HINT_PRIORITY_MIN     (0)
 #define CFG_IS_BSSID_HINT_PRIORITY_MAX     (1)
 
@@ -12849,7 +12904,7 @@ enum hw_filter_mode {
  * </ini>
  */
 #define CFG_PCL_WEIGHT_WEIGHTAGE_NAME "pcl_weightage"
-#define CFG_PCL_WEIGHT_DEFAULT        (10)
+#define CFG_PCL_WEIGHT_DEFAULT        (0)
 #define CFG_PCL_WEIGHT_MIN            (0)
 #define CFG_PCL_WEIGHT_MAX            (100)
 
@@ -13241,7 +13296,7 @@ enum hw_filter_mode {
  * esp_qbss_score_idx7_to_4 - percentage for  esp/qbss load for slots 4-7
  * @Min: 0x00000000
  * @Max: 0x64646464
- * @Default: 0x00000019
+ * @Default: 0x0000000A
  *
  * This INI give percentage value of channel_congestion_weightage to be used as
  * index in which the load value falls. Used only if num_esp_qbss_slots is
@@ -13263,7 +13318,7 @@ enum hw_filter_mode {
  * </ini>
  */
 #define CFG_ESP_QBSS_SCORE_IDX7_TO_4_NAME      "esp_qbss_score_idx7_to_4"
-#define CFG_ESP_QBSS_SCORE_IDX7_TO_4_DEFAULT   (0x00000019)
+#define CFG_ESP_QBSS_SCORE_IDX7_TO_4_DEFAULT   (0x0000000A)
 #define CFG_ESP_QBSS_SCORE_IDX7_TO_4_MIN       (0x00000000)
 #define CFG_ESP_QBSS_SCORE_IDX7_TO_4_MAX       (0x64646464)
 
@@ -14607,6 +14662,7 @@ struct hdd_config {
 	uint8_t dp_trace_config[DP_TRACE_CONFIG_STRING_LENGTH];
 	bool adaptive_dwell_mode_enabled;
 	enum wmi_dwelltime_adaptive_mode scan_adaptive_dwell_mode;
+	enum wmi_dwelltime_adaptive_mode scan_adaptive_dwell_mode_nc;
 	enum wmi_dwelltime_adaptive_mode roamscan_adaptive_dwell_mode;
 	enum wmi_dwelltime_adaptive_mode extscan_adaptive_dwell_mode;
 	enum wmi_dwelltime_adaptive_mode pnoscan_adaptive_dwell_mode;

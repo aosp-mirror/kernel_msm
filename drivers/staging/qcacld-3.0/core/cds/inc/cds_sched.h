@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -340,6 +340,7 @@ typedef struct _cds_context_type {
 	qdf_work_t cds_recovery_work;
 	qdf_workqueue_t *cds_recovery_wq;
 	enum cds_hang_reason recovery_reason;
+	qdf_event_t channel_switch_complete;
 } cds_context_type, *p_cds_contextType;
 
 extern struct _cds_sched_context *gp_cds_sched_context;
@@ -375,6 +376,16 @@ void cds_drop_rxpkt_by_staid(p_cds_sched_context pSchedContext, uint16_t staId);
    -------------------------------------------------------------------------*/
 void cds_indicate_rxpkt(p_cds_sched_context pSchedContext,
 			struct cds_ol_rx_pkt *pkt);
+
+/**
+ * cds_wakeup_rx_thread() - wakeup rx thread
+ * @Arg: Pointer to the global CDS Sched Context
+ *
+ * This api wake up cds_ol_rx_thread() to process pkt
+ *
+ * Return: none
+ */
+void cds_wakeup_rx_thread(p_cds_sched_context pSchedContext);
 
 /*---------------------------------------------------------------------------
    \brief cds_alloc_ol_rx_pkt() - API to return next available cds message
@@ -436,6 +447,19 @@ void cds_drop_rxpkt_by_staid(p_cds_sched_context pSchedContext, uint16_t staId)
 static inline
 void cds_indicate_rxpkt(p_cds_sched_context pSchedContext,
 			struct cds_ol_rx_pkt *pkt)
+{
+}
+
+/**
+ * cds_wakeup_rx_thread() - wakeup rx thread
+ * @Arg: Pointer to the global CDS Sched Context
+ *
+ * This api wake up cds_ol_rx_thread() to process pkt
+ *
+ * Return: none
+ */
+static inline
+void cds_wakeup_rx_thread(p_cds_sched_context pSchedContext)
 {
 }
 

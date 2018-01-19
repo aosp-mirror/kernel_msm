@@ -1072,10 +1072,12 @@ bool lim_process_fils_auth_frame2(tpAniSirGlobal mac_ctx,
 	if (!pe_session->fils_info)
 		return false;
 
-	dot11f_unpack_ie_rsn(mac_ctx,
+	if (dot11f_unpack_ie_rsn(mac_ctx,
 				&rx_auth_frm_body->rsn_ie.info[0],
 				rx_auth_frm_body->rsn_ie.length,
-				&dot11f_ie_rsn, 0);
+				&dot11f_ie_rsn, 0) != DOT11F_PARSE_SUCCESS) {
+		return false;
+	}
 
 	for (i = 0; i < dot11f_ie_rsn.pmkid_count; i++) {
 		if (qdf_mem_cmp(dot11f_ie_rsn.pmkid[i],
@@ -1350,6 +1352,12 @@ static QDF_STATUS lim_parse_kde_elements(tpAniSirGlobal mac_ctx,
 			return QDF_STATUS_E_FAILURE;
 		}
 
+		if (elem_len < KDE_IE_DATA_OFFSET) {
+			pe_err("Not enough len to parse elem_len %d",
+				elem_len);
+			return QDF_STATUS_E_FAILURE;
+		}
+
 		if (lim_check_if_vendor_oui_match(mac_ctx, KDE_OUI_TYPE,
 				KDE_OUI_TYPE_SIZE, current_ie, elem_len)) {
 
@@ -1359,6 +1367,11 @@ static QDF_STATUS lim_parse_kde_elements(tpAniSirGlobal mac_ctx,
 
 			switch (data_type) {
 			case DATA_TYPE_GTK:
+				if (data_len < GTK_OFFSET) {
+					pe_err("Invalid KDE data_len %d",
+						data_len);
+					return QDF_STATUS_E_FAILURE;
+				}
 				qdf_mem_copy(fils_info->gtk, (ie_data +
 					     GTK_OFFSET), (data_len -
 					     GTK_OFFSET));
@@ -1366,6 +1379,11 @@ static QDF_STATUS lim_parse_kde_elements(tpAniSirGlobal mac_ctx,
 				break;
 
 			case DATA_TYPE_IGTK:
+				if (data_len < IGTK_OFFSET) {
+					pe_err("Invalid KDE data_len %d",
+						data_len);
+					return QDF_STATUS_E_FAILURE;
+				}
 				fils_info->igtk_len = (data_len - IGTK_OFFSET);
 				qdf_mem_copy(fils_info->igtk, (ie_data +
 					     IGTK_OFFSET), (data_len -

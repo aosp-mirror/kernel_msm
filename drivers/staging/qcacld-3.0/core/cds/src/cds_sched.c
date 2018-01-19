@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -919,6 +919,8 @@ static int cds_mc_thread(void *Arg)
 	qdf_timer_free(&wd_timer);
 
 	complete_and_exit(&pSchedContext->McShutdown, 0);
+
+	return 0;
 } /* cds_mc_thread() */
 
 #ifdef QCA_CONFIG_SMP
@@ -1049,6 +1051,21 @@ cds_indicate_rxpkt(p_cds_sched_context pSchedContext,
 	spin_lock_bh(&pSchedContext->ol_rx_queue_lock);
 	list_add_tail(&pkt->list, &pSchedContext->ol_rx_thread_queue);
 	spin_unlock_bh(&pSchedContext->ol_rx_queue_lock);
+	set_bit(RX_POST_EVENT, &pSchedContext->ol_rx_event_flag);
+	wake_up_interruptible(&pSchedContext->ol_rx_wait_queue);
+}
+
+/**
+ * cds_wakeup_rx_thread() - wakeup rx thread
+ * @Arg: Pointer to the global CDS Sched Context
+ *
+ * This api wake up cds_ol_rx_thread() to process pkt
+ *
+ * Return: none
+ */
+void
+cds_wakeup_rx_thread(p_cds_sched_context pSchedContext)
+{
 	set_bit(RX_POST_EVENT, &pSchedContext->ol_rx_event_flag);
 	wake_up_interruptible(&pSchedContext->ol_rx_wait_queue);
 }
@@ -1216,6 +1233,8 @@ static int cds_ol_rx_thread(void *arg)
 	QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_DEBUG,
 		  "%s: Exiting CDS OL rx thread", __func__);
 	complete_and_exit(&pSchedContext->ol_rx_shutdown, 0);
+
+	return 0;
 }
 #endif
 

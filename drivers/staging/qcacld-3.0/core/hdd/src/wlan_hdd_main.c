@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -54,6 +54,7 @@
 #include "wlan_hdd_power.h"
 #include "wlan_hdd_stats.h"
 #include "wlan_hdd_scan.h"
+#include "wlan_hdd_request_manager.h"
 #include "qdf_types.h"
 #include "qdf_trace.h"
 #include <cdp_txrx_peer_ops.h>
@@ -165,8 +166,10 @@ static struct attribute *attrs[] = {
 
 #define HDD_OPS_INACTIVITY_TIMEOUT (120000)
 #define MAX_OPS_NAME_STRING_SIZE 20
+#define RATE_LIMIT_ERROR_LOG (256)
 
 static qdf_timer_t hdd_drv_ops_inactivity_timer;
+static struct task_struct *hdd_drv_ops_task;
 static char drv_ops_string[MAX_OPS_NAME_STRING_SIZE];
 
 /* the Android framework expects this param even though we don't use it */
@@ -2008,8 +2011,23 @@ static void hdd_update_hw_sw_info(hdd_context_t *hdd_ctx)
 	hdd_wlan_get_version(hdd_ctx, NULL, NULL);
 }
 
+/**
+ * hdd_check_for_leaks() - Perform runtime memory leak checks
+ *
+ * This API triggers runtime memory leak detection. This feature enforces the
+ * policy that any memory allocated at runtime must also be released at runtime.
+ *
+ * Allocating memory at runtime and releasing it at unload is effectively a
+ * memory leak for configurations which never unload (e.g. LONU, statically
+ * compiled driver). Such memory leaks are NOT false positives, and must be
+ * fixed.
+ *
+ * Return: None
+ */
 static void hdd_check_for_leaks(void)
 {
+	/* DO NOT REMOVE these checks; for false positives, read above first */
+
 	qdf_mc_timer_check_for_leaks();
 	qdf_nbuf_map_check_for_leaks();
 	qdf_mem_check_for_leaks();
@@ -2123,6 +2141,10 @@ int hdd_wlan_start_modules(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter,
 		}
 
 		hdd_ctx->hHal = cds_get_context(QDF_MODULE_ID_SME);
+		if (NULL == hdd_ctx->hHal) {
+			hdd_err("HAL context is null");
+			goto close;
+		}
 
 		status = cds_pre_enable(hdd_ctx->pcds_context);
 		if (!QDF_IS_STATUS_SUCCESS(status)) {
@@ -2189,6 +2211,7 @@ int hdd_wlan_start_modules(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter,
 	return 0;
 
 post_disable:
+	sme_destroy_config(hdd_ctx->hHal);
 	cds_post_disable();
 
 close:
@@ -2209,7 +2232,10 @@ power_down:
 release_lock:
 	hdd_ctx->start_modules_in_progress = false;
 	mutex_unlock(&hdd_ctx->iface_change_lock);
-
+	if (hdd_ctx->target_hw_name) {
+		qdf_mem_free(hdd_ctx->target_hw_name);
+		hdd_ctx->target_hw_name = NULL;
+	}
 	/* many adapter resources are not freed by design in SSR case */
 	if (!reinit)
 		hdd_check_for_leaks();
@@ -2250,8 +2276,12 @@ static int __hdd_open(struct net_device *dev)
 		return -EBUSY;
 	}
 
-	mutex_lock(&hdd_init_deinit_lock);
+	if (qdf_atomic_read(&hdd_ctx->con_mode_flag)) {
+		hdd_err("con_mode_handler is in progress; Please try again.");
+		return -EBUSY;
+	}
 
+	mutex_lock(&hdd_init_deinit_lock);
 	hdd_start_driver_ops_timer(eHDD_DRV_OP_IFF_UP);
 
 	/*
@@ -2305,7 +2335,6 @@ static int __hdd_open(struct net_device *dev)
 		hdd_debug("Sending Start Lpass notification");
 		hdd_lpass_notify_start(hdd_ctx, adapter);
 	}
-
 
 err_hdd_hdd_init_deinit_lock:
 	hdd_stop_driver_ops_timer();
@@ -3266,8 +3295,8 @@ QDF_STATUS hdd_init_station_mode(hdd_adapter_t *adapter)
 		sizeof(pHddStaCtx->conn_info.staId), HDD_WLAN_INVALID_STA_ID);
 
 	/* set fast roaming capability in sme session */
-	status = sme_config_fast_roaming(hdd_ctx->hHal, adapter->sessionId,
-					 adapter->fast_roaming_allowed);
+	status = sme_config_fast_roaming(hdd_ctx->hHal,
+					 adapter->sessionId, true);
 	/* Set the default operation channel */
 	pHddStaCtx->conn_info.operationChannel =
 		hdd_ctx->config->OperatingChannel;
@@ -4310,6 +4339,54 @@ static void hdd_wait_for_sme_close_sesion(hdd_context_t *hdd_ctx,
 	}
 }
 
+/**
+ * hdd_roc_req_q_flush() - Flush the RoC request queue for a given adapter
+ * @hdd_ctx: the global HDD context
+ * @adapter: the adapter for whose RoC requests should be flushed
+ *
+ * Pop each RoC request from the queue. If the request's adapter matches the
+ * given adapter, free the request. Otherwise, requeue the request at the back
+ * of the queue. Continue until queue size number of requests have been
+ * processed.
+ *
+ * Return: None
+ */
+static void hdd_roc_req_q_flush(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter)
+{
+	qdf_list_t *req_q = &hdd_ctx->hdd_roc_req_q;
+	qdf_list_node_t *node;
+	hdd_roc_req_t *req;
+	uint32_t count;
+
+	hdd_debug("Flushing RoC queue for adapter %u", adapter->sessionId);
+
+	flush_delayed_work(&hdd_ctx->roc_req_work);
+
+	qdf_spin_lock(&hdd_ctx->hdd_roc_req_q_lock);
+	for (count = qdf_list_size(req_q); count > 0; count--) {
+		if (QDF_IS_STATUS_ERROR(qdf_list_remove_front(req_q, &node))) {
+			qdf_spin_unlock(&hdd_ctx->hdd_roc_req_q_lock);
+
+			hdd_err("Unexpected number of requests in RoC queue");
+			QDF_BUG(0);
+
+			return;
+		}
+
+		req = qdf_container_of(node, hdd_roc_req_t, node);
+		if (req->pAdapter != adapter) {
+			qdf_list_insert_back(req_q, node);
+			continue;
+		}
+
+		if (req->pRemainChanCtx)
+			qdf_mem_free(req->pRemainChanCtx);
+
+		qdf_mem_free(req);
+	}
+	qdf_spin_unlock(&hdd_ctx->hdd_roc_req_q_lock);
+}
+
 QDF_STATUS hdd_stop_adapter(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter,
 			    const bool bCloseSession)
 {
@@ -4544,6 +4621,8 @@ QDF_STATUS hdd_stop_adapter(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter,
 		qdf_mem_free(adapter->scan_info.default_scan_ies);
 		adapter->scan_info.default_scan_ies = NULL;
 	}
+
+	hdd_roc_req_q_flush(hdd_ctx, adapter);
 
 	EXIT();
 	return QDF_STATUS_SUCCESS;
@@ -5035,7 +5114,8 @@ static void hdd_connect_done(struct net_device *dev, const u8 *bssid,
 	} else {
 		fils_params.status = status;
 		fils_params.bssid = bssid;
-		fils_params.timeout_reason = timeout_reason;
+		fils_params.timeout_reason =
+				hdd_convert_timeout_reason(timeout_reason);
 		fils_params.req_ie = req_ie;
 		fils_params.req_ie_len = req_ie_len;
 		fils_params.resp_ie = resp_ie;
@@ -5449,8 +5529,6 @@ hdd_adapter_t *hdd_get_adapter_by_vdev(hdd_context_t *hdd_ctx,
 			hdd_get_next_adapter(hdd_ctx, adapterNode, &pNext);
 		adapterNode = pNext;
 	}
-
-	hdd_err("vdev_id %d does not exist with host", vdev_id);
 
 	return NULL;
 }
@@ -5950,52 +6028,16 @@ static int hdd_roc_context_init(hdd_context_t *hdd_ctx)
 }
 
 /**
- * hdd_destroy_roc_req_q() - Free allocations in ROC Req Queue
- * @hdd_ctx: HDD context.
- *
- * Free memory allocations made in ROC Req Queue nodes.
- *
- * Return: None.
- */
-static void hdd_destroy_roc_req_q(hdd_context_t *hdd_ctx)
-{
-	hdd_roc_req_t *hdd_roc_req;
-	QDF_STATUS status;
-
-	qdf_spin_lock(&hdd_ctx->hdd_roc_req_q_lock);
-
-	while (!qdf_list_empty(&hdd_ctx->hdd_roc_req_q)) {
-		status = qdf_list_remove_front(&hdd_ctx->hdd_roc_req_q,
-				(qdf_list_node_t **) &hdd_roc_req);
-
-		if (QDF_STATUS_SUCCESS != status) {
-			qdf_spin_unlock(&hdd_ctx->hdd_roc_req_q_lock);
-			hdd_debug("unable to remove roc element from list");
-			QDF_ASSERT(0);
-			return;
-		}
-
-		if (hdd_roc_req->pRemainChanCtx)
-			qdf_mem_free(hdd_roc_req->pRemainChanCtx);
-
-		qdf_mem_free(hdd_roc_req);
-	}
-
-	qdf_spin_unlock(&hdd_ctx->hdd_roc_req_q_lock);
-}
-
-/**
  * hdd_roc_context_destroy() - Destroy ROC context
  * @hdd_ctx:	HDD context.
  *
- * Destroy roc list and flush the pending roc work.
+ * Destroy roc list and spinlock.
  *
  * Return: None.
  */
 static void hdd_roc_context_destroy(hdd_context_t *hdd_ctx)
 {
-	flush_delayed_work(&hdd_ctx->roc_req_work);
-	hdd_destroy_roc_req_q(hdd_ctx);
+	qdf_list_destroy(&hdd_ctx->hdd_roc_req_q);
 	qdf_spinlock_destroy(&hdd_ctx->hdd_roc_req_q_lock);
 }
 
@@ -6186,6 +6228,7 @@ static void hdd_wlan_exit(hdd_context_t *hdd_ctx)
 	 */
 
 	hdd_green_ap_deinit(hdd_ctx);
+	hdd_request_manager_deinit();
 
 	hdd_runtime_suspend_context_deinit(hdd_ctx);
 	hdd_close_all_adapters(hdd_ctx, false);
@@ -8367,8 +8410,8 @@ err_free_config:
 
 err_free_hdd_context:
 	hdd_free_probe_req_ouis(hdd_ctx);
-	wiphy_free(hdd_ctx->wiphy);
 	mutex_destroy(&hdd_ctx->iface_change_lock);
+	wiphy_free(hdd_ctx->wiphy);
 
 err_out:
 	return ERR_PTR(ret);
@@ -8592,9 +8635,6 @@ static int hdd_open_interfaces(hdd_context_t *hdd_ctx, bool rtnl_held)
 
 	if (adapter == NULL)
 		return -ENOSPC;
-
-	/* fast roaming is allowed only on first STA, i.e. wlan adapter */
-	adapter->fast_roaming_allowed = true;
 
 	if (strlen(hdd_ctx->config->enableConcurrentSTA) != 0) {
 		ret = hdd_open_concurrent_interface(hdd_ctx, rtnl_held);
@@ -9113,6 +9153,11 @@ int hdd_pktlog_enable_disable(hdd_context_t *hdd_ctx, bool enable,
 		EXIT();
 		return -EINVAL;
 	}
+
+	if (enable == true)
+		hdd_ctx->is_pktlog_enabled = 1;
+	else
+		hdd_ctx->is_pktlog_enabled = 0;
 
 	return 0;
 }
@@ -9880,7 +9925,15 @@ static int hdd_features_init(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter)
 		goto deregister_frames;
 	}
 
-	if (cds_is_packet_log_enabled())
+	/**
+	 * In case of SSR/PDR, if pktlog was enabled manually before
+	 * SSR/PDR, Then enabled it again automatically after Wlan
+	 * device up.
+	 */
+	if (cds_is_driver_recovering()) {
+		if (hdd_ctx->is_pktlog_enabled)
+			hdd_pktlog_enable_disable(hdd_ctx, true, 0, 0);
+	} else if (cds_is_packet_log_enabled())
 		hdd_pktlog_enable_disable(hdd_ctx, true, 0, 0);
 
 	hddtxlimit.txPower2g = hdd_ctx->config->TxPower2g;
@@ -10444,7 +10497,7 @@ void hdd_dp_trace_init(struct hdd_config *config)
 		live_mode = config_params[0];
 		/* fall through */
 	default:
-		hdd_info("live_mode %u thresh %u time_limit %u verbosity %u bitmap 0x%x",
+		hdd_debug("live_mode %u thresh %u time_limit %u verbosity %u bitmap 0x%x",
 			live_mode, thresh, thresh_time_limit,
 			verbosity, proto_bitmap);
 		break;
@@ -10483,6 +10536,7 @@ int hdd_wlan_startup(struct device *dev)
 	if (ret)
 		goto err_hdd_free_context;
 
+	hdd_request_manager_init();
 	hdd_green_ap_init(hdd_ctx);
 
 	hdd_init_spectral_scan(hdd_ctx);
@@ -10496,7 +10550,7 @@ int hdd_wlan_startup(struct device *dev)
 		hdd_err("Failed to init ACS Skip timer");
 	qdf_spinlock_create(&hdd_ctx->acs_skip_lock);
 #endif
-
+	qdf_atomic_init(&hdd_ctx->con_mode_flag);
 	qdf_mc_timer_init(&hdd_ctx->tdls_source_timer,
 			  QDF_TIMER_TYPE_SW,
 			  wlan_hdd_change_tdls_mode,
@@ -10613,6 +10667,7 @@ err_exit_nl_srv:
 	qdf_mc_timer_destroy(&hdd_ctx->tdls_source_timer);
 
 	hdd_green_ap_deinit(hdd_ctx);
+	hdd_request_manager_deinit();
 	hdd_exit_netlink_services(hdd_ctx);
 
 err_hdd_free_context:
@@ -10700,6 +10755,15 @@ static void hdd_get_nud_stats_cb(void *data, struct rsp_stats *rsp)
 	adapter->hdd_stats.hdd_arp_stats.rx_fw_cnt = rsp->arp_rsp_recvd;
 	adapter->dad |= rsp->dad_detected;
 	adapter->con_status = rsp->connect_status;
+
+	/* Flag true indicates connectivity check stats present. */
+	if (rsp->connect_stats_present) {
+		hdd_notice("rsp->tcp_ack_recvd :%x", rsp->tcp_ack_recvd);
+		hdd_notice("rsp->icmpv4_rsp_recvd :%x", rsp->icmpv4_rsp_recvd);
+		adapter->hdd_stats.hdd_tcp_stats.rx_fw_cnt = rsp->tcp_ack_recvd;
+		adapter->hdd_stats.hdd_icmpv4_stats.rx_fw_cnt =
+							rsp->icmpv4_rsp_recvd;
+	}
 
 	spin_lock(&hdd_context_lock);
 	context = &hdd_ctx->nud_stats_context;
@@ -12277,8 +12341,9 @@ static int __con_mode_handler(const char *kmessage, struct kernel_param *kp,
 	if (ret)
 		return ret;
 
+	qdf_atomic_set(&hdd_ctx->con_mode_flag, 1);
 	cds_set_load_in_progress(true);
-
+	mutex_lock(&hdd_init_deinit_lock);
 	ret = param_set_int(kmessage, kp);
 
 	if (!(is_con_mode_valid(con_mode))) {
@@ -12294,9 +12359,6 @@ static int __con_mode_handler(const char *kmessage, struct kernel_param *kp,
 		ret = 0;
 		goto reset_flags;
 	}
-
-	if (!cds_wait_for_external_threads_completion(__func__))
-		hdd_warn("Waiting for monitor mode: External threads are active");
 
 	/* ensure adapters are stopped */
 	hdd_stop_present_mode(hdd_ctx, curr_mode);
@@ -12358,6 +12420,8 @@ static int __con_mode_handler(const char *kmessage, struct kernel_param *kp,
 
 reset_flags:
 	cds_set_load_in_progress(false);
+	mutex_unlock(&hdd_init_deinit_lock);
+	qdf_atomic_set(&hdd_ctx->con_mode_flag, 0);
 	return ret;
 }
 
@@ -12621,7 +12685,11 @@ hdd_adapter_t *hdd_get_adapter_by_rand_macaddr(hdd_context_t *hdd_ctx,
 	status = hdd_get_front_adapter(hdd_ctx, &adapter_node);
 	while (adapter_node && status == QDF_STATUS_SUCCESS) {
 		adapter = adapter_node->pAdapter;
-		if (adapter && hdd_check_random_mac(adapter, mac_addr))
+		if (adapter &&
+		    (adapter->device_mode == QDF_STA_MODE ||
+		     adapter->device_mode == QDF_P2P_CLIENT_MODE ||
+		     adapter->device_mode == QDF_P2P_DEVICE_MODE) &&
+		    hdd_check_random_mac(adapter, mac_addr))
 			return adapter;
 		status = hdd_get_next_adapter(hdd_ctx, adapter_node, &next);
 		adapter_node = next;
@@ -12790,6 +12858,7 @@ void hdd_start_driver_ops_timer(int drv_op)
 		break;
 	}
 
+	hdd_drv_ops_task = current;
 	qdf_timer_start(&hdd_drv_ops_inactivity_timer,
 		HDD_OPS_INACTIVITY_TIMEOUT);
 }
@@ -12815,10 +12884,22 @@ void hdd_drv_ops_inactivity_handler(void)
 	hdd_err("%s: %d Sec timer expired while in .%s",
 		__func__, HDD_OPS_INACTIVITY_TIMEOUT/1000, drv_ops_string);
 
+	if (hdd_drv_ops_task) {
+		printk("Call stack for \"%s\"\n", hdd_drv_ops_task->comm);
+		qdf_print_thread_trace(hdd_drv_ops_task);
+	} else {
+		hdd_err("hdd_drv_ops_task is null");
+	}
+
 	/* Driver shutdown is stuck, no recovery possible at this point */
 	if (0 == qdf_mem_cmp(&drv_ops_string[0], "shutdown",
 		sizeof("shutdown")))
 		QDF_BUG(0);
+
+	if (cds_is_fw_down()) {
+		hdd_err("FW is down");
+		return;
+	}
 
 	if (cds_is_self_recovery_enabled())
 		cds_trigger_recovery(false);

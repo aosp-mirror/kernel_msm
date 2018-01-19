@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -1023,6 +1023,23 @@ bool csr_is_infra_connected(tpAniSirGlobal pMac)
 	return fRc;
 }
 
+uint8_t csr_get_connected_infra(tpAniSirGlobal mac_ctx)
+{
+	uint32_t i;
+	uint8_t connected_session = CSR_SESSION_ID_INVALID;
+
+	for (i = 0; i < CSR_ROAM_SESSION_MAX; i++) {
+		if (CSR_IS_SESSION_VALID(mac_ctx, i)
+		    && csr_is_conn_state_connected_infra(mac_ctx, i)) {
+			connected_session = i;
+			break;
+		}
+	}
+
+	return connected_session;
+}
+
+
 bool csr_is_concurrent_infra_connected(tpAniSirGlobal pMac)
 {
 	uint32_t i, noOfConnectedInfra = 0;
@@ -1373,6 +1390,7 @@ QDF_STATUS csr_get_parsed_bss_description_ies(tHalHandle hHal,
 			if (!QDF_IS_STATUS_SUCCESS(status)) {
 				qdf_mem_free(*ppIEStruct);
 				*ppIEStruct = NULL;
+				sme_debug("parse bss description ies failed");
 			}
 		} else {
 			sme_err("failed to allocate memory");

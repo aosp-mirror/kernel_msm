@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -252,6 +252,7 @@ int hdd_hif_open(struct device *dev, void *bdev, const struct hif_bus_id *bid,
 		ret = qdf_status_to_os_return(status);
 		goto err_hif_close;
 	} else {
+		cds_set_target_ready(true);
 		ret = hdd_napi_create();
 		hdd_debug("hdd_napi_create returned: %d", ret);
 		if (ret == 0)
@@ -410,8 +411,6 @@ static int wlan_hdd_probe(struct device *dev, void *bdev, const struct hif_bus_i
 	hdd_allow_suspend(WIFI_POWER_EVENT_WAKELOCK_DRIVER_INIT);
 	hdd_remove_pm_qos(dev);
 
-	cds_clear_fw_state(CDS_FW_STATE_DOWN);
-
 	probe_fail_cnt = 0;
 	re_init_fail_cnt = 0;
 	hdd_stop_driver_ops_timer();
@@ -435,7 +434,6 @@ err_hdd_deinit:
 	hdd_allow_suspend(WIFI_POWER_EVENT_WAKELOCK_DRIVER_INIT);
 	hdd_remove_pm_qos(dev);
 
-	cds_clear_fw_state(CDS_FW_STATE_DOWN);
 	hdd_stop_driver_ops_timer();
 	mutex_unlock(&hdd_init_deinit_lock);
 	return check_for_probe_defer(ret);
@@ -644,7 +642,7 @@ static int __wlan_hdd_bus_suspend(pm_message_t state, uint32_t wow_flags)
 	int err;
 	int status;
 
-	hdd_debug("starting bus suspend; event:%d, flags:%u",
+	hdd_info("starting bus suspend; event:%d, flags:%u",
 		 state.event, wow_flags);
 
 	err = wlan_hdd_validate_context(hdd_ctx);
@@ -689,7 +687,7 @@ static int __wlan_hdd_bus_suspend(pm_message_t state, uint32_t wow_flags)
 		goto resume_wma;
 	}
 
-	hdd_debug("bus suspend succeeded");
+	hdd_info("bus suspend succeeded");
 	return 0;
 
 resume_wma:
@@ -748,6 +746,7 @@ static int __wlan_hdd_bus_suspend_noirq(void)
 	int err;
 	int status;
 
+	hdd_info("start bus_suspend_noirq");
 	err = wlan_hdd_validate_context(hdd_ctx);
 	if (err) {
 		hdd_err("Invalid HDD context: %d", err);
@@ -775,7 +774,7 @@ static int __wlan_hdd_bus_suspend_noirq(void)
 
 	hdd_ctx->suspend_resume_stats.suspends++;
 
-	hdd_debug("suspend_noirq done");
+	hdd_info("bus_suspend_noirq done");
 	return 0;
 
 resume_hif_noirq:
@@ -827,7 +826,7 @@ static int __wlan_hdd_bus_resume(void)
 	if (cds_is_driver_recovering())
 		return 0;
 
-	hdd_debug("starting bus resume");
+	hdd_info("starting bus resume");
 
 	status = wlan_hdd_validate_context(hdd_ctx);
 	if (status) {
@@ -871,7 +870,7 @@ static int __wlan_hdd_bus_resume(void)
 		goto out;
 	}
 
-	hdd_debug("bus resume succeeded");
+	hdd_info("bus resume succeeded");
 	return 0;
 
 out:
@@ -909,6 +908,7 @@ static int __wlan_hdd_bus_resume_noirq(void)
 	void *hif_ctx;
 	int status;
 
+	hdd_info("starting bus_resume_noirq");
 	if (cds_is_driver_recovering())
 		return 0;
 
@@ -933,7 +933,7 @@ static int __wlan_hdd_bus_resume_noirq(void)
 	status = hif_bus_resume_noirq(hif_ctx);
 	QDF_BUG(!status);
 
-	hdd_debug("resume_noirq done");
+	hdd_info("bus_resume_noirq done");
 	return status;
 }
 
@@ -1356,12 +1356,8 @@ static void wlan_hdd_set_the_pld_uevent(struct pld_uevent_data *uevent)
 	case PLD_RECOVERY:
 		cds_set_recovery_in_progress(true);
 		break;
-	case PLD_FW_DOWN:
-		cds_set_fw_state(CDS_FW_STATE_DOWN);
-		break;
-	case PLD_FW_READY:
-		cds_set_target_ready(true);
-		break;
+	default:
+		return;
 	}
 }
 
@@ -1400,8 +1396,6 @@ static void wlan_hdd_pld_uevent(struct device *dev,
 		break;
 	case PLD_FW_DOWN:
 		hdd_cleanup_on_fw_down();
-		break;
-	case PLD_FW_READY:
 		break;
 	}
 uevent_not_allowed:

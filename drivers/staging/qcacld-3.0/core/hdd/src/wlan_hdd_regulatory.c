@@ -60,23 +60,28 @@
 #define REG_RULE_5500_5720    REG_RULE(5500-10, 5720+10, 160, 0, 20, \
 		NL80211_RRF_PASSIVE_SCAN | NL80211_RRF_NO_IBSS)
 
+#define REG_RULE_5500_5700    REG_RULE(5500-10, 5700+10, 160, 0, 20, \
+		NL80211_RRF_PASSIVE_SCAN | NL80211_RRF_NO_IBSS)
+
 #define REG_RULE_5745_5925    REG_RULE(5745-10, 5925+10, 80, 0, 20, \
 		NL80211_RRF_PASSIVE_SCAN | NL80211_RRF_NO_IBSS)
+
+#define REG_RULE_5745_5825    REG_RULE(5745-10, 5825+10, 80, 0, 20, \
+				       NL80211_RRF_NO_IR)
 
 static bool init_by_driver;
 static bool init_by_reg_core;
 
 static const struct ieee80211_regdomain
 hdd_world_regrules_60_61_62 = {
-	.n_reg_rules = 6,
+	.n_reg_rules = 5,
 	.alpha2 =  "00",
 	.reg_rules = {
 		REG_RULE_2412_2462,
 		REG_RULE_2467_2472,
-		REG_RULE_2484,
 		REG_RULE_5180_5320,
-		REG_RULE_5500_5720,
-		REG_RULE_5745_5925,
+		REG_RULE_5500_5700,
+		REG_RULE_5745_5825,
 	}
 };
 
@@ -827,13 +832,13 @@ void hdd_reg_notifier(struct wiphy *wiphy,
 
 		hdd_ctx->reg.alpha2[0] = request->alpha2[0];
 		hdd_ctx->reg.alpha2[1] = request->alpha2[1];
+		hdd_ctx->reg.reset = reset;
 
 		hdd_set_dfs_region(hdd_ctx,
 				   (enum dfs_region) request->dfs_region);
 
 
 		if (hdd_ctx->driver_status == DRIVER_MODULES_CLOSED) {
-			hdd_ctx->reg.reset = reset;
 			hdd_debug("Driver module is closed, apply it later");
 			return;
 		}

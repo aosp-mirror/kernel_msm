@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -1874,14 +1874,24 @@ static void cds_trigger_recovery_work(void *param)
 	struct qdf_runtime_lock recovery_lock;
 	qdf_device_t qdf_ctx;
 
-	if (!cds_is_self_recovery_enabled()) {
-		cds_err("Recovery is not enabled");
-		QDF_BUG(0);
+	if (cds_is_driver_recovering()) {
+		cds_err("Recovery in progress; ignoring recovery trigger");
 		return;
 	}
 
-	if (cds_is_driver_recovering() || cds_is_driver_in_bad_state()) {
-		cds_err("Recovery in progress; ignoring recovery trigger");
+	if (cds_is_driver_in_bad_state()) {
+		cds_err("Driver is in bad state; ignoring recovery trigger");
+		return;
+	}
+
+	if (cds_is_fw_down()) {
+		cds_err("firmware is down; ignoring recovery trigger");
+		return;
+	}
+
+	if (!cds_is_self_recovery_enabled()) {
+		cds_err("Recovery is not enabled");
+		QDF_BUG(0);
 		return;
 	}
 
@@ -2754,22 +2764,37 @@ QDF_STATUS cds_deregister_dp_cb(void)
 	return QDF_STATUS_SUCCESS;
 }
 
+uint32_t cds_get_connectivity_stats_pkt_bitmap(void *context)
+{
+	hdd_adapter_t *adapter = NULL;
+
+	adapter = (hdd_adapter_t *)context;
+	if (unlikely(adapter->magic != WLAN_HDD_ADAPTER_MAGIC)) {
+		QDF_TRACE(QDF_MODULE_ID_HDD_DATA, QDF_TRACE_LEVEL_ERROR,
+			  "Magic cookie(%x) for adapter sanity verification is invalid",
+			  adapter->magic);
+		return QDF_STATUS_E_FAILURE;
+	}
+	return adapter->pkt_type_bitmap;
+}
+
 /**
  * cds_get_arp_stats_gw_ip() - get arp stats track IP
  *
  * Return: ARP stats IP to track
  */
-uint32_t cds_get_arp_stats_gw_ip(void)
+uint32_t cds_get_arp_stats_gw_ip(void *context)
 {
-	hdd_context_t *hdd_ctx;
+	hdd_adapter_t *adapter = (hdd_adapter_t *)context;
 
-	hdd_ctx = (hdd_context_t *) (gp_cds_context->pHDDContext);
-	if (!hdd_ctx) {
-		cds_err("Hdd Context is Null");
+	if (unlikely(adapter->magic != WLAN_HDD_ADAPTER_MAGIC)) {
+		QDF_TRACE(QDF_MODULE_ID_HDD_DATA, QDF_TRACE_LEVEL_ERROR,
+			  "Magic cookie(%x) for adapter sanity verification is invalid",
+			  adapter->magic);
 		return 0;
 	}
 
-	return hdd_ctx->track_arp_ip;
+	return adapter->track_arp_ip;
 }
 
 /**

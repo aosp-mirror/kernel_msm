@@ -987,7 +987,7 @@ static int __iw_set_scan(struct net_device *dev, struct iw_request_info *info,
 
 	/* Block All Scan during DFS operation and send null scan result */
 	con_sap_adapter = hdd_get_con_sap_adapter(pAdapter, true);
-	if (con_sap_adapter) {
+	if (con_sap_adapter && !cds_is_sta_sap_scc_allowed_on_dfs_channel()) {
 		con_dfs_ch = con_sap_adapter->sessionCtx.ap.operatingChannel;
 
 		if (CDS_IS_DFS_CH(con_dfs_ch)) {
@@ -1433,14 +1433,12 @@ static QDF_STATUS hdd_cfg80211_scan_done_callback(tHalHandle halHandle,
 	struct cfg80211_scan_request *req = NULL;
 	bool aborted = false;
 	hdd_context_t *hddctx = WLAN_HDD_GET_CTX(pAdapter);
-	int ret = 0;
 	unsigned int current_timestamp, time_elapsed;
 	uint8_t source;
 	uint32_t scan_time;
 	uint32_t size = 0;
 
-	ret = wlan_hdd_validate_context(hddctx);
-	if (ret) {
+	if (hddctx == NULL) {
 		hdd_err("Invalid hdd_ctx; Drop results for scanId %d", scanId);
 		return QDF_STATUS_E_INVAL;
 	}
@@ -1925,6 +1923,11 @@ static int __wlan_hdd_cfg80211_scan(struct wiphy *wiphy,
 	if (0 != status)
 		return status;
 
+	if (cds_is_fw_down()) {
+		hdd_err("firmware is down, scan cmd cannot be processed");
+		return -EINVAL;
+	}
+
 	if ((eConnectionState_Associated ==
 			WLAN_HDD_GET_STATION_CTX_PTR(pAdapter)->
 						conn_info.connState) &&
@@ -1975,7 +1978,8 @@ static int __wlan_hdd_cfg80211_scan(struct wiphy *wiphy,
 			con_dfs_ch =
 				con_sap_adapter->sessionCtx.ap.operatingChannel;
 
-		if (!wma_is_hw_dbs_capable() && CDS_IS_DFS_CH(con_dfs_ch)) {
+		if (!wma_is_hw_dbs_capable() && CDS_IS_DFS_CH(con_dfs_ch) &&
+			!cds_is_sta_sap_scc_allowed_on_dfs_channel()) {
 			/* Provide empty scan result during DFS operation since
 			 * scanning not supported during DFS. Reason is
 			 * following case:
@@ -2635,7 +2639,7 @@ static int __wlan_hdd_cfg80211_vendor_scan(struct wiphy *wiphy,
 	struct cfg80211_scan_request *request = NULL;
 	struct nlattr *attr;
 	enum nl80211_band band;
-	uint8_t n_channels = 0, n_ssid = 0;
+	uint32_t n_channels = 0, n_ssid = 0;
 	uint32_t tmp, count, j;
 	size_t len, ie_len;
 	struct ieee80211_channel *chan;
@@ -2738,17 +2742,20 @@ static int __wlan_hdd_cfg80211_vendor_scan(struct wiphy *wiphy,
 	request->n_channels = count;
 	count = 0;
 	if (tb[QCA_WLAN_VENDOR_ATTR_SCAN_SSIDS]) {
+		int ssid_length;
 		nla_for_each_nested(attr, tb[QCA_WLAN_VENDOR_ATTR_SCAN_SSIDS],
 				tmp) {
-			request->ssids[count].ssid_len = nla_len(attr);
-			if (request->ssids[count].ssid_len >
-				SIR_MAC_MAX_SSID_LENGTH) {
+			ssid_length = nla_len(attr);
+			if ((ssid_length > SIR_MAC_MAX_SSID_LENGTH) ||
+			    (ssid_length < 0)) {
 				hdd_err("SSID Len %d is not correct for network %d",
-					 request->ssids[count].ssid_len, count);
+					 ssid_length, count);
 				goto error;
 			}
+
+			request->ssids[count].ssid_len = ssid_length;
 			memcpy(request->ssids[count].ssid, nla_data(attr),
-					nla_len(attr));
+					ssid_length);
 			count++;
 		}
 	}

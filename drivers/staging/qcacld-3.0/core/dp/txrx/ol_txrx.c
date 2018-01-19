@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -93,6 +93,16 @@
 
 /* thresh for peer's cached buf queue beyond which the elements are dropped */
 #define OL_TXRX_CACHED_BUFQ_THRESH 128
+
+/* These macros are expected to be used only for data path.
+ * Existing APIs cannot be used since they log every time
+ * they are used. Other modules, outside of data path should
+ * not use these APIs since they are not trackable.
+ */
+#define OL_TXRX_PEER_INC_REF_CNT_SILENT(peer) \
+	qdf_atomic_inc(&peer->ref_cnt)
+#define OL_TXRX_PEER_DEC_REF_CNT_SILENT(peer) \
+	qdf_atomic_dec(&peer->ref_cnt)
 
 #if defined(CONFIG_HL_SUPPORT) && defined(FEATURE_WLAN_TDLS)
 
@@ -433,6 +443,64 @@ ol_txrx_peer_find_by_local_id(struct ol_txrx_pdev_t *pdev,
 	qdf_spin_lock_bh(&pdev->local_peer_ids.lock);
 	peer = pdev->local_peer_ids.map[local_peer_id];
 	qdf_spin_unlock_bh(&pdev->local_peer_ids.lock);
+	return peer;
+}
+
+/**
+ * @brief Find a txrx peer handle from a peer's local ID
+ * @param pdev - the data physical device object
+ * @param local_peer_id - the ID txrx assigned locally to the peer in question
+ * @return handle to the txrx peer object
+ * @details
+ *  The control SW typically uses the txrx peer handle to refer to the peer.
+ *  In unusual circumstances, if it is infeasible for the control SW maintain
+ *  the txrx peer handle but it can maintain a small integer local peer ID,
+ *  this function allows the peer handled to be retrieved, based on the local
+ *  peer ID.
+ *
+ * Note that this function increments the peer->ref_cnt.
+ * This makes sure that peer will be valid. This also means the caller needs to
+ * call the corresponding API -
+ *          OL_TXRX_PEER_UNREF_DELETE
+ *          Special for rx_thread, using ol_txrx_peer_dec_ref_cnt to delete
+ *          the peer as it will not print log.
+ *
+ * reference.
+ * Sample usage:
+ *    {
+ *      //the API call below increments the peer->ref_cnt
+ *      peer = ol_txrx_peer_find_by_local_id_inc_ref(pdev,local_peer_id);
+ *
+ *      // Once peer usage is done
+ *
+ *      //the API call below decrements the peer->ref_cnt
+ *      OL_TXRX_PEER_UNREF_DELETE(peer);
+ *              or
+ *      //only in rx thread
+ *      ol_txrx_peer_dec_ref_cnt(peer);
+ *    }
+ *
+ * Return: peer handle if the peer is found, NULL if peer is not found.
+ */
+ol_txrx_peer_handle
+ol_txrx_peer_find_by_local_id_inc_ref(struct ol_txrx_pdev_t *pdev,
+			      uint8_t local_peer_id)
+{
+	struct ol_txrx_peer_t *peer = NULL;
+
+	if ((local_peer_id == OL_TXRX_INVALID_LOCAL_PEER_ID) ||
+	    (local_peer_id >= OL_TXRX_NUM_LOCAL_PEER_IDS)) {
+		return NULL;
+	}
+
+	qdf_spin_lock_bh(&pdev->peer_ref_mutex);
+	qdf_spin_lock_bh(&pdev->local_peer_ids.lock);
+	peer = pdev->local_peer_ids.map[local_peer_id];
+	qdf_spin_unlock_bh(&pdev->local_peer_ids.lock);
+	if (peer && peer->valid)
+		OL_TXRX_PEER_INC_REF_CNT_SILENT(peer);
+	qdf_spin_unlock_bh(&pdev->peer_ref_mutex);
+
 	return peer;
 }
 
@@ -1094,7 +1162,21 @@ static void ol_txrx_stats_display_tso(ol_txrx_pdev_handle pdev)
 		}
 	}
 }
+
+static void ol_txrx_tso_stats_clear(ol_txrx_pdev_handle pdev)
+{
+	qdf_mem_zero(&pdev->stats.pub.tx.tso.tso_pkts,
+		     sizeof(struct ol_txrx_stats_elem));
+#if defined(FEATURE_TSO)
+	qdf_mem_zero(&pdev->stats.pub.tx.tso.tso_info,
+		     sizeof(struct ol_txrx_stats_tso_info));
+	qdf_mem_zero(&pdev->stats.pub.tx.tso.tso_hist,
+		     sizeof(struct ol_txrx_tso_histogram));
+#endif
+}
+
 #else
+
 static void ol_txrx_stats_display_tso(ol_txrx_pdev_handle pdev)
 {
 	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
@@ -1117,6 +1199,13 @@ static void ol_txrx_tso_stats_deinit(ol_txrx_pdev_handle pdev)
 	 */
 }
 
+static void ol_txrx_tso_stats_clear(ol_txrx_pdev_handle pdev)
+{
+	/*
+	 * keeping the body empty and not keeping an error print as print will
+	 * will show up everytime during driver unload if TSO is not enabled.
+	 */
+}
 #endif /* defined(FEATURE_TSO) && defined(FEATURE_TSO_DEBUG) */
 
 /**
@@ -2151,6 +2240,7 @@ void ol_txrx_vdev_register(ol_txrx_vdev_handle vdev,
 
 	vdev->osif_dev = osif_vdev;
 	vdev->rx = txrx_ops->rx.rx;
+	vdev->stats_rx = txrx_ops->rx.stats_rx;
 	txrx_ops->tx.tx = ol_tx_data;
 }
 
@@ -2403,6 +2493,31 @@ void ol_txrx_flush_rx_frames(struct ol_txrx_peer_t *peer,
 	bufqi->qdepth_no_thresh = bufqi->curr;
 	qdf_spin_unlock_bh(&bufqi->bufq_lock);
 	qdf_atomic_dec(&peer->flush_in_progress);
+}
+
+/**
+ * ol_txrx_peer_dec_ref_cnt() - decrease peer ref_cnt
+ * @peer: peer
+ *
+ * if ref_cnt is 1, need to take care peer cleanup.
+ * otherwise, decrease ref_cnt silently when called from rx_thread.
+ *
+ * Note: This is expected to be used only for rx_thread.
+ *
+ * Return: None
+ */
+static void ol_txrx_peer_dec_ref_cnt(struct ol_txrx_peer_t *peer)
+{
+	struct ol_txrx_pdev_t *pdev = peer->vdev->pdev;
+
+	qdf_spin_lock_bh(&pdev->peer_ref_mutex);
+	if (qdf_atomic_read(&peer->ref_cnt) == 1) {
+		qdf_spin_unlock_bh(&pdev->peer_ref_mutex);
+		OL_TXRX_PEER_UNREF_DELETE(peer);
+	} else {
+		OL_TXRX_PEER_DEC_REF_CNT_SILENT(peer);
+		qdf_spin_unlock_bh(&pdev->peer_ref_mutex);
+	}
 }
 
 void ol_txrx_flush_cache_rx_queue(void)
@@ -2853,12 +2968,12 @@ ol_txrx_remove_peers_for_vdev(ol_txrx_vdev_handle vdev,
 	temp = NULL;
 	TAILQ_FOREACH_REVERSE(peer, &vdev->peer_list, peer_list_t,
 			      peer_list_elem) {
+		if (qdf_atomic_read(&peer->delete_in_progress))
+			continue;
 		if (temp) {
 			qdf_spin_unlock_bh(&vdev->pdev->peer_ref_mutex);
-			if (qdf_atomic_read(&temp->delete_in_progress) == 0) {
-				callback(callback_context, temp->mac_addr.raw,
-					vdev->vdev_id, temp, false);
-			}
+			callback(callback_context, temp->mac_addr.raw,
+				vdev->vdev_id, temp, false);
 			qdf_spin_lock_bh(&vdev->pdev->peer_ref_mutex);
 		}
 		/* self peer is deleted last */
@@ -3229,6 +3344,9 @@ int ol_txrx_peer_unref_delete(ol_txrx_peer_handle peer,
 		/* cleanup the Rx reorder queues for this peer */
 		ol_rx_peer_cleanup(vdev, peer);
 
+		qdf_spinlock_destroy(&peer->peer_info_lock);
+		qdf_spinlock_destroy(&peer->bufq_info.bufq_lock);
+
 		/* peer is removed from peer_list */
 		qdf_atomic_set(&peer->delete_in_progress, 0);
 
@@ -3466,8 +3584,6 @@ void ol_txrx_peer_detach(ol_txrx_peer_handle peer, bool start_peer_unmap_timer)
 	qdf_spin_unlock_bh(&vdev->pdev->last_real_peer_mutex);
 	htt_rx_reorder_log_print(peer->vdev->pdev->htt_pdev);
 
-	qdf_spinlock_destroy(&peer->peer_info_lock);
-	qdf_spinlock_destroy(&peer->bufq_info.bufq_lock);
 	/*
 	 * set delete_in_progress to identify that wma
 	 * is waiting for unmap massage for this peer
@@ -4761,6 +4877,9 @@ QDF_STATUS ol_txrx_clear_stats(uint16_t value)
 	case WLAN_TXRX_STATS:
 		ol_txrx_stats_clear(pdev);
 		break;
+	case WLAN_TXRX_TSO_STATS:
+		ol_txrx_tso_stats_clear(pdev);
+		break;
 	case WLAN_DUMP_TX_FLOW_POOL_INFO:
 		ol_tx_clear_flow_pool_stats();
 		break;
@@ -4841,7 +4960,7 @@ static void ol_rx_data_cb(struct ol_txrx_pdev_t *pdev,
 	/* Do not use peer directly. Derive peer from staid to
 	 * make sure that peer is valid.
 	 */
-	peer = ol_txrx_peer_find_by_local_id(pdev, staid);
+	peer = ol_txrx_peer_find_by_local_id_inc_ref(pdev, staid);
 	if (!peer)
 		goto free_buf;
 
@@ -4863,6 +4982,8 @@ static void ol_rx_data_cb(struct ol_txrx_pdev_t *pdev,
 		ol_txrx_flush_rx_frames(peer, 0);
 	} else
 		qdf_spin_unlock_bh(&peer->bufq_info.bufq_lock);
+
+	ol_txrx_peer_dec_ref_cnt(peer);
 
 	buf = buf_list;
 	while (buf) {
@@ -5380,8 +5501,10 @@ static void ol_txrx_offld_flush(void *data)
 	} else {
 		pkt = cds_alloc_ol_rx_pkt(sched_ctx);
 		if (qdf_unlikely(!pkt)) {
-			QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
-				  "%s: Not able to allocate context", __func__);
+			QDF_TRACE_RATE_LIMITED(128, QDF_MODULE_ID_TXRX,
+				QDF_TRACE_LEVEL_ERROR,
+				"%s: Not able to allocate context", __func__);
+			cds_wakeup_rx_thread(sched_ctx);
 			return;
 		}
 

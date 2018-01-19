@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -193,6 +193,12 @@ QDF_STATUS wma_get_buf_start_scan_cmd(tp_wma_handle wma_handle,
 	if (!pMac) {
 		WMA_LOGP("%s: pMac is NULL!", __func__);
 		return QDF_STATUS_E_FAILURE;
+	}
+
+	if (scan_req->uIEFieldLen > WLAN_SCAN_PARAMS_MAX_IE_LEN) {
+		WMA_LOGD(FL("scan_ie_len (%d) greater than max (%d)"),
+			scan_req->uIEFieldLen, WLAN_SCAN_PARAMS_MAX_IE_LEN);
+		return QDF_STATUS_E_INVAL;
 	}
 
 	cmd->vdev_id = scan_req->sessionId;
@@ -1928,8 +1934,8 @@ QDF_STATUS wma_process_roaming_config(tp_wma_handle wma_handle,
 		qdf_mem_free(roam_req);
 		return QDF_STATUS_E_PERM;
 	}
-	WMA_LOGD("%s: RSO Command:%d, reason:%d",
-			__func__, roam_req->Command, roam_req->reason);
+	WMA_LOGD("%s: RSO Command:%d, reason:%d session ID %d", __func__,
+		 roam_req->Command, roam_req->reason, roam_req->sessionId);
 	wma_handle->interfaces[roam_req->sessionId].roaming_in_progress = false;
 	switch (roam_req->Command) {
 	case ROAM_SCAN_OFFLOAD_START:
@@ -2729,6 +2735,18 @@ int wma_roam_synch_event_handler(void *handle, uint8_t *event,
 		goto cleanup_label;
 	}
 
+	if (synch_event->bcn_probe_rsp_len >
+	    param_buf->num_bcn_probe_rsp_frame ||
+	    synch_event->reassoc_req_len >
+	    param_buf->num_reassoc_req_frame ||
+	    synch_event->reassoc_rsp_len >
+	    param_buf->num_reassoc_rsp_frame) {
+		WMA_LOGD("Invalid synch payload: LEN bcn:%d, req:%d, rsp:%d",
+			synch_event->bcn_probe_rsp_len,
+			synch_event->reassoc_req_len,
+			synch_event->reassoc_rsp_len);
+		goto cleanup_label;
+	}
 	if (synch_event->vdev_id >= wma->max_bssid) {
 		WMA_LOGE("%s: received invalid vdev_id %d",
 			 __func__, synch_event->vdev_id);
@@ -2896,7 +2914,7 @@ cleanup_label:
 		roam_req = qdf_mem_malloc(sizeof(tSirRoamOffloadScanReq));
 		if (roam_req && synch_event) {
 			roam_req->Command = ROAM_SCAN_OFFLOAD_STOP;
-			roam_req->reason = REASON_ROAM_SYNCH_FAILED;
+			roam_req->reason = REASON_ROAM_STOP_ALL;
 			roam_req->sessionId = synch_event->vdev_id;
 			wma_process_roaming_config(wma, roam_req);
 		}
@@ -3420,7 +3438,16 @@ static QDF_STATUS wma_switch_channel(tp_wma_handle wma,
 	pmac = cds_get_context(QDF_MODULE_ID_PE);
 
 	if (pmac == NULL) {
-		WMA_LOGE("%s: vdev start failed as pmac is NULL", __func__);
+		WMA_LOGE("%s: channel switch failed as pmac is NULL",
+			 __func__);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	chanmode = wma_chan_phy_mode(req->chan, req->chan_width,
+				     req->dot11_mode);
+
+	if (chanmode == MODE_UNKNOWN) {
+		WMA_LOGE("%s: invalid phy mode!", __func__);
 		return QDF_STATUS_E_FAILURE;
 	}
 
@@ -3437,8 +3464,6 @@ static QDF_STATUS wma_switch_channel(tp_wma_handle wma,
 
 	/* Fill channel info */
 	cmd->mhz = cds_chan_to_freq(req->chan);
-	chanmode = wma_chan_phy_mode(req->chan, req->chan_width,
-				    req->dot11_mode);
 
 	intr[req->vdev_id].chanmode = chanmode; /* save channel mode */
 	intr[req->vdev_id].ht_capable = req->ht_capable;
@@ -3585,8 +3610,10 @@ void wma_set_channel(tp_wma_handle wma, tpSwitchChannelParams params)
 	 * true
 	 */
 	if ((wma_is_vdev_in_ap_mode(wma, req.vdev_id) == true) ||
-		(params->restart_on_chan_switch == true))
+	    (params->restart_on_chan_switch == true)) {
 		wma->interfaces[req.vdev_id].is_channel_switch = true;
+		req.hidden_ssid = intr[vdev_id].vdev_restart_params.ssidHidden;
+	}
 
 	if (params->restart_on_chan_switch == true &&
 			wma->interfaces[req.vdev_id].beacon_filter_enabled)
@@ -4761,6 +4788,10 @@ int wma_extscan_hotlist_match_event_handler(void *handle,
 		WMA_LOGE("%s: Hotlist AP's list invalid", __func__);
 		return -EINVAL;
 	}
+	if (numap > param_buf->num_hotlist_match) {
+		WMA_LOGE("Invalid no of total enteries %d", numap);
+		return -EINVAL;
+	}
 	if (numap > WMA_EXTSCAN_MAX_HOTLIST_ENTRIES) {
 		WMA_LOGE("%s: Total Entries %u greater than max",
 			__func__, numap);
@@ -4768,7 +4799,7 @@ int wma_extscan_hotlist_match_event_handler(void *handle,
 	}
 
 	buf_len = sizeof(wmi_extscan_hotlist_match_event_fixed_param) +
-		  (4 * sizeof(uint32_t)) +
+		  WMI_TLV_HDR_SIZE +
 		  (numap * sizeof(wmi_extscan_wlan_descriptor));
 
 	if (buf_len > len) {
@@ -5065,10 +5096,11 @@ int wma_extscan_cached_results_event_handler(void *handle,
 	}
 
 	if (event->num_entries_in_page >
-	    (WMI_SVC_MSG_MAX_SIZE - sizeof(*event))/sizeof(*src_hotlist)) {
-		WMA_LOGE("%s:excess num_entries_in_page %d in WMI event",
+	    (WMI_SVC_MSG_MAX_SIZE - sizeof(*event))/sizeof(*src_hotlist) ||
+	    event->num_entries_in_page > param_buf->num_bssid_list) {
+		WMA_LOGE("%s:excess num_entries_in_page %d in WMI event. num_bssid_list %d",
 			 __func__,
-			 event->num_entries_in_page);
+			 event->num_entries_in_page, param_buf->num_bssid_list);
 		return -EINVAL;
 	} else {
 		total_len = sizeof(*event) +
@@ -5208,6 +5240,10 @@ int wma_extscan_change_results_event_handler(void *handle,
 		WMA_LOGE("%s: Results invalid", __func__);
 		return -EINVAL;
 	}
+	if (numap > param_buf->num_bssid_signal_descriptor_list) {
+		WMA_LOGE("%s: Invalid num of entries in page: %d", __func__, numap);
+		return -EINVAL;
+	}
 	for (i = 0; i < numap; i++)
 		rssi_num += src_chglist->num_rssi_samples;
 
@@ -5256,6 +5292,13 @@ int wma_extscan_change_results_event_handler(void *handle,
 					   dest_ap->bssid.bytes);
 		dest_ap->numOfRssi = src_chglist->num_rssi_samples;
 		if (dest_ap->numOfRssi) {
+			if ((dest_ap->numOfRssi + count) >
+			    param_buf->num_rssi_list) {
+				WMA_LOGE("%s: Invalid num in rssi list: %d",
+					__func__, dest_ap->numOfRssi);
+				qdf_mem_free(dest_chglist);
+				return -EINVAL;
+			}
 			for (k = 0; k < dest_ap->numOfRssi; k++) {
 				dest_ap->rssi[k] = WMA_TGT_NOISE_FLOOR_DBM +
 						   src_rssi[count++];
@@ -5321,9 +5364,11 @@ int wma_passpoint_match_event_handler(void *handle,
 	 * against a constant should not be an issue.
 	 */
 	if ((sizeof(*event) + event->ie_length + event->anqp_length) >
-			WMI_SVC_MSG_MAX_SIZE) {
-		WMA_LOGE("IE Length: %d or ANQP Length: %d is huge",
-				 event->ie_length, event->anqp_length);
+	     WMI_SVC_MSG_MAX_SIZE ||
+	     (event->ie_length + event->anqp_length) > param_buf->num_bufp) {
+		WMA_LOGE("IE Length: %u or ANQP Length: %u is huge, num_bufp: %u",
+			event->ie_length, event->anqp_length,
+			param_buf->num_bufp);
 		return -EINVAL;
 	}
 

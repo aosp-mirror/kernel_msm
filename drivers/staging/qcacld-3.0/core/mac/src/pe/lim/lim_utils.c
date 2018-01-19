@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -557,6 +557,11 @@ void lim_deactivate_timers(tpAniSirGlobal mac_ctx)
 	/* Deactivate addts response timer. */
 	tx_timer_deactivate(&lim_timer->gLimAddtsRspTimer);
 
+	if (tx_timer_running(&lim_timer->gLimJoinFailureTimer)) {
+		pe_err("Join failure timer running call the timeout API");
+		/* Cleanup as if join timer expired */
+		lim_process_join_failure_timeout(mac_ctx);
+	}
 	/* Deactivate Join failure timer. */
 	tx_timer_deactivate(&lim_timer->gLimJoinFailureTimer);
 
@@ -567,9 +572,19 @@ void lim_deactivate_timers(tpAniSirGlobal mac_ctx)
 	tx_timer_deactivate
 			(&lim_timer->g_lim_periodic_auth_retry_timer);
 
+	if (tx_timer_running(&lim_timer->gLimAssocFailureTimer)) {
+		pe_err("Assoc failure timer running call the timeout API");
+		/* Cleanup as if assoc timer expired */
+		lim_process_assoc_failure_timeout(mac_ctx, LIM_ASSOC);
+	}
 	/* Deactivate Association failure timer. */
 	tx_timer_deactivate(&lim_timer->gLimAssocFailureTimer);
 
+	if (tx_timer_running(&mac_ctx->lim.limTimers.gLimAuthFailureTimer)) {
+		pe_err("Auth failure timer running call the timeout API");
+		/* Cleanup as if auth timer expired */
+		lim_process_auth_failure_timeout(mac_ctx);
+	}
 	/* Deactivate Authentication failure timer. */
 	tx_timer_deactivate(&lim_timer->gLimAuthFailureTimer);
 
@@ -5945,6 +5960,16 @@ bool lim_set_nss_change(tpAniSirGlobal pMac, tpPESession psessionEntry,
 {
 	tUpdateRxNss tempParam;
 
+	if (!rxNss) {
+		pe_err("Invalid rxNss value: %u", rxNss);
+		if (!cds_is_driver_recovering()) {
+			if (cds_is_self_recovery_enabled())
+				cds_trigger_recovery(CDS_REASON_UNSPECIFIED);
+			else
+				QDF_BUG(0);
+		}
+	}
+
 	tempParam.rxNss = rxNss;
 	tempParam.staId = staId;
 	tempParam.smesessionId = psessionEntry->smeSessionId;
@@ -7045,7 +7070,7 @@ bool lim_is_robust_mgmt_action_frame(uint8_t action_category)
 	case SIR_MAC_ACTION_FST:
 		return true;
 	default:
-		pe_warn("non-PMF action category: %d", action_category);
+		pe_debug("non-PMF action category: %d", action_category);
 		break;
 	}
 	return false;
@@ -7118,12 +7143,12 @@ void lim_send_set_dtim_period(tpAniSirGlobal mac_ctx, uint8_t dtim_period,
 	tSirRetStatus ret = eSIR_SUCCESS;
 	tSirMsgQ msg;
 
-	if (session == NULL) {
+	if (!session) {
 		pe_err("Inavalid parameters");
 		return;
 	}
 	dtim_params = qdf_mem_malloc(sizeof(*dtim_params));
-	if (NULL == dtim_params) {
+	if (!dtim_params) {
 		pe_err("Unable to allocate memory");
 		return;
 	}

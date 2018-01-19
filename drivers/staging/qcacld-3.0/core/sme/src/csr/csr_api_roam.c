@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -2782,6 +2782,8 @@ QDF_STATUS csr_change_default_config_param(tpAniSirGlobal pMac,
 
 		pMac->roam.configParam.scan_adaptive_dwell_mode =
 			pParam->scan_adaptive_dwell_mode;
+		pMac->roam.configParam.scan_adaptive_dwell_mode_nc =
+			pParam->scan_adaptive_dwell_mode_nc;
 		pMac->roam.configParam.roamscan_adaptive_dwell_mode =
 			pParam->roamscan_adaptive_dwell_mode;
 
@@ -3058,6 +3060,8 @@ QDF_STATUS csr_get_config_param(tpAniSirGlobal pMac, tCsrConfigParam *pParam)
 
 	pParam->scan_adaptive_dwell_mode =
 			cfg_params->scan_adaptive_dwell_mode;
+	pParam->scan_adaptive_dwell_mode_nc =
+			cfg_params->scan_adaptive_dwell_mode_nc;
 	pParam->roamscan_adaptive_dwell_mode =
 			cfg_params->roamscan_adaptive_dwell_mode;
 
@@ -7972,8 +7976,6 @@ QDF_STATUS csr_roam_copy_profile(tpAniSirGlobal pMac,
 	pDstProfile->sap_dot11mc = pSrcProfile->sap_dot11mc;
 	pDstProfile->supplicant_disabled_roaming =
 		pSrcProfile->supplicant_disabled_roaming;
-	pDstProfile->roaming_allowed_on_iface =
-		pSrcProfile->roaming_allowed_on_iface;
 	qdf_mem_copy(&pDstProfile->Keys, &pSrcProfile->Keys,
 		sizeof(pDstProfile->Keys));
 #ifdef WLAN_FEATURE_11W
@@ -13626,7 +13628,7 @@ static void csr_populate_supported_rates_from_hostapd(tSirMacRateSet *opr_rates,
  *
  * Return: void
  */
-static void
+static QDF_STATUS
 csr_roam_get_bss_start_parms(tpAniSirGlobal pMac,
 			     tCsrRoamProfile *pProfile,
 			     tCsrRoamStartBssParams *pParam,
@@ -13654,6 +13656,7 @@ csr_roam_get_bss_start_parms(tpAniSirGlobal pMac,
 			 "For P2P (persona %d) dot11_mode is 11B",
 			  pProfile->csrPersona);
 		QDF_ASSERT(0);
+		return QDF_STATUS_E_INVAL;
 	}
 
 	nw_type = csr_convert_mode_to_nw_type(pParam->uCfgDot11Mode, band);
@@ -13676,6 +13679,7 @@ csr_roam_get_bss_start_parms(tpAniSirGlobal pMac,
 			sme_err(
 				"sees an unknown pSirNwType (%d)",
 				nw_type);
+			return QDF_STATUS_E_INVAL;
 		case eSIR_11A_NW_TYPE:
 			csr_populate_basic_rates(opr_rates, true, true);
 			if (eCSR_OPERATING_CHANNEL_ANY != tmp_opr_ch) {
@@ -13739,6 +13743,7 @@ csr_roam_get_bss_start_parms(tpAniSirGlobal pMac,
 		pProfile->ch_params.center_freq_seg1;
 	pParam->ch_params.sec_ch_offset =
 		pProfile->ch_params.sec_ch_offset;
+	return QDF_STATUS_SUCCESS;
 }
 
 static void
@@ -14863,6 +14868,7 @@ QDF_STATUS csr_send_join_req_msg(tpAniSirGlobal pMac, uint32_t sessionId,
 	uint32_t value = 0, value1 = 0;
 	QDF_STATUS packetdump_timer_status;
 	enum hw_mode_dbs_capab hw_mode_to_use;
+	tDot11fIEVHTCaps *vht_caps = NULL;
 
 	if (!pSession) {
 		sme_err("session %d not found", sessionId);
@@ -15395,8 +15401,12 @@ QDF_STATUS csr_send_join_req_msg(tpAniSirGlobal pMac, uint32_t sessionId,
 
 		csr_join_req->vht_config.su_beam_formee = value;
 
+		if (pIes->VHTCaps.present)
+			vht_caps = &pIes->VHTCaps;
+		else if (pIes->vendor_vht_ie.VHTCaps.present)
+			vht_caps = &pIes->vendor_vht_ie.VHTCaps;
 		/* Set BF CSN value only if SU Bformee is enabled */
-		if (csr_join_req->vht_config.su_beam_formee) {
+		if (vht_caps && csr_join_req->vht_config.su_beam_formee) {
 			txBFCsnValue = (uint8_t)value1;
 			/*
 			 * Certain commercial AP display a bad behavior when
@@ -15406,18 +15416,11 @@ QDF_STATUS csr_send_join_req_msg(tpAniSirGlobal pMac, uint32_t sessionId,
 			 * CSN cap of less than 4. To avoid such issues, take a
 			 * min of self and peer CSN while sending ASSOC request.
 			 */
-			if (txBFCsnValue < 4) {
-				if (IS_BSS_VHT_CAPABLE(pIes->VHTCaps) &&
-					pIes->VHTCaps.csnofBeamformerAntSup)
+			if (pIes->Vendor1IE.present &&
+					vht_caps->csnofBeamformerAntSup < 4) {
+				if (vht_caps->csnofBeamformerAntSup)
 					txBFCsnValue = QDF_MIN(txBFCsnValue,
-					  pIes->VHTCaps.csnofBeamformerAntSup);
-				else if (IS_BSS_VHT_CAPABLE(
-					pIes->vendor_vht_ie.VHTCaps)
-					&& pIes->vendor_vht_ie.VHTCaps.
-					csnofBeamformerAntSup)
-					txBFCsnValue = QDF_MIN(txBFCsnValue,
-					  pIes->vendor_vht_ie.
-					  VHTCaps.csnofBeamformerAntSup);
+					  vht_caps->csnofBeamformerAntSup);
 			}
 		}
 		csr_join_req->vht_config.csnof_beamformer_antSup = txBFCsnValue;
@@ -19202,7 +19205,7 @@ static void csr_update_fils_params_rso(tpAniSirGlobal mac,
 	if (!fils_info || !req_buffer)
 		return;
 
-	if ((!fils_info->keyname_nai) || (!fils_info->key_nai_length)) {
+	if (!fils_info->key_nai_length) {
 		sme_debug("key_nai_length is NULL");
 		return;
 	}
@@ -19323,6 +19326,31 @@ static void csr_update_score_params(tpAniSirGlobal mac_ctx,
 		bss_score_params->oce_wan_scoring.score_pcnt15_to_12;
 
 }
+
+uint8_t csr_get_roam_enabled_sta_sessionid(
+	tpAniSirGlobal mac_ctx)
+{
+	tCsrRoamSession *session;
+	tpCsrNeighborRoamControlInfo roam_info;
+	uint8_t i;
+
+	for (i = 0; i < CSR_ROAM_SESSION_MAX; i++) {
+		session = CSR_GET_SESSION(mac_ctx, i);
+		if (!session || !CSR_IS_SESSION_VALID(mac_ctx, i))
+			continue;
+		if (!session->pCurRoamProfile ||
+		    session->pCurRoamProfile->csrPersona != QDF_STA_MODE)
+			continue;
+		roam_info = &mac_ctx->roam.neighborRoamInfo[i];
+		if (roam_info->b_roam_scan_offload_started) {
+			sme_debug("Roaming enabled on iface, session: %d", i);
+			return i;
+		}
+	}
+
+	return CSR_SESSION_ID_INVALID;
+}
+
 /**
  * csr_roam_offload_scan() - populates roam offload scan request and sends to
  * WMA
@@ -19347,21 +19375,22 @@ csr_roam_offload_scan(tpAniSirGlobal mac_ctx, uint8_t session_id,
 		&mac_ctx->roam.neighborRoamInfo[session_id];
 	struct roam_ext_params *roam_params_dst;
 	struct roam_ext_params *roam_params_src;
-	uint8_t i;
+	uint8_t i, temp_session_id;
 	uint8_t op_channel;
 
-	QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
-			"RSO Command %d, Session id %d, Reason %d",
-			command, session_id, reason);
+	sme_debug("RSO Command %d, Session id %d, Reason %d", command,
+		   session_id, reason);
 	if (NULL == session) {
 		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
 			 "session is null");
 		return QDF_STATUS_E_FAILURE;
 	}
 
-	if ((session->pCurRoamProfile &&
-		session->pCurRoamProfile->roaming_allowed_on_iface == false)) {
-		sme_debug("Roaming disabled on iface, session: %d", session_id);
+	temp_session_id = csr_get_roam_enabled_sta_sessionid(mac_ctx);
+	if ((temp_session_id != CSR_SESSION_ID_INVALID) &&
+	    (session_id != temp_session_id)) {
+		sme_debug("Roam cmd not for session %d on which roaming is enabled",
+			   temp_session_id);
 		return QDF_STATUS_E_FAILURE;
 	}
 
@@ -20234,7 +20263,13 @@ QDF_STATUS csr_roam_channel_change_req(tpAniSirGlobal pMac,
 	 */
 	qdf_mem_zero(&param, sizeof(tCsrRoamStartBssParams));
 
-	csr_roam_get_bss_start_parms(pMac, profile, &param, skip_hostapd_rate);
+	status = csr_roam_get_bss_start_parms(pMac, profile, &param,
+		skip_hostapd_rate);
+
+	if (status != QDF_STATUS_SUCCESS) {
+		sme_err("Failed to get bss parameters");
+		return status;
+	}
 
 	pMsg = qdf_mem_malloc(sizeof(tSirChanChangeRequest));
 	if (!pMsg)
@@ -20246,13 +20281,13 @@ QDF_STATUS csr_roam_channel_change_req(tpAniSirGlobal pMac,
 	pMsg->sec_ch_offset = ch_params->sec_ch_offset;
 	pMsg->ch_width = profile->ch_params.ch_width;
 	pMsg->dot11mode = csr_translate_to_wni_cfg_dot11_mode(pMac,
-					pMac->roam.configParam.uCfgDot11Mode);
+			pMac->roam.configParam.uCfgDot11Mode);
 	if (IS_24G_CH(pMsg->targetChannel) &&
 	   (false == pMac->roam.configParam.enableVhtFor24GHz) &&
 	   (WNI_CFG_DOT11_MODE_11AC == pMsg->dot11mode ||
 	    WNI_CFG_DOT11_MODE_11AC_ONLY == pMsg->dot11mode))
 		pMsg->dot11mode = WNI_CFG_DOT11_MODE_11N;
-
+	pMsg->nw_type = param.sirNwType;
 	pMsg->center_freq_seg_0 = ch_params->center_freq_seg0;
 	pMsg->center_freq_seg_1 = ch_params->center_freq_seg1;
 	qdf_mem_copy(pMsg->bssid, bssid.bytes, QDF_MAC_ADDR_SIZE);

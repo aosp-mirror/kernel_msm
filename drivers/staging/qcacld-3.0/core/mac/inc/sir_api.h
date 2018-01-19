@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -142,7 +142,6 @@ typedef uint8_t tSirVersionString[SIR_VERSION_STRING_LEN];
 /* Maximum peer station number query one time */
 #define MAX_PEER_STA 12
 
-#define SIR_NAN_CH_INFO_MAX_CHANNELS 4
 /**
  * enum sir_conn_update_reason: Reason for conc connection update
  * @SIR_UPDATE_REASON_SET_OPER_CHAN: Set probable operating channel
@@ -420,12 +419,20 @@ typedef struct sSirSupportedRates {
 	uint16_t vhtTxHighestDataRate;
 } tSirSupportedRates, *tpSirSupportedRates;
 
+/**
+ * enum eSirRFBand
+ * @SIR_BAND_ALL:all bands
+ * @SIR_BAND_2_4_GHZ: 2G band
+ * @SIR_BAND_5_GHZ: 5G band
+ * @SIR_BAND_UNKNOWN: Unsupported band
+ * @SIR_BAND_MAX: Max number of band
+ */
 typedef enum eSirRFBand {
-	SIR_BAND_UNKNOWN,
 	SIR_BAND_ALL,
 	SIR_BAND_2_4_GHZ,
 	SIR_BAND_5_GHZ,
-	SIR_BAND_MAX
+	SIR_BAND_UNKNOWN,
+	SIR_BAND_MAX = SIR_BAND_UNKNOWN,
 } tSirRFBand;
 
 typedef struct sSirRemainOnChnReq {
@@ -4697,6 +4704,7 @@ typedef struct sSirChanChangeRequest {
 	uint8_t center_freq_seg_1;
 	uint8_t bssid[QDF_MAC_ADDR_SIZE];
 	uint32_t dot11mode;
+	tSirNwType nw_type;
 	tSirMacRateSet operational_rateset;
 	tSirMacRateSet extended_rateset;
 } tSirChanChangeRequest, *tpSirChanChangeRequest;
@@ -7705,19 +7713,6 @@ struct ndp_responder_rsp_event {
 };
 
 /**
- * struct ndp_channel_info - ndp channel and channel bandwidth
- * @channel: channel width of the ndp connection
- * @ch_width: channel width of the ndp connection
- * @nss: nss used for ndp connection
- *
- */
-struct ndp_channel_info {
-	uint32_t channel;
-	uint32_t ch_width;
-	uint32_t nss;
-};
-
-/**
  * struct ndp_confirm_event - ndp confirmation event from FW
  * @vdev_id: session id of the interface over which ndp is being created
  * @ndp_instance_id: ndp instance id for which confirm is being generated
@@ -7725,8 +7720,6 @@ struct ndp_channel_info {
  * @num_active_ndps_on_peer: number of ndp instances on peer
  * @peer_ndi_mac_addr: peer NDI mac address
  * @rsp_code: ndp response code
- * @num_channels: num channels
- * @ch: channel info struct array
  * @ndp_info: ndp application info
  *
  */
@@ -7737,8 +7730,6 @@ struct ndp_confirm_event {
 	uint32_t num_active_ndps_on_peer;
 	struct qdf_mac_addr peer_ndi_mac_addr;
 	enum ndp_response_code rsp_code;
-	uint32_t num_channels;
-	struct ndp_channel_info ch[SIR_NAN_CH_INFO_MAX_CHANNELS];
 	struct ndp_app_info ndp_info;
 };
 
@@ -7826,27 +7817,6 @@ struct ndp_schedule_update_rsp {
 	uint32_t vdev_id;
 	uint32_t status;
 	uint32_t reason;
-};
-
-/**
- * struct ndp_sch_update_event - ndp schedule update indication
- * @vdev_id: vdev id on which ndp schedule update was received
- * @peer_addr: peer for which schedule update was received
- * @flags: reason for sch update
- * @num_channels: num of channels
- * @num_ndp_instances: num of ndp instances
- * @ch: channel info array
- * @ndp_instances: array of ndp instances
- *
- */
-struct ndp_sch_update_event {
-	uint32_t vdev_id;
-	struct qdf_mac_addr peer_addr;
-	uint32_t flags;
-	uint32_t num_channels;
-	uint32_t num_ndp_instances;
-	struct ndp_channel_info ch[SIR_NAN_CH_INFO_MAX_CHANNELS];
-	uint32_t *ndp_instances;
 };
 
 /**
@@ -8087,6 +8057,9 @@ struct sme_rcpi_req {
  * @dad_detected: dad detected
  * @connect_status: connection status
  * @ba_session_establishment_status: BA session status
+ * @connect_stats_present: connectivity stats present or not
+ * @tcp_ack_recvd: tcp syn ack's count
+ * @icmpv4_rsp_recvd: icmpv4 responses count
  */
 struct rsp_stats {
 	uint32_t vdev_id;
@@ -8098,6 +8071,9 @@ struct rsp_stats {
 	uint32_t dad_detected;
 	uint32_t connect_status;
 	uint32_t ba_session_establishment_status;
+	bool connect_stats_present;
+	uint32_t tcp_ack_recvd;
+	uint32_t icmpv4_rsp_recvd;
 };
 
 /**
@@ -8106,12 +8082,22 @@ struct rsp_stats {
  * @flag: enable/disable stats
  * @pkt_type: type of packet(1 - arp)
  * @ip_addr: subnet ipv4 address in case of encrypted packets
+ * @pkt_type_bitmap: pkt bitmap
+ * @tcp_src_port: tcp src port for pkt tracking
+ * @tcp_dst_port: tcp dst port for pkt tracking
+ * @icmp_ipv4: target ipv4 address to track ping packets
+ * @reserved: reserved
  */
 struct set_arp_stats_params {
 	uint32_t vdev_id;
 	uint8_t flag;
 	uint8_t pkt_type;
 	uint32_t ip_addr;
+	uint32_t pkt_type_bitmap;
+	uint32_t tcp_src_port;
+	uint32_t tcp_dst_port;
+	uint32_t icmp_ipv4;
+	uint32_t reserved;
 };
 
 /**

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -2457,6 +2457,11 @@ QDF_STATUS sap_goto_channel_sel(ptSapContext sap_context,
 
 		scan_request.requestType =
 			eCSR_SCAN_SOFTAP_CHANNEL_RANGE;
+		if (sap_context->channelList) {
+			qdf_mem_free(sap_context->channelList);
+			sap_context->channelList = NULL;
+			sap_context->num_of_channel = 0;
+		}
 
 		sap_context->channelList = channel_list;
 		sap_context->num_of_channel = num_of_channels;
@@ -2673,6 +2678,12 @@ QDF_STATUS sap_open_session(tHalHandle hHal, ptSapContext sapContext,
 	sapContext->chan_before_pre_cac = 0;
 	sapContext->enable_etsi_srd_chan_support =
 		pMac->sap.enable_etsi_srd_chan_support;
+
+	if (sapContext->csr_roamProfile.csrPersona == QDF_SAP_MODE)
+		sme_cli_set_command(*session_id,
+			WMI_VDEV_PARAM_ENABLE_DISABLE_RTT_RESPONDER_ROLE,
+			(bool)(pMac->fine_time_meas_cap & WMI_FW_AP_RTT_RESPR),
+			VDEV_CMD);
 
 	return QDF_STATUS_SUCCESS;
 }

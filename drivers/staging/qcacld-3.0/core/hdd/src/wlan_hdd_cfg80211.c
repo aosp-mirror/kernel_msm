@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -74,7 +74,7 @@
 #include "sap_api.h"
 #include "csr_api.h"
 #include "pld_common.h"
-
+#include "wlan_hdd_request_manager.h"
 
 #ifdef FEATURE_WLAN_EXTSCAN
 #include "wlan_hdd_ext_scan.h"
@@ -657,6 +657,27 @@ static const struct wiphy_wowlan_support wowlan_support_cfg80211_init = {
 	.pattern_max_len = WOWL_PTRN_MAX_SIZE,
 };
 #endif
+
+bool hdd_is_ie_valid(const uint8_t *ie, size_t ie_len)
+{
+	uint8_t elen;
+
+	while (ie_len) {
+		if (ie_len < 2)
+			return false;
+
+		elen = ie[1];
+		ie_len -= 2;
+		ie += 2;
+		if (elen > ie_len)
+			return false;
+
+		ie_len -= elen;
+		ie += elen;
+	}
+
+	return true;
+}
 
 /**
  * hdd_add_channel_switch_support()- Adds Channel Switch flag if supported
@@ -5469,6 +5490,56 @@ static int wlan_hdd_save_default_scan_ies(hdd_context_t *hdd_ctx,
 	return 0;
 }
 
+static int hdd_config_scan_default_ies(hdd_adapter_t *adapter,
+				       const struct nlattr *attr)
+{
+	hdd_context_t *hdd_ctx = WLAN_HDD_GET_CTX(adapter);
+	uint8_t *scan_ie;
+	uint16_t scan_ie_len;
+	QDF_STATUS status;
+
+	if (!attr)
+		return 0;
+
+	scan_ie_len = nla_len(attr);
+	hdd_debug("IE len %d session %d device mode %d",
+		  scan_ie_len, adapter->sessionId, adapter->device_mode);
+
+	if (!scan_ie_len) {
+		hdd_err("zero-length IE prohibited");
+		return -EINVAL;
+	}
+
+	if (scan_ie_len > MAX_DEFAULT_SCAN_IE_LEN) {
+		hdd_err("IE length %d exceeds max of %d",
+			scan_ie_len, MAX_DEFAULT_SCAN_IE_LEN);
+		return -EINVAL;
+	}
+
+	scan_ie = nla_data(attr);
+	if (!hdd_is_ie_valid(scan_ie, scan_ie_len)) {
+		hdd_err("Invalid default scan IEs");
+		return -EINVAL;
+	}
+
+	if (wlan_hdd_save_default_scan_ies(hdd_ctx, adapter,
+					   scan_ie, scan_ie_len))
+		hdd_err("Failed to save default scan IEs");
+
+	if (adapter->device_mode == QDF_STA_MODE) {
+		status = sme_set_default_scan_ie(hdd_ctx->hHal,
+						 adapter->sessionId, scan_ie,
+						 scan_ie_len);
+		if (QDF_STATUS_SUCCESS != status) {
+			hdd_err("failed to set default scan IEs in sme: %d",
+				status);
+			return -EPERM;
+		}
+	}
+
+	return 0;
+}
+
 /**
  * __wlan_hdd_cfg80211_wifi_configuration_set() - Wifi configuration
  * vendor command
@@ -5492,6 +5563,8 @@ __wlan_hdd_cfg80211_wifi_configuration_set(struct wiphy *wiphy,
 	hdd_adapter_t *adapter = WLAN_HDD_GET_PRIV_PTR(dev);
 	hdd_context_t *hdd_ctx  = wiphy_priv(wiphy);
 	struct nlattr *tb[QCA_WLAN_VENDOR_ATTR_CONFIG_MAX + 1];
+	const struct nlattr *attr;
+	int ret;
 	int ret_val = 0;
 	u32 modulated_dtim, override_li;
 	u16 stats_avg_factor;
@@ -5506,8 +5579,6 @@ __wlan_hdd_cfg80211_wifi_configuration_set(struct wiphy *wiphy,
 	int access_policy = 0;
 	char vendor_ie[SIR_MAC_MAX_IE_LENGTH + 2];
 	bool vendor_ie_present = false, access_policy_present = false;
-	uint16_t scan_ie_len = 0;
-	uint8_t *scan_ie;
 	struct sir_set_tx_rx_aggregation_size request;
 	struct sir_set_rx_reorder_timeout_val reorder_timeout;
 	struct sir_peer_set_rx_blocksize rx_blocksize;
@@ -5748,30 +5819,10 @@ __wlan_hdd_cfg80211_wifi_configuration_set(struct wiphy *wiphy,
 		ret_val = hdd_enable_disable_ca_event(hdd_ctx, set_value);
 	}
 
-	if (tb[QCA_WLAN_VENDOR_ATTR_CONFIG_SCAN_DEFAULT_IES]) {
-		scan_ie_len = nla_len(
-			tb[QCA_WLAN_VENDOR_ATTR_CONFIG_SCAN_DEFAULT_IES]);
-		hdd_debug("Received default scan IE of len %d session %d device mode %d",
-						scan_ie_len, adapter->sessionId,
-						adapter->device_mode);
-		if (scan_ie_len && (scan_ie_len <= MAX_DEFAULT_SCAN_IE_LEN)) {
-			scan_ie = (uint8_t *) nla_data(tb
-				[QCA_WLAN_VENDOR_ATTR_CONFIG_SCAN_DEFAULT_IES]);
-
-			if (wlan_hdd_save_default_scan_ies(hdd_ctx, adapter,
-							scan_ie, scan_ie_len))
-				hdd_err("Failed to save default scan IEs");
-
-			if (adapter->device_mode == QDF_STA_MODE) {
-				status = sme_set_default_scan_ie(hdd_ctx->hHal,
-						adapter->sessionId, scan_ie,
-						scan_ie_len);
-				if (QDF_STATUS_SUCCESS != status)
-					ret_val = -EPERM;
-			}
-		} else
-			ret_val = -EPERM;
-	}
+	attr = tb[QCA_WLAN_VENDOR_ATTR_CONFIG_SCAN_DEFAULT_IES];
+	ret = hdd_config_scan_default_ies(adapter, attr);
+	if (ret)
+		ret_val = ret;
 
 	if (tb[QCA_WLAN_VENDOR_ATTR_CONFIG_TX_MPDU_AGGREGATION] ||
 	    tb[QCA_WLAN_VENDOR_ATTR_CONFIG_RX_MPDU_AGGREGATION]) {
@@ -10102,6 +10153,49 @@ static int wlan_hdd_cfg80211_sar_convert_modulation(u32 nl80211_value,
 	return ret;
 }
 
+static u32 hdd_sar_wmi_to_nl_enable(uint32_t wmi_value)
+{
+	switch (wmi_value) {
+	default:
+	case WMI_SAR_FEATURE_OFF:
+		return QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SELECT_NONE;
+	case WMI_SAR_FEATURE_ON_SET_0:
+		return QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SELECT_BDF0;
+	case WMI_SAR_FEATURE_ON_SET_1:
+		return QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SELECT_BDF1;
+	case WMI_SAR_FEATURE_ON_SET_2:
+		return QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SELECT_BDF2;
+	case WMI_SAR_FEATURE_ON_SET_3:
+		return QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SELECT_BDF3;
+	case WMI_SAR_FEATURE_ON_SET_4:
+		return QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SELECT_BDF4;
+	case WMI_SAR_FEATURE_ON_USER_DEFINED:
+		return QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SELECT_USER;
+	}
+}
+
+static u32 hdd_sar_wmi_to_nl_band(uint32_t wmi_value)
+{
+	switch (wmi_value) {
+	default:
+	case WMI_SAR_2G_ID:
+		return HDD_NL80211_BAND_2GHZ;
+	case WMI_SAR_5G_ID:
+		return HDD_NL80211_BAND_5GHZ;
+	}
+}
+
+static u32 hdd_sar_wmi_to_nl_modulation(uint32_t wmi_value)
+{
+	switch (wmi_value) {
+	default:
+	case WMI_SAR_MOD_CCK:
+		return QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_MODULATION_CCK;
+	case WMI_SAR_MOD_OFDM:
+		return QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_MODULATION_OFDM;
+	}
+}
+
 static const struct nla_policy
 sar_limits_policy[QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_MAX + 1] = {
 	[QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SAR_ENABLE] = {.type = NLA_U32},
@@ -10111,6 +10205,258 @@ sar_limits_policy[QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_MAX + 1] = {
 	[QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_MODULATION] = {.type = NLA_U32},
 	[QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_POWER_LIMIT] = {.type = NLA_U32},
 };
+
+#define WLAN_WAIT_TIME_SAR 5000
+
+/**
+ * hdd_sar_context - hdd sar context
+ * @event: sar limit event
+ */
+struct hdd_sar_context {
+	struct sar_limit_event event;
+};
+
+/**
+ * hdd_sar_cb () - sar response message handler
+ * @cookie: hdd request cookie
+ * @event: sar response event
+ *
+ * Return: none
+ */
+static void hdd_sar_cb(void *cookie,
+		       struct sar_limit_event *event)
+{
+	struct hdd_request *request;
+	struct hdd_sar_context *context;
+
+	ENTER();
+
+	if (!event) {
+		hdd_err("response is NULL");
+		return;
+	}
+
+	request = hdd_request_get(cookie);
+	if (!request) {
+		hdd_debug("Obsolete request");
+		return;
+	}
+
+	context = hdd_request_priv(request);
+	context->event = *event;
+	hdd_request_complete(request);
+	hdd_request_put(request);
+
+	EXIT();
+}
+
+static uint32_t hdd_sar_get_response_len(const struct sar_limit_event *event)
+{
+	uint32_t len;
+	uint32_t row_len;
+
+	len = NLMSG_HDRLEN;
+	/* QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SAR_ENABLE */
+	len += NLA_HDRLEN + sizeof(u32);
+	/* QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_NUM_SPECS */
+	len += NLA_HDRLEN + sizeof(u32);
+
+	/* nest */
+	row_len = NLA_HDRLEN;
+	/* QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_BAND */
+	row_len += NLA_HDRLEN + sizeof(u32);
+	/* QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_CHAIN */
+	row_len += NLA_HDRLEN + sizeof(u32);
+	/* QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_MODULATION */
+	row_len += NLA_HDRLEN + sizeof(u32);
+	/* QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_POWER_LIMIT */
+	row_len += NLA_HDRLEN + sizeof(u32);
+
+	/* QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC */
+	len += NLA_HDRLEN + (row_len * event->num_limit_rows);
+
+	return len;
+}
+
+static int hdd_sar_fill_response(struct sk_buff *skb,
+				 const struct sar_limit_event *event)
+{
+	int errno;
+	u32 value;
+	u32 attr;
+	struct nlattr *nla_spec_attr;
+	struct nlattr *nla_row_attr;
+	uint32_t row;
+	const struct sar_limit_event_row *event_row;
+
+	attr = QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SAR_ENABLE;
+	value = hdd_sar_wmi_to_nl_enable(event->sar_enable);
+	errno = nla_put_u32(skb, attr, value);
+	if (errno)
+		return errno;
+
+	attr = QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_NUM_SPECS;
+	value = event->num_limit_rows;
+	errno = nla_put_u32(skb, attr, value);
+	if (errno)
+		return errno;
+
+	attr = QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC;
+	nla_spec_attr = nla_nest_start(skb, attr);
+	if (!nla_spec_attr)
+		return -EINVAL;
+
+	for (row = 0, event_row = event->sar_limit_row;
+	     row < event->num_limit_rows;
+	     row++, event_row++) {
+		nla_row_attr = nla_nest_start(skb, attr);
+		if (!nla_row_attr)
+			return -EINVAL;
+
+		attr = QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_BAND;
+		value = hdd_sar_wmi_to_nl_band(event_row->band_id);
+		errno = nla_put_u32(skb, attr, value);
+		if (errno)
+			return errno;
+
+		attr = QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_CHAIN;
+		value = event_row->chain_id;
+		errno = nla_put_u32(skb, attr, value);
+		if (errno)
+			return errno;
+
+		attr = QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_MODULATION;
+		value = hdd_sar_wmi_to_nl_modulation(event_row->mod_id);
+		errno = nla_put_u32(skb, attr, value);
+		if (errno)
+			return errno;
+
+		attr = QCA_WLAN_VENDOR_ATTR_SAR_LIMITS_SPEC_POWER_LIMIT;
+		value = event_row->limit_value;
+		errno = nla_put_u32(skb, attr, value);
+		if (errno)
+			return errno;
+
+		nla_nest_end(skb, nla_row_attr);
+	}
+	nla_nest_end(skb, nla_spec_attr);
+
+	return 0;
+}
+
+static int hdd_sar_send_response(struct wiphy *wiphy,
+				 const struct sar_limit_event *event)
+{
+	uint32_t len;
+	struct sk_buff *skb;
+	int errno;
+
+	len = hdd_sar_get_response_len(event);
+	skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, len);
+	if (!skb) {
+		hdd_err("cfg80211_vendor_cmd_alloc_reply_skb failed");
+		return -ENOMEM;
+	}
+
+	errno = hdd_sar_fill_response(skb, event);
+	if (errno) {
+		kfree_skb(skb);
+		return errno;
+	}
+
+	return cfg80211_vendor_cmd_reply(skb);
+}
+
+/**
+ * __wlan_hdd_get_sar_power_limits() - Get SAR power limits
+ * @wiphy: Pointer to wireless phy
+ * @wdev: Pointer to wireless device
+ * @data: Pointer to data
+ * @data_len: Length of @data
+ *
+ * This function is used to retrieve Specific Absorption Rate limit specs.
+ *
+ * Return: 0 on success, negative errno on failure
+ */
+static int __wlan_hdd_get_sar_power_limits(struct wiphy *wiphy,
+					   struct wireless_dev *wdev,
+					   const void *data, int data_len)
+{
+	hdd_context_t *hdd_ctx = wiphy_priv(wiphy);
+	struct hdd_request *request;
+	struct hdd_sar_context *context;
+	void *cookie;
+	QDF_STATUS status;
+	int ret;
+	static const struct hdd_request_params params = {
+		.priv_size = sizeof(*context),
+		.timeout_ms = WLAN_WAIT_TIME_SAR,
+	};
+
+	ENTER();
+
+	if (QDF_GLOBAL_FTM_MODE == hdd_get_conparam()) {
+		hdd_err("Command not allowed in FTM mode");
+		return -EPERM;
+	}
+
+	if (wlan_hdd_validate_context(hdd_ctx))
+		return -EINVAL;
+
+	request = hdd_request_alloc(&params);
+	if (!request) {
+		hdd_err("Request allocation failure");
+		return -ENOMEM;
+	}
+
+	cookie = hdd_request_cookie(request);
+
+	status = sme_get_sar_power_limits(hdd_ctx->hHal, hdd_sar_cb, cookie);
+	if (!QDF_IS_STATUS_SUCCESS(status)) {
+		hdd_err("Unable to post sar message");
+		ret = -EINVAL;
+		goto cleanup;
+	}
+
+	ret = hdd_request_wait_for_response(request);
+	if (ret) {
+		hdd_err("Target response timed out");
+		goto cleanup;
+	}
+
+	context = hdd_request_priv(request);
+	ret = hdd_sar_send_response(wiphy, &context->event);
+
+cleanup:
+	hdd_request_put(request);
+
+	return ret;
+}
+
+/**
+ * wlan_hdd_cfg80211_get_sar_power_limits() - Get SAR power limits
+ * @wiphy: Pointer to wireless phy
+ * @wdev: Pointer to wireless device
+ * @data: Pointer to data
+ * @data_len: Length of @data
+ *
+ * Wrapper function of __wlan_hdd_cfg80211_get_sar_power_limits()
+ *
+ * Return: 0 on success, negative errno on failure
+ */
+static int wlan_hdd_cfg80211_get_sar_power_limits(struct wiphy *wiphy,
+						  struct wireless_dev *wdev,
+						  const void *data,
+						  int data_len)
+{
+	int ret;
+
+	cds_ssr_protect(__func__);
+	ret = __wlan_hdd_get_sar_power_limits(wiphy, wdev, data, data_len);
+	cds_ssr_unprotect(__func__);
+
+	return ret;
+}
 
 /**
  * __wlan_hdd_set_sar_power_limits() - Set SAR power limits
@@ -10330,7 +10676,7 @@ static int __wlan_hdd_cfg80211_set_fast_roaming(struct wiphy *wiphy,
 	struct net_device *dev = wdev->netdev;
 	hdd_adapter_t *adapter = WLAN_HDD_GET_PRIV_PTR(dev);
 	struct nlattr *tb[QCA_WLAN_VENDOR_ATTR_MAX + 1];
-	uint32_t is_fast_roam_enabled, enable_lfr_fw;
+	uint32_t is_fast_roam_enabled;
 	int ret;
 	QDF_STATUS qdf_status;
 	unsigned long rc;
@@ -10362,26 +10708,18 @@ static int __wlan_hdd_cfg80211_set_fast_roaming(struct wiphy *wiphy,
 
 	is_fast_roam_enabled = nla_get_u32(
 				tb[QCA_WLAN_VENDOR_ATTR_ROAMING_POLICY]);
-	hdd_debug("isFastRoamEnabled %d fast_roaming_allowed %d",
-		   is_fast_roam_enabled, adapter->fast_roaming_allowed);
-
-	if (!adapter->fast_roaming_allowed) {
-		hdd_err("fast roaming not allowed on %s interface",
-			adapter->dev->name);
-		return -EINVAL;
-	}
+	hdd_debug("isFastRoamEnabled %d", is_fast_roam_enabled);
 
 	/* Update roaming */
-	enable_lfr_fw = (is_fast_roam_enabled && adapter->fast_roaming_allowed);
 	qdf_status = sme_config_fast_roaming(hdd_ctx->hHal, adapter->sessionId,
-					     enable_lfr_fw);
+					     is_fast_roam_enabled);
 	if (qdf_status != QDF_STATUS_SUCCESS)
 		hdd_err("sme_config_fast_roaming failed with status=%d",
 				qdf_status);
 	ret = qdf_status_to_os_return(qdf_status);
 
 	if (eConnectionState_Associated == hdd_sta_ctx->conn_info.connState &&
-		QDF_IS_STATUS_SUCCESS(qdf_status) && !enable_lfr_fw) {
+		QDF_IS_STATUS_SUCCESS(qdf_status) && !is_fast_roam_enabled) {
 
 		INIT_COMPLETION(adapter->lfr_fw_status.disable_lfr_event);
 		/*
@@ -10440,6 +10778,8 @@ static int wlan_hdd_cfg80211_set_fast_roaming(struct wiphy *wiphy,
 	QCA_ATTR_NUD_STATS_SET_START
 #define STATS_GW_IPV4 \
 	QCA_ATTR_NUD_STATS_GW_IPV4
+#define STATS_SET_DATA_PKT_INFO \
+		QCA_ATTR_NUD_STATS_SET_DATA_PKT_INFO
 #define STATS_SET_MAX \
 	QCA_ATTR_NUD_STATS_SET_MAX
 
@@ -10447,7 +10787,244 @@ const struct nla_policy
 qca_wlan_vendor_set_nud_stats[STATS_SET_MAX + 1] = {
 	[STATS_SET_START] = {.type = NLA_FLAG },
 	[STATS_GW_IPV4] = {.type = NLA_U32 },
+	[STATS_SET_DATA_PKT_INFO] = {.type = NLA_U32 },
 };
+
+/* define short names for the global vendor params */
+#define CONNECTIVITY_STATS_SET_INVALID \
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_SET_INVALID
+#define STATS_PKT_INFO_TYPE \
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_STATS_PKT_INFO_TYPE
+#define STATS_DNS_DOMAIN_NAME \
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_DNS_DOMAIN_NAME
+#define STATS_SRC_PORT \
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_SRC_PORT
+#define STATS_DEST_PORT \
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_DEST_PORT
+#define STATS_DEST_IPV4 \
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_DEST_IPV4
+#define STATS_DEST_IPV6 \
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_DEST_IPV6
+#define CONNECTIVITY_STATS_SET_MAX \
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_SET_MAX
+
+const struct nla_policy
+qca_wlan_vendor_set_connectivity_check_stats[CONNECTIVITY_STATS_SET_MAX + 1] = {
+	[STATS_PKT_INFO_TYPE] = {.type = NLA_U32 },
+	[STATS_DNS_DOMAIN_NAME] = {.type = NLA_BINARY,
+					.len = DNS_DOMAIN_NAME_MAX_LEN },
+	[STATS_SRC_PORT] = {.type = NLA_U32 },
+	[STATS_DEST_PORT] = {.type = NLA_U32 },
+	[STATS_DEST_IPV4] = {.type = NLA_U32 },
+	[STATS_DEST_IPV6] = {.type = NLA_BINARY,
+					.len = ICMPv6_ADDR_LEN },
+};
+
+/**
+ * hdd_dns_unmake_name_query() - Convert an uncompressed DNS name to a
+ *			     NUL-terminated string
+ * @name: DNS name
+ *
+ * Return: Produce a printable version of a DNS name.
+ */
+static inline uint8_t *hdd_dns_unmake_name_query(uint8_t *name)
+{
+	uint8_t *p;
+	unsigned int len;
+
+	p = name;
+	while ((len = *p)) {
+		*(p++) = '.';
+		p += len;
+	}
+
+	return name + 1;
+}
+
+/**
+ * hdd_dns_make_name_query() - Convert a standard NUL-terminated string
+ *				to DNS name
+ * @string: Name as a NUL-terminated string
+ * @buf: Buffer in which to place DNS name
+ *
+ * DNS names consist of "<length>element" pairs.
+ *
+ * Return: Byte following constructed DNS name
+ */
+static uint8_t *hdd_dns_make_name_query(const uint8_t *string, uint8_t *buf)
+{
+	uint8_t *length_byte = buf++;
+	uint8_t c;
+
+	while ((c = *(string++))) {
+		if (c == '.') {
+			*length_byte = buf - length_byte - 1;
+			length_byte = buf;
+		}
+		*(buf++) = c;
+	}
+	*length_byte = buf - length_byte - 1;
+	*(buf++) = '\0';
+	return buf;
+}
+
+/**
+ * hdd_set_clear_connectivity_check_stats_info() - set/clear stats info
+ * @adapter: Pointer to hdd adapter
+ * @arp_stats_params: arp stats structure to be sent to FW
+ * @tb: nl attribute
+ * @is_set_stats: set/clear stats
+ *
+ *
+ * Return: 0 on success, negative errno on failure
+ */
+static int hdd_set_clear_connectivity_check_stats_info(
+		hdd_adapter_t *adapter,
+		struct set_arp_stats_params *arp_stats_params,
+		struct nlattr **tb, bool is_set_stats)
+{
+	struct nlattr *tb2[CONNECTIVITY_STATS_SET_MAX + 1];
+	struct nlattr *curr_attr = NULL;
+	int err = 0;
+	uint32_t pkt_bitmap;
+	int rem;
+
+	/* Clear All Stats command has come */
+	if (!is_set_stats) {
+		arp_stats_params->pkt_type_bitmap = adapter->pkt_type_bitmap;
+		/* DNS tracking is not supported in FW. */
+		arp_stats_params->pkt_type_bitmap &=
+						~CONNECTIVITY_CHECK_SET_DNS;
+		arp_stats_params->flag = false;
+		arp_stats_params->pkt_type = WLAN_NUD_STATS_ARP_PKT_TYPE;
+		qdf_mem_zero(&adapter->hdd_stats.hdd_arp_stats,
+			     sizeof(adapter->hdd_stats.hdd_arp_stats));
+		qdf_mem_zero(&adapter->hdd_stats.hdd_dns_stats,
+			     sizeof(adapter->hdd_stats.hdd_dns_stats));
+		qdf_mem_zero(&adapter->hdd_stats.hdd_tcp_stats,
+			     sizeof(adapter->hdd_stats.hdd_tcp_stats));
+		qdf_mem_zero(&adapter->hdd_stats.hdd_icmpv4_stats,
+			     sizeof(adapter->hdd_stats.hdd_icmpv4_stats));
+		adapter->track_arp_ip = 0;
+		qdf_mem_zero(adapter->dns_payload,
+			     adapter->track_dns_domain_len);
+		adapter->track_dns_domain_len = 0;
+		adapter->track_src_port = 0;
+		adapter->track_dest_port = 0;
+		adapter->track_dest_ipv4 = 0;
+		adapter->pkt_type_bitmap = 0;
+		goto end;
+	}
+
+	/* Set NUD command for start tracking is received. */
+	nla_for_each_nested(curr_attr,
+			    tb[STATS_SET_DATA_PKT_INFO],
+			    rem) {
+
+		if (hdd_nla_parse(tb2,
+				CONNECTIVITY_STATS_SET_MAX,
+				nla_data(curr_attr), nla_len(curr_attr),
+				qca_wlan_vendor_set_connectivity_check_stats)) {
+			hdd_err("nla_parse failed");
+			err = -EINVAL;
+			goto end;
+		}
+
+		if (tb2[STATS_PKT_INFO_TYPE]) {
+			pkt_bitmap = nla_get_u32(tb2[STATS_PKT_INFO_TYPE]);
+			if (!pkt_bitmap) {
+				hdd_err("pkt tracking bitmap is empty");
+				err = -EINVAL;
+				goto end;
+			}
+			arp_stats_params->pkt_type_bitmap = pkt_bitmap;
+			arp_stats_params->flag = true;
+			adapter->pkt_type_bitmap |=
+					arp_stats_params->pkt_type_bitmap;
+
+			if (pkt_bitmap & CONNECTIVITY_CHECK_SET_ARP) {
+				if (!tb[STATS_GW_IPV4]) {
+					hdd_err("GW ipv4 address is not present");
+					err = -EINVAL;
+					goto end;
+				}
+				arp_stats_params->ip_addr =
+						nla_get_u32(tb[STATS_GW_IPV4]);
+				arp_stats_params->pkt_type =
+						WLAN_NUD_STATS_ARP_PKT_TYPE;
+				adapter->track_arp_ip =
+						arp_stats_params->ip_addr;
+				qdf_mem_zero(&adapter->hdd_stats.hdd_arp_stats,
+					sizeof(adapter->hdd_stats.
+					       hdd_arp_stats));
+			}
+
+			if (pkt_bitmap & CONNECTIVITY_CHECK_SET_DNS) {
+				uint8_t *domain_name;
+
+				if (!tb2[STATS_DNS_DOMAIN_NAME]) {
+					hdd_err("DNS domain id is not present");
+					err = -EINVAL;
+					goto end;
+				}
+				domain_name =
+					nla_data(tb2[STATS_DNS_DOMAIN_NAME]);
+				adapter->track_dns_domain_len =
+					nla_len(tb2[STATS_DNS_DOMAIN_NAME]);
+				hdd_dns_make_name_query(domain_name,
+						    adapter->dns_payload);
+				/* DNS tracking is not supported in FW. */
+				arp_stats_params->pkt_type_bitmap &=
+						~CONNECTIVITY_CHECK_SET_DNS;
+				qdf_mem_zero(&adapter->hdd_stats.hdd_dns_stats,
+					sizeof(adapter->hdd_stats.
+					       hdd_dns_stats));
+			}
+
+			if (pkt_bitmap & CONNECTIVITY_CHECK_SET_TCP_HANDSHAKE) {
+				if (!tb2[STATS_SRC_PORT] ||
+				    !tb2[STATS_DEST_PORT]) {
+					hdd_err("Source/Dest port is not present");
+					err = -EINVAL;
+					goto end;
+				}
+				arp_stats_params->tcp_src_port =
+					nla_get_u32(tb2[STATS_SRC_PORT]);
+				arp_stats_params->tcp_dst_port =
+					nla_get_u32(tb2[STATS_DEST_PORT]);
+				adapter->track_src_port =
+						arp_stats_params->tcp_src_port;
+				adapter->track_dest_port =
+						arp_stats_params->tcp_dst_port;
+				qdf_mem_zero(&adapter->hdd_stats.hdd_tcp_stats,
+					sizeof(adapter->hdd_stats.
+					       hdd_tcp_stats));
+			}
+
+			if (pkt_bitmap & CONNECTIVITY_CHECK_SET_ICMPV4) {
+				if (!tb2[STATS_DEST_IPV4]) {
+					hdd_err("destination ipv4 address to track ping packets is not present");
+					err = -EINVAL;
+					goto end;
+				}
+				arp_stats_params->icmp_ipv4 =
+					nla_get_u32(tb2[STATS_DEST_IPV4]);
+				adapter->track_dest_ipv4 =
+						arp_stats_params->icmp_ipv4;
+				qdf_mem_zero(&adapter->hdd_stats.hdd_tcp_stats,
+					sizeof(adapter->hdd_stats.
+							hdd_tcp_stats));
+			}
+		} else {
+			hdd_err("stats list empty");
+			err = -EINVAL;
+			goto end;
+		}
+	}
+
+end:
+	return err;
+}
 
 /**
  * hdd_post_get_chain_rssi_rsp - send rsp to user space
@@ -10638,10 +11215,15 @@ static int __wlan_hdd_cfg80211_set_nud_stats(struct wiphy *wiphy,
 	struct net_device   *dev = wdev->netdev;
 	hdd_adapter_t *adapter = WLAN_HDD_GET_PRIV_PTR(dev);
 	hdd_context_t *hdd_ctx = wiphy_priv(wiphy);
-	struct set_arp_stats_params arp_stats_params;
+	struct set_arp_stats_params arp_stats_params = {0};
 	int err = 0;
 
 	ENTER();
+
+	if (QDF_GLOBAL_FTM_MODE == hdd_get_conparam()) {
+		hdd_err("Command not allowed in FTM mode");
+		return -EINVAL;
+	}
 
 	err = wlan_hdd_validate_context(hdd_ctx);
 	if (0 != err)
@@ -10661,25 +11243,65 @@ static int __wlan_hdd_cfg80211_set_nud_stats(struct wiphy *wiphy,
 	}
 
 	if (tb[STATS_SET_START]) {
-		if (!tb[STATS_GW_IPV4]) {
-			QDF_TRACE(QDF_MODULE_ID_HDD, QDF_TRACE_LEVEL_ERROR,
-				  "%s STATS_SET_START CMD", __func__);
-			return -EINVAL;
+		/* tracking is enabled for stats other than arp. */
+		if (tb[STATS_SET_DATA_PKT_INFO]) {
+			err = hdd_set_clear_connectivity_check_stats_info(
+						adapter,
+						&arp_stats_params, tb, true);
+			if (err)
+				return -EINVAL;
+
+			/*
+			 * if only tracking dns, then don't send
+			 * wmi command to FW.
+			 */
+			if (!arp_stats_params.pkt_type_bitmap)
+				return err;
+		} else {
+			if (!tb[STATS_GW_IPV4]) {
+				QDF_TRACE(QDF_MODULE_ID_HDD,
+					  QDF_TRACE_LEVEL_ERROR,
+					  "%s STATS_SET_START CMD", __func__);
+				return -EINVAL;
+			}
+			arp_stats_params.flag = true;
+			arp_stats_params.ip_addr =
+					nla_get_u32(tb[STATS_GW_IPV4]);
+			adapter->track_arp_ip = arp_stats_params.ip_addr;
+
+			qdf_mem_zero(&adapter->hdd_stats.hdd_arp_stats,
+			     sizeof(adapter->hdd_stats.hdd_arp_stats));
+
+			arp_stats_params.pkt_type = WLAN_NUD_STATS_ARP_PKT_TYPE;
 		}
-		arp_stats_params.flag = true;
-		arp_stats_params.ip_addr = nla_get_u32(tb[STATS_GW_IPV4]);
-		hdd_ctx->track_arp_ip = arp_stats_params.ip_addr;
 	} else {
-		arp_stats_params.flag = false;
+		/* clear tracking stats of other data types as well*/
+		if (adapter->pkt_type_bitmap) {
+			err = hdd_set_clear_connectivity_check_stats_info(
+						adapter,
+						&arp_stats_params, tb, false);
+			if (err)
+				return -EINVAL;
+
+			/*
+			 * if only tracking dns, then don't send
+			 * wmi command to FW.
+			 */
+			if (!arp_stats_params.pkt_type_bitmap)
+				return err;
+		} else {
+			arp_stats_params.flag = false;
+			qdf_mem_zero(&adapter->hdd_stats.hdd_arp_stats,
+				     sizeof(adapter->hdd_stats.hdd_arp_stats));
+			arp_stats_params.pkt_type = WLAN_NUD_STATS_ARP_PKT_TYPE;
+		}
 	}
+
 	if (arp_stats_params.flag) {
 		QDF_TRACE(QDF_MODULE_ID_HDD, QDF_TRACE_LEVEL_INFO,
 			  "%s STATS_SET_START Cleared!!", __func__);
 	}
-	qdf_mem_zero(&adapter->hdd_stats.hdd_arp_stats,
-		     sizeof(adapter->hdd_stats.hdd_arp_stats));
 
-	arp_stats_params.pkt_type = WLAN_NUD_STATS_ARP_PKT_TYPE;
 	arp_stats_params.vdev_id = adapter->sessionId;
 
 	if (QDF_STATUS_SUCCESS !=
@@ -10836,8 +11458,44 @@ static int wlan_hdd_cfg80211_set_limit_offchan_param(struct wiphy *wiphy,
 	QCA_ATTR_NUD_STATS_AP_LINK_ACTIVE
 #define AP_LINK_DAD \
 	QCA_ATTR_NUD_STATS_IS_DAD
+#define DATA_PKT_STATS \
+	QCA_ATTR_NUD_STATS_DATA_PKT_STATS
 #define STATS_GET_MAX \
 	QCA_ATTR_NUD_STATS_GET_MAX
+
+#define CHECK_STATS_INVALID \
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_INVALID
+#define CHECK_STATS_PKT_TYPE \
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_PKT_TYPE
+#define CHECK_STATS_PKT_DNS_DOMAIN_NAME \
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_PKT_DNS_DOMAIN_NAME
+#define CHECK_STATS_PKT_SRC_PORT \
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_PKT_SRC_PORT
+#define CHECK_STATS_PKT_DEST_PORT \
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_PKT_DEST_PORT
+#define CHECK_STATS_PKT_DEST_IPV4 \
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_PKT_DEST_IPV4
+#define CHECK_STATS_PKT_DEST_IPV6 \
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_PKT_DEST_IPV6
+#define CHECK_STATS_PKT_REQ_COUNT_FROM_NETDEV \
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_PKT_REQ_COUNT_FROM_NETDEV
+#define CHECK_STATS_PKT_REQ_COUNT_TO_LOWER_MAC \
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_PKT_REQ_COUNT_TO_LOWER_MAC
+#define CHECK_STATS_PKT_REQ_RX_COUNT_BY_LOWER_MAC \
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_PKT_REQ_RX_COUNT_BY_LOWER_MAC
+#define CHECK_STATS_PKT_REQ_COUNT_TX_SUCCESS \
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_PKT_REQ_COUNT_TX_SUCCESS
+#define CHECK_STATS_PKT_RSP_RX_COUNT_BY_LOWER_MAC \
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_PKT_RSP_RX_COUNT_BY_LOWER_MAC
+#define CHECK_STATS_PKT_RSP_RX_COUNT_BY_UPPER_MAC \
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_PKT_RSP_RX_COUNT_BY_UPPER_MAC
+#define CHECK_STATS_PKT_RSP_COUNT_TO_NETDEV \
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_PKT_RSP_COUNT_TO_NETDEV
+#define CHECK_STATS_PKT_RSP_COUNT_OUT_OF_ORDER_DROP \
+	QCA_ATTR_CONNECTIVITY_CHECK_STATS_PKT_RSP_COUNT_OUT_OF_ORDER_DROP
+#define CHECK_DATA_STATS_MAX \
+	QCA_ATTR_CONNECTIVITY_CHECK_DATA_STATS_MAX
+
 
 const struct nla_policy
 qca_wlan_vendor_get_nud_stats[STATS_GET_MAX + 1] = {
@@ -10851,7 +11509,277 @@ qca_wlan_vendor_get_nud_stats[STATS_GET_MAX + 1] = {
 	[RSP_COUNT_OUT_OF_ORDER_DROP] = {.type = NLA_U16 },
 	[AP_LINK_ACTIVE] = {.type = NLA_FLAG },
 	[AP_LINK_DAD] = {.type = NLA_FLAG },
+	[DATA_PKT_STATS] = {.type = NLA_U16 },
 };
+
+/**
+ * hdd_populate_dns_stats_info() - send dns stats info to network stack
+ * @adapter: pointer to adapter context
+ * @skb: pointer to skb
+ *
+ *
+ * Return: An error code or 0 on success.
+ */
+static int hdd_populate_dns_stats_info(hdd_adapter_t *adapter,
+				       struct sk_buff *skb)
+{
+	uint8_t *dns_query;
+
+	dns_query = qdf_mem_malloc(adapter->track_dns_domain_len + 1);
+	if (!dns_query) {
+		QDF_TRACE(QDF_MODULE_ID_HDD, QDF_TRACE_LEVEL_ERROR,
+			  "%s: mem alloc fail.", __func__);
+		return -EINVAL;
+	}
+
+	qdf_mem_copy(dns_query, adapter->dns_payload,
+		     adapter->track_dns_domain_len);
+
+	if (nla_put_u16(skb, CHECK_STATS_PKT_TYPE,
+		CONNECTIVITY_CHECK_SET_DNS) ||
+	    nla_put(skb, CHECK_STATS_PKT_DNS_DOMAIN_NAME,
+		adapter->track_dns_domain_len,
+		hdd_dns_unmake_name_query(dns_query)) ||
+	    nla_put_u16(skb, CHECK_STATS_PKT_REQ_COUNT_FROM_NETDEV,
+		adapter->hdd_stats.hdd_dns_stats.tx_dns_req_count) ||
+	    nla_put_u16(skb, CHECK_STATS_PKT_REQ_COUNT_TO_LOWER_MAC,
+		adapter->hdd_stats.hdd_dns_stats.tx_host_fw_sent) ||
+	    nla_put_u16(skb, CHECK_STATS_PKT_REQ_RX_COUNT_BY_LOWER_MAC,
+		adapter->hdd_stats.hdd_dns_stats.tx_host_fw_sent) ||
+	    nla_put_u16(skb, CHECK_STATS_PKT_REQ_COUNT_TX_SUCCESS,
+		adapter->hdd_stats.hdd_dns_stats.tx_ack_cnt) ||
+	    nla_put_u16(skb, CHECK_STATS_PKT_RSP_RX_COUNT_BY_UPPER_MAC,
+		adapter->hdd_stats.hdd_dns_stats.rx_dns_rsp_count) ||
+	    nla_put_u16(skb, CHECK_STATS_PKT_RSP_COUNT_TO_NETDEV,
+		adapter->hdd_stats.hdd_dns_stats.rx_delivered) ||
+	    nla_put_u16(skb, CHECK_STATS_PKT_RSP_COUNT_OUT_OF_ORDER_DROP,
+		adapter->hdd_stats.hdd_dns_stats.rx_host_drop)) {
+		hdd_err("nla put fail");
+		qdf_mem_free(dns_query);
+		kfree_skb(skb);
+		return -EINVAL;
+	}
+	qdf_mem_free(dns_query);
+	return 0;
+}
+
+/**
+ * hdd_populate_tcp_stats_info() - send tcp stats info to network stack
+ * @adapter: pointer to adapter context
+ * @skb: pointer to skb
+ * @pkt_type: tcp pkt type
+ *
+ * Return: An error code or 0 on success.
+ */
+static int hdd_populate_tcp_stats_info(hdd_adapter_t *adapter,
+				       struct sk_buff *skb,
+				       uint8_t pkt_type)
+{
+	switch (pkt_type) {
+	case CONNECTIVITY_CHECK_SET_TCP_SYN:
+		/* Fill info for tcp syn packets (tx packet) */
+		if (nla_put_u16(skb, CHECK_STATS_PKT_TYPE,
+			CONNECTIVITY_CHECK_SET_TCP_SYN) ||
+		    nla_put_u16(skb, CHECK_STATS_PKT_SRC_PORT,
+			adapter->track_src_port) ||
+		    nla_put_u16(skb, CHECK_STATS_PKT_DEST_PORT,
+			adapter->track_dest_port) ||
+		    nla_put_u16(skb, CHECK_STATS_PKT_REQ_COUNT_FROM_NETDEV,
+			adapter->hdd_stats.hdd_tcp_stats.tx_tcp_syn_count) ||
+		    nla_put_u16(skb, CHECK_STATS_PKT_REQ_COUNT_TO_LOWER_MAC,
+			adapter->hdd_stats.hdd_tcp_stats.
+						tx_tcp_syn_host_fw_sent) ||
+		    nla_put_u16(skb, CHECK_STATS_PKT_REQ_RX_COUNT_BY_LOWER_MAC,
+			adapter->hdd_stats.hdd_tcp_stats.
+						tx_tcp_syn_host_fw_sent) ||
+		    nla_put_u16(skb, CHECK_STATS_PKT_REQ_COUNT_TX_SUCCESS,
+			adapter->hdd_stats.hdd_tcp_stats.tx_tcp_syn_ack_cnt)) {
+			hdd_err("nla put fail");
+			kfree_skb(skb);
+			return -EINVAL;
+		}
+		break;
+	case CONNECTIVITY_CHECK_SET_TCP_SYN_ACK:
+		/* Fill info for tcp syn-ack packets (rx packet) */
+		if (nla_put_u16(skb, CHECK_STATS_PKT_TYPE,
+			CONNECTIVITY_CHECK_SET_TCP_SYN_ACK) ||
+		    nla_put_u16(skb, CHECK_STATS_PKT_SRC_PORT,
+			adapter->track_src_port) ||
+		    nla_put_u16(skb, CHECK_STATS_PKT_DEST_PORT,
+			adapter->track_dest_port) ||
+		    nla_put_u16(skb, CHECK_STATS_PKT_RSP_RX_COUNT_BY_LOWER_MAC,
+			adapter->hdd_stats.hdd_tcp_stats.rx_fw_cnt) ||
+		    nla_put_u16(skb, CHECK_STATS_PKT_RSP_RX_COUNT_BY_UPPER_MAC,
+			adapter->hdd_stats.hdd_tcp_stats.
+							rx_tcp_syn_ack_count) ||
+		    nla_put_u16(skb, CHECK_STATS_PKT_RSP_COUNT_TO_NETDEV,
+			adapter->hdd_stats.hdd_tcp_stats.rx_delivered) ||
+		    nla_put_u16(skb,
+			CHECK_STATS_PKT_RSP_COUNT_OUT_OF_ORDER_DROP,
+			adapter->hdd_stats.hdd_tcp_stats.rx_host_drop)) {
+			hdd_err("nla put fail");
+			kfree_skb(skb);
+			return -EINVAL;
+		}
+		break;
+	case CONNECTIVITY_CHECK_SET_TCP_ACK:
+		/* Fill info for tcp ack packets (tx packet) */
+		if (nla_put_u16(skb, CHECK_STATS_PKT_TYPE,
+			CONNECTIVITY_CHECK_SET_TCP_ACK) ||
+		    nla_put_u16(skb, CHECK_STATS_PKT_SRC_PORT,
+			adapter->track_src_port) ||
+		    nla_put_u16(skb, CHECK_STATS_PKT_DEST_PORT,
+			adapter->track_dest_port) ||
+		    nla_put_u16(skb, CHECK_STATS_PKT_REQ_COUNT_FROM_NETDEV,
+			adapter->hdd_stats.hdd_tcp_stats.tx_tcp_ack_count) ||
+		    nla_put_u16(skb, CHECK_STATS_PKT_REQ_COUNT_TO_LOWER_MAC,
+			adapter->hdd_stats.hdd_tcp_stats.
+						tx_tcp_ack_host_fw_sent) ||
+		    nla_put_u16(skb, CHECK_STATS_PKT_REQ_RX_COUNT_BY_LOWER_MAC,
+			adapter->hdd_stats.hdd_tcp_stats.
+						tx_tcp_ack_host_fw_sent) ||
+		    nla_put_u16(skb, CHECK_STATS_PKT_REQ_COUNT_TX_SUCCESS,
+			adapter->hdd_stats.hdd_tcp_stats.tx_tcp_ack_ack_cnt)) {
+			hdd_err("nla put fail");
+			kfree_skb(skb);
+			return -EINVAL;
+		}
+		break;
+	default:
+		break;
+	}
+	return 0;
+}
+
+/**
+ * hdd_populate_icmpv4_stats_info() - send icmpv4 stats info to network stack
+ * @adapter: pointer to adapter context
+ * @skb: pointer to skb
+ *
+ *
+ * Return: An error code or 0 on success.
+ */
+static int hdd_populate_icmpv4_stats_info(hdd_adapter_t *adapter,
+					  struct sk_buff *skb)
+{
+	if (nla_put_u16(skb, CHECK_STATS_PKT_TYPE,
+		CONNECTIVITY_CHECK_SET_ICMPV4) ||
+	    nla_put_u32(skb, CHECK_STATS_PKT_DEST_IPV4,
+		adapter->track_dest_ipv4) ||
+	    nla_put_u16(skb, CHECK_STATS_PKT_REQ_COUNT_FROM_NETDEV,
+		adapter->hdd_stats.hdd_icmpv4_stats.tx_icmpv4_req_count) ||
+	    nla_put_u16(skb, CHECK_STATS_PKT_REQ_COUNT_TO_LOWER_MAC,
+		adapter->hdd_stats.hdd_icmpv4_stats.tx_host_fw_sent) ||
+	    nla_put_u16(skb, CHECK_STATS_PKT_REQ_RX_COUNT_BY_LOWER_MAC,
+		adapter->hdd_stats.hdd_icmpv4_stats.tx_host_fw_sent) ||
+	    nla_put_u16(skb, CHECK_STATS_PKT_REQ_COUNT_TX_SUCCESS,
+		adapter->hdd_stats.hdd_icmpv4_stats.tx_ack_cnt) ||
+	    nla_put_u16(skb, CHECK_STATS_PKT_RSP_RX_COUNT_BY_LOWER_MAC,
+		adapter->hdd_stats.hdd_icmpv4_stats.rx_fw_cnt) ||
+	    nla_put_u16(skb, CHECK_STATS_PKT_RSP_RX_COUNT_BY_UPPER_MAC,
+		adapter->hdd_stats.hdd_icmpv4_stats.rx_icmpv4_rsp_count) ||
+	    nla_put_u16(skb, CHECK_STATS_PKT_RSP_COUNT_TO_NETDEV,
+		adapter->hdd_stats.hdd_icmpv4_stats.rx_delivered) ||
+	    nla_put_u16(skb, CHECK_STATS_PKT_RSP_COUNT_OUT_OF_ORDER_DROP,
+		adapter->hdd_stats.hdd_icmpv4_stats.rx_host_drop)) {
+		hdd_err("nla put fail");
+		kfree_skb(skb);
+		return -EINVAL;
+	}
+	return 0;
+}
+
+/**
+ * hdd_populate_connectivity_check_stats_info() - send connectivity stats info
+ *						  to network stack
+ * @adapter: pointer to adapter context
+ * @skb: pointer to skb
+ *
+ *
+ * Return: An error code or 0 on success.
+ */
+
+static int hdd_populate_connectivity_check_stats_info(
+	hdd_adapter_t *adapter, struct sk_buff *skb)
+{
+	struct nlattr *connect_stats, *connect_info;
+	uint32_t count = 0;
+
+	connect_stats = nla_nest_start(skb, DATA_PKT_STATS);
+	if (connect_stats == NULL) {
+		hdd_err("nla_nest_start failed");
+		return -EINVAL;
+	}
+
+	if (adapter->pkt_type_bitmap & CONNECTIVITY_CHECK_SET_DNS) {
+		connect_info = nla_nest_start(skb, count);
+		if (connect_info == NULL) {
+			hdd_err("nla_nest_start failed count %u", count);
+			return -EINVAL;
+		}
+
+		if (hdd_populate_dns_stats_info(adapter, skb))
+			goto put_attr_fail;
+		nla_nest_end(skb, connect_info);
+		count++;
+	}
+
+	if (adapter->pkt_type_bitmap & CONNECTIVITY_CHECK_SET_TCP_HANDSHAKE) {
+		connect_info = nla_nest_start(skb, count);
+		if (connect_info == NULL) {
+			hdd_err("nla_nest_start failed count %u", count);
+			return -EINVAL;
+		}
+		if (hdd_populate_tcp_stats_info(adapter, skb,
+					CONNECTIVITY_CHECK_SET_TCP_SYN))
+			goto put_attr_fail;
+		nla_nest_end(skb, connect_info);
+		count++;
+
+		connect_info = nla_nest_start(skb, count);
+		if (connect_info == NULL) {
+			hdd_err("nla_nest_start failed count %u", count);
+			return -EINVAL;
+		}
+		if (hdd_populate_tcp_stats_info(adapter, skb,
+					CONNECTIVITY_CHECK_SET_TCP_SYN_ACK))
+			goto put_attr_fail;
+		nla_nest_end(skb, connect_info);
+		count++;
+
+		connect_info = nla_nest_start(skb, count);
+		if (connect_info == NULL) {
+			hdd_err("nla_nest_start failed count %u", count);
+			return -EINVAL;
+		}
+		if (hdd_populate_tcp_stats_info(adapter, skb,
+					CONNECTIVITY_CHECK_SET_TCP_ACK))
+			goto put_attr_fail;
+		nla_nest_end(skb, connect_info);
+		count++;
+	}
+
+	if (adapter->pkt_type_bitmap & CONNECTIVITY_CHECK_SET_ICMPV4) {
+		connect_info = nla_nest_start(skb, count);
+		if (connect_info == NULL) {
+			hdd_err("nla_nest_start failed count %u", count);
+			return -EINVAL;
+		}
+
+		if (hdd_populate_icmpv4_stats_info(adapter, skb))
+			goto put_attr_fail;
+		nla_nest_end(skb, connect_info);
+		count++;
+	}
+
+	nla_nest_end(skb, connect_stats);
+	return 0;
+
+put_attr_fail:
+	hdd_err("QCA_WLAN_VENDOR_ATTR put fail. count %u", count);
+	return -EINVAL;
+}
+
 
 /**
  * __wlan_hdd_cfg80211_get_nud_stats() - get arp stats command to firmware
@@ -10876,9 +11804,15 @@ static int __wlan_hdd_cfg80211_get_nud_stats(struct wiphy *wiphy,
 	hdd_adapter_t *adapter = WLAN_HDD_GET_PRIV_PTR(dev);
 	hdd_context_t *hdd_ctx = wiphy_priv(wiphy);
 	struct get_arp_stats_params arp_stats_params;
+	uint32_t pkt_type_bitmap;
 	struct sk_buff *skb;
 
 	ENTER();
+
+	if (QDF_GLOBAL_FTM_MODE == hdd_get_conparam()) {
+		hdd_err("Command not allowed in FTM mode");
+		return -EINVAL;
+	}
 
 	err = wlan_hdd_validate_context(hdd_ctx);
 	if (0 != err)
@@ -10952,7 +11886,15 @@ static int __wlan_hdd_cfg80211_get_nud_stats(struct wiphy *wiphy,
 	if (adapter->dad)
 		nla_put_flag(skb, AP_LINK_DAD);
 
-	hdd_ctx->track_arp_ip = 0;
+	pkt_type_bitmap = adapter->pkt_type_bitmap;
+	/* ARP tracking is done above. */
+	pkt_type_bitmap &= ~CONNECTIVITY_CHECK_SET_ARP;
+
+	if (pkt_type_bitmap) {
+		if (hdd_populate_connectivity_check_stats_info(adapter, skb))
+			return -EINVAL;
+	}
+
 	cfg80211_vendor_cmd_reply(skb);
 	return err;
 }
@@ -12141,6 +13083,13 @@ const struct wiphy_vendor_command hdd_wiphy_vendor_commands[] = {
 		.doit = wlan_hdd_cfg80211_configure_tdls_mode
 	},
 #endif
+	{
+		.info.vendor_id = QCA_NL80211_VENDOR_ID,
+		.info.subcmd = QCA_NL80211_VENDOR_SUBCMD_GET_SAR_LIMITS,
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV |
+			 WIPHY_VENDOR_CMD_NEED_RUNNING,
+		.doit = wlan_hdd_cfg80211_get_sar_power_limits
+	},
 	{
 		.info.vendor_id = QCA_NL80211_VENDOR_ID,
 		.info.subcmd = QCA_NL80211_VENDOR_SUBCMD_SET_SAR_LIMITS,
@@ -15461,10 +16410,7 @@ static int wlan_hdd_cfg80211_connect_start(hdd_adapter_t *pAdapter,
 		qdf_mem_copy((void *)(pRoamProfile->SSIDs.SSIDList->SSID.ssId),
 			     ssid, ssid_len);
 
-		pRoamProfile->supplicant_disabled_roaming =
-			!pAdapter->fast_roaming_allowed;
-		pRoamProfile->roaming_allowed_on_iface =
-			pAdapter->fast_roaming_allowed;
+		pRoamProfile->supplicant_disabled_roaming = false;
 
 		/* cleanup bssid hint */
 		qdf_mem_zero(pRoamProfile->bssid_hint.bytes,
@@ -19860,10 +20806,8 @@ static int __wlan_hdd_cfg80211_update_connect_params(
 		  changed, roam_profile->fils_con_info->is_fils_connection,
 		  roam_profile->fils_con_info->key_nai_length);
 
-	if (!adapter->fast_roaming_allowed ||
-	    !hdd_ctx->config->is_fils_roaming_supported) {
-		hdd_debug("LFR3: %d, FILS support %d",
-			  adapter->fast_roaming_allowed,
+	if (!hdd_ctx->config->is_fils_roaming_supported) {
+		hdd_debug("FILS roaming support %d",
 			  hdd_ctx->config->is_fils_roaming_supported);
 		return 0;
 	}

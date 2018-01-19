@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -3005,8 +3005,18 @@ static int drv_cmd_country(hdd_adapter_t *adapter,
 	QDF_STATUS status;
 	unsigned long rc;
 	char *country_code;
+	int32_t cc_from_db;
 
 	country_code = command + 8;
+	if (!((country_code[0] == 'X' && country_code[1] == 'X') ||
+	    (country_code[0] == '0' && country_code[1] == '0'))) {
+		cc_from_db = cds_get_country_from_alpha2(country_code);
+		if (cc_from_db == CTRY_DEFAULT) {
+			hdd_err("Invalid country code: %c%c",
+				country_code[0], country_code[1]);
+			return -EINVAL;
+		}
+	}
 
 	INIT_COMPLETION(adapter->change_country_code);
 
@@ -3299,11 +3309,6 @@ static int drv_cmd_set_roam_mode(hdd_adapter_t *adapter,
 	int ret = 0;
 	uint8_t *value = command;
 	uint8_t roamMode = CFG_LFR_FEATURE_ENABLED_DEFAULT;
-
-	if (!adapter->fast_roaming_allowed) {
-		hdd_err("Roaming is always disabled on this interface");
-		goto exit;
-	}
 
 	/* Move pointer to ahead of SETROAMMODE<delimiter> */
 	value = value + SIZE_OF_SETROAMMODE + 1;
@@ -4341,11 +4346,6 @@ static int drv_cmd_set_fast_roam(hdd_adapter_t *adapter,
 	int ret = 0;
 	uint8_t *value = command;
 	uint8_t lfrMode = CFG_LFR_FEATURE_ENABLED_DEFAULT;
-
-	if (!adapter->fast_roaming_allowed) {
-		hdd_err("Roaming is always disabled on this interface");
-		goto exit;
-	}
 
 	/* Move pointer to ahead of SETFASTROAM<delimiter> */
 	value = value + command_len + 1;
@@ -5686,12 +5686,6 @@ static int drv_cmd_set_ccx_mode(hdd_adapter_t *adapter,
 		goto exit;
 	}
 
-	if (!adapter->fast_roaming_allowed) {
-		hdd_warn("Fast roaming is not allowed on this device hence this operation is not permitted!");
-		ret = -EPERM;
-		goto exit;
-	}
-
 	/* Move pointer to ahead of SETCCXMODE<delimiter> */
 	value = value + command_len + 1;
 
@@ -6998,13 +6992,18 @@ static int hdd_drv_cmd_process(hdd_adapter_t *adapter,
 	const int cmd_num_total = ARRAY_SIZE(hdd_drv_cmds);
 	uint8_t *cmd_i = NULL;
 	hdd_drv_cmd_handler_t handler = NULL;
-	int len = 0;
+	int len = 0, cmd_len = 0;
+	uint8_t *ptr;
 	bool args;
 
 	if (!adapter || !cmd || !priv_data) {
 		hdd_err("at least 1 param is NULL");
 		return -EINVAL;
 	}
+
+	/* Calculate length of the first word */
+	ptr = strchrnul(cmd, ' ');
+	cmd_len = ptr - cmd;
 
 	hdd_ctx = (hdd_context_t *)adapter->pHddCtx;
 
@@ -7020,7 +7019,7 @@ static int hdd_drv_cmd_process(hdd_adapter_t *adapter,
 			return -EINVAL;
 		}
 
-		if (strncasecmp(cmd, cmd_i, len) == 0) {
+		if (len == cmd_len && strncasecmp(cmd, cmd_i, len) == 0) {
 			if (args && drv_cmd_validate(cmd, len))
 				return -EINVAL;
 
