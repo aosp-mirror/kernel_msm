@@ -141,8 +141,32 @@ int32_t camera_io_dev_write_continuous(struct camera_io_master *io_master_info,
 	}
 }
 
+static int read_rainbow_sensor_id(struct camera_io_master *io_master_info)
+{
+	int rc = 0;
+	uint16_t orig_slave_addr = io_master_info->cci_client->sid;
+	uint32_t data = 0;
+	uint32_t addr = 0x00;
+
+	io_master_info->cci_client->sid = 0x40 >> 1;
+
+	rc = camera_io_dev_read(io_master_info, addr,
+		&data, CAMERA_SENSOR_I2C_TYPE_BYTE,
+		CAMERA_SENSOR_I2C_TYPE_BYTE);
+
+	io_master_info->cci_client->sid = orig_slave_addr;
+
+	if (rc < 0)
+		pr_info("read_rainbow_sensor_id failed(non-fatal): %d\n", rc);
+	else
+		pr_info("read_rainbow_sensor_id success, id: 0x%x\n", data);
+
+	return rc;
+}
+
 int32_t camera_io_init(struct camera_io_master *io_master_info)
 {
+	int rc = 0;
 	if (!io_master_info) {
 		CAM_ERR(CAM_SENSOR, "Invalid Args");
 		return -EINVAL;
@@ -151,16 +175,20 @@ int32_t camera_io_init(struct camera_io_master *io_master_info)
 	if (io_master_info->master_type == CCI_MASTER) {
 		io_master_info->cci_client->cci_subdev =
 			cam_cci_get_subdev();
-		return cam_sensor_cci_i2c_util(io_master_info->cci_client,
+		rc = cam_sensor_cci_i2c_util(io_master_info->cci_client,
 			MSM_CCI_INIT);
 	} else if ((io_master_info->master_type == I2C_MASTER) ||
 			(io_master_info->master_type == SPI_MASTER)) {
-		return 0;
+		rc = 0;
 	} else {
 		CAM_ERR(CAM_SENSOR, "Invalid Comm. Master:%d",
 			io_master_info->master_type);
-		return -EINVAL;
+		rc = -EINVAL;
 	}
+
+	read_rainbow_sensor_id(io_master_info);
+
+	return rc;
 }
 
 int32_t camera_io_release(struct camera_io_master *io_master_info)
