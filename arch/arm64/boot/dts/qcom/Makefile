@@ -126,6 +126,7 @@ ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
 		sda670-pm660a-mtp-overlay.dtbo \
 		qcs605-cdp-overlay.dtbo \
 		qcs605-mtp-overlay.dtbo \
+		qcs605-360camera-overlay.dtbo \
 		qcs605-external-codec-mtp-overlay.dtbo \
 		qcs605-lc-mtp-overlay.dtbo
 
@@ -156,6 +157,7 @@ qcs605-cdp-overlay.dtbo-base := qcs605.dtb
 qcs605-mtp-overlay.dtbo-base := qcs605.dtb
 qcs605-external-codec-mtp-overlay.dtbo-base := qcs605.dtb
 qcs605-lc-mtp-overlay.dtbo-base := qcs605.dtb
+qcs605-360camera-overlay.dtbo-base := qcs605.dtb
 
 else
 dtb-$(CONFIG_ARCH_SDM670) += sdm670-rumi.dtb \
@@ -219,7 +221,10 @@ dtb-$(CONFIG_ARCH_SDM450) += sdm450-rcm.dtb \
 	sdm450-qrd.dtb \
 	sdm450-pmi8940-mtp.dtb \
 	sdm450-pmi8937-mtp.dtb \
-	sdm450-iot-mtp.dtb
+	sdm450-iot-mtp.dtb \
+	sdm450-qrd-sku4.dtb \
+	sdm450-pmi632-cdp-s2.dtb \
+	sdm450-pmi632-mtp-s3.dtb
 endif
 
 always		:= $(dtb-y)

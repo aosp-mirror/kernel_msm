@@ -42,7 +42,6 @@
 
 #define ERR_READY	0
 #define PBL_DONE	1
-#define QDSP6SS_NMI_STATUS	0x44
 
 #define desc_to_data(d) container_of(d, struct pil_tz_data, desc)
 #define subsys_to_data(d) container_of(d, struct pil_tz_data, subsys_desc)
@@ -117,7 +116,6 @@ struct pil_tz_data {
 	void __iomem *irq_mask;
 	void __iomem *err_status;
 	void __iomem *err_status_spare;
-	void __iomem *reg_base;
 	u32 bits_arr[2];
 };
 
@@ -931,19 +929,8 @@ static void subsys_crash_shutdown(const struct subsys_desc *subsys)
 static irqreturn_t subsys_err_fatal_intr_handler (int irq, void *dev_id)
 {
 	struct pil_tz_data *d = subsys_to_data(dev_id);
-	u32 nmi_status = 0;
 
-	if (d->reg_base)
-		nmi_status = readl_relaxed(d->reg_base +
-						QDSP6SS_NMI_STATUS);
-
-	if (nmi_status & 0x04)
-		pr_err("%s: Fatal error on the %s due to TZ NMI\n",
-			__func__, d->subsys_desc.name);
-	else
-		pr_err("%s Fatal error on the %s\n",
-			__func__, d->subsys_desc.name);
-
+	pr_err("Fatal error on %s!\n", d->subsys_desc.name);
 	if (subsys_get_crash_status(d->subsys)) {
 		pr_err("%s: Ignoring error fatal, restart in progress\n",
 							d->subsys_desc.name);
@@ -1065,7 +1052,8 @@ static int pil_tz_driver_probe(struct platform_device *pdev)
 {
 	struct pil_tz_data *d;
 	struct resource *res;
-	u32 proxy_timeout;
+	struct device_node *crypto_node;
+	u32 proxy_timeout, crypto_id;
 	int len, rc;
 
 	d = devm_kzalloc(&pdev->dev, sizeof(*d), GFP_KERNEL);
@@ -1078,13 +1066,6 @@ static int pil_tz_driver_probe(struct platform_device *pdev)
 
 	d->keep_proxy_regs_on = of_property_read_bool(pdev->dev.of_node,
 						"qcom,keep-proxy-regs-on");
-
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "base_reg");
-	d->reg_base = devm_ioremap_resource(&pdev->dev, res);
-	if (IS_ERR(d->reg_base)) {
-		dev_err(&pdev->dev, "Failed to ioremap base register\n");
-		d->reg_base = NULL;
-	}
 
 	rc = of_property_read_string(pdev->dev.of_node, "qcom,firmware-name",
 				      &d->desc.name);
@@ -1128,7 +1109,17 @@ static int pil_tz_driver_probe(struct platform_device *pdev)
 									rc);
 			return rc;
 		}
-		scm_pas_init(MSM_BUS_MASTER_CRYPTO_CORE_0);
+
+		crypto_id = MSM_BUS_MASTER_CRYPTO_CORE_0;
+		crypto_node = of_parse_phandle(pdev->dev.of_node,
+						"qcom,mas-crypto", 0);
+		if (!IS_ERR_OR_NULL(crypto_node)) {
+			of_property_read_u32(crypto_node, "cell-id",
+				&crypto_id);
+			of_node_put(crypto_node);
+		}
+
+		scm_pas_init((int)crypto_id);
 	}
 
 	rc = pil_desc_init(&d->desc);

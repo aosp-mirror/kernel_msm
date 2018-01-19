@@ -144,6 +144,12 @@
 #define ADRENO_QUIRK_HFI_USE_REG BIT(6)
 /* Only set protected SECVID registers once */
 #define ADRENO_QUIRK_SECVID_SET_ONCE BIT(7)
+/*
+ * Limit number of read and write transactions from
+ * UCHE block to GBIF to avoid possible deadlock
+ * between GBIF, SMMU and MEMNOC.
+ */
+#define ADRENO_QUIRK_LIMIT_UCHE_GBIF_RW BIT(8)
 
 /* Flags to control command packet settings */
 #define KGSL_CMD_FLAGS_NONE             0
@@ -575,7 +581,6 @@ enum adreno_device_flags {
 	ADRENO_DEVICE_ISDB_ENABLED = 12,
 	ADRENO_DEVICE_CACHE_FLUSH_TS_SUSPENDED = 13,
 	ADRENO_DEVICE_HARD_RESET = 14,
-	ADRENO_DEVICE_PREEMPTION_EXECUTION = 15,
 	ADRENO_DEVICE_CORESIGHT_CX = 16,
 };
 
@@ -650,6 +655,7 @@ enum adreno_regs {
 	ADRENO_REG_CP_CONTEXT_SWITCH_PRIV_SECURE_RESTORE_ADDR_HI,
 	ADRENO_REG_CP_CONTEXT_SWITCH_NON_PRIV_RESTORE_ADDR_LO,
 	ADRENO_REG_CP_CONTEXT_SWITCH_NON_PRIV_RESTORE_ADDR_HI,
+	ADRENO_REG_CP_PREEMPT_LEVEL_STATUS,
 	ADRENO_REG_RBBM_STATUS,
 	ADRENO_REG_RBBM_STATUS3,
 	ADRENO_REG_RBBM_PERFCTR_CTL,
@@ -1647,22 +1653,10 @@ static inline void adreno_set_preempt_state(struct adreno_device *adreno_dev,
 	smp_wmb();
 }
 
-static inline bool adreno_is_preemption_execution_enabled(
-				struct adreno_device *adreno_dev)
-{
-	return test_bit(ADRENO_DEVICE_PREEMPTION_EXECUTION, &adreno_dev->priv);
-}
-
-static inline bool adreno_is_preemption_setup_enabled(
-				struct adreno_device *adreno_dev)
-{
-	return test_bit(ADRENO_DEVICE_PREEMPTION, &adreno_dev->priv);
-}
-
 static inline bool adreno_is_preemption_enabled(
 				struct adreno_device *adreno_dev)
 {
-	return 0;
+	return test_bit(ADRENO_DEVICE_PREEMPTION, &adreno_dev->priv);
 }
 /**
  * adreno_ctx_get_rb() - Return the ringbuffer that a context should
@@ -1687,7 +1681,7 @@ static inline struct adreno_ringbuffer *adreno_ctx_get_rb(
 	 * ringbuffer
 	 */
 
-	if (!adreno_is_preemption_execution_enabled(adreno_dev))
+	if (!adreno_is_preemption_enabled(adreno_dev))
 		return &(adreno_dev->ringbuffers[0]);
 
 	/*
@@ -1938,13 +1932,15 @@ static inline int adreno_vbif_clear_pending_transactions(
 		 * Need to release CX Halt explicitly in case of SW_RESET.
 		 * GX Halt release will be taken care by SW_RESET internally.
 		 */
-		adreno_writereg(adreno_dev, ADRENO_REG_RBBM_GPR0_CNTL,
-				GBIF_HALT_REQUEST);
-		ret = adreno_wait_for_vbif_halt_ack(device,
-				ADRENO_REG_RBBM_VBIF_GX_RESET_STATUS,
-				VBIF_RESET_ACK_MASK);
-		if (ret)
-			return ret;
+		if (gpudev->gx_is_on(adreno_dev)) {
+			adreno_writereg(adreno_dev, ADRENO_REG_RBBM_GPR0_CNTL,
+					GBIF_HALT_REQUEST);
+			ret = adreno_wait_for_vbif_halt_ack(device,
+					ADRENO_REG_RBBM_VBIF_GX_RESET_STATUS,
+					VBIF_RESET_ACK_MASK);
+			if (ret)
+				return ret;
+		}
 
 		adreno_writereg(adreno_dev, ADRENO_REG_GBIF_HALT, mask);
 		ret = adreno_wait_for_vbif_halt_ack(device,

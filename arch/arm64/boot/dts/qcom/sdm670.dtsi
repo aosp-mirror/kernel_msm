@@ -1,4 +1,4 @@
-/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -545,6 +545,14 @@
 			size = <0 0x1400000>;
 		};
 
+		qseecom_ta_mem: qseecom_ta_region {
+			compatible = "shared-dma-pool";
+			alloc-ranges = <0 0x00000000 0 0xffffffff>;
+			reusable;
+			alignment = <0 0x400000>;
+			size = <0 0x1000000>;
+		};
+
 		sp_mem: sp_region {  /* SPSS-HLOS ION shared mem */
 			compatible = "shared-dma-pool";
 			alloc-ranges = <0 0x00000000 0 0xffffffff>; /* 32-bit */
@@ -745,6 +753,7 @@
 			compatible = "qcom,memshare-peripheral";
 			qcom,peripheral-size = <0x500000>;
 			qcom,client-id = <1>;
+			qcom,allocate-boot-time;
 			label = "modem";
 		};
 	};
@@ -2386,7 +2395,7 @@
 
 	qcom,msm_fastrpc {
 		compatible = "qcom,msm-fastrpc-compute";
-		qcom,adsp-remoteheap-vmid = <37>;
+		qcom,adsp-remoteheap-vmid = <22 37>;
 
 		qcom,msm_fastrpc_compute_cb1 {
 			compatible = "qcom,msm-fastrpc-compute-cb";
@@ -2537,8 +2546,6 @@
 		qcom,count-unit = <0x10000>;
 		qcom,hw-timer-hz = <19200000>;
 		qcom,target-dev = <&cpubw>;
-		qcom,byte-mid-mask = <0xe000>;
-		qcom,byte-mid-match = <0xe000>;
 	};
 
 	memlat_cpu0: qcom,memlat-cpu0 {
@@ -2637,10 +2644,9 @@
 		qcom,cachemiss-ev = <0x17>;
 		qcom,core-dev-table =
 			<  576000  300000000 >,
-			<  748800  556800000 >,
-			<  998400  806400000 >,
-			< 1209660  940800000 >,
-			< 1516800 1190400000 >,
+			<  998400  556800000 >,
+			< 1209660  844800000 >,
+			< 1516800  940800000 >,
 			< 1612800 1382400000 >,
 			< 1708000 1440000000 >;
 	};
@@ -2931,4 +2937,18 @@
 
 &pm660_div_clk {
 	status = "ok";
+};
+
+&qupv3_se10_i2c {
+	nx30p6093: nx30p6093@36 {
+		status = "disabled";
+		compatible = "nxp,nx30p6093";
+		reg = <0x36>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <5 IRQ_TYPE_NONE>;
+		nxp,long-wakeup-sec = <28800>; /* 8 hours */
+		nxp,short-wakeup-ms = <180000>; /* 3 mins */
+		pinctrl-names = "default";
+		pinctrl-0 = <&nx30p6093_intr_default>;
+	};
 };
