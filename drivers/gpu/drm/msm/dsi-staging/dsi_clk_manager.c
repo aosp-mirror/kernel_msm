@@ -1062,9 +1062,10 @@ int dsi_clk_req_state(void *client, enum dsi_clk_type clk,
 
 DEFINE_MUTEX(dsi_mngr_clk_mutex);
 
-int dsi_display_clk_ctrl(void *handle,
-	enum dsi_clk_type clk_type, enum dsi_clk_state clk_state)
+int dsi_display_clk_ctrl(void *handle, u32 type, u32 state)
 {
+	enum dsi_clk_type clk_type = (enum dsi_clk_type)type;
+	enum dsi_clk_state clk_state = (enum dsi_clk_state)state;
 	int rc = 0;
 
 	if (!handle) {
