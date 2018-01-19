@@ -29,9 +29,11 @@
 #include <linux/regulator/machine.h>
 #include <linux/regulator/of_regulator.h>
 #include <linux/qpnp/power-on.h>
+#include <linux/sched.h>
 #include <linux/power_supply.h>
 #include <linux/timer.h>
 #include <linux/wakelock.h>
+#include <linux/timer.h>
 
 #define CREATE_MASK(NUM_BITS, POS) \
 	((unsigned char) (((1 << (NUM_BITS)) - 1) << (POS)))
@@ -230,6 +232,7 @@ struct qpnp_pon {
 	u8			warm_reset_reason2;
 	bool		is_spon;
 	bool		store_hard_reset_reason;
+	struct		hrtimer timed_timer;
 
 	/* extend */
 	int						timer_id;
@@ -769,6 +772,14 @@ qpnp_get_cfg(struct qpnp_pon *pon, u32 pon_type)
 	return NULL;
 }
 
+static enum hrtimer_restart qpnp_pon_vibe_timer_func(struct hrtimer *timer)
+{
+	show_state();
+	BUG();
+	return HRTIMER_NORESTART;
+}
+
+
 static int
 qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 {
@@ -826,6 +837,15 @@ qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 	input_sync(pon->pon_input);
 
 	cfg->old_state = !!key_status;
+
+
+	if (key_status)
+		hrtimer_start(&pon->timed_timer,
+					ns_to_ktime(7000llu * NSEC_PER_MSEC),
+					HRTIMER_MODE_REL);
+	else
+		if (hrtimer_active(&pon->timed_timer))
+			hrtimer_try_to_cancel(&pon->timed_timer);
 
 	return 0;
 }
@@ -2399,6 +2419,9 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 	qpnp_pon_debugfs_init(spmi);
 
 	qpnp_pon_cblpwr_init(pon);
+
+	hrtimer_init(&pon->timed_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	pon->timed_timer.function = qpnp_pon_vibe_timer_func;
 
 	return 0;
 }
