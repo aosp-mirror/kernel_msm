@@ -50,6 +50,7 @@
 #include <asm/fixmap.h>
 #include <asm/cputype.h>
 #include <asm/elf.h>
+#include <asm/cpufeature.h>
 #include <asm/cputable.h>
 #include <asm/cpu_ops.h>
 #include <asm/sections.h>
@@ -90,6 +91,9 @@ unsigned int compat_elf_hwcap2 __read_mostly;
 
 static const char *cpu_name;
 static const char *machine_name;
+#ifdef CONFIG_HARDEN_BRANCH_PREDICTOR
+bool sys_psci_bp_hardening_initialised;
+#endif
 phys_addr_t __fdt_pointer __initdata;
 
 /*
@@ -236,6 +240,17 @@ static void __maybe_unused install_bp_hardening_cb(bp_hardening_cb_t fn)
 {
 	__install_bp_hardening_cb(fn);
 }
+
+void enable_psci_bp_hardening(void *data) {
+	if (psci_ops.get_version) {
+		switch(read_cpuid_part_number()) {
+		case ARM_CPU_PART_CORTEX_A57:
+		case ARM_CPU_PART_CORTEX_A72:
+			install_bp_hardening_cb(
+				  (bp_hardening_cb_t)psci_ops.get_version);
+		}
+	}
+}
 #endif	/* CONFIG_HARDEN_BRANCH_PREDICTOR */
 
 void __init setup_cpu_features(void)
@@ -243,6 +258,11 @@ void __init setup_cpu_features(void)
 	u64 features, block;
 	u32 cwg;
 	int cls;
+
+#ifdef CONFIG_HARDEN_BRANCH_PREDICTOR
+	on_each_cpu(enable_psci_bp_hardening, NULL, true);
+	sys_psci_bp_hardening_initialised = true;
+#endif
 
 	/*
 	 * Check for sane CTR_EL0.CWG value.
