@@ -156,7 +156,7 @@ ENTRY(flush_icache_range)
  *	- end     - virtual end address of region
  */
 ENTRY(__flush_cache_user_range)
-	uaccess_enable_not_uao x2, x3
+	uaccess_ttbr0_enable x2, x3, x4
 	dcache_line_size x2, x3
 	sub	x3, x2, #1
 	bic	x4, x0, x3
@@ -178,7 +178,7 @@ USER(9f, ic	ivau, x4	)		// invalidate I line PoU
 9:						// ignore any faulting cache operation
 	dsb	ish
 	isb
-	uaccess_disable_not_uao x1
+	uaccess_ttbr0_disable x1, x2
 	ret
 ENDPROC(flush_icache_range)
 ENDPROC(__flush_cache_user_range)
@@ -267,7 +267,7 @@ ENDPROC(__dma_clean_range)
  *	- end     - virtual end address of region
  */
 ENTRY(__dma_flush_range)
-	uaccess_enable_not_uao x2, x3
+	uaccess_enable_not_uao x2, x3, x4
 	dcache_line_size x2, x3
 	sub	x3, x2, #1
 	bic	x0, x0, x3
@@ -276,7 +276,7 @@ ENTRY(__dma_flush_range)
 	cmp	x0, x1
 	b.lo	1b
 	dsb	sy
-	uaccess_disable_not_uao x1
+	uaccess_disable_not_uao x1, x2
 	ret
 ENDPIPROC(__dma_flush_range)
 

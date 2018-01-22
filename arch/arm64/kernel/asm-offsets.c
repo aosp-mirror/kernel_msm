@@ -22,6 +22,7 @@
 #include <linux/mm.h>
 #include <linux/dma-mapping.h>
 #include <linux/kvm_host.h>
+#include <asm/fixmap.h>
 #include <asm/thread_info.h>
 #include <asm/memory.h>
 #include <asm/signal32.h>
@@ -44,15 +45,15 @@ int main(void)
   DEFINE(TI_PREEMPT,		offsetof(struct thread_info, preempt_count));
   DEFINE(TI_ADDR_LIMIT,		offsetof(struct thread_info, addr_limit));
 #endif
-#ifdef CONFIG_ARM64_SW_TTBR0_PAN
-  DEFINE(TI_TTBR0,		offsetof(struct thread_info, ttbr0));
-#endif
 #ifndef CONFIG_THREAD_INFO_IN_TASK
   DEFINE(TI_TASK,		offsetof(struct thread_info, task));
 #endif
   DEFINE(TI_EXEC_DOMAIN,	offsetof(struct thread_info, exec_domain));
 #ifndef CONFIG_THREAD_INFO_IN_TASK
   DEFINE(TI_CPU,		offsetof(struct thread_info, cpu));
+#endif
+#ifdef CONFIG_ARM64_SW_TTBR0_PAN
+  DEFINE(TSK_TI_TTBR0,		offsetof(struct thread_info, ttbr0));
 #endif
   BLANK();
   DEFINE(THREAD_CPU_CONTEXT,	offsetof(struct task_struct, thread.cpu_context));
@@ -159,6 +160,10 @@ int main(void)
   DEFINE(SLEEP_SAVE_SP_SZ,	sizeof(struct sleep_save_sp));
   DEFINE(SLEEP_SAVE_SP_PHYS,	offsetof(struct sleep_save_sp, save_ptr_stash_phys));
   DEFINE(SLEEP_SAVE_SP_VIRT,	offsetof(struct sleep_save_sp, save_ptr_stash));
+#endif
+  BLANK();
+#ifdef CONFIG_UNMAP_KERNEL_AT_EL0
+  DEFINE(TRAMP_VALIAS,		TRAMP_VALIAS);
 #endif
   return 0;
 }
