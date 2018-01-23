@@ -31475,6 +31475,7 @@ static int wma_apfind_evt_handler(void *handle, u_int8_t *event,
 	u_int8_t ssid_tmp[WMI_MAX_SSID_LEN + 1];
 	u_int8_t *mac;
 	u_int32_t vdev_id;
+	u_int32_t buf_len;
 
 	if (!param_buf) {
 		WMA_LOGE("Invalid APFIND event buffer");
@@ -31482,8 +31483,36 @@ static int wma_apfind_evt_handler(void *handle, u_int8_t *event,
 	}
 
 	apfind_event_hdr = param_buf->hdr;
-	WMA_LOGD("APFIND event received, id=%d, data_length=%d",
-		apfind_event_hdr->event_type, apfind_event_hdr->data_len);
+	WMA_LOGD("APFIND event received, id=%d, data_len=%d",
+		 apfind_event_hdr->event_type, apfind_event_hdr->data_len);
+
+	/* data_len = WMI_TLV_HDR_SIZE + length of data */
+	if (apfind_event_hdr->data_len <= WMI_TLV_HDR_SIZE) {
+		WMA_LOGE("APFIND event with no data");
+		return -EINVAL;
+	}
+
+	buf_len = param_buf->num_data;
+	if (buf_len != (apfind_event_hdr->data_len - WMI_TLV_HDR_SIZE)) {
+		WMA_LOGE("APFIND event with unmatched len: %u - %u",
+			 buf_len, apfind_event_hdr->data_len);
+		return -EINVAL;
+	}
+
+	if ((apfind_event_hdr->data_len >
+	     (len - sizeof(wmi_apfind_event_hdr))) ||
+	    (apfind_event_hdr->data_len >
+	     (WMA_SVC_MSG_MAX_SIZE - sizeof(wmi_apfind_event_hdr)))) {
+		WMA_LOGE("APFIND event with invalid data_len: %u",
+			 apfind_event_hdr->data_len);
+		return -EINVAL;
+	}
+
+	if (buf_len < WMI_MAX_SSID_LEN + IEEE80211_ADDR_LEN) {
+		WMA_LOGE("APFIND event with invalid buf_len: %u", buf_len);
+		return -EINVAL;
+	}
+
 	buf = param_buf->data;
 	A_MEMZERO(ssid_tmp, sizeof(ssid_tmp));
 	A_MEMCPY(ssid_tmp, buf, WMI_MAX_SSID_LEN);
@@ -31492,12 +31521,10 @@ static int wma_apfind_evt_handler(void *handle, u_int8_t *event,
 
 	buf = &param_buf->data[WMI_MAX_SSID_LEN];
 	mac = buf;
-	WMA_LOGD("%s, APFIND dump mac=0x%08X-0x%08X",
-		__func__, *(u_int32_t *)buf, *(u_int32_t *)(buf + sizeof(u_int32_t)));
+	WMA_LOGD("%s, APFIND dump mac=%pM", __func__, mac);
 
-	if (apfind_event_hdr->data_len >=
-		(WMI_MAX_SSID_LEN + IEEE80211_ADDR_LEN + sizeof(vdev_id)
-		+ sizeof(apfind_event_hdr->tlv_header))) {
+	if (buf_len >=
+	    (WMI_MAX_SSID_LEN + IEEE80211_ADDR_LEN + sizeof(vdev_id))) {
 		/* FW had the tlv_header len calculated into the data_len */
 		buf = &param_buf->data[WMI_MAX_SSID_LEN + IEEE80211_ADDR_LEN];
 		vdev_id = *(u_int32_t*) buf;
