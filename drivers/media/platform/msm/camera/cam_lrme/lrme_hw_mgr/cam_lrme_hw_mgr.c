@@ -652,7 +652,7 @@ static int cam_lrme_mgr_hw_flush(void *hw_mgr_priv, void *hw_flush_args)
 {	int rc = 0, i;
 	struct cam_lrme_hw_mgr *hw_mgr = hw_mgr_priv;
 	struct cam_hw_flush_args *args;
-	struct cam_lrme_device *hw_device;
+	struct cam_lrme_device *hw_device = NULL;
 	struct cam_lrme_frame_request *frame_req = NULL, *req_to_flush = NULL;
 	struct cam_lrme_frame_request **req_list = NULL;
 	uint32_t device_index;
