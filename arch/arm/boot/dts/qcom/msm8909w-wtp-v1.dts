@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -18,6 +18,8 @@
 #include "msm8909w.dtsi"
 #include "msm8909w-memory.dtsi"
 #include "msm8909w-pm660-mtp.dtsi"
+#include "msm8909w-pm660-camera.dtsi"
+#include "msm8909w-pm660-camera-sensor-wtp-v1.dtsi"
 
 / {
 	model = "Qualcomm Technologies, Inc. MSM8909W-PM660 V1 WTP";
@@ -51,12 +53,16 @@
 			synaptics,irq-on-state = <0>;
 			synaptics,irq-flags = <0x2008>;
 			synaptics,power-delay-ms = <200>;
-			synaptics,reset-delay-ms = <200>;
 			synaptics,max-y-for-2d = <389>;
+			synaptics,wakeup-gestures-en = <1>;
 			synaptics,resume-in-workqueue;
 			synaptics,x-flip;
 			synaptics,y-flip;
-			/delete-property/ synaptics,reset-gpio;
+
+			synaptics,reset-gpio = <&msm_gpio 31 0x0>;
+			synaptics,reset-delay-ms = <200>;
+			synaptics,reset-on-state = <0>;
+			synaptics,reset-active-ms = <20>;
 			/delete-property/ synaptics,display-coords;
 			/delete-property/ synaptics,panel-coords;
 			/delete-property/ synaptics,power-down;
@@ -105,6 +111,20 @@
 	 /delete-property/ asoc-codec;
 };
 
+&qcom_seecom {
+	reg = <0x87b00000 0x100000>;
+	reg-names = "secapp-region";
+	status = "okay";
+};
+
+&modem_adsp_mem {
+	reg = <0x0 0x88000000 0x0 0x05600000>;
+};
+
+&peripheral_mem {
+	reg = <0x0 0x8d600000 0x0 0x0500000>;
+};
+
 &i2c_1 {
 	status = "disabled";
 };
@@ -118,7 +138,24 @@
 };
 
 &i2c_2 {
-	status = "disabled";
+	status = "okay";
+	nq@28 {
+		compatible = "qcom,nq-nci";
+		reg = <0x28>;
+		qcom,nq-irq = <&msm_gpio 50 0x00>;
+		qcom,nq-ven = <&msm_gpio 52 0x00>;
+		qcom,nq-firm = <&msm_gpio 38 0x00>;
+		qcom,nq-esepwr = <&msm_gpio 49 0x00>;
+		qcom,nq-clkreq = <&pm660_gpios 4 0x00>;
+		qcom,clk-src = "BBCLK3";
+		interrupt-parent = <&msm_gpio>;
+		interrupts = <50 0>;
+		interrupt-names = "nfc_irq";
+		pinctrl-names = "nfc_active","nfc_suspend";
+		pinctrl-0 = <&nfcw_int_active &nfcv2k_disable_active>;
+		pinctrl-1 = <&nfcw_int_suspend &nfcv2k_disable_suspend>;
+		clock-names = "ref_clk";
+	};
 };
 
 &i2c_5 {
@@ -130,9 +167,13 @@
 };
 
 &blsp1_uart1 {
+	status = "disabled";
+};
+
+&blsp1_uart2 {
 	status = "ok";
 	pinctrl-names = "default";
-	pinctrl-0 = <&uart_console_sleep>;
+	pinctrl-0 = <&uart_console2_sleep>;
 };
 
 /* Pinctrl dt nodes for interrupt & reset gpio for Synaptics touch controller */
@@ -168,20 +209,33 @@
 
 &ts_reset_suspend {
 	mux {
-		pins = "gpio16";
+		pins = "gpio31";
 	};
 
 	config {
-		pins = "gpio16";
+		pins = "gpio31";
 	};
 };
 
 &ts_release {
 	mux {
-		pins = "gpio98", "gpio16";
+		pins = "gpio98", "gpio31";
 	};
 
 	config {
-		pins = "gpio98", "gpio16";
+		pins = "gpio98", "gpio31";
 	};
+};
+
+&system_fstab {
+	fsmgr_flags = "wait";
+};
+
+&vendor_fstab {
+	fsmgr_flags = "wait";
+};
+
+&mdss_dsi0{
+	qcom,dsi-pref-prim-pan = <&dsi_auo_390p_cmd>;
+	qcom,platform-bklight-en-gpio = <&msm_gpio 37 0>;
 };

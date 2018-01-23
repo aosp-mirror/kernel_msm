@@ -168,6 +168,10 @@
 	qcom,clock-a7@0b011050 {
 		cpu-vdd-supply = <&apc_vreg_corner>;
 	};
+
+	qcom,rpmcc@1800000 {
+		compatible = "qcom,rpmcc-8909-pm660";
+	};
 };
 
 &sdhc_1 {
@@ -241,10 +245,10 @@
 };
 
 / {
+	/delete-node/ qcom,battery-data;
 	mtp_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <15>;
-		#include "fg-gen3-batterydata-itech-3000mah.dtsi"
-		#include "fg-gen3-batterydata-ascent-3450mah.dtsi"
+		#include "fg-gen3-batterydata-palladium-1500mah.dtsi"
 	};
 };
 

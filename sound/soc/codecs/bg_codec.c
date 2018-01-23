@@ -29,6 +29,7 @@
 #include <sound/soc.h>
 #include <sound/soc-dapm.h>
 #include <sound/tlv.h>
+#include <linux/qdsp6v2/apr.h>
 #include <sound/info.h>
 #include <soc/qcom/bg_glink.h>
 #include "bg_codec.h"
@@ -110,7 +111,7 @@ static uint32_t get_active_session_id(int dai_id)
 	uint32_t active_session;
 
 	if ((dai_id >= NUM_CODEC_DAIS) || (dai_id < 0)) {
-		pr_err("%s dai id\n", __func__);
+		pr_err("%s invalid dai id\n", __func__);
 		return 0;
 	}
 
@@ -258,10 +259,9 @@ static int _bg_codec_hw_params(struct bg_cdc_priv *bg_cdc)
 	/* Send command to BG to set_params */
 	ret = pktzr_cmd_set_params(&hw_params, sizeof(hw_params), &rsp);
 	if (ret < 0)
-		pr_err("pktzr cmd set params failed\n");
+		pr_err("pktzr cmd set params failed with error %d\n", ret);
 
-	if (rsp.buf)
-		kzfree(rsp.buf);
+	kfree(rsp.buf);
 
 	return ret;
 }
@@ -276,8 +276,7 @@ static int _bg_codec_start(struct bg_cdc_priv *bg_cdc, int dai_id)
 	codec_start.active_session = get_active_session_id(dai_id);
 	if (codec_start.active_session == 0) {
 		pr_err("%s:Invalid dai id %d", __func__, dai_id);
-		ret = -EINVAL;
-		goto exit;
+		return -EINVAL;
 	}
 	codec_start.route_to_bg = bg_cdc->src[dai_id];
 	pr_debug("%s active_session %x route_to_bg %d\n",
@@ -287,13 +286,11 @@ static int _bg_codec_start(struct bg_cdc_priv *bg_cdc, int dai_id)
 	if (!rsp.buf)
 		return -ENOMEM;
 	ret = pktzr_cmd_start(&codec_start, sizeof(codec_start), &rsp);
-	if (ret < 0) {
-		pr_err("pktzr cmd start failed\n");
-		goto exit;
-	}
-exit:
-	if (rsp.buf)
-		kzfree(rsp.buf);
+	if (ret < 0)
+		pr_err("pktzr cmd start failed %d\n", ret);
+
+	kfree(rsp.buf);
+
 	return ret;
 }
 
@@ -307,8 +304,7 @@ static int _bg_codec_stop(struct bg_cdc_priv *bg_cdc, int dai_id)
 	codec_start.active_session = get_active_session_id(dai_id);
 	if (codec_start.active_session == 0) {
 		pr_err("%s:Invalid dai id %d", __func__, dai_id);
-		ret = -EINVAL;
-		goto exit;
+		return -EINVAL;
 	}
 	codec_start.route_to_bg = bg_cdc->src[dai_id];
 	pr_debug("%s active_session %x route_to_bg %d\n",
@@ -318,13 +314,11 @@ static int _bg_codec_stop(struct bg_cdc_priv *bg_cdc, int dai_id)
 	if (!rsp.buf)
 		return -ENOMEM;
 	ret = pktzr_cmd_stop(&codec_start, sizeof(codec_start), &rsp);
-	if (ret < 0) {
-		pr_err("pktzr cmd stop failed\n");
-		goto exit;
-	}
-exit:
-	if (rsp.buf)
-		kzfree(rsp.buf);
+	if (ret < 0)
+		pr_err("pktzr cmd stop failed with error %d\n", ret);
+
+	kfree(rsp.buf);
+
 	return ret;
 }
 
@@ -405,7 +399,7 @@ static int bg_put_hwd_state(struct snd_kcontrol *kcontrol,
 
 	if ((bg_cdc == NULL) || (dai_id >= NUM_CODEC_DAIS) ||
 		(dai_id < 0)) {
-		pr_err("%s invalid input\n", __func__);
+		pr_err("%s bgcdc is null or invalid dai id\n", __func__);
 		return -EINVAL;
 	}
 
@@ -420,21 +414,20 @@ static int bg_put_hwd_state(struct snd_kcontrol *kcontrol,
 		active_session_id = get_active_session_id(dai_id);
 		if (active_session_id == 0) {
 			pr_err("%s:Invalid dai id %d", __func__, dai_id);
-			ret = -EINVAL;
-			goto exit;
+			return -EINVAL;
 		}
 		bg_cdc->hw_params.active_session = active_session_id;
 		/* Send command to BG for HW params */
 		ret = _bg_codec_hw_params(bg_cdc);
 		if (ret < 0) {
 			pr_err("_bg_codec_hw_params fail for dai %d", dai_id);
-			goto exit;
+			return ret;
 		}
 		/* Send command to BG to start session */
 		ret = _bg_codec_start(bg_cdc, dai_id);
 		if (ret < 0) {
 			pr_err("_bg_codec_start fail for dai %d", dai_id);
-			goto exit;
+			return ret;
 		}
 		bg_cdc->hwd_started = true;
 	} else if (bg_cdc->hwd_started &&
@@ -444,11 +437,10 @@ static int bg_put_hwd_state(struct snd_kcontrol *kcontrol,
 		ret = _bg_codec_stop(bg_cdc, dai_id);
 		if (ret < 0) {
 			pr_err("bg_codec_stop failed for dai %d\n", dai_id);
-			goto exit;
+			return ret;
 		}
 	}
 
-exit:
 	return ret;
 }
 
@@ -874,6 +866,14 @@ static int bg_cdc_probe(struct platform_device *pdev)
 {
 	struct bg_cdc_priv *bg_cdc;
 	int ret = 0;
+	int adsp_state;
+
+	adsp_state = apr_get_subsys_state();
+	if (adsp_state != APR_SUBSYS_LOADED) {
+		pr_err("%s:Adsp is not loaded yet %d\n",
+			__func__, adsp_state);
+		return -EPROBE_DEFER;
+	}
 
 	bg_cdc = kzalloc(sizeof(struct bg_cdc_priv),
 			    GFP_KERNEL);

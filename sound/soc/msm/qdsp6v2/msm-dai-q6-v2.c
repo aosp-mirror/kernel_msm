@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -5126,11 +5126,15 @@ static int msm_dai_q6_dai_tdm_remove(struct snd_soc_dai *dai)
 				dev_err(dai->dev, "fail to disable AFE group 0x%x\n",
 					group_id);
 			}
-			rc = msm_dai_q6_tdm_set_clk(tdm_dai_data,
-				dai->id, false);
-			if (IS_ERR_VALUE(rc)) {
-				dev_err(dai->dev, "%s: fail to disable AFE clk 0x%x\n",
+			if (!(tdm_dai_data->afe_ebit_unsupported &&
+			     !tdm_dai_data->clk_set.clk_freq_in_hz)) {
+				rc = msm_dai_q6_tdm_set_clk(tdm_dai_data,
+							    dai->id, false);
+				if (IS_ERR_VALUE(rc)) {
+					dev_err(dai->dev,
+					"%s: fail to disable AFE clk 0x%x\n",
 					__func__, dai->id);
+				}
 			}
 		}
 	}
@@ -5657,6 +5661,10 @@ static int msm_dai_q6_tdm_prepare(struct snd_pcm_substream *substream,
 			prim_port_id = dai->id;
 			if (dai_data->sec_port_enable) {
 				sec_port_id = AFE_PORT_ID_PRIMARY_TDM_TX;
+				sec_group_ref = &tdm_group_ref[sec_group_idx];
+			}
+			if ((dai_data->num_group_ports > 1) &&
+			    (dai_data->sec_port_enable)) {
 				sec_group_id =
 					AFE_GROUP_DEVICE_ID_PRIMARY_TDM_TX;
 				sec_group_idx =
@@ -5667,7 +5675,6 @@ static int msm_dai_q6_tdm_prepare(struct snd_pcm_substream *substream,
 						sec_group_id);
 					goto rtn;
 				}
-				sec_group_ref = &tdm_group_ref[sec_group_idx];
 				if (atomic_read(sec_group_ref) == 0) {
 					rc = afe_port_group_enable(
 							sec_group_id,
@@ -5687,6 +5694,10 @@ static int msm_dai_q6_tdm_prepare(struct snd_pcm_substream *substream,
 			prim_port_id = dai->id;
 			if (dai_data->sec_port_enable) {
 				sec_port_id = AFE_PORT_ID_PRIMARY_TDM_RX;
+				sec_group_ref = &tdm_group_ref[sec_group_idx];
+			}
+			if ((dai_data->num_group_ports > 1) &&
+			    (dai_data->sec_port_enable)) {
 				sec_group_id =
 					AFE_GROUP_DEVICE_ID_PRIMARY_TDM_RX;
 				sec_group_idx =
@@ -5697,7 +5708,6 @@ static int msm_dai_q6_tdm_prepare(struct snd_pcm_substream *substream,
 						sec_group_id);
 						goto rtn;
 				}
-				sec_group_ref = &tdm_group_ref[sec_group_idx];
 				if (atomic_read(sec_group_ref) == 0) {
 					rc = afe_port_group_enable(
 								  sec_group_id,
@@ -5761,8 +5771,10 @@ static int msm_dai_q6_tdm_prepare(struct snd_pcm_substream *substream,
 				if (atomic_read(group_ref) == 0) {
 					afe_port_group_enable(group_id,
 						NULL, false);
+				if (!(dai_data->afe_ebit_unsupported &&
+				     !dai_data->clk_set.clk_freq_in_hz))
 					msm_dai_q6_tdm_set_clk(dai_data,
-					dai->id, false);
+							       dai->id, false);
 				}
 				dev_err(dai->dev, "%s: fail AFE port 0x%x\n",
 						__func__, sec_port_id);
@@ -5814,6 +5826,10 @@ static void msm_dai_q6_tdm_shutdown(struct snd_pcm_substream *substream,
 			prim_port_id = dai->id;
 			if (dai_data->sec_port_enable) {
 				sec_port_id = AFE_PORT_ID_PRIMARY_TDM_TX;
+				sec_group_ref = &tdm_group_ref[sec_group_idx];
+			}
+			if ((dai_data->num_group_ports > 1) &&
+			    (dai_data->sec_port_enable)) {
 				sec_group_id =
 					AFE_GROUP_DEVICE_ID_PRIMARY_TDM_TX;
 				sec_group_idx =
@@ -5824,12 +5840,15 @@ static void msm_dai_q6_tdm_shutdown(struct snd_pcm_substream *substream,
 						__func__, sec_group_id);
 					return;
 				}
-				sec_group_ref = &tdm_group_ref[sec_group_idx];
 			}
 		} else {
 			prim_port_id = dai->id;
 			if (dai_data->sec_port_enable) {
 				sec_port_id = AFE_PORT_ID_PRIMARY_TDM_RX;
+				sec_group_ref = &tdm_group_ref[sec_group_idx];
+			}
+			if ((dai_data->num_group_ports > 1) &&
+			    (dai_data->sec_port_enable)) {
 				sec_group_id =
 					AFE_GROUP_DEVICE_ID_PRIMARY_TDM_RX;
 				sec_group_idx =
@@ -5840,7 +5859,6 @@ static void msm_dai_q6_tdm_shutdown(struct snd_pcm_substream *substream,
 						__func__, sec_group_id);
 					return;
 				}
-				sec_group_ref = &tdm_group_ref[sec_group_idx];
 			}
 		}
 		rc = afe_close(prim_port_id);
@@ -5870,15 +5888,19 @@ static void msm_dai_q6_tdm_shutdown(struct snd_pcm_substream *substream,
 					"%s: failed to disable grp 0x%x\n",
 					__func__, group_id);
 			}
-			rc = msm_dai_q6_tdm_set_clk(dai_data,
-				dai->id, false);
-			if (IS_ERR_VALUE(rc)) {
-				dev_err(dai->dev,
+			if (!(dai_data->afe_ebit_unsupported &&
+				!dai_data->clk_set.clk_freq_in_hz)) {
+				rc = msm_dai_q6_tdm_set_clk(dai_data,
+							    dai->id, false);
+				if (IS_ERR_VALUE(rc)) {
+					dev_err(dai->dev,
 					"%s: fail to disable AFE clk 0x%x\n",
 					__func__, dai->id);
+				}
 			}
 		}
-		if (dai_data->sec_port_enable) {
+		if ((dai_data->num_group_ports > 1) &&
+		    (dai_data->sec_port_enable)) {
 			if (atomic_read(sec_group_ref) == 0) {
 				rc = afe_port_group_enable(sec_group_id,
 							NULL, false);

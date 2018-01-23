@@ -182,5 +182,4 @@
 		compatible = "qcom,wcd-dsp-glink";
 		qcom,msm-codec-glink-edge = "bg";
 	};
-
 };
