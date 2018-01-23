@@ -71,10 +71,12 @@ static const struct i2c_device_id lm36272_bl_id[] = {
 	{ },
 };
 
+static struct lm36272_device *this;
+
 static int lm36272_write_reg(struct i2c_client *client,
 		unsigned char reg, unsigned char val);
-
-static struct lm36272_device *this;
+static void lm36272_backlight_ctrl_internal(struct lm36272_device *ldev,
+		int level);
 
 int lm36272_dsv_ctrl(int dsv_en)
 {
@@ -106,6 +108,12 @@ int lm36272_dsv_ctrl(int dsv_en)
 
 		gpio_set_value_cansleep(pdata->dsv_p_gpio, 0);
 		usleep_range(pdata->dsv_off_delay[1], pdata->dsv_off_delay[1]);
+
+		/* backlight off */
+		mutex_lock(&ldev->bl_mutex);
+		if (BL_OFF_PENDING == ldev->status)
+			lm36272_backlight_ctrl_internal(ldev, 0);
+		mutex_unlock(&ldev->bl_mutex);
 	}
 
 	return 0;
@@ -175,10 +183,8 @@ static void lm36272_backlight_ctrl_internal(struct lm36272_device *ldev,
 	struct lm36272_platform_data *pdata = ldev->pdata;
 
 	if (0 == level) {
-		if (ldev->status == BL_OFF) {
-			mutex_unlock(&ldev->bl_mutex);
+		if (ldev->status == BL_OFF)
 			return;
-		}
 
 		lm36272_set_main_current_level(ldev->client, 0);
 		lm36272_write_reg(ldev->client, 0x08, 0x00);
