@@ -32,14 +32,8 @@ struct lm36272_platform_data {
 int lm36272_dsv_ctrl(int dsv_en);
 void lm36272_backlight_ctrl(int level);
 #else
-static inline int lm36272_dsv_ctrl(int dsv_en)
-{
-	return 0;
-}
-static inline void lm36272_backlight_ctrl(int level);
-{
-	return;
-}
+static inline int lm36272_dsv_ctrl(int dsv_en) { return 0; }
+static inline void lm36272_backlight_ctrl(int level) { }
 #endif
 
 #endif /* __LEDS_LM36272_H */
