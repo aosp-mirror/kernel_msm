@@ -298,7 +298,7 @@ ifeq ($(CONFIG_USE_OF),y)
 KBUILD_DTBS := dtbs
 endif
 
-DTSSUBDIR := qcom
+DTSSUBDIR := msm8909w-ling
 
 all:	$(KBUILD_IMAGE) $(KBUILD_DTBS)
 

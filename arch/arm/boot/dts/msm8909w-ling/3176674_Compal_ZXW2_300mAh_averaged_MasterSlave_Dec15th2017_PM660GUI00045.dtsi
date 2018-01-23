@@ -1,0 +1,71 @@
+
+qcom,3176674_compal_zxw2_300mah_averaged_masterslave_dec15th2017 {
+	qcom, = <24>;
+	/* #3176674_Compal_ZXW2_300mAh_averaged_MasterSlave_Dec15th2017*/
+	qcom,max-voltage-uv = <4350000>;
+	qcom,fastchg-current-ma = <210>;
+	qcom,nom-batt-capacity-mah = <300>;
+	qcom,batt-id-kohm = <60>;
+	qcom,battery-beta = <3435>;
+	qcom,battery-type = "3176674_compal_zxw2_300mah_averaged_masterslave_dec15th2017";
+	qcom,checksum = <0x070B>;
+	qcom,gui-version = "PM660GUI - 0.0.0.45";
+	qcom,fg-profile-data = [
+		 3A 1F 35 FC
+		 05 0A 65 FD
+		 D6 1C DD 01
+		 25 04 1C 0A
+		 E5 18 6D 22
+		 5E 3C C2 4B
+		 7A 00 00 00
+		 14 00 00 00
+		 00 00 09 C4
+		 EB CC BA CA
+		 49 00 08 00
+		 58 DD D8 E5
+		 5C EB 5D F5
+		 D1 00 62 03
+		 01 1C 87 52
+		 0C 06 09 20
+		 27 00 14 00
+		 81 1F EC 05
+		 2B 0A 84 06
+		 DA 1C 7E 02
+		 EB 0C 47 0B
+		 AD 18 32 23
+		 09 45 D1 53
+		 6F 00 00 00
+		 10 00 00 00
+		 00 00 D2 D5
+		 47 8B D5 CA
+		 40 00 00 00
+		 D3 EA D8 E5
+		 D8 E2 97 ED
+		 AF F3 9A 02
+		 83 0A C1 12
+		 B9 33 CC FF
+		 07 10 00 00
+		 26 01 99 45
+		 40 00 40 00
+		 07 07 0A FA
+		 FF 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+	];
+};
