@@ -755,6 +755,9 @@ ol_tx_single_completion_handler(
     struct ol_tx_desc_list_elem_t *td_array = pdev->tx_desc.array;
     adf_nbuf_t  netbuf;
 
+    if (tx_desc_id >= pdev->tx_desc.pool_size)
+        return;
+
     tx_desc = td_array[tx_desc_id].tx_desc;
     tx_desc->status = status;
     netbuf = tx_desc->netbuf;
