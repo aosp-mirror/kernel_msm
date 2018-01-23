@@ -1337,6 +1337,33 @@ static int wma_unified_link_peer_stats_event_handler(void *handle,
 		return -EINVAL;
 	}
 
+	do {
+		if (peer_stats->num_rates >
+			WMI_SVC_MSG_MAX_SIZE/sizeof(wmi_rate_stats)) {
+			excess_data = true;
+			break;
+		} else {
+			buf_len =
+				peer_stats->num_rates * sizeof(wmi_rate_stats);
+		}
+		if (fixed_param->num_peers >
+			WMI_SVC_MSG_MAX_SIZE/sizeof(wmi_peer_link_stats)) {
+			excess_data = true;
+			break;
+		} else {
+			buf_len += fixed_param->num_peers *
+				sizeof(wmi_peer_link_stats);
+		}
+	} while (0);
+
+	if (excess_data ||
+		(sizeof(*fixed_param) > WMI_SVC_MSG_MAX_SIZE - buf_len)) {
+		WMA_LOGE("excess wmi buffer: rates:%d, peers:%d",
+			peer_stats->num_rates, fixed_param->num_peers);
+		QDF_ASSERT(0);
+		return -EINVAL;
+	}
+
 	peer_stats_size = sizeof(tSirWifiPeerStat);
 	peer_info_size = sizeof(tSirWifiPeerInfo);
 	rate_stats_size = sizeof(tSirWifiRateStat);
