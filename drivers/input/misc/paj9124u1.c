@@ -66,8 +66,8 @@ static struct spi_device_id paj9124u1_spi_id[] = {
  * NOTE: Please make sure the #define values are kept in lock step with the
  * size of the array. If not, the paj9124u1 will *not* be initialized properly!
  */
-#define INIT_WRITES_FIRST_BATCH_INDEX	5
-#define INIT_WRITES_SECOND_BATCH_INDEX	34
+#define INIT_WRITES_FIRST_BATCH_INDEX	6
+#define INIT_WRITES_SECOND_BATCH_INDEX	35
 
 static uint8_t init_writes[][2] = {
 	{0x05, 0xA0 }, /* OPERATION_MODE */
@@ -75,6 +75,7 @@ static uint8_t init_writes[][2] = {
 	{0x0E, 0x0A }, /* RES_Y */
 	{0x19, 0x04 }, /* ORIENTATION */
 	{0x2B, 0x6D },
+	{0x4B, 0x04 },
 	{0x5C, 0xD7 }, /* LD_SRC */
 	{0x09, 0x22 }, /* WRITE_PROTECT */
 	{0x2A, 0x03 },
