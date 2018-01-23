@@ -15209,6 +15209,12 @@ int wlan_hdd_cfg80211_set_ie( hdd_adapter_t *pAdapter,
                 } /* end of if (WLAN_HDD_IBSS == pAdapter->device_mode) */
                 break;
             case DOT11F_EID_RSN:
+                if (eLen > (MAX_WPA_RSN_IE_LEN - 2)) {
+                    hddLog(VOS_TRACE_LEVEL_FATAL, "%s: Invalid WPA RSN IE length[%d], exceeds %d bytes",
+                            __func__, eLen, MAX_WPA_RSN_IE_LEN - 2);
+                    VOS_ASSERT(0);
+                    return -EINVAL;
+                }
                 hddLog (VOS_TRACE_LEVEL_INFO, "%s Set RSN IE(len %d)",__func__, eLen + 2);
                 memset( pWextState->WPARSNIE, 0, MAX_WPA_RSN_IE_LEN );
                 memcpy( pWextState->WPARSNIE, genie - 2, (eLen + 2)/*ie_len*/);
