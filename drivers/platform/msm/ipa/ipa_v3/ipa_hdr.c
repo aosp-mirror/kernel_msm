@@ -693,8 +693,17 @@ int __ipa3_del_hdr(u32 hdr_hdl, bool by_user)
 		return -EINVAL;
 	}
 
-	if (by_user)
+	if (by_user) {
+		if (!strcmp(entry->name, IPA_LAN_RX_HDR_NAME)) {
+			IPADBG("Trying to delete hdr %s offset=%u\n",
+				entry->name, entry->offset_entry->offset);
+			if (!entry->offset_entry->offset) {
+				IPAERR("User cannot delete default header\n");
+				return -EPERM;
+			}
+		}
 		entry->user_deleted = true;
+	}
 
 	if (--entry->ref_cnt) {
 		IPADBG("hdr_hdl %x ref_cnt %d\n", hdr_hdl, entry->ref_cnt);
@@ -992,8 +1001,14 @@ int ipa3_reset_hdr(void)
 			&ipa3_ctx->hdr_tbl.head_hdr_entry_list, link) {
 
 		/* do not remove the default header */
-		if (!strcmp(entry->name, IPA_LAN_RX_HDR_NAME))
-			continue;
+		if (!strcmp(entry->name, IPA_LAN_RX_HDR_NAME)) {
+			IPADBG("Trying to remove hdr %s offset=%u\n",
+				entry->name, entry->offset_entry->offset);
+			if (!entry->offset_entry->offset) {
+				IPADBG("skip default header\n");
+				continue;
+			}
+		}
 
 		if (ipa3_id_find(entry->id) == NULL) {
 			WARN_ON(1);
