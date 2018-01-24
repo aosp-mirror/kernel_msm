@@ -311,6 +311,9 @@ dhd_wl_ioctl(dhd_pub_t *dhd_pub, int ifindex, wl_ioctl_t *ioc, void *buf, int le
 			else if (ioc->cmd == WLC_SET_VAR)
 				DHD_ERROR(("%s: WLC_SET_VAR: %s, ret = %d\n",
 					__FUNCTION__, (char *)ioc->buf, ret));
+			else if (ioc->cmd == WLC_GET_BSSID)
+				DHD_TRACE(("%s: WLC_IOCTL: cmd: %d, ret = %d\n",
+					__FUNCTION__, ioc->cmd, ret));
 			else
 				DHD_ERROR(("%s: WLC_IOCTL: cmd: %d, ret = %d\n",
 					__FUNCTION__, ioc->cmd, ret));
