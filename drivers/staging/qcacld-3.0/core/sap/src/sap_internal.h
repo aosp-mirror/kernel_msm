@@ -434,6 +434,22 @@ QDF_STATUS sap_open_session(tHalHandle hHal, ptSapContext sapContext,
 QDF_STATUS sap_close_session(tHalHandle hHal,
 			     ptSapContext sapContext,
 			     csr_roamSessionCloseCallback callback, bool valid);
+
+/**
+ * sap_channel_in_acs_channel_list() - check if channel in acs channel list
+ * @channel_num: channel to check
+ * @sap_ctx: struct ptSapContext
+ * @spect_info_params: strcut tSapChSelSpectInfo
+ *
+ * This function checks if specified channel is in the configured ACS channel
+ * list.
+ *
+ * Return: channel number if in acs channel list or SAP_CHANNEL_NOT_SELECTED
+ */
+uint8_t sap_channel_in_acs_channel_list(uint8_t channel_num,
+					ptSapContext sap_ctx,
+					tSapChSelSpectInfo *spect_info_params);
+
 #ifdef __cplusplus
 }
 #endif
