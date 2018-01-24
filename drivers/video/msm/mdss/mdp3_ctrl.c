@@ -300,25 +300,34 @@ static int mdp3_ctrl_vsync_enable(struct msm_fb_data_type *mfd, int enable)
 	 * active or when dsi clocks are currently off
 	 */
 	if (mod_vsync_timer) {
-		mod_timer(&mdp3_session->vsync_timer,
-			jiffies + msecs_to_jiffies(mdp3_session->vsync_period));
+		unsigned long vsync_period_ns = mdp3_session->vsync_period *
+			NSEC_PER_MSEC;
+
+		hrtimer_start(&mdp3_session->vsync_timer,
+			      ktime_set(0, vsync_period_ns), HRTIMER_MODE_REL);
 	} else if (!enable) {
-		del_timer(&mdp3_session->vsync_timer);
+		hrtimer_cancel(&mdp3_session->vsync_timer);
 	}
 
 	return 0;
 }
 
-void mdp3_vsync_timer_func(unsigned long arg)
+static enum hrtimer_restart mdp3_vsync_timer_func(struct hrtimer *timer)
 {
-	struct mdp3_session_data *session = (struct mdp3_session_data *)arg;
+	struct mdp3_session_data *session =
+		container_of(timer, struct mdp3_session_data, vsync_timer);
+
 	if (session->status == 1 && (session->vsync_before_commit ||
 			!session->intf->active)) {
+		unsigned long vsync_period_ns = session->vsync_period *
+			NSEC_PER_MSEC;
 		pr_debug("mdp3_vsync_timer_func trigger\n");
 		vsync_notify_handler(session);
-		mod_timer(&session->vsync_timer,
-			jiffies + msecs_to_jiffies(session->vsync_period));
+		hrtimer_forward_now(&session->vsync_timer,
+				ktime_set(0, vsync_period_ns));
+		return HRTIMER_RESTART;
 	}
+	return HRTIMER_NORESTART;
 }
 
 static int mdp3_ctrl_async_blit_req(struct msm_fb_data_type *mfd,
@@ -2836,9 +2845,9 @@ int mdp3_ctrl_init(struct msm_fb_data_type *mfd)
 	mdp3_session->lut_sel = 0;
 	BLOCKING_INIT_NOTIFIER_HEAD(&mdp3_session->notifier_head);
 
-	init_timer(&mdp3_session->vsync_timer);
+	hrtimer_init(&mdp3_session->vsync_timer,
+		     CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	mdp3_session->vsync_timer.function = mdp3_vsync_timer_func;
-	mdp3_session->vsync_timer.data = (u32)mdp3_session;
 	mdp3_session->vsync_period = 1000 / mfd->panel_info->mipi.frame_rate;
 	mfd->mdp.private1 = mdp3_session;
 	mfd->wait_for_kickoff = true;

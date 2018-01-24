@@ -19,6 +19,7 @@
 #include <linux/completion.h>
 #include <linux/timer.h>
 #include <linux/kthread.h>
+#include <linux/hrtimer.h>
 
 #include "mdp3.h"
 #include "mdp3_dma.h"
@@ -44,7 +45,7 @@ struct mdp3_session_data {
 	struct mdp3_intf *intf;
 	struct msm_fb_data_type *mfd;
 	ktime_t vsync_time;
-	struct timer_list vsync_timer;
+	struct hrtimer vsync_timer;
 	int vsync_period;
 	struct kernfs_node *vsync_event_sd;
 	struct mdp_overlay overlay;
