@@ -204,7 +204,7 @@ int32_t vd6281_update_i2c_info(struct rainbow_ctrl_t *ctrl)
 	int32_t rc = 0;
 
 	ctrl->cci_i2c_master = MASTER_0;
-	ctrl->io_master_info.cci_client->sid = 0x40 >> 1;
+	ctrl->io_master_info.cci_client->sid = 0x7F;
 	ctrl->io_master_info.cci_client->retries = 3;
 	ctrl->io_master_info.cci_client->id_map = 0;
 	ctrl->io_master_info.cci_client->i2c_freq_mode = I2C_STANDARD_MODE;
