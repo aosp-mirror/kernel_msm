@@ -148,7 +148,7 @@ static int read_rainbow_sensor_id(struct camera_io_master *io_master_info)
 	uint32_t data = 0;
 	uint32_t addr = 0x00;
 
-	io_master_info->cci_client->sid = 0x40 >> 1;
+	io_master_info->cci_client->sid = 0x7f;
 
 	rc = camera_io_dev_read(io_master_info, addr,
 		&data, CAMERA_SENSOR_I2C_TYPE_BYTE,
