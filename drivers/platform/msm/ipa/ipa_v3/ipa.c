@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -461,6 +461,8 @@ static void ipa3_active_clients_log_destroy(void)
 
 	spin_lock_irqsave(&ipa3_ctx->ipa3_active_clients_logging.lock, flags);
 	ipa3_ctx->ipa3_active_clients_logging.log_rdy = 0;
+	kfree(active_clients_table_buf);
+	active_clients_table_buf = NULL;
 	kfree(ipa3_ctx->ipa3_active_clients_logging.log_buffer[0]);
 	ipa3_ctx->ipa3_active_clients_logging.log_head = 0;
 	ipa3_ctx->ipa3_active_clients_logging.log_tail =
@@ -3484,7 +3486,7 @@ static unsigned int ipa3_get_bus_vote(void)
 	} else {
 		WARN_ON(1);
 	}
-	IPADBG("curr %d idx %d\n", ipa3_ctx->curr_ipa_clk_rate, idx);
+	IPADBG_LOW("curr %d idx %d\n", ipa3_ctx->curr_ipa_clk_rate, idx);
 
 	return idx;
 }
@@ -4974,7 +4976,8 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
 		goto fail_clk;
 
 	/* init active_clients_log after getting ipa-clk */
-	if (ipa3_active_clients_log_init())
+	result = ipa3_active_clients_log_init();
+	if (result)
 		goto fail_init_active_client;
 
 	/* Enable ipa3_ctx->enable_clock_scaling */

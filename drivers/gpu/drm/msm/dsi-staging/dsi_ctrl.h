@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -247,7 +247,7 @@ struct dsi_ctrl {
 	u32 cmd_buffer_iova;
 	u32 cmd_len;
 	void *vaddr;
-	u32 secure_mode;
+	bool secure_mode;
 
 	/* Debug Information */
 	struct dentry *debugfs_root;
@@ -717,4 +717,11 @@ void dsi_ctrl_isr_configure(struct dsi_ctrl *dsi_ctrl, bool enable);
  * @enable:		   variable to control enable/disable irq line
  */
 void dsi_ctrl_irq_update(struct dsi_ctrl *dsi_ctrl, bool enable);
+
+/**
+ * dsi_ctrl_get_host_engine_init_state() - Return host init state
+ */
+int dsi_ctrl_get_host_engine_init_state(struct dsi_ctrl *dsi_ctrl,
+		bool *state);
+
 #endif /* _DSI_CTRL_H_ */

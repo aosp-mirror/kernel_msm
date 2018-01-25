@@ -2090,8 +2090,12 @@ static int fg_adjust_recharge_soc(struct fg_chip *chip)
 				return 0;
 			}
 		} else {
-			/* Charging, do nothing */
-			return 0;
+			if (!chip->recharge_soc_adjusted)
+				return 0;
+
+			/* Restore the default value */
+			new_recharge_soc = recharge_soc;
+			chip->recharge_soc_adjusted = false;
 		}
 	} else {
 		/* Restore the default value */
