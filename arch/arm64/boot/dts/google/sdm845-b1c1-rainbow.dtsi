@@ -14,10 +14,10 @@
 &cam_cci {
 	/* VD6281 */
 	status = "ok";
-	vd6281: qcom,rainbow@20 {
+	vd6281: qcom,rainbow@7f {
 		compatible = "qcom,rainbow";
 		cci-master = <0>;
-		reg = <0x20>;
+		reg = <0x7f>;
 		vdd-supply = <&pm8998_lvs1>;
 		regulator-names = "vdd";
 		status = "ok";
