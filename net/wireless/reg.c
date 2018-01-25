@@ -489,6 +489,17 @@ static void reg_regdb_search(struct work_struct *work)
 
 static DECLARE_WORK(reg_regdb_work, reg_regdb_search);
 
+/* Feel free to add any other sanity checks here */
+static void reg_regdb_size_check(void)
+{
+	/* We should ideally BUILD_BUG_ON() but then random builds would fail */
+	WARN_ONCE(!reg_regdb_size, "db.txt is empty, you should update it...");
+}
+#else
+static inline void reg_regdb_size_check(void) {}
+#endif /* CONFIG_CFG80211_INTERNAL_REGDB */
+
+#ifdef CONFIG_CFG80211_CRDA_SUPPORT
 static void reg_regdb_query(const char *alpha2)
 {
 	struct reg_regdb_search_request *request;
@@ -508,17 +519,6 @@ static void reg_regdb_query(const char *alpha2)
 
 	schedule_work(&reg_regdb_work);
 }
-
-/* Feel free to add any other sanity checks here */
-static void reg_regdb_size_check(void)
-{
-	/* We should ideally BUILD_BUG_ON() but then random builds would fail */
-	WARN_ONCE(!reg_regdb_size, "db.txt is empty, you should update it...");
-}
-#else
-static inline void reg_regdb_size_check(void) {}
-static inline void reg_regdb_query(const char *alpha2) {}
-#endif /* CONFIG_CFG80211_INTERNAL_REGDB */
 
 /*
  * This lets us keep regulatory code which is updated on a regulatory
@@ -543,6 +543,13 @@ static int call_crda(const char *alpha2)
 
 	return kobject_uevent_env(&reg_pdev->dev.kobj, KOBJ_CHANGE, env);
 }
+#else
+static inline void reg_regdb_query(const char *alpha2) {}
+static inline int call_crda(const char *alpha2)
+{
+	return -ENODATA;
+}
+#endif /* CONFIG_CFG80211_CRDA_SUPPORT */
 
 static enum reg_request_treatment
 reg_call_crda(struct regulatory_request *request)
