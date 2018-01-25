@@ -1,2 +1,0 @@
-export PATH=$PATH:/home/rdadmin/sculpin_f/sculpin_dailybuild_20161028/prebuilts/gcc/linux-x86/arm/arm-eabi-4.8/bin
-make ARCH=arm CROSS_COMPILE=arm-eabi- bluegill-perf_defconfig && make ARCH=arm CROSS_COMPILE=arm-eabi- -j16
