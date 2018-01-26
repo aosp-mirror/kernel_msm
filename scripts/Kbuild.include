@@ -208,7 +208,7 @@ ld-ifversion = $(shell [ $(ld-version) $(1) $(2) ] && echo $(3) || echo $(4))
 
 # __ld-ifversion
 # Usage:  $(call __ld-ifversion, gold, -ge, 112000000, y)
-__ld-ifversion = $(shell [ $(ld-name) == $(1) ] && [ $(ld-version) $(2) $(3) ] && echo $(4) || echo $(5))
+__ld-ifversion = $(shell [ $(ld-name) = $(1) ] && [ $(ld-version) $(2) $(3) ] && echo $(4) || echo $(5))
 
 # bfd-ifversion
 # Usage:  $(call bfd-ifversion, -ge, 227000000, y)
