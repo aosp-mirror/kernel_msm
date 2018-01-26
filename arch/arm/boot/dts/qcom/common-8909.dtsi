@@ -30,6 +30,15 @@
 		pinctrl-0 = <&gpio_bt_reg_on_active &gpio_bt_host_wake_active &gpio_bt_dev_wake_active>;
 		pinctrl-1 = <&gpio_bt_reg_on_sleep &gpio_bt_host_wake_sleep &gpio_bt_dev_wake_sleep>;
 	};
+
+	reserved-memory {
+		ramoops_mem: ramoops_region@0 {
+			reg = <0x0 0x9ff00000 0x0 0x00100000>;
+			compatible = "removed-dma-pool";
+			no-map;
+			};
+	};
+
 };
 
 &soc {
