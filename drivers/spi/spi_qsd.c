@@ -2499,7 +2499,7 @@ skip_dma_resources:
 		goto err_probe_reqmem;
 	}
 
-	pm_runtime_set_autosuspend_delay(&pdev->dev, MSEC_PER_SEC);
+	pm_runtime_set_autosuspend_delay(&pdev->dev, 30);
 	pm_runtime_use_autosuspend(&pdev->dev);
 	pm_runtime_enable(&pdev->dev);
 

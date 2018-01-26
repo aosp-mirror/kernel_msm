@@ -627,7 +627,7 @@ static int spi_qup_probe(struct platform_device *pdev)
 	if (ret)
 		goto error;
 
-	pm_runtime_set_autosuspend_delay(dev, MSEC_PER_SEC);
+	pm_runtime_set_autosuspend_delay(dev, 30);
 	pm_runtime_use_autosuspend(dev);
 	pm_runtime_set_active(dev);
 	pm_runtime_enable(dev);
