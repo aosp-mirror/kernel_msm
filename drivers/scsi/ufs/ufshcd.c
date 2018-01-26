@@ -52,6 +52,34 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/ufs.h>
 
+static void ufshcd_log_slowio(struct ufs_hba *hba,
+		struct ufshcd_lrb *lrbp, s64 iotime_us)
+{
+	sector_t lba = -1;
+	int transfer_len = -1;
+	u8 opcode = 0xff;
+
+	if (likely(iotime_us < hba->slowio_us))
+		return;
+
+	hba->slowio_cnt++;
+
+	if (lrbp->cmd) {
+		opcode = (u8)(*lrbp->cmd->cmnd);
+		if (opcode == READ_10 || opcode == WRITE_10) {
+			if (lrbp->cmd->request && lrbp->cmd->request->bio)
+				lba = lrbp->cmd->request->bio->
+					bi_iter.bi_sector;
+			transfer_len = be32_to_cpu(
+				lrbp->ucd_req_ptr->sc.exp_data_transfer_len);
+		}
+	}
+	dev_err_ratelimited(hba->dev,
+		"Slow UFS (%lld): time = %lld us, opcode = %02x, lba = %ld, "
+		"len = %d\n", hba->slowio_cnt, iotime_us, opcode, lba,
+		transfer_len);
+}
+
 #ifdef CONFIG_DEBUG_FS
 
 static int ufshcd_tag_req_type(struct request *rq)
@@ -114,6 +142,9 @@ static void update_req_stats(struct ufs_hba *hba, struct ufshcd_lrb *lrbp)
 	s64 delta = ktime_us_delta(lrbp->complete_time_stamp,
 		lrbp->issue_time_stamp);
 
+	/* Log for slow I/O */
+	ufshcd_log_slowio(hba, lrbp, delta);
+
 	/* update general request statistics */
 	if (hba->ufs_stats.req_stats[TS_TAG].count == 0)
 		hba->ufs_stats.req_stats[TS_TAG].min = delta;
@@ -163,6 +194,11 @@ static inline void ufshcd_update_error_stats(struct ufs_hba *hba, int type)
 static inline
 void update_req_stats(struct ufs_hba *hba, struct ufshcd_lrb *lrbp)
 {
+	s64 delta = ktime_us_delta(lrbp->complete_time_stamp,
+		lrbp->issue_time_stamp);
+
+	/* Log for slow I/O */
+	ufshcd_log_slowio(hba, lrbp, delta);
 }
 
 static inline
@@ -9753,14 +9789,68 @@ latency_hist_show(struct device *dev, struct device_attribute *attr,
 	return blk_latency_hist_show(&hba->io_lat_s, buf);
 }
 
+/**
+ * Two sysfs entries for slow I/O monitoring:
+ *  - slowio_us:  watermark time in us. Can be updated by writing.
+ *  - slowio_cnt: number of I/O count. Can be reseted by writing any value.
+*/
+static ssize_t
+slowio_us_store(struct device *dev, struct device_attribute *attr,
+		   const char *buf, size_t count)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	unsigned long flags, value;
+
+	if (kstrtol(buf, 0, &value))
+		return -EINVAL;
+
+	if (value < UFSHCD_MIN_SLOWIO_US)
+		return -EINVAL;
+	spin_lock_irqsave(hba->host->host_lock, flags);
+	hba->slowio_us = value;
+	spin_unlock_irqrestore(hba->host->host_lock, flags);
+	return count;
+}
+
+static ssize_t
+slowio_us_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	return snprintf(buf, PAGE_SIZE, "%lld\n", hba->slowio_us);
+}
+
+static ssize_t
+slowio_cnt_store(struct device *dev, struct device_attribute *attr,
+		   const char *buf, size_t count)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	unsigned long flags;
+
+	spin_lock_irqsave(hba->host->host_lock, flags);
+	hba->slowio_cnt = 0;
+	spin_unlock_irqrestore(hba->host->host_lock, flags);
+	return count;
+}
+
+static ssize_t
+slowio_cnt_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	return snprintf(buf, PAGE_SIZE, "%lld\n", hba->slowio_cnt);
+}
+
 static DEVICE_ATTR_RW(rpm_lvl);
 static DEVICE_ATTR_RW(spm_lvl);
 static DEVICE_ATTR_RW(latency_hist);
+static DEVICE_ATTR_RW(slowio_us);
+static DEVICE_ATTR_RW(slowio_cnt);
 
 static struct attribute *ufshcd_attrs[] = {
 	&dev_attr_rpm_lvl.attr,
 	&dev_attr_spm_lvl.attr,
 	&dev_attr_latency_hist.attr,
+	&dev_attr_slowio_us.attr,
+	&dev_attr_slowio_cnt.attr,
 	NULL
 };
 
@@ -10540,6 +10630,9 @@ int ufshcd_init(struct ufs_hba *hba, void __iomem *mmio_base, unsigned int irq)
 	host->set_dbd_for_caching = 1;
 
 	hba->max_pwr_info.is_valid = false;
+
+	/* Set default slow io value. */
+	hba->slowio_us = UFSHCD_DEFAULT_SLOWIO_US;
 
 	/* Initailize wait queue for task management */
 	init_waitqueue_head(&hba->tm_wq);
