@@ -1,0 +1,15 @@
+What:		/sys/devices/soc/<....>ufshc/slowio_us
+Date:		February, 2018
+Contact:	"Hyojun Kim" <hyojun@google.com>
+Description:
+		Contains watermark value in micro seconds unit for slow
+		UFS I/O logging and counting. Can be updated by writing
+		value to.
+
+What:		/sys/devices/soc/<....>ufshc/slowio_cnt
+Date:		February, 2018
+Contact:	"Hyojun Kim" <hyojun@google.com>
+Description:
+		Contains the number of UFS I/O requests which took more
+		or euqal to the defined slow I/O water mark time.
+		Can be reset by writing any value.
