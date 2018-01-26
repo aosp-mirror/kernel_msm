@@ -118,3 +118,32 @@ void ufs_advertise_fixup_device(struct ufs_hba *hba)
 out:
 	kfree(card_data.model);
 }
+
+int ufs_fix_qdepth_device(struct ufs_hba *hba, struct scsi_device *sdev)
+{
+	struct ufs_card_info card_data;
+	int err;
+
+	card_data.wmanufacturerid = 0;
+	card_data.model = kmalloc(MAX_MODEL_LEN + 1, GFP_KERNEL);
+	if (!card_data.model)
+		goto out;
+
+	/* get device data*/
+	err = ufs_get_device_info(hba, &card_data);
+	if (err) {
+		dev_err(hba->dev, "%s: Failed getting device info\n", __func__);
+		goto out;
+	}
+
+	/* Android Bug: 64610438 -- causing device freezing */
+	if (STR_PRFX_EQUAL(card_data.model, UFS_MODEL_SAMSUNG_QDEPTH_ERR) &&
+			sdev->queue_depth > UFS_MODEL_SAMSUNG_MAX_QDEPTH) {
+		scsi_change_queue_depth(sdev, UFS_MODEL_SAMSUNG_MAX_QDEPTH);
+		dev_err(hba->dev, "Change queue_depth to %u\n",
+				sdev->queue_depth);
+	}
+out:
+	kfree(card_data.model);
+	return sdev->queue_depth;
+}

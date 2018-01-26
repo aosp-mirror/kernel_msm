@@ -718,6 +718,10 @@ static void ufshcd_print_host_state(struct ufs_hba *hba)
 					hba->sdev_ufs_device->model);
 		dev_err(hba->dev, " rev = %.4s\n",
 					hba->sdev_ufs_device->rev);
+		dev_err(hba->dev, " nutrs = %d\n",
+					hba->nutrs);
+		dev_err(hba->dev, " queue_depth = %u\n",
+					hba->sdev_ufs_device->queue_depth);
 	}
 	dev_err(hba->dev, "lrb in use=0x%lx, outstanding reqs=0x%lx tasks=0x%lx\n",
 		hba->lrb_in_use, hba->outstanding_tasks, hba->outstanding_reqs);
@@ -4944,6 +4948,7 @@ static void ufshcd_set_queue_depth(struct scsi_device *sdev)
 	dev_dbg(hba->dev, "%s: activate tcq with queue depth %d\n",
 			__func__, lun_qdepth);
 	scsi_change_queue_depth(sdev, lun_qdepth);
+	ufs_fix_qdepth_device(hba, sdev);
 }
 
 /*
@@ -5046,7 +5051,9 @@ static int ufshcd_change_queue_depth(struct scsi_device *sdev, int depth)
 
 	if (depth > hba->nutrs)
 		depth = hba->nutrs;
-	return scsi_change_queue_depth(sdev, depth);
+
+	scsi_change_queue_depth(sdev, depth);
+	return ufs_fix_qdepth_device(hba, sdev);
 }
 
 /**
