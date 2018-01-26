@@ -1395,7 +1395,8 @@ static void check_recharge(struct fan5451x_chip *chip)
 				if (rawcap <= RECHG_RETAIL_CAPACITY)
 					is_rechg = true;
 			} else {
-				if (rawcap <= chip->prev_capacity - 1)
+				if ((rawcap <= chip->prev_capacity - 1) ||
+						(!chip->ext_vdd_restriction))
 					is_rechg = true;
 			}
 		}
