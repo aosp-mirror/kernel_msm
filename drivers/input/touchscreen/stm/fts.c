@@ -1174,7 +1174,7 @@ static ssize_t fts_gesture_coordinates_show(struct device *dev, struct device_at
  * } = end byte \n
  * \n
  * Possible commands (cmd): \n
- * - 00 = MP Test -> return erro_code \n
+ * - 00 = MP Test -> return error_code \n
  * - 01 = ITO Test -> return error_code \n
  * - 03 = MS Raw Test -> return error_code \n
  * - 04 = MS Init Data Test -> return error_code \n
@@ -1237,66 +1237,127 @@ static ssize_t stm_fts_cmd_show(struct device *dev, struct device_attribute *att
 		}
 
 
-        switch (typeOfComand[0]) {
-                /*ITO TEST*/
-            case 0x01:
-                res = production_test_ito(LIMITS_FILE, &tests);
-                break;
-                /*PRODUCTION TEST*/
-            case 0x00:
+		switch (typeOfComand[0]) {
+		/*ITO TEST*/
+		case 0x01:
+			res = production_test_ito(LIMITS_FILE, &tests);
+			break;
 
-
-				if(systemInfo.u8_cfgAfeVer != systemInfo.u8_cxAfeVer) {
-					res = ERROR_OP_NOT_ALLOW;
-					logError(0, "%s Miss match in CX version! MP test not allowed with wrong CX memory! ERROR %08X \n", tag, res);
-					break;
-				}
-
-				res = production_test_main(LIMITS_FILE, 1, init_type, &tests);
+		/*PRODUCTION TEST*/
+		case 0x02:
+			if (systemInfo.u8_cfgAfeVer != systemInfo.u8_cxAfeVer) {
+				res = ERROR_OP_NOT_ALLOW;
+				logError(0,
+					 "%s Miss match in CX version! MP test not allowed with wrong CX memory! ERROR %08X\n",
+					 tag, res);
 				break;
-                /*read mutual raw*/
-            case 0x13:
-                        logError(0, "%s Get 1 MS Frame \n", tag);
-						setScanMode(SCAN_MODE_ACTIVE,0xFF);
-						mdelay(WAIT_FOR_FRESH_FRAMES);
-						setScanMode(SCAN_MODE_ACTIVE,0x00);
-						mdelay(WAIT_AFTER_SENSEOFF);
-						flushFIFO(); //delete the events related to some touch (allow to call this function while touching the screen without having a flooding of the FIFO)
-						res = getMSFrame3(MS_RAW, &frameMS);
-                        if (res < 0) {
-                            logError(0, "%s Error while taking the MS frame... ERROR %08X \n", tag, res);
+			}
+			res = production_test_initialization(init_type);
+			break;
 
-                        } else {
-                            logError(0, "%s The frame size is %d words\n", tag, res);
-                            size += (res * sizeof (short) + 2)*2;
-                            // set res to OK because if getMSFrame is
-                            // successful res = number of words read
-                            res = OK;
-							print_frame_short("MS frame =", array1dTo2d_short(frameMS.node_data, frameMS.node_data_size, frameMS.header.sense_node), frameMS.header.force_node, frameMS.header.sense_node);
-                        }
-                break;
-                /*read self raw*/
-            case 0x15:
-                        logError(0, "%s Get 1 SS Frame \n", tag);
-						setScanMode(SCAN_MODE_ACTIVE,0xFF);
+		case 0x00:
+			if (systemInfo.u8_cfgAfeVer != systemInfo.u8_cxAfeVer) {
+				res = ERROR_OP_NOT_ALLOW;
+				logError(0,
+					 "%s Miss match in CX version! MP test not allowed with wrong CX memory! ERROR %08X\n",
+					 tag, res);
+				break;
+			}
+
+			res = production_test_main(LIMITS_FILE, 1, init_type,
+						   &tests);
+			break;
+
+		/*read mutual raw*/
+		case 0x13:
+			if (numberParameters > 1) {
+				logError(0, "%s Get 1 MS Frame\n", tag);
+				setScanMode(SCAN_MODE_LOCKED, typeOfComand[1]);
+				mdelay(WAIT_FOR_FRESH_FRAMES);
+				setScanMode(SCAN_MODE_ACTIVE, 0x00);
+				mdelay(WAIT_AFTER_SENSEOFF);
+				/* Delete the events related to some touch
+				 * (allow to call this function while touching
+				 * the screen without having a flooding of the
+				 * FIFO)
+				 */
+				flushFIFO();
+				res = getMSFrame3(MS_RAW, &frameMS);
+				if (res < 0) {
+					logError(0,
+						 "%s Error while taking the MS frame... ERROR %08X\n",
+						 tag, res);
+
+				} else {
+					logError(0,
+						 "%s The frame size is %d words\n",
+						 tag, res);
+					size += (res * sizeof(short) + 2) * 2;
+					/* set res to OK because if getMSFrame
+					 * is successful res = number of words
+					 * read
+					 */
+					res = OK;
+					print_frame_short(
+					    "MS frame =",
+					    array1dTo2d_short(
+						frameMS.node_data,
+						frameMS.node_data_size,
+						frameMS.header.sense_node),
+					    frameMS.header.force_node,
+					    frameMS.header.sense_node);
+				}
+			} else {
+				logError(1, "%s Wrong number of parameters!\n",
+					 tag);
+				res = ERROR_OP_NOT_ALLOW;
+			}
+			break;
+		/*read self raw*/
+		case 0x15:
+			if (numberParameters > 1) {
+				logError(0, "%s Get 1 SS Frame\n", tag);
+				setScanMode(SCAN_MODE_LOCKED, typeOfComand[1]);
 						mdelay(WAIT_FOR_FRESH_FRAMES);
 						setScanMode(SCAN_MODE_ACTIVE,0x00);
 						mdelay(WAIT_AFTER_SENSEOFF);
 						flushFIFO(); //delete the events related to some touch (allow to call this function while touching the screen without having a flooding of the FIFO)
 						res = getSSFrame3(SS_RAW, &frameSS);
 
-                        if (res < OK) {
-                            logError(0, "%s Error while taking the SS frame... ERROR %08X \n", tag, res);
+				if (res < OK) {
+					logError(0,
+						 "%s Error while taking the SS frame... ERROR %08X\n",
+						 tag, res);
 
-                        } else {
-                            logError(0, "%s The frame size is %d words\n", tag, res);
-                            size += (res * sizeof (short) + 2)*2;
-                            // set res to OK because if getMSFrame is
-                            // successful res = number of words read
-                            res = OK;
-							print_frame_short("SS force frame =", array1dTo2d_short(frameSS.force_data, frameSS.header.force_node, 1), frameSS.header.force_node, 1);
-							print_frame_short("SS sense frame =", array1dTo2d_short(frameSS.sense_data, frameSS.header.sense_node, frameSS.header.sense_node), 1, frameSS.header.sense_node);
-                        }
+				} else {
+					logError(0,
+						 "%s The frame size is %d words\n",
+						 tag, res);
+					size += (res * sizeof(short) + 2) * 2;
+					/* set res to OK because if getMSFrame
+					 * is successful res = number of words
+					 * read
+					 */
+					res = OK;
+					print_frame_short(
+					    "SS force frame =",
+					    array1dTo2d_short(
+						frameSS.force_data,
+						frameSS.header.force_node, 1),
+					    frameSS.header.force_node, 1);
+					print_frame_short(
+					    "SS sense frame =",
+					    array1dTo2d_short(
+						frameSS.sense_data,
+						frameSS.header.sense_node,
+						frameSS.header.sense_node),
+					    1, frameSS.header.sense_node);
+				}
+			} else {
+				logError(1, "%s Wrong number of parameters!\n",
+					 tag);
+				res = ERROR_OP_NOT_ALLOW;
+			}
 
                 break;
 
@@ -1806,7 +1867,7 @@ static void fts_error_event_handler(struct fts_ts_info *info, unsigned char *eve
         case EVT_TYPE_ERROR_WATCHDOG: //watch dog timer
         {
 			dumpErrorInfo(NULL,0);
-			//before reset clear all slot
+			//before reset clear all slots
 			release_all_touches(info);
 			error = fts_system_reset();
 			error |= fts_mode_handler(info,0);
