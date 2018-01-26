@@ -1062,6 +1062,10 @@ static void ufshcd_print_host_state(struct ufs_hba *hba)
 					hba->sdev_ufs_device->model);
 		dev_err(hba->dev, " rev = %.4s\n",
 					hba->sdev_ufs_device->rev);
+		dev_err(hba->dev, " nutrs = %d\n",
+					hba->nutrs);
+		dev_err(hba->dev, " queue_depth = %u\n",
+					hba->sdev_ufs_device->queue_depth);
 	}
 	dev_err(hba->dev, "lrb in use=0x%lx, outstanding reqs=0x%lx tasks=0x%lx\n",
 		hba->lrb_in_use, hba->outstanding_reqs, hba->outstanding_tasks);
@@ -5483,6 +5487,7 @@ static void ufshcd_set_queue_depth(struct scsi_device *sdev)
 	int ret = 0;
 	u8 lun_qdepth;
 	struct ufs_hba *hba;
+	bool fixable_qdepth = false;
 
 	hba = shost_priv(sdev->host);
 
@@ -5494,17 +5499,23 @@ static void ufshcd_set_queue_depth(struct scsi_device *sdev)
 			  sizeof(lun_qdepth));
 
 	/* Some WLUN doesn't support unit descriptor */
-	if (ret == -EOPNOTSUPP)
+	if (ret == -EOPNOTSUPP ||
+		(sdev->lun ==
+			ufshcd_upiu_wlun_to_scsi_wlun(UFS_UPIU_RPMB_WLUN))) {
 		lun_qdepth = 1;
-	else if (!lun_qdepth)
+	} else if (!lun_qdepth) {
 		/* eventually, we can figure out the real queue depth */
 		lun_qdepth = hba->nutrs;
-	else
+		fixable_qdepth = true;
+	} else {
 		lun_qdepth = min_t(int, lun_qdepth, hba->nutrs);
+	}
 
-	dev_dbg(hba->dev, "%s: activate tcq with queue depth %d\n",
+	dev_err(hba->dev, "%s: activate tcq with queue depth %d\n",
 			__func__, lun_qdepth);
 	scsi_change_queue_depth(sdev, lun_qdepth);
+	if (fixable_qdepth)
+		ufs_fix_qdepth_device(hba, sdev);
 }
 
 /*
@@ -5607,7 +5618,9 @@ static int ufshcd_change_queue_depth(struct scsi_device *sdev, int depth)
 
 	if (depth > hba->nutrs)
 		depth = hba->nutrs;
-	return scsi_change_queue_depth(sdev, depth);
+
+	scsi_change_queue_depth(sdev, depth);
+	return ufs_fix_qdepth_device(hba, sdev);
 }
 
 /**

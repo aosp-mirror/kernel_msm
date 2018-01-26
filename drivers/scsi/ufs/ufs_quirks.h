@@ -30,6 +30,17 @@
 #define UFS_MODEL_TOSHIBA_32GB "THGLF2G8D4KBADR"
 #define UFS_MODEL_TOSHIBA_64GB "THGLF2G9D8KBADG"
 
+struct ufs_qdepth_fix {
+	char *model;
+	unsigned int qdepth;
+};
+
+#define UFS_QDEPTH(_model, _qdepth)	\
+	{				\
+		.model = (_model),	\
+		.qdepth = (_qdepth),	\
+	}
+
 /**
  * ufs_card_fix - ufs device quirk info
  * @card: ufs card details
@@ -141,5 +152,5 @@ struct ufs_card_fix {
 
 struct ufs_hba;
 void ufs_advertise_fixup_device(struct ufs_hba *hba);
-
+int ufs_fix_qdepth_device(struct ufs_hba *hba, struct scsi_device *sdev);
 #endif /* UFS_QUIRKS_H_ */

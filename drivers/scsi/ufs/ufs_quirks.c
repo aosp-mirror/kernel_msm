@@ -84,3 +84,50 @@ void ufs_advertise_fixup_device(struct ufs_hba *hba)
 out:
 	kfree(model);
 }
+
+static struct ufs_qdepth_fix ufs_qdepth[] = {
+	UFS_QDEPTH("H28S7Q302BMR", 16),
+	UFS_QDEPTH("H28S8Q302CMR", 16),
+	UFS_QDEPTH("KLUCG2K1EA-B0C1", 16),
+	UFS_QDEPTH("KLUDG4U1EA-B0C1", 16),
+	UFS_QDEPTH("128GB-UFS-MT", 16),
+	UFS_QDEPTH("64GB-UFS-MT", 16),
+	END_FIX
+};
+
+int ufs_fix_qdepth_device(struct ufs_hba *hba, struct scsi_device *sdev)
+{
+	u8 str_desc_buf[QUERY_DESC_MAX_SIZE + 1];
+	char *model;
+	struct ufs_qdepth_fix *f;
+	int err;
+
+	model = kmalloc(MAX_MODEL_LEN + 1, GFP_KERNEL);
+	if (!model)
+		goto out;
+
+	memset(str_desc_buf, 0, QUERY_DESC_MAX_SIZE);
+	err = ufshcd_read_string_desc(hba, hba->dev_info.i_product_name,
+			str_desc_buf, QUERY_DESC_MAX_SIZE, ASCII_STD);
+	if (err)
+		goto out;
+
+	str_desc_buf[QUERY_DESC_MAX_SIZE] = '\0';
+	strlcpy(model, (str_desc_buf + QUERY_DESC_HDR_SIZE),
+		min_t(u8, str_desc_buf[QUERY_DESC_LENGTH_OFFSET],
+		      MAX_MODEL_LEN));
+	/* Null terminate the model string */
+	model[MAX_MODEL_LEN] = '\0';
+
+	for (f = ufs_qdepth; f->qdepth; f++) {
+		if (STR_PRFX_EQUAL(f->model, model) &&
+			sdev->queue_depth > f->qdepth) {
+			scsi_change_queue_depth(sdev, f->qdepth);
+			dev_err(hba->dev, "Change qdepth to %u for LU=0x%llx\n",
+				sdev->queue_depth, sdev->lun);
+		}
+	}
+out:
+	kfree(model);
+	return sdev->queue_depth;
+}
