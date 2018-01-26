@@ -157,9 +157,6 @@ static void fuelgauge_battery_poll(struct work_struct *work)
 	struct Nanohub_FuelGauge_Info *fg_info =
 		container_of(work, struct Nanohub_FuelGauge_Info, work.work);
 
-	pr_warn("nanohub: [FG] %s  fg_info->requested:%d\n",
-			__func__, fg_info->requested);
-
 	if (!fg_info->requested) {
 		pr_warn("nanohub: [FG] request data from sensorhub.\n");
 		request_fuel_gauge_data(fg_info->hub_data);
@@ -446,8 +443,6 @@ static int bq27x00_battery_get_property(struct power_supply *psy,
 	mutex_lock(&fg_info->lock);
 	if (time_is_before_jiffies(fg_info->last_update +
 			(poll_interval / 2) * HZ)) {
-		pr_warn("nanohub : [FG] %s fg_info->last_update:%lu\n",
-			__func__, fg_info->last_update);
 		cancel_delayed_work_sync(&fg_info->work);
 		fuelgauge_battery_poll(&fg_info->work.work);
 	}
@@ -531,10 +526,6 @@ static void bq27x00_external_power_changed(struct power_supply *psy)
 	union power_supply_propval prop = {0,};
 	int rc, online = 0;
 
-	if (fg_info->bms_psy_name && !fg_info->bms_psy)
-		fg_info->bms_psy =
-			power_supply_get_by_name((char *)fg_info->bms_psy_name);
-
 	rc = fg_info->usb_psy->get_property(fg_info->usb_psy,
 				POWER_SUPPLY_PROP_ONLINE, &prop);
 	if (rc)
@@ -603,7 +594,6 @@ int bq27x00_powersupply_init(struct device *dev,
 		retval = -ENOMEM;
 		goto batt_failed_2;
 	}
-	fg_info->bms_psy_name = "bms";
 	fg_info->usb_psy = usb_psy;
 	fg_info->hub_data = hub_data;
 	fg_info->dev = dev;

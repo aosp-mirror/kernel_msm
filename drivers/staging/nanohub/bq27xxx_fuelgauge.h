@@ -67,8 +67,6 @@ struct Nanohub_FuelGauge_Info {
 	struct delayed_work work;
 	bool requested;
 	struct power_supply	*usb_psy;
-	struct power_supply	*bms_psy;
-	const char *bms_psy_name;
 	bool charger_online;
 	uint16_t last_capacity;
 #if FUEL_GAUGE_USE_FAKE_CAPACITY
