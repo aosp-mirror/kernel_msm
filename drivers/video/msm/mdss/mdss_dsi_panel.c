@@ -339,6 +339,9 @@ static void mdss_dsi_panel_set_idle_mode(struct mdss_panel_data *pdata,
 	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
+	if (0 == ctrl->idle_on_cmds.cmd_cnt || 0 == ctrl->idle_off_cmds.cmd_cnt)
+		return;
+
 	pr_debug("%s: idle (%d->%d)\n", __func__, ctrl->idle, enable);
 
 	if (ctrl->idle == enable)
@@ -347,15 +350,12 @@ static void mdss_dsi_panel_set_idle_mode(struct mdss_panel_data *pdata,
 	ctrl->idle = enable;
 
 	if (enable) {
-		if (ctrl->idle_on_cmds.cmd_cnt)
-			schedule_work(&ctrl->idle_on_work);
+		schedule_work(&ctrl->idle_on_work);
 	} else {
-		if (ctrl->idle_off_cmds.cmd_cnt) {
-			cancel_work_sync(&ctrl->idle_on_work);
-			pr_debug("idle off ++\n");
-			mdss_dsi_panel_cmds_send(ctrl, &ctrl->idle_off_cmds, CMD_REQ_COMMIT);
-			pr_debug("idle off --\n");
-		}
+		cancel_work_sync(&ctrl->idle_on_work);
+		pr_debug("idle off ++\n");
+		mdss_dsi_panel_cmds_send(ctrl, &ctrl->idle_off_cmds, CMD_REQ_COMMIT);
+		pr_debug("idle off --\n");
 	}
 }
 
