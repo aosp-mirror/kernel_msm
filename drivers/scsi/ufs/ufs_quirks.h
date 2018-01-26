@@ -30,6 +30,10 @@
 #define UFS_MODEL_TOSHIBA_32GB "THGLF2G8D4KBADR"
 #define UFS_MODEL_TOSHIBA_64GB "THGLF2G9D8KBADG"
 
+/* Android Bug: 64610438 -- causing device freezing */
+#define UFS_MODEL_SAMSUNG_QDEPTH_ERR	"KLUDG8V1EE-B0C1"
+#define UFS_MODEL_SAMSUNG_MAX_QDEPTH	16
+
 /**
  * ufs_card_info - ufs device details
  * @wmanufacturerid: card details
@@ -149,4 +153,5 @@ struct ufs_card_fix {
 
 struct ufs_hba;
 void ufs_advertise_fixup_device(struct ufs_hba *hba);
+int ufs_fix_qdepth_device(struct ufs_hba *hba, struct scsi_device *sdev);
 #endif /* UFS_QUIRKS_H_ */
