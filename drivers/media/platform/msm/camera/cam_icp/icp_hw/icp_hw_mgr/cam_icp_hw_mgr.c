@@ -2285,7 +2285,6 @@ static int cam_icp_mgr_release_ctx(struct cam_icp_hw_mgr *hw_mgr, int ctx_id)
 	if (hw_mgr->ctx_data[ctx_id].state !=
 		CAM_ICP_CTX_STATE_ACQUIRED) {
 		mutex_unlock(&hw_mgr->ctx_data[ctx_id].ctx_mutex);
-		mutex_unlock(&hw_mgr->hw_mgr_mutex);
 		CAM_DBG(CAM_ICP,
 			"ctx with id: %d not in right state to release: %d",
 			ctx_id, hw_mgr->ctx_data[ctx_id].state);
