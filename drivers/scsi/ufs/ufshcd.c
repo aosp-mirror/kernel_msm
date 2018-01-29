@@ -178,6 +178,56 @@ ufshcd_update_query_stats(struct ufs_hba *hba, enum query_opcode opcode, u8 idn)
 		hba->ufs_stats.query_stats_arr[opcode][idn]++;
 }
 
+static void
+__update_io_stat(struct ufs_hba *hba, struct ufshcd_io_stat *io_stat,
+		int transfer_len, int is_start)
+{
+	if (is_start) {
+		u64 diff;
+		io_stat->req_count_started++;
+		io_stat->total_bytes_started += transfer_len;
+		diff = io_stat->req_count_started -
+			io_stat->req_count_completed;
+		if (diff > io_stat->max_diff_req_count) {
+			io_stat->max_diff_req_count = diff;
+		}
+		diff = io_stat->total_bytes_started -
+			io_stat->total_bytes_completed;
+		if (diff > io_stat->max_diff_total_bytes) {
+			io_stat->max_diff_total_bytes = diff;
+		}
+	} else {
+		io_stat->req_count_completed++;
+		io_stat->total_bytes_completed += transfer_len;
+	}
+}
+
+static void
+update_io_stat(struct ufs_hba *hba, int tag, int is_start)
+{
+	struct ufshcd_lrb *lrbp = &hba->lrb[tag];
+	u8 opcode;
+	int transfer_len;
+
+	if (!lrbp->cmd)
+		return;
+	opcode = (u8)(*lrbp->cmd->cmnd);
+	if (opcode != READ_10 && opcode != WRITE_10)
+		return;
+
+	transfer_len = be32_to_cpu(lrbp->ucd_req_ptr->sc.exp_data_transfer_len);
+
+	__update_io_stat(hba, &hba->ufs_stats.io_readwrite, transfer_len,
+			is_start);
+	if (opcode == READ_10) {
+		__update_io_stat(hba, &hba->ufs_stats.io_read, transfer_len,
+				is_start);
+	} else {
+		__update_io_stat(hba, &hba->ufs_stats.io_write, transfer_len,
+				is_start);
+	}
+}
+
 #else
 static inline void ufshcd_update_tag_stats(struct ufs_hba *hba, int tag)
 {
@@ -207,6 +257,12 @@ void ufshcd_update_query_stats(struct ufs_hba *hba,
 			       enum query_opcode opcode, u8 idn)
 {
 }
+
+static void
+update_io_stat(struct ufs_hba *hba, int tag, int is_start)
+{
+}
+
 #endif
 
 #define UFSHCD_REQ_SENSE_SIZE	18
@@ -2199,6 +2255,7 @@ int ufshcd_send_command(struct ufs_hba *hba, unsigned int task_tag)
 	wmb();
 	ufshcd_cond_add_cmd_trace(hba, task_tag, "send");
 	ufshcd_update_tag_stats(hba, task_tag);
+	update_io_stat(hba, task_tag, 1);
 	return ret;
 }
 
@@ -5438,6 +5495,7 @@ static void __ufshcd_transfer_req_compl(struct ufs_hba *hba,
 		if (cmd) {
 			ufshcd_cond_add_cmd_trace(hba, index, "complete");
 			ufshcd_update_tag_stats_completion(hba, cmd);
+			update_io_stat(hba, index, 0);
 			result = ufshcd_transfer_rsp_status(hba, lrbp);
 			scsi_dma_unmap(cmd);
 			cmd->result = result;
