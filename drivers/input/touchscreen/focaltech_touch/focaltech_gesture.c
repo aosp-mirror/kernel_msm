@@ -474,11 +474,6 @@ void fts_gesture_recovery(struct i2c_client *client)
 {
 	if (fts_gesture_data.mode && fts_gesture_data.active) {
 		fts_i2c_write_reg(client, 0xD1, 0xff);
-		fts_i2c_write_reg(client, 0xD2, 0xff);
-		fts_i2c_write_reg(client, 0xD5, 0xff);
-		fts_i2c_write_reg(client, 0xD6, 0xff);
-		fts_i2c_write_reg(client, 0xD7, 0xff);
-		fts_i2c_write_reg(client, 0xD8, 0xff);
 		fts_i2c_write_reg(client, FTS_REG_GESTURE_EN, ENABLE);
 	}
 }
@@ -506,11 +501,6 @@ int fts_gesture_suspend(struct i2c_client *i2c_client)
 
 	for (i = 0; i < 5; i++) {
 		fts_i2c_write_reg(i2c_client, 0xd1, 0xff);
-		fts_i2c_write_reg(i2c_client, 0xd2, 0xff);
-		fts_i2c_write_reg(i2c_client, 0xd5, 0xff);
-		fts_i2c_write_reg(i2c_client, 0xd6, 0xff);
-		fts_i2c_write_reg(i2c_client, 0xd7, 0xff);
-		fts_i2c_write_reg(i2c_client, 0xd8, 0xff);
 		fts_i2c_write_reg(i2c_client, FTS_REG_GESTURE_EN, 0x01);
 		mdelay(1);
 		fts_i2c_read_reg(i2c_client, FTS_REG_GESTURE_EN, &state);
@@ -622,6 +612,13 @@ int fts_gesture_init(struct input_dev *input_dev, struct i2c_client *client)
 	fts_create_gesture_sysfs(client);
 	fts_gesture_data.mode = 1;
 	fts_gesture_data.active = 0;
+
+	fts_i2c_write_reg(client, 0xD2, 0x0);
+	fts_i2c_write_reg(client, 0xD5, 0x0);
+	fts_i2c_write_reg(client, 0xD6, 0x0);
+	fts_i2c_write_reg(client, 0xD7, 0x0);
+	fts_i2c_write_reg(client, 0xD8, 0x0);
+
 	FTS_FUNC_EXIT();
 	return 0;
 }
