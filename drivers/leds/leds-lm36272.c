@@ -109,6 +109,9 @@ int lm36272_dsv_ctrl(int dsv_en)
 		gpio_set_value_cansleep(pdata->dsv_p_gpio, 0);
 		usleep_range(pdata->dsv_off_delay[1], pdata->dsv_off_delay[1]);
 
+		/* cancel the pending bl work */
+		cancel_work_sync(&ldev->bl_work);
+
 		/* backlight off */
 		mutex_lock(&ldev->bl_mutex);
 		if (BL_OFF_PENDING == ldev->status)
@@ -217,6 +220,9 @@ void lm36272_backlight_ctrl(int level)
 	pdata = ldev->pdata;
 	new_level = clamp(level, pdata->min_brightness, pdata->max_brightness);
 
+	/* cancel the pending bl work */
+	cancel_work_sync(&ldev->bl_work);
+
 	mutex_lock(&ldev->bl_mutex);
 	if (ldev->direct_control) {
 		lm36272_backlight_ctrl_internal(ldev, new_level);
@@ -236,15 +242,10 @@ void lm36272_backlight_ctrl(int level)
 		pr_info("pending backlight dim\n");
 	} else {
 		if (new_level >= (ldev->level_saved - 5)) {
-			mutex_unlock(&ldev->bl_mutex);
-			cancel_work_sync(&ldev->bl_work);
-			mutex_lock(&ldev->bl_mutex);
 			lm36272_backlight_ctrl_internal(ldev, new_level);
 		} else {
-			mutex_unlock(&ldev->bl_mutex);
 			ldev->level_target = new_level;
 			schedule_work(&ldev->bl_work);
-			mutex_lock(&ldev->bl_mutex);
 		}
 	}
 out:
@@ -387,6 +388,9 @@ static int fb_notifier_callback(struct notifier_block *self,
 
 	ldev = container_of(self, struct lm36272_device, fb_notifier);
 	pdata = ldev->pdata;
+
+	/* cancel the pending bl work */
+	cancel_work_sync(&ldev->bl_work);
 
 	mutex_lock(&ldev->bl_mutex);
 	fb_blank = *(int *)evdata->data;
