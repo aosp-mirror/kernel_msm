@@ -56,7 +56,6 @@
 #endif
 #define FTS_READ_TOUCH_BUFFER_DIVIDED       0
 #define GESTURE_PLAM						0x26
-
 /*****************************************************************************
 * Global variable or extern global variabls/functions
 ******************************************************************************/
@@ -401,7 +400,6 @@ static int fts_input_dev_report_key_event(struct ts_event *event,
 {
 	int i;
 
-	if (data->pdata->have_key) {
 		if ((1 == event->touch_point || 1 == event->point_num) &&
 			(event->au16_y[0] == data->pdata->key_y_coord)) {
 
@@ -427,11 +425,9 @@ static int fts_input_dev_report_key_event(struct ts_event *event,
 				}
 			}
 			input_sync(data->input_dev);
-			return 0;
 		}
-	}
+		return 0;
 
-	return -1;
 }
 
 #if FTS_MT_PROTOCOL_B_EN
@@ -697,9 +693,8 @@ static void fts_report_value(struct fts_ts_data *data)
 
 	FTS_DEBUG("point number: %d, touch point: %d", event->point_num,
 			  event->touch_point);
-
-	if (0 == fts_input_dev_report_key_event(event, data))
-		return;
+	if (data->pdata->have_key)
+		fts_input_dev_report_key_event(event, data);
 
 #if FTS_MT_PROTOCOL_B_EN
 	fts_input_dev_report_b(event, data);
@@ -715,70 +710,69 @@ static void fts_report_value(struct fts_ts_data *data)
 *  Output:
 *  Return:
 *****************************************************************************/
-static irqreturn_t fts_ts_interrupt(int irq, void *dev_id)
+static void fts_touch_irq_work(struct work_struct *work)
 {
-	struct fts_ts_data *fts_ts = dev_id;
 	int ret = -1;
 #if FTS_PLAM_EN
 	ktime_t cur_time;
 	u8 val;
 #endif
 
-	if (!fts_ts) {
-		FTS_ERROR("[INTR]: Invalid fts_ts");
-		return IRQ_HANDLED;
-	}
-
 #if FTS_ESDCHECK_EN
 	fts_esdcheck_set_intr(1);
 #endif
 
 #if FTS_GESTURE_EN
-	if(fts_wq_data->is_ambient_mode == 1 && fts_wq_data->suspended) {
+	if (fts_wq_data->is_ambient_mode == 1
+		&& fts_wq_data->suspended) {
 #if FTS_PLAM_EN
 		cur_time = ktime_get();
-		if(cur_time.tv64 - fts_wq_data->last_plam_time.tv64 < 1000000000)
-			return IRQ_HANDLED;
+		if (cur_time.tv64 - fts_wq_data->last_plam_time.tv64
+			< 1000000000)
+			return;
 #endif
 		input_report_key(fts_input_dev, KEY_WAKEUP, 1);
 		input_sync(fts_input_dev);
 		input_report_key(fts_input_dev, KEY_WAKEUP, 0);
 		input_sync(fts_input_dev);
-		fts_i2c_write_reg(fts_wq_data->client, FTS_REG_GESTURE_EN, 0x01);
-		printk(KERN_DEBUG "CLICK to wakeup system from ambient mode\n");
-		return IRQ_HANDLED;
+		fts_i2c_write_reg(fts_wq_data->client,
+				FTS_REG_GESTURE_EN, 0x01);
+		printk(KERN_DEBUG "FTS: wakeup system from ambient mode\n");
+		return;
 	}
 #endif
 
 #if FTS_PLAM_EN
 	fts_i2c_read_reg(fts_wq_data->client,
-					 FTS_REG_GESTURE_OUTPUT_ADDRESS, &val);
+		FTS_REG_GESTURE_OUTPUT_ADDRESS, &val);
 	if (val == GESTURE_PLAM) {
-		if(fts_wq_data->suspended)
-			return IRQ_HANDLED;
+		if (fts_wq_data->suspended)
+			return;
 		fts_wq_data->last_plam_time =  ktime_get();
 		input_report_key(fts_input_dev, KEY_SLEEP, 1);
 		input_sync(fts_input_dev);
 		input_report_key(fts_input_dev, KEY_SLEEP, 0);
 		input_sync(fts_input_dev);
-		fts_i2c_write_reg(fts_wq_data->client, FTS_REG_GESTURE_EN, 0x01);
-		printk(KERN_DEBUG "PLAM Send message to KEY_SLEEP\n");
-		return IRQ_HANDLED;
+		fts_i2c_write_reg(fts_wq_data->client,
+				FTS_REG_GESTURE_EN, 0x01);
+		printk(KERN_DEBUG "FTS: PLAM to Send KEY_SLEEP\n");
+		return;
 	}
 #endif
 
 	ret = fts_read_touchdata(fts_wq_data);
-
 	if (ret == 0) {
-		mutex_lock(&fts_wq_data->report_mutex);
 		fts_report_value(fts_wq_data);
-		mutex_unlock(&fts_wq_data->report_mutex);
 	}
-
 #if FTS_ESDCHECK_EN
 	fts_esdcheck_set_intr(0);
 #endif
+}
 
+
+static irqreturn_t fts_ts_interrupt(int irq, void *dev_id)
+{
+	queue_work(fts_wq_data->ts_workqueue, &fts_wq_data->touch_event_work);
 	return IRQ_HANDLED;
 }
 
@@ -1113,8 +1107,6 @@ static int fts_ts_probe(struct i2c_client *client,
 		return -ENOMEM;
 	}
 
-
-
 	data->input_dev = input_dev;
 	data->client = client;
 	data->pdata = pdata;
@@ -1147,6 +1139,14 @@ static int fts_ts_probe(struct i2c_client *client,
 		FTS_ERROR("Read chip id failed!");
 		goto free_gpio;
 	}
+
+	INIT_WORK(&data->touch_event_work, fts_touch_irq_work);
+	data->ts_workqueue = create_workqueue(FTS_WORKQUEUE_NAME);
+	if (!data->ts_workqueue) {
+		err = -ESRCH;
+		goto exit_create_singlethread;
+	}
+
 	client->irq = gpio_to_irq(pdata->irq_gpio);
 
 	err = request_threaded_irq(client->irq, NULL, fts_ts_interrupt,
@@ -1157,7 +1157,7 @@ static int fts_ts_probe(struct i2c_client *client,
 		goto exit_free_irq;
 	}
 
-	/*fts_irq_disable();*/
+	fts_irq_disable();
 
 #if FTS_PSENSOR_EN
 	if (fts_sensor_init(data) != 0) {
@@ -1190,8 +1190,6 @@ static int fts_ts_probe(struct i2c_client *client,
 #endif
 	device_init_wakeup(&data->client->dev, 1);
 
-	/*fts_irq_enable();*/
-
 #if FTS_AUTO_UPGRADE_EN
 	fts_ctpm_upgrade_init();
 #endif
@@ -1212,14 +1210,15 @@ static int fts_ts_probe(struct i2c_client *client,
 	data->early_suspend.resume = fts_ts_late_resume;
 	register_early_suspend(&data->early_suspend);
 #endif
-	enable_irq(client->irq);
+	fts_irq_enable();
 
 	FTS_FUNC_EXIT();
 	return 0;
 
 exit_free_irq:
 	free_irq(data->client->irq, data->client);
-
+exit_create_singlethread:
+	i2c_set_clientdata(client, NULL);
 free_gpio:
 	if (gpio_is_valid(pdata->reset_gpio))
 		gpio_free(pdata->reset_gpio);
@@ -1257,6 +1256,7 @@ static int fts_ts_remove(struct i2c_client *client)
 
 	FTS_FUNC_ENTER();
 	cancel_work_sync(&data->touch_event_work);
+	destroy_workqueue(data->ts_workqueue);
 
 #if FTS_PSENSOR_EN
 	fts_sensor_remove(data);
