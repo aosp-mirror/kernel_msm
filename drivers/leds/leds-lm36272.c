@@ -165,13 +165,14 @@ static void lm36272_set_main_current_level(struct i2c_client *client, int level)
 		} else {
 			lm36272_write_reg(client, 0x05, cal_value);
 		}
+		/* enable backlight */
+		lm36272_write_reg(client, 0x08, 0x13);
 	} else {
 		lm36272_write_reg(client, 0x04, cal_value);
 		lm36272_write_reg(client, 0x05, cal_value);
+		/* disable backlight */
+		lm36272_write_reg(client, 0x08, 0x00);
 	}
-
-	if (ldev->status == BL_OFF)
-		lm36272_write_reg(ldev->client, 0x08, 0x13);
 
 	pr_debug("%s: level=%d, cal_value=%d \n",
 				__func__, level, cal_value);
@@ -187,12 +188,11 @@ static void lm36272_backlight_ctrl_internal(struct lm36272_device *ldev,
 			return;
 
 		lm36272_set_main_current_level(ldev->client, 0);
-		lm36272_write_reg(ldev->client, 0x08, 0x00);
 		ldev->status = BL_OFF;
 		pr_info("backlight off\n");
 	} else {
-		if (ldev->status == BL_OFF)
-			lm36272_write_reg(ldev->client, 0x02, 0x60);
+		/* Set the backlight OVP to 29V */
+		lm36272_write_reg(ldev->client, 0x02, 0x60);
 
 		usleep_range(1000, 1000);
 		lm36272_set_main_current_level(ldev->client, level);
