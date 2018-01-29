@@ -18,10 +18,10 @@
 #include <linux/init.h>
 #include <linux/i2c.h>
 #include <linux/slab.h>
+#include <linux/list.h>
+#include <linux/string.h>
 #include <linux/workqueue.h>
-#include <linux/platform_device.h>
 #include <linux/regulator/consumer.h>
-#include <linux/of_device.h>
 #include <linux/regmap.h>
 #include <linux/leds.h>
 #include <linux/sysfs.h>
@@ -43,13 +43,17 @@ struct cs40l20_private {
 	struct work_struct vibe_start_work;
 	struct work_struct vibe_stop_work;
 	struct workqueue_struct *vibe_workqueue;
-	struct mutex lock; /* protect hw register access */
+	struct mutex lock;
 	unsigned int cp_trigger_index;
+	unsigned int cp_trailer_index;
 	unsigned int num_waves;
 	bool vibe_init_success;
 	struct gpio_desc *reset_gpio;
 	struct cs40l20_platform_data pdata;
 	struct list_head coeff_desc_head;
+	unsigned char diag_state;
+	unsigned int f0_measured;
+	unsigned int redc_measured;
 	struct led_classdev led_dev;
 };
 
@@ -84,7 +88,7 @@ static ssize_t cs40l20_cp_trigger_index_store(struct device *dev,
 	if (ret)
 		return -EINVAL;
 
-	if (index > (cs40l20->num_waves - 1))
+	if ((index & 0x7FFF) > (cs40l20->num_waves - 1) && index != 0xFFFF)
 		return -EINVAL;
 
 	cs40l20->cp_trigger_index = index;
@@ -93,14 +97,14 @@ static ssize_t cs40l20_cp_trigger_index_store(struct device *dev,
 }
 
 static unsigned int cs40l20_dsp_reg(struct cs40l20_private *cs40l20,
-				    const char *coeff_name)
+			const char *coeff_name, const unsigned char block_type)
 {
 	struct cs40l20_coeff_desc *coeff_desc;
 
 	list_for_each_entry(coeff_desc, &cs40l20->coeff_desc_head, list) {
 		if (strcmp(coeff_desc->name, coeff_name))
 			continue;
-		if (coeff_desc->block_type != CS40L20_XM_UNPACKED_TYPE)
+		if (coeff_desc->block_type != block_type)
 			continue;
 
 		return coeff_desc->reg;
@@ -120,7 +124,8 @@ static ssize_t cs40l20_gpio1_rise_index_show(struct device *dev,
 
 	mutex_lock(&cs40l20->lock);
 	ret = regmap_read(cs40l20->regmap,
-			  cs40l20_dsp_reg(cs40l20, "INDEXBUTTONPRESS"), &val);
+			  cs40l20_dsp_reg(cs40l20, "INDEXBUTTONPRESS",
+					  CS40L20_XM_UNPACKED_TYPE), &val);
 	mutex_unlock(&cs40l20->lock);
 
 	if (ret) {
@@ -148,7 +153,8 @@ static ssize_t cs40l20_gpio1_rise_index_store(struct device *dev,
 
 	mutex_lock(&cs40l20->lock);
 	ret = regmap_write(cs40l20->regmap,
-			   cs40l20_dsp_reg(cs40l20, "INDEXBUTTONPRESS"), index);
+			cs40l20_dsp_reg(cs40l20, "INDEXBUTTONPRESS",
+					CS40L20_XM_UNPACKED_TYPE), index);
 	mutex_unlock(&cs40l20->lock);
 
 	if (ret) {
@@ -169,7 +175,8 @@ static ssize_t cs40l20_gpio1_fall_index_show(struct device *dev,
 
 	mutex_lock(&cs40l20->lock);
 	ret = regmap_read(cs40l20->regmap,
-			  cs40l20_dsp_reg(cs40l20, "INDEXBUTTONRELEASE"), &val);
+			cs40l20_dsp_reg(cs40l20, "INDEXBUTTONRELEASE",
+					CS40L20_XM_UNPACKED_TYPE), &val);
 	mutex_unlock(&cs40l20->lock);
 
 	if (ret) {
@@ -197,8 +204,8 @@ static ssize_t cs40l20_gpio1_fall_index_store(struct device *dev,
 
 	mutex_lock(&cs40l20->lock);
 	ret = regmap_write(cs40l20->regmap,
-			   cs40l20_dsp_reg(cs40l20, "INDEXBUTTONRELEASE"),
-			   index);
+			   cs40l20_dsp_reg(cs40l20, "INDEXBUTTONRELEASE",
+					   CS40L20_XM_UNPACKED_TYPE), index);
 	mutex_unlock(&cs40l20->lock);
 
 	if (ret) {
@@ -214,20 +221,18 @@ static ssize_t cs40l20_f0_measured_show(struct device *dev,
 					char *buf)
 {
 	struct cs40l20_private *cs40l20 = cs40l20_get_private(dev);
-	int ret;
-	unsigned int val;
+	unsigned char diag_state;
+	unsigned int f0_measured;
 
 	mutex_lock(&cs40l20->lock);
-	ret = regmap_read(cs40l20->regmap,
-			  cs40l20_dsp_reg(cs40l20, "F0_MEASURED"), &val);
+	diag_state = cs40l20->diag_state;
+	f0_measured = cs40l20->f0_measured;
 	mutex_unlock(&cs40l20->lock);
 
-	if (ret) {
-		pr_err("Failed to read measured f0\n");
-		return ret;
-	}
+	if (diag_state != CS40L20_DIAG_STATE_DONE)
+		return -ENODATA;
 
-	return snprintf(buf, PAGE_SIZE, "%d\n", val);
+	return snprintf(buf, PAGE_SIZE, "%d\n", f0_measured);
 }
 
 static ssize_t cs40l20_f0_stored_show(struct device *dev,
@@ -239,7 +244,8 @@ static ssize_t cs40l20_f0_stored_show(struct device *dev,
 
 	mutex_lock(&cs40l20->lock);
 	ret = regmap_read(cs40l20->regmap,
-			  cs40l20_dsp_reg(cs40l20, "F0_STORED"), &val);
+			  cs40l20_dsp_reg(cs40l20, "F0_STORED",
+					  CS40L20_XM_UNPACKED_TYPE), &val);
 	mutex_unlock(&cs40l20->lock);
 
 	if (ret) {
@@ -264,7 +270,8 @@ static ssize_t cs40l20_f0_stored_store(struct device *dev,
 
 	mutex_lock(&cs40l20->lock);
 	ret = regmap_write(cs40l20->regmap,
-			   cs40l20_dsp_reg(cs40l20, "F0_STORED"), val);
+			cs40l20_dsp_reg(cs40l20, "F0_STORED",
+					CS40L20_XM_UNPACKED_TYPE), val);
 	mutex_unlock(&cs40l20->lock);
 
 	if (ret) {
@@ -273,6 +280,27 @@ static ssize_t cs40l20_f0_stored_store(struct device *dev,
 	}
 
 	return count;
+}
+
+static ssize_t cs40l20_redc_measured_show(struct device *dev,
+					  struct device_attribute *attr,
+					  char *buf)
+{
+	struct cs40l20_private *cs40l20 = cs40l20_get_private(dev);
+	unsigned char diag_state;
+	unsigned int redc_measured;
+
+	mutex_lock(&cs40l20->lock);
+
+	diag_state = cs40l20->diag_state;
+	redc_measured = cs40l20->redc_measured;
+
+	mutex_unlock(&cs40l20->lock);
+
+	if (diag_state != CS40L20_DIAG_STATE_DONE)
+		return -ENODATA;
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", redc_measured);
 }
 
 static DEVICE_ATTR(cp_trigger_index, 0660, cs40l20_cp_trigger_index_show,
@@ -284,6 +312,7 @@ static DEVICE_ATTR(gpio1_fall_index, 0660, cs40l20_gpio1_fall_index_show,
 static DEVICE_ATTR(f0_measured, 0660, cs40l20_f0_measured_show, NULL);
 static DEVICE_ATTR(f0_stored, 0660, cs40l20_f0_stored_show,
 		   cs40l20_f0_stored_store);
+static DEVICE_ATTR(redc_measured, 0660, cs40l20_redc_measured_show, NULL);
 
 static struct attribute *cs40l20_dev_attrs[] = {
 	&dev_attr_cp_trigger_index.attr,
@@ -291,6 +320,7 @@ static struct attribute *cs40l20_dev_attrs[] = {
 	&dev_attr_gpio1_fall_index.attr,
 	&dev_attr_f0_measured.attr,
 	&dev_attr_f0_stored.attr,
+	&dev_attr_redc_measured.attr,
 	NULL,
 };
 
@@ -298,27 +328,106 @@ static struct attribute_group cs40l20_dev_attr_group = {
 	.attrs = cs40l20_dev_attrs,
 };
 
+static int cs40l20_diag_capture(struct cs40l20_private *cs40l20)
+{
+	struct regmap *regmap = cs40l20->regmap;
+	int ret;
+
+	/* this function expects to be called from a locked worker function */
+	if (!mutex_is_locked(&cs40l20->lock))
+		return -EACCES;
+
+	if (cs40l20->diag_state != CS40L20_DIAG_STATE_RUN)
+		return -ENODATA;
+
+	ret = regmap_read(regmap, cs40l20_dsp_reg(cs40l20, "F0",
+						  CS40L20_XM_UNPACKED_TYPE),
+			  &cs40l20->f0_measured);
+	if (ret)
+		return ret;
+
+	ret = regmap_read(regmap, cs40l20_dsp_reg(cs40l20, "REDC",
+						  CS40L20_XM_UNPACKED_TYPE),
+			  &cs40l20->redc_measured);
+	if (ret)
+		return ret;
+
+	cs40l20->diag_state = CS40L20_DIAG_STATE_DONE;
+
+	return 0;
+}
 static void cs40l20_vibe_start_worker(struct work_struct *work)
 {
 	struct cs40l20_private *cs40l20 =
 	    container_of(work, struct cs40l20_private, vibe_start_work);
+	struct regmap *regmap = cs40l20->regmap;
+	struct device *dev = cs40l20->dev;
 	int ret;
-	unsigned int control_reg;
 
 	mutex_lock(&cs40l20->lock);
 
-	if (cs40l20->cp_trigger_index)
-		control_reg = cs40l20_dsp_reg(cs40l20, "TRIGGERINDEX");
-	else
-		control_reg = cs40l20_dsp_reg(cs40l20, "TRIGGER_MS");
+	cs40l20->cp_trailer_index = cs40l20->cp_trigger_index;
 
-	ret = regmap_write(cs40l20->regmap,
-			   control_reg, cs40l20->cp_trigger_index);
-	if (ret)
-		dev_err(cs40l20->dev, "Failed to start playback\n");
-	else
-		cs40l20->led_dev.brightness = LED_FULL;
+	switch (cs40l20->cp_trailer_index) {
+	case 0x0000:
+	case 0x8000 ... 0xFFFE:
+		ret = regmap_write(regmap,
+				   cs40l20_dsp_reg(cs40l20, "TRIGGER_MS",
+						   CS40L20_XM_UNPACKED_TYPE),
+				   cs40l20->cp_trailer_index & 0x7FFF);
+		if (ret)
+			dev_err(dev, "Failed to start playback\n");
+		break;
 
+	case 0x0001 ... 0x7FFF:
+		ret = regmap_write(regmap,
+				   cs40l20_dsp_reg(cs40l20, "TRIGGERINDEX",
+						   CS40L20_XM_UNPACKED_TYPE),
+				   cs40l20->cp_trailer_index);
+		if (ret)
+			dev_err(dev, "Failed to start playback\n");
+		break;
+
+	case 0xFFFF:
+		cs40l20->diag_state = CS40L20_DIAG_STATE_INIT;
+
+		ret = regmap_write(regmap,
+				   cs40l20_dsp_reg(cs40l20, "CLOSED_LOOP",
+						   CS40L20_XM_UNPACKED_TYPE),
+				   0);
+		if (ret) {
+			dev_err(dev, "Failed to disable closed-loop mode\n");
+			goto err_mutex;
+		}
+
+		ret = regmap_write(regmap,
+				   cs40l20_dsp_reg(cs40l20, "STIMULUS_MODE",
+						   CS40L20_XM_UNPACKED_TYPE),
+				   1);
+		if (ret) {
+			dev_err(dev, "Failed to enable stimulus mode\n");
+			goto err_mutex;
+		}
+
+		msleep(CS40L20_DIAG_STATE_DELAY_MS);
+
+		ret = regmap_write(regmap,
+				   cs40l20_dsp_reg(cs40l20, "CLOSED_LOOP",
+						   CS40L20_XM_UNPACKED_TYPE),
+				   1);
+		if (ret) {
+			dev_err(dev, "Failed to enable closed-loop mode\n");
+			goto err_mutex;
+		}
+		cs40l20->diag_state = CS40L20_DIAG_STATE_RUN;
+
+		break;
+
+	default:
+		dev_err(dev, "Invalid wavetable index\n");
+	}
+
+err_mutex:
 	mutex_unlock(&cs40l20->lock);
 }
 
@@ -326,16 +435,36 @@ static void cs40l20_vibe_stop_worker(struct work_struct *work)
 {
 	struct cs40l20_private *cs40l20 =
 	    container_of(work, struct cs40l20_private, vibe_stop_work);
+	struct regmap *regmap = cs40l20->regmap;
+	struct device *dev = cs40l20->dev;
 	int ret;
 
 	mutex_lock(&cs40l20->lock);
 
-	ret = regmap_write(cs40l20->regmap,
-			   cs40l20_dsp_reg(cs40l20, "ENDPLAYBACK"), 1);
-	if (ret)
-		dev_err(cs40l20->dev, "Failed to stop playback\n");
-	else
-		cs40l20->led_dev.brightness = LED_OFF;
+	switch (cs40l20->cp_trailer_index) {
+	case 0xFFFF:
+		ret = cs40l20_diag_capture(cs40l20);
+		if (ret)
+			dev_err(dev, "Failed to capture f0 and ReDC\n");
+
+		ret = regmap_write(regmap,
+				   cs40l20_dsp_reg(cs40l20, "STIMULUS_MODE",
+						   CS40L20_XM_UNPACKED_TYPE),
+				   0);
+		if (ret)
+			dev_err(dev, "Failed to disable stimulus mode\n");
+		break;
+
+	default:
+		ret = regmap_write(regmap,
+				   cs40l20_dsp_reg(cs40l20, "ENDPLAYBACK",
+						   CS40L20_XM_UNPACKED_TYPE),
+				   1);
+		if (ret)
+			dev_err(dev, "Failed to stop playback\n");
+	}
+
+	cs40l20->cp_trailer_index = 0;
 
 	mutex_unlock(&cs40l20->lock);
 }
@@ -509,7 +638,8 @@ static void cs40l20_dsp_start(struct cs40l20_private *cs40l20)
 		return;
 	}
 
-	ret = regmap_read(regmap, cs40l20_dsp_reg(cs40l20, "HALO_STATE"),
+	ret = regmap_read(regmap, cs40l20_dsp_reg(cs40l20, "HALO_STATE",
+						  CS40L20_XM_UNPACKED_TYPE),
 			  &val);
 	if (ret) {
 		dev_err(dev, "Failed to read haptics algorithm status\n");
@@ -523,15 +653,16 @@ static void cs40l20_dsp_start(struct cs40l20_private *cs40l20)
 		return;
 	}
 
-	ret = regmap_write(regmap, cs40l20_dsp_reg(cs40l20, "TIMEOUT_MS"),
+	ret = regmap_write(regmap, cs40l20_dsp_reg(cs40l20, "TIMEOUT_MS",
+						   CS40L20_XM_UNPACKED_TYPE),
 			   CS40L20_TIMEOUT_MS_MAX);
 	if (ret) {
 		dev_err(dev, "Failed to extend playback timeout\n");
 		return;
 	}
 
-	ret = regmap_read(regmap, cs40l20_dsp_reg(cs40l20, "NUMBEROFWAVES"),
-			  &val);
+	ret = regmap_read(regmap, cs40l20_dsp_reg(cs40l20, "NUMBEROFWAVES",
+			CS40L20_XM_UNPACKED_TYPE), &val);
 	if (ret) {
 		dev_err(dev, "Failed to count wavetable entries\n");
 		return;
@@ -601,9 +732,11 @@ static void cs40l20_waveform_load(const struct firmware *fw, void *context)
 			+ (fw->data[pos + 3] << 24);
 		pos += CS40L20_WT_DBLK_LENGTH_SIZE;
 
-		if (block_type == CS40L20_XM_UNPACKED_TYPE) {
+		switch (block_type) {
+		case CS40L20_XM_UNPACKED_TYPE:
 			ret = cs40l20_raw_write(cs40l20,
-					cs40l20_dsp_reg(cs40l20, "WAVETABLE"),
+					cs40l20_dsp_reg(cs40l20, "WAVETABLE",
+						CS40L20_XM_UNPACKED_TYPE),
 					&fw->data[pos], block_length,
 					CS40L20_MAX_WLEN);
 			if (ret) {
@@ -611,6 +744,19 @@ static void cs40l20_waveform_load(const struct firmware *fw, void *context)
 					"Failed to write XM_UNPACKED memory\n");
 				goto err_rls_fw;
 			}
+			break;
+		case CS40L20_YM_UNPACKED_TYPE:
+			ret = cs40l20_raw_write(cs40l20,
+					cs40l20_dsp_reg(cs40l20, "WAVETABLEYM",
+						CS40L20_YM_UNPACKED_TYPE),
+					&fw->data[pos], block_length,
+					CS40L20_MAX_WLEN);
+			if (ret) {
+				dev_err(dev,
+					"Failed to write YM_UNPACKED memory\n");
+				goto err_rls_fw;
+			}
+			break;
 		}
 
 		pos += block_length;
@@ -910,7 +1056,9 @@ static int cs40l20_init(struct cs40l20_private *cs40l20)
 	struct device *dev = cs40l20->dev;
 
 	cs40l20->cp_trigger_index = 0;
+	cs40l20->cp_trailer_index = 0;
 	cs40l20->vibe_init_success = false;
+	cs40l20->diag_state = CS40L20_DIAG_STATE_INIT;
 
 	if (cs40l20->pdata.refclk_gpio2) {
 		ret = regmap_update_bits(regmap, CS40L20_GPIO_PAD_CONTROL,
@@ -946,6 +1094,23 @@ static int cs40l20_init(struct cs40l20_private *cs40l20)
 		return ret;
 	}
 
+	ret = regmap_update_bits(regmap, CS40L20_DSP1_RX2_SRC,
+				 CS40L20_DSP1_RXN_SRC_MASK,
+				 CS40L20_DSP1_RXN_SRC_VMON
+				 << CS40L20_DSP1_RXN_SRC_SHIFT);
+	if (ret) {
+		dev_err(dev, "Failed to route voltage monitor to DSP\n");
+		return ret;
+	}
+
+	ret = regmap_update_bits(regmap, CS40L20_DSP1_RX3_SRC,
+				 CS40L20_DSP1_RXN_SRC_MASK,
+				 CS40L20_DSP1_RXN_SRC_IMON
+				 << CS40L20_DSP1_RXN_SRC_SHIFT);
+	if (ret) {
+		dev_err(dev, "Failed to route current monitor to DSP\n");
+		return ret;
+	}
 	ret = regmap_update_bits(regmap, CS40L20_PWR_CTRL1,
 			CS40L20_GLOBAL_EN_MASK, 1 << CS40L20_GLOBAL_EN_SHIFT);
 	if (ret) {
@@ -1042,6 +1207,7 @@ static int cs40l20_i2c_probe(struct i2c_client *i2c_client,
 	cs40l20->dev = dev;
 	dev_set_drvdata(dev, cs40l20);
 	i2c_set_clientdata(i2c_client, cs40l20);
+	mutex_init(&cs40l20->lock);
 
 	cs40l20->regmap = devm_regmap_init_i2c(i2c_client, &cs40l20_regmap);
 	if (IS_ERR(cs40l20->regmap)) {
@@ -1155,6 +1321,7 @@ static int cs40l20_i2c_remove(struct i2c_client *i2c_client)
 	gpiod_set_value_cansleep(cs40l20->reset_gpio, 0);
 
 	regulator_bulk_disable(cs40l20->num_supplies, cs40l20->supplies);
+	mutex_destroy(&cs40l20->lock);
 
 	return 0;
 }
