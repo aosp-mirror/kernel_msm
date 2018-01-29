@@ -900,6 +900,7 @@ static void tmc_disable_etr_sink(struct coresight_device *csdev)
 	spin_lock_irqsave(&drvdata->spinlock, flags);
 	if (drvdata->reading) {
 		spin_unlock_irqrestore(&drvdata->spinlock, flags);
+		mutex_unlock(&drvdata->mem_lock);
 		return;
 	}
 
