@@ -4019,6 +4019,44 @@ void dump_cfg_ini (tCfgIniEntry* iniTable, unsigned long entries)
 }
 #endif
 
+#define WLAN_INI_MAC_FILE              "wlan/prima/wifimac.ini"
+#define WLAN_INI_MAC_SIZE              12
+VOS_STATUS hdd_parse_config_ini_Mac(hdd_context_t* pHddCtx, char *persist_mac)
+{
+   int status;
+   const struct firmware *fw = NULL;
+   char *buffer = NULL;
+   VOS_STATUS vos_status = VOS_STATUS_E_FAILURE;
+   status = request_firmware(&fw, WLAN_INI_MAC_FILE, pHddCtx->parent_dev);
+   if(status)
+   {
+      hddLog(VOS_TRACE_LEVEL_FATAL, "%s: request_firmware failed %d",__func__, status);
+      goto config_exit;
+   }
+   if(!fw || !fw->data || !fw->size)
+   {
+      hddLog(VOS_TRACE_LEVEL_FATAL, "%s: %s download failed", __func__, WLAN_INI_FILE);
+      goto config_exit;
+   }
+   buffer = (char*)vos_mem_vmalloc(fw->size);
+   if(NULL == buffer) {
+      hddLog(VOS_TRACE_LEVEL_FATAL, "%s: kmalloc failure",__func__);
+      release_firmware(fw);
+      return VOS_STATUS_E_FAILURE;
+   }
+   vos_mem_copy((void*)buffer,(void *)fw->data, fw->size);
+   if (fw->size < WLAN_INI_MAC_SIZE){
+      vos_status = VOS_STATUS_E_FAILURE;
+      goto config_exit;
+   }
+   memcpy(persist_mac,buffer,WLAN_INI_MAC_SIZE);
+   persist_mac[WLAN_INI_MAC_SIZE]='\0';
+   vos_status = VOS_STATUS_SUCCESS;
+config_exit:
+   release_firmware(fw);
+   vos_mem_vfree(buffer);
+   return vos_status;
+}
 /*
  * This function reads the qcom_cfg.ini file and
  * parses each 'Name=Value' pair in the ini file
@@ -4034,6 +4072,9 @@ VOS_STATUS hdd_parse_config_ini(hdd_context_t* pHddCtx)
    /* cfgIniTable is static to avoid excess stack usage */
    static tCfgIniEntry cfgIniTable[MAX_CFG_INI_ITEMS];
    VOS_STATUS vos_status = VOS_STATUS_SUCCESS;
+   char persist_mac[WLAN_INI_MAC_SIZE+1] ={0};
+   VOS_STATUS vos_status_mac = VOS_STATUS_SUCCESS;
+   vos_status_mac = hdd_parse_config_ini_Mac(pHddCtx, persist_mac);
 
    memset(cfgIniTable, 0, sizeof(cfgIniTable));
 
@@ -4117,6 +4158,10 @@ VOS_STATUS hdd_parse_config_ini(hdd_context_t* pHddCtx)
                   *buffer = '\0';
                   cfgIniTable[i].name= name;
                   cfgIniTable[i++].value= value;
+                  if (strcmp(cfgIniTable[i-1].name, "Intf0MacAddress")==0 && vos_status_mac==VOS_STATUS_SUCCESS)
+                  {
+                     cfgIniTable[i-1].value= persist_mac;
+                  }
                   if(i >= MAX_CFG_INI_ITEMS) {
                      hddLog(LOGE,"%s: Number of items in %s > %d",
                         __func__, WLAN_INI_FILE, MAX_CFG_INI_ITEMS);
