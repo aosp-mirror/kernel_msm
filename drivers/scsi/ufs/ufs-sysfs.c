@@ -917,6 +917,10 @@ UFS_REQ_STATS_ATTR(flush_min, TS_FLUSH, SHOW_IO_MIN);
 UFS_REQ_STATS_ATTR(flush_max, TS_FLUSH, SHOW_IO_MAX);
 UFS_REQ_STATS_ATTR(flush_avg, TS_FLUSH, SHOW_IO_AVG);
 UFS_REQ_STATS_ATTR(flush_sum, TS_FLUSH, SHOW_IO_SUM);
+UFS_REQ_STATS_ATTR(discard_min, TS_DISCARD, SHOW_IO_MIN);
+UFS_REQ_STATS_ATTR(discard_max, TS_DISCARD, SHOW_IO_MAX);
+UFS_REQ_STATS_ATTR(discard_avg, TS_DISCARD, SHOW_IO_AVG);
+UFS_REQ_STATS_ATTR(discard_sum, TS_DISCARD, SHOW_IO_SUM);
 DEVICE_ATTR_RW(reset_req_status);
 
 static struct attribute *ufs_sysfs_req_stats[] = {
@@ -944,6 +948,10 @@ static struct attribute *ufs_sysfs_req_stats[] = {
 	&dev_attr_flush_max.attr,
 	&dev_attr_flush_avg.attr,
 	&dev_attr_flush_sum.attr,
+	&dev_attr_discard_min.attr,
+	&dev_attr_discard_max.attr,
+	&dev_attr_discard_avg.attr,
+	&dev_attr_discard_sum.attr,
 	&dev_attr_reset_req_status.attr,
 	NULL,
 };
