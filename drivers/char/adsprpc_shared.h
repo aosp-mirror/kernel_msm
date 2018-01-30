@@ -137,7 +137,7 @@ struct fastrpc_ioctl_mmap {
 };
 
 struct smq_null_invoke {
-	struct smq_invoke_ctx *ctx; /* invoke caller context */
+	uint64_t ctx;		    /* invoke caller context */
 	uint32_t handle;	    /* handle to invoke */
 	uint32_t sc;		    /* scalars structure describing the data */
 };
@@ -164,7 +164,7 @@ struct smq_msg {
 };
 
 struct smq_invoke_rsp {
-	struct smq_invoke_ctx *ctx;  /* invoke caller context */
+	uint64_t ctx;            /* invoke caller context */
 	int retval;	             /* invoke return value */
 };
 
