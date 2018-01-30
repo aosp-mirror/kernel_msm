@@ -15,6 +15,7 @@
 #define pr_fmt(fmt)	"%s:%d: " fmt, __func__, __LINE__
 #include <linux/backlight.h>
 #include <linux/of_gpio.h>
+#include <linux/sysfs.h>
 
 #include "dsi_panel.h"
 
@@ -121,6 +122,9 @@ static int dsi_backlight_update_status(struct backlight_device *bd)
 
 	mutex_lock(&panel->panel_lock);
 	if (dsi_panel_initialized(panel)) {
+		pr_info("req:%d bl:%d state:0x%x\n",
+			bd->props.brightness, bl_lvl, bd->props.state);
+
 		rc = dsi_panel_set_backlight(panel, bl_lvl);
 		if (rc) {
 			pr_err("unable to set backlight (%d)\n", rc);
@@ -146,6 +150,58 @@ static const struct backlight_ops dsi_backlight_ops = {
 	.get_brightness = dsi_backlight_get_brightness,
 };
 
+static ssize_t alpm_mode_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf, size_t count)
+{
+	struct backlight_device *bd = to_backlight_device(dev);
+	struct dsi_backlight_config *bl = bl_get_data(bd);
+	struct dsi_panel *panel = container_of(bl, struct dsi_panel, bl_config);
+	int rc, alpm_mode;
+	const unsigned int lp_state = bl->bl_device->props.state &
+			(BL_STATE_LP | BL_STATE_LP2);
+
+	rc = kstrtoint(buf, 0, &alpm_mode);
+	if (rc)
+		return rc;
+
+	if (bl->bl_device->props.state & BL_CORE_FBBLANK) {
+		return -EINVAL;
+	} else if ((alpm_mode == 1) && (lp_state != BL_STATE_LP)) {
+		pr_info("activating lp1 mode\n");
+		dsi_panel_set_lp1(panel);
+	} else if ((alpm_mode > 1) && !(lp_state & BL_STATE_LP2)) {
+		pr_info("activating lp2 mode\n");
+		dsi_panel_set_lp2(panel);
+	} else if (!alpm_mode && lp_state) {
+		pr_info("activating normal mode\n");
+		dsi_panel_set_nolp(panel);
+	}
+
+	return count;
+}
+
+static ssize_t alpm_mode_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct backlight_device *bd = to_backlight_device(dev);
+	int alpm_mode;
+
+	if (bd->props.state & BL_STATE_LP2)
+		alpm_mode = 2;
+	else
+		alpm_mode = (bd->props.state & BL_STATE_LP) != 0;
+
+	return sprintf(buf, "%d\n", alpm_mode);
+}
+static DEVICE_ATTR_RW(alpm_mode);
+
+static struct attribute *bl_device_attrs[] = {
+	&dev_attr_alpm_mode.attr,
+	NULL,
+};
+ATTRIBUTE_GROUPS(bl_device);
+
 static int dsi_backlight_register(struct dsi_backlight_config *bl)
 {
 	static int display_count;
@@ -168,6 +224,10 @@ static int dsi_backlight_register(struct dsi_backlight_config *bl)
 		bl->bl_device = NULL;
 		return -ENODEV;
 	}
+
+	if (sysfs_create_groups(&bl->bl_device->dev.kobj, bl_device_groups))
+		pr_warn("unable to create device groups\n");
+
 	display_count++;
 	return 0;
 }
@@ -248,6 +308,9 @@ int dsi_panel_bl_unregister(struct dsi_panel *panel)
 		rc = -ENOTSUPP;
 		goto error;
 	}
+
+	if (bl->bl_device)
+		sysfs_remove_groups(&bl->bl_device->dev.kobj, bl_device_groups);
 
 error:
 	return rc;
