@@ -63,9 +63,13 @@ struct pl_data {
 	struct votable		*pl_enable_votable_indirect;
 	struct delayed_work	status_change_work;
 	struct work_struct	pl_disable_forever_work;
+#ifdef CONFIG_QPNP_BATTERY_TAPER
 	struct work_struct	pl_taper_work;
+#endif
 	struct delayed_work	pl_awake_work;
+#ifdef CONFIG_QPNP_BATTERY_TAPER
 	bool			taper_work_running;
+#endif
 	struct power_supply	*main_psy;
 	struct power_supply	*pl_psy;
 	struct power_supply	*batt_psy;
@@ -430,7 +434,9 @@ static void get_fcc_split(struct pl_data *chip, int total_ua,
 		*master_ua = max(0, total_ua - *slave_ua);
 }
 
+
 #define MINIMUM_PARALLEL_FCC_UA		500000
+#ifdef CONFIG_QPNP_BATTERY_TAPER
 #define PL_TAPER_WORK_DELAY_MS		500
 #define TAPER_RESIDUAL_PCT		90
 #define TAPER_REDUCTION_UA		200000
@@ -499,6 +505,8 @@ done:
 	vote(chip->fcc_votable, TAPER_STEPPER_VOTER, false, 0);
 	vote(chip->pl_awake_votable, TAPER_END_VOTER, false, 0);
 }
+
+#endif	/* CONFIG_QPNP_BATTERY_TAPER */
 
 static int pl_fcc_vote_callback(struct votable *votable, void *data,
 			int total_fcc_ua, const char *client)
@@ -781,6 +789,7 @@ static int pl_disable_vote_callback(struct votable *votable,
 
 		if (IS_USBIN(chip->pl_mode))
 			split_settled(chip);
+#ifdef CONFIG_QPNP_BATTERY_TAPER
 		/*
 		 * we could have been enabled while in taper mode,
 		 *  start the taper work if so
@@ -800,6 +809,7 @@ static int pl_disable_vote_callback(struct votable *votable,
 						&chip->pl_taper_work);
 			}
 		}
+#endif	/* CONFIG_QPNP_BATTERY_TAPER */
 
 		pl_dbg(chip, PR_PARALLEL, "master_fcc=%d slave_fcc=%d distribution=(%d/%d)\n",
 			master_fcc_ua, slave_fcc_ua,
@@ -960,6 +970,7 @@ static void handle_main_charge_type(struct pl_data *chip)
 		return;
 	}
 
+#ifdef CONFIG_QPNP_BATTERY_TAPER
 	/* handle taper charge entry */
 	if (chip->charge_type == POWER_SUPPLY_CHARGE_TYPE_FAST
 		&& (pval.intval == POWER_SUPPLY_CHARGE_TYPE_TAPER)) {
@@ -971,6 +982,7 @@ static void handle_main_charge_type(struct pl_data *chip)
 		}
 		return;
 	}
+#endif
 
 	/* handle fast/taper charge entry */
 	if (pval.intval == POWER_SUPPLY_CHARGE_TYPE_TAPER
@@ -1058,6 +1070,7 @@ static void handle_settled_icl_change(struct pl_data *chip)
 	}
 }
 
+#ifdef CONFIG_QPNP_BATTERY_TAPER
 static void handle_parallel_in_taper(struct pl_data *chip)
 {
 	union power_supply_propval pval = {0, };
@@ -1086,6 +1099,7 @@ static void handle_parallel_in_taper(struct pl_data *chip)
 		return;
 	}
 }
+#endif
 
 static void handle_usb_change(struct pl_data *chip)
 {
@@ -1108,9 +1122,11 @@ static void handle_usb_change(struct pl_data *chip)
 
 	if (!pval.intval) {
 		/* USB removed: remove all stale votes */
+#ifdef CONFIG_QPNP_BATTERY_TAPER
 		vote(chip->pl_disable_votable, TAPER_END_VOTER, false, 0);
 		vote(chip->pl_disable_votable, PL_TAPER_EARLY_BAD_VOTER,
 				false, 0);
+#endif
 		vote(chip->pl_disable_votable, ICL_LIMIT_VOTER, false, 0);
 	}
 }
@@ -1142,7 +1158,9 @@ static void status_change_work(struct work_struct *work)
 	handle_usb_change(chip);
 	handle_main_charge_type(chip);
 	handle_settled_icl_change(chip);
+#ifdef CONFIG_QPNP_BATTERY_TAPER
 	handle_parallel_in_taper(chip);
+#endif
 }
 
 static int pl_notifier_call(struct notifier_block *nb,
@@ -1236,7 +1254,9 @@ int qcom_batt_init(void)
 		goto destroy_votable;
 	}
 	vote(chip->pl_disable_votable, CHG_STATE_VOTER, true, 0);
+#ifdef CONFIG_QPNP_BATTERY_TAPER
 	vote(chip->pl_disable_votable, TAPER_END_VOTER, false, 0);
+#endif
 	vote(chip->pl_disable_votable, PARALLEL_PSY_VOTER, true, 0);
 
 	chip->pl_awake_votable = create_votable("PL_AWAKE", VOTE_SET_ANY,
@@ -1259,7 +1279,9 @@ int qcom_batt_init(void)
 	vote(chip->pl_disable_votable, PL_INDIRECT_VOTER, true, 0);
 
 	INIT_DELAYED_WORK(&chip->status_change_work, status_change_work);
+#ifdef CONFIG_QPNP_BATTERY_TAPER
 	INIT_WORK(&chip->pl_taper_work, pl_taper_work);
+#endif
 	INIT_WORK(&chip->pl_disable_forever_work, pl_disable_forever_work);
 	INIT_DELAYED_WORK(&chip->pl_awake_work, pl_awake_work);
 
@@ -1313,7 +1335,9 @@ void qcom_batt_deinit(void)
 		return;
 
 	cancel_delayed_work_sync(&chip->status_change_work);
+#ifdef CONFIG_QPNP_BATTERY_TAPER
 	cancel_work_sync(&chip->pl_taper_work);
+#endif
 	cancel_work_sync(&chip->pl_disable_forever_work);
 	cancel_delayed_work_sync(&chip->pl_awake_work);
 
