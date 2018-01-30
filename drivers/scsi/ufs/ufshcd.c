@@ -84,8 +84,11 @@ static int ufshcd_tag_req_type(struct request *rq)
 
 	if (!rq)
 		rq_type = TS_NOT_SUPPORTED;
-	else if (rq->cmd_flags & REQ_PREFLUSH)
+	else if ((rq->cmd_flags & REQ_PREFLUSH) ||
+		 (req_op(rq) == REQ_OP_FLUSH))
 		rq_type = TS_FLUSH;
+	else if (req_op(rq) == REQ_OP_DISCARD)
+		rq_type = TS_DISCARD;
 	else if (rq_data_dir(rq) == READ)
 		rq_type = (rq->cmd_flags & REQ_URGENT) ?
 			TS_URGENT_READ : TS_READ;
