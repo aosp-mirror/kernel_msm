@@ -4959,7 +4959,7 @@ static int arch_setup_msi_irq_default(struct pci_dev *pdev,
 		if (irq < 0)
 			return irq;
 		else if ((lastirq != -1) && (irq != (lastirq + 1))) {
-			msm_pcie_destroy_irq(irq, pdev);
+			msm_pcie_destroy_irq(desc, irq);
 			break;
 		}
 
