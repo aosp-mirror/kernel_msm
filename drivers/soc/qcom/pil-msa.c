@@ -662,6 +662,12 @@ int pil_mss_reset_load_mba(struct pil_desc *pil)
 	trace_pil_func(__func__);
 	fw_name_p = drv->non_elf_image ? fw_name_legacy : fw_name;
 	ret = request_firmware(&fw, fw_name_p, pil->dev);
+	while (ret == -EAGAIN) {
+		dev_err(pil->dev,"request_firmware:%s failed, retry\n",
+						fw_name_p);
+		ret = request_firmware(&fw, fw_name_p, pil->dev);
+	}
+
 	if (ret) {
 		dev_err(pil->dev, "Failed to locate %s (rc:%d)\n",
 						fw_name_p, ret);
