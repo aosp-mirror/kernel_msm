@@ -43,7 +43,6 @@
 static bool selftest_enable;
 static bool selftest_show;
 static struct wake_lock touch_wake_lock;
-static struct workqueue_struct	*touch_wq = NULL;
 
 static unsigned char touched_finger_count = 0;
 static unsigned char patchevent_mask = 0;
@@ -759,8 +758,7 @@ static void mxt_proc_t6_messages(struct mxt_data *data, u8 *msg)
 		mxt_reset_slots(data);
 		if (data->delayed_cal) {
 			TOUCH_DEBUG_MSG("delayed calibration call\n");
-			queue_delayed_work(touch_wq,
-					&data->work_delay_cal,
+			schedule_delayed_work(&data->work_delay_cal,
 					msecs_to_jiffies(200));
 			data->delayed_cal = false;
 		}
@@ -883,8 +881,7 @@ static void mxt_register_psy_func(struct work_struct *work)
 		mxt_external_power_changed(&data->psy);
 		return;
 	} else if (-EPROBE_DEFER == error) {
-		queue_delayed_work(touch_wq,
-				&data->work_register_psy,
+		schedule_delayed_work(&data->work_register_psy,
 				msecs_to_jiffies(MXT_REGISTER_PSY_MS));
 	} else if (error < 0) {
 		TOUCH_ERR_MSG("failed power supply register\n");
@@ -904,7 +901,8 @@ static void mxt_proc_t42_messages(struct mxt_data *data, u8 *msg)
 		data->button_lock = true;
 	} else {
 		TOUCH_DEBUG_MSG("Palm released \n");
-		queue_delayed_work(touch_wq, &data->work_button_lock, msecs_to_jiffies(200));
+		schedule_delayed_work(&data->work_button_lock,
+				msecs_to_jiffies(200));
 	}
 	mxt_reset_slots(data);
 }
@@ -1013,7 +1011,7 @@ static void mxt_proc_t100_message(struct mxt_data *data, u8 *message)
 			bool irq_enabled;
 			TOUCH_ERR_MSG( "recalibration\n");
 			irq_enabled = mxt_disable_irq(data);
-			queue_delayed_work(touch_wq, &data->work_delay_cal,
+			schedule_delayed_work(&data->work_delay_cal,
 					msecs_to_jiffies(10));
 			data->delayed_cal = false;
 			msleep(50);
@@ -2390,7 +2388,7 @@ static ssize_t mxt_check_fw_store(struct mxt_data *data, const char *buf,
 		return -EINVAL;
 
 	if (input)
-		queue_delayed_work(touch_wq, &data->work_firmware_update, 0);
+		schedule_delayed_work(&data->work_firmware_update, 0);
 
 	return count;
 }
@@ -4122,8 +4120,7 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 
 	error = power_supply_register(&client->dev, &data->psy);
 	if (-EPROBE_DEFER == error) {
-		queue_delayed_work(touch_wq,
-				&data->work_register_psy,
+		schedule_delayed_work(&data->work_register_psy,
 				msecs_to_jiffies(MXT_REGISTER_PSY_MS));
 	} else if (error < 0) {
 		TOUCH_ERR_MSG("failed power supply register\n");
@@ -4274,37 +4271,12 @@ static struct i2c_driver mxt_driver = {
 
 static int __init mxt_init(void)
 {
-	int ret;
-
-	touch_wq = create_singlethread_workqueue("touch_wq");
-	if (!touch_wq) {
-		TOUCH_ERR_MSG("touch_wq error\n");
-		ret = -ENOMEM;
-	}
-
-	ret = i2c_add_driver(&mxt_driver);
-	if (ret < 0) {
-		TOUCH_ERR_MSG("can't add i2c driver\n");
-		goto error;
-	}
-
-	return 0;
-
-error:
-	if (touch_wq)
-		destroy_workqueue(touch_wq);
-
-	return ret;
+	return i2c_add_driver(&mxt_driver);
 }
 
 static void __exit mxt_exit(void)
 {
 	i2c_del_driver(&mxt_driver);
-
-	if (touch_wq) {
-		destroy_workqueue(touch_wq);
-		touch_wq = NULL;
-	}
 }
 
 late_initcall(mxt_init);
