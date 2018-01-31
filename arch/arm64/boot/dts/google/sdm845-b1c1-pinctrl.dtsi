@@ -30,16 +30,6 @@
 		};
 	};
 	ts_mux {
-		ts_reset_active: ts_reset_active {
-			mux {
-				pins = "gpio99";
-				function = "gpio";
-			};
-			config {
-				pins = "gpio99";
-				output-high;
-			};
-		};
 		ts_active: ts_active {
 			mux {
 				pins = "gpio125";
