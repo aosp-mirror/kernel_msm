@@ -423,6 +423,12 @@ struct RTP_Seq {
 	int RTPindex;
 };
 
+struct sysfs_reg_ctrl_info {
+	bool is_read_reg_cmd;
+	char read_reg_addr;
+	char reg_data;
+};
+
 struct drv2605_data {
 	struct drv2605_platform_data PlatData[2];
 	struct i2c_client *i2c_client;
@@ -461,6 +467,7 @@ struct drv2605_data {
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	struct early_suspend early_suspend;
 #endif
+	struct sysfs_reg_ctrl_info sysfs_reg_ctrl;
 };
 
 #endif
