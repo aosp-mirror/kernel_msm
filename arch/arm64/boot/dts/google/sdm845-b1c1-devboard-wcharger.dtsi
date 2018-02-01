@@ -11,17 +11,12 @@
  *   P9221 J1-5 (GND) to J20-1
  */
 
-&tlmm {
-	p9221_int: p9221_int {
-		mux {
-			pins = "gpio132";
-			function = "gpio";
-		};
-		config {
-			pins = "gpio132";
-			drive-strength = <2>;
-			bias-pull-up;
-		};
+&p9221_int {
+	mux {
+		pins = "gpio132";
+	};
+	config {
+		pins = "gpio132";
 	};
 };
 

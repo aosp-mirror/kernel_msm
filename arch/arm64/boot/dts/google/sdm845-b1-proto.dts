@@ -23,10 +23,8 @@
 };
 
 /* B1 P1 has easel spi connected to se11 */
-/ {
-	aliases {
-		spi10 = &qupv3_se11_spi;
-	};
+&aliases {
+	spi10 = "/soc/spi@a8c000";
 };
 &qupv3_se0_spi {
 	status = "disabled";
@@ -68,10 +66,8 @@
  * B1 P1 requires the speaker amp to be strictly in i2s (instead of tdm mode)
  * This will be resolved in P1.1 schematic and is not needed there.
  */
-&soc {
-	sound-tavil {
-		qcom,model = "sdm845-tavil-snd-card";
-	};
+&snd_934x {
+	qcom,model = "sdm845-tavil-snd-card";
 };
 
 /* path to speaker boosters */
@@ -142,10 +138,8 @@
 	status = "ok";
 };
 
-/ {
-	aliases {
-		spi0 = &qupv3_se8_spi;
-	};
+&aliases {
+	spi0 = "/soc/spi@a80000";
 };
 
 /* Disable wchg on I2C10 */

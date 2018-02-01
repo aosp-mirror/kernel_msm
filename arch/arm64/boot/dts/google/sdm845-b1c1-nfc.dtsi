@@ -1,11 +1,5 @@
 &tlmm {
 	nfc {
-		/* remove the ../qcom/sdm845-pinctrl.dtsi legacy */
-		/delete-node/ nfc_int_active;
-		/delete-node/ nfc_int_suspend;
-		/delete-node/ nfc_enable_active;
-		/delete-node/ nfc_enable_suspend;
-
 		/* define the real stuff */
 		nfc_int_default: nfc_int_default {
 			/* default state */

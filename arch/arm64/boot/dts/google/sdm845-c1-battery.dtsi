@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  */
 
-/{
+&vendor {
 	c1_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <10>;
 		/* Include B1 battery profile as placeholders for each

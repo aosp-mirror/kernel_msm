@@ -13,12 +13,12 @@
 
 /dts-v1/;
 
-#include "../qcom/sdm845-v2.dtsi"
 #include "sdm845-b1c1-devboard-common.dtsi"
 
 / {
 	model = "Google Inc. MSM sdm845 V2 Dev Board";
 	compatible = "google,b1c1-sdm845", "qcom,sdm845";
+	qcom,msm-id = <321 0x20000>;
 	qcom,board-id = <0x00010205 0>;
 };
 

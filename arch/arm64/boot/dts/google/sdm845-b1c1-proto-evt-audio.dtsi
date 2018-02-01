@@ -7,6 +7,5 @@
 
 
 &cs35l36_codec2 {
-	/delete-property/ pinctrl-names;
-	/delete-property/ pinctrl-0;
+	pinctrl-names = "unused";
 };

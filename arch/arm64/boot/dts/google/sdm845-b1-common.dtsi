@@ -19,7 +19,3 @@
 &dsi_sw43408_cmd_display {
 	qcom,dsi-display-active;
 };
-
-&mdss_dsi0 {
-	/delete-property/ qcom,null-insertion-enabled;
-};

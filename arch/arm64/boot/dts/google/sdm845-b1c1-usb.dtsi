@@ -1,5 +1,5 @@
 
-/{
+&vendor {
 	extcon_usb1: extcon_usb1 {
 		compatible = "linux,extcon-usb-gpio";
 		vbus-gpio = <&pmi8998_gpios 8 GPIO_ACTIVE_HIGH>;

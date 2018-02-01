@@ -56,7 +56,6 @@
 };
 
 &pm8998_gpios {
-	/delete-node/ key_home;
 	/* Don't drive these, for display */
 	sde_pmgpio_active: sde_pmgpio_active {
 		pins = "gpio2", "gpio5";

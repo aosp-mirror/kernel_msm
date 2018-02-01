@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  */
 
-/{
+&vendor {
 	b1_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <10>;
 		/* all B1 proto battery have the same RID

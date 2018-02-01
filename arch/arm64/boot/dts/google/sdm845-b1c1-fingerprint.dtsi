@@ -28,8 +28,6 @@
 		pinctrl-1 = <&fp_reset_l_output_high>;
 		pinctrl-2 = <&fp_to_ap_irq_default>;
 	};
-
-	/delete-node/ qcom,qbt1000;
 };
 
 &tlmm {

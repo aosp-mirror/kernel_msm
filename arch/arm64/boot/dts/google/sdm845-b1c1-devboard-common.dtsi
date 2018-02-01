@@ -61,10 +61,8 @@
 };
 
 /* B1 P1 has easel spi connected to se11 */
-/ {
-	aliases {
-		spi10 = &qupv3_se11_spi;
-	};
+&aliases {
+	spi10 = "/soc/spi@a8c000";
 };
 &qupv3_se0_spi {
 	status = "disabled";
@@ -84,14 +82,12 @@
 };
 
 /* devboard doesn't have easel PMIC, so we need a pull-down on resetb */
-&s2mpb04_resetb_default {
-	config {
-		/delete-property/ bias-disable;
-		bias-pull-down;
-	};
+&easel_pmic {
+	pinctrl-0 = <&s2mpb04_pon_default &s2mpb04_intb_default
+		     &s2mpb04_resetb_devboard>;
 };
 
-/* override thermistors config for devborad only */
+/* override thermistor configs for devboard only */
 &pm8998_vadc {
 	chan@4d {
 		label = "msm_therm";
@@ -129,10 +125,15 @@
 };
 
 &thermal_zones {
-	/delete-node/sdm-therm-adc;
-	/delete-node/usbc-therm-adc;
-	/delete-node/pmi_therm-adc;
-
+	sdm-therm-adc {
+		status = "disabled";
+	};
+	usbc-therm-adc {
+		status = "disabled";
+	};
+	pmi_therm-adc {
+		status = "disabled";
+	};
 	msm-therm-adc {
 		polling-delay-passive = <0>;
 		polling-delay = <0>;
@@ -195,7 +196,7 @@
 };
 
 &qupv3_se7_spi {
-	status = "disable";
+	status = "disabled";
 };
 
 &qupv3_se8_spi {
@@ -205,10 +206,8 @@
 	pinctrl-1 = <&qupv3_se8_spi_sleep>;
 };
 
-/ {
-	aliases {
-		spi0 = &qupv3_se8_spi;
-	};
+&aliases {
+	spi0 = "/soc/spi@a80000";
 };
 
 &ctdl_ap_irq {

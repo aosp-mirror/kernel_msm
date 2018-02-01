@@ -26,8 +26,6 @@
 	fod = [b0 24 90 46 88 52 88 53 90 24 9a f0 14 00 01 64];
 };
 
-&cam_cci {
-	vd6281: qcom,rainbow@20 {
-		hw-version = <20>; /* cut2.0 */
-	};
+&vd6281 {
+	hw-version = <20>; /* cut2.0 */
 };

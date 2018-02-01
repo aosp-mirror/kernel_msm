@@ -95,19 +95,18 @@
 			drive-strength = <2>; /* 2 MA */
 		};
 	};
+};
 
-	/delete-node/ cci0_suspend;
-	cci0_suspend: cci0_suspend {
-		mux {
-			/* CLK, DATA */
-			pins = "gpio17","gpio18";
-			function = "cci_i2c";
-		};
-		config {
-			pins = "gpio17","gpio18";
-			/* bus has external pull-up, don't pull down */
-			bias-disable;
-		};
+&cci0_suspend {
+	mux {
+		/* CLK, DATA */
+		pins = "gpio17","gpio18";
+		function = "cci_i2c";
+	};
+	config {
+		pins = "gpio17","gpio18";
+		/* bus has external pull-up, don't pull down */
+		bias-disable;
 	};
 };
 

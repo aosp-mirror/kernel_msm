@@ -11,12 +11,15 @@
  *
  */
 
-#include "../qcom/sdm845-v2.1.dtsi"
 #include "sdm845-b1c1-common.dtsi"
 
 #include "sdm845-c1-touch.dtsi"
 #include "sdm845-b1c1-audio.dtsi"
 #include "sdm845-c1-battery.dtsi"
+
+/ {
+	qcom,msm-id = <321 0x20001>;
+};
 
 &dsi_s6e3ha8_cmd_display {
 	qcom,dsi-display-active;
@@ -31,4 +34,8 @@
 
 &routing {
 	qcom,msm-pcm-config = "c1";
+};
+
+&mdss_dsi0 {
+	qcom,null-insertion-enabled;
 };

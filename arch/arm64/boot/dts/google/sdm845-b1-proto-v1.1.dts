@@ -28,10 +28,8 @@
 };
 
 /* B1 P1 has easel spi connected to se11 */
-/ {
-	aliases {
-		spi10 = &qupv3_se11_spi;
-	};
+&aliases {
+	spi10 = "/soc/spi@a8c000";
 };
 &qupv3_se0_spi {
 	status = "disabled";
@@ -323,10 +321,8 @@
 	status = "ok";
 };
 
-/ {
-	aliases {
-		spi0 = &qupv3_se8_spi;
-	};
+&aliases {
+	spi0 = "/soc/spi@a80000";
 };
 
 &cam_sensor_front2_active {
