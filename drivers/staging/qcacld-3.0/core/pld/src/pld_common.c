@@ -344,7 +344,7 @@ int pld_wlan_enable(struct device *dev, struct pld_wlan_enable_cfg *config,
 		ret = pld_pcie_wlan_enable(config, mode, host_version);
 		break;
 	case PLD_BUS_TYPE_SNOC:
-		ret = pld_snoc_wlan_enable(config, mode, host_version);
+		ret = pld_snoc_wlan_enable(dev, config, mode, host_version);
 		break;
 	case PLD_BUS_TYPE_SDIO:
 		break;
@@ -375,7 +375,7 @@ int pld_wlan_disable(struct device *dev, enum pld_driver_mode mode)
 		ret = pld_pcie_wlan_disable(mode);
 		break;
 	case PLD_BUS_TYPE_SNOC:
-		ret = pld_snoc_wlan_disable(mode);
+		ret = pld_snoc_wlan_disable(dev, mode);
 		break;
 	case PLD_BUS_TYPE_SDIO:
 		break;
@@ -406,7 +406,7 @@ int pld_set_fw_log_mode(struct device *dev, u8 fw_log_mode)
 		ret = pld_pcie_set_fw_log_mode(fw_log_mode);
 		break;
 	case PLD_BUS_TYPE_SNOC:
-		ret = pld_snoc_set_fw_log_mode(fw_log_mode);
+		ret = pld_snoc_set_fw_log_mode(dev, fw_log_mode);
 		break;
 	case PLD_BUS_TYPE_SDIO:
 		break;
@@ -963,7 +963,8 @@ int pld_ce_request_irq(struct device *dev, unsigned int ce_id,
 
 	switch (pld_get_bus_type(dev)) {
 	case PLD_BUS_TYPE_SNOC:
-		ret = pld_snoc_ce_request_irq(ce_id, handler, flags, name, ctx);
+		ret = pld_snoc_ce_request_irq(dev, ce_id,
+					      handler, flags, name, ctx);
 		break;
 	case PLD_BUS_TYPE_PCIE:
 		break;
@@ -990,7 +991,7 @@ int pld_ce_free_irq(struct device *dev, unsigned int ce_id, void *ctx)
 
 	switch (pld_get_bus_type(dev)) {
 	case PLD_BUS_TYPE_SNOC:
-		ret = pld_snoc_ce_free_irq(ce_id, ctx);
+		ret = pld_snoc_ce_free_irq(dev, ce_id, ctx);
 		break;
 	case PLD_BUS_TYPE_PCIE:
 		break;
@@ -1013,7 +1014,7 @@ void pld_enable_irq(struct device *dev, unsigned int ce_id)
 {
 	switch (pld_get_bus_type(dev)) {
 	case PLD_BUS_TYPE_SNOC:
-		pld_snoc_enable_irq(ce_id);
+		pld_snoc_enable_irq(dev, ce_id);
 		break;
 	case PLD_BUS_TYPE_PCIE:
 		break;
@@ -1036,7 +1037,7 @@ void pld_disable_irq(struct device *dev, unsigned int ce_id)
 {
 	switch (pld_get_bus_type(dev)) {
 	case PLD_BUS_TYPE_SNOC:
-		pld_snoc_disable_irq(ce_id);
+		pld_snoc_disable_irq(dev, ce_id);
 		break;
 	case PLD_BUS_TYPE_PCIE:
 		break;
@@ -1064,7 +1065,7 @@ int pld_get_soc_info(struct device *dev, struct pld_soc_info *info)
 
 	switch (pld_get_bus_type(dev)) {
 	case PLD_BUS_TYPE_SNOC:
-		ret = pld_snoc_get_soc_info(info);
+		ret = pld_snoc_get_soc_info(dev, info);
 		break;
 	case PLD_BUS_TYPE_PCIE:
 		break;
@@ -1091,7 +1092,7 @@ int pld_get_ce_id(struct device *dev, int irq)
 
 	switch (pld_get_bus_type(dev)) {
 	case PLD_BUS_TYPE_SNOC:
-		ret = pld_snoc_get_ce_id(irq);
+		ret = pld_snoc_get_ce_id(dev, irq);
 		break;
 	case PLD_BUS_TYPE_PCIE:
 		ret = pld_pcie_get_ce_id(irq);
@@ -1117,7 +1118,7 @@ int pld_get_irq(struct device *dev, int ce_id)
 
 	switch (pld_get_bus_type(dev)) {
 	case PLD_BUS_TYPE_SNOC:
-		ret = pld_snoc_get_irq(ce_id);
+		ret = pld_snoc_get_irq(dev, ce_id);
 		break;
 	case PLD_BUS_TYPE_PCIE:
 	default:
@@ -1396,7 +1397,7 @@ int pld_is_qmi_disable(struct device *dev)
 
 	switch (type) {
 	case PLD_BUS_TYPE_SNOC:
-		ret = pld_snoc_is_qmi_disable();
+		ret = pld_snoc_is_qmi_disable(dev);
 		break;
 	case PLD_BUS_TYPE_PCIE:
 	case PLD_BUS_TYPE_SDIO:

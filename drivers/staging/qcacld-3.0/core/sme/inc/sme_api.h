@@ -106,6 +106,7 @@ typedef struct _smeConfigParams {
 	tCsrConfigParam csrConfig;
 	struct rrm_config_param rrmConfig;
 	bool snr_monitor_enabled;
+	bool enable_action_oui;
 } tSmeConfigParams, *tpSmeConfigParams;
 
 #ifdef FEATURE_WLAN_TDLS
@@ -282,6 +283,17 @@ static inline void sme_update_roam_pno_channel_prediction_config(
 #endif
 QDF_STATUS sme_update_config(tHalHandle hHal,
 		tpSmeConfigParams pSmeConfigParams);
+
+/**
+ * sme_destroy_config() - destroy the config params allocated dynamically
+ * @hal: handle returned by mac_open
+ *
+ * This function is used to de-allocate the memory for config params
+ * which are allocated using sme_update_config() function
+ *
+ * Return: QDF_STATUS
+ */
+QDF_STATUS sme_destroy_config(tHalHandle hal);
 
 QDF_STATUS sme_set11dinfo(tHalHandle hHal, tpSmeConfigParams pSmeConfigParams);
 QDF_STATUS sme_get_soft_ap_domain(tHalHandle hHal,
@@ -476,6 +488,9 @@ QDF_STATUS sme_change_country_code(tHalHandle hHal,
 		bool sendRegHint);
 QDF_STATUS sme_generic_change_country_code(tHalHandle hHal,
 					   uint8_t *pCountry);
+
+QDF_STATUS sme_update_channel_list(tpAniSirGlobal mac_ctx);
+
 QDF_STATUS sme_tx_fail_monitor_start_stop_ind(tHalHandle hHal,
 		uint8_t tx_fail_count,
 		void *txFailIndCallback);
@@ -982,11 +997,6 @@ QDF_STATUS sme_ll_stats_set_thresh(tHalHandle hal,
 				struct sir_ll_ext_stats_threshold *threshold);
 #endif /* WLAN_FEATURE_LINK_LAYER_STATS */
 
-QDF_STATUS sme_fw_mem_dump(tHalHandle hHal, void *recvd_req);
-QDF_STATUS sme_fw_mem_dump_register_cb(tHalHandle hHal,
-		void (*callback_routine)(void *cb_context,
-		struct fw_dump_rsp *rsp));
-QDF_STATUS sme_fw_mem_dump_unregister_cb(tHalHandle hHal);
 QDF_STATUS sme_set_wisa_params(tHalHandle hal,
 				struct sir_wisa_params *wisa_params);
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD
@@ -1831,6 +1841,28 @@ QDF_STATUS sme_set_bmiss_bcnt(uint32_t vdev_id, uint32_t first_cnt,
 QDF_STATUS sme_set_del_pmkid_cache(tHalHandle hal, uint8_t session_id,
 				   tPmkidCacheInfo *pmk_cache_info,
 				   bool is_add);
+/**
+ * sme_set_action_oui_ext() - set action oui extensions in pmac
+ * @hal: hal global context
+ * @wmi_ext: pointer to oui extension to be stored
+ * @action_id: action for which @wmi_ext is meant
+ *
+ * Return: if set is success return QDF_STATUS_SUCCESS
+ *         else QDF_STATUS_E_INVAL or QDF_STATUS_E_NOMEM
+ */
+QDF_STATUS sme_set_action_oui_ext(tHalHandle hal,
+				  struct wmi_action_oui_extension *wmi_ext,
+				  enum wmi_action_oui_id action_id);
+/**
+ * sme_send_action_oui() - send action oui extensions to wma
+ * @hal: hal global context
+ * @action_id: action for which oui extensions need to be send to wma
+ *
+ * Return: if set is success return QDF_STATUS_SUCCESS
+ *         else QDF_STATUS_E_INVAL or QDF_STATUS_E_NOMEM
+ */
+QDF_STATUS sme_send_action_oui(tHalHandle hal,
+			enum wmi_action_oui_id action_id);
 
 /**
  * sme_send_hlp_ie_info() - API to send HLP IE info to fw

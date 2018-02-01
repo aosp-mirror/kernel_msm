@@ -301,6 +301,8 @@ enum qca_nl80211_vendor_subcmds {
 
 	QCA_NL80211_VENDOR_SUBCMD_GET_WIFI_INFO = 61,
 	QCA_NL80211_VENDOR_SUBCMD_WIFI_LOGGER_START = 62,
+
+	/* Deprecated */
 	QCA_NL80211_VENDOR_SUBCMD_WIFI_LOGGER_MEMORY_DUMP = 63,
 	QCA_NL80211_VENDOR_SUBCMD_ROAM = 64,
 	QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_SET_SSID_HOTLIST = 65,
@@ -483,20 +485,21 @@ enum qca_wlan_vendor_attr_get_station {
 
 /**
  * enum qca_wlan_802_11_mode - dot11 mode
- * @QCA_WLAN_802_11_MODE_INVALID: Invalid dot11 mode
- * @QCA_WLAN_802_11_MODE_11A: mode A
  * @QCA_WLAN_802_11_MODE_11B: mode B
  * @QCA_WLAN_802_11_MODE_11G: mode G
  * @QCA_WLAN_802_11_MODE_11N: mode N
+ * @QCA_WLAN_802_11_MODE_11A: mode A
  * @QCA_WLAN_802_11_MODE_11AC: mode AC
+ * @QCA_WLAN_802_11_MODE_INVALID: Invalid dot11 mode
  */
 enum qca_wlan_802_11_mode {
-	QCA_WLAN_802_11_MODE_INVALID,
-	QCA_WLAN_802_11_MODE_11A,
 	QCA_WLAN_802_11_MODE_11B,
 	QCA_WLAN_802_11_MODE_11G,
 	QCA_WLAN_802_11_MODE_11N,
+	QCA_WLAN_802_11_MODE_11A,
 	QCA_WLAN_802_11_MODE_11AC,
+	QCA_WLAN_802_11_MODE_INVALID,
+
 };
 
 /**
@@ -757,9 +760,6 @@ enum qca_nl80211_vendor_subcmds_index {
 	QCA_NL80211_VENDOR_SUBCMD_EXTSCAN_HOTLIST_SSID_LOST_INDEX,
 #endif /* FEATURE_WLAN_EXTSCAN */
 	QCA_NL80211_VENDOR_SUBCMD_MONITOR_RSSI_INDEX,
-#ifdef WLAN_FEATURE_MEMDUMP
-	QCA_NL80211_VENDOR_SUBCMD_WIFI_LOGGER_MEMORY_DUMP_INDEX,
-#endif /* WLAN_FEATURE_MEMDUMP */
 	/* OCB events */
 	QCA_NL80211_VENDOR_SUBCMD_DCC_STATS_EVENT_INDEX,
 	QCA_NL80211_VENDOR_SUBCMD_SCAN_INDEX,
@@ -2831,7 +2831,6 @@ enum qca_wlan_vendor_attr_sap_conditional_chan_switch {
 
 /**
  * enum wifi_logger_supported_features - values for supported logger features
- * @WIFI_LOGGER_MEMORY_DUMP_SUPPORTED - Memory dump of FW
  * @WIFI_LOGGER_PER_PACKET_TX_RX_STATUS_SUPPORTED - Per packet statistics
  * @WIFI_LOGGER_CONNECT_EVENT_SUPPORTED - Logging of Connectivity events
  * @WIFI_LOGGER_POWER_EVENT_SUPPORTED - Power of driver
@@ -2839,7 +2838,6 @@ enum qca_wlan_vendor_attr_sap_conditional_chan_switch {
  * @WIFI_LOGGER_WATCHDOG_TIMER_SUPPORTED - monitor FW health
  */
 enum wifi_logger_supported_features {
-	WIFI_LOGGER_MEMORY_DUMP_SUPPORTED = (1 << (0)),
 	WIFI_LOGGER_PER_PACKET_TX_RX_STATUS_SUPPORTED = (1 << (1)),
 	WIFI_LOGGER_CONNECT_EVENT_SUPPORTED = (1 << (2)),
 	WIFI_LOGGER_POWER_EVENT_SUPPORTED = (1 << (3)),

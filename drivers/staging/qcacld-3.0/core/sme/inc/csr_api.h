@@ -1010,6 +1010,7 @@ typedef struct tagCsrRoamProfile {
 	uint32_t hlp_ie_len;
 	struct cds_fils_connection_info *fils_con_info;
 #endif
+	bool chan_switch_hostapd_rate_enabled;
 } tCsrRoamProfile;
 
 #ifdef FEATURE_WLAN_MCC_TO_SCC_SWITCH
@@ -1213,6 +1214,7 @@ typedef struct tagCsrConfigParam {
 	uint8_t MAWCEnabled;
 	uint8_t isFastTransitionEnabled;
 	uint8_t RoamRssiDiff;
+	int32_t rssi_abs_thresh;
 	bool isWESModeEnabled;
 	tCsrNeighborRoamConfigParams neighborRoamConfig;
 	/*
@@ -1318,10 +1320,12 @@ typedef struct tagCsrConfigParam {
 	uint32_t auto_bmps_timer_val;
 	uint32_t fine_time_meas_cap;
 	uint32_t dual_mac_feature_disable;
+	uint32_t sta_sap_scc_on_dfs_chan;
 	uint32_t roam_dense_traffic_thresh;
 	uint32_t roam_dense_rssi_thresh_offset;
 	uint32_t roam_dense_min_aps;
 	int8_t roam_bg_scan_bad_rssi_thresh;
+	uint8_t roam_bad_rssi_thresh_offset_2g;
 	uint32_t roam_bg_scan_client_bitmap;
 	uint32_t obss_width_interval;
 	uint32_t obss_active_dwelltime;
@@ -1360,6 +1364,7 @@ typedef struct tagCsrConfigParam {
 	uint32_t num_disallowed_aps;
 	uint32_t scan_probe_repeat_time;
 	uint32_t scan_num_probes;
+	struct sir_score_config bss_score_params;
 } tCsrConfigParam;
 
 /* Tush */
@@ -1554,6 +1559,9 @@ typedef struct sSirSmeAssocIndToUpperLayerCnf {
 	uint8_t max_mcs_idx;
 	uint8_t rx_mcs_map;
 	uint8_t tx_mcs_map;
+
+	tDot11fIEHTCaps HTCaps;
+	tDot11fIEVHTCaps VHTCaps;
 } tSirSmeAssocIndToUpperLayerCnf, *tpSirSmeAssocIndToUpperLayerCnf;
 
 typedef struct tagCsrSummaryStatsInfo {

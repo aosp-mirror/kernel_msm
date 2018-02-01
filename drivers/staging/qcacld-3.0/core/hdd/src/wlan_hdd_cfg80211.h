@@ -285,6 +285,21 @@ typedef struct sHddAvoidFreqList {
 #define CFG_PROPAGATION_DELAY_BASE             (64)
 #define CFG_AGG_RETRY_MIN                      (5)
 
+/**
+ * hdd_is_ie_valid() - Determine if an IE sequence is valid
+ * @ie: Pointer to the IE buffer
+ * @ie_len: Length of the IE buffer @ie
+ *
+ * This function validates that the IE sequence is valid by verifying
+ * that the sum of the lengths of the embedded elements match the
+ * length of the sequence.
+ *
+ * Note well that a 0-length IE sequence is considered valid.
+ *
+ * Return: true if the IE sequence is valid, false if it is invalid
+ */
+bool hdd_is_ie_valid(const uint8_t *ie, size_t ie_len);
+
 struct cfg80211_bss *wlan_hdd_cfg80211_update_bss_db(hdd_adapter_t *pAdapter,
 						tCsrRoamInfo *pRoamInfo);
 
@@ -531,14 +546,6 @@ static inline void wlan_hdd_cfg80211_indicate_disconnect(struct net_device *dev,
 #endif
 struct cfg80211_bss *wlan_hdd_cfg80211_inform_bss_frame(hdd_adapter_t *pAdapter,
 						tSirBssDescription *bss_desc);
-
-/*
- * As of 4.7, ieee80211_band is removed; add shims so we can reference
- * nl80211_band instead
-  */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 7, 0))
-#define NUM_NL80211_BANDS ((enum nl80211_band)IEEE80211_NUM_BANDS)
-#endif
 
 /**
  * hdd_lost_link_info_cb() - callback function to get lost link information

@@ -844,8 +844,8 @@ uint16_t csr_check_concurrent_channel_overlap(tpAniSirGlobal mac_ctx,
 		}
 	}
 
-	sme_debug("intf_ch:%d sap_ch:%d cc_switch_mode:%d",
-		intf_ch, sap_ch, cc_switch_mode);
+	sme_debug("intf_ch:%d sap_ch:%d cc_switch_mode:%d, dbs:%d",
+			intf_ch, sap_ch, cc_switch_mode, wma_is_dbs_enable());
 
 	if (intf_ch && sap_ch != intf_ch &&
 	    cc_switch_mode != QDF_MCC_TO_SCC_SWITCH_FORCE &&
@@ -877,8 +877,10 @@ uint16_t csr_check_concurrent_channel_overlap(tpAniSirGlobal mac_ctx,
 		(cc_switch_mode ==
 			QDF_MCC_TO_SCC_SWITCH_WITH_FAVORITE_CHANNEL))) {
 		if (!((intf_ch <= 14 && sap_ch <= 14) ||
-			(intf_ch > 14 && sap_ch > 14)))
-			intf_ch = 0;
+			(intf_ch > 14 && sap_ch > 14))) {
+			if (wma_is_hw_dbs_capable())
+				intf_ch = 0;
+		}
 		else if (cc_switch_mode ==
 			QDF_MCC_TO_SCC_SWITCH_WITH_FAVORITE_CHANNEL) {
 			status =
@@ -2376,10 +2378,6 @@ bool csr_is_profile11r(tCsrRoamProfile *pProfile)
 				   pProfile->MDID.mdiePresent);
 }
 
-
-#ifdef FEATURE_WLAN_ESE
-
-/* Function to return true if the authtype is ESE */
 bool csr_is_auth_type_ese(eCsrAuthType AuthType)
 {
 	switch (AuthType) {
@@ -2391,6 +2389,8 @@ bool csr_is_auth_type_ese(eCsrAuthType AuthType)
 	}
 	return false;
 }
+
+#ifdef FEATURE_WLAN_ESE
 
 /* Function to return true if the profile is ESE */
 bool csr_is_profile_ese(tCsrRoamProfile *pProfile)
@@ -3322,6 +3322,7 @@ uint8_t csr_construct_rsn_ie(tHalHandle hHal, uint32_t sessionId,
 	tDot11fBeaconIEs *pIesLocal = pIes;
 	eCsrAuthType negAuthType = eCSR_AUTH_TYPE_UNKNOWN;
 
+	qdf_mem_zero(&pmkid_cache, sizeof(pmkid_cache));
 	do {
 		if (!csr_is_profile_rsn(pProfile))
 			break;

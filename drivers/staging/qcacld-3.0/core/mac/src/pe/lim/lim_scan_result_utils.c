@@ -90,7 +90,6 @@ static inline void populate_qbss_load_status(tSirBssDescription *pBssDescr,
 		pBssDescr->QBSSLoad_present = true;
 		pBssDescr->QBSSLoad_avail = pBPR->QBSSLoad.avail;
 		pBssDescr->qbss_chan_load = pBPR->QBSSLoad.chautil;
-		pBssDescr->qbss_stacount = pBPR->QBSSLoad.stacount;
 	}
 }
 #else
@@ -215,10 +214,15 @@ lim_collect_bss_description(tpAniSirGlobal pMac,
 		if (pBPR->HTCaps.supportedChannelWidthSet)
 			pBssDescr->chan_width = eHT_CHANNEL_WIDTH_40MHZ;
 	}
+
 	/* VHT Parameters */
-	if (pBPR->VHTCaps.present) {
+	if (IS_BSS_VHT_CAPABLE(pBPR->VHTCaps) ||
+	    IS_BSS_VHT_CAPABLE(pBPR->vendor_vht_ie.VHTCaps)) {
 		pBssDescr->vht_caps_present = 1;
-		if (pBPR->VHTCaps.muBeamformerCap)
+		if ((IS_BSS_VHT_CAPABLE(pBPR->VHTCaps) &&
+		     pBPR->VHTCaps.suBeamFormerCap) ||
+		    (IS_BSS_VHT_CAPABLE(pBPR->vendor_vht_ie.VHTCaps) &&
+		     pBPR->vendor_vht_ie.VHTCaps.suBeamFormerCap))
 			pBssDescr->beacomforming_capable = 1;
 	}
 	if (pBPR->VHTOperation.present)
@@ -296,22 +300,16 @@ lim_collect_bss_description(tpAniSirGlobal pMac,
 
 	/* SINR no longer reported by HW */
 	pBssDescr->sinr = 0;
-	pe_debug(MAC_ADDRESS_STR " rssi: normalized: %d, absolute: %d",
-		MAC_ADDR_ARRAY(pHdr->bssId), pBssDescr->rssi,
-		pBssDescr->rssi_raw);
-
 	pBssDescr->received_time = (uint64_t)qdf_mc_timer_get_system_time();
 	pBssDescr->tsf_delta = WMA_GET_RX_TSF_DELTA(pRxPacketInfo);
 	pBssDescr->seq_ctrl = pHdr->seqControl;
 
-	pe_debug("BSSID: "MAC_ADDRESS_STR " tsf_delta: %u ReceivedTime: %llu ssid: %s",
-		  MAC_ADDR_ARRAY(pHdr->bssId), pBssDescr->tsf_delta,
-		  pBssDescr->received_time,
-		  ((pBPR->ssidPresent) ? (char *)pBPR->ssId.ssId : ""));
-
-	pe_debug("Seq Ctrl: Frag Num: %d Seq Num: LO: %02x HI: %02x",
-		pBssDescr->seq_ctrl.fragNum, pBssDescr->seq_ctrl.seqNumLo,
-		pBssDescr->seq_ctrl.seqNumHi);
+	pe_debug(MAC_ADDRESS_STR
+		" rssi: norm %d abs %d tsf_delta %u RcvdTime %llu ssid %s",
+		MAC_ADDR_ARRAY(pHdr->bssId), pBssDescr->rssi,
+		pBssDescr->rssi_raw, pBssDescr->tsf_delta,
+		pBssDescr->received_time,
+		((pBPR->ssidPresent) ? (char *)pBPR->ssId.ssId : ""));
 
 	if (fScanning) {
 		rrm_get_start_tsf(pMac, pBssDescr->startTSF);
@@ -333,6 +331,11 @@ lim_collect_bss_description(tpAniSirGlobal pMac,
 	}
 
 	populate_qbss_load_status(pBssDescr, pBPR);
+
+	if (pBPR->oce_wan_present) {
+		pBssDescr->oce_wan_present = 1;
+		pBssDescr->oce_wan_down_cap = pBPR->oce_wan_downlink_av_cap;
+	}
 	lim_update_bss_with_fils_data(pBPR, pBssDescr);
 	/* Copy IE fields */
 	qdf_mem_copy((uint8_t *) &pBssDescr->ieFields,

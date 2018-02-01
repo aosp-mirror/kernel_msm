@@ -36,6 +36,7 @@
 #include <linux/netdevice.h>
 #include <linux/skbuff.h>
 #include <net/cfg80211.h>
+#include <linux/ieee80211.h>
 #include <qdf_list.h>
 #include <qdf_types.h>
 #include "sir_mac_prot_def.h"
@@ -72,12 +73,15 @@
 #define NUM_TX_QUEUES 4
 #endif
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0))
+#if (KERNEL_VERSION(4, 7, 0) <= LINUX_VERSION_CODE) || \
+	defined(CFG80211_REMOVE_IEEE80211_BACKPORT)
 #define HDD_NL80211_BAND_2GHZ   NL80211_BAND_2GHZ
 #define HDD_NL80211_BAND_5GHZ   NL80211_BAND_5GHZ
+#define HDD_NUM_NL80211_BANDS   NUM_NL80211_BANDS
 #else
 #define HDD_NL80211_BAND_2GHZ   IEEE80211_BAND_2GHZ
 #define HDD_NL80211_BAND_5GHZ   IEEE80211_BAND_5GHZ
+#define HDD_NUM_NL80211_BANDS   ((enum nl80211_band)IEEE80211_NUM_BANDS)
 #endif
 
 /** Length of the TX queue for the netdev */
@@ -121,7 +125,7 @@
 #else
 #define WLAN_WAIT_TIME_DISCONNECT  5000
 #endif
-#define WLAN_WAIT_DISCONNECT_ALREADY_IN_PROGRESS 1000
+#define WLAN_WAIT_DISCONNECT_ALREADY_IN_PROGRESS  1000
 #define WLAN_WAIT_TIME_STOP_ROAM  4000
 #define WLAN_WAIT_TIME_STATS       800
 #define WLAN_WAIT_TIME_POWER       800
@@ -319,18 +323,22 @@
 #define WLAN_NUD_STATS_LEN 800
 /* ARP packet type for NUD debug stats */
 #define WLAN_NUD_STATS_ARP_PKT_TYPE 1
+/* Assigned size of driver memory dump is 4096 bytes */
+#define DRIVER_MEM_DUMP_SIZE    4096
 
 /*
  * @eHDD_DRV_OP_PROBE: Refers to .probe operation
  * @eHDD_DRV_OP_REMOVE: Refers to .remove operation
  * @eHDD_DRV_OP_SHUTDOWN: Refers to .shutdown operation
  * @eHDD_DRV_OP_REINIT: Refers to .reinit operation
+ * @eHDD_DRV_OP_IFF_UP: Refers to IFF_UP operation
  */
 enum {
 	eHDD_DRV_OP_PROBE = 0,
 	eHDD_DRV_OP_REMOVE,
 	eHDD_DRV_OP_SHUTDOWN,
-	eHDD_DRV_OP_REINIT
+	eHDD_DRV_OP_REINIT,
+	eHDD_DRV_OP_IFF_UP
 };
 
 /*
@@ -895,6 +903,14 @@ enum bss_stop_reason {
  * @max_mcs_idx: Max supported mcs index of the station
  * @rx_mcs_map: VHT Rx mcs map
  * @tx_mcs_map: VHT Tx mcs map
+ * @freq : Frequency of the current station
+ * @dot11_mode: 802.11 Mode of the connection
+ * @ht_present: HT caps present or not in the current station
+ * @vht_present: VHT caps present or not in the current station
+ * @ht_caps: HT capabilities of current station
+ * @vht_caps: VHT capabilities of current station
+ * @reason_code: Disconnection reason code for current station
+ * @rssi: RSSI of the current station reported from F/W
  */
 typedef struct {
 	bool isUsed;
@@ -926,6 +942,14 @@ typedef struct {
 	uint8_t max_mcs_idx;
 	uint8_t rx_mcs_map;
 	uint8_t tx_mcs_map;
+	uint32_t freq;
+	uint8_t dot11_mode;
+	bool ht_present;
+	bool vht_present;
+	struct ieee80211_ht_cap ht_caps;
+	struct ieee80211_vht_cap vht_caps;
+	uint32_t reason_code;
+	int8_t rssi;
 } hdd_station_info_t;
 
 /**
@@ -1262,6 +1286,8 @@ struct hdd_adapter_s {
 	/** Per-station structure */
 	spinlock_t staInfo_lock;        /* To protect access to station Info */
 	hdd_station_info_t aStaInfo[WLAN_MAX_STA_COUNT];
+	hdd_station_info_t cache_sta_info[WLAN_MAX_STA_COUNT];
+
 	/* uint8_t uNumActiveStation; */
 
 /*************************************************************
@@ -1416,6 +1442,8 @@ struct hdd_adapter_s {
 	/* random address management for management action frames */
 	spinlock_t random_mac_lock;
 	struct action_frame_random_mac random_mac[MAX_RANDOM_MAC_ADDRS];
+	uint32_t mon_chan;
+	uint32_t mon_bandwidth;
 };
 
 #define WLAN_HDD_GET_STATION_CTX_PTR(pAdapter) (&(pAdapter)->sessionCtx.station)
@@ -1908,14 +1936,8 @@ struct hdd_context_s {
 #endif
 	bool mcc_mode;
 	struct hdd_chain_rssi_context chain_rssi_context;
-#ifdef WLAN_FEATURE_MEMDUMP
-	uint8_t *fw_dump_loc;
-	uint32_t dump_loc_paddr;
-	qdf_mc_timer_t memdump_cleanup_timer;
+
 	struct mutex memdump_lock;
-	bool memdump_in_progress;
-	bool memdump_init_done;
-#endif /* WLAN_FEATURE_MEMDUMP */
 	uint16_t driver_dump_size;
 	uint8_t *driver_dump_mem;
 
@@ -1971,7 +1993,6 @@ struct hdd_context_s {
 	qdf_atomic_t disable_lro_in_concurrency;
 	qdf_atomic_t disable_lro_in_low_tput;
 	qdf_atomic_t vendor_disable_lro_flag;
-	bool fw_mem_dump_enabled;
 	uint8_t last_scan_reject_session_id;
 	scan_reject_states last_scan_reject_reason;
 	unsigned long last_scan_reject_timestamp;
@@ -2001,6 +2022,7 @@ struct hdd_context_s {
 #endif
 	struct sta_ap_intf_check_work_ctx *sta_ap_intf_check_work_info;
 	uint8_t active_ac;
+	qdf_wake_lock_t monitor_mode_wakelock;
 };
 
 int hdd_validate_channel_and_bandwidth(hdd_adapter_t *adapter,
@@ -2283,26 +2305,6 @@ void hdd_get_fw_version(hdd_context_t *hdd_ctx,
 			uint32_t *major_spid, uint32_t *minor_spid,
 			uint32_t *siid, uint32_t *crmid);
 
-#ifdef WLAN_FEATURE_MEMDUMP
-/**
- * hdd_is_memdump_supported() - to check if memdump feature support
- *
- * This function is used to check if memdump feature is supported in
- * the host driver
- *
- * Return: true if supported and false otherwise
- */
-static inline bool hdd_is_memdump_supported(hdd_context_t *hdd_ctx)
-{
-	return hdd_ctx->fw_mem_dump_enabled;
-}
-#else
-static inline bool hdd_is_memdump_supported(hdd_context_t *hdd_ctx)
-{
-	return false;
-}
-#endif /* WLAN_FEATURE_MEMDUMP */
-
 void hdd_update_macaddr(struct hdd_config *config,
 			struct qdf_mac_addr hw_macaddr);
 void wlan_hdd_disable_roaming(hdd_adapter_t *pAdapter);
@@ -2376,8 +2378,7 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 		struct cfg80211_beacon_data *params,
 		const u8 *ssid, size_t ssid_len,
 		enum nl80211_hidden_ssid hidden_ssid,
-		bool check_for_concurrency,
-		bool update_beacon);
+		bool check_for_concurrency);
 #ifdef FEATURE_WLAN_MCC_TO_SCC_SWITCH
 QDF_STATUS hdd_register_for_sap_restart_with_channel_switch(void);
 #else
@@ -2779,4 +2780,20 @@ void hdd_stop_driver_ops_timer(void);
  * Return: None
  */
 void hdd_pld_ipa_uc_shutdown_pipes(void);
+
+/**
+ * hdd_get_stainfo() - get stainfo for the specified peer
+ * @adapter: hostapd interface
+ * @mac_addr: mac address of requested peer
+ *
+ * This function find the stainfo for the peer with mac_addr
+ *
+ * Return: stainfo if found, NULL if not found
+ */
+hdd_station_info_t *hdd_get_stainfo(hdd_station_info_t *aStaInfo,
+				    struct qdf_mac_addr mac_addr);
+
+int hdd_driver_memdump_init(void);
+void hdd_driver_memdump_deinit(void);
+
 #endif /* end #if !defined(WLAN_HDD_MAIN_H) */

@@ -3106,8 +3106,9 @@ MULTIIE MBO_IE (EID_VENDOR_SPECIFIC) OUI ( 0x50, 0x6F, 0x9A, 0x16 )
    OPTIONALTLV reduced_wan_metrics;
 }
 
-IE vendor_vht_ie (EID_VENDOR_SPECIFIC) OUI (0x00, 0x90, 0x4c, 0x04, 0x08)
+IE vendor_vht_ie (EID_VENDOR_SPECIFIC) OUI (0x00, 0x90, 0x4c, 0x04)
 {
+   sub_type, 1;
    OPTIE IE VHTCaps;
    OPTIE IE VHTOperation;
 }
@@ -3980,6 +3981,7 @@ FRAME ext_channel_switch_action_frame
     FF     Category;
     FF     Action;
     FF     ext_chan_switch_ann_action;
+    OPTIE  WiderBWChanSwitchAnn;
 }
 
 FRAME p2p_oper_chan_change_confirm

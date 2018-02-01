@@ -5017,6 +5017,9 @@ QDF_STATUS send_roam_scan_offload_rssi_thresh_cmd_tlv(wmi_unified_t wmi_handle,
 		roam_req->bg_scan_bad_rssi_thresh;
 	bg_scan_params->roam_bg_scan_client_bitmap =
 		roam_req->bg_scan_client_bitmap;
+	bg_scan_params->bad_rssi_thresh_offset_2g =
+		roam_req->roam_bad_rssi_thresh_offset_2g;
+	bg_scan_params->flags = roam_req->flags;
 	WMITLV_SET_HDR(&bg_scan_params->tlv_header,
 			WMITLV_TAG_STRUC_wmi_roam_bg_scan_roaming_param,
 			WMITLV_GET_STRUCT_TLVLEN
@@ -9903,99 +9906,6 @@ QDF_STATUS send_update_tdls_peer_state_cmd_tlv(wmi_unified_t wmi_handle,
 }
 
 /*
- * send_process_fw_mem_dump_cmd_tlv() - Function to request fw memory dump from
- * firmware
- * @wmi_handle:         Pointer to wmi handle
- * @mem_dump_req:       Pointer for mem_dump_req
- *
- * This function sends memory dump request to firmware
- *
- * Return: QDF_STATUS_SUCCESS for success otherwise failure
- *
- */
-QDF_STATUS send_process_fw_mem_dump_cmd_tlv(wmi_unified_t wmi_handle,
-					struct fw_dump_req_param *mem_dump_req)
-{
-	wmi_get_fw_mem_dump_fixed_param *cmd;
-	wmi_fw_mem_dump *dump_params;
-	struct wmi_fw_dump_seg_req *seg_req;
-	int32_t len;
-	wmi_buf_t buf;
-	u_int8_t *buf_ptr;
-	int ret, loop;
-
-	/*
-	 * len = sizeof(fixed param) that includes tlv header +
-	 *       tlv header for array of struc +
-	 *       sizeof (each struct)
-	 */
-	len = sizeof(*cmd) + WMI_TLV_HDR_SIZE;
-	len += mem_dump_req->num_seg * sizeof(wmi_fw_mem_dump);
-	buf = wmi_buf_alloc(wmi_handle, len);
-
-	if (!buf) {
-		WMI_LOGE(FL("Failed allocate wmi buffer"));
-		return QDF_STATUS_E_NOMEM;
-	}
-
-	buf_ptr = (u_int8_t *) wmi_buf_data(buf);
-	qdf_mem_zero(buf_ptr, len);
-	cmd = (wmi_get_fw_mem_dump_fixed_param *) buf_ptr;
-
-	WMITLV_SET_HDR(&cmd->tlv_header,
-		WMITLV_TAG_STRUC_wmi_get_fw_mem_dump_fixed_param,
-		WMITLV_GET_STRUCT_TLVLEN(wmi_get_fw_mem_dump_fixed_param));
-
-	cmd->request_id = mem_dump_req->request_id;
-	cmd->num_fw_mem_dump_segs = mem_dump_req->num_seg;
-
-	/* TLV indicating array of structures to follow */
-	buf_ptr += sizeof(wmi_get_fw_mem_dump_fixed_param);
-	WMITLV_SET_HDR(buf_ptr, WMITLV_TAG_ARRAY_STRUC,
-		       sizeof(wmi_fw_mem_dump) *
-		       cmd->num_fw_mem_dump_segs);
-
-	buf_ptr += WMI_TLV_HDR_SIZE;
-	dump_params = (wmi_fw_mem_dump *) buf_ptr;
-
-	WMI_LOGI(FL("request_id:%d num_seg:%d"),
-		    mem_dump_req->request_id, mem_dump_req->num_seg);
-	for (loop = 0; loop < cmd->num_fw_mem_dump_segs; loop++) {
-		seg_req = (struct wmi_fw_dump_seg_req *)
-			  ((uint8_t *)(mem_dump_req->segment) +
-			    loop * sizeof(*seg_req));
-		WMITLV_SET_HDR(&dump_params->tlv_header,
-			    WMITLV_TAG_STRUC_wmi_fw_mem_dump_params,
-			    WMITLV_GET_STRUCT_TLVLEN(wmi_fw_mem_dump));
-		dump_params->seg_id = seg_req->seg_id;
-		dump_params->seg_start_addr_lo = seg_req->seg_start_addr_lo;
-		dump_params->seg_start_addr_hi = seg_req->seg_start_addr_hi;
-		dump_params->seg_length = seg_req->seg_length;
-		dump_params->dest_addr_lo = seg_req->dst_addr_lo;
-		dump_params->dest_addr_hi = seg_req->dst_addr_hi;
-		WMI_LOGI(FL("seg_number:%d"), loop);
-		WMI_LOGI(FL("seg_id:%d start_addr_lo:0x%x start_addr_hi:0x%x"),
-			 dump_params->seg_id, dump_params->seg_start_addr_lo,
-			 dump_params->seg_start_addr_hi);
-		WMI_LOGI(FL("seg_length:%d dst_addr_lo:0x%x dst_addr_hi:0x%x"),
-			 dump_params->seg_length, dump_params->dest_addr_lo,
-			 dump_params->dest_addr_hi);
-		dump_params++;
-	}
-
-	ret = wmi_unified_cmd_send(wmi_handle, buf, len,
-				   WMI_GET_FW_MEM_DUMP_CMDID);
-	if (ret) {
-		WMI_LOGE(FL("Failed to send get firmware mem dump request"));
-		wmi_buf_free(buf);
-		return QDF_STATUS_E_FAILURE;
-	}
-
-	WMI_LOGI(FL("Get firmware mem dump request sent successfully"));
-	return QDF_STATUS_SUCCESS;
-}
-
-/*
  * send_process_set_ie_info_cmd_tlv() - Function to send IE info to firmware
  * @wmi_handle:    Pointer to WMi handle
  * @ie_data:       Pointer for ie data
@@ -11549,17 +11459,18 @@ error:
  * Return: CDF status
  */
 QDF_STATUS send_roam_scan_offload_ap_profile_cmd_tlv(wmi_unified_t wmi_handle,
-					    wmi_ap_profile *ap_profile_p,
-					    uint32_t vdev_id)
+					   struct ap_profile_params *ap_profile)
 {
 	wmi_buf_t buf = NULL;
 	QDF_STATUS status;
 	int len;
 	uint8_t *buf_ptr;
 	wmi_roam_ap_profile_fixed_param *roam_ap_profile_fp;
+	wmi_roam_cnd_scoring_param *score_param;
+	wmi_ap_profile *profile;
 
 	len = sizeof(wmi_roam_ap_profile_fixed_param) + sizeof(wmi_ap_profile);
-
+	len += sizeof(*score_param);
 	buf = wmi_buf_alloc(wmi_handle, len);
 	if (!buf) {
 		WMI_LOGE("%s : wmi_buf_alloc failed", __func__);
@@ -11573,14 +11484,143 @@ QDF_STATUS send_roam_scan_offload_ap_profile_cmd_tlv(wmi_unified_t wmi_handle,
 		       WMITLV_GET_STRUCT_TLVLEN
 			       (wmi_roam_ap_profile_fixed_param));
 	/* fill in threshold values */
-	roam_ap_profile_fp->vdev_id = vdev_id;
+	roam_ap_profile_fp->vdev_id = ap_profile->vdev_id;
 	roam_ap_profile_fp->id = 0;
 	buf_ptr += sizeof(wmi_roam_ap_profile_fixed_param);
 
-	qdf_mem_copy(buf_ptr, ap_profile_p, sizeof(wmi_ap_profile));
-	WMITLV_SET_HDR(buf_ptr,
+	profile = (wmi_ap_profile *)buf_ptr;
+	WMITLV_SET_HDR(&profile->tlv_header,
 		       WMITLV_TAG_STRUC_wmi_ap_profile,
 		       WMITLV_GET_STRUCT_TLVLEN(wmi_ap_profile));
+	profile->flags = ap_profile->profile.flags;
+	profile->rssi_threshold = ap_profile->profile.rssi_threshold;
+	profile->ssid.ssid_len = ap_profile->profile.ssid.length;
+	qdf_mem_copy(profile->ssid.ssid, ap_profile->profile.ssid.mac_ssid,
+		     profile->ssid.ssid_len);
+	profile->rsn_authmode = ap_profile->profile.rsn_authmode;
+	profile->rsn_ucastcipherset = ap_profile->profile.rsn_ucastcipherset;
+	profile->rsn_mcastcipherset = ap_profile->profile.rsn_mcastcipherset;
+	profile->rsn_mcastmgmtcipherset =
+				ap_profile->profile.rsn_mcastmgmtcipherset;
+	profile->rssi_abs_thresh = ap_profile->profile.rssi_abs_thresh;
+
+	WMI_LOGD("AP profile: flags %x rssi_threshold %d ssid:%.*s authmode %d uc cipher %d mc cipher %d mc mgmt cipher %d rssi abs thresh %d",
+		 profile->flags, profile->rssi_threshold,
+		 profile->ssid.ssid_len, ap_profile->profile.ssid.mac_ssid,
+		 profile->rsn_authmode, profile->rsn_ucastcipherset,
+		 profile->rsn_mcastcipherset, profile->rsn_mcastmgmtcipherset,
+		 profile->rssi_abs_thresh);
+
+	buf_ptr += sizeof(wmi_ap_profile);
+
+	score_param = (wmi_roam_cnd_scoring_param *)buf_ptr;
+	WMITLV_SET_HDR(&score_param->tlv_header,
+		       WMITLV_TAG_STRUC_wmi_roam_cnd_scoring_param,
+		       WMITLV_GET_STRUCT_TLVLEN(wmi_roam_cnd_scoring_param));
+	score_param->disable_bitmap = ap_profile->param.disable_bitmap;
+	score_param->rssi_weightage_pcnt =
+			ap_profile->param.rssi_weightage;
+	score_param->ht_weightage_pcnt = ap_profile->param.ht_weightage;
+	score_param->vht_weightage_pcnt = ap_profile->param.vht_weightage;
+	score_param->he_weightage_pcnt = ap_profile->param.he_weightage;
+	score_param->bw_weightage_pcnt = ap_profile->param.bw_weightage;
+	score_param->band_weightage_pcnt = ap_profile->param.band_weightage;
+	score_param->nss_weightage_pcnt = ap_profile->param.nss_weightage;
+	score_param->esp_qbss_weightage_pcnt =
+			ap_profile->param.esp_qbss_weightage;
+	score_param->beamforming_weightage_pcnt =
+			ap_profile->param.beamforming_weightage;
+	score_param->pcl_weightage_pcnt = ap_profile->param.pcl_weightage;
+	score_param->oce_wan_weightage_pcnt =
+			ap_profile->param.oce_wan_weightage;
+
+	WMI_LOGD("Score params weightage: disable_bitmap %x rssi %d ht %d vht %d he %d BW %d band %d NSS %d ESP %d BF %d PCL %d OCE WAN %d",
+		 score_param->disable_bitmap, score_param->rssi_weightage_pcnt,
+		 score_param->ht_weightage_pcnt,
+		 score_param->vht_weightage_pcnt,
+		 score_param->he_weightage_pcnt, score_param->bw_weightage_pcnt,
+		 score_param->band_weightage_pcnt,
+		 score_param->nss_weightage_pcnt,
+		 score_param->esp_qbss_weightage_pcnt,
+		 score_param->beamforming_weightage_pcnt,
+		 score_param->pcl_weightage_pcnt,
+		 score_param->oce_wan_weightage_pcnt);
+
+	score_param->bw_scoring.score_pcnt = ap_profile->param.bw_index_score;
+	score_param->band_scoring.score_pcnt =
+			ap_profile->param.band_index_score;
+	score_param->nss_scoring.score_pcnt =
+			ap_profile->param.nss_index_score;
+
+	WMI_LOGD("Params index score bitmask: bw_index_score %x band_index_score %x nss_index_score %x",
+		 score_param->bw_scoring.score_pcnt,
+		 score_param->band_scoring.score_pcnt,
+		 score_param->nss_scoring.score_pcnt);
+
+	score_param->rssi_scoring.best_rssi_threshold =
+		(-1) * ap_profile->param.rssi_scoring.best_rssi_threshold;
+	score_param->rssi_scoring.good_rssi_threshold =
+		(-1) * ap_profile->param.rssi_scoring.good_rssi_threshold;
+	score_param->rssi_scoring.bad_rssi_threshold =
+		(-1) * ap_profile->param.rssi_scoring.bad_rssi_threshold;
+	score_param->rssi_scoring.good_rssi_pcnt =
+		ap_profile->param.rssi_scoring.good_rssi_pcnt;
+	score_param->rssi_scoring.bad_rssi_pcnt =
+		ap_profile->param.rssi_scoring.bad_rssi_pcnt;
+	score_param->rssi_scoring.good_bucket_size =
+		ap_profile->param.rssi_scoring.good_bucket_size;
+	score_param->rssi_scoring.bad_bucket_size =
+		ap_profile->param.rssi_scoring.bad_bucket_size;
+	score_param->rssi_scoring.rssi_pref_5g_rssi_thresh =
+		(-1) * ap_profile->param.rssi_scoring.rssi_pref_5g_rssi_thresh;
+
+	WMI_LOGD("Rssi scoring threshold: best RSSI %d good RSSI %d bad RSSI %d prefer 5g threshold %d",
+		 score_param->rssi_scoring.best_rssi_threshold,
+		 score_param->rssi_scoring.good_rssi_threshold,
+		 score_param->rssi_scoring.bad_rssi_threshold,
+		 score_param->rssi_scoring.rssi_pref_5g_rssi_thresh);
+	WMI_LOGD("Good RSSI score for each slot %d bad RSSI score for each slot %d good bucket %d bad bucket %d",
+		 score_param->rssi_scoring.good_rssi_pcnt,
+		 score_param->rssi_scoring.bad_rssi_pcnt,
+		 score_param->rssi_scoring.good_bucket_size,
+		 score_param->rssi_scoring.bad_bucket_size);
+
+	score_param->esp_qbss_scoring.num_slot =
+			ap_profile->param.esp_qbss_scoring.num_slot;
+	score_param->esp_qbss_scoring.score_pcnt3_to_0 =
+			ap_profile->param.esp_qbss_scoring.score_pcnt3_to_0;
+	score_param->esp_qbss_scoring.score_pcnt7_to_4 =
+			ap_profile->param.esp_qbss_scoring.score_pcnt7_to_4;
+	score_param->esp_qbss_scoring.score_pcnt11_to_8 =
+			ap_profile->param.esp_qbss_scoring.score_pcnt11_to_8;
+	score_param->esp_qbss_scoring.score_pcnt15_to_12 =
+			ap_profile->param.esp_qbss_scoring.score_pcnt15_to_12;
+
+	WMI_LOGD("ESP QBSS index weight: slots %d weight 0to3 %x weight 4to7 %x weight 8to11 %x weight 12to15 %x",
+		 score_param->esp_qbss_scoring.num_slot,
+		 score_param->esp_qbss_scoring.score_pcnt3_to_0,
+		 score_param->esp_qbss_scoring.score_pcnt7_to_4,
+		 score_param->esp_qbss_scoring.score_pcnt11_to_8,
+		 score_param->esp_qbss_scoring.score_pcnt15_to_12);
+
+	score_param->oce_wan_scoring.num_slot =
+			ap_profile->param.oce_wan_scoring.num_slot;
+	score_param->oce_wan_scoring.score_pcnt3_to_0 =
+			ap_profile->param.oce_wan_scoring.score_pcnt3_to_0;
+	score_param->oce_wan_scoring.score_pcnt7_to_4 =
+			ap_profile->param.oce_wan_scoring.score_pcnt7_to_4;
+	score_param->oce_wan_scoring.score_pcnt11_to_8 =
+			ap_profile->param.oce_wan_scoring.score_pcnt11_to_8;
+	score_param->oce_wan_scoring.score_pcnt15_to_12 =
+			ap_profile->param.oce_wan_scoring.score_pcnt15_to_12;
+
+	WMI_LOGD("OCE WAN index weight: slots %d weight 0to3 %x weight 4to7 %x weight 8to11 %x weight 12to15 %x",
+		 score_param->oce_wan_scoring.num_slot,
+		 score_param->oce_wan_scoring.score_pcnt3_to_0,
+		 score_param->oce_wan_scoring.score_pcnt7_to_4,
+		 score_param->oce_wan_scoring.score_pcnt11_to_8,
+		 score_param->oce_wan_scoring.score_pcnt15_to_12);
+
 	status = wmi_unified_cmd_send(wmi_handle, buf,
 				      len, WMI_ROAM_AP_PROFILE);
 	if (QDF_IS_STATUS_ERROR(status)) {
@@ -13659,6 +13699,303 @@ QDF_STATUS send_limit_off_chan_cmd_tlv(wmi_unified_t wmi_handle,
 }
 
 /**
+ * wmi_get_action_oui_id() - convert action id to firmware specific
+ * @action_id: host specific action id
+ * @id: output pointer to hold converted fw specific action id
+ *
+ * Return: true on conversion else failure
+ */
+static bool
+wmi_get_action_oui_id(enum wmi_action_oui_id action_id,
+		      wmi_vendor_oui_action_id *id)
+{
+	switch (action_id) {
+
+	case WMI_ACTION_OUI_CONNECT_1X1:
+		*id = WMI_VENDOR_OUI_ACTION_CONNECTION_1X1;
+		return true;
+
+	case WMI_ACTION_OUI_ITO_EXTENSION:
+		*id = WMI_VENDOR_OUI_ACTION_ITO_EXTENSION;
+		return true;
+
+	case WMI_ACTION_OUI_CCKM_1X1:
+		*id = WMI_VENDOR_OUI_ACTION_CCKM_1X1;
+		return true;
+
+	default:
+		return false;
+	}
+}
+
+/**
+ * wmi_get_action_oui_info_mask() - convert info mask to firmware specific
+ * @info_mask: host specific info mask
+ *
+ * Return: firmware specific information mask
+ */
+static uint32_t
+wmi_get_action_oui_info_mask(uint32_t info_mask)
+{
+	uint32_t info_presence = WMI_BEACON_INFO_PRESENCE_OUI_EXT;
+
+	if (info_mask & WMI_ACTION_OUI_INFO_MAC_ADDRESS)
+		info_presence |= WMI_BEACON_INFO_PRESENCE_MAC_ADDRESS;
+
+	if (info_mask & WMI_ACTION_OUI_INFO_AP_CAPABILITY_NSS)
+		info_presence |= WMI_BEACON_INFO_PRESENCE_AP_CAPABILITY_NSS;
+
+	if (info_mask & WMI_ACTION_OUI_INFO_AP_CAPABILITY_HT)
+		info_presence |= WMI_BEACON_INFO_PRESENCE_AP_CAPABILITY_HT;
+
+	if (info_mask & WMI_ACTION_OUI_INFO_AP_CAPABILITY_VHT)
+		info_presence |= WMI_BEACON_INFO_PRESENCE_AP_CAPABILITY_VHT;
+
+	if (info_mask & WMI_ACTION_OUI_INFO_AP_CAPABILITY_BAND)
+		info_presence |= WMI_BEACON_INFO_PRESENCE_AP_CAPABILITY_BAND;
+
+	return info_presence;
+}
+
+/**
+ * wmi_fill_oui_extensions() - populates wmi_vendor_oui_ext array
+ * @extension: pointer to user supplied action oui extensions
+ * @no_oui_extns: number of action oui extensions
+ * @cmd_ext: output pointer to TLV
+ *
+ * This function parses the user supplied input data and populates the
+ * array of variable structures TLV in WMI_PDEV_CONFIG_VENDOR_OUI_ACTION_CMDID
+ *
+ * Return: None
+ */
+static void
+wmi_fill_oui_extensions(struct wmi_action_oui_extension *extension,
+			uint32_t no_oui_extns, wmi_vendor_oui_ext *cmd_ext)
+{
+	uint32_t i;
+	uint32_t buffer_length;
+
+	for (i = 0; i < no_oui_extns; i++) {
+		WMITLV_SET_HDR(&cmd_ext->tlv_header,
+			       WMITLV_TAG_STRUC_wmi_vendor_oui_ext,
+			       WMITLV_GET_STRUCT_TLVLEN(wmi_vendor_oui_ext));
+		cmd_ext->info_presence_bit_mask =
+			wmi_get_action_oui_info_mask(extension->info_mask);
+
+		cmd_ext->oui_header_length = extension->oui_length;
+		cmd_ext->oui_data_length = extension->data_length;
+		cmd_ext->mac_address_length = extension->mac_addr_length;
+		cmd_ext->capability_data_length =
+					extension->capability_length;
+
+		buffer_length = extension->oui_length +
+				extension->data_length +
+				extension->data_mask_length +
+				extension->mac_addr_length +
+				extension->mac_mask_length +
+				extension->capability_length;
+
+		cmd_ext->buf_data_length = buffer_length + 1;
+
+		cmd_ext++;
+		extension++;
+	}
+
+}
+
+/**
+ * wmi_fill_oui_extensions_buffer() - populates data buffer in action oui cmd
+ * @extension: pointer to user supplied action oui extensions
+ * @cmd_ext: pointer to vendor_oui_ext TLV in action oui cmd
+ * @no_oui_extns: number of action oui extensions
+ * @rem_var_buf_len: remaining length of buffer to be populated
+ * @var_buf: output pointer to hold variable length data
+ *
+ * This function parses the user supplied input data and populates the variable
+ * buffer of type array byte TLV in WMI_PDEV_CONFIG_VENDOR_OUI_ACTION_CMDID
+ *
+ * Return: QDF_STATUS_SUCCESS for successful fill else QDF_STATUS_E_INVAL
+ */
+static QDF_STATUS
+wmi_fill_oui_extensions_buffer(struct wmi_action_oui_extension *extension,
+			       wmi_vendor_oui_ext *cmd_ext,
+			       uint32_t no_oui_extns, uint32_t rem_var_buf_len,
+			       uint8_t *var_buf)
+{
+	uint8_t i;
+
+	for (i = 0; i < (uint8_t)no_oui_extns; i++) {
+		if ((rem_var_buf_len - cmd_ext->buf_data_length) < 0) {
+			WMI_LOGE(FL("Invalid action oui command length"));
+			return QDF_STATUS_E_INVAL;
+		}
+
+		var_buf[0] = i;
+		var_buf++;
+
+		qdf_mem_copy(var_buf, extension->oui, extension->oui_length);
+		var_buf += extension->oui_length;
+
+		if (extension->data_length) {
+			qdf_mem_copy(var_buf, extension->data,
+				     extension->data_length);
+			var_buf += extension->data_length;
+		}
+
+		if (extension->data_mask_length) {
+			qdf_mem_copy(var_buf, extension->data_mask,
+				     extension->data_mask_length);
+			var_buf += extension->data_mask_length;
+		}
+
+		if (extension->mac_addr_length) {
+			qdf_mem_copy(var_buf, extension->mac_addr,
+				     extension->mac_addr_length);
+			var_buf += extension->mac_addr_length;
+		}
+
+		if (extension->mac_mask_length) {
+			qdf_mem_copy(var_buf, extension->mac_mask,
+				     extension->mac_mask_length);
+			var_buf += extension->mac_mask_length;
+		}
+
+		if (extension->capability_length) {
+			qdf_mem_copy(var_buf, extension->capability,
+				     extension->capability_length);
+			var_buf += extension->capability_length;
+		}
+
+		rem_var_buf_len -= cmd_ext->buf_data_length;
+		cmd_ext++;
+		extension++;
+	}
+
+	return QDF_STATUS_SUCCESS;
+}
+
+/**
+ * send_action_oui_cmd_tlv() - send action oui cmd to firmware
+ * @wmi_handle: wmi handler
+ * @action_oui: pointer to action oui info
+ *
+ * Return: QDF_STATUS_SUCCESS on successful transmission else
+ *         QDF_STATUS_E_INVAL or QDF_STATUS_E_NOMEM
+ */
+static QDF_STATUS
+send_action_oui_cmd_tlv(wmi_unified_t wmi_handle,
+			struct wmi_action_oui *action_oui)
+{
+	wmi_pdev_config_vendor_oui_action_fixed_param *cmd;
+	wmi_vendor_oui_ext *cmd_ext;
+	wmi_buf_t wmi_buf;
+	struct wmi_action_oui_extension *extension;
+	uint32_t len;
+	uint32_t i;
+	uint8_t *buf_ptr;
+	uint32_t no_oui_extns;
+	uint32_t total_no_oui_extns;
+	uint32_t var_buf_len = 0;
+	wmi_vendor_oui_action_id action_id;
+	bool valid;
+	uint32_t rem_var_buf_len;
+	QDF_STATUS status;
+
+	if (!action_oui) {
+		WMI_LOGE(FL("action oui is empty"));
+		return QDF_STATUS_E_INVAL;
+	}
+
+	no_oui_extns = action_oui->no_oui_extensions;
+	total_no_oui_extns = action_oui->total_no_oui_extensions;
+
+	len = sizeof(*cmd);
+	len += WMI_TLV_HDR_SIZE; /* Array of wmi_vendor_oui_ext structures */
+
+	if (!no_oui_extns ||
+	    no_oui_extns > WMI_MAX_VENDOR_OUI_ACTION_SUPPORTED_PER_ACTION ||
+	    (total_no_oui_extns > WMI_VENDOR_OUI_ACTION_MAX_ACTION_ID *
+	     WMI_MAX_VENDOR_OUI_ACTION_SUPPORTED_PER_ACTION)) {
+		WMI_LOGE(FL("Invalid number of action oui extensions"));
+		return QDF_STATUS_E_INVAL;
+	}
+
+	valid = wmi_get_action_oui_id(action_oui->action_id, &action_id);
+	if (!valid) {
+		WMI_LOGE(FL("Invalid action id"));
+		return QDF_STATUS_E_INVAL;
+	}
+
+	len += no_oui_extns * sizeof(*cmd_ext);
+	len += WMI_TLV_HDR_SIZE; /* Variable length buffer */
+
+	extension = action_oui->extension;
+	for (i = 0; i < no_oui_extns; i++) {
+		var_buf_len += extension->oui_length +
+		       extension->data_length +
+		       extension->data_mask_length +
+		       extension->mac_addr_length +
+		       extension->mac_mask_length +
+		       extension->capability_length;
+		extension++;
+	}
+
+	var_buf_len += no_oui_extns; /* to store indexes */
+	rem_var_buf_len = var_buf_len;
+	var_buf_len = (var_buf_len + 3) & ~0x3;
+	len += var_buf_len;
+
+	wmi_buf = wmi_buf_alloc(wmi_handle, len);
+	if (!wmi_buf) {
+		WMI_LOGE(FL("Failed to allocate wmi buffer"));
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	buf_ptr = (uint8_t *)wmi_buf_data(wmi_buf);
+	cmd = (wmi_pdev_config_vendor_oui_action_fixed_param *)buf_ptr;
+
+	WMITLV_SET_HDR(&cmd->tlv_header,
+		WMITLV_TAG_STRUC_wmi_pdev_config_vendor_oui_action_fixed_param,
+		WMITLV_GET_STRUCT_TLVLEN(
+			wmi_pdev_config_vendor_oui_action_fixed_param));
+
+	cmd->action_id = action_id;
+	cmd->total_num_vendor_oui = total_no_oui_extns;
+	cmd->num_vendor_oui_ext = no_oui_extns;
+
+	buf_ptr += sizeof(*cmd);
+	WMITLV_SET_HDR(buf_ptr, WMITLV_TAG_ARRAY_STRUC,
+		       no_oui_extns * sizeof(*cmd_ext));
+	buf_ptr += WMI_TLV_HDR_SIZE;
+	cmd_ext = (wmi_vendor_oui_ext *)buf_ptr;
+	wmi_fill_oui_extensions(action_oui->extension, no_oui_extns, cmd_ext);
+
+	buf_ptr += no_oui_extns * sizeof(*cmd_ext);
+	WMITLV_SET_HDR(buf_ptr, WMITLV_TAG_ARRAY_BYTE, var_buf_len);
+	buf_ptr += WMI_TLV_HDR_SIZE;
+	status = wmi_fill_oui_extensions_buffer(action_oui->extension,
+						cmd_ext, no_oui_extns,
+						rem_var_buf_len, buf_ptr);
+	if (!QDF_IS_STATUS_SUCCESS(status)) {
+		wmi_buf_free(wmi_buf);
+		wmi_buf = NULL;
+		return QDF_STATUS_E_INVAL;
+	}
+
+	buf_ptr += var_buf_len;
+
+	if (wmi_unified_cmd_send(wmi_handle, wmi_buf, len,
+				 WMI_PDEV_CONFIG_VENDOR_OUI_ACTION_CMDID)) {
+		WMI_LOGE(FL("WMI_PDEV_CONFIG_VENDOR_OUI_ACTION send fail"));
+		wmi_buf_free(wmi_buf);
+		wmi_buf = NULL;
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	return QDF_STATUS_SUCCESS;
+}
+
+/**
  * send_set_del_pmkid_cache_cmd_tlv() - send wmi cmd of set del pmkid
  * @wmi_handle: wmi handler
  * @pmk_info: pointer to PMK cache entry
@@ -13921,7 +14258,6 @@ struct wmi_ops tlv_ops =  {
 	.send_set_tdls_offchan_mode_cmd = send_set_tdls_offchan_mode_cmd_tlv,
 	.send_update_fw_tdls_state_cmd = send_update_fw_tdls_state_cmd_tlv,
 	.send_update_tdls_peer_state_cmd = send_update_tdls_peer_state_cmd_tlv,
-	.send_process_fw_mem_dump_cmd = send_process_fw_mem_dump_cmd_tlv,
 	.send_process_set_ie_info_cmd = send_process_set_ie_info_cmd_tlv,
 #ifdef CONFIG_MCL
 	.send_init_cmd = send_init_cmd_tlv,
@@ -14004,6 +14340,7 @@ struct wmi_ops tlv_ops =  {
 				send_encrypt_decrypt_send_cmd_tlv,
 	.send_sar_limit_cmd = send_sar_limit_cmd_tlv,
 	.send_per_roam_config_cmd = send_per_roam_config_cmd_tlv,
+	.send_action_oui_cmd = send_action_oui_cmd_tlv,
 	.wmi_set_htc_tx_tag = wmi_set_htc_tx_tag_tlv,
 	.send_get_rcpi_cmd = send_get_rcpi_cmd_tlv,
 	.send_set_arp_stats_req_cmd = send_set_arp_stats_req_cmd_tlv,
@@ -14240,8 +14577,6 @@ static void populate_tlv_events_id(uint32_t *event_ids)
 	event_ids[wmi_iface_link_stats_event_id] = WMI_IFACE_LINK_STATS_EVENTID;
 	event_ids[wmi_peer_link_stats_event_id] = WMI_PEER_LINK_STATS_EVENTID;
 	event_ids[wmi_radio_link_stats_link] = WMI_RADIO_LINK_STATS_EVENTID;
-	event_ids[wmi_update_fw_mem_dump_event_id] =
-				WMI_UPDATE_FW_MEM_DUMP_EVENTID;
 	event_ids[wmi_diag_event_id_log_supported_event_id] =
 				WMI_DIAG_EVENT_LOG_SUPPORTED_EVENTID;
 	event_ids[wmi_nlo_match_event_id] = WMI_NLO_MATCH_EVENTID;

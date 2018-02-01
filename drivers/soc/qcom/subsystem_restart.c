@@ -324,6 +324,32 @@ static ssize_t system_debug_store(struct device *dev,
 	return orig_count;
 }
 
+static ssize_t restart_now_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	char p[3] = "no";
+	return snprintf(buf, PAGE_SIZE, "%s\n", p);
+}
+
+static ssize_t restart_now_store(struct device *dev,
+				 struct device_attribute *attr, const char *buf,
+				 size_t count)
+{
+	struct subsys_device *subsys = to_subsys(dev);
+	const char *p;
+	int orig_count = count;
+
+	p = memchr(buf, '\n', count);
+	if (p)
+		count = p - buf;
+
+	if (!strncasecmp(buf, "yes", count))
+		subsystem_restart_dev(subsys);
+	else
+		return -EINVAL;
+	return orig_count;
+}
+
 int subsys_get_restart_level(struct subsys_device *dev)
 {
 	return dev->restart_level;
@@ -375,6 +401,7 @@ static struct device_attribute subsys_attrs[] = {
 	__ATTR(restart_level, 0644, restart_level_show, restart_level_store),
 	__ATTR(firmware_name, 0644, firmware_name_show, firmware_name_store),
 	__ATTR(system_debug, 0644, system_debug_show, system_debug_store),
+	__ATTR(restart_now, 0644, restart_now_show, restart_now_store),
 	__ATTR_NULL,
 };
 

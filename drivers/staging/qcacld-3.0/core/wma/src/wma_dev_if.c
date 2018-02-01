@@ -1135,8 +1135,11 @@ bool wma_is_vdev_valid(uint32_t vdev_id)
 		return false;
 
 	/* No of interface are allocated based on max_bssid value */
-	if (vdev_id >= wma_handle->max_bssid)
+	if (vdev_id >= wma_handle->max_bssid) {
+		WMA_LOGD("%s: vdev_id: %d is invalid, max_bssid: %d",
+				__func__, vdev_id, wma_handle->max_bssid);
 		return false;
+	}
 
 	return wma_handle->interfaces[vdev_id].vdev_active;
 }
@@ -4871,6 +4874,11 @@ void wma_delete_sta(tp_wma_handle wma, tpDeleteStaParams del_sta)
 			WMA_LOGD(FL("vdev_id %d status %d"),
 				 del_sta->smesessionId, del_sta->status);
 			qdf_mem_free(del_sta);
+		} else if (!rsp_requested &&
+				(del_sta->status != QDF_STATUS_SUCCESS)) {
+			WMA_LOGD(FL("Release del_sta mem vdev_id %d status %d"),
+				 del_sta->smesessionId, del_sta->status);
+			qdf_mem_free(del_sta);
 		}
 		break;
 	case BSS_OPERATIONAL_MODE_NDI:
@@ -5020,6 +5028,11 @@ static void wma_wait_tx_complete(tp_wma_handle wma,
 	}
 
 	pdev = cds_get_context(QDF_MODULE_ID_TXRX);
+	if (pdev == NULL) {
+		WMA_LOGE("%s: pdev is not valid: %d",
+			 __func__, session_id);
+		return;
+	}
 	max_wait_iterations =
 		wma->interfaces[session_id].delay_before_vdev_stop /
 		WMA_TX_Q_RECHECK_TIMER_WAIT;
