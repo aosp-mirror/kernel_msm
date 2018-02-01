@@ -25,8 +25,8 @@
 	qcom,linearize-soc;
 	qcom,fg-cutoff-voltage = <3300>;
 	qcom,fg-empty-voltage = <3100>;
-	qcom,fg-jeita-hyst-temp = <2>;
-	qcom,fg-jeita-thresholds = <0 5 50 55>;
+	qcom,fg-jeita-hyst-temp = <1>;
+	qcom,fg-jeita-thresholds = <0 0 55 55>;
 	qcom,fg-force-load-profile;
 };
 
@@ -64,5 +64,24 @@
 		pinctrl-0 = <&fg_int_default>;
 		/* maxim,force-flash-config; */
 		/* maxim,force-load-config; */
+	};
+};
+
+&soc {
+	google_charger: google,charger {
+		compatible = "google,charger";
+		google,chg-update-interval = <30000>;
+		google,chg-temp-nb-limits = <7>;
+		google,chg-temp-limits = <0 100 200 420 450 480 550>;
+		google,chg-cv-nb-limits = <3>;
+		google,chg-cv-limits = <4200000 4300000 4400000>;
+		google,chg-cc-limits = <
+			 30  10   0
+			 50  30  30
+			100  70  50
+			 80  50  50
+			 50  50   0
+			 30   0   0
+		>;
 	};
 };

@@ -36,3 +36,7 @@
 &max1720x_fg {
 	#include "batterydata-maxim-b1-proto.dtsi"
 };
+
+&google_charger {
+	google,chg-battery-capacity = <2915>;
+};

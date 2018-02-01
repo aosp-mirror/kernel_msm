@@ -42,3 +42,7 @@
 &pmi8998_fg {
 	qcom,battery-data = <&c1_batterydata>;
 };
+
+&google_charger {
+	google,chg-battery-capacity = <3430>;
+};
