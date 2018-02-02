@@ -50,6 +50,8 @@
 #define CONFIG_HAPTICS_DRV2605
 #define CONFIG_HAPTICS_LRA_SEMCO1030
 
+#define LOG_TAG "[DRV2605]"
+
 int back_cover = 0x31;
 
 static void drv2605_change_mode(struct drv2605_data *pDrv2605data,
@@ -69,18 +71,28 @@ static ssize_t drv2605_mode_show(struct device *dev,
 static int drv2605_init_dev(struct drv2605_data *data,
 			int user_prefer, int index);
 
+static ssize_t drv2605_reg_ctrl_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t len);
+static ssize_t drv2605_reg_ctrl_show(struct device *dev,
+			struct device_attribute *attr,
+			char *buf);
+
 static struct drv2605_data *pDRV2605data;
 
 static DEVICE_ATTR(ID, S_IRUSR, drv2605_ID_show, NULL);
 static DEVICE_ATTR(vol, S_IRUSR, drv2605_vol_show, NULL);
 static DEVICE_ATTR(mode, 0660, drv2605_mode_show, drv2605_mode_store);
 static DEVICE_ATTR(mode_help, S_IRUSR, drv2605_mode_help_show, NULL);
+static DEVICE_ATTR(reg_ctrl, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP,
+			drv2605_reg_ctrl_show, drv2605_reg_ctrl_store);
 
 static struct attribute *drv2605_attrs[] = {
 	&dev_attr_ID.attr,
 	&dev_attr_vol.attr,
 	&dev_attr_mode.attr,
 	&dev_attr_mode_help.attr,
+	&dev_attr_reg_ctrl.attr,
 	NULL
 };
 
@@ -196,7 +208,7 @@ static int drv2605_reg_write_block(struct i2c_client *client, u8 addr,
 	if (!client) {
 		return -EINVAL;
 	} else if (len >= C_I2C_FIFO_SIZE) {
-		pr_err(" length %d exceeds %d\n", len, C_I2C_FIFO_SIZE);
+		pr_err(LOG_TAG" length %d exceeds %d\n", len, C_I2C_FIFO_SIZE);
 		return -EINVAL;
 	}
 
@@ -207,7 +219,7 @@ static int drv2605_reg_write_block(struct i2c_client *client, u8 addr,
 
 	err = i2c_master_send(client, buf, num);
 	if (err < 0) {
-		pr_err("send command error!!\n");
+		pr_err(LOG_TAG"send command error!!\n");
 		return -EFAULT;
 	}
 	return err;
@@ -348,10 +360,10 @@ static ssize_t drv2605_ID_show(struct device *dev,
 
 	err = drv2605_reg_read(pDRV2605data, STATUS_REG);
 	if (err < 0) {
-		pr_err("%s, i2c bus fail (%d)\n", __func__, err);
+		pr_err(LOG_TAG"%s, i2c bus fail (%d)\n", __func__, err);
 		ret = snprintf(buf, 16, "read error\n");
 	} else {
-		pr_err("%s, i2c status (0x%x)\n", __func__, err);
+		pr_err(LOG_TAG"%s, i2c status (0x%x)\n", __func__, err);
 		ret = snprintf(buf, 16, "%d\n", (err & DEV_ID_MASK));
 	}
 	return ret;
@@ -402,6 +414,25 @@ static int chr_is_dec_data(const char *pdata)
 	if (
 		(
 			(*pdata >= '0') && (*pdata <= '9')
+		)
+	)
+		return 1;
+	else
+		return 0;
+
+}
+
+static int chr_is_hex_data(const char *pdata)
+{
+	if (
+		(
+			(*pdata >= '0') && (*pdata <= '9')
+		) ||
+		(
+			(*pdata >= 'a') && (*pdata <= 'f')
+		) ||
+		(
+			(*pdata >= 'A') && (*pdata <= 'F')
 		)
 	)
 		return 1;
@@ -462,15 +493,15 @@ static ssize_t drv2605_mode_store(struct device *dev,
 
 	work_mode = data_buf_t[0];
 	dev_mode = data_buf_t[1];
-	pr_info("%s: work_mode = %d, dev_mode = %d\n", __func__,
+	pr_info(LOG_TAG"%s: work_mode = %d, dev_mode = %d\n", __func__,
 			work_mode, dev_mode);
 	if (work_mode < WORK_IDLE || work_mode > WORK_SEQ_PLAYBACK) {
-		pr_err("%s: invalid workmode %d\n",
+		pr_err(LOG_TAG"%s: invalid workmode %d\n",
 			__func__, work_mode);
 		return -EFAULT;
 	}
 	if (dev_mode < DEV_IDLE || dev_mode > DEV_READY) {
-		pr_err("%s: invalid devmode %d\n",
+		pr_err(LOG_TAG"%s: invalid devmode %d\n",
 			__func__, dev_mode);
 		return -EFAULT;
 	}
@@ -483,6 +514,107 @@ static ssize_t drv2605_mode_store(struct device *dev,
 		return ret;
 
 	return len;
+}
+
+static ssize_t drv2605_reg_ctrl_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t len)
+{
+	char *tmp_buf = NULL;
+	int i = 0, j = 0;
+	int index_buf = 0;
+	int need_break = 0;
+	unsigned long data_buf_t[2] = {0};
+	int data_buf_index_t = 0;
+	int ret = 0;
+	char reg_addr, reg_value;
+	struct drv2605_data *pDrv2605data = pDRV2605data;
+
+	tmp_buf = kmalloc(sizeof(char) * 5, GFP_KERNEL);
+	if (!tmp_buf)
+		return -EFAULT;
+
+	memset(tmp_buf, 0, sizeof(char) * 5);
+
+	for (i = 0; i < 2; i++) {
+		memset(tmp_buf, 0, sizeof(char) * 5);
+		j = 0;
+
+		while (chr_is_hex_data(&buf[index_buf])
+		       && (index_buf < len)
+		       && (j < 5)) {
+			tmp_buf[j] = buf[index_buf];
+			j++;
+			index_buf++;
+		}
+		while ((!chr_is_hex_data(&buf[index_buf]))
+		       && (index_buf < len)) {
+			if (buf[index_buf] == '\0'
+			|| buf[index_buf] == '\n'
+			|| buf[index_buf] == '\r') {
+				need_break = 1;
+				break;
+			}
+			index_buf++;
+		}
+		/*transfer tmp_buf to int*/
+		ret = kstrtoul(tmp_buf, 16, &data_buf_t[i]);
+
+		data_buf_index_t++;
+
+		if (need_break)
+			break;
+	}
+
+	reg_addr = data_buf_t[0];
+	reg_value = data_buf_t[1];
+	if (data_buf_index_t == 1) {
+		pDrv2605data->sysfs_reg_ctrl.is_read_reg_cmd = 1;
+		pDrv2605data->sysfs_reg_ctrl.read_reg_addr = reg_addr;
+	} else {
+		pDrv2605data->sysfs_reg_ctrl.is_read_reg_cmd = 0;
+		pDrv2605data->sysfs_reg_ctrl.read_reg_addr = reg_addr;
+	}
+
+	pr_info(LOG_TAG"%s: is_read_ops = %d, reg_addr = 0x%02x, reg_value = 0x%02x\n",
+			__func__, pDrv2605data->sysfs_reg_ctrl.is_read_reg_cmd,
+			reg_addr, reg_value);
+
+	if (!pDrv2605data->sysfs_reg_ctrl.is_read_reg_cmd) {
+		pr_info(LOG_TAG"%s: write 0x%02x to reg 0x%02x.\n", __func__,
+			reg_value, reg_addr);
+		drv2605_reg_write(pDrv2605data, reg_addr, reg_value);
+	}
+
+	kfree(tmp_buf);
+	tmp_buf = NULL;
+
+	if (!!ret)
+		return ret;
+
+	return len;
+}
+
+static ssize_t drv2605_reg_ctrl_show(struct device *dev,
+			struct device_attribute *attr,
+			char *buf)
+{
+	struct drv2605_data *pDrv2605data = pDRV2605data;
+	int reg_value, ret;
+	char reg_addr = pDrv2605data->sysfs_reg_ctrl.read_reg_addr;
+
+	if (pDrv2605data->sysfs_reg_ctrl.is_read_reg_cmd) {
+		reg_value = drv2605_reg_read(pDrv2605data, reg_addr);
+		pr_info(LOG_TAG"%s: read reg 0x%02x result is 0x%02x.\n",
+			__func__, reg_addr, reg_value);
+		ret = snprintf(buf, 32, "reg: 0x%02x, value: 0x%02x\n",
+			reg_addr, reg_value);
+	} else {
+		pr_info(LOG_TAG"%s: no read reg_addr has been set.\n",
+			__func__);
+		ret = snprintf(buf, 32, "no read reg_addr has been set.\n");
+	}
+	return ret;
 }
 
 static void drv2605_change_mode(struct drv2605_data *pDrv2605data,
@@ -702,7 +834,7 @@ static void drv2605_stop(struct drv2605_data *pDrv2605data)
 		} else if (pDrv2605data->work_mode == WORK_SEQ_PLAYBACK)
 			;
 		else
-			pr_err("%s, err mode=%d\n", __func__,
+			pr_err(LOG_TAG"%s, err mode=%d\n", __func__,
 				pDrv2605data->work_mode);
 	}
 }
@@ -805,7 +937,8 @@ static ssize_t dev2605_read(struct file *filp, char *buff,
 		ret = copy_to_user(buff, pDrv2605data->ReadBuff,
 				pDrv2605data->ReadLen);
 		if (ret != 0)
-			pr_err("%s, copy_to_user err=%d\n", __func__, ret);
+			pr_err(LOG_TAG"%s, copy_to_user err=%d\n",
+				__func__, ret);
 		else
 			ret = pDrv2605data->ReadLen;
 
@@ -924,7 +1057,7 @@ static ssize_t dev2605_write(struct file *filp, const char *buff,
 					&buff[1],
 					pDrv2605data->RTPSeq.RTPCounts * 2)
 					!= 0) {
-					pr_err("%s, rtp_seq copy seq err\n",
+					pr_err(LOG_TAG"%s, rtp_seq copy seq err\n",
 						__func__);
 					break;
 				}
@@ -938,10 +1071,10 @@ static ssize_t dev2605_write(struct file *filp, const char *buff,
 						WORK_SEQ_RTP_OFF, DEV_IDLE);
 				schedule_work(&pDrv2605data->vibrator_work);
 			} else
-				pr_err("%s, rtp_seq count error,maximum=%d\n",
+				pr_err(LOG_TAG"%s, rtp_seq count error,maximum=%d\n",
 						__func__, MAX_RTP_SEQ);
 		} else
-			pr_err("%s, rtp_seq len error\n", __func__);
+			pr_err(LOG_TAG"%s, rtp_seq len error\n", __func__);
 		break;
 	}
 	case HAPTIC_CMDID_USER_PREFER: {
@@ -952,7 +1085,8 @@ static ssize_t dev2605_write(struct file *filp, const char *buff,
 	case HAPTIC_CMDID_USER_PREFER_READ: {
 		snprintf(buffer, 4, "#%d\n", pDrv2605data->user_prefer);
 		if (0 != copy_to_user((void __user *)buff, buffer, 2))
-			pr_err("%s, USER_PREFER_READ error.\n", __func__);
+			pr_err(LOG_TAG"%s, USER_PREFER_READ error.\n",
+				__func__);
 		break;
 	}
 	case HAPTIC_CMDID_STOP: {
@@ -987,7 +1121,7 @@ static ssize_t dev2605_write(struct file *filp, const char *buff,
 					pDrv2605data->ReadLen,
 					pDrv2605data->ReadBuff);
 		} else
-			pr_err("%s, reg_read len error\n", __func__);
+			pr_err(LOG_TAG"%s, reg_read len error\n", __func__);
 
 		break;
 	}
@@ -1001,14 +1135,15 @@ static ssize_t dev2605_write(struct file *filp, const char *buff,
 			if (data != NULL) {
 				if (copy_from_user(data, &buff[2], len - 2)
 					!= 0)
-					pr_err("%s, reg copy err\n", __func__);
+					pr_err(LOG_TAG"%s, reg copy err\n",
+						__func__);
 				else
 					drv2605_bulk_write(pDrv2605data,
 						buff[1], len - 2, data);
 				kfree(data);
 			}
 		} else
-			pr_err("%s, reg_write len error\n", __func__);
+			pr_err(LOG_TAG"%s, reg_write len error\n", __func__);
 
 		break;
 	}
@@ -1024,7 +1159,7 @@ static ssize_t dev2605_write(struct file *filp, const char *buff,
 		break;
 	}
 	default:
-		pr_err("%s, unknown HAPTIC cmd\n", __func__);
+		pr_err(LOG_TAG"%s, unknown HAPTIC cmd\n", __func__);
 		break;
 	}
 
@@ -1079,13 +1214,14 @@ static int Haptics_init(struct drv2605_data *pDrv2605data)
 	reval = alloc_chrdev_region(&pDrv2605data->version,
 		0, 1, HAPTICS_DEVICE_NAME);
 	if (reval < 0) {
-		pr_err("drv2605: error getting major number %d\n", reval);
+		pr_err(LOG_TAG"error getting major number %d\n",
+			reval);
 		goto fail0;
 	}
 
 	pDrv2605data->class = class_create(THIS_MODULE, HAPTICS_DEVICE_NAME);
 	if (!pDrv2605data->class) {
-		pr_err("drv2605: error creating class\n");
+		pr_err(LOG_TAG"error creating class\n");
 		goto fail1;
 	}
 
@@ -1093,7 +1229,7 @@ static int Haptics_init(struct drv2605_data *pDrv2605data)
 					NULL, pDrv2605data->version,
 					NULL, HAPTICS_DEVICE_NAME);
 	if (!pDrv2605data->device) {
-		pr_err("drv2605: error creating device 2605\n");
+		pr_err(LOG_TAG"error creating device 2605\n");
 		goto fail2;
 	}
 
@@ -1102,14 +1238,14 @@ static int Haptics_init(struct drv2605_data *pDrv2605data)
 	pDrv2605data->cdev.ops = &fops;
 	reval = cdev_add(&pDrv2605data->cdev, pDrv2605data->version, 1);
 	if (reval) {
-		pr_err("drv2605: fail to add cdev\n");
+		pr_err(LOG_TAG"fail to add cdev\n");
 		goto fail3;
 	}
 
 	pDrv2605data->sw_dev.name = "haptics";
 	reval = switch_dev_register(&pDrv2605data->sw_dev);
 	if (reval < 0) {
-		pr_err("drv2605: fail to register switch\n");
+		pr_err(LOG_TAG"fail to register switch\n");
 		goto fail4;
 	}
 
@@ -1118,7 +1254,7 @@ static int Haptics_init(struct drv2605_data *pDrv2605data)
 	pDrv2605data->to_dev.enable = vibrator_enable;
 
 	if (timed_output_dev_register(&(pDrv2605data->to_dev)) < 0) {
-		pr_err("drv2605: fail to create timed output dev\n");
+		pr_err(LOG_TAG"fail to create timed output dev\n");
 		goto fail3;
 	}
 
@@ -1162,7 +1298,7 @@ static void dev_init_platform_data(struct drv2605_data *pDrv2605data,
 
 	drv2605_select_library(pDrv2605data, actuator.g_effect_bank);
 	/*OTP memory saves data from 0x16 to 0x1a*/
-	pr_info("drv2605: rated_vol:%x over_drive_vol:%x\n",
+	pr_info(LOG_TAG"rated_vol:%x over_drive_vol:%x\n",
 		actuator.rated_vol, actuator.over_drive_vol);
 	if (pDrv2605data->OTP == 0 || user_prefer) {
 		if (actuator.rated_vol != 0)
@@ -1170,14 +1306,15 @@ static void dev_init_platform_data(struct drv2605_data *pDrv2605data,
 				 RATED_VOLTAGE_REG,
 				 actuator.rated_vol);
 		else
-			pr_err("%s, ERROR Rated ZERO\n", __func__);
+			pr_err(LOG_TAG"%s, ERROR Rated ZERO\n", __func__);
 
 		if (actuator.over_drive_vol != 0)
 			drv2605_reg_write(pDrv2605data,
 				 OVERDRIVE_CLAMP_VOLTAGE_REG,
 				 actuator.over_drive_vol);
 		else
-			pr_err("%s, ERROR OverDriveVol ZERO\n", __func__);
+			pr_err(LOG_TAG"%s, ERROR OverDriveVol ZERO\n",
+				__func__);
 
 		drv2605_set_bits(pDrv2605data,
 				 FEEDBACK_CONTROL_REG,
@@ -1186,7 +1323,7 @@ static void dev_init_platform_data(struct drv2605_data *pDrv2605data,
 				 FEEDBACK_CONTROL_MODE_LRA :
 				 FEEDBACK_CONTROL_MODE_ERM);
 	} else
-		pr_info("%s, OTP programmed\n", __func__);
+		pr_info(LOG_TAG"%s, OTP programmed\n", __func__);
 
 
 	if (pDrv2605Platdata->loop == OPEN_LOOP)
@@ -1205,7 +1342,7 @@ static void dev_init_platform_data(struct drv2605_data *pDrv2605data,
 				 Control1_REG,
 				 Control1_REG_DRIVE_TIME_MASK,
 				 DriveTime);
-		pr_info("%s, LRA = %d, DriveTime=0x%x\n", __func__,
+		pr_info(LOG_TAG"%s, LRA = %d, DriveTime=0x%x\n", __func__,
 				actuator.LRAFreq, DriveTime);
 	}
 
@@ -1270,7 +1407,7 @@ static int dev_auto_calibrate(struct drv2605_data *pDrv2605data)
 	/* Read status */
 	status = drv2605_reg_read(pDrv2605data, STATUS_REG);
 
-	pr_info("%s, calibration status =0x%x\n", __func__, status);
+	pr_info(LOG_TAG"%s, calibration status =0x%x\n", __func__, status);
 
 	/* Read calibration results */
 	drv2605_reg_read(pDrv2605data, AUTO_CALI_RESULT_REG);
@@ -1300,7 +1437,8 @@ static int drv2605_init_dev(struct drv2605_data *data,
 	if (data->OTP == 0 || user_prefer) {
 		err = dev_auto_calibrate(data);
 		if (err < 0)
-			pr_err("%s, ERROR, calibration fail\n", __func__);
+			pr_err(LOG_TAG"%s, ERROR, calibration fail\n",
+				__func__);
 	}
 
 	/* Put hardware in standby */
@@ -1332,7 +1470,7 @@ static int drv2605_probe(struct i2c_client *client,
 	int status = 0;
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
-		pr_err("%s:I2C check failed\n", __func__);
+		pr_err(LOG_TAG"%s:I2C check failed\n", __func__);
 		return -ENODEV;
 	}
 	pDrv2605data = devm_kzalloc(&client->dev,
@@ -1346,7 +1484,7 @@ static int drv2605_probe(struct i2c_client *client,
 		devm_regmap_init_i2c(client, &drv2605_i2c_regmap);
 	if (IS_ERR(pDrv2605data->regmap)) {
 		err = PTR_ERR(pDrv2605data->regmap);
-		pr_err("%s:Failed to allocate register map: %d\n",
+		pr_err(LOG_TAG"%s:Failed to allocate register map: %d\n",
 			__func__, err);
 		return err;
 	}
@@ -1357,7 +1495,7 @@ static int drv2605_probe(struct i2c_client *client,
 		ARRAY_SIZE(drv2605_plat_data));
 	i2c_set_clientdata(client, pDrv2605data);
 
-	pr_info("DRV2605: @back_cover = %d\n", back_cover);
+	pr_info(LOG_TAG"@back_cover = %d\n", back_cover);
 
 	if (back_cover  == 0x31) {
 		/* plastic back cover */
@@ -1366,14 +1504,15 @@ static int drv2605_probe(struct i2c_client *client,
 		/* ceramic back cover */
 		pDrv2605data->user_prefer = back_cover = 0;
 	} else {
-		pr_err("#error to goto here.\n");
+		pr_err(LOG_TAG"#error to goto here.\n");
 	}
 	if (pDrv2605data->PlatData[back_cover].GpioTrigger) {
 		err = gpio_request(
 			pDrv2605data->PlatData[back_cover].GpioTrigger,
 			HAPTICS_DEVICE_NAME"Trigger");
 		if (err < 0) {
-			pr_err("%s: GPIO request Trigger error\n", __func__);
+			pr_err(LOG_TAG"%s: GPIO request Trigger error\n",
+				__func__);
 			goto exit_gpio_request_failed;
 		}
 	}
@@ -1383,7 +1522,8 @@ static int drv2605_probe(struct i2c_client *client,
 			pDrv2605data->PlatData[back_cover].GpioEnable,
 			HAPTICS_DEVICE_NAME"Enable");
 		if (err < 0) {
-			pr_err("%s: GPIO request enable error\n", __func__);
+			pr_err(LOG_TAG"%s: GPIO request enable error\n",
+				__func__);
 			goto exit_gpio_request_failed;
 		}
 
@@ -1397,10 +1537,10 @@ static int drv2605_probe(struct i2c_client *client,
 
 	err = drv2605_reg_read(pDrv2605data, STATUS_REG);
 	if (err < 0) {
-		pr_err("%s, i2c bus fail (%d)\n", __func__, err);
+		pr_err(LOG_TAG"%s, i2c bus fail (%d)\n", __func__, err);
 		goto exit_gpio_request_failed;
 	} else {
-		pr_info("%s, i2c status (0x%x)\n", __func__, err);
+		pr_info(LOG_TAG"%s, i2c status (0x%x)\n", __func__, err);
 		status = err;
 	}
 
@@ -1408,29 +1548,29 @@ static int drv2605_probe(struct i2c_client *client,
 	pDrv2605data->device_id = (status & DEV_ID_MASK);
 	switch (pDrv2605data->device_id) {
 	case DRV2605_VER_1DOT1:
-		pr_info("drv2605 driver found: drv2605 v1.1.\n");
+		pr_info(LOG_TAG"drv2605 driver found: drv2605 v1.1.\n");
 		break;
 	case DRV2605_VER_1DOT0:
-		pr_info("drv2605 driver found: drv2605 v1.0.\n");
+		pr_info(LOG_TAG"drv2605 driver found: drv2605 v1.0.\n");
 		break;
 	case DRV2604:
-		pr_info("drv2605 driver found: drv2604.\n");
+		pr_info(LOG_TAG"drv2605 driver found: drv2604.\n");
 		break;
 	case DRV2604L:
-		pr_info("drv2605 driver found: drv2604L.\n");
+		pr_info(LOG_TAG"drv2605 driver found: drv2604L.\n");
 		break;
 	case DRV2605L:
-		pr_info("drv2605 driver found: drv2605L.\n");
+		pr_info(LOG_TAG"drv2605 driver found: drv2605L.\n");
 		break;
 	default:
-		pr_err("drv2605 driver found: unknown.\n");
+		pr_err(LOG_TAG"drv2605 driver found: unknown.\n");
 		break;
 	}
 
 	if ((pDrv2605data->device_id != DRV2605_VER_1DOT1)
 	    && (pDrv2605data->device_id != DRV2605_VER_1DOT0)
 	    && (pDrv2605data->device_id != DRV2605L)) {
-		pr_err("%s, status(0x%x),device_id(%d) fail\n",
+		pr_err(LOG_TAG"%s, status(0x%x),device_id(%d) fail\n",
 		       __func__, status, pDrv2605data->device_id);
 		goto exit_gpio_request_failed;
 	}
@@ -1448,7 +1588,7 @@ static int drv2605_probe(struct i2c_client *client,
 	if (pDrv2605data->OTP == 0) {
 		err = dev_auto_calibrate(pDrv2605data);
 		if (err < 0)
-			pr_err("%s, calibration fail\n", __func__);
+			pr_err(LOG_TAG"%s, calibration fail\n", __func__);
 	}
 
 	/* Put hardware in standby */
@@ -1462,9 +1602,9 @@ static int drv2605_probe(struct i2c_client *client,
 
 	err = sysfs_create_group(&client->dev.kobj, &drv2605_attr_group);
 	if (err)
-		dev_err(&client->dev, "failure %d create sysfs group\n", err);
+		pr_err(LOG_TAG"failure %d create sysfs group\n", err);
 
-	pr_info("drv2605 probe succeeded\n");
+	pr_info(LOG_TAG"drv2605 probe succeeded\n");
 
 	return 0;
 
@@ -1475,7 +1615,7 @@ exit_gpio_request_failed:
 	if (pDrv2605data->PlatData[back_cover].GpioEnable)
 		gpio_free(pDrv2605data->PlatData[back_cover].GpioEnable);
 
-	pr_err("%s failed, err=%d\n", __func__, err);
+	pr_err(LOG_TAG"%s failed, err=%d\n", __func__, err);
 	return err;
 }
 
@@ -1497,7 +1637,7 @@ static int drv2605_remove(struct i2c_client *client)
 	/* unregister_early_suspend(&pDrv2605data->early_suspend); */
 #endif
 
-	pr_err("drv2605 remove");
+	pr_err(LOG_TAG"drv2605 remove");
 
 	return 0;
 }
