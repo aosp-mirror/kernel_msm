@@ -235,6 +235,8 @@ void lm36272_backlight_ctrl(int level)
 	if (0 == new_level &&
 	    (FB_BLANK_NORMAL != ldev->fb_blank ||
 	     FB_BLANK_POWERDOWN != ldev->fb_blank)) {
+		if (BL_OFF == ldev->status)
+			goto out;
 		ldev->status = BL_OFF_PENDING;
 		pr_info("pending backlight off\n");
 	} else if (!pdata->dim_enabled) {
