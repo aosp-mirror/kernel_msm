@@ -574,6 +574,14 @@ config CS40L2X_HAPTIC
 
 	  To compile this driver as a module, choose M here.
 
+config AIRBRUSH_SM
+	bool "Device driver for Airbrush State Manager"
+	default "n"
+	---help---
+	  This option enables device driver support for airbrush state manager.
+	  This includes the support for CLK, LPDDR, UART, SPI and other IP
+	  configurations which can be controlled through the PCIe interface.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
