@@ -111,8 +111,15 @@
 					39 01 00 00 00 00 07 F7
 						01 49 0C FF 7F 04 /* Flash memory power on */
 
+					39 01 00 00 00 00 06 CB 80 5C 07 03 28
+
 					39 01 00 00 00 00 06 CC
 						02 00 00 00 41 /* Flash memory type check */
+
+					39 01 00 00 00 00 13 CD
+						00 00 00 20 20 20 20 20
+						24 24 28 28 28 20 20 20
+						20 16	       /* VSSEL band setting */
 
 					15 01 00 00 00 00 02 EC 10 /* Data read enable from Flash */
 					15 01 00 00 00 00 02 F3 AC /* Don't load OTP */
@@ -131,6 +138,8 @@
 
 					39 01 00 00 00 00 07 55
 						34 70 CB 04 70 DB /* Edge Round function on */
+
+					15 01 00 00 00 00 02 B0 CA /* Lock MCS Access */
 
 					05 01 00 00 00 00 01 29
 				];
