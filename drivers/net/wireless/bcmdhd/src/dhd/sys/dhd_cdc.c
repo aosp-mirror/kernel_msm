@@ -250,7 +250,7 @@ dhdcdc_set_ioctl(dhd_pub_t *dhd, int ifidx, uint cmd, void *buf, uint len, uint8
 			goto done;
 		}
 #endif
-		DHD_ERROR(("%s: SET PM to %d\n", __FUNCTION__, *(char *)buf));
+		DHD_TRACE(("%s: SET PM to %d\n", __FUNCTION__, *(char *)buf));
 	}
 #endif /* CUSTOMER_HW4 */
 	memset(msg, 0, sizeof(cdc_ioctl_t));
