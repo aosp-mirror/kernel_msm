@@ -1611,11 +1611,6 @@ static int mdss_dsi_unblank(struct mdss_panel_data *pdata)
 		ctrl_pdata->ctrl_state |= CTRL_STATE_PANEL_INIT;
 	}
 
-	if ((pdata->panel_info.type == MIPI_CMD_PANEL) &&
-		mipi->vsync_enable && mipi->hw_vsync_mode) {
-		mdss_dsi_set_tear_on(ctrl_pdata);
-	}
-
 error:
 	mdss_dsi_clk_ctrl(ctrl_pdata, ctrl_pdata->dsi_clk_handle,
 			  MDSS_DSI_ALL_CLKS, MDSS_DSI_CLK_OFF);
@@ -1673,7 +1668,6 @@ static int mdss_dsi_blank(struct mdss_panel_data *pdata, int power_state)
 			ctrl_pdata->switch_mode(pdata, SWITCH_TO_VIDEO_MODE);
 		} else if (pdata->panel_info.type == MIPI_VIDEO_PANEL) {
 			ctrl_pdata->switch_mode(pdata, SWITCH_TO_CMD_MODE);
-			mdss_dsi_set_tear_off(ctrl_pdata);
 		}
 	}
 
@@ -3971,8 +3965,8 @@ static int mdss_dsi_parse_gpio_params(struct platform_device *ctrl_pdev,
 	ctrl_pdata->tp_reset_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
 		"qcom,platform-tpreset-gpio", 0);
 
-	if (!gpio_is_valid(ctrl_pdata->disp_avdden_gpio))
-		pr_err("%s:%d, TP Reset gpio not specified\n",
+	if (!gpio_is_valid(ctrl_pdata->tp_reset_gpio))
+		pr_err("%s:%d, TP reset gpio not specified\n",
 						__func__, __LINE__);
 
 	ctrl_pdata->disp_te_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
