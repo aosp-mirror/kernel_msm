@@ -7,6 +7,7 @@
 #include <linux/gfp.h>
 #include <linux/module.h>
 #include <linux/printk.h>
+#include <linux/ratelimit.h>
 #include <linux/rcupdate.h>
 #include <linux/spinlock.h>
 #include <asm/bug.h>
@@ -17,17 +18,19 @@
 #ifdef CONFIG_CFI_PERMISSIVE
 #define cfi_failure_handler	__ubsan_handle_cfi_check_fail
 #define cfi_slowpath_handler	__cfi_slowpath_diag
-#define CFI_BUG()		__WARN()
 #else /* enforcing */
 #define cfi_failure_handler	__ubsan_handle_cfi_check_fail_abort
 #define cfi_slowpath_handler	__cfi_slowpath
-#define CFI_BUG()		BUG()
 #endif /* CONFIG_CFI_PERMISSIVE */
 
 static inline void handle_cfi_failure()
 {
-	printk(KERN_ERR "CFI failure:\n");
-	CFI_BUG();
+#ifdef CONFIG_CFI_PERMISSIVE
+	WARN_RATELIMIT(1, "CFI failure:\n");
+#else
+	pr_err("CFI failure:\n");
+	BUG();
+#endif
 }
 
 #ifdef CONFIG_MODULES
@@ -272,12 +275,12 @@ static inline cfi_check_fn find_cfi_check(void *ptr)
 	return find_module_cfi_check(ptr);
 }
 
-void cfi_slowpath_handler(uint64_t id, void *ptr)
+void cfi_slowpath_handler(uint64_t id, void *ptr, void *diag)
 {
 	cfi_check_fn check = find_cfi_check(ptr);
 
 	if (likely(check))
-		check(id, ptr, NULL);
+		check(id, ptr, diag);
 	else /* Don't allow unchecked modules */
 		handle_cfi_failure();
 }
