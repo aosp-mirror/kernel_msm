@@ -24,6 +24,7 @@
 #include <linux/leds.h>
 #include <linux/platform_data/leds-lm36272.h>
 #include <linux/pm_wakeup.h>
+#include <linux/reboot.h>
 #include <linux/sysfs.h>
 
 #define LM36272_BL_DEV "lcd-backlight"
@@ -55,6 +56,8 @@ struct lm36272_device {
 #ifdef CONFIG_FB
 	struct notifier_block fb_notifier;
 #endif
+	struct notifier_block reboot_notifier;
+
 	int fb_blank;
 	int status;
 	struct mutex bl_mutex;
@@ -419,6 +422,22 @@ static int fb_notifier_callback(struct notifier_block *self,
 }
 #endif
 
+static int reboot_notifier_callback(struct notifier_block *self,
+		unsigned long code, void *unused)
+{
+	struct lm36272_device *ldev= container_of(self,
+			struct lm36272_device, reboot_notifier);
+
+	/* cancel the pending bl work */
+	cancel_work_sync(&ldev->bl_work);
+
+	/* Ensure the backlight OFF before fb_release on power cycle */
+	if (BL_OFF_PENDING == ldev->status)
+		lm36272_backlight_ctrl_internal(ldev, 0);
+
+	return NOTIFY_DONE;
+}
+
 static void lm36272_bl_work(struct work_struct *work)
 {
 	struct lm36272_device *ldev = container_of(work,
@@ -588,6 +607,13 @@ static int lm36272_probe(struct i2c_client *client,
 		goto err_sysfs_create;
 	}
 
+	ldev->reboot_notifier.notifier_call = reboot_notifier_callback;
+	err = register_reboot_notifier(&ldev->reboot_notifier);
+	if (err < 0) {
+		dev_err(&client->dev, "Failed to register reboot notifier\n");
+		goto err_reboot_notifier;
+	}
+
 	/* set the default brightness */
 	lm36272_lcd_backlight_set_level(&ldev->led_dev,
 			pdata->default_brightness);
@@ -596,6 +622,8 @@ static int lm36272_probe(struct i2c_client *client,
 
 	return 0;
 
+err_reboot_notifier:
+	sysfs_remove_group(&ldev->led_dev.dev->kobj, &lm36272_dev_attr_group);
 err_sysfs_create:
 	led_classdev_unregister(&ldev->led_dev);
 err_led_classdev:
@@ -613,6 +641,7 @@ static int lm36272_remove(struct i2c_client *client)
 {
 	struct lm36272_device *ldev = i2c_get_clientdata(client);
 
+	unregister_reboot_notifier(&ldev->reboot_notifier);
 	sysfs_remove_group(&ldev->led_dev.dev->kobj, &lm36272_dev_attr_group);
 	led_classdev_unregister(&ldev->led_dev);
 #ifdef CONFIG_FB
