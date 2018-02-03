@@ -28,3 +28,7 @@
 		qcom,model = "sdm845-tavil-c1-snd-card";
 	};
 };
+
+&routing {
+	qcom,msm-pcm-config = "c1";
+};

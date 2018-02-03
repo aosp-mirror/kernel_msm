@@ -141,6 +141,10 @@
 	};
 };
 
+&routing {
+	qcom,msm-pcm-config = "b1";
+};
+
 /* path to speaker boosters */
 &dai_quat_tdm_rx_0 {
 	pinctrl-names = "default", "sleep";
