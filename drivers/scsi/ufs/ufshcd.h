@@ -3,7 +3,7 @@
  *
  * This code is based on drivers/scsi/ufs/ufshcd.h
  * Copyright (C) 2011-2013 Samsung India Software Operations
- * Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
  *
  * Authors:
  *	Santosh Yaraganavi <santosh.sy@samsung.com>
@@ -813,7 +813,6 @@ struct ufs_hba {
 	/* Work Queues */
 	struct work_struct eh_work;
 	struct work_struct eeh_work;
-	struct work_struct rls_work;
 
 	/* HBA Errors */
 	u32 errors;
@@ -909,10 +908,9 @@ struct ufs_hba {
 
 	bool full_init_linereset;
 	struct pinctrl *pctrl;
-
+	
 	int			latency_hist_enabled;
 	struct io_latency_state io_lat_s;
-	bool restore_needed;
 };
 
 static inline void ufshcd_mark_shutdown_ongoing(struct ufs_hba *hba)
