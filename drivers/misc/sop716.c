@@ -54,12 +54,26 @@ enum sop716_cmd_ids {
 	CMD_SOP716_READ_TIMEZONE,
 	CMD_SOP716_SET_EOL_BATTERY_LEVEL,
 	CMD_SOP716_READ_EOL_BATTERY_LEVEL,
+	CMD_SOP716_READ_MOTORS_POSITION,
+	CMD_SOP716_READ_MODE, /* 15 */
+	CMD_SOP716_SET_AGING_TEST,
 	CMD_SOP716_MAX
+};
+
+enum sop716_mode_ids {
+	MODE_IDLE,
+	MODE_START_TURN_CW,
+	MODE_START_TURN_CCW,
+	MODE_RETURN_POS_0,
+	MODE_WATCH = 5,
+	MODE_MOTOR,
+	MODE_MAX = 10
 };
 
 struct sop716_command {
 	char *desc;
 	u8 size;
+	u8 rev;
 };
 
 struct sop716_info {
@@ -83,6 +97,9 @@ struct sop716_info {
 	int eol_limit_mv;
 	int eol_threshold_mv;
 
+	u8 fw_ver;
+	u8 fw_rev;
+
 	bool update_sysclock_on_boot;
 	bool watch_mode;
 
@@ -100,7 +117,7 @@ static void sop716_hw_reset(struct sop716_info *si);
 static int sop716_restore_default_config(struct sop716_info *si);
 
 static inline int REG_CMD(struct sop716_command *cmd, u8 reg, char *desc,
-		u8 size)
+		u8 size, u8 rev)
 {
 	if (reg >= CMD_SOP716_MAX) {
 		pr_err("%s: unknown command %d\n", __func__, reg);
@@ -109,6 +126,7 @@ static inline int REG_CMD(struct sop716_command *cmd, u8 reg, char *desc,
 
 	cmd[reg].desc = desc;
 	cmd[reg].size = size;
+	cmd[reg].rev = rev;
 
 	return 0;
 }
@@ -126,31 +144,37 @@ static int sop716_register_commands(struct sop716_info *si)
 	}
 
 	err = REG_CMD(si->cmds, CMD_SOP716_SET_CURRENT_TIME,
-			"set time", 8);
+			"set time", 8, 0);
 	err |= REG_CMD(si->cmds, CMD_SOP716_MOTOR_MOVE_ONE,
-			"motor move one", 4);
+			"motor move one", 4, 0);
 	err |= REG_CMD(si->cmds, CMD_SOP716_MOTOR_MOVE_ALL,
-			"motor move all", 4);
+			"motor move all", 4, 0);
 	err |= REG_CMD(si->cmds, CMD_SOP716_MOTOR_INIT,
-			"motor init", 4);
+			"motor init", 4, 0);
 	err |= REG_CMD(si->cmds, CMD_SOP716_READ_CURRENT_TIME,
-			"read time", 6);
+			"read time", 6, 0);
 	err |= REG_CMD(si->cmds, CMD_SOP716_READ_FW_VERSION,
-			"read fw version", 2);
+			"read fw version", 2, 0);
 	err |= REG_CMD(si->cmds, CMD_SOP716_BATTERY_CHECK_INTERVAL,
-			"battery check interval", 3);
+			"battery check interval", 3, 0);
 	err |= REG_CMD(si->cmds, CMD_SOP716_READ_BATTERY_LEVEL,
-			"read battery level" , 2);
+			"read battery level" , 2, 0);
 	err |= REG_CMD(si->cmds, CMD_SOP716_READ_BATTERY_CHECK_INTERVAL,
-			"read battery check interval", 2);
+			"read battery check interval", 2, 0);
 	err |= REG_CMD(si->cmds, CMD_SOP716_SET_TIMEZONE,
-			"set timezone", 3);
+			"set timezone", 3, 0);
 	err |= REG_CMD(si->cmds, CMD_SOP716_READ_TIMEZONE,
-			"read timezone", 2);
+			"read timezone", 2, 0);
 	err |= REG_CMD(si->cmds, CMD_SOP716_SET_EOL_BATTERY_LEVEL,
-			"set eol battery level" , 5);
+			"set eol battery level" , 5, 0);
 	err |= REG_CMD(si->cmds, CMD_SOP716_READ_EOL_BATTERY_LEVEL,
-			"read eol battery level", 4);
+			"read eol battery level", 4, 0);
+	err |= REG_CMD(si->cmds, CMD_SOP716_READ_MOTORS_POSITION,
+			"read motors read positions", 2, 16);
+	err |= REG_CMD(si->cmds, CMD_SOP716_READ_MODE,
+			"read mode", 1, 16);
+	err |= REG_CMD(si->cmds, CMD_SOP716_SET_AGING_TEST,
+			"set aging test", 3, 16);
 
 	return err;
 }
@@ -167,6 +191,14 @@ static int sop716_write(struct sop716_info *si, u8 reg, u8 *val)
 		return -EINVAL;
 	}
 
+	if (si->cmds[reg].rev > si->fw_rev) {
+		pr_warn("%s: cmd %s(%d) not supported by fw v%d.%d\n",
+				__func__,
+				si->cmds[reg].desc, reg,
+				si->fw_ver, si->fw_rev);
+		return -ENOTSUPP;
+	}
+
 	/* sop716 writes size instead of reg */
 	do {
 		ret = i2c_smbus_write_i2c_block_data(si->client,
@@ -176,8 +208,8 @@ static int sop716_write(struct sop716_info *si, u8 reg, u8 *val)
 	} while (retry-- && ret < 0);
 
 	if (ret < 0)
-		pr_err("%s: cannot write i2c: reg %d (%s)\n",
-				__func__, reg, si->cmds[reg].desc);
+		pr_err("%s: cannot write i2c: cmd %s(%d)\n",
+				__func__, si->cmds[reg].desc, reg);
 
 	return ret;
 }
@@ -189,11 +221,19 @@ static int sop716_read(struct sop716_info *si, u8 reg, u8 *val)
 	static u64 saved_ts_ns = 0ULL;
 	u64 off_ms;
 
-	pr_debug("%s: reg:%d val:%d\n", __func__, reg, *val);
+	pr_debug("%s: reg:%d\n", __func__, reg);
 
 	if (reg >= CMD_SOP716_MAX) {
 		pr_err("%s: unknown command %d\n", __func__, reg);
 		return -EINVAL;
+	}
+
+	if (si->cmds[reg].rev > si->fw_rev) {
+		pr_warn("%s: cmd %s(%d) not supported by FW %d.%d\n",
+				__func__,
+				si->cmds[reg].desc, reg,
+				si->fw_ver, si->fw_rev);
+		return -ENOTSUPP;
 	}
 
 	/* FIXME: i2c error on subsequent i2c reads in 100ms */
@@ -212,14 +252,16 @@ static int sop716_read(struct sop716_info *si, u8 reg, u8 *val)
 	saved_ts_ns = ktime_get_boot_ns();
 
 	if (ret < 0) {
-		pr_err("%s: cannot read i2c: reg %d (%s)\n",
-				__func__, reg, si->cmds[reg].desc);
+		pr_err("%s: cannot read i2c: cmd %s(%d)\n",
+				__func__, si->cmds[reg].desc, reg);
 		return ret;
 	}
 
 	if ((ret - 1) != val[0]) {
-		pr_err("%s: error: cmd %d, size %d, ret %d, val[0] %d\n",
-				__func__, reg, si->cmds[reg].size, ret, val[0]);
+		pr_err("%s: error: cmd %s(%d), size %d, ret %d, val[0] %d\n",
+				__func__,
+				si->cmds[reg].desc, reg,
+				si->cmds[reg].size, ret, val[0]);
 		return -EINVAL;
 
 	}
@@ -357,6 +399,37 @@ static int sop716_set_eol_threshold(struct sop716_info *si, int eol_threshold)
 out:
 	mutex_unlock(&si->lock);
 	return rc;
+}
+
+static int sop716_read_mode(struct sop716_info *si)
+{
+	u8 data[SOP716_I2C_DATA_LENGTH] = {0, };
+	int rc;
+	int mode;
+
+	mutex_lock(&si->lock);
+	rc = sop716_read(si, CMD_SOP716_READ_MODE, data);
+	mutex_unlock(&si->lock);
+
+	mode = data[1];
+
+	/* if mode is not determined, set the mode to WATCH by default */
+	if (rc < 0 || mode > MODE_WATCH)
+		mode = MODE_WATCH;
+
+	return mode;
+}
+
+static void sop716_read_fw_version(struct sop716_info *si)
+{
+	u8 data[SOP716_I2C_DATA_LENGTH] = {0, };
+
+	mutex_lock(&si->lock);
+	sop716_read(si, CMD_SOP716_READ_FW_VERSION, data);
+	mutex_unlock(&si->lock);
+
+	si->fw_ver = data[1];
+	si->fw_rev = data[2];
 }
 
 static ssize_t sop716_reset_store(struct device *dev,
@@ -1071,6 +1144,44 @@ static ssize_t sop716_watch_mode_store(struct device *dev,
 	return count;
 }
 
+/*
+ * CMD_SOP716_SET_AGING_TEST
+ * intput format: 0~255 (0: stop, 1~255: start the aging test
+ */
+static ssize_t sop716_aging_test_store(struct device *dev,
+			struct device_attribute *attr, const char *buf,
+			size_t count)
+{
+	struct sop716_info *si = dev_get_drvdata(dev);
+	u8 data[SOP716_I2C_DATA_LENGTH];
+	unsigned int v = -1;
+	int rc;
+
+	if (!count) {
+		pr_err("%s: invalid input count!\n", __func__);
+		return -EINVAL;
+	}
+
+	rc = kstrtouint(buf, 0, &v);
+	if (rc < 0 || v > 255) {
+		pr_err("%s: invalid input %u\n", __func__, v);
+		return -EINVAL;
+	}
+
+	pr_debug("%s: No. of sequence:%u\n", __func__, v);
+
+	data[0] = CMD_SOP716_SET_AGING_TEST;
+	data[1] = v? 1 : 0;
+	data[2] = v;
+
+	mutex_lock(&si->lock);
+	sop716_write(si, CMD_SOP716_SET_AGING_TEST, data);
+	si->watch_mode = false;
+	mutex_unlock(&si->lock);
+
+	return count;
+}
+
 static DEVICE_ATTR(reset, S_IWUSR, NULL, sop716_reset_store);
 static DEVICE_ATTR(time, S_IWUSR | S_IRUGO,
 		sop716_time_show, sop716_time_store);
@@ -1094,6 +1205,7 @@ static DEVICE_ATTR(update_sysclock, S_IWUSR, NULL,
 		sop716_update_sysclock_store);
 static DEVICE_ATTR(watch_mode, S_IWUSR | S_IRUGO, sop716_watch_mode_show,
 		sop716_watch_mode_store);
+static DEVICE_ATTR(aging_test, S_IWUSR, NULL, sop716_aging_test_store);
 
 static struct attribute *sop716_dev_attrs[] = {
 	&dev_attr_reset.attr,
@@ -1110,6 +1222,7 @@ static struct attribute *sop716_dev_attrs[] = {
 	&dev_attr_update_fw.attr,
 	&dev_attr_update_sysclock.attr,
 	&dev_attr_watch_mode.attr,
+	&dev_attr_aging_test.attr,
 	NULL
 };
 
@@ -1261,7 +1374,7 @@ static void sop716_update_fw_work(struct work_struct *work)
 	struct sop716_info *si = container_of(work,
 			struct sop716_info, fw_work);
 	u8 data[SOP716_I2C_DATA_LENGTH] = {0, };
-	u8 major, minor, img_major, img_minor;
+	u8 img_ver, img_rev;
 	int err;
 	int retry = SOP716_CMD_READ_RETRY;
 	const struct firmware *fw_entry = NULL;
@@ -1272,30 +1385,19 @@ static void sop716_update_fw_work(struct work_struct *work)
 		return;
 	};
 
-	sop716fw_validate_firmware(fw_entry->data, &img_major, &img_minor);
-	if (!img_major && !img_minor) {
+	sop716fw_validate_firmware(fw_entry->data, &img_ver, &img_rev);
+	if (!img_ver && !img_rev) {
 		pr_err("%s: wrong firmware file\n", __func__);
 	}
 
-	mutex_lock(&si->lock);
-	err = sop716_read(si, CMD_SOP716_READ_FW_VERSION, data);
-	if (err < 0)
-		pr_err("%s: failed to read fw version\n", __func__);
-	msleep(si->fw_ver_check_delay_ms);
-
-	major = data[1];
-	minor = data[2];
-
 	pr_info("sop firmware version: device v%d.%d, image v%d.%d\n",
-			major, minor, img_major, img_minor);
-	if (major == img_major && minor == img_minor) {
-		mutex_unlock(&si->lock);
+			si->fw_ver, si->fw_rev, img_ver, img_rev);
+	if (si->fw_ver == img_ver && si->fw_rev == img_rev) {
 		release_firmware(fw_entry);
 		return;
 	}
 
-	/* Update FW */
-	si->watch_mode = false;
+	mutex_lock(&si->lock);
 
 	/* Set the position 0 */
 	memset(data, 0, sizeof(data));
@@ -1325,7 +1427,8 @@ static void sop716_update_fw_work(struct work_struct *work)
 
 	/* restore time */
 	data[0] = CMD_SOP716_SET_CURRENT_TIME;
-	data[7] = 8;
+	if (!si->watch_mode)
+		data[7] = 8;
 	do {
 		err = sop716_write(si, CMD_SOP716_SET_CURRENT_TIME, data);
 		msleep(100);
@@ -1334,15 +1437,19 @@ static void sop716_update_fw_work(struct work_struct *work)
 	if (err < 0)
 		pr_err("%s: cannot set time\n", __func__);
 
-	si->watch_mode = true;
+	mutex_unlock(&si->lock);
 
-	sop716_read(si, CMD_SOP716_READ_FW_VERSION, data);
+	/* save old fw version info */
+	img_ver = si->fw_ver;
+	img_rev = si->fw_rev;
 
+	/* read new fw version */
+	sop716_read_fw_version(si);
 	msleep(si->fw_ver_check_delay_ms);
 
 	pr_info("sop firmware update: v%d.%d -> v%d.%d\n",
-			major, minor, data[1], data[2]);
-	mutex_unlock(&si->lock);
+			img_ver, img_rev, si->fw_ver, si->fw_rev);
+
 	release_firmware(fw_entry);
 
 	sop716_restore_default_config(si);
@@ -1387,6 +1494,10 @@ static void sop716_init_work(struct work_struct *work)
 {
 	struct sop716_info *si = container_of(work,
 			struct sop716_info, init_work);
+
+	sop716_read_fw_version(si);
+	if (sop716_read_mode(si) == MODE_WATCH)
+		si->watch_mode = true;
 
 	sop716_restore_default_config(si);
 }
