@@ -2109,21 +2109,23 @@ static int kgsl_setup_dmabuf_useraddr(struct kgsl_device *device,
 		if (fd != 0)
 			dmabuf = dma_buf_get(fd - 1);
 	}
-	up_read(&current->mm->mmap_sem);
 
-	if (dmabuf == NULL)
-		return -ENODEV;
+	if (IS_ERR_OR_NULL(dmabuf)) {
+		up_read(&current->mm->mmap_sem);
+		return dmabuf ? PTR_ERR(dmabuf) : -ENODEV;
+	}
 
 	ret = kgsl_setup_dma_buf(device, pagetable, entry, dmabuf);
 	if (ret) {
 		dma_buf_put(dmabuf);
+		up_read(&current->mm->mmap_sem);
 		return ret;
 	}
 
 	/* Setup the user addr/cache mode for cache operations */
 	entry->memdesc.useraddr = hostptr;
 	_setup_cache_mode(entry, vma);
-
+	up_read(&current->mm->mmap_sem);
 	return 0;
 }
 #else
@@ -2160,7 +2162,7 @@ static long _gpuobj_map_useraddr(struct kgsl_device *device,
 		struct kgsl_mem_entry *entry,
 		struct kgsl_gpuobj_import *param)
 {
-	struct kgsl_gpuobj_import_useraddr useraddr;
+	struct kgsl_gpuobj_import_useraddr useraddr = {0};
 	int ret;
 
 	param->flags &= KGSL_MEMFLAGS_GPUREADONLY

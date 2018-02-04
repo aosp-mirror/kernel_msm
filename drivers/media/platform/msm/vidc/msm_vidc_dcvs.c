@@ -229,7 +229,8 @@ void msm_dcvs_init_load(struct msm_vidc_inst *inst)
 	table = res->dcvs_tbl;
 
 	if (!num_rows || !table) {
-		dprintk(VIDC_ERR,
+		if (msm_vidc_dec_dcvs_mode && msm_vidc_enc_dcvs_mode)
+			dprintk(VIDC_ERR,
 				"%s: Dcvs table entry not found.\n", __func__);
 		return;
 	}
@@ -595,7 +596,8 @@ static bool msm_dcvs_check_supported(struct msm_vidc_inst *inst)
 	res = &core->resources;
 
 	if (!res->dcvs_limit) {
-		dprintk(VIDC_WARN,
+		if (msm_vidc_dec_dcvs_mode && msm_vidc_enc_dcvs_mode)
+			dprintk(VIDC_WARN,
 				"%s: dcvs limit table not found\n", __func__);
 		return false;
 	}
