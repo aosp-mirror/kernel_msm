@@ -39,6 +39,9 @@
 #define SOP716_EOL_LIMIT_MV                 3700
 #define SOP716_EOL_THRESHOLD_MV             3900
 
+/* FIXME: i2c error on subsequent i2c reads in 100ms */
+#define SOP716_I2C_READ_POST_DELAY_MS       100
+
 enum sop716_cmd_ids {
 	CMD_SOP716_SET_CURRENT_TIME = 0,
 	CMD_SOP716_MOTOR_MOVE_ONE,
@@ -109,12 +112,24 @@ struct sop716_info {
 	struct work_struct sysclock_work;
 	struct work_struct init_work;
 	struct mutex lock;
+
+	u64 saved_ts_ns; /* workaround for i2c read errors */
+};
+
+struct sop716_error {
+	struct sop716_info *si;
+	int errno;
+	u32 ts; /* in seconds */
+	u8 hour;
+	u8 minute;
+	u16 code; /* (type << 8)|param */
 };
 
 static struct sop716_info *sop716_info;
 
-static void sop716_hw_reset(struct sop716_info *si);
+static void sop716_hw_reset_locked(struct sop716_info *si, bool need_dump);
 static int sop716_restore_default_config(struct sop716_info *si);
+static void sop716_print_errors(struct sop716_info *si);
 
 static inline int REG_CMD(struct sop716_command *cmd, u8 reg, char *desc,
 		u8 size, u8 rev)
@@ -170,7 +185,7 @@ static int sop716_register_commands(struct sop716_info *si)
 	err |= REG_CMD(si->cmds, CMD_SOP716_READ_EOL_BATTERY_LEVEL,
 			"read eol battery level", 4, 0);
 	err |= REG_CMD(si->cmds, CMD_SOP716_READ_MOTORS_POSITION,
-			"read motors read positions", 2, 16);
+			"read motors positions", 2, 16);
 	err |= REG_CMD(si->cmds, CMD_SOP716_READ_MODE,
 			"read mode", 1, 16);
 	err |= REG_CMD(si->cmds, CMD_SOP716_SET_AGING_TEST,
@@ -203,8 +218,12 @@ static int sop716_write(struct sop716_info *si, u8 reg, u8 *val)
 	do {
 		ret = i2c_smbus_write_i2c_block_data(si->client,
 				si->cmds[reg].size, si->cmds[reg].size, val);
-		if (ret < 0)
-			sop716_hw_reset(si);
+		if (ret < 0) {
+			pr_warn("%s: cannot write i2c: cmd %s(%d)\n"
+				"and force reset to recover\n",
+				__func__, si->cmds[reg].desc, reg);
+			sop716_hw_reset_locked(si, true);
+		}
 	} while (retry-- && ret < 0);
 
 	if (ret < 0)
@@ -218,7 +237,7 @@ static int sop716_read(struct sop716_info *si, u8 reg, u8 *val)
 {
 	int ret;
 	int retry = 1;
-	static u64 saved_ts_ns = 0ULL;
+	u64 saved_ts_ns = si->saved_ts_ns;
 	u64 off_ms;
 
 	pr_debug("%s: reg:%d\n", __func__, reg);
@@ -236,17 +255,21 @@ static int sop716_read(struct sop716_info *si, u8 reg, u8 *val)
 		return -ENOTSUPP;
 	}
 
-	/* FIXME: i2c error on subsequent i2c reads in 100ms */
-	off_ms = div_u64(ktime_get_boot_ns() - saved_ts_ns,  1000000);
-	if (off_ms < 100)
-		msleep(100 - off_ms);
+	/* FIXME: i2c error on subsequent i2c reads */
+	off_ms = div_u64(ktime_get_boot_ns() - saved_ts_ns, NSEC_PER_MSEC);
+	if (off_ms < SOP716_I2C_READ_POST_DELAY_MS)
+		msleep(SOP716_I2C_READ_POST_DELAY_MS - off_ms);
 
 	/* read size + data, So "size + 1" need to be added  */
 	do {
 		ret = i2c_smbus_read_i2c_block_data(si->client,
 				reg, si->cmds[reg].size + 1, val);
-		if ((ret < 0) || ((ret - 1) != val[0]))
-			sop716_hw_reset(si);
+		if ((ret < 0) || ((ret - 1) != val[0])) {
+			pr_warn("%s: cannot read i2c: cmd %s(%d)\n"
+				"and force reset to recover\n",
+				__func__, si->cmds[reg].desc, reg);
+			sop716_hw_reset_locked(si, true);
+		}
 	} while (retry-- && ret < 0);
 
 	saved_ts_ns = ktime_get_boot_ns();
@@ -268,12 +291,181 @@ static int sop716_read(struct sop716_info *si, u8 reg, u8 *val)
 	return ret;
 }
 
-static void sop716_hw_reset(struct sop716_info *si)
+static int sop716_read_error(struct sop716_error *serr)
+{
+	struct sop716_info *si = serr->si;
+	u8 errno = serr->errno;
+	u64 saved_ts_ns = si->saved_ts_ns;
+	u64 off_ms;
+	u8 val[8] = {0, };
+	int ret;
+	int retry = 1;
+
+	pr_debug("%s: errno:%d\n", __func__, errno);
+
+	if (errno > 0xF) {
+		pr_err("%s: unknown errno %d\n", __func__, errno);
+		return -EINVAL;
+	}
+
+	/* FIXME: i2c error on subsequent i2c reads */
+	off_ms = div_u64(ktime_get_boot_ns() - saved_ts_ns, NSEC_PER_MSEC);
+	if (off_ms < SOP716_I2C_READ_POST_DELAY_MS)
+		msleep(SOP716_I2C_READ_POST_DELAY_MS - off_ms);
+
+	do {
+		ret = i2c_smbus_read_i2c_block_data(si->client,
+				0x80 + errno, 8, val);
+		if (ret < 0)
+			sop716_hw_reset_locked(si, false);
+	} while (retry-- && ret < 0);
+
+	saved_ts_ns = ktime_get_boot_ns();
+
+	if (ret < 0) {
+		pr_err("%s: cannot read i2c: errno:%d\n", __func__, errno);
+		return ret;
+	}
+
+	serr->errno = errno;
+	serr->ts = (val[0] << 24) | (val[1] << 16) | (val[2] << 8) | val[3];
+	serr->hour = val[4];
+	serr->minute = val[5];
+	serr->code = (val[6] << 8) | val[7];
+
+	return ret;
+}
+
+static void sop716_print_error_single(struct sop716_error *serr)
+{
+	char *reason = "Unknown";
+
+	switch (serr->code) {
+		/* system reset */
+		case 0x100:
+			reason = "No interrupt pending";
+			break;
+		case 0x102:
+			reason = "Brownout (BOR)";
+			break;
+		case 0x104:
+			reason = "RST/NMI (BOR)";
+			break;
+		case 0x106:
+			reason = "PMMSWBOR (BOR)";
+			break;
+		case 0x108:
+			reason = "Wakeup from LPMx.5";
+			break;
+		case 0x10A:
+			reason = "Security violation";
+			break;
+		case 0x10C:
+			reason = "SVSL (POR)";
+			break;
+		case 0x10E:
+			reason = "SVSH (POR)";
+			break;
+		case 0x110:
+			reason = "SVML_OVP (POR)";
+			break;
+		case 0x112:
+			reason = "SVMH_OVP (POR)";
+			break;
+		case 0x114:
+			reason = "PMMSWPOR (POR)";
+			break;
+		case 0x116:
+			reason = "WDT time out (PUC)";
+			break;
+		case 0x118:
+			reason = "WDT password violation (PUC)";
+			break;
+		case 0x11A:
+			reason = "Flash password violation (PUC)";
+			break;
+		case 0x11E:
+			reason = "PERF peripheral/configuration area fetch (PUC)";
+			break;
+		case 0x120:
+			reason = "PMM password vioation (PUC)";
+			break;
+		/* A/D converter error */
+		case 0x202:
+			reason = "Register Overflow";
+			break;
+		case 0x204:
+			reason = "Conversion time Overflow";
+			break;
+		/* serial error */
+		case 0x302:
+			reason = "Too few byte received";
+			break;
+		case 0x304:
+			reason = "Too many byte received";
+			break;
+		case 0x306:
+			reason = "Stop bit not received";
+			break;
+		case 0x308:
+			reason = "I2C timeout";
+			break;
+		/* motor error */
+		case 0x402:
+			reason = "Wrong motor position";
+
+			break;
+		case 0x200:
+		case 0x300:
+		case 0x400:
+			reason = "Nothing";
+			break;
+		default:
+			break;
+	}
+
+	printk("%2u [%10u] %2u:%-2u %s (%3x)\n",
+		serr->errno, serr->ts, serr->hour, serr->minute,
+		reason, serr->code);
+}
+
+static void sop716_print_errors(struct sop716_info *si)
+{
+	u8 errno;
+	struct sop716_error serr;
+	int ret;
+
+	mutex_lock(&si->lock);
+	printk("sop716 dump errors:\n"
+	       "no [ts in second] h:m reason_string (code)\n"
+	       "---------------------------------------\n");
+	for (errno = 0; errno < 0x10; errno++) {
+		memset(&serr, 0, sizeof(struct sop716_error));
+
+		serr.si = si;
+		serr.errno = errno;
+
+		ret = sop716_read_error(&serr);
+		if (ret < 0)
+			break;
+		sop716_print_error_single(&serr);
+	}
+	printk("---------------------------------------\n");
+	mutex_unlock(&si->lock);
+}
+
+static void sop716_hw_reset_locked(struct sop716_info *si, bool need_dump)
 {
 	gpio_set_value(si->gpio_reset, 1);
 	msleep(10);
 	gpio_set_value(si->gpio_reset, 0);
 	msleep(si->reset_delay_ms);
+
+	if (need_dump) {
+		mutex_unlock(&si->lock);
+		sop716_print_errors(si);
+		mutex_lock(&si->lock);
+	}
 }
 
 static int sop716_read_tz_minutes(struct sop716_info *si)
@@ -448,7 +640,7 @@ static ssize_t sop716_reset_store(struct device *dev,
 
 	if (reset) {
 		mutex_lock(&si->lock);
-		sop716_hw_reset(si);
+		sop716_hw_reset_locked(si, false);
 		mutex_unlock(&si->lock);
 	}
 
@@ -1182,6 +1374,15 @@ static ssize_t sop716_aging_test_store(struct device *dev,
 	return count;
 }
 
+static ssize_t sop716_dump_errors(struct device *dev,
+			struct device_attribute *attr, const char *buf,
+			size_t count)
+{
+	struct sop716_info *si = dev_get_drvdata(dev);
+	sop716_print_errors(si);
+	return count;
+}
+
 static DEVICE_ATTR(reset, S_IWUSR, NULL, sop716_reset_store);
 static DEVICE_ATTR(time, S_IWUSR | S_IRUGO,
 		sop716_time_show, sop716_time_store);
@@ -1206,6 +1407,7 @@ static DEVICE_ATTR(update_sysclock, S_IWUSR, NULL,
 static DEVICE_ATTR(watch_mode, S_IWUSR | S_IRUGO, sop716_watch_mode_show,
 		sop716_watch_mode_store);
 static DEVICE_ATTR(aging_test, S_IWUSR, NULL, sop716_aging_test_store);
+static DEVICE_ATTR(dump_errors, S_IWUSR, NULL, sop716_dump_errors);
 
 static struct attribute *sop716_dev_attrs[] = {
 	&dev_attr_reset.attr,
@@ -1223,6 +1425,7 @@ static struct attribute *sop716_dev_attrs[] = {
 	&dev_attr_update_sysclock.attr,
 	&dev_attr_watch_mode.attr,
 	&dev_attr_aging_test.attr,
+	&dev_attr_dump_errors.attr,
 	NULL
 };
 
