@@ -399,7 +399,7 @@ static int max1720x_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_PRESENT:
 		REGMAP_READ(map, MAX1720X_Status, data);
-		val->intval = ((u16) data) & MAX1720X_STATUS_BST ? 1 : 0;
+		val->intval = (((u16) data) & MAX1720X_STATUS_BST) ? 0 : 1;
 		break;
 	case POWER_SUPPLY_PROP_RESISTANCE:
 		REGMAP_READ(map, MAX1720X_RCell, data);
