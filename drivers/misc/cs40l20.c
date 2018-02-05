@@ -88,7 +88,8 @@ static ssize_t cs40l20_cp_trigger_index_store(struct device *dev,
 	if (ret)
 		return -EINVAL;
 
-	if ((index & 0x7FFF) > (cs40l20->num_waves - 1) && index != 0xFFFF)
+	if ((index & CS40L20_INDEX_MASK) >= cs40l20->num_waves
+	    && index != CS40L20_INDEX_DIAG)
 		return -EINVAL;
 
 	cs40l20->cp_trigger_index = index;
@@ -366,6 +367,12 @@ static void cs40l20_vibe_start_worker(struct work_struct *work)
 
 	mutex_lock(&cs40l20->lock);
 
+	/* gracefully exit if diagnostics stimulus is interrupted */
+	if (cs40l20->cp_trailer_index == CS40L20_INDEX_DIAG) {
+		cs40l20->diag_state = CS40L20_DIAG_STATE_INIT;
+		goto err_mutex;
+	}
+
 	cs40l20->cp_trailer_index = cs40l20->cp_trigger_index;
 
 	switch (cs40l20->cp_trailer_index) {
@@ -374,7 +381,8 @@ static void cs40l20_vibe_start_worker(struct work_struct *work)
 		ret = regmap_write(regmap,
 				   cs40l20_dsp_reg(cs40l20, "TRIGGER_MS",
 						   CS40L20_XM_UNPACKED_TYPE),
-				   cs40l20->cp_trailer_index & 0x7FFF);
+				   cs40l20->cp_trailer_index &
+				   CS40L20_INDEX_MASK);
 		if (ret)
 			dev_err(dev, "Failed to start playback\n");
 		break;
@@ -388,7 +396,7 @@ static void cs40l20_vibe_start_worker(struct work_struct *work)
 			dev_err(dev, "Failed to start playback\n");
 		break;
 
-	case 0xFFFF:
+	case CS40L20_INDEX_DIAG:
 		cs40l20->diag_state = CS40L20_DIAG_STATE_INIT;
 
 		ret = regmap_write(regmap,
@@ -442,7 +450,7 @@ static void cs40l20_vibe_stop_worker(struct work_struct *work)
 	mutex_lock(&cs40l20->lock);
 
 	switch (cs40l20->cp_trailer_index) {
-	case 0xFFFF:
+	case CS40L20_INDEX_DIAG:
 		ret = cs40l20_diag_capture(cs40l20);
 		if (ret)
 			dev_err(dev, "Failed to capture f0 and ReDC\n");
@@ -495,6 +503,7 @@ static void cs40l20_create_led(struct cs40l20_private *cs40l20)
 	led_dev->max_brightness = LED_FULL;
 	led_dev->brightness_set = cs40l20_vibe_brightness_set;
 	led_dev->default_trigger = "transient";
+	led_dev->flags = LED_BRIGHTNESS_FAST;
 
 	ret = led_classdev_register(dev, led_dev);
 	if (ret) {
