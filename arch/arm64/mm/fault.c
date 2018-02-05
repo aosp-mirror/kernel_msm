@@ -187,7 +187,7 @@ static inline bool is_permission_fault(unsigned int esr, struct pt_regs *regs,
 	if (fsc_type == ESR_ELx_FSC_PERM)
 		return true;
 
-	if (addr < USER_DS && system_uses_ttbr0_pan())
+	if (addr < TASK_SIZE && system_uses_ttbr0_pan())
 		return fsc_type == ESR_ELx_FSC_FAULT &&
 			(regs->pstate & PSR_PAN_BIT);
 
