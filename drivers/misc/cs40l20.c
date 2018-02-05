@@ -484,6 +484,9 @@ static void cs40l20_vibe_brightness_set(struct led_classdev *led_cdev,
 	struct cs40l20_private *cs40l20 =
 		container_of(led_cdev, struct cs40l20_private, led_dev);
 
+	if (!cs40l20->vibe_workqueue || !cs40l20->vibe_init_success)
+		return;
+
 	switch (brightness) {
 	case LED_OFF:
 		queue_work(cs40l20->vibe_workqueue, &cs40l20->vibe_stop_work);
@@ -520,8 +523,6 @@ static void cs40l20_create_led(struct cs40l20_private *cs40l20)
 
 static void cs40l20_vibe_init(struct cs40l20_private *cs40l20)
 {
-	cs40l20_create_led(cs40l20);
-
 	mutex_init(&cs40l20->lock);
 
 	cs40l20->vibe_workqueue =
@@ -1142,6 +1143,8 @@ static int cs40l20_init(struct cs40l20_private *cs40l20)
 	}
 
 	INIT_LIST_HEAD(&cs40l20->coeff_desc_head);
+
+	cs40l20_create_led(cs40l20);
 
 	request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG, "cs40l20.wmfw",
 			dev, GFP_KERNEL, cs40l20, cs40l20_firmware_load);
