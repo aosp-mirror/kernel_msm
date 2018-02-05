@@ -80,7 +80,7 @@ struct usbpd {
 
 	/* debugfs logging */
 	struct dentry *dentry;
-	struct mutex logbuffer_lock;	/* log buffer access lock */
+	spinlock_t logbuffer_lock;	/* log buffer access lock */
 	int logbuffer_head;
 	int logbuffer_tail;
 	u8 *logbuffer[LOG_BUFFER_ENTRIES];
@@ -105,14 +105,14 @@ static void _pd_engine_log(struct usbpd *pd, const char *fmt, va_list args)
 
 	if (!pd->logbuffer[pd->logbuffer_head]) {
 		pd->logbuffer[pd->logbuffer_head] =
-			kzalloc(LOG_BUFFER_ENTRY_SIZE, GFP_KERNEL);
+			kzalloc(LOG_BUFFER_ENTRY_SIZE, GFP_ATOMIC);
 		if (!pd->logbuffer[pd->logbuffer_head])
 			return;
 	}
 
 	vsnprintf(tmpbuffer, sizeof(tmpbuffer), fmt, args);
 
-	mutex_lock(&pd->logbuffer_lock);
+	spin_lock(&pd->logbuffer_lock);
 
 	if (pd_engine_log_full(pd)) {
 		pd->logbuffer_head = max(pd->logbuffer_head - 1, 0);
@@ -140,7 +140,7 @@ static void _pd_engine_log(struct usbpd *pd, const char *fmt, va_list args)
 	pd->logbuffer_head = (pd->logbuffer_head + 1) % LOG_BUFFER_ENTRIES;
 
 abort:
-	mutex_unlock(&pd->logbuffer_lock);
+	spin_unlock(&pd->logbuffer_lock);
 }
 
 static void pd_engine_log(struct usbpd *pd, const char *fmt, ...)
@@ -157,7 +157,7 @@ static int pd_engine_seq_show(struct seq_file *s, void *v)
 	struct usbpd *pd = (struct usbpd *)s->private;
 	int tail;
 
-	mutex_lock(&pd->logbuffer_lock);
+	spin_lock(&pd->logbuffer_lock);
 	tail = pd->logbuffer_tail;
 	while (tail != pd->logbuffer_head) {
 		seq_printf(s, "%s\n", pd->logbuffer[tail]);
@@ -165,7 +165,7 @@ static int pd_engine_seq_show(struct seq_file *s, void *v)
 	}
 	if (!seq_has_overflowed(s))
 		pd->logbuffer_tail = tail;
-	mutex_unlock(&pd->logbuffer_lock);
+	spin_unlock(&pd->logbuffer_lock);
 
 	return 0;
 }
@@ -186,7 +186,7 @@ static struct dentry *rootdir;
 
 static int pd_engine_debugfs_init(struct usbpd *pd)
 {
-	mutex_init(&pd->logbuffer_lock);
+	spin_lock_init(&pd->logbuffer_lock);
 	/* /sys/kernel/debug/pd_engine/usbpdX */
 	if (!rootdir) {
 		rootdir = debugfs_create_dir("pd_engine", NULL);
