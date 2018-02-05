@@ -302,10 +302,10 @@ static inline int reg_to_deci_deg_cel(s16 val)
 	return div_s64((s64) val * 10, 256);
 }
 
-static inline int reg_to_resistance_micro_ohms(s16 val)
+static inline int reg_to_resistance_micro_ohms(s16 val, u16 rsense)
 {
 	/* LSB: 1/4096 Ohm */
-	return div_s64((s64) val * 1000000, 4096);
+	return div_s64((s64) val * 1000 * rsense, 4096);
 }
 
 static inline int reg_to_cycles(s16 val)
@@ -393,7 +393,7 @@ static int max1720x_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_RESISTANCE:
 		REGMAP_READ(map, MAX1720X_RCell, data);
-		val->intval = reg_to_resistance_micro_ohms(data);
+		val->intval = reg_to_resistance_micro_ohms(data, chip->RSense);
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
 		REGMAP_READ(map, MAX1720X_Temp, data);
@@ -681,10 +681,12 @@ fg_reset:
 	max1720x_fg_reset(chip);
 
 	REGMAP_READ(chip->regmap_nvram, MAX1720X_NVRAM_RSENSE, chip->RSense);
-	REGMAP_READ(chip->regmap, MAX1720X_Config, chip->RConfig);
-
-	dev_info(chip->dev, "Config after POR: 0x%04x\n", chip->RConfig);
 	dev_info(chip->dev, "RSense value %d micro Ohm\n", chip->RSense * 10);
+	REGMAP_READ(chip->regmap, MAX1720X_Config, chip->RConfig);
+	dev_info(chip->dev, "Config after POR: 0x%04x\n", chip->RConfig);
+	REGMAP_READ(chip->regmap, MAX1720X_IChgTerm, data);
+	dev_info(chip->dev, "IChgTerm: %d\n",
+		 reg_to_micro_amp(data, chip->RSense));
 }
 
 static void max1720x_init_worker(struct work_struct *work)
