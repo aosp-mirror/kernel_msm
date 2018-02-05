@@ -19,7 +19,7 @@
 		lge,gpio-interrupt = <&msm_gpio 34 0x0>;
 		lge,gpio-bslen = <&msm_gpio 16 0x0>;
 		lge,gpio-temp-1 = <&msm_gpio 22 0x0>;
-		lge,reset-delay-ms = <400>;
+		lge,reset-delay-ms = <1000>;
 		lge,hctosys-pre-delay-ms = <0>;
 		lge,hctosys-post-delay-ms = <0>;
 		lge,fw-ver-check-delay-ms = <0>;
@@ -39,7 +39,7 @@
 		lge,gpio-interrupt = <&msm_gpio 34 0x0>;
 		lge,gpio-bslen = <&msm_gpio 16 0x0>;
 		lge,gpio-temp-1 = <&msm_gpio 22 0x0>;
-		lge,reset-delay-ms = <400>;
+		lge,reset-delay-ms = <1000>;
 		lge,hctosys-pre-delay-ms = <0>;
 		lge,hctosys-post-delay-ms = <0>;
 		lge,fw-ver-check-delay-ms = <0>;
