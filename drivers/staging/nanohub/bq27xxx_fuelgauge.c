@@ -23,6 +23,8 @@
 #include "comms.h"
 #include "bq27xxx_fuelgauge.h"
 #include "custom_app_event.h"
+#include <linux/reboot.h>
+
 
 
 #define DBG_ENABLE 1
@@ -135,7 +137,13 @@ void bq27x00_update(struct Nanohub_FuelGauge_Info *fg_info)
 			fg_info->cache.capacity, fg_info->cache.temperature,
 			fg_info->cache.flags, fg_info->charger_online);
 #endif
-
+	if ((fg_info->cache.voltage > 4000)
+		&& (strnstr(saved_command_line, "androidboot.mode=charger",
+		strlen(saved_command_line)))) {
+		pr_err("fg_info->cache.voltage %d more than 4V reboot the system\n",
+		fg_info->cache.voltage);
+		machine_restart(NULL);
+	}
 	if (fg_info->last_capacity != fg_info->cache.capacity) {
 		if ((fg_info->charger_online &&
 		  fg_info->last_capacity < fg_info->cache.capacity) ||
