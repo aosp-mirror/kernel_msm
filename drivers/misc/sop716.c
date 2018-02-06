@@ -45,6 +45,13 @@
 /* FIXME: i2c error on subsequent i2c reads in 100ms */
 #define SOP716_I2C_READ_POST_DELAY_MS       100
 
+/* SOP716 COMMANDS SUB OPTIONS */
+#define SOP716_OPT_ACC_DEC       0x80
+#define SOP716_OPT_STACKED       0x40
+#define SOP716_OPT_DIRECTION     0x20
+#define SOP716_OPT_DIR_CCW       0x10
+#define SOP716_OPT_NO_HANDS_MOVE 0x08
+
 enum sop716_motor_ids {
 	MOTOR1 = 0,
 	MOTOR2,
@@ -656,7 +663,7 @@ static u8 sop716_get_distance_locked(struct sop716_info *si,
 		return -EINVAL;
 	}
 
-	if (opt & 0x40) /* stacked request */
+	if (opt & SOP716_OPT_STACKED) /* stacked request */
 		return 0;
 
 	/* get current motors position */
@@ -667,8 +674,8 @@ static u8 sop716_get_distance_locked(struct sop716_info *si,
 	distance = distance % (SOP716_MOTOR_MAX_POS + 1);
 
 	distance = clamp_val(distance, 0, SOP716_MOTOR_MAX_POS);
-	if (opt & 0x20) { /* force direction */
-		if (opt & 0x10) /* counter clockwise */
+	if (opt & SOP716_OPT_DIRECTION) { /* force direction */
+		if (opt & SOP716_OPT_DIR_CCW) /* counter clockwise */
 			distance = SOP716_MOTOR_MAX_POS - distance + 1;
 	} else { /* shortest way */
 		if (distance > ((SOP716_MOTOR_MAX_POS + 1) >> 1))
@@ -842,7 +849,7 @@ static ssize_t sop716_time_store(struct device *dev,
 	/*
 	 * Do not set the watch mode if opt is not moving hands
 	 */
-	if (8 != user_data[6])
+	if (!(user_data[6] & SOP716_OPT_NO_HANDS_MOVE))
 		si->watch_mode = true;
 	mutex_unlock(&si->lock);
 
@@ -1035,10 +1042,9 @@ static ssize_t sop716_motor_init_store(struct device *dev,
 	data[3] = result[2];
 
 	mutex_lock(&si->lock);
+	opt = SOP716_OPT_DIRECTION;
 	if (data[2]) /* counter clockwise */
-		opt = 0x30;
-	else
-		opt = 0x20;
+		opt |= SOP716_OPT_DIR_CCW;
 
 	sop716_write(si, CMD_SOP716_MOTOR_INIT, data);
 
@@ -1752,7 +1758,7 @@ static void sop716_update_fw_work(struct work_struct *work)
 	/* restore time */
 	data[0] = CMD_SOP716_SET_CURRENT_TIME;
 	if (!si->watch_mode)
-		data[7] = 8;
+		data[7] = SOP716_OPT_NO_HANDS_MOVE;
 	do {
 		err = sop716_write(si, CMD_SOP716_SET_CURRENT_TIME, data);
 		msleep(100);
