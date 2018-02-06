@@ -198,6 +198,26 @@
 	};
 };
 
+&soc {
+	battery_tm: battery_tm {
+		compatible = "battery_tm";
+		status = "ok";
+		qcom,batt-tm-adc_tm = <&pm8916_adc_tm>;
+		tm,batt-vreg-mv = <4400>;
+		tm,current-ma = <200>;
+		tm,low-vreg-mv = <4100>;
+		tm,low-current-ma = <200>;
+		tm,warm-cfg = <
+			 (-50) (-100) (450) 0 1
+			 (450)  (430) (550) 1 2
+			 (550)  (430) (600) 2 2
+			 (600)  (430) (790) 3 2>;
+		tm,cool-cfg = <
+			(-100) (-300) (-50) 2 6
+			 (430) (-100) (450) 0 1>;
+	};
+};
+
 &pm8916_chg {
 	status = "disabled";
 };
