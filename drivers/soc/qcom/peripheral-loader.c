@@ -911,6 +911,7 @@ int pil_boot(struct pil_desc *desc)
 	struct pil_priv *priv = desc->priv;
 	bool mem_protect = false;
 	bool hyp_assign = false;
+	int pil_retry_count = 0;
 
 	ret = pil_notify_aop(desc, "on");
 	if (ret < 0) {
@@ -927,8 +928,10 @@ int pil_boot(struct pil_desc *desc)
 	down_read(&pil_pm_rwsem);
 	snprintf(fw_name, sizeof(fw_name), "%s.mdt", desc->fw_name);
 	ret = request_firmware(&fw, fw_name, desc->dev);
-	while (ret == -EAGAIN) {
-		pil_err(desc,"request_firmware:%s failed, retry\n",fw_name);
+	while ((ret == -EAGAIN) &&
+		(pil_retry_count < PERIPHERAL_LOADER_MAX_RETRY)) {
+		pil_err(desc,"request_firmware:%s failed, retry: %d \n",
+					fw_name, pil_retry_count++);
 		ret = request_firmware(&fw, fw_name, desc->dev);
 	}
 

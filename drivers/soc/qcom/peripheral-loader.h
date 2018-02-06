@@ -16,6 +16,8 @@
 #include <linux/mailbox/qmp.h>
 #include "minidump_private.h"
 
+#define PERIPHERAL_LOADER_MAX_RETRY (3)
+
 struct device;
 struct module;
 struct pil_priv;

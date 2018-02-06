@@ -659,15 +659,17 @@ int pil_mss_reset_load_mba(struct pil_desc *pil)
 	int ret;
 	const u8 *data;
 	struct device *dma_dev = md->mba_mem_dev_fixed ?: &md->mba_mem_dev;
+	int pil_retry_count = 0;
 
 	trace_pil_func(__func__);
 	if (drv->mba_dp_virt && md->mba_mem_dev_fixed)
 		goto mss_reset;
 	fw_name_p = drv->non_elf_image ? fw_name_legacy : fw_name;
 	ret = request_firmware(&fw, fw_name_p, pil->dev);
-	while (ret == -EAGAIN) {
-		dev_err(pil->dev,"request_firmware:%s failed, retry\n",
-						fw_name_p);
+	while ((ret == -EAGAIN) &&
+		(pil_retry_count < PERIPHERAL_LOADER_MAX_RETRY)) {
+		dev_err(pil->dev,"request_firmware:%s failed, retry: %d\n",
+						fw_name_p, pil_retry_count++);
 		ret = request_firmware(&fw, fw_name_p, pil->dev);
 	}
 
