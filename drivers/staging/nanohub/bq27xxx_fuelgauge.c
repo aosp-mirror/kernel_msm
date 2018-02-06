@@ -167,8 +167,10 @@ static void fuelgauge_battery_poll(struct work_struct *work)
 
 	if (!fg_info->requested) {
 		pr_warn("nanohub: [FG] request data from sensorhub.\n");
-		request_fuel_gauge_data(fg_info->hub_data);
 		fg_info->requested = 1;
+		if (0 != request_fuel_gauge_data(fg_info->hub_data)) {
+			fg_info->requested = 0;
+		}
 	}
 }
 
@@ -224,12 +226,12 @@ int store_fuelguage_cache(struct bq27x00_reg_cache *cache_data)
 
 	if (!(fg_info && cache_data))
 		return -EINVAL;
+
 	memcpy(&(fg_info->cache), cache_data, sizeof(struct bq27x00_reg_cache));
 
 	bq27x00_update(fg_info);
 	if (poll_interval > 0) {
 		/* The timer does not have to be accurate. */
-		cancel_delayed_work_sync(&fg_info->work);
 		set_timer_slack(&fg_info->work.timer,
 			poll_interval * HZ / 4);
 		schedule_delayed_work(&fg_info->work,
