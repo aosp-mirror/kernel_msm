@@ -47,7 +47,7 @@
 #define HED_EVENT_SIZE_LEN (0x02)
 #define HED_EVENT_DATA_STRT_LEN (0x05)
 
-#define MAX_RETRY 3
+#define MAX_RETRY 20
 
 enum bgcom_state {
 	/*BGCOM Staus ready*/
@@ -109,7 +109,7 @@ static enum bgcom_spi_state spi_state;
 static struct workqueue_struct *wq;
 static DECLARE_WORK(input_work , send_input_events);
 
-struct mutex bg_resume_mutex;
+static struct mutex bg_resume_mutex;
 
 static void augmnt_fifo(uint8_t *data, int pos)
 {

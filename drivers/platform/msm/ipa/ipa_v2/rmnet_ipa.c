@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -2561,7 +2561,7 @@ int rmnet_ipa_set_data_quota(struct wan_ioctl_set_data_quota *data)
 	if (index == MAX_NUM_OF_MUX_CHANNEL) {
 		IPAWANERR("%s is an invalid iface name\n",
 			  data->interface_name);
-		return -EFAULT;
+		return -ENODEV;
 	}
 
 	mux_id = mux_channel[index].mux_id;
@@ -2652,8 +2652,9 @@ int rmnet_ipa_query_tethering_stats(struct wan_ioctl_query_tether_stats *data,
 		/* prevent string buffer overflows */
 		data->upstreamIface[IFNAMSIZ-1] = '\0';
 		data->tetherIface[IFNAMSIZ-1] = '\0';
-	} else if (reset != false) {
-		/* Data can be NULL for reset stats, checking reset != False */
+	} else if (reset == false) {
+		/* only reset can have data == NULL*/
+		IPAWANERR("query without allocate tether_stats strucutre\n");
 		return -EINVAL;
 	}
 
@@ -2692,7 +2693,7 @@ int rmnet_ipa_query_tethering_stats(struct wan_ioctl_query_tether_stats *data,
 		kfree(req);
 		kfree(resp);
 		return rc;
-	} else if (reset) {
+	} else if (data == NULL) {
 		kfree(req);
 		kfree(resp);
 		return 0;
@@ -2822,6 +2823,7 @@ int rmnet_ipa_query_tethering_stats_all(
 			+ tether_stats.ipv6_rx_bytes;
 	return rc;
 }
+
 
 /**
  * ipa_broadcast_quota_reach_ind() - Send Netlink broadcast on Quota
