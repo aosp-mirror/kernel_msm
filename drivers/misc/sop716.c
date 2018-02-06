@@ -39,8 +39,16 @@
 #define SOP716_EOL_LIMIT_MV                 3700
 #define SOP716_EOL_THRESHOLD_MV             3900
 
+#define SOP716_MOTOR_MAX_POS                179
+#define SOP716_MOTOR_TIME_PER_STEP_MS       17
+
 /* FIXME: i2c error on subsequent i2c reads in 100ms */
 #define SOP716_I2C_READ_POST_DELAY_MS       100
+
+enum sop716_motor_ids {
+	MOTOR1 = 0,
+	MOTOR2,
+};
 
 enum sop716_cmd_ids {
 	CMD_SOP716_SET_CURRENT_TIME = 0,
@@ -185,7 +193,7 @@ static int sop716_register_commands(struct sop716_info *si)
 	err |= REG_CMD(si->cmds, CMD_SOP716_READ_EOL_BATTERY_LEVEL,
 			"read eol battery level", 4, 0);
 	err |= REG_CMD(si->cmds, CMD_SOP716_READ_MOTORS_POSITION,
-			"read motors positions", 2, 16);
+			"read motors position", 2, 16);
 	err |= REG_CMD(si->cmds, CMD_SOP716_READ_MODE,
 			"read mode", 1, 16);
 	err |= REG_CMD(si->cmds, CMD_SOP716_SET_AGING_TEST,
@@ -624,6 +632,58 @@ static void sop716_read_fw_version(struct sop716_info *si)
 	si->fw_rev = data[2];
 }
 
+static void sop716_read_motors_position_locked(struct sop716_info *si,
+		u8 motor_pos[])
+{
+	u8 data[SOP716_I2C_DATA_LENGTH] = {0, };
+
+	sop716_read(si, CMD_SOP716_READ_MOTORS_POSITION, data);
+
+	motor_pos[MOTOR1] = min(data[1], (u8)SOP716_MOTOR_MAX_POS);
+	motor_pos[MOTOR2] = min(data[2], (u8)SOP716_MOTOR_MAX_POS);
+	pr_debug("%s: motor1 pos %d motor2 pos %d\n", __func__,
+			motor_pos[MOTOR1], motor_pos[MOTOR2]);
+}
+
+static u8 sop716_get_distance_locked(struct sop716_info *si,
+		u8 motor, u8 pos, u8 opt)
+{
+	u8 val[2];
+	int distance;
+
+	if (pos > SOP716_MOTOR_MAX_POS) {
+		pr_err("%s: invalid vlaue (%d)\n", __func__, pos);
+		return -EINVAL;
+	}
+
+	if (opt & 0x40) /* stacked request */
+		return 0;
+
+	/* get current motors position */
+	sop716_read_motors_position_locked(si, val);
+
+	/* calculate distance */
+	distance = SOP716_MOTOR_MAX_POS + 1 - val[motor] + pos;
+	distance = distance % (SOP716_MOTOR_MAX_POS + 1);
+
+	distance = clamp_val(distance, 0, SOP716_MOTOR_MAX_POS);
+	if (opt & 0x20) { /* force direction */
+		if (opt & 0x10) /* counter clockwise */
+			distance = SOP716_MOTOR_MAX_POS - distance + 1;
+	} else { /* shortest way */
+		if (distance > ((SOP716_MOTOR_MAX_POS + 1) >> 1))
+			distance = SOP716_MOTOR_MAX_POS - distance + 1;
+	}
+
+	return distance;
+}
+
+static inline void sop716_wait_for_motor_move_locked(u8 distance)
+{
+	pr_debug("%s: distance %d\n", __func__, distance);
+	msleep(SOP716_MOTOR_TIME_PER_STEP_MS * distance);
+}
+
 static ssize_t sop716_reset_store(struct device *dev,
 			struct device_attribute *attr, const char *buf,
 			size_t count)
@@ -688,6 +748,8 @@ static ssize_t sop716_time_store(struct device *dev,
 	char *p;
 	int user_data[7] = {0, };
 	int rc = 0;
+	u8 pos[2];
+	u8 dist[2];
 
 	if (!count) {
 		pr_err("%s: invalid input count!\n", __func__);
@@ -762,10 +824,21 @@ static ssize_t sop716_time_store(struct device *dev,
 	data[7] = user_data[6]; //opt
 
 	mutex_lock(&si->lock);
+	/* covert h:m to motors position */
+	pos[MOTOR1] = 3 * data[2];
+	pos[MOTOR2] = (15 * (data[1] % 12)) + (data[2] >> 2);
+	dist[MOTOR1] = sop716_get_distance_locked(si, MOTOR1, pos[MOTOR1],
+			user_data[6]);
+	dist[MOTOR2] = sop716_get_distance_locked(si, MOTOR2, pos[MOTOR2],
+			user_data[6]);
+
 	rc = sop716_write(si, CMD_SOP716_SET_CURRENT_TIME, data);
 	if (rc < 0)
 		pr_err("%s: cannot set time\n", __func__);
 
+	/* wait for motor move */
+	dist[0] = max(dist[MOTOR1], dist[MOTOR2]);
+	sop716_wait_for_motor_move_locked(dist[0]);
 	/*
 	 * Do not set the watch mode if opt is not moving hands
 	 */
@@ -791,6 +864,7 @@ static ssize_t sop716_motor_move_store(struct device *dev,
 	int result[2];
 	int option = 0;
 	int rc = 0;
+	u8 dist;
 
 	if (!count) {
 		pr_err("%s: invalid input count!\n", __func__);
@@ -816,7 +890,7 @@ static ssize_t sop716_motor_move_store(struct device *dev,
 	}
 
 	if (result[0] < 0 || result[0]> 1  ||   // motor type
-	    result[1] < 0 || result[1] > 179 || // motor position
+	    result[1] < 0 || result[1] > SOP716_MOTOR_MAX_POS || // motor position
 	    option < 0 || option > 255) {
 		pr_err("%s: out of range: %s\n", __func__, buf);
 		return -EINVAL;
@@ -831,7 +905,12 @@ static ssize_t sop716_motor_move_store(struct device *dev,
 	data[3] = option;
 
 	mutex_lock(&si->lock);
+	dist = sop716_get_distance_locked(si, data[1], data[2], data[3]);
+
 	sop716_write(si, CMD_SOP716_MOTOR_MOVE_ONE, data);
+
+	/* wait for motor move */
+	sop716_wait_for_motor_move_locked(dist);
 
 	si->watch_mode = false;
 	mutex_unlock(&si->lock);
@@ -854,6 +933,7 @@ static ssize_t sop716_motor_move_all_store(struct device *dev,
 	int result[2];
 	int option = 0;
 	int rc = 0;
+	u8 dist[2];
 
 	if (!count) {
 		pr_err("%s: invalid input count!\n", __func__);
@@ -878,8 +958,8 @@ static ssize_t sop716_motor_move_all_store(struct device *dev,
 		}
 	}
 
-	if (result[0] < 0 || result[0] > 179 || // motor1
-	    result[1] < 0 || result[1] > 179 || // motor2
+	if (result[0] < 0 || result[0] > SOP716_MOTOR_MAX_POS || // motor1
+	    result[1] < 0 || result[1] > SOP716_MOTOR_MAX_POS || // motor2
 	    option < 0 || option > 255) {
 		pr_err("%s: invalid input format!\n", __func__);
 		return -EINVAL;
@@ -894,7 +974,14 @@ static ssize_t sop716_motor_move_all_store(struct device *dev,
 	data[3] = option;
 
 	mutex_lock(&si->lock);
+	dist[MOTOR1] = sop716_get_distance_locked(si, MOTOR1, data[1], data[3]);
+	dist[MOTOR2] = sop716_get_distance_locked(si, MOTOR2, data[2], data[3]);
+
 	sop716_write(si, CMD_SOP716_MOTOR_MOVE_ALL, data);
+
+	/* wait for motor move */
+	dist[0] = max(dist[MOTOR1], dist[MOTOR2]);
+	sop716_wait_for_motor_move_locked(dist[0]);
 
 	si->watch_mode = false;
 	mutex_unlock(&si->lock);
@@ -916,6 +1003,7 @@ static ssize_t sop716_motor_init_store(struct device *dev,
 	char *str;
 	int result[3];
 	int rc = 0;
+	u8 dist, opt;
 
 	if (!count) {
 		pr_err("%s: invalid input count!\n", __func__);
@@ -933,7 +1021,7 @@ static ssize_t sop716_motor_init_store(struct device *dev,
 
 	if (result[0] < 0 || result[0] > 1 || // motor type
 	    result[1] < 0 || result[1] > 1 || // motor direction
-	    result[2] < 0 || result[2] > 255) { // motor steps
+	    result[2] < 0 || result[2] > 179) { // motor steps
 		pr_err("%s: invalid input format!\n", __func__);
 		return -EINVAL;
 	}
@@ -947,7 +1035,16 @@ static ssize_t sop716_motor_init_store(struct device *dev,
 	data[3] = result[2];
 
 	mutex_lock(&si->lock);
+	if (data[2]) /* counter clockwise */
+		opt = 0x30;
+	else
+		opt = 0x20;
+
 	sop716_write(si, CMD_SOP716_MOTOR_INIT, data);
+
+	/* wait for motor move */
+	dist = data[3];
+	sop716_wait_for_motor_move_locked(dist);
 
 	si->watch_mode = false;
 	mutex_unlock(&si->lock);
@@ -1306,6 +1403,10 @@ static ssize_t sop716_watch_mode_store(struct device *dev,
 	struct sop716_info *si = dev_get_drvdata(dev);
 	int value = 0;
 	int err;
+	struct rtc_time tm;
+	struct timeval tv;
+	u8 pos[2];
+	u8 dist[2];
 	u8 data[SOP716_I2C_DATA_LENGTH] = {
 		CMD_SOP716_SET_CURRENT_TIME,
 		0xFF,
@@ -1324,7 +1425,27 @@ static ssize_t sop716_watch_mode_store(struct device *dev,
 	}
 
 	mutex_lock(&si->lock);
+	/* Get local time */
+	do_gettimeofday(&tv);
+	tv.tv_sec -= si->tz_minuteswest * 60;
+	rtc_time_to_tm(tv.tv_sec, &tm);
+
+	pr_debug("%s: current time: %d-%02d-%02d %02d:%02d:%02d\n",
+			__func__,
+			tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+			tm.tm_hour, tm.tm_min, tm.tm_sec);
+
+	/* covert h:m to motors position */
+	pos[MOTOR1] = 3 * tm.tm_min;
+	pos[MOTOR2] = (15 * (tm.tm_hour % 12)) + (tm.tm_min >> 2);
+	dist[MOTOR1] = sop716_get_distance_locked(si, MOTOR1, pos[MOTOR1], 0);
+	dist[MOTOR2] = sop716_get_distance_locked(si, MOTOR2, pos[MOTOR2], 0);
+
 	err = sop716_write(si, CMD_SOP716_SET_CURRENT_TIME, data);
+
+	/* wait for motor move */
+	dist[0] = max(dist[MOTOR1], dist[MOTOR2]);
+	sop716_wait_for_motor_move_locked(dist[0]);
 	mutex_unlock(&si->lock);
 	if (err < 0) {
 		pr_err("%s: cannot set watch mode\n", __func__);
