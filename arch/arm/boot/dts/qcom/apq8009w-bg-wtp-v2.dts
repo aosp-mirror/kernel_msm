@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2018 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -52,6 +52,7 @@
 			synaptics,power-delay-ms = <200>;
 			synaptics,reset-delay-ms = <200>;
 			synaptics,max-y-for-2d = <389>;
+			synaptics,wakeup-gestures-en;
 			synaptics,resume-in-workqueue;
 			synaptics,x-flip;
 			synaptics,y-flip;
@@ -150,6 +151,11 @@
 		vdd-ldo1-supply = <&pm660_l11>;
 		vdd-ldo2-supply = <&pm660_l15>;
 	};
+
+	qcom,bg-daemon {
+		compatible = "qcom,bg-daemon";
+		qcom,bg-reset-gpio = <&pm660_gpios 5 0>;
+	};
 };
 
 &i2c_1 {
@@ -199,11 +205,11 @@
 
 &audio_codec_bg {
 	status = "ok";
-	vdd-spkr-supply = <&pm660_l11>;
 };
 
 &bg_cdc {
 	status = "ok";
+	vdd-spkr-supply = <&pm660_l11>;
 };
 
 &blsp1_uart1 {
@@ -230,6 +236,8 @@
 
 	config {
 		pins = "gpio98";
+		/delete-property/ bias-pull-down;
+		bias-disable; /* No PULL */
 	};
 };
 

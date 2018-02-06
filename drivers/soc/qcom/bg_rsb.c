@@ -1,4 +1,4 @@
-/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -43,9 +43,13 @@
 
 #define BGRSB_BGWEAR_SUBSYS "bg-wear"
 
+#define BGRSB_BTTN_CONFIGURE 5
 #define BGRSB_POWER_CALIBRATION 2
 #define BGRSB_POWER_ENABLE 1
 #define BGRSB_POWER_DISABLE 0
+#define BGRSB_GLINK_POWER_ENABLE 6
+#define BGRSB_GLINK_POWER_DISABLE 7
+
 
 struct bgrsb_regulator {
 	struct regulator *regldo11;
@@ -91,7 +95,11 @@ struct bgrsb_priv {
 	struct work_struct rsb_up_work;
 	struct work_struct rsb_down_work;
 
+	struct work_struct rsb_glink_up_work;
+	struct work_struct rsb_glink_down_work;
+
 	struct work_struct rsb_calibration_work;
+	struct work_struct bttn_configr_work;
 
 	struct work_struct glink_work;
 
@@ -118,12 +126,17 @@ struct bgrsb_priv {
 
 	uint32_t calbrtion_intrvl;
 	uint32_t calbrtion_cpi;
+
+	uint8_t bttn_configs;
 };
 
 static void *bgrsb_drv;
 
 int bgrsb_send_input(struct event *evnt)
 {
+	uint8_t press_code;
+	uint8_t value;
+
 	struct bgrsb_priv *dev =
 			container_of(bgrsb_drv, struct bgrsb_priv, lhndl);
 
@@ -133,10 +146,44 @@ int bgrsb_send_input(struct event *evnt)
 	if (evnt->sub_id == 1) {
 		input_report_rel(dev->input, REL_WHEEL, evnt->evnt_data);
 		input_sync(dev->input);
-	} else
-		pr_debug("event: type[%d] , data: %d\n",
-						evnt->sub_id, evnt->evnt_data);
+	} else if (evnt->sub_id == 2) {
 
+		press_code = (uint8_t) evnt->evnt_data;
+		value = (uint8_t) (evnt->evnt_data >> 8);
+
+		switch (press_code) {
+		case 0x1:
+			if (value == 0) {
+				input_report_key(dev->input, KEY_VOLUMEDOWN, 1);
+				input_sync(dev->input);
+			} else {
+				input_report_key(dev->input, KEY_VOLUMEDOWN, 0);
+				input_sync(dev->input);
+			}
+			break;
+		case 0x2:
+			if (value == 0) {
+				input_report_key(dev->input, KEY_VOLUMEUP, 1);
+				input_sync(dev->input);
+			} else {
+				input_report_key(dev->input, KEY_VOLUMEUP, 0);
+				input_sync(dev->input);
+			}
+			break;
+		case 0x3:
+			if (value == 0) {
+				input_report_key(dev->input, KEY_POWER, 1);
+				input_sync(dev->input);
+			} else {
+				input_report_key(dev->input, KEY_POWER, 0);
+				input_sync(dev->input);
+			}
+			break;
+		default:
+			pr_info("event: type[%d] , data: %d\n",
+						evnt->sub_id, evnt->evnt_data);
+		}
+	}
 	return 0;
 }
 EXPORT_SYMBOL(bgrsb_send_input);
@@ -362,6 +409,30 @@ static void bgrsb_bgdown_work(struct work_struct *work)
 	pr_debug("RSB current state is : %d\n", dev->bgrsb_current_state);
 }
 
+static void bgrsb_glink_bgdown_work(struct work_struct *work)
+{
+	struct bgrsb_priv *dev = container_of(work, struct bgrsb_priv,
+							rsb_glink_down_work);
+
+	if (dev->bgrsb_current_state == BGRSB_STATE_RSB_ENABLED) {
+		if (bgrsb_ldo_work(dev, BGRSB_DISABLE_LDO15) == 0)
+			dev->bgrsb_current_state = BGRSB_STATE_RSB_CONFIGURED;
+		else
+			pr_err("Failed to unvote LDO-15 on BG down\n");
+	}
+
+	if (dev->bgrsb_current_state == BGRSB_STATE_RSB_CONFIGURED) {
+		if (bgrsb_ldo_work(dev, BGRSB_DISABLE_LDO11) == 0)
+			dev->bgrsb_current_state = BGRSB_STATE_INIT;
+		else
+			pr_err("Failed to unvote LDO-11 on BG Glink down\n");
+	}
+	if (dev->handle)
+		glink_close(dev->handle);
+	dev->handle = NULL;
+	pr_debug("BG Glink Close connection\n");
+}
+
 static int bgrsb_tx_msg(struct bgrsb_priv *dev, void  *msg, size_t len)
 {
 	int rc = 0;
@@ -457,6 +528,36 @@ static void bgrsb_bgup_work(struct work_struct *work)
 	}
 }
 
+static void bgrsb_glink_bgup_work(struct work_struct *work)
+{
+	int rc = 0;
+	struct bgrsb_priv *dev = container_of(work, struct bgrsb_priv,
+							rsb_glink_up_work);
+
+	if (bgrsb_ldo_work(dev, BGRSB_ENABLE_LDO11) == 0) {
+
+		INIT_WORK(&dev->glink_work, bgrsb_glink_open_work);
+		queue_work(dev->bgrsb_event_wq, &dev->glink_work);
+
+		rc = wait_event_timeout(dev->link_state_wait,
+					(dev->chnl_state == true),
+						msecs_to_jiffies(TIMEOUT_MS*2));
+		if (rc == 0) {
+			pr_err("Glink channel connection time out\n");
+			return;
+		}
+		rc = bgrsb_configr_rsb(dev, true);
+		if (rc != 0) {
+			pr_err("BG Glink failed to configure RSB %d\n", rc);
+			if (bgrsb_ldo_work(dev, BGRSB_DISABLE_LDO11) == 0)
+				dev->bgrsb_current_state = BGRSB_STATE_INIT;
+			return;
+		}
+		dev->bgrsb_current_state = BGRSB_STATE_RSB_CONFIGURED;
+		pr_debug("Glink RSB Cofigured\n");
+	}
+}
+
 /**
  *ssr_bg_cb(): callback function is called
  *by ssr framework when BG goes down, up and during ramdump
@@ -544,8 +645,6 @@ static void bgrsb_disable_rsb(struct work_struct *work)
 								rsb_down_work);
 
 	if (dev->bgrsb_current_state == BGRSB_STATE_RSB_ENABLED) {
-		if (bgrsb_ldo_work(dev, BGRSB_DISABLE_LDO15) != 0)
-			return;
 
 		req.cmd_id = 0x02;
 		req.data = 0x00;
@@ -555,6 +654,10 @@ static void bgrsb_disable_rsb(struct work_struct *work)
 			pr_err("Failed to send disable command to BG\n");
 			return;
 		}
+
+		if (bgrsb_ldo_work(dev, BGRSB_DISABLE_LDO15) != 0)
+			return;
+
 		dev->bgrsb_current_state = BGRSB_STATE_RSB_CONFIGURED;
 		pr_debug("RSB Disabled\n");
 	}
@@ -586,6 +689,27 @@ static void bgrsb_calibration(struct work_struct *work)
 		return;
 	}
 	pr_debug("RSB Calibbered\n");
+}
+
+static void bgrsb_buttn_configration(struct work_struct *work)
+{
+	int rc = 0;
+	struct bgrsb_msg req = {0};
+	struct bgrsb_priv *dev =
+			container_of(work, struct bgrsb_priv,
+							bttn_configr_work);
+
+	req.cmd_id = 0x05;
+	req.data = dev->bttn_configs;
+
+	rc = bgrsb_tx_msg(dev, &req, 5);
+	if (rc != 0) {
+		pr_err("Failed to send button configuration cmnd to BG\n");
+		return;
+	}
+
+	dev->bttn_configs = 0;
+	pr_debug("Button configured\n");
 }
 
 static int split_bg_work(struct bgrsb_priv *dev, char *str)
@@ -635,6 +759,24 @@ static int split_bg_work(struct bgrsb_priv *dev, char *str)
 		dev->calbrtion_cpi = (uint32_t)val;
 
 		queue_work(dev->bgrsb_wq, &dev->rsb_calibration_work);
+		break;
+	case BGRSB_BTTN_CONFIGURE:
+		tmp = strsep(&str, ":");
+		if (!tmp)
+			return -EINVAL;
+
+		ret = kstrtol(tmp, 10, &val);
+		if (ret < 0)
+			return ret;
+
+		dev->bttn_configs = (uint8_t)val;
+		queue_work(dev->bgrsb_wq, &dev->bttn_configr_work);
+		break;
+	case BGRSB_GLINK_POWER_DISABLE:
+		queue_work(dev->bgrsb_wq, &dev->rsb_glink_down_work);
+		break;
+	case BGRSB_GLINK_POWER_ENABLE:
+		queue_work(dev->bgrsb_wq, &dev->rsb_glink_up_work);
 		break;
 	}
 	return 0;
@@ -709,6 +851,9 @@ static int bgrsb_init(struct bgrsb_priv *dev)
 	INIT_WORK(&dev->rsb_up_work, bgrsb_enable_rsb);
 	INIT_WORK(&dev->rsb_down_work, bgrsb_disable_rsb);
 	INIT_WORK(&dev->rsb_calibration_work, bgrsb_calibration);
+	INIT_WORK(&dev->bttn_configr_work, bgrsb_buttn_configration);
+	INIT_WORK(&dev->rsb_glink_down_work, bgrsb_glink_bgdown_work);
+	INIT_WORK(&dev->rsb_glink_up_work, bgrsb_glink_bgup_work);
 
 	return 0;
 
@@ -743,6 +888,8 @@ static int bg_rsb_probe(struct platform_device *pdev)
 		goto err_ret_dev;
 
 	input_set_capability(input, EV_REL, REL_WHEEL);
+	input_set_capability(input, EV_KEY, KEY_VOLUMEUP);
+	input_set_capability(input, EV_KEY, KEY_VOLUMEDOWN);
 	input->name = "bg-spi";
 
 	rc = input_register_device(input);
@@ -839,7 +986,7 @@ static struct platform_driver bg_rsb_driver = {
 		.name = "bg-rsb",
 		.of_match_table = bg_rsb_of_match,
 	},
-	.probe          = bg_rsb_probe,
+	.probe		= bg_rsb_probe,
 	.remove		= bg_rsb_remove,
 	.resume		= bg_rsb_resume,
 	.suspend	= bg_rsb_suspend,

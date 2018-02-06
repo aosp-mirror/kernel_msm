@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -57,6 +57,7 @@
 
 		qcom,idle-timeout = <80>; //msec
 		qcom,strtstp-sleepwake;
+		qcom,gpu-disable-fuse = <0x44 0x00000001 27>;
 
 		/*
 		 * Clocks = KGSL_CLK_CORE | KGSL_CLK_IFACE |
@@ -92,26 +93,6 @@
 		/* CPU latency parameter */
 		qcom,pm-qos-active-latency = <701>;
 		qcom,pm-qos-wakeup-latency = <701>;
-
-		/* GPU Mempools */
-		qcom,gpu-mempools {
-			#address-cells= <1>;
-			#size-cells = <0>;
-			compatible = "qcom,gpu-mempools";
-
-			qcom,mempool-max-pages = <32768>;
-
-			/* 4K Page Pool configuration */
-			qcom,gpu-mempool@0 {
-				reg = <0>;
-				qcom,mempool-page-size = <4096>;
-			};
-			/* 64K Page Pool configuration */
-			qcom,gpu-mempool@1 {
-				reg = <1>;
-				qcom,mempool-page-size  = <65536>;
-			};
-		};
 
 		/* Power levels */
 		qcom,gpu-pwrlevels {

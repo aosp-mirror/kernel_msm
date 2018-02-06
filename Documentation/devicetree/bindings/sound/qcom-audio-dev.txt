@@ -1997,6 +1997,9 @@ Optional properties:
 - qcom,wsa-devs: This property contains list of wsa codec names. The names
 		should comply with the wsa nodes configurations.
 - qcom,wsa-aux-dev-prefix: This property contains list of wsa codec prefixes.
+- qcom,tdm-i2s-switch-enable: For chipsets where tdm mics are controlled by
+			      switch, drive corresponding gpio to output high
+			      to enable switch.
 
 Example:
 	sound {
@@ -2770,6 +2773,7 @@ Required properties:
 	- compatible :"qcom,bg-cdc-glink"
 - qcom,msm-glink-channels: Number of glink channels available to communicate
 			   with the glink client
+- vdd-spkr-supply: BG codec supply's speaker regulator device tree node.
 
 
 Example:
