@@ -229,6 +229,7 @@ struct fastrpc_channel_ctx {
 	int ramdumpenabled;
 	void *remoteheap_ramdump_dev;
 	struct fastrpc_glink_info link;
+	int reset_tried;
 };
 
 struct fastrpc_apps {
@@ -1588,14 +1589,41 @@ static int fastrpc_internal_invoke(struct fastrpc_file *fl, uint32_t mode,
 		inv_args(ctx);
 	PERF_END);
  wait:
-	if (kernel)
-		wait_for_completion(&ctx->work);
-	else {
+	if (kernel) {
+		/* Wait long enough that we expect never to get a reply. */
+		int wait_result = wait_for_completion_timeout(
+						&ctx->work, RPC_TIMEOUT * 2);
+		if (wait_result == 0) {
+			int channel = gcinfo[cid].channel;
+
+			printk(KERN_WARNING
+			       "%s: fastrpc to %s timed out %sside kernel(%d):"
+			       " %d%s\n", __func__,
+			       gcinfo[cid].subsys, kernel ? "in" : "out",
+			       current->pid, wait_result,
+			       gcinfo[cid].reset_tried ?
+					" (tried reset before)" : "");
+
+			/* It should be safe to restart either of these DSPs. */
+			if ((channel == SMD_APPS_QDSP ||
+			    channel == SMD_APPS_DSPS) &&
+			    kernel && gcinfo[cid].reset_tried == 0) {
+				gcinfo[cid].reset_tried = 1;
+				subsystem_restart(gcinfo[cid].subsys);
+			}
+		} else if (unlikely(gcinfo[cid].reset_tried != 0)) {
+			gcinfo[cid].reset_tried = 0;
+		}
+		/* We consider ourselves "interrupted" if the call timed out. */
+		interrupted = (wait_result <= 0) ? -ERESTARTSYS : 0;
+	} else {
 		interrupted = wait_for_completion_interruptible(&ctx->work);
-		VERIFY(err, 0 == (err = interrupted));
-		if (err)
-			goto bail;
 	}
+
+	VERIFY(err, 0 == (err = interrupted));
+	if (err)
+		goto bail;
+
 	VERIFY(err, 0 == (err = ctx->retval));
 	if (err)
 		goto bail;
