@@ -152,6 +152,11 @@
 		vdd-ldo1-supply = <&pm660_l11>;
 		vdd-ldo2-supply = <&pm660_l15>;
 	};
+
+	qcom,bg-daemon {
+		compatible = "qcom,bg-daemon";
+		qcom,bg-reset-gpio = <&pm660_gpios 5 0>;
+	};
 };
 
 &i2c_1 {
@@ -201,11 +206,11 @@
 
 &audio_codec_bg {
 	status = "ok";
-	vdd-spkr-supply = <&pm660_l11>;
 };
 
 &bg_cdc {
 	status = "ok";
+	vdd-spkr-supply = <&pm660_l11>;
 };
 
 &blsp1_uart1 {
@@ -232,6 +237,8 @@
 
 	config {
 		pins = "gpio98";
+		/delete-property/ bias-pull-down;
+		bias-disable; /* No PULL */
 	};
 };
 

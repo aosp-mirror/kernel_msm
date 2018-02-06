@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -206,6 +206,10 @@
 	qcom,clock-a7@0b011050 {
 		cpu-vdd-supply = <&apc_vreg_corner>;
 	};
+
+	qcom,rpmcc@1800000 {
+		compatible = "qcom,rpmcc-8909-pm660";
+	};
 };
 
 &sdhc_1 {
@@ -263,6 +267,16 @@
 		qcom,master-en = <1>;
 		qcom,out-strength = <2>;
 	};
+
+	gpio@c400 {
+		status = "ok";
+		qcom,mode = <1>;
+		qcom,pull = <5>;
+		qcom,vin-sel = <0>;
+		qcom,src-sel = <2>;
+		qcom,master-en = <1>;
+		qcom,out-strength = <2>;
+	};
 };
 
 &pm660_misc {
@@ -279,10 +293,10 @@
 };
 
 / {
+	/delete-node/ qcom,battery-data;
 	mtp_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <15>;
 		#include "triton-fg-gen3-batterydata-itech-3000mah.dtsi"
-		#include "triton-fg-gen3-batterydata-ascent-3450mah.dtsi"
 	};
 };
 
