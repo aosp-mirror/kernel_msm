@@ -385,8 +385,10 @@ static void cs40l20_vibe_start_worker(struct work_struct *work)
 				   CS40L20_INDEX_MASK);
 		if (ret)
 			dev_err(dev, "Failed to start playback\n");
-		break;
 
+		cs40l20->led_dev.brightness = LED_FULL;
+
+		break;
 	case 0x0001 ... 0x7FFF:
 		ret = regmap_write(regmap,
 				   cs40l20_dsp_reg(cs40l20, "TRIGGERINDEX",
@@ -394,6 +396,9 @@ static void cs40l20_vibe_start_worker(struct work_struct *work)
 				   cs40l20->cp_trailer_index);
 		if (ret)
 			dev_err(dev, "Failed to start playback\n");
+
+		cs40l20->led_dev.brightness = LED_FULL;
+
 		break;
 
 	case CS40L20_INDEX_DIAG:
@@ -428,6 +433,7 @@ static void cs40l20_vibe_start_worker(struct work_struct *work)
 			goto err_mutex;
 		}
 		cs40l20->diag_state = CS40L20_DIAG_STATE_RUN;
+		cs40l20->led_dev.brightness = LED_FULL;
 
 		break;
 
@@ -446,6 +452,7 @@ static void cs40l20_vibe_stop_worker(struct work_struct *work)
 	struct regmap *regmap = cs40l20->regmap;
 	struct device *dev = cs40l20->dev;
 	int ret;
+	unsigned int reg;
 
 	mutex_lock(&cs40l20->lock);
 
@@ -462,17 +469,18 @@ static void cs40l20_vibe_stop_worker(struct work_struct *work)
 		if (ret)
 			dev_err(dev, "Failed to disable stimulus mode\n");
 		break;
-
 	default:
-		ret = regmap_write(regmap,
-				   cs40l20_dsp_reg(cs40l20, "ENDPLAYBACK",
-						   CS40L20_XM_UNPACKED_TYPE),
-				   1);
+		reg = cs40l20_dsp_reg(cs40l20, "ENDPLAYBACK",
+				      CS40L20_XM_UNPACKED_TYPE);
+		ret = regmap_write(regmap, reg, 1);
 		if (ret)
 			dev_err(dev, "Failed to stop playback\n");
+
+		/* fall-thru*/
 	}
 
 	cs40l20->cp_trailer_index = 0;
+	cs40l20->led_dev.brightness = LED_OFF;
 
 	mutex_unlock(&cs40l20->lock);
 }
@@ -484,14 +492,22 @@ static void cs40l20_vibe_brightness_set(struct led_classdev *led_cdev,
 	struct cs40l20_private *cs40l20 =
 		container_of(led_cdev, struct cs40l20_private, led_dev);
 
-	if (!cs40l20->vibe_workqueue || !cs40l20->vibe_init_success)
+	if (!cs40l20->vibe_workqueue || !cs40l20->vibe_init_success) {
+		dev_err(cs40l20->dev,
+			"Failed to set vibe when it's not ready\n");
 		return;
+	}
 
-	switch (brightness) {
-	case LED_OFF:
-		queue_work(cs40l20->vibe_workqueue, &cs40l20->vibe_stop_work);
-		break;
-	default:
+	if (brightness == LED_OFF) {
+		/* If for any reasons the stop_work is too slow, the driver must
+		 * wait till the previous stop_work has finished here or else
+		 * the LRA might not stop potentially
+		 */
+		while (!queue_work(cs40l20->vibe_workqueue,
+				   &cs40l20->vibe_stop_work))
+			udelay(1000);
+
+	} else {
 		queue_work(cs40l20->vibe_workqueue, &cs40l20->vibe_start_work);
 	}
 }
@@ -640,13 +656,15 @@ static void cs40l20_dsp_start(struct cs40l20_private *cs40l20)
 	struct device *dev = cs40l20->dev;
 	unsigned int val;
 
-	ret = regmap_update_bits(regmap, CS40L20_DSP1_CCM_CORE_CTRL,
-				 CS40L20_DSP1_EN_MASK,
-				 1 << CS40L20_DSP1_EN_SHIFT);
+	ret = regmap_write_bits(regmap, CS40L20_DSP1_CCM_CORE_CTRL,
+				CS40L20_DSP1_EN_MASK,
+				1 << CS40L20_DSP1_EN_SHIFT);
 	if (ret) {
 		dev_err(dev, "Failed to enable DSP\n");
 		return;
 	}
+
+	usleep_range(5000, 8000);
 
 	ret = regmap_read(regmap, cs40l20_dsp_reg(cs40l20, "HALO_STATE",
 						  CS40L20_XM_UNPACKED_TYPE),
@@ -656,12 +674,13 @@ static void cs40l20_dsp_start(struct cs40l20_private *cs40l20)
 		return;
 	}
 
-	if (val == CS40L20_HALO_STATE_RUNNING) {
-		dev_info(dev, "Haptics algorithm started\n");
-	} else {
-		dev_err(dev, "Failed to start haptics algorithm\n");
+	if (val != CS40L20_HALO_STATE_RUNNING) {
+		dev_err(dev, "Register HALO_STATE reports %d, expected %d\n",
+			val, CS40L20_HALO_STATE_RUNNING);
 		return;
 	}
+
+	dev_dbg(dev, "Haptics algorithm started\n");
 
 	ret = regmap_write(regmap, cs40l20_dsp_reg(cs40l20, "TIMEOUT_MS",
 						   CS40L20_XM_UNPACKED_TYPE),
@@ -704,78 +723,6 @@ static int cs40l20_raw_write(struct cs40l20_private *cs40l20, unsigned int reg,
 	}
 
 	return ret;
-}
-
-static void cs40l20_waveform_load(const struct firmware *fw, void *context)
-{
-	int ret;
-	struct cs40l20_private *cs40l20 = (struct cs40l20_private *)context;
-	struct device *dev = cs40l20->dev;
-	unsigned int pos = CS40L20_WT_FILE_HEADER_SIZE;
-	unsigned int block_type, block_length;
-
-	if (!fw) {
-		dev_warn(dev, "Using default wavetable\n");
-		goto skip_loading;
-	}
-
-	if (memcmp(fw->data, "WMDR", 4)) {
-		dev_err(dev, "Failed to recognize waveform file\n");
-		goto err_rls_fw;
-	}
-
-	dev_info(dev, "Found custom wavetable\n");
-
-	while (pos < fw->size) {
-
-		/* block offset is not used here */
-		pos += CS40L20_WT_DBLK_OFFSET_SIZE;
-
-		block_type = fw->data[pos]
-			+ (fw->data[pos + 1] << 8);
-		pos += (CS40L20_WT_DBLK_TYPE_SIZE
-			+ CS40L20_WT_DBLK_UNUSED_SIZE);
-
-		block_length = fw->data[pos]
-			+ (fw->data[pos + 1] << 8)
-			+ (fw->data[pos + 2] << 16)
-			+ (fw->data[pos + 3] << 24);
-		pos += CS40L20_WT_DBLK_LENGTH_SIZE;
-
-		switch (block_type) {
-		case CS40L20_XM_UNPACKED_TYPE:
-			ret = cs40l20_raw_write(cs40l20,
-					cs40l20_dsp_reg(cs40l20, "WAVETABLE",
-						CS40L20_XM_UNPACKED_TYPE),
-					&fw->data[pos], block_length,
-					CS40L20_MAX_WLEN);
-			if (ret) {
-				dev_err(dev,
-					"Failed to write XM_UNPACKED memory\n");
-				goto err_rls_fw;
-			}
-			break;
-		case CS40L20_YM_UNPACKED_TYPE:
-			ret = cs40l20_raw_write(cs40l20,
-					cs40l20_dsp_reg(cs40l20, "WAVETABLEYM",
-						CS40L20_YM_UNPACKED_TYPE),
-					&fw->data[pos], block_length,
-					CS40L20_MAX_WLEN);
-			if (ret) {
-				dev_err(dev,
-					"Failed to write YM_UNPACKED memory\n");
-				goto err_rls_fw;
-			}
-			break;
-		}
-
-		pos += block_length;
-	}
-
-skip_loading:
-	cs40l20_dsp_start(cs40l20);
-err_rls_fw:
-	release_firmware(fw);
 }
 
 static int cs40l20_algo_parse(struct cs40l20_private *cs40l20,
@@ -935,9 +882,9 @@ static void cs40l20_firmware_load(const struct firmware *fw, void *context)
 	if (ret)
 		goto err_rls_fw;
 
-	request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG, "cs40l20.bin",
-				dev, GFP_KERNEL, cs40l20,
-				cs40l20_waveform_load);
+	/* FIXME: Enable waveform download */
+	cs40l20_dsp_start(cs40l20);
+
 err_rls_fw:
 	release_firmware(fw);
 }
