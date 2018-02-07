@@ -534,7 +534,7 @@ config GOOGLE_CHARGER
 	tristate "Google Battery Charging Control"
 	help
 	  Say Y here to choose the Google battery charging control.
-	  The driver performs a muti CC-CV steps charging setting the Constant
+	  The driver performs a multi CC-CV steps charging setting the Constant
 	  Charge Current given battery temperature and voltage limits.
 
 source "drivers/power/supply/qcom/Kconfig"
