@@ -1,0 +1,34 @@
+function update_safestack_config() {
+  ${KERNEL_DIR}/scripts/config --file ${OUT_DIR}/.config \
+    -e SAFESTACK \
+    -e SAFESTACK_COLORING
+  (cd ${OUT_DIR} && \
+    make O=${OUT_DIR} $archsubarch CROSS_COMPILE=${CROSS_COMPILE} olddefconfig)
+}
+ARCH=arm64
+BRANCH=android-msm-bluecross-4.9
+CC=clang
+CLANG_TRIPLE=aarch64-linux-gnu-
+CROSS_COMPILE=aarch64-linux-android-
+CROSS_COMPILE_ARM32=arm-linux-androideabi-
+DEFCONFIG=b1c1_defconfig
+EXTRA_CMDS=''
+KERNEL_DIR=private/msm-google
+POST_DEFCONFIG_CMDS="check_defconfig && update_safestack_config"
+CLANG_PREBUILT_BIN=prebuilts-master/clang/host/linux-x86/clang-4579689/bin/
+LD_LIBRARY_PATH=${ROOT_DIR}/prebuilts-master/clang/host/linux-x86/clang-4579689/lib64:$LD_LIBRARY_PATH
+LINUX_GCC_CROSS_COMPILE_PREBUILTS_BIN=prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin
+LINUX_GCC_CROSS_COMPILE_ARM32_PREBUILTS_BIN=prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9/bin
+LZ4_PREBUILTS_BIN=prebuilts-master/misc/linux-x86/lz4
+DTC_PREBUILTS_BIN=prebuilts-master/misc/linux-x86/dtc
+LIBUFDT_PREBUILTS_BIN=prebuilts-master/misc/linux-x86/libufdt
+FILES="
+arch/arm64/boot/dtbo.img
+arch/arm64/boot/Image.gz-dtb
+vmlinux
+System.map
+"
+EXT_MODULES="
+private/msm-google-modules/wlan/qcacld-3.0
+"
+IN_KERNEL_MODULES=1
