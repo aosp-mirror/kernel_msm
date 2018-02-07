@@ -1452,15 +1452,15 @@ static ssize_t sop716_watch_mode_store(struct device *dev,
 	/* wait for motor move */
 	dist[0] = max(dist[MOTOR1], dist[MOTOR2]);
 	sop716_wait_for_motor_move_locked(dist[0]);
-	mutex_unlock(&si->lock);
 	if (err < 0) {
 		pr_err("%s: cannot set watch mode\n", __func__);
-		return err;
+		goto out;
 	}
 
 	si->watch_mode = true;
-
-	return count;
+out:
+	mutex_unlock(&si->lock);
+	return (err < 0)? err : count;
 }
 
 /*
