@@ -1612,6 +1612,27 @@ typedef enum
 
 /*
  * <ini>
+ * gindoor_channel_support - Mark indoor channels as enabled or passive
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to control the state of indoor channels. If the
+ * value is 1 then the indoor channels will be marked as enabled and
+ * if the value is 0 then the indoor channels will be marked as
+ * DFS
+ *
+ * The default value is 0
+ * </ini>
+ */
+#define CFG_INDOOR_CHANNEL_SUPPORT_NAME     "gindoor_channel_support"
+#define CFG_INDOOR_CHANNEL_SUPPORT_MIN      (0)
+#define CFG_INDOOR_CHANNEL_SUPPORT_MAX      (1)
+#define CFG_INDOOR_CHANNEL_SUPPORT_DEFAULT  (0)
+
+
+/*
+ * <ini>
  * g_mark_indoor_as_disable - Enable/Disable Indoor channel
  * @Min: 0
  * @Max: 1
@@ -3819,6 +3840,7 @@ typedef struct
    uint32_t                    btc_dyn_bt_len;
    uint32_t                    btc_dyn_bt_ext_len;
    uint32_t                    btc_dyn_num_bt_ext;
+   bool                        indoor_channel_support;
 
 } hdd_config_t;
 

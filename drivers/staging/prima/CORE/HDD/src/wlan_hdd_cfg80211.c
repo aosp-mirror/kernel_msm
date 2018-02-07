@@ -10554,13 +10554,14 @@ VOS_STATUS wlan_hdd_set_dhcp_server_offload(hdd_adapter_t *hostapd_adapter,
  * @wiphy_chan: wiphy channel number
  * @rfChannel: channel hw value
  * @disable: Disable/enable the flags
+ * @hdd_ctx: The HDD context handler
  *
  * Modify wiphy flags and cds state if channel is indoor.
  *
  * Return: void
  */
 void hdd_modify_indoor_channel_state_flags(struct ieee80211_channel *wiphy_chan,
-    v_U32_t rfChannel, bool disable)
+    v_U32_t rfChannel, bool disable, hdd_context_t *hdd_ctx)
 {
     v_U32_t channelLoop;
     eRfChannels channelEnum = INVALID_RF_CHANNEL;
@@ -10582,6 +10583,8 @@ void hdd_modify_indoor_channel_state_flags(struct ieee80211_channel *wiphy_chan,
                 IEEE80211_CHAN_DISABLED;
             regChannels[channelEnum].enabled =
                 NV_CHANNEL_DISABLE;
+            hddLog(VOS_TRACE_LEVEL_INFO, "Channel: %d marked as DISABLE",
+                                                           channelEnum);
         }
     } else {
         if (wiphy_chan->flags & IEEE80211_CHAN_INDOOR_ONLY) {
@@ -10591,16 +10594,26 @@ void hdd_modify_indoor_channel_state_flags(struct ieee80211_channel *wiphy_chan,
              * Indoor channels are marked as DFS
              * during regulatory processing
              */
+           if ((wiphy_chan->flags & (IEEE80211_CHAN_RADAR |
+                           IEEE80211_CHAN_PASSIVE_SCAN)) ||
+                           ((hdd_ctx->cfg_ini->indoor_channel_support == false)
+			     && (wiphy_chan->flags &
+                           IEEE80211_CHAN_INDOOR_ONLY))) {
+               regChannels[channelEnum].enabled = NV_CHANNEL_DFS;
+               hddLog(VOS_TRACE_LEVEL_INFO, "Channel: %d marked as DFS",
+                                                           channelEnum);
+           } else {
+               regChannels[channelEnum].enabled =
+                   NV_CHANNEL_ENABLE;
+               hddLog(VOS_TRACE_LEVEL_INFO, "Channel: %d marked as ENABLE",
+                                                           channelEnum);
+	   }
+       }
 
-            regChannels[channelEnum].enabled =
-                    NV_CHANNEL_DFS;
-        }
-    }
-
+   }
 }
 
-void hdd_update_indoor_channel(hdd_context_t *hdd_ctx,
-                    bool disable)
+void hdd_update_indoor_channel(hdd_context_t *hdd_ctx, bool disable)
 {
     int band_num;
     int chan_num;
@@ -10626,7 +10639,7 @@ void hdd_update_indoor_channel(hdd_context_t *hdd_ctx,
             rfChannel = wiphy->bands[band_num]->channels[chan_num].hw_value;
 
             hdd_modify_indoor_channel_state_flags(wiphy_chan, rfChannel,
-                                        disable);
+                                        disable, hdd_ctx);
         }
     }
     EXIT();
