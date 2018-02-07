@@ -76,6 +76,7 @@ module_param(poll_interval, uint, 0644);
 MODULE_PARM_DESC(poll_interval,
 	"battery poll interval in seconds - 0 disables polling");
 
+static int charger_online;
 
 static int request_fuel_gauge_data(struct nanohub_data *data);
 
@@ -368,12 +369,10 @@ static int bq27x00_battery_status(
 {
 	int status;
 
-	if (fg_info->cache.flags & BQ27XXX_FLAG_FC)
-		status = POWER_SUPPLY_STATUS_FULL;
-	else if (fg_info->cache.flags & BQ27XXX_FLAG_DSC)
-		status = POWER_SUPPLY_STATUS_DISCHARGING;
-	else
+	if (charger_online)
 		status = POWER_SUPPLY_STATUS_CHARGING;
+	else
+		status = POWER_SUPPLY_STATUS_DISCHARGING;
 
 	val->intval = status;
 
@@ -544,6 +543,7 @@ static void bq27x00_external_power_changed(struct power_supply *psy)
 		online = prop.intval;
 
 	pr_debug("nanohub: [FG] %s: online = %d\n", __func__, online);
+	charger_online = online;
 
 	fg_info->charger_online = online;
 	cancel_delayed_work_sync(&fg_info->work);
