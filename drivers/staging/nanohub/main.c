@@ -730,6 +730,8 @@ int __nanohub_send_AP_cmd(struct nanohub_data *data, enum AP_GPIO_CMD mode)
 		return -EINVAL;
 	}
 
+	mutex_lock(&(data->hub_mode_set_lock));
+
 	switch (mode) {
 	case GPIO_CMD_POWEROFF: /*0000*/
 	case GPIO_CMD_BAND:     /*0001*/
@@ -759,6 +761,8 @@ int __nanohub_send_AP_cmd(struct nanohub_data *data, enum AP_GPIO_CMD mode)
 	default:
 		break;
 	}
+
+	mutex_unlock(&(data->hub_mode_set_lock));
 
 	return 0;
 }
@@ -1450,7 +1454,7 @@ static int nanohub_kthread(void *arg)
 
 			ret = nanohub_comms_rx_retrans_boottime(
 			    data, CMD_COMMS_READ, buf->buffer,
-			    sizeof(buf->buffer), 10, 0);
+			    sizeof(buf->buffer), 10, 10);
 
 			if (ret > 0) {
 				nanohub_process_buffer(data, &buf, ret);
@@ -1475,9 +1479,9 @@ static int nanohub_kthread(void *arg)
 				data->kthread_err_cnt++;
 				if (data->kthread_err_cnt >= KTHREAD_WARN_CNT) {
 					dev_err(sensor_dev,
-						"%s: kthread_err_cnt=%d\n",
+						"%s: kthread_err_cnt=%d, ret = %d\n",
 						__func__,
-						data->kthread_err_cnt);
+						data->kthread_err_cnt, ret);
 					nanohub_set_state(data, ST_ERROR);
 					continue;
 				}
@@ -1825,6 +1829,7 @@ struct iio_dev *nanohub_probe(struct device *dev, struct iio_dev *iio_dev)
 	data->iio_dev = iio_dev;
 	data->pdata = pdata;
 
+	mutex_init(&(data->hub_mode_set_lock));
 	init_waitqueue_head(&data->kthread_wait);
 
 	nanohub_io_init(&data->free_pool, data, dev);
