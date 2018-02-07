@@ -7,12 +7,18 @@
 #include <linux/init.h>
 #include <linux/fs.h>
 #include <linux/mm.h>
+#include <linux/safestack.h>
 
 #include <asm/pgtable.h>
 #include <asm/uaccess.h>
 
 static struct signal_struct init_signals = INIT_SIGNALS(init_signals);
 static struct sighand_struct init_sighand = INIT_SIGHAND(init_sighand);
+
+#ifdef CONFIG_SAFESTACK
+static unsigned long init_unsafe_stack[UNSAFE_STACK_SIZE / sizeof(long)]
+	__init_task_data __aligned(UNSAFE_STACK_ALIGN);
+#endif
 
 /* Initial task structure */
 struct task_struct init_task = INIT_TASK(init_task);

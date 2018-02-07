@@ -712,11 +712,14 @@ static void check_stack_usage(void)
 {
 	static DEFINE_SPINLOCK(low_water_lock);
 	static int lowest_to_date = THREAD_SIZE;
+	static int unsafe_lowest_to_date = UNSAFE_STACK_SIZE;
 	unsigned long free;
+	unsigned long unsafe_free;
 
 	free = stack_not_used(current);
+	unsafe_free = unsafe_stack_not_used(current);
 
-	if (free >= lowest_to_date)
+	if (free >= lowest_to_date && unsafe_free >= unsafe_lowest_to_date)
 		return;
 
 	spin_lock(&low_water_lock);
@@ -724,6 +727,12 @@ static void check_stack_usage(void)
 		pr_info("%s (%d) used greatest stack depth: %lu bytes left\n",
 			current->comm, task_pid_nr(current), free);
 		lowest_to_date = free;
+	}
+	if (unsafe_free < unsafe_lowest_to_date) {
+		pr_info("%s (%d) used greatest unsafe stack depth: %lu bytes "
+			"left\n",
+			current->comm, task_pid_nr(current), unsafe_free);
+		unsafe_lowest_to_date = unsafe_free;
 	}
 	spin_unlock(&low_water_lock);
 }

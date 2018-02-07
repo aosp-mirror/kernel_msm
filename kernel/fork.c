@@ -76,6 +76,7 @@
 #include <linux/compiler.h>
 #include <linux/sysctl.h>
 #include <linux/kcov.h>
+#include <linux/safestack.h>
 
 #include <asm/pgtable.h>
 #include <asm/pgalloc.h>
@@ -321,6 +322,7 @@ static void release_task_stack(struct task_struct *tsk)
 	account_kernel_stack(tsk, -1);
 	arch_release_thread_stack(tsk->stack);
 	free_thread_stack(tsk);
+	free_unsafe_stack(tsk);
 	tsk->stack = NULL;
 #ifdef CONFIG_VMAP_STACK
 	tsk->stack_vm_area = NULL;
@@ -451,6 +453,8 @@ void __init fork_init(void)
 	for (i = 0; i < UCOUNT_COUNTS; i++) {
 		init_user_ns.ucount_max[i] = max_threads/2;
 	}
+
+	init_unsafe_stack_cache();
 }
 
 int __weak arch_dup_task_struct(struct task_struct *dst,
@@ -466,6 +470,8 @@ void set_task_stack_end_magic(struct task_struct *tsk)
 
 	stackend = end_of_stack(tsk);
 	*stackend = STACK_END_MAGIC;	/* for overflow detection */
+
+	set_unsafe_stack_end_magic(tsk);
 }
 
 static struct task_struct *dup_task_struct(struct task_struct *orig, int node)
@@ -501,7 +507,10 @@ static struct task_struct *dup_task_struct(struct task_struct *orig, int node)
 #ifdef CONFIG_THREAD_INFO_IN_TASK
 	atomic_set(&tsk->stack_refcount, 1);
 #endif
+	if (err)
+		goto free_stack;
 
+	err = alloc_unsafe_stack(tsk, node);
 	if (err)
 		goto free_stack;
 
@@ -544,6 +553,7 @@ static struct task_struct *dup_task_struct(struct task_struct *orig, int node)
 
 free_stack:
 	free_thread_stack(tsk);
+	free_unsafe_stack(tsk);
 free_tsk:
 	free_task_struct(tsk);
 	return NULL;

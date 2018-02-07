@@ -560,6 +560,32 @@ config CFI_CLANG_SHADOW
 	  If you select this option, the kernel builds a fast look-up table of
 	  CFI check functions in loaded modules to reduce overhead.
 
+config ARCH_SUPPORTS_SAFESTACK
+	bool
+	help
+	  An architecture should select this if it supports clang SafeStack,
+	  has asm/safestack.h, and implements __safestack_pointer_address().
+
+config SAFESTACK
+	bool "Use clang SafeStack"
+	depends on ARCH_SUPPORTS_SAFESTACK
+	help
+	  This option enables clang SafeStack, which protects function return
+	  addresses against attacks based on stack buffer overflows.
+
+	  SafeStack splits the kernel stack into safe and unsafe parts. Safe
+	  stack is used only for data that's at compile time determined to be
+	  only accessed in a safe way. This prevents a buffer overflow in the
+	  unsafe stack from overwriting any data in the safe stack, including
+	  the return address.
+
+config SAFESTACK_COLORING
+	bool "Use clang SafeStack coloring (EXPERIMENTAL)"
+	depends on SAFESTACK
+	help
+	  This option enables clang SafeStack coloring, which reduces unsafe
+	  stack usage.
+
 config HAVE_ARCH_WITHIN_STACK_FRAMES
 	bool
 	help

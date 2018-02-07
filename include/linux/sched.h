@@ -1748,6 +1748,12 @@ struct task_struct {
 	unsigned int flags;	/* per process flags, defined below */
 	unsigned int ptrace;
 
+#ifdef CONFIG_SAFESTACK
+	void *unsafe_stack;
+	void *unsafe_stack_ptr;
+	void *unsafe_saved_ptr;
+#endif
+
 #ifdef CONFIG_SMP
 	struct llist_node wake_entry;
 	int on_cpu;
@@ -3564,14 +3570,18 @@ static inline void *try_get_task_stack(struct task_struct *tsk)
 static inline void put_task_stack(struct task_struct *tsk) {}
 #endif
 
+#include <linux/safestack.h>
+
 #define task_stack_end_corrupted(task) \
-		(*(end_of_stack(task)) != STACK_END_MAGIC)
+		(*(end_of_stack(task)) != STACK_END_MAGIC || \
+			unsafe_stack_corrupted(task))
 
 static inline int object_is_on_stack(void *obj)
 {
 	void *stack = task_stack_page(current);
 
-	return (obj >= stack) && (obj < (stack + THREAD_SIZE));
+	return ((obj >= stack) && (obj < (stack + THREAD_SIZE))) ||
+			object_is_on_unsafe_stack(obj);
 }
 
 extern void thread_stack_cache_init(void);
