@@ -84,6 +84,8 @@ do { \
 } while (0)
 
 
+/* Use decimal-formatted raw data */
+#define RAW_DATA_FORMAT_DEC
 
 #ifdef KERNEL_ABOVE_2_6_38
 #define TYPE_B_PROTOCOL
@@ -223,7 +225,7 @@ static ssize_t fts_appid_show(struct device *dev, struct device_attribute *attr,
 	int error;
 	char temp[100];
 	
-	error = snprintf(buf, PAGE_SIZE, "%s\n", printHex("EXT Release = ",
+	error = snprintf(buf, PAGE_SIZE, "%s\n", printHex("ST-V",
 			systemInfo.u8_releaseInfo,EXTERNAL_RELEASE_INFO_SIZE, temp));
 	
 	return error;
@@ -1210,6 +1212,7 @@ static ssize_t stm_fts_cmd_show(struct device *dev, struct device_attribute *att
     int res, j, doClean = 0, count=0, index=0;
 
     int size = (6 * 2)+1;
+	int nodes = 0;
 	int init_type = SPECIAL_PANEL_INIT;
     u8 *all_strbuff = NULL;
     struct fts_ts_info *info = dev_get_drvdata(dev);
@@ -1291,7 +1294,13 @@ static ssize_t stm_fts_cmd_show(struct device *dev, struct device_attribute *att
 					logError(0,
 						 "%s The frame size is %d words\n",
 						 tag, res);
+#ifdef RAW_DATA_FORMAT_DEC
+					size += 3 * 2 +
+					    (7 * frameMS.header.sense_node + 1)
+					    * frameMS.header.force_node;
+#else
 					size += (res * sizeof(short) + 2) * 2;
+#endif
 					/* set res to OK because if getMSFrame
 					 * is successful res = number of words
 					 * read
@@ -1332,7 +1341,13 @@ static ssize_t stm_fts_cmd_show(struct device *dev, struct device_attribute *att
 					logError(0,
 						 "%s The frame size is %d words\n",
 						 tag, res);
+#ifdef RAW_DATA_FORMAT_DEC
+					size += 3 * 2 +
+					    (7 * frameMS.header.sense_node + 1)
+					    * frameMS.header.force_node;
+#else
 					size += (res * sizeof(short) + 2) * 2;
+#endif
 					/* set res to OK because if getMSFrame
 					 * is successful res = number of words
 					 * read
@@ -1385,8 +1400,43 @@ static ssize_t stm_fts_cmd_show(struct device *dev, struct device_attribute *att
 					print_frame_i8("SS Data Cx2_fm = ", array1dTo2d_i8(comData.cx2_fm, comData.header.force_node, 1), comData.header.force_node, 1);
 					print_frame_u8("SS Data Ix2_sn = ", array1dTo2d_u8(comData.ix2_sn, comData.header.sense_node, comData.header.sense_node), 1, comData.header.sense_node);
 					print_frame_i8("SS Data Cx2_sn = ", array1dTo2d_i8(comData.cx2_sn, comData.header.sense_node, comData.header.sense_node), 1, comData.header.sense_node);
-                }
-                break;
+		}
+		break;
+
+		/* Read mutual strength */
+		case 0x17:
+			logError(0, "%s Get 1 MS Strength\n", tag);
+			setScanMode(SCAN_MODE_ACTIVE, 0xFF);
+			msleep(WAIT_FOR_FRESH_FRAMES);
+			setScanMode(SCAN_MODE_ACTIVE, 0x00);
+			msleep(WAIT_AFTER_SENSEOFF);
+			/* Flush outstanding touch events */
+			flushFIFO();
+			nodes = getMSFrame3(MS_STRENGTH, &frameMS);
+			if (nodes < 0) {
+				res = nodes;
+				logError(0,
+					 "%s Error while taking the MS strength... ERROR %08X\n",
+					 tag, res);
+			} else {
+				logError(0, "%s The frame size is %d words\n",
+					 tag, nodes);
+#ifdef RAW_DATA_FORMAT_DEC
+				size += 3 * 2 +
+				    (7 * frameMS.header.sense_node + 1)
+				    * frameMS.header.force_node;
+#else
+				size += (nodes * sizeof(short) + 2) * 2;
+#endif
+				print_frame_short("MS strength =",
+				    array1dTo2d_short(frameMS.node_data,
+						frameMS.node_data_size,
+						frameMS.header.sense_node),
+				    frameMS.header.force_node,
+				    frameMS.header.sense_node);
+				res = OK;
+			}
+			break;
 
             case 0x03: // MS Raw DATA TEST
                 res = fts_system_reset();
@@ -1451,15 +1501,31 @@ END: //here start the reporting phase, assembling the data to send in the file n
         /*all the other cases are already fine printing only the res.*/
         switch (typeOfComand[0]) {
             case 0x13:
+	case 0x17:
+#ifdef RAW_DATA_FORMAT_DEC
+		index += snprintf(all_strbuff + index, 4, "%3d",
+				 (u8)frameMS.header.force_node);
+		index += snprintf(all_strbuff + index, 4, "%3d",
+				 (u8)frameMS.header.sense_node);
+#else
                 snprintf(&all_strbuff[index], 3, "%02X", (u8) frameMS.header.force_node);
 				index+=2;
 
                 snprintf(&all_strbuff[index], 3, "%02X", (u8) frameMS.header.sense_node);
 				index+=2;
+#endif
 
                 for (j = 0; j < frameMS.node_data_size; j++) {
+#ifdef RAW_DATA_FORMAT_DEC
+			if (j % frameMS.header.sense_node == 0)
+				index += snprintf(all_strbuff + index, 2,
+						  "\n");
+			index += snprintf(all_strbuff + index, 8, "%7d",
+					  frameMS.node_data[j]);
+#else
                     snprintf(&all_strbuff[index], 5, "%02X%02X", (frameMS.node_data[j]&0xFF00)>>8, frameMS.node_data[j]&0xFF);
 					index+=4;
+#endif
 
                 }
 
@@ -1467,23 +1533,45 @@ END: //here start the reporting phase, assembling the data to send in the file n
                 break;
 
             case 0x15:
+#ifdef RAW_DATA_FORMAT_DEC
+		index += snprintf(all_strbuff + index, 4, "%3d",
+				 (u8)frameSS.header.force_node);
+		index += snprintf(all_strbuff + index, 4, "%3d",
+				 (u8)frameSS.header.sense_node);
+		index += snprintf(all_strbuff + index, 2, "\n");
+#else
                 snprintf(&all_strbuff[index], 3, "%02X", (u8) frameSS.header.force_node);
 				index+=2;
 
                 snprintf(&all_strbuff[index], 3, "%02X", (u8) frameSS.header.sense_node);
 				index+=2;
+#endif
 
                 // Copying self raw data Force
                 for (j = 0; j < frameSS.header.force_node; j++) {
+#ifdef RAW_DATA_FORMAT_DEC
+			index += snprintf(all_strbuff + index, 8, "%7d",
+					  frameSS.force_data[j]);
+#else
                     snprintf(&all_strbuff[index], 5, "%02X%02X", (frameSS.force_data[j]&0xFF00)>>8,frameSS.force_data[j]&0xFF);
 					index+=4;
+#endif
                 }
 
 
+#ifdef RAW_DATA_FORMAT_DEC
+		index += snprintf(all_strbuff + index, 2, "\n");
+#endif
+
                 // Copying self raw data Sense
                 for (j = 0; j < frameSS.header.sense_node; j++) {
+#ifdef RAW_DATA_FORMAT_DEC
+			index += snprintf(all_strbuff + index, 8, "%7d",
+					  frameSS.sense_data[j]);
+#else
                     snprintf(&all_strbuff[index], 5, "%02X%02X", (frameSS.sense_data[j]&0xFF00)>>8,frameSS.sense_data[j]&0xFF);
 					index+=4;
+#endif
                 }
 
                 kfree(frameSS.force_data);
