@@ -281,11 +281,19 @@ static int sop716_read(struct sop716_info *si, u8 reg, u8 *val)
 	do {
 		ret = i2c_smbus_read_i2c_block_data(si->client,
 				reg, si->cmds[reg].size + 1, val);
-		if ((ret < 0) || ((ret - 1) != val[0])) {
+		if (ret < 0) {
 			pr_warn("%s: cannot read i2c: cmd %s(%d)\n"
 				"and force reset to recover\n",
 				__func__, si->cmds[reg].desc, reg);
 			sop716_hw_reset_locked(si, true);
+		} else if ((ret - 1) != val[0]) {
+			pr_warn("%s: size is not matched with requested: "
+				"cmd %s(%d) size %d, ret %d, val[0] %d\n"
+				"and retry it later\n",
+				__func__, si->cmds[reg].desc, reg,
+				si->cmds[reg].size, ret, val[0]);
+			msleep(100);
+			ret = -EPIPE; /* for retry */
 		}
 	} while (retry-- && ret < 0);
 
@@ -297,14 +305,6 @@ static int sop716_read(struct sop716_info *si, u8 reg, u8 *val)
 		return ret;
 	}
 
-	if ((ret - 1) != val[0]) {
-		pr_err("%s: error: cmd %s(%d), size %d, ret %d, val[0] %d\n",
-				__func__,
-				si->cmds[reg].desc, reg,
-				si->cmds[reg].size, ret, val[0]);
-		return -EINVAL;
-
-	}
 	return ret;
 }
 
