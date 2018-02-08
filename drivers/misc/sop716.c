@@ -23,6 +23,7 @@
 #include <linux/sysfs.h>
 #include <linux/timer.h>
 #include <linux/time.h>
+#include <linux/random.h>
 #include <linux/rtc.h>
 
 #include "sop716_firmware.h"
@@ -145,6 +146,7 @@ static struct sop716_info *sop716_info;
 static void sop716_hw_reset_locked(struct sop716_info *si, bool need_dump);
 static int sop716_restore_default_config(struct sop716_info *si);
 static void sop716_print_errors(struct sop716_info *si);
+static int sop716_do_self_test(struct sop716_info *si);
 
 static inline int REG_CMD(struct sop716_command *cmd, u8 reg, char *desc,
 		u8 size, u8 rev)
@@ -1501,13 +1503,24 @@ static ssize_t sop716_aging_test_store(struct device *dev,
 	return count;
 }
 
-static ssize_t sop716_dump_errors(struct device *dev,
+static ssize_t sop716_dump_errors_store(struct device *dev,
 			struct device_attribute *attr, const char *buf,
 			size_t count)
 {
 	struct sop716_info *si = dev_get_drvdata(dev);
 	sop716_print_errors(si);
 	return count;
+}
+
+static ssize_t sop716_self_test_store(struct device *dev,
+			struct device_attribute *attr, const char *buf,
+			size_t count)
+{
+	struct sop716_info *si = dev_get_drvdata(dev);
+	int rc;
+
+	rc = sop716_do_self_test(si);
+	return rc < 0? rc : count;
 }
 
 static DEVICE_ATTR(reset, S_IWUSR, NULL, sop716_reset_store);
@@ -1534,7 +1547,8 @@ static DEVICE_ATTR(update_sysclock, S_IWUSR, NULL,
 static DEVICE_ATTR(watch_mode, S_IWUSR | S_IRUGO, sop716_watch_mode_show,
 		sop716_watch_mode_store);
 static DEVICE_ATTR(aging_test, S_IWUSR, NULL, sop716_aging_test_store);
-static DEVICE_ATTR(dump_errors, S_IWUSR, NULL, sop716_dump_errors);
+static DEVICE_ATTR(dump_errors, S_IWUSR, NULL, sop716_dump_errors_store);
+static DEVICE_ATTR(self_test, S_IWUSR, NULL, sop716_self_test_store);
 
 static struct attribute *sop716_dev_attrs[] = {
 	&dev_attr_reset.attr,
@@ -1553,12 +1567,141 @@ static struct attribute *sop716_dev_attrs[] = {
 	&dev_attr_watch_mode.attr,
 	&dev_attr_aging_test.attr,
 	&dev_attr_dump_errors.attr,
+	&dev_attr_self_test.attr,
 	NULL
 };
 
 static struct attribute_group sop716_dev_attr_group = {
 	.attrs = sop716_dev_attrs,
 };
+
+static int do_self_test_read(struct sop716_info *si)
+{
+	u8 data[SOP716_I2C_DATA_LENGTH] = {0, };
+	u8 read_cmds[] = {
+		CMD_SOP716_READ_CURRENT_TIME,
+		CMD_SOP716_READ_FW_VERSION,
+		CMD_SOP716_READ_MODE,
+		CMD_SOP716_READ_BATTERY_LEVEL,
+		CMD_SOP716_READ_BATTERY_CHECK_INTERVAL,
+		CMD_SOP716_READ_TIMEZONE,
+		CMD_SOP716_READ_EOL_BATTERY_LEVEL,
+		CMD_SOP716_READ_MOTORS_POSITION
+	};
+	u32 rn = prandom_u32() % sizeof(read_cmds);
+	u8 cmd = read_cmds[rn];
+	int rc;
+
+	mutex_lock(&si->lock);
+	rc = sop716_read(si, cmd, data);
+	mutex_unlock(&si->lock);
+
+	return rc;
+}
+
+static int do_self_test_configs(struct sop716_info *si)
+{
+	sop716_read_fw_version(si);
+	sop716_read_mode(si);
+	return sop716_restore_default_config(si);
+}
+
+static int do_self_test_write(struct sop716_info *si)
+{
+	int rc;
+	u8 pos1 = prandom_u32() % (SOP716_MOTOR_MAX_POS + 1);
+	u8 pos2 = prandom_u32() % (SOP716_MOTOR_MAX_POS + 1);
+	char buf[32];
+
+	snprintf(buf, sizeof(buf), "%d:%d:0", pos1, pos2);
+	rc = sop716_motor_move_all_store(si->dev, NULL,
+			buf, strlen(buf));
+	rc |= sop716_motor_move_all_store(si->dev, NULL,
+			"0:0:0", strlen("0:0:0"));
+	rc |= sop716_watch_mode_store(si->dev, NULL, "1", strlen("1"));
+
+	return rc;
+}
+
+static void print_self_test_result(const char *str, int n, int rc)
+{
+	pr_info("sop716: %2d: %16s\t%s\n", n, str,
+			rc < 0? "FAILED" : "PASSED");
+}
+
+static int sop716_do_self_test(struct sop716_info *si)
+{
+	int i, rc;
+	int results[4] = {0, };
+	const char *passed = "PASSED";
+	const char *failed = "FAILED";
+
+	prandom_seed((u32)jiffies);
+	/* read test */
+	pr_info("\nsop716: SELF TEST for READ\n"
+	       "--------------------------------------\n");
+	for (i = 0; i < 80; i++) {
+		rc = do_self_test_read(si);
+		print_self_test_result("read", i, rc);
+		if (rc < 0)
+			results[0] = -1;
+
+	}
+
+	/* initial config test */
+	pr_info("\nsop716: SELF TEST for initial configs\n"
+	       "--------------------------------------\n");
+	for (i = 0; i < 10; i++) {
+		rc = do_self_test_configs(si);
+		print_self_test_result("config", i, rc);
+		if (rc < 0)
+			results[1] = -1;
+	}
+
+	/* write and hands test */
+	pr_info("\nsop716: SELF TEST for write and hands move\n"
+	       "--------------------------------------\n");
+	for (i = 0; i < 10; i++) {
+		rc = do_self_test_write(si);
+		print_self_test_result("write", i, rc);
+		if (rc < 0)
+			results[2] = -1;
+	}
+
+
+	/* mixed */
+	pr_info("\nsop716: SELF TEST for mixed\n"
+	       "--------------------------------------\n");
+	for (i = 0; i < 20; i++) {
+		u8 which = prandom_u32() % 3;
+		switch (which) {
+			case 0:
+				rc = do_self_test_read(si);
+				print_self_test_result("read", i, rc);
+				break;
+			case 1:
+				rc = do_self_test_configs(si);
+				print_self_test_result("config", i, rc);
+				break;
+			case 2:
+				rc = do_self_test_write(si);
+				print_self_test_result("write", i, rc);
+				break;
+			default:
+				break;
+		}
+		if (rc < 0)
+			results[3] = -1;
+	}
+
+	pr_info("SELF TEST: read %s, config %s write %s, mixed %s\n",
+			results[0] ? failed : passed,
+			results[1] ? failed : passed,
+			results[2] ? failed : passed,
+			results[3] ? failed : passed);
+	pr_info("--------------------------------------\n");
+	return (results[0] | results[1] | results[2] | results[3]);
+}
 
 static int sop716_parse_dt(struct i2c_client *client)
 {
