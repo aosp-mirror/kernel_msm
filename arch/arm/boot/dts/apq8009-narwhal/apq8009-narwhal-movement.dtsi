@@ -24,8 +24,8 @@
 		lge,hctosys-post-delay-ms = <0>;
 		lge,fw-ver-check-delay-ms = <0>;
 		lge,hands-settle-time-ms = <2000>;
-		lge,eol-limit-mv = <3500>;
-		lge,eol-threshold-mv = <3700>;
+		lge,eol-limit-mv = <3300>;
+		lge,eol-threshold-mv = <3600>;
 		lge,update-syslock-on-boot;
 	};
 };
@@ -44,8 +44,8 @@
 		lge,hctosys-post-delay-ms = <0>;
 		lge,fw-ver-check-delay-ms = <0>;
 		lge,hands-settle-time-ms = <2000>;
-		lge,eol-limit-mv = <3500>;
-		lge,eol-threshold-mv = <3700>;
+		lge,eol-limit-mv = <3300>;
+		lge,eol-threshold-mv = <3600>;
 		lge,update-syslock-on-boot;
 	};
 };
