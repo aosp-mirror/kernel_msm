@@ -43,8 +43,23 @@
 		qcom,mdss-dsi-border-color = <0>;
 		qcom,mdss-dsi-pixel-packing = "tight";
 		qcom,mdss-dsi-pixel-alignment = <0>;
+		qcom,mdss-dsi-on-command-recovery = [05 01 00 00 03 00 02 00 00
+				15 01 00 00 00 00 02 FE 01
+				15 01 00 00 00 00 02 0A F0
+				15 01 00 00 00 00 02 FE 0A
+				15 01 00 00 00 00 02 29 92
+				15 01 00 00 00 00 02 FE 00
+				29 01 00 00 00 00 05 2A 00 0A 01 CF
+				29 01 00 00 00 00 05 2B 00 00 01 C5
+				29 01 00 00 00 00 05 30 00 00 01 C5
+				29 01 00 00 00 00 05 31 00 0A 01 CF
+				05 01 00 00 00 00 02 12 00
+				15 01 00 00 00 00 02 35 00
+				15 01 00 00 00 00 02 53 20
+				05 01 00 00 C8 00 02 11 00
+				05 01 00 00 00 00 02 29 00];
 		qcom,mdss-dsi-on-command = [05 01 00 00 C8 00 02 11 00
-	            05 01 00 00 00 00 02 29 00];
+				05 01 00 00 00 00 02 29 00];
 		qcom,mdss-dsi-off-command = [05 01 00 00 00 00 02 28 00
 				05 01 00 00 00 00 02 10 00];
 		qcom,mdss-dsi-on-command-state = "dsi_hs_mode";
