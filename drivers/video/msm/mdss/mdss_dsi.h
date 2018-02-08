@@ -135,6 +135,11 @@ enum dsi_pm_type {
 	DSI_MAX_PM
 };
 
+enum {
+	BOOTMODE_NORMAL,
+	BOOTMODE_RECOVERY,
+};
+
 /*
  * DSI controller states.
  *	CTRL_STATE_UNKNOWN - Unknown state of DSI controller.

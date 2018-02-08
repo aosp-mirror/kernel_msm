@@ -35,6 +35,8 @@
 
 DEFINE_LED_TRIGGER(bl_led_trigger);
 
+static int is_recovery = BOOTMODE_NORMAL;
+
 void mdss_dsi_panel_pwm_cfg(struct mdss_dsi_ctrl_pdata *ctrl)
 {
 	if (ctrl->pwm_pmi)
@@ -2037,10 +2039,16 @@ static int  mdss_dsi_panel_config_res_properties(struct device_node *np,
 {
 	int rc = 0;
 
-	mdss_dsi_parse_dcs_cmds(np, &pt->on_cmds,
-		"qcom,mdss-dsi-on-command",
-		"qcom,mdss-dsi-on-command-state");
-
+	if (is_recovery == BOOTMODE_RECOVERY) {
+		mdss_dsi_parse_dcs_cmds(np, &pt->on_cmds,
+			"qcom,mdss-dsi-on-command-recovery",
+			"qcom,mdss-dsi-on-command-state");
+	}
+	else {
+		mdss_dsi_parse_dcs_cmds(np, &pt->on_cmds,
+			"qcom,mdss-dsi-on-command",
+			"qcom,mdss-dsi-on-command-state");
+	}
 	mdss_dsi_parse_dcs_cmds(np, &pt->post_panel_on_cmds,
 		"qcom,mdss-dsi-post-panel-on-command", NULL);
 
@@ -2428,3 +2436,18 @@ int mdss_dsi_panel_init(struct device_node *node,
 
 	return 0;
 }
+
+static int __init get_bootmode_cmdline(char *buf)
+{
+	int bootmode_num = 0;
+
+	bootmode_num = simple_strtol(buf, NULL, 10);
+	
+	if (bootmode_num == 1){
+		is_recovery = BOOTMODE_RECOVERY;
+	}
+
+	return 0;
+}
+
+early_param("IsRecovery", get_bootmode_cmdline);
