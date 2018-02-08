@@ -113,6 +113,7 @@
 			drv2605@5a {
 				compatible = "ti,drv2605";
 				reg = <0x5a>;
+				drv2605,en_gpio = <&msm_gpio 26 0x00>;
 			};
 		};
 		spi@78b9000 { /* BLSP1 QUP5 */
