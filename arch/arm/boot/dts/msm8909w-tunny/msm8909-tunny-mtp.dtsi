@@ -19,6 +19,40 @@
 	 * with VM-BMS.
 	 */
 	i2c@78b8000 {
+		smb231@12 {
+			compatible = "qcom,smb231-charger";
+			reg = <0x12>;
+			qcom,smb-stat = <&msm_gpio 49 0x00>;
+
+			pinctrl-names = "default";
+			pinctrl-0 = <&smb_stat_default &smb_susp_default>;
+
+			qcom,float-voltage-mv = <4400>;
+			qcom,recharge-thresh-mv = <80>;
+			qcom,aicl-disabled;
+			qcom,hot-bat-decidegc = <560>;
+			qcom,warm-bat-decidegc = <450>;
+			qcom,cool-bat-decidegc = <170>;
+			qcom,cold-bat-decidegc = <0>;
+			qcom,fastchg-ma = <250>;
+			qcom,soft-temp-vfloat-comp-mv = <80>;
+			qcom,soft-temp-current-comp-ma = <250>;
+			cei,max-ac-current-ma = <1000>;
+			cei,prechg-current-ma = <20>;
+			cei,chg-en-active = <0>;
+			cei,sys-voltage = <2>;
+			cei,sys-voltage-threshold = <2>;
+			cei,cool-temp-vfloat-comp-mv = <160>;
+			qcom,bms-psy-name = "bms";
+		};
+		st-fg@70 {
+			compatible = "st,stc3117";
+			reg = <0x70>;
+			st,alarm-irq = <&msm_gpio 28 0x00>;
+
+			pinctrl-names = "default";
+			pinctrl-0 = <&gauge_alarm_default>;
+		};
 		smb1357_otg_vreg: smb1357-charger@57 {
 			compatible = "qcom,smb1357-charger";
 			reg = <0x57>;
