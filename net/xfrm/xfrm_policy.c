@@ -1273,7 +1273,7 @@ static struct xfrm_policy *xfrm_sk_policy_lookup(const struct sock *sk, int dir,
 
 		match = xfrm_selector_match(&pol->selector, fl, family);
 		if (match) {
-			if ((sk->sk_mark & pol->mark.m) != pol->mark.v || 
+			if ((sk->sk_mark & pol->mark.m) != pol->mark.v ||
 			    pol->if_id != fl->flowi_xfrm.if_id) {
 				pol = NULL;
 				goto out;
@@ -2125,9 +2125,14 @@ xfrm_bundle_lookup(struct net *net, const struct flowi *fl, u16 family, u8 dir,
 	}
 
 	new_xdst = xfrm_resolve_and_create_bundle(pols, num_pols, fl, family,
-						  xflo->dst_orig);
+						  					  xflo->dst_orig);
+
 	if (IS_ERR(new_xdst)) {
 		err = PTR_ERR(new_xdst);
+		if (err == -EREMOTE) {
+			xfrm_pols_put(pols, num_pols);
+			return NULL;
+		}
 		if (err != -EAGAIN)
 			goto error;
 		if (oldflo == NULL)
@@ -2240,6 +2245,9 @@ struct dst_entry *xfrm_lookup(struct net *net, struct dst_entry *dst_orig,
 			if (IS_ERR(xdst)) {
 				xfrm_pols_put(pols, num_pols);
 				err = PTR_ERR(xdst);
+				if (err == -EREMOTE)
+					goto nopol;
+
 				goto dropdst;
 			} else if (xdst == NULL) {
 				num_xfrms = 0;
@@ -2436,12 +2444,17 @@ int __xfrm_decode_session(struct sk_buff *skb, struct flowi *fl,
 			  unsigned int family, int reverse)
 {
 	struct xfrm_policy_afinfo *afinfo = xfrm_policy_get_afinfo(family);
+	struct xfrm_if *xi;
 	int err;
 
 	if (unlikely(afinfo == NULL))
 		return -EAFNOSUPPORT;
 
 	afinfo->decode_session(skb, fl, reverse);
+	xi = xfrmi_lookup_byindex(dev_net(skb->dev), skb->dev->ifindex);
+	if (xi)
+		fl->flowi_xfrm.if_id = xi->p.if_id;
+
 	err = security_xfrm_decode_session(skb, &fl->flowi_secid);
 	xfrm_policy_put_afinfo(afinfo);
 	return err;
