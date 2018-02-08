@@ -161,6 +161,8 @@ static enum hrtimer_restart nitrous_tx_lpm_handler(struct hrtimer *timer)
 		return HRTIMER_NORESTART;
 	}
 
+	hrtimer_forward_now(&bt_lpm->tx_lpm_timer,
+			ktime_set(UART_TIMEOUT_SEC, 0));
 	pr_warn("%s: pending to sleep\n", __func__);
 	return HRTIMER_RESTART;
 }
