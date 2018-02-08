@@ -747,6 +747,7 @@ static int bcm_spi_probe(struct spi_device *spi)
 {
 	int host_req, mcu_req, mcu_resp;
 	struct bcm_spi_priv *priv;
+	int pin_ttyBCM, pin_MCU_REQ, pin_MCU_RESP;
 	int ret;
 
 	long gpio = 74;
@@ -890,6 +891,11 @@ static int bcm_spi_probe(struct spi_device *spi)
 	priv->host_req = host_req;
 	priv->mcu_req  = mcu_req;
 	priv->mcu_resp = mcu_resp;
+	pin_ttyBCM = gpio_get_value(host_req);
+	pin_MCU_REQ = gpio_get_value(mcu_req);
+	pin_MCU_RESP = gpio_get_value(mcu_resp);
+	pr_info("[SSPBBD]: %s pin_ttyBCM:%d, pin_MCU_REQ:%d, pin_MCU_RESP:%d\n",
+		__func__, pin_ttyBCM, pin_MCU_REQ, pin_MCU_RESP);
 
 	/* Init - etc */
 	wake_lock_init(&priv->bcm_wake_lock, WAKE_LOCK_SUSPEND, "bcm_spi_wake_lock");
