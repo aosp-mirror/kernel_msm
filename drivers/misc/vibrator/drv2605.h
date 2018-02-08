@@ -468,6 +468,7 @@ struct drv2605_data {
 	struct early_suspend early_suspend;
 #endif
 	struct sysfs_reg_ctrl_info sysfs_reg_ctrl;
+	bool will_switch_pwm_mode_shutdown;
 };
 
 #endif

@@ -36,6 +36,7 @@
 #include <linux/syscalls.h>
 #include <linux/uaccess.h>
 #include <linux/gpio.h>
+#include <linux/of_gpio.h>
 #include <linux/sched.h>
 #include <linux/spinlock_types.h>
 #include <linux/spinlock.h>
@@ -78,6 +79,17 @@ static ssize_t drv2605_reg_ctrl_show(struct device *dev,
 			struct device_attribute *attr,
 			char *buf);
 
+static ssize_t drv2605_pwm_mode_shutdown_show(struct device *dev,
+			struct device_attribute *attr,
+			char *buf);
+static ssize_t drv2605_pwm_mode_shutdown_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t len);
+
+static ssize_t drv2605_en_ctrl_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t len);
+
 static struct drv2605_data *pDRV2605data;
 
 static DEVICE_ATTR(ID, S_IRUSR, drv2605_ID_show, NULL);
@@ -87,12 +99,22 @@ static DEVICE_ATTR(mode_help, S_IRUSR, drv2605_mode_help_show, NULL);
 static DEVICE_ATTR(reg_ctrl, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP,
 			drv2605_reg_ctrl_show, drv2605_reg_ctrl_store);
 
+static DEVICE_ATTR(pwm_mode_shutdown,
+			S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP,
+			drv2605_pwm_mode_shutdown_show,
+			drv2605_pwm_mode_shutdown_store);
+
+static DEVICE_ATTR(en_ctrl, S_IWUSR | S_IWGRP,
+			NULL, drv2605_en_ctrl_store);
+
 static struct attribute *drv2605_attrs[] = {
 	&dev_attr_ID.attr,
 	&dev_attr_vol.attr,
 	&dev_attr_mode.attr,
 	&dev_attr_mode_help.attr,
 	&dev_attr_reg_ctrl.attr,
+	&dev_attr_pwm_mode_shutdown.attr,
+	&dev_attr_en_ctrl.attr,
 	NULL
 };
 
@@ -617,6 +639,50 @@ static ssize_t drv2605_reg_ctrl_show(struct device *dev,
 	return ret;
 }
 
+static ssize_t drv2605_pwm_mode_shutdown_show(struct device *dev,
+			struct device_attribute *attr,
+			char *buf)
+{
+	struct drv2605_data *pDrv2605data = pDRV2605data;
+
+	return snprintf(buf, 32, "%d\n",
+				pDrv2605data->will_switch_pwm_mode_shutdown);
+}
+
+static ssize_t drv2605_pwm_mode_shutdown_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t len)
+{
+	struct drv2605_data *pDrv2605data = pDRV2605data;
+	int setting = 0;
+
+	if (sscanf(buf, "%d\n", &setting) > 0)
+		pDrv2605data->will_switch_pwm_mode_shutdown = setting;
+
+	return len;
+}
+
+static ssize_t drv2605_en_ctrl_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t len)
+{
+	struct drv2605_data *pDrv2605data = pDRV2605data;
+	int status = 0;
+
+	if (sscanf(buf, "%d\n", &status) > 0) {
+		if (pDrv2605data->PlatData[back_cover].GpioEnable) {
+			/* Enable power to the chip */
+			gpio_direction_output(
+				pDrv2605data->PlatData[back_cover].GpioEnable,
+				status);
+			/* Wait 30 us */
+			udelay(30);
+		}
+	}
+
+	return len;
+}
+
 static void drv2605_change_mode(struct drv2605_data *pDrv2605data,
 			char work_mode, char dev_mode)
 {
@@ -864,22 +930,31 @@ static void vibrator_enable(struct timed_output_dev *dev, int value)
 
 	mutex_lock(&pDrv2605data->lock);
 
-	drv2605_stop(pDrv2605data);
-
-	if (value > 0) {
-		if (pDrv2605data->audio_haptics_enabled == NO)
-			wake_lock(&pDrv2605data->wklock);
-
-		drv2605_change_mode(pDrv2605data, WORK_VIBRATOR, DEV_READY);
-		pDrv2605data->vibrator_is_playing = YES;
-		switch_set_state(&pDrv2605data->sw_dev, SW_STATE_RTP_PLAYBACK);
-
-		value = (value > MAX_TIMEOUT) ? MAX_TIMEOUT : value;
-		hrtimer_start(&pDrv2605data->timer,
-				ns_to_ktime((u64)value * NSEC_PER_MSEC),
-				HRTIMER_MODE_REL);
+	if (value < 0) {
+		pr_err(LOG_TAG"Error enable value: %d.\n", value);
+		return;
 	}
+	if (pDrv2605data->work_mode != WORK_PWM) {
+		drv2605_stop(pDrv2605data);
 
+		if (value > 0) {
+			if (pDrv2605data->audio_haptics_enabled == NO)
+				wake_lock(&pDrv2605data->wklock);
+
+			drv2605_change_mode(pDrv2605data,
+						WORK_VIBRATOR, DEV_READY);
+			pDrv2605data->vibrator_is_playing = YES;
+			switch_set_state(&pDrv2605data->sw_dev,
+							SW_STATE_RTP_PLAYBACK);
+
+			value = (value > MAX_TIMEOUT) ? MAX_TIMEOUT : value;
+			hrtimer_start(&pDrv2605data->timer,
+					ns_to_ktime((u64)value * NSEC_PER_MSEC),
+					HRTIMER_MODE_REL);
+		}
+	} else {
+		pr_info(LOG_TAG"vibrator in pwm mode, fefuse to enable req.\n");
+	}
 	mutex_unlock(&pDrv2605data->lock);
 }
 
@@ -1460,6 +1535,32 @@ static ssize_t drv2605_vol_show(struct device *dev,
 		return snprintf(buf, 10, "unkown\n");
 }
 
+#ifdef CONFIG_OF
+static int drv2605_parse_dt(struct drv2605_data *data, const int back_cover)
+{
+	struct device_node *dt = data->i2c_client->dev.of_node;
+	int ret;
+
+	if (!dt)
+		return -ENODEV;
+
+	ret = data->PlatData[back_cover].GpioEnable =
+	    of_get_named_gpio(dt, "drv2605,en_gpio", 0);
+	if (ret < 0) {
+		pr_err(LOG_TAG"missing drv2605,en_gpio in device tree\n");
+		data->PlatData[back_cover].GpioEnable = 0;
+	}
+
+	ret = data->PlatData[back_cover].GpioTrigger =
+		of_get_named_gpio(dt, "drv2605,trigger_gpio", 0);
+	if (ret < 0) {
+		pr_err(LOG_TAG"missing drv2605,trigger_gpio in device tree\n");
+		data->PlatData[back_cover].GpioTrigger = 0;
+	}
+	return 0;
+}
+#endif
+
 static int drv2605_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
 {
@@ -1506,6 +1607,9 @@ static int drv2605_probe(struct i2c_client *client,
 	} else {
 		pr_err(LOG_TAG"#error to goto here.\n");
 	}
+
+	drv2605_parse_dt(pDrv2605data, back_cover);
+
 	if (pDrv2605data->PlatData[back_cover].GpioTrigger) {
 		err = gpio_request(
 			pDrv2605data->PlatData[back_cover].GpioTrigger,
@@ -1619,6 +1723,20 @@ exit_gpio_request_failed:
 	return err;
 }
 
+static void drv2605_shutdown(struct i2c_client *client)
+{
+	struct drv2605_data *pDrv2605data = i2c_get_clientdata(client);
+
+	if (pDrv2605data->will_switch_pwm_mode_shutdown) {
+		pr_info(LOG_TAG"shutting down, try to change to pwm mode.\n");
+		drv2605_change_mode(pDrv2605data, WORK_PWM, DEV_READY);
+	} else {
+		pr_info(LOG_TAG"shutting down, no change mode.\n");
+	}
+	gpio_direction_output(
+		pDrv2605data->PlatData[back_cover].GpioEnable, 0);
+}
+
 static int drv2605_remove(struct i2c_client *client)
 {
 	struct drv2605_data *pDrv2605data = i2c_get_clientdata(client);
@@ -1675,6 +1793,7 @@ static struct i2c_driver drv2605_driver = {
 	.id_table = drv2605_id_table,
 	.probe = drv2605_probe,
 	.remove = drv2605_remove,
+	.shutdown = drv2605_shutdown,
 };
 
 module_i2c_driver(drv2605_driver);
