@@ -253,9 +253,10 @@ static int sop716_write(struct sop716_info *si, u8 reg, u8 *val)
 static int sop716_read(struct sop716_info *si, u8 reg, u8 *val)
 {
 	int ret;
-	int retry = 1;
+	int retry = 2;
 	u64 saved_ts_ns = si->saved_ts_ns;
 	u64 off_ms;
+	bool retried_with_delay = false;
 
 	pr_debug("%s: reg:%d\n", __func__, reg);
 
@@ -286,6 +287,14 @@ static int sop716_read(struct sop716_info *si, u8 reg, u8 *val)
 				"and force reset to recover\n",
 				__func__, si->cmds[reg].desc, reg);
 			sop716_hw_reset_locked(si, true);
+			/* If i2c error happens during retring with delay,
+			 * rery it one more after reset
+			 */
+			if (retried_with_delay)
+				retried_with_delay = false;
+			else
+				retry--;
+
 		} else if ((ret - 1) != val[0]) {
 			pr_warn("%s: size is not matched with requested: "
 				"cmd %s(%d) size %d, ret %d, val[0] %d\n"
@@ -294,8 +303,10 @@ static int sop716_read(struct sop716_info *si, u8 reg, u8 *val)
 				si->cmds[reg].size, ret, val[0]);
 			msleep(100);
 			ret = -EPIPE; /* for retry */
+			retried_with_delay = true;
+			retry--;
 		}
-	} while (retry-- && ret < 0);
+	} while (retry && ret < 0);
 
 	saved_ts_ns = ktime_get_boot_ns();
 
