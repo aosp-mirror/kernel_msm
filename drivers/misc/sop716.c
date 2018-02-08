@@ -527,19 +527,8 @@ static int sop716_set_battery_check_interval(struct sop716_info *si,
 	if (rc < 0)
 		goto out;
 
-	rc = sop716_read(si, CMD_SOP716_READ_BATTERY_CHECK_INTERVAL, data);
-	if (rc < 0)
-		goto out;
-
-	if (interval != ((data[1] << 8) + data[2])) {
-		pr_err("%s: cannot update the interval\n", __func__);
-		rc = -EINVAL;
-		goto out;
-	}
-
 	si->battery_check_interval = interval;
 	rc = 0;
-
 out:
 	mutex_unlock(&si->lock);
 	return rc;
