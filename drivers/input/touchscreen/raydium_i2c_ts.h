@@ -7,7 +7,7 @@
 #define I2C_VTG_MIN_UV    1800000
 #define I2C_VTG_MAX_UV    1800000
 
-#define RAYDIUM_VER     0x0003
+#define RAYDIUM_VER     0x0004
 
 #if defined(CONFIG_TOUCHSCREEN_RM_TS)
 /* IC timing control arguments */
@@ -75,11 +75,12 @@
 #define RAYDIUM_PDA2_TCH_RPT_STATUS_ADDR    0x00    // only in Page 0
 #define RAYDIUM_PDA2_TCH_RPT_ADDR           0x01    // only in Page 0
 #define RAYDIUM_PDA2_HOST_CMD_ADDR          0x02    // only in Page 0
-#define RAYDIUM_PDA2_GESTURE_STATUS_ADDR    0x03    // only in Page 0
+#define RAYDIUM_PDA2_PALM_AREA_ADDR         0x03    // only in Page 0
 #define RAYDIUM_PDA2_GESTURE_RPT_ADDR       0x04    // only in Page 0
 #define RAYDIUM_PDA2_PALM_STATUS_ADDR       0x05    // only in Page 0
 #define RAYDIUM_PDA2_FW_VERSION_ADDR        0x06    // only in Page 0
 #define RAYDIUM_PDA2_PANEL_VERSION_ADDR     0x07    // only in Page 0
+#define RAYDIUM_PDA2_DISPLAY_MODE_ADDR      0x08    // only in Page 0
 #define RAYDIUM_PDA2_PDA_CFG_ADDR           0x09    // only in Page 0
 #define RAYDIUM_PDA2_PAGE_ADDR              0x0A    // Page 0 ~ Page 9 will be directed to Page 0
 #define RAYDIUM_PDA2_PAGE_0                 0x00
@@ -90,6 +91,8 @@
 #define RAYDIUM_HOST_CMD_NO_OP              0x00
 #define RAYDIUM_HOST_CMD_PWR_SLEEP          0x30
 #define RAYDIUM_HOST_CMD_CALIBRATION        0x5C
+#define RAYDIUM_HOST_CMD_TP_MODE            0x60
+#define RAYDIUM_HOST_CMD_FT_MODE            0x61
 
 /* PDA2 literal */
 #define RAYDIUM_I2C_PDA2_PAGE_LENGTH        2    // entry byte + target page byte
@@ -117,6 +120,10 @@
 /*Raydium system flag*/
 #define RAYDIUM_INTERRUPT_FLAG     0x01
 #define RAYDIUM_BOOTLOADER_FLAG    0x02
+
+/* define display mode */
+#define ACTIVE_MODE     0x00
+#define AMBIENT_MODE    0x01
 
 /* Enable sysfs */
 #define CONFIG_RM_SYSFS_DEBUG
