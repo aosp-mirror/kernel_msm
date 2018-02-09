@@ -3,7 +3,7 @@ qcom,3176674_compal_zxw2_300mah_averaged_masterslave_dec15th2017 {
 	qcom, = <24>;
 	/* #3176674_Compal_ZXW2_300mAh_averaged_MasterSlave_Dec15th2017*/
 	qcom,max-voltage-uv = <4350000>;
-	qcom,fastchg-current-ma = <300>;
+	qcom,fastchg-current-ma = <125>;
 	qcom,nom-batt-capacity-mah = <300>;
 	qcom,batt-id-kohm = <60>;
 	qcom,battery-beta = <3435>;
