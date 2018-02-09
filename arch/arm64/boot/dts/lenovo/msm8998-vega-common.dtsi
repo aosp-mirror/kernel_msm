@@ -668,7 +668,7 @@
 &spmi_bus {
 	qcom,pm8998@0 {
 		qcom,power-on@800 {
-			qcom,warm-reset-poweroff-type = <PON_POWER_OFF_HARD_RESET>;
+			qcom,hard-reset-poweroff-type = <PON_POWER_OFF_WARM_RESET>;
 		};
 	};
 
