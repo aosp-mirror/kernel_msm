@@ -185,6 +185,8 @@ struct tcpc_dev {
 	void (*set_pd_capable)(struct tcpc_dev *dev, bool capable);
 	void (*set_in_hard_reset)(struct tcpc_dev *dev, bool status);
 	void (*log_rtc)(struct tcpc_dev *dev);
+	int (*set_suspend_supported)(struct tcpc_dev *dev,
+				     bool suspend_supported);
 	struct tcpc_mux_dev *mux;
 };
 
