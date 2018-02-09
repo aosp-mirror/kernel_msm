@@ -146,12 +146,15 @@ void bq27x00_update(struct Nanohub_FuelGauge_Info *fg_info)
 		machine_restart(NULL);
 	}
 	if (fg_info->last_capacity != fg_info->cache.capacity) {
-		if ((fg_info->charger_online &&
+		if ((charger_online &&
 		  fg_info->last_capacity < fg_info->cache.capacity) ||
-		  (!fg_info->charger_online &&
+		  (!charger_online &&
 		  fg_info->last_capacity > fg_info->cache.capacity)) {
 			power_supply_changed(&fg_info->bat);
 			fg_info->last_capacity = fg_info->cache.capacity;
+		} else if (!charger_online &&
+			   (fg_info->last_capacity < fg_info->cache.capacity)) {
+			fg_info->cache.capacity = fg_info->last_capacity;
 		}
 	}
 	last.tv_sec = cur.tv_sec;
