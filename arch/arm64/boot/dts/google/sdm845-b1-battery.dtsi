@@ -31,6 +31,8 @@
 
 &pmi8998_fg {
 	qcom,battery-data = <&b1_batterydata>;
+	qcom,fg-chg-term-current = <145>;
+	qcom,fg-sys-term-current = <(-181)>;
 };
 
 &max1720x_fg {
