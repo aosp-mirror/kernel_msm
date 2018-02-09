@@ -437,6 +437,9 @@
 	/delete-node/ tavil_codec;
 
 	tasha_codec {
+		qcom,cdc-micbias2-headset-only;
+		qcom,cdc-micbias2-mv = <2400>;
+
 		/delete-node/ swr_master; /* Don't enable WSA */
 	};
 };
