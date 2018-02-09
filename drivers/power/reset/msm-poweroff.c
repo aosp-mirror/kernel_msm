@@ -291,7 +291,8 @@ static void msm_restart_prepare(const char *cmd)
 	if (!hard_reset)
 		need_warm_reset = true;
 
-	if ((cmd != NULL) && !strncmp(cmd, "user_request", 12))
+	if ((cmd != NULL) &&
+	    ((cmd[0] == '\0') || !strncmp(cmd, "user_request", 12)))
 		need_warm_reset = false;
 #else
 	if (qpnp_pon_check_hard_reset_stored()) {
