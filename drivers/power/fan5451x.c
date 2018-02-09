@@ -804,13 +804,13 @@ static irqreturn_t fan5451x_irq_thread(int irq, void *handle)
 
 	ret = i2c_smbus_read_i2c_block_data(chip->client, REG_INT0, 3, intr);
 	if (ret < 0) {
-		pr_err("error i2c read REG_INT block\n");
+		pr_err_ratelimited("error i2c read REG_INT block\n");
 		return ret;
 	}
 
 	ret = i2c_smbus_read_i2c_block_data(chip->client, REG_STAT0, 3, statr);
 	if (ret < 0) {
-		pr_err("error i2c read REG_STAT block\n");
+		pr_err_ratelimited("error i2c read REG_STAT block\n");
 		return ret;
 	}
 
