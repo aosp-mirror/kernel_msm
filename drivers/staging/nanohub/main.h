@@ -98,7 +98,13 @@ struct nanohub_data {
 	atomic_t download_bl_status;
 	atomic_t hub_mode_ap_pwr_down;
 	atomic_t hub_mode_ap_active;
+	atomic_t lcd_mutex;
 	struct mutex hub_mode_set_lock;
+};
+
+enum {
+	LCD_MUTEX_OFF = 0,
+	LCD_MUTEX_ON,
 };
 
 enum NRESET_POLARITY {

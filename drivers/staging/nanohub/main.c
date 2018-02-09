@@ -725,6 +725,8 @@ int __nanohub_set_mode_pin(struct nanohub_data *data, enum AP_GPIO_CMD mode)
 
 int __nanohub_send_AP_cmd(struct nanohub_data *data, enum AP_GPIO_CMD mode)
 {
+	int ret = 0;
+
 	if ((mode < GPIO_CMD_POWEROFF) || (mode > GPIO_CMD_RESEND)) {
 		pr_err("nanohub: invalid mode = %d\n", mode);
 		return -EINVAL;
@@ -737,25 +739,26 @@ int __nanohub_send_AP_cmd(struct nanohub_data *data, enum AP_GPIO_CMD mode)
 	case GPIO_CMD_BAND:     /*0001*/
 		atomic_set(&data->hub_mode_ap_pwr_down, mode);    /* Only remember the state after AP pwr off */
 		atomic_set(&data->hub_mode_ap_active, mode);
-		__nanohub_set_mode_pin(data, mode);
+		ret = __nanohub_set_mode_pin(data, mode);
 		break;
 
 	case GPIO_CMD_AMBIENT:	/*0010*/
 	case GPIO_CMD_NORMAL:   /*0011*/
 	case GPIO_CMD_SUSPEND:  /*0110*/
 	case GPIO_CMD_RESUME:   /*0111*/
-		__nanohub_set_mode_pin(data, mode);
+		ret = __nanohub_set_mode_pin(data, mode);
 		atomic_set(&data->hub_mode_ap_active, mode);
 		break;
 
 	case GPIO_CMD_FLASH_ERASE:       /*0100*/
 	case GPIO_CMD_REQUEST_FUELGAUGE: /*0101*/
 	case GPIO_CMD_TEST:              /*1111*/
-		__nanohub_set_mode_pin(data, mode);
+		ret = __nanohub_set_mode_pin(data, mode);
 		break;
 
 	case GPIO_CMD_RESEND:   /*send mode again if mcu needed*/
-		__nanohub_set_mode_pin(data, atomic_read(&data->hub_mode_ap_active));
+		ret = __nanohub_set_mode_pin(data,
+				atomic_read(&data->hub_mode_ap_active));
 		break;
 
 	default:
@@ -764,7 +767,7 @@ int __nanohub_send_AP_cmd(struct nanohub_data *data, enum AP_GPIO_CMD mode)
 
 	mutex_unlock(&(data->hub_mode_set_lock));
 
-	return 0;
+	return ret;
 }
 
 static ssize_t nanohub_mode_set(struct device *dev,
@@ -776,6 +779,20 @@ static ssize_t nanohub_mode_set(struct device *dev,
 
 	if (sscanf(buf, "%d\n", &mode) > 0)
 		__nanohub_send_AP_cmd(data, mode);
+
+	return count;
+}
+
+static ssize_t nanohub_lcd_mutex(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	struct nanohub_data *data = dev_get_nanohub_data(dev);
+	int lcd_mutex = 0;
+
+	if (sscanf(buf, "%d\n", &lcd_mutex) > 0)
+		atomic_set(&data->lcd_mutex,
+			lcd_mutex?LCD_MUTEX_ON:LCD_MUTEX_OFF);
 
 	return count;
 }
@@ -1129,6 +1146,7 @@ static struct device_attribute attributes[] = {
 	__ATTR(mode, 0220, NULL, nanohub_mode_set),
 	__ATTR(get_custom_flash, 0220, NULL, nanohub_read_custom_flash_to_file),
 	__ATTR(download_bl_status, 0444, nanohub_download_bl_status, NULL),
+	__ATTR(lcd_mutex, 0220, NULL, nanohub_lcd_mutex),
 };
 
 static inline int nanohub_create_sensor(struct nanohub_data *data)
@@ -1854,6 +1872,7 @@ struct iio_dev *nanohub_probe(struct device *dev, struct iio_dev *iio_dev)
 	atomic_set(&data->download_bl_status, DOWNLOAD_BL_NOT_START);
 	atomic_set(&data->hub_mode_ap_active, GPIO_CMD_NORMAL);
 	atomic_set(&data->hub_mode_ap_pwr_down, GPIO_CMD_POWEROFF);
+	atomic_set(&data->lcd_mutex, LCD_MUTEX_OFF);
 	init_waitqueue_head(&data->wakeup_wait);
 
 	ret = nanohub_request_gpios(data);
