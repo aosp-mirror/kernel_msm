@@ -308,7 +308,7 @@ static int sop716_read(struct sop716_info *si, u8 reg, u8 *val)
 		}
 	} while (retry && ret < 0);
 
-	saved_ts_ns = ktime_get_boot_ns();
+	si->saved_ts_ns = ktime_get_boot_ns();
 
 	if (ret < 0) {
 		pr_err("%s: cannot read i2c: cmd %s(%d)\n",
@@ -348,7 +348,7 @@ static int sop716_read_error(struct sop716_error *serr)
 			sop716_hw_reset_locked(si, false);
 	} while (retry-- && ret < 0);
 
-	saved_ts_ns = ktime_get_boot_ns();
+	si->saved_ts_ns = ktime_get_boot_ns();
 
 	if (ret < 0) {
 		pr_err("%s: cannot read i2c: errno:%d\n", __func__, errno);
