@@ -2767,6 +2767,9 @@ static int tcpm_snk_attach(struct tcpm_port *port)
 
 static void tcpm_snk_detach(struct tcpm_port *port)
 {
+	/* Conservatively reset back to suspend should be honored */
+	if (port->tcpc->set_suspend_supported)
+		port->tcpc->set_suspend_supported(port->tcpc, true);
 	tcpm_detach(port);
 }
 
@@ -3209,6 +3212,11 @@ static void run_state_machine(struct tcpm_port *port)
 		} else {
 			tcpm_set_state_cond(port, hard_reset_state(port),
 					    PD_T_SENDER_RESPONSE);
+		}
+		if (port->tcpc->set_suspend_supported) {
+			port->tcpc->set_suspend_supported(port->tcpc,
+							  port->source_caps[0] &
+							  PDO_FIXED_SUSPEND);
 		}
 		break;
 	case SNK_NEGOTIATE_PPS_CAPABILITIES:
