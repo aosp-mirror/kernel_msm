@@ -75,6 +75,7 @@ struct usbpd {
 	int logbuffer_tail;
 	u8 *logbuffer[LOG_BUFFER_ENTRIES];
 	bool in_pr_swap;
+	bool suspend_supported;
 };
 
 /*
@@ -1077,6 +1078,35 @@ unlock:
 	return ret;
 }
 
+static int tcpm_set_suspend_supported(struct tcpc_dev *dev,
+				      bool suspend_supported)
+{
+	union power_supply_propval val = {0};
+	struct usbpd *pd = container_of(dev, struct usbpd, tcpc_dev);
+	int ret = 0;
+
+	mutex_lock(&pd->lock);
+
+	if (suspend_supported == pd->suspend_supported)
+		goto unlock;
+
+	/* Attempt once */
+	pd->suspend_supported = suspend_supported;
+	val.intval = suspend_supported ? 1 : 0;
+	pd_engine_log(pd, "usb suspend %d", suspend_supported ? 1 : 0);
+	ret = power_supply_set_property(pd->usb_psy,
+				POWER_SUPPLY_PROP_PD_USB_SUSPEND_SUPPORTED,
+				&val);
+	if (ret < 0) {
+		pd_engine_log(pd,
+			      "unable to set suspend flag to %d, ret=%d",
+			      suspend_supported ? 1 : 0, ret);
+	}
+
+unlock:
+	mutex_unlock(&pd->lock);
+	return ret;
+}
 
 enum power_role get_pdphy_power_role(enum typec_role role)
 {
@@ -1346,6 +1376,7 @@ static void init_tcpc_dev(struct tcpc_dev *pd_tcpc_dev)
 	pd_tcpc_dev->pd_transmit = tcpm_pd_transmit;
 	pd_tcpc_dev->start_drp_toggling = tcpm_start_drp_toggling;
 	pd_tcpc_dev->set_in_pr_swap = tcpm_set_in_pr_swap;
+	pd_tcpc_dev->set_suspend_supported = tcpm_set_suspend_supported;
 	pd_tcpc_dev->mux = NULL;
 }
 
@@ -1470,6 +1501,8 @@ struct usbpd *usbpd_create(struct device *parent)
 		goto unreg_tcpm;
 
 	init_pd_phy_params(&pd->pdphy_params);
+
+	pd->suspend_supported = true;
 
 	return pd;
 
