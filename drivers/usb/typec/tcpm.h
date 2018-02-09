@@ -126,6 +126,8 @@ struct tcpc_dev {
 	int (*pd_transmit)(struct tcpc_dev *dev, enum tcpm_transmit_type type,
 			   const struct pd_message *msg);
 	int (*set_in_pr_swap)(struct tcpc_dev *dev, bool pr_swap);
+	int (*set_suspend_supported)(struct tcpc_dev *dev,
+				     bool suspend_supported);
 	struct tcpc_mux_dev *mux;
 };
 
