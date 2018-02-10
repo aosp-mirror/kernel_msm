@@ -28,6 +28,8 @@
 
 #include "sop716_firmware.h"
 
+#define SOP716_USE_DISTANCE                 0
+
 #define SOP716_I2C_DATA_LENGTH              8
 
 #define SOP716_CMD_READ_RETRY               10
@@ -641,6 +643,7 @@ static void sop716_read_fw_version(struct sop716_info *si)
 	si->fw_rev = data[2];
 }
 
+#if SOP716_USE_DISTANCE
 static void sop716_read_motors_position_locked(struct sop716_info *si,
 		u8 motor_pos[])
 {
@@ -686,6 +689,13 @@ static u8 sop716_get_distance_locked(struct sop716_info *si,
 
 	return distance;
 }
+#else
+static u8 sop716_get_distance_locked(struct sop716_info *si,
+		u8 motor, u8 pos, u8 opt)
+{
+	return 0;
+}
+#endif
 
 static inline void sop716_wait_for_motor_move_locked(u8 distance)
 {
