@@ -699,6 +699,8 @@ static int smb23x_charging_disable(struct smb23x_chip *chip,
 	int rc = 0;
 	int disabled;
 
+	pr_info("SMB: %s: reason: %d disable: %d\n", __func__, reason, disable);
+
 	mutex_lock(&chip->chg_disable_lock);
 	disabled = chip->chg_disabled_status;
 	if (disable)
@@ -1124,54 +1126,54 @@ static int smb23x_hw_init(struct smb23x_chip *chip)
 
 static int hot_hard_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
-	pr_warn("rt_sts = 0x02%x\n", rt_sts);
+	pr_info("SMB: %s: rt_sts = 0x02%x\n", __func__, rt_sts);
 	chip->batt_hot = !!rt_sts;
 	return 0;
 }
 
 static int cold_hard_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
-	pr_debug("rt_sts = 0x02%x\n", rt_sts);
+	pr_info("SMB: %s: rt_sts = 0x02%x\n", __func__, rt_sts);
 	chip->batt_cold = !!rt_sts;
 	return 0;
 }
 
 static int hot_soft_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
-	pr_debug("rt_sts = 0x02%x\n", rt_sts);
+	pr_info("SMB: %s: rt_sts = 0x02%x\n", __func__, rt_sts);
 	chip->batt_warm = !!rt_sts;
 	return 0;
 }
 
 static int cold_soft_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
-	pr_debug("rt_sts = 0x02%x\n", rt_sts);
+	pr_info("SMB: %s: rt_sts = 0x02%x\n", __func__, rt_sts);
 	chip->batt_cool = !!rt_sts;
 	return 0;
 }
 
 static int batt_ov_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
-	pr_debug("rt_sts = 0x02%x\n", rt_sts);
+	pr_info("SMB: %s: rt_sts = 0x02%x\n", __func__, rt_sts);
 	return 0;
 }
 
 static int batt_missing_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
-	pr_debug("rt_sts = 0x02%x\n", rt_sts);
+	pr_info("SMB: %s: rt_sts = 0x02%x\n", __func__, rt_sts);
 	chip->batt_present = !rt_sts;
 	return 0;
 }
 
 static int batt_low_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
-	pr_warn("rt_sts = 0x02%x\n", rt_sts);
+	pr_info("SMB: %s: rt_sts = 0x02%x\n", __func__, rt_sts);
 	return 0;
 }
 
 static int pre_to_fast_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
-	pr_debug("rt_sts = 0x02%x\n", rt_sts);
+	pr_info("SMB: %s: rt_sts = 0x02%x\n", __func__, rt_sts);
 	chip->batt_full = false;
 
 	return 0;
@@ -1185,20 +1187,20 @@ static int chg_error_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 
 static int recharge_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
-	pr_debug("rt_sts = 0x02%x\n", rt_sts);
+	pr_info("SMB: %s: rt_sts = 0x02%x\n", __func__, rt_sts);
 	chip->batt_full = !rt_sts;
 	return 0;
 }
 
 static int taper_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
-	pr_debug("rt_sts = 0x02%x\n", rt_sts);
+	pr_info("SMB: %s: rt_sts = 0x02%x\n", __func__, rt_sts);
 	return 0;
 }
 
 static int iterm_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
-	pr_debug("rt_sts = 0x02%x\n", rt_sts);
+	pr_info("SMB: %s: rt_sts = 0x02%x\n", __func__, rt_sts);
 	chip->batt_full = !!rt_sts;
 	return 0;
 }
@@ -1242,7 +1244,7 @@ static int get_usb_supply_type(struct smb23x_chip *chip)
 		tmp = 1;
 	}
 
-	pr_debug("Charger type %s detected\n", usb_type_str[tmp]);
+	pr_info("SMB: Charger type %s detected\n", usb_type_str[tmp]);
 
 	return type;
 }
@@ -1905,7 +1907,7 @@ static int smb23x_battery_set_property(struct power_supply *psy,
 
 		switch (val->intval) {
 		case POWER_SUPPLY_STATUS_FULL:
-			pr_debug("BMS notify: battery FULL!\n");
+			pr_info("SMB notify: battery FULL!\n");
 			chip->batt_full = true;
 			rc = smb23x_charging_disable(chip, BMS, true);
 			if (rc < 0) {
@@ -1915,7 +1917,7 @@ static int smb23x_battery_set_property(struct power_supply *psy,
 			}
 			break;
 		case POWER_SUPPLY_STATUS_CHARGING:
-			pr_debug("BMS notify: battery CHARGING!\n");
+			pr_info("SMB notify: battery CHARGING!\n");
 			chip->batt_full = false;
 			rc = smb23x_charging_disable(chip, BMS, false);
 			if (rc < 0) {
@@ -1925,7 +1927,7 @@ static int smb23x_battery_set_property(struct power_supply *psy,
 			}
 			break;
 		case POWER_SUPPLY_STATUS_DISCHARGING:
-			pr_debug("BMS notify: battery DISCHARGING!\n");
+			pr_info("SMB notify: battery DISCHARGING!\n");
 			chip->batt_full = false;
 			break;
 		default:
