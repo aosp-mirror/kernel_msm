@@ -70,8 +70,9 @@
 		qcom,mdss-dsi-bllp-eof-power-mode;
 		qcom,mdss-dsi-bllp-power-mode;
 		qcom,mdss-dsi-lane-0-state;
+		qcom,mdss-tear-check-frame-rate = <4500>;
+		qcom,mdss-dsi-panel-clockrate = <308655360>;
 		qcom,mdss-dsi-te-pin-select = <1>;
-		qcom,mdss-dsi-te-v-sync-rd-ptr-irq-line = <0x2c>;
 		qcom,mdss-dsi-te-dcs-command = <1>;
 		qcom,mdss-dsi-te-check-enable;
 		qcom,mdss-dsi-te-using-te-pin;
