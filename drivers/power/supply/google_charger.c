@@ -46,6 +46,8 @@ struct chg_drv {
 	struct power_supply *usb_psy;
 	struct power_supply *wlc_psy;
 	const char *wlc_psy_name;
+	struct power_supply *bat_psy;
+	const char *bat_psy_name;
 	struct chg_profile chg_profile;
 	struct notifier_block psy_nb;
 
@@ -57,6 +59,7 @@ struct chg_drv {
 	int temp_idx;
 	int vbatt_idx;
 	int checked_cv_cnt;
+	int fv_uv;
 };
 
 /* Used as left operand also */
@@ -77,6 +80,7 @@ static int psy_changed(struct notifier_block *nb,
 
 	if (action == PSY_EVENT_PROP_CHANGED &&
 	    (!strcmp(psy->desc->name, chg_drv->chg_psy_name) ||
+	     !strcmp(psy->desc->name, chg_drv->bat_psy_name) ||
 	     !strcmp(psy->desc->name, "usb") ||
 	     (chg_drv->wlc_psy_name &&
 	      !strcmp(psy->desc->name, chg_drv->wlc_psy_name)))) {
@@ -138,17 +142,28 @@ static inline int psy_set_prop(struct power_supply *psy,
 	return 0;
 }
 
+static inline void init_chg_drv(struct chg_drv *chg_drv)
+{
+	chg_drv->temp_idx = -1;
+	chg_drv->vbatt_idx = -1;
+	chg_drv->checked_cv_cnt = 0;
+	chg_drv->fv_uv = -1;
+	PSY_SET_PROP(chg_drv->chg_psy,
+		     POWER_SUPPLY_PROP_TAPER_CONTROL_ENABLED, 0);
+}
+
 static void pr_info_states(struct power_supply *chg_psy,
 			   struct power_supply *usb_psy,
 			   struct power_supply *wlc_psy,
-			   int temp, int ibatt, int vbatt, int soc,
-			   int usb_present, int wlc_online)
+			   int temp, int ibatt, int vbatt, int vchrg,
+			   int soc, int usb_present, int wlc_online)
 {
 	int usb_type = PSY_GET_PROP(usb_psy, POWER_SUPPLY_PROP_REAL_TYPE);
 	int chg_type = PSY_GET_PROP(chg_psy, POWER_SUPPLY_PROP_CHARGE_TYPE);
 
-	pr_info("l=%d v=%d c=%d t=%d s=%s usb=%d wlc=%d\n",
-		soc, vbatt / 1000, ibatt / 1000, temp, psy_chgt_str[chg_type],
+	pr_info("l=%d vb=%d vc=%d c=%d t=%d s=%s usb=%d wlc=%d\n",
+		soc, vbatt / 1000, vchrg / 1000, ibatt / 1000,
+		temp, psy_chgt_str[chg_type],
 		usb_present, wlc_online);
 
 	if (usb_present)
@@ -186,11 +201,13 @@ static void chg_work(struct work_struct *work)
 	struct power_supply *chg_psy = chg_drv->chg_psy;
 	struct power_supply *usb_psy = chg_drv->usb_psy;
 	struct power_supply *wlc_psy = chg_drv->wlc_psy;
-	int temp, ibatt, vbatt, soc;
+	struct power_supply *bat_psy = chg_drv->bat_psy;
+	int temp, ibatt, vbatt, vchrg, soc;
 	int usb_present, wlc_online = 0;
 	int vbatt_idx = 0, temp_idx = 0, fv_uv, cc_max, cc_next_max;
 	int batt_status, cv_delta;
 	bool rerun_work = false;
+	int vcell_delta = 0;
 
 	pr_debug("battery charging work item\n");
 
@@ -199,10 +216,11 @@ static void chg_work(struct work_struct *work)
 		__pm_stay_awake(&chg_drv->chg_ws);
 	}
 
-	temp = PSY_GET_PROP(chg_psy, POWER_SUPPLY_PROP_TEMP);
-	ibatt = PSY_GET_PROP(chg_psy, POWER_SUPPLY_PROP_CURRENT_NOW);
-	vbatt = PSY_GET_PROP(chg_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW);
-	soc = PSY_GET_PROP(chg_psy, POWER_SUPPLY_PROP_CAPACITY);
+	temp = PSY_GET_PROP(bat_psy, POWER_SUPPLY_PROP_TEMP);
+	ibatt = PSY_GET_PROP(bat_psy, POWER_SUPPLY_PROP_CURRENT_NOW);
+	vbatt = PSY_GET_PROP(bat_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW);
+	vchrg = PSY_GET_PROP(chg_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW);
+	soc = PSY_GET_PROP(bat_psy, POWER_SUPPLY_PROP_CAPACITY);
 
 	usb_present = PSY_GET_PROP(usb_psy, POWER_SUPPLY_PROP_PRESENT);
 	if (wlc_psy)
@@ -213,7 +231,7 @@ static void chg_work(struct work_struct *work)
 		goto error_rerun;
 
 	pr_info_states(chg_psy, usb_psy, wlc_psy,
-		       temp, ibatt, vbatt, soc, usb_present, wlc_online);
+		       temp, ibatt, vbatt, vchrg, soc, usb_present, wlc_online);
 
 	if (!usb_present && !wlc_online)
 		goto check_rerun;
@@ -225,9 +243,7 @@ static void chg_work(struct work_struct *work)
 			PSY_SET_PROP(chg_psy,
 				     POWER_SUPPLY_PROP_INPUT_SUSPEND, 1);
 			chg_drv->stop_charging = true;
-			chg_drv->temp_idx = -1;
-			chg_drv->vbatt_idx = -1;
-			chg_drv->checked_cv_cnt = 0;
+			init_chg_drv(chg_drv);
 		}
 		/* status will be discharging when disabled but we want to keep
 		 * monitoring temperature to re-enable charging
@@ -246,7 +262,7 @@ static void chg_work(struct work_struct *work)
 		temp_idx++;
 
 	/* 2. compute the step index given the battery voltage  */
-	while (vbatt_idx < profile->volt_nb_limits &&
+	while (vbatt_idx < profile->volt_nb_limits - 1 &&
 	       vbatt > profile->volt_limits[vbatt_idx])
 		vbatt_idx++;
 	/* voltage index cannot go down once a CV step is crossed */
@@ -258,14 +274,20 @@ static void chg_work(struct work_struct *work)
 	fv_uv = profile->volt_limits[vbatt_idx];
 
 	/* 4. get next step CC value */
-	if (vbatt_idx == profile->volt_nb_limits - 1)
+	if (vbatt_idx == profile->volt_nb_limits - 1) {
 		cc_next_max = 0;
-	else
+		PSY_SET_PROP(chg_drv->chg_psy,
+			     POWER_SUPPLY_PROP_TAPER_CONTROL_ENABLED, 1);
+	} else
 		cc_next_max = CCCM_LIMITS(profile, temp_idx, vbatt_idx + 1);
 
-	/* 5. check if CV step limit has been reached */
+	/* 5. check if CV step limit has been reached from a charger POV
+	 *    we compare vchrg and not batt to float voltage to raise
+	 *    sooner the FV otherwise taper phase current is quickly
+	 *    lower than next CC phase current
+	 */
 	if (chg_drv->vbatt_idx != -1) {
-		cv_delta = abs(fv_uv - vbatt);
+		cv_delta = abs(fv_uv - vchrg);
 		if (cv_delta <= profile->cv_range_accuracy)
 			chg_drv->checked_cv_cnt++;
 		else
@@ -284,14 +306,23 @@ static void chg_work(struct work_struct *work)
 		fv_uv = profile->volt_limits[vbatt_idx];
 	}
 
-	if (chg_drv->vbatt_idx != vbatt_idx || chg_drv->temp_idx != temp_idx) {
-		pr_info("temp_idx:%d->%d, vbatt_idx:%d->%d, fv=%d, cc_max=%d, cc_next_max=%d\n",
-			chg_drv->temp_idx, temp_idx,
-			chg_drv->vbatt_idx, vbatt_idx,
-			fv_uv, cc_max, cc_next_max);
+	/* 7. adjust float voltage but not for last CV step */
+	if (vbatt_idx < profile->volt_nb_limits - 1) {
+		if (vchrg > vbatt)
+			vcell_delta = vchrg - vbatt;
+		fv_uv += vcell_delta;
+		fv_uv = fv_uv / profile->cv_hw_resolution *
+		    profile->cv_hw_resolution;
+	}
 
-		if (PSY_SET_PROP(chg_psy,
-				 POWER_SUPPLY_PROP_VOLTAGE_MAX, fv_uv))
+	if (chg_drv->vbatt_idx != vbatt_idx ||
+	    chg_drv->temp_idx != temp_idx ||
+	    chg_drv->fv_uv != fv_uv) {
+		pr_info("temp_idx:%d->%d, vbatt_idx:%d->%d, fv=%d->%d, cc_max=%d, cc_next_max=%d\n",
+		chg_drv->temp_idx, temp_idx, chg_drv->vbatt_idx, vbatt_idx,
+		chg_drv->fv_uv, fv_uv, cc_max, cc_next_max);
+
+		if (PSY_SET_PROP(chg_psy, POWER_SUPPLY_PROP_VOLTAGE_MAX, fv_uv))
 			goto error_rerun;
 
 		if (PSY_SET_PROP(chg_psy,
@@ -301,6 +332,7 @@ static void chg_work(struct work_struct *work)
 		chg_drv->temp_idx = temp_idx;
 		chg_drv->vbatt_idx = vbatt_idx;
 		chg_drv->checked_cv_cnt = 0;
+		chg_drv->fv_uv = fv_uv;
 	}
 
 check_rerun:
@@ -333,9 +365,7 @@ handle_rerun:
 	} else {
 		pr_info("stop battery charging work: batt_status=%d\n",
 			batt_status);
-		chg_drv->temp_idx = -1;
-		chg_drv->vbatt_idx = -1;
-		chg_drv->checked_cv_cnt = 0;
+		init_chg_drv(chg_drv);
 		chg_drv->chg_work_running = false;
 		__pm_relax(&chg_drv->chg_ws);
 	}
@@ -417,10 +447,11 @@ static int chg_init_chg_profile(struct chg_drv *chg_drv)
 	if (ret < 0)
 		profile->cv_range_accuracy_cnt = 3;
 
-	ret = of_property_read_u32(node, "google,chg-temp-nb-limits",
-				   &profile->temp_nb_limits);
-	if (ret < 0) {
-		pr_err("cannot read chg-temp-nb-limits, ret=%d\n", ret);
+	profile->temp_nb_limits =
+	    of_property_count_elems_of_size(node, "google,chg-temp-limits",
+					    sizeof(u32));
+	if (profile->temp_nb_limits < 0) {
+		pr_err("cannot read chg-temp-limits, ret=%d\n", ret);
 		return ret;
 	}
 	if (profile->temp_nb_limits > CHG_TEMP_NB_LIMITS_MAX) {
@@ -436,10 +467,11 @@ static int chg_init_chg_profile(struct chg_drv *chg_drv)
 		return ret;
 	}
 
-	ret = of_property_read_u32(node, "google,chg-cv-nb-limits",
-				   &profile->volt_nb_limits);
-	if (ret < 0) {
-		pr_err("cannot read chg-cv-nb-limits, ret=%d\n", ret);
+	profile->volt_nb_limits =
+	    of_property_count_elems_of_size(node, "google,chg-cv-limits",
+					    sizeof(u32));
+	if (profile->volt_nb_limits < 0) {
+		pr_err("cannot read chg-cv-limits, ret=%d\n", ret);
 		return ret;
 	}
 	if (profile->volt_nb_limits > CHG_VOLT_NB_LIMITS_MAX) {
@@ -491,14 +523,22 @@ static int google_charger_probe(struct platform_device *pdev)
 {
 	int ret = 0;
 	struct chg_drv *chg_drv;
-	struct power_supply *chg_psy, *usb_psy, *wlc_psy = NULL;
-	const char *chg_psy_name, *wlc_psy_name = NULL;
+	struct power_supply *chg_psy, *usb_psy, *wlc_psy = NULL, *bat_psy;
+	const char *chg_psy_name, *bat_psy_name, *wlc_psy_name = NULL;
 
 	ret = of_property_read_string(pdev->dev.of_node,
 				      "google,chg-power-supply",
 				      &chg_psy_name);
 	if (ret != 0) {
 		pr_err("cannot read google,chg-power-supply, ret=%d\n", ret);
+		return ret;
+	}
+
+	ret = of_property_read_string(pdev->dev.of_node,
+				      "google,bat-power-supply",
+				      &bat_psy_name);
+	if (ret != 0) {
+		pr_err("cannot read google,bat-power-supply, ret=%d\n", ret);
 		return ret;
 	}
 
@@ -516,9 +556,19 @@ static int google_charger_probe(struct platform_device *pdev)
 		return -EPROBE_DEFER;
 	}
 
+	bat_psy = power_supply_get_by_name(bat_psy_name);
+	if (!bat_psy) {
+		dev_info(&pdev->dev, "failed to get \"%s\" power supply\n",
+			 bat_psy_name);
+		power_supply_put(chg_psy);
+		return -EPROBE_DEFER;
+	}
+
 	usb_psy = power_supply_get_by_name("usb");
 	if (!usb_psy) {
 		dev_info(&pdev->dev, "failed to get \"usb\" power supply\n");
+		power_supply_put(chg_psy);
+		power_supply_put(bat_psy);
 		return -EPROBE_DEFER;
 	}
 
@@ -528,46 +578,90 @@ static int google_charger_probe(struct platform_device *pdev)
 			dev_info(&pdev->dev,
 				 "failed to get \"%s\" power supply\n",
 				 wlc_psy_name);
+			power_supply_put(chg_psy);
+			power_supply_put(bat_psy);
+			power_supply_put(usb_psy);
 			return -EPROBE_DEFER;
 		}
 	}
 
 	chg_drv = devm_kzalloc(&pdev->dev, sizeof(*chg_drv), GFP_KERNEL);
-	if (!chg_drv)
-		return -ENOMEM;
+	if (!chg_drv) {
+		ret = -ENOMEM;
+		goto error_out;
+	}
 
 	chg_drv->device = &pdev->dev;
 	chg_drv->chg_psy = chg_psy;
-	chg_drv->chg_psy_name = chg_psy_name;
-	chg_drv->usb_psy = usb_psy;
+	chg_drv->chg_psy_name =
+	    devm_kstrdup(&pdev->dev, chg_psy_name, GFP_KERNEL);
+	if (!chg_drv->chg_psy_name) {
+		ret = -ENOMEM;
+		goto error_out;
+	}
 	chg_drv->wlc_psy = wlc_psy;
-	chg_drv->wlc_psy_name = wlc_psy_name;
+	if (wlc_psy_name) {
+		chg_drv->wlc_psy_name =
+		    devm_kstrdup(&pdev->dev, wlc_psy_name, GFP_KERNEL);
+		if (!chg_drv->wlc_psy_name) {
+			ret = -ENOMEM;
+			goto error_out;
+		}
+	}
+	chg_drv->usb_psy = usb_psy;
+	chg_drv->bat_psy = bat_psy;
+	chg_drv->bat_psy_name =
+	    devm_kstrdup(&pdev->dev, bat_psy_name, GFP_KERNEL);
+	if (!chg_drv->bat_psy_name) {
+		ret = -ENOMEM;
+		goto error_out;
+	}
+	init_chg_drv(chg_drv);
+	chg_drv->chg_work_running = false;
 
 	ret = chg_init_chg_profile(chg_drv);
 	if (ret < 0) {
 		pr_err("cannot read charging profile from dt, ret=%d\n", ret);
-		return ret;
+		goto error_out;
 	}
-
-	INIT_DELAYED_WORK(&chg_drv->chg_work, chg_work);
-	wakeup_source_init(&chg_drv->chg_ws, "google-charger");
-	chg_drv->temp_idx = -1;
-	chg_drv->vbatt_idx = -1;
 
 	chg_drv->psy_nb.notifier_call = psy_changed;
 	ret = power_supply_reg_notifier(&chg_drv->psy_nb);
 	if (ret < 0) {
 		pr_err("Cannot register power supply notifer, ret=%d\n", ret);
-		return ret;
+		goto error_out;
 	}
+
+	INIT_DELAYED_WORK(&chg_drv->chg_work, chg_work);
+	wakeup_source_init(&chg_drv->chg_ws, "google-charger");
+	platform_set_drvdata(pdev, chg_drv);
 
 	dev_info(&pdev->dev, "probe done\n");
 
 	return 0;
+
+error_out:
+	power_supply_put(chg_psy);
+	power_supply_put(bat_psy);
+	power_supply_put(usb_psy);
+	if (wlc_psy)
+		power_supply_put(wlc_psy);
+	return ret;
 }
 
 static int google_charger_remove(struct platform_device *pdev)
 {
+	struct chg_drv *chg_drv = platform_get_drvdata(pdev);
+
+	if (chg_drv) {
+		power_supply_put(chg_drv->chg_psy);
+		power_supply_put(chg_drv->bat_psy);
+		power_supply_put(chg_drv->usb_psy);
+		if (chg_drv->wlc_psy)
+			power_supply_put(chg_drv->wlc_psy);
+		wakeup_source_trash(&chg_drv->chg_ws);
+	}
+
 	return 0;
 }
 

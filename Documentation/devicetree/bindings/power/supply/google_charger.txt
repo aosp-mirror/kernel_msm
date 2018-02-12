@@ -3,19 +3,19 @@ google_charger
 
 Required properties:
  - compatible : "google,charger"
- - google,chg-power-supply: name of the power supply to use to control charging
+ - google,chg-power-supply: name of the charge control power supply
+ - google,bat-power-supply: name of the Fuel Gauge power supply
  - google,chg-update-interval: delay in ms to wait before re-running the work item
  - google,chg-battery-capacity: the nominal capacity used to compute the effective
      1C charge rate
- - google,chg-temp-nb-limits: size of google,chg-temp-limits array
  - google,chg-temp-limits: the temperature buckets limits defining the indexes of
      the constant charge limits (row index in google,chg-cc-limits)
- - google,chg-cv-nb-limits: size of google,chg-cv-limits array
  - google,chg-cv-limits: steps voltage limits (column index in google,chg-cc-limits)
  - google,chg-cc-limits: the array of constant current charge rates given in % of
      google,chg-battery-capacity
 
-Required properties:
+Optional properties:
+ - google,wlc-power-supply: name of wireless charing input power supply
  - google,cv-hw-resolution: the constant voltage setting resolution in micro volt
      defaults to 25000
  - google,cc-hw-resolution: the constant current setting resolution in micro amp
