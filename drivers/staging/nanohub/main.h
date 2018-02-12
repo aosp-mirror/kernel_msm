@@ -100,6 +100,7 @@ struct nanohub_data {
 	atomic_t hub_mode_ap_active;
 	atomic_t lcd_mutex;
 	struct mutex hub_mode_set_lock;
+	struct mutex nanohub_write_lock;
 };
 
 enum {

@@ -1268,13 +1268,18 @@ static ssize_t nanohub_write(struct file *file, const char *buffer,
 	struct nanohub_data *data = io->data;
 	int ret;
 
+	mutex_lock(&(data->nanohub_write_lock));
 	ret = request_wakeup_timeout(data, WAKEUP_TIMEOUT_MS);
-	if (ret)
+	if (ret) {
+		pr_err("nanohub: error to request wakeup, ret = %d\n", ret);
+		mutex_unlock(&(data->nanohub_write_lock));
 		return ret;
+	}
 
 	ret = nanohub_comms_write(data, buffer, length);
 
 	release_wakeup(data);
+	mutex_unlock(&(data->nanohub_write_lock));
 
 	return ret;
 }
@@ -1848,6 +1853,7 @@ struct iio_dev *nanohub_probe(struct device *dev, struct iio_dev *iio_dev)
 	data->pdata = pdata;
 
 	mutex_init(&(data->hub_mode_set_lock));
+	mutex_init(&(data->nanohub_write_lock));
 	init_waitqueue_head(&data->kthread_wait);
 
 	nanohub_io_init(&data->free_pool, data, dev);
