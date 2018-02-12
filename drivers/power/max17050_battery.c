@@ -55,15 +55,17 @@
 #define ALERT_THRESHOLD_SOC	1
 
 /* Save and Restore dyn_soc information */
-#define DYNMIC_RESTORE_MIN_SOC 20
-#define RESTORE_TIME_SEC       3600
-#define NORMAL_HEADER_DATA     0xAD
-#define ABNORMAL_HEADER_DATA   0xFF
+#define DYNMIC_RESTORE_MIN_SOC	20
+#define RESTORE_TIME_SEC	3600
+#define NORMAL_HEADER_DATA	0xAD
+#define ABNORMAL_HEADER_DATA	0xFF
 /* index of the external stroage offsets */
-#define ES_OFF_HEAD            0
-#define ES_OFF_SOC             1
-#define ES_OFF_DYN             2
-#define ES_OFF_STAMP           3
+#define ES_OFF_HEAD		0
+#define ES_OFF_SOC		1
+#define ES_OFF_DYN		2
+#define ES_OFF_STAMP		3
+
+#define MAX_CYCLE_STEP		4
 
 /* Modelgauge M3 save/restore values */
 struct max17050_learned_params {
@@ -118,6 +120,12 @@ struct max17050_chip {
 	int fake_capacity;
 	int backup_capacity;
 	int charge_status;
+
+	/* offset based on battery cycle */
+	u32 batt_life_cycle_set[MAX_CYCLE_STEP];
+	u32 batt_life_cycle_offset[MAX_CYCLE_STEP];
+	int cycle_state;
+	bool support_battery_cycle_soc;
 };
 
 static int max17050_write_reg(struct i2c_client *client, u8 reg, u16 value)
@@ -712,8 +720,8 @@ static char *pm_batt_supplied_to[] = {
 };
 
 static int max17050_get_property(struct power_supply *psy,
-			    enum power_supply_property psp,
-			    union power_supply_propval *val)
+				enum power_supply_property psp,
+				union power_supply_propval *val)
 {
 	struct max17050_chip *chip = container_of(psy,
 				struct max17050_chip, battery);
@@ -1077,6 +1085,30 @@ static void max17050_complete_init(struct max17050_chip *chip)
 	if (chip->use_ext_temp && chip->pdata->ext_batt_psy)
 		schedule_delayed_work(&chip->ext_batt_work, 0);
 
+	if (chip->support_battery_cycle_soc) {
+		int i;
+		u32 cycles;
+
+		mutex_lock(&chip->mutex);
+		chip->learned.cycles = max17050_read_reg(client,
+				MAX17050_CYCLES);
+		cycles = chip->learned.cycles / 100;
+		mutex_unlock(&chip->mutex);
+
+		for (i = 0; i < MAX_CYCLE_STEP; i++) {
+			if (cycles > chip->batt_life_cycle_set[i])
+				chip->cycle_state = i;
+		}
+
+		if (chip->support_battery_cycle_soc) {
+			chip->pdata->empty_soc +=
+				chip->batt_life_cycle_offset[chip->cycle_state];
+			pr_info("cycle state: %d empty soc: %d\n",
+					chip->cycle_state,
+					chip->pdata->empty_soc);
+		}
+	}
+
 	chip->init_done = true;
 }
 
@@ -1195,8 +1227,116 @@ max17050_get_pdata(struct device *dev)
 			pdata->model[i] |= *model++;
 		}
 	}
-
 	return pdata;
+}
+
+static int max17050_batt_cycle_offset_dt_init(struct max17050_chip *chip)
+{
+	struct device_node *np = chip->client->dev.of_node;
+	struct property *prop;
+	size_t size;
+	int i;
+	int rc = 0;
+
+	chip->support_battery_cycle_soc = of_property_read_bool(np,
+			"maxim,batt-life-cycle-soc");
+
+	if (!chip->support_battery_cycle_soc)
+		goto out;
+
+	prop = of_find_property(np, "maxim,batt-life-cycle-set", NULL);
+	if (!np) {
+		pr_err("%s: batt-life-cycle-set not specified\n",
+				__func__);
+		rc = -EINVAL;
+		goto out;
+	}
+
+	size = prop->length / sizeof(u32);
+	if (size != MAX_CYCLE_STEP) {
+		pr_err("%s: Battery Life Cycle Set specified is of \
+				incorrect size\n",
+				__func__);
+		rc = -EINVAL;
+		goto out;
+	}
+
+	rc = of_property_read_u32_array(np,
+			"maxim,batt-life-cycle-set",
+			chip->batt_life_cycle_set, size);
+	if (rc < 0) {
+		pr_err("%s: Reading batt-life-cycle-set failed, rc=%d\n",
+				__func__,rc);
+		rc = -EINVAL;
+		goto out;
+	}
+
+	for (i = 0; i < MAX_CYCLE_STEP; i++) {
+		if (chip->batt_life_cycle_set[i] < 0 ||
+				chip->batt_life_cycle_set[i] > 1000) {
+			pr_err("%s: Incorrect batt-life-cycle-set\n",
+					__func__);
+			rc = -EINVAL;
+			goto out;
+		}
+	}
+
+	if (chip->support_battery_cycle_soc) {
+		prop = of_find_property(np, "maxim,batt-life-cycle-offset",
+					NULL);
+		if (!prop) {
+			pr_err("%s: batt-life-cycle-offset not specified\n",
+					__func__);
+			rc = -EINVAL;
+			goto out;
+		}
+
+		size = prop->length / sizeof(u32);
+		if (size != MAX_CYCLE_STEP) {
+			pr_err("%s: batt-life-cycle-offset specified is of \
+					incorrect size\n",
+					__func__);
+			rc = -EINVAL;
+			goto out;
+		}
+
+		rc = of_property_read_u32_array(np,
+				"maxim,batt-life-cycle-offset",
+				chip->batt_life_cycle_offset,size);
+		if (rc < 0) {
+			pr_err("%s: Reading batt-life-cycle-offset failed, \
+					rc=%d\n",
+					__func__,rc);
+			rc = -EINVAL;
+			goto out;
+		}
+
+		for (i = 0; i < MAX_CYCLE_STEP; i++) {
+			if (chip->batt_life_cycle_offset[i] < 0 ||
+					chip->batt_life_cycle_offset[i] > 100) {
+				pr_err("%s: Incorrect batt-life-cycle-offset\n",
+						__func__);
+				rc = -EINVAL;
+				goto out;
+			}
+		}
+	}
+
+	for (i = 0; i < MAX_CYCLE_STEP; i++) {
+		pr_debug("Cycle %d - Offset: %d\n",
+				chip->batt_life_cycle_set[i],
+				chip->batt_life_cycle_offset[i]);
+	}
+
+	return 0;
+out:
+	/* Write default cycle step & offset value */
+	for (i = 0; i < MAX_CYCLE_STEP; i++) {
+		chip->batt_life_cycle_set[i] = 0;
+		chip->batt_life_cycle_offset[i] = 0;
+	}
+
+	return rc;
 }
 
 static int max17050_debugfs_get_fake_capacity(void *data, u64 *val)
@@ -1412,6 +1552,12 @@ static int max17050_probe(struct i2c_client *client,
 	if (chip->use_ext_temp && chip->pdata->ext_batt_psy)
 		INIT_DELAYED_WORK(&chip->ext_batt_work,
 						max17050_update_ext_temp);
+
+	ret = max17050_batt_cycle_offset_dt_init(chip);
+	if (ret) {
+		pr_err("failed to parse devicetree %d\n", ret);
+		return ret;
+	}
 
 	if (client->irq) {
 		ret = request_threaded_irq(client->irq, NULL,
