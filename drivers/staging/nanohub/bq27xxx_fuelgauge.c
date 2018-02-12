@@ -152,7 +152,7 @@ void bq27x00_update(struct Nanohub_FuelGauge_Info *fg_info)
 		  fg_info->last_capacity > fg_info->cache.capacity)) {
 			power_supply_changed(&fg_info->bat);
 			fg_info->last_capacity = fg_info->cache.capacity;
-		} else if (!charger_online &&
+		} else if (!charger_online && (fg_info->last_capacity > 0) &&
 			   (fg_info->last_capacity < fg_info->cache.capacity)) {
 			fg_info->cache.capacity = fg_info->last_capacity;
 		}
