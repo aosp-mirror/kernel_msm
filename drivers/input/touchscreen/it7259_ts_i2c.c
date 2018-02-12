@@ -141,7 +141,7 @@
 #define IT_I2C_VTG_MAX_UV	3300000
 #define IT_I2C_ACTIVE_LOAD_UA	10000
 #define DELAY_VTG_REG_EN	170
-#define DELAY_I2C_TRANSATION	200
+#define DELAY_I2C_TRANSATION	300
 
 #define PINCTRL_STATE_ACTIVE	"pmx_ts_active"
 #define PINCTRL_STATE_SUSPEND	"pmx_ts_suspend"
@@ -234,6 +234,7 @@ static int fb_notifier_callback(struct notifier_block *self,
 static int it7259_ts_resume(struct device *dev);
 static int it7259_ts_suspend(struct device *dev);
 
+static bool gfnIT7259_WriteSignature(struct it7259_ts_data *ts_data);
 static int it7259_debug_suspend_set(void *_data, u64 val)
 {
 	struct it7259_ts_data *ts_data = _data;
@@ -806,6 +807,74 @@ static int gfnIT7259_DirectWriteFlash(struct it7259_ts_data *ts_data, int wFlash
         return COMMAND_SUCCESS;
 }
 
+static bool gfnIT7259_WriteSignature(struct it7259_ts_data *ts_data)
+{
+	int dwAddress;
+	unsigned char RetDATABuffer[10];
+	unsigned char DATABuffer[10];
+	unsigned long dwFlashSize = 0x10000;
+
+	ts_data->fw_cfg_uploading = true;
+	disable_irq(ts_data->client->irq);
+	//trun off CPU data clock
+	if (!gfnIT7259_SwitchCPUClock(ts_data, 0x01)) {
+		printk("###002 gfnIT7259_SwitchCPUClock(0x01) fail!\n");
+		ts_data->fw_cfg_uploading = false;
+		enable_irq(ts_data->client->irq);
+		return false;
+	}
+
+	//Wait SPIFCR
+	//printk("###003 Wait SPIFCR\n");
+	dwAddress = 0xF400;
+	do
+	{
+		i2cDirectReadFromIT7259(ts_data,dwAddress,RetDATABuffer,2);
+	}
+	while((RetDATABuffer[1] & 0x01 )  != 0x00);
+	//printk("###003 End SPIFCR\n");
+	//Erase signature
+	//printk("###004 Erase signature\n");
+	dwAddress = 0xF404;
+	DATABuffer[0] = 0x3F;
+	i2cDirectWriteToIT7259(ts_data,dwAddress,DATABuffer,1);
+
+	dwAddress = 0xF402;
+	DATABuffer[0] = 0xD7;
+	i2cDirectWriteToIT7259(ts_data,dwAddress,DATABuffer,1);
+
+	//write signature
+	DATABuffer[0] = 0x59;
+	DATABuffer[1] = 0x72;
+
+	gfnIT7259_DirectEraseFlash(ts_data, 0xD7,(dwFlashSize -1024));
+	gfnIT7259_DirectWriteFlash(ts_data, (dwFlashSize -1024),2,DATABuffer);
+
+	DATABuffer[0] = 0x00;
+	DATABuffer[1] = 0x00;
+	i2cDirectReadFromIT7259(ts_data,dwAddress,DATABuffer,2);
+
+	//trun on CPU data clock
+	//printk("###012 trun on CPU data clock\n");
+	if(!gfnIT7259_SwitchCPUClock(ts_data, 0x04)) {
+		printk("###012 trun on CPU data clock fail\n");
+		ts_data->fw_cfg_uploading = false;
+		enable_irq(ts_data->client->irq);
+		return false;
+	}
+
+	gpio_set_value(ts_data->pdata->reset_gpio, 0); //After upgrade FW&CFG, reset the IC
+	msleep(1); //INT low time need to more than 1us
+	gpio_set_value(ts_data->pdata->reset_gpio, 1);
+	msleep(300);
+	ts_data->fw_cfg_uploading = false;
+	printk("###gfnIT7259_FirmwareDownload() end.\n");
+
+	enable_irq(ts_data->client->irq);
+	return true;
+}
+
+
 
 static bool gfnIT7259_FirmwareDownload(struct it7259_ts_data *ts_data, unsigned int unFirmwareLength,
                         unsigned char arucFW[], unsigned int unConfigLength, unsigned char arucConfig[])
@@ -837,11 +906,14 @@ static bool gfnIT7259_FirmwareDownload(struct it7259_ts_data *ts_data, unsigned 
 	}
 
 
+	ts_data->fw_cfg_uploading = true;
 	disable_irq(ts_data->client->irq);
 	//trun off CPU data clock
 	if (!gfnIT7259_SwitchCPUClock(ts_data, 0x01))
 	{
 		printk("###002 gfnIT7259_SwitchCPUClock(0x01) fail!\n");
+		ts_data->fw_cfg_uploading = false;
+		enable_irq(ts_data->client->irq);
 		return false;
 	}
 
@@ -890,6 +962,8 @@ static bool gfnIT7259_FirmwareDownload(struct it7259_ts_data *ts_data, unsigned 
 			if(wTmp != COMMAND_SUCCESS) {
 				//Write Firmware Flash error
 				printk("###DMA ModeWrite Firmware Flash error(FlashAddress:%04x)\n", i);
+				ts_data->fw_cfg_uploading = false;
+				enable_irq(ts_data->client->irq);
 				return false;
 			}
 		}
@@ -937,6 +1011,8 @@ static bool gfnIT7259_FirmwareDownload(struct it7259_ts_data *ts_data, unsigned 
 				RetDATABuffer[0], RetDATABuffer[1],
 				arucFW[unFirmwareLength - 2],
 				arucFW[unFirmwareLength - 1]);
+			ts_data->fw_cfg_uploading = false;
+			ts_data->fw_cfg_uploading = false;
 			return false;//FW CRC check fail
 		}
 	}
@@ -1035,6 +1111,8 @@ static bool gfnIT7259_FirmwareDownload(struct it7259_ts_data *ts_data, unsigned 
 				RetDATABuffer[0], RetDATABuffer[1],
 				arucConfig[unConfigLength - 2],
 				arucConfig[unConfigLength - 1]);
+			ts_data->fw_cfg_uploading = false;
+			enable_irq(ts_data->client->irq);
 			return false;//config CRC Check Error
 		}
 	}
@@ -1055,9 +1133,15 @@ static bool gfnIT7259_FirmwareDownload(struct it7259_ts_data *ts_data, unsigned 
 	if(!gfnIT7259_SwitchCPUClock(ts_data, 0x04))
 	{
 		printk("###012 trun on CPU data clock fail\n");
+		ts_data->fw_cfg_uploading = false;
+		enable_irq(ts_data->client->irq);
 		return false;
 	}
 
+	gpio_set_value(ts_data->pdata->reset_gpio, 0); //After upgrade FW&CFG, reset
+	msleep(1); //INT low time need to more than 1u
+	gpio_set_value(ts_data->pdata->reset_gpio, 1);
+	ts_data->fw_cfg_uploading = false;
 	printk("###gfnIT7259_FirmwareDownload() end.\n");
 
 	enable_irq(ts_data->client->irq);
@@ -1206,6 +1290,7 @@ static ssize_t sysfs_upgrade_store(struct device *dev,
                 struct device_attribute *attr, const char *buf, size_t count)
 {
         struct it7259_ts_data *ts_data = dev_get_drvdata(dev);
+	int reset_count = 0;
 
         printk(KERN_INFO "%s():\n", __func__);
         if (ts_data->suspended) {
@@ -1213,15 +1298,32 @@ static ssize_t sysfs_upgrade_store(struct device *dev,
                 return -EBUSY;
         }
 
+	disable_irq(ts_data->client->irq);
+	gpio_set_value(ts_data->pdata->reset_gpio, 0);
+	msleep(1);
+	gpio_set_value(ts_data->pdata->reset_gpio, 1);
+	msleep(300);
+	enable_irq(ts_data->client->irq);
         mutex_lock(&ts_data->fw_cfg_mutex);
+upgrade_fw:
         if(Upgrade_FW_CFG(ts_data)) {
+		if(reset_count < 3) {
+			reset_count++;
+			disable_irq(ts_data->client->irq);
+			gpio_set_value(ts_data->pdata->reset_gpio, 0);
+			msleep(1);
+			gpio_set_value(ts_data->pdata->reset_gpio, 1);
+			msleep(300);
+			enable_irq(ts_data->client->irq);
+			goto upgrade_fw;
+		}
                 printk(KERN_ERR "IT7259_upgrade_failed\n");
 
         } else {
                 printk(KERN_ERR "IT7259_upgrade_OK\n\n");
         }
 	mutex_unlock(&ts_data->fw_cfg_mutex);
-	return 1;
+	return count;
 }
 
 static ssize_t sysfs_upgrade_show(struct device *dev,
@@ -2436,6 +2538,7 @@ static int it7259_ts_probe(struct i2c_client *client,
 	uint8_t rsp[2];
 	int ret = -1, err;
 	struct dentry *temp;
+	int count = 0;
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
 		dev_err(&client->dev, "need I2C_FUNC_I2C\n");
@@ -2518,11 +2621,28 @@ static int it7259_ts_probe(struct i2c_client *client,
 	}
 
 	msleep(DELAY_I2C_TRANSATION);
+
+	ret = gfnIT7259_WriteSignature(ts_data);
+	if (!ret) {
+		dev_err(&client->dev, "Failed to write firmware signature %d!!!", ret);
+	}
+
+recheck:
 	ret = it7259_ts_chip_identify(ts_data);
 	if (ret) {
 		dev_err(&client->dev, "Failed to identify chip %d!!!", ret);
-		if(Force_Upgrade(ts_data))
+		if(Force_Upgrade(ts_data)) {
+			if(count < 3) {
+				count++;
+				/* Reset the chip before re-try to read vendor ID */
+				gpio_set_value(ts_data->pdata->reset_gpio, 0);
+				msleep(1);
+				gpio_set_value(ts_data->pdata->reset_gpio, 1);
+				msleep(DELAY_I2C_TRANSATION);
+				goto recheck;
+			}
 			dev_err(&client->dev, "IT7259 force upgrade fail, please check hardware\n");
+		}
 		else
 			dev_err(&client->dev, "IT7259 force upgrade success!!\n");
 		//goto err_identification_fail;
