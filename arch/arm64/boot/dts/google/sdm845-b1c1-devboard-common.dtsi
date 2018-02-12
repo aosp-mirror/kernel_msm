@@ -200,6 +200,9 @@
 
 &qupv3_se8_spi {
 	status = "ok";
+	/* Sleep the SPI lines when not in use. This allows SLPI to share the
+	 * bus with the AP. */
+	pinctrl-1 = <&qupv3_se8_spi_sleep>;
 };
 
 / {
