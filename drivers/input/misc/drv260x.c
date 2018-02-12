@@ -814,6 +814,34 @@ static int drv260x_probe(struct i2c_client *client,
 		return error;
 	}
 
+	if (regulator_count_voltages(haptics->regulator) > 0) {
+		error = regulator_set_voltage(haptics->regulator,
+				2600000, 3300000);
+		if (error) {
+			dev_err(&client->dev,
+					"reg set i2c vtg failed retval =%d\n",
+					error);
+			regulator_set_voltage(haptics->regulator, 0, 3300000);
+		}
+
+		error = regulator_set_optimum_mode(haptics->regulator, 10000);
+		if (error < 0) {
+			dev_err(&client->dev,
+					"Regulator avdd set_opt failed rc=%d\n",
+					error);
+		} else {
+
+			error = regulator_enable(haptics->regulator);
+			if (error) {
+				dev_err(&client->dev,
+						"Regulator avdd enable failed rc=%d\n",
+						error);
+			}
+		}
+
+	}
+
+
 	haptics->enable_gpio = devm_gpiod_get(&client->dev, "enable");
 	if (IS_ERR(haptics->enable_gpio)) {
 		error = PTR_ERR(haptics->enable_gpio);

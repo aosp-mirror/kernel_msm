@@ -223,6 +223,9 @@ struct it7259_ts_data {
 	struct pinctrl_state *pinctrl_state_release;
 	bool palm_pressed;
 	bool fw_active;
+	struct mutex	it7259_mutex;
+	bool opened;
+	bool wake_unlock;
 };
 
 /* Function declarations */
@@ -1639,6 +1642,10 @@ static irqreturn_t it7259_ts_threaded_handler(int irq, void *devid)
 	u32 virtual_radius = 0, panel_radius = 0, sq_rad_position = 0, sq_disp_position = 0;
 #endif
 
+	if(!ts_data->opened) {
+		return IRQ_HANDLED;
+	}
+
 	/* verify there is point data to read & it is readable and valid */
 	ret = it7259_i2c_read_no_ready_check(ts_data, BUF_QUERY, &dev_status,
 						sizeof(dev_status));
@@ -1979,7 +1986,6 @@ static int it7259_power_on(struct it7259_ts_data *ts_data, bool on)
 			retval);
 		goto error_reg_en_vdd;
 	}
-
 	retval = reg_set_optimum_mode_check(ts_data->avdd,
 		IT_I2C_ACTIVE_LOAD_UA);
 	if (retval < 0) {
@@ -2387,6 +2393,36 @@ static void it7259_get_chip_versions(struct it7259_ts_data *ts_data)
                 ts_data->cfg_ver[2], ts_data->cfg_ver[3]);
 }
 
+static int it7259_open(struct input_dev *input)
+{
+	struct it7259_ts_data *ts_data = input_get_drvdata(input);
+
+	mutex_lock(&ts_data->it7259_mutex);
+	if(ts_data->opened == false) {
+		if(ts_data->suspended) {
+			ts_data->wake_unlock = true;
+			it7259_ts_resume(&(ts_data->client->dev));
+		}
+		ts_data->opened = true;
+	}
+	mutex_unlock(&ts_data->it7259_mutex);
+
+	return 0;
+}
+
+static void it7259_close(struct input_dev *input)
+{
+	struct it7259_ts_data *ts_data = input_get_drvdata(input);
+
+	mutex_lock(&ts_data->it7259_mutex);
+	if(ts_data->opened == true) {
+		ts_data->opened = false;
+		ts_data->wake_unlock = false;
+		it7259_ts_suspend(&(ts_data->client->dev));
+	}
+	mutex_unlock(&ts_data->it7259_mutex);
+}
+
 
 static int it7259_ts_probe(struct i2c_client *client,
 				const struct i2c_device_id *id)
@@ -2525,6 +2561,11 @@ static int it7259_ts_probe(struct i2c_client *client,
                         HOVER_Z_MAX, 0, 0);
 	input_mt_init_slots(ts_data->input_dev,
 					ts_data->pdata->num_of_fingers, 0);
+
+	mutex_init(&ts_data->it7259_mutex);
+	ts_data->opened = true;
+	ts_data->input_dev->open = it7259_open;
+        ts_data->input_dev->close = it7259_close;
 
 	input_set_drvdata(ts_data->input_dev, ts_data);
 
@@ -2708,11 +2749,13 @@ static int fb_notifier_callback(struct notifier_block *self,
 	if (evdata && evdata->data && ts_data && ts_data->client) {
 		if (event == FB_EVENT_BLANK) {
 			blank = evdata->data;
-			if (*blank == FB_BLANK_UNBLANK)
+			if (*blank == FB_BLANK_UNBLANK) {
 				it7259_ts_resume(&(ts_data->client->dev));
+			}
 			else if (*blank == FB_BLANK_POWERDOWN ||
-					*blank == FB_BLANK_VSYNC_SUSPEND)
+					*blank == FB_BLANK_VSYNC_SUSPEND) {
 				it7259_ts_suspend(&(ts_data->client->dev));
+			}
 		}
 	}
 
@@ -2726,7 +2769,7 @@ static int it7259_ts_resume(struct device *dev)
 	struct it7259_ts_data *ts_data = dev_get_drvdata(dev);
 	int retval;
 
-	if (device_may_wakeup(dev)) {
+	if (device_may_wakeup(dev) && ts_data->opened) {
 		if (ts_data->in_low_power_mode) {
 			/* Set active current for the avdd regulator */
 			if (ts_data->pdata->avdd_lpm_cur) {
@@ -2744,6 +2787,24 @@ static int it7259_ts_resume(struct device *dev)
 		return 0;
 	}
 
+	if(!ts_data->suspended || !ts_data->wake_unlock) {
+                return 0;
+        }
+
+	if (ts_data->in_low_power_mode) {
+		/* Set active current for the avdd regulator */
+		if (ts_data->pdata->avdd_lpm_cur) {
+			retval = reg_set_optimum_mode_check(
+					ts_data->avdd,
+					IT_I2C_ACTIVE_LOAD_UA);
+			if (retval < 0)
+				dev_err(dev, "Regulator avdd set_opt failed at resume rc=%d\n",
+						retval);
+		}
+
+		ts_data->in_low_power_mode = false;
+	}
+
 	if (ts_data->ts_pinctrl) {
 		retval = pinctrl_select_state(ts_data->ts_pinctrl,
 				ts_data->pinctrl_state_active);
@@ -2753,7 +2814,7 @@ static int it7259_ts_resume(struct device *dev)
 			goto err_pinctrl_select_suspend;
 		}
 	}
-
+	msleep(200);
 	enable_irq(ts_data->client->irq);
 	ts_data->suspended = false;
 	return 0;
@@ -2772,7 +2833,12 @@ static int it7259_ts_suspend(struct device *dev)
 		return -EBUSY;
 	}
 
-	if (device_may_wakeup(dev)) {
+	if(ts_data->in_low_power_mode) {
+		ts_data->opened = true;
+		return 0;
+	}
+
+	if (device_may_wakeup(dev) && ts_data->opened) {
 		if (!ts_data->in_low_power_mode) {
 			if(ts_data->fw_active) {
 				/* put the device in low power idle mode */
@@ -2792,18 +2858,15 @@ static int it7259_ts_suspend(struct device *dev)
 				if (retval < 0)
 					dev_err(dev, "Regulator avdd set_opt failed at suspend rc=%d\n",
 						retval);
-
-				retval = regulator_enable(ts_data->avdd);
-				if (retval)
-					dev_err(&ts_data->client->dev,
-							"Regulator avdd enable failed rc=%d\n",
-							retval);
-
 			}
 
 			ts_data->in_low_power_mode = true;
 			enable_irq_wake(ts_data->client->irq);
 		}
+		return 0;
+	}
+
+	if(ts_data->suspended) {
 		return 0;
 	}
 

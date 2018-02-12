@@ -191,7 +191,6 @@
 
 
 &dsi_boe6d00_454p_cmd {
-	qcom,mdss-dsi-pwm-gpio = <&pm8916_mpps 4 0>;
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
 };
 
