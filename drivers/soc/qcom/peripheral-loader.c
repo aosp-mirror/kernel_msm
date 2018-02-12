@@ -777,6 +777,7 @@ static int pil_load_seg(struct pil_desc *desc, struct pil_seg *seg)
 		.dev = desc->dev,
 	};
 	void *map_data = desc->map_data ? desc->map_data : &map_fw_info;
+	int pil_retry_count = 0;
 
 	if (seg->filesz) {
 		snprintf(fw_name, ARRAY_SIZE(fw_name), "%s.b%02d",
@@ -791,6 +792,15 @@ static int pil_load_seg(struct pil_desc *desc, struct pil_seg *seg)
 		ret = request_firmware_into_buf(&fw, fw_name, desc->dev,
 						firmware_buf, seg->filesz);
 		desc->unmap_fw_mem(firmware_buf, seg->filesz, map_data);
+
+		while ((ret == -EAGAIN) &&
+			(pil_retry_count < PERIPHERAL_LOADER_MAX_RETRY)) {
+			pil_err(desc, "Failed to locate blob %s, retry: %d \n",
+				fw_name, pil_retry_count++);
+			ret = request_firmware_into_buf(&fw, fw_name, desc->dev,
+						firmware_buf, seg->filesz);
+			desc->unmap_fw_mem(firmware_buf, seg->filesz, map_data);
+		}
 
 		if (ret) {
 			pil_err(desc, "Failed to locate blob %s or blob is too big(rc:%d)\n",
