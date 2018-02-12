@@ -3769,9 +3769,11 @@ limSendAuthMgmtFrame(tpAniSirGlobal pMac,
                      * for challenge text.
                      */
 
+                    bodyLen  = SIR_MAC_AUTH_FRAME_INFO_LEN +
+                               SIR_MAC_SAP_AUTH_CHALLENGE_LENGTH +
+                               SIR_MAC_CHALLENGE_ID_LEN;
                     frameLen = sizeof(tSirMacMgmtHdr) +
-                               sizeof(tSirMacAuthFrame);
-                    bodyLen  = sizeof(tSirMacAuthFrameBody);
+                               bodyLen;
                 }
 
                 break;
