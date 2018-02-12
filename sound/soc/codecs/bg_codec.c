@@ -326,6 +326,20 @@ static int _bg_codec_start(struct bg_cdc_priv *bg_cdc, int dai_id)
 		pr_err("%s:Invalid dai id %d", __func__, dai_id);
 		return -EINVAL;
 	}
+
+	mutex_lock(&bg_cdc->bg_cdc_lock);
+	if (bg_cdc->num_sessions == 0) {
+		/* set regulator to normal mode */
+		ret = regulator_set_optimum_mode(bg_cdc->spkr_vreg, 100000);
+		if (ret < 0) {
+			pr_err("Fail to set spkr_vreg mode%d\n", ret);
+			mutex_unlock(&bg_cdc->bg_cdc_lock);
+			return ret;
+		}
+	}
+	bg_cdc->num_sessions++;
+	mutex_unlock(&bg_cdc->bg_cdc_lock);
+
 	codec_start.route_to_bg = bg_cdc->src[dai_id];
 	pr_debug("%s active_session %x route_to_bg %d\n",
 		__func__, codec_start.active_session, codec_start.route_to_bg);
@@ -922,13 +936,13 @@ static int bg_cdc_pm_resume(struct bg_cdc_priv *bg_cdc)
 			pr_err("calibiration failed\n");
 			goto err1;
 		}
+		kfree(rsp.buf);
 	}
-	kfree(rsp.buf);
 	mutex_unlock(&bg_cdc->bg_cdc_lock);
 	return 0;
-err1 :
+err1:
 	kfree(rsp.buf);
-err :
+err:
 	bg_cdc_enable_regulator(bg_cdc->spkr_vreg, false);
 	mutex_unlock(&bg_cdc->bg_cdc_lock);
 	return 0;

@@ -760,7 +760,7 @@ static int find_vchannel_name_index(const char *vchannel_name)
 {
 	int i;
 
-	for (i = 0; i < MAX_NUM_OF_MUX_CHANNEL; i++) {
+	for (i = 0; i < rmnet_index; i++) {
 		if (0 == strcmp(mux_channel[i].vchannel_name, vchannel_name))
 			return i;
 	}
@@ -1613,6 +1613,7 @@ static int ipa_wwan_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 				IPAWANERR("Failed to allocate memory.\n");
 				return -ENOMEM;
 			}
+			extend_ioctl_data.u.if_name[IFNAMSIZ-1] = '\0';
 			len = sizeof(wan_msg->upstream_ifname) >
 			sizeof(extend_ioctl_data.u.if_name) ?
 				sizeof(extend_ioctl_data.u.if_name) :

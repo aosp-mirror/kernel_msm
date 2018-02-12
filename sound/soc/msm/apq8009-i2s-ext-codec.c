@@ -144,6 +144,7 @@ static int apq8009_auxpcm_rate = 8000;
 static atomic_t pri_mi2s_clk_ref;
 static atomic_t quat_mi2s_clk_ref;
 static atomic_t auxpcm_mi2s_clk_ref;
+static int tdm_i2s_switch_enable = -EINVAL;
 
 static int apq8009_enable_extcodec_ext_clk(struct snd_soc_codec *codec,
 					int enable, bool dapm);
@@ -324,7 +325,8 @@ static struct snd_soc_dapm_route wcd9335_audio_paths[] = {
 	{"MIC BIAS4", NULL, "MCLK"},
 };
 
-static char const *rx_bit_format_text[] = {"S16_LE", "S24_3LE", "S24_LE"};
+static char const *rx_bit_format_text[] = {"S16_LE", "S24_3LE", "S24_LE",
+								"S32_LE"};
 static const char *const mi2s_tx_ch_text[] = {"One", "Two", "Three", "Four"};
 static char const *pri_rx_sample_rate_text[] = {"KHZ_48", "KHZ_96",
 					"KHZ_192", "KHZ_8",
@@ -632,6 +634,10 @@ static int mi2s_tx_bit_format_get(struct snd_kcontrol *kcontrol,
 {
 
 	switch (mi2s_tx_bit_format) {
+	case SNDRV_PCM_FORMAT_S32_LE:
+		ucontrol->value.integer.value[0] = 3;
+		break;
+
 	case SNDRV_PCM_FORMAT_S24_LE:
 		ucontrol->value.integer.value[0] = 2;
 		break;
@@ -657,6 +663,10 @@ static int mi2s_tx_bit_format_put(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
 	switch (ucontrol->value.integer.value[0]) {
+	case 3:
+		mi2s_tx_bit_format = SNDRV_PCM_FORMAT_S32_LE;
+		tx_bits_per_sample = 32;
+		break;
 	case 2:
 		mi2s_tx_bit_format = SNDRV_PCM_FORMAT_S24_LE;
 		tx_bits_per_sample = 32;
@@ -1208,7 +1218,8 @@ static int msm_btsco_rate_put(struct snd_kcontrol *kcontrol,
 }
 
 static const struct soc_enum msm_snd_enum[] = {
-	SOC_ENUM_SINGLE_EXT(3, rx_bit_format_text),
+	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(rx_bit_format_text),
+			rx_bit_format_text),
 	SOC_ENUM_SINGLE_EXT(4, mi2s_tx_ch_text),
 	SOC_ENUM_SINGLE_EXT(6, pri_rx_sample_rate_text),
 	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(tdm_ch_text),
@@ -1480,6 +1491,9 @@ static int msm_tdm_startup(struct snd_pcm_substream *substream)
 		if (ret < 0)
 			pr_err("%s: failed to activate primary TDM gpio set\n",
 				 __func__);
+		/* Enable I2S switch to turn on TDM mics for SOM*/
+		if (tdm_i2s_switch_enable >= 0)
+			gpio_direction_output(tdm_i2s_switch_enable, 1);
 		break;
 	default:
 		pr_err("dai id 0x%x not supported", cpu_dai->id);
@@ -1517,6 +1531,9 @@ static void msm_tdm_shutdown(struct snd_pcm_substream *substream)
 				__func__, "pri_tdm");
 			return;
 		}
+
+		if (tdm_i2s_switch_enable >= 0)
+			gpio_direction_output(tdm_i2s_switch_enable, 0);
 		break;
 	default:
 		break;
@@ -2733,7 +2750,6 @@ static int apq8009_asoc_machine_probe(struct platform_device *pdev)
 	const char *mclk = "qcom,msm-mclk-freq";
 	const char *type = NULL;
 	int ret, id;
-	int tdm_i2s_switch_enable = -EINVAL;
 
 	pdata = devm_kzalloc(&pdev->dev,
 			sizeof(struct apq8009_asoc_mach_data), GFP_KERNEL);
@@ -2842,7 +2858,6 @@ static int apq8009_asoc_machine_probe(struct platform_device *pdev)
 			pr_err("%s: Failed to request gpio\n", __func__);
 			goto err;
 		}
-		gpio_direction_output(tdm_i2s_switch_enable, 1);
 	} else
 		dev_err(&pdev->dev, "Looking up %s property in node %s failed\n",
 			"qcom,tdm-i2s-switch-enable",

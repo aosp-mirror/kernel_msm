@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2018 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -4243,10 +4243,12 @@ static void smbchg_chg_led_brightness_set(struct led_classdev *cdev,
 	reg = (value > LED_OFF) ? CHG_LED_ON << CHG_LED_SHIFT :
 		CHG_LED_OFF << CHG_LED_SHIFT;
 
-	if (value > LED_OFF)
-		power_supply_set_hi_power_state(chip->bms_psy, 1);
-	else
-		power_supply_set_hi_power_state(chip->bms_psy, 0);
+	if (chip->bms_psy) {
+		if (value > LED_OFF)
+			power_supply_set_hi_power_state(chip->bms_psy, 1);
+		else
+			power_supply_set_hi_power_state(chip->bms_psy, 0);
+	}
 
 	pr_smb(PR_STATUS,
 			"set the charger led brightness to value=%d\n",
@@ -4289,11 +4291,16 @@ static void smbchg_chg_led_blink_set(struct smbchg_chip *chip,
 	u8 reg;
 	int rc;
 
+	if (chip->bms_psy) {
+		if (blinking == 0)
+			power_supply_set_hi_power_state(chip->bms_psy, 0);
+		else
+			power_supply_set_hi_power_state(chip->bms_psy, 1);
+	}
+
 	if (blinking == 0) {
 		reg = CHG_LED_OFF << CHG_LED_SHIFT;
-		power_supply_set_hi_power_state(chip->bms_psy, 0);
 	} else {
-		power_supply_set_hi_power_state(chip->bms_psy, 1);
 		if (blinking == 1)
 			reg = LED_BLINKING_PATTERN2 << CHG_LED_SHIFT;
 		else if (blinking == 2)
@@ -4653,6 +4660,7 @@ static int smbchg_change_usb_supply_type(struct smbchg_chip *chip,
 						enum power_supply_type type)
 {
 	int rc, current_limit_ma;
+	union power_supply_propval propval;
 
 	/*
 	 * if the type is not unknown, set the type before changing ICL vote
@@ -4691,8 +4699,12 @@ static int smbchg_change_usb_supply_type(struct smbchg_chip *chip,
 		goto out;
 	}
 
-	if (!chip->skip_usb_notification)
-		power_supply_set_supply_type(chip->usb_psy, type);
+	if (!chip->skip_usb_notification) {
+		propval.intval = type;
+		chip->usb_psy->set_property(chip->usb_psy,
+				POWER_SUPPLY_PROP_REAL_TYPE,
+				&propval);
+	}
 
 	/*
 	 * otherwise if it is unknown, remove vote
@@ -6064,7 +6076,7 @@ static void smbchg_external_power_changed(struct power_supply *psy)
 		current_limit = prop.intval / 1000;
 
 	rc = chip->usb_psy->get_property(chip->usb_psy,
-				POWER_SUPPLY_PROP_TYPE, &prop);
+				POWER_SUPPLY_PROP_REAL_TYPE, &prop);
 
 	read_usb_type(chip, &usb_type_name, &usb_supply_type);
 

@@ -334,13 +334,14 @@ static void arch_counter_set_user_access(void)
 {
 	u32 cntkctl = arch_timer_get_cntkctl();
 
-	/* Disable user access to the timers */
+	/* Disable user access to the timers and the physical counter */
 	/* Also disable virtual event stream */
 	cntkctl &= ~(ARCH_TIMER_USR_PT_ACCESS_EN
-			| ARCH_TIMER_VIRT_EVT_EN);
+			| ARCH_TIMER_VIRT_EVT_EN
+			| ARCH_TIMER_USR_PCT_ACCESS_EN);
 
-	/* Enable user access to the virtual and physical counters */
-	cntkctl |= ARCH_TIMER_USR_PCT_ACCESS_EN | ARCH_TIMER_USR_VT_ACCESS_EN;
+	/* Enable user access to the virtual counter */
+	cntkctl |= ARCH_TIMER_USR_VT_ACCESS_EN;
 
 	if (IS_ENABLED(CONFIG_ARM_ARCH_TIMER_VCT_ACCESS))
 		cntkctl |= ARCH_TIMER_USR_VCT_ACCESS_EN;
@@ -831,7 +832,7 @@ static void __init arch_timer_mem_init(struct device_node *np)
 	arch_timer_detect_rate(base, np);
 	arch_timer_mem_register(base, irq);
 	arch_timer_common_init();
-	get_pct_hook_init();
+	get_timer_count_hook_init();
 }
 CLOCKSOURCE_OF_DECLARE(armv7_arch_timer_mem, "arm,armv7-timer-mem",
 		       arch_timer_mem_init);
