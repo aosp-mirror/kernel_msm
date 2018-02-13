@@ -3756,6 +3756,7 @@ static void smblib_handle_apsd_done(struct smb_charger *chg, bool rising)
 					true);
 		if (chg->use_extcon)
 			smblib_notify_device_mode(chg, true);
+	case UNKNOWN: /* For unknown type, enable pd here */
 	case OCP_CHARGER_BIT:
 	case FLOAT_CHARGER_BIT:
 		/* if not DCP then no hvdcp timeout happens, Enable pd here. */
