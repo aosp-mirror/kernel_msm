@@ -481,6 +481,22 @@ config DM_VERITY_FEC
 
 	  If unsure, say N.
 
+config DM_ANDROID_VERITY_AT_MOST_ONCE_DEFAULT_ENABLED
+	bool "Verity will validate blocks at most once"
+	depends on DM_VERITY
+	---help---
+	  Enables only to validate the checksum at most once.
+
+	  Blocks can be validated more than once but the goal with
+	  this option is to validate them at most once.
+
+	  This allows an intermediate level of security on a CPU
+	  and/or RAM constrained platform. This will protect against
+	  offline attacks but if someone gains access to R/W of the
+	  block device this option may fail to detect any changes.
+
+	  If unsure, say N.
+
 config DM_SWITCH
 	tristate "Switch target support (EXPERIMENTAL)"
 	depends on BLK_DEV_DM
