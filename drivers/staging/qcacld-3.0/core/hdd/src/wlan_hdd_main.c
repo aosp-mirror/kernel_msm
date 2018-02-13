@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -1613,28 +1613,11 @@ void hdd_update_tgt_cfg(void *context, void *param)
 
 	/* This can be extended to other configurations like ht, vht cap... */
 
-	if (!qdf_is_macaddr_zero(&cfg->hw_macaddr)) {
-		hdd_update_macaddr(hdd_ctx->config, cfg->hw_macaddr);
-		hdd_ctx->update_mac_addr_to_fw = false;
-	} else {
-		static struct qdf_mac_addr default_mac_addr = {
-			{0x00, 0x0A, 0xF5, 0x89, 0x89, 0xFF}
-		};
-		if (qdf_is_macaddr_equal(&hdd_ctx->config->intfMacAddr[0],
-					 &default_mac_addr)) {
-			if (hdd_generate_macaddr_auto(hdd_ctx) != 0)
-				hdd_warn("Fail to auto-generate MAC, using MAC from ini file "
-					MAC_ADDRESS_STR,
-					MAC_ADDR_ARRAY(hdd_ctx->config->
-						       intfMacAddr[0].bytes));
-		} else {
-			hdd_warn("Invalid MAC passed from target, using MAC from ini file "
-				MAC_ADDRESS_STR,
-				MAC_ADDR_ARRAY(hdd_ctx->config->
-					       intfMacAddr[0].bytes));
-		}
-		hdd_ctx->update_mac_addr_to_fw = true;
-	}
+	if (!qdf_is_macaddr_zero(&cfg->hw_macaddr))
+		qdf_mem_copy(&hdd_ctx->hw_macaddr, &cfg->hw_macaddr,
+			     QDF_MAC_ADDR_SIZE);
+	else
+		hdd_info("hw_mac is zero");
 
 	hdd_ctx->target_fw_version = cfg->target_fw_version;
 	hdd_ctx->target_fw_vers_ext = cfg->target_fw_vers_ext;
@@ -2234,8 +2217,12 @@ static int __hdd_open(struct net_device *dev)
 		return -EBUSY;
 	}
 
-	mutex_lock(&hdd_init_deinit_lock);
+	if (qdf_atomic_read(&hdd_ctx->con_mode_flag)) {
+		hdd_err("con_mode_handler is in progress; Please try again.");
+		return -EBUSY;
+	}
 
+	mutex_lock(&hdd_init_deinit_lock);
 	hdd_start_driver_ops_timer(eHDD_DRV_OP_IFF_UP);
 
 	/*
@@ -2289,7 +2276,6 @@ static int __hdd_open(struct net_device *dev)
 		hdd_debug("Sending Start Lpass notification");
 		hdd_lpass_notify_start(hdd_ctx, adapter);
 	}
-
 
 err_hdd_hdd_init_deinit_lock:
 	hdd_stop_driver_ops_timer();
@@ -6537,11 +6523,6 @@ static void hdd_bus_bw_work_handler(struct work_struct *work)
 	tx_packets += (uint64_t)ipa_tx_packets;
 	rx_packets += (uint64_t)ipa_rx_packets;
 
-	if (adapter) {
-		adapter->stats.tx_packets += ipa_tx_packets;
-		adapter->stats.rx_packets += ipa_rx_packets;
-	}
-
 	if (!connected) {
 		hdd_err("bus bandwidth timer running in disconnected state");
 		return;
@@ -8809,6 +8790,7 @@ static void hdd_initialize_mac_address(hdd_context_t *hdd_ctx)
 {
 	QDF_STATUS status;
 	int ret;
+	bool update_mac_addr_to_fw = true;
 
 	ret = hdd_platform_wlan_mac(hdd_ctx);
 	if (ret == 0)
@@ -8825,7 +8807,33 @@ static void hdd_initialize_mac_address(hdd_context_t *hdd_ctx)
 	hdd_info("MAC is not programmed in wlan_mac.bin ret %d, use default MAC",
 		 status);
 
-	if (hdd_ctx->update_mac_addr_to_fw) {
+	/* Use fw provided MAC */
+	if (!qdf_is_macaddr_zero(&hdd_ctx->hw_macaddr)) {
+		hdd_update_macaddr(hdd_ctx->config, hdd_ctx->hw_macaddr);
+		update_mac_addr_to_fw = false;
+	} else {
+		static struct qdf_mac_addr default_mac_addr = {
+				{0x00, 0x0A, 0xF5, 0x89, 0x89, 0xFF}
+			};
+		if (qdf_is_macaddr_equal(&hdd_ctx->config->intfMacAddr[0],
+					 &default_mac_addr)) {
+			if (hdd_generate_macaddr_auto(hdd_ctx) != 0)
+				hdd_warn("Fail to auto-generate MAC"
+					 "using MAC from ini file "
+					 MAC_ADDRESS_STR,
+					 MAC_ADDR_ARRAY(hdd_ctx->config->
+							intfMacAddr[0].bytes));
+			} else {
+			hdd_warn("Invalid MAC passed from target"
+				 "using MAC from ini file "
+				 MAC_ADDRESS_STR,
+				 MAC_ADDR_ARRAY(hdd_ctx->config->
+						intfMacAddr[0].bytes));
+		}
+		update_mac_addr_to_fw = true;
+	}
+
+	if (update_mac_addr_to_fw) {
 		ret = hdd_update_mac_addr_to_fw(hdd_ctx);
 		if (ret != 0) {
 			hdd_err("MAC address out-of-sync, ret:%d", ret);
@@ -9921,6 +9929,8 @@ int hdd_wlan_startup(struct device *dev)
 
 	hdd_init_spectral_scan(hdd_ctx);
 
+	qdf_atomic_init(&hdd_ctx->con_mode_flag);
+
 	ret = hdd_wlan_start_modules(hdd_ctx, NULL, false);
 	if (ret) {
 		hdd_err("Failed to start modules: %d", ret);
@@ -10975,7 +10985,6 @@ void wlan_hdd_start_sap(hdd_adapter_t *ap_adapter, bool reinit)
 
 	if (0 != wlan_hdd_cfg80211_update_apies(ap_adapter)) {
 		hdd_err("SAP Not able to set AP IEs");
-		wlansap_reset_sap_config_add_ie(sap_config, eUPDATE_IE_ALL);
 		goto end;
 	}
 
@@ -10993,6 +11002,7 @@ void wlan_hdd_start_sap(hdd_adapter_t *ap_adapter, bool reinit)
 		hdd_err("SAP Start failed");
 		goto end;
 	}
+	wlansap_reset_sap_config_add_ie(sap_config, eUPDATE_IE_ALL);
 	hdd_info("SAP Start Success");
 	set_bit(SOFTAP_BSS_STARTED, &ap_adapter->event_flags);
 	if (hostapd_state->bssState == BSS_START)
@@ -11001,6 +11011,7 @@ void wlan_hdd_start_sap(hdd_adapter_t *ap_adapter, bool reinit)
 	hostapd_state->bCommit = true;
 
 end:
+	wlansap_reset_sap_config_add_ie(sap_config, eUPDATE_IE_ALL);
 	mutex_unlock(&hdd_ctx->sap_lock);
 	/* SAP context and beacon cleanup will happen during driver unload
 	 * in hdd_stop_adapter
@@ -11260,31 +11271,6 @@ static void wlan_hdd_state_ctrl_param_destroy(void)
 	pr_info("Device node unregistered");
 }
 
-/*
-#ifndef MODULE
-static int hdd_wait_for_probe_complete(void)
-{
-	unsigned long rc;
-
-	rc = wait_for_completion_timeout(&wlan_start_comp,
-				msecs_to_jiffies(HDD_WLAN_START_WAIT_TIME));
-
-	if (!rc) {
-		hdd_alert("Timed-out waiting for Probe to complete");
-		return -ETIMEDOUT;
-	}
-
-	return 0;
-}
-#else
- */
-static int hdd_wait_for_probe_complete(void)
-{
-	return 0;
-}
-/*
-#endif
- */
 /**
  * __hdd_module_init - Module init helper
  *
@@ -11324,12 +11310,6 @@ static int __hdd_module_init(void)
 	if (ret) {
 		pr_err("%s: driver load failure, err %d\n", WLAN_MODULE_NAME,
 			ret);
-		goto out;
-	}
-
-	if (hdd_wait_for_probe_complete()) {
-		pr_err("%s: probe of the driver failed!", __func__);
-		wlan_hdd_unregister_driver();
 		goto out;
 	}
 
@@ -11394,7 +11374,6 @@ static ssize_t wlan_boot_cb(struct kobject *kobj,
 		return -EALREADY;
 	}
 
-	init_completion(&wlan_start_comp);
 	if (__hdd_module_init()) {
 		pr_err("%s: wlan driver initialization failed\n", __func__);
 		return -EIO;
@@ -11496,6 +11475,7 @@ static int wlan_deinit_sysfs(void)
 	hdd_sysfs_cleanup();
 	return 0;
 }
+
 #endif /* MODULE */
 
 #ifdef MODULE
@@ -11731,8 +11711,9 @@ static int __con_mode_handler(const char *kmessage, struct kernel_param *kp,
 	if (ret)
 		return ret;
 
+	qdf_atomic_set(&hdd_ctx->con_mode_flag, 1);
 	cds_set_load_in_progress(true);
-
+	mutex_lock(&hdd_init_deinit_lock);
 	ret = param_set_int(kmessage, kp);
 
 	if (!(is_con_mode_valid(con_mode))) {
@@ -11748,9 +11729,6 @@ static int __con_mode_handler(const char *kmessage, struct kernel_param *kp,
 		ret = 0;
 		goto reset_flags;
 	}
-
-	if (!cds_wait_for_external_threads_completion(__func__))
-		hdd_warn("Waiting for monitor mode: External threads are active");
 
 	/* ensure adapters are stopped */
 	hdd_stop_present_mode(hdd_ctx, curr_mode);
@@ -11812,6 +11790,8 @@ static int __con_mode_handler(const char *kmessage, struct kernel_param *kp,
 
 reset_flags:
 	cds_set_load_in_progress(false);
+	mutex_unlock(&hdd_init_deinit_lock);
+	qdf_atomic_set(&hdd_ctx->con_mode_flag, 0);
 	return ret;
 }
 
