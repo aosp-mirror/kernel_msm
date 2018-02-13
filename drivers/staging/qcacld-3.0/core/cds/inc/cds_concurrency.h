@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -38,13 +38,10 @@
 
 #include "wlan_hdd_main.h"
 
-#define MAX_NUMBER_OF_CONC_CONNECTIONS 3
-#define DBS_OPPORTUNISTIC_TIME    10
-#ifdef QCA_WIFI_3_0_EMU
-#define CONNECTION_UPDATE_TIMEOUT 3000
-#else
-#define CONNECTION_UPDATE_TIMEOUT 1000
-#endif
+#define MAX_NUMBER_OF_CONC_CONNECTIONS    3
+#define DBS_OPPORTUNISTIC_TIME            10
+#define CONNECTION_UPDATE_TIMEOUT         3000
+#define CHANNEL_SWITCH_COMPLETE_TIMEOUT   1000
 
 /* Some max value greater than the max length of the channel list */
 #define MAX_WEIGHT_OF_PCL_CHANNELS 255
@@ -66,6 +63,8 @@
 
 #define WEIGHT_OF_NON_PCL_CHANNELS 1
 #define WEIGHT_OF_DISALLOWED_CHANNELS 0
+
+#define MAX_MAC 2
 
 /**
  * enum hw_mode_ss_config - Possible spatial stream configuration
@@ -619,6 +618,19 @@ struct cds_conc_connection_info {
 	bool          in_use;
 };
 
+/**
+ * struct connection_info - connection information
+ *
+ * @mac_id: The HW mac it is running
+ * @vdev_id: vdev id
+ * @channel: channel of the connection
+ */
+struct connection_info {
+	uint8_t mac_id;
+	uint8_t vdev_id;
+	uint8_t channel;
+};
+
 bool cds_is_connection_in_progress(uint8_t *session_id,
 				scan_reject_states *reason);
 void cds_dump_concurrency_info(void);
@@ -865,7 +877,8 @@ QDF_STATUS cds_get_mcc_session_id_on_mac(uint8_t mac_id, uint8_t session_id,
 uint8_t cds_get_mcc_operating_channel(uint8_t session_id);
 QDF_STATUS cds_get_pcl_for_existing_conn(enum cds_con_mode mode,
 			uint8_t *pcl_ch, uint32_t *len,
-			uint8_t *weight_list, uint32_t weight_len);
+			uint8_t *weight_list, uint32_t weight_len,
+			bool all_matching_cxn_to_del);
 QDF_STATUS cds_get_valid_chan_weights(struct sir_pcl_chan_weights *weight,
 			enum cds_con_mode mode);
 QDF_STATUS cds_set_hw_mode_on_channel_switch(uint8_t session_id);
@@ -888,6 +901,9 @@ void cds_dump_connection_status_info(void);
 uint32_t cds_mode_specific_vdev_id(enum cds_con_mode mode);
 uint32_t cds_mode_specific_connection_count(enum cds_con_mode mode,
 						uint32_t *list);
+
+uint8_t cds_mode_specific_get_channel(enum cds_con_mode mode);
+
 /**
  * cds_check_conn_with_mode_and_vdev_id() - checks if any active
  * session with specific mode and vdev_id
@@ -925,4 +941,115 @@ uint32_t cds_get_sap_mandatory_chan_list_len(void);
  */
 void cds_save_wlan_unsafe_channels(uint16_t *unsafe_channel_list,
 		uint16_t unsafe_channel_count);
+/**
+ * cds_is_force_scc() - checks if SCC needs to be mandated
+ *
+ * This function checks if SCC needs to be mandated or not
+ *
+ * Return: True if SCC to be mandated, false otherwise
+ */
+bool cds_is_force_scc(void);
+/**
+ * cds_valid_sap_conc_channel_check() - checks & updates the channel
+ * SAP to come up on in case of STA+SAP concurrency
+ * @con_ch: pointer to the channel on which sap will come up
+ * @sap_ch: initial channel for SAP
+ *
+ * This function checks & updates the channel SAP to come up on in
+ * case of STA+SAP concurrency
+ * Return: Success if SAP can come up on a channel
+ */
+QDF_STATUS cds_valid_sap_conc_channel_check(uint8_t *con_ch, uint8_t sap_ch);
+/**
+ * cds_is_safe_channel() - checks if the channel is
+ * LTE safe
+ * @channel: channel on which a beaconing entity might come up
+ *
+ * This function checks if the channel is LTE safe
+ *
+ * Return: Success if the channel is LTE safe
+ */
+bool cds_is_safe_channel(uint8_t channel);
+/**
+ * cds_disallow_mcc() - Check for mcc
+ *
+ * @channel: channel on which new connection is coming up
+ *
+ * When a new connection is about to come up check if current
+ * concurrency combination including the new connection is
+ * causing MCC
+ *
+ * Return: True if it is causing MCC
+ */
+bool cds_disallow_mcc(uint8_t channel);
+/**
+ * cds_get_alternate_channel_for_sap() - checks if any alternate channel can
+ * be obtained from PCL if current channel can't be allowed
+ *
+ * This function checks if any alternate channel can be obtained
+ * from PCL or other means if current channel for SAP can't be allowed
+ *
+ * Return: New channel
+ */
+uint8_t cds_get_alternate_channel_for_sap(void);
+
+/**
+ * cds_set_cur_conc_system_pref() - set the value of cur_conc_system_pref
+ * @conc_system_pref: value of conc_system_pref
+ * This function overwrites the conc_system_pref with the user preference
+ *
+ * Return: None
+  */
+void cds_set_cur_conc_system_pref(uint8_t conc_system_pref);
+
+/**
+ * cds_get_cur_conc_system() - read the value of cur_conc_system_pref
+ *
+ * This function reads the value of current conc_system_pref value
+ *
+ * Return: current conc_system_pref
+ */
+uint8_t cds_get_cur_conc_system_pref(void);
+
+/**
+ * cds_remove_dfs_passive_channels_from_pcl() - set weight of dfs and passive
+ * channels to 0
+ * @pcl_channels: preferred channel list
+ * @len: length of preferred channel list
+ * @weight_list: preferred channel weight list
+ * @weight_len: length of weight list
+ * This function set the weight of dfs and passive channels to 0
+ *
+ * Return: None
+ */
+void cds_remove_dfs_passive_channels_from_pcl(uint8_t *pcl_channels,
+		uint32_t *len, uint8_t *weight_list, uint32_t weight_len);
+
+/**
+ * cds_is_valid_channel_for_channel_switch() - check for valid channel for
+ * channel switch
+ * @channel: channel to be validated
+ * This function validates whether the given channel is valid for channel
+ * switch.
+ *
+ * Return: true or false
+ */
+bool cds_is_valid_channel_for_channel_switch(uint8_t channel);
+
+/**
+ * cds_is_sta_connected_in_2g() - check if sta is connected in 2G
+ *
+ * This function loops through all sta adapters to check if any
+ * sta is connected in 2G
+ *
+ * Return: true for success and false for failure
+ */
+bool cds_is_sta_connected_in_2g(void);
+/**
+ * cds_get_connection_info() - Get info of all active connections
+ * @info: Pointer to connection info
+ *
+ * Return: Connection count
+ */
+uint32_t cds_get_connection_info(struct connection_info *info);
 #endif /* __CDS_CONCURRENCY_H */

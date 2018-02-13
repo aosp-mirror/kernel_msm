@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -83,7 +83,7 @@
 		QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_ERROR, ## args)
 #define A_PRINTF_LOG(args ...) \
 		QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_ERROR, ## args)
-#define A_SNPRINTF(buf, len, args ...)   snprintf (buf, len, args)
+#define A_SNPRINTF(buf, len, args ...)   snprintf(buf, len, args)
 
 /*
  * Timer Functions
@@ -138,13 +138,13 @@ typedef struct timer_list A_TIMER;
 extern unsigned int panic_on_assert;
 #define A_ASSERT(expr)	\
 	if (!(expr)) {	 \
-		printk(KERN_ALERT "Debug Assert Caught, File %s, Line: %d, Test:%s \n", __FILE__, __LINE__, # expr); \
+		printk(KERN_ALERT "Debug Assert Caught, File %s, Line: %d, Test:%s\n", __FILE__, __LINE__, # expr); \
 		if (panic_on_assert) panic(# expr);								  \
 	}
 #else
 #define A_ASSERT(expr)	\
 	if (!(expr)) {	 \
-		printk(KERN_ALERT "Debug Assert Caught, File %s, Line: %d, Test:%s \n", __FILE__, __LINE__, # expr); \
+		printk(KERN_ALERT "Debug Assert Caught, File %s, Line: %d, Test:%s\n", __FILE__, __LINE__, # expr); \
 	}
 #endif
 #else
@@ -271,14 +271,14 @@ void a_netbuf_queue_init(A_NETBUF_QUEUE_T *q);
 
 #ifdef ANDROID
 #ifndef err
-#include <errno.h>
+#include <linux/errno.h>
 #define err(_s, args ...) do { \
 		fprintf(stderr, "%s: line %d ", __FILE__, __LINE__); \
 		fprintf(stderr, args); fprintf(stderr, ": %d\n", errno); \
 		exit(_s); } while (0)
 #endif
 #else
-#include <err.h>
+#include <linux/err.h>
 #endif
 
 #endif /* __KERNEL__ */

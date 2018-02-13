@@ -261,6 +261,7 @@ static void __lim_init_vars(tpAniSirGlobal pMac)
 static void __lim_init_assoc_vars(tpAniSirGlobal pMac)
 {
 	uint32_t val;
+
 	if (wlan_cfg_get_int(pMac, WNI_CFG_ASSOC_STA_LIMIT, &val)
 		!= eSIR_SUCCESS)
 		pe_err("cfg get assoc sta limit failed");
@@ -551,9 +552,6 @@ tSirRetStatus lim_initialize(tpAniSirGlobal pMac)
 
 	rrm_initialize(pMac);
 
-	qdf_mutex_create(&pMac->lim.lim_frame_register_lock);
-	qdf_list_create(&pMac->lim.gLimMgmtFrameRegistratinQueue, 0);
-
 	/* Initialize the configurations needed by PE */
 	if (eSIR_FAILURE == __lim_init_config(pMac)) {
 		/* We need to undo everything in lim_start */
@@ -593,24 +591,7 @@ tSirRetStatus lim_initialize(tpAniSirGlobal pMac)
 void lim_cleanup(tpAniSirGlobal pMac)
 {
 	uint8_t i;
-	/*
-	 * Before destroying the list making sure all the nodes have been
-	 * deleted Which should be the normal case, but a memory leak has been
-	 * reported
-	 */
 
-	struct mgmt_frm_reg_info *pLimMgmtRegistration = NULL;
-
-	qdf_mutex_acquire(&pMac->lim.lim_frame_register_lock);
-	while (qdf_list_remove_front(
-			&pMac->lim.gLimMgmtFrameRegistratinQueue,
-			(qdf_list_node_t **) &pLimMgmtRegistration) ==
-			QDF_STATUS_SUCCESS) {
-		qdf_mem_free(pLimMgmtRegistration);
-	}
-	qdf_mutex_release(&pMac->lim.lim_frame_register_lock);
-	qdf_list_destroy(&pMac->lim.gLimMgmtFrameRegistratinQueue);
-	qdf_mutex_destroy(&pMac->lim.lim_frame_register_lock);
 	qdf_mem_free(pMac->lim.gpLimRemainOnChanReq);
 	pMac->lim.gpLimRemainOnChanReq = NULL;
 	lim_cleanup_mlm(pMac);
@@ -718,6 +699,32 @@ static void lim_register_debug_callback(void)
 	qdf_register_debug_callback(QDF_MODULE_ID_PE, &lim_state_info_dump);
 }
 
+/*
+ * pe_shutdown_notifier_cb - Shutdown notifier callback
+ * @ctx: Pointer to Global MAC structure
+ *
+ * Return: None
+ */
+static void pe_shutdown_notifier_cb(void *ctx)
+{
+	tpAniSirGlobal mac_ctx = (tpAniSirGlobal)ctx;
+	tpPESession session;
+	uint8_t i;
+
+	lim_deactivate_timers(mac_ctx);
+	for (i = 0; i < mac_ctx->lim.maxBssId; i++) {
+		session = &mac_ctx->lim.gpSession[i];
+		if (session->valid == true) {
+			if (LIM_IS_AP_ROLE(session))
+				qdf_mc_timer_stop(&session->
+						 protection_fields_reset_timer);
+#ifdef WLAN_FEATURE_11W
+			qdf_mc_timer_stop(&session->pmfComebackTimer);
+#endif
+		}
+	}
+}
+
 /** -------------------------------------------------------------
    \fn pe_open
    \brief will be called in Open sequence from mac_open
@@ -764,8 +771,18 @@ tSirRetStatus pe_open(tpAniSirGlobal pMac, struct cds_config_info *cds_cfg)
 	if (!QDF_IS_STATUS_SUCCESS(qdf_mutex_create(&pMac->lim.lkPeGlobalLock))) {
 		pe_err("pe lock init failed!");
 		status = eSIR_FAILURE;
-		goto pe_open_lock_fail;
+		goto pe_open_lock_1_fail;
 	}
+
+	if (QDF_IS_STATUS_ERROR(qdf_mutex_create(
+				&pMac->lim.lim_frame_register_lock))) {
+		pe_err("pe lock init failed!");
+		status = eSIR_FAILURE;
+		goto pe_open_lock_2_fail;
+	}
+
+	qdf_list_create(&pMac->lim.gLimMgmtFrameRegistratinQueue, 0);
+
 	pMac->lim.retry_packet_cnt = 0;
 	pMac->lim.ibss_retry_cnt = 0;
 
@@ -779,9 +796,16 @@ tSirRetStatus pe_open(tpAniSirGlobal pMac, struct cds_config_info *cds_cfg)
 #endif
 	lim_register_debug_callback();
 
+	if (!QDF_IS_STATUS_SUCCESS(
+	   cds_shutdown_notifier_register(pe_shutdown_notifier_cb, pMac))) {
+		pe_err("%s: Shutdown notifier register failed", __func__);
+	}
+
 	return status; /* status here will be eSIR_SUCCESS */
 
-pe_open_lock_fail:
+pe_open_lock_2_fail:
+	qdf_mutex_destroy(&pMac->lim.lkPeGlobalLock);
+pe_open_lock_1_fail:
 	qdf_mem_free(pMac->lim.gpSession);
 	pMac->lim.gpSession = NULL;
 pe_open_psession_fail:
@@ -801,15 +825,31 @@ pe_open_psession_fail:
 tSirRetStatus pe_close(tpAniSirGlobal pMac)
 {
 	uint8_t i;
+	qdf_list_node_t *lst_node;
 
 	if (ANI_DRIVER_TYPE(pMac) == QDF_DRIVER_TYPE_MFG)
 		return eSIR_SUCCESS;
+	/*
+	 * Before destroying the list making sure all the nodes have been
+	 * deleted
+	 */
+	while (qdf_list_remove_front(
+			&pMac->lim.gLimMgmtFrameRegistratinQueue,
+			&lst_node) == QDF_STATUS_SUCCESS) {
+		qdf_mem_free(lst_node);
+	}
+	qdf_list_destroy(&pMac->lim.gLimMgmtFrameRegistratinQueue);
+	qdf_mutex_destroy(&pMac->lim.lim_frame_register_lock);
+
+	if (pMac->lim.limDisassocDeauthCnfReq.pMlmDeauthReq) {
+		qdf_mem_free(pMac->lim.limDisassocDeauthCnfReq.pMlmDeauthReq);
+		pMac->lim.limDisassocDeauthCnfReq.pMlmDeauthReq = NULL;
+	}
 
 	qdf_spinlock_destroy(&pMac->sys.bbt_mgmt_lock);
 	for (i = 0; i < pMac->lim.maxBssId; i++) {
-		if (pMac->lim.gpSession[i].valid == true) {
+		if (pMac->lim.gpSession[i].valid == true)
 			pe_delete_session(pMac, &pMac->lim.gpSession[i]);
-		}
 	}
 	qdf_mem_free(pMac->lim.limTimers.gpLimCnfWaitTimer);
 	pMac->lim.limTimers.gpLimCnfWaitTimer = NULL;
@@ -1079,7 +1119,7 @@ static QDF_STATUS pe_handle_mgmt_frame(void *p_cds_gctx, void *cds_buff)
 
 	mHdr = WMA_GET_RX_MAC_HEADER(pRxPacketInfo);
 	if (mHdr->fc.type == SIR_MAC_MGMT_FRAME) {
-		pe_debug("RxBd: %p mHdr: %p Type: %d Subtype: %d  SizesFC: %zu Mgmt: %zu",
+		pe_debug("RxBd: %pK mHdr: %pK Type: %d Subtype: %d  SizesFC: %zu Mgmt: %zu",
 		  pRxPacketInfo, mHdr, mHdr->fc.type, mHdr->fc.subType,
 		  sizeof(tSirMacFrameCtl), sizeof(tSirMacMgmtHdr));
 
@@ -1225,6 +1265,7 @@ lim_update_overlap_sta_param(tpAniSirGlobal pMac, tSirMacAddr bssId,
 			     tpLimProtStaParams pStaParams)
 {
 	int i;
+
 	if (!pStaParams->numSta) {
 		qdf_mem_copy(pMac->lim.protStaOverlapCache[0].addr,
 			     bssId, sizeof(tSirMacAddr));
@@ -1355,6 +1396,7 @@ lim_handle_ibss_coalescing(tpAniSirGlobal pMac,
 		uint32_t ieLen;
 		uint16_t tsfLater;
 		uint8_t *pIEs;
+
 		ieLen = WMA_GET_RX_PAYLOAD_LEN(pRxPacketInfo);
 		tsfLater = WMA_GET_RX_TSF_LATER(pRxPacketInfo);
 		pIEs = WMA_GET_RX_MPDU_DATA(pRxPacketInfo);
@@ -1724,6 +1766,7 @@ void lim_ps_offload_handle_missed_beacon_ind(tpAniSirGlobal pMac, tpSirMsgQ pMsg
 void lim_fill_join_rsp_ht_caps(tpPESession session, tpSirSmeJoinRsp join_rsp)
 {
 	tSirSmeHTProfile *ht_profile;
+
 	if (session == NULL) {
 		pe_err("Invalid Session");
 		return;
@@ -1764,6 +1807,7 @@ static void sir_parse_bcn_fixed_fields(tpAniSirGlobal mac_ctx,
 					uint8_t *buf)
 {
 	tDot11fFfCapabilities dst;
+
 	beacon_struct->timeStamp[0] = lim_get_u32(buf);
 	beacon_struct->timeStamp[1] = lim_get_u32(buf + 4);
 	buf += 8;
@@ -1879,27 +1923,9 @@ lim_roam_fill_bss_descr(tpAniSirGlobal pMac,
 	}
 	bss_desc_ptr->channelIdSelf = bss_desc_ptr->channelId;
 
-	if ((bss_desc_ptr->channelId > 0) && (bss_desc_ptr->channelId < 15)) {
-		int i;
-		/* *
-		 * 11b or 11g packet
-		 * 11g if extended Rate IE is present or
-		 * if there is an A rate in suppRate IE
-		 * */
-		for (i = 0; i < parsed_frm_ptr->supportedRates.numRates; i++) {
-			if (sirIsArate(parsed_frm_ptr->supportedRates.rate[i] &
-						0x7f)) {
-				bss_desc_ptr->nwType = eSIR_11G_NW_TYPE;
-				break;
-			}
-		}
-		if (parsed_frm_ptr->extendedRatesPresent) {
-			bss_desc_ptr->nwType = eSIR_11G_NW_TYPE;
-		}
-	} else {
-		/* 11a packet */
-		bss_desc_ptr->nwType = eSIR_11A_NW_TYPE;
-	}
+	bss_desc_ptr->nwType = lim_get_nw_type(pMac, bss_desc_ptr->channelId,
+					       SIR_MAC_MGMT_FRAME,
+					       parsed_frm_ptr);
 
 	bss_desc_ptr->sinr = 0;
 	bss_desc_ptr->beaconInterval = parsed_frm_ptr->beaconInterval;
@@ -1907,6 +1933,15 @@ lim_roam_fill_bss_descr(tpAniSirGlobal pMac,
 	bss_desc_ptr->timeStamp[1]   = parsed_frm_ptr->timeStamp[1];
 	qdf_mem_copy(&bss_desc_ptr->capabilityInfo,
 	&bcn_proberesp_ptr[SIR_MAC_HDR_LEN_3A + SIR_MAC_B_PR_CAPAB_OFFSET], 2);
+
+	if (qdf_is_macaddr_zero((struct qdf_mac_addr *)mac_hdr->bssId)) {
+		pe_debug("bssid is 0 in beacon/probe update it with bssId %pM in sync ind",
+			roam_offload_synch_ind_ptr->bssid.bytes);
+		qdf_mem_copy(mac_hdr->bssId,
+			roam_offload_synch_ind_ptr->bssid.bytes,
+			sizeof(tSirMacAddr));
+	}
+
 	qdf_mem_copy((uint8_t *) &bss_desc_ptr->bssId,
 			(uint8_t *) mac_hdr->bssId,
 			sizeof(tSirMacAddr));
@@ -1932,6 +1967,45 @@ lim_roam_fill_bss_descr(tpAniSirGlobal pMac,
 	qdf_mem_free(parsed_frm_ptr);
 	return QDF_STATUS_SUCCESS;
 }
+
+#if defined(WLAN_FEATURE_FILS_SK)
+/**
+ * lim_copy_and_free_hlp_data_from_session - Copy HLP info
+ * @session_ptr: PE session
+ * @roam_sync_ind_ptr: Roam Synch Indication pointer
+ *
+ * This API is used to copy the parsed HLP info from PE session
+ * to roam synch indication data. THe HLP info is expected to be
+ * parsed/stored in PE session already from assoc IE's received
+ * from fw as part of Roam Synch Indication.
+ *
+ * Return: None
+ */
+static void lim_copy_and_free_hlp_data_from_session(tpPESession session_ptr,
+				    roam_offload_synch_ind *roam_sync_ind_ptr)
+{
+	if (session_ptr->hlp_data && session_ptr->hlp_data_len) {
+		cds_copy_hlp_info(&session_ptr->dst_mac,
+				&session_ptr->src_mac,
+				session_ptr->hlp_data_len,
+				session_ptr->hlp_data,
+				&roam_sync_ind_ptr->dst_mac,
+				&roam_sync_ind_ptr->src_mac,
+				&roam_sync_ind_ptr->hlp_data_len,
+				roam_sync_ind_ptr->hlp_data);
+		qdf_mem_free(session_ptr->hlp_data);
+		session_ptr->hlp_data = NULL;
+		session_ptr->hlp_data_len = 0;
+	}
+}
+#else
+static inline void lim_copy_and_free_hlp_data_from_session(
+					tpPESession session_ptr,
+					roam_offload_synch_ind
+					*roam_sync_ind_ptr)
+{}
+#endif
+
 /**
  * pe_roam_synch_callback() - PE level callback for roam synch propagation
  * @mac_ctx: MAC Context
@@ -2009,8 +2083,7 @@ QDF_STATUS pe_roam_synch_callback(tpAniSirGlobal mac_ctx,
 	sir_copy_mac_addr(session_ptr->limReAssocbssId, bss_desc->bssId);
 	ft_session_ptr->csaOffloadEnable = session_ptr->csaOffloadEnable;
 
-	lim_fill_ft_session(mac_ctx, bss_desc, ft_session_ptr, session_ptr);
-
+	/* Assign default configured nss value in the new session */
 	if (IS_5G_CH(ft_session_ptr->currentOperChannel))
 		ft_session_ptr->vdev_nss = mac_ctx->vdev_type_nss_5g.sta;
 	else
@@ -2018,6 +2091,10 @@ QDF_STATUS pe_roam_synch_callback(tpAniSirGlobal mac_ctx,
 
 	ft_session_ptr->nss = ft_session_ptr->vdev_nss;
 
+	/* Next routine will update nss and vdev_nss with AP's capabilities */
+	lim_fill_ft_session(mac_ctx, bss_desc, ft_session_ptr, session_ptr);
+
+	/* Next routine may update nss based on dot11Mode */
 	lim_ft_prepare_add_bss_req(mac_ctx, false, ft_session_ptr, bss_desc);
 	roam_sync_ind_ptr->add_bss_params =
 		(tpAddBssParams) ft_session_ptr->ftPEContext.pAddBssReq;
@@ -2046,6 +2123,8 @@ QDF_STATUS pe_roam_synch_callback(tpAniSirGlobal mac_ctx,
 		ft_session_ptr->bRoamSynchInProgress = false;
 		return status;
 	}
+
+	add_bss_params->bssIdx = roam_sync_ind_ptr->roamedVdevId;
 	ft_session_ptr->bssIdx = (uint8_t) add_bss_params->bssIdx;
 
 	curr_sta_ds->bssId = add_bss_params->bssIdx;
@@ -2075,8 +2154,13 @@ QDF_STATUS pe_roam_synch_callback(tpAniSirGlobal mac_ctx,
 			mac_ctx->roam.pReassocResp,
 			mac_ctx->roam.reassocRespLen);
 	ft_session_ptr->bRoamSynchInProgress = true;
+
 	lim_process_assoc_rsp_frame(mac_ctx, mac_ctx->roam.pReassocResp,
 			LIM_REASSOC, ft_session_ptr);
+
+	lim_copy_and_free_hlp_data_from_session(ft_session_ptr,
+						roam_sync_ind_ptr);
+
 	roam_sync_ind_ptr->aid = ft_session_ptr->limAID;
 	curr_sta_ds->mlmStaContext.mlmState =
 		eLIM_MLM_LINK_ESTABLISHED_STATE;
@@ -2309,6 +2393,7 @@ QDF_STATUS pe_acquire_global_lock(tAniSirLim *psPe)
 QDF_STATUS pe_release_global_lock(tAniSirLim *psPe)
 {
 	QDF_STATUS status = QDF_STATUS_E_INVAL;
+
 	if (psPe) {
 		if (QDF_IS_STATUS_SUCCESS
 			    (qdf_mutex_release(&psPe->lkPeGlobalLock))) {

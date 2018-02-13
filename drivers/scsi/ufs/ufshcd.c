@@ -173,9 +173,6 @@ void ufshcd_update_query_stats(struct ufs_hba *hba,
 }
 #endif
 
-#define PWR_INFO_MASK	0xF
-#define PWR_RX_OFFSET	4
-
 #define UFSHCD_REQ_SENSE_SIZE	18
 
 #define UFSHCD_ENABLE_INTRS	(UTP_TRANSFER_REQ_COMPL |\
@@ -718,6 +715,10 @@ static void ufshcd_print_host_state(struct ufs_hba *hba)
 					hba->sdev_ufs_device->model);
 		dev_err(hba->dev, " rev = %.4s\n",
 					hba->sdev_ufs_device->rev);
+		dev_err(hba->dev, " nutrs = %d\n",
+					hba->nutrs);
+		dev_err(hba->dev, " queue_depth = %u\n",
+					hba->sdev_ufs_device->queue_depth);
 	}
 	dev_err(hba->dev, "lrb in use=0x%lx, outstanding reqs=0x%lx tasks=0x%lx\n",
 		hba->lrb_in_use, hba->outstanding_tasks, hba->outstanding_reqs);
@@ -4467,14 +4468,13 @@ int ufshcd_change_power_mode(struct ufs_hba *hba,
 	int ret = 0;
 
 	/* if already configured to the requested pwr_mode */
-	if (!hba->restore_needed &&
-		pwr_mode->gear_rx == hba->pwr_info.gear_rx &&
-		pwr_mode->gear_tx == hba->pwr_info.gear_tx &&
-		pwr_mode->lane_rx == hba->pwr_info.lane_rx &&
-		pwr_mode->lane_tx == hba->pwr_info.lane_tx &&
-		pwr_mode->pwr_rx == hba->pwr_info.pwr_rx &&
-		pwr_mode->pwr_tx == hba->pwr_info.pwr_tx &&
-		pwr_mode->hs_rate == hba->pwr_info.hs_rate) {
+	if (pwr_mode->gear_rx == hba->pwr_info.gear_rx &&
+	    pwr_mode->gear_tx == hba->pwr_info.gear_tx &&
+	    pwr_mode->lane_rx == hba->pwr_info.lane_rx &&
+	    pwr_mode->lane_tx == hba->pwr_info.lane_tx &&
+	    pwr_mode->pwr_rx == hba->pwr_info.pwr_rx &&
+	    pwr_mode->pwr_tx == hba->pwr_info.pwr_tx &&
+	    pwr_mode->hs_rate == hba->pwr_info.hs_rate) {
 		dev_dbg(hba->dev, "%s: power already configured\n", __func__);
 		return 0;
 	}
@@ -4947,6 +4947,7 @@ static void ufshcd_set_queue_depth(struct scsi_device *sdev)
 	dev_dbg(hba->dev, "%s: activate tcq with queue depth %d\n",
 			__func__, lun_qdepth);
 	scsi_change_queue_depth(sdev, lun_qdepth);
+	ufs_fix_qdepth_device(hba, sdev);
 }
 
 /*
@@ -5049,7 +5050,9 @@ static int ufshcd_change_queue_depth(struct scsi_device *sdev, int depth)
 
 	if (depth > hba->nutrs)
 		depth = hba->nutrs;
-	return scsi_change_queue_depth(sdev, depth);
+
+	scsi_change_queue_depth(sdev, depth);
+	return ufs_fix_qdepth_device(hba, sdev);
 }
 
 /**
@@ -6085,52 +6088,6 @@ static void ufshcd_update_uic_reg_hist(struct ufs_uic_err_reg_hist *reg_hist,
 	reg_hist->pos = (reg_hist->pos + 1) % UIC_ERR_REG_HIST_LENGTH;
 }
 
-static void ufshcd_rls_handler(struct work_struct *work)
-{
-	struct ufs_hba *hba;
-	int ret = 0;
-	u32 mode;
-
-	hba = container_of(work, struct ufs_hba, rls_work);
-	pm_runtime_get_sync(hba->dev);
-	ufshcd_scsi_block_requests(hba);
-	ret = ufshcd_wait_for_doorbell_clr(hba, U64_MAX);
-	if (ret) {
-		dev_err(hba->dev,
-			"Timed out (%d) waiting for DB to clear\n",
-			ret);
-		goto out;
-	}
-
-	ufshcd_dme_get(hba, UIC_ARG_MIB(PA_PWRMODE), &mode);
-	if (hba->pwr_info.pwr_rx != ((mode >> PWR_RX_OFFSET) & PWR_INFO_MASK))
-		hba->restore_needed = true;
-
-	if (hba->pwr_info.pwr_tx != (mode & PWR_INFO_MASK))
-		hba->restore_needed = true;
-
-	ufshcd_dme_get(hba, UIC_ARG_MIB(PA_RXGEAR), &mode);
-	if (hba->pwr_info.gear_rx != mode)
-		hba->restore_needed = true;
-
-	ufshcd_dme_get(hba, UIC_ARG_MIB(PA_TXGEAR), &mode);
-	if (hba->pwr_info.gear_tx != mode)
-		hba->restore_needed = true;
-
-	if (hba->restore_needed)
-		ret = ufshcd_config_pwr_mode(hba, &(hba->pwr_info));
-
-	if (ret)
-		dev_err(hba->dev, "%s: Failed setting power mode, err = %d\n",
-			__func__, ret);
-	else
-		hba->restore_needed = false;
-
-out:
-	ufshcd_scsi_unblock_requests(hba);
-	pm_runtime_put_sync(hba->dev);
-}
-
 /**
  * ufshcd_update_uic_error - check and set fatal UIC error flags.
  * @hba: per-adapter instance
@@ -6178,8 +6135,6 @@ static irqreturn_t ufshcd_update_uic_error(struct ufs_hba *hba)
 					"%s: LINERESET without cmd, reg 0x%x\n",
 					__func__, reg);
 			}
-			if (!hba->full_init_linereset)
-				schedule_work(&hba->rls_work);
 		}
 		retval |= IRQ_HANDLED;
 	}
@@ -9781,7 +9736,6 @@ int ufshcd_init(struct ufs_hba *hba, void __iomem *mmio_base, unsigned int irq)
 	/* Initialize work queues */
 	INIT_WORK(&hba->eh_work, ufshcd_err_handler);
 	INIT_WORK(&hba->eeh_work, ufshcd_exception_event_handler);
-	INIT_WORK(&hba->rls_work, ufshcd_rls_handler);
 
 	/* Initialize UIC command mutex */
 	mutex_init(&hba->uic_cmd_mutex);

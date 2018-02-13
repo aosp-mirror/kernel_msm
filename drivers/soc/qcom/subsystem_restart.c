@@ -228,11 +228,8 @@ static ssize_t crash_count_show(struct device *dev,
 static ssize_t crash_reason_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
-	if (is_ramdump_enabled(to_subsys(dev)))
-		return snprintf(buf, PAGE_SIZE, "%s\n",
-				to_subsys(dev)->desc->last_crash_reason);
-
-	return snprintf(buf, PAGE_SIZE, "\n");
+	return snprintf(buf, PAGE_SIZE, "%s\n",
+			to_subsys(dev)->desc->last_crash_reason);
 }
 
 static ssize_t crash_timestamp_show(struct device *dev,

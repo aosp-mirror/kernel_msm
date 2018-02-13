@@ -3623,6 +3623,16 @@ enum nl80211_bss_scan_width {
  * @NL80211_BSS_LAST_SEEN_BOOTTIME: CLOCK_BOOTTIME timestamp when this entry
  *	was last updated by a received frame. The value is expected to be
  *	accurate to about 10ms. (u64, nanoseconds)
+ * @NL80211_BSS_PAD: attribute used for padding for 64-bit alignment
+ * @NL80211_BSS_PARENT_TSF: the time at the start of reception of the first
+ *	octet of the timestamp field of the last beacon/probe received for
+ *	this BSS. The time is the TSF of the BSS specified by
+ *	@NL80211_BSS_PARENT_BSSID. (u64).
+ * @NL80211_BSS_PARENT_BSSID: the BSS according to which @NL80211_BSS_PARENT_TSF
+ *	is set.
+ * @NL80211_BSS_CHAIN_SIGNAL: per-chain signal strength of last BSS update.
+ *	Contains a nested array of signal strength attributes (u8, dBm),
+ *	using the nesting index as the antenna number.
  * @__NL80211_BSS_AFTER_LAST: internal
  * @NL80211_BSS_MAX: highest BSS attribute
  */
@@ -3643,6 +3653,10 @@ enum nl80211_bss {
 	NL80211_BSS_BEACON_TSF,
 	NL80211_BSS_PRESP_DATA,
 	NL80211_BSS_LAST_SEEN_BOOTTIME,
+	NL80211_BSS_PAD,
+	NL80211_BSS_PARENT_TSF,
+	NL80211_BSS_PARENT_BSSID,
+	NL80211_BSS_CHAIN_SIGNAL,
 
 	/* keep last */
 	__NL80211_BSS_AFTER_LAST,
@@ -4668,6 +4682,32 @@ enum nl80211_feature_flags {
  * @NL80211_EXT_FEATURE_SCHED_SCAN_RELATIVE_RSSI: The driver supports sched_scan
  *	for reporting BSSs with better RSSI than the current connected BSS
  *	(%NL80211_ATTR_SCHED_SCAN_RELATIVE_RSSI).
+ * @NL80211_EXT_FEATURE_CQM_RSSI_LIST: With this driver the
+ *	%NL80211_ATTR_CQM_RSSI_THOLD attribute accepts a list of zero or more
+ *	RSSI threshold values to monitor rather than exactly one threshold.
+ * @NL80211_EXT_FEATURE_FILS_SK_OFFLOAD: Driver SME supports FILS shared key
+ *	authentication with %NL80211_CMD_CONNECT.
+ * @NL80211_EXT_FEATURE_4WAY_HANDSHAKE_STA_PSK: Device wants to do 4-way
+ *	handshake with PSK in station mode (PSK is passed as part of the connect
+ *	and associate commands), doing it in the host might not be supported.
+ * @NL80211_EXT_FEATURE_4WAY_HANDSHAKE_STA_1X: Device wants to do doing 4-way
+ *	handshake with 802.1X in station mode (will pass EAP frames to the host
+ *	and accept the set_pmk/del_pmk commands), doing it in the host might not
+ *	be supported.
+ * @NL80211_EXT_FEATURE_FILS_MAX_CHANNEL_TIME: Driver is capable of overriding
+ *	the max channel attribute in the FILS request params IE with the
+ *	actual dwell time.
+ * @NL80211_EXT_FEATURE_ACCEPT_BCAST_PROBE_RESP: Driver accepts broadcast probe
+ *	response
+ * @NL80211_EXT_FEATURE_OCE_PROBE_REQ_HIGH_TX_RATE: Driver supports sending
+ *	the first probe request in each channel at rate of at least 5.5Mbps.
+ * @NL80211_EXT_FEATURE_OCE_PROBE_REQ_DEFERRAL_SUPPRESSION: Driver supports
+ *	probe request tx deferral and suppression
+ * @NL80211_EXT_FEATURE_MFP_OPTIONAL: Driver supports the %NL80211_MFP_OPTIONAL
+ *	value in %NL80211_ATTR_USE_MFP.
+ * @NL80211_EXT_FEATURE_LOW_SPAN_SCAN: Driver supports low span scan.
+ * @NL80211_EXT_FEATURE_LOW_POWER_SCAN: Driver supports low power scan.
+ * @NL80211_EXT_FEATURE_HIGH_ACCURACY_SCAN: Driver supports high accuracy scan.
  *
  * @NUM_NL80211_EXT_FEATURES: number of extended features.
  * @MAX_NL80211_EXT_FEATURES: highest extended feature index.
@@ -4686,6 +4726,18 @@ enum nl80211_ext_feature_index {
 	NL80211_EXT_FEATURE_MGMT_TX_RANDOM_TA,
 	NL80211_EXT_FEATURE_MGMT_TX_RANDOM_TA_CONNECTED,
 	NL80211_EXT_FEATURE_SCHED_SCAN_RELATIVE_RSSI,
+	NL80211_EXT_FEATURE_CQM_RSSI_LIST,
+	NL80211_EXT_FEATURE_FILS_SK_OFFLOAD,
+	NL80211_EXT_FEATURE_4WAY_HANDSHAKE_STA_PSK,
+	NL80211_EXT_FEATURE_4WAY_HANDSHAKE_STA_1X,
+	NL80211_EXT_FEATURE_FILS_MAX_CHANNEL_TIME,
+	NL80211_EXT_FEATURE_ACCEPT_BCAST_PROBE_RESP,
+	NL80211_EXT_FEATURE_OCE_PROBE_REQ_HIGH_TX_RATE,
+	NL80211_EXT_FEATURE_OCE_PROBE_REQ_DEFERRAL_SUPPRESSION,
+	NL80211_EXT_FEATURE_MFP_OPTIONAL,
+	NL80211_EXT_FEATURE_LOW_SPAN_SCAN,
+	NL80211_EXT_FEATURE_LOW_POWER_SCAN,
+	NL80211_EXT_FEATURE_HIGH_ACCURACY_SCAN,
 
 	/* add new features before the definition below */
 	NUM_NL80211_EXT_FEATURES,
@@ -4746,6 +4798,10 @@ enum nl80211_timeout_reason {
  * of NL80211_CMD_TRIGGER_SCAN and NL80211_CMD_START_SCHED_SCAN
  * requests.
  *
+ * NL80211_SCAN_FLAG_LOW_SPAN, NL80211_SCAN_FLAG_LOW_POWER, and
+ * NL80211_SCAN_FLAG_HIGH_ACCURACY flags are exclusive of each other, i.e., only
+ * one of them can be used in the request.
+ *
  * @NL80211_SCAN_FLAG_LOW_PRIORITY: scan request has low priority
  * @NL80211_SCAN_FLAG_FLUSH: flush cache before scanning
  * @NL80211_SCAN_FLAG_AP: force a scan even if the interface is configured
@@ -4762,12 +4818,29 @@ enum nl80211_timeout_reason {
  *	locally administered 1, multicast 0) is assumed.
  *	This flag must not be requested when the feature isn't supported, check
  *	the nl80211 feature flags for the device.
+ *	SSID and/or RSSI.
+ * @NL80211_SCAN_FLAG_LOW_SPAN: Span corresponds to the total time taken to
+ *	accomplish the scan. Thus, this flag intends the driver to perform the
+ *	scan request with lesser span/duration. It is specific to the driver
+ *	implementations on how this is accomplished. Scan accuracy may get
+ *	impacted with this flag.
+ * @NL80211_SCAN_FLAG_LOW_POWER: This flag intends the scan attempts to consume
+ *	optimal possible power. Drivers can resort to their specific means to
+ *	optimize the power. Scan accuracy may get impacted with this flag.
+ * @NL80211_SCAN_FLAG_HIGH_ACCURACY: Accuracy here intends to the extent of scan
+ *	results obtained. Thus HIGH_ACCURACY scan flag aims to get maximum
+ *	possible scan results. This flag hints the driver to use the best
+ *	possible scan configuration to improve the accuracy in scanning.
+ *	Latency and power use may get impacted with this flag.
  */
 enum nl80211_scan_flags {
 	NL80211_SCAN_FLAG_LOW_PRIORITY			= 1<<0,
 	NL80211_SCAN_FLAG_FLUSH				= 1<<1,
 	NL80211_SCAN_FLAG_AP				= 1<<2,
 	NL80211_SCAN_FLAG_RANDOM_ADDR			= 1<<3,
+	NL80211_SCAN_FLAG_LOW_SPAN			= 1<<8,
+	NL80211_SCAN_FLAG_LOW_POWER			= 1<<9,
+	NL80211_SCAN_FLAG_HIGH_ACCURACY			= 1<<10,
 };
 
 /**

@@ -137,6 +137,7 @@ static void lim_delete_sta_util(tpAniSirGlobal mac_ctx, tpDeleteStaContext msg,
 #endif
 		/* TearDownLink with AP */
 		tLimMlmDeauthInd mlm_deauth_ind;
+
 		pe_debug("Delete Station (staId: %d, assocId: %d)",
 			msg->staId, msg->assocId);
 
@@ -247,8 +248,8 @@ void lim_delete_sta_context(tpAniSirGlobal mac_ctx, tpSirMsgQ lim_msg)
 				eSIR_MAC_DISASSOC_DUE_TO_INACTIVITY_REASON,
 				msg->addr2, session_entry, false);
 			lim_tear_down_link_with_ap(mac_ctx,
-						session_entry->peSessionId,
-						eSIR_MAC_UNSPEC_FAILURE_REASON);
+				session_entry->peSessionId,
+				eSIR_MAC_DISASSOC_DUE_TO_INACTIVITY_REASON);
 			/* only break for STA role (non TDLS) */
 			break;
 		}
@@ -298,7 +299,7 @@ lim_trigger_sta_deletion(tpAniSirGlobal mac_ctx, tpDphHashNode sta_ds,
 			eLIM_MLM_WT_DEL_BSS_RSP_STATE) ||
 		sta_ds->sta_deletion_in_progress) {
 		/* Already in the process of deleting context for the peer */
-		pe_debug("Deletion is in progress (%d) for peer:%p in mlmState %d",
+		pe_debug("Deletion is in progress (%d) for peer:%pK in mlmState %d",
 			sta_ds->sta_deletion_in_progress, sta_ds->staAddr,
 			sta_ds->mlmStaContext.mlmState);
 		return;

@@ -182,7 +182,7 @@ static inline struct htt_host_rx_desc_base *htt_rx_desc(qdf_nbuf_t msdu)
 		~HTT_RX_DESC_ALIGN_MASK);
 }
 
-#if defined(FEATURE_LRO)
+#if defined(HELIUMPLUS)
 /**
  * htt_print_rx_desc_lro() - print LRO information in the rx
  * descriptor
@@ -223,7 +223,7 @@ static inline void htt_print_rx_desc_lro(struct htt_host_rx_desc_base *rx_desc)
 }
 
 /**
- * htt_print_rx_desc_lro() - extract LRO information from the rx
+ * htt_rx_extract_lro_info() - extract LRO information from the rx
  * descriptor
  * @msdu: network buffer
  * @rx_desc: HTT rx descriptor
@@ -236,8 +236,13 @@ static inline void htt_print_rx_desc_lro(struct htt_host_rx_desc_base *rx_desc)
 static inline void htt_rx_extract_lro_info(qdf_nbuf_t msdu,
 	 struct htt_host_rx_desc_base *rx_desc)
 {
-	QDF_NBUF_CB_RX_LRO_ELIGIBLE(msdu) = rx_desc->msdu_end.lro_eligible;
-	if (rx_desc->msdu_end.lro_eligible) {
+	if (rx_desc->attention.tcp_udp_chksum_fail)
+		QDF_NBUF_CB_RX_LRO_ELIGIBLE(msdu) = 0;
+	else
+		QDF_NBUF_CB_RX_LRO_ELIGIBLE(msdu) =
+			rx_desc->msdu_end.lro_eligible;
+
+	if (QDF_NBUF_CB_RX_LRO_ELIGIBLE(msdu)) {
 		QDF_NBUF_CB_RX_TCP_PURE_ACK(msdu) =
 			rx_desc->msdu_start.tcp_only_ack;
 		QDF_NBUF_CB_RX_TCP_CHKSUM(msdu) =
@@ -257,16 +262,19 @@ static inline void htt_rx_extract_lro_info(qdf_nbuf_t msdu,
 		QDF_NBUF_CB_RX_TCP_OFFSET(msdu) =
 			rx_desc->msdu_start.l4_offset;
 		QDF_NBUF_CB_RX_FLOW_ID_TOEPLITZ(msdu) =
-			 rx_desc->msdu_start.flow_id_toeplitz;
+			rx_desc->msdu_start.flow_id_toeplitz;
 	}
 }
-#else
-static inline void htt_print_rx_desc_lro(struct htt_host_rx_desc_base *rx_desc)
-{}
+#else /* !HELIUMPLUS */
 static inline void htt_rx_extract_lro_info(qdf_nbuf_t msdu,
-	 struct htt_host_rx_desc_base *rx_desc) {}
-#endif /* FEATURE_LRO */
+	 struct htt_host_rx_desc_base *rx_desc)
+{
+}
 
+static inline void htt_print_rx_desc_lro(struct htt_host_rx_desc_base *rx_desc)
+{
+}
+#endif /* !HELIUMPLUS */
 static inline void htt_print_rx_desc(struct htt_host_rx_desc_base *rx_desc)
 {
 	qdf_print
@@ -569,6 +577,7 @@ htt_rx_ipa_uc_attach(struct htt_pdev_t *pdev, unsigned int rx_ind_ring_size);
 int htt_tx_ipa_uc_detach(struct htt_pdev_t *pdev);
 
 int htt_rx_ipa_uc_detach(struct htt_pdev_t *pdev);
+
 #else
 /**
  * htt_tx_ipa_uc_attach() - attach htt ipa uc tx resource
@@ -610,6 +619,7 @@ static inline int htt_rx_ipa_uc_detach(struct htt_pdev_t *pdev)
 {
 	return 0;
 }
+
 #endif /* IPA_OFFLOAD */
 
 /* Maximum Outstanding Bus Download */
@@ -693,7 +703,7 @@ static inline int htt_display_rx_buf_debug(struct htt_pdev_t *pdev)
 			if (buf[i].posted != 0)
 				QDF_TRACE(QDF_MODULE_ID_HTT,
 					  QDF_TRACE_LEVEL_INFO,
-					  "[%d][0x%x] %p %lu %p %llu %llu",
+					  "[%d][0x%x] %pK %lu %pK %llu %llu",
 					  i, buf[i].cpu,
 					  buf[i].nbuf_data,
 					  (unsigned long)buf[i].paddr,

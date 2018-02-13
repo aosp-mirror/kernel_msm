@@ -623,6 +623,16 @@ int ce_send_fast(struct CE_handle *copyeng, qdf_nbuf_t msdu,
 
 	Q_TARGET_ACCESS_BEGIN(scn);
 
+	/*
+	 * Create a log assuming the call will go through, and if not, we would
+	 * add an error trace as well.
+	 * Please add the same failure log for any additional error paths.
+	 */
+	DPTRACE(qdf_dp_trace(msdu,
+			QDF_DP_TRACE_CE_FAST_PACKET_PTR_RECORD,
+			qdf_nbuf_data_addr(msdu),
+			sizeof(qdf_nbuf_data(msdu)), QDF_TX));
+
 	qdf_spin_lock_bh(&ce_state->ce_index_lock);
 	src_ring->sw_index = CE_SRC_RING_READ_IDX_GET_FROM_DDR(scn, ctrl_addr);
 	write_index = src_ring->write_index;
@@ -640,6 +650,11 @@ int ce_send_fast(struct CE_handle *copyeng, qdf_nbuf_t msdu,
 		OL_ATH_CE_PKT_ERROR_COUNT_INCR(scn, CE_RING_DELTA_FAIL);
 		Q_TARGET_ACCESS_END(scn);
 		qdf_spin_unlock_bh(&ce_state->ce_index_lock);
+
+		DPTRACE(qdf_dp_trace(NULL,
+				QDF_DP_TRACE_CE_FAST_PACKET_ERR_RECORD,
+				NULL, 0, QDF_TX));
+
 		return 0;
 	}
 
@@ -732,12 +747,6 @@ int ce_send_fast(struct CE_handle *copyeng, qdf_nbuf_t msdu,
 		hif_pm_runtime_put(hif_hdl);
 	}
 	qdf_spin_unlock_bh(&ce_state->ce_index_lock);
-
-	DPTRACE(qdf_dp_trace(msdu,
-			QDF_DP_TRACE_CE_FAST_PACKET_PTR_RECORD,
-			qdf_nbuf_data_addr(msdu),
-			sizeof(qdf_nbuf_data(msdu)), QDF_TX));
-
 
 	hif_record_ce_desc_event(scn, ce_state->id, type,
 				 NULL, NULL, write_index);
@@ -1994,7 +2003,7 @@ more_watermarks:
 					   HOST_IS_COPY_COMPLETE_MASK);
 	} else {
 		HIF_ERROR("%s: target access is not allowed", __func__);
-		return CE_state->receive_count;
+		goto unlock_end;
 	}
 
 	/*
@@ -2292,7 +2301,7 @@ bool ce_check_rx_pending(struct CE_state *CE_state)
 /**
  * ce_ipa_get_resource() - get uc resource on copyengine
  * @ce: copyengine context
- * @ce_sr_base_paddr: copyengine source ring base physical address
+ * @ce_sr: copyengine source ring resource info
  * @ce_sr_ring_size: copyengine source ring size
  * @ce_reg_paddr: copyengine register physical address
  *
@@ -2305,7 +2314,7 @@ bool ce_check_rx_pending(struct CE_state *CE_state)
  * Return: None
  */
 void ce_ipa_get_resource(struct CE_handle *ce,
-			 qdf_dma_addr_t *ce_sr_base_paddr,
+			 qdf_shared_mem_t **ce_sr,
 			 uint32_t *ce_sr_ring_size,
 			 qdf_dma_addr_t *ce_reg_paddr)
 {
@@ -2316,7 +2325,8 @@ void ce_ipa_get_resource(struct CE_handle *ce,
 	struct hif_softc *scn = CE_state->scn;
 
 	if (CE_UNUSED == CE_state->state) {
-		*ce_sr_base_paddr = 0;
+		*qdf_mem_get_dma_addr_ptr(scn->qdf_dev,
+			&CE_state->scn->ipa_ce_ring->mem_info) = 0;
 		*ce_sr_ring_size = 0;
 		return;
 	}
@@ -2333,8 +2343,8 @@ void ce_ipa_get_resource(struct CE_handle *ce,
 	/* Get BAR address */
 	hif_read_phy_mem_base(CE_state->scn, &phy_mem_base);
 
-	*ce_sr_base_paddr = CE_state->src_ring->base_addr_CE_space;
-	*ce_sr_ring_size = (uint32_t) (CE_state->src_ring->nentries *
+	*ce_sr = CE_state->scn->ipa_ce_ring;
+	*ce_sr_ring_size = (uint32_t)(CE_state->src_ring->nentries *
 		sizeof(struct CE_src_desc));
 	*ce_reg_paddr = phy_mem_base + CE_BASE_ADDRESS(CE_state->id) +
 			SR_WR_INDEX_ADDRESS;

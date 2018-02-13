@@ -44,6 +44,9 @@
  * @en_tdls_uapsd_buf_sta: enable sta tdls uapsd buf
  * @en_tdls_uapsd_sleep_sta: enable sta tdls uapsd sleep
  * @en_roam_offload: enable roam offload
+ * @get_peer_info_enabled: PEER info feature
+ * @is_fils_roaming_supported: Fast Initial Link Setup feature
+ * @is_fw_mawc_capable: Motion Aided Wireless Connectivity feature
  */
 struct wma_tgt_services {
 	uint32_t sta_power_save;
@@ -67,6 +70,9 @@ struct wma_tgt_services {
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD
 	bool en_roam_offload;
 #endif /* WLAN_FEATURE_ROAM_OFFLOAD */
+	bool get_peer_info_enabled;
+	bool is_fils_roaming_supported;
+	bool is_fw_mawc_capable;
 };
 
 /**
@@ -149,7 +155,6 @@ struct wma_dfs_radar_ind {
  * @egap_support: enhanced green ap support
  * @nan_datapath_enabled: nan data path support
  * @bool is_ra_rate_limit_enabled: RA filter support
- * @fw_mem_dump_enabled: Fw memory dump support
  * @tx_bfee_8ss_enabled: Tx Beamformee support for 8x8
  * @rcpi_enabled: for checking rcpi support
  */
@@ -181,7 +186,6 @@ struct wma_tgt_cfg {
 #endif
 	bool sub_20_support;
 	uint16_t wmi_max_len;
-	bool fw_mem_dump_enabled;
 	bool tx_bfee_8ss_enabled;
 	bool rcpi_enabled;
 };

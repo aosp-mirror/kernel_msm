@@ -39,11 +39,7 @@
 #define WAIT_CHANGE_CHANNEL_FOR_OFFCHANNEL_TX 3000
 #define COMPLETE_EVENT_PROPOGATE_TIME 10
 
-#ifdef QCA_WIFI_3_0_EMU
 #define ACTION_FRAME_DEFAULT_WAIT 500
-#else
-#define ACTION_FRAME_DEFAULT_WAIT 200
-#endif
 
 #define WLAN_HDD_GET_TYPE_FRM_FC(__fc__)         (((__fc__) & 0x0F) >> 2)
 #define WLAN_HDD_GET_SUBTYPE_FRM_FC(__fc__)      (((__fc__) & 0xF0) >> 4)
@@ -55,13 +51,8 @@
 					 MAC_ADDR_LEN)
 
 
-#ifdef QCA_WIFI_3_0_EMU
 #define P2P_ROC_DURATION_MULTIPLIER_GO_PRESENT   2
 #define P2P_ROC_DURATION_MULTIPLIER_GO_ABSENT    3
-#else
-#define P2P_ROC_DURATION_MULTIPLIER_GO_PRESENT   2
-#define P2P_ROC_DURATION_MULTIPLIER_GO_ABSENT    5
-#endif
 
 #define HDD_P2P_MAX_ROC_DURATION 1000
 #define MAX_ROC_REQ_QUEUE_ENTRY 10
@@ -138,7 +129,13 @@ int wlan_hdd_mgmt_tx(struct wiphy *wiphy, struct wireless_dev *wdev,
 		     bool dont_wait_for_ack, u64 *cookie);
 #endif
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0)) || defined(WITH_BACKPORTS)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
+struct wireless_dev *wlan_hdd_add_virtual_intf(struct wiphy *wiphy,
+					       const char *name,
+					       unsigned char name_assign_type,
+					       enum nl80211_iftype type,
+					       struct vif_params *params);
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0)) || defined(WITH_BACKPORTS)
 struct wireless_dev *wlan_hdd_add_virtual_intf(struct wiphy *wiphy,
 					       const char *name,
 					       unsigned char name_assign_type,

@@ -403,7 +403,7 @@
 &pmi8998_charger {
 	goog,port-overheat-mitigation;
 	goog,port-overheat-usb-port-tz-name = "usb_port_temp";
-	goog,port-overheat-begin-temp = <700>;
-	goog,port-overheat-end-temp = <600>;
+	goog,port-overheat-begin-temp = <600>;
+	goog,port-overheat-end-temp = <500>;
 	goog,port-overheat-work-interval = <1000>;
 };

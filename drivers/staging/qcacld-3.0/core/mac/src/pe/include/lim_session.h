@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -185,8 +185,7 @@ typedef struct sPESession       /* Added to Support BT-AMP */
 	uint64_t lastBeaconTimeStamp;
 	/* RX Beacon count for the current BSS to which STA is connected. */
 	uint32_t currentBssBeaconCnt;
-	uint8_t lastBeaconDtimCount;
-	uint8_t lastBeaconDtimPeriod;
+	uint8_t bcon_dtim_period;
 
 	uint32_t bcnLen;
 	uint8_t *beacon;        /* Used to store last beacon / probe response before assoc. */
@@ -472,7 +471,6 @@ typedef struct sPESession       /* Added to Support BT-AMP */
 #endif
 	uint8_t sap_dot11mc;
 	bool is_vendor_specific_vhtcaps;
-	uint8_t vendor_specific_vht_ie_type;
 	uint8_t vendor_specific_vht_ie_sub_type;
 	bool vendor_vht_sap;
 	/* HS 2.0 Indication */
@@ -487,7 +485,7 @@ typedef struct sPESession       /* Added to Support BT-AMP */
 	/* Supported NSS is intersection of self and peer NSS */
 	bool supported_nss_1x1;
 	bool is_ext_caps_present;
-	uint8_t beacon_tx_rate;
+	uint16_t beacon_tx_rate;
 	uint8_t *access_policy_vendor_ie;
 	uint8_t access_policy;
 	bool ignore_assoc_disallowed;
@@ -497,10 +495,19 @@ typedef struct sPESession       /* Added to Support BT-AMP */
 	uint8_t lim_non_ecsa_cap_num;
 #ifdef WLAN_FEATURE_FILS_SK
 	struct pe_fils_session *fils_info;
+	struct qdf_mac_addr dst_mac;
+	struct qdf_mac_addr src_mac;
+	uint16_t hlp_data_len;
+	uint8_t *hlp_data;
 #endif
 	uint8_t deauthmsgcnt;
 	uint8_t disassocmsgcnt;
 	bool enable_bcast_probe_rsp;
+	uint8_t ht_client_cnt;
+	bool force_24ghz_in_ht20;
+	bool ch_switch_in_progress;
+	/* previous auth frame's sequence number */
+	uint16_t prev_auth_seq_num;
 } tPESession, *tpPESession;
 
 /*-------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -232,6 +232,10 @@ static void csr_set_default_scan_timing(tpAniSirGlobal pMac,
 
 		pScanRequest->min_rest_time =
 			pMac->roam.configParam.min_rest_time_conc;
+		/* IF AP is active set min rest time same as max rest time */
+		if (csr_is_infra_ap_started(pMac))
+			pScanRequest->min_rest_time = pScanRequest->restTime;
+
 		pScanRequest->idle_time =
 			pMac->roam.configParam.idle_time_conc;
 
@@ -341,6 +345,7 @@ csr_set_scan_reason(tSmeCmd *scan_cmd, eCsrRequestType req_type)
 #endif
 	case eCSR_SCAN_REQUEST_FULL_SCAN:
 	case eCSR_SCAN_P2P_DISCOVERY:
+	case eCSR_SCAN_RRM:
 		scan_cmd->u.scanCmd.reason = eCsrScanUserRequest;
 		break;
 	case eCSR_SCAN_HO_PROBE_SCAN:
@@ -395,6 +400,7 @@ csr_issue_11d_scan(tpAniSirGlobal mac_ctx, tSmeCmd *scan_cmd,
 	chn_info->ChannelList = qdf_mem_malloc(num_chn);
 	if (NULL == chn_info->ChannelList) {
 		sme_err("Failed to allocate memory");
+		csr_release_command(mac_ctx, scan_11d_cmd);
 		return QDF_STATUS_E_NOMEM;
 	}
 	qdf_mem_copy(chn_info->ChannelList,
@@ -408,7 +414,7 @@ csr_issue_11d_scan(tpAniSirGlobal mac_ctx, tSmeCmd *scan_cmd,
 	tmp_rq.BSSType = eCSR_BSS_TYPE_ANY;
 	tmp_rq.scan_id = scan_11d_cmd->u.scanCmd.scanID;
 
-	status = qdf_mc_timer_init(&scan_cmd->u.scanCmd.csr_scan_timer,
+	status = qdf_mc_timer_init(&scan_11d_cmd->u.scanCmd.csr_scan_timer,
 			QDF_TIMER_TYPE_SW,
 			csr_scan_active_list_timeout_handle, scan_11d_cmd);
 
@@ -449,6 +455,7 @@ csr_issue_11d_scan(tpAniSirGlobal mac_ctx, tSmeCmd *scan_cmd,
 	chn_info->ChannelList = NULL;
 	if (!QDF_IS_STATUS_SUCCESS(status)) {
 		sme_err("csr_scan_copy_request failed");
+		csr_release_command_scan(mac_ctx, scan_11d_cmd);
 		return QDF_STATUS_E_FAILURE;
 	}
 
@@ -460,6 +467,7 @@ csr_issue_11d_scan(tpAniSirGlobal mac_ctx, tSmeCmd *scan_cmd,
 	if (!QDF_IS_STATUS_SUCCESS(status)) {
 		sme_err("Failed to send message status = %d",
 			status);
+		csr_release_command_scan(mac_ctx, scan_11d_cmd);
 		return QDF_STATUS_E_FAILURE;
 	}
 	return QDF_STATUS_SUCCESS;
@@ -537,6 +545,9 @@ QDF_STATUS csr_scan_request(tpAniSirGlobal pMac, uint16_t sessionId,
 	if (scan_req->restTime == 0 && csr_is_any_session_connected(pMac)) {
 		scan_req->restTime = cfg_prm->nRestTimeConc;
 		scan_req->min_rest_time = cfg_prm->min_rest_time_conc;
+		/* IF AP is active set min rest time same as max rest time */
+		if (csr_is_infra_ap_started(pMac))
+			scan_req->min_rest_time = scan_req->restTime;
 		scan_req->idle_time = cfg_prm->idle_time_conc;
 		if (scan_req->scanType == eSIR_ACTIVE_SCAN) {
 			scan_req->maxChnTime = cfg_prm->nActiveMaxChnTimeConc;
@@ -579,8 +590,29 @@ QDF_STATUS csr_scan_request(tpAniSirGlobal pMac, uint16_t sessionId,
 		sme_debug("updating dwell time for first scan %u",
 			scan_req->maxChnTime);
 	}
-	scan_req->scan_adaptive_dwell_mode = cfg_prm->scan_adaptive_dwell_mode;
+	/*
+	 * RRM is an internally triggered scan and to
+	 * achieve reliable results, Adaptive dwell scan is
+	 * disabled using the dwell_mode.
+	 */
+	if (scan_req->requestType != eCSR_SCAN_RRM) {
+		if (csr_is_conn_state_disconnected(pMac, sessionId))
+			scan_req->scan_adaptive_dwell_mode =
+				cfg_prm->scan_adaptive_dwell_mode_nc;
+		else
+			scan_req->scan_adaptive_dwell_mode =
+				cfg_prm->scan_adaptive_dwell_mode;
+	}
 
+	if (scan_req->scan_flags & SME_SCAN_FLAG_HIGH_ACCURACY)
+		scan_req->scan_adaptive_dwell_mode = WMI_DWELL_MODE_STATIC;
+
+	if (scan_req->scan_flags & SME_SCAN_FLAG_LOW_POWER ||
+	    scan_req->scan_flags & SME_SCAN_FLAG_LOW_SPAN) {
+		scan_req->scan_adaptive_dwell_mode = WMI_DWELL_MODE_AGGRESSIVE;
+	}
+	sme_debug("Set scan adaptive dwell mode %d ",
+					scan_req->scan_adaptive_dwell_mode);
 	status = csr_scan_copy_request(pMac, &scan_cmd->u.scanCmd.u.scanRequest,
 				       scan_req);
 	/*
@@ -1182,6 +1214,32 @@ QDF_STATUS csr_scan_handle_search_for_ssid(tpAniSirGlobal pMac,
 	return status;
 }
 
+#ifdef WLAN_FEATURE_FILS_SK
+static
+bool csr_handle_fils_scan_for_ssid_failure(tCsrRoamProfile *roam_profile,
+					   tCsrRoamInfo *roam_info)
+{
+	if (roam_profile && roam_profile->fils_con_info &&
+	    roam_profile->fils_con_info->is_fils_connection) {
+		sme_debug("send roam_info for FILS connection failure, seq %d",
+			   roam_profile->fils_con_info->sequence_number);
+		roam_info->is_fils_connection = true;
+		roam_info->fils_seq_num =
+				roam_profile->fils_con_info->sequence_number;
+		return true;
+	}
+
+	return false;
+}
+#else
+static
+bool csr_handle_fils_scan_for_ssid_failure(tCsrRoamProfile *roam_profile,
+					   tCsrRoamInfo *roam_info)
+{
+	return false;
+}
+#endif
+
 QDF_STATUS csr_scan_handle_search_for_ssid_failure(tpAniSirGlobal pMac,
 						   tSmeCmd *pCommand)
 {
@@ -1190,6 +1248,8 @@ QDF_STATUS csr_scan_handle_search_for_ssid_failure(tpAniSirGlobal pMac,
 	tCsrRoamProfile *pProfile = pCommand->u.scanCmd.pToRoamProfile;
 	tCsrRoamSession *pSession = CSR_GET_SESSION(pMac, sessionId);
 	eCsrRoamResult roam_result;
+	tCsrRoamInfo *roam_info = NULL;
+	struct tag_csrscan_result *scan_result;
 
 	if (!pSession) {
 		sme_err("session %d not found", sessionId);
@@ -1237,31 +1297,42 @@ QDF_STATUS csr_scan_handle_search_for_ssid_failure(tpAniSirGlobal pMac,
 		roam_result = eCSR_ROAM_RESULT_IBSS_START_FAILED;
 		goto roam_completion;
 	}
+
+	roam_info = qdf_mem_malloc(sizeof(tCsrRoamInfo));
+	if (!roam_info) {
+		sme_err("Failed to allocate memory for roam_info");
+		goto roam_completion;
+	}
+
+	if (pCommand->u.roamCmd.pRoamBssEntry) {
+		scan_result = GET_BASE_ADDR(pCommand->u.roamCmd.pRoamBssEntry,
+					    struct tag_csrscan_result, Link);
+		roam_info->pBssDesc = &scan_result->Result.BssDescriptor;
+	}
+	roam_info->statusCode = pSession->joinFailStatusCode.statusCode;
+	roam_info->reasonCode = pSession->joinFailStatusCode.reasonCode;
+
 	/* Only indicate assoc_completion if we indicate assoc_start. */
 	if (pSession->bRefAssocStartCnt > 0) {
-		tCsrRoamInfo *pRoamInfo = NULL, roamInfo;
-
-		qdf_mem_set(&roamInfo, sizeof(tCsrRoamInfo), 0);
-		pRoamInfo = &roamInfo;
-		if (pCommand->u.roamCmd.pRoamBssEntry) {
-			struct tag_csrscan_result *pScanResult = GET_BASE_ADDR(
-				pCommand->u.roamCmd.pRoamBssEntry,
-				struct tag_csrscan_result, Link);
-			roamInfo.pBssDesc = &pScanResult->Result.BssDescriptor;
-		}
-		roamInfo.statusCode = pSession->joinFailStatusCode.statusCode;
-		roamInfo.reasonCode = pSession->joinFailStatusCode.reasonCode;
 		pSession->bRefAssocStartCnt--;
-		csr_roam_call_callback(pMac, sessionId, pRoamInfo,
+		csr_roam_call_callback(pMac, sessionId, roam_info,
 				       pCommand->u.scanCmd.roamId,
 				       eCSR_ROAM_ASSOCIATION_COMPLETION,
 				       eCSR_ROAM_RESULT_SCAN_FOR_SSID_FAILURE);
 	} else {
-		csr_roam_call_callback(pMac, sessionId, NULL,
+		if (!csr_handle_fils_scan_for_ssid_failure(
+		    pProfile, roam_info)) {
+			qdf_mem_free(roam_info);
+			roam_info = NULL;
+		}
+		csr_roam_call_callback(pMac, sessionId, roam_info,
 				       pCommand->u.scanCmd.roamId,
 				       eCSR_ROAM_ASSOCIATION_FAILURE,
 				       eCSR_ROAM_RESULT_SCAN_FOR_SSID_FAILURE);
 	}
+
+	if (roam_info)
+		qdf_mem_free(roam_info);
 roam_completion:
 	csr_roam_completion(pMac, sessionId, NULL, pCommand, roam_result,
 			    false);
@@ -1759,11 +1830,6 @@ static int32_t csr_calculate_rssi_score(struct sir_rssi_cfg_score *score_param,
 	bad_rssi_pcnt = score_param->bad_rssi_pcnt;
 	good_bucket_size = score_param->good_rssi_bucket_size;
 	bad_bucket_size = score_param->bad_rssi_bucket_size;
-	sme_debug("best_rssi_threshold %d good_rssi_threshold %d bad_rssi_threshold %d good_rssi_pcnt %d bad_rssi_pcnt %d good_bucket_size %d bad_bucket_size %d",
-		  best_rssi_threshold, good_rssi_threshold,
-		  bad_rssi_threshold, good_rssi_pcnt,
-		  bad_rssi_pcnt, good_bucket_size,
-		  bad_bucket_size);
 
 	total_rssi_score = (BEST_CANDIDATE_MAX_WEIGHT * rssi_weightage);
 
@@ -1881,84 +1947,95 @@ static int32_t csr_calculate_pcl_score(tpAniSirGlobal mac_ctx,
  * @mac_ctx: Pointer to mac context
  * @bss_info: bss information
  * @chan_width_weightage: PCL _weightage out of total weightage
+ * @dot11mode: dot 11 mode
+ * @prorated_pct: prorated % to return dependent on RSSI
  *
  * Return : bw score
  */
 static int32_t csr_calculate_bandwidth_score(tpAniSirGlobal mac_ctx,
 		tSirBssDescription *bss_info,
-		uint8_t chan_width_weightage)
+		uint8_t chan_width_weightage, uint32_t dot11mode,
+		uint8_t prorated_pct)
 {
 	uint32_t score;
 	int32_t bw_weight_per_idx;
 	uint8_t cbmode;
+	uint8_t width;
+	bool is_vht = false;
 
 	bw_weight_per_idx = mac_ctx->roam.configParam.
 			bss_score_params.bandwidth_weight_per_index;
 	if (CDS_IS_CHANNEL_24GHZ(bss_info->channelId)) {
 		cbmode =
 			mac_ctx->roam.configParam.channelBondingMode24GHz;
+		if (IS_DOT11_MODE_VHT(dot11mode) &&
+		    mac_ctx->roam.configParam.enableVhtFor24GHz)
+			is_vht = true;
 	} else {
 		cbmode =
 			mac_ctx->roam.configParam.channelBondingMode5GHz;
+		if (IS_DOT11_MODE_VHT(dot11mode))
+			is_vht = true;
 	}
 
-	if (cbmode) {
-		if (bss_info->chan_width == eHT_CHANNEL_WIDTH_160MHZ)
+	width = bss_info->chan_width;
+
+	if (!IS_DOT11_MODE_HT(dot11mode) && width > eHT_CHANNEL_WIDTH_20MHZ)
+		width = eHT_CHANNEL_WIDTH_20MHZ;
+
+	if (!is_vht && width > eHT_CHANNEL_WIDTH_40MHZ)
+		width = eHT_CHANNEL_WIDTH_40MHZ;
+
+	if (cbmode && width > eHT_CHANNEL_WIDTH_20MHZ) {
+		if (width == eHT_CHANNEL_WIDTH_160MHZ ||
+		    width == eHT_CHANNEL_WIDTH_80P80MHZ)
 			score = WLAN_GET_SCORE_PERCENTAGE(bw_weight_per_idx,
 					WLAN_SCORE_160MHZ_BW_INDEX);
-		else if (bss_info->chan_width == eHT_CHANNEL_WIDTH_80MHZ)
+		else if (width == eHT_CHANNEL_WIDTH_80MHZ)
 			score = WLAN_GET_SCORE_PERCENTAGE(bw_weight_per_idx,
 					WLAN_SCORE_80MHZ_BW_INDEX);
-		else if (bss_info->chan_width == eHT_CHANNEL_WIDTH_40MHZ)
-			score = WLAN_GET_SCORE_PERCENTAGE(bw_weight_per_idx,
-					WLAN_SCORE_40MHZ_BW_INDEX);
 		else
 			score = WLAN_GET_SCORE_PERCENTAGE(bw_weight_per_idx,
-					WLAN_20MHZ_BW_INDEX);
+					WLAN_SCORE_40MHZ_BW_INDEX);
 	} else {
 		score = WLAN_GET_SCORE_PERCENTAGE(bw_weight_per_idx,
 					WLAN_20MHZ_BW_INDEX);
 	}
 
-	return score * chan_width_weightage;
+	return (prorated_pct * score *
+		chan_width_weightage) / BEST_CANDIDATE_MAX_WEIGHT;
 }
 
 /**
- * csr_get_congestion_score_for_index () - get congetion score for the given
+ * csr_get_score_for_index () - get score for the given
  * index
  * @index: index for which we need the score
- * @bss_score_params: bss score params
+ * @weightage: weigtage for the param
+ * @score: per slot score
  *
- * Return : congestion score for the index
+ * Return : score for the index
  */
-static int32_t csr_get_congestion_score_for_index(uint8_t index,
-		struct sir_score_config *bss_score_params)
+static int32_t csr_get_score_for_index(uint8_t index, uint8_t weightage,
+				       struct sir_per_slot_scoring *score)
 {
-	if (index <= WLAN_ESP_QBSS_INDEX_3)
-		return bss_score_params->weight_cfg.
-			   channel_congestion_weightage *
-			   WLAN_GET_SCORE_PERCENTAGE(
-			   bss_score_params->esp_qbss_scoring.score_pcnt3_to_0,
-			   index);
-	else if (index <= WLAN_ESP_QBSS_INDEX_7)
-		return bss_score_params->weight_cfg.
-			   channel_congestion_weightage *
-			   WLAN_GET_SCORE_PERCENTAGE(
-			   bss_score_params->esp_qbss_scoring.score_pcnt7_to_4,
-			   index - WLAN_ESP_QBSS_OFFSET_INDEX_7_4);
-	else if (index <= WLAN_ESP_QBSS_INDEX_11)
-		return bss_score_params->weight_cfg.
-			   channel_congestion_weightage *
-			   WLAN_GET_SCORE_PERCENTAGE(
-			   bss_score_params->esp_qbss_scoring.score_pcnt11_to_8,
-			   index - WLAN_ESP_QBSS_OFFSET_INDEX_11_8);
+	if (index <= WLAN_SCORE_INDEX_3)
+		return weightage * WLAN_GET_SCORE_PERCENTAGE(
+				   score->score_pcnt3_to_0,
+				   index);
+	else if (index <= WLAN_SCORE_INDEX_7)
+		return weightage * WLAN_GET_SCORE_PERCENTAGE(
+				   score->score_pcnt7_to_4,
+				   index - WLAN_SCORE_OFFSET_INDEX_7_4);
+	else if (index <= WLAN_SCORE_INDEX_11)
+		return weightage * WLAN_GET_SCORE_PERCENTAGE(
+				   score->score_pcnt11_to_8,
+				   index - WLAN_SCORE_OFFSET_INDEX_11_8);
 	else
-		return bss_score_params->weight_cfg.
-			  channel_congestion_weightage *
-			  WLAN_GET_SCORE_PERCENTAGE(
-			  bss_score_params->esp_qbss_scoring.score_pcnt15_to_12,
-			  index - WLAN_ESP_QBSS_OFFSET_INDEX_15_12);
+		return weightage * WLAN_GET_SCORE_PERCENTAGE(
+				   score->score_pcnt15_to_12,
+				   index - WLAN_SCORE_OFFSET_INDEX_15_12);
 }
+
 /**
  * csr_calculate_congestion_score () - Calculate congestion score
  * @mac_ctx: Pointer to mac context
@@ -1982,18 +2059,20 @@ static int32_t csr_calculate_congestion_score(tpAniSirGlobal mac_ctx,
 		return 0;
 
 	if (bss_score_params->esp_qbss_scoring.num_slot >
-	    WLAN_ESP_QBSS_MAX_INDEX)
+	    WLAN_SCORE_MAX_INDEX)
 		bss_score_params->esp_qbss_scoring.num_slot =
-			WLAN_ESP_QBSS_MAX_INDEX;
+			WLAN_SCORE_MAX_INDEX;
 
 	good_rssi_threshold =
 		bss_score_params->rssi_score.good_rssi_threshold * (-1);
 
 	/* For bad zone rssi get score from last index */
 	if (bss_info->rssi < good_rssi_threshold)
-		return csr_get_congestion_score_for_index(
-			bss_score_params->esp_qbss_scoring.num_slot,
-			bss_score_params);
+		return csr_get_score_for_index(
+				bss_score_params->esp_qbss_scoring.num_slot,
+				bss_score_params->weight_cfg.
+				channel_congestion_weightage,
+				&bss_score_params->esp_qbss_scoring);
 
 	if (bss_info->air_time_fraction) {
 			/* Convert 0-255 range to percentage */
@@ -2019,10 +2098,10 @@ static int32_t csr_calculate_congestion_score(tpAniSirGlobal mac_ctx,
 			congestion = qdf_do_div(ap_load, MAX_AP_LOAD);
 	} else {
 		return bss_score_params->weight_cfg.
-			channel_congestion_weightage *
+			   channel_congestion_weightage *
 			   WLAN_GET_SCORE_PERCENTAGE(
 			   bss_score_params->esp_qbss_scoring.score_pcnt3_to_0,
-			   WLAN_ESP_QBSS_INDEX_0);
+			   WLAN_SCORE_INDEX_0);
 	}
 
 	window_size = BEST_CANDIDATE_MAX_WEIGHT /
@@ -2034,7 +2113,49 @@ static int32_t csr_calculate_congestion_score(tpAniSirGlobal mac_ctx,
 	if (index > bss_score_params->esp_qbss_scoring.num_slot)
 		index = bss_score_params->esp_qbss_scoring.num_slot;
 
-	return csr_get_congestion_score_for_index(index, bss_score_params);
+	return csr_get_score_for_index(index, bss_score_params->weight_cfg.
+				       channel_congestion_weightage,
+				       &bss_score_params->esp_qbss_scoring);
+}
+
+/**
+ * csr_calculate_oce_wan_score () - Calculate oce wan score
+ * @mac_ctx: Pointer to mac context
+ * @bss_info: bss information
+ * @bss_score_params: bss score params
+ *
+ * Return : oce wan score
+ */
+static int32_t csr_calculate_oce_wan_score(tpAniSirGlobal mac_ctx,
+		tSirBssDescription *bss_info,
+		struct sir_score_config *bss_score_params)
+{
+	uint32_t window_size;
+	uint8_t index;
+
+	if (!bss_score_params->oce_wan_scoring.num_slot)
+		return 0;
+
+	if (bss_score_params->oce_wan_scoring.num_slot >
+	    WLAN_SCORE_MAX_INDEX)
+		bss_score_params->oce_wan_scoring.num_slot =
+			WLAN_SCORE_MAX_INDEX;
+
+	window_size = MAX_OCE_WAN_DL_CAP/
+			bss_score_params->oce_wan_scoring.num_slot;
+
+	if (bss_info->oce_wan_present)
+		/* Desired values are from 1 to 15, as 0 is for not present */
+		index = qdf_do_div(bss_info->oce_wan_down_cap, window_size) + 1;
+	else
+		index = WLAN_SCORE_INDEX_0;
+
+	if (index > bss_score_params->oce_wan_scoring.num_slot)
+		index = bss_score_params->oce_wan_scoring.num_slot;
+
+	return csr_get_score_for_index(index,
+			bss_score_params->weight_cfg.oce_wan_weightage,
+			&bss_score_params->oce_wan_scoring);
 }
 
 /**
@@ -2043,13 +2164,16 @@ static int32_t csr_calculate_congestion_score(tpAniSirGlobal mac_ctx,
  * @ap_nss: AP nss supported
  * @nss_weight_per_index: nss wight per index
  * @nss_weightage: weightage for nss
+ * @prorated_pct: prorated % to return dependent on RSSI
  *
  * Return : nss score
  */
 static int32_t csr_calculate_nss_score(uint8_t sta_nss, uint8_t ap_nss,
-		uint32_t nss_weight_per_index, uint8_t nss_weightage)
+		uint32_t nss_weight_per_index, uint8_t nss_weightage,
+		uint8_t prorated_pct)
 {
 	uint8_t nss;
+	uint8_t score_pct;
 
 	if (wma_is_current_hwmode_dbs())
 		sta_nss--;
@@ -2059,21 +2183,20 @@ static int32_t csr_calculate_nss_score(uint8_t sta_nss, uint8_t ap_nss,
 		nss = sta_nss;
 
 	if (nss == 4)
-		return nss_weightage *
-			WLAN_GET_SCORE_PERCENTAGE(nss_weight_per_index,
-					WLAN_NSS_4x4_INDEX);
+		score_pct = WLAN_GET_SCORE_PERCENTAGE(nss_weight_per_index,
+				WLAN_NSS_4x4_INDEX);
 	else if (nss == 3)
-		return nss_weightage *
-			WLAN_GET_SCORE_PERCENTAGE(nss_weight_per_index,
+		score_pct = WLAN_GET_SCORE_PERCENTAGE(nss_weight_per_index,
 				WLAN_NSS_3x3_INDEX);
 	else if (nss == 2)
-		return nss_weightage *
-			WLAN_GET_SCORE_PERCENTAGE(nss_weight_per_index,
+		score_pct = WLAN_GET_SCORE_PERCENTAGE(nss_weight_per_index,
 				WLAN_NSS_2x2_INDEX);
 	else
-		return nss_weightage *
-			WLAN_GET_SCORE_PERCENTAGE(nss_weight_per_index,
+		score_pct = WLAN_GET_SCORE_PERCENTAGE(nss_weight_per_index,
 				WLAN_NSS_1x1_INDEX);
+
+	return (nss_weightage * score_pct *
+		prorated_pct) / BEST_CANDIDATE_MAX_WEIGHT;
 }
 
 /**
@@ -2101,29 +2224,17 @@ static int32_t _csr_calculate_bss_score(tpAniSirGlobal mac_ctx,
 	int32_t pcl_score = 0;
 	int32_t bandwidth_score = 0;
 	int32_t band_score = 0;
+	int32_t oce_wan_score = 0;
 	struct sir_weight_config *weight_config;
 	uint32_t beamformee_cap;
 	uint32_t dot11mode;
 	struct sir_score_config *bss_score_params;
 	uint8_t prorated_pcnt;
 	bool same_bucket = false;
+	bool is_vht = false;
 	int8_t good_rssi_threshold;
 	int8_t rssi_pref_5g_rssi_thresh;
 
-	/*
-	 * Total weight of a BSSID is calculated on basis of 100 in which
-	 * contribution of every factor is considered like this(default).
-	 * RSSI: RSSI_WEIGHTAGE : 25
-	 * HT_CAPABILITY_WEIGHTAGE: 7
-	 * VHT_CAP_WEIGHTAGE: 5
-	 * BEAMFORMING_CAP_WEIGHTAGE: 2
-	 * CHAN_WIDTH_WEIGHTAGE:10
-	 * CHAN_BAND_WEIGHTAGE: 5
-	 * NSS: 5
-	 * PCL: 10
-	 * CHANNEL_CONGESTION: 5
-	 * Reserved : 31
-	 */
 	bss_score_params = &mac_ctx->roam.configParam.bss_score_params;
 	weight_config = &bss_score_params->weight_cfg;
 
@@ -2146,17 +2257,25 @@ static int32_t _csr_calculate_bss_score(tpAniSirGlobal mac_ctx,
 				weight_config->ht_caps_weightage;
 	score += ht_score;
 
+	if (CDS_IS_CHANNEL_24GHZ(bss_info->channelId)) {
+		if (IS_DOT11_MODE_VHT(dot11mode) &&
+		    mac_ctx->roam.configParam.enableVhtFor24GHz)
+			is_vht = true;
+	} else if (IS_DOT11_MODE_VHT(dot11mode)) {
+		is_vht = true;
+	}
 	/*
 	 * If device and AP supports VHT caps, Extra 6% score will
 	 * be added to score
 	 */
-	if (IS_DOT11_MODE_VHT(dot11mode) && bss_info->vht_caps_present)
+	if (is_vht && bss_info->vht_caps_present)
 		vht_score = prorated_pcnt *
 				 weight_config->vht_caps_weightage;
 	score += vht_score;
 
 	bandwidth_score = csr_calculate_bandwidth_score(mac_ctx, bss_info,
-				weight_config->chan_width_weightage);
+				weight_config->chan_width_weightage, dot11mode,
+				prorated_pcnt);
 	score += bandwidth_score;
 
 	good_rssi_threshold =
@@ -2195,11 +2314,13 @@ static int32_t _csr_calculate_bss_score(tpAniSirGlobal mac_ctx,
 	 */
 	wlan_cfg_get_int(mac_ctx,
 			 WNI_CFG_VHT_SU_BEAMFORMEE_CAP, &beamformee_cap);
-	if ((bss_info->rssi > rssi_pref_5g_rssi_thresh) && !same_bucket &&
+	if (is_vht &&
+	    (bss_info->rssi > rssi_pref_5g_rssi_thresh) && !same_bucket &&
 	    beamformee_cap && bss_info->beacomforming_capable)
 		beamformee_score = BEST_CANDIDATE_MAX_WEIGHT *
 				weight_config->beamforming_cap_weightage;
 	score += beamformee_score;
+
 	congestion_score = csr_calculate_congestion_score(mac_ctx,
 		bss_info, bss_score_params);
 	score += congestion_score;
@@ -2210,23 +2331,31 @@ static int32_t _csr_calculate_bss_score(tpAniSirGlobal mac_ctx,
 	 */
 	nss_score = csr_calculate_nss_score(sta_nss, bss_info->nss,
 				bss_score_params->nss_weight_per_index,
-				weight_config->nss_weightage);
+				weight_config->nss_weightage, prorated_pcnt);
 	score += nss_score;
 
-	sme_debug("BSSID:"MAC_ADDRESS_STR" rssi=%d dot11mode %d htcaps=%d vht=%d AP bw=%d channel=%d self beamformee %d AP beamforming %d air time fraction %d qbss load %d ap_NSS %d sta nss %d",
+	oce_wan_score = csr_calculate_oce_wan_score(mac_ctx, bss_info,
+						    bss_score_params);
+	score += oce_wan_score;
+
+	sme_debug("BSSID:"MAC_ADDRESS_STR" rssi=%d dot11mode %d htcaps=%d vht=%d enableVhtFor24GHz %d AP bw=%d channel=%d self beamformee %d AP beamforming %d air time fraction %d qbss load %d ap_NSS %d sta nss %d oce_wan_present %d oce_wan_down_cap %d",
 		MAC_ADDR_ARRAY(bss_info->bssId),
 		bss_info->rssi, dot11mode,  bss_info->ht_caps_present,
-		bss_info->vht_caps_present, bss_info->chan_width,
+		bss_info->vht_caps_present,
+		mac_ctx->roam.configParam.enableVhtFor24GHz,
+		bss_info->chan_width,
 		bss_info->channelId, beamformee_cap,
 		bss_info->beacomforming_capable,
 		bss_info->air_time_fraction,
 		bss_info->qbss_chan_load,
-		bss_info->nss, sta_nss);
+		bss_info->nss, sta_nss,
+		bss_info->oce_wan_present,
+		bss_info->oce_wan_down_cap);
 
-	sme_debug("Scores : rssi %d pcl %d prorated_pcnt %d ht %d vht %d beamformee %d bw %d band %d congestion %d nss %d TOTAL score %d",
+	sme_debug("Scores : rssi %d pcl %d prorated_pcnt %d ht %d vht %d beamformee %d bw %d band %d congestion %d nss %d oce wan %d TOTAL score %d",
 		rssi_score, pcl_score, prorated_pcnt, ht_score, vht_score,
 		beamformee_score, bandwidth_score, band_score,
-		congestion_score, nss_score, score);
+		congestion_score, nss_score, oce_wan_score, score);
 
 	return score;
 }
@@ -2440,6 +2569,130 @@ csr_parse_scan_results(tpAniSirGlobal pMac,
 	return status;
 }
 
+/**
+ * csr_remove_ap_due_to_rssi() - check if bss is present in
+ * list of BSSID which rejected Assoc due to RSSI
+ * @list: rssi based rejected BSS list
+ * @bss_descr: pointer to bss description
+ *
+ * Check if the time interval indicated in last Assoc reject
+ * has expired OR rssi has improved by margin indicated
+ * in last Assoc reject. If any of the condition match remove
+ * the AP from the avoid list, else do not try to conenct
+ * to the AP
+ *
+ * Return: true if connection cannot be tried with AP else false
+ */
+static bool csr_remove_ap_due_to_rssi(qdf_list_t *list,
+	tSirBssDescription *bss_descr)
+{
+	QDF_STATUS status;
+	struct sir_rssi_disallow_lst *cur_node = NULL;
+	qdf_list_node_t *cur_lst = NULL, *next_lst = NULL;
+	qdf_time_t cur_time;
+	uint32_t time_diff;
+
+	if (!qdf_list_size(list))
+		return false;
+
+	cur_time = qdf_do_div(qdf_get_monotonic_boottime(),
+		QDF_MC_TIMER_TO_MS_UNIT);
+
+	qdf_list_peek_front(list, &cur_lst);
+	while (cur_lst) {
+		cur_node = qdf_container_of(cur_lst,
+				struct sir_rssi_disallow_lst, node);
+
+		qdf_list_peek_next(list, cur_lst, &next_lst);
+
+		time_diff = cur_time - cur_node->time_during_rejection;
+		if ((time_diff > cur_node->retry_delay)) {
+			sme_debug("Remove %pM as time diff %d is greater retry delay %d",
+				cur_node->bssid.bytes, time_diff,
+				cur_node->retry_delay);
+			status = qdf_list_remove_node(list, cur_lst);
+			if (QDF_IS_STATUS_SUCCESS(status))
+				qdf_mem_free(cur_node);
+			cur_lst = next_lst;
+			next_lst = NULL;
+			cur_node = NULL;
+			continue;
+		}
+
+		if (!qdf_mem_cmp(cur_node->bssid.bytes,
+		    bss_descr->bssId, QDF_MAC_ADDR_SIZE))
+			break;
+		cur_lst = next_lst;
+		next_lst = NULL;
+		cur_node = NULL;
+	}
+
+	if (cur_node) {
+		time_diff = cur_time - cur_node->time_during_rejection;
+		if (!(time_diff > cur_node->retry_delay ||
+		   bss_descr->rssi_raw >= cur_node->expected_rssi)) {
+			sme_err("Don't Attempt to connect %pM (time diff %d retry delay %d rssi %d expected rssi %d)",
+				cur_node->bssid.bytes, time_diff,
+				cur_node->retry_delay, bss_descr->rssi_raw,
+				cur_node->expected_rssi);
+			return true;
+		}
+		sme_debug("Remove %pM as time diff %d is greater retry delay %d or RSSI %d is greater than expected %d",
+				cur_node->bssid.bytes, time_diff,
+				cur_node->retry_delay,
+				bss_descr->rssi_raw,
+				cur_node->expected_rssi);
+		status = qdf_list_remove_node(list, cur_lst);
+		if (QDF_IS_STATUS_SUCCESS(status))
+			qdf_mem_free(cur_node);
+	}
+
+	return false;
+}
+
+/**
+ * csr_filter_ap_due_to_rssi_reject() - filter the AP who has sent
+ * assoc reject due to RSSI if condition has not improved
+ * @mac_ctx: mac context
+ * @scan_list: candidate list for the connection
+ *
+ * Return: void
+ */
+static void csr_filter_ap_due_to_rssi_reject(tpAniSirGlobal mac_ctx,
+	struct scan_result_list *scan_list)
+{
+	tListElem *cur_entry;
+	tListElem *next_entry;
+	struct tag_csrscan_result *scan_res;
+	bool remove;
+
+	if (!scan_list ||
+	   !qdf_list_size(&mac_ctx->roam.rssi_disallow_bssid))
+		return;
+
+	csr_ll_lock(&scan_list->List);
+
+	cur_entry = csr_ll_peek_head(&scan_list->List, LL_ACCESS_NOLOCK);
+	while (cur_entry) {
+		scan_res = GET_BASE_ADDR(cur_entry, struct tag_csrscan_result,
+					Link);
+		next_entry = csr_ll_next(&scan_list->List,
+						cur_entry, LL_ACCESS_NOLOCK);
+		remove = csr_remove_ap_due_to_rssi(
+			&mac_ctx->roam.rssi_disallow_bssid,
+			&scan_res->Result.BssDescriptor);
+		if (remove) {
+			csr_ll_remove_entry(&scan_list->List,
+				cur_entry, LL_ACCESS_NOLOCK);
+			csr_free_scan_result_entry(mac_ctx, scan_res);
+		}
+		cur_entry = next_entry;
+		next_entry = NULL;
+	}
+	csr_ll_unlock(&scan_list->List);
+
+}
+
 QDF_STATUS csr_scan_get_result(tpAniSirGlobal pMac,
 			       tCsrScanResultFilter *pFilter,
 			       tScanResultHandle *phResult)
@@ -2466,7 +2719,10 @@ QDF_STATUS csr_scan_get_result(tpAniSirGlobal pMac,
 		/* Fail or No one wants the result. */
 		csr_scan_result_purge(pMac, (tScanResultHandle) pRetList);
 	} else {
-		if (0 == count) {
+		if (pFilter)
+			csr_filter_ap_due_to_rssi_reject(pMac, pRetList);
+		if (0 == count ||
+		   !csr_ll_count(&pRetList->List)) {
 			/* We are here meaning the there is no match */
 			csr_ll_close(&pRetList->List);
 			qdf_mem_free(pRetList);
@@ -2942,6 +3198,63 @@ static void csr_check_n_save_wsc_ie(tpAniSirGlobal pMac,
 			pbIe += pbIe[1] + 2;
 		}
 	}
+}
+
+
+/**
+ * csr_check_hidden_ssid_entry() - Used for checking if probersp entry for
+ * hidden ssid ap has existed or not.
+ * @mac_ctx: pointer to Global MAC structure
+ * @bssdesc_old:  bss desc has existed in the list
+ * @bssdesc_new:  bss desc will be added to the list
+ *
+ * This function will return true if new desc's ssid is null and the existed
+ * bss desc's ssid is not null.
+ *
+ * Return:
+ *        true   - probersp entry has existed
+ *        false  - probersp entry doesn't exist
+ */
+static bool csr_check_hidden_ssid_entry(tpAniSirGlobal mac_ctx,
+				      tSirBssDescription *bssdesc_old,
+				      tSirBssDescription *bssdesc_new)
+{
+	bool is_hiddenap_probersp_entry_present = false;
+	tDot11fBeaconIEs *p_ies_old = NULL;
+	tDot11fBeaconIEs *p_ies_new = NULL;
+	QDF_STATUS status;
+
+	status = csr_get_parsed_bss_description_ies(mac_ctx, bssdesc_old,
+							&p_ies_old);
+	if (!QDF_IS_STATUS_SUCCESS(status))
+		goto free_ies;
+
+	status = csr_get_parsed_bss_description_ies(mac_ctx, bssdesc_new,
+							&p_ies_new);
+	if (!QDF_IS_STATUS_SUCCESS(status))
+		goto free_ies;
+
+
+	if (p_ies_old->SSID.present && p_ies_new->SSID.present
+		&& csr_is_nullssid(
+			p_ies_new->SSID.ssid, p_ies_new->SSID.num_ssid)
+		&& !csr_is_nullssid(
+			p_ies_old->SSID.ssid, p_ies_old->SSID.num_ssid)) {
+		/*
+		 * This is for hidden ssid. When beacon(null ssid) receives late
+		 * than probersp(non-null ssid), it should not duplicate the
+		 * non-null ssid scan entry. otherwise, it can't get match AP by
+		 * csr_scan_get_result when connection happens.
+		 */
+		is_hiddenap_probersp_entry_present = true;
+	}
+
+free_ies:
+	if (p_ies_old)
+		qdf_mem_free(p_ies_old);
+	if (p_ies_new)
+		qdf_mem_free(p_ies_new);
+	return is_hiddenap_probersp_entry_present;
 }
 
 /* pIes may be NULL */
@@ -3563,6 +3876,7 @@ struct tag_csrscan_result *csr_scan_append_bss_description(tpAniSirGlobal pMac,
 	tmpSsid.length = 0;
 	result = csr_remove_dup_bss_description(pMac, pSirBssDescription,
 						&tmpSsid, &timer);
+
 	pCsrBssDescription = csr_scan_save_bss_description(pMac,
 					pSirBssDescription, pIes, sessionId);
 	if (result && (pCsrBssDescription != NULL)) {
@@ -4194,7 +4508,6 @@ bool csr_learn_11dcountry_information(tpAniSirGlobal pMac,
 		goto free_ie;
 	}
 
-	pMac->reg_hint_src = SOURCE_11D;
 	status = csr_get_regulatory_domain_for_country(pMac,
 				pCountryCodeSelected, &domainId, SOURCE_11D);
 	if (status != QDF_STATUS_SUCCESS) {
@@ -4765,14 +5078,30 @@ bool csr_scan_complete(tpAniSirGlobal pMac, tSirSmeScanRsp *pScanRsp)
 	return fRemoveCommand;
 }
 
+/**
+ * csr_scan_remove_dup_bss_description_from_interim_list() - To remove duplicate
+ * entry in interim scan list
+ *
+ * @mac_ctx - MAC context
+ * @bss_dscp - new bss_dscp will be added to list
+ * @flags - flag to indicate if rssi update is needed
+ * @is_hiddenap_probersp_entry_present - value return to indicate if probersp
+ * entry for hidden ssid ap has existed
+ *
+ * To check and remove if duplicate entry existed in interim list.
+ *
+ * Return: none.
+ */
 static void
 csr_scan_remove_dup_bss_description_from_interim_list(tpAniSirGlobal mac_ctx,
-					tSirBssDescription *bss_dscp,
-					uint32_t flags)
+				tSirBssDescription *bss_dscp,
+				uint32_t flags,
+				bool *is_hiddenap_probersp_entry_present)
 {
 	tListElem *pEntry;
 	struct tag_csrscan_result *scan_bss_dscp;
 	int8_t scan_entry_rssi = 0;
+	int8_t scan_entry_rssi_raw = 0;
 	/*
 	 * Walk through all the chained BssDescriptions. If we find a chained
 	 * BssDescription that matches the BssID of the BssDescription passed
@@ -4792,6 +5121,9 @@ csr_scan_remove_dup_bss_description_from_interim_list(tpAniSirGlobal mac_ctx,
 		 * Channel and NetworkType matches
 		 */
 		scan_entry_rssi = scan_bss_dscp->Result.BssDescriptor.rssi;
+		scan_entry_rssi_raw =
+				scan_bss_dscp->Result.BssDescriptor.rssi_raw;
+
 		if (csr_is_duplicate_bss_description(mac_ctx,
 			&scan_bss_dscp->Result.BssDescriptor, bss_dscp)) {
 
@@ -4814,7 +5146,32 @@ csr_scan_remove_dup_bss_description_from_interim_list(tpAniSirGlobal mac_ctx,
 					((int32_t) scan_entry_rssi *
 					(100 - CSR_SCAN_RESULT_RSSI_WEIGHT)))
 					/ 100);
+				bss_dscp->rssi_raw = (int8_t)
+					((((int32_t) bss_dscp->rssi_raw *
+					CSR_SCAN_RESULT_RSSI_WEIGHT) +
+					((int32_t) scan_entry_rssi_raw *
+					(100 - CSR_SCAN_RESULT_RSSI_WEIGHT)))
+					/ 100);
 			}
+
+			*is_hiddenap_probersp_entry_present =
+				csr_check_hidden_ssid_entry(mac_ctx,
+					&scan_bss_dscp->Result.BssDescriptor,
+					bss_dscp);
+			if (*is_hiddenap_probersp_entry_present) {
+				/*
+				 * In the temp list we have a probe resp and we
+				 * don't want to overwrite this with beacon in
+				 * case of hidden AP scenario.
+				 * but rssi must be updated.
+				 */
+				scan_bss_dscp->Result.BssDescriptor.rssi =
+							bss_dscp->rssi;
+				scan_bss_dscp->Result.BssDescriptor.rssi_raw =
+							bss_dscp->rssi_raw;
+				break;
+			}
+
 			/* Remove the 'old' entry from the list */
 			if (csr_ll_remove_entry(&mac_ctx->scan.tempScanResults,
 				pEntry, LL_ACCESS_NOLOCK)) {
@@ -4919,7 +5276,6 @@ bool csr_is_duplicate_bss_description(tpAniSirGlobal pMac,
 	    qdf_is_macaddr_equal((struct qdf_mac_addr *) pSirBssDesc1->bssId,
 				 (struct qdf_mac_addr *) pSirBssDesc2->bssId)) {
 		fMatch = true;
-		/* Check for SSID match, if exists */
 	}
 	/* In case of P2P devices, ess and ibss will be set to zero */
 	else if (!pCap1->ess &&
@@ -5018,10 +5374,14 @@ static bool csr_scan_validate_scan_result(tpAniSirGlobal pMac,
 			return false;
 
 		valid = csr_scan_is_bss_allowed(pMac, pBssDesc, pIes);
-		if (valid)
+		if (valid) {
 			*ppIes = pIes;
-		else
+		} else {
 			qdf_mem_free(pIes);
+			sme_debug("Scan result invalid due to dot11 mode mismatch");
+		}
+	} else {
+		sme_debug("Scan result invalid");
 	}
 	return valid;
 }
@@ -5128,6 +5488,7 @@ QDF_STATUS csr_scan_process_single_bssdescr(tpAniSirGlobal mac_ctx,
 	uint32_t len = sizeof(mac_ctx->roam.validChannelList);
 	tCsrRoamInfo *roam_info;
 	uint8_t session_id;
+	bool is_hiddenap_probersp_entry_present = false;
 
 	session_id = csr_scan_get_session_id(mac_ctx);
 	sme_debug("CSR: Processing single bssdescr");
@@ -5146,7 +5507,12 @@ QDF_STATUS csr_scan_process_single_bssdescr(tpAniSirGlobal mac_ctx,
 			cnt_channels, bssdescr, &ies)) {
 
 		csr_scan_remove_dup_bss_description_from_interim_list
-			(mac_ctx, bssdescr, flags);
+			(mac_ctx, bssdescr, flags,
+			&is_hiddenap_probersp_entry_present);
+
+		if (is_hiddenap_probersp_entry_present)
+			goto exit;
+
 		csr_scan_save_bss_description_to_interim_list
 			(mac_ctx, bssdescr, ies);
 		roam_info = qdf_mem_malloc(sizeof(*roam_info));
@@ -5184,10 +5550,12 @@ QDF_STATUS csr_scan_process_single_bssdescr(tpAniSirGlobal mac_ctx,
 				csr_purge_scan_result_by_age(mac_ctx);
 		}
 		csr_update_scantype(mac_ctx, ies, bssdescr->channelId);
-		/* Free the resource */
-		if (ies != NULL)
-			qdf_mem_free(ies);
 	}
+
+exit:
+	/* Free the resource */
+	if (ies != NULL)
+		qdf_mem_free(ies);
 	return QDF_STATUS_SUCCESS;
 }
 
@@ -5220,7 +5588,7 @@ QDF_STATUS csr_scan_sme_scan_response(tpAniSirGlobal pMac,
 	if (!pEntry)
 		goto error_handling;
 
-	sme_debug("Scan completion called:scan_id %d, entry = %p",
+	sme_debug("Scan completion called:scan_id %d, entry = %pK",
 		pScanRsp->scan_id, pEntry);
 
 	pCommand = GET_BASE_ADDR(pEntry, tSmeCmd, Link);
@@ -5467,6 +5835,39 @@ QDF_STATUS csr_scan_age_results(tpAniSirGlobal pMac,
 	return status;
 }
 
+/**
+ * csr_populate_ie_whitelist_attrs() - Populates ie whitelist attrs
+ * @msg: pointer to sme scan req
+ * @scan_req: pointer to csr scan req
+ *
+ * This function populates ie whitelisting attributes of the sme scan req
+ * with corresponding whitelisting attrs in csr scan req
+ *
+ * Return: None
+ */
+static void csr_populate_ie_whitelist_attrs(tSirSmeScanReq *msg,
+					    tCsrScanRequest *scan_req)
+{
+	msg->ie_whitelist = scan_req->ie_whitelist;
+	msg->num_vendor_oui = scan_req->num_vendor_oui;
+
+	if (!msg->ie_whitelist)
+		return;
+
+	qdf_mem_copy(msg->probe_req_ie_bitmap, scan_req->probe_req_ie_bitmap,
+		     PROBE_REQ_BITMAP_LEN * sizeof(uint32_t));
+	msg->oui_field_len = scan_req->num_vendor_oui * sizeof(*scan_req->voui);
+	msg->oui_field_offset = (sizeof(tSirSmeScanReq) -
+				 sizeof(msg->channelList.channelNumber) +
+				 (sizeof(msg->channelList.channelNumber) *
+				 scan_req->ChannelInfo.numOfChannels)) +
+				 scan_req->uIEFieldLen;
+
+	if (scan_req->num_vendor_oui != 0)
+		qdf_mem_copy((uint8_t *)msg + msg->oui_field_offset,
+			     (uint8_t *)(scan_req->voui), msg->oui_field_len);
+}
+
 static QDF_STATUS csr_send_mb_scan_req(tpAniSirGlobal pMac, uint16_t sessionId,
 				       tCsrScanRequest *pScanReq,
 				       struct tag_scanreq_param *pScanReqParam)
@@ -5609,6 +6010,9 @@ static QDF_STATUS csr_send_mb_scan_req(tpAniSirGlobal pMac, uint16_t sessionId,
 
 	pMsg->minChannelTime = minChnTime;
 	pMsg->maxChannelTime = maxChnTime;
+	pMsg->scan_probe_repeat_time =
+		pMac->roam.configParam.scan_probe_repeat_time;
+	pMsg->scan_num_probes = pMac->roam.configParam.scan_num_probes;
 	/* hidden SSID option */
 	pMsg->hiddenSsid = pScanReqParam->hiddenSsid;
 	/* maximum rest time */
@@ -5654,25 +6058,7 @@ static QDF_STATUS csr_send_mb_scan_req(tpAniSirGlobal pMac, uint16_t sessionId,
 			     QDF_MAC_ADDR_SIZE);
 	}
 
-	pMsg->ie_whitelist = pScanReq->ie_whitelist;
-	if (pMsg->ie_whitelist)
-		qdf_mem_copy(pMsg->probe_req_ie_bitmap,
-			     pScanReq->probe_req_ie_bitmap,
-			     PROBE_REQ_BITMAP_LEN * sizeof(uint32_t));
-	pMsg->num_vendor_oui = pScanReq->num_vendor_oui;
-	pMsg->oui_field_len = pScanReq->num_vendor_oui *
-				      sizeof(*pScanReq->voui);
-	pMsg->oui_field_offset = (sizeof(tSirSmeScanReq) -
-				sizeof(pMsg->channelList.channelNumber) +
-				(sizeof(pMsg->channelList.channelNumber) *
-				pScanReq->ChannelInfo.numOfChannels)) +
-				pScanReq->uIEFieldLen;
-
-	if (pScanReq->num_vendor_oui != 0) {
-		qdf_mem_copy((uint8_t *)pMsg + pMsg->oui_field_offset,
-			     (uint8_t *)(pScanReq->voui),
-			     pMsg->oui_field_len);
-	}
+	csr_populate_ie_whitelist_attrs(pMsg, pScanReq);
 
 	pMsg->scan_ctrl_flags_ext = pScanReq->scan_ctrl_flags_ext;
 
@@ -5898,8 +6284,8 @@ static void csr_scan_copy_request_valid_channels_only(tpAniSirGlobal mac_ctx,
 		 * that is the only way to find p2p peers.
 		 * This can happen only if band is set to 5Ghz mode.
 		 */
-		if (src_req->ChannelInfo.ChannelList[index] <
-		    CDS_MIN_11P_CHANNEL &&
+		if (!cds_is_dsrc_channel(cds_chan_to_freq(
+			src_req->ChannelInfo.ChannelList[index])) &&
 			((csr_roam_is_valid_channel(mac_ctx,
 			src_req->ChannelInfo.ChannelList[index])) ||
 			((eCSR_SCAN_P2P_DISCOVERY == src_req->requestType) &&
@@ -5940,13 +6326,13 @@ static void csr_scan_copy_request_valid_channels_only(tpAniSirGlobal mac_ctx,
 						ChannelList[index]) &&
 					mac_ctx->roam.configParam.
 					sta_roam_policy.sap_operating_band ==
-						eCSR_BAND_24) ||
+						SIR_BAND_2_4_GHZ) ||
 						(CDS_IS_CHANNEL_5GHZ(
 							src_req->ChannelInfo.
 							ChannelList[index]) &&
 					mac_ctx->roam.configParam.
 					sta_roam_policy.sap_operating_band ==
-						eCSR_BAND_5G))) {
+						SIR_BAND_5_GHZ))) {
 					QDF_TRACE(QDF_MODULE_ID_SME,
 						QDF_TRACE_LEVEL_DEBUG,
 					      FL("ignoring unsafe channel %d"),
@@ -6014,7 +6400,7 @@ static bool csr_scan_filter_given_chnl_band(tpAniSirGlobal mac_ctx,
 		 * Don't allow DSRC channel when IBSS or SAP DFS concurrent
 		 * connection is up
 		 */
-		if (valid_chnl_list[i] >= CDS_MIN_11P_CHANNEL)
+		if (cds_is_dsrc_channel(cds_chan_to_freq(valid_chnl_list[i])))
 			continue;
 		if (CDS_IS_CHANNEL_5GHZ(channel) &&
 			CDS_IS_CHANNEL_24GHZ(valid_chnl_list[i])) {
@@ -6053,6 +6439,42 @@ static bool csr_scan_filter_given_chnl_band(tpAniSirGlobal mac_ctx,
 }
 
 /**
+ * csr_scan_copy_ie_whitelist_attrs() - Copies ie whitelist attrs
+ * @dst_req: pointer to tCsrScanRequest
+ * @src_req: pointer to tCsrScanRequest
+ *
+ * This function makes a copy of ie whitelist attrs
+ *
+ * Return: QDF_STATUS_SUCCESS - for successful allocation and copy
+ *         QDF_STATUS_E_NOMEM - when failed to allocate memory
+ */
+static QDF_STATUS csr_scan_copy_ie_whitelist_attrs(tCsrScanRequest *dst_req,
+						   tCsrScanRequest *src_req)
+{
+	QDF_STATUS status = QDF_STATUS_SUCCESS;
+
+	if (!src_req->num_vendor_oui) {
+		dst_req->num_vendor_oui = 0;
+		dst_req->voui = NULL;
+		return status;
+	}
+
+	dst_req->voui = qdf_mem_malloc(src_req->num_vendor_oui *
+				       sizeof(*dst_req->voui));
+	if (!dst_req->voui) {
+		status = QDF_STATUS_E_NOMEM;
+		dst_req->num_vendor_oui = 0;
+		sme_err("No memory for voui");
+	} else {
+		dst_req->num_vendor_oui = src_req->num_vendor_oui;
+		qdf_mem_copy(dst_req->voui, src_req->voui,
+			     src_req->num_vendor_oui * sizeof(*dst_req->voui));
+	}
+
+	return status;
+}
+
+/**
  * csr_scan_copy_request() - Function to copy scan request
  * @mac_ctx : pointer to Global Mac Structure
  * @dst_req: pointer to tCsrScanRequest
@@ -6085,6 +6507,7 @@ QDF_STATUS csr_scan_copy_request(tpAniSirGlobal mac_ctx,
 	dst_req->pIEField = NULL;
 	dst_req->ChannelInfo.ChannelList = NULL;
 	dst_req->SSIDs.SSIDList = NULL;
+	dst_req->SSIDs.numOfSSIDs = 0;
 	dst_req->voui = NULL;
 
 	if (src_req->uIEFieldLen) {
@@ -6125,10 +6548,10 @@ QDF_STATUS csr_scan_copy_request(tpAniSirGlobal mac_ctx,
 					cds_get_channel_state(src_req->
 							ChannelInfo.
 							ChannelList[index]);
-				if (src_req->ChannelInfo.ChannelList[index] <
-						CDS_MIN_11P_CHANNEL &&
-					((CHANNEL_STATE_ENABLE ==
-						channel_state) ||
+				if (!cds_is_dsrc_channel(cds_chan_to_freq(
+					src_req->ChannelInfo.ChannelList[index]
+					)) && ((CHANNEL_STATE_ENABLE ==
+					channel_state) ||
 					((CHANNEL_STATE_DFS == channel_state) &&
 					!skip_dfs_chnl))) {
 					dst_req->ChannelInfo.ChannelList
@@ -6156,8 +6579,9 @@ QDF_STATUS csr_scan_copy_request(tpAniSirGlobal mac_ctx,
 			new_index = 0;
 			for (index = 0; index < src_req->ChannelInfo.
 					numOfChannels; index++) {
-				if (src_req->ChannelInfo.ChannelList[index] <
-						CDS_MIN_11P_CHANNEL) {
+				if (!cds_is_dsrc_channel(cds_chan_to_freq(
+					src_req->ChannelInfo.ChannelList[index]
+					))) {
 					dst_req->ChannelInfo.
 						ChannelList[new_index] =
 						src_req->ChannelInfo.
@@ -6191,9 +6615,10 @@ QDF_STATUS csr_scan_copy_request(tpAniSirGlobal mac_ctx,
 		 * if all above 3 conditions are true then don't skip any
 		 * channel from scan list
 		 */
-		if (true != wma_is_current_hwmode_dbs() &&
+		if ((true != wma_is_current_hwmode_dbs() &&
 		    wma_get_dbs_plus_agile_scan_config() &&
-		    wma_get_single_mac_scan_with_dfs_config())
+		    wma_get_single_mac_scan_with_dfs_config()) ||
+		    cds_is_sta_sap_scc_allowed_on_dfs_channel())
 			channel = 0;
 		else
 			sme_debug(
@@ -6238,28 +6663,7 @@ QDF_STATUS csr_scan_copy_request(tpAniSirGlobal mac_ctx,
 	dst_req->scan_id = src_req->scan_id;
 	dst_req->timestamp = src_req->timestamp;
 
-	if (src_req->num_vendor_oui == 0) {
-		dst_req->num_vendor_oui = 0;
-		dst_req->voui = NULL;
-	} else {
-		dst_req->voui = qdf_mem_malloc(src_req->num_vendor_oui *
-					       sizeof(*dst_req->voui));
-		if (!dst_req->voui)
-			status = QDF_STATUS_E_NOMEM;
-		else
-			status = QDF_STATUS_SUCCESS;
-
-		if (QDF_IS_STATUS_SUCCESS(status)) {
-			dst_req->num_vendor_oui = src_req->num_vendor_oui;
-			qdf_mem_copy(dst_req->voui,
-				     src_req->voui,
-				     src_req->num_vendor_oui *
-				     sizeof(*dst_req->voui));
-		} else {
-			dst_req->num_vendor_oui = 0;
-			sme_err("No memory for voui");
-		}
-	}
+	status = csr_scan_copy_ie_whitelist_attrs(dst_req, src_req);
 
 complete:
 	if (!QDF_IS_STATUS_SUCCESS(status))
@@ -7379,14 +7783,10 @@ QDF_STATUS csr_abort_scan_from_active_list(tpAniSirGlobal mac_ctx,
 			if ((cmd->command == scan_cmd_type) &&
 			    ((cmd->u.scanCmd.scanID == scan_id) ||
 			    (cmd->sessionId == session_id))) {
-				if (abort_reason ==
-				    eCSR_SCAN_ABORT_DUE_TO_BAND_CHANGE)
-					cmd->u.scanCmd.abort_scan_indication =
-					eCSR_SCAN_ABORT_DUE_TO_BAND_CHANGE;
-
+				cmd->u.scanCmd.abort_scan_indication =
+						abort_reason;
 				csr_send_scan_abort(mac_ctx, cmd->sessionId,
 						    cmd->u.scanCmd.scanID);
-
 			}
 		}
 	}
@@ -7496,10 +7896,12 @@ QDF_STATUS csr_scan_save_preferred_network_found(tpAniSirGlobal pMac,
 		 * a part of PNO is updated to the supplicant. Specially
 		 * applicable in case of AP configured in 11A only mode.
 		 */
-		if ((pMac->roam.configParam.bandCapability == eCSR_BAND_ALL) ||
-			(pMac->roam.configParam.bandCapability == eCSR_BAND_24))
+		if ((pMac->roam.configParam.bandCapability == SIR_BAND_ALL) ||
+			(pMac->roam.configParam.bandCapability ==
+			 SIR_BAND_2_4_GHZ))
 			pBssDescr->channelId = 1;
-		else if (pMac->roam.configParam.bandCapability == eCSR_BAND_5G)
+		else if (pMac->roam.configParam.bandCapability ==
+			 SIR_BAND_5_GHZ)
 			pBssDescr->channelId = 36;
 	}
 	if ((pBssDescr->channelId > 0) && (pBssDescr->channelId < 15)) {

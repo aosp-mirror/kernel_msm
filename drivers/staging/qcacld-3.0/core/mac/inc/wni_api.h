@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -221,7 +221,6 @@ enum eWniMsgTypes {
 	eWNI_SME_EXTSCAN_FULL_SCAN_RESULT_IND,
 	eWNI_SME_EPNO_NETWORK_FOUND_IND,
 #endif
-	eWNI_SME_FW_DUMP_IND,
 	eWNI_SME_SET_HW_MODE_REQ,
 	eWNI_SME_SET_HW_MODE_RESP,
 	eWNI_SME_HW_MODE_TRANS_IND,
@@ -253,6 +252,7 @@ enum eWniMsgTypes {
 	eWNI_SME_NDP_INITIATOR_RSP,
 	eWNI_SME_NDP_NEW_PEER_IND,
 	eWNI_SME_NDP_CONFIRM_IND,
+	eWNI_SME_NDP_SCH_UPDATE_IND,
 	eWNI_SME_NDP_INDICATION,
 	eWNI_SME_NDP_RESPONDER_REQ,
 	eWNI_SME_NDP_RESPONDER_RSP,
@@ -424,8 +424,6 @@ enum ewni_tdls_connection_tracker_notification {
 /*---------------------------------------------------------------------*/
 #define WNI_CFG_DNLD_RSP               (WNI_CFG_MSG_TYPES_BEGIN | 0x80)
 #define WNI_CFG_GET_REQ                (WNI_CFG_MSG_TYPES_BEGIN | 0x81)
-#define WNI_CFG_SET_REQ                (WNI_CFG_MSG_TYPES_BEGIN | 0x82)
-#define WNI_CFG_SET_REQ_NO_RSP         (WNI_CFG_MSG_TYPES_BEGIN | 0x83) /* No RSP for this set */
 
 /* Shall be removed after stats integration */
 

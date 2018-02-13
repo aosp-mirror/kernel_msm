@@ -325,7 +325,7 @@ QDF_STATUS csr_create_roam_scan_channel_list(tpAniSirGlobal pMac,
 		uint8_t sessionId,
 		uint8_t *pChannelList,
 		uint8_t numChannels,
-		const eCsrBand eBand);
+		const tSirRFBand eBand);
 #endif
 
 QDF_STATUS p2p_process_remain_on_channel_cmd(tpAniSirGlobal pMac,
@@ -336,8 +336,5 @@ void csr_process_set_dual_mac_config(tpAniSirGlobal mac, tSmeCmd *command);
 void csr_process_set_antenna_mode(tpAniSirGlobal mac, tSmeCmd *command);
 void csr_process_set_hw_mode(tpAniSirGlobal mac, tSmeCmd *command);
 void csr_process_nss_update_req(tpAniSirGlobal mac, tSmeCmd *command);
-
-QDF_STATUS sme_check_ch_in_band(tpAniSirGlobal mac_ctx, uint8_t start_ch,
-				uint8_t ch_cnt);
 
 #endif /* #if !defined( __SMEINSIDE_H ) */

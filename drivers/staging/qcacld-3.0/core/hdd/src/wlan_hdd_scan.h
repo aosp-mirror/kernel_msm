@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -37,21 +37,13 @@
 /* (30 Mins) */
 #define MIN_TIME_REQUIRED_FOR_NEXT_BUG_REPORT (30 * 60 * 1000)
 
-/* DBS Scan policy selection ext flags */
-#define HDD_SCAN_FLAG_EXT_DBS_SCAN_POLICY_MASK  0x00000003
-#define HDD_SCAN_FLAG_EXT_DBS_SCAN_POLICY_BIT   0
-#define HDD_SCAN_DBS_POLICY_DEFAULT             0x0
-#define HDD_SCAN_DBS_POLICY_FORCE_NONDBS        0x1
-#define HDD_SCAN_DBS_POLICY_IGNORE_DUTY         0x2
-#define HDD_SCAN_DBS_POLICY_MAX                 0x3
-
 /* Minimum number of channels for enabling DBS Scan */
 #define HDD_MIN_CHAN_DBS_SCAN_THRESHOLD         8
 
-/* HDD Scan inactivity timeout set to 10 seconds
- * more than the CSR CMD Timeout */
+/* HDD Scan inactivity timeout set to double
+ * of the CSR CMD Timeout */
 #define HDD_SCAN_INACTIVITY_TIMEOUT \
-	(CSR_ACTIVE_SCAN_LIST_CMD_TIMEOUT + (10*1000))
+	(CSR_ACTIVE_SCAN_LIST_CMD_TIMEOUT * 2)
 /*
  * enum scan_source - scan request source
  *
@@ -94,6 +86,7 @@ int wlan_hdd_cfg80211_sched_scan_start(struct wiphy *wiphy,
 				       struct cfg80211_sched_scan_request
 				       *request);
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 12, 0)
 /**
  * wlan_hdd_cfg80211_sched_scan_stop() - stop cfg80211 scheduled (PNO) scan
  * @wiphy: Pointer to wiphy
@@ -108,6 +101,12 @@ int wlan_hdd_cfg80211_sched_scan_start(struct wiphy *wiphy,
  */
 int wlan_hdd_cfg80211_sched_scan_stop(struct wiphy *wiphy,
 				      struct net_device *dev);
+#else
+int wlan_hdd_cfg80211_sched_scan_stop(struct wiphy *wiphy,
+				      struct net_device *dev,
+				      uint64_t reqid);
+
+#endif /* KERNEL_VERSION(4, 12, 0) */
 
 /**
  * wlan_hdd_sched_scan_stop() - stop scheduled (PNO) scans
@@ -138,7 +137,7 @@ int wlan_hdd_vendor_abort_scan(
 	struct wiphy *wiphy, struct wireless_dev *wdev,
 	const void *data, int data_len);
 
-void hdd_cleanup_scan_queue(hdd_context_t *hdd_ctx);
+void hdd_cleanup_scan_queue(hdd_context_t *hdd_ctx, hdd_adapter_t *p_adapter);
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)) || \
 	defined(CFG80211_ABORT_SCAN)
@@ -162,7 +161,7 @@ void wlan_hdd_cfg80211_abort_scan(struct wiphy *wiphy,
 void wlan_hdd_fill_whitelist_ie_attrs(bool *ie_whitelist,
 				      uint32_t *probe_req_ie_bitmap,
 				      uint32_t *num_vendor_oui,
-				      struct vendor_oui *voui,
+				      uint32_t *voui,
 				      hdd_context_t *hdd_ctx);
 
 /**

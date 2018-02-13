@@ -356,7 +356,7 @@ __hif_read_write(struct hif_sdio_dev *device,
 {
 	uint8_t opcode;
 	QDF_STATUS status = QDF_STATUS_SUCCESS;
-	int ret;
+	int ret = A_OK;
 	uint8_t *tbuffer;
 	bool bounced = false;
 
@@ -501,7 +501,7 @@ __hif_read_write(struct hif_sdio_dev *device,
 					("%s: writesb ret=%d address: 0x%X, len: %d, 0x%X\n",
 					 __func__, ret, address, length,
 					 *(int *)tbuffer));
-			} else {
+			} else if (tbuffer) {
 				ret =
 					sdio_memcpy_toio(device->func, address,
 							 tbuffer, length);
@@ -539,7 +539,7 @@ __hif_read_write(struct hif_sdio_dev *device,
 					("%s: readsb ret=%d address: 0x%X, len: %d, 0x%X\n",
 					 __func__, ret, address, length,
 					 *(int *)tbuffer));
-			} else {
+			} else if (tbuffer) {
 				ret =
 					sdio_memcpy_fromio(device->func,
 							   tbuffer,
@@ -550,7 +550,7 @@ __hif_read_write(struct hif_sdio_dev *device,
 					 *(int *)tbuffer));
 			}
 #if HIF_USE_DMA_BOUNCE_BUFFER
-			if (bounced)
+			if (bounced && tbuffer)
 				memcpy(buffer, tbuffer, length);
 #endif
 		} else {
@@ -558,7 +558,7 @@ __hif_read_write(struct hif_sdio_dev *device,
 					("%s: Invalid direction: 0x%08x\n",
 					 __func__, request));
 			status = QDF_STATUS_E_INVAL;
-			break;
+			return status;
 		}
 
 		if (ret) {
@@ -630,7 +630,7 @@ hif_read_write(struct hif_sdio_dev *device,
 	AR_DEBUG_ASSERT(device != NULL);
 	AR_DEBUG_ASSERT(device->func != NULL);
 	AR_DEBUG_PRINTF(ATH_DEBUG_TRACE,
-			("%s: device 0x%p addr 0x%X buffer 0x%p len %d req 0x%X context 0x%p",
+			("%s: device 0x%pK addr 0x%X buffer 0x%pK len %d req 0x%X context 0x%pK",
 			 __func__, device, address, buffer,
 			 length, request, context));
 
@@ -1388,7 +1388,7 @@ void hif_sdio_shutdown(struct hif_softc *hif_ctx)
 		for (i = 0; i < MAX_HIF_DEVICES; ++i) {
 			if (hif_devices[i] && hif_devices[i]->func == NULL) {
 				AR_DEBUG_PRINTF(ATH_DEBUG_TRACE,
-				("%s: Remove pending hif_device %p\n",
+				("%s: Remove pending hif_device %pK\n",
 					 __func__, hif_devices[i]));
 				del_hif_device(hif_devices[i]);
 				hif_devices[i] = NULL;
@@ -1680,7 +1680,7 @@ static int hif_device_inserted(struct sdio_func *func,
 		}
 		if (i == MAX_HIF_DEVICES) {
 			AR_DEBUG_PRINTF(ATH_DEBUG_ERROR,
-				("%s: No more hif_devices[] slot for %p",
+				("%s: No more hif_devices[] slot for %pK",
 				 __func__, device));
 		}
 
@@ -1737,7 +1737,7 @@ static int hif_device_inserted(struct sdio_func *func,
 					AR_DEBUG_PRINTF(ATH_DEBUG_ERR,
 						("%s: CMD52 to set bus width failed: %d\n",
 						 __func__, ret));
-					return ret;
+					goto del_hif_dev;
 				}
 				device->host->ios.bus_width =
 					MMC_BUS_WIDTH_1;
@@ -1758,7 +1758,7 @@ static int hif_device_inserted(struct sdio_func *func,
 					("%s: CMD52 to bus width failed: %d\n",
 					 __func__,
 						 ret));
-					return ret;
+					goto del_hif_dev;
 				}
 				device->host->ios.bus_width =
 					MMC_BUS_WIDTH_4;
@@ -1779,7 +1779,7 @@ static int hif_device_inserted(struct sdio_func *func,
 					("%s: CMD52 to bus width failed: %d\n",
 							 __func__,
 							 ret));
-					return ret;
+					goto del_hif_dev;
 				}
 				device->host->ios.bus_width =
 					MMC_BUS_WIDTH_8;
@@ -1791,7 +1791,8 @@ static int hif_device_inserted(struct sdio_func *func,
 				("%s: MMC bus width %d is not supported.\n",
 						 __func__,
 						 mmcbuswidth));
-				return ret = QDF_STATUS_E_FAILURE;
+				ret = QDF_STATUS_E_FAILURE;
+				goto del_hif_dev;
 			}
 			AR_DEBUG_PRINTF(ATH_DEBUG_ANY,
 				("%s: Set MMC bus width to %dBit.\n",
@@ -1827,8 +1828,23 @@ static int hif_device_inserted(struct sdio_func *func,
 
 	ret = hif_enable_func(device, func);
 
-	return (ret == QDF_STATUS_SUCCESS || ret == QDF_STATUS_E_PENDING)
-						? 0 : QDF_STATUS_E_FAILURE;
+	if ((ret == QDF_STATUS_SUCCESS || ret == QDF_STATUS_E_PENDING))
+		return 0;
+	ret = QDF_STATUS_E_FAILURE;
+del_hif_dev:
+	del_hif_device(device);
+	for (i = 0; i < MAX_HIF_DEVICES; ++i) {
+		if (hif_devices[i] == device) {
+			hif_devices[i] = NULL;
+			break;
+		}
+	}
+	if (i == MAX_HIF_DEVICES) {
+		AR_DEBUG_PRINTF(ATH_DEBUG_ERROR,
+			("%s: No hif_devices[] slot for %pK",
+			__func__, device));
+	}
+	return ret;
 }
 
 /**
@@ -1945,7 +1961,7 @@ struct bus_request *hif_allocate_bus_request(struct hif_sdio_dev *device)
 	/* Release lock */
 	qdf_spin_unlock_irqrestore(&device->lock);
 	AR_DEBUG_PRINTF(ATH_DEBUG_TRACE,
-			("%s: hif_allocate_bus_request: 0x%p\n",
+			("%s: hif_allocate_bus_request: 0x%pK\n",
 			__func__, busrequest));
 
 	return busrequest;
@@ -2042,7 +2058,7 @@ static QDF_STATUS hif_enable_func(struct hif_sdio_dev *device,
 	int (*taskFunc)(void *) = NULL;
 	int ret = QDF_STATUS_SUCCESS;
 
-	HIF_ENTER("sdio_func 0x%p", func);
+	HIF_ENTER("sdio_func 0x%pK", func);
 
 	device = get_hif_device(func);
 
@@ -2406,6 +2422,10 @@ int hif_device_resume(struct device *dev)
 	struct hif_sdio_dev *device;
 
 	device = get_hif_device(func);
+	if (!device) {
+		AR_DEBUG_PRINTF(ATH_DEBUG_ERROR, ("get hif device failed\n"));
+		return QDF_STATUS_E_FAILURE;
+	}
 
 	if (device->device_state == HIF_DEVICE_STATE_CUTPOWER) {
 		config = HIF_DEVICE_POWER_UP;
@@ -2423,7 +2443,18 @@ int hif_device_resume(struct device *dev)
 	} else if (device->device_state == HIF_DEVICE_STATE_DEEPSLEEP) {
 		hif_un_mask_interrupt(device);
 	} else if (device->device_state == HIF_DEVICE_STATE_WOW) {
-		/*TODO:WOW support */
+		config = HIF_DEVICE_POWER_UP;
+		status = hif_configure_device(device,
+					      HIF_DEVICE_POWER_STATE_CHANGE,
+					      &config,
+					      sizeof(enum
+						 HIF_DEVICE_POWER_CHANGE_TYPE));
+		if (status) {
+			AR_DEBUG_PRINTF(ATH_DEBUG_ERROR,
+				("%s: hif_configure_device failed\n",
+				 __func__));
+			return status;
+		}
 		hif_un_mask_interrupt(device);
 	}
 
@@ -2437,7 +2468,7 @@ int hif_device_resume(struct device *dev)
 	AR_DEBUG_PRINTF(ATH_DEBUG_TRACE,
 			("%s: +hif_device_resume\n",
 			 __func__));
-	if (device && device->claimed_ctx
+	if (device->claimed_ctx
 	    && osdrv_callbacks.device_suspend_handler) {
 		status =
 		osdrv_callbacks.device_resume_handler(device->claimed_ctx);
@@ -2561,9 +2592,18 @@ static struct hif_sdio_dev *add_hif_device(struct sdio_func *func)
 	hifdevice = (struct hif_sdio_dev *) qdf_mem_malloc(sizeof(
 							struct hif_sdio_dev));
 	AR_DEBUG_ASSERT(hifdevice != NULL);
+	if (hifdevice == NULL) {
+		AR_DEBUG_PRINTF(ATH_DEBUG_ERROR, ("Alloc hif device fail\n"));
+		return NULL;
+	}
 #if HIF_USE_DMA_BOUNCE_BUFFER
 	hifdevice->dma_buffer = qdf_mem_malloc(HIF_DMA_BUFFER_SIZE);
 	AR_DEBUG_ASSERT(hifdevice->dma_buffer != NULL);
+	if (hifdevice->dma_buffer == NULL) {
+		qdf_mem_free(hifdevice);
+		AR_DEBUG_PRINTF(ATH_DEBUG_ERROR, ("Alloc dma buffer fail\n"));
+		return NULL;
+	}
 #endif
 	hifdevice->func = func;
 	hifdevice->power_config = HIF_DEVICE_POWER_UP;
@@ -2585,7 +2625,7 @@ static void del_hif_device(struct hif_sdio_dev *device)
 {
 	AR_DEBUG_ASSERT(device != NULL);
 	AR_DEBUG_PRINTF(ATH_DEBUG_TRACE,
-			("%s: deleting hif device 0x%p\n",
+			("%s: deleting hif device 0x%pK\n",
 				__func__, device));
 	if (device->dma_buffer != NULL)
 		qdf_mem_free(device->dma_buffer);

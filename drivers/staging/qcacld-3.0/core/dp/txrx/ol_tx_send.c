@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -33,7 +33,7 @@
 
 #include <cds_queue.h>          /* TAILQ */
 #ifdef QCA_COMPUTE_TX_DELAY
-#include <ieee80211.h>          /* ieee80211_frame, etc. */
+#include <linux/ieee80211.h>          /* ieee80211_frame, etc. */
 #include <enet.h>               /* ethernet_hdr_t, etc. */
 #include <ipv6_defs.h>          /* ipv6_traffic_class */
 #endif
@@ -128,8 +128,9 @@ static void ol_tx_flow_ct_unpause_os_q(ol_txrx_pdev_handle pdev)
 	struct ol_txrx_vdev_t *vdev;
 
 	TAILQ_FOREACH(vdev, &pdev->vdev_list, vdev_list_elem) {
-		if (qdf_atomic_read(&vdev->os_q_paused) &&
-		    (vdev->tx_fl_hwm != 0)) {
+		if ((qdf_atomic_read(&vdev->os_q_paused) &&
+		    (vdev->tx_fl_hwm != 0)) ||
+		    ol_txrx_flow_control_is_pause(vdev)) {
 			qdf_spin_lock(&pdev->tx_mutex);
 			if (pdev->tx_desc.num_free > vdev->tx_fl_hwm) {
 				qdf_atomic_set(&vdev->os_q_paused, 0);
@@ -542,18 +543,54 @@ void ol_tx_credit_completion_handler(ol_txrx_pdev_handle pdev, int credits)
 	ol_tx_flow_ct_unpause_os_q(pdev);
 }
 
-
 /**
- * ol_tx_update_arp_stats() - update ARP packet TX stats
+ * ol_tx_update_connectivity_stats() - update connectivity stats
+ * @tx_desc: tx desc
  * @netbuf:  buffer
+ * @status: htt status
  *
  *
  * Return: none
  */
-static void ol_tx_update_arp_stats(qdf_nbuf_t netbuf,
-					enum htt_tx_status status)
+static void ol_tx_update_connectivity_stats(struct ol_tx_desc_t *tx_desc,
+					    qdf_nbuf_t netbuf,
+					    enum htt_tx_status status)
 {
-	uint32_t tgt_ip = cds_get_arp_stats_gw_ip();
+	void *osif_dev;
+	ol_txrx_stats_rx_fp stats_rx = NULL;
+	uint8_t pkt_type = 0;
+
+	qdf_assert(tx_desc);
+	osif_dev = tx_desc->vdev->osif_dev;
+	stats_rx = tx_desc->vdev->stats_rx;
+
+	if (stats_rx) {
+		if (status != htt_tx_status_download_fail)
+			stats_rx(netbuf, osif_dev,
+				 PKT_TYPE_TX_HOST_FW_SENT, &pkt_type);
+		if (status == htt_tx_status_ok)
+			stats_rx(netbuf, osif_dev,
+				 PKT_TYPE_TX_ACK_CNT, &pkt_type);
+	}
+}
+
+/**
+ * ol_tx_update_arp_stats() - update ARP packet TX stats
+ * @tx_desc: tx desc
+ * @netbuf:  buffer
+ * @status: htt status
+ *
+ *
+ * Return: none
+ */
+static void ol_tx_update_arp_stats(struct ol_tx_desc_t *tx_desc,
+				   qdf_nbuf_t netbuf,
+				   enum htt_tx_status status)
+{
+	uint32_t tgt_ip;
+
+	qdf_assert(tx_desc);
+	tgt_ip = cds_get_arp_stats_gw_ip(tx_desc->vdev->osif_dev);
 
 	if (tgt_ip == qdf_nbuf_get_arp_tgt_ip(netbuf)) {
 		if (status != htt_tx_status_download_fail)
@@ -562,6 +599,65 @@ static void ol_tx_update_arp_stats(qdf_nbuf_t netbuf,
 			cds_incr_arp_stats_tx_tgt_acked();
 	}
 }
+
+#ifdef WLAN_FEATURE_TSF_PLUS
+static inline struct htt_tx_compl_ind_append_tx_tstamp *ol_tx_get_txtstamps(
+		u_int32_t *msg_word, int num_msdus)
+{
+	u_int32_t has_tx_tsf;
+	u_int32_t has_retry;
+	struct htt_tx_compl_ind_append_tx_tstamp *txtstamp_list = NULL;
+	struct htt_tx_compl_ind_append_retries *retry_list = NULL;
+	int offset_dwords;
+
+	has_tx_tsf = HTT_TX_COMPL_IND_APPEND1_GET(*msg_word);
+	if (num_msdus <= 0 || !has_tx_tsf)
+		return NULL;
+
+	offset_dwords = 1 + ((num_msdus + 1) >> 1);
+
+	has_retry = HTT_TX_COMPL_IND_APPEND_GET(*msg_word);
+	if (has_retry) {
+		int retry_index = 0;
+		int width_for_each_retry =
+			(sizeof(struct htt_tx_compl_ind_append_retries) +
+			3) >> 2;
+
+		retry_list = (struct htt_tx_compl_ind_append_retries *)
+			(msg_word + offset_dwords);
+		while (retry_list) {
+			if (retry_list[retry_index++].flag == 0)
+				break;
+		}
+		offset_dwords += retry_index * width_for_each_retry;
+	}
+	txtstamp_list = (struct htt_tx_compl_ind_append_tx_tstamp *)
+		(msg_word + offset_dwords);
+
+	return txtstamp_list;
+}
+
+static inline void ol_tx_timestamp(ol_txrx_pdev_handle pdev,
+				   qdf_nbuf_t netbuf, u_int64_t ts)
+{
+	if (!netbuf)
+		return;
+
+	if (pdev->ol_tx_timestamp_cb)
+		pdev->ol_tx_timestamp_cb(netbuf, ts);
+}
+#else
+static inline struct htt_tx_compl_ind_append_tx_tstamp *ol_tx_get_txtstamps(
+		u_int32_t *msg_word, int num_msdus)
+{
+	return NULL;
+}
+
+static inline void ol_tx_timestamp(ol_txrx_pdev_handle pdev,
+				   qdf_nbuf_t netbuf, u_int64_t ts)
+{
+}
+#endif
 
 /**
  * WARNING: ol_tx_inspect_handler()'s bahavior is similar to that of
@@ -572,36 +668,55 @@ static void ol_tx_update_arp_stats(qdf_nbuf_t netbuf,
 void
 ol_tx_completion_handler(ol_txrx_pdev_handle pdev,
 			 int num_msdus,
-			 enum htt_tx_status status, void *tx_desc_id_iterator)
+			 enum htt_tx_status status, void *msg)
 {
 	int i;
-	uint16_t *desc_ids = (uint16_t *) tx_desc_id_iterator;
 	uint16_t tx_desc_id;
 	struct ol_tx_desc_t *tx_desc;
 	uint32_t byte_cnt = 0;
 	qdf_nbuf_t netbuf;
+	uint32_t pkt_type_bitmap;
 	tp_ol_packetdump_cb packetdump_cb;
 	uint32_t is_tx_desc_freed = 0;
+	struct htt_tx_compl_ind_append_tx_tstamp *txtstamp_list = NULL;
+	u_int32_t *msg_word = (u_int32_t *)msg;
+	u_int16_t *desc_ids = (u_int16_t *)(msg_word + 1);
 
 	union ol_tx_desc_list_elem_t *lcl_freelist = NULL;
 	union ol_tx_desc_list_elem_t *tx_desc_last = NULL;
 	ol_tx_desc_list tx_descs;
+
 	TAILQ_INIT(&tx_descs);
 
 	ol_tx_delay_compute(pdev, status, desc_ids, num_msdus);
+	if (status == htt_tx_status_ok)
+		txtstamp_list = ol_tx_get_txtstamps(msg_word, num_msdus);
 
 	for (i = 0; i < num_msdus; i++) {
 		tx_desc_id = desc_ids[i];
 		tx_desc = ol_tx_desc_find(pdev, tx_desc_id);
 		tx_desc->status = status;
 		netbuf = tx_desc->netbuf;
+
+		if (txtstamp_list)
+			ol_tx_timestamp(pdev, netbuf,
+					(u_int64_t)txtstamp_list->timestamp[i]
+					);
+
 		QDF_NBUF_UPDATE_TX_PKT_COUNT(netbuf, QDF_NBUF_TX_PKT_FREE);
 
 		if (QDF_NBUF_CB_GET_PACKET_TYPE(netbuf) ==
 		    QDF_NBUF_CB_PACKET_TYPE_ARP) {
 			if (qdf_nbuf_data_is_arp_req(netbuf))
-				ol_tx_update_arp_stats(netbuf, status);
+				ol_tx_update_arp_stats(tx_desc, netbuf, status);
 		}
+
+		/* track connectivity stats */
+		pkt_type_bitmap = cds_get_connectivity_stats_pkt_bitmap(
+						tx_desc->vdev->osif_dev);
+		if (pkt_type_bitmap)
+			ol_tx_update_connectivity_stats(tx_desc, netbuf,
+							status);
 
 		if (tx_desc->pkt_type != OL_TX_FRM_TSO) {
 			packetdump_cb = pdev->ol_tx_packetdump_cb;
@@ -1318,3 +1433,27 @@ void ol_deregister_packetdump_callback(void)
 	pdev->ol_tx_packetdump_cb = NULL;
 	pdev->ol_rx_packetdump_cb = NULL;
 }
+
+#ifdef WLAN_FEATURE_TSF_PLUS
+void ol_register_timestamp_callback(tp_ol_timestamp_cb ol_tx_timestamp_cb)
+{
+	ol_txrx_pdev_handle pdev = cds_get_context(QDF_MODULE_ID_TXRX);
+
+	if (!pdev) {
+		ol_txrx_err("%s: pdev is NULL", __func__);
+		return;
+	}
+	pdev->ol_tx_timestamp_cb = ol_tx_timestamp_cb;
+}
+
+void ol_deregister_timestamp_callback(void)
+{
+	ol_txrx_pdev_handle pdev = cds_get_context(QDF_MODULE_ID_TXRX);
+
+	if (!pdev) {
+		ol_txrx_err("%s: pdev is NULL", __func__);
+		return;
+	}
+	pdev->ol_tx_timestamp_cb = NULL;
+}
+#endif

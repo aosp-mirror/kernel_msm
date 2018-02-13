@@ -116,8 +116,27 @@ enum hif_fake_apps_state_bits {
 	HIF_FA_SUSPENDED_BIT = 0
 };
 
+void hif_fake_apps_init_ctx(struct hif_softc *scn);
 void hif_fake_apps_resume_work(struct work_struct *work);
-#endif /* WLAN_SUSPEND_RESUME_TEST */
+bool hif_interrupt_is_fake_apps_resume(struct hif_opaque_softc *hif_ctx,
+					      int ce_id);
+void hif_trigger_fake_apps_resume(struct hif_opaque_softc *hif_ctx);
+#else
+static inline void hif_fake_apps_init_ctx(struct hif_softc *scn)
+{
+}
+
+static inline bool
+hif_interrupt_is_fake_apps_resume(struct hif_opaque_softc *hif_ctx, int ce_id)
+{
+	return false;
+}
+
+static inline void
+hif_trigger_fake_apps_resume(struct hif_opaque_softc *hif_ctx)
+{
+}
+#endif /* End of WLAN_SUSPEND_RESUME_TEST */
 
 struct hif_softc {
 	struct hif_opaque_softc osc;
@@ -164,6 +183,9 @@ struct hif_softc {
 	uint32_t hif_con_param;
 #ifdef QCA_NSS_WIFI_OFFLOAD_SUPPORT
 	uint32_t nss_wifi_ol_mode;
+#endif
+#ifdef IPA_OFFLOAD
+	qdf_shared_mem_t *ipa_ce_ring;
 #endif
 #ifdef WLAN_SUSPEND_RESUME_TEST
 	struct fake_apps_context fake_apps_ctx;

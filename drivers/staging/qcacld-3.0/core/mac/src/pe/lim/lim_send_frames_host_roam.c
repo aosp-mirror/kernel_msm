@@ -303,8 +303,6 @@ void lim_send_reassoc_req_with_ft_ies_mgmt_frame(tpAniSirGlobal mac_ctx,
 			pe_session->is_vendor_specific_vhtcaps) {
 		pe_debug("Populate Vendor VHT IEs in Re-Assoc Request");
 		frm.vendor_vht_ie.present = 1;
-		frm.vendor_vht_ie.type =
-			pe_session->vendor_specific_vht_ie_type;
 		frm.vendor_vht_ie.sub_type =
 			pe_session->vendor_specific_vht_ie_sub_type;
 		frm.vendor_vht_ie.VHTCaps.present = 1;
@@ -474,6 +472,7 @@ void lim_send_retry_reassoc_req_frame(tpAniSirGlobal pMac,
 {
 	tLimMlmReassocCnf mlmReassocCnf;        /* keep sme */
 	tLimMlmReassocReq *pTmpMlmReassocReq = NULL;
+
 	if (NULL == pTmpMlmReassocReq) {
 		pTmpMlmReassocReq = qdf_mem_malloc(sizeof(tLimMlmReassocReq));
 		if (NULL == pTmpMlmReassocReq)

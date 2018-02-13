@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -167,6 +167,7 @@ lim_collect_bss_description(tpAniSirGlobal pMac,
 	uint8_t channelNum;
 	uint8_t rxChannel;
 	uint8_t rfBand = 0;
+	uint32_t *rssi_per_chain;
 
 	pHdr = WMA_GET_RX_MAC_HEADER(pRxPacketInfo);
 
@@ -214,10 +215,15 @@ lim_collect_bss_description(tpAniSirGlobal pMac,
 		if (pBPR->HTCaps.supportedChannelWidthSet)
 			pBssDescr->chan_width = eHT_CHANNEL_WIDTH_40MHZ;
 	}
+
 	/* VHT Parameters */
-	if (pBPR->VHTCaps.present) {
+	if (IS_BSS_VHT_CAPABLE(pBPR->VHTCaps) ||
+	    IS_BSS_VHT_CAPABLE(pBPR->vendor_vht_ie.VHTCaps)) {
 		pBssDescr->vht_caps_present = 1;
-		if (pBPR->VHTCaps.suBeamFormerCap)
+		if ((IS_BSS_VHT_CAPABLE(pBPR->VHTCaps) &&
+		     pBPR->VHTCaps.suBeamFormerCap) ||
+		    (IS_BSS_VHT_CAPABLE(pBPR->vendor_vht_ie.VHTCaps) &&
+		     pBPR->vendor_vht_ie.VHTCaps.suBeamFormerCap))
 			pBssDescr->beacomforming_capable = 1;
 	}
 	if (pBPR->VHTOperation.present)
@@ -293,24 +299,24 @@ lim_collect_bss_description(tpAniSirGlobal pMac,
 	pBssDescr->rssi = (int8_t) WMA_GET_RX_RSSI_NORMALIZED(pRxPacketInfo);
 	pBssDescr->rssi_raw = (int8_t) WMA_GET_RX_RSSI_RAW(pRxPacketInfo);
 
+	/* Copy per chain rssi */
+
+	rssi_per_chain = WMA_GET_RX_RSSI_CTL_PTR(pRxPacketInfo);
+	qdf_mem_copy(pBssDescr->rssi_per_chain, rssi_per_chain,
+					sizeof(pBssDescr->rssi_per_chain));
+
 	/* SINR no longer reported by HW */
 	pBssDescr->sinr = 0;
-	pe_debug(MAC_ADDRESS_STR " rssi: normalized: %d, absolute: %d",
-		MAC_ADDR_ARRAY(pHdr->bssId), pBssDescr->rssi,
-		pBssDescr->rssi_raw);
-
 	pBssDescr->received_time = (uint64_t)qdf_mc_timer_get_system_time();
 	pBssDescr->tsf_delta = WMA_GET_RX_TSF_DELTA(pRxPacketInfo);
 	pBssDescr->seq_ctrl = pHdr->seqControl;
 
-	pe_debug("BSSID: "MAC_ADDRESS_STR " tsf_delta: %u ReceivedTime: %llu ssid: %s",
-		  MAC_ADDR_ARRAY(pHdr->bssId), pBssDescr->tsf_delta,
-		  pBssDescr->received_time,
-		  ((pBPR->ssidPresent) ? (char *)pBPR->ssId.ssId : ""));
-
-	pe_debug("Seq Ctrl: Frag Num: %d Seq Num: LO: %02x HI: %02x",
-		pBssDescr->seq_ctrl.fragNum, pBssDescr->seq_ctrl.seqNumLo,
-		pBssDescr->seq_ctrl.seqNumHi);
+	pe_debug(MAC_ADDRESS_STR
+		" rssi: norm %d abs %d tsf_delta %u RcvdTime %llu ssid %s",
+		MAC_ADDR_ARRAY(pHdr->bssId), pBssDescr->rssi,
+		pBssDescr->rssi_raw, pBssDescr->tsf_delta,
+		pBssDescr->received_time,
+		((pBPR->ssidPresent) ? (char *)pBPR->ssId.ssId : ""));
 
 	if (fScanning) {
 		rrm_get_start_tsf(pMac, pBssDescr->startTSF);
@@ -332,6 +338,11 @@ lim_collect_bss_description(tpAniSirGlobal pMac,
 	}
 
 	populate_qbss_load_status(pBssDescr, pBPR);
+
+	if (pBPR->oce_wan_present) {
+		pBssDescr->oce_wan_present = 1;
+		pBssDescr->oce_wan_down_cap = pBPR->oce_wan_downlink_av_cap;
+	}
 	lim_update_bss_with_fils_data(pBPR, pBssDescr);
 	/* Copy IE fields */
 	qdf_mem_copy((uint8_t *) &pBssDescr->ieFields,
@@ -376,6 +387,8 @@ lim_check_and_add_bss_description(tpAniSirGlobal mac_ctx,
 	uint8_t rf_band = 0;
 	uint8_t rx_chan_bd = 0;
 	uint32_t flags = 0;
+	bool drop_bcn_prb_rsp = true;
+	uint8_t freq_diff = 0;
 
 	tSirMacAddr bssid_zero =  {0x0, 0x0, 0x0, 0x0, 0x0, 0x0};
 	tpSirMacDataHdr3a hdr;
@@ -415,17 +428,23 @@ lim_check_and_add_bss_description(tpAniSirGlobal mac_ctx,
 		rx_chan_bd = WMA_GET_RX_CH(rx_packet_info);
 
 		if (rx_chan_bd != rx_chan_in_beacon) {
+			if (mac_ctx->allow_adj_ch_bcn) {
+				freq_diff = abs(cds_chan_to_freq(rx_chan_bd) -
+						cds_chan_to_freq(
+							rx_chan_in_beacon));
+				if (freq_diff <= 10)
+					drop_bcn_prb_rsp = false;
+			}
 			/* Drop beacon, if CH do not match, Drop */
-			if (!fProbeRsp) {
+			if (!fProbeRsp && drop_bcn_prb_rsp) {
 				pe_debug("Beacon Rsp dropped. Channel in BD: %d Channel in beacon: %d",
-					WMA_GET_RX_CH(rx_packet_info),
-					lim_get_channel_from_beacon(mac_ctx,
-						bpr));
+					rx_chan_bd, rx_chan_in_beacon);
 				return;
 			}
 			/* Probe RSP, do not drop */
 			else {
-				flags |= WLAN_SKIP_RSSI_UPDATE;
+				if (!mac_ctx->allow_adj_ch_bcn)
+					flags |= WLAN_SKIP_RSSI_UPDATE;
 				pe_debug("SSID: %s CH in ProbeRsp: %d CH in BD: %d mismatch Do Not Drop",
 					bpr->ssId.ssId, rx_chan_in_beacon,
 					WMA_GET_RX_CH(rx_packet_info));

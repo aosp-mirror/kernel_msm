@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -266,6 +266,7 @@ static int hdd_ocb_register_sta(hdd_adapter_t *adapter)
 	/* Register the vdev transmit and receive functions */
 	qdf_mem_zero(&txrx_ops, sizeof(txrx_ops));
 	txrx_ops.rx.rx = hdd_rx_packet_cbk;
+	txrx_ops.rx.stats_rx = hdd_tx_rx_collect_connectivity_stats_info;
 	ol_txrx_vdev_register(
 		 ol_txrx_get_vdev_from_vdev_id(adapter->sessionId),
 		 adapter, &txrx_ops);
@@ -546,7 +547,8 @@ static int __iw_set_dot11p_channel_sched(struct net_device *dev,
 			qdf_copy_macaddr(&curr_chan->mac_address,
 				     &adapter->macAddressCurrent);
 		} else {
-			mac_addr = wlan_hdd_get_intf_addr(adapter->pHddCtx);
+			mac_addr = wlan_hdd_get_intf_addr(adapter->pHddCtx,
+							  adapter->device_mode);
 			if (mac_addr == NULL) {
 				hdd_err("Cannot obtain mac address");
 				rc = -EINVAL;
@@ -813,9 +815,8 @@ static int __wlan_hdd_cfg80211_ocb_set_config(struct wiphy *wiphy,
 	}
 
 	/* Parse the netlink message */
-	if (nla_parse(tb, QCA_WLAN_VENDOR_ATTR_OCB_SET_CONFIG_MAX,
-			data,
-			data_len, qca_wlan_vendor_ocb_set_config_policy)) {
+	if (hdd_nla_parse(tb, QCA_WLAN_VENDOR_ATTR_OCB_SET_CONFIG_MAX, data,
+			  data_len, qca_wlan_vendor_ocb_set_config_policy)) {
 		hdd_err("Invalid ATTR");
 		return -EINVAL;
 	}
@@ -881,10 +882,6 @@ static int __wlan_hdd_cfg80211_ocb_set_config(struct wiphy *wiphy,
 	config->def_tx_param_size = def_tx_param_size;
 
 	/* Read the channel array */
-	if (!tb[QCA_WLAN_VENDOR_ATTR_OCB_SET_CONFIG_CHANNEL_ARRAY]) {
-		hdd_err("CHANNEL_ARRAY is not present");
-		return -EINVAL;
-	}
 	channel_array = tb[QCA_WLAN_VENDOR_ATTR_OCB_SET_CONFIG_CHANNEL_ARRAY];
 	if (!channel_array) {
 		hdd_err("No channel present");
@@ -917,7 +914,8 @@ static int __wlan_hdd_cfg80211_ocb_set_config(struct wiphy *wiphy,
 			qdf_copy_macaddr(&config->channels[i].mac_address,
 				&adapter->macAddressCurrent);
 		} else {
-			mac_addr = wlan_hdd_get_intf_addr(adapter->pHddCtx);
+			mac_addr = wlan_hdd_get_intf_addr(adapter->pHddCtx,
+							  adapter->device_mode);
 			if (mac_addr == NULL) {
 				hdd_err("Cannot obtain mac address");
 				goto fail;
@@ -1032,9 +1030,8 @@ static int __wlan_hdd_cfg80211_ocb_set_utc_time(struct wiphy *wiphy,
 	}
 
 	/* Parse the netlink message */
-	if (nla_parse(tb, QCA_WLAN_VENDOR_ATTR_OCB_SET_UTC_TIME_MAX,
-		      data,
-		      data_len, qca_wlan_vendor_ocb_set_utc_time_policy)) {
+	if (hdd_nla_parse(tb, QCA_WLAN_VENDOR_ATTR_OCB_SET_UTC_TIME_MAX, data,
+			  data_len, qca_wlan_vendor_ocb_set_utc_time_policy)) {
 		hdd_err("Invalid ATTR");
 		return -EINVAL;
 	}
@@ -1150,10 +1147,9 @@ __wlan_hdd_cfg80211_ocb_start_timing_advert(struct wiphy *wiphy,
 	timing_advert->vdev_id = adapter->sessionId;
 
 	/* Parse the netlink message */
-	if (nla_parse(tb, QCA_WLAN_VENDOR_ATTR_OCB_START_TIMING_ADVERT_MAX,
-		      data,
-		      data_len,
-		      qca_wlan_vendor_ocb_start_timing_advert_policy)) {
+	if (hdd_nla_parse(tb, QCA_WLAN_VENDOR_ATTR_OCB_START_TIMING_ADVERT_MAX,
+			  data, data_len,
+			  qca_wlan_vendor_ocb_start_timing_advert_policy)) {
 		hdd_err("Invalid ATTR");
 		goto fail;
 	}
@@ -1267,10 +1263,9 @@ __wlan_hdd_cfg80211_ocb_stop_timing_advert(struct wiphy *wiphy,
 	timing_advert->vdev_id = adapter->sessionId;
 
 	/* Parse the netlink message */
-	if (nla_parse(tb, QCA_WLAN_VENDOR_ATTR_OCB_STOP_TIMING_ADVERT_MAX,
-		      data,
-		      data_len,
-		      qca_wlan_vendor_ocb_stop_timing_advert_policy)) {
+	if (hdd_nla_parse(tb, QCA_WLAN_VENDOR_ATTR_OCB_STOP_TIMING_ADVERT_MAX,
+			  data, data_len,
+			  qca_wlan_vendor_ocb_stop_timing_advert_policy)) {
 		hdd_err("Invalid ATTR");
 		goto fail;
 	}
@@ -1573,10 +1568,8 @@ static int __wlan_hdd_cfg80211_dcc_get_stats(struct wiphy *wiphy,
 	}
 
 	/* Parse the netlink message */
-	if (nla_parse(tb, QCA_WLAN_VENDOR_ATTR_DCC_GET_STATS_MAX,
-		      data,
-		      data_len,
-		      qca_wlan_vendor_dcc_get_stats)) {
+	if (hdd_nla_parse(tb, QCA_WLAN_VENDOR_ATTR_DCC_GET_STATS_MAX, data,
+			  data_len, qca_wlan_vendor_dcc_get_stats)) {
 		hdd_err("Invalid ATTR");
 		return -EINVAL;
 	}
@@ -1738,10 +1731,8 @@ static int __wlan_hdd_cfg80211_dcc_clear_stats(struct wiphy *wiphy,
 	}
 
 	/* Parse the netlink message */
-	if (nla_parse(tb, QCA_WLAN_VENDOR_ATTR_DCC_CLEAR_STATS_MAX,
-		      data,
-		      data_len,
-		      qca_wlan_vendor_dcc_clear_stats)) {
+	if (hdd_nla_parse(tb, QCA_WLAN_VENDOR_ATTR_DCC_CLEAR_STATS_MAX, data,
+			  data_len, qca_wlan_vendor_dcc_clear_stats)) {
 		hdd_err("Invalid ATTR");
 		return -EINVAL;
 	}
@@ -1857,10 +1848,8 @@ static int __wlan_hdd_cfg80211_dcc_update_ndl(struct wiphy *wiphy,
 	}
 
 	/* Parse the netlink message */
-	if (nla_parse(tb, QCA_WLAN_VENDOR_ATTR_DCC_UPDATE_NDL_MAX,
-		      data,
-		      data_len,
-		      qca_wlan_vendor_dcc_update_ndl)) {
+	if (hdd_nla_parse(tb, QCA_WLAN_VENDOR_ATTR_DCC_UPDATE_NDL_MAX, data,
+			  data_len, qca_wlan_vendor_dcc_update_ndl)) {
 		hdd_err("Invalid ATTR");
 		goto end;
 	}

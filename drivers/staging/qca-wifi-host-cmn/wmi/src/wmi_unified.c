@@ -1549,22 +1549,9 @@ static void wmi_process_fw_event_worker_thread_ctx
 		(struct wmi_unified *wmi_handle, HTC_PACKET *htc_packet)
 {
 	wmi_buf_t evt_buf;
-	uint32_t id;
-	uint8_t *data;
 
 	evt_buf = (wmi_buf_t) htc_packet->pPktContext;
-	id = WMI_GET_FIELD(qdf_nbuf_data(evt_buf), WMI_CMD_HDR, COMMANDID);
-	data = qdf_nbuf_data(evt_buf);
 
-#ifdef WMI_INTERFACE_EVENT_LOGGING
-	if (wmi_handle->log_info.wmi_logging_enable) {
-		qdf_spin_lock_bh(&wmi_handle->log_info.wmi_record_lock);
-		/* Exclude 4 bytes of TLV header */
-		WMI_RX_EVENT_RECORD(wmi_handle, id, ((uint8_t *) data +
-				wmi_handle->log_info.buf_offset_event));
-		qdf_spin_unlock_bh(&wmi_handle->log_info.wmi_record_lock);
-	}
-#endif
 	qdf_spin_lock_bh(&wmi_handle->eventq_lock);
 	qdf_nbuf_queue_add(&wmi_handle->event_queue, evt_buf);
 	qdf_spin_unlock_bh(&wmi_handle->eventq_lock);
@@ -1601,6 +1588,19 @@ static void wmi_control_rx(void *ctx, HTC_PACKET *htc_packet)
 	qdf_spin_lock_bh(&wmi_handle->ctx_lock);
 	exec_ctx = wmi_handle->ctx[idx];
 	qdf_spin_unlock_bh(&wmi_handle->ctx_lock);
+
+#ifdef WMI_INTERFACE_EVENT_LOGGING
+	if (wmi_handle->log_info.wmi_logging_enable) {
+		uint8_t *data;
+		data = qdf_nbuf_data(evt_buf);
+
+		qdf_spin_lock_bh(&wmi_handle->log_info.wmi_record_lock);
+		/* Exclude 4 bytes of TLV header */
+		WMI_RX_EVENT_RECORD(wmi_handle, id, ((uint8_t *) data +
+				wmi_handle->log_info.buf_offset_event));
+		qdf_spin_unlock_bh(&wmi_handle->log_info.wmi_record_lock);
+	}
+#endif
 
 	if (exec_ctx == WMI_RX_WORK_CTX) {
 		wmi_process_fw_event_worker_thread_ctx
@@ -1710,6 +1710,36 @@ end:
 
 }
 
+#define WMI_WQ_WD_TIMEOUT (10 * 1000) /* 10s */
+
+static inline void wmi_workqueue_watchdog_warn(uint32_t msg_type_id)
+{
+	QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_ERROR,
+		  "%s: Message type %x has exceeded its alloted time of %ds",
+		  __func__, msg_type_id, WMI_WQ_WD_TIMEOUT / 1000);
+}
+
+#ifdef CONFIG_SLUB_DEBUG_ON
+static void wmi_workqueue_watchdog_bite(void *arg)
+{
+	struct wmi_wq_dbg_info *info = arg;
+
+	wmi_workqueue_watchdog_warn(info->wd_msg_type_id);
+	qdf_print_thread_trace(info->task);
+
+	QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_ERROR,
+		  "%s: Going down for WMI WQ Watchdog Bite!", __func__);
+	QDF_BUG(0);
+}
+#else
+static inline void wmi_workqueue_watchdog_bite(void *arg)
+{
+	struct wmi_wq_dbg_info *info = arg;
+
+	wmi_workqueue_watchdog_warn(info->wd_msg_type_id);
+}
+#endif
+
 /**
  * wmi_rx_event_work() - process rx event in rx work queue context
  * @arg: opaque pointer to wmi handle
@@ -1722,16 +1752,28 @@ static void wmi_rx_event_work(void *arg)
 {
 	wmi_buf_t buf;
 	struct wmi_unified *wmi = arg;
+	qdf_timer_t wd_timer;
+	struct wmi_wq_dbg_info info;
 
+	/* initialize WMI workqueue watchdog timer */
+	qdf_timer_init(NULL, &wd_timer, &wmi_workqueue_watchdog_bite,
+			&info, QDF_TIMER_TYPE_SW);
 	qdf_spin_lock_bh(&wmi->eventq_lock);
 	buf = qdf_nbuf_queue_remove(&wmi->event_queue);
 	qdf_spin_unlock_bh(&wmi->eventq_lock);
 	while (buf) {
+		qdf_timer_start(&wd_timer, WMI_WQ_WD_TIMEOUT);
+		info.wd_msg_type_id =
+		   WMI_GET_FIELD(qdf_nbuf_data(buf), WMI_CMD_HDR, COMMANDID);
+		info.wmi_wq = wmi->wmi_rx_work_queue;
+		info.task = qdf_get_current_task();
 		__wmi_control_rx(wmi, buf);
+		qdf_timer_stop(&wd_timer);
 		qdf_spin_lock_bh(&wmi->eventq_lock);
 		buf = qdf_nbuf_queue_remove(&wmi->event_queue);
 		qdf_spin_unlock_bh(&wmi->eventq_lock);
 	}
+	qdf_timer_free(&wd_timer);
 }
 
 #ifdef FEATURE_RUNTIME_PM
@@ -1862,6 +1904,10 @@ void wmi_unified_detach(struct wmi_unified *wmi_handle)
 		qdf_nbuf_free(buf);
 		buf = qdf_nbuf_queue_remove(&wmi_handle->event_queue);
 	}
+
+	/* Free events logs list */
+	if (wmi_handle->events_logs_list)
+		qdf_mem_free(wmi_handle->events_logs_list);
 
 #ifdef WMI_INTERFACE_EVENT_LOGGING
 	wmi_log_buffer_free(wmi_handle);

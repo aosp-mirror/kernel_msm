@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -115,9 +115,16 @@ typedef int (*hdd_drv_cmd_handler_t)(hdd_adapter_t *adapter,
 				     uint8_t cmd_name_len,
 				     hdd_priv_data_t *priv_data);
 
+/**
+ * struct hdd_drv_cmd - Structure to store ioctl command handling info
+ * @cmd: Name of the command
+ * @handler: Command handler to be invoked
+ * @args: Set to true if command expects input parameters
+ */
 struct hdd_drv_cmd {
 	const char *cmd;
 	hdd_drv_cmd_handler_t handler;
+	bool args;
 };
 
 #ifdef WLAN_FEATURE_EXTWOW_SUPPORT
@@ -127,6 +134,24 @@ struct hdd_drv_cmd {
 
 static uint16_t cesium_pid;
 
+/**
+ * drv_cmd_validate() - Validates for space in hdd driver command
+ * @command: pointer to input data (its a NULL terminated string)
+ * @len: length of command name
+ *
+ * This function checks for space after command name and if no space
+ * is found returns error.
+ *
+ * Return: 0 for success non-zero for failure
+ */
+static int drv_cmd_validate(uint8_t *command, int len)
+{
+	if (command[len] != ' ')
+		return -EINVAL;
+
+	return 0;
+}
+
 #ifdef FEATURE_WLAN_ESE
 static void hdd_get_tsm_stats_cb(tAniTrafStrmMetrics tsm_metrics,
 				 const uint32_t staId, void *context)
@@ -135,7 +160,7 @@ static void hdd_get_tsm_stats_cb(tAniTrafStrmMetrics tsm_metrics,
 	hdd_adapter_t *adapter = NULL;
 
 	if (NULL == context) {
-		hdd_err("Bad param, context [%p]", context);
+		hdd_err("Bad param, context [%pK]", context);
 		return;
 	}
 
@@ -156,7 +181,7 @@ static void hdd_get_tsm_stats_cb(tAniTrafStrmMetrics tsm_metrics,
 		 * nothing we can do
 		 */
 		spin_unlock(&hdd_context_lock);
-		hdd_warn("Invalid context, adapter [%p] magic [%08x]",
+		hdd_warn("Invalid context, adapter [%pK] magic [%08x]",
 			  adapter, stats_context->magic);
 		return;
 	}
@@ -572,19 +597,19 @@ hdd_parse_get_ibss_peer_info(uint8_t *pValue, struct qdf_mac_addr *pPeerMacAddr)
 
 static void hdd_get_band_helper(hdd_context_t *hdd_ctx, int *pBand)
 {
-	eCsrBand band = -1;
+	tSirRFBand band = SIR_BAND_UNKNOWN;
 
 	sme_get_freq_band((tHalHandle) (hdd_ctx->hHal), &band);
 	switch (band) {
-	case eCSR_BAND_ALL:
+	case SIR_BAND_ALL:
 		*pBand = WLAN_HDD_UI_BAND_AUTO;
 		break;
 
-	case eCSR_BAND_24:
+	case SIR_BAND_2_4_GHZ:
 		*pBand = WLAN_HDD_UI_BAND_2_4_GHZ;
 		break;
 
-	case eCSR_BAND_5G:
+	case SIR_BAND_5_GHZ:
 		*pBand = WLAN_HDD_UI_BAND_5_GHZ;
 		break;
 
@@ -828,45 +853,17 @@ static int hdd_parse_reassoc_command_v1_data(const uint8_t *pValue,
 void hdd_wma_send_fastreassoc_cmd(hdd_adapter_t *adapter,
 				const tSirMacAddr bssid, int channel)
 {
-	QDF_STATUS status;
 	hdd_wext_state_t *wext_state = WLAN_HDD_GET_WEXT_STATE_PTR(adapter);
+	hdd_station_ctx_t *hdd_sta_ctx = WLAN_HDD_GET_STATION_CTX_PTR(adapter);
+
 	tCsrRoamProfile *profile = &wext_state->roamProfile;
-	struct wma_roam_invoke_cmd *fastreassoc;
-	cds_msg_t msg = {0};
+	tSirMacAddr connected_bssid;
 
-	fastreassoc = qdf_mem_malloc(sizeof(*fastreassoc));
-	if (NULL == fastreassoc) {
-		hdd_err("qdf_mem_malloc failed for fastreassoc");
-		return;
-	}
-	fastreassoc->vdev_id = adapter->sessionId;
-	fastreassoc->bssid[0] = bssid[0];
-	fastreassoc->bssid[1] = bssid[1];
-	fastreassoc->bssid[2] = bssid[2];
-	fastreassoc->bssid[3] = bssid[3];
-	fastreassoc->bssid[4] = bssid[4];
-	fastreassoc->bssid[5] = bssid[5];
-
-	status = sme_get_beacon_frm(WLAN_HDD_GET_HAL_CTX(adapter), profile,
-						bssid, &fastreassoc->frame_buf,
-						&fastreassoc->frame_len,
-						&channel);
-
-	fastreassoc->channel = channel;
-	if (QDF_STATUS_SUCCESS != status) {
-		hdd_warn("sme_get_beacon_frm failed");
-		fastreassoc->frame_buf = NULL;
-		fastreassoc->frame_len = 0;
-	}
-
-	msg.type = SIR_HAL_ROAM_INVOKE;
-	msg.reserved = 0;
-	msg.bodyptr = fastreassoc;
-	status = cds_mq_post_message(QDF_MODULE_ID_WMA, &msg);
-	if (QDF_STATUS_SUCCESS != status) {
-		hdd_err("Not able to post ROAM_INVOKE_CMD message to WMA");
-		qdf_mem_free(fastreassoc);
-	}
+	qdf_mem_copy(connected_bssid, hdd_sta_ctx->conn_info.bssId.bytes,
+		     ETH_ALEN);
+	sme_fast_reassoc(WLAN_HDD_GET_HAL_CTX(adapter),
+			 profile, bssid, channel, adapter->sessionId,
+			 connected_bssid);
 }
 #endif
 
@@ -981,6 +978,7 @@ static int hdd_parse_reassoc_v1(hdd_adapter_t *adapter, const char *command)
  * @adapter:	Adapter upon which the command was received
  * @command:	Command that was received, ASCII command
  *		followed by binary data
+ * @total_len:  Total length of the command received
  *
  * This function parses the v2 REASSOC command with the format
  *
@@ -988,11 +986,17 @@ static int hdd_parse_reassoc_v1(hdd_adapter_t *adapter, const char *command)
  *
  * Return: 0 for success non-zero for failure
  */
-static int hdd_parse_reassoc_v2(hdd_adapter_t *adapter, const char *command)
+static int hdd_parse_reassoc_v2(hdd_adapter_t *adapter, const char *command,
+				int total_len)
 {
 	struct android_wifi_reassoc_params params;
 	tSirMacAddr bssid;
 	int ret;
+
+	if (total_len < sizeof(params) + 8) {
+		hdd_err("Invalid command length");
+		return -EINVAL;
+	}
 
 	/* The params are located after "REASSOC " */
 	memcpy(&params, command + 8, sizeof(params));
@@ -1010,6 +1014,7 @@ static int hdd_parse_reassoc_v2(hdd_adapter_t *adapter, const char *command)
  * hdd_parse_reassoc() - parse the REASSOC command
  * @adapter:	Adapter upon which the command was received
  * @command:	Command that was received
+ * @total_len:  Total length of the command received
  *
  * There are two different versions of the REASSOC command.  Version 1
  * of the command contains a parameter list that is ASCII characters
@@ -1020,7 +1025,8 @@ static int hdd_parse_reassoc_v2(hdd_adapter_t *adapter, const char *command)
  *
  * Return: 0 for success non-zero for failure
  */
-static int hdd_parse_reassoc(hdd_adapter_t *adapter, const char *command)
+static int hdd_parse_reassoc(hdd_adapter_t *adapter, const char *command,
+			     int total_len)
 {
 	int ret;
 
@@ -1037,10 +1043,16 @@ static int hdd_parse_reassoc(hdd_adapter_t *adapter, const char *command)
 	 *           1111111111222222
 	 * 01234567890123456789012345
 	 */
+
+	if (total_len < 26) {
+		hdd_err("Invalid command, total_len = %d", total_len);
+		return -EINVAL;
+	}
+
 	if (command[25])
 		ret = hdd_parse_reassoc_v1(adapter, command);
 	else
-		ret = hdd_parse_reassoc_v2(adapter, command);
+		ret = hdd_parse_reassoc_v2(adapter, command, total_len);
 
 	return ret;
 }
@@ -1254,13 +1266,20 @@ hdd_parse_sendactionframe_v2(hdd_adapter_t *adapter,
 	struct android_wifi_af_params *params;
 	tSirMacAddr bssid;
 	int ret;
+	int len_wo_payload = 0;
 
 	/* The params are located after "SENDACTIONFRAME " */
 	total_len -= 16;
+	len_wo_payload = sizeof(*params) - ANDROID_WIFI_ACTION_FRAME_SIZE;
+	if (total_len <= len_wo_payload) {
+		hdd_err("Invalid command len");
+		return -EINVAL;
+	}
+
 	params = (struct android_wifi_af_params *)(command + 16);
 
 	if (params->len <= 0 || params->len > ANDROID_WIFI_ACTION_FRAME_SIZE ||
-		(params->len > total_len)) {
+		(params->len > (total_len - len_wo_payload))) {
 		hdd_err("Invalid payload length: %d", params->len);
 		return -EINVAL;
 	}
@@ -2254,7 +2273,7 @@ static int hdd_get_dwell_time(struct hdd_config *pCfg, uint8_t *command,
 				 (int)pCfg->nPassiveMinChnTime);
 		return 0;
 	} else if (strncmp(command, "GETDWELLTIME", 12) == 0) {
-		*len = scnprintf(extra, n, "GETDWELLTIME %u \n",
+		*len = scnprintf(extra, n, "GETDWELLTIME %u\n",
 				 (int)pCfg->nActiveMaxChnTime);
 		return 0;
 	}
@@ -2267,8 +2286,9 @@ static int hdd_set_dwell_time(hdd_adapter_t *adapter, uint8_t *command)
 	tHalHandle hHal;
 	struct hdd_config *pCfg;
 	uint8_t *value = command;
-	tSmeConfigParams smeConfig;
+	tSmeConfigParams *sme_config;
 	int val = 0, temp = 0;
+	int retval = 0;
 
 	pCfg = (WLAN_HDD_GET_CTX(adapter))->config;
 	hHal = WLAN_HDD_GET_HAL_CTX(adapter);
@@ -2277,69 +2297,97 @@ static int hdd_set_dwell_time(hdd_adapter_t *adapter, uint8_t *command)
 		return -EINVAL;
 	}
 
-	qdf_mem_zero(&smeConfig, sizeof(smeConfig));
-	sme_get_config_param(hHal, &smeConfig);
+	sme_config = qdf_mem_malloc(sizeof(*sme_config));
+	if (!sme_config) {
+		hdd_err("failed to allocate memory for sme_config");
+		return -ENOMEM;
+	}
+	qdf_mem_zero(sme_config, sizeof(*sme_config));
+	sme_get_config_param(hHal, sme_config);
 
 	if (strncmp(command, "SETDWELLTIME ACTIVE MAX", 23) == 0) {
+		if (drv_cmd_validate(command, 23))
+			return -EINVAL;
+
 		value = value + 24;
 		temp = kstrtou32(value, 10, &val);
 		if (temp != 0 || val < CFG_ACTIVE_MAX_CHANNEL_TIME_MIN ||
 		    val > CFG_ACTIVE_MAX_CHANNEL_TIME_MAX) {
 			hdd_err("argument passed for SETDWELLTIME ACTIVE MAX is incorrect");
-			return -EFAULT;
+			retval = -EFAULT;
+			goto free;
 		}
 		pCfg->nActiveMaxChnTime = val;
-		smeConfig.csrConfig.nActiveMaxChnTime = val;
-		sme_update_config(hHal, &smeConfig);
+		sme_config->csrConfig.nActiveMaxChnTime = val;
+		sme_update_config(hHal, sme_config);
 	} else if (strncmp(command, "SETDWELLTIME ACTIVE MIN", 23) == 0) {
+		if (drv_cmd_validate(command, 23))
+			return -EINVAL;
+
 		value = value + 24;
 		temp = kstrtou32(value, 10, &val);
 		if (temp != 0 || val < CFG_ACTIVE_MIN_CHANNEL_TIME_MIN ||
 		    val > CFG_ACTIVE_MIN_CHANNEL_TIME_MAX) {
 			hdd_err("argument passed for SETDWELLTIME ACTIVE MIN is incorrect");
-			return -EFAULT;
+			retval = -EFAULT;
+			goto free;
 		}
 		pCfg->nActiveMinChnTime = val;
-		smeConfig.csrConfig.nActiveMinChnTime = val;
-		sme_update_config(hHal, &smeConfig);
+		sme_config->csrConfig.nActiveMinChnTime = val;
+		sme_update_config(hHal, sme_config);
 	} else if (strncmp(command, "SETDWELLTIME PASSIVE MAX", 24) == 0) {
+		if (drv_cmd_validate(command, 24))
+			return -EINVAL;
+
 		value = value + 25;
 		temp = kstrtou32(value, 10, &val);
 		if (temp != 0 || val < CFG_PASSIVE_MAX_CHANNEL_TIME_MIN ||
 		    val > CFG_PASSIVE_MAX_CHANNEL_TIME_MAX) {
 			hdd_err("argument passed for SETDWELLTIME PASSIVE MAX is incorrect");
-			return -EFAULT;
+			retval = -EFAULT;
+			goto free;
 		}
 		pCfg->nPassiveMaxChnTime = val;
-		smeConfig.csrConfig.nPassiveMaxChnTime = val;
-		sme_update_config(hHal, &smeConfig);
+		sme_config->csrConfig.nPassiveMaxChnTime = val;
+		sme_update_config(hHal, sme_config);
 	} else if (strncmp(command, "SETDWELLTIME PASSIVE MIN", 24) == 0) {
+		if (drv_cmd_validate(command, 24))
+			return -EINVAL;
+
 		value = value + 25;
 		temp = kstrtou32(value, 10, &val);
 		if (temp != 0 || val < CFG_PASSIVE_MIN_CHANNEL_TIME_MIN ||
 		    val > CFG_PASSIVE_MIN_CHANNEL_TIME_MAX) {
 			hdd_err("argument passed for SETDWELLTIME PASSIVE MIN is incorrect");
-			return -EFAULT;
+			retval = -EFAULT;
+			goto free;
 		}
 		pCfg->nPassiveMinChnTime = val;
-		smeConfig.csrConfig.nPassiveMinChnTime = val;
-		sme_update_config(hHal, &smeConfig);
+		sme_config->csrConfig.nPassiveMinChnTime = val;
+		sme_update_config(hHal, sme_config);
 	} else if (strncmp(command, "SETDWELLTIME", 12) == 0) {
+		if (drv_cmd_validate(command, 12))
+			return -EINVAL;
+
 		value = value + 13;
 		temp = kstrtou32(value, 10, &val);
 		if (temp != 0 || val < CFG_ACTIVE_MAX_CHANNEL_TIME_MIN ||
 		    val > CFG_ACTIVE_MAX_CHANNEL_TIME_MAX) {
 			hdd_err("argument passed for SETDWELLTIME is incorrect");
-			return -EFAULT;
+			retval = -EFAULT;
+			goto free;
 		}
 		pCfg->nActiveMaxChnTime = val;
-		smeConfig.csrConfig.nActiveMaxChnTime = val;
-		sme_update_config(hHal, &smeConfig);
+		sme_config->csrConfig.nActiveMaxChnTime = val;
+		sme_update_config(hHal, sme_config);
 	} else {
-		return -EINVAL;
+		retval = -EINVAL;
+		goto free;
 	}
 
-	return 0;
+free:
+	qdf_mem_free(sme_config);
+	return retval;
 }
 
 static void hdd_get_link_status_cb(uint8_t status, void *context)
@@ -2348,7 +2396,7 @@ static void hdd_get_link_status_cb(uint8_t status, void *context)
 	hdd_adapter_t *adapter;
 
 	if (NULL == context) {
-		hdd_err("Bad context [%p]", context);
+		hdd_err("Bad context [%pK]", context);
 		return;
 	}
 
@@ -2364,7 +2412,7 @@ static void hdd_get_link_status_cb(uint8_t status, void *context)
 		 * nothing we can do
 		 */
 		spin_unlock(&hdd_context_lock);
-		hdd_warn("Invalid context, adapter [%p] magic [%08x]",
+		hdd_warn("Invalid context, adapter [%pK] magic [%08x]",
 			  adapter, pLinkContext->magic);
 		return;
 	}
@@ -2957,8 +3005,18 @@ static int drv_cmd_country(hdd_adapter_t *adapter,
 	QDF_STATUS status;
 	unsigned long rc;
 	char *country_code;
+	int32_t cc_from_db;
 
 	country_code = command + 8;
+	if (!((country_code[0] == 'X' && country_code[1] == 'X') ||
+	    (country_code[0] == '0' && country_code[1] == '0'))) {
+		cc_from_db = cds_get_country_from_alpha2(country_code);
+		if (cc_from_db == CTRY_DEFAULT) {
+			hdd_err("Invalid country code: %c%c",
+				country_code[0], country_code[1]);
+			return -EINVAL;
+		}
+	}
 
 	INIT_COMPLETION(adapter->change_country_code);
 
@@ -3252,16 +3310,11 @@ static int drv_cmd_set_roam_mode(hdd_adapter_t *adapter,
 	uint8_t *value = command;
 	uint8_t roamMode = CFG_LFR_FEATURE_ENABLED_DEFAULT;
 
-	if (!adapter->fast_roaming_allowed) {
-		hdd_err("Roaming is always disabled on this interface");
-		goto exit;
-	}
-
 	/* Move pointer to ahead of SETROAMMODE<delimiter> */
 	value = value + SIZE_OF_SETROAMMODE + 1;
 
 	/* Convert the value from ascii to integer */
-	ret = kstrtou8(value, SIZE_OF_SETROAMMODE, &roamMode);
+	ret = kstrtou8(value, 10, &roamMode);
 	if (ret < 0) {
 		/*
 		 * If the input value is greater than max value of datatype,
@@ -4097,7 +4150,7 @@ static int drv_cmd_reassoc(hdd_adapter_t *adapter,
 			   uint8_t command_len,
 			   hdd_priv_data_t *priv_data)
 {
-	return hdd_parse_reassoc(adapter, command);
+	return hdd_parse_reassoc(adapter, command, priv_data->total_len);
 }
 
 static int drv_cmd_set_wes_mode(hdd_adapter_t *adapter,
@@ -4294,11 +4347,6 @@ static int drv_cmd_set_fast_roam(hdd_adapter_t *adapter,
 	uint8_t *value = command;
 	uint8_t lfrMode = CFG_LFR_FEATURE_ENABLED_DEFAULT;
 
-	if (!adapter->fast_roaming_allowed) {
-		hdd_err("Roaming is always disabled on this interface");
-		goto exit;
-	}
-
 	/* Move pointer to ahead of SETFASTROAM<delimiter> */
 	value = value + command_len + 1;
 
@@ -4395,7 +4443,7 @@ static int drv_cmd_fast_reassoc(hdd_adapter_t *adapter,
 	uint8_t *value = command;
 	uint8_t channel = 0;
 	tSirMacAddr targetApBssid;
-	uint32_t roamId = 0;
+	uint32_t roamId = INVALID_ROAM_ID;
 	tCsrRoamModifyProfileFields modProfileFields;
 	tCsrHandoffRequest handoffInfo;
 	hdd_station_ctx_t *pHddStaCtx;
@@ -5638,12 +5686,6 @@ static int drv_cmd_set_ccx_mode(hdd_adapter_t *adapter,
 		goto exit;
 	}
 
-	if (!adapter->fast_roaming_allowed) {
-		hdd_warn("Fast roaming is not allowed on this device hence this operation is not permitted!");
-		ret = -EPERM;
-		goto exit;
-	}
-
 	/* Move pointer to ahead of SETCCXMODE<delimiter> */
 	value = value + command_len + 1;
 
@@ -6821,105 +6863,112 @@ static int drv_cmd_set_channel_switch(hdd_adapter_t *adapter,
  * IOCTL driver commands and the handler for each of them.
  */
 static const struct hdd_drv_cmd hdd_drv_cmds[] = {
-	{"P2P_DEV_ADDR",              drv_cmd_p2p_dev_addr},
-	{"P2P_SET_NOA",               drv_cmd_p2p_set_noa},
-	{"P2P_SET_PS",                drv_cmd_p2p_set_ps},
-	{"SETBAND",                   drv_cmd_set_band},
-	{"SETWMMPS",                  drv_cmd_set_wmmps},
-	{"COUNTRY",                   drv_cmd_country},
-	{"SETSUSPENDMODE",            drv_cmd_dummy},
-	{"SET_AP_WPS_P2P_IE",         drv_cmd_dummy},
-	{"BTCOEXSCAN",                drv_cmd_dummy},
-	{"RXFILTER",                  drv_cmd_dummy},
-	{"SETROAMTRIGGER",            drv_cmd_set_roam_trigger},
-	{"GETROAMTRIGGER",            drv_cmd_get_roam_trigger},
-	{"SETROAMSCANPERIOD",         drv_cmd_set_roam_scan_period},
-	{"GETROAMSCANPERIOD",         drv_cmd_get_roam_scan_period},
-	{"SETROAMSCANREFRESHPERIOD",  drv_cmd_set_roam_scan_refresh_period},
-	{"GETROAMSCANREFRESHPERIOD",  drv_cmd_get_roam_scan_refresh_period},
-	{"SETROAMMODE",               drv_cmd_set_roam_mode},
-	{"GETROAMMODE",               drv_cmd_get_roam_mode},
-	{"SETROAMDELTA",              drv_cmd_set_roam_delta},
-	{"GETROAMDELTA",              drv_cmd_get_roam_delta},
-	{"GETBAND",                   drv_cmd_get_band},
-	{"SETROAMSCANCHANNELS",       drv_cmd_set_roam_scan_channels},
-	{"GETROAMSCANCHANNELS",       drv_cmd_get_roam_scan_channels},
-	{"GETCCXMODE",                drv_cmd_get_ccx_mode},
-	{"GETOKCMODE",                drv_cmd_get_okc_mode},
-	{"GETFASTROAM",               drv_cmd_get_fast_roam},
-	{"GETFASTTRANSITION",         drv_cmd_get_fast_transition},
-	{"SETROAMSCANCHANNELMINTIME", drv_cmd_set_roam_scan_channel_min_time},
-	{"SENDACTIONFRAME",           drv_cmd_send_action_frame},
-	{"GETROAMSCANCHANNELMINTIME", drv_cmd_get_roam_scan_channel_min_time},
-	{"SETSCANCHANNELTIME",        drv_cmd_set_scan_channel_time},
-	{"GETSCANCHANNELTIME",        drv_cmd_get_scan_channel_time},
-	{"SETSCANHOMETIME",           drv_cmd_set_scan_home_time},
-	{"GETSCANHOMETIME",           drv_cmd_get_scan_home_time},
-	{"SETROAMINTRABAND",          drv_cmd_set_roam_intra_band},
-	{"GETROAMINTRABAND",          drv_cmd_get_roam_intra_band},
-	{"SETSCANNPROBES",            drv_cmd_set_scan_n_probes},
-	{"GETSCANNPROBES",            drv_cmd_get_scan_n_probes},
-	{"SETSCANHOMEAWAYTIME",       drv_cmd_set_scan_home_away_time},
-	{"GETSCANHOMEAWAYTIME",       drv_cmd_get_scan_home_away_time},
-	{"REASSOC",                   drv_cmd_reassoc},
-	{"SETWESMODE",                drv_cmd_set_wes_mode},
-	{"GETWESMODE",                drv_cmd_get_wes_mode},
-	{"SETOPPORTUNISTICRSSIDIFF",  drv_cmd_set_opportunistic_rssi_diff},
-	{"GETOPPORTUNISTICRSSIDIFF",  drv_cmd_get_opportunistic_rssi_diff},
-	{"SETROAMRESCANRSSIDIFF",     drv_cmd_set_roam_rescan_rssi_diff},
-	{"GETROAMRESCANRSSIDIFF",     drv_cmd_get_roam_rescan_rssi_diff},
-	{"SETFASTROAM",               drv_cmd_set_fast_roam},
-	{"SETFASTTRANSITION",         drv_cmd_set_fast_transition},
-	{"FASTREASSOC",               drv_cmd_fast_reassoc},
-	{"SETROAMSCANCONTROL",        drv_cmd_set_roam_scan_control},
-	{"SETOKCMODE",                drv_cmd_set_okc_mode},
-	{"GETROAMSCANCONTROL",        drv_cmd_get_roam_scan_control},
-	{"BTCOEXMODE",                drv_cmd_bt_coex_mode},
-	{"SCAN-ACTIVE",               drv_cmd_scan_active},
-	{"SCAN-PASSIVE",              drv_cmd_scan_passive},
-	{"GETDWELLTIME",              drv_cmd_get_dwell_time},
-	{"SETDWELLTIME",              drv_cmd_set_dwell_time},
-	{"MIRACAST",                  drv_cmd_miracast},
-	{"SETIBSSBEACONOUIDATA",      drv_cmd_set_ibss_beacon_oui_data},
-	{"SETRMCENABLE",              drv_cmd_set_rmc_enable},
-	{"SETRMCACTIONPERIOD",        drv_cmd_set_rmc_action_period},
-	{"GETIBSSPEERINFOALL",        drv_cmd_get_ibss_peer_info_all},
-	{"GETIBSSPEERINFO",           drv_cmd_get_ibss_peer_info},
-	{"SETRMCTXRATE",              drv_cmd_set_rmc_tx_rate},
-	{"SETIBSSTXFAILEVENT",        drv_cmd_set_ibss_tx_fail_event},
+	{"P2P_DEV_ADDR",              drv_cmd_p2p_dev_addr, false},
+	{"P2P_SET_NOA",               drv_cmd_p2p_set_noa, true},
+	{"P2P_SET_PS",                drv_cmd_p2p_set_ps, true},
+	{"SETBAND",                   drv_cmd_set_band, true},
+	{"SETWMMPS",                  drv_cmd_set_wmmps, true},
+	{"COUNTRY",                   drv_cmd_country, true},
+	{"SETSUSPENDMODE",            drv_cmd_dummy, false},
+	{"SET_AP_WPS_P2P_IE",         drv_cmd_dummy, false},
+	{"BTCOEXSCAN",                drv_cmd_dummy, false},
+	{"RXFILTER",                  drv_cmd_dummy, false},
+	{"SETROAMTRIGGER",            drv_cmd_set_roam_trigger, true},
+	{"GETROAMTRIGGER",            drv_cmd_get_roam_trigger, false},
+	{"SETROAMSCANPERIOD",         drv_cmd_set_roam_scan_period, true},
+	{"GETROAMSCANPERIOD",         drv_cmd_get_roam_scan_period, false},
+	{"SETROAMSCANREFRESHPERIOD",  drv_cmd_set_roam_scan_refresh_period,
+	 true},
+	{"GETROAMSCANREFRESHPERIOD",  drv_cmd_get_roam_scan_refresh_period,
+	 false},
+	{"SETROAMMODE",               drv_cmd_set_roam_mode, true},
+	{"GETROAMMODE",               drv_cmd_get_roam_mode, false},
+	{"SETROAMDELTA",              drv_cmd_set_roam_delta, true},
+	{"GETROAMDELTA",              drv_cmd_get_roam_delta, false},
+	{"GETBAND",                   drv_cmd_get_band, false},
+	{"SETROAMSCANCHANNELS",       drv_cmd_set_roam_scan_channels, true},
+	{"GETROAMSCANCHANNELS",       drv_cmd_get_roam_scan_channels, false},
+	{"GETCCXMODE",                drv_cmd_get_ccx_mode, false},
+	{"GETOKCMODE",                drv_cmd_get_okc_mode, false},
+	{"GETFASTROAM",               drv_cmd_get_fast_roam, false},
+	{"GETFASTTRANSITION",         drv_cmd_get_fast_transition, false},
+	{"SETROAMSCANCHANNELMINTIME", drv_cmd_set_roam_scan_channel_min_time,
+	 true},
+	{"SENDACTIONFRAME",           drv_cmd_send_action_frame, true},
+	{"GETROAMSCANCHANNELMINTIME", drv_cmd_get_roam_scan_channel_min_time,
+	 false},
+	{"SETSCANCHANNELTIME",        drv_cmd_set_scan_channel_time, true},
+	{"GETSCANCHANNELTIME",        drv_cmd_get_scan_channel_time, false},
+	{"SETSCANHOMETIME",           drv_cmd_set_scan_home_time, true},
+	{"GETSCANHOMETIME",           drv_cmd_get_scan_home_time, false},
+	{"SETROAMINTRABAND",          drv_cmd_set_roam_intra_band, true},
+	{"GETROAMINTRABAND",          drv_cmd_get_roam_intra_band, false},
+	{"SETSCANNPROBES",            drv_cmd_set_scan_n_probes, true},
+	{"GETSCANNPROBES",            drv_cmd_get_scan_n_probes, false},
+	{"SETSCANHOMEAWAYTIME",       drv_cmd_set_scan_home_away_time, true},
+	{"GETSCANHOMEAWAYTIME",       drv_cmd_get_scan_home_away_time, false},
+	{"REASSOC",                   drv_cmd_reassoc, true},
+	{"SETWESMODE",                drv_cmd_set_wes_mode, true},
+	{"GETWESMODE",                drv_cmd_get_wes_mode, false},
+	{"SETOPPORTUNISTICRSSIDIFF",  drv_cmd_set_opportunistic_rssi_diff,
+	 true},
+	{"GETOPPORTUNISTICRSSIDIFF",  drv_cmd_get_opportunistic_rssi_diff,
+	 false},
+	{"SETROAMRESCANRSSIDIFF",     drv_cmd_set_roam_rescan_rssi_diff, true},
+	{"GETROAMRESCANRSSIDIFF",     drv_cmd_get_roam_rescan_rssi_diff, false},
+	{"SETFASTROAM",               drv_cmd_set_fast_roam, true},
+	{"SETFASTTRANSITION",         drv_cmd_set_fast_transition, true},
+	{"FASTREASSOC",               drv_cmd_fast_reassoc, true},
+	{"SETROAMSCANCONTROL",        drv_cmd_set_roam_scan_control, true},
+	{"SETOKCMODE",                drv_cmd_set_okc_mode, true},
+	{"GETROAMSCANCONTROL",        drv_cmd_get_roam_scan_control, false},
+	{"BTCOEXMODE",                drv_cmd_bt_coex_mode, true},
+	{"SCAN-ACTIVE",               drv_cmd_scan_active, false},
+	{"SCAN-PASSIVE",              drv_cmd_scan_passive, false},
+	{"GETDWELLTIME",              drv_cmd_get_dwell_time, false},
+	{"SETDWELLTIME",              drv_cmd_set_dwell_time, true},
+	{"MIRACAST",                  drv_cmd_miracast, true},
+	{"SETIBSSBEACONOUIDATA",      drv_cmd_set_ibss_beacon_oui_data, true},
+	{"SETRMCENABLE",              drv_cmd_set_rmc_enable, true},
+	{"SETRMCACTIONPERIOD",        drv_cmd_set_rmc_action_period, true},
+	{"GETIBSSPEERINFOALL",        drv_cmd_get_ibss_peer_info_all, false},
+	{"GETIBSSPEERINFO",           drv_cmd_get_ibss_peer_info, true},
+	{"SETRMCTXRATE",              drv_cmd_set_rmc_tx_rate, true},
+	{"SETIBSSTXFAILEVENT",        drv_cmd_set_ibss_tx_fail_event, true},
 #ifdef FEATURE_WLAN_ESE
-	{"SETCCXROAMSCANCHANNELS",    drv_cmd_set_ccx_roam_scan_channels},
-	{"GETTSMSTATS",               drv_cmd_get_tsm_stats},
-	{"SETCCKMIE",                 drv_cmd_set_cckm_ie},
-	{"CCXBEACONREQ",	      drv_cmd_ccx_beacon_req},
-	{"CCXPLMREQ",                 drv_cmd_ccx_plm_req},
-	{"SETCCXMODE",                drv_cmd_set_ccx_mode},
+	{"SETCCXROAMSCANCHANNELS",    drv_cmd_set_ccx_roam_scan_channels, true},
+	{"GETTSMSTATS",               drv_cmd_get_tsm_stats, true},
+	{"SETCCKMIE",                 drv_cmd_set_cckm_ie, true},
+	{"CCXBEACONREQ",	      drv_cmd_ccx_beacon_req, true},
+	{"CCXPLMREQ",                 drv_cmd_ccx_plm_req, true},
+	{"SETCCXMODE",                drv_cmd_set_ccx_mode, true},
 #endif /* FEATURE_WLAN_ESE */
-	{"SETMCRATE",                 drv_cmd_set_mc_rate},
-	{"MAXTXPOWER",                drv_cmd_max_tx_power},
-	{"SETDFSSCANMODE",            drv_cmd_set_dfs_scan_mode},
-	{"GETDFSSCANMODE",            drv_cmd_get_dfs_scan_mode},
-	{"GETLINKSTATUS",             drv_cmd_get_link_status},
+	{"SETMCRATE",                 drv_cmd_set_mc_rate, true},
+	{"MAXTXPOWER",                drv_cmd_max_tx_power, true},
+	{"SETDFSSCANMODE",            drv_cmd_set_dfs_scan_mode, true},
+	{"GETDFSSCANMODE",            drv_cmd_get_dfs_scan_mode, false},
+	{"GETLINKSTATUS",             drv_cmd_get_link_status, false},
 #ifdef WLAN_FEATURE_EXTWOW_SUPPORT
-	{"ENABLEEXTWOW",              drv_cmd_enable_ext_wow},
-	{"SETAPP1PARAMS",             drv_cmd_set_app1_params},
-	{"SETAPP2PARAMS",             drv_cmd_set_app2_params},
+	{"ENABLEEXTWOW",              drv_cmd_enable_ext_wow, true},
+	{"SETAPP1PARAMS",             drv_cmd_set_app1_params, true},
+	{"SETAPP2PARAMS",             drv_cmd_set_app2_params, true},
 #endif
 #ifdef FEATURE_WLAN_TDLS
-	{"TDLSSECONDARYCHANNELOFFSET", drv_cmd_tdls_secondary_channel_offset},
-	{"TDLSOFFCHANNELMODE",        drv_cmd_tdls_off_channel_mode},
-	{"TDLSOFFCHANNEL",            drv_cmd_tdls_off_channel},
-	{"TDLSSCAN",                  drv_cmd_tdls_scan},
+	{"TDLSSECONDARYCHANNELOFFSET", drv_cmd_tdls_secondary_channel_offset,
+	 true},
+	{"TDLSOFFCHANNELMODE",        drv_cmd_tdls_off_channel_mode, true},
+	{"TDLSOFFCHANNEL",            drv_cmd_tdls_off_channel, true},
+	{"TDLSSCAN",                  drv_cmd_tdls_scan, true},
 #endif
-	{"RSSI",                      drv_cmd_get_rssi},
-	{"LINKSPEED",                 drv_cmd_get_linkspeed},
-	{"RXFILTER-REMOVE",           drv_cmd_rx_filter_remove},
-	{"RXFILTER-ADD",              drv_cmd_rx_filter_add},
-	{"SET_FCC_CHANNEL",           drv_cmd_set_fcc_channel},
-	{"CHANNEL_SWITCH",            drv_cmd_set_channel_switch},
-	{"SETANTENNAMODE",            drv_cmd_set_antenna_mode},
-	{"GETANTENNAMODE",            drv_cmd_get_antenna_mode},
-	{"STOP",                      drv_cmd_dummy},
+	{"RSSI",                      drv_cmd_get_rssi, false},
+	{"LINKSPEED",                 drv_cmd_get_linkspeed, false},
+	{"RXFILTER-REMOVE",           drv_cmd_rx_filter_remove, true},
+	{"RXFILTER-ADD",              drv_cmd_rx_filter_add, true},
+	{"SET_FCC_CHANNEL",           drv_cmd_set_fcc_channel, true},
+	{"CHANNEL_SWITCH",            drv_cmd_set_channel_switch, true},
+	{"SETANTENNAMODE",            drv_cmd_set_antenna_mode, true},
+	{"GETANTENNAMODE",            drv_cmd_get_antenna_mode, false},
+	{"STOP",                      drv_cmd_dummy, false},
 };
 
 /**
@@ -6943,12 +6992,18 @@ static int hdd_drv_cmd_process(hdd_adapter_t *adapter,
 	const int cmd_num_total = ARRAY_SIZE(hdd_drv_cmds);
 	uint8_t *cmd_i = NULL;
 	hdd_drv_cmd_handler_t handler = NULL;
-	int len = 0;
+	int len = 0, cmd_len = 0;
+	uint8_t *ptr;
+	bool args;
 
 	if (!adapter || !cmd || !priv_data) {
 		hdd_err("at least 1 param is NULL");
 		return -EINVAL;
 	}
+
+	/* Calculate length of the first word */
+	ptr = strchrnul(cmd, ' ');
+	cmd_len = ptr - cmd;
 
 	hdd_ctx = (hdd_context_t *)adapter->pHddCtx;
 
@@ -6957,15 +7012,20 @@ static int hdd_drv_cmd_process(hdd_adapter_t *adapter,
 		cmd_i = (uint8_t *)hdd_drv_cmds[i].cmd;
 		handler = hdd_drv_cmds[i].handler;
 		len = strlen(cmd_i);
+		args = hdd_drv_cmds[i].args;
 
 		if (!handler) {
 			hdd_err("no. %d handler is NULL", i);
 			return -EINVAL;
 		}
 
-		if (strncasecmp(cmd, cmd_i, len) == 0)
+		if (len == cmd_len && strncasecmp(cmd, cmd_i, len) == 0) {
+			if (args && drv_cmd_validate(cmd, len))
+				return -EINVAL;
+
 			return handler(adapter, hdd_ctx,
 				       cmd, len, priv_data);
+		}
 	}
 
 	return drv_cmd_invalid(adapter, hdd_ctx, cmd, len, priv_data);

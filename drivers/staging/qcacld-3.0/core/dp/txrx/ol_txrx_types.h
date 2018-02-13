@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -152,6 +152,7 @@ enum tx_peer_level {
 	TXRX_IEEE11_A_G,
 	TXRX_IEEE11_N,
 	TXRX_IEEE11_AC,
+	TXRX_IEEE11_AX,
 	TXRX_IEEE11_MAX,
 };
 
@@ -259,6 +260,23 @@ enum {
 
 	OL_TX_SCHED_WRR_ADV_NUM_CATEGORIES /* must be last */
 };
+
+A_COMPILE_TIME_ASSERT(ol_tx_sched_htt_ac_values,
+	/* check that regular WMM AC enum values match */
+	((int)OL_TX_SCHED_WRR_ADV_CAT_VO == (int)HTT_AC_WMM_VO) &&
+	((int)OL_TX_SCHED_WRR_ADV_CAT_VI == (int)HTT_AC_WMM_VI) &&
+	((int)OL_TX_SCHED_WRR_ADV_CAT_BK == (int)HTT_AC_WMM_BK) &&
+	((int)OL_TX_SCHED_WRR_ADV_CAT_BE == (int)HTT_AC_WMM_BE) &&
+
+	/* check that extension AC enum values match */
+	((int)OL_TX_SCHED_WRR_ADV_CAT_NON_QOS_DATA
+		== (int)HTT_AC_EXT_NON_QOS) &&
+	((int)OL_TX_SCHED_WRR_ADV_CAT_UCAST_MGMT
+		== (int)HTT_AC_EXT_UCAST_MGMT) &&
+	((int)OL_TX_SCHED_WRR_ADV_CAT_MCAST_DATA
+		== (int)HTT_AC_EXT_MCAST_DATA) &&
+	((int)OL_TX_SCHED_WRR_ADV_CAT_MCAST_MGMT
+		== (int)HTT_AC_EXT_MCAST_MGMT));
 
 struct ol_tx_reorder_cat_timeout_t {
 	TAILQ_HEAD(, ol_rx_reorder_timeout_list_elem_t) virtual_timer_list;
@@ -412,6 +430,14 @@ enum throttle_phase {
 
 #define THROTTLE_TX_THRESHOLD (100)
 
+/*
+ * Threshold to stop priority queue in percentage. When no
+ * of available descriptors falls below TX_STOP_PRIORITY_TH,
+ * priority queue will be paused.
+ */
+#define TX_STOP_PRIORITY_TH   (80)
+
+
 typedef void (*ipa_uc_op_cb_type)(uint8_t *op_msg, void *osif_ctxt);
 
 struct ol_tx_queue_group_t {
@@ -478,6 +504,7 @@ struct ol_txrx_pool_stats {
  * @freelist: tx descriptor freelist
  * @pkt_drop_no_desc: drop due to no descriptors
  * @ref_cnt: pool's ref count
+ * @stop_priority_th: Threshold to stop priority queue
  */
 struct ol_tx_flow_pool_t {
 	TAILQ_ENTRY(ol_tx_flow_pool_t) flow_pool_list_elem;
@@ -494,6 +521,7 @@ struct ol_tx_flow_pool_t {
 	union ol_tx_desc_list_elem_t *freelist;
 	uint16_t pkt_drop_no_desc;
 	qdf_atomic_t ref_cnt;
+	uint16_t stop_priority_th;
 };
 
 #endif
@@ -511,6 +539,17 @@ struct ol_txrx_peer_id_map {
 	struct ol_txrx_peer_t *peer;
 	qdf_atomic_t peer_id_ref_cnt;
 	qdf_atomic_t del_peer_id_ref_cnt;
+};
+
+/**
+ * ol_txrx_stats_req_internal - specifications of the requested
+ * statistics internally
+ */
+struct ol_txrx_stats_req_internal {
+    struct ol_txrx_stats_req base;
+    TAILQ_ENTRY(ol_txrx_stats_req_internal) req_list_elem;
+    int serviced; /* state of this request */
+    int offset;
 };
 
 /*
@@ -630,6 +669,10 @@ struct ol_txrx_pdev_t {
 	/* ol_txrx_vdev list */
 	TAILQ_HEAD(, ol_txrx_vdev_t) vdev_list;
 
+	TAILQ_HEAD(, ol_txrx_stats_req_internal) req_list;
+	int req_list_depth;
+	qdf_spinlock_t req_list_spinlock;
+
 	/* peer ID to peer object map (array of pointers to peer objects) */
 	struct ol_txrx_peer_id_map *peer_id_to_obj_map;
 
@@ -678,9 +721,14 @@ struct ol_txrx_pdev_t {
 		} callbacks[OL_TXRX_MGMT_NUM_TYPES];
 	} tx_mgmt;
 
+	data_stall_detect_cb data_stall_detect_callback;
 	/* packetdump callback functions */
 	tp_ol_packetdump_cb ol_tx_packetdump_cb;
 	tp_ol_packetdump_cb ol_rx_packetdump_cb;
+
+#ifdef WLAN_FEATURE_TSF_PLUS
+	tp_ol_timestamp_cb ol_tx_timestamp_cb;
+#endif
 
 	struct {
 		uint16_t pool_size;
@@ -976,8 +1024,8 @@ struct ol_txrx_pdev_t {
 	ol_tx_pause_callback_fp pause_cb;
 
 	struct {
-		void (*lro_flush_cb)(void *);
-	} lro_info;
+		void (*offld_flush_cb)(void *);
+	} rx_offld_info;
 	struct ol_txrx_peer_t *self_peer;
 };
 
@@ -1005,6 +1053,7 @@ struct ol_txrx_vdev_t {
 						* pseudo-peer)
 						*/
 	ol_txrx_rx_fp rx; /* receive function used by this vdev */
+	ol_txrx_stats_rx_fp stats_rx; /* receive function used by this vdev */
 
 	struct {
 		/*
@@ -1020,6 +1069,7 @@ struct ol_txrx_vdev_t {
 		 */
 		ol_txrx_vdev_delete_cb callback;
 		void *context;
+		atomic_t detaching;
 	} delete;
 
 	/* safe mode control to bypass the encrypt and decipher process */
@@ -1064,6 +1114,7 @@ struct ol_txrx_vdev_t {
 	uint16_t tx_fl_hwm;
 	qdf_spinlock_t flow_control_lock;
 	ol_txrx_tx_flow_control_fp osif_flow_control_cb;
+	ol_txrx_tx_flow_control_is_pause_fp osif_flow_control_is_pause;
 	void *osif_fc_ctx;
 
 #if defined(CONFIG_HL_SUPPORT) && defined(FEATURE_WLAN_TDLS)
@@ -1215,6 +1266,7 @@ struct ol_txrx_peer_t {
 	struct ol_rx_reorder_t tids_rx_reorder[OL_TXRX_NUM_EXT_TIDS];
 	union htt_rx_pn_t tids_last_pn[OL_TXRX_NUM_EXT_TIDS];
 	uint8_t tids_last_pn_valid[OL_TXRX_NUM_EXT_TIDS];
+	uint8_t tids_rekey_flag[OL_TXRX_NUM_EXT_TIDS];
 	uint16_t tids_next_rel_idx[OL_TXRX_NUM_EXT_TIDS];
 	uint16_t tids_last_seq[OL_TXRX_NUM_EXT_TIDS];
 	uint16_t tids_mcast_last_seq[OL_TXRX_NUM_EXT_TIDS];

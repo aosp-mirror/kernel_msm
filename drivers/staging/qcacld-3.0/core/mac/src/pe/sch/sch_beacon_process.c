@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -72,6 +72,7 @@ ap_beacon_process_5_ghz(tpAniSirGlobal mac_ctx, uint8_t *rx_pkt_info,
 			uint32_t phy_mode)
 {
 	tpSirMacMgmtHdr mac_hdr = WMA_GET_RX_MAC_HEADER(rx_pkt_info);
+
 	if (!session->htCapability)
 		return;
 
@@ -393,10 +394,9 @@ sch_bcn_process_sta(tpAniSirGlobal mac_ctx,
 	beaconParams->bssIdx = *bssIdx;
 	qdf_mem_copy((uint8_t *) &session->lastBeaconTimeStamp,
 			(uint8_t *) bcn->timeStamp, sizeof(uint64_t));
-	session->lastBeaconDtimCount = bcn->tim.dtimCount;
 	session->currentBssBeaconCnt++;
-	if (session->lastBeaconDtimPeriod != bcn->tim.dtimPeriod) {
-		session->lastBeaconDtimPeriod = bcn->tim.dtimPeriod;
+	if (session->bcon_dtim_period != bcn->tim.dtimPeriod) {
+		session->bcon_dtim_period = bcn->tim.dtimPeriod;
 		lim_send_set_dtim_period(mac_ctx, bcn->tim.dtimPeriod,
 				session);
 	}
@@ -533,24 +533,39 @@ sch_bcn_process_sta_ibss(tpAniSirGlobal mac_ctx,
 	uint32_t fw_vht_ch_wd = wma_get_vht_ch_width();
 	bool skip_opmode_update = false;
 
-	if (CHAN_ENUM_14 >= session->currentOperChannel)
-		cb_mode = mac_ctx->roam.configParam.channelBondingMode24GHz;
+	if (CDS_IS_CHANNEL_24GHZ(session->currentOperChannel)) {
+		if (session->force_24ghz_in_ht20)
+			cb_mode = WNI_CFG_CHANNEL_BONDING_MODE_DISABLE;
+		else
+			cb_mode = mac_ctx->roam.configParam.channelBondingMode24GHz;
+	}
 	else
 		cb_mode = mac_ctx->roam.configParam.channelBondingMode5GHz;
+
 	/* check for VHT capability */
 	pStaDs = dph_lookup_hash_entry(mac_ctx, pMh->sa, &aid,
 			&session->dph.dphHashTable);
-	if ((NULL == pStaDs) ||
-	  (WNI_CFG_CHANNEL_BONDING_MODE_DISABLE == cb_mode) ||
-	  ((NULL != pStaDs) &&
-	   (STA_INVALID_IDX == pStaDs->staIndex)))
+	if ((NULL == pStaDs) || ((NULL != pStaDs) &&
+					(STA_INVALID_IDX == pStaDs->staIndex)))
 		return;
 
 	if (session->vhtCapability && bcn->OperatingMode.present) {
+		update_nss(mac_ctx, pStaDs, bcn, session, pMh);
 		operMode = get_operating_channel_width(pStaDs);
 		if ((operMode == eHT_CHANNEL_WIDTH_80MHZ) &&
 		    (bcn->OperatingMode.chanWidth > eHT_CHANNEL_WIDTH_80MHZ))
 			skip_opmode_update = true;
+		if (WNI_CFG_CHANNEL_BONDING_MODE_DISABLE == cb_mode) {
+			/*
+			 * if channel bonding is disabled from INI and
+			 * receiving beacon which has operating mode IE
+			 * containing channel width change then don't update
+			 * CH_WIDTH
+			 */
+			pe_err("CB disabled & CH_WIDTH changed old[%d] new[%d]",
+				operMode, bcn->OperatingMode.chanWidth);
+			return;
+		}
 
 		if (!skip_opmode_update &&
 			((operMode != bcn->OperatingMode.chanWidth) ||
@@ -600,7 +615,6 @@ sch_bcn_process_sta_ibss(tpAniSirGlobal mac_ctx,
 			lim_check_vht_op_mode_change(mac_ctx, session,
 					chWidth, session->dot11mode,
 					pStaDs->staIndex, pMh->sa);
-			update_nss(mac_ctx, pStaDs, bcn, session, pMh);
 		}
 		return;
 	}
@@ -613,6 +627,17 @@ sch_bcn_process_sta_ibss(tpAniSirGlobal mac_ctx,
 	    (operMode < bcn->VHTOperation.chanWidth))
 		skip_opmode_update = true;
 
+	if (WNI_CFG_CHANNEL_BONDING_MODE_DISABLE == cb_mode) {
+		/*
+		 * if channel bonding is disabled from INI and
+		 * receiving beacon which has operating mode IE
+		 * containing channel width change then don't update
+		 * the CH_WIDTH
+		 */
+		pe_err("CB disabled & VHT CH_WIDTH changed old[%d] new[%d]",
+			operMode, bcn->VHTOperation.chanWidth);
+		return;
+	}
 	if (!skip_opmode_update &&
 	    (operMode != bcn->VHTOperation.chanWidth)) {
 		pe_debug("received VHTOP CHWidth %d staIdx = %d",
@@ -736,6 +761,7 @@ static void __sch_beacon_process_for_session(tpAniSirGlobal mac_ctx,
 	uint8_t sendProbeReq = false;
 	tpSirMacMgmtHdr pMh = WMA_GET_RX_MAC_HEADER(rx_pkt_info);
 	int8_t regMax = 0, maxTxPower = 0, local_constraint;
+
 	qdf_mem_zero(&beaconParams, sizeof(tUpdateBeaconParams));
 	beaconParams.paramChangeBitmap = 0;
 
@@ -748,8 +774,13 @@ static void __sch_beacon_process_for_session(tpAniSirGlobal mac_ctx,
 			return;
 	}
 
-	if (session->htCapability && bcn->HTInfo.present &&
-			!LIM_IS_IBSS_ROLE(session))
+	/*
+	 * For vht session, if opermode ie or vht oper IE is present
+	 * bandwidth change will be taken care using these vht IEs.
+	 */
+	if (!(session->vhtCapability && (bcn->OperatingMode.present ||
+	   bcn->VHTOperation.present)) && session->htCapability &&
+	   bcn->HTInfo.present && !LIM_IS_IBSS_ROLE(session))
 		lim_update_sta_run_time_ht_switch_chnl_params(mac_ctx,
 						&bcn->HTInfo, bssIdx, session);
 

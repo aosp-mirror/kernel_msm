@@ -145,28 +145,6 @@ typedef struct {
 } tdls_config_params_t;
 
 /**
- * struct tdls_scan_context_t - tdls scan context
- *
- * @wiphy: pointer to wiphy structure
- * @dev: pointer to netdev
- * @scan_request: scan request
- * @magic: magic
- * @attempt: attempt
- * @reject: reject
- * @source: scan request source(NL/Vendor scan)
- * @tdls_scan_work: delayed tdls scan work
- */
-typedef struct {
-	struct wiphy *wiphy;
-	struct cfg80211_scan_request *scan_request;
-	uint32_t magic;
-	int attempt;
-	int reject;
-	uint8_t source;
-	struct delayed_work tdls_scan_work;
-} tdls_scan_context_t;
-
-/**
  * enum tdls_spatial_streams - TDLS spatial streams
  * @TDLS_NSS_1x1_MODE: TDLS tx/rx spatial streams = 1
  * @TDLS_NSS_2x2_MODE: TDLS tx/rx spatial streams = 2
@@ -737,7 +715,8 @@ bool wlan_hdd_tdls_check_enable_tdls_scan(hdd_context_t *hdd_ctx);
 bool wlan_hdd_tdls_check_peer_buf_capable(hdd_context_t *hdd_ctx,
 					  uint16_t connectedTdlsPeers);
 void hdd_update_tdls_ct_and_teardown_links(hdd_context_t *hdd_ctx);
-void wlan_hdd_tdls_disable_offchan_and_teardown_links(hdd_context_t *hddctx);
+void wlan_hdd_tdls_disable_offchan_and_teardown_links(hdd_context_t *hddctx,
+		bool disable_tdls_state);
 
 hddTdlsPeer_t *wlan_hdd_tdls_find_first_connected_peer(hdd_adapter_t *adapter);
 int hdd_set_tdls_offchannel(hdd_context_t *hdd_ctx, int offchannel);
@@ -873,7 +852,8 @@ static inline void hdd_update_tdls_ct_and_teardown_links(hdd_context_t *hdd_ctx)
 {
 }
 static inline void
-wlan_hdd_tdls_disable_offchan_and_teardown_links(hdd_context_t *hddctx)
+wlan_hdd_tdls_disable_offchan_and_teardown_links(hdd_context_t *hddctx,
+		bool disable_tdls_state)
 {
 }
 static inline void wlan_hdd_tdls_exit(hdd_adapter_t *adapter)

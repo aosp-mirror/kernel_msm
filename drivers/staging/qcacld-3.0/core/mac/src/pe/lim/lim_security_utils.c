@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -375,7 +375,7 @@ void lim_delete_pre_auth_node(tpAniSirGlobal pMac, tSirMacAddr macAddr)
 
 		pMac->lim.pLimPreAuthList = pTempNode->next;
 
-		pe_debug("first node to delete, Release data entry: %p id %d peer",
+		pe_debug("first node to delete, Release data entry: %pK id %d peer",
 			       pTempNode, pTempNode->authNodeIdx);
 		lim_print_mac_addr(pMac, macAddr, LOGD);
 		lim_release_pre_auth_node(pMac, pTempNode);
@@ -393,7 +393,7 @@ void lim_delete_pre_auth_node(tpAniSirGlobal pMac, tSirMacAddr macAddr)
 
 			pPrevNode->next = pTempNode->next;
 
-			pe_debug("subsequent node to delete, Release data entry: %p id %d peer",
+			pe_debug("subsequent node to delete, Release data entry: %pK id %d peer",
 				       pTempNode, pTempNode->authNodeIdx);
 			lim_print_mac_addr(pMac, macAddr, LOGD);
 			lim_release_pre_auth_node(pMac, pTempNode);
@@ -634,6 +634,7 @@ lim_rc4(uint8_t *pDest, uint8_t *pSrc, uint8_t *seed, uint32_t keyLength,
 		k = 0;
 		for (i = 0; i < 256; i++) {
 			uint8_t temp;
+
 			if (k < LIM_SEED_LENGTH)
 				j = (uint8_t) (j + ctx.sbox[i] + seed[k]);
 			temp = ctx.sbox[i];
@@ -705,6 +706,7 @@ lim_decrypt_auth_frame(tpAniSirGlobal pMac, uint8_t *pKey, uint8_t *pEncrBody,
 {
 	uint8_t seed[LIM_SEED_LENGTH], icv[SIR_MAC_WEP_ICV_LENGTH];
 	int i;
+
 	keyLength += 3;
 
 	/* Bytes 0-2 of seed is received IV */
@@ -899,7 +901,7 @@ void lim_send_set_sta_key_req(tpAniSirGlobal pMac,
 	pSetStaKeyParams = qdf_mem_malloc(sizeof(tSetStaKeyParams));
 	if (NULL == pSetStaKeyParams) {
 		pe_err("Unable to allocate memory during SET_BSSKEY");
-		return;
+		goto fail;
 	}
 
 	/* Update the WMA_SET_STAKEY_REQ parameters */
@@ -988,8 +990,7 @@ void lim_send_set_sta_key_req(tpAniSirGlobal pMac,
 					SIR_MAC_MAX_NUM_OF_DEFAULT_KEYS;
 			} else {
 				pe_err("Wrong Key Index %d", defWEPIdx);
-				qdf_mem_free(pSetStaKeyParams);
-				return;
+				goto free_sta_key;
 			}
 		}
 		break;
@@ -1022,11 +1023,15 @@ void lim_send_set_sta_key_req(tpAniSirGlobal pMac,
 	if (eSIR_SUCCESS != retCode) {
 		pe_err("Posting SET_STAKEY to HAL failed, reason=%X",
 			retCode);
-		/* Respond to SME with LIM_MLM_SETKEYS_CNF */
-		mlmSetKeysCnf.resultCode = eSIR_SME_HAL_SEND_MESSAGE_FAIL;
+		goto free_sta_key;
 	} else
 		return;         /* Continue after WMA_SET_STAKEY_RSP... */
 
+free_sta_key:
+	qdf_mem_free(pSetStaKeyParams);
+fail:
+	/* Respond to SME with LIM_MLM_SETKEYS_CNF */
+	mlmSetKeysCnf.resultCode = eSIR_SME_HAL_SEND_MESSAGE_FAIL;
 	if (sendRsp == true)
 		lim_post_sme_set_keys_cnf(pMac, pMlmSetKeysReq, &mlmSetKeysCnf);
 }

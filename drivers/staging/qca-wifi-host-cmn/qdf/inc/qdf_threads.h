@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -34,6 +34,9 @@
 #define __QDF_THREADS_H
 
 #include <qdf_types.h>
+#include "i_qdf_threads.h"
+
+typedef __qdf_thread_t qdf_thread_t;
 
 /* Function declarations and documenation */
 
@@ -43,4 +46,18 @@ void qdf_sleep_us(uint32_t us_interval);
 
 void qdf_busy_wait(uint32_t us_interval);
 
+/**
+ * qdf_print_stack_trace_thread() - prints the stack trace of the given thread
+ * @thread: the thread for which the stack trace will be printed
+ *
+ * Return: None
+ */
+void qdf_print_thread_trace(qdf_thread_t *thread);
+
+/**
+ * qdf_get_current_task() - get current task struct
+ *
+ * Return: pointer to task struct
+ */
+qdf_thread_t *qdf_get_current_task(void);
 #endif /* __QDF_THREADS_H */

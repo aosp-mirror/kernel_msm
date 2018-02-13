@@ -351,6 +351,7 @@ void pktlog_init(struct hif_opaque_softc *scn)
 {
 	struct ath_pktlog_info *pl_info;
 	ol_txrx_pdev_handle pdev_txrx_handle;
+
 	pdev_txrx_handle = cds_get_context(QDF_MODULE_ID_TXRX);
 
 	if (pdev_txrx_handle == NULL ||
@@ -388,7 +389,7 @@ void pktlog_init(struct hif_opaque_softc *scn)
 	PKTLOG_SW_EVENT_SUBSCRIBER.callback = pktlog_callback;
 }
 
-static int __pktlog_enable(struct hif_opaque_softc *scn, int32_t log_state,
+int __pktlog_enable(struct hif_opaque_softc *scn, int32_t log_state,
 		 bool ini_triggered, uint8_t user_triggered,
 		 uint32_t is_iwpriv_command)
 {
@@ -747,6 +748,17 @@ void pktlog_process_fw_msg(uint32_t *buff)
 }
 
 #if defined(QCA_WIFI_3_0_ADRASTEA)
+static inline int pktlog_nbuf_check_sanity(qdf_nbuf_t nbuf)
+{
+	int rc = 0; /* sane */
+
+	if ((!nbuf) ||
+	    (nbuf->data < nbuf->head) ||
+	    ((nbuf->data + skb_headlen(nbuf)) > skb_end_pointer(nbuf)))
+		rc = -EINVAL;
+
+	return rc;
+}
 /**
  * pktlog_t2h_msg_handler() - Target to host message handler
  * @context: pdev context
@@ -759,6 +771,15 @@ static void pktlog_t2h_msg_handler(void *context, HTC_PACKET *pkt)
 	struct ol_pktlog_dev_t *pdev = (struct ol_pktlog_dev_t *)context;
 	qdf_nbuf_t pktlog_t2h_msg = (qdf_nbuf_t) pkt->pPktContext;
 	uint32_t *msg_word;
+
+	/* check for sanity of the packet, have seen corrupted pkts */
+	if (pktlog_nbuf_check_sanity(pktlog_t2h_msg)) {
+		qdf_print("%s: packet 0x%p corrupted? Leaking...",
+			  __func__, pktlog_t2h_msg);
+		/* do not free; may crash! */
+		QDF_ASSERT(0);
+		return;
+	}
 
 	/* check for successful message reception */
 	if (pkt->Status != QDF_STATUS_SUCCESS) {

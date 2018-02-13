@@ -940,11 +940,11 @@ static void wlan_hdd_cancel_pending_roc(hdd_adapter_t *adapter)
 	mutex_unlock(&cfg_state->remain_on_chan_ctx_lock);
 
 	if (adapter->device_mode == QDF_P2P_GO_MODE) {
-		wlansap_cancel_remain_on_channel((WLAN_HDD_GET_CTX
-					(adapter))->pcds_context, roc_scan_id);
-	} else if (adapter->device_mode == QDF_P2P_CLIENT_MODE
-			|| adapter->device_mode ==
-			QDF_P2P_DEVICE_MODE) {
+		void *sap_ctx = WLAN_HDD_GET_SAP_CTX_PTR(adapter);
+
+		wlansap_cancel_remain_on_channel(sap_ctx, roc_scan_id);
+	} else if (adapter->device_mode == QDF_P2P_CLIENT_MODE ||
+		   adapter->device_mode == QDF_P2P_DEVICE_MODE) {
 		hdd_delete_all_action_frame_cookies(adapter);
 		sme_cancel_remain_on_channel(WLAN_HDD_GET_HAL_CTX
 				(adapter),
@@ -1017,7 +1017,7 @@ static void wlan_hdd_remain_on_chan_timeout(void *data)
 
 	if ((NULL == pAdapter) ||
 	    (WLAN_HDD_ADAPTER_MAGIC != pAdapter->magic)) {
-		hdd_err("pAdapter is invalid %p !!!", pAdapter);
+		hdd_err("pAdapter is invalid %pK !!!", pAdapter);
 		return;
 	}
 
@@ -1045,17 +1045,15 @@ static void wlan_hdd_remain_on_chan_timeout(void *data)
 
 	if ((QDF_STA_MODE == pAdapter->device_mode) ||
 	    (QDF_P2P_CLIENT_MODE == pAdapter->device_mode) ||
-	    (QDF_P2P_DEVICE_MODE == pAdapter->device_mode)
-	    ) {
+	    (QDF_P2P_DEVICE_MODE == pAdapter->device_mode)) {
 		hdd_delete_all_action_frame_cookies(pAdapter);
 		sme_cancel_remain_on_channel(WLAN_HDD_GET_HAL_CTX(pAdapter),
 			pAdapter->sessionId, roc_scan_id);
 	} else if ((QDF_SAP_MODE == pAdapter->device_mode) ||
-		   (QDF_P2P_GO_MODE == pAdapter->device_mode)
-		   ) {
-		wlansap_cancel_remain_on_channel(
-			(WLAN_HDD_GET_CTX(pAdapter))->pcds_context,
-			roc_scan_id);
+			(QDF_P2P_GO_MODE == pAdapter->device_mode)) {
+		void *sap_ctx = WLAN_HDD_GET_SAP_CTX_PTR(pAdapter);
+
+		wlansap_cancel_remain_on_channel(sap_ctx, roc_scan_id);
 	}
 
 	hdd_tdls_notify_p2p_roc(hdd_ctx, P2P_ROC_END);
@@ -1147,7 +1145,7 @@ static int wlan_hdd_execute_remain_on_channel(hdd_adapter_t *pAdapter,
 			mutex_lock(&cfgState->remain_on_chan_ctx_lock);
 			pAdapter->is_roc_inprogress = false;
 			pRemainChanCtx = cfgState->remain_on_chan_ctx;
-			hdd_debug("Freeing ROC ctx cfgState->remain_on_chan_ctx=%p",
+			hdd_debug("Freeing ROC ctx cfgState->remain_on_chan_ctx=%pK",
 				 cfgState->remain_on_chan_ctx);
 			if (pRemainChanCtx) {
 				if (qdf_mc_timer_destroy(
@@ -1188,7 +1186,7 @@ static int wlan_hdd_execute_remain_on_channel(hdd_adapter_t *pAdapter,
 			mutex_lock(&cfgState->remain_on_chan_ctx_lock);
 			pAdapter->is_roc_inprogress = false;
 			pRemainChanCtx = cfgState->remain_on_chan_ctx;
-			hdd_debug("Freeing ROC ctx cfgState->remain_on_chan_ctx=%p",
+			hdd_debug("Freeing ROC ctx cfgState->remain_on_chan_ctx=%pK",
 				 cfgState->remain_on_chan_ctx);
 			if (pRemainChanCtx) {
 				if (qdf_mc_timer_destroy(
@@ -1415,7 +1413,7 @@ static int wlan_hdd_request_remain_on_channel(struct wiphy *wiphy,
 			schedule_delayed_work(&pHddCtx->roc_req_work,
 			msecs_to_jiffies(
 				pHddCtx->config->p2p_listen_defer_interval));
-			hdd_debug("Defer interval is %hu, pAdapter %p",
+			hdd_debug("Defer interval is %hu, pAdapter %pK",
 				pHddCtx->config->p2p_listen_defer_interval,
 				pAdapter);
 			return 0;
@@ -1676,7 +1674,7 @@ __wlan_hdd_cfg80211_cancel_remain_on_channel(struct wiphy *wiphy,
 					if (REMAIN_ON_CHANNEL_REQUEST ==
 							pRemainChanCtx->
 							rem_on_chan_request) {
-						cfg80211_remain_on_channel_expired(
+					cfg80211_remain_on_channel_expired(
 							pRemainChanCtx->dev->
 							ieee80211_ptr,
 							pRemainChanCtx->cookie,
@@ -2102,6 +2100,8 @@ static int __wlan_hdd_mgmt_tx(struct wiphy *wiphy, struct wireless_dev *wdev,
 			(QDF_TIMER_STATE_RUNNING !=
 			 qdf_mc_timer_get_current_state(
 				 &pRemainChanCtx->hdd_remain_on_chan_timer))) {
+				 mutex_unlock(
+				 &cfgState->remain_on_chan_ctx_lock);
 			hdd_debug("remain_on_chan_ctx exists but RoC timer not running. wait for ready on channel");
 			rc = wait_for_completion_timeout(&pAdapter->
 					rem_on_chan_ready_event,
@@ -2109,6 +2109,9 @@ static int __wlan_hdd_mgmt_tx(struct wiphy *wiphy, struct wireless_dev *wdev,
 					(WAIT_REM_CHAN_READY));
 			if (!rc)
 				hdd_err("timeout waiting for remain on channel ready indication");
+
+			mutex_lock(&cfgState->remain_on_chan_ctx_lock);
+			pRemainChanCtx = cfgState->remain_on_chan_ctx;
 		}
 
 		if ((pRemainChanCtx != NULL) &&
@@ -2656,6 +2659,53 @@ static uint8_t wlan_hdd_get_session_type(enum nl80211_iftype type)
 }
 
 /**
+ * wlan_hdd_allow_sap_add() - check to add new sap interface
+ * @hdd_ctx: pointer to hdd context
+ * @name: name of the new interface
+ * @sap_dev: output pointer to hold existing interface
+ *
+ * Return: If able to add interface return true else false
+ */
+static bool
+wlan_hdd_allow_sap_add(hdd_context_t *hdd_ctx,
+		       const char *name,
+		       struct wireless_dev **sap_dev)
+{
+	hdd_adapter_list_node_t *adapter_node = NULL, *next = NULL;
+	QDF_STATUS status;
+	hdd_adapter_t *adapter;
+
+	*sap_dev = NULL;
+	status = hdd_get_front_adapter(hdd_ctx, &adapter_node);
+	while (adapter_node && QDF_IS_STATUS_SUCCESS(status)) {
+		adapter = adapter_node->pAdapter;
+		if (adapter && adapter->device_mode == QDF_SAP_MODE &&
+		    test_bit(NET_DEVICE_REGISTERED, &adapter->event_flags) &&
+		    !strncmp(adapter->dev->name, name, IFNAMSIZ)) {
+			beacon_data_t *beacon = adapter->sessionCtx.ap.beacon;
+
+			hdd_debug("iface already registered");
+			if (beacon) {
+				adapter->sessionCtx.ap.beacon = NULL;
+				qdf_mem_free(beacon);
+			}
+			if (adapter->dev && adapter->dev->ieee80211_ptr) {
+				*sap_dev = adapter->dev->ieee80211_ptr;
+				return false;
+			}
+
+			hdd_err("ieee80211_ptr points to NULL");
+			return false;
+		}
+
+		status = hdd_get_next_adapter(hdd_ctx, adapter_node, &next);
+		adapter_node = next;
+	}
+
+	return true;
+}
+
+/**
  * __wlan_hdd_add_virtual_intf() - Add virtual interface
  * @wiphy: wiphy pointer
  * @name: User-visible name of the interface
@@ -2721,6 +2771,18 @@ struct wireless_dev *__wlan_hdd_add_virtual_intf(struct wiphy *wiphy,
 		}
 	}
 
+	if (session_type == QDF_SAP_MODE) {
+		struct wireless_dev *sap_dev;
+		bool allow_add_sap = wlan_hdd_allow_sap_add(pHddCtx, name,
+							    &sap_dev);
+		if (!allow_add_sap) {
+			if (sap_dev)
+				return sap_dev;
+
+			return ERR_PTR(-EINVAL);
+		}
+	}
+
 	pAdapter = NULL;
 	if (pHddCtx->config->isP2pDeviceAddrAdministrated &&
 	    ((NL80211_IFTYPE_P2P_GO == type) ||
@@ -2741,7 +2803,9 @@ struct wireless_dev *__wlan_hdd_add_virtual_intf(struct wiphy *wiphy,
 		pAdapter = hdd_open_adapter(pHddCtx,
 					    session_type,
 					    name,
-					    wlan_hdd_get_intf_addr(pHddCtx),
+					    wlan_hdd_get_intf_addr(
+								pHddCtx,
+								session_type),
 					    name_assign_type,
 					    true);
 	}
@@ -2788,8 +2852,11 @@ stop_modules:
 	 */
 	if (hdd_check_for_opened_interfaces(pHddCtx)) {
 		hdd_debug("Closing all modules from the add_virt_iface");
-		qdf_mc_timer_start(&pHddCtx->iface_change_timer,
-				   pHddCtx->config->iface_change_wait_time);
+		qdf_sched_delayed_work(&pHddCtx->iface_idle_work,
+				       pHddCtx->config->iface_change_wait_time);
+		hdd_prevent_suspend_timeout(
+			pHddCtx->config->iface_change_wait_time,
+			WIFI_POWER_EVENT_WAKELOCK_IFACE_CHANGE_TIMER);
 	} else
 		hdd_debug("Other interfaces are still up dont close modules!");
 
@@ -2799,7 +2866,23 @@ close_adapter:
 	return ERR_PTR(-EINVAL);
 }
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0)) || defined(WITH_BACKPORTS)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
+struct wireless_dev *wlan_hdd_add_virtual_intf(struct wiphy *wiphy,
+					       const char *name,
+					       unsigned char name_assign_type,
+					       enum nl80211_iftype type,
+					       struct vif_params *params)
+{
+	struct wireless_dev *wdev;
+
+	cds_ssr_protect(__func__);
+	wdev = __wlan_hdd_add_virtual_intf(wiphy, name, name_assign_type,
+					   type, &params->flags, params);
+	cds_ssr_unprotect(__func__);
+
+	return wdev;
+}
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0)) || defined(WITH_BACKPORTS)
 /**
  * wlan_hdd_add_virtual_intf() - Add virtual interface wrapper
  * @wiphy: wiphy pointer
@@ -2869,6 +2952,12 @@ int __wlan_hdd_del_virtual_intf(struct wiphy *wiphy, struct wireless_dev *wdev)
 		hdd_err("Command not allowed in FTM mode");
 		return -EINVAL;
 	}
+
+	/*
+	 * Clear SOFTAP_INIT_DONE flag to mark SAP unload, so that we do
+	 * not restart SAP after SSR as SAP is already stopped from user space.
+	 */
+	clear_bit(SOFTAP_INIT_DONE, &pVirtAdapter->event_flags);
 
 	MTRACE(qdf_trace(QDF_MODULE_ID_HDD,
 			 TRACE_CODE_HDD_DEL_VIRTUAL_INTF,

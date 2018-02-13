@@ -72,7 +72,7 @@ extern "C" {
 #define       QDF_MAX_NO_OF_SAP_MODE       2    /* max # of SAP */
 #define       SAP_MAX_NUM_SESSION          5
 #define       SAP_MAX_OBSS_STA_CNT         1    /* max # of OBSS STA */
-#define       SAP_ACS_WEIGHT_MAX           (4444)
+#define       SAP_ACS_WEIGHT_MAX           (26664)
 
 /*--------------------------------------------------------------------------
  * reasonCode taken from 802.11 standard.
@@ -144,6 +144,8 @@ typedef enum {
 	 * result of various conditions
 	 */
 	eSAP_STA_DISASSOC_EVENT,
+
+	eSAP_STA_LOSTLINK_DETECTED,
 	/* Event sent when user called wlansap_set_key_sta */
 	eSAP_STA_SET_KEY_EVENT,
 	/* Event sent whenever there is MIC failure detected */
@@ -179,6 +181,7 @@ typedef enum {
 	eSAP_DFS_NOL_SET,
 	/* No ch available after DFS RADAR detect */
 	eSAP_DFS_NO_AVAILABLE_CHANNEL,
+	eSAP_STOP_BSS_DUE_TO_NO_CHNL,
 	eSAP_ACS_SCAN_SUCCESS_EVENT,
 	eSAP_ACS_CHANNEL_SELECTED,
 	eSAP_ECSA_CHANGE_CHAN_IND,
@@ -290,6 +293,8 @@ typedef struct sap_StationAssocReassocCompleteEvent_s {
 	uint8_t max_mcs_idx;
 	uint8_t rx_mcs_map;
 	uint8_t tx_mcs_map;
+	tDot11fIEHTCaps ht_caps;
+	tDot11fIEVHTCaps vht_caps;
 } tSap_StationAssocReassocCompleteEvent;
 
 typedef struct sap_StationDisassocCompleteEvent_s {
@@ -297,6 +302,7 @@ typedef struct sap_StationDisassocCompleteEvent_s {
 	uint8_t staId;          /* STAID should not be used */
 	uint8_t status;
 	uint32_t statusCode;
+	uint32_t reason_code;
 	eSapDisassocReason reason;
 } tSap_StationDisassocCompleteEvent;
 
@@ -417,7 +423,7 @@ struct sap_roc_ready_ind_s {
  * @channellist: acs scan channels
  * @num_of_channels: number of channels
  */
-struct sap_acs_scan_complete_event{
+struct sap_acs_scan_complete_event {
 	uint8_t status;
 	uint8_t *channellist;
 	uint8_t num_of_channels;
@@ -591,6 +597,7 @@ typedef struct sap_Config {
 #ifdef FEATURE_WLAN_MCC_TO_SCC_SWITCH
 	uint8_t cc_switch_mode;
 #endif
+	uint32_t auto_channel_select_weight;
 	struct sap_acs_cfg acs_cfg;
 	uint16_t probeRespIEsBufferLen;
 	/* buffer for addn ies comes from hostapd */
@@ -602,7 +609,7 @@ typedef struct sap_Config {
 	/* buffer for addn ies comes from hostapd */
 	void *pProbeRespBcnIEsBuffer;
 	uint8_t sap_dot11mc; /* Specify if 11MC is enabled or disabled*/
-	uint8_t beacon_tx_rate;
+	uint16_t beacon_tx_rate;
 	uint8_t *vendor_ie;
 	enum vendor_ie_access_policy vendor_ie_access_policy;
 	uint16_t sta_inactivity_timeout;
@@ -618,6 +625,8 @@ typedef struct sap_Config {
 	uint8_t sap_chanswitch_mode;
 	uint16_t reduced_beacon_interval;
 	bool dfs_beacon_tx_enhanced;
+	bool chan_switch_hostapd_rate_enabled;
+	uint32_t user_config_channel;
 } tsap_Config_t;
 
 #ifdef FEATURE_WLAN_AP_AP_ACS_OPTIMIZE
@@ -745,6 +754,7 @@ typedef struct tagSapStruct {
 	bool sap_channel_avoidance;
 #endif /* FEATURE_AP_MCC_CH_AVOIDANCE */
 	bool enable_dfs_phy_error_logs;
+	bool enable_etsi_srd_chan_support;
 } tSapStruct, *tpSapStruct;
 
 #define WPS_PROBRSP_VER_PRESENT                          0x00000001
@@ -916,7 +926,7 @@ QDF_STATUS wlansap_disassoc_sta(void *p_cds_gctx,
 QDF_STATUS wlansap_deauth_sta(void *p_cds_gctx,
 			struct tagCsrDelStaParams *pDelStaParams);
 QDF_STATUS wlansap_set_channel_change_with_csa(void *p_cds_gctx,
-			uint32_t targetChannel, enum phy_ch_width target_bw);
+	uint32_t targetChannel, enum phy_ch_width target_bw, bool strict);
 QDF_STATUS wlansap_set_key_sta(void *p_cds_gctx,
 	tCsrRoamSetKey *pSetKeyInfo);
 QDF_STATUS wlansap_get_assoc_stations(void *p_cds_gctx,
@@ -972,6 +982,16 @@ QDF_STATUS wlansap_set_dfs_preferred_channel_location(tHalHandle hHal,
 		uint8_t dfs_Preferred_Channels_location);
 QDF_STATUS wlansap_set_dfs_target_chnl(tHalHandle hHal,
 			uint8_t target_channel);
+
+/**
+ * wlan_sap_get_phymode() - Returns sap phymode.
+ * @ctx:	Pointer to cds Context or Sap Context.
+ *
+ * This function provides the SAP current phymode.
+ *
+ * Return: phymode
+ */
+eCsrPhyMode wlan_sap_get_phymode(void *ctx);
 uint32_t wlan_sap_get_vht_ch_width(void *ctx);
 void wlan_sap_set_vht_ch_width(void *ctx, uint32_t vht_channel_width);
 QDF_STATUS wlansap_update_sap_config_add_ie(tsap_Config_t *pConfig,
@@ -1003,6 +1023,28 @@ QDF_STATUS wlansap_set_tx_leakage_threshold(tHalHandle hal,
 
 QDF_STATUS wlansap_set_invalid_session(void *cds_ctx);
 QDF_STATUS sap_roam_session_close_callback(void *pContext);
+
+/**
+ * wlansap_set_etsi_srd_chan_support() - set SRD channel support.
+ * @hal: HAL pointer
+ * @srd_chan_support: SRD channel support
+ *
+ * This function set sap SRD channel support
+ *
+ * Return: None
+ */
+void wlansap_set_etsi_srd_chan_support(tHalHandle hal, bool srd_chan_support);
+
+/**
+ * wlansap_cleanup_cac_timer() - Force cleanup DFS CAC timer
+ * @sap_ctx: sap context
+ *
+ * Force cleanup DFS CAC timer when reset all adapters. It will not
+ * check concurrency SAP since just called when reset all adapters.
+ *
+ * Return: None
+ */
+void wlansap_cleanup_cac_timer(void *sap_ctx);
 
 #ifdef __cplusplus
 }

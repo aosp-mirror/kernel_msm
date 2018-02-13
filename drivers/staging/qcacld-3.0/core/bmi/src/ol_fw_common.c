@@ -164,9 +164,11 @@ QDF_STATUS ol_sdio_extra_initialization(struct ol_context *ol_ctx)
 		goto exit;
 	}
 
-	param |= (HI_ACS_FLAGS_SDIO_SWAP_MAILBOX_SET|
-			 HI_ACS_FLAGS_SDIO_REDUCE_TX_COMPL_SET|
-			 HI_ACS_FLAGS_ALT_DATA_CREDIT_SIZE);
+	param |= (HI_ACS_FLAGS_SDIO_SWAP_MAILBOX_SET |
+		HI_ACS_FLAGS_ALT_DATA_CREDIT_SIZE);
+
+	if (!cds_is_ptp_tx_opt_enabled())
+		param |= HI_ACS_FLAGS_SDIO_REDUCE_TX_COMPL_SET;
 
 	/* enable TX completion to collect tx_desc for pktlog */
 	if (cds_is_packet_log_enabled())
@@ -224,6 +226,8 @@ void ol_target_ready(struct hif_opaque_softc *scn, void *cfg_ctx)
 		hif_set_mailbox_swap(scn);
 	}
 
-	if (value & HI_ACS_FLAGS_SDIO_REDUCE_TX_COMPL_FW_ACK)
+	if (value & HI_ACS_FLAGS_SDIO_REDUCE_TX_COMPL_FW_ACK) {
 		BMI_ERR("Reduced Tx Complete service is enabled!");
+		ol_cfg_set_tx_free_at_download(cfg_ctx);
+	}
 }

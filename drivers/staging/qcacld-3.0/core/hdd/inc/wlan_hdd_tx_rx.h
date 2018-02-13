@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -61,6 +61,59 @@ QDF_STATUS hdd_init_tx_rx(hdd_adapter_t *pAdapter);
 QDF_STATUS hdd_deinit_tx_rx(hdd_adapter_t *pAdapter);
 QDF_STATUS hdd_rx_packet_cbk(void *context, qdf_nbuf_t rxBuf);
 
+/**
+ * hdd_tx_rx_collect_connectivity_stats_info() - collect connectivity stats
+ * @skb: pointer to skb data
+ * @adapter: pointer to vdev apdapter
+ * @action: action done on pkt.
+ * @pkt_type: data pkt type
+ *
+ * Return: None
+ */
+void hdd_tx_rx_collect_connectivity_stats_info(struct sk_buff *skb,
+		void *adapter, enum connectivity_stats_pkt_status action,
+		uint8_t *pkt_type);
+
+/**
+ * hdd_rx_ol_init() - Initialize Rx mode(LRO or GRO) method
+ * @hdd_ctx: pointer to HDD Station Context
+ *
+ * Return: 0 on success and non zero on failure.
+ */
+int hdd_rx_ol_init(hdd_context_t *hdd_ctx);
+void hdd_gro_destroy(void);
+void ol_deregister_offld_flush_cb(void (*offload_deinit_cb)(void *data));
+
+/**
+ * hdd_enable_rx_ol_in_concurrency() - Enable Rx offload
+ * @hdd_ctx: hdd context
+ *
+ * Enable Rx offload if for inactive concurrency is not active
+ *
+ * Return: none
+ */
+void hdd_enable_rx_ol_in_concurrency(hdd_context_t *hdd_ctx);
+
+/**
+ * hdd_disable_rx_ol_in_concurrency() - Disable Rx offload due to concurrency
+ * @hdd_ctx: hdd context
+ *
+ * Return: none
+ */
+void hdd_disable_rx_ol_in_concurrency(hdd_context_t *hdd_ctx);
+
+/**
+ * hdd_disable_rx_ol_for_low_tput() - Disable Rx offload in low TPUT scenario
+ * @hdd_ctx: hdd context
+ * @disable: 1 disable, 0 enable
+ *
+ * Return: none
+ */
+void hdd_disable_rx_ol_for_low_tput(hdd_context_t *hdd_ctx, bool disable);
+
+#define CFG_LRO_ENABLED		1
+#define CFG_GRO_ENABLED		2
+
 #ifdef IPA_OFFLOAD
 QDF_STATUS hdd_rx_mul_packet_cbk(void *cds_context,
 				 qdf_nbuf_t rx_buf_list, uint8_t staId);
@@ -72,10 +125,29 @@ QDF_STATUS hdd_get_peer_sta_id(hdd_station_ctx_t *sta_ctx,
 
 #ifdef QCA_LL_LEGACY_TX_FLOW_CONTROL
 void hdd_tx_resume_cb(void *adapter_context, bool tx_resume);
+
+/**
+ * hdd_tx_flow_control_is_pause() - Is TX Q paused by flow control
+ * @adapter_context: pointer to vdev apdapter
+ *
+ * Return: true if TX Q is paused by flow control
+ */
+bool hdd_tx_flow_control_is_pause(void *adapter_context);
 void hdd_tx_resume_timer_expired_handler(void *adapter_context);
+
+/**
+ * hdd_register_tx_flow_control() - Register TX Flow control
+ * @adapter: adapter handle
+ * @timer_callback: timer callback
+ * @flow_control_fp: txrx flow control
+ * @flow_control_is_pause_fp: is txrx paused by flow control
+ *
+ * Return: none
+ */
 void hdd_register_tx_flow_control(hdd_adapter_t *adapter,
 		qdf_mc_timer_callback_t timer_callback,
-		ol_txrx_tx_flow_control_fp flowControl);
+		ol_txrx_tx_flow_control_fp flowControl,
+		ol_txrx_tx_flow_control_is_pause_fp flow_control_is_pause);
 void hdd_deregister_tx_flow_control(hdd_adapter_t *adapter);
 void hdd_get_tx_resource(hdd_adapter_t *adapter,
 			uint8_t STAId, uint16_t timer_value);
@@ -84,12 +156,17 @@ void hdd_get_tx_resource(hdd_adapter_t *adapter,
 static inline void hdd_tx_resume_cb(void *adapter_context, bool tx_resume)
 {
 }
+static inline bool hdd_tx_flow_control_is_pause(void *adapter_context)
+{
+	return false;
+}
 static inline void hdd_tx_resume_timer_expired_handler(void *adapter_context)
 {
 }
 static inline void hdd_register_tx_flow_control(hdd_adapter_t *adapter,
 		qdf_mc_timer_callback_t timer_callback,
-		ol_txrx_tx_flow_control_fp flowControl)
+		ol_txrx_tx_flow_control_fp flowControl,
+		ol_txrx_tx_flow_control_is_pause_fp flow_control_is_pause)
 {
 }
 static inline void hdd_deregister_tx_flow_control(hdd_adapter_t *adapter)
@@ -146,5 +223,17 @@ static inline void netif_trans_update(struct net_device *dev)
 	"%s: Transmission timeout occurred jiffies %lu", \
 	__func__, jiffies)
 #endif
+
+static inline void
+hdd_skb_fill_gso_size(struct net_device *dev,
+					struct sk_buff *skb) {
+	if (skb_cloned(skb) && skb_is_nonlinear(skb) &&
+		skb_shinfo(skb)->gso_size == 0 &&
+		ip_hdr(skb)->protocol == IPPROTO_TCP) {
+		skb_shinfo(skb)->gso_size = dev->mtu -
+			((skb_transport_header(skb) - skb_network_header(skb))
+				+ tcp_hdrlen(skb));
+	}
+}
 
 #endif /* end #if !defined(WLAN_HDD_TX_RX_H) */

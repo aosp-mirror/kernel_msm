@@ -205,6 +205,9 @@ struct mnh_sm_device {
 
 	/* firmware version */
 	char mnh_fw_ver[FW_VER_SIZE];
+
+	/* serialize fw update requests */
+	struct mutex fw_update_lock;
 };
 
 static struct mnh_sm_device *mnh_sm_dev;
@@ -894,9 +897,17 @@ int mnh_validate_update_buf(struct mnh_update_configs configs)
 	for (i = 0; i < MAX_NR_MNH_FW_SLOTS; i++) {
 		config = configs.config[i];
 		slot = config.slot_type;
+		if ((slot < 0) || (slot >= MAX_NR_MNH_FW_SLOTS))
+			return -EINVAL;
+
+		if (!((config.size > 0) &&
+		     (config.size < MNH_ION_BUFFER_SIZE) &&
+		     (config.offset >= 0) &&
+		     (config.offset < (MNH_ION_BUFFER_SIZE - config.size))))
+			return -EINVAL;
+
 		/* only configure slots masked by FW_SLOT_UPDATE_MASK */
-		if ((FW_SLOT_UPDATE_MASK & (1 << slot)) &&
-		    (config.size > 0)) {
+		if (FW_SLOT_UPDATE_MASK & (1 << slot)) {
 			mnh_sm_dev->ion[fw_idx]->fw_array[slot].ap_offs =
 				config.offset;
 			mnh_sm_dev->ion[fw_idx]->fw_array[slot].size =
@@ -1650,6 +1661,23 @@ static void mnh_sm_print_boot_trace(struct device (*dev))
 	dev_info(dev, "%s: MNH_BOOT_TRACE = 0x%x\n", __func__, val);
 }
 
+static void mnh_sm_enable_ready_irq(bool enable)
+{
+	/* irqs are automatically enabled during request_irq */
+	static bool is_enabled = true;
+
+	if (enable && !is_enabled) {
+		enable_irq(mnh_sm_dev->ready_irq);
+		is_enabled = true;
+	} else if (!enable && is_enabled) {
+		disable_irq(mnh_sm_dev->ready_irq);
+		is_enabled = false;
+	} else {
+		dev_warn(mnh_sm_dev->dev, "%s: ready_irq already %s\n",
+			 __func__, is_enabled ? "enabled" : "disabled");
+	}
+}
+
 /*
  * NOTE (b/64372955): Put Easel into a low-power mode for MIPI bypass. Ideally,
  * this would be done from Easel kernel, but if the Easel kernel fails for some
@@ -1771,7 +1799,7 @@ static int mnh_sm_set_state_locked(int state)
 		/* enable pad isolation to the DRAM */
 		gpiod_set_value_cansleep(mnh_sm_dev->ddr_pad_iso_n_pin, 0);
 
-		disable_irq(mnh_sm_dev->ready_irq);
+		mnh_sm_enable_ready_irq(false);
 		break;
 	case MNH_STATE_ACTIVE:
 		/* stage firmware copy to ION if valid update was received */
@@ -1788,7 +1816,7 @@ static int mnh_sm_set_state_locked(int state)
 			mnh_sm_dev->update_status = FW_UPD_NONE;
 		}
 
-		enable_irq(mnh_sm_dev->ready_irq);
+		mnh_sm_enable_ready_irq(true);
 		ret = mnh_sm_poweron();
 		if (ret)
 			break;
@@ -1832,7 +1860,7 @@ static int mnh_sm_set_state_locked(int state)
 
 			ret = mnh_sm_suspend();
 
-			disable_irq(mnh_sm_dev->ready_irq);
+			mnh_sm_enable_ready_irq(false);
 		}
 		break;
 	default:
@@ -1868,7 +1896,7 @@ static int mnh_sm_set_state_locked(int state)
 				reinit_completion(
 					&mnh_sm_dev->powered_complete);
 				mnh_sm_poweroff();
-				disable_irq(mnh_sm_dev->ready_irq);
+				mnh_sm_enable_ready_irq(false);
 				mnh_sm_dev->state = MNH_STATE_OFF;
 			}
 
@@ -2119,6 +2147,7 @@ static long mnh_sm_ioctl(struct file *file, unsigned int cmd,
 			mnh_mipi_stop(mnh_sm_dev->dev, mipi_config);
 		break;
 	case MNH_SM_IOC_GET_UPDATE_BUF:
+		mutex_lock(&mnh_sm_dev->fw_update_lock);
 		mnh_sm_dev->ion[FW_PART_SEC]->is_fw_ready = false;
 		if (mnh_sm_dev->ion[FW_PART_SEC]) {
 			if (mnh_ion_create_buffer(mnh_sm_dev->ion[FW_PART_SEC],
@@ -2137,17 +2166,21 @@ static long mnh_sm_ioctl(struct file *file, unsigned int cmd,
 			dev_err(mnh_sm_dev->dev,
 				"%s: failed to copy to userspace (%d)\n",
 				__func__, err);
+			mutex_unlock(&mnh_sm_dev->fw_update_lock);
 			return err;
 		}
 		mnh_sm_dev->update_status = FW_UPD_INIT;
+		mutex_unlock(&mnh_sm_dev->fw_update_lock);
 		break;
 	case MNH_SM_IOC_POST_UPDATE_BUF:
+		mutex_lock(&mnh_sm_dev->fw_update_lock);
 		err = copy_from_user(&update_configs, (void __user *)arg,
 				     sizeof(update_configs));
 		if (err) {
 			dev_err(mnh_sm_dev->dev,
 				"%s: failed to copy from userspace (%d)\n",
 				__func__, err);
+			mutex_unlock(&mnh_sm_dev->fw_update_lock);
 			return err;
 		}
 		if (mnh_sm_dev->update_status == FW_UPD_INIT) {
@@ -2160,10 +2193,12 @@ static long mnh_sm_ioctl(struct file *file, unsigned int cmd,
 				dev_err(mnh_sm_dev->dev,
 					"%s: failed to validate slots (%d)\n",
 					__func__, err);
+				mutex_unlock(&mnh_sm_dev->fw_update_lock);
 				return err;
 			}
 			mnh_sm_dev->update_status = FW_UPD_VERIFIED;
 		}
+		mutex_unlock(&mnh_sm_dev->fw_update_lock);
 		break;
 	case MNH_SM_IOC_GET_FW_VER:
 		err = copy_to_user((void __user *)arg, &mnh_sm_dev->mnh_fw_ver,
@@ -2286,6 +2321,7 @@ static int mnh_sm_probe(struct platform_device *pdev)
 
 	/* initialize driver structures */
 	mutex_init(&mnh_sm_dev->lock);
+	mutex_init(&mnh_sm_dev->fw_update_lock);
 	init_completion(&mnh_sm_dev->powered_complete);
 	init_completion(&mnh_sm_dev->work_complete);
 	init_completion(&mnh_sm_dev->suspend_complete);
@@ -2340,7 +2376,7 @@ static int mnh_sm_probe(struct platform_device *pdev)
 			error);
 		goto fail_probe_2;
 	}
-	disable_irq(mnh_sm_dev->ready_irq);
+	mnh_sm_enable_ready_irq(false);
 
 	/* request ddr pad isolation pin */
 	mnh_sm_dev->ddr_pad_iso_n_pin = devm_gpiod_get(&pdev->dev,
@@ -2357,9 +2393,9 @@ static int mnh_sm_probe(struct platform_device *pdev)
 	}
 
 	/* initialize mnh-pwr and get resources there */
-	enable_irq(mnh_sm_dev->ready_irq);
+	mnh_sm_enable_ready_irq(true);
 	error = mnh_pwr_init(pdev, dev);
-	disable_irq(mnh_sm_dev->ready_irq);
+	mnh_sm_enable_ready_irq(false);
 	if (error) {
 		dev_err(dev, "failed to initialize mnh-pwr (%d)\n", error);
 		goto fail_probe_2;

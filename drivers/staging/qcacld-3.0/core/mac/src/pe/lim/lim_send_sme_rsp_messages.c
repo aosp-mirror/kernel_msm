@@ -60,6 +60,7 @@
 #include "nan_datapath.h"
 #include "lim_assoc_utils.h"
 #include "lim_process_fils.h"
+#include "wma.h"
 
 static void lim_handle_join_rsp_status(tpAniSirGlobal mac_ctx,
 	tpPESession session_entry, tSirResultCodes result_code,
@@ -362,7 +363,7 @@ static void lim_handle_join_rsp_status(tpAniSirGlobal mac_ctx,
 			ht_profile->apChanWidth = session_entry->ch_width;
 		}
 #endif
-		pe_debug("pLimJoinReq:%p, pLimReAssocReq:%p",
+		pe_debug("pLimJoinReq:%pK, pLimReAssocReq:%pK",
 			session_entry->pLimJoinReq,
 			session_entry->pLimReAssocReq);
 
@@ -385,8 +386,8 @@ static void lim_handle_join_rsp_status(tpAniSirGlobal mac_ctx,
 			bss_ies, bss_ie_len) != NULL);
 
 		if (mac_ctx->roam.configParam.is_force_1x1 &&
-			is_vendor_ap_1_present && (session_entry->nss == 2) &&
-			(mac_ctx->lteCoexAntShare == 0 ||
+		    is_vendor_ap_1_present && (session_entry->nss == 2) &&
+		    (mac_ctx->lteCoexAntShare == 0 ||
 				IS_5G_CH(session_entry->currentOperChannel))) {
 			/* SET vdev param */
 			pe_debug("sending SMPS intolrent vdev_param");
@@ -920,6 +921,8 @@ lim_send_sme_disassoc_ntf(tpAniSirGlobal pMac,
 				sta_ds = dph_lookup_hash_entry(pMac,
 						peerMacAddr, &assoc_id,
 						&session->dph.dphHashTable);
+				if (sta_ds)
+					break;
 			}
 		}
 		if (sta_ds
@@ -2064,7 +2067,7 @@ lim_send_sme_ibss_peer_ind(tpAniSirGlobal pMac,
  *
  * Return: None
  */
-static void lim_process_csa_wbw_ie(tpAniSirGlobal mac_ctx,
+static QDF_STATUS lim_process_csa_wbw_ie(tpAniSirGlobal mac_ctx,
 		struct csa_offload_params *csa_params,
 		tLimWiderBWChannelSwitchInfo *chnl_switch_info,
 		tpPESession session_entry)
@@ -2073,8 +2076,27 @@ static void lim_process_csa_wbw_ie(tpAniSirGlobal mac_ctx,
 	uint8_t ap_new_ch_width;
 	bool new_ch_width_dfn = false;
 	uint8_t center_freq_diff;
+	uint32_t fw_vht_ch_wd = wma_get_vht_ch_width() + 1;
 
 	ap_new_ch_width = csa_params->new_ch_width + 1;
+
+	pe_info("new channel: %d new_ch_width: %d seg0: %d seg1: %d",
+			csa_params->channel, ap_new_ch_width,
+			csa_params->new_ch_freq_seg1,
+			csa_params->new_ch_freq_seg2);
+
+	if ((ap_new_ch_width != CH_WIDTH_80MHZ) &&
+			(ap_new_ch_width != CH_WIDTH_160MHZ) &&
+			(ap_new_ch_width != CH_WIDTH_80P80MHZ)) {
+		pe_err("CSA wide BW IE has wrong ch_width %d",
+				csa_params->new_ch_width);
+		return QDF_STATUS_E_INVAL;
+	}
+
+	if (!csa_params->new_ch_freq_seg1 && !csa_params->new_ch_freq_seg2) {
+		pe_err("CSA wide BW IE has invalid center freq");
+		return QDF_STATUS_E_INVAL;
+	}
 	if ((ap_new_ch_width == CH_WIDTH_80MHZ) &&
 			csa_params->new_ch_freq_seg2) {
 		new_ch_width_dfn = true;
@@ -2096,12 +2118,55 @@ static void lim_process_csa_wbw_ie(tpAniSirGlobal mac_ctx,
 		eLIM_CHANNEL_SWITCH_PRIMARY_AND_SECONDARY;
 	if ((ap_new_ch_width == CH_WIDTH_160MHZ) &&
 			!new_ch_width_dfn) {
-		ch_params.ch_width = CH_WIDTH_160MHZ;
+		if (csa_params->new_ch_freq_seg1 != csa_params->channel +
+				CH_TO_CNTR_FREQ_DIFF_160MHz) {
+			pe_err("CSA wide BW IE has invalid center freq");
+			return QDF_STATUS_E_INVAL;
+		}
+
+		if (ap_new_ch_width > fw_vht_ch_wd) {
+			pe_info("New BW is not supported, setting BW to %d",
+					fw_vht_ch_wd);
+			ap_new_ch_width = fw_vht_ch_wd;
+		}
+		ch_params.ch_width = ap_new_ch_width ;
 		cds_set_channel_params(csa_params->channel, 0,
 				&ch_params);
 		ap_new_ch_width = ch_params.ch_width;
 		csa_params->new_ch_freq_seg1 = ch_params.center_freq_seg0;
 		csa_params->new_ch_freq_seg2 = ch_params.center_freq_seg1;
+	} else if (!new_ch_width_dfn) {
+		if (ap_new_ch_width > fw_vht_ch_wd) {
+			pe_info("New BW is not supported, setting BW to %d",
+					fw_vht_ch_wd);
+			ap_new_ch_width = fw_vht_ch_wd;
+		}
+		if (csa_params->new_ch_freq_seg1 != csa_params->channel +
+				CH_TO_CNTR_FREQ_DIFF_80MHz) {
+			pe_err("CSA wide BW IE has invalid center freq");
+			return QDF_STATUS_E_INVAL;
+		}
+		csa_params->new_ch_freq_seg2 = 0;
+	}
+	if (new_ch_width_dfn) {
+		if (csa_params->new_ch_freq_seg1 != csa_params->channel +
+				CH_TO_CNTR_FREQ_DIFF_80MHz) {
+			pe_err("CSA wide BW IE has invalid center freq");
+			return QDF_STATUS_E_INVAL;
+		}
+		if (ap_new_ch_width > fw_vht_ch_wd) {
+			pe_info("New width is not supported, setting BW to %d",
+					fw_vht_ch_wd);
+			ap_new_ch_width = fw_vht_ch_wd;
+		}
+		if ((ap_new_ch_width == CH_WIDTH_160MHZ) &&
+				(csa_params->new_ch_freq_seg1 !=
+				 csa_params->channel +
+				 CH_TO_CNTR_FREQ_DIFF_160MHz)) {
+			pe_err("wide BW IE has invalid 160M center freq");
+			csa_params->new_ch_freq_seg2 = 0;
+			ap_new_ch_width = CH_WIDTH_80MHZ;
+		}
 	}
 	chnl_switch_info->newChanWidth = ap_new_ch_width;
 	chnl_switch_info->newCenterChanFreq0 = csa_params->new_ch_freq_seg1;
@@ -2123,7 +2188,10 @@ prnt_log:
 			chnl_switch_info->newChanWidth,
 			chnl_switch_info->newCenterChanFreq0,
 			chnl_switch_info->newCenterChanFreq1);
+
+	return QDF_STATUS_SUCCESS;
 }
+
 /**
  * lim_handle_csa_offload_msg() - Handle CSA offload message
  * @mac_ctx:         pointer to global adapter context
@@ -2199,12 +2267,13 @@ void lim_handle_csa_offload_msg(tpAniSirGlobal mac_ctx, tpSirMsgQ msg)
 	chnl_switch_info =
 		&session_entry->gLimWiderBWChannelSwitch;
 
-	pe_debug("vht: %d ht: %d flag: %x chan: %d",
+	pe_info("vht: %d ht: %d flag: %x chan: %d, sec_ch_offset %d",
 			session_entry->vhtCapability,
 			session_entry->htSupportedChannelWidthSet,
 			csa_params->ies_present_flag,
-			csa_params->channel);
-	pe_debug("seg1: %d seg2: %d width: %d country: %s class: %d",
+			csa_params->channel,
+			csa_params->sec_chan_offset);
+	pe_info("seg1: %d seg2: %d width: %d country: %s class: %d",
 			csa_params->new_ch_freq_seg1,
 			csa_params->new_ch_freq_seg2,
 			csa_params->new_ch_width,
@@ -2213,9 +2282,11 @@ void lim_handle_csa_offload_msg(tpAniSirGlobal mac_ctx, tpSirMsgQ msg)
 
 	if (session_entry->vhtCapability &&
 			session_entry->htSupportedChannelWidthSet) {
-		if (csa_params->ies_present_flag & lim_wbw_ie_present) {
-			lim_process_csa_wbw_ie(mac_ctx, csa_params,
-					chnl_switch_info, session_entry);
+		if ((csa_params->ies_present_flag & lim_wbw_ie_present) &&
+			(QDF_STATUS_SUCCESS == lim_process_csa_wbw_ie(mac_ctx,
+					csa_params, chnl_switch_info,
+					session_entry))) {
+			pe_debug("CSA wide BW IE process successful");
 			lim_ch_switch->sec_ch_offset =
 				PHY_SINGLE_CHANNEL_CENTERED;
 			if (chnl_switch_info->newChanWidth) {
@@ -2268,6 +2339,18 @@ void lim_handle_csa_offload_msg(tpAniSirGlobal mac_ctx, tpSirMsgQ msg)
 			lim_ch_switch->sec_ch_offset =
 				ch_params.sec_ch_offset;
 
+		} else {
+			lim_ch_switch->state =
+				eLIM_CHANNEL_SWITCH_PRIMARY_AND_SECONDARY;
+			ch_params.ch_width = CH_WIDTH_40MHZ;
+			cds_set_channel_params(csa_params->channel,
+					0, &ch_params);
+			lim_ch_switch->sec_ch_offset =
+				ch_params.sec_ch_offset;
+			chnl_switch_info->newChanWidth = CH_WIDTH_40MHZ;
+			chnl_switch_info->newCenterChanFreq0 =
+				ch_params.center_freq_seg0;
+			chnl_switch_info->newCenterChanFreq1 = 0;
 		}
 		session_entry->gLimChannelSwitch.ch_center_freq_seg0 =
 			chnl_switch_info->newCenterChanFreq0;
@@ -2384,6 +2467,7 @@ void lim_handle_delete_bss_rsp(tpAniSirGlobal pMac, tpSirMsgQ MsgQ)
 		qdf_mem_free(MsgQ->bodyptr);
 		return;
 	}
+
 	/*
 	 * During DEL BSS handling, the PE Session will be deleted, but it is
 	 * better to clear this flag if the session is hanging around due
@@ -2473,6 +2557,7 @@ void
 lim_send_sme_dfs_event_notify(tpAniSirGlobal pMac, uint16_t msgType, void *event)
 {
 	tSirMsgQ mmhMsg;
+
 	mmhMsg.type = eWNI_SME_DFS_RADAR_FOUND;
 	mmhMsg.bodyptr = event;
 	mmhMsg.bodyval = 0;

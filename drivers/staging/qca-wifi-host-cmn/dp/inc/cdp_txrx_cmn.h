@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -128,6 +128,28 @@ enum wlan_op_mode {
 };
 
 /**
+ * connectivity_stats_pkt_status - data pkt type
+ * @PKT_TYPE_REQ: Request packet
+ * @PKT_TYPE_RSP: Response packet
+ * @PKT_TYPE_TX_DROPPED: TX packet dropped
+ * @PKT_TYPE_RX_DROPPED: RX packet dropped
+ * @PKT_TYPE_RX_DELIVERED: RX packet delivered
+ * @PKT_TYPE_RX_REFUSED: RX packet refused
+ * @PKT_TYPE_TX_HOST_FW_SENT: TX packet FW sent
+ * @PKT_TYPE_TX_ACK_CNT:TC packet acked
+ */
+enum connectivity_stats_pkt_status {
+	PKT_TYPE_REQ,
+	PKT_TYPE_RSP,
+	PKT_TYPE_TX_DROPPED,
+	PKT_TYPE_RX_DROPPED,
+	PKT_TYPE_RX_DELIVERED,
+	PKT_TYPE_RX_REFUSED,
+	PKT_TYPE_TX_HOST_FW_SENT,
+	PKT_TYPE_TX_ACK_CNT,
+};
+
+/**
  * ol_txrx_tx_fp - top-level transmit function
  * @data_vdev - handle to the virtual device object
  * @msdu_list - list of network buffers
@@ -142,6 +164,14 @@ typedef qdf_nbuf_t (*ol_txrx_tx_fp)(ol_txrx_vdev_handle data_vdev,
  */
 typedef void (*ol_txrx_tx_flow_control_fp)(void *osif_dev,
 					    bool tx_resume);
+/**
+ * ol_txrx_tx_flow_control_is_pause_fp - is tx paused by flow control
+ * function from txrx to OS shim
+ * @osif_dev - the virtual device's OS shim object
+ *
+ * Return: true if tx is paused by flow control
+ */
+typedef bool (*ol_txrx_tx_flow_control_is_pause_fp)(void *osif_dev);
 
 /**
  * ol_txrx_rx_fp - receive function to hand batches of data
@@ -150,6 +180,18 @@ typedef void (*ol_txrx_tx_flow_control_fp)(void *osif_dev,
  * @msdu_list - list of network buffers
  */
 typedef QDF_STATUS (*ol_txrx_rx_fp)(void *osif_dev, qdf_nbuf_t msdu_list);
+
+/**
+ * ol_txrx_stats_rx_fp - receive function to hand batches of data
+ * frames from txrx to OS shim
+ * @skb: skb data
+ * @osif_dev: the virtual device's OS shim object
+ * @action: data packet type
+ * @pkt_type: packet data type
+ */
+typedef void (*ol_txrx_stats_rx_fp)(struct sk_buff *skb,
+		void *osif_dev, enum connectivity_stats_pkt_status action,
+		uint8_t *pkt_type);
 
 /**
  * ol_txrx_rx_check_wai_fp - OSIF WAPI receive function
@@ -237,6 +279,7 @@ struct ol_txrx_ops {
 		ol_txrx_rx_fp           rx;
 		ol_txrx_rx_check_wai_fp wai_check;
 		ol_txrx_rx_mon_fp       mon;
+		ol_txrx_stats_rx_fp           stats_rx;
 	} rx;
 
 	/* proxy arp function pointer - specified by OS shim, stored by txrx */
@@ -310,8 +353,12 @@ void ol_txrx_pdev_detach(ol_txrx_pdev_handle pdev);
 ol_txrx_peer_handle
 ol_txrx_peer_attach(ol_txrx_vdev_handle vdev, uint8_t *peer_mac_addr);
 
+#ifdef CONFIG_MCL
 void
+ol_txrx_peer_detach(ol_txrx_peer_handle peer, bool start_peer_unmap_timer);
+#else
 ol_txrx_peer_detach(ol_txrx_peer_handle peer);
+#endif
 
 int
 ol_txrx_set_monitor_mode(ol_txrx_vdev_handle vdev);
@@ -332,6 +379,8 @@ void
 ol_txrx_vdev_register(ol_txrx_vdev_handle vdev,
 			 void *osif_vdev, struct ol_txrx_ops *txrx_ops);
 
+void ol_register_offld_flush_cb(void (gro_flush_cb)(void *),
+				void *(gro_init_cb)(void));
 int
 ol_txrx_mgmt_send(
 	ol_txrx_vdev_handle vdev,
@@ -357,6 +406,113 @@ ol_txrx_mgmt_tx_cb_set(ol_txrx_pdev_handle pdev,
 			 ol_txrx_mgmt_tx_cb ota_ack_cb, void *ctxt);
 
 int ol_txrx_get_tx_pending(ol_txrx_pdev_handle pdev);
+
+/**
+ * enum data_stall_log_event_indicator - Module triggering data stall
+ * @DATA_STALL_LOG_INDICATOR_UNUSED: Unused
+ * @DATA_STALL_LOG_INDICATOR_HOST_DRIVER: Host driver indicates data stall
+ * @DATA_STALL_LOG_INDICATOR_FIRMWARE: FW indicates data stall
+ * @DATA_STALL_LOG_INDICATOR_FRAMEWORK: Framework indicates data stall
+ *
+ * Enum indicating the module that indicates data stall event
+ */
+enum data_stall_log_event_indicator {
+	DATA_STALL_LOG_INDICATOR_UNUSED,
+	DATA_STALL_LOG_INDICATOR_HOST_DRIVER,
+	DATA_STALL_LOG_INDICATOR_FIRMWARE,
+	DATA_STALL_LOG_INDICATOR_FRAMEWORK,
+};
+
+/**
+ * enum data_stall_log_event_type - data stall event type
+ * @DATA_STALL_LOG_NONE
+ * @DATA_STALL_LOG_FW_VDEV_PAUSE
+ * @DATA_STALL_LOG_HWSCHED_CMD_FILTER
+ * @DATA_STALL_LOG_HWSCHED_CMD_FLUSH
+ * @DATA_STALL_LOG_FW_RX_REFILL_FAILED
+ * @DATA_STALL_LOG_FW_RX_FCS_LEN_ERROR
+ * @DATA_STALL_LOG_FW_WDOG_ERRORS
+ * @DATA_STALL_LOG_BB_WDOG_ERROR
+ * @DATA_STALL_LOG_POST_TIM_NO_TXRX_ERROR
+ * @DATA_STALL_LOG_HOST_STA_TX_TIMEOUT
+ * @DATA_STALL_LOG_HOST_SOFTAP_TX_TIMEOUT
+ * @DATA_STALL_LOG_NUD_FAILURE
+ *
+ * Enum indicating data stall event type
+ */
+enum data_stall_log_event_type {
+	DATA_STALL_LOG_NONE,
+	DATA_STALL_LOG_FW_VDEV_PAUSE,
+	DATA_STALL_LOG_HWSCHED_CMD_FILTER,
+	DATA_STALL_LOG_HWSCHED_CMD_FLUSH,
+	DATA_STALL_LOG_FW_RX_REFILL_FAILED,
+	DATA_STALL_LOG_FW_RX_FCS_LEN_ERROR,
+	DATA_STALL_LOG_FW_WDOG_ERRORS,
+	DATA_STALL_LOG_BB_WDOG_ERROR,
+	DATA_STALL_LOG_POST_TIM_NO_TXRX_ERROR,
+	/* Stall events triggered by host/framework start from 0x100 onwards. */
+	DATA_STALL_LOG_HOST_STA_TX_TIMEOUT = 0x100,
+	DATA_STALL_LOG_HOST_SOFTAP_TX_TIMEOUT,
+	DATA_STALL_LOG_NUD_FAILURE,
+};
+
+
+/**
+ * enum data_stall_log_recovery_type - data stall recovery type
+ * @DATA_STALL_LOG_RECOVERY_NONE,
+ * @DATA_STALL_LOG_RECOVERY_CONNECT_DISCONNECT,
+ * @DATA_STALL_LOG_RECOVERY_TRIGGER_PDR
+ *
+ * Enum indicating data stall recovery type
+ */
+enum data_stall_log_recovery_type {
+	DATA_STALL_LOG_RECOVERY_NONE = 0,
+	DATA_STALL_LOG_RECOVERY_CONNECT_DISCONNECT,
+	DATA_STALL_LOG_RECOVERY_TRIGGER_PDR,
+};
+
+
+/**
+ * struct data_stall_event_info - data stall info
+ * @indicator: Module triggering data stall
+ * @data_stall_type: data stall event type
+ * @vdev_id_bitmap: vdev_id_bitmap
+ * @pdev_id: pdev id
+ * @recovery_type: data stall recovery type
+ */
+struct data_stall_event_info {
+	uint32_t indicator;
+	uint32_t data_stall_type;
+	uint32_t vdev_id_bitmap;
+	uint32_t pdev_id;
+	uint32_t recovery_type;
+};
+
+struct data_stall_event_info;
+typedef struct data_stall_event_info *data_stall_event_info_handle;
+
+
+typedef void (*data_stall_detect_cb)(data_stall_event_info_handle);
+
+/**
+ * ol_register_data_stall_detect_cb() - register data stall callback
+ * @data_stall_detect_callback: data stall callback function
+ *
+ *
+ * Return: QDF_STATUS Enumeration
+ */
+QDF_STATUS ol_register_data_stall_detect_cb(
+			data_stall_detect_cb data_stall_detect_callback);
+
+/**
+ * ol_deregister_data_stall_detect_cb() - de-register data stall callback
+ * @data_stall_detect_callback: data stall callback function
+ *
+ *
+ * Return: QDF_STATUS Enumeration
+ */
+QDF_STATUS ol_deregister_data_stall_detect_cb(
+			data_stall_detect_cb data_stall_detect_callback);
 
 /**
  * ol_txrx_data_tx_cb - Function registered with the data path

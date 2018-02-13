@@ -664,6 +664,104 @@ static void ce_oom_recovery(void *context)
 	hif_post_recv_buffers_for_pipe(pipe_info);
 }
 
+#ifdef IPA_OFFLOAD
+/**
+ * ce_alloc_desc_ring() - Allocate copyengine descriptor ring
+ * @scn: softc instance
+ * @ce_id: ce in question
+ * @base_addr: pointer to copyengine ring base address
+ * @ce_ring: copyengine instance
+ * @nentries: number of entries should be allocated
+ * @desc_size: ce desc size
+ *
+ * Return: QDF_STATUS_SUCCESS - for success
+ */
+static QDF_STATUS ce_alloc_desc_ring(struct hif_softc *scn, unsigned int CE_id,
+				     qdf_dma_addr_t *base_addr,
+				     struct CE_ring_state *ce_ring,
+				     unsigned int nentries, uint32_t desc_size)
+{
+	if (CE_id == HIF_PCI_IPA_UC_ASSIGNED_CE) {
+		scn->ipa_ce_ring = qdf_mem_shared_mem_alloc(scn->qdf_dev,
+			nentries * desc_size + CE_DESC_RING_ALIGN);
+		if (!scn->ipa_ce_ring) {
+			HIF_ERROR("%s: Failed to allocate memory for IPA ce ring",
+				  __func__);
+			return QDF_STATUS_E_NOMEM;
+		}
+		*base_addr = qdf_mem_get_dma_addr(scn->qdf_dev,
+						&scn->ipa_ce_ring->mem_info);
+		ce_ring->base_addr_owner_space_unaligned =
+						scn->ipa_ce_ring->vaddr;
+	} else {
+		ce_ring->base_addr_owner_space_unaligned =
+			qdf_mem_alloc_consistent(scn->qdf_dev,
+						 scn->qdf_dev->dev,
+						 (nentries * desc_size +
+						 CE_DESC_RING_ALIGN),
+						 base_addr);
+		if (!ce_ring->base_addr_owner_space_unaligned) {
+			HIF_ERROR("%s: Failed to allocate DMA memory for ce ring id : %u",
+				  __func__, CE_id);
+			return QDF_STATUS_E_NOMEM;
+		}
+	}
+	return QDF_STATUS_SUCCESS;
+}
+
+/**
+ * ce_free_desc_ring() - Frees copyengine descriptor ring
+ * @scn: softc instance
+ * @ce_id: ce in question
+ * @ce_ring: copyengine instance
+ * @desc_size: ce desc size
+ *
+ * Return: None
+ */
+static void ce_free_desc_ring(struct hif_softc *scn, unsigned int CE_id,
+			      struct CE_ring_state *ce_ring, uint32_t desc_size)
+{
+	if (CE_id == HIF_PCI_IPA_UC_ASSIGNED_CE) {
+		qdf_mem_shared_mem_free(scn->qdf_dev,
+					scn->ipa_ce_ring);
+		ce_ring->base_addr_owner_space_unaligned = NULL;
+	} else {
+		qdf_mem_free_consistent(scn->qdf_dev, scn->qdf_dev->dev,
+			ce_ring->nentries * desc_size + CE_DESC_RING_ALIGN,
+			ce_ring->base_addr_owner_space_unaligned,
+			ce_ring->base_addr_CE_space, 0);
+		ce_ring->base_addr_owner_space_unaligned = NULL;
+	}
+}
+#else
+static QDF_STATUS ce_alloc_desc_ring(struct hif_softc *scn, unsigned int CE_id,
+				     qdf_dma_addr_t *base_addr,
+				     struct CE_ring_state *ce_ring,
+				     unsigned int nentries, uint32_t desc_size)
+{
+	ce_ring->base_addr_owner_space_unaligned =
+		qdf_mem_alloc_consistent(scn->qdf_dev, scn->qdf_dev->dev,
+					 (nentries * desc_size +
+					 CE_DESC_RING_ALIGN), base_addr);
+	if (!ce_ring->base_addr_owner_space_unaligned) {
+		HIF_ERROR("%s: Failed to allocate DMA memory for ce ring id : %u",
+			  __func__, CE_id);
+		return QDF_STATUS_E_NOMEM;
+	}
+	return QDF_STATUS_SUCCESS;
+}
+
+static void ce_free_desc_ring(struct hif_softc *scn, unsigned int CE_id,
+			      struct CE_ring_state *ce_ring, uint32_t desc_size)
+{
+	qdf_mem_free_consistent(scn->qdf_dev, scn->qdf_dev->dev,
+		ce_ring->nentries * desc_size + CE_DESC_RING_ALIGN,
+		ce_ring->base_addr_owner_space_unaligned,
+		ce_ring->base_addr_CE_space, 0);
+	ce_ring->base_addr_owner_space_unaligned = NULL;
+}
+#endif /* IPA_OFFLOAD */
+
 /*
  * Initialize a Copy Engine based on caller-supplied attributes.
  * This may be called once to initialize both source and destination
@@ -780,15 +878,10 @@ struct CE_handle *ce_init(struct hif_softc *scn,
 			/* Legacy platforms that do not support cache
 			 * coherent DMA are unsupported
 			 */
-			src_ring->base_addr_owner_space_unaligned =
-				qdf_mem_alloc_consistent(scn->qdf_dev,
-						scn->qdf_dev->dev,
-						(nentries *
-						sizeof(struct CE_src_desc) +
-						CE_DESC_RING_ALIGN),
-						&base_addr);
-			if (src_ring->base_addr_owner_space_unaligned
-					== NULL) {
+			if (ce_alloc_desc_ring(scn, CE_state->id, &base_addr,
+					       src_ring, nentries,
+					       sizeof(struct CE_src_desc)) !=
+					QDF_STATUS_SUCCESS) {
 				HIF_ERROR("%s: src ring has no DMA mem",
 					  __func__);
 				goto error_no_dma_mem;
@@ -916,15 +1009,10 @@ struct CE_handle *ce_init(struct hif_softc *scn,
 			/* Legacy platforms that do not support cache
 			 * coherent DMA are unsupported
 			 */
-			dest_ring->base_addr_owner_space_unaligned =
-				qdf_mem_alloc_consistent(scn->qdf_dev,
-						scn->qdf_dev->dev,
-						(nentries *
-						sizeof(struct CE_dest_desc) +
-						CE_DESC_RING_ALIGN),
-						&base_addr);
-			if (dest_ring->base_addr_owner_space_unaligned
-				== NULL) {
+			if (ce_alloc_desc_ring(scn, CE_state->id, &base_addr,
+					       dest_ring, nentries,
+					       sizeof(struct CE_dest_desc)) !=
+					QDF_STATUS_SUCCESS) {
 				HIF_ERROR("%s: dest ring has no DMA mem",
 					  __func__);
 				goto error_no_dma_mem;
@@ -1225,15 +1313,9 @@ void ce_fini(struct CE_handle *copyeng)
 		if (CE_state->src_ring->shadow_base_unaligned)
 			qdf_mem_free(CE_state->src_ring->shadow_base_unaligned);
 		if (CE_state->src_ring->base_addr_owner_space_unaligned)
-			qdf_mem_free_consistent(scn->qdf_dev,
-						scn->qdf_dev->dev,
-					    (CE_state->src_ring->nentries *
-					     sizeof(struct CE_src_desc) +
-					     CE_DESC_RING_ALIGN),
-					    CE_state->src_ring->
-					    base_addr_owner_space_unaligned,
-					    CE_state->src_ring->
-					    base_addr_CE_space, 0);
+			ce_free_desc_ring(scn, CE_state->id,
+					  CE_state->src_ring,
+					  sizeof(struct CE_src_desc));
 		qdf_mem_free(CE_state->src_ring);
 	}
 	if (CE_state->dest_ring) {
@@ -1241,15 +1323,9 @@ void ce_fini(struct CE_handle *copyeng)
 		ce_t2h_msg_ce_cleanup(copyeng);
 
 		if (CE_state->dest_ring->base_addr_owner_space_unaligned)
-			qdf_mem_free_consistent(scn->qdf_dev,
-						scn->qdf_dev->dev,
-					    (CE_state->dest_ring->nentries *
-					     sizeof(struct CE_dest_desc) +
-					     CE_DESC_RING_ALIGN),
-					    CE_state->dest_ring->
-					    base_addr_owner_space_unaligned,
-					    CE_state->dest_ring->
-					    base_addr_CE_space, 0);
+			ce_free_desc_ring(scn, CE_state->id,
+					  CE_state->dest_ring,
+					  sizeof(struct CE_dest_desc));
 		qdf_mem_free(CE_state->dest_ring);
 
 		/* epping */
@@ -1465,7 +1541,7 @@ static inline void hif_ce_do_recv(struct hif_msg_callbacks *msg_callbacks,
 			rxCompletionHandler(msg_callbacks->Context,
 					netbuf, pipe_info->pipe_num);
 	} else {
-		HIF_ERROR("%s: Invalid Rx msg buf:%p nbytes:%d",
+		HIF_ERROR("%s: Invalid Rx msg buf:%pK nbytes:%d",
 				__func__, netbuf, nbytes);
 
 		qdf_nbuf_free(netbuf);
@@ -1571,7 +1647,7 @@ static int hif_completion_thread_startup(struct HIF_CE_state *hif_state)
 		attr = host_ce_config[pipe_num];
 		if (attr.src_nentries) {
 			/* pipe used to send to target */
-			HIF_DBG("%s: pipe_num:%d pipe_info:0x%p",
+			HIF_DBG("%s: pipe_num:%d pipe_info:0x%pK",
 					 __func__, pipe_num, pipe_info);
 			ce_send_cb_register(pipe_info->ce_hdl,
 					    hif_pci_ce_send_done, pipe_info,
@@ -2009,12 +2085,21 @@ void hif_ce_stop(struct hif_softc *scn)
 
 	for (pipe_num = 0; pipe_num < scn->ce_count; pipe_num++) {
 		struct HIF_CE_pipe_info *pipe_info;
+		struct CE_attr attr;
+		struct CE_handle *ce_diag = hif_state->ce_diag;
 
 		pipe_info = &hif_state->pipe_info[pipe_num];
 		if (pipe_info->ce_hdl) {
+			if (pipe_info->ce_hdl != ce_diag) {
+				attr = host_ce_config[pipe_num];
+				if (attr.src_nentries)
+					qdf_spinlock_destroy(&pipe_info->
+							completion_freeq_lock);
+			}
 			ce_fini(pipe_info->ce_hdl);
 			pipe_info->ce_hdl = NULL;
 			pipe_info->buf_sz = 0;
+			qdf_spinlock_destroy(&pipe_info->recv_bufs_needed_lock);
 		}
 	}
 
@@ -2212,7 +2297,10 @@ QDF_STATUS hif_ce_open(struct hif_softc *hif_sc)
  */
 void hif_ce_close(struct hif_softc *hif_sc)
 {
+	struct HIF_CE_state *hif_state = HIF_GET_CE_STATE(hif_sc);
+
 	hif_clear_rri_on_ddr(hif_sc);
+	qdf_spinlock_destroy(&hif_state->keep_awake_lock);
 }
 
 /**
@@ -2273,16 +2361,6 @@ static void hif_post_static_buf_to_target(struct hif_softc *scn)
 static inline void hif_post_static_buf_to_target(struct hif_softc *scn)
 {
 }
-#endif
-
-#ifdef WLAN_SUSPEND_RESUME_TEST
-static void hif_fake_apps_init_ctx(struct hif_softc *scn)
-{
-	INIT_WORK(&scn->fake_apps_ctx.resume_work,
-		  hif_fake_apps_resume_work);
-}
-#else
-static inline void hif_fake_apps_init_ctx(struct hif_softc *scn) {}
 #endif
 
 /**
@@ -2445,7 +2523,7 @@ int hif_ce_fastpath_cb_register(struct hif_opaque_softc *hif_ctx,
  * Return: None
  */
 void hif_ce_ipa_get_ce_resource(struct hif_softc *scn,
-			     qdf_dma_addr_t *ce_sr_base_paddr,
+			     qdf_shared_mem_t **ce_sr,
 			     uint32_t *ce_sr_ring_size,
 			     qdf_dma_addr_t *ce_reg_paddr)
 {
@@ -2454,8 +2532,7 @@ void hif_ce_ipa_get_ce_resource(struct hif_softc *scn,
 		&(hif_state->pipe_info[HIF_PCI_IPA_UC_ASSIGNED_CE]);
 	struct CE_handle *ce_hdl = pipe_info->ce_hdl;
 
-	ce_ipa_get_resource(ce_hdl, ce_sr_base_paddr, ce_sr_ring_size,
-			    ce_reg_paddr);
+	ce_ipa_get_resource(ce_hdl, ce_sr, ce_sr_ring_size, ce_reg_paddr);
 }
 #endif /* IPA_OFFLOAD */
 
@@ -2609,6 +2686,7 @@ void *hif_ce_get_lro_ctx(struct hif_opaque_softc *hif_hdl, int ctx_id)
 
 	return ce_state->lro_data;
 }
+#endif
 
 /**
  * ce_lro_flush_cb_register() - register the LRO flush
@@ -2687,7 +2765,6 @@ int ce_lro_flush_cb_deregister(struct hif_opaque_softc *hif_hdl,
 	}
 	return rc;
 }
-#endif
 
 /**
  * hif_map_service_to_pipe() - returns  the ce ids pertaining to

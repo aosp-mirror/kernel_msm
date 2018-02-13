@@ -119,8 +119,8 @@ static int __wlan_hdd_cfg80211_spectral_scan_start(struct wiphy *wiphy,
 	/* initialize config parameters*/
 	config_req = hdd_ctx->ss_config;
 
-	if (nla_parse(tb, QCA_WLAN_VENDOR_ATTR_SPECTRAL_SCAN_CONFIG_MAX,
-		      data, data_len, spectral_scan_policy)) {
+	if (hdd_nla_parse(tb, QCA_WLAN_VENDOR_ATTR_SPECTRAL_SCAN_CONFIG_MAX,
+			  data, data_len, spectral_scan_policy)) {
 		hdd_err("Invalid Spectral Scan config ATTR");
 		return -EINVAL;
 	}
@@ -207,7 +207,9 @@ static int __wlan_hdd_cfg80211_spectral_scan_start(struct wiphy *wiphy,
 
 	ss_req.vdev_id = adapter->sessionId;
 	ss_req.active = 1;
+	ss_req.active_valid = 1;
 	ss_req.enabled = 1;
+	ss_req.enabled_valid = 1;
 
 	status = sme_start_spectral_scan(&ss_req);
 	if (QDF_STATUS_SUCCESS != status)
@@ -292,7 +294,9 @@ static int __wlan_hdd_cfg80211_spectral_scan_stop(struct wiphy *wiphy,
 
 	ss_req.vdev_id = adapter->sessionId;
 	ss_req.active = 0;
+	ss_req.active_valid = 1;
 	ss_req.enabled = 0;
+	ss_req.enabled_valid = 1;
 
 	status = sme_start_spectral_scan(&ss_req);
 	if (QDF_STATUS_SUCCESS != status)
@@ -393,7 +397,7 @@ static void __spectral_scan_msg_handler(const void *data, int data_len,
 	if (0 != ret)
 		return;
 
-	if (nla_parse(tb, CLD80211_ATTR_MAX, data, data_len, NULL)) {
+	if (hdd_nla_parse(tb, CLD80211_ATTR_MAX, data, data_len, NULL)) {
 		hdd_err("nla parse fails");
 		return;
 	}

@@ -87,7 +87,7 @@ void dfs_reset_alldelaylines(struct ath_dfs *dfs, int seg_id)
 
 	if (pl == NULL) {
 		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_ERROR,
-			  "%s[%d]:  pl==NULL, dfs=%p", __func__, __LINE__, dfs);
+			  "%s[%d]:  pl==NULL, dfs=%pK", __func__, __LINE__, dfs);
 		return;
 	}
 
@@ -95,7 +95,7 @@ void dfs_reset_alldelaylines(struct ath_dfs *dfs, int seg_id)
 		if (((seg_id == 0) ?
 		    dfs->dfs_b5radars : dfs->dfs_b5radars_ext_seg) == NULL) {
 			DFS_DPRINTK(dfs, ATH_DEBUG_DFS,
-				    "%s: pl==NULL, b5radars=%p\n",
+				    "%s: pl==NULL, b5radars=%pK\n",
 				    __func__,
 				    (seg_id == 0) ? dfs->dfs_b5radars :
 						    dfs->dfs_b5radars_ext_seg);
@@ -104,7 +104,7 @@ void dfs_reset_alldelaylines(struct ath_dfs *dfs, int seg_id)
 	} else {
 		if (dfs->dfs_b5radars == NULL) {
 			QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_ERROR,
-				"%s[%d]: pl==NULL, b5radars=%p", __func__, __LINE__,
+				"%s[%d]: pl==NULL, b5radars=%pK", __func__, __LINE__,
 				dfs->dfs_b5radars);
 			return;
 		}
@@ -183,6 +183,7 @@ void dfs_reset_delayline(struct dfs_delayline *dl)
 void dfs_reset_radarq(struct ath_dfs *dfs)
 {
 	struct dfs_event *event;
+
 	if (dfs == NULL) {
 		DFS_DPRINTK(dfs, ATH_DEBUG_DFS, "%s: sc_dfs is NULL", __func__);
 		return;
@@ -310,6 +311,7 @@ int dfs_init_radar_filters(struct ieee80211com *ic,
 				max_pulsedur = ft->ft_maxdur;
 			for (i = ft->ft_mindur; i <= ft->ft_maxdur; i++) {
 				uint32_t stop = 0, tableindex = 0;
+
 				while ((tableindex < DFS_MAX_RADAR_OVERLAP)
 				       && (!stop)) {
 					if ((dfs->
@@ -342,6 +344,8 @@ int dfs_init_radar_filters(struct ieee80211com *ic,
 
 		rf->rf_numpulses = numpulses;
 		rf->rf_patterntype = dfs_radars[p].rp_patterntype;
+		rf->rf_sidx_spread = dfs_radars[p].rp_sidx_spread;
+		rf->rf_check_delta_peak = dfs_radars[p].rp_check_delta_peak;
 		rf->rf_pulseid = dfs_radars[p].rp_pulseid;
 		rf->rf_mindur = dfs_radars[p].rp_mindur;
 		rf->rf_maxdur = dfs_radars[p].rp_maxdur;
@@ -486,6 +490,7 @@ bad4:
 void dfs_clear_stats(struct ieee80211com *ic)
 {
 	struct ath_dfs *dfs = (struct ath_dfs *)ic->ic_dfs;
+
 	if (dfs == NULL)
 		return;
 	OS_MEMZERO(&dfs->ath_dfs_stats, sizeof(struct dfs_stats));

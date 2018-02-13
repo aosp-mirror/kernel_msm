@@ -30,7 +30,7 @@
  *
  * WLAN HDD NAPI interface implementation
  */
-#include <smp.h> /* get_cpu */
+#include <linux/smp.h> /* get_cpu */
 
 #include "wlan_hdd_napi.h"
 #include "cds_api.h"       /* cds_get_context */
@@ -64,7 +64,7 @@ struct qca_napi_data *hdd_napi_get_all(void)
 	else
 		rp = hif_napi_get_all(hif);
 
-	NAPI_DEBUG("<-- [addr=%p]", rp);
+	NAPI_DEBUG("<-- [addr=%pK]", rp);
 	return rp;
 }
 
@@ -237,7 +237,7 @@ int hdd_napi_event(enum qca_napi_event event, void *data)
 	int rc = -EFAULT;  /* assume err */
 	struct hif_opaque_softc *hif;
 
-	NAPI_DEBUG("-->(event=%d, aux=%p)", event, data);
+	NAPI_DEBUG("-->(event=%d, aux=%pK)", event, data);
 
 	hif = cds_get_context(QDF_MODULE_ID_HIF);
 	if (unlikely(NULL == hif))
@@ -459,17 +459,24 @@ int hdd_display_napi_stats(void)
 	struct qca_napi_data *napid;
 	struct qca_napi_info *napii;
 	struct qca_napi_stat *napis;
-#define MAX_SCRATCH_BUFFER_SIZE 1024
-	char buf[MAX_SCRATCH_BUFFER_SIZE] = {'\0'};
+	/*
+	 * Expecting each NAPI bucket item to need at max 5 numerals + space for
+	 * formatting. For example "10000 " Thus the array needs to have
+	 * (5 + 1) * QCA_NAPI_NUM_BUCKETS bytes of space. Leaving one space at
+	 * the end of the "buf" arrary for end of string char.
+	 */
+	char buf[6 * QCA_NAPI_NUM_BUCKETS + 1] = {'\0'};
 
 	napid = hdd_napi_get_all();
 	if (NULL == napid) {
 		hdd_err("%s unable to retrieve napi structure", __func__);
 		return -EFAULT;
 	}
-	qdf_print("[NAPI %u][BL %d]:  scheds   polls   comps    done t-lim p-lim  corr  max_time",
+	hdd_log(QDF_TRACE_LEVEL_INFO_LOW,
+		"[NAPI %u][BL %d]:  scheds   polls   comps    done t-lim p-lim  corr  max_time napi-buckets(%d)",
 		  napid->napi_mode,
-		  hif_napi_cpu_blacklist(napid, BLACKLIST_QUERY));
+		  hif_napi_cpu_blacklist(napid, BLACKLIST_QUERY),
+		  QCA_NAPI_NUM_BUCKETS);
 
 	for (i = 0; i < CE_COUNT_MAX; i++)
 		if (napid->ce_map & (0x01 << i)) {
@@ -479,12 +486,18 @@ int hdd_display_napi_stats(void)
 
 			for (j = 0; j < num_possible_cpus(); j++) {
 				napis = &(napii->stats[j]);
-
-				if (napis->napi_schedules != 0) {
 				n = 0;
-					buf[0] = '\0';
 				max = sizeof(buf);
-					qdf_print("NAPI[%2d]CPU[%d]: %7d %7d %7d %7d %5d %5d %5d %9llu %s",
+				for (k = 0; k < QCA_NAPI_NUM_BUCKETS; k++) {
+					n += scnprintf(
+						buf + n, max - n,
+						" %d",
+						napis->napi_budget_uses[k]);
+				}
+
+				if (napis->napi_schedules != 0)
+					hdd_log(QDF_TRACE_LEVEL_INFO_LOW,
+					"NAPI[%2d]CPU[%d]: %7d %7d %7d %7d %5d %5d %5d %9llu %s",
 						  i, j,
 						  napis->napi_schedules,
 						  napis->napi_polls,
@@ -495,33 +508,40 @@ int hdd_display_napi_stats(void)
 						  napis->cpu_corrected,
 						  napis->napi_max_poll_time,
 						  buf);
-					n = 0;
-					for (k = 0; k < QCA_NAPI_TIME_BUCKETS;
-					     k++) {
-						n += scnprintf(
-							buf + n, max - n,
-							" %d", napis->
-							napi_time_budget[k]);
-					}
-					qdf_print("NAPI[%2d]CPU[%d]: TIMES: %s",
-						  i, j, buf);
-
-					n = 0;
-					for (k = 0; k < QCA_NAPI_MSG_BUCKETS;
-					     k++) {
-						n += scnprintf(
-							buf + n, max - n,
-							" %d", napis->
-							napi_msg_budget[k]);
-					}
-					qdf_print("NAPI[%2d]CPU[%d]: MESGS: %s",
-						  i, j, buf);
-				}
 			}
 		}
 
 	hif_napi_stats(napid);
 	return 0;
-#undef MAX_SCRATCH_BUFFER_SIZE
 }
 
+/**
+ * hdd_clear_napi_stats() - clear NAPI stats
+ *
+ * Return: == 0: success; !=0: failure
+ */
+int hdd_clear_napi_stats(void)
+{
+	int i, j;
+	struct qca_napi_data *napid;
+	struct qca_napi_info *napii;
+	struct qca_napi_stat *napis;
+
+	napid = hdd_napi_get_all();
+	if (NULL == napid) {
+		hdd_err("%s unable to retrieve napi structure", __func__);
+		return -EFAULT;
+	}
+
+	for (i = 0; i < CE_COUNT_MAX; i++)
+		if (napid->ce_map & (0x01 << i)) {
+			napii = napid->napis[i];
+			for (j = 0; j < NR_CPUS; j++) {
+				napis = &(napii->stats[j]);
+				qdf_mem_zero(napis,
+					     sizeof(struct qca_napi_stat));
+			}
+		}
+
+	return 0;
+}

@@ -47,6 +47,7 @@
 #include <htc_api.h>            /* HTC_PACKET */
 #include <htc.h>                /* HTC_HDR_ALIGNMENT_PADDING */
 #include <htt.h>                /* HTT host->target msg defs */
+#include <wdi_ipa.h>            /* HTT host->target WDI IPA msg defs */
 #include <ol_txrx_htt_api.h>    /* ol_tx_completion_handler, htt_tx_status */
 #include <ol_htt_tx_api.h>
 
@@ -102,8 +103,10 @@ void htt_h2t_send_complete(void *context, HTC_PACKET *htc_pkt)
 	if (pdev->cfg.is_high_latency && !pdev->cfg.default_tx_comp_req) {
 		int32_t credit_delta;
 
+		HTT_TX_MUTEX_ACQUIRE(&pdev->credit_mutex);
 		qdf_atomic_add(1, &pdev->htt_tx_credit.bus_delta);
 		credit_delta = htt_tx_credit_update(pdev);
+		HTT_TX_MUTEX_RELEASE(&pdev->credit_mutex);
 
 		if (credit_delta)
 			ol_tx_credit_completion_handler(pdev->txrx_pdev,
@@ -1032,7 +1035,8 @@ int htt_h2t_ipa_uc_rsc_cfg_msg(struct htt_pdev_t *pdev)
 	*msg_word = 0;
 	/* TX COMP RING BASE LO */
 	HTT_WDI_IPA_CFG_TX_COMP_RING_BASE_ADDR_LO_SET(*msg_word,
-		(unsigned int)pdev->ipa_uc_tx_rsc.tx_comp_base.paddr);
+		(unsigned int)qdf_mem_get_dma_addr(pdev->osdev,
+			&pdev->ipa_uc_tx_rsc.tx_comp_ring->mem_info));
 	msg_word++;
 	*msg_word = 0;
 	/* TX COMP RING BASE HI, NONE */
@@ -1052,14 +1056,16 @@ int htt_h2t_ipa_uc_rsc_cfg_msg(struct htt_pdev_t *pdev)
 	msg_word++;
 	*msg_word = 0;
 	HTT_WDI_IPA_CFG_TX_CE_WR_IDX_ADDR_LO_SET(*msg_word,
-		(unsigned int)pdev->ipa_uc_tx_rsc.tx_ce_idx.paddr);
+		(unsigned int)qdf_mem_get_dma_addr(pdev->osdev,
+			&pdev->ipa_uc_tx_rsc.tx_ce_idx->mem_info));
 	msg_word++;
 	*msg_word = 0;
 
 	msg_word++;
 	*msg_word = 0;
 	HTT_WDI_IPA_CFG_RX_IND_RING_BASE_ADDR_LO_SET(*msg_word,
-		(unsigned int)pdev->ipa_uc_rx_rsc.rx_ind_ring_base.paddr);
+		(unsigned int)qdf_mem_get_dma_addr(pdev->osdev,
+			&pdev->ipa_uc_rx_rsc.rx_ind_ring->mem_info));
 	msg_word++;
 	*msg_word = 0;
 	HTT_WDI_IPA_CFG_RX_IND_RING_BASE_ADDR_HI_SET(*msg_word,
@@ -1073,7 +1079,8 @@ int htt_h2t_ipa_uc_rsc_cfg_msg(struct htt_pdev_t *pdev)
 	msg_word++;
 	*msg_word = 0;
 	HTT_WDI_IPA_CFG_RX_IND_RD_IDX_ADDR_LO_SET(*msg_word,
-		(unsigned int)pdev->ipa_uc_rx_rsc.rx_ipa_prc_done_idx.paddr);
+		(unsigned int)qdf_mem_get_dma_addr(pdev->osdev,
+			&pdev->ipa_uc_rx_rsc.rx_ipa_prc_done_idx->mem_info));
 	msg_word++;
 	*msg_word = 0;
 	HTT_WDI_IPA_CFG_RX_IND_RD_IDX_ADDR_HI_SET(*msg_word,
@@ -1091,7 +1098,8 @@ int htt_h2t_ipa_uc_rsc_cfg_msg(struct htt_pdev_t *pdev)
 	msg_word++;
 	*msg_word = 0;
 	HTT_WDI_IPA_CFG_RX_RING2_BASE_ADDR_LO_SET(*msg_word,
-		(unsigned int)pdev->ipa_uc_rx_rsc.rx2_ind_ring_base.paddr);
+		(unsigned int)qdf_mem_get_dma_addr(pdev->osdev,
+			&pdev->ipa_uc_rx_rsc.rx2_ind_ring->mem_info));
 	msg_word++;
 	*msg_word = 0;
 	HTT_WDI_IPA_CFG_RX_RING2_BASE_ADDR_HI_SET(*msg_word,
@@ -1105,7 +1113,8 @@ int htt_h2t_ipa_uc_rsc_cfg_msg(struct htt_pdev_t *pdev)
 	msg_word++;
 	*msg_word = 0;
 	HTT_WDI_IPA_CFG_RX_RING2_RD_IDX_ADDR_LO_SET(*msg_word,
-		(unsigned int)pdev->ipa_uc_rx_rsc.rx2_ipa_prc_done_idx.paddr);
+		(unsigned int)qdf_mem_get_dma_addr(pdev->osdev,
+			&pdev->ipa_uc_rx_rsc.rx2_ipa_prc_done_idx->mem_info));
 	msg_word++;
 	*msg_word = 0;
 	HTT_WDI_IPA_CFG_RX_RING2_RD_IDX_ADDR_HI_SET(*msg_word,
@@ -1114,7 +1123,8 @@ int htt_h2t_ipa_uc_rsc_cfg_msg(struct htt_pdev_t *pdev)
 	msg_word++;
 	*msg_word = 0;
 	HTT_WDI_IPA_CFG_RX_RING2_WR_IDX_ADDR_LO_SET(*msg_word,
-		(unsigned int)pdev->ipa_uc_rx_rsc.rx2_ipa_prc_done_idx.paddr);
+		(unsigned int)qdf_mem_get_dma_addr(pdev->osdev,
+			&pdev->ipa_uc_rx_rsc.rx2_ipa_prc_done_idx->mem_info));
 	msg_word++;
 	*msg_word = 0;
 	HTT_WDI_IPA_CFG_RX_RING2_WR_IDX_ADDR_HI_SET(*msg_word,
@@ -1174,7 +1184,8 @@ int htt_h2t_ipa_uc_rsc_cfg_msg(struct htt_pdev_t *pdev)
 	msg_word++;
 	*msg_word = 0;
 	HTT_WDI_IPA_CFG_TX_COMP_RING_BASE_ADDR_SET(*msg_word,
-		(unsigned int)pdev->ipa_uc_tx_rsc.tx_comp_base.paddr);
+		(unsigned int)qdf_mem_get_dma_addr(pdev->osdev,
+			&pdev->ipa_uc_tx_rsc.tx_comp_ring->mem_info));
 
 	msg_word++;
 	*msg_word = 0;
@@ -1190,12 +1201,14 @@ int htt_h2t_ipa_uc_rsc_cfg_msg(struct htt_pdev_t *pdev)
 	msg_word++;
 	*msg_word = 0;
 	HTT_WDI_IPA_CFG_TX_CE_WR_IDX_ADDR_SET(*msg_word,
-		(unsigned int)pdev->ipa_uc_tx_rsc.tx_ce_idx.paddr);
+		(unsigned int)qdf_mem_get_dma_addr(pdev->osdev,
+			&pdev->ipa_uc_tx_rsc.tx_ce_idx->mem_info));
 
 	msg_word++;
 	*msg_word = 0;
 	HTT_WDI_IPA_CFG_RX_IND_RING_BASE_ADDR_SET(*msg_word,
-		(unsigned int)pdev->ipa_uc_rx_rsc.rx_ind_ring_base.paddr);
+		(unsigned int)qdf_mem_get_dma_addr(pdev->osdev,
+			&pdev->ipa_uc_rx_rsc.rx_ind_ring->mem_info));
 
 	msg_word++;
 	*msg_word = 0;
@@ -1205,7 +1218,8 @@ int htt_h2t_ipa_uc_rsc_cfg_msg(struct htt_pdev_t *pdev)
 	msg_word++;
 	*msg_word = 0;
 	HTT_WDI_IPA_CFG_RX_IND_RD_IDX_ADDR_SET(*msg_word,
-		(unsigned int)pdev->ipa_uc_rx_rsc.rx_ipa_prc_done_idx.paddr);
+		(unsigned int)qdf_mem_get_dma_addr(pdev->osdev,
+			&pdev->ipa_uc_rx_rsc.rx_ipa_prc_done_idx->mem_info));
 
 	msg_word++;
 	*msg_word = 0;
@@ -1279,6 +1293,10 @@ int htt_h2t_ipa_uc_set_active(struct htt_pdev_t *pdev,
 		active_target = HTT_WDI_IPA_OPCODE_RX_RESUME;
 	else if (!uc_active && !is_tx)
 		active_target = HTT_WDI_IPA_OPCODE_RX_SUSPEND;
+
+	QDF_TRACE(QDF_MODULE_ID_HTT, QDF_TRACE_LEVEL_INFO,
+			"%s: HTT_H2T_MSG_TYPE_WDI_IPA_OP_REQ (%d)\n",
+			__func__, active_target);
 
 	HTT_WDI_IPA_OP_REQUEST_OP_CODE_SET(*msg_word, active_target);
 	HTT_H2T_MSG_TYPE_SET(*msg_word, HTT_H2T_MSG_TYPE_WDI_IPA_OP_REQ);
@@ -1379,7 +1397,7 @@ int htt_h2t_ipa_uc_get_share_stats(struct htt_pdev_t *pdev, uint8_t reset_stats)
 	/* reserve room for HTC header */
 	msg = qdf_nbuf_alloc(pdev->osdev,
 		HTT_MSG_BUF_SIZE(HTT_WDI_IPA_OP_REQUEST_SZ)+
-		HTT_MSG_BUF_SIZE(HTT_WDI_IPA_OP_REQ_GET_SHARING_STATS_SZ),
+		HTT_MSG_BUF_SIZE(WLAN_WDI_IPA_GET_SHARING_STATS_REQ_SZ),
 		HTC_HEADER_LEN + HTC_HDR_ALIGNMENT_PADDING, 4, false);
 	if (!msg) {
 		htt_htc_pkt_free(pdev, pkt);
@@ -1387,7 +1405,7 @@ int htt_h2t_ipa_uc_get_share_stats(struct htt_pdev_t *pdev, uint8_t reset_stats)
 	}
 	/* set the length of the message */
 	qdf_nbuf_put_tail(msg, HTT_WDI_IPA_OP_REQUEST_SZ+
-			  HTT_WDI_IPA_OP_REQ_GET_SHARING_STATS_SZ);
+			  WLAN_WDI_IPA_GET_SHARING_STATS_REQ_SZ);
 
 	/* fill in the message contents */
 	msg_word = (uint32_t *) qdf_nbuf_data(msg);
@@ -1402,7 +1420,7 @@ int htt_h2t_ipa_uc_get_share_stats(struct htt_pdev_t *pdev, uint8_t reset_stats)
 
 	msg_word++;
 	*msg_word = 0;
-	HTT_WDI_IPA_OP_REQ_GET_SHARING_STATS_RESET_STATS_SET(*msg_word,
+	WLAN_WDI_IPA_GET_SHARING_STATS_REQ_RESET_STATS_SET(*msg_word,
 							     reset_stats);
 
 	SET_HTC_PACKET_INFO_TX(&pkt->htc_pkt,
@@ -1443,7 +1461,7 @@ int htt_h2t_ipa_uc_set_quota(struct htt_pdev_t *pdev, uint64_t quota_bytes)
 	/* reserve room for HTC header */
 	msg = qdf_nbuf_alloc(pdev->osdev,
 		HTT_MSG_BUF_SIZE(HTT_WDI_IPA_OP_REQUEST_SZ)+
-		HTT_MSG_BUF_SIZE(HTT_WDI_IPA_OP_REQ_SET_QUOTA_SZ),
+		HTT_MSG_BUF_SIZE(WLAN_WDI_IPA_SET_QUOTA_REQ_SZ),
 		HTC_HEADER_LEN + HTC_HDR_ALIGNMENT_PADDING, 4, false);
 	if (!msg) {
 		htt_htc_pkt_free(pdev, pkt);
@@ -1451,7 +1469,7 @@ int htt_h2t_ipa_uc_set_quota(struct htt_pdev_t *pdev, uint64_t quota_bytes)
 	}
 	/* set the length of the message */
 	qdf_nbuf_put_tail(msg, HTT_WDI_IPA_OP_REQUEST_SZ+
-			  HTT_WDI_IPA_OP_REQ_SET_QUOTA_SZ);
+			  WLAN_WDI_IPA_SET_QUOTA_REQ_SZ);
 
 	/* fill in the message contents */
 	msg_word = (uint32_t *) qdf_nbuf_data(msg);
@@ -1466,19 +1484,19 @@ int htt_h2t_ipa_uc_set_quota(struct htt_pdev_t *pdev, uint64_t quota_bytes)
 
 	msg_word++;
 	*msg_word = 0;
-	HTT_WDI_IPA_OP_REQ_SET_QUOTA_SET_QUOTA_SET(*msg_word, quota_bytes > 0);
+	WLAN_WDI_IPA_SET_QUOTA_REQ_SET_QUOTA_SET(*msg_word, quota_bytes > 0);
 
 	msg_word++;
 	*msg_word = 0;
-	HTT_WDI_IPA_OP_REQ_SET_QUOTA_QUOTA_LO_SET(*msg_word,
+	WLAN_WDI_IPA_SET_QUOTA_REQ_QUOTA_LO_SET(*msg_word,
 			(uint32_t)(quota_bytes &
-				   HTT_WDI_IPA_OP_REQ_SET_QUOTA_QUOTA_LO_M));
+				   WLAN_WDI_IPA_SET_QUOTA_REQ_QUOTA_LO_M));
 
 	msg_word++;
 	*msg_word = 0;
-	HTT_WDI_IPA_OP_REQ_SET_QUOTA_QUOTA_HI_SET(*msg_word,
+	WLAN_WDI_IPA_SET_QUOTA_REQ_QUOTA_HI_SET(*msg_word,
 			(uint32_t)(quota_bytes>>32 &
-				   HTT_WDI_IPA_OP_REQ_SET_QUOTA_QUOTA_HI_M));
+				   WLAN_WDI_IPA_SET_QUOTA_REQ_QUOTA_HI_M));
 
 	SET_HTC_PACKET_INFO_TX(&pkt->htc_pkt,
 			       htt_h2t_send_complete_free_netbuf,

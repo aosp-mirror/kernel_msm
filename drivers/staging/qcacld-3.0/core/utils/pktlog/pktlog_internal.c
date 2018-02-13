@@ -290,6 +290,12 @@ fill_ieee80211_hdr_data(struct ol_txrx_pdev_t *txrx_pdev,
 				      >> TX_DESC_ID_HIGH_SHIFT);
 			msdu_id += 1;
 		}
+		if (tx_desc_id >= txrx_pdev->tx_desc.pool_size) {
+			QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_DEBUG,
+				"%s: drop due to invalid msdu id = %x\n",
+				__func__, tx_desc_id);
+			return;
+		}
 		tx_desc = ol_tx_desc_find_check(txrx_pdev, tx_desc_id);
 		if (!tx_desc) {
 			qdf_print("%s: ignore invalid desc_id(%u)\n", __func__,
@@ -387,6 +393,7 @@ A_STATUS process_tx_info(struct ol_txrx_pdev_t *txrx_pdev, void *data)
 	if (pl_hdr.log_type == PKTLOG_TYPE_TX_CTRL) {
 		size_t log_size = sizeof(frm_hdr) + pl_hdr.size;
 		void *txdesc_hdr_ctl = (void *)
+
 		pktlog_getbuf(pl_dev, pl_info, log_size, &pl_hdr);
 		qdf_assert(txdesc_hdr_ctl);
 		qdf_assert(pl_hdr.size < (370 * sizeof(u_int32_t)));
@@ -513,6 +520,10 @@ A_STATUS process_tx_info(struct ol_txrx_pdev_t *txrx_pdev, void *data)
 		 */
 		txctl_log.priv.frm_hdr = frm_hdr;
 		qdf_assert(txctl_log.priv.txdesc_ctl);
+		qdf_assert(pl_hdr.size < sizeof(txctl_log.priv.txdesc_ctl));
+		pl_hdr.size = (pl_hdr.size > sizeof(txctl_log.priv.txdesc_ctl))
+			       ? sizeof(txctl_log.priv.txdesc_ctl) :
+			       pl_hdr.size;
 		qdf_mem_copy((void *)&txctl_log.priv.txdesc_ctl,
 			     ((void *)data + sizeof(struct ath_pktlog_hdr)),
 			     pl_hdr.size);

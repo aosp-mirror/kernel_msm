@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -197,7 +197,7 @@ typedef struct sLimMlmStartReq {
 	uint8_t ssidHidden;
 	uint8_t wps_state;
 	uint8_t obssProtEnabled;
-	uint8_t beacon_tx_rate;
+	uint16_t beacon_tx_rate;
 } tLimMlmStartReq, *tpLimMlmStartReq;
 
 typedef struct sLimMlmStartCnf {
@@ -276,6 +276,9 @@ typedef struct sLimMlmAssocInd {
 	uint8_t max_mcs_idx;
 	uint8_t rx_mcs_map;
 	uint8_t tx_mcs_map;
+
+	tDot11fIEHTCaps HTCaps;
+	tDot11fIEVHTCaps VHTCaps;
 } tLimMlmAssocInd, *tpLimMlmAssocInd;
 
 typedef struct sLimMlmReassocReq {
@@ -901,6 +904,16 @@ tSirRetStatus lim_process_sme_del_all_tdls_peers(tpAniSirGlobal p_mac,
 }
 #endif
 
+/**
+ * lim_process_rx_channel_status_event() - processes
+ * event WDA_RX_CHN_STATUS_EVENT
+ * @mac_ctx Pointer to Global MAC structure
+ * @buf: Received message info
+ *
+ * Return: None
+ */
+void lim_process_rx_channel_status_event(tpAniSirGlobal mac_ctx, void *buf);
+
 /* / Bit value data structure */
 typedef enum sHalBitVal         /* For Bit operations */
 {
@@ -913,5 +926,43 @@ enum {
 	ePROT,
 	eDBG
 };
+
+/**
+ * lim_process_join_failure_timeout() - This function is called to process
+ * JoinFailureTimeout
+ *
+ * @mac_ctx: Pointer to Global MAC structure
+ *
+ * This function is called to process JoinFailureTimeout
+ *
+ * @Return None
+ */
+void lim_process_join_failure_timeout(tpAniSirGlobal mac_ctx);
+
+/**
+ * lim_process_auth_failure_timeout() - This function is called to process Min
+ * Channel Timeout during channel scan.
+ *
+ * @mac_ctx: Pointer to Global MAC structure
+ *
+ * This function is called to process Min Channel Timeout during channel scan.
+ *
+ * @Return: None
+ */
+void lim_process_auth_failure_timeout(tpAniSirGlobal mac_ctx);
+
+/**
+ * lim_process_assoc_failure_timeout() - This function is called to process Min
+ * Channel Timeout during channel scan.
+ *
+ * @mac_ctx: Pointer to Global MAC structure
+ * @msg_type: Assoc or reassoc
+ *
+ * This function is called to process Min Channel Timeout during channel scan.
+ *
+ * @Return: None
+ */
+void lim_process_assoc_failure_timeout(tpAniSirGlobal mac_ctx,
+						     uint32_t msg_type);
 
 #endif /* __LIM_TYPES_H */

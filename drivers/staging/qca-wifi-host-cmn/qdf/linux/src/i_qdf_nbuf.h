@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -66,7 +66,7 @@ typedef struct sk_buff *__qdf_nbuf_t;
 #define QDF_NBUF_CB_PACKET_TYPE_WAPI   3
 #define QDF_NBUF_CB_PACKET_TYPE_DHCP   4
 #define QDF_NBUF_CB_PACKET_TYPE_ICMP   5
-#define QDF_NBUF_CB_PACKET_TYPE_ICMPV6 6
+#define QDF_NBUF_CB_PACKET_TYPE_ICMPv6 6
 
 
 /* mark the first packet after wow wakeup */
@@ -514,6 +514,18 @@ bool __qdf_nbuf_data_is_arp_req(uint8_t *data);
 bool __qdf_nbuf_data_is_arp_rsp(uint8_t *data);
 uint32_t __qdf_nbuf_get_arp_src_ip(uint8_t *data);
 uint32_t __qdf_nbuf_get_arp_tgt_ip(uint8_t *data);
+uint8_t *__qdf_nbuf_get_dns_domain_name(uint8_t *data, uint32_t len);
+bool __qdf_nbuf_data_is_dns_query(uint8_t *data);
+bool __qdf_nbuf_data_is_dns_response(uint8_t *data);
+bool __qdf_nbuf_data_is_tcp_syn(uint8_t *data);
+bool __qdf_nbuf_data_is_tcp_syn_ack(uint8_t *data);
+bool __qdf_nbuf_data_is_tcp_ack(uint8_t *data);
+uint16_t __qdf_nbuf_data_get_tcp_src_port(uint8_t *data);
+uint16_t __qdf_nbuf_data_get_tcp_dst_port(uint8_t *data);
+bool __qdf_nbuf_data_is_icmpv4_req(uint8_t *data);
+bool __qdf_nbuf_data_is_icmpv4_rsp(uint8_t *data);
+uint32_t __qdf_nbuf_get_icmpv4_src_ip(uint8_t *data);
+uint32_t __qdf_nbuf_get_icmpv4_tgt_ip(uint8_t *data);
 enum qdf_proto_subtype  __qdf_nbuf_data_get_dhcp_subtype(uint8_t *data);
 enum qdf_proto_subtype  __qdf_nbuf_data_get_eapol_subtype(uint8_t *data);
 enum qdf_proto_subtype  __qdf_nbuf_data_get_arp_subtype(uint8_t *data);
@@ -521,6 +533,22 @@ enum qdf_proto_subtype  __qdf_nbuf_data_get_icmp_subtype(uint8_t *data);
 enum qdf_proto_subtype  __qdf_nbuf_data_get_icmpv6_subtype(uint8_t *data);
 uint8_t __qdf_nbuf_data_get_ipv4_proto(uint8_t *data);
 uint8_t __qdf_nbuf_data_get_ipv6_proto(uint8_t *data);
+#ifdef CONFIG_MCL
+void __qdf_nbuf_init_replenish_timer(void);
+void __qdf_nbuf_deinit_replenish_timer(void);
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 13, 0)
+#define qdf_nbuf_users_inc atomic_inc
+#define qdf_nbuf_users_dec atomic_dec
+#define qdf_nbuf_users_set atomic_set
+#define qdf_nbuf_users_read atomic_read
+#else
+#define qdf_nbuf_users_inc refcount_inc
+#define qdf_nbuf_users_dec refcount_dec
+#define qdf_nbuf_users_set refcount_set
+#define qdf_nbuf_users_read refcount_read
+#endif /* KERNEL_VERSION(4, 13, 0) */
 
 /**
  * __qdf_to_status() - OS to QDF status conversion
@@ -1489,7 +1517,7 @@ static inline size_t __qdf_nbuf_tcp_tso_size(struct sk_buff *skb)
  */
 static inline void __qdf_nbuf_init(__qdf_nbuf_t nbuf)
 {
-	atomic_set(&nbuf->users, 1);
+	qdf_nbuf_users_set(&nbuf->users, 1);
 	nbuf->data = nbuf->head + NET_SKB_PAD;
 	skb_reset_tail_pointer(nbuf);
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -365,6 +365,13 @@ QDF_STATUS wmi_unified_stats_request_send(void *wmi_hdl,
 QDF_STATUS wmi_unified_green_ap_ps_send(void *wmi_hdl,
 						uint32_t value, uint8_t mac_id);
 
+#ifdef FEATURE_WLAN_D0WOW
+QDF_STATUS wmi_d0wow_enable_send(void *wmi_hdl,
+				uint8_t mac_id);
+QDF_STATUS wmi_d0wow_disable_send(void *wmi_hdl,
+				uint8_t mac_id);
+#endif
+
 
 QDF_STATUS wmi_unified_wow_enable_send(void *wmi_hdl,
 				struct wow_cmd_params *param,
@@ -562,6 +569,9 @@ QDF_STATUS wmi_unified_roam_scan_offload_mode_cmd(void *wmi_hdl,
 				struct roam_offload_scan_params *roam_req);
 #endif
 
+QDF_STATUS wmi_unified_roam_mawc_params_cmd(void *wmi_hdl,
+			struct wmi_mawc_roam_params *params);
+
 QDF_STATUS wmi_unified_roam_scan_offload_rssi_thresh_cmd(void *wmi_hdl,
 				struct roam_offload_scan_rssi_params *roam_req);
 
@@ -612,6 +622,9 @@ QDF_STATUS wmi_unified_pno_start_cmd(void *wmi_hdl,
 		   struct pno_scan_req_params *pno,
 		   uint32_t *gchannel_freq_list);
 #endif
+
+QDF_STATUS wmi_unified_nlo_mawc_cmd(void *wmi_hdl,
+		struct nlo_mawc_params *params);
 
 QDF_STATUS wmi_unified_set_ric_req_cmd(void *wmi_hdl, void *msg,
 			uint8_t is_add_ts);
@@ -685,7 +698,20 @@ QDF_STATUS wmi_unified_wow_sta_ra_filter_cmd(void *wmi_hdl,
 			  uint8_t vdev_id, uint8_t default_pattern,
 			  uint16_t rate_limit_interval);
 
+QDF_STATUS wmi_unified_wow_timer_pattern_cmd(void *wmi_hdl, uint8_t vdev_id,
+					     uint32_t cookie, uint32_t time);
+
 QDF_STATUS wmi_unified_nat_keepalive_en_cmd(void *wmi_hdl, uint8_t vdev_id);
+
+/**
+ * wmi_unified_set_latency_config_cmd()
+ * @wmi_handle: wmi handle
+ * @param: WLM parameters
+ *
+ * Return: QDF_STATUS_SUCCESS on success and QDF_STATUS_E_FAILURE for failure
+ */
+QDF_STATUS wmi_unified_wlm_latency_level_cmd(void *wmi_hdl,
+					struct wlm_latency_level_param *param);
 
 QDF_STATUS wmi_unified_csa_offload_enable(void *wmi_hdl, uint8_t vdev_id);
 
@@ -1364,8 +1390,38 @@ QDF_STATUS wmi_extract_vdev_extd_stats(void *wmi_hdl, void *evt_buf,
 
 QDF_STATUS wmi_unified_send_power_dbg_cmd(void *wmi_hdl,
 				struct wmi_power_dbg_params *param);
+
+/**
+ * wmi_unified_send_sar_limit_cmd() - send sar limit cmd to fw
+ * @wmi_hdl: wmi handle
+ * @params: sar limit command params
+ *
+ * Return: QDF_STATUS_SUCCESS on success and QDF_STATUS_E_FAILURE for failure
+ */
 QDF_STATUS wmi_unified_send_sar_limit_cmd(void *wmi_hdl,
-				struct sar_limit_cmd_params *params);
+					  struct sar_limit_cmd_params *params);
+
+/**
+ * wmi_unified_get_sar_limit_cmd() - request current SAR limits from FW
+ * @wmi_hdl: wmi handle
+ *
+ * Return: QDF_STATUS_SUCCESS for success or error code
+ */
+QDF_STATUS wmi_unified_get_sar_limit_cmd(void *wmi_hdl);
+
+/**
+ * wmi_unified_extract_sar_limit_event() - extract SAR limits from FW event
+ * @wmi_hdl: wmi handle
+ * @evt_buf: event buffer received from firmware
+ * @event: SAR limit event which is to be populated by data extracted from
+ *         the @evt_buf buffer
+ *
+ * Return: QDF_STATUS_SUCCESS for success or error code
+ */
+QDF_STATUS wmi_unified_extract_sar_limit_event(void *wmi_hdl,
+					       uint8_t *evt_buf,
+					       struct sar_limit_event *event);
+
 QDF_STATUS wmi_unified_send_adapt_dwelltime_params_cmd(void *wmi_hdl,
 				   struct wmi_adaptive_dwelltime_params *
 				   wmi_param);
@@ -1386,6 +1442,41 @@ QDF_STATUS wmi_unified_set_arp_stats_req(void *wmi_hdl,
 					 struct set_arp_stats *req_buf);
 QDF_STATUS wmi_unified_get_arp_stats_req(void *wmi_hdl,
 					 struct get_arp_stats *req_buf);
+
+/**
+ * wmi_unified_send_action_oui_cmd() - send action oui cmd to fw
+ * @wmi_hdl: wma handle
+ * @action_oui: wmi action oui message to be send
+ *
+ * Return: QDF_STATUS_SUCCESS on success and QDF_STATUS_E_FAILURE for failure
+ */
+QDF_STATUS
+wmi_unified_send_action_oui_cmd(void *wmi_hdl,
+				struct wmi_action_oui *action_oui);
+
+/*
+ * wmi_unified_set_del_pmkid_cache() - set delete PMKID
+ * @wmi_hdl: wma handle
+ * @pmksa: pointer to pmk cache entry
+ * @vdev_id: vdev id
+ *
+ * Return: QDF_STATUS_SUCCESS on success and QDF_STATUS_E_FAILURE for failure
+ */
+QDF_STATUS wmi_unified_set_del_pmkid_cache(void *wmi_hdl,
+					wmi_pmk_cache *pmksa,
+					uint32_t vdev_id);
+
+#if defined (WLAN_FEATURE_FILS_SK)
+/*
+ * wmi_unified_roam_send_hlp_cmd() -send HLP command info
+ * @wmi_hdl: wma handle
+ * @req_buf: Pointer to HLP params
+ *
+ * Return: QDF_STATUS_SUCCESS on success and QDF_STATUS_E_FAILURE for failure
+ */
+QDF_STATUS wmi_unified_roam_send_hlp_cmd(void *wmi_hdl,
+					struct hlp_params *req_buf);
+#endif
 
 #ifdef WMI_INTERFACE_EVENT_LOGGING
 void wmi_print_cmd_log(wmi_unified_t wmi, uint32_t count,
@@ -1412,4 +1503,7 @@ void wmi_print_mgmt_event_log(wmi_unified_t wmi, uint32_t count,
 
 QDF_STATUS wmi_unified_send_dbs_scan_sel_params_cmd(void *wmi_hdl,
 				   struct wmi_dbs_scan_sel_params *wmi_param);
+
+QDF_STATUS wmi_unified_send_limit_off_chan_cmd(void *wmi_hdl,
+				   struct wmi_limit_off_chan_param *wmi_param);
 #endif /* _WMI_UNIFIED_API_H_ */

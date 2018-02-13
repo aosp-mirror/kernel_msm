@@ -219,6 +219,7 @@ void lim_update_assoc_sta_datas(tpAniSirGlobal mac_ctx,
 	if (qos_mode) {
 		if (assoc_rsp->edcaPresent) {
 			tSirRetStatus status;
+
 			status =
 				sch_beacon_edca_process(mac_ctx,
 					&assoc_rsp->edca, session_entry);
@@ -238,6 +239,7 @@ void lim_update_assoc_sta_datas(tpAniSirGlobal mac_ctx,
 	sta_ds->wsmEnabled = 0;
 	if (session_entry->limWmeEnabled && assoc_rsp->wmeEdcaPresent) {
 		tSirRetStatus status;
+
 		status = sch_beacon_edca_process(mac_ctx, &assoc_rsp->edca,
 				session_entry);
 		pe_debug("WME Edca set update based on AssocRsp: status %d",
@@ -431,6 +433,7 @@ static void lim_update_stads_ext_cap(tpAniSirGlobal mac_ctx,
 	tpDphHashNode sta_ds)
 {
 	struct s_ext_cap *ext_cap;
+
 	if (!assoc_rsp->ExtCap.present) {
 		sta_ds->timingMeasCap = 0;
 #ifdef FEATURE_WLAN_TDLS
@@ -641,17 +644,19 @@ lim_process_assoc_rsp_frame(tpAniSirGlobal mac_ctx,
 		session_entry->assocRspLen = 0;
 	}
 
-	session_entry->assocRsp = qdf_mem_malloc(frame_len);
-	if (NULL == session_entry->assocRsp) {
-		pe_err("Unable to allocate memory for assoc res,len: %d",
-			 frame_len);
-	} else {
-		/*
-		 * Store the Assoc response. This is sent
-		 * to csr/hdd in join cnf response.
-		 */
-		qdf_mem_copy(session_entry->assocRsp, body, frame_len);
-		session_entry->assocRspLen = frame_len;
+	if (frame_len) {
+		session_entry->assocRsp = qdf_mem_malloc(frame_len);
+		if (NULL == session_entry->assocRsp) {
+			pe_err("Unable to allocate memory for assoc res,len: %d",
+				 frame_len);
+		} else {
+			/*
+			 * Store the Assoc response. This is sent
+			 * to csr/hdd in join cnf response.
+			 */
+			qdf_mem_copy(session_entry->assocRsp, body, frame_len);
+			session_entry->assocRspLen = frame_len;
+		}
 	}
 
 	lim_update_ric_data(mac_ctx, session_entry, assoc_rsp);
@@ -703,6 +708,13 @@ lim_process_assoc_rsp_frame(tpAniSirGlobal mac_ctx,
 		lim_deactivate_and_change_timer(mac_ctx, eLIM_ASSOC_FAIL_TIMER);
 	else
 		lim_stop_reassoc_retry_timer(mac_ctx);
+
+	if (eSIR_MAC_XS_FRAME_LOSS_POOR_CHANNEL_RSSI_STATUS ==
+	   assoc_rsp->statusCode &&
+	    assoc_rsp->rssi_assoc_rej.present)
+		lim_assoc_rej_add_to_rssi_based_reject_list(mac_ctx,
+			&assoc_rsp->rssi_assoc_rej, hdr->sa,
+			WMA_GET_RX_RSSI_NORMALIZED(rx_pkt_info));
 
 	if (assoc_rsp->statusCode != eSIR_MAC_SUCCESS_STATUS
 #ifdef WLAN_FEATURE_11W

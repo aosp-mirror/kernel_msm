@@ -33,6 +33,7 @@
 #include "wma_api.h"
 #include "wlan_hdd_assoc.h"
 #include "sme_nan_datapath.h"
+#include "wma.h"
 
 /* NLA policy */
 static const struct nla_policy
@@ -70,6 +71,9 @@ qca_wlan_vendor_ndp_policy[QCA_WLAN_VENDOR_ATTR_NDP_PARAMS_MAX + 1] = {
 					.len = NAN_PASSPHRASE_MAX_LEN },
 	[QCA_WLAN_VENDOR_ATTR_NDP_SERVICE_NAME] = { .type = NLA_BINARY,
 					.len = NAN_MAX_SERVICE_NAME_LEN },
+	[QCA_WLAN_VENDOR_ATTR_NDP_CHANNEL_INFO] = { .type = NLA_BINARY,
+					.len = NAN_CH_INFO_MAX_LEN },
+	[QCA_WLAN_VENDOR_ATTR_NDP_NSS] = { .type = NLA_U32 },
 };
 
 /**
@@ -115,7 +119,7 @@ void hdd_nan_datapath_target_config(hdd_context_t *hdd_ctx,
  */
 static int hdd_close_ndi(hdd_adapter_t *adapter)
 {
-	int rc;
+	QDF_STATUS status = QDF_STATUS_E_FAILURE;
 	hdd_context_t *hdd_ctx = WLAN_HDD_GET_CTX(adapter);
 	uint32_t timeout = WLAN_WAIT_TIME_SESSIONOPENCLOSE;
 
@@ -142,15 +146,18 @@ static int hdd_close_ndi(hdd_adapter_t *adapter)
 #endif
 	/* check if the session is open */
 	if (test_bit(SME_SESSION_OPENED, &adapter->event_flags)) {
-		INIT_COMPLETION(adapter->session_close_comp_var);
+		status = qdf_event_reset(&adapter->qdf_session_close_event);
+		if (QDF_STATUS_SUCCESS != status) {
+			hdd_err("failed to reinit session_close QDF event");
+			return -EINVAL;
+		}
 		if (QDF_STATUS_SUCCESS == sme_close_session(hdd_ctx->hHal,
 				adapter->sessionId, true,
 				hdd_sme_close_session_callback, adapter)) {
 			/* Block on a timed completion variable */
-			rc = wait_for_completion_timeout(
-				&adapter->session_close_comp_var,
-				msecs_to_jiffies(timeout));
-			if (!rc)
+			status = qdf_wait_for_event_completion(
+				&adapter->qdf_session_close_event, timeout);
+			if (QDF_STATUS_SUCCESS != status)
 				hdd_err("session close timeout");
 		}
 	}
@@ -298,8 +305,10 @@ static int hdd_get_random_nan_mac_addr(hdd_context_t *hdd_ctx,
 {
 	hdd_adapter_t *adapter;
 	uint8_t i, attempts, max_attempt = 16;
+	bool found;
 
 	for (attempts = 0; attempts < max_attempt; attempts++) {
+		found = false;
 		cds_rand_get_bytes(0, (uint8_t *)mac_addr, sizeof(*mac_addr));
 
 		/*
@@ -313,11 +322,26 @@ static int hdd_get_random_nan_mac_addr(hdd_context_t *hdd_ctx,
 		 */
 		mac_addr->bytes[5] &= 0xFE;
 
-		for (i = 0; i < QDF_MAX_CONCURRENCY_PERSONA; i++) {
-			if (!qdf_mem_cmp(hdd_ctx->config->intfMacAddr[i].bytes,
-					 mac_addr, sizeof(*mac_addr)))
-				continue;
+		for (i = 0; i < hdd_ctx->num_provisioned_addr; i++) {
+			if ((!qdf_mem_cmp(hdd_ctx->
+					  provisioned_mac_addr[i].bytes,
+			      mac_addr, sizeof(*mac_addr))))
+				found = true;
+				break;
 		}
+
+		if (found)
+			continue;
+
+		for (i = 0; i < hdd_ctx->num_derived_addr; i++) {
+			if ((!qdf_mem_cmp(hdd_ctx->
+					  derived_mac_addr[i].bytes,
+					  mac_addr, sizeof(*mac_addr))))
+				found = true;
+				break;
+		}
+		if (found)
+			continue;
 
 		adapter = hdd_get_adapter_by_macaddr(hdd_ctx, mac_addr->bytes);
 		if (!adapter)
@@ -379,7 +403,7 @@ static int hdd_ndi_create_req_handler(hdd_context_t *hdd_ctx,
 		}
 		ndi_mac_addr = &random_ndi_mac.bytes[0];
 	} else {
-		ndi_mac_addr = wlan_hdd_get_intf_addr(hdd_ctx);
+		ndi_mac_addr = wlan_hdd_get_intf_addr(hdd_ctx, QDF_NDI_MODE);
 		if (!ndi_mac_addr) {
 			hdd_err("get intf address failed");
 			return -EINVAL;
@@ -1052,7 +1076,6 @@ nla_put_failure:
 close_ndi:
 	hdd_close_ndi(adapter);
 	qdf_mem_free(roam_info);
-	return;
 }
 
 /**
@@ -1388,13 +1411,13 @@ static void hdd_ndp_confirm_ind_handler(hdd_adapter_t *adapter,
 						void *ind_params)
 {
 	int idx;
-	uint32_t ndp_qos_config = 0;
-	struct ndp_confirm_event *ndp_confirm = ind_params;
-	struct sk_buff *vendor_event;
-	hdd_context_t *hdd_ctx = WLAN_HDD_GET_CTX(adapter);
-	struct nan_datapath_ctx *ndp_ctx = WLAN_HDD_GET_NDP_CTX_PTR(adapter);
-	hdd_station_ctx_t *sta_ctx = WLAN_HDD_GET_STATION_CTX_PTR(adapter);
 	uint32_t data_len;
+	struct sk_buff *vendor_event;
+	struct nlattr *ch_array, *ch_element;
+	hdd_context_t *hdd_ctx = WLAN_HDD_GET_CTX(adapter);
+	struct ndp_confirm_event *ndp_confirm = ind_params;
+	hdd_station_ctx_t *sta_ctx = WLAN_HDD_GET_STATION_CTX_PTR(adapter);
+	struct nan_datapath_ctx *ndp_ctx = WLAN_HDD_GET_NDP_CTX_PTR(adapter);
 
 	ENTER();
 	if (!ndp_confirm) {
@@ -1413,9 +1436,11 @@ static void hdd_ndp_confirm_ind_handler(hdd_adapter_t *adapter,
 	else if (ndp_confirm->rsp_code == NDP_RESPONSE_ACCEPT)
 		ndp_ctx->active_ndp_sessions[idx]++;
 
-	data_len = (4 * sizeof(uint32_t)) + QDF_MAC_ADDR_SIZE + IFNAMSIZ +
-			+ NLMSG_HDRLEN + (7 * NLA_HDRLEN) +
-			ndp_confirm->ndp_info.ndp_app_info_len;
+	data_len = NLMSG_HDRLEN + (8 * NLA_HDRLEN) + (5 * sizeof(uint32_t))
+		   + QDF_MAC_ADDR_SIZE + IFNAMSIZ
+		   + ndp_confirm->ndp_info.ndp_app_info_len
+		   + (ndp_confirm->num_channels * 3 * sizeof(uint32_t))
+		   + (ndp_confirm->num_channels * 4 * NLA_HDRLEN);
 
 	if (ndp_confirm->ndp_info.ndp_app_info_len)
 		data_len += NLA_HDRLEN + ndp_confirm->ndp_info.ndp_app_info_len;
@@ -1437,17 +1462,18 @@ static void hdd_ndp_confirm_ind_handler(hdd_adapter_t *adapter,
 		goto ndp_confirm_nla_failed;
 
 	if (nla_put(vendor_event, QCA_WLAN_VENDOR_ATTR_NDP_NDI_MAC_ADDR,
-		QDF_MAC_ADDR_SIZE, ndp_confirm->peer_ndi_mac_addr.bytes))
+		    QDF_MAC_ADDR_SIZE, ndp_confirm->peer_ndi_mac_addr.bytes))
 		goto ndp_confirm_nla_failed;
 
 	if (nla_put(vendor_event, QCA_WLAN_VENDOR_ATTR_NDP_IFACE_STR,
 		    IFNAMSIZ, adapter->dev->name))
 		goto ndp_confirm_nla_failed;
 
-	if (ndp_confirm->ndp_info.ndp_app_info_len && nla_put(vendor_event,
-			QCA_WLAN_VENDOR_ATTR_NDP_APP_INFO,
-			ndp_confirm->ndp_info.ndp_app_info_len,
-			ndp_confirm->ndp_info.ndp_app_info))
+	if (ndp_confirm->ndp_info.ndp_app_info_len &&
+	    nla_put(vendor_event,
+		    QCA_WLAN_VENDOR_ATTR_NDP_APP_INFO,
+		    ndp_confirm->ndp_info.ndp_app_info_len,
+		    ndp_confirm->ndp_info.ndp_app_info))
 		goto ndp_confirm_nla_failed;
 
 	if (nla_put_u32(vendor_event,
@@ -1460,14 +1486,50 @@ static void hdd_ndp_confirm_ind_handler(hdd_adapter_t *adapter,
 			ndp_confirm->reason_code))
 		goto ndp_confirm_nla_failed;
 
-	cfg80211_vendor_event(vendor_event, GFP_KERNEL);
-	hdd_info("NDP confim sent, ndp instance id: %d, peer addr: %pM, ndp_cfg: %d, rsp_code: %d, reason_code: %d",
-		ndp_confirm->ndp_instance_id,
-		ndp_confirm->peer_ndi_mac_addr.bytes,
-		ndp_qos_config, ndp_confirm->rsp_code,
-		ndp_confirm->reason_code);
+	if (nla_put_u32(vendor_event, QCA_WLAN_VENDOR_ATTR_NDP_NUM_CHANNELS,
+			ndp_confirm->num_channels))
+		goto ndp_confirm_nla_failed;
 
-	hdd_info("NDP confim, ndp app info dump");
+	hdd_debug("num_ch: %d", ndp_confirm->num_channels);
+	if (ndp_confirm->num_channels) {
+		ch_array = nla_nest_start(vendor_event,
+				QCA_WLAN_VENDOR_ATTR_NDP_CHANNEL_INFO);
+		if (!ch_array)
+			goto ndp_confirm_nla_failed;
+
+		for (idx = 0; idx < ndp_confirm->num_channels; idx++) {
+			hdd_debug("ch[%d]: freq: %d, width: %d, nss: %d",
+				  idx, ndp_confirm->ch[idx].channel,
+				  ndp_confirm->ch[idx].ch_width,
+				  ndp_confirm->ch[idx].nss);
+			ch_element = nla_nest_start(vendor_event, idx);
+			if (!ch_element)
+				goto ndp_confirm_nla_failed;
+			if (nla_put_u32(vendor_event,
+					QCA_WLAN_VENDOR_ATTR_NDP_CHANNEL,
+					ndp_confirm->ch[idx].channel))
+				goto ndp_confirm_nla_failed;
+			if (nla_put_u32(vendor_event,
+					QCA_WLAN_VENDOR_ATTR_NDP_CHANNEL_WIDTH,
+					ndp_confirm->ch[idx].ch_width))
+				goto ndp_confirm_nla_failed;
+			if (nla_put_u32(vendor_event,
+					QCA_WLAN_VENDOR_ATTR_NDP_NSS,
+					ndp_confirm->ch[idx].nss))
+				goto ndp_confirm_nla_failed;
+			nla_nest_end(vendor_event, ch_element);
+		}
+		nla_nest_end(vendor_event, ch_array);
+	}
+
+	cfg80211_vendor_event(vendor_event, GFP_KERNEL);
+	hdd_debug("NDP confim sent, ndp instance id: %d, peer addr: %pM",
+		  ndp_confirm->ndp_instance_id,
+		  ndp_confirm->peer_ndi_mac_addr.bytes);
+	hdd_debug("rsp_code: %d, reason_code: %d",
+		  ndp_confirm->rsp_code, ndp_confirm->reason_code);
+
+	hdd_debug("NDP confim, ndp app info dump");
 	QDF_TRACE_HEX_DUMP(QDF_MODULE_ID_HDD, QDF_TRACE_LEVEL_DEBUG,
 			   ndp_confirm->ndp_info.ndp_app_info,
 			   ndp_confirm->ndp_info.ndp_app_info_len);
@@ -1880,6 +1942,120 @@ ndp_end_ind_nla_failed:
 }
 
 /**
+ * hdd_ndp_sch_update_ind_handler() - NDP end indication handler
+ * @adapter: pointer to adapter context
+ * @ind_params: indication parameters
+ *
+ * Following vendor event is sent to cfg80211:
+ *
+ * Return: none
+ */
+static void hdd_ndp_sch_update_ind_handler(hdd_adapter_t *adapter,
+				struct ndp_sch_update_event *sch_update)
+{
+	uint8_t idx;
+	uint32_t data_len;
+	struct sk_buff *vendor_event;
+	hdd_context_t *hdd_ctx = WLAN_HDD_GET_CTX(adapter);
+	struct nlattr *ch_array, *ch_element;
+
+	ENTER();
+	if (!sch_update) {
+		hdd_err("Invalid sch update params");
+		return;
+	}
+
+	if (0 != wlan_hdd_validate_context(hdd_ctx)) {
+		return;
+	}
+
+	data_len = NLMSG_HDRLEN + (6 * NLA_HDRLEN) + (3 * sizeof(uint32_t))
+		   + QDF_MAC_ADDR_SIZE
+		   + (sch_update->num_ndp_instances * sizeof(uint32_t))
+		   + (sch_update->num_channels * 3 * sizeof(uint32_t))
+		   + (sch_update->num_channels * 4 * NLA_HDRLEN);
+
+	vendor_event = cfg80211_vendor_event_alloc(hdd_ctx->wiphy, NULL,
+				data_len, QCA_NL80211_VENDOR_SUBCMD_NDP_INDEX,
+				GFP_KERNEL);
+	if (!vendor_event) {
+		hdd_err("cfg80211_vendor_event_alloc failed");
+		return;
+	}
+
+	if (nla_put_u32(vendor_event, QCA_WLAN_VENDOR_ATTR_NDP_SUBCMD,
+			QCA_WLAN_VENDOR_ATTR_NDP_SCHEDULE_UPDATE_IND))
+		goto ndp_sch_ind_nla_failed;
+
+	if (nla_put(vendor_event,
+		    QCA_WLAN_VENDOR_ATTR_NDP_PEER_DISCOVERY_MAC_ADDR,
+		    QDF_MAC_ADDR_SIZE, sch_update->peer_addr.bytes))
+		goto ndp_sch_ind_nla_failed;
+
+	if (nla_put(vendor_event, QCA_WLAN_VENDOR_ATTR_NDP_INSTANCE_ID_ARRAY,
+		    sch_update->num_ndp_instances * sizeof(uint32_t),
+		    sch_update->ndp_instances))
+		goto ndp_sch_ind_nla_failed;
+
+	if (nla_put_u32(vendor_event,
+			QCA_WLAN_VENDOR_ATTR_NDP_SCHEDULE_UPDATE_REASON,
+			sch_update->flags))
+		goto ndp_sch_ind_nla_failed;
+
+	if (nla_put_u32(vendor_event, QCA_WLAN_VENDOR_ATTR_NDP_NUM_CHANNELS,
+			sch_update->num_channels))
+		goto ndp_sch_ind_nla_failed;
+
+	hdd_debug("num_ch: %d", sch_update->num_channels);
+	if (sch_update->num_channels) {
+		ch_array = nla_nest_start(vendor_event,
+				QCA_WLAN_VENDOR_ATTR_NDP_CHANNEL_INFO);
+		if (!ch_array)
+			goto ndp_sch_ind_nla_failed;
+
+		for (idx = 0; idx < sch_update->num_channels; idx++) {
+			hdd_debug("ch[%d]: freq: %d, width: %d, nss: %d",
+				  idx, sch_update->ch[idx].channel,
+				  sch_update->ch[idx].ch_width,
+				  sch_update->ch[idx].nss);
+			ch_element = nla_nest_start(vendor_event, idx);
+			if (!ch_element)
+				goto ndp_sch_ind_nla_failed;
+			if (nla_put_u32(vendor_event,
+					QCA_WLAN_VENDOR_ATTR_NDP_CHANNEL,
+					sch_update->ch[idx].channel))
+				goto ndp_sch_ind_nla_failed;
+			if (nla_put_u32(vendor_event,
+					QCA_WLAN_VENDOR_ATTR_NDP_CHANNEL_WIDTH,
+					sch_update->ch[idx].ch_width))
+				goto ndp_sch_ind_nla_failed;
+			if (nla_put_u32(vendor_event,
+					QCA_WLAN_VENDOR_ATTR_NDP_NSS,
+					sch_update->ch[idx].nss))
+				goto ndp_sch_ind_nla_failed;
+			nla_nest_end(vendor_event, ch_element);
+		}
+		nla_nest_end(vendor_event, ch_array);
+	}
+
+	hdd_debug("Flags: %d, num_instance_id: %d",
+		  sch_update->flags, sch_update->num_ndp_instances);
+
+	for (idx = 0; idx < sch_update->num_ndp_instances; idx++)
+		hdd_debug("ndp_instance[%d]: %d", idx,
+			  sch_update->ndp_instances[idx]);
+
+	cfg80211_vendor_event(vendor_event, GFP_KERNEL);
+	EXIT();
+	return;
+
+ndp_sch_ind_nla_failed:
+	hdd_err("nla_put api failed");
+	kfree_skb(vendor_event);
+	EXIT();
+}
+
+/**
  * hdd_ndp_event_handler() - ndp response and indication handler
  * @adapter: adapter context
  * @roam_info: pointer to roam_info structure
@@ -1935,6 +2111,10 @@ void hdd_ndp_event_handler(hdd_adapter_t *adapter,
 			hdd_ndp_end_ind_handler(adapter,
 				roam_info->ndp.ndp_end_ind_params);
 			break;
+		case eCSR_ROAM_RESULT_NDP_SCH_UPDATE_IND:
+			hdd_ndp_sch_update_ind_handler(adapter,
+				&roam_info->ndp.sch_update_params);
+			break;
 		default:
 			hdd_err("Unknown NDP response event from SME %d",
 				roam_result);
@@ -1978,9 +2158,8 @@ static int __wlan_hdd_cfg80211_process_ndp_cmd(struct wiphy *wiphy,
 		hdd_err("NAN datapath is not enabled");
 		return -EPERM;
 	}
-	if (nla_parse(tb, QCA_WLAN_VENDOR_ATTR_NDP_PARAMS_MAX,
-			data, data_len,
-			qca_wlan_vendor_ndp_policy)) {
+	if (hdd_nla_parse(tb, QCA_WLAN_VENDOR_ATTR_NDP_PARAMS_MAX,
+			  data, data_len, qca_wlan_vendor_ndp_policy)) {
 		hdd_err("Invalid NDP vendor command attributes");
 		return -EINVAL;
 	}
@@ -2058,6 +2237,46 @@ int wlan_hdd_cfg80211_process_ndp_cmd(struct wiphy *wiphy,
 }
 
 /**
+ * hdd_is_ndi_hw_mode_dbs() - Check if the current hw mode is dbs
+ * @adapter: handle to adapter context
+ *
+ * Returns: None
+ */
+static bool hdd_is_ndi_hw_mode_dbs(struct hdd_adapter_s *adapter)
+{
+	bool hw_mode_dbs;
+	hdd_context_t *hdd_ctx = WLAN_HDD_GET_CTX(adapter);
+
+	/*
+	 * 1) When DBS hwmode is disabled from INI then send HT/VHT IE as per
+	 *    non-dbs hw mode, so that there is no limitation applied for 2G/5G.
+	 * 2) When DBS hw mode is enabled, master Rx LDPC is enabled, 2G RX LDPC
+	 *    support is enabled, and if it is NDP connection then send HT/VHT
+	 *    IE as per non-dbs hw mode, so that there is no limitation applied
+	 *    for first connection (initial connections as well as roaming
+	 *    scenario). As soon as second connection comes up policy manager
+	 *    will take care of imposing Rx LDPC limitation of NDP connection
+	 *    (for current connection as well as roaming scenario).
+	 * 3) When DBS hw mode is supported but RX LDPC is disabled or 2G RXLPDC
+	 *    support is disabled then send HT/VHT IE as per DBS hw mode, so
+	 *    that STA will not use Rx LDPC for 2G connection.
+	 */
+	if (!wma_is_hw_dbs_capable() ||
+	    (((QDF_STA_MODE == adapter->device_mode) &&
+	    hdd_ctx->config->enable_rx_ldpc &&
+	    hdd_ctx->config->rx_ldpc_support_for_2g) &&
+	    !wma_is_current_hwmode_dbs())) {
+		hdd_debug("send HT/VHT IE per band using nondbs hwmode");
+		hw_mode_dbs = false;
+	} else {
+		hdd_debug("send HT/VHT IE per band using dbs hwmode");
+		hw_mode_dbs = true;
+	}
+
+	return hw_mode_dbs;
+}
+
+/**
  * hdd_init_nan_data_mode() - initialize nan data mode
  * @adapter: adapter context
  *
@@ -2071,10 +2290,14 @@ int hdd_init_nan_data_mode(struct hdd_adapter_s *adapter)
 	QDF_STATUS status;
 	uint32_t type, sub_type;
 	int32_t ret_val = 0;
-	unsigned long rc;
 	uint32_t timeout = WLAN_WAIT_TIME_SESSIONOPENCLOSE;
+	bool is_hw_mode_dbs;
 
-	INIT_COMPLETION(adapter->session_open_comp_var);
+	status = qdf_event_reset(&adapter->qdf_session_open_event);
+	if (QDF_STATUS_SUCCESS != status) {
+		hdd_err("failed to reinit session_close QDF event");
+		goto error_sme_open;
+	}
 	sme_set_curr_device_mode(hdd_ctx->hHal, adapter->device_mode);
 	status = cds_get_vdev_types(adapter->device_mode, &type, &sub_type);
 	if (QDF_STATUS_SUCCESS != status) {
@@ -2094,14 +2317,18 @@ int hdd_init_nan_data_mode(struct hdd_adapter_s *adapter)
 	}
 
 	/* Block on a completion variable. Can't wait forever though */
-	rc = wait_for_completion_timeout(
-			&adapter->session_open_comp_var,
-			msecs_to_jiffies(timeout));
-	if (!rc) {
-		hdd_err("Failed to open session, timeout code: %ld", rc);
+	status = qdf_wait_for_event_completion(
+			&adapter->qdf_session_open_event, timeout);
+	if (QDF_STATUS_SUCCESS != status) {
+		hdd_err("Failed to open session, timeout code: %u", status);
 		ret_val = -ETIMEDOUT;
 		goto error_sme_open;
 	}
+
+	is_hw_mode_dbs = hdd_is_ndi_hw_mode_dbs(adapter);
+
+	/* Configure self HT/VHT capabilities */
+	sme_set_vdev_ies_per_band(adapter->sessionId, is_hw_mode_dbs);
 
 	/* Register wireless extensions */
 	ret_val = hdd_register_wext(wlan_dev);
@@ -2150,17 +2377,21 @@ error_init_txrx:
 
 error_register_wext:
 	if (test_bit(SME_SESSION_OPENED, &adapter->event_flags)) {
-		INIT_COMPLETION(adapter->session_close_comp_var);
+		status = qdf_event_reset(&adapter->qdf_session_close_event);
+		if (QDF_STATUS_SUCCESS != status) {
+			hdd_err("failed to reinit session_close QDF event");
+			return -EINVAL;
+		}
 		if (QDF_STATUS_SUCCESS ==
 				sme_close_session(hdd_ctx->hHal,
 					adapter->sessionId, true,
 					hdd_sme_close_session_callback,
 					adapter)) {
-			rc = wait_for_completion_timeout(
-					&adapter->session_close_comp_var,
-					msecs_to_jiffies(timeout));
-			if (rc <= 0) {
-				hdd_err("Session close failed status %ld", rc);
+			status = qdf_wait_for_event_completion(
+					&adapter->qdf_session_close_event,
+					timeout);
+			if (QDF_STATUS_SUCCESS != status) {
+				hdd_err("Session close failed status %u", status);
 				ret_val = -ETIMEDOUT;
 			}
 		}

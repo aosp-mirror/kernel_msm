@@ -136,6 +136,9 @@ typedef __qdf_dma_size_t     qdf_dma_size_t;
  */
 typedef __qdf_dma_context_t qdf_dma_context_t;
 
+typedef __qdf_mem_info_t qdf_mem_info_t;
+typedef __sgtable_t sgtable_t;
+
 /**
  * typedef qdf_dma_dir_t - DMA data direction.
  */
@@ -155,6 +158,20 @@ typedef struct qdf_dma_map_info {
 		qdf_dma_size_t len;
 	} dma_segs[QDF_MAX_SCATTER];
 } qdf_dmamap_info_t;
+
+/**
+ * struct qdf_shared_mem - Shared memory resource
+ * @mem_info: memory info struct
+ * @vaddr: virtual address
+ * @sgtable: scatter-gather table
+ * @memctx: dma address
+ */
+typedef struct qdf_shared_mem {
+	qdf_mem_info_t mem_info;
+	void *vaddr;
+	sgtable_t sgtable;
+	qdf_dma_mem_context(memctx);
+} qdf_shared_mem_t;
 
 #define qdf_iomem_t __qdf_iomem_t;
 
@@ -396,11 +413,44 @@ enum tQDF_GLOBAL_CON_MODE {
 void __printf(3, 4) qdf_trace_msg(QDF_MODULE_ID module, QDF_TRACE_LEVEL level,
 		   char *str_format, ...);
 
+/**
+ * qdf_vtrace_msg() - the va_list version of qdf_trace_msg
+ * @module: the calling module's Id
+ * @level: the logging level to log using
+ * @str_format: the log format string
+ * @val: the va_list containing the values to format according to str_format
+ *
+ * Return: None
+ */
+void qdf_vtrace_msg(QDF_MODULE_ID module, QDF_TRACE_LEVEL level,
+		    char *str_format, va_list val);
+
 #define qdf_print(args...) \
 	QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_ERROR, ## args)
 
+#define qdf_logfl(level, format, args...) \
+	QDF_TRACE(QDF_MODULE_ID_QDF, level, FL(format), ## args)
+
+#define qdf_alert(format, args...) \
+	qdf_logfl(QDF_TRACE_LEVEL_FATAL, format, ## args)
+#define qdf_err(format, args...) \
+	qdf_logfl(QDF_TRACE_LEVEL_ERROR, format, ## args)
+#define qdf_warn(format, args...) \
+	qdf_logfl(QDF_TRACE_LEVEL_WARN, format, ## args)
+#define qdf_info(format, args...) \
+	qdf_logfl(QDF_TRACE_LEVEL_INFO, format, ## args)
+#define qdf_debug(format, args...) \
+	qdf_logfl(QDF_TRACE_LEVEL_DEBUG, format, ## args)
+
 #else
+
 #define qdf_print printk
+#define qdf_alert printk
+#define qdf_err printk
+#define qdf_warn printk
+#define qdf_info printk
+#define qdf_debug printk
+
 #endif /* CONFIG_MCL */
 
 #define qdf_vprint    __qdf_vprint
@@ -683,6 +733,16 @@ struct qdf_tso_info_t {
 enum qdf_suspend_type {
 	QDF_SYSTEM_SUSPEND,
 	QDF_RUNTIME_SUSPEND
+};
+
+/*
+ * Verbosity levels for stats for which want to have differet levels
+ * @QDF_STATS_VERB_LVL_LOW: Stats verbosity level low
+ * @QDF_STATS_VERB_LVL_HIGH: Stats verbosity level high
+ */
+enum qdf_stats_verb_lvl {
+	QDF_STATS_VERB_LVL_LOW,
+	QDF_STATS_VERB_LVL_HIGH
 };
 
 #endif /* __QDF_TYPES_H */

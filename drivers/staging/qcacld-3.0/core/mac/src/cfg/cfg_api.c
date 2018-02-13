@@ -58,7 +58,7 @@ typedef enum {
 } eRfBandMode;
 
 extern cfgstatic_string cfg_static_string[CFG_MAX_STATIC_STRING];
-extern cgstatic cfg_static[CFG_PARAM_MAX_NUM] ;
+extern cgstatic cfg_static[CFG_PARAM_MAX_NUM];
 
 /* --------------------------------------------------------------------- */
 uint32_t cfg_need_restart(tpAniSirGlobal pMac, uint16_t cfgId)
@@ -892,7 +892,7 @@ static void notify(tpAniSirGlobal pMac, uint16_t cfgId, uint32_t ntfMask)
 	if ((ntfMask & CFG_CTL_NTF_LIM) != 0)
 		lim_post_msg_api(pMac, &mmhMsg);
 
-	if ((ntfMask & CFG_CTL_NTF_HAL) != 0)
+	if ((ntfMask & CFG_CTL_NTF_TARGET) != 0)
 		wma_post_ctrl_msg(pMac, &mmhMsg);
 
 	/* notify ARQ */
@@ -935,7 +935,8 @@ uint8_t *cfg_get_vendor_ie_ptr_from_oui(tpAniSirGlobal mac_ctx,
 			return NULL;
 		}
 		if (SIR_MAC_EID_VENDOR == elem_id) {
-			if (memcmp(&ptr[2], oui, oui_size) == 0)
+			if ((elem_len >= oui_size) &&
+				(memcmp(&ptr[2], oui, oui_size) == 0))
 				return ptr;
 		}
 

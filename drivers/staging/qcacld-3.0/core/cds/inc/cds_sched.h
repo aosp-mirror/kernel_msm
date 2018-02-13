@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -88,6 +88,8 @@
 #endif
 
 typedef void (*cds_ol_rx_thread_cb)(void *context, void *rxpkt, uint16_t staid);
+
+typedef int (*send_mode_change_event_cb)(void);
 
 /*
 ** QDF Message queue definition.
@@ -308,15 +310,17 @@ typedef struct _cds_context_type {
 #ifdef FEATURE_WLAN_MCC_TO_SCC_SWITCH
 	void (*sap_restart_chan_switch_cb)(void *, uint32_t, uint32_t);
 #endif
-	QDF_STATUS (*sme_get_valid_channels)(void*, uint8_t *, uint32_t *);
+	QDF_STATUS (*sme_get_valid_channels)(void*, uint16_t cfg_id,
+		uint8_t *, uint32_t *);
 	void (*sme_get_nss_for_vdev)(void*, enum tQDF_ADAPTER_MODE,
 		uint8_t *, uint8_t *);
 
 	/* Datapath callback functions */
-	void (*ol_txrx_update_mac_id_cb)(uint8_t , uint8_t);
+	void (*ol_txrx_update_mac_id_cb)(uint8_t, uint8_t);
 	void (*hdd_en_lro_in_cc_cb)(struct hdd_context_s *);
 	void (*hdd_disable_lro_in_cc_cb)(struct hdd_context_s *);
 	void (*hdd_set_rx_mode_rps_cb)(struct hdd_context_s *, void *, bool);
+	void (*hdd_ipa_set_mcc_mode_cb)(bool);
 
 	/* This list is not sessionized. This mandatory channel list would be
 	 * as per OEMs preference as per the regulatory/other considerations.
@@ -333,8 +337,13 @@ typedef struct _cds_context_type {
 	uint32_t hw_mode_change_in_progress;
 	uint16_t unsafe_channel_count;
 	uint16_t unsafe_channel_list[NUM_CHANNELS];
+	/* current system preference */
+	uint8_t cur_conc_system_pref;
 	qdf_work_t cds_recovery_work;
 	qdf_workqueue_t *cds_recovery_wq;
+	enum cds_hang_reason recovery_reason;
+	qdf_event_t channel_switch_complete;
+	send_mode_change_event_cb mode_change_cb;
 } cds_context_type, *p_cds_contextType;
 
 extern struct _cds_sched_context *gp_cds_sched_context;
@@ -370,6 +379,16 @@ void cds_drop_rxpkt_by_staid(p_cds_sched_context pSchedContext, uint16_t staId);
    -------------------------------------------------------------------------*/
 void cds_indicate_rxpkt(p_cds_sched_context pSchedContext,
 			struct cds_ol_rx_pkt *pkt);
+
+/**
+ * cds_wakeup_rx_thread() - wakeup rx thread
+ * @Arg: Pointer to the global CDS Sched Context
+ *
+ * This api wake up cds_ol_rx_thread() to process pkt
+ *
+ * Return: none
+ */
+void cds_wakeup_rx_thread(p_cds_sched_context pSchedContext);
 
 /*---------------------------------------------------------------------------
    \brief cds_alloc_ol_rx_pkt() - API to return next available cds message
@@ -431,6 +450,19 @@ void cds_drop_rxpkt_by_staid(p_cds_sched_context pSchedContext, uint16_t staId)
 static inline
 void cds_indicate_rxpkt(p_cds_sched_context pSchedContext,
 			struct cds_ol_rx_pkt *pkt)
+{
+}
+
+/**
+ * cds_wakeup_rx_thread() - wakeup rx thread
+ * @Arg: Pointer to the global CDS Sched Context
+ *
+ * This api wake up cds_ol_rx_thread() to process pkt
+ *
+ * Return: none
+ */
+static inline
+void cds_wakeup_rx_thread(p_cds_sched_context pSchedContext)
 {
 }
 

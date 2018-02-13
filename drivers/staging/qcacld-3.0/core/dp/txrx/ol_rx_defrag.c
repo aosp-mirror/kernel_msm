@@ -61,7 +61,7 @@
 #include <ol_ctrl_txrx_api.h>
 #include <ol_txrx_peer_find.h>
 #include <qdf_nbuf.h>
-#include <ieee80211.h>
+#include <linux/ieee80211.h>
 #include <qdf_util.h>
 #include <athdefs.h>
 #include <qdf_mem.h>
@@ -325,13 +325,19 @@ ol_rx_frag_indication_handler(ol_txrx_pdev_handle pdev,
 			      uint16_t peer_id, uint8_t tid)
 {
 	uint16_t seq_num;
-	int seq_num_start, seq_num_end;
+	uint16_t seq_num_start, seq_num_end;
 	struct ol_txrx_peer_t *peer;
 	htt_pdev_handle htt_pdev;
 	qdf_nbuf_t head_msdu, tail_msdu;
 	void *rx_mpdu_desc;
 	uint8_t pktlog_bit;
 	uint32_t msdu_count = 0;
+	int ret;
+
+	if (tid >= OL_TXRX_NUM_EXT_TIDS) {
+		ol_txrx_err("%s:  invalid tid, %u\n", __FUNCTION__, tid);
+		return;
+	}
 
 	htt_pdev = pdev->htt_pdev;
 	peer = ol_txrx_peer_find_by_id(pdev, peer_id);
@@ -350,9 +356,14 @@ ol_rx_frag_indication_handler(ol_txrx_pdev_handle pdev,
 	}
 	pktlog_bit =
 		(htt_rx_amsdu_rx_in_order_get_pktlog(rx_frag_ind_msg) == 0x01);
+	ret = htt_rx_frag_pop(htt_pdev, rx_frag_ind_msg, &head_msdu,
+			      &tail_msdu, &msdu_count);
+	/* Return if msdu pop fails from rx hash table, as recovery
+	 * is triggered and we exit gracefully.
+	 */
+	if (!ret)
+		return;
 	if (peer) {
-		htt_rx_frag_pop(htt_pdev, rx_frag_ind_msg, &head_msdu,
-				&tail_msdu, &msdu_count);
 		qdf_assert(head_msdu == tail_msdu);
 		if (ol_cfg_is_full_reorder_offload(pdev->ctrl_pdev)) {
 			rx_mpdu_desc =
@@ -369,8 +380,6 @@ ol_rx_frag_indication_handler(ol_txrx_pdev_handle pdev,
 		ol_rx_reorder_store_frag(pdev, peer, tid, seq_num, head_msdu);
 	} else {
 		/* invalid frame - discard it */
-		htt_rx_frag_pop(htt_pdev, rx_frag_ind_msg, &head_msdu,
-				&tail_msdu, &msdu_count);
 		if (ol_cfg_is_full_reorder_offload(pdev->ctrl_pdev))
 			htt_rx_msdu_desc_retrieve(htt_pdev, head_msdu);
 		else
@@ -389,7 +398,7 @@ ol_rx_frag_indication_handler(ol_txrx_pdev_handle pdev,
 void
 ol_rx_reorder_flush_frag(htt_pdev_handle htt_pdev,
 			 struct ol_txrx_peer_t *peer,
-			 unsigned int tid, int seq_num)
+			 unsigned int tid, uint16_t seq_num)
 {
 	struct ol_rx_reorder_array_elem_t *rx_reorder_array_elem;
 	int seq;

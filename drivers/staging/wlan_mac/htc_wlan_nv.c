@@ -21,7 +21,7 @@
 #include <linux/random.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
-#include <soc/qcom/icnss.h>
+#include <net/cnss_utils.h>
 
 #define WLAN_MAC_OFFSET 0x40
 #define CALIBRATION_DATA_PATH "/calibration_data"
@@ -29,8 +29,8 @@
 
 static void set_wifi_mac(void)
 {
-	u8 mac[12] = {0};
-	unsigned int i, p_size;
+	u8 mac[6] = {0};
+	unsigned int p_size;
 	unsigned char *wifi_nvs_ram = NULL;
 	struct device_node *offset;
 
@@ -51,13 +51,14 @@ static void set_wifi_mac(void)
 		mac[1] = 0x88;
 	}
 
-	/*Intf1MacAddress*/
-	mac[6] = mac[0] | 2;
-	for (i = 1;  i < 6; i++)
-		mac[i + 6] = mac[i];
-
-	if (icnss_set_wlan_mac_address(mac, sizeof(mac)) != 0)
+	if (cnss_utils_set_wlan_mac_address(mac, sizeof(mac)) != 0)
 		pr_err("[WLAN] set wlan mac address failed\n");
+
+	/*Intf1MacAddress*/
+	mac[0] = mac[0] | 2;
+
+	if (cnss_utils_set_wlan_derived_mac_address(mac, sizeof(mac)) != 0)
+		pr_err("[WLAN] set wlan derived mac address failed\n");
 }
 
 static int __init wifi_nvs_init(void)

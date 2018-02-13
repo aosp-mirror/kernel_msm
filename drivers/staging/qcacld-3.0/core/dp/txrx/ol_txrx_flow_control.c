@@ -228,7 +228,7 @@ QDF_STATUS ol_tx_inc_pool_ref(struct ol_tx_flow_pool_t *pool)
 	qdf_spin_lock_bh(&pool->flow_pool_lock);
 	qdf_atomic_inc(&pool->ref_cnt);
 	qdf_spin_unlock_bh(&pool->flow_pool_lock);
-	ol_txrx_dbg("pool %p, ref_cnt %x",
+	ol_txrx_dbg("pool %pK, ref_cnt %x",
 		    pool, qdf_atomic_read(&pool->ref_cnt));
 
 	return  QDF_STATUS_SUCCESS;
@@ -257,12 +257,12 @@ QDF_STATUS ol_tx_dec_pool_ref(struct ol_tx_flow_pool_t *pool, bool force)
 		TAILQ_REMOVE(&pdev->tx_desc.flow_pool_list, pool,
 			     flow_pool_list_elem);
 		qdf_spin_unlock_bh(&pdev->tx_desc.flow_pool_list_lock);
-		ol_txrx_dbg("Deleting pool %p", pool);
+		ol_txrx_dbg("Deleting pool %pK", pool);
 		ol_tx_delete_flow_pool(pool, force);
 	} else {
 		qdf_spin_unlock_bh(&pool->flow_pool_lock);
 		qdf_spin_unlock_bh(&pdev->tx_desc.flow_pool_list_lock);
-		ol_txrx_dbg("pool %p, ref_cnt %x",
+		ol_txrx_dbg("pool %pK, ref_cnt %x",
 			    pool, qdf_atomic_read(&pool->ref_cnt));
 	}
 
@@ -281,24 +281,23 @@ void ol_tx_dump_flow_pool_info(void)
 	struct ol_tx_flow_pool_t tmp_pool;
 
 
-	ol_txrx_info("Global Pool");
+	ol_txrx_log(QDF_TRACE_LEVEL_INFO, "Global Pool");
 	if (!pdev) {
 		ol_txrx_err("ERROR: pdev NULL");
 		QDF_ASSERT(0); /* traceback */
 		return;
 	}
-	ol_txrx_info("Total %d :: Available %d",
+	ol_txrx_log(QDF_TRACE_LEVEL_INFO_LOW, "Total %d :: Available %d",
 		pdev->tx_desc.pool_size, pdev->tx_desc.num_free);
-	ol_txrx_info("Invalid flow_pool %d",
+	ol_txrx_log(QDF_TRACE_LEVEL_INFO_LOW, "Invalid flow_pool %d",
 		pdev->tx_desc.num_invalid_bin);
-	ol_txrx_info("No of pool map received %d",
+	ol_txrx_log(QDF_TRACE_LEVEL_INFO_LOW, "No of pool map received %d",
 		pdev->pool_stats.pool_map_count);
-	ol_txrx_info("No of pool unmap received %d",
+	ol_txrx_log(QDF_TRACE_LEVEL_INFO_LOW, "No of pool unmap received %d",
 		pdev->pool_stats.pool_unmap_count);
-	ol_txrx_info(
+	ol_txrx_log(QDF_TRACE_LEVEL_INFO_LOW,
 		"Pkt dropped due to unavailablity of pool %d",
 		pdev->pool_stats.pkt_drop_no_pool);
-
 	/*
 	 * Nested spin lock.
 	 * Always take in below order.
@@ -316,21 +315,21 @@ void ol_tx_dump_flow_pool_info(void)
 		if (pool_prev)
 			ol_tx_dec_pool_ref(pool_prev, false);
 
-		ol_txrx_info("\n");
-		ol_txrx_info(
+		ol_txrx_log(QDF_TRACE_LEVEL_INFO_LOW, "\n");
+		ol_txrx_log(QDF_TRACE_LEVEL_INFO_LOW,
 			"Flow_pool_id %d :: status %d",
 			tmp_pool.flow_pool_id, tmp_pool.status);
-		ol_txrx_info(
+		ol_txrx_info_high(
 			"Total %d :: Available %d :: Deficient %d",
 			tmp_pool.flow_pool_size, tmp_pool.avail_desc,
 			tmp_pool.deficient_desc);
-		ol_txrx_info(
+		ol_txrx_log(QDF_TRACE_LEVEL_INFO_LOW,
 			"Start threshold %d :: Stop threshold %d",
 			 tmp_pool.start_th, tmp_pool.stop_th);
-		ol_txrx_info(
+		ol_txrx_log(QDF_TRACE_LEVEL_INFO_LOW,
 			"Member flow_id  %d :: flow_type %d",
 			tmp_pool.member_flow_id, tmp_pool.flow_type);
-		ol_txrx_info(
+		ol_txrx_log(QDF_TRACE_LEVEL_INFO_LOW,
 			"Pkt dropped due to unavailablity of descriptors %d",
 			tmp_pool.pkt_drop_no_desc);
 
@@ -503,12 +502,12 @@ struct ol_tx_flow_pool_t *ol_tx_create_flow_pool(uint8_t flow_pool_id,
 		   "%s: malloc failed\n", __func__);
 		return NULL;
 	}
-
 	pool->flow_pool_id = flow_pool_id;
 	pool->flow_pool_size = flow_pool_size;
 	pool->status = FLOW_POOL_ACTIVE_UNPAUSED;
 	pool->start_th = (start_threshold * flow_pool_size)/100;
 	pool->stop_th = (stop_threshold * flow_pool_size)/100;
+	pool->stop_priority_th = (TX_STOP_PRIORITY_TH * pool->stop_th)/100;
 	qdf_spinlock_create(&pool->flow_pool_lock);
 	qdf_atomic_init(&pool->ref_cnt);
 	ol_tx_inc_pool_ref(pool);

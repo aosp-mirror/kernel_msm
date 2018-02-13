@@ -85,6 +85,7 @@ static inline hdd_ipa_nbuf_cb_fn wlan_hdd_stub_ipa_fn(void)
 };
 
 QDF_STATUS hdd_ipa_init(hdd_context_t *hdd_ctx);
+void hdd_ipa_flush(hdd_context_t *hdd_ctx);
 QDF_STATUS hdd_ipa_cleanup(hdd_context_t *hdd_ctx);
 QDF_STATUS hdd_ipa_process_rxt(void *cds_context, qdf_nbuf_t rxBuf,
 	uint8_t sta_id);
@@ -106,11 +107,20 @@ bool hdd_ipa_is_enabled(hdd_context_t *pHddCtx);
 bool hdd_ipa_uc_is_enabled(hdd_context_t *pHddCtx);
 #ifndef QCA_LL_TX_FLOW_CONTROL_V2
 int hdd_ipa_send_mcc_scc_msg(hdd_context_t *hdd_ctx, bool mcc_mode);
+void hdd_ipa_set_mcc_mode(bool mcc_mode);
 #else
 static inline int hdd_ipa_send_mcc_scc_msg(hdd_context_t *hdd_ctx,
 					   bool mcc_mode)
 {
 	return 0;
+}
+
+static inline void hdd_ipa_set_mcc_mode(bool mcc_mode)
+{
+}
+
+static inline void hdd_ipa_mcc_work_handler(struct work_struct *work)
+{
 }
 #endif
 int hdd_ipa_uc_ssr_reinit(hdd_context_t *hdd_ctx);
@@ -122,10 +132,45 @@ bool hdd_ipa_is_present(hdd_context_t *hdd_ctx);
 void hdd_ipa_dump_info(hdd_context_t *hdd_ctx);
 QDF_STATUS hdd_ipa_uc_ol_init(hdd_context_t *hdd_ctx);
 int hdd_ipa_uc_ol_deinit(hdd_context_t *hdd_ctx);
+
+/**
+ * hdd_ipa_uc_smmu_map() - Map / Unmap DMA buffer to IPA UC
+ * @map: Map / unmap operation
+ * @num_buf: Number of buffers in array
+ * @buf_arr: Buffer array of DMA mem mapping info
+ *
+ * This API maps/unmaps WLAN-IPA buffers if SMMU S1 translation
+ * is enabled.
+ *
+ * Return: Status of map operation
+ */
+int hdd_ipa_uc_smmu_map(bool map, uint32_t num_buf, qdf_mem_info_t *buf_arr);
+
+/**
+ * hdd_ipa_uc_stat() - Print IPA uC stats
+ * @adapter: network adapter
+ *
+ * Return: None
+ */
+void hdd_ipa_uc_stat(hdd_adapter_t *adapter);
+
+/**
+ * hdd_ipa_uc_info() - Print IPA uC resource and session information
+ * @adapter: network adapter
+ *
+ * Return: None
+ */
+void hdd_ipa_uc_info(hdd_context_t *hdd_ctx);
+
 #else
+
 static inline QDF_STATUS hdd_ipa_init(hdd_context_t *hdd_ctx)
 {
 	return QDF_STATUS_SUCCESS;
+}
+
+static inline void hdd_ipa_flush(hdd_context_t *hdd_ctx)
+{
 }
 
 static inline QDF_STATUS hdd_ipa_cleanup(hdd_context_t *hdd_ctx)
@@ -149,6 +194,14 @@ static inline int hdd_ipa_send_mcc_scc_msg(hdd_context_t *hdd_ctx,
 	bool mcc_mode)
 {
 	return 0;
+}
+
+static inline void hdd_ipa_set_mcc_mode(bool mcc_mode)
+{
+}
+
+static inline void hdd_ipa_mcc_work_handler(struct work_struct *work)
+{
 }
 
 static inline int hdd_ipa_set_perf_level(hdd_context_t *hdd_ctx,
@@ -267,5 +320,20 @@ static inline int hdd_ipa_uc_ol_deinit(hdd_context_t *hdd_ctx)
 {
 	return 0;
 }
+
+static inline int hdd_ipa_uc_smmu_map(bool map, uint32_t num_buf,
+				      qdf_mem_info_t *buf_arr)
+{
+	return 0;
+}
+
+static inline void hdd_ipa_uc_stat(hdd_adapter_t *adapter)
+{
+}
+
+static inline void hdd_ipa_uc_info(hdd_context_t *hdd_ctx)
+{
+}
+
 #endif /* IPA_OFFLOAD */
 #endif /* #ifndef HDD_IPA_H__ */

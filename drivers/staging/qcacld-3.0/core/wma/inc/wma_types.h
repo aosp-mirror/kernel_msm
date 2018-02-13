@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -78,6 +78,9 @@
 
 #define WMA_GET_RX_MPDU_DATA(pRxMeta) \
 	(((t_packetmeta *)pRxMeta)->mpdu_data_ptr)
+
+#define WMA_GET_RX_RSSI_CTL_PTR(pRxMeta) \
+		(((t_packetmeta *)pRxMeta)->rssi_per_chain)
 
 #define WMA_GET_RX_MPDU_HEADER_OFFSET(pRxMeta) 0
 
@@ -335,6 +338,7 @@
 #define WMA_STOP_SCAN_OFFLOAD_REQ  SIR_HAL_STOP_SCAN_OFFLOAD_REQ
 #define WMA_UPDATE_CHAN_LIST_REQ    SIR_HAL_UPDATE_CHAN_LIST_REQ
 #define WMA_RX_SCAN_EVENT           SIR_HAL_RX_SCAN_EVENT
+#define WMA_RX_CHN_STATUS_EVENT     SIR_HAL_RX_CHN_STATUS_EVENT
 #define WMA_IBSS_PEER_INACTIVITY_IND SIR_HAL_IBSS_PEER_INACTIVITY_IND
 
 #define WMA_CLI_SET_CMD             SIR_HAL_CLI_SET_CMD
@@ -463,8 +467,6 @@
 #endif /* FEATURE_AP_MCC_CH_AVOIDANCE */
 #define WMA_SET_RSSI_MONITOR_REQ              SIR_HAL_SET_RSSI_MONITOR_REQ
 
-#define WMA_FW_MEM_DUMP_REQ                   SIR_HAL_FW_MEM_DUMP_REQ
-
 #define WMA_OCB_SET_CONFIG_CMD               SIR_HAL_OCB_SET_CONFIG_CMD
 #define WMA_OCB_SET_UTC_TIME_CMD             SIR_HAL_OCB_SET_UTC_TIME_CMD
 #define WMA_OCB_START_TIMING_ADVERT_CMD      SIR_HAL_OCB_START_TIMING_ADVERT_CMD
@@ -502,7 +504,9 @@
 #define WMA_SET_ARP_STATS_REQ                SIR_HAL_SET_ARP_STATS_REQ
 #define WMA_GET_ARP_STATS_REQ                SIR_HAL_GET_ARP_STATS_REQ
 
-#define WDA_ACTION_FRAME_RANDOM_MAC           SIR_HAL_ACTION_FRAME_RANDOM_MAC
+#define WDA_ACTION_FRAME_RANDOM_MAC          SIR_HAL_ACTION_FRAME_RANDOM_MAC
+
+#define WMA_SET_LIMIT_OFF_CHAN               SIR_HAL_SET_LIMIT_OFF_CHAN
 
 /* Bit 6 will be used to control BD rate for Management frames */
 #define HAL_USE_BD_RATE2_FOR_MANAGEMENT_FRAME 0x40
@@ -724,6 +728,16 @@ tSirRetStatus u_mac_post_ctrl_msg(void *pSirGlobal, tSirMbMsg *pMb);
 QDF_STATUS wma_set_idle_ps_config(void *wma_ptr, uint32_t idle_ps);
 QDF_STATUS wma_get_snr(tAniGetSnrReq *psnr_req);
 
+/**
+ * wma_set_wlm_latency_level() - set latency level to FW
+ * @wma_ptr: wma handle
+ * @latency_params: latency params
+ *
+ * Return: QDF_STATUS
+ */
+QDF_STATUS wma_set_wlm_latency_level(void *wma_ptr,
+			struct wlm_latency_level_param *latency_params);
+
 QDF_STATUS
 wma_ds_peek_rx_packet_info
 	(cds_pkt_t *vosDataBuff, void **ppRxHeader, bool bSwap);
@@ -742,6 +756,22 @@ QDF_STATUS wma_tx_packet(void *pWMA,
 			 pWMAAckFnTxComp pAckTxComp,
 			 uint8_t txFlag, uint8_t sessionId, bool tdlsflag,
 			 uint16_t channel_freq, enum rateid rid);
+
+/**
+ * wma_vdev_init() - initialize a wma vdev
+ * @vdev: the vdev to initialize
+ *
+ * Return: None
+ */
+void wma_vdev_init(struct wma_txrx_node *vdev);
+
+/**
+ * wma_vdev_deinit() - de-initialize a wma vdev
+ * @vdev: the vdev to de-initialize
+ *
+ * Return: None
+ */
+void wma_vdev_deinit(struct wma_txrx_node *vdev);
 
 QDF_STATUS wma_open(void *p_cds_context,
 		    wma_tgt_cfg_cb pTgtUpdCB,

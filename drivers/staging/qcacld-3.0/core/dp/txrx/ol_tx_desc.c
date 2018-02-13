@@ -49,7 +49,7 @@ static inline void ol_tx_desc_sanity_checks(struct ol_txrx_pdev_t *pdev,
 {
 	if (tx_desc->pkt_type != ol_tx_frm_freed) {
 		ol_txrx_err(
-				   "%s Potential tx_desc corruption pkt_type:0x%x pdev:0x%p",
+				   "%s Potential tx_desc corruption pkt_type:0x%x pdev:0x%pK",
 				   __func__, tx_desc->pkt_type, pdev);
 		qdf_assert(0);
 	}
@@ -144,19 +144,18 @@ struct ol_tx_desc_t *ol_tx_desc_alloc(struct ol_txrx_pdev_t *pdev,
 	qdf_spin_lock_bh(&pdev->tx_mutex);
 	if (pdev->tx_desc.freelist) {
 		tx_desc = ol_tx_get_desc_global_pool(pdev);
+		if (!tx_desc) {
+			qdf_spin_unlock_bh(&pdev->tx_mutex);
+			return NULL;
+		}
 		ol_tx_desc_dup_detect_set(pdev, tx_desc);
 		ol_tx_desc_sanity_checks(pdev, tx_desc);
 		ol_tx_desc_compute_delay(tx_desc);
+		ol_tx_desc_vdev_update(tx_desc, vdev);
+		ol_tx_desc_count_inc(vdev);
+		qdf_atomic_inc(&tx_desc->ref_cnt);
 	}
 	qdf_spin_unlock_bh(&pdev->tx_mutex);
-
-	if (!tx_desc)
-		return NULL;
-
-	ol_tx_desc_vdev_update(tx_desc, vdev);
-	ol_tx_desc_count_inc(vdev);
-	qdf_atomic_inc(&tx_desc->ref_cnt);
-
 	return tx_desc;
 }
 
@@ -197,13 +196,25 @@ struct ol_tx_desc_t *ol_tx_desc_alloc(struct ol_txrx_pdev_t *pdev,
 		if (pool->avail_desc) {
 			tx_desc = ol_tx_get_desc_flow_pool(pool);
 			ol_tx_desc_dup_detect_set(pdev, tx_desc);
-			if (qdf_unlikely(pool->avail_desc < pool->stop_th)) {
+			if (qdf_unlikely(pool->avail_desc < pool->stop_th)
+				&& (pool->status != FLOW_POOL_ACTIVE_PAUSED)) {
 				pool->status = FLOW_POOL_ACTIVE_PAUSED;
 				qdf_spin_unlock_bh(&pool->flow_pool_lock);
 				/* pause network queues */
 				pdev->pause_cb(vdev->vdev_id,
 					       WLAN_STOP_ALL_NETIF_QUEUE,
 					       WLAN_DATA_FLOW_CONTROL);
+				/* unpause priority queue */
+				pdev->pause_cb(vdev->vdev_id,
+					       WLAN_NETIF_PRIORITY_QUEUE_ON,
+					       WLAN_DATA_FLOW_CONTROL_PRIORITY);
+			} else if (qdf_unlikely(pool->avail_desc <
+						pool->stop_priority_th)) {
+				qdf_spin_unlock_bh(&pool->flow_pool_lock);
+				/* pause priority queue */
+				pdev->pause_cb(vdev->vdev_id,
+					       WLAN_NETIF_PRIORITY_QUEUE_OFF,
+					       WLAN_DATA_FLOW_CONTROL_PRIORITY);
 			} else {
 				qdf_spin_unlock_bh(&pool->flow_pool_lock);
 			}
@@ -287,6 +298,13 @@ ol_tx_desc_alloc_hl(struct ol_txrx_pdev_t *pdev,
 static inline void
 ol_tx_desc_vdev_rm(struct ol_tx_desc_t *tx_desc)
 {
+	/*
+	 * In module exit context, vdev handle could be destroyed but still
+	 * we need to free pending completion tx_desc.
+	 */
+	if (!tx_desc || !tx_desc->vdev)
+		return;
+
 	qdf_atomic_dec(&tx_desc->vdev->tx_desc_count);
 	tx_desc->vdev = NULL;
 }
@@ -403,6 +421,8 @@ static void ol_tx_desc_free_common(struct ol_txrx_pdev_t *pdev,
 
 	ol_tx_desc_reset_pkt_type(tx_desc);
 	ol_tx_desc_reset_timestamp(tx_desc);
+	/* clear the ref cnt */
+	qdf_atomic_init(&tx_desc->ref_cnt);
 	tx_desc->vdev_id = OL_TXRX_INVALID_VDEV_ID;
 }
 
@@ -445,6 +465,10 @@ void ol_tx_desc_free(struct ol_txrx_pdev_t *pdev, struct ol_tx_desc_t *tx_desc)
 	switch (pool->status) {
 	case FLOW_POOL_ACTIVE_PAUSED:
 		if (pool->avail_desc > pool->start_th) {
+			/* unpause priority queue */
+			pdev->pause_cb(pool->member_flow_id,
+				       WLAN_NETIF_PRIORITY_QUEUE_ON,
+				       WLAN_DATA_FLOW_CONTROL_PRIORITY);
 			pdev->pause_cb(pool->member_flow_id,
 				       WLAN_WAKE_ALL_NETIF_QUEUE,
 				       WLAN_DATA_FLOW_CONTROL);
@@ -638,7 +662,7 @@ struct ol_tx_desc_t *ol_tx_desc_ll(struct ol_txrx_pdev_t *pdev,
 			htt_tx_desc_frag(pdev->htt_pdev, tx_desc->htt_frag_desc,
 					 i - 1, frag_paddr, frag_len);
 #if defined(HELIUMPLUS_DEBUG)
-			qdf_print("%s:%d: htt_fdesc=%p frag=%d frag_vaddr=0x%p frag_paddr=0x%llx len=%zu\n",
+			qdf_print("%s:%d: htt_fdesc=%pK frag=%d frag_vaddr=0x%pK frag_paddr=0x%llx len=%zu\n",
 				  __func__, __LINE__, tx_desc->htt_frag_desc,
 				  i-1, frag_vaddr, frag_paddr, frag_len);
 			ol_txrx_dump_pkt(netbuf, frag_paddr, 64);

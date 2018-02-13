@@ -225,7 +225,7 @@ typedef struct sSapContext {
 	 * on a DFS channel and a RADAR is detected on the channel.
 	 */
 	tAll5GChannelList SapAllChnlList;
-
+	uint32_t auto_channel_select_weight;
 	tSapAcsChannelInfo acsBestChannelInfo;
 	bool enableOverLapCh;
 	struct sap_acs_cfg *acs_cfg;
@@ -268,11 +268,13 @@ typedef struct sSapContext {
 	bool is_pre_cac_on;
 	bool pre_cac_complete;
 	uint8_t chan_before_pre_cac;
-	uint8_t beacon_tx_rate;
+	uint16_t beacon_tx_rate;
 	tSirMacRateSet supp_rate_set;
 	tSirMacRateSet extended_rate_set;
 	enum sap_acs_dfs_mode dfs_mode;
 	uint8_t sap_sta_id;
+	bool is_chan_change_inprogress;
+	bool enable_etsi_srd_chan_support;
 } *ptSapContext;
 
 /*----------------------------------------------------------------------------
@@ -394,9 +396,9 @@ sap_channel_matrix_check(ptSapContext sapContext,
 			 uint8_t target_channel);
 
 bool is_concurrent_sap_ready_for_channel_change(tHalHandle hHal,
-						ptSapContext
-						sapContext);
-
+			ptSapContext sapContext);
+bool sap_is_conc_sap_doing_scc_dfs(tHalHandle hal,
+			ptSapContext given_sapctx);
 uint8_t sap_get_total_number_sap_intf(tHalHandle hHal);
 
 bool sap_dfs_is_w53_invalid(tHalHandle hHal, uint8_t channelID);
@@ -432,6 +434,22 @@ QDF_STATUS sap_open_session(tHalHandle hHal, ptSapContext sapContext,
 QDF_STATUS sap_close_session(tHalHandle hHal,
 			     ptSapContext sapContext,
 			     csr_roamSessionCloseCallback callback, bool valid);
+
+/**
+ * sap_channel_in_acs_channel_list() - check if channel in acs channel list
+ * @channel_num: channel to check
+ * @sap_ctx: struct ptSapContext
+ * @spect_info_params: strcut tSapChSelSpectInfo
+ *
+ * This function checks if specified channel is in the configured ACS channel
+ * list.
+ *
+ * Return: channel number if in acs channel list or SAP_CHANNEL_NOT_SELECTED
+ */
+uint8_t sap_channel_in_acs_channel_list(uint8_t channel_num,
+					ptSapContext sap_ctx,
+					tSapChSelSpectInfo *spect_info_params);
+
 #ifdef __cplusplus
 }
 #endif

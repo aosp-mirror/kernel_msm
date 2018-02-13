@@ -428,7 +428,6 @@ static void bm_watch_work(struct work_struct *work)
 						struct battery_manager,
 						bm_watch.work);
 	int rc, batt_volt, batt_temp, ibat_max = 0;
-	int batt_ocv, batt_res, charge_counter, charge_raw;
 
 	mutex_lock(&bm->work_lock);
 
@@ -456,40 +455,12 @@ static void bm_watch_work(struct work_struct *work)
 			     POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
 			     &ibat_max);
 
-	rc = bm_get_property(bm->bms_psy,
-			POWER_SUPPLY_PROP_VOLTAGE_OCV, &batt_ocv);
-	if (rc < 0) {
-		pr_bm(ERROR, "Couldn't get BATT_OCV = %d\n", rc);
-		goto error;
-	}
-
-	rc = bm_get_property(bm->bms_psy,
-			POWER_SUPPLY_PROP_RESISTANCE, &batt_res);
-	if (rc < 0) {
-		pr_bm(ERROR, "Couldn't get BATT_RES = %d\n", rc);
-		goto error;
-	}
-
-	rc = bm_get_property(bm->bms_psy,
-			POWER_SUPPLY_PROP_CHARGE_COUNTER, &charge_counter);
-	if (rc < 0) {
-		pr_bm(ERROR, "Couldn't get CHARGE_COUNTER = %d\n", rc);
-		goto error;
-	}
-
-	rc = bm_get_property(bm->bms_psy,
-			POWER_SUPPLY_PROP_CHARGE_FULL, &charge_raw);
-	if (rc < 0) {
-		pr_bm(ERROR, "Couldn't get CHARGE_RAW = %d\n", rc);
-		goto error;
-	}
-
 	pr_bm(VERBOSE, "PRESENT:%d, CHG_STAT:%d, THM_STAT:%d, " \
-		"BAT_TEMP:%d, BAT_VOLT:%d, BAT_OCV:%d, VOTE_CUR:%d, " \
-		"SET_CUR:%d, BATT_RES:%d, BATT_CC:%d, BATT_CAPA:%d \n",
+		"BAT_TEMP:%d, BAT_VOLT:%d, VOTE_CUR:%d, " \
+		"SET_CUR:%d \n",
 			bm->chg_present, bm->chg_status, bm->therm_stat,
-			batt_temp, batt_volt, batt_ocv, bm_vote_fcc_get(bm),
-			ibat_max, batt_res, charge_counter, charge_raw);
+			batt_temp, batt_volt, bm_vote_fcc_get(bm),
+			ibat_max);
 
 error:
 	mutex_unlock(&bm->work_lock);
