@@ -527,6 +527,11 @@ static int msm_comm_vote_bus(struct msm_vidc_core *core)
 			inst->fmts[CAPTURE_PORT]->fourcc :
 			inst->fmts[OUTPUT_PORT]->fourcc;
 
+		if (!msm_comm_get_inst_load(inst, LOAD_CALC_NO_QUIRKS)) {
+			--vote_data_count;
+			continue;
+		}
+
 		vote_data[i].domain = get_hal_domain(inst->session_type);
 		vote_data[i].codec = get_hal_codec(codec);
 		vote_data[i].width =  max(inst->prop.width[CAPTURE_PORT],
@@ -567,8 +572,8 @@ static int msm_comm_vote_bus(struct msm_vidc_core *core)
 	}
 	mutex_unlock(&core->lock);
 
-	rc = call_hfi_op(hdev, vote_bus, hdev->hfi_device_data, vote_data,
-			vote_data_count);
+	rc = call_hfi_op(hdev, vote_bus, hdev->hfi_device_data,
+			vote_data_count ? vote_data : NULL, vote_data_count);
 	if (rc)
 		dprintk(VIDC_ERR, "Failed to scale bus: %d\n", rc);
 

@@ -116,7 +116,7 @@ int __cpu_suspend(unsigned long arg, int (*fn)(unsigned long))
 		 */
 		if (mm == &init_mm)
 			cpu_set_reserved_ttbr0();
-		else
+		else if (!system_uses_ttbr0_pan())
 			cpu_switch_mm(mm->pgd, mm);
 
 		local_flush_tlb_all();

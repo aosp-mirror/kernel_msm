@@ -641,6 +641,16 @@ static int tlshim_mgmt_rx_process(void *context, u_int8_t *data,
 					 rx_pkt->pkt_meta.mpdu_hdr_len;
 
     /*
+	 * If the mpdu_data_len is greater than Max (2k), drop the frame
+	 */
+	if (rx_pkt->pkt_meta.mpdu_data_len > WMA_MAX_MGMT_MPDU_LEN) {
+		TLSHIM_LOGE("Data Len %d greater than max, dropping frame",
+			 rx_pkt->pkt_meta.mpdu_data_len);
+		vos_mem_free(rx_pkt);
+		return 0;
+	}
+
+    /*
      * saved_beacon means this beacon is a duplicate of one
      * sent earlier. roamCandidateInd flag is used to indicate to
      * PE that roam scan finished and a better candidate AP

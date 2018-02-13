@@ -101,6 +101,8 @@
 
 #define FRAGMENT_SIZE 3072
 
+#define WMA_MAX_MGMT_MPDU_LEN     2000
+
 #define WMA_INVALID_VDEV_ID				0xFF
 #define MAX_MEM_CHUNKS					32
 #define WMA_MAX_VDEV_SIZE				20
