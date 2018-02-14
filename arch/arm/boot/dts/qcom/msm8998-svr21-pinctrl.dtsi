@@ -1699,12 +1699,12 @@
 
 		mdss_dp_aux_active: mdss_dp_aux_active {
 			mux {
-				pins = "gpio77", "gpio78";
+				pins = "gpio50", "gpio51";
 				function = "gpio";
 			};
 
 			config {
-				pins = "gpio77", "gpio78";
+				pins = "gpio50", "gpio51";
 				bias-disable = <0>; /* no pull */
 				drive-strength = <8>;
 			};
@@ -1712,12 +1712,12 @@
 
 		mdss_dp_aux_suspend: mdss_dp_aux_suspend {
 			mux {
-				pins = "gpio77", "gpio78";
+				pins = "gpio50", "gpio51";
 				function = "gpio";
 			};
 
 			config {
-				pins = "gpio77", "gpio78";
+				pins = "gpio50", "gpio51";
 				bias-pull-down;
 				drive-strength = <2>;
 			};
