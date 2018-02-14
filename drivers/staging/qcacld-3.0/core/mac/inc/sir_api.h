@@ -3635,6 +3635,7 @@ typedef struct sSirRoamOffloadScanReq {
 	struct roam_fils_params roam_fils_params;
 #endif
 	struct scoring_param score_params;
+	struct wmi_11k_offload_params offload_11k_params;
 } tSirRoamOffloadScanReq, *tpSirRoamOffloadScanReq;
 
 typedef struct sSirRoamOffloadScanRsp {
@@ -7716,8 +7717,8 @@ struct ndp_responder_rsp_event {
 
 /**
  * struct ndp_channel_info - ndp channel and channel bandwidth
- * @channel: channel width of the ndp connection
- * @ch_width: channel width of the ndp connection
+ * @channel: channel freq in mhz of the ndp connection
+ * @ch_width: channel width (wmi_channel_width) of the ndp connection
  * @nss: nss used for ndp connection
  *
  */

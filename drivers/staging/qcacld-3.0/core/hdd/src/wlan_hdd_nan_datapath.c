@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -325,9 +325,10 @@ static int hdd_get_random_nan_mac_addr(hdd_context_t *hdd_ctx,
 		for (i = 0; i < hdd_ctx->num_provisioned_addr; i++) {
 			if ((!qdf_mem_cmp(hdd_ctx->
 					  provisioned_mac_addr[i].bytes,
-			      mac_addr, sizeof(*mac_addr))))
+			      mac_addr, sizeof(*mac_addr)))) {
 				found = true;
 				break;
+			}
 		}
 
 		if (found)
@@ -336,9 +337,10 @@ static int hdd_get_random_nan_mac_addr(hdd_context_t *hdd_ctx,
 		for (i = 0; i < hdd_ctx->num_derived_addr; i++) {
 			if ((!qdf_mem_cmp(hdd_ctx->
 					  derived_mac_addr[i].bytes,
-					  mac_addr, sizeof(*mac_addr))))
+					  mac_addr, sizeof(*mac_addr)))) {
 				found = true;
 				break;
+			}
 		}
 		if (found)
 			continue;
@@ -1965,9 +1967,8 @@ static void hdd_ndp_sch_update_ind_handler(hdd_adapter_t *adapter,
 		return;
 	}
 
-	if (0 != wlan_hdd_validate_context(hdd_ctx)) {
+	if (0 != wlan_hdd_validate_context(hdd_ctx))
 		return;
-	}
 
 	data_len = NLMSG_HDRLEN + (6 * NLA_HDRLEN) + (3 * sizeof(uint32_t))
 		   + QDF_MAC_ADDR_SIZE

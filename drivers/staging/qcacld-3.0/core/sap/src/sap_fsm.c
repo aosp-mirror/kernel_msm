@@ -2934,9 +2934,10 @@ QDF_STATUS sap_signal_hdd_event(ptSapContext sap_ctx,
 		return QDF_STATUS_E_FAILURE;
 	}
 
-	QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_HIGH,
-		  FL("SAP event callback event = %s"),
-		  sap_hdd_event_to_string(sap_hddevent));
+	if (sap_hddevent != eSAP_UPDATE_SCAN_RESULT)
+		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_HIGH,
+			  FL("SAP event callback event = %s"),
+			  sap_hdd_event_to_string(sap_hddevent));
 
 	switch (sap_hddevent) {
 	case eSAP_STA_ASSOC_IND:
@@ -4869,7 +4870,6 @@ static QDF_STATUS sap_get_channel_list(ptSapContext sap_ctx,
 #endif
 	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal);
 	tSapChSelSpectInfo spect_info_obj = { NULL, 0 };
-	tSapChSelSpectInfo *spect_info = &spect_info_obj;
 
 	if (NULL == hal) {
 		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_ERROR,
@@ -4941,10 +4941,10 @@ static QDF_STATUS sap_get_channel_list(ptSapContext sap_ctx,
 		 * Skip the channels which are not in ACS config from user
 		 * space
 		 */
-		if(SAP_CHANNEL_NOT_SELECTED ==
+		if (SAP_CHANNEL_NOT_SELECTED ==
 			sap_channel_in_acs_channel_list(
-				CDS_CHANNEL_NUM(loop_count), sap_ctx,
-				spect_info))
+				CDS_CHANNEL_NUM(loop_count),
+				sap_ctx, &spect_info_obj))
 			continue;
 
 #ifdef FEATURE_WLAN_CH_AVOID

@@ -3817,17 +3817,39 @@ eCsrPhyMode sme_get_phy_mode(tHalHandle hHal)
  * sme_get_channel_bonding_mode5_g() - get the channel bonding mode for 5G band
  *
  * @hHal - HAL handle
+ * @mode - channel bonding mode
  *
- * Return channel bonding mode for 5G
+ * Return QDF_STATUS
  */
-uint32_t sme_get_channel_bonding_mode5_g(tHalHandle hHal)
+QDF_STATUS sme_get_channel_bonding_mode5_g(tHalHandle hHal, uint32_t *mode)
 {
 	tpAniSirGlobal pMac = PMAC_STRUCT(hHal);
-	tSmeConfigParams smeConfig;
+	tSmeConfigParams *smeConfig;
 
-	sme_get_config_param(pMac, &smeConfig);
+	if (!mode) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+				"%s: invalid mode", __func__);
+		return QDF_STATUS_E_FAILURE;
+	}
 
-	return smeConfig.csrConfig.channelBondingMode5GHz;
+	smeConfig = qdf_mem_malloc(sizeof(*smeConfig));
+	if (!smeConfig) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+				"%s: failed to alloc smeConfig", __func__);
+		return QDF_STATUS_E_NOMEM;
+	}
+
+	if (sme_get_config_param(pMac, smeConfig) != QDF_STATUS_SUCCESS) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+				"%s: sme_get_config_param failed", __func__);
+		qdf_mem_free(smeConfig);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	*mode = smeConfig->csrConfig.channelBondingMode5GHz;
+	qdf_mem_free(smeConfig);
+
+	return QDF_STATUS_SUCCESS;
 }
 
 /**
@@ -3835,16 +3857,39 @@ uint32_t sme_get_channel_bonding_mode5_g(tHalHandle hHal)
  * band
  *
  * hHal - HAL handle
- * Return channel bonding mode for 2.4G
+ * @mode - channel bonding mode
+ *
+ * Return QDF_STATUS
  */
-uint32_t sme_get_channel_bonding_mode24_g(tHalHandle hHal)
+QDF_STATUS sme_get_channel_bonding_mode24_g(tHalHandle hHal, uint32_t *mode)
 {
 	tpAniSirGlobal pMac = PMAC_STRUCT(hHal);
-	tSmeConfigParams smeConfig;
+	tSmeConfigParams *smeConfig;
 
-	sme_get_config_param(pMac, &smeConfig);
+	if (!mode) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+				"%s: invalid mode", __func__);
+		return QDF_STATUS_E_FAILURE;
+	}
 
-	return smeConfig.csrConfig.channelBondingMode24GHz;
+	smeConfig = qdf_mem_malloc(sizeof(*smeConfig));
+	if (!smeConfig) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+				"%s: failed to alloc smeConfig", __func__);
+		return QDF_STATUS_E_NOMEM;
+	}
+
+	if (sme_get_config_param(pMac, smeConfig) != QDF_STATUS_SUCCESS) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+				"%s: sme_get_config_param failed", __func__);
+		qdf_mem_free(smeConfig);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	*mode = smeConfig->csrConfig.channelBondingMode24GHz;
+	qdf_mem_free(smeConfig);
+
+	return QDF_STATUS_SUCCESS;
 }
 
 /**
@@ -5800,6 +5845,13 @@ QDF_STATUS sme_neighbor_report_request(tHalHandle hHal, uint8_t sessionId,
 	MTRACE(qdf_trace(QDF_MODULE_ID_SME,
 			 TRACE_CODE_SME_RX_HDD_NEIGHBOR_REPORTREQ, NO_SESSION,
 			 0));
+
+	if (pRrmNeighborReq->neighbor_report_offload) {
+		status = csr_invoke_neighbor_report_request(sessionId,
+							    pRrmNeighborReq,
+							    false);
+		return status;
+	}
 
 	if (QDF_STATUS_SUCCESS == sme_acquire_global_lock(&pMac->sme)) {
 		status =
@@ -12344,7 +12396,8 @@ void active_list_cmd_timeout_handle(void *userData)
 		cds_trigger_recovery(CDS_ACTIVE_LIST_TIMEOUT);
 	} else {
 		if (!(cds_is_load_or_unload_in_progress() ||
-		    cds_is_driver_recovering() || cds_is_driver_in_bad_state()))
+		    cds_is_driver_recovering() ||
+		    cds_is_driver_in_bad_state() || cds_is_fw_down()))
 			QDF_BUG(0);
 		else
 			QDF_ASSERT(0);
@@ -16284,9 +16337,12 @@ void sme_update_tgt_services(tHalHandle hal, struct wma_tgt_services *cfg)
 	mac_ctx->pmf_offload = cfg->pmf_offload;
 	mac_ctx->is_fils_roaming_supported =
 				cfg->is_fils_roaming_supported;
+	mac_ctx->is_11k_offload_supported =
+				cfg->is_11k_offload_supported;
 	QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
-		  FL("mac_ctx->pmf_offload: %d fils_roam support %d"),
-		  mac_ctx->pmf_offload, mac_ctx->is_fils_roaming_supported);
+		  FL("pmf_offload: %d fils_roam support %d 11k_offload %d"),
+		  mac_ctx->pmf_offload, mac_ctx->is_fils_roaming_supported,
+		  mac_ctx->is_11k_offload_supported);
 
 }
 

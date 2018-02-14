@@ -32,6 +32,7 @@
 #include <qdf_types.h>          /* qdf_device_t, qdf_print */
 #include <qdf_lock.h>           /* qdf_spinlock */
 #include <qdf_atomic.h>         /* qdf_atomic_read */
+#include <qdf_debugfs.h>
 
 #if defined(HIF_PCI) || defined(HIF_SNOC) || defined(HIF_AHB)
 /* Required for WLAN_FEATURE_FASTPATH */
@@ -94,6 +95,11 @@
 /* thresh for peer's cached buf queue beyond which the elements are dropped */
 #define OL_TXRX_CACHED_BUFQ_THRESH 128
 
+#define DPT_DEBUGFS_PERMS	(QDF_FILE_USR_READ |	\
+				QDF_FILE_USR_WRITE |	\
+				QDF_FILE_GRP_READ |	\
+				QDF_FILE_OTH_READ)
+
 /* These macros are expected to be used only for data path.
  * Existing APIs cannot be used since they log every time
  * they are used. Other modules, outside of data path should
@@ -103,6 +109,11 @@
 	qdf_atomic_inc(&peer->ref_cnt)
 #define OL_TXRX_PEER_DEC_REF_CNT_SILENT(peer) \
 	qdf_atomic_dec(&peer->ref_cnt)
+
+ol_txrx_peer_handle
+ol_txrx_peer_find_by_local_id_inc_ref(struct ol_txrx_pdev_t *pdev,
+			      uint8_t local_peer_id);
+static void ol_txrx_peer_dec_ref_cnt(struct ol_txrx_peer_t *peer);
 
 #if defined(CONFIG_HL_SUPPORT) && defined(FEATURE_WLAN_TDLS)
 
@@ -323,6 +334,7 @@ void *ol_txrx_get_vdev_by_sta_id(uint8_t sta_id)
 {
 	struct ol_txrx_peer_t *peer = NULL;
 	ol_txrx_pdev_handle pdev = NULL;
+	ol_txrx_vdev_handle vdev;
 
 	if (sta_id >= WLAN_MAX_STA_COUNT) {
 		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_INFO_HIGH,
@@ -337,14 +349,17 @@ void *ol_txrx_get_vdev_by_sta_id(uint8_t sta_id)
 		return NULL;
 	}
 
-	peer = ol_txrx_peer_find_by_local_id(pdev, sta_id);
+	peer = ol_txrx_peer_find_by_local_id_inc_ref(pdev, sta_id);
 	if (!peer) {
 		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_INFO_HIGH,
 			  "PEER [%d] not found", sta_id);
 		return NULL;
 	}
 
-	return peer->vdev;
+	vdev = peer->vdev;
+	ol_txrx_peer_dec_ref_cnt(peer);
+
+	return vdev;
 }
 
 /**
@@ -499,6 +514,8 @@ ol_txrx_peer_find_by_local_id_inc_ref(struct ol_txrx_pdev_t *pdev,
 	qdf_spin_unlock_bh(&pdev->local_peer_ids.lock);
 	if (peer && peer->valid)
 		OL_TXRX_PEER_INC_REF_CNT_SILENT(peer);
+	else
+		peer = NULL;
 	qdf_spin_unlock_bh(&pdev->peer_ref_mutex);
 
 	return peer;
@@ -620,6 +637,13 @@ void ol_txrx_update_tx_queue_groups(
 	u_int32_t group_vdev_bit_mask, vdev_bit_mask, group_vdev_id_mask;
 	u_int32_t membership;
 	struct ol_txrx_vdev_t *vdev;
+
+	if (group_id >= OL_TX_MAX_TXQ_GROUPS) {
+		ol_txrx_warn("%s: invalid group_id=%u, ignore update.\n",
+			__func__,
+			group_id);
+		return;
+	}
 
 	group = &pdev->txq_grps[group_id];
 
@@ -1209,6 +1233,82 @@ static void ol_txrx_tso_stats_clear(ol_txrx_pdev_handle pdev)
 #endif /* defined(FEATURE_TSO) && defined(FEATURE_TSO_DEBUG) */
 
 /**
+ * ol_txrx_read_dpt_buff_debugfs() - read dp trace buffer
+ * @file: file to read
+ * @arg: pdev object
+ *
+ * Return: QDF_STATUS
+ */
+static QDF_STATUS ol_txrx_read_dpt_buff_debugfs(qdf_debugfs_file_t file,
+						void *arg)
+{
+	struct ol_txrx_pdev_t *pdev = (struct ol_txrx_pdev_t *)arg;
+	uint32_t i = 0;
+	QDF_STATUS status = QDF_STATUS_SUCCESS;
+
+	if (pdev->state == QDF_DPT_DEBUGFS_STATE_SHOW_STATE_INVALID)
+		return QDF_STATUS_E_INVAL;
+	else if (pdev->state == QDF_DPT_DEBUGFS_STATE_SHOW_COMPLETE) {
+		pdev->state = QDF_DPT_DEBUGFS_STATE_SHOW_STATE_INIT;
+		return QDF_STATUS_SUCCESS;
+	}
+
+	i = qdf_dpt_get_curr_pos_debugfs(file, pdev->state);
+	status =  qdf_dpt_dump_stats_debugfs(file, i);
+	if (status == QDF_STATUS_E_FAILURE)
+		pdev->state = QDF_DPT_DEBUGFS_STATE_SHOW_IN_PROGRESS;
+	else if (status == QDF_STATUS_SUCCESS)
+		pdev->state = QDF_DPT_DEBUGFS_STATE_SHOW_COMPLETE;
+
+	return status;
+}
+
+/**
+ * ol_txrx_write_dpt_buff_debugfs() - set dp trace parameters
+ * @priv: pdev object
+ * @buf: buff to get value for dpt parameters
+ * @len: buf length
+ *
+ * Return: QDF_STATUS
+ */
+static QDF_STATUS ol_txrx_write_dpt_buff_debugfs(void *priv,
+					      const char *buf,
+					      qdf_size_t len)
+{
+	return QDF_STATUS_SUCCESS;
+}
+
+static int ol_txrx_debugfs_init(struct ol_txrx_pdev_t *pdev)
+{
+	pdev->dpt_debugfs_fops.show = ol_txrx_read_dpt_buff_debugfs;
+	pdev->dpt_debugfs_fops.write = ol_txrx_write_dpt_buff_debugfs;
+	pdev->dpt_debugfs_fops.priv = pdev;
+
+	pdev->dpt_stats_log_dir = qdf_debugfs_create_dir("dpt_stats", NULL);
+
+	if (!pdev->dpt_stats_log_dir) {
+		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
+				"%s: error while creating debugfs dir for %s",
+				__func__, "dpt_stats");
+		pdev->state = QDF_DPT_DEBUGFS_STATE_SHOW_STATE_INVALID;
+		return -EBUSY;
+	}
+
+	if (!qdf_debugfs_create_file("dump_set_dpt_logs", DPT_DEBUGFS_PERMS,
+				     pdev->dpt_stats_log_dir,
+				     &pdev->dpt_debugfs_fops)) {
+		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
+				"%s: debug Entry creation failed!",
+				__func__);
+		pdev->state = QDF_DPT_DEBUGFS_STATE_SHOW_STATE_INVALID;
+		return -EBUSY;
+	}
+
+	pdev->state = QDF_DPT_DEBUGFS_STATE_SHOW_STATE_INIT;
+	return 0;
+}
+
+/**
  * ol_txrx_pdev_attach() - allocate txrx pdev
  * @ctrl_pdev: cfg pdev
  * @htc_pdev: HTC pdev
@@ -1291,6 +1391,8 @@ ol_txrx_pdev_attach(ol_pdev_handle ctrl_pdev,
 		OL_TX_SCHED_WRR_ADV_CAT_MCAST_DATA;
 	pdev->tid_to_ac[OL_TX_NUM_TIDS + OL_TX_VDEV_DEFAULT_MGMT] =
 		OL_TX_SCHED_WRR_ADV_CAT_MCAST_MGMT;
+
+	ol_txrx_debugfs_init(pdev);
 
 	return pdev;
 
@@ -2024,6 +2126,11 @@ void ol_txrx_pdev_pre_detach(ol_txrx_pdev_handle pdev, int force)
 #endif
 }
 
+static void ol_txrx_debugfs_exit(ol_txrx_pdev_handle pdev)
+{
+	qdf_debugfs_remove_dir_recursive(pdev->dpt_stats_log_dir);
+}
+
 /**
  * ol_txrx_pdev_detach() - delete the data SW state
  * @pdev - the data physical device object being removed
@@ -2084,6 +2191,8 @@ void ol_txrx_pdev_detach(ol_txrx_pdev_handle pdev)
 
 	ol_txrx_pdev_txq_log_destroy(pdev);
 	ol_txrx_pdev_grp_stat_destroy(pdev);
+
+	ol_txrx_debugfs_exit(pdev);
 }
 
 #if defined(CONFIG_PER_VDEV_TX_DESC_POOL)
@@ -2646,10 +2755,6 @@ ol_txrx_peer_attach(ol_txrx_vdev_handle vdev, uint8_t *peer_mac_addr)
 				vdev->wait_on_peer_id, (int) rc);
 			/* Added for debugging only */
 			wma_peer_debug_dump();
-			if (cds_is_self_recovery_enabled())
-				cds_trigger_recovery(PEER_DEL_TIMEOUT);
-			else
-				QDF_ASSERT(0);
 			vdev->wait_on_peer_id = OL_TXRX_INVALID_LOCAL_PEER_ID;
 			return NULL;
 		}
@@ -3502,8 +3607,12 @@ QDF_STATUS ol_txrx_clear_peer(uint8_t sta_id)
 
 
 	peer = ol_txrx_peer_find_by_local_id(pdev, sta_id);
+
+	/* Return success, if the peer is already cleared by
+	 * data path via peer detach function.
+	 */
 	if (!peer)
-		return QDF_STATUS_E_FAULT;
+		return QDF_STATUS_SUCCESS;
 
 	return ol_txrx_clear_peer_internal(peer);
 
@@ -4968,6 +5077,7 @@ static void ol_rx_data_cb(struct ol_txrx_pdev_t *pdev,
 	if (qdf_unlikely(!(peer->state >= OL_TXRX_PEER_STATE_CONN) ||
 					 !peer->vdev->rx)) {
 		qdf_spin_unlock_bh(&peer->peer_info_lock);
+		ol_txrx_peer_dec_ref_cnt(peer);
 		goto free_buf;
 	}
 

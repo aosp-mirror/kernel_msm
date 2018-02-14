@@ -867,7 +867,7 @@ static uint32_t sap_weight_channel_noise_floor(ptSapContext sap_ctx,
 				    softap_nf_weight_cfg);
 
 	if (channel_stat == NULL || channel_stat->channelfreq == 0) {
-		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO,
+		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_DEBUG,
 			  "In %s, sanity check failed return max weight",
 			  __func__);
 		return softap_nf_weight_local;
@@ -921,7 +921,7 @@ static uint32_t sap_weight_channel_free(ptSapContext sap_ctx,
 				    softap_channel_free_weight_cfg);
 
 	if (channel_stat == NULL || channel_stat->channelfreq == 0) {
-		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO,
+		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_DEBUG,
 			  "In %s, sanity check failed return max weight",
 			  __func__);
 		return softap_channel_free_weight_local;
@@ -982,7 +982,7 @@ static uint32_t sap_weight_channel_txpwr_range(ptSapContext sap_ctx,
 				    softap_txpwr_range_weight_cfg);
 
 	if (channel_stat == NULL || channel_stat->channelfreq == 0) {
-		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO,
+		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_DEBUG,
 			  "In %s, sanity check failed return max weight",
 			  __func__);
 		return softap_txpwr_range_weight_local;
@@ -1034,7 +1034,7 @@ static uint32_t sap_weight_channel_txpwr_tput(ptSapContext sap_ctx,
 				    softap_txpwr_tput_weight_cfg);
 
 	if (channel_stat == NULL || channel_stat->channelfreq == 0) {
-		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO,
+		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_DEBUG,
 			  "In %s, sanity check failed return max weight",
 			  __func__);
 		return softap_txpwr_tput_weight_local;

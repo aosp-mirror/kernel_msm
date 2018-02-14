@@ -174,6 +174,11 @@
  */
 #define WLAN_DEAUTH_DPTRACE_DUMP_COUNT 100
 
+static const u32 hdd_gcmp_cipher_suits[] = {
+	WLAN_CIPHER_SUITE_GCMP,
+	WLAN_CIPHER_SUITE_GCMP_256,
+};
+
 static const u32 hdd_cipher_suites[] = {
 	WLAN_CIPHER_SUITE_WEP40,
 	WLAN_CIPHER_SUITE_WEP104,
@@ -193,8 +198,6 @@ static const u32 hdd_cipher_suites[] = {
 #ifdef WLAN_FEATURE_11W
 	WLAN_CIPHER_SUITE_AES_CMAC,
 #endif
-	WLAN_CIPHER_SUITE_GCMP,
-	WLAN_CIPHER_SUITE_GCMP_256,
 };
 
 static const struct ieee80211_channel hdd_channels_2_4_ghz[] = {
@@ -1250,6 +1253,10 @@ static const struct nl80211_vendor_cmd_info wlan_hdd_cfg80211_vendor_events[] = 
 	[QCA_NL80211_VENDOR_SUBCMD_HANG_REASON_INDEX] = {
 		.vendor_id = QCA_NL80211_VENDOR_ID,
 		.subcmd = QCA_NL80211_VENDOR_SUBCMD_HANG,
+	},
+	[QCA_NL80211_VENDOR_SUBCMD_LINK_PROPERTIES_INDEX] = {
+	.vendor_id = QCA_NL80211_VENDOR_ID,
+	.subcmd = QCA_NL80211_VENDOR_SUBCMD_LINK_PROPERTIES,
 	},
 	[QCA_NL80211_VENDOR_SUBCMD_WLAN_MAC_INFO_INDEX] = {
 		.vendor_id = QCA_NL80211_VENDOR_ID,
@@ -3794,6 +3801,10 @@ hdd_add_link_standard_info(struct sk_buff *skb,
 		hdd_err("put fail");
 		goto fail;
 	}
+	if (nla_put(skb, NL80211_ATTR_MAC, QDF_MAC_ADDR_SIZE,
+		    hdd_sta_ctx->conn_info.bssId.bytes)) {
+		goto fail;
+	}
 	if (hdd_add_survey_info(skb, hdd_sta_ctx, NL80211_ATTR_SURVEY_INFO))
 		goto fail;
 	if (hdd_add_sta_info(skb, hdd_sta_ctx, NL80211_ATTR_STA_INFO))
@@ -3860,6 +3871,7 @@ static int hdd_get_station_info(hdd_context_t *hdd_ctx,
 
 	nl_buf_len = NLMSG_HDRLEN;
 	nl_buf_len += sizeof(hdd_sta_ctx->conn_info.last_ssid.SSID.length) +
+		      QDF_MAC_ADDR_SIZE +
 		      sizeof(hdd_sta_ctx->conn_info.freq) +
 		      sizeof(hdd_sta_ctx->conn_info.noise) +
 		      sizeof(hdd_sta_ctx->conn_info.signal) +
@@ -5026,6 +5038,7 @@ __wlan_hdd_cfg80211_get_logger_supp_feature(struct wiphy *wiphy,
 	features |= WIFI_LOGGER_PER_PACKET_TX_RX_STATUS_SUPPORTED;
 	features |= WIFI_LOGGER_CONNECT_EVENT_SUPPORTED;
 	features |= WIFI_LOGGER_WAKE_LOCK_SUPPORTED;
+	features |= WIFI_LOGGER_DRIVER_DUMP_SUPPORTED;
 
 	reply_skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy,
 			sizeof(uint32_t) + NLA_HDRLEN + NLMSG_HDRLEN);
@@ -10902,33 +10915,6 @@ static int hdd_set_clear_connectivity_check_stats_info(
 	uint32_t pkt_bitmap;
 	int rem;
 
-	/* Clear All Stats command has come */
-	if (!is_set_stats) {
-		arp_stats_params->pkt_type_bitmap = adapter->pkt_type_bitmap;
-		/* DNS tracking is not supported in FW. */
-		arp_stats_params->pkt_type_bitmap &=
-						~CONNECTIVITY_CHECK_SET_DNS;
-		arp_stats_params->flag = false;
-		arp_stats_params->pkt_type = WLAN_NUD_STATS_ARP_PKT_TYPE;
-		qdf_mem_zero(&adapter->hdd_stats.hdd_arp_stats,
-			     sizeof(adapter->hdd_stats.hdd_arp_stats));
-		qdf_mem_zero(&adapter->hdd_stats.hdd_dns_stats,
-			     sizeof(adapter->hdd_stats.hdd_dns_stats));
-		qdf_mem_zero(&adapter->hdd_stats.hdd_tcp_stats,
-			     sizeof(adapter->hdd_stats.hdd_tcp_stats));
-		qdf_mem_zero(&adapter->hdd_stats.hdd_icmpv4_stats,
-			     sizeof(adapter->hdd_stats.hdd_icmpv4_stats));
-		adapter->track_arp_ip = 0;
-		qdf_mem_zero(adapter->dns_payload,
-			     adapter->track_dns_domain_len);
-		adapter->track_dns_domain_len = 0;
-		adapter->track_src_port = 0;
-		adapter->track_dest_port = 0;
-		adapter->track_dest_ipv4 = 0;
-		adapter->pkt_type_bitmap = 0;
-		goto end;
-	}
-
 	/* Set NUD command for start tracking is received. */
 	nla_for_each_nested(curr_attr,
 			    tb[STATS_SET_DATA_PKT_INFO],
@@ -10950,12 +10936,14 @@ static int hdd_set_clear_connectivity_check_stats_info(
 				err = -EINVAL;
 				goto end;
 			}
-			arp_stats_params->pkt_type_bitmap = pkt_bitmap;
-			arp_stats_params->flag = true;
-			adapter->pkt_type_bitmap |=
+
+			if (is_set_stats) {
+				arp_stats_params->pkt_type_bitmap = pkt_bitmap;
+				arp_stats_params->flag = true;
+				adapter->pkt_type_bitmap |=
 					arp_stats_params->pkt_type_bitmap;
 
-			if (pkt_bitmap & CONNECTIVITY_CHECK_SET_ARP) {
+				if (pkt_bitmap & CONNECTIVITY_CHECK_SET_ARP) {
 				if (!tb[STATS_GW_IPV4]) {
 					hdd_err("GW ipv4 address is not present");
 					err = -EINVAL;
@@ -10967,66 +10955,109 @@ static int hdd_set_clear_connectivity_check_stats_info(
 						WLAN_NUD_STATS_ARP_PKT_TYPE;
 				adapter->track_arp_ip =
 						arp_stats_params->ip_addr;
-				qdf_mem_zero(&adapter->hdd_stats.hdd_arp_stats,
-					sizeof(adapter->hdd_stats.
-					       hdd_arp_stats));
-			}
-
-			if (pkt_bitmap & CONNECTIVITY_CHECK_SET_DNS) {
-				uint8_t *domain_name;
-
-				if (!tb2[STATS_DNS_DOMAIN_NAME]) {
-					hdd_err("DNS domain id is not present");
-					err = -EINVAL;
-					goto end;
 				}
-				domain_name =
-					nla_data(tb2[STATS_DNS_DOMAIN_NAME]);
-				adapter->track_dns_domain_len =
-					nla_len(tb2[STATS_DNS_DOMAIN_NAME]);
-				hdd_dns_make_name_query(domain_name,
-						    adapter->dns_payload);
-				/* DNS tracking is not supported in FW. */
-				arp_stats_params->pkt_type_bitmap &=
+
+				if (pkt_bitmap & CONNECTIVITY_CHECK_SET_DNS) {
+					uint8_t *domain_name;
+
+					if (!tb2[STATS_DNS_DOMAIN_NAME]) {
+						hdd_err("DNS domain id is not present");
+						err = -EINVAL;
+						goto end;
+					}
+					domain_name = nla_data(
+						tb2[STATS_DNS_DOMAIN_NAME]);
+					adapter->track_dns_domain_len =
+						nla_len(tb2[
+							STATS_DNS_DOMAIN_NAME]);
+					hdd_dns_make_name_query(domain_name,
+							adapter->dns_payload);
+					/* DNStracking isn't supported in FW. */
+					arp_stats_params->pkt_type_bitmap &=
 						~CONNECTIVITY_CHECK_SET_DNS;
-				qdf_mem_zero(&adapter->hdd_stats.hdd_dns_stats,
-					sizeof(adapter->hdd_stats.
-					       hdd_dns_stats));
-			}
-
-			if (pkt_bitmap & CONNECTIVITY_CHECK_SET_TCP_HANDSHAKE) {
-				if (!tb2[STATS_SRC_PORT] ||
-				    !tb2[STATS_DEST_PORT]) {
-					hdd_err("Source/Dest port is not present");
-					err = -EINVAL;
-					goto end;
 				}
-				arp_stats_params->tcp_src_port =
-					nla_get_u32(tb2[STATS_SRC_PORT]);
-				arp_stats_params->tcp_dst_port =
-					nla_get_u32(tb2[STATS_DEST_PORT]);
-				adapter->track_src_port =
+
+				if (pkt_bitmap &
+				    CONNECTIVITY_CHECK_SET_TCP_HANDSHAKE) {
+					if (!tb2[STATS_SRC_PORT] ||
+					    !tb2[STATS_DEST_PORT]) {
+						hdd_err("Source/Dest port is not present");
+						err = -EINVAL;
+						goto end;
+					}
+					arp_stats_params->tcp_src_port =
+						nla_get_u32(
+							tb2[STATS_SRC_PORT]);
+					arp_stats_params->tcp_dst_port =
+						nla_get_u32(
+							tb2[STATS_DEST_PORT]);
+					adapter->track_src_port =
 						arp_stats_params->tcp_src_port;
-				adapter->track_dest_port =
+					adapter->track_dest_port =
 						arp_stats_params->tcp_dst_port;
-				qdf_mem_zero(&adapter->hdd_stats.hdd_tcp_stats,
-					sizeof(adapter->hdd_stats.
-					       hdd_tcp_stats));
-			}
-
-			if (pkt_bitmap & CONNECTIVITY_CHECK_SET_ICMPV4) {
-				if (!tb2[STATS_DEST_IPV4]) {
-					hdd_err("destination ipv4 address to track ping packets is not present");
-					err = -EINVAL;
-					goto end;
 				}
-				arp_stats_params->icmp_ipv4 =
-					nla_get_u32(tb2[STATS_DEST_IPV4]);
-				adapter->track_dest_ipv4 =
+
+				if (pkt_bitmap &
+				    CONNECTIVITY_CHECK_SET_ICMPV4) {
+					if (!tb2[STATS_DEST_IPV4]) {
+						hdd_err("destination ipv4 address to track ping packets is not present");
+						err = -EINVAL;
+						goto end;
+					}
+					arp_stats_params->icmp_ipv4 =
+						nla_get_u32(
+							tb2[STATS_DEST_IPV4]);
+					adapter->track_dest_ipv4 =
 						arp_stats_params->icmp_ipv4;
-				qdf_mem_zero(&adapter->hdd_stats.hdd_tcp_stats,
-					sizeof(adapter->hdd_stats.
-							hdd_tcp_stats));
+				}
+			} else {
+				/* clear stats command received */
+				arp_stats_params->pkt_type_bitmap = pkt_bitmap;
+				arp_stats_params->flag = false;
+				adapter->pkt_type_bitmap &=
+					(~arp_stats_params->pkt_type_bitmap);
+
+				if (pkt_bitmap & CONNECTIVITY_CHECK_SET_ARP) {
+					arp_stats_params->pkt_type =
+						WLAN_NUD_STATS_ARP_PKT_TYPE;
+					qdf_mem_zero(&adapter->hdd_stats.
+								hdd_arp_stats,
+						     sizeof(adapter->hdd_stats.
+								hdd_arp_stats));
+					adapter->track_arp_ip = 0;
+				}
+
+				if (pkt_bitmap & CONNECTIVITY_CHECK_SET_DNS) {
+					/* DNStracking isn't supported in FW. */
+					arp_stats_params->pkt_type_bitmap &=
+						~CONNECTIVITY_CHECK_SET_DNS;
+					qdf_mem_zero(&adapter->hdd_stats.
+								hdd_dns_stats,
+						     sizeof(adapter->hdd_stats.
+								hdd_dns_stats));
+					qdf_mem_zero(adapter->dns_payload,
+						adapter->track_dns_domain_len);
+					adapter->track_dns_domain_len = 0;
+				}
+
+				if (pkt_bitmap &
+				    CONNECTIVITY_CHECK_SET_TCP_HANDSHAKE) {
+					qdf_mem_zero(&adapter->hdd_stats.
+								hdd_tcp_stats,
+						     sizeof(adapter->hdd_stats.
+								hdd_tcp_stats));
+					adapter->track_src_port = 0;
+					adapter->track_dest_port = 0;
+				}
+
+				if (pkt_bitmap &
+				    CONNECTIVITY_CHECK_SET_ICMPV4) {
+					qdf_mem_zero(&adapter->hdd_stats.
+							hdd_icmpv4_stats,
+						     sizeof(adapter->hdd_stats.
+							hdd_icmpv4_stats));
+					adapter->track_dest_ipv4 = 0;
+				}
 			}
 		} else {
 			hdd_err("stats list empty");
@@ -11277,19 +11308,20 @@ static int __wlan_hdd_cfg80211_set_nud_stats(struct wiphy *wiphy,
 					  "%s STATS_SET_START CMD", __func__);
 				return -EINVAL;
 			}
+
+			arp_stats_params.pkt_type_bitmap =
+						CONNECTIVITY_CHECK_SET_ARP;
+			adapter->pkt_type_bitmap |=
+					arp_stats_params.pkt_type_bitmap;
 			arp_stats_params.flag = true;
 			arp_stats_params.ip_addr =
 					nla_get_u32(tb[STATS_GW_IPV4]);
 			adapter->track_arp_ip = arp_stats_params.ip_addr;
-
-			qdf_mem_zero(&adapter->hdd_stats.hdd_arp_stats,
-			     sizeof(adapter->hdd_stats.hdd_arp_stats));
-
 			arp_stats_params.pkt_type = WLAN_NUD_STATS_ARP_PKT_TYPE;
 		}
 	} else {
-		/* clear tracking stats of other data types as well*/
-		if (adapter->pkt_type_bitmap) {
+		/* clear stats command received. */
+		if (tb[STATS_SET_DATA_PKT_INFO]) {
 			err = hdd_set_clear_connectivity_check_stats_info(
 						adapter,
 						&arp_stats_params, tb, false);
@@ -11303,6 +11335,10 @@ static int __wlan_hdd_cfg80211_set_nud_stats(struct wiphy *wiphy,
 			if (!arp_stats_params.pkt_type_bitmap)
 				return err;
 		} else {
+			arp_stats_params.pkt_type_bitmap =
+						CONNECTIVITY_CHECK_SET_ARP;
+			adapter->pkt_type_bitmap &=
+					(~arp_stats_params.pkt_type_bitmap);
 			arp_stats_params.flag = false;
 			qdf_mem_zero(&adapter->hdd_stats.hdd_arp_stats,
 				     sizeof(adapter->hdd_stats.hdd_arp_stats));
@@ -11310,10 +11346,9 @@ static int __wlan_hdd_cfg80211_set_nud_stats(struct wiphy *wiphy,
 		}
 	}
 
-	if (arp_stats_params.flag) {
-		QDF_TRACE(QDF_MODULE_ID_HDD, QDF_TRACE_LEVEL_INFO,
-			  "%s STATS_SET_START Cleared!!", __func__);
-	}
+	QDF_TRACE(QDF_MODULE_ID_HDD, QDF_TRACE_LEVEL_INFO,
+		  "%s STATS_SET_START Received flag %d!!", __func__,
+		  arp_stats_params.flag);
 
 	arp_stats_params.vdev_id = adapter->sessionId;
 
@@ -11843,7 +11878,11 @@ static int __wlan_hdd_cfg80211_get_nud_stats(struct wiphy *wiphy,
 	INIT_COMPLETION(context->response_event);
 	spin_unlock(&hdd_context_lock);
 
-	if (hdd_ctx->config->enable_data_stall_det)
+	pkt_type_bitmap = adapter->pkt_type_bitmap;
+
+	/* send NUD failure event only when ARP tracking is enabled. */
+	if (hdd_ctx->config->enable_data_stall_det &&
+	    (pkt_type_bitmap & CONNECTIVITY_CHECK_SET_ARP))
 		ol_txrx_post_data_stall_event(
 					DATA_STALL_LOG_INDICATOR_FRAMEWORK,
 					DATA_STALL_LOG_NUD_FAILURE,
@@ -11899,7 +11938,6 @@ static int __wlan_hdd_cfg80211_get_nud_stats(struct wiphy *wiphy,
 	if (adapter->dad)
 		nla_put_flag(skb, AP_LINK_DAD);
 
-	pkt_type_bitmap = adapter->pkt_type_bitmap;
 	/* ARP tracking is done above. */
 	pkt_type_bitmap &= ~CONNECTIVITY_CHECK_SET_ARP;
 
@@ -13573,6 +13611,7 @@ int wlan_hdd_cfg80211_init(struct device *dev,
 	int i, j;
 	hdd_context_t *pHddCtx = wiphy_priv(wiphy);
 	int len = 0;
+	uint32_t *cipher_suites;
 
 	ENTER();
 
@@ -13796,9 +13835,32 @@ int wlan_hdd_cfg80211_init(struct device *dev,
 		}
 	}
 	/*Initialise the supported cipher suite details */
-	wiphy->cipher_suites = hdd_cipher_suites;
-	wiphy->n_cipher_suites = ARRAY_SIZE(hdd_cipher_suites);
-
+	if (pCfg->gcmp_enabled) {
+		cipher_suites = qdf_mem_malloc(sizeof(hdd_cipher_suites) +
+					       sizeof(hdd_gcmp_cipher_suits));
+		if (cipher_suites == NULL) {
+			hdd_err("Not enough memory for cipher suites");
+			return -ENOMEM;
+		}
+		wiphy->n_cipher_suites = QDF_ARRAY_SIZE(hdd_cipher_suites) +
+			 QDF_ARRAY_SIZE(hdd_gcmp_cipher_suits);
+		qdf_mem_copy(cipher_suites, &hdd_cipher_suites,
+			     sizeof(hdd_cipher_suites));
+		qdf_mem_copy(cipher_suites + QDF_ARRAY_SIZE(hdd_cipher_suites),
+			     &hdd_gcmp_cipher_suits,
+			     sizeof(hdd_gcmp_cipher_suits));
+	} else {
+		cipher_suites = qdf_mem_malloc(sizeof(hdd_cipher_suites));
+		if (cipher_suites == NULL) {
+			hdd_err("Not enough memory for cipher suites");
+			return -ENOMEM;
+		}
+		wiphy->n_cipher_suites = QDF_ARRAY_SIZE(hdd_cipher_suites);
+		qdf_mem_copy(cipher_suites, &hdd_cipher_suites,
+			     sizeof(hdd_cipher_suites));
+	}
+	wiphy->cipher_suites = cipher_suites;
+	cipher_suites = NULL;
 	/*signal strength in mBm (100*dBm) */
 	wiphy->signal_type = CFG80211_SIGNAL_TYPE_MBM;
 	wiphy->max_remain_on_channel_duration = MAX_REMAIN_ON_CHANNEL_DURATION;
@@ -13860,6 +13922,7 @@ mem_fail:
 void wlan_hdd_cfg80211_deinit(struct wiphy *wiphy)
 {
 	int i;
+	const uint32_t *cipher_suites;
 
 	for (i = 0; i < HDD_NUM_NL80211_BANDS; i++) {
 		if (NULL != wiphy->bands[i] &&
@@ -13868,6 +13931,11 @@ void wlan_hdd_cfg80211_deinit(struct wiphy *wiphy)
 			wiphy->bands[i]->channels = NULL;
 		}
 	}
+	cipher_suites = wiphy->cipher_suites;
+	wiphy->cipher_suites = NULL;
+	wiphy->n_cipher_suites = 0;
+	qdf_mem_free((uint32_t *)cipher_suites);
+	cipher_suites = NULL;
 	hdd_reset_global_reg_params();
 }
 
@@ -14781,6 +14849,58 @@ static bool wlan_hdd_is_duplicate_channel(uint8_t *arr,
 }
 #endif
 
+QDF_STATUS wlan_hdd_send_sta_authorized_event(
+					hdd_adapter_t *pAdapter,
+					hdd_context_t *pHddCtx,
+					const struct qdf_mac_addr *mac_addr)
+{
+	struct sk_buff *vendor_event;
+	uint32_t sta_flags = 0;
+	QDF_STATUS status;
+
+	ENTER();
+
+	if (!pHddCtx) {
+		hdd_err("HDD context is null");
+		return -EINVAL;
+	}
+
+	vendor_event =
+		cfg80211_vendor_event_alloc(
+			pHddCtx->wiphy, &pAdapter->wdev, sizeof(sta_flags) +
+			QDF_MAC_ADDR_SIZE + NLMSG_HDRLEN,
+			QCA_NL80211_VENDOR_SUBCMD_LINK_PROPERTIES_INDEX,
+			GFP_KERNEL);
+	if (!vendor_event) {
+		hdd_err("cfg80211_vendor_event_alloc failed");
+		return -EINVAL;
+	}
+
+	sta_flags |= BIT(NL80211_STA_FLAG_AUTHORIZED);
+
+	status = nla_put_u32(vendor_event,
+			     QCA_WLAN_VENDOR_ATTR_LINK_PROPERTIES_STA_FLAGS,
+			     sta_flags);
+	if (status) {
+		hdd_err("STA flag put fails");
+		kfree_skb(vendor_event);
+		return QDF_STATUS_E_FAILURE;
+	}
+	status = nla_put(vendor_event,
+			 QCA_WLAN_VENDOR_ATTR_LINK_PROPERTIES_STA_MAC,
+			 QDF_MAC_ADDR_SIZE, mac_addr->bytes);
+	if (status) {
+		hdd_err("STA MAC put fails");
+		kfree_skb(vendor_event);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	cfg80211_vendor_event(vendor_event, GFP_KERNEL);
+
+	EXIT();
+	return 0;
+}
+
 /**
  * __wlan_hdd_change_station() - change station
  * @wiphy: Pointer to the wiphy structure
@@ -14850,6 +14970,13 @@ static int __wlan_hdd_change_station(struct wiphy *wiphy,
 
 			if (status != QDF_STATUS_SUCCESS) {
 				hdd_debug("Not able to change TL state to AUTHENTICATED");
+				return -EINVAL;
+			}
+			status = wlan_hdd_send_sta_authorized_event(
+								pAdapter,
+								pHddCtx,
+								&STAMacAddress);
+			if (status != QDF_STATUS_SUCCESS) {
 				return -EINVAL;
 			}
 		}
@@ -16853,8 +16980,8 @@ static int wlan_hdd_cfg80211_connect_start(hdd_adapter_t *pAdapter,
 			hdd_conn_set_connection_state(pAdapter,
 			eConnectionState_Connecting);
 
-		qdf_runtime_pm_prevent_suspend(&pAdapter->connect_rpm_ctx.
-					       connect);
+		qdf_runtime_pm_prevent_suspend(
+				&pHddCtx->runtime_context.connect);
 		hdd_prevent_suspend_timeout(HDD_WAKELOCK_TIMEOUT_CONNECT,
 					    WIFI_POWER_EVENT_WAKELOCK_CONNECT);
 
@@ -16872,8 +16999,8 @@ static int wlan_hdd_cfg80211_connect_start(hdd_adapter_t *pAdapter,
 			/* change back to NotAssociated */
 			hdd_conn_set_connection_state(pAdapter,
 						      eConnectionState_NotConnected);
-			qdf_runtime_pm_allow_suspend(&pAdapter->connect_rpm_ctx.
-						     connect);
+			qdf_runtime_pm_allow_suspend(
+					&pHddCtx->runtime_context.connect);
 			hdd_allow_suspend(WIFI_POWER_EVENT_WAKELOCK_CONNECT);
 		}
 
@@ -18322,16 +18449,7 @@ static int wlan_hdd_cfg80211_connect(struct wiphy *wiphy,
 	return ret;
 }
 
-/**
- * wlan_hdd_disconnect() - hdd disconnect api
- * @pAdapter: Pointer to adapter
- * @reason: Disconnect reason code
- *
- * This function is used to issue a disconnect request to SME
- *
- * Return: 0 for success, non-zero for failure
- */
-static int wlan_hdd_disconnect(hdd_adapter_t *pAdapter, u16 reason)
+int wlan_hdd_disconnect(hdd_adapter_t *pAdapter, u16 reason)
 {
 	int status, result = 0;
 	unsigned long rc;
@@ -18650,6 +18768,7 @@ static int wlan_hdd_cfg80211_set_privacy_ibss(hdd_adapter_t *pAdapter,
 					      struct cfg80211_ibss_params
 					      *params)
 {
+	uint32_t ret;
 	int status = 0;
 	hdd_wext_state_t *pWextState = WLAN_HDD_GET_WEXT_STATE_PTR(pAdapter);
 	eCsrEncryptionType encryptionType = eCSR_ENCRYPT_TYPE_NONE;
@@ -18678,13 +18797,22 @@ static int wlan_hdd_cfg80211_set_privacy_ibss(hdd_adapter_t *pAdapter,
 			if (NULL != ie) {
 				pWextState->wpaVersion =
 					IW_AUTH_WPA_VERSION_WPA;
-				/* Unpack the WPA IE */
-				/* Skip past the EID byte and length byte - and four byte WiFi OUI */
-				dot11f_unpack_ie_wpa((tpAniSirGlobal) halHandle,
-						     &ie[2 + 4], ie[1] - 4,
-						     &dot11WPAIE, false);
-				/*Extract the multicast cipher, the encType for unicast
-				   cipher for wpa-none is none */
+				/*
+				 * Unpack the WPA IE. Skip past the EID byte and
+				 * length byte - and four byte WiFi OUI
+				 */
+				ret = dot11f_unpack_ie_wpa(
+						(tpAniSirGlobal) halHandle,
+						&ie[2 + 4], ie[1] - 4,
+						&dot11WPAIE, false);
+				if (DOT11F_FAILED(ret)) {
+					hdd_err("unpack failed ret: 0x%x", ret);
+					return -EINVAL;
+				}
+				/*
+				 * Extract the multicast cipher, the encType for
+				 * unicast cipher for wpa-none is none
+				 */
 				encryptionType =
 					hdd_translate_wpa_to_csr_encryption_type
 						(dot11WPAIE.multicast_cipher);

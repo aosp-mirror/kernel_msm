@@ -5351,7 +5351,7 @@ enum hdd_link_speed_rpt_type {
 #define CFG_VHT_ENABLE_1x1_TX_CHAINMASK         "gSetTxChainmask1x1"
 #define CFG_VHT_ENABLE_1x1_TX_CHAINMASK_MIN     (0)
 #define CFG_VHT_ENABLE_1x1_TX_CHAINMASK_MAX     (2)
-#define CFG_VHT_ENABLE_1x1_TX_CHAINMASK_DEFAULT (1)
+#define CFG_VHT_ENABLE_1x1_TX_CHAINMASK_DEFAULT (0)
 
 /*
  * <ini>
@@ -5379,7 +5379,7 @@ enum hdd_link_speed_rpt_type {
 #define CFG_VHT_ENABLE_1x1_RX_CHAINMASK         "gSetRxChainmask1x1"
 #define CFG_VHT_ENABLE_1x1_RX_CHAINMASK_MIN     (0)
 #define CFG_VHT_ENABLE_1x1_RX_CHAINMASK_MAX     (2)
-#define CFG_VHT_ENABLE_1x1_RX_CHAINMASK_DEFAULT (1)
+#define CFG_VHT_ENABLE_1x1_RX_CHAINMASK_DEFAULT (0)
 
 /*
  * <ini>
@@ -7345,6 +7345,29 @@ enum hdd_link_speed_rpt_type {
 #define CFG_VHT_SU_BEAMFORMEE_CAP_FEATURE_MIN     (WNI_CFG_VHT_SU_BEAMFORMEE_CAP_STAMIN)
 #define CFG_VHT_SU_BEAMFORMEE_CAP_FEATURE_MAX     (WNI_CFG_VHT_SU_BEAMFORMEE_CAP_STAMAX)
 #define CFG_VHT_SU_BEAMFORMEE_CAP_FEATURE_DEFAULT (WNI_CFG_VHT_SU_BEAMFORMEE_CAP_STADEF)
+
+/*
+ * <ini>
+ * enable_subfee_vendor_vhtie - ini to enable/disable SU Bformee in vendor VHTIE
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to enable/disable SU Bformee in vendor vht ie if gTxBFEnable
+ * is enabled. if gTxBFEnable is 0 this will not have any effect.
+ *
+ * Related: gTxBFEnable.
+ *
+ * Supported Feature: STA
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ENABLE_SUBFEE_IN_VENDOR_VHTIE_NAME    "enable_subfee_vendor_vhtie"
+#define CFG_ENABLE_SUBFEE_IN_VENDOR_VHTIE_MIN     (0)
+#define CFG_ENABLE_SUBFEE_IN_VENDOR_VHTIE_MAX     (1)
+#define CFG_ENABLE_SUBFEE_IN_VENDOR_VHTIE_DEFAULT (1)
 
 /*
  * Enable / Disable Tx beamformee in SAP mode
@@ -12424,7 +12447,7 @@ enum hw_filter_mode {
 /*
  * <ini>
  * gAutoChannelSelectWeight - ACS channel weight
- * @Min: 0x1
+ * @Min: 0
  * @Max: 0xFFFFFFFF
  * @Default: 0x000000FF
  *
@@ -12446,7 +12469,7 @@ enum hw_filter_mode {
  * </ini>
  */
 #define CFG_AUTO_CHANNEL_SELECT_WEIGHT          "gAutoChannelSelectWeight"
-#define CFG_AUTO_CHANNEL_SELECT_WEIGHT_MIN      (0x1)
+#define CFG_AUTO_CHANNEL_SELECT_WEIGHT_MIN      (0)
 #define CFG_AUTO_CHANNEL_SELECT_WEIGHT_MAX      (0xFFFFFFFF)
 #define CFG_AUTO_CHANNEL_SELECT_WEIGHT_DEFAULT  (0x000000FF)
 
@@ -13959,6 +13982,214 @@ enum hw_filter_mode {
 #define CFG_DERIVED_INTERFACE_POOL_MAX     (0xffffffff)
 #define CFG_DERIVED_INTERFACE_POOL_DEFAULT (0xffffffff)
 
+/*
+ * <ini>
+ * gcmp_enabled - ini to enable/disable GCMP
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * Currently Firmware update the sequence number for each TID with 2^3
+ * because of security issues. But with this PN mechanism, throughput drop
+ * is observed. With this ini FW takes the decision to trade off between
+ * security and throughput
+ *
+ * Supported Feature: STA/SAP/P2P
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+
+#define CFG_ENABLE_GCMP_NAME    "gcmp_enabled"
+#define CFG_ENABLE_GCMP_MIN     (0)
+#define CFG_ENABLE_GCMP_MAX     (1)
+#define CFG_ENABLE_GCMP_DEFAULT (0)
+
+/*
+ * <ini>
+ * 11k_offload_enable_bitmask - Bitmask to enable 11k offload to FW
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to set which of the 11k features is offloaded to FW
+ * Currently Neighbor Report Request is supported for offload and is enabled
+ * by default
+ * B0: Offload 11k neighbor report requests
+ * B1-B31: Reserved
+ *
+ * Related : None
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+
+#define CFG_OFFLOAD_11K_ENABLE_BITMASK_NAME    "11k_offload_enable_bitmask"
+#define CFG_OFFLOAD_11K_ENABLE_BITMASK_MIN     (0)
+#define CFG_OFFLOAD_11K_ENABLE_BITMASK_MAX     (1)
+#define CFG_OFFLOAD_11K_ENABLE_BITMASK_DEFAULT (1)
+
+#define OFFLOAD_11K_BITMASK_NEIGHBOR_REPORT_REQUEST  0x1
+
+/*
+ * <ini>
+ * nr_offload_params_bitmask - bitmask to specify which of the
+ * neighbor report offload params are valid in the ini
+ * frame
+ * @Min: 0
+ * @Max: 63
+ * @Default: 63
+ *
+ * This ini specifies which of the neighbor report offload params are valid
+ * and should be considered by the FW. The bitmask is as follows
+ * B0: nr_offload_time_offset
+ * B1: nr_offload_low_rssi_offset
+ * B2: nr_offload_bmiss_count_trigger
+ * B3: nr_offload_per_threshold_offset
+ * B4: nr_offload_cache_timeout
+ * B5: nr_offload_max_req_cap
+ * B6-B7: Reserved
+ *
+ * Related : 11k_offload_enable_bitmask
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+
+#define CFG_OFFLOAD_NEIGHBOR_REPORT_PARAMS_BITMASK_NAME \
+	"nr_offload_params_bitmask"
+#define CFG_OFFLOAD_NEIGHBOR_REPORT_PARAMS_BITMASK_MIN      (0)
+#define CFG_OFFLOAD_NEIGHBOR_REPORT_PARAMS_BITMASK_MAX      (63)
+#define CFG_OFFLOAD_NEIGHBOR_REPORT_PARAMS_BITMASK_DEFAULT  (63)
+
+/*
+ * <ini>
+ * nr_offload_time_offset - time interval in seconds after the
+ * neighbor report offload command to send the first neighbor report request
+ * frame
+ * @Min: 30
+ * @Max: 3600
+ * @Default: 30
+ *
+ * Related : nr_offload_params_bitmask
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_OFFLOAD_NEIGHBOR_REPORT_TIME_OFFSET_NAME \
+	"nr_offload_time_offset"
+#define CFG_OFFLOAD_NEIGHBOR_REPORT_TIME_OFFSET_MIN      (0)
+#define CFG_OFFLOAD_NEIGHBOR_REPORT_TIME_OFFSET_MAX      (3600)
+#define CFG_OFFLOAD_NEIGHBOR_REPORT_TIME_OFFSET_DEFAULT  (30)
+
+/*
+ * <ini>
+ * nr_offload_low_rssi_offset - offset from the roam RSSI threshold
+ * to trigger the neighbor report request frame (in dBm)
+ * @Min: 4
+ * @Max: 10
+ * @Default: 4
+ *
+ * Related : nr_offload_params_bitmask
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_OFFLOAD_NEIGHBOR_REPORT_LOW_RSSI_OFFSET_NAME \
+	"nr_offload_low_rssi_offset"
+#define CFG_OFFLOAD_NEIGHBOR_REPORT_LOW_RSSI_OFFSET_MIN     (4)
+#define CFG_OFFLOAD_NEIGHBOR_REPORT_LOW_RSSI_OFFSET_MAX     (10)
+#define CFG_OFFLOAD_NEIGHBOR_REPORT_LOW_RSSI_OFFSET_DEFAULT (4)
+
+/*
+ * <ini>
+ * nr_offload_bmiss_count_trigger - Number of beacon miss events to
+ * trigger a neighbor report request frame
+ * @Min: 1
+ * @Max: 5
+ * @Default: 1
+ *
+ * Related : nr_offload_params_bitmask
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_OFFLOAD_NEIGHBOR_REPORT_BMISS_COUNT_TRIGGER_NAME \
+	"nr_offload_bmiss_count_trigger"
+#define CFG_OFFLOAD_NEIGHBOR_REPORT_BMISS_COUNT_TRIGGER_MIN     (1)
+#define CFG_OFFLOAD_NEIGHBOR_REPORT_BMISS_COUNT_TRIGGER_MAX     (5)
+#define CFG_OFFLOAD_NEIGHBOR_REPORT_BMISS_COUNT_TRIGGER_DEFAULT (1)
+
+/*
+ * <ini>
+ * nr_offload_per_threshold_offset - offset from PER threshold to
+ * trigger a neighbor report request frame (in %)
+ * @Min: 5
+ * @Max: 20
+ * @Default: 5
+ *
+ * This ini is used to set the neighbor report offload parameter:
+ *
+ * Related : nr_offload_params_bitmask
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_OFFLOAD_NEIGHBOR_REPORT_PER_THRESHOLD_OFFSET_NAME \
+	"nr_offload_per_threshold_offset"
+#define CFG_OFFLOAD_NEIGHBOR_REPORT_PER_THRESHOLD_OFFSET_MIN     (5)
+#define CFG_OFFLOAD_NEIGHBOR_REPORT_PER_THRESHOLD_OFFSET_MAX     (20)
+#define CFG_OFFLOAD_NEIGHBOR_REPORT_PER_THRESHOLD_OFFSET_DEFAULT (5)
+
+/*
+ * <ini>
+ * nr_offload_cache_timeout - time in seconds after which the
+ * neighbor report cache is marked as timed out and any of the triggers would
+ * cause a neighbor report request frame to be sent.
+ * @Min: 300
+ * @Max: 86400
+ * @Default: 1200
+ *
+ * Related : nr_offload_params_bitmask
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_OFFLOAD_NEIGHBOR_REPORT_CACHE_TIMEOUT_NAME \
+	"nr_offload_cache_timeout"
+#define CFG_OFFLOAD_NEIGHBOR_REPORT_CACHE_TIMEOUT_MIN     (300)
+#define CFG_OFFLOAD_NEIGHBOR_REPORT_CACHE_TIMEOUT_MAX     (86400)
+#define CFG_OFFLOAD_NEIGHBOR_REPORT_CACHE_TIMEOUT_DEFAULT (1200)
+
+/*
+ * <ini>
+ * nr_offload_max_req_cap - Max number of neighbor
+ * report requests that can be sent to a connected peer in the current session.
+ * This counter is reset once a successful roam happens or at cache timeout
+ * @Min: 3
+ * @Max: 10
+ * @Default: 3
+ *
+ * Related : nr_offload_params_bitmask
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_OFFLOAD_NEIGHBOR_REPORT_MAX_REQ_CAP_NAME \
+	"nr_offload_max_req_cap"
+#define CFG_OFFLOAD_NEIGHBOR_REPORT_MAX_REQ_CAP_MIN     (3)
+#define CFG_OFFLOAD_NEIGHBOR_REPORT_MAX_REQ_CAP_MAX     (300)
+#define CFG_OFFLOAD_NEIGHBOR_REPORT_MAX_REQ_CAP_DEFAULT (3)
+
 /*---------------------------------------------------------------------------
    Type declarations
    -------------------------------------------------------------------------*/
@@ -14272,6 +14503,7 @@ struct hdd_config {
 	uint8_t vhtRxMCS;
 	uint8_t vhtTxMCS;
 	bool enableTxBF;
+	bool enable_subfee_vendor_vhtie;
 	bool enable_txbf_sap_mode;
 	uint8_t txBFCsnValue;
 	bool enable_su_tx_bformer;
@@ -14281,8 +14513,8 @@ struct hdd_config {
 	bool enable2x2;
 	uint32_t vdev_type_nss_2g;
 	uint32_t vdev_type_nss_5g;
-	bool txchainmask1x1;
-	bool rxchainmask1x1;
+	uint8_t txchainmask1x1;
+	uint8_t rxchainmask1x1;
 	bool enableMuBformee;
 	bool enableVhtpAid;
 	bool enableVhtGid;
@@ -14849,6 +15081,16 @@ struct hdd_config {
 	bool mac_provision;
 	uint32_t provisioned_intf_pool;
 	uint32_t derived_intf_pool;
+	bool gcmp_enabled;
+	bool is_11k_offload_supported;
+	uint32_t offload_11k_enable_bitmask;
+	uint32_t neighbor_report_offload_params_bitmask;
+	uint32_t neighbor_report_offload_time_offset;
+	uint32_t neighbor_report_offload_low_rssi_offset;
+	uint32_t neighbor_report_offload_bmiss_count_trigger;
+	uint32_t neighbor_report_offload_per_threshold_offset;
+	uint32_t neighbor_report_offload_cache_timeout;
+	uint32_t neighbor_report_offload_max_req_cap;
 };
 
 #define VAR_OFFSET(_Struct, _Var) (offsetof(_Struct, _Var))
