@@ -464,12 +464,12 @@ void print_frame_short(char *label, short **matrix, int row, int column)
 	logError(0, "%s %s \n", tag, label);
 	for (i = 0; i < row; i++)
 	{
-		logError(0, "%s ", tag);
+		pr_info("%s ", tag);
 		for (j = 0; j < column; j++)
 		{
-			printk("%d ", matrix[i][j]);
+			pr_cont("%d ", matrix[i][j]);
 		}
-		logError(0, "\n");
+		pr_cont("\n");
 		kfree(matrix[i]);
 	}
 	kfree(matrix);
@@ -488,12 +488,12 @@ void print_frame_u16(char *label, u16 **matrix, int row, int column)
 	logError(0, "%s %s \n", tag, label);
 	for (i = 0; i < row; i++)
 	{
-		logError(0, "%s ", tag);
+		pr_info("%s ", tag);
 		for (j = 0; j < column; j++)
 		{
-			printk("%d ", matrix[i][j]);
+			pr_cont("%d ", matrix[i][j]);
 		}
-		logError(0, "\n");
+		pr_info("\n");
 		kfree(matrix[i]);
 	}
 	kfree(matrix);
@@ -512,12 +512,12 @@ void print_frame_u8(char *label, u8 **matrix, int row, int column)
 	logError(0, "%s %s \n", tag, label);
 	for (i = 0; i < row; i++)
 	{
-		logError(0, "%s ", tag);
+		pr_info("%s ", tag);
 		for (j = 0; j < column; j++)
 		{
-			printk("%d ", matrix[i][j]);
+			pr_cont("%d ", matrix[i][j]);
 		}
-		logError(0, "\n");
+		pr_cont("\n");
 		kfree(matrix[i]);
 	}
 	kfree(matrix);
@@ -536,12 +536,12 @@ void print_frame_i8(char *label, i8 **matrix, int row, int column)
 	logError(0, "%s %s \n", tag, label);
 	for (i = 0; i < row; i++)
 	{
-		logError(0, "%s ", tag);
+		pr_info("%s ", tag);
 		for (j = 0; j < column; j++)
 		{
-			printk("%d ", matrix[i][j]);
+			pr_cont("%d ", matrix[i][j]);
 		}
-		logError(0, "\n");
+		pr_cont("\n");
 		kfree(matrix[i]);
 	}
 	kfree(matrix);
@@ -560,12 +560,12 @@ void print_frame_u32(char *label, u32 **matrix, int row, int column)
 	logError(0, "%s %s \n", tag, label);
 	for (i = 0; i < row; i++)
 	{
-		logError(0, "%s ", tag);
+		pr_info("%s ", tag);
 		for (j = 0; j < column; j++)
 		{
-			printk("%d ", matrix[i][j]);
+			pr_cont("%d ", matrix[i][j]);
 		}
-		logError(0, "\n");
+		pr_cont("\n");
 		kfree(matrix[i]);
 	}
 	kfree(matrix);
@@ -584,12 +584,12 @@ void print_frame_int(char *label, int **matrix, int row, int column)
 	logError(0, "%s %s \n", tag, label);
 	for (i = 0; i < row; i++)
 	{
-		logError(0, "%s ", tag);
+		pr_info("%s ", tag);
 		for (j = 0; j < column; j++)
 		{
-			printk("%d ", matrix[i][j]);
+			pr_cont("%d ", matrix[i][j]);
 		}
-		logError(0, "\n");
+		pr_cont("\n");
 		kfree(matrix[i]);
 	}
 	kfree(matrix);

@@ -350,12 +350,12 @@ int setFeatures(u8 feat, u8 *settings, int size){
 	logError(0,"%s %s: Setting feature: feat = %02X !\n", tag, __func__, feat);
 	cmd[0] = FTS_CMD_FEATURE;
 	cmd[1] = feat;
-	logError(0,"%s %s: Settings = ", tag, __func__);
+	pr_info("%s %s: Settings = ", tag, __func__);
 	for(i=0; i<size; i++){
 		cmd[2+i]=settings[i];
-		logError(0,"%02X ", settings[i]);
+		pr_cont("%02X ", settings[i]);
 	}
-	logError(0,"\n");
+	pr_cont("\n");
 	ret = fts_write(cmd,2+size); //use write instead of writeFw because can be called while the interrupts are enabled
 	if(ret<OK){
 		logError(1,"%s %s: write failed...ERROR %08X !\n", tag, __func__, ret);
@@ -383,12 +383,12 @@ int writeSysCmd(u8 sys_cmd, u8 *sett, int size){
 	cmd[0] = FTS_CMD_SYSTEM;
 	cmd[1] = sys_cmd;
 
-	logError(0,"%s %s: Command = %02X %02X ", tag, __func__, cmd[0], cmd[1]);
+	pr_info("%s %s: Command = %02X %02X ", tag, __func__, cmd[0], cmd[1]);
 	for(ret=0; ret<size; ret++){
 		cmd[2+ret] = sett[ret];
-		logError(0,"%02X ", cmd[2+ret]);
+		pr_cont("%02X ", cmd[2+ret]);
 	}
-	logError(0, "\n");
+	pr_cont("\n");
 	logError(0, "%s %s: Writing Sys command...\n", tag, __func__);
 	if(sys_cmd!= SYS_CMD_LOAD_DATA){
 		ret = fts_writeFwCmd(cmd,2+size);

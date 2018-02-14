@@ -356,13 +356,13 @@ int parseBinFile(u8* fw_data, int fw_size, Firmware *fwData, int keep_cx)
 		index += FW_BYTES_ALLIGN * 2; //skip reserved data
 
 		index += FW_BYTES_ALLIGN;
-		logError(1, "%s parseBinFile: File External Release =  ", tag);
+		pr_info("%s parseBinFile: File External Release =  ", tag);
 		for (i = 0; i < EXTERNAL_RELEASE_INFO_SIZE; i++)
 		{
 			fwData->externalRelease[i] = fw_data[index++];
-			logError(1, "%02X ", fwData->externalRelease[i]);
+			pr_cont("%02X ", fwData->externalRelease[i]);
 		}
-		logError(1, "\n");
+		pr_cont("\n");
 
 		//index+=FW_BYTES_ALLIGN;
 		u8ToU32(&fw_data[index], &temp);
@@ -534,13 +534,13 @@ int flash_erase_page_by_page(ErasePage keep_cx) {
 	}
 
 
-	logError(0, "%s Setting the page mask = ", tag,i);
+	pr_info("%s Setting the page mask = ", tag);
 	for(i=0; i<4; i++){
 		cmd2[5+i] = cmd2[5+i]&(~mask[i]);
-		logError(0, "%02X ", cmd2[5+i]);
+		pr_cont("%02X ", cmd2[5+i]);
 	}
 
-	logError(0, "\n%s Writing page mask... \n", tag);
+	pr_cont("\n%s Writing page mask... \n", tag);
 	if (fts_write(cmd2, ARRAY_SIZE(cmd2)) < OK) {
 		logError(1, "%s flash_erase_page_by_page: Page mask ERROR %08X\n", tag, ERROR_BUS_W);
 		return ERROR_BUS_W;
