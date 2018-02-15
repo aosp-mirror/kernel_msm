@@ -3013,12 +3013,22 @@ static void run_fs_cal_pre_press(void *device_data)
 		goto ErrorSendingCmd;
 	}
 
+	ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SET_TOUCH_ENGINE_MODE,
+				   off, 1);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev,
+			  "%s: fail to disable touch engine\n", __func__);
+		goto ErrorSendingCmd;
+	}
+
 	ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_RESET_BASELINE, NULL, 0);
 	if (ret < 0) {
 		input_err(true, &ts->client->dev, "%s: fail to fix tmode\n",
 			  __func__);
 		goto ErrorSendingCmd;
 	}
+
+	sec_ts_delay(50);
 
 	input_info(true, &ts->client->dev, "%s: ready to press\n", __func__);
 
@@ -3063,16 +3073,14 @@ static void run_fs_cal_get_average(void *device_data)
 	}
 
 	memset(&mode, 0x00, sizeof(struct sec_ts_test_mode));
-	mode.type = TYPE_SIGNAL_DATA;
 
-	if (sec->cmd_param[0] == 0) {
-		sec_ts_read_frame_stdev(ts, sec, mode.type, &mode.min,
-					&mode.max, only_average);
-		//sec_ts_write_signal_cal_table(ts);
-	} else {
-		sec_ts_read_frame_stdev(ts, sec, mode.type, &mode.min,
-					&mode.max, only_average);
-	}
+	if (sec->cmd_param[0] == 0)
+		mode.type = TYPE_REMV_AMB_DATA;
+	else
+		mode.type = TYPE_NORM2_DATA;
+
+	sec_ts_read_frame_stdev(ts, sec, mode.type, &mode.min, &mode.max,
+				only_average);
 }
 
 static void run_fs_cal_post_press(void *device_data)
@@ -3090,6 +3098,13 @@ static void run_fs_cal_post_press(void *device_data)
 	}
 
 	sec_cmd_set_default_result(sec);
+
+	ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SET_TOUCH_ENGINE_MODE, on, 1);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev,
+			  "%s: fail to enable touch engine\n", __func__);
+		goto ErrorSendingCmd;
+	}
 
 	ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_DISABLE_DF, on, 1);
 	if (ret < 0) {
