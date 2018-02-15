@@ -237,6 +237,7 @@
 #define SEC_TS_CMD_FLASH_PADDING	0xDA
 
 #define SEC_TS_READ_BL_UPDATE_STATUS	0xDB
+#define SEC_TS_CMD_SET_TOUCH_ENGINE_MODE	0xE1
 #define SEC_TS_CMD_SET_POWER_MODE	0xE4
 #define SEC_TS_CMD_EDGE_DEADZONE	0xE5
 #define SEC_TS_CMD_SET_DEX_MODE		0xE7
@@ -423,6 +424,7 @@ enum {
 	TYPE_REMV_BASELINE_DATA	= 4,
 	TYPE_DECODED_DATA		= 5,	/* Raw */
 	TYPE_REMV_AMB_DATA		= 6,	/*  TYPE_RAW_DATA - TYPE_AMBIENT_DATA */
+	TYPE_NORM2_DATA			= 15,	/* After fs norm. data */
 	TYPE_OFFSET_DATA_SEC	= 19,	/* Cap Offset in SEC Manufacturing Line */
 	TYPE_OFFSET_DATA_SDC	= 29,	/* Cap Offset in SDC Manufacturing Line */
 	TYPE_NOI_P2P_MIN		= 30,	/* Peak-to-peak noise Min */
