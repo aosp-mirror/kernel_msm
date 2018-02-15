@@ -2056,7 +2056,7 @@ static void run_rawdata_stdev_read(void *device_data)
 	sec_cmd_set_default_result(sec);
 
 	memset(&mode, 0x00, sizeof(struct sec_ts_test_mode));
-	mode.type = TYPE_RAW_DATA;
+	mode.type = TYPE_REMV_AMB_DATA;
 
 	sec_ts_read_frame_stdev(ts, sec, mode.type, &mode.min, &mode.max,
 				false);
@@ -2128,13 +2128,11 @@ static int sec_ts_read_frame_p2p(struct sec_ts_data *ts,
 			strlcat(buff, "\n", buff_size);
 	}
 
-	if (!sec)
-		goto ErrorSetResult;
+	if (sec) {
+		sec_cmd_set_cmd_result(sec, buff, strnlen(buff, buff_size));
+		sec->cmd_state = SEC_CMD_STATUS_OK;
+	}
 
-	sec_cmd_set_cmd_result(sec, buff, strnlen(buff, buff_size));
-	sec->cmd_state = SEC_CMD_STATUS_OK;
-
-ErrorSetResult:
 	kfree(temp);
 ErrorAlloctemp:
 ErrorP2PTest:
@@ -2147,12 +2145,9 @@ ErrorP2PTest:
 ErrorPowerState:
 	kfree(buff);
 ErrorAllocbuff:
-	if (!sec)
-		return ret;
 
-	if (ret < 0) {
-		snprintf(tmp, sizeof(tmp), "%s", "NG");
-		sec_cmd_set_cmd_result(sec, tmp, SEC_CMD_STR_LEN);
+	if (sec && ret < 0) {
+		sec_cmd_set_cmd_result(sec, "NG", 3);
 		sec->cmd_state = SEC_CMD_STATUS_FAIL;
 	}
 
@@ -2880,16 +2875,16 @@ err_exit:
 int execute_selftest(struct sec_ts_data *ts, bool save_result)
 {
 	int rc;
-	u8 tpara[2] = {0x23, 0x40};
+	u8 tpara[2] = {0x21, 0x40};
 	u8 *rBuff;
 	int i;
 	int result_size = SEC_TS_SELFTEST_REPORT_SIZE + ts->tx_count * ts->rx_count * 2;
 
 	/* save selftest result in flash */
 	if (save_result)
-		tpara[0] = 0x23;
+		tpara[0] = 0x21;
 	else
-		tpara[0] = 0xA3;
+		tpara[0] = 0xA1;
 
 	rBuff = kzalloc(result_size, GFP_KERNEL);
 	if (!rBuff)
@@ -2955,10 +2950,10 @@ int execute_selftest(struct sec_ts_data *ts, bool save_result)
 			else if ((rBuff[i + 3] & 0xC0) != 0)
 				rc = 0;
 			/* RX-RX, TX-TX short check. */
-			else if ((rBuff[i + 2] & 0x30) != 0)
+			else if ((rBuff[i + 2] & 0x03) != 0)
 				rc = 0;
 			/* TX-RX short check. */
-			else if ((rBuff[i + 2] & 0x40) != 0)
+			else if ((rBuff[i + 2] & 0x04) != 0)
 				rc = 0;
 			else
 				rc = 1;
