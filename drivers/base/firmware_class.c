@@ -994,7 +994,7 @@ static int fw_load_from_user_helper(struct firmware *firmware,
 	return _request_firmware_load(fw_priv, opt_flags, timeout);
 }
 
-#ifdef CONFIG_PM_SLEEP
+#ifdef CONFIG_FW_CACHE
 /* kill pending requests without uevent to avoid blocking suspend */
 static void kill_requests_without_uevent(void)
 {
@@ -1022,7 +1022,7 @@ fw_load_from_user_helper(struct firmware *firmware, const char *name,
 /* No abort during direct loading */
 #define is_fw_load_aborted(buf) false
 
-#ifdef CONFIG_PM_SLEEP
+#ifdef CONFIG_FW_CACHE
 static inline void kill_requests_without_uevent(void) { }
 #endif
 
@@ -1395,7 +1395,7 @@ request_firmware_nowait(
 }
 EXPORT_SYMBOL(request_firmware_nowait);
 
-#ifdef CONFIG_PM_SLEEP
+#ifdef CONFIG_FW_CACHE
 static ASYNC_DOMAIN_EXCLUSIVE(fw_cache_domain);
 
 /**
@@ -1428,6 +1428,7 @@ static int cache_firmware(const char *fw_name)
 	return ret;
 }
 
+#ifdef CONFIG_FW_CACHE
 static struct firmware_buf *fw_lookup_buf(const char *fw_name)
 {
 	struct firmware_buf *tmp;
@@ -1439,7 +1440,7 @@ static struct firmware_buf *fw_lookup_buf(const char *fw_name)
 
 	return tmp;
 }
-
+#endif
 /**
  * uncache_firmware - remove one cached firmware image
  * @fw_name: the firmware image name
@@ -1741,7 +1742,7 @@ static void __init fw_cache_init(void)
 	INIT_LIST_HEAD(&fw_cache.head);
 	fw_cache.state = FW_LOADER_NO_CACHE;
 
-#ifdef CONFIG_PM_SLEEP
+#ifdef CONFIG_FW_CACHE
 	spin_lock_init(&fw_cache.name_lock);
 	INIT_LIST_HEAD(&fw_cache.fw_names);
 
@@ -1768,7 +1769,7 @@ static int __init firmware_class_init(void)
 
 static void __exit firmware_class_exit(void)
 {
-#ifdef CONFIG_PM_SLEEP
+#ifdef CONFIG_FW_CACHE
 	unregister_syscore_ops(&fw_syscore_ops);
 	unregister_pm_notifier(&fw_cache.pm_notify);
 #endif
