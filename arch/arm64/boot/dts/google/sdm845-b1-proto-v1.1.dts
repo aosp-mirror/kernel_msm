@@ -62,6 +62,8 @@
 
 /* We need override the display on sequence for P1.1 devices. */
 &dsi_sw43408_dsc_fhd_cmd {
+	qcom,mdss-dsi-bl-min-level = <0xf0>;
+	qcom,mdss-dsi-bl-max-level = <0x332>;
 	qcom,mdss-dsi-display-timings {
 		timing@0 {
 			qcom,mdss-dsi-on-command = [

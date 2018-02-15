@@ -48,8 +48,8 @@
 		qcom,mdss-dsi-init-delay-us = <10000>;
 
 		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
-		qcom,mdss-dsi-bl-min-level = <0xf0>;
-		qcom,mdss-dsi-bl-max-level = <0x332>;
+		qcom,mdss-dsi-bl-min-level = <0x8>;
+		qcom,mdss-dsi-bl-max-level = <0x3ff>;
 
 		qcom,mdss-dsi-display-timings {
 			timing@0 {
