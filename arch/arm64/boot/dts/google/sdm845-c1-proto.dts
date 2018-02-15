@@ -20,3 +20,7 @@
 	compatible = "google,b1c1-sdm845", "qcom,sdm845";
 	qcom,board-id = <0x00010305 0>;
 };
+
+&p9221 {
+	fod = [b0 24 90 46 88 52 88 53 90 24 9a f0 14 00 01 64];
+};
