@@ -17912,6 +17912,14 @@ void wlan_hdd_tsf_init(hdd_adapter_t *adapter)
 
 #endif
 
+bool hdd_is_memdump_supported(void)
+{
+#ifdef WLAN_FEATURE_MEMDUMP
+	return true;
+#endif
+	return false;
+}
+
 //Register the module init/exit functions
 module_init(hdd_module_init);
 module_exit(hdd_module_exit);
