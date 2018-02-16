@@ -312,7 +312,8 @@ static int mnh_mipi_gen3_lookup_device_cfg_idx(uint32_t rate)
 static int mnh_mipi_gen3_host(struct device *dev, uint32_t device,
 			       uint32_t rate)
 {
-	uint32_t code_index, freq_range_code, osc_freq_code;
+	uint32_t freq_range_code, osc_freq_code;
+	int code_index;
 
 	/* only support devices 0-2 */
 	if (device > 2)
@@ -347,7 +348,7 @@ static int mnh_mipi_gen3_host(struct device *dev, uint32_t device,
 
 	/* get the PHY settings */
 	code_index = mnh_mipi_gen3_lookup_freq_code(rate);
-	if (code_index < 0)
+	if ((code_index < 0) || (code_index >= ARRAY_SIZE(mipi_rate_configs)))
 		return -EINVAL;
 	freq_range_code = mipi_rate_configs[code_index].freq_range_code;
 	osc_freq_code = mipi_rate_configs[code_index].osc_freq_code;
@@ -452,7 +453,8 @@ static void mnh_mipi_get_pll_coeffs(uint32_t rate, uint16_t *m, uint8_t *n)
 static int mnh_mipi_gen3_device(struct device *dev, uint32_t device,
 				uint32_t rate)
 {
-	uint32_t code_index, freq_range_code, osc_freq_code;
+	uint32_t freq_range_code, osc_freq_code;
+	int code_index;
 	struct mipi_dev_ovr_cfg *dev_ovr_cfg;
 	uint32_t mipi_dev_cfg_index;
 	unsigned long data;
@@ -545,7 +547,7 @@ static int mnh_mipi_gen3_device(struct device *dev, uint32_t device,
 
 	/* get the PHY settings */
 	code_index = mnh_mipi_gen3_lookup_freq_code(rate);
-	if (code_index < 0)
+	if ((code_index < 0) || (code_index >= ARRAY_SIZE(mipi_rate_configs)))
 		return -EINVAL;
 	freq_range_code = mipi_rate_configs[code_index].freq_range_code;
 	osc_freq_code = mipi_rate_configs[code_index].osc_freq_code;
