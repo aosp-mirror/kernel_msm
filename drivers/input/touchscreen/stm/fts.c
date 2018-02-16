@@ -1342,9 +1342,9 @@ static ssize_t stm_fts_cmd_show(struct device *dev, struct device_attribute *att
 						 "%s The frame size is %d words\n",
 						 tag, res);
 #ifdef RAW_DATA_FORMAT_DEC
-					size += 3 * 2 +
-					    (7 * frameMS.header.sense_node + 1)
-					    * frameMS.header.force_node;
+					size += 3 * 2 + 5 +
+						(frameSS.header.sense_node +
+						 frameSS.header.force_node) * 7;
 #else
 					size += (res * sizeof(short) + 2) * 2;
 #endif
@@ -1493,6 +1493,11 @@ static ssize_t stm_fts_cmd_show(struct device *dev, struct device_attribute *att
 
 END: //here start the reporting phase, assembling the data to send in the file node
     all_strbuff = (u8 *) kzalloc(size, GFP_KERNEL);
+	if (!all_strbuff) {
+		logError(1, "%s %s Failed to allocate string buffer.\n", tag,
+			 __FILE__);
+		return 0;
+	}
 
     snprintf(&all_strbuff[index], 11, "{ %08X", res);
 	index+=10;
