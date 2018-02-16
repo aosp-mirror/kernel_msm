@@ -583,6 +583,14 @@ ol_rx_flush_handler(
     struct ol_rx_reorder_array_elem_t *rx_reorder_array_elem;
     htt_pdev_handle htt_pdev = pdev->htt_pdev;
 
+    if (tid >= OL_TXRX_NUM_EXT_TIDS) {
+        TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+                    "%s:  invalid tid, %u\n",
+                    __FUNCTION__,
+                    tid);
+        return;
+    }
+
     peer = ol_txrx_peer_find_by_id(pdev, peer_id);
     if (peer) {
         vdev = peer->vdev;
@@ -622,8 +630,8 @@ ol_rx_pn_ind_handler(
     ol_txrx_pdev_handle pdev,
     u_int16_t peer_id,
     u_int8_t tid,
-    int seq_num_start,
-    int seq_num_end,
+    u_int16_t seq_num_start,
+    u_int16_t seq_num_end,
     u_int8_t pn_ie_cnt,
     u_int8_t *pn_ie)
 {
@@ -635,7 +643,8 @@ ol_rx_pn_ind_handler(
     adf_nbuf_t head_msdu = NULL;
     adf_nbuf_t tail_msdu = NULL;
     htt_pdev_handle htt_pdev = pdev->htt_pdev;
-    int seq_num, i=0;
+    u_int16_t seq_num;
+    int i=0;
 
     peer = ol_txrx_peer_find_by_id(pdev, peer_id);
 
