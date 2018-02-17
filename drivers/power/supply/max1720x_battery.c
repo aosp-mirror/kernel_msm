@@ -177,21 +177,31 @@ enum MAX1720X_COMMAND_bits {
 	MAX1720X_COMMAND_COPY_NV_BLOCK = 0xE904,
 };
 
+/** NV RAM is never manipulated directly but rather shadow RAM.
+ * We use NVRAM in this driver also code is reading/writing from/to shadow RAM.
+ * max1720x_copy_nv_block will copy shadow RAM content to NV RAM.
+ */
 enum max1720x_nvram {
 	MAX1720X_NVRAM_START = 0x80,
-	MAX1720X_NVRAM_VEMPTY = 0x9E,
+	MAX1720X_NVRAM_LEARNCFG = 0x9F,
+	MAX1720X_NVRAM_QRTABLE00 = 0xA0,
+	MAX1720X_NVRAM_CONFIG = 0xB0,
 	MAX1720X_NVRAM_PACKCFG = 0xB5,
 	MAX1720X_NVRAM_NVCFG0 = 0xB8,
+	MAX1720X_NVRAM_SBSCFG = 0xBB,
+	MAX1720X_NVRAM_CGAIN = 0xC8,
 	MAX1720X_NVRAM_RSENSE = 0xCF,
+	MAX1720X_NVRAM_DEVICENAME4 = 0xDF,
 	MAX1720X_NVRAM_END = 0xE0,
 	MAX1720X_NVRAM_REMAINING_UPDATES = 0xED,
 	MAX1720X_NVRAM_HISTORY_END = 0xF0,
 };
 #define NVRAM_SHORT_INDEX(reg) (reg - MAX1720X_NVRAM_START)
+#define NVRAM_BYTE_INDEX(reg) (NVRAM_SHORT_INDEX(reg) * sizeof(short))
+#define NVRAM_BYTE_INDEX_FROM(reg, base) ((reg - base) * sizeof(short))
 #define MAX1720X_NVRAM_SHORT_SIZE NVRAM_SHORT_INDEX(MAX1720X_NVRAM_END)
-#define MAX1720X_NVRAM_SIZE (MAX1720X_NVRAM_SHORT_SIZE * sizeof(short))
+#define MAX1720X_NVRAM_SIZE NVRAM_BYTE_INDEX(MAX1720X_NVRAM_END)
 
-#define MAX1720X_VEMPTY_IDX NVRAM_SHORT_INDEX(MAX1720X_NVRAM_VEMPTY)
 #define MAX1720X_NPACKCFG_IDX NVRAM_SHORT_INDEX(MAX1720X_NVRAM_PACKCFG)
 #define MAX1720X_NVCFG0_IDX NVRAM_SHORT_INDEX(MAX1720X_NVRAM_NVCFG0)
 
@@ -203,7 +213,7 @@ struct max1720x_chip {
 	struct i2c_client *primary;
 	struct i2c_client *secondary;
 	struct regmap *regmap_nvram;
-	u16 nvRAM_cfg[MAX1720X_NVRAM_SHORT_SIZE];
+	u16 dt_nvRAM_cfg[MAX1720X_NVRAM_SHORT_SIZE];
 	u16 RSense;
 	u16 RConfig;
 	bool init_complete;
@@ -497,10 +507,10 @@ static int max1720x_copy_nv_block(struct max1720x_chip *chip)
 	return 0;
 }
 
-static int max1720x_load_config_to_ram(struct max1720x_chip *chip)
+static int max1720x_load_dt_config_to_nvram(struct max1720x_chip *chip)
 {
 	if (regmap_raw_write(chip->regmap_nvram, MAX1720X_NVRAM_START,
-			     chip->nvRAM_cfg, MAX1720X_NVRAM_SIZE)) {
+			     chip->dt_nvRAM_cfg, MAX1720X_NVRAM_SIZE)) {
 		dev_err(chip->dev, "Failed to write config to shadow RAM\n");
 		return -EINVAL;
 	}
@@ -523,9 +533,97 @@ static int max1720x_load_dt_config(struct max1720x_chip *chip)
 		dev_err(chip->dev, "invalid config size: %d\n", len);
 		return -EINVAL;
 	}
-	memcpy(chip->nvRAM_cfg, data, len);
+	memcpy(chip->dt_nvRAM_cfg, data, len);
 
 	return 0;
+}
+
+/** Compare configuration:
+ * Return 0 if matching else return 1 and update dst with learned from src.
+ */
+static int max1720x_compare_config(const u16 *cfg_src, u16 *cfg_dst)
+{
+	/* Locations A0h to AFh are updated by the ICs each time it learns */
+	/* The ROM ID is unique to each IC and cannot be changed by the user. */
+
+	if (memcmp(cfg_src, cfg_dst,
+		   NVRAM_BYTE_INDEX(MAX1720X_NVRAM_LEARNCFG + 1)))
+		goto update_dst;
+
+	if (memcmp(cfg_src + NVRAM_SHORT_INDEX(MAX1720X_NVRAM_CONFIG),
+		   cfg_dst + NVRAM_SHORT_INDEX(MAX1720X_NVRAM_CONFIG),
+		   NVRAM_BYTE_INDEX_FROM(MAX1720X_NVRAM_SBSCFG + 1,
+					 MAX1720X_NVRAM_CONFIG)))
+		goto update_dst;
+
+	return 0;
+update_dst:
+	memcpy(cfg_dst + NVRAM_SHORT_INDEX(MAX1720X_NVRAM_QRTABLE00),
+	       cfg_src + NVRAM_SHORT_INDEX(MAX1720X_NVRAM_QRTABLE00),
+	       NVRAM_BYTE_INDEX_FROM(MAX1720X_NVRAM_CONFIG,
+				     MAX1720X_NVRAM_QRTABLE00));
+	cfg_dst[NVRAM_SHORT_INDEX(MAX1720X_NVRAM_CGAIN)] =
+	    cfg_src[NVRAM_SHORT_INDEX(MAX1720X_NVRAM_CGAIN)];
+
+	return 1;
+}
+
+
+static void max1720x_handle_dt_config(struct max1720x_chip *chip)
+{
+	struct device_node *node = chip->dev->of_node;
+	u16 data, dt_nPackCfg, nPackCfg;
+	bool force_flash_config, force_load_config, config_differ;
+	u16 nvRAM_cfg[MAX1720X_NVRAM_SHORT_SIZE];
+
+	force_flash_config =
+	    of_property_read_bool(node, "maxim,force-flash-config");
+	force_load_config =
+	    of_property_read_bool(node, "maxim,force-load-config");
+
+	if (regmap_raw_read(chip->regmap_nvram, MAX1720X_NVRAM_START,
+			    nvRAM_cfg, MAX1720X_NVRAM_SIZE)) {
+		dev_err(chip->dev, "Failed to read config from shadow RAM\n");
+		return;
+	}
+
+	config_differ = max1720x_compare_config(nvRAM_cfg, chip->dt_nvRAM_cfg);
+
+	REGMAP_WRITE(chip->regmap, MAX1720X_COMMAND,
+		     MAX1720X_COMMAND_QUERY_REMAINING_UPDATES);
+	msleep(MAX1720X_TRECALL_MS);
+	REGMAP_READ(chip->regmap_nvram, MAX1720X_NVRAM_REMAINING_UPDATES, data);
+	dev_info(chip->dev, "Remaining config memory updates: 0x%04x\n", data);
+
+	REGMAP_READ(chip->regmap, MAX1720X_Lock, data);
+	dev_info(chip->dev, "NV RAM lock status: 0x%02x\n", data & 0x1F);
+
+	REGMAP_READ(chip->regmap, MAX1720X_PackCfg, nPackCfg);
+	dt_nPackCfg = chip->dt_nvRAM_cfg[MAX1720X_NPACKCFG_IDX];
+
+	if ((dt_nPackCfg != nPackCfg) ||
+	    (config_differ && force_flash_config)) {
+		if (dt_nPackCfg != nPackCfg)
+			dev_info(chip->dev, "nPackCfg 0x%04x != DT config 0x%04x\n",
+				 nPackCfg, dt_nPackCfg);
+
+		dev_info(chip->dev, "Flashing DT config to NVRAM\n");
+
+		if (max1720x_load_dt_config_to_nvram(chip))
+			goto check_force_load_config;
+
+		if (max1720x_copy_nv_block(chip))
+			goto check_force_load_config;
+
+		max1720x_full_reset(chip);
+	}
+
+check_force_load_config:
+	if (force_load_config) {
+		dev_info(chip->dev, "Loading DT config to shadow RAM\n");
+		max1720x_load_dt_config_to_nvram(chip);
+		max1720x_fg_reset(chip);
+	}
 }
 
 static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
@@ -609,10 +707,7 @@ static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 
 static void max1720x_init_chip(struct max1720x_chip *chip)
 {
-	struct device_node *node = chip->dev->of_node;
 	u16 data;
-	u16 dt_nPackCfg, nPackCfg, dt_nVEmpty, nVEmpty;
-	bool force_flash_config, force_load_config;
 
 	REGMAP_READ(chip->regmap, MAX1720X_Status, data);
 	if (data & MAX1720X_STATUS_BR) {
@@ -620,65 +715,19 @@ static void max1720x_init_chip(struct max1720x_chip *chip)
 		regmap_update_bits(chip->regmap, MAX1720X_Status,
 				   MAX1720X_STATUS_BR, 0x0);
 	}
-
-	if (max1720x_load_dt_config(chip))
-		/* We'll run with the existing config */
-		goto fg_reset;
-
-	REGMAP_READ(chip->regmap, MAX1720X_PackCfg, nPackCfg);
-	dt_nPackCfg = chip->nvRAM_cfg[MAX1720X_NPACKCFG_IDX];
-
-	REGMAP_READ(chip->regmap_nvram, MAX1720X_NVRAM_VEMPTY, nVEmpty);
-	dt_nVEmpty = chip->nvRAM_cfg[MAX1720X_VEMPTY_IDX];
-
-	force_flash_config =
-	    of_property_read_bool(node, "maxim,force-flash-config");
-	force_load_config =
-	    of_property_read_bool(node, "maxim,force-load-config");
-
-	if (dt_nPackCfg != nPackCfg)
-		dev_info(chip->dev, "nPackCfg 0x%04x != DT config 0x%04x\n",
-			 nPackCfg, dt_nPackCfg);
-
-	if (dt_nVEmpty != nVEmpty)
-		dev_info(chip->dev, "nVEmpty 0x%04x != DT config 0x%04x\n",
-			 nVEmpty, dt_nVEmpty);
-
-	REGMAP_WRITE(chip->regmap, MAX1720X_COMMAND,
-		     MAX1720X_COMMAND_QUERY_REMAINING_UPDATES);
-	msleep(MAX1720X_TRECALL_MS);
-	REGMAP_READ(chip->regmap_nvram, MAX1720X_NVRAM_REMAINING_UPDATES, data);
-	dev_info(chip->dev, "Remaining config memory updates: 0x%04x\n", data);
-
-	REGMAP_READ(chip->regmap, MAX1720X_Lock, data);
-	dev_info(chip->dev, "NV RAM lock status: 0x%02x\n", data & 0x1F);
-
-	if ((dt_nPackCfg != nPackCfg) ||
-	    (force_flash_config && (dt_nVEmpty != nVEmpty))) {
-		/* Force NV blocks programming if PackCfg is invalid.
-		 * Also perform NV blocks programming is requested and
-		 * VEmpty are different.
-		 */
-		dev_info(chip->dev, "Flashing DT config to NVRAM\n");
-
-		if (max1720x_load_config_to_ram(chip))
-			/* We'll run with the existing config */
-			goto fg_reset;
-
-		if (max1720x_copy_nv_block(chip))
-			/* We'll run with the DT config */
-			goto fg_reset;
-
-		max1720x_full_reset(chip);
+	if (data & MAX1720X_STATUS_BI) {
+		dev_info(chip->dev, "Clearing Battery Insertion bit\n");
+		regmap_update_bits(chip->regmap, MAX1720X_Status,
+				   MAX1720X_STATUS_BI, 0x0);
+	}
+	if (data & MAX1720X_STATUS_POR) {
+		dev_info(chip->dev, "Clearing Power-On Reset bit\n");
+		regmap_update_bits(chip->regmap, MAX1720X_Status,
+				   MAX1720X_STATUS_POR, 0x0);
 	}
 
-	if (force_load_config) {
-		dev_info(chip->dev, "Loading DT config to shadow RAM\n");
-		max1720x_load_config_to_ram(chip);
-	}
-
-fg_reset:
-	max1720x_fg_reset(chip);
+	if (max1720x_load_dt_config(chip) == 0)
+		max1720x_handle_dt_config(chip);
 
 	REGMAP_READ(chip->regmap_nvram, MAX1720X_NVRAM_RSENSE, chip->RSense);
 	dev_info(chip->dev, "RSense value %d micro Ohm\n", chip->RSense * 10);
@@ -687,6 +736,9 @@ fg_reset:
 	REGMAP_READ(chip->regmap, MAX1720X_IChgTerm, data);
 	dev_info(chip->dev, "IChgTerm: %d\n",
 		 reg_to_micro_amp(data, chip->RSense));
+	REGMAP_READ(chip->regmap, MAX1720X_VEmpty, data);
+	dev_info(chip->dev, "VEmpty: VE=%dmV VR=%dmV\n",
+		 ((data >> 7) & 0x1ff) * 10, (data & 0x7f) * 40);
 }
 
 static void max1720x_init_worker(struct work_struct *work)
