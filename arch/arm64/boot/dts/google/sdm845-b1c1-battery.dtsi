@@ -62,7 +62,7 @@
 		fg,irq-gpio = <&tlmm 62 0x00>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&fg_int_default>;
-		/* maxim,force-flash-config; */
+		maxim,force-flash-config;
 		/* maxim,force-load-config; */
 	};
 };
