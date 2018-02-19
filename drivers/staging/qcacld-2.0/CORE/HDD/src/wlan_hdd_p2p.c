@@ -648,12 +648,18 @@ static int wlan_hdd_execute_remain_on_channel(hdd_adapter_t *pAdapter,
             return -EINVAL;
         }
 
-        if (REMAIN_ON_CHANNEL_REQUEST == pRemainChanCtx->rem_on_chan_request) {
+        mutex_lock(&cfgState->remain_on_chan_ctx_lock);
+        pRemainChanCtx = cfgState->remain_on_chan_ctx;
+        if ((pRemainChanCtx)&&(REMAIN_ON_CHANNEL_REQUEST ==
+            pRemainChanCtx->rem_on_chan_request)) {
+            mutex_unlock(&cfgState->remain_on_chan_ctx_lock);
             if (eHAL_STATUS_SUCCESS != sme_RegisterMgmtFrame(
                                          WLAN_HDD_GET_HAL_CTX(pAdapter),
                                          sessionId, (SIR_MAC_MGMT_FRAME << 2) |
                                         (SIR_MAC_MGMT_PROBE_REQ << 4), NULL, 0))
                 hddLog(LOGE, FL("sme_RegisterMgmtFrame returned failure"));
+        } else {
+               mutex_unlock(&cfgState->remain_on_chan_ctx_lock);
         }
     }
     else if ( ( WLAN_HDD_SOFTAP== pAdapter->device_mode ) ||
