@@ -224,6 +224,7 @@ enum max1720x_nvram {
 		MAX1720X_NVRAM_HISTORY_WRITE_STATUS_START + 1 + \
 		MAX1720X_NVRAM_HISTORY_WRITE_STATUS_END -	\
 		MAX1720X_NVRAM_END + 1)
+#define MAX1720X_N_OF_QRTABLES 4
 
 struct max1720x_chip {
 	struct device *dev;
@@ -240,6 +241,7 @@ struct max1720x_chip {
 	u16 *history;
 	int history_count;
 	int history_index;
+	bool vmin_breached;
 };
 
 #define REGMAP_READ(regmap, what, dst)				\
@@ -602,6 +604,18 @@ static enum power_supply_property max1720x_battery_props[] = {
 	POWER_SUPPLY_PROP_TECHNOLOGY,
 };
 
+static int max1720x_get_battery_soc(struct max1720x_chip *chip)
+{
+	u16 data;
+
+	if (chip->vmin_breached) {
+		dev_info(chip->dev, "minimal voltage has been breached");
+		return 0;
+	}
+	REGMAP_READ(chip->regmap, MAX1720X_RepSOC, data);
+	return reg_to_percentage(data);
+}
+
 static int max1720x_get_property(struct power_supply *psy,
 				 enum power_supply_property psp,
 				 union power_supply_propval *val)
@@ -615,8 +629,7 @@ static int max1720x_get_property(struct power_supply *psy,
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_CAPACITY:
-		REGMAP_READ(map, MAX1720X_RepSOC, data);
-		val->intval = reg_to_percentage(data);
+		val->intval = max1720x_get_battery_soc(chip);
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY_RAW:
 		REGMAP_READ(map, MAX1720X_DesignCap, data);
@@ -759,6 +772,65 @@ static int max1720x_copy_nv_block(struct max1720x_chip *chip)
 	}
 
 	return 0;
+}
+
+static void max1720x_load_overlay_dt_settings_to_ram(
+		struct max1720x_chip *chip)
+{
+	struct device_node *node = chip->dev->of_node;
+	u16 ic_vempty = 0, dt_vempty = 0, dt_vempty_ve = 0, dt_vempty_vr = 0;
+	u16 dt_valrtth_vmax = 0, dt_valrtth_vmin = 0;
+	u16 dt_qrtables[MAX1720X_N_OF_QRTABLES];
+	u32 val;
+	u16 reg;
+	u16 qrtables[MAX1720X_N_OF_QRTABLES];
+
+	if (!of_property_read_u32(node, "maxim,empty-voltage", &val))
+		dt_vempty_ve = val / 10;
+
+	if (!of_property_read_u32(node, "maxim,recovery-voltage", &val))
+		dt_vempty_vr = val / 40;
+
+	if (!of_property_read_u32(node, "maxim,valrtth-vmax", &val))
+		dt_valrtth_vmax = val / 20;
+
+	if (!of_property_read_u32(node, "maxim,valrtth-vmin", &val))
+		dt_valrtth_vmin = val / 20;
+
+	if ((dt_vempty_ve != 0) || (dt_vempty_vr != 0)) {
+		REGMAP_READ(chip->regmap, MAX1720X_VEmpty, val);
+		dt_vempty = ic_vempty = val;
+		if (dt_vempty_ve != 0)
+			dt_vempty = ((dt_vempty_ve << 7) & GENMASK(15, 7)) |
+			    (ic_vempty & GENMASK(6, 0));
+		if (dt_vempty_vr != 0)
+			dt_vempty = (dt_vempty_vr & GENMASK(6, 0)) |
+			    (ic_vempty & GENMASK(15, 7));
+		REGMAP_WRITE(chip->regmap, MAX1720X_VEmpty, dt_vempty);
+	}
+
+	if ((dt_valrtth_vmax != 0) || (dt_valrtth_vmin != 0)) {
+		REGMAP_READ(chip->regmap, MAX1720X_VAlrtTh, val);
+		reg = val;
+		if (dt_valrtth_vmax != 0)
+			reg = (reg & GENMASK(7, 0)) | (dt_valrtth_vmax << 8);
+		if (dt_valrtth_vmin != 0)
+			reg = (reg & GENMASK(15, 8)) | dt_valrtth_vmin;
+		REGMAP_WRITE(chip->regmap, MAX1720X_VAlrtTh, reg);
+	}
+
+	if (dt_vempty != ic_vempty) {
+		if (of_property_read_u16_array(node, "maxim,battery-qrtables",
+					       qrtables,
+					       MAX1720X_N_OF_QRTABLES)) {
+			dev_warn(chip->dev, "maxim,battery-qrtables not provided while maxim,empty-voltage is\n");
+			return;
+		}
+		REGMAP_WRITE(chip->regmap, MAX1720X_QRTable00, dt_qrtables[0]);
+		REGMAP_WRITE(chip->regmap, MAX1720X_QRTable10, dt_qrtables[1]);
+		REGMAP_WRITE(chip->regmap, MAX1720X_QRTable20, dt_qrtables[2]);
+		REGMAP_WRITE(chip->regmap, MAX1720X_QRTable30, dt_qrtables[3]);
+	}
 }
 
 static int max1720x_load_dt_config_to_nvram(struct max1720x_chip *chip)
@@ -917,6 +989,7 @@ static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 	if (fg_status & MAX1720X_STATUS_VMN) {
 		if (chip->RConfig & MAX1720X_CONFIG_VS)
 			fg_status &= ~MAX1720X_STATUS_VMN;
+		chip->vmin_breached = true;
 		pr_debug("VMN is set");
 	}
 	if (fg_status & MAX1720X_STATUS_TMN) {
@@ -982,6 +1055,9 @@ static void max1720x_init_chip(struct max1720x_chip *chip)
 	if (max1720x_load_dt_config(chip) == 0)
 		max1720x_handle_dt_config(chip);
 
+	/* No reset of the fg is permitted after load overlay */
+	max1720x_load_overlay_dt_settings_to_ram(chip);
+
 	REGMAP_READ(chip->regmap_nvram, MAX1720X_NVRAM_RSENSE, chip->RSense);
 	dev_info(chip->dev, "RSense value %d micro Ohm\n", chip->RSense * 10);
 	REGMAP_READ(chip->regmap, MAX1720X_Config, chip->RConfig);
@@ -1010,6 +1086,8 @@ static void max1720x_init_worker(struct work_struct *work)
 			dev_err(chip->dev, "Unable to register IRQ handler\n");
 			return;
 		}
+		enable_irq_wake(chip->primary->irq);
+		chip->vmin_breached = false;
 	}
 	chip->init_complete = 1;
 }

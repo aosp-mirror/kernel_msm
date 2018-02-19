@@ -14,3 +14,14 @@ Optional properties :
    NV block writes are limited to 7 so use with care.
  - maxim,psy-type-unknown: if set, forces poser supply type to be
    POWER_SUPPLY_TYPE_UNKNOWN rather than POWER_SUPPLY_TYPE_BATTERY
+ - maxim,empty-voltage: Sets the voltage level for detecting empty. The unit is
+   millivolt.
+ - maxim,recovery-voltage: Sets the voltage level for clearing empty detection.
+   Once the cell voltage rises above this point, empty voltage detection is
+   reenabled.
+ - maxim,battery-qrtables: initial learning parameters that should be specified
+   when a new maxim,empty-voltage is specified.
+ - maxim,maxim,valrtth-vmax: An alert is generated if the VCell register reading
+   exceeds this value. The unit is millivolt.
+ - maxim,maxim,valrtth-vmin: An alert is generated if the VCell register reading
+   falls below this value. The unit is millivolt.
