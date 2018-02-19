@@ -71,6 +71,7 @@
 &soc {
 	google_charger: google,charger {
 		compatible = "google,charger";
+		google,chg-power-supply = "battery";
 		google,chg-update-interval = <30000>;
 		google,chg-temp-nb-limits = <7>;
 		google,chg-temp-limits = <0 100 200 420 460 480 550>;
