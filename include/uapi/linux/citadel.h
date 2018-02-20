@@ -30,5 +30,6 @@ struct citadel_ioc_tpm_datagram {
 
 #define CITADEL_IOC_TPM_DATAGRAM	_IOW(CITADEL_IOC_MAGIC, 1, \
 					     struct citadel_ioc_tpm_datagram)
+#define CITADEL_IOC_RESET		_IO(CITADEL_IOC_MAGIC, 2)
 
 #endif /* CITADEL_H */
