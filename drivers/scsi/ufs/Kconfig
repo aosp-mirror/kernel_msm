@@ -3,6 +3,8 @@
 #
 # This code is based on drivers/scsi/ufs/Kconfig
 # Copyright (C) 2011-2013 Samsung India Software Operations
+# Copyright (c) 2017-2018 Samsung Electronics Co., Ltd.
+# Copyright (C) 2018, Google, Inc.
 #
 # Authors:
 #	Santosh Yaraganavi <santosh.sy@samsung.com>
@@ -126,3 +128,10 @@ config SCSI_UFSHCD_CMD_LOGGING
 
 	  Select this if you want above mentioned debug information captured.
 	  If unsure, say N.
+
+config SCSI_UFSHCD_HPB_ACTIVATE
+	int "Activate HPB Host-aware Performance Booster"
+	depends on SCSI_UFSHCD
+	default 1
+	help
+	  Activate or deactive UFSHPB v1.3.5 test driver

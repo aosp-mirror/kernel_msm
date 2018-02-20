@@ -1,0 +1,77 @@
+What:		/sys/devices/platform/soc/<....>ufshc/ufshpb_lu#num/HPBVersion
+Date:		April, 2018
+Contact:	"Jaegeuk Kim" <jaegeuk@google.com>
+Description:
+		Show HPB version info.
+
+What:		/sys/devices/platform/soc/<....>ufshc/ufshpb_lu#num/add_evict_count
+Date:		April, 2018
+Contact:	"Jaegeuk Kim" <jaegeuk@google.com>
+Description:
+		Show the count of HPB entry evictions.
+
+What:		/sys/devices/platform/soc/<....>ufshc/ufshpb_lu#num/hit_count
+Date:		April, 2018
+Contact:	"Jaegeuk Kim" <jaegeuk@google.com>
+Description:
+		Show the count of HPB entry hits.
+
+What:		/sys/devices/platform/soc/<....>ufshc/ufshpb_lu#num/map_loading
+Date:		April, 2018
+Contact:	"Jaegeuk Kim" <jaegeuk@google.com>
+Description:
+		Request HPB map loading.
+
+What:		/sys/devices/platform/soc/<....>ufshc/ufshpb_lu#num/read_16_disable
+Date:		April, 2018
+Contact:	"Jaegeuk Kim" <jaegeuk@google.com>
+Description:
+		Disable READ16 for HPB communication.
+
+What:		/sys/devices/platform/soc/<....>ufshc/ufshpb_lu#num/active_block_status
+Date:		April, 2018
+Contact:	"Jaegeuk Kim" <jaegeuk@google.com>
+Description:
+		Show all the active block.
+
+What:		/sys/devices/platform/soc/<....>ufshc/ufshpb_lu#num/count_reset
+Date:		April, 2018
+Contact:	"Jaegeuk Kim" <jaegeuk@google.com>
+Description:
+		Reset all the tracking counts.
+
+What:		/sys/devices/platform/soc/<....>ufshc/ufshpb_lu#num/is_active_group
+Date:		April, 2018
+Contact:	"Jaegeuk Kim" <jaegeuk@google.com>
+Description:
+		Show active group info.
+
+What:		/sys/devices/platform/soc/<....>ufshc/ufshpb_lu#num/map_req_count
+Date:		April, 2018
+Contact:	"Jaegeuk Kim" <jaegeuk@google.com>
+Description:
+		Show the count to request HPB map entry.
+
+What:		/sys/devices/platform/soc/<....>ufshc/ufshpb_lu#num/active_list
+Date:		April, 2018
+Contact:	"Jaegeuk Kim" <jaegeuk@google.com>
+Description:
+		Show active block list.
+
+What:		/sys/devices/platform/soc/<....>ufshc/ufshpb_lu#num/get_info_from_lba
+Date:		April, 2018
+Contact:	"Jaegeuk Kim" <jaegeuk@google.com>
+Description:
+		Show HPB entry info given LBA.
+
+What:		/sys/devices/platform/soc/<....>ufshc/ufshpb_lu#num/map_cmd_disable
+Date:		April, 2018
+Contact:	"Jaegeuk Kim" <jaegeuk@google.com>
+Description:
+		Disable HPB map command.
+
+What:		/sys/devices/platform/soc/<....>ufshc/ufshpb_lu#num/miss_count
+Date:		April, 2018
+Contact:	"Jaegeuk Kim" <jaegeuk@google.com>
+Description:
+		Show the count of HPB entry misses.
