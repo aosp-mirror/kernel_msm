@@ -19,6 +19,7 @@
 #include <linux/interrupt.h>
 #include <linux/ioctl.h>
 #include <linux/fs.h>
+#include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/slab.h>
@@ -43,8 +44,8 @@ struct citadel_data {
 	struct cdev		cdev;
 	struct spi_device	*spi;
 	int			ctdl_ap_irq;
-	int			ap_ctdl_irq;
 	wait_queue_head_t	waitq;
+	int			ctdl_rst;
 	atomic_t		users;
 	void			*tx_buf;
 	void			*rx_buf;
@@ -202,6 +203,24 @@ exit:
 	return ret;
 }
 
+static int citadel_reset(struct citadel_data *citadel)
+{
+	/* Synchronize with the datagrams by locking the SPI bus */
+	struct spi_device *spi = citadel->spi;
+	spi_bus_lock(spi->master);
+
+	/* Assert reset for at least 3ms after VDDIOM is stable; 10ms is safe */
+	gpio_set_value(citadel->ctdl_rst, 1);
+	msleep(10);
+
+	/* Clear reset and wait for Citadel to become functional */
+	gpio_set_value(citadel->ctdl_rst, 0);
+	msleep(100);
+
+	spi_bus_unlock(spi->master);
+	return 0;
+}
+
 static long
 citadel_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
@@ -226,6 +245,8 @@ citadel_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 
 		/* translate to spi_message, execute */
 		return citadel_tpm_datagram(citadel, &dg);
+	case CITADEL_IOC_RESET:
+		return citadel_reset(citadel);
 	}
 	return -EINVAL;
 }
@@ -394,6 +415,7 @@ static int citadel_probe(struct spi_device *spi)
 	citadel->devt = devt;
 	spi_set_drvdata(spi, citadel);
 
+	/* setup ctdl_ap_irq  */
 	ret = citadel_request_named_gpio(citadel, "citadel,ctdl_ap_irq",
 					 &citadel->ctdl_ap_irq);
 	if (ret) {
@@ -418,6 +440,19 @@ static int citadel_probe(struct spi_device *spi)
 
 	enable_irq_wake(gpio_to_irq(citadel->ctdl_ap_irq));
 
+	/* setup ctdl_rst */
+	ret = citadel_request_named_gpio(citadel, "citadel,ctdl_rst",
+					 &citadel->ctdl_rst);
+	if (ret) {
+		dev_err(&spi->dev,
+			"citadel_request_named_gpio "
+			"citadel,ctdl_rst failed.\n");
+		goto free_citadel;
+	}
+
+	gpio_direction_output(citadel->ctdl_rst, 0);
+
+	/* create the device */
 	dev = device_create(citadel_class, &spi->dev, devt, NULL,
 			    "citadel%u", minor);
 	if (IS_ERR(dev)) {
