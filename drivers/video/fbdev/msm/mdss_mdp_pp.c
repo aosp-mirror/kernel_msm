@@ -1717,7 +1717,7 @@ int mdss_mdp_qseed3_setup(struct mdss_mdp_pipe *pipe,
 			lut_offset = mdata->scaler_off->dest_base +
 				mdata->scaler_off->dest_scaler_lut_off[id];
 			/*TODO : set pixel fmt to RGB101010 */
-			return -ENOTSUP;
+			return -ENOTSUPP;
 		} else {
 			return -EINVAL;
 		}
@@ -7207,6 +7207,13 @@ int mdss_mdp_pp_get_version(struct mdp_pp_feature_version *version)
 	if (!version) {
 		pr_err("invalid param version %pK\n", version);
 		ret = -EINVAL;
+		goto exit_version;
+	}
+	/* PA dither is not supported by driver */
+	if (version->pp_feature == PA_DITHER) {
+		pr_warn("unsupported feature %d\n", version->pp_feature);
+		version->version_info = 0;
+		ret = 0;
 		goto exit_version;
 	}
 	if (version->pp_feature >= PP_FEATURE_MAX) {

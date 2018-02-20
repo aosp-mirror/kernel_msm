@@ -169,7 +169,7 @@ sda670-pm660a-mtp-overlay.dtbo-base := sda670.dtb
 qcs605-cdp-overlay.dtbo-base := qcs605.dtb
 qcs605-mtp-overlay.dtbo-base := qcs605.dtb
 qcs605-external-codec-mtp-overlay.dtbo-base := qcs605.dtb
-qcs605-lc-mtp-overlay.dtbo-base := qcs605.dtb
+qcs605-lc-mtp-overlay.dtbo-base := qcs605-lc.dtb
 qcs605-360camera-overlay.dtbo-base := qcs605.dtb
 
 else
@@ -201,8 +201,7 @@ dtb-$(CONFIG_ARCH_SDM670) += sdm670-rumi.dtb \
 	qcs605-360camera.dtb \
 	qcs605-mtp.dtb \
 	qcs605-cdp.dtb \
-	qcs605-external-codec-mtp.dtb \
-	qcs605-lc-mtp.dtb
+	qcs605-external-codec-mtp.dtb
 endif
 
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
@@ -220,7 +219,15 @@ dtbo-$(CONFIG_ARCH_SDM450) += msm8953-mtp-overlay.dtbo \
 	msm8953-cdp-overlay.dtbo \
 	msm8953-rcm-overlay.dtbo \
 	msm8953-qrd-overlay.dtbo \
-	msm8953-iot-mtp-overlay.dtbo
+	msm8953-iot-mtp-overlay.dtbo \
+	sdm450-cdp-s2-overlay.dtbo \
+	sdm450-mtp-s3-overlay.dtbo \
+	sdm450-qrd-sku4-overlay.dtbo
+
+dtbo-$(CONFIG_ARCH_SDM632) += sdm632-rumi-overlay.dtbo \
+	sdm450-cdp-s2-overlay.dtbo \
+	sdm450-mtp-s3-overlay.dtbo \
+	sdm450-qrd-sku4-overlay.dtbo
 
 msm8953-mtp-overlay.dtbo-base := sdm450.dtb \
 	msm8953.dtb \
@@ -251,6 +258,14 @@ msm8953-ext-codec-mtp-overlay.dtbo-base := msm8953.dtb \
 msm8953-ext-codec-rcm-overlay.dtbo-base := msm8953.dtb \
 	apq8053.dtb
 msm8953-cdp-1200p-overlay.dtbo-base := msm8953.dtb
+sdm450-cdp-s2-overlay.dtbo-base := sdm450-pmi632.dtb \
+	sdm632.dtb \
+	msm8953-pmi632.dtb
+sdm450-mtp-s3-overlay.dtbo-base := sdm450-pmi632.dtb \
+	sdm632.dtb
+sdm450-qrd-sku4-overlay.dtbo-base := sdm450-pmi632.dtb \
+	sdm632.dtb
+sdm632-rumi-overlay.dtbo-base := sdm632.dtb
 
 else
 dtb-$(CONFIG_ARCH_MSM8953) += msm8953-cdp.dtb \
@@ -274,7 +289,10 @@ dtb-$(CONFIG_ARCH_MSM8953) += msm8953-cdp.dtb \
 	msm8953-pmi8937-cdp.dtb \
 	msm8953-pmi8937-mtp.dtb \
 	msm8953-pmi8940-ext-codec-mtp.dtb \
-	msm8953-pmi8937-ext-codec-mtp.dtb
+	msm8953-pmi8937-ext-codec-mtp.dtb \
+	msm8953-pmi632-cdp-s2.dtb
+
+dtb-$(CONFIG_ARCH_MSM8937) += msm8937-pmi8950-mtp.dtb
 
 dtb-$(CONFIG_ARCH_SDM450) += sdm450-rcm.dtb \
 	sdm450-cdp.dtb \
@@ -287,7 +305,10 @@ dtb-$(CONFIG_ARCH_SDM450) += sdm450-rcm.dtb \
 	sdm450-pmi632-cdp-s2.dtb \
 	sdm450-pmi632-mtp-s3.dtb
 
-dtb-$(CONFIG_ARCH_SDM632) += sdm632-rumi.dtb
+dtb-$(CONFIG_ARCH_SDM632) += sdm632-rumi.dtb \
+	sdm632-cdp-s2.dtb	\
+	sdm632-mtp-s3.dtb	\
+	sdm632-qrd-sku4.dtb
 
 endif
 
