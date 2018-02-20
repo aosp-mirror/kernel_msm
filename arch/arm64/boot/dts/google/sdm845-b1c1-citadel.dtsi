@@ -36,7 +36,7 @@
 				pins = "gpio135";
 				drive-strength = <2>; /* 2 MA */
 				bias-pull-down;
-			    output-high;
+				output-high;
 			};
 		};
 	};
@@ -60,6 +60,7 @@
 		interrupt-parent = <&tlmm>;
 		interrupts = <129 0x0>;
 		citadel,ctdl_ap_irq = <&tlmm 129 0x0>;
+		citadel,ctdl_rst = <&pmi8998_gpios 12 GPIO_ACTIVE_HIGH>;
 		pinctrl-names = "ap_ctdl_irq";
 		pinctrl-0 = <&ap_ctdl_irq>;
 		reg = <0>;
