@@ -11,6 +11,7 @@
  */
 
 #include "sec_ts.h"
+#include "sec_ts_fac_spec.h"
 
 static void fw_update(void *device_data);
 static void get_fw_ver_bin(void *device_data);
@@ -39,6 +40,7 @@ static void get_reference(void *device_data);
 static void run_rawcap_read(void *device_data);
 static void run_rawcap_read_all(void *device_data);
 static void get_rawcap(void *device_data);
+static void run_rawcap_gap_read_all(void *device_data);
 static void run_delta_read(void *device_data);
 static void run_delta_read_all(void *device_data);
 static void get_delta(void *device_data);
@@ -126,6 +128,7 @@ static struct sec_cmd sec_cmds[] = {
 	{SEC_CMD("run_rawcap_read", run_rawcap_read),},
 	{SEC_CMD("run_rawcap_read_all", run_rawcap_read_all),},
 	{SEC_CMD("get_rawcap", get_rawcap),},
+	{SEC_CMD("run_rawcap_gap_read_all", run_rawcap_gap_read_all),},
 	{SEC_CMD("run_delta_read", run_delta_read),},
 	{SEC_CMD("run_delta_read_all", run_delta_read_all),},
 	{SEC_CMD("get_delta", get_delta),},
@@ -759,6 +762,79 @@ int sec_ts_release_tmode(struct sec_ts_data *ts)
 	sec_ts_delay(20);
 
 	return ret;
+}
+
+/* sec_ts_cm_spec_over_check : apply gap calculation with ts->pFrame data
+ * gap = abs(N1 - N2) / MAX(N1, N2) * 100 (%)
+ */
+static int sec_ts_cm_spec_over_check(struct sec_ts_data *ts, short *gap,
+				     bool gap_dir)
+{
+	int i = 0;
+	int j = 0;
+	int gapx, gapy, pos1, pos2;
+	short dpos1, dpos2;
+	int specover_count = 0;
+
+	input_info(true, &ts->client->dev, "%s\n", __func__);
+
+	/* Get x-direction cm gap */
+	if (!gap_dir) {
+		input_info(true, &ts->client->dev, "gapX TX\n");
+
+		for (i = 0; i < ts->rx_count; i++) {
+			for (j = 0; j < ts->tx_count - 1; j++) {
+				/* Exclude last line to get gap between two
+				 * lines.
+				 */
+				pos1 = (i * ts->tx_count) + j;
+				pos2 = (i * ts->tx_count) + (j + 1);
+
+				dpos1 = ts->pFrame[pos1];
+				dpos2 = ts->pFrame[pos2];
+
+				if (dpos1 > dpos2)
+					gapx = 100 - (dpos2 * 100 / dpos1);
+				else
+					gapx = 100 - (dpos1 * 100 / dpos2);
+
+				gap[pos1] = gapx;
+
+				if (gapx > cm_gap[i][j])
+					specover_count++;
+			}
+		}
+	}
+
+	/* get y-direction cm gap */
+	else {
+		input_info(true, &ts->client->dev, "gapY RX\n");
+
+		for (i = 0; i < ts->rx_count - 1; i++) {
+			for (j = 0; j < ts->tx_count; j++) {
+				pos1 = (i * ts->tx_count) + j;
+				pos2 = ((i + 1) * ts->tx_count) + j;
+
+				dpos1 = ts->pFrame[pos1];
+				dpos2 = ts->pFrame[pos2];
+
+				if (dpos1 > dpos2)
+					gapy = 100 - (dpos2 * 100 / dpos1);
+				else
+					gapy = 100 - (dpos1 * 100 / dpos2);
+
+				gap[pos1] = gapy;
+
+				if (gapy > cm_gap[i][j])
+					specover_count++;
+			}
+		}
+	}
+
+	input_info(true, &ts->client->dev, "%s: Gap NG for %d node(s)\n",
+			gap_dir == 0 ? "gapX" : "gapY", specover_count);
+
+	return specover_count;
 }
 
 static void sec_ts_print_frame(struct sec_ts_data *ts, short *min, short *max)
@@ -1725,6 +1801,75 @@ static void get_rawcap(void *device_data)
 	input_info(true, &ts->client->dev, "%s: %s\n", __func__, buff);
 }
 
+static void run_rawcap_gap_read_all(void *device_data)
+{
+	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
+	struct sec_ts_data *ts = container_of(sec, struct sec_ts_data, sec);
+	struct sec_ts_test_mode mode;
+	int ret_x, ret_y;
+	int i;
+	short *gap_x, *gap_y;
+	short dTmp;
+	char *buff;
+	char temp[SEC_CMD_STR_LEN] = { 0 };
+	const unsigned int buff_size = ts->tx_count * ts->rx_count * 2
+		* CMD_RESULT_WORD_LEN + 4 * CMD_RESULT_WORD_LEN;
+	const unsigned int readbytes = ts->tx_count * ts->rx_count * 2;
+	const unsigned int X_DIR = 0;
+	const unsigned int Y_DIR = 1;
+
+	if (!sec)
+		return;
+
+	sec_cmd_set_default_result(sec);
+
+	memset(&mode, 0x00, sizeof(struct sec_ts_test_mode));
+
+	gap_x = kzalloc(readbytes, GFP_KERNEL);
+	gap_y = kzalloc(readbytes, GFP_KERNEL);
+	buff = kzalloc(buff_size, GFP_KERNEL);
+	if (!gap_x || !gap_y || !buff) {
+		snprintf(temp, sizeof(temp), "FAIL");
+		sec->cmd_state = SEC_CMD_STATUS_FAIL;
+		sec_cmd_set_cmd_result(sec, temp, sizeof(temp));
+		goto ErrorAlloc;
+	}
+
+	mode.type = TYPE_OFFSET_DATA_SDC;
+	mode.allnode = TEST_MODE_ALL_NODE;
+
+	sec_ts_read_frame(ts, mode.type, &mode.min, &mode.max);
+
+	ret_x = sec_ts_cm_spec_over_check(ts, gap_x, X_DIR);
+
+	ret_y = sec_ts_cm_spec_over_check(ts, gap_y, Y_DIR);
+
+	if (0 == (ret_x + ret_y)) {
+		strlcat(buff, "OK", buff_size);
+		sec->cmd_state = SEC_CMD_STATUS_OK;
+	} else {
+		strlcat(buff, "NG", buff_size);
+		sec->cmd_state = SEC_CMD_STATUS_FAIL;
+	}
+	strlcat(buff, "\n", buff_size);
+	for (i = 0; i < (ts->tx_count * ts->rx_count); i++) {
+		dTmp = (gap_x[i] > gap_y[i]) ? gap_x[i] : gap_y[i];
+		snprintf(temp, sizeof(temp), "%3d,", dTmp);
+		strlcat(buff, temp, buff_size);
+		if (i % ts->tx_count == (ts->tx_count - 1))
+			strlcat(buff, "\n", buff_size);
+		memset(temp, 0x00, sizeof(temp));
+	}
+	strlcat(buff, "\n", buff_size);
+
+	sec_cmd_set_cmd_result(sec, buff, buff_size);
+
+ErrorAlloc:
+	kfree(buff);
+	kfree(gap_y);
+	kfree(gap_x);
+}
+
 static void run_delta_read(void *device_data)
 {
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
@@ -1987,7 +2132,7 @@ SetCmdResult:
 		if (i == 0)
 			strlcat(pBuff, "\n", buff_size);
 
-		snprintf(pTmp, sizeof(pTmp), "%d,", ts->pFrame[i]);
+		snprintf(pTmp, sizeof(pTmp), "%6d,", ts->pFrame[i]);
 		strlcat(pBuff, pTmp, buff_size);
 
 		if (i % ts->tx_count == ts->tx_count - 1)
