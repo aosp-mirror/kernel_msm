@@ -189,6 +189,13 @@ config TSL2584
 	 Provides support for the AMS-TAOS tsl2584tsv device.
 	 Access ALS data via iio, sysfs.
 
+config OPT3001
+	tristate "Texas Instruments OPT3001 Light Sensor`"
+	depends on IIO && I2C
+	help
+	 Provides support for the exas Instruments OPT3001 device.
+	 Acces ALS data via iio, sysfs.
+
 config VCNL4000
 	tristate "VCNL4000 combined ALS and proximity sensor"
 	depends on I2C

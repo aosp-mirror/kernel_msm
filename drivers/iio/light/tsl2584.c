@@ -1060,7 +1060,13 @@ static int taos_probe(struct i2c_client *clientp,
 	taos_defaults(chip);
 
 	/* Make sure the chip is on */
-	taos_chip_on(indio_dev);
+	//taos_chip_on(indio_dev);
+	if(taos_chip_on(indio_dev) < 0) {
+		dev_err(&clientp->dev, "I2C Slave Failed\n");
+		devm_iio_device_unregister(indio_dev->dev.parent, indio_dev);
+		devm_iio_device_free(&clientp->dev, indio_dev);
+		return -ENOMEM;
+	}
 
 
 	plat_data = devm_kzalloc(&clientp->dev,

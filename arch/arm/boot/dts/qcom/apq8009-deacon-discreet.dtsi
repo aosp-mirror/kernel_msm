@@ -63,6 +63,11 @@
 			};
 		};
 
+		ti_opt3001: opt3001@44 {
+			compatible = "ti,opt3001";
+			reg = <0x44>;
+		};
+
 	};
 
 	i2c@78b8000 { /* BLSP1 QUP4 */
