@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -30,8 +30,38 @@
 	status = "disabled";
 };
 
+&msm_gpio {
+	hsuart_active: default {
+		mux {
+			pins = "gpio20", "gpio21", "gpio111", "gpio112";
+			function = "blsp_uart2";
+		};
+
+		config {
+			pins = "gpio20", "gpio21", "gpio111", "gpio112";
+			drive-strength = <16>;
+			bias-disable;
+		};
+	};
+
+	hsuart_sleep: sleep {
+		mux {
+			pins = "gpio20", "gpio21", "gpio111", "gpio112";
+			function = "blsp_uart2";
+		};
+
+		config {
+			pins = "gpio20", "gpio21", "gpio111", "gpio112";
+			drive-strength = <2>;
+			bias-disable;
+		};
+	};
+};
+
 &soc {
 	sound-9335 {
+		qcom,model = "apq8009-tashalite-snd-card-tdm";
+		qcom,tdm-i2s-switch-enable = <&msm_gpio 88 0>;
 		qcom,audio-routing =
 			"AIF4 VI", "MCLK",
 			"RX_BIAS", "MCLK",
@@ -52,7 +82,16 @@
 
 	i2c@78b8000 {
 		wcd9xxx_codec@d {
-			qcom,cdc-reset-gpio = <&msm_gpio 27 0>;
+			qcom,wcd9xxx-mic-tristate;
+			qcom,cdc-reset-gpio = <&msm_gpio 23 0>;
+
+			cdc-vdd-buck-supply = <&wcd_vdd_buck_1p8>;
+			qcom,cdc-vdd-buck-voltage = <0 0>;
+			qcom,cdc-vdd-buck-current = <250000>;
+
+			cdc-buck-sido-supply = <&wcd_vdd_buck_1p8>;
+			qcom,cdc-buck-sido-voltage = <0 0>;
+			qcom,cdc-buck-sido-current = <250000>;
 		};
 	};
 
@@ -61,6 +100,139 @@
 			status = "disabled";
 		};
 	};
+
+	wcd_vdd_buck_1p8: wcd_vdd_buck_1p8 {
+		compatible = "regulator-fixed";
+		regulator-name = "wcd_vdd_buck_1p8";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		status = "ok";
+		enable-active-high;
+		gpio = <&pm8916_gpios 4 0>;
+		vin-supply = <&pm8916_s4>;
+	};
+
+	blsp1_uart2_hs: uart@78b0000 {
+		compatible = "qcom,msm-hsuart-v14";
+		reg = <0x78b0000 0x200>,
+			<0x7884000 0x1f000>;
+		reg-names = "core_mem", "bam_mem";
+		interrupt-names = "core_irq", "bam_irq", "wakeup_irq";
+		#address-cells = <0>;
+		interrupt-parent = <&blsp1_uart2_hs>;
+		interrupts = <0 1 2>;
+		#interrupt-cells = <1>;
+		interrupt-map-mask = <0xffffffff>;
+		interrupt-map = <0 &intc 0 108 0
+				1 &intc 0 238 0
+				2 &msm_gpio 21 0>;
+		qcom,inject-rx-on-wakeup;
+		qcom,rx-char-to-inject = <0xfd>;
+		qcom,master-id = <86>;
+		clock-names = "core_clk", "iface_clk";
+		clocks = <&clock_gcc clk_gcc_blsp1_uart2_apps_clk>,
+				<&clock_gcc clk_gcc_blsp1_ahb_clk>;
+		pinctrl-names = "sleep", "default";
+		pinctrl-0 = <&hsuart_sleep>;
+		pinctrl-1 = <&hsuart_active>;
+		qcom,bam-tx-ep-pipe-index = <2>;
+		qcom,bam-rx-ep-pipe-index = <3>;
+		qcom,msm-bus,name = "blsp1_uart2_hs";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+				<86 512 0 0>,
+				<86 512 500 800>;
+		status = "ok";
+	};
+
+	bluetooth: bt_qca9379 {
+		compatible = "qca,qca9379";
+		qca,bt-reset-gpio = <&msm_gpio 47 0>; /* BT_EN */
+	};
+
+	cnss_sdio: qcom,cnss_sdio {
+		compatible = "qcom,cnss_sdio";
+		subsys-name = "AR6320";
+		/**
+		* There is no vdd-wlan on board and this is not for DSRC.
+		* IO and XTAL share the same vreg.
+		*/
+		vdd-wlan-io-supply = <&pm8916_l5>;
+		qcom,cap-tsf-gpio = <&msm_gpio 42 1>;
+		qcom,wlan-ramdump-dynamic = <0x200000>;
+		qcom,msm-bus,name = "msm-cnss";
+		qcom,msm-bus,num-cases = <4>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+				<79 512 0 0>,             /* No vote */
+				<79 512 6250 200000>,     /* 50 Mbps */
+				<79 512 25000 200000>,    /* 200 Mbps */
+				<79 512 2048000 4096000>; /* MAX */
+	};
+};
+
+&wcnss {
+	status = "disabled";
+};
+
+&msm_gpio {
+	sdc2_wlan_gpio_on: sdc2_wlan_gpio_on {
+		mux {
+			pins = "gpio43";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio43";
+			drive-strength = <10>;
+			bias-pull-up;
+			output-high;
+		};
+	};
+
+	sdc2_wlan_gpio_off: sdc2_wlan_gpio_off {
+		mux {
+			pins = "gpio43";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio43";
+			drive-strength = <2>;
+			bias-disable;
+			output-low;
+		};
+	};
+};
+
+&sdhc_2 {
+	/delete-property/cd-gpios;
+	#address-cells = <0>;
+	interrupt-parent = <&sdhc_2>;
+	interrupts = <0 1 2>;
+	#interrupt-cells = <1>;
+	interrupt-map-mask = <0xffffffff>;
+	interrupt-map = <0 &intc 0 125 0
+			1 &intc 0 221 0
+			2 &msm_gpio 38 0>;
+	interrupt-names = "hc_irq", "pwr_irq", "sdiowakeup_irq";
+
+	qcom,vdd-voltage-level = <1800000 2950000>;
+	qcom,vdd-current-level = <15000 400000>;
+
+	qcom,vdd-io-voltage-level = <1800000 1800000>;
+	qcom,vdd-io-current-level = <200 50000>;
+	qcom,clk-rates = <400000 25000000 50000000 100000000 200000000>;
+	qcom,bus-speed-mode = "SDR12", "SDR25", "SDR50", "DDR50", "SDR104";
+
+	pinctrl-names = "active", "sleep";
+	pinctrl-0 = <&sdc2_clk_on &sdc2_cmd_on &sdc2_data_on
+			&sdc2_wlan_gpio_on>;
+	pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off
+			&sdc2_wlan_gpio_off>;
+	qcom,nonremovable;
+	qcom,core_3_0v_support;
+
+	status = "ok";
 };
 
 &i2c_4 {
@@ -82,6 +254,17 @@
 	};
 };
 
+&pm8916_gpios {
+	gpio@c300 {
+		qcom,mode = <1>;        /* DIGITAL OUT */
+		qcom,pull = <1>;        /* No Pull */
+		qcom,vin-sel = <2>;     /* 1.8 */
+		qcom,src-sel = <0>;     /* CONSTANT */
+		qcom,master-en = <1>;   /* ENABLE GPIO */
+		status = "okay";
+	};
+};
+
 &pm8916_chg {
 	status = "ok";
 	qcom,use-external-charger;
@@ -96,7 +279,9 @@
 	interrupts = <0 134 0>,<0 140 0>,<0 136 0>;
 	interrupt-names = "core_irq", "async_irq", "phy_irq";
 
-	qcom,hsusb-otg-mode = <3>;
+	qcom,hsusb-otg-mode = <1>; /* peripheral mode */
+	qcom,hsusb-otg-otg-control= <3>;
+	qcom,hsusb-otg-default-mode= <1>; /* peripheral mode */
 	vbus_otg-supply = <&smb1360_otg_supply>;
 };
 
@@ -114,6 +299,22 @@
 };
 
 &mdss_dsi0 {
+	status = "disabled";
+};
+
+&i2c_1 {
+	status = "disabled";
+};
+
+&i2c_2 {
+	status = "disabled";
+};
+
+&i2c_5 {
+	status = "disabled";
+};
+
+&spi_0 {
 	status = "disabled";
 };
 
