@@ -73,6 +73,9 @@
 		/delete-node/ it7260@46;
 	};
 
+	spi@78b8000 {  /* BLSP1 QUP4 */
+		status = "ok";
+	};
 
 	qcom,msm-ssc-sensors {
 		compatible = "qcom,msm-ssc-sensors";
@@ -105,10 +108,18 @@
 			qcom,thermal-handle = <&msm_thermal_freq>;
 		};
 	};
-};
 
-&audio_codec_mtp {
-	 /delete-property/ asoc-codec;
+	msm_digital_codec: msm-dig-codec@771c000 {
+		compatible = "qcom,msm-digital-codec";
+		reg = <0x0771c000 0x0>;
+
+		cdc-vdd-digital-supply = <&pm660_l11>;
+		qcom,cdc-vdd-digital-voltage = <1800000 1800000>;
+		qcom,cdc-vdd-digital-current = <5000>;
+		qcom,cdc-on-demand-supplies = "cdc-vdd-digital";
+
+		qcom,subsys-name = "modem";
+	};
 };
 
 &qcom_seecom {
@@ -122,7 +133,7 @@
 };
 
 &peripheral_mem {
-	reg = <0x0 0x8d600000 0x0 0x0500000>;
+	reg = <0x0 0x8d600000 0x0 0x0600000>;
 };
 
 &i2c_1 {
@@ -154,6 +165,7 @@
 		pinctrl-names = "nfc_active","nfc_suspend";
 		pinctrl-0 = <&nfcw_int_active &nfcv2k_disable_active>;
 		pinctrl-1 = <&nfcw_int_suspend &nfcv2k_disable_suspend>;
+		clocks = <&clock_rpm clk_bb_clk3_pin>;
 		clock-names = "ref_clk";
 	};
 };
@@ -238,4 +250,55 @@
 &mdss_dsi0{
 	qcom,dsi-pref-prim-pan = <&dsi_auo_390p_cmd>;
 	qcom,platform-bklight-en-gpio = <&msm_gpio 37 0>;
+};
+
+&dai_mi2s3 {
+	qcom,msm-mi2s-rx-lines = <1>;
+	qcom,msm-mi2s-tx-lines = <2>;
+};
+
+&audio_codec_mtp {
+	compatible = "qcom,msm8909-audio-codec";
+	qcom,model = "msm8909w-wtp-snd-card";
+	qcom,msm-ext-pa = "quaternary";
+	/delete-property/qcom,split-a2dp;
+	qcom,audio-routing =
+		"CDC_CONN", "MCLK",
+		"QUAT_MI2S_RX", "DIGIT_REGULATOR",
+		"TX_I2S_CLK", "DIGIT_REGULATOR",
+		"DMIC1", "Digital Mic1",
+		"DMIC2", "Digital Mic2";
+	qcom,msm-gpios =
+		"quat_i2s",
+		"dmic";
+	qcom,pinctrl-names =
+		"all_off",
+		"quat_i2s_act",
+		"dmic_act",
+		"quat_i2s_dmic_act";
+	pinctrl-names =
+		"all_off",
+		"quat_i2s_act",
+		"dmic_act",
+		"quat_i2s_dmic_act";
+	pinctrl-0 = <&quat_mi2s_sleep &quat_mi2s_din_sleep
+			&cdc_dmic0_clk_sus &cdc_dmic0_data_sus>;
+	pinctrl-1 = <&quat_mi2s_active &quat_mi2s_din_active
+			&cdc_dmic0_clk_sus &cdc_dmic0_data_sus>;
+	pinctrl-2 = <&quat_mi2s_sleep &quat_mi2s_din_sleep
+			&cdc_dmic0_clk_act &cdc_dmic0_data_act>;
+	pinctrl-3 = <&quat_mi2s_active &quat_mi2s_din_active
+			&cdc_dmic0_clk_act &cdc_dmic0_data_act>;
+	/delete-property/qcom,cdc-us-euro-gpios;
+
+	asoc-codec = <&stub_codec>, <&msm_digital_codec>;
+	asoc-codec-names = "msm-stub-codec.1", "msm-dig-codec";
+};
+
+&led_flash0{
+	status = "disabled";
+};
+
+&actuator0{
+	status = "disabled";
 };
