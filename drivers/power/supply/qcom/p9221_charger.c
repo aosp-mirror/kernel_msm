@@ -201,8 +201,8 @@ static int p9221_reg_write_n(struct p9221_charger_data *charger, u16 reg,
 	mutex_lock(&charger->io_lock);
 	ret = i2c_master_send(charger->client, data, datalen);
 	mutex_unlock(&charger->io_lock);
-
 	kfree(data);
+
 	if (ret < datalen) {
 		/*
 		 * Treat -ENOTCONN as -ENODEV to suppress the get/set
@@ -327,6 +327,9 @@ static int p9221_get_property_reg(struct p9221_charger_data *charger,
 	if (p == NULL)
 		return -EINVAL;
 
+	if (!charger->online)
+		return -ENODEV;
+
 	ret = p9221_reg_read_cooked(charger, p->reg, &data);
 	if (ret)
 		return ret;
@@ -344,6 +347,9 @@ static int p9221_set_property_reg(struct p9221_charger_data *charger,
 	p = p9221_get_map_entry(prop, true);
 	if (p == NULL)
 		return -EINVAL;
+
+	if (!charger->online)
+		return -ENODEV;
 
 	return p9221_reg_write_cooked(charger, p->reg, val->intval);
 }
@@ -539,6 +545,9 @@ static ssize_t p9221_show_otp_rev(struct device *dev,
 	u8 otp_time;
 	int ret;
 
+	if (!charger->online)
+		return -ENODEV;
+
 	ret = p9221_reg_read_16(charger, P9221_OTP_FW_MAJOR_REV_L_REG,
 				&otp_maj_rev);
 	if (ret)
@@ -575,6 +584,9 @@ static ssize_t p9221_show_sram_rev(struct device *dev,
 	u8 sram_time;
 	int ret;
 
+	if (!charger->online)
+		return -ENODEV;
+
 	ret = p9221_reg_read_16(charger, P9221_SRAM_FW_MAJOR_REV_L_REG,
 				&sram_maj_rev);
 	if (ret)
@@ -609,6 +621,9 @@ static ssize_t p9221_show_status(struct device *dev,
 	u16 int_ena;
 	int ret;
 
+	if (!charger->online)
+		return -ENODEV;
+
 	ret = p9221_reg_read_16(charger, P9221_STATUS_L_REG, &status);
 	if (ret)
 		return ret;
@@ -636,6 +651,9 @@ static ssize_t p9221_show_align(struct device *dev,
 	u16 align;
 	int ret;
 
+	if (!charger->online)
+		return -ENODEV;
+
 	ret = p9221_reg_read_16(charger, P9221_ADC_ALIGN_X_REG, &align);
 	if (ret)
 		return ret;
@@ -654,6 +672,9 @@ static ssize_t p9221_show_rx_id(struct device *dev,
 	struct p9221_charger_data *charger = i2c_get_clientdata(client);
 	u8 rxid[6];
 	int ret;
+
+	if (!charger->online)
+		return -ENODEV;
 
 	ret = p9221_reg_read_n(charger, P9221_RXID_REG, rxid, 6);
 	if (ret)
@@ -674,6 +695,9 @@ static ssize_t p9221_show_mpreq(struct device *dev,
 	u8 data[6];
 	int ret;
 
+	if (!charger->online)
+		return -ENODEV;
+
 	ret = p9221_reg_read_n(charger, P9221_MPREQ_REG, data, P9221_MPREQ_LEN);
 	if (ret)
 		return ret;
@@ -693,6 +717,9 @@ static ssize_t p9221_show_pma_adv(struct device *dev,
 	u8 pmaad[2];
 	int ret;
 
+	if (!charger->online)
+		return -ENODEV;
+
 	ret = p9221_reg_read_n(charger, P9221_PMA_AD_L_REG, pmaad, 2);
 	if (ret)
 		return ret;
@@ -710,6 +737,9 @@ static ssize_t p9221_show_fod(struct device *dev,
 	struct p9221_charger_data *charger = i2c_get_clientdata(client);
 	u8 fod[P9221_NUM_FOD];
 	int ret;
+
+	if (!charger->online)
+		return -ENODEV;
 
 	ret = p9221_reg_read_n(charger, P9221_FOD_REG, fod, P9221_NUM_FOD);
 	if (ret)
@@ -730,6 +760,9 @@ static ssize_t p9221_store_fod(struct device *dev,
 	int i = 0;
 	int ret = 0;
 	char *data;
+
+	if (!charger->online)
+		return -ENODEV;
 
 	data = kmalloc(strlen(buf), GFP_KERNEL);
 	if (!data)
@@ -832,6 +865,9 @@ static ssize_t p9221_show_data(struct device *dev,
 	if (!charger->count || (charger->addr > (0xFFFF - charger->count)))
 		return -EINVAL;
 
+	if (!charger->online)
+		return -ENODEV;
+
 	ret = p9221_reg_read_n(charger, charger->addr, reg, charger->count);
 	if (ret)
 		return ret;
@@ -856,6 +892,9 @@ static ssize_t p9221_store_data(struct device *dev,
 
 	if (!charger->count || (charger->addr > (0xFFFF - charger->count)))
 		return -EINVAL;
+
+	if (!charger->online)
+		return -ENODEV;
 
 	data = kmalloc(strlen(buf) + 1, GFP_KERNEL);
 	if (!data)
