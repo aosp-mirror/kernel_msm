@@ -9054,6 +9054,8 @@ static int __wlan_hdd_cfg80211_add_key( struct wiphy *wiphy,
     {
         hddLog(VOS_TRACE_LEVEL_ERROR,"%s: Invalid seq length %d", __func__,
                 params->seq_len);
+
+        return -EINVAL;
     }
 
     hddLog(VOS_TRACE_LEVEL_INFO,
