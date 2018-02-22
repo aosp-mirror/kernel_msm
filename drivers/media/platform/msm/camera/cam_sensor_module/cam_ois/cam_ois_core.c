@@ -24,23 +24,29 @@ int32_t cam_ois_construct_default_power_setting(
 {
 	int rc = 0;
 
-	power_info->power_setting_size = 1;
+	power_info->power_setting_size = 2;
 	power_info->power_setting =
 		(struct cam_sensor_power_setting *)
-		kzalloc(sizeof(struct cam_sensor_power_setting),
+		kzalloc(sizeof(struct cam_sensor_power_setting) *
+			power_info->power_setting_size,
 			GFP_KERNEL);
 	if (!power_info->power_setting)
 		return -ENOMEM;
 
-	power_info->power_setting[0].seq_type = SENSOR_VAF;
-	power_info->power_setting[0].seq_val = CAM_VAF;
+	power_info->power_setting[0].seq_type = SENSOR_VIO;
+	power_info->power_setting[0].seq_val = CAM_VIO;
 	power_info->power_setting[0].config_val = 1;
-	power_info->power_setting[0].delay = 2;
+	power_info->power_setting[0].delay = 0;
+	power_info->power_setting[1].seq_type = SENSOR_VAF;
+	power_info->power_setting[1].seq_val = CAM_VAF;
+	power_info->power_setting[1].config_val = 1;
+	power_info->power_setting[1].delay = 2;
 
 	power_info->power_down_setting_size = 1;
 	power_info->power_down_setting =
 		(struct cam_sensor_power_setting *)
-		kzalloc(sizeof(struct cam_sensor_power_setting),
+		kzalloc(sizeof(struct cam_sensor_power_setting) *
+			power_info->power_down_setting_size,
 			GFP_KERNEL);
 	if (!power_info->power_down_setting) {
 		rc = -ENOMEM;
