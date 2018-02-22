@@ -84,6 +84,10 @@ static const char longname[] = "Gadget Android";
 #define VENDOR_ID		0x18D1
 #define PRODUCT_ID		0x0001
 
+#undef dev_dbg
+#define dev_dbg dev_info
+#undef pr_debug
+#define pr_debug pr_info
 #define ANDROID_DEVICE_NODE_NAME_LENGTH 11
 /* f_midi configuration */
 #define MIDI_INPUT_PORTS    1
