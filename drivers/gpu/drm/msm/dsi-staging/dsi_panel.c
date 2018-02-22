@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -3311,11 +3311,7 @@ int dsi_panel_get_phy_props(struct dsi_panel *panel,
 		return -EINVAL;
 	}
 
-	mutex_lock(&panel->panel_lock);
-
 	memcpy(phy_props, &panel->phy_props, sizeof(*phy_props));
-
-	mutex_unlock(&panel->panel_lock);
 	return rc;
 }
 
@@ -3329,11 +3325,7 @@ int dsi_panel_get_dfps_caps(struct dsi_panel *panel,
 		return -EINVAL;
 	}
 
-	mutex_lock(&panel->panel_lock);
-
 	memcpy(dfps_caps, &panel->dfps_caps, sizeof(*dfps_caps));
-
-	mutex_unlock(&panel->panel_lock);
 	return rc;
 }
 
@@ -3683,7 +3675,7 @@ static int dsi_panel_roi_prepare_dcs_cmds(struct dsi_panel_cmd_set *set,
 	set->cmds[0].msg.rx_len = 0;
 	set->cmds[0].msg.rx_buf = 0;
 	set->cmds[0].last_command = 0;
-	set->cmds[0].post_wait_ms = 1;
+	set->cmds[0].post_wait_ms = 0;
 
 	set->cmds[1].msg.channel = 0;
 	set->cmds[1].msg.type = MIPI_DSI_DCS_LONG_WRITE;
@@ -3694,7 +3686,7 @@ static int dsi_panel_roi_prepare_dcs_cmds(struct dsi_panel_cmd_set *set,
 	set->cmds[1].msg.rx_len = 0;
 	set->cmds[1].msg.rx_buf = 0;
 	set->cmds[1].last_command = 1;
-	set->cmds[1].post_wait_ms = 1;
+	set->cmds[1].post_wait_ms = 0;
 
 	goto exit;
 

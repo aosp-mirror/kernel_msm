@@ -35,6 +35,8 @@
 		V4L2_EVENT_MSM_VIDC_RELEASE_BUFFER_REFERENCE
 #define L_MODE V4L2_MPEG_VIDEO_H264_LOOP_FILTER_MODE_DISABLED_AT_SLICE_BOUNDARY
 
+#define TRIGGER_SSR_LOCK_RETRIES 5
+
 const char *const mpeg_video_vidc_extradata[] = {
 	"Extradata none",
 	"Extradata MB Quantization",
@@ -2042,6 +2044,7 @@ static void handle_session_flush(enum hal_command_response cmd, void *data)
 		return;
 	}
 
+	mutex_lock(&inst->flush_lock);
 	if (msm_comm_get_stream_output_mode(inst) ==
 			HAL_VIDEO_DECODER_SECONDARY) {
 
@@ -2084,6 +2087,7 @@ static void handle_session_flush(enum hal_command_response cmd, void *data)
 	v4l2_event_queue_fh(&inst->event_handler, &flush_event);
 
 exit:
+	mutex_unlock(&inst->flush_lock);
 	put_inst(inst);
 }
 
@@ -2207,6 +2211,10 @@ static void handle_sys_error(enum hal_command_response cmd, void *data)
 	}
 	/* handle the hw error before core released to get full debug info */
 	msm_vidc_handle_hw_error(core);
+	if (response->status == VIDC_ERR_NOC_ERROR) {
+		dprintk(VIDC_WARN, "Got NOC error");
+		MSM_VIDC_ERROR(true);
+	}
 	dprintk(VIDC_DBG, "Calling core_release\n");
 	rc = call_hfi_op(hdev, core_release, hdev->hfi_device_data);
 	if (rc) {
@@ -3335,11 +3343,9 @@ int msm_comm_suspend(int core_id)
 		return -EINVAL;
 	}
 
-	mutex_lock(&core->lock);
 	rc = call_hfi_op(hdev, suspend, hdev->hfi_device_data);
 	if (rc)
 		dprintk(VIDC_WARN, "Failed to suspend\n");
-	mutex_unlock(&core->lock);
 
 	return rc;
 }
@@ -3913,13 +3919,17 @@ int msm_vidc_comm_cmd(void *instance, union msm_v4l2_cmd *cmd)
 		struct eos_buf *binfo = NULL;
 		u32 smem_flags = 0;
 
-		get_inst(inst->core, inst);
+		if (inst->state != MSM_VIDC_START_DONE) {
+			dprintk(VIDC_DBG,
+				"Inst = %pK is not ready for EOS\n", inst);
+			break;
+		}
 
 		binfo = kzalloc(sizeof(*binfo), GFP_KERNEL);
 		if (!binfo) {
 			dprintk(VIDC_ERR, "%s: Out of memory\n", __func__);
 			rc = -ENOMEM;
-			goto exit;
+			break;
 		}
 
 		if (inst->flags & VIDC_SECURE)
@@ -3929,26 +3939,25 @@ int msm_vidc_comm_cmd(void *instance, union msm_v4l2_cmd *cmd)
 				SZ_4K, 1, smem_flags,
 				HAL_BUFFER_INPUT, 0, &binfo->smem);
 		if (rc) {
+			kfree(binfo);
 			dprintk(VIDC_ERR,
 				"Failed to allocate output memory\n");
 			rc = -ENOMEM;
-			goto exit;
+			break;
 		}
 
 		mutex_lock(&inst->eosbufs.lock);
 		list_add_tail(&binfo->list, &inst->eosbufs.list);
 		mutex_unlock(&inst->eosbufs.lock);
 
-		if (inst->state != MSM_VIDC_START_DONE) {
-			dprintk(VIDC_DBG,
-				"Inst = %pK is not ready for EOS\n", inst);
-			goto exit;
-		}
-
 		rc = msm_vidc_send_pending_eos_buffers(inst);
-
-exit:
-		put_inst(inst);
+		if (rc) {
+			dprintk(VIDC_ERR,
+				"Failed pending_eos_buffers sending\n");
+			list_del(&binfo->list);
+			kfree(binfo);
+			break;
+		}
 		break;
 	}
 	default:
@@ -5110,6 +5119,7 @@ int msm_comm_flush(struct msm_vidc_inst *inst, u32 flags)
 		return 0;
 	}
 
+	mutex_lock(&inst->flush_lock);
 	/* enable in flush */
 	inst->in_flush = true;
 
@@ -5163,6 +5173,7 @@ int msm_comm_flush(struct msm_vidc_inst *inst, u32 flags)
 		rc = call_hfi_op(hdev, session_flush, inst->session,
 			HAL_FLUSH_OUTPUT);
 	}
+	mutex_unlock(&inst->flush_lock);
 	if (rc) {
 		dprintk(VIDC_ERR,
 			"Sending flush to firmware failed, flush out all buffers\n");
@@ -5305,6 +5316,7 @@ int msm_vidc_trigger_ssr(struct msm_vidc_core *core,
 {
 	int rc = 0;
 	struct hfi_device *hdev;
+	int try_lock_counter = TRIGGER_SSR_LOCK_RETRIES;
 
 	if (!core || !core->device) {
 		dprintk(VIDC_WARN, "Invalid parameters: %pK\n", core);
@@ -5312,7 +5324,13 @@ int msm_vidc_trigger_ssr(struct msm_vidc_core *core,
 	}
 	hdev = core->device;
 
-	mutex_lock(&core->lock);
+	while (try_lock_counter) {
+		if (mutex_trylock(&core->lock))
+			break;
+		try_lock_counter--;
+		if (!try_lock_counter)
+			return -EBUSY;
+	}
 	if (core->state == VIDC_CORE_INIT_DONE) {
 		/*
 		 * In current implementation user-initiated SSR triggers
@@ -6568,6 +6586,7 @@ void handle_release_buffer_reference(struct msm_vidc_inst *inst,
 	bool found = false;
 	int i = 0;
 
+	mutex_lock(&inst->flush_lock);
 	mutex_lock(&inst->registeredbufs.lock);
 	found = false;
 	/* check if mbuf was not removed by any chance */
@@ -6648,6 +6667,7 @@ unlock:
 			print_vidc_buffer(VIDC_ERR,
 				"rbr qbuf failed", inst, mbuf);
 	}
+	mutex_unlock(&inst->flush_lock);
 }
 
 int msm_comm_unmap_vidc_buffer(struct msm_vidc_inst *inst,

@@ -75,6 +75,7 @@
 &pm660_fg {
 	qcom,battery-data = <&qrd_batterydata>;
 	qcom,fg-bmd-en-delay-ms = <300>;
+	qcom,fg-jeita-thresholds = <0 15 45 55>;
 };
 
 &pm660_charger {
@@ -305,6 +306,12 @@
 
 &dsi_dual_nt36850_truly_cmd_display {
 	 qcom,dsi-display-active;
+};
+
+&dsi_panel_pwr_supply {
+	qcom,panel-supply-entry@2 {
+		qcom,supply-post-off-sleep = <5>;
+	};
 };
 
 &pm660l_wled {

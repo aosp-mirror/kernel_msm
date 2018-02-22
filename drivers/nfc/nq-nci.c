@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -38,6 +38,8 @@ struct nqx_platform_data {
 	int i2c_postinit_cmd_len;
 	u8 *i2c_postinit_cmd;
 	const char *clk_src_name;
+	/* NFC_CLK pin voting state */
+	bool clk_pin_voting;
 };
 
 static const struct of_device_id msm_match_table[] = {
@@ -455,6 +457,7 @@ int nfc_ioctl_power_states(struct file *filp, unsigned long arg)
 						nqx_dev->ese_gpio_stored);
 			}
 			gpio_set_value(nqx_dev->firm_gpio, 0);
+			usleep_range(10000, 10100);
 		}
 		mutex_unlock(&nqx_dev->ese_status_mutex);
 
@@ -462,12 +465,19 @@ int nfc_ioctl_power_states(struct file *filp, unsigned long arg)
 			if (!gpio_get_value(nqx_dev->ese_gpio)) {
 				dev_dbg(&nqx_dev->client->dev, "disabling en_gpio\n");
 				gpio_set_value(nqx_dev->en_gpio, 0);
+				usleep_range(10000, 10100);
 			} else {
 				dev_dbg(&nqx_dev->client->dev, "keeping en_gpio high\n");
 			}
 		} else {
 			dev_dbg(&nqx_dev->client->dev, "ese_gpio invalid, set en_gpio to low\n");
 			gpio_set_value(nqx_dev->en_gpio, 0);
+			usleep_range(10000, 10100);
+		}
+		if (nqx_dev->pdata->clk_pin_voting) {
+			r = nqx_clock_deselect(nqx_dev);
+			if (r < 0)
+				dev_err(&nqx_dev->client->dev, "unable to disable clock\n");
 		}
 		if (gpio_is_valid(nqx_dev->clkreq_gpio)) {
 			r = nqx_clock_deselect(nqx_dev);
@@ -475,24 +485,24 @@ int nfc_ioctl_power_states(struct file *filp, unsigned long arg)
 				dev_err(&nqx_dev->client->dev, "unable to disable clock\n");
 		}
 		nqx_dev->nfc_ven_enabled = false;
-		/* hardware dependent delay */
-		msleep(100);
 	} else if (arg == 1) {
 		nqx_enable_irq(nqx_dev);
 
 		dev_dbg(&nqx_dev->client->dev,
 			"gpio_set_value enable: %s: info: %p\n",
 			__func__, nqx_dev);
-		if (gpio_is_valid(nqx_dev->firm_gpio))
+		if (gpio_is_valid(nqx_dev->firm_gpio)) {
 			gpio_set_value(nqx_dev->firm_gpio, 0);
+			usleep_range(10000, 10100);
+		}
 		gpio_set_value(nqx_dev->en_gpio, 1);
-		if (gpio_is_valid(nqx_dev->clkreq_gpio)) {
+		usleep_range(10000, 10100);
+		if (nqx_dev->pdata->clk_pin_voting) {
 			r = nqx_clock_select(nqx_dev);
 			if (r < 0)
 				dev_err(&nqx_dev->client->dev, "unable to enable clock\n");
 		}
 		nqx_dev->nfc_ven_enabled = true;
-		msleep(20);
 	} else if (arg == 2) {
 		/*
 		 * We are switching to Dowload Mode, toggle the enable pin
@@ -517,14 +527,15 @@ int nfc_ioctl_power_states(struct file *filp, unsigned long arg)
 		mutex_unlock(&nqx_dev->ese_status_mutex);
 
 		gpio_set_value(nqx_dev->en_gpio, 1);
-		msleep(20);
-		if (gpio_is_valid(nqx_dev->firm_gpio))
+		usleep_range(10000, 10100);
+		if (gpio_is_valid(nqx_dev->firm_gpio)) {
 			gpio_set_value(nqx_dev->firm_gpio, 1);
-		msleep(20);
+			usleep_range(10000, 10100);
+		}
 		gpio_set_value(nqx_dev->en_gpio, 0);
-		msleep(100);
+		usleep_range(10000, 10100);
 		gpio_set_value(nqx_dev->en_gpio, 1);
-		msleep(20);
+		usleep_range(10000, 10100);
 	} else {
 		r = -ENOIOCTLCMD;
 	}
@@ -738,14 +749,12 @@ static int nfc_parse_dt(struct device *dev, struct nqx_platform_data *pdata)
 		}
 	}
 
-	r = of_property_read_string(np, "qcom,clk-src", &pdata->clk_src_name);
+	if (of_property_read_string(np, "qcom,clk-src", &pdata->clk_src_name))
+		pdata->clk_pin_voting = false;
+	else
+		pdata->clk_pin_voting = true;
 
-	if (r) {
-		pdata->clkreq_gpio = -EINVAL;
-		return 0;
-	} else {
-		pdata->clkreq_gpio = of_get_named_gpio(np, "qcom,nq-clkreq", 0);
-	}
+	pdata->clkreq_gpio = of_get_named_gpio(np, "qcom,nq-clkreq", 0);
 
 	return r;
 }
@@ -1122,6 +1131,7 @@ static struct i2c_driver nqx = {
 		.owner = THIS_MODULE,
 		.name = "nq-nci",
 		.of_match_table = msm_match_table,
+		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 		.pm = &nfc_pm_ops,
 	},
 };

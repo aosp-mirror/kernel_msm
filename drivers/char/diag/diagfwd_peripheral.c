@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -26,6 +26,7 @@
 #include "diag_masks.h"
 #include "diag_dci.h"
 #include "diagfwd.h"
+#include "diagfwd_smd.h"
 #include "diagfwd_socket.h"
 #include "diag_mux.h"
 #include "diag_ipc_logging.h"
@@ -343,14 +344,13 @@ static void diagfwd_data_process_done(struct diagfwd_info *fwd_info,
 		diag_ws_release();
 		return;
 	}
-
-	session_info =
-		diag_md_session_get_peripheral(peripheral);
+	mutex_lock(&driver->md_session_lock);
+	session_info = diag_md_session_get_peripheral(peripheral);
 	if (session_info)
 		hdlc_disabled = session_info->hdlc_disabled;
 	else
 		hdlc_disabled = driver->hdlc_disabled;
-
+	mutex_unlock(&driver->md_session_lock);
 	if (hdlc_disabled) {
 		/* The data is raw and and on APPS side HDLC is disabled */
 		if (!buf) {
@@ -633,12 +633,13 @@ static void diagfwd_data_read_done(struct diagfwd_info *fwd_info,
 
 	mutex_lock(&driver->hdlc_disable_mutex);
 	mutex_lock(&fwd_info->data_mutex);
+	mutex_lock(&driver->md_session_lock);
 	session_info = diag_md_session_get_peripheral(fwd_info->peripheral);
 	if (session_info)
 		hdlc_disabled = session_info->hdlc_disabled;
 	else
 		hdlc_disabled = driver->hdlc_disabled;
-
+	mutex_unlock(&driver->md_session_lock);
 	if (!driver->feature[fwd_info->peripheral].encode_hdlc) {
 		if (fwd_info->buf_1 && fwd_info->buf_1->data == buf) {
 			temp_buf = fwd_info->buf_1;
@@ -905,6 +906,8 @@ int diagfwd_peripheral_init(void)
 			&peripheral_info[TYPE_DCI_CMD][peripheral];
 	}
 
+	_diag_smd_init();
+
 	if (driver->supports_sockets)
 		diag_socket_init();
 	diag_glink_init();
@@ -918,6 +921,8 @@ void diagfwd_peripheral_exit(void)
 	uint8_t type;
 	struct diagfwd_info *fwd_info = NULL;
 	int transport = 0;
+
+	_diag_smd_exit();
 
 	diag_socket_exit();
 
@@ -1049,6 +1054,74 @@ void diagfwd_deregister(uint8_t peripheral, uint8_t type, void *ctxt)
 	}
 }
 
+#ifdef CONFIG_DIAG_USES_SMD
+void diagfwd_close_transport(uint8_t transport, uint8_t peripheral)
+{
+	struct diagfwd_info *fwd_info = NULL;
+	struct diagfwd_info *dest_info = NULL;
+	int (*init_fn)(uint8_t) = NULL;
+	void (*invalidate_fn)(void *, struct diagfwd_info *) = NULL;
+	int (*check_channel_state)(void *) = NULL;
+	uint8_t transport_open = 0;
+	int i = 0;
+
+	if (peripheral >= NUM_PERIPHERALS)
+		return;
+
+	switch (transport) {
+	case TRANSPORT_SMD:
+		transport_open = TRANSPORT_SOCKET;
+		init_fn = diag_socket_init_peripheral;
+		invalidate_fn = diag_socket_invalidate;
+		check_channel_state = diag_socket_check_state;
+		break;
+	case TRANSPORT_SOCKET:
+		if (peripheral == PERIPHERAL_WDSP) {
+		transport_open = TRANSPORT_GLINK;
+		init_fn = diag_glink_init_peripheral;
+		invalidate_fn = diag_glink_invalidate;
+		check_channel_state = diag_glink_check_state;
+		} else {
+			transport_open = TRANSPORT_SMD;
+			init_fn = diag_smd_init_peripheral;
+			invalidate_fn = diag_smd_invalidate;
+			check_channel_state = diag_smd_check_state;
+		}
+		break;
+	default:
+		return;
+
+	}
+
+	mutex_lock(&driver->diagfwd_channel_mutex[peripheral]);
+	fwd_info = &early_init_info[transport][peripheral];
+	if (fwd_info->p_ops && fwd_info->p_ops->close)
+		fwd_info->p_ops->close(fwd_info->ctxt);
+	fwd_info = &early_init_info[transport_open][peripheral];
+	dest_info = &peripheral_info[TYPE_CNTL][peripheral];
+	dest_info->inited = 1;
+	dest_info->ctxt = fwd_info->ctxt;
+	dest_info->p_ops = fwd_info->p_ops;
+	dest_info->c_ops = fwd_info->c_ops;
+	dest_info->ch_open = fwd_info->ch_open;
+	dest_info->read_bytes = fwd_info->read_bytes;
+	dest_info->write_bytes = fwd_info->write_bytes;
+	dest_info->inited = fwd_info->inited;
+	dest_info->buf_1 = fwd_info->buf_1;
+	dest_info->buf_2 = fwd_info->buf_2;
+	dest_info->transport = fwd_info->transport;
+	invalidate_fn(dest_info->ctxt, dest_info);
+	for (i = 0; i < NUM_WRITE_BUFFERS; i++)
+		dest_info->buf_ptr[i] = fwd_info->buf_ptr[i];
+	if (!check_channel_state(dest_info->ctxt))
+		diagfwd_late_open(dest_info);
+	diagfwd_cntl_open(dest_info);
+	init_fn(peripheral);
+	mutex_unlock(&driver->diagfwd_channel_mutex[peripheral]);
+	diagfwd_queue_read(&peripheral_info[TYPE_DATA][peripheral]);
+	diagfwd_queue_read(&peripheral_info[TYPE_CMD][peripheral]);
+}
+#else
 void diagfwd_close_transport(uint8_t transport, uint8_t peripheral)
 {
 	struct diagfwd_info *fwd_info = NULL;
@@ -1108,6 +1181,7 @@ void diagfwd_close_transport(uint8_t transport, uint8_t peripheral)
 	diagfwd_queue_read(&peripheral_info[TYPE_DATA][peripheral]);
 	diagfwd_queue_read(&peripheral_info[TYPE_CMD][peripheral]);
 }
+#endif
 
 void *diagfwd_request_write_buf(struct diagfwd_info *fwd_info)
 {

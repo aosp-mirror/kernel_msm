@@ -364,7 +364,7 @@ static struct reg_list_pair a6xx_ifpc_pwrup_reglist[] = {
 	{ A6XX_CP_AHB_CNTL, 0x0 },
 };
 
-static struct reg_list_pair a615_ifpc_pwrup_reglist[] = {
+static struct reg_list_pair a615_pwrup_reglist[] = {
 	{ A6XX_UCHE_GBIF_GX_CONFIG, 0x0 },
 };
 
@@ -604,7 +604,6 @@ static void a6xx_patch_pwrup_reglist(struct adreno_device *adreno_dev)
 	uint32_t i;
 	struct cpu_gpu_lock *lock;
 	struct reg_list_pair *r;
-	uint16_t a615_list_size = 0;
 
 	/* Set up the register values */
 	for (i = 0; i < ARRAY_SIZE(a6xx_ifpc_pwrup_reglist); i++) {
@@ -615,19 +614,6 @@ static void a6xx_patch_pwrup_reglist(struct adreno_device *adreno_dev)
 	for (i = 0; i < ARRAY_SIZE(a6xx_pwrup_reglist); i++) {
 		r = &a6xx_pwrup_reglist[i];
 		kgsl_regread(KGSL_DEVICE(adreno_dev), r->offset, &r->val);
-	}
-
-	if (adreno_is_a615(adreno_dev)) {
-		for (i = 0; i < ARRAY_SIZE(a615_ifpc_pwrup_reglist); i++) {
-			r = &a615_ifpc_pwrup_reglist[i];
-			kgsl_regread(KGSL_DEVICE(adreno_dev),
-				r->offset, &r->val);
-		}
-
-		a615_list_size = sizeof(a615_ifpc_pwrup_reglist);
-
-		memcpy(adreno_dev->pwrup_reglist.hostptr + sizeof(*lock),
-			a615_ifpc_pwrup_reglist, a615_list_size);
 	}
 
 	lock = (struct cpu_gpu_lock *) adreno_dev->pwrup_reglist.hostptr;
@@ -648,16 +634,29 @@ static void a6xx_patch_pwrup_reglist(struct adreno_device *adreno_dev)
 	 * of the static IFPC-only register list.
 	 */
 	lock->list_length = (sizeof(a6xx_ifpc_pwrup_reglist) +
-			sizeof(a6xx_pwrup_reglist) + a615_list_size) >> 2;
-	lock->list_offset = (sizeof(a6xx_ifpc_pwrup_reglist) +
-			a615_list_size) >> 2;
+			sizeof(a6xx_pwrup_reglist)) >> 2;
+	lock->list_offset = sizeof(a6xx_ifpc_pwrup_reglist) >> 2;
 
-	memcpy(adreno_dev->pwrup_reglist.hostptr + sizeof(*lock)
-		+ a615_list_size,
+	memcpy(adreno_dev->pwrup_reglist.hostptr + sizeof(*lock),
 		a6xx_ifpc_pwrup_reglist, sizeof(a6xx_ifpc_pwrup_reglist));
 	memcpy(adreno_dev->pwrup_reglist.hostptr + sizeof(*lock)
-		+ sizeof(a6xx_ifpc_pwrup_reglist) + a615_list_size,
-		a6xx_pwrup_reglist, sizeof(a6xx_pwrup_reglist));
+		+ sizeof(a6xx_ifpc_pwrup_reglist), a6xx_pwrup_reglist,
+		sizeof(a6xx_pwrup_reglist));
+
+	if (adreno_is_a615(adreno_dev)) {
+		for (i = 0; i < ARRAY_SIZE(a615_pwrup_reglist); i++) {
+			r = &a615_pwrup_reglist[i];
+			kgsl_regread(KGSL_DEVICE(adreno_dev),
+				r->offset, &r->val);
+		}
+
+		memcpy(adreno_dev->pwrup_reglist.hostptr + sizeof(*lock)
+			+ sizeof(a6xx_ifpc_pwrup_reglist)
+			+ sizeof(a6xx_pwrup_reglist), a615_pwrup_reglist,
+			sizeof(a615_pwrup_reglist));
+
+		lock->list_length += sizeof(a615_pwrup_reglist);
+	}
 }
 
 /*
@@ -1274,7 +1273,7 @@ static void _load_gmu_rpmh_ucode(struct kgsl_device *device)
 	wmb();
 }
 
-#define GMU_START_TIMEOUT	10	/* ms */
+#define GMU_START_TIMEOUT	100	/* ms */
 #define GPU_START_TIMEOUT	100	/* ms */
 #define GPU_RESET_TIMEOUT	1	/* ms */
 #define GPU_RESET_TIMEOUT_US	10	/* us */
@@ -2032,17 +2031,17 @@ static int a6xx_wait_for_gmu_idle(struct adreno_device *adreno_dev)
 {
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 	struct gmu_device *gmu = &device->gmu;
-	unsigned int status, status2;
+	unsigned int status2;
+	uint64_t ts1;
 
+	ts1 = read_AO_counter(device);
 	if (timed_poll_check(device, A6XX_GPU_GMU_AO_GPU_CX_BUSY_STATUS,
 			0, GMU_START_TIMEOUT, CXGXCPUBUSYIGNAHB)) {
 		kgsl_gmu_regread(device,
-				A6XX_GPU_GMU_AO_GPU_CX_BUSY_STATUS, &status);
-		kgsl_gmu_regread(device,
 				A6XX_GPU_GMU_AO_GPU_CX_BUSY_STATUS2, &status2);
 		dev_err(&gmu->pdev->dev,
-				"GMU not idling: status=0x%x, status2=0x%x\n",
-				status, status2);
+				"GMU not idling: status2=0x%x %llx %llx\n",
+				status2, ts1, read_AO_counter(device));
 		return -ETIMEDOUT;
 	}
 
