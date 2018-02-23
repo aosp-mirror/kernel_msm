@@ -93,3 +93,5 @@ obj-$(CONFIG_TOUCHSCREEN_GT9XX)		+= gt9xx/
 obj-$(CONFIG_TOUCHSCREEN_FT3207) += fts_ts.o
 fts_ts-$(CONFIG_TOUCHSCREEN_FT3207) += focaltech_core.o focaltech_ctl.o focaltech_ex_fun.o focaltech_flash.o \
                                        test_lib.o ini.o Global.o Config_FT6X36.o Test_FT6X36.o DetailThreshold.o focaltech_gesture.o
+
+ldflagobj-$(CONFIG_TOUCHSCREEN_FT3207) += fts_ts.o
