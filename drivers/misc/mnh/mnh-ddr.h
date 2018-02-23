@@ -20,6 +20,7 @@
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/gpio/consumer.h>
+#include <linux/platform_device.h>
 
 #define MNH_DDR_NUM_CTL_REG	(558 + 1)
 #define MNH_DDR_NUM_PHY_REG	(1100 + 1)
@@ -58,11 +59,18 @@ enum mnh_ddr_bist_type {
 	LIMITED_MOVI1_3N,
 };
 
-int mnh_ddr_po_init(struct device *dev, struct gpio_desc *iso_n);
-int mnh_ddr_resume(struct device *dev, struct gpio_desc *iso_n);
-int mnh_ddr_suspend(struct device *dev, struct gpio_desc *iso_n);
+struct mnh_ddr_data {
+	struct platform_device *pdev;
+	struct mnh_ddr_internal_state _state;
+};
+
+int mnh_ddr_platform_init(struct platform_device *pdev,
+			  struct mnh_ddr_data *data);
+int mnh_ddr_po_init(struct mnh_ddr_data *data, struct gpio_desc *iso_n);
+int mnh_ddr_resume(struct mnh_ddr_data *data, struct gpio_desc *iso_n);
+int mnh_ddr_suspend(struct mnh_ddr_data *data, struct gpio_desc *iso_n);
 int mnh_ddr_clr_int_status(struct device *dev);
 u64 mnh_ddr_int_status(struct device *dev);
-u32 mnh_ddr_mbist(struct device *dev, enum mnh_ddr_bist_type bist_type);
+u32 mnh_ddr_mbist(struct mnh_ddr_data *data, enum mnh_ddr_bist_type bist_type);
 
 #endif /* __MNH_DDR_H__ */
