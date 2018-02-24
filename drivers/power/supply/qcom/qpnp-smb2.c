@@ -170,6 +170,7 @@ struct smb_dt_props {
 	bool	hvdcp_disable;
 	bool	auto_recharge_soc;
 	int	wd_bark_time;
+	int	batt_psy_is_bms;
 };
 
 struct smb2 {
@@ -327,6 +328,9 @@ static int smb2_parse_dt(struct smb2 *chip)
 					&chg->otg_delay_ms);
 	if (rc < 0)
 		chg->otg_delay_ms = OTG_DEFAULT_DEGLITCH_TIME_MS;
+
+	chip->dt.batt_psy_is_bms =
+	    of_property_read_bool(node, "google,batt_psy_is_bms");
 
 	return 0;
 }
@@ -1235,7 +1239,7 @@ static int smb2_batt_prop_is_writeable(struct power_supply *psy,
 	return 0;
 }
 
-static const struct power_supply_desc batt_psy_desc = {
+static struct power_supply_desc batt_psy_desc = {
 	.name = "battery",
 	.type = POWER_SUPPLY_TYPE_BATTERY,
 	.properties = smb2_batt_props,
@@ -1253,6 +1257,8 @@ static int smb2_init_batt_psy(struct smb2 *chip)
 
 	batt_cfg.drv_data = chg;
 	batt_cfg.of_node = chg->dev->of_node;
+	if (chip->dt.batt_psy_is_bms)
+		batt_psy_desc.type = POWER_SUPPLY_TYPE_BMS;
 	chg->batt_psy = power_supply_register(chg->dev,
 						   &batt_psy_desc,
 						   &batt_cfg);
