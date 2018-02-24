@@ -765,9 +765,9 @@ static void max1720x_init_worker(struct work_struct *work)
 	chip->init_complete = 1;
 }
 
-static const struct power_supply_desc max1720x_psy_desc = {
+static struct power_supply_desc max1720x_psy_desc = {
 	.name = "maxfg",
-	.type = POWER_SUPPLY_TYPE_BMS,
+	.type = POWER_SUPPLY_TYPE_BATTERY,
 	.get_property = max1720x_get_property,
 	.set_property = max1720x_set_property,
 	.property_is_writeable = max1720x_property_is_writeable,
@@ -812,6 +812,9 @@ static int max1720x_probe(struct i2c_client *client,
 		ret = -EINVAL;
 		goto i2c_unregister;
 	}
+
+	if (of_property_read_bool(dev->of_node, "maxim,psy-type-unknown"))
+		max1720x_psy_desc.type = POWER_SUPPLY_TYPE_UNKNOWN;
 
 	psy_cfg.drv_data = chip;
 	chip->psy = devm_power_supply_register(dev,

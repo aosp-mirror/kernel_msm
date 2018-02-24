@@ -12,3 +12,5 @@ Optional properties :
  - maxim,force-flash-config: program the loaded config (maxim,fg-config) into
    the non volatile if the this flag is set AND nVEmpty are not matching. Number
    NV block writes are limited to 7 so use with care.
+ - maxim,psy-type-unknown: if set, forces poser supply type to be
+   POWER_SUPPLY_TYPE_UNKNOWN rather than POWER_SUPPLY_TYPE_BATTERY
