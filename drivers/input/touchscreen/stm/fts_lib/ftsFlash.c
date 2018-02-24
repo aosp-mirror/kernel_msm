@@ -732,12 +732,18 @@ int fillFlash(u32 address, u8 *data, int size) {
  *	encountered
  */
 int flash_burn(Firmware fw, int force_burn, int keep_cx) {
-    int res;
-	
+	int res;
 
-    if (!force_burn) {
-		for(res = EXTERNAL_RELEASE_INFO_SIZE-1; res >=0; res--){
-			if(fw.externalRelease[res]>systemInfo.u8_releaseInfo[res])
+	if (!force_burn) {
+		/* Compare firmware, config, and CX versions */
+		if (fw.fw_ver != (uint32_t)systemInfo.u16_fwVer ||
+		    fw.config_id != (uint32_t)systemInfo.u16_cfgVer ||
+		    fw.cx_ver != (uint32_t)systemInfo.u16_cxVer)
+			goto start;
+
+		for (res = EXTERNAL_RELEASE_INFO_SIZE - 1; res >= 0; res--) {
+			if (fw.externalRelease[res] !=
+			    systemInfo.u8_releaseInfo[res])
 				goto start;
 		}
 
