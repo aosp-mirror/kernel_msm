@@ -17,6 +17,7 @@
 &pmi8998_charger {
 	google,boost_to_5_1V;
 	qcom,dc-icl-ua = <1200000>;
+	google,batt_psy_is_bms;
 };
 
 &pmi8998_fg {
