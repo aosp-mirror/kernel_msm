@@ -349,6 +349,7 @@ static enum power_supply_property max1720x_battery_props[] = {
 	POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_VOLTAGE_OCV,
+	POWER_SUPPLY_PROP_TECHNOLOGY,
 };
 
 static int max1720x_get_property(struct power_supply *psy,
@@ -438,6 +439,9 @@ static int max1720x_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_VOLTAGE_OCV:
 		REGMAP_READ(map, MAX1720X_VFOCV, data);
 		val->intval = reg_to_micro_volt(data);
+		break;
+	case POWER_SUPPLY_PROP_TECHNOLOGY:
+		val->intval = POWER_SUPPLY_TECHNOLOGY_LION;
 		break;
 	default:
 		return -EINVAL;
