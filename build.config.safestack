@@ -1,7 +1,7 @@
 function update_safestack_config() {
   ${KERNEL_DIR}/scripts/config --file ${OUT_DIR}/.config \
-    -e SAFESTACK \
-    -e SAFESTACK_COLORING
+    -d SAFESTACK \
+    -d SAFESTACK_COLORING
   (cd ${OUT_DIR} && \
     make O=${OUT_DIR} $archsubarch CROSS_COMPILE=${CROSS_COMPILE} olddefconfig)
 }
