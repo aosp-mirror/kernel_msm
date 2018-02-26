@@ -1609,6 +1609,59 @@
 				};
 			};
 		};
+
+		dmic_clk {
+			dmic_clk_act: dmic_clk_act {
+				mux {
+					pins = "gpio4";
+					function = "dmic0_clk";
+				};
+				config {
+					pins = "gpio4";
+					drive-strength = <8>;
+					bias-pull-none;
+				};
+			};
+
+			dmic_clk_sus: dmic_clk_sus {
+				mux {
+					pins = "gpio4";
+					function = "gpio";
+				};
+				config {
+					pins = "gpio4";
+					drive-strength = <2>;
+					bias-disable;
+				};
+			};
+		};
+
+		dmic_data {
+			dmic_data_act: dmic_data_act {
+				mux {
+					pins = "gpio5";
+					function = "dmic0_data";
+				};
+				config {
+					pins = "gpio5";
+					drive-strength = <8>;
+					bias-pull-none;
+				};
+			};
+
+			dmic_data_sus: dmic_data_sus {
+				mux {
+					pins = "gpio5";
+					function = "gpio";
+				};
+				config {
+					pins = "gpio5";
+					drive-strength = <2>;
+					bias-disable;
+				};
+			};
+		};
+
 		pmx_rd_nfc_int {
 			nfc_int_active: active {
 				mux {
