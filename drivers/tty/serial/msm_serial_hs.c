@@ -1510,6 +1510,12 @@ static void flip_insert_work(struct work_struct *work)
 	struct tty_struct *tty = msm_uport->uport.state->port.tty;
 
 	spin_lock_irqsave(&msm_uport->uport.lock, flags);
+	if (!tty || msm_uport->rx.flush == FLUSH_SHUTDOWN) {
+		MSM_HS_ERR("%s: Invalid driver state flush %d\n",
+				__func__, msm_uport->rx.flush);
+		spin_unlock_irqrestore(&msm_uport->uport.lock, flags);
+		return;
+	}
 	if (msm_uport->rx.buffer_pending == NONE_PENDING) {
 		MSM_HS_ERR("Error: No buffer pending in %s", __func__);
 		spin_unlock_irqrestore(&msm_uport->uport.lock, flags);
@@ -1581,6 +1587,13 @@ static void msm_serial_hs_rx_tlet(unsigned long tlet_ptr)
 	pdata = pdev->dev.platform_data;
 
 	spin_lock_irqsave(&uport->lock, flags);
+
+	if (!tty || rx->flush == FLUSH_SHUTDOWN) {
+		MSM_HS_ERR("%s: Invalid driver state flush %d\n",
+				__func__, rx->flush);
+		spin_unlock_irqrestore(&uport->lock, flags);
+		return;
+	}
 
 	/*
 	 * Process all pending descs or if nothing is
@@ -3481,20 +3494,20 @@ static void msm_hs_shutdown(struct uart_port *uport)
 	msm_hs_disable_flow_control(uport);
 	/* make sure rx tasklet finishes */
 	tasklet_kill(&msm_uport->rx.tlet);
+
 	if (msm_uport->rx.flush == FLUSH_STOP)
 		ret = wait_event_timeout(msm_uport->rx.wait,
-			msm_uport->rx.flush == FLUSH_SHUTDOWN, 500);
-	else if (msm_uport->rx.flush != FLUSH_SHUTDOWN) {
+				msm_uport->rx.flush == FLUSH_SHUTDOWN, 500);
+	if (msm_uport->rx.flush != FLUSH_SHUTDOWN) {
+		ret = wait_event_timeout(msm_uport->rx.wait,
+				msm_uport->rx.pending_flag, 500);
+		if (!ret)
+			MSM_HS_WARN("%s(): rx disconnect not complete",
+					__func__);
 		spin_lock_irqsave(&uport->lock, flags);
 		msm_hs_stop_rx_locked(uport);
 		spin_unlock_irqrestore(&uport->lock, flags);
-		ret = wait_event_timeout(msm_uport->rx.wait,
-				msm_uport->rx.flush == FLUSH_SHUTDOWN, 500);
-	} else
-		ret = EINPROGRESS;
-
-	if (!ret && msm_uport->rx.flush != FLUSH_SHUTDOWN)
-		MSM_HS_WARN("%s(): rx disconnect not complete", __func__);
+	}
 
 	cancel_delayed_work_sync(&msm_uport->rx.flip_insert_work);
 	flush_workqueue(msm_uport->hsuart_wq);
