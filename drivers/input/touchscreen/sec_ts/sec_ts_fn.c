@@ -1045,7 +1045,7 @@ static void sec_ts_print_frame(struct sec_ts_data *ts, short *min, short *max)
 }
 
 static int sec_ts_read_frame(struct sec_ts_data *ts, u8 type, short *min,
-		short *max)
+		short *max, enum spec_check_type *spec_check)
 {
 	unsigned int readbytes = 0xFF;
 	unsigned char *pRead = NULL;
@@ -1053,6 +1053,7 @@ static int sec_ts_read_frame(struct sec_ts_data *ts, u8 type, short *min,
 	int ret = 0;
 	int i = 0;
 	int j = 0;
+	short dTmp = 0;
 	short *temp = NULL;
 
 	input_info(true, &ts->client->dev, "%s\n", __func__);
@@ -1122,6 +1123,64 @@ static int sec_ts_read_frame(struct sec_ts_data *ts, u8 type, short *min,
 	for (i = 0; i < ts->tx_count; i++) {
 		for (j = 0; j < ts->rx_count; j++)
 			ts->pFrame[(j * ts->tx_count) + i] = temp[(i * ts->rx_count) + j];
+	}
+
+	/* spec check */
+	if (*spec_check == SPEC_CHECK) {
+		int specover_count = 0;
+
+		if (type == TYPE_OFFSET_DATA_SDC) {
+			for (i = 0; i < ts->rx_count; i++) {
+				for (j = 0; j < ts->tx_count; j++) {
+					dTmp = ts->pFrame[i * ts->tx_count + j];
+
+					*min = min(*min, dTmp);
+					*max = max(*max, dTmp);
+
+					if (dTmp > cm_max[i][j])
+						specover_count++;
+					if (dTmp < cm_min[i][j])
+						specover_count++;
+				}
+			}
+			input_info(true, &ts->client->dev, "%s: type = %d, specover = %d\n",
+					__func__, type, specover_count);
+
+			if (specover_count == 0 && (*max - *min) < cm_mm)
+				*spec_check = SPEC_PASS;
+			else
+				*spec_check = SPEC_FAIL;
+		} else if (type == TYPE_NOI_P2P_MIN) {
+			for (i = 0; i < ts->rx_count; i++) {
+				for (j = 0; j < ts->tx_count; j++) {
+					dTmp = ts->pFrame[i * ts->tx_count + j];
+					if (dTmp < noi_min[i][j])
+						specover_count++;
+				}
+			}
+			input_info(true, &ts->client->dev, "%s: type = %d, specover = %d\n",
+					__func__, type, specover_count);
+
+			if (specover_count == 0)
+				*spec_check = SPEC_PASS;
+			else
+				*spec_check = SPEC_FAIL;
+		} else if (type == TYPE_NOI_P2P_MAX) {
+			for (i = 0; i < ts->rx_count; i++) {
+				for (j = 0; j < ts->tx_count; j++) {
+					dTmp = ts->pFrame[i * ts->tx_count + j];
+					if (dTmp > noi_max[i][j])
+						specover_count++;
+				}
+			}
+			input_info(true, &ts->client->dev, "%s: type = %d, specover = %d\n",
+					__func__, type, specover_count);
+
+			if (specover_count == 0)
+				*spec_check = SPEC_PASS;
+			else
+				*spec_check = SPEC_FAIL;
+		}
 	}
 
 	kfree(temp);
@@ -1209,7 +1268,7 @@ static void sec_ts_print_channel(struct sec_ts_data *ts)
 }
 
 static int sec_ts_read_channel(struct sec_ts_data *ts, u8 type, short *min,
-			       short *max)
+			       short *max, enum spec_check_type *spec_check)
 {
 	unsigned char *pRead = NULL;
 	u8 mode = TYPE_INVALID_DATA;
@@ -1275,12 +1334,31 @@ static int sec_ts_read_channel(struct sec_ts_data *ts, u8 type, short *min,
 		*min = min(*min, ts->pFrame[jj]);
 		*max = max(*max, ts->pFrame[jj]);
 
-		input_info(true, &ts->client->dev, "%s: [%s][%d] %d\n", __func__,
-				(jj < ts->tx_count) ? "TX" : "RX", jj, ts->pFrame[jj]);
 		jj++;
 	}
 
 	sec_ts_print_channel(ts);
+
+	if (*spec_check == SPEC_CHECK) {
+		int specover_count = 0;
+
+		if (type == TYPE_OFFSET_DATA_SDC) {
+			for (ii = 0; ii < ts->tx_count + ts->rx_count; ii++) {
+				if (ts->pFrame[ii] > cs_max)
+					specover_count++;
+				if (ts->pFrame[ii] < cs_min)
+					specover_count++;
+			}
+		}
+
+		input_info(true, &ts->client->dev, "%s: type : %d, specover = %d\n",
+				__func__, type, specover_count);
+
+		if (specover_count == 0 && (*max - *min) < cs_mm)
+			*spec_check = SPEC_PASS;
+		else
+			*spec_check = SPEC_FAIL;
+	}
 
 err_read_data:
 	/* release data monitory (unprepare AFE data memory) */
@@ -1299,9 +1377,9 @@ int sec_ts_read_raw_data(struct sec_ts_data *ts,
 {
 	int ii;
 	int ret = 0;
-	char temp[SEC_CMD_STR_LEN] = { 0 };
 	const unsigned int buff_size = ts->tx_count * ts->rx_count *
 					CMD_RESULT_WORD_LEN;
+	unsigned int buff_len = 0;
 	char *buff;
 
 	buff = kzalloc(buff_size, GFP_KERNEL);
@@ -1327,10 +1405,10 @@ int sec_ts_read_raw_data(struct sec_ts_data *ts,
 
 	if (mode->frame_channel)
 		ret = sec_ts_read_channel(ts, mode->type, &mode->min,
-					  &mode->max);
+					  &mode->max, &mode->spec_check);
 	else
 		ret = sec_ts_read_frame(ts, mode->type, &mode->min,
-					&mode->max);
+					&mode->max, &mode->spec_check);
 	if (ret < 0) {
 		input_err(true, &ts->client->dev, "%s: failed to read frame\n",
 				__func__);
@@ -1339,28 +1417,45 @@ int sec_ts_read_raw_data(struct sec_ts_data *ts,
 
 	if (mode->allnode) {
 		if (mode->frame_channel) {
-			strlcat(buff, "\n      ", buff_size);
+			buff_len += scnprintf(buff + buff_len,
+					      buff_size - buff_len, "\n      ");
 			for (ii = 0; ii < (ts->rx_count + ts->tx_count); ii++) {
-				snprintf(temp, sizeof(temp), "%3d,",
-					 ts->pFrame[ii]);
-				strlcat(buff, temp, buff_size);
+				buff_len += scnprintf(buff + buff_len,
+						      buff_size - buff_len,
+						      "%3d,", ts->pFrame[ii]);
 				if (ii >= ts->tx_count - 1)
-					strlcat(buff, "\n", buff_size);
-				memset(temp, 0x00, sizeof(temp));
+					buff_len += scnprintf(buff + buff_len,
+							buff_size - buff_len,
+							"\n");
 			}
 		} else {
-			strlcat(buff, "\n", buff_size);
+			if (mode->spec_check == SPEC_NO_CHECK)
+				buff_len += scnprintf(buff + buff_len,
+						buff_size - buff_len, "\n");
+			else if (mode->spec_check == SPEC_PASS) {
+				buff_len += scnprintf(buff + buff_len,
+						buff_size - buff_len,
+						"OK %d %d\n",
+						ts->rx_count, ts->tx_count);
+			} else {	/* mode->spec_check == SPEC_FAIL) */
+				buff_len += scnprintf(buff + buff_len,
+						    buff_size - buff_len,
+						    "NG %d %d\n", ts->rx_count,
+						    ts->tx_count);
+			}
 			for (ii = 0; ii < (ts->rx_count * ts->tx_count); ii++) {
-				snprintf(temp, sizeof(temp), "%3d,",
-					 ts->pFrame[ii]);
-				strlcat(buff, temp, buff_size);
+				buff_len += scnprintf(buff + buff_len,
+						    buff_size - buff_len,
+						    "%3d,", ts->pFrame[ii]);
 				if (ii % ts->tx_count == (ts->tx_count - 1))
-					strlcat(buff, "\n", buff_size);
-				memset(temp, 0x00, sizeof(temp));
+					buff_len += scnprintf(buff + buff_len,
+							buff_size - buff_len,
+							"\n");
 			}
 		}
 	} else {
-		snprintf(buff, buff_size, "%3d,%3d", mode->min, mode->max);
+		buff_len = scnprintf(buff, buff_size, "%3d,%3d", mode->min,
+				     mode->max);
 	}
 
 	ret = sec_ts_release_tmode(ts);
@@ -1372,7 +1467,7 @@ int sec_ts_read_raw_data(struct sec_ts_data *ts,
 
 	if (!sec)
 		goto out_rawdata;
-	sec_cmd_set_cmd_result(sec, buff, strnlen(buff, buff_size));
+	sec_cmd_set_cmd_result(sec, buff, buff_len);
 	sec->cmd_state = SEC_CMD_STATUS_OK;
 
 out_rawdata:
@@ -1389,8 +1484,7 @@ error_alloc_mem:
 	if (!sec)
 		return ret;
 
-	snprintf(temp, SEC_CMD_STR_LEN, "FAIL");
-	sec_cmd_set_cmd_result(sec, temp, SEC_CMD_STR_LEN);
+	sec_cmd_set_cmd_result(sec, "FAIL", 4);
 	sec->cmd_state = SEC_CMD_STATUS_FAIL;
 
 	sec_ts_locked_release_all_finger(ts);
@@ -1996,6 +2090,7 @@ static void run_rawcap_read(void *device_data)
 
 	memset(&mode, 0x00, sizeof(struct sec_ts_test_mode));
 	mode.type = TYPE_OFFSET_DATA_SDC;
+	mode.spec_check = SPEC_CHECK;
 
 	sec_ts_read_raw_data(ts, sec, &mode);
 }
@@ -2011,6 +2106,7 @@ static void run_rawcap_read_all(void *device_data)
 	memset(&mode, 0x00, sizeof(struct sec_ts_test_mode));
 	mode.type = TYPE_OFFSET_DATA_SDC;
 	mode.allnode = TEST_MODE_ALL_NODE;
+	mode.spec_check = SPEC_CHECK;
 
 	sec_ts_read_raw_data(ts, sec, &mode);
 }
@@ -2080,8 +2176,10 @@ static void run_rawcap_gap_read_all(void *device_data)
 
 	mode.type = TYPE_OFFSET_DATA_SDC;
 	mode.allnode = TEST_MODE_ALL_NODE;
+	mode.spec_check = SPEC_NO_CHECK;
 
-	sec_ts_read_frame(ts, mode.type, &mode.min, &mode.max);
+	sec_ts_read_frame(ts, mode.type, &mode.min, &mode.max,
+			  &mode.spec_check);
 
 	ret_x = sec_ts_cm_spec_over_check(ts, gap_x, X_DIR);
 
@@ -2174,7 +2272,7 @@ static void get_delta(void *device_data)
 
 static int sec_ts_read_frame_stdev(struct sec_ts_data *ts,
 	struct sec_cmd_data *sec, u8 type, short *min, short *max,
-	bool get_average_only)
+	enum spec_check_type *spec_check, bool get_average_only)
 {
 	unsigned char *pRead = NULL;
 	short *pFrameAll = NULL;
@@ -2190,11 +2288,9 @@ static int sec_ts_read_frame_stdev(struct sec_ts_data *ts,
 	int frame_tot = 0;
 	int tmp = 0;
 
-	const unsigned int str_size = 10 * (ts->tx_count + 1);
-	unsigned char *pStr = NULL;
-	unsigned char pTmp[16] = { 0 };
 	const unsigned int buff_size = ts->tx_count * ts->rx_count *
 					CMD_RESULT_WORD_LEN;
+	unsigned int buff_len = 0;
 	char *pBuff;
 
 	input_info(true, &ts->client->dev, "%s\n", __func__);
@@ -2206,11 +2302,7 @@ static int sec_ts_read_frame_stdev(struct sec_ts_data *ts,
 	ret = -ENOMEM;
 	pBuff = kzalloc(buff_size, GFP_KERNEL);
 	if (!pBuff)
-		goto ErrorNomem;
-
-	pStr = kzalloc(str_size, GFP_KERNEL);
-	if (!pStr)
-		goto ErrorAllocpStr;
+		goto ErrorAlloc;
 
 	/* each node data 2bytes : 1frame bytes = node_tot * 2 */
 	node_tot = ts->rx_count * ts->tx_count;
@@ -2218,22 +2310,22 @@ static int sec_ts_read_frame_stdev(struct sec_ts_data *ts,
 
 	pRead = kzalloc(frame_len_byte, GFP_KERNEL);
 	if (!pRead)
-		goto ErrorAllocpRead;
+		goto ErrorAlloc;
 
 	/* memory whole frame data : 1frame bytes * total frame */
 	pFrameAll = kzalloc(frame_len_byte * frame_tot, GFP_KERNEL);
 	if (!pFrameAll)
-		goto ErrorAllocpFrameAll;
+		goto ErrorAlloc;
 
 	/* float type : type size is double */
 	pFrameAvg = kzalloc(frame_len_byte * 2, GFP_KERNEL);
 	if (!pFrameAvg)
-		goto ErrorAllocpFrameAvg;
+		goto ErrorAlloc;
 
 	/* 64-bit to prevent overflow */
 	pFrameStd = kzalloc(frame_len_byte * 4, GFP_KERNEL);
 	if (!pFrameStd)
-		goto ErrorAllocpFrameStd;
+		goto ErrorAlloc;
 
 	/* fix touch mode */
 	ret = sec_ts_fix_tmode(ts, TOUCH_SYSTEM_MODE_TOUCH,
@@ -2241,7 +2333,7 @@ static int sec_ts_read_frame_stdev(struct sec_ts_data *ts,
 	if (ret < 0) {
 		input_err(true, &ts->client->dev, "%s: failed to fix tmode\n",
 				__func__);
-		goto ErrorFixmode;
+		goto ErrorAlloc;
 	}
 
 	/* set OPCODE and data type */
@@ -2287,16 +2379,15 @@ static int sec_ts_read_frame_stdev(struct sec_ts_data *ts,
 
 	/* print frame average x 1000 of each node */
 	for (i = 0; i < ts->rx_count; i++) {
-		memset(pStr, 0x0, str_size);
-		snprintf(pTmp, sizeof(pTmp), "Rx%02d | ", i);
-		strlcat(pStr, pTmp, str_size);
+		buff_len = scnprintf(pBuff, buff_size, "Rx%02d | ", i);
 
 		for (j = 0; j < ts->tx_count; j++) {
-			snprintf(pTmp, sizeof(pTmp), " %6d",
-				 pFrameAvg[(j * ts->rx_count) + i]);
-			strlcat(pStr, pTmp, str_size);
+			buff_len += scnprintf(pBuff + buff_len,
+					buff_size - buff_len,
+					" %6d",
+					pFrameAvg[(j * ts->rx_count) + i]);
 		}
-		input_info(true, &ts->client->dev, "%s\n", pStr);
+		input_info(true, &ts->client->dev, "%s\n", pBuff);
 	}
 
 	/* when only getting average, put average in
@@ -2331,14 +2422,9 @@ static int sec_ts_read_frame_stdev(struct sec_ts_data *ts,
 	*min = *max = pFrameStd[0];
 
 	for (i = 0; i < ts->rx_count; i++) {
-		memset(pStr, 0x0, str_size);
-		snprintf(pTmp, sizeof(pTmp), "Rx%02d | ", i);
-		strlcat(pStr, pTmp, str_size);
+		buff_len = scnprintf(pBuff, buff_size, "Rx%02d | ", i);
 
 		for (j = 0; j < ts->tx_count; j++) {
-			snprintf(pTmp, sizeof(pTmp), " %6d",
-				 (int)pFrameStd[(j * ts->rx_count) + i]);
-
 			if (i > 0) {
 				if (pFrameStd[(j * ts->rx_count) + i] < *min)
 					*min =
@@ -2348,9 +2434,12 @@ static int sec_ts_read_frame_stdev(struct sec_ts_data *ts,
 					*max =
 					    pFrameStd[(j * ts->rx_count) + i];
 			}
-			strlcat(pStr, pTmp, str_size);
+			buff_len += scnprintf(pBuff + buff_len,
+					buff_size - buff_len,
+					" %6d",
+					(int)pFrameStd[(j * ts->rx_count) + i]);
 		}
-		input_info(true, &ts->client->dev, "%s\n", pStr);
+		input_info(true, &ts->client->dev, "%s\n", pBuff);
 	}
 	// SQRT(VAR)
 
@@ -2370,23 +2459,37 @@ static int sec_ts_read_frame_stdev(struct sec_ts_data *ts,
 		}
 	}
 
-	for (i = 0; i < node_tot; i++) {
-		if (i == 0)
-			strlcat(pBuff, "\n", buff_size);
+	if (*spec_check == SPEC_CHECK) {
+		int specover_count = 0;
 
-		snprintf(pTmp, sizeof(pTmp), "%6d,", ts->pFrame[i]);
-		strlcat(pBuff, pTmp, buff_size);
+		for (i = 0; i < ts->tx_count; i++) {
+			for (j = 0; j < ts->rx_count; j++) {
+				if (ts->pFrame[(j * ts->tx_count) + i] >
+				    cm_stdev_max)
+					specover_count++;
+			}
+		}
+
+		if (specover_count == 0)
+			*spec_check = SPEC_PASS;
+		else
+			*spec_check = SPEC_FAIL;
+	}
+
+	buff_len = scnprintf(pBuff, buff_size, "\n");
+	for (i = 0; i < node_tot; i++) {
+		buff_len += scnprintf(pBuff + buff_len, buff_size - buff_len,
+				      "%6d,", ts->pFrame[i]);
 
 		if (i % ts->tx_count == ts->tx_count - 1)
-			strlcat(pBuff, "\n", buff_size);
-
-		memset(pTmp, 0x00, sizeof(pTmp));
+			buff_len += scnprintf(pBuff + buff_len,
+					      buff_size - buff_len, "\n");
 	}
 
 	if (!sec)
 		goto ErrorRelease;
 
-	sec_cmd_set_cmd_result(sec, pBuff, strnlen(pBuff, buff_size));
+	sec_cmd_set_cmd_result(sec, pBuff, buff_len);
 	sec->cmd_state = SEC_CMD_STATUS_OK;
 
 ErrorRelease:
@@ -2397,7 +2500,7 @@ OnlyAverage:
 	if (ret < 0) {
 		input_err(true, &ts->client->dev,
 			  "%s: Set rawdata type failed\n", __func__);
-		goto ErrorFixmode;
+		goto ErrorAlloc;
 	}
 
 ErrorDataType:
@@ -2408,25 +2511,12 @@ ErrorDataType:
 				__func__);
 	}
 
-ErrorFixmode:
+ErrorAlloc:
 	kfree(pFrameStd);
-
-ErrorAllocpFrameStd:
 	kfree(pFrameAvg);
-
-ErrorAllocpFrameAvg:
 	kfree(pFrameAll);
-
-ErrorAllocpFrameAll:
 	kfree(pRead);
-
-ErrorAllocpRead:
-	kfree(pStr);
-
-ErrorAllocpStr:
 	kfree(pBuff);
-
-ErrorNomem:
 
 	return ret;
 }
@@ -2441,9 +2531,10 @@ static void run_rawdata_stdev_read(void *device_data)
 
 	memset(&mode, 0x00, sizeof(struct sec_ts_test_mode));
 	mode.type = TYPE_REMV_AMB_DATA;
+	mode.spec_check = SPEC_CHECK;
 
 	sec_ts_read_frame_stdev(ts, sec, mode.type, &mode.min, &mode.max,
-				false);
+				&mode.spec_check, false);
 }
 
 static int sec_ts_read_frame_p2p(struct sec_ts_data *ts,
@@ -2454,11 +2545,12 @@ static int sec_ts_read_frame_p2p(struct sec_ts_data *ts,
 	unsigned short readbytes;
 	int i;
 	int ret = -1;
-	char tmp[SEC_CMD_STR_LEN] = { 0 };
 	char para = TO_TOUCH_MODE;
 	const unsigned int buff_size = ts->tx_count * ts->rx_count *
 					CMD_RESULT_WORD_LEN;
+	unsigned int buff_len = 0;
 	char *buff;
+	u8 result = 0x0;
 
 	buff = kzalloc(buff_size, GFP_KERNEL);
 	if (!buff)
@@ -2483,7 +2575,11 @@ static int sec_ts_read_frame_p2p(struct sec_ts_data *ts,
 
 	/* get min data */
 	mode.type = TYPE_NOI_P2P_MIN;
-	sec_ts_read_frame(ts, mode.type, &mode.min, &mode.max);
+	mode.spec_check = SPEC_CHECK;
+	sec_ts_read_frame(ts, mode.type, &mode.min, &mode.max,
+			  &mode.spec_check);
+	if (mode.spec_check == SPEC_FAIL)
+		result |= 0x1;
 
 	readbytes = ts->rx_count * ts->tx_count;
 
@@ -2497,23 +2593,36 @@ static int sec_ts_read_frame_p2p(struct sec_ts_data *ts,
 
 	/* get max data */
 	mode.type = TYPE_NOI_P2P_MAX;
-	sec_ts_read_frame(ts, mode.type, &mode.min, &mode.max);
+	mode.spec_check = SPEC_CHECK;
+	sec_ts_read_frame(ts, mode.type, &mode.min, &mode.max,
+			  &mode.spec_check);
+	if (mode.spec_check == SPEC_FAIL)
+		result |= 0x2;
 
-	for (i = 0; i < readbytes; i++)
+	for (i = 0; i < readbytes; i++) {
 		/* get p2p by subtract min from max data */
 		ts->pFrame[i] = ts->pFrame[i] - temp[i];
+		if (ts->pFrame[i] > noi_mm)
+			result |= 0x4;
+	}
 
-	strlcat(buff, "\n", buff_size);
+	if (result != 0x0)
+		buff_len += scnprintf(buff + buff_len, buff_size - buff_len,
+				      "NG\n");
+	else
+		buff_len += scnprintf(buff + buff_len, buff_size - buff_len,
+				      "OK\n");
+
 	for (i = 0; i < readbytes; i++) {
-		tmp[0] = 0;
-		snprintf(tmp, sizeof(tmp), "%3d,", ts->pFrame[i]);
-		strlcat(buff, tmp, buff_size);
+		buff_len += scnprintf(buff + buff_len, buff_size - buff_len,
+				      "%3d,", ts->pFrame[i]);
 		if (i % ts->tx_count == (ts->tx_count - 1))
-			strlcat(buff, "\n", buff_size);
+			buff_len += scnprintf(buff + buff_len,
+					      buff_size - buff_len, "\n");
 	}
 
 	if (sec) {
-		sec_cmd_set_cmd_result(sec, buff, strnlen(buff, buff_size));
+		sec_cmd_set_cmd_result(sec, buff, buff_len);
 		sec->cmd_state = SEC_CMD_STATUS_OK;
 	}
 
@@ -2594,6 +2703,7 @@ static void run_self_rawcap_read(void *device_data)
 	memset(&mode, 0x00, sizeof(struct sec_ts_test_mode));
 	mode.type = TYPE_OFFSET_DATA_SDC;
 	mode.frame_channel = TEST_MODE_READ_CHANNEL;
+	mode.spec_check = SPEC_CHECK;
 
 	sec_ts_read_raw_data(ts, sec, &mode);
 }
@@ -2610,6 +2720,7 @@ static void run_self_rawcap_read_all(void *device_data)
 	mode.type = TYPE_OFFSET_DATA_SDC;
 	mode.frame_channel = TEST_MODE_READ_CHANNEL;
 	mode.allnode = TEST_MODE_ALL_NODE;
+	mode.spec_check = SPEC_CHECK;
 
 	sec_ts_read_raw_data(ts, sec, &mode);
 }
@@ -2642,7 +2753,8 @@ static void run_self_rawcap_gap_read_all(void *device_data)
 		goto ErrorAlloc;
 	}
 
-	sec_ts_read_channel(ts, mode.type, &mode.min, &mode.max);
+	sec_ts_read_channel(ts, mode.type, &mode.min, &mode.max,
+			    &mode.spec_check);
 
 	/* ret is number of spec over channel */
 	ret = sec_ts_cs_spec_over_check(ts, gap);
@@ -3530,8 +3642,9 @@ static void run_fs_cal_get_average(void *device_data)
 
 	if (sec->cmd_param[0] == 0) {
 		mode.type = TYPE_REMV_AMB_DATA;
+		mode.spec_check = SPEC_NO_CHECK;
 		ret = sec_ts_read_frame_stdev(ts, sec, mode.type, &mode.min,
-					      &mode.max, only_average);
+				&mode.max, &mode.spec_check, only_average);
 		if (ret < 0) {
 			buff_len += scnprintf(buff + buff_len,
 					      buff_size - buff_len, "NG");
@@ -3567,9 +3680,10 @@ static void run_fs_cal_get_average(void *device_data)
 		int mean;
 		/* for stim pad fixture 2 */
 		mode.type = TYPE_NORM2_DATA;
+		mode.spec_check = SPEC_NO_CHECK;
 
 		ret = sec_ts_read_frame_stdev(ts, sec, mode.type, &mode.min,
-					      &mode.max, only_average);
+				&mode.max, &mode.spec_check, only_average);
 		if (ret < 0) {
 			buff_len += scnprintf(buff + buff_len,
 					      buff_size - buff_len, "NG");
@@ -5656,6 +5770,7 @@ void sec_ts_fn_remove(struct sec_ts_data *ts)
 void sec_ts_run_rawdata_all(struct sec_ts_data *ts, bool full_read)
 {
 	short min, max;
+	enum spec_check_type spec_check = SPEC_NO_CHECK;
 	int ret, i, read_num;
 	u8 test_type[5] = {TYPE_AMBIENT_DATA, TYPE_DECODED_DATA,
 		TYPE_SIGNAL_DATA, TYPE_OFFSET_DATA_SEC, TYPE_OFFSET_DATA_SDC};
@@ -5685,7 +5800,8 @@ void sec_ts_run_rawdata_all(struct sec_ts_data *ts, bool full_read)
 	}
 
 	for (i = 0; i < read_num; i++) {
-		ret = sec_ts_read_frame(ts, test_type[i], &min, &max);
+		ret = sec_ts_read_frame(ts, test_type[i], &min, &max,
+					&spec_check);
 		if (ret < 0)
 			input_info(true, &ts->client->dev,
 					"%s: mutual %d : error ## ret:%d\n",
@@ -5697,7 +5813,8 @@ void sec_ts_run_rawdata_all(struct sec_ts_data *ts, bool full_read)
 		sec_ts_delay(20);
 
 		if (full_read) {
-			ret = sec_ts_read_channel(ts, test_type[i], &min, &max);
+			ret = sec_ts_read_channel(ts, test_type[i], &min, &max,
+						  &spec_check);
 			if (ret < 0)
 				input_info(true, &ts->client->dev,
 						"%s: self %d : error ## ret:%d\n",

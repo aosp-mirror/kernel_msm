@@ -371,6 +371,13 @@
 #define SEC_TS_CMD_DEAD_ZONE		0xAC
 #define SEC_TS_CMD_LANDSCAPE_MODE	0xAD
 
+enum spec_check_type {
+	SPEC_NO_CHECK			= 0,
+	SPEC_CHECK			= 1,
+	SPEC_PASS			= 2,
+	SPEC_FAIL			= 3,
+};
+
 enum grip_write_mode {
 	G_NONE				= 0,
 	G_SET_EDGE_HANDLER		= 1,
@@ -508,6 +515,7 @@ struct sec_ts_test_mode {
 	short max;
 	bool allnode;
 	bool frame_channel;
+	enum spec_check_type spec_check;
 };
 
 struct sec_ts_fw_file {
