@@ -51,6 +51,7 @@ static void run_self_reference_read(void *device_data);
 static void run_self_reference_read_all(void *device_data);
 static void run_self_rawcap_read(void *device_data);
 static void run_self_rawcap_read_all(void *device_data);
+static void run_self_rawcap_gap_read_all(void *device_data);
 static void run_self_delta_read(void *device_data);
 static void run_self_delta_read_all(void *device_data);
 static void run_force_calibration(void *device_data);
@@ -139,6 +140,8 @@ static struct sec_cmd sec_cmds[] = {
 	{SEC_CMD("run_self_reference_read_all", run_self_reference_read_all),},
 	{SEC_CMD("run_self_rawcap_read", run_self_rawcap_read),},
 	{SEC_CMD("run_self_rawcap_read_all", run_self_rawcap_read_all),},
+	{SEC_CMD("run_self_rawcap_gap_read_all",
+		 run_self_rawcap_gap_read_all),},
 	{SEC_CMD("run_self_delta_read", run_self_delta_read),},
 	{SEC_CMD("run_self_delta_read_all", run_self_delta_read_all),},
 	{SEC_CMD("run_force_calibration", run_force_calibration),},
@@ -837,6 +840,154 @@ static int sec_ts_cm_spec_over_check(struct sec_ts_data *ts, short *gap,
 	return specover_count;
 }
 
+static int sec_ts_cs_spec_over_check(struct sec_ts_data *ts, short *gap)
+{
+	int i;
+	int specover_count = 0;
+	short dTmp;
+
+	for (i = 0; i < ts->tx_count - 1; i++) {
+		dTmp = ts->pFrame[i] - ts->pFrame[i + 1];
+		if (dTmp < 0)
+			dTmp *= -1;
+
+		gap[i] = dTmp;
+
+		if (dTmp > cs_gap[i])
+			specover_count++;
+	}
+
+	for (i = ts->tx_count; i < ts->tx_count + ts->rx_count - 1; i++) {
+		dTmp = ts->pFrame[i] - ts->pFrame[i + 1];
+		if (dTmp < 0)
+			dTmp *= -1;
+
+		gap[i] = dTmp;
+
+		if (dTmp > cs_gap[i])
+			specover_count++;
+	}
+
+	input_info(true, &ts->client->dev, "%s: Gap NG for %d node(s)\n",
+			__func__, specover_count);
+
+	return specover_count;
+}
+static int sec_ts_set_digital_gain(struct sec_ts_data *ts)
+{
+	int i, j;
+	u8 *gainTable = NULL;
+	const unsigned int node_cnt = ts->tx_count * ts->rx_count;
+	int temp;
+	int tmp_dv;
+	int ret = 0;
+	unsigned int str_size, str_len = 0;
+	unsigned char *pStr = NULL;
+	u8 *tCmd = NULL;
+	int copy_max, copy_left, copy_size, copy_cur;
+
+	input_info(true, &ts->client->dev, "%s\n", __func__);
+
+	ret = -1;
+	/* gain table - 1 byte per node */
+	gainTable = kzalloc(node_cnt, GFP_KERNEL);
+	if (gainTable == NULL)
+		return ret;
+
+	for (i = 0; i < ts->rx_count; i++) {
+		for (j = 0; j < ts->tx_count; j++) {
+			tmp_dv = ts->pFrame[i * ts->tx_count + j];
+			/* For TEST */
+			if (tmp_dv <= 0) {
+				input_info(true, &ts->client->dev,
+					"%s: node[%d,%d] == 0\n", __func__, i,
+					j);
+				tmp_dv = 1;
+			}
+			/* For TEST */
+			temp = (fs_target[i][j] * 1000) / (tmp_dv) * 64;
+			temp = temp / 1000;
+			if (temp > 255)
+				temp = 255;
+			gainTable[j * ts->rx_count + i] = (temp & 0xFF);
+		}
+	}
+
+	str_size = 6 * (ts->tx_count + 1);
+	pStr = kzalloc(str_size, GFP_KERNEL);
+	if (pStr == NULL)
+		goto ErrorAlloc;
+
+	input_info(true, &ts->client->dev, "%s: Gain Table\n", __func__);
+
+	for (i = 0; i < ts->rx_count; i++) {
+		pStr[0] = 0;
+		str_len = 0;
+		for (j = 0; j < ts->tx_count; j++) {
+			str_len += scnprintf(pStr + str_len, str_size - str_len,
+					     " %3d",
+					     gainTable[(j * ts->rx_count) + i]);
+		}
+		input_info(true, &ts->client->dev, "%s\n", pStr);
+	}
+
+	/* Write norm table to ic
+	 * divide data into 256 bytes:
+	 * i2c buffer size limit 256 bytes
+	 */
+	copy_max = ts->i2c_burstmax - 3;
+	copy_left = node_cnt;
+	copy_size = 0;
+	copy_cur = (copy_left > copy_max) ? copy_max : copy_left;
+
+	tCmd = kzalloc(copy_cur + 3, GFP_KERNEL);
+	if (!tCmd)
+		goto ErrorAlloc;
+
+	while (copy_left > 0) {
+		tCmd[0] = SEC_TS_CMD_WRITE_NORM_TABLE;
+		tCmd[1] = (copy_size >> 8) & 0xFF;
+		tCmd[2] = (copy_size >> 0) & 0xFF;
+
+		memcpy(&tCmd[3], &gainTable[copy_size], copy_cur);
+
+		input_info(true, &ts->client->dev,
+			   "%s: left = %d, cur = %d, size = %d\n",
+			   __func__, copy_left, copy_cur, copy_size);
+
+		ret = ts->sec_ts_i2c_write_burst(ts, tCmd, 3 + copy_cur);
+		if (ret < 0)
+			input_err(true, &ts->client->dev,
+					"%s: table write failed\n", __func__);
+
+		copy_size += copy_cur;
+		copy_left -= copy_cur;
+		copy_cur = (copy_left > copy_max) ? copy_max : copy_left;
+	}
+
+ErrorAlloc:
+	kfree(tCmd);
+	kfree(pStr);
+	kfree(gainTable);
+
+	return ret;
+}
+
+static int sec_ts_get_postcal_mean(struct sec_ts_data *ts)
+{
+	int i;
+	int sum = 0;
+	const unsigned int node_cnt = ts->tx_count * ts->rx_count;
+
+	for (i = 0; i < node_cnt; i++)
+		/* TODO: postcal_mean calculation - handle notch area */
+		sum += ts->pFrame[i];
+
+	sum = sum / node_cnt;
+
+	return sum;
+}
+
 static void sec_ts_print_frame(struct sec_ts_data *ts, short *min, short *max)
 {
 	int i = 0;
@@ -987,7 +1138,78 @@ ErrorExit:
 	return ret;
 }
 
-static int sec_ts_read_channel(struct sec_ts_data *ts, u8 type, short *min, short *max)
+static void sec_ts_print_channel(struct sec_ts_data *ts)
+{
+	unsigned char *pStr = NULL;
+	unsigned int str_size, str_len = 0;
+	int i = 0, j = 0, k = 0;
+
+	if (!ts->tx_count)
+		return;
+
+	str_size = 7 * (ts->tx_count + 1);
+	pStr = vzalloc(str_size);
+	if (!pStr)
+		return;
+
+	str_len = scnprintf(pStr, str_size, " TX");
+
+	for (k = 0; k < ts->tx_count; k++) {
+		str_len += scnprintf(pStr + str_len, str_size - str_len,
+				     "    %02d", k);
+	}
+	input_info(true, &ts->client->dev, "%s\n", pStr);
+
+	str_len = scnprintf(pStr, str_size, " +");
+
+	for (k = 0; k < ts->tx_count; k++) {
+		str_len += scnprintf(pStr + str_len, str_size - str_len,
+				     "------");
+	}
+	input_info(true, &ts->client->dev, "%s\n", pStr);
+
+	str_len = scnprintf(pStr, str_size, " | ");
+
+	for (i = 0; i < (ts->tx_count + ts->rx_count) * 2; i += 2) {
+		if (j == ts->tx_count) {
+			input_info(true, &ts->client->dev, "%s\n", pStr);
+			input_info(true, &ts->client->dev, "\n");
+			str_len = scnprintf(pStr, str_size, " RX");
+
+			for (k = 0; k < ts->tx_count; k++) {
+				str_len += scnprintf(pStr + str_len,
+						     str_size - str_len,
+						     "    %02d", k);
+			}
+
+			input_info(true, &ts->client->dev, "%s\n", pStr);
+
+			str_len = scnprintf(pStr, str_size, " +");
+
+			for (k = 0; k < ts->tx_count; k++) {
+				str_len += scnprintf(pStr + str_len,
+						     str_size - str_len,
+						     "------");
+			}
+			input_info(true, &ts->client->dev, "%s\n", pStr);
+
+			str_len = scnprintf(pStr, str_size, " | ");
+		} else if (j && !(j % ts->tx_count)) {
+			input_info(true, &ts->client->dev, "%s\n", pStr);
+			str_len = scnprintf(pStr, str_size, " | ");
+		}
+
+		str_len += scnprintf(pStr + str_len, str_size - str_len, " %5d",
+				     ts->pFrame[j]);
+
+		j++;
+	}
+	input_info(true, &ts->client->dev, "%s\n", pStr);
+	vfree(pStr);
+}
+
+static int sec_ts_read_channel(struct sec_ts_data *ts, u8 type, short *min,
+			       short *max)
 {
 	unsigned char *pRead = NULL;
 	u8 mode = TYPE_INVALID_DATA;
@@ -1057,6 +1279,8 @@ static int sec_ts_read_channel(struct sec_ts_data *ts, u8 type, short *min, shor
 				(jj < ts->tx_count) ? "TX" : "RX", jj, ts->pFrame[jj]);
 		jj++;
 	}
+
+	sec_ts_print_channel(ts);
 
 err_read_data:
 	/* release data monitory (unprepare AFE data memory) */
@@ -1172,6 +1396,25 @@ error_alloc_mem:
 	sec_ts_locked_release_all_finger(ts);
 
 	return ret;
+}
+
+int sec_ts_check_fs_precal(struct sec_ts_data *ts)
+{
+	int i, j;
+	int fail_count = 0;
+	short temp;
+
+	for (i = 0; i < ts->rx_count; i++) {
+		for (j = 0; j < ts->tx_count; j++) {
+			temp = ts->pFrame[i * ts->tx_count + j];
+			/* check whether fs_precal data is within range */
+			if ((temp > fs_precal_h[i][j]) ||
+				(temp < fs_precal_l[i][j]))
+				fail_count++;
+		}
+	}
+
+	return fail_count;
 }
 
 static void get_fw_ver_bin(void *device_data)
@@ -2067,7 +2310,7 @@ static int sec_ts_read_frame_stdev(struct sec_ts_data *ts,
 							  j]);
 			}
 		}
-		goto SetCmdResult;
+		goto OnlyAverage;
 	}
 
 	/* get standard deviation */
@@ -2127,7 +2370,6 @@ static int sec_ts_read_frame_stdev(struct sec_ts_data *ts,
 		}
 	}
 
-SetCmdResult:
 	for (i = 0; i < node_tot; i++) {
 		if (i == 0)
 			strlcat(pBuff, "\n", buff_size);
@@ -2148,6 +2390,7 @@ SetCmdResult:
 	sec->cmd_state = SEC_CMD_STATUS_OK;
 
 ErrorRelease:
+OnlyAverage:
 	/* release data monitory (unprepare AFE data memory) */
 	ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_MUTU_RAW_TYPE, &inval_type,
 				   1);
@@ -2184,10 +2427,6 @@ ErrorAllocpStr:
 	kfree(pBuff);
 
 ErrorNomem:
-	if (ret < 0)
-		sec_cmd_set_cmd_result(&ts->sec, "NG", 2);
-	else
-		sec_cmd_set_cmd_result(&ts->sec, "OK", 2);
 
 	return ret;
 }
@@ -2373,6 +2612,65 @@ static void run_self_rawcap_read_all(void *device_data)
 	mode.allnode = TEST_MODE_ALL_NODE;
 
 	sec_ts_read_raw_data(ts, sec, &mode);
+}
+
+static void run_self_rawcap_gap_read_all(void *device_data)
+{
+	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
+	struct sec_ts_data *ts = container_of(sec, struct sec_ts_data, sec);
+	struct sec_ts_test_mode mode;
+	int i;
+	int ret = 0;
+	char *buff = NULL;
+	short *gap = NULL;
+	const int gap_buff_size = (ts->tx_count - 1) + (ts->rx_count - 1);
+	const int buff_size = gap_buff_size * CMD_RESULT_WORD_LEN + 4;
+	unsigned int buff_len = 0;
+
+	sec_cmd_set_default_result(sec);
+
+	memset(&mode, 0x00, sizeof(struct sec_ts_test_mode));
+	mode.type = TYPE_OFFSET_DATA_SDC;
+	mode.frame_channel = TEST_MODE_READ_CHANNEL;
+	mode.allnode = TEST_MODE_ALL_NODE;
+
+	gap = kzalloc(gap_buff_size, GFP_KERNEL);
+	buff = kzalloc(buff_size, GFP_KERNEL);
+	if (!gap || !buff) {
+		sec->cmd_state = SEC_CMD_STATUS_FAIL;
+		sec_cmd_set_cmd_result(sec, "FAIL", 4);
+		goto ErrorAlloc;
+	}
+
+	sec_ts_read_channel(ts, mode.type, &mode.min, &mode.max);
+
+	/* ret is number of spec over channel */
+	ret = sec_ts_cs_spec_over_check(ts, gap);
+
+	if (ret == 0) {
+		buff_len = scnprintf(buff, buff_size, "OK\n	");
+		sec->cmd_state = SEC_CMD_STATUS_OK;
+	} else {
+		buff_len = scnprintf(buff, buff_size, "NG\n	");
+		sec->cmd_state = SEC_CMD_STATUS_FAIL;
+	}
+
+	for (i = 0; i < (ts->tx_count - 1); i++) {
+		buff_len += scnprintf(buff + buff_len, buff_size - buff_len,
+				      "%6d,", gap[i]);
+	}
+	buff_len += scnprintf(buff + buff_len, buff_size - buff_len, "\n");
+
+	for (i = ts->tx_count; i < ts->tx_count + (ts->rx_count - 1); i++) {
+		buff_len += scnprintf(buff + buff_len, buff_size - buff_len,
+				      "%6d,\n", gap[i]);
+	}
+
+	sec_cmd_set_cmd_result(sec, buff, buff_len);
+
+ErrorAlloc:
+	kfree(buff);
+	kfree(gap);
 }
 
 static void run_self_delta_read(void *device_data)
@@ -3196,36 +3494,104 @@ static void run_fs_cal_get_average(void *device_data)
 	struct sec_ts_data *ts = container_of(sec, struct sec_ts_data, sec);
 	struct sec_ts_test_mode mode;
 	const bool only_average = true;
-	char buff[SEC_CMD_STR_LEN] = { 0 };
+	char *buff;
+	int ret;
+	int i;
+	const unsigned int buff_size = ts->tx_count * ts->rx_count *
+				       CMD_RESULT_WORD_LEN;
+	unsigned int buff_len = 0;
 
 	input_info(true, &ts->client->dev, "%s: fs cal with stim pad\n",
 		   __func__);
 
+	sec_cmd_set_default_result(sec);
+
 	if (ts->power_status == SEC_TS_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: Touch is stopped!\n",
 			  __func__);
-		snprintf(buff, sizeof(buff), "NG");
-		sec->cmd_state = SEC_CMD_STATUS_FAIL;
+		sec_cmd_set_cmd_result(sec, "NG", 2);
 		return;
 	}
 
-	sec_cmd_set_default_result(sec);
-
 	if (sec->cmd_param[0] < 0 || sec->cmd_param[0] > 1) {
-		snprintf(buff, sizeof(buff), "NG");
-		sec->cmd_state = SEC_CMD_STATUS_FAIL;
+		input_err(true, &ts->client->dev,
+			  "%s: Parameter Error\n", __func__);
+		sec_cmd_set_cmd_result(sec, "NG", 2);
+		return;
+	}
+
+	buff = kzalloc(buff_size, GFP_KERNEL);
+	if (!buff) {
+		sec_cmd_set_cmd_result(sec, "NG", 2);
 		return;
 	}
 
 	memset(&mode, 0x00, sizeof(struct sec_ts_test_mode));
 
-	if (sec->cmd_param[0] == 0)
+	if (sec->cmd_param[0] == 0) {
 		mode.type = TYPE_REMV_AMB_DATA;
-	else
+		ret = sec_ts_read_frame_stdev(ts, sec, mode.type, &mode.min,
+					      &mode.max, only_average);
+		if (ret < 0) {
+			buff_len += scnprintf(buff + buff_len,
+					      buff_size - buff_len, "NG");
+			sec->cmd_state = SEC_CMD_STATUS_FAIL;
+			goto SetCmdResult;
+		}
+		ret = sec_ts_check_fs_precal(ts);
+
+		/* ret = NG node count */
+		if (ret > 0) {
+			buff_len += scnprintf(buff + buff_len,
+					      buff_size - buff_len, "NG\n");
+			sec->cmd_state = SEC_CMD_STATUS_FAIL;
+		} else {
+			buff_len += scnprintf(buff + buff_len,
+					      buff_size - buff_len, "OK\n");
+			sec->cmd_state = SEC_CMD_STATUS_OK;
+		}
+
+		for (i = 0; i < ts->tx_count * ts->rx_count; i++) {
+			buff_len += scnprintf(buff + buff_len,
+					      buff_size - buff_len, "%4d,",
+					      ts->pFrame[i]);
+
+			if (i % ts->tx_count == ts->tx_count - 1)
+				buff_len += scnprintf(buff + buff_len,
+						      buff_size - buff_len,
+						      "\n");
+		}
+
+		sec_ts_set_digital_gain(ts);
+	} else {
+		int mean;
+		/* for stim pad fixture 2 */
 		mode.type = TYPE_NORM2_DATA;
 
-	sec_ts_read_frame_stdev(ts, sec, mode.type, &mode.min, &mode.max,
-				only_average);
+		ret = sec_ts_read_frame_stdev(ts, sec, mode.type, &mode.min,
+					      &mode.max, only_average);
+		if (ret < 0) {
+			buff_len += scnprintf(buff + buff_len,
+					      buff_size - buff_len, "NG");
+			sec->cmd_state = SEC_CMD_STATUS_FAIL;
+			goto SetCmdResult;
+		}
+
+		buff_len += scnprintf(buff + buff_len, buff_size - buff_len,
+				      "OK\n");
+		sec->cmd_state = SEC_CMD_STATUS_OK;
+
+		/* TODO: postcal_mean calculation - handle notch area */
+		mean = sec_ts_get_postcal_mean(ts);
+		input_info(true, &ts->client->dev,
+			   "%s : FS mean = %d\n", __func__, mean);
+	}
+
+SetCmdResult:
+
+	sec_cmd_set_cmd_result(sec, buff, buff_len);
+
+	kfree(buff);
 }
 
 static void run_fs_cal_post_press(void *device_data)
@@ -3236,13 +3602,13 @@ static void run_fs_cal_post_press(void *device_data)
 	int ret = 0;
 	u8 on[1] = {STATE_MANAGE_ON};
 
+	sec_cmd_set_default_result(sec);
+
 	if (ts->power_status == SEC_TS_STATE_POWER_OFF) {
 		input_err(true, &ts->client->dev, "%s: Touch is stopped!\n",
 			  __func__);
 		goto ErrorPowerOff;
 	}
-
-	sec_cmd_set_default_result(sec);
 
 	ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SET_TOUCH_ENGINE_MODE, on, 1);
 	if (ret < 0) {
