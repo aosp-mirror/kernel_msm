@@ -14,32 +14,7 @@
 
 &soc {
 	i2c@78b7000 { /* BLSP1 QUP3 */
-		status = "okay";
-		synaptics@4b {
-			compatible = "synaptics,dsx-i2c";
-			reg = <0x4b>;
-			interrupt-parent = <&tlmm>;
-			interrupts = <65 0x2008>;
-			vdd_ana-supply = <&vdd_vreg>;
-			vcc_i2c-supply = <&pm8953_l6>;
-			synaptics,pwr-reg-name = "vdd_ana";
-			synaptics,bus-reg-name = "vcc_i2c";
-			synaptics,irq-gpio = <&tlmm 65 0x2008>;
-			synaptics,irq-on-state = <0>;
-			synaptics,irq-flags = <0x2008>;
-			synaptics,power-delay-ms = <200>;
-			synaptics,reset-delay-ms = <200>;
-			synaptics,max-y-for-2d = <1919>;
-			synaptics,cap-button-codes = <139 158 172>;
-			synaptics,vir-button-codes = <139 180 2000 320 160
-						      158 540 2000 320 160
-						      172 900 2000 320 160>;
-			synaptics,resume-in-workqueue;
-			/* Underlying clocks used by secure touch */
-			clock-names = "iface_clk", "core_clk";
-			clocks = <&clock_gcc clk_gcc_blsp1_ahb_clk>,
-				 <&clock_gcc clk_gcc_blsp1_qup3_i2c_apps_clk>;
-		};
+		/delete-node/ synaptics@4b;
 	};
 
 	vdd_vreg: vdd_vreg {
@@ -48,12 +23,60 @@
 		regulator-name = "vdd_vreg";
 	};
 
+	gpio_keys {
+		compatible = "gpio-keys";
+		input-name = "gpio-keys";
+		pinctrl-names = "tlmm_gpio_key_active","tlmm_gpio_key_suspend";
+		pinctrl-0 = <&gpio_key_active>;
+		pinctrl-1 = <&gpio_key_suspend>;
+
+		vol_up {
+			label = "volume_up";
+			gpios = <&tlmm 85 0x1>;
+			linux,input-type = <1>;
+			linux,code = <115>;
+			debounce-interval = <15>;
+		};
+	};
 };
 
 &blsp1_uart0 {
 	status = "ok";
 	pinctrl-names = "default";
 	pinctrl-0 = <&uart_console_active>;
+};
+
+&pm8953_gpios {
+	nfc_clk {
+		nfc_clk_default: nfc_clk_default {
+			pins = "gpio2";
+			function = "normal";
+			input-enable;
+			power-source = <1>;
+		};
+	};
+};
+
+&i2c_5 { /* BLSP2 QUP1 (NFC) */
+	status = "ok";
+	nq@28 {
+		compatible = "qcom,nq-nci";
+		reg = <0x28>;
+		qcom,nq-irq = <&tlmm 17 0x00>;
+		qcom,nq-ven = <&tlmm 16 0x00>;
+		qcom,nq-firm = <&tlmm 62 0x00>;
+		qcom,nq-clkreq = <&pm8953_gpios 2 0x00>;
+		interrupt-parent = <&tlmm>;
+		qcom,clk-src = "BBCLK2";
+		interrupts = <17 0>;
+		interrupt-names = "nfc_irq";
+		pinctrl-names = "nfc_active", "nfc_suspend";
+		pinctrl-0 = <&nfc_int_active &nfc_disable_active
+						&nfc_clk_default>;
+		pinctrl-1 = <&nfc_int_suspend &nfc_disable_suspend>;
+		clocks = <&clock_gcc clk_bb_clk2_pin>;
+		clock-names = "ref_clk";
+	};
 };
 
 &sdhc_1 {

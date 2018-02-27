@@ -4581,10 +4581,13 @@ static int _sde_crtc_check_secure_state(struct drm_crtc *crtc,
 {
 	struct drm_encoder *encoder;
 	struct sde_crtc_state *cstate;
+	struct sde_crtc *sde_crtc;
+	struct sde_crtc_smmu_state_data *smmu_state;
 	uint32_t secure;
 	uint32_t fb_ns = 0, fb_sec = 0, fb_sec_dir = 0;
 	int encoder_cnt = 0, i;
 	int rc;
+	bool is_video_mode = false;
 
 	if (!crtc || !state) {
 		SDE_ERROR("invalid arguments\n");
@@ -4642,6 +4645,37 @@ static int _sde_crtc_check_secure_state(struct drm_crtc *crtc,
 
 		}
 	}
+
+	drm_for_each_encoder(encoder, crtc->dev) {
+		if (encoder->crtc != crtc)
+			continue;
+
+		is_video_mode |= sde_encoder_check_mode(encoder,
+						MSM_DISPLAY_CAP_VID_MODE);
+	}
+
+	sde_crtc = to_sde_crtc(crtc);
+	smmu_state = &sde_crtc->smmu_state;
+	/*
+	 * In video mode check for null commit before transition
+	 * from secure to non secure and vice versa
+	 */
+	if (is_video_mode && smmu_state &&
+		state->plane_mask && crtc->state->plane_mask &&
+		((fb_sec_dir && ((smmu_state->state == ATTACHED) &&
+				(secure == SDE_DRM_SEC_ONLY))) ||
+			(fb_ns && ((smmu_state->state == DETACHED) ||
+				(smmu_state->state == DETACH_ALL_REQ))))) {
+
+		SDE_EVT32(DRMID(&sde_crtc->base), fb_ns, fb_sec_dir,
+		  smmu_state->state, crtc->state->plane_mask,
+			crtc->state->plane_mask);
+		SDE_DEBUG("crtc %d, Invalid secure transition %x\n",
+				crtc->base.id, smmu_state->state);
+		return -EINVAL;
+
+	}
+
 	SDE_DEBUG("crtc:%d Secure validation successful\n", crtc->base.id);
 
 	return 0;
@@ -5893,7 +5927,8 @@ static void _sde_crtc_event_cb(struct kthread_work *work)
 }
 
 int sde_crtc_event_queue(struct drm_crtc *crtc,
-		void (*func)(struct drm_crtc *crtc, void *usr), void *usr)
+		void (*func)(struct drm_crtc *crtc, void *usr),
+		void *usr, bool color_processing_event)
 {
 	unsigned long irq_flags;
 	struct sde_crtc *sde_crtc;
@@ -5932,7 +5967,11 @@ int sde_crtc_event_queue(struct drm_crtc *crtc,
 
 	/* queue new event request */
 	kthread_init_work(&event->kt_work, _sde_crtc_event_cb);
-	kthread_queue_work(&priv->event_thread[crtc_id].worker,
+	if (color_processing_event)
+		kthread_queue_work(&priv->pp_event_worker,
+			&event->kt_work);
+	else
+		kthread_queue_work(&priv->event_thread[crtc_id].worker,
 			&event->kt_work);
 
 	return 0;

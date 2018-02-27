@@ -178,6 +178,8 @@ enum {
 #define APSD_RERUN_BIT				BIT(0)
 
 #define CMD_HVDCP_2_REG				(USBIN_BASE + 0x43)
+#define FORCE_12V_BIT				BIT(5)
+#define FORCE_9V_BIT				BIT(4)
 #define FORCE_5V_BIT				BIT(3)
 #define SINGLE_DECREMENT_BIT			BIT(1)
 #define SINGLE_INCREMENT_BIT			BIT(0)
@@ -196,6 +198,7 @@ enum {
 };
 
 #define USBIN_OPTIONS_1_CFG_REG			(USBIN_BASE + 0x62)
+#define HVDCP_AUTH_ALG_EN_CFG_BIT		BIT(6)
 #define HVDCP_AUTONOMOUS_MODE_EN_CFG_BIT	BIT(5)
 #define BC1P2_SRC_DETECT_BIT			BIT(3)
 
@@ -299,6 +302,8 @@ enum {
 #define TYPEC_U_USB_CFG_REG			(TYPEC_BASE + 0x70)
 #define EN_MICRO_USB_MODE_BIT			BIT(0)
 
+#define TYPEC_MICRO_USB_MODE_REG		(TYPEC_BASE + 0x70)
+#define MICRO_USB_MODE_ONLY_BIT			BIT(0)
 /********************************
  *  MISC Peripheral Registers  *
  ********************************/

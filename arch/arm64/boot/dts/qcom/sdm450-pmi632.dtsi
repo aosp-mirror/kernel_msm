@@ -26,3 +26,37 @@
 	qcom,ps-hold-hard-reset-disable;
 	qcom,ps-hold-shutdown-disable;
 };
+
+&usb3 {
+	extcon = <&pmi632_charger>, <&pmi632_charger>, <0>,
+		 <&pmi632_charger>, <&pmi632_charger>;
+	vbus_dwc3-supply = <&smb5_vbus>;
+};
+
+/{
+	mtp_batterydata: qcom,battery-data {
+		qcom,batt-id-range-pct = <15>;
+		#include "qg-batterydata-ascent-3450mah.dtsi"
+		#include "qg-batterydata-mlp356477-2800mah.dtsi"
+	};
+};
+
+&pmi632_qg {
+	qcom,battery-data = <&mtp_batterydata>;
+	qcom,rbat-conn-mohm = <20>;
+};
+
+&pm8953_gpios {
+	bklt_en {
+		bklt_en_default: bklt_en_default {
+		pins = "gpio4";
+		function = "normal";
+		power-source = <0>;
+		output-high;
+		};
+	};
+};
+
+&pm8953_pwm {
+	status = "ok";
+};
