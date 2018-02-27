@@ -68,8 +68,8 @@
 		reg = <0>;
 		spi-max-frequency = <10000000>;
 		/* i2c NFC device handles eSE power:
-		 * i2c_3, reg 0x28
+		 * i2c_1, reg 0x28
 		 */
-		nxp,nfcc = "3-0028";
+		nxp,nfcc = "1-0028";
 	};
 };
