@@ -8560,7 +8560,6 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 	dhd_conf_set_fw_string_cmd(dhd, "lpc", dhd->conf->lpc, 0, FALSE);
 
 	/* Set PowerSave mode */
-	dhd->conf->pm = PM_MAX;
 	if (dhd->conf->pm >= 0)
 		power_mode = dhd->conf->pm;
 	dhd_wl_ioctl_cmd(dhd, WLC_SET_PM, (char *)&power_mode, sizeof(power_mode), TRUE, 0);
