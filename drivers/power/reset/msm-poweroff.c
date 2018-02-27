@@ -45,7 +45,6 @@
 #define SCM_EDLOAD_MODE			0X01
 #define SCM_DLOAD_CMD			0x10
 
-
 static int restart_mode;
 static void *restart_reason, *dload_type_addr;
 static bool scm_pmic_arbiter_disable_supported;
@@ -389,7 +388,9 @@ static void do_msm_restart(enum reboot_mode reboot_mode, const char *cmd)
 
 static void do_msm_poweroff(void)
 {
-	pr_notice("Powering off the SoC\n");
+	pr_err("Powering off the SoC val\n");
+	if (device_is_charging)
+		qpnp_pon_set_restart_reason(PON_RESTART_REASON_TEST);
 
 	set_dload_mode(0);
 	scm_disable_sdi();

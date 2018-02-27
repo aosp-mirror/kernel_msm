@@ -19,6 +19,7 @@
 
 void msm_set_restart_mode(int mode);
 extern int pmic_reset_irq;
+extern int device_is_charging;
 
 #endif
 
