@@ -6429,7 +6429,6 @@ static void __ufshcd_transfer_req_compl(struct ufs_hba *hba,
 	struct scsi_cmnd *cmd;
 	int result;
 	int index;
-	struct request *req;
 
 	for_each_set_bit(index, &completed_reqs, hba->nutrs) {
 		lrbp = &hba->lrb[index];
@@ -6441,11 +6440,11 @@ static void __ufshcd_transfer_req_compl(struct ufs_hba *hba,
 			result = ufshcd_transfer_rsp_status(hba, lrbp);
 			scsi_dma_unmap(cmd);
 			cmd->result = result;
-			clear_bit_unlock(index, &hba->lrb_in_use);
 			lrbp->complete_time_stamp = ktime_get();
 			update_req_stats(hba, lrbp);
 			/* Mark completed command as NULL in LRB */
 			lrbp->cmd = NULL;
+			clear_bit_unlock(index, &hba->lrb_in_use);
 			hba->ufs_stats.clk_rel.ctx = XFR_REQ_COMPL;
 			__ufshcd_release(hba, false);
 			__ufshcd_hibern8_release(hba, false);
@@ -6459,22 +6458,19 @@ static void __ufshcd_transfer_req_compl(struct ufs_hba *hba,
 					false);
 				ufshcd_vops_crypto_engine_cfg_end(hba,
 					lrbp, cmd->request);
-			}
 
-			req = cmd->request;
-			if (req) {
 				/* Update IO svc time latency histogram */
-				if (req->lat_hist_enabled) {
+				if (cmd->request->lat_hist_enabled) {
 					ktime_t completion;
 					u_int64_t delta_us;
 
 					completion = ktime_get();
 					delta_us = ktime_us_delta(completion,
-						  req->lat_hist_io_start);
+					  cmd->request->lat_hist_io_start);
 					/* rq_data_dir() => true if WRITE */
 					blk_update_latency_hist(
-						(rq_data_dir(req) == READ) ?
-						&hba->io_lat_read :
+						(rq_data_dir(cmd->request) ==
+						READ)? &hba->io_lat_read:
 						&hba->io_lat_write, delta_us);
 				}
 			}
@@ -6528,11 +6524,11 @@ void ufshcd_abort_outstanding_transfer_requests(struct ufs_hba *hba, int result)
 			/* Clear pending transfer requests */
 			ufshcd_clear_cmd(hba, index);
 			ufshcd_outstanding_req_clear(hba, index);
-			clear_bit_unlock(index, &hba->lrb_in_use);
 			lrbp->complete_time_stamp = ktime_get();
 			update_req_stats(hba, lrbp);
 			/* Mark completed command as NULL in LRB */
 			lrbp->cmd = NULL;
+			clear_bit_unlock(index, &hba->lrb_in_use);
 			ufshcd_release_all(hba);
 			if (cmd->request) {
 				/*
