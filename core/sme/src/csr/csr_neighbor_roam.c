@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -1138,7 +1138,6 @@ QDF_STATUS csr_neighbor_roam_indicate_connect(
 		csr_neighbor_roam_reset_init_state_control_info(pMac,
 			session_id);
 		csr_neighbor_roam_info_ctx_init(pMac, session_id);
-
 		return status;
 	}
 #endif
