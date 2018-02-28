@@ -24,3 +24,6 @@
 	/delete-property/ qcom,sde-has-dest-scaler;
 };
 
+&mdss_dsi0 {
+	/delete-property/ qcom,null-insertion-enabled;
+};
