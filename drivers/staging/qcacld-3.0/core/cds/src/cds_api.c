@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -827,8 +827,17 @@ QDF_STATUS cds_disable(v_CONTEXT_t cds_context)
 		cds_err("Invalid PE context return!");
 		return QDF_STATUS_E_INVAL;
 	}
+	qdf_status = sme_stop(handle, HAL_STOP_TYPE_SYS_DEEP_SLEEP);
+	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
+		cds_err("Failed to stop SME: %d", qdf_status);
+		QDF_ASSERT(QDF_IS_STATUS_SUCCESS(qdf_status));
+	}
+	qdf_status = mac_stop(handle, HAL_STOP_TYPE_SYS_DEEP_SLEEP);
 
-	umac_stop(cds_context);
+	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
+		cds_err("Failed to stop MAC");
+		QDF_ASSERT(QDF_IS_STATUS_SUCCESS(qdf_status));
+	}
 
 	return qdf_status;
 }
@@ -2663,22 +2672,37 @@ QDF_STATUS cds_deregister_dp_cb(void)
 	return QDF_STATUS_SUCCESS;
 }
 
+uint32_t cds_get_connectivity_stats_pkt_bitmap(void *context)
+{
+	hdd_adapter_t *adapter = NULL;
+
+	adapter = (hdd_adapter_t *)context;
+	if (unlikely(adapter->magic != WLAN_HDD_ADAPTER_MAGIC)) {
+		QDF_TRACE(QDF_MODULE_ID_HDD_DATA, QDF_TRACE_LEVEL_ERROR,
+			  "Magic cookie(%x) for adapter sanity verification is invalid",
+			  adapter->magic);
+		return QDF_STATUS_E_FAILURE;
+	}
+	return adapter->pkt_type_bitmap;
+}
+
 /**
  * cds_get_arp_stats_gw_ip() - get arp stats track IP
  *
  * Return: ARP stats IP to track
  */
-uint32_t cds_get_arp_stats_gw_ip(void)
+uint32_t cds_get_arp_stats_gw_ip(void *context)
 {
-	hdd_context_t *hdd_ctx;
+	hdd_adapter_t *adapter = (hdd_adapter_t *)context;
 
-	hdd_ctx = (hdd_context_t *) (gp_cds_context->pHDDContext);
-	if (!hdd_ctx) {
-		cds_err("Hdd Context is Null");
+	if (unlikely(adapter->magic != WLAN_HDD_ADAPTER_MAGIC)) {
+		QDF_TRACE(QDF_MODULE_ID_HDD_DATA, QDF_TRACE_LEVEL_ERROR,
+			  "Magic cookie(%x) for adapter sanity verification is invalid",
+			  adapter->magic);
 		return 0;
 	}
 
-	return hdd_ctx->track_arp_ip;
+	return adapter->track_arp_ip;
 }
 
 /**
