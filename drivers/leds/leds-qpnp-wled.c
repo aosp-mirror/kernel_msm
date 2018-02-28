@@ -34,6 +34,7 @@
 /* ctrl registers */
 #define QPNP_WLED_FAULT_STATUS(b)	(b + 0x08)
 #define QPNP_WLED_INT_RT_STS(b)		(b + 0x10)
+#define QPNP_WLED_EXT_PIN_CTL(b)	(b + 0x45)
 #define QPNP_WLED_EN_REG(b)		(b + 0x46)
 #define QPNP_WLED_FDBK_OP_REG(b)	(b + 0x48)
 #define QPNP_WLED_VREF_REG(b)		(b + 0x49)
@@ -90,6 +91,8 @@
 #define QPNP_WLED_LCD_AUTO_PFM_EN_BIT			BIT(7)
 #define QPNP_WLED_LCD_AUTO_PFM_THRESH_MASK		GENMASK(3, 0)
 #define QPNP_WLED_EN_PSM_BIT				BIT(7)
+
+#define QPNP_WLED_EXT_PIN_CTL_BIT			BIT(7)
 
 #define QPNP_WLED_ILIM_MASK		GENMASK(2, 0)
 #define QPNP_WLED_ILIM_OVERWRITE	BIT(7)
@@ -1559,7 +1562,7 @@ static irqreturn_t qpnp_wled_sc_irq_handler(int irq, void *_wled)
 {
 	struct qpnp_wled *wled = _wled;
 	int rc;
-	u8 val;
+	u8 val, ext_ctl;
 
 	rc = qpnp_wled_read_reg(wled,
 			QPNP_WLED_FAULT_STATUS(wled->ctrl_base), &val);
@@ -1568,12 +1571,32 @@ static irqreturn_t qpnp_wled_sc_irq_handler(int irq, void *_wled)
 		return IRQ_HANDLED;
 	}
 
-	pr_err("WLED short circuit detected %d times fault_status=%x\n",
-		++wled->sc_cnt, val);
+	rc = qpnp_wled_read_reg(wled,
+			QPNP_WLED_EXT_PIN_CTL(wled->ctrl_base), &ext_ctl);
+
+	if (rc < 0) {
+		pr_err("Can't read WLED_EXT_PIN_CTL\n");
+		return IRQ_HANDLED;
+	}
+
+	pr_err("WLED short circuit: n=%d, ext_pin_ctl=%x, fault=%x\n",
+		++wled->sc_cnt, ext_ctl, val);
 	mutex_lock(&wled->lock);
-	qpnp_wled_module_en(wled, wled->ctrl_base, false);
-	msleep(QPNP_WLED_SC_DLY_MS);
-	qpnp_wled_module_en(wled, wled->ctrl_base, true);
+	if ((ext_ctl & QPNP_WLED_EXT_PIN_CTL_BIT) == 0x00) {
+		/* Disable, then re-enable WLED regulator. */
+		qpnp_wled_module_en(wled, wled->ctrl_base, false);
+		msleep(QPNP_WLED_SC_DLY_MS);
+		qpnp_wled_module_en(wled, wled->ctrl_base, true);
+	} else {
+		/* Disable, then restore external pin control. */
+		qpnp_wled_write_reg(wled,
+			QPNP_WLED_EXT_PIN_CTL(wled->ctrl_base),
+			ext_ctl & ~QPNP_WLED_EXT_PIN_CTL_BIT);
+		msleep(QPNP_WLED_SC_DLY_MS);
+		qpnp_wled_write_reg(wled,
+			QPNP_WLED_EXT_PIN_CTL(wled->ctrl_base), ext_ctl);
+	}
+
 	mutex_unlock(&wled->lock);
 
 	return IRQ_HANDLED;
