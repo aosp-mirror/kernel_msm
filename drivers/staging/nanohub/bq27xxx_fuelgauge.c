@@ -27,7 +27,7 @@
 #include <linux/reboot.h>
 
 
-
+int device_is_charging = 0;
 #define DBG_ENABLE 1
 #define WAKEUP_TIMEOUT_MS       1000
 
@@ -139,12 +139,15 @@ void bq27x00_update(struct Nanohub_FuelGauge_Info *fg_info)
 			fg_info->cache.capacity, fg_info->cache.temperature,
 			fg_info->cache.flags, fg_info->charger_online);
 #endif
-	if ((fg_info->cache.voltage > 4000)
-		&& (strnstr(saved_command_line, "androidboot.mode=charger",
+	if (!(strnstr(saved_command_line, "androidboot.mode=keep_charging",
 		strlen(saved_command_line)))) {
-		pr_err("fg_info->cache.voltage %d more than 4V reboot the system\n",
-		fg_info->cache.voltage);
-		machine_restart(NULL);
+		if ((fg_info->cache.voltage > 4000)
+		&& (strnstr(saved_command_line, "androidboot.mode=charger",
+			strlen(saved_command_line)))) {
+			pr_err("fg_info->cache.voltage %d more than 4V reboot the system\n",
+			fg_info->cache.voltage);
+			machine_restart(NULL);
+	}
 	}
 	if (fg_info->last_capacity != fg_info->cache.capacity) {
 		if ((charger_online &&
@@ -558,6 +561,7 @@ static void bq27x00_external_power_changed(struct power_supply *psy)
 	pr_debug("nanohub: [FG] %s: online = %d\n", __func__, online);
 	charger_online = online;
 
+	device_is_charging = online;
 	fg_info->charger_online = online;
 	cancel_delayed_work_sync(&fg_info->work);
 	schedule_delayed_work(&fg_info->work, 0);
