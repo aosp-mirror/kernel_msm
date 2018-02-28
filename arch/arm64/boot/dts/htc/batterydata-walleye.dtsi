@@ -18,7 +18,6 @@
 	qcom,fg-chg-term-current = <50>;
 	qcom,fg-sys-term-current = <(-405)>;
 	qcom,fg-cutoff-voltage = <3400>;
-	qcom,fg-empty-voltage = <3200>;
 	qcom,hold-soc-while-full;
 	qcom,linearize-soc;
 	qcom,cl-max-decrement = <5>;
