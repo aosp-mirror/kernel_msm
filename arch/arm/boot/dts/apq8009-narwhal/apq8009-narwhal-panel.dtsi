@@ -29,7 +29,7 @@
 	qcom,platform-enable-gpio = <&msm_gpio 49 0>;
 	/delete-property/qcom,platform-bklight-en-gpio;
 
-	vddio-supply = <&pm8916_l6>;
+	vddio-supply = <&pm8916_l4>;
 };
 
 &dsi_sharp_nt35350_cmd {

@@ -13,7 +13,6 @@
 #include "apq8009-narwhal.dtsi"
 
 &mdss_dsi0 {
-	vddio-supply = <&pm8916_l4>;
 	qcom,platform-enable-gpio = <&msm_gpio 38 0>;
 };
 

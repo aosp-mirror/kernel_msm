@@ -12,6 +12,10 @@
 
 #include "apq8009-narwhal.dtsi"
 
+&mdss_dsi0 {
+	vddio-supply = <&pm8916_l6>;
+};
+
 &dsi_sharp_nt35350_cmd {
 	qcom,mdss-dsi-on-command = [
 		15 01 00 00 00 00 02 FF 10

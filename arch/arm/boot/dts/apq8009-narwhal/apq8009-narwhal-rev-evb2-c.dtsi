@@ -17,6 +17,8 @@
 	pinctrl-1 = <&mdss_reset_suspend &mdss_te_suspend>;
 
 	/delete-property/qcom,platform-enable-gpio;
+
+	vddio-supply = <&pm8916_l6>;
 };
 
 &bt_addr {
