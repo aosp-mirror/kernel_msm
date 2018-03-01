@@ -90,6 +90,7 @@ struct intf_params {
  * @sensor_info: Sensor query cap structure
  * @bridge_intf: Bridge interface structure
  * @device_name: Sensor device structure
+ * @fw_update_flag: Update OIS firmware
  */
 struct cam_sensor_ctrl_t {
 	struct platform_device *pdev;
@@ -109,6 +110,7 @@ struct cam_sensor_ctrl_t {
 	struct  cam_sensor_query_cap sensor_info;
 	struct intf_params bridge_intf;
 	char device_name[20];
+	uint8_t fw_update_flag;
 #ifdef CONFIG_MNH_SM_HOST
 	bool uses_easel;
 #endif
