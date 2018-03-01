@@ -25,6 +25,7 @@ struct class *sec_class;
 static void sec_ts_reset_work(struct work_struct *work);
 #endif
 static void sec_ts_read_info_work(struct work_struct *work);
+static void sec_ts_fw_update_work(struct work_struct *work);
 
 #ifdef USE_OPEN_CLOSE
 static int sec_ts_input_open(struct input_dev *dev);
@@ -1783,9 +1784,8 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 		force_update = false;
 
 #ifdef SEC_TS_FW_UPDATE_ON_PROBE
-	ret = sec_ts_firmware_update_on_probe(ts, force_update);
-	if (ret < 0)
-		goto err_init;
+	INIT_DELAYED_WORK(&ts->work_fw_update, sec_ts_fw_update_work);
+	schedule_delayed_work(&ts->work_fw_update, msecs_to_jiffies(10000));
 #else
 	input_info(true, &ts->client->dev, "%s: fw update on probe disabled!\n", __func__);
 #endif
@@ -2150,6 +2150,21 @@ static void sec_ts_read_info_work(struct work_struct *work)
 	input_log_fix();
 }
 
+static void sec_ts_fw_update_work(struct work_struct *work)
+{
+	struct sec_ts_data *ts = container_of(work, struct sec_ts_data,
+					      work_fw_update.work);
+	int ret;
+
+	input_info(true, &ts->client->dev,
+		   "%s: Beginning firmware update after probe.\n", __func__);
+	ret = sec_ts_firmware_update_on_probe(ts, false);
+	if (ret < 0)
+		input_info(true, &ts->client->dev,
+			   "%s: firmware update was unsuccessful.\n",
+			   __func__);
+}
+
 int sec_ts_set_lowpowermode(struct sec_ts_data *ts, u8 mode)
 {
 	int ret;
@@ -2272,6 +2287,11 @@ static int sec_ts_remove(struct i2c_client *client)
 	struct sec_ts_data *ts = i2c_get_clientdata(client);
 
 	input_info(true, &ts->client->dev, "%s\n", __func__);
+
+#ifdef SEC_TS_FW_UPDATE_ON_PROBE
+	cancel_delayed_work_sync(&ts->work_fw_update);
+	flush_delayed_work(&ts->work_fw_update);
+#endif
 
 	cancel_delayed_work_sync(&ts->work_read_info);
 	flush_delayed_work(&ts->work_read_info);

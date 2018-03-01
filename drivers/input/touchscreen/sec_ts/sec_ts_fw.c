@@ -264,7 +264,8 @@ static int sec_ts_check_firmware_version(struct sec_ts_data *ts, const u8 *fw_in
 	}
 
 	for (i = 2; i < 4; i++) {
-		if (ts->plat_data->img_version_of_ic[i] < ts->plat_data->img_version_of_bin[i])
+		if (ts->plat_data->img_version_of_ic[i] !=
+		    ts->plat_data->img_version_of_bin[i])
 			return 1;
 	}
 
