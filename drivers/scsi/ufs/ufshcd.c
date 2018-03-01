@@ -5393,7 +5393,6 @@ static void __ufshcd_transfer_req_compl(struct ufs_hba *hba,
 	struct scsi_cmnd *cmd;
 	int result;
 	int index;
-	struct request *req;
 
 	for_each_set_bit(index, &completed_reqs, hba->nutrs) {
 		lrbp = &hba->lrb[index];
@@ -5429,7 +5428,8 @@ static void __ufshcd_transfer_req_compl(struct ufs_hba *hba,
 
 					completion = ktime_get();
 					delta_us = ktime_us_delta(completion,
-						  req->lat_hist_io_start);
+						cmd->request->
+							lat_hist_io_start);
 					/* rq_data_dir() => true if WRITE */
 					blk_update_latency_hist(&hba->io_lat_s,
 						(rq_data_dir(cmd->request) ==
