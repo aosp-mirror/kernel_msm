@@ -11,6 +11,7 @@
 #include <linux/fs.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
+#include <linux/kthread.h>
 #include <linux/poll.h>
 #include <linux/pagemap.h>
 #include <linux/sched.h>
@@ -51,6 +52,10 @@ struct kernfs_open_node {
 
 static DEFINE_SPINLOCK(kernfs_notify_lock);
 static struct kernfs_node *kernfs_notify_list = KERNFS_NOTIFY_EOL;
+
+static struct kthread_worker kernfs_worker;
+static struct kthread_work   kernfs_work;
+static struct task_struct   *kernfs_thread;
 
 static struct kernfs_open_file *kernfs_of(struct file *file)
 {
@@ -796,7 +801,7 @@ static unsigned int kernfs_fop_poll(struct file *filp, poll_table *wait)
 	return DEFAULT_POLLMASK|POLLERR|POLLPRI;
 }
 
-static void kernfs_notify_workfn(struct work_struct *work)
+static void kernfs_notify_workfn(struct kthread_work *work)
 {
 	struct kernfs_node *kn;
 	struct kernfs_open_node *on;
@@ -860,10 +865,12 @@ repeat:
  */
 void kernfs_notify(struct kernfs_node *kn)
 {
-	static DECLARE_WORK(kernfs_notify_work, kernfs_notify_workfn);
 	unsigned long flags;
 
 	if (WARN_ON(kernfs_type(kn) != KERNFS_FILE))
+		return;
+
+	if (WARN_ON(!kernfs_thread))
 		return;
 
 	spin_lock_irqsave(&kernfs_notify_lock, flags);
@@ -871,7 +878,7 @@ void kernfs_notify(struct kernfs_node *kn)
 		kernfs_get(kn);
 		kn->attr.notify_next = kernfs_notify_list;
 		kernfs_notify_list = kn;
-		schedule_work(&kernfs_notify_work);
+		queue_kthread_work(&kernfs_worker, &kernfs_work);
 	}
 	spin_unlock_irqrestore(&kernfs_notify_lock, flags);
 }
@@ -950,3 +957,25 @@ struct kernfs_node *__kernfs_create_file(struct kernfs_node *parent,
 	}
 	return kn;
 }
+
+static void kernfs_init_kthread_worker(void)
+{
+	struct sched_param sched = { .sched_priority = 16 };
+
+	init_kthread_worker(&kernfs_worker);
+	init_kthread_work(&kernfs_work, kernfs_notify_workfn);
+
+	kernfs_thread = kthread_run(kthread_worker_fn, &kernfs_worker,
+			"kernfs_notify");
+
+	sched_setscheduler(kernfs_thread, SCHED_FIFO, &sched);
+}
+
+static int __init kernfs_file_init(void)
+{
+	kernfs_init_kthread_worker();
+
+	return 0;
+}
+
+core_initcall(kernfs_file_init);
