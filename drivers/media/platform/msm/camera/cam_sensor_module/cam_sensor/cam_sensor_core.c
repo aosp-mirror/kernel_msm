@@ -20,6 +20,10 @@
 #include "cam_packet_util.h"
 
 
+#ifdef CONFIG_CAMERA_FW_UPDATE
+#include "../cam_fw_update/fw_update.h"
+#endif
+
 static void cam_sensor_update_req_mgr(
 	struct cam_sensor_ctrl_t *s_ctrl,
 	struct cam_packet *csl_packet)
@@ -369,6 +373,7 @@ int32_t cam_sensor_update_slave_info(struct cam_cmd_probe *probe_info,
 	/* Userspace passes the pipeline delay in reserved field */
 	s_ctrl->pipeline_delay =
 		probe_info->reserved;
+	s_ctrl->fw_update_flag = probe_info->fw_update_flag;
 
 	s_ctrl->sensor_probe_addr_type =  probe_info->addr_type;
 	s_ctrl->sensor_probe_data_type =  probe_info->data_type;
@@ -733,6 +738,13 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 			s_ctrl->soc_info.index,
 			s_ctrl->sensordata->slave_info.sensor_slave_addr,
 			s_ctrl->sensordata->slave_info.sensor_id);
+
+#ifdef CONFIG_CAMERA_FW_UPDATE
+		if (s_ctrl->fw_update_flag) {
+			CAM_INFO(CAM_SENSOR, "[OISFW]Check OIS FW update");
+			rc = checkOISFWUpdate(s_ctrl);
+		}
+#endif
 
 		rc = cam_sensor_power_down(s_ctrl);
 		if (rc < 0) {

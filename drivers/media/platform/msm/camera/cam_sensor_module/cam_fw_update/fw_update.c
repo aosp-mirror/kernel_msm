@@ -1,0 +1,284 @@
+/* OIS calibration interface for LC898123 F40
+ *
+ */
+
+#include "fw_update.h"
+
+#define OIS_CUR_FW_VERSION           0x08
+#define OIS_COMPONENT_I2C_ADDR_WRITE 0x7C
+#define MK_SHARP                     0x04170000
+#define MK_LGIT                      0x09170000
+
+static struct camera_io_master *g_io_master_info;
+bool g_first = true;
+
+
+void RamWrite32A(UINT_16 RamAddr, UINT_32 RamData)
+{
+	int rc = 0;
+	struct camera_io_master *io_master_info = g_io_master_info;
+	struct cam_sensor_i2c_reg_setting i2c_reg_settings;
+	struct cam_sensor_i2c_reg_array i2c_reg_array;
+
+	i2c_reg_settings.addr_type = CAMERA_SENSOR_I2C_TYPE_WORD;
+	i2c_reg_settings.data_type = CAMERA_SENSOR_I2C_TYPE_DWORD;
+	i2c_reg_settings.size = 1;
+	i2c_reg_settings.delay = 0;
+	i2c_reg_array.reg_addr = RamAddr;
+	i2c_reg_array.reg_data = RamData;
+	i2c_reg_array.delay = 0;
+	i2c_reg_settings.reg_setting = &i2c_reg_array;
+
+	rc = camera_io_dev_write(io_master_info, &i2c_reg_settings);
+	if (rc < 0)
+		CAM_ERR(CAM_SENSOR, "[OISFW] %s : write failed\n", __func__);
+}
+
+void RamRead32A(UINT_16 RamAddr, UINT_32 *ReadData)
+{
+	int rc = 0;
+
+	rc = camera_io_dev_read(g_io_master_info, RamAddr,
+		ReadData, CAMERA_SENSOR_I2C_TYPE_WORD,
+		CAMERA_SENSOR_I2C_TYPE_DWORD);
+	if (rc < 0)
+		CAM_ERR(CAM_SENSOR, "[OISFW]:%s read i2c failed\n", __func__);
+}
+
+void WitTim(UINT_16 UsWitTim)
+{
+	msleep(UsWitTim);
+}
+
+int CntWrt(UINT_8 *PcSetDat, UINT_16 UsDatNum)
+{
+	int rc = 0, cnt;
+	uint16_t total_bytes = UsDatNum-1;
+	uint8_t *ptr = NULL;
+	struct camera_io_master *io_master_info = g_io_master_info;
+	struct cam_sensor_i2c_reg_setting i2c_reg_setting;
+
+	i2c_reg_setting.addr_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+	i2c_reg_setting.data_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+	i2c_reg_setting.size = total_bytes;
+	i2c_reg_setting.delay = 0;
+	i2c_reg_setting.reg_setting = (struct cam_sensor_i2c_reg_array *)
+		kzalloc(sizeof(struct cam_sensor_i2c_reg_array) * total_bytes,
+		GFP_KERNEL);
+	if (!i2c_reg_setting.reg_setting) {
+		CAM_ERR(CAM_SENSOR, "[OISFW]:%s Failed in allocating i2c_array",
+			__func__);
+		return -ENOMEM;
+	}
+
+	for (cnt = 0, ptr = &PcSetDat[1]; cnt < total_bytes;
+		cnt++, ptr++) {
+		i2c_reg_setting.reg_setting[cnt].reg_addr =	PcSetDat[0];
+		i2c_reg_setting.reg_setting[cnt].reg_data = *ptr;
+		i2c_reg_setting.reg_setting[cnt].delay = 0;
+		i2c_reg_setting.reg_setting[cnt].data_mask = 0;
+	}
+
+	rc = camera_io_dev_write_continuous(
+		io_master_info, &i2c_reg_setting, 1);
+	if (rc < 0)
+		CAM_ERR(CAM_SENSOR, "[OISFW]:%s i2c write sequence error:%d\n",
+			__func__, rc);
+
+	kfree(i2c_reg_setting.reg_setting);
+	return rc;
+}
+
+int CntRd3(UINT_32 addr, void *PcSetDat, UINT_16 UsDatNum)
+{
+	int rc = 0;
+
+	rc = camera_io_dev_read_seq(g_io_master_info, addr, PcSetDat,
+		CAMERA_SENSOR_I2C_TYPE_WORD, CAMERA_SENSOR_I2C_TYPE_WORD,
+		UsDatNum);
+	if (rc < 0)
+		CAM_ERR(CAM_SENSOR, "[OISFW]:%s read i2c failed\n", __func__);
+	return rc;
+}
+
+void WPBCtrl(UINT_8 UcCtrl)
+{
+	//do nothing because lc898123F40 uses UnlockCodeSet()
+	//to handle WPB by itself
+}
+
+int checkHighLevelCommand(int cnt)
+{
+	int i;
+	UINT_32 FWRead;
+
+	for (i = 0; i < cnt ; i++) {
+		WitTim(10);
+		RamRead32A(0xF100, &FWRead);//Check high level command ready.
+		if (FWRead == 0x0) {
+			CAM_INFO(CAM_SENSOR, "[OISFW]:%s finish.", __func__);
+			return 0;
+		}
+		CAM_INFO(CAM_SENSOR, "[OISFW]:%s waiting...", __func__);
+	}
+	CAM_ERR(CAM_SENSOR, "[OISFW]:%s fail.", __func__);
+	return -EINVAL;
+}
+
+int doFWupdate(UINT_16 CAL_ID, UINT_32 MODULE_MAKER)
+{
+	int rc = 0;
+
+	if (MODULE_MAKER == MK_SHARP) {
+		if (CAL_ID == 0x0) {
+			CAM_INFO(CAM_SENSOR,
+				"[OISFW]:%s not to update FW because of unknown CAL_ID.",
+				__func__);
+			rc = -EINVAL;
+		} else if (CAL_ID == 0x1) {
+			CAM_INFO(CAM_SENSOR,
+				"[OISFW]:%s F40_FlashDownload(0, 4, 0 )",
+				__func__);
+			rc = F40_FlashDownload(0, 4, 0);
+		} else {
+			CAM_INFO(CAM_SENSOR,
+				"[OISFW]:%s F40_FlashDownload(0, 4, 1 )",
+				__func__);
+			rc = F40_FlashDownload(0, 4, 1);
+		}
+	} else if (MODULE_MAKER == MK_LGIT) {
+		if (CAL_ID == 0x0) {
+			CAM_INFO(CAM_SENSOR,
+				"[OISFW]:%s not to update FW because of unknown CAL_ID.",
+				__func__);
+			rc = -EINVAL;
+		} else if (CAL_ID == 0x1) {
+			CAM_INFO(CAM_SENSOR,
+				"[OISFW]:%s F40_FlashDownload(0, 9, 0 )",
+				__func__);
+			rc = F40_FlashDownload(0, 9, 0);
+		} else {
+			CAM_INFO(CAM_SENSOR,
+				"[OISFW]:%s F40_FlashDownload(0, 9, 1 )",
+				__func__);
+			rc = F40_FlashDownload(0, 9, 1);
+		}
+	} else {
+		CAM_ERR(CAM_SENSOR,
+			"[OISFW]:%s unknown module maker.", __func__);
+		rc = -EINVAL;
+	}
+
+	if (rc == 0) {
+		/*Wait for FW update finish.*/
+		rc = checkHighLevelCommand(20);
+	} else {
+		CAM_ERR(CAM_SENSOR,
+			"[OISFW]%s: OIS FW update failed rc = %d.\n",
+			__func__, rc);
+		rc = -EINVAL;
+	}
+
+	return rc;
+}
+
+bool checkOISFWversion(UINT_16 *cal_id, UINT_32 *module_maker)
+{
+	int rc;
+	UINT_16 RamAddr;
+	UINT_32 UlReadVal;
+	UINT_16 FW_version;
+	bool need_update = false;
+
+	CAM_INFO(CAM_SENSOR, "[OISFW]:%s\n", __func__);
+
+	RamAddr = 0x8000;
+	RamRead32A(RamAddr, &UlReadVal);
+	FW_version = UlReadVal & 0xFF;
+	*module_maker = UlReadVal & 0xFFFF0000;
+	CAM_INFO(CAM_SENSOR, "[OISFW]:%s module_version =  0x%02x.\n",
+		__func__, UlReadVal);
+
+	RamAddr = 0x8004;
+	RamRead32A(RamAddr, &UlReadVal);
+	*cal_id = UlReadVal & 0xFF;
+	CAM_INFO(CAM_SENSOR,
+		"[OISFW]:%s CAL_ID = 0x%04x, MODULE_MAKER = 0x%x\n",
+		__func__, *cal_id, *module_maker);
+
+	if (FW_version >= OIS_CUR_FW_VERSION) {
+		CAM_INFO(CAM_SENSOR,
+			"[OISFW]%s: No need to update.\n", __func__);
+	} else {
+		rc = checkHighLevelCommand(100);
+		if (rc != 0) {
+			CAM_ERR(CAM_SENSOR,
+				"[OISFW]:%s checkHighLevelCommand failed = %d\n",
+				__func__, rc);
+		} else
+			need_update = true;
+	}
+
+	return need_update;
+}
+
+int checkOISFWUpdate(struct cam_sensor_ctrl_t *s_ctrl)
+{
+	int rc = 0;
+	int i;
+	unsigned short cci_client_sid_backup;
+	UINT_32 FWRead;
+	UINT_16 FW_version;
+	UINT_16 cal_id;
+	UINT_32 module_maker;
+
+	if (g_first != true) {
+		CAM_INFO(CAM_SENSOR, "[OISFW]%s: No need.\n", __func__);
+		return 0;
+	}
+	g_first = false;
+
+	CAM_INFO(CAM_SENSOR, "[OISFW]:%s 1. sid = %d\n", __func__,
+		s_ctrl->io_master_info.cci_client->sid);
+
+	/* Bcakup the I2C slave address */
+	cci_client_sid_backup = s_ctrl->io_master_info.cci_client->sid;
+
+	/* Replace the I2C slave address with OIS component */
+	s_ctrl->io_master_info.cci_client->sid =
+		OIS_COMPONENT_I2C_ADDR_WRITE >> 1;
+
+	g_io_master_info = &(s_ctrl->io_master_info);
+	WitTim(100);
+
+	/*Check current HW and FW version*/
+	if (checkOISFWversion(&cal_id, &module_maker) == true) {
+		rc = doFWupdate(cal_id, module_maker);
+
+		for (i = 0; i < 2 ; i++) {
+			RamRead32A(0x8000, &FWRead);
+			FW_version = FWRead & 0xFF;
+			CAM_INFO(CAM_SENSOR, "[OISFW]:%s 0x8000 = 0x%08x",
+				__func__, FWRead);
+			if (FW_version != OIS_CUR_FW_VERSION) {
+				CAM_ERR(CAM_SENSOR,
+					"[OISFW]:FW version check failed after update. retry.\n");
+				rc = doFWupdate(cal_id, module_maker);
+			} else {
+				CAM_INFO(CAM_SENSOR,
+					"[OISFW]: FW vserion verify pass.\n");
+				break;
+			}
+		}
+	}
+
+	/* Restore the I2C slave address */
+	s_ctrl->io_master_info.cci_client->sid =
+		cci_client_sid_backup;
+	CAM_INFO(CAM_SENSOR, "[OISFW]:%s 2. sid = %d\n", __func__,
+		s_ctrl->io_master_info.cci_client->sid);
+
+	CAM_INFO(CAM_SENSOR, "[OISFW]:%s rc = %d\n", __func__, rc);
+
+	return rc;
+}
