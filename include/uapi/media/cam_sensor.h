@@ -197,6 +197,7 @@ struct cam_cmd_ois_info {
  * @data_mask       :   Data mask if only few bits are valid
  * @camera_id       :   Indicates the slot to which camera
  *                      needs to be probed
+ * @fw_update_flag  :   Update OIS firmware
  * @reserved
  */
 struct cam_cmd_probe {
@@ -208,6 +209,7 @@ struct cam_cmd_probe {
 	uint32_t    expected_data;
 	uint32_t    data_mask;
 	uint16_t    camera_id;
+	uint8_t     fw_update_flag;
 	uint16_t    reserved;
 } __attribute__((packed));
 

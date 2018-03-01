@@ -94,6 +94,7 @@ struct intf_params {
  * @streamoff_count: Count to hold the number of times stream off called
  * @bob_reg_index: Hold to BoB regulator index
  * @bob_pwm_switch: Boolean flag to switch into PWM mode for BoB regulator
+ * @fw_update_flag: Update OIS firmware
  */
 struct cam_sensor_ctrl_t {
 	struct platform_device *pdev;
@@ -119,6 +120,7 @@ struct cam_sensor_ctrl_t {
 	int bob_reg_index;
 	bool bob_pwm_switch;
 	struct cam_sensor_override_info override_info;
+	uint8_t fw_update_flag;
 };
 
 #endif /* _CAM_SENSOR_DEV_H_ */
