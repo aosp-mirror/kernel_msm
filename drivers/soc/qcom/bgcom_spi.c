@@ -407,7 +407,7 @@ static void send_back_notification(uint32_t slav_status_reg,
 		}
 	}
 
-	if (slave_fifo_free > 0) {
+	if (slave_fifo_free >= 0) {
 		event_data.to_slave_fifo_free = slave_fifo_free;
 		send_event(BGCOM_EVENT_TO_SLAVE_FIFO_FREE, &event_data);
 	}
