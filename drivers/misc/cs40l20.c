@@ -725,6 +725,76 @@ static int cs40l20_raw_write(struct cs40l20_private *cs40l20, unsigned int reg,
 	return ret;
 }
 
+static void cs40l20_waveform_load(const struct firmware *fw, void *context)
+{
+	int ret;
+	struct cs40l20_private *cs40l20 = (struct cs40l20_private *)context;
+	struct device *dev = cs40l20->dev;
+	unsigned int pos = CS40L20_WT_FILE_HEADER_SIZE;
+	unsigned int block_type, block_length, reg;
+
+	if (!fw) {
+		dev_warn(dev, "Using default wavetable\n");
+		goto skip_loading;
+	}
+
+	if (memcmp(fw->data, "WMDR", 4)) {
+		dev_err(dev, "Failed to recognize waveform file\n");
+		goto err_rls_fw;
+	}
+
+	dev_info(dev, "Found custom wavetable\n");
+
+	while (pos < fw->size) {
+		/* block offset is not used here */
+		pos += CS40L20_WT_DBLK_OFFSET_SIZE;
+
+		block_type = fw->data[pos]
+			+ (fw->data[pos + 1] << 8);
+		pos += (CS40L20_WT_DBLK_TYPE_SIZE
+			+ CS40L20_WT_DBLK_UNUSED_SIZE);
+
+		block_length = fw->data[pos]
+			+ (fw->data[pos + 1] << 8)
+			+ (fw->data[pos + 2] << 16)
+			+ (fw->data[pos + 3] << 24);
+		pos += CS40L20_WT_DBLK_LENGTH_SIZE;
+
+		switch (block_type) {
+		case CS40L20_XM_UNPACKED_TYPE:
+			reg = cs40l20_dsp_reg(cs40l20, "WAVETABLE",
+					      CS40L20_XM_UNPACKED_TYPE);
+			ret = cs40l20_raw_write(cs40l20, reg,
+						&fw->data[pos], block_length,
+						CS40L20_MAX_WLEN);
+			if (ret) {
+				dev_err(dev,
+					"Failed to write XM_UNPACKED memory\n");
+				goto err_rls_fw;
+			}
+			break;
+		case CS40L20_YM_UNPACKED_TYPE:
+			reg = cs40l20_dsp_reg(cs40l20, "WAVETABLEYM",
+					      CS40L20_YM_UNPACKED_TYPE);
+			ret = cs40l20_raw_write(cs40l20, reg,
+						&fw->data[pos], block_length,
+						CS40L20_MAX_WLEN);
+			if (ret) {
+				dev_err(dev,
+					"Failed to write YM_UNPACKED memory\n");
+				goto err_rls_fw;
+			}
+			break;
+		}
+
+		pos += block_length;
+	}
+
+skip_loading:
+	cs40l20_dsp_start(cs40l20);
+err_rls_fw:
+	release_firmware(fw);
+}
 static int cs40l20_algo_parse(struct cs40l20_private *cs40l20,
 		const unsigned char *data)
 {
@@ -882,8 +952,9 @@ static void cs40l20_firmware_load(const struct firmware *fw, void *context)
 	if (ret)
 		goto err_rls_fw;
 
-	/* FIXME: Enable waveform download */
-	cs40l20_dsp_start(cs40l20);
+	request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG, "cs40l20.bin",
+				dev, GFP_KERNEL, cs40l20,
+				cs40l20_waveform_load);
 
 err_rls_fw:
 	release_firmware(fw);
