@@ -175,7 +175,7 @@
 		interrupts = <40 IRQ_TYPE_LEVEL_LOW>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&cs35l36_reset_default &cs35l36_irq_default>;
-		cirrus,left-channel-amp;
+		cirrus,right-channel-amp;
 		cirrus,boost-ind-nanohenry = <1000>;
 		cirrus,boost-ctrl-select = <0x00>;
 		cirrus,boost-ctl-millivolt = <10000>;
@@ -211,7 +211,7 @@
 		VA-supply = <&pm8998_s4>;
 		interrupt-parent = <&tlmm>;
 		interrupts = <40 IRQ_TYPE_LEVEL_LOW>;
-		cirrus,right-channel-amp;
+		cirrus,left-channel-amp;
 		cirrus,boost-ind-nanohenry = <1000>;
 		cirrus,boost-ctrl-select = <0x00>;
 		cirrus,boost-ctl-millivolt = <10000>;
