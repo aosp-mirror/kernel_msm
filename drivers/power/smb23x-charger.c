@@ -517,6 +517,9 @@ static int smb23x_parse_dt(struct smb23x_chip *chip)
 	chip->cfg_bms_controlled_charging =
 		of_property_read_bool(node, "qcom,bms-controlled-charging");
 
+	pr_info("SMB: %s: cfg_aicl_disabled:%d  cfg_apsd_disabled:%d\n",
+		__func__, chip->cfg_aicl_disabled, chip->cfg_apsd_disabled);
+
 	rc = of_property_read_string(node, "qcom,bms-psy-name",
 						&chip->bms_psy_name);
 	if (rc) {
@@ -734,7 +737,7 @@ static int smb23x_suspend_usb(struct smb23x_chip *chip,
 	rc = smb23x_masked_write(chip, CMD_REG_0, USB_SUSPEND_BIT,
 			suspended ? USB_SUSPEND_BIT : 0);
 	if (rc < 0) {
-		pr_err("Write USB_SUSPEND failed, rc=%d\n", rc);
+		pr_err("SMB: Write USB_SUSPEND failed, rc=%d\n", rc);
 	} else {
 		chip->usb_suspended_status = suspended;
 		pr_debug("%suspend USB!\n", suspend ? "S" : "Un-s");
@@ -764,6 +767,8 @@ static int smb23x_set_appropriate_usb_current(struct smb23x_chip *chip)
 		therm_ma = usb_current;
 
 	current_ma = min(therm_ma, usb_current);
+	pr_info("SMB: %s current_ma:%d, therm_ma:%d, usb_current:%d\n",
+		__func__, current_ma, therm_ma, usb_current);
 
 	if (current_ma <= CURRENT_SUSPEND) {
 		if (chip->workaround_flags & WRKRND_USB_SUSPEND) {
@@ -782,32 +787,40 @@ static int smb23x_set_appropriate_usb_current(struct smb23x_chip *chip)
 		rc = smb23x_masked_write(chip, CMD_REG_1,
 				USB500_MODE_BIT | USBAC_MODE_BIT, 0);
 		if (rc)
-			pr_err("Set USB100 failed, rc=%d\n", rc);
-		pr_debug("Setting USB 100\n");
+			pr_err("SMB: Set USB100 failed, rc=%d\n", rc);
+		else
+			pr_info("SMB: Setting USB 100\n");
 	} else if (current_ma <= CURRENT_500_MA) {
 		/* USB 500 */
 		rc = smb23x_masked_write(chip, CMD_REG_1,
 				USB500_MODE_BIT | USBAC_MODE_BIT,
 				USB500_MODE_BIT);
 		if (rc)
-			pr_err("Set USB500 failed, rc=%d\n", rc);
-		pr_debug("Setting USB 500\n");
+			pr_err("SMB: Set USB500 failed, rc=%d\n", rc);
+		else
+			pr_info("SMB: Setting USB 500\n");
 	} else {
 		/* USB AC */
 		rc = smb23x_masked_write(chip, CMD_REG_1,
 				USBAC_MODE_BIT, USBAC_MODE_BIT);
 		if (rc)
-			pr_err("Set USBAC failed, rc=%d\n", rc);
-		pr_debug("Setting USB AC\n");
+			pr_err("SMB: Set USBAC failed, rc=%d\n", rc);
+		else
+			pr_info("SMB: Setting USB AC\n");
 	}
 
 	/* set ICL */
 	tmp = find_closest_in_ascendant_list(current_ma, usbin_current_ma_table,
 					ARRAY_SIZE(usbin_current_ma_table));
 	tmp = tmp << USBIN_ICL_OFFSET;
+	pr_info("SMB: %s tmp:%d\n", __func__, tmp);
+	/*Set max input current 500mA*/
+	if(tmp > 8)
+		tmp = 8;
+
 	rc = smb23x_masked_write(chip, CFG_REG_0, USBIN_ICL_MASK, tmp);
 	if (rc < 0) {
-		pr_err("Set ICL failed\n, rc=%d\n", rc);
+		pr_err("SMB: Set ICL failed\n, rc=%d\n", rc);
 		return rc;
 	}
 	pr_debug("ICL set to = %d\n",
@@ -899,23 +912,34 @@ static int smb23x_hw_init(struct smb23x_chip *chip)
 	if (chip->cfg_aicl_disabled) {
 		rc = smb23x_masked_write(chip, CFG_REG_5, AICL_EN_BIT, 0);
 		if (rc < 0) {
-			pr_err("Disable AICL failed, rc=%d\n", rc);
+			pr_err("SMB: Disable AICL failed, rc=%d\n", rc);
 			return rc;
 		}
+
+		pr_info("SMB: Disable AICL successfully!\n");
+	} else {
+		rc = smb23x_masked_write(chip, CFG_REG_5, AICL_EN_BIT, 1);
+		if (rc < 0) {
+			pr_err("SMB: Enable AICL failed, rc=%d\n", rc);
+			return rc;
+		}
+
+		pr_info("SMB: Enable AICL successfully!\n");
 	}
 
 	/* disable APSD */
 	if (chip->cfg_apsd_disabled) {
 		rc = smb23x_masked_write(chip, CFG_REG_5, APSD_EN_BIT, 0);
 		if (rc < 0) {
-			pr_err("Disable APSD failed, rc=%d\n", rc);
+			pr_err("SMB: Disable APSD failed, rc=%d\n", rc);
 			return rc;
-		}
+		} else
+			pr_info("SMB: Disable APSD successfully! rc=%d\n", rc);
 		chip->apsd_enabled = false;
 	} else {
 		rc = smb23x_read(chip, CFG_REG_5, &tmp);
 		if (rc < 0) {
-			pr_err("read CFG_REG_5 failed, rc=%d\n", rc);
+			pr_err("SMB: read CFG_REG_5 failed, rc=%d\n", rc);
 			return rc;
 		}
 		chip->apsd_enabled = !!(tmp & APSD_EN_BIT);
@@ -927,7 +951,7 @@ static int smb23x_hw_init(struct smb23x_chip *chip)
 		rc = smb23x_masked_write(chip, CFG_REG_3,
 				FLOAT_VOLTAGE_MASK, tmp);
 		if (rc < 0) {
-			pr_err("Set float voltage failed, rc=%d\n", rc);
+			pr_err("SMB: Set float voltage failed, rc=%d\n", rc);
 			return rc;
 		}
 	}
@@ -941,7 +965,7 @@ static int smb23x_hw_init(struct smb23x_chip *chip)
 		rc = smb23x_masked_write(chip, CFG_REG_2,
 				FASTCHG_CURR_MASK, tmp);
 		if (rc < 0) {
-			pr_err("Set fastchg current failed, rc=%d\n", rc);
+			pr_err("SMB: Set fastchg current failed, rc=%d\n", rc);
 			return rc;
 		}
 	}
@@ -1216,16 +1240,17 @@ static int get_usb_supply_type(struct smb23x_chip *chip)
 	int rc;
 	u8 reg, tmp;
 	enum power_supply_type type;
+	pr_info("SMB: %s\n", __func__);
 
 	rc = smb23x_read(chip, CHG_STATUS_C_REG, &reg);
 	if (rc < 0) {
-		pr_err("Read STATUS_C failed, rc=%d\n", rc);
+		pr_err("SMB: Read STATUS_C failed, rc=%d\n", rc);
 		return rc;
 	}
 	tmp = reg & APSD_STATUS_BIT;
 
 	if (!tmp) {
-		pr_debug("APSD not completed\n");
+		pr_err("SMB: APSD not completed\n");
 		return POWER_SUPPLY_TYPE_UNKNOWN;
 	}
 
@@ -1278,7 +1303,7 @@ static int src_detect_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 	if (!chip->apsd_enabled)
 		return 0;
 
-	pr_debug("chip->usb_present = %d, usb_present = %d\n",
+	pr_info("SMB: chip->usb_present = %d, usb_present = %d\n",
 					chip->usb_present, usb_present);
 
 	if (usb_present && !chip->usb_present) {
@@ -1990,10 +2015,10 @@ static void smb23x_external_power_changed(struct power_supply *psy)
 	rc = chip->usb_psy->get_property(chip->usb_psy,
 			POWER_SUPPLY_PROP_CURRENT_MAX, &prop);
 	if (rc < 0)
-		pr_err("Get CURRENT_MAX from usb failed, rc=%d\n", rc);
+		pr_err("SMB: Get CURRENT_MAX from usb failed, rc=%d\n", rc);
 	else
 		icl = prop.intval / 1000;
-	pr_debug("current_limit = %d\n", icl);
+	pr_info("SMB current_limit:%d; usb_psy_ma:%d\n", icl, chip->usb_psy_ma);
 
 	if (chip->usb_psy_ma != icl) {
 		mutex_lock(&chip->icl_set_lock);
