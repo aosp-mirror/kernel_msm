@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -3575,6 +3575,7 @@ typedef struct sSirRoamOffloadScanReq {
 	struct roam_fils_params roam_fils_params;
 #endif
 	struct scoring_param score_params;
+	struct wmi_11k_offload_params offload_11k_params;
 } tSirRoamOffloadScanReq, *tpSirRoamOffloadScanReq;
 
 typedef struct sSirRoamOffloadScanRsp {
@@ -7999,6 +8000,9 @@ struct sme_rcpi_req {
  * @dad_detected: dad detected
  * @connect_status: connection status
  * @ba_session_establishment_status: BA session status
+ * @connect_stats_present: connectivity stats present or not
+ * @tcp_ack_recvd: tcp syn ack's count
+ * @icmpv4_rsp_recvd: icmpv4 responses count
  */
 struct rsp_stats {
 	uint32_t vdev_id;
@@ -8010,6 +8014,9 @@ struct rsp_stats {
 	uint32_t dad_detected;
 	uint32_t connect_status;
 	uint32_t ba_session_establishment_status;
+	bool connect_stats_present;
+	uint32_t tcp_ack_recvd;
+	uint32_t icmpv4_rsp_recvd;
 };
 
 /**
@@ -8018,12 +8025,22 @@ struct rsp_stats {
  * @flag: enable/disable stats
  * @pkt_type: type of packet(1 - arp)
  * @ip_addr: subnet ipv4 address in case of encrypted packets
+ * @pkt_type_bitmap: pkt bitmap
+ * @tcp_src_port: tcp src port for pkt tracking
+ * @tcp_dst_port: tcp dst port for pkt tracking
+ * @icmp_ipv4: target ipv4 address to track ping packets
+ * @reserved: reserved
  */
 struct set_arp_stats_params {
 	uint32_t vdev_id;
 	uint8_t flag;
 	uint8_t pkt_type;
 	uint32_t ip_addr;
+	uint32_t pkt_type_bitmap;
+	uint32_t tcp_src_port;
+	uint32_t tcp_dst_port;
+	uint32_t icmp_ipv4;
+	uint32_t reserved;
 };
 
 /**

@@ -1591,6 +1591,9 @@ void hdd_update_tgt_cfg(void *context, void *param)
 	hdd_ctx->config->is_fils_roaming_supported =
 			cfg->services.is_fils_roaming_supported;
 
+	hdd_ctx->config->is_11k_offload_supported =
+			cfg->services.is_11k_offload_supported;
+
 	/* now overwrite the target band capability with INI
 	 * setting if INI setting is a subset
 	 */
@@ -10137,6 +10140,15 @@ static void hdd_get_nud_stats_cb(void *data, struct rsp_stats *rsp)
 	adapter->hdd_stats.hdd_arp_stats.rx_fw_cnt = rsp->arp_rsp_recvd;
 	adapter->dad |= rsp->dad_detected;
 	adapter->con_status = rsp->connect_status;
+
+	/* Flag true indicates connectivity check stats present. */
+	if (rsp->connect_stats_present) {
+		hdd_notice("rsp->tcp_ack_recvd :%x", rsp->tcp_ack_recvd);
+		hdd_notice("rsp->icmpv4_rsp_recvd :%x", rsp->icmpv4_rsp_recvd);
+		adapter->hdd_stats.hdd_tcp_stats.rx_fw_cnt = rsp->tcp_ack_recvd;
+		adapter->hdd_stats.hdd_icmpv4_stats.rx_fw_cnt =
+							rsp->icmpv4_rsp_recvd;
+	}
 
 	spin_lock(&hdd_context_lock);
 	context = &hdd_ctx->nud_stats_context;

@@ -553,6 +553,13 @@ void ol_txrx_update_tx_queue_groups(
 	u_int32_t membership;
 	struct ol_txrx_vdev_t *vdev;
 
+	if (group_id >= OL_TX_MAX_TXQ_GROUPS) {
+		ol_txrx_warn("%s: invalid group_id=%u, ignore update.\n",
+			__func__,
+			group_id);
+		return;
+	}
+
 	group = &pdev->txq_grps[group_id];
 
 	membership = OL_TXQ_GROUP_MEMBERSHIP_GET(vdev_id_mask, ac_mask);
@@ -2150,6 +2157,7 @@ void ol_txrx_vdev_register(ol_txrx_vdev_handle vdev,
 
 	vdev->osif_dev = osif_vdev;
 	vdev->rx = txrx_ops->rx.rx;
+	vdev->stats_rx = txrx_ops->rx.stats_rx;
 	txrx_ops->tx.tx = ol_tx_data;
 }
 
