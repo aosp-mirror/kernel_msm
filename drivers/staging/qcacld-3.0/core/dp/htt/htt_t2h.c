@@ -366,6 +366,13 @@ static void htt_t2h_lp_msg_handler(void *context, qdf_nbuf_t htt_t2h_msg,
 	{
 		struct htt_mgmt_tx_compl_ind *compl_msg;
 		int32_t credit_delta = 1;
+		int msg_len = qdf_nbuf_len(htt_t2h_msg);
+		if (msg_len < (sizeof(struct htt_mgmt_tx_compl_ind) + sizeof(*msg_word))) {
+			QDF_TRACE(QDF_MODULE_ID_HTT, QDF_TRACE_LEVEL_ERROR,
+				  "Invalid msg_word lenght in HTT_T2H_MSG_TYPE_MGMT_TX_COMPL_IND");
+			WARN_ON(1);
+			break;
+		}
 
 		compl_msg =
 			(struct htt_mgmt_tx_compl_ind *)(msg_word + 1);
@@ -459,6 +466,7 @@ static void htt_t2h_lp_msg_handler(void *context, qdf_nbuf_t htt_t2h_msg,
 		uint16_t len;
 		uint8_t *op_msg_buffer;
 		uint8_t *msg_start_ptr;
+		int msg_len = qdf_nbuf_len(htt_t2h_msg);
 
 		htc_pm_runtime_put(pdev->htc_pdev);
 		msg_start_ptr = (uint8_t *) msg_word;
@@ -467,6 +475,11 @@ static void htt_t2h_lp_msg_handler(void *context, qdf_nbuf_t htt_t2h_msg,
 		msg_word++;
 		len = HTT_WDI_IPA_OP_RESPONSE_RSP_LEN_GET(*msg_word);
 
+		if (sizeof(struct htt_wdi_ipa_op_response_t) + len > msg_len) {
+			qdf_print("Invalid buffer length");
+			WARN_ON(1);
+			break;
+		}
 		op_msg_buffer =
 			qdf_mem_malloc(sizeof
 				       (struct htt_wdi_ipa_op_response_t) +
@@ -488,8 +501,16 @@ static void htt_t2h_lp_msg_handler(void *context, qdf_nbuf_t htt_t2h_msg,
 	{
 		uint8_t num_flows;
 		struct htt_flow_pool_map_payload_t *pool_map_payoad;
+		int msg_len = qdf_nbuf_len(htt_t2h_msg);
 
 		num_flows = HTT_FLOW_POOL_MAP_NUM_FLOWS_GET(*msg_word);
+
+		if (((HTT_FLOW_POOL_MAP_PAYLOAD_SZ /
+			HTT_FLOW_POOL_MAP_HEADER_SZ) * num_flows + 1) * sizeof(*msg_word) > msg_len) {
+			qdf_print("Invalid num_flows");
+			WARN_ON(1);
+			break;
+		}
 
 		msg_word++;
 		while (num_flows) {
@@ -510,6 +531,14 @@ static void htt_t2h_lp_msg_handler(void *context, qdf_nbuf_t htt_t2h_msg,
 	case HTT_T2H_MSG_TYPE_FLOW_POOL_UNMAP:
 	{
 		struct htt_flow_pool_unmap_t *pool_numap_payload;
+		int msg_len = qdf_nbuf_len(htt_t2h_msg);
+
+		if (msg_len < sizeof(struct htt_flow_pool_unmap_t)) {
+			QDF_TRACE(QDF_MODULE_ID_HTT, QDF_TRACE_LEVEL_ERROR,
+				  "Invalid msg_word lenght in HTT_T2H_MSG_TYPE_FLOW_POOL_UNMAP");
+			WARN_ON(1);
+			break;
+		}
 
 		pool_numap_payload = (struct htt_flow_pool_unmap_t *)msg_word;
 		ol_tx_flow_pool_unmap_handler(pool_numap_payload->flow_id,
@@ -664,6 +693,7 @@ void htt_t2h_msg_handler(void *context, HTC_PACKET *pkt)
 		unsigned int num_msdu_bytes;
 		uint16_t peer_id;
 		uint8_t tid;
+		int msg_len = qdf_nbuf_len(htt_t2h_msg);
 
 		if (qdf_unlikely(pdev->cfg.is_full_reorder_offload)) {
 			qdf_print("HTT_T2H_MSG_TYPE_RX_IND not supported ");
@@ -676,6 +706,10 @@ void htt_t2h_msg_handler(void *context, HTC_PACKET *pkt)
 		if (tid >= OL_TXRX_NUM_EXT_TIDS) {
 			qdf_print("HTT_T2H_MSG_TYPE_RX_IND, invalid tid %d\n",
 				tid);
+			break;
+		}
+		if (msg_len < (2 + HTT_RX_PPDU_DESC_SIZE32 + 1) * sizeof(uint32_t)) {
+			qdf_print("HTT_T2H_MSG_TYPE_RX_IND, invalid msg_len\n");
 			break;
 		}
 		num_msdu_bytes =
@@ -693,6 +727,12 @@ void htt_t2h_msg_handler(void *context, HTC_PACKET *pkt)
 		num_mpdu_ranges =
 			HTT_RX_IND_NUM_MPDU_RANGES_GET(*(msg_word + 1));
 		pdev->rx_ind_msdu_byte_idx = 0;
+		if (qdf_unlikely(pdev->rx_mpdu_range_offset_words + (num_mpdu_ranges * 4) > msg_len)) {
+			qdf_print("HTT_T2H_MSG_TYPE_RX_IND, invalid mpdu_ranges %d\n",
+				num_mpdu_ranges);
+			WARN_ON(1);
+			break;
+		}
 
 		ol_rx_indication_handler(pdev->txrx_pdev,
 					 htt_t2h_msg, peer_id,
