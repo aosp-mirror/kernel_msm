@@ -62,7 +62,7 @@
 	};
 
 	sound-tavil {
-		qcom,model = "sdm845-tavil-tdm-snd-card";
+		qcom,model = "sdm845-tavil-b1-snd-card";
 		qcom,audio-routing =
 			"AIF4 VI", "MCLK",
 			"RX_BIAS", "MCLK",
