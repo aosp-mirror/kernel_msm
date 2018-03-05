@@ -169,8 +169,6 @@ sapSafeChannelType safe_channels[NUM_CHANNELS] = {
 	{157, true},
 	{161, true},
 	{165, true},
-	{169, true},
-	{173, true},
 };
 #endif
 
