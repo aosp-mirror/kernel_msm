@@ -12,6 +12,11 @@
  */
 
 &soc {
+	/* Force LDO 19 (touch 3.3v) to stay in HPM. */
+	rpmh-regulator-ldoa19 {
+		qcom,supported-modes = <RPMH_REGULATOR_MODE_HPM>;
+	};
+
 	rpmh-regulator-ldoa22 {
 		qcom,supported-modes = <>;
 		pm8998_l22: regulator-l22 {
