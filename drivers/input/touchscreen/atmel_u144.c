@@ -3354,6 +3354,8 @@ static int mxt_enter_bootloader(struct mxt_data *data)
 	if (error)
 		goto err_free_mem;
 
+	return 0;
+
 err_free_mem:
 	kfree(data->object_table);
 	data->object_table = NULL;
