@@ -36,6 +36,7 @@ struct rainbow_ctrl_t {
 	struct device_node *of_node;
 	struct cam_subdev v4l2_dev_str;
 	int  is_power_up;
+	int hw_version;
 	struct regulator *vdd;
 };
 
@@ -204,7 +205,12 @@ int32_t vd6281_update_i2c_info(struct rainbow_ctrl_t *ctrl)
 	int32_t rc = 0;
 
 	ctrl->cci_i2c_master = MASTER_0;
-	ctrl->io_master_info.cci_client->sid = 0x7F;
+
+	if (ctrl->hw_version == 20)
+		ctrl->io_master_info.cci_client->sid = 0x7F;
+	else
+		ctrl->io_master_info.cci_client->sid = 0x20;
+
 	ctrl->io_master_info.cci_client->retries = 3;
 	ctrl->io_master_info.cci_client->id_map = 0;
 	ctrl->io_master_info.cci_client->i2c_freq_mode = I2C_STANDARD_MODE;
@@ -226,6 +232,10 @@ static int vd6281_parse_dt(struct device *dev)
 		dev_err(dev, "unable to get vdd\n");
 		rc = -ENOENT;
 	}
+
+	if (of_property_read_u32(dev->of_node, "hw-version",
+		&(ctrl->hw_version)))
+		dev_warn(dev, "hw-version not specified in dt\n");
 
 	return rc;
 }
