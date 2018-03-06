@@ -431,6 +431,22 @@
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
 };
 
+&dsi_edo_e1392amc_amoled_cmd {
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+	//qcom,mdss-dsi-bl-pmic-pwm-frequency = <100>;
+	//qcom,mdss-dsi-bl-pmic-bank-select = <0>;
+	//qcom,mdss-dsi-pwm-gpio = <&pm8909_mpps 2 0>;
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_edo>;
+};
+
+&dsi_truly_am013r_amoled_cmd {
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+	//qcom,mdss-dsi-bl-pmic-pwm-frequency = <100>;
+	//qcom,mdss-dsi-bl-pmic-bank-select = <0>;
+	//qcom,mdss-dsi-pwm-gpio = <&pm8909_mpps 2 0>;
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_truly>;
+};
+
 &msm_gpio {
 	pmx_mdss {
 		mdss_dsi_active: mdss_dsi_active {
@@ -472,13 +488,14 @@
 
 
 &mdss_dsi0 {
-	qcom,dsi-pref-prim-pan = <&dsi_hx8394d_720_vid>;
+	qcom,dsi-pref-prim-pan = <&dsi_edo_e1392amc_amoled_cmd>;
 	pinctrl-names = "mdss_default", "mdss_sleep";
 	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
 	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
 
 	qcom,platform-reset-gpio = <&msm_gpio 25 0>;
-	qcom,platform-bklight-en-gpio = <&msm_gpio 37 0>;
+	//qcom,platform-bklight-en-gpio = <&msm_gpio 37 0>;
+	qcom,platform-te-gpio = <&msm_gpio 24 0>;
 };
 
 /* CoreSight */
