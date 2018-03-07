@@ -34,6 +34,8 @@
 #define LOG_PAGE_DATA_SIZE	sizeof(((struct ipc_log_page *)0)->data)
 #define LOG_PAGE_FLAG (1 << 31)
 
+#define ENABLE_IPC_LOG_STRING 0
+
 static LIST_HEAD(ipc_log_context_list);
 static DEFINE_RWLOCK(context_list_lock_lha1);
 static void *get_deserialization_func(struct ipc_log_context *ilctxt,
@@ -495,6 +497,7 @@ EXPORT_SYMBOL(tsv_byte_array_write);
  */
 int ipc_log_string(void *ilctxt, const char *fmt, ...)
 {
+#if ENABLE_IPC_LOG_STRING
 	struct encode_context ectxt;
 	int avail_size, data_size, hdr_size = sizeof(struct tsv_header);
 	va_list arg_list;
@@ -514,6 +517,7 @@ int ipc_log_string(void *ilctxt, const char *fmt, ...)
 	ectxt.offset += data_size;
 	msg_encode_end(&ectxt);
 	ipc_log_write(ilctxt, &ectxt);
+#endif
 	return 0;
 }
 EXPORT_SYMBOL(ipc_log_string);
