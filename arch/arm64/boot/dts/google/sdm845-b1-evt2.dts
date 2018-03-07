@@ -1,0 +1,26 @@
+/* Copyright (c) 2018 Google, Inc.
+ *
+ * This software is licensed under the terms of the GNU General Public
+ * License version 2, as published by the Free Software Foundation, and
+ * may be copied, distributed, and modified under those terms.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ */
+
+/dts-v1/;
+
+#include "sdm845-b1-common-v2.1.dtsi"
+
+/ {
+	model = "Google Inc. MSM sdm845 B1 EVT v2.0";
+	compatible = "google,b1c1-sdm845", "qcom,sdm845";
+	qcom,board-id = <0x00020F05 0>;
+};
+
+&p9221 {
+	fod = [b0 24 90 46 88 52 88 53 90 34 9a f7 14 00 01 64];
+};
