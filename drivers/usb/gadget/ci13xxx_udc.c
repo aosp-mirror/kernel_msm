@@ -3678,6 +3678,7 @@ static int ci13xxx_stop(struct usb_gadget *gadget)
 		spin_lock_irqsave(udc->lock, flags);
 	}
 
+	udc->driver = NULL;
 	spin_unlock_irqrestore(udc->lock, flags);
 
 	usb_ep_free_request(&udc->ep0in.ep, udc->status);
@@ -3841,6 +3842,7 @@ static int udc_probe(struct ci13xxx_udc_driver *driver, struct device *dev,
 			(unsigned long) mEp);
 	}
 
+	arch_setup_dma_ops(&udc->gadget.dev, 0, DMA_BIT_MASK(32), NULL, false);
 	for (i = 0; i < hw_ep_max/2; i++) {
 		for (j = RX; j <= TX; j++) {
 			int k = i + j * hw_ep_max/2;
@@ -3855,6 +3857,20 @@ static int udc_probe(struct ci13xxx_udc_driver *driver, struct device *dev,
 
 			mEp->ep.name      = mEp->name;
 			mEp->ep.ops       = &usb_ep_ops;
+
+			if (i == 0) {
+				mEp->ep.caps.type_control = true;
+			} else {
+				mEp->ep.caps.type_iso = true;
+				mEp->ep.caps.type_bulk = true;
+				mEp->ep.caps.type_int = true;
+			}
+
+			if (j == TX)
+				mEp->ep.caps.dir_in = true;
+			else
+				mEp->ep.caps.dir_out = true;
+
 			usb_ep_set_maxpacket_limit(&mEp->ep,
 				k ? USHRT_MAX : CTRL_PAYLOAD_MAX);
 

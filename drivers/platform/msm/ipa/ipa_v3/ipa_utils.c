@@ -4168,9 +4168,8 @@ bool ipa3_is_client_handle_valid(u32 clnt_hdl)
  */
 void ipa3_proxy_clk_unvote(void)
 {
-	if (!ipa3_is_ready())
+	if (ipa3_ctx == NULL)
 		return;
-
 	mutex_lock(&ipa3_ctx->q6_proxy_clk_vote_mutex);
 	if (ipa3_ctx->q6_proxy_clk_vote_valid) {
 		IPA_ACTIVE_CLIENTS_DEC_SPECIAL("PROXY_CLK_VOTE");
@@ -4188,9 +4187,8 @@ void ipa3_proxy_clk_unvote(void)
  */
 void ipa3_proxy_clk_vote(void)
 {
-	if (!ipa3_is_ready())
+	if (ipa3_ctx == NULL)
 		return;
-
 	mutex_lock(&ipa3_ctx->q6_proxy_clk_vote_mutex);
 	if (!ipa3_ctx->q6_proxy_clk_vote_valid ||
 		(ipa3_ctx->q6_proxy_clk_vote_cnt > 0)) {
@@ -4334,6 +4332,11 @@ static int ipa3_is_vlan_mode(enum ipa_vlan_ifaces iface, bool *res)
 
 	IPADBG("Driver %d vlan mode is %d\n", iface, *res);
 	return 0;
+}
+
+static bool ipa3_pm_is_used(void)
+{
+	return (ipa3_ctx) ? ipa3_ctx->use_ipa_pm : false;
 }
 
 int ipa3_bind_api_controller(enum ipa_hw_type ipa_hw_type,
@@ -4523,6 +4526,7 @@ int ipa3_bind_api_controller(enum ipa_hw_type ipa_hw_type,
 	api_ctrl->ipa_tz_unlock_reg = ipa3_tz_unlock_reg;
 	api_ctrl->ipa_get_smmu_params = ipa3_get_smmu_params;
 	api_ctrl->ipa_is_vlan_mode = ipa3_is_vlan_mode;
+	api_ctrl->ipa_pm_is_used = ipa3_pm_is_used;
 
 	return 0;
 }

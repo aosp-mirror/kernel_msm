@@ -532,6 +532,9 @@ static int ipa_suspend_work_handler(struct gsi_data_port *d_port)
 	if (!usb_gsi_ep_op(gsi->d_port.in_ep, (void *) &f_suspend,
 				GSI_EP_OP_CHECK_FOR_SUSPEND)) {
 		ret = -EFAULT;
+		block_db = false;
+		usb_gsi_ep_op(d_port->in_ep, (void *)&block_db,
+			GSI_EP_OP_SET_CLR_BLOCK_DBL);
 		goto done;
 	}
 
@@ -1655,11 +1658,10 @@ static void gsi_rndis_command_complete(struct usb_ep *ep,
 
 	buf = (rndis_init_msg_type *)req->buf;
 	if (buf->MessageType == RNDIS_MSG_INIT) {
-		gsi->d_port.in_aggr_size = min_t(u32, gsi->d_port.in_aggr_size,
-						gsi->params->dl_max_xfer_size);
-		log_event_dbg("RNDIS host dl_aggr_size:%d in_aggr_size:%d\n",
-				gsi->params->dl_max_xfer_size,
-				gsi->d_port.in_aggr_size);
+		/* honor host dl aggr size */
+		gsi->d_port.in_aggr_size = gsi->params->dl_max_xfer_size;
+		log_event_dbg("RNDIS host dl_aggr_size:%d\n",
+				gsi->params->dl_max_xfer_size);
 	}
 }
 
@@ -2565,7 +2567,7 @@ static int gsi_bind(struct usb_configuration *c, struct usb_function *f)
 		info.out_epname = "gsi-epout";
 		info.in_req_buf_len = GSI_IN_BUFF_SIZE;
 		gsi->d_port.in_aggr_size = GSI_IN_RNDIS_AGGR_SIZE;
-		info.in_req_num_buf = GSI_NUM_IN_BUFFERS;
+		info.in_req_num_buf = GSI_NUM_IN_RNDIS_BUFFERS;
 		gsi->d_port.out_aggr_size = GSI_OUT_AGGR_SIZE;
 		info.out_req_buf_len = GSI_OUT_AGGR_SIZE;
 		info.out_req_num_buf = GSI_NUM_OUT_BUFFERS;

@@ -69,6 +69,8 @@ static void dspp_igc_install_property(struct drm_crtc *crtc);
 
 static void dspp_hist_install_property(struct drm_crtc *crtc);
 
+static void dspp_dither_install_property(struct drm_crtc *crtc);
+
 typedef void (*dspp_prop_install_func_t)(struct drm_crtc *crtc);
 
 static dspp_prop_install_func_t dspp_prop_install_func[SDE_DSPP_MAX];
@@ -98,6 +100,7 @@ do { \
 	func[SDE_DSPP_GC] = dspp_gc_install_property; \
 	func[SDE_DSPP_IGC] = dspp_igc_install_property; \
 	func[SDE_DSPP_HIST] = dspp_hist_install_property; \
+	func[SDE_DSPP_DITHER] = dspp_dither_install_property; \
 } while (0)
 
 typedef void (*lm_prop_install_func_t)(struct drm_crtc *crtc);
@@ -133,6 +136,7 @@ enum {
 	SDE_CP_CRTC_DSPP_AD_INPUT,
 	SDE_CP_CRTC_DSPP_AD_ASSERTIVENESS,
 	SDE_CP_CRTC_DSPP_AD_BACKLIGHT,
+	SDE_CP_CRTC_DSPP_AD_STRENGTH,
 	SDE_CP_CRTC_DSPP_MAX,
 	/* DSPP features end */
 
@@ -736,6 +740,13 @@ static void sde_cp_crtc_setfeature(struct sde_cp_node *prop_node,
 			}
 			hw_lm->ops.setup_gc(hw_lm, &hw_cfg);
 			break;
+		case SDE_CP_CRTC_DSPP_DITHER:
+			if (!hw_dspp || !hw_dspp->ops.setup_pa_dither) {
+				ret = -EINVAL;
+				continue;
+			}
+			hw_dspp->ops.setup_pa_dither(hw_dspp, &hw_cfg);
+			break;
 		case SDE_CP_CRTC_DSPP_HIST_CTRL:
 			if (!hw_dspp || !hw_dspp->ops.setup_histogram) {
 				ret = -EINVAL;
@@ -802,6 +813,15 @@ static void sde_cp_crtc_setfeature(struct sde_cp_node *prop_node,
 				continue;
 			}
 			ad_cfg.prop = AD_BACKLIGHT;
+			ad_cfg.hw_cfg = &hw_cfg;
+			hw_dspp->ops.setup_ad(hw_dspp, &ad_cfg);
+			break;
+		case SDE_CP_CRTC_DSPP_AD_STRENGTH:
+			if (!hw_dspp || !hw_dspp->ops.setup_ad) {
+				ret = -EINVAL;
+				continue;
+			}
+			ad_cfg.prop = AD_STRENGTH;
 			ad_cfg.hw_cfg = &hw_cfg;
 			hw_dspp->ops.setup_ad(hw_dspp, &ad_cfg);
 			break;
@@ -1365,6 +1385,9 @@ static void dspp_ad_install_property(struct drm_crtc *crtc)
 		sde_cp_crtc_install_range_property(crtc,
 			"SDE_DSPP_AD_V4_ASSERTIVENESS",
 			SDE_CP_CRTC_DSPP_AD_ASSERTIVENESS, 0, (BIT(8) - 1), 0);
+		sde_cp_crtc_install_range_property(crtc,
+			"SDE_DSPP_AD_V4_STRENGTH",
+			SDE_CP_CRTC_DSPP_AD_STRENGTH, 0, (BIT(10) - 1), 0);
 		sde_cp_crtc_install_range_property(crtc, "SDE_DSPP_AD_V4_INPUT",
 			SDE_CP_CRTC_DSPP_AD_INPUT, 0, U16_MAX, 0);
 		sde_cp_crtc_install_range_property(crtc,
@@ -1498,6 +1521,31 @@ static void dspp_hist_install_property(struct drm_crtc *crtc)
 	}
 }
 
+static void dspp_dither_install_property(struct drm_crtc *crtc)
+{
+	char feature_name[256];
+	struct sde_kms *kms = NULL;
+	struct sde_mdss_cfg *catalog = NULL;
+	u32 version;
+
+	kms = get_kms(crtc);
+	catalog = kms->catalog;
+
+	version = catalog->dspp[0].sblk->dither.version >> 16;
+	snprintf(feature_name, ARRAY_SIZE(feature_name), "%s%d",
+		"SDE_DSPP_PA_DITHER_V", version);
+	switch (version) {
+	case 1:
+		sde_cp_crtc_install_blob_property(crtc, feature_name,
+			SDE_CP_CRTC_DSPP_DITHER,
+			sizeof(struct drm_msm_pa_dither));
+		break;
+	default:
+		DRM_ERROR("version %d not supported\n", version);
+		break;
+	}
+}
+
 static void sde_cp_update_list(struct sde_cp_node *prop_node,
 		struct sde_crtc *crtc, bool dirty_list)
 {
@@ -1508,6 +1556,7 @@ static void sde_cp_update_list(struct sde_cp_node *prop_node,
 	case SDE_CP_CRTC_DSPP_AD_INPUT:
 	case SDE_CP_CRTC_DSPP_AD_ASSERTIVENESS:
 	case SDE_CP_CRTC_DSPP_AD_BACKLIGHT:
+	case SDE_CP_CRTC_DSPP_AD_STRENGTH:
 		if (dirty_list)
 			list_add_tail(&prop_node->dirty_list, &crtc->ad_dirty);
 		else
@@ -1556,6 +1605,9 @@ static int sde_cp_ad_validate_prop(struct sde_cp_node *prop_node,
 		case SDE_CP_CRTC_DSPP_AD_BACKLIGHT:
 			ad_prop = AD_BACKLIGHT;
 			break;
+		case SDE_CP_CRTC_DSPP_AD_STRENGTH:
+			ad_prop = AD_STRENGTH;
+			break;
 		default:
 			/* Not an AD property */
 			return 0;
@@ -1573,7 +1625,8 @@ static void sde_cp_ad_interrupt_cb(void *arg, int irq_idx)
 {
 	struct sde_crtc *crtc = arg;
 
-	sde_crtc_event_queue(&crtc->base, sde_cp_notify_ad_event, NULL);
+	sde_crtc_event_queue(&crtc->base, sde_cp_notify_ad_event,
+							NULL, true);
 }
 
 static void sde_cp_notify_ad_event(struct drm_crtc *crtc_drm, void *arg)
@@ -1834,7 +1887,8 @@ static void sde_cp_hist_interrupt_cb(void *arg, int irq_idx)
 	}
 
 	/* notify histogram event */
-	sde_crtc_event_queue(crtc_drm, sde_cp_notify_hist_event, NULL);
+	sde_crtc_event_queue(crtc_drm, sde_cp_notify_hist_event,
+							NULL, true);
 }
 
 static void sde_cp_notify_hist_event(struct drm_crtc *crtc_drm, void *arg)

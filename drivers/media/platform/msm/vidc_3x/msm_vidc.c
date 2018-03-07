@@ -81,16 +81,24 @@ EXPORT_SYMBOL(msm_vidc_poll);
 
 int msm_vidc_querycap(void *instance, struct v4l2_capability *cap)
 {
+	int rc = -EINVAL;
 	struct msm_vidc_inst *inst = instance;
 
 	if (!inst || !cap)
 		return -EINVAL;
 
 	if (inst->session_type == MSM_VIDC_DECODER)
-		return msm_vdec_querycap(instance, cap);
+		rc = msm_vdec_querycap(instance, cap);
 	else if (inst->session_type == MSM_VIDC_ENCODER)
-		return msm_venc_querycap(instance, cap);
-	return -EINVAL;
+		rc = msm_venc_querycap(instance, cap);
+	else
+		goto exit;
+	if (!rc) {
+		cap->device_caps = cap->capabilities;
+		cap->capabilities |= V4L2_CAP_DEVICE_CAPS;
+	}
+exit:
+	return rc;
 }
 EXPORT_SYMBOL(msm_vidc_querycap);
 
@@ -1067,6 +1075,7 @@ static inline int vb2_bufq_init(struct msm_vidc_inst *inst,
 		q->ops = msm_venc_get_vb2q_ops();
 	q->mem_ops = &msm_vidc_vb2_mem_ops;
 	q->drv_priv = inst;
+	q->allow_zero_bytesused = 1;
 	return vb2_queue_init(q);
 }
 
