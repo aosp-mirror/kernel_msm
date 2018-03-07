@@ -18,6 +18,13 @@ config QPNP_FG_GEN3
 	  the fuel gauge. The state of charge is reported through a BMS power
 	  supply property and also sends uevents when the capacity is updated.
 
+config QPNP_FG_GEN3_DEBUG_BATT
+	bool "QPNP GEN3 FG debug battery"
+	default n
+	help
+	  Say Y here to enable QCOM FG debug battery detection.
+	  Disabling by default to avoid ID probe on every capacity update.
+
 config SMB135X_CHARGER
 	tristate "SMB135X Battery Charger"
 	depends on I2C

@@ -810,6 +810,7 @@ static bool is_batt_empty(struct fg_chip *chip)
 	return ((vbatt_uv < chip->dt.cutoff_volt_mv * 1000) ? true : false);
 }
 
+#ifdef CONFIG_QPNP_FG_GEN3_DEBUG_BATT
 static int fg_get_debug_batt_id(struct fg_chip *chip, int *batt_id)
 {
 	int rc;
@@ -866,6 +867,7 @@ static bool is_debug_batt_id(struct fg_chip *chip)
 
 	return false;
 }
+#endif /* CONFIG_QPNP_FG_GEN3_DEBUG_BATT */
 
 #define DEBUG_BATT_SOC	67
 #define BATT_MISS_SOC	50
@@ -874,10 +876,12 @@ static int fg_get_prop_capacity(struct fg_chip *chip, int *val)
 {
 	int rc, msoc;
 
+#ifdef CONFIG_QPNP_FG_GEN3_DEBUG_BATT
 	if (is_debug_batt_id(chip)) {
 		*val = DEBUG_BATT_SOC;
 		return 0;
 	}
+#endif
 
 	if (chip->fg_restarting) {
 		*val = chip->last_soc;
@@ -3709,7 +3713,11 @@ static int fg_psy_get_property(struct power_supply *psy,
 		pval->intval = chip->soc_reporting_ready;
 		break;
 	case POWER_SUPPLY_PROP_DEBUG_BATTERY:
+#ifdef CONFIG_QPNP_FG_GEN3_DEBUG_BATT
 		pval->intval = is_debug_batt_id(chip);
+#else
+		pval->intval = 0;
+#endif
 		break;
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE:
 		rc = fg_get_sram_prop(chip, FG_SRAM_VBATT_FULL, &pval->intval);
@@ -4195,6 +4203,7 @@ static int fg_hw_init(struct fg_chip *chip)
 		return rc;
 	}
 
+#ifdef CONFIG_QPNP_FG_GEN3_DEBUG_BATT
 	if (is_debug_batt_id(chip)) {
 		val = ESR_NO_PULL_DOWN;
 		rc = fg_masked_write(chip, BATT_INFO_ESR_PULL_DN_CFG(chip),
@@ -4204,6 +4213,7 @@ static int fg_hw_init(struct fg_chip *chip)
 			return rc;
 		}
 	}
+#endif
 
 	return 0;
 }
