@@ -1943,6 +1943,7 @@ static int __wlan_hdd_mgmt_tx(struct wiphy *wiphy, struct wireless_dev *wdev,
 	uint8_t home_ch = 0;
 	bool enb_random_mac = false;
 	uint32_t mgmt_hdr_len = sizeof(struct ieee80211_hdr_3addr);
+	QDF_STATUS qdf_status;
 
 	ENTER();
 
@@ -1975,6 +1976,22 @@ static int __wlan_hdd_mgmt_tx(struct wiphy *wiphy, struct wireless_dev *wdev,
 	hdd_debug("Device_mode %s(%d) type: %d, wait: %d, offchan: %d",
 		   hdd_device_mode_to_string(pAdapter->device_mode),
 		   pAdapter->device_mode, type, wait, offchan);
+
+	/*
+	 * When frame to be transmitted is auth mgmt, then trigger
+	 * sme_send_mgmt_tx to send auth frame
+	 */
+	if ((pAdapter->device_mode == QDF_STA_MODE) &&
+	    (type == SIR_MAC_MGMT_FRAME &&
+	    subType == SIR_MAC_MGMT_AUTH)) {
+		qdf_status = sme_send_mgmt_tx(WLAN_HDD_GET_HAL_CTX(pAdapter),
+					      pAdapter->sessionId, buf, len);
+
+		if (QDF_IS_STATUS_SUCCESS(qdf_status))
+			return 0;
+		else
+			return -EINVAL;
+	}
 
 	if (type == SIR_MAC_MGMT_FRAME && subType == SIR_MAC_MGMT_ACTION &&
 	    len > IEEE80211_MIN_ACTION_SIZE)
