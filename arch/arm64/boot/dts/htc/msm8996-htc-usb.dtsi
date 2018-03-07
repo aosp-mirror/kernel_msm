@@ -10,6 +10,8 @@
  * GNU General Public License for more details.
  */
 
+#include <dt-bindings/usb/typec.h>
+
 &pm8994_l21 {
 	regulator-min-microvolt = <3000000>;
 	regulator-max-microvolt = <3300000>;
@@ -195,6 +197,17 @@
 			pinctrl-2 = <&usb3_switch_sel_1>;
 			pinctrl-3 = <&vconn_enable>;
 			pinctrl-4 = <&vconn_disable>;
+
+			src-pdo = <PDO_TYPE_FIXED 5000 900 0>;		/* FIXED 5V-0.9A */
+			snk-pdo = <PDO_TYPE_FIXED 5000 3000 0>,		/* FIXED 5V-3A */
+				  <PDO_TYPE_FIXED 9000 2000 0>,		/* FIXED 9V-2A */
+				  <PDO_TYPE_BATT 4000 10000 18000>;	/* BATT [4-10]V-18W */
+			max-snk-mv = <9000>;
+			max-snk-ma = <3000>;
+			max-snk-mw = <18000>;
+			op-snk-mw = <7600>;
+			port-type = <TYPEC_PORT_DRP>;			/* TYPEC_PORT_DRP */
+			default-role = <TYPEC_SINK>;			/* TYPEC_SINK */
 		};
 	};
 };
