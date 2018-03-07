@@ -1003,6 +1003,12 @@ static int smb2_batt_get_prop(struct power_supply *psy,
 	union power_supply_propval pval = {0, };
 
 	switch (psp) {
+	case POWER_SUPPLY_PROP_ONLINE:
+		/** when type != POWER_SUPPLY_TYPE_BATTERY
+		 * power_supply_core check this property
+		 */
+		val->intval = 0;
+		break;
 	case POWER_SUPPLY_PROP_STATUS:
 		rc = smblib_get_prop_batt_status(chg, val);
 		break;
