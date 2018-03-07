@@ -1,6 +1,4 @@
-dtb-$(CONFIG_ARCH_MSM8909) += apq8009w-ling-bg-wtp-v2.dtb \
-                              apq8009w-ling-bg-wtp-v2_1gb.dtb \
-                              apq8009w-ling-bg-alpha.dtb
+dtb-$(CONFIG_ARCH_MSM8909) += apq8009w-ling.dtb
 
 targets += dtbs
 targets += $(addprefix ../, $(dtb-y))
