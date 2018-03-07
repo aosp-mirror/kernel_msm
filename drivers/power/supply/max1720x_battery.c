@@ -241,7 +241,7 @@ struct max1720x_chip {
 	u16 *history;
 	int history_count;
 	int history_index;
-	bool vmin_breached;
+	u16 status;
 };
 
 #define REGMAP_READ(regmap, what, dst)				\
@@ -583,6 +583,8 @@ static ssize_t max1720x_history_show(struct device *dev,
 static const DEVICE_ATTR(history, 0444, max1720x_history_show, NULL);
 
 static enum power_supply_property max1720x_battery_props[] = {
+	POWER_SUPPLY_PROP_STATUS,
+	POWER_SUPPLY_PROP_HEALTH,
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_CAPACITY_RAW,
 	POWER_SUPPLY_PROP_CHARGE_COUNTER,
@@ -608,12 +610,60 @@ static int max1720x_get_battery_soc(struct max1720x_chip *chip)
 {
 	u16 data;
 
-	if (chip->vmin_breached) {
+	if (chip->status & MAX1720X_STATUS_VMN) {
 		dev_info(chip->dev, "minimal voltage has been breached");
 		return 0;
 	}
 	REGMAP_READ(chip->regmap, MAX1720X_RepSOC, data);
 	return reg_to_percentage(data);
+}
+
+static int max1720x_get_battery_status(struct max1720x_chip *chip)
+{
+	u16 data;
+	int current_now, ichgterm, fullsocthr;
+	int status = POWER_SUPPLY_STATUS_UNKNOWN;
+
+	REGMAP_READ(chip->regmap, MAX1720X_Current, data);
+	current_now = -reg_to_micro_amp(data, chip->RSense);
+
+	REGMAP_READ(chip->regmap, MAX1720X_IChgTerm, data);
+	ichgterm = reg_to_micro_amp(data, chip->RSense);
+
+	REGMAP_READ(chip->regmap, MAX1720X_FullSocThr, data);
+	fullsocthr = reg_to_percentage(data);
+
+	if (current_now < -ichgterm)
+		status = POWER_SUPPLY_STATUS_CHARGING;
+	else if (current_now <= 0 &&
+		 max1720x_get_battery_soc(chip) >= fullsocthr)
+		status = POWER_SUPPLY_STATUS_FULL;
+	else
+		status = POWER_SUPPLY_STATUS_DISCHARGING;
+
+	return status;
+}
+
+static int max1720x_get_battery_health(struct max1720x_chip *chip)
+{
+	/* For health report what ever was recently alerted and clear it */
+
+	if (chip->status & MAX1720X_STATUS_VMX) {
+		chip->status &= ~MAX1720X_STATUS_VMX;
+		return POWER_SUPPLY_HEALTH_OVERVOLTAGE;
+	}
+
+	if (chip->status & MAX1720X_STATUS_TMN) {
+		chip->status &= ~MAX1720X_STATUS_TMN;
+		return POWER_SUPPLY_HEALTH_COLD;
+	}
+
+	if (chip->status & MAX1720X_STATUS_TMX) {
+		chip->status &= ~MAX1720X_STATUS_TMX;
+		return POWER_SUPPLY_HEALTH_OVERHEAT;
+	}
+
+	return POWER_SUPPLY_HEALTH_GOOD;
 }
 
 static int max1720x_get_property(struct power_supply *psy,
@@ -628,6 +678,12 @@ static int max1720x_get_property(struct power_supply *psy,
 		return -EAGAIN;
 
 	switch (psp) {
+	case POWER_SUPPLY_PROP_STATUS:
+		val->intval = max1720x_get_battery_status(chip);
+		break;
+	case POWER_SUPPLY_PROP_HEALTH:
+		val->intval = max1720x_get_battery_health(chip);
+		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
 		val->intval = max1720x_get_battery_soc(chip);
 		break;
@@ -969,6 +1025,7 @@ static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 		return IRQ_NONE;
 	}
 	fg_status = (u16) data;
+	chip->status |= fg_status;
 	if (fg_status & MAX1720X_STATUS_POR) {
 		fg_status &= ~MAX1720X_STATUS_POR;
 		pr_debug("POR is set");
@@ -989,7 +1046,6 @@ static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 	if (fg_status & MAX1720X_STATUS_VMN) {
 		if (chip->RConfig & MAX1720X_CONFIG_VS)
 			fg_status &= ~MAX1720X_STATUS_VMN;
-		chip->vmin_breached = true;
 		pr_debug("VMN is set");
 	}
 	if (fg_status & MAX1720X_STATUS_TMN) {
@@ -1087,7 +1143,7 @@ static void max1720x_init_worker(struct work_struct *work)
 			return;
 		}
 		enable_irq_wake(chip->primary->irq);
-		chip->vmin_breached = false;
+		chip->status = 0;
 	}
 	chip->init_complete = 1;
 }
