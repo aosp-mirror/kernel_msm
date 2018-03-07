@@ -2775,8 +2775,6 @@ static int __mdss_fb_wait_for_fence_sub(struct msm_sync_pt_data *sync_pt_data,
 						wait_ms);
 
 			pr_warn("%s: sync_fence_wait timed out! ",
-					sync_pt_data->fence_name);
-			pr_warn("%s: sync_fence_wait timed out! ",
 					fences[i]->name);
 			pr_cont("Waiting %ld.%ld more seconds\n",
 				(wait_ms/MSEC_PER_SEC), (wait_ms%MSEC_PER_SEC));
@@ -2867,10 +2865,8 @@ static void mdss_fb_release_fences(struct msm_fb_data_type *mfd)
 
 static void mdss_fb_release_kickoff(struct msm_fb_data_type *mfd)
 {
-	if (mfd->wait_for_kickoff) {
-		atomic_set(&mfd->kickoff_pending, 0);
-		wake_up_all(&mfd->kickoff_wait_q);
-	}
+	atomic_set(&mfd->kickoff_pending, 0);
+	wake_up_all(&mfd->kickoff_wait_q);
 }
 
 /**
@@ -4419,7 +4415,6 @@ static int __ioctl_wait_idle(struct msm_fb_data_type *mfd, u32 cmd)
 {
 	int ret = 0;
 
-#ifndef TARGET_HW_MDSS_MDP3
 	if (mfd->wait_for_kickoff &&
 		((cmd == MSMFB_OVERLAY_PREPARE) ||
 		(cmd == MSMFB_BUFFER_SYNC) ||
@@ -4432,16 +4427,7 @@ static int __ioctl_wait_idle(struct msm_fb_data_type *mfd, u32 cmd)
 		(cmd == MSMFB_OVERLAY_SET))) {
 		ret = mdss_fb_wait_for_kickoff(mfd);
 	}
-#else
-	if ((cmd != MSMFB_VSYNC_CTRL) &&
-		(cmd != MSMFB_OVERLAY_VSYNC_CTRL) &&
-		(cmd != MSMFB_ASYNC_BLIT) &&
-		(cmd != MSMFB_BLIT) &&
-		(cmd != MSMFB_NOTIFY_UPDATE) &&
-		(cmd != MSMFB_OVERLAY_PREPARE)) {
-		ret = mdss_fb_wait_for_kickoff(mfd);
-	}
-#endif
+
 	if (ret && (ret != -ESHUTDOWN))
 		pr_err("wait_idle failed. cmd=0x%x rc=%d\n", cmd, ret);
 
