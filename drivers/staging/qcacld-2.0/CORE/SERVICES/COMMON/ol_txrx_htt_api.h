@@ -617,8 +617,8 @@ ol_rx_pn_ind_handler(
     ol_txrx_pdev_handle pdev,
     u_int16_t peer_id,
     u_int8_t tid,
-    int seq_num_start,
-    int seq_num_end,
+    u_int16_t seq_num_start,
+    u_int16_t seq_num_end,
     u_int8_t pn_ie_cnt,
     u_int8_t *pn_ie);
 
