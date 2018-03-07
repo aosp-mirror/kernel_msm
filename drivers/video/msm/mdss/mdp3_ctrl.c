@@ -2850,7 +2850,6 @@ int mdp3_ctrl_init(struct msm_fb_data_type *mfd)
 	mdp3_session->vsync_timer.function = mdp3_vsync_timer_func;
 	mdp3_session->vsync_period = 1000 / mfd->panel_info->mipi.frame_rate;
 	mfd->mdp.private1 = mdp3_session;
-	mfd->wait_for_kickoff = true;
 	init_completion(&mdp3_session->dma_completion);
 	if (intf_type != MDP3_DMA_OUTPUT_SEL_DSI_VIDEO)
 		mdp3_session->wait_for_dma_done = mdp3_wait_for_dma_done;
