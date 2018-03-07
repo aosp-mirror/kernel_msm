@@ -3208,7 +3208,7 @@ dhd_bus_rxctl(struct dhd_bus *bus, uchar *msg, uint msglen)
 	bus->rxlen = 0;
 	dhd_os_sdunlock(bus->dhd);
 
-	DHD_ERROR(("%s: 1 WL_REG_ON: [%d]\n", __FUNCTION__,gpio_get_value(33)));
+	DHD_TRACE(("%s: 1 WL_REG_ON: [%d]\n", __FUNCTION__,gpio_get_value(33)));
 
 	if (rxlen) {
 		DHD_CTL(("%s: resumed on rxctl frame, got %d expected %d\n",
@@ -3220,7 +3220,7 @@ dhd_bus_rxctl(struct dhd_bus *bus, uchar *msg, uint msglen)
 		DHD_ERROR(("%s: resumed on timeout, INT status=0x%08X\n",
 			__FUNCTION__, status));
 #else
-		DHD_ERROR(("%s: 2 WL_REG_ON: [%d]\n",__FUNCTION__, gpio_get_value(33)));
+		DHD_TRACE(("%s: 2 WL_REG_ON: [%d]\n",__FUNCTION__, gpio_get_value(33)));
 		DHD_ERROR(("%s: resumed on timeout\n", __FUNCTION__));
 #endif /* DHD_DEBUG */
 		dhd_os_sdlock(bus->dhd);
