@@ -454,6 +454,9 @@ DHDOFILES := src/bcmsdio/sys/bcmsdh.o		src/bcmsdio/sys/bcmsdh_linux.o \
 	src/wl/sys/wl_cfg_btcoex.o		src/wl/sys/wldev_common.o \
 	src/wl/sys/wl_linux_mon.o		src/wl/sys/wl_roam.o
 
+# disable the warning about date and time with gcc 4.9
+CFLAGS_dhd_common.o += -Wno-date-time
+
 obj-$(CONFIG_BCMDHD) += bcmdhd.o
 
 bcmdhd-objs := $(DHDOFILES)
