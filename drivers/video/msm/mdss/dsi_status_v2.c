@@ -126,13 +126,16 @@ void mdp3_check_dsi_ctrl_status(struct work_struct *work,
 		goto status_dead;
 	}
 
+	mutex_lock(&mdp3_session->lock);
 	if (!mdp3_session->status) {
+		mutex_unlock(&mdp3_session->lock);
 		pr_debug("%s: display off already\n", __func__);
 		return;
 	}
 
 	if (mdp3_session->wait_for_dma_done)
 		ret = mdp3_session->wait_for_dma_done(mdp3_session);
+	mutex_unlock(&mdp3_session->lock);
 
 	if (!ret)
 		ret = ctrl_pdata->check_status(ctrl_pdata);
