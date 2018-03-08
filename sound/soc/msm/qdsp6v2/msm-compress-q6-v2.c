@@ -880,6 +880,7 @@ static int msm_compr_configure_dsp(struct snd_compr_stream *cstream)
 	struct snd_soc_pcm_runtime *soc_prtd = cstream->private_data;
 	uint16_t bits_per_sample = 16;
 	int dir = IN, ret = 0;
+	int avs_ver = -EINVAL;
 	struct audio_client *ac = prtd->audio_client;
 	uint32_t stream_index;
 	struct asm_softpause_params softpause = {
@@ -947,9 +948,12 @@ static int msm_compr_configure_dsp(struct snd_compr_stream *cstream)
 	if (ret < 0)
 		pr_err("%s : Set Volume failed : %d", __func__, ret);
 
-	ret = q6asm_send_cal(ac);
-	if (ret < 0)
-		pr_debug("%s : Send cal failed : %d", __func__, ret);
+	avs_ver = q6core_get_avs_version();
+	if(avs_ver == Q6_SUBSYS_AVS2_6) {
+		ret = q6asm_send_cal(ac);
+		if (ret < 0)
+			pr_debug("%s : Send cal failed : %d", __func__, ret);
+	}
 
 	ret = q6asm_set_softpause(ac, &softpause);
 	if (ret < 0)
