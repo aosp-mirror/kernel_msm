@@ -1,0 +1,12 @@
+&cs35l36_codec1 {
+	reset-gpios = <&tlmm 75 0>;
+	irq-gpio = <&tlmm 40 0>;
+	interrupts = <40 IRQ_TYPE_LEVEL_LOW>;
+	pinctrl-0 = <&cs35l36_reset_top &cs35l36_irq_top>;
+};
+
+
+&cs35l36_codec2 {
+	/delete-property/ pinctrl-names;
+	/delete-property/ pinctrl-0;
+};

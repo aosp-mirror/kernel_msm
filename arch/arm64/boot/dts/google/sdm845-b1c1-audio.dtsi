@@ -23,7 +23,7 @@
 
 &tlmm {
 	cs35l36_pins {
-		cs35l36_reset_default: cs35l36_reset_default {
+		cs35l36_reset_top: cs35l36_reset_top {
 			mux {
 				pins = "gpio75";
 				function = "gpio";
@@ -36,7 +36,7 @@
 			};
 		};
 
-		cs35l36_irq_default: cs35l36_irq_default {
+		cs35l36_irq_top: cs35l36_irq_top {
 			mux {
 				pins = "gpio40";
 				function = "gpio";
@@ -44,6 +44,31 @@
 
 			config {
 				pins = "gpio40";
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+		};
+		cs35l36_reset_bottom: cs35l36_reset_bottom {
+			mux {
+				pins = "gpio112";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio112";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+
+		cs35l36_irq_bottom: cs35l36_irq_bottom {
+			mux {
+				pins = "gpio115";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio115";
 				drive-strength = <2>;
 				bias-pull-up;
 			};
@@ -166,15 +191,16 @@
 &qupv3_se12_i2c {
 	status = "ok";
 	cs35l36_codec1: cs35l36@40 {
+		/* bottom speaker - portrait right */
 		compatible = "cirrus,cs35l36";
 		reg = <0x40>;
-		reset-gpios = <&tlmm 75 0>;
-		irq-gpio = <&tlmm 40 0>;
+		reset-gpios = <&tlmm 112 0>;
+		irq-gpio = <&tlmm 115 0>;
 		VA-supply = <&pm8998_s4>;
 		interrupt-parent = <&tlmm>;
-		interrupts = <40 IRQ_TYPE_LEVEL_LOW>;
+		interrupts = <115 IRQ_TYPE_LEVEL_LOW>;
 		pinctrl-names = "default";
-		pinctrl-0 = <&cs35l36_reset_default &cs35l36_irq_default>;
+		pinctrl-0 = <&cs35l36_reset_bottom &cs35l36_irq_bottom>;
 		cirrus,right-channel-amp;
 		cirrus,boost-ind-nanohenry = <1000>;
 		cirrus,boost-ctrl-select = <0x00>;
@@ -204,6 +230,7 @@
 	};
 
 	cs35l36_codec2: cs35l36@41 {
+		/* top speaker - portrait left */
 		compatible = "cirrus,cs35l36";
 		reg = <0x41>;
 		reset-gpios = <&tlmm 75 0>;
@@ -211,6 +238,8 @@
 		VA-supply = <&pm8998_s4>;
 		interrupt-parent = <&tlmm>;
 		interrupts = <40 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&cs35l36_reset_top &cs35l36_irq_top>;
 		cirrus,left-channel-amp;
 		cirrus,boost-ind-nanohenry = <1000>;
 		cirrus,boost-ctrl-select = <0x00>;
