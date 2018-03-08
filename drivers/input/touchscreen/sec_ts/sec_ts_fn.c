@@ -1182,7 +1182,7 @@ static void get_fw_ver_bin(void *device_data)
 
 	sec_cmd_set_default_result(sec);
 
-	snprintf(buff, sizeof(buff), "SE%02X%02X%02X",
+	snprintf(buff, sizeof(buff), "SE-V%02X.%02X.%02X",
 		ts->plat_data->panel_revision, ts->plat_data->img_version_of_bin[2],
 		ts->plat_data->img_version_of_bin[3]);
 
@@ -1219,7 +1219,7 @@ static void get_fw_ver_ic(void *device_data)
 		return;
 	}
 
-	snprintf(buff, sizeof(buff), "SE%02X%02X%02X",
+	snprintf(buff, sizeof(buff), "SE-V%02X.%02X.%02X",
 			ts->plat_data->panel_revision, fw_ver[2], fw_ver[3]);
 
 	sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
