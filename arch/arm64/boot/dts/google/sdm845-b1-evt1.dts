@@ -24,3 +24,7 @@
 &p9221 {
 	fod = [b0 24 90 46 88 52 88 53 90 34 9a f7 14 00 01 64];
 };
+
+&google_charger {
+	google,wlc-power-supply = "wireless";
+};

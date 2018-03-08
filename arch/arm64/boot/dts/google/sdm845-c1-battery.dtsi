@@ -47,4 +47,5 @@
 
 &google_charger {
 	google,chg-battery-capacity = <3430>;
+	google,wlc-power-supply = "wireless";
 };
