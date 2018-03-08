@@ -2,6 +2,12 @@ KASAN_SANITIZE_scm.o := n
 
 CFLAGS_scm.o :=$(call as-instr,.arch_extension sec,-DREQUIRES_SEC=1)
 
+ifdef CONFIG_CC_STACKPROTECTOR_STRONG
+# the scm_call_atomic1 function is using R12 register for stack-canary and
+# this is getting corrupted as TZ is using the same register.
+CFLAGS_REMOVE_scm.o = -fstack-protector-strong
+endif
+
 ccflags-$(CONFIG_MSM_QBT1000) += -Idrivers/misc/
 
 obj-$(CONFIG_MSM_INRUSH_CURRENT_MITIGATION) += inrush-current-mitigation.o
