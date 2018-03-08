@@ -1561,6 +1561,20 @@ QDF_STATUS wmi_unified_send_limit_off_chan_cmd(void *wmi_hdl,
 				   struct wmi_limit_off_chan_param *wmi_param);
 
 /**
+ * wmi_unified_send_roam_scan_stats_cmd() - Wrapper to request roam scan stats
+ * @wmi_hdl: wmi handle
+ * @params: request params
+ *
+ * This function is used to send the roam scan stats request command to
+ * firmware.
+ *
+ * Return: QDF_STATUS_SUCCESS on success and QDF_STATUS_E_FAILURE for failure
+ */
+QDF_STATUS
+wmi_unified_send_roam_scan_stats_cmd(void *wmi_hdl,
+				     struct wmi_roam_scan_stats_req *params);
+
+/**
  * wmi_unified_offload_11k_cmd() - send 11k offload command
  * @wmi_hdl: wmi handle
  * @params: 11k offload params

@@ -1985,7 +1985,7 @@ QDF_STATUS send_mgmt_cmd_tlv(wmi_unified_t wmi_handle,
 				     QDF_DMA_TO_DEVICE);
 	if (status != QDF_STATUS_SUCCESS) {
 		WMI_LOGE("%s: wmi buf map failed", __func__);
-		goto err1;
+		goto free_buf;
 	}
 
 	dma_addr = qdf_nbuf_get_frag_paddr(param->tx_frame, 0);
@@ -2006,7 +2006,7 @@ QDF_STATUS send_mgmt_cmd_tlv(wmi_unified_t wmi_handle,
 		if (status != QDF_STATUS_SUCCESS) {
 			WMI_LOGE("%s: Populate TX send params failed",
 				 __func__);
-			goto err1;
+			goto unmap_tx_frame;
 		}
 		cmd_len += sizeof(wmi_tx_send_params);
 	}
@@ -2014,11 +2014,14 @@ QDF_STATUS send_mgmt_cmd_tlv(wmi_unified_t wmi_handle,
 	if (wmi_unified_cmd_send(wmi_handle, buf, cmd_len,
 				      WMI_MGMT_TX_SEND_CMDID)) {
 		WMI_LOGE("%s: Failed to send mgmt Tx", __func__);
-		goto err1;
+		goto unmap_tx_frame;
 	}
 	return QDF_STATUS_SUCCESS;
 
-err1:
+unmap_tx_frame:
+	qdf_nbuf_unmap_single(qdf_ctx, param->tx_frame,
+				     QDF_DMA_TO_DEVICE);
+free_buf:
 	wmi_buf_free(buf);
 	return QDF_STATUS_E_FAILURE;
 }
@@ -14419,6 +14422,39 @@ send_cmd:
 	return status;
 }
 
+static QDF_STATUS
+send_roam_scan_stats_cmd_tlv(wmi_unified_t wmi_handle,
+			     struct wmi_roam_scan_stats_req *params)
+{
+	wmi_buf_t buf;
+	wmi_request_roam_scan_stats_cmd_fixed_param *cmd;
+	uint8_t len = sizeof(*cmd);
+
+	buf = wmi_buf_alloc(wmi_handle, len);
+	if (!buf) {
+		WMI_LOGE(FL("Failed to allocate wmi buffer"));
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	cmd = (wmi_request_roam_scan_stats_cmd_fixed_param *)wmi_buf_data(buf);
+	WMITLV_SET_HDR(&cmd->tlv_header,
+	 WMITLV_TAG_STRUC_wmi_request_roam_scan_stats_cmd_fixed_param,
+	 WMITLV_GET_STRUCT_TLVLEN(wmi_request_roam_scan_stats_cmd_fixed_param));
+
+	cmd->vdev_id = params->vdev_id;
+
+	WMI_LOGD(FL("Roam Scan Stats Req vdev_id: %u"), cmd->vdev_id);
+	if (wmi_unified_cmd_send(wmi_handle, buf, len,
+				 WMI_REQUEST_ROAM_SCAN_STATS_CMDID)) {
+		WMI_LOGE("%s: Failed to send WMI_REQUEST_ROAM_SCAN_STATS_CMDID",
+			 __func__);
+		wmi_buf_free(buf);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	return QDF_STATUS_SUCCESS;
+}
+
 /**
  * send_offload_11k_cmd_tlv() - send wmi cmd with 11k offload params
  * @wmi_handle: wmi handler
@@ -14859,6 +14895,7 @@ struct wmi_ops tlv_ops =  {
 				send_roam_scan_send_hlp_cmd_tlv,
 #endif
 	.send_wow_timer_pattern_cmd = send_wow_timer_pattern_cmd_tlv,
+	.send_roam_scan_stats_cmd = send_roam_scan_stats_cmd_tlv,
 	.send_offload_11k_cmd = send_offload_11k_cmd_tlv,
 	.send_invoke_neighbor_report_cmd = send_invoke_neighbor_report_cmd_tlv,
 };
@@ -15207,6 +15244,7 @@ static void populate_tlv_events_id(uint32_t *event_ids)
 	event_ids[wmi_update_rcpi_event_id] = WMI_UPDATE_RCPI_EVENTID;
 	event_ids[wmi_get_arp_stats_req_id] = WMI_VDEV_GET_ARP_STATS_EVENTID;
 	event_ids[wmi_sar_get_limits_event_id] = WMI_SAR_GET_LIMITS_EVENTID;
+	event_ids[wmi_roam_scan_stats_event_id] = WMI_ROAM_SCAN_STATS_EVENTID;
 }
 }
 

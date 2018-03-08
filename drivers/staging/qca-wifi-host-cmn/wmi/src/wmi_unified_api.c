@@ -6521,6 +6521,19 @@ QDF_STATUS wmi_unified_send_limit_off_chan_cmd(void *wmi_hdl,
 	return QDF_STATUS_E_FAILURE;
 }
 
+QDF_STATUS
+wmi_unified_send_roam_scan_stats_cmd(void *wmi_hdl,
+				     struct wmi_roam_scan_stats_req *params)
+{
+	wmi_unified_t wmi_handle = (wmi_unified_t) wmi_hdl;
+
+	if (wmi_handle->ops->send_roam_scan_stats_cmd)
+		return wmi_handle->ops->send_roam_scan_stats_cmd(wmi_handle,
+								 params);
+
+	return QDF_STATUS_E_FAILURE;
+}
+
 QDF_STATUS wmi_unified_offload_11k_cmd(void *wmi_hdl,
 				struct wmi_11k_offload_params *params)
 {

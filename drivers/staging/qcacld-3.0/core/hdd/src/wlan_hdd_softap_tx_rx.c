@@ -275,8 +275,8 @@ static inline struct sk_buff *hdd_skb_orphan(hdd_adapter_t *pAdapter,
  *
  * Return: Always returns NETDEV_TX_OK
  */
-static int __hdd_softap_hard_start_xmit(struct sk_buff *skb,
-					struct net_device *dev)
+static netdev_tx_t __hdd_softap_hard_start_xmit(struct sk_buff *skb,
+						struct net_device *dev)
 {
 	sme_ac_enum_type ac = SME_AC_BE;
 	hdd_adapter_t *pAdapter = (hdd_adapter_t *) netdev_priv(dev);
@@ -469,9 +469,10 @@ drop_pkt_accounting:
  *
  * Return: Always returns NETDEV_TX_OK
  */
-int hdd_softap_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
+netdev_tx_t hdd_softap_hard_start_xmit(struct sk_buff *skb,
+				       struct net_device *dev)
 {
-	int ret;
+	netdev_tx_t ret;
 
 	cds_ssr_protect(__func__);
 	ret = __hdd_softap_hard_start_xmit(skb, dev);
@@ -804,11 +805,12 @@ QDF_STATUS hdd_softap_deregister_sta(hdd_adapter_t *pAdapter, uint8_t staId)
 
 	if (pAdapter->aStaInfo[staId].isUsed) {
 		if (hdd_ipa_uc_is_enabled(pHddCtx)) {
-			hdd_ipa_wlan_evt(pAdapter,
+			if (hdd_ipa_wlan_evt(pAdapter,
 					 pAdapter->aStaInfo[staId].ucSTAId,
 					 HDD_IPA_CLIENT_DISCONNECT,
 					 pAdapter->aStaInfo[staId].macAddrSTA.
-					 bytes);
+					 bytes))
+				hdd_err("WLAN_CLIENT_DISCONNECT event failed");
 		}
 		spin_lock_bh(&pAdapter->staInfo_lock);
 		qdf_mem_zero(&pAdapter->aStaInfo[staId],
@@ -1018,6 +1020,14 @@ QDF_STATUS hdd_softap_stop_bss(hdd_adapter_t *pAdapter)
 	if (pHddCtx->config->disable_indoor_channel) {
 		hdd_update_indoor_channel(pHddCtx, false);
 		sme_update_channel_list(pHddCtx->hHal);
+	}
+
+	if (hdd_ipa_is_enabled(pHddCtx)) {
+		if (hdd_ipa_wlan_evt(pAdapter,
+				WLAN_HDD_GET_AP_CTX_PTR(pAdapter)->uBCStaId,
+				HDD_IPA_AP_DISCONNECT,
+				pAdapter->dev->dev_addr))
+			hdd_err("WLAN_AP_DISCONNECT event failed");
 	}
 
 	return qdf_status;
