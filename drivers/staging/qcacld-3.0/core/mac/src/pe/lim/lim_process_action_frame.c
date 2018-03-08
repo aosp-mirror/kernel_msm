@@ -1648,6 +1648,7 @@ static void lim_process_action_vendor_specific(tpAniSirGlobal mac_ctx,
 		pe_debug("Received action frame of invalid len %d", frame_len);
 		return;
 	}
+
 	if (session)
 		session_id = session->smeSessionId;
 	/* Check if it is a P2P or DPP public action frame. */

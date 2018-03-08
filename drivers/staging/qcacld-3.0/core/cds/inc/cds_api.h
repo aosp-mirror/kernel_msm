@@ -253,7 +253,7 @@ if (cds_is_load_or_unload_in_progress() || cds_is_driver_recovering() ||
 */
 static inline bool cds_is_fw_down(void)
 {
-return pld_is_fw_down();
+	return pld_is_fw_down();
 }
 
 /**
@@ -263,9 +263,9 @@ return pld_is_fw_down();
 */
 static inline bool cds_is_target_ready(void)
 {
-enum cds_driver_state state = cds_get_driver_state();
+	enum cds_driver_state state = cds_get_driver_state();
 
-return __CDS_IS_DRIVER_STATE(state, CDS_DRIVER_STATE_FW_READY);
+	return __CDS_IS_DRIVER_STATE(state, CDS_DRIVER_STATE_FW_READY);
 }
 
 /**
@@ -541,9 +541,9 @@ void cds_print_htc_credit_history(uint32_t count, qdf_abstract_print * print,
  * This API checks if SMMU S1 translation is enabled in
  * platform driver or not and sets it accordingly in driver.
  *
- * Return: none
+ * Return: QDF_STATUS
  */
-void cds_smmu_mem_map_setup(qdf_device_t osdev);
+QDF_STATUS cds_smmu_mem_map_setup(qdf_device_t osdev);
 
 /**
  * cds_smmu_map_unmap() - Map / Unmap DMA buffer to IPA UC

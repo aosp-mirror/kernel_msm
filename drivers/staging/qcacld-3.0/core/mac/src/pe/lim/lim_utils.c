@@ -560,7 +560,7 @@ void lim_deactivate_timers(tpAniSirGlobal mac_ctx)
 	if (tx_timer_running(&lim_timer->gLimJoinFailureTimer)) {
 		pe_err("Join failure timer running call the timeout API");
 		/* Cleanup as if join timer expired */
-		lim_process_join_failure_timeout(mac_ctx);
+		lim_timer_handler(mac_ctx, SIR_LIM_JOIN_FAIL_TIMEOUT);
 	}
 	/* Deactivate Join failure timer. */
 	tx_timer_deactivate(&lim_timer->gLimJoinFailureTimer);
@@ -575,7 +575,7 @@ void lim_deactivate_timers(tpAniSirGlobal mac_ctx)
 	if (tx_timer_running(&lim_timer->gLimAssocFailureTimer)) {
 		pe_err("Assoc failure timer running call the timeout API");
 		/* Cleanup as if assoc timer expired */
-		lim_process_assoc_failure_timeout(mac_ctx, LIM_ASSOC);
+		lim_assoc_failure_timer_handler(mac_ctx, LIM_ASSOC);
 	}
 	/* Deactivate Association failure timer. */
 	tx_timer_deactivate(&lim_timer->gLimAssocFailureTimer);
@@ -583,7 +583,7 @@ void lim_deactivate_timers(tpAniSirGlobal mac_ctx)
 	if (tx_timer_running(&mac_ctx->lim.limTimers.gLimAuthFailureTimer)) {
 		pe_err("Auth failure timer running call the timeout API");
 		/* Cleanup as if auth timer expired */
-		lim_process_auth_failure_timeout(mac_ctx);
+		lim_timer_handler(mac_ctx, SIR_LIM_AUTH_FAIL_TIMEOUT);
 	}
 	/* Deactivate Authentication failure timer. */
 	tx_timer_deactivate(&lim_timer->gLimAuthFailureTimer);
@@ -4320,6 +4320,7 @@ void lim_update_sta_run_time_ht_switch_chnl_params(tpAniSirGlobal pMac,
 						   tpPESession psessionEntry)
 {
 	uint8_t center_freq = 0;
+	enum phy_ch_width ch_width = CH_WIDTH_20MHZ;
 
 	/* If self capability is set to '20Mhz only', then do not change the CB mode. */
 	if (!lim_get_ht_capability
@@ -4371,12 +4372,15 @@ void lim_update_sta_run_time_ht_switch_chnl_params(tpAniSirGlobal pMac,
 			(uint8_t) pHTInfo->recommendedTxWidthSet;
 		if (eHT_CHANNEL_WIDTH_40MHZ ==
 		    psessionEntry->htRecommendedTxWidthSet) {
+			ch_width = CH_WIDTH_40MHZ;
 			if (PHY_DOUBLE_CHANNEL_LOW_PRIMARY ==
 					pHTInfo->secondaryChannelOffset)
 				center_freq = pHTInfo->primaryChannel + 2;
 			else if (PHY_DOUBLE_CHANNEL_HIGH_PRIMARY ==
 					pHTInfo->secondaryChannelOffset)
 				center_freq = pHTInfo->primaryChannel - 2;
+			else
+				ch_width = CH_WIDTH_20MHZ;
 		}
 
 		/* notify HAL */
@@ -4391,12 +4395,11 @@ void lim_update_sta_run_time_ht_switch_chnl_params(tpAniSirGlobal pMac,
 		pMac->lim.gpchangeChannelCallback = NULL;
 		pMac->lim.gpchangeChannelData = NULL;
 
-		lim_send_switch_chnl_params(pMac, (uint8_t) pHTInfo->primaryChannel,
-					    center_freq, 0,
-					    psessionEntry->htRecommendedTxWidthSet,
-					    psessionEntry->maxTxPower,
-					    psessionEntry->peSessionId,
-					    true);
+		lim_send_switch_chnl_params(pMac,
+				(uint8_t)pHTInfo->primaryChannel,
+				center_freq, 0, ch_width,
+				psessionEntry->maxTxPower,
+				psessionEntry->peSessionId, true);
 
 		/* In case of IBSS, if STA should update HT Info IE in its beacons. */
 		if (LIM_IS_IBSS_ROLE(psessionEntry)) {
@@ -5294,7 +5297,6 @@ tSirNwType lim_get_nw_type(tpAniSirGlobal pMac, uint8_t channelNum, uint32_t typ
 				}
 			}
 			if (pBeacon->extendedRatesPresent) {
-				pe_debug("Beacon, nwtype: G");
 				nwType = eSIR_11G_NW_TYPE;
 			} else if (pBeacon->HTInfo.present ||
 				   IS_BSS_VHT_CAPABLE(pBeacon->VHTCaps)) {
@@ -5302,7 +5304,6 @@ tSirNwType lim_get_nw_type(tpAniSirGlobal pMac, uint8_t channelNum, uint32_t typ
 			}
 		} else {
 			/* 11a packet */
-			pe_debug("Beacon, nwtype: A");
 			nwType = eSIR_11A_NW_TYPE;
 		}
 	}

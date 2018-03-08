@@ -404,6 +404,10 @@ static int __hdd_hostapd_stop(struct net_device *dev)
 	hdd_stop_adapter(hdd_ctx, adapter, true);
 
 	clear_bit(DEVICE_IFACE_OPENED, &adapter->event_flags);
+
+	if (!hdd_is_cli_iface_up(hdd_ctx))
+		sme_scan_flush_result(hdd_ctx->hHal);
+
 	/* Stop all tx queues */
 	hdd_info("Disabling queues");
 	wlan_hdd_netif_queue_control(adapter,
@@ -2680,11 +2684,11 @@ int hdd_softap_unpack_ie(tHalHandle halHandle,
 			 bool *pMFPRequired,
 			 uint16_t gen_ie_len, uint8_t *gen_ie)
 {
-	tDot11fIERSN dot11RSNIE;
-	tDot11fIEWPA dot11WPAIE;
-
+	uint32_t ret;
 	uint8_t *pRsnIe;
 	uint16_t RSNIeLen;
+	tDot11fIERSN dot11RSNIE;
+	tDot11fIEWPA dot11WPAIE;
 
 	if (NULL == halHandle) {
 		hdd_err("Error haHandle returned NULL");
@@ -2707,8 +2711,13 @@ int hdd_softap_unpack_ie(tHalHandle halHandle,
 		RSNIeLen = gen_ie_len - 2;
 		/* Unpack the RSN IE */
 		memset(&dot11RSNIE, 0, sizeof(tDot11fIERSN));
-		dot11f_unpack_ie_rsn((tpAniSirGlobal) halHandle,
-				     pRsnIe, RSNIeLen, &dot11RSNIE, false);
+		ret = dot11f_unpack_ie_rsn((tpAniSirGlobal) halHandle,
+					   pRsnIe, RSNIeLen, &dot11RSNIE,
+					   false);
+		if (DOT11F_FAILED(ret)) {
+			hdd_err("unpack failed, ret: 0x%x", ret);
+			return -EINVAL;
+		}
 		/* Copy out the encryption and authentication types */
 		hdd_debug("pairwise cipher suite count: %d",
 		       dot11RSNIE.pwise_cipher_suite_count);
@@ -2743,8 +2752,12 @@ int hdd_softap_unpack_ie(tHalHandle halHandle,
 		RSNIeLen = gen_ie_len - (2 + 4);
 		/* Unpack the WPA IE */
 		memset(&dot11WPAIE, 0, sizeof(tDot11fIEWPA));
-		dot11f_unpack_ie_wpa((tpAniSirGlobal) halHandle,
+		ret = dot11f_unpack_ie_wpa((tpAniSirGlobal) halHandle,
 				     pRsnIe, RSNIeLen, &dot11WPAIE, false);
+		if (DOT11F_FAILED(ret)) {
+			hdd_err("unpack failed, ret: 0x%x", ret);
+			return -EINVAL;
+		}
 		/* Copy out the encryption and authentication types */
 		hdd_debug("WPA unicast cipher suite count: %d",
 		       dot11WPAIE.unicast_cipher_count);
@@ -6817,19 +6830,24 @@ static bool wlan_hdd_rate_is_11g(u8 rate)
  */
 static bool wlan_hdd_get_sap_obss(hdd_adapter_t *pHostapdAdapter)
 {
-	uint8_t ht_cap_ie[DOT11F_IE_HTCAPS_MAX_LEN];
+	uint32_t ret;
+	uint8_t *ie = NULL;
 	tDot11fIEHTCaps dot11_ht_cap_ie = {0};
+	uint8_t ht_cap_ie[DOT11F_IE_HTCAPS_MAX_LEN];
 	hdd_context_t *hdd_ctx = WLAN_HDD_GET_CTX(pHostapdAdapter);
 	beacon_data_t *beacon = pHostapdAdapter->sessionCtx.ap.beacon;
-	uint8_t *ie = NULL;
 
 	ie = wlan_hdd_cfg80211_get_ie_ptr(beacon->tail, beacon->tail_len,
 						WLAN_EID_HT_CAPABILITY);
 	if (ie && ie[1]) {
 		qdf_mem_copy(ht_cap_ie, &ie[2], DOT11F_IE_HTCAPS_MAX_LEN);
-		dot11f_unpack_ie_ht_caps((tpAniSirGlobal)hdd_ctx->hHal,
-					ht_cap_ie, ie[1], &dot11_ht_cap_ie,
-					false);
+		ret = dot11f_unpack_ie_ht_caps((tpAniSirGlobal)hdd_ctx->hHal,
+					       ht_cap_ie, ie[1],
+					       &dot11_ht_cap_ie, false);
+		if (DOT11F_FAILED(ret)) {
+			hdd_err("unpack failed, ret: 0x%x", ret);
+			return false;
+		}
 		return dot11_ht_cap_ie.supportedChannelWidthSet;
 	}
 
@@ -7902,6 +7920,7 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 	enum dfs_mode mode;
 	bool disable_fw_tdls_state = false;
 	uint8_t ignore_cac = 0;
+	hdd_adapter_t *sta_adapter;
 
 	ENTER();
 
@@ -7916,6 +7935,30 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 			ret = -EINVAL;
 			goto ret_status;
 		}
+	}
+
+	/*
+	 * For STA+SAP concurrency support from GUI, first STA connection gets
+	 * triggered and while it is in progress, SAP start also comes up.
+	 * Once STA association is successful, STA connect event is sent to
+	 * kernel which gets queued in kernel workqueue and supplicant won't
+	 * process M1 received from AP and send M2 until this NL80211_CONNECT
+	 * event is received. Workqueue is not scheduled as RTNL lock is already
+	 * taken by hostapd thread which has issued start_bss command to driver.
+	 * Driver cannot complete start_bss as the pending command at the head
+	 * of the SME command pending list is hw_mode_update for STA session
+	 * which cannot be processed as SME is in WAITforKey state for STA
+	 * interface. The start_bss command for SAP interface is queued behind
+	 * the hw_mode_update command and so it cannot be processed until
+	 * hw_mode_update command is processed. This is causing a deadlock so
+	 * disconnect the STA interface first if connection or key exchange is
+	 * in progress and then start SAP interface.
+	 */
+	sta_adapter = hdd_get_sta_connection_in_progress(pHddCtx);
+	if (sta_adapter) {
+		hdd_debug("Disconnecting STA with session id: %d",
+			  sta_adapter->sessionId);
+		wlan_hdd_disconnect(sta_adapter, eCSR_DISCONNECT_REASON_DEAUTH);
 	}
 
 	sme_config = qdf_mem_malloc(sizeof(tSmeConfigParams));
@@ -8395,10 +8438,12 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 			pConfig->ch_width_orig = CH_WIDTH_20MHZ;
 	}
 
-	if (cds_is_force_scc() &&
+	if (!wma_is_hw_dbs_capable() &&
+			(pHostapdAdapter->device_mode == QDF_SAP_MODE) &&
+			cds_is_force_scc() &&
 			cds_mode_specific_get_channel(CDS_STA_MODE)) {
 		pConfig->channel = cds_mode_specific_get_channel(CDS_STA_MODE);
-		hdd_debug("force SCC is enabled and STA is active, override the SAP channel to %d",
+		hdd_debug("DBS is disabled, force SCC is enabled and STA is active, override the SAP channel to %d",
 				pConfig->channel);
 	} else if (wlan_hdd_setup_driver_overrides(pHostapdAdapter)) {
 		ret = -EINVAL;
@@ -8719,6 +8764,10 @@ static int __wlan_hdd_cfg80211_stop_ap(struct wiphy *wiphy,
 
 			if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
 				hdd_err("qdf wait for single_event failed!!");
+
+				if (hdd_ipa_uc_is_enabled(pHddCtx))
+					hdd_ipa_clean_adapter_iface(pAdapter);
+
 				QDF_ASSERT(0);
 			}
 		}

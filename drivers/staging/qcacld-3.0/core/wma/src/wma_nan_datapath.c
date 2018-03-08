@@ -469,6 +469,19 @@ static int wma_ndp_indication_event_handler(void *handle, uint8_t *event_info,
 	fixed_params =
 		(wmi_ndp_indication_event_fixed_param *)event->fixed_param;
 
+	if (fixed_params->ndp_cfg_len > event->num_ndp_cfg) {
+		WMA_LOGE("FW message ndp cfg length %d larger than TLV hdr %d",
+			 fixed_params->ndp_cfg_len, event->num_ndp_cfg);
+		return -EINVAL;
+	}
+
+	if (fixed_params->ndp_app_info_len > event->num_ndp_app_info) {
+		WMA_LOGE("FW message ndp app info length %d more than TLV hdr %d",
+			 fixed_params->ndp_app_info_len,
+			 event->num_ndp_app_info);
+		return -EINVAL;
+	}
+
 	ind_event.vdev_id = fixed_params->vdev_id;
 	ind_event.service_instance_id = fixed_params->service_instance_id;
 	ind_event.ndp_instance_id = fixed_params->ndp_instance_id;
@@ -910,7 +923,7 @@ static int wma_ndp_sch_update_event_handler(void *handle, uint8_t *evinfo,
 
 	buff_len = sizeof(uint32_t) * sch_update_ev.num_ndp_instances;
 	sch_update_ev.ndp_instances = qdf_mem_malloc(buff_len);
-	if(!sch_update_ev.ndp_instances) {
+	if (!sch_update_ev.ndp_instances) {
 		WMA_LOGE(FL("malloc failed"));
 		return -ENOMEM;
 	}
