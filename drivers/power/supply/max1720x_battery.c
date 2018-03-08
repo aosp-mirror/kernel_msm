@@ -346,13 +346,13 @@ static inline int reg_to_resistance_micro_ohms(s16 val, u16 rsense)
 static inline int reg_to_cycles(s16 val)
 {
 	/* LSB: 16% of one cycle */
-	return val * 16 / 100;
+	return DIV_ROUND_CLOSEST((int) val * 16, 100);
 }
 
 static inline int reg_to_seconds(s16 val)
 {
 	/* LSB: 5.625 seconds */
-	return val * 5625 / 1000;
+	return DIV_ROUND_CLOSEST((int) val * 5625, 1000);
 }
 
 static void max1720x_read_log_write_status(struct max1720x_chip *chip,
@@ -686,10 +686,6 @@ static int max1720x_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
 		val->intval = max1720x_get_battery_soc(chip);
-		break;
-	case POWER_SUPPLY_PROP_CAPACITY_RAW:
-		REGMAP_READ(map, MAX1720X_DesignCap, data);
-		val->intval = reg_to_percentage(data);
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
 		REGMAP_READ(map, MAX1720X_RepCap, data);
