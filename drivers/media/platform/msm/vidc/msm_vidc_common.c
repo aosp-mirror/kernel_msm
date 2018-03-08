@@ -2596,11 +2596,6 @@ static int msm_vidc_deinit_core(struct msm_vidc_inst *inst)
 				core->id, core->state);
 		goto core_already_uninited;
 	}
-	mutex_unlock(&core->lock);
-
-	msm_comm_scale_clocks_and_bus(inst);
-
-	mutex_lock(&core->lock);
 
 	if (!core->resources.never_unload_fw) {
 		cancel_delayed_work(&core->fw_unload_work);

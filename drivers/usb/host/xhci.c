@@ -1014,7 +1014,7 @@ int xhci_resume(struct xhci_hcd *xhci, bool hibernated)
 	int			retval = 0;
 	bool			comp_timer_running = false;
 
-	if (!hcd->state)
+	if (!hcd->state || !xhci->shared_hcd)
 		return 0;
 
 	/* Wait a bit if either of the roothubs need to settle from the
