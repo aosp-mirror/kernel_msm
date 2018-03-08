@@ -33,7 +33,7 @@
 		reg = <0x43>;
 		cirrus,boost-ind-nanohenry = <1000>;
 		cirrus,boost-cap-microfarad = <4>;
-		cirrus,boost-ipk-milliamp = <3500>;
+		cirrus,boost-ipk-milliamp = <4500>;
 		status = "ok";
 	};
 };
