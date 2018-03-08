@@ -41,9 +41,11 @@ struct chg_profile {
 
 struct chg_drv {
 	struct device *device;
-	struct power_supply *batt_psy;
+	struct power_supply *chg_psy;
+	const char *chg_psy_name;
 	struct power_supply *usb_psy;
 	struct power_supply *wlc_psy;
+	const char *wlc_psy_name;
 	struct chg_profile chg_profile;
 	struct notifier_block psy_nb;
 
@@ -74,9 +76,10 @@ static int psy_changed(struct notifier_block *nb,
 		return NOTIFY_OK;
 
 	if (action == PSY_EVENT_PROP_CHANGED &&
-	    (!strcmp(psy->desc->name, "battery") ||
+	    (!strcmp(psy->desc->name, chg_drv->chg_psy_name) ||
 	     !strcmp(psy->desc->name, "usb") ||
-	     !strcmp(psy->desc->name, "wireless"))) {
+	     (chg_drv->wlc_psy_name &&
+	      !strcmp(psy->desc->name, chg_drv->wlc_psy_name)))) {
 		cancel_delayed_work(&chg_drv->chg_work);
 		schedule_delayed_work(&chg_drv->chg_work, 0);
 	}
@@ -135,14 +138,14 @@ static inline int psy_set_prop(struct power_supply *psy,
 	return 0;
 }
 
-static void pr_info_states(struct power_supply *batt_psy,
+static void pr_info_states(struct power_supply *chg_psy,
 			   struct power_supply *usb_psy,
 			   struct power_supply *wlc_psy,
 			   int temp, int ibatt, int vbatt, int soc,
 			   int usb_present, int wlc_online)
 {
 	int usb_type = PSY_GET_PROP(usb_psy, POWER_SUPPLY_PROP_REAL_TYPE);
-	int chg_type = PSY_GET_PROP(batt_psy, POWER_SUPPLY_PROP_CHARGE_TYPE);
+	int chg_type = PSY_GET_PROP(chg_psy, POWER_SUPPLY_PROP_CHARGE_TYPE);
 
 	pr_info("l=%d v=%d c=%d t=%d s=%s usb=%d wlc=%d\n",
 		soc, vbatt / 1000, ibatt / 1000, temp, psy_chgt_str[chg_type],
@@ -180,11 +183,11 @@ static void chg_work(struct work_struct *work)
 	    container_of(work, struct chg_drv, chg_work.work);
 	struct chg_profile *profile = &chg_drv->chg_profile;
 	union power_supply_propval val;
-	struct power_supply *batt_psy = chg_drv->batt_psy;
+	struct power_supply *chg_psy = chg_drv->chg_psy;
 	struct power_supply *usb_psy = chg_drv->usb_psy;
 	struct power_supply *wlc_psy = chg_drv->wlc_psy;
 	int temp, ibatt, vbatt, soc;
-	int usb_present, wlc_online;
+	int usb_present, wlc_online = 0;
 	int vbatt_idx = 0, temp_idx = 0, fv_uv, cc_max, cc_next_max;
 	int batt_status, cv_delta;
 	bool rerun_work = false;
@@ -196,19 +199,20 @@ static void chg_work(struct work_struct *work)
 		__pm_stay_awake(&chg_drv->chg_ws);
 	}
 
-	temp = PSY_GET_PROP(batt_psy, POWER_SUPPLY_PROP_TEMP);
-	ibatt = PSY_GET_PROP(batt_psy, POWER_SUPPLY_PROP_CURRENT_NOW);
-	vbatt = PSY_GET_PROP(batt_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW);
-	soc = PSY_GET_PROP(batt_psy, POWER_SUPPLY_PROP_CAPACITY);
+	temp = PSY_GET_PROP(chg_psy, POWER_SUPPLY_PROP_TEMP);
+	ibatt = PSY_GET_PROP(chg_psy, POWER_SUPPLY_PROP_CURRENT_NOW);
+	vbatt = PSY_GET_PROP(chg_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW);
+	soc = PSY_GET_PROP(chg_psy, POWER_SUPPLY_PROP_CAPACITY);
 
 	usb_present = PSY_GET_PROP(usb_psy, POWER_SUPPLY_PROP_PRESENT);
-	wlc_online = PSY_GET_PROP(wlc_psy, POWER_SUPPLY_PROP_ONLINE);
+	if (wlc_psy)
+		wlc_online = PSY_GET_PROP(wlc_psy, POWER_SUPPLY_PROP_ONLINE);
 
 	if (temp == -EINVAL || ibatt == -EINVAL || vbatt == -EINVAL ||
 	    usb_present == -EINVAL || wlc_online == -EINVAL)
 		goto error_rerun;
 
-	pr_info_states(batt_psy, usb_psy, wlc_psy,
+	pr_info_states(chg_psy, usb_psy, wlc_psy,
 		       temp, ibatt, vbatt, soc, usb_present, wlc_online);
 
 	if (!usb_present && !wlc_online)
@@ -218,7 +222,7 @@ static void chg_work(struct work_struct *work)
 	    temp > profile->temp_limits[profile->temp_nb_limits - 1]) {
 		if (!chg_drv->stop_charging) {
 			pr_info("batt. temp. off limits, disabling charging\n");
-			PSY_SET_PROP(batt_psy,
+			PSY_SET_PROP(chg_psy,
 				     POWER_SUPPLY_PROP_INPUT_SUSPEND, 1);
 			chg_drv->stop_charging = true;
 			chg_drv->temp_idx = -1;
@@ -232,7 +236,7 @@ static void chg_work(struct work_struct *work)
 		goto handle_rerun;
 	} else if (chg_drv->stop_charging) {
 		pr_info("batt. temp. ok, enabling charging\n");
-		PSY_SET_PROP(batt_psy, POWER_SUPPLY_PROP_INPUT_SUSPEND, 0);
+		PSY_SET_PROP(chg_psy, POWER_SUPPLY_PROP_INPUT_SUSPEND, 0);
 		chg_drv->stop_charging = false;
 	}
 
@@ -286,11 +290,11 @@ static void chg_work(struct work_struct *work)
 			chg_drv->vbatt_idx, vbatt_idx,
 			fv_uv, cc_max, cc_next_max);
 
-		if (PSY_SET_PROP(batt_psy,
+		if (PSY_SET_PROP(chg_psy,
 				 POWER_SUPPLY_PROP_VOLTAGE_MAX, fv_uv))
 			goto error_rerun;
 
-		if (PSY_SET_PROP(batt_psy,
+		if (PSY_SET_PROP(chg_psy,
 				 POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
 				 cc_max))
 			goto error_rerun;
@@ -300,7 +304,7 @@ static void chg_work(struct work_struct *work)
 	}
 
 check_rerun:
-	batt_status = PSY_GET_PROP(batt_psy, POWER_SUPPLY_PROP_STATUS);
+	batt_status = PSY_GET_PROP(chg_psy, POWER_SUPPLY_PROP_STATUS);
 
 	switch (batt_status) {
 	case POWER_SUPPLY_STATUS_DISCHARGING:
@@ -487,22 +491,28 @@ static int google_charger_probe(struct platform_device *pdev)
 {
 	int ret = 0;
 	struct chg_drv *chg_drv;
-	struct power_supply *batt_psy, *usb_psy, *wlc_psy;
-	const char *chg_power_supply;
+	struct power_supply *chg_psy, *usb_psy, *wlc_psy = NULL;
+	const char *chg_psy_name, *wlc_psy_name = NULL;
 
 	ret = of_property_read_string(pdev->dev.of_node,
 				      "google,chg-power-supply",
-				      &chg_power_supply);
+				      &chg_psy_name);
 	if (ret != 0) {
 		pr_err("cannot read google,chg-power-supply, ret=%d\n", ret);
 		return ret;
 	}
 
-	batt_psy = power_supply_get_by_name(chg_power_supply);
-	if (!batt_psy) {
+	ret = of_property_read_string(pdev->dev.of_node,
+				      "google,wlc-power-supply",
+				      &wlc_psy_name);
+	if (ret != 0)
+		pr_warn("google,wlc-power-supply not defined\n");
+
+	chg_psy = power_supply_get_by_name(chg_psy_name);
+	if (!chg_psy) {
 		dev_info(&pdev->dev,
 			 "failed to get \"%s\" power supply\n",
-			 chg_power_supply);
+			 chg_psy_name);
 		return -EPROBE_DEFER;
 	}
 
@@ -512,11 +522,14 @@ static int google_charger_probe(struct platform_device *pdev)
 		return -EPROBE_DEFER;
 	}
 
-	wlc_psy = power_supply_get_by_name("wireless");
-	if (!wlc_psy) {
-		dev_info(&pdev->dev,
-			 "failed to get \"wireless\" power supply\n");
-		return -EPROBE_DEFER;
+	if (wlc_psy_name) {
+		wlc_psy = power_supply_get_by_name(wlc_psy_name);
+		if (!wlc_psy) {
+			dev_info(&pdev->dev,
+				 "failed to get \"%s\" power supply\n",
+				 wlc_psy_name);
+			return -EPROBE_DEFER;
+		}
 	}
 
 	chg_drv = devm_kzalloc(&pdev->dev, sizeof(*chg_drv), GFP_KERNEL);
@@ -524,9 +537,11 @@ static int google_charger_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	chg_drv->device = &pdev->dev;
-	chg_drv->batt_psy = batt_psy;
+	chg_drv->chg_psy = chg_psy;
+	chg_drv->chg_psy_name = chg_psy_name;
 	chg_drv->usb_psy = usb_psy;
 	chg_drv->wlc_psy = wlc_psy;
+	chg_drv->wlc_psy_name = wlc_psy_name;
 
 	ret = chg_init_chg_profile(chg_drv);
 	if (ret < 0) {
