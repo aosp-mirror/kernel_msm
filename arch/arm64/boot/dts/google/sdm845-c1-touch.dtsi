@@ -50,10 +50,8 @@
 		sec,irq_gpio = <&tlmm 125 0>;	/* required */
 		//sec,irq_type = ?;		/* optional - IRQF flags - default is IRQF_TRIGGER_LOW | IRQF_ONESHOT */
 		sec,max_coords = <1440 2880>;	/* optional - Max values, like 4095? */
-		//sec,firmware_name = "s6sy761.fw"; /* optional, can be specified/indexed by value of tsp-id_gpio? */
+		sec,firmware_name = "s6sy761.fw";
 		sec,regulator_dvdd = "pm8998_l14";	/* required */
 		sec,regulator_avdd = "pm8998_l19";
-
-		sec,bringup = <1>;		/* optional, 1=no fw update, 2=transfer w/o update */
 	};
 };
