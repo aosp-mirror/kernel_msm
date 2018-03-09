@@ -27,6 +27,7 @@
 #include <linux/pmic-voter.h>
 #include "smb5-reg.h"
 #include "smb5-lib.h"
+#include "schgm-flash.h"
 
 static struct smb_params smb5_pmi632_params = {
 	.fcc			= {
@@ -157,7 +158,8 @@ struct smb_dt_props {
 	int			chg_inhibit_thr_mv;
 	bool			no_battery;
 	bool			hvdcp_disable;
-	bool			auto_recharge_soc;
+	int			auto_recharge_soc;
+	int			auto_recharge_vbat_mv;
 	int			wd_bark_time;
 	int			batt_profile_fcc_ua;
 	int			batt_profile_fv_uv;
@@ -328,8 +330,23 @@ static int smb5_parse_dt(struct smb5 *chip)
 		return -EINVAL;
 	}
 
-	chip->dt.auto_recharge_soc = of_property_read_bool(node,
-						"qcom,auto-recharge-soc");
+	chip->dt.auto_recharge_soc = -EINVAL;
+	rc = of_property_read_u32(node, "qcom,auto-recharge-soc",
+				&chip->dt.auto_recharge_soc);
+	if (!rc && (chip->dt.auto_recharge_soc < 0 ||
+			chip->dt.auto_recharge_soc > 100)) {
+		pr_err("qcom,auto-recharge-soc is incorrect\n");
+		return -EINVAL;
+	}
+	chg->auto_recharge_soc = chip->dt.auto_recharge_soc;
+
+	chip->dt.auto_recharge_vbat_mv = -EINVAL;
+	rc = of_property_read_u32(node, "qcom,auto-recharge-vbat-mv",
+				&chip->dt.auto_recharge_vbat_mv);
+	if (!rc && (chip->dt.auto_recharge_vbat_mv < 0)) {
+		pr_err("qcom,auto-recharge-vbat-mv is incorrect\n");
+		return -EINVAL;
+	}
 
 	chg->dcp_icl_ua = chip->dt.usb_icl_ua;
 
@@ -371,6 +388,7 @@ static enum power_supply_property smb5_usb_props[] = {
 	POWER_SUPPLY_PROP_SDP_CURRENT_MAX,
 	POWER_SUPPLY_PROP_CONNECTOR_TYPE,
 	POWER_SUPPLY_PROP_VOLTAGE_MAX,
+	POWER_SUPPLY_PROP_SCOPE,
 };
 
 static int smb5_usb_get_prop(struct power_supply *psy,
@@ -379,6 +397,7 @@ static int smb5_usb_get_prop(struct power_supply *psy,
 {
 	struct smb5 *chip = power_supply_get_drvdata(psy);
 	struct smb_charger *chg = &chip->chg;
+	union power_supply_propval pval;
 	int rc = 0;
 
 	switch (psp) {
@@ -475,6 +494,15 @@ static int smb5_usb_get_prop(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CONNECTOR_TYPE:
 		val->intval = chg->connector_type;
+		break;
+	case POWER_SUPPLY_PROP_SCOPE:
+		val->intval = POWER_SUPPLY_SCOPE_UNKNOWN;
+		rc = smblib_get_prop_usb_present(chg, &pval);
+		if (rc < 0)
+			break;
+		val->intval = pval.intval ? POWER_SUPPLY_SCOPE_DEVICE
+				: chg->otg_present ? POWER_SUPPLY_SCOPE_SYSTEM
+						: POWER_SUPPLY_SCOPE_UNKNOWN;
 		break;
 	default:
 		pr_err("get prop %d is not supported in usb\n", psp);
@@ -701,6 +729,8 @@ static enum power_supply_property smb5_usb_main_props[] = {
 	POWER_SUPPLY_PROP_INPUT_VOLTAGE_SETTLED,
 	POWER_SUPPLY_PROP_FCC_DELTA,
 	POWER_SUPPLY_PROP_CURRENT_MAX,
+	POWER_SUPPLY_PROP_FLASH_ACTIVE,
+	POWER_SUPPLY_PROP_FLASH_TRIGGER,
 };
 
 static int smb5_usb_main_get_prop(struct power_supply *psy,
@@ -734,6 +764,12 @@ static int smb5_usb_main_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
 		rc = smblib_get_icl_current(chg, &val->intval);
 		break;
+	case POWER_SUPPLY_PROP_FLASH_ACTIVE:
+		val->intval = chg->flash_active;
+		break;
+	case POWER_SUPPLY_PROP_FLASH_TRIGGER:
+		rc = schgm_flash_get_vreg_ok(chg, &val->intval);
+		break;
 	default:
 		pr_debug("get prop %d is not supported in usb-main\n", psp);
 		rc = -EINVAL;
@@ -764,6 +800,9 @@ static int smb5_usb_main_set_prop(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
 		rc = smblib_set_icl_current(chg, val->intval);
+		break;
+	case POWER_SUPPLY_PROP_FLASH_ACTIVE:
+		chg->flash_active = val->intval;
 		break;
 	default:
 		pr_err("set prop %d is not supported\n", psp);
@@ -933,6 +972,7 @@ static enum power_supply_property smb5_batt_props[] = {
 	POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT_MAX,
 	POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT,
 	POWER_SUPPLY_PROP_CHARGE_COUNTER,
+	POWER_SUPPLY_PROP_RECHARGE_SOC,
 };
 
 static int smb5_batt_get_prop(struct power_supply *psy,
@@ -1021,6 +1061,9 @@ static int smb5_batt_get_prop(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
 		rc = smblib_get_prop_batt_charge_counter(chg, val);
+		break;
+	case POWER_SUPPLY_PROP_RECHARGE_SOC:
+		val->intval = chg->auto_recharge_soc;
 		break;
 	default:
 		pr_err("batt power supply prop %d not supported\n", psp);
@@ -1367,6 +1410,13 @@ static int smb5_init_hw(struct smb5 *chip)
 					: POWER_SUPPLY_CONNECTOR_TYPEC;
 	pr_debug("Connector type=%s\n", type ? "Micro USB" : "TypeC");
 
+	/*
+	 * PMI632 based hw init:
+	 * - Initialize flash module for PMI632
+	 */
+	if (chg->smb_version == PMI632_SUBTYPE)
+		schgm_flash_init(chg);
+
 	smblib_rerun_apsd_if_required(chg);
 
 	/* vote 0mA on usb_icl for non battery platforms */
@@ -1525,13 +1575,64 @@ static int smb5_init_hw(struct smb5 *chip)
 		return rc;
 	}
 
-	rc = smblib_masked_write(chg, CHGR_CFG2_REG,
-			SOC_BASED_RECHG_BIT,
-			chip->dt.auto_recharge_soc ? SOC_BASED_RECHG_BIT : 0);
+	rc = smblib_masked_write(chg, CHGR_CFG2_REG, RECHG_MASK,
+				(chip->dt.auto_recharge_vbat_mv != -EINVAL) ?
+				VBAT_BASED_RECHG_BIT : 0);
 	if (rc < 0) {
-		dev_err(chg->dev, "Couldn't configure FG_UPDATE_CFG2_SEL_REG rc=%d\n",
+		dev_err(chg->dev, "Couldn't configure VBAT-rechg CHG_CFG2_REG rc=%d\n",
 			rc);
 		return rc;
+	}
+
+	/* program the auto-recharge VBAT threshold */
+	if (chip->dt.auto_recharge_vbat_mv != -EINVAL) {
+		u32 temp = VBAT_TO_VRAW_ADC(chip->dt.auto_recharge_vbat_mv);
+
+		temp = ((temp & 0xFF00) >> 8) | ((temp & 0xFF) << 8);
+		rc = smblib_batch_write(chg,
+			CHGR_ADC_RECHARGE_THRESHOLD_MSB_REG, (u8 *)&temp, 2);
+		if (rc < 0) {
+			dev_err(chg->dev, "Couldn't configure ADC_RECHARGE_THRESHOLD REG rc=%d\n",
+				rc);
+			return rc;
+		}
+		/* Program the sample count for VBAT based recharge to 3 */
+		rc = smblib_masked_write(chg, CHGR_NO_SAMPLE_TERM_RCHG_CFG_REG,
+					NO_OF_SAMPLE_FOR_RCHG,
+					2 << NO_OF_SAMPLE_FOR_RCHG_SHIFT);
+		if (rc < 0) {
+			dev_err(chg->dev, "Couldn't configure CHGR_NO_SAMPLE_FOR_TERM_RCHG_CFG rc=%d\n",
+				rc);
+			return rc;
+		}
+	}
+
+	rc = smblib_masked_write(chg, CHGR_CFG2_REG, RECHG_MASK,
+				(chip->dt.auto_recharge_soc != -EINVAL) ?
+				SOC_BASED_RECHG_BIT : VBAT_BASED_RECHG_BIT);
+	if (rc < 0) {
+		dev_err(chg->dev, "Couldn't configure SOC-rechg CHG_CFG2_REG rc=%d\n",
+			rc);
+		return rc;
+	}
+
+	/* program the auto-recharge threshold */
+	if (chip->dt.auto_recharge_soc != -EINVAL) {
+		rc = smblib_write(chg, CHARGE_RCHG_SOC_THRESHOLD_CFG_REG,
+				(chip->dt.auto_recharge_soc * 255) / 100);
+		if (rc < 0) {
+			dev_err(chg->dev, "Couldn't configure CHG_RCHG_SOC_REG rc=%d\n",
+				rc);
+			return rc;
+		}
+		/* Program the sample count for SOC based recharge to 1 */
+		rc = smblib_masked_write(chg, CHGR_NO_SAMPLE_TERM_RCHG_CFG_REG,
+						NO_OF_SAMPLE_FOR_RCHG, 0);
+		if (rc < 0) {
+			dev_err(chg->dev, "Couldn't configure CHGR_NO_SAMPLE_FOR_TERM_RCHG_CFG rc=%d\n",
+				rc);
+			return rc;
+		}
 	}
 
 	if (chg->sw_jeita_enabled) {
@@ -1828,6 +1929,39 @@ static struct smb_irq_info smb5_irqs[] = {
 	[TEMP_CHANGE_SMB_IRQ] = {
 		.name		= "temp-change-smb",
 		.handler	= default_irq_handler,
+	},
+	/* FLASH */
+	[VREG_OK_IRQ] = {
+		.name		= "vreg-ok",
+		.handler	= schgm_flash_default_irq_handler,
+	},
+	[ILIM_S2_IRQ] = {
+		.name		= "ilim2-s2",
+		.handler	= schgm_flash_ilim2_irq_handler,
+	},
+	[ILIM_S1_IRQ] = {
+		.name		= "ilim1-s1",
+		.handler	= schgm_flash_default_irq_handler,
+	},
+	[VOUT_DOWN_IRQ] = {
+		.name		= "vout-down",
+		.handler	= schgm_flash_default_irq_handler,
+	},
+	[VOUT_UP_IRQ] = {
+		.name		= "vout-up",
+		.handler	= schgm_flash_default_irq_handler,
+	},
+	[FLASH_STATE_CHANGE_IRQ] = {
+		.name		= "flash-state-change",
+		.handler	= schgm_flash_state_change_irq_handler,
+	},
+	[TORCH_REQ_IRQ] = {
+		.name		= "torch-req",
+		.handler	= schgm_flash_default_irq_handler,
+	},
+	[FLASH_EN_IRQ] = {
+		.name		= "flash-en",
+		.handler	= schgm_flash_default_irq_handler,
 	},
 };
 

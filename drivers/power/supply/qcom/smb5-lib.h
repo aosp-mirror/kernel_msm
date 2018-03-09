@@ -70,6 +70,8 @@ enum print_reason {
 #define BOOST_BACK_STORM_COUNT	3
 #define WEAK_CHG_STORM_COUNT	8
 
+#define VBAT_TO_VRAW_ADC(v)		div_u64((u64)v * 1000000UL, 194637UL)
+
 enum smb_mode {
 	PARALLEL_MASTER = 0,
 	PARALLEL_SLAVE,
@@ -143,6 +145,15 @@ enum smb_irq_index {
 	IMP_TRIGGER_IRQ,
 	TEMP_CHANGE_IRQ,
 	TEMP_CHANGE_SMB_IRQ,
+	/* FLASH */
+	VREG_OK_IRQ,
+	ILIM_S2_IRQ,
+	ILIM_S1_IRQ,
+	VOUT_DOWN_IRQ,
+	VOUT_UP_IRQ,
+	FLASH_STATE_CHANGE_IRQ,
+	TORCH_REQ_IRQ,
+	FLASH_EN_IRQ,
 	/* END */
 	SMB_IRQ_MAX,
 };
@@ -335,6 +346,7 @@ struct smb_charger {
 	bool			use_extcon;
 	bool			otg_present;
 	int			hw_max_icl_ua;
+	int			auto_recharge_soc;
 
 	/* workaround flag */
 	u32			wa_flags;
@@ -351,11 +363,20 @@ struct smb_charger {
 	int			pulse_cnt;
 
 	int			die_health;
+
+	/* flash */
+	u32			flash_derating_soc;
+	u32			flash_disable_soc;
+	u32			headroom_mode;
+	bool			flash_init_done;
+	bool			flash_active;
 };
 
 int smblib_read(struct smb_charger *chg, u16 addr, u8 *val);
 int smblib_masked_write(struct smb_charger *chg, u16 addr, u8 mask, u8 val);
 int smblib_write(struct smb_charger *chg, u16 addr, u8 val);
+int smblib_batch_write(struct smb_charger *chg, u16 addr, u8 *val, int count);
+int smblib_batch_read(struct smb_charger *chg, u16 addr, u8 *val, int count);
 
 int smblib_get_charge_param(struct smb_charger *chg,
 			    struct smb_chg_param *param, int *val_u);
