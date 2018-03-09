@@ -940,7 +940,8 @@ static int fg_get_batt_profile(struct fg_chip *chip)
 	if (rc < 0) {
 		pr_err("battery type unavailable, rc:%d\n", rc);
 		return rc;
-	}
+	} else
+		pr_info("profile name: %s \n", chip->bp.batt_type_str);
 
 	rc = of_property_read_u32(profile_node, "qcom,max-voltage-uv",
 			&chip->bp.float_volt_uv);
