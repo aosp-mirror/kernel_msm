@@ -812,6 +812,15 @@ config SENSORS_BMA2X2_ENABLE_INT2
 	 acceleration sensors BMA255/BMA254/BMA355/BMA250E/BMA222E/BMA280.
 	 Can only open if you do NOT open interrupt INT1 support
 
+config SENSORS_AP314AQ
+	tristate "AP314AQ offbody detect sensor driver"
+	depends on I2C
+	help
+	  Say Y here if you want to enable the ap314aq offbody detect sensor driver.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called ap314aq.
+
 config SIG_MOTION
 	tristate "support significant motion sensor function"
 	depends on SENSORS_BMA2X2  && ( SENSORS_BMA2X2_ENABLE_INT1 || SENSORS_BMA2X2_ENABLE_INT2)

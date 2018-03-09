@@ -155,6 +155,15 @@
 			clocks = <&clock_rpm clk_bb_clk2_pin>;
 			clock-names = "ref_clk";
 		};
+		di_ap314aq@1e {
+			compatible = "di_ap314aq";
+			reg = <0x1e>;
+			interrupt-parent = <&msm_gpio>;
+			interrupts = <96 0>;//configuration change accordingly such as bus number & pin number
+			vdd-supply = <&pm660_l15>;
+			vio-supply = <&pm660_l13>;
+			ap314aq,irq-gpio = <&msm_gpio 96 0>;
+		};
 	};
 
 	gen-vkeys {
