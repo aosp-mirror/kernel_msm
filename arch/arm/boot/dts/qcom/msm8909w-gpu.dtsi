@@ -31,8 +31,8 @@
 	qcom,msm-bus,num-cases = <3>;
 	qcom,msm-bus,vectors-KBps =
 		<26 512 0 0>,
-		<26 512 0 1536000>,
-		<26 512 0 3070000>;
+		<26 512 0 1600000>,
+		<26 512 0 3200000>;
 
 	/delete-node/qcom,gpu-pwrlevels;
 
