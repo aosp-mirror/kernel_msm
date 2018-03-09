@@ -298,12 +298,13 @@
 		qcom,batt-id-range-pct = <15>;
 		#include "ling-fg-gen3-batterydata-itech-3000mah.dtsi"
 	};
+	qrd_batterydata: qcom,battery-data {
+		qcom,batt-id-range-pct = <60>;
+		#include "ling-fg-gen3-batterydata-apack-300mah.dtsi"
+	};
 };
 
 &pm660_charger {
 	qcom,pd-not-supported;
 };
 
-&pm660_fg {
-	qcom,battery-data = <&mtp_batterydata>;
-};

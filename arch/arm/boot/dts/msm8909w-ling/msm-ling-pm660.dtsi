@@ -12,13 +12,6 @@
 
 #include <dt-bindings/interrupt-controller/irq.h>
 
-/{
-	qrd_batterydata: qcom,battery-data {
-		qcom,batt-id-range-pct = <60>;
-		#include "3176674_Compal_ZXW2_300mAh_averaged_MasterSlave_Dec15th2017_PM660GUI00045.dtsi"
-	};
-};
-
 &spmi_bus {
 	qcom,pm660@0 {
 		spmi-slave-container;
