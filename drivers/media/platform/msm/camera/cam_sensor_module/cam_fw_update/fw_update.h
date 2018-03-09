@@ -10,5 +10,5 @@ int CntWrt(UINT_8 *PcSetDat, UINT_16 CntWrt);
 int CntRd3(UINT_32 addr, void *PcSetDat, UINT_16 UsDatNum);
 void WitTim(UINT_16) ;
 void WPBCtrl(UINT_8 UcCtrl);
-int checkHWFWversion(bool *need_update);
+bool checkHWFWversion(UINT_16 *cal_id, UINT_32 *module_maker);
 int checkFWUpdate(struct cam_sensor_ctrl_t *s_ctrl);

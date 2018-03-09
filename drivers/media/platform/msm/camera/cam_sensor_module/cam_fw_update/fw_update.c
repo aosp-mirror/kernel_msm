@@ -4,8 +4,10 @@
 
 #include "fw_update.h"
 
-#define OIS_CUR_FW_VERSION 0x06
+#define OIS_CUR_FW_VERSION 0x08
 #define OIS_COMPONENT_I2C_ADDR_WRITE 0x7C
+#define MK_SHARP   0x04170000
+#define MK_LGIT    0x09170000
 
 static struct camera_io_master *g_io_master_info;
 bool g_first = true;
@@ -119,24 +121,35 @@ int checkHighLevelCommand(int cnt)
 	return -EINVAL;
 }
 
-int doFWupdate(int HW_Ver)
+int doFWupdate(UINT_16 CAL_ID, UINT_32 MODULE_MAKER)
 {
 	int rc = 0;
 
-	if (HW_Ver < 0) {
-		CAM_INFO(CAM_SENSOR, "[OISFW]%s: Invalid HW version.\n", __func__);
-		return -EINVAL;
-	}
-
-	if (HW_Ver == 0x0) {
-		CAM_INFO(CAM_SENSOR, "[OISFW]:%s not to update FW because of unknown HW version.", __func__);
-		return rc;
-	} else if (HW_Ver == 0x1) {
-		CAM_INFO(CAM_SENSOR, "[OISFW]:%s F40_FlashDownload(0, 4, 0 )_MTM1.", __func__);
-		rc = F40_FlashDownload(0, 4, 0);
+	if(MODULE_MAKER == MK_SHARP) {
+		if (CAL_ID == 0x0) {
+			CAM_INFO(CAM_SENSOR, "[OISFW]:%s not to update FW because of unknown CAL_ID.", __func__);
+			rc = -EINVAL;
+		} else if (CAL_ID == 0x1) {
+			CAM_INFO(CAM_SENSOR, "[OISFW]:%s F40_FlashDownload(0, 4, 0 )", __func__);
+			rc = F40_FlashDownload(0, 4, 0);
+		} else {
+			CAM_INFO(CAM_SENSOR, "[OISFW]:%s F40_FlashDownload(0, 4, 1 )", __func__);
+			rc = F40_FlashDownload(0, 4, 1);
+		}
+	} else if(MODULE_MAKER == MK_LGIT) {
+		if (CAL_ID == 0x0) {
+			CAM_INFO(CAM_SENSOR, "[OISFW]:%s not to update FW because of unknown CAL_ID.", __func__);
+			rc = -EINVAL;
+		} else if (CAL_ID == 0x1) {
+			CAM_INFO(CAM_SENSOR, "[OISFW]:%s F40_FlashDownload(0, 9, 0 )", __func__);
+			rc = F40_FlashDownload(0, 9, 0);
+		} else {
+			CAM_INFO(CAM_SENSOR, "[OISFW]:%s F40_FlashDownload(0, 9, 1 )", __func__);
+			rc = F40_FlashDownload(0, 9, 1);
+		}
 	} else {
-		CAM_INFO(CAM_SENSOR, "[OISFW]:%s F40_FlashDownload(0, 4, 1 )_MTM2.", __func__);
-		rc = F40_FlashDownload(0, 4, 1);
+		CAM_ERR(CAM_SENSOR, "[OISFW]:%s unknown module maker.", __func__);
+		rc = -EINVAL;
 	}
 
 	if (rc == 0) {
@@ -151,58 +164,57 @@ int doFWupdate(int HW_Ver)
 	return rc;
 }
 
-int checkHWFWversion(bool *need_update)
+bool checkHWFWversion(UINT_16 *cal_id, UINT_32 *module_maker)
 {
 	int rc;
 	UINT_16 RamAddr;
 	UINT_32 UlReadVal;
 	UINT_16 FW_version;
-	UINT_16 MTM_version;
+	bool need_update = false;
 
 	CAM_INFO(CAM_SENSOR, "[OISFW]:%s\n", __func__);
 
 	RamAddr = 0x8000;
 	RamRead32A(RamAddr, &UlReadVal);
 	FW_version = UlReadVal & 0xFF;
+	*module_maker = UlReadVal & 0xFFFF0000;
 	CAM_INFO(CAM_SENSOR, "[OISFW]:%s module_version =  0x%02x.\n", __func__, UlReadVal);
 
 	RamAddr = 0x8004;
 	RamRead32A(RamAddr, &UlReadVal);
-	MTM_version = UlReadVal & 0xFF;
-	CAM_INFO(CAM_SENSOR, "[OISFW]:%s MTM_version =  0x%04x\n", __func__, MTM_version);
+	*cal_id = UlReadVal & 0xFF;
+	CAM_INFO(CAM_SENSOR, "[OISFW]:%s CAL_ID = 0x%04x, MODULE_MAKER = 0x%x\n", __func__, *cal_id, *module_maker);
 
 	if (FW_version >= OIS_CUR_FW_VERSION) {
 		CAM_INFO(CAM_SENSOR, "[OISFW]%s: No need to update.\n", __func__);
-		*need_update = false;
-		return 0;
+		return false;
 	} else {
 		rc = checkHighLevelCommand(100);
 		if (rc != 0) {
 			CAM_ERR(CAM_SENSOR, "[OISFW]:%s checkHighLevelCommand failed = %d\n",
 				__func__, rc);
-			*need_update = false;
+			need_update = false;
 			return -EINVAL;
 		}
 
 		CAM_INFO(CAM_SENSOR, "[OISFW]:%s checkHighLevelCommand = %d\n",
 			__func__, rc);
 
-		*need_update = true;
-		rc = MTM_version;
+		need_update = true;
 	}
 
-	return rc;
+	return need_update;
 }
 
 int checkFWUpdate(struct cam_sensor_ctrl_t *s_ctrl)
 {
 	int rc = 0;
 	int i;
-	bool need_fw_update;
 	unsigned short cci_client_sid_backup;
 	UINT_32 FWRead;
-	UINT_8 HWVer;
 	UINT_16 FW_version;
+	UINT_16 cal_id;
+	UINT_32 module_maker;
 
 	if (g_first != true) {
 		CAM_INFO(CAM_SENSOR, "[OISFW]%s: No need.\n", __func__);
@@ -223,9 +235,8 @@ int checkFWUpdate(struct cam_sensor_ctrl_t *s_ctrl)
 	g_io_master_info = &(s_ctrl->io_master_info);
 	WitTim(100);
 
-	HWVer = checkHWFWversion(&need_fw_update);/*Check current HW and FW version*/
-	if( need_fw_update == true ) {
-		rc = doFWupdate(HWVer);
+	if( checkHWFWversion(&cal_id, &module_maker) == true ) {
+		rc = doFWupdate(cal_id, module_maker);
 
 		for (i = 0; i < 2 ; i++) {
 			RamRead32A(0x8000, &FWRead);
@@ -233,7 +244,7 @@ int checkFWUpdate(struct cam_sensor_ctrl_t *s_ctrl)
 			CAM_INFO(CAM_SENSOR, "[OISFW]:%s 0x8000 =  0x%08x", __func__, FWRead);
 			if (FW_version != OIS_CUR_FW_VERSION) {
 				CAM_ERR(CAM_SENSOR, "[OISFW]:FW version check failed after update. retry.\n");
-				rc = doFWupdate(HWVer);
+				rc = doFWupdate(cal_id, module_maker);
 			} else {
 				CAM_INFO(CAM_SENSOR, "[OISFW]: FW vserion verify pass.\n");
 				break;

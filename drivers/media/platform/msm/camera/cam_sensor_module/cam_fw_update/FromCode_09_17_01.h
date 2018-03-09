@@ -5,17 +5,17 @@
  *
  **/
 
-// Time Stamp : 2018/02/21 13:34:21
+// Time Stamp : 2018/02/21 14:04:27
 
-#define FromCodeBlockSize_04_17_01		11
+#define FromCodeBlockSize_09_17_01		11
 
-// [04170108] [00000002] [00000100]
+// [09170108] [00000002] [00000100]
 
-//#define	MODULE_VENDOR		0x04
+//#define	MODULE_VENDOR		0x09
 //#define	END_USER			0x17
 //#define	USE_ACT				0x01
 
-const unsigned char CcMagicCodeF40_04_17_01[] = {
+const unsigned char CcMagicCodeF40_09_17_01[] = {
 0x00,
 0x01,
 0x02,
@@ -62,7 +62,7 @@ const unsigned char CcMagicCodeF40_04_17_01[] = {
 0xbb,
 0x67,
 0x00,
-0x8a,
+0x8f,
 0x41,
 0x47,
 0xef,
@@ -218,7 +218,7 @@ const unsigned char CcMagicCodeF40_04_17_01[] = {
 0x00,
 };
 
-const unsigned char CcFromCodeF40_04_17_01[] = {
+const unsigned char CcFromCodeF40_09_17_01[] = {
 0x64,
 0x00,
 0x00,
@@ -300,7 +300,7 @@ const unsigned char CcFromCodeF40_04_17_01[] = {
 0x80,
 0x00,
 0x00,
-0x04,
+0x09,
 0x17,
 0x01,
 0x08,
@@ -27491,5 +27491,5 @@ const unsigned char CcFromCodeF40_04_17_01[] = {
 0x52,
 };
 
-#define VERNUM_04_17_01		0x04170108
-#define CAL_ID_04_17_01		0x00000002
+#define VERNUM_09_17_01		0x09170108
+#define CAL_ID_09_17_01		0x00000002
