@@ -561,7 +561,6 @@ static int lm36272_probe(struct i2c_client *client,
 		return -ENOMEM;
 	}
 
-	this = ldev;
 	ldev->client = client;
 	ldev->pdata = pdata;
 
@@ -616,6 +615,8 @@ static int lm36272_probe(struct i2c_client *client,
 		goto err_reboot_notifier;
 	}
 
+	this = ldev;
+
 	/* set the default brightness */
 	lm36272_lcd_backlight_set_level(&ldev->led_dev,
 			pdata->default_brightness);
@@ -634,7 +635,6 @@ err_led_classdev:
 err_fb_client:
 #endif
 	mutex_destroy(&ldev->bl_mutex);
-	this = NULL;
 
 	return err;
 }
@@ -643,6 +643,7 @@ static int lm36272_remove(struct i2c_client *client)
 {
 	struct lm36272_device *ldev = i2c_get_clientdata(client);
 
+	this = NULL;
 	unregister_reboot_notifier(&ldev->reboot_notifier);
 	sysfs_remove_group(&ldev->led_dev.dev->kobj, &lm36272_dev_attr_group);
 	led_classdev_unregister(&ldev->led_dev);
@@ -650,7 +651,6 @@ static int lm36272_remove(struct i2c_client *client)
 	fb_unregister_client(&ldev->fb_notifier);
 #endif
 	mutex_destroy(&ldev->bl_mutex);
-	this = NULL;
 
 	return 0;
 }
