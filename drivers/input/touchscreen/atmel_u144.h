@@ -443,11 +443,6 @@ struct mxt_platform_data {
 	unsigned long gpio_id;
 	unsigned char panel_on;
 	const char *fw_name;
-	const char *fw_name_ogs;
-	const char *fw_name_gf2;
-	const char *fw_name_lgd;
-	const char *fw_name_laibao;
-	const char *extra_fw_name_gf2;
 	unsigned int lcd_x;
 	unsigned int lcd_y;
 	u8 fw_ver[3];
@@ -666,6 +661,7 @@ struct mxt_data {
 	u32 info_crc;
 	u8 bootloader_addr;
 	struct t7_config t7_cfg;
+	int msg_buf_size;
 	u8 *msg_buf;
 	u8 t6_status;
 	bool update_input;
@@ -800,6 +796,5 @@ int mxt_read_mem(struct mxt_data *data, u16 reg, u16 len, void *buf);
 int mxt_write_object(struct mxt_data *data, u8 type, u8 offset, u8 val);
 struct mxt_object *mxt_get_object(struct mxt_data *data, u8 type);
 int mxt_read_object(struct mxt_data *data, u8 type, u8 offset, u8 *val);
-int mxt_update_firmware(struct mxt_data *data, const char *fwname);
 
 #endif /* __LINUX_ATMEL_MXT_TS_H__ */

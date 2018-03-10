@@ -99,6 +99,7 @@ static void trigger_usb_state_from_otg(struct mxt_data *data, int usb_type);
 static void mxt_read_fw_version(struct mxt_data *data);
 static int mxt_read_t100_config(struct mxt_data *data);
 static void mxt_external_power_changed(struct power_supply *psy);
+static int mxt_update_firmware(struct mxt_data *data, const char *fwname);
 
 static bool mxt_enable_irq(struct mxt_data *data)
 {
@@ -171,6 +172,23 @@ static inline u16 mxt_obj_size(const struct mxt_object *obj)
 static inline unsigned int mxt_obj_instances(const struct mxt_object *obj)
 {
 	return obj->instances_minus_one + 1;
+}
+
+static char *mxt_strim(char *s)
+{
+	size_t size;
+	char *end;
+
+	size = strlen(s);
+	if (!size)
+		return s;
+
+	end = s + size - 1;
+	while (end >= s && *end == '\n')
+		end--;
+	*(end + 1) = '\0';
+
+	return s;
 }
 
 static bool mxt_object_readable(unsigned int type)
@@ -315,7 +333,7 @@ static u8 mxt_get_bootloader_version(struct mxt_data *data, u8 val)
 
 	if (val & MXT_BOOT_EXTENDED_ID) {
 		if (mxt_bootloader_read(data, &buf[0], 3) != 0) {
-			TOUCH_ERR_MSG("%s: i2c failure\n", __func__);
+			TOUCH_ERR_MSG("i2c failure\n");
 			return -EIO;
 		}
 
@@ -415,13 +433,14 @@ static int __mxt_read_reg(struct i2c_client *client, u16 reg, u16 len,
 	xfer[1].buf = val;
 
 	do {
-		if (i2c_transfer(client->adapter, xfer, ARRAY_SIZE(xfer))==2)
+		if (i2c_transfer(client->adapter, xfer, ARRAY_SIZE(xfer)) == 2)
 			return 0;
-		TOUCH_ERR_MSG("%s: i2c retry %d\n", __func__, i+1);
+
+		TOUCH_ERR_MSG("i2c retry %d\n", i + 1);
 		msleep(MXT_WAKEUP_TIME);
 	} while (++i < 10);
 
-	TOUCH_ERR_MSG("%s: i2c transfer failed\n", __func__);
+	TOUCH_ERR_MSG("i2c transfer failed\n");
 	return -EIO;
 }
 
@@ -439,8 +458,10 @@ static int __mxt_write_reg(struct i2c_client *client, u16 reg, u16 len,
 
 	if (unlikely(count > 288)) {
 		buf = kzalloc(count, GFP_KERNEL);
-		if (!buf)
+		if (!buf) {
+			TOUCH_ERR_MSG("No mem\n");
 			return -ENOMEM;
+		}
 		alloced = true;
 	} else {
 		buf = data;
@@ -450,14 +471,14 @@ static int __mxt_write_reg(struct i2c_client *client, u16 reg, u16 len,
 	buf[1] = (reg >> 8) & 0xff;
 	memcpy(&buf[2], val, len);
 	do {
-		if (i2c_master_send(client, buf, count)==count) {
-			ret = 0;
+		if (i2c_master_send(client, buf, count) == count)
 			goto out;
-		}
-		TOUCH_ERR_MSG("%s: i2c retry %d\n", __func__, i+1);
+
+		TOUCH_ERR_MSG("i2c retry %d\n", i + 1);
 		msleep(MXT_WAKEUP_TIME);
 	} while (++i < 10);
-	TOUCH_ERR_MSG("%s: i2c transfer failed\n", __func__);
+
+	TOUCH_ERR_MSG("i2c transfer failed\n");
 	ret = -EIO;
 
 out:
@@ -480,6 +501,7 @@ struct mxt_object *mxt_get_object(struct mxt_data *data, u8 type)
 	if (!data->info || !data->object_table)
 		return NULL;
 
+	BUG_ON(data->info->object_num > MXT_OBJECT_NUM_MAX);
 	for (i = 0; i < data->info->object_num; i++) {
 		object = data->object_table + i;
 		if (object->type == type)
@@ -697,8 +719,7 @@ int mxt_get_self_reference_chk(struct mxt_data *data)
 				dbg_object->start_address +
 				MXT_DIAGNOSTIC_PAGE, 1, &cur_page);
 			if (ret  || loop_chk++ >= 4) {
-				TOUCH_ERR_MSG("%s Read fail page(%d)\n",
-						__func__, loop_chk);
+				TOUCH_ERR_MSG("Read fail page(%d)\n", loop_chk);
 				/* Don't check self reference no more!! */
 				return 0;
 			}
@@ -802,7 +823,7 @@ static void mxt_firmware_update_func(struct work_struct *work_firmware_update)
 
 	error = mxt_update_firmware(data, data->pdata->fw_name);
 	if (error) {
-		TOUCH_ERR_MSG("%s error \n", __func__);
+		TOUCH_ERR_MSG("Failed to update firmware\n");
 		goto exit;
 	}
 
@@ -1024,7 +1045,7 @@ static void mxt_proc_t100_message(struct mxt_data *data, u8 *message)
 
 	return_cnt = 0;
 	id = message[0] - data->T100_reportid_min - 2;
-	if (id < 0) {
+	if (id < 0 || id >= data->pdata->numtouch) {
 		TOUCH_DEBUG_MSG("Not valid touch event (%d: %d)\n",
 				message[0], data->T100_reportid_min);
 		return;
@@ -1176,52 +1197,25 @@ static void mxt_proc_t109_messages(struct mxt_data *data, u8 *msg)
 	}
 }
 
-static int mxt_update_file_name(struct device *dev, char **file_name,
-		const char *buf, size_t count)
-{
-	char *file_name_tmp = NULL;
-
-	/* Simple sanity check */
-	if (count < 1 || count > 128) {
-		TOUCH_ERR_MSG("File name too short or long \n");
-		return -EINVAL;
-	}
-
-	file_name_tmp = krealloc(*file_name, count + 1, GFP_KERNEL);
-	if (!file_name_tmp) {
-		TOUCH_ERR_MSG("no memory\n");
-		return -ENOMEM;
-	}
-
-	*file_name = file_name_tmp;
-	memcpy(*file_name, buf, count);
-
-	/* Echo into the sysfs entry may append newline at the end of buf */
-	if (buf[count - 1] == '\n')
-		(*file_name)[count - 1] = '\0';
-	else
-		(*file_name)[count] = '\0';
-
-	return 0;
-}
-
 static ssize_t mxt_update_patch_store(struct mxt_data *data, const char *buf,
 		size_t count)
 {
 	u8 *patch_data = NULL;
 	const struct firmware *fw = NULL;
-	char *name = NULL;
+	char name[128];
 	int ret = 0;
 
-	ret = mxt_update_file_name(&data->client->dev, &name, buf, count);
-	if (ret) {
-		TOUCH_ERR_MSG("%s error patch name [%s] \n", __func__, name);
-		goto out;
+	if (!buf || !count) {
+		TOUCH_ERR_MSG("invalid parameters\n");
+		return -EINVAL;
 	}
+
+	strlcpy(name, buf, sizeof(name));
+	mxt_strim(name);
 
 	ret = request_firmware(&fw, name, &data->client->dev);
 	if (ret < 0) {
-		TOUCH_ERR_MSG("Fail to request firmware(%s)\n", name);
+		TOUCH_ERR_MSG("Failed to request firmware(%s)\n", name);
 		goto out;
 	}
 
@@ -1244,7 +1238,7 @@ static ssize_t mxt_update_patch_store(struct mxt_data *data, const char *buf,
 
 	ret = mxt_patch_init(data, data->patch.patch);
 	if (ret) {
-		TOUCH_ERR_MSG("%s mxt_data is NULL\n", __func__);
+		TOUCH_ERR_MSG("mxt_data is NULL\n");
 		goto out;
 	}
 
@@ -1372,7 +1366,7 @@ static int mxt_proc_message(struct mxt_data *data, u8 *message)
 			TOUCH_DEBUG_MSG("MXT_SPT_TIMER_T61\n");
 			break;
 		default:
-			TOUCH_ERR_MSG("%s : Unknown T%d \n", __func__, type);
+			TOUCH_ERR_MSG("Unknown T%d \n", type);
 			dump = true;
 			break;
 	}
@@ -1391,10 +1385,27 @@ static int mxt_read_and_process_messages(struct mxt_data *data, u8 count)
 	int ret = 0;
 	int i = 0;
 	u8 num_valid = 0;
+	int msg_size;
+
+	if (count > data->max_reportid)
+		return -EINVAL;
+
+	if (!data->msg_buf) {
+		TOUCH_ERR_MSG("data->msg_buf = NULL\n");
+		return -EINVAL;
+	}
+
+	msg_size = data->T5_msg_size * count;
+	if (data->msg_buf_size < msg_size) {
+		TOUCH_ERR_MSG("out of buf size (%d:%d)\n",
+				data->msg_buf_size,
+				msg_size);
+		return -EINVAL;
+	}
 
 	/* Process remaining messages if necessary */
 	ret = __mxt_read_reg(data->client, data->T5_address,
-			data->T5_msg_size * count, data->msg_buf);
+			msg_size, data->msg_buf);
 	if (ret) {
 		TOUCH_ERR_MSG("Failed to read %u messages (%d)\n", count, ret);
 		return ret;
@@ -1419,6 +1430,11 @@ static irqreturn_t mxt_process_messages_t44(struct mxt_data *data)
 	int i = 0;
 	struct t_data *tmp;
 	u8 count, num_left;
+
+	if (!data->msg_buf) {
+		TOUCH_ERR_MSG("data->msg_buf = NULL\n");
+		return IRQ_NONE;
+	}
 
 	/* Read T44 and T5 together */
 	ret = __mxt_read_reg(data->client, data->T44_address,
@@ -1620,7 +1636,7 @@ static int mxt_t6_command(struct mxt_data *data, u16 cmd_offset, u8 value,
 	} while ((command_register != 0) && (timeout_counter++ <= 100));
 
 	if (timeout_counter > 100) {
-		TOUCH_ERR_MSG("%s Command failed!\n", __func__);
+		TOUCH_ERR_MSG("Command failed!\n");
 		return -EIO;
 	}
 
@@ -1739,7 +1755,7 @@ static void mxt_free_input_device(struct mxt_data *data)
 	}
 }
 
-static void mxt_free_object_table(struct mxt_data *data)
+static void __mxt_free_object_table(struct mxt_data *data)
 {
 	TOUCH_DEBUG_MSG("%s \n", __func__);
 
@@ -1781,6 +1797,13 @@ static void mxt_free_object_table(struct mxt_data *data)
 	data->max_reportid = 0;
 }
 
+static void mxt_free_object_table(struct mxt_data *data)
+{
+	__mxt_free_object_table(data);
+	kfree(data->object_table);
+	data->object_table = NULL;
+}
+
 static int mxt_parse_object_table(struct mxt_data *data)
 {
 	int i = 0;
@@ -1788,11 +1811,18 @@ static int mxt_parse_object_table(struct mxt_data *data)
 	u16 end_address = 0;
 	struct mxt_object *object = NULL;
 	u8 min_id = 0, max_id = 0;
+	int msg_size;
 
 	/* Valid Report IDs start counting from 1 */
 	reportid = 1;
 	data->mem_size = 0;
 
+	if (!data->object_table) {
+		TOUCH_ERR_MSG("object_table is NULL\n");
+		return -EINVAL;
+	}
+
+	BUG_ON(data->info->object_num > MXT_OBJECT_NUM_MAX);
 	for (i = 0; i < data->info->object_num; i++) {
 		object = data->object_table + i;
 
@@ -1910,15 +1940,23 @@ static int mxt_parse_object_table(struct mxt_data *data)
 	/* Store maximum reportid */
 	data->max_reportid = reportid;
 
-	if (data->msg_buf)
+	msg_size = data->max_reportid * data->T5_msg_size;
+
+	if (data->msg_buf_size != msg_size) {
+		TOUCH_INFO_MSG("Re-alloc msg_buf (%d:%d)\n",
+				data->msg_buf_size, msg_size);
+
 		kfree(data->msg_buf);
 
-	data->msg_buf = kzalloc((data->max_reportid * data->T5_msg_size),
-			GFP_KERNEL);
-	if (!data->msg_buf) {
-		TOUCH_ERR_MSG("%s d Failed to allocate message buffer\n",
-				__func__);
-		return -ENOMEM;
+		data->msg_buf = kzalloc(msg_size, GFP_KERNEL);
+		if (!data->msg_buf) {
+			data->msg_buf_size = 0;
+			TOUCH_ERR_MSG("Failed to allocate message buffer\n");
+			return -ENOMEM;
+		}
+		data->msg_buf_size = msg_size;
+	} else {
+		memset(data->msg_buf, 0, msg_size);
 	}
 
 	return 0;
@@ -1932,19 +1970,19 @@ static int mxt_read_info_block(struct mxt_data *data)
 	void *buf = NULL;
 	struct mxt_info *info = NULL;
 
-	TOUCH_INFO_MSG("%s \n", __func__);
+	TOUCH_INFO_MSG("%s\n", __func__);
 
 	/* Read 7-byte ID information block starting at address 0 */
 	size = sizeof(struct mxt_info);
 	buf = kzalloc(size, GFP_KERNEL);
 	if (!buf) {
-		TOUCH_ERR_MSG("%s Failed to allocate memory 1\n", __func__);
+		TOUCH_ERR_MSG("Failed to allocate memory for mxt_info\n");
 		return -ENOMEM;
 	}
 
 	error = __mxt_read_reg(client, 0, size, buf);
 	if (error) {
-		TOUCH_ERR_MSG("%s __mxt_read_reg error \n", __func__);
+		TOUCH_ERR_MSG("__mxt_read_reg error\n");
 		goto err_free_mem;
 	}
 
@@ -1954,7 +1992,7 @@ static int mxt_read_info_block(struct mxt_data *data)
 		MXT_INFO_CHECKSUM_SIZE;
 	buf = krealloc(buf, size, GFP_KERNEL);
 	if (!buf) {
-		TOUCH_ERR_MSG("%s Failed to allocate memory 2\n", __func__);
+		TOUCH_ERR_MSG("Failed to allocate memory for extra info\n");
 		error = -ENOMEM;
 		goto err_free_mem;
 	}
@@ -1963,17 +2001,13 @@ static int mxt_read_info_block(struct mxt_data *data)
 	error = __mxt_read_reg(client, MXT_OBJECT_START,
 			       size - MXT_OBJECT_START, buf + MXT_OBJECT_START);
 	if (error) {
-		TOUCH_ERR_MSG("%s __mxt_read_reg error \n", __func__);
+		TOUCH_ERR_MSG("__mxt_read_reg error\n");
 		goto err_free_mem;
 	}
 
 	/* Save pointers in device data structure */
 	data->raw_info_block = buf;
 	data->info = (struct mxt_info *)buf;
-
-	if (data->object_table == NULL)
-		data->object_table = (struct mxt_object *)(
-				buf + MXT_OBJECT_START);
 
 	TOUCH_INFO_MSG("Family:%02X Variant:%02X Binary:%u.%u.%02X"
 			" TX:%d RX:%d Objects:%d\n",
@@ -1985,9 +2019,8 @@ static int mxt_read_info_block(struct mxt_data *data)
 	/* Parse object table information */
 	error = mxt_parse_object_table(data);
 	if (error) {
-		TOUCH_ERR_MSG("%s Error %d reading object table\n",
-				__func__, error);
-		mxt_free_object_table(data);
+		TOUCH_ERR_MSG("Error %d reading object table\n", error);
+		__mxt_free_object_table(data);
 		return error;
 	}
 
@@ -1997,9 +2030,6 @@ err_free_mem:
 	kfree(buf);
 	data->raw_info_block = NULL;
 	data->info = NULL;
-	if(data->object_table)
-		kfree(data->object_table);
-	data->object_table = NULL;
 	return error;
 }
 
@@ -2328,12 +2358,17 @@ error:
 static ssize_t mxt_update_fw_store(struct mxt_data *data, const char *buf,
 		size_t count)
 {
-	char *package_name = NULL;
+	char name[128];
 	int error = 0;
 	int wait_cnt = 0;
 	bool irq_enabled;
 
 	TOUCH_DEBUG_MSG("%s\n", __func__);
+
+	if (!buf || !count) {
+		TOUCH_ERR_MSG("Invalid parameters\n");
+		return -EINVAL;
+	}
 
 	wake_lock_timeout(&touch_wake_lock, msecs_to_jiffies(2000));
 
@@ -2341,17 +2376,12 @@ static ssize_t mxt_update_fw_store(struct mxt_data *data, const char *buf,
 
 	irq_enabled = mxt_disable_irq(data);
 
-	error = mxt_update_file_name(&data->client->dev,
-			&package_name, buf, count);
-	if (error) {
-		TOUCH_ERR_MSG("%s error package_name [%s]\n", __func__,
-				package_name);
-		goto exit;
-	}
+	strlcpy(name, buf, sizeof(name));
+	mxt_strim(name);
 
-	error = mxt_update_firmware(data, package_name);
+	error = mxt_update_firmware(data, name);
 	if (error) {
-		TOUCH_ERR_MSG("%s error\n", __func__);
+		TOUCH_ERR_MSG("Failed to update firmware\n");
 		goto exit;
 	}
 
@@ -2368,9 +2398,6 @@ static ssize_t mxt_update_fw_store(struct mxt_data *data, const char *buf,
 
 	error = count;
 exit:
-	if (package_name)
-		kfree(package_name);
-
 	if (irq_enabled)
 		mxt_enable_irq(data);
 
@@ -2407,12 +2434,12 @@ static ssize_t mxt_debug_enable_store(struct mxt_data *data,
 
 	ret = kstrtouint(buf, 0, &v);
 	if (ret < 0) {
-		TOUCH_ERR_MSG("%s: Invalid input\n", __func__);
+		TOUCH_ERR_MSG("Invalid input\n");
 		return ret;
 	}
 
 	if (v >= MXT_DBG_LVL_MAX) {
-		TOUCH_ERR_MSG("%s: out of range %d\n", __func__, v);
+		TOUCH_ERR_MSG("out of range %d\n", v);
 		return -EINVAL;
 	}
 
@@ -2426,7 +2453,7 @@ static ssize_t mxt_patch_debug_enable_show(struct mxt_data *data, char *buf)
 	char c = 0;
 
 	if (data->patch.patch == NULL) {
-		TOUCH_ERR_MSG("patch not support \n");
+		TOUCH_ERR_MSG("patch not support\n");
 		return -ENOTSUPP;
 	}
 
@@ -2442,7 +2469,7 @@ static ssize_t mxt_patch_debug_enable_store(struct mxt_data *data,
 	int i = 0;
 
 	if (data->patch.patch == NULL) {
-		TOUCH_ERR_MSG("patch not support \n");
+		TOUCH_ERR_MSG("patch not support\n");
 		return -ENOTSUPP;
 	}
 
@@ -2479,7 +2506,7 @@ static ssize_t mxt_idle_mode_store(struct mxt_data *data,
 
 	ret = kstrtoint(buf, 0, &idle);
 	if (ret) {
-		TOUCH_ERR_MSG("%s: invalid parameter\n", __func__);
+		TOUCH_ERR_MSG("invalid parameter\n");
 		return ret;
 	}
 
@@ -2853,7 +2880,7 @@ static int mxt_parse_dt(struct device *dev, struct mxt_platform_data *pdata)
 	pdata->gpio_reset = of_get_named_gpio_flags(node,
 			"atmel,reset-gpio", 0, NULL);
 	if (pdata->gpio_reset < 0) {
-		TOUCH_ERR_MSG("DT get gpio_reset error \n");
+		TOUCH_ERR_MSG("DT get gpio_reset error\n");
 		return pdata->gpio_reset;
 	}
 	TOUCH_DEBUG_MSG("DT : gpio_reset = %lu\n", pdata->gpio_reset);
@@ -2861,7 +2888,7 @@ static int mxt_parse_dt(struct device *dev, struct mxt_platform_data *pdata)
 	pdata->gpio_int = of_get_named_gpio_flags(node,
 			"atmel,irq-gpio", 0, NULL);
 	if (pdata->gpio_int < 0) {
-		TOUCH_ERR_MSG("DT get gpio_int error \n");
+		TOUCH_ERR_MSG("DT get gpio_int error\n");
 		return pdata->gpio_int;
 	}
 	TOUCH_DEBUG_MSG("DT : gpio_int = %lu\n", pdata->gpio_int);
@@ -2869,7 +2896,7 @@ static int mxt_parse_dt(struct device *dev, struct mxt_platform_data *pdata)
 	pdata->gpio_id = of_get_named_gpio_flags(node,
 			"atmel,id-gpio", 0, NULL);
 	if (pdata->gpio_id < 0)
-		TOUCH_ERR_MSG("DT get gpio_id error \n");
+		TOUCH_ERR_MSG("DT get gpio_id error\n");
 	else
 		TOUCH_DEBUG_MSG("DT : gpio_id = %lu\n", pdata->gpio_id);
 
@@ -2886,7 +2913,7 @@ static int mxt_parse_dt(struct device *dev, struct mxt_platform_data *pdata)
 
 	rc = of_property_read_string(node, "atmel,fw_name",  &pdata->fw_name);
 	if (rc) {
-		TOUCH_ERR_MSG("DT : atmel,fw_name error \n");
+		TOUCH_ERR_MSG("DT : atmel,fw_name error\n");
 		return rc;
 	}
 	TOUCH_DEBUG_MSG("DT : fw_name : %s \n", pdata->fw_name);
@@ -3188,7 +3215,6 @@ static int mxt_verify_fw(struct mxt_data *data, const struct firmware *fw)
 				TOUCH_INFO_MSG("Firmware file has patch size:"
 					       " %d\n", ppheader->size);
 				if (ppheader->size) {
-					patch = NULL;
 					if (data->patch.patch) {
 						kfree(data->patch.patch);
 						data->patch.patch = NULL;
@@ -3203,14 +3229,12 @@ static int mxt_verify_fw(struct mxt_data *data, const struct firmware *fw)
 							"%s Patch Updated\n",
 							__func__);
 					} else {
-						data->patch.patch = NULL;
 						TOUCH_ERR_MSG(
-							"%s Patch Update"
-							" Failed\n", __func__);
+							"Patch Update Failed\n");
 					}
 				}
 			} else {
-				TOUCH_ERR_MSG("Firmware file is invaild !\n");
+				TOUCH_ERR_MSG("Firmware file is invaild!\n");
 				return -EINVAL;
 			}
 		}
@@ -3286,7 +3310,7 @@ static int mxt_get_object_table(struct mxt_data *data)
 	struct mxt_object *object = NULL;
 
 	if (!data->info || !data->object_table) {
-		TOUCH_ERR_MSG("%s() info, object_table is NULL \n", __func__);
+		TOUCH_ERR_MSG("info, object_table is NULL\n");
 		return -EINVAL;
 	}
 
@@ -3298,7 +3322,7 @@ static int mxt_get_object_table(struct mxt_data *data)
 		error = mxt_read_mem(data, reg,
 				MXT_OBJECT_TABLE_ELEMENT_SIZE, buf);
 		if (error) {
-			TOUCH_ERR_MSG("%s mxt_read_mem error \n", __func__);
+			TOUCH_ERR_MSG("mxt_read_mem error\n");
 			return error;
 		}
 
@@ -3327,39 +3351,25 @@ static int mxt_enter_bootloader(struct mxt_data *data)
 {
 	int error = 0;
 
-	if (data->object_table) {
-		memset(data->object_table, 0x0,
-			(MXT_OBJECT_NUM_MAX * sizeof(struct mxt_object)));
-	} else {
-		data->object_table = kzalloc(
-			(MXT_OBJECT_NUM_MAX * sizeof(struct mxt_object)),
-			GFP_KERNEL);
-		if (!data->object_table) {
-			TOUCH_ERR_MSG("%s Failed to allocate memory\n",
-					__func__);
-			return -ENOMEM;
-		} else {
-			memset(data->object_table, 0x0,
-			(MXT_OBJECT_NUM_MAX * sizeof(struct mxt_object)));
-		}
+	if (!data->object_table) {
+		TOUCH_ERR_MSG("object_table is NULL\n");
+		return -EINVAL;
 	}
+
+	memset(data->object_table, 0x0,
+		(MXT_OBJECT_NUM_MAX * sizeof(struct mxt_object)));
 
 	/* Get object table information*/
 	error = mxt_get_object_table(data);
 	if (error)
-		goto err_free_mem;
+		return error;
 
 	/* Change to the bootloader mode */
 	error = mxt_command_reset(data, MXT_BOOT_VALUE);
 	if (error)
-		goto err_free_mem;
+		return error;
 
 	return 0;
-
-err_free_mem:
-	kfree(data->object_table);
-	data->object_table = NULL;
-	return error;
 }
 
 static int mxt_flash_fw(struct mxt_data *data)
@@ -3374,12 +3384,12 @@ static int mxt_flash_fw(struct mxt_data *data)
 
 	fw_data = kmalloc(fw_size, GFP_KERNEL);
 	if (!fw_data) {
-		TOUCH_ERR_MSG("%s firmware data is Null\n", __func__);
+		TOUCH_ERR_MSG("firmware data is Null\n");
 		return -ENOMEM;
 	}
 
 	if (!fw_info->fw_raw_data) {
-		TOUCH_ERR_MSG("%s fw_raw_data is Null\n", __func__);
+		TOUCH_ERR_MSG("fw_raw_data is Null\n");
 		ret = -EINVAL;
 		goto out;
 	}
@@ -3510,10 +3520,16 @@ static void mxt_make_reportid_table(struct mxt_data *data)
 	int i = 0, j = 0;
 	int id = 0;
 
+	BUG_ON(data->info->object_num > MXT_OBJECT_NUM_MAX);
+
 	for (i = 0; i < data->info->object_num; i++) {
-		for (j = 0; j < objects[i].num_report_ids *
-				(objects[i].instances_minus_one+1); j++) {
+		int num_reportid = objects[i].num_report_ids *
+			(objects[i].instances_minus_one + 1);
+
+		for (j = 0; j < num_reportid; j++) {
 			id++;
+
+			BUG_ON(id > data->max_reportid);
 
 			reportids[id].type = objects[i].type;
 			reportids[id].index = j;
@@ -3549,28 +3565,18 @@ static int mxt_table_initialize(struct mxt_data *data)
 	if (ret)
 		return ret;
 
-	if (data->object_table)
-		memset(data->object_table, 0x0,
-			(MXT_OBJECT_NUM_MAX * sizeof(struct mxt_object)));
-	else {
-		data->object_table = kzalloc((MXT_OBJECT_NUM_MAX *
-					sizeof(struct mxt_object)), GFP_KERNEL);
-		if (!data->object_table) {
-			TOUCH_ERR_MSG("%s Failed to allocate memory\n",
-					__func__);
-			ret = 1;
-			goto out;
-		} else {
-			memset(data->object_table, 0x0,
-				(MXT_OBJECT_NUM_MAX *
-				 sizeof(struct mxt_object)));
-		}
+	if (!data->object_table) {
+		TOUCH_ERR_MSG("object_table is NULL\n");
+		return -EINVAL;
 	}
+
+	memset(data->object_table, 0x0,
+		(MXT_OBJECT_NUM_MAX * sizeof(struct mxt_object)));
 
 	/* Get object table infomation */
 	ret = mxt_get_object_table(data);
 	if (ret)
-		goto out;
+		return ret;
 
 	if (data->reportids)
 		kfree(data->reportids);
@@ -3578,9 +3584,8 @@ static int mxt_table_initialize(struct mxt_data *data)
 	data->reportids = kzalloc(((data->max_reportid + 1) *
 				sizeof(struct mxt_reportid)), GFP_KERNEL);
 	if (!data->reportids) {
-		TOUCH_ERR_MSG("%s Failed to allocate memory 2\n", __func__);
-		ret = -ENOMEM;
-		goto out;
+		TOUCH_ERR_MSG("Failed to allocate memory for reportids\n");
+		return -ENOMEM;
 	}
 
 	/* Make report id table */
@@ -3588,11 +3593,16 @@ static int mxt_table_initialize(struct mxt_data *data)
 
 	/* Verify the info CRC */
 	ret = mxt_read_info_crc(data, &read_info_crc);
-	if (ret)
+	if (ret) {
+		TOUCH_ERR_MSG("Failed to read info crc\n");
 		goto out;
+	}
 
 	return 0;
 out:
+	kfree(data->reportids);
+	data->reportids = NULL;
+
 	return ret;
 }
 
@@ -3692,11 +3702,11 @@ static int mxt_write_config(struct mxt_data *data)
 
 	/* Check Version information */
 	if (fw_info->bin_ver != data->info->version) {
-		TOUCH_ERR_MSG("Warning: version mismatch! %s\n", __func__);
+		TOUCH_ERR_MSG("Warning: version mismatch!\n");
 		return 0;
 	}
 	if (fw_info->build_ver != data->info->build) {
-		TOUCH_ERR_MSG("Warning: build num mismatch! %s\n", __func__);
+		TOUCH_ERR_MSG("Warning: build num mismatch!\n");
 		return 0;
 	}
 
@@ -3889,35 +3899,33 @@ out:
 	return error;
 }
 
-int mxt_update_firmware(struct mxt_data *data, const char *fwname)
+static int mxt_update_firmware(struct mxt_data *data, const char *fwname)
 {
 	int error = 0;
 	const struct firmware *fw = NULL;
 
-	TOUCH_INFO_MSG("%s [%s]\n", __func__, fwname);
+	TOUCH_INFO_MSG("%s: fwname = %s\n", __func__, fwname);
 
-	if (fwname) {
-		error = request_firmware(&fw, fwname, &data->client->dev);
-		if (error)
-			TOUCH_WARN_MSG("%s No firmware\n", __func__);
-	}
+	error = request_firmware(&fw, fwname, &data->client->dev);
+	if (error)
+		TOUCH_WARN_MSG("%s No firmware\n", __func__);
 
 	error = mxt_request_firmware_work(fw, data);
 	if (error) {
-		TOUCH_ERR_MSG("%s error mxt_request_firmware_work\n", __func__);
-		return 1;
+		TOUCH_ERR_MSG("error mxt_request_firmware_work\n");
+		return error;
 	}
 
 	error = mxt_read_info_block(data);
 	if (error) {
-		TOUCH_ERR_MSG("%s error mxt_read_info_block\n", __func__);
-		return 1;
+		TOUCH_ERR_MSG("error mxt_read_info_block\n");
+		return error;
 	}
 
 	error = mxt_init_t7_power_cfg(data);
 	if (error) {
-		TOUCH_ERR_MSG("%s error mxt_init_t7_power_cfg\n", __func__);
-		return 1;
+		TOUCH_ERR_MSG("error mxt_init_t7_power_cfg\n");
+		return error;
 	}
 
 	return 0;
@@ -3984,7 +3992,7 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 			(MXT_OBJECT_NUM_MAX * sizeof(struct mxt_object)),
 			GFP_KERNEL);
 	if (!data->object_table) {
-		TOUCH_ERR_MSG("%s Failed to allocate memory\n", __func__);
+		TOUCH_ERR_MSG("Failed to allocate memory\n");
 		return -ENOMEM;
 	}
 
@@ -4090,15 +4098,13 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	 */
 	error = subsys_system_register(&touch_subsys, NULL);
 	if (error < 0) {
-		TOUCH_ERR_MSG("%s, bus is not registered, error : %d\n",
-				__func__, error);
+		TOUCH_ERR_MSG("bus is not registered, error : %d\n", error);
 		goto err_init_t100_input_device;
 	}
 
 	error = device_register(&device_touch);
 	if (error < 0) {
-		TOUCH_ERR_MSG("%s, device is not registered, error : %d\n",
-				__func__, error);
+		TOUCH_ERR_MSG("device is not registered, error : %d\n", error);
 		goto err_init_t100_input_device;
 	}
 
