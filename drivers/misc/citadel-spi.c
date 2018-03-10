@@ -37,7 +37,7 @@
 
 #define MAX_DATA_SIZE		2044
 #define CITADEL_MAX_DEVICES	4
-#define CITADEL_TPM_TIMEOUT	5000
+#define CITADEL_TPM_TIMEOUT_MS	10
 
 struct citadel_data {
 	dev_t			devt;
@@ -59,21 +59,40 @@ static int citadel_wait_cmd_done(struct spi_device *spi)
 	struct spi_message m;
 	int ret;
 	u8 val;
-	unsigned long to = jiffies + msecs_to_jiffies(CITADEL_TPM_TIMEOUT);
+	unsigned long to = jiffies + 1 +	/* at least one jiffy */
+		msecs_to_jiffies(CITADEL_TPM_TIMEOUT_MS);
 	struct spi_transfer spi_xfer = {
 		.rx_buf = &val,
 		.len = 1,
 		.cs_change = 1,
 	};
 
+	/*
+	 * We have sent the initial four-byte command to Citadel on MOSI, and
+	 * now we're waiting for bit0 of the MISO byte to be set, indicating
+	 * that we can continue with the rest of the transaction. If that bit
+	 * is not immediately set, we'll keep sending one more don't-care byte
+	 * on MOSI just to read MISO until it is. If Citadel is awake and
+	 * functioning correctly its hardware implementation should always
+	 * return 0x00 while it's thinking and return 0x01 when ready to
+	 * continue. However, there are a couple of ways this can fail. First,
+	 * if Citadel is in deep sleep, it should send 0x5A on MISO until it
+	 * wakes up. This may take ~40ms or so but it's not unexpected, so if
+	 * we time out we just give up and try again. Second, if Citadel
+	 * unexpectedly reboots, it will probably return 0xFF or 0xDF, which
+	 * will exit the loop but we shouldn't continue the transaction because
+	 * Citadel won't know what's going on.
+	 */
 	do {
+		if (time_after(jiffies, to)) {
+			dev_warn(&spi->dev, "Citadel SPI timed out\n");
+			return -EBUSY;
+		}
 		spi_message_init(&m);
 		spi_message_add_tail(&spi_xfer, &m);
 		ret = spi_sync_locked(spi, &m);
 		if (ret)
 			return ret;
-		if (time_after(jiffies, to))
-			return -EBUSY;
 	} while (!val);
 
 	/* Return EAGAIN if unexpected bytes were received. */
