@@ -16,23 +16,28 @@
 #include <linux/device.h>
 #include <../../extcon/extcon.h>
 #include <linux/delay.h>
+#include <linux/extcon.h>
+#include <linux/jiffies.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/power_supply.h>
 #include <linux/regulator/consumer.h>
+#include <linux/sched/clock.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/usb/typec.h>
 #include <linux/usb/pd.h>
-#include <linux/workqueue.h>
 #include <linux/usb/tcpm.h>
-#include <linux/sched/clock.h>
+#include <linux/workqueue.h>
 #include "usbpd.h"
 
 #define LOG_BUFFER_ENTRIES	1024
 #define LOG_BUFFER_ENTRY_SIZE	256
+
+#define EXT_VBUS_WORK_DELAY_MS 5000
+#define EXT_VBUS_OVERLAP_MS       5
 
 struct usbpd {
 	struct device		dev;
@@ -85,6 +90,9 @@ struct usbpd {
 
 	bool apsd_done;
 	bool pd_capable;
+
+	/* Ext vbus management */
+	struct delayed_work ext_vbus_work;
 	struct notifier_block ext_vbus_nb;
 };
 
@@ -530,19 +538,31 @@ static int update_vbus_locked(struct usbpd *pd, bool vbus_output)
 		ret = regulator_enable(pd->external_vbus ?
 					pd->ext_vbus : pd->vbus);
 		if (ret) {
-			pd_engine_log(pd, "unable to turn on %s vbus ret = %d"
+			pd_engine_log(pd,
+				      "update_vbus_locked: unable to turn on %s vbus ret = %d"
 				      , pd->external_vbus ? "external" : "pmic"
 				      , ret);
 			return ret;
+		} else {
+			pd_engine_log(pd,
+				      "update_vbus_locked: turned on %s vbus ret = %d"
+				      , pd->external_vbus ? "external" : "pmic"
+				      , ret);
 		}
 	} else {
 		ret = regulator_disable(pd->external_vbus ?
 					pd->ext_vbus : pd->vbus);
 		if (ret) {
-			pd_engine_log(pd, "unable to turn off %s vbus ret = %d"
+			pd_engine_log(pd,
+				      "update_vbus_locked: unable to turn off %s vbus ret = %d"
 				      , pd->external_vbus ? "external" : "pmic"
 				      , ret);
 			return ret;
+		} else {
+			pd_engine_log(pd,
+				      "update_vbus_locked: turned off %s vbus ret = %d"
+				      , pd->external_vbus ? "external" : "pmic"
+				      , ret);
 		}
 	}
 	pd->vbus_output = vbus_output;
@@ -554,40 +574,59 @@ static int update_vbus_locked(struct usbpd *pd, bool vbus_output)
 	return ret;
 }
 
-static int update_external_vbus_locked(struct usbpd *pd, bool external_vbus)
+void update_external_vbus(struct work_struct *work)
 {
 	int ret = 0;
+	union power_supply_propval val = {0};
+	struct usbpd *pd = container_of(to_delayed_work(work), struct usbpd,
+					ext_vbus_work);
 
-	if (pd->external_vbus == external_vbus)
-		return ret;
-
-	/*
+	mutex_lock(&pd->lock);
+	/* Exit when the old value is same as the new value or
 	 * update the value and exit when vbus is not on.
 	 */
-	if (!pd->vbus_output)
+	if (pd->external_vbus == pd->external_vbus_update || !pd->vbus_output)
 		goto exit;
 
 	/*
 	 * Turn on the other regulator before turning off the other one.
 	 */
-	ret = regulator_enable(external_vbus ? pd->ext_vbus : pd->vbus);
+	ret = regulator_enable(pd->external_vbus_update ? pd->ext_vbus
+			       : pd->vbus);
 	if (ret) {
-		pd_engine_log(pd, "unable to turn on %s vbus ret = %d"
-			      , external_vbus ? "external" : "pmic"
+		pd_engine_log(pd,
+			      "update_external_vbus: unable to turn on %s vbus ret = %d"
+			      , pd->external_vbus_update ? "external" : "pmic"
 			      , ret);
-		return ret;
+		goto err;
+	} else {
+		pd_engine_log(pd,
+			      "update_external_vbus: turned on %s vbus ret = %d"
+			      , pd->external_vbus_update ? "external" : "pmic"
+			      , ret);
 	}
-	ret = regulator_disable(external_vbus ? pd->vbus : pd->ext_vbus);
+
+	/* Regulator overlap according to hardware recommendation */
+	msleep(EXT_VBUS_OVERLAP_MS);
+	ret = regulator_disable(pd->external_vbus_update ? pd->vbus
+				: pd->ext_vbus);
 	if (ret) {
-		pd_engine_log(pd, "unable to turn off %s vbus ret = %d"
-			      , external_vbus ? "pmic" : "external"
+		pd_engine_log(pd,
+			      "update_external_vbus: unable to turn off %s vbus ret = %d"
+			      , pd->external_vbus_update ? "pmic" : "external"
 			      , ret);
-		return ret;
+		goto err;
+	} else {
+		pd_engine_log(pd,
+			      "update_external_vbus: turned off %s vbus ret = %d"
+			      , pd->external_vbus_update ? "pmic" : "external"
+			      , ret);
 	}
 
 exit:
-	pd->external_vbus = external_vbus;
-	return ret;
+	pd->external_vbus = pd->external_vbus_update;
+err:
+	mutex_unlock(&pd->lock);
 }
 
 static void psy_changed_handler(struct work_struct *work)
@@ -611,7 +650,7 @@ static void psy_changed_handler(struct work_struct *work)
 
 	ret = power_supply_get_property(pd->usb_psy,
 					POWER_SUPPLY_PROP_TYPEC_MODE, &val);
-        if (ret < 0) {
+	if (ret < 0) {
 		pd_engine_log(pd, "Unable to read TYPEC_MODE, ret=%d",
 			      ret);
 		return;
@@ -705,9 +744,6 @@ static void psy_changed_handler(struct work_struct *work)
 		pd->cc2 = cc2;
 		tcpm_cc_change(pd->tcpm_port);
 	}
-
-	if (update_external_vbus_locked(pd, pd->external_vbus_update))
-		goto unlock;
 
 	if (pd->apsd_done && pd->pending_update_usb_data) {
 		pd_engine_log(pd,
@@ -858,7 +894,11 @@ static int tcpm_set_vbus(struct tcpc_dev *dev, bool on, bool charge)
 {
 	struct usbpd *pd = container_of(dev, struct usbpd, tcpc_dev);
 	int ret = 0;
+	bool work_flushed;
 
+	work_flushed = flush_delayed_work(&pd->ext_vbus_work);
+	pd_engine_log(pd, "Flushed ext vbus delayed work: %s", work_flushed ?
+		      "yes" : "no");
 	mutex_lock(&pd->lock);
 
 	ret = update_vbus_locked(pd, on);
@@ -1532,11 +1572,25 @@ static int update_ext_vbus(struct notifier_block *self, unsigned long action,
 			   void *dev)
 {
 	struct usbpd *pd = container_of(self, struct usbpd, ext_vbus_nb);
+	bool turn_on_ext_vbus = (action == EXT_VBUS_ON) ? true : false;
+	bool work_queued, work_cancelled;
 
-	pd->external_vbus_update = (action == EXT_VBUS_ON) ? true : false;
-	pd_engine_log(pd, "EXT_VBUS_%s", (action == EXT_VBUS_ON) ? "ON" :
-					 "OFF");
-	psy_changed(&pd->psy_nb, PSY_EVENT_PROP_CHANGED, pd->usb_psy);
+	work_cancelled = cancel_delayed_work_sync(&pd->ext_vbus_work);
+	pd_engine_log(pd, "ext_vbus_work_cancelled: %s", work_cancelled ? "yes"
+		      : "no");
+	mutex_lock(&pd->lock);
+	pd->external_vbus_update = turn_on_ext_vbus;
+	work_queued = queue_delayed_work(pd->wq, &pd->ext_vbus_work,
+				turn_on_ext_vbus ?
+				msecs_to_jiffies(EXT_VBUS_WORK_DELAY_MS)
+				: 0);
+	if (!work_queued)
+		pd_engine_log(pd, "error: queueing ext_vbus_work failed");
+	else
+		pd_engine_log(pd, "queued work EXT_VBUS_%s",
+			      (action == EXT_VBUS_ON) ?
+			      "ON" : "OFF");
+	mutex_unlock(&pd->lock);
 	return NOTIFY_OK;
 }
 
@@ -1637,6 +1691,8 @@ struct usbpd *usbpd_create(struct device *parent)
 		ret = -ENOMEM;
 		goto exit_debugfs;
 	}
+
+	INIT_DELAYED_WORK(&pd->ext_vbus_work, update_external_vbus);
 
 	pd->usb_psy = power_supply_get_by_name("usb");
 	if (!pd->usb_psy) {
