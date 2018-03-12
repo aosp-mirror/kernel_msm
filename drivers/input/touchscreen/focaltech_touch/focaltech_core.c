@@ -712,6 +712,7 @@ static void fts_report_value(struct fts_ts_data *data)
 *****************************************************************************/
 static int plam_detected_flag;
 static int wakeup_flag;
+static ktime_t last_touch_time;
 
 static void fts_touch_irq_work(struct work_struct *work)
 {
@@ -725,13 +726,20 @@ static void fts_touch_irq_work(struct work_struct *work)
 	fts_esdcheck_set_intr(1);
 #endif
 
-	if (plam_detected_flag || wakeup_flag)
-		return;
+	if (plam_detected_flag || wakeup_flag) {
+		cur_time = ktime_get();
+		if (cur_time.tv64 - last_touch_time.tv64
+			< 600000000)
+			return;
+
+		plam_detected_flag = 0;
+		wakeup_flag = 0;
+	}
 #if FTS_GESTURE_EN
-	if (fts_wq_data->is_ambient_mode == 1
-		&& fts_wq_data->suspended) {
+	if (fts_wq_data->is_ambient_mode == 1) {
 #if FTS_PLAM_EN
 		cur_time = ktime_get();
+		last_touch_time = cur_time;
 		if (cur_time.tv64 - fts_wq_data->last_plam_time.tv64
 			< 600000000)
 			return;
@@ -740,8 +748,6 @@ static void fts_touch_irq_work(struct work_struct *work)
 		input_sync(fts_input_dev);
 		input_report_key(fts_input_dev, KEY_WAKEUP, 0);
 		input_sync(fts_input_dev);
-		fts_i2c_write_reg(fts_wq_data->client,
-				FTS_REG_GESTURE_EN, 0x01);
 		wakeup_flag = 1;
 		printk(KERN_DEBUG "FTS: wakeup system from ambient mode\n");
 		return;
@@ -755,13 +761,12 @@ static void fts_touch_irq_work(struct work_struct *work)
 		if (fts_wq_data->suspended)
 			return;
 		fts_wq_data->last_plam_time =  ktime_get();
+		last_touch_time = fts_wq_data->last_plam_time;
 		input_report_key(fts_input_dev, KEY_SLEEP, 1);
 		input_sync(fts_input_dev);
 		input_report_key(fts_input_dev, KEY_SLEEP, 0);
 		input_sync(fts_input_dev);
 		plam_detected_flag = 1;
-		fts_i2c_write_reg(fts_wq_data->client,
-				FTS_REG_GESTURE_EN, 0x01);
 		printk(KERN_DEBUG "FTS: PLAM to Send KEY_SLEEP\n");
 		return;
 	}
@@ -1337,7 +1342,6 @@ static int fts_ts_suspend(struct device *dev)
 	printk(KERN_DEBUG "[FTS] fts_ts_suspend data->is_ambient_mode = %d,\
 		data->suspended =%d\n", data->is_ambient_mode, data->suspended);
 	if(data->is_ambient_mode == 1) {
-		fts_i2c_write_reg(fts_wq_data->client, FTS_REG_GESTURE_EN, 0x0);
 		if (device_may_wakeup(&fts_wq_data->client->dev))
 			enable_irq_wake(fts_wq_data->client->irq);
 		data->suspended = true;
@@ -1415,7 +1419,6 @@ static int fts_ts_resume(struct device *dev)
 		data->suspended =%d\n", data->is_ambient_mode, data->suspended);
 
 	if (data->is_ambient_mode == 1 && data->suspended) {
-		fts_i2c_write_reg(fts_wq_data->client, FTS_REG_GESTURE_EN, 0x0);
 		if (device_may_wakeup(&fts_wq_data->client->dev))
 			disable_irq_wake(fts_wq_data->client->irq);
 		data->suspended = false;
