@@ -20,7 +20,7 @@
 		reg = <0x20>;
 		vdd-supply = <&pm8998_lvs1>;
 		regulator-names = "vdd";
-		hw-version = <20>; /* cut2.0 */
+		hw-version = <21>; /* cut2.1 */
 		status = "ok";
 	};
 };

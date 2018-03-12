@@ -29,3 +29,9 @@
 &google_charger {
 	google,wlc-power-supply = "wireless";
 };
+
+&cam_cci {
+	vd6281: qcom,rainbow@20 {
+		hw-version = <20>; /* cut2.0 */
+	};
+};
