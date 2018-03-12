@@ -1155,7 +1155,8 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 			if (numberParam == 2)
 			{ //read fw file
 				logError(0, "%s Reading FW File... \n", tag);
-				res = readFwFile(PATH_FILE_FW, &fw, funcToTest[1]);
+				res = readFwFile(info->board->fw_name, &fw,
+						 funcToTest[1]);
 				if (res < OK)
 				{
 					logError(0, "%s Error reading FW File ERROR %08X\n", tag, res);
@@ -1175,7 +1176,8 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 			if (numberParam == 3)
 			{ //flashing procedure
 				logError(0, "%s Starting Flashing Procedure... \n", tag);
-				res = flashProcedure(PATH_FILE_FW, cmd[1], cmd[2]);
+				res = flashProcedure(info->board->fw_name,
+						     cmd[1], cmd[2]);
 				if (res < OK)
 				{
 					logError(0, "%s Error during flash procedure ERROR %08X\n", tag, res);
@@ -1350,7 +1352,8 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 			if(numberParam>=1){
 
 				if(numberParam==1)
-					res = getFWdata(PATH_FILE_FW, &readData, &fileSize);
+					res = getFWdata(info->board->fw_name,
+							&readData, &fileSize);
 				else
 					res = getFWdata(path, &readData, &fileSize);
 
@@ -1371,7 +1374,8 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf, 
 				addr = ((u64)byteToRead)*4;						//number of words
 
 
-				res = getFWdata(PATH_FILE_FW, &readData, &fileSize);
+				res = getFWdata(info->board->fw_name, &readData,
+						&fileSize);
 				if(fileSize>addr){
 					logError(1, "%s FW dimension expected by Host is less than actual size: expected = %d, real = %d \n", tag, byteToRead, fileSize);
 					res = ERROR_OP_NOT_ALLOW;

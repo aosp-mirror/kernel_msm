@@ -254,13 +254,13 @@ static ssize_t fts_mode_active_show(struct device *dev, struct device_attribute 
  * cat fw_file_test			show on the kernel log fw_version and config_id of the FW stored in the fw file/header file
  */
 static ssize_t fts_fw_test_show(struct device *dev, struct device_attribute *attr, char *buf) {
-
+	struct fts_ts_info *info = dev_get_drvdata(dev);
 	Firmware fw;
 	int ret;
 	char temp[100]={0};
 
 	fw.data = NULL;
-	ret=readFwFile(PATH_FILE_FW, &fw, 0);
+	ret = readFwFile(info->board->fw_name, &fw, 0);
 
 	if(ret < OK) {
 		logError(1, "%s Error during reading FW file! ERROR %08X\n", tag, ret);
@@ -2404,14 +2404,21 @@ static int fts_fw_update(struct fts_ts_info *info)
 			 "%s %s: NO CRC Error or Impossible to read CRC register!\n",
 			 tag, __func__);
 	}
-	ret = flashProcedure(PATH_FILE_FW, info->reflash_fw, keep_cx);
-	if ((ret & 0xFF000000) == ERROR_FLASH_PROCEDURE) {
+	ret = flashProcedure(info->board->fw_name, info->reflash_fw, keep_cx);
+	if ((ret & 0xF000000F) == ERROR_FILE_NOT_FOUND) {
+		logError(1,
+			 "%s %s: firmware file not found. Bypassing update.\n",
+			 tag, __func__);
+		ret = 0;
+		goto out;
+	} else if ((ret & 0xFF000000) == ERROR_FLASH_PROCEDURE) {
 		logError(1,
 			 "%s %s: firmware update failed; retrying. ERROR %08X\n",
 			 tag, __func__, ret);
 		/* Power cycle the touch IC */
 		fts_chip_powercycle(info);
-		ret = flashProcedure(PATH_FILE_FW, info->reflash_fw, keep_cx);
+		ret = flashProcedure(info->board->fw_name, info->reflash_fw,
+				     keep_cx);
 		if ((ret & 0xFF000000) == ERROR_FLASH_PROCEDURE) {
 			logError(1,
 				 "%s %s: firmware update failed again! ERROR %08X\n",
@@ -2457,7 +2464,7 @@ static int fts_fw_update(struct fts_ts_info *info)
 			logError(1,
 				 "%s %s: Try to recovery with CX in fw file...\n",
 				 tag, __func__, ret);
-			flashProcedure(PATH_FILE_FW, CRC_CX, 0);
+			flashProcedure(info->board->fw_name, CRC_CX, 0);
 			logError(1,
 				 "%s %s: Refresh panel init data...\n",
 				 tag, __func__, ret);
@@ -2484,6 +2491,7 @@ static int fts_fw_update(struct fts_ts_info *info)
 			}
 	}
 
+out:
 	/* Reinitialize after a complete FW update or if the initialization
 	 * status is not correct.
 	 */
@@ -3220,6 +3228,13 @@ static int parse_dt(struct device *dev, struct fts_hw_platform_data *bdata) {
     } else {
         bdata->reset_gpio = GPIO_NOT_DEFINED;
     }
+
+	retval = of_property_read_string(np, "st,firmware_name", &name);
+	if (retval == -EINVAL)
+		bdata->fw_name = PATH_FILE_FW;
+	else if (retval >= 0)
+		bdata->fw_name = name;
+	logError(0, "%s firmware name = %s\n", tag, bdata->fw_name);
 
     if (of_property_read_u32_array(np, "st,max-coords", coords, 2)) {
         logError(0, "%s st,max-coords not found, using 1440x2560\n");

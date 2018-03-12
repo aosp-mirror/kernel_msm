@@ -63,16 +63,17 @@ typedef enum{
 * Struct which contains information and data of the FW that should be burnt into the IC
 */
 typedef struct {
-	u8* data;																	///< pointer to an array of bytes which represent the FW data
-	u16 fw_ver;																	///< FW version of the FW file
-	u16 config_id;																///< Config ID of the FW file
-	u16 cx_ver;																	///< Cx version of the FW file
-	u8 externalRelease[EXTERNAL_RELEASE_INFO_SIZE];								///< External Release Info of the FW file
-	int data_size;																///< dimension of data (the actual data to be burnt)
-	u32 sec0_size;																///< dimension of section 0 (FW) in .ftb file
-	u32 sec1_size;																///< dimension of section 1 (Config) in .ftb file
-	u32 sec2_size;																///< dimension of section 2 (Cx) in .ftb file
-	u32 sec3_size;																///< dimension of section 3 (TBD) in .ftb file
+	u8 *data;	/* Pointer to array of bytes containing the FW data */
+	u16 fw_ver;	/* FW version of the FW file */
+	u16 config_ver;	/* Config version of the FW file */
+	u16 cx_ver;	/* Cx version of the FW file */
+	/* External Release Info of the FW file */
+	u8 externalRelease[EXTERNAL_RELEASE_INFO_SIZE];
+	int data_size;	/* Dimension of data (the actual data to be burnt) */
+	u32 sec0_size;	/* dimension of section 0 (FW) in .ftb file */
+	u32 sec1_size;	/* dimension of section 1 (Config) in .ftb file */
+	u32 sec2_size;	/* dimension of section 2 (Cx) in .ftb file */
+	u32 sec3_size;	/* dimension of section 3 (TBD) in .ftb file */
 } Firmware;
 
 /** @}*/

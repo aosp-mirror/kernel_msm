@@ -64,14 +64,21 @@ extern SysInfo systemInfo;														///< forward declaration of the global v
 */
 int getFWdata(const char* pathToFile, u8** data, int *size){
 	const struct firmware *fw = NULL;
-	struct device *dev = NULL;
+	struct device *dev = getDev();
+	struct fts_ts_info *info = NULL;
 	int res,from=0;
 	char* path = (char*)pathToFile;
+
+	if (dev != NULL)
+		info = dev_get_drvdata(dev);
 
 	logError(1, "%s getFWdata starting ...\n", tag);
 	if(strncmp(pathToFile,"NULL",4)==0){
 		from =1;
-		path = PATH_FILE_FW;
+		if (info != NULL && info->board->fw_name)
+			path = (char *)info->board->fw_name;
+		else
+			path = PATH_FILE_FW;
 	}
 	//keep the switch case because if the argument passed is null but the option from .h is not set we still try to load from bin
 	switch(from){
@@ -90,7 +97,6 @@ int getFWdata(const char* pathToFile, u8** data, int *size){
 #endif
 		default:
 			logError(1, "%s Read FW from BIN file %s !\n", tag, path);
-			dev = getDev();
 
 			if (dev != NULL){
 				res = request_firmware(&fw, path, dev);
@@ -346,11 +352,11 @@ int parseBinFile(u8* fw_data, int fw_size, Firmware *fwData, int keep_cx)
 
 		index += FW_BYTES_ALLIGN;
 		u8ToU32(&fw_data[index], &temp);
-		fwData->config_id = temp;
 		logError(1, "%s parseBinFile: FILE Config Project ID = %08X\n", tag, temp);
 
 		index += FW_BYTES_ALLIGN;
 		u8ToU32(&fw_data[index], &temp);
+		fwData->config_ver = temp;
 		logError(1, "%s parseBinFile: FILE Config Version = %08X\n", tag, temp);
 
 		index += FW_BYTES_ALLIGN * 2; //skip reserved data
@@ -737,7 +743,7 @@ int flash_burn(Firmware fw, int force_burn, int keep_cx) {
 	if (!force_burn) {
 		/* Compare firmware, config, and CX versions */
 		if (fw.fw_ver != (uint32_t)systemInfo.u16_fwVer ||
-		    fw.config_id != (uint32_t)systemInfo.u16_cfgVer ||
+		    fw.config_ver != (uint32_t)systemInfo.u16_cfgVer ||
 		    fw.cx_ver != (uint32_t)systemInfo.u16_cxVer)
 			goto start;
 
