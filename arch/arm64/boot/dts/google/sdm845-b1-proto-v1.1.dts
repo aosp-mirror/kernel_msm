@@ -294,6 +294,13 @@
 	};
 };
 
+/* B1 proto has curved screen edges, so it requires its own firmware tuning */
+&qupv3_se2_i2c {
+	st_fts@49 {
+		st,firmware_name = "ftm5_p1_fw.ftb";
+	};
+};
+
 #include "sdm845-b1c1-haptics-drv2624-overlay.dtsi"
 
 /* B1 P1.1 has the bottom speaker amp in inverted polarity */

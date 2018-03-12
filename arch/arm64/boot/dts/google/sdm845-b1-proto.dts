@@ -470,3 +470,9 @@
 	};
 };
 
+/* B1 proto has curved screen edges, so it requires its own firmware tuning */
+&qupv3_se2_i2c {
+	st_fts@49 {
+		st,firmware_name = "ftm5_p1_fw.ftb";
+	};
+};
