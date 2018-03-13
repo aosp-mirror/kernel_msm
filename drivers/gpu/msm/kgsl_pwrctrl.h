@@ -52,6 +52,7 @@
 
 enum kgsl_pwrctrl_timer_type {
 	KGSL_PWR_IDLE_TIMER,
+	KGSL_PWR_NAP_TIMER,
 	KGSL_PWR_DEEP_NAP_TIMER,
 };
 
@@ -206,6 +207,8 @@ struct kgsl_pwrctrl {
 	struct kgsl_pwr_limit *sysfs_pwr_limit;
 	struct timer_list deep_nap_timer;
 	uint32_t deep_nap_timeout;
+	struct timer_list nap_timer;
+	uint32_t nap_timeout;
 	bool gx_retention;
 	unsigned int gpu_bimc_int_clk_freq;
 	bool gpu_bimc_interface_enabled;
