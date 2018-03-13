@@ -24,6 +24,14 @@
 	/delete-property/ qcom,mdss-dsi-panel-status-check-mode;
 };
 
+&dsi_sharp_nt35350_cmd_gamma {
+	/delete-property/ qcom,mdss-dsi-te-pin-select;
+	/delete-property/ qcom,mdss-dsi-te-check-enable;
+	/delete-property/ qcom,mdss-dsi-te-using-te-pin;
+	/delete-property/ qcom,esd-check-enabled;
+	/delete-property/ qcom,mdss-dsi-panel-status-check-mode;
+};
+
 &soc {
 	msm_gpio: pinctrl@1000000 {
 		pmx_mdss {
