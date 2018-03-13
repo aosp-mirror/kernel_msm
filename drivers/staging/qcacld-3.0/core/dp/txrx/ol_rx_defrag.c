@@ -339,16 +339,6 @@ ol_rx_frag_indication_handler(ol_txrx_pdev_handle pdev,
 		return;
 	}
 
-	if (tid >= OL_TXRX_NUM_EXT_TIDS) {
-		ol_txrx_err("%s:  invalid tid, %u\n", __FUNCTION__, tid);
-		return;
-	}
-
-	if (tid >= OL_TXRX_NUM_EXT_TIDS) {
-		ol_txrx_err("%s:  invalid tid, %u\n", __FUNCTION__, tid);
-		return;
-	}
-
 	htt_pdev = pdev->htt_pdev;
 	peer = ol_txrx_peer_find_by_id(pdev, peer_id);
 

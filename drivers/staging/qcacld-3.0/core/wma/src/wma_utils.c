@@ -2201,28 +2201,6 @@ int wma_unified_link_iface_stats_event_handler(void *handle,
 		return -EINVAL;
 	}
 
-	if (link_stats->num_ac > WIFI_AC_MAX) {
-		WMA_LOGE("%s: Excess data received from firmware num_ac %d",
-			 __func__, link_stats->num_ac);
-		return -EINVAL;
-	}
-	if (fixed_param->num_offload_stats > WMI_OFFLOAD_STATS_TYPE_MAX) {
-		WMA_LOGE("%s: Excess num offload stats recvd from fw: %d",
-			__func__, fixed_param->num_offload_stats);
-		return -EINVAL;
-	}
-
-	if (link_stats->num_ac > WIFI_AC_MAX) {
-		WMA_LOGE("%s: Excess data received from firmware num_ac %d",
-			 __func__, link_stats->num_ac);
-		return -EINVAL;
-	}
-	if (fixed_param->num_offload_stats > WMI_OFFLOAD_STATS_TYPE_MAX) {
-		WMA_LOGE("%s: Excess num offload stats recvd from fw: %d",
-			__func__, fixed_param->num_offload_stats);
-		return -EINVAL;
-	}
-
 	link_stats_size = sizeof(tSirWifiIfaceStat);
 	iface_info_size = sizeof(tSirWifiInterfaceInfo);
 
@@ -2542,6 +2520,12 @@ static void wma_vdev_stats_lost_link_helper(tp_wma_handle wma,
 	static const uint8_t zero_mac[QDF_MAC_ADDR_SIZE] = {0};
 	int32_t bcn_snr, dat_snr;
 
+	if (vdev_stats->vdev_id >= wma->max_bssid) {
+		WMA_LOGE("%s: Invalid vdev_id %hu",
+			__func__, vdev_stats->vdev_id);
+		return;
+	}
+
 	node = &wma->interfaces[vdev_stats->vdev_id];
 	if (node->vdev_up &&
 	    !qdf_mem_cmp(node->bssid, zero_mac, QDF_MAC_ADDR_SIZE)) {
@@ -2590,6 +2574,12 @@ static void wma_update_vdev_stats(tp_wma_handle wma,
 	tAniGetRssiReq *pGetRssiReq = (tAniGetRssiReq *) wma->pGetRssiReq;
 	cds_msg_t sme_msg = { 0 };
 	int32_t bcn_snr, dat_snr;
+
+	if (vdev_stats->vdev_id >= wma->max_bssid) {
+		WMA_LOGE("%s: Invalid vdev_id %hu",
+			__func__, vdev_stats->vdev_id);
+		return;
+	}
 
 	bcn_snr = vdev_stats->vdev_snr.bcn_snr;
 	dat_snr = vdev_stats->vdev_snr.dat_snr;
@@ -2862,6 +2852,12 @@ static void wma_update_rssi_stats(tp_wma_handle wma,
 	uint8_t *stats_buf;
 	uint32_t temp_mask;
 	uint8_t vdev_id;
+
+	if (rssi_stats->vdev_id >= wma->max_bssid) {
+		WMA_LOGE("%s: Invalid vdev_id %hu",
+			__func__, rssi_stats->vdev_id);
+		return;
+	}
 
 	vdev_id = rssi_stats->vdev_id;
 	node = &wma->interfaces[vdev_id];
@@ -5104,7 +5100,8 @@ QDF_STATUS wma_get_updated_scan_config(uint32_t *scan_config,
 }
 
 QDF_STATUS wma_get_updated_scan_and_fw_mode_config(uint32_t *scan_config,
-			uint32_t *fw_mode_config, uint32_t dual_mac_disable_ini)
+			uint32_t *fw_mode_config, uint32_t dual_mac_disable_ini,
+			uint32_t channel_select_logic_conc)
 {
 	tp_wma_handle wma;
 
@@ -5143,6 +5140,11 @@ QDF_STATUS wma_get_updated_scan_and_fw_mode_config(uint32_t *scan_config,
 	default:
 		break;
 	}
+
+	WMI_DBS_FW_MODE_CFG_DBS_FOR_STA_PLUS_STA_SET(*fw_mode_config,
+	       WMA_CHANNEL_SELECT_LOGIC_STA_STA_GET(channel_select_logic_conc));
+	WMI_DBS_FW_MODE_CFG_DBS_FOR_STA_PLUS_P2P_SET(*fw_mode_config,
+	       WMA_CHANNEL_SELECT_LOGIC_STA_P2P_GET(channel_select_logic_conc));
 	WMA_LOGD("%s: *scan_config:%x ", __func__, *scan_config);
 	WMA_LOGD("%s: *fw_mode_config:%x ", __func__, *fw_mode_config);
 

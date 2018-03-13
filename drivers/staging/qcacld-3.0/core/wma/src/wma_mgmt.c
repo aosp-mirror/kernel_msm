@@ -2926,11 +2926,11 @@ void wma_process_update_opmode(tp_wma_handle wma_handle,
 			update_vht_opmode->dot11_mode);
 
 	wma_set_peer_param(wma_handle, update_vht_opmode->peer_mac,
-			WMI_PEER_PHYMODE, chan_mode,
+			WMI_PEER_CHWIDTH, update_vht_opmode->opMode,
 			update_vht_opmode->smesessionId);
 
 	wma_set_peer_param(wma_handle, update_vht_opmode->peer_mac,
-			WMI_PEER_CHWIDTH, update_vht_opmode->opMode,
+			WMI_PEER_PHYMODE, chan_mode,
 			update_vht_opmode->smesessionId);
 }
 
@@ -3800,7 +3800,8 @@ QDF_STATUS wma_register_roaming_callbacks(void *cds_ctx,
 		enum sir_roam_op_code reason),
 	QDF_STATUS (*pe_roam_synch_cb)(tpAniSirGlobal mac,
 		roam_offload_synch_ind *roam_synch_data,
-		tpSirBssDescription  bss_desc_ptr))
+		tpSirBssDescription  bss_desc_ptr,
+		enum sir_roam_op_code reason))
 {
 
 	tp_wma_handle wma = cds_get_context(QDF_MODULE_ID_WMA);

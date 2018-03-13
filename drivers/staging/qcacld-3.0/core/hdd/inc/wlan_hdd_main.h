@@ -163,8 +163,6 @@
 #define WLAN_WAIT_TIME_ANTENNA_MODE_REQ 3000
 #define WLAN_WAIT_TIME_SET_DUAL_MAC_CFG 1500
 
-#define WLAN_WAIT_TIME_BPF     1000
-
 /* rcpi request timeout in milli seconds */
 #define WLAN_WAIT_TIME_RCPI 500
 /* Maximum time(ms) to wait for RSO CMD status event */
@@ -444,7 +442,7 @@ extern struct mutex hdd_init_deinit_lock;
 #define LINK_CONTEXT_MAGIC  0x4C494E4B  /* LINKSPEED */
 #define LINK_STATUS_MAGIC   0x4C4B5354  /* LINKSTATUS(LNST) */
 #define TEMP_CONTEXT_MAGIC  0x74656d70   /* TEMP (temperature) */
-#define BPF_CONTEXT_MAGIC 0x4575354    /* BPF */
+#define APF_CONTEXT_MAGIC 0x4575354    /* APF */
 #define POWER_STATS_MAGIC 0x14111990
 #define RCPI_CONTEXT_MAGIC  0x7778888  /* RCPI */
 #define ACTION_FRAME_RANDOM_CONTEXT_MAGIC 0x87878787
@@ -1680,18 +1678,6 @@ struct hdd_offloaded_packets_ctx {
 #endif
 
 /**
- * struct hdd_bpf_context - hdd Context for bpf
- * @magic: magic number
- * @completion: Completion variable for BPF Get Capability
- * @capability_response: capabilities response received from fw
- */
-struct hdd_bpf_context {
-	unsigned int magic;
-	struct completion completion;
-	struct sir_bpf_get_offload capability_response;
-};
-
-/**
  * enum driver_status: Driver Modules status
  * @DRIVER_MODULES_UNINITIALIZED: Driver CDS modules uninitialized
  * @DRIVER_MODULES_OPENED: Driver CDS modules opened
@@ -2071,7 +2057,7 @@ struct hdd_context_s {
 	struct completion set_antenna_mode_cmpl;
 	/* Current number of TX X RX chains being used */
 	enum antenna_mode current_antenna_mode;
-	bool bpf_enabled;
+	bool apf_enabled;
 
 	/* the radio index assigned by cnss_logger */
 	int radio_index;
@@ -2137,6 +2123,7 @@ struct hdd_context_s {
 	hdd_adapter_t *cap_tsf_context;
 #endif
 	struct sta_ap_intf_check_work_ctx *sta_ap_intf_check_work_info;
+	bool force_rsne_override;
 	qdf_wake_lock_t monitor_mode_wakelock;
 	bool lte_coex_ant_share;
 
@@ -2151,6 +2138,7 @@ struct hdd_context_s {
 	/* mutex lock to block concurrent access */
 	struct mutex power_stats_lock;
 #endif
+	qdf_atomic_t is_acs_allowed;
 };
 
 int hdd_validate_channel_and_bandwidth(hdd_adapter_t *adapter,
@@ -2248,6 +2236,18 @@ void hdd_cleanup_actionframe_no_wait(hdd_context_t *pHddCtx,
 void crda_regulatory_entry_default(uint8_t *countryCode, int domain_id);
 void wlan_hdd_reset_prob_rspies(hdd_adapter_t *pHostapdAdapter);
 void hdd_prevent_suspend(uint32_t reason);
+
+/*
+ * hdd_get_first_valid_adapter() - Get the first valid adapter from adapter list
+ *
+ * This function is used to fetch the first valid adapter from the adapter
+ * list. If there is no valid adapter then it returns NULL
+ *
+ * Return: NULL if no valid adapter found in the adapter list
+ *
+ */
+hdd_adapter_t *hdd_get_first_valid_adapter(void);
+
 void hdd_allow_suspend(uint32_t reason);
 void hdd_prevent_suspend_timeout(uint32_t timeout, uint32_t reason);
 

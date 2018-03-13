@@ -3334,6 +3334,19 @@ enum qca_wlan_vendor_attr_config {
 	 */
 	QCA_WLAN_VENDOR_ATTR_CONFIG_LATENCY_LEVEL = 55,
 
+	/*
+	 * 8-bit unsigned value indicating the driver to use the RSNE as-is from
+	 * the connect interface. Exclusively used for the scenarios where the
+	 * device is used as a test bed device with special functionality and
+	 * not recommended for production. This helps driver to not validate the
+	 * RSNE passed from user space and thus allow arbitrary IE data to be
+	 * used for testing purposes.
+	 * 1-enable, 0-disable.
+	 * Applications set/reset this configuration. If not reset, this
+	 * parameter remains in use until the driver is unloaded.
+	 */
+	QCA_WLAN_VENDOR_ATTR_CONFIG_RSN_IE = 56,
+
 	QCA_WLAN_VENDOR_ATTR_CONFIG_AFTER_LAST,
 	QCA_WLAN_VENDOR_ATTR_CONFIG_MAX =
 	QCA_WLAN_VENDOR_ATTR_CONFIG_AFTER_LAST - 1,
@@ -3613,20 +3626,30 @@ enum qca_set_band {
  * enum set_reset_packet_filter - set packet filter control commands
  * @QCA_WLAN_SET_PACKET_FILTER: Set Packet Filter
  * @QCA_WLAN_GET_PACKET_FILTER: Get Packet filter
+ * @QCA_WLAN_WRITE_PACKET_FILTER: Write packet filter program/data
+ * @QCA_WLAN_READ_PACKET_FILTER: Read packet filter program/data
+ * @QCA_WLAN_ENABLE_PACKET_FILTER: Enable APF interpreter
+ * @QCA_WLAN_DISABLE_PACKET_FILTER: Disable APF interpreter
  */
 enum set_reset_packet_filter {
 	QCA_WLAN_SET_PACKET_FILTER = 1,
 	QCA_WLAN_GET_PACKET_FILTER = 2,
+	QCA_WLAN_WRITE_PACKET_FILTER = 3,
+	QCA_WLAN_READ_PACKET_FILTER = 4,
+	QCA_WLAN_ENABLE_PACKET_FILTER = 5,
+	QCA_WLAN_DISABLE_PACKET_FILTER = 6,
 };
 
 /**
- * enum qca_wlan_vendor_attr_packet_filter - BPF control commands
+ * enum qca_wlan_vendor_attr_packet_filter - APF control commands
  * @QCA_WLAN_VENDOR_ATTR_PACKET_FILTER_INVALID: Invalid
  * @QCA_WLAN_VENDOR_ATTR_SET_RESET_PACKET_FILTER: Filter ID
  * @QCA_WLAN_VENDOR_ATTR_PACKET_FILTER_VERSION: Filter Version
  * @QCA_WLAN_VENDOR_ATTR_PACKET_FILTER_SIZE: Total Length
  * @QCA_WLAN_VENDOR_ATTR_PACKET_FILTER_CURRENT_OFFSET: Current offset
- * @QCA_WLAN_VENDOR_ATTR_PACKET_FILTER_PROGRAM: length of BPF instructions
+ * @QCA_WLAN_VENDOR_ATTR_PACKET_FILTER_PROGRAM: length of APF instructions
+ * @QCA_WLAN_VENDOR_ATTR_PACKET_FILTER_PROG_LENGTH: length of the program
+ *	section in packet filter buffer
  */
 enum qca_wlan_vendor_attr_packet_filter {
 	QCA_WLAN_VENDOR_ATTR_PACKET_FILTER_INVALID = 0,
@@ -3636,6 +3659,7 @@ enum qca_wlan_vendor_attr_packet_filter {
 	QCA_WLAN_VENDOR_ATTR_PACKET_FILTER_SIZE,
 	QCA_WLAN_VENDOR_ATTR_PACKET_FILTER_CURRENT_OFFSET,
 	QCA_WLAN_VENDOR_ATTR_PACKET_FILTER_PROGRAM,
+	QCA_WLAN_VENDOR_ATTR_PACKET_FILTER_PROG_LENGTH,
 
 	/* keep last */
 	QCA_WLAN_VENDOR_ATTR_PACKET_FILTER_AFTER_LAST,

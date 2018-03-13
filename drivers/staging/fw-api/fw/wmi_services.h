@@ -248,6 +248,7 @@ typedef  enum  {
     WMI_SERVICE_STA_TWT=152, /* support for TWT (Target Wake Time) of STA */
     WMI_SERVICE_AP_TWT=153, /* support for TWT (Target Wake Time) on AP */
     WMI_SERVICE_GMAC_OFFLOAD_SUPPORT=154, /* Support for GMAC */
+    WMI_SERVICE_SPOOF_MAC_SUPPORT=155,  /* support for SERVICE_SPOOF_MAC */
 
 
     /******* ADD NEW SERVICES HERE *******/
@@ -308,8 +309,8 @@ typedef  enum  {
         (svc_id) < WMI_MAX_SERVICE ? \
             WMI_SERVICE_IS_ENABLED(pwmi_svc_bmap, svc_id) : \
             /* If service ID is in the extended range, check ext_bmap */ \
-            (pwmi_svc_ext_bmap)[((svc_id) - WMI_MAX_SERVICE) / 32] >> \
-                ((svc_id) & 0x1f))
+            (((pwmi_svc_ext_bmap)[((svc_id) - WMI_MAX_SERVICE) / 32] >> \
+                ((svc_id) & 0x1f)) & 0x1))
 
 
 #ifdef __cplusplus

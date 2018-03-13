@@ -113,6 +113,9 @@
 #include "wlan_hdd_spectralscan.h"
 #include "sme_power_save_api.h"
 #include "wlan_hdd_sysfs.h"
+#ifdef WLAN_FEATURE_APF
+#include "wlan_hdd_apf.h"
+#endif
 
 #ifdef CNSS_GENL
 #include <net/cnss_nl.h>
@@ -134,6 +137,12 @@
 #define MEMORY_DEBUG_STR " +MEMORY_DEBUG"
 #else
 #define MEMORY_DEBUG_STR ""
+#endif
+
+#ifdef PANIC_ON_BUG
+#define PANIC_ON_BUG_STR " +PANIC_ON_BUG"
+#else
+#define PANIC_ON_BUG_STR ""
 #endif
 
 int wlan_start_ret_val;
@@ -719,6 +728,12 @@ int wlan_hdd_validate_context(hdd_context_t *hdd_ctx)
 
 	if (cds_is_driver_in_bad_state()) {
 		hdd_debug("%pS driver in bad State: 0x%x Ignore!!!",
+			(void *)_RET_IP_, cds_get_driver_state());
+		return -ENODEV;
+	}
+
+	if (cds_is_fw_down()) {
+		hdd_debug("%pS FW is down: 0x%x Ignore!!!",
 			(void *)_RET_IP_, cds_get_driver_state());
 		return -ENODEV;
 	}
@@ -1697,8 +1712,8 @@ void hdd_update_tgt_cfg(void *context, void *param)
 	hdd_debug("Init current antenna mode: %d",
 		 hdd_ctx->current_antenna_mode);
 
-	hdd_ctx->bpf_enabled = (cfg->bpf_enabled &&
-				hdd_ctx->config->bpf_packet_filter_enable);
+	hdd_ctx->apf_enabled = (cfg->apf_enabled &&
+				hdd_ctx->config->apf_packet_filter_enable);
 	hdd_ctx->rcpi_enabled = cfg->rcpi_enabled;
 	hdd_update_ra_rate_limit(hdd_ctx, cfg);
 
@@ -1714,8 +1729,8 @@ void hdd_update_tgt_cfg(void *context, void *param)
 		hdd_err("fw update WNI_CFG_VHT_CSN_BEAMFORMEE_ANT_SUPPORTED to CFG fails");
 
 
-	hdd_debug("Target BPF %d Host BPF %d 8ss fw support %d txBFCsnValue %d",
-		cfg->bpf_enabled, hdd_ctx->config->bpf_packet_filter_enable,
+	hdd_debug("Target APF %d Host APF %d 8ss fw support %d txBFCsnValue %d",
+		cfg->apf_enabled, hdd_ctx->config->apf_packet_filter_enable,
 		cfg->tx_bfee_8ss_enabled, hdd_ctx->config->txBFCsnValue);
 
 	/*
@@ -1723,11 +1738,11 @@ void hdd_update_tgt_cfg(void *context, void *param)
 	 */
 	hdd_update_wiphy_vhtcap(hdd_ctx);
 	/*
-	 * If BPF is enabled, maxWowFilters set to WMA_STA_WOW_DEFAULT_PTRN_MAX
+	 * If APF is enabled, maxWowFilters set to WMA_STA_WOW_DEFAULT_PTRN_MAX
 	 * because we need atleast WMA_STA_WOW_DEFAULT_PTRN_MAX free slots to
 	 * configure the STA mode wow pattern.
 	 */
-	if (hdd_ctx->bpf_enabled)
+	if (hdd_ctx->apf_enabled)
 		hdd_ctx->config->maxWoWFilters = WMA_STA_WOW_DEFAULT_PTRN_MAX;
 
 	hdd_ctx->wmi_max_len = cfg->wmi_max_len;
@@ -1915,7 +1930,7 @@ int hdd_start_adapter(hdd_adapter_t *adapter)
 	int ret;
 	enum tQDF_ADAPTER_MODE device_mode = adapter->device_mode;
 
-	ENTER_DEV(adapter->dev);
+	hdd_info("enter(%s)", netdev_name(adapter->dev));
 	hdd_debug("Start_adapter for mode : %d", adapter->device_mode);
 
 	switch (device_mode) {
@@ -2354,6 +2369,9 @@ static int __hdd_open(struct net_device *dev)
 		}
 	}
 
+	if (adapter->device_mode == QDF_FTM_MODE)
+		goto err_hdd_hdd_init_deinit_lock;
+
 	set_bit(DEVICE_IFACE_OPENED, &adapter->event_flags);
 	hdd_info("%s interface up", dev->name);
 
@@ -2638,6 +2656,7 @@ static int __hdd_set_mac_address(struct net_device *dev, void *addr)
 	struct sockaddr *psta_mac_addr = addr;
 	QDF_STATUS qdf_ret_status = QDF_STATUS_SUCCESS;
 	int ret;
+	struct qdf_mac_addr mac_addr;
 
 	ENTER_DEV(dev);
 
@@ -2645,6 +2664,23 @@ static int __hdd_set_mac_address(struct net_device *dev, void *addr)
 	ret = wlan_hdd_validate_context(hdd_ctx);
 	if (0 != ret)
 		return ret;
+
+	qdf_mem_copy(&mac_addr, psta_mac_addr->sa_data, QDF_MAC_ADDR_SIZE);
+
+	if (qdf_is_macaddr_zero(&mac_addr)) {
+		hdd_err("MAC is all zero");
+		return -EINVAL;
+	}
+
+	if (qdf_is_macaddr_broadcast(&mac_addr)) {
+		hdd_err("MAC is Broadcast");
+		return -EINVAL;
+	}
+
+	if (ETHER_IS_MULTICAST(psta_mac_addr->sa_data)) {
+		hdd_err("MAC is Multicast");
+		return -EINVAL;
+	}
 
 	memcpy(&adapter->macAddressCurrent, psta_mac_addr->sa_data, ETH_ALEN);
 	memcpy(dev->dev_addr, psta_mac_addr->sa_data, ETH_ALEN);
@@ -3706,6 +3742,11 @@ static int hdd_configure_chain_mask(hdd_adapter_t *adapter)
 		  hdd_ctx->config->tx_chain_mask_5g,
 		  hdd_ctx->config->rx_chain_mask_5g);
 
+	if (hdd_ctx->num_rf_chains < 2) {
+		hdd_info("firmware not capable. skip chain mask programming");
+		return 0;
+	}
+
 	if (hdd_ctx->config->enable2x2) {
 		hdd_info("2x2 enabled. skip chain mask programming");
 		return 0;
@@ -3715,6 +3756,11 @@ static int hdd_configure_chain_mask(hdd_adapter_t *adapter)
 	    DISABLE_DBS_CXN_AND_SCAN) {
 		hdd_info("DBS enabled(%d). skip chain mask programming",
 			 hdd_ctx->config->dual_mac_feature_disable);
+		return 0;
+	}
+
+	if (hdd_ctx->lte_coex_ant_share) {
+		hdd_info("lte ant sharing enabled. skip chainmask programming");
 		return 0;
 	}
 
@@ -3734,11 +3780,6 @@ static int hdd_configure_chain_mask(hdd_adapter_t *adapter)
 					      PDEV_CMD);
 		if (ret_val)
 			goto error;
-	}
-
-	if (hdd_ctx->lte_coex_ant_share) {
-		hdd_info("lte ant sharing enabled. skip per band chain mask");
-		return 0;
 	}
 
 	if (hdd_ctx->config->txchainmask1x1 ||
@@ -3818,6 +3859,17 @@ int hdd_set_fw_params(hdd_adapter_t *adapter)
 		hdd_err("Failed to set LPRx");
 		goto error;
 	}
+
+	ret = sme_cli_set_command(
+			adapter->sessionId,
+			WMI_PDEV_PARAM_1CH_DTIM_OPTIMIZED_CHAIN_SELECTION,
+			hdd_ctx->config->enable_dtim_selection_diversity,
+			PDEV_CMD);
+	if (ret) {
+		hdd_err("Failed to set DTIM_OPTIMIZED_CHAIN_SELECTION");
+		goto error;
+	}
+
 	if (adapter->device_mode == QDF_STA_MODE) {
 		sme_set_smps_cfg(adapter->sessionId,
 					HDD_STA_SMPS_PARAM_UPPER_BRSSI_THRESH,
@@ -3967,7 +4019,6 @@ hdd_adapter_t *hdd_open_adapter(hdd_context_t *hdd_ctx, uint8_t session_type,
 	hdd_adapter_t *adapter = NULL;
 	QDF_STATUS status = QDF_STATUS_E_FAILURE;
 	hdd_cfg80211_state_t *cfgState;
-
 
 	if (hdd_ctx->current_intf_count >= hdd_ctx->max_intf_count) {
 		/*
@@ -4190,6 +4241,8 @@ QDF_STATUS hdd_close_adapter(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter,
 	hdd_adapter_list_node_t *adapterNode, *pCurrent, *pNext;
 	QDF_STATUS status;
 
+	hdd_info("enter(%s)", netdev_name(adapter->dev));
+
 	status = hdd_get_front_adapter(hdd_ctx, &pCurrent);
 	if (QDF_STATUS_SUCCESS != status) {
 		hdd_warn("adapter list empty %d",
@@ -4228,6 +4281,7 @@ QDF_STATUS hdd_close_adapter(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter,
 		return QDF_STATUS_SUCCESS;
 	}
 
+	EXIT();
 	return QDF_STATUS_E_FAILURE;
 }
 
@@ -4424,7 +4478,7 @@ QDF_STATUS hdd_stop_adapter(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter,
 	void *sap_ctx;
 	tsap_Config_t *sap_config;
 
-	ENTER();
+	hdd_info("enter(%s)", netdev_name(adapter->dev));
 
 	if (!test_bit(SME_SESSION_OPENED, &adapter->event_flags)) {
 		hdd_err("session %d is not open %lu",
@@ -6123,6 +6177,8 @@ static int hdd_context_deinit(hdd_context_t *hdd_ctx)
 
 	qdf_list_destroy(&hdd_ctx->hddAdapters);
 
+	hdd_apf_context_destroy();
+
 	return 0;
 }
 
@@ -6444,6 +6500,34 @@ QDF_STATUS hdd_post_cds_enable_config(hdd_context_t *hdd_ctx)
 	}
 
 	return QDF_STATUS_SUCCESS;
+}
+
+hdd_adapter_t *hdd_get_first_valid_adapter()
+{
+	hdd_adapter_list_node_t *adapterNode = NULL, *pNext = NULL;
+	hdd_adapter_t *adapter;
+	QDF_STATUS status;
+	hdd_context_t *hdd_ctx;
+
+	hdd_ctx = cds_get_context(QDF_MODULE_ID_HDD);
+
+	if (!hdd_ctx) {
+		hdd_err("HDD context not valid");
+		return NULL;
+	}
+
+	status = hdd_get_front_adapter(hdd_ctx, &adapterNode);
+
+	while (adapterNode != NULL && status == QDF_STATUS_SUCCESS) {
+		adapter = adapterNode->pAdapter;
+		if (adapter && adapter->magic == WLAN_HDD_ADAPTER_MAGIC)
+			return adapter;
+		status = hdd_get_next_adapter(hdd_ctx, adapterNode, &pNext);
+		adapterNode = pNext;
+	}
+
+
+	return NULL;
 }
 
 /* wake lock APIs for HDD */
@@ -6824,7 +6908,8 @@ static void hdd_pld_request_bus_bandwidth(hdd_context_t *hdd_ctx,
 	else
 		next_tx_level = WLAN_SVC_TP_LOW;
 
-	if (hdd_ctx->cur_tx_level != next_tx_level) {
+	if ((hdd_ctx->config->enable_tcp_limit_output) &&
+	    (hdd_ctx->cur_tx_level != next_tx_level)) {
 		hdd_debug("change TCP TX trigger level %d, average_tx: %llu",
 				next_tx_level, temp_tx);
 		hdd_ctx->cur_tx_level = next_tx_level;
@@ -6936,23 +7021,26 @@ static void hdd_bus_bw_work_handler(struct work_struct *work)
 		connected = true;
 	}
 
-	/* add intra bss forwarded tx and rx packets */
-	tx_packets += fwd_tx_packets_diff;
-	rx_packets += fwd_rx_packets_diff;
-
-	hdd_ipa_uc_stat_query(hdd_ctx, &ipa_tx_packets, &ipa_rx_packets);
-	tx_packets += (uint64_t)ipa_tx_packets;
-	rx_packets += (uint64_t)ipa_rx_packets;
-
 	if (!connected) {
 		hdd_err("bus bandwidth timer running in disconnected state");
 		return;
 	}
 
-	hdd_pld_request_bus_bandwidth(hdd_ctx, tx_packets, rx_packets);
+	/* add intra bss forwarded tx and rx packets */
+	tx_packets += fwd_tx_packets_diff;
+	rx_packets += fwd_rx_packets_diff;
 
-	hdd_ipa_set_perf_level(hdd_ctx, tx_packets, rx_packets);
-	hdd_ipa_uc_stat_request(adapter, 2);
+	if (hdd_ipa_is_fw_wdi_actived(hdd_ctx)) {
+		hdd_ipa_uc_stat_query(hdd_ctx, &ipa_tx_packets,
+				      &ipa_rx_packets);
+		tx_packets += (uint64_t)ipa_tx_packets;
+		rx_packets += (uint64_t)ipa_rx_packets;
+
+		hdd_ipa_set_perf_level(hdd_ctx, tx_packets, rx_packets);
+		hdd_ipa_uc_stat_request(adapter, 2);
+	}
+
+	hdd_pld_request_bus_bandwidth(hdd_ctx, tx_packets, rx_packets);
 
 restart_timer:
 	/* ensure periodic timer should still be running before restarting it */
@@ -8066,44 +8154,12 @@ void hdd_indicate_mgmt_frame(tSirSmeMgmtFrameInd *frame_ind)
 						frame_ind->rxRssi);
 }
 
-/**
- * wlan_hdd_disable_all_dual_mac_features() - Disable dual mac features
- * @hdd_ctx: HDD context
- *
- * Disables all the dual mac features like DBS, Agile DFS etc.
- *
- * Return: QDF_STATUS_SUCCESS on success
- */
-static QDF_STATUS wlan_hdd_disable_all_dual_mac_features(hdd_context_t *hdd_ctx)
-{
-	struct sir_dual_mac_config cfg;
-	QDF_STATUS status;
-
-	if (!hdd_ctx) {
-		hdd_err("HDD context is NULL");
-		return QDF_STATUS_E_FAILURE;
-	}
-
-	cfg.scan_config = 0;
-	cfg.fw_mode_config = 0;
-	cfg.set_dual_mac_cb = cds_soc_set_dual_mac_cfg_cb;
-
-	hdd_debug("Disabling all dual mac features...");
-
-	status = sme_soc_set_dual_mac_config(hdd_ctx->hHal, cfg);
-	if (status != QDF_STATUS_SUCCESS) {
-		hdd_err("sme_soc_set_dual_mac_config failed %d", status);
-		return status;
-	}
-
-	return QDF_STATUS_SUCCESS;
-}
-
 static QDF_STATUS
 wlan_hdd_update_dbs_scan_and_fw_mode_config(hdd_context_t *hdd_ctx)
 {
 	struct sir_dual_mac_config cfg = {0};
 	QDF_STATUS status;
+	uint32_t channel_select_logic_conc;
 
 	if (!hdd_ctx) {
 		hdd_err("HDD context is NULL");
@@ -8113,14 +8169,25 @@ wlan_hdd_update_dbs_scan_and_fw_mode_config(hdd_context_t *hdd_ctx)
 	cfg.scan_config = 0;
 	cfg.fw_mode_config = 0;
 	cfg.set_dual_mac_cb = cds_soc_set_dual_mac_cfg_cb;
-	status = wma_get_updated_scan_and_fw_mode_config(&cfg.scan_config,
-			&cfg.fw_mode_config,
-			hdd_ctx->config->dual_mac_feature_disable);
 
-	if (status != QDF_STATUS_SUCCESS) {
-		hdd_err("wma_get_updated_scan_and_fw_mode_config failed %d",
-			status);
-		return status;
+	if (!wma_is_dbs_enable())
+		channel_select_logic_conc = 0;
+	else
+		channel_select_logic_conc = hdd_ctx->config->
+						channel_select_logic_conc;
+
+	if (hdd_ctx->config->dual_mac_feature_disable !=
+	    DISABLE_DBS_CXN_AND_SCAN) {
+		status = wma_get_updated_scan_and_fw_mode_config(
+				&cfg.scan_config, &cfg.fw_mode_config,
+				hdd_ctx->config->dual_mac_feature_disable,
+				channel_select_logic_conc);
+
+		if (status != QDF_STATUS_SUCCESS) {
+			hdd_err("wma_get_updated_scan_and_fw_mode_config failed %d",
+				status);
+			return status;
+		}
 	}
 
 	hdd_debug("send scan_cfg: 0x%x fw_mode_cfg: 0x%x to fw",
@@ -8156,7 +8223,7 @@ static void hdd_override_ini_config(hdd_context_t *hdd_ctx)
 		hdd_debug("Module enable_11d set to %d", enable_11d);
 	}
 
-	if (!hdd_ipa_is_present(hdd_ctx)) {
+	if (!hdd_ipa_is_present()) {
 		hdd_ctx->config->IpaConfig = 0;
 		hdd_debug("IpaConfig override to %d",
 			hdd_ctx->config->IpaConfig);
@@ -8243,7 +8310,7 @@ static int hdd_context_init(hdd_context_t *hdd_ctx)
 	init_completion(&hdd_ctx->mc_sus_event_var);
 	init_completion(&hdd_ctx->ready_to_suspend);
 
-	hdd_init_bpf_completion();
+	hdd_apf_context_init();
 
 	qdf_spinlock_create(&hdd_ctx->connection_status_lock);
 	qdf_spinlock_create(&hdd_ctx->sta_update_info_lock);
@@ -8933,8 +9000,8 @@ static int hdd_update_cds_config(hdd_context_t *hdd_ctx)
 	cds_cfg->enable_rxthread = hdd_ctx->enableRxThread;
 	cds_cfg->ce_classify_enabled =
 		hdd_ctx->config->ce_classify_enabled;
-	cds_cfg->bpf_packet_filter_enable =
-		hdd_ctx->config->bpf_packet_filter_enable;
+	cds_cfg->apf_packet_filter_enable =
+		hdd_ctx->config->apf_packet_filter_enable;
 	cds_cfg->tx_chain_mask_cck = hdd_ctx->config->tx_chain_mask_cck;
 	cds_cfg->self_gen_frm_pwr = hdd_ctx->config->self_gen_frm_pwr;
 	cds_cfg->max_station = hdd_ctx->config->maxNumberOfPeers;
@@ -8944,8 +9011,8 @@ static int hdd_update_cds_config(hdd_context_t *hdd_ctx)
 		hdd_ctx->config->max_msdus_per_rxinorderind;
 	cds_cfg->self_recovery_enabled = hdd_ctx->config->enableSelfRecovery;
 	cds_cfg->fw_timeout_crash = hdd_ctx->config->fw_timeout_crash;
-	cds_cfg->active_uc_bpf_mode = hdd_ctx->config->active_uc_bpf_mode;
-	cds_cfg->active_mc_bc_bpf_mode = hdd_ctx->config->active_mc_bc_bpf_mode;
+	cds_cfg->active_uc_apf_mode = hdd_ctx->config->active_uc_apf_mode;
+	cds_cfg->active_mc_bc_apf_mode = hdd_ctx->config->active_mc_bc_apf_mode;
 	cds_cfg->auto_power_save_fail_mode =
 		hdd_ctx->config->auto_pwr_save_fail_mode;
 
@@ -9343,8 +9410,7 @@ static int hdd_platform_wlan_mac(hdd_context_t *hdd_ctx)
 
 	addr = hdd_get_platform_wlan_mac_buff(dev, &no_of_mac_addr);
 
-	if (no_of_mac_addr == 0 || !addr ||
-	    (hdd_ctx->config->mac_provision && (no_of_mac_addr < 2))) {
+	if (no_of_mac_addr == 0 || !addr) {
 		hdd_err("Platform Driver doesn't have provisioned mac addr");
 		return -EINVAL;
 	}
@@ -9446,10 +9512,7 @@ static int hdd_initialize_mac_address(hdd_context_t *hdd_ctx)
 	bool update_mac_addr_to_fw = true;
 
 	ret = hdd_platform_wlan_mac(hdd_ctx);
-	if (hdd_ctx->config->mac_provision)
-		return ret;
-
-	if (ret == 0)
+	if (hdd_ctx->config->mac_provision || !ret)
 		return ret;
 
 	hdd_info("MAC is not programmed in platform driver ret: %d, use wlan_mac.bin",
@@ -9843,31 +9906,6 @@ static int hdd_set_auto_shutdown_cb(hdd_context_t *hdd_ctx)
 }
 #endif
 
-static QDF_STATUS hdd_set_dbs_scan_and_fw_mode_cfg(hdd_context_t *hdd_ctx)
-{
-
-	QDF_STATUS status = QDF_STATUS_SUCCESS;
-
-	switch (hdd_ctx->config->dual_mac_feature_disable) {
-	case DISABLE_DBS_CXN_AND_SCAN:
-		status = wlan_hdd_disable_all_dual_mac_features(hdd_ctx);
-		if (status != QDF_STATUS_SUCCESS)
-			hdd_err("Failed to disable dual mac features");
-		break;
-	case DISABLE_DBS_CXN_AND_ENABLE_DBS_SCAN:
-	case DISABLE_DBS_CXN_AND_ENABLE_DBS_SCAN_WITH_ASYNC_SCAN_OFF:
-	case ENABLE_DBS_CXN_AND_ENABLE_SCAN_WITH_ASYNC_SCAN_OFF:
-		status = wlan_hdd_update_dbs_scan_and_fw_mode_config(hdd_ctx);
-		if (status != QDF_STATUS_SUCCESS)
-			hdd_err("Failed to set dbs scan and fw mode config");
-		break;
-	default:
-		break;
-	}
-
-	return status;
-
-}
 /**
  * hdd_features_init() - Init features
  * @hdd_ctx:	HDD context
@@ -10008,7 +10046,7 @@ static int hdd_features_init(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter)
 		hdd_err("Failed to register HDD callbacks!");
 		goto deregister_frames;
 	}
-	status = hdd_set_dbs_scan_and_fw_mode_cfg(hdd_ctx);
+	status = wlan_hdd_update_dbs_scan_and_fw_mode_config(hdd_ctx);
 	if (!QDF_IS_STATUS_SUCCESS(status)) {
 		hdd_err("Failed to set dbs scan and fw mode cfg");
 		goto deregister_cb;
@@ -10889,10 +10927,10 @@ int hdd_register_cb(hdd_context_t *hdd_ctx)
 	sme_set_nud_debug_stats_cb(hdd_ctx->hHal,
 				   hdd_get_nud_stats_cb);
 
-	status = sme_bpf_offload_register_callback(hdd_ctx->hHal,
-						   hdd_get_bpf_offload_cb);
+	status = sme_apf_offload_register_callback(hdd_ctx->hHal,
+						   hdd_get_apf_capabilities_cb);
 	if (!QDF_IS_STATUS_SUCCESS(status)) {
-		hdd_err("set bpf offload callback failed");
+		hdd_err("set apf offload callback failed");
 		ret = -EINVAL;
 		return ret;
 	}
@@ -10932,6 +10970,9 @@ int hdd_register_cb(hdd_context_t *hdd_ctx)
 	if (!QDF_IS_STATUS_SUCCESS(status))
 		hdd_err("set congestion callback failed");
 
+	sme_apf_read_memory_register_callback(hdd_ctx->hHal,
+					  hdd_apf_read_memory_callback);
+
 	EXIT();
 
 	return ret;
@@ -10958,9 +10999,9 @@ void hdd_deregister_cb(hdd_context_t *hdd_ctx)
 			status);
 
 	sme_reset_link_layer_stats_ind_cb(hdd_ctx->hHal);
-	status = sme_bpf_offload_deregister_callback(hdd_ctx->hHal);
+	status = sme_apf_offload_deregister_callback(hdd_ctx->hHal);
 	if (!QDF_IS_STATUS_SUCCESS(status))
-		hdd_warn("De-register bpf offload callback failed: %d",
+		hdd_warn("De-register apf offload callback failed: %d",
 			status);
 	sme_reset_rssi_threshold_breached_cb(hdd_ctx->hHal);
 
@@ -10984,6 +11025,7 @@ void hdd_deregister_cb(hdd_context_t *hdd_ctx)
 
 	sme_deregister_oem_data_rsp_callback(hdd_ctx->hHal);
 	sme_deregister11d_scan_done_callback(hdd_ctx->hHal);
+	sme_apf_read_memory_deregister_callback(hdd_ctx->hHal);
 
 	EXIT();
 }
@@ -11985,7 +12027,7 @@ static int __hdd_module_init(void)
 	pr_err("%s: Loading driver v%s (%s)\n",
 	       WLAN_MODULE_NAME,
 	       g_wlan_driver_version,
-	       TIMER_MANAGER_STR MEMORY_DEBUG_STR);
+	       TIMER_MANAGER_STR MEMORY_DEBUG_STR PANIC_ON_BUG_STR);
 
 	pld_init();
 
@@ -12226,7 +12268,8 @@ static void __exit hdd_module_exit(void)
 }
 #endif
 
-static int fwpath_changed_handler(const char *kmessage, struct kernel_param *kp)
+static int fwpath_changed_handler(const char *kmessage,
+				  const struct kernel_param *kp)
 {
 	return param_set_copystring(kmessage, kp);
 }
@@ -12398,7 +12441,8 @@ static int hdd_register_req_mode(hdd_context_t *hdd_ctx,
  *
  * Return - 0 on success and failure code on failure
  */
-static int __con_mode_handler(const char *kmessage, struct kernel_param *kp,
+static int __con_mode_handler(const char *kmessage,
+			      const struct kernel_param *kp,
 			      hdd_context_t *hdd_ctx)
 {
 	int ret;
@@ -12497,7 +12541,7 @@ reset_flags:
 }
 
 
-static int con_mode_handler(const char *kmessage, struct kernel_param *kp)
+static int con_mode_handler(const char *kmessage, const struct kernel_param *kp)
 {
 	int ret;
 	hdd_context_t *hdd_ctx;
@@ -13008,11 +13052,20 @@ MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("Qualcomm Atheros, Inc.");
 MODULE_DESCRIPTION("WLAN HOST DEVICE DRIVER");
 
-module_param_call(con_mode, con_mode_handler, param_get_int, &con_mode,
-		  S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+static const struct kernel_param_ops con_mode_ops = {
+	.set = con_mode_handler,
+	.get = param_get_int,
+};
 
-module_param_call(fwpath, fwpath_changed_handler, param_get_string, &fwpath,
-		  S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+static const struct kernel_param_ops fwpath_ops = {
+	.set = fwpath_changed_handler,
+	.get = param_get_string,
+};
+
+module_param_cb(con_mode, &con_mode_ops, &con_mode,
+		S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+module_param_cb(fwpath, &fwpath_ops, &fwpath,
+		S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 
 module_param(enable_dfs_chan_scan, int, S_IRUSR | S_IRGRP | S_IROTH);
 

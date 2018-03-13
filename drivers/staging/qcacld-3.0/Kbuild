@@ -243,6 +243,9 @@ endif
 #enable spectral scan feature
 CONFIG_WLAN_SPECTRAL_SCAN := y
 
+# Flag to enable Android Packet Filtering
+CONFIG_WLAN_FEATURE_APF := y
+
 #Enable WLAN/Power debugfs feature only if debug_fs is enabled
 ifeq ($(CONFIG_DEBUG_FS), y)
        # Flag to enable debugfs. Depends on CONFIG_DEBUG_FS in kernel
@@ -269,7 +272,13 @@ BUILD_DEBUG_VERSION := 1
 BUILD_DIAG_VERSION := 1
 
 #Do we panic on bug?  default is to warn
-PANIC_ON_BUG := 1
+ifeq ($(CONFIG_SLUB_DEBUG), y)
+	PANIC_ON_BUG := 1
+else ifeq ($(CONFIG_PERF_DEBUG), y)
+	PANIC_ON_BUG := 1
+else
+	PANIC_ON_BUG := 0
+endif
 
 #Enable OL debug and wmi unified functions
 CONFIG_ATH_PERF_PWR_OFFLOAD := 1
@@ -517,6 +526,10 @@ endif
 
 ifeq ($(CONFIG_WLAN_SPECTRAL_SCAN), y)
 HDD_OBJS += $(HDD_SRC_DIR)/wlan_hdd_spectral.o
+endif
+
+ifeq ($(CONFIG_WLAN_FEATURE_APF), y)
+HDD_OBJS += $(HDD_SRC_DIR)/wlan_hdd_apf.o
 endif
 
 ########### HOST DIAG LOG ###########
@@ -839,6 +852,10 @@ WMI_OBJS := $(WMI_OBJ_DIR)/wmi_unified.o \
 	    $(WMI_OBJ_DIR)/wmi_unified_tlv.o \
 	    $(WMI_OBJ_DIR)/wmi_unified_api.o \
 	    $(WMI_OBJ_DIR)/wmi_unified_non_tlv.o
+
+ifeq ($(CONFIG_WLAN_FEATURE_APF), y)
+WMI_OBJS += $(WMI_OBJ_DIR)/wmi_unified_apf_tlv.o
+endif
 
 WMI_CLEAN_FILES := $(WMI_OBJ_DIR)/*.o \
 		   $(WMI_OBJ_DIR)/*.o.* \
@@ -1803,6 +1820,10 @@ endif
 
 ifeq ($(CONFIG_WLAN_SPECTRAL_SCAN), y)
 CDEFINES += -DFEATURE_SPECTRAL_SCAN
+endif
+
+ifeq ($(CONFIG_WLAN_FEATURE_APF), y)
+CDEFINES += -DWLAN_FEATURE_APF
 endif
 
 #Flag to enable/disable WLAN D0-WOW

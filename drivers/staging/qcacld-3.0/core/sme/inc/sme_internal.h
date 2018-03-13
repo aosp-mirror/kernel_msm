@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -263,8 +263,8 @@ typedef struct tagSmeStruct {
 	ocb_callback dcc_stats_event_callback;
 	sme_set_thermal_level_callback set_thermal_level_cb;
 	void *saved_scan_cmd;
-	void (*pbpf_get_offload_cb)(void *context,
-			struct sir_bpf_get_offload *);
+	void (*papf_get_offload_cb)(void *context,
+			struct sir_apf_get_offload *);
 	p2p_lo_callback p2p_lo_event_callback;
 	void *p2p_lo_event_context;
 	sme_send_oem_data_rsp_msg oem_data_rsp_callback;
@@ -283,6 +283,8 @@ typedef struct tagSmeStruct {
 			struct spectral_samp_msg *samp_msg);
 	void (*stats_ext2_cb)(void *, struct stats_ext2_event *);
 	void (*congestion_cb)(void *, uint32_t congestion, uint32_t vdev_id);
+	void (*apf_read_mem_cb)(void *context,
+			struct wmi_apf_read_memory_resp_event_params *params);
 } tSmeStruct, *tpSmeStruct;
 
 

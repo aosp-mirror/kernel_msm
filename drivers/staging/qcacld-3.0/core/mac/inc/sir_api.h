@@ -436,6 +436,26 @@ typedef enum eSirRFBand {
 	SIR_BAND_MAX = SIR_BAND_UNKNOWN,
 } tSirRFBand;
 
+/**
+ * enum set_hw_mode_status - Status of set HW mode command
+ * @SET_HW_MODE_STATUS_OK: command successful
+ * @SET_HW_MODE_STATUS_EINVAL: Requested invalid hw_mode
+ * @SET_HW_MODE_STATUS_ECANCELED: HW mode change cancelled
+ * @SET_HW_MODE_STATUS_ENOTSUP: HW mode not supported
+ * @SET_HW_MODE_STATUS_EHARDWARE: HW mode change prevented by hardware
+ * @SET_HW_MODE_STATUS_EPENDING: HW mode change is pending
+ * @SET_HW_MODE_STATUS_ECOEX: HW mode change conflict with Coex
+ */
+enum set_hw_mode_status {
+	SET_HW_MODE_STATUS_OK,
+	SET_HW_MODE_STATUS_EINVAL,
+	SET_HW_MODE_STATUS_ECANCELED,
+	SET_HW_MODE_STATUS_ENOTSUP,
+	SET_HW_MODE_STATUS_EHARDWARE,
+	SET_HW_MODE_STATUS_EPENDING,
+	SET_HW_MODE_STATUS_ECOEX,
+};
+
 typedef struct sSirRemainOnChnReq {
 	uint16_t messageType;
 	uint16_t length;
@@ -522,6 +542,9 @@ struct s_sir_set_hw_mode {
 	struct sir_hw_mode set_hw;
 };
 
+typedef void (*dual_mac_cb)(enum set_hw_mode_status status,
+		uint32_t scan_config,
+		uint32_t fw_mode_config);
 /**
  * struct sir_dual_mac_config - Dual MAC configuration
  * @scan_config: Scan configuration
@@ -531,7 +554,7 @@ struct s_sir_set_hw_mode {
 struct sir_dual_mac_config {
 	uint32_t scan_config;
 	uint32_t fw_mode_config;
-	void *set_dual_mac_cb;
+	dual_mac_cb set_dual_mac_cb;
 };
 
 /**
@@ -1310,6 +1333,7 @@ typedef struct sSirSmeJoinReq {
 	bool ignore_assoc_disallowed;
 	bool enable_bcast_probe_rsp;
 	bool force_24ghz_in_ht20;
+	bool force_rsne_override;
 	tSirBssDescription bssDescription;
 	/*
 	 * WARNING: Pls make bssDescription as last variable in struct
@@ -2890,16 +2914,6 @@ typedef struct sSirNsOffloadReq {
 } tSirNsOffloadReq, *tpSirNsOffloadReq;
 #endif /* WLAN_NS_OFFLOAD */
 
-/**
- * struct hw_filter_request - For enable/disable HW Filter
- * @mode_bitmap: the hardware filter mode to configure
- * @bssid: bss_id for get session.
- */
-struct hw_filter_request {
-	uint8_t mode_bitmap;
-	struct qdf_mac_addr bssid;
-};
-
 typedef struct sSirHostOffloadReq {
 	uint8_t offloadType;
 	uint8_t enableOrDisable;
@@ -3835,26 +3849,6 @@ enum hw_mode_bandwidth {
 	HW_MODE_80_PLUS_80_MHZ,
 	HW_MODE_160_MHZ,
 	HW_MODE_MAX_BANDWIDTH
-};
-
-/**
- * enum set_hw_mode_status - Status of set HW mode command
- * @SET_HW_MODE_STATUS_OK: command successful
- * @SET_HW_MODE_STATUS_EINVAL: Requested invalid hw_mode
- * @SET_HW_MODE_STATUS_ECANCELED: HW mode change cancelled
- * @SET_HW_MODE_STATUS_ENOTSUP: HW mode not supported
- * @SET_HW_MODE_STATUS_EHARDWARE: HW mode change prevented by hardware
- * @SET_HW_MODE_STATUS_EPENDING: HW mode change is pending
- * @SET_HW_MODE_STATUS_ECOEX: HW mode change conflict with Coex
- */
-enum set_hw_mode_status {
-	SET_HW_MODE_STATUS_OK,
-	SET_HW_MODE_STATUS_EINVAL,
-	SET_HW_MODE_STATUS_ECANCELED,
-	SET_HW_MODE_STATUS_ENOTSUP,
-	SET_HW_MODE_STATUS_EHARDWARE,
-	SET_HW_MODE_STATUS_EPENDING,
-	SET_HW_MODE_STATUS_ECOEX,
 };
 
 /**
@@ -6722,8 +6716,6 @@ typedef void (*hw_mode_transition_cb)(uint32_t old_hw_mode_index,
 		uint32_t new_hw_mode_index,
 		uint32_t num_vdev_mac_entries,
 		struct sir_vdev_mac_map *vdev_mac_map);
-typedef void (*dual_mac_cb)(uint32_t status, uint32_t scan_config,
-		uint32_t fw_mode_config);
 typedef void (*antenna_mode_cb)(uint32_t status);
 
 /**
@@ -7231,17 +7223,17 @@ struct obss_scanparam {
 };
 
 /**
- * struct sir_bpf_set_offload - set bpf filter instructions
+ * struct sir_apf_set_offload - set apf filter instructions
  * @session_id: session identifier
- * @version: host bpf version
- * @filter_id: Filter ID for BPF filter
+ * @version: host apf version
+ * @filter_id: Filter ID for APF filter
  * @total_length: The total length of the full instruction
  *                total_length equal to 0 means reset
  * @current_offset: current offset, 0 means start a new setting
  * @current_length: Length of current @program
- * @program: BPF instructions
+ * @program: APF instructions
  */
-struct sir_bpf_set_offload {
+struct sir_apf_set_offload {
 	uint8_t  session_id;
 	uint32_t version;
 	uint32_t filter_id;
@@ -7252,18 +7244,18 @@ struct sir_bpf_set_offload {
 };
 
 /**
- * struct sir_bpf_offload_capabilities - get bpf Capabilities
- * @bpf_version: fw's implement version
- * @max_bpf_filters: max filters that fw supports
- * @max_bytes_for_bpf_inst: the max bytes that can be used as bpf instructions
- * @remaining_bytes_for_bpf_inst: remaining bytes for bpf instructions
+ * struct sir_apf_offload_capabilities - get apf Capabilities
+ * @apf_version: fw's implement version
+ * @max_apf_filters: max filters that fw supports
+ * @max_bytes_for_apf_inst: the max bytes that can be used as apf instructions
+ * @remaining_bytes_for_apf_inst: remaining bytes for apf instructions
  *
  */
-struct sir_bpf_get_offload {
-	uint32_t bpf_version;
-	uint32_t max_bpf_filters;
-	uint32_t max_bytes_for_bpf_inst;
-	uint32_t remaining_bytes_for_bpf_inst;
+struct sir_apf_get_offload {
+	uint32_t apf_version;
+	uint32_t max_apf_filters;
+	uint32_t max_bytes_for_apf_inst;
+	uint32_t remaining_bytes_for_apf_inst;
 };
 
 /**
