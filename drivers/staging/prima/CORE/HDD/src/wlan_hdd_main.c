@@ -120,6 +120,7 @@ int wlan_hdd_ftm_start(hdd_context_t *pAdapter);
 #endif
 #include "wlan_hdd_debugfs.h"
 #include "sapInternal.h"
+#include "wlan_hdd_request_manager.h"
 
 #ifdef MODULE
 #define WLAN_MODULE_NAME  module_name(THIS_MODULE)
@@ -11103,6 +11104,8 @@ free_hdd_ctx:
        pHddCtx->cfg_ini= NULL;
    }
 
+   hdd_request_manager_deinit();
+
    /* FTM/MONITOR mode, WIPHY did not registered
       If un-register here, system crash will happen */
    if (!(VOS_FTM_MODE == hdd_get_conparam() ||
@@ -12103,6 +12106,8 @@ int hdd_wlan_startup(struct device *dev )
       goto err_free_hdd_context;
    }
 
+   hdd_request_manager_init();
+
    vos_mem_zero(pHddCtx->cfg_ini, sizeof( hdd_config_t ));
 
    // Read and parse the qcom_cfg.ini file
@@ -12965,6 +12970,7 @@ err_wdclose:
       vos_watchdog_close(pVosContext);
 
 err_config:
+   hdd_request_manager_deinit();
    kfree(pHddCtx->cfg_ini);
    pHddCtx->cfg_ini= NULL;
 
