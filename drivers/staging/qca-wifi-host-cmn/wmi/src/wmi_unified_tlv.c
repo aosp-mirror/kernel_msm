@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -11775,6 +11775,16 @@ error:
 
 	return status;
 }
+
+/**
+ * send_set_arp_stats_req_cmd_tlv() - set connectivity stats command
+ * @wmi_handle: wmi handle
+ * @req_buf: connecitivity stats
+ *
+ * Set connectivity stats.
+ *
+ * Return: QDF status
+ */
 QDF_STATUS send_set_arp_stats_req_cmd_tlv(wmi_unified_t wmi_handle,
 					  struct set_arp_stats *req_buf)
 {
@@ -11785,6 +11795,10 @@ QDF_STATUS send_set_arp_stats_req_cmd_tlv(wmi_unified_t wmi_handle,
 	wmi_vdev_set_arp_stats_cmd_fixed_param *wmi_set_arp;
 
 	len = sizeof(wmi_vdev_set_arp_stats_cmd_fixed_param);
+	if (req_buf->pkt_type_bitmap) {
+		len += WMI_TLV_HDR_SIZE;
+		len += sizeof(wmi_vdev_set_connectivity_check_stats);
+	}
 	buf = wmi_buf_alloc(wmi_handle, len);
 	if (!buf) {
 		WMI_LOGE("%s : wmi_buf_alloc failed", __func__);
@@ -11799,14 +11813,47 @@ QDF_STATUS send_set_arp_stats_req_cmd_tlv(wmi_unified_t wmi_handle,
 		       WMITLV_GET_STRUCT_TLVLEN
 		       (wmi_vdev_set_arp_stats_cmd_fixed_param));
 
-	/* fill in per roam config values */
 	wmi_set_arp->vdev_id = req_buf->vdev_id;
 
 	wmi_set_arp->set_clr = req_buf->flag;
 	wmi_set_arp->pkt_type = req_buf->pkt_type;
 	wmi_set_arp->ipv4 = req_buf->ip_addr;
 
-	/* Send per roam config parameters */
+	WMI_LOGD("NUD Stats: vdev_id %u set_clr %u pkt_type:%u ipv4 %u",
+		 wmi_set_arp->vdev_id, wmi_set_arp->set_clr,
+		 wmi_set_arp->pkt_type, wmi_set_arp->ipv4);
+
+	/*
+	 * pkt_type_bitmap should be non-zero to ensure
+	 * presence of additional stats.
+	 */
+	if (req_buf->pkt_type_bitmap) {
+		wmi_vdev_set_connectivity_check_stats *wmi_set_connect_stats;
+
+		buf_ptr += sizeof(wmi_vdev_set_arp_stats_cmd_fixed_param);
+		WMITLV_SET_HDR(buf_ptr,
+		       WMITLV_TAG_ARRAY_STRUC,
+		       sizeof(wmi_vdev_set_connectivity_check_stats));
+		buf_ptr += WMI_TLV_HDR_SIZE;
+		wmi_set_connect_stats =
+			(wmi_vdev_set_connectivity_check_stats *)buf_ptr;
+		WMITLV_SET_HDR(&wmi_set_connect_stats->tlv_header,
+		    WMITLV_TAG_STRUC_wmi_vdev_set_connectivity_check_stats,
+		    WMITLV_GET_STRUCT_TLVLEN(
+					wmi_vdev_set_connectivity_check_stats));
+		wmi_set_connect_stats->pkt_type_bitmap =
+						req_buf->pkt_type_bitmap;
+		wmi_set_connect_stats->tcp_src_port = req_buf->tcp_src_port;
+		wmi_set_connect_stats->tcp_dst_port = req_buf->tcp_dst_port;
+		wmi_set_connect_stats->icmp_ipv4 = req_buf->icmp_ipv4;
+
+		WMI_LOGD("Connectivity Stats: pkt_type_bitmap %u tcp_src_port:%u tcp_dst_port %u icmp_ipv4 %u",
+			 wmi_set_connect_stats->pkt_type_bitmap,
+			 wmi_set_connect_stats->tcp_src_port,
+			 wmi_set_connect_stats->tcp_dst_port,
+			 wmi_set_connect_stats->icmp_ipv4);
+	}
+
 	status = wmi_unified_cmd_send(wmi_handle, buf,
 				      len, WMI_VDEV_SET_ARP_STAT_CMDID);
 	if (QDF_IS_STATUS_ERROR(status)) {
@@ -14074,6 +14121,150 @@ send_cmd:
 	return status;
 }
 
+/**
+ * send_offload_11k_cmd_tlv() - send wmi cmd with 11k offload params
+ * @wmi_handle: wmi handler
+ * @params: pointer to 11k offload params
+ *
+ * Return: 0 for success and non zero for failure
+ */
+static QDF_STATUS send_offload_11k_cmd_tlv(wmi_unified_t wmi_handle,
+				struct wmi_11k_offload_params *params)
+{
+	wmi_11k_offload_report_fixed_param *cmd;
+	wmi_buf_t buf;
+	QDF_STATUS status;
+	uint8_t *buf_ptr;
+	wmi_neighbor_report_11k_offload_tlv_param
+					*neighbor_report_offload_params;
+	wmi_neighbor_report_offload *neighbor_report_offload;
+
+	uint32_t len = sizeof(*cmd);
+
+	if (params->offload_11k_bitmask &
+	    WMI_11K_OFFLOAD_BITMAP_NEIGHBOR_REPORT_REQ)
+		len += WMI_TLV_HDR_SIZE +
+			sizeof(wmi_neighbor_report_11k_offload_tlv_param);
+
+	buf = wmi_buf_alloc(wmi_handle, len);
+	if (!buf) {
+		WMI_LOGP("%s: failed to allocate memory for 11k offload params",
+			 __func__);
+		return QDF_STATUS_E_NOMEM;
+	}
+
+	buf_ptr = (uint8_t *) wmi_buf_data(buf);
+	cmd = (wmi_11k_offload_report_fixed_param *) buf_ptr;
+
+	WMITLV_SET_HDR(&cmd->tlv_header,
+		 WMITLV_TAG_STRUC_wmi_offload_11k_report_fixed_param,
+		 WMITLV_GET_STRUCT_TLVLEN(
+			wmi_11k_offload_report_fixed_param));
+
+	cmd->vdev_id = params->vdev_id;
+	cmd->offload_11k = params->offload_11k_bitmask;
+
+	if (params->offload_11k_bitmask &
+	    WMI_11K_OFFLOAD_BITMAP_NEIGHBOR_REPORT_REQ) {
+		buf_ptr += sizeof(wmi_11k_offload_report_fixed_param);
+
+		WMITLV_SET_HDR(buf_ptr, WMITLV_TAG_ARRAY_STRUC,
+			sizeof(wmi_neighbor_report_11k_offload_tlv_param));
+		buf_ptr += WMI_TLV_HDR_SIZE;
+
+		neighbor_report_offload_params =
+			(wmi_neighbor_report_11k_offload_tlv_param *)buf_ptr;
+		WMITLV_SET_HDR(&neighbor_report_offload_params->tlv_header,
+			WMITLV_TAG_STRUC_wmi_neighbor_report_offload_tlv_param,
+			WMITLV_GET_STRUCT_TLVLEN(
+			wmi_neighbor_report_11k_offload_tlv_param));
+
+		neighbor_report_offload = &neighbor_report_offload_params->
+			neighbor_rep_ofld_params;
+
+		neighbor_report_offload->time_offset =
+			params->neighbor_report_params.time_offset;
+		neighbor_report_offload->low_rssi_offset =
+			params->neighbor_report_params.low_rssi_offset;
+		neighbor_report_offload->bmiss_count_trigger =
+			params->neighbor_report_params.bmiss_count_trigger;
+		neighbor_report_offload->per_threshold_offset =
+			params->neighbor_report_params.per_threshold_offset;
+		neighbor_report_offload->neighbor_report_cache_timeout =
+			params->neighbor_report_params.
+			neighbor_report_cache_timeout;
+		neighbor_report_offload->max_neighbor_report_req_cap =
+			params->neighbor_report_params.
+			max_neighbor_report_req_cap;
+		neighbor_report_offload->ssid.ssid_len =
+			params->neighbor_report_params.ssid.length;
+		qdf_mem_copy(neighbor_report_offload->ssid.ssid,
+			&params->neighbor_report_params.ssid.mac_ssid,
+			neighbor_report_offload->ssid.ssid_len);
+	}
+
+	status = wmi_unified_cmd_send(wmi_handle, buf, len,
+			WMI_11K_OFFLOAD_REPORT_CMDID);
+	if (status != QDF_STATUS_SUCCESS) {
+		WMI_LOGE("%s: failed to send 11k offload command %d",
+			 __func__, status);
+		wmi_buf_free(buf);
+	}
+
+	return status;
+}
+
+/**
+ * send_invoke_neighbor_report_cmd_tlv() - send invoke 11k neighbor report
+ * command
+ * @wmi_handle: wmi handler
+ * @params: pointer to neighbor report invoke params
+ *
+ * Return: 0 for success and non zero for failure
+ */
+static QDF_STATUS send_invoke_neighbor_report_cmd_tlv(wmi_unified_t wmi_handle,
+			struct wmi_invoke_neighbor_report_params *params)
+{
+	wmi_11k_offload_invoke_neighbor_report_fixed_param *cmd;
+	wmi_buf_t buf;
+	QDF_STATUS status;
+	uint8_t *buf_ptr;
+	uint32_t len = sizeof(*cmd);
+
+	buf = wmi_buf_alloc(wmi_handle, len);
+	if (!buf) {
+		WMI_LOGP("%s:failed to allocate memory for neighbor invoke cmd",
+			 __func__);
+		return QDF_STATUS_E_NOMEM;
+	}
+
+	buf_ptr = (uint8_t *) wmi_buf_data(buf);
+	cmd = (wmi_11k_offload_invoke_neighbor_report_fixed_param *) buf_ptr;
+
+	WMITLV_SET_HDR(&cmd->tlv_header,
+		 WMITLV_TAG_STRUC_wmi_invoke_neighbor_report_fixed_param,
+		 WMITLV_GET_STRUCT_TLVLEN(
+			wmi_11k_offload_invoke_neighbor_report_fixed_param));
+
+	cmd->vdev_id = params->vdev_id;
+	cmd->flags = params->send_resp_to_host;
+
+	cmd->ssid.ssid_len = params->ssid.length;
+	qdf_mem_copy(cmd->ssid.ssid,
+		     &params->ssid.mac_ssid,
+		     cmd->ssid.ssid_len);
+
+	status = wmi_unified_cmd_send(wmi_handle, buf, len,
+			WMI_11K_INVOKE_NEIGHBOR_REPORT_CMDID);
+	if (status != QDF_STATUS_SUCCESS) {
+		WMI_LOGE("%s: failed to send invoke neighbor report command %d",
+			 __func__, status);
+		wmi_buf_free(buf);
+	}
+
+	return status;
+}
+
 struct wmi_ops tlv_ops =  {
 	.send_vdev_create_cmd = send_vdev_create_cmd_tlv,
 	.send_vdev_delete_cmd = send_vdev_delete_cmd_tlv,
@@ -14359,6 +14550,8 @@ struct wmi_ops tlv_ops =  {
 	.send_roam_scan_send_hlp_cmd =
 				send_roam_scan_send_hlp_cmd_tlv,
 #endif
+	.send_offload_11k_cmd = send_offload_11k_cmd_tlv,
+	.send_invoke_neighbor_report_cmd = send_invoke_neighbor_report_cmd_tlv,
 };
 
 #ifdef WMI_TLV_AND_NON_TLV_SUPPORT

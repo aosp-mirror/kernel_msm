@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -86,6 +86,8 @@
  * MCL platform.
  */
 #define WMA_SET_VDEV_IE_SOURCE_HOST 0x0
+#define WMI_TLV_HEADER_MASK		0xFFFF0000
+
 
 static const uint8_t arp_ptrn[] = {0x08, 0x06};
 static const uint8_t arp_mask[] = {0xff, 0xff};
@@ -1654,8 +1656,8 @@ int wma_nan_rsp_event_handler(void *handle, uint8_t *event_buf,
 	if (nan_rsp_event_hdr->data_len > ((WMI_SVC_MSG_MAX_SIZE -
 	    sizeof(*nan_rsp_event_hdr)) / sizeof(uint8_t)) ||
 	    nan_rsp_event_hdr->data_len > param_buf->num_data) {
-		WMA_LOGE("excess data length:%d", nan_rsp_event_hdr->data_len);
-		QDF_ASSERT(0);
+		WMA_LOGE("excess data length:%d, num_data:%d",
+			nan_rsp_event_hdr->data_len, param_buf->num_data);
 		return -EINVAL;
 	}
 	nan_rsp_event = (tSirNanEvent *) qdf_mem_malloc(alloc_len);
@@ -2338,6 +2340,11 @@ QDF_STATUS wma_extract_comb_phyerr_spectral(void *handle, void *data,
 
 	phyerr->bufp = param_tlvs->bufp;
 	phyerr->buf_len = pe_hdr->buf_len;
+	if (phyerr->buf_len > param_tlvs->num_bufp) {
+		WMA_LOGE("Invalid buf_len %d, num_bufp %d",
+				phyerr->buf_len, param_tlvs->num_bufp);
+		return -EINVAL;
+	}
 
 	phyerr->phy_err_mask0 = pe_hdr->rsPhyErrMask0;
 	phyerr->phy_err_mask1 = pe_hdr->rsPhyErrMask1;
@@ -7972,7 +7979,11 @@ int wma_channel_avoid_evt_handler(void *handle, uint8_t *event,
 		(afr_fixed_param->num_freq_ranges >
 		 SIR_CH_AVOID_MAX_RANGE) ? SIR_CH_AVOID_MAX_RANGE :
 		afr_fixed_param->num_freq_ranges;
-
+	if (num_freq_ranges > param_buf->num_avd_freq_range) {
+		WMA_LOGE("Invalid num_freq_ranges %d, avd_freq_range %d",
+			num_freq_ranges, param_buf->num_avd_freq_range);
+		return -EINVAL;
+	}
 	WMA_LOGD("Channel avoid event received with %d ranges",
 		 num_freq_ranges);
 	for (freq_range_idx = 0; freq_range_idx < num_freq_ranges;
@@ -10219,6 +10230,8 @@ int wma_get_arp_stats_handler(void *handle, uint8_t *data,
 {
 	WMI_VDEV_GET_ARP_STAT_EVENTID_param_tlvs *param_buf;
 	wmi_vdev_get_arp_stats_event_fixed_param *data_event;
+	wmi_vdev_get_connectivity_check_stats *connect_stats_event;
+	uint8_t *buf_ptr;
 	struct rsp_stats rsp;
 	tpAniSirGlobal mac = cds_get_context(QDF_MODULE_ID_PE);
 
@@ -10259,6 +10272,21 @@ int wma_get_arp_stats_handler(void *handle, uint8_t *data,
 	rsp.connect_status = data_event->connect_status;
 	rsp.ba_session_establishment_status =
 		data_event->ba_session_establishment_status;
+
+	buf_ptr = (uint8_t *)data_event;
+	buf_ptr = buf_ptr + sizeof(wmi_vdev_get_arp_stats_event_fixed_param) +
+		  WMI_TLV_HDR_SIZE;
+	connect_stats_event = (wmi_vdev_get_connectivity_check_stats *)buf_ptr;
+
+	if (((connect_stats_event->tlv_header & WMI_TLV_HEADER_MASK) >> 16 ==
+	      WMITLV_TAG_STRUC_wmi_vdev_get_connectivity_check_stats)) {
+		rsp.connect_stats_present = true;
+		rsp.tcp_ack_recvd = connect_stats_event->tcp_ack_recvd;
+		rsp.icmpv4_rsp_recvd = connect_stats_event->icmpv4_rsp_recvd;
+		WMA_LOGD("tcp_ack_recvd %d icmpv4_rsp_recvd %d",
+			connect_stats_event->tcp_ack_recvd,
+			connect_stats_event->icmpv4_rsp_recvd);
+	}
 
 	mac->sme.get_arp_stats_cb(mac->hHdd, &rsp);
 
@@ -10704,6 +10732,12 @@ int wma_rx_aggr_failure_event_handler(void *handle, u_int8_t *event_buf,
 	}
 
 	rx_aggr_hole_event->hole_cnt = rx_aggr_failure_info->num_failure_info;
+	if (rx_aggr_hole_event->hole_cnt > param_buf->num_failure_info) {
+		WMA_LOGE("Invalid no of hole count: %d",
+				rx_aggr_hole_event->hole_cnt);
+		qdf_mem_free(rx_aggr_hole_event);
+		return -EINVAL;
+	}
 	WMA_LOGD("aggr holes_sum: %d\n",
 		 rx_aggr_failure_info->num_failure_info);
 	for (i = 0; i < rx_aggr_hole_event->hole_cnt; i++) {
