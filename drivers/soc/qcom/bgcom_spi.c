@@ -27,6 +27,7 @@
 #include <linux/kthread.h>
 #include "bgcom.h"
 #include "bgrsb.h"
+#include "linux/bgcom_interface.h"
 
 #define BG_SPI_WORD_SIZE (0x04)
 #define BG_SPI_READ_LEN (0x04)
@@ -47,7 +48,7 @@
 #define HED_EVENT_SIZE_LEN (0x02)
 #define HED_EVENT_DATA_STRT_LEN (0x05)
 
-#define MAX_RETRY 20
+#define MAX_RETRY 200
 
 enum bgcom_state {
 	/*BGCOM Staus ready*/
@@ -407,7 +408,7 @@ static void send_back_notification(uint32_t slav_status_reg,
 		}
 	}
 
-	if (slave_fifo_free > 0) {
+	if (slave_fifo_free >= 0) {
 		event_data.to_slave_fifo_free = slave_fifo_free;
 		send_event(BGCOM_EVENT_TO_SLAVE_FIFO_FREE, &event_data);
 	}
@@ -464,7 +465,7 @@ int bgcom_ahb_read(void *handle, uint32_t ahb_start_addr,
 		return -EBUSY;
 	}
 
-	if (bgcom_resume(&handle)) {
+	if (bgcom_resume(handle)) {
 		pr_err("Failed to resume\n");
 		return -EBUSY;
 	}
@@ -525,7 +526,7 @@ int bgcom_ahb_write(void *handle, uint32_t ahb_start_addr,
 		return -EBUSY;
 	}
 
-	if (bgcom_resume(&handle)) {
+	if (bgcom_resume(handle)) {
 		pr_err("Failed to resume\n");
 		return -EBUSY;
 	}
@@ -574,7 +575,7 @@ int bgcom_fifo_write(void *handle, uint32_t num_words,
 		return -EBUSY;
 	}
 
-	if (bgcom_resume(&handle)) {
+	if (bgcom_resume(handle)) {
 		pr_err("Failed to resume\n");
 		return -EBUSY;
 	}
@@ -757,23 +758,23 @@ static int is_bg_resume(void *handle)
 	return cmnd_reg & BIT(31);
 }
 
-int bgcom_resume(void **handle)
+int bgcom_resume(void *handle)
 {
 	struct bg_spi_priv *bg_spi;
 	struct bg_context *cntx;
 	int retry = 0;
 
-	if (*handle == NULL)
+	if (handle == NULL)
 		return -EINVAL;
 
-	cntx = *handle;
+	cntx = (struct bg_context *)handle;
 	bg_spi = cntx->bg_spi;
 
 	mutex_lock(&bg_resume_mutex);
 	if (bg_spi->bg_state == BGCOM_STATE_ACTIVE)
 		goto unlock;
 	do {
-		if (is_bg_resume(*handle)) {
+		if (is_bg_resume(handle)) {
 			bg_spi->bg_state = BGCOM_STATE_ACTIVE;
 			break;
 		}
@@ -783,29 +784,35 @@ int bgcom_resume(void **handle)
 
 unlock:
 	mutex_unlock(&bg_resume_mutex);
-	pr_info("BG Resumed in %d retries\n", retry);
-	return (retry == MAX_RETRY ? -ETIMEDOUT : 0);
+	if (retry == MAX_RETRY) {
+		/* BG failed to resume. Trigger BG soft reset. */
+		pr_err("BG failed to resume");
+		bg_soft_reset();
+		return -ETIMEDOUT;
+	}
+	pr_info("BG retries for wake up : %d\n", retry);
+	return 0;
 }
 EXPORT_SYMBOL(bgcom_resume);
 
-int bgcom_suspend(void **handle)
+int bgcom_suspend(void *handle)
 {
 	struct bg_spi_priv *bg_spi;
 	struct bg_context *cntx;
 	uint32_t cmnd_reg = 0;
 	int ret = 0;
 
-	if (*handle == NULL)
+	if (handle == NULL)
 		return -EINVAL;
 
-	cntx = *handle;
+	cntx = (struct bg_context *)handle;
 	bg_spi = cntx->bg_spi;
 	mutex_lock(&bg_resume_mutex);
 	if (bg_spi->bg_state == BGCOM_STATE_SUSPEND)
 		goto unlock;
 
 	cmnd_reg |= BIT(31);
-	ret = bgcom_reg_write(*handle, BG_CMND_REG, 1, &cmnd_reg);
+	ret = bgcom_reg_write(handle, BG_CMND_REG, 1, &cmnd_reg);
 	if (ret == 0)
 		bg_spi->bg_state = BGCOM_STATE_SUSPEND;
 
@@ -962,6 +969,8 @@ static int bg_spi_probe(struct spi_device *spi)
 
 	if (ret)
 		goto err_ret;
+
+	pr_info("Bgcom Probed successfully\n");
 	return ret;
 
 err_ret:

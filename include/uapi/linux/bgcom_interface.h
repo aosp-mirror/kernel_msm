@@ -1,3 +1,6 @@
+#ifndef BGCOM_INTERFACE_H
+#define BGCOM_INTERFACE_H
+
 #ifndef LINUX_BG_CHAR_H
 #define LINUX_BG_CHAR_H
 #define BGCOM_REG_READ  0
@@ -46,3 +49,11 @@ enum bg_event_type {
 	_IOWR(EXCHANGE_CODE, BGCOM_SOFT_RESET, \
 	struct bg_ui_data)
 #endif
+
+/**
+ * bg_soft_reset() - soft reset Blackghost
+ * Return 0 on success or -Ve on error
+*/
+int bg_soft_reset(void);
+
+#endif /* BGCOM_INTERFACE_H */
