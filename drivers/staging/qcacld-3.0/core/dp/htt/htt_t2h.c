@@ -190,7 +190,7 @@ static void htt_t2h_lp_msg_handler(void *context, qdf_nbuf_t htt_t2h_msg,
 	{
 		uint16_t peer_id;
 		uint8_t tid;
-		int seq_num_start, seq_num_end;
+		uint16_t seq_num_start, seq_num_end;
 		enum htt_rx_flush_action action;
 
 		peer_id = HTT_RX_FLUSH_PEER_ID_GET(*msg_word);
@@ -316,6 +316,14 @@ static void htt_t2h_lp_msg_handler(void *context, qdf_nbuf_t htt_t2h_msg,
 			(uint8_t *) (msg_word + 1),
 			&mac_addr_deswizzle_buf[0]);
 
+		if (peer_id > ol_cfg_max_peer_id(pdev->ctrl_pdev)) {
+			qdf_print("%s: HTT_T2H_MSG_TYPE_PEER_MAP,"
+				"invalid peer_id, %u\n",
+				__FUNCTION__,
+				peer_id);
+			break;
+		}
+
 		ol_rx_peer_map_handler(pdev->txrx_pdev, peer_id,
 				       vdev_id, peer_mac_addr,
 				       1 /*can tx */);
@@ -326,6 +334,14 @@ static void htt_t2h_lp_msg_handler(void *context, qdf_nbuf_t htt_t2h_msg,
 		uint16_t peer_id;
 
 		peer_id = HTT_RX_PEER_UNMAP_PEER_ID_GET(*msg_word);
+		if (peer_id > ol_cfg_max_peer_id(pdev->ctrl_pdev)) {
+			qdf_print("%s: HTT_T2H_MSG_TYPE_PEER_UNMAP,"
+				"invalid peer_id, %u\n",
+				__FUNCTION__,
+				peer_id);
+			break;
+		}
+
 		ol_rx_peer_unmap_handler(pdev->txrx_pdev, peer_id);
 		break;
 	}
@@ -727,7 +743,7 @@ void htt_t2h_msg_handler(void *context, HTC_PACKET *pkt)
 	{
 		uint16_t peer_id;
 		uint8_t tid, pn_ie_cnt, *pn_ie = NULL;
-		int seq_num_start, seq_num_end;
+		uint16_t seq_num_start, seq_num_end;
 
 		/*First dword */
 		peer_id = HTT_RX_PN_IND_PEER_ID_GET(*msg_word);
@@ -1317,7 +1333,7 @@ htt_t2h_dbg_stats_hdr_parse(uint8_t *stats_info_list,
 void
 htt_rx_frag_ind_flush_seq_num_range(htt_pdev_handle pdev,
 				    qdf_nbuf_t rx_frag_ind_msg,
-				    int *seq_num_start, int *seq_num_end)
+				    uint16_t *seq_num_start, uint16_t *seq_num_end)
 {
 	uint32_t *msg_word;
 
