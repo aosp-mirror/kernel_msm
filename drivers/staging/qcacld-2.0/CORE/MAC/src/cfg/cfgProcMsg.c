@@ -2692,7 +2692,8 @@ ProcSetReqInternal(tpAniSirGlobal pMac, tANI_U16 length, tANI_U32 *pParam, tANI_
                 // Process string parameter
                 else
                 {
-                    if (valueLenRoundedUp4 > length)
+                    if ((valueLenRoundedUp4 > length) ||
+                        (valueLen > CFG_MAX_STR_LEN))
                     {
                        PELOGE(cfgLog(pMac, LOGE, FL("Invalid string length %d"
                               "in set param %d (tot %d)"), valueLen,
