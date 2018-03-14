@@ -1851,6 +1851,47 @@ QDF_STATUS wma_roam_scan_offload_command(tp_wma_handle wma_handle,
 }
 
 /**
+ * wma_send_offload_11k_params() - API to send 11k offload params to FW
+ * @handle: WMA handle
+ * @params: Pointer to 11k offload params
+ *
+ * Return: None
+ */
+static
+QDF_STATUS wma_send_offload_11k_params(WMA_HANDLE handle,
+				    struct wmi_11k_offload_params *params)
+{
+	QDF_STATUS status;
+	tp_wma_handle wma_handle = (tp_wma_handle) handle;
+
+	if (!wma_handle || !wma_handle->wmi_handle) {
+		WMA_LOGE("%s: WMA is closed, cannot send 11k offload cmd",
+			 __func__);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	if (!WMI_SERVICE_EXT_IS_ENABLED(wma_handle->wmi_service_bitmap,
+				wma_handle->wmi_service_ext_bitmap,
+				WMI_SERVICE_11K_NEIGHBOUR_REPORT_SUPPORT)) {
+		WMA_LOGE("%s: FW doesn't support 11k offload",
+			 __func__);
+		return QDF_STATUS_E_NOSUPPORT;
+	}
+
+	if (!params->neighbor_report_params.ssid.length) {
+		WMA_LOGD("%s: SSID Len 0", __func__);
+		return QDF_STATUS_E_INVAL;
+	}
+
+	status = wmi_unified_offload_11k_cmd(wma_handle->wmi_handle, params);
+
+	if (status != QDF_STATUS_SUCCESS)
+		WMA_LOGE("failed to send 11k offload command");
+
+	return status;
+}
+
+/**
  * wma_process_roaming_config() - process roam request
  * @wma_handle: wma handle
  * @roam_req: roam request parameters
@@ -1975,6 +2016,16 @@ QDF_STATUS wma_process_roaming_config(tp_wma_handle wma_handle,
 		if (qdf_status != QDF_STATUS_SUCCESS) {
 			WMA_LOGE("Sending start for roam scan filter failed");
 			break;
+		}
+
+		if (roam_req->reason == REASON_CTX_INIT) {
+			qdf_status = wma_send_offload_11k_params(wma_handle,
+						&roam_req->offload_11k_params);
+			if (qdf_status != QDF_STATUS_SUCCESS) {
+				WMA_LOGE("11k offload params not sent, status %d",
+					 qdf_status);
+				break;
+			}
 		}
 		break;
 
@@ -2554,6 +2605,18 @@ int wma_roam_synch_event_handler(void *handle, uint8_t *event,
 		goto cleanup_label;
 	}
 
+	if (synch_event->bcn_probe_rsp_len >
+	    param_buf->num_bcn_probe_rsp_frame ||
+	    synch_event->reassoc_req_len >
+	    param_buf->num_reassoc_req_frame ||
+	    synch_event->reassoc_rsp_len >
+	    param_buf->num_reassoc_rsp_frame) {
+		WMA_LOGD("Invalid synch payload: LEN bcn:%d, req:%d, rsp:%d",
+			synch_event->bcn_probe_rsp_len,
+			synch_event->reassoc_req_len,
+			synch_event->reassoc_rsp_len);
+		goto cleanup_label;
+	}
 	if (synch_event->vdev_id >= wma->max_bssid) {
 		WMA_LOGE("%s: received invalid vdev_id %d",
 			 __func__, synch_event->vdev_id);
@@ -4395,6 +4458,10 @@ int wma_extscan_hotlist_match_event_handler(void *handle,
 		WMA_LOGE("%s: Hotlist AP's list invalid", __func__);
 		return -EINVAL;
 	}
+	if (numap > param_buf->num_hotlist_match) {
+		WMA_LOGE("Invalid no of total enteries %d", numap);
+		return -EINVAL;
+	}
 	if (numap > WMA_EXTSCAN_MAX_HOTLIST_ENTRIES) {
 		WMA_LOGE("%s: Total Entries %u greater than max",
 			__func__, numap);
@@ -4699,10 +4766,11 @@ int wma_extscan_cached_results_event_handler(void *handle,
 	}
 
 	if (event->num_entries_in_page >
-	    (WMI_SVC_MSG_MAX_SIZE - sizeof(*event))/sizeof(*src_hotlist)) {
-		WMA_LOGE("%s:excess num_entries_in_page %d in WMI event",
+	    (WMI_SVC_MSG_MAX_SIZE - sizeof(*event))/sizeof(*src_hotlist) ||
+	    event->num_entries_in_page > param_buf->num_bssid_list) {
+		WMA_LOGE("%s:excess num_entries_in_page %d in WMI event. num_bssid_list %d",
 			 __func__,
-			 event->num_entries_in_page);
+			 event->num_entries_in_page, param_buf->num_bssid_list);
 		return -EINVAL;
 	} else {
 		total_len = sizeof(*event) +
@@ -4842,6 +4910,10 @@ int wma_extscan_change_results_event_handler(void *handle,
 		WMA_LOGE("%s: Results invalid", __func__);
 		return -EINVAL;
 	}
+	if (numap > param_buf->num_bssid_signal_descriptor_list) {
+		WMA_LOGE("%s: Invalid num of entries in page: %d", __func__, numap);
+		return -EINVAL;
+	}
 	for (i = 0; i < numap; i++)
 		rssi_num += src_chglist->num_rssi_samples;
 
@@ -4890,6 +4962,13 @@ int wma_extscan_change_results_event_handler(void *handle,
 					   dest_ap->bssid.bytes);
 		dest_ap->numOfRssi = src_chglist->num_rssi_samples;
 		if (dest_ap->numOfRssi) {
+			if ((dest_ap->numOfRssi + count) >
+			    param_buf->num_rssi_list) {
+				WMA_LOGE("%s: Invalid num in rssi list: %d",
+					__func__, dest_ap->numOfRssi);
+				qdf_mem_free(dest_chglist);
+				return -EINVAL;
+			}
 			for (k = 0; k < dest_ap->numOfRssi; k++) {
 				dest_ap->rssi[k] = WMA_TGT_NOISE_FLOOR_DBM +
 						   src_rssi[count++];
@@ -4955,9 +5034,11 @@ int wma_passpoint_match_event_handler(void *handle,
 	 * against a constant should not be an issue.
 	 */
 	if ((sizeof(*event) + event->ie_length + event->anqp_length) >
-			WMI_SVC_MSG_MAX_SIZE) {
-		WMA_LOGE("IE Length: %d or ANQP Length: %d is huge",
-				 event->ie_length, event->anqp_length);
+	     WMI_SVC_MSG_MAX_SIZE ||
+	     (event->ie_length + event->anqp_length) > param_buf->num_bufp) {
+		WMA_LOGE("IE Length: %u or ANQP Length: %u is huge, num_bufp: %u",
+			event->ie_length, event->anqp_length,
+			param_buf->num_bufp);
 		return -EINVAL;
 	}
 
