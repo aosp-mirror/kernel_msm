@@ -18,6 +18,9 @@ Required properties:
 - compatible: must be "ramoops"
 
 - memory-region: phandle to a region of memory that is preserved between reboots
+- alt-memory-region: phandle to a region of memory that is preserved between
+		     reboots which contains an AES encrypted copy of the
+		     persistent RAM storage.
 
 
 Optional properties:
