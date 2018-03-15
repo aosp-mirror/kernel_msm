@@ -4573,6 +4573,978 @@ END:
 }
 
 
+/*************** TP Sensitivity calibration API ********************/
+
+/**
+  * Perform the Pre Calibration MS Test when the stimpad is down
+  * @param[out] frame pointer to the frame which will contain
+  * the average frame resulting from the test
+  * @param target reference value for the frame, each node should be
+  * around +-percentage% this value
+  * @param percentage percentage of the target value which define
+  * the valid interval for the frame, if <0 the test will be skipped
+  * @return OK if success or an error code which specify the type of error
+  */
+int tp_sensitivity_test_pre_cal_ms(MutualSenseFrame *finalFrame, short target,
+				   int percentage)
+{
+	int ret = OK;
+	int count = 0, i = 0, j = 0;
+	short min, max;
+	MutualSenseFrame frame;
+
+	finalFrame->node_data = NULL;
+
+
+	logError(0, "%s %s: Start TP sensitivity MS Pre Cal...\n", tag,
+		 __func__);
+	logError(0,
+		 "%s %s: IMPORTANT!!! Stimpad should be on the display of the device!\n",
+		 tag, __func__);
+	ret = getMSFrame3(MS_STRENGTH, &frame);
+	if (ret < OK) {
+		logError(1, "%s %s: can not read MS Frame... ERROR %08X\n",
+			 tag, __func__, ret);
+		goto ERROR;
+	}
+
+	finalFrame->header = frame.header;
+	finalFrame->node_data_size = frame.node_data_size;
+
+	finalFrame->node_data = (short *)kzalloc(frame.node_data_size *
+						 sizeof(short), GFP_KERNEL);
+	if (finalFrame->node_data == NULL) {
+		logError(1, "%s %s: can not allocate node_data ERROR %08X\n",
+			 tag, __func__, ERROR_ALLOC | ERROR_GET_FRAME);
+		ret = ERROR_ALLOC | ERROR_GET_FRAME;
+		goto ERROR;
+	}
+
+	/* collecting frames */
+	do {
+		for (i = 0; i < finalFrame->node_data_size; i++) {
+			finalFrame->node_data[i] += (frame.node_data[i] * 10) /
+						    SENS_TEST_NUM_FRAMES;
+		}
+
+		if (frame.node_data != NULL) {
+			kfree(frame.node_data);
+			frame.node_data = NULL;
+		}
+
+		count++;
+
+		/* exclude one more reading at the end*/
+		if (count < SENS_TEST_NUM_FRAMES)
+			ret = getMSFrame3(MS_STRENGTH, &frame);
+	} while ((count < SENS_TEST_NUM_FRAMES) && (ret >= OK));
+
+	if (ret < OK) {
+		logError(1,
+			 "%s %s: Error while capturing the frame %d! ERROR %08X\n",
+			 tag,
+			 __func__, count, ret);
+		goto ERROR;
+	}
+
+	ret = OK;
+	/* check against +-percentage% target */
+	logError(1, "%s %s: Computing average frame...\n", tag, __func__);
+
+	min = target - (target * percentage / 100);
+	max = target + (target * percentage / 100);
+
+	for (i = 0; i < finalFrame->header.force_node; i++) {
+		for (j = 0; j < finalFrame->header.sense_node; j++) {
+			finalFrame->node_data[i *
+					      finalFrame->header.sense_node +
+					      j] /= 10;
+		/*if percentage is <0 skip this test, just collect data */
+			if ((percentage > 0) &&
+			    ((finalFrame->node_data[i * finalFrame->header.
+						    sense_node
+						    + j] >
+			      max) ||
+			     (finalFrame->node_data[i *
+						    finalFrame->header.
+						    sense_node
+						    + j] <
+			      min))) {
+				logError(1,
+					 "%s %s: MS Force Node[%d, %d] = %d exceed limit [%d, %d]\n",
+					 tag, __func__, i, j,
+					 finalFrame->node_data[i *
+							       finalFrame
+							       ->header.
+							       sense_node + j],
+					 min, max);
+				ret = ERROR_TEST_CHECK_FAIL;
+			}
+		}
+	}
+
+
+	/* print average frame in the log */
+	print_frame_short("MS FS Mean =",
+			  array1dTo2d_short(
+				  finalFrame->node_data,
+				  finalFrame->node_data_size,
+				  finalFrame->header.sense_node),
+			  finalFrame->header.force_node,
+			  finalFrame->header.sense_node);
+
+	if (ret != OK)
+		logError(1,
+			 "%s %s: TP sensitivity MS Pre Cal test FAILED... ERROR %08X\n",
+			 tag, __func__, ret);
+	else
+		logError(1, "%s %s: TP sensitivity MS Pre Cal FINISHED!\n",
+			 tag, __func__);
+
+	return ret;
+
+
+ERROR:
+	if (frame.node_data != NULL) {
+		kfree(frame.node_data);
+		frame.node_data = NULL;
+	}
+
+
+	if (finalFrame->node_data != NULL) {
+		kfree(finalFrame->node_data);
+		finalFrame->node_data = NULL;
+	}
+
+	return ret;
+}
+
+
+
+/**
+  * Perform the Pre Calibration SS Test when the stimpad is down
+  * @param[out] frame pointer to the frame which will contain the average frame
+  * resulting from the test
+  * @param target reference value for the frame, each node should be around
+  * +-percentage% this value
+  * @param percentage percentage of the target value which define the valid
+  * interval for the frame
+  * @return OK if success or an error code which specify the type of error
+  */
+int tp_sensitivity_test_pre_cal_ss(SelfSenseFrame *finalFrame, short target,
+				int percentage)
+{
+	int ret = OK;
+	int count = 0, i = 0;
+	short min, max;
+	SelfSenseFrame frame;
+	int *temp_force = NULL;
+	int *temp_sense = NULL;
+
+	finalFrame->force_data = NULL;
+	finalFrame->sense_data = NULL;
+
+	logError(0, "%s %s: Start TP sensitivity SS Pre Cal...\n", tag,
+		 __func__);
+	logError(0,
+		 "%s %s: IMPORTANT!!! Stimpad should be on the display of the device!\n",
+		 tag, __func__);
+	ret = getSSFrame3(SS_STRENGTH, &frame);
+	if (ret < OK) {
+		logError(1, "%s %s: can not read SS Frame... ERROR %08X\n",
+			 tag, __func__, ret);
+		goto ERROR;
+	}
+
+	finalFrame->header = frame.header;
+
+	finalFrame->force_data = (short *)kzalloc(frame.header.force_node *
+						  sizeof(short), GFP_KERNEL);
+	temp_force = (int *)kzalloc(frame.header.force_node *
+						  sizeof(int), GFP_KERNEL);
+	finalFrame->sense_data = (short *)kzalloc(frame.header.sense_node *
+						  sizeof(short), GFP_KERNEL);
+	temp_sense = (int *)kzalloc(frame.header.sense_node *
+						  sizeof(int), GFP_KERNEL);
+	if (finalFrame->force_data == NULL ||
+	    temp_force == NULL ||
+	    finalFrame->sense_data == NULL ||
+	    temp_sense == NULL) {
+
+		logError(1, "%s %s: can not allocate memory ERROR %08X\n",
+			 tag, __func__, ERROR_ALLOC | ERROR_GET_FRAME);
+		ret = ERROR_ALLOC | ERROR_GET_FRAME;
+		goto ERROR;
+	}
+
+	/* collecting frames */
+	do {
+		for (i = 0; i < finalFrame->header.force_node; i++)
+			temp_force[i] += frame.force_data[i];
+
+		for (i = 0; i < finalFrame->header.sense_node; i++)
+			temp_sense[i] += frame.sense_data[i];
+
+		count++;
+
+		if (frame.force_data != NULL) {
+			kfree(frame.force_data);
+			frame.force_data = NULL;
+		}
+		if (frame.sense_data != NULL) {
+			kfree(frame.sense_data);
+			frame.sense_data = NULL;
+		}
+
+		/* exclude one more reading at the end*/
+		if (count < SENS_TEST_NUM_FRAMES)
+			ret = getSSFrame3(SS_STRENGTH, &frame);
+	} while ((count < SENS_TEST_NUM_FRAMES) && (ret >= OK));
+
+	if (ret < OK) {
+		logError(1,
+			 "%s %s: Error while capturing the frame %d! ERROR %08X\n",
+			 tag,
+			 __func__, count, ret);
+		goto ERROR;
+	}
+
+	ret = OK;
+
+	/* compute the average and check against +-percentage% target */
+	min = target - (target * percentage / 100);
+	max = target + (target * percentage / 100);
+
+	for (i = 0; i < finalFrame->header.force_node; i++) {
+		finalFrame->force_data[i] = temp_force[i] /
+						SENS_TEST_NUM_FRAMES;
+		if ((percentage > 0) && ((finalFrame->force_data[i] > max) ||
+					 (finalFrame->force_data[i] < min))) {
+			logError(1,
+				 "%s %s: SS Force Node[%d] = %d exceed limit [%d, %d]\n",
+				 tag, __func__, i, finalFrame->force_data[i],
+				 min, max);
+			ret = ERROR_TEST_CHECK_FAIL;
+		}
+	}
+
+	for (i = 0; i < finalFrame->header.sense_node; i++) {
+		finalFrame->sense_data[i] = temp_sense[i] /
+						SENS_TEST_NUM_FRAMES;
+		if ((finalFrame->sense_data[i] > max) ||
+		    (finalFrame->sense_data[i] < min)) {
+			logError(1,
+				 "%s %s: SS Sense Node[%d] = %d exceed limit [%d, %d]\n",
+				 tag, __func__, i, finalFrame->sense_data[i],
+				 min, max);
+			ret = ERROR_TEST_CHECK_FAIL;
+		}
+	}
+
+	/* print average frame in the log */
+	print_frame_short("SS FS force Mean =",
+			  array1dTo2d_short(
+				  finalFrame->force_data,
+				  finalFrame->header.force_node,
+				  1),
+			  finalFrame->header.force_node, 1);
+	print_frame_short("SS FS sense Mean =",
+			  array1dTo2d_short(
+				  finalFrame->sense_data,
+				  finalFrame->header.sense_node,
+				  finalFrame->header.sense_node),
+			  1, finalFrame->header.sense_node);
+
+
+	kfree(temp_force);
+	temp_force = NULL;
+
+	kfree(temp_sense);
+	temp_sense = NULL;
+
+	if (ret < OK)
+		logError(1,
+			 "%s %s: TP sensitivity SS Pre Cal test FAILED... ERROR %08X\n",
+			 tag, __func__, ret);
+	else {
+		logError(1, "%s %s: TP sensitivity SS Pre Cal FINISHED!\n",
+			 tag, __func__);
+		ret = OK;
+	}
+
+	return ret;
+
+
+ERROR:
+
+	kfree(temp_force);
+	temp_force = NULL;
+
+	kfree(temp_sense);
+	temp_sense = NULL;
+
+	kfree(frame.force_data);
+	frame.force_data = NULL;
+
+	kfree(frame.sense_data);
+	frame.sense_data = NULL;
+
+	kfree(finalFrame->force_data);
+	finalFrame->force_data = NULL;
+
+	kfree(finalFrame->sense_data);
+	finalFrame->sense_data = NULL;
+
+	return ret;
+}
+
+/**
+  * Compute Digital gains for calibration
+  * @param frame pointer to the frame used as reference to compute the gains
+  * @param target reference target value for computing the gains
+  * @param saveGain if 1, will save the gain table into the chip otherwise will
+  * not save it
+  * @return OK if success or an error code which specify the type of error
+  */
+int tp_sensitivity_compute_gains(MutualSenseFrame *frame, short target,
+				int saveGain)
+{
+	int ret = OK;
+	int i = 0;
+	u8 gains[frame->node_data_size];
+
+	if ((frame->node_data == NULL) || (frame->node_data_size == 0)) {
+		logError(1,
+			 "%s %s: Invalid frame data passed as argument! ERROR %08X\n",
+			 tag, __func__, ERROR_OP_NOT_ALLOW);
+		return ERROR_OP_NOT_ALLOW;
+	}
+
+	memset(gains, 0, frame->node_data_size);
+
+	logError(0, "%s %s: Start to compute Digital Gains...\n", tag,
+		 __func__);
+	for (i = 0; i < frame->node_data_size; i++)
+		gains[i] = ((target * 100) / frame->node_data[i]) > 255 ?
+			   (u8)(255) : (u8)(((target * 100) /
+					     frame->node_data[i]));
+	/* clamp the max value to 255 because gain is only one byte */
+
+
+	/* print average frame in the log */
+	print_frame_u8("MS Digital Gain =",
+		       array1dTo2d_u8(
+			       gains,
+			       frame->node_data_size,
+			       frame->header.sense_node),
+		       frame->header.force_node,
+		       frame->header.sense_node);
+
+
+	/* if(saveGain==1){ */
+	/* write gains into the IC */
+	ret = writeHostDataMemory(LOAD_SENS_CAL_COEFF, gains,
+				  frame->header.force_node,
+				  frame->header.sense_node, 0, 0, saveGain);
+	if (ret != OK)
+		logError(1,
+			 "%s %s: impossible to write digital gains! ERROR %08X\n",
+			 tag,
+			 __func__, ret);
+	/* } */
+
+	if (ret < OK)
+		logError(1,
+			 "%s %s: compute Digital Gains FAILED! ERROR %08X\n",
+			 tag,
+			 __func__, ret);
+	else {
+		logError(1, "%s %s: compute Digital Gains FINISHED!\n", tag,
+			 __func__);
+		ret = OK;
+	}
+
+	return ret;
+}
+
+/**
+  * Perform the Post Calibration MS Test when the stimpad is down
+  * @param[out] finalFrame pointer to the frame which will contain
+  * the average frame resulting from the test
+  * @param[out] deltas pointer to the frame which will contain
+  * the FS Uniform frame (worst_neighborhood/mean)
+  * @param target reference value for the frame, each node should be
+  * around +-percentage% this value
+  * @param percentage percentage of the target value which define
+  * the valid interval for the frame, if <0 the test will be skipped
+  * @param[out] mean_normal pointer to the variable which will contain the mean
+  * of the normal area
+  * @param[out] mean_edge pointer to the variable which will contain the mean of
+  * the edge area
+  * @return OK if success or an error code which specify the type of error
+  */
+int tp_sensitivity_test_post_cal_ms(MutualSenseFrame *finalFrame,
+				    MutualSenseFrame *deltas, short target,
+				    int percentage, int *mean_normal,
+				    int *mean_edge)
+{
+	short currentNode;
+	short final_force_num;
+	short final_sense_num;
+	short *final_node;
+	short delta_sense_num;
+	short *delta_node;
+	short *delta;
+	short adjNode;
+	int ret = OK;
+	int i = 0, j = 0, min, max;
+
+
+	if ((finalFrame == NULL) || (deltas == NULL) || (mean_normal == NULL) ||
+	    (mean_edge == NULL)) {
+		logError(1, "%s %s: Invalid arguments Passed! ERROR %08X\n",
+			 tag, __func__, ERROR_OP_NOT_ALLOW);
+		return ERROR_OP_NOT_ALLOW;
+	}
+
+	*mean_normal = 0;
+	*mean_edge = 0;
+
+	finalFrame->node_data = NULL;
+	deltas->node_data = NULL;
+
+	logError(0, "%s %s: Start TP sensitivity MS Post Cal...\n", tag,
+		 __func__);
+	logError(0,
+		 "%s %s: IMPORTANT!!! Stimpad should be on the display of the device!\n",
+		 tag, __func__);
+
+	/* collect frames skipping the tests + print on the log */
+	ret = tp_sensitivity_test_pre_cal_ms(finalFrame, target, -1);
+	if (ret < OK) {
+		logError(1, "%s %s: can not collect MS Frame... ERROR %08X\n",
+			 tag, __func__, ret);
+		goto ERROR;
+	}
+
+
+	deltas->header = finalFrame->header;
+	deltas->node_data_size = finalFrame->node_data_size;
+
+	deltas->node_data = (short *)kzalloc(deltas->node_data_size *
+					     sizeof(short), GFP_KERNEL);
+	if (deltas->node_data == NULL) {
+		logError(1,
+			 "%s %s: can not allocate deltas node_data ERROR %08X\n",
+			 tag,
+			 __func__, ERROR_ALLOC | ERROR_GET_FRAME);
+		ret = ERROR_ALLOC | ERROR_GET_FRAME;
+		goto ERROR;
+	}
+
+	/* compute the average of the whole panel and check against
+	  * +-percentage% target */
+	logError(0,
+		 "%s %s: Computing average of whole panel and delta for each node...\n",
+		 tag, __func__);
+
+	final_force_num = finalFrame->header.force_node;
+	final_sense_num = finalFrame->header.sense_node;
+	final_node = finalFrame->node_data;
+	delta_sense_num = deltas->header.sense_node;
+	delta_node = deltas->node_data;
+
+
+	for (i = 0; i < final_force_num; i++) {
+		for (j = 0; j < final_sense_num; j++) {
+			currentNode = finalFrame->node_data[i *
+							    finalFrame->header.
+							    sense_node + j];
+			delta = &delta_node[i * delta_sense_num + j];
+
+			if ((i == 0) ||
+			    (i == (final_force_num - 1)) ||
+			    (j == 0) ||
+			    (j == (final_sense_num - 1))) {
+				/* edge nodes */
+				*mean_edge += currentNode;
+				if ((i == 0) ||
+				    (i == final_force_num - 1)) {
+					/* need to check adj node up or down for
+					  *  nodes in the corners */
+					if ((i == 0) &&
+					    ((j == 0) ||
+					     (j == final_sense_num - 1))) {
+						adjNode = currentNode -
+							  final_node[(i + 1) *
+							   final_sense_num + j];
+						if (abs(adjNode) > *delta)
+							*delta = abs(adjNode);
+					}
+
+					if ((i == (final_force_num - 1)) &&
+					    ((j == 0) ||
+					     (j == final_sense_num - 1))) {
+						adjNode = currentNode -
+							  final_node[(i - 1) *
+							   final_sense_num + j];
+						if (abs(adjNode) > *delta)
+							*delta = abs(adjNode);
+					}
+
+					/* scan the row */
+					if ((j - 1) >= 0) {
+						adjNode = currentNode -
+							  final_node[i *
+							    final_sense_num +
+							    (j - 1)];
+						if (abs(adjNode) > *delta)
+							*delta = abs(adjNode);
+					}
+
+					if ((j + 1) < final_sense_num) {
+						adjNode = currentNode -
+							  final_node[i *
+							    final_sense_num +
+							    (j + 1)];
+						if (abs(adjNode) > *delta)
+						    *delta = abs(adjNode);
+					}
+				}
+
+				if ((j == 0) ||
+				    (j == final_sense_num - 1)) {
+					/* scan the column */
+					if ((i - 1) >= 0) {
+						adjNode = currentNode -
+							  final_node[(i - 1) *
+							   final_sense_num + j];
+						if (abs(adjNode) > *delta)
+							*delta = abs(adjNode);
+					}
+
+					if ((i + 1) < final_force_num) {
+						adjNode = currentNode -
+							  final_node[(i + 1) *
+							   final_sense_num + j];
+						if (abs(adjNode) > *delta)
+							*delta = abs(adjNode);
+					}
+				}
+			} else {
+				/*normal nodes */
+				*mean_normal += currentNode;
+
+				/* picking up the worst difference between
+				  * one pixel and its neighbors */
+				if ((i - 1) >= 1) {
+					adjNode = currentNode -
+						  final_node[(i - 1) *
+							final_sense_num + j];
+					if (abs(adjNode) > *delta)
+						*delta = abs(adjNode);
+				}
+
+				if ((i + 1) < (final_force_num - 1)) {
+					adjNode = currentNode -
+						  final_node[(i + 1) *
+							final_sense_num + j];
+					if (abs(adjNode) > *delta)
+						*delta = abs(adjNode);
+				}
+				if ((j - 1) >= 1) {
+					adjNode = currentNode -
+						  final_node[i *
+						    final_sense_num + (j - 1)];
+					if (abs(adjNode) > *delta)
+						*delta = abs(adjNode);
+				}
+
+				if ((j + 1) < (final_sense_num - 1)) {
+					adjNode = currentNode -
+						  final_node[i *
+						    final_sense_num + (j + 1)];
+					if (abs(adjNode) > *delta)
+						*delta = abs(adjNode);
+				}
+			}
+		}
+	}
+
+	*mean_normal /= (finalFrame->header.force_node - 2) *
+			(finalFrame->header.sense_node - 2);
+	*mean_edge /= (finalFrame->header.force_node * 2) +
+		      (finalFrame->header.sense_node - 2) * 2;
+
+	logError(0, "%s %s: Normal Frame average = %d\n", tag, __func__,
+		 *mean_normal);
+	logError(0, "%s %s: Edge Frame average = %d\n", tag, __func__,
+		 *mean_edge);
+	/* compute the average and check against +-% target */
+	min = target - (target * percentage / 100);
+	max = target + (target * percentage / 100);
+
+	if ((percentage > 0) && ((*mean_normal < min) || (*mean_normal >
+							  max))) {
+		logError(1,
+			 "%s %s: Normal Frame average = %d exceed limit [%d, %d]\n",
+			 tag, __func__, *mean_normal, min, max);
+		ret = ERROR_TEST_CHECK_FAIL;
+	}
+
+	if ((percentage > 0) && ((*mean_edge < min) || (*mean_edge > max))) {
+		logError(1,
+			 "%s %s: Edge Frame average = %d exceed limit [%d, %d]\n",
+			 tag,
+			 __func__, *mean_edge, min, max);
+		ret = ERROR_TEST_CHECK_FAIL;
+	}
+
+	for (i = 0; i < deltas->header.force_node; i++) {
+		for (j = 0; j < deltas->header.sense_node; j++) {
+			if ((i == 0) || (i == deltas->header.force_node) ||
+			    (j == 0) || (j == deltas->header.sense_node))
+				deltas->node_data[i *
+						  deltas->header.sense_node +
+						  j] =
+					deltas->node_data[i *
+							  deltas->header.
+							  sense_node + j] *
+					100 /
+					(*mean_edge);
+			else
+				deltas->node_data[i *
+						  deltas->header.sense_node +
+						  j] =
+					deltas->node_data[i *
+							  deltas->header.
+							  sense_node + j] *
+					100 /
+					(*mean_normal);
+
+			if ((percentage > 0) && (deltas->node_data[i *
+								   deltas->
+								   header.
+								   sense_node +
+								   j] >
+						 percentage)) {
+				logError(1,
+					 "%s %s: Delta Node[%d, %d] = %d exceed limit [%d]\n",
+					 tag, __func__, i, j,
+					 deltas->node_data[i *
+							   deltas
+							   ->header.sense_node +
+							   j], percentage);
+				ret = ERROR_TEST_CHECK_FAIL;
+			}
+		}
+	}
+
+
+	/* print average frame in the log */
+	print_frame_short("FS Uniform (%) =",
+			  array1dTo2d_short(
+				  deltas->node_data,
+				  deltas->node_data_size,
+				  deltas->header.sense_node),
+			  deltas->header.force_node,
+			  deltas->header.sense_node);
+
+
+	if (ret < OK)
+		logError(1,
+			 "%s %s: TP sensitivity MS Post Cal test FAILED... ERROR %08X\n",
+			 tag, __func__, ret);
+	else {
+		logError(1, "%s %s: TP sensitivity MS Post Cal FINISHED!\n",
+			 tag, __func__);
+		ret = OK;
+	}
+
+	return ret;
+
+
+ERROR:
+	if (deltas->node_data != NULL) {
+		kfree(deltas->node_data);
+		deltas->node_data = NULL;
+	}
+
+
+	if (finalFrame->node_data != NULL) {
+		kfree(finalFrame->node_data);
+		finalFrame->node_data = NULL;
+	}
+
+	return ret;
+}
+
+
+/**
+  * Compute Digital gains for calibration
+  * @param enter if =1 turn on TP Sensitivity mode, otherwise will turn it off
+  * @param saveGain if 1, will save the gain table into the chip otherwise will
+  * not save it
+  * @return OK if success or an error code which specify the type of error
+  */
+int tp_sensitivity_mode(u8 enter, int saveGain)
+{
+	int res, ret = OK;
+	u8 cmd[4] = { 0xC0, 0x00, 0x00, 0x00 };
+	u8 sett = SPECIAL_WRITE_HOST_MEM_TO_FLASH;
+
+	logError(0, "%s %s: Start TP Sensitivity Mode... enter = %02X\n", tag,
+		 __func__, enter);
+	if (enter == 1) {
+		/* enter TP Sensitivity mode*/
+		ret = fts_disableInterrupt();
+		logError(0,
+			 "%s %s: Entering TP Sensitivity Mode disabling algos...\n",
+			 tag,
+			 __func__);
+		cmd[3] = 0x01;
+		res = fts_writeFwCmd(cmd, 4);
+		if (res < OK)
+			logError(1,
+				 "%s %s: Error while turning on TP Sens Mode! ERROR %08X\n",
+				 tag, __func__, res);
+	} else {
+		/* exit TP Sensitivity mode*/
+		logError(0,
+			 "%s %s: Exiting TP Sensitivity Mode enabling algos...\n",
+			 tag,
+			 __func__);
+		res = fts_writeFwCmd(cmd, 4);
+		if (res < OK)
+			logError(1,
+				 "%s %s: Error while turning off TP Sens Mode! ERROR %08X\n",
+				 tag, __func__, res);
+
+		if (saveGain == 1) {
+			logError(0,
+				 "%s %s: Trigger writing gains into the flash...\n",
+				 tag,
+				 __func__);
+			ret = writeSysCmd(SYS_CMD_SPECIAL, &sett, 1);
+			if (ret < OK)
+				logError(1,
+					 "%s %s: error while writing gains into the flash! ERROR %08X\n",
+					 tag, __func__, res);
+		}
+
+		res |= senseOn();
+		res |= fts_enableInterrupt();
+	}
+
+	res |= ret;
+
+	if (res < OK)
+		logError(1, "%s %s: TP Sensitivity Mode... ERROR %08X!\n", tag,
+			 __func__, res);
+	else
+		logError(0, "%s %s: TP Sensitivity Mode FINISHED!\n", tag,
+			 __func__);
+
+	return res;
+}
+
+
+/**
+  * Compute Digital gains for calibration
+  * @param scan select the scan mode which should be enabled
+  * @param enableGains =1 apply gains when computing the strength otherwise
+  * the gains will be ignored
+  * @return OK if success or an error code which specify the type of error
+  */
+int tp_sensitivity_set_scan_mode(u8 scan, int enableGains)
+{
+	int res, ret = OK;
+	u8 cmd[4] = { 0xC0, 0x00, 0x01, 0x00 };
+
+
+	logError(0,
+		 "%s %s: Set TP Sensitivity Scan Mode... scan = %02X, enableGains = %d\n",
+		 tag, __func__, scan, enableGains);
+
+
+	if (enableGains == 1) {
+		/* Consider Sensitivity Gains when computing Strength */
+		cmd[3] = 0x01;
+		ret = fts_writeFwCmd(cmd, 4);
+		if (ret < OK)
+			logError(1,
+				 "%s %s: Error while enabling Gains in TP Sens Mode! ERROR %08X\n",
+				 tag, __func__, ret);
+	} else {
+		/* Exclude Sensitivity Gains when computing Strength */
+		ret = fts_writeFwCmd(cmd, 4);
+		if (ret < OK)
+			logError(1,
+				 "%s %s: Error while disabling Gain in TP Sens Mode! ERROR %08X\n",
+				 tag, __func__, ret);
+	}
+
+	res = setScanMode(SCAN_MODE_LOCKED, scan);
+	if (res < OK)
+		logError(1,
+			 "%s Error while setting the scan frequency... ERROR %08X\n",
+			 tag, res);
+
+	res |= ret;
+
+	if (res < OK)
+		logError(1,
+			 "%s %s: Set TP Sensitivity Scan Mode... ERROR %08X!\n",
+			 tag,
+			 __func__, res);
+	else
+		logError(0, "%s %s: Set TP Sensitivity Scan FINISHED!\n", tag,
+			 __func__);
+
+	return res;
+}
+
+
+
+
+/**
+  * Compute the standard deviation for each node form a series of frames
+  * @param numFrames number of frames to collect to compute the standard
+  * deviation
+  * @param[out] std pointer to the frame which will contain the standard
+  * deviation for each node
+  * @return OK if success or an error code which specify the type of error
+  */
+int tp_sensitivity_test_std_ms(int numFrames, MutualSenseFrame *std)
+{
+	int ret = OK;
+	int i = 0, count = 0;
+	MutualSenseFrame frame;
+	int *mean = NULL;/* store the mean value for each node */
+	unsigned long *stdTemp = NULL;
+
+
+	if (std == NULL) {
+		logError(1, "%s %s: Invalid arguments Passed! ERROR %08X\n",
+			 tag, __func__, ERROR_OP_NOT_ALLOW);
+		return ERROR_OP_NOT_ALLOW;
+	}
+
+	std->node_data = NULL;
+
+	logError(0,
+		 "%s %s: Start TP sensitivity STD... collecting %d frames!\n",
+		 tag,
+		 __func__, numFrames);
+
+	/* collect frames skipping the tests + print on the log */
+	ret = getMSFrame3(MS_STRENGTH, &frame);
+	if (ret < OK) {
+		logError(1, "%s %s: can not read MS Frame... ERROR %08X\n",
+			 tag, __func__, ret);
+		goto ERROR;
+	}
+
+	std->header = frame.header;
+	std->node_data_size = frame.node_data_size;
+
+	std->node_data = (short *)kzalloc(std->node_data_size * sizeof(short),
+					  GFP_KERNEL);
+	mean = (int *)kzalloc(std->node_data_size * sizeof(int), GFP_KERNEL);
+	stdTemp = (unsigned long *)kzalloc(std->node_data_size *
+					   sizeof(unsigned long),
+					   GFP_KERNEL);
+	if (std->node_data == NULL ||
+	    mean == NULL ||
+	    stdTemp == NULL) {
+		logError(1,
+			 "%s %s: can not allocate memory ERROR %08X\n",
+			 tag,
+			 __func__, ERROR_ALLOC | ERROR_GET_FRAME);
+		ret = ERROR_ALLOC | ERROR_GET_FRAME;
+		goto ERROR;
+	}
+
+	/* collecting frames */
+	do {
+		for (i = 0; i < frame.node_data_size; i++) {
+			mean[i] += frame.node_data[i];
+			stdTemp[i] += frame.node_data[i] * frame.node_data[i];
+		}
+		count++;
+
+		if (frame.node_data != NULL) {
+			kfree(frame.node_data);
+			frame.node_data = NULL;
+		}
+
+		/* exclude one more reading at the end*/
+		if (count < numFrames)
+			ret = getMSFrame3(MS_STRENGTH, &frame);
+	} while ((count < numFrames) && (ret >= OK));
+
+	if (ret < OK) {
+		logError(0,
+			 "%s %s: error while collecting the frames! ERROR%08X\n",
+			 tag,
+			 __func__, ret);
+		goto ERROR;
+	}
+
+	/* compute the average for each node */
+	logError(0, "%s %s: Computing std for each node...\n", tag, __func__);
+
+	for (i = 0; i < std->node_data_size; i++) {
+		mean[i] /= numFrames;
+		stdTemp[i] = stdTemp[i] / numFrames - (mean[i] * mean[i]);
+		std->node_data[i] = (short)int_sqrt(stdTemp[i]);
+	}
+
+	kfree(stdTemp);
+	stdTemp = NULL;
+	kfree(mean);
+	mean = NULL;
+
+	/* print average frame in the log */
+	print_frame_short("STD =",
+			  array1dTo2d_short(
+				  std->node_data,
+				  std->node_data_size,
+				  std->header.sense_node),
+			  std->header.force_node,
+			  std->header.sense_node);
+
+	if (ret < OK)
+		logError(1,
+			 "%s %s: TP sensitivity STD test FAILED... ERROR %08X\n",
+			 tag,
+			 __func__, ret);
+	else {
+		logError(1, "%s %s: TP sensitivity STD FINISHED!\n", tag,
+			 __func__);
+		ret = OK;
+	}
+
+	return ret;
+
+ERROR:
+
+	kfree(frame.node_data);
+	frame.node_data = NULL;
+
+	kfree(std->node_data);
+	std->node_data = NULL;
+
+	kfree(stdTemp);
+	stdTemp = NULL;
+
+	kfree(mean);
+	mean = NULL;
+
+	return ret;
+}
+
+
 /**
   * Retrieve the actual Test Limit data from the system (bin file or header
   * file)
@@ -4903,7 +5875,7 @@ int readLine(char *data, char *line, int size, int *n)
 	int i = 0;
 
 	if (size < 1)
-		return -1;
+		return ERROR_OP_NOT_ALLOW;
 
 	while (data[i] != '\n' && i < size) {
 		line[i] = data[i];

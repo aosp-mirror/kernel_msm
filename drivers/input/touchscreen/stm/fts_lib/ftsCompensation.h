@@ -120,7 +120,26 @@ typedef struct {
 			 * (can be negative) */
 } TotSelfSenseData;
 
+/**
+  * Struct which contains the Mutual Sense Sensitivity Calibration Coefficients
+  */
+typedef struct {
+	DataHeader header;	/* /< Header */
+	u8 *ms_coeff;	/* /< Pointer to an array of bytes which contains the MS
+			 * Sens coeff */
+	int node_data_size;	/* /< size of coefficients */
+} MutualSenseCoeff;
 
+/**
+  * Struct which contains the Self Sense Sensitivity Calibration Coefficients
+  */
+typedef struct {
+	DataHeader header;	/* /< Header */
+	u8 *ss_force_coeff;	/* /< Pointer to an array of bytes which
+				 * contains the SS Sens Force coeff */
+	u8 *ss_sense_coeff;	/* /< Pointer to an array of bytes which
+				 * contains the SS Sens Sense coeff */
+} SelfSenseCoeff;
 
 int requestCompensationData(u8 type);
 int readCompensationDataHeader(u8 type, DataHeader *header, u64 *address);
@@ -136,4 +155,11 @@ int readTotMutualSenseCompensationData(u8 type, TotMutualSenseData *data);
 int readTotSelfSenseGlobalData(u64 *address, TotSelfSenseData *global);
 int readTotSelfSenseNodeData(u64 address, TotSelfSenseData *node);
 int readTotSelfSenseCompensationData(u8 type, TotSelfSenseData *data);
+int readSensitivityCoeffHeader(u8 type, DataHeader *msHeader,
+			       DataHeader *ssHeader, u64 *address);
+int readSensitivityCoeffNodeData(u64 address, MutualSenseCoeff *msCoeff,
+				 SelfSenseCoeff *ssCoeff);
+int readSensitivityCoefficientsData(MutualSenseCoeff *msData,
+				    SelfSenseCoeff *ssData);
+
 #endif

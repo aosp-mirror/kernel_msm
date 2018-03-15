@@ -817,5 +817,202 @@ int readTotSelfSenseCompensationData(u8 type, TotSelfSenseData *data)
 	}
 
 	return OK;
+}
 
+
+/**
+  * Read Initialization Data Header for the Coefficients and check that the type
+  *  loaded match with the one previously requested
+  * @param type type of Coefficients data requested @link load_opt Load Host
+  * Data Option @endlink
+  * @param msHeader pointer to DataHeader variable for the MS Coefficients
+  * @param ssHeader pointer to DataHeader variable for the SS Coefficients
+  * @param address pointer to a variable which will contain the updated address
+  * to the next data
+  * @return OK if success or an error code which specify the type of error
+  */
+int readSensitivityCoeffHeader(u8 type, DataHeader *msHeader,
+			       DataHeader *ssHeader, u64 *address)
+{
+	u64 offset = ADDR_FRAMEBUFFER;
+	u8 data[SYNCFRAME_DATA_HEADER];
+	int ret;
+
+	ret = fts_writeReadU8UX(FTS_CMD_FRAMEBUFFER_R, BITS_16, offset, data,
+				SYNCFRAME_DATA_HEADER, DUMMY_FRAMEBUFFER);
+	if (ret < OK) {	/* i2c function have already a retry mechanism */
+		logError(1,
+			 "%s %s: error while reading data header ERROR %08X\n",
+			 tag,
+			 __func__, ret);
+		return ret;
+	}
+
+	logError(0, "%s Read Data Header done!\n", tag);
+
+	if (data[0] != HEADER_SIGNATURE) {
+		logError(1,
+			 "%s %s: The Header Signature was wrong! %02X != %02X ERROR %08X\n",
+			 tag, __func__, data[0], HEADER_SIGNATURE,
+			 ERROR_WRONG_DATA_SIGN);
+		return ERROR_WRONG_DATA_SIGN;
+	}
+
+
+	if (data[1] != type) {
+		logError(1, "%s %s: Wrong type found! %02X!=%02X ERROR %08X\n",
+			 tag, __func__, data[1], type, ERROR_DIFF_DATA_TYPE);
+		return ERROR_DIFF_DATA_TYPE;
+	}
+
+	logError(0, "%s Type = %02X of Compensation data OK!\n", tag, type);
+
+	msHeader->type = type;
+	ssHeader->type = type;
+
+	msHeader->force_node = data[5];
+	msHeader->sense_node = data[6];
+	logError(0, "%s MS Force Len = %d Sense Len = %d\n", tag,
+		 msHeader->force_node, msHeader->sense_node);
+
+	ssHeader->force_node = data[7];
+	ssHeader->sense_node = data[8];
+	logError(0, "%s SS Force Len = %d Sense Len = %d\n", tag,
+		 ssHeader->force_node, ssHeader->sense_node);
+
+	*address = offset + SYNCFRAME_DATA_HEADER;
+
+	return OK;
+}
+
+
+/**
+  * Read MS and SS Sensitivity Coefficients for from the IC
+  * @param address a variable which contain the address from where to read the
+  * data
+  * @param msCoeff pointer to MutualSenseCoeff variable which will contain the
+  * MS Coefficient data
+  * @param ssCoeff pointer to SelfSenseCoeff variable which will contain the SS
+  * Coefficient data
+  * @return OK if success or an error code which specify the type of error
+  */
+int readSensitivityCoeffNodeData(u64 address, MutualSenseCoeff *msCoeff,
+				 SelfSenseCoeff *ssCoeff)
+{
+	int size = msCoeff->header.force_node * msCoeff->header.sense_node +
+		   (ssCoeff->header.force_node + ssCoeff->header.sense_node);
+	u8 data[size];
+	int ret;
+
+	msCoeff->node_data_size = msCoeff->header.force_node *
+				  msCoeff->header.sense_node;
+
+	msCoeff->ms_coeff = (u8 *)kmalloc(msCoeff->node_data_size *
+					  (sizeof(u8)), GFP_KERNEL);
+
+	ssCoeff->ss_force_coeff = (u8 *)kmalloc(ssCoeff->header.force_node *
+						(sizeof(u8)), GFP_KERNEL);
+
+	ssCoeff->ss_sense_coeff = (u8 *)kmalloc(ssCoeff->header.sense_node *
+						(sizeof(u8)), GFP_KERNEL);
+	if (msCoeff->ms_coeff == NULL ||
+	    ssCoeff->ss_force_coeff == NULL ||
+	    ssCoeff->ss_sense_coeff == NULL) {
+
+		logError(1,
+			 "%s %s: can not allocate memory for coeff ERROR %08X",
+			 tag,
+			 __func__, ERROR_ALLOC);
+
+		kfree(msCoeff->ms_coeff);
+		msCoeff->ms_coeff = NULL;
+
+		kfree(ssCoeff->ss_force_coeff);
+		ssCoeff->ss_force_coeff = NULL;
+
+		kfree(ssCoeff->ss_sense_coeff);
+		ssCoeff->ss_sense_coeff = NULL;
+
+		return ERROR_ALLOC;
+	}
+
+	logError(0, "%s Address for Node data = %02X\n", tag, address);
+
+	logError(0, "%s Node Data to read %d bytes\n", tag, size);
+
+	ret = fts_writeReadU8UX(FTS_CMD_FRAMEBUFFER_R, BITS_16, address, data,
+				size, DUMMY_FRAMEBUFFER);
+	if (ret < OK) {
+		logError(1, "%s %s: error while reading data... ERROR %08X\n",
+			 tag, ret);
+		kfree(msCoeff->ms_coeff);
+		msCoeff->ms_coeff = NULL;
+		kfree(ssCoeff->ss_force_coeff);
+		ssCoeff->ss_force_coeff = NULL;
+		kfree(ssCoeff->ss_sense_coeff);
+		ssCoeff->ss_sense_coeff = NULL;
+		return ret;
+	}
+
+	logError(0, "%s Read node data ok!\n", tag);
+
+	memcpy(msCoeff->ms_coeff, data, msCoeff->node_data_size);
+	memcpy(ssCoeff->ss_force_coeff, &data[msCoeff->node_data_size],
+	       ssCoeff->header.force_node);
+	memcpy(ssCoeff->ss_sense_coeff, &data[msCoeff->node_data_size +
+					      ssCoeff->header.force_node],
+	       ssCoeff->header.sense_node);
+
+	return OK;
+}
+
+
+/**
+  * Perform all the steps to read Sensitivity Coefficients and store into the
+  * corresponding variables
+  * @param msCoeff pointer to a variable which will contain the MS Sensitivity
+  * Coefficients
+  * @param ssCoeff pointer to a variable which will contain the SS Sensitivity
+  * Coefficients
+  * @return OK if success or an error code which specify the type of error
+  */
+int readSensitivityCoefficientsData(MutualSenseCoeff *msCoeff,
+				    SelfSenseCoeff *ssCoeff)
+{
+	int ret;
+	u64 address;
+
+	msCoeff->ms_coeff = NULL;
+	ssCoeff->ss_force_coeff = NULL;
+	ssCoeff->ss_sense_coeff = NULL;
+
+
+	ret = requestCompensationData(LOAD_SENS_CAL_COEFF);
+	if (ret < OK) {
+		logError(1,
+			 "%s %s: error while requesting data... ERROR %08X\n",
+			 tag,
+			 __func__, ERROR_REQU_COMP_DATA);
+		return ret | ERROR_REQU_COMP_DATA;
+	}
+
+	ret = readSensitivityCoeffHeader(LOAD_SENS_CAL_COEFF,
+					 &(msCoeff->header), &(ssCoeff->header),
+					 &address);
+	if (ret < OK) {
+		logError(1,
+			 "%s %s: error while reading data header... ERROR %08X\n",
+			 tag,
+			 __func__, ERROR_COMP_DATA_HEADER);
+		return ret | ERROR_COMP_DATA_HEADER;
+	}
+
+	ret = readSensitivityCoeffNodeData(address, msCoeff, ssCoeff);
+	if (ret < OK) {
+		logError(1, "%s %s: ERROR %08X\n", tag, __func__,
+			 ERROR_COMP_DATA_NODE);
+		return ret | ERROR_COMP_DATA_NODE;
+	}
+
+	return OK;
 }

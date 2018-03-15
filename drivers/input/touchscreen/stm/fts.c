@@ -1466,7 +1466,6 @@ static ssize_t stm_fts_cmd_show(struct device *dev,
 			goto END;
 		}
 
-
 		res = msm_drm_unregister_client(&info->notifier);
 		if (res < 0) {
 			logError(1, "%s ERROR: unregister notifier failed!\n",
@@ -1685,7 +1684,6 @@ static ssize_t stm_fts_cmd_show(struct device *dev,
 					       comData.header.sense_node);
 			}
 			break;
-
 		case 0x17:	/* Read mutual strength */
 			logError(0, "%s Get 1 MS Strength\n", tag);
 			setScanMode(SCAN_MODE_ACTIVE, 0xFF);
@@ -1774,8 +1772,6 @@ static ssize_t stm_fts_cmd_show(struct device *dev,
 			 tag);
 		res = ERROR_OP_NOT_ALLOW;
 	}
-
-
 
 	if (msm_drm_register_client(&info->notifier) < 0)
 		logError(1, "%s ERROR: register notifier failed!\n", tag);

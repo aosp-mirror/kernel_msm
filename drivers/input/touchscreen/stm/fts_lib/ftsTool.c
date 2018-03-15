@@ -557,6 +557,7 @@ void print_frame_i8(char *label, i8 **matrix, int row, int column)
 void print_frame_u32(char *label, u32 **matrix, int row, int column)
 {
 	int i, j;
+
 	logError(0, "%s %s \n", tag, label);
 	for (i = 0; i < row; i++)
 	{

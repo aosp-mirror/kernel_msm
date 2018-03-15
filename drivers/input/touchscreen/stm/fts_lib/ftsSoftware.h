@@ -128,7 +128,13 @@ typedef enum {
 #define LOCKED_ACTIVE		0x00	/* /< Active Scan Mode */
 #define LOCKED_HOVER		0x01	/* /< Hover Scan Mode */
 #define LOCKED_IDLE		0x02	/* /< Idle Scan Mode */
-
+#define LOCKED_ONLY_SELF	0x03	/* /< Only Self Sense scan mode */
+#define LOCKED_ONLY_MUTUAL_0	0x04	/* /< Only Mutual Sense scan mode at
+					 * lowest freq */
+#define LOCKED_ONLY_MUTUAL_1	0x05	/* /< Only Mutual Sense scan mode */
+#define LOCKED_ONLY_MUTUAL_2	0x06	/* /< Only Mutual Sense scan mode */
+#define LOCKED_ONLY_MUTUAL_3	0x07	/* /< Only Mutual Sense scan mode at
+					 * highest freq */
 #define LOCKED_LP_DETECT	0x10	/* /< Low Power SS */
 #define LOCKED_LP_ACTIVE	0x11	/* /< Low Power MS */
 /** @}*/
@@ -227,6 +233,7 @@ typedef enum {
 #define SPECIAL_PANEL_INIT		0x02	/* /< Panel Initialization */
 #define SPECIAL_FULL_PANEL_INIT		0x03	/* /< Full panel initialization
 						 * */
+#define SPECIAL_WRITE_HOST_MEM_TO_FLASH 0x04	/* /< Write */
 /** @} */
 
 
@@ -333,6 +340,8 @@ typedef enum {
 						 * Force */
 #define LOAD_PANEL_CX_TOT_SS_FORCE	0x57	/* /< Load TOT SS Init Data for
 						 * Force */
+#define LOAD_SENS_CAL_COEFF		0xC0	/* /< Load Sesitivity
+						 * Calibration Coefficients */
 /** @}*/
 
 /* Special Tuning */

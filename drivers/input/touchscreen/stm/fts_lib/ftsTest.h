@@ -23,6 +23,7 @@
 #define FTS_TEST_H
 
 #include "ftsSoftware.h"
+#include "ftsFrame.h"
 
 #ifndef LIMITS_H_FILE
 /* /< Name of the Production Test Limit File */
@@ -44,6 +45,15 @@
 
 #define RETRY_INIT_BOOT			3	/* /< number of retry of the
 						 * init process at boot */
+
+#define SENS_TEST_NUM_FRAMES		100 /* /< number of frames to read */
+#define SENS_TEST_PERC_TARGET_PRECAL	20	/* /< +-% of target value within
+						 * all the node of the frames
+						 * should be contained */
+#define SENS_TEST_PERC_TARGET_POSTCAL	4	/* /< +-% of target value within
+						 * should be contained the
+						 * avarege of the nodes and the
+						 * deltas for each node */
 
 /** @defgroup mp_test Mass Production Test
   * Mass production test API.
@@ -317,4 +327,17 @@ int freeLimitsFile(LimitFile *file);
 int freeCurrentLimitsFile(void);
 /**@}*/
 
+int tp_sensitivity_test_pre_cal_ms(MutualSenseFrame *finalFrame, short target,
+				   int percentage);
+int tp_sensitivity_test_pre_cal_ss(SelfSenseFrame *finalFrame, short target,
+				   int percentage);
+int tp_sensitivity_compute_gains(MutualSenseFrame *frame, short target,
+				 int saveGain);
+int tp_sensitivity_test_post_cal_ms(MutualSenseFrame *finalFrame,
+				    MutualSenseFrame *deltas, short target,
+				    int percentage, int *mean_normal,
+				    int *mean_edge);
+int tp_sensitivity_set_scan_mode(u8 scan, int enableGains);
+int tp_sensitivity_mode(u8 enter, int saveGain);
+int tp_sensitivity_test_std_ms(int numFrames, MutualSenseFrame *std);
 #endif

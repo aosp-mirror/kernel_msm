@@ -712,6 +712,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 	u32 funcToTest[((count + 1) / 3)];
 	u64 addr = 0;
 	MutualSenseFrame frameMS;
+	MutualSenseFrame deltas;
 	SelfSenseFrame frameSS;
 
 	DataHeader dataHead;
@@ -719,6 +720,9 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 	SelfSenseData comData;
 	TotMutualSenseData totCompData;
 	TotSelfSenseData totComData;
+	MutualSenseCoeff msCoeff;
+	SelfSenseCoeff ssCoeff;
+	int meanNorm = 0, meanEdge = 0;
 
 	u64 address;
 
@@ -1685,6 +1689,50 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 			}
 			break;
 
+		case CMD_READSENSCOEFF:
+			/* read MS and SS Sensitivity Coefficients */
+			logError(0,
+				 "%s Get Sensitivity Calibration Coefficients...\n",
+				 tag);
+			res = readSensitivityCoefficientsData(&msCoeff,
+							      &ssCoeff);
+			if (res < OK)
+				logError(0,
+					 "%s Error reading Sensitivity Calibration Coefficients ERROR %08X\n",
+					 tag, res);
+			else {
+				logError(0,
+					 "%s Sensitivity Calibration Coefficients Reading Finished!\n",
+					 tag);
+				size += (((msCoeff.node_data_size) +
+					  ssCoeff.header.force_node +
+					  ssCoeff.header.sense_node) *
+					 sizeof(u8) + 4);
+				print_frame_u8("MS Sensitivity Coeff = ",
+					       array1dTo2d_u8(msCoeff.ms_coeff,
+							      msCoeff.
+							      node_data_size,
+							      msCoeff.header.
+							      sense_node),
+					       msCoeff.header.force_node,
+					       msCoeff.header.sense_node);
+				print_frame_u8("SS Sensitivity Coeff force = ",
+					       array1dTo2d_u8(
+						       ssCoeff.ss_force_coeff,
+						       ssCoeff.header.
+						       force_node, 1),
+					       ssCoeff.header.force_node, 1);
+				print_frame_u8("SS Sensitivity Coeff sense = ",
+					       array1dTo2d_u8(
+						       ssCoeff.ss_sense_coeff,
+						       ssCoeff.header.
+						       sense_node,
+						       ssCoeff.header.
+						       sense_node), 1,
+					       ssCoeff.header.sense_node);
+			}
+			break;
+
 		case CMD_GETFWVER:
 			size += (EXTERNAL_RELEASE_INFO_SIZE)*sizeof(u8);
 			break;
@@ -1923,7 +1971,6 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 				if (numberParam == 1)
 					res = getFWdata(info->board->fw_name,
 							&readData, &fileSize);
-
 				else
 					res = getFWdata(path, &readData,
 							&fileSize);
@@ -1946,8 +1993,6 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 				u8ToU16_be(&cmd[1], &byteToRead);
 				addr = ((u64)byteToRead) * 4;	/* number of
 								 * words */
-
-
 				res = getFWdata(info->board->fw_name, &readData,
 						&fileSize);
 				if (fileSize > addr) {
@@ -2467,6 +2512,213 @@ END_DIAGNOSTIC:
 
 			break;
 
+		case CMD_TP_SENS_MODE:
+			/* need to pass: enter (optional)saveGain */
+			if (numberParam >= 2) {
+				if (numberParam == 2)
+					cmd[2] = 0;	/* by default never save
+							 * the gain (used only
+							 * when exit) */
+
+				res = tp_sensitivity_mode(cmd[1], cmd[2]);
+				if (res < OK)
+					logError(0,
+						 "%s Error while setting TP Sens mode... ERROR %08X\n",
+						 tag, res);
+			} else {
+				logError(1, "%s Wrong number of parameters!\n",
+					 tag);
+				res = ERROR_OP_NOT_ALLOW;
+			}
+			break;
+
+
+		case CMD_TP_SENS_SET_SCAN_MODE:
+			/* need to pass: scan_type, enableGains */
+			if (numberParam == 3) {
+				res = tp_sensitivity_set_scan_mode(cmd[1],
+								   cmd[2]);
+				/* this force the IC to  lock in a scan mode */
+				if (res < OK)
+					logError(0,
+						 "%s Error while setting TP Sens scan mode... ERROR %08X\n",
+						 tag, res);
+			} else {
+				logError(1, "%s Wrong number of parameters!\n",
+					 tag);
+				res = ERROR_OP_NOT_ALLOW;
+			}
+
+			break;
+
+		case CMD_TP_SENS_PRECAL_SS:
+			/* need to pass: target1 target0 percentage(optional) */
+			if (numberParam >= 3) {
+				if (numberParam > 3)
+					temp = cmd[3];
+				else
+					temp = SENS_TEST_PERC_TARGET_PRECAL;
+
+				logError(1,
+					 "%s Setting target = %d and percentage = %d\n",
+					 tag, (cmd[1] << 8 | cmd[2]), temp);
+
+				res = tp_sensitivity_test_pre_cal_ss(&frameSS,
+							     (cmd[1] << 8 |
+									cmd[2]),
+							      temp);
+				if (res < OK)
+					logError(0,
+						 "%s Error while setting the scan frequency... ERROR %08X\n",
+						 tag, res);
+
+				if ((frameSS.force_data != NULL) &&
+				    (frameSS.sense_data != NULL)) {
+					size += ((frameSS.header.force_node +
+						  frameSS.header.sense_node) *
+						 sizeof(short) + 2);
+					/*make error code positive to print the
+					 * frame*/
+					res &= (~0x80000000);
+				}
+			} else {
+				logError(1, "%s Wrong number of parameters!\n",
+					 tag);
+				res = ERROR_OP_NOT_ALLOW;
+			}
+			break;
+
+		case CMD_TP_SENS_PRECAL_MS:
+			/* need to pass: target1 target0 calibrate
+			 * percentage(optional) */
+			if (numberParam >= 4) {
+				if (numberParam > 4)
+					temp = cmd[4];
+				else
+					temp = SENS_TEST_PERC_TARGET_PRECAL;
+
+				logError(1,
+					 "%s Setting target = %d and percentage = %d\n",
+					 tag, (cmd[1] << 8 | cmd[2]), temp);
+
+				res = tp_sensitivity_test_pre_cal_ms(&frameMS,
+							     (cmd[1] << 8 |
+									cmd[2]),
+							      temp);
+				if (res < OK)
+					logError(0,
+						 "%s Error during TP Sensitivity Precal ... ERROR %08X\n",
+						 tag, res);
+
+				if (cmd[3] != 0) {
+					logError(1,
+						 "%s Computing gains with target = %d and saveGain = %d\n",
+						 tag, (cmd[1] << 8 | cmd[2]),
+						 cmd[3]);
+					temp = tp_sensitivity_compute_gains(
+						&frameMS, (cmd[1] << 8 |
+							   cmd[2]),
+						cmd[3]);
+					if (temp < OK)
+						logError(0,
+							 "%s Error during TP Sensitivity Calibration... ERROR %08X\n",
+							 tag, temp);
+					res |= temp;
+				}
+
+				if (frameMS.node_data != NULL) {
+					size += (frameMS.node_data_size *
+						 sizeof(short) + 2);
+					/*make error code positive to print the
+					 * frame*/
+					res &= (~0x80000000);
+				}
+			} else {
+				logError(1, "%s Wrong number of parameters!\n",
+					 tag);
+				res = ERROR_OP_NOT_ALLOW;
+			}
+			break;
+
+		case CMD_TP_SENS_POSTCAL_MS:
+			/* need to pass: target1 target0 executeTest
+			 * percentage(optional) */
+			if (numberParam >= 4) {
+				if (cmd[3] != 0) {
+					if (numberParam > 4)
+						temp = cmd[4];
+					else
+						temp =
+						SENS_TEST_PERC_TARGET_POSTCAL;
+				} else
+					temp = -1;
+
+				logError(1,
+					 "%s Setting target = %d and percentage = %d\n",
+					 tag, (cmd[1] << 8 | cmd[2]), temp);
+
+				res = tp_sensitivity_test_post_cal_ms(&frameMS,
+							      &deltas,
+							      (cmd[1] << 8 |
+									cmd[2]),
+							      temp,
+							      &meanNorm,
+							      &meanEdge);
+				if (res < OK)
+					logError(0,
+						 "%s Error during TP Sensitivity Post Cal ... ERROR %08X\n",
+						 tag, res);
+
+				/* processing for a proper printing on the shell
+				 * */
+				if ((frameMS.node_data != NULL) &&
+				    (deltas.node_data != NULL)) {
+					size += ((frameMS.node_data_size +
+						  deltas.node_data_size) *
+						 sizeof(short) +
+						 2 + 8);/* +2 force and
+							 * sense len, +8
+							 * mean_normal/edge
+							 * */
+					/*make error code positive to print the
+					 * frame*/
+					res &= (~0x80000000);
+				}
+			} else {
+				logError(1, "%s Wrong number of parameters!\n",
+					 tag);
+				res = ERROR_OP_NOT_ALLOW;
+			}
+			break;
+
+
+		case CMD_TP_SENS_STD:
+			/* need to pass: numFrames */
+			if (numberParam >= 2) {
+				res =  tp_sensitivity_test_std_ms(cmd[1],
+								  &frameMS);
+				if (res < OK)
+					logError(0,
+						 "%s Error during TP Sensitivity STD... ERROR %08X\n",
+						 tag, res);
+
+				/* processing for a proper printing on the shell
+				 * */
+				if (frameMS.node_data != NULL) {
+					size += ((frameMS.node_data_size) *
+						 sizeof(short) + 2);
+					/* +2 force and sense len */
+					/*make error code positive to print the
+					 * frame*/
+					res &= (~0x80000000);
+				}
+			} else {
+				logError(1, "%s Wrong number of parameters!\n",
+					 tag);
+				res = ERROR_OP_NOT_ALLOW;
+			}
+			break;
+
 		default:
 			logError(1, "%s COMMAND ID NOT VALID!!!\n", tag);
 			res = ERROR_OP_NOT_ALLOW;
@@ -2575,6 +2827,14 @@ END:	/* here start the reporting phase, assembling the data to send in the
 
 
 			case CMD_GETMSFRAME:
+			case CMD_TP_SENS_PRECAL_MS:
+			case CMD_TP_SENS_POSTCAL_MS:
+			case CMD_TP_SENS_STD:
+
+				if (res != OK)
+					driver_test_buff[2] = '8';
+				/* convert back error code to negative */
+
 				snprintf(&driver_test_buff[index], 3, "%02X",
 					 (u8)frameMS.header.force_node);
 				index += 2;
@@ -2592,9 +2852,41 @@ END:	/* here start the reporting phase, assembling the data to send in the
 				}
 
 				kfree(frameMS.node_data);
+
+				if (funcToTest[0] == CMD_TP_SENS_POSTCAL_MS) {
+					/* print also mean and deltas */
+
+					for (j = 0; j < deltas.node_data_size;
+					     j++) {
+						snprintf(
+						    &driver_test_buff[index],
+						    5,
+						    "%02X%02X",
+						    (deltas.node_data[j] &
+							 0xFF00) >> 8,
+						    deltas.node_data[j] &
+							0xFF);
+						index += 4;
+					}
+					kfree(deltas.node_data);
+
+					snprintf(&driver_test_buff[index], 9,
+						 "%08X", meanNorm);
+					index += 8;
+
+					snprintf(&driver_test_buff[index], 9,
+						 "%08X", meanEdge);
+					index += 8;
+				}
+
 				break;
 
 			case CMD_GETSSFRAME:
+			case CMD_TP_SENS_PRECAL_SS:
+				if (res != OK)
+					driver_test_buff[2] = '8';
+				/* convert back error code to negative */
+
 				snprintf(&driver_test_buff[index], 3, "%02X",
 					 (u8)frameSS.header.force_node);
 				index += 2;
@@ -2827,6 +3119,56 @@ END:	/* here start the reporting phase, assembling the data to send in the
 				kfree(totComData.ix_sn);
 				kfree(totComData.cx_fm);
 				kfree(totComData.cx_sn);
+				break;
+
+			case CMD_READSENSCOEFF:
+				snprintf(&driver_test_buff[index], 3, "%02X",
+					 (u8)msCoeff.header.force_node);
+				index += 2;
+
+				snprintf(&driver_test_buff[index], 3, "%02X",
+					 (u8)msCoeff.header.sense_node);
+				index += 2;
+
+				snprintf(&driver_test_buff[index], 3, "%02X",
+					 (u8)ssCoeff.header.force_node);
+				index += 2;
+
+				snprintf(&driver_test_buff[index], 3, "%02X",
+					 (u8)ssCoeff.header.sense_node);
+				index += 2;
+
+				/* Copying MS Coefficients */
+				for (j = 0; j < msCoeff.node_data_size; j++) {
+					snprintf(&driver_test_buff[index], 3,
+						 "%02X", msCoeff.ms_coeff[j] &
+						 0xFF);
+					index += 2;
+				}
+
+				/* Copying SS force Coefficients */
+				for (j = 0; j < ssCoeff.header.force_node;
+				     j++) {
+					snprintf(&driver_test_buff[index], 3,
+						 "%02X",
+						 ssCoeff.ss_force_coeff[j] &
+						 0xFF);
+					index += 2;
+				}
+
+				/* Copying SS sense Coefficients */
+				for (j = 0; j < ssCoeff.header.sense_node;
+				     j++) {
+					snprintf(&driver_test_buff[index], 3,
+						 "%02X",
+						 ssCoeff.ss_sense_coeff[j] &
+						 0xFF);
+					index += 2;
+				}
+
+				kfree(msCoeff.ms_coeff);
+				kfree(ssCoeff.ss_force_coeff);
+				kfree(ssCoeff.ss_sense_coeff);
 				break;
 
 			case CMD_GETFWVER:
