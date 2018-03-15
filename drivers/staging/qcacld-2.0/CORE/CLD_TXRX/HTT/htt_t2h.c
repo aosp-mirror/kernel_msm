@@ -613,10 +613,26 @@ if (adf_os_unlikely(pdev->rx_ring.rx_reset)) {
         {
             int num_msdus;
             enum htt_tx_status status;
+            int msg_len = adf_nbuf_len(htt_t2h_msg);
 
             /* status - no enum translation needed */
             status = HTT_TX_COMPL_IND_STATUS_GET(*msg_word);
             num_msdus = HTT_TX_COMPL_IND_NUM_GET(*msg_word);
+
+            /*
+             * each desc id will occupy 2 bytes.
+             * the 4 is for htt msg header
+             */
+            if ((num_msdus * HTT_TX_COMPL_BYTES_PER_MSDU_ID +
+                HTT_TX_COMPL_HEAD_SZ) > msg_len) {
+                adf_os_print("%s: num_msdus(%d) is invalid,"
+                            "adf_nbuf_len = %d\n",
+                            __FUNCTION__,
+                            num_msdus,
+                            msg_len);
+                break;
+            }
+
             if (num_msdus & 0x1) {
                 struct htt_tx_compl_ind_base *compl = (void *)msg_word;
 
@@ -685,8 +701,23 @@ if (adf_os_unlikely(pdev->rx_ring.rx_reset)) {
     case HTT_T2H_MSG_TYPE_TX_INSPECT_IND:
         {
             int num_msdus;
+            int msg_len = adf_nbuf_len(htt_t2h_msg);
 
             num_msdus = HTT_TX_COMPL_IND_NUM_GET(*msg_word);
+            /*
+             * each desc id will occupy 2 bytes.
+             * the 4 is for htt msg header
+             */
+            if ((num_msdus * HTT_TX_COMPL_BYTES_PER_MSDU_ID +
+                HTT_TX_COMPL_HEAD_SZ) > msg_len) {
+                adf_os_print("%s: num_msdus(%d) is invalid,"
+                            "adf_nbuf_len = %d,inspect\n",
+                            __FUNCTION__,
+                            num_msdus,
+                            msg_len);
+                break;
+            }
+
             if (num_msdus & 0x1) {
                 struct htt_tx_compl_ind_base *compl = (void *)msg_word;
 

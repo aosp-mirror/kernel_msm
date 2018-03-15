@@ -6315,6 +6315,9 @@ PREPACK struct htt_txq_group {
 #define HTT_TX_COMPL_IND_APPEND_GET(_info)                             \
     (((_info) & HTT_TX_COMPL_IND_APPEND_M) >> HTT_TX_COMPL_IND_APPEND_S)
 
+#define HTT_TX_COMPL_HEAD_SZ                4
+#define HTT_TX_COMPL_BYTES_PER_MSDU_ID      2
+
 #define HTT_TX_COMPL_CTXT_SZ                sizeof(A_UINT16)
 #define HTT_TX_COMPL_CTXT_NUM(_bytes)       ((_bytes) >> 1)
 
