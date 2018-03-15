@@ -752,6 +752,7 @@ int __nanohub_send_AP_cmd(struct nanohub_data *data, enum AP_GPIO_CMD mode)
 
 	case GPIO_CMD_FLASH_ERASE:       /*0100*/
 	case GPIO_CMD_REQUEST_FUELGAUGE: /*0101*/
+	case GPIO_CMD_FORCE_REQUEST_FUELGAUGE: /*1000*/
 	case GPIO_CMD_TEST:              /*1111*/
 		ret = __nanohub_set_mode_pin(data, mode);
 		break;
