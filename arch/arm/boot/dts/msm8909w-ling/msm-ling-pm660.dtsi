@@ -321,7 +321,7 @@
 			qcom,micro-usb;
 			qcom,pmic-revid = <&pm660_revid>;
 			qcom,wipower-max-uw = <5000000>;
-
+			qcom,auto-recharge-soc;
 			qcom,thermal-mitigation
 					= <3000000 2500000 2000000 1500000
 						1000000 500000>;
@@ -464,7 +464,7 @@
 			qcom,fg-chg-term-current = <25>;
 			qcom,battery-thermal-coefficients = [d2 50 ff];
 			qcom,fg-auto-recharge-soc;
-			qcom,fg-recharge-soc-thr = <95>;
+			qcom,fg-recharge-soc-thr = <99>;
 			qcom,cycle-counter-en;
 			status = "okay";
 
