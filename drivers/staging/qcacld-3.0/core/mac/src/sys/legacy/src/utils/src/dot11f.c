@@ -353,8 +353,6 @@ static uint32_t get_container_ies_len(tpAniSirGlobal pCtx,
 		pBufRemaining += *(pBufRemaining + 1) + 2;
 	}
 
-	if ((len > 0xFF) || (len > nBuf))
-		return DOT11F_INTERNAL_ERROR;
 	*pnConsumed = len;
 	return DOT11F_PARSE_SUCCESS;
 
