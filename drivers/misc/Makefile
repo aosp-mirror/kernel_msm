@@ -67,3 +67,4 @@ obj-y				+= qcom/
 obj-$(CONFIG_QPNP_MISC) 	+= qpnp-misc.o
 obj-$(CONFIG_MEMORY_STATE_TIME) += memory_state_time.o
 obj-$(CONFIG_TI_BACKLIGHT_DRIVER) += tilp8556_bl.o
+obj-$(CONFIG_ACCESS_RAMOOPS)	+= access_ramoops.o
