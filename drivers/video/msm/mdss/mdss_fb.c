@@ -3103,10 +3103,8 @@ static void mdss_fb_release_fences(struct msm_fb_data_type *mfd)
 
 static void mdss_fb_release_kickoff(struct msm_fb_data_type *mfd)
 {
-	if (mfd->wait_for_kickoff) {
-		atomic_set(&mfd->kickoff_pending, 0);
-		wake_up_all(&mfd->kickoff_wait_q);
-	}
+	atomic_set(&mfd->kickoff_pending, 0);
+	wake_up_all(&mfd->kickoff_wait_q);
 }
 
 /**
