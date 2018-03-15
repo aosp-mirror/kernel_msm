@@ -169,6 +169,7 @@ static void mdp3_dispatch_dma_done(struct kthread_work *work)
 	while (cnt > 0) {
 		mdp3_ctrl_notify(session, MDP_NOTIFY_FRAME_DONE);
 		atomic_dec(&session->dma_done_cnt);
+		mdp3_ctrl_notify(session, MDP_NOTIFY_FRAME_CTX_DONE);
 		cnt--;
 	}
 }
