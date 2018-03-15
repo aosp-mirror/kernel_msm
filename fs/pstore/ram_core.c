@@ -305,7 +305,7 @@ void persistent_ram_save_old(struct persistent_ram_zone *prz, bool use_alt)
 		persistent_ram_free_old(prz);
 	if (!prz->old_log) {
 		persistent_ram_ecc_old(prz, use_alt);
-		prz->old_log = kmalloc(size, GFP_KERNEL);
+		prz->old_log = vmalloc(size);
 		prz->old_log_alloc_size = size;
 	}
 	if (!prz->old_log) {
@@ -392,7 +392,7 @@ void *persistent_ram_old(struct persistent_ram_zone *prz)
 
 void persistent_ram_free_old(struct persistent_ram_zone *prz)
 {
-	kfree(prz->old_log);
+	vfree(prz->old_log);
 	prz->old_log = NULL;
 	prz->old_log_size = 0;
 	prz->old_log_alloc_size = 0;
