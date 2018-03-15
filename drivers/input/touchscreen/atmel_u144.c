@@ -996,13 +996,12 @@ static void mxt_proc_t80_messages(struct mxt_data *data, u8 *message)
 static void mxt_proc_t100_message(struct mxt_data *data, u8 *message)
 {
 	int id;
-	u8 status, status_t100;
+	u8 status;
 	int x, y;
 	int area;
 	int amplitude;
 	u8 vector, height, width;
 	static int return_cnt = 0;
-	struct t_data *c_data;
 
 	/* do not report events if input device not yet registered */
 	if (!data->enable_reporting){
@@ -1031,7 +1030,6 @@ static void mxt_proc_t100_message(struct mxt_data *data, u8 *message)
 	}
 
 	status = message[1];
-	status_t100 = status & MXT_T100_STATUS_MASK;
 	x = (message[3] << 8) | message[2];
 	y = (message[5] << 8) | message[4];
 
@@ -1042,75 +1040,69 @@ static void mxt_proc_t100_message(struct mxt_data *data, u8 *message)
 	height = message[data->t100_aux_resv];
 	width = message[data->t100_aux_resv+1];
 
-	c_data = &data->ts_data.curr_data[id];
-	c_data->id = id;
-
 	if (status & MXT_T100_DETECT) {
 		/* Multiple bits may be set if the host is slow to read the
 		* status messages, indicating all the events that have
 		* happened */
 
-		c_data->x_position = x;
-		c_data->y_position = y;
-		c_data->area = area;
-		c_data->tool = MT_TOOL_FINGER;
+		if ((status & MXT_T100_STATUS_MASK) == MXT_T100_RELEASE ||
+		    (status & MXT_T100_STATUS_MASK) == MXT_T100_SUPPRESSION) {
+			data->ts_data.curr_data[id].id = id;
+			data->ts_data.curr_data[id].status = FINGER_RELEASED;
+			if ((status & MXT_T100_STATUS_MASK) ==
+					MXT_T100_SUPPRESSION)
+				TOUCH_ERR_MSG("T100_message[%u] ###DETECT &&"
+					" SUPPRESSION (%02X)\n", id, status);
+		}
+
+		data->ts_data.curr_data[id].id = id;
+		data->ts_data.curr_data[id].x_position = x;
+		data->ts_data.curr_data[id].y_position = y;
+		data->ts_data.curr_data[id].area = area;
+		data->ts_data.curr_data[id].tool = MT_TOOL_FINGER;
 
 		if (amplitude == 255 &&
 		    ((status & MXT_T100_TYPE_MASK) == MXT_T100_TYPE_FINGER ||
 		     (status & MXT_T100_TYPE_MASK) == MXT_T100_TYPE_STYLUS)) {
-			c_data->pressure = 240;
+			data->ts_data.curr_data[id].pressure = 240;
 		} else if ((status & MXT_T100_TYPE_MASK) ==
 				MXT_T100_TYPE_PALM) {
-			c_data->pressure = 255;
+			data->ts_data.curr_data[id].pressure = 255;
 		} else {
-			c_data->pressure = amplitude;
+			data->ts_data.curr_data[id].pressure = amplitude;
 		}
 
 		if (height >= width) {
-			c_data->touch_major = height;
-			c_data->touch_minor = width;
+			data->ts_data.curr_data[id].touch_major = height;
+			data->ts_data.curr_data[id].touch_minor = width;
 		} else {
-			c_data->touch_major = width;
-			c_data->touch_minor = height;
+			data->ts_data.curr_data[id].touch_major = width;
+			data->ts_data.curr_data[id].touch_minor = height;
 		}
 
-		switch (status_t100) {
-			case MXT_T100_SUPPRESSION:
-				TOUCH_ERR_MSG("T100_message[%u] ###DETECT &&"
-					      " SUPPRESSION (%02X)\n",
-					      id, status);
-			case MXT_T100_RELEASE:
-				c_data->status = FINGER_RELEASED;
-				break;
-			case MXT_T100_PRESS:
-				c_data->status = FINGER_PRESSED;
-				if (data->debug_enabled &
-						MXT_DBG_LVL_COORDINATE) {
-					TOUCH_INFO_MSG("touch_pressed    <%d> :"
-						       " x[%4d] y[%4d] A[%3d] P[%3d]"
-						       " WM[%3d] Wm[%3d]\n",
-						       id, x, y, area,
-						       amplitude,
-						       c_data->touch_major,
-						       c_data->touch_minor);
-				}
-				break;
-			case MXT_T100_MOVE:
-				c_data->status = FINGER_MOVED;
-				break;
-			default:
-				break;
-		}
-	} else {
-		if (status_t100 == MXT_T100_RELEASE) {
-			/* Touch Release */
-			c_data->status = FINGER_RELEASED;
+		if ((status & MXT_T100_STATUS_MASK) == MXT_T100_PRESS)
+			data->ts_data.curr_data[id].status = FINGER_PRESSED;
+		else if ((status & MXT_T100_STATUS_MASK) == MXT_T100_MOVE)
+			data->ts_data.curr_data[id].status = FINGER_MOVED;
 
+		if ((status & MXT_T100_STATUS_MASK) == MXT_T100_PRESS) {
 			if (data->debug_enabled & MXT_DBG_LVL_COORDINATE) {
-				TOUCH_INFO_MSG("touch_release    <%d> : "
-					       "x[%4d] y[%4d]\n",
-						id, x, y);
+				TOUCH_INFO_MSG("touch_pressed    <%d> :"
+					" x[%4d] y[%4d] A[%3d] P[%3d]"
+					" WM[%3d] Wm[%3d]\n",
+					id, x, y, area, amplitude,
+					data->ts_data.curr_data[id].touch_major,
+					data->ts_data.curr_data[id].touch_minor);
 			}
+		}
+	} else if ((status & MXT_T100_STATUS_MASK) == MXT_T100_RELEASE){
+		/* Touch Release */
+		data->ts_data.curr_data[id].id = id;
+		data->ts_data.curr_data[id].status = FINGER_RELEASED;
+
+		if (data->debug_enabled & MXT_DBG_LVL_COORDINATE) {
+			TOUCH_INFO_MSG("touch_release    <%d> : x[%4d] y[%4d]\n",
+					id, x, y);
 		}
 	}
 
@@ -1119,24 +1111,27 @@ static void mxt_proc_t100_message(struct mxt_data *data, u8 *message)
 			" %s%s%s%s%s (0x%02X) x:%u y:%u z:%u area:%u amp:%u"
 			" vec:%u h:%u w:%u\n",
 			id,
-			(status_t100 == MXT_T100_MOVE)?
+			((status & MXT_T100_STATUS_MASK) == MXT_T100_MOVE)?
 				"MOVE" : "",
-			(status_t100 == 2)? "UNSUP" : "",
-			(status_t100 == 3)? "SUP" : "",
-			(status_t100 == MXT_T100_PRESS)?
+			((status & MXT_T100_STATUS_MASK) == 2)? "UNSUP" : "",
+			((status & MXT_T100_STATUS_MASK) == 3)? "SUP" : "",
+			((status & MXT_T100_STATUS_MASK) == MXT_T100_PRESS)?
 				"PRESS" : "",
-			(status_t100 == MXT_T100_RELEASE)?
+			((status & MXT_T100_STATUS_MASK) == MXT_T100_RELEASE)?
 				"RELEASE" : "",
-			(status_t100 == 6)? "UNSUPSUP" : "",
-			(status_t100 == 7)? "UNSUPUP" : "",
-			(status_t100 == 8)? "DOWNSUP" : "",
-			(status_t100 == 9)? "DOWNUP" : "",
-			(status_t100 == MXT_T100_TYPE_FINGER)? "FIN" : ".",
-			(status_t100 == MXT_T100_TYPE_STYLUS)? "PEN" : ".",
-			(status_t100 == MXT_T100_TYPE_PALM)? "PALM" : ".",
-			(status_t100 == 0x40)? "HOVER" : ".",
-			(status_t100 == 0x30)? "ACTSTY" : ".",
-			status, x, y, c_data->pressure,
+			((status & MXT_T100_STATUS_MASK) == 6)? "UNSUPSUP" : "",
+			((status & MXT_T100_STATUS_MASK) == 7)? "UNSUPUP" : "",
+			((status & MXT_T100_STATUS_MASK) == 8)? "DOWNSUP" : "",
+			((status & MXT_T100_STATUS_MASK) == 9)? "DOWNUP" : "",
+			((status & MXT_T100_TYPE_MASK) ==
+				 MXT_T100_TYPE_FINGER)? "FIN" : ".",
+			((status & MXT_T100_TYPE_MASK) ==
+				 MXT_T100_TYPE_STYLUS)? "PEN" : ".",
+			((status & MXT_T100_TYPE_MASK) ==
+				 MXT_T100_TYPE_PALM)? "PALM" : ".",
+			((status & MXT_T100_TYPE_MASK) == 0x40)? "HOVER" : ".",
+			((status & MXT_T100_TYPE_MASK) == 0x30)? "ACTSTY" : ".",
+			status, x, y, data->ts_data.curr_data[id].pressure,
 			area, amplitude, vector,
 			height, width);
 	}
@@ -1295,10 +1290,10 @@ void trigger_usb_state_from_otg(struct mxt_data *data, int usb_type)
 
 	wake_lock_timeout(&touch_wake_lock, msecs_to_jiffies(2000));
 
-	if (mutex_is_locked(&data->msg_lock))
+	if (mutex_is_locked(&data->i2c_suspend_lock))
 		TOUCH_DEBUG_MSG("%s mutex_is_locked \n", __func__);
 
-	mutex_lock(&data->msg_lock);
+	mutex_lock(&data->i2c_suspend_lock);
 	if (usb_type == 0) {
 		if (mxt_patchevent_get(PATCH_EVENT_TA)) {
 			if (mxt_patchevent_get(PATCH_EVENT_IDLE))
@@ -1318,7 +1313,7 @@ void trigger_usb_state_from_otg(struct mxt_data *data, int usb_type)
 				mxt_patch_event(data, IDLE_IN_CHG);
 		}
 	}
-	mutex_unlock(&data->msg_lock);
+	mutex_unlock(&data->i2c_suspend_lock);
 }
 
 static int mxt_proc_message(struct mxt_data *data, u8 *message)
@@ -1392,6 +1387,15 @@ static int mxt_read_and_process_messages(struct mxt_data *data, u8 count)
 	int i = 0;
 	u8 num_valid = 0;
 
+	/* Safety check for msg_buf */
+	if (count > data->max_reportid)
+		return -EINVAL;
+
+	if (!data->msg_buf) {
+		TOUCH_ERR_MSG("%s data->msg_buf = NULL \n", __func__);
+		return -EINVAL;
+	}
+
 	/* Process remaining messages if necessary */
 	ret = __mxt_read_reg(data->client, data->T5_address,
 			data->T5_msg_size * count, data->msg_buf);
@@ -1442,54 +1446,51 @@ static irqreturn_t mxt_process_messages_t44(struct mxt_data *data)
 	data->ts_data.total_num = 0;
 
 	/* Process first message */
-	mxt_proc_message(data, data->msg_buf + 1);
+	ret = mxt_proc_message(data, data->msg_buf + 1);
+	if (ret < 0) {
+		TOUCH_ERR_MSG( "Unexpected invalid message\n");
+		return IRQ_NONE;
+	}
 
 	num_left = count - 1;
 	/* Process remaining messages if necessary */
 	if (num_left) {
 		ret = mxt_read_and_process_messages(data, num_left);
 		if (ret < 0)
-			goto out_sync;
-		if (ret != num_left)
+			goto end;
+		else if (ret != num_left)
 			TOUCH_ERR_MSG( "Unexpected invalid message\n");
 	}
 
-	for (i = 0; i < pdata->numtouch; i++) {
-		struct t_data *c_data = &data->ts_data.curr_data[i];
-		struct t_data *p_data = &data->ts_data.prev_data[i];
-		int report = 0;
-
-		switch (c_data->status) {
-			case FINGER_INACTIVE:
-				if (p_data->status == FINGER_PRESSED ||
-				    p_data->status == FINGER_MOVED) {
-					memcpy(c_data, p_data,
-					       sizeof(struct t_data));
-					report = 1;
-				}
-				break;
-			case FINGER_PRESSED:
-			case FINGER_MOVED:
-				data->ts_data.total_num++;
-			default:
-				report = 1;
-				break;
+	for (i = 0; i < data->pdata->numtouch; i++) {
+		if (data->ts_data.curr_data[i].status == FINGER_INACTIVE &&
+		    data->ts_data.prev_data[i].status != FINGER_INACTIVE &&
+		    data->ts_data.prev_data[i].status != FINGER_RELEASED) {
+			memcpy(&data->ts_data.curr_data[i],
+			       &data->ts_data.prev_data[i],
+			       sizeof(data->ts_data.prev_data[i]));
+			data->ts_data.curr_data[i].skip_report = true;
+		} else if (data->ts_data.curr_data[i].status ==
+				FINGER_INACTIVE) {
+			continue;
 		}
-		report_num += report;
+
+		if (data->ts_data.curr_data[i].status == FINGER_PRESSED ||
+		    data->ts_data.curr_data[i].status == FINGER_MOVED) {
+			data->ts_data.total_num++;
+		}
+		report_num++;
 	}
 
 	if (!data->enable_reporting || !report_num)
 		goto out;
 
-	for (i = 0; i < pdata->numtouch; i++) {
-		struct t_data *c_data = &data->ts_data.curr_data[i];
-
-		if (c_data->status == FINGER_INACTIVE ||
-		    (c_data->status != FINGER_RELEASED && data->palm))
+	for (i = 0; i < data->pdata->numtouch; i++) {
+		if (data->ts_data.curr_data[i].status == FINGER_INACTIVE ||
+		    data->ts_data.curr_data[i].skip_report) {
 			continue;
-
-		/* palm detected */
-		if (c_data->pressure == 255 &&
+		}
+		if (data->ts_data.curr_data[i].pressure == 255 &&
 		    pdata->palm_enabled && !data->palm) {
 			TOUCH_INFO_MSG("Palm Pressed\n");
 			mxt_reset_slots(data);
@@ -1498,36 +1499,37 @@ static irqreturn_t mxt_process_messages_t44(struct mxt_data *data)
 			data->palm = true;
 			goto out;
 		}
-
-		if (c_data->status == FINGER_RELEASED) {
+		if (data->ts_data.curr_data[i].status == FINGER_RELEASED) {
 			if (pdata->palm_enabled && data->palm) {
 				TOUCH_INFO_MSG("Palm Released\n");
 				input_report_key(data->input_dev, KEY_SLEEP, 0);
 				input_sync(data->input_dev);
 				data->palm = false;
 				goto out;
+			} else {
+				input_mt_slot(data->input_dev,
+						data->ts_data.curr_data[i].id);
+				input_mt_report_slot_state(data->input_dev,
+						MT_TOOL_FINGER, 0);
 			}
-
-			input_mt_slot(data->input_dev, c_data->id);
+			data->ts_data.curr_data[i].status = FINGER_INACTIVE;
+		} else if (data->palm == false) {
+			input_mt_slot(data->input_dev,
+					data->ts_data.curr_data[i].id);
 			input_mt_report_slot_state(data->input_dev,
-					MT_TOOL_FINGER, 0);
-			c_data->status = FINGER_INACTIVE;
-		} else {
-			input_mt_slot(data->input_dev, c_data->id);
-			input_mt_report_slot_state(data->input_dev,
-						   MT_TOOL_FINGER, 1);
+					MT_TOOL_FINGER, 1);
 			input_report_abs(data->input_dev, ABS_MT_POSITION_X,
-					 c_data->x_position);
+					data->ts_data.curr_data[i].x_position);
 			input_report_abs(data->input_dev, ABS_MT_POSITION_Y,
-					 c_data->y_position);
+					data->ts_data.curr_data[i].y_position);
 
 			input_report_abs(data->input_dev, ABS_MT_PRESSURE,
-					 c_data->pressure);
+					data->ts_data.curr_data[i].pressure);
 
 			input_report_abs(data->input_dev, ABS_MT_WIDTH_MAJOR,
-					 c_data->touch_major);
+					data->ts_data.curr_data[i].touch_major);
 			input_report_abs(data->input_dev, ABS_MT_WIDTH_MINOR,
-					 c_data->touch_minor);
+					data->ts_data.curr_data[i].touch_minor);
 		}
 	}
 
@@ -1539,18 +1541,59 @@ static irqreturn_t mxt_process_messages_t44(struct mxt_data *data)
 	} else {
 		data->ts_data.prev_total_num = 0;
 		memset(data->ts_data.prev_data, 0,
-		       sizeof(struct t_data) * data->pdata->numtouch);
+				sizeof(struct t_data) * data->pdata->numtouch);
 	}
 	memset(data->ts_data.curr_data, 0,
-	       sizeof(struct t_data) * data->pdata->numtouch);
+			sizeof(struct t_data) * data->pdata->numtouch);
 
-out_sync:
+end:
 	if (data->update_input) {
 		input_sync(data->input_dev);
 		data->update_input = false;
 	}
 
 out:
+	return IRQ_HANDLED;
+}
+
+static irqreturn_t mxt_process_messages(struct mxt_data *data)
+{
+	int total_handled = 0, num_handled = 0;
+	u8 count = data->last_message_count;
+
+	if (count < 1 || count > data->max_reportid)
+		count = 1;
+
+	/* include final invalid message */
+	total_handled = mxt_read_and_process_messages(data, count);
+	if (total_handled < 0)
+		return IRQ_HANDLED;
+	/* if there were invalid messages, then we are done */
+
+	if (total_handled <= count)
+		goto update_count;
+
+	/* read two at a time until an invalid message or else we reach
+	 * reportid limit */
+	do {
+		num_handled = mxt_read_and_process_messages(data, 2);
+		if (num_handled < 0)
+			return IRQ_HANDLED;
+
+		total_handled += num_handled;
+
+		if (num_handled < 2)
+			break;
+	} while (total_handled < data->num_touchids);
+
+update_count:
+	data->last_message_count = total_handled;
+
+	if (data->enable_reporting && data->update_input) {
+		input_sync(data->input_dev);
+		data->update_input = false;
+	}
+
 	return IRQ_HANDLED;
 }
 
@@ -1585,12 +1628,15 @@ static irqreturn_t mxt_interrupt_thread(int irq, void *dev_id)
 		return IRQ_HANDLED;
 	}
 
-	if (!data->object_table || !data->T44_address)
+	if (!data->object_table)
 		return IRQ_HANDLED;
 
-	mutex_lock(&data->msg_lock);
-	ret = mxt_process_messages_t44(data);
-	mutex_unlock(&data->msg_lock);
+	mutex_lock(&data->i2c_suspend_lock);
+	if (data->T44_address)
+		ret = mxt_process_messages_t44(data);
+	else
+		ret = mxt_process_messages(data);
+	mutex_unlock(&data->i2c_suspend_lock);
 
 	return ret;
 }
@@ -2485,7 +2531,7 @@ static ssize_t mxt_idle_mode_store(struct mxt_data *data,
 
 	TOUCH_INFO_MSG("idle %d\n", idle);
 
-	mutex_lock(&data->msg_lock);
+	mutex_lock(&data->i2c_suspend_lock);
 	if (idle && !mxt_patchevent_get(PATCH_EVENT_IDLE)) {
 		if (!data->charging_mode)
 			mxt_patch_event(data, IDLE_IN_NOCHG);
@@ -2508,7 +2554,7 @@ static ssize_t mxt_idle_mode_store(struct mxt_data *data,
 		if (ret < 0)
 			TOUCH_WARN_MSG("Regulator vdd set_opt failed\n");
 	}
-	mutex_unlock(&data->msg_lock);
+	mutex_unlock(&data->i2c_suspend_lock);
 
 	return count;
 }
@@ -4054,7 +4100,7 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		}
 	}
 
-	mutex_init(&data->msg_lock);
+	mutex_init(&data->i2c_suspend_lock);
 	mutex_init(&data->fw_update_lock);
 	mutex_init(&data->irq_lock);
 
@@ -4158,7 +4204,7 @@ err_init_t100_input_device:
 err_probe_regulators:
 	mutex_destroy(&data->irq_lock);
 	mutex_destroy(&data->fw_update_lock);
-	mutex_destroy(&data->msg_lock);
+	mutex_destroy(&data->i2c_suspend_lock);
 
 	wake_lock_destroy(&touch_wake_lock);
 
@@ -4180,7 +4226,7 @@ static int mxt_remove(struct i2c_client *client)
 
 	mutex_destroy(&data->irq_lock);
 	mutex_destroy(&data->fw_update_lock);
-	mutex_destroy(&data->msg_lock);
+	mutex_destroy(&data->i2c_suspend_lock);
 
 	wake_lock_destroy(&touch_wake_lock);
 
