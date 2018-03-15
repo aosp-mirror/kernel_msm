@@ -422,6 +422,18 @@
 		};
 	};
 
+	access_ramoops@0 {
+		compatible = "access_ramoops";
+		label = "metadata";
+		memory-region = <&ramoops_meta_mem>;
+	};
+
+	access_ramoops@1 {
+		compatible = "access_ramoops";
+		label = "ramoops";
+		memory-region = <&alt_ramoops_mem>;
+	};
+
 	ramoops {
 		compatible = "ramoops";
 		status = "ok";
@@ -430,6 +442,7 @@
 		record-size = <0 0x00008000>;
 		ftrace-size = <0 0x00020000>;
 		memory-region = <&ramoops_mem>;
+		alt-memory-region = <&alt_ramoops_mem>;
 	};
 };
 
@@ -514,6 +527,16 @@
 			compatible = "removed-dma-pool";
 			no-map;
 			reg = <0 0x88f00000 0 0x00100000>;
+		};
+		ramoops_meta_mem: ramoops_meta_region@89000000 {
+			compatible = "removed-dma-pool";
+			no-map;
+			reg = <0 0x89000000 0 0x1000>;
+		};
+		alt_ramoops_mem: ramoops_region@89001000 {
+			compatible = "removed-dma-pool";
+			no-map;
+			reg = <0 0x89001000 0 0x00100000>;
 		};
 	};
 };
