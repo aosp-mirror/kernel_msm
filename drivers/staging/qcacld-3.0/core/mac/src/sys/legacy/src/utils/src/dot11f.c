@@ -344,7 +344,7 @@ static uint32_t get_container_ies_len(tpAniSirGlobal pCtx,
 	pBufRemaining += len + 2;
 	len += 2;
 	while (len < nBuf) {
-		pIe = find_ie_defn(pCtx, pBufRemaining, nBuf - len, IEs);
+		pIe = find_ie_defn(pCtx, pBufRemaining, nBuf + len, IEs);
 		if (NULL == pIe)
 			break;
 		if (pIe->eid == pIeFirst->eid)
@@ -9906,15 +9906,11 @@ static uint32_t unpack_core(tpAniSirGlobal pCtx,
 		}
 
 		if (pIe) {
-			if ((nBufRemaining < pIe->minSize - pIe->noui - 2U) ||
-			    (len < pIe->minSize - pIe->noui - 2U)) {
-				FRAMES_LOG4(pCtx, FRLOGW, FRFL("The IE %s must "
-					"be at least %d bytes in size, but "
-					"there are only %d bytes remaining in "
-					"this frame or the IE reports a size "
-					"of %d bytes.\n"),
-					pIe->name, pIe->minSize, nBufRemaining,
-					(len + pIe->noui + 2U));
+			if (nBufRemaining < pIe->minSize - pIe->noui - 2U) {
+				FRAMES_LOG3(pCtx, FRLOGW, FRFL("The IE %s must be "
+					"at least %d bytes in size, but there are onl"
+					"y %d bytes remaining in this frame.\n"),
+					pIe->name, pIe->minSize, nBufRemaining);
 				FRAMES_DUMP(pCtx, FRLOG1, pBuf, nBuf);
 				status |= DOT11F_INCOMPLETE_IE;
 				FRAMES_DBG_BREAK();
