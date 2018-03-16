@@ -724,9 +724,6 @@ static int smb2_usb_main_get_prop(struct power_supply *psy,
 		rc = smblib_get_charge_param(chg, &chg->param.fcc,
 							&val->intval);
 		break;
-	case POWER_SUPPLY_PROP_CHARGE_FULL:
-		rc = smblib_get_prop_batt_charge_full(chg, val);
-		break;
 	case POWER_SUPPLY_PROP_TYPE:
 		val->intval = POWER_SUPPLY_TYPE_MAIN;
 		break;
@@ -1046,6 +1043,9 @@ static int smb2_batt_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_SET_SHIP_MODE:
 		/* Not in ship mode as long as device is active */
 		val->intval = 0;
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_FULL:
+		rc = smblib_get_prop_batt_charge_full(chg, val);
 		break;
 	case POWER_SUPPLY_PROP_DIE_HEALTH:
 		rc = smblib_get_prop_die_health(chg, val);
