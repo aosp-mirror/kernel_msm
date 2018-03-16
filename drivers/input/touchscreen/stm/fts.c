@@ -2955,7 +2955,7 @@ static void fts_suspend_work(struct work_struct *work) {
 
 	info->sensor_sleep = true;
 
-	fts_enableInterrupt();
+	fts_disableInterrupt();
 }
 /** @}*/
 
