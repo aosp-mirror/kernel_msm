@@ -1301,8 +1301,8 @@ static int sec_ts_parse_dt(struct i2c_client *client)
 					       "sec,switch_gpio", 0);
 	if (gpio_is_valid(pdata->switch_gpio)) {
 		ret = gpio_request_one(pdata->switch_gpio,
-				       GPIOF_OUT_INIT_LOW,
-				       "sec,tsp_i2c_switch");
+				       GPIOF_OUT_INIT_HIGH,
+				       "sec,touch_i2c_switch");
 		if (ret) {
 			input_err(true, dev,
 				  "%s: Failed to request gpio %d\n",
@@ -1310,7 +1310,7 @@ static int sec_ts_parse_dt(struct i2c_client *client)
 			return -EINVAL;
 		}
 
-		ret = gpio_direction_output(pdata->switch_gpio, 0);
+		ret = gpio_direction_output(pdata->switch_gpio, 1);
 		if (ret) {
 			input_err(true, dev,
 				  "%s: Failed to set gpio %d direction\n",
