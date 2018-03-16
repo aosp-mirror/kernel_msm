@@ -643,7 +643,6 @@ static void sop716_read_fw_version(struct sop716_info *si)
 	si->fw_rev = data[2];
 }
 
-#if SOP716_USE_DISTANCE
 static void sop716_read_motors_position_locked(struct sop716_info *si,
 		u8 motor_pos[])
 {
@@ -657,6 +656,7 @@ static void sop716_read_motors_position_locked(struct sop716_info *si,
 			motor_pos[MOTOR1], motor_pos[MOTOR2]);
 }
 
+#if SOP716_USE_DISTANCE
 static u8 sop716_get_distance_locked(struct sop716_info *si,
 		u8 motor, u8 pos, u8 opt)
 {
@@ -1475,6 +1475,20 @@ out:
 	return (err < 0)? err : count;
 }
 
+/* Code for CMD_SOP716_READ_MOTORS_POSITION */
+static ssize_t sop716_read_motors_position_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct sop716_info *si = dev_get_drvdata(dev);
+	u8 pos[2] = {0, };
+
+	mutex_lock(&si->lock);
+	sop716_read_motors_position_locked(si, pos);
+	mutex_unlock(&si->lock);
+
+	return snprintf(buf, PAGE_SIZE, "%d:%d\n", pos[MOTOR1], pos[MOTOR2]);
+}
+
 /*
  * CMD_SOP716_SET_AGING_TEST
  * intput format: 0~255 (0: stop, 1~255: start the aging test
@@ -1556,6 +1570,7 @@ static DEVICE_ATTR(update_sysclock, S_IWUSR, NULL,
 		sop716_update_sysclock_store);
 static DEVICE_ATTR(watch_mode, S_IWUSR | S_IRUGO, sop716_watch_mode_show,
 		sop716_watch_mode_store);
+static DEVICE_ATTR(position, S_IRUGO, sop716_read_motors_position_show, NULL);
 static DEVICE_ATTR(aging_test, S_IWUSR, NULL, sop716_aging_test_store);
 static DEVICE_ATTR(dump_errors, S_IWUSR, NULL, sop716_dump_errors_store);
 static DEVICE_ATTR(self_test, S_IWUSR, NULL, sop716_self_test_store);
@@ -1575,6 +1590,7 @@ static struct attribute *sop716_dev_attrs[] = {
 	&dev_attr_update_fw.attr,
 	&dev_attr_update_sysclock.attr,
 	&dev_attr_watch_mode.attr,
+	&dev_attr_position.attr,
 	&dev_attr_aging_test.attr,
 	&dev_attr_dump_errors.attr,
 	&dev_attr_self_test.attr,
