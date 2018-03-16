@@ -1,7 +1,7 @@
 /*
  *  vd6281_module.c - Linux kernel module for rainbow sensor
  *
- *  Copyright (C) 2017 Google, Inc.
+ *  Copyright (C) 2017-2018 Google, Inc.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published
@@ -22,6 +22,9 @@
 #include <linux/pinctrl/consumer.h>
 #include <linux/of_gpio.h>
 #include <linux/slab.h>
+#include <linux/cdev.h>
+#include <linux/device.h>
+#include <media/cam_sensor.h>
 #include "cam_sensor_dev.h"
 
 #define VD6281_DEV_NAME	"vd6281"
@@ -38,7 +41,12 @@ struct rainbow_ctrl_t {
 	int  is_power_up;
 	int hw_version;
 	struct regulator *vdd;
+	dev_t dev;
+	struct cdev c_dev;
+	struct class *cl;
 };
+
+static struct rainbow_ctrl_t *ctrl;
 
 int vd6281_write_data(struct rainbow_ctrl_t *ctrl,
 					uint32_t addr, uint32_t data)
@@ -213,7 +221,7 @@ int32_t vd6281_update_i2c_info(struct rainbow_ctrl_t *ctrl)
 
 	ctrl->io_master_info.cci_client->retries = 3;
 	ctrl->io_master_info.cci_client->id_map = 0;
-	ctrl->io_master_info.cci_client->i2c_freq_mode = I2C_STANDARD_MODE;
+	ctrl->io_master_info.cci_client->i2c_freq_mode = I2C_FAST_PLUS_MODE;
 
 	return rc;
 }
@@ -264,7 +272,6 @@ static int32_t vd6281_driver_platform_probe(
 	struct platform_device *pdev)
 {
 	int32_t rc = 0;
-	struct rainbow_ctrl_t *ctrl = NULL;
 
 	/* Create sensor control structure */
 	ctrl = devm_kzalloc(&pdev->dev,
@@ -326,17 +333,182 @@ static struct platform_driver vd6281_platform_driver = {
 	.remove = vd6281_platform_remove,
 };
 
+static int vd6281_open(struct inode *inode, struct file *file)
+{
+	return 0;
+}
+
+static int vd6281_release(struct inode *inode, struct file *file)
+{
+	return 0;
+}
+
+static long vd6281_ioctl_handler(struct file *file, unsigned int cmd,
+				 unsigned long arg, void __user *p)
+{
+	int rc = 0;
+	int i = 0;
+	struct rainbow_config config;
+
+	mutex_lock(&ctrl->cam_sensor_mutex);
+
+	switch (cmd) {
+	case RAINBOW_CONFIG:
+		if (copy_from_user(&config, p, sizeof(config))) {
+			rc = -EFAULT;
+			goto out;
+		}
+
+		if (config.size == 0 || config.size > MAX_RAINBOW_CONFIG_SIZE) {
+			rc = -EFAULT;
+			goto out;
+		}
+
+		if (config.operation == RAINBOW_RANDOM_READ) {
+			for (i = 0; i < config.size; i++) {
+				rc = camera_io_dev_read(&(ctrl->io_master_info),
+					config.reg_addr[i],
+					&config.reg_data[i],
+					CAMERA_SENSOR_I2C_TYPE_BYTE,
+					CAMERA_SENSOR_I2C_TYPE_BYTE);
+				if (rc) {
+					pr_err("%s i2c random read failed: %d\n",
+						__func__, rc);
+					goto out;
+				}
+			}
+			rc = copy_to_user(p, &config, sizeof(config));
+		} else if (config.operation == RAINBOW_SEQ_READ) {
+			uint8_t data[MAX_RAINBOW_CONFIG_SIZE];
+
+			rc = camera_io_dev_read_seq(&(ctrl->io_master_info),
+					config.reg_addr[0],
+					data,
+					CAMERA_SENSOR_I2C_TYPE_BYTE,
+					config.size);
+			if (rc) {
+				pr_err("%s i2c cont read failed: %d\n",
+					__func__, rc);
+				goto out;
+			}
+			for (i = 0; i < config.size; i++)
+				config.reg_data[i] = data[i];
+
+			rc = copy_to_user(p, &config, sizeof(config));
+		} else if (config.operation == RAINBOW_RANDOM_WRITE ||
+				   config.operation == RAINBOW_SEQ_WRITE) {
+			struct cam_sensor_i2c_reg_setting write_setting;
+			struct cam_sensor_i2c_reg_array
+				reg_setting[MAX_RAINBOW_CONFIG_SIZE] = { {0} };
+
+			write_setting.reg_setting = reg_setting;
+			write_setting.size = config.size;
+			write_setting.addr_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+			write_setting.data_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+			write_setting.delay = 0;
+
+			for (i = 0; i < config.size; i++) {
+				reg_setting[i].reg_addr = config.reg_addr[0];
+				reg_setting[i].reg_data = config.reg_data[0];
+				reg_setting[i].delay = 0;
+				reg_setting[i].data_mask = 0;
+			}
+
+			if (config.operation == RAINBOW_RANDOM_WRITE)
+				rc = camera_io_dev_write(
+					&(ctrl->io_master_info),
+					&write_setting);
+			else
+				rc = camera_io_dev_write_continuous(
+					&(ctrl->io_master_info),
+					&write_setting, 0);
+
+		} else
+			pr_err("%s: Unsupported opertion type\n", __func__);
+
+		break;
+	default:
+		pr_err("%s: Unsupported ioctl command %u\n", __func__, cmd);
+		rc = -EINVAL;
+		break;
+	}
+
+out:
+	mutex_unlock(&ctrl->cam_sensor_mutex);
+	return rc;
+}
+
+static long vd6281_ioctl(struct file *file, unsigned int cmd,
+	unsigned long arg)
+{
+	return vd6281_ioctl_handler(file, cmd, arg, (void __user *)arg);
+}
+
+#ifdef CONFIG_COMPAT
+static long vd6281_compat_ioctl(struct file *file, unsigned int cmd,
+	unsigned long arg)
+{
+	return vd6281_ioctl_handler(file, cmd, arg, compat_ptr(arg));
+}
+#endif
+
+static const struct file_operations vd6281_fops = {
+	.owner		= THIS_MODULE,
+	.open		= vd6281_open,
+	.release	= vd6281_release,
+	.unlocked_ioctl	= vd6281_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl	= vd6281_compat_ioctl,
+#endif
+};
+
 static int __init vd6281_init(void)
 {
 	int rc = 0;
+	struct device *dev_ret;
 
 	rc = platform_driver_register(&vd6281_platform_driver);
+
+	if (rc)
+		return -EINVAL;
+
+	rc = alloc_chrdev_region(&ctrl->dev, 0, 1, "vd6281_ioctl");
+
+	if (rc)
+		return rc;
+
+	cdev_init(&ctrl->c_dev, &vd6281_fops);
+
+	rc = cdev_add(&ctrl->c_dev, ctrl->dev, 1);
+	if (rc)
+		return rc;
+
+	rc = IS_ERR(ctrl->cl = class_create(THIS_MODULE, "char"));
+	if (rc) {
+		cdev_del(&ctrl->c_dev);
+		unregister_chrdev_region(ctrl->dev, 1);
+		return PTR_ERR(ctrl->cl);
+	}
+
+	rc = IS_ERR(dev_ret =
+			device_create(ctrl->cl, NULL,
+			ctrl->dev, NULL, "vd6281"));
+	if (rc) {
+		class_destroy(ctrl->cl);
+		cdev_del(&ctrl->c_dev);
+		unregister_chrdev_region(ctrl->dev, 1);
+		return PTR_ERR(dev_ret);
+	}
 
 	return rc;
 }
 
 static void __exit vd6281_exit(void)
 {
+	device_destroy(ctrl->cl, ctrl->dev);
+	class_destroy(ctrl->cl);
+	cdev_del(&ctrl->c_dev);
+	unregister_chrdev_region(ctrl->dev, 1);
 	platform_driver_unregister(&vd6281_platform_driver);
 }
 
