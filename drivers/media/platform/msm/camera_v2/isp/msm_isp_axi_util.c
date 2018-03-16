@@ -935,8 +935,12 @@ void msm_isp_increment_frame_id(struct vfe_device *vfe_dev,
 	}
 
 	if (frame_src == VFE_PIX_0) {
-		vfe_dev->isp_page->kernel_sofid =
-			vfe_dev->axi_data.src_info[frame_src].frame_id;
+		if (vfe_dev->isp_page == NULL)
+			pr_err("Invalid ISP PAGE");
+		else
+			vfe_dev->isp_page->kernel_sofid =
+				vfe_dev->axi_data.src_info[frame_src].frame_id;
+
 		if (!src_info->frame_id &&
 			!src_info->reg_update_frame_id &&
 			((src_info->frame_id -
@@ -4111,12 +4115,7 @@ void msm_isp_process_axi_irq_stream(struct vfe_device *vfe_dev,
 		return;
 	}
 
-	if (vfe_dev->vt_enable) {
-		msm_isp_get_avtimer_ts(ts);
-		time_stamp = &ts->vt_time;
-	} else {
-		time_stamp = &ts->buf_time;
-	}
+	time_stamp = &ts->buf_time;
 
 	frame_id = vfe_dev->axi_data.
 		src_info[SRC_TO_INTF(stream_info->stream_src)].frame_id;

@@ -109,10 +109,18 @@ Charger specific properties:
 
 - qcom,auto-recharge-soc
   Usage:      optional
-  Value type: <empty>
-  Definition: Specifies if automatic recharge needs to be based off battery
-		SOC. If this property is not specified, then auto recharge will
-		be based off battery voltage.
+  Value type: <u32>
+  Definition: Specifies the SOC threshold at which the charger will
+		restart charging after termination. The value specified
+		ranges from 0 - 100. The feature is enabled if this
+		property is specified with a valid SOC value.
+
+- qcom,auto-recharge-vbat-mv
+  Usage:      optional
+  Value type: <u32>
+  Definition: Specifies the battery voltage threshold at which the charger
+		will restart charging after termination. The value specified
+		is in milli-volts.
 
 - qcom,suspend-input-on-debug-batt
   Usage:      optional
@@ -163,6 +171,32 @@ Charger specific properties:
 		when step charging and sw-jeita configurations are desired
 		to be get from these properties defined in battery profile:
 		qcom,step-chg-ranges, qcom,jeita-fcc-ranges, qcom,jeita-fv-ranges.
+
+- qcom,flash-derating-soc
+  Usage:      optional
+  Value type: <u32>
+  Definition: SOC threshold in percentage below which hardware will start
+		derating flash. This is only applicable to certain PMICs like
+		PMI632 which has SCHGM_FLASH peripheral.
+
+- qcom,flash-disable-soc
+  Usage:      optional
+  Value type: <u32>
+  Definition: SOC threshold in percentage below which hardware will disable
+		flash. This is only applicable to certain PMICs like PMI632
+		which has SCHGM_FLASH peripheral.
+
+- qcom,headroom-mode
+  Usage:      optional
+  Value type: <u32>
+  Definition: Specifies flash hardware headroom management policy. The
+		possible values are:
+		<0>: Fixed mode, constant 5V at flash input.
+		<1>: Adaptive mode allows charger output voltage to be
+		dynamically controlled by the flash module based on the
+		required flash headroom.
+		This is only applicable to certain PMICs like PMI632 which
+		has SCHGM_FLASH peripheral.
 
 =============================================
 Second Level Nodes - SMB5 Charger Peripherals
@@ -300,5 +334,26 @@ pmi8998_charger: qcom,qpnp-smb5 {
 					"input-current-limiting",
 					"temperature-change",
 					"switcher-power-ok";
+	};
+
+	qcom,schgm-flash@a600 {
+		reg = <0xa600 0x100>;
+		interrupts =	<0x2 0xa6 0x0 IRQ_TYPE_NONE>,
+				<0x2 0xa6 0x1 IRQ_TYPE_NONE>,
+				<0x2 0xa6 0x2 IRQ_TYPE_NONE>,
+				<0x2 0xa6 0x3 IRQ_TYPE_NONE>,
+				<0x2 0xa6 0x4 IRQ_TYPE_NONE>,
+				<0x2 0xa6 0x5 IRQ_TYPE_NONE>,
+				<0x2 0xa6 0x6 IRQ_TYPE_NONE>,
+				<0x2 0xa6 0x7 IRQ_TYPE_NONE>;
+
+		interrupt-names =	"flash-en",
+					"torch-req",
+					"flash-state-change",
+					"vout-up",
+					"vout-down",
+					"ilim1-s1",
+					"ilim2-s2",
+					"vreg-ok";
 	};
 };

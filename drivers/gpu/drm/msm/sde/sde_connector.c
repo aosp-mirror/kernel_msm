@@ -1644,6 +1644,7 @@ status_dead:
 	event.length = sizeof(bool);
 	msm_mode_object_event_notify(&conn->base.base,
 		conn->base.dev, &event, (u8 *)&panel_dead);
+	sde_encoder_display_failure_notification(conn->encoder);
 }
 
 static const struct drm_connector_helper_funcs sde_connector_helper_ops = {
