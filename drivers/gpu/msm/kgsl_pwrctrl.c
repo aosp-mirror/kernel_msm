@@ -806,8 +806,6 @@ static ssize_t __timer_store(struct device *dev, struct device_attribute *attr,
 	/* Let the timeout be requested in ms, but convert to jiffies. */
 	if (timer == KGSL_PWR_IDLE_TIMER)
 		device->pwrctrl.interval_timeout = msecs_to_jiffies(val);
-	else if (timer == KGSL_PWR_NAP_TIMER)
-		device->pwrctrl.nap_timeout = msecs_to_jiffies(val);
 	else if (timer == KGSL_PWR_DEEP_NAP_TIMER)
 		device->pwrctrl.deep_nap_timeout = msecs_to_jiffies(val);
 
@@ -835,27 +833,6 @@ static ssize_t kgsl_pwrctrl_idle_timer_show(struct device *dev,
 		jiffies_to_msecs(device->pwrctrl.interval_timeout));
 }
 
-static ssize_t kgsl_pwrctrl_nap_timer_store(struct device *dev,
-					struct device_attribute *attr,
-					const char *buf, size_t count)
-{
-
-	return __timer_store(dev, attr, buf, count, KGSL_PWR_NAP_TIMER);
-}
-
-static ssize_t kgsl_pwrctrl_nap_timer_show(struct device *dev,
-					struct device_attribute *attr,
-					char *buf)
-{
-	struct kgsl_device *device = kgsl_device_from_dev(dev);
-
-	if (device == NULL)
-		return 0;
-	/* Show the nap_timeout converted to msec */
-	return snprintf(buf, PAGE_SIZE, "%u\n",
-		jiffies_to_msecs(device->pwrctrl.nap_timeout));
-}
-
 static ssize_t kgsl_pwrctrl_deep_nap_timer_store(struct device *dev,
 					struct device_attribute *attr,
 					const char *buf, size_t count)
@@ -872,7 +849,7 @@ static ssize_t kgsl_pwrctrl_deep_nap_timer_show(struct device *dev,
 
 	if (device == NULL)
 		return 0;
-	/* Show the deep_nap_timeout converted to msec */
+	/* Show the idle_timeout converted to msec */
 	return snprintf(buf, PAGE_SIZE, "%u\n",
 		jiffies_to_msecs(device->pwrctrl.deep_nap_timeout));
 }
@@ -1194,8 +1171,6 @@ static DEVICE_ATTR(max_gpuclk, 0644, kgsl_pwrctrl_max_gpuclk_show,
 	kgsl_pwrctrl_max_gpuclk_store);
 static DEVICE_ATTR(idle_timer, 0644, kgsl_pwrctrl_idle_timer_show,
 	kgsl_pwrctrl_idle_timer_store);
-static DEVICE_ATTR(nap_timer, 0644, kgsl_pwrctrl_nap_timer_show,
-	kgsl_pwrctrl_nap_timer_store);
 static DEVICE_ATTR(deep_nap_timer, 0644, kgsl_pwrctrl_deep_nap_timer_show,
 	kgsl_pwrctrl_deep_nap_timer_store);
 static DEVICE_ATTR(gpubusy, 0444, kgsl_pwrctrl_gpubusy_show,
@@ -1245,7 +1220,6 @@ static const struct device_attribute *pwrctrl_attr_list[] = {
 	&dev_attr_gpuclk,
 	&dev_attr_max_gpuclk,
 	&dev_attr_idle_timer,
-	&dev_attr_nap_timer,
 	&dev_attr_deep_nap_timer,
 	&dev_attr_gpubusy,
 	&dev_attr_gpu_available_frequencies,
@@ -1590,17 +1564,6 @@ static void kgsl_thermal_timer(unsigned long data)
 	kgsl_schedule_work(&device->pwrctrl.thermal_cycle_ws);
 }
 
-void kgsl_nap_timer(unsigned long data)
-{
-	struct kgsl_device *device = (struct kgsl_device *) data;
-
-	if (device->state == KGSL_STATE_ACTIVE &&
-			atomic_read(&device->active_cnt) == 0) {
-		kgsl_pwrctrl_request_state(device, KGSL_STATE_NAP);
-		kgsl_schedule_work(&device->idle_check_ws);
-	}
-}
-
 void kgsl_deep_nap_timer(unsigned long data)
 {
 	struct kgsl_device *device = (struct kgsl_device *) data;
@@ -1711,7 +1674,6 @@ int kgsl_pwrctrl_init(struct kgsl_device *device)
 	struct msm_bus_scale_pdata *bus_scale_table;
 	struct device_node *gpubw_dev_node = NULL;
 	struct platform_device *p2dev;
-	u32 val;
 
 	bus_scale_table = msm_bus_cl_get_pdata(device->pdev);
 	if (bus_scale_table == NULL)
@@ -1725,15 +1687,9 @@ int kgsl_pwrctrl_init(struct kgsl_device *device)
 	if (pwr->grp_clks[0] == NULL)
 		pwr->grp_clks[0] = pwr->grp_clks[1];
 
-	if (of_property_read_u32(pdev->dev.of_node, "qcom,nap-timeout",
-		&val))
-		val = 10;
-	pwr->nap_timeout = msecs_to_jiffies(val);
-
 	if (of_property_read_u32(pdev->dev.of_node, "qcom,deep-nap-timeout",
-		&val))
-		val = 20;
-	pwr->deep_nap_timeout = msecs_to_jiffies(val);
+		&pwr->deep_nap_timeout))
+		pwr->deep_nap_timeout = 20;
 
 	pwr->gx_retention = of_property_read_bool(pdev->dev.of_node,
 						"qcom,gx-retention");
@@ -1902,8 +1858,6 @@ int kgsl_pwrctrl_init(struct kgsl_device *device)
 	spin_lock_init(&pwr->limits_lock);
 	pwr->sysfs_pwr_limit = kgsl_pwr_limits_add(KGSL_DEVICE_3D0);
 
-	setup_timer(&pwr->nap_timer, kgsl_nap_timer,
-			(unsigned long) device);
 	setup_timer(&pwr->deep_nap_timer, kgsl_deep_nap_timer,
 			(unsigned long) device);
 	devfreq_vbif_register_callback(kgsl_get_bw);
@@ -2156,7 +2110,6 @@ static int _wake(struct kgsl_device *device)
 		pwr->previous_pwrlevel = pwr->active_pwrlevel;
 		mod_timer(&device->idle_timer, jiffies +
 				device->pwrctrl.interval_timeout);
-		del_timer_sync(&device->pwrctrl.nap_timer);
 		del_timer_sync(&device->pwrctrl.deep_nap_timer);
 
 		break;
@@ -2166,7 +2119,6 @@ static int _wake(struct kgsl_device *device)
 		kgsl_pwrctrl_irq(device, KGSL_PWRFLAGS_ON);
 		mod_timer(&device->idle_timer, jiffies +
 				device->pwrctrl.interval_timeout);
-		del_timer_sync(&device->pwrctrl.nap_timer);
 		del_timer_sync(&device->pwrctrl.deep_nap_timer);
 		break;
 	default:
@@ -2239,7 +2191,7 @@ _nap(struct kgsl_device *device)
 		kgsl_pwrscale_update_stats(device);
 
 		mod_timer(&device->pwrctrl.deep_nap_timer, jiffies +
-			device->pwrctrl.deep_nap_timeout);
+			msecs_to_jiffies(device->pwrctrl.deep_nap_timeout));
 
 		kgsl_pwrctrl_clk(device, KGSL_PWRFLAGS_OFF, KGSL_STATE_NAP);
 		kgsl_pwrctrl_set_state(device, KGSL_STATE_NAP);
@@ -2332,7 +2284,6 @@ _slumber(struct kgsl_device *device)
 			device->pwrctrl.thermal_cycle = CYCLE_ENABLE;
 			del_timer_sync(&device->pwrctrl.thermal_timer);
 		}
-		del_timer_sync(&device->pwrctrl.nap_timer);
 		del_timer_sync(&device->pwrctrl.deep_nap_timer);
 		kgsl_pwrctrl_irq(device, KGSL_PWRFLAGS_OFF);
 		/* Get the device out of retention */
@@ -2565,8 +2516,8 @@ void kgsl_active_count_put(struct kgsl_device *device)
 	if (atomic_dec_and_test(&device->active_cnt)) {
 		if (device->state == KGSL_STATE_ACTIVE &&
 			device->requested_state == KGSL_STATE_NONE) {
-			mod_timer(&device->pwrctrl.nap_timer, jiffies +
-					device->pwrctrl.nap_timeout);
+			kgsl_pwrctrl_request_state(device, KGSL_STATE_NAP);
+			kgsl_schedule_work(&device->idle_check_ws);
 		}
 
 		mod_timer(&device->idle_timer,
