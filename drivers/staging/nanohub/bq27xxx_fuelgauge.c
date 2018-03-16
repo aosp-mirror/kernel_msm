@@ -47,6 +47,7 @@ int device_is_charging = 0;
 
 #define SPM_TIMEOUT             (10*60) /* 10minutes */
 #define BQ27XXX_TEMP_DELTA	100 /* unit 0.1 celsius degree */
+#define REQUEST_TIMEOUT		20
 
 struct FuelGaugeCfgData {
 	uint32_t interval;
@@ -80,6 +81,8 @@ MODULE_PARM_DESC(poll_interval,
 static int charger_online;
 
 static int request_fuel_gauge_data(struct nanohub_data *data);
+static int force_request_fuel_gauge_data(struct nanohub_data *data);
+static void request_delayed_func(struct work_struct *work);
 
 void bq27x00_update(struct Nanohub_FuelGauge_Info *fg_info)
 {
@@ -133,11 +136,6 @@ void bq27x00_update(struct Nanohub_FuelGauge_Info *fg_info)
 			fg_info->fake_capacity = fg_info->cache.capacity;
 		}
 	}
-#else
-	pr_warn("nanohub: [FG] cache.capacity:%d, cache.temperature:%d, "
-			"cache.flags:%08x, charger_online:%d\n",
-			fg_info->cache.capacity, fg_info->cache.temperature,
-			fg_info->cache.flags, fg_info->charger_online);
 #endif
 	if (!(strnstr(saved_command_line, "androidboot.mode=keep_charging",
 		strlen(saved_command_line)))) {
@@ -167,7 +165,6 @@ void bq27x00_update(struct Nanohub_FuelGauge_Info *fg_info)
 
 }
 
-
 static void fuelgauge_battery_poll(struct work_struct *work)
 {
 	struct Nanohub_FuelGauge_Info *fg_info =
@@ -176,14 +173,29 @@ static void fuelgauge_battery_poll(struct work_struct *work)
 	if (!fg_info->requested) {
 		pr_info("nanohub: [FG] request data from sensorhub.\n");
 		fg_info->requested = 1;
-		pr_info("nanohub:%s  fg_info->requested: %d address:%p",
-			__func__, fg_info->requested, &(fg_info->requested));
-		if (0 != request_fuel_gauge_data(fg_info->hub_data)) {
+		if (0 != request_fuel_gauge_data(fg_info->hub_data))
 			fg_info->requested = 0;
-			pr_info("nanohub:%s  fg_info->requested: %d address:%p",
-				__func__, fg_info->requested,
-				&(fg_info->requested));
-		}
+
+		set_timer_slack(&fg_info->request_delayed_work.timer, 2 * HZ);
+		schedule_delayed_work(&fg_info->request_delayed_work,
+			REQUEST_TIMEOUT * HZ);
+	}
+}
+
+static void request_delayed_func(struct work_struct *work)
+{
+	struct Nanohub_FuelGauge_Info *fg_info =
+		container_of(work, struct Nanohub_FuelGauge_Info,
+		request_delayed_work.work);
+
+	pr_info("nanohub: %s  fg_info->requested:%d\n", __func__,
+		fg_info->requested);
+
+	if (fg_info->requested) {
+		pr_info("nanohub: [FG] no response from sensorhub. Send the force request!\n");
+		fg_info->requested = 0;
+		if (0 != force_request_fuel_gauge_data(fg_info->hub_data))
+			fg_info->requested = 0;
 	}
 }
 
@@ -191,44 +203,44 @@ static void fuelgauge_battery_poll(struct work_struct *work)
 int dump_fuelgauge_cache(struct bq27x00_reg_cache *cache_data)
 {
 #if DBG_ENABLE
-	pr_info("nanohub: [FG] cache: control = 0x%04x\n",
-		cache_data->control);
-	pr_info("nanohub: [FG] cache: status = %d\n",
-		cache_data->status);
-	pr_info("nanohub: [FG] cache: present = %d\n",
-		cache_data->present);
-	pr_info("nanohub: [FG] cache: temperature = %d\n",
-		cache_data->temperature);
-	pr_info("nanohub: [FG] cache: voltage = %d\n",
-		cache_data->voltage);
-	pr_info("nanohub: [FG] cache: flags = %d\n",
-		cache_data->flags);
-	pr_info("nanohub: [FG] cache: FullAvailableCapacity = %d\n",
-		cache_data->FullAvailableCapacity);
-	pr_info("nanohub: [FG] cache: RemainingCapacity = %d\n",
-		cache_data->RemainingCapacity);
-	pr_info("nanohub: [FG] cache: FullChargeCapacity = %d\n",
-		cache_data->FullChargeCapacity);
-	pr_info("nanohub: [FG] cache: AverageCurrent = %d\n",
-		(int)((s16)cache_data->AverageCurrent));
-	pr_info("nanohub: [FG] cache: RemainingCapacityUnfiltered = %d\n",
-		cache_data->RemainingCapacityUnfiltered);
-	pr_info("nanohub: [FG] cache: FullChargeCapacityUnfiltered = %d\n",
-		cache_data->FullChargeCapacityUnfiltered);
-	pr_info("nanohub: [FG] cache: FullChargeCapacityFiltered = %d\n",
-		cache_data->FullChargeCapacityFiltered);
-	pr_info("nanohub: [FG] cache: StateOfChargeUnfiltered = %d\n",
-		cache_data->StateOfChargeUnfiltered);
-	pr_info("nanohub: [FG] cache: charge_full = %d\n",
-		cache_data->charge_full);
-	pr_info("nanohub: [FG] cache: capacity = %d\n",
-		cache_data->capacity);
-	pr_info("nanohub: [FG] cache: power_avg = %d\n",
-		(int)((s16)cache_data->power_avg));
-	pr_info("nanohub: [FG] cache: health = %d\n",
-		cache_data->health);
-	pr_info("nanohub: [FG] cache: charge_design_full = %d\n",
-		cache_data->charge_design_full);
+	pr_info("nanohub: [FG] control = 0x%04x; "
+		"status = %d; "
+		"present = %d; "
+		"TEMP = %d; "
+		"VOL = %d; "
+		"flags = 0x%04x; "
+		"FAC = %d; "
+		"RM = %d; "
+		"FCC = %d; "
+		"SOC = %d; "
+		"AC = %d; "
+		"RMU = %d; "
+		"FCCU = %d; "
+		"SOCU = %d; "
+		"CF = %d; "
+		"power_avg = %d; "
+		"health = %d; "
+		"CDF = %d; "
+		"charger_online = %d;\n",
+		cache_data->control,
+		cache_data->status,
+		cache_data->present,
+		cache_data->temperature,
+		cache_data->voltage,
+		cache_data->flags,
+		cache_data->FullAvailableCapacity,
+		cache_data->RemainingCapacity,
+		cache_data->FullChargeCapacity,
+		cache_data->capacity,
+		(int)((s16)cache_data->AverageCurrent),
+		cache_data->RemainingCapacityUnfiltered,
+		cache_data->FullChargeCapacityUnfiltered,
+		cache_data->StateOfChargeUnfiltered,
+		cache_data->charge_full,
+		(int)((s16)cache_data->power_avg),
+		cache_data->health,
+		cache_data->charge_design_full,
+		charger_online);
 #endif
 	return 0;
 }
@@ -245,14 +257,14 @@ int store_fuelguage_cache(struct bq27x00_reg_cache *cache_data)
 	bq27x00_update(fg_info);
 	if (poll_interval > 0) {
 		/* The timer does not have to be accurate. */
-		set_timer_slack(&fg_info->work.timer,
-			poll_interval * HZ / 4);
+		set_timer_slack(&fg_info->work.timer, 2 * HZ);
 		schedule_delayed_work(&fg_info->work,
 			poll_interval * HZ);
+
+		cancel_delayed_work(&fg_info->request_delayed_work);
 	}
 	fg_info->requested = 0;
-	pr_info("nanohub:%s  fg_info->requested: %d address:%p",
-		__func__, fg_info->requested, &(fg_info->requested));
+
 	return 0;
 }
 
@@ -375,6 +387,11 @@ int enable_fuelgauge(struct nanohub_data *data, int on)
 static int request_fuel_gauge_data(struct nanohub_data *data)
 {
 	return __nanohub_send_AP_cmd(data, GPIO_CMD_REQUEST_FUELGAUGE);
+}
+
+static int force_request_fuel_gauge_data(struct nanohub_data *data)
+{
+	return __nanohub_send_AP_cmd(data, GPIO_CMD_FORCE_REQUEST_FUELGAUGE);
 }
 
 static int bq27x00_battery_status(
@@ -637,6 +654,7 @@ int bq27x00_powersupply_init(struct device *dev,
 
 
 	INIT_DELAYED_WORK(&fg_info->work, fuelgauge_battery_poll);
+	INIT_DELAYED_WORK(&fg_info->request_delayed_work, request_delayed_func);
 	mutex_init(&fg_info->lock);
 
 	retval = power_supply_register(fg_info->dev, &fg_info->bat);

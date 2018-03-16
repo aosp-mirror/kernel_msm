@@ -65,6 +65,7 @@ struct Nanohub_FuelGauge_Info {
 	unsigned int  pre_interval;
 	struct nanohub_data *hub_data;
 	struct delayed_work work;
+	struct delayed_work request_delayed_work;
 	bool requested;
 	struct power_supply	*usb_psy;
 	bool charger_online;
