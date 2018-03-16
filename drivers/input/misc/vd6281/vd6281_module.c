@@ -47,6 +47,7 @@ struct rainbow_ctrl_t {
 };
 
 static struct rainbow_ctrl_t *ctrl;
+static const struct file_operations vd6281_fops;
 
 int vd6281_write_data(struct rainbow_ctrl_t *ctrl,
 					uint32_t addr, uint32_t data)
@@ -259,6 +260,11 @@ static int32_t vd6281_platform_remove(struct platform_device *pdev)
 		return 0;
 	}
 
+	device_destroy(ctrl->cl, ctrl->dev);
+	class_destroy(ctrl->cl);
+	cdev_del(&ctrl->c_dev);
+	unregister_chrdev_region(ctrl->dev, 1);
+
 	mutex_destroy(&ctrl->cam_sensor_mutex);
 	sysfs_remove_groups(&pdev->dev.kobj, rainbow_dev_groups);
 	kfree(ctrl->io_master_info.cci_client);
@@ -272,6 +278,7 @@ static int32_t vd6281_driver_platform_probe(
 	struct platform_device *pdev)
 {
 	int32_t rc = 0;
+	struct device *dev_ret;
 
 	/* Create sensor control structure */
 	ctrl = devm_kzalloc(&pdev->dev,
@@ -312,6 +319,37 @@ static int32_t vd6281_driver_platform_probe(
 	rc = sysfs_create_groups(&pdev->dev.kobj, rainbow_dev_groups);
 	if (rc)
 		dev_err(&pdev->dev, "failed to create sysfs files");
+
+	if (rc)
+		return -EINVAL;
+
+	rc = alloc_chrdev_region(&ctrl->dev, 0, 1, "vd6281_ioctl");
+
+	if (rc)
+		return rc;
+
+	cdev_init(&ctrl->c_dev, &vd6281_fops);
+
+	rc = cdev_add(&ctrl->c_dev, ctrl->dev, 1);
+	if (rc)
+		return rc;
+
+	rc = IS_ERR(ctrl->cl = class_create(THIS_MODULE, "char"));
+	if (rc) {
+		cdev_del(&ctrl->c_dev);
+		unregister_chrdev_region(ctrl->dev, 1);
+		return PTR_ERR(ctrl->cl);
+	}
+
+	rc = IS_ERR(dev_ret =
+			device_create(ctrl->cl, NULL,
+			ctrl->dev, NULL, "vd6281"));
+	if (rc) {
+		class_destroy(ctrl->cl);
+		cdev_del(&ctrl->c_dev);
+		unregister_chrdev_region(ctrl->dev, 1);
+		return PTR_ERR(dev_ret);
+	}
 
 	return rc;
 }
@@ -465,50 +503,14 @@ static const struct file_operations vd6281_fops = {
 static int __init vd6281_init(void)
 {
 	int rc = 0;
-	struct device *dev_ret;
 
 	rc = platform_driver_register(&vd6281_platform_driver);
-
-	if (rc)
-		return -EINVAL;
-
-	rc = alloc_chrdev_region(&ctrl->dev, 0, 1, "vd6281_ioctl");
-
-	if (rc)
-		return rc;
-
-	cdev_init(&ctrl->c_dev, &vd6281_fops);
-
-	rc = cdev_add(&ctrl->c_dev, ctrl->dev, 1);
-	if (rc)
-		return rc;
-
-	rc = IS_ERR(ctrl->cl = class_create(THIS_MODULE, "char"));
-	if (rc) {
-		cdev_del(&ctrl->c_dev);
-		unregister_chrdev_region(ctrl->dev, 1);
-		return PTR_ERR(ctrl->cl);
-	}
-
-	rc = IS_ERR(dev_ret =
-			device_create(ctrl->cl, NULL,
-			ctrl->dev, NULL, "vd6281"));
-	if (rc) {
-		class_destroy(ctrl->cl);
-		cdev_del(&ctrl->c_dev);
-		unregister_chrdev_region(ctrl->dev, 1);
-		return PTR_ERR(dev_ret);
-	}
 
 	return rc;
 }
 
 static void __exit vd6281_exit(void)
 {
-	device_destroy(ctrl->cl, ctrl->dev);
-	class_destroy(ctrl->cl);
-	cdev_del(&ctrl->c_dev);
-	unregister_chrdev_region(ctrl->dev, 1);
 	platform_driver_unregister(&vd6281_platform_driver);
 }
 
