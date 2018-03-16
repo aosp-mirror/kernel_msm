@@ -657,7 +657,7 @@ struct mxt_data {
 	u8 t100_aux_vect;
 	u8 t100_aux_resv;
 	struct mutex irq_lock;
-	struct mutex i2c_suspend_lock;
+	struct mutex msg_lock;
 	struct mutex fw_update_lock;
 
 	u32 debug_enabled;
