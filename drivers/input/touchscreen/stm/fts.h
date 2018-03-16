@@ -35,6 +35,10 @@
 #include "fts_lib/ftsSoftware.h"
 #include "fts_lib/ftsHardware.h"
 
+#ifdef CONFIG_TOUCHSCREEN_TBN
+#include "../touch_bus_negotiator.h"
+#endif
+
 
 /****************** CONFIGURATION SECTION ******************/
 /** @defgroup conf_section	 Driver Configuration Section
@@ -210,6 +214,7 @@ typedef void (*event_dispatch_handler_t)
  * - wakesrc         Wakeup Source struct \n
  * - input_report_mutex  mutex for handling the pressure of keys \n
  * - series_of_switches  to store the enabling status of a particular feature from the host \n
+ * - tbn             Touch Bus Negotiator context
  */
 struct fts_ts_info{
 	struct device		*dev;		/* Pointer to the device */
@@ -263,6 +268,10 @@ struct fts_ts_info{
 	int		stylus_enabled;		/* Stylus mode */
 	int		cover_enabled;		/* Cover mode */
 	int		grip_enabled;		/* Grip mode */
+
+#ifdef CONFIG_TOUCHSCREEN_TBN
+	struct tbn_context	*tbn;
+#endif
 };
 
 int fts_chip_powercycle(struct fts_ts_info *info);

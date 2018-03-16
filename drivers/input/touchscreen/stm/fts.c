@@ -2922,6 +2922,11 @@ static void fts_resume_work(struct work_struct *work) {
 
 	info = container_of(work, struct fts_ts_info, resume_work);
 
+#ifdef CONFIG_TOUCHSCREEN_TBN
+	if (info->tbn)
+		tbn_request_bus(info->tbn);
+#endif
+
 	__pm_wakeup_event(&info->wakesrc, jiffies_to_msecs(HZ));
 
 	info->resume_bit = 1;
@@ -2956,6 +2961,11 @@ static void fts_suspend_work(struct work_struct *work) {
 	info->sensor_sleep = true;
 
 	fts_disableInterrupt();
+
+#ifdef CONFIG_TOUCHSCREEN_TBN
+	if (info->tbn)
+		tbn_release_bus(info->tbn);
+#endif
 }
 /** @}*/
 
@@ -3312,6 +3322,15 @@ static int fts_probe(struct spi_device *client) {
 
 	dev_set_drvdata(info->dev,info);
 
+#ifdef CONFIG_TOUCHSCREEN_TBN
+	info->tbn = tbn_init(info->dev);
+	if (!info->tbn) {
+		logError(1, "%s ERROR: failed to init tbn context\n", tag);
+		error = -ENODEV;
+		goto ProbeErrorExit_1;
+	}
+#endif
+
     if (dp) {
         info->board = devm_kzalloc(&client->dev, sizeof (struct fts_hw_platform_data), GFP_KERNEL);
         if (!info->board) {
@@ -3566,6 +3585,10 @@ static int fts_remove(struct spi_device *client) {
 #endif
 
     struct fts_ts_info *info = dev_get_drvdata(&(client->dev));
+
+#ifdef CONFIG_TOUCHSCREEN_TBN
+	tbn_cleanup(info->tbn);
+#endif
 
     fts_proc_remove();
 
