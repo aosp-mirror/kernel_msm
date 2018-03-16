@@ -540,6 +540,10 @@ struct ol_txrx_pdev_t {
 	/* ol_txrx_vdev list */
 	TAILQ_HEAD(, ol_txrx_vdev_t) vdev_list;
 
+	TAILQ_HEAD(, ol_txrx_stats_req_internal) req_list;
+	int req_list_depth;
+	adf_os_spinlock_t req_list_spinlock;
+
 	/* peer ID to peer object map (array of pointers to peer objects) */
 	struct ol_txrx_peer_t **peer_id_to_obj_map;
 
