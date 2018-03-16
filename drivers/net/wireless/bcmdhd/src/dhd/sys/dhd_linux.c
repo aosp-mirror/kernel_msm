@@ -45,6 +45,7 @@
 #include <linux/ip.h>
 #include <net/addrconf.h>
 #include <linux/cpufreq.h>
+#include <linux/pm_qos.h>
 
 #include <asm/uaccess.h>
 #include <asm/unaligned.h>
@@ -144,18 +145,16 @@ extern bool ap_cfg_running;
 extern bool ap_fw_loaded;
 #endif
 
-#ifdef CUSTOMER_HW4
-#ifdef FIX_CPU_MIN_CLOCK
-#include <linux/pm_qos.h>
-#endif /* FIX_CPU_MIN_CLOCK */
-#endif /* CUSTOMER_HW4 */
-
 #ifdef ENABLE_ADAPTIVE_SCHED
 #define DEFAULT_CPUFREQ_THRESH		1000000	/* threshold frequency : 1000000 = 1GHz */
 #ifndef CUSTOM_CPUFREQ_THRESH
 #define CUSTOM_CPUFREQ_THRESH	DEFAULT_CPUFREQ_THRESH
 #endif /* CUSTOM_CPUFREQ_THRESH */
 #endif /* ENABLE_ADAPTIVE_SCHED */
+
+#define DEFAULT_PM_QOS_TIMEOUT		250000 /* 250ms */
+static int dhd_pm_qos_timeout = DEFAULT_PM_QOS_TIMEOUT;
+module_param(dhd_pm_qos_timeout, int, S_IRUGO | S_IWUSR);
 
 /* enable HOSTIP cache update from the host side when an eth0:N is up */
 #define AOE_IP_ALIAS_SUPPORT 1
@@ -458,16 +457,9 @@ typedef struct dhd_info {
 #ifdef DHDTCPACK_SUPPRESS
 	spinlock_t	tcpack_lock;
 #endif /* DHDTCPACK_SUPPRESS */
-#ifdef CUSTOMER_HW4
-#ifdef FIX_CPU_MIN_CLOCK
-	bool cpufreq_fix_status;
-	struct mutex cpufreq_fix;
+#ifdef USE_PM_QOS
 	struct pm_qos_request dhd_cpu_qos;
-#ifdef FIX_BUS_MIN_CLOCK
-	struct pm_qos_request dhd_bus_qos;
-#endif /* FIX_BUS_MIN_CLOCK */
-#endif /* FIX_CPU_MIN_CLOCK */
-#endif /* CUSTOMER_HW4 */
+#endif
 	void			*dhd_deferred_wq;
 #ifdef DEBUG_CPU_FREQ
 	struct notifier_block freq_trans;
@@ -2532,6 +2524,22 @@ static void dhd_watchdog(ulong data)
 	dhd_os_sdunlock(&dhd->pub);
 }
 
+#ifdef USE_PM_QOS
+static void
+dhd_pm_qos_update(dhd_info_t *dhd)
+{
+	if (!pm_qos_request_active(&dhd->dhd_cpu_qos)) {
+		pm_qos_add_request(&dhd->dhd_cpu_qos,
+				PM_QOS_CPU_DMA_LATENCY,
+				PM_QOS_DEFAULT_VALUE);
+	}
+	pm_qos_update_request_timeout(&dhd->dhd_cpu_qos,
+			501,
+			dhd_pm_qos_timeout
+			);
+}
+#endif
+
 #ifdef ENABLE_ADAPTIVE_SCHED
 /* DPC thread policy */
 static int dhd_dpc_poli = SCHED_FIFO;
@@ -2594,6 +2602,9 @@ dhd_dpc_thread(void *data)
 #ifdef ENABLE_ADAPTIVE_SCHED
 			dhd_sched_policy(dhd_dpc_prio);
 #endif /* ENABLE_ADAPTIVE_SCHED */
+#ifdef USE_PM_QOS
+			dhd_pm_qos_update(dhd);
+#endif
 			SMP_RD_BARRIER_DEPENDS();
 			if (tsk->terminated) {
 				break;
@@ -2671,6 +2682,9 @@ dhd_rxf_thread(void *data)
 #ifdef ENABLE_ADAPTIVE_SCHED
 			dhd_sched_policy(dhd_rxf_prio);
 #endif /* ENABLE_ADAPTIVE_SCHED */
+#ifdef USE_PM_QOS
+			dhd_pm_qos_update(dhd);
+#endif
 
 			SMP_RD_BARRIER_DEPENDS();
 
@@ -3258,64 +3272,6 @@ done:
 int trigger_deep_sleep = 0;
 #endif /* WL_CFG80211 && SUPPORT_DEEP_SLEEP */
 
-#ifdef CUSTOMER_HW4
-#ifdef FIX_CPU_MIN_CLOCK
-static int dhd_init_cpufreq_fix(dhd_info_t *dhd)
-{
-	if (dhd) {
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25))
-		mutex_init(&dhd->cpufreq_fix);
-#endif
-		dhd->cpufreq_fix_status = FALSE;
-	}
-	return 0;
-}
-
-static void dhd_fix_cpu_freq(dhd_info_t *dhd)
-{
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25))
-	mutex_lock(&dhd->cpufreq_fix);
-#endif
-	if (dhd && !dhd->cpufreq_fix_status) {
-		pm_qos_add_request(&dhd->dhd_cpu_qos, PM_QOS_CPU_FREQ_MIN, 300000);
-#ifdef FIX_BUS_MIN_CLOCK
-		pm_qos_add_request(&dhd->dhd_bus_qos, PM_QOS_BUS_THROUGHPUT, 400000);
-#endif /* FIX_BUS_MIN_CLOCK */
-		DHD_ERROR(("pm_qos_add_requests called\n"));
-
-		dhd->cpufreq_fix_status = TRUE;
-	}
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25))
-	mutex_unlock(&dhd->cpufreq_fix);
-#endif
-}
-
-static void dhd_rollback_cpu_freq(dhd_info_t *dhd)
-{
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25))
-	mutex_lock(&dhd ->cpufreq_fix);
-#endif
-	if (dhd && dhd->cpufreq_fix_status != TRUE) {
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25))
-		mutex_unlock(&dhd->cpufreq_fix);
-#endif
-		return;
-	}
-
-	pm_qos_remove_request(&dhd->dhd_cpu_qos);
-#ifdef FIX_BUS_MIN_CLOCK
-	pm_qos_remove_request(&dhd->dhd_bus_qos);
-#endif /* FIX_BUS_MIN_CLOCK */
-	DHD_ERROR(("pm_qos_add_requests called\n"));
-
-	dhd->cpufreq_fix_status = FALSE;
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25))
-	mutex_unlock(&dhd->cpufreq_fix);
-#endif
-}
-#endif /* FIX_CPU_MIN_CLOCK */
-#endif /* CUSTOMER_HW4 */
-
 static int
 dhd_stop(struct net_device *net)
 {
@@ -3326,11 +3282,6 @@ dhd_stop(struct net_device *net)
 	if (dhd->pub.up == 0) {
 		goto exit;
 	}
-
-#if defined(CUSTOMER_HW4) && defined(FIX_CPU_MIN_CLOCK)
-	if (dhd_get_fw_mode(dhd) == DHD_FLAG_HOSTAP_MODE)
-		dhd_rollback_cpu_freq(dhd);
-#endif /* defined(CUSTOMER_HW4) && defined(FIX_CPU_MIN_CLOCK) */
 
 	ifidx = dhd_net2idx(dhd, net);
 	BCM_REFERENCE(ifidx);
@@ -3618,12 +3569,6 @@ dhd_open(struct net_device *net)
 			}
 		}
 #endif /* SUPPORT_DEEP_SLEEP */
-#if defined(CUSTOMER_HW4) && defined(FIX_CPU_MIN_CLOCK)
-		if (dhd_get_fw_mode(dhd) == DHD_FLAG_HOSTAP_MODE) {
-			dhd_init_cpufreq_fix(dhd);
-			dhd_fix_cpu_freq(dhd);
-		}
-#endif /* defined(CUSTOMER_HW4) && defined(FIX_CPU_MIN_CLOCK) */
 #endif 
 
 		if (dhd->pub.busstate != DHD_BUS_DATA) {
