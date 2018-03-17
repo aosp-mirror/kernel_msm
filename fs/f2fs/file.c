@@ -225,6 +225,9 @@ static int f2fs_do_sync_file(struct file *file, loff_t start, loff_t end,
 	clear_inode_flag(inode, FI_NEED_IPU);
 
 	if (ret) {
+		f2fs_msg(sbi->sb, KERN_WARNING,
+			"filemap_write failed %d dsync=%d atomic=%d",
+			ret, datasync, atomic);
 		trace_f2fs_sync_file_exit(inode, cp_reason, datasync, ret);
 		return ret;
 	}
@@ -262,6 +265,10 @@ go_write:
 	if (cp_reason) {
 		/* all the dirty node pages should be flushed for POR */
 		ret = f2fs_sync_fs(inode->i_sb, 1);
+		if (ret)
+			f2fs_msg(sbi->sb, KERN_WARNING,
+				"f2fs_sync_fs failed %d dsync=%d atomic=%d",
+				ret, datasync, atomic);
 
 		/*
 		 * We've secured consistency through sync_fs. Following pino
@@ -274,8 +281,12 @@ go_write:
 	}
 sync_nodes:
 	ret = fsync_node_pages(sbi, inode, &wbc, atomic);
-	if (ret)
+	if (ret) {
+		f2fs_msg(sbi->sb, KERN_WARNING,
+				"fsync_node_pages failed %d dsync=%d atomic=%d",
+				ret, datasync, atomic);
 		goto out;
+	}
 
 	/* if cp_error was enabled, we should avoid infinite loop */
 	if (unlikely(f2fs_cp_error(sbi))) {
@@ -299,16 +310,25 @@ sync_nodes:
 	 */
 	if (!atomic) {
 		ret = wait_on_node_pages_writeback(sbi, ino);
-		if (ret)
+		if (ret) {
+			f2fs_msg(sbi->sb, KERN_WARNING,
+				"wait_on_node failed %d dsync=%d atomic=%d",
+				ret, datasync, atomic);
 			goto out;
+		}
 	}
 
 	/* once recovery info is written, don't need to tack this */
 	remove_ino_entry(sbi, ino, APPEND_INO);
 	clear_inode_flag(inode, FI_APPEND_WRITE);
 flush_out:
-	if (!atomic)
+	if (!atomic) {
 		ret = f2fs_issue_flush(sbi, inode->i_ino);
+		if (ret)
+			f2fs_msg(sbi->sb, KERN_WARNING,
+				"f2fs_issue_flush failed %d dsync=%d atomic=%d",
+				ret, datasync, atomic);
+	}
 	if (!ret) {
 		remove_ino_entry(sbi, ino, UPDATE_INO);
 		clear_inode_flag(inode, FI_UPDATE_WRITE);

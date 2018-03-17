@@ -1982,6 +1982,13 @@ continue_unlock:
 						goto retry_write;
 					}
 					continue;
+				} else {
+					f2fs_msg(F2FS_M_SB(mapping)->sb,
+						KERN_WARNING,
+						"__write_data_page failed %d "
+						"mode=%d type=%d index=%lu",
+						ret, wbc->sync_mode,
+						io_type, page->index);
 				}
 				done_index = page->index + 1;
 				done = 1;
