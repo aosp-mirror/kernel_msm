@@ -1790,6 +1790,12 @@ int wma_vdev_stop_resp_handler(void *handle, uint8_t *cmd_param_info,
 	}
 	resp_event = param_buf->fixed_param;
 
+	if (resp_event->vdev_id >= wma->max_bssid) {
+		WMA_LOGE("%s: Invalid vdev_id %d from FW",
+			 __func__, resp_event->vdev_id);
+		return -EINVAL;
+	}
+
 	req_msg = wma_find_vdev_req(wma, resp_event->vdev_id,
 				    WMA_TARGET_REQ_TYPE_VDEV_STOP, true);
 	if (!req_msg) {
@@ -1798,8 +1804,7 @@ int wma_vdev_stop_resp_handler(void *handle, uint8_t *cmd_param_info,
 		return -EINVAL;
 	}
 
-	if ((resp_event->vdev_id < wma->max_bssid) &&
-	    (qdf_atomic_read
+	if ((qdf_atomic_read
 		     (&wma->interfaces[resp_event->vdev_id].vdev_restart_params.
 		     hidden_ssid_restart_in_progress))
 	    && ((wma->interfaces[resp_event->vdev_id].type == WMI_VDEV_TYPE_AP)
@@ -1837,14 +1842,6 @@ int wma_vdev_stop_resp_handler(void *handle, uint8_t *cmd_param_info,
 	if (req_msg->msg_type == WMA_DELETE_BSS_REQ) {
 		tpDeleteBssParams params =
 			(tpDeleteBssParams) req_msg->user_data;
-
-		if (resp_event->vdev_id >= wma->max_bssid) {
-			WMA_LOGE("%s: Invalid vdev_id %d", __func__,
-				 resp_event->vdev_id);
-			wma_cleanup_target_req_param(req_msg);
-			status = -EINVAL;
-			goto free_req_msg;
-		}
 
 		iface = &wma->interfaces[resp_event->vdev_id];
 		if (iface->handle == NULL) {
