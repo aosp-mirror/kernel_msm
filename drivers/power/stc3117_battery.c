@@ -193,7 +193,7 @@ static const int TempTable[NTEMP] = {60, 40, 25, 10, 0, -10, -20};
 static const int DefVMTempTable[NTEMP] = VMTEMPTABLE;
 static const char *charger_name = "battery";
 //static int g_low_battery_counter;
-static bool g_debug, g_standby_mode, g_boot_phase, g_force_SOC_update;
+static bool g_debug = 1, g_standby_mode, g_boot_phase, g_force_SOC_update;
 static int g_ui_soc, g_last_status, g_ocv, g_reg_soc, g_dummy_soc;
 static const char * const charge_status[] = {
 	"unknown",
@@ -2409,10 +2409,13 @@ void stc311x_check_charger_state(struct stc311x_chip *chip)
 		} else {
 			g_last_status = chip->status;
 			chip->status = ret.intval;
+			/*
 			if (chip->status == POWER_SUPPLY_STATUS_DISCHARGING)
 				return;
+			*/
 		}
 
+		/*
 		ret.intval = 0;
 		rc = charger_psy->get_property(charger_psy,
 					POWER_SUPPLY_PROP_RESISTANCE, &ret);
@@ -2429,6 +2432,7 @@ void stc311x_check_charger_state(struct stc311x_chip *chip)
 				charger_psy->set_property(charger_psy, POWER_SUPPLY_PROP_STATUS, &ret);
 			}
 		}
+		*/
 	}
 }
 

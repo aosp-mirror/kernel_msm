@@ -462,6 +462,11 @@ config SMB23X_CHARGER
 	  The driver reports the charger status via the power supply framework.
 	  A charger status change triggers an IRQ via the device STAT pin.
 
+config SMB231_JEITA_CONTROL
+	tristate "Dynamical control to JEITA"
+	depends on  SMB23X_CHARGER
+	default n
+
 config BATTERY_BQ28400
 	tristate "BQ28400 battery driver"
 	depends on I2C

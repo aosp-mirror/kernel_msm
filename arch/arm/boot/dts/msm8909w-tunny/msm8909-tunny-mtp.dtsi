@@ -30,6 +30,29 @@
 			qcom,float-voltage-mv = <4400>;
 			qcom,recharge-thresh-mv = <80>;
 			qcom,aicl-disabled;
+			thermal-monitor-disabled;
+			//jeita-check-enabled;
+			max-temp-zone = <6>;
+			/*
+			<[start_temp_for_zone] [voltage] [current]
+			[hysteresis direction] [hysteresis delta temp]>
+			hysteresis direction:
+				 0: do not hysteresis.
+				 1: tracking toward up
+				-1: tracking toward down
+			example: zone-5 jump to zone-4,
+				Algorithm doens't switch to zone-4 directly
+				while just decrease from 46 to 44 deg-C.
+				It will stay at zone-5 until decreasing to
+				43 deg-C and switch to zone-4.
+			*/
+			temp-zone-0 = <(-40) 4400 0 1 20>;
+			temp-zone-1 = <0 4400 42 1 20>;
+			temp-zone-2 = <60 4400 125 1 20>;
+			temp-zone-3 = <110 4400 207 1 20>;
+			temp-zone-4 = <210 4400 415 0 0>;
+			temp-zone-5 = <460 4100 207 (-1) 20>;
+			temp-zone-6 = <600 4100 0 (-1) 20>;
 			qcom,hot-bat-decidegc = <560>;
 			qcom,warm-bat-decidegc = <450>;
 			qcom,cool-bat-decidegc = <170>;
