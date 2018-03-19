@@ -195,6 +195,10 @@
 	};
 };
 
+&soc {
+	/delete-node/google,port-overheat-mitigation;
+};
+
 &qupv3_se7_spi {
 	status = "disabled";
 };
