@@ -537,6 +537,11 @@ config GOOGLE_CHARGER
 	  The driver performs a multi CC-CV steps charging setting the Constant
 	  Charge Current given battery temperature and voltage limits.
 
+config USB_OVERHEAT_MITIGATION
+	tristate "Google USB Overheat Mitigation"
+	help
+	  Say Y here to enable Google USB overheat mitigation
+
 source "drivers/power/supply/qcom/Kconfig"
 
 endif # POWER_SUPPLY

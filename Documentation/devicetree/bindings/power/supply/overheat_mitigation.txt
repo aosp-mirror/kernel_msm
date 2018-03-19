@@ -1,0 +1,11 @@
+google,overheat_mitigation
+~~~~~~~~~~~~~~
+
+Required properties:
+ - compatible : "google,overheat_mitigation"
+ - google,begin-mitigation-temp: USB port temperature threshold in decidegrees
+     Celsius at which to begin overheat mitigation
+ - google,end-mitigation-temp: USB port temperature threshold in decidegrees
+     Celsius at which to end overheat mitigation
+ - google,port-overheat-work-interval: period in milliseconds at which the
+     driver should monitor the overheat status
