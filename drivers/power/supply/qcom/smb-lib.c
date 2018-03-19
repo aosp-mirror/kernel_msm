@@ -2525,6 +2525,38 @@ int smblib_get_prop_usb_current_now(struct smb_charger *chg,
 	return iio_read_channel_processed(chg->iio.usbin_i_chan, &val->intval);
 }
 
+int smblib_get_prop_usb_port_temp(struct smb_charger *chg,
+				  union power_supply_propval *val)
+{
+	int rc = 0;
+	int temp = INT_MIN;
+
+	if (!chg->usb_port_tz_name)
+		return -ENODEV;
+
+	/* lazily get the usb port thermal zone */
+	if (!chg->usb_port_tz) {
+		chg->usb_port_tz =
+			thermal_zone_get_zone_by_name(chg->usb_port_tz_name);
+		if (IS_ERR(chg->usb_port_tz)) {
+			rc = PTR_ERR(chg->usb_port_tz);
+			pr_err("Couldn't get USB thermal zone rc=%d\n", rc);
+			return rc;
+		}
+	} else if (IS_ERR(chg->usb_port_tz))
+		return PTR_ERR(chg->usb_port_tz);
+
+	rc = thermal_zone_get_temp(chg->usb_port_tz, &temp);
+	if (rc < 0) {
+		pr_err("Couldn't get temp USB port thermal zone rc=%d\n", rc);
+		return rc;
+	}
+
+	/* power property value needs to be in deciDeg */
+	val->intval = temp / 100;
+	return 0;
+}
+
 int smblib_get_prop_charger_temp(struct smb_charger *chg,
 				 union power_supply_propval *val)
 {
