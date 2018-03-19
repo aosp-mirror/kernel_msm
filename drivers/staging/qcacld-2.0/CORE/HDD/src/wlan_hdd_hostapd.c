@@ -5526,69 +5526,99 @@ iw_set_ap_genie(struct net_device *dev,
 	return ret;
 }
 
+struct linkspeed_priv {
+	tSirLinkSpeedInfo linkspeed_info;
+};
+
+static void
+hdd_get_link_speed_cb(tSirLinkSpeedInfo *linkspeed_info, void *cookie)
+{
+	struct hdd_request *request;
+	struct linkspeed_priv *priv;
+
+	if (NULL == linkspeed_info)
+	{
+		hddLog(VOS_TRACE_LEVEL_ERROR,
+		       "%s: Bad param, linkspeed_info [%pK] cookie [%pK]",
+		       __func__, linkspeed_info, cookie);
+		return;
+	}
+
+	request = hdd_request_get(cookie);
+	if (!request) {
+		hddLog(VOS_TRACE_LEVEL_ERROR,"Obsolete request");
+		return;
+	}
+
+	priv = hdd_request_priv(request);
+	priv->linkspeed_info = *linkspeed_info;
+	hdd_request_complete(request);
+	hdd_request_put(request);
+}
 
 VOS_STATUS  wlan_hdd_get_linkspeed_for_peermac(hdd_adapter_t *pAdapter,
                                                tSirMacAddr macAddress)
 {
    eHalStatus hstatus;
-   unsigned long rc;
-   struct linkspeedContext context;
-   tSirLinkSpeedInfo *linkspeed_req;
+   VOS_STATUS status = VOS_STATUS_SUCCESS;
+   void *cookie;
+   tSirLinkSpeedInfo *linkspeed_info;
+   int ret;
+   struct hdd_request *request;
+   struct linkspeed_priv *priv;
+   static const struct hdd_request_params params = {
+      .priv_size = sizeof(*priv),
+      .timeout_ms = WLAN_WAIT_TIME_STATS,
+   };
 
    if (NULL == pAdapter)
    {
       hddLog(VOS_TRACE_LEVEL_ERROR, "%s: pAdapter is NULL", __func__);
       return VOS_STATUS_E_FAULT;
    }
-   linkspeed_req = (tSirLinkSpeedInfo *)vos_mem_malloc(sizeof(*linkspeed_req));
-   if (NULL == linkspeed_req)
-   {
+
+   request = hdd_request_alloc(&params);
+   if (!request) {
       VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
                           "%s Request Buffer Alloc Fail", __func__);
       return VOS_STATUS_E_INVAL;
    }
-   init_completion(&context.completion);
-   context.pAdapter = pAdapter;
-   context.magic = LINK_CONTEXT_MAGIC;
+   cookie = hdd_request_cookie(request);
+   priv = hdd_request_priv(request);
 
-   vos_mem_copy(linkspeed_req->peer_macaddr, macAddress, sizeof(tSirMacAddr) );
-   hstatus = sme_GetLinkSpeed( WLAN_HDD_GET_HAL_CTX(pAdapter),
-                                  linkspeed_req,
-                                  &context,
-                                  hdd_GetLink_SpeedCB);
+   linkspeed_info = &priv->linkspeed_info;
+   vos_mem_copy(linkspeed_info->peer_macaddr, macAddress, sizeof(tSirMacAddr) );
+   hstatus = sme_GetLinkSpeed(WLAN_HDD_GET_HAL_CTX(pAdapter),
+                              linkspeed_info,
+                              cookie,
+                              hdd_get_link_speed_cb);
+
    if (eHAL_STATUS_SUCCESS != hstatus)
    {
       hddLog(VOS_TRACE_LEVEL_ERROR,
-            "%s: Unable to retrieve statistics for link speed",
-            __func__);
-      vos_mem_free(linkspeed_req);
+            "%s: Unable to retrieve statistics for link speed, ret(%d)",
+            __func__, hstatus);
+      status = VOS_STATUS_E_INVAL;
+      goto cleanup;
    }
-   else
-   {
-      rc = wait_for_completion_timeout(&context.completion,
-            msecs_to_jiffies(WLAN_WAIT_TIME_STATS));
-      if (!rc) {
-         hddLog(VOS_TRACE_LEVEL_ERROR,
-               "%s: SME timed out while retrieving link speed",
-              __func__);
-      }
+   ret = hdd_request_wait_for_response(request);
+   if (!ret) {
+      hddLog(VOS_TRACE_LEVEL_ERROR,
+             "%s: SME timed out while retrieving link speed,ret(%d)",
+             __func__, ret);
+      status = VOS_STATUS_E_INVAL;
+      goto cleanup;
    }
+   pAdapter->ls_stats.estLinkSpeed = linkspeed_info->estLinkSpeed;
 
-   /* either we never sent a request, we sent a request and received a
-     response or we sent a request and timed out.  if we never sent a
-     request or if we sent a request and got a response, we want to
-     clear the magic out of paranoia.  if we timed out there is a
-     race condition such that the callback function could be
-     executing at the same time we are. of primary concern is if the
-     callback function had already verified the "magic" but had not
-     yet set the completion variable when a timeout occurred. we
-     serialize these activities by invalidating the magic while
-     holding a shared spinlock which will cause us to block if the
-     callback is currently executing */
-   spin_lock(&hdd_context_lock);
-   context.magic = 0;
-   spin_unlock(&hdd_context_lock);
-   return VOS_STATUS_SUCCESS;
+cleanup:
+   /*
+    * either we never sent a request, we sent a request and
+    * received a response or we sent a request and timed out.
+    * regardless we are done with the request.
+    */
+   hdd_request_put(request);
+   return status;
 }
 
 
