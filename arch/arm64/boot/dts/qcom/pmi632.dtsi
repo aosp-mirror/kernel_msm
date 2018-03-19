@@ -18,8 +18,8 @@
 	qcom,pmi632@2 {
 		compatible = "qcom,spmi-pmic";
 		reg = <0x2 SPMI_USID>;
-		#address-cells = <2>;
-		#size-cells = <0>;
+		#address-cells = <1>;
+		#size-cells = <1>;
 
 		pmi632_revid: qcom,revid@100 {
 			compatible = "qcom,qpnp-revid";
@@ -37,7 +37,7 @@
 			reg = <0x3100 0x100>;
 			#address-cells = <1>;
 			#size-cells = <0>;
-			interrupts = <0x0 0x31 0x0 IRQ_TYPE_EDGE_RISING>;
+			interrupts = <0x2 0x31 0x0 IRQ_TYPE_EDGE_RISING>;
 			interrupt-names = "eoc-int-en-set";
 			qcom,adc-vdd-reference = <1875>;
 			qcom,adc-full-scale-code = <0x70e4>;
@@ -237,8 +237,8 @@
 					<0x2 0x10 0x3 IRQ_TYPE_EDGE_RISING>,
 					<0x2 0x10 0x4 IRQ_TYPE_EDGE_RISING>,
 					<0x2 0x10 0x5 IRQ_TYPE_EDGE_RISING>,
-					<0x2 0x10 0x6 IRQ_TYPE_LEVEL_HIGH>,
-					<0x2 0x10 0x7 IRQ_TYPE_LEVEL_HIGH>;
+					<0x2 0x10 0x6 IRQ_TYPE_EDGE_RISING>,
+					<0x2 0x10 0x7 IRQ_TYPE_EDGE_RISING>;
 
 				interrupt-names = "chgr-error",
 						  "chg-state-change",
@@ -256,7 +256,7 @@
 					<0x2 0x11 0x0 IRQ_TYPE_EDGE_RISING>,
 					<0x2 0x11 0x1 IRQ_TYPE_EDGE_RISING>,
 					<0x2 0x11 0x2 IRQ_TYPE_EDGE_RISING>,
-					<0x2 0x11 0x3 IRQ_TYPE_LEVEL_HIGH>,
+					<0x2 0x11 0x3 IRQ_TYPE_EDGE_BOTH>,
 					<0x2 0x11 0x4 IRQ_TYPE_EDGE_BOTH>,
 					<0x2 0x11 0x5 IRQ_TYPE_EDGE_BOTH>,
 					<0x2 0x11 0x6 IRQ_TYPE_EDGE_RISING>,
@@ -282,7 +282,7 @@
 					<0x2 0x12 0x4 IRQ_TYPE_EDGE_BOTH>,
 					<0x2 0x12 0x5 IRQ_TYPE_EDGE_BOTH>,
 					<0x2 0x12 0x6 IRQ_TYPE_EDGE_BOTH>,
-					<0x2 0x12 0x7 IRQ_TYPE_LEVEL_HIGH>;
+					<0x2 0x12 0x7 IRQ_TYPE_EDGE_BOTH>;
 
 				interrupt-names = "bat-temp",
 						  "all-chnl-conv-done",
@@ -301,8 +301,8 @@
 					<0x2 0x13 0x1 IRQ_TYPE_EDGE_BOTH>,
 					<0x2 0x13 0x2 IRQ_TYPE_EDGE_BOTH>,
 					<0x2 0x13 0x3 IRQ_TYPE_EDGE_BOTH>,
-					<0x2 0x13 0x4 IRQ_TYPE_LEVEL_HIGH>,
-					<0x2 0x13 0x5 IRQ_TYPE_LEVEL_HIGH>,
+					<0x2 0x13 0x4 IRQ_TYPE_EDGE_BOTH>,
+					<0x2 0x13 0x5 IRQ_TYPE_EDGE_BOTH>,
 					<0x2 0x13 0x6 IRQ_TYPE_EDGE_RISING>,
 					<0x2 0x13 0x7 IRQ_TYPE_EDGE_RISING>;
 
@@ -320,12 +320,12 @@
 				reg = <0x1500 0x100>;
 				interrupts =
 					<0x2 0x15 0x0 IRQ_TYPE_EDGE_BOTH>,
-					<0x2 0x15 0x1 IRQ_TYPE_LEVEL_HIGH>,
+					<0x2 0x15 0x1 IRQ_TYPE_EDGE_BOTH>,
 					<0x2 0x15 0x2 IRQ_TYPE_EDGE_RISING>,
-					<0x2 0x15 0x3 IRQ_TYPE_LEVEL_HIGH>,
-					<0x2 0x15 0x4 IRQ_TYPE_EDGE_RISING>,
+					<0x2 0x15 0x3 IRQ_TYPE_EDGE_RISING>,
+					<0x2 0x15 0x4 IRQ_TYPE_EDGE_BOTH>,
 					<0x2 0x15 0x5 IRQ_TYPE_EDGE_RISING>,
-					<0x2 0x15 0x6 IRQ_TYPE_LEVEL_HIGH>,
+					<0x2 0x15 0x6 IRQ_TYPE_EDGE_RISING>,
 					<0x2 0x15 0x7 IRQ_TYPE_EDGE_RISING>;
 
 				interrupt-names = "typec-or-rid-detect-change",
@@ -343,11 +343,11 @@
 				interrupts =
 					<0x2 0x16 0x0 IRQ_TYPE_EDGE_RISING>,
 					<0x2 0x16 0x1 IRQ_TYPE_EDGE_RISING>,
-					<0x2 0x16 0x2 IRQ_TYPE_LEVEL_HIGH>,
-					<0x2 0x16 0x3 IRQ_TYPE_LEVEL_HIGH>,
-					<0x2 0x16 0x4 IRQ_TYPE_LEVEL_HIGH>,
+					<0x2 0x16 0x2 IRQ_TYPE_EDGE_RISING>,
+					<0x2 0x16 0x3 IRQ_TYPE_EDGE_RISING>,
+					<0x2 0x16 0x4 IRQ_TYPE_EDGE_BOTH>,
 					<0x2 0x16 0x5 IRQ_TYPE_EDGE_RISING>,
-					<0x2 0x16 0x6 IRQ_TYPE_EDGE_FALLING>,
+					<0x2 0x16 0x6 IRQ_TYPE_EDGE_RISING>,
 					<0x2 0x16 0x7 IRQ_TYPE_EDGE_RISING>;
 
 				interrupt-names = "wdog-snarl",
@@ -432,8 +432,8 @@
 	pmi632_3: qcom,pmi632@3 {
 		compatible ="qcom,spmi-pmic";
 		reg = <0x3 SPMI_USID>;
-		#address-cells = <2>;
-		#size-cells = <0>;
+		#address-cells = <1>;
+		#size-cells = <1>;
 
 		pmi632_vib: qcom,vibrator@5700 {
 			compatible = "qcom,qpnp-vibrator-ldo";
@@ -625,33 +625,6 @@
 				type = "passive";
 			};
 		};
-
-		cooling-maps {
-			vbat_map4 {
-				trip = <&pmi632_vbat_low>;
-				cooling-device =
-					<&CPU4 THERMAL_MAX_LIMIT
-						THERMAL_MAX_LIMIT>;
-			};
-			vbat_map5 {
-				trip = <&pmi632_vbat_low>;
-				cooling-device =
-					<&CPU5 THERMAL_MAX_LIMIT
-						THERMAL_MAX_LIMIT>;
-			};
-			vbat_map6 {
-				trip = <&pmi632_vbat_low>;
-				cooling-device =
-					<&CPU6 THERMAL_MAX_LIMIT
-						THERMAL_MAX_LIMIT>;
-			};
-			vbat_map7 {
-				trip = <&pmi632_vbat_low>;
-				cooling-device =
-					<&CPU7 THERMAL_MAX_LIMIT
-						THERMAL_MAX_LIMIT>;
-			};
-		};
 	};
 
 	soc {
@@ -666,32 +639,6 @@
 				temperature = <10>;
 				hysteresis = <0>;
 				type = "passive";
-			};
-		};
-		cooling-maps {
-			soc_map4 {
-				trip = <&pmi632_low_soc>;
-				cooling-device =
-					<&CPU4 THERMAL_MAX_LIMIT
-						THERMAL_MAX_LIMIT>;
-			};
-			soc_map5 {
-				trip = <&pmi632_low_soc>;
-				cooling-device =
-					<&CPU5 THERMAL_MAX_LIMIT
-						THERMAL_MAX_LIMIT>;
-			};
-			soc_map6 {
-				trip = <&pmi632_low_soc>;
-				cooling-device =
-					<&CPU6 THERMAL_MAX_LIMIT
-						THERMAL_MAX_LIMIT>;
-			};
-			soc_map7 {
-				trip = <&pmi632_low_soc>;
-				cooling-device =
-					<&CPU7 THERMAL_MAX_LIMIT
-						THERMAL_MAX_LIMIT>;
 			};
 		};
 	};
