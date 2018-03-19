@@ -18,6 +18,7 @@
 	google,boost_to_5_1V;
 	qcom,dc-icl-ua = <1200000>;
 	google,batt_psy_is_bms;
+	google,usb-port-tz-name = "usbc-therm-adc";
 };
 
 &pmi8998_fg {
