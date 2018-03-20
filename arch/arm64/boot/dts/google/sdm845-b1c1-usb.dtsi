@@ -1,4 +1,6 @@
 
+#include <dt-bindings/usb/typec.h>
+
 &vendor {
 	extcon_usb1: extcon_usb1 {
 		compatible = "linux,extcon-usb-gpio";
@@ -65,4 +67,17 @@
 	pinctrl-names = "atest_usb13_suspend", "atest_usb13_active";
 	pinctrl-0 = <&atest_usb13_suspend>;
 	pinctrl-1 = <&atest_usb13_active>;
+};
+
+&pmi8998_pdphy {
+	goog,src-pdo = <PDO_TYPE_FIXED 5000 900 0>;	/* 5V @ 0.9A */
+	goog,snk-pdo = <PDO_TYPE_FIXED 5000 3000 0>,	/* 5V @ 3A */
+		       <PDO_TYPE_FIXED 9000 3000 0>;	/* 9V @ 3A */
+	goog,max-snk-mv = <9000>;
+	goog,max-snk-ma = <3000>;
+	goog,max-snk-mw = <27000>;
+	goog,op-snk-mw = <7600>;
+	goog,port-type = <TYPEC_PORT_DRP>;
+	goog,default-role = <TYPEC_SINK>;
+	goog,try-role-hw;
 };
