@@ -883,14 +883,14 @@ struct v4l2_event32 {
 static int put_v4l2_event32(struct v4l2_event __user *kp, struct v4l2_event32 __user *up)
 {
 	if (!access_ok(VERIFY_WRITE, up, sizeof(struct v4l2_event32)) ||
-		convert_in_user(&kp->type, &up->type) ||
-		copy_in_user(&up->u, &kp->u, sizeof(kp->u)) ||
-		convert_in_user(&kp->pending, &up->pending) ||
-		convert_in_user(&kp->sequence, &up->sequence) ||
-		convert_in_user(&kp->timestamp.tv_sec, &up->timestamp.tv_sec) ||
-		convert_in_user(&kp->timestamp.tv_nsec, &up->timestamp.tv_nsec) ||
-		convert_in_user(&kp->id, &up->id) ||
-		copy_in_user(up->reserved, kp->reserved, 8 * sizeof(__u32)))
+		put_user(kp->type, &up->type) ||
+		copy_to_user(&up->u, &kp->u, sizeof(kp->u)) ||
+		put_user(kp->pending, &up->pending) ||
+		put_user(kp->sequence, &up->sequence) ||
+		put_user(kp->timestamp.tv_sec, &up->timestamp.tv_sec) ||
+		put_user(kp->timestamp.tv_nsec, &up->timestamp.tv_nsec) ||
+		put_user(kp->id, &up->id) ||
+		copy_to_user(up->reserved, kp->reserved, 8 * sizeof(__u32)))
 			return -EFAULT;
 	return 0;
 }
