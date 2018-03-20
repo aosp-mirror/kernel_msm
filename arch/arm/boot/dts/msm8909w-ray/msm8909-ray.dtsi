@@ -104,22 +104,30 @@
 		};
 	};
 
-    firmware: firmware {
-        android {
-            compatible = "android,firmware";
-            fstab {
-                compatible = "android,fstab";
-                vendor {
-                    compatible = "android,vendor";
-                    dev = "/dev/block/platform/soc/7824900.sdhci/by-name/vendor";
-                    type = "ext4";
-                    mnt_flags = "ro,barrier=1,discard";
-                    fsmgr_flags = "wait";
-                    status = "ok";
-                };
-            };
-        };
-    };
+	firmware: firmware {
+		android {
+			compatible = "android,firmware";
+			fstab {
+				compatible = "android,fstab";
+				system {
+					compatible = "android,system";
+					dev = "/dev/block/platform/soc/7824900.sdhci/by-name/system";
+					type = "ext4";
+					mnt_flags = "ro,barrier=1,discard";
+					fsmgr_flags = "wait";
+					status = "ok";
+				};
+				vendor {
+					compatible = "android,vendor";
+					dev = "/dev/block/platform/soc/7824900.sdhci/by-name/vendor";
+					type = "ext4";
+					mnt_flags = "ro,barrier=1,discard";
+					fsmgr_flags = "wait";
+					status = "ok";
+				};
+			};
+		};
+	};
 
 	reserved-memory {
 		#address-cells = <2>;
@@ -144,13 +152,13 @@
 			no-map;
 		};
 
-        pstore_reserve_mem: pstore_reserve_mem_region@0 {
-            linux,reserve-contiguous-region;
-            linux,reserve-region;
-            linux,remove-completely;
-            reg = <0x0 0x9ff00000 0x0 0x00100000>;
-            label = "pstore_reserve_mem";
-        };
+		pstore_reserve_mem: pstore_reserve_mem_region@0 {
+			linux,reserve-contiguous-region;
+			linux,reserve-region;
+			linux,remove-completely;
+			reg = <0x0 0x9ff00000 0x0 0x00100000>;
+			label = "pstore_reserve_mem";
+		};
 
 		venus_qseecom_mem: venus_qseecom_region@0 {
 			compatible = "shared-dma-pool";
@@ -211,9 +219,9 @@
 	timer {
 		compatible = "arm,armv7-timer";
 		interrupts = <1 2 0xf08>,
-			     <1 3 0xf08>,
-			     <1 4 0xf08>,
-			     <1 1 0xf08>;
+				 <1 3 0xf08>,
+				 <1 4 0xf08>,
+				 <1 1 0xf08>;
 		clock-frequency = <19200000>;
 	};
 
@@ -228,9 +236,9 @@
 		frame@b021000 {
 			frame-number = <0>;
 			interrupts = <0 8 0x4>,
-				     <0 7 0x4>;
+					 <0 7 0x4>;
 			reg = <0xb021000 0x1000>,
-			      <0xb022000 0x1000>;
+				  <0xb022000 0x1000>;
 		};
 		frame@b023000 {
 			frame-number = <1>;
@@ -280,7 +288,7 @@
 	clock_gcc: qcom,gcc@1800000 {
 		compatible = "qcom,gcc-8909";
 		reg = <0x1800000 0x80000>,
-		      <0xb016000 0x00040>;
+			  <0xb016000 0x00040>;
 		reg-names = "cc_base", "apcs_base";
 		vdd_dig-supply = <&pm8909_s1_corner>;
 		vdd_sr2_dig-supply = <&pm8909_s1_corner_ao>;
@@ -313,7 +321,7 @@
 	clock_cpu: qcom,clock-a7@0b011050 {
 		compatible = "qcom,clock-a53-8916";
 		reg = <0x0b011050 0x8>,
-		      <0x0005c00c 0x8>;
+			  <0x0005c00c 0x8>;
 		reg-names = "rcg-base", "efuse";
 		qcom,safe-freq = < 400000000 >;
 		cpu-vdd-supply = <&pm8909_s1_corner_ao>;
@@ -417,7 +425,7 @@
 	tsens: tsens@4a8000 {
 		compatible = "qcom,msm8909-tsens";
 		reg = <0x4a8000 0x2000>,
-		      <0x5c000  0x1000>;
+			  <0x5c000  0x1000>;
 		reg-names = "tsens_physical", "tsens_eeprom_physical";
 		interrupts = <0 184 0>;
 		interrupt-names = "tsens-upper-lower";
@@ -826,12 +834,12 @@
 			<0x0A080c00 0x00000001>;
 
 		reg-names = "wcnss_mmio", "wcnss_fiq",
-			    "pronto_phy_base", "riva_phy_base",
-			    "riva_ccu_base", "pronto_a2xb_base",
-			    "pronto_ccpu_base", "pronto_saw2_base",
-			    "wlan_tx_phy_aborts","wlan_brdg_err_source",
-			    "wlan_tx_status", "alarms_txctl",
-			    "alarms_tactl", "pronto_mcu_base";
+				"pronto_phy_base", "riva_phy_base",
+				"riva_ccu_base", "pronto_a2xb_base",
+				"pronto_ccpu_base", "pronto_saw2_base",
+				"wlan_tx_phy_aborts","wlan_brdg_err_source",
+				"wlan_tx_status", "alarms_txctl",
+				"alarms_tactl", "pronto_mcu_base";
 
 		interrupts = <0 145 0 0 146 0>;
 		interrupt-names = "wcnss_wlantx_irq", "wcnss_wlanrx_irq";
@@ -1022,7 +1030,7 @@
 	jtag_mm0: jtagmm@84c000 {
 		compatible = "qcom,jtag-mm";
 		reg = <0x84c000 0x1000>,
-		      <0x840000 0x1000>;
+			  <0x840000 0x1000>;
 		reg-names = "etm-base","debug-base";
 
 		clocks = <&clock_rpm clk_qdss_clk>,
@@ -1035,7 +1043,7 @@
 	jtag_mm1: jtagmm@84d000 {
 		compatible = "qcom,jtag-mm";
 		reg = <0x84d000 0x1000>,
-		      <0x842000 0x1000>;
+			  <0x842000 0x1000>;
 		reg-names = "etm-base","debug-base";
 
 		clocks = <&clock_rpm clk_qdss_clk>,
@@ -1048,7 +1056,7 @@
 	jtag_mm2: jtagmm@84e000 {
 		compatible = "qcom,jtag-mm";
 		reg = <0x84e000 0x1000>,
-		      <0x844000 0x1000>;
+			  <0x844000 0x1000>;
 		reg-names = "etm-base","debug-base";
 
 		clocks = <&clock_rpm clk_qdss_clk>,
@@ -1061,7 +1069,7 @@
 	jtag_mm3: jtagmm@84f000 {
 		compatible = "qcom,jtag-mm";
 		reg = <0x84f000 0x1000>,
-		      <0x846000 0x1000>;
+			  <0x846000 0x1000>;
 		reg-names = "etm-base","debug-base";
 
 		clocks = <&clock_rpm clk_qdss_clk>,
@@ -1200,7 +1208,7 @@
 		#size-cells = <0>;
 		reg-names = "spi_physical", "spi_bam_physical";
 		reg = <0x78ba000 0x600>,
-		      <0x7884000 0x23000>;
+			  <0x7884000 0x23000>;
 		interrupt-names = "spi_irq", "spi_bam_irq";
 		interrupts = <0 100 0>, <0 238 0>;
 		spi-max-frequency = <19200000>;
@@ -1649,7 +1657,7 @@
 	qcom_crypto: qcrypto@720000 {
 		compatible = "qcom,qcrypto";
 		reg = <0x720000 0x20000>,
-		      <0x704000 0x20000>;
+			  <0x704000 0x20000>;
 		reg-names = "crypto-base","crypto-bam-base";
 		interrupts = <0 207 0>;
 		qcom,bam-pipe-pair = <2>;
@@ -1678,7 +1686,7 @@
 	qcom_cedev: qcedev@720000 {
 		compatible = "qcom,qcedev";
 		reg = <0x720000 0x20000>,
-		      <0x704000 0x20000>;
+			  <0x704000 0x20000>;
 		reg-names = "crypto-base","crypto-bam-base";
 		interrupts = <0 207 0>;
 		qcom,bam-pipe-pair = <1>;
@@ -1769,11 +1777,11 @@
 	qcom,mss@4080000 {
 		compatible = "qcom,pil-q6v55-mss";
 		reg = <0x04080000 0x100>,
-		      <0x0194f000 0x010>,
-		      <0x01950000 0x008>,
-		      <0x01951000 0x008>,
-		      <0x04020000 0x040>,
-		      <0x0183e000 0x004>;
+			  <0x0194f000 0x010>,
+			  <0x01950000 0x008>,
+			  <0x01951000 0x008>,
+			  <0x04020000 0x040>,
+			  <0x0183e000 0x004>;
 		reg-names = "qdsp6_base", "halt_q6", "halt_modem", "halt_nc",
 				 "rmb_base", "restart_reg";
 
