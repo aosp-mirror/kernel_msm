@@ -489,8 +489,8 @@
 #define CS40L20_DSP1_PMEM_0		0x03800000
 #define CS40L20_DSP1_PMEM_5114		0x03804FE8
 
-/*registers populated by OTP*/
-#define CS40L20_OTP_TRIM_1	0x0000208c
+/* trim fields unpacked from OTP memory */
+#define CS40L20_OTP_TRIM_1	0x0000208C
 #define CS40L20_OTP_TRIM_2	0x00002090
 #define CS40L20_OTP_TRIM_3	0x00003010
 #define CS40L20_OTP_TRIM_4	0x0000300C
@@ -527,11 +527,7 @@
 #define CS40L20_OTP_TRIM_35	0x0000400C
 #define CS40L20_OTP_TRIM_36	0x00002030
 
-#define CS40L20_MAX_CACHE_REG		0x0000006F
-#define CS40L20_OTP_SIZE_WORDS		32
-#define CS40L20_NUM_OTP_ELEM		100
-
-#define CS40L20_VALID_PDATA		0x80000000
+#define CS40L20_MAX_CACHE_REG		0x00000069
 
 #define CS40L20_SCLK_MSTR_MASK		0x10
 #define CS40L20_SCLK_MSTR_SHIFT		4
@@ -558,8 +554,6 @@
 
 #define CS40L20_TEMP_THLD_MASK		0x03
 
-#define CS40L20_PDM_MODE_MASK		0x01
-#define CS40L20_PDM_MODE_SHIFT		0
 
 #define CS40L20_CH_MEM_DEPTH_MASK	0x07
 #define CS40L20_CH_MEM_DEPTH_SHIFT	0
@@ -645,6 +639,8 @@
 
 #define CS40L20_BST_LBST_VAL_MASK	0x00000003
 #define CS40L20_BST_LBST_VAL_SHIFT	0
+#define CS40L20_AMP_VOL_PCM_MASK	0x00003FF8
+#define CS40L20_AMP_VOL_PCM_SHIFT	3
 
 #define CS40L20_PDN_DONE_MASK		0x00800000
 #define CS40L20_PDN_DONE_SHIFT		23
@@ -657,7 +653,8 @@
 #define CS40L20_TEMP_ERR		0x00020000
 #define CS40L20_BST_OVP_ERR		0x40
 #define CS40L20_BST_DCM_UVP_ERR		0x80
-#define CS40L20_OTP_BOOT_DONE		0x02
+#define CS40L20_OTP_BOOT_ERR		0x80000000
+#define CS40L20_OTP_BOOT_DONE		0x00000002
 
 #define CS40L20_AMP_SHORT_ERR_RLS	0x02
 #define CS40L20_BST_SHORT_ERR_RLS	0x04
@@ -670,10 +667,7 @@
 #define CS40L20_INT1_UNMASK_PUP		0xFEFFFFFF
 #define CS40L20_INT1_UNMASK_PDN		0xFF7FFFFF
 
-#define CS40L20_CHIP_ID			0x35a40
-
-#define CS40L20_OTP_HDR_ID_SHIFT	16
-#define CS40L20_OTP_HDR_ID_MASK		0x000F0000
+#define CS40L20_CHIP_ID			0x35A40
 
 #define CS40L20_MPU_UNLOCK_CODE1	0x5555
 #define CS40L20_MPU_UNLOCK_CODE2	0xAAAA
@@ -703,7 +697,7 @@
 #define CS40L20_XM_LIST_TERM		0xBEDEAD
 
 #define CS40L20_NUM_ALGOS_MAX		16
-#define CS40L20_FW_REV_MIN		0x000202
+#define CS40L20_FW_REV_MIN		0x000205
 
 #define CS40L20_ALGO_ID_SIZE		4
 #define CS40L20_COEFF_COUNT_SIZE	4
@@ -721,6 +715,17 @@
 #define CS40L20_DIAG_STATE_RUN		0x01
 #define CS40L20_DIAG_STATE_DONE		0x02
 #define CS40L20_DIAG_STATE_DELAY_MS	500
+#define CS40L20_DSP_TIMEOUT_COUNT	10	/* 1 count = 10 ms */
+#define CS40L20_OTP_TIMEOUT_COUNT	10
+#define CS40L20_NUM_OTP_MAPS		2
+#define CS40L20_NUM_OTP_WORDS		32
+
+#define CS40L20_TEST_KEY_UNLOCK_CODE1	0x55
+#define CS40L20_TEST_KEY_UNLOCK_CODE2	0xAA
+#define CS40L20_TEST_KEY_RELOCK_CODE1	0xCC
+#define CS40L20_TEST_KEY_RELOCK_CODE2	0x33
+
+#define CS40L20_DIG_SCALE_MAX		816	/* -102 dB */
 
 #define CS40L20_MAX_WLEN		4096
 
@@ -728,17 +733,20 @@
 
 bool cs40l20_readable_reg(struct device *dev, unsigned int reg);
 bool cs40l20_volatile_reg(struct device *dev, unsigned int reg);
+bool cs40l20_precious_reg(struct device *dev, unsigned int reg);
 
-struct cs40l20_otp_packed_element_t {
+struct cs40l20_trim {
 	u32 reg;
 	u8 shift;
 	u8 size;
 };
 
-struct cs40l20_otp_map_element_t {
+struct cs40l20_otp_desc {
 	u32 id;
-	u32 num_elements;
-	const struct cs40l20_otp_packed_element_t *map;
+	u8 row_start;
+	u8 col_start;
+	u32 num_trims;
+	const struct cs40l20_trim *trim_table;
 };
 
 struct cs40l20_coeff_desc {
@@ -755,6 +763,6 @@ extern const unsigned char cs40l20_bst_k2_table[4][5];
 extern const unsigned char cs40l20_bst_slope_table[4];
 
 extern const struct reg_default cs40l20_reg[CS40L20_MAX_CACHE_REG];
-extern const struct cs40l20_otp_map_element_t cs40l20_otp_map_map[2];
+extern const struct cs40l20_otp_desc cs40l20_otp_map[CS40L20_NUM_OTP_MAPS];
 
 #endif /*__CS40L20_H__*/

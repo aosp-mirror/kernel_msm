@@ -55,6 +55,7 @@ struct cs40l20_private {
 	unsigned int f0_measured;
 	unsigned int redc_measured;
 	struct led_classdev led_dev;
+	unsigned int dig_scale;
 };
 
 static const char *const cs40l20_supplies[] = {
@@ -304,6 +305,46 @@ static ssize_t cs40l20_redc_measured_show(struct device *dev,
 	return snprintf(buf, PAGE_SIZE, "%d\n", redc_measured);
 }
 
+static ssize_t cs40l20_dig_scale_show(struct device *dev,
+				      struct device_attribute *attr, char *buf)
+{
+	struct cs40l20_private *cs40l20 = cs40l20_get_private(dev);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", cs40l20->dig_scale);
+}
+
+static ssize_t cs40l20_dig_scale_store(struct device *dev,
+				       struct device_attribute *attr,
+				       const char *buf, size_t count)
+{
+	struct cs40l20_private *cs40l20 = cs40l20_get_private(dev);
+	int ret;
+	unsigned int dig_scale;
+
+	ret = kstrtou32(buf, 10, &dig_scale);
+	if (ret)
+		return -EINVAL;
+
+	if (dig_scale > CS40L20_DIG_SCALE_MAX)
+		return -EINVAL;
+
+	mutex_lock(&cs40l20->lock);
+	ret = regmap_update_bits(cs40l20->regmap, CS40L20_AMP_DIG_VOL_CTRL,
+				 CS40L20_AMP_VOL_PCM_MASK,
+				 ((0x800 - dig_scale) & 0x7FF)
+				 << CS40L20_AMP_VOL_PCM_SHIFT);
+	mutex_unlock(&cs40l20->lock);
+
+	if (ret) {
+		pr_err("Failed to store digital scale\n");
+		return ret;
+	}
+
+	cs40l20->dig_scale = dig_scale;
+
+	return count;
+}
+
 static DEVICE_ATTR(cp_trigger_index, 0660, cs40l20_cp_trigger_index_show,
 		   cs40l20_cp_trigger_index_store);
 static DEVICE_ATTR(gpio1_rise_index, 0660, cs40l20_gpio1_rise_index_show,
@@ -314,6 +355,8 @@ static DEVICE_ATTR(f0_measured, 0660, cs40l20_f0_measured_show, NULL);
 static DEVICE_ATTR(f0_stored, 0660, cs40l20_f0_stored_show,
 		   cs40l20_f0_stored_store);
 static DEVICE_ATTR(redc_measured, 0660, cs40l20_redc_measured_show, NULL);
+static DEVICE_ATTR(dig_scale, 0660, cs40l20_dig_scale_show,
+		   cs40l20_dig_scale_store);
 
 static struct attribute *cs40l20_dev_attrs[] = {
 	&dev_attr_cp_trigger_index.attr,
@@ -322,6 +365,7 @@ static struct attribute *cs40l20_dev_attrs[] = {
 	&dev_attr_f0_measured.attr,
 	&dev_attr_f0_stored.attr,
 	&dev_attr_redc_measured.attr,
+	&dev_attr_dig_scale.attr,
 	NULL,
 };
 
@@ -404,6 +448,14 @@ static void cs40l20_vibe_start_worker(struct work_struct *work)
 	case CS40L20_INDEX_DIAG:
 		cs40l20->diag_state = CS40L20_DIAG_STATE_INIT;
 
+		ret = regmap_update_bits(cs40l20->regmap,
+					 CS40L20_AMP_DIG_VOL_CTRL,
+					 CS40L20_AMP_VOL_PCM_MASK, 0);
+		if (ret) {
+			dev_err(dev, "Failed to reset digital scale\n");
+			goto err_mutex;
+		}
+
 		ret = regmap_write(regmap,
 				   cs40l20_dsp_reg(cs40l20, "CLOSED_LOOP",
 						   CS40L20_XM_UNPACKED_TYPE),
@@ -468,6 +520,13 @@ static void cs40l20_vibe_stop_worker(struct work_struct *work)
 				   0);
 		if (ret)
 			dev_err(dev, "Failed to disable stimulus mode\n");
+		ret = regmap_update_bits(cs40l20->regmap,
+					 CS40L20_AMP_DIG_VOL_CTRL,
+					 CS40L20_AMP_VOL_PCM_MASK,
+					 ((0x800 - cs40l20->dig_scale) & 0x7FF)
+					 << CS40L20_AMP_VOL_PCM_SHIFT);
+		if (ret)
+			dev_err(dev, "Failed to restore digital scale\n");
 		break;
 	default:
 		reg = cs40l20_dsp_reg(cs40l20, "ENDPLAYBACK",
@@ -655,6 +714,7 @@ static void cs40l20_dsp_start(struct cs40l20_private *cs40l20)
 	struct regmap *regmap = cs40l20->regmap;
 	struct device *dev = cs40l20->dev;
 	unsigned int val;
+	int dsp_timeout = CS40L20_DSP_TIMEOUT_COUNT;
 
 	ret = regmap_write_bits(regmap, CS40L20_DSP1_CCM_CORE_CTRL,
 				CS40L20_DSP1_EN_MASK,
@@ -664,19 +724,25 @@ static void cs40l20_dsp_start(struct cs40l20_private *cs40l20)
 		return;
 	}
 
-	usleep_range(5000, 8000);
+	while (dsp_timeout > 0) {
+		usleep_range(10000, 10100);
 
 	ret = regmap_read(regmap, cs40l20_dsp_reg(cs40l20, "HALO_STATE",
 						  CS40L20_XM_UNPACKED_TYPE),
 			  &val);
 	if (ret) {
-		dev_err(dev, "Failed to read haptics algorithm status\n");
+		dev_err(dev, "Failed to read DSP status\n");
 		return;
 	}
 
-	if (val != CS40L20_HALO_STATE_RUNNING) {
-		dev_err(dev, "Register HALO_STATE reports %d, expected %d\n",
-			val, CS40L20_HALO_STATE_RUNNING);
+		if (val == CS40L20_HALO_STATE_RUNNING)
+			break;
+
+		dsp_timeout--;
+	}
+
+	if (dsp_timeout == 0) {
+		dev_err(dev, "Timed out with DSP status = %d\n", val);
 		return;
 	}
 
@@ -1087,6 +1153,7 @@ static int cs40l20_init(struct cs40l20_private *cs40l20)
 	cs40l20->cp_trailer_index = 0;
 	cs40l20->vibe_init_success = false;
 	cs40l20->diag_state = CS40L20_DIAG_STATE_INIT;
+	cs40l20->dig_scale = 0;
 
 	if (cs40l20->pdata.refclk_gpio2) {
 		ret = regmap_update_bits(regmap, CS40L20_GPIO_PAD_CONTROL,
@@ -1170,6 +1237,152 @@ static int cs40l20_init(struct cs40l20_private *cs40l20)
 	return 0;
 }
 
+static int cs40l20_otp_unpack(struct cs40l20_private *cs40l20)
+{
+	struct regmap *regmap = cs40l20->regmap;
+	struct device *dev = cs40l20->dev;
+	struct cs40l20_trim trim;
+	unsigned char row_offset, col_offset;
+	unsigned int val, otp_map;
+	unsigned int otp_mem[CS40L20_NUM_OTP_WORDS];
+	int otp_timeout = CS40L20_OTP_TIMEOUT_COUNT;
+	int ret, i;
+
+	while (otp_timeout > 0) {
+		usleep_range(10000, 10100);
+
+		ret = regmap_read(regmap, CS40L20_IRQ1_STATUS4, &val);
+		if (ret) {
+			dev_err(dev, "Failed to read OTP boot status\n");
+			return ret;
+		}
+
+		if (val & CS40L20_OTP_BOOT_DONE)
+			break;
+
+		otp_timeout--;
+	}
+
+	if (otp_timeout == 0) {
+		dev_err(dev, "Timed out waiting for OTP boot\n");
+		return -ETIME;
+	}
+
+	ret = regmap_read(cs40l20->regmap, CS40L20_IRQ1_STATUS3, &val);
+	if (ret) {
+		dev_err(dev, "Failed to read OTP error status\n");
+		return ret;
+	}
+
+	if (val & CS40L20_OTP_BOOT_ERR) {
+		dev_err(dev, "Encountered fatal OTP error\n");
+		return -EIO;
+	}
+
+	ret = regmap_read(cs40l20->regmap, CS40L20_OTPID, &val);
+	if (ret) {
+		dev_err(dev, "Failed to read OTP ID\n");
+		return ret;
+	}
+
+	/* hard matching against known OTP IDs */
+	for (i = 0; i < CS40L20_NUM_OTP_MAPS; i++) {
+		if (cs40l20_otp_map[i].id == val) {
+			otp_map = i;
+			break;
+		}
+	}
+
+	/* reject unrecognized IDs, including untrimmed devices (OTP ID = 0) */
+	if (i == CS40L20_NUM_OTP_MAPS) {
+		dev_err(dev, "Unrecognized OTP ID: 0x%01X\n", val);
+		return -ENODEV;
+	}
+
+	dev_dbg(dev, "Found OTP ID: 0x%01X\n", val);
+
+	ret = regmap_bulk_read(regmap, CS40L20_OTP_MEM0, otp_mem,
+			       CS40L20_NUM_OTP_WORDS);
+	if (ret) {
+		dev_err(dev, "Failed to read OTP contents\n");
+		return ret;
+	}
+
+	ret = regmap_write(regmap, CS40L20_TEST_KEY_CTL,
+			   CS40L20_TEST_KEY_UNLOCK_CODE1);
+	if (ret) {
+		dev_err(dev, "Failed to unlock test space (step 1 of 2)\n");
+		return ret;
+	}
+
+	ret = regmap_write(regmap, CS40L20_TEST_KEY_CTL,
+			   CS40L20_TEST_KEY_UNLOCK_CODE2);
+	if (ret) {
+		dev_err(dev, "Failed to unlock test space (step 2 of 2)\n");
+		return ret;
+	}
+
+	row_offset = cs40l20_otp_map[otp_map].row_start;
+	col_offset = cs40l20_otp_map[otp_map].col_start;
+
+	for (i = 0; i < cs40l20_otp_map[otp_map].num_trims; i++) {
+		trim = cs40l20_otp_map[otp_map].trim_table[i];
+
+		if (col_offset + trim.size - 1 > 31) {
+			/* trim straddles word boundary */
+			val = (otp_mem[row_offset] &
+					GENMASK(31, col_offset)) >> col_offset;
+			val |= (otp_mem[row_offset + 1] &
+					GENMASK(col_offset + trim.size - 33, 0))
+					<< (32 - col_offset);
+		} else {
+			/* trim does not straddle word boundary */
+			val = (otp_mem[row_offset] &
+					GENMASK(col_offset + trim.size - 1,
+						col_offset)) >> col_offset;
+		}
+
+		/* advance column marker and wrap if necessary */
+		col_offset += trim.size;
+		if (col_offset > 31) {
+			col_offset -= 32;
+			row_offset++;
+		}
+
+		/* skip blank trims */
+		if (trim.reg == 0)
+			continue;
+
+		ret = regmap_update_bits(regmap, trim.reg,
+					 GENMASK(trim.shift + trim.size - 1,
+						 trim.shift),
+					 val << trim.shift);
+		if (ret) {
+			dev_err(dev, "Failed to write trim %d\n", i + 1);
+			return ret;
+		}
+
+		dev_dbg(dev, "Trim %d: wrote 0x%X to 0x%08X bits [%d:%d]\n",
+			i + 1, val, trim.reg, trim.shift + trim.size - 1,
+			trim.shift);
+	}
+
+	ret = regmap_write(regmap, CS40L20_TEST_KEY_CTL,
+			   CS40L20_TEST_KEY_RELOCK_CODE1);
+	if (ret) {
+		dev_err(dev, "Failed to lock test space (step 1 of 2)\n");
+		return ret;
+	}
+
+	ret = regmap_write(regmap, CS40L20_TEST_KEY_CTL,
+			   CS40L20_TEST_KEY_RELOCK_CODE2);
+	if (ret) {
+		dev_err(dev, "Failed to lock test space (step 2 of 2)\n");
+		return ret;
+	}
+
+	return 0;
+}
 static int cs40l20_handle_of_data(struct i2c_client *i2c_client,
 		struct cs40l20_platform_data *pdata)
 {
@@ -1216,6 +1429,7 @@ static struct regmap_config cs40l20_regmap = {
 	.max_register = CS40L20_LASTREG,
 	.reg_defaults = cs40l20_reg,
 	.num_reg_defaults = ARRAY_SIZE(cs40l20_reg),
+	.precious_reg = cs40l20_precious_reg,
 	.volatile_reg = cs40l20_volatile_reg,
 	.readable_reg = cs40l20_readable_reg,
 	.cache_type = REGCACHE_RBTREE,
@@ -1228,7 +1442,7 @@ static int cs40l20_i2c_probe(struct i2c_client *i2c_client,
 	struct cs40l20_private *cs40l20;
 	struct device *dev = &i2c_client->dev;
 	struct cs40l20_platform_data *pdata = dev_get_platdata(dev);
-	unsigned int reg_devid, reg_revid, reg_otpid;
+	unsigned int reg_devid, reg_revid;
 
 	cs40l20 = devm_kzalloc(dev, sizeof(struct cs40l20_private), GFP_KERNEL);
 	if (!cs40l20)
@@ -1310,13 +1524,11 @@ static int cs40l20_i2c_probe(struct i2c_client *i2c_client,
 		goto err;
 	}
 
-	ret = regmap_read(cs40l20->regmap, CS40L20_OTPID, &reg_otpid);
-	if (ret) {
-		dev_err(dev, "Failed to read OTP ID\n");
+	ret = cs40l20_otp_unpack(cs40l20);
+	if (ret)
 		goto err;
-	}
 
-	dev_info(dev, "Cirrus Logic CS40L20 revision %02X\n", reg_revid >> 8);
+	dev_info(dev, "Cirrus Logic CS40L20 revision %02X\n", reg_revid);
 
 	ret = cs40l20_init(cs40l20);
 	if (ret)

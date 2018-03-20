@@ -32,9 +32,7 @@ const unsigned char cs40l20_bst_slope_table[4] = {0x75, 0x6B, 0x3B, 0x28};
 const struct reg_default cs40l20_reg[CS40L20_MAX_CACHE_REG] = {
 	{CS40L20_TEST_KEY_CTL, 0x00000000},
 	{CS40L20_USER_KEY_CTL, 0x00000000},
-	{CS40L20_OTP_MEM0, 0x00000000},
-	{CS40L20_OTP_MEM31, 0x00000000},
-	{CS40L20_OTP_CTRL0, 0x00006419},
+	{CS40L20_OTP_CTRL0, 0x00006418},
 	{CS40L20_OTP_CTRL1, 0x00000000},
 	{CS40L20_OTP_CTRL3, 0x00000000},
 	{CS40L20_OTP_CTRL4, 0x00000000},
@@ -43,18 +41,16 @@ const struct reg_default cs40l20_reg[CS40L20_MAX_CACHE_REG] = {
 	{CS40L20_OTP_CTRL7, 0x00000000},
 	{CS40L20_OTP_CTRL8, 0x00000000},
 	{CS40L20_PWR_CTRL1, 0x00000000},
-	{CS40L20_PWR_CTRL2, 0x00003321},
-	{CS40L20_PWR_CTRL3, 0x01000011},
+	{CS40L20_PWR_CTRL3, 0x01000010},
 	{CS40L20_CTRL_OVRRIDE, 0x00000002},
 	{CS40L20_AMP_OUT_MUTE, 0x00000000},
 	{CS40L20_PROTECT_REL_ERR_IGN, 0x00000000},
-	{CS40L20_GPIO_PAD_CONTROL, 0x00000000},
 	{CS40L20_JTAG_CONTROL, 0x00000000},
 	{CS40L20_PLL_CLK_CTRL, 0x00000010},
 	{CS40L20_DSP_CLK_CTRL, 0x00000003},
 	{CS40L20_GLOBAL_CLK_CTRL, 0x00000003},
 	{CS40L20_DATA_FS_SEL, 0x00000000},
-	{CS40L20_MDSYNC_EN, 0x00000000},
+	{CS40L20_MDSYNC_EN, 0x00000200},
 	{CS40L20_MDSYNC_TX_ID, 0x00000000},
 	{CS40L20_MDSYNC_PWR_CTRL, 0x00000002},
 	{CS40L20_MDSYNC_DATA_TX, 0x00000000},
@@ -75,12 +71,12 @@ const struct reg_default cs40l20_reg[CS40L20_MAX_CACHE_REG] = {
 	{CS40L20_BSTCVRT_DCM_CTRL, 0x00002001},
 	{CS40L20_BSTCVRT_DCM_MODE_FORCE, 0x00000000},
 	{CS40L20_BSTCVRT_OVERVOLT_CTRL, 0x00000130},
-	{CS40L20_VI_VOL_POL, 0x080C0806},
+	{CS40L20_VI_VOL_POL, 0x08000800},
 	{CS40L20_DTEMP_WARN_THLD, 0x00000002},
 	{CS40L20_DTEMP_EN, 0x00000000},
 	{CS40L20_VPVBST_FS_SEL, 0x00000001},
 	{CS40L20_SP_ENABLES, 0x00000000},
-	{CS40L20_SP_RATE_CTRL, 0x01000028},
+	{CS40L20_SP_RATE_CTRL, 0x00000028},
 	{CS40L20_SP_FORMAT, 0x18180200},
 	{CS40L20_SP_HIZ_CTRL, 0x00000002},
 	{CS40L20_SP_FRAME_TX_SLOT, 0x03020100},
@@ -115,8 +111,6 @@ const struct reg_default cs40l20_reg[CS40L20_MAX_CACHE_REG] = {
 	{CS40L20_NG_CFG, 0x00000033},
 	{CS40L20_AMP_GAIN_CTRL, 0x00000273},
 	{CS40L20_DAC_MSM_CFG, 0x00580000},
-	{CS40L20_GPIO_STATUS1, 0x00000000},
-	{CS40L20_GPIO1_CTRL1, 0xE1000001},
 	{CS40L20_GPIO2_CTRL1, 0xE1000001},
 	{CS40L20_MIXER_NGATE_CFG, 0x00000000},
 	{CS40L20_MIXER_NGATE_CH1_CFG, 0x00000303},
@@ -618,6 +612,8 @@ bool cs40l20_volatile_reg(struct device *dev, unsigned int reg)
 	case CS40L20_SFT_RESET:
 	case CS40L20_FABID:
 	case CS40L20_REVID:
+	case CS40L20_PWR_CTRL2:
+	case CS40L20_GPIO_PAD_CONTROL:
 	case CS40L20_IRQ1_STATUS:
 	case CS40L20_IRQ1_STATUS1:
 	case CS40L20_IRQ1_STATUS2:
@@ -666,6 +662,8 @@ bool cs40l20_volatile_reg(struct device *dev, unsigned int reg)
 	case CS40L20_IRQ2_POL3:
 	case CS40L20_IRQ2_POL4:
 	case CS40L20_IRQ2_DB3:
+	case CS40L20_GPIO_STATUS1:
+	case CS40L20_GPIO1_CTRL1:
 	case CS40L20_DSP1_XMEM_PACK_0 ... CS40L20_DSP1_XMEM_PACK_3068:
 	case CS40L20_DSP1_XMEM_UNPACK32_0 ... CS40L20_DSP1_XMEM_UNPACK32_2046:
 	case CS40L20_DSP1_XMEM_UNPACK24_0 ... CS40L20_DSP1_XMEM_UNPACK24_4093:
@@ -674,21 +672,30 @@ bool cs40l20_volatile_reg(struct device *dev, unsigned int reg)
 	case CS40L20_DSP1_YMEM_UNPACK24_0 ... CS40L20_DSP1_YMEM_UNPACK24_2045:
 	case CS40L20_DSP1_PMEM_0 ... CS40L20_DSP1_PMEM_5114:
 	case CS40L20_DSP1_CCM_CORE_CTRL ... CS40L20_DSP1_WDT_STATUS:
+	case CS40L20_OTP_MEM0 ... CS40L20_OTP_MEM31:
 		return true;
 	default:
 		return false;
 	}
 }
 
-static const struct cs40l20_otp_packed_element_t
-cs40l20_otp_map_1[CS40L20_NUM_OTP_ELEM] = {
+bool cs40l20_precious_reg(struct device *dev, unsigned int reg)
+{
+	switch (reg) {
+	case CS40L20_OTP_MEM0 ... CS40L20_OTP_MEM31:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static const struct cs40l20_trim cs40l20_trim_table_c[] = {
 	/* addr         shift   size */
 	{0x00002030, 0, 4},	/*TRIM_OSC_FREQ_TRIM */
 	{0x00002030, 7, 1},	/*TRIM_OSC_TRIM_DONE */
-	{0x0000208c, 24, 6},	/*TST_DIGREG_VREF_TRIM */
+	{0x0000208C, 24, 6}, /*TST_DIGREG_VREF_TRIM*/
 	{0x00002090, 14, 4},	/*TST_REF_TRIM */
 	{0x00002090, 10, 4},	/*TST_REF_TEMPCO_TRIM */
-	{0x00003010, 2, 6},	/*PLL_DCO_CAL_TRIM */
 	{0x0000300C, 11, 4},	/*PLL_LDOA_TST_VREF_TRIM */
 	{0x0000394C, 23, 2},	/*BST_ATEST_CM_VOFF */
 	{0x00003950, 0, 7},	/*BST_ATRIM_IADC_OFFSET */
@@ -785,15 +792,13 @@ cs40l20_otp_map_1[CS40L20_NUM_OTP_ELEM] = {
 	{0x00017044, 0, 24},	/*LOT_NUMBER */
 };
 
-static const struct cs40l20_otp_packed_element_t
-cs40l20_otp_map_2[CS40L20_NUM_OTP_ELEM] = {
+static const struct cs40l20_trim cs40l20_trim_table_d[] = {
 	/* addr         shift   size */
 	{0x00002030, 0, 4},	/*TRIM_OSC_FREQ_TRIM */
 	{0x00002030, 7, 1},	/*TRIM_OSC_TRIM_DONE */
-	{0x0000208c, 24, 6},	/*TST_DIGREG_VREF_TRIM */
+	{0x0000208C, 24, 6}, /*TST_DIGREG_VREF_TRIM*/
 	{0x00002090, 14, 4},	/*TST_REF_TRIM */
 	{0x00002090, 10, 4},	/*TST_REF_TEMPCO_TRIM */
-	{0x00003010, 2, 6},	/*PLL_DCO_CAL_TRIM */
 	{0x0000300C, 11, 4},	/*PLL_LDOA_TST_VREF_TRIM */
 	{0x0000394C, 23, 2},	/*BST_ATEST_CM_VOFF */
 	{0x00003950, 0, 7},	/*BST_ATRIM_IADC_OFFSET */
@@ -890,15 +895,19 @@ cs40l20_otp_map_2[CS40L20_NUM_OTP_ELEM] = {
 	{0x00017044, 0, 24},	/*LOT_NUMBER */
 };
 
-const struct cs40l20_otp_map_element_t cs40l20_otp_map_map[2] = {
+const struct cs40l20_otp_desc cs40l20_otp_map[CS40L20_NUM_OTP_MAPS] = {
 	{
-	 .id = 0x01,
-	 .map = cs40l20_otp_map_1,
-	 .num_elements = CS40L20_NUM_OTP_ELEM,
+		.id = 0xC,
+		.row_start = 2,
+		.col_start = 16,
+		.num_trims = ARRAY_SIZE(cs40l20_trim_table_c),
+		.trim_table = cs40l20_trim_table_c,
 	 },
 	{
-	 .id = 0x02,
-	 .map = cs40l20_otp_map_2,
-	 .num_elements = CS40L20_NUM_OTP_ELEM,
+		.id = 0xD,
+		.row_start = 2,
+		.col_start = 16,
+		.num_trims = ARRAY_SIZE(cs40l20_trim_table_d),
+		.trim_table = cs40l20_trim_table_d,
 	 },
 };
