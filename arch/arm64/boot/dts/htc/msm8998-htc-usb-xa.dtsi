@@ -11,6 +11,8 @@
  * GNU General Public License for more details.
  */
 
+#include <dt-bindings/usb/typec.h>
+
 &pm8998_gpios {
 	gpio@c400 { /* GPIO 5 - V_OTG_5V_EN_AP */
 		qcom,mode = <1>;
@@ -71,6 +73,19 @@
 	 * the value to allow faster charging.
 	 */
 	qcom,fcc-max-ua = <500000>;
+};
+
+&pmi8998_pdphy {
+	src-pdo = <PDO_TYPE_FIXED 5000 900 0>;	/* 5V-0.9A */
+	snk-pdo = <PDO_TYPE_FIXED 5000 3000 0>,	/* 5V-3A */
+		  <PDO_TYPE_FIXED 9000 3000 0>;	/* 9V-3A */
+	max-snk-mv = <9000>;
+	max-snk-ma = <3000>;
+	max-snk-mw = <27000>;
+	op-snk-mw = <7600>;
+	port-type = <TYPEC_PORT_DRP>;
+	default-role = <TYPEC_SINK>;
+	try-role-hw;
 };
 
 &qusb_phy0 {
