@@ -705,12 +705,7 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 				ts->scrub_x = ((p_event_status->status_data_4 >> 4) & 0xF) << 8 | (p_event_status->status_data_3 & 0xFF);
 				ts->scrub_y = ((p_event_status->status_data_4 >> 0) & 0xF) << 8 | (p_event_status->status_data_2 & 0xFF);
 
-#ifdef CONFIG_SAMSUNG_PRODUCT_SHIP
 				input_info(true, &ts->client->dev, "%s: PRESSURE[%d]\n", __func__, ts->scrub_id);
-#else
-				input_info(true, &ts->client->dev, "%s: PRESSURE[%d %d %d]\n", __func__,
-						ts->scrub_id, ts->scrub_x, ts->scrub_y);
-#endif
 
 				input_sync(ts->input_dev);
 				input_report_key(ts->input_dev, KEY_BLACK_UI_GESTURE, 0);
@@ -876,13 +871,8 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 
 						ts->scrub_x = (data[1] & 0xFF) << 8 | (data[0] & 0xFF);
 						ts->scrub_y = (data[3] & 0xFF) << 8 | (data[2] & 0xFF);
-#ifdef CONFIG_SAMSUNG_PRODUCT_SHIP
 						input_info(true, &ts->client->dev, "%s: aod: %d\n",
 								__func__, ts->scrub_id);
-#else
-						input_info(true, &ts->client->dev, "%s: aod: %d, %d, %d\n",
-								__func__, ts->scrub_id, ts->scrub_x, ts->scrub_y);
-#endif
 						ts->all_aod_tap_count++;
 					}
 					if (customlib[1] & SEC_TS_MODE_CUSTOMLIB_SPAY) {
@@ -907,24 +897,15 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 
 		if (t_id < MAX_SUPPORT_TOUCH_COUNT + MAX_SUPPORT_HOVER_COUNT) {
 			if (ts->coord[t_id].action == SEC_TS_COORDINATE_ACTION_PRESS) {
-#if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
-				input_info(true, &ts->client->dev,
+				input_dbg(false, &ts->client->dev,
 					"%s[P] tID:%d x:%d y:%d z:%d major:%d minor:%d tc:%d type:%X\n",
 					ts->dex_name,
 					t_id, ts->coord[t_id].x, ts->coord[t_id].y, ts->coord[t_id].z,
 					ts->coord[t_id].major, ts->coord[t_id].minor, ts->touch_count,
 					ts->coord[t_id].ttype);
-#else
-				input_info(true, &ts->client->dev,
-					"%s[P] tID:%d z:%d major:%d minor:%d tc:%d type:%X\n",
-					ts->dex_name,
-					t_id, ts->coord[t_id].z, ts->coord[t_id].major,
-					ts->coord[t_id].minor, ts->touch_count, ts->coord[t_id].ttype);
-#endif
 
 			} else if (ts->coord[t_id].action == SEC_TS_COORDINATE_ACTION_RELEASE) {
-#if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
-				input_info(true, &ts->client->dev,
+				input_dbg(false, &ts->client->dev,
 					"%s[R] tID:%d mc:%d tc:%d lx:%d ly:%d f:%d v:%02X%02X cal:%02X(%02X) id(%d,%d) p:%d P%02XT%04X\n",
 					ts->dex_name,
 					t_id, ts->coord[t_id].mcount, ts->touch_count,
@@ -934,18 +915,7 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 					ts->cal_status, ts->nv, ts->tspid_val,
 					ts->tspicid_val, ts->coord[t_id].palm_count,
 					ts->cal_count, ts->tune_fix_ver );
-#else
-				input_info(true, &ts->client->dev,
-					"%s[R] tID:%d mc:%d tc:%d f:%d v:%02X%02X cal:%02X(%02X) id(%d,%d) p:%d P%02XT%04X F%02X%02X\n",
-					ts->dex_name,
-					t_id, ts->coord[t_id].mcount, ts->touch_count,
-					max_force_p, ts->plat_data->img_version_of_ic[2],
-					ts->plat_data->img_version_of_ic[3],
-					ts->cal_status, ts->nv, ts->tspid_val,
-					ts->tspicid_val, ts->coord[t_id].palm_count,
-					ts->cal_count, ts->tune_fix_ver,
-					ts->pressure_cal_base, ts->pressure_cal_delta);
-#endif
+
 				ts->coord[t_id].action = SEC_TS_COORDINATE_ACTION_NONE;
 				ts->coord[t_id].mcount = 0;
 				ts->coord[t_id].palm_count = 0;
