@@ -5501,6 +5501,11 @@ static void smbchg_sink_current_change_worker(struct work_struct *work)
 		return;
 	}
 
+	if (htc_battery_is_pd_detected()) {
+		pr_smb(PR_STATUS, "Not applicable for PD, skip.\n");
+		return;
+	}
+
 	pr_smb(PR_MISC, "Start.\n");
 
 	type = the_chip->usb_supply_type;
