@@ -103,4 +103,4 @@ obj-$(CONFIG_TOUCHSCREEN_COLIBRI_VF50)	+= colibri-vf50-ts.o
 obj-$(CONFIG_TOUCHSCREEN_ROHM_BU21023)	+= rohm_bu21023.o
 obj-$(CONFIG_TOUCHSCREEN_FTM4)          += stm/
 obj-$(CONFIG_TOUCHSCREEN_SEC_TS)	+= sec_ts/
-
+obj-$(CONFIG_TOUCHSCREEN_TBN)		+= qmi_tbn_v01.o touch_bus_negotiator.o
