@@ -78,4 +78,6 @@ source "drivers/usb/typec/altmodes/Kconfig"
 
 source "drivers/usb/typec/altmodes/Kconfig"
 
+source "drivers/usb/typec/mux/Kconfig"
+
 endif # TYPEC
