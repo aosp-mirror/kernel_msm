@@ -530,8 +530,7 @@
 						RPMH_REGULATOR_LEVEL_NOM 0>;
 
 		qcom,l1-supported;
-		qcom,l1ss-supported;
-		qcom,aux-clk-sync;
+		/* BUG 67735049: L1ss doesn't work */
 
 		qcom,ep-latency = <10>;
 

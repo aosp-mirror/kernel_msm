@@ -499,7 +499,7 @@
 		};
 	};
 
-	qcom,msm-dai-tdm-quat-rx {
+	msm_dai_tdm_quat_rx: qcom,msm-dai-tdm-quat-rx {
 		compatible = "qcom,msm-dai-tdm";
 		qcom,msm-cpudai-tdm-group-id = <37168>;
 		qcom,msm-cpudai-tdm-group-num-ports = <1>;
@@ -518,7 +518,7 @@
 		};
 	};
 
-	qcom,msm-dai-tdm-quat-tx {
+	msm_dai_tdm_quat_tx: qcom,msm-dai-tdm-quat-tx {
 		compatible = "qcom,msm-dai-tdm";
 		qcom,msm-cpudai-tdm-group-id = <37169>;
 		qcom,msm-cpudai-tdm-group-num-ports = <1>;
