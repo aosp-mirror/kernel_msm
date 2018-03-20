@@ -20,6 +20,7 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/power_supply.h>
+#include <linux/property.h>
 #include <linux/regulator/consumer.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
@@ -1514,36 +1515,153 @@ unlock:
 	mutex_unlock(&pd->lock);
 }
 
+enum pdo_role {
+	SNK_PDO,
+	SRC_PDO,
+};
+
+static const char * const pdo_prop_name[] = {
+	[SNK_PDO]	= "goog,snk-pdo",
+	[SRC_PDO]	= "goog,src-pdo",
+};
+
 #define PDO_FIXED_FLAGS \
 	(PDO_FIXED_DUAL_ROLE | PDO_FIXED_DATA_SWAP | PDO_FIXED_USB_COMM)
 
-static const u32 src_pdo[] = {
-	PDO_FIXED(5000, 900, PDO_FIXED_FLAGS),
-};
-
-static const u32 snk_pdo[] = {
-	PDO_FIXED(5000, 3000, PDO_FIXED_FLAGS),
-	PDO_FIXED(9000, 3000, PDO_FIXED_FLAGS),
-};
-
-static const struct tcpc_config pd_tcpc_config = {
-	.src_pdo = src_pdo,
-	.nr_src_pdo = ARRAY_SIZE(src_pdo),
-	.snk_pdo = snk_pdo,
-	.nr_snk_pdo = ARRAY_SIZE(snk_pdo),
-	.max_snk_mv = 9000,
-	.max_snk_ma = 3000,
-	.max_snk_mw = 27000,
-	.operating_snk_mw = 7600,
-	.type = TYPEC_PORT_DRP,
-	.default_role = TYPEC_SINK,
-	.alt_modes = NULL,
-	.try_role_hw = true,
-};
-
-static void init_tcpc_dev(struct tcpc_dev *pd_tcpc_dev)
+static u32 *parse_pdo(struct usbpd *pd, enum pdo_role role,
+		      unsigned int *nr_pdo)
 {
-	pd_tcpc_dev->config = &pd_tcpc_config;
+	struct device *dev = &pd->dev;
+	u32 *dt_array;
+	u32 *pdo;
+	int i, count, rc;
+
+	count = device_property_read_u32_array(dev->parent, pdo_prop_name[role],
+					       NULL, 0);
+	if (count > 0) {
+		if (count % 4)
+			return ERR_PTR(-EINVAL);
+
+		*nr_pdo = count / 4;
+		dt_array = devm_kcalloc(dev, count, sizeof(*dt_array),
+					GFP_KERNEL);
+		if (!dt_array)
+			return ERR_PTR(-ENOMEM);
+
+		rc = device_property_read_u32_array(dev->parent,
+						    pdo_prop_name[role],
+						    dt_array, count);
+		if (rc)
+			return ERR_PTR(rc);
+
+		pdo = devm_kcalloc(dev, *nr_pdo, sizeof(*pdo), GFP_KERNEL);
+		if (!pdo)
+			return ERR_PTR(-ENOMEM);
+
+		for (i = 0; i < *nr_pdo; i++) {
+			switch (dt_array[i * 4]) {
+			case PDO_TYPE_FIXED:
+				pdo[i] = PDO_FIXED(dt_array[i * 4 + 1],
+						   dt_array[i * 4 + 2],
+						   PDO_FIXED_FLAGS);
+				break;
+			case PDO_TYPE_BATT:
+				pdo[i] = PDO_BATT(dt_array[i * 4 + 1],
+						  dt_array[i * 4 + 2],
+						  dt_array[i * 4 + 3]);
+				break;
+			case PDO_TYPE_VAR:
+				pdo[i] = PDO_VAR(dt_array[i * 4 + 1],
+						 dt_array[i * 4 + 2],
+						 dt_array[i * 4 + 3]);
+				break;
+			/*case PDO_TYPE_AUG:*/
+			default:
+				return ERR_PTR(-EINVAL);
+			}
+		}
+		return pdo;
+	}
+
+	return ERR_PTR(-EINVAL);
+}
+
+static int init_tcpc_config(struct tcpc_dev *pd_tcpc_dev)
+{
+	struct usbpd *pd = container_of(pd_tcpc_dev, struct usbpd, tcpc_dev);
+	struct device *dev = &pd->dev;
+	struct tcpc_config *config;
+	int ret;
+
+	pd_tcpc_dev->config = devm_kzalloc(dev, sizeof(*config), GFP_KERNEL);
+	if (!pd_tcpc_dev->config)
+		return -ENOMEM;
+
+	config = pd_tcpc_dev->config;
+
+	ret = device_property_read_u32(dev->parent, "goog,port-type",
+				       &config->type);
+	if (ret < 0)
+		return ret;
+
+	switch (config->type) {
+	case TYPEC_PORT_UFP:
+		config->snk_pdo = parse_pdo(pd, SNK_PDO, &config->nr_snk_pdo);
+		if (IS_ERR(config->snk_pdo))
+			return PTR_ERR(config->snk_pdo);
+		break;
+	case TYPEC_PORT_DFP:
+		config->src_pdo = parse_pdo(pd, SRC_PDO, &config->nr_src_pdo);
+		if (IS_ERR(config->src_pdo))
+			return PTR_ERR(config->src_pdo);
+		break;
+	case TYPEC_PORT_DRP:
+		config->snk_pdo = parse_pdo(pd, SNK_PDO, &config->nr_snk_pdo);
+		if (IS_ERR(config->snk_pdo))
+			return PTR_ERR(config->snk_pdo);
+		config->src_pdo = parse_pdo(pd, SRC_PDO, &config->nr_src_pdo);
+		if (IS_ERR(config->src_pdo))
+			return PTR_ERR(config->src_pdo);
+
+		ret = device_property_read_u32(dev->parent, "goog,default-role",
+					       &config->default_role);
+		if (ret < 0)
+			return ret;
+
+		config->try_role_hw = device_property_read_bool(
+							dev->parent,
+							"goog,try-role-hw");
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	if (config->type == TYPEC_PORT_UFP || config->type == TYPEC_PORT_DRP) {
+		ret = device_property_read_u32(dev->parent, "goog,max-snk-mv",
+					       &config->max_snk_mv);
+		ret = device_property_read_u32(dev->parent, "goog,max-snk-ma",
+					       &config->max_snk_ma);
+		ret = device_property_read_u32(dev->parent, "goog,max-snk-mw",
+					       &config->max_snk_mw);
+		ret = device_property_read_u32(dev->parent, "goog,op-snk-mw",
+					       &config->operating_snk_mw);
+		if (ret < 0)
+			return ret;
+	}
+
+	/* TODO: parse alt mode from DT */
+	config->alt_modes = NULL;
+
+	return 0;
+}
+
+static int init_tcpc_dev(struct tcpc_dev *pd_tcpc_dev)
+{
+	int ret;
+
+	ret = init_tcpc_config(pd_tcpc_dev);
+	if (ret < 0)
+		return ret;
 	pd_tcpc_dev->init = tcpm_init;
 	pd_tcpc_dev->get_vbus = tcpm_get_vbus;
 	pd_tcpc_dev->set_cc = tcpm_set_cc;
@@ -1561,6 +1679,7 @@ static void init_tcpc_dev(struct tcpc_dev *pd_tcpc_dev)
 	pd_tcpc_dev->set_pd_capable = set_pd_capable;
 	pd_tcpc_dev->set_in_hard_reset = set_in_hard_reset;
 	pd_tcpc_dev->mux = NULL;
+	return 0;
 }
 
 static void init_pd_phy_params(struct pd_phy_params *pdphy_params)
@@ -1698,7 +1817,9 @@ struct usbpd *usbpd_create(struct device *parent)
 	 * TCPM callbacks may access pd->usb_psy. Therefore, tcpm_register_port
 	 * must be called after pd->usb_psy is initialized.
 	 */
-	init_tcpc_dev(&pd->tcpc_dev);
+	ret = init_tcpc_dev(&pd->tcpc_dev);
+	if (ret < 0)
+		goto put_psy;
 	pd->tcpm_port = tcpm_register_port(&pd->dev, &pd->tcpc_dev);
 	if (IS_ERR(pd->tcpm_port)) {
 		ret = PTR_ERR(pd->tcpm_port);

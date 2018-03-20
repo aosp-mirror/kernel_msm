@@ -34,6 +34,10 @@ Required properties:
 				Triggers when a message was received but had to
 				be discarded due to the RX buffer still in use
 				by SW.
+- goog,port-type:	Should be set to one of following bindings:
+			<TYPEC_PORT_DFP>
+			<TYPEC_PORT_UFP>
+			<TYPEC_PORT_DRP>
 
 Optional properties:
 - vbus-supply:		Regulator that enables VBUS source output
@@ -46,6 +50,58 @@ Optional properties:
 - qcom,default-sink-caps: List of 32-bit values representing the nominal sink
 			capabilities in voltage (millivolts) and current
 			(milliamps) pairs.
+- goog,src-pdo: 	Required when goog,port-type is set to <TYPEC_PORT_DFP>
+			or <TYPEC_PORT_DRP>.
+			A set of 32-bit unsigned integer cells represents the
+			Source Capabilities of the board. The number of the
+			cells should be multiple of 4, at least 4 cells, and at
+			most 28 cells. Every group of 4-tuple-cell represents
+			one Capability.
+
+			Format of each 4-tuple:
+			< pdo_type power_attr1 power_attr2 power_attr3 >
+			where pdo_type should be set to one of the following:
+			1. PDO_TYPE_FIXED
+			2. PDO_TYPE_BATT
+			3. PDO_TYPE_VAR
+			And power_attrX varies from pdo_type
+
+			When pdo_type is PDO_TYPE_FIXED:
+			power_attr1 is Voltage (mv)
+			power_attr2 is Maximum Current (ma)
+			power_attr3 should be set to 0
+
+			When pdo_type is PDO_TYPE_BATT:
+			power_attr1 is Minimum Voltage (mv)
+			power_attr2 is Maximum Voltage (mv)
+			power_attr3 is Maximum Allowable Power (mw)
+
+			When pdo_type is PDO_TYPE_VAR:
+			power_attr1 is Minimum Voltage (mv)
+			power_attr2 is Maximum Voltage (mv)
+			power_attr3 is Maximum Current (ma)
+
+- goog,snk-pdo: 	Required when goog,port-type is set to <TYPEC_PORT_UFP>
+			or <TYPEC_PORT_DRP>.
+			It represents the Sink Capabilities of the board with
+			the same format as that of goog,src-pdo
+- goog,max-snk-mv:	Maximum acceptable sinking voltage when selecting PDO in
+			power negotiation
+- goog,max-snk-ma:	Maximum acceptable sinking current when selecting PDO in
+			power negotiation
+- goog,max-snk-mw:	Maximum acceptable power limit when specifying available
+			current in power negotiation
+- goog,op-snk-mw:	Required when goog,port-type is set to <TYPEC_PORT_UFP>
+			or <TYPEC_PORT_DRP>.
+			Minimum operating power
+			Capability Mismatch flag will be set if this value is
+			bigger than the calculated power in selected PDO.
+- goog,default-role:	Specifying Type-C try role
+			This value should be set to one of the following:
+			<TYPEC_SINK>
+			<TYPEC_SOURCE>
+- goog,try-role-hw:	Set this property if try.{src,snk} is implemented in
+			hardware.
 
 Example:
 	qcom,qpnp-pdphy@1700 {
@@ -71,4 +127,15 @@ Example:
 		qcom,default-sink-caps = <5000 3000>, /* 5V @ 3A */
 					 <9000 3000>, /* 9V @ 3A */
 					 <12000 2250>; /* 12V @ 2.25A */
+
+		goog,src-pdo = <PDO_TYPE_FIXED 5000 900 0>;	/* 5V @ 0.9A */
+		goog,snk-pdo = <PDO_TYPE_FIXED 5000 3000 0>,	/* 5V @ 3A */
+			       <PDO_TYPE_FIXED 9000 3000 0>;	/* 9V @ 3A */
+		goog,max-snk-mv = <9000>;
+		goog,max-snk-ma = <3000>;
+		goog,max-snk-mw = <27000>;
+		goog,op-snk-mw = <7600>;
+		goog,port-type = <TYPEC_PORT_DRP>;
+		goog,default-role = <TYPEC_SINK>;
+		goog,try-role-hw;
 	};
