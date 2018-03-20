@@ -15,7 +15,6 @@
 #endif
 
 #ifndef CONFIG_SEC_FACTORY
-#define USE_SEC_CMD_QUEUE
 #include <linux/kfifo.h>
 #endif
 
