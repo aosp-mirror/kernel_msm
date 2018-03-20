@@ -1136,6 +1136,7 @@ static void mxt_proc_t100_message(struct mxt_data *data, u8 *message)
 	}
 
 	if (data->debug_enabled & MXT_DBG_LVL_EVENT) {
+		u8 type_t100 = status & MXT_T100_TYPE_MASK;
 		TOUCH_INFO_MSG( "T100_message[%u] %s%s%s%s%s%s%s%s%s"
 			" %s%s%s%s%s (0x%02X) x:%u y:%u z:%u area:%u amp:%u"
 			" vec:%u h:%u w:%u\n",
@@ -1152,11 +1153,11 @@ static void mxt_proc_t100_message(struct mxt_data *data, u8 *message)
 			(status_t100 == 7)? "UNSUPUP" : "",
 			(status_t100 == 8)? "DOWNSUP" : "",
 			(status_t100 == 9)? "DOWNUP" : "",
-			(status_t100 == MXT_T100_TYPE_FINGER)? "FIN" : ".",
-			(status_t100 == MXT_T100_TYPE_STYLUS)? "PEN" : ".",
-			(status_t100 == MXT_T100_TYPE_PALM)? "PALM" : ".",
-			(status_t100 == 0x40)? "HOVER" : ".",
-			(status_t100 == 0x30)? "ACTSTY" : ".",
+			(type_t100 == MXT_T100_TYPE_FINGER)? "FIN" : ".",
+			(type_t100 == MXT_T100_TYPE_STYLUS)? "PEN" : ".",
+			(type_t100 == MXT_T100_TYPE_PALM)? "PALM" : ".",
+			(type_t100 == 0x40)? "HOVER" : ".",
+			(type_t100 == 0x30)? "ACTSTY" : ".",
 			status, x, y, c_data->pressure,
 			area, amplitude, vector,
 			height, width);
