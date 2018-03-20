@@ -2,7 +2,7 @@
  * LN_BB_CLK3, SLIMBUS_CLK: GPIO70, SLIMBUS_DATA[0..1]: GPIO71,GPIO72 */
 
 #include <dt-bindings/clock/qcom,audio-ext-clk.h>
-#include "../qcom/sdm845-audio-overlay.dtsi"
+#include "sdm845-audio-overlay.dtsi"
 
 &pm8998_gpios {
 	gpio@cc00 { /* GPIO 13 */
