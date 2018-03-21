@@ -741,9 +741,14 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 				if (ts->coord[t_id].z <= 0)
 					ts->coord[t_id].z = 1;
 
-				if ((ts->coord[t_id].ttype == SEC_TS_TOUCHTYPE_NORMAL)
-						|| (ts->coord[t_id].ttype == SEC_TS_TOUCHTYPE_PALM)
-						|| (ts->coord[t_id].ttype == SEC_TS_TOUCHTYPE_GLOVE)) {
+				if ((ts->coord[t_id].ttype ==
+				     SEC_TS_TOUCHTYPE_NORMAL) ||
+				    (ts->coord[t_id].ttype ==
+				     SEC_TS_TOUCHTYPE_PALM) ||
+				    (ts->coord[t_id].ttype ==
+				     SEC_TS_TOUCHTYPE_WET) ||
+				    (ts->coord[t_id].ttype ==
+				     SEC_TS_TOUCHTYPE_GLOVE)) {
 
 					if (ts->coord[t_id].action == SEC_TS_COORDINATE_ACTION_RELEASE) {
 						u8 rbuf[2] = {0, };
