@@ -400,13 +400,13 @@ htt_pdev_alloc(ol_txrx_pdev_handle txrx_pdev,
 	pdev->cfg.is_full_reorder_offload =
 			ol_cfg_is_full_reorder_offload(pdev->ctrl_pdev);
 	QDF_TRACE(QDF_MODULE_ID_HTT, QDF_TRACE_LEVEL_INFO,
-		  "is_full_reorder_offloaded? %d",
+		  "full_reorder_offloaded %d",
 		  (int)pdev->cfg.is_full_reorder_offload);
 
 	pdev->cfg.ce_classify_enabled =
 		ol_cfg_is_ce_classify_enabled(ctrl_pdev);
 	QDF_TRACE(QDF_MODULE_ID_HTT, QDF_TRACE_LEVEL_INFO,
-		  "ce_classify_enabled? %d",
+		  "ce_classify %d",
 		  pdev->cfg.ce_classify_enabled);
 
 	if (pdev->cfg.is_high_latency) {
@@ -883,7 +883,7 @@ int htt_ipa_uc_attach(struct htt_pdev_t *pdev)
  */
 void htt_ipa_uc_detach(struct htt_pdev_t *pdev)
 {
-	QDF_TRACE(QDF_MODULE_ID_HTT, QDF_TRACE_LEVEL_INFO, "%s: enter",
+	QDF_TRACE(QDF_MODULE_ID_HTT, QDF_TRACE_LEVEL_DEBUG, "%s: enter",
 		  __func__);
 
 	/* TX IPA micro controller detach */
@@ -892,7 +892,7 @@ void htt_ipa_uc_detach(struct htt_pdev_t *pdev)
 	/* RX IPA micro controller detach */
 	htt_rx_ipa_uc_detach(pdev);
 
-	QDF_TRACE(QDF_MODULE_ID_HTT, QDF_TRACE_LEVEL_INFO, "%s: exit",
+	QDF_TRACE(QDF_MODULE_ID_HTT, QDF_TRACE_LEVEL_DEBUG, "%s: exit",
 		  __func__);
 }
 

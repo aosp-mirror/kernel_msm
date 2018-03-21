@@ -825,7 +825,10 @@ static void wma_set_dtim_period(tp_wma_handle wma,
 {
 	struct wma_txrx_node *iface =
 		&wma->interfaces[dtim_params->session_id];
-
+	if (!wma_is_vdev_valid(dtim_params->session_id)) {
+		WMA_LOGE("%s: invalid VDEV", __func__);
+		return;
+	}
 	WMA_LOGD("%s: set dtim_period %d", __func__,
 			dtim_params->dtim_period);
 	iface->dtimPeriod = dtim_params->dtim_period;
@@ -4307,6 +4310,11 @@ static inline void wma_update_target_services(tp_wma_handle wh,
 			wh->wmi_service_ext_bitmap,
 			WMI_SERVICE_MAWC_SUPPORT))
 		cfg->is_fw_mawc_capable = true;
+
+	if (WMI_SERVICE_EXT_IS_ENABLED(wh->wmi_service_bitmap,
+			wh->wmi_service_ext_bitmap,
+			WMI_SERVICE_11K_NEIGHBOUR_REPORT_SUPPORT))
+		cfg->is_11k_offload_supported = true;
 }
 
 /**
@@ -5848,8 +5856,9 @@ static void wma_populate_soc_caps(t_wma_handle *wma_handle,
 		return;
 	}
 
-	if (param_buf->soc_hw_mode_caps->num_hw_modes >
-			MAX_NUM_HW_MODE) {
+	if ((param_buf->soc_hw_mode_caps->num_hw_modes > MAX_NUM_HW_MODE) ||
+	    (param_buf->soc_hw_mode_caps->num_hw_modes >
+	    param_buf->num_hw_mode_caps)) {
 		WMA_LOGE("Invalid num_hw_modes %u received from firmware",
 			 param_buf->soc_hw_mode_caps->num_hw_modes);
 		return;
@@ -5930,10 +5939,12 @@ static void wma_populate_soc_caps(t_wma_handle *wma_handle,
 	 * next thing is to populate reg caps per phy
 	 */
 
-	if (param_buf->soc_hal_reg_caps->num_phy >
-			MAX_NUM_PHY) {
+	if ((param_buf->soc_hal_reg_caps->num_phy > MAX_NUM_PHY) ||
+	    (param_buf->soc_hal_reg_caps->num_phy >
+	    param_buf->num_hal_reg_caps)) {
 		WMA_LOGE("Invalid num_phy %u received from firmware",
 			 param_buf->soc_hal_reg_caps->num_phy);
+		wma_cleanup_dbs_phy_caps(wma_handle);
 		return;
 	}
 
@@ -6921,6 +6932,34 @@ static void wma_set_del_pmkid_cache(WMA_HANDLE handle,
 						 pmk_cache, vdev_id);
 	if (status != EOK)
 		WMA_LOGE("failed to send set/del pmkid cmd to fw");
+}
+
+/**
+ * wma_send_invoke_neighbor_report() - API to send invoke neighbor report
+ * command to fw
+ *
+ * @handle: WMA handle
+ * @params: Pointer to invoke neighbor report params
+ *
+ * Return: None
+ */
+static
+void wma_send_invoke_neighbor_report(WMA_HANDLE handle,
+			struct wmi_invoke_neighbor_report_params *params)
+{
+	QDF_STATUS status;
+	tp_wma_handle wma_handle = (tp_wma_handle) handle;
+
+	if (!wma_handle || !wma_handle->wmi_handle) {
+		WMA_LOGE("WMA is closed, cannot send invoke neighbor report");
+		return;
+	}
+
+	status = wmi_unified_invoke_neighbor_report_cmd(wma_handle->wmi_handle,
+							params);
+
+	if (status != QDF_STATUS_SUCCESS)
+		WMA_LOGE("failed to send invoke neighbor report command");
 }
 
 /**
@@ -8166,6 +8205,11 @@ QDF_STATUS wma_mc_process_msg(void *cds_context, cds_msg_t *msg)
 	case SIR_HAL_HLP_IE_INFO:
 		wma_roam_scan_send_hlp(wma_handle,
 			(struct hlp_params *)msg->bodyptr);
+		qdf_mem_free(msg->bodyptr);
+		break;
+	case WMA_INVOKE_NEIGHBOR_REPORT:
+		wma_send_invoke_neighbor_report(wma_handle,
+		(struct wmi_invoke_neighbor_report_params *)msg->bodyptr);
 		qdf_mem_free(msg->bodyptr);
 		break;
 	default:

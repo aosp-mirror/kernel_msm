@@ -3526,6 +3526,7 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 			pr_err("Failed to request disp ERR_DETECT irq : %d\n", rc);
 			goto error_shadow_clk_deinit;
 		}
+		disable_irq(gpio_to_irq(ctrl_pdata->disp_err_detect_gpio));
 		pr_info("request disp ERR_DETECT irq\n");
 	}
 

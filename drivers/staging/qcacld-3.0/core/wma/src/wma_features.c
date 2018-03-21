@@ -4872,11 +4872,17 @@ int wma_wow_wakeup_host_event(void *handle, uint8_t *event,
 		 * WMI_ROAM_REASON_HO_FAILED event and it will be handled by
 		 * wma_roam_event_callback().
 		 */
+		WMA_LOGD("Host woken up because of roam event");
+		if (wake_info->vdev_id >= wma->max_bssid) {
+			WMA_LOGE("%s: received invalid vdev_id %d",
+				 __func__, wake_info->vdev_id);
+			return -EINVAL;
+		}
+
 		wma_peer_debug_log(wake_info->vdev_id,
 				DEBUG_WOW_ROAM_EVENT, DEBUG_INVALID_PEER_ID,
 				NULL, NULL, wake_info->wake_reason,
 				wow_buf_pkt_len);
-		WMA_LOGD("Host woken up because of roam event");
 		if (param_buf->wow_packet_buffer) {
 			/* Roam event is embedded in wow_packet_buffer */
 			WMA_LOGD("wow_packet_buffer dump");
@@ -8443,6 +8449,7 @@ failure:
 static void wma_check_and_set_wake_timer(tp_wma_handle wma, uint32_t time)
 {
 	int i;
+	bool is_set_key_in_progress = false;
 	struct wma_txrx_node *iface;
 
 	if (!WMI_SERVICE_EXT_IS_ENABLED(wma->wmi_service_bitmap,
@@ -8459,10 +8466,14 @@ static void wma_check_and_set_wake_timer(tp_wma_handle wma, uint32_t time)
 			 * right now cookie is dont care, since FW disregards
 			 * that.
 			 */
+			is_set_key_in_progress = true;
 			wma_wow_set_wake_time((WMA_HANDLE)wma, i, 0, time);
 			break;
 		}
 	}
+
+	if (!is_set_key_in_progress)
+		WMA_LOGD("set key not in progress for any vdev");
 }
 
 /**
@@ -10362,7 +10373,7 @@ static int wma_sar_event_handler(void *handle, uint8_t *evt_buf, uint32_t len)
 {
 	tp_wma_handle wma_handle;
 	wmi_unified_t wmi_handle;
-	struct sar_limit_event event;
+	struct sar_limit_event *event;
 	wma_sar_cb callback;
 	QDF_STATUS status;
 
@@ -10380,17 +10391,26 @@ static int wma_sar_event_handler(void *handle, uint8_t *evt_buf, uint32_t len)
 		return QDF_STATUS_E_INVAL;
 	}
 
+	event = qdf_mem_malloc(sizeof(*event));
+	if (!event) {
+		WMA_LOGE(FL("failed to malloc sar_limit_event"));
+		return QDF_STATUS_E_NOMEM;
+	}
+
 	status = wmi_unified_extract_sar_limit_event(wmi_handle,
-						     evt_buf, &event);
+						     evt_buf, event);
 	if (QDF_IS_STATUS_ERROR(status)) {
 		WMA_LOGE(FL("Event extract failure: %d"), status);
+		qdf_mem_free(event);
 		return QDF_STATUS_E_INVAL;
 	}
 
 	callback = sar_callback;
 	sar_callback = NULL;
 	if (callback)
-		callback(sar_context, &event);
+		callback(sar_context, event);
+
+	qdf_mem_free(event);
 
 	return 0;
 }
@@ -10412,7 +10432,7 @@ QDF_STATUS wma_sar_register_event_handlers(WMA_HANDLE handle)
 	}
 
 	return wmi_unified_register_event_handler(wmi_handle,
-						  wmi_sar_get_limits_event_id,
+						  WMI_SAR_GET_LIMITS_EVENTID,
 						  wma_sar_event_handler,
 						  WMA_RX_WORK_CTX);
 }

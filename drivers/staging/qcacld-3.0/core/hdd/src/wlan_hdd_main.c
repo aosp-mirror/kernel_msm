@@ -885,6 +885,43 @@ QDF_STATUS hdd_set_ibss_power_save_params(hdd_adapter_t *adapter)
 	return QDF_STATUS_SUCCESS;
 }
 
+#ifdef FEATURE_RUNTIME_PM
+/**
+ * hdd_runtime_suspend_context_init() - API to initialize HDD Runtime Contexts
+ * @hdd_ctx: HDD context
+ *
+ * Return: None
+ */
+static void hdd_runtime_suspend_context_init(hdd_context_t *hdd_ctx)
+{
+	struct hdd_runtime_pm_context *ctx = &hdd_ctx->runtime_context;
+
+	qdf_runtime_lock_init(&ctx->scan);
+	qdf_runtime_lock_init(&ctx->roc);
+	qdf_runtime_lock_init(&ctx->dfs);
+	qdf_runtime_lock_init(&ctx->connect);
+}
+
+/**
+ * hdd_runtime_suspend_context_deinit() - API to deinit HDD runtime context
+ * @hdd_ctx: HDD Context
+ *
+ * Return: None
+ */
+static void hdd_runtime_suspend_context_deinit(hdd_context_t *hdd_ctx)
+{
+	struct hdd_runtime_pm_context *ctx = &hdd_ctx->runtime_context;
+
+	qdf_runtime_lock_deinit(&ctx->scan);
+	qdf_runtime_lock_deinit(&ctx->roc);
+	qdf_runtime_lock_deinit(&ctx->dfs);
+	qdf_runtime_lock_deinit(&ctx->connect);
+}
+#else /* FEATURE_RUNTIME_PM */
+static void hdd_runtime_suspend_context_init(hdd_context_t *hdd_ctx) {}
+static void hdd_runtime_suspend_context_deinit(hdd_context_t *hdd_ctx) {}
+#endif /* FEATURE_RUNTIME_PM */
+
 #define INTF_MACADDR_MASK       0x7
 
 void hdd_update_macaddr(hdd_context_t *hdd_ctx,
@@ -1600,6 +1637,9 @@ void hdd_update_tgt_cfg(void *context, void *param)
 	hdd_ctx->config->is_fils_roaming_supported =
 			cfg->services.is_fils_roaming_supported;
 
+	hdd_ctx->config->is_11k_offload_supported =
+			cfg->services.is_11k_offload_supported;
+
 	/* now overwrite the target band capability with INI
 	 * setting if INI setting is a subset
 	 */
@@ -2140,6 +2180,8 @@ int hdd_wlan_start_modules(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter,
 			goto deinit_config;
 		}
 
+		hdd_runtime_suspend_context_init(hdd_ctx);
+
 		hdd_ctx->hHal = cds_get_context(QDF_MODULE_ID_SME);
 		if (NULL == hdd_ctx->hHal) {
 			hdd_err("HAL context is null");
@@ -2442,6 +2484,13 @@ static int __hdd_stop(struct net_device *dev)
 
 	/* Make sure the interface is marked as closed */
 	clear_bit(DEVICE_IFACE_OPENED, &adapter->event_flags);
+
+	/*
+	 * Upon wifi turn off, DUT has to flush the scan results so if
+	 * this is the last cli iface, flush the scan database.
+	 */
+	if (!hdd_is_cli_iface_up(hdd_ctx))
+		sme_scan_flush_result(hdd_ctx->hHal);
 
 	/*
 	 * Find if any iface is up. If any iface is up then can't put device to
@@ -2909,58 +2958,6 @@ void hdd_set_station_ops(struct net_device *pWlanDev)
 		pWlanDev->netdev_ops = &wlan_drv_ops;
 }
 
-#ifdef FEATURE_RUNTIME_PM
-/**
- * hdd_runtime_suspend_context_init() - API to initialize HDD Runtime Contexts
- * @hdd_ctx: HDD context
- *
- * Return: None
- */
-static void hdd_runtime_suspend_context_init(hdd_context_t *hdd_ctx)
-{
-	struct hdd_runtime_pm_context *ctx = &hdd_ctx->runtime_context;
-
-	qdf_runtime_lock_init(&ctx->scan);
-	qdf_runtime_lock_init(&ctx->roc);
-	qdf_runtime_lock_init(&ctx->dfs);
-}
-
-/**
- * hdd_runtime_suspend_context_deinit() - API to deinit HDD runtime context
- * @hdd_ctx: HDD Context
- *
- * Return: None
- */
-static void hdd_runtime_suspend_context_deinit(hdd_context_t *hdd_ctx)
-{
-	struct hdd_runtime_pm_context *ctx = &hdd_ctx->runtime_context;
-
-	qdf_runtime_lock_deinit(&ctx->scan);
-	qdf_runtime_lock_deinit(&ctx->roc);
-	qdf_runtime_lock_deinit(&ctx->dfs);
-}
-
-static void hdd_adapter_runtime_suspend_init(hdd_adapter_t *adapter)
-{
-	struct hdd_connect_pm_context *ctx = &adapter->connect_rpm_ctx;
-
-	qdf_runtime_lock_init(&ctx->connect);
-}
-
-static void hdd_adapter_runtime_suspend_denit(hdd_adapter_t *adapter)
-{
-	struct hdd_connect_pm_context *ctx = &adapter->connect_rpm_ctx;
-
-	qdf_runtime_lock_deinit(&ctx->connect);
-	ctx->connect = NULL;
-}
-#else /* FEATURE_RUNTIME_PM */
-static void hdd_runtime_suspend_context_init(hdd_context_t *hdd_ctx) {}
-static void hdd_runtime_suspend_context_deinit(hdd_context_t *hdd_ctx) {}
-static inline void hdd_adapter_runtime_suspend_init(hdd_adapter_t *adapter) {}
-static inline void hdd_adapter_runtime_suspend_denit(hdd_adapter_t *adapter) {}
-#endif /* FEATURE_RUNTIME_PM */
-
 /**
  * hdd_adapter_init_action_frame_random_mac() - Initialze attributes needed for
  * randomization of SA in management action frames
@@ -3086,7 +3083,6 @@ static hdd_adapter_t *hdd_alloc_station_adapter(hdd_context_t *hdd_ctx,
 		/* set pWlanDev's parent to underlying device */
 		SET_NETDEV_DEV(pWlanDev, hdd_ctx->parent_dev);
 		hdd_wmm_init(adapter);
-		hdd_adapter_runtime_suspend_init(adapter);
 		spin_lock_init(&adapter->pause_map_lock);
 		adapter->start_time = adapter->last_time = qdf_system_ticks();
 	}
@@ -3388,6 +3384,7 @@ void hdd_cleanup_actionframe(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter)
 	if (NULL != cfgState->buf) {
 		unsigned long rc;
 
+		hdd_debug("Wait for ack for the previous action frame");
 		rc = wait_for_completion_timeout(
 			&adapter->tx_action_cnf_event,
 			msecs_to_jiffies(ACTION_FRAME_TX_TIMEOUT));
@@ -3398,7 +3395,35 @@ void hdd_cleanup_actionframe(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter)
 			 * cfgState->buf
 			 */
 			 hdd_send_action_cnf(adapter, false);
-		}
+		} else
+			hdd_debug("Wait complete");
+	}
+}
+
+/**
+ * hdd_cleanup_actionframe_no_wait() - Clean up pending action frame
+ * @hdd_ctx: global hdd context
+ * @adapter: pointer to adapter
+ *
+ * This function used to cancel the pending action frame without waiting for
+ * ack.
+ *
+ * Return: None.
+ */
+void hdd_cleanup_actionframe_no_wait(hdd_context_t *hdd_ctx,
+		hdd_adapter_t *adapter)
+{
+	hdd_cfg80211_state_t *cfgState;
+
+	cfgState = WLAN_HDD_GET_CFG_STATE_PTR(adapter);
+
+	if (cfgState->buf) {
+		/*
+		 * Inform tx status as FAILURE to upper layer and free
+		 * cfgState->buf
+		 */
+		hdd_debug("Cleanup previous action frame without waiting for the ack");
+		hdd_send_action_cnf(adapter, false);
 	}
 }
 
@@ -3514,8 +3539,6 @@ static void hdd_cleanup_adapter(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter,
 	}
 
 	hdd_debugfs_exit(adapter);
-
-	hdd_adapter_runtime_suspend_denit(adapter);
 
 	/*
 	 * The adapter is marked as closed. When hdd_wlan_exit() call returns,
@@ -3688,6 +3711,13 @@ static int hdd_configure_chain_mask(hdd_adapter_t *adapter)
 		return 0;
 	}
 
+	if (hdd_ctx->config->dual_mac_feature_disable !=
+	    DISABLE_DBS_CXN_AND_SCAN) {
+		hdd_info("DBS enabled(%d). skip chain mask programming",
+			 hdd_ctx->config->dual_mac_feature_disable);
+		return 0;
+	}
+
 	if (hdd_ctx->config->txchainmask1x1) {
 		ret_val = sme_cli_set_command(adapter->sessionId,
 					      WMI_PDEV_PARAM_TX_CHAIN_MASK,
@@ -3714,11 +3744,6 @@ static int hdd_configure_chain_mask(hdd_adapter_t *adapter)
 	if (hdd_ctx->config->txchainmask1x1 ||
 	    hdd_ctx->config->rxchainmask1x1) {
 		hdd_info("band agnostic tx/rx chain mask set. skip per band chain mask");
-		return 0;
-	}
-
-	if (!hdd_ctx->config->dual_mac_feature_disable) {
-		hdd_info("DBS enabled. skip per band chain mask");
 		return 0;
 	}
 
@@ -5240,6 +5265,7 @@ void hdd_connect_result(struct net_device *dev, const u8 *bssid,
 {
 	hdd_adapter_t *padapter = (hdd_adapter_t *) netdev_priv(dev);
 	struct cfg80211_bss *bss = NULL;
+	hdd_context_t *hdd_ctx = WLAN_HDD_GET_CTX(padapter);
 
 	if (WLAN_STATUS_SUCCESS == status) {
 		struct ieee80211_channel *chan;
@@ -5267,7 +5293,7 @@ void hdd_connect_result(struct net_device *dev, const u8 *bssid,
 			req_ie_len, resp_ie, resp_ie_len,
 			status, gfp, connect_timeout, timeout_reason);
 	}
-	qdf_runtime_pm_allow_suspend(&padapter->connect_rpm_ctx.connect);
+	qdf_runtime_pm_allow_suspend(&hdd_ctx->runtime_context.connect);
 	hdd_allow_suspend(WIFI_POWER_EVENT_WAKELOCK_CONNECT);
 }
 #else
@@ -5279,10 +5305,11 @@ void hdd_connect_result(struct net_device *dev, const u8 *bssid,
 			tSirResultCodes timeout_reason)
 {
 	hdd_adapter_t *padapter = (hdd_adapter_t *) netdev_priv(dev);
+	hdd_context_t *hdd_ctx = WLAN_HDD_GET_CTX(padapter);
 
 	cfg80211_connect_result(dev, bssid, req_ie, req_ie_len,
 				resp_ie, resp_ie_len, status, gfp);
-	qdf_runtime_pm_allow_suspend(&padapter->connect_rpm_ctx.connect);
+	qdf_runtime_pm_allow_suspend(&hdd_ctx->runtime_context.connect);
 	hdd_allow_suspend(WIFI_POWER_EVENT_WAKELOCK_CONNECT);
 }
 #endif
@@ -5629,6 +5656,35 @@ hdd_adapter_t *hdd_get_adapter(hdd_context_t *hdd_ctx,
 }
 
 /**
+ * hdd_is_adapter_valid() - Check if adapter is valid
+ * @hdd_ctx: hdd context
+ * @adapter: pointer to adapter
+ *
+ * Return: true if adapter address is valid or false otherwise
+ */
+bool hdd_is_adapter_valid(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter)
+{
+	hdd_adapter_list_node_t *adapter_node = NULL, *p_next = NULL;
+	hdd_adapter_t *p_adapter;
+	QDF_STATUS status;
+
+	status = hdd_get_front_adapter(hdd_ctx, &adapter_node);
+
+	while (NULL != adapter_node && QDF_STATUS_SUCCESS == status) {
+		p_adapter = adapter_node->pAdapter;
+
+		if (p_adapter && (p_adapter == adapter))
+			return true;
+
+		status = hdd_get_next_adapter(hdd_ctx, adapter_node, &p_next);
+		adapter_node = p_next;
+	}
+
+	return false;
+
+}
+
+/**
  * hdd_get_operating_channel() - return operating channel of the device mode
  * @hdd_ctx:	Pointer to the HDD context.
  * @mode:	Device mode for which operating channel is required.
@@ -5742,9 +5798,7 @@ QDF_STATUS hdd_abort_mac_scan_all_adapters(hdd_context_t *hdd_ctx)
 		    (adapter->device_mode == QDF_P2P_DEVICE_MODE) ||
 		    (adapter->device_mode == QDF_SAP_MODE) ||
 		    (adapter->device_mode == QDF_P2P_GO_MODE)) {
-			hdd_abort_mac_scan(hdd_ctx, adapter->sessionId,
-					   INVALID_SCAN_ID,
-					   eCSR_SCAN_ABORT_DEFAULT);
+			wlan_hdd_scan_abort(adapter);
 		}
 		status = hdd_get_next_adapter(hdd_ctx, adapterNode, &pNext);
 		adapterNode = pNext;
@@ -6230,7 +6284,6 @@ static void hdd_wlan_exit(hdd_context_t *hdd_ctx)
 	hdd_green_ap_deinit(hdd_ctx);
 	hdd_request_manager_deinit();
 
-	hdd_runtime_suspend_context_deinit(hdd_ctx);
 	hdd_close_all_adapters(hdd_ctx, false);
 	hdd_ipa_cleanup(hdd_ctx);
 
@@ -6245,7 +6298,6 @@ static void hdd_wlan_exit(hdd_context_t *hdd_ctx)
 		hdd_lpass_notify_stop(hdd_ctx);
 	}
 
-	wlan_hdd_deinit_chan_info(hdd_ctx);
 	hdd_exit_netlink_services(hdd_ctx);
 	mutex_destroy(&hdd_ctx->iface_change_lock);
 	hdd_context_destroy(hdd_ctx);
@@ -6752,7 +6804,7 @@ static void hdd_pld_request_bus_bandwidth(hdd_context_t *hdd_ctx,
 		 * to default delayed ack. Note that this will disable the
 		 * dynamic delayed ack mechanism across the system
 		 */
-		if (hdd_ctx->config->enable_tcp_delack)
+		if (hdd_ctx->tcp_delack_on)
 			rx_tp_data.rx_tp_flags |= TCP_DEL_ACK_IND;
 
 		if (hdd_ctx->config->enable_tcp_adv_win_scale)
@@ -6891,11 +6943,6 @@ static void hdd_bus_bw_work_handler(struct work_struct *work)
 	hdd_ipa_uc_stat_query(hdd_ctx, &ipa_tx_packets, &ipa_rx_packets);
 	tx_packets += (uint64_t)ipa_tx_packets;
 	rx_packets += (uint64_t)ipa_rx_packets;
-
-	if (adapter) {
-		adapter->stats.tx_packets += ipa_tx_packets;
-		adapter->stats.rx_packets += ipa_rx_packets;
-	}
 
 	if (!connected) {
 		hdd_err("bus bandwidth timer running in disconnected state");
@@ -7043,7 +7090,7 @@ void wlan_hdd_display_tx_rx_histogram(hdd_context_t *hdd_ctx)
 		hdd_ctx->config->busBandwidthMediumThreshold,
 		hdd_ctx->config->busBandwidthLowThreshold);
 	hdd_debug("Enable TCP DEL ACK: %d",
-		hdd_ctx->config->enable_tcp_delack);
+		hdd_ctx->tcp_delack_on);
 	hdd_debug("TCP DEL High TH: %d TCP DEL Low TH: %d",
 		hdd_ctx->config->tcpDelackThresholdHigh,
 		hdd_ctx->config->tcpDelackThresholdLow);
@@ -7110,7 +7157,8 @@ hdd_display_netif_queue_history_compact(hdd_context_t *hdd_ctx)
 	qdf_time_t total, pause, unpause, curr_time, delta;
 	QDF_STATUS status;
 	char temp_str[20 * WLAN_REASON_TYPE_MAX];
-	char comb_log_str[(ADAP_NETIFQ_LOG_LEN * MAX_NUMBER_OF_ADAPTERS) + 1];
+	char *comb_log_str;
+	uint32_t comb_log_str_size;
 	struct ol_txrx_pdev_t *pdev = cds_get_context(QDF_MODULE_ID_TXRX);
 	hdd_adapter_t *adapter = NULL;
 	hdd_adapter_list_node_t *adapter_node = NULL, *next = NULL;
@@ -7120,8 +7168,14 @@ hdd_display_netif_queue_history_compact(hdd_context_t *hdd_ctx)
 		return;
 	}
 
+	comb_log_str_size = (ADAP_NETIFQ_LOG_LEN * MAX_NUMBER_OF_ADAPTERS) + 1;
+	comb_log_str = qdf_mem_malloc(comb_log_str_size);
+	if (!comb_log_str) {
+		hdd_err("failed to alloc comb_log_str");
+		return;
+	}
+
 	bytes_written = 0;
-	qdf_mem_set(comb_log_str, 0, sizeof(comb_log_str));
 	status = hdd_get_front_adapter(hdd_ctx, &adapter_node);
 	while (NULL != adapter_node && QDF_STATUS_SUCCESS == status) {
 		adapter = adapter_node->pAdapter;
@@ -7160,8 +7214,8 @@ hdd_display_netif_queue_history_compact(hdd_context_t *hdd_ctx)
 			hdd_warn("log truncated");
 
 		bytes_written += snprintf(&comb_log_str[bytes_written],
-			bytes_written >= sizeof(comb_log_str) ? 0 :
-					sizeof(comb_log_str) - bytes_written,
+			bytes_written >= comb_log_str_size ? 0 :
+					comb_log_str_size - bytes_written,
 			"[%d %d] (%d) %u/%ums %s|",
 			adapter->sessionId, adapter->device_mode,
 			adapter->pause_map,
@@ -7180,9 +7234,10 @@ hdd_display_netif_queue_history_compact(hdd_context_t *hdd_ctx)
 		pdev->tx_desc.num_free,
 		pdev->tx_desc.pool_size, comb_log_str);
 
-	if (bytes_written >= sizeof(comb_log_str))
+	if (bytes_written >= comb_log_str_size)
 		hdd_warn("log string truncated");
 
+	qdf_mem_free(comb_log_str);
 }
 
 /**
@@ -8101,8 +8156,11 @@ static void hdd_override_ini_config(hdd_context_t *hdd_ctx)
 		hdd_debug("Module enable_11d set to %d", enable_11d);
 	}
 
-	if (!hdd_ipa_is_present(hdd_ctx))
+	if (!hdd_ipa_is_present(hdd_ctx)) {
 		hdd_ctx->config->IpaConfig = 0;
+		hdd_debug("IpaConfig override to %d",
+			hdd_ctx->config->IpaConfig);
+	}
 
 	if (!hdd_ctx->config->rssi_assoc_reject_enabled ||
 	    !hdd_ctx->config->enable_bcast_probe_rsp) {
@@ -9993,6 +10051,8 @@ static int hdd_features_init(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter)
 	if (ret)
 		goto deregister_cb;
 
+	wlan_hdd_init_chan_info(hdd_ctx);
+
 	EXIT();
 	return 0;
 
@@ -10016,6 +10076,7 @@ out:
  */
 static void hdd_features_deinit(hdd_context_t *hdd_ctx)
 {
+	wlan_hdd_deinit_chan_info(hdd_ctx);
 	wlan_hdd_tsf_deinit(hdd_ctx);
 }
 
@@ -10124,6 +10185,8 @@ int hdd_configure_cds(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter)
 	if (hdd_ctx->config->enable_phy_reg_retention)
 		sme_cli_set_command(0, WMI_PDEV_PARAM_FAST_PWR_TRANSITION,
 			hdd_ctx->config->enable_phy_reg_retention, PDEV_CMD);
+	sme_cli_set_command(0, WMI_PDEV_PARAM_GCMP_SUPPORT_ENABLE,
+			    hdd_ctx->config->gcmp_enabled, PDEV_CMD);
 
 	sme_cli_set_command(0, (int)WMI_PDEV_AUTO_DETECT_POWER_FAILURE,
 			    hdd_ctx->config->auto_pwr_save_fail_mode, PDEV_CMD);
@@ -10305,6 +10368,8 @@ int hdd_wlan_stop_modules(hdd_context_t *hdd_ctx, bool ftm_mode)
 		goto done;
 	}
 
+	hdd_sysfs_destroy_version_interface();
+
 	qdf_status = cds_post_disable();
 	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
 		hdd_err("Failed to process post CDS disable Modules! :%d",
@@ -10312,6 +10377,8 @@ int hdd_wlan_stop_modules(hdd_context_t *hdd_ctx, bool ftm_mode)
 		ret = -EINVAL;
 		QDF_ASSERT(0);
 	}
+
+	hdd_runtime_suspend_context_deinit(hdd_ctx);
 
 	qdf_status = cds_close(hdd_ctx->pcds_context);
 	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
@@ -10580,8 +10647,6 @@ int hdd_wlan_startup(struct device *dev)
 		goto err_stop_modules;
 	}
 
-	wlan_hdd_init_chan_info(hdd_ctx);
-
 	ret = hdd_wiphy_init(hdd_ctx);
 	if (ret) {
 		hdd_err("Failed to initialize wiphy: %d", ret);
@@ -10634,8 +10699,6 @@ int hdd_wlan_startup(struct device *dev)
 	if (QDF_IS_STATUS_ERROR(status))
 		goto err_close_adapters;
 
-	hdd_runtime_suspend_context_init(hdd_ctx);
-
 	if (hdd_ctx->config->fIsImpsEnabled)
 		hdd_set_idle_ps_config(hdd_ctx, true);
 	else
@@ -10647,7 +10710,6 @@ int hdd_wlan_startup(struct device *dev)
 		hdd_ctx->config->iface_change_wait_time,
 		WIFI_POWER_EVENT_WAKELOCK_IFACE_CHANGE_TIMER);
 
-	hdd_start_complete(0);
 	goto success;
 
 err_close_adapters:
@@ -11619,7 +11681,6 @@ void wlan_hdd_start_sap(hdd_adapter_t *ap_adapter, bool reinit)
 
 	if (0 != wlan_hdd_cfg80211_update_apies(ap_adapter)) {
 		hdd_err("SAP Not able to set AP IEs");
-		wlansap_reset_sap_config_add_ie(sap_config, eUPDATE_IE_ALL);
 		goto end;
 	}
 
@@ -11637,6 +11698,7 @@ void wlan_hdd_start_sap(hdd_adapter_t *ap_adapter, bool reinit)
 		hdd_err("SAP Start failed");
 		goto end;
 	}
+	wlansap_reset_sap_config_add_ie(sap_config, eUPDATE_IE_ALL);
 	hdd_info("SAP Start Success");
 	set_bit(SOFTAP_BSS_STARTED, &ap_adapter->event_flags);
 	if (hostapd_state->bssState == BSS_START)
@@ -11648,6 +11710,7 @@ void wlan_hdd_start_sap(hdd_adapter_t *ap_adapter, bool reinit)
 	return;
 
 end:
+	wlansap_reset_sap_config_add_ie(sap_config, eUPDATE_IE_ALL);
 	mutex_unlock(&hdd_ctx->sap_lock);
 	/* SAP context and beacon cleanup will happen during driver unload
 	 * in hdd_stop_adapter
@@ -11816,6 +11879,10 @@ static ssize_t wlan_hdd_state_ctrl_param_write(struct file *filp,
 		goto exit;
 	}
 
+	if (strncmp(buf, wlan_on_str, strlen(wlan_on_str)) == 0) {
+		pr_info("Wifi Turning On from UI\n");
+	}
+
 	if (strncmp(buf, wlan_on_str, strlen(wlan_on_str)) != 0) {
 		pr_err("Invalid value received from framework");
 		goto exit;
@@ -11828,7 +11895,6 @@ static ssize_t wlan_hdd_state_ctrl_param_write(struct file *filp,
 		if (!rc) {
 			hdd_alert("Timed-out waiting in wlan_hdd_state_ctrl_param_write");
 			ret = -EINVAL;
-			hdd_start_complete(ret);
 			return ret;
 		}
 
@@ -11921,12 +11987,6 @@ static int __hdd_module_init(void)
 	       g_wlan_driver_version,
 	       TIMER_MANAGER_STR MEMORY_DEBUG_STR);
 
-	ret = wlan_hdd_state_ctrl_param_create();
-	if (ret) {
-		pr_err("wlan_hdd_state_create:%x\n", ret);
-		goto err_dev_state;
-	}
-
 	pld_init();
 
 	ret = hdd_init();
@@ -11946,6 +12006,12 @@ static int __hdd_module_init(void)
 		goto out;
 	}
 
+	ret = wlan_hdd_state_ctrl_param_create();
+	if (ret) {
+		pr_err("wlan_hdd_state_create:%x\n", ret);
+		goto out;
+	}
+
 	pr_info("%s: driver loaded\n", WLAN_MODULE_NAME);
 
 	return 0;
@@ -11954,8 +12020,6 @@ out:
 	hdd_deinit();
 err_hdd_init:
 	pld_deinit();
-	wlan_hdd_state_ctrl_param_destroy();
-err_dev_state:
 	return ret;
 }
 
@@ -12912,6 +12976,28 @@ void hdd_drv_ops_inactivity_handler(void)
 		cds_trigger_recovery(false);
 	else
 		QDF_BUG(0);
+}
+
+bool hdd_is_cli_iface_up(hdd_context_t *hdd_ctx)
+{
+	hdd_adapter_list_node_t *adapter_node = NULL, *next = NULL;
+	hdd_adapter_t *adapter;
+	QDF_STATUS status;
+
+	status = hdd_get_front_adapter(hdd_ctx, &adapter_node);
+	while (NULL != adapter_node && QDF_STATUS_SUCCESS == status) {
+		adapter = adapter_node->pAdapter;
+		if ((adapter->device_mode == QDF_STA_MODE ||
+		     adapter->device_mode == QDF_P2P_CLIENT_MODE) &&
+		    qdf_atomic_test_bit(DEVICE_IFACE_OPENED,
+					&adapter->event_flags)){
+			return true;
+		}
+		status = hdd_get_next_adapter(hdd_ctx, adapter_node, &next);
+		adapter_node = next;
+	}
+
+	return false;
 }
 
 /* Register the module init/exit functions */

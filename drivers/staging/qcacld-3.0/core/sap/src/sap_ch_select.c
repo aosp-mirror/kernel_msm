@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -592,7 +592,7 @@ uint8_t sap_select_preferred_channel_from_channel_list(uint8_t best_chnl,
 		if ((sap_ctx->acs_cfg->ch_list[i] == best_chnl) &&
 		!(CDS_IS_DFS_CH(best_chnl) && cds_disallow_mcc(best_chnl))) {
 			QDF_TRACE(QDF_MODULE_ID_SAP,
-				QDF_TRACE_LEVEL_INFO_HIGH,
+				QDF_TRACE_LEVEL_INFO,
 				"Best channel so far is: %d",
 				best_chnl);
 			return best_chnl;
@@ -640,6 +640,7 @@ static bool sap_chan_sel_init(tHalHandle halHandle,
 	bool include_dfs_ch = true;
 	bool sta_sap_scc_on_dfs_chan =
 		cds_is_sta_sap_scc_allowed_on_dfs_channel();
+	uint8_t chan_num;
 
 	QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_HIGH, "In %s",
 		  __func__);
@@ -735,6 +736,21 @@ static bool sap_chan_sel_init(tHalHandle halHandle,
 			pSpectCh->valid = true;
 			pSpectCh->rssiAgr = SOFTAP_MIN_RSSI;    /* Initialise for all channels */
 			pSpectCh->channelWidth = SOFTAP_HT20_CHANNELWIDTH;      /* Initialise 20MHz for all the Channels */
+			/* Initialise max ACS weight for all channels */
+			pSpectCh->weight = SAP_ACS_WEIGHT_MAX;
+			for (chan_num = 0; chan_num < pSapCtx->num_of_channel;
+			     chan_num++) {
+				if (pSpectCh->chNum !=
+				    pSapCtx->channelList[chan_num])
+					continue;
+
+				/*
+				 * Initialize ACS weight to 0 for channels
+				 * present in sap context scan channel list
+				 */
+				pSpectCh->weight = 0;
+				break;
+			}
 		}
 	}
 	return true;
@@ -851,7 +867,7 @@ static uint32_t sap_weight_channel_noise_floor(ptSapContext sap_ctx,
 				    softap_nf_weight_cfg);
 
 	if (channel_stat == NULL || channel_stat->channelfreq == 0) {
-		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO,
+		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_DEBUG,
 			  "In %s, sanity check failed return max weight",
 			  __func__);
 		return softap_nf_weight_local;
@@ -905,7 +921,7 @@ static uint32_t sap_weight_channel_free(ptSapContext sap_ctx,
 				    softap_channel_free_weight_cfg);
 
 	if (channel_stat == NULL || channel_stat->channelfreq == 0) {
-		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO,
+		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_DEBUG,
 			  "In %s, sanity check failed return max weight",
 			  __func__);
 		return softap_channel_free_weight_local;
@@ -966,7 +982,7 @@ static uint32_t sap_weight_channel_txpwr_range(ptSapContext sap_ctx,
 				    softap_txpwr_range_weight_cfg);
 
 	if (channel_stat == NULL || channel_stat->channelfreq == 0) {
-		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO,
+		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_DEBUG,
 			  "In %s, sanity check failed return max weight",
 			  __func__);
 		return softap_txpwr_range_weight_local;
@@ -1018,7 +1034,7 @@ static uint32_t sap_weight_channel_txpwr_tput(ptSapContext sap_ctx,
 				    softap_txpwr_tput_weight_cfg);
 
 	if (channel_stat == NULL || channel_stat->channelfreq == 0) {
-		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO,
+		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_DEBUG,
 			  "In %s, sanity check failed return max weight",
 			  __func__);
 		return softap_txpwr_tput_weight_local;
@@ -1692,6 +1708,9 @@ static void sap_compute_spect_weight(tSapChSelSpectInfo *pSpectInfoParams,
 		if (ch_in_pcl(sap_ctx, chn_num))
 			rssi -= PCL_RSSI_DISCOUNT;
 
+		if (pSpectCh->weight == SAP_ACS_WEIGHT_MAX)
+			goto debug_info;
+
 		pSpectCh->weight =
 			SAPDFS_NORMALISE_1000 *
 			 (sapweight_rssi_count(sap_ctx, rssi,
@@ -1702,6 +1721,7 @@ static void sap_compute_spect_weight(tSapChSelSpectInfo *pSpectInfoParams,
 			pSpectCh->weight = SAP_ACS_WEIGHT_MAX;
 		pSpectCh->weight_copy = pSpectCh->weight;
 
+debug_info:
 		/* ------ Debug Info ------ */
 		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_HIGH,
 			  "In %s, Chan=%d Weight= %d rssiAgr=%d bssCount=%d",
@@ -1936,12 +1956,16 @@ static void sap_sort_chl_weight_ht80(tSapChSelSpectInfo *pSpectInfoParams)
 		}
 	}
 
+	/*
+	 * Assign max weight(SAP_ACS_WEIGHT_MAX * 4) to 2.4 Ghz channels
+	 * and channel 165 as they cannot be part of a 80Mhz channel bonding.
+	 */
 	pSpectInfo = pSpectInfoParams->pSpectCh;
 	for (j = 0; j < pSpectInfoParams->numSpectChans; j++) {
-		if (CHANNEL_165 == pSpectInfo[j].chNum) {
+		if ((pSpectInfo[j].chNum >= CDS_CHANNEL_NUM(CHAN_ENUM_1) &&
+		     pSpectInfo[j].chNum <= CDS_CHANNEL_NUM(CHAN_ENUM_14)) ||
+		    (CHANNEL_165 == pSpectInfo[j].chNum))
 			pSpectInfo[j].weight = SAP_ACS_WEIGHT_MAX * 4;
-			break;
-		}
 	}
 
 	sap_sort_chl_weight(pSpectInfoParams);
@@ -2076,12 +2100,18 @@ static void sap_sort_chl_weight_vht160(tSapChSelSpectInfo *pSpectInfoParams)
 		pSpectInfo[j + minIdx].weight = acs_vht160_channels[i].weight;
 	}
 
+	/*
+	 * Assign max weight(SAP_ACS_WEIGHT_MAX * 8) to 2.4 Ghz channels
+	 * and channel 132-165 as they cannot be part of a 160Mhz channel
+	 * bonding.
+	 */
 	pSpectInfo = pSpectInfoParams->pSpectCh;
 	for (j = 0; j < pSpectInfoParams->numSpectChans; j++) {
-		if (CHANNEL_165 == pSpectInfo[j].chNum) {
+		if ((pSpectInfo[j].chNum >= CDS_CHANNEL_NUM(CHAN_ENUM_1) &&
+		     pSpectInfo[j].chNum <= CDS_CHANNEL_NUM(CHAN_ENUM_14)) ||
+		    (pSpectInfo[j].chNum >= CDS_CHANNEL_NUM(CHAN_ENUM_132) &&
+		     pSpectInfo[j].chNum <= CDS_CHANNEL_NUM(CHAN_ENUM_165)))
 			pSpectInfo[j].weight = SAP_ACS_WEIGHT_MAX * 8;
-			break;
-		}
 	}
 
 	sap_sort_chl_weight(pSpectInfoParams);
@@ -2398,11 +2428,11 @@ static void sap_sort_chl_weight_all(ptSapContext pSapCtx,
 #endif
 
 	/* For testing */
-	QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_HIGH,
+	QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO,
 		  "In %s, Sorted Spectrum Channels Weight", __func__);
 	pSpectCh = pSpectInfoParams->pSpectCh;
 	for (j = 0; j < (pSpectInfoParams->numSpectChans); j++) {
-		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_HIGH,
+		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO,
 			  "In %s, Channel=%d Weight= %d rssi=%d bssCount=%d",
 			  __func__, pSpectCh->chNum, pSpectCh->weight,
 			  pSpectCh->rssiAgr, pSpectCh->bssCount);

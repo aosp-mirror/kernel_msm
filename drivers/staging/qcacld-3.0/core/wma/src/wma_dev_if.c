@@ -1112,27 +1112,20 @@ int wma_vdev_start_resp_handler(void *handle, uint8_t *cmd_param_info,
 
 			param.vdev_id = resp_event->vdev_id;
 			param.assoc_id = iface->aid;
-
-			if (iface->vdev_up == true) {
-				WMA_LOGD(FL("vdev id %d is already UP for %pM"),
-					 param.vdev_id, iface->bssid);
-				status = QDF_STATUS_SUCCESS;
+			status = wma_send_vdev_up_to_fw(wma, &param,
+							iface->bssid);
+			if (QDF_IS_STATUS_ERROR(status)) {
+				WMA_LOGE("%s:vdev_up failed vdev_id %d",
+					 __func__, resp_event->vdev_id);
+				iface->vdev_up = false;
+				WMA_LOGD(FL("Setting vdev_up flag to false"));
+				cds_set_do_hw_mode_change_flag(false);
 			} else {
-				status = wmi_unified_vdev_up_send(wma->wmi_handle,
-							 iface->bssid,
-							 &param);
-				if (QDF_IS_STATUS_ERROR(status)) {
-					WMA_LOGE(FL("vdev_up failed vdev_id %d"),
-						 resp_event->vdev_id);
-					wma->interfaces[resp_event->vdev_id].vdev_up =
-						false;
-					WMA_LOGD(FL("Setting vdev_up flag to false"));
-					cds_set_do_hw_mode_change_flag(false);
-				} else {
-					wma->interfaces[resp_event->vdev_id].vdev_up =
-						true;
-					WMA_LOGD(FL("Setting vdev_up flag to true"));
-				}
+				iface->vdev_up = true;
+				WMA_LOGD(FL("Setting vdev_up flag to true"));
+				if (iface->beacon_filter_enabled)
+					wma_add_beacon_filter(wma,
+							&iface->beacon_filter);
 			}
 		}
 
@@ -1147,21 +1140,14 @@ int wma_vdev_start_resp_handler(void *handle, uint8_t *cmd_param_info,
 	} else if (req_msg->msg_type == WMA_OCB_SET_CONFIG_CMD) {
 		param.vdev_id = resp_event->vdev_id;
 		param.assoc_id = iface->aid;
-
-		if (iface->vdev_up == true) {
-			WMA_LOGD(FL("vdev id %d is already UP for %pM"),
-				  param.vdev_id, iface->bssid);
-		} else {
-			if (wmi_unified_vdev_up_send(wma->wmi_handle,
-					     iface->bssid,
-					     &param) != QDF_STATUS_SUCCESS) {
-				WMA_LOGE(FL("failed to send vdev up"));
-				cds_set_do_hw_mode_change_flag(false);
-				return -EEXIST;
-			}
-			iface->vdev_up = true;
-			WMA_LOGD(FL("Setting vdev_up flag to true"));
+		if (wma_send_vdev_up_to_fw(wma, &param, iface->bssid) !=
+		    QDF_STATUS_SUCCESS) {
+			WMA_LOGE(FL("failed to send vdev up"));
+			cds_set_do_hw_mode_change_flag(false);
+			return -EEXIST;
 		}
+		iface->vdev_up = true;
+		WMA_LOGD(FL("Setting vdev_up flag to true"));
 
 		wma_ocb_start_resp_ind_cont(wma);
 	}
@@ -1192,11 +1178,12 @@ bool wma_is_vdev_valid(uint32_t vdev_id)
 		return false;
 	}
 
-	/* No of interface are allocated based on max_bssid value */
-	if (vdev_id >= wma_handle->max_bssid)
-		return false;
+	WMA_LOGD("%s: vdev_id: %d, vdev_active: %d, is_vdev_valid %d",
+		 __func__, vdev_id, wma_handle->interfaces[vdev_id].vdev_active,
+		 wma_handle->interfaces[vdev_id].is_vdev_valid);
 
-	return wma_handle->interfaces[vdev_id].vdev_active;
+	return wma_handle->interfaces[vdev_id].vdev_active ||
+		wma_handle->interfaces[vdev_id].is_vdev_valid;
 }
 
 /**
@@ -2437,8 +2424,7 @@ QDF_STATUS wma_vdev_start(tp_wma_handle wma,
 			params.band_center_freq2 = 0;
 			ch_width = CH_WIDTH_80MHZ;
 		}
-	}
-	else {
+	} else {
 		params.band_center_freq2 = 0;
 	}
 	chan_mode = wma_chan_phy_mode(req->chan, ch_width,
@@ -2449,6 +2435,16 @@ QDF_STATUS wma_vdev_start(tp_wma_handle wma,
 		return QDF_STATUS_E_FAILURE;
 	}
 
+	if (!params.band_center_freq1) {
+		WMA_LOGE("%s: invalid center freq1", __func__);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	if (((ch_width == CH_WIDTH_160MHZ) || (ch_width == CH_WIDTH_80P80MHZ))
+				&& !params.band_center_freq2) {
+		WMA_LOGE("%s: invalid center freq2 for 160MHz", __func__);
+		return QDF_STATUS_E_FAILURE;
+	}
 	/* Fill channel info */
 	params.chan_freq = cds_chan_to_freq(req->chan);
 	params.chan_mode = chan_mode;
@@ -2901,9 +2897,8 @@ int wma_peer_delete_handler(void *handle, uint8_t *cmd_param_info,
 		struct wma_txrx_node *iface;
 
 		iface = &wma->interfaces[req_msg->vdev_id];
-		if (wmi_unified_vdev_down_send(wma->wmi_handle,
-				req_msg->vdev_id) !=
-				QDF_STATUS_SUCCESS) {
+		if (wma_send_vdev_down_to_fw(wma, req_msg->vdev_id) !=
+		    QDF_STATUS_SUCCESS) {
 			WMA_LOGE("Failed to send vdev down cmd: vdev %d",
 					req_msg->vdev_id);
 		} else {
@@ -3176,6 +3171,15 @@ void wma_vdev_resp_timer(void *data)
 		qdf_mc_timer_stop(&tgt_req->event_timeout);
 		goto free_tgt_req;
 	}
+
+#ifdef FEATURE_AP_MCC_CH_AVOIDANCE
+	mac_ctx = cds_get_context(QDF_MODULE_ID_PE);
+	if (!mac_ctx) {
+		WMA_LOGE("%s: Failed to get mac_ctx", __func__);
+		wma_cleanup_target_req_param(tgt_req);
+		goto free_tgt_req;
+	}
+#endif /* FEATURE_AP_MCC_CH_AVOIDANCE */
 
 	iface = &wma->interfaces[tgt_req->vdev_id];
 	if (tgt_req->msg_type == WMA_CHNL_SWITCH_REQ) {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -332,8 +332,7 @@ wlansap_pre_start_bss_acs_scan_callback(tHalHandle hal_handle, void *pcontext,
 			FL("CSR scan_status = eCSR_SCAN_ABORT/FAILURE (%d), choose default channel"),
 			scan_status);
 		sap_ctx->channel =
-			sap_select_default_oper_chan(hal_handle,
-					sap_ctx->acs_cfg->hw_mode);
+			sap_select_default_oper_chan(sap_ctx->acs_cfg);
 		sap_ctx->sap_state = eSAP_ACS_CHANNEL_SELECTED;
 		sap_ctx->sap_status = eSAP_STATUS_SUCCESS;
 		goto close_session;
@@ -398,8 +397,7 @@ wlansap_pre_start_bss_acs_scan_callback(tHalHandle hal_handle, void *pcontext,
 	} else {
 #else
 		sap_ctx->channel =
-			sap_select_default_oper_chan(hal_handle,
-				sap_ctx->acs_cfg->hw_mode);
+			sap_select_default_oper_chan(sap_ctx->acs_cfg);
 	} else {
 #endif
 		/* Valid Channel Found from scan results. */
@@ -899,8 +897,11 @@ wlansap_roam_callback(void *ctx, tCsrRoamInfo *csr_roam_info, uint32_t roamId,
 	}
 
 	mac_ctx = PMAC_STRUCT(hal);
-	QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_HIGH,
-		  FL("Before switch on roam_status = %d"), roam_status);
+	if (eCSR_ROAM_UPDATE_SCAN_RESULT != roam_status) {
+		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_HIGH,
+			FL("roam_status = %d, roam_result = %d"),
+			roam_status, roam_result);
+	}
 
 	sta_sap_scc_on_dfs_chan = cds_is_sta_sap_scc_allowed_on_dfs_channel();
 
@@ -1094,9 +1095,6 @@ wlansap_roam_callback(void *ctx, tCsrRoamInfo *csr_roam_info, uint32_t roamId,
 	default:
 		break;
 	}
-
-	QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_HIGH,
-		  FL("Before switch on roam_result = %d"), roam_result);
 
 	switch (roam_result) {
 	case eCSR_ROAM_RESULT_INFRA_ASSOCIATION_IND:

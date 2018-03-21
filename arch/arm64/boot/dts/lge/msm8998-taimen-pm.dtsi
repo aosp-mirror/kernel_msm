@@ -238,12 +238,7 @@
 				(-40)  (-40)  (-65)  (-60)
 				(-60)  (-40)  (-40)  (-30)
 				(-30)>;
-	qcom,fg-cutoff-voltage = <3300>;
-	qcom,fg-empty-voltage = <3100>;
-};
-
-&pmi8998_bcl {
-	qcom,vbat-too-low-threshold = <4>; /* 2.8V */
+	qcom,fg-cutoff-voltage = <3400>;
 };
 
 &pmi8998_pdphy {

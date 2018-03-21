@@ -51,6 +51,7 @@
 #include "ol_txrx_osif_api.h" /* ol_rx_callback_fp */
 #include "cdp_txrx_flow_ctrl_v2.h"
 #include "cdp_txrx_peer_ops.h"
+#include <qdf_trace.h>
 
 /*
  * The target may allocate multiple IDs for a peer.
@@ -1027,6 +1028,12 @@ struct ol_txrx_pdev_t {
 		void (*offld_flush_cb)(void *);
 	} rx_offld_info;
 	struct ol_txrx_peer_t *self_peer;
+
+	/* dp debug fs */
+	struct dentry *dpt_stats_log_dir;
+	enum qdf_dpt_debugfs_state state;
+	struct qdf_debugfs_fops dpt_debugfs_fops;
+
 };
 
 struct ol_txrx_ocb_chan_info {

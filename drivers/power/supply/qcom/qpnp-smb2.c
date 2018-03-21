@@ -449,7 +449,7 @@ static enum power_supply_property smb2_usb_props[] = {
 	POWER_SUPPLY_PROP_BOOST_CURRENT,
 	POWER_SUPPLY_PROP_PE_START,
 	POWER_SUPPLY_PROP_USE_EXTERNAL_VBUS_OUTPUT,
-	POWER_SUPPLY_PROP_PORT_TEMP,
+	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_CTM_CURRENT_MAX,
 	POWER_SUPPLY_PROP_HW_CURRENT_MAX,
 	POWER_SUPPLY_PROP_PR_SWAP,
@@ -544,7 +544,7 @@ static int smb2_usb_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_USE_EXTERNAL_VBUS_OUTPUT:
 		rc = smblib_get_prop_use_external_vbus_output(chg, val);
 		break;
-	case POWER_SUPPLY_PROP_PORT_TEMP:
+	case POWER_SUPPLY_PROP_TEMP:
 		rc = smblib_get_prop_usb_port_temp(chg, val);
 		break;
 	case POWER_SUPPLY_PROP_CTM_CURRENT_MAX:
@@ -612,7 +612,7 @@ static int smb2_usb_set_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_USE_EXTERNAL_VBUS_OUTPUT:
 		rc = smblib_set_prop_use_external_vbus_output(chg, val);
 		break;
-	case POWER_SUPPLY_PROP_PORT_TEMP:
+	case POWER_SUPPLY_PROP_TEMP:
 		rc = smblib_set_prop_usb_port_temp(chg, val);
 		break;
 	case POWER_SUPPLY_PROP_CTM_CURRENT_MAX:
@@ -642,7 +642,7 @@ static int smb2_usb_prop_is_writeable(struct power_supply *psy,
 		return 1;
 	case POWER_SUPPLY_PROP_USE_EXTERNAL_VBUS_OUTPUT:
 		return 1;
-	case POWER_SUPPLY_PROP_PORT_TEMP:
+	case POWER_SUPPLY_PROP_TEMP:
 		return 1;
 	default:
 		break;

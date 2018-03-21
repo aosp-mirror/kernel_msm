@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -40,6 +40,8 @@
 #include  <qdf_status.h>
 #include  <qdf_nbuf.h>
 #include  <i_qdf_types.h>
+#include <qdf_debugfs.h>
+
 
 /* Type declarations */
 
@@ -357,6 +359,8 @@ struct s_qdf_dp_trace_data {
 	bool enable;
 	bool live_mode_config;
 	bool live_mode;
+	uint32_t curr_pos;
+	uint32_t saved_tail;
 	uint8_t print_pkt_cnt;
 	uint8_t high_tput_thresh;
 	uint16_t thresh_time_limit;
@@ -386,6 +390,20 @@ struct s_qdf_dp_trace_data {
 	uint16_t icmpv6_ra;
 };
 
+/**
+ * struct qdf_dpt_debugfs_state - state to control read to debugfs file
+ * @QDF_DPT_DEBUGFS_STATE_SHOW_STATE_INVALID: invalid state
+ * @QDF_DPT_DEBUGFS_STATE_SHOW_STATE_INIT: initial state
+ * @QDF_DPT_DEBUGFS_STATE_SHOW_IN_PROGRESS: read is in progress
+ * @QDF_DPT_DEBUGFS_STATE_SHOW_COMPLETE:  read complete
+ */
+
+enum qdf_dpt_debugfs_state {
+	QDF_DPT_DEBUGFS_STATE_SHOW_STATE_INVALID,
+	QDF_DPT_DEBUGFS_STATE_SHOW_STATE_INIT,
+	QDF_DPT_DEBUGFS_STATE_SHOW_IN_PROGRESS,
+	QDF_DPT_DEBUGFS_STATE_SHOW_COMPLETE,
+};
 
 /* Function declarations and documenation */
 
@@ -449,6 +467,37 @@ void qdf_dp_trace_set_value(uint8_t proto_bitmap, uint8_t no_of_records,
 void qdf_dp_trace_set_track(qdf_nbuf_t nbuf, enum qdf_proto_dir dir);
 void qdf_dp_trace(qdf_nbuf_t nbuf, enum QDF_DP_TRACE_ID code,
 			uint8_t *data, uint8_t size, enum qdf_proto_dir dir);
+
+/**
+ * qdf_dpt_get_curr_pos_debugfs() - get curr position to start read
+ * @file: debugfs file to read
+ * @state: state to control read to debugfs file
+ *
+ * Return: curr pos
+ */
+uint32_t qdf_dpt_get_curr_pos_debugfs(qdf_debugfs_file_t file,
+				enum qdf_dpt_debugfs_state state);
+/**
+ * qdf_dpt_dump_stats_debugfs() - dump DP Trace stats to debugfs file
+ * @file: debugfs file to read
+ * @curr_pos: curr position to start read
+ *
+ * Return: QDF_STATUS
+ */
+QDF_STATUS qdf_dpt_dump_stats_debugfs(qdf_debugfs_file_t file,
+				      uint32_t curr_pos);
+
+/**
+ * qdf_dpt_set_value_debugfs() - dump DP Trace stats to debugfs file
+ * @file: debugfs file to read
+ * @curr_pos: curr position to start read
+ *
+ * Return: none
+ */
+void qdf_dpt_set_value_debugfs(uint8_t proto_bitmap, uint8_t no_of_record,
+			    uint8_t verbosity);
+
+
 void qdf_dp_trace_dump_all(uint32_t count);
 
 /**
@@ -510,8 +559,27 @@ void qdf_dp_trace_set_value(uint8_t proto_bitmap, uint8_t no_of_records,
 			 uint8_t verbosity)
 {
 }
+
 static inline
 void qdf_dp_trace_dump_all(uint32_t count)
+{
+}
+
+static inline
+uint32_t qdf_dpt_get_curr_pos_debugfs(qdf_debugfs_file_t file,
+				      enum qdf_dpt_debugfs_state state)
+{
+}
+
+static inline
+QDF_STATUS qdf_dpt_dump_stats_debugfs(qdf_debugfs_file_t file,
+				      uint32_t curr_pos)
+{
+}
+
+static inline
+void qdf_dpt_set_value_debugfs(uint8_t proto_bitmap, uint8_t no_of_record,
+			    uint8_t verbosity)
 {
 }
 
@@ -558,29 +626,44 @@ void __printf(3, 4) qdf_snprintf(char *str_buffer, unsigned int size,
 #define QDF_SNPRINTF qdf_snprintf
 
 #ifdef TSOSEG_DEBUG
-static inline
-int qdf_tso_seg_dbg_record(struct qdf_tso_seg_elem_t *tsoseg,
-			   uint16_t caller)
-{
-	int rc = -1;
 
-	if (tsoseg != NULL) {
-		tsoseg->dbg.cur++;  tsoseg->dbg.cur &= 0x0f;
-		tsoseg->dbg.history[tsoseg->dbg.cur] = caller;
-		rc = tsoseg->dbg.cur;
-	}
-	return rc;
-};
 static inline void qdf_tso_seg_dbg_bug(char *msg)
 {
 	qdf_print(msg);
 	QDF_BUG(0);
 };
 
+static inline
+int qdf_tso_seg_dbg_record(struct qdf_tso_seg_elem_t *tsoseg, short id)
+{
+	int rc = -1;
+	unsigned int c;
+
+	qdf_assert(tsoseg);
+
+	if (id == TSOSEG_LOC_ALLOC) {
+		c = qdf_atomic_read(&(tsoseg->dbg.cur));
+		/* dont crash on the very first alloc on the segment */
+		c &= 0x0f;
+		/* allow only INIT and FREE ops before ALLOC */
+		if (tsoseg->dbg.h[c].id >= id)
+			qdf_tso_seg_dbg_bug("Rogue TSO seg alloc");
+	}
+	c = qdf_atomic_inc_return(&(tsoseg->dbg.cur));
+
+	c &= 0x0f;
+	tsoseg->dbg.h[c].ts = qdf_get_log_timestamp();
+	tsoseg->dbg.h[c].id = id;
+	rc = c;
+
+	return rc;
+};
+
 static inline void
 qdf_tso_seg_dbg_setowner(struct qdf_tso_seg_elem_t *tsoseg, void *owner)
 {
-	tsoseg->dbg.txdesc = owner;
+	if (tsoseg != NULL)
+		tsoseg->dbg.txdesc = owner;
 };
 
 static inline void
@@ -592,8 +675,7 @@ qdf_tso_seg_dbg_zero(struct qdf_tso_seg_elem_t *tsoseg)
 
 #else
 static inline
-int qdf_tso_seg_dbg_record(struct qdf_tso_seg_elem_t *tsoseg,
-			   uint16_t caller)
+int qdf_tso_seg_dbg_record(struct qdf_tso_seg_elem_t *tsoseg, short id)
 {
 	return 0;
 };

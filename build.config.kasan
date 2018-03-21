@@ -9,7 +9,8 @@ function update_kasan_config() {
          -e CONFIG_SLUB_DEBUG_ON \
          -d CONFIG_SLUB_DEBUG_PANIC_ON \
          -d CONFIG_KASAN_OUTLINE \
-         -d CONFIG_KERNEL_LZ4
+         -d CONFIG_KERNEL_LZ4 \
+	 -d CONFIG_RANDOMIZE_BASE
     (cd ${OUT_DIR} && \
      make O=${OUT_DIR} $archsubarch CROSS_COMPILE=${CROSS_COMPILE} olddefconfig)
 }
