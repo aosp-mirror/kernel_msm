@@ -47,7 +47,7 @@ static void tbn_process_event(
 		queue_work(tbn->event_processor, &tbn->on_event);
 		break;
 	default:
-		dev_err(tbn->dev, "unhandled QMI event: %ld\n", event);
+		dev_err(tbn->dev, "unhandled QMI event: %d\n", (int)event);
 	}
 }
 
@@ -67,7 +67,7 @@ static int tbn_on_server_event(
 		schedule_work(&tbn->on_server_exit);
 		break;
 	default:
-		dev_err(tbn->dev, "unhandled server event: %ld\n", event);
+		dev_err(tbn->dev, "unhandled server event: %d\n", (int)event);
 	}
 
 	return 0;
