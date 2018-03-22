@@ -100,3 +100,7 @@
 	qcom,clk-dis-wait-val = <0x5>;
 	status = "okay";
 };
+
+&qcom_seecom {
+	reg = <0x87a00000 0x200000>;
+};
