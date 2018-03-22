@@ -1705,7 +1705,13 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	ts->power_status = SEC_TS_STATE_POWER_ON;
 	ts->external_factory = false;
 
-	sec_ts_wait_for_ready(ts, SEC_TS_ACK_BOOT_COMPLETE);
+	ret = sec_ts_wait_for_ready(ts, SEC_TS_ACK_BOOT_COMPLETE);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev,
+			  "%s: failed to communicate with touch controller.\n");
+		ret = -ENODEV;
+		goto err_init;
+	}
 
 	input_info(true, &client->dev, "%s: power enable\n", __func__);
 
