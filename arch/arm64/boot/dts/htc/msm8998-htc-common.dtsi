@@ -176,4 +176,12 @@
 		qcom,bcl-hotplug-list = <>;
 		qcom,bcl-soc-hotplug-list = <>;
 	};
+
+	qcom,msm-imem@146bf000 {
+		restart_info@a94 {
+			compatible = "msm-imem-restart_info";
+			reg = <0xa94 100>;
+			info_size = <100>;
+		};
+	};
 };
