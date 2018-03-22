@@ -61,6 +61,8 @@
 
 #define FG_ADC_RR_AUX_THERM_CTRL		0x80
 #define FG_ADC_RR_AUX_THERM_TRIGGER		0x81
+#define FG_ADC_RR_AUX_THERM_EVERY_CYCLE_MASK	0x80
+#define FG_ADC_RR_AUX_THERM_EVERY_CYCLE 	BIT(7)
 #define FG_ADC_RR_AUX_THERM_STS			0x82
 #define FG_ADC_RR_AUX_THERM_CFG			0x83
 #define FG_ADC_RR_AUX_THERM_LSB			0x84
@@ -766,7 +768,6 @@ static int rradc_check_status_ready_with_retry(struct rradc_chip *chip,
 			rradc_chans[prop->channel].datasheet_name, buf[0]);
 
 		if (((prop->channel == RR_ADC_CHG_TEMP) ||
-			(prop->channel == RR_ADC_SKIN_TEMP) ||
 			(prop->channel == RR_ADC_USBIN_I) ||
 			(prop->channel == RR_ADC_DIE_TEMP)) &&
 					((!rradc_is_usb_present(chip)))) {
@@ -1186,6 +1187,12 @@ static int rradc_probe(struct platform_device *pdev)
 	chip->usb_trig = power_supply_get_by_name("usb");
 	if (!chip->usb_trig)
 		pr_debug("Error obtaining usb power supply\n");
+
+	rc = rradc_masked_write(chip, FG_ADC_RR_AUX_THERM_TRIGGER,
+				FG_ADC_RR_AUX_THERM_EVERY_CYCLE_MASK,
+				FG_ADC_RR_AUX_THERM_EVERY_CYCLE);
+	if (rc < 0)
+		pr_err("Failed to set FG_ADC_RR_AUX_THERM_EVERY_CYCLE");
 
 	return devm_iio_device_register(dev, indio_dev);
 }
