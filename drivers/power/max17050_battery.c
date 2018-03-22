@@ -713,6 +713,7 @@ static enum power_supply_property max17050_battery_props[] = {
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_CURRENT_AVG,
 	POWER_SUPPLY_PROP_CHARGE_COUNTER,
+	POWER_SUPPLY_PROP_CHARGE_EMPTY,
 };
 
 static char *pm_batt_supplied_to[] = {
@@ -796,6 +797,9 @@ static int max17050_get_property(struct power_supply *psy,
 		s16_value = (s16)chip->repcap;
 		val->intval = (s32)s16_value;
 		val->intval *= 5000000 / chip->pdata->r_sns;
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_EMPTY:
+		val->intval = chip->pdata->empty_soc;
 		break;
 	default:
 		return -EINVAL;
