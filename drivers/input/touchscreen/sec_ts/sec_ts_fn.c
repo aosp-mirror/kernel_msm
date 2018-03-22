@@ -77,6 +77,7 @@ static void get_pressure_user_level(void *device_data);
 static void run_fs_cal_pre_press(void *device_data);
 static void run_fs_cal_get_average(void *device_data);
 static void run_fs_cal_post_press(void *device_data);
+static void enable_fs_cal_table(void *device_data);
 static void run_trx_short_test(void *device_data);
 static void set_tsp_test_result(void *device_data);
 static void get_tsp_test_result(void *device_data);
@@ -167,6 +168,7 @@ static struct sec_cmd sec_cmds[] = {
 	{SEC_CMD("run_fs_cal_pre_press", run_fs_cal_pre_press),},
 	{SEC_CMD("run_fs_cal_get_average", run_fs_cal_get_average),},
 	{SEC_CMD("run_fs_cal_post_press", run_fs_cal_post_press),},
+	{SEC_CMD("enable_fs_cal_table", enable_fs_cal_table),},
 	{SEC_CMD("run_trx_short_test", run_trx_short_test),},
 	{SEC_CMD("set_tsp_test_result", set_tsp_test_result),},
 	{SEC_CMD("get_tsp_test_result", get_tsp_test_result),},
@@ -3764,6 +3766,59 @@ ErrorPowerOff:
 	snprintf(buff, sizeof(buff), "%s", "NG");
 	sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
 	sec->cmd_state = SEC_CMD_STATUS_NOT_APPLICABLE;
+}
+
+/* enable_fs_cal_table : enable or disable fs cal table
+ * cmd_param : 0 to disable, 1 to enable
+ * touch mode and state should be fixed before enable or disable
+ */
+static void enable_fs_cal_table(void *device_data)
+{
+	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
+	struct sec_ts_data *ts = container_of(sec, struct sec_ts_data, sec);
+	u8 tPara;
+	int ret;
+
+	sec_cmd_set_default_result(sec);
+
+	if (sec->cmd_param[0] < 0 || sec->cmd_param[0] > 1) {
+		sec->cmd_state = SEC_CMD_STATUS_FAIL;
+		sec_cmd_set_cmd_result(sec, "NG", 2);
+		return;
+	}
+
+	ret = sec_ts_fix_tmode(ts, TOUCH_SYSTEM_MODE_TOUCH,
+				TOUCH_MODE_STATE_TOUCH);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev, "%s: fail to fix tmode\n",
+			  __func__);
+		sec->cmd_state = SEC_CMD_STATUS_FAIL;
+		sec_cmd_set_cmd_result(sec, "NG", 2);
+		return;
+	}
+
+	tPara = sec->cmd_param[0];
+
+	input_info(true, &ts->client->dev, "%s: fs cal table %s\n",
+		   __func__, ((tPara == 0) ? "disable" : "enable"));
+
+	ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_DISABLE_NORM_TABLE,
+				   &tPara, 1);
+
+	if (ret < 0) {
+		input_err(true, &ts->client->dev,
+			  "%s: cmd write failed\n", __func__);
+		sec->cmd_state = SEC_CMD_STATUS_FAIL;
+		sec_cmd_set_cmd_result(sec, "NG", 2);
+	} else {
+		sec->cmd_state = SEC_CMD_STATUS_OK;
+		sec_cmd_set_cmd_result(sec, "OK", 2);
+	}
+
+	ret = sec_ts_release_tmode(ts);
+	if (ret < 0)
+		input_err(true, &ts->client->dev, "%s: fail to release tmode\n",
+			  __func__);
 }
 
 static void run_trx_short_test(void *device_data)
