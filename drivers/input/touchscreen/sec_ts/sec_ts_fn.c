@@ -3738,14 +3738,36 @@ static void run_fs_cal_get_average(void *device_data)
 			goto SetCmdResult;
 		}
 
-		buff_len += scnprintf(buff + buff_len, buff_size - buff_len,
-				      "OK\n");
-		sec->cmd_state = SEC_CMD_STATUS_OK;
-
-		/* TODO: postcal_mean calculation - handle notch area */
 		mean = sec_ts_get_postcal_mean(ts);
+		ts->fs_postcal_mean = mean;
+
 		input_info(true, &ts->client->dev,
 			   "%s : FS mean = %d\n", __func__, mean);
+
+		if ((mean > fs_mean_target_h) || (mean < fs_mean_target_l)) {
+			buff_len += scnprintf(buff + buff_len,
+					      buff_size - buff_len,
+					      "NG %d %d\n",
+					      ts->rx_count, ts->tx_count);
+			sec->cmd_state = SEC_CMD_STATUS_FAIL;
+		} else {
+			buff_len += scnprintf(buff + buff_len,
+					      buff_size - buff_len,
+					      "OK %d %d\n",
+					      ts->rx_count, ts->tx_count);
+			sec->cmd_state = SEC_CMD_STATUS_OK;
+		}
+
+		for (i = 0; i < ts->tx_count * ts->rx_count; i++) {
+			buff_len += scnprintf(buff + buff_len,
+					      buff_size - buff_len, "%4d,",
+					      ts->pFrame[i]);
+
+			if (i % ts->tx_count == ts->tx_count - 1)
+				buff_len += scnprintf(buff + buff_len,
+						      buff_size - buff_len,
+						      "\n");
+		}
 	}
 
 SetCmdResult:
