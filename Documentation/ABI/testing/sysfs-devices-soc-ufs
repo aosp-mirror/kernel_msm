@@ -1,3 +1,9 @@
+What:		/sys/devices/soc/X.ufshc/erasesize
+Date:		April 2018
+contact:	Jaegeuk Kim <jaegeuk@google.com>
+Description:
+		This file shows the size of erase operation reported by UFS.
+
 What:		/sys/devices/soc/X.ufshc/health
 Date:		September 2017
 contact:	Jaegeuk Kim <jaegeuk@google.com>
@@ -23,3 +29,7 @@ Description:
 		  09h: 80% ~ 90% device life time used
 		  0Ah: 90% ~ 100% device life time used
 		  0Bh: Exceeded its maximum estimated device life time
+		- erasecount
+		  average erase count
+		- totalwrite
+		  total host data writes in 100MB

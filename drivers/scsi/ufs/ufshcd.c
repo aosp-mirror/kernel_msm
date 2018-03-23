@@ -10611,11 +10611,69 @@ slowio_cnt_show(struct device *dev, struct device_attribute *attr, char *buf)
 	return snprintf(buf, PAGE_SIZE, "%lld\n", hba->slowio_cnt);
 }
 
+static ssize_t
+erasesize_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	u32 erasesize = 0;
+	int ret = -EOPNOTSUPP;
+	int i;
+
+	for (i = 0; i < UFS_UPIU_MAX_GENERAL_LUN; i++) {
+		ret = ufshcd_read_unit_desc_param(hba,
+				i, UNIT_DESC_PARAM_ERASE_BLK_SIZE,
+				(u8 *)&erasesize, sizeof(erasesize));
+		if (ret == -EOPNOTSUPP)
+			continue;
+		/* Got a valid one, and should be same as others. */
+		break;
+	}
+	return snprintf(buf, PAGE_SIZE, "0x%x\n", ret ? 0 : erasesize);
+}
+
+static ssize_t
+vendor_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	return snprintf(buf, PAGE_SIZE, "%.8s\n", hba->sdev_ufs_device->vendor);
+}
+
+static ssize_t
+model_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	return snprintf(buf, PAGE_SIZE, "%.16s\n", hba->sdev_ufs_device->model);
+}
+
+static ssize_t
+rev_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	return snprintf(buf, PAGE_SIZE, "%.4s\n", hba->sdev_ufs_device->rev);
+}
+
+static ssize_t
+version_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	return snprintf(buf, PAGE_SIZE, "0x%x\n", hba->ufs_version);
+}
+
 static DEVICE_ATTR_RW(rpm_lvl);
 static DEVICE_ATTR_RW(spm_lvl);
 static DEVICE_ATTR_RW(latency_hist);
 static DEVICE_ATTR_RW(slowio_us);
 static DEVICE_ATTR_RW(slowio_cnt);
+static DEVICE_ATTR_RO(erasesize);
+static DEVICE_ATTR_RO(vendor);
+static DEVICE_ATTR_RO(model);
+static DEVICE_ATTR_RO(rev);
+static DEVICE_ATTR_RO(version);
 
 static struct attribute *ufshcd_attrs[] = {
 	&dev_attr_rpm_lvl.attr,
@@ -10623,6 +10681,11 @@ static struct attribute *ufshcd_attrs[] = {
 	&dev_attr_latency_hist.attr,
 	&dev_attr_slowio_us.attr,
 	&dev_attr_slowio_cnt.attr,
+	&dev_attr_erasesize.attr,
+	&dev_attr_vendor.attr,
+	&dev_attr_model.attr,
+	&dev_attr_rev.attr,
+	&dev_attr_version.attr,
 	NULL
 };
 
@@ -10633,6 +10696,7 @@ static const struct attribute_group ufshcd_attr_group = {
 struct health_attr {
 	struct device_attribute attr;
 	int bytes;
+	int len;
 };
 
 static ssize_t health_attr_show(struct device *dev,
@@ -10642,19 +10706,35 @@ static ssize_t health_attr_show(struct device *dev,
 	struct ufs_hba *hba = dev_get_drvdata(dev);
 	int buff_len = hba->desc_size.health_desc;
 	u8 desc_buf[hba->desc_size.health_desc];
+	u32 value = 0;
 	int err;
 
 	pm_runtime_get_sync(hba->dev);
 	err = ufshcd_read_desc(hba, QUERY_DESC_IDN_HEALTH, 0,
 					desc_buf, buff_len);
 	pm_runtime_put_sync(hba->dev);
-	if (err)
+	if (err || (attr->bytes + attr->len) > desc_buf[0])
 		return 0;
 
-	return scnprintf(buf, PAGE_SIZE, "0x%02x", desc_buf[attr->bytes]);
+	switch (attr->len) {
+	case 1:
+		return scnprintf(buf, PAGE_SIZE, "0x%02x\n",
+					desc_buf[attr->bytes]);
+	case 2:
+		value = desc_buf[attr->bytes] << 8;
+		value += desc_buf[attr->bytes + 1];
+		return scnprintf(buf, PAGE_SIZE, "%u\n", value);
+	case 4:
+		value = desc_buf[attr->bytes] << 24;
+		value += desc_buf[attr->bytes + 1] << 16;
+		value += desc_buf[attr->bytes + 2] << 8;
+		value += desc_buf[attr->bytes + 3];
+		return scnprintf(buf, PAGE_SIZE, "%u\n", value);
+	}
+	return 0;
 }
 
-#define HEALTH_ATTR_RO(_name, _bytes)					\
+#define HEALTH_ATTR_RO(_name, _bytes, _len)				\
 static struct health_attr ufs_health_##_name = {			\
 	.attr = {							\
 		.attr = {						\
@@ -10664,13 +10744,16 @@ static struct health_attr ufs_health_##_name = {			\
 		.show = health_attr_show,				\
 	},								\
 	.bytes = _bytes,						\
+	.len = _len,							\
 }
 
-HEALTH_ATTR_RO(length, 0);
-HEALTH_ATTR_RO(type, 1);
-HEALTH_ATTR_RO(eol, 2);
-HEALTH_ATTR_RO(lifetimeA, 3);
-HEALTH_ATTR_RO(lifetimeB, 4);
+HEALTH_ATTR_RO(length, 0, 1);
+HEALTH_ATTR_RO(type, 1, 1);
+HEALTH_ATTR_RO(eol, 2, 1);
+HEALTH_ATTR_RO(lifetimeA, 3, 1);
+HEALTH_ATTR_RO(lifetimeB, 4, 1);
+HEALTH_ATTR_RO(erasecount, 13, 2);
+HEALTH_ATTR_RO(totalwrite, 21, 4);
 
 static struct attribute *ufshcd_health_attrs[] = {
 	&ufs_health_length.attr.attr,
@@ -10678,6 +10761,8 @@ static struct attribute *ufshcd_health_attrs[] = {
 	&ufs_health_eol.attr.attr,
 	&ufs_health_lifetimeA.attr.attr,
 	&ufs_health_lifetimeB.attr.attr,
+	&ufs_health_erasecount.attr.attr,
+	&ufs_health_totalwrite.attr.attr,
 	NULL
 };
 
