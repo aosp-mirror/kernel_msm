@@ -55,10 +55,6 @@
 		qcom,mdss-dsi-panel-on-command = [
 			05 01 00 00 00 00 01 29 /* Display On */
 			];
-		qcom,mdss-dsi-post-panel-on-command = [
-			39 01 00 00 00 00 01 2C
-			39 01 00 00 00 00 01 3C
-			];
 		qcom,mdss-dsi-off-command = [
 			15 01 00 00 00 00 02 FF 20
 			15 01 00 00 00 00 02 FB 01
@@ -70,7 +66,6 @@
 			];
 		qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
 		qcom,mdss-dsi-panel-on-command-state = "dsi_lp_mode";
-		qcom,mdss-dsi-post-panel-on-command-state = "dsi_hs_mode";
 		qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
 		qcom,mdss-dsi-h-sync-pulse = <1>;
 		qcom,mdss-dsi-traffic-mode = "burst_mode";
@@ -510,10 +505,6 @@
 		qcom,mdss-dsi-panel-on-command = [
 			05 01 00 00 00 00 01 29 /* Display On */
 			];
-		qcom,mdss-dsi-post-panel-on-command = [
-			39 01 00 00 00 00 01 2C
-			39 01 00 00 00 00 01 3C
-			];
 		qcom,mdss-dsi-off-command = [
 			15 01 00 00 00 00 02 FF 20
 			15 01 00 00 00 00 02 FB 01
@@ -525,7 +516,6 @@
 			];
 		qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
 		qcom,mdss-dsi-panel-on-command-state = "dsi_lp_mode";
-		qcom,mdss-dsi-post-panel-on-command-state = "dsi_hs_mode";
 		qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
 		qcom,mdss-dsi-h-sync-pulse = <1>;
 		qcom,mdss-dsi-traffic-mode = "burst_mode";
