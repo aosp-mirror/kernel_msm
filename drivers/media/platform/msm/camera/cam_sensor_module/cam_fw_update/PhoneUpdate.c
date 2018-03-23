@@ -21,12 +21,11 @@
 #elif	MODULE_VENDOR == 9 && MDL_VER == 1
 #include	"FromCode_09_05_05.h"
 #include	"FromCode_09_05_07.h"
-//#elif
-//#include	"FromCode_09_0E_06.h"
-//#include	"FromCode_09_0E_08.h"
 #else
 #include	"FromCode_04_17_00.h"
 #include	"FromCode_04_17_01.h"
+#include	"FromCode_09_17_00.h"
+#include	"FromCode_09_17_01.h"
 #endif
 
 
@@ -63,22 +62,31 @@ extern void	WitTim( UINT_16 );
 
 const DOWNLOAD_TBL DTbl[] = {
 #if		MODULE_VENDOR == 4
-	{0x0406, CcMagicCodeF40_04_05_06, sizeof(CcMagicCodeF40_04_05_06), CcFromCodeF40_04_05_06, sizeof(CcFromCodeF40_04_05_06) },
-	{0x0408, CcMagicCodeF40_04_05_08, sizeof(CcMagicCodeF40_04_05_08), CcFromCodeF40_04_05_08, sizeof(CcFromCodeF40_04_05_08) },
+	{0x0406, CcMagicCodeF40_04_05_06, sizeof(CcMagicCodeF40_04_05_06),
+		CcFromCodeF40_04_05_06, sizeof(CcFromCodeF40_04_05_06) },
+	{0x0408, CcMagicCodeF40_04_05_08, sizeof(CcMagicCodeF40_04_05_08),
+		CcFromCodeF40_04_05_08, sizeof(CcFromCodeF40_04_05_08) },
 #elif	MODULE_VENDOR == 9 && MDL_VER == 2
-	{0x0906, CcMagicCodeF40_09_05_06, sizeof(CcMagicCodeF40_09_05_06), CcFromCodeF40_09_05_06, sizeof(CcFromCodeF40_09_05_06) },
-	{0x0908, CcMagicCodeF40_09_05_08, sizeof(CcMagicCodeF40_09_05_08), CcFromCodeF40_09_05_08, sizeof(CcFromCodeF40_09_05_08) },
+	{0x0906, CcMagicCodeF40_09_05_06, sizeof(CcMagicCodeF40_09_05_06),
+		CcFromCodeF40_09_05_06, sizeof(CcFromCodeF40_09_05_06) },
+	{0x0908, CcMagicCodeF40_09_05_08, sizeof(CcMagicCodeF40_09_05_08),
+		CcFromCodeF40_09_05_08, sizeof(CcFromCodeF40_09_05_08) },
 #elif	MODULE_VENDOR == 9 && MDL_VER == 1
-	{0x0905, CcMagicCodeF40_09_05_05, sizeof(CcMagicCodeF40_09_05_05), CcFromCodeF40_09_05_05, sizeof(CcFromCodeF40_09_05_05) },
-	{0x0907, CcMagicCodeF40_09_05_07, sizeof(CcMagicCodeF40_09_05_07), CcFromCodeF40_09_05_07, sizeof(CcFromCodeF40_09_05_07) },
-//#elif
-//	{0x0906, CcMagicCodeF40_09_0E_06, sizeof(CcMagicCodeF40_09_0E_06), CcFromCodeF40_09_0E_06, sizeof(CcFromCodeF40_09_0E_06) },
-//	{0x0908, CcMagicCodeF40_09_0E_08, sizeof(CcMagicCodeF40_09_0E_08), CcFromCodeF40_09_0E_08, sizeof(CcFromCodeF40_09_0E_08) },
+	{0x0905, CcMagicCodeF40_09_05_05, sizeof(CcMagicCodeF40_09_05_05),
+		CcFromCodeF40_09_05_05, sizeof(CcFromCodeF40_09_05_05) },
+	{0x0907, CcMagicCodeF40_09_05_07, sizeof(CcMagicCodeF40_09_05_07),
+		CcFromCodeF40_09_05_07, sizeof(CcFromCodeF40_09_05_07) },
 #else
-	{0x0400, CcMagicCodeF40_04_17_00, sizeof(CcMagicCodeF40_04_17_00), CcFromCodeF40_04_17_00, sizeof(CcFromCodeF40_04_17_00) },
-	{0x0401, CcMagicCodeF40_04_17_01, sizeof(CcMagicCodeF40_04_17_01), CcFromCodeF40_04_17_01, sizeof(CcFromCodeF40_04_17_01) },
+	{0x0400, CcMagicCodeF40_04_17_00, sizeof(CcMagicCodeF40_04_17_00),
+		CcFromCodeF40_04_17_00, sizeof(CcFromCodeF40_04_17_00) },
+	{0x0401, CcMagicCodeF40_04_17_01, sizeof(CcMagicCodeF40_04_17_01),
+		CcFromCodeF40_04_17_01, sizeof(CcFromCodeF40_04_17_01) },
+	{0x0900, CcMagicCodeF40_09_17_00, sizeof(CcMagicCodeF40_09_17_00),
+		CcFromCodeF40_09_17_00, sizeof(CcFromCodeF40_09_17_00) },
+	{0x0901, CcMagicCodeF40_09_17_01, sizeof(CcMagicCodeF40_09_17_01),
+		CcFromCodeF40_09_17_01, sizeof(CcFromCodeF40_09_17_00) },
 #endif
-	{0xFFFF, (void *)0,                0,                               (void *)0,               0                              }
+	{0xFFFF, (void *)0, 0, (void *)0, 0}
 };
 
 //**************************
