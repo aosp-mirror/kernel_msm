@@ -1005,6 +1005,73 @@ static int sec_ts_get_postcal_mean(struct sec_ts_data *ts)
 	return sum;
 }
 
+static int sec_ts_get_postcal_uniformity(struct sec_ts_data *ts, short *diff)
+{
+	int pos1, pos2;
+	short dpos1, dpos2, gap;
+	int i = 0;
+	int j = 0;
+	int specover_cnt = 0;
+
+	for (i = 0; i < ts->rx_count; i++) {
+		for (j = 0; j < ts->tx_count - 1; j++) {
+			/* At the notch boundary, skip (leave gap as 0)
+			 * if node[row][col] or node[row][col+1] is 0,
+			 * it is notch boundary for column direction
+			 */
+			if ((fs_target[i][j] == 0) ||
+			    (fs_target[i][j + 1] == 0))
+				continue;
+
+			pos1 = (i * ts->tx_count) + j;
+			pos2 = (i * ts->tx_count) + (j + 1);
+
+			dpos1 = ts->pFrame[pos1];
+			dpos2 = ts->pFrame[pos2];
+
+			gap = (dpos1 > dpos2) ? (dpos1 - dpos2) :
+						(dpos2 - dpos1);
+
+			diff[pos1] = gap;
+		}
+	}
+
+	for (i = 0; i < ts->rx_count - 1; i++) {
+		for (j = 0; j < ts->tx_count; j++) {
+			/* At the notch boundary, skip (leave gap as 0)
+			 * if node[row][col] or node[row+1][col] is 0,
+			 * it is notch boundary for row direction
+			 */
+			if ((fs_target[i][j] == 0) ||
+			    (fs_target[i + 1][j] == 0))
+				continue;
+
+			pos1 = (i * ts->tx_count) + j;
+			pos2 = ((i + 1) * ts->tx_count) + j;
+
+			dpos1 = ts->pFrame[pos1];
+			dpos2 = ts->pFrame[pos2];
+
+			gap = (dpos1 > dpos2) ? (dpos1 - dpos2) :
+						(dpos2 - dpos1);
+
+			/* find max gap between x and y direction */
+			if (diff[pos1] < gap)
+				diff[pos1] = gap;
+		}
+	}
+
+	for (i = 0; i < ts->rx_count * ts->tx_count; i++) {
+		/* since spec is in % unit, multiply 100 */
+		diff[i] *= 100;
+		diff[i] /= (ts->fs_postcal_mean);
+		if (diff[i] > fs_postcal_uniform_spec)
+			specover_cnt++;
+	}
+
+	return specover_cnt;
+}
+
 static void sec_ts_print_frame(struct sec_ts_data *ts, short *min, short *max)
 {
 	int i = 0;

@@ -256,6 +256,8 @@ const unsigned int fs_mean_target_h = 269;
 
 const unsigned int fs_mean_target_l = 291;
 
+const unsigned int fs_postcal_uniform_spec = 4;
+
 const unsigned int fs_precal_l[37][18] = {
 	{278, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 278},
 	{280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280},
