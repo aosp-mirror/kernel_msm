@@ -3690,6 +3690,7 @@ static void run_fs_cal_get_average(void *device_data)
 	struct sec_ts_data *ts = container_of(sec, struct sec_ts_data, sec);
 	struct sec_ts_test_mode mode;
 	u8 *gainTable = NULL;
+	short *diff_table = NULL;
 	const bool only_average = true;
 	char *buff;
 	int ret;
@@ -3710,7 +3711,7 @@ static void run_fs_cal_get_average(void *device_data)
 		return;
 	}
 
-	if (sec->cmd_param[0] < 0 || sec->cmd_param[0] > 2) {
+	if (sec->cmd_param[0] < 0 || sec->cmd_param[0] > 3) {
 		input_err(true, &ts->client->dev,
 			  "%s: Parameter Error\n", __func__);
 		sec_cmd_set_cmd_result(sec, "NG", 2);
@@ -3799,7 +3800,7 @@ static void run_fs_cal_get_average(void *device_data)
 			buff_len += scnprintf(buff + buff_len,
 					      buff_size - buff_len, "\n");
 		}
-	} else {
+	} else if (sec->cmd_param[0] == 2) {
 		int mean;
 		/* for stim pad fixture 2 */
 		mode.type = TYPE_NORM2_DATA;
@@ -3844,12 +3845,56 @@ static void run_fs_cal_get_average(void *device_data)
 						      buff_size - buff_len,
 						      "\n");
 		}
+	} else { //(sec->cmd_param[0] == 3)
+		/* get fs_uniformity */
+
+		diff_table = kzalloc(ts->tx_count * ts->rx_count * 2,
+				GFP_KERNEL);
+
+		if ((diff_table == NULL) || (ts->fs_postcal_mean == 0)) {
+			input_err(true, &ts->client->dev,
+					"%s: fail to alloc diffTable, postcal mean = %d\n",
+					__func__, ts->fs_postcal_mean);
+			buff_len += scnprintf(buff + buff_len,
+					      buff_size - buff_len, "NG %d %d",
+					      ts->rx_count, ts->tx_count);
+			sec->cmd_state = SEC_CMD_STATUS_FAIL;
+			goto SetCmdResult;
+		}
+
+		ret = sec_ts_get_postcal_uniformity(ts, diff_table);
+
+		if (ret == 0) {
+			buff_len += scnprintf(buff + buff_len,
+					      buff_size - buff_len,
+					      "OK %d %d\n",
+					      ts->rx_count, ts->tx_count);
+			sec->cmd_state = SEC_CMD_STATUS_OK;
+		} else {
+			buff_len += scnprintf(buff + buff_len,
+					      buff_size - buff_len,
+					      "NG %d %d\n",
+					      ts->rx_count, ts->tx_count);
+			sec->cmd_state = SEC_CMD_STATUS_FAIL;
+		}
+
+		for (i = 0; i < ts->tx_count * ts->rx_count; i++) {
+			buff_len += scnprintf(buff + buff_len,
+					      buff_size - buff_len, "%4d,",
+					      diff_table[i]);
+
+			if (i % ts->tx_count == ts->tx_count - 1)
+				buff_len += scnprintf(buff + buff_len,
+						      buff_size - buff_len,
+						      "\n");
+		}
 	}
 
 SetCmdResult:
 
 	sec_cmd_set_cmd_result(sec, buff, buff_len);
 
+	kfree(diff_table);
 	kfree(gainTable);
 	kfree(buff);
 }
