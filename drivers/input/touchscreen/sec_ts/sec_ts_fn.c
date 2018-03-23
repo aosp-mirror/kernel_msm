@@ -981,17 +981,26 @@ ErrorAlloc:
 	return ret;
 }
 
+/* sec_ts_get_postcal_mean : get mean value for all nodes */
 static int sec_ts_get_postcal_mean(struct sec_ts_data *ts)
 {
-	int i;
+	int i, j;
 	int sum = 0;
-	const unsigned int node_cnt = ts->tx_count * ts->rx_count;
+	int nCnt = 0;
 
-	for (i = 0; i < node_cnt; i++)
-		/* TODO: postcal_mean calculation - handle notch area */
-		sum += ts->pFrame[i];
+	for (i = 0; i < ts->rx_count; i++) {
+		for (j = 0; j < ts->tx_count; j++) {
+			if (fs_target[i][j] == 0) {
+				/* Count notch nodes, where fs target is 0 */
+				nCnt++;
+				continue;
+			}
+			sum += ts->pFrame[(i * ts->tx_count) + j];
+		}
+	}
 
-	sum = sum / node_cnt;
+	/* exclude notch area from average */
+	sum = sum / (ts->tx_count * ts->rx_count - nCnt);
 
 	return sum;
 }
