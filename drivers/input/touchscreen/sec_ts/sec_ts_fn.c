@@ -875,10 +875,9 @@ static int sec_ts_cs_spec_over_check(struct sec_ts_data *ts, short *gap)
 
 	return specover_count;
 }
-static int sec_ts_set_digital_gain(struct sec_ts_data *ts)
+static int sec_ts_set_gain_table(struct sec_ts_data *ts, u8 *gainTable)
 {
 	int i, j;
-	u8 *gainTable = NULL;
 	const unsigned int node_cnt = ts->tx_count * ts->rx_count;
 	int temp;
 	int tmp_dv;
@@ -891,10 +890,11 @@ static int sec_ts_set_digital_gain(struct sec_ts_data *ts)
 	input_info(true, &ts->client->dev, "%s\n", __func__);
 
 	ret = -1;
-	/* gain table - 1 byte per node */
-	gainTable = kzalloc(node_cnt, GFP_KERNEL);
-	if (gainTable == NULL)
+	if (gainTable == NULL) {
+		input_err(true, &ts->client->dev, "%s: gainTable null\n",
+				__func__);
 		return ret;
+	}
 
 	for (i = 0; i < ts->rx_count; i++) {
 		for (j = 0; j < ts->tx_count; j++) {
@@ -977,7 +977,6 @@ static int sec_ts_set_digital_gain(struct sec_ts_data *ts)
 ErrorAlloc:
 	kfree(tCmd);
 	kfree(pStr);
-	kfree(gainTable);
 
 	return ret;
 }
@@ -3614,10 +3613,11 @@ static void run_fs_cal_get_average(void *device_data)
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
 	struct sec_ts_data *ts = container_of(sec, struct sec_ts_data, sec);
 	struct sec_ts_test_mode mode;
+	u8 *gainTable = NULL;
 	const bool only_average = true;
 	char *buff;
 	int ret;
-	int i;
+	int i, j;
 	const unsigned int buff_size = ts->tx_count * ts->rx_count *
 				       CMD_RESULT_WORD_LEN;
 	unsigned int buff_len = 0;
@@ -3634,7 +3634,7 @@ static void run_fs_cal_get_average(void *device_data)
 		return;
 	}
 
-	if (sec->cmd_param[0] < 0 || sec->cmd_param[0] > 1) {
+	if (sec->cmd_param[0] < 0 || sec->cmd_param[0] > 2) {
 		input_err(true, &ts->client->dev,
 			  "%s: Parameter Error\n", __func__);
 		sec_cmd_set_cmd_result(sec, "NG", 2);
@@ -3683,8 +3683,46 @@ static void run_fs_cal_get_average(void *device_data)
 						      buff_size - buff_len,
 						      "\n");
 		}
+	} else if (sec->cmd_param[0] == 1) {
+		/* calculate gain table, send to ic */
 
-		sec_ts_set_digital_gain(ts);
+		/* gain table size = 1 byte per node */
+		gainTable = kzalloc(ts->tx_count * ts->rx_count, GFP_KERNEL);
+		if (gainTable == NULL) {
+			input_err(true, &ts->client->dev,
+				  "%s: fail to alloc gainTable\n", __func__);
+			buff_len += scnprintf(buff + buff_len,
+					      buff_size - buff_len, "NG %d %d",
+					      ts->rx_count, ts->tx_count);
+			sec->cmd_state = SEC_CMD_STATUS_FAIL;
+			goto SetCmdResult;
+		}
+
+		ret = sec_ts_set_gain_table(ts, gainTable);
+		if (ret < 0) {
+			buff_len += scnprintf(buff + buff_len,
+					      buff_size - buff_len,
+					      "NG %d %d\n",
+					      ts->rx_count, ts->tx_count);
+			sec->cmd_state = SEC_CMD_STATUS_FAIL;
+		} else {
+			buff_len += scnprintf(buff + buff_len,
+					      buff_size - buff_len,
+					      "OK %d %d\n",
+					      ts->rx_count, ts->tx_count);
+			sec->cmd_state = SEC_CMD_STATUS_OK;
+		}
+
+		for (j = 0; j < ts->rx_count; j++) {
+			for (i = 0; i < ts->tx_count; i++) {
+				buff_len += scnprintf(buff + buff_len,
+						buff_size - buff_len,
+						"%4d,",
+						gainTable[i*ts->rx_count + j]);
+			}
+			buff_len += scnprintf(buff + buff_len,
+					      buff_size - buff_len, "\n");
+		}
 	} else {
 		int mean;
 		/* for stim pad fixture 2 */
@@ -3714,6 +3752,7 @@ SetCmdResult:
 
 	sec_cmd_set_cmd_result(sec, buff, buff_len);
 
+	kfree(gainTable);
 	kfree(buff);
 }
 
