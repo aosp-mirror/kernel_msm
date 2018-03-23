@@ -899,14 +899,21 @@ static int sec_ts_set_digital_gain(struct sec_ts_data *ts)
 	for (i = 0; i < ts->rx_count; i++) {
 		for (j = 0; j < ts->tx_count; j++) {
 			tmp_dv = ts->pFrame[i * ts->tx_count + j];
-			/* For TEST */
+
+			/* skip notch area */
+			/* fs_target for notch area is 0 */
+			if (fs_target[i][j] == 0) {
+				gainTable[j * ts->rx_count + i] = 0;
+				continue;
+			}
+
 			if (tmp_dv <= 0) {
 				input_info(true, &ts->client->dev,
 					"%s: node[%d,%d] == 0\n", __func__, i,
 					j);
 				tmp_dv = 1;
 			}
-			/* For TEST */
+
 			temp = (fs_target[i][j] * 1000) / (tmp_dv) * 64;
 			temp = temp / 1000;
 			if (temp > 255)
