@@ -493,9 +493,11 @@ static struct bio *f2fs_grab_read_bio(struct inode *inode, block_t blkaddr,
 	struct bio *bio;
 
 	if (f2fs_encrypted_file(inode)) {
-		ctx = fscrypt_get_ctx(inode, GFP_NOFS);
-		if (IS_ERR(ctx))
-			return ERR_CAST(ctx);
+		if (!fscrypt_using_hardware_encryption(inode)) {
+			ctx = fscrypt_get_ctx(inode, GFP_NOFS);
+			if (IS_ERR(ctx))
+				return ERR_CAST(ctx);
+		}
 
 		/* wait the page to be moved by cleaning */
 		f2fs_wait_on_block_writeback(sbi, blkaddr);
@@ -509,8 +511,7 @@ static struct bio *f2fs_grab_read_bio(struct inode *inode, block_t blkaddr,
 	}
 	f2fs_target_device(sbi, blkaddr, bio);
 	bio->bi_end_io = f2fs_read_end_io;
-	if (!fscrypt_using_hardware_encryption(inode))
-		bio->bi_private = ctx;
+	bio->bi_private = ctx;
 	bio_set_op_attrs(bio, REQ_OP_READ, 0);
 
 	return bio;
