@@ -75,7 +75,7 @@ static void set_pressure_user_level(void *device_data);
 static void get_pressure_user_level(void *device_data);
 #endif
 static void run_fs_cal_pre_press(void *device_data);
-static void run_fs_cal_get_average(void *device_data);
+static void run_fs_cal_get_data(void *device_data);
 static void run_fs_cal_post_press(void *device_data);
 static void enable_fs_cal_table(void *device_data);
 static void run_trx_short_test(void *device_data);
@@ -166,7 +166,7 @@ static struct sec_cmd sec_cmds[] = {
 	{SEC_CMD("get_pressure_user_level", get_pressure_user_level),},
 #endif
 	{SEC_CMD("run_fs_cal_pre_press", run_fs_cal_pre_press),},
-	{SEC_CMD("run_fs_cal_get_average", run_fs_cal_get_average),},
+	{SEC_CMD("run_fs_cal_get_data", run_fs_cal_get_data),},
 	{SEC_CMD("run_fs_cal_post_press", run_fs_cal_post_press),},
 	{SEC_CMD("enable_fs_cal_table", enable_fs_cal_table),},
 	{SEC_CMD("run_trx_short_test", run_trx_short_test),},
@@ -3684,7 +3684,7 @@ ErrorPowerOff:
 	sec->cmd_state = SEC_CMD_STATUS_NOT_APPLICABLE;
 }
 
-static void run_fs_cal_get_average(void *device_data)
+static void run_fs_cal_get_data(void *device_data)
 {
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
 	struct sec_ts_data *ts = container_of(sec, struct sec_ts_data, sec);
