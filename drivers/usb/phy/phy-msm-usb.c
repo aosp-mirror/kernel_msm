@@ -2773,6 +2773,11 @@ static void msm_otg_sm_work(struct work_struct *w)
 				get_pm_runtime_counter(otg->phy->dev), 0);
 			/* Delay used only if autosuspend enabled */
 			pm_runtime_mark_last_busy(dev);
+			if(dev->power.usage_count.counter > 1) {
+				pr_err("usage_count = %d is error and adjust it  to 1\n",
+					dev->power.usage_count.counter);
+				atomic_set(&dev->power.usage_count, 1);
+			}
 			pm_runtime_put_autosuspend(dev);
 		}
 		break;
