@@ -2650,12 +2650,25 @@ static int fg_get_cycle_count(struct fg_chip *chip)
 	if (!chip->cyc_ctr.en)
 		return 0;
 
+#ifdef CONFIG_QPNP_FG_GEN3_LEGACY_CYCLE_COUNT
 	if ((chip->cyc_ctr.id <= 0) || (chip->cyc_ctr.id > BUCKET_COUNT))
 		return -EINVAL;
 
 	mutex_lock(&chip->cyc_ctr.lock);
 	count = chip->cyc_ctr.count[chip->cyc_ctr.id - 1];
 	mutex_unlock(&chip->cyc_ctr.lock);
+#else
+	mutex_lock(&chip->cyc_ctr.lock);
+	{
+		int i;
+
+		count = 0;
+		for (i = 0 ; i < BUCKET_COUNT; i++)
+			count += chip->cyc_ctr.count[i];
+		count = DIV_ROUND_CLOSEST(count, 8);
+	}
+	mutex_unlock(&chip->cyc_ctr.lock);
+#endif
 	return count;
 }
 
@@ -3373,9 +3386,11 @@ static int fg_psy_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CYCLE_COUNT:
 		pval->intval = fg_get_cycle_count(chip);
 		break;
+#ifdef CONFIG_QPNP_FG_GEN3_LEGACY_CYCLE_COUNT
 	case POWER_SUPPLY_PROP_CYCLE_COUNT_ID:
 		pval->intval = chip->cyc_ctr.id;
 		break;
+#endif
 	case POWER_SUPPLY_PROP_CHARGE_NOW_RAW:
 		rc = fg_get_charge_raw(chip, &pval->intval);
 		break;
@@ -3423,9 +3438,10 @@ static int fg_psy_set_property(struct power_supply *psy,
 				  const union power_supply_propval *pval)
 {
 	struct fg_chip *chip = power_supply_get_drvdata(psy);
-	int rc = 0;
+	int rc = -EINVAL;
 
 	switch (psp) {
+#ifdef CONFIG_QPNP_FG_GEN3_LEGACY_CYCLE_COUNT
 	case POWER_SUPPLY_PROP_CYCLE_COUNT_ID:
 		if ((pval->intval > 0) && (pval->intval <= BUCKET_COUNT)) {
 			chip->cyc_ctr.id = pval->intval;
@@ -3435,6 +3451,7 @@ static int fg_psy_set_property(struct power_supply *psy,
 			return -EINVAL;
 		}
 		break;
+#endif
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE:
 		rc = fg_set_constant_chg_voltage(chip, pval->intval);
 		break;
@@ -3449,7 +3466,9 @@ static int fg_property_is_writeable(struct power_supply *psy,
 						enum power_supply_property psp)
 {
 	switch (psp) {
+#ifdef CONFIG_QPNP_FG_GEN3_LEGACY_CYCLE_COUNT
 	case POWER_SUPPLY_PROP_CYCLE_COUNT_ID:
+#endif
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE:
 		return 1;
 	default:
@@ -3502,7 +3521,9 @@ static enum power_supply_property fg_psy_props[] = {
 	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
 	POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN,
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
+#ifdef CONFIG_QPNP_FG_GEN3_LEGACY_CYCLE_COUNT
 	POWER_SUPPLY_PROP_CYCLE_COUNT_ID,
+#endif
 	POWER_SUPPLY_PROP_CHARGE_NOW_RAW,
 	POWER_SUPPLY_PROP_CHARGE_NOW,
 	POWER_SUPPLY_PROP_CHARGE_FULL,

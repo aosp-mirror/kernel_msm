@@ -1948,6 +1948,21 @@ int smblib_get_prop_batt_charge_counter(struct smb_charger *chg,
 	return rc;
 }
 
+#ifndef CONFIG_QPNP_FG_GEN3_LEGACY_CYCLE_COUNT
+int smblib_get_cycle_count(struct smb_charger *chg,
+			   union power_supply_propval *val)
+{
+	int rc;
+
+	if (!chg->bms_psy)
+		return -EINVAL;
+
+	rc = power_supply_get_property(chg->bms_psy,
+				       POWER_SUPPLY_PROP_CYCLE_COUNT, val);
+	return rc;
+}
+#endif
+
 /***********************
  * BATTERY PSY SETTERS *
  ***********************/
