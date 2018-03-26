@@ -1423,13 +1423,6 @@ static int sec_ts_read_channel(struct sec_ts_data *ts, u8 type, short *min,
  */
 	for (ii = 0; ii < data_length; ii += 2) {
 		ts->pFrame[jj] = ((pRead[ii] << 8) | pRead[ii + 1]);
-
-		if (ii == 0)
-			*min = *max = ts->pFrame[jj];
-
-		*min = min(*min, ts->pFrame[jj]);
-		*max = max(*max, ts->pFrame[jj]);
-
 		jj++;
 	}
 
@@ -1439,18 +1432,36 @@ static int sec_ts_read_channel(struct sec_ts_data *ts, u8 type, short *min,
 		int specover_count = 0;
 
 		if (type == TYPE_OFFSET_DATA_SDC) {
-			for (ii = 0; ii < ts->tx_count + ts->rx_count; ii++) {
-				if (ts->pFrame[ii] > cs_max)
+			min[0] = min[1] = SHRT_MAX;
+			max[0] = max[1] = SHRT_MIN;
+
+			for (ii = 0; ii < ts->tx_count; ii++) {
+				if (ts->pFrame[ii] > cs_tx_max)
 					specover_count++;
-				if (ts->pFrame[ii] < cs_min)
+				if (ts->pFrame[ii] < cs_tx_min)
 					specover_count++;
+
+				min[0] = min(min[0], ts->pFrame[ii]);
+				max[0] = max(max[0], ts->pFrame[ii]);
+			}
+			for (ii = ts->tx_count;
+			     ii < ts->tx_count + ts->rx_count; ii++) {
+				if (ts->pFrame[ii] > cs_rx_max)
+					specover_count++;
+				if (ts->pFrame[ii] < cs_rx_min)
+					specover_count++;
+
+				min[1] = min(min[1], ts->pFrame[ii]);
+				max[1] = max(max[1], ts->pFrame[ii]);
 			}
 		}
 
 		input_info(true, &ts->client->dev, "%s: type : %d, specover = %d\n",
 				__func__, type, specover_count);
 
-		if (specover_count == 0 && (*max - *min) < cs_mm)
+		if (specover_count == 0 &&
+			(max[0] - min[0]) < cs_tx_mm &&
+			(max[1] - min[1]) < cs_rx_mm)
 			*spec_check = SPEC_PASS;
 		else
 			*spec_check = SPEC_FAIL;
