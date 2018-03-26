@@ -855,7 +855,7 @@ static int sec_ts_cs_spec_over_check(struct sec_ts_data *ts, short *gap)
 
 		gap[i] = dTmp;
 
-		if (dTmp > cs_gap[i])
+		if (dTmp > cs_tx_gap)
 			specover_count++;
 	}
 
@@ -866,7 +866,7 @@ static int sec_ts_cs_spec_over_check(struct sec_ts_data *ts, short *gap)
 
 		gap[i] = dTmp;
 
-		if (dTmp > cs_gap[i])
+		if (dTmp > cs_rx_gap)
 			specover_count++;
 	}
 
