@@ -1189,8 +1189,6 @@ static int sec_ts_read_frame(struct sec_ts_data *ts, u8 type, short *min,
 	for (i = 0; i < readbytes; i += 2)
 		ts->pFrame[i / 2] = pRead[i + 1] + (pRead[i] << 8);
 
-	*min = *max = ts->pFrame[0];
-
 #ifdef DEBUG_MSG
 	input_info(true, &ts->client->dev, "%s: 02X%02X%02X readbytes=%d\n", __func__,
 			pRead[0], pRead[1], pRead[2], readbytes);
@@ -1214,23 +1212,37 @@ static int sec_ts_read_frame(struct sec_ts_data *ts, u8 type, short *min,
 		int specover_count = 0;
 
 		if (type == TYPE_OFFSET_DATA_SDC) {
+			unsigned int region = 0;
+			/* set initial value for min, max */
+			for (i = 0; i < REGION_TYPE_COUNT; i++) {
+				min[i] = SHRT_MAX;
+				max[i] = SHRT_MIN;
+			}
+
 			for (i = 0; i < ts->rx_count; i++) {
 				for (j = 0; j < ts->tx_count; j++) {
 					dTmp = ts->pFrame[i * ts->tx_count + j];
+					region = cm_region[i][j];
 
-					*min = min(*min, dTmp);
-					*max = max(*max, dTmp);
+					min[region] = min(min[region], dTmp);
+					max[region] = max(max[region], dTmp);
 
-					if (dTmp > cm_max[i][j])
+					if (dTmp > cm_max[region])
 						specover_count++;
-					if (dTmp < cm_min[i][j])
+					if (dTmp < cm_min[region])
 						specover_count++;
 				}
 			}
 			input_info(true, &ts->client->dev, "%s: type = %d, specover = %d\n",
 					__func__, type, specover_count);
 
-			if (specover_count == 0 && (*max - *min) < cm_mm)
+			if (specover_count == 0 &&
+			    (max[REGION_NORMAL] - min[REGION_NORMAL] <
+			     cm_mm[REGION_NORMAL]) &&
+			    (max[REGION_EDGE] - min[REGION_EDGE] <
+			     cm_mm[REGION_EDGE]) &&
+			    (max[REGION_CORNER] - min[REGION_CORNER] <
+			     cm_mm[REGION_CORNER]))
 				*spec_check = SPEC_PASS;
 			else
 				*spec_check = SPEC_FAIL;
@@ -1488,11 +1500,11 @@ int sec_ts_read_raw_data(struct sec_ts_data *ts,
 	}
 
 	if (mode->frame_channel)
-		ret = sec_ts_read_channel(ts, mode->type, &mode->min,
-					  &mode->max, &mode->spec_check);
+		ret = sec_ts_read_channel(ts, mode->type, mode->min,
+					  mode->max, &mode->spec_check);
 	else
-		ret = sec_ts_read_frame(ts, mode->type, &mode->min,
-					&mode->max, &mode->spec_check);
+		ret = sec_ts_read_frame(ts, mode->type, mode->min,
+					mode->max, &mode->spec_check);
 	if (ret < 0) {
 		input_err(true, &ts->client->dev, "%s: failed to read frame\n",
 				__func__);
@@ -1538,8 +1550,8 @@ int sec_ts_read_raw_data(struct sec_ts_data *ts,
 			}
 		}
 	} else {
-		buff_len = scnprintf(buff, buff_size, "%3d,%3d", mode->min,
-				     mode->max);
+		buff_len += scnprintf(buff + buff_len, buff_size - buff_len,
+				      "%3d,%3d", mode->min[0], mode->max[0]);
 	}
 
 	ret = sec_ts_release_tmode(ts);
@@ -2262,7 +2274,7 @@ static void run_rawcap_gap_read_all(void *device_data)
 	mode.allnode = TEST_MODE_ALL_NODE;
 	mode.spec_check = SPEC_NO_CHECK;
 
-	sec_ts_read_frame(ts, mode.type, &mode.min, &mode.max,
+	sec_ts_read_frame(ts, mode.type, mode.min, mode.max,
 			  &mode.spec_check);
 
 	ret_x = sec_ts_cm_spec_over_check(ts, gap_x, X_DIR);
@@ -2617,7 +2629,7 @@ static void run_rawdata_stdev_read(void *device_data)
 	mode.type = TYPE_REMV_AMB_DATA;
 	mode.spec_check = SPEC_CHECK;
 
-	sec_ts_read_frame_stdev(ts, sec, mode.type, &mode.min, &mode.max,
+	sec_ts_read_frame_stdev(ts, sec, mode.type, mode.min, mode.max,
 				&mode.spec_check, false);
 }
 
@@ -2660,7 +2672,7 @@ static int sec_ts_read_frame_p2p(struct sec_ts_data *ts,
 	/* get min data */
 	mode.type = TYPE_NOI_P2P_MIN;
 	mode.spec_check = SPEC_CHECK;
-	sec_ts_read_frame(ts, mode.type, &mode.min, &mode.max,
+	sec_ts_read_frame(ts, mode.type, mode.min, mode.max,
 			  &mode.spec_check);
 	if (mode.spec_check == SPEC_FAIL)
 		result |= 0x1;
@@ -2678,7 +2690,7 @@ static int sec_ts_read_frame_p2p(struct sec_ts_data *ts,
 	/* get max data */
 	mode.type = TYPE_NOI_P2P_MAX;
 	mode.spec_check = SPEC_CHECK;
-	sec_ts_read_frame(ts, mode.type, &mode.min, &mode.max,
+	sec_ts_read_frame(ts, mode.type, mode.min, mode.max,
 			  &mode.spec_check);
 	if (mode.spec_check == SPEC_FAIL)
 		result |= 0x2;
@@ -2837,7 +2849,7 @@ static void run_self_rawcap_gap_read_all(void *device_data)
 		goto ErrorAlloc;
 	}
 
-	sec_ts_read_channel(ts, mode.type, &mode.min, &mode.max,
+	sec_ts_read_channel(ts, mode.type, mode.min, mode.max,
 			    &mode.spec_check);
 
 	/* ret is number of spec over channel */
@@ -3729,8 +3741,8 @@ static void run_fs_cal_get_data(void *device_data)
 	if (sec->cmd_param[0] == 0) {
 		mode.type = TYPE_REMV_AMB_DATA;
 		mode.spec_check = SPEC_NO_CHECK;
-		ret = sec_ts_read_frame_stdev(ts, sec, mode.type, &mode.min,
-				&mode.max, &mode.spec_check, only_average);
+		ret = sec_ts_read_frame_stdev(ts, sec, mode.type, mode.min,
+				mode.max, &mode.spec_check, only_average);
 		if (ret < 0) {
 			buff_len += scnprintf(buff + buff_len,
 					      buff_size - buff_len, "NG");
@@ -3806,8 +3818,8 @@ static void run_fs_cal_get_data(void *device_data)
 		mode.type = TYPE_NORM2_DATA;
 		mode.spec_check = SPEC_NO_CHECK;
 
-		ret = sec_ts_read_frame_stdev(ts, sec, mode.type, &mode.min,
-				&mode.max, &mode.spec_check, only_average);
+		ret = sec_ts_read_frame_stdev(ts, sec, mode.type, mode.min,
+				mode.max, &mode.spec_check, only_average);
 		if (ret < 0) {
 			buff_len += scnprintf(buff + buff_len,
 					      buff_size - buff_len, "NG");
@@ -6013,7 +6025,7 @@ void sec_ts_fn_remove(struct sec_ts_data *ts)
  */
 void sec_ts_run_rawdata_all(struct sec_ts_data *ts, bool full_read)
 {
-	short min, max;
+	short min[REGION_TYPE_COUNT], max[REGION_TYPE_COUNT];
 	enum spec_check_type spec_check = SPEC_NO_CHECK;
 	int ret, i, read_num;
 	u8 test_type[5] = {TYPE_AMBIENT_DATA, TYPE_DECODED_DATA,
@@ -6044,7 +6056,7 @@ void sec_ts_run_rawdata_all(struct sec_ts_data *ts, bool full_read)
 	}
 
 	for (i = 0; i < read_num; i++) {
-		ret = sec_ts_read_frame(ts, test_type[i], &min, &max,
+		ret = sec_ts_read_frame(ts, test_type[i], min, max,
 					&spec_check);
 		if (ret < 0)
 			input_info(true, &ts->client->dev,
@@ -6053,12 +6065,12 @@ void sec_ts_run_rawdata_all(struct sec_ts_data *ts, bool full_read)
 		else
 			input_info(true, &ts->client->dev,
 					"%s: mutual %d : Max/Min %d,%d ##\n",
-					__func__, test_type[i], max, min);
+					__func__, test_type[i], max[0], min[0]);
 		sec_ts_delay(20);
 
 		if (full_read) {
-			ret = sec_ts_read_channel(ts, test_type[i], &min, &max,
-						  &spec_check);
+			ret = sec_ts_read_channel(ts, test_type[i], min,
+						  max, &spec_check);
 			if (ret < 0)
 				input_info(true, &ts->client->dev,
 						"%s: self %d : error ## ret:%d\n",
@@ -6066,8 +6078,8 @@ void sec_ts_run_rawdata_all(struct sec_ts_data *ts, bool full_read)
 			else
 				input_info(true, &ts->client->dev,
 						"%s: self %d : Max/Min %d,%d ##\n",
-						__func__, test_type[i], max,
-						min);
+						__func__, test_type[i], max[0],
+						min[0]);
 			sec_ts_delay(20);
 		}
 	}
