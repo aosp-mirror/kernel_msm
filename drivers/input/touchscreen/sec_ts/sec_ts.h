@@ -378,6 +378,17 @@ enum spec_check_type {
 	SPEC_FAIL			= 3,
 };
 
+enum region_type {
+	REGION_NORMAL			= 0,
+	REGION_EDGE			= 1,
+	REGION_CORNER			= 2,
+	REGION_NOTCH			= 3,
+	REGION_TYPE_COUNT		= 4,
+	/* REGION type should be continuous number start from 0,
+	 * since REGION_TYPE_COUNT is used for type count
+	 */
+};
+
 enum grip_write_mode {
 	G_NONE				= 0,
 	G_SET_EDGE_HANDLER		= 1,
@@ -511,8 +522,8 @@ enum tsp_hw_parameter {
 /* factory test mode */
 struct sec_ts_test_mode {
 	u8 type;
-	short min;
-	short max;
+	short min[REGION_TYPE_COUNT];
+	short max[REGION_TYPE_COUNT];
 	bool allnode;
 	bool frame_channel;
 	enum spec_check_type spec_check;
