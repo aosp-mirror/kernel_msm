@@ -466,6 +466,7 @@ Optional properties:
 					"reg_read_nt35596" = Reads panel status register to check the panel
 							     status for NT35596 panel.
 					"te_signal_check" = Uses TE signal behaviour to check the panel status
+					"irq_check" = Uses IRQ signal behaviour to check the panel status.
 - qcom,mdss-dsi-panel-status-read-length: Integer array that specify the expected read-back length of values
 					  for each of panel registers. Each length is corresponding to number of
 					  returned parameters of register introduced in specification.
@@ -566,6 +567,13 @@ Optional properties:
 					- length of the SN
 - qcom,mdss-dsi-dma-schedule-line:	An integer value indicates the line number after vertical active
 					region, at which command DMA needs to be triggered.
+- google,dsi-esd-irq			Specifies the pinctrl setting if qcom,mdss-dsi-panel-status-check-mode
+					is "irq_check".
+- google,esd-irq-mode			Specifies the interrupt line behaviour for ESD recovery.
+					"trigger_rising" = Triggered when signal is changed from low to high.
+					"trigger_falling" = Triggered when signal is changed from high to low.
+					"trigger_high" = Triggered when signal is high.
+					"trigger_low" = Triggered when signal is low.
 
 Required properties for sub-nodes:	None
 Optional properties:

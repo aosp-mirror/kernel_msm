@@ -808,6 +808,191 @@ enum dsi_pixel_format dsi_display_get_dst_format(void *display)
 	return format;
 }
 
+int dsi_display_get_esd_mode(void *display)
+{
+	struct dsi_display *dsi_display = display;
+	struct dsi_panel *panel;
+	int esd_mode;
+
+	if (!dsi_display)
+		return -ENODEV;
+
+	panel = dsi_display->panel;
+	if (!panel)
+		return -ENODEV;
+
+	esd_mode = panel->esd_config.status_mode;
+	if (esd_mode < 0 || esd_mode >= ESD_MODE_MAX)
+		return -EINVAL;
+
+	return esd_mode;
+}
+
+static void dsi_display_esd_irq_work(struct work_struct *work)
+{
+	struct dsi_display *display;
+	struct drm_connector *connector;
+
+	display = container_of(work, struct dsi_display, esd_irq_work);
+	connector = display->drm_conn;
+	if (!connector) {
+		pr_err("invalid drm connector\n");
+		return;
+	}
+
+	sde_connector_report_panel_dead(connector);
+}
+
+static irqreturn_t dsi_display_esd_irq_handler(int irq, void *data)
+{
+	struct dsi_display *display = (struct dsi_display *)data;
+
+	if (!display)
+		pr_err("invalid dsi display\n");
+	else
+		schedule_work(&display->esd_irq_work);
+
+	return IRQ_HANDLED;
+}
+
+void dsi_display_register_esd_irq(struct dsi_display *display)
+{
+	struct platform_device *pdev;
+	struct dsi_panel *panel;
+	int rc;
+
+	if (!display) {
+		pr_err("invalid dsi display\n");
+		return;
+	}
+
+	pdev = display->pdev;
+	if (!pdev) {
+		pr_err("invalid platform device\n");
+		return;
+	}
+
+	panel = display->panel;
+	if (!panel) {
+		pr_err("invalid panel\n");
+		return;
+	}
+
+	if (gpio_is_valid(panel->esd_config.irq_gpio)) {
+		rc = devm_request_irq(&pdev->dev,
+				gpio_to_irq(panel->esd_config.irq_gpio),
+				dsi_display_esd_irq_handler,
+				panel->esd_config.irq_mode,
+				"esd_isr", display);
+		if (rc) {
+			pr_err("esd irq request failed\n");
+			return;
+		}
+	} else {
+		pr_err("esd irq gpio is invalid\n");
+		return;
+	}
+
+	disable_irq(gpio_to_irq(panel->esd_config.irq_gpio));
+	panel->esd_config.irq_enabled = false;
+
+	pr_info("register esd irq success\n");
+}
+
+void dsi_display_esd_irq_prepare(struct dsi_display *display)
+{
+	struct dsi_panel *panel;
+
+	if (!display) {
+		pr_err("invalid dsi display\n");
+		return;
+	}
+
+	panel = display->panel;
+	if (!panel) {
+		pr_err("invalid panel\n");
+		return;
+	}
+
+	INIT_WORK(&display->esd_irq_work,
+			dsi_display_esd_irq_work);
+	dsi_display_register_esd_irq(display);
+
+	panel->esd_config.irq_mode_prepared = true;
+}
+
+void dsi_display_esd_irq_configure(struct dsi_display *display,
+		bool enable)
+{
+	struct dsi_panel *panel;
+
+	if (!display) {
+		pr_err("invalid dsi display\n");
+		return;
+	}
+
+	panel = display->panel;
+	if (!panel) {
+		pr_err("invalid dsi panel\n");
+		return;
+	}
+
+	if (enable && !panel->esd_config.irq_enabled) {
+		enable_irq(gpio_to_irq(panel->esd_config.irq_gpio));
+		panel->esd_config.irq_enabled = true;
+	} else if (!enable && panel->esd_config.irq_enabled) {
+		disable_irq(gpio_to_irq(panel->esd_config.irq_gpio));
+		panel->esd_config.irq_enabled = false;
+	}
+}
+
+void dsi_display_esd_irq_mode_switch(struct dsi_display *display,
+		bool enable)
+{
+	struct dsi_panel *panel;
+	struct drm_connector *connector;
+	struct sde_connector *conn;
+
+	if (!display) {
+		pr_err("invalid dsi display\n");
+		return;
+	}
+
+	panel = display->panel;
+	if (!panel) {
+		pr_err("invalid dsi panel\n");
+		return;
+	}
+
+	connector = display->drm_conn;
+	if (!connector) {
+		pr_err("invalid drm connector\n");
+		return;
+	}
+	conn = to_sde_connector(connector);
+
+	if ((panel->esd_config.status_mode != ESD_MODE_IRQ_GPIO) &&
+			enable) {
+		/* Cancel any pending ESD status check */
+		cancel_delayed_work_sync(&conn->status_work);
+		conn->esd_status_check = false;
+
+		if (!panel->esd_config.irq_mode_prepared)
+			dsi_display_esd_irq_prepare(display);
+		dsi_display_esd_irq_configure(display, true);
+	} else if ((panel->esd_config.status_mode == ESD_MODE_IRQ_GPIO) &&
+			!enable) {
+		dsi_display_esd_irq_configure(display, false);
+		/* Cancel any pending ESD IRQ work */
+		cancel_work_sync(&display->esd_irq_work);
+
+		/* Schedule ESD status check */
+		schedule_delayed_work(&conn->status_work,
+				msecs_to_jiffies(STATUS_CHECK_INTERVAL_MS));
+		conn->esd_status_check = true;
+	}
+}
+
 static void _dsi_display_setup_misr(struct dsi_display *display)
 {
 	int i;
@@ -1153,6 +1338,7 @@ static ssize_t debugfs_alter_esd_check_mode(struct file *file,
 		goto error;
 
 	if (!strcmp(buf, "te_signal_check\n")) {
+		dsi_display_esd_irq_mode_switch(display, false);
 		esd_config->status_mode = ESD_MODE_PANEL_TE;
 		dsi_display_change_te_irq_status(display, true);
 	}
@@ -1166,9 +1352,23 @@ static ssize_t debugfs_alter_esd_check_mode(struct file *file,
 			rc = user_len;
 			goto error;
 		}
+		dsi_display_esd_irq_mode_switch(display, false);
 		esd_config->status_mode = ESD_MODE_REG_READ;
 		if (dsi_display_is_te_based_esd(display))
 			dsi_display_change_te_irq_status(display, false);
+	}
+
+	if (!strcmp(buf, "irq_check\n")) {
+		rc = dsi_panel_parse_esd_irq_gpio_configs(display->panel,
+						display->panel_of);
+		if (rc) {
+			pr_err("failed to alter esd check mode,rc=%d\n",
+						rc);
+			rc = user_len;
+			goto error;
+		}
+		dsi_display_esd_irq_mode_switch(display, true);
+		esd_config->status_mode = ESD_MODE_IRQ_GPIO;
 	}
 
 	rc = len;
@@ -1216,10 +1416,13 @@ static ssize_t debugfs_read_esd_check_mode(struct file *file,
 	}
 
 	if (esd_config->status_mode == ESD_MODE_REG_READ)
-		rc = snprintf(buf, len, "reg_read");
+		rc = snprintf(buf, len, "reg_read\n");
 
 	if (esd_config->status_mode == ESD_MODE_PANEL_TE)
-		rc = snprintf(buf, len, "te_signal_check");
+		rc = snprintf(buf, len, "te_signal_check\n");
+
+	if (esd_config->status_mode == ESD_MODE_IRQ_GPIO)
+		rc = snprintf(buf, len, "err_irq_check\n");
 
 output_mode:
 	if (!rc) {
@@ -4487,6 +4690,9 @@ static int dsi_display_bind(struct device *dev,
 	/* register te irq handler */
 	dsi_display_register_te_irq(display);
 
+	if (dsi_display_get_esd_mode(display) == ESD_MODE_IRQ_GPIO)
+		dsi_display_esd_irq_prepare(display);
+
 	goto error;
 
 error_host_deinit:
@@ -6248,6 +6454,9 @@ int dsi_display_post_enable(struct dsi_display *display)
 		dsi_display_clk_ctrl(display->dsi_clk_handle,
 			DSI_ALL_CLKS, DSI_CLK_OFF);
 
+	if (dsi_display_get_esd_mode(display) == ESD_MODE_IRQ_GPIO)
+		dsi_display_esd_irq_configure(display, true);
+
 	mutex_unlock(&display->display_lock);
 	return rc;
 }
@@ -6262,6 +6471,12 @@ int dsi_display_pre_disable(struct dsi_display *display)
 	}
 
 	mutex_lock(&display->display_lock);
+
+	if (dsi_display_get_esd_mode(display) == ESD_MODE_IRQ_GPIO) {
+		dsi_display_esd_irq_configure(display, false);
+		/* Cancel any pending ESD IRQ work */
+		cancel_work_sync(&display->esd_irq_work);
+	}
 
 	/* enable the clk vote for CMD mode panels */
 	if (display->config.panel_mode == DSI_OP_CMD_MODE)

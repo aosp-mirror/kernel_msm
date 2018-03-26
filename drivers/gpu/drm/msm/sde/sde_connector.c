@@ -328,6 +328,13 @@ void sde_connector_schedule_status_work(struct drm_connector *connector,
 	if (en == c_conn->esd_status_check)
 		return;
 
+	/* IRQ GPIO mode has specific work in DSI */
+	if (c_conn->ops.get_esd_mode) {
+		if (c_conn->ops.get_esd_mode(c_conn->display) ==
+				ESD_MODE_IRQ_GPIO)
+			return;
+	}
+
 	sde_connector_get_info(connector, &info);
 	if (c_conn->ops.check_status &&
 		(info.capabilities & MSM_DISPLAY_ESD_ENABLED)) {
@@ -549,11 +556,6 @@ void sde_connector_helper_bridge_disable(struct drm_connector *connector)
 	sde_connector_schedule_status_work(connector, false);
 
 	c_conn = to_sde_connector(connector);
-	if (c_conn->panel_dead) {
-		c_conn->bl_device->props.power = FB_BLANK_POWERDOWN;
-		c_conn->bl_device->props.state |= BL_CORE_FBBLANK;
-		backlight_update_status(c_conn->bl_device);
-	}
 	c_conn->last_panel_power_mode = SDE_MODE_DPMS_OFF;
 }
 
@@ -565,15 +567,6 @@ void sde_connector_helper_bridge_enable(struct drm_connector *connector)
 		return;
 
 	c_conn = to_sde_connector(connector);
-
-	/* Special handling for ESD recovery case */
-	if (c_conn->panel_dead) {
-		c_conn->bl_device->props.power = FB_BLANK_UNBLANK;
-		c_conn->bl_device->props.state &= ~BL_CORE_FBBLANK;
-		backlight_update_status(c_conn->bl_device);
-		c_conn->panel_dead = false;
-	}
-
 	c_conn->last_panel_power_mode = SDE_MODE_DPMS_ON;
 }
 
@@ -1504,6 +1497,53 @@ static const struct file_operations conn_cmd_tx_fops = {
 	.write =	_sde_debugfs_conn_cmd_tx_write,
 };
 
+static ssize_t _sde_debugfs_force_panel_dead_write(struct file *file,
+		const char __user *user_buf, size_t count, loff_t *ppos)
+{
+	struct drm_connector *connector = file->private_data;
+	struct sde_connector *c_conn;
+	struct dsi_display *display;
+	char buf[1];
+	int esd_mode = 0;
+
+	if (*ppos || !connector)
+		return 0;
+
+	c_conn = to_sde_connector(connector);
+	/* only support DSI type */
+	if (c_conn->connector_type != DRM_MODE_CONNECTOR_DSI)
+		return 0;
+
+	if (c_conn->ops.get_esd_mode) {
+		esd_mode = c_conn->ops.get_esd_mode(c_conn->display);
+		if (esd_mode < 0)
+			return 0;
+	}
+
+	display = c_conn->display;
+	if (!display)
+		return 0;
+
+	if (!count || copy_from_user(buf, user_buf, 1))
+		return -EINVAL;
+
+	if (buf[0] == '1') {
+		pr_info("force panel dead triggered\n");
+		if (esd_mode != ESD_MODE_IRQ_GPIO)
+			c_conn->force_panel_dead = 1;
+		else
+			schedule_work(&display->esd_irq_work);
+	}
+
+	return count;
+}
+
+static const struct file_operations force_panel_dead_fops = {
+	.open =		simple_open,
+	.llseek =	noop_llseek,
+	.write =	_sde_debugfs_force_panel_dead_write,
+};
+
 #ifdef CONFIG_DEBUG_FS
 /**
  * sde_connector_init_debugfs - initialize connector debugfs
@@ -1524,12 +1564,15 @@ static int sde_connector_init_debugfs(struct drm_connector *connector)
 	sde_connector_get_info(connector, &info);
 	if (sde_connector->ops.check_status &&
 		(info.capabilities & MSM_DISPLAY_ESD_ENABLED)) {
-		debugfs_create_u32("force_panel_dead", 0600,
-				connector->debugfs_entry,
-				&sde_connector->force_panel_dead);
+		if (!debugfs_create_file("force_panel_dead", 0600,
+					connector->debugfs_entry,
+					connector, &force_panel_dead_fops)) {
+			pr_err("failed to create force_panel_dead\n");
+			return -ENOMEM;
+		}
 		debugfs_create_u32("esd_status_interval", 0600,
-				connector->debugfs_entry,
-				&sde_connector->esd_status_interval);
+					connector->debugfs_entry,
+					&sde_connector->esd_status_interval);
 	}
 
 	if (!debugfs_create_bool("fb_kmap", 0600, connector->debugfs_entry,
@@ -1673,22 +1716,23 @@ sde_connector_best_encoder(struct drm_connector *connector)
 	return c_conn->encoder;
 }
 
-static void _sde_connector_report_panel_dead(struct sde_connector *conn)
+void sde_connector_report_panel_dead(struct drm_connector *connector)
 {
+	struct sde_connector *c_conn = to_sde_connector(connector);
 	struct drm_event event;
 
-	if (!conn)
+	if (!c_conn)
 		return;
 
-	conn->panel_dead = true;
+	c_conn->panel_dead = true;
 	event.type = DRM_EVENT_PANEL_DEAD;
 	event.length = sizeof(bool);
-	msm_mode_object_event_notify(&conn->base.base,
-		conn->base.dev, &event, (u8 *)&conn->panel_dead);
-	sde_encoder_display_failure_notification(conn->encoder);
+	msm_mode_object_event_notify(&c_conn->base.base,
+		c_conn->base.dev, &event, (u8 *)&c_conn->panel_dead);
+	sde_encoder_display_failure_notification(c_conn->encoder);
 	SDE_EVT32(SDE_EVTLOG_ERROR);
 	SDE_ERROR("esd check failed report PANEL_DEAD conn_id: %d enc_id: %d\n",
-			conn->base.base.id, conn->encoder->base.id);
+		c_conn->base.base.id, c_conn->encoder->base.id);
 }
 
 int sde_connector_esd_status(struct drm_connector *conn)
@@ -1711,7 +1755,7 @@ int sde_connector_esd_status(struct drm_connector *conn)
 	if (ret <= 0) {
 		/* cancel if any pending esd work */
 		sde_connector_schedule_status_work(conn, false);
-		_sde_connector_report_panel_dead(sde_conn);
+		sde_connector_report_panel_dead(conn);
 		ret = -ETIMEDOUT;
 	} else {
 		SDE_DEBUG("Successfully received TE from panel\n");
@@ -1766,7 +1810,7 @@ static void sde_connector_check_status_work(struct work_struct *work)
 	}
 
 status_dead:
-	_sde_connector_report_panel_dead(conn);
+	sde_connector_report_panel_dead(&conn->base);
 }
 
 static const struct drm_connector_helper_funcs sde_connector_helper_ops = {

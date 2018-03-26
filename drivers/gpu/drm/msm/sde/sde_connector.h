@@ -265,6 +265,13 @@ struct sde_connector_ops {
 	 * Returns: v_front_porch on success error-code on failure
 	 */
 	int (*get_panel_vfp)(void *display, int h_active, int v_active);
+
+	/**
+	 * get_esd_mode - get ESD mode of display panel
+	 * @display: Pointer to private display handle
+	 * Returns: Positive value for ESD mode, negetive for failure
+	 */
+	int (*get_esd_mode)(void *display);
 };
 
 /**
@@ -785,5 +792,11 @@ int sde_connector_get_panel_vfp(struct drm_connector *connector,
  * @connector: Pointer to DRM connector object
  */
 int sde_connector_esd_status(struct drm_connector *connector);
+
+/**
+ * sde_connector_report_panel_dead - helper function for panel recovery
+ * @c_conn: Pointer to DRM connector object
+ */
+void sde_connector_report_panel_dead(struct drm_connector *connector);
 
 #endif /* _SDE_CONNECTOR_H_ */

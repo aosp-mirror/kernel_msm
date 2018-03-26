@@ -2771,6 +2771,57 @@ error:
 	return rc;
 }
 
+int dsi_panel_parse_esd_irq_gpio_configs(struct dsi_panel *panel,
+				struct device_node *of_node)
+{
+	struct drm_panel_esd_config *esd_config;
+	struct device_node *esd_of_node;
+	const char *esd_irq_mode;
+	int rc = 0;
+
+	if (!panel || !of_node) {
+		pr_err("Invalid panel or node\n");
+		return -EINVAL;
+	}
+
+	esd_of_node = of_parse_phandle(of_node,
+					"google,dsi-esd-irq", 0);
+	if (!esd_of_node) {
+		pr_err("google,dsi-esd-irq is not found\n");
+		return -EINVAL;
+	}
+
+	esd_config = &panel->esd_config;
+	esd_config->irq_gpio = of_get_named_gpio(esd_of_node,
+							"google,esd-irq-gpio",
+							0);
+
+	rc = of_property_read_string(esd_of_node,
+						"google,esd-irq-mode",
+						&esd_irq_mode);
+	if (rc) {
+		pr_err("esd irq mode is not defined\n");
+		return -EINVAL;
+	}
+
+	if (!strcmp(esd_irq_mode, "trigger_rising")) {
+		esd_config->irq_mode = ESD_IRQ_MODE_TRIGGER_RISING;
+	} else if (!strcmp(esd_irq_mode, "trigger_falling")) {
+		esd_config->irq_mode = ESD_IRQ_MODE_TRIGGER_FALLING;
+	} else if (!strcmp(esd_irq_mode, "trigger_high")) {
+		esd_config->irq_mode = ESD_IRQ_MODE_TRIGGER_HIGH;
+	} else if (!strcmp(esd_irq_mode, "trigger_low")) {
+		esd_config->irq_mode = ESD_IRQ_MODE_TRIGGER_LOW;
+	} else {
+		pr_err("No valid string for google,esd-irq-mode\n");
+		return -EINVAL;
+	}
+
+	pr_info("esd irq mode is %s\n", esd_irq_mode);
+
+	return 0;
+}
+
 static int dsi_panel_parse_esd_config(struct dsi_panel *panel,
 				     struct device_node *of_node)
 {
@@ -2802,6 +2853,8 @@ static int dsi_panel_parse_esd_config(struct dsi_panel *panel,
 				rc = -EINVAL;
 				goto error;
 			}
+		} else if (!strcmp(string, "irq_check")) {
+			esd_config->status_mode = ESD_MODE_IRQ_GPIO;
 		} else {
 			pr_err("No valid panel-status-check-mode string\n");
 			rc = -EINVAL;
@@ -2825,6 +2878,14 @@ static int dsi_panel_parse_esd_config(struct dsi_panel *panel,
 		esd_mode = "bta_trigger";
 	} else if (panel->esd_config.status_mode ==  ESD_MODE_PANEL_TE) {
 		esd_mode = "te_check";
+	} else if (panel->esd_config.status_mode == ESD_MODE_IRQ_GPIO) {
+		rc = dsi_panel_parse_esd_irq_gpio_configs(panel, of_node);
+		if (rc) {
+			pr_err("failed to parse esd irq gpio mode params, rc=%d\n",
+					rc);
+			goto error;
+		}
+		esd_mode = "irq_check";
 	}
 
 	pr_info("ESD enabled with mode: %s\n", esd_mode);

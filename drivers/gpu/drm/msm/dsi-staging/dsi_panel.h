@@ -155,7 +155,16 @@ enum esd_check_status_mode {
 	ESD_MODE_REG_READ,
 	ESD_MODE_SW_BTA,
 	ESD_MODE_PANEL_TE,
+	ESD_MODE_IRQ_GPIO,
 	ESD_MODE_MAX
+};
+
+enum esd_irq_mode {
+	ESD_IRQ_MODE_TRIGGER_RISING = 1,
+	ESD_IRQ_MODE_TRIGGER_FALLING = 2,
+	ESD_IRQ_MODE_TRIGGER_HIGH = 4,
+	ESD_IRQ_MODE_TRIGGER_LOW = 8,
+	ESD_IRQ_MODE_MAX
 };
 
 struct drm_panel_esd_config {
@@ -169,6 +178,11 @@ struct drm_panel_esd_config {
 	u8 *return_buf;
 	u8 *status_buf;
 	u32 groups;
+
+	enum esd_irq_mode irq_mode;
+	int irq_gpio;
+	bool irq_enabled;
+	bool irq_mode_prepared;
 };
 
 enum dsi_panel_type {
@@ -340,6 +354,8 @@ struct dsi_panel *dsi_panel_ext_bridge_get(struct device *parent,
 				int topology_override);
 
 int dsi_panel_parse_esd_reg_read_configs(struct dsi_panel *panel,
+				struct device_node *of_node);
+int dsi_panel_parse_esd_irq_gpio_configs(struct dsi_panel *panel,
 				struct device_node *of_node);
 
 void dsi_panel_ext_bridge_put(struct dsi_panel *panel);
