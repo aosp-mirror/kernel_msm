@@ -178,11 +178,17 @@ const unsigned int noi_mm = 120;
 
 const unsigned int cm_stdev_max = 15000;
 
-const signed int cs_max = -10000;
+const signed int cs_tx_max = -12692;
 
-const signed int cs_min = -25000;
+const signed int cs_tx_min = -22897;
 
-const unsigned int cs_mm = 10000;
+const unsigned int cs_tx_mm = 10205;
+
+const signed int cs_rx_max = -9638;
+
+const signed int cs_rx_min = -25296;
+
+const unsigned int cs_rx_mm = 15658;
 
 const unsigned int fs_precal_h[37][18] = {
 	{417, 420, 420, 420, 420, 420, 420, 420, 420, 420, 420, 420, 420, 420, 420, 420, 420, 417},
