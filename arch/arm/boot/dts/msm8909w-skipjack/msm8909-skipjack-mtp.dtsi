@@ -207,11 +207,11 @@
 		pinctrl-0 = <&gpio_key_active>;
 		pinctrl-1 = <&gpio_key_suspend>;
 
-		camera_focus {
-			label = "camera_focus";
+		stem_1 {
+			label = "STEM_1";
 			gpios = <&msm_gpio 91 0x1>;
 			linux,input-type = <1>;
-			linux,code = <0x210>;
+			linux,code = <265>;
 			gpio-key,wakeup;
 			debounce-interval = <15>;
 		};
