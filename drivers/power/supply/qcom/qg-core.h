@@ -43,6 +43,9 @@ struct qg_dt {
 	int			s3_exit_ibat_ua;
 	int			delta_soc;
 	int			rbat_conn_mohm;
+	int			ignore_shutdown_soc_secs;
+	bool			hold_soc_while_full;
+	bool			linearize_soc;
 };
 
 struct qpnp_qg {
@@ -79,6 +82,7 @@ struct qpnp_qg {
 
 	/* status variable */
 	u32			*debug_mask;
+	bool			qg_device_open;
 	bool			profile_loaded;
 	bool			battery_missing;
 	bool			data_ready;
@@ -87,6 +91,7 @@ struct qpnp_qg {
 	bool			charge_done;
 	bool			parallel_enabled;
 	bool			usb_present;
+	bool			charge_full;
 	int			charge_status;
 	int			charge_type;
 	int			next_wakeup_ms;
@@ -98,6 +103,7 @@ struct qpnp_qg {
 
 	/* soc params */
 	int			catch_up_soc;
+	int			maint_soc;
 	int			msoc;
 	int			pon_soc;
 	struct alarm		alarm_timer;
