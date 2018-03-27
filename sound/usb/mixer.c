@@ -1283,8 +1283,10 @@ static void build_feature_ctl(struct mixer_build *state, void *raw_desc,
 	cval->control = control;
 	cval->cmask = ctl_mask;
 	ctl_info = get_feature_control_info(control);
-	if (!ctl_info)
+	if (!ctl_info) {
+		kfree(cval);
 		return;
+	}
 	cval->val_type = ctl_info->type;
 	if (ctl_mask == 0) {
 		cval->channels = 1;	/* master channel */
