@@ -1047,6 +1047,9 @@ static int smb2_batt_get_prop(struct power_supply *psy,
 		/* Not in ship mode as long as device is active */
 		val->intval = 0;
 		break;
+	case POWER_SUPPLY_PROP_CHARGE_FULL:
+		rc = smblib_get_prop_batt_charge_full(chg, val);
+		break;
 	case POWER_SUPPLY_PROP_DIE_HEALTH:
 		rc = smblib_get_prop_die_health(chg, val);
 		break;
