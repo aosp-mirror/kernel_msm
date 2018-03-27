@@ -253,8 +253,9 @@ static void mdss_dsi_panel_set_idle_mode(struct mdss_panel_data *pdata,
 	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 						panel_data);
 
-	pr_debug("%s: Idle (%d->%d)\n", __func__, ctrl->idle, enable);
+	pr_info("%s: Idle (%d->%d)\n", __func__, ctrl->idle, enable);
 
+	MDSS_XLOG(ctrl->idle, enable);
 	if (ctrl->idle == enable)
 		return;
 
