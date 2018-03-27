@@ -3292,6 +3292,17 @@ QDF_STATUS hdd_init_station_mode(hdd_adapter_t *adapter)
 		}
 	}
 
+	if (adapter->device_mode == QDF_STA_MODE) {
+		hdd_debug("setting RTT mac randomization param: %d",
+			hdd_ctx->config->enable_rtt_mac_randomization);
+		ret_val = sme_cli_set_command(adapter->sessionId,
+			WMI_VDEV_PARAM_ENABLE_DISABLE_RTT_INITIATOR_RANDOM_MAC,
+			hdd_ctx->config->enable_rtt_mac_randomization,
+			VDEV_CMD);
+		if (0 != ret_val)
+			hdd_err("RTT mac randomization param set failed %d",
+				ret_val);
+	}
 	/*
 	 * 1) When DBS hwmode is disabled from INI then send HT/VHT IE as per
 	 *    non-dbs hw mode, so that there is no limitation applied for 2G/5G.
@@ -3733,6 +3744,8 @@ static void hdd_set_fw_log_params(hdd_context_t *hdd_ctx,
 static int hdd_configure_chain_mask(hdd_adapter_t *adapter)
 {
 	int ret_val;
+	QDF_STATUS status;
+	struct wma_caps_per_phy non_dbs_phy_cap;
 	hdd_context_t *hdd_ctx = WLAN_HDD_GET_CTX(adapter);
 
 	hdd_debug("enable2x2: %d, lte_coex: %d, ChainMask1x1: tx: %d rx: %d",
@@ -3747,7 +3760,18 @@ static int hdd_configure_chain_mask(hdd_adapter_t *adapter)
 		  hdd_ctx->config->tx_chain_mask_5g,
 		  hdd_ctx->config->rx_chain_mask_5g);
 
-	if (hdd_ctx->num_rf_chains < 2) {
+	status = wma_get_caps_for_phyidx_hwmode(&non_dbs_phy_cap,
+						HW_MODE_DBS_NONE,
+						CDS_BAND_ALL);
+	if (QDF_IS_STATUS_ERROR(status)) {
+		hdd_info("couldn't get phy caps. skip chain mask programming");
+		return 0;
+	}
+
+	if (non_dbs_phy_cap.tx_chain_mask_2G < 3 ||
+	    non_dbs_phy_cap.rx_chain_mask_2G < 3 ||
+	    non_dbs_phy_cap.tx_chain_mask_5G < 3 ||
+	    non_dbs_phy_cap.rx_chain_mask_5G < 3) {
 		hdd_info("firmware not capable. skip chain mask programming");
 		return 0;
 	}
@@ -9996,6 +10020,9 @@ static int hdd_features_init(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter)
 	sme_setdef_dot11mode(hdd_ctx->hHal);
 	sme_set_prefer_80MHz_over_160MHz(hdd_ctx->hHal,
 			hdd_ctx->config->sta_prefer_80MHz_over_160MHz);
+
+	sme_set_etsi_srd_ch_in_master_mode(hdd_ctx->hHal,
+			hdd_ctx->config->etsi_srd_chan_in_master_mode);
 
 	sme_set_allow_adj_ch_bcn(hdd_ctx->hHal,
 			hdd_ctx->config->allow_adj_ch_bcn);

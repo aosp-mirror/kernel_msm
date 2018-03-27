@@ -14283,6 +14283,22 @@ enum hw_filter_mode {
 #define CFG_DTIM_SELECTION_DIVERSITY_MAX     (30)
 #define CFG_DTIM_SELECTION_DIVERSITY_DEFAULT (5)
 
+/*
+ * <ini>
+ * enable_rtt_mac_randomization - Enable/Disable rtt mac randomization
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ENABLE_RTT_MAC_RANDOMIZATION_NAME    "enable_rtt_mac_randomization"
+#define CFG_ENABLE_RTT_MAC_RANDOMIZATION_MIN     (0)
+#define CFG_ENABLE_RTT_MAC_RANDOMIZATION_MAX     (1)
+#define CFG_ENABLE_RTT_MAC_RANDOMIZATION_DEFAULT (0)
+
 /*---------------------------------------------------------------------------
    Type declarations
    -------------------------------------------------------------------------*/
@@ -15188,6 +15204,7 @@ struct hdd_config {
 	uint32_t neighbor_report_offload_max_req_cap;
 	uint32_t channel_select_logic_conc;
 	bool enable_dtim_selection_diversity;
+	bool enable_rtt_mac_randomization;
 };
 
 #define VAR_OFFSET(_Struct, _Var) (offsetof(_Struct, _Var))

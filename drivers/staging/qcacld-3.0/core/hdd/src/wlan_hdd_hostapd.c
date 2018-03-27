@@ -4702,7 +4702,7 @@ static int __iw_get_channel_list(struct net_device *dev,
 		if (hdd_ctx->config->dot11p_mode)
 			band_end_channel = CHAN_ENUM_184;
 		else
-			band_end_channel = CHAN_ENUM_165;
+			band_end_channel = CHAN_ENUM_173;
 	}
 
 	if (hostapd_adapter->device_mode == QDF_STA_MODE &&
@@ -8169,8 +8169,6 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 	wlansap_set_tx_leakage_threshold(hHal,
 		iniConfig->sap_tx_leakage_threshold);
 
-	wlansap_set_etsi_srd_chan_support(hHal,
-			iniConfig->etsi_srd_chan_in_master_mode);
 	capab_info = pMgmt_frame->u.beacon.capab_info;
 
 	pConfig->privacy = (pMgmt_frame->u.beacon.capab_info &
