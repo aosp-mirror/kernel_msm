@@ -49,9 +49,9 @@
   */
 /* **** CODE CONFIGURATION **** */
 #define FTS_TS_DRV_NAME		"fts"	/* driver name */
-#define FTS_TS_DRV_VERSION	"5.2.7_Google_B1"	/* driver version string
+#define FTS_TS_DRV_VERSION	"5.2.9_Google_B1"	/* driver version string
 							 * */
-#define FTS_TS_DRV_VER		0x05020700	/* driver version u32 format */
+#define FTS_TS_DRV_VER		0x05020900	/* driver version u32 format */
 
 #define DEBUG	/* /< define to print more logs in the kernel log
 		  * and better follow the code flow */
@@ -213,6 +213,8 @@
 #define MODE_LOW_POWER(_mask, _sett)	\
 	(_mask |= (SCAN_MODE_LOW_POWER << 24) | (_sett << 16))
 /* /< store the status of scan mode low power and its setting */
+#define IS_POWER_MODE(_mask, _mode)	((_mask&(_mode<<24)) != 0x00)
+/* /< check the current mode of the IC */
 
 /** @}*/
 

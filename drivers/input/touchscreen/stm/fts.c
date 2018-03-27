@@ -544,7 +544,7 @@ static ssize_t fts_feature_enable_store(struct device *dev,
 			 tag, (count - 2 + 1) / 3, 1);
 	else {
 		sscanf(p, "%02X ", &temp);
-		p += 9;
+		p += 3;
 		res = check_feature_feasibility(info, temp);
 		if (res >= OK) {
 			switch (temp) {
@@ -3315,6 +3315,10 @@ static int fts_mode_handler(struct fts_ts_info *info, int force)
 	int ret = OK;
 	u8 settings[4] = { 0 };
 
+	/* disable irq wake because resuming from gesture mode */
+	if (IS_POWER_MODE(info->mode, SCAN_MODE_LOW_POWER) &&
+	    (info->resume_bit == 1))
+		disable_irq_wake(info->client->irq);
 
 	info->mode = MODE_NOTHING;	/* initialize the mode to nothing
 					  * in order to be updated depending
@@ -3340,6 +3344,7 @@ static int fts_mode_handler(struct fts_ts_info *info, int force)
 				 __func__);
 			res = enterGestureMode(isSystemResettedDown());
 			if (res >= OK) {
+				enable_irq_wake(info->client->irq);
 				fromIDtoMask(FEAT_SEL_GESTURE,
 					     (u8 *)&info->mode,
 					     sizeof(info->mode));

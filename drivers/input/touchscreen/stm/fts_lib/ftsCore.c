@@ -636,7 +636,7 @@ int readSysInfo(int request)
 	u8ToU32(&data[index], &systemInfo.u32_cfgCrc);
 	index += 4;
 
-	index += 8;	/* skip reserved area */
+	index += 16;	/* skip reserved area */
 
 	u8ToU16(&data[index], &systemInfo.u16_scrResX);
 	index += 2;

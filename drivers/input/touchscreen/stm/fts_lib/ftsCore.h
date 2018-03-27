@@ -60,7 +60,7 @@ typedef enum {
 						 * sys info
 						 *  (first bytes are external
 						 * release) */
-#define RELEASE_INFO_SIZE		(EXTERNAL_RELEASE_INFO_SIZE + 8)
+#define RELEASE_INFO_SIZE		(EXTERNAL_RELEASE_INFO_SIZE)
 /** @}*/
 
 /* RETRY MECHANISM */
