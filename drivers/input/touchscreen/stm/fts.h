@@ -268,7 +268,7 @@ typedef void (*event_dispatch_handler_t)
   * - mode            Device operating mode (bitmask) \n
   * - touch_id        Bitmask for touch id (mapped to input slots) \n
   * - stylus_id       Bitmask for tracking the stylus touches (mapped using the
-  * touchId) \n
+  *                   touchId) \n
   * - timer           Timer when operating in polling mode \n
   * - power           Power on/off routine \n
   * - board           HW info retrieved from device tree \n
@@ -281,7 +281,8 @@ typedef void (*event_dispatch_handler_t)
   * - wakesrc         Wakeup Source struct \n
   * - input_report_mutex  mutex for handling the pressure of keys \n
   * - series_of_switches  to store the enabling status of a particular feature
-  * from the host \n
+  *                       from the host \n
+  * - tbn             Touch Bus Negotiator context
   */
 struct fts_ts_info {
 	struct device           *dev;	/* Pointer to the device */

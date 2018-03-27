@@ -50,22 +50,22 @@
   * @param count size of buff
   * @param result pointer to the array of characters that compose the HEX final
   * string
+  * @param size size of result
   * @return pointer to the array of characters that compose the HEX string,
   * (same address of result)
   * @warning result MUST be allocated outside the function and should be
   * big enough to contain the data converted as HEX!
   */
-char *printHex(char *label, u8 *buff, int count, u8 *result)
+char *printHex(char *label, u8 *buff, int count, u8 *result, int size)
 {
-	int i, offset;
+	int i, offset = 0;
 
-	offset = strlen(label);
-	strlcpy(result, label, offset+1); /* +1 for terminator char */
-
+	offset = scnprintf(result + offset, size - offset, "%s", label);
 	for (i = 0; i < count; i++) {
-		snprintf(&result[offset], 4, "%02X ", buff[i]);
-		/* this append automatically a null terminator char */
-		offset += 3;
+		offset +=
+			scnprintf(result + offset,
+				 size - offset, "%02X ", buff[i]);
+			/* this append automatically a null terminator char */
 	}
 	return result;
 }

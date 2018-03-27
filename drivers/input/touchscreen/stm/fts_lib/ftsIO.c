@@ -699,8 +699,6 @@ int fts_writeU8UXthenWriteReadU8UX(u8 cmd1, AddrSize addrSize1, u8 cmd2,
 			finalCmd1[i + 1] = (u8)((address >> ((addrSize1 +
 							      addrSize2 - 1 -
 							      i) * 8)) & 0xFF);
-		/* logError(1, "%s %s: finalCmd1[%d] =  %02X\n",
-		  *	tag, __func__, i+1, finalCmd1[i + 1]); */
 
 		finalCmd2[0] = cmd2;
 		for (i = addrSize1; i < addrSize1 + addrSize2; i++)

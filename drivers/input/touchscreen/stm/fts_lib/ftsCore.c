@@ -227,10 +227,12 @@ int pollForEvent(int *event_to_search, int event_bytes, u8 *readData, int
 	       >= OK) {
 		/* Log of errors */
 		if (readData[0] == EVT_ID_ERROR) {
-			logError(1, "%s %s\n", tag, printHex("ERROR EVENT = ",
-							     readData,
-							     FIFO_EVENT_SIZE,
-							     temp));
+			logError(1, "%s %s\n", tag,
+				 printHex("ERROR EVENT = ",
+					  readData,
+					  FIFO_EVENT_SIZE,
+					  temp,
+					  sizeof(temp)));
 			memset(temp, 0, 128);
 			count_err++;
 			err_handling = errorHandler(readData, FIFO_EVENT_SIZE);
@@ -243,10 +245,11 @@ int pollForEvent(int *event_to_search, int event_bytes, u8 *readData, int
 			}
 		} else {
 			if (readData[0] != EVT_ID_NOEVENT) {
-				logError(1, "%s %s\n", tag, printHex(
-						 "READ EVENT = ", readData,
-						 FIFO_EVENT_SIZE,
-						 temp));
+				logError(1, "%s %s\n", tag,
+					 printHex("READ EVENT = ", readData,
+						  FIFO_EVENT_SIZE,
+						  temp,
+						  sizeof(temp)));
 				memset(temp, 0, 128);
 			}
 			if (readData[0] == EVT_ID_CONTROLLER_READY &&
@@ -278,8 +281,12 @@ int pollForEvent(int *event_to_search, int event_bytes, u8 *readData, int
 			 ERROR_TIMEOUT);
 		return ERROR_TIMEOUT;
 	} else if (find == 1) {
-		logError(0, "%s %s\n", tag, printHex("FOUND EVENT = ", readData,
-						     FIFO_EVENT_SIZE, temp));
+		logError(0, "%s %s\n", tag,
+			 printHex("FOUND EVENT = ",
+				  readData,
+				  FIFO_EVENT_SIZE,
+				  temp,
+				  sizeof(temp)));
 		memset(temp, 0, 128);
 		logError(0,
 			 "%s Event found in %d ms (%d iterations)! Number of errors found = %d\n",
@@ -612,23 +619,27 @@ int readSysInfo(int request)
 	/* logError(1, "%s Die Info =  ", tag); */
 	for (i = 0; i < DIE_INFO_SIZE; i++)
 		systemInfo.u8_dieInfo[i] = data[index++];
-	/* logError(1, "%02X ", systemInfo.u8_dieInfo[i]); */
+
 	/* logError(1, "\n"); */
-	logError(1, "%s %s\n", tag, printHex("Die Info =  ",
-					      systemInfo.u8_dieInfo,
-					      DIE_INFO_SIZE, temp));
+	logError(1, "%s %s\n", tag,
+		 printHex("Die Info =  ",
+			  systemInfo.u8_dieInfo,
+			  DIE_INFO_SIZE, temp, sizeof(temp)));
 	memset(temp, 0, 256);
 
 
 	/* logError(1, "%s Release Info =  ", tag); */
 	for (i = 0; i < RELEASE_INFO_SIZE; i++)
 		systemInfo.u8_releaseInfo[i] = data[index++];
-	/* logError(1, "%02X ", systemInfo.u8_releaseInfo[i]); */
+
 	/* logError(1, "\n"); */
 
-	logError(1, "%s %s\n", tag, printHex("Release Info =  ",
-					      systemInfo.u8_releaseInfo,
-					      RELEASE_INFO_SIZE, temp));
+	logError(1, "%s %s\n", tag,
+		 printHex("Release Info =  ",
+			  systemInfo.u8_releaseInfo,
+			  RELEASE_INFO_SIZE,
+			  temp,
+			  sizeof(temp)));
 	memset(temp, 0, 256);
 
 	u8ToU32(&data[index], &systemInfo.u32_fwCrc);

@@ -539,14 +539,13 @@ static void *fts_seq_start(struct seq_file *s, loff_t *pos)
 		 __func__, *pos, limit, printed);
 
 	if (driver_test_buff == NULL && *pos == 0) {
+		int size = 13 * sizeof(u8);
+
 		logError(1, "%s %s: No data to print!\n", tag, __func__);
-		driver_test_buff = (u8 *)kmalloc(13 * sizeof(u8), GFP_KERNEL);
-
-		snprintf(driver_test_buff,
-			14, "{ %08X }\n", ERROR_OP_NOT_ALLOW);
-
-
-		limit = strlen(driver_test_buff);
+		driver_test_buff = (u8 *)kmalloc(size, GFP_KERNEL);
+		limit = scnprintf(driver_test_buff,
+				  size,
+				  "{ %08X }\n", ERROR_OP_NOT_ALLOW);
 		/* logError(0, "%s %s: len = %d driver_test_buff = %s\n", tag,
 		 * __func__, limit, driver_test_buff); */
 	} else {
@@ -2037,8 +2036,9 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 					 tag, res);
 				goto END;
 			}
-			j = snprintf(&driver_test_buff[index], fileSize - index,
-				     "DIAGNOSTIC TEST:\n1) I2C Test: ");
+			j = scnprintf(&driver_test_buff[index],
+				      fileSize - index,
+				      "DIAGNOSTIC TEST:\n1) I2C Test: ");
 			index += j;
 
 			res = fts_writeReadU8UX(FTS_CMD_HW_REG_R,
@@ -2050,9 +2050,9 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 					 "%s Error during I2C test: ERROR %08X!\n",
 					 tag,
 					 res);
-				j = snprintf(&driver_test_buff[index],
-					     fileSize - index, "ERROR %08X\n",
-					     res);
+				j = scnprintf(&driver_test_buff[index],
+					      fileSize - index, "ERROR %08X\n",
+					      res);
 				index += j;
 				res = ERROR_OP_NOT_ALLOW;
 				goto END_DIAGNOSTIC;
@@ -2060,10 +2060,11 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 
 			temp &= 0xFFFF;
 			logError(1, "%s Chip ID = %04X!\n", tag, temp);
-			j = snprintf(&driver_test_buff[index], fileSize - index,
-				     "DATA = %04X, expected = %02X%02X\n",
-				     temp, DCHIP_ID_1,
-				     DCHIP_ID_0);
+			j = scnprintf(&driver_test_buff[index],
+				      fileSize - index,
+				      "DATA = %04X, expected = %02X%02X\n",
+				      temp, DCHIP_ID_1,
+				      DCHIP_ID_0);
 			index += j;
 			if (temp != ((DCHIP_ID_1 << 8) | DCHIP_ID_0)) {
 				logError(1,
@@ -2074,13 +2075,15 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 				goto END_DIAGNOSTIC;
 			}
 
-			j = snprintf(&driver_test_buff[index], fileSize - index,
-				     "Present Driver Mode: %08X\n",
-				     info->mode);
+			j = scnprintf(&driver_test_buff[index],
+				      fileSize - index,
+				      "Present Driver Mode: %08X\n",
+				      info->mode);
 			index += j;
 
-			j = snprintf(&driver_test_buff[index], fileSize - index,
-				     "2) FW running: Sensing On...");
+			j = scnprintf(&driver_test_buff[index],
+				      fileSize - index,
+				      "2) FW running: Sensing On...");
 			index += j;
 			logError(1, "%s Sensing On!\n", tag, temp);
 			readData[0] = FTS_CMD_SCAN_MODE;
@@ -2093,68 +2096,69 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 					 "%s No Echo received.. ERROR %08X !\n",
 					 tag,
 					 res);
-				j = snprintf(&driver_test_buff[index],
-					     fileSize - index,
-					     "No echo found... ERROR %08X!\n",
-					     res);
+				j = scnprintf(&driver_test_buff[index],
+					      fileSize - index,
+					      "No echo found... ERROR %08X!\n",
+					      res);
 				index += j;
 				goto END_DIAGNOSTIC;
 			} else {
 				logError(1, "%s Echo FOUND... OK!\n", tag, res);
-				j = snprintf(&driver_test_buff[index],
-					     fileSize - index,
-					     "Echo FOUND... OK!\n");
+				j = scnprintf(&driver_test_buff[index],
+					      fileSize - index,
+					      "Echo FOUND... OK!\n");
 				index += j;
 			}
 
 			logError(1, "%s Reading Frames...!\n", tag, temp);
-			j = snprintf(&driver_test_buff[index], fileSize - index,
-				     "3) Read Frames:\n");
+			j = scnprintf(&driver_test_buff[index],
+				      fileSize - index,
+				      "3) Read Frames:\n");
 			index += j;
 			for (temp = 0; temp < DIAGNOSTIC_NUM_FRAME; temp++) {
 				logError(1, "%s Iteration n. %d...\n", tag,
 					 temp + 1);
-				j = snprintf(&driver_test_buff[index],
-					     fileSize - index,
-					     "Iteration n. %d...\n", temp +
-					     1);
+				j = scnprintf(&driver_test_buff[index],
+					      fileSize - index,
+					      "Iteration n. %d...\n",
+					      temp + 1);
 				index += j;
 				for (addr = 0; addr < 3; addr++) {
 					switch (addr) {
 					case 0:
-						j = snprintf(
-						      &driver_test_buff[index],
-						      fileSize - index,
-						      "MS RAW FRAME =");
+						j = scnprintf(
+						    &driver_test_buff[index],
+						    fileSize - index,
+						    "MS RAW FRAME =");
 						index += j;
 						res |= getMSFrame3(MS_RAW,
 								   &frameMS);
 						break;
 					case 2:
-						j = snprintf(
-						      &driver_test_buff[index],
-						      fileSize - index,
-						      "MS STRENGTH FRAME =");
+						j = scnprintf(
+						    &driver_test_buff[index],
+						    fileSize - index,
+						    "MS STRENGTH FRAME =");
 						index += j;
 						res |= getMSFrame3(MS_STRENGTH,
 								   &frameMS);
 						break;
 					case 1:
-						j = snprintf(
-						      &driver_test_buff[index],
-						      fileSize - index,
-						      "MS BASELINE FRAME =");
+						j = scnprintf(
+						    &driver_test_buff[index],
+						    fileSize - index,
+						    "MS BASELINE FRAME =");
 						index += j;
 						res |= getMSFrame3(MS_BASELINE,
 								   &frameMS);
 						break;
 					}
 					if (res < OK) {
-						j = snprintf(
-						      &driver_test_buff[index],
-						      fileSize - index,
-						      "No data! ERROR %08X\n",
-						      res);
+						j = scnprintf(
+						    &driver_test_buff[index],
+						    fileSize - index,
+						    "No data! ERROR %08X\n",
+						    res);
 						index += j;
 					} else {
 						for (address = 0; address <
@@ -2163,7 +2167,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 							if (address %
 							    frameMS.header.
 							      sense_node == 0) {
-								j = snprintf(
+								j = scnprintf(
 							       &driver_test_buff
 									[index],
 							       fileSize	-
@@ -2171,7 +2175,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 							       "\n");
 								index += j;
 							}
-							j = snprintf(
+							j = scnprintf(
 							    &driver_test_buff
 								[index],
 							    fileSize - index,
@@ -2180,7 +2184,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 							    node_data[address]);
 							index += j;
 						}
-						j = snprintf(
+						j = scnprintf(
 						    &driver_test_buff[index],
 						    fileSize - index, "\n");
 						index += j;
@@ -2191,66 +2195,72 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 				for (addr = 0; addr < 3; addr++) {
 					switch (addr) {
 					case 0:
-						j = snprintf(
-						      &driver_test_buff[index],
-						      fileSize - index,
-						      "SS RAW FRAME =\n");
+						j = scnprintf(
+						    &driver_test_buff[index],
+						    fileSize - index,
+						    "SS RAW FRAME =\n");
 						index += j;
 						res |= getSSFrame3(SS_RAW,
 								   &frameSS);
 						break;
 					case 2:
-						j = snprintf(
-						      &driver_test_buff[index],
-						      fileSize - index,
-						      "SS STRENGTH FRAME =\n");
+						j = scnprintf(
+						    &driver_test_buff[index],
+						    fileSize - index,
+						    "SS STRENGTH FRAME =\n");
 						index += j;
 						res |= getSSFrame3(SS_STRENGTH,
 								   &frameSS);
 						break;
 					case 1:
-						j = snprintf(
-						      &driver_test_buff[index],
-						      fileSize - index,
-						      "SS BASELINE FRAME =\n");
+						j = scnprintf(
+						    &driver_test_buff[index],
+						    fileSize - index,
+						    "SS BASELINE FRAME =\n");
 						index += j;
 						res |= getSSFrame3(SS_BASELINE,
 								   &frameSS);
 						break;
 					}
 					if (res < OK) {
-						j = snprintf(
-						      &driver_test_buff[index],
-						      fileSize - index,
-						      "No data! ERROR %08X\n",
-						      res);
-						index += j;
-					} else {
-						for (address = 0; address <
-						      frameSS.header.force_node;
-						     address++) {
-						  j = snprintf(
+						j = scnprintf(
 						    &driver_test_buff[index],
 						    fileSize - index,
-						    "%d\n",
-						    frameSS.force_data[
-							address]);
-						  index += j;
-						}
-						for (address = 0; address <
-						      frameSS.header.sense_node;
-						     address++) {
-						    j = snprintf(
-						      &driver_test_buff[index],
-						      fileSize - index,
-						      "%d, ",
-						      frameSS.sense_data[
-							address]);
+						    "No data! ERROR %08X\n",
+						    res);
+						index += j;
+					} else {
+						int num;
+						short *data;
+
+						num = frameSS.header.force_node;
+						data = frameSS.force_data;
+						for (address = 0;
+							address < num;
+							address++) {
+						    j = scnprintf(
+						       &driver_test_buff[index],
+						       fileSize - index,
+						       "%d\n",
+						       data[address]);
 						    index += j;
 						}
-						j = snprintf(
-						      &driver_test_buff[index],
-						      fileSize - index, "\n");
+
+						num = frameSS.header.sense_node;
+						data = frameSS.sense_data;
+						for (address = 0;
+							address < num;
+							address++) {
+						    j = scnprintf(
+						       &driver_test_buff[index],
+						       fileSize - index,
+						       "%d, ",
+						       data[address]);
+						    index += j;
+						}
+						j = scnprintf(
+						    &driver_test_buff[index],
+						    fileSize - index, "\n");
 						index += j;
 					}
 					if (frameSS.force_data != NULL)
@@ -2262,8 +2272,9 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 
 
 			logError(1, "%s Reading error info...\n", tag, temp);
-			j = snprintf(&driver_test_buff[index], fileSize - index,
-				     "4) FW INFO DUMP: ");
+			j = scnprintf(&driver_test_buff[index],
+				      fileSize - index,
+				      "4) FW INFO DUMP: ");
 			index += j;
 			temp = dumpErrorInfo(readData, ERROR_DUMP_ROW_SIZE *
 					     ERROR_DUMP_COL_SIZE);
@@ -2275,25 +2286,25 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 					 "%s Error during dump: ERROR %08X!\n",
 					 tag,
 					 res);
-				j = snprintf(&driver_test_buff[index],
-					     fileSize - index, "ERROR %08X\n",
-					     temp);
+				j = scnprintf(&driver_test_buff[index],
+					      fileSize - index, "ERROR %08X\n",
+					      temp);
 				index += j;
 			} else {
 				logError(1, "%s DUMP OK!\n", tag, res);
 				for (temp = 0; temp < ERROR_DUMP_ROW_SIZE *
 				     ERROR_DUMP_COL_SIZE; temp++) {
 					if (temp % ERROR_DUMP_COL_SIZE == 0) {
-						j = snprintf(
+						j = scnprintf(
 						    &driver_test_buff[index],
 						    fileSize - index,
 						    "\n%2d - ",
 						    temp / ERROR_DUMP_COL_SIZE);
 						index += j;
 					}
-					j = snprintf(&driver_test_buff[index],
-						     fileSize - index, "%02X ",
-						     readData[temp]);
+					j = scnprintf(&driver_test_buff[index],
+						      fileSize - index, "%02X ",
+						      readData[temp]);
 					index += j;
 				}
 			}
@@ -2301,18 +2312,18 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 
 END_DIAGNOSTIC:
 			if (res < OK) {
-				j = snprintf(&driver_test_buff[index],
-					     fileSize - index,
-					     "\nRESULT = FAIL\n");
+				j = scnprintf(&driver_test_buff[index],
+					      fileSize - index,
+					      "\nRESULT = FAIL\n");
 				index += j;
 			} else {
-				j = snprintf(&driver_test_buff[index],
-					     fileSize - index,
-					     "\nRESULT = FINISHED\n");
+				j = scnprintf(&driver_test_buff[index],
+					      fileSize - index,
+					      "\nRESULT = FINISHED\n");
 				index += j;
 			}
 			/* the sting is already terminated with the null char by
-			 * snprintf */
+			 * scnprintf */
 			limit = index;
 			printed = 0;
 			goto ERROR;
@@ -2774,11 +2785,10 @@ END:	/* here start the reporting phase, assembling the data to send in the
 
 	if (byte_call == 0) {
 		index = 0;
-		snprintf(&driver_test_buff[index], 3, "{ ");
-		index += 2;
-		snprintf(&driver_test_buff[index], 9, "%08X", res);
-
-		index += 8;
+		index += scnprintf(&driver_test_buff[index],
+				   size - index, "{ ");
+		index += scnprintf(&driver_test_buff[index],
+				   size - index, "%08X", res);
 		if (res >= OK) {
 			/*all the other cases are already fine printing only the
 			 * res.*/
@@ -2798,10 +2808,11 @@ END:	/* here start the reporting phase, assembling the data to send in the
 					j = 0;
 				for (; j < byteToRead + mess.dummy; j++) {
 					/* logError(0, "%02X ", readData[j]); */
-					snprintf(&driver_test_buff[index], 3,
-						 "%02X", readData[j]);
+					index += scnprintf(
+						    &driver_test_buff[index],
+						    size - index,
+						    "%02X", readData[j]);
 					/* this approach is much more faster */
-					index += 2;
 				}
 				/* logError(0, "\n"); */
 				break;
@@ -2810,22 +2821,19 @@ END:	/* here start the reporting phase, assembling the data to send in the
 				logError(0, "%s Start To parse!\n", tag);
 				for (j = 0; j < fileSize; j++) {
 					/* logError(0, "%02X ", readData[j]); */
-					snprintf(&driver_test_buff[index], 3,
-						 "%02X", readData[j]);
-					index += 2;
+					index += scnprintf(
+						    &driver_test_buff[index],
+						    size - index,
+						    "%02X", readData[j]);
 				}
 				logError(0, "%s Finish to parse!\n", tag);
 				break;
-
 			case CMD_GETFORCELEN:
 			case CMD_GETSENSELEN:
-				snprintf(&driver_test_buff[index], 3, "%02X",
-					 (u8)temp);
-				index += 2;
-
+				index += scnprintf(&driver_test_buff[index],
+						   size - index, "%02X",
+						   (u8)temp);
 				break;
-
-
 			case CMD_GETMSFRAME:
 			case CMD_TP_SENS_PRECAL_MS:
 			case CMD_TP_SENS_POSTCAL_MS:
@@ -2835,84 +2843,82 @@ END:	/* here start the reporting phase, assembling the data to send in the
 					driver_test_buff[2] = '8';
 				/* convert back error code to negative */
 
-				snprintf(&driver_test_buff[index], 3, "%02X",
-					 (u8)frameMS.header.force_node);
-				index += 2;
+				index += scnprintf(&driver_test_buff[index],
+						size - index, "%02X",
+						(u8)frameMS.header.force_node);
 
-				snprintf(&driver_test_buff[index], 3, "%02X",
-					 (u8)frameMS.header.sense_node);
-				index += 2;
+				index += scnprintf(&driver_test_buff[index],
+						size - index, "%02X",
+						(u8)frameMS.header.sense_node);
 
 				for (j = 0; j < frameMS.node_data_size; j++) {
-					snprintf(&driver_test_buff[index], 5,
-					  "%02X%02X",
-					  (frameMS.node_data[j] & 0xFF00) >> 8,
-					  frameMS.node_data[j] & 0xFF);
-					index += 4;
+					index += scnprintf(
+					   &driver_test_buff[index],
+					   size - index,
+					   "%02X%02X",
+					   (frameMS.node_data[j] & 0xFF00) >> 8,
+					   frameMS.node_data[j] & 0xFF);
 				}
 
 				kfree(frameMS.node_data);
 
 				if (funcToTest[0] == CMD_TP_SENS_POSTCAL_MS) {
 					/* print also mean and deltas */
-
 					for (j = 0; j < deltas.node_data_size;
 					     j++) {
-						snprintf(
+						index += scnprintf(
 						    &driver_test_buff[index],
-						    5,
+						    size - index,
 						    "%02X%02X",
 						    (deltas.node_data[j] &
 							 0xFF00) >> 8,
 						    deltas.node_data[j] &
 							0xFF);
-						index += 4;
 					}
 					kfree(deltas.node_data);
 
-					snprintf(&driver_test_buff[index], 9,
-						 "%08X", meanNorm);
-					index += 8;
+					index += scnprintf(
+						     &driver_test_buff[index],
+						     size - index,
+						     "%08X", meanNorm);
 
-					snprintf(&driver_test_buff[index], 9,
-						 "%08X", meanEdge);
-					index += 8;
+					index += scnprintf(
+						     &driver_test_buff[index],
+						     size - index,
+						     "%08X", meanEdge);
 				}
-
 				break;
-
 			case CMD_GETSSFRAME:
 			case CMD_TP_SENS_PRECAL_SS:
 				if (res != OK)
 					driver_test_buff[2] = '8';
 				/* convert back error code to negative */
-
-				snprintf(&driver_test_buff[index], 3, "%02X",
-					 (u8)frameSS.header.force_node);
-				index += 2;
-
-				snprintf(&driver_test_buff[index], 3, "%02X",
-					 (u8)frameSS.header.sense_node);
-				index += 2;
+				index += scnprintf(&driver_test_buff[index],
+						size - index, "%02X",
+						(u8)frameSS.header.force_node);
+				index += scnprintf(&driver_test_buff[index],
+						size - index, "%02X",
+						(u8)frameSS.header.sense_node);
 				/* Copying self raw data Force */
 				for (j = 0; j < frameSS.header.force_node;
 				     j++) {
-					snprintf(&driver_test_buff[index], 5,
+					index += scnprintf(
+					  &driver_test_buff[index],
+					  size - index,
 					  "%02X%02X",
 					  (frameSS.force_data[j] & 0xFF00) >> 8,
 					  frameSS.force_data[j] & 0xFF);
-					index += 4;
 				}
-
 
 				/* Copying self raw data Sense */
 				for (j = 0; j < frameSS.header.sense_node;
 				     j++) {
-					snprintf(&driver_test_buff[index], 5,
+					index += scnprintf(
+					  &driver_test_buff[index],
+					  size - index,
 					  "%02X%02X",
 					  (frameSS.sense_data[j] & 0xFF00) >> 8,
 					  frameSS.sense_data[j] & 0xFF);
-					index += 4;
 				}
 
 				kfree(frameSS.force_data);
@@ -2920,99 +2926,102 @@ END:	/* here start the reporting phase, assembling the data to send in the
 				break;
 
 			case CMD_READMSCOMPDATA:
-				snprintf(&driver_test_buff[index], 3, "%02X",
-					 (u8)compData.header.type);
-				index += 2;
+				index += scnprintf(&driver_test_buff[index],
+						   size - index, "%02X",
+						   (u8)compData.header.type);
 
-				snprintf(&driver_test_buff[index], 3, "%02X",
-					 (u8)compData.header.force_node);
-				index += 2;
+				index += scnprintf(&driver_test_buff[index],
+						size - index, "%02X",
+						(u8)compData.header.force_node);
 
-				snprintf(&driver_test_buff[index], 3, "%02X",
-					 (u8)compData.header.sense_node);
-				index += 2;
+				index += scnprintf(&driver_test_buff[index],
+						size - index, "%02X",
+						(u8)compData.header.sense_node);
 
 				/* Cpying CX1 value */
-				snprintf(&driver_test_buff[index], 3, "%02X",
-					 compData.cx1 & 0xFF);
-				index += 2;
+				index += scnprintf(&driver_test_buff[index],
+						   size - index, "%02X",
+						   compData.cx1 & 0xFF);
 
 				/* Copying CX2 values */
 				for (j = 0; j < compData.node_data_size; j++) {
-					snprintf(&driver_test_buff[index], 3,
-					  "%02X", compData.node_data[j] & 0xFF);
-					index += 2;
+					index += scnprintf(
+						&driver_test_buff[index],
+						size - index,
+						"%02X",
+						compData.node_data[j] & 0xFF);
 				}
 
 				kfree(compData.node_data);
 				break;
 
 			case CMD_READSSCOMPDATA:
-				snprintf(&driver_test_buff[index], 3, "%02X",
-					 (u8)comData.header.type);
-				index += 2;
+				index += scnprintf(&driver_test_buff[index],
+						   size - index, "%02X",
+						   (u8)comData.header.type);
 
-				snprintf(&driver_test_buff[index], 3, "%02X",
-					 comData.header.force_node);
-				index += 2;
+				index += scnprintf(&driver_test_buff[index],
+						   size - index, "%02X",
+						   comData.header.force_node);
 
+				index += scnprintf(&driver_test_buff[index],
+						   size - index, "%02X",
+						   comData.header.sense_node);
 
-				snprintf(&driver_test_buff[index], 3, "%02X",
-					 comData.header.sense_node);
-				index += 2;
+				index += scnprintf(&driver_test_buff[index],
+						   size - index, "%02X",
+						   comData.f_ix1 & 0xFF);
 
+				index += scnprintf(&driver_test_buff[index],
+						   size - index, "%02X",
+						   comData.s_ix1 & 0xFF);
 
-				snprintf(&driver_test_buff[index], 3, "%02X",
-					 comData.f_ix1 & 0xFF);
-				index += 2;
+				index += scnprintf(&driver_test_buff[index],
+						   size - index, "%02X",
+						   comData.f_cx1 & 0xFF);
 
-
-				snprintf(&driver_test_buff[index], 3, "%02X",
-					 comData.s_ix1 & 0xFF);
-				index += 2;
-
-
-				snprintf(&driver_test_buff[index], 3, "%02X",
-					 comData.f_cx1 & 0xFF);
-				index += 2;
-
-
-				snprintf(&driver_test_buff[index], 3, "%02X",
-					 comData.s_cx1 & 0xFF);
-				index += 2;
-
+				index += scnprintf(&driver_test_buff[index],
+						   size - index, "%02X",
+						   comData.s_cx1 & 0xFF);
 
 				/* Copying IX2 Force */
 				for (j = 0; j < comData.header.force_node;
 				     j++) {
-					snprintf(&driver_test_buff[index], 3,
-					    "%02X", comData.ix2_fm[j] & 0xFF);
-					index += 2;
+					index += scnprintf(
+						    &driver_test_buff[index],
+						    size - index,
+						    "%02X",
+						    comData.ix2_fm[j] & 0xFF);
 				}
 
 				/* Copying IX2 Sense */
 				for (j = 0; j < comData.header.sense_node;
 				     j++) {
-					snprintf(&driver_test_buff[index], 3,
-					    "%02X", comData.ix2_sn[j] & 0xFF);
-					index += 2;
+					index += scnprintf(
+						    &driver_test_buff[index],
+						    size - index,
+						    "%02X",
+						    comData.ix2_sn[j] & 0xFF);
 				}
 
 				/* Copying CX2 Force */
 				for (j = 0; j < comData.header.force_node;
 				     j++) {
-					snprintf(&driver_test_buff[index], 3,
-					    "%02X", comData.cx2_fm[j] & 0xFF);
-
-					index += 2;
+					index += scnprintf(
+						    &driver_test_buff[index],
+						    size - index,
+						    "%02X",
+						    comData.cx2_fm[j] & 0xFF);
 				}
 
 				/* Copying CX2 Sense */
 				for (j = 0; j < comData.header.sense_node;
 				     j++) {
-					snprintf(&driver_test_buff[index], 3,
-					    "%02X", comData.cx2_sn[j] & 0xFF);
-					index += 2;
+					index += scnprintf(
+						    &driver_test_buff[index],
+						    size - index,
+						    "%02X",
+						    comData.cx2_sn[j] & 0xFF);
 				}
 
 				kfree(comData.ix2_fm);
@@ -3024,95 +3033,97 @@ END:	/* here start the reporting phase, assembling the data to send in the
 
 
 			case CMD_READTOTMSCOMPDATA:
-				snprintf(&driver_test_buff[index], 3, "%02X",
-					 (u8)totCompData.header.type);
-				index += 2;
+				index += scnprintf(&driver_test_buff[index],
+						size - index, "%02X",
+						(u8)totCompData.header.type);
 
-				snprintf(&driver_test_buff[index], 3, "%02X",
-					 (u8)totCompData.header.force_node);
-				index += 2;
+				index += scnprintf(&driver_test_buff[index],
+					    size - index, "%02X",
+					    (u8)totCompData.header.force_node);
 
-
-				snprintf(&driver_test_buff[index], 3, "%02X",
-					 (u8)totCompData.header.sense_node);
-
-				index += 2;
+				index += scnprintf(&driver_test_buff[index],
+					    size - index, "%02X",
+					    (u8)totCompData.header.sense_node);
 
 				/* Copying TOT CX values */
 				for (j = 0; j < totCompData.node_data_size;
 				     j++) {
-					snprintf(&driver_test_buff[index], 5,
-						 "%02X%02X",
-						 (totCompData.node_data[j] &
+					index += scnprintf(
+						    &driver_test_buff[index],
+						    size - index,
+						    "%02X%02X",
+						    (totCompData.node_data[j] &
 							0xFF00) >> 8,
-						 totCompData.node_data[j] &
+						    totCompData.node_data[j] &
 							0xFF);
-					index += 4;
 				}
 
 				kfree(totCompData.node_data);
 				break;
 
 			case CMD_READTOTSSCOMPDATA:
-				snprintf(&driver_test_buff[index], 3, "%02X",
-					 (u8)totComData.header.type);
-				index += 2;
+				index += scnprintf(&driver_test_buff[index],
+						size - index, "%02X",
+						(u8)totComData.header.type);
 
-				snprintf(&driver_test_buff[index], 3, "%02X",
-					 totComData.header.force_node);
-				index += 2;
+				index += scnprintf(&driver_test_buff[index],
+						size - index, "%02X",
+						totComData.header.force_node);
 
-				snprintf(&driver_test_buff[index], 3, "%02X",
-					 totComData.header.sense_node);
-				index += 2;
+				index += scnprintf(&driver_test_buff[index],
+						size - index, "%02X",
+						totComData.header.sense_node);
 
 				/* Copying TOT IX Force */
 				for (j = 0; j < totComData.header.force_node;
 				     j++) {
-					snprintf(&driver_test_buff[index], 5,
-						 "%02X%02X",
-						 (totComData.ix_fm[j] &
+					index += scnprintf(
+						    &driver_test_buff[index],
+						    size - index,
+						    "%02X%02X",
+						    (totComData.ix_fm[j] &
 							0xFF00) >> 8,
-						 totComData.ix_fm[j] & 0xFF);
-					index += 4;
+						    totComData.ix_fm[j] &
+							0xFF);
 				}
 
 				/* Copying TOT IX Sense */
 				for (j = 0; j < totComData.header.sense_node;
 				     j++) {
-					snprintf(&driver_test_buff[index], 5,
-						 "%02X%02X",
-						 (totComData.ix_sn[j] &
+					index += scnprintf(
+						    &driver_test_buff[index],
+						    size - index,
+						    "%02X%02X",
+						    (totComData.ix_sn[j] &
 							0xFF00) >> 8,
-						 totComData.ix_sn[j] &
+						    totComData.ix_sn[j] &
 							0xFF);
-					index += 4;
 				}
 
 				/* Copying TOT CX Force */
 				for (j = 0; j < totComData.header.force_node;
 				     j++) {
-					snprintf(&driver_test_buff[index], 5,
-						 "%02X%02X",
-						 (totComData.cx_fm[j] &
+					index += scnprintf(
+						    &driver_test_buff[index],
+						    size - index,
+						    "%02X%02X",
+						    (totComData.cx_fm[j] &
 							0xFF00) >> 8,
-						 totComData.cx_fm[j] &
+						    totComData.cx_fm[j] &
 							0xFF);
-
-
-					index += 4;
 				}
 
 				/* Copying CX2 Sense */
 				for (j = 0; j < totComData.header.sense_node;
 				     j++) {
-					snprintf(&driver_test_buff[index], 5,
-						 "%02X%02X",
-						 (totComData.cx_sn[j] &
+					index += scnprintf(
+						    &driver_test_buff[index],
+						    size - index,
+						    "%02X%02X",
+						    (totComData.cx_sn[j] &
 							0xFF00) >> 8,
-						 totComData.cx_sn[j] &
+						    totComData.cx_sn[j] &
 							0xFF);
-					index += 4;
 				}
 
 				kfree(totComData.ix_fm);
@@ -3122,48 +3133,51 @@ END:	/* here start the reporting phase, assembling the data to send in the
 				break;
 
 			case CMD_READSENSCOEFF:
-				snprintf(&driver_test_buff[index], 3, "%02X",
-					 (u8)msCoeff.header.force_node);
-				index += 2;
+				index += scnprintf(&driver_test_buff[index],
+						size - index, "%02X",
+						(u8)msCoeff.header.force_node);
 
-				snprintf(&driver_test_buff[index], 3, "%02X",
-					 (u8)msCoeff.header.sense_node);
-				index += 2;
+				index += scnprintf(&driver_test_buff[index],
+						size - index, "%02X",
+						(u8)msCoeff.header.sense_node);
 
-				snprintf(&driver_test_buff[index], 3, "%02X",
-					 (u8)ssCoeff.header.force_node);
-				index += 2;
+				index += scnprintf(&driver_test_buff[index],
+						size - index, "%02X",
+						(u8)ssCoeff.header.force_node);
 
-				snprintf(&driver_test_buff[index], 3, "%02X",
-					 (u8)ssCoeff.header.sense_node);
-				index += 2;
+				index += scnprintf(&driver_test_buff[index],
+						size - index, "%02X",
+						(u8)ssCoeff.header.sense_node);
 
 				/* Copying MS Coefficients */
 				for (j = 0; j < msCoeff.node_data_size; j++) {
-					snprintf(&driver_test_buff[index], 3,
-						 "%02X", msCoeff.ms_coeff[j] &
-						 0xFF);
-					index += 2;
+					index += scnprintf(
+						    &driver_test_buff[index],
+						    size - index,
+						    "%02X",
+						    msCoeff.ms_coeff[j] & 0xFF);
 				}
 
 				/* Copying SS force Coefficients */
 				for (j = 0; j < ssCoeff.header.force_node;
 				     j++) {
-					snprintf(&driver_test_buff[index], 3,
-						 "%02X",
-						 ssCoeff.ss_force_coeff[j] &
-						 0xFF);
-					index += 2;
+					index += scnprintf(
+						    &driver_test_buff[index],
+						    size - index,
+						    "%02X",
+						    ssCoeff.ss_force_coeff[j] &
+							0xFF);
 				}
 
 				/* Copying SS sense Coefficients */
 				for (j = 0; j < ssCoeff.header.sense_node;
 				     j++) {
-					snprintf(&driver_test_buff[index], 3,
-						 "%02X",
-						 ssCoeff.ss_sense_coeff[j] &
-						 0xFF);
-					index += 2;
+					index += scnprintf(
+						    &driver_test_buff[index],
+						    size - index,
+						    "%02X",
+						    ssCoeff.ss_sense_coeff[j] &
+							0xFF);
 				}
 
 				kfree(msCoeff.ms_coeff);
@@ -3174,70 +3188,74 @@ END:	/* here start the reporting phase, assembling the data to send in the
 			case CMD_GETFWVER:
 				for (j = 0; j < EXTERNAL_RELEASE_INFO_SIZE;
 				     j++) {
-					snprintf(&driver_test_buff[index], 3,
-						 "%02X",
-						 systemInfo.u8_releaseInfo[j]);
-					index += 2;
+					index += scnprintf(
+						  &driver_test_buff[index],
+						  size - index,
+						  "%02X",
+						  systemInfo.u8_releaseInfo[j]);
 				}
 				break;
 
 			case CMD_READCOMPDATAHEAD:
-				snprintf(&driver_test_buff[index], 3, "%02X",
-					 dataHead.type);
-				index += 2;
+				index += scnprintf(&driver_test_buff[index],
+						size - index, "%02X",
+						dataHead.type);
 				break;
 
 			case CMD_READ_SYNC_FRAME:
+				index += scnprintf(&driver_test_buff[index],
+						size - index, "%02X",
+						(u8)frameMS.header.force_node);
 
-				snprintf(&driver_test_buff[index], 3, "%02X",
-					 (u8)frameMS.header.force_node);
-				index += 2;
+				index += scnprintf(&driver_test_buff[index],
+						size - index, "%02X",
+						(u8)frameMS.header.sense_node);
 
-				snprintf(&driver_test_buff[index], 3, "%02X",
-					 (u8)frameMS.header.sense_node);
-				index += 2;
+				index += scnprintf(&driver_test_buff[index],
+						size - index, "%02X",
+						(u8)frameSS.header.force_node);
 
-				snprintf(&driver_test_buff[index], 3, "%02X",
-					 (u8)frameSS.header.force_node);
-				index += 2;
-
-				snprintf(&driver_test_buff[index], 3, "%02X",
-					 (u8)frameSS.header.sense_node);
-				index += 2;
+				index += scnprintf(&driver_test_buff[index],
+						size - index, "%02X",
+						(u8)frameSS.header.sense_node);
 
 				/* Copying mutual data */
 				for (j = 0; j < frameMS.node_data_size; j++) {
-					snprintf(&driver_test_buff[index], 5,
-						 "%02X%02X",
-						 (frameMS.node_data[j] &
+					index += scnprintf(
+						    &driver_test_buff[index],
+						    size - index,
+						    "%02X%02X",
+						    (frameMS.node_data[j] &
 							0xFF00) >> 8,
-						 frameMS.node_data[j] &
+						    frameMS.node_data[j] &
 							0xFF);
-					index += 4;
 				}
 
 				/* Copying self data Force */
 				for (j = 0; j < frameSS.header.force_node;
 				     j++) {
-					snprintf(&driver_test_buff[index], 5,
-						 "%02X%02X",
-						 (frameSS.force_data[j] &
+					index += scnprintf(
+						    &driver_test_buff[index],
+						    size - index,
+						    "%02X%02X",
+						    (frameSS.force_data[j] &
 							0xFF00) >> 8,
-						 frameSS.force_data[j] &
+						    frameSS.force_data[j] &
 							0xFF);
-					index += 4;
 				}
 
 
 				/* Copying self  data Sense */
 				for (j = 0; j < frameSS.header.sense_node;
 				     j++) {
-					snprintf(&driver_test_buff[index], 5,
-						 "%02X%02X",
-						 (frameSS.sense_data[j] &
+					index += scnprintf(
+						    &driver_test_buff[index],
+						    size - index,
+						    "%02X%02X",
+						    (frameSS.sense_data[j] &
 							0xFF00) >> 8,
-						 frameSS.sense_data[j] & 0xFF);
-					index += 4;
+						    frameSS.sense_data[j] &
+							0xFF);
 				}
 
 				kfree(frameMS.node_data);
@@ -3251,7 +3269,8 @@ END:	/* here start the reporting phase, assembling the data to send in the
 			}
 		}
 
-		snprintf(&driver_test_buff[index], 4, " }\n");
+		index += scnprintf(&driver_test_buff[index],
+				   size - index, " }\n");
 		limit = size - 1;/* avoid to print \0 in the shell */
 		printed = 0;
 	} else {
@@ -3274,22 +3293,27 @@ END:	/* here start the reporting phase, assembling the data to send in the
 		} else {
 			if (funcToTest[0] == CMD_GETLIMITSFILE_BYTE ||
 			    funcToTest[0] == CMD_GETFWFILE_BYTE)
-				snprintf(&driver_test_buff[index], 5,
-					 "%02X%02X",
-					 (((fileSize + 3) / 4) & 0xFF00) >> 8,
-					 ((fileSize + 3) / 4) & 0x00FF);
+				index += scnprintf(&driver_test_buff[index],
+					   size - index,
+					   "%02X%02X",
+					   (((fileSize + 3) / 4) & 0xFF00) >> 8,
+					   ((fileSize + 3) / 4) & 0x00FF);
 			else
-				snprintf(&driver_test_buff[index], 5,
-					 "%02X%02X", (size & 0xFF00) >> 8,
-					 size & 0xFF);
-			index += 4;
-			index += snprintf(&driver_test_buff[index], 5, "%04X",
-					  (u16)mess.counter);
-			index += snprintf(&driver_test_buff[index], 5, "%04X",
-					  (u16)mess.action);
-			index += snprintf(&driver_test_buff[index], 5,
-					  "%02X%02X", (res & 0xFF00) >> 8,
-					  res & 0xFF);
+				index += scnprintf(&driver_test_buff[index],
+					    size - index,
+					    "%02X%02X", (size & 0xFF00) >> 8,
+					    size & 0xFF);
+
+			index += scnprintf(&driver_test_buff[index],
+					   size - index, "%04X",
+					   (u16)mess.counter);
+			index += scnprintf(&driver_test_buff[index],
+					   size - index, "%04X",
+					   (u16)mess.action);
+			index += scnprintf(&driver_test_buff[index],
+					   size - index,
+					   "%02X%02X", (res & 0xFF00) >> 8,
+					   res & 0xFF);
 		}
 
 		switch (funcToTest[0]) {
@@ -3310,8 +3334,9 @@ END:	/* here start the reporting phase, assembling the data to send in the
 			} else {
 				j = mess.dummy;
 				for (; j < byteToRead + mess.dummy; j++)
-					index += snprintf(
-						&driver_test_buff[index], 3,
+					index += scnprintf(
+						&driver_test_buff[index],
+						size - index,
 						"%02X",
 						(u8)readData[j]);
 			}
@@ -3345,13 +3370,15 @@ END:	/* here start the reporting phase, assembling the data to send in the
 				/* snprintf(&driver_test_buff[3], 3, "%02X",
 				 * ((fileSize + 3) / 4)&0x00FF); */
 				for (j = 0; j < fileSize; j++)
-					index += snprintf(
-						&driver_test_buff[index], 3,
+					index += scnprintf(
+						&driver_test_buff[index],
+						size - index,
 						"%02X",
 						(u8)readData[j]);
 				for (; j < addr; j++)
-					index += snprintf(
-						&driver_test_buff[index], 3,
+					index += scnprintf(
+						&driver_test_buff[index],
+						size - index,
 						"%02X", 0);	/* pad memory
 								 * with 0x00 */
 			}
@@ -3360,8 +3387,8 @@ END:	/* here start the reporting phase, assembling the data to send in the
 			break;
 		}
 
-		driver_test_buff[index++] = MESSAGE_END_BYTE;
-		driver_test_buff[index] = '\n';
+		index += scnprintf(&driver_test_buff[index],
+				  size - index, "%c\n", MESSAGE_END_BYTE);
 		/*for(j=0; j<size; j++){
 		  *      logError(0,"%c", driver_test_buff[j]);
 		  * }*/

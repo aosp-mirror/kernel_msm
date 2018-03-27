@@ -562,9 +562,9 @@ int flash_full_erase(void)
 {
 	int status;
 
-	u8 cmd1[6] = { FTS_CMD_HW_REG_W,      0x20,	 0x00,	    0x00,
+	u8 cmd1[6] = { FTS_CMD_HW_REG_W, 0x20, 0x00, 0x00,
 		       FLASH_ERASE_CODE0 + 1, 0x00 };
-	u8 cmd[6] = { FTS_CMD_HW_REG_W,	 0x20,	0x00,  0x00,
+	u8 cmd[6] = { FTS_CMD_HW_REG_W, 0x20, 0x00, 0x00,
 		      FLASH_ERASE_CODE0, FLASH_ERASE_CODE1 };
 
 	if (fts_write(cmd1, ARRAY_SIZE(cmd1)) < OK) {

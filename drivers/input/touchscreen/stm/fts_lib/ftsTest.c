@@ -4989,10 +4989,10 @@ int tp_sensitivity_test_post_cal_ms(MutualSenseFrame *finalFrame,
 				    int *mean_edge)
 {
 	short currentNode;
-	short final_force_num;
-	short final_sense_num;
+	int final_force_num;
+	int final_sense_num;
 	short *final_node;
-	short delta_sense_num;
+	int delta_sense_num;
 	short *delta_node;
 	short *delta;
 	short adjNode;
