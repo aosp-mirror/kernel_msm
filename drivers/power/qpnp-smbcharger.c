@@ -1334,6 +1334,20 @@ static int get_prop_batt_charge_counter(struct smbchg_chip *chip)
 	return ua;
 }
 
+#ifndef CONFIG_QPNP_LEGACY_CYCLE_COUNT
+static int get_prop_batt_cycle_count(struct smbchg_chip *chip)
+{
+	int cycles, rc;
+
+	rc = get_property_from_fg(chip, POWER_SUPPLY_PROP_CYCLE_COUNT, &cycles);
+	if (rc) {
+		pr_smb(PR_STATUS, "Couldn't get cycle count rc = %d\n", rc);
+		cycles = 0;
+	}
+	return cycles;
+}
+#endif
+
 #ifdef CONFIG_HTC_BATT
 static int get_prop_batt_soc(struct smbchg_chip *chip)
 {
@@ -6826,6 +6840,9 @@ static enum power_supply_property smbchg_battery_properties[] = {
 	POWER_SUPPLY_PROP_ALLOW_HVDCP3,
 	POWER_SUPPLY_PROP_CHARGE_COUNTER,
 	POWER_SUPPLY_PROP_CHARGE_FULL,
+#ifndef CONFIG_QPNP_LEGACY_CYCLE_COUNT
+	POWER_SUPPLY_PROP_CYCLE_COUNT,
+#endif
 };
 
 static int smbchg_battery_set_property(struct power_supply *psy,
@@ -7059,6 +7076,11 @@ static int smbchg_battery_get_property(struct power_supply *psy,
 			val->intval = USB_MA_3000;
 		break;
 #endif /* CONFIG_HTC_BATT */
+#ifndef CONFIG_QPNP_LEGACY_CYCLE_COUNT
+	case POWER_SUPPLY_PROP_CYCLE_COUNT:
+		val->intval = get_prop_batt_cycle_count(chip);
+		break;
+#endif
 	default:
 		return -EINVAL;
 	}
