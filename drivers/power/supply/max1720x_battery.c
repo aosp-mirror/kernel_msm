@@ -21,6 +21,7 @@
 #include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/pm_runtime.h>
 #include <linux/power_supply.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
@@ -238,6 +239,7 @@ struct max1720x_chip {
 	u16 RSense;
 	u16 RConfig;
 	bool init_complete;
+	bool resume_complete;
 	u16 *history;
 	int history_count;
 	int history_index;
@@ -673,8 +675,12 @@ static int max1720x_get_property(struct power_supply *psy,
 	struct regmap *map = chip->regmap;
 	u16 data;
 
-	if (!chip->init_complete)
+	pm_runtime_get_sync(chip->dev);
+	if (!chip->init_complete || !chip->resume_complete) {
+		pm_runtime_put_sync(chip->dev);
 		return -EAGAIN;
+	}
+	pm_runtime_put_sync(chip->dev);
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_STATUS:
@@ -1014,6 +1020,12 @@ static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 		return IRQ_NONE;
 	}
 
+	pm_runtime_get_sync(chip->dev);
+	if (!chip->init_complete || !chip->resume_complete) {
+		pm_runtime_put_sync(chip->dev);
+		return -EAGAIN;
+	}
+	pm_runtime_put_sync(chip->dev);
 	rtn = regmap_read(chip->regmap, MAX1720X_Status, &data);
 	if (rtn) {
 		pr_err("Failed to read MAX1720X_Status\n");
@@ -1127,6 +1139,7 @@ static void max1720x_init_worker(struct work_struct *work)
 	    container_of(work, struct max1720x_chip, work);
 	int rtn;
 
+	pm_runtime_get_sync(chip->dev);
 	max1720x_init_chip(chip);
 	if (chip->primary->irq) {
 		rtn = request_threaded_irq(chip->primary->irq, NULL,
@@ -1135,12 +1148,17 @@ static void max1720x_init_worker(struct work_struct *work)
 					   MAX1720X_I2C_DRIVER_NAME, chip);
 		if (rtn != 0) {
 			dev_err(chip->dev, "Unable to register IRQ handler\n");
+			chip->init_complete = 1;
+			chip->resume_complete = 1;
+			pm_runtime_put_sync(chip->dev);
 			return;
 		}
 		enable_irq_wake(chip->primary->irq);
 		chip->status = 0;
 	}
 	chip->init_complete = 1;
+	chip->resume_complete = 1;
+	pm_runtime_put_sync(chip->dev);
 }
 
 static struct power_supply_desc max1720x_psy_desc = {
@@ -1239,10 +1257,41 @@ static const struct i2c_device_id max1720x_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, max1720x_id);
 
+#ifdef CONFIG_PM_SLEEP
+static int max1720x_pm_suspend(struct device *dev)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct max1720x_chip *chip = i2c_get_clientdata(client);
+
+	pm_runtime_get_sync(chip->dev);
+	chip->resume_complete = false;
+	pm_runtime_put_sync(chip->dev);
+
+	return 0;
+}
+
+static int max1720x_pm_resume(struct device *dev)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct max1720x_chip *chip = i2c_get_clientdata(client);
+
+	pm_runtime_get_sync(chip->dev);
+	chip->resume_complete = true;
+	pm_runtime_put_sync(chip->dev);
+
+	return 0;
+}
+static SIMPLE_DEV_PM_OPS(max1720x_pm_ops,
+			max1720x_pm_suspend, max1720x_pm_resume);
+#else
+#define max1720x_pm_ops NULL
+#endif
+
 static struct i2c_driver max1720x_i2c_driver = {
 	.driver = {
 		   .name = "max1720x",
 		   .of_match_table = max1720x_of_match,
+		   .pm = &max1720x_pm_ops,
 		   },
 	.id_table = max1720x_id,
 	.probe = max1720x_probe,
