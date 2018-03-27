@@ -724,6 +724,9 @@ static int smb2_usb_main_get_prop(struct power_supply *psy,
 		rc = smblib_get_charge_param(chg, &chg->param.fcc,
 							&val->intval);
 		break;
+	case POWER_SUPPLY_PROP_CHARGE_FULL:
+		rc = smblib_get_prop_batt_charge_full(chg, val);
+		break;
 	case POWER_SUPPLY_PROP_TYPE:
 		val->intval = POWER_SUPPLY_TYPE_MAIN;
 		break;
@@ -942,6 +945,7 @@ static enum power_supply_property smb2_batt_props[] = {
 	POWER_SUPPLY_PROP_CHARGE_DONE,
 	POWER_SUPPLY_PROP_PARALLEL_DISABLE,
 	POWER_SUPPLY_PROP_SET_SHIP_MODE,
+	POWER_SUPPLY_PROP_CHARGE_FULL,
 	POWER_SUPPLY_PROP_DIE_HEALTH,
 	POWER_SUPPLY_PROP_RERUN_AICL,
 	POWER_SUPPLY_PROP_DP_DM,
