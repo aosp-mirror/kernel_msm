@@ -1439,6 +1439,7 @@ static struct i2c_driver bcm15602_driver = {
 #ifdef CONFIG_PM
 		.pm = &bcm15602_dev_pm_ops,
 #endif
+		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 	},
 	.probe = bcm15602_probe,
 	.id_table = bcm15602_id_table,
