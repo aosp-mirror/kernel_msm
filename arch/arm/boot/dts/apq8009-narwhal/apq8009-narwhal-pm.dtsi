@@ -198,6 +198,7 @@
 		step-dwn-thr-mv = <4100>;
 		fcs,embedded-battery;
 		support-sw-eoc;
+		support-divcoff;
 	};
 };
 
