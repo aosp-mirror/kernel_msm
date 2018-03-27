@@ -1864,7 +1864,7 @@ static int parse_audio_feature_unit(struct mixer_build *state, int unitid,
 				int wr = uac2_control_is_writeable(master_bits,
 								   control);
 				build_feature_ctl(state, _ftr, 0, control,
-						  &iterm, unitid, wr);
+						  &iterm, unitid, !wr);
 			}
 		}
 	}
