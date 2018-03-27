@@ -139,6 +139,8 @@ struct fan5451x_chip {
 	struct dentry *dent;
 	bool retail_enable;
 	int prev_capacity;
+	/* divc off */
+	bool divcoff;
 };
 
 enum {
@@ -511,6 +513,19 @@ static int fan5451x_set_prechg(struct fan5451x_chip *chip, int ma)
 
 	return fan5451x_update_reg(chip->client, REG_IBAT,
 			reg_val, IBAT_PRECHG);
+}
+
+static int fan5451x_set_divc(struct fan5451x_chip *chip, bool divc_off)
+{
+	int ret = 0;
+	if (divc_off) {
+		ret = fan5451x_update_reg(chip->client, REG_FEAT_CON,
+				0 << FEAT_CON_DIVCON_SHIFT, FEAT_CON_DIVCON);
+		if (ret)
+			pr_err("failed to set divcoff enable=%d, ret=%d\n",
+					!divc_off, ret);
+	}
+	return ret;
 }
 
 struct fan5451x_map {
@@ -1107,6 +1122,7 @@ static void fan5451x_initialization(struct fan5451x_chip *chip)
 	ret |= fan5451x_set_iochrg(chip, chip->iochrg);
 
 	ret |= fan5451x_set_prechg(chip, chip->prechg);
+	ret |= fan5451x_set_divc(chip, chip->divcoff);
 	ret |= fan5451x_set_protection(chip,
 			VBUS, chip->vbusovp, chip->vbuslim);
 	ret |= fan5451x_set_protection(chip,
@@ -1843,6 +1859,7 @@ static int fan5451x_parse_dt(struct fan5451x_chip *chip)
 	OF_PROP_READ(chip, wlc_chg_on_min, "wlc-chg-on-min", ret, 1);
 	OF_PROP_READ(chip, wlc_chg_off_min, "wlc-chg-off-min", ret, 1);
 
+	chip->divcoff = of_property_read_bool(np, "support-divcoff");
 	chip->swap_vbus_vin = of_property_read_bool(np, "swap-vbus-vin");
 	chip->embedded_battery = of_property_read_bool(np,
 			"fcs,embedded-battery");
