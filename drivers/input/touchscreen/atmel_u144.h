@@ -283,6 +283,8 @@
 #define POWERLOCK_FW_UP         (1 << 1)
 #define POWERLOCK_SYSFS         (1 << 2)
 
+#define I2C_RETRY_COUNT		3
+
 /* MXT_GEN_POWER_T7 field */
 struct t7_config {
 	u8 idle;

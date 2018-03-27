@@ -438,7 +438,7 @@ static int __mxt_read_reg(struct i2c_client *client, u16 reg, u16 len,
 
 		TOUCH_ERR_MSG("i2c retry %d\n", i + 1);
 		msleep(MXT_WAKEUP_TIME);
-	} while (++i < 10);
+	} while (++i < I2C_RETRY_COUNT);
 
 	TOUCH_ERR_MSG("i2c transfer failed\n");
 	return -EIO;
@@ -476,7 +476,7 @@ static int __mxt_write_reg(struct i2c_client *client, u16 reg, u16 len,
 
 		TOUCH_ERR_MSG("i2c retry %d\n", i + 1);
 		msleep(MXT_WAKEUP_TIME);
-	} while (++i < 10);
+	} while (++i < I2C_RETRY_COUNT);
 
 	TOUCH_ERR_MSG("i2c transfer failed\n");
 	ret = -EIO;
@@ -1569,26 +1569,6 @@ out_sync:
 
 out:
 	return IRQ_HANDLED;
-}
-
-/* touch_irq_handler
- *
- * When Interrupt occurs, it will be called before touch_thread_irq_handler.
- *
- * return
- * IRQ_HANDLED: touch_thread_irq_handler will not be called.
- * IRQ_WAKE_THREAD: touch_thread_irq_handler will be called.
- */
-static irqreturn_t touch_irq_handler(int irq, void *dev_id)
-{
-	struct mxt_data *data = (struct mxt_data *)dev_id;
-	if (data->pm_state >= PM_SUSPEND) {
-		TOUCH_INFO_MSG("interrupt in suspend[%d]\n", data->pm_state);
-		data->pm_state = PM_SUSPEND_IRQ;
-		return IRQ_HANDLED;
-	}
-
-	return IRQ_WAKE_THREAD;
 }
 
 static irqreturn_t mxt_interrupt_thread(int irq, void *dev_id)
@@ -4138,7 +4118,7 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	mxt_external_power_changed(&data->psy);
 
 	error = devm_request_threaded_irq(&client->dev, data->irq,
-			touch_irq_handler, mxt_interrupt_thread,
+			NULL, mxt_interrupt_thread,
 			IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
 			client->name, data);
 	if (error) {
