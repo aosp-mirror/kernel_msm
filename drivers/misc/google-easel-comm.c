@@ -943,7 +943,7 @@ void easelcomm_cmd_channel_data_handler(void)
 			channel->readp - channel->buffer);
 		if (sizeof(struct easelcomm_cmd_header) +
 			saved_cmd_len >
-			EASELCOMM_CMD_CHANNEL_SIZE) {
+			EASELCOMM_CMD_CHANNEL_LOCAL_SIZE) {
 			dev_err(easelcomm_miscdev.this_device,
 				"command channel corruption detected: seq=%llu svc=%u cmd=%u len=%u off=%lx\n",
 				cmdhdr->sequence_nbr, cmdhdr->service_id,
@@ -1204,7 +1204,7 @@ int easelcomm_start_cmd(
 	 * If never enough room for the command plus an 8-byte wrap marker,
 	 * bail.
 	 */
-	if (cmdbuf_size > EASELCOMM_CMD_CHANNEL_SIZE - 8 -
+	if (cmdbuf_size > EASELCOMM_CMD_CHANNEL_REMOTE_SIZE - 8 -
 		sizeof(struct easelcomm_cmd_channel_header))
 		return -EINVAL;
 
@@ -1215,7 +1215,7 @@ int easelcomm_start_cmd(
 
 	/* Choose a spot for the new entry, wrap around if needed. */
 	if (channel->write_offset + cmdbuf_size >
-		EASELCOMM_CMD_CHANNEL_SIZE - 8 -
+		EASELCOMM_CMD_CHANNEL_REMOTE_SIZE - 8 -
 		sizeof(struct easelcomm_cmd_channel_header)) {
 		ret = easelcomm_cmd_channel_send_wrap(channel);
 		if (ret)

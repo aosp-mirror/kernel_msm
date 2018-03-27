@@ -98,7 +98,7 @@ int easelcomm_hw_ap_setup_cmdchans(void)
 
 	/* Command channel size shall not exceed the translation region size */
 	BUILD_BUG_ON_MSG(
-		EASELCOMM_CMD_CHANNEL_SIZE > HW_MNH_PCIE_OUTBOUND_SIZE,
+		EASELCOMM_CMD_CHANNEL_LOCAL_SIZE > HW_MNH_PCIE_OUTBOUND_SIZE,
 	       "Easelcomm command channel size exceeds translation region");
 
 	ret = mnh_get_rb_base(&easel_cmdchan_dma_addr);
@@ -128,7 +128,7 @@ int easelcomm_hw_ap_setup_cmdchans(void)
 	outbound.region = 1;
 	outbound.base_address = HW_MNH_PCIE_OUTBOUND_BASE;
 	outbound.limit_address = HW_MNH_PCIE_OUTBOUND_BASE +
-		EASELCOMM_CMD_CHANNEL_SIZE - 1;
+		EASELCOMM_CMD_CHANNEL_LOCAL_SIZE - 1;
 	outbound.target_pcie_address = local_cmdchan_dma_addr;
 	ret = mnh_set_outbound_iatu(&outbound);
 	if (WARN_ON(ret))
@@ -218,7 +218,7 @@ int easelcomm_hw_init(void)
 	/* dma alloc a buffer for now, may want dedicated carveout */
 	/* temporary: alloc twice as much, align to boundary */
 	local_cmdchan_cpu_addr =
-	    mnh_alloc_coherent(EASELCOMM_CMD_CHANNEL_SIZE,
+	    mnh_alloc_coherent(EASELCOMM_CMD_CHANNEL_LOCAL_SIZE,
 			       &local_cmdchan_dma_addr);
 	pr_debug("easelcomm: cmdchan v=%p d=%pad\n",
 		 local_cmdchan_cpu_addr, &local_cmdchan_dma_addr);
@@ -289,8 +289,8 @@ static int easelcomm_hw_ap_pcie_ready(unsigned long bootstrap_timeout_jiffies)
 	/* Only allocate ringbuffer once for AP */
 	if (local_cmdchan_cpu_addr == NULL) {
 		local_cmdchan_cpu_addr = mnh_alloc_coherent(
-						EASELCOMM_CMD_CHANNEL_SIZE,
-						&local_cmdchan_dma_addr);
+					EASELCOMM_CMD_CHANNEL_LOCAL_SIZE,
+					&local_cmdchan_dma_addr);
 		if (IS_ERR_OR_NULL(local_cmdchan_cpu_addr)) {
 			pr_warn("%s: failed to alloc ringbuffer\n", __func__);
 			return -ENOMEM;
