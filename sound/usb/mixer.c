@@ -1385,8 +1385,10 @@ static void build_feature_ctl(struct mixer_build *state, void *raw_desc,
 	cval->control = control;
 	cval->cmask = ctl_mask;
 	ctl_info = get_feature_control_info(control);
-	if (!ctl_info)
+	if (!ctl_info) {
+		kfree(cval);
 		return;
+	}
 	if (state->mixer->protocol == UAC_VERSION_1)
 		cval->val_type = ctl_info->type;
 	else /* UAC_VERSION_2 or UAC_VERSION_3*/
