@@ -745,12 +745,12 @@ static int max1720x_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN:
 		REGMAP_READ(map, MAX1720X_MaxMinVolt, data);
 		/* LSB: 20mV */
-		val->intval = ((data >> 8) & 0xF) * 20000;
+		val->intval = ((data >> 8) & 0xFF) * 20000;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN:
 		REGMAP_READ(map, MAX1720X_MaxMinVolt, data);
 		/* LSB: 20mV */
-		val->intval = (data & 0xF) * 20000;
+		val->intval = (data & 0xFF) * 20000;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
 		REGMAP_READ(map, MAX1720X_VCell, data);
