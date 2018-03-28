@@ -1608,6 +1608,8 @@ int sec_ts_check_fs_precal(struct sec_ts_data *ts)
 	for (i = 0; i < ts->rx_count; i++) {
 		for (j = 0; j < ts->tx_count; j++) {
 			temp = ts->pFrame[i * ts->tx_count + j];
+			if (cm_region[i][j] == REGION_NOTCH)
+				continue;
 			/* check whether fs_precal data is within range */
 			if ((temp > fs_precal_h[i][j]) ||
 				(temp < fs_precal_l[i][j]))
