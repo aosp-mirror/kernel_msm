@@ -47,7 +47,7 @@
 #define BULK_BUFFER_INIT_SIZE 131072
 #define ACC_STRING_SIZE     256
 
-#define PROTOCOL_VERSION    1
+#define PROTOCOL_VERSION    2
 
 /* String IDs */
 #define INTERFACE_STRING_INDEX	0
