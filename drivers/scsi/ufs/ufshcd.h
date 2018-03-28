@@ -687,6 +687,36 @@ struct ufs_stats {
 	u32 dme_err_cnt;
 };
 
+static inline bool is_read_opcode(u8 opcode)
+{
+	return opcode == READ_10 || opcode == READ_16;
+}
+
+static inline bool is_write_opcode(u8 opcode)
+{
+	return opcode == WRITE_10 || opcode == WRITE_16;
+}
+
+static inline char *parse_opcode(u8 opcode)
+{
+	/* string should be less than 12 byte-long */
+	switch (opcode) {
+	case READ_10:
+		return "READ_10";
+	case READ_16:
+		return "READ_16";
+	case WRITE_10:
+		return "WRITE_10";
+	case WRITE_16:
+		return "WRITE_16";
+	case UNMAP:
+		return "UNMAP";
+	case SYNCHRONIZE_CACHE:
+		return "SYNC_CACHE";
+	}
+	return NULL;
+}
+
 /* UFS Host Controller debug print bitmask */
 #define UFSHCD_DBG_PRINT_CLK_FREQ_EN		UFS_BIT(0)
 #define UFSHCD_DBG_PRINT_UIC_ERR_HIST_EN	UFS_BIT(1)

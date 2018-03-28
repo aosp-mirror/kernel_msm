@@ -55,6 +55,7 @@ static void ufshcd_log_slowio(struct ufs_hba *hba,
 	sector_t la = -1;
 	int transfer_len = -1;
 	u8 opcode = 0xff;
+	char opcode_str[16];
 
 	if (likely(iotime_us < hba->slowio_us))
 		return;
@@ -63,17 +64,18 @@ static void ufshcd_log_slowio(struct ufs_hba *hba,
 
 	if (lrbp->cmd) {
 		opcode = (u8)(*lrbp->cmd->cmnd);
-		if (opcode == READ_10 || opcode == WRITE_10) {
+		if (is_read_opcode(opcode) || is_write_opcode(opcode)) {
 			if (lrbp->cmd->request && lrbp->cmd->request->bio)
 				la = lrbp->cmd->request->bio->bi_iter.bi_sector;
 			transfer_len = be32_to_cpu(
 				lrbp->ucd_req_ptr->sc.exp_data_transfer_len);
 		}
 	}
+	snprintf(opcode_str, 16, "%02x: %s", opcode, parse_opcode(opcode));
 	dev_err_ratelimited(hba->dev,
-		"Slow UFS (%lld): time = %lld us, opcode = %02x, lba = %ld, "
-		"len = %d\n", hba->slowio_cnt, iotime_us, opcode, la,
-		transfer_len);
+		"Slow UFS (%lld): time = %lld us, opcode = %16s, lba = %ld, "
+		"len = %d\n",
+		hba->slowio_cnt, iotime_us, opcode_str, la, transfer_len);
 }
 
 #ifdef CONFIG_DEBUG_FS
@@ -210,20 +212,15 @@ update_io_stat(struct ufs_hba *hba, int tag, int is_start)
 	if (!lrbp->cmd)
 		return;
 	opcode = (u8)(*lrbp->cmd->cmnd);
-	if (opcode != READ_10 && opcode != WRITE_10)
+	if (!is_read_opcode(opcode) && is_write_opcode(opcode))
 		return;
 
 	transfer_len = be32_to_cpu(lrbp->ucd_req_ptr->sc.exp_data_transfer_len);
 
 	__update_io_stat(hba, &hba->ufs_stats.io_readwrite, transfer_len,
 			is_start);
-	if (opcode == READ_10) {
-		__update_io_stat(hba, &hba->ufs_stats.io_read, transfer_len,
-				is_start);
-	} else {
-		__update_io_stat(hba, &hba->ufs_stats.io_write, transfer_len,
-				is_start);
-	}
+	__update_io_stat(hba, is_read_opcode(opcode) ? &hba->ufs_stats.io_read:
+			&hba->ufs_stats.io_write, transfer_len, is_start);
 }
 
 #else
@@ -883,10 +880,10 @@ static inline void ufshcd_cond_add_cmd_trace(struct ufs_hba *hba,
 
 	if (lrbp->cmd) { /* data phase exists */
 		opcode = (u8)(*lrbp->cmd->cmnd);
-		if ((opcode == READ_10) || (opcode == WRITE_10)) {
+		if (is_read_opcode(opcode) || is_write_opcode(opcode)) {
 			/*
-			 * Currently we only fully trace read(10) and write(10)
-			 * commands
+			 * Currently we only fully trace read(10), write(10),
+			 * read(16), and write(16) commands
 			 */
 			if (lrbp->cmd->request && lrbp->cmd->request->bio)
 				lba =
