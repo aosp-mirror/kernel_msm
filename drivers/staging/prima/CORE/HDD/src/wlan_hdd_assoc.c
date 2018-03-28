@@ -4424,10 +4424,18 @@ static tANI_S32 hdd_ProcessGENIE(hdd_adapter_t *pAdapter,
         pRsnIe = gen_ie + 2 + 4;
         RSNIeLen = gen_ie_len - (2 + 4);
         // Unpack the WPA IE
-        dot11fUnpackIeWPA((tpAniSirGlobal) halHandle,
+        status = dot11fUnpackIeWPA((tpAniSirGlobal) halHandle,
                             pRsnIe,
                             RSNIeLen,
                             &dot11WPAIE);
+        if (DOT11F_FAILED(status))
+        {
+            hddLog(LOGE,
+                   FL("Parse failure in hdd_ProcessGENIE (0x%08x)"),
+                   status);
+            return -EINVAL;
+        }
+
         // Copy out the encryption and authentication types
         hddLog(LOG1, FL("%s: WPA unicast cipher suite count: %d"),
                __func__, dot11WPAIE.unicast_cipher_count );
