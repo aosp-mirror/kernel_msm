@@ -697,6 +697,11 @@ static inline bool is_write_opcode(u8 opcode)
 	return opcode == WRITE_10 || opcode == WRITE_16;
 }
 
+static inline bool is_unmap_opcode(u8 opcode)
+{
+	return opcode == UNMAP;
+}
+
 static inline char *parse_opcode(u8 opcode)
 {
 	/* string should be less than 12 byte-long */

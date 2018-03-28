@@ -64,7 +64,8 @@ static void ufshcd_log_slowio(struct ufs_hba *hba,
 
 	if (lrbp->cmd) {
 		opcode = (u8)(*lrbp->cmd->cmnd);
-		if (is_read_opcode(opcode) || is_write_opcode(opcode)) {
+		if (is_read_opcode(opcode) || is_write_opcode(opcode) ||
+						is_unmap_opcode(opcode)) {
 			if (lrbp->cmd->request && lrbp->cmd->request->bio)
 				la = lrbp->cmd->request->bio->bi_iter.bi_sector;
 			transfer_len = be32_to_cpu(
