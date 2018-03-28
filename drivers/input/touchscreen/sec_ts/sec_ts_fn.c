@@ -901,8 +901,7 @@ static int sec_ts_set_gain_table(struct sec_ts_data *ts, u8 *gainTable)
 			tmp_dv = ts->pFrame[i * ts->tx_count + j];
 
 			/* skip notch area */
-			/* fs_target for notch area is 0 */
-			if (fs_target[i][j] == 0) {
+			if (cm_region[i][j] == REGION_NOTCH) {
 				gainTable[j * ts->rx_count + i] = 0;
 				continue;
 			}
@@ -990,7 +989,7 @@ static int sec_ts_get_postcal_mean(struct sec_ts_data *ts)
 
 	for (i = 0; i < ts->rx_count; i++) {
 		for (j = 0; j < ts->tx_count; j++) {
-			if (fs_target[i][j] == 0) {
+			if (cm_region[i][j] == REGION_NOTCH) {
 				/* Count notch nodes, where fs target is 0 */
 				nCnt++;
 				continue;
@@ -1019,8 +1018,8 @@ static int sec_ts_get_postcal_uniformity(struct sec_ts_data *ts, short *diff)
 			 * if node[row][col] or node[row][col+1] is 0,
 			 * it is notch boundary for column direction
 			 */
-			if ((fs_target[i][j] == 0) ||
-			    (fs_target[i][j + 1] == 0))
+			if ((cm_region[i][j] == REGION_NOTCH) ||
+			    (cm_region[i][j + 1] == REGION_NOTCH))
 				continue;
 
 			pos1 = (i * ts->tx_count) + j;
@@ -1042,8 +1041,8 @@ static int sec_ts_get_postcal_uniformity(struct sec_ts_data *ts, short *diff)
 			 * if node[row][col] or node[row+1][col] is 0,
 			 * it is notch boundary for row direction
 			 */
-			if ((fs_target[i][j] == 0) ||
-			    (fs_target[i + 1][j] == 0))
+			if ((cm_region[i][j] == REGION_NOTCH) ||
+			    (cm_region[i + 1][j] == REGION_NOTCH))
 				continue;
 
 			pos1 = (i * ts->tx_count) + j;
