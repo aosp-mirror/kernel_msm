@@ -127,6 +127,7 @@ static int vti_rcv_cb(struct sk_buff *skb, int err)
 	if (!ret)
 		return -EPERM;
 
+	secpath_reset(skb);
 	skb_scrub_packet(skb, !net_eq(tunnel->net, dev_net(skb->dev)));
 	skb->dev = dev;
 
