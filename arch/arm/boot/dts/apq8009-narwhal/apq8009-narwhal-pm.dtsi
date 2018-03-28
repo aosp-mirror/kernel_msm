@@ -180,20 +180,20 @@
 		stat-gpio = <&msm_gpio 85 0x00>;
 		disable-gpio = <&msm_gpio 84 0x00>;
 
-		vbatmin = <3000>;    //CC start voltage 3.0V
-		vfloat = <4400>;     //vbatmax
-		vrechg-hyst = <100>; //rechg = vfloat - (vrechg-hyst)
-		ibus = <400>;        //iusb for vbus
-		iin = <325>;         //iusb for wlc
-		iochrg = <200>;      //CC current
-		iterm = <25>;        //term current
-		prechg = <50>;      //pre charge current
-		topoff-enable = <0>; //post charging flag
-		vbusovp = <10500>;   //ovd for usb
-		vbuslim = <4560>;    //uvd for usb
-		vinovp = <10500>;    //ovd for wireless
-		vinlim = <4560>;     //uvd for wireless
-		fctmr = <0>;         //fast charge timer off
+		vbatmin = <3000>;    /* CC start voltage 3.0V */
+		vfloat = <4400>;     /* vbatmax */
+		vrechg-hyst = <100>; /* rechg = vfloat - (vrechg-hyst) */
+		ibus = <400>;        /* iusb for vbus */
+		iin = <325>;         /* iusb for wlc */
+		iochrg = <200>;      /* CC current */
+		iterm = <25>;        /* term current */
+		prechg = <50>;       /* pre charge current */
+		topoff-enable = <0>; /* post charging flag */
+		vbusovp = <6500>;    /* ovd for usb */
+		vbuslim = <4560>;    /* uvd for usb */
+		vinovp = <6500>;     /* ovd for wireless */
+		vinlim = <4560>;     /* uvd for wireless */
+		fctmr = <0>;         /* fast charge timer off */
 		step-dwn-iusb-ma = <150>;
 		step-dwn-thr-mv = <4100>;
 		fcs,embedded-battery;
