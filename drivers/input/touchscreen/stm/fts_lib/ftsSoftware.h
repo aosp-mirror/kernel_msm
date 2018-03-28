@@ -375,7 +375,7 @@ typedef enum {
 #define EVT_ID_ERROR		0xF3	/* /< Error Event */
 
 /* /< Max number of unique event IDs supported */
-#define NUM_EVT_ID		((EVT_ID_ERROR & 0xF0) >> 4)
+#define NUM_EVT_ID		(((EVT_ID_ERROR & 0xF0) >> 4) + 1)
 
 /** @}*/
 
