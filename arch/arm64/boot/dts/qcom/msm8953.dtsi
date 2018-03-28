@@ -25,6 +25,10 @@
 	qcom,msm-name = "MSM8953";
 	interrupt-parent = <&wakegic>;
 
+	chosen {
+		bootargs = "kpti=0";
+	};
+
 	firmware: firmware {
 		android {
 			compatible = "android,firmware";
@@ -99,7 +103,7 @@
 			compatible = "shared-dma-pool";
 			reusable;
 			alignment = <0 0x400000>;
-			size = <0 0x0400000>;
+			size = <0 0x1000000>;
 		};
 
 		qseecom_ta_mem: qseecom_ta_region {
@@ -107,7 +111,7 @@
 			alloc-ranges = <0 0x00000000 0 0xffffffff>;
 			reusable;
 			alignment = <0 0x400000>;
-			size = <0 0x1000000>;
+			size = <0 0x400000>;
 		};
 
 		adsp_mem: adsp_region@0 {
@@ -771,6 +775,7 @@
 		vdd_gfx-supply = <&gfx_vreg_corner>;
 		clocks = <&clock_gcc clk_xo_clk_src>;
 		clock-names = "xo";
+		qcom,gcc_oxili_gfx3d_clk-opp-handle = <&msm_gpu>;
 		qcom,gfxfreq-corner =
 			 <         0   0 >,
 			 < 133330000   1 >,  /* Min SVS   */
@@ -1158,6 +1163,12 @@
 			qcom,smdpkt-dev-name = "smdcntl8";
 		};
 
+		qcom,smdpkt-data2 {
+			qcom,smdpkt-remote = "modem";
+			qcom,smdpkt-port-name = "DATA2";
+			qcom,smdpkt-dev-name = "at_mdm0";
+		};
+
 		qcom,smdpkt-apr-apps2 {
 			qcom,smdpkt-remote = "adsp";
 			qcom,smdpkt-port-name = "apr_apps2";
@@ -1188,12 +1199,22 @@
 		qcom,wakeup-enable;
 	};
 
-	qcom,chd {
+	qcom,chd_silver {
 		compatible = "qcom,core-hang-detect";
+		label = "silver";
 		qcom,threshold-arr = <0xb1880b0 0xb1980b0 0xb1a80b0
-			0xb1b80b0 0xb0880b0 0xb0980b0 0xb0a80b0 0xb0b80b0>;
+			0xb1b80b0>;
 		qcom,config-arr = <0xb1880b8 0xb1980b8 0xb1a80b8
-			0xb1b80b8 0xb0880b8 0xb0980b8 0xb0a80b8 0xb0b80b8>;
+			0xb1b80b8>;
+	};
+
+	qcom,chd_gold {
+		compatible = "qcom,core-hang-detect";
+		label = "gold";
+		qcom,threshold-arr = <0xb0880b0 0xb0980b0 0xb0a80b0
+			0xb0b80b0>;
+		qcom,config-arr = <0xb0880b8 0xb0980b8 0xb0a80b8
+			0xb0b80b8>;
 	};
 
 	qcom,msm-rtb {
@@ -1501,8 +1522,8 @@
 			usb-phy = <&qusb_phy>, <&ssphy>;
 			tx-fifo-resize;
 			snps,usb3-u1u2-disable;
-			snps,nominal-elastic-buffer;
 			snps,is-utmi-l1-suspend;
+			snps,usb2-l1-disable;
 			snps,hird-threshold = /bits/ 8 <0x0>;
 		};
 
@@ -1772,6 +1793,15 @@
 		qcom,qdsp6v56-1-10;
 		qcom,reset-clk;
 
+		/* GPIO inputs from mss */
+		qcom,gpio-err-fatal = <&smp2pgpio_ssr_smp2p_1_in 0 0>;
+		qcom,gpio-err-ready = <&smp2pgpio_ssr_smp2p_1_in 1 0>;
+		qcom,gpio-proxy-unvote = <&smp2pgpio_ssr_smp2p_1_in 2 0>;
+		qcom,gpio-stop-ack = <&smp2pgpio_ssr_smp2p_1_in 3 0>;
+		qcom,gpio-shutdown-ack = <&smp2pgpio_ssr_smp2p_1_in 7 0>;
+
+		/* GPIO output to mss */
+		qcom,gpio-force-stop = <&smp2pgpio_ssr_smp2p_1_out 0 0>;
 		memory-region = <&modem_mem>;
 	};
 
@@ -1803,6 +1833,15 @@
 		qcom,sysmon-id = <1>;
 		qcom,ssctl-instance-id = <0x14>;
 		qcom,firmware-name = "adsp";
+
+		/* GPIO inputs from lpass */
+		qcom,gpio-err-fatal = <&smp2pgpio_ssr_smp2p_2_in 0 0>;
+		qcom,gpio-proxy-unvote = <&smp2pgpio_ssr_smp2p_2_in 2 0>;
+		qcom,gpio-err-ready = <&smp2pgpio_ssr_smp2p_2_in 1 0>;
+		qcom,gpio-stop-ack = <&smp2pgpio_ssr_smp2p_2_in 3 0>;
+
+		/* GPIO output to lpass */
+		qcom,gpio-force-stop = <&smp2pgpio_ssr_smp2p_2_out 0 0>;
 
 		memory-region = <&adsp_fw_mem>;
 	};
@@ -1836,6 +1875,14 @@
 		qcom,ssctl-instance-id = <0x13>;
 		qcom,firmware-name = "wcnss";
 
+		/* GPIO inputs from wcnss */
+		qcom,gpio-err-fatal = <&smp2pgpio_ssr_smp2p_4_in 0 0>;
+		qcom,gpio-err-ready = <&smp2pgpio_ssr_smp2p_4_in 1 0>;
+		qcom,gpio-proxy-unvote = <&smp2pgpio_ssr_smp2p_4_in 2 0>;
+		qcom,gpio-stop-ack = <&smp2pgpio_ssr_smp2p_4_in 3 0>;
+
+		/* GPIO output to wcnss */
+		qcom,gpio-force-stop = <&smp2pgpio_ssr_smp2p_4_out 0 0>;
 		memory-region = <&wcnss_fw_mem>;
 	};
 

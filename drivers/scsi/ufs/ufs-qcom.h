@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -161,6 +161,7 @@ enum ufs_qcom_phy_init_type {
 
 /* QUniPro Vendor specific attributes */
 #define PA_VS_CONFIG_REG1		0x9000
+#define PA_VS_STATUS_REG1		0x9001
 #define SAVECONFIGTIME_MODE_MASK	0x6000
 
 #define PA_VS_CLK_CFG_REG	0x9004
@@ -375,7 +376,6 @@ struct ufs_qcom_host {
 	struct work_struct ice_cfg_work;
 	struct request *req_pending;
 	struct ufs_vreg *vddp_ref_clk;
-	bool work_pending;
 };
 
 static inline u32
@@ -397,6 +397,9 @@ int ufs_qcom_testbus_config(struct ufs_qcom_host *host);
 void ufs_qcom_print_hw_debug_reg_all(struct ufs_hba *hba, void *priv,
 		void (*print_fn)(struct ufs_hba *hba, int offset, int num_regs,
 				char *str, void *priv));
+void ufs_qcom_read_custom_testbus(struct ufs_hba *hba);
+int ufs_qcom_read_pa_vs_status_reg1(struct ufs_hba *hba,
+		u32 *pa_vs_status_reg1);
 
 static inline bool ufs_qcom_cap_qunipro(struct ufs_qcom_host *host)
 {

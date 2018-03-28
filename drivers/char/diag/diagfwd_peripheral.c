@@ -311,7 +311,6 @@ static void diagfwd_data_process_done(struct diagfwd_info *fwd_info,
 	int err = 0;
 	int write_len = 0, peripheral = 0;
 	unsigned char *write_buf = NULL;
-	struct diag_md_session_t *session_info = NULL;
 	uint8_t hdlc_disabled = 0;
 
 	if (!fwd_info || !buf || len <= 0) {
@@ -344,13 +343,9 @@ static void diagfwd_data_process_done(struct diagfwd_info *fwd_info,
 		diag_ws_release();
 		return;
 	}
-	mutex_lock(&driver->md_session_lock);
-	session_info = diag_md_session_get_peripheral(peripheral);
-	if (session_info)
-		hdlc_disabled = session_info->hdlc_disabled;
-	else
-		hdlc_disabled = driver->hdlc_disabled;
-	mutex_unlock(&driver->md_session_lock);
+
+	hdlc_disabled = driver->p_hdlc_disabled[peripheral];
+
 	if (hdlc_disabled) {
 		/* The data is raw and and on APPS side HDLC is disabled */
 		if (!buf) {
@@ -611,7 +606,6 @@ static void diagfwd_data_read_done(struct diagfwd_info *fwd_info,
 	int write_len = 0;
 	unsigned char *write_buf = NULL;
 	struct diagfwd_buf_t *temp_buf = NULL;
-	struct diag_md_session_t *session_info = NULL;
 	uint8_t hdlc_disabled = 0;
 
 	if (!fwd_info || !buf || len <= 0) {
@@ -633,13 +627,9 @@ static void diagfwd_data_read_done(struct diagfwd_info *fwd_info,
 
 	mutex_lock(&driver->hdlc_disable_mutex);
 	mutex_lock(&fwd_info->data_mutex);
-	mutex_lock(&driver->md_session_lock);
-	session_info = diag_md_session_get_peripheral(fwd_info->peripheral);
-	if (session_info)
-		hdlc_disabled = session_info->hdlc_disabled;
-	else
-		hdlc_disabled = driver->hdlc_disabled;
-	mutex_unlock(&driver->md_session_lock);
+
+	hdlc_disabled = driver->p_hdlc_disabled[fwd_info->peripheral];
+
 	if (!driver->feature[fwd_info->peripheral].encode_hdlc) {
 		if (fwd_info->buf_1 && fwd_info->buf_1->data == buf) {
 			temp_buf = fwd_info->buf_1;
@@ -1189,8 +1179,11 @@ void *diagfwd_request_write_buf(struct diagfwd_info *fwd_info)
 	int index;
 	unsigned long flags;
 
+	if (!fwd_info)
+		return NULL;
 	spin_lock_irqsave(&fwd_info->write_buf_lock, flags);
-	for (index = 0 ; index < NUM_WRITE_BUFFERS; index++) {
+	for (index = 0; (index < NUM_WRITE_BUFFERS) && fwd_info->buf_ptr[index];
+		index++) {
 		if (!atomic_read(&(fwd_info->buf_ptr[index]->in_busy))) {
 			atomic_set(&(fwd_info->buf_ptr[index]->in_busy), 1);
 			buf = fwd_info->buf_ptr[index]->data;
@@ -1625,7 +1618,8 @@ int diagfwd_write_buffer_done(struct diagfwd_info *fwd_info, const void *ptr)
 	if (!fwd_info || !ptr)
 		return found;
 	spin_lock_irqsave(&fwd_info->write_buf_lock, flags);
-	for (index = 0; index < NUM_WRITE_BUFFERS; index++) {
+	for (index = 0; (index < NUM_WRITE_BUFFERS) && fwd_info->buf_ptr[index];
+		index++) {
 		if (fwd_info->buf_ptr[index]->data == ptr) {
 			atomic_set(&fwd_info->buf_ptr[index]->in_busy, 0);
 			found = 1;

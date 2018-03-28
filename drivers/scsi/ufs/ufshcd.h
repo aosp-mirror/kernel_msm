@@ -3,7 +3,7 @@
  *
  * This code is based on drivers/scsi/ufs/ufshcd.h
  * Copyright (C) 2011-2013 Samsung India Software Operations
- * Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2018, The Linux Foundation. All rights reserved.
  *
  * Authors:
  *	Santosh Yaraganavi <santosh.sy@samsung.com>
@@ -650,6 +650,11 @@ struct ufs_stats {
 	struct ufs_uic_err_reg_hist nl_err;
 	struct ufs_uic_err_reg_hist tl_err;
 	struct ufs_uic_err_reg_hist dme_err;
+	u32 pa_err_cnt_total;
+	u32 pa_err_cnt[UFS_EC_PA_MAX];
+	u32 dl_err_cnt_total;
+	u32 dl_err_cnt[UFS_EC_DL_MAX];
+	u32 dme_err_cnt;
 };
 
 /* UFS Host Controller debug print bitmask */
@@ -681,6 +686,12 @@ struct ufshcd_cmd_log_entry {
 	u32 seq_num;
 	unsigned int tag;
 	ktime_t tstamp;
+	u32 tb_ah8_ctrl_0;
+	u32 tb_dme;
+	u32 tb_pa_power_ctrl;
+	u32 tb_pa_attr_1;
+	u32 tb_pa_attr_2;
+	u32 pa_vs_status_reg1;
 };
 
 struct ufshcd_cmd_log {
@@ -986,9 +997,17 @@ struct ufs_hba {
 	struct pinctrl *pctrl;
 
 	int latency_hist_enabled;
-	struct io_latency_state io_lat_s;
+	struct io_latency_state io_lat_read;
+	struct io_latency_state io_lat_write;
 	struct ufs_desc_size desc_size;
 	bool restore_needed;
+
+	/* Custom test bus data */
+	u32 tb_ah8_ctrl_0;
+	u32 tb_dme;
+	u32 tb_pa_power_ctrl;
+	u32 tb_pa_attr_1;
+	u32 tb_pa_attr_2;
 };
 
 static inline void ufshcd_mark_shutdown_ongoing(struct ufs_hba *hba)

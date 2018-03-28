@@ -19,6 +19,7 @@
 
 &usb_otg {
 	vbus_otg-supply = <&smb5_vbus>;
+	extcon = <&pmi632_charger>;
 };
 
 &pmi632_pon {
@@ -36,5 +37,68 @@
 
 &pmi632_qg {
 	qcom,battery-data = <&mtp_batterydata>;
-	qcom,rbat-conn-mohm = <20>;
+};
+
+&pm8953_typec {
+	status = "disabled";
+};
+
+&thermal_zones {
+	pmi-vbat-lvl0 {
+		cooling-maps {
+			vbat_map0 {
+				trip = <&pmi632_vbat_lvl0>;
+				cooling-device =
+					<&CPU0 THERMAL_MAX_LIMIT
+						THERMAL_MAX_LIMIT>;
+			};
+			vbat_map1 {
+				trip = <&pmi632_vbat_lvl0>;
+				cooling-device =
+					<&CPU1 THERMAL_MAX_LIMIT
+						THERMAL_MAX_LIMIT>;
+			};
+			vbat_map2 {
+				trip = <&pmi632_vbat_lvl0>;
+				cooling-device =
+					<&CPU2 THERMAL_MAX_LIMIT
+						THERMAL_MAX_LIMIT>;
+			};
+			vbat_map3 {
+				trip = <&pmi632_vbat_lvl0>;
+				cooling-device =
+					<&CPU3 THERMAL_MAX_LIMIT
+						THERMAL_MAX_LIMIT>;
+			};
+		};
+	};
+
+	soc {
+		cooling-maps {
+			soc_map0 {
+				trip = <&pmi632_low_soc>;
+				cooling-device =
+					<&CPU0 THERMAL_MAX_LIMIT
+						THERMAL_MAX_LIMIT>;
+			};
+			soc_map1 {
+				trip = <&pmi632_low_soc>;
+				cooling-device =
+					<&CPU1 THERMAL_MAX_LIMIT
+						THERMAL_MAX_LIMIT>;
+			};
+			soc_map2 {
+				trip = <&pmi632_low_soc>;
+				cooling-device =
+					<&CPU2 THERMAL_MAX_LIMIT
+						THERMAL_MAX_LIMIT>;
+			};
+			soc_map3 {
+				trip = <&pmi632_low_soc>;
+				cooling-device =
+					<&CPU3 THERMAL_MAX_LIMIT
+						THERMAL_MAX_LIMIT>;
+			};
+		};
+	};
 };

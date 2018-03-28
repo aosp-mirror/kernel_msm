@@ -371,11 +371,9 @@ int ipa3_active_clients_log_print_table(char *buf, int size)
 static int ipa3_active_clients_panic_notifier(struct notifier_block *this,
 		unsigned long event, void *ptr)
 {
-	mutex_lock(&ipa3_ctx->ipa3_active_clients.mutex);
 	ipa3_active_clients_log_print_table(active_clients_table_buf,
 			IPA3_ACTIVE_CLIENTS_TABLE_BUF_SIZE);
 	IPAERR("%s", active_clients_table_buf);
-	mutex_unlock(&ipa3_ctx->ipa3_active_clients.mutex);
 
 	return NOTIFY_DONE;
 }
@@ -4517,8 +4515,6 @@ static int ipa3_post_init(const struct ipa3_plat_drv_res *resource_p,
 		IPADBG("teth_bridge initialized");
 	}
 
-	ipa3_debugfs_init();
-
 	result = ipa3_uc_interface_init();
 	if (result)
 		IPAERR(":ipa Uc interface init failed (%d)\n", -result);
@@ -4555,6 +4551,8 @@ static int ipa3_post_init(const struct ipa3_plat_drv_res *resource_p,
 	ipa3_trigger_ipa_ready_cbs();
 	complete_all(&ipa3_ctx->init_completion_obj);
 	pr_info("IPA driver initialization was successful.\n");
+
+	ipa3_debugfs_init();
 
 	return 0;
 

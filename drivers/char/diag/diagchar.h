@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -36,7 +36,11 @@
 
 #define DIAG_MAX_REQ_SIZE	(16 * 1024)
 #define DIAG_MAX_RSP_SIZE	(16 * 1024)
+#ifdef CONFIG_USB_CI13XXX_MSM
+#define APF_DIAG_PADDING	256
+#else
 #define APF_DIAG_PADDING	0
+#endif
 /*
  * In the worst case, the HDLC buffer can be atmost twice the size of the
  * original packet. Add 3 bytes for 16 bit CRC (2 bytes) and a delimiter
@@ -619,6 +623,7 @@ struct diagchar_dev {
 	/* buffer for updating mask to peripherals */
 	unsigned char *buf_feature_mask_update;
 	uint8_t hdlc_disabled;
+	uint8_t p_hdlc_disabled[NUM_MD_SESSIONS];
 	struct mutex hdlc_disable_mutex;
 	struct mutex hdlc_recovery_mutex;
 	struct timer_list hdlc_reset_timer;
@@ -643,6 +648,7 @@ struct diagchar_dev {
 	struct work_struct diag_drain_work;
 	struct work_struct update_user_clients;
 	struct work_struct update_md_clients;
+	struct work_struct diag_hdlc_reset_work;
 	struct workqueue_struct *diag_cntl_wq;
 	uint8_t log_on_demand_support;
 	uint8_t *apps_req_buf;
@@ -725,5 +731,6 @@ void diag_record_stats(int type, int flag);
 
 struct diag_md_session_t *diag_md_session_get_pid(int pid);
 struct diag_md_session_t *diag_md_session_get_peripheral(uint8_t peripheral);
+int diag_md_session_match_pid_peripheral(int pid, uint8_t peripheral);
 
 #endif

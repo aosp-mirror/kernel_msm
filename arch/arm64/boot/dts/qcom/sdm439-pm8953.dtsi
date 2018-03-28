@@ -48,6 +48,7 @@
 	/delete-node/ xo-therm-buf-adc;
 	/delete-node/ case-therm-adc;
 	/delete-node/ pa-therm0-adc;
+	/delete-node/ pm8937_tz;
 };
 
 &int_codec {
@@ -89,12 +90,6 @@
 		/delete-property/ vdd-cci-supply;
 	};
 
-	usb@78db000 {
-		/delete-property/ hsusb_vdd_dig-supply;
-		/delete-property/ HSUSB_1p8-supply;
-		/delete-property/ HSUSB_3p3-supply;
-	};
-
 	qcom,lpass@c200000 {
 		/delete-property/ vdd_cx-supply;
 	};
@@ -130,9 +125,10 @@
 };
 
 &usb_otg {
-	/delete-property/ hsusb_vdd_dig-supply;
-	/delete-property/ HSUSB_1p8-supply;
-	/delete-property/ HSUSB_3p3-supply;
+	hsusb_vdd_dig-supply = <&pm8953_l23>;
+	HSUSB_1p8-supply = <&pm8953_l7>;
+	HSUSB_3p3-supply = <&pm8953_l13>;
+	qcom,vdd-voltage-level = <0 800000 800000>;
 };
 
 &mdss_dsi0_pll {
@@ -174,3 +170,84 @@
 #include "pm8953.dtsi"
 #include "pm8953-rpm-regulator.dtsi"
 #include "sdm439-regulator.dtsi"
+
+&thermal_zones {
+	aoss0-lowf {
+		cooling-maps {
+			cx_vdd_cdev {
+				cooling-device = <&pm8953_cx_cdev 0 0>;
+			};
+		};
+	};
+
+	mdm-core-lowf {
+		cooling-maps {
+			cx_vdd_cdev {
+				cooling-device = <&pm8953_cx_cdev 0 0>;
+			};
+		};
+	};
+	lpass-lowf {
+		cooling-maps {
+			cx_vdd_cdev {
+				cooling-device = <&pm8953_cx_cdev 0 0>;
+			};
+		};
+	};
+	camera-lowf {
+		cooling-maps {
+			cx_vdd_cdev {
+				cooling-device = <&pm8953_cx_cdev 0 0>;
+			};
+		};
+	};
+	cpuss1-lowf {
+		cooling-maps {
+			cx_vdd_cdev {
+				cooling-device = <&pm8953_cx_cdev 0 0>;
+			};
+		};
+	};
+	apc1-cpu0-lowf {
+		cooling-maps {
+			cx_vdd_cdev {
+				cooling-device = <&pm8953_cx_cdev 0 0>;
+			};
+		};
+	};
+	apc1-cpu1-lowf {
+		cooling-maps {
+			cx_vdd_cdev {
+				cooling-device = <&pm8953_cx_cdev 0 0>;
+			};
+		};
+	};
+	apc1-cpu2-lowf {
+		cooling-maps {
+			cx_vdd_cdev {
+				cooling-device = <&pm8953_cx_cdev 0 0>;
+			};
+		};
+	};
+	apc1-cpu3-lowf {
+		cooling-maps {
+			cx_vdd_cdev {
+				cooling-device = <&pm8953_cx_cdev 0 0>;
+			};
+		};
+	};
+	cpuss0-lowf {
+		cooling-maps {
+			cx_vdd_cdev {
+				cooling-device = <&pm8953_cx_cdev 0 0>;
+			};
+		};
+	};
+	gpu-lowf {
+		cooling-maps {
+			cx_vdd_cdev {
+				cooling-device = <&pm8953_cx_cdev 0 0>;
+			};
+		};
+	};
+};

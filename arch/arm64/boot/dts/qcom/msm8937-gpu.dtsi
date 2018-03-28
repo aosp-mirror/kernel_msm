@@ -117,6 +117,9 @@
 		/* Context aware jump target power level */
 		qcom,ca-target-pwrlevel = <1>;
 
+		/* Enable gpu cooling device */
+		#cooling-cells = <2>;
+
 		/* GPU Mempools */
 		qcom,gpu-mempools {
 			#address-cells= <1>;
@@ -134,6 +137,25 @@
 			qcom,gpu-mempool@1 {
 				reg = <1>;
 				qcom,mempool-page-size = <65536>;
+			};
+		};
+
+		qcom,gpu-coresights {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			compatible = "qcom,gpu-coresight";
+
+			/* Trace bus */
+			qcom,gpu-coresight@0 {
+				reg = <0>;
+				coresight-name = "coresight-gfx";
+				coresight-atid = <67>;
+				port {
+					gfx_out_funnel_mm: endpoint {
+						remote-endpoint =
+						<&funnel_mm_in_gfx>;
+					};
+				};
 			};
 		};
 
