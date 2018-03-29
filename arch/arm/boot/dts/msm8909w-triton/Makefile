@@ -1,5 +1,4 @@
-dtb-$(CONFIG_ARCH_MSM8909) += apq8009w-triton.dtb \
-                              apq8009w-triton_1gb.dtb
+dtb-$(CONFIG_ARCH_MSM8909) += apq8009w-triton.dtb
 
 targets += dtbs
 targets += $(addprefix ../, $(dtb-y))
