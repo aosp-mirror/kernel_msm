@@ -33221,17 +33221,18 @@ int wma_scpc_event_handler(void *handle, u_int8_t *event_buf, u_int32_t len)
 	buf += sizeof(u_int32_t);
 
 	i = n = 0;
-	bd_data = (struct _bd *)&buf[n];
-	n += roundup((sizeof(struct _bd) + bd_data->length), 4);
 
 	while ((n < length) && (i < scpc_event->num_patch)) {
 		bd_data = (struct _bd *)&buf[n];
 
 		WMA_LOGD("%s: board data patch%i, offset= %d, length= %d.\n",
 			__func__, i, bd_data->offset, bd_data->length);
+		if (bd_data->length + n > length)
+			break;
+
 		/* cache the data section */
 		vos_cache_boarddata(bd_data->offset,
-				bd_data->length, bd_data->data);
+				    bd_data->length, bd_data->data);
 
 		n += roundup((sizeof(struct _bd) + bd_data->length), 4);
 		i++;
