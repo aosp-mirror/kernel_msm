@@ -1949,6 +1949,7 @@ static int cam_ife_csid_get_time_stamp(
 	struct cam_isp_resource_node         *res;
 	struct cam_ife_csid_reg_offset       *csid_reg;
 	struct cam_hw_soc_info               *soc_info;
+	struct timespec64 ts;
 	uint32_t  time_32, id;
 
 	time_stamp = (struct cam_csid_get_time_stamp_args  *)cmd_args;
@@ -1997,6 +1998,10 @@ static int cam_ife_csid_get_time_stamp(
 		time_stamp->time_stamp_val,
 		CAM_IFE_CSID_QTIMER_MUL_FACTOR,
 		CAM_IFE_CSID_QTIMER_DIV_FACTOR);
+
+	get_monotonic_boottime64(&ts);
+	time_stamp->boot_timestamp = (uint64_t)((ts.tv_sec * 1000000000) +
+		ts.tv_nsec);
 
 	return 0;
 }
