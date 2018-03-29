@@ -719,8 +719,7 @@ static void fts_report_value(struct fts_ts_data *data)
 static int plam_detected_flag;
 static int wakeup_flag;
 static ktime_t last_touch_time;
-
-static void fts_touch_irq_work(struct work_struct *work)
+static irqreturn_t fts_ts_interrupt(int irq, void *dev_id)
 {
 	int ret = -1;
 	ktime_t cur_time;
@@ -736,7 +735,7 @@ static void fts_touch_irq_work(struct work_struct *work)
 		cur_time = ktime_get();
 		if (cur_time.tv64 - last_touch_time.tv64
 			< 600000000)
-			return;
+			return IRQ_HANDLED;
 
 		plam_detected_flag = 0;
 		wakeup_flag = 0;
@@ -747,8 +746,8 @@ static void fts_touch_irq_work(struct work_struct *work)
 		last_touch_time = cur_time;
 #if FTS_PLAM_EN
 		if (cur_time.tv64 - fts_wq_data->last_plam_time.tv64
-			< 600000000)
-			return;
+			< 1000000000)
+			return IRQ_HANDLED;
 #endif
 		input_report_key(fts_input_dev, KEY_WAKEUP, 1);
 		input_sync(fts_input_dev);
@@ -756,16 +755,15 @@ static void fts_touch_irq_work(struct work_struct *work)
 		input_sync(fts_input_dev);
 		wakeup_flag = 1;
 		printk(KERN_DEBUG "FTS: wakeup system from ambient mode\n");
-		return;
+		return IRQ_HANDLED;
 	}
-
 
 #if FTS_PLAM_EN
 	fts_i2c_read_reg(fts_wq_data->client,
 		FTS_REG_GESTURE_OUTPUT_ADDRESS, &val);
 	if (val == GESTURE_PLAM) {
 		if (fts_wq_data->suspended)
-			return;
+			return IRQ_HANDLED;
 		fts_wq_data->last_plam_time =  ktime_get();
 		last_touch_time = fts_wq_data->last_plam_time;
 		input_report_key(fts_input_dev, KEY_SLEEP, 1);
@@ -774,7 +772,7 @@ static void fts_touch_irq_work(struct work_struct *work)
 		input_sync(fts_input_dev);
 		plam_detected_flag = 1;
 		printk(KERN_DEBUG "FTS: PLAM to Send KEY_SLEEP\n");
-		return;
+		return IRQ_HANDLED;
 	}
 #endif
 
@@ -785,12 +783,7 @@ static void fts_touch_irq_work(struct work_struct *work)
 #if FTS_ESDCHECK_EN
 	fts_esdcheck_set_intr(0);
 #endif
-}
 
-
-static irqreturn_t fts_ts_interrupt(int irq, void *dev_id)
-{
-	queue_work(fts_wq_data->ts_workqueue, &fts_wq_data->touch_event_work);
 	return IRQ_HANDLED;
 }
 
@@ -1156,17 +1149,10 @@ static int fts_ts_probe(struct i2c_client *client,
 		goto free_gpio;
 	}
 
-	INIT_WORK(&data->touch_event_work, fts_touch_irq_work);
-	data->ts_workqueue = create_workqueue(FTS_WORKQUEUE_NAME);
-	if (!data->ts_workqueue) {
-		err = -ESRCH;
-		goto exit_create_singlethread;
-	}
-
 	client->irq = gpio_to_irq(pdata->irq_gpio);
 
 	err = request_threaded_irq(client->irq, NULL, fts_ts_interrupt,
-							   pdata->irq_gpio_flags | IRQF_ONESHOT | IRQF_TRIGGER_FALLING,
+	pdata->irq_gpio_flags | IRQF_ONESHOT | IRQF_TRIGGER_LOW,
 							   client->dev.driver->name, data);
 	if (err) {
 		FTS_ERROR("Request irq failed!");
@@ -1233,7 +1219,6 @@ static int fts_ts_probe(struct i2c_client *client,
 
 exit_free_irq:
 	free_irq(data->client->irq, data->client);
-exit_create_singlethread:
 	i2c_set_clientdata(client, NULL);
 free_gpio:
 	if (gpio_is_valid(pdata->reset_gpio))
