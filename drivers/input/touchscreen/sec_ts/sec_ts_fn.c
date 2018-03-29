@@ -2587,7 +2587,7 @@ static int sec_ts_read_frame_stdev(struct sec_ts_data *ts,
 	buff_len = scnprintf(pBuff, buff_size, "\n");
 	for (i = 0; i < node_tot; i++) {
 		buff_len += scnprintf(pBuff + buff_len, buff_size - buff_len,
-				      "%6d,", ts->pFrame[i]);
+				      "%4d,", ts->pFrame[i]);
 
 		if (i % ts->tx_count == ts->tx_count - 1)
 			buff_len += scnprintf(pBuff + buff_len,
