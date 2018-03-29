@@ -1714,18 +1714,12 @@ static int mdss_dsi_blank(struct mdss_panel_data *pdata, int power_state)
 
 	if (ctrl_pdata->ctrl_state & CTRL_STATE_PANEL_INIT) {
 		if (!pdata->panel_info.dynamic_switch_pending) {
-			if(mdp3_res->twm_en) {
-				pr_err("%s: Skip Panel OFF for TWM\n",
+			ATRACE_BEGIN("dsi_panel_off");
+			ret = ctrl_pdata->off(pdata);
+			if (ret) {
+				pr_err("%s: Panel OFF failed\n",
 					__func__);
-			} else {
-				ATRACE_BEGIN("dsi_panel_off");
-				ret = ctrl_pdata->off(pdata);
-				if (ret) {
-					pr_err("%s: Panel OFF failed\n",
-						__func__);
-					goto error;
-				}
-				ATRACE_END("dsi_panel_off");
+				goto error;
 			}
 		}
 		ctrl_pdata->ctrl_state &= ~(CTRL_STATE_PANEL_INIT |

@@ -2686,7 +2686,7 @@ static ssize_t mdp3_store_twm(struct device *dev,
 		pr_err("kstrtoint failed. rc=%d\n", rc);
 		return rc;
 	}
-	mdp3_res->twm_en = data;
+	mdp3_res->twm_en = data ? true : false;
 	pr_err("TWM :  %s\n",	(mdp3_res->twm_en) ?
 		"ENABLED" : "DISABLED");
 	return len;
