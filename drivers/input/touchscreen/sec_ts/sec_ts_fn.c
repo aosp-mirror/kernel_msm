@@ -3559,19 +3559,35 @@ err_exit:
 	return rc;
 }
 
+/* execute_selftest options
+ * bit[7] : Do NOT save
+ * bit[6] : Load self-test configuration only
+ * bit[5] : Get Self capacitance
+ * bit[4] : Enable/Disable Force test
+ * bit[3] : Reserved
+ * bit[2] : Enable/disable the short test
+ * bit[1] : Enable/disable the node variance test
+ * bit[0] : Enable/disable the open test
+ */
 int execute_selftest(struct sec_ts_data *ts, bool save_result)
 {
 	int rc;
-	u8 tpara[2] = {0x21, 0x40};
+	/* Selftest setting
+	 * Get self capacitance
+	 * Enable/disable the short test
+	 * Enable/disable the node variance test
+	 * Enable/disable the open test
+	 */
+	u8 tpara[2] = {0x27, 0x40};
 	u8 *rBuff;
 	int i;
 	int result_size = SEC_TS_SELFTEST_REPORT_SIZE + ts->tx_count * ts->rx_count * 2;
 
-	/* save selftest result in flash */
-	if (save_result)
-		tpara[0] = 0x21;
-	else
-		tpara[0] = 0xA1;
+	/* don't save selftest result in flash */
+	if (!save_result) {
+		tpara[0] = 0xA7;
+		tpara[1] = 0x00;
+	}
 
 	rBuff = kzalloc(result_size, GFP_KERNEL);
 	if (!rBuff)
