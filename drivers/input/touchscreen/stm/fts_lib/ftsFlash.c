@@ -408,10 +408,10 @@ int parseBinFile(u8 *fw_data, int fw_size, Firmware *fwData, int keep_cx)
 			 tag, temp);
 
 		index += FW_BYTES_ALIGN;
-		fwData->config_ver = temp;
 		u8ToU32(&fw_data[index], &temp);
+		fwData->config_ver = temp;
 		logError(1, "%s parseBinFile: FILE Config Version = %08X\n",
-			 tag, temp);
+			 tag, fwData->config_ver);
 
 		index += FW_BYTES_ALIGN * 2;	/* skip reserved data */
 
