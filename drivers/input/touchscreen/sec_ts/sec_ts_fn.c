@@ -5661,7 +5661,9 @@ static void set_grip_data(void *device_data)
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
 	struct sec_ts_data *ts = container_of(sec, struct sec_ts_data, sec);
 	char buff[SEC_CMD_STR_LEN] = { 0 };
-	u8 mode = G_NONE;
+	/* u8 mode = G_NONE; */
+	u8 tPara[2] = { 0 };
+	int ret;
 
 	sec_cmd_set_default_result(sec);
 
@@ -5669,6 +5671,13 @@ static void set_grip_data(void *device_data)
 
 	mutex_lock(&ts->device_mutex);
 
+	tPara[0] = sec->cmd_param[0] & 0xFF;
+	tPara[1] = (sec->cmd_param[0] >> 8) & 0xFF;
+
+	ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_DEADZONE_RANGE, tPara, 2);
+	if (ret < 0)
+		goto err_grip_data;
+	/*
 	if (sec->cmd_param[0] == 0) {	// edge handler
 		if (sec->cmd_param[1] == 0) {	// clear
 			ts->grip_edgehandler_direction = 0;
@@ -5719,6 +5728,7 @@ static void set_grip_data(void *device_data)
 		input_err(true, &ts->client->dev, "%s: cmd0 is abnormal, %d", __func__, sec->cmd_param[0]);
 		goto err_grip_data;
 	}
+	*/
 
 	mutex_unlock(&ts->device_mutex);
 
