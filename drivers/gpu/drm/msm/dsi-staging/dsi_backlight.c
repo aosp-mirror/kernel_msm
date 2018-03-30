@@ -191,8 +191,62 @@ static ssize_t alpm_mode_show(struct device *dev,
 }
 static DEVICE_ATTR_RW(alpm_mode);
 
+static ssize_t vr_mode_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf, size_t count)
+{
+	struct backlight_device *bd = NULL;
+	struct dsi_backlight_config *bl = NULL;
+	struct dsi_panel *panel = NULL;
+	int rc = 0;
+	bool vr_mode = false;
+
+	/* dev is non-NULL, enforced by sysfs_create_file_ns */
+	bd = to_backlight_device(dev);
+	bl = bl_get_data(bd);
+	panel = container_of(bl, struct dsi_panel, bl_config);
+
+	rc = kstrtobool(buf, &vr_mode);
+	if (rc)
+		return rc;
+
+	rc = dsi_panel_update_vr_mode(panel, vr_mode);
+
+	if (!rc && !vr_mode) {
+		bl->bl_actual = -1;
+		if (backlight_update_status(bd))
+			pr_warn("couldn't restore backlight after VR exit");
+	}
+
+	if (rc)
+		return rc;
+	else
+		return count;
+}
+
+static ssize_t vr_mode_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct backlight_device *bd = NULL;
+	struct dsi_backlight_config *bl = NULL;
+	struct dsi_panel *panel = NULL;
+	bool vr_mode = false;
+
+	/* dev is non-NULL, enforced by sysfs_create_file_ns */
+	bd = to_backlight_device(dev);
+	bl = bl_get_data(bd);
+	panel = container_of(bl, struct dsi_panel, bl_config);
+
+	vr_mode = dsi_panel_get_vr_mode(panel);
+
+	return snprintf(buf, PAGE_SIZE, "%s\n", vr_mode ? "on" : "off");
+}
+
+static DEVICE_ATTR_RW(vr_mode);
+
 static struct attribute *bl_device_attrs[] = {
 	&dev_attr_alpm_mode.attr,
+	&dev_attr_vr_mode.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(bl_device);
@@ -386,6 +440,27 @@ int dsi_backlight_late_dpms(struct dsi_backlight_config *bl, int power_mode)
 	mutex_unlock(&bd->ops_lock);
 
 	return 0;
+}
+
+int dsi_backlight_get_dpms(struct dsi_backlight_config *bl)
+{
+	struct backlight_device *bd = bl->bl_device;
+	int power = 0;
+	int state = 0;
+
+	mutex_lock(&bd->ops_lock);
+	power = bd->props.power;
+	state = bd->props.state;
+	mutex_unlock(&bd->ops_lock);
+
+	if (power == FB_BLANK_POWERDOWN)
+		return SDE_MODE_DPMS_OFF;
+	else if (state & BL_STATE_LP2)
+		return SDE_MODE_DPMS_LP2;
+	else if (state & BL_STATE_LP)
+		return SDE_MODE_DPMS_LP1;
+	else
+		return SDE_MODE_DPMS_ON;
 }
 
 #define DSI_PANEL_S6E3HA8_HLPM_OFF    0x20

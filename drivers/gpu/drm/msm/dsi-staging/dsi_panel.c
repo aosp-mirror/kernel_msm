@@ -101,6 +101,13 @@ static char dsi_dsc_rc_range_max_qp_1_1_scr1[][15] = {
 static char dsi_dsc_rc_range_bpg_offset[] = {2, 0, 0, -2, -4, -6, -8, -8,
 		-8, -10, -10, -12, -12, -12, -12};
 
+/*
+ * VR utility function.  Forward-declared so that other commands
+ * can clear VR mode if necessary.
+ */
+
+static int dsi_panel_clear_vr_locked(struct dsi_panel *panel);
+
 int dsi_dsc_create_pps_buf_cmd(struct msm_display_dsc_info *dsc, char *buf,
 				int pps_id)
 {
@@ -1327,6 +1334,8 @@ const char *cmd_set_prop_map[DSI_CMD_SET_MAX] = {
 	"qcom,mdss-dsi-lp1-command",
 	"qcom,mdss-dsi-lp2-command",
 	"qcom,mdss-dsi-nolp-command",
+	"qcom,mdss-dsi-vr-command",
+	"qcom,mdss-dsi-novr-command",
 	"PPS not parsed from DTSI, generated dynamically",
 	"ROI not parsed from DTSI, generated dynamically",
 	"qcom,mdss-dsi-timing-switch-command",
@@ -1351,6 +1360,8 @@ const char *cmd_set_state_map[DSI_CMD_SET_MAX] = {
 	"qcom,mdss-dsi-lp1-command-state",
 	"qcom,mdss-dsi-lp2-command-state",
 	"qcom,mdss-dsi-nolp-command-state",
+	"qcom,mdss-dsi-vr-command-state",
+	"qcom,mdss-dsi-novr-command-state",
 	"PPS not parsed from DTSI, generated dynamically",
 	"ROI not parsed from DTSI, generated dynamically",
 	"qcom,mdss-dsi-timing-switch-command-state",
@@ -2856,6 +2867,8 @@ struct {
 	{ "lp1",		DSI_CMD_SET_LP1 },
 	{ "lp2",		DSI_CMD_SET_LP2 },
 	{ "no_lp",		DSI_CMD_SET_NOLP },
+	{ "vr",			DSI_CMD_SET_VR },
+	{ "novr",		DSI_CMD_SET_NOVR },
 };
 
 static inline ssize_t parse_cmdset(struct dsi_panel_cmd_set *set, char *buf,
@@ -3448,6 +3461,17 @@ int dsi_panel_set_lp1(struct dsi_panel *panel)
 	dsi_backlight_early_dpms(&panel->bl_config, SDE_MODE_DPMS_LP1);
 
 	mutex_lock(&panel->panel_lock);
+
+	if (panel->vr_mode) {
+		rc = dsi_panel_clear_vr_locked(panel);
+		if (rc) {
+			pr_err("[%s] couldn't disable VR mode for LP1 transition\n",
+				panel->name);
+			mutex_unlock(&panel->panel_lock);
+			return rc;
+		}
+	}
+
 	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_LP1);
 	if (rc)
 		pr_err("[%s] failed to send DSI_CMD_SET_LP1 cmd, rc=%d\n",
@@ -3476,6 +3500,17 @@ int dsi_panel_set_lp2(struct dsi_panel *panel)
 	dsi_backlight_early_dpms(&panel->bl_config, SDE_MODE_DPMS_LP2);
 
 	mutex_lock(&panel->panel_lock);
+
+	if (panel->vr_mode) {
+		rc = dsi_panel_clear_vr_locked(panel);
+		if (rc) {
+			pr_err("[%s] couldn't disable VR mode for LP2 transition\n",
+				panel->name);
+			mutex_unlock(&panel->panel_lock);
+			return rc;
+		}
+	}
+
 	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_LP2);
 	if (rc)
 		pr_err("[%s] failed to send DSI_CMD_SET_LP2 cmd, rc=%d\n",
@@ -3514,6 +3549,108 @@ int dsi_panel_set_nolp(struct dsi_panel *panel)
 		rc = dsi_backlight_late_dpms(&panel->bl_config,
 					       SDE_MODE_DPMS_ON);
 	return rc;
+}
+
+static int dsi_panel_set_vr_locked(struct dsi_panel *panel)
+{
+	int rc = 0;
+
+	if (dsi_backlight_get_dpms(&panel->bl_config) != SDE_MODE_DPMS_ON) {
+		pr_err("[%s] DSI_CMD_SET_VR wasn't allowed\n", panel->name);
+		return -EINVAL;
+	}
+
+	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_VR);
+
+	if (rc)
+		pr_err("[%s] failed to send DSI_CMD_SET_VR cmd, rc=%d\n",
+			panel->name, rc);
+	else
+		panel->vr_mode = true;
+
+	return rc;
+}
+
+static int dsi_panel_clear_vr_locked(struct dsi_panel *panel)
+{
+	int rc = 0;
+
+	if (!panel->vr_mode) {
+		pr_err("[%s] tried to exit, but not in VR mode\n", panel->name);
+		return -EINVAL;
+	}
+
+	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_NOVR);
+
+	if (rc)
+		pr_err("[%s] failed to send DSI_CMD_SET_NOVR cmd, rc=%d\n",
+		       panel->name, rc);
+	else
+		panel->vr_mode = false;
+
+	return rc;
+}
+
+int dsi_panel_set_vr(struct dsi_panel *panel)
+{
+	int rc = 0;
+
+	if (!panel) {
+		pr_err("invalid params\n");
+		return -EINVAL;
+	}
+
+	if (panel->type == EXT_BRIDGE)
+		return 0;
+
+	mutex_lock(&panel->panel_lock);
+	rc = dsi_panel_set_vr_locked(panel);
+	mutex_unlock(&panel->panel_lock);
+
+	return rc;
+}
+
+int dsi_panel_clear_vr(struct dsi_panel *panel)
+{
+	int rc = 0;
+
+	if (!panel) {
+		pr_err("invalid params\n");
+		return -EINVAL;
+	}
+
+	if (panel->type == EXT_BRIDGE)
+		return 0;
+
+	mutex_lock(&panel->panel_lock);
+	rc = dsi_panel_clear_vr_locked(panel);
+	mutex_unlock(&panel->panel_lock);
+
+	return rc;
+}
+
+int dsi_panel_update_vr_mode(struct dsi_panel *panel, bool enable)
+{
+	if (enable)
+		return dsi_panel_set_vr(panel);
+	else
+		return dsi_panel_clear_vr(panel);
+}
+
+bool dsi_panel_get_vr_mode(struct dsi_panel *panel)
+{
+	bool vr_mode;
+
+	if (!panel) {
+		pr_err("invalid params\n");
+		return false;
+	}
+
+	mutex_lock(&panel->panel_lock);
+	vr_mode = panel->vr_mode;
+	mutex_unlock(&panel->panel_lock);
+
+	return vr_mode;
 }
 
 int dsi_panel_prepare(struct dsi_panel *panel)
@@ -3811,6 +3948,14 @@ int dsi_panel_disable(struct dsi_panel *panel)
 		return 0;
 
 	mutex_lock(&panel->panel_lock);
+
+	if (panel->vr_mode) {
+		rc = dsi_panel_clear_vr_locked(panel);
+		if (rc) {
+			pr_warn("[%s] couldn't disable VR mode to unprepare display\n",
+				panel->name);
+		}
+	}
 
 	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_OFF);
 	if (rc) {

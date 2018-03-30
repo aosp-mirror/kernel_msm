@@ -422,6 +422,15 @@ Optional properties:
 					setting the panel power mode.
 					"dsi_lp_mode" = DSI low power mode
 					"dsi_hs_mode" = DSI high speed mode
+- qcom,mdss-dsi-vr-command:		An optional byte stream containing commands to switch the panel
+					into a mode designed for virtual reality applications.
+- qcom,mdss-dsi-vr-command-state:	The control state for sending qcom,mdss-dsi-vr-command.
+					"dsi_lp_mode" = DSI low power mode (default)
+					"dsi_hs_mode" = DSI high speed mode
+- qcom,mdss-dsi-novr-command:		If qcom,mdss-dsi-vr-command is defined, a byte stream containing
+					commands to switch the panel out of virtual-reality mode to normal operation.
+- qcom,mdss-dsi-novr-command-state:	The control state for sending qcom,mdss-dsi-novr-command
+					See qcom,mdss-dsi-vr-command-state.
 - qcom,mdss-dsi-panel-status-check-mode:Specifies the panel status check method for ESD recovery.
 					"bta_check" = Uses BTA to check the panel status
 					"reg_read" = Reads panel status register to check the panel status

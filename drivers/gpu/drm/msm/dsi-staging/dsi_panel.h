@@ -207,6 +207,8 @@ struct dsi_panel {
 	enum dsi_dms_mode dms_mode;
 
 	bool sync_broadcast_en;
+
+	bool vr_mode;	      /* guarded by panel_lock */
 };
 
 static inline bool dsi_panel_ulps_feature_enabled(struct dsi_panel *panel)
@@ -274,6 +276,10 @@ int dsi_panel_set_lp2(struct dsi_panel *panel);
 
 int dsi_panel_set_nolp(struct dsi_panel *panel);
 
+int dsi_panel_set_vr(struct dsi_panel *panel);
+
+int dsi_panel_set_novr(struct dsi_panel *panel);
+
 int dsi_panel_prepare(struct dsi_panel *panel);
 
 int dsi_panel_enable(struct dsi_panel *panel);
@@ -311,8 +317,14 @@ void dsi_panel_ext_bridge_put(struct dsi_panel *panel);
 int dsi_backlight_early_dpms(struct dsi_backlight_config *bl, int power_state);
 int dsi_backlight_late_dpms(struct dsi_backlight_config *bl, int power_state);
 
+int dsi_backlight_get_dpms(struct dsi_backlight_config *bl);
+
 int dsi_panel_bl_register(struct dsi_panel *panel);
 int dsi_panel_bl_unregister(struct dsi_panel *panel);
 int dsi_panel_bl_parse_config(struct dsi_backlight_config *bl,
 			      struct device_node *of_node);
+
+int dsi_panel_update_vr_mode(struct dsi_panel *panel, bool enable);
+bool dsi_panel_get_vr_mode(struct dsi_panel *panel);
+
 #endif /* _DSI_PANEL_H_ */
