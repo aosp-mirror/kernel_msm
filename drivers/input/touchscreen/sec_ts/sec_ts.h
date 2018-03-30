@@ -694,7 +694,6 @@ struct sec_ts_data {
 	struct delayed_work suspend_work;
 	struct delayed_work resume_work;
 	struct completion resume_done;
-	struct wakeup_source wakesrc;
 	struct sec_cmd_data sec;
 	short *pFrame;
 
