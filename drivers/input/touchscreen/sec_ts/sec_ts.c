@@ -538,7 +538,7 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 
 	if (ts->power_status == SEC_TS_STATE_LPM) {
 
-		__pm_wakeup_event(&ts->wakesrc, 3 * MSEC_PER_SEC);
+		pm_wakeup_event(&ts->client->dev, 3 * MSEC_PER_SEC);
 		/* waiting for blsp block resuming, if not occurs i2c error */
 		ret = wait_for_completion_interruptible_timeout(&ts->resume_done, msecs_to_jiffies(3 * MSEC_PER_SEC));
 		if (ret == 0) {
@@ -1691,7 +1691,6 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	mutex_init(&ts->i2c_mutex);
 	mutex_init(&ts->eventlock);
 
-	wakeup_source_init(&ts->wakesrc, "tsp_wakesrc");
 	init_completion(&ts->resume_done);
 	complete_all(&ts->resume_done);
 
@@ -1901,7 +1900,6 @@ err_input_register_device:
 	kfree(ts->pFrame);
 err_allocate_frame:
 err_init:
-	wakeup_source_trash(&ts->wakesrc);
 	sec_ts_power(ts, false);
 	if (ts->plat_data->support_dex) {
 		if (ts->input_dev_pad)
@@ -2322,7 +2320,6 @@ static int sec_ts_remove(struct i2c_client *client)
 	p_ghost_check = NULL;
 #endif
 	device_init_wakeup(&client->dev, false);
-	wakeup_source_trash(&ts->wakesrc);
 
 	ts->lowpower_mode = false;
 	ts->probe_done = false;
