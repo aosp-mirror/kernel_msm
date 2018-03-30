@@ -20,7 +20,7 @@
 
 #include <soc/qcom/msm_qmi_interface.h>
 
-#define TBN_SERVICE_ID_V01 231
+#define TBN_SERVICE_ID_V01 232
 #define TBN_SERVICE_VERS_V01 1
 
 #define QMI_TBN_KERNEL_REQUEST_BUS_V01  0x0020
