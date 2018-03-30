@@ -50,9 +50,7 @@
 			15 01 00 00 00 00 02 01 AA
 			15 01 00 00 00 00 02 FF 10
 			15 01 00 00 00 00 02 35 00
-			05 01 00 00 3C 00 01 11 /* Sleep out */
-			];
-		qcom,mdss-dsi-panel-on-command = [
+			05 01 00 00 64 00 01 11 /* Sleep out */
 			05 01 00 00 00 00 01 29 /* Display On */
 			];
 		qcom,mdss-dsi-off-command = [
@@ -65,7 +63,6 @@
 			05 01 00 00 5A 00 01 10
 			];
 		qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
-		qcom,mdss-dsi-panel-on-command-state = "dsi_lp_mode";
 		qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
 		qcom,mdss-dsi-h-sync-pulse = <1>;
 		qcom,mdss-dsi-traffic-mode = "burst_mode";
@@ -500,9 +497,7 @@
 			15 01 00 00 00 00 02 EA DB
 			15 01 00 00 00 00 02 FB 01 /* MTP No Reload CMD2 Page1 */
 			15 01 00 00 00 00 02 FF 10
-			05 01 00 00 3C 00 01 11 /* Sleep out */
-			];
-		qcom,mdss-dsi-panel-on-command = [
+			05 01 00 00 64 00 01 11 /* Sleep out */
 			05 01 00 00 00 00 01 29 /* Display On */
 			];
 		qcom,mdss-dsi-off-command = [
@@ -515,7 +510,6 @@
 			05 01 00 00 5A 00 01 10
 			];
 		qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
-		qcom,mdss-dsi-panel-on-command-state = "dsi_lp_mode";
 		qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
 		qcom,mdss-dsi-h-sync-pulse = <1>;
 		qcom,mdss-dsi-traffic-mode = "burst_mode";
