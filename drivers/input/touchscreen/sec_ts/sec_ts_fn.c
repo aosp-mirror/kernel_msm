@@ -1528,6 +1528,17 @@ int sec_ts_read_raw_data(struct sec_ts_data *ts,
 
 	if (mode->allnode) {
 		if (mode->frame_channel) {
+			if (mode->spec_check == SPEC_PASS) {
+				buff_len += scnprintf(buff + buff_len,
+						buff_size - buff_len,
+						"OK %d %d",
+						ts->rx_count, ts->tx_count);
+			} else if (mode->spec_check == SPEC_FAIL) {
+				buff_len += scnprintf(buff + buff_len,
+						buff_size - buff_len,
+						"NG %d %d",
+						ts->rx_count, ts->tx_count);
+			}
 			buff_len += scnprintf(buff + buff_len,
 					      buff_size - buff_len, "\n      ");
 			for (ii = 0; ii < (ts->rx_count + ts->tx_count); ii++) {
@@ -2589,7 +2600,15 @@ static int sec_ts_read_frame_stdev(struct sec_ts_data *ts,
 			*spec_check = SPEC_FAIL;
 	}
 
-	buff_len = scnprintf(pBuff, buff_size, "\n");
+	if (*spec_check == SPEC_PASS)
+		buff_len = scnprintf(pBuff, buff_size, "OK %d %d\n",
+				ts->rx_count, ts->tx_count);
+	else if (*spec_check == SPEC_FAIL)
+		buff_len = scnprintf(pBuff, buff_size, "NG %d %d\n",
+				ts->rx_count, ts->tx_count);
+	else
+		buff_len = scnprintf(pBuff, buff_size, "\n");
+
 	for (i = 0; i < node_tot; i++) {
 		buff_len += scnprintf(pBuff + buff_len, buff_size - buff_len,
 				      "%4d,", ts->pFrame[i]);
