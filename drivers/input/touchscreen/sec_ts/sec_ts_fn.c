@@ -1223,6 +1223,9 @@ static int sec_ts_read_frame(struct sec_ts_data *ts, u8 type, short *min,
 					dTmp = ts->pFrame[i * ts->tx_count + j];
 					region = cm_region[i][j];
 
+					if (region == REGION_NOTCH)
+						continue;
+
 					min[region] = min(min[region], dTmp);
 					max[region] = max(max[region], dTmp);
 
@@ -1249,7 +1252,8 @@ static int sec_ts_read_frame(struct sec_ts_data *ts, u8 type, short *min,
 			for (i = 0; i < ts->rx_count; i++) {
 				for (j = 0; j < ts->tx_count; j++) {
 					dTmp = ts->pFrame[i * ts->tx_count + j];
-					if (dTmp < noi_min[i][j])
+					if (cm_region[i][j] != REGION_NOTCH &&
+					    dTmp < noi_min[i][j])
 						specover_count++;
 				}
 			}
@@ -1264,7 +1268,8 @@ static int sec_ts_read_frame(struct sec_ts_data *ts, u8 type, short *min,
 			for (i = 0; i < ts->rx_count; i++) {
 				for (j = 0; j < ts->tx_count; j++) {
 					dTmp = ts->pFrame[i * ts->tx_count + j];
-					if (dTmp > noi_max[i][j])
+					if (cm_region[i][j] != REGION_NOTCH &&
+					    dTmp > noi_max[i][j])
 						specover_count++;
 				}
 			}
