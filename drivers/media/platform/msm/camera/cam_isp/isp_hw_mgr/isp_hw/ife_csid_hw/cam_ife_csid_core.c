@@ -2384,7 +2384,7 @@ static int cam_ife_csid_init_hw(void *hw_priv,
 	rc = cam_ife_csid_reset_retain_sw_reg(csid_hw);
 	if (rc < 0) {
 		CAM_ERR(CAM_ISP, "CSID: Failed in SW reset");
-		return rc;
+		goto end;
 	}
 
 	if (rc)
