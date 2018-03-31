@@ -130,6 +130,13 @@
 	qcom,msm-cpudai-tdm-invert-sync = <0>;
 };
 
+&soc {
+	msm_cirrus_playback {
+		compatible = "cirrus,msm-cirrus-playback";
+		usecase-names = "Playback";
+	};
+};
+
 &routing {
 	qcom,msm-pcm-config = "b1";
 };
@@ -165,9 +172,8 @@
 		interrupts = <115 IRQ_TYPE_LEVEL_LOW>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&cs35l36_reset_bottom &cs35l36_irq_bottom>;
-		cirrus,right-channel-amp;
 		cirrus,boost-ind-nanohenry = <1000>;
-		cirrus,boost-ctrl-select = <0x00>;
+		cirrus,boost-ctl-select = <0x01>;
 		cirrus,boost-ctl-millivolt = <10000>;
 		cirrus,boost-peak-milliamp = <4500>;
 		cirrus,amp-gain-zc;
@@ -177,19 +183,14 @@
 		cirrus,weak-fet-delay = <0x04>;
 		cirrus,weak-fet-thld = <0x01>;
 		cirrus,temp-warn-threshold = <0x01>;
+		cirrus,multi-amp-mode;
 
 		cirrus,irq-config {
-			cirrus,irq-drive-select = <0x01>;
-			cirrus,irq-polarity = <0x01>;
-			cirrus,irq-gpio-select = <0x01>;
+			cirrus,irq-drive-select = <0x00>;
+			cirrus,irq-polarity = <0x00>;
+			cirrus,irq-gpio-select = <0x00>;
 			cirrus,irq-output-enable = <0x01>;
 			cirrus,irq-src-select = <0x01>;
-		};
-
-		cirrus,asp-tx-config {
-			cirrus,tx1-config = /bits/ 8 <0x00 0x18>;
-			cirrus,tx2-config = /bits/ 8 <0x01 0x19>;
-			cirrus,tx3-config = /bits/ 8 <0x02 0x28>;
 		};
 	};
 
@@ -204,9 +205,8 @@
 		interrupts = <40 IRQ_TYPE_LEVEL_LOW>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&cs35l36_reset_top &cs35l36_irq_top>;
-		cirrus,left-channel-amp;
 		cirrus,boost-ind-nanohenry = <1000>;
-		cirrus,boost-ctrl-select = <0x00>;
+		cirrus,boost-ctl-select = <0x01>;
 		cirrus,boost-ctl-millivolt = <10000>;
 		cirrus,boost-peak-milliamp = <4500>;
 		cirrus,amp-gain-zc;
@@ -216,19 +216,14 @@
 		cirrus,weak-fet-delay = <0x04>;
 		cirrus,weak-fet-thld = <0x01>;
 		cirrus,temp-warn-threshold = <0x01>;
+		cirrus,multi-amp-mode;
 
 		cirrus,irq-config {
-			cirrus,irq-drive-select = <0x01>;
-			cirrus,irq-polarity = <0x01>;
-			cirrus,irq-gpio-select = <0x01>;
+			cirrus,irq-drive-select = <0x00>;
+			cirrus,irq-polarity = <0x00>;
+			cirrus,irq-gpio-select = <0x00>;
 			cirrus,irq-output-enable = <0x01>;
 			cirrus,irq-src-select = <0x01>;
-		};
-
-		cirrus,asp-tx-config {
-			cirrus,tx4-config = /bits/ 8 <0x03 0x18>;
-			cirrus,tx5-config = /bits/ 8 <0x04 0x19>;
-			cirrus,tx6-config = /bits/ 8 <0x05 0x28>;
 		};
 	};
 };

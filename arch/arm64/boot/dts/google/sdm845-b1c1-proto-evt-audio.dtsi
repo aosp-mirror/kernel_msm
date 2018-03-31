@@ -3,9 +3,15 @@
 	irq-gpio = <&tlmm 40 0>;
 	interrupts = <40 IRQ_TYPE_LEVEL_LOW>;
 	pinctrl-0 = <&cs35l36_reset_top &cs35l36_irq_top>;
+	cirrus,irq-config {
+		cirrus,irq-shared;
+	};
 };
 
 
 &cs35l36_codec2 {
 	pinctrl-names = "unused";
+	cirrus,irq-config {
+		cirrus,irq-shared;
+	};
 };
