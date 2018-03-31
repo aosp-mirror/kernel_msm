@@ -152,6 +152,7 @@ struct fusb302_chip {
 	struct usb_controller *uc;
 	struct usb_typec_ctrl *utc;
 	struct power_supply *batt_psy;
+	struct power_supply *usb_psy;
 
 	/* Current limit to be set */
 	u32 max_ma;
@@ -926,8 +927,7 @@ static void fusb302_set_current_limit(struct work_struct *work)
 	max_ma = chip->max_ma;
 	mv = chip->mv;
 
-	fusb302_log("current limit: %d ma, %d mv\n",
-		    max_ma, mv);
+	fusb302_log("current limit: %d ma, %d mv\n", max_ma, mv);
 
 	if ((mv == 0 || mv == 5000) &&
 	    (max_ma == 0 || max_ma == 1500 || max_ma == 3000)) {
@@ -942,16 +942,6 @@ static void fusb302_set_current_limit(struct work_struct *work)
 			chip->utc->sink_current = sink_current;
 		}
 
-		if (!chip->batt_psy) {
-			chip->batt_psy = power_supply_get_by_name("battery");
-			if (IS_ERR(chip->batt_psy)) {
-				ret = PTR_ERR(chip->batt_psy);
-				fusb302_log(
-					"cannot get battery power supply, ret=%d\n",
-					ret);
-			}
-		}
-
 		if (chip->batt_psy && chip->utc &&
 		    (sink_current != pre_sink_current)) {
 			ret = chip->batt_psy->set_property(chip->batt_psy,
@@ -959,11 +949,19 @@ static void fusb302_set_current_limit(struct work_struct *work)
 					(const union power_supply_propval *)
 							&pre_sink_current);
 			if (ret < 0) {
-				fusb302_log(
-					"cannot set battery sink current, ret=%d\n",
-					ret);
+				fusb302_log("cannot set sink current, ret=%d\n",
+					    ret);
 			}
 		}
+	}
+
+	if (chip->usb_psy) {
+		ret = chip->usb_psy->set_property(chip->usb_psy,
+					POWER_SUPPLY_PROP_INPUT_CURRENT_MAX,
+					(const union power_supply_propval *)
+					&max_ma);
+		if (ret < 0)
+			fusb302_log("cannot set usb current, ret=%d\n", ret);
 	}
 
 	mutex_unlock(&chip->lock);
@@ -2042,7 +2040,20 @@ static int fusb302_probe(struct i2c_client *client,
 {
 	struct fusb302_chip *chip;
 	struct i2c_adapter *adapter;
+	struct power_supply *batt_psy, *usb_psy;
 	int ret = 0;
+
+	/* If batt_psy is not ready, defer the probe */
+	batt_psy = power_supply_get_by_name("battery");
+	if (IS_ERR(batt_psy))
+		return -EPROBE_DEFER;
+
+	/* If usb_psy is not ready, defer the probe */
+	usb_psy = power_supply_get_by_name("usb");
+	if (IS_ERR(usb_psy)) {
+		put_device(batt_psy->dev);
+		return -EPROBE_DEFER;
+	}
 
 	if (!fusb302_log)
 		fusb302_log = ipc_log_context_create(NUM_LOG_PAGES,
@@ -2050,36 +2061,36 @@ static int fusb302_probe(struct i2c_client *client,
 	adapter = to_i2c_adapter(client->dev.parent);
 	if (!i2c_check_functionality(adapter, I2C_FUNC_SMBUS_I2C_BLOCK)) {
 		fusb302_log("I2C/SMBus block functionality not supported!\n");
-		return -ENODEV;
+		ret = -ENODEV;
+		goto power_supply_put;
 	}
 	chip = devm_kzalloc(&client->dev, sizeof(*chip), GFP_KERNEL);
-	if (!chip)
-		return -ENOMEM;
+	if (!chip) {
+		ret = -ENOMEM;
+		goto power_supply_put;
+	}
 	chip->i2c_client = client;
 	i2c_set_clientdata(client, chip);
 	chip->dev = &client->dev;
 	mutex_init(&chip->lock);
 
-	/* If batt_psy is not ready in probe, skip here and get it when used. */
-	chip->batt_psy = power_supply_get_by_name("battery");
-	if (IS_ERR(chip->batt_psy)) {
-		ret = PTR_ERR(chip->batt_psy);
-		fusb302_log("cannot get battery power supply, ret=%d\n", ret);
-		chip->batt_psy = NULL;
-	}
+	chip->batt_psy = batt_psy;
+	chip->usb_psy = usb_psy;
 
 	chip->wq = create_singlethread_workqueue(dev_name(chip->dev));
-	if (!chip->wq)
-		return -ENOMEM;
+	if (!chip->wq) {
+		ret = -ENOMEM;
+		goto power_supply_put;
+	}
 	INIT_DELAYED_WORK(&chip->bc_lvl_handler, fusb302_bc_lvl_handler_work);
 	INIT_WORK(&chip->set_current_limit, fusb302_set_current_limit);
 
 	ret = init_tcpc_dev(&chip->tcpc_dev);
 	if (ret < 0)
-		return ret;
+		goto power_supply_put;
 	ret = init_regulators(chip);
 	if (ret < 0)
-		return ret;
+		goto power_supply_put;
 	ret = init_gpio(chip);
 	if (ret < 0)
 		goto disable_regulators;
@@ -2114,6 +2125,10 @@ disable_regulators:
 	regulator_disable(chip->vdd);
 	regulator_set_optimum_mode(chip->switch_vdd, 0);
 	regulator_disable(chip->switch_vdd);
+
+power_supply_put:
+	put_device(batt_psy->dev);
+	put_device(usb_psy->dev);
 
 	return ret;
 }
