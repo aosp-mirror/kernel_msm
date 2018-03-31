@@ -1886,7 +1886,7 @@ static int tcpm_pd_select_pdo(struct tcpm_port *port, int *sink_pdo,
 	}
 
 	pd_data.pd_list[0][0] = max_mv;
-	pd_data.pd_list[0][1] = max_mw / max_mv * 1000;
+	pd_data.pd_list[0][1] = max_mw * 1000 / max_mv;
 
 	/* notify battery driver of the selected pdo */
 	htc_battery_pd_charger_support(1, pd_data, &op_ma);
