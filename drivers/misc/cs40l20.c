@@ -1790,8 +1790,6 @@ static int cs40l20_i2c_remove(struct i2c_client *i2c_client)
 		cancel_work_sync(&cs40l20->vibe_stop_work);
 
 		destroy_workqueue(cs40l20->vibe_workqueue);
-
-		mutex_destroy(&cs40l20->lock);
 	}
 
 	gpiod_set_value_cansleep(cs40l20->reset_gpio, 0);
