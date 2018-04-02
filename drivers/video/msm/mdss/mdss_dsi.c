@@ -33,6 +33,7 @@
 #include "mdss_debug.h"
 #include "mdss_dsi_phy.h"
 #include "mdss_dba_utils.h"
+#include "mdp3.h"
 
 #define XO_CLK_RATE	19200000
 #define CMDLINE_DSI_CTL_NUM_STRING_LEN 2
@@ -438,7 +439,13 @@ int mdss_dsi_panel_power_ctrl(struct mdss_panel_data *pdata,
 
 	switch (power_state) {
 	case MDSS_PANEL_POWER_OFF:
-		ret = mdss_dsi_panel_power_off(pdata);
+		if(mdp3_res->twm_en) {
+			pr_err("%s: Skip Panel OFF for TWM\n",
+			__func__);
+			ret = 0;
+		} else {
+			ret = mdss_dsi_panel_power_off(pdata);
+		}
 		break;
 	case MDSS_PANEL_POWER_ON:
 		if (mdss_dsi_is_panel_on_ulp(pdata)) {
@@ -1707,13 +1714,19 @@ static int mdss_dsi_blank(struct mdss_panel_data *pdata, int power_state)
 
 	if (ctrl_pdata->ctrl_state & CTRL_STATE_PANEL_INIT) {
 		if (!pdata->panel_info.dynamic_switch_pending) {
-			ATRACE_BEGIN("dsi_panel_off");
-			ret = ctrl_pdata->off(pdata);
-			if (ret) {
-				pr_err("%s: Panel OFF failed\n", __func__);
-				goto error;
+			if(mdp3_res->twm_en) {
+				pr_err("%s: Skip Panel OFF for TWM\n",
+					__func__);
+			} else {
+				ATRACE_BEGIN("dsi_panel_off");
+				ret = ctrl_pdata->off(pdata);
+				if (ret) {
+					pr_err("%s: Panel OFF failed\n",
+						__func__);
+					goto error;
+				}
+				ATRACE_END("dsi_panel_off");
 			}
-			ATRACE_END("dsi_panel_off");
 		}
 		ctrl_pdata->ctrl_state &= ~(CTRL_STATE_PANEL_INIT |
 			CTRL_STATE_PANEL_LP);
