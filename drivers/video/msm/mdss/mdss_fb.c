@@ -954,6 +954,7 @@ static void mdss_fb_shutdown(struct platform_device *pdev)
 	wake_up_all(&mfd->idle_wait_q);
 	wake_up_all(&mfd->kickoff_wait_q);
 
+	pr_err("%s:\n",__func__);
 	lock_fb_info(mfd->fbi);
 	mdss_fb_release_all(mfd->fbi, true);
 	sysfs_notify(&mfd->fbi->dev->kobj, NULL, "show_blank_event");
@@ -1670,6 +1671,14 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 	bool ad_bl_notify_needed = false;
 	bool bl_notify_needed = false;
 
+#ifdef TARGET_HW_MDSS_MDP3
+	struct mdp3_session_data *mdp3_session = NULL;
+	mdp3_session = (struct mdp3_session_data *)mfd->mdp.private1;
+	if(mdp3_res->twm_en) {
+		pr_err("Skip BL update %d\n", bkl_lvl);
+		return;
+	}
+#endif
 	if ((((mdss_fb_is_power_off(mfd) && mfd->dcm_state != DCM_ENTER)
 		|| !mfd->allow_bl_update) && !IS_CALIB_MODE_BL(mfd)) ||
 		mfd->panel_info->cont_splash_enabled) {

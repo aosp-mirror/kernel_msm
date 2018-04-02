@@ -828,6 +828,7 @@ struct mdss_panel_data {
 	struct list_head timings_list;
 	struct mdss_panel_timing *current_timing;
 	bool active;
+	bool twm_en;
 
 	/* To store dsc cfg name passed by bootloader */
 	char dsc_cfg_np_name[MDSS_MAX_PANEL_LEN];
