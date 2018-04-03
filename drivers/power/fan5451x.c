@@ -1461,6 +1461,9 @@ static int get_prop_capacity(struct fan5451x_chip *chip)
 {
 	union power_supply_propval ret = {0,};
 
+	if (!chip->bms_psy)
+		chip->bms_psy = power_supply_get_by_name("bms");
+
 	if (chip->bms_psy) {
 		check_recharge(chip);
 
