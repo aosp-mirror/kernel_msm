@@ -252,7 +252,7 @@ static void transient_trig_deactivate(struct led_classdev *led_cdev)
 	struct transient_trig_data *transient_data = led_cdev->trigger_data;
 
 	if (led_cdev->activated) {
-		del_timer_sync(&transient_data->timer);
+		transient_timer_cancel(led_cdev);
 		led_set_brightness_nosleep(led_cdev,
 					transient_data->restore_state);
 		device_remove_file(led_cdev->dev, &dev_attr_activate);
