@@ -1399,6 +1399,12 @@ static int fastrpc_init_process(struct file_data *fdata,
 		inbuf.pgid = current->tgid;
 		inbuf.namelen = strlen(current->comm);
 		inbuf.filelen = init->filelen;
+		if (!access_ok(0, (void const __user *)init->file,
+				init->filelen))
+			goto bail;
+		if (!access_ok(1, (void const __user *)init->mem,
+				init->memlen))
+			goto bail;
 		VERIFY(err, 0 == map_buffer(me, fdata, init->memfd,
 					(char *)init->mem, init->memlen,
 					&map, &pages, &npages));
