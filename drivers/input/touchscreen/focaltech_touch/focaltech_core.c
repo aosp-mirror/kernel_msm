@@ -732,7 +732,7 @@ static irqreturn_t fts_ts_interrupt(int irq, void *dev_id)
 #endif
 
 	if (plam_detected_flag || wakeup_flag) {
-		cur_time = ktime_get();
+		cur_time = ktime_get_boottime();
 		if (cur_time.tv64 - last_touch_time.tv64
 			< 600000000)
 			return IRQ_HANDLED;
@@ -742,7 +742,7 @@ static irqreturn_t fts_ts_interrupt(int irq, void *dev_id)
 	}
 
 	if (fts_wq_data->suspended) {
-		cur_time = ktime_get();
+		cur_time = ktime_get_boottime();
 		last_touch_time = cur_time;
 #if FTS_PLAM_EN
 		if (cur_time.tv64 - fts_wq_data->last_plam_time.tv64
@@ -764,7 +764,7 @@ static irqreturn_t fts_ts_interrupt(int irq, void *dev_id)
 	if (val == GESTURE_PLAM) {
 		if (fts_wq_data->suspended)
 			return IRQ_HANDLED;
-		fts_wq_data->last_plam_time =  ktime_get();
+		fts_wq_data->last_plam_time =  ktime_get_boottime();
 		last_touch_time = fts_wq_data->last_plam_time;
 		input_report_key(fts_input_dev, KEY_SLEEP, 1);
 		input_sync(fts_input_dev);
