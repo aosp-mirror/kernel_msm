@@ -587,8 +587,8 @@ _NV_TEMPLATE_TABLE NvTablesBuiltIn[/*TABLES_MAX*/][TABLE_ENTRIES_MAX] = {
          ((char *)&(nvDefaults.tables.hwCalValues.calData.psSlpTimeOvrHdxLNA5G) -
           (char *)&nvDefaults.tables.hwCalValues.calData),"psSlpTimeOvrHdxLNA5G"},
       {"ed",_ID_U8,SINGULAR,0,0,0,
-         (((char *)&(nvDefaults.tables.hwCalValues.calData.psSlpTimeOvrHdxLNA5G) +
-          sizeof(uint16)) - (char *)&nvDefaults.tables.hwCalValues.calData),
+         ((char *)&(nvDefaults.tables.hwCalValues.calData.psSlpTimeOvrHdxLNA5G) -
+          (char *)&nvDefaults.tables.hwCalValues.calData) + sizeof(uint16),
          "nv_TxBBFSel9MHz"},
       {"ee",_ID_U8,SINGULAR,0,0,0,
          ((char *)&(nvDefaults.tables.hwCalValues.calData.hwParam2) -
