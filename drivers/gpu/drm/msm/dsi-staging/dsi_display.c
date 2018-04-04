@@ -1791,7 +1791,8 @@ static void dsi_config_host_engine_state_for_cont_splash
 	enum dsi_engine_state host_state = DSI_CTRL_ENGINE_ON;
 
 	/* Sequence does not matter for split dsi usecases */
-	for (i = 0; i < display->ctrl_count; i++) {
+	for (i = 0; (i < display->ctrl_count) &&
+			(i < MAX_DSI_CTRLS_PER_DISPLAY); i++) {
 		ctrl = &display->ctrl[i];
 		if (!ctrl->ctrl)
 			continue;
@@ -3958,8 +3959,13 @@ int dsi_display_cont_splash_config(void *dsi_display)
 	struct dsi_display *display = dsi_display;
 	int rc = 0;
 
+	if (!display) {
+		pr_err("Invalid display\n");
+		return -EINVAL;
+	}
+
 	/* Continuous splash not supported by external bridge */
-	if (!display || dsi_display_has_ext_bridge(display)) {
+	if (dsi_display_has_ext_bridge(display)) {
 		display->is_cont_splash_enabled = false;
 		return 0;
 	}
@@ -5835,18 +5841,19 @@ int dsi_display_prepare(struct dsi_display *display)
 		goto error_host_engine_off;
 	}
 
-	rc = dsi_display_soft_reset(display);
-	if (rc) {
-		pr_err("[%s] failed soft reset, rc=%d\n", display->name, rc);
-		goto error_ctrl_link_off;
-	}
-
 	if (!display->is_cont_splash_enabled) {
 		/*
-		 * For continuous splash usecase we skip panel
-		 * prepare since the pnael is already in
-		 * active state and panel on commands are not needed
+		 * For continuous splash usecase, skip panel prepare and
+		 * ctl reset since the pnael and ctrl is already in active
+		 * state and panel on commands are not needed
 		 */
+		rc = dsi_display_soft_reset(display);
+		if (rc) {
+			pr_err("[%s] failed soft reset, rc=%d\n",
+					display->name, rc);
+			goto error_ctrl_link_off;
+		}
+
 		rc = dsi_panel_prepare(display->panel);
 		if (rc) {
 			pr_err("[%s] panel prepare failed, rc=%d\n",
