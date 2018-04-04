@@ -37,7 +37,7 @@
 
 &qupv3_se2_i2c {
 	status = "ok";
-	qcom,clk-freq-out = <400000>;
+	qcom,clk-freq-out = <1000000>;
 
 	touchscreen@48 {
 		status = "ok";
