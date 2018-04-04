@@ -783,9 +783,9 @@ static int smb23x_set_appropriate_usb_current(struct smb23x_chip *chip)
 	}
 
 	if (current_ma <= CURRENT_100_MA) {
-		/* USB 100 */
+		/* USB 100. Set 500 mA for normal USB5/1 polarity. */
 		rc = smb23x_masked_write(chip, CMD_REG_1,
-				USB500_MODE_BIT | USBAC_MODE_BIT, 0);
+				USB500_MODE_BIT | USBAC_MODE_BIT, 2);
 		if (rc)
 			pr_err("SMB: Set USB100 failed, rc=%d\n", rc);
 		else
