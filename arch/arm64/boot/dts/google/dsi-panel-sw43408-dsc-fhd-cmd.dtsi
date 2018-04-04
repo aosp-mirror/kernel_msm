@@ -50,6 +50,11 @@
 		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 		qcom,mdss-dsi-bl-min-level = <0x8>;
 		qcom,mdss-dsi-bl-max-level = <0x3ff>;
+		qcom,mdss-dsi-panel-hdr-enabled;
+		qcom,mdss-dsi-panel-hdr-color-primaries = <14500 15500 32000
+			17000 15500 30000 8000 3000>;
+		qcom,mdss-dsi-panel-peak-brightness = <6200000>;
+		qcom,mdss-dsi-panel-blackness-level = <42>;
 
 		qcom,mdss-dsi-display-timings {
 			timing@0 {
