@@ -111,7 +111,7 @@ static void adsp_loader_do(struct platform_device *pdev)
 			"%s: MDSP state = %x\n", __func__, adsp_state);
 		}
 
-		dev_dbg(&pdev->dev, "%s: Q6/MDSP image is loaded\n", __func__);
+		dev_info(&pdev->dev, "%s: Q6/MDSP image is loaded\n", __func__);
 		return;
 	}
 load_adsp:
@@ -139,7 +139,7 @@ load_adsp:
 			"%s: ADSP state = %x\n", __func__, adsp_state);
 		}
 
-		dev_dbg(&pdev->dev, "%s: Q6/ADSP image is loaded\n", __func__);
+		dev_info(&pdev->dev, "%s: Q6/ADSP image is loaded\n", __func__);
 		return;
 	}
 fail:
@@ -149,7 +149,7 @@ fail:
 
 static void adsp_loader_do_work(struct work_struct *work)
 {
-	pr_debug("%s: going to call adsp_loader_do\n", __func__);
+	pr_info("%s: going to call adsp_loader_do\n", __func__);
 	adsp_loader_do(adsp_private);
 }
 
@@ -182,7 +182,7 @@ static ssize_t adsp_boot_store(struct kobject *kobj,
 	if (boot == BOOT_CMD) {
 		schedule_work(&priv->do_work);
 	} else if (boot == IMAGE_UNLOAD_CMD) {
-		pr_debug("%s: going to call adsp_unloader\n", __func__);
+		pr_info("%s: going to call adsp_unloader\n", __func__);
 		flush_work(&priv->do_work);
 		adsp_loader_unload(adsp_private);
 	}
