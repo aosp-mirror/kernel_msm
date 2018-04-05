@@ -989,6 +989,7 @@ extern void device_release_driver(struct device *dev);
 extern int  __must_check device_attach(struct device *dev);
 extern int __must_check driver_attach(struct device_driver *drv);
 extern int __must_check device_reprobe(struct device *dev);
+extern void driver_deferred_probe_trigger(void);
 
 /*
  * Easy functions for dynamically creating devices on the fly
