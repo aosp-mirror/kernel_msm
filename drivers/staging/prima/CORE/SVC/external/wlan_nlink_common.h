@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013, 2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -122,5 +122,39 @@ typedef struct sAniHdr {
    unsigned short type;
    unsigned short length;
 } tAniHdr, tAniMsgHdr;
+
+/**
+ * enum wlan_tp_level - indicates wlan throughput level
+ * @WLAN_SVC_TP_NONE:    used for initialization
+ * @WLAN_SVC_TP_LOW:     used to identify low throughput level
+ * @WLAN_SVC_TP_MEDIUM:  used to identify medium throughput level
+ * @WLAN_SVC_TP_HIGH:    used to identify high throughput level
+ *
+ * The different throughput levels are determined on the basis of # of tx and
+ * rx packets and other threshold values. For example, if the # of total
+ * packets sent or received by the driver is greater than 500 in the last 100ms
+ * , the driver has a high throughput requirement. The driver may tweak certain
+ * system parameters based on the throughput level.
+ */
+enum wlan_tp_level {
+   WLAN_SVC_TP_NONE,
+   WLAN_SVC_TP_LOW,
+   WLAN_SVC_TP_MEDIUM,
+   WLAN_SVC_TP_HIGH,
+};
+
+/* Indication to enable TCP delayed ack in TPUT indication */
+#define TCP_DEL_ACK_IND    (1 << 0)
+
+/**
+ * struct wlan_rx_tp_data - msg to TCP delayed ack and advance window scaling
+ * @level:            Throughput level.
+ * @rx_tp_flags:      Bit map of flags, for which this indcation will take
+ *                    effect, bit map for TCP_ADV_WIN_SCL and TCP_DEL_ACK_IND.
+ */
+struct wlan_rx_tp_data {
+   enum wlan_tp_level level;
+   uint16_t rx_tp_flags;
+};
 
 #endif //WLAN_NLINK_COMMON_H__
