@@ -2764,6 +2764,96 @@ static void fts_user_report_event_handler(struct fts_ts_info *info, unsigned
 	}
 }
 
+static void heatmap_enable(void)
+{
+	unsigned char command[] = {0xA4, 0x06, LOCAL_HEATMAP_MODE};
+	fts_write(command, 3);
+}
+
+static bool read_heatmap_raw(struct v4l2_heatmap *v4l2, strength_t *data)
+{
+	unsigned char heatmap_read_command[] = {0xA6, 0x00, 0x00};
+
+	unsigned int num_elements;
+	/* index for looping through the heatmap buffer read over the bus */
+	unsigned int local_i;
+
+	int result;
+
+	/* old value of the counter, for comparison */
+	static uint16_t counter;
+
+	strength_t heatmap_value;
+	/* final position of the heatmap value in the full heatmap frame */
+	unsigned int frame_i;
+
+	int heatmap_x, heatmap_y;
+	int max_x = v4l2->format.width;
+	int max_y = v4l2->format.height;
+
+	struct heatmap_report report = {0};
+
+	result = fts_writeRead(heatmap_read_command, 3,
+		(uint8_t *) &report, sizeof(report));
+	if (result != OK) {
+		pr_err("%s: i2c read failed, fts_writeRead returned %i",
+			__func__, result);
+		return false;
+	}
+	if (report.mode != LOCAL_HEATMAP_MODE) {
+		pr_err("Touch IC not in local heatmap mode: %X %X %i",
+			report.prefix, report.mode, report.counter);
+		return false;
+	}
+
+	le16_to_cpus(&report.counter); /* enforce little-endian order */
+	if (report.counter == counter && counter != 0) {
+		/*
+		 * We shouldn't make ordered comparisons because of
+		 * potential overflow, but at least the value
+		 * should have changed. If the value remains the same,
+		 * but we are processing a new interrupt,
+		 * this could indicate slowness in the interrupt handler.
+		 */
+		pr_warn("Heatmap frame has stale counter value %i",
+			counter);
+	}
+	counter = report.counter;
+	num_elements = report.size_x * report.size_y;
+	if (num_elements > LOCAL_HEATMAP_WIDTH * LOCAL_HEATMAP_HEIGHT) {
+		pr_err("Unexpected heatmap size: %i x %i",
+				report.size_x, report.size_y);
+		return false;
+	}
+
+	/* set all to zero, will only write to non-zero locations in the loop */
+	memset(data, 0, max_x * max_y * sizeof(data[0]));
+	/* populate the data buffer, rearranging into final locations */
+	for (local_i = 0; local_i < num_elements; local_i++) {
+		/* enforce little-endian order */
+		le16_to_cpus(&report.data[local_i]);
+		heatmap_value = report.data[local_i];
+
+		if (heatmap_value == 0) {
+			/* Already set to zero. Nothing to do */
+			continue;
+		}
+
+		heatmap_x = report.offset_x + (local_i % report.size_x);
+		heatmap_y = report.offset_y + (local_i / report.size_x);
+
+		if (heatmap_x < 0 || heatmap_x >= max_x ||
+			heatmap_y < 0 || heatmap_y >= max_y) {
+				pr_err("Invalid x or y: (%i, %i), value=%i, ending loop\n",
+					heatmap_x, heatmap_y, heatmap_value);
+				return false;
+		}
+		frame_i = heatmap_y * max_x + heatmap_x;
+		data[frame_i] = heatmap_value;
+	}
+	return true;
+}
+
 /**
   * Bottom Half Interrupt Handler function
   * This handler is called each time there is at least one new event in the FIFO
@@ -2837,6 +2927,8 @@ static irqreturn_t fts_interrupt_handler(int irq, void *handle)
 	input_event(info->input_dev, EV_MSC, MSC_TIMESTAMP,
 			info->timestamp / 1000);
 	input_sync(info->input_dev);
+
+	heatmap_read(&info->v4l2, info->timestamp);
 
 	pm_qos_update_request(&info->pm_qos_req, PM_QOS_DEFAULT_VALUE);
 	fts_set_bus_ref(info, FTS_BUS_REF_IRQ, false);
@@ -3099,8 +3191,6 @@ static int fts_interrupt_install(struct fts_ts_info *info)
 	/* disable interrupts in any case */
 	error = fts_enableInterrupt(false);
 	if (error) {
-		pr_err("%s Failed to disable interrupts.\n",
-			 __func__);
 		return error;
 	}
 
@@ -3260,6 +3350,7 @@ static int fts_init_sensing(struct fts_ts_info *info)
 		pr_err("%s Init after Probe error (ERROR = %08X)\n",
 			__func__, error);
 
+	heatmap_enable();
 
 	return error;
 }
@@ -3500,6 +3591,9 @@ static void fts_resume_work(struct work_struct *work)
 	fts_mode_handler(info, 0);
 
 	info->sensor_sleep = false;
+
+	/* heatmap must be enabled after every chip reset (fts_system_reset) */
+	heatmap_enable();
 
 	fts_enableInterrupt(true);
 
@@ -4186,6 +4280,25 @@ static int fts_probe(struct spi_device *client)
 		goto ProbeErrorExit_6;
 	}
 
+	/*
+	 * Heatmap_probe must be called before irq routine is registered,
+	 * because heatmap_read is called from interrupt context.
+	 * This is done as part of fwu_work.
+	 * At the same time, heatmap_probe must be done after fts_init(..) has
+	 * completed, because getForceLen() and getSenseLen() require
+	 * the chip to be initialized.
+	 */
+	info->v4l2.parent_dev = info->dev;
+	info->v4l2.read_frame = read_heatmap_raw;
+	info->v4l2.width = getForceLen();
+	info->v4l2.height = getSenseLen();
+	/* 120 Hz operation */
+	info->v4l2.timeperframe.numerator = 1;
+	info->v4l2.timeperframe.denominator = 120;
+	error = heatmap_probe(&info->v4l2);
+	if (error < OK)
+		goto ProbeErrorExit_6;
+
 	/* Update the FW/LIMITS name by config project ID,
 	 * TODO:
 	 * 1. Monitor the project ID will be consistent or not.
@@ -4289,6 +4402,8 @@ ProbeErrorExit_7:
 	msm_drm_unregister_client(&info->notifier);
 #endif
 
+	heatmap_remove(&info->v4l2);
+
 ProbeErrorExit_6:
 	pm_qos_remove_request(&info->pm_qos_req);
 	input_unregister_device(info->input_dev);
@@ -4349,6 +4464,8 @@ static int fts_remove(struct spi_device *client)
 
 	/* remove interrupt and event handlers */
 	fts_interrupt_uninstall(info);
+
+	heatmap_remove(&info->v4l2);
 
 	pm_qos_remove_request(&info->pm_qos_req);
 
