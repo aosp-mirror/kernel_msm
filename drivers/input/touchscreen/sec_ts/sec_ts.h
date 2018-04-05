@@ -22,6 +22,7 @@
 #include <linux/hrtimer.h>
 #include <linux/i2c.h>
 #include <linux/input.h>
+#include <linux/input/heatmap.h>
 #include <linux/input/mt.h>
 #include <linux/input/sec_cmd.h>
 #include <linux/interrupt.h>
@@ -197,6 +198,8 @@
 #define SEC_TS_CMD_ERASE_FLASH			0x45
 #define SEC_TS_CMD_RESET_BASELINE		0x47
 #define SEC_TS_CMD_WRITE_NORM_TABLE		0x49
+#define SEC_TS_CMD_HEATMAP_READ			0x4A
+#define SEC_TS_CMD_HEATMAP_ENABLE		0x4B
 #define SEC_TS_READ_ID				0x52
 #define SEC_TS_READ_BOOT_STATUS			0x55
 #define SEC_TS_CMD_ENTER_FW_MODE		0x57
@@ -550,6 +553,19 @@ enum tsp_hw_parameter {
 	TSP_MODULE_ID		= 6,
 };
 
+/* Local heatmap */
+#define LOCAL_HEATMAP_WIDTH 7
+#define LOCAL_HEATMAP_HEIGHT 7
+
+struct heatmap_report {
+	int8_t offset_x;
+	uint8_t size_x;
+	int8_t offset_y;
+	uint8_t size_y;
+	/* data is in BE order; order should be enforced after data is read */
+	strength_t data[LOCAL_HEATMAP_WIDTH * LOCAL_HEATMAP_HEIGHT];
+} __attribute__((packed));
+
 #define TEST_MODE_MIN_MAX		false
 #define TEST_MODE_ALL_NODE		true
 #define TEST_MODE_READ_FRAME		false
@@ -725,6 +741,8 @@ struct sec_ts_data {
 	struct notifier_block notifier;
 
 	struct pm_qos_request pm_qos_req;
+
+	struct v4l2_heatmap v4l2;
 
 	struct delayed_work work_read_info;
 #ifdef USE_POWER_RESET_WORK

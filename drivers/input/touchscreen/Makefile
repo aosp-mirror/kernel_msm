@@ -108,6 +108,7 @@ obj-$(CONFIG_TOUCHSCREEN_ROHM_BU21023)	+= rohm_bu21023.o
 # stm/Kconfig and focaltech_touch_Kconfig
 # obj-$(CONFIG_TOUCHSCREEN_FTS)		+= focaltech_touch/
 obj-$(CONFIG_TOUCHSCREEN_HIMAX_CHIPSET)	+= hxchipset/
-obj-$(CONFIG_TOUCHSCREEN_FTM4)          += stm/
+obj-$(CONFIG_TOUCHSCREEN_HEATMAP)	+= heatmap.o
+obj-$(CONFIG_TOUCHSCREEN_FTM4)		+= stm/
 obj-$(CONFIG_TOUCHSCREEN_SEC_TS)	+= sec_ts/
 obj-$(CONFIG_TOUCHSCREEN_TBN)		+= qmi_tbn_v01.o touch_bus_negotiator.o

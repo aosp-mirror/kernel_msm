@@ -303,6 +303,13 @@ config TOUCHSCREEN_HAMPSHIRE
 	  To compile this driver as a module, choose M here: the
 	  module will be called hampshire.
 
+config TOUCHSCREEN_HEATMAP
+	tristate "Heatmap support for touchscreen"
+	select VIDEOBUF2_VMALLOC
+	help
+	  Do not explicitly select this option. The drivers that utilize
+	  this module must select this in their Kconfig.
+
 config TOUCHSCREEN_EETI
 	tristate "EETI touchscreen panel support"
 	depends on I2C

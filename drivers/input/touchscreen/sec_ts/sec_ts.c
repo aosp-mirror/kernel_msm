@@ -604,6 +604,74 @@ static void sec_ts_reinit(struct sec_ts_data *ts)
 	return;
 }
 
+static bool read_heatmap_raw(struct v4l2_heatmap *v4l2, strength_t *data)
+{
+	struct sec_ts_data *ts = container_of(v4l2, struct sec_ts_data, v4l2);
+
+	unsigned int num_elements;
+	/* index for looping through the heatmap buffer read over the bus */
+	unsigned int local_i;
+
+	int result;
+
+	strength_t heatmap_value;
+	/* final position of the heatmap value in the full heatmap frame */
+	unsigned int frame_i;
+	int heatmap_x, heatmap_y;
+	int max_x = v4l2->format.width;
+	int max_y = v4l2->format.height;
+
+	struct heatmap_report report = {0};
+
+	result = sec_ts_i2c_read(ts, SEC_TS_CMD_HEATMAP_READ,
+		(uint8_t *) &report, sizeof(report));
+	if (result < 0) {
+		input_err(true, &ts->client->dev,
+			 "%s: i2c read failed, sec_ts_i2c_read returned %i\n",
+			__func__, result);
+		return false;
+	}
+
+	num_elements = report.size_x * report.size_y;
+	if (num_elements > LOCAL_HEATMAP_WIDTH * LOCAL_HEATMAP_HEIGHT) {
+		input_err(true, &ts->client->dev,
+			"Unexpected heatmap size: %i x %i",
+			report.size_x, report.size_y);
+			return false;
+	}
+
+	/* set all to zero, will only write to non-zero locations in the loop */
+	memset(data, 0, max_x * max_y * sizeof(data[0]));
+	/* populate the data buffer, rearranging into final locations */
+	for (local_i = 0; local_i < num_elements; local_i++) {
+		/* enforce big-endian order */
+		be16_to_cpus(&report.data[local_i]);
+		heatmap_value = report.data[local_i];
+
+		if (heatmap_value == 0) {
+			/*
+			 * Already initialized to zero. More importantly,
+			 * samples around edges may go out of bounds.
+			 * If their value is zero, this is ok.
+			 */
+			continue;
+		}
+		heatmap_x = report.offset_x + (local_i % report.size_x);
+		heatmap_y = report.offset_y + (local_i / report.size_x);
+
+		if (heatmap_x < 0 || heatmap_x >= max_x ||
+			heatmap_y < 0 || heatmap_y >= max_y) {
+				input_err(true, &ts->client->dev,
+					"Invalid x or y: (%i, %i), value=%i, ending loop\n",
+					heatmap_x, heatmap_y, heatmap_value);
+				return false;
+		}
+		frame_i = heatmap_y * max_x + heatmap_x;
+		data[frame_i] = heatmap_value;
+	};
+	return true;
+}
+
 #define MAX_EVENT_COUNT 32
 static void sec_ts_read_event(struct sec_ts_data *ts)
 {
@@ -1021,6 +1089,8 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 	input_event(ts->input_dev, EV_MSC, MSC_TIMESTAMP,
 		ts->timestamp / 1000);
 	input_sync(ts->input_dev);
+
+	heatmap_read(&ts->v4l2, ts->timestamp);
 }
 
 static irqreturn_t sec_ts_isr(int irq, void *handle)
@@ -2034,16 +2104,38 @@ static int sec_ts_probe(struct i2c_client *client,
 		}
 	}
 
-	input_info(true, &ts->client->dev, "%s: request_irq = %d\n", __func__, client->irq);
-
 	pm_qos_add_request(&ts->pm_qos_req, PM_QOS_CPU_DMA_LATENCY,
 		PM_QOS_DEFAULT_VALUE);
+
+	/*
+	 * Heatmap_probe must be called before irq routine is registered,
+	 * because heatmap_read is called from the irq context.
+	 * If the ISR runs before heatmap_probe is finished, it will invoke
+	 * heatmap_read and cause NPE, since read_frame would not yet be set.
+	 */
+	ts->v4l2.parent_dev = &ts->client->dev;
+	ts->v4l2.read_frame = read_heatmap_raw;
+	ts->v4l2.width = ts->tx_count;
+	ts->v4l2.height = ts->rx_count;
+	/* 120 Hz operation */
+	ts->v4l2.timeperframe.numerator = 1;
+	ts->v4l2.timeperframe.denominator = 120;
+	ret = heatmap_probe(&ts->v4l2);
+	if (ret) {
+		input_err(true, &ts->client->dev,
+			"%s: Heatmap probe failed\n", __func__);
+		goto err_irq;
+	}
+
+	input_info(true, &ts->client->dev, "%s: request_irq = %d\n", __func__,
+			client->irq);
 
 	ret = request_threaded_irq(client->irq, sec_ts_isr, sec_ts_irq_thread,
 			ts->plat_data->irq_type, SEC_TS_I2C_NAME, ts);
 	if (ret < 0) {
-		input_err(true, &ts->client->dev, "%s: Unable to request threaded irq\n", __func__);
-		goto err_irq;
+		input_err(true, &ts->client->dev,
+			"%s: Unable to request threaded irq\n", __func__);
+		goto err_heatmap;
 	}
 
 	ts->notifier = sec_ts_screen_nb;
@@ -2096,6 +2188,8 @@ static int sec_ts_probe(struct i2c_client *client,
 */
 err_register_drm_client:
 	free_irq(client->irq, ts);
+err_heatmap:
+	heatmap_remove(&ts->v4l2);
 err_irq:
 	pm_qos_remove_request(&ts->pm_qos_req);
 	if (ts->plat_data->support_dex) {
@@ -2553,6 +2647,8 @@ static int sec_ts_remove(struct i2c_client *client)
 	disable_irq_nosync(ts->client->irq);
 	free_irq(ts->client->irq, ts);
 	input_info(true, &ts->client->dev, "%s: irq disabled\n", __func__);
+
+	heatmap_remove(&ts->v4l2);
 
 	pm_qos_remove_request(&ts->pm_qos_req);
 
