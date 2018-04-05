@@ -146,6 +146,8 @@ struct fusb302_chip {
 	enum typec_cc_polarity cc_polarity;
 	enum typec_cc_status cc1;
 	enum typec_cc_status cc2;
+	/* Local pin status */
+	enum typec_cc_status cc;
 
 	struct usb_controller *uc;
 	struct usb_typec_ctrl *utc;
@@ -587,6 +589,19 @@ static int tcpm_set_cc(struct tcpc_dev *dev, enum typec_cc_status cc)
 	u8 rd_mda;
 
 	mutex_lock(&chip->lock);
+
+	if ((chip->cc == TYPEC_CC_RP_DEF || chip->cc == TYPEC_CC_RP_1_5 ||
+	     chip->cc == TYPEC_CC_RP_3_0) && (cc == TYPEC_CC_RP_DEF ||
+	     cc == TYPEC_CC_RP_1_5 || cc == TYPEC_CC_RP_3_0)) {
+		ret = fusb302_set_src_current(chip, cc_src_current[cc]);
+		if (ret < 0) {
+			fusb302_log("cannot set src current %s, ret=%d\n",
+				    typec_cc_status_name[cc], ret);
+			goto done;
+		}
+		goto rp_switch;
+	}
+
 	switch (cc) {
 	case TYPEC_CC_OPEN:
 		pull_up = false;
@@ -695,7 +710,9 @@ static int tcpm_set_cc(struct tcpc_dev *dev, enum typec_cc_status cc)
 		chip->intr_bc_lvl = true;
 		chip->intr_comp_chng = false;
 	}
+rp_switch:
 	fusb302_log("cc := %s\n", typec_cc_status_name[cc]);
+	chip->cc = cc;
 done:
 	mutex_unlock(&chip->lock);
 
