@@ -12,109 +12,235 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
  */
-#ifndef __P9220_CHARGER_H__
-#define __P9220_CHARGER_H__
+#ifndef __P9221_CHARGER_H__
+#define __P9221_CHARGER_H__
 
-#define P9221_CHIP_ID_L_REG		0x00
-#define P9221_CHIP_ID_H_REG		0x01
-#define P9221_CHIP_REVISION_REG		0x02
-#define P9221_CUSTOMER_ID_REG		0x03
-#define P9221_OTP_FW_MAJOR_REV_L_REG	0x04
-#define P9221_OTP_FW_MINOR_REV_L_REG	0x06
-#define P9221_OTP_FW_DATE_REG		0x08
-#define P9221_OTP_FW_TIME_REG		0x14
-#define P9221_SRAM_FW_MAJOR_REV_L_REG	0x1C
-#define P9221_SRAM_FW_MINOR_REV_L_REG	0x1E
-#define P9221_SRAM_FW_DATE_REG		0x20
-#define P9221_SRAM_FW_TIME_REG		0x2C
-#define P9221_STATUS_L_REG		0x34
-#define P9221_INT_L_REG			0x36
-#define P9221_INT_L_MASK		0xF7
-#define P9221_INT_L_STAT_VOUT		BIT(7)
-#define P9221_INT_L_STAT_VRECT		BIT(6)
-#define P9221_INT_L_STAT_ACMISSING	BIT(5)
-#define P9221_INT_L_STAT_TX_DATA_RX	BIT(4)
-#define P9221_INT_L_STAT_OV_TEMP	BIT(2)
-#define P9221_INT_L_STAT_OV_VOLT	BIT(1)
-#define P9221_INT_L_STAT_OV_CURRENT	BIT(0)
-#define P9221_INT_L_STAT_OV_MASK	(P9221_INT_L_STAT_OV_TEMP | \
-					 P9221_INT_L_STAT_OV_VOLT | \
-					 P9221_INT_L_STAT_OV_CURRENT)
-#define P9221_INT_ENABLE_L_REG		0x38
-#define P9221_CHG_STATUS_REG		0x3A
-#define P9221_EPT_REG			0x3B
-#define P9221_ADC_VOUT_L_REG		0x3C
-#define P9221_ADC_VOUT_MASK		0x0FFF
-#define P9221_VOUT_SET_REG		0x3E
-#define P9221_MAX_VOUT_SET_MV_DEFAULT	9000 /* mV */
-#define P9221_ADC_VRECT_L_REG		0x40
-#define P9221_ADC_VRECT_MASK		0x0FFF
-#define P9221_OVSET_REG			0x42
-#define P9221_OVSET_MASK		0xF0
-#define P9221_OVSET_SHIFT		4
-#define P9221_RX_IOUT_L_REG		0x44
-#define P9221_ADC_DIE_TEMP_L_REG	0x46
-#define P9221_ADC_DIE_TEMP_MASK		0x0FFF
-#define P9221_OP_FREQ_L_REG		0x48
-#define P9221_ILIM_SET_REG		0x4A
-#define P9221_ADC_ALIGN_X_REG		0x4B
-#define P9221_ADC_ALIGN_Y_REG		0x4C
-#define P9221_OP_MODE_REG		0x4D
-#define P9221_COM_REG			0x4E
-#define P9221_COM_SWITCH_TO_RAM_MASK	BIT(6)
-#define P9221_COM_CLEAR_INT_MASK	BIT(5)
-#define P9221_COM_SEND_CHG_STAT_MASK	BIT(4)
-#define P9221_COM_SEND_EOP_MASK		BIT(3)
-#define P9221_COM_SEND_RX_DATA_MASK	BIT(0)
-#define P9221_INT_CLEAR_L_REG		0x56
-#define P9221_INT_CLEAR_H_REG		0x57
-#define P9221_RXID_REG			0x5C
-#define P9221_RXID_LEN			6
-#define P9221_MPREQ_REG			0x5C
-#define P9221_MPREQ_LEN			6
-#define P9221_OV_CLAMP_REG		0x62
-#define P9221_OV_CLAMP_MASK		0x07
-#define P9221_FOD_REG			0x68
-#define P9221_NUM_FOD			16
-#define P9221_RX_RAWIOUT_L_REG		0x7A
-#define P9221_RX_RAWIOUT_MASK		0x0FFF
-#define P9221_PMA_AD_L_REG		0x7C
-#define P9221_RX_PINGFREQ_L_REG		0xFC
-#define P9221_RX_PINGFREQ_MASK		0x0FFF
-#define P9221_LAST_REG			0xFF
+#define P9221_WLC_VOTER				"WLC_VOTER"
 
-#define P9221_EOP_UNKNOWN		0x00
-#define P9221_EOP_EOC			0x01
-#define P9221_EOP_INTERNAL_FAULT	0x02
-#define P9221_EOP_OVER_TEMP		0x03
-#define P9221_EOP_OVER_VOLT		0x04
-#define P9221_EOP_OVER_CURRENT		0x05
-#define P9221_EOP_BATT_FAIL		0x06
-#define P9221_EOP_RECONFIG		0x07
-#define P9221_EOP_NO_RESPONSE		0x08
-#define P9221_EOP_NEGOTIATION_FAIL	0x0A
-#define P9221_EOP_RESTART_POWER		0x0B
+/*
+ * P9221 common registers
+ */
+#define P9221_CHIP_ID_REG			0x00
+#define P9221_CHIP_REVISION_REG			0x02
+#define P9221_CUSTOMER_ID_REG			0x03
+#define P9221R5_CUSTOMER_ID_VAL			0x05
+#define P9221_OTP_FW_MAJOR_REV_REG		0x04
+#define P9221_OTP_FW_MINOR_REV_REG		0x06
+#define P9221_OTP_FW_DATE_REG			0x08
+#define P9221_OTP_FW_TIME_REG			0x14
+#define P9221_SRAM_FW_MAJOR_REV_REG		0x1C
+#define P9221_SRAM_FW_MINOR_REV_REG		0x1E
+#define P9221_SRAM_FW_DATE_REG			0x20
+#define P9221_SRAM_FW_TIME_REG			0x2C
+#define P9221_STATUS_REG			0x34
+#define P9221_INT_REG				0x36
+#define P9221_INT_MASK				0xF7
+#define P9221_INT_ENABLE_REG			0x38
+
+/*
+ * P9221 Rx registers (x != 5)
+ */
+#define P9221_CHARGE_STAT_REG			0x3A
+#define P9221_EPT_REG				0x3B
+#define P9221_VOUT_ADC_REG			0x3C
+#define P9221_VOUT_ADC_MASK			0x0FFF
+#define P9221_VOUT_SET_REG			0x3E
+#define P9221_MAX_VOUT_SET_MV_DEFAULT		9000
+#define P9221_VRECT_ADC_REG			0x40
+#define P9221_VRECT_ADC_MASK			0x0FFF
+#define P9221_OVSET_REG				0x42
+#define P9221_OVSET_MASK			0x70
+#define P9221_OVSET_SHIFT			4
+#define P9221_RX_IOUT_REG			0x44
+#define P9221_DIE_TEMP_ADC_REG			0x46
+#define P9221_DIE_TEMP_ADC_MASK			0x0FFF
+#define P9221_OP_FREQ_REG			0x48
+#define P9221_ILIM_SET_REG			0x4A
+#define P9221_ALIGN_X_ADC_REG			0x4B
+#define P9221_ALIGN_Y_ADC_REG			0x4C
+#define P9221_OP_MODE_REG			0x4D
+#define P9221_COM_REG				0x4E
+#define P9221_FW_SWITCH_KEY_REG			0x4F
+#define P9221_INT_CLEAR_REG			0x56
+#define P9221_RXID_REG				0x5C
+#define P9221_RXID_LEN				6
+#define P9221_MPREQ_REG				0x5C
+#define P9221_MPREQ_LEN				6
+#define P9221_FOD_REG				0x68
+#define P9221_NUM_FOD				16
+#define P9221_RX_RAWIOUT_REG			0x7A
+#define P9221_RX_RAWIOUT_MASK			0xFFF
+#define P9221_PMA_AD_REG			0x7C
+#define P9221_RX_PINGFREQ_REG			0xFC
+#define P9221_RX_PINGFREQ_MASK			0xFFF
+#define P9221_LAST_REG				0xFF
+
+/*
+ * P9221R5 unique registers
+ */
+#define P9221R5_INT_CLEAR_REG			0x3A
+#define P9221R5_VOUT_SET_REG			0x3C
+#define P9221R5_ILIM_SET_REG			0x3D
+#define P9221R5_ILIM_SET_MAX			0x0E	/* 0x0E = 1.6A */
+#define P9221R5_CHARGE_STAT_REG			0x3E
+#define P9221R5_EPT_REG				0x3F
+#define P9221R5_VRECT_REG			0x40
+#define P9221R5_VOUT_REG			0x42
+#define P9221R5_IOUT_REG			0x44
+#define P9221R5_OP_FREQ_REG			0x48
+#define P9221R5_SYSTEM_MODE_REG			0x4C
+#define P9221R5_COM_CHAN_RESET_REG		0x50
+#define P9221R5_COM_CHAN_SEND_SIZE_REG		0x58
+#define P9221R5_COM_CHAN_SEND_IDX_REG		0x59
+#define P9221R5_COM_CHAN_RECV_SIZE_REG		0x5A
+#define P9221R5_COM_CHAN_RECV_IDX_REG		0x5B
+#define P9221R5_VRECT_ADC_REG			0x60
+#define P9221R5_VOUT_ADC_REG			0x62
+#define P9221R5_VOUT_ADC_MASK			0xFFF
+#define P9221R5_IOUT_ADC_REG			0x64
+#define P9221R5_IOUT_ADC_MASK			0xFFF
+#define P9221R5_DIE_TEMP_ADC_REG		0x66
+#define P9221R5_DIE_TEMP_ADC_MASK		0xFFF
+#define P9221R5_AC_PERIOD_REG			0x68
+#define P9221R5_TX_PINGFREQ_REG			0x6A
+#define P9221R5_EXT_TEMP_REG			0x6C
+#define P9221R5_EXT_TEMP_MASK			0xFFF
+#define P9221R5_FOD_REG				0x70
+#define P9221R5_NUM_FOD				16
+#define P9221R5_DEBUG_REG			0x80
+#define P9221R5_EPP_Q_FACTOR_REG		0x83
+#define P9221R5_EPP_TX_GUARANTEED_POWER_REG	0x84
+#define P9221R5_EPP_TX_POTENTIAL_POWER_REG	0x85
+#define P9221R5_EPP_TX_CAPABILITY_FLAGS_REG	0x86
+#define P9221R5_EPP_RENEGOTIATION_REG		0x87
+#define P9221R5_EPP_CUR_RPP_HEADER_REG		0x88
+#define P9221R5_EPP_CUR_NEGOTIATED_POWER_REG	0x89
+#define P9221R5_EPP_CUR_MAXIMUM_POWER_REG	0x8A
+#define P9221R5_EPP_CUR_FSK_MODULATION_REG	0x8B
+#define P9221R5_EPP_REQ_RPP_HEADER_REG		0x8C
+#define P9221R5_EPP_REQ_NEGOTIATED_POWER_REG	0x8D
+#define P9221R5_EPP_REQ_MAXIMUM_POWER_REG	0x8E
+#define P9221R5_EPP_REQ_FSK_MODULATION_REG	0x8F
+#define P9221R5_VRECT_TARGET_REG		0x90
+#define P9221R5_VRECT_KNEE_REG			0x92
+#define P9221R5_VRECT_CORRECTION_FACTOR_REG	0x93
+#define P9221R5_VRECT_MAX_CORRECTION_FACTOR_REG	0x94
+#define P9221R5_VRECT_MIN_CORRECTION_FACTOR_REG	0x96
+#define P9221R5_FOD_SECTION_REG			0x99
+#define P9221R5_VRECT_ADJ_REG			0x9E
+#define P9221R5_ALIGN_X_ADC_REG			0xA0
+#define P9221R5_ALIGN_Y_ADC_REG			0xA1
+#define P9221R5_ASK_MODULATION_DEPTH_REG	0xA2
+#define P9221R5_OVSET_REG			0xA3
+#define P9221R5_OVSET_MASK			0x7
+#define P9221R5_EPP_TX_SPEC_REV_REG		0xA9
+#define P9221R5_EPP_TX_MFG_CODE_REG		0xAA
+#define P9221R5_GP0_RESET_VOLT_REG		0xAC
+#define P9221R5_GP1_RESET_VOLT_REG		0xAE
+#define P9221R5_GP2_RESET_VOLT_REG		0xB0
+#define P9221R5_GP3_RESET_VOLT_REG		0xB2
+#define P9221R5_PROPRIETARY_TX_ID_REG		0xB4
+#define P9221R5_DATA_SEND_BUF_START		0x100
+#define P9221R5_DATA_SEND_BUF_SIZE		0x80
+#define P9221R5_DATA_RECV_BUF_START		0x180
+#define P9221R5_DATA_RECV_BUF_SIZE		0x80
+#define P9221R5_LAST_REG			0x1FF
+
+/*
+ * End of Power packet types
+ */
+#define P9221_EOP_UNKNOWN			0x00
+#define P9221_EOP_EOC				0x01
+#define P9221_EOP_INTERNAL_FAULT		0x02
+#define P9221_EOP_OVER_TEMP			0x03
+#define P9221_EOP_OVER_VOLT			0x04
+#define P9221_EOP_OVER_CURRENT			0x05
+#define P9221_EOP_BATT_FAIL			0x06
+#define P9221_EOP_RECONFIG			0x07
+#define P9221_EOP_NO_RESPONSE			0x08
+#define P9221_EOP_NEGOTIATION_FAIL		0x0A
+#define P9221_EOP_RESTART_POWER			0x0B
+
+/*
+ * Command flags
+ */
+#define P9221R5_COM_RENEGOTIATE			P9221_COM_RENEGOTIATE
+#define P9221R5_COM_SWITCH2RAM			P9221_COM_SWITCH_TO_RAM_MASK
+#define P9221R5_COM_CLRINT			P9221_COM_CLEAR_INT_MASK
+#define P9221R5_COM_SENDCSP			P9221_COM_SEND_CHG_STAT_MASK
+#define P9221R5_COM_SENDEPT			P9221_COM_SEND_EOP_MASK
+#define P9221R5_COM_LDOTGL			P9221_COM_LDO_TOGGLE
+#define P9221R5_COM_CCACTIVATE			BIT(0)
+
+#define P9221_COM_RENEGOTIATE			BIT(7)
+#define P9221_COM_SWITCH_TO_RAM_MASK		BIT(6)
+#define P9221_COM_CLEAR_INT_MASK		BIT(5)
+#define P9221_COM_SEND_CHG_STAT_MASK		BIT(4)
+#define P9221_COM_SEND_EOP_MASK			BIT(3)
+#define P9221_COM_LDO_TOGGLE			BIT(1)
+
+/*
+ * Interrupt/Status flags for P9221
+ */
+#define P9221_STAT_VOUT				BIT(7)
+#define P9221_STAT_VRECT			BIT(6)
+#define P9221_STAT_ACMISSING			BIT(5)
+#define P9221_STAT_OV_TEMP			BIT(2)
+#define P9221_STAT_OV_VOLT			BIT(1)
+#define P9221_STAT_OV_CURRENT			BIT(0)
+#define P9221_STAT_LIMIT_MASK			(P9221_STAT_OV_TEMP | \
+						 P9221_STAT_OV_VOLT | \
+						 P9221_STAT_OV_CURRENT)
+/*
+ * Interrupt/Status flags for P9221R5
+ */
+#define P9221R5_STAT_CCRESET			BIT(12)
+#define P9221R5_STAT_CCERROR			BIT(11)
+#define P9221R5_STAT_PPRCVD			BIT(10)
+#define P9221R5_STAT_CCDATARCVD			BIT(9)
+#define P9221R5_STAT_CCSENDBUSY			BIT(8)
+#define P9221R5_STAT_VOUTCHANGED		BIT(7)
+#define P9221R5_STAT_VRECTON			BIT(6)
+#define P9221R5_STAT_MODECHANGED		BIT(5)
+#define P9221R5_STAT_UV				BIT(3)
+#define P9221R5_STAT_OVT			BIT(2)
+#define P9221R5_STAT_OVV			BIT(1)
+#define P9221R5_STAT_OVC			BIT(0)
+#define P9221R5_STAT_MASK			0x1FFF
+#define P9221R5_STAT_CC_MASK			(P9221R5_STAT_CCRESET | \
+						 P9221R5_STAT_CCERROR | \
+						 P9221R5_STAT_CCDATARCVD | \
+						 P9221R5_STAT_CCSENDBUSY)
+#define P9221R5_STAT_LIMIT_MASK			(P9221R5_STAT_UV | \
+						 P9221R5_STAT_OVV | \
+						 P9221R5_STAT_OVT | \
+						 P9221R5_STAT_OVC)
 
 struct p9221_charger_platform_data {
-	int irq_gpio;
-	int irq_int;
-	int max_vout_mv;
-	u8 fod[P9221_NUM_FOD];
-	bool fod_set;
+	int				irq_gpio;
+	int				irq_int;
+	int				max_vout_mv;
+	u8				fod[P9221_NUM_FOD];
+	bool				fod_set;
 };
 
 struct p9221_charger_data {
-	struct i2c_client			*client;
-	struct p9221_charger_platform_data	*pdata;
-	struct power_supply			*wc_psy;
-	struct power_supply			*dc_psy;
-	struct notifier_block			nb;
-	struct mutex				io_lock;
-	struct device				*dev;
-	struct delayed_work			notifier_work;
-	int					online;
-	u16					addr;
-	u8					count;
+	struct i2c_client		*client;
+	struct p9221_charger_platform_data *pdata;
+	struct power_supply		*wc_psy;
+	struct power_supply		*dc_psy;
+	struct votable			*dc_icl_votable;
+	struct notifier_block		nb;
+	struct mutex			io_lock;
+	struct device			*dev;
+	struct delayed_work		notifier_work;
+	struct bin_attribute		bin;
+	int				online;
+	u16				addr;
+	u8				count;
+	u8				cust_id;
+	u8				rx_buf[P9221R5_DATA_RECV_BUF_SIZE];
+	u8				tx_buf[P9221R5_DATA_SEND_BUF_SIZE];
 };
 
 struct p9221_prop_reg_map_entry {
@@ -123,24 +249,6 @@ struct p9221_prop_reg_map_entry {
 	bool				get;
 	bool				set;
 };
-
-
-#define P9221_SHOW_COOKED(name, reg, format)				\
-	static ssize_t p9221_show_##name(struct device *dev,		\
-					struct device_attribute *attr,	\
-					char *buf)			\
-	{								\
-		struct i2c_client *client = to_i2c_client(dev);		\
-		struct p9221_charger_data *charger =			\
-					i2c_get_clientdata(client);	\
-		u32 val;						\
-		int ret;						\
-									\
-		ret = p9221_reg_read_cooked(charger, reg, &val);	\
-		if (ret)						\
-			return ret;					\
-		return snprintf(buf, PAGE_SIZE, format, val);		\
-	}
 
 #define P9221_SHOW(name, reg, width, mask, format)			\
 	static ssize_t p9221_show_##name(struct device *dev,		\
@@ -160,55 +268,4 @@ struct p9221_prop_reg_map_entry {
 		return snprintf(buf, PAGE_SIZE, format, val);		\
 	}
 
-#define P9221_STORE_COOKED(name, reg)					\
-	static ssize_t p9221_store_##name(struct device *dev,		\
-					  struct device_attribute *attr,\
-					  const char *buf, size_t count)\
-	{								\
-		struct i2c_client *client = to_i2c_client(dev);		\
-		struct p9221_charger_data *charger =			\
-					i2c_get_clientdata(client);	\
-		u32 val;						\
-		int ret;						\
-									\
-		ret = kstrtou32(buf, 0, &val);				\
-		if (ret < 0)						\
-			return ret;					\
-									\
-		ret = p9221_reg_write_cooked(charger, reg, val);	\
-		if (ret)						\
-			return ret;					\
-		return count;						\
-	}
-
-#define P9221_STORE(name, reg, width, mask)				\
-	static ssize_t p9221_store_##name(struct device *dev,		\
-					  struct device_attribute *attr,\
-					  const char *buf, size_t count)\
-	{								\
-		struct i2c_client *client = to_i2c_client(dev);		\
-		struct p9221_charger_data *charger =			\
-					i2c_get_clientdata(client);	\
-		u##width val;						\
-		int ret;						\
-									\
-		ret = kstrtou##width(buf, 0, &val);			\
-		if (ret < 0)						\
-			return ret;					\
-									\
-		val &= mask;						\
-		ret = p9221_reg_write_##width(charger, reg, val);	\
-		if (ret)						\
-			return ret;					\
-		return count;						\
-	}
-
-#define P9221_SHOW_STORE(name, reg, width, mask, format) \
-	P9221_SHOW(name, reg, width, mask, format)	 \
-	P9221_STORE(name, reg, width, mask)
-
-#define P9221_SHOW_STORE_COOKED(name, reg, format) \
-	P9221_SHOW_COOKED(name, reg, format)	 \
-	P9221_STORE_COOKED(name, reg)
-
-#endif /* __P9220_CHARGER_H__ */
+#endif /* __P9221_CHARGER_H__ */
