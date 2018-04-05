@@ -58,6 +58,12 @@ enum btsco_rates {
 	RATE_16KHZ_ID,
 };
 
+#define MSM8952_PROBE_RETRY        30
+#define MSM8952_PROBE_RETRIGGER_MS 2000
+static int msm8952_probe_retry = 0;
+static void msm8952_probe_retrigger(struct work_struct *work);
+static DECLARE_DELAYED_WORK(deferred_probe_work, msm8952_probe_retrigger);
+
 static int msm8952_auxpcm_rate = 8000;
 static int msm_btsco_rate = BTSCO_RATE_8KHZ;
 static int msm_btsco_ch = 1;
@@ -2947,6 +2953,11 @@ static struct snd_soc_card *msm8952_populate_sndcard_dailinks(
 	return card;
 }
 
+static void msm8952_probe_retrigger(struct work_struct *work)
+{
+	driver_deferred_probe_trigger();
+}
+
 static int msm8952_asoc_machine_probe(struct platform_device *pdev)
 {
 	struct snd_soc_card *card;
@@ -2964,6 +2975,8 @@ static int msm8952_asoc_machine_probe(struct platform_device *pdev)
 	int ret, id, i;
 	struct resource	*muxsel;
 	char *temp_str = NULL;
+
+	cancel_delayed_work(&deferred_probe_work);
 
 	pdata = devm_kzalloc(&pdev->dev,
 			sizeof(struct msm8916_asoc_mach_data), GFP_KERNEL);
@@ -3250,6 +3263,11 @@ parse_mclk_freq:
 	}
 	return 0;
 err:
+	if (-EPROBE_DEFER == ret &&
+	    msm8952_probe_retry++ < MSM8952_PROBE_RETRY)
+		schedule_delayed_work(&deferred_probe_work,
+				msecs_to_jiffies(MSM8952_PROBE_RETRIGGER_MS));
+
 	if (pdata->vaddr_gpio_mux_spkr_ctl)
 		iounmap(pdata->vaddr_gpio_mux_spkr_ctl);
 	if (pdata->vaddr_gpio_mux_mic_ctl)
