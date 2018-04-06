@@ -343,6 +343,11 @@ typedef struct ccp_freq_chan_map_s{
     v_U32_t chan;
 }hdd_freq_chan_map_t;
 
+struct stats_class_a_ctx {
+    tCsrGlobalClassAStatsInfo class_a_stats;
+};
+
+
 #define wlan_hdd_get_wps_ie_ptr(ie, ie_len) \
     wlan_hdd_get_vendor_oui_ie_ptr(WPS_OUI_TYPE, WPS_OUI_TYPE_SIZE, ie, ie_len)
 
@@ -421,7 +426,7 @@ extern int hdd_priv_get_data(struct iw_point *p_priv_data,
 extern void *mem_alloc_copy_from_user_helper(const void *wrqu_data, size_t len);
 
 void hdd_clearRoamProfileIe( hdd_adapter_t *pAdapter);
-void hdd_GetClassA_statisticsCB(void *pStats, void *pContext);
+void hdd_get_class_a_statistics_cb(void *stats, void *context);
 
 VOS_STATUS wlan_hdd_check_ula_done(hdd_adapter_t *pAdapter);
 
