@@ -4538,10 +4538,8 @@ static int ufshcd_read_desc_length(struct ufs_hba *hba,
 	if (desc_id >= QUERY_DESC_IDN_MAX)
 		return -EINVAL;
 
-	ret = ufshcd_query_descriptor_retry(hba, UPIU_QUERY_OPCODE_READ_DESC,
-					desc_id, desc_index, 0, header,
-					&header_len);
-
+	ret = ufshcd_read_desc_param(hba, desc_id, desc_index,
+						0, header, header_len);
 	if (ret) {
 		dev_err(hba->dev, "%s: Failed to get descriptor header id %d",
 			__func__, desc_id);
@@ -4555,7 +4553,6 @@ static int ufshcd_read_desc_length(struct ufs_hba *hba,
 
 	*desc_length = header[QUERY_DESC_LENGTH_OFFSET];
 	return ret;
-
 }
 
 /**
