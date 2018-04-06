@@ -3332,55 +3332,6 @@ static int iw_get_range(struct net_device *dev,
    return ret;
 }
 
-/* Callback function registered with PMC to know status of PMC request */
-static void iw_power_callback_fn (void *pContext, eHalStatus status)
-{
-   struct statsContext *pStatsContext;
-
-   if (NULL == pContext)
-   {
-       hddLog(VOS_TRACE_LEVEL_ERROR,
-            "%s: Bad param, pContext [%pK]",
-              __func__, pContext);
-       return;
-   }
-
-   pStatsContext = (struct statsContext *)pContext;
-
-   /* there is a race condition that exists between this callback
-      function and the caller since the caller could time out either
-      before or while this code is executing.  we use a spinlock to
-      serialize these actions */
-   spin_lock(&hdd_context_lock);
-
-   if (POWER_CONTEXT_MAGIC != pStatsContext->magic)
-   {
-       /* the caller presumably timed out so there is nothing we can do */
-       spin_unlock(&hdd_context_lock);
-       hddLog(VOS_TRACE_LEVEL_WARN,
-              "%s: Invalid context, magic [%08x]",
-              __func__, pStatsContext->magic);
-
-       if (ioctl_debug)
-       {
-           pr_info("%s: Invalid context, magic [%08x]\n",
-                   __func__, pStatsContext->magic);
-       }
-       return;
-  }
-
-  /* context is valid so caller is still waiting */
-
-  /* paranoia: invalidate the magic */
-  pStatsContext->magic = 0;
-
-  /* notify the caller */
-  complete(&pStatsContext->completion);
-
-  /* serialization is complete */
-  spin_unlock(&hdd_context_lock);
-}
-
 /* Callback function for tx per hit */
 void hdd_tx_per_hit_cb (void *pCallbackContext)
 {
@@ -4086,10 +4037,16 @@ hdd_encrypt_msg_cb(v_VOID_t *pUserData, v_VOID_t *pEncInfoRsp)
 
 VOS_STATUS  wlan_hdd_enter_bmps(hdd_adapter_t *pAdapter, int mode)
 {
-   struct statsContext context;
    eHalStatus status;
    hdd_context_t *pHddCtx;
    hdd_station_ctx_t *pHddStaCtx = WLAN_HDD_GET_STATION_CTX_PTR(pAdapter);
+   int ret;
+   void *cookie;
+   struct hdd_request *request;
+   static const struct hdd_request_params params = {
+        .priv_size = 0,
+        .timeout_ms = WLAN_WAIT_TIME_STATS,
+   };
 
    if (NULL == pAdapter)
    {
@@ -4105,32 +4062,31 @@ VOS_STATUS  wlan_hdd_enter_bmps(hdd_adapter_t *pAdapter, int mode)
       return VOS_STATUS_E_FAILURE;
    }
 
-   init_completion(&context.completion);
+   request = hdd_request_alloc(&params);
+   if (!request) {
+           hddLog(VOS_TRACE_LEVEL_ERROR, FL("Request allocation failure"));
+           return VOS_STATUS_E_NOMEM;
+   }
+   cookie = hdd_request_cookie(request);
 
-   context.pAdapter = pAdapter;
-   context.magic = POWER_CONTEXT_MAGIC;
 
    if (DRIVER_POWER_MODE_ACTIVE == mode)
    {
        hddLog(VOS_TRACE_LEVEL_INFO_HIGH, "%s:Wlan driver Entering "
                "Full Power", __func__);
        status = sme_RequestFullPower(WLAN_HDD_GET_HAL_CTX(pAdapter),
-                       iw_power_callback_fn, &context,
+                       iw_power_callback_func, cookie,
                        eSME_FULL_PWR_NEEDED_BY_HDD);
        // Enter Full power command received from GUI this means we are disconnected
        // Set PMC remainInPowerActiveTillDHCP flag to disable auto BMPS entry by PMC
        sme_SetDHCPTillPowerActiveFlag(pHddCtx->hHal, TRUE);
        if (eHAL_STATUS_PMC_PENDING == status)
        {
-           /* request was sent -- wait for the response */
-           int lrc = wait_for_completion_interruptible_timeout(
-                   &context.completion,
-                   msecs_to_jiffies(WLAN_WAIT_TIME_POWER));
-
-           if (lrc <= 0)
+           ret = hdd_request_wait_for_response(request);
+           if (ret)
            {
-               hddLog(VOS_TRACE_LEVEL_ERROR,"%s: SME %s while requesting fullpower ",
-                  __func__, (0 == lrc) ? "timeout" : "interrupt");
+               hddLog(VOS_TRACE_LEVEL_ERROR,
+                      FL("SME timeout  while requesting fullpower"));
            }
        }
    }
@@ -4162,19 +4118,16 @@ VOS_STATUS  wlan_hdd_enter_bmps(hdd_adapter_t *pAdapter, int mode)
            sme_SetDHCPTillPowerActiveFlag(WLAN_HDD_GET_HAL_CTX(pAdapter),
                     FALSE);
            status = sme_RequestBmps(WLAN_HDD_GET_HAL_CTX(pAdapter),
-                           iw_power_callback_fn, &context);
+                           iw_power_callback_func, cookie);
            if (eHAL_STATUS_PMC_PENDING == status)
            {
                /* request was sent -- wait for the response */
-               int lrc = wait_for_completion_interruptible_timeout(
-                           &context.completion,
-                           msecs_to_jiffies(WLAN_WAIT_TIME_POWER));
-               if (lrc <= 0)
+               ret = hdd_request_wait_for_response(request);
+               if (ret)
                {
                    hddLog(VOS_TRACE_LEVEL_ERROR,
-                          "%s: SME %s while requesting BMPS",
-                          __func__, (0 == lrc) ? "timeout" : "interrupt");
-               }
+                          FL("SME timeout  while requesting bmps"));
+                }
            }
        }
        else
@@ -4184,20 +4137,12 @@ VOS_STATUS  wlan_hdd_enter_bmps(hdd_adapter_t *pAdapter, int mode)
        }
    }
 
-   /* either we never sent a request, we sent a request and received a
-      response or we sent a request and timed out.  if we never sent a
-      request or if we sent a request and got a response, we want to
-      clear the magic out of paranoia.  if we timed out there is a
-      race condition such that the callback function could be
-      executing at the same time we are. of primary concern is if the
-      callback function had already verified the "magic" but had not
-      yet set the completion variable when a timeout occurred. we
-      serialize these activities by invalidating the magic while
-      holding a shared spinlock which will cause us to block if the
-      callback is currently executing */
-   spin_lock(&hdd_context_lock);
-   context.magic = 0;
-   spin_unlock(&hdd_context_lock);
+   /*
+    * either we never sent a request, we sent a request and received a
+    * response or we sent a request and timed out. Regardless we are
+    * done with the request.
+    */
+    hdd_request_put(request);
 
    return VOS_STATUS_SUCCESS;
 }
