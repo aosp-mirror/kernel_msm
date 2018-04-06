@@ -38,5 +38,8 @@ arch/arm64/boot/Image.gz-dtb
 vmlinux
 System.map
 "
+EXT_MODULES="
+private/msm-google-modules/wlan/qcacld-3.0
+"
 IN_KERNEL_MODULES=1
 KCFLAGS='-fno-tree-vrp'

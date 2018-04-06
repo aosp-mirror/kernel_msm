@@ -42,4 +42,7 @@ vmlinux
 System.map
 .config
 "
+EXT_MODULES="
+private/msm-google-modules/wlan/qcacld-3.0
+"
 IN_KERNEL_MODULES=1
