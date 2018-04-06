@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011,2014-2015, 2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011,2014-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -1815,6 +1815,8 @@ enum {
 
 #define IEEE80211_CCMP_HEADERLEN    8
 #define IEEE80211_CCMP_MICLEN       8
+#define WLAN_IEEE80211_GCMP_HEADERLEN    8
+#define WLAN_IEEE80211_GCMP_MICLEN      16
 
 /*
  * 802.11w defines a MMIE chunk to be attached at the end of
