@@ -958,7 +958,7 @@ int mnh_sg_build(void *dmadest, size_t size, struct mnh_sg_entry **sg,
 		"Enter mnh_sg_build:p_num:%d, maxsg:%zu\n",
 		p_num, maxsg);
 
-	sgl->mypage = kcalloc(p_num, sizeof(struct page *), GFP_KERNEL);
+	sgl->mypage = vzalloc(p_num * sizeof(struct page *));
 	if (!sgl->mypage) {
 		vfree((*sg));
 		*sg = NULL;
@@ -966,11 +966,11 @@ int mnh_sg_build(void *dmadest, size_t size, struct mnh_sg_entry **sg,
 		sgl->length = 0;
 		return -EINVAL;
 	}
-	sgl->sc_list = kcalloc(p_num, sizeof(struct scatterlist), GFP_KERNEL);
+	sgl->sc_list = vzalloc(p_num * sizeof(struct scatterlist));
 	if (!sgl->sc_list) {
 		vfree((*sg));
 		*sg = NULL;
-		kfree(sgl->mypage);
+		vfree(sgl->mypage);
 		sgl->mypage = NULL;
 		sgl->n_num = 0;
 		sgl->length = 0;
@@ -1026,9 +1026,9 @@ release_page:
 free_mem:
 	vfree((*sg));
 	*sg = NULL;
-	kfree(sgl->mypage);
+	vfree(sgl->mypage);
 	sgl->mypage = NULL;
-	kfree(sgl->sc_list);
+	vfree(sgl->sc_list);
 	sgl->sc_list = NULL;
 	sgl->n_num = 0;
 	sgl->length = 0;
@@ -1057,9 +1057,9 @@ int mnh_sg_destroy(struct mnh_sg_list *sgl)
 			SetPageDirty(page);
 		put_page(page);
 	}
-	kfree(sgl->mypage);
+	vfree(sgl->mypage);
 	sgl->mypage = NULL;
-	kfree(sgl->sc_list);
+	vfree(sgl->sc_list);
 	sgl->sc_list = NULL;
 	sgl->n_num = 0;
 
