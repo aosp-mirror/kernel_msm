@@ -843,11 +843,11 @@ static void dci_process_ctrl_status(unsigned char *buf, int len, int token)
 {
 	struct diag_ctrl_dci_status *header = NULL;
 	unsigned char *temp = buf;
-	uint32_t read_len = 0;
+	unsigned int read_len = 0;
 	uint8_t i;
 	int peripheral_mask, status;
 
-	if (!buf || (len < sizeof(struct diag_ctrl_dci_status))) {
+	if (!buf || (len < 2) || (len < sizeof(struct diag_ctrl_dci_status))) {
 		pr_err("diag: In %s, invalid buf %pK or length: %d\n",
 		       __func__, buf, len);
 		return;
@@ -905,7 +905,9 @@ static void dci_process_ctrl_handshake_pkt(unsigned char *buf, int len,
 	unsigned char *temp = buf;
 	int err = 0;
 
-	if (!buf || (len < sizeof(struct diag_ctrl_dci_handshake_pkt)))
+	if (!buf)
+		return;
+	if (len < 0 || len < sizeof(struct diag_ctrl_dci_handshake_pkt))
 		return;
 
 	if (!VALID_DCI_TOKEN(token))
