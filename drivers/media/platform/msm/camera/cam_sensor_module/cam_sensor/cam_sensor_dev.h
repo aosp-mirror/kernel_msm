@@ -1,4 +1,4 @@
-/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -91,6 +91,8 @@ struct intf_params {
  * @bridge_intf: Bridge interface structure
  * @device_name: Sensor device structure
  * @fw_update_flag: Update OIS firmware
+ * @streamon_count: Count to hold the number of times stream on called
+ * @streamoff_count: Count to hold the number of times stream off called
  */
 struct cam_sensor_ctrl_t {
 	struct platform_device *pdev;
@@ -114,6 +116,8 @@ struct cam_sensor_ctrl_t {
 #ifdef CONFIG_MNH_SM_HOST
 	bool uses_easel;
 #endif
+	uint32_t streamon_count;
+	uint32_t streamoff_count;
 };
 
 #endif /* _CAM_SENSOR_DEV_H_ */

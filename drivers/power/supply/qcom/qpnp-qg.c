@@ -41,8 +41,6 @@ module_param_named(
 	debug_mask, qg_debug_mask, int, 0600
 );
 
-static int qg_get_battery_temp(struct qpnp_qg *chip, int *batt_temp);
-
 static bool is_battery_present(struct qpnp_qg *chip)
 {
 	u8 reg = 0;
@@ -531,8 +529,7 @@ static void process_udata_work(struct work_struct *work)
 		qg_scale_soc(chip, false);
 
 		/* update parameters to SDAM */
-		chip->sdam_data[SDAM_SOC] =
-				chip->udata.param[QG_SOC].data;
+		chip->sdam_data[SDAM_SOC] = chip->msoc;
 		chip->sdam_data[SDAM_OCV_UV] =
 				chip->udata.param[QG_OCV_UV].data;
 		chip->sdam_data[SDAM_RBAT_MOHM] =
@@ -671,12 +668,22 @@ static irqreturn_t qg_vbat_empty_handler(int irq, void *data)
 static irqreturn_t qg_good_ocv_handler(int irq, void *data)
 {
 	int rc;
+	u8 status = 0;
 	u32 ocv_uv;
 	struct qpnp_qg *chip = data;
 
 	qg_dbg(chip, QG_DEBUG_IRQ, "IRQ triggered\n");
 
 	mutex_lock(&chip->data_lock);
+
+	rc = qg_read(chip, chip->qg_base + QG_STATUS2_REG, &status, 1);
+	if (rc < 0) {
+		pr_err("Failed to read status2 register rc=%d\n", rc);
+		goto done;
+	}
+
+	if (!(status & GOOD_OCV_BIT))
+		goto done;
 
 	rc = qg_read_ocv(chip, &ocv_uv, GOOD_OCV);
 	if (rc < 0) {
@@ -736,6 +743,10 @@ static int qg_awake_cb(struct votable *votable, void *data, int awake,
 			const char *client)
 {
 	struct qpnp_qg *chip = data;
+
+	/* ignore if the QG device is not open */
+	if (!chip->qg_device_open)
+		return 0;
 
 	if (awake)
 		pm_stay_awake(chip->dev);
@@ -877,6 +888,7 @@ static int qg_get_battery_voltage(struct qpnp_qg *chip, int *vbat_uv)
 #define DEBUG_BATT_SOC		67
 #define BATT_MISSING_SOC	50
 #define EMPTY_SOC		0
+#define FULL_SOC		100
 static int qg_get_battery_capacity(struct qpnp_qg *chip, int *soc)
 {
 	if (is_debug_batt_id(chip)) {
@@ -889,33 +901,21 @@ static int qg_get_battery_capacity(struct qpnp_qg *chip, int *soc)
 		return 0;
 	}
 
-	*soc = chip->msoc;
-
-	return 0;
-}
-
-static int qg_get_battery_temp(struct qpnp_qg *chip, int *temp)
-{
-	int rc = 0;
-	struct qpnp_vadc_result result;
-
-	if (chip->battery_missing) {
-		*temp = 250;
+	if (chip->charge_full) {
+		*soc = FULL_SOC;
 		return 0;
 	}
 
-	rc = qpnp_vadc_read(chip->vadc_dev, VADC_BAT_THERM_PU2, &result);
-	if (rc) {
-		pr_err("Failed reading adc channel=%d, rc=%d\n",
-					VADC_BAT_THERM_PU2, rc);
-		return rc;
-	}
-	pr_debug("batt_temp = %lld meas = 0x%llx\n",
-			result.physical, result.measurement);
+	mutex_lock(&chip->soc_lock);
 
-	*temp = (int)result.physical;
+	if (chip->dt.linearize_soc && chip->maint_soc > 0)
+		*soc = chip->maint_soc;
+	else
+		*soc = chip->msoc;
 
-	return rc;
+	mutex_unlock(&chip->soc_lock);
+
+	return 0;
 }
 
 static int qg_psy_set_property(struct power_supply *psy,
@@ -1024,13 +1024,62 @@ static const struct power_supply_desc qg_psy_desc = {
 	.property_is_writeable = qg_property_is_writeable,
 };
 
+#define DEFAULT_RECHARGE_SOC 95
 static int qg_charge_full_update(struct qpnp_qg *chip)
 {
+	union power_supply_propval prop = {0, };
+	int rc, recharge_soc, health;
 
 	vote(chip->good_ocv_irq_disable_votable,
 		QG_INIT_STATE_IRQ_DISABLE, !chip->charge_done, 0);
 
-	/* TODO: add hold-soc-at-full logic */
+	if (!chip->dt.hold_soc_while_full)
+		goto out;
+
+	rc = power_supply_get_property(chip->batt_psy,
+			POWER_SUPPLY_PROP_HEALTH, &prop);
+	if (rc < 0) {
+		pr_err("Failed to get battery health, rc=%d\n", rc);
+		goto out;
+	}
+	health = prop.intval;
+
+	rc = power_supply_get_property(chip->batt_psy,
+			POWER_SUPPLY_PROP_RECHARGE_SOC, &prop);
+	if (rc < 0 || prop.intval < 0) {
+		pr_debug("Failed to get recharge-soc\n");
+		recharge_soc = DEFAULT_RECHARGE_SOC;
+	}
+	recharge_soc = prop.intval;
+
+	qg_dbg(chip, QG_DEBUG_STATUS, "msoc=%d health=%d charge_full=%d\n",
+				chip->msoc, health, chip->charge_full);
+	if (chip->charge_done && !chip->charge_full) {
+		if (chip->msoc >= 99 && health == POWER_SUPPLY_HEALTH_GOOD) {
+			chip->charge_full = true;
+			qg_dbg(chip, QG_DEBUG_STATUS, "Setting charge_full (0->1) @ msoc=%d\n",
+					chip->msoc);
+		} else {
+			qg_dbg(chip, QG_DEBUG_STATUS, "Terminated charging @ msoc=%d\n",
+					chip->msoc);
+		}
+	} else if ((!chip->charge_done || chip->msoc < recharge_soc)
+				&& chip->charge_full) {
+		/*
+		 * If recharge or discharge has started and
+		 * if linearize soc dtsi property defined
+		 * scale msoc from 100% for better UX.
+		 */
+		if (chip->dt.linearize_soc && chip->msoc < 99) {
+			chip->maint_soc = FULL_SOC;
+			qg_scale_soc(chip, false);
+		}
+
+		qg_dbg(chip, QG_DEBUG_STATUS, "msoc=%d recharge_soc=%d charge_full (1->0)\n",
+					chip->msoc, recharge_soc);
+		chip->charge_full = false;
+	}
+out:
 	return 0;
 }
 
@@ -1098,6 +1147,9 @@ static void qg_status_change_work(struct work_struct *work)
 		pr_err("Failed to get charge done status, rc=%d\n", rc);
 	else
 		chip->charge_done = prop.intval;
+
+	qg_dbg(chip, QG_DEBUG_STATUS, "charge_status=%d charge_done=%d\n",
+			chip->charge_status, chip->charge_done);
 
 	rc = qg_parallel_status_update(chip);
 	if (rc < 0)
@@ -1174,7 +1226,7 @@ static ssize_t qg_device_read(struct file *file, char __user *buf, size_t count,
 
 	/* non-blocking access, return */
 	if (!chip->data_ready && (file->f_flags & O_NONBLOCK))
-		return -EAGAIN;
+		return 0;
 
 	/* blocking access wait on data_ready */
 	if (!(file->f_flags & O_NONBLOCK)) {
@@ -1260,14 +1312,12 @@ fail:
 static unsigned int qg_device_poll(struct file *file, poll_table *wait)
 {
 	struct qpnp_qg *chip = file->private_data;
-	unsigned int mask;
+	unsigned int mask = 0;
 
 	poll_wait(file, &chip->qg_wait_q, wait);
 
 	if (chip->data_ready)
 		mask = POLLIN | POLLRDNORM;
-	else
-		mask = POLLERR;
 
 	return mask;
 }
@@ -1278,7 +1328,20 @@ static int qg_device_open(struct inode *inode, struct file *file)
 				struct qpnp_qg, qg_cdev);
 
 	file->private_data = chip;
+	chip->qg_device_open = true;
 	qg_dbg(chip, QG_DEBUG_DEVICE, "QG device opened!\n");
+
+	return 0;
+}
+
+static int qg_device_release(struct inode *inode, struct file *file)
+{
+	struct qpnp_qg *chip = container_of(inode->i_cdev,
+				struct qpnp_qg, qg_cdev);
+
+	file->private_data = chip;
+	chip->qg_device_open = false;
+	qg_dbg(chip, QG_DEBUG_DEVICE, "QG device closed!\n");
 
 	return 0;
 }
@@ -1286,6 +1349,7 @@ static int qg_device_open(struct inode *inode, struct file *file)
 static const struct file_operations qg_fops = {
 	.owner		= THIS_MODULE,
 	.open		= qg_device_open,
+	.release	= qg_device_release,
 	.read		= qg_device_read,
 	.write		= qg_device_write,
 	.poll		= qg_device_poll,
@@ -1464,9 +1528,9 @@ static int qg_setup_battery(struct qpnp_qg *chip)
 
 static int qg_determine_pon_soc(struct qpnp_qg *chip)
 {
-	u8 status;
-	int rc, batt_temp = 0;
-	bool use_pon_ocv = false;
+	u8 status = 0, ocv_type = 0;
+	int rc = 0, batt_temp = 0;
+	bool use_pon_ocv = true, use_shutdown_ocv = false;
 	unsigned long rtc_sec = 0;
 	u32 ocv_uv = 0, soc = 0, shutdown[SDAM_MAX] = {0};
 
@@ -1475,85 +1539,77 @@ static int qg_determine_pon_soc(struct qpnp_qg *chip)
 		return 0;
 	}
 
-	rc = qg_get_battery_temp(chip, &batt_temp);
-	if (rc) {
-		pr_err("Failed to read BATT_TEMP at PON rc=%d\n", rc);
-		return rc;
-	}
-
-	rc = qg_read(chip, chip->qg_base + QG_STATUS2_REG,
-					&status, 1);
+	rc = get_rtc_time(&rtc_sec);
 	if (rc < 0) {
-		pr_err("Failed to read status2 register rc=%d\n", rc);
-		return rc;
+		pr_err("Failed to read RTC time rc=%d\n", rc);
+		goto use_pon_ocv;
 	}
 
-	if (status & GOOD_OCV_BIT) {
-		qg_dbg(chip, QG_DEBUG_PON, "Using GOOD_OCV @ PON\n");
-		rc = qg_read_ocv(chip, &ocv_uv, GOOD_OCV);
-		if (rc < 0) {
-			pr_err("Failed to read good_ocv rc=%d\n", rc);
-			use_pon_ocv = true;
-		} else {
-			rc = lookup_soc_ocv(&soc, ocv_uv, batt_temp,
-							SOC_AVERAGE);
-			if (rc < 0) {
-				pr_err("Failed to lookup SOC (GOOD_OCV) @ PON rc=%d\n",
-					rc);
-				use_pon_ocv = true;
-			}
-		}
-	} else {
-		rc = get_rtc_time(&rtc_sec);
-		if (rc < 0) {
-			pr_err("Failed to read RTC time rc=%d\n", rc);
-			use_pon_ocv = true;
+	rc = qg_sdam_read_all(shutdown);
+	if (rc < 0) {
+		pr_err("Failed to read shutdown params rc=%d\n", rc);
+		goto use_pon_ocv;
+	}
+
+	qg_dbg(chip, QG_DEBUG_PON, "Shutdown: Valid=%d SOC=%d OCV=%duV time=%dsecs, time_now=%ldsecs\n",
+			shutdown[SDAM_VALID],
+			shutdown[SDAM_SOC],
+			shutdown[SDAM_OCV_UV],
+			shutdown[SDAM_TIME_SEC],
+			rtc_sec);
+	/*
+	 * Use the shutdown SOC if
+	 * 1. The device was powered off for < ignore_shutdown_time
+	 * 2. SDAM read is a success & SDAM data is valid
+	 */
+	if (shutdown[SDAM_VALID] && is_between(0,
+			chip->dt.ignore_shutdown_soc_secs,
+			(rtc_sec - shutdown[SDAM_TIME_SEC]))) {
+		use_pon_ocv = false;
+		use_shutdown_ocv = true;
+		ocv_uv = shutdown[SDAM_OCV_UV];
+		soc = shutdown[SDAM_SOC];
+		qg_dbg(chip, QG_DEBUG_PON, "Using SHUTDOWN_SOC @ PON\n");
+	}
+
+use_pon_ocv:
+	if (use_pon_ocv == true) {
+		rc = qg_get_battery_temp(chip, &batt_temp);
+		if (rc) {
+			pr_err("Failed to read BATT_TEMP at PON rc=%d\n", rc);
 			goto done;
 		}
 
-		rc = qg_sdam_read_all(shutdown);
+		rc = qg_read(chip, chip->qg_base + QG_STATUS2_REG, &status, 1);
 		if (rc < 0) {
-			pr_err("Failed to read shutdown params rc=%d\n", rc);
-			use_pon_ocv = true;
+			pr_err("Failed to read status2 register rc=%d\n", rc);
 			goto done;
 		}
-		qg_dbg(chip, QG_DEBUG_PON, "Shutdown: Valid=%d SOC=%d OCV=%duV time=%dsecs, time_now=%ldsecs\n",
-				shutdown[SDAM_VALID],
-				shutdown[SDAM_SOC],
-				shutdown[SDAM_OCV_UV],
-				shutdown[SDAM_TIME_SEC],
-				rtc_sec);
-		/*
-		 * Use the shutdown SOC if
-		 * 1. The device was powered off for < 180 seconds
-		 * 2. SDAM read is a success & SDAM data is valid
-		 */
-		use_pon_ocv = true;
-		if (!rc && shutdown[SDAM_VALID] &&
-			((rtc_sec - shutdown[SDAM_TIME_SEC]) < 180)) {
-			use_pon_ocv = false;
-			ocv_uv = shutdown[SDAM_OCV_UV];
-			soc = shutdown[SDAM_SOC];
-			qg_dbg(chip, QG_DEBUG_PON, "Using SHUTDOWN_SOC @ PON\n");
+
+		if (status & GOOD_OCV_BIT)
+			ocv_type = GOOD_OCV;
+		else
+			ocv_type = PON_OCV;
+
+		qg_dbg(chip, QG_DEBUG_PON, "Using %s @ PON\n",
+				ocv_type == GOOD_OCV ? "GOOD_OCV" : "PON_OCV");
+
+		rc = qg_read_ocv(chip, &ocv_uv, ocv_type);
+		if (rc < 0) {
+			pr_err("Failed to read ocv rc=%d\n", rc);
+			goto done;
+		}
+
+		rc = lookup_soc_ocv(&soc, ocv_uv, batt_temp, false);
+		if (rc < 0) {
+			pr_err("Failed to lookup SOC@PON rc=%d\n", rc);
+			goto done;
 		}
 	}
 done:
-	/*
-	 * Use PON OCV if
-	 * OCV_UV is not set or shutdown SOC is invalid.
-	 */
-	if (use_pon_ocv || !ocv_uv || !rtc_sec) {
-		qg_dbg(chip, QG_DEBUG_PON, "Using PON_OCV @ PON\n");
-		rc = qg_read_ocv(chip, &ocv_uv, PON_OCV);
-		if (rc < 0) {
-			pr_err("Failed to read HW PON ocv rc=%d\n", rc);
-			return rc;
-		}
-		rc = lookup_soc_ocv(&soc, ocv_uv, batt_temp, SOC_AVERAGE);
-		if (rc < 0) {
-			pr_err("Failed to lookup SOC @ PON rc=%d\n", rc);
-			soc = 50;
-		}
+	if (rc < 0) {
+		pr_err("Failed to get SOC @ PON, rc=%d\n", rc);
+		return rc;
 	}
 
 	chip->pon_soc = chip->catch_up_soc = chip->msoc = soc;
@@ -1573,10 +1629,9 @@ done:
 	if (rc < 0)
 		pr_err("Failed to update sdam params rc=%d\n", rc);
 
-	pr_info("use_pon_ocv=%d good_ocv=%d ocv_uv=%duV temp=%d soc=%d\n",
+	pr_info("use_pon_ocv=%d use_good_ocv=%d use_shutdown_ocv=%d ocv_uv=%duV soc=%d\n",
 			use_pon_ocv, !!(status & GOOD_OCV_BIT),
-			ocv_uv, batt_temp, chip->msoc);
-
+			use_shutdown_ocv, ocv_uv, chip->msoc);
 	return 0;
 }
 
@@ -1886,6 +1941,7 @@ static int qg_request_irqs(struct qpnp_qg *chip)
 #define DEFAULT_S2_ACC_LENGTH		128
 #define DEFAULT_S2_ACC_INTVL_MS		100
 #define DEFAULT_DELTA_SOC		1
+#define DEFAULT_SHUTDOWN_SOC_SECS	360
 static int qg_parse_dt(struct qpnp_qg *chip)
 {
 	int rc = 0;
@@ -2043,6 +2099,18 @@ static int qg_parse_dt(struct qpnp_qg *chip)
 	else
 		chip->dt.delta_soc = temp;
 
+	rc = of_property_read_u32(node, "qcom,ignore-shutdown-soc-secs", &temp);
+	if (rc < 0)
+		chip->dt.ignore_shutdown_soc_secs = DEFAULT_SHUTDOWN_SOC_SECS;
+	else
+		chip->dt.ignore_shutdown_soc_secs = temp;
+
+	chip->dt.hold_soc_while_full = of_property_read_bool(node,
+					"qcom,hold-soc-while-full");
+
+	chip->dt.linearize_soc = of_property_read_bool(node,
+					"qcom,linearize-soc");
+
 	rc = of_property_read_u32(node, "qcom,rbat-conn-mohm", &temp);
 	if (rc < 0)
 		chip->dt.rbat_conn_mohm = 0;
@@ -2058,8 +2126,13 @@ static int qg_parse_dt(struct qpnp_qg *chip)
 
 static int process_suspend(struct qpnp_qg *chip)
 {
+	u8 status = 0;
 	int rc;
 	u32 fifo_rt_length = 0, sleep_fifo_length = 0;
+
+	/* skip if profile is not loaded */
+	if (!chip->profile_loaded)
+		return 0;
 
 	chip->suspend_data = false;
 
@@ -2112,6 +2185,9 @@ static int process_suspend(struct qpnp_qg *chip)
 		chip->suspend_data = true;
 	}
 
+	/* read STATUS2 register to clear its last state */
+	qg_read(chip, chip->qg_base + QG_STATUS2_REG, &status, 1);
+
 	qg_dbg(chip, QG_DEBUG_PM, "FIFO rt_length=%d sleep_fifo_length=%d default_s2_count=%d suspend_data=%d\n",
 			fifo_rt_length, sleep_fifo_length,
 			chip->dt.s2_fifo_length, chip->suspend_data);
@@ -2124,6 +2200,10 @@ static int process_resume(struct qpnp_qg *chip)
 	u8 status2 = 0, rt_status = 0;
 	u32 ocv_uv = 0;
 	int rc, batt_temp = 0;
+
+	/* skip if profile is not loaded */
+	if (!chip->profile_loaded)
+		return 0;
 
 	rc = qg_read(chip, chip->qg_base + QG_STATUS2_REG, &status2, 1);
 	if (rc < 0) {
@@ -2250,6 +2330,7 @@ static int qpnp_qg_probe(struct platform_device *pdev)
 	mutex_init(&chip->soc_lock);
 	mutex_init(&chip->data_lock);
 	init_waitqueue_head(&chip->qg_wait_q);
+	chip->maint_soc = -EINVAL;
 
 	rc = qg_parse_dt(chip);
 	if (rc < 0) {

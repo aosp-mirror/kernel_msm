@@ -13,6 +13,8 @@
 /dts-v1/;
 
 #include "sdxpoorwills-cdp.dtsi"
+#include "sdxpoorwills-display.dtsi"
+#include "qpic-panel-ili-hvga.dtsi"
 
 / {
 	model = "Qualcomm Technologies, Inc. SDXPOORWILLS CDP";

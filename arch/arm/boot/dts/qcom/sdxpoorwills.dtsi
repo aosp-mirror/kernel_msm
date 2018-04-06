@@ -209,7 +209,7 @@
 	};
 
 	clock_gcc: qcom,gcc@100000 {
-		compatible = "qcom,gcc-sdxpoorwills";
+		compatible = "qcom,gcc-sdxpoorwills", "syscon";
 		reg = <0x100000 0x1f0000>;
 		reg-names = "cc_base";
 		vdd_cx-supply = <&pmxpoorwills_s5_level>;
@@ -260,6 +260,14 @@
 		status = "ok";
 		qcom,bw-tbl =
 			< 1 >;
+	};
+
+	clock_debug: qcom,cc-debug {
+		compatible = "qcom,debugcc-sdxpoorwills";
+		qcom,gcc = <&clock_gcc>;
+		clock-names = "xo_clk_src";
+		clocks = <&clock_rpmh RPMH_CXO_CLK>;
+		#clock-cells = <1>;
 	};
 
 	serial_uart: serial@831000 {
@@ -1101,7 +1109,6 @@
 		compatible = "qcom,cnss_sdio";
 		subsys-name = "AR6320_SDIO";
 		vdd-wlan-supply = <&vreg_wlan>;
-		vdd-wlan-xtal-supply = <&pmxpoorwills_l5>;
 		vdd-wlan-io-supply = <&pmxpoorwills_l6>;
 		qcom,wlan-ramdump-dynamic = <0x200000>;
 		pinctrl-names = "active", "sleep";
@@ -1167,6 +1174,26 @@
 		io-macro-info {
 			io-macro-bypass-mode = <0>;
 			io-interface = "rgmii";
+		};
+	};
+
+	ess-instance {
+		num_devices = <0x1>;
+		ess-switch@0 {
+			compatible = "qcom,ess-switch-qca83xx";
+			qcom,switch-access-mode = "mdio";
+			qcom,ar8327-initvals = <
+				0x0000c 0x7600000   /* PAD6_MODE */
+				0x00008 0x0         /* PAD5_MODE */
+				0x000e4 0xaa545     /* MAC_POWER_SEL */
+				0x000e0 0xc74164de  /* SGMII_CTRL */
+				0x0007c 0x4e        /* PORT0_STATUS */
+				0x00094 0x4e        /* PORT6_STATUS */
+			>;
+			qcom,link-intr-gpio = <2>;
+			qcom,switch-cpu-bmp = <0x40>;    /* cpu port bitmap */
+			qcom,switch-lan-bmp = <0x3e>;    /* lan port bitmap */
+			qcom,switch-wan-bmp = <0x0>;     /* wan port bitmap */
 		};
 	};
 };

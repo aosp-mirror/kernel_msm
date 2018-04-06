@@ -713,6 +713,11 @@ static void ufshcd_dme_cmd_log(struct ufs_hba *hba, char *str, u8 cmd_id)
 	ufshcd_cmd_log(hba, str, "dme", 0, cmd_id, 0);
 }
 
+static void ufshcd_custom_cmd_log(struct ufs_hba *hba, char *str)
+{
+	ufshcd_cmd_log(hba, str, "custom", 0, 0, 0);
+}
+
 static void ufshcd_print_cmd_log(struct ufs_hba *hba)
 {
 	int i;
@@ -751,7 +756,7 @@ static void __ufshcd_cmd_log(struct ufs_hba *hba, char *str, char *cmd_type,
 
 	entry.str = str;
 	entry.lba = lba;
-	entry->cmd_id = cmd_id;
+	entry.cmd_id = cmd_id;
 	entry.transfer_len = transfer_len;
 	entry.doorbell = ufshcd_readl(hba, REG_UTP_TRANSFER_REQ_DOOR_BELL);
 	entry.tag = tag;
@@ -760,6 +765,10 @@ static void __ufshcd_cmd_log(struct ufs_hba *hba, char *str, char *cmd_type,
 }
 
 static void ufshcd_dme_cmd_log(struct ufs_hba *hba, char *str, u8 cmd_id)
+{
+}
+
+static void ufshcd_custom_cmd_log(struct ufs_hba *hba, char *str)
 {
 }
 
@@ -993,7 +1002,7 @@ static void ufshcd_print_host_state(struct ufs_hba *hba)
 					hba->sdev_ufs_device->rev);
 	}
 	dev_err(hba->dev, "lrb in use=0x%lx, outstanding reqs=0x%lx tasks=0x%lx\n",
-		hba->lrb_in_use, hba->outstanding_tasks, hba->outstanding_reqs);
+		hba->lrb_in_use, hba->outstanding_reqs, hba->outstanding_tasks);
 	dev_err(hba->dev, "saved_err=0x%x, saved_uic_err=0x%x, saved_ce_err=0x%x\n",
 		hba->saved_err, hba->saved_uic_err, hba->saved_ce_err);
 	dev_err(hba->dev, "Device power mode=%d, UIC link state=%d\n",
@@ -6456,7 +6465,7 @@ static void ufshcd_err_handler(struct work_struct *work)
 	 * Dump controller state before resetting. Transfer requests state
 	 * will be dump as part of the request completion.
 	 */
-	if ((hba->saved_err & (INT_FATAL_ERRORS | UIC_ERROR)) ||
+	if ((hba->saved_err & (INT_FATAL_ERRORS | UIC_ERROR | UIC_LINK_LOST)) ||
 	    hba->auto_h8_err) {
 		dev_err(hba->dev, "%s: saved_err 0x%x saved_uic_err 0x%x",
 			__func__, hba->saved_err, hba->saved_uic_err);
@@ -6473,7 +6482,7 @@ static void ufshcd_err_handler(struct work_struct *work)
 		hba->auto_h8_err = false;
 	}
 
-	if ((hba->saved_err & INT_FATAL_ERRORS)
+	if ((hba->saved_err & (INT_FATAL_ERRORS | UIC_LINK_LOST))
 	    || hba->saved_ce_err || hba->force_host_reset ||
 	    ((hba->saved_err & UIC_ERROR) &&
 	    (hba->saved_uic_err & (UFSHCD_UIC_DL_PA_INIT_ERROR |
@@ -6751,6 +6760,12 @@ static irqreturn_t ufshcd_check_errors(struct ufs_hba *hba)
 
 	if (hba->errors & INT_FATAL_ERRORS || hba->ce_error)
 		queue_eh_work = true;
+
+	if (hba->errors & UIC_LINK_LOST) {
+		dev_err(hba->dev, "%s: UIC_LINK_LOST received, errors 0x%x\n",
+					__func__, hba->errors);
+		queue_eh_work = true;
+	}
 
 	if (hba->errors & UIC_ERROR) {
 		hba->uic_error = 0;
@@ -10402,11 +10417,14 @@ static int ufshcd_devfreq_scale(struct ufs_hba *hba, bool scale_up)
 	if (ret)
 		goto out;
 
+	ufshcd_custom_cmd_log(hba, "waited-for-DB-clear");
+
 	/* scale down the gear before scaling down clocks */
 	if (!scale_up) {
 		ret = ufshcd_scale_gear(hba, false);
 		if (ret)
 			goto clk_scaling_unprepare;
+		ufshcd_custom_cmd_log(hba, "Gear-scaled-down");
 	}
 
 	/*
@@ -10419,17 +10437,20 @@ static int ufshcd_devfreq_scale(struct ufs_hba *hba, bool scale_up)
 		if (ret)
 			/* link will be bad state so no need to scale_up_gear */
 			return ret;
+		ufshcd_custom_cmd_log(hba, "Hibern8-entered");
 	}
 
 	ret = ufshcd_scale_clks(hba, scale_up);
 	if (ret)
 		goto scale_up_gear;
+	ufshcd_custom_cmd_log(hba, "Clk-freq-switched");
 
 	if (ufshcd_is_auto_hibern8_supported(hba)) {
 		ret = ufshcd_uic_hibern8_exit(hba);
 		if (ret)
 			/* link will be bad state so no need to scale_up_gear */
 			return ret;
+		ufshcd_custom_cmd_log(hba, "Hibern8-Exited");
 	}
 
 	/* scale up the gear after scaling up clocks */
@@ -10439,6 +10460,7 @@ static int ufshcd_devfreq_scale(struct ufs_hba *hba, bool scale_up)
 			ufshcd_scale_clks(hba, false);
 			goto clk_scaling_unprepare;
 		}
+		ufshcd_custom_cmd_log(hba, "Gear-scaled-up");
 	}
 
 	if (!ret) {
