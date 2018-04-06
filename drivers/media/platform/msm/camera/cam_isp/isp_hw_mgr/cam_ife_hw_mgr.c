@@ -3470,7 +3470,7 @@ static int cam_ife_hw_mgr_handle_sof(
 	cam_hw_event_cb_func                  ife_hw_irq_sof_cb;
 	struct cam_isp_hw_sof_event_data      sof_done_event_data;
 	uint32_t  sof_status = 0;
-	uint64_t *boot_timestamp = NULL;
+	uint64_t boot_timestamp;
 
 	CAM_DBG(CAM_ISP, "Enter");
 
@@ -3506,10 +3506,10 @@ static int cam_ife_hw_mgr_handle_sof(
 					cam_ife_mgr_cmd_get_sof_timestamp(
 						ife_hw_mgr_ctx,
 						&sof_done_event_data.timestamp,
-						boot_timestamp);
+						&boot_timestamp);
 
 					sof_done_event_data.boot_timestamp =
-						*boot_timestamp;
+						boot_timestamp;
 
 					ife_hw_irq_sof_cb(
 						ife_hw_mgr_ctx->common.cb_priv,
