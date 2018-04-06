@@ -10617,6 +10617,7 @@ erasesize_show(struct device *dev,
 	int ret = -EOPNOTSUPP;
 	int i;
 
+	pm_runtime_get_sync(hba->dev);
 	for (i = 0; i < UFS_UPIU_MAX_GENERAL_LUN; i++) {
 		ret = ufshcd_read_unit_desc_param(hba,
 				i, UNIT_DESC_PARAM_ERASE_BLK_SIZE,
@@ -10626,6 +10627,7 @@ erasesize_show(struct device *dev,
 		/* Got a valid one, and should be same as others. */
 		break;
 	}
+	pm_runtime_put_sync(hba->dev);
 	return snprintf(buf, PAGE_SIZE, "0x%x\n", ret ? 0 : erasesize);
 }
 
