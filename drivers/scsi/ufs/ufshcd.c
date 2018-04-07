@@ -9324,6 +9324,12 @@ static int ufshcd_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 			 hba->rpm_lvl : hba->spm_lvl;
 		req_dev_pwr_mode = ufs_get_pm_lvl_to_dev_pwr_mode(pm_lvl);
 		req_link_state = ufs_get_pm_lvl_to_link_pwr_state(pm_lvl);
+
+		if (ufshcd_is_auto_hibern8_supported(hba) &&
+				req_link_state == UIC_LINK_HIBERN8_STATE) {
+			ret = -EINVAL;
+			goto out;
+		}
 	} else {
 		req_dev_pwr_mode = UFS_POWERDOWN_PWR_MODE;
 		req_link_state = UIC_LINK_OFF_STATE;
