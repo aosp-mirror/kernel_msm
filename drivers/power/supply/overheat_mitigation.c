@@ -14,6 +14,7 @@
 
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/delay.h>
 #include <linux/platform_device.h>
 #include <linux/pmic-voter.h>
 #include <linux/power_supply.h>
@@ -33,6 +34,7 @@ struct overheat_info {
 	struct device              *dev;
 	struct power_supply        *usb_psy;
 	struct votable             *usb_icl_votable;
+	struct votable             *disable_power_role_switch;
 	struct notifier_block      psy_nb;
 	struct delayed_work        port_overheat_work;
 	struct wakeup_source	   overheat_ws;
@@ -45,6 +47,8 @@ struct overheat_info {
 	int begin_temp;
 	int clear_temp;
 	int overheat_work_delay_ms;
+	int polling_freq;
+	int check_status;
 };
 
 #define PSY_GET_PROP(psy, psp) psy_get_prop(psy, psp, #psp)
@@ -94,8 +98,17 @@ static inline int get_dts_vars(struct overheat_info *ovh_info)
 	ret = of_property_read_u32(node, "google,port-overheat-work-interval",
 				   &ovh_info->overheat_work_delay_ms);
 	if (ret < 0) {
-		dev_err(ovh_info->dev, "cannot read " \
-			"port-overheat-work-interval, ret=%d\n", ret);
+		dev_err(ovh_info->dev,
+			"cannot read port-overheat-work-interval, ret=%d\n",
+			ret);
+		return ret;
+	}
+
+	ret = of_property_read_u32(node, "google,polling-freq",
+				   &ovh_info->polling_freq);
+	if (ret < 0) {
+		dev_err(ovh_info->dev,
+			"cannot read polling-freq, ret=%d\n", ret);
 		return ret;
 	}
 
@@ -108,6 +121,17 @@ static int suspend_usb(struct overheat_info *ovh_info)
 
 	ovh_info->usb_replug = false;
 
+	/* disable USB */
+	ret = vote(ovh_info->disable_power_role_switch,
+		   USB_OVERHEAT_MITIGATION_VOTER, false, 0);
+	if (ret < 0) {
+		dev_err(ovh_info->dev,
+			"Couldn't un-vote for disable_power_role_switch ret=%d\n",
+			ret);
+		return ret;
+	}
+
+	/* suspend charging */
 	ret = vote(ovh_info->usb_icl_votable,
 		  USB_OVERHEAT_MITIGATION_VOTER, true, 0);
 	if (ret < 0) {
@@ -124,6 +148,7 @@ static int resume_usb(struct overheat_info *ovh_info)
 {
 	int ret;
 
+	/* enable charging */
 	ret = vote(ovh_info->usb_icl_votable,
 		  USB_OVERHEAT_MITIGATION_VOTER, false, 0);
 	if (ret < 0) {
@@ -132,25 +157,72 @@ static int resume_usb(struct overheat_info *ovh_info)
 		return ret;
 	}
 
+	/* enable USB */
+	ret = vote(ovh_info->disable_power_role_switch,
+		   USB_OVERHEAT_MITIGATION_VOTER, true, 0);
+	if (ret < 0) {
+		dev_err(ovh_info->dev,
+			"Couldn't un-vote for disable_power_role_switch ret=%d\n",
+			ret);
+		return ret;
+	}
+
 	ovh_info->overheat_mitigation = false;
 	ovh_info->usb_replug = false;
 	return ret;
 }
 
-static int update_usb_connected_status(struct overheat_info *ovh_info)
+/*
+ * Updated usb_connected and usb_replug status in overheat_info struct
+ */
+static int update_usb_status(struct overheat_info *ovh_info)
 {
 	int ret;
 	bool prev_state = ovh_info->usb_connected;
+	int *check_status = &ovh_info->check_status;
+
+	if (ovh_info->overheat_mitigation) {
+		// Only check USB status every polling_freq instances
+		*check_status = (*check_status + 1) % ovh_info->polling_freq;
+		if (*check_status > 0)
+			return 0;
+		ret = vote(ovh_info->disable_power_role_switch,
+			   USB_OVERHEAT_MITIGATION_VOTER, false, 0);
+		if (ret < 0) {
+			dev_err(ovh_info->dev,
+				"Couldn't un-vote for disable_power_role_switch ret=%d\n",
+				ret);
+			return ret;
+		}
+		msleep(200);
+	}
 
 	ret = PSY_GET_PROP(ovh_info->usb_psy, POWER_SUPPLY_PROP_PRESENT);
 	if (ret < 0)
 		return ret;
 	ovh_info->usb_connected = ret;
 
+	if (ovh_info->overheat_mitigation) {
+		ret = vote(ovh_info->disable_power_role_switch,
+			   USB_OVERHEAT_MITIGATION_VOTER, true, 0);
+		if (ret < 0) {
+			dev_err(ovh_info->dev,
+				"Couldn't un-vote for disable_power_role_switch ret=%d\n",
+				ret);
+			return ret;
+		}
+	}
+
 	if (ovh_info->usb_connected != prev_state)
 		dev_info(ovh_info->dev,
 			 "USB is %sconnected",
 			 ovh_info->usb_connected ? "" : "dis");
+
+	// USB should be disconnected for two cycles before replug is acked
+	if(ovh_info->overheat_mitigation && !ovh_info->usb_connected &&
+	   !prev_state)
+		ovh_info->usb_replug = true;
+
 	return 0;
 }
 
@@ -201,16 +273,16 @@ static void port_overheat_work(struct work_struct *work)
 		__pm_stay_awake(&ovh_info->overheat_ws);
 	ovh_info->overheat_work_running = true;
 
-	// If USB is disconnected, replug condition is met
-	ret = update_usb_connected_status(ovh_info);
-	if (ret < 0)
-		goto rerun;
-	if (!ovh_info->usb_connected && ovh_info->overheat_mitigation)
-		ovh_info->usb_replug = true;
-
 	temp = get_usb_port_temp(ovh_info);
 	if (temp < 0)
 		goto rerun;
+
+	// Check USB connection status if it's safe to do so
+	if (!ovh_info->overheat_mitigation || temp < ovh_info->clear_temp) {
+		ret = update_usb_status(ovh_info);
+		if (ret < 0)
+			goto rerun;
+	}
 
 	if (ovh_info->overheat_mitigation &&
 	    temp < ovh_info->clear_temp && ovh_info->usb_replug) {
@@ -242,6 +314,7 @@ static int ovh_probe(struct platform_device *pdev)
 	struct overheat_info *ovh_info;
 	struct power_supply  *usb_psy;
 	struct votable       *usb_icl_votable;
+	struct votable       *disable_power_role_switch;
 
 	usb_psy = power_supply_get_by_name("usb");
 	if (!usb_psy)
@@ -253,12 +326,19 @@ static int ovh_probe(struct platform_device *pdev)
 		return -EPROBE_DEFER;
 	}
 
+	disable_power_role_switch = find_votable("DISABLE_POWER_ROLE_SWITCH");
+	if (disable_power_role_switch == NULL) {
+		pr_err("Couldn't find DISABLE_POWER_ROLE_SWITCH votable\n");
+		return -EPROBE_DEFER;
+	}
+
 	ovh_info = devm_kzalloc(&pdev->dev, sizeof(*ovh_info), GFP_KERNEL);
 	if (!ovh_info)
 		return -ENOMEM;
 
 	ovh_info->dev = &pdev->dev;
 	ovh_info->usb_icl_votable = usb_icl_votable;
+	ovh_info->disable_power_role_switch = disable_power_role_switch;
 	ovh_info->usb_psy = usb_psy;
 	ovh_info->overheat_mitigation = false;
 	ovh_info->usb_replug = false;
@@ -270,8 +350,10 @@ static int ovh_probe(struct platform_device *pdev)
 	if (ret < 0)
 		return -ENODEV;
 
-	// initialize votable
+	// initialize votables
 	vote(ovh_info->usb_icl_votable,
+	     USB_OVERHEAT_MITIGATION_VOTER, false, 0);
+	vote(ovh_info->disable_power_role_switch,
 	     USB_OVERHEAT_MITIGATION_VOTER, false, 0);
 
 	// register power supply change notifier

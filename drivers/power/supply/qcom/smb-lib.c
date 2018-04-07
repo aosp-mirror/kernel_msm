@@ -1387,7 +1387,7 @@ static int smblib_disable_power_role_switch_callback(struct votable *votable,
 	if (chg->connector_type == POWER_SUPPLY_CONNECTOR_MICRO_USB) {
 		rc = smblib_micro_usb_disable_power_role_switch(chg, disable);
 	} else {
-		pval.intval = disable ? POWER_SUPPLY_TYPEC_PR_SINK
+		pval.intval = disable ? POWER_SUPPLY_TYPEC_PR_NONE
 				      : POWER_SUPPLY_TYPEC_PR_DUAL;
 		rc = __smblib_set_prop_typec_power_role(chg, &pval);
 	}
