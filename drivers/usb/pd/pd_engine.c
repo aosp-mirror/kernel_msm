@@ -29,6 +29,7 @@
 #include <linux/usb/typec.h>
 #include <linux/usb/pd.h>
 #include <linux/usb/tcpm.h>
+#include <linux/vmalloc.h>
 #include <linux/workqueue.h>
 #include "usbpd.h"
 
@@ -88,7 +89,7 @@ struct usbpd {
 	spinlock_t logbuffer_lock;	/* log buffer access lock */
 	int logbuffer_head;
 	int logbuffer_tail;
-	u8 *logbuffer[LOG_BUFFER_ENTRIES];
+	u8 *logbuffer;
 	bool in_pr_swap;
 
 	/* Ext vbus management */
@@ -99,11 +100,6 @@ struct usbpd {
 /*
  * Logging
  */
-static bool pd_engine_log_full(struct usbpd *pd)
-{
-	return pd->logbuffer_tail ==
-		(pd->logbuffer_head + 1) % LOG_BUFFER_ENTRIES;
-}
 
 static void _pd_engine_log(struct usbpd *pd, const char *fmt, va_list args)
 {
@@ -111,22 +107,9 @@ static void _pd_engine_log(struct usbpd *pd, const char *fmt, va_list args)
 	u64 ts_nsec = local_clock();
 	unsigned long rem_nsec;
 
-	if (!pd->logbuffer[pd->logbuffer_head]) {
-		pd->logbuffer[pd->logbuffer_head] =
-			kzalloc(LOG_BUFFER_ENTRY_SIZE, GFP_ATOMIC);
-		if (!pd->logbuffer[pd->logbuffer_head])
-			return;
-	}
-
 	vsnprintf(tmpbuffer, sizeof(tmpbuffer), fmt, args);
 
 	spin_lock(&pd->logbuffer_lock);
-
-	if (pd_engine_log_full(pd)) {
-		pd->logbuffer_head = max(pd->logbuffer_head - 1, 0);
-		strlcpy(tmpbuffer, "overflow", LOG_BUFFER_ENTRY_SIZE);
-	}
-
 	if (pd->logbuffer_head < 0 ||
 	    pd->logbuffer_head >= LOG_BUFFER_ENTRIES) {
 		dev_warn(&pd->dev,
@@ -134,19 +117,16 @@ static void _pd_engine_log(struct usbpd *pd, const char *fmt, va_list args)
 		goto abort;
 	}
 
-	if (!pd->logbuffer[pd->logbuffer_head]) {
-		dev_warn(&pd->dev,
-			 "Log buffer index %d is NULL\n", pd->logbuffer_head);
-		goto abort;
-	}
-
 	rem_nsec = do_div(ts_nsec, 1000000000);
-	scnprintf(pd->logbuffer[pd->logbuffer_head],
+	scnprintf(pd->logbuffer + (pd->logbuffer_head * LOG_BUFFER_ENTRY_SIZE),
 		  LOG_BUFFER_ENTRY_SIZE, "[%5lu.%06lu] %s",
 		  (unsigned long)ts_nsec, rem_nsec / 1000,
 		  tmpbuffer);
 	pd->logbuffer_head = (pd->logbuffer_head + 1) % LOG_BUFFER_ENTRIES;
-
+	if (pd->logbuffer_head == pd->logbuffer_tail) {
+		pd->logbuffer_tail = (pd->logbuffer_tail + 1)
+				     % LOG_BUFFER_ENTRIES;
+	}
 abort:
 	spin_unlock(&pd->logbuffer_lock);
 }
@@ -168,7 +148,8 @@ static int pd_engine_seq_show(struct seq_file *s, void *v)
 	spin_lock(&pd->logbuffer_lock);
 	tail = pd->logbuffer_tail;
 	while (tail != pd->logbuffer_head) {
-		seq_printf(s, "%s\n", pd->logbuffer[tail]);
+		seq_printf(s, "%s\n", pd->logbuffer +
+			   (tail * LOG_BUFFER_ENTRY_SIZE));
 		tail = (tail + 1) % LOG_BUFFER_ENTRIES;
 	}
 	if (!seq_has_overflowed(s))
@@ -1788,6 +1769,12 @@ struct usbpd *usbpd_create(struct device *parent)
 	if (!pd)
 		return ERR_PTR(-ENOMEM);
 
+	pd->logbuffer =
+		(u8 *) vzalloc(LOG_BUFFER_ENTRIES * LOG_BUFFER_ENTRY_SIZE);
+
+	if (!pd->logbuffer)
+		return ERR_PTR(-ENOMEM);
+
 	mutex_init(&pd->lock);
 
 	device_initialize(&pd->dev);
@@ -1904,6 +1891,7 @@ del_pd:
 	device_del(&pd->dev);
 free_pd:
 	num_pd_instances--;
+	vfree(pd->logbuffer);
 	kfree(pd);
 	return ERR_PTR(ret);
 }
@@ -1927,6 +1915,7 @@ void usbpd_destroy(struct usbpd *pd)
 	pd_engine_debugfs_exit(pd);
 	device_del(&pd->dev);
 	num_pd_instances--;
+	vfree(pd->logbuffer);
 	kfree(pd);
 }
 EXPORT_SYMBOL(usbpd_destroy);
