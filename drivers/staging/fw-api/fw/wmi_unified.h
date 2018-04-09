@@ -502,8 +502,19 @@ typedef enum {
     WMI_PEER_SET_RX_BLOCKSIZE_CMDID,
     /** request peer antdiv info from FW. FW shall respond with PEER_ANTDIV_INFO_EVENTID */
     WMI_PEER_ANTDIV_INFO_REQ_CMDID,
-    /** Peer operating mode change indication sent to host to update stats */
-    WMI_PEER_OPER_MODE_CHANGE_EVENTID,
+    /*
+     * The WMI_PEER_OPER_MODE_CHANGE_EVENTID def was originally mistakenly
+     * placed here, amongst the CMDID defs.
+     * The WMI_PEER_OPER_MODE_CHANGE_EVENTID def has been moved to the
+     * EVENTID section, but to preserve backwards compatibility, the value
+     * here that had been used for WMI_PEER_OPER_MODE_CHANGE_EVENTID
+     * is kept reserved/deprecated.
+     *
+     * This WMI_PEER_RESERVED0_CMDID value can be replaced with an actual
+     * WMI peer event message ID, though it will be simpler to instead add
+     * new WMI_PEER CMDID defs at the end of the WMI_GRP_PEER WMI_CMD_GRP.
+     */
+    WMI_PEER_RESERVED0_CMDID,
     /** Peer/Tid/Msduq threshold update */
     WMI_PEER_TID_MSDUQ_QDEPTH_THRESH_UPDATE_CMDID,
 
@@ -1270,6 +1281,32 @@ typedef enum {
     WMI_PEER_STA_PS_STATECHG_EVENTID,
     /** Peer Ant Div Info Event with rssi per chain, etc */
     WMI_PEER_ANTDIV_INFO_EVENTID,
+
+    /*
+     * WMI_PEER_RESERVED_EVENTID
+     * These values are used for placeholders, to allow the subsequent
+     * WMI_PEER_OPER_MODE_CHANGE_EVENTID constant to have the same value
+     * as it had in its original location, when it was mistakenly placed
+     * amongst the WMI_PEER CMDID defs.
+     *
+     * These WMI_PEER_RESERVED values can be replaced with actual WMI peer
+     * event message IDs, though it will be simpler to instead add new
+     * WMI_PEER EVENTID defs at the end of the WMI_GRP_PEER WMI_EVT_GRP.
+     */
+    WMI_PEER_RESERVED0_EVENTID,
+    WMI_PEER_RESERVED1_EVENTID,
+    WMI_PEER_RESERVED2_EVENTID,
+    WMI_PEER_RESERVED3_EVENTID,
+    WMI_PEER_RESERVED4_EVENTID,
+    WMI_PEER_RESERVED5_EVENTID,
+    WMI_PEER_RESERVED6_EVENTID,
+    WMI_PEER_RESERVED7_EVENTID,
+    WMI_PEER_RESERVED8_EVENTID,
+    WMI_PEER_RESERVED9_EVENTID,
+    WMI_PEER_RESERVED10_EVENTID,
+    /** Peer operating mode change indication sent to host to update stats */
+    WMI_PEER_OPER_MODE_CHANGE_EVENTID,
+
 
     /* beacon/mgmt specific events */
     /** RX management frame. the entire frame is carried along with the event.  */
@@ -2211,6 +2248,15 @@ typedef struct {
      * bits 31:28 -> CRM sub ID
      */
     A_UINT32 fw_build_vers_ext;
+    /* max_nlo_ssids - dynamically negotiated maximum number of SSIDS for NLO
+     * This limit is the maximum number of SSIDs that can be configured in the
+     * target for Network List Offload (i.e. scanning for a preferred network).
+     * If this value is 0x0, the target supports WMI_NLO_MAX_SSIDS (16).
+     * If this value is non-zero, the host should send back in the
+     * WMI_INIT message's wmi_resource_config.max_nlo_ssids a value that
+     * is equal to or less than the target capability limit reported here.
+     */
+    A_UINT32 max_nlo_ssids;
 } wmi_service_ready_ext_event_fixed_param;
 
 typedef enum {
@@ -2726,6 +2772,27 @@ typedef struct {
 
     /* Max no of STA with which TWT sessions can be formed by the AP */
     A_UINT32 twt_ap_sta_count;
+
+    /* max_nlo_ssids - dynamically negotiated maximum number of SSIDS for NLO
+     * This parameter provides the final specification for the maximum number
+     * of SSIDs for the target to support for Network List Offload's scanning
+     * for preferred networks.
+     * This wmi_resource_config.max_nlo_ssids must be <= the max_nlo_ssids
+     * field from the target's WMI_SERVICE_READY_EXT_EVENT message.
+     * (If the target didn't provide a max_nlo_ssids field in the
+     * WMI_SERVICE_READY_EXT message, or if the SERVICE_READY_EXT msg's
+     * max_nlo_ssids value was 0x0, the target doesn't support dynamic
+     * negotiation of max NLO SSIDs, and WMI_NLO_MAX_SSIDS (=16) applies.)
+     * If this wmi_resource_config.max_nlo_ssids field is absent or 0x0,
+     * the host does not support dynamic negotiation of max NLO SSIDs.
+     * In such a case, the target will respond as follows:
+     * If the target supports at least WMI_NLO_MAX_SSIDS, the target will
+     * use the statically-configured WMI_NLO_MAX_SSIDS value.
+     * If the target supports less than WMI_NLO_MAX_SSIDS, the target will
+     * abort its boot-up, due to receiving an invalid/unsupported
+     * configuration specification.
+     */
+    A_UINT32 max_nlo_ssids;
 } wmi_resource_config;
 
 #define WMI_RSRC_CFG_FLAG_SET(word32, flag, value) \
@@ -4828,6 +4895,21 @@ typedef enum {
     WMI_PDEV_PARAM_DATA_STALL_DETECT_ENABLE,          /* 0x9b */
     /* GCMP Support indication to FW */
     WMI_PDEV_PARAM_GCMP_SUPPORT_ENABLE,               /* 0x9c */
+    /** Enable/Disable chain selection optimization for one chain dtim
+     *   non-zero - Enable optimization and use this non-zero value as the
+     *              chain imbalance threshold for optimization to kick in
+     *              (units = dB)
+     *   0- Disable optimization
+     */
+    WMI_PDEV_PARAM_1CH_DTIM_OPTIMIZED_CHAIN_SELECTION,/* 0x9d */
+    /*
+     * Override default FW behavior and explicitly enable / disable
+     * the use of CCK for PPDU transmissions.
+     *
+     * When CCK transmissions are disabled, the default OFDM legacy
+     * rate will be used instead.
+     */
+    WMI_PDEV_PARAM_CCK_TX_ENABLE,                     /* 0x9e */
 } WMI_PDEV_PARAM;
 
 typedef struct {
@@ -5017,6 +5099,11 @@ typedef struct {
      * See macros starting with WMI_PDEV_ID_ for values.
      */
     A_UINT32    pdev_id;
+    /* ppdu_id
+     * Hardware PPDU ID for tracking the completion stats
+     * A ppdu_id value of 0x0 is invalid, and should be ignored.
+     */
+    A_UINT32    ppdu_id;
 } wmi_mgmt_tx_compl_event_fixed_param;
 
 typedef struct {
@@ -5027,6 +5114,11 @@ typedef struct {
      * See macros starting with WMI_PDEV_ID_ for values.
      */
     A_UINT32    pdev_id;
+    /* ppdu_id
+     * Hardware PPDU ID for tracking the completion stats
+     * A ppdu_id value of 0x0 is invalid, and should be ignored.
+     */
+    A_UINT32    ppdu_id;
 } wmi_offchan_data_tx_compl_event_fixed_param;
 
 typedef struct {
@@ -8170,6 +8262,21 @@ typedef enum {
       */
     WMI_VDEV_PARAM_ENABLE_DISABLE_RTT_RESPONDER_ROLE,        /* 0x7d */
 
+    /** Parameter to configure BA mode.
+     * Default: Auto mode.
+     * Valid values: 0- Auto mode,
+     *               1- Manual mode(addba req not sent).
+     */
+    WMI_VDEV_PARAM_BA_MODE,                                 /* 0x7e */
+
+    /**
+     * VDEV parameter to force to set modulate DTIM count as listen interval,
+     * no matter whether WoW is enabled
+     * Default: Disabled.
+     * Valid values: 0- Disabled,
+     *               1- Enabled.
+     */
+    WMI_VDEV_PARAM_FORCED_MODDTIM_ENABLE,                   /* 0x7f */
 
     /*=== ADD NEW VDEV PARAM TYPES ABOVE THIS LINE ===
      * The below vdev param types are used for prototyping, and are
@@ -12683,11 +12790,24 @@ typedef struct {
     A_UINT32 vdev_id; /** unique id identifying the VDEV */
     A_UINT32 flags; /* status flags */
     A_UINT32 refresh_cnt; /* number of successful GTK refresh exchanges since last SET operation */
+    /*
+     * As with all WMI messages, this message uses little-endian byte
+     * ordering within each A_UINT32 field.
+     * If a big-endian host is using automatic swapping of the bytes within
+     * each 4-byte A_UINT32 to automatically correct the endianness of the
+     * A_UINT32 fields as the message is uploaded from target --> host, the
+     * big-endian host will have to undo the automatic byte swapping for the
+     * below A_UINT8 fields, to restore them to their original order.
+     */
     A_UINT8 replay_counter[GTK_REPLAY_COUNTER_BYTES]; /* current replay counter */
     A_UINT8 igtk_keyIndex; /* Use if IGTK_OFFLOAD is defined */
     A_UINT8 igtk_keyLength; /* Use if IGTK_OFFLOAD is defined */
     A_UINT8 igtk_keyRSC[IGTK_PN_SIZE]; /* key replay sequence counter *//* Use if IGTK_OFFLOAD is defined */
     A_UINT8 igtk_key[WMI_MAX_KEY_LEN]; /* Use if IGTK_OFFLOAD is defined */
+    A_UINT8 gtk_keyIndex; /* GTK key index */
+    A_UINT8 gtk_keyLength; /* GTK key length */
+    A_UINT8 gtk_keyRSC[GTK_REPLAY_COUNTER_BYTES]; /* GTK key replay sequence counter */
+    A_UINT8 gtk_key[WMI_MAX_KEY_LEN]; /* GTK key data */
 } WMI_GTK_OFFLOAD_STATUS_EVENT_fixed_param;
 
 typedef struct {
@@ -20343,6 +20463,8 @@ typedef struct {
     wmi_ppe_threshold he_ppet5G;
     /* chainmask table to be used for the MAC */
     A_UINT32 chainmask_table_id;
+    /* PDEV ID to LMAC ID mapping */
+    A_UINT32 lmac_id;
 } WMI_MAC_PHY_CAPABILITIES;
 
 typedef struct {
@@ -21414,7 +21536,10 @@ typedef struct {
     /** TLV tag and len; tag equals
      * WMITLV_TAG_STRUC_wmi_pdev_get_nfcal_power_fixed_param */
     A_UINT32 tlv_header;
-    /* Currently there are no parameters for this message. */
+    /** pdev_id for identifying the MAC
+     * See macros starting with WMI_PDEV_ID_ for values.
+     */
+    A_UINT32 pdev_id;
 } wmi_pdev_get_nfcal_power_fixed_param;
 
 typedef struct {
@@ -21715,12 +21840,21 @@ typedef enum {
 /*
 * Lay out of flags in wmi_wlm_config_cmd_fixed_param
 *
-* |31  12|  11  |  10  |9    8|7    6|5    4|3    2|  1  |  0  |
-* +------+------+------+------+------+------+------+-----+-----+
-* | RSVD | SSLP | CSLP | RSVD | Roam | RSVD | DWLT | DFS | SUP |
-* +------+-------------+-------------+-------------------------+
-* |  WAL |      PS     |     Roam    |         Scan            |
+* |31  17|16 14| 13 | 12 |  11  |  10  |9    8|7    6|5    4|3    2|  1  |  0  |
+* +------+-----+----+----+------+------+------+------+------+------+-----+-----+
+* | RSVD | NSS |EDCA| TRY| SSLP | CSLP | RSVD | Roam | RSVD | DWLT | DFS | SUP |
+* +----------------------+-------------+-------------+-------------------------+
+* |          WAL         |      PS     |     Roam    |         Scan            |
 *
+* Flag values:
+*     TRY: (1) enable short limit for retrying unacked tx, where the limit is
+*              based on the traffic's latency level
+*          (0) default tx retry behavior
+*    EDCA: (1) Apply VO parameters on BE
+*          (0) default behavior
+*     NSS: (0) no Nss limits, other than those negotiatied during association
+*          (1) during 2-chain operation, tx only a single spatial stream
+*          (2) - (7) reserved / invalid
 */
 /* bit 0-3 of flags is used for scan operation */
 /* bit 0: WLM_FLAGS_SCAN_SUPPRESS, suppress all scan and other bits would be ignored if bit is set */
@@ -21772,7 +21906,7 @@ typedef enum {
 #define WLM_FLAGS_PS_DISABLE_SYS_SLEEP  1  /* disable sys sleep */
 
 
-/* bit 12-31 of flags is reserved for powersave and WAL */
+/* bit 17-31 of flags is reserved for powersave and WAL */
 
 #define WLM_FLAGS_SCAN_IS_SUPPRESS(flag)                  WMI_GET_BITS(flag, 0, 1)
 #define WLM_FLAGS_SCAN_SET_SUPPRESS(flag, val)            WMI_SET_BITS(flag, 0, 1, val)
@@ -21786,6 +21920,12 @@ typedef enum {
 #define WLM_FLAGS_PS_SET_CSS_CLPS_DISABLE(flag, val)      WMI_SET_BITS(flag, 10, 1, val)
 #define WLM_FLAGS_PS_IS_SYS_SLP_DISABLED(flag)            WMI_GET_BITS(flag, 11, 1)
 #define WLM_FLAGS_PS_SET_SYS_SLP_DISABLE(flag, val)       WMI_SET_BITS(flag, 11, 1, val)
+#define WLM_FLAGS_WAL_LIMIT_TRY_ENABLED(flag)             WMI_GET_BITS(flag, 12, 1)
+#define WLM_FLAGS_WAL_LIMIT_TRY_SET(flag, val)            WMI_SET_BITS(flag, 12, 1, val)
+#define WLM_FLAGS_WAL_ADJUST_EDCA_ENABLED(flag)           WMI_GET_BITS(flag, 13, 1)
+#define WLM_FLAGS_WAL_ADJUST_EDCA_SET(flag, val)          WMI_SET_BITS(flag, 13, 1, val)
+#define WLM_FLAGS_WAL_1NSS_ENABLED(flag)                 (WMI_GET_BITS(flag, 14, 3) & 0x1)
+#define WLM_FLAGS_WAL_NSS_SET(flag, val)                  WMI_SET_BITS(flag, 14, 3, val)
 
 typedef struct {
     /** TLV tag and len; tag equals
