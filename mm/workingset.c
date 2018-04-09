@@ -473,8 +473,7 @@ static enum lru_status shadow_lru_isolate(struct list_head *item,
 	if (WARN_ON_ONCE(node->exceptional))
 		goto out_invalid;
 	inc_node_state(page_pgdat(virt_to_page(node)), WORKINGSET_NODERECLAIM);
-	__radix_tree_delete_node(&mapping->page_tree, node,
-				 workingset_update_node, mapping);
+	__radix_tree_delete_node(&mapping->page_tree, node);
 
 out_invalid:
 	spin_unlock(&mapping->tree_lock);
