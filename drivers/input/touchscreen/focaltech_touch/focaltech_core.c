@@ -145,7 +145,7 @@ int fts_reset_proc(int hdelayms)
 {
 	gpio_direction_output(fts_wq_data->pdata->reset_gpio, 1);
 	gpio_direction_output(fts_wq_data->pdata->reset_gpio, 0);
-	mdelay(10);
+	mdelay(6);
 	gpio_direction_output(fts_wq_data->pdata->reset_gpio, 1);
 	msleep(hdelayms);
 
@@ -1395,10 +1395,8 @@ static int fts_ts_resume(struct device *dev)
 	fts_release_all_finger();
 
 #if (!FTS_CHIP_IDC)
-	fts_reset_proc(200);
+	fts_reset_proc(1);
 #endif
-
-	fts_tp_state_recovery(data->client);
 
 #if FTS_ESDCHECK_EN
 	fts_esdcheck_resume();
