@@ -59,6 +59,7 @@
 			39 01 00 00 00 00 05 2B 00 00 01 85
 			15 01 00 00 00 00 02 53 20
 			05 01 00 00 80 00 02 11 00
+			05 01 00 00 00 00 02 13 00/*normal mode*/
 			05 01 00 00 00 00 02 29 00];
 		qcom,mdss-dsi-off-command = [05 01 00 00 00 00 02 28 00
 					05 01 00 00 78 00 02 10 00
@@ -73,6 +74,7 @@
 		qcom,mdss-dsi-idle-on-command-state = "dsi_hs_mode";
 		qcom,mdss-dsi-idle-off-command = [
 					15 01 00 00 00 00 02 fe 00
+					05 01 00 00 00 00 02 13 00/*normal mode*/
 					15 01 00 00 00 00 02 38 00/*Idle Mode Off*/
 					];
 		qcom,mdss-dsi-idle-off-command-state = "dsi_hs_mode";
