@@ -325,6 +325,7 @@ static void radix_tree_node_rcu_free(struct rcu_head *head)
 		tag_clear(node, i, 0);
 
 	node->slots[0] = NULL;
+	node->count = 0;
 
 	kmem_cache_free(radix_tree_node_cachep, node);
 }
@@ -541,9 +542,7 @@ out:
  *	radix_tree_shrink    -    shrink radix tree to minimum height
  *	@root		radix tree root
  */
-static inline bool radix_tree_shrink(struct radix_tree_root *root,
-				     radix_tree_update_node_t update_node,
-				     void *private)
+static inline bool radix_tree_shrink(struct radix_tree_root *root)
 {
 	bool shrunk = false;
 
@@ -598,12 +597,8 @@ static inline bool radix_tree_shrink(struct radix_tree_root *root,
 		 * also results in a stale slot). So tag the slot as indirect
 		 * to force callers to retry.
 		 */
-		node->count = 0;
-		if (!radix_tree_is_internal_node(child)) {
+		if (!radix_tree_is_internal_node(child))
 			node->slots[0] = RADIX_TREE_RETRY;
-			if (update_node)
-				update_node(node, private);
-		}
 
 		radix_tree_node_free(node);
 		shrunk = true;
@@ -613,8 +608,7 @@ static inline bool radix_tree_shrink(struct radix_tree_root *root,
 }
 
 static bool delete_node(struct radix_tree_root *root,
-			struct radix_tree_node *node,
-			radix_tree_update_node_t update_node, void *private)
+			struct radix_tree_node *node)
 {
 	bool deleted = false;
 
@@ -623,8 +617,7 @@ static bool delete_node(struct radix_tree_root *root,
 
 		if (node->count) {
 			if (node == entry_to_node(root->rnode))
-				deleted |= radix_tree_shrink(root, update_node,
-							     private);
+				deleted |= radix_tree_shrink(root);
 			return deleted;
 		}
 
@@ -887,20 +880,17 @@ static void replace_slot(struct radix_tree_root *root,
 
 /**
  * __radix_tree_replace		- replace item in a slot
- * @root:		radix tree root
- * @node:		pointer to tree node
- * @slot:		pointer to slot in @node
- * @item:		new item to store in the slot.
- * @update_node:	callback for changing leaf nodes
- * @private:		private data to pass to @update_node
+ * @root:	radix tree root
+ * @node:	pointer to tree node
+ * @slot:	pointer to slot in @node
+ * @item:	new item to store in the slot.
  *
  * For use with __radix_tree_lookup().  Caller must hold tree write locked
  * across slot lookup and replacement.
  */
 void __radix_tree_replace(struct radix_tree_root *root,
 			  struct radix_tree_node *node,
-			  void **slot, void *item,
-			  radix_tree_update_node_t update_node, void *private)
+			  void **slot, void *item)
 {
 	/*
 	 * This function supports replacing exceptional entries and
@@ -910,13 +900,7 @@ void __radix_tree_replace(struct radix_tree_root *root,
 	replace_slot(root, node, slot, item,
 		     !node && slot != (void **)&root->rnode);
 
-	if (!node)
-		return;
-
-	if (update_node)
-		update_node(node, private);
-
-	delete_node(root, node, update_node, private);
+	delete_node(root, node);
 }
 
 /**
@@ -1601,7 +1585,7 @@ unsigned long radix_tree_locate_item(struct radix_tree_root *root, void *item)
 bool __radix_tree_delete_node(struct radix_tree_root *root,
 			      struct radix_tree_node *node)
 {
-	return delete_node(root, node, NULL, NULL);
+	return delete_node(root, node);
 }
 
 static inline void delete_sibling_entries(struct radix_tree_node *node,
@@ -1658,7 +1642,7 @@ void *radix_tree_delete_item(struct radix_tree_root *root,
 		node_tag_clear(root, node, tag, offset);
 
 	delete_sibling_entries(node, node_to_entry(slot), offset);
-	__radix_tree_replace(root, node, slot, NULL, NULL, NULL);
+	__radix_tree_replace(root, node, slot, NULL);
 
 	return entry;
 }
