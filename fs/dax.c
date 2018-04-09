@@ -643,13 +643,12 @@ static void *dax_insert_mapping_entry(struct address_space *mapping,
 		}
 		mapping->nrexceptional++;
 	} else {
-		struct radix_tree_node *node;
 		void **slot;
 		void *ret;
 
-		ret = __radix_tree_lookup(page_tree, index, &node, &slot);
+		ret = __radix_tree_lookup(page_tree, index, NULL, &slot);
 		WARN_ON_ONCE(ret != entry);
-		__radix_tree_replace(page_tree, node, slot, new_entry);
+		radix_tree_replace_slot(slot, new_entry);
 	}
 	if (vmf->flags & FAULT_FLAG_WRITE)
 		radix_tree_tag_set(page_tree, index, PAGECACHE_TAG_DIRTY);
