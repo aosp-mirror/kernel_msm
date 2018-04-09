@@ -1,0 +1,24 @@
+KERNEL_DIR=private/msm-google
+. ${ROOT_DIR}/${KERNEL_DIR}/build.config.common
+POST_DEFCONFIG_CMDS="check_defconfig && compression_tool_and_files gz && update_debug_config"
+EXTRA_CMDS="split_marlin_sailfish_dtb"
+
+function update_debug_config() {
+    ${KERNEL_DIR}/scripts/config --file ${OUT_DIR}/.config \
+         -e CONFIG_DEBUG_OBJECTS \
+         -e CONFIG_DEBUG_OBJECTS_FREE \
+         -e CONFIG_DEBUG_OBJECTS_TIMERS \
+         -e CONFIG_DEBUG_OBJECTS_WORK \
+         -e CONFIG_DEBUG_OBJECTS_RCU_HEAD \
+         -e CONFIG_DEBUG_OBJECTS_PERCPU_COUNTER \
+         -e CONFIG_DEBUG_VM \
+         -e CONFIG_DEBUG_VM_VMACACHE \
+         -e CONFIG_DEBUG_VM_RB \
+         -e CONFIG_DEBUG_MEMORY_INIT \
+         -e CONFIG_DEBUG_STACK_USAGE \
+         -e CONFIG_FORCE_PAGES \
+         -e CONFIG_FREE_PAGES_RDONLY \
+         -d CONFIG_KERNEL_LZ4
+    (cd ${OUT_DIR} && \
+     make O=${OUT_DIR} $archsubarch CROSS_COMPILE=${CROSS_COMPILE} olddefconfig)
+}

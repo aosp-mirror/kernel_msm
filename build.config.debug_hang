@@ -1,0 +1,21 @@
+KERNEL_DIR=private/msm-google
+. ${ROOT_DIR}/${KERNEL_DIR}/build.config.common
+POST_DEFCONFIG_CMDS="check_defconfig && compression_tool_and_files gz && update_debug_config"
+EXTRA_CMDS="split_marlin_sailfish_dtb"
+
+function update_debug_config() {
+    ${KERNEL_DIR}/scripts/config --file ${OUT_DIR}/.config \
+         -e CONFIG_LOCKUP_DETECTOR \
+         -e CONFIG_HARDLOCKUP_DETECTOR \
+         -e CONFIG_HARDLOCKUP_DETECTOR_OTHER_CPU \
+         -e CONFIG_BOOTPARAM_HARDLOCKUP_PANIC \
+         -e CONFIG_BOOTPARAM_SOFTLOCKUP_PANIC \
+         -e CONFIG_BOOTPARAM_HUNG_TASK_PANIC \
+         -e CONFIG_WQ_WATCHDOG \
+         -e CONFIG_RCU_STALL_WATCHDOG_BITE \
+         -e CONFIG_PANIC_ON_RT_THROTTLING \
+         -e CONFIG_RCU_EQS_DEBUG \
+         -d CONFIG_KERNEL_LZ4
+    (cd ${OUT_DIR} && \
+     make O=${OUT_DIR} $archsubarch CROSS_COMPILE=${CROSS_COMPILE} olddefconfig)
+}

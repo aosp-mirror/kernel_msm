@@ -1,0 +1,36 @@
+ARCH=arm64
+BRANCH=android-msm-marlin-3.18
+CROSS_COMPILE=aarch64-linux-android-
+CROSS_COMPILE_ARM32=arm-linux-androideabi-
+DEFCONFIG=marlin_defconfig
+LINUX_GCC_CROSS_COMPILE_PREBUILTS_BIN=prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin
+LINUX_GCC_CROSS_COMPILE_ARM32_PREBUILTS_BIN=prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9/bin
+LZ4_PREBUILTS_BIN=prebuilts-master/misc/linux-x86/lz4
+
+function compression_tool_and_files() {
+    local method=$1
+    if [ "$method" == "lz4" ]; then
+        FILES="
+        arch/arm64/boot/Image.lz4-dtb
+        vmlinux
+        System.map
+        compile.json
+        .config
+        "
+    elif [ "$method" == "gz" ]; then
+        FILES="
+        arch/arm64/boot/Image.gz-dtb
+        arch/arm64/boot/Image.gz-dtb.marlin
+        arch/arm64/boot/Image.gz-dtb.sailfish
+        vmlinux
+        System.map
+        .config
+        "
+    fi
+}
+
+function split_marlin_sailfish_dtb() {
+    OUT_DIR_BOOT=${OUT_DIR}/arch/${ARCH}/boot
+    cat ${OUT_DIR_BOOT}/Image.gz `find ${OUT_DIR_BOOT}/dts/ -name \*marlin\*.dtb` > ${OUT_DIR_BOOT}/Image.gz-dtb.marlin
+    cat ${OUT_DIR_BOOT}/Image.gz `find ${OUT_DIR_BOOT}/dts/ -name \*sailfish\*.dtb` > ${OUT_DIR_BOOT}/Image.gz-dtb.sailfish
+}
