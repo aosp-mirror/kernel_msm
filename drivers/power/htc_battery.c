@@ -476,6 +476,9 @@ static int update_ibat_setting(void)
 			is_screen_on, idx, ibat_ma);
 	}
 
+	if (g_chg_dis_reason)
+		ibat_ma = 0;
+
 	return ibat_ma * 1000;
 }
 
@@ -585,9 +588,9 @@ static void batt_worker(struct work_struct *work)
 	    POWER_SUPPLY_TYPE_BATTERY) ||
 	    (chg_present && !ex_otg)) {
 		if (is_bounding_fully_charged_level())
-			g_pwrsrc_dis_reason |= HTC_BATT_PWRSRC_DIS_BIT_MFG;
+			g_chg_dis_reason |= HTC_BATT_CHG_DIS_BIT_MFG;
 		else
-			g_pwrsrc_dis_reason &= ~HTC_BATT_PWRSRC_DIS_BIT_MFG;
+			g_chg_dis_reason &= ~HTC_BATT_CHG_DIS_BIT_MFG;
 		/* STEP 5.1 determin charging_eanbled for charger control */
 		if (g_chg_dis_reason)
 			charging_enabled = 0;
@@ -625,6 +628,12 @@ static void batt_worker(struct work_struct *work)
 			set_batt_psy_property(
 					     POWER_SUPPLY_PROP_INPUT_SUSPEND,
 					     !pwrsrc_enabled);
+		} else if (charging_enabled != gs_prev_charging_enabled) {
+			BATT_EMBEDDED("set charging_enable(%d)",
+				      charging_enabled);
+			set_batt_psy_property(
+					     POWER_SUPPLY_PROP_CHARGE_DISABLE,
+					     !charging_enabled);
 		}
 	} else {
 		if ((htc_batt_info.prev.charging_source !=
