@@ -164,7 +164,14 @@ static void page_cache_tree_delete(struct address_space *mapping,
 		__radix_tree_lookup(&mapping->page_tree, page->index + i,
 				    &node, &slot);
 
-		VM_BUG_ON_PAGE(!node && nr != 1, page);
+		if (!node) {
+			VM_BUG_ON_PAGE(nr != 1, page);
+			/*
+			 * We need a node to properly account shadow
+			 * entries. Don't plant any without. XXX
+			 */
+			shadow = NULL;
+		}
 
 		radix_tree_clear_tags(&mapping->page_tree, node, slot);
 		__radix_tree_replace(&mapping->page_tree, node, slot, shadow,
