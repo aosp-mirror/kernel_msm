@@ -56,7 +56,7 @@
 		st,irq-gpio = <&tlmm 125 0>;
 		st,reset-gpio = <&tlmm 99 0>;
 		st,switch_gpio = <&tlmm 136 0>;
-		st,max-coords = <1080 2160>;
+		st,max-coords = <1079 2159>;
 		st,regulator_dvdd = "vdd";
 		st,regulator_avdd = "avdd";
 		/* todo  st,firmware_name = "ftm4_fw.ftb"; */
