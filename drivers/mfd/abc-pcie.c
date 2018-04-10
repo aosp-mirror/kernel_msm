@@ -48,7 +48,7 @@ int abc_pcie_config_read(u32 offset, u32 len, u32 *data)
 	u32 region_offset;
 #endif
 
-	if (!abc_dev->pcie_config || !abc_dev->fsys_config)
+	if (!abc_dev || !abc_dev->pcie_config || !abc_dev->fsys_config)
 		return -EFAULT;
 
 	if (((TPU_START) <= offset) && (offset < (IPU_START))) {
@@ -95,7 +95,7 @@ int abc_pcie_config_write(u32 offset, u32 len, u32 data)
 	u32 region_offset;
 #endif
 
-	if (!abc_dev->pcie_config || !abc_dev->fsys_config)
+	if (!abc_dev || !abc_dev->pcie_config || !abc_dev->fsys_config)
 		return -EFAULT;
 
 	if (((TPU_START) <= offset) && (offset < (IPU_START))) {
@@ -138,6 +138,9 @@ int aon_config_read(u32 offset, u32 len, u32 *data)
 {
 	void __iomem *base_offset;
 
+	if (!abc_dev || !abc_dev->aon_config)
+		return -EFAULT;
+
 	base_offset = abc_dev->aon_config + offset;
 	*data = readl(base_offset);
 	return 0;
@@ -146,6 +149,9 @@ int aon_config_read(u32 offset, u32 len, u32 *data)
 int aon_config_write(u32 offset, u32 len, u32 data)
 {
 	void __iomem *base_offset;
+
+	if (!abc_dev || !abc_dev->aon_config)
+		return -EFAULT;
 
 	base_offset = abc_dev->aon_config + offset;
 	writel(data, base_offset);
