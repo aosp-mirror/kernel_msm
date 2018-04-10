@@ -162,6 +162,10 @@
 #include "msm8917-ion.dtsi"
 #include "msm8917-smp2p.dtsi"
 #include "msm8917-bus.dtsi"
+#include "msm8917-mdss.dtsi"
+#include "msm8917-mdss-pll.dtsi"
+#include "msm-arm-smmu-8917.dtsi"
+#include "msm8917-gpu.dtsi"
 
 &soc {
 	#address-cells = <1>;
@@ -209,6 +213,20 @@
 	qcom,sps {
 		compatible = "qcom,msm_sps_4k";
 		qcom,pipe-attr-ee;
+	};
+
+	thermal_zones: thermal-zones {};
+
+	tsens0: tsens@4a8000 {
+		compatible = "qcom,msm8937-tsens";
+		reg = <0x4a8000 0x1000>,
+			<0x4a9000 0x1000>,
+			<0xa4000  0x1000>;
+		reg-names = "tsens_srot_physical",
+				"tsens_tm_physical", "tsens_eeprom_physical";
+		interrupts = <0 184 0>;
+		interrupt-names = "tsens-upper-lower";
+		#thermal-sensor-cells = <1>;
 	};
 
 	timer@b120000 {
@@ -424,6 +442,14 @@
 		reg = <0x1874000 0x4>,
 		      <0xb01101c 0x8>;
 		reg-names = "cc_base", "meas";
+		#clock-cells = <1>;
+	};
+
+	clock_gcc_mdss: qcom,gcc-mdss@1800000 {
+		compatible = "qcom,gcc-mdss-8917";
+		clocks = <&mdss_dsi0_pll clk_dsi_pll0_pixel_clk_src>,
+		<&mdss_dsi0_pll clk_dsi_pll0_byte_clk_src>;
+		clock-names = "pclk0_src", "byte0_src";
 		#clock-cells = <1>;
 	};
 
@@ -1223,6 +1249,7 @@
 #include "msm8917-regulator.dtsi"
 #include "pm8937.dtsi"
 #include "msm-gdsc-8916.dtsi"
+#include "msm8917-thermal.dtsi"
 
 &gdsc_venus {
 	clock-names = "bus_clk", "core_clk";

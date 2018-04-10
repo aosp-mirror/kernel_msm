@@ -158,6 +158,8 @@
 #define DDR_CONFIG_PRG_RCLK_DLY_MASK	0x1FF
 #define DDR_CONFIG_PRG_RCLK_DLY		115
 #define DDR_CONFIG_2_POR_VAL		0x80040873
+#define DLL_USR_CTL_POR_VAL		0x10800
+#define ENABLE_DLL_LOCK_STATUS		(1 << 26)
 
 /* 512 descriptors */
 #define SDHCI_MSM_MAX_SEGMENTS  (1 << 9)
@@ -200,6 +202,7 @@ struct sdhci_msm_offset {
 	u32 CORE_DLL_CONFIG_2;
 	u32 CORE_DDR_CONFIG;
 	u32 CORE_DDR_CONFIG_2;
+	u32 CORE_DLL_USR_CTL; /* Present on SDCC5.1 onwards */
 };
 
 struct sdhci_msm_offset sdhci_msm_offset_mci_removed = {
@@ -229,6 +232,7 @@ struct sdhci_msm_offset sdhci_msm_offset_mci_removed = {
 	.CORE_DLL_CONFIG_2 = 0x254,
 	.CORE_DDR_CONFIG = 0x258,
 	.CORE_DDR_CONFIG_2 = 0x25C,
+	.CORE_DLL_USR_CTL = 0x388,
 };
 
 struct sdhci_msm_offset sdhci_msm_offset_mci_present = {
@@ -793,6 +797,15 @@ static int msm_init_cm_dll(struct sdhci_host *host)
 				msm_host_offset->CORE_DLL_CONFIG_2)
 				& ~CORE_DLL_CLOCK_DISABLE), host->ioaddr +
 				msm_host_offset->CORE_DLL_CONFIG_2);
+	}
+
+	/*
+	 * Configure DLL user control register to enable DLL status
+	 * This setting is applicable to SDCC v5.1 onwards only
+	 */
+	if (msm_host->need_dll_user_ctl) {
+		writel_relaxed(DLL_USR_CTL_POR_VAL | ENABLE_DLL_LOCK_STATUS,
+			host->ioaddr + msm_host_offset->CORE_DLL_USR_CTL);
 	}
 
 	/* Set DLL_EN bit to 1. */
@@ -3952,8 +3965,9 @@ void sdhci_msm_pm_qos_irq_unvote(struct sdhci_host *host, bool async)
 		return;
 
 	if (async) {
-		schedule_delayed_work(&msm_host->pm_qos_irq.unvote_work,
-				      msecs_to_jiffies(QOS_REMOVE_DELAY_MS));
+		queue_delayed_work(msm_host->pm_qos_wq,
+				&msm_host->pm_qos_irq.unvote_work,
+				msecs_to_jiffies(QOS_REMOVE_DELAY_MS));
 		return;
 	}
 
@@ -4030,6 +4044,33 @@ static inline void set_affine_irq(struct sdhci_msm_host *msm_host,
 				struct sdhci_host *host) { }
 #endif
 
+static bool sdhci_msm_pm_qos_wq_init(struct sdhci_msm_host *msm_host)
+{
+	char *wq = NULL;
+	bool ret = true;
+
+	wq = kasprintf(GFP_KERNEL, "sdhci_msm_pm_qos/%s",
+			dev_name(&msm_host->pdev->dev));
+	if (!wq)
+		return false;
+	/*
+	 * Create a work queue with flag WQ_MEM_RECLAIM set for
+	 * pm_qos_unvote work. Because mmc thread is created with
+	 * flag PF_MEMALLOC set, kernel will check for work queue
+	 * flag WQ_MEM_RECLAIM when flush the work queue. If work
+	 * queue flag WQ_MEM_RECLAIM is not set, kernel warning
+	 * will be triggered.
+	 */
+	msm_host->pm_qos_wq = create_workqueue(wq);
+	if (!msm_host->pm_qos_wq) {
+		ret = false;
+		dev_err(&msm_host->pdev->dev,
+				"failed to create pm qos unvote work queue\n");
+	}
+	kfree(wq);
+	return ret;
+}
+
 void sdhci_msm_pm_qos_irq_init(struct sdhci_host *host)
 {
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
@@ -4053,6 +4094,8 @@ void sdhci_msm_pm_qos_irq_init(struct sdhci_host *host)
 	else
 		cpumask_copy(&msm_host->pm_qos_irq.req.cpus_affine,
 			cpumask_of(msm_host->pdata->pm_qos_data.irq_cpu));
+
+	sdhci_msm_pm_qos_wq_init(msm_host);
 
 	INIT_DELAYED_WORK(&msm_host->pm_qos_irq.unvote_work,
 		sdhci_msm_pm_qos_irq_unvote_work);
@@ -4228,8 +4271,9 @@ bool sdhci_msm_pm_qos_cpu_unvote(struct sdhci_host *host, int cpu, bool async)
 		return false;
 
 	if (async) {
-		schedule_delayed_work(&msm_host->pm_qos[group].unvote_work,
-				      msecs_to_jiffies(QOS_REMOVE_DELAY_MS));
+		queue_delayed_work(msm_host->pm_qos_wq,
+				&msm_host->pm_qos[group].unvote_work,
+				msecs_to_jiffies(QOS_REMOVE_DELAY_MS));
 		return true;
 	}
 
@@ -4532,6 +4576,10 @@ static void sdhci_set_default_hw_caps(struct sdhci_msm_host *msm_host,
 		msm_host->ice_hci_support = true;
 		host->cdr_support = true;
 	}
+
+	if ((major == 1) && (minor >= 0x71))
+		msm_host->need_dll_user_ctl = true;
+
 }
 
 #ifdef CONFIG_MMC_CQ_HCI
@@ -5169,6 +5217,9 @@ static int sdhci_msm_remove(struct platform_device *pdev)
 		device_remove_file(&pdev->dev, &msm_host->polling);
 	device_remove_file(&pdev->dev, &msm_host->msm_bus_vote.max_bus_bw);
 	pm_runtime_disable(&pdev->dev);
+
+	if (msm_host->pm_qos_wq)
+		destroy_workqueue(msm_host->pm_qos_wq);
 	sdhci_remove_host(host, dead);
 	sdhci_pltfm_free(pdev);
 

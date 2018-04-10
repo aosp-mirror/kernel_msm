@@ -349,7 +349,7 @@ static void dsi_display_change_te_irq_status(struct dsi_display *display,
 
 static void dsi_display_register_te_irq(struct dsi_display *display)
 {
-	int rc;
+	int rc = 0;
 	struct platform_device *pdev;
 	struct device *dev;
 
@@ -365,18 +365,31 @@ static void dsi_display_register_te_irq(struct dsi_display *display)
 		return;
 	}
 
+	if (!gpio_is_valid(display->disp_te_gpio)) {
+		rc = -EINVAL;
+		goto error;
+	}
+
+	init_completion(&display->esd_te_gate);
+
 	rc = devm_request_irq(dev, gpio_to_irq(display->disp_te_gpio),
 			dsi_display_panel_te_irq_handler, IRQF_TRIGGER_FALLING,
 			"TE_GPIO", display);
 	if (rc) {
 		pr_err("TE request_irq failed for ESD rc:%d\n", rc);
-		return;
+		goto error;
 	}
-
-	init_completion(&display->esd_te_gate);
 
 	disable_irq(gpio_to_irq(display->disp_te_gpio));
 	display->is_te_irq_enabled = false;
+
+	return;
+
+error:
+	/* disable the TE based ESD check */
+	pr_warn("Unable to register for TE IRQ\n");
+	if (display->panel->esd_config.status_mode == ESD_MODE_PANEL_TE)
+		display->panel->esd_config.esd_enabled = false;
 }
 
 static bool dsi_display_is_te_based_esd(struct dsi_display *display)
@@ -555,14 +568,14 @@ static int dsi_display_read_status(struct dsi_display_ctrl *ctrl,
 	lenp = config->status_valid_params ?: config->status_cmds_rlen;
 	count = config->status_cmd.count;
 	cmds = config->status_cmd.cmds;
-	if (cmds->last_command) {
-		cmds->msg.flags |= MIPI_DSI_MSG_LASTCOMMAND;
-		flags |= DSI_CTRL_CMD_LAST_COMMAND;
-	}
 	flags |= (DSI_CTRL_CMD_FETCH_MEMORY | DSI_CTRL_CMD_READ);
 
 	for (i = 0; i < count; ++i) {
 		memset(config->status_buf, 0x0, SZ_4K);
+		if (cmds[i].last_command) {
+			cmds[i].msg.flags |= MIPI_DSI_MSG_LASTCOMMAND;
+			flags |= DSI_CTRL_CMD_LAST_COMMAND;
+		}
 		cmds[i].msg.rx_buf = config->status_buf;
 		cmds[i].msg.rx_len = config->status_cmds_rlen[i];
 		rc = dsi_ctrl_cmd_transfer(ctrl->ctrl, &cmds[i].msg, flags);
@@ -646,7 +659,7 @@ static int dsi_display_status_reg_read(struct dsi_display *display)
 
 		rc = dsi_display_validate_status(ctrl, display->panel);
 		if (rc <= 0) {
-			pr_err("[%s] read status failed on master,rc=%d\n",
+			pr_err("[%s] read status failed on slave,rc=%d\n",
 			       display->name, rc);
 			goto exit;
 		}
@@ -4079,11 +4092,6 @@ static int dsi_display_force_update_dsi_clk(struct dsi_display *display)
 {
 	int rc = 0;
 
-	if (!display || !display->panel) {
-		pr_err("Invalid params\n");
-		return -EINVAL;
-	}
-
 	rc = dsi_display_link_clk_force_update_ctrl(display->dsi_clk_handle);
 
 	if (!rc) {
@@ -4091,8 +4099,6 @@ static int dsi_display_force_update_dsi_clk(struct dsi_display *display)
 			display->cached_clk_rate);
 
 		atomic_set(&display->clkrate_change_pending, 0);
-	} else if (rc == -EAGAIN) {
-		pr_info("Clock is disabled, update it next time\n");
 	} else {
 		pr_err("Failed to configure dsi bit clock '%d'. rc = %d\n",
 			display->cached_clk_rate, rc);
@@ -4108,7 +4114,7 @@ static int dsi_display_request_update_dsi_bitrate(struct dsi_display *display,
 	int i;
 
 	pr_debug("%s:bit rate:%d\n", __func__, bit_clk_rate);
-	if (!display || !display->panel) {
+	if (!display->panel) {
 		pr_err("Invalid params\n");
 		return -EINVAL;
 	}
@@ -4187,11 +4193,6 @@ static ssize_t sysfs_dynamic_dsi_clk_read(struct device *dev,
 	struct dsi_display_ctrl *m_ctrl;
 	struct dsi_ctrl *ctrl;
 
-	if (!dev) {
-		pr_err("Invalid device\n");
-		return -EINVAL;
-	}
-
 	display = dev_get_drvdata(dev);
 	if (!display) {
 		pr_err("Invalid display\n");
@@ -4207,7 +4208,7 @@ static ssize_t sysfs_dynamic_dsi_clk_read(struct device *dev,
 					byte_clk_rate * 8;
 
 	rc = snprintf(buf, PAGE_SIZE, "%d\n", display->cached_clk_rate);
-	pr_info("%s: read dsi clk rate %d\n", __func__,
+	pr_debug("%s: read dsi clk rate %d\n", __func__,
 		display->cached_clk_rate);
 
 	mutex_unlock(&display->display_lock);
@@ -4221,11 +4222,6 @@ static ssize_t sysfs_dynamic_dsi_clk_write(struct device *dev,
 	int rc = 0;
 	int clk_rate;
 	struct dsi_display *display;
-
-	if (!dev) {
-		pr_err("Invalid device\n");
-		return -EINVAL;
-	}
 
 	display = dev_get_drvdata(dev);
 	if (!display) {
@@ -6030,11 +6026,8 @@ int dsi_display_pre_kickoff(struct dsi_display *display,
 			int ret = 0;
 
 			ret = dsi_ctrl_wait_for_cmd_mode_mdp_idle(ctrl);
-			if (ret) {
-				pr_info("Failed to wait for cmd engine not to be busy sending data from MDP, rc: %d\n",
-					ret);
+			if (ret)
 				goto wait_failure;
-			}
 		}
 
 		/*
