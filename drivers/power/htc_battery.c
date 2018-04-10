@@ -1507,9 +1507,9 @@ static void batt_worker(struct work_struct *work)
 			g_pwrsrc_dis_reason &= ~HTC_BATT_PWRSRC_DIS_BIT_FTM;
 
 		if (is_bounding_fully_charged_level())
-			g_pwrsrc_dis_reason |= HTC_BATT_PWRSRC_DIS_BIT_MFG;
+			g_chg_dis_reason |= HTC_BATT_CHG_DIS_BIT_MFG;
 		else
-			g_pwrsrc_dis_reason &= ~HTC_BATT_PWRSRC_DIS_BIT_MFG;
+			g_chg_dis_reason &= ~HTC_BATT_CHG_DIS_BIT_MFG;
 
 		if (g_usb_overheat){
 			g_pwrsrc_dis_reason |= HTC_BATT_PWRSRC_DIS_BIT_USB_OVERHEAT;
@@ -1607,10 +1607,7 @@ static void batt_worker(struct work_struct *work)
 			set_batt_psy_property(POWER_SUPPLY_PROP_BATTERY_CHARGING_ENABLED, charging_enabled);
 		}
 
-		if (htc_batt_info.rep.full_level != 100) {
-			BATT_EMBEDDED("set full level pwrsrc_enable(%d)", pwrsrc_enabled);
-			set_batt_psy_property(POWER_SUPPLY_PROP_CHARGING_ENABLED, pwrsrc_enabled);
-		} else if (pwrsrc_enabled != s_prev_pwrsrc_enabled) {
+		if (pwrsrc_enabled != s_prev_pwrsrc_enabled) {
 			BATT_EMBEDDED("set pwrsrc_enable(%d)", pwrsrc_enabled);
 			set_batt_psy_property(POWER_SUPPLY_PROP_CHARGING_ENABLED, pwrsrc_enabled);
 		}
