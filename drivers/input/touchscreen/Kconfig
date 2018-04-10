@@ -995,6 +995,16 @@ config TOUCHSCREEN_FT5X06_GESTURE
 
          If unsure, say N.
 
+config TOUCHSCREEN_RM_TS
+       tristate "Raydium touchscreens"
+       depends on I2C
+       help
+       Say Y here if you have a raydium touchscreen.
+       Raydium controllers are multi touch controllers which can
+       report 2 touches at a time.
+
+       If unsure, say N.
+
 config TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_EXTRA_SYSFS
 	bool "Synaptics DSX firmware update extra sysfs attributes"
 	depends on TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE
