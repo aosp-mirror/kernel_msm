@@ -789,14 +789,14 @@ static ssize_t p9221_show_version(struct device *dev,
 				     "otp fw min : ", "%04x\n");
 
 	count += scnprintf(buf + count, PAGE_SIZE - count, "otp fw date: ");
-	for (i = 0; i < 12; i++) {
+	for (i = 0; i < P9221_OTP_FW_DATE_SIZE; i++) {
 		ret = p9221_reg_read_8(charger,
 				       P9221_OTP_FW_DATE_REG + i, &val8);
 		count += scnprintf(buf + count, PAGE_SIZE - count, "%c", val8);
 	}
 
 	count += scnprintf(buf + count, PAGE_SIZE - count, "\notp fw time: ");
-	for (i = 0; i < 12; i++) {
+	for (i = 0; i < P9221_OTP_FW_TIME_SIZE; i++) {
 		ret = p9221_reg_read_8(charger,
 				       P9221_OTP_FW_TIME_REG + i, &val8);
 		count += scnprintf(buf + count, PAGE_SIZE - count, "%c", val8);
@@ -810,14 +810,14 @@ static ssize_t p9221_show_version(struct device *dev,
 				     "ram fw min : ", "%04x\n");
 
 	count += scnprintf(buf + count, PAGE_SIZE - count, "ram fw date: ");
-	for (i = 0; i < 12; i++) {
+	for (i = 0; i < P9221_SRAM_FW_DATE_SIZE; i++) {
 		ret = p9221_reg_read_8(charger,
 				       P9221_SRAM_FW_DATE_REG + i, &val8);
 		count += scnprintf(buf + count, PAGE_SIZE - count, "%c", val8);
 	}
 
 	count += scnprintf(buf + count, PAGE_SIZE - count, "\nram fw time: ");
-	for (i = 0; i < 12; i++) {
+	for (i = 0; i < P9221_SRAM_FW_TIME_SIZE; i++) {
 		ret = p9221_reg_read_8(charger,
 				       P9221_SRAM_FW_TIME_REG + i, &val8);
 		count += scnprintf(buf + count, PAGE_SIZE - count, "%c", val8);
