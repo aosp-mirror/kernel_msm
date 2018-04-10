@@ -352,6 +352,15 @@ static int __radix_tree_preload(gfp_t gfp_mask, int nr)
 	int ret = -ENOMEM;
 
 	/*
+	 * New allocate node must have node->private_list as INIT_LIST_HEAD
+	 * state by workingset shadow memory implementation.
+	 * If user pass  __GFP_ZERO by mistake, slab allocator will clear
+	 * node->private_list, which makes a BUG. Rather than going Oops,
+	 * just fix and warn about it.
+	 */
+	if (WARN_ON(gfp_mask & __GFP_ZERO))
+		gfp_mask &= ~__GFP_ZERO;
+	/*
 	 * Nodes preloaded by one cgroup can be be used by another cgroup, so
 	 * they should never be accounted to any particular memory cgroup.
 	 */
