@@ -262,6 +262,14 @@ static int32_t cam_sensor_i2c_modes_util(
 	int32_t rc = 0;
 	uint32_t i, size;
 
+	uint16_t default_sid = 0;
+	if ((io_master_info->master_type == CCI_MASTER) &&
+		(0 != i2c_list->i2c_settings.slave_addr)) {
+		default_sid = io_master_info->cci_client->sid;
+		io_master_info->cci_client->sid =
+			i2c_list->i2c_settings.slave_addr >> 1;
+	}
+
 	if (i2c_list->op_code == CAM_SENSOR_I2C_WRITE_RANDOM) {
 		rc = camera_io_dev_write(io_master_info,
 			&(i2c_list->i2c_settings));
@@ -335,6 +343,11 @@ static int32_t cam_sensor_i2c_modes_util(
 				i2c_list->i2c_settings.reg_setting[i].reg_addr,
 				i2c_list->i2c_settings.reg_setting[i].reg_data);
 		}
+	}
+
+	if ((io_master_info->master_type == CCI_MASTER) &&
+		(0 != i2c_list->i2c_settings.slave_addr)) {
+		io_master_info->cci_client->sid = default_sid;
 	}
 
 	return rc;
