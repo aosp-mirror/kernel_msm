@@ -230,8 +230,17 @@ unsigned long segv(struct faultinfo fi, unsigned long ip, int is_user,
 		current->thread.segv_regs = container_of(regs, struct pt_regs, regs);
 
 	catcher = current->thread.fault_catcher;
-	if (catcher && current->thread.is_running_test)
+	if (catcher && current->thread.is_running_test) {
+		/*
+		 * TODO(b/77223210): Right now we don't have a way to store a
+		 * copy of the stack, or a copy of information from the stack,
+		 * so we need to print it now; otherwise, the stack will be
+		 * destroyed by segv_run_catcher which works by popping off
+		 * stack frames.
+		 */
+		show_stack(NULL, NULL);
 		segv_run_catcher(catcher, (void *) address);
+	}
 	else if (!is_user && (address >= start_vm) && (address < end_vm)) {
 		flush_tlb_kernel_vm();
 		goto out;

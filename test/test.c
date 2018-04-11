@@ -166,12 +166,17 @@ static void test_handle_test_crash(struct test *test,
 				   struct test_module *module,
 				   struct test_case *test_case)
 {
-	test_err(test, "%s crashed", test_case->name);
 	/*
-	 * TODO(brendanhiggins@google.com): This prints the stack trace up
-	 * through this frame, not up to the frame that caused the crash.
+	 * TODO(brendanhiggins@google.com): Right now we don't have a way to
+	 * store a copy of the stack, or a copy of information from the stack,
+	 * so we need to print it in the "trap" handler; otherwise, the stack
+	 * will be destroyed when it returns to us by popping off the
+	 * appropriate stack frames (see longjmp).
+	 *
+	 * Ideally we would print the stack trace here, but we do not have the
+	 * ability to do so with meaningful information at this time.
 	 */
-	show_stack(NULL, NULL);
+	test_err(test, "%s crashed", test_case->name);
 
 	test_case_internal_cleanup(test);
 }
