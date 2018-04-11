@@ -2384,7 +2384,7 @@ dhd_conf_preinit(dhd_pub_t *dhd)
 	} else {
 		strcpy(conf->cspec.country_abbrev, "CN");
 		strcpy(conf->cspec.ccode, "CN");
-		conf->cspec.rev = 0;
+		conf->cspec.rev = 38;
 	}
 	memset(&conf->channels, 0, sizeof(wl_channel_list_t));
 	conf->roam_off = 1;

@@ -451,8 +451,6 @@ int wldev_set_country(
 				__FUNCTION__, country_code, cspec.ccode, cspec.rev));
 			return error;
 		}
-		dhd_conf_fix_country(dhd_get_pub(dev));
-		dhd_conf_get_country(dhd_get_pub(dev), &cspec);
 		dhd_bus_country_set(dev, &cspec, notify);
 		printf("%s: set country for %s as %s rev %d\n",
 			__FUNCTION__, country_code, cspec.ccode, cspec.rev);
