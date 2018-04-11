@@ -1242,17 +1242,14 @@ static int wlan_logging_thread(void *Arg)
 				 * memdump complete. If it's null,then something is
 				 * not right.
 				 */
-				if (gwlan_logging.fw_mem_dump_ctx.svc_fw_mem_dump_req_cb &&
-				    gwlan_logging.fw_mem_dump_ctx.svc_fw_mem_dump_req_cb_arg) {
+				if (gwlan_logging.fw_mem_dump_ctx.svc_fw_mem_dump_req_cb) {
 					((hdd_fw_mem_dump_req_cb)
 					gwlan_logging.fw_mem_dump_ctx.svc_fw_mem_dump_req_cb)(
-					(struct hdd_fw_mem_dump_req_ctx*)
 					gwlan_logging.fw_mem_dump_ctx.svc_fw_mem_dump_req_cb_arg);
 
 					/*invalidate the callback pointers*/
 					spin_lock_irqsave(&gwlan_logging.fw_mem_dump_ctx.fw_mem_dump_lock,flags);
 					gwlan_logging.fw_mem_dump_ctx.svc_fw_mem_dump_req_cb = NULL;
-					gwlan_logging.fw_mem_dump_ctx.svc_fw_mem_dump_req_cb_arg = NULL;
 					spin_unlock_irqrestore(&gwlan_logging.fw_mem_dump_ctx.fw_mem_dump_lock,flags);
 				}
 		}
