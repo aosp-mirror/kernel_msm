@@ -220,23 +220,47 @@ static int single_uid_time_in_state_show(struct seq_file *m, void  *ptr)
 	return 0;
 }
 
-static int uid_time_in_state_show(struct seq_file *m, void *v)
+static void *uid_seq_start(struct seq_file *seq, loff_t *pos)
+{
+	if (!all_freq_table || !cpufreq_all_freq_init)
+		return NULL;
+
+	if (*pos >= HASH_SIZE(uid_hash_table))
+		return NULL;
+
+	return &uid_hash_table[*pos];
+}
+
+static void *uid_seq_next(struct seq_file *seq, void *v, loff_t *pos)
+{
+	(*pos)++;
+
+	if (*pos >= HASH_SIZE(uid_hash_table))
+		return NULL;
+
+	return &uid_hash_table[*pos];
+}
+
+static void uid_seq_stop(struct seq_file *seq, void *v) { }
+
+static int uid_time_in_state_seq_show(struct seq_file *m, void *v)
 {
 	struct uid_entry *uid_entry;
-	unsigned long bkt;
 	int i;
 
 	if (!all_freq_table || !cpufreq_all_freq_init)
 		return 0;
 
-	seq_puts(m, "uid:");
-	for (i = 0; i < all_freq_table->table_size; ++i)
-		seq_printf(m, " %d", all_freq_table->freq_table[i]);
-	seq_putc(m, '\n');
+	if (v == uid_hash_table) {
+		seq_puts(m, "uid:");
+		for (i = 0; i < all_freq_table->table_size; ++i)
+			seq_printf(m, " %d", all_freq_table->freq_table[i]);
+		seq_putc(m, '\n');
+	}
 
 	rcu_read_lock();
 
-	hash_for_each_rcu(uid_hash_table, bkt, uid_entry, hash) {
+	hlist_for_each_entry_rcu(uid_entry, (struct hlist_head *)v, hash) {
 		if (uid_entry->max_states)
 			seq_printf(m, "%d:", uid_entry->uid);
 
@@ -259,10 +283,9 @@ static int uid_time_in_state_show(struct seq_file *m, void *v)
  *     uid2, time2a, time2b, ..., time2n, etc.]
  * where n is the total number of frequencies
  */
-static int time_in_state_show(struct seq_file *m, void *v)
+static int time_in_state_seq_show(struct seq_file *m, void *v)
 {
 	struct uid_entry *uid_entry;
-	unsigned long bkt;
 	u32 cpufreq_max_states = all_freq_table->table_size;
 	u32 uid, time;
 	int i;
@@ -270,11 +293,12 @@ static int time_in_state_show(struct seq_file *m, void *v)
 	if (!cpufreq_all_freq_init)
 		return 0;
 
-	seq_write(m, &cpufreq_max_states, sizeof(cpufreq_max_states));
+	if (v == uid_hash_table)
+		seq_write(m, &cpufreq_max_states, sizeof(cpufreq_max_states));
 
 	rcu_read_lock();
 
-	hash_for_each_rcu(uid_hash_table, bkt, uid_entry, hash) {
+	hlist_for_each_entry_rcu(uid_entry, (struct hlist_head *)v, hash) {
 		if (uid_entry->max_states) {
 			uid = (u32) uid_entry->uid;
 			seq_write(m, &uid, sizeof(uid));
@@ -298,21 +322,21 @@ static int time_in_state_show(struct seq_file *m, void *v)
  *     uid2, time2a, time2b, ..., time2n, etc.]
  * where n is the total number of cpus (num_possible_cpus)
  */
-static int concurrent_active_time_show(struct seq_file *m, void *v)
+static int concurrent_active_time_seq_show(struct seq_file *m, void *v)
 {
 	struct uid_entry *uid_entry;
 	u32 uid, time, num_possible_cpus = num_possible_cpus();
-	unsigned long bkt;
 	int i;
 
 	if (!cpufreq_all_freq_init || !uid_cpupower_enable)
 		return 0;
 
-	seq_write(m, &num_possible_cpus, sizeof(num_possible_cpus));
+	if (v == uid_hash_table)
+		seq_write(m, &num_possible_cpus, sizeof(num_possible_cpus));
 
 	rcu_read_lock();
 
-	hash_for_each_rcu(uid_hash_table, bkt, uid_entry, hash) {
+	hlist_for_each_entry_rcu(uid_entry, (struct hlist_head *)v, hash) {
 		uid = (u32) uid_entry->uid;
 		seq_write(m, &uid, sizeof(uid));
 
@@ -336,43 +360,43 @@ static int concurrent_active_time_show(struct seq_file *m, void *v)
  * where n is the number of policies
  * xi is the number cpus on a particular policy
  */
-static int concurrent_policy_time_show(struct seq_file *m, void *v)
+static int concurrent_policy_time_seq_show(struct seq_file *m, void *v)
 {
 	struct uid_entry *uid_entry;
 	struct cpufreq_policy *policy;
 	struct cpufreq_policy *last_policy = NULL;
 	u32 buf[num_possible_cpus()];
 	u32 uid, time;
-	unsigned long bkt;
 	int i, cnt = 0, num_possible_cpus = num_possible_cpus();
 
 	if (!cpufreq_all_freq_init || !uid_cpupower_enable)
 		return 0;
 
-	for_each_possible_cpu(i) {
-		policy = cpufreq_cpu_get(i);
-		if (!policy)
-			continue;
-		if (policy != last_policy) {
-			cnt++;
-			if (last_policy)
-				cpufreq_cpu_put(last_policy);
-			last_policy = policy;
-			buf[cnt] = 0;
-		} else {
-			cpufreq_cpu_put(policy);
+	if (v == uid_hash_table) {
+		for_each_possible_cpu(i) {
+			policy = cpufreq_cpu_get(i);
+			if (!policy)
+				continue;
+			if (policy != last_policy) {
+				cnt++;
+				if (last_policy)
+					cpufreq_cpu_put(last_policy);
+				last_policy = policy;
+				buf[cnt] = 0;
+			} else {
+				cpufreq_cpu_put(policy);
+			}
+			++buf[cnt];
 		}
-		++buf[cnt];
+		if (last_policy)
+			cpufreq_cpu_put(last_policy);
+
+		buf[0] = (u32) cnt;
+		seq_write(m, buf, (cnt + 1) * sizeof(*buf));
 	}
-	if (last_policy)
-		cpufreq_cpu_put(last_policy);
-
-	buf[0] = (u32) cnt;
-	seq_write(m, buf, (cnt + 1) * sizeof(*buf));
-
 	rcu_read_lock();
 
-	hash_for_each_rcu(uid_hash_table, bkt, uid_entry, hash) {
+	hlist_for_each_entry_rcu(uid_entry, (struct hlist_head *)v, hash) {
 		uid = (u32) uid_entry->uid;
 		seq_write(m, &uid, sizeof(uid));
 
@@ -1319,9 +1343,16 @@ static int process_notifier(struct notifier_block *self,
 	return NOTIFY_OK;
 }
 
+static const struct seq_operations uid_time_in_state_seq_ops = {
+	.start = uid_seq_start,
+	.next = uid_seq_next,
+	.stop = uid_seq_stop,
+	.show = uid_time_in_state_seq_show,
+};
+
 static int uid_time_in_state_open(struct inode *inode, struct file *file)
 {
-	return single_open(file, uid_time_in_state_show, PDE_DATA(inode));
+	return seq_open(file, &uid_time_in_state_seq_ops);
 }
 
 int single_uid_time_in_state_open(struct inode *inode, struct file *file)
@@ -1334,43 +1365,64 @@ static const struct file_operations uid_time_in_state_fops = {
 	.open		= uid_time_in_state_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
-	.release	= single_release,
+	.release	= seq_release,
+};
+
+static const struct seq_operations time_in_state_seq_ops = {
+	.start = uid_seq_start,
+	.next = uid_seq_next,
+	.stop = uid_seq_stop,
+	.show = time_in_state_seq_show,
 };
 
 int time_in_state_open(struct inode *inode, struct file *file)
 {
-	return single_open(file, time_in_state_show, PDE_DATA(inode));
+	return seq_open(file, &time_in_state_seq_ops);
 }
 
 const struct file_operations time_in_state_fops = {
 	.open		= time_in_state_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
-	.release	= single_release,
+	.release	= seq_release,
+};
+
+static const struct seq_operations concurrent_active_time_seq_ops = {
+	.start = uid_seq_start,
+	.next = uid_seq_next,
+	.stop = uid_seq_stop,
+	.show = concurrent_active_time_seq_show,
 };
 
 static int concurrent_active_time_open(struct inode *inode, struct file *file)
 {
-	return single_open(file, concurrent_active_time_show, PDE_DATA(inode));
+	return seq_open(file, &concurrent_active_time_seq_ops);
 }
 
 static const struct file_operations concurrent_active_time_fops = {
 	.open		= concurrent_active_time_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
-	.release	= single_release,
+	.release	= seq_release,
+};
+
+static const struct seq_operations concurrent_policy_time_seq_ops = {
+	.start = uid_seq_start,
+	.next = uid_seq_next,
+	.stop = uid_seq_stop,
+	.show = concurrent_policy_time_seq_show,
 };
 
 static int concurrent_policy_time_open(struct inode *inode, struct file *file)
 {
-	return single_open(file, concurrent_policy_time_show, PDE_DATA(inode));
+	return seq_open(file, &concurrent_policy_time_seq_ops);
 }
 
 static const struct file_operations concurrent_policy_time_fops = {
 	.open		= concurrent_policy_time_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
-	.release	= single_release,
+	.release	= seq_release,
 };
 
 static int uid_cpupower_enable_open(struct inode *inode, struct file *file)
