@@ -1530,6 +1530,25 @@ static void pd_phy_message_rx(struct usbpd *pd, enum pd_sop_type sop,
 
 static void pd_phy_shutdown(struct usbpd *pd)
 {
+	int rc = 0;
+
+	mutex_lock(&pd->lock);
+	if (regulator_is_enabled(pd->vbus)) {
+		rc = regulator_disable(pd->vbus);
+		if (rc < 0)
+			pr_err("unable to disable vbus\n");
+		else
+			pd->vbus_output = false;
+	}
+	if (regulator_is_enabled(pd->vconn)) {
+		rc = regulator_disable(pd->vconn);
+		if (rc < 0)
+			pr_err("unable to disable vconn\n");
+		else
+			pd->vconn_output = false;
+	}
+	mutex_unlock(&pd->lock);
+
 	pd_engine_log(pd, "pd phy shutdown");
 }
 
