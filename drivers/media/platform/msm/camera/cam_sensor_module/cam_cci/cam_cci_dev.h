@@ -206,8 +206,8 @@ enum cam_cci_state_t {
  * @is_burst_read:              Flag to determine if we are performing
  *                              a burst read operation or not
  * @irqs_disabled:              Mask for IRQs that are disabled
- * @init_mutex:                 Mutex for maintaining refcount for attached
- *                              devices to cci during init/deinit.
+ * @mutex:                      Mutex for maintaining cci devices,
+ *                              especially during read/write.
  */
 struct cci_device {
 	struct v4l2_subdev subdev;
@@ -236,7 +236,7 @@ struct cci_device {
 	spinlock_t lock_status;
 	bool is_burst_read;
 	uint32_t irqs_disabled;
-	struct mutex init_mutex;
+	struct mutex mutex;
 };
 
 enum cam_cci_i2c_cmd_type {
