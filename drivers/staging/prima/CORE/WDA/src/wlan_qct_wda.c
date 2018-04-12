@@ -22990,8 +22990,8 @@ void WDA_MonModeRspCallback(void *pEventData, void* pUserData)
       return ;
    }
    pData = (tSirMonModeReq *)pWdaParams->wdaMsgParam;
-   if (pData != NULL) {
-        pData->callback(pData->magic, pData->cmpVar);
+   if (pData != NULL && pData->callback != NULL) {
+        pData->callback(pData->context);
         vos_mem_free(pWdaParams->wdaMsgParam);
    }
    vos_mem_free(pWdaParams) ;

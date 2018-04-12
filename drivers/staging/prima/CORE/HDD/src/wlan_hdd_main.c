@@ -9629,22 +9629,20 @@ VOS_STATUS hdd_disable_bmps_imps(hdd_context_t *pHddCtx, tANI_U8 session_type)
    return status;
 }
 
-void hdd_monPostMsgCb(tANI_U32 *magic, struct completion *cmpVar)
+void hdd_mon_post_msg_cb(void *context)
 {
-    if (magic == NULL || cmpVar == NULL) {
-        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                  FL("invalid arguments %pK %pK"), magic, cmpVar);
-        return;
-    }
-    if (*magic != MON_MODE_MSG_MAGIC) {
-        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                  FL("maic: %x"), *magic);
-        return;
-    }
+	struct hdd_request *request;
 
-    complete(cmpVar);
-    return;
+	request = hdd_request_get(context);
+	if (!request) {
+		hddLog(VOS_TRACE_LEVEL_ERROR, FL("Obsolete request"));
+		return;
+	}
+
+	hdd_request_complete(request);
+	hdd_request_put(request);
 }
+
 
 void hdd_init_mon_mode (hdd_adapter_t *pAdapter)
  {
@@ -10106,12 +10104,16 @@ VOS_STATUS hdd_cleanup_ap_events(hdd_adapter_t *adapter)
 
 int wlan_hdd_stop_mon(hdd_context_t *hdd_ctx, bool wait)
 {
-	hdd_mon_ctx_t *mon_ctx;
-	long ret;
-	v_U32_t magic;
-	struct completion cmp_var;
-	void (*func_ptr)(tANI_U32 *magic, struct completion *cmpVar) = NULL;
 	hdd_adapter_t *adapter;
+	hdd_mon_ctx_t *mon_ctx;
+	void (*func_ptr)(void *context) = NULL;
+	int ret = 0;
+	void *cookie = NULL;
+	struct hdd_request *request;
+	static const struct hdd_request_params params = {
+		.priv_size = 0,
+		.timeout_ms = MON_MODE_MSG_TIMEOUT,
+	};
 
 	adapter = hdd_get_adapter(hdd_ctx, WLAN_HDD_MONITOR);
 	if (!adapter) {
@@ -10128,28 +10130,37 @@ int wlan_hdd_stop_mon(hdd_context_t *hdd_ctx, bool wait)
 
 	mon_ctx->state = MON_MODE_STOP;
 	if (wait) {
-		func_ptr = hdd_monPostMsgCb;
-		magic = MON_MODE_MSG_MAGIC;
-		init_completion(&cmp_var);
+		func_ptr = hdd_mon_post_msg_cb;
+		request = hdd_request_alloc(&params);
+		if (!request) {
+			hddLog(VOS_TRACE_LEVEL_ERROR,
+				FL("Request allocation failure"));
+			return -ENOMEM;
+		}
+		cookie = hdd_request_cookie(request);
 	}
 
-	if (VOS_STATUS_SUCCESS != wlan_hdd_mon_postMsg(&magic, &cmp_var,
+	/*
+	 * If func_ptr is NULL, on receiving WDI_MON_START_RSP or
+	 * WDI_MON_STOP_RSP hdd_mon_post_msg_cb() won't be invoked
+	 * and so uninitialized cookie won't be accessed.
+	 */
+	if (VOS_STATUS_SUCCESS != wlan_hdd_mon_postMsg(cookie,
 						       mon_ctx,
-						       hdd_monPostMsgCb)) {
+						       func_ptr)) {
 		hddLog(LOGE, FL("failed to stop MON MODE"));
-		mon_ctx->state = MON_MODE_START;
-		magic = 0;
-		return -EINVAL;
+		ret =  -EINVAL;
 	}
 
 	if (!wait)
 		goto bmps_roaming;
 
-	ret = wait_for_completion_timeout(&cmp_var, MON_MODE_MSG_TIMEOUT);
-	magic = 0;
-	if (ret <= 0 ) {
+	if (!ret)
+		ret = hdd_request_wait_for_response(request);
+	hdd_request_put(request);
+	if (ret) {
 		hddLog(LOGE,
-			FL("timeout on stop monitor mode completion %ld"), ret);
+			FL("timeout on stop monitor mode completion %d"), ret);
 		return -EINVAL;
 	}
 
@@ -11913,8 +11924,8 @@ void wlan_hdd_mon_set_typesubtype( hdd_mon_ctx_t *pMonCtx,int type)
      pMonCtx->typeSubtypeBitmap |= 0xFFFF00000000;
 }
 
-VOS_STATUS wlan_hdd_mon_postMsg(tANI_U32 *magic, struct completion *cmpVar,
-                                hdd_mon_ctx_t *pMonCtx , void* callback)
+VOS_STATUS wlan_hdd_mon_postMsg(void *context, hdd_mon_ctx_t *pMonCtx,
+                                void* callback)
 {
     vos_msg_t    monMsg;
     tSirMonModeReq *pMonModeReq;
@@ -11936,8 +11947,7 @@ VOS_STATUS wlan_hdd_mon_postMsg(tANI_U32 *magic, struct completion *cmpVar,
         return VOS_STATUS_E_FAILURE;
     }
 
-    pMonModeReq->magic = magic;
-    pMonModeReq->cmpVar = cmpVar;
+    pMonModeReq->context = context;
     pMonModeReq->data = pMonCtx;
     pMonModeReq->callback = callback;
 
@@ -11957,10 +11967,14 @@ void wlan_hdd_mon_close(hdd_context_t *pHddCtx)
 {
     VOS_STATUS vosStatus;
     v_CONTEXT_t pVosContext = pHddCtx->pvosContext;
-    long ret;
     hdd_mon_ctx_t *pMonCtx = NULL;
-    v_U32_t magic;
-    struct completion cmpVar;
+    int ret;
+    void *cookie;
+    struct hdd_request *request;
+    static const struct hdd_request_params params = {
+        .priv_size = 0,
+        .timeout_ms = MON_MODE_MSG_TIMEOUT,
+    };
 
     hdd_adapter_t *pAdapter = hdd_get_adapter(pHddCtx,WLAN_HDD_MONITOR);
     if(pAdapter == NULL || pVosContext == NULL)
@@ -11972,23 +11986,29 @@ void wlan_hdd_mon_close(hdd_context_t *pHddCtx)
     pMonCtx =  WLAN_HDD_GET_MONITOR_CTX_PTR(pAdapter);
     if (pMonCtx!= NULL && pMonCtx->state == MON_MODE_START) {
         pMonCtx->state = MON_MODE_STOP;
-        magic = MON_MODE_MSG_MAGIC;
-        init_completion(&cmpVar);
+        request = hdd_request_alloc(&params);
+        if (!request) {
+            hddLog(VOS_TRACE_LEVEL_ERROR, FL("Request allocation failure"));
+            return;
+        }
+        cookie = hdd_request_cookie(request);
+
         if (VOS_STATUS_SUCCESS !=
-                      wlan_hdd_mon_postMsg(&magic, &cmpVar,
-                                            pMonCtx, hdd_monPostMsgCb)) {
+                      wlan_hdd_mon_postMsg(cookie, pMonCtx,
+                                           hdd_mon_post_msg_cb)) {
              VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
                        FL("failed to post MON MODE REQ"));
              pMonCtx->state = MON_MODE_START;
-             magic = 0;
-             return;
+             goto req_put;
         }
-        ret = wait_for_completion_timeout(&cmpVar, MON_MODE_MSG_TIMEOUT);
-        magic = 0;
-        if (ret <= 0 ) {
+
+        ret = hdd_request_wait_for_response(request);
+        if (ret)
             VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                    FL("timeout on monitor mode completion %ld"), ret);
-        }
+                    FL("timeout on monitor mode completion %d"), ret);
+
+req_put:
+        hdd_request_put(request);
     }
 
    hdd_UnregisterWext(pAdapter->dev);
