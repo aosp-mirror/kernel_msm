@@ -5920,10 +5920,14 @@ static int __iw_setint_getnone(struct net_device *dev,
         }
         case WE_SET_MONITOR_STATE:
         {
-           v_U32_t magic = 0;
-           struct completion cmpVar;
-           long waitRet = 0;
            tVOS_CON_MODE mode = hdd_get_conparam();
+           int ret;
+           void *cookie;
+           struct hdd_request *request;
+           static const struct hdd_request_params params = {
+               .priv_size = 0,
+               .timeout_ms = MON_MODE_MSG_TIMEOUT,
+           };
 
            if( VOS_MONITOR_MODE != mode)
            {
@@ -5947,26 +5951,31 @@ static int __iw_setint_getnone(struct net_device *dev,
                break;
            }
            pMonCtx->state = set_value;
-           magic = MON_MODE_MSG_MAGIC;
-           init_completion(&cmpVar);
+           request = hdd_request_alloc(&params);
+           if (!request) {
+               hddLog(VOS_TRACE_LEVEL_ERROR, FL("Request allocation failure"));
+               ret = -ENOMEM;
+               break;
+           }
+           cookie = hdd_request_cookie(request);
+
            if (VOS_STATUS_SUCCESS !=
-                         wlan_hdd_mon_postMsg(&magic, &cmpVar,
-                                               pMonCtx, hdd_monPostMsgCb)) {
+                         wlan_hdd_mon_postMsg(cookie, pMonCtx,
+                                              hdd_mon_post_msg_cb)) {
                 VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
                           FL("failed to post MON MODE REQ"));
                 pMonCtx->state = (pMonCtx->state==MON_MODE_START)?
                                    MON_MODE_STOP : MON_MODE_START;
-                magic = 0;
                 ret = -EIO;
-                break;
+           } else {
+               ret = hdd_request_wait_for_response(request);
+               if (ret) {
+                   VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
+                             FL("failed to wait on monitor mode completion %d"),
+                                 ret);
+               }
            }
-           waitRet = wait_for_completion_timeout(&cmpVar, MON_MODE_MSG_TIMEOUT);
-           magic = 0;
-           if (waitRet <= 0 ){
-               VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                    FL("failed to wait on monitor mode completion %ld"),
-                        waitRet);
-           }
+           hdd_request_put(request);
            break;
         }
         case WE_SET_PKT_STATS_ENABLE_DISABLE:
@@ -7686,10 +7695,14 @@ static int __iw_set_var_ints_getnone(struct net_device *dev,
 #endif
         case WE_CONFIGURE_MONITOR_MODE:
            {
-               v_U32_t magic = 0;
-               struct completion cmpVar;
-               long waitRet = 0;
                tVOS_CON_MODE mode = hdd_get_conparam();
+               int ret;
+               void *cookie;
+               struct hdd_request *request;
+               static const struct hdd_request_params params = {
+                   .priv_size = 0,
+                   .timeout_ms = MON_MODE_MSG_TIMEOUT,
+               };
 
                if (VOS_MONITOR_MODE != mode) {
                   hddLog(LOGE, FL("invalid mode %d"), mode);
@@ -7723,34 +7736,41 @@ static int __iw_set_var_ints_getnone(struct net_device *dev,
                   pMonCtx->typeSubtypeBitmap = 0xFFFF00000000;
                }
                if (MON_MODE_START == pMonCtx->state) {
-                    magic = MON_MODE_MSG_MAGIC;
-                    init_completion(&cmpVar);
+                    request = hdd_request_alloc(&params);
+                    if (!request) {
+                        hddLog(VOS_TRACE_LEVEL_ERROR, FL("Request allocation failure"));
+                        return -ENOMEM;
+                    }
+                    cookie = hdd_request_cookie(request);
+
                     if (VOS_STATUS_SUCCESS !=
-                            wlan_hdd_mon_postMsg(&magic, &cmpVar,
-                                                  pMonCtx, hdd_monPostMsgCb)) {
+                            wlan_hdd_mon_postMsg(cookie, pMonCtx,
+                                                 hdd_mon_post_msg_cb)) {
                         VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
                                     FL("failed to post MON MODE REQ"));
-                        magic = 0;
-                        return -EIO;
-                    }
-                    waitRet = wait_for_completion_timeout(&cmpVar,
-                                                       MON_MODE_MSG_TIMEOUT);
-                    magic = 0;
-                    if (waitRet <= 0 ) {
-                        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                            FL("failed to wait on monitor mode completion %ld"),
-                                waitRet);
-                    }
-               }
+                        ret = -EIO;
+                    } else {
+                        ret = hdd_request_wait_for_response(request);
+                        if (ret)
+                            VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
+                                FL("failed to wait on monitor mode completion %d"),
+                                     ret);
+                   }
+                   hdd_request_put(request);
+              }
            }
          break;
 
         case WE_SET_MONITOR_MODE_FILTER:
            {
-               v_U32_t magic = 0;
-               struct completion cmpVar;
-               long waitRet = 0;
                tVOS_CON_MODE mode = hdd_get_conparam();
+               int ret;
+               void *cookie;
+               struct hdd_request *request;
+               static const struct hdd_request_params params = {
+                   .priv_size = 0,
+                   .timeout_ms = MON_MODE_MSG_TIMEOUT,
+               };
 
                if (VOS_MONITOR_MODE != mode) {
                   hddLog(LOGE, FL("invalid mode %d"), mode);
@@ -7778,24 +7798,23 @@ static int __iw_set_var_ints_getnone(struct net_device *dev,
                         __func__, pMonCtx->mmFilters[0].macAddr.bytes,
                        apps_args[6], apps_args[7], apps_args[8]);
                if (MON_MODE_START == pMonCtx->state) {
-                    magic = MON_MODE_MSG_MAGIC;
-                    init_completion(&cmpVar);
-                    if (VOS_STATUS_SUCCESS !=
-                            wlan_hdd_mon_postMsg(&magic, &cmpVar,
-                                                  pMonCtx, hdd_monPostMsgCb)) {
-                        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                                    FL("failed to post MON MODE REQ"));
-                        magic = 0;
-                        return -EIO;
+                    request = hdd_request_alloc(&params);
+                    if (!request) {
+                        hddLog(VOS_TRACE_LEVEL_ERROR, FL("Request allocation failure"));
+                        return -ENOMEM;
                     }
-                    waitRet = wait_for_completion_timeout(&cmpVar,
-                                                       MON_MODE_MSG_TIMEOUT);
-                    magic = 0;
-                    if (waitRet <= 0 ) {
-                        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                            FL("failed to wait on monitor mode completion %ld"),
-                                waitRet);
+                    cookie = hdd_request_cookie(request);
+
+                    if (VOS_STATUS_SUCCESS ==
+                            wlan_hdd_mon_postMsg(cookie, pMonCtx,
+                                                 hdd_mon_post_msg_cb)) {
+                        ret = hdd_request_wait_for_response(request);
+                        if (ret)
+                            VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
+                                FL("failed to wait on monitor mode completion %d"),
+                                    ret);
                     }
+                    hdd_request_put(request);
                }
            }
          break;
@@ -7808,7 +7827,7 @@ static int __iw_set_var_ints_getnone(struct net_device *dev,
             break;
     }
     EXIT();
-    return 0;
+    return ret;
 }
 
 static int iw_hdd_set_var_ints_getnone(struct net_device *dev,
