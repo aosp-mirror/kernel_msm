@@ -6085,12 +6085,11 @@ typedef struct
     tSirMacAddr bssid;
 }tSirDelAllTdlsPeers, *ptSirDelAllTdlsPeers;
 
-typedef void (*tSirMonModeCb)(tANI_U32 *magic, struct completion *cmpVar);
+typedef void (*tSirMonModeCb)(void *context);
 typedef struct
 {
-    tANI_U32 *magic;
-    struct completion *cmpVar;
     void *data;
+    void *context;
     tSirMonModeCb callback;
 }tSirMonModeReq, *ptSirMonModeReq;
 
