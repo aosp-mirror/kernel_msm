@@ -650,7 +650,7 @@ static int msm_pcm_volume_ctl_get(struct snd_kcontrol *kcontrol,
 {
 	struct snd_pcm_volume *vol = snd_kcontrol_chip(kcontrol);
 	struct snd_pcm_substream *substream =
-		vol->pcm->streams[SNDRV_PCM_STREAM_PLAYBACK].substream;
+		vol->pcm->streams[vol->stream].substream;
 	struct msm_audio *prtd;
 
 	pr_debug("%s\n", __func__);
@@ -674,7 +674,7 @@ static int msm_pcm_volume_ctl_put(struct snd_kcontrol *kcontrol,
 	int rc = 0;
 	struct snd_pcm_volume *vol = snd_kcontrol_chip(kcontrol);
 	struct snd_pcm_substream *substream =
-		vol->pcm->streams[SNDRV_PCM_STREAM_PLAYBACK].substream;
+		vol->pcm->streams[vol->stream].substream;
 	struct msm_audio *prtd;
 	int volume = ucontrol->value.integer.value[0];
 
@@ -695,17 +695,17 @@ static int msm_pcm_volume_ctl_put(struct snd_kcontrol *kcontrol,
 	return rc;
 }
 
-static int msm_pcm_add_volume_control(struct snd_soc_pcm_runtime *rtd)
+static int msm_pcm_add_volume_control(struct snd_soc_pcm_runtime *rtd,
+				      int stream)
 {
 	int ret = 0;
 	struct snd_pcm *pcm = rtd->pcm;
 	struct snd_pcm_volume *volume_info;
 	struct snd_kcontrol *kctl;
 
-	dev_dbg(rtd->dev, "%s, Volume control add\n", __func__);
-	ret = snd_pcm_add_volume_ctls(pcm, SNDRV_PCM_STREAM_PLAYBACK,
-			NULL, 1, rtd->dai_link->be_id,
-			&volume_info);
+	dev_dbg(rtd->dev, "%s, volume control add\n", __func__);
+	ret = snd_pcm_add_volume_ctls(pcm, stream,
+			NULL, 1, rtd->dai_link->be_id, &volume_info);
 	if (ret < 0) {
 		pr_err("%s volume control failed ret %d\n", __func__, ret);
 		return ret;
@@ -1176,12 +1176,16 @@ static int msm_asoc_pcm_new(struct snd_soc_pcm_runtime *rtd)
 		pr_err("%s failed to add chmap cntls\n", __func__);
 		goto exit;
 	}
-	ret = msm_pcm_add_volume_control(rtd);
+	ret = msm_pcm_add_volume_control(rtd, SNDRV_PCM_STREAM_PLAYBACK);
 	if (ret) {
-		pr_err("%s: Could not add pcm Volume Control %d\n",
+		pr_err("%s: Could not add pcm playback volume Control %d\n",
 			__func__, ret);
 	}
-
+	ret = msm_pcm_add_volume_control(rtd, SNDRV_PCM_STREAM_CAPTURE);
+	if (ret) {
+		pr_err("%s: Could not add pcm capture volume Control %d\n",
+			__func__, ret);
+	}
 	ret = msm_pcm_add_fe_topology_control(rtd);
 	if (ret) {
 		pr_err("%s: Could not add pcm topology control %d\n",
