@@ -1502,6 +1502,8 @@ static int abc_pcie_probe(struct pci_dev *pdev,
 #endif
 	}
 
+	pci_enable_pcie_error_reporting(pdev);
+	pci_save_state(pdev);
 exit_loop:
 	/* IRQ handling */
 #if CONFIG_PCI_MSI
@@ -1566,12 +1568,90 @@ static void abc_pcie_remove(struct pci_dev *pdev)
 	kfree(abc);
 }
 
+static void abc_dev_disable(struct pci_dev *pdev)
+{
+	if (pci_is_enabled(pdev)) {
+		pci_disable_pcie_error_reporting(pdev);
+		pci_disable_device(pdev);
+	}
+}
+
+/* TODO(b/117430457):  PCIe errors need to be communicated to the MFD children.
+*/
+
+static pci_ers_result_t abc_error_detected(struct pci_dev *pdev,
+						pci_channel_state_t state)
+{
+	struct device *dev = &pdev->dev;
+
+	switch (state) {
+	case pci_channel_io_normal:
+		return PCI_ERS_RESULT_CAN_RECOVER;
+	case pci_channel_io_frozen:
+		dev_warn(dev,
+			"frozen state error detected, reset controller\n");
+		abc_dev_disable(pdev);
+		return PCI_ERS_RESULT_NEED_RESET;
+	case pci_channel_io_perm_failure:
+		dev_warn(dev,
+			"failure state error detected, request disconnect\n");
+		return PCI_ERS_RESULT_DISCONNECT;
+	}
+	return PCI_ERS_RESULT_NEED_RESET;
+}
+
+static pci_ers_result_t abc_slot_reset(struct pci_dev *pdev)
+{
+	struct device *dev = &pdev->dev;
+	int result;
+
+	dev_dbg(dev, "restart after slot reset\n");
+	pci_restore_state(pdev);
+	result = pci_enable_device(pdev);
+	if (result) {
+		dev_err(dev, "%s:PCIe device enable failed result=%d\n",
+				__func__, result);
+		return result;
+	}
+	pci_set_master(pdev);
+	result = pci_enable_pcie_error_reporting(pdev);
+	if (result)
+		dev_warn(dev, "%s:PCIe error reporting enable failed res=%d\n",
+				__func__, result);
+	result = pci_save_state(pdev);
+	if (result)
+		dev_warn(dev, "%s:PCIe state saving failed result=%d\n",
+				__func__, result);
+
+	return PCI_ERS_RESULT_RECOVERED;
+}
+
+static void abc_error_resume(struct pci_dev *pdev)
+{
+	struct device *dev = &pdev->dev;
+	int result;
+
+	dev_dbg(dev, "Resume after recovery\n");
+
+	result = pci_cleanup_aer_uncorrect_error_status(pdev);
+	if (result)
+		dev_err(dev, "%s:AERUncorrectable status clean fail,res=%d\n",
+			__func__, result);
+}
+
+static const struct pci_error_handlers abc_err_handler = {
+	.error_detected	= abc_error_detected,
+	.slot_reset	= abc_slot_reset,
+	.resume		= abc_error_resume,
+};
+
 static struct pci_driver abc_pcie_driver = {
 	.name = DRV_NAME_ABC_PCIE,
 	.id_table = abc_pcie_ids,
 	.probe = abc_pcie_probe,
 	.remove = abc_pcie_remove,
 	.shutdown = abc_pcie_remove,
+	.err_handler = &abc_err_handler,
 };
 
 static int __init abc_pcie_init(void)
