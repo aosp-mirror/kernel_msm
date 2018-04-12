@@ -1,0 +1,71 @@
+
+qcom,b1-10k {
+	qcom, = <24>;
+	/* #3353338_Google_B1DsyLsn_2970mAh_averaged_MasterSlave_Feb27th2018*/
+	qcom,max-voltage-uv = <4400000>;
+	qcom,nom-batt-capacity-mah = <2970>;
+	qcom,batt-id-kohm = <10>;
+	qcom,battery-beta = <4360>;
+	qcom,fg-cc-cv-threshold-mv = <4390>;
+	qcom,battery-type = "b1-10k";
+	qcom,checksum = <0xBD5A>;
+	qcom,gui-version = "PMI8998GUI - 2.0.0.58";
+	qcom,fg-profile-data = [
+		 17 20 1C 05
+		 C3 0A 31 FC
+		 F8 1C 99 01
+		 EA 04 99 03
+		 F6 17 BE 23
+		 76 44 49 5A
+		 85 00 00 00
+		 10 00 00 00
+		 00 00 22 A5
+		 4D CD 96 B3
+		 20 00 08 00
+		 6B DB D2 07
+		 27 06 20 01
+		 E2 04 CA 0B
+		 67 EC 7D 32
+		 1F 06 09 20
+		 27 00 14 00
+		 AB 1F AC 05
+		 66 0A 5E 06
+		 C3 1C 18 03
+		 D5 15 63 12
+		 7B 18 27 2A
+		 5B 4D 3F 62
+		 67 00 00 00
+		 0C 00 00 00
+		 00 00 9A D5
+		 3E CA BD BB
+		 1A 00 00 00
+		 07 EA D2 07
+		 63 FD EB F2
+		 31 F4 05 03
+		 52 EA 76 1A
+		 B1 33 CC FF
+		 07 10 00 00
+		 99 0B 66 46
+		 1A 00 40 00
+		 B0 01 0A FA
+		 FF 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+	];
+};
