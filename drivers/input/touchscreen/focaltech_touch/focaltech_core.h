@@ -76,7 +76,7 @@
 
 #define FTS_WORKQUEUE_NAME                  "fts_wq"
 
-#define FTS_MAX_POINTS                      10
+#define FTS_MAX_POINTS                      3
 #define FTS_KEY_WIDTH                       50
 #define FTS_ONE_TCH_LEN                     6
 #define POINT_READ_BUF  (3 + FTS_ONE_TCH_LEN * FTS_MAX_POINTS)

@@ -437,6 +437,7 @@ static int fts_input_dev_report_key_event(struct ts_event *event,
 }
 
 #if FTS_MT_PROTOCOL_B_EN
+static u8 last_au8_touch_event[2];
 static int fts_input_dev_report_b(struct ts_event *event,
 								  struct fts_ts_data *data)
 {
@@ -449,6 +450,9 @@ static int fts_input_dev_report_b(struct ts_event *event,
 			break;
 
 		input_mt_slot(data->input_dev, event->au8_finger_id[i]);
+		if ((event->au8_touch_event[i] == FTS_TOUCH_UP) &&
+				(last_au8_touch_event[i] == FTS_TOUCH_UP))
+			event->au8_touch_event[i] = FTS_TOUCH_DOWN;
 
 		if (event->au8_touch_event[i] == FTS_TOUCH_DOWN ||
 			event->au8_touch_event[i] == FTS_TOUCH_CONTACT) {
@@ -483,6 +487,7 @@ static int fts_input_dev_report_b(struct ts_event *event,
 			data->touchs &= ~BIT(event->au8_finger_id[i]);
 			FTS_DEBUG("[B]P%d UP!", event->au8_finger_id[i]);
 		}
+		last_au8_touch_event[i] = event->au8_touch_event[i];
 	}
 
 	if (unlikely(data->touchs ^ touchs)) {
@@ -500,6 +505,8 @@ static int fts_input_dev_report_b(struct ts_event *event,
 	data->touchs = touchs;
 	if (event->touch_point == uppoint) {
 		FTS_DEBUG("Points All Up!");
+		last_au8_touch_event[0] = FTS_TOUCH_UP;
+		last_au8_touch_event[1] = FTS_TOUCH_UP;
 		input_report_key(data->input_dev, BTN_TOUCH, 0);
 	} else
 		input_report_key(data->input_dev, BTN_TOUCH, event->touch_point > 0);
