@@ -218,6 +218,7 @@ struct cci_device {
 	uint8_t payload_size;
 	char device_name[20];
 	uint32_t cpas_handle;
+	struct mutex mutex;
 };
 
 enum cam_cci_i2c_cmd_type {
