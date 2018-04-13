@@ -40,6 +40,8 @@ struct cs40l20_private {
 	struct regmap *regmap;
 	struct regulator_bulk_data supplies[2];
 	unsigned int num_supplies;
+	unsigned int devid;
+	unsigned int revid;
 	struct work_struct vibe_start_work;
 	struct work_struct vibe_stop_work;
 	struct workqueue_struct *vibe_workqueue;
@@ -65,6 +67,13 @@ struct cs40l20_private {
 static const char *const cs40l20_supplies[] = {
 	"VA",
 	"VP",
+};
+
+static const char * const cs40l20_part_nums[] = {
+	"CS40L20",
+	"CS40L25",
+	"CS40L25A",
+	"CS40L25B",
 };
 
 static struct cs40l20_private *cs40l20_get_private(struct device *dev)
@@ -216,6 +225,100 @@ static ssize_t cs40l20_gpio1_fall_index_store(struct device *dev,
 
 	if (ret) {
 		pr_err("Failed to write index\n");
+		return ret;
+	}
+
+	return count;
+}
+
+static ssize_t cs40l20_gpio1_fall_timeout_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct cs40l20_private *cs40l20 = cs40l20_get_private(dev);
+	int ret;
+	unsigned int val;
+
+	mutex_lock(&cs40l20->lock);
+	ret = regmap_read(cs40l20->regmap,
+			cs40l20_dsp_reg(cs40l20, "PRESS_RELEASE_TIMEOUT",
+				CS40L20_XM_UNPACKED_TYPE), &val);
+	mutex_unlock(&cs40l20->lock);
+
+	if (ret) {
+		pr_err("Failed to read GPIO1 falling-edge timeout\n");
+		return ret;
+	}
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", val);
+}
+
+static ssize_t cs40l20_gpio1_fall_timeout_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct cs40l20_private *cs40l20 = cs40l20_get_private(dev);
+	int ret;
+	unsigned int val;
+
+	ret = kstrtou32(buf, 10, &val);
+	if (ret)
+		return -EINVAL;
+
+	mutex_lock(&cs40l20->lock);
+	ret = regmap_write(cs40l20->regmap,
+			cs40l20_dsp_reg(cs40l20, "PRESS_RELEASE_TIMEOUT",
+				CS40L20_XM_UNPACKED_TYPE), val);
+	mutex_unlock(&cs40l20->lock);
+
+	if (ret) {
+		pr_err("Failed to write GPIO1 falling-edge timeout\n");
+		return ret;
+	}
+
+	return count;
+}
+
+static ssize_t cs40l20_standby_timeout_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct cs40l20_private *cs40l20 = cs40l20_get_private(dev);
+	int ret;
+	unsigned int val;
+
+	mutex_lock(&cs40l20->lock);
+	ret = regmap_read(cs40l20->regmap,
+			cs40l20_dsp_reg(cs40l20, "EVENT_TIMEOUT",
+				CS40L20_XM_UNPACKED_TYPE), &val);
+	mutex_unlock(&cs40l20->lock);
+
+	if (ret) {
+		pr_err("Failed to read standby timeout\n");
+		return ret;
+	}
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", val);
+}
+
+static ssize_t cs40l20_standby_timeout_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct cs40l20_private *cs40l20 = cs40l20_get_private(dev);
+	int ret;
+	unsigned int val;
+
+	ret = kstrtou32(buf, 10, &val);
+	if (ret)
+		return -EINVAL;
+
+	mutex_lock(&cs40l20->lock);
+	ret = regmap_write(cs40l20->regmap,
+			cs40l20_dsp_reg(cs40l20, "EVENT_TIMEOUT",
+				CS40L20_XM_UNPACKED_TYPE), val);
+	mutex_unlock(&cs40l20->lock);
+
+	if (ret) {
+		pr_err("Failed to write standby timeout\n");
 		return ret;
 	}
 
@@ -479,6 +582,10 @@ static DEVICE_ATTR(gpio1_rise_index, 0660, cs40l20_gpio1_rise_index_show,
 		   cs40l20_gpio1_rise_index_store);
 static DEVICE_ATTR(gpio1_fall_index, 0660, cs40l20_gpio1_fall_index_show,
 		   cs40l20_gpio1_fall_index_store);
+static DEVICE_ATTR(gpio1_fall_timeout, 0660, cs40l20_gpio1_fall_timeout_show,
+		cs40l20_gpio1_fall_timeout_store);
+static DEVICE_ATTR(standby_timeout, 0660, cs40l20_standby_timeout_show,
+		cs40l20_standby_timeout_store);
 static DEVICE_ATTR(f0_measured, 0660, cs40l20_f0_measured_show, NULL);
 static DEVICE_ATTR(f0_stored, 0660, cs40l20_f0_stored_show,
 		   cs40l20_f0_stored_store);
@@ -496,6 +603,8 @@ static struct attribute *cs40l20_dev_attrs[] = {
 	&dev_attr_cp_trigger_index.attr,
 	&dev_attr_gpio1_rise_index.attr,
 	&dev_attr_gpio1_fall_index.attr,
+	&dev_attr_gpio1_fall_timeout.attr,
+	&dev_attr_standby_timeout.attr,
 	&dev_attr_f0_measured.attr,
 	&dev_attr_f0_stored.attr,
 	&dev_attr_redc_measured.attr,
@@ -560,11 +669,8 @@ static void cs40l20_vibe_start_worker(struct work_struct *work)
 	switch (cs40l20->cp_trailer_index) {
 	case 0x0000:
 	case 0x8000 ... 0xFFFE:
-		ret = regmap_write(regmap,
-				   cs40l20_dsp_reg(cs40l20, "TRIGGER_MS",
-						   CS40L20_XM_UNPACKED_TYPE),
-				   cs40l20->cp_trailer_index &
-				   CS40L20_INDEX_MASK);
+		ret = regmap_write(regmap, CS40L20_MBOX_TRIGGER_MS,
+				cs40l20->cp_trailer_index & CS40L20_INDEX_MASK);
 		if (ret)
 			dev_err(dev, "Failed to start playback\n");
 
@@ -572,9 +678,7 @@ static void cs40l20_vibe_start_worker(struct work_struct *work)
 
 		break;
 	case 0x0001 ... 0x7FFF:
-		ret = regmap_write(regmap,
-				   cs40l20_dsp_reg(cs40l20, "TRIGGERINDEX",
-						   CS40L20_XM_UNPACKED_TYPE),
+		ret = regmap_write(regmap, CS40L20_MBOX_TRIGGERINDEX,
 				   cs40l20->cp_trailer_index);
 		if (ret)
 			dev_err(dev, "Failed to start playback\n");
@@ -603,10 +707,7 @@ static void cs40l20_vibe_start_worker(struct work_struct *work)
 			goto err_mutex;
 		}
 
-		ret = regmap_write(regmap,
-				   cs40l20_dsp_reg(cs40l20, "STIMULUS_MODE",
-						   CS40L20_XM_UNPACKED_TYPE),
-				   1);
+		ret = regmap_write(regmap, CS40L20_MBOX_STIMULUS_MODE, 1);
 		if (ret) {
 			dev_err(dev, "Failed to enable stimulus mode\n");
 			goto err_mutex;
@@ -642,7 +743,6 @@ static void cs40l20_vibe_stop_worker(struct work_struct *work)
 	struct regmap *regmap = cs40l20->regmap;
 	struct device *dev = cs40l20->dev;
 	int ret;
-	unsigned int reg;
 
 	mutex_lock(&cs40l20->lock);
 
@@ -652,10 +752,7 @@ static void cs40l20_vibe_stop_worker(struct work_struct *work)
 		if (ret)
 			dev_err(dev, "Failed to capture f0 and ReDC\n");
 
-		ret = regmap_write(regmap,
-				   cs40l20_dsp_reg(cs40l20, "STIMULUS_MODE",
-						   CS40L20_XM_UNPACKED_TYPE),
-				   0);
+		ret = regmap_write(regmap, CS40L20_MBOX_STIMULUS_MODE, 0);
 		if (ret)
 			dev_err(dev, "Failed to disable stimulus mode\n");
 		ret = regmap_update_bits(cs40l20->regmap,
@@ -667,13 +764,12 @@ static void cs40l20_vibe_stop_worker(struct work_struct *work)
 			dev_err(dev, "Failed to restore digital scale\n");
 		break;
 	default:
-		reg = cs40l20_dsp_reg(cs40l20, "ENDPLAYBACK",
-				      CS40L20_XM_UNPACKED_TYPE);
-		ret = regmap_write(regmap, reg, 1);
+		ret = regmap_write(regmap,
+				cs40l20_dsp_reg(cs40l20, "ENDPLAYBACK",
+					CS40L20_XM_UNPACKED_TYPE), 1);
 		if (ret)
 			dev_err(dev, "Failed to stop playback\n");
 
-		/* fall-thru*/
 	}
 
 	cs40l20->cp_trailer_index = 0;
@@ -896,12 +992,42 @@ static void cs40l20_dsp_start(struct cs40l20_private *cs40l20)
 	unsigned int val;
 	int dsp_timeout = CS40L20_DSP_TIMEOUT_COUNT;
 
-	ret = regmap_write_bits(regmap, CS40L20_DSP1_CCM_CORE_CTRL,
+	switch (cs40l20->revid) {
+	case CS40L20_REVID_A0:
+		ret = regmap_update_bits(regmap, CS40L20_PWR_CTRL1,
+				CS40L20_GLOBAL_EN_MASK,
+				1 << CS40L20_GLOBAL_EN_SHIFT);
+		if (ret) {
+			dev_err(dev, "Failed to enable device\n");
+			return;
+		}
+
+		ret = regmap_update_bits(regmap, CS40L20_DSP1_CCM_CORE_CTRL,
+				CS40L20_DSP1_RESET_MASK |
 				CS40L20_DSP1_EN_MASK,
-				1 << CS40L20_DSP1_EN_SHIFT);
+				(1 << CS40L20_DSP1_RESET_SHIFT) |
+				(1 << CS40L20_DSP1_EN_SHIFT));
 	if (ret) {
 		dev_err(dev, "Failed to enable DSP\n");
 		return;
+	}
+		break;
+	default:
+		ret = regmap_update_bits(regmap, CS40L20_PWRMGT_CTL,
+				CS40L20_MEM_RDY_MASK,
+				1 << CS40L20_MEM_RDY_SHIFT);
+		if (ret) {
+			dev_err(dev, "Failed to set memory ready flag\n");
+			return;
+		}
+
+		ret = regmap_update_bits(regmap, CS40L20_DSP1_CCM_CORE_CTRL,
+				CS40L20_DSP1_RESET_MASK,
+				1 << CS40L20_DSP1_RESET_SHIFT);
+		if (ret) {
+			dev_err(dev, "Failed to restart DSP\n");
+			return;
+		}
 	}
 
 	while (dsp_timeout > 0) {
@@ -1252,9 +1378,8 @@ static void cs40l20_firmware_load(const struct firmware *fw, void *context)
 	if (ret)
 		goto err_rls_fw;
 
-	request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG, "cs40l20.bin",
-				dev, GFP_KERNEL, cs40l20,
-				cs40l20_waveform_load);
+	request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG, CS40L20_WT_NAME,
+			dev, GFP_KERNEL, cs40l20, cs40l20_waveform_load);
 
 err_rls_fw:
 	release_firmware(fw);
@@ -1377,19 +1502,47 @@ static const struct reg_sequence cs40l20_mpu_config[] = {
 	{CS40L20_DSP1_MPU_LOCK_CONFIG,	0x00000000}
 };
 
+static int cs40l20_dsp_load(struct cs40l20_private *cs40l20)
+{
+	int ret;
+	unsigned int revid = cs40l20->revid;
+	struct regmap *regmap = cs40l20->regmap;
+	struct device *dev = cs40l20->dev;
+
+	switch (revid) {
+	case CS40L20_REVID_A0:
+	case CS40L20_REVID_B0:
+		ret = regmap_multi_reg_write(regmap, cs40l20_mpu_config,
+				ARRAY_SIZE(cs40l20_mpu_config));
+		if (ret) {
+			dev_err(dev, "Failed to configure MPU\n");
+			return ret;
+		}
+
+		request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
+				CS40L20_FW_NAME_A0, dev, GFP_KERNEL, cs40l20,
+				cs40l20_firmware_load);
+		return 0;
+	case CS40L20_REVID_B1:
+		request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
+				CS40L20_FW_NAME_B1, dev, GFP_KERNEL, cs40l20,
+				cs40l20_firmware_load);
+		return 0;
+	default:
+		dev_err(dev, "No firmware defined for revision %02X\n", revid);
+		return -EINVAL;
+	}
+}
+
 static int cs40l20_init(struct cs40l20_private *cs40l20)
 {
 	int ret;
 	struct regmap *regmap = cs40l20->regmap;
 	struct device *dev = cs40l20->dev;
 
-	cs40l20->cp_trigger_index = 0;
-	cs40l20->cp_trailer_index = 0;
-	cs40l20->vibe_init_success = false;
-	cs40l20->diag_state = CS40L20_DIAG_STATE_INIT;
-	cs40l20->dig_scale = 0;
-
-	if (cs40l20->pdata.refclk_gpio2) {
+	/* REFCLK configuration is handled by revision B1 ROM */
+	if (cs40l20->pdata.refclk_gpio2 &&
+			(cs40l20->revid < CS40L20_REVID_B1)) {
 		ret = regmap_update_bits(regmap, CS40L20_GPIO_PAD_CONTROL,
 				CS40L20_GP2_CTRL_MASK,
 				CS40L20_GP2_CTRL_MCLK
@@ -1440,33 +1593,8 @@ static int cs40l20_init(struct cs40l20_private *cs40l20)
 		dev_err(dev, "Failed to route current monitor to DSP\n");
 		return ret;
 	}
-	ret = regmap_update_bits(regmap, CS40L20_PWR_CTRL1,
-			CS40L20_GLOBAL_EN_MASK, 1 << CS40L20_GLOBAL_EN_SHIFT);
-	if (ret) {
-		dev_err(dev, "Failed to enable device\n");
-		return ret;
-	}
-
-	ret = regmap_update_bits(regmap, CS40L20_DSP1_CCM_CORE_CTRL,
-			CS40L20_DSP1_RESET_MASK, 1 << CS40L20_DSP1_RESET_SHIFT);
-	if (ret) {
-		dev_err(dev, "Failed to reset DSP\n");
-		return ret;
-	}
-
-	ret = regmap_multi_reg_write(regmap, cs40l20_mpu_config,
-			ARRAY_SIZE(cs40l20_mpu_config));
-	if (ret) {
-		dev_err(dev, "Failed to configure MPU\n");
-		return ret;
-	}
-
-	INIT_LIST_HEAD(&cs40l20->coeff_desc_head);
 
 	cs40l20_create_led(cs40l20);
-
-	request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG, "cs40l20.wmfw",
-			dev, GFP_KERNEL, cs40l20, cs40l20_firmware_load);
 
 	return 0;
 }
@@ -1479,39 +1607,8 @@ static int cs40l20_otp_unpack(struct cs40l20_private *cs40l20)
 	unsigned char row_offset, col_offset;
 	unsigned int val, otp_map;
 	unsigned int otp_mem[CS40L20_NUM_OTP_WORDS];
-	int otp_timeout = CS40L20_OTP_TIMEOUT_COUNT;
 	int ret, i;
 
-	while (otp_timeout > 0) {
-		usleep_range(10000, 10100);
-
-		ret = regmap_read(regmap, CS40L20_IRQ1_STATUS4, &val);
-		if (ret) {
-			dev_err(dev, "Failed to read OTP boot status\n");
-			return ret;
-		}
-
-		if (val & CS40L20_OTP_BOOT_DONE)
-			break;
-
-		otp_timeout--;
-	}
-
-	if (otp_timeout == 0) {
-		dev_err(dev, "Timed out waiting for OTP boot\n");
-		return -ETIME;
-	}
-
-	ret = regmap_read(cs40l20->regmap, CS40L20_IRQ1_STATUS3, &val);
-	if (ret) {
-		dev_err(dev, "Failed to read OTP error status\n");
-		return ret;
-	}
-
-	if (val & CS40L20_OTP_BOOT_ERR) {
-		dev_err(dev, "Encountered fatal OTP error\n");
-		return -EIO;
-	}
 
 	ret = regmap_read(cs40l20->regmap, CS40L20_OTPID, &val);
 	if (ret) {
@@ -1654,6 +1751,113 @@ static int cs40l20_handle_of_data(struct i2c_client *i2c_client,
 	return 0;
 }
 
+static const struct reg_sequence cs40l20_rev_a0_errata[] = {
+	{CS40L20_OTP_TRIM_30,		0x9091A1C8},
+	{CS40L20_PLL_MISC_CTRL,		0x0200EE0E},
+	{CS40L20_BSTCVRT_DCM_CTRL,	0x00000051},
+	{CS40L20_CTRL_ASYNC1,		0x00000004},
+	{CS40L20_IRQ1_DB3,		0x00000000},
+	{CS40L20_IRQ2_DB3,		0x00000000},
+};
+
+static int cs40l20_part_num_resolve(struct cs40l20_private *cs40l20)
+{
+	struct regmap *regmap = cs40l20->regmap;
+	struct device *dev = cs40l20->dev;
+	unsigned int val, devid, revid;
+	unsigned int part_num_index;
+	int otp_timeout = CS40L20_OTP_TIMEOUT_COUNT;
+	int ret;
+
+	while (otp_timeout > 0) {
+		usleep_range(10000, 10100);
+
+		ret = regmap_read(regmap, CS40L20_IRQ1_STATUS4, &val);
+		if (ret) {
+			dev_err(dev, "Failed to read OTP boot status\n");
+			return ret;
+		}
+
+		if (val & CS40L20_OTP_BOOT_DONE)
+			break;
+
+		otp_timeout--;
+	}
+
+	if (otp_timeout == 0) {
+		dev_err(dev, "Timed out waiting for OTP boot\n");
+		return -ETIME;
+	}
+
+	ret = regmap_read(regmap, CS40L20_IRQ1_STATUS3, &val);
+	if (ret) {
+		dev_err(dev, "Failed to read OTP error status\n");
+		return ret;
+	}
+
+	if (val & CS40L20_OTP_BOOT_ERR) {
+		dev_err(dev, "Encountered fatal OTP error\n");
+		return -EIO;
+	}
+
+	ret = regmap_read(regmap, CS40L20_DEVID, &devid);
+	if (ret) {
+		dev_err(dev, "Failed to read device ID\n");
+		return ret;
+	}
+
+	ret = regmap_read(regmap, CS40L20_REVID, &revid);
+	if (ret) {
+		dev_err(dev, "Failed to read revision ID\n");
+		return ret;
+	}
+
+	switch (devid) {
+	case CS40L20_DEVID_L20:
+		part_num_index = 0;
+		if (revid != CS40L20_REVID_A0)
+			goto err_revid;
+
+		ret = regmap_register_patch(regmap, cs40l20_rev_a0_errata,
+				ARRAY_SIZE(cs40l20_rev_a0_errata));
+		if (ret) {
+			dev_err(dev, "Failed to apply revision %02X errata\n",
+					revid);
+			return ret;
+		}
+
+		ret = cs40l20_otp_unpack(cs40l20);
+		if (ret)
+			return ret;
+		break;
+	case CS40L20_DEVID_L25:
+		part_num_index = 1;
+		if (revid != CS40L20_REVID_B0)
+			goto err_revid;
+		break;
+	case CS40L20_DEVID_L25A:
+	case CS40L20_DEVID_L25B:
+		part_num_index = devid - CS40L20_DEVID_L25A + 2;
+		if (revid < CS40L20_REVID_B1)
+			goto err_revid;
+		break;
+	default:
+		dev_err(dev, "Unrecognized device ID: 0x%06X\n", devid);
+		return -ENODEV;
+	}
+
+	dev_info(dev, "Cirrus Logic %s revision %02X\n",
+			cs40l20_part_nums[part_num_index], revid);
+	cs40l20->devid = devid;
+	cs40l20->revid = revid;
+
+	return 0;
+err_revid:
+	dev_err(dev, "Unexpected revision ID for %s: %02X\n",
+			cs40l20_part_nums[part_num_index], revid);
+	return -ENODEV;
+}
+
 static struct regmap_config cs40l20_regmap = {
 	.reg_bits = 32,
 	.val_bits = 32,
@@ -1661,12 +1865,9 @@ static struct regmap_config cs40l20_regmap = {
 	.reg_format_endian = REGMAP_ENDIAN_BIG,
 	.val_format_endian = REGMAP_ENDIAN_BIG,
 	.max_register = CS40L20_LASTREG,
-	.reg_defaults = cs40l20_reg,
-	.num_reg_defaults = ARRAY_SIZE(cs40l20_reg),
 	.precious_reg = cs40l20_precious_reg,
-	.volatile_reg = cs40l20_volatile_reg,
 	.readable_reg = cs40l20_readable_reg,
-	.cache_type = REGCACHE_RBTREE,
+	.cache_type = REGCACHE_NONE,
 };
 
 static int cs40l20_i2c_probe(struct i2c_client *i2c_client,
@@ -1676,7 +1877,6 @@ static int cs40l20_i2c_probe(struct i2c_client *i2c_client,
 	struct cs40l20_private *cs40l20;
 	struct device *dev = &i2c_client->dev;
 	struct cs40l20_platform_data *pdata = dev_get_platdata(dev);
-	unsigned int reg_devid, reg_revid;
 
 	cs40l20 = devm_kzalloc(dev, sizeof(struct cs40l20_private), GFP_KERNEL);
 	if (!cs40l20)
@@ -1686,6 +1886,8 @@ static int cs40l20_i2c_probe(struct i2c_client *i2c_client,
 	dev_set_drvdata(dev, cs40l20);
 	i2c_set_clientdata(i2c_client, cs40l20);
 	mutex_init(&cs40l20->lock);
+
+	INIT_LIST_HEAD(&cs40l20->coeff_desc_head);
 
 	cs40l20->regmap = devm_regmap_init_i2c(i2c_client, &cs40l20_regmap);
 	if (IS_ERR(cs40l20->regmap)) {
@@ -1740,31 +1942,16 @@ static int cs40l20_i2c_probe(struct i2c_client *i2c_client,
 
 	/* satisfy control port delay specification (with margin) */
 	usleep_range(1000, 1100);
-	ret = regmap_read(cs40l20->regmap, CS40L20_DEVID, &reg_devid);
-	if (ret) {
-		dev_err(dev, "Failed to read device ID\n");
-		goto err;
-	}
 
-	if (reg_devid != CS40L20_CHIP_ID) {
-		dev_err(dev, "Failed to recognize device ID: %X\n", reg_devid);
-		ret = -ENODEV;
-		goto err;
-	}
-
-	ret = regmap_read(cs40l20->regmap, CS40L20_REVID, &reg_revid);
-	if (ret) {
-		dev_err(dev, "Failed to read revision ID\n");
-		goto err;
-	}
-
-	ret = cs40l20_otp_unpack(cs40l20);
+	ret = cs40l20_part_num_resolve(cs40l20);
 	if (ret)
 		goto err;
 
-	dev_info(dev, "Cirrus Logic CS40L20 revision %02X\n", reg_revid);
-
 	ret = cs40l20_init(cs40l20);
+	if (ret)
+		goto err;
+
+	ret = cs40l20_dsp_load(cs40l20);
 	if (ret)
 		goto err;
 
