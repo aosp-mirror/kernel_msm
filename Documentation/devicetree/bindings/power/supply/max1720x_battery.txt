@@ -5,23 +5,23 @@ Required properties :
  - compatible : "maxim,max1720x"
 
 Optional properties :
- - maxim,fg-config: array of bytes to be uploaded to the shadow RAM to either
-   use this config or burn it to the non volatile area.
- - maxim,force-load-config: load the maxim,fg-config data into shadow RAM and
-   run the fuel gauge using this config instead of the one from the NV RAM.
- - maxim,force-flash-config: program the loaded config (maxim,fg-config) into
-   the non volatile if the this flag is set AND nVEmpty are not matching. Number
-   NV block writes are limited to 7 so use with care.
  - maxim,psy-type-unknown: if set, forces poser supply type to be
    POWER_SUPPLY_TYPE_UNKNOWN rather than POWER_SUPPLY_TYPE_BATTERY
- - maxim,empty-voltage: Sets the voltage level for detecting empty. The unit is
-   millivolt.
- - maxim,recovery-voltage: Sets the voltage level for clearing empty detection.
-   Once the cell voltage rises above this point, empty voltage detection is
-   reenabled.
- - maxim,battery-qrtables: initial learning parameters that should be specified
-   when a new maxim,empty-voltage is specified.
- - maxim,maxim,valrtth-vmax: An alert is generated if the VCell register reading
-   exceeds this value. The unit is millivolt.
- - maxim,maxim,valrtth-vmin: An alert is generated if the VCell register reading
-   falls below this value. The unit is millivolt.
+
+ - io-channels: see Documentation/devicetree/bindings/iio/iio-bindings.txt
+ - io-channel-names: see Documentation/devicetree/bindings/iio/iio-bindings.txt
+ - maxim,batt-id-range-pct: tolerance in percent on the resitance ID value. if
+   not provided, defaults to 20%.
+
+ - maxim,config: node in which children would have a "maxim,batt-id-kohm"
+   property and a "maxim,regval" to allow applying configuration changes given a
+   battery.
+ - maxim,batt-id-kohm: the value of the battery resitance ID the config applies
+   to.
+ - maxim,n_regval: An array of u16 that are pairs of register address and
+   corresponding values. These values will be written to the shadow registers
+   of Maxim fuel gauge their address must be within 0x80 - 0xDF to be considered
+ - maxim,r_regval: An array of u16 that are pairs of register address and
+   corresponding values. These values will be written to the ModelGauge m5
+   Register their address must be within 0x00 - 0x4D, 0xB0 - 0xDF to be
+   considered.
