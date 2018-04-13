@@ -94,5 +94,7 @@
 		google,port-overheat-work-interval = <1000>;
 		google,begin-mitigation-temp = <600>;
 		google,end-mitigation-temp = <500>;
+		/* Must maintain < 1/15 duty cycle */
+		google,polling-freq = <3>;
 	};
 };
