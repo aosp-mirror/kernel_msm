@@ -33,10 +33,35 @@
 	qcom,fg-sys-term-current = <(-181)>;
 };
 
-&max1720x_fg {
-	#include "batterydata-maxim-b1-proto.dtsi"
-};
-
 &google_charger {
 	google,chg-battery-capacity = <2915>;
+};
+
+&vendor {
+	b1_maxim_config: maxim,config {
+		maxim,b1-10k {
+			maxim,batt-id-kohm = <10>;
+#include "batterydata-maxim-b1-10k.dtsi"
+		};
+		maxim,b1-22k {
+			maxim,batt-id-kohm = <22>;
+#include "batterydata-maxim-b1-22k.dtsi"
+		};
+		maxim,b1-47k {
+			maxim,batt-id-kohm = <47>;
+#include "batterydata-maxim-b1-47k.dtsi"
+		};
+		maxim,b1-68k {
+			maxim,batt-id-kohm = <68>;
+#include "batterydata-maxim-b1-68k.dtsi"
+		};
+		maxim,b1-180k {
+			maxim,batt-id-kohm = <100>;
+#include "batterydata-maxim-b1-100k.dtsi"
+		};
+	};
+};
+
+&max1720x_fg {
+	maxim,config = <&b1_maxim_config>;
 };

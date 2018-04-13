@@ -38,3 +38,29 @@
 	google,chg-battery-capacity = <3430>;
 	google,wlc-power-supply = "wireless";
 };
+
+&vendor {
+	c1_maxim_config: maxim,config {
+		maxim,c1-10k {
+			maxim,batt-id-kohm = <10>;
+#include "batterydata-maxim-c1-10k.dtsi"
+		};
+		maxim,c1-47k {
+			maxim,batt-id-kohm = <47>;
+#include "batterydata-maxim-c1-47k.dtsi"
+		};
+		maxim,c1-68k {
+			maxim,batt-id-kohm = <68>;
+#include "batterydata-maxim-c1-68k.dtsi"
+		};
+		maxim,c1-180k {
+			maxim,batt-id-kohm = <180>;
+#include "batterydata-maxim-c1-180k.dtsi"
+		};
+	};
+};
+
+&max1720x_fg {
+	maxim,config = <&c1_maxim_config>;
+};
+
