@@ -65,10 +65,8 @@
 		fg,irq-gpio = <&tlmm 62 0x00>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&fg_int_default>;
-
-		io-channels = <&pmi8998_rradc 0>;
-		io-channel-names = "rradc_batt_id";
-		maxim,batt-id-range-pct = <15>;
+		maxim,force-flash-config;
+		/* maxim,force-load-config; */
 	};
 };
 
@@ -97,11 +95,4 @@
 		google,begin-mitigation-temp = <600>;
 		google,end-mitigation-temp = <500>;
 	};
-};
-
-&max1720x_fg {
-	maxim,r_regval = /bits/ 16 <
-	    0x03 0xFF00	/* SAlrtTh: disabled */
-	    0xBB 0x0090	/* dSOCen */
-	>;
 };
