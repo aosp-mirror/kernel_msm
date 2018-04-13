@@ -32,6 +32,11 @@ struct dsi_backlight_pwm_config {
 	int pwm_gpio;
 };
 
+static inline bool is_lp_mode(unsigned long state)
+{
+	return (state & (BL_STATE_LP | BL_STATE_LP2)) != 0;
+}
+
 static int dsi_panel_pwm_bl_register(struct dsi_backlight_config *bl);
 
 static int dsi_backlight_update_dcs(struct dsi_backlight_config *bl, u32 bl_lvl)
@@ -269,6 +274,7 @@ static int dsi_backlight_register(struct dsi_backlight_config *bl)
 		.power = FB_BLANK_UNBLANK,
 	};
 	struct dsi_panel *panel = container_of(bl, struct dsi_panel, bl_config);
+	struct regulator *reg;
 
 	props.max_brightness = bl->brightness_max_level;
 	props.brightness = bl->brightness_max_level / 2;
@@ -286,14 +292,46 @@ static int dsi_backlight_register(struct dsi_backlight_config *bl)
 	if (sysfs_create_groups(&bl->bl_device->dev.kobj, bl_device_groups))
 		pr_warn("unable to create device groups\n");
 
+	reg = regulator_get(panel->parent, "lab");
+	if (!PTR_ERR_OR_ZERO(reg)) {
+		pr_info("LAB regulator found\n");
+		panel->bl_config.lab_vreg = reg;
+	}
+
 	display_count++;
 	return 0;
 }
 
-int dsi_backlight_update_dpms(struct dsi_backlight_config *bl, int power_mode)
+static unsigned long get_state_after_dpms(struct dsi_backlight_config *bl,
+				   int power_mode)
 {
 	struct backlight_device *bd = bl->bl_device;
-	int rc = 0;
+	unsigned long state = bd->props.state;
+
+	switch (power_mode) {
+	case SDE_MODE_DPMS_ON:
+		state &= ~(BL_CORE_FBBLANK | BL_STATE_LP | BL_STATE_LP2);
+		break;
+	case SDE_MODE_DPMS_OFF:
+		state &= ~(BL_STATE_LP | BL_STATE_LP2);
+		state |= BL_CORE_FBBLANK;
+		break;
+	case SDE_MODE_DPMS_LP1:
+		state |= BL_STATE_LP;
+		state &= ~BL_STATE_LP2;
+		break;
+	case SDE_MODE_DPMS_LP2:
+		state |= BL_STATE_LP | BL_STATE_LP2;
+		break;
+	}
+
+	return state;
+}
+
+int dsi_backlight_early_dpms(struct dsi_backlight_config *bl, int power_mode)
+{
+	struct backlight_device *bd = bl->bl_device;
+	unsigned long state;
 
 	if (!bd)
 		return 0;
@@ -301,34 +339,45 @@ int dsi_backlight_update_dpms(struct dsi_backlight_config *bl, int power_mode)
 	pr_info("power_mode:%d state:0x%0x\n", power_mode, bd->props.state);
 
 	mutex_lock(&bd->ops_lock);
-	switch (power_mode) {
-	case SDE_MODE_DPMS_ON:
-		bd->props.power = FB_BLANK_UNBLANK;
-		bd->props.state &= ~(BL_CORE_FBBLANK | BL_STATE_LP |
-				     BL_STATE_LP2);
-		break;
-	case SDE_MODE_DPMS_OFF:
-		bd->props.power = FB_BLANK_POWERDOWN;
-		bd->props.state &= ~(BL_STATE_LP | BL_STATE_LP2);
-		bd->props.state |= BL_CORE_FBBLANK;
-		break;
-	case SDE_MODE_DPMS_LP1:
-		bd->props.state |= BL_STATE_LP;
-		bd->props.state &= ~BL_STATE_LP2;
-		break;
-	case SDE_MODE_DPMS_LP2:
-		bd->props.state |= BL_STATE_LP | BL_STATE_LP2;
-		break;
-	default:
-		rc = -EINVAL;
-		break;
-	}
+	state = get_state_after_dpms(bl, power_mode);
 
-	if (!rc)
-		backlight_update_status(bd);
+	if (bl->lab_vreg) {
+		if (is_lp_mode(bl->last_state) && !is_lp_mode(state)) {
+			/* LP -> no LP */
+			pr_debug("enabling lab vreg\n");
+			regulator_set_mode(bl->lab_vreg, REGULATOR_MODE_NORMAL);
+		} else if (!is_lp_mode(bl->last_state) && is_lp_mode(state)) {
+			/* no LP -> LP */
+			pr_debug("disabling lab vreg\n");
+			regulator_set_mode(bl->lab_vreg, REGULATOR_MODE_IDLE);
+		}
+	}
 	mutex_unlock(&bd->ops_lock);
 
-	return rc;
+	return 0;
+}
+
+int dsi_backlight_late_dpms(struct dsi_backlight_config *bl, int power_mode)
+{
+	struct backlight_device *bd = bl->bl_device;
+	unsigned long state;
+
+	if (!bd)
+		return 0;
+
+	pr_debug("power_mode:%d state:0x%0x\n", power_mode, bd->props.state);
+
+	mutex_lock(&bd->ops_lock);
+	state = get_state_after_dpms(bl, power_mode);
+
+	bd->props.power = state & BL_CORE_FBBLANK ? FB_BLANK_POWERDOWN :
+			FB_BLANK_UNBLANK;
+	bd->props.state = state;
+
+	backlight_update_status(bd);
+	mutex_unlock(&bd->ops_lock);
+
+	return 0;
 }
 
 #define DSI_PANEL_S6E3HA8_HLPM_OFF    0x20
