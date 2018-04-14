@@ -21,6 +21,7 @@ struct nanohub_platform_data {
 	u32 mode4_gpio;
 	u32 irq1_gpio;
 	u32 irq2_gpio;
+	u32 irq3_gpio;
 	u32 spi_cs_gpio;
 	u32 bl_addr;
 	u32 num_flash_banks;

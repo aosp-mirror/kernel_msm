@@ -28,6 +28,8 @@
 
 #define NANOHUB_NAME "nanohub"
 
+#define NANOHUB_WAKEUP_TRACE_ENABLE  (1)
+
 struct nanohub_buf {
 	struct list_head list;
 	uint8_t buffer[255];
@@ -42,6 +44,30 @@ struct nanohub_io {
 	wait_queue_head_t buf_wait;
 	struct list_head buf_list;
 };
+
+#if (NANOHUB_WAKEUP_TRACE_ENABLE)
+struct nanohub_trace_event {
+	uint32_t event_id;
+	uint32_t event_sub_id;
+	char *event_name;
+	uint8_t interrupt;
+	int event_count;
+};
+
+struct wakeup_trace_listnode {
+	struct list_head event_list;
+	struct nanohub_trace_event trace_event;
+	uint8_t buffer[255];
+	uint8_t length;
+};
+
+struct irq_nums_during_wakeup {
+	uint32_t nums_irq1;
+	uint32_t nums_irq2;
+	uint32_t nums_irq3;
+};
+
+#endif
 
 static inline struct nanohub_data *dev_get_nanohub_data(struct device *dev)
 {
@@ -66,6 +92,7 @@ struct nanohub_data {
 	const struct nanohub_platform_data *pdata;
 	int irq1;
 	int irq2;
+	int irq3;
 
 	atomic_t kthread_run;
 	atomic_t thread_state;
@@ -99,8 +126,16 @@ struct nanohub_data {
 	atomic_t hub_mode_ap_pwr_down;
 	atomic_t hub_mode_ap_active;
 	atomic_t lcd_mutex;
+#if (NANOHUB_WAKEUP_TRACE_ENABLE)
+	atomic_t suspend_status;
+	atomic_t st_wakeup_trace;
+	struct irq_nums_during_wakeup wakeup_trace_irqs;
+	struct wakeup_trace_listnode wakeup_trace;
+#endif
 	struct mutex hub_mode_set_lock;
 	struct mutex nanohub_write_lock;
+	uint16_t nanohub_hw_type;
+	uint32_t nanohub_variant_version;
 };
 
 enum {
@@ -148,6 +183,25 @@ enum DOWNLOAD_BL_STATUS {
 	DOWNLOAD_BL_FAILED,
 	DOWNLOAD_BL_TIMEOUT,
 };
+
+#if (NANOHUB_WAKEUP_TRACE_ENABLE)
+enum NANOHUB_SUSPEND_STATUS {
+	NANOHUB_SUSPEND_ENTRY = 0,
+	NANOHUB_SUSPEND_EXIT,
+};
+
+enum NANOHUB_WAKEUP_TRACE {
+	NANOHUB_WAKEUP_TRACE_OFF = 0,
+	NANOHUB_WAKEUP_TRACE_ON,
+};
+
+enum DUMP_WAKEUP_TRACE_REASON {
+	DUMP_TRACE_REASON_QUEUE_EMPTY,
+	DUMP_TRACE_REASON_DUMP_QUEUE,
+	DUMP_TRACE_REASON_NO_BUFFER,
+	DUMP_TRACE_REASON_CLEAR_IRQS,
+};
+#endif
 
 int request_wakeup_ex(struct nanohub_data *data, long timeout,
 		      int key, int lock_mode);

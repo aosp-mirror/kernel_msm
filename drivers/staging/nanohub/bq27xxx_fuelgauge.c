@@ -276,7 +276,6 @@ int is_fuel_gauge_data(struct nanohub_buf *buf, int len)
 
 	struct HostHubRawPacket *p_HostHubRawPacket;
 	struct SensorAppEventHeader *p_SensorAppEventHeader;
-	struct bq27x00_reg_cache *p_reg_cache;
 
 	uint32_t event_id;
 
@@ -292,11 +291,6 @@ int is_fuel_gauge_data(struct nanohub_buf *buf, int len)
 		(struct SensorAppEventHeader *)
 		&(buf->buffer[sizeof(uint32_t)
 		+ sizeof(struct HostHubRawPacket)]);
-	p_reg_cache =
-		(struct bq27x00_reg_cache *)
-		&(buf->buffer[sizeof(uint32_t)
-		+ sizeof(struct HostHubRawPacket)
-		+ sizeof(struct SensorAppEventHeader)]);
 
 	event_id =
 		le32_to_cpu((((uint32_t *)(buf)->buffer)[0]) & 0x7FFFFFFF);
@@ -310,15 +304,6 @@ int is_fuel_gauge_data(struct nanohub_buf *buf, int len)
 		/*pr_err("nanohub: [FG] not appId for fuel gauge.\n");*/
 		return -EINVAL;
 	}
-	if (p_HostHubRawPacket->dataLen !=
-		sizeof(struct SensorAppEventHeader) +
-		sizeof(struct bq27x00_reg_cache)) {
-		pr_err("nanohub: [FG] bad dataLen for report packet: %d : %d.\n",
-			p_HostHubRawPacket->dataLen,
-			sizeof(struct SensorAppEventHeader) +
-			sizeof(struct bq27x00_reg_cache));
-		return -EINVAL;
-	}
 	if (p_SensorAppEventHeader->msgId != SENSOR_APP_MSG_ID_CUSTOM_USE ||
 		p_SensorAppEventHeader->sensorType != SENS_TYPE_FUELGAUGE ||
 		p_SensorAppEventHeader->status !=
@@ -330,6 +315,27 @@ int is_fuel_gauge_data(struct nanohub_buf *buf, int len)
 			p_SensorAppEventHeader->status);
 		return -EINVAL;
 	}
+	if (p_HostHubRawPacket->dataLen !=
+		sizeof(struct SensorAppEventHeader) +
+		sizeof(struct bq27x00_reg_cache)) {
+		pr_err("nanohub: [FG] bad dataLen for report packet: %d : %d.\n",
+			p_HostHubRawPacket->dataLen,
+			sizeof(struct SensorAppEventHeader) +
+			sizeof(struct bq27x00_reg_cache));
+		return -EINVAL;
+	}
+	return 0;
+}
+
+int handle_fuelgauge_data(struct nanohub_buf *buf, int len)
+{
+	struct bq27x00_reg_cache *p_reg_cache;
+
+	p_reg_cache =
+		(struct bq27x00_reg_cache *)
+		&(buf->buffer[sizeof(uint32_t)
+		+ sizeof(struct HostHubRawPacket)
+		+ sizeof(struct SensorAppEventHeader)]);
 
 	dump_fuelgauge_cache(p_reg_cache);
 	store_fuelguage_cache(p_reg_cache);

@@ -42,11 +42,21 @@
 #include "bq27xxx_fuelgauge.h"
 #include "custom_app_event.h"
 
-#define READ_QUEUE_DEPTH	10
+#define READ_QUEUE_DEPTH	20
 #define APP_FROM_HOST_EVENTID	0x000000F8
 #define FIRST_SENSOR_EVENTID	0x00000200
 #define LAST_SENSOR_EVENTID	0x000002FF
 #define APP_TO_HOST_EVENTID	0x00000401
+
+enum APP_TO_HOST_EVENT_SUBID {
+	APP_TO_HOST_EVENT_SUBID_OTHERS = 0,
+	APP_TO_HOST_EVENT_SUBID_FUELGAUGE = 1,
+	APP_TO_HOST_EVENT_SUBID_HR_LOG,
+	APP_TO_HOST_EVENT_SUBID_FLASH,
+	APP_TO_HOST_EVENT_SUBID_CALIBRATE,
+	APP_TO_HOST_EVENT_SUBID_SELFTEST,
+};
+
 #define OS_LOG_EVENTID		0x3B474F4C
 #define WAKEUP_INTERRUPT	1
 #define WAKEUP_TIMEOUT_MS	1000
@@ -114,6 +124,7 @@ static const struct gpio_config gconf[] = {
 	{ PLAT_GPIO_DEF(boot0, GPIOF_OUT_INIT_LOW) },
 	{ PLAT_GPIO_DEF_IRQ(irq1, GPIOF_DIR_IN, 0) },
 	{ PLAT_GPIO_DEF_IRQ(irq2, GPIOF_DIR_IN, GPIO_OPT_OPTIONAL) },
+	{ PLAT_GPIO_DEF_IRQ(irq3, GPIOF_DIR_IN, GPIO_OPT_OPTIONAL) },
 };
 
 static const struct iio_info nanohub_iio_info = {
@@ -524,10 +535,12 @@ static ssize_t nanohub_wakeup_query(struct device *dev,
 	if (nanohub_irq1_fired(data) || nanohub_irq2_fired(data))
 		wake_up_interruptible(&data->wakeup_wait);
 
-	return scnprintf(buf, PAGE_SIZE, "WAKEUP: %d INT1: %d INT2: %d\n",
+	return scnprintf(buf, PAGE_SIZE, "WAKEUP: %d INT1: %d "
+			 "INT2: %d INT3: %d\n",
 			 gpio_get_value(pdata->wakeup_gpio),
 			 gpio_get_value(pdata->irq1_gpio),
-			 data->irq2 ? gpio_get_value(pdata->irq2_gpio) : -1);
+			 data->irq2 ? gpio_get_value(pdata->irq2_gpio) : -1,
+			 data->irq3 ? gpio_get_value(pdata->irq3_gpio) : -1);
 }
 
 static ssize_t nanohub_app_info(struct device *dev,
@@ -583,6 +596,11 @@ static ssize_t nanohub_firmware_query(struct device *dev,
 	    (data, CMD_COMMS_GET_OS_HW_VERSIONS, NULL, 0, (uint8_t *)&buffer,
 	     sizeof(buffer), false, 10, 10) == sizeof(buffer)) {
 		release_wakeup(data);
+		data->nanohub_hw_type = buffer[0];
+		data->nanohub_variant_version = buffer[5] << 16 | buffer[4];
+		pr_info("nanohub_firmware_query: hw type 0x%04x, variant vesion 0x%08x\n",
+				data->nanohub_hw_type,
+				data->nanohub_variant_version);
 		return scnprintf(buf, PAGE_SIZE,
 				 "hw type: %04x hw ver: %04x bl ver: %04x os ver: %04x variant ver: %08x\n",
 				 buffer[0], buffer[1], buffer[2], buffer[3],
@@ -705,15 +723,15 @@ int __nanohub_set_mode_pin(struct nanohub_data *data, enum AP_GPIO_CMD mode)
 	gpio_set_value(pdata->mode2_gpio, (mode & 0x04) ? 1 : 0);
 	gpio_set_value(pdata->mode3_gpio, (mode & 0x02) ? 1 : 0);
 	gpio_set_value(pdata->mode4_gpio, (mode & 0x01) ? 1 : 0);
-	usleep_range(10000, 15000);
+	usleep_range(1000, 1500);
 
 	if (gpio_get_value(pdata->int_gpio) != 0) {
 		gpio_set_value(pdata->int_gpio, 0);
-		usleep_range(10000, 15000);
+		usleep_range(1000, 1500);
 	}
 	gpio_set_value(pdata->int_gpio, 1);
 		/*creat a intterupt(high rise edge) to mcu*/
-	usleep_range(20000, 25000);
+	usleep_range(10000, 15000);
 	gpio_set_value(pdata->int_gpio, 0);
 
 	gpio_set_value(pdata->mode1_gpio, 0);
@@ -1323,6 +1341,13 @@ static irqreturn_t nanohub_irq1(int irq, void *dev_id)
 
 	nanohub_handle_irq1(data);
 
+#if (NANOHUB_WAKEUP_TRACE_ENABLE)
+	if (NANOHUB_WAKEUP_TRACE_ON ==
+		atomic_read(&data->st_wakeup_trace)) {
+		data->wakeup_trace_irqs.nums_irq1++;
+	}
+#endif
+
 	return IRQ_HANDLED;
 }
 
@@ -1331,7 +1356,34 @@ static irqreturn_t nanohub_irq2(int irq, void *dev_id)
 	struct nanohub_data *data = (struct nanohub_data *)dev_id;
 
 	nanohub_handle_irq2(data);
+
+	if (data->nanohub_hw_type == 0x4d70	&&
+		data->nanohub_variant_version < 0x0000001b)
+		__nanohub_send_AP_cmd(data, GPIO_CMD_RESEND);
+
+#if (NANOHUB_WAKEUP_TRACE_ENABLE)
+	if (NANOHUB_WAKEUP_TRACE_ON ==
+		atomic_read(&data->st_wakeup_trace)) {
+		data->wakeup_trace_irqs.nums_irq2++;
+	}
+#endif
+
+	return IRQ_HANDLED;
+}
+
+
+static irqreturn_t nanohub_irq3(int irq, void *dev_id)
+{
+	struct nanohub_data *data = (struct nanohub_data *)dev_id;
+
 	__nanohub_send_AP_cmd(data, GPIO_CMD_RESEND);
+
+#if (NANOHUB_WAKEUP_TRACE_ENABLE)
+	if (NANOHUB_WAKEUP_TRACE_ON ==
+		atomic_read(&data->st_wakeup_trace)) {
+		data->wakeup_trace_irqs.nums_irq3++;
+	}
+#endif
 
 	return IRQ_HANDLED;
 }
@@ -1369,6 +1421,182 @@ static bool nanohub_os_log(char *buffer, int len)
 	}
 }
 
+#if (NANOHUB_WAKEUP_TRACE_ENABLE)
+static const char * const interrupt_name[] = {
+					"INVALID",
+					"SENSOR_WAKEUP",
+					"SENSOR_NON_WAKEUP"};
+
+static char *nanohub_get_event_name_from_id(
+					uint32_t event_id,
+					uint32_t event_sub_id)
+{
+	char *evt_name;
+
+	if (event_id > FIRST_SENSOR_EVENTID &&
+	    event_id <= LAST_SENSOR_EVENTID)
+		evt_name = "EVENT_SENSOR";
+	else if (event_id == APP_TO_HOST_EVENTID) {
+		if (event_sub_id == APP_TO_HOST_EVENT_SUBID_FUELGAUGE)
+			evt_name = "EVENT_FUELGAUGE";
+		else if (event_sub_id == APP_TO_HOST_EVENT_SUBID_HR_LOG)
+			evt_name = "EVENT_HR_LOG";
+		else if (event_sub_id == APP_TO_HOST_EVENT_SUBID_FLASH)
+			evt_name = "EVENT_CUSTOM_FLASH";
+		else if (event_sub_id == APP_TO_HOST_EVENT_SUBID_CALIBRATE)
+			evt_name = "EVENT_CALIBRATE_RESULT";
+		else if (event_sub_id == APP_TO_HOST_EVENT_SUBID_SELFTEST)
+			evt_name = "EVENT_SELFTEST_RESULT";
+		else
+			evt_name = "EVENT_OTHERS";
+	} else if (event_id == OS_LOG_EVENTID)
+		evt_name = "EVENT_LOG";
+	else if (event_id == APP_FROM_HOST_EVENTID)
+		evt_name = "EVENT_APP_FROM_HOST";
+	else
+		evt_name = "EVENT_UNKNOWN";
+
+	return evt_name;
+}
+
+static bool nanohub_wakeup_trace_event_same(
+				struct wakeup_trace_listnode *new_event,
+				struct wakeup_trace_listnode *cur_event)
+{
+	if (new_event->trace_event.event_id != cur_event->trace_event.event_id)
+		return false;
+	if (new_event->trace_event.event_sub_id	!=
+		cur_event->trace_event.event_sub_id)
+			return false;
+
+	return true;
+}
+
+static void nanohub_wakeup_trace_add_to_list(
+				struct wakeup_trace_listnode *trace_head,
+				struct nanohub_buf **buf, int len)
+{
+	struct wakeup_trace_listnode *new_trace_event =
+			kzalloc(sizeof(struct wakeup_trace_listnode),
+				GFP_KERNEL);
+
+	struct wakeup_trace_listnode *tmp;
+	bool is_same_type = false;
+
+	memset(new_trace_event, 0, sizeof(new_trace_event));
+	new_trace_event->length =
+		len > sizeof(new_trace_event->buffer) ?
+		sizeof(new_trace_event->buffer) : len;
+
+	memcpy(new_trace_event->buffer,
+		(*buf)->buffer, new_trace_event->length);
+	new_trace_event->length = len;
+	new_trace_event->trace_event.event_id =
+		le32_to_cpu((((uint32_t *)(*buf)->buffer)[0]) & 0x7FFFFFFF);
+
+	if (new_trace_event->trace_event.event_id > FIRST_SENSOR_EVENTID &&
+		new_trace_event->trace_event.event_id <= LAST_SENSOR_EVENTID) {
+			new_trace_event->trace_event.interrupt =
+				(*buf)->buffer[sizeof(uint32_t) +
+				sizeof(uint64_t) + 3];
+	} else if (new_trace_event->trace_event.event_id ==
+				APP_TO_HOST_EVENTID) {
+		struct SensorAppEventHeader *p_SensorAppEventHeader;
+
+		p_SensorAppEventHeader =
+			(struct SensorAppEventHeader *)
+			&((*buf)->buffer[sizeof(uint32_t)
+			+ sizeof(struct HostHubRawPacket)]);
+		if (!is_fuel_gauge_data(*buf, len))
+			new_trace_event->trace_event.event_sub_id =
+				APP_TO_HOST_EVENT_SUBID_FUELGAUGE;
+		else if (!is_hr_log_data(*buf, len))
+			new_trace_event->trace_event.event_sub_id =
+				APP_TO_HOST_EVENT_SUBID_HR_LOG;
+		else if (!is_custom_flash_data(*buf, len))
+			new_trace_event->trace_event.event_sub_id =
+				APP_TO_HOST_EVENT_SUBID_FLASH;
+		else if (p_SensorAppEventHeader->msgId ==
+				SENSOR_APP_MSG_ID_CAL_RESULT)
+			new_trace_event->trace_event.event_sub_id =
+				APP_TO_HOST_EVENT_SUBID_CALIBRATE;
+		else if (p_SensorAppEventHeader->msgId ==
+				SENSOR_APP_MSG_ID_TEST_RESULT)
+			new_trace_event->trace_event.event_sub_id =
+				APP_TO_HOST_EVENT_SUBID_CALIBRATE;
+		else
+			new_trace_event->trace_event.event_sub_id =
+				APP_TO_HOST_EVENT_SUBID_OTHERS;
+	}
+	new_trace_event->trace_event.event_name =
+		nanohub_get_event_name_from_id(
+				new_trace_event->trace_event.event_id,
+				new_trace_event->trace_event.event_sub_id);
+
+	pr_debug("nanohub: wakeup trace: get new event id 0x%08x, "
+			"event name %s, interrupt %s\n",
+			new_trace_event->trace_event.event_id,
+			new_trace_event->trace_event.event_name,
+			interrupt_name[
+				new_trace_event->trace_event.interrupt%3]);
+
+	list_for_each_entry(tmp, &(trace_head->event_list), event_list) {
+		is_same_type = nanohub_wakeup_trace_event_same(
+							new_trace_event, tmp);
+		if (is_same_type) {
+			tmp->trace_event.event_count++;
+			pr_debug("nanohub: wakeup trace: stored.\n");
+			break;
+		}
+	}
+	if (!is_same_type) {
+		new_trace_event->trace_event.event_count++;
+		list_add_tail(&(new_trace_event->event_list),
+				&(trace_head->event_list));
+		pr_debug("nanohub: wakeup trace: add to tail.\n");
+	} else
+		kzfree(new_trace_event);
+}
+
+static void nanohub_wakeup_trace_dump_list(
+				struct wakeup_trace_listnode *trace_head,
+				int call_reason)
+{
+	struct list_head *pos, *q;
+	struct wakeup_trace_listnode *tmp;
+	struct nanohub_data *data =
+		container_of(trace_head, struct nanohub_data,
+		wakeup_trace);
+	static const char * const dump_reason_name[] = {
+					"queue empty",
+					"dump data",
+					"ap no buffer",
+					"clear irqs"};
+
+	pr_info(
+		"nanohub: wakeup trace: dump_reason: %s,"
+		"irq_nums: irq1 %u, irq2 %u, ir13 %u\n",
+		dump_reason_name[call_reason%4],
+		data->wakeup_trace_irqs.nums_irq1,
+		data->wakeup_trace_irqs.nums_irq2,
+		data->wakeup_trace_irqs.nums_irq3);
+
+	if (list_empty(&(trace_head->event_list)))
+		return;
+
+	list_for_each_safe(pos, q, &(trace_head->event_list)) {
+		tmp = list_entry(pos, struct wakeup_trace_listnode, event_list);
+		pr_info("nanohub: wakeup trace: event id 0x%08x, "
+			"event name %s, interrupt %s, event_cnt %d\n",
+			tmp->trace_event.event_id, tmp->trace_event.event_name,
+			interrupt_name[tmp->trace_event.interrupt%3],
+			tmp->trace_event.event_count);
+		list_del(pos);
+		kzfree(tmp);
+	}
+}
+#endif
+
 static void nanohub_process_buffer(struct nanohub_data *data,
 				   struct nanohub_buf **buf,
 				   int ret)
@@ -1379,8 +1607,15 @@ static void nanohub_process_buffer(struct nanohub_data *data,
 	struct nanohub_io *io = &data->io[ID_NANOHUB_SENSOR];
 
 	data->kthread_err_cnt = 0;
-	if (ret < 4 || nanohub_os_log((*buf)->buffer, ret) ||
-		(!is_fuel_gauge_data(*buf, ret))) {
+
+#if (NANOHUB_WAKEUP_TRACE_ENABLE)
+	if (NANOHUB_WAKEUP_TRACE_ON ==
+		atomic_read(&data->st_wakeup_trace))
+		nanohub_wakeup_trace_add_to_list(
+				&data->wakeup_trace, buf, ret);
+#endif
+
+	if (ret < 4 || nanohub_os_log((*buf)->buffer, ret)) {
 		release_wakeup(data);
 		return;
 	}
@@ -1398,7 +1633,11 @@ static void nanohub_process_buffer(struct nanohub_data *data,
 	}
 	if (event_id == APP_TO_HOST_EVENTID) {
 		wakeup = true;
-		if (!is_hr_log_data(*buf, ret))
+		if (!is_fuel_gauge_data(*buf, ret)) {
+			handle_fuelgauge_data(*buf, ret);
+			release_wakeup(data);
+			return;
+		} else if (!is_hr_log_data(*buf, ret))
 			io = &data->io[ID_NANOHUB_HR_LOG];
 		else if (!is_custom_flash_data(*buf, ret))
 			io = &data->io[ID_NANOHUB_CUSTOM_FLASH];
@@ -1485,6 +1724,17 @@ static int nanohub_kthread(void *arg)
 				if (!nanohub_irq1_fired(data) &&
 				    !nanohub_irq2_fired(data)) {
 					nanohub_set_state(data, ST_IDLE);
+
+#if (NANOHUB_WAKEUP_TRACE_ENABLE)
+				if (NANOHUB_WAKEUP_TRACE_ON ==
+					atomic_read(&data->st_wakeup_trace)) {
+					atomic_set(&data->st_wakeup_trace,
+						NANOHUB_WAKEUP_TRACE_OFF);
+					nanohub_wakeup_trace_dump_list(
+						&data->wakeup_trace,
+						DUMP_TRACE_REASON_DUMP_QUEUE);
+				}
+#endif
 					continue;
 				}
 			} else if (ret == 0) {
@@ -1493,6 +1743,18 @@ static int nanohub_kthread(void *arg)
 				data->interrupts[0] &= ~0x00000006;
 				release_wakeup(data);
 				nanohub_set_state(data, ST_IDLE);
+
+#if (NANOHUB_WAKEUP_TRACE_ENABLE)
+				if (NANOHUB_WAKEUP_TRACE_ON ==
+					atomic_read(&data->st_wakeup_trace)) {
+
+					atomic_set(&data->st_wakeup_trace,
+						NANOHUB_WAKEUP_TRACE_OFF);
+					nanohub_wakeup_trace_dump_list(
+						&data->wakeup_trace,
+						DUMP_TRACE_REASON_QUEUE_EMPTY);
+				}
+#endif
 				continue;
 			} else {
 				release_wakeup(data);
@@ -1514,6 +1776,17 @@ static int nanohub_kthread(void *arg)
 			if (!nanohub_irq1_fired(data) &&
 			    !nanohub_irq2_fired(data)) {
 				nanohub_set_state(data, ST_IDLE);
+#if (NANOHUB_WAKEUP_TRACE_ENABLE)
+				if (NANOHUB_WAKEUP_TRACE_ON ==
+					atomic_read(&data->st_wakeup_trace)) {
+
+					atomic_set(&data->st_wakeup_trace,
+						NANOHUB_WAKEUP_TRACE_OFF);
+					nanohub_wakeup_trace_dump_list(
+						&data->wakeup_trace,
+						DUMP_TRACE_REASON_NO_BUFFER);
+				}
+#endif
 				continue;
 			}
 			/* pending interrupt, but no room to read data -
@@ -1532,6 +1805,17 @@ static int nanohub_kthread(void *arg)
 						    false, 10, 0);
 			release_wakeup(data);
 			nanohub_set_state(data, ST_IDLE);
+#if (NANOHUB_WAKEUP_TRACE_ENABLE)
+				if (NANOHUB_WAKEUP_TRACE_ON ==
+					atomic_read(&data->st_wakeup_trace)) {
+
+					atomic_set(&data->st_wakeup_trace,
+						NANOHUB_WAKEUP_TRACE_OFF);
+					nanohub_wakeup_trace_dump_list(
+						&data->wakeup_trace,
+						DUMP_TRACE_REASON_CLEAR_IRQS);
+				}
+#endif
 		}
 	}
 
@@ -1564,6 +1848,8 @@ static struct nanohub_platform_data *nanohub_parse_dt(struct device *dev)
 
 	/* optional (strongly recommended) */
 	pdata->irq2_gpio = of_get_named_gpio(dt, "sensorhub,irq2-gpio", 0);
+
+	pdata->irq3_gpio = of_get_named_gpio(dt, "sensorhub,irq3-gpio", 0);
 
 	ret = pdata->wakeup_gpio =
 	    of_get_named_gpio(dt, "sensorhub,wakeup-gpio", 0);
@@ -1737,6 +2023,16 @@ static int nanohub_request_irqs(struct nanohub_data *data)
 		disable_irq(data->irq2);
 	}
 
+	ret = request_threaded_irq(data->irq3, NULL, nanohub_irq3,
+				   IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+				   "nanohub-irq3", data);
+	if (ret < 0) {
+		data->irq3 = 0;
+		WARN(1, "failed to request optional IRQ %d; err=%d",
+		     data->irq3, ret);
+	} else {
+		disable_irq(data->irq3);
+	}
 	/* if 2d request fails, hide this; it is optional IRQ,
 	 * and failure should not interrupt driver init sequence.
 	 */
@@ -1790,10 +2086,14 @@ static void nanohub_release_gpios_irqs(struct nanohub_data *data)
 {
 	const struct nanohub_platform_data *pdata = data->pdata;
 
+	if (data->irq3)
+		free_irq(data->irq3, data);
 	if (data->irq2)
 		free_irq(data->irq2, data);
 	if (data->irq1)
 		free_irq(data->irq1, data);
+	if (gpio_is_valid(pdata->irq3_gpio))
+		gpio_free(pdata->irq3_gpio);
 	if (gpio_is_valid(pdata->irq2_gpio))
 		gpio_free(pdata->irq2_gpio);
 	gpio_free(pdata->irq1_gpio);
@@ -1882,6 +2182,10 @@ struct iio_dev *nanohub_probe(struct device *dev, struct iio_dev *iio_dev)
 	atomic_set(&data->lcd_mutex, LCD_MUTEX_OFF);
 	init_waitqueue_head(&data->wakeup_wait);
 
+#if (NANOHUB_WAKEUP_TRACE_ENABLE)
+	INIT_LIST_HEAD(&data->wakeup_trace.event_list);
+#endif
+
 	ret = nanohub_request_gpios(data);
 	if (ret)
 		goto fail_gpio;
@@ -1943,6 +2247,9 @@ int nanohub_reset(struct nanohub_data *data)
 	else
 		nanohub_unmask_interrupt(data, 2);
 
+	if (data->irq3)
+		enable_irq(data->irq3);
+
 	__nanohub_send_AP_cmd(data, GPIO_CMD_RESEND);
 
 	return 0;
@@ -1984,7 +2291,6 @@ int nanohub_suspend(struct iio_dev *iio_dev)
 	struct nanohub_data *data = iio_priv(iio_dev);
 	int ret;
 
-	__nanohub_send_AP_cmd(data, GPIO_CMD_SUSPEND);
 	ret = nanohub_wakeup_lock(data, LOCK_MODE_SUSPEND_RESUME);
 	if (!ret) {
 		int cnt;
@@ -1999,6 +2305,16 @@ int nanohub_suspend(struct iio_dev *iio_dev)
 			dev_dbg(&iio_dev->dev, "nanohub: %s: cnt=%d\n",
 				__func__, cnt);
 			enable_irq_wake(data->irq1);
+			__nanohub_send_AP_cmd(data, GPIO_CMD_SUSPEND);
+
+#if (NANOHUB_WAKEUP_TRACE_ENABLE)
+			atomic_set(&data->suspend_status,
+					NANOHUB_SUSPEND_ENTRY);
+			atomic_set(&data->st_wakeup_trace,
+					NANOHUB_WAKEUP_TRACE_ON);
+			memset(&data->wakeup_trace_irqs, 0,
+					sizeof(struct irq_nums_during_wakeup));
+#endif
 			return 0;
 		}
 		ret = -EBUSY;
@@ -2020,6 +2336,10 @@ int nanohub_resume(struct iio_dev *iio_dev)
 	struct nanohub_data *data = iio_priv(iio_dev);
 
 	__nanohub_send_AP_cmd(data, GPIO_CMD_RESUME);
+
+#if (NANOHUB_WAKEUP_TRACE_ENABLE)
+	atomic_set(&data->suspend_status, NANOHUB_SUSPEND_EXIT);
+#endif
 
 	disable_irq_wake(data->irq1);
 	nanohub_wakeup_unlock(data);
