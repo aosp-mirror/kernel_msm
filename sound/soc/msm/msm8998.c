@@ -7478,7 +7478,10 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 			pdev->dev.of_node->full_name);
 		dev_dbg(&pdev->dev, "Jack type properties set to default");
 	} else {
-		if (!strcmp(mbhc_audio_jack_type, "4-pole-jack")) {
+		if (!strcmp(mbhc_audio_jack_type, "3-pole-jack")) {
+			wcd_mbhc_cfg.headphones_only = true;
+			dev_dbg(&pdev->dev, "This hardware has 3 pole jack");
+		} else if (!strcmp(mbhc_audio_jack_type, "4-pole-jack")) {
 			wcd_mbhc_cfg.enable_anc_mic_detect = false;
 			dev_dbg(&pdev->dev, "This hardware has 4 pole jack");
 		} else if (!strcmp(mbhc_audio_jack_type, "5-pole-jack")) {
