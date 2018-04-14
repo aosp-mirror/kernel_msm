@@ -1241,6 +1241,10 @@ config TOUCHSCREEN_SYNAPTICS_DSX
           If unsure, say N.
 
 source "drivers/input/touchscreen/synaptics_dsx/Kconfig"
-source "drivers/input/touchscreen/focaltech_touch/Kconfig"
+
+# Hide focaltech_touch for now. It appears as if the Kconfig symbol
+# TOUCHSCREEN_FTS is overloaded: It is used for different drivers in
+# stm/Kconfig and focaltech_touch_Kconfig
+# source "drivers/input/touchscreen/focaltech_touch/Kconfig"
 
 endif
