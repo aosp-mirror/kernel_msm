@@ -184,12 +184,18 @@
 		/* NRST, BOOT0, AP2SH, SH2AP, SH2APNW */
 			sensorhub_ctrl_active: sensorhub_ctrl_active {
 				mux {
-					pins = "gpio97", "gpio96", "gpio71", "gpio72","gpio70", "gpio73", "gpio8", "gpio9", "gpio99", "gpio110";
+					pins = "gpio97", "gpio96", "gpio90", \
+						"gpio71", "gpio72","gpio70", \
+						"gpio73", "gpio8", "gpio9", \
+						"gpio99", "gpio110";
 					function = "gpio";
 				};
 
 				config {
-					pins = "gpio97", "gpio96", "gpio71", "gpio72","gpio70", "gpio73", "gpio8", "gpio9", "gpio99", "gpio110";
+					pins = "gpio97", "gpio96", "gpio90", \
+						"gpio71", "gpio72","gpio70", \
+						"gpio73", "gpio8", "gpio9", \
+						"gpio99", "gpio110";
 					drive-strength = <2>;
 					bias-disable;
 				};
