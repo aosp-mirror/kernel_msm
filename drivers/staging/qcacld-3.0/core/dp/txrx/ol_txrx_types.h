@@ -553,6 +553,7 @@ struct ol_txrx_stats_req_internal {
     int offset;
 };
 
+
 /*
  * As depicted in the diagram below, the pdev contains an array of
  * NUM_EXT_TID ol_tx_active_queues_in_tid_t elements.
