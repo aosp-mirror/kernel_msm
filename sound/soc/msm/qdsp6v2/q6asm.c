@@ -1099,7 +1099,9 @@ int q6asm_send_stream_cmd(struct audio_client *ac, uint32_t opcode,
 {
 	char *asm_params = NULL;
 	struct apr_hdr hdr;
-	int sz, rc;
+	int rc;
+	uint32_t sz = 0;
+	uint64_t actual_sz = 0;
 
 	if (!param || !ac) {
 		pr_err("%s: %s is NULL\n", __func__,
@@ -1108,7 +1110,15 @@ int q6asm_send_stream_cmd(struct audio_client *ac, uint32_t opcode,
 		goto done;
 	}
 
-	sz = sizeof(struct apr_hdr) + params_length;
+	actual_sz = sizeof(struct apr_hdr) + params_length;
+	if (actual_sz > U32_MAX) {
+		pr_err("%s: payload size 0x%X exceeds limit\n",
+			__func__, params_length);
+		rc = -EINVAL;
+		goto done;
+	}
+
+	sz = (uint32_t)actual_sz;
 	asm_params = kzalloc(sz, GFP_KERNEL);
 	if (!asm_params) {
 		rc = -ENOMEM;
