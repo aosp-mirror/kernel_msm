@@ -1150,10 +1150,16 @@ static int fts_ts_probe(struct i2c_client *client,
 	}
 
 	fts_reset_proc(200);
+
 	err = fts_wait_tp_to_valid(client);
 	if (err) {
-		FTS_ERROR("Read chip id failed!");
-		goto free_gpio;
+		FTS_ERROR("Read id failed, Forced firmware upgrade!");
+		fts_ctpm_auto_upgrade(client);
+		err = fts_wait_tp_to_valid(client);
+		if (err) {
+			FTS_ERROR("Forced firmware upgrade failed!");
+			goto free_gpio;
+		}
 	}
 
 	client->irq = gpio_to_irq(pdata->irq_gpio);

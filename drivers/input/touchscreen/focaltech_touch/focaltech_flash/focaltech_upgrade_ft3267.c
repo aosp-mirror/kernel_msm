@@ -171,7 +171,6 @@ static int fts_ft6x36gu_get_i_file(struct i2c_client *client, int fw_valid)
 	FTS_DEBUG("[UPGRADE] tp_vendor_id=%x", vendor_id);
 	if (ret < 0) {
 		FTS_ERROR("Get upgrade file fail because of Vendor ID wrong");
-		return ret;
 	}
 
 	FTS_INFO("[UPGRADE]tp vendor id:%x, FTS_VENDOR_ID:%02x %02x %02x",
@@ -200,8 +199,9 @@ static int fts_ft6x36gu_get_i_file(struct i2c_client *client, int fw_valid)
 		break;
 #endif
 	default:
-		FTS_ERROR("[UPGRADE]Vendor ID check fail, get fw file fail");
-		ret = -EIO;
+		g_fw_file = CTPM_FW3;
+		g_fw_len = fts_getsize(FW3_SIZE);
+		FTS_DEBUG("[UPGRADE]DEFAULT FW3, SIZE:%x", g_fw_len);
 		break;
 	}
 #else
