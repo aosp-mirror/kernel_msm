@@ -8,3 +8,6 @@ function update_safestack_config() {
   (cd ${OUT_DIR} && \
     make O=${OUT_DIR} $archsubarch CROSS_COMPILE=${CROSS_COMPILE} olddefconfig)
 }
+CLANG_PREBUILT_BIN=prebuilts-master/clang/host/linux-x86/clang-4579689/bin/
+LD_LIBRARY_PATH=${ROOT_DIR}/prebuilts-master/clang/host/linux-x86/clang-4579689/lib64:$LD_LIBRARY_PATH
+
