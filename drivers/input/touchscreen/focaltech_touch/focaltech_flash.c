@@ -562,7 +562,7 @@ static int fts_ctpm_check_need_upgrade(struct i2c_client *client)
 	if (fw_status < 0) {
 		/* I2C no ACK, return immediately */
 		FTS_ERROR("[UPGRADE]******I2C NO ACK,exit upgrade******");
-		return -EIO;
+		bUpgradeFlag = true;
 	} else if (fw_status == FTS_RUN_IN_ERROR)
 		FTS_ERROR("[UPGRADE]******IC Type Fail******");
 	else if (fw_status == FTS_RUN_IN_APP) {
