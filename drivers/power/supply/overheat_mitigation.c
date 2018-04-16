@@ -123,10 +123,10 @@ static int suspend_usb(struct overheat_info *ovh_info)
 
 	/* disable USB */
 	ret = vote(ovh_info->disable_power_role_switch,
-		   USB_OVERHEAT_MITIGATION_VOTER, false, 0);
+		   USB_OVERHEAT_MITIGATION_VOTER, true, 0);
 	if (ret < 0) {
 		dev_err(ovh_info->dev,
-			"Couldn't un-vote for disable_power_role_switch ret=%d\n",
+			"Couldn't vote for disable_power_role_switch ret=%d\n",
 			ret);
 		return ret;
 	}
@@ -136,7 +136,7 @@ static int suspend_usb(struct overheat_info *ovh_info)
 		  USB_OVERHEAT_MITIGATION_VOTER, true, 0);
 	if (ret < 0) {
 		dev_err(ovh_info->dev,
-			"Couldn't un-vote for USB ICL ret=%d\n", ret);
+			"Couldn't vote for USB ICL ret=%d\n", ret);
 		return ret;
 	}
 
@@ -159,7 +159,7 @@ static int resume_usb(struct overheat_info *ovh_info)
 
 	/* enable USB */
 	ret = vote(ovh_info->disable_power_role_switch,
-		   USB_OVERHEAT_MITIGATION_VOTER, true, 0);
+		   USB_OVERHEAT_MITIGATION_VOTER, false, 0);
 	if (ret < 0) {
 		dev_err(ovh_info->dev,
 			"Couldn't un-vote for disable_power_role_switch ret=%d\n",
@@ -197,6 +197,7 @@ static int update_usb_status(struct overheat_info *ovh_info)
 		msleep(200);
 	}
 
+	dev_dbg(ovh_info->dev, "Updating USB connected status\n");
 	ret = PSY_GET_PROP(ovh_info->usb_psy, POWER_SUPPLY_PROP_PRESENT);
 	if (ret < 0)
 		return ret;
