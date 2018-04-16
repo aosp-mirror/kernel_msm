@@ -730,9 +730,6 @@ static irqreturn_t fts_ts_interrupt(int irq, void *dev_id)
 {
 	int ret = -1;
 	ktime_t cur_time;
-#if FTS_PLAM_EN
-	u8 val;
-#endif
 
 #if FTS_ESDCHECK_EN
 	fts_esdcheck_set_intr(1);
@@ -765,26 +762,22 @@ static irqreturn_t fts_ts_interrupt(int irq, void *dev_id)
 		return IRQ_HANDLED;
 	}
 
-#if FTS_PLAM_EN
-	fts_i2c_read_reg(fts_wq_data->client,
-		FTS_REG_GESTURE_OUTPUT_ADDRESS, &val);
-	if (val == GESTURE_PLAM) {
-		if (fts_wq_data->suspended)
-			return IRQ_HANDLED;
-		fts_wq_data->last_plam_time =  ktime_get_boottime();
-		last_touch_time = fts_wq_data->last_plam_time;
-		input_report_key(fts_input_dev, KEY_SLEEP, 1);
-		input_sync(fts_input_dev);
-		input_report_key(fts_input_dev, KEY_SLEEP, 0);
-		input_sync(fts_input_dev);
-		plam_detected_flag = 1;
-		printk(KERN_DEBUG "FTS: PLAM to Send KEY_SLEEP\n");
-		return IRQ_HANDLED;
-	}
-#endif
-
 	ret = fts_read_touchdata(fts_wq_data);
 	if (ret == 0) {
+#if FTS_PLAM_EN
+		if (fts_wq_data->event.au16_x[0] == 2000 &&
+			fts_wq_data->event.au16_y[0] == 2000) {
+			fts_wq_data->last_plam_time =  ktime_get_boottime();
+			last_touch_time = fts_wq_data->last_plam_time;
+			input_report_key(fts_input_dev, KEY_SLEEP, 1);
+			input_sync(fts_input_dev);
+			input_report_key(fts_input_dev, KEY_SLEEP, 0);
+			input_sync(fts_input_dev);
+			plam_detected_flag = 1;
+			printk(KERN_DEBUG "FTS: PLAM to Send KEY_SLEEP\n");
+			return IRQ_HANDLED;
+		}
+#endif
 		fts_report_value(fts_wq_data);
 	}
 #if FTS_ESDCHECK_EN
