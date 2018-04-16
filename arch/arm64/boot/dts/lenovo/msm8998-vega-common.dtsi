@@ -404,6 +404,7 @@
 		/delete-property/qcom,wsa-devs;
 		/delete-property/qcom,wsa-aux-dev-prefix;
 		qcom,wsa-max-devs = <0>;
+		qcom,mbhc-audio-jack-type = "3-pole-jack";
 	};
 
 	wcd_rst_gpio: msm_cdc_pinctrl@116 {
