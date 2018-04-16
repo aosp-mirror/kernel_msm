@@ -918,10 +918,12 @@ static int msm_vfe47_start_fetch_engine(struct vfe_device *vfe_dev,
 	vfe_dev->fetch_engine_info.session_id = fe_cfg->session_id;
 	vfe_dev->fetch_engine_info.stream_id = fe_cfg->stream_id;
 
+	mutex_lock(&vfe_dev->buf_mgr->lock);
 	rc = vfe_dev->buf_mgr->ops->get_buf_by_index(
 		vfe_dev->buf_mgr, bufq_handle, fe_cfg->buf_idx, &buf);
 	if (rc < 0) {
 		pr_err("%s: No fetch buffer\n", __func__);
+		mutex_unlock(&vfe_dev->buf_mgr->lock);
 		return -EINVAL;
 	}
 	vfe_dev->fetch_engine_info.buf_idx = fe_cfg->buf_idx;
@@ -934,6 +936,7 @@ static int msm_vfe47_start_fetch_engine(struct vfe_device *vfe_dev,
 
 	ISP_DBG("%s:VFE%d Fetch Engine ready\n", __func__, vfe_dev->pdev->id);
 	buf->state = MSM_ISP_BUFFER_STATE_DISPATCHED;
+	mutex_unlock(&vfe_dev->buf_mgr->lock);
 
 	return 0;
 }
