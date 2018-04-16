@@ -891,6 +891,7 @@ struct ufs_hba {
 	bool is_urgent_bkops_lvl_checked;
 
 	struct rw_semaphore clk_scaling_lock;
+	struct rw_semaphore query_lock;
 
 	/* If set, don't gate device ref_clk during clock gating */
 	bool no_ref_clk_gating;
