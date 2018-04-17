@@ -1886,7 +1886,7 @@ static struct msm_vfe_stats_hardware_info msm_vfe40_stats_hw_info = {
 };
 
 static struct v4l2_subdev_core_ops msm_vfe40_subdev_core_ops = {
-	.ioctl = msm_isp_ioctl,
+	.ioctl = NULL,
 	.subscribe_event = msm_isp_subscribe_event,
 	.unsubscribe_event = msm_isp_unsubscribe_event,
 };
