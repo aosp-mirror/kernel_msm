@@ -6192,16 +6192,16 @@ static int _sde_debugfs_status_show(struct seq_file *s, void *data)
 				sde_crtc->vblank_cb_count * 1000, diff_ms) : 0;
 
 		seq_printf(s,
-			"vblank fps:%lld count:%u total:%llums total_framecount:%llu\n",
+			"vblank fps:%lld count:%u total:%llums\n",
 				fps, sde_crtc->vblank_cb_count,
-				ktime_to_ms(diff), sde_crtc->play_count);
+				ktime_to_ms(diff));
 
 		/* reset time & count for next measurement */
 		sde_crtc->vblank_cb_count = 0;
 		sde_crtc->vblank_cb_time = ktime_set(0, 0);
 	}
-
 	seq_printf(s, "vblank_enable:%d\n", sde_crtc->vblank_requested);
+	seq_printf(s, "total_framecount:%llu\n", sde_crtc->play_count);
 
 	mutex_unlock(&sde_crtc->crtc_lock);
 
