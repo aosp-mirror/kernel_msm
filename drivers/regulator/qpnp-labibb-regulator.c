@@ -177,6 +177,7 @@
 #define REG_IBB_OUTPUT_SLEW_CTL		0x5D
 #define REG_IBB_SPARE_CTL		0x60
 #define REG_IBB_NLIMIT_DAC		0x61
+#define REG_IBB_SWIRE_WLED_CTL1		0x64
 
 /* IBB registers for PM660A */
 #define REG_IBB_DEFAULT_VOLTAGE		0x40
@@ -288,6 +289,10 @@
 
 /* REG_IBB_NLIMIT_DAC */
 #define IBB_DEFAULT_NLIMIT_DAC		0x5
+
+/* REG_IBB_SWIRE_WLED_CTL1 */
+#define AVDD_MIN_MASK			GENMASK(7, 4)
+#define AVDD_MIN_SHIFT			4
 
 /* REG_IBB_PFM_CTL */
 #define IBB_PFM_ENABLE			BIT(7)
@@ -570,6 +575,7 @@ struct lab_regulator {
 	int				sc_wait_time_ms;
 
 	int				vreg_enabled;
+	unsigned int			mode;
 };
 
 struct ibb_regulator {
@@ -2671,6 +2677,47 @@ static int qpnp_lab_regulator_is_enabled(struct regulator_dev *rdev)
 	return labibb->lab_vreg.vreg_enabled;
 }
 
+static int qpnp_lab_regulator_set_mode(struct regulator_dev *rdev,
+					unsigned int mode)
+{
+	struct qpnp_labibb *labibb  = rdev_get_drvdata(rdev);
+	int rc;
+	u8 val;
+
+	if (!labibb->aod_mode)
+		return 0;
+
+	/* AVDD_MIN voltage = 5.65 + code * 0.15 V */
+	if (mode == REGULATOR_MODE_NORMAL)
+		val = 0xD;
+	else if (mode == REGULATOR_MODE_IDLE)
+		val = 0x1;
+	else
+		return -EINVAL;
+
+	val <<= AVDD_MIN_SHIFT;
+	rc = qpnp_labibb_masked_write(labibb, labibb->ibb_base +
+			REG_IBB_SWIRE_WLED_CTL1, AVDD_MIN_MASK, val);
+	if (rc < 0) {
+		pr_err("write to register %x failed rc = %d\n",
+			REG_IBB_SWIRE_WLED_CTL1, rc);
+		return rc;
+	}
+
+	labibb->lab_vreg.mode = mode;
+	return 0;
+}
+
+static unsigned int qpnp_lab_regulator_get_mode(struct regulator_dev *rdev)
+{
+	struct qpnp_labibb *labibb  = rdev_get_drvdata(rdev);
+
+	if (!labibb->aod_mode)
+		return REGULATOR_MODE_NORMAL;
+
+	return labibb->lab_vreg.mode;
+}
+
 static int qpnp_labibb_force_enable(struct qpnp_labibb *labibb)
 {
 	int rc;
@@ -2997,6 +3044,8 @@ static struct regulator_ops qpnp_lab_ops = {
 	.is_enabled		= qpnp_lab_regulator_is_enabled,
 	.set_voltage		= qpnp_lab_regulator_set_voltage,
 	.get_voltage		= qpnp_lab_regulator_get_voltage,
+	.set_mode		= qpnp_lab_regulator_set_mode,
+	.get_mode		= qpnp_lab_regulator_get_mode,
 };
 
 static int register_qpnp_lab_regulator(struct qpnp_labibb *labibb,
@@ -3277,6 +3326,13 @@ static int register_qpnp_lab_regulator(struct qpnp_labibb *labibb,
 		init_data->constraints.valid_ops_mask
 				|= REGULATOR_CHANGE_VOLTAGE |
 					REGULATOR_CHANGE_STATUS;
+
+		if (labibb->aod_mode) {
+			init_data->constraints.valid_ops_mask |=
+				REGULATOR_CHANGE_MODE;
+			init_data->constraints.valid_modes_mask |=
+				REGULATOR_MODE_NORMAL | REGULATOR_MODE_IDLE;
+		}
 
 		labibb->lab_vreg.rdev = regulator_register(rdesc, &cfg);
 		if (IS_ERR(labibb->lab_vreg.rdev)) {
