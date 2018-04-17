@@ -345,7 +345,6 @@ static int ovh_probe(struct platform_device *pdev)
 	ovh_info->usb_replug = false;
 	ovh_info->usb_connected = false;
 	ovh_info->overheat_work_running = false;
-	wakeup_source_init(&ovh_info->overheat_ws, "overheat_mitigation");
 
 	ret = get_dts_vars(ovh_info);
 	if (ret < 0)
@@ -366,6 +365,8 @@ static int ovh_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+	platform_set_drvdata(pdev, ovh_info);
+	wakeup_source_init(&ovh_info->overheat_ws, "overheat_mitigation");
 	INIT_DELAYED_WORK(&ovh_info->port_overheat_work, port_overheat_work);
 	schedule_delayed_work(&ovh_info->port_overheat_work, 0);
 
@@ -374,6 +375,10 @@ static int ovh_probe(struct platform_device *pdev)
 
 static int ovh_remove(struct platform_device *pdev)
 {
+	struct overheat_info *ovh_info = platform_get_drvdata(pdev);
+	if (ovh_info)
+		wakeup_source_trash(&ovh_info->overheat_ws);
+
 	return 0;
 }
 
