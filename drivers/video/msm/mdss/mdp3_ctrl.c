@@ -408,7 +408,7 @@ static int mdp3_ctrl_async_blit_req(struct msm_fb_data_type *mfd,
 		return -EFAULT;
 	p_req = p + sizeof(req_list_header);
 	count = req_list_header.count;
-	if (count < 0 || count >= MAX_BLIT_REQ)
+	if (count < 0 || count > MAX_BLIT_REQ)
 		return -EINVAL;
 	rc = mdp3_ppp_parse_req(p_req, &req_list_header, 1);
 	if (!rc)
@@ -427,7 +427,7 @@ static int mdp3_ctrl_blit_req(struct msm_fb_data_type *mfd, void __user *p)
 		return -EFAULT;
 	p_req = p + sizeof(struct mdp_blit_req_list);
 	count = req_list_header.count;
-	if (count < 0 || count >= MAX_BLIT_REQ)
+	if (count < 0 || count > MAX_BLIT_REQ)
 		return -EINVAL;
 	req_list_header.sync.acq_fen_fd_cnt = 0;
 	rc = mdp3_ppp_parse_req(p_req, &req_list_header, 0);
@@ -1738,9 +1738,9 @@ static void mdp3_ctrl_pan_display(struct msm_fb_data_type *mfd)
 	panel = mdp3_session->panel;
 	if (mdp3_ctrl_get_intf_type(mfd) != MDP3_DMA_OUTPUT_SEL_SPI_CMD) {
 		if (mdp3_session->first_commit) {
-			if (panel_info->mipi.init_delay)
-				msleep(((1000 / panel_info->mipi.frame_rate)
-					+ 1) * panel_info->mipi.init_delay);
+			if (panel_info->mipi.post_init_delay)
+				msleep(((1000 / panel_info->mipi.frame_rate) +
+					1) * panel_info->mipi.post_init_delay);
 			else
 				msleep(1000 / panel_info->mipi.frame_rate);
 					mdp3_session->first_commit = false;
@@ -1824,9 +1824,10 @@ static int mdp3_get_metadata(struct msm_fb_data_type *mfd,
 		}
 		break;
 	case metadata_op_get_ion_fd:
-		if (mfd->fb_ion_handle) {
+		if (mfd->fb_ion_handle &&  mfd->fb_ion_client) {
 			metadata->data.fbmem_ionfd =
-					dma_buf_fd(mfd->fbmem_buf, 0);
+				ion_share_dma_buf_fd(mfd->fb_ion_client,
+					mfd->fb_ion_handle);
 			if (metadata->data.fbmem_ionfd < 0)
 				pr_err("fd allocation failed. fd = %d\n",
 						metadata->data.fbmem_ionfd);
