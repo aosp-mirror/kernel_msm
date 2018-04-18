@@ -2619,9 +2619,6 @@ static int qpnp_lab_regulator_enable(struct regulator_dev *rdev)
 	if (labibb->notify_lab_vreg_ok_sts || labibb->detect_lab_sc)
 		schedule_work(&labibb->lab_vreg_ok_work);
 
-	if (labibb->aod_mode)
-		schedule_work(&labibb->aod_lab_vreg_ok_work);
-
 	return 0;
 }
 
@@ -2648,22 +2645,6 @@ static int qpnp_lab_regulator_disable(struct regulator_dev *rdev)
 		labibb->lab_vreg.vreg_enabled = 0;
 	}
 
-	if (labibb->aod_mode) {
-		cancel_work_sync(&labibb->aod_lab_vreg_ok_work);
-		rc = qpnp_ibb_pd_control(labibb, false);
-		if (rc < 0)
-			goto out;
-
-		rc = qpnp_lab_pd_control(labibb, false);
-		if (rc < 0)
-			goto out;
-
-		rc = qpnp_lab_scp_control(labibb, false);
-		if (rc < 0)
-			goto out;
-	}
-
-out:
 	return 0;
 }
 
@@ -2704,8 +2685,26 @@ static int qpnp_lab_regulator_set_mode(struct regulator_dev *rdev,
 		return rc;
 	}
 
+	if (mode == REGULATOR_MODE_NORMAL) {
+		schedule_work(&labibb->aod_lab_vreg_ok_work);
+	} else if (mode == REGULATOR_MODE_IDLE) {
+		cancel_work_sync(&labibb->aod_lab_vreg_ok_work);
+		rc = qpnp_ibb_pd_control(labibb, false);
+		if (rc < 0)
+			goto out;
+
+		rc = qpnp_lab_pd_control(labibb, false);
+		if (rc < 0)
+			goto out;
+
+		rc = qpnp_lab_scp_control(labibb, false);
+		if (rc < 0)
+			goto out;
+	}
+
 	labibb->lab_vreg.mode = mode;
-	return 0;
+out:
+	return rc;
 }
 
 static unsigned int qpnp_lab_regulator_get_mode(struct regulator_dev *rdev)
@@ -3332,6 +3331,7 @@ static int register_qpnp_lab_regulator(struct qpnp_labibb *labibb,
 				REGULATOR_CHANGE_MODE;
 			init_data->constraints.valid_modes_mask |=
 				REGULATOR_MODE_NORMAL | REGULATOR_MODE_IDLE;
+			labibb->lab_vreg.mode = REGULATOR_MODE_NORMAL;
 		}
 
 		labibb->lab_vreg.rdev = regulator_register(rdesc, &cfg);
