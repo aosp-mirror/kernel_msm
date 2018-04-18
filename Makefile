@@ -1203,11 +1203,15 @@ endif
 
 uts_len := 64
 define filechk_utsrelease.h
-	if [ `echo -n "$(KERNELRELEASE)" | wc -c ` -gt $(uts_len) ]; then \
-	  echo '"$(KERNELRELEASE)" exceeds $(uts_len) characters' >&2;    \
-	  exit 1;                                                         \
-	fi;                                                               \
-	(echo \#define UTS_RELEASE \"$(KERNELRELEASE)\";)
+	if [ `echo -n "$(KERNELRELEASE)" | wc -c ` -gt $(uts_len) ]; then   \
+	  echo '"$(KERNELRELEASE)" exceeds $(uts_len) characters' >&2;      \
+	  exit 1;                                                           \
+	fi;                                                                 \
+	if [ -n "$(BUILD_NUMBER)" ]; then                                   \
+	  (echo \#define UTS_RELEASE \"$(KERNELRELEASE)-ab$(BUILD_NUMBER)\";) \
+	else                                                                \
+	  (echo \#define UTS_RELEASE \"$(KERNELRELEASE)\";)                 \
+	fi
 endef
 
 define filechk_version.h
