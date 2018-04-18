@@ -257,12 +257,13 @@ static int32_t msm_isp_stats_buf_divert(struct vfe_device *vfe_dev,
 
 static int32_t msm_isp_stats_configure(struct vfe_device *vfe_dev,
 	uint32_t stats_irq_mask, struct msm_isp_timestamp *ts,
-	uint32_t pingpong_status, bool is_composite)
+	bool is_composite)
 {
 	int i, rc = 0;
 	struct msm_isp_event_data buf_event;
 	struct msm_isp_stats_event *stats_event = &buf_event.u.stats;
 	struct msm_vfe_stats_stream *stream_info = NULL;
+	uint32_t pingpong_status;
 	uint32_t comp_stats_type_mask = 0;
 	int result = 0;
 
@@ -271,6 +272,8 @@ static int32_t msm_isp_stats_configure(struct vfe_device *vfe_dev,
 	buf_event.mono_timestamp = ts->buf_time;
 
 	buf_event.frame_id = vfe_dev->axi_data.src_info[VFE_PIX_0].frame_id;
+	pingpong_status = vfe_dev->hw_info->
+		vfe_ops.stats_ops.get_pingpong_status(vfe_dev);
 
 	for (i = 0; i < vfe_dev->hw_info->stats_hw_info->num_stats_type; i++) {
 		if (!(stats_irq_mask & (1 << i)))
@@ -307,7 +310,7 @@ static int32_t msm_isp_stats_configure(struct vfe_device *vfe_dev,
 
 void msm_isp_process_stats_irq(struct vfe_device *vfe_dev,
 	uint32_t irq_status0, uint32_t irq_status1,
-	uint32_t pingpong_status, struct msm_isp_timestamp *ts)
+	struct msm_isp_timestamp *ts)
 {
 	int j, rc;
 	uint32_t atomic_stats_mask = 0;
@@ -335,7 +338,7 @@ void msm_isp_process_stats_irq(struct vfe_device *vfe_dev,
 	/* Process non-composite irq */
 	if (stats_irq_mask) {
 		rc = msm_isp_stats_configure(vfe_dev, stats_irq_mask, ts,
-			pingpong_status, comp_flag);
+			comp_flag);
 	}
 
 	/* Process composite irq */
@@ -348,7 +351,7 @@ void msm_isp_process_stats_irq(struct vfe_device *vfe_dev,
 				&vfe_dev->stats_data.stats_comp_mask[j]);
 
 			rc = msm_isp_stats_configure(vfe_dev, atomic_stats_mask,
-				ts, pingpong_status, !comp_flag);
+				ts, !comp_flag);
 		}
 	}
 }

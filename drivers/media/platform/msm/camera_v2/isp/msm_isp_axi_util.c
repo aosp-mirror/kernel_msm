@@ -235,10 +235,6 @@ static int msm_isp_validate_axi_request(struct vfe_device *vfe_dev,
 	case V4L2_PIX_FMT_P16GBRG10:
 	case V4L2_PIX_FMT_P16GRBG10:
 	case V4L2_PIX_FMT_P16RGGB10:
-	case V4L2_PIX_FMT_P16BGGR12:
-	case V4L2_PIX_FMT_P16GBRG12:
-	case V4L2_PIX_FMT_P16GRBG12:
-	case V4L2_PIX_FMT_P16RGGB12:
 	case V4L2_PIX_FMT_JPEG:
 	case V4L2_PIX_FMT_META:
 	case V4L2_PIX_FMT_META10:
@@ -380,10 +376,6 @@ static uint32_t msm_isp_axi_get_plane_size(
 	case V4L2_PIX_FMT_P16GBRG10:
 	case V4L2_PIX_FMT_P16GRBG10:
 	case V4L2_PIX_FMT_P16RGGB10:
-	case V4L2_PIX_FMT_P16BGGR12:
-	case V4L2_PIX_FMT_P16GBRG12:
-	case V4L2_PIX_FMT_P16GRBG12:
-	case V4L2_PIX_FMT_P16RGGB12:
 		size = plane_cfg[plane_idx].output_height *
 		plane_cfg[plane_idx].output_width;
 		break;
@@ -4040,12 +4032,10 @@ int msm_isp_update_axi_stream(struct vfe_device *vfe_dev, void *arg)
 				pr_err("%s: stream_info is null", __func__);
 				return -EINVAL;
 			}
-			mutex_lock(&vfe_dev->buf_mgr->lock);
 			rc = msm_isp_request_frame(vfe_dev, stream_info,
 				update_info->user_stream_id,
 				update_info->frame_id,
 				MSM_ISP_INVALID_BUF_INDEX);
-			mutex_unlock(&vfe_dev->buf_mgr->lock);
 			if (rc)
 				pr_err("%s failed to request frame!\n",
 					__func__);
@@ -4097,12 +4087,10 @@ int msm_isp_update_axi_stream(struct vfe_device *vfe_dev, void *arg)
 			pr_err("%s: stream_info is null", __func__);
 			return -EINVAL;
 		}
-		mutex_lock(&vfe_dev->buf_mgr->lock);
 		rc = msm_isp_request_frame(vfe_dev, stream_info,
 			req_frm->user_stream_id,
 			req_frm->frame_id,
 			req_frm->buf_index);
-		mutex_unlock(&vfe_dev->buf_mgr->lock);
 		if (rc)
 			pr_err("%s failed to request frame!\n",
 				__func__);
@@ -4305,11 +4293,11 @@ void msm_isp_process_axi_irq_stream(struct vfe_device *vfe_dev,
 
 void msm_isp_process_axi_irq(struct vfe_device *vfe_dev,
 	uint32_t irq_status0, uint32_t irq_status1,
-	uint32_t pingpong_status, struct msm_isp_timestamp *ts)
+	struct msm_isp_timestamp *ts)
 {
 	int i, rc = 0;
 	uint32_t comp_mask = 0, wm_mask = 0;
-	uint32_t stream_idx;
+	uint32_t pingpong_status, stream_idx;
 	struct msm_vfe_axi_stream *stream_info;
 	struct msm_vfe_axi_composite_info *comp_info;
 	struct msm_vfe_axi_shared_data *axi_data = &vfe_dev->axi_data;
@@ -4323,6 +4311,8 @@ void msm_isp_process_axi_irq(struct vfe_device *vfe_dev,
 		return;
 
 	ISP_DBG("%s: status: 0x%x\n", __func__, irq_status0);
+	pingpong_status =
+		vfe_dev->hw_info->vfe_ops.axi_ops.get_pingpong_status(vfe_dev);
 
 	for (i = 0; i < axi_data->hw_info->num_comp_mask; i++) {
 		rc = 0;

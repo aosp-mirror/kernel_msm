@@ -42,7 +42,6 @@
 
 /* soc id */
 #define SDM670_SOC_ID 336
-#define SDM710_SOC_ID 360
 
 /* Minor Version */
 #define SDM670_V1_1 0x1

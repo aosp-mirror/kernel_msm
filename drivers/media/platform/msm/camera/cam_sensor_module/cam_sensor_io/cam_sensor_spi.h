@@ -14,8 +14,6 @@
 #define _CAM_SENSOR_SPI_H_
 
 #include <linux/spi/spi.h>
-#include <linux/cma.h>
-#include <linux/dma-contiguous.h>
 #include <media/cam_sensor.h>
 #include "cam_sensor_i2c.h"
 
