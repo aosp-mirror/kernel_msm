@@ -1,8 +1,27 @@
 /*
- * Wireless charger: INT on GPIO 124, I2C(10) on GPIO 55/56
+ * Wireless charger:
+ *	Signal			GPIO		Type
+ *	----------------------- --------------- ---------
+ *	INT			124		interrupt
+ *	QI_EN_L			122		output
+ *	WLC_1V8_PG		36		interrupt
+ *	WLC_BPP_EPP_SLCT	37		output
+ *	I2C(10)			55(SDA)/56(SCL)	i2c bus
  */
 
 &tlmm {
+	p9221_det_int: p9221_det_int {
+		mux {
+			pins = "gpio36";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio36";
+			drive-strength = <2>;
+			bias-pull-down;
+		};
+	};
+
 	p9221_int: p9221_int {
 		mux {
 			pins = "gpio124";
@@ -21,10 +40,15 @@
 		compatible = "idt,p9221";
 		reg = <0x61>;
 		pinctrl-names = "default";
-		pinctrl-0 = <&p9221_int>;
+		pinctrl-0 = <&p9221_int
+			     &p9221_det_int>;
 		interrupt-parent = <&tlmm>;
-		interrupts = <124 0>;
+		interrupts = <124 0>,
+			     <36 0>;
+		idt,gpio_qien = <&tlmm 122 0x00>;
+		idt,gpio_slct = <&tlmm 37 0x00>;
 		idt,irq_gpio = <&tlmm 124 0x00>;
+		idt,irq_det_gpio = <&tlmm 36 0x00>;
 		status = "ok";
 	};
 };

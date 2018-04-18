@@ -25,5 +25,10 @@
 };
 
 &p9221 {
+	pinctrl-0 = <&p9221_int>;
+	interrupts = <124 0>;
+	idt,irq_det_gpio = <0>;
+	idt,gpio_qien = <0>;
+	idt,gpio_slct = <0>;
 	fod = [b0 24 90 46 88 52 88 53 90 24 9a f0 14 00 01 64];
 };
