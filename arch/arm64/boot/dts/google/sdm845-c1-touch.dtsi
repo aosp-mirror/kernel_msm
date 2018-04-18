@@ -50,7 +50,7 @@
 		sec,irq_gpio = <&tlmm 125 0>;	/* required */
 		sec,switch_gpio = <&tlmm 136 0>;
 		//sec,irq_type = ?;		/* optional - IRQF flags - default is IRQF_TRIGGER_LOW | IRQF_ONESHOT */
-		sec,max_coords = <1440 2880>;	/* optional - Max values, like 4095? */
+		sec,max_coords = <1440 2960>;
 		sec,firmware_name = "s6sy761.fw";
 		sec,regulator_dvdd = "pm8998_l14";	/* required */
 		sec,regulator_avdd = "pm8998_l19";
