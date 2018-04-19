@@ -649,6 +649,20 @@ static ssize_t get_force_recal_count(struct device *dev,
 	return snprintf(buf, SEC_CMD_BUF_SIZE, "%d", recal_count);
 }
 
+static ssize_t fw_version_show(struct device *dev,
+			       struct device_attribute *attr, char *buf)
+{
+	struct sec_cmd_data *sec = dev_get_drvdata(dev);
+	struct sec_ts_data *ts = container_of(sec, struct sec_ts_data, sec);
+	int written = 0;
+
+	written = scnprintf(buf, PAGE_SIZE, "SE-V%02X.%02X.%02X\n",
+		ts->plat_data->panel_revision,
+		ts->plat_data->img_version_of_ic[2],
+		ts->plat_data->img_version_of_ic[3]);
+	return written;
+}
+
 static DEVICE_ATTR(ito_check, S_IRUGO, read_ito_check_show, NULL);
 static DEVICE_ATTR(raw_check, S_IRUGO, read_raw_check_show, NULL);
 static DEVICE_ATTR(multi_count, S_IRUGO | S_IWUSR | S_IWGRP, read_multi_count_show, clear_multi_count_store);
@@ -663,6 +677,7 @@ static DEVICE_ATTR(vendor, S_IRUGO, read_vendor_show, NULL);
 static DEVICE_ATTR(pressure_enable, S_IRUGO | S_IWUSR | S_IWGRP, pressure_enable_show, pressure_enable_strore);
 static DEVICE_ATTR(get_lp_dump, S_IRUGO, get_lp_dump, NULL);
 static DEVICE_ATTR(force_recal_count, S_IRUGO, get_force_recal_count, NULL);
+static DEVICE_ATTR(fw_version, 0444, fw_version_show, NULL);
 
 static struct attribute *cmd_attributes[] = {
 	&dev_attr_scrub_pos.attr,
@@ -680,6 +695,7 @@ static struct attribute *cmd_attributes[] = {
 	&dev_attr_pressure_enable.attr,
 	&dev_attr_get_lp_dump.attr,
 	&dev_attr_force_recal_count.attr,
+	&dev_attr_fw_version.attr,
 	NULL,
 };
 
