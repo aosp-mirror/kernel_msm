@@ -58,14 +58,13 @@ int getChannelsLength(void)
 	u8 data[2];
 
 	if (data == NULL) {
-		logError(1, "%s getChannelsLength: ERROR %08X\n", tag,
-			 ERROR_ALLOC);
+		pr_err("getChannelsLength: ERROR %08X\n", ERROR_ALLOC);
 		return ERROR_ALLOC;
 	}
 
 	ret = readConfig(ADDR_CONFIG_SENSE_LEN, data, 2);
 	if (ret < OK) {
-		logError(1, "%s getChannelsLength: ERROR %08X\n", tag, ret);
+		pr_err("getChannelsLength: ERROR %08X\n", ret);
 
 		return ret;
 	}
@@ -73,7 +72,7 @@ int getChannelsLength(void)
 	systemInfo.u8_scrRxLen = (int)data[0];
 	systemInfo.u8_scrTxLen = (int)data[1];
 
-	logError(0, "%s Force_len = %d   Sense_Len = %d\n", tag,
+	pr_info("Force_len = %d   Sense_Len = %d\n",
 		 systemInfo.u8_scrTxLen, systemInfo.u8_scrRxLen);
 
 	return OK;
@@ -95,14 +94,14 @@ int getFrameData(u16 address, int size, short *frame)
 	u8 *data = (u8 *)kmalloc(size * sizeof(u8), GFP_KERNEL);
 
 	if (data == NULL) {
-		logError(1, "%s getFrameData: ERROR %08X\n", tag, ERROR_ALLOC);
+		pr_err("getFrameData: ERROR %08X\n", ERROR_ALLOC);
 		return ERROR_ALLOC;
 	}
 
 	ret = fts_writeReadU8UX(FTS_CMD_FRAMEBUFFER_R, BITS_16, address, data,
 				size, DUMMY_FRAMEBUFFER);
 	if (ret < OK) {
-		logError(1, "%s getFrameData: ERROR %08X\n", tag, ERROR_BUS_R);
+		pr_err("getFrameData: ERROR %08X\n", ERROR_BUS_R);
 		kfree(data);
 		return ERROR_BUS_R;
 	}
@@ -159,7 +158,7 @@ int getMSFrame3(MSFrameType type, MutualSenseFrame *frame)
 
 	frame->node_data = NULL;
 
-	logError(0, "%s %s: Starting to get frame %02X\n", tag, __func__,
+	pr_info("%s: Starting to get frame %02X\n", __func__,
 		 type);
 	switch (type) {
 	case MS_RAW:
@@ -176,9 +175,8 @@ int getMSFrame3(MSFrameType type, MutualSenseFrame *frame)
 		offset = systemInfo.u16_msTchBaselineAddr;
 LOAD_NORM:
 		if (force_len == 0 || sense_len == 0) {
-			logError(1,
-				 "%s %s: number of channels not initialized ERROR %08X\n",
-				 tag, __func__, ERROR_CH_LEN);
+			pr_err("%s: number of channels not initialized ERROR %08X\n",
+				__func__, ERROR_CH_LEN);
 			return ERROR_CH_LEN | ERROR_GET_FRAME;
 		}
 
@@ -197,9 +195,8 @@ LOAD_NORM:
 		offset = systemInfo.u16_keyBaselineAddr;
 LOAD_KEY:
 		if (systemInfo.u8_keyLen == 0) {
-			logError(1,
-				 "%s %s: number of channels not initialized ERROR %08X\n",
-				 tag, __func__, ERROR_CH_LEN);
+			pr_err("%s: number of channels not initialized ERROR %08X\n",
+				__func__, ERROR_CH_LEN);
 			return ERROR_CH_LEN | ERROR_GET_FRAME;
 		}
 		force_len = 1;
@@ -219,15 +216,14 @@ LOAD_KEY:
 		offset = systemInfo.u16_frcBaselineAddr;
 LOAD_FRC:
 		if (force_len == 0) {
-			logError(1,
-				 "%s %s: number of channels not initialized ERROR %08X\n",
-				 tag, __func__, ERROR_CH_LEN);
+			pr_err("%s: number of channels not initialized ERROR %08X\n",
+				__func__, ERROR_CH_LEN);
 			return ERROR_CH_LEN | ERROR_GET_FRAME;
 		}
 		sense_len = 1;
 		break;
 	default:
-		logError(1, "%s %s: Invalid type ERROR %08X\n", tag, __func__,
+		pr_err("%s: Invalid type ERROR %08X\n", __func__,
 			 ERROR_OP_NOT_ALLOW | ERROR_GET_FRAME);
 		return ERROR_OP_NOT_ALLOW | ERROR_GET_FRAME;
 	}
@@ -237,22 +233,21 @@ LOAD_FRC:
 	frame->header.sense_node = sense_len;
 	frame->header.type = type;
 
-	logError(0, "%s %s: Force_len = %d Sense_len = %d Offset = %04X\n",
-		 tag, __func__, force_len, sense_len, offset);
+	pr_info("%s: Force_len = %d Sense_len = %d Offset = %04X\n",
+		__func__, force_len, sense_len, offset);
 
 	frame->node_data = (short *)kmalloc(frame->node_data_size *
 					    sizeof(short), GFP_KERNEL);
 	if (frame->node_data == NULL) {
-		logError(1, "%s %s: ERROR %08X\n", tag, __func__, ERROR_ALLOC |
-			 ERROR_GET_FRAME);
+		pr_err("%s: ERROR %08X\n", __func__,
+			ERROR_ALLOC | ERROR_GET_FRAME);
 		return ERROR_ALLOC | ERROR_GET_FRAME;
 	}
 
 	ret = getFrameData(offset, frame->node_data_size * BYTES_PER_NODE,
 			   (frame->node_data));
 	if (ret < OK) {
-		logError(1, "%s %s: ERROR %08X\n", tag, __func__,
-			 ERROR_GET_FRAME_DATA);
+		pr_err("%s: ERROR %08X\n", __func__, ERROR_GET_FRAME_DATA);
 		kfree(frame->node_data);
 		frame->node_data = NULL;
 		return ret | ERROR_GET_FRAME_DATA | ERROR_GET_FRAME;
@@ -260,7 +255,7 @@ LOAD_FRC:
 	/* if you want to access one node i,j,
 	  * compute the offset like: offset = i*columns + j = > frame[i, j] */
 
-	logError(0, "%s Frame acquired!\n", tag);
+	pr_info("Frame acquired!\n");
 	return frame->node_data_size;
 	/* return the number of data put inside frame */
 }
@@ -287,16 +282,13 @@ int getSSFrame3(SSFrameType type, SelfSenseFrame *frame)
 	frame->header.sense_node = getSenseLen();
 
 	if (frame->header.force_node == 0 || frame->header.sense_node == 0) {
-		logError(1,
-			 "%s %s: number of channels not initialized ERROR %08X\n",
-			 tag,
-			 __func__, ERROR_CH_LEN);
+		pr_err("%s: number of channels not initialized ERROR %08X\n",
+			__func__, ERROR_CH_LEN);
 		return ERROR_CH_LEN | ERROR_GET_FRAME;
 	}
 
 
-	logError(0, "%s %s: Starting to get frame %02X\n", tag, __func__,
-		 type);
+	pr_info("%s: Starting to get frame %02X\n", __func__, type);
 	switch (type) {
 	case SS_RAW:
 		offset_force = systemInfo.u16_ssTchTxRawAddr;
@@ -350,24 +342,23 @@ int getSSFrame3(SSFrameType type, SelfSenseFrame *frame)
 		break;
 
 	default:
-		logError(1, "%s %s: Invalid type ERROR %08X\n", tag, __func__,
+		pr_err("%s: Invalid type ERROR %08X\n", __func__,
 			 ERROR_OP_NOT_ALLOW | ERROR_GET_FRAME);
 		return ERROR_OP_NOT_ALLOW | ERROR_GET_FRAME;
 	}
 
 	frame->header.type = type;
 
-	logError(0,
-		 "%s %s: Force_len = %d Sense_len = %d Offset_force = %04X Offset_sense = %04X\n",
-		 tag, __func__, frame->header.force_node,
-		 frame->header.sense_node,
-		 offset_force, offset_sense);
+	pr_info("%s: Force_len = %d Sense_len = %d Offset_force = %04X Offset_sense = %04X\n",
+		__func__, frame->header.force_node,
+		frame->header.sense_node,
+		offset_force, offset_sense);
 
 	frame->force_data = (short *)kmalloc(frame->header.force_node *
 					     sizeof(short), GFP_KERNEL);
 	if (frame->force_data == NULL) {
-		logError(1, "%s %s: can not allocate force_data ERROR %08X\n",
-			 tag, __func__, ERROR_ALLOC | ERROR_GET_FRAME);
+		pr_err("%s: can not allocate force_data ERROR %08X\n",
+			__func__, ERROR_ALLOC | ERROR_GET_FRAME);
 		return ERROR_ALLOC | ERROR_GET_FRAME;
 	}
 
@@ -376,18 +367,16 @@ int getSSFrame3(SSFrameType type, SelfSenseFrame *frame)
 	if (frame->sense_data == NULL) {
 		kfree(frame->force_data);
 		frame->force_data = NULL;
-		logError(1, "%s %s: can not allocate sense_data ERROR %08X\n",
-			 tag, __func__, ERROR_ALLOC | ERROR_GET_FRAME);
+		pr_err("%s: can not allocate sense_data ERROR %08X\n",
+			__func__, ERROR_ALLOC | ERROR_GET_FRAME);
 		return ERROR_ALLOC | ERROR_GET_FRAME;
 	}
 
 	ret = getFrameData(offset_force, frame->header.force_node *
 			   BYTES_PER_NODE, (frame->force_data));
 	if (ret < OK) {
-		logError(1,
-			 "%s %s: error while reading force data ERROR %08X\n",
-			 tag,
-			 __func__, ERROR_GET_FRAME_DATA);
+		pr_err("%s: error while reading force data ERROR %08X\n",
+			__func__, ERROR_GET_FRAME_DATA);
 		kfree(frame->force_data);
 		frame->force_data = NULL;
 		kfree(frame->sense_data);
@@ -398,10 +387,8 @@ int getSSFrame3(SSFrameType type, SelfSenseFrame *frame)
 	ret = getFrameData(offset_sense, frame->header.sense_node *
 			   BYTES_PER_NODE, (frame->sense_data));
 	if (ret < OK) {
-		logError(1,
-			 "%s %s: error while reading sense data ERROR %08X\n",
-			 tag,
-			 __func__, ERROR_GET_FRAME_DATA);
+		pr_err("%s: error while reading sense data ERROR %08X\n",
+			__func__, ERROR_GET_FRAME_DATA);
 		kfree(frame->force_data);
 		frame->force_data = NULL;
 		kfree(frame->sense_data);
@@ -411,7 +398,7 @@ int getSSFrame3(SSFrameType type, SelfSenseFrame *frame)
 	/* if you want to access one node i,j,
 	  * the offset like: offset = i*columns + j = > frame[i, j] */
 
-	logError(0, "%s Frame acquired!\n", tag);
+	pr_info("Frame acquired!\n");
 	return frame->header.force_node + frame->header.sense_node;
 	/* return the number of data put inside frame */
 }
@@ -440,40 +427,37 @@ int readSyncDataHeader(u8 type, DataHeader *msHeader, DataHeader *ssHeader,
 	ret = fts_writeReadU8UX(FTS_CMD_FRAMEBUFFER_R, BITS_16, offset, data,
 				SYNCFRAME_DATA_HEADER, DUMMY_FRAMEBUFFER);
 	if (ret < OK) {	/* i2c function have already a retry mechanism */
-		logError(1,
-			 "%s %s: error while reading data header ERROR %08X\n",
-			 tag,
-			 __func__, ret);
+		pr_err("%s: error while reading data header ERROR %08X\n",
+			__func__, ret);
 		return ret;
 	}
 
-	logError(0, "%s Read Data Header done!\n", tag);
+	pr_info("Read Data Header done!\n");
 
 	if (data[0] != HEADER_SIGNATURE) {
-		logError(1,
-			 "%s %s: The Header Signature was wrong! %02X != %02X ERROR %08X\n",
-			 tag, __func__, data[0], HEADER_SIGNATURE,
-			 ERROR_WRONG_DATA_SIGN);
+		pr_err("%s: The Header Signature was wrong! %02X != %02X ERROR %08X\n",
+			__func__, data[0], HEADER_SIGNATURE,
+			ERROR_WRONG_DATA_SIGN);
 		return ERROR_WRONG_DATA_SIGN;
 	}
 
 
 	if (data[1] != type) {
-		logError(1, "%s %s: Wrong type found! %02X!=%02X ERROR %08X\n",
-			 tag, __func__, data[1], type, ERROR_DIFF_DATA_TYPE);
+		pr_err("%s: Wrong type found! %02X!=%02X ERROR %08X\n",
+			__func__, data[1], type, ERROR_DIFF_DATA_TYPE);
 		return ERROR_DIFF_DATA_TYPE;
 	}
 
-	logError(0, "%s Type = %02X of SyncFrame data OK!\n", tag, type);
+	pr_info("Type = %02X of SyncFrame data OK!\n", type);
 
 	msHeader->force_node = data[5];
 	msHeader->sense_node = data[6];
-	logError(0, "%s MS Frame force_node = %d, sense_node = %d\n", tag,
+	pr_info("MS Frame force_node = %d, sense_node = %d\n",
 		 msHeader->force_node, msHeader->sense_node);
 
 	ssHeader->force_node = data[7];
 	ssHeader->sense_node = data[8];
-	logError(0, "%s SS Frame force_node = %d, sense_node = %d\n", tag,
+	pr_info("SS Frame force_node = %d, sense_node = %d\n",
 		 ssHeader->force_node, ssHeader->sense_node);
 
 	*address = offset + SYNCFRAME_DATA_HEADER + data[4];
@@ -503,8 +487,7 @@ int getSyncFrame(u8 type, MutualSenseFrame *msFrame, SelfSenseFrame *ssFrame)
 	ssFrame->force_data = NULL;
 	ssFrame->sense_data = NULL;
 
-	logError(0, "%s %s: Starting to get Sync Frame %02X...\n", tag,
-		 __func__, type);
+	pr_info("%s: Starting to get Sync Frame %02X...\n", __func__, type);
 	switch (type) {
 	case LOAD_SYNC_FRAME_RAW:
 		msFrame->header.type = MS_RAW;
@@ -530,23 +513,19 @@ int getSyncFrame(u8 type, MutualSenseFrame *msFrame, SelfSenseFrame *ssFrame)
 		return ERROR_OP_NOT_ALLOW | ERROR_GET_FRAME;
 	}
 
-	logError(0, "%s %s: Requesting Sync Frame %02X...\n", tag, __func__,
-		 type);
+	pr_info("%s: Requesting Sync Frame %02X...\n", __func__, type);
 	res = requestSyncFrame(type);
 	if (res < OK) {
-		logError(1,
-			 "%s %s: error while requesting Sync Frame ERROR %08X\n",
-			 tag,
-			 __func__, res | ERROR_GET_FRAME_DATA);
+		pr_err("%s: error while requesting Sync Frame ERROR %08X\n",
+			__func__, res | ERROR_GET_FRAME_DATA);
 		return res | ERROR_GET_FRAME_DATA;
 	}
 
 	res = readSyncDataHeader(type, &(msFrame->header), &(ssFrame->header),
 				 &address);
 	if (res < OK) {
-		logError(1,
-			 "%s %s: error while reading Sync Frame header... ERROR %08X\n",
-			 tag, __func__, res | ERROR_GET_FRAME_DATA);
+		pr_err("%s: error while reading Sync Frame header... ERROR %08X\n",
+			__func__, res | ERROR_GET_FRAME_DATA);
 		return res | ERROR_GET_FRAME_DATA;
 	}
 
@@ -556,19 +535,17 @@ int getSyncFrame(u8 type, MutualSenseFrame *msFrame, SelfSenseFrame *ssFrame)
 	msFrame->node_data = (short *)kmalloc(msFrame->node_data_size *
 					      sizeof(short), GFP_KERNEL);
 	if (msFrame->node_data == NULL) {
-		logError(1,
-			 "%s %s: impossible allocate memory for MS frame... ERROR %08X\n",
-			 tag, __func__, ERROR_ALLOC | ERROR_GET_FRAME);
+		pr_err("%s: impossible allocate memory for MS frame... ERROR %08X\n",
+			__func__, ERROR_ALLOC | ERROR_GET_FRAME);
 		return ERROR_ALLOC | ERROR_GET_FRAME;
 	}
 
-	logError(0, "%s %s: Getting MS frame at %04X...\n", tag, __func__,
-		 address);
+	pr_info("%s: Getting MS frame at %llx...\n", __func__, address);
 	res = getFrameData(address, (msFrame->node_data_size) * BYTES_PER_NODE,
 			   (msFrame->node_data));
 	if (res < OK) {
-		logError(1, "%s %s: error while getting MS data...ERROR %08X\n",
-			 tag, __func__, res);
+		pr_err("%s: error while getting MS data...ERROR %08X\n",
+			__func__, res);
 		res |= ERROR_GET_FRAME_DATA | ERROR_GET_FRAME;
 		goto ERROR;
 	}
@@ -579,22 +556,18 @@ int getSyncFrame(u8 type, MutualSenseFrame *msFrame, SelfSenseFrame *ssFrame)
 	ssFrame->force_data = (short *)kmalloc(ssFrame->header.force_node *
 					       sizeof(short), GFP_KERNEL);
 	if (ssFrame->force_data == NULL) {
-		logError(1,
-			 "%s %s: impossible allocate memory for SS force frame...ERROR %08X\n",
-			 tag, __func__, ERROR_ALLOC | ERROR_GET_FRAME);
+		pr_err("%s: impossible allocate memory for SS force frame...ERROR %08X\n",
+			__func__, ERROR_ALLOC | ERROR_GET_FRAME);
 		res = ERROR_ALLOC | ERROR_GET_FRAME;
 		goto ERROR;
 	}
 
-	logError(0, "%s %s: Getting SS force frame at %04X...\n", tag, __func__,
-		 address);
+	pr_info("%s: Getting SS force frame at %llx...\n", __func__, address);
 	res = getFrameData(address, (ssFrame->header.force_node) *
 			   BYTES_PER_NODE, (ssFrame->force_data));
 	if (res < OK) {
-		logError(1,
-			 "%s %s: error while getting SS force data...ERROR %08X\n",
-			 tag,
-			 __func__, res);
+		pr_err("%s: error while getting SS force data...ERROR %08X\n",
+			__func__, res);
 		res |= ERROR_GET_FRAME_DATA | ERROR_GET_FRAME;
 		goto ERROR;
 	}
@@ -605,22 +578,18 @@ int getSyncFrame(u8 type, MutualSenseFrame *msFrame, SelfSenseFrame *ssFrame)
 	ssFrame->sense_data = (short *)kmalloc(ssFrame->header.sense_node *
 					       sizeof(short), GFP_KERNEL);
 	if (ssFrame->sense_data == NULL) {
-		logError(1,
-			 "%s %s: impossible allocate memory for SS sense frame...ERROR %08X\n",
-			 tag, __func__, ERROR_ALLOC | ERROR_GET_FRAME);
+		pr_err("%s: impossible allocate memory for SS sense frame...ERROR %08X\n",
+			__func__, ERROR_ALLOC | ERROR_GET_FRAME);
 		res = ERROR_ALLOC | ERROR_GET_FRAME;
 		goto ERROR;
 	}
 
-	logError(0, "%s %s: Getting SS sense frame at %04X...\n", tag, __func__,
-		 address);
+	pr_info("%s: Getting SS sense frame at %llx...\n", __func__, address);
 	res = getFrameData(address, (ssFrame->header.sense_node) *
 			   BYTES_PER_NODE, (ssFrame->sense_data));
 	if (res < OK) {
-		logError(1,
-			 "%s %s: error while getting SS sense data...ERROR %08X\n",
-			 tag,
-			 __func__, res);
+		pr_err("%s: error while getting SS sense data...ERROR %08X\n",
+			__func__, res);
 		res |= ERROR_GET_FRAME_DATA | ERROR_GET_FRAME;
 		goto ERROR;
 	}
@@ -641,9 +610,9 @@ ERROR:
 			kfree(ssFrame->sense_data);
 			ssFrame->sense_data = NULL;
 		}
-		logError(0, "Getting Sync Frame FAILED! ERROR %08X!\n", res);
+		pr_err("Getting Sync Frame FAILED! ERROR %08X!\n", res);
 	} else {
-		logError(0, "Getting Sync Frame FINISHED!\n");
+		pr_info("Getting Sync Frame FINISHED!\n");
 		res = msFrame->node_data_size + ssFrame->header.force_node +
 		      ssFrame->header.sense_node;
 	}

@@ -76,7 +76,7 @@ int getFWdata(const char *pathToFile, u8 **data, int *size)
 	if (dev != NULL)
 		info = dev_get_drvdata(dev);
 
-	logError(1, "%s getFWdata starting ...\n", tag);
+	pr_info("getFWdata starting ...\n");
 	if (strncmp(pathToFile, "NULL", 4) == 0) {
 		from = 1;
 		if (info != NULL && info->board->fw_name)
@@ -89,13 +89,12 @@ int getFWdata(const char *pathToFile, u8 **data, int *size)
 	switch (from) {
 #ifdef FW_H_FILE
 	case 1:
-		logError(1, "%s Read FW from .h file!\n", tag);
+		pr_info("Read FW from .h file!\n");
 		*size = FW_SIZE_NAME;
 		*data = (u8 *)kmalloc((*size) * sizeof(u8), GFP_KERNEL);
 		if (*data == NULL) {
-			logError(1,
-				 "%s getFWdata: Impossible to allocate memory! ERROR %08X\n",
-				 tag, ERROR_ALLOC);
+			pr_err("getFWdata: Impossible to allocate memory! ERROR %08X\n",
+				ERROR_ALLOC);
 			return ERROR_ALLOC;
 		}
 		memcpy(*data, (u8 *)FW_ARRAY_NAME, (*size));
@@ -103,7 +102,7 @@ int getFWdata(const char *pathToFile, u8 **data, int *size)
 		break;
 #endif
 	default:
-		logError(1, "%s Read FW from BIN file %s !\n", tag, path);
+		pr_info("Read FW from BIN file %s !\n", path);
 
 		if (dev != NULL) {
 			res = request_firmware(&fw, path, dev);
@@ -112,30 +111,26 @@ int getFWdata(const char *pathToFile, u8 **data, int *size)
 				*data = (u8 *)kmalloc((*size) * sizeof(u8),
 						      GFP_KERNEL);
 				if (*data == NULL) {
-					logError(1,
-						 "%s getFWdata: Impossible to allocate memory! ERROR %08X\n",
-						 tag, ERROR_ALLOC);
+					pr_err("getFWdata: Impossible to allocate memory! ERROR %08X\n",
+						ERROR_ALLOC);
 					release_firmware(fw);
 					return ERROR_ALLOC;
 				}
 				memcpy(*data, (u8 *)fw->data, (*size));
 				release_firmware(fw);
 			} else {
-				logError(1,
-					 "%s getFWdata: No File found! ERROR %08X\n",
-					 tag, ERROR_FILE_NOT_FOUND);
+				pr_err("getFWdata: No File found! ERROR %08X\n",
+					ERROR_FILE_NOT_FOUND);
 				return ERROR_FILE_NOT_FOUND;
 			}
 		} else {
-			logError(1,
-				 "%s getFWdata: No device found! ERROR %08X\n",
-				 tag,
-				 ERROR_OP_NOT_ALLOW);
+			pr_err("getFWdata: No device found! ERROR %08X\n",
+				ERROR_OP_NOT_ALLOW);
 			return ERROR_OP_NOT_ALLOW;
 		}
 	}
 
-	logError(1, "%s getFWdata Finished!\n", tag);
+	pr_info("getFWdata Finished!\n");
 	return OK;
 }
 
@@ -160,15 +155,13 @@ int readFwFile(const char *path, Firmware *fw, int keep_cx)
 
 	res = getFWdata(path, &orig_data, &orig_size);
 	if (res < OK) {
-		logError(1,
-			 "%s readFwFile: impossible retrieve FW... ERROR %08X\n",
-			 tag,
-			 ERROR_MEMH_READ);
+		pr_err("readFwFile: impossible retrieve FW... ERROR %08X\n",
+			ERROR_MEMH_READ);
 		return res | ERROR_MEMH_READ;
 	}
 	res = parseBinFile(orig_data, orig_size, fw, keep_cx);
 	if (res < OK) {
-		logError(1, "%s readFwFile: impossible parse ERROR %08X\n", tag,
+		pr_err("readFwFile: impossible parse ERROR %08X\n",
 			 ERROR_MEMH_READ);
 		return res | ERROR_MEMH_READ;
 	}
@@ -193,25 +186,25 @@ int flashProcedure(const char *path, int force, int keep_cx)
 	int res;
 
 	fw.data = NULL;
-	logError(0, "%s Reading Fw file...\n", tag);
+	pr_info("Reading Fw file...\n");
 	res = readFwFile(path, &fw, keep_cx);
 	if (res < OK) {
-		logError(1, "%s flashProcedure: ERROR %08X\n", tag,
+		pr_err("flashProcedure: ERROR %08X\n",
 			 (res | ERROR_FLASH_PROCEDURE));
 		kfree(fw.data);
 		return res | ERROR_FLASH_PROCEDURE;
 	}
-	logError(0, "%s Fw file read COMPLETED!\n", tag);
+	pr_info("Fw file read COMPLETED!\n");
 
-	logError(0, "%s Starting flashing procedure...\n", tag);
+	pr_info("Starting flashing procedure...\n");
 	res = flash_burn(fw, force, keep_cx);
 	if (res < OK && res != (ERROR_FW_NO_UPDATE | ERROR_FLASH_BURN_FAILED)) {
-		logError(1, "%s flashProcedure: ERROR %08X\n", tag,
+		pr_err("flashProcedure: ERROR %08X\n",
 			 ERROR_FLASH_PROCEDURE);
 		kfree(fw.data);
 		return res | ERROR_FLASH_PROCEDURE;
 	}
-	logError(0, "%s flashing procedure Finished!\n", tag);
+	pr_info("flashing procedure Finished!\n");
 	kfree(fw.data);
 
 	return res;
@@ -230,12 +223,12 @@ int wait_for_flash_ready(u8 type)
 	u8 readData[2] = { 0 };
 	int i, res = -1;
 
-	logError(0, "%s Waiting for flash ready ...\n", tag);
+	pr_info("Waiting for flash ready ...\n");
 	for (i = 0; i < FLASH_RETRY_COUNT && res != 0; i++) {
 		res = fts_writeRead(cmd, ARRAY_SIZE(cmd), readData, 2);
 		if (res < OK)
-			logError(1, "%s wait_for_flash_ready: ERROR % 08X\n",
-				 tag, ERROR_BUS_W);
+			pr_err("wait_for_flash_ready: ERROR %08X\n",
+				ERROR_BUS_W);
 		else {
 #ifdef I2C_INTERFACE	/* in case of spi there is a dummy byte */
 			res = readData[0] & 0x80;
@@ -243,18 +236,18 @@ int wait_for_flash_ready(u8 type)
 			res = readData[1] & 0x80;
 #endif
 
-			logError(0, "%s flash status = %d\n", tag, res);
+			pr_info("flash status = %d\n", res);
 		}
 		mdelay(FLASH_WAIT_BEFORE_RETRY);
 	}
 
 	if (i == FLASH_RETRY_COUNT && res != 0) {
-		logError(1, "%s Wait for flash TIMEOUT! ERROR %08X\n", tag,
+		pr_err("Wait for flash TIMEOUT! ERROR %08X\n",
 			 ERROR_TIMEOUT);
 		return ERROR_TIMEOUT;
 	}
 
-	logError(0, "%s Flash READY!\n", tag);
+	pr_info("Flash READY!\n");
 	return OK;
 }
 
@@ -268,25 +261,24 @@ int hold_m3(void)
 	int ret;
 	u8 cmd[1] = { 0x01 };
 
-	logError(0, "%s Command m3 hold...\n", tag);
+	pr_info("Command m3 hold...\n");
 	ret = fts_writeU8UX(FTS_CMD_HW_REG_W, ADDR_SIZE_HW_REG,
 			    ADDR_SYSTEM_RESET, cmd, 1);
 	if (ret < OK) {
-		logError(1, "%s hold_m3: ERROR %08X\n", tag, ret);
+		pr_err("hold_m3: ERROR %08X\n", ret);
 		return ret;
 	}
-	logError(0, "%s Hold M3 DONE!\n", tag);
+	pr_info("Hold M3 DONE!\n");
 
 #if !defined(I2C_INTERFACE) && defined(SPI4_WIRE)
 	/* configure manually SPI4 because when no fw is running the chip use
 	 * SPI3 by default */
-	logError(0, "%s Setting SPI4 mode...\n", tag);
+	pr_info("Setting SPI4 mode...\n");
 	cmd[0] = 0x10;
 	ret = fts_writeU8UX(FTS_CMD_HW_REG_W, ADDR_SIZE_HW_REG,
 			    ADDR_GPIO_DIRECTION, cmd, 1);
 	if (ret < OK) {
-		logError(1, "%s hold_m3: can not set gpio dir ERROR %08X\n",
-			 tag, ret);
+		pr_err("hold_m3: can not set gpio dir ERROR %08X\n", ret);
 		return ret;
 	}
 
@@ -294,8 +286,7 @@ int hold_m3(void)
 	ret = fts_writeU8UX(FTS_CMD_HW_REG_W, ADDR_SIZE_HW_REG,
 			    ADDR_GPIO_PULLUP, cmd, 1);
 	if (ret < OK) {
-		logError(1, "%s hold_m3: can not set gpio pull-up ERROR %08X\n",
-			 tag, ret);
+		pr_err("hold_m3: can not set gpio pull-up ERROR %08X\n", ret);
 		return ret;
 	}
 
@@ -303,8 +294,7 @@ int hold_m3(void)
 	ret = fts_writeU8UX(FTS_CMD_HW_REG_W, ADDR_SIZE_HW_REG,
 			    ADDR_GPIO_CONFIG_REG2, cmd, 1);
 	if (ret < OK) {
-		logError(1, "%s hold_m3: can not set gpio config ERROR %08X\n",
-			 tag, ret);
+		pr_err("hold_m3: can not set gpio config ERROR %08X\n", ret);
 		return ret;
 	}
 
@@ -312,8 +302,7 @@ int hold_m3(void)
 	ret = fts_writeU8UX(FTS_CMD_HW_REG_W, ADDR_SIZE_HW_REG,
 			    ADDR_GPIO_CONFIG_REG0, cmd, 1);
 	if (ret < OK) {
-		logError(1, "%s hold_m3: can not set gpio config ERROR %08X\n",
-			 tag, ret);
+		pr_err("hold_m3: can not set gpio config ERROR %08X\n", ret);
 		return ret;
 	}
 
@@ -321,8 +310,7 @@ int hold_m3(void)
 	ret = fts_writeU8UX(FTS_CMD_HW_REG_W, ADDR_SIZE_HW_REG, ADDR_ICR, cmd,
 			    1);
 	if (ret < OK) {
-		logError(1, "%s hold_m3: can not set spi4 mode ERROR %08X\n",
-			 tag, ret);
+		pr_err("hold_m3: can not set spi4 mode ERROR %08X\n", ret);
 		return ret;
 	}
 	mdelay(1);	/* wait for the GPIO to stabilize */
@@ -350,102 +338,101 @@ int parseBinFile(u8 *fw_data, int fw_size, Firmware *fwData, int keep_cx)
 	int dimension, index = 0;
 	u32 temp;
 	int res, i;
+	char buff[(2 + 1) * EXTERNAL_RELEASE_INFO_SIZE + 1];
+	int buff_len = sizeof(buff);
+	int buff_index = 0;
 
 	/* the file should contain at least the header plus the content_crc */
 	if (fw_size < FW_HEADER_SIZE + FW_BYTES_ALIGN || fw_data == NULL) {
-		logError(1,
-			 "%s parseBinFile: Read only %d instead of %d... ERROR %08X\n",
-			 tag, fw_size, FW_HEADER_SIZE + FW_BYTES_ALIGN,
-			 ERROR_FILE_PARSE);
+		pr_err("parseBinFile: Read only %d instead of %d... ERROR %08X\n",
+			fw_size, FW_HEADER_SIZE + FW_BYTES_ALIGN,
+			ERROR_FILE_PARSE);
 		res = ERROR_FILE_PARSE;
 		goto END;
 	} else {
 		/* start parsing of bytes */
 		u8ToU32(&fw_data[index], &temp);
 		if (temp != FW_HEADER_SIGNATURE) {
-			logError(1,
-				 "%s parseBinFile: Wrong Signature %08X ... ERROR %08X\n",
-				 tag, temp, ERROR_FILE_PARSE);
+			pr_err("parseBinFile: Wrong Signature %08X ... ERROR %08X\n",
+				temp, ERROR_FILE_PARSE);
 			res = ERROR_FILE_PARSE;
 			goto END;
 		}
-		logError(0, "%s parseBinFile: Fw Signature OK!\n", tag);
+		pr_info("parseBinFile: Fw Signature OK!\n");
 		index += FW_BYTES_ALIGN;
 		u8ToU32(&fw_data[index], &temp);
 		if (temp != FW_FTB_VER) {
-			logError(1,
-				 "%s parseBinFile: Wrong ftb_version %08X ... ERROR %08X\n",
-				 tag, temp, ERROR_FILE_PARSE);
+			pr_err("parseBinFile: Wrong ftb_version %08X ... ERROR %08X\n",
+				temp, ERROR_FILE_PARSE);
 			res = ERROR_FILE_PARSE;
 			goto END;
 		}
-		logError(0, "%s parseBinFile: ftb_version OK!\n", tag);
+		pr_info("parseBinFile: ftb_version OK!\n");
 		index += FW_BYTES_ALIGN;
 		if (fw_data[index] != DCHIP_ID_0 || fw_data[index + 1] !=
 		    DCHIP_ID_1) {
-			logError(1,
-				 "%s parseBinFile: Wrong target %02X != %02X  %02X != %02X ... ERROR %08X\n",
-				 tag, fw_data[index], DCHIP_ID_0,
-				 fw_data[index + 1],
-				 DCHIP_ID_1, ERROR_FILE_PARSE);
+			pr_err("parseBinFile: Wrong target %02X != %02X  %02X != %02X ... ERROR %08X\n",
+				fw_data[index], DCHIP_ID_0,
+				fw_data[index + 1],
+				DCHIP_ID_1, ERROR_FILE_PARSE);
 			res = ERROR_FILE_PARSE;
 			goto END;
 		}
 		index += FW_BYTES_ALIGN;
 		u8ToU32(&fw_data[index], &temp);
-		logError(1, "%s parseBinFile: FILE SVN REV = %08X\n", tag,
-			 temp);
+		pr_info("parseBinFile: FILE SVN REV = %08X\n", temp);
 
 		index += FW_BYTES_ALIGN;
 		u8ToU32(&fw_data[index], &temp);
 		fwData->fw_ver = temp;
-		logError(1, "%s parseBinFile: FILE Fw Version = %04X\n", tag,
-			 fwData->fw_ver);
+		pr_info("parseBinFile: FILE Fw Version = %04X\n",
+			fwData->fw_ver);
 
 		index += FW_BYTES_ALIGN;
 		u8ToU32(&fw_data[index], &temp);
-		logError(1, "%s parseBinFile: FILE Config Project ID = %08X\n",
-			 tag, temp);
+		pr_info("parseBinFile: FILE Config Project ID = %08X\n", temp);
 
 		index += FW_BYTES_ALIGN;
 		u8ToU32(&fw_data[index], &temp);
 		fwData->config_ver = temp;
-		logError(1, "%s parseBinFile: FILE Config Version = %08X\n",
-			 tag, fwData->config_ver);
+		pr_info("parseBinFile: FILE Config Version = %08X\n",
+			fwData->config_ver);
 
 		index += FW_BYTES_ALIGN * 2;	/* skip reserved data */
 
 		index += FW_BYTES_ALIGN;
-		pr_info("%s parseBinFile: File External Release =  ", tag);
 		for (i = 0; i < EXTERNAL_RELEASE_INFO_SIZE; i++) {
 			fwData->externalRelease[i] = fw_data[index++];
-			pr_cont("%02X ", fwData->externalRelease[i]);
+			buff_index += scnprintf(buff + buff_index,
+						buff_len - buff_index,
+						"%02X ",
+						fwData->externalRelease[i]);
 		}
-		pr_cont("\n");
+		pr_info("parseBinFile: File External Release = %s\n", buff);
 
 		/* index+=FW_BYTES_ALIGN; */
 		u8ToU32(&fw_data[index], &temp);
 		fwData->sec0_size = temp;
-		logError(1, "%s parseBinFile:  sec0_size = %08X (%d bytes)\n",
-			 tag, fwData->sec0_size, fwData->sec0_size);
+		pr_info("parseBinFile:  sec0_size = %08X (%d bytes)\n",
+			fwData->sec0_size, fwData->sec0_size);
 
 		index += FW_BYTES_ALIGN;
 		u8ToU32(&fw_data[index], &temp);
 		fwData->sec1_size = temp;
-		logError(1, "%s parseBinFile:  sec1_size = %08X (%d bytes)\n",
-			 tag, fwData->sec1_size, fwData->sec1_size);
+		pr_info("parseBinFile:  sec1_size = %08X (%d bytes)\n",
+			fwData->sec1_size, fwData->sec1_size);
 
 		index += FW_BYTES_ALIGN;
 		u8ToU32(&fw_data[index], &temp);
 		fwData->sec2_size = temp;
-		logError(1, "%s parseBinFile:  sec2_size = %08X (%d bytes)\n",
-			 tag, fwData->sec2_size, fwData->sec2_size);
+		pr_info("parseBinFile:  sec2_size = %08X (%d bytes)\n",
+			fwData->sec2_size, fwData->sec2_size);
 
 		index += FW_BYTES_ALIGN;
 		u8ToU32(&fw_data[index], &temp);
 		fwData->sec3_size = temp;
-		logError(1, "%s parseBinFile:  sec3_size = %08X (%d bytes)\n",
-			 tag, fwData->sec3_size, fwData->sec3_size);
+		pr_info("parseBinFile:  sec3_size = %08X (%d bytes)\n",
+			fwData->sec3_size, fwData->sec3_size);
 
 		index += FW_BYTES_ALIGN;/* skip header crc */
 
@@ -463,10 +450,9 @@ int parseBinFile(u8 *fw_data, int fw_size, Firmware *fwData, int keep_cx)
 		 * }*/
 
 		if (dimension + FW_HEADER_SIZE + FW_BYTES_ALIGN != temp) {
-			logError(1,
-				 "%s parseBinFile: Read only %d instead of %d... ERROR %08X\n",
-				 tag, fw_size, dimension + FW_HEADER_SIZE +
-				 FW_BYTES_ALIGN, ERROR_FILE_PARSE);
+			pr_err("parseBinFile: Read only %d instead of %d... ERROR %08X\n",
+				fw_size, dimension + FW_HEADER_SIZE +
+				FW_BYTES_ALIGN, ERROR_FILE_PARSE);
 			res = ERROR_FILE_PARSE;
 			goto END;
 		}
@@ -474,8 +460,7 @@ int parseBinFile(u8 *fw_data, int fw_size, Firmware *fwData, int keep_cx)
 		fwData->data = (u8 *)kmalloc(dimension * sizeof(u8),
 					     GFP_KERNEL);
 		if (fwData->data == NULL) {
-			logError(1, "%s parseBinFile: ERROR %08X\n", tag,
-				 ERROR_ALLOC);
+			pr_err("parseBinFile: ERROR %08X\n", ERROR_ALLOC);
 			res = ERROR_ALLOC;
 			goto END;
 		}
@@ -488,19 +473,15 @@ int parseBinFile(u8 *fw_data, int fw_size, Firmware *fwData, int keep_cx)
 					      FW_CX_VERSION], &fwData->cx_ver);
 
 		else {
-			logError(1,
-				 "%s parseBinFile: Initialize cx_ver to default value!\n",
-				 tag);
+			pr_err("parseBinFile: Initialize cx_ver to default value!\n");
 			fwData->cx_ver = systemInfo.u16_cxVer;
 		}
 
-		logError(1, "%s parseBinFile: CX Version = %04X\n", tag,
-			 fwData->cx_ver);
+		pr_info("parseBinFile: CX Version = %04X\n", fwData->cx_ver);
 
 		fwData->data_size = dimension;
 
-		logError(0, "%s READ FW DONE %d bytes!\n", tag,
-			 fwData->data_size);
+		pr_info("READ FW DONE %d bytes!\n", fwData->data_size);
 		res = OK;
 		goto END;
 	}
@@ -519,13 +500,13 @@ int flash_unlock(void)
 	u8 cmd[6] = { FTS_CMD_HW_REG_W,	  0x20,	  0x00,	  0x00,
 		      FLASH_UNLOCK_CODE0, FLASH_UNLOCK_CODE1 };
 
-	logError(0, "%s Command unlock ...\n", tag);
+	pr_info("Command unlock ...\n");
 	if (fts_write(cmd, ARRAY_SIZE(cmd)) < OK) {
-		logError(1, "%s flash_unlock: ERROR %08X\n", tag, ERROR_BUS_W);
+		pr_err("flash_unlock: ERROR %08X\n", ERROR_BUS_W);
 		return ERROR_BUS_W;
 	}
 
-	logError(0, "%s Unlock flash DONE!\n", tag);
+	pr_info("Unlock flash DONE!\n");
 
 	return OK;
 }
@@ -540,16 +521,15 @@ int flash_erase_unlock(void)
 		      0x00,
 		      FLASH_ERASE_UNLOCK_CODE0, FLASH_ERASE_UNLOCK_CODE1 };
 
-	logError(0, "%s Try to erase unlock flash...\n", tag);
+	pr_info("Try to erase unlock flash...\n");
 
-	logError(0, "%s Command erase unlock ...\n", tag);
+	pr_info("Command erase unlock ...\n");
 	if (fts_write(cmd, ARRAY_SIZE(cmd)) < 0) {
-		logError(1, "%s flash_erase_unlock: ERROR %08X\n", tag,
-			 ERROR_BUS_W);
+		pr_err("flash_erase_unlock: ERROR %08X\n", ERROR_BUS_W);
 		return ERROR_BUS_W;
 	}
 
-	logError(0, "%s Erase Unlock flash DONE!\n", tag);
+	pr_info("Erase Unlock flash DONE!\n");
 
 	return OK;
 }
@@ -568,28 +548,25 @@ int flash_full_erase(void)
 		      FLASH_ERASE_CODE0, FLASH_ERASE_CODE1 };
 
 	if (fts_write(cmd1, ARRAY_SIZE(cmd1)) < OK) {
-		logError(1, "%s flash_erase_page_by_page: ERROR %08X\n", tag,
-			 ERROR_BUS_W);
+		pr_err("flash_erase_page_by_page: ERROR %08X\n", ERROR_BUS_W);
 		return ERROR_BUS_W;
 	}
 
-	logError(0, "%s Command full erase sent ...\n", tag);
+	pr_info("Command full erase sent ...\n");
 	if (fts_write(cmd, ARRAY_SIZE(cmd)) < OK) {
-		logError(1, "%s flash_full_erase: ERROR %08X\n", tag,
-			 ERROR_BUS_W);
+		pr_err("flash_full_erase: ERROR %08X\n", ERROR_BUS_W);
 		return ERROR_BUS_W;
 	}
 
 	status = wait_for_flash_ready(FLASH_ERASE_CODE0);
 
 	if (status != OK) {
-		logError(1, "%s flash_full_erase: ERROR %08X\n", tag,
-			 ERROR_FLASH_NOT_READY);
+		pr_err("flash_full_erase: ERROR %08X\n", ERROR_FLASH_NOT_READY);
 		return status | ERROR_FLASH_NOT_READY;
 		/* Flash not ready within the chosen time, better exit! */
 	}
 
-	logError(0, "%s Full Erase flash DONE!\n", tag);
+	pr_info("Full Erase flash DONE!\n");
 
 	return OK;
 }
@@ -614,61 +591,60 @@ int flash_erase_page_by_page(ErasePage keep_cx)
 		       0xFF,
 		       0xFF,		 0xFF,		   0xFF };
 	u8 mask[4] = { 0 };
+	char buff[(2 + 1) * 4 + 1];
+	int buff_len = sizeof(buff);
+	int index = 0;
 
 	for (i = FLASH_CX_PAGE_START; i <= FLASH_CX_PAGE_END && keep_cx >=
 	     SKIP_PANEL_CX_INIT; i++) {
-		logError(0, "%s Skipping erase CX page %d!\n", tag, i);
+		pr_info("Skipping erase CX page %d!\n", i);
 		fromIDtoMask(i, mask, 4);
 	}
 
 
 	for (i = FLASH_PANEL_PAGE_START; i <= FLASH_PANEL_PAGE_END && keep_cx >=
 	     SKIP_PANEL_INIT; i++) {
-		logError(0, "%s Skipping erase Panel Init page %d!\n", tag, i);
+		pr_info("Skipping erase Panel Init page %d!\n", i);
 		fromIDtoMask(i, mask, 4);
 	}
 
-
-	pr_info("%s Setting the page mask = ", tag);
 	for (i = 0; i < 4; i++) {
 		cmd2[5 + i] = cmd2[5 + i] & (~mask[i]);
-		pr_cont("%02X ", cmd2[5 + i]);
+		index += scnprintf(buff + index, buff_len - index,
+					"%02X ", cmd2[5 + i]);
 	}
+	pr_info("Setting the page mask = %s\n", buff);
 
-	pr_cont("\n%s Writing page mask... \n", tag);
+	pr_info("Writing page mask...\n");
 	if (fts_write(cmd2, ARRAY_SIZE(cmd2)) < OK) {
-		logError(1,
-			 "%s flash_erase_page_by_page: Page mask ERROR %08X\n",
-			 tag,
-			 ERROR_BUS_W);
+		pr_err("flash_erase_page_by_page: Page mask ERROR %08X\n",
+			ERROR_BUS_W);
 		return ERROR_BUS_W;
 	}
 
 	if (fts_write(cmd1, ARRAY_SIZE(cmd1)) < OK) {
-		logError(1,
-			 "%s flash_erase_page_by_page: Disable info ERROR %08X\n",
-			 tag,
-			 ERROR_BUS_W);
+		pr_err("flash_erase_page_by_page: Disable info ERROR %08X\n",
+			ERROR_BUS_W);
 		return ERROR_BUS_W;
 	}
 
-	logError(0, "%s Command erase pages sent ...\n", tag);
+	pr_info("Command erase pages sent ...\n");
 	if (fts_write(cmd, ARRAY_SIZE(cmd)) < OK) {
-		logError(1, "%s flash_erase_page_by_page: Erase ERROR %08X\n",
-			 tag, ERROR_BUS_W);
+		pr_err("flash_erase_page_by_page: Erase ERROR %08X\n",
+			ERROR_BUS_W);
 		return ERROR_BUS_W;
 	}
 
 	status = wait_for_flash_ready(FLASH_ERASE_CODE0);
 
 	if (status != OK) {
-		logError(1, "%s flash_erase_page_by_page: ERROR % 08X\n", tag,
+		pr_err("flash_erase_page_by_page: ERROR %08X\n",
 			 ERROR_FLASH_NOT_READY);
 		return status | ERROR_FLASH_NOT_READY;
 		/* Flash not ready within the chosen time, better exit! */
 	}
 
-	logError(0, "%s Erase flash page by page DONE!\n", tag);
+	pr_info("Erase flash page by page DONE!\n");
 
 	return OK;
 }
@@ -686,23 +662,21 @@ int start_flash_dma(void)
 
 	/* write the command to erase the flash */
 
-	logError(0, "%s Command flash DMA ...\n", tag);
+	pr_info("Command flash DMA ...\n");
 	if (fts_write(cmd, ARRAY_SIZE(cmd)) < OK) {
-		logError(1, "%s start_flash_dma: ERROR %08X\n", tag,
-			 ERROR_BUS_W);
+		pr_err("start_flash_dma: ERROR %08X\n", ERROR_BUS_W);
 		return ERROR_BUS_W;
 	}
 
 	status = wait_for_flash_ready(FLASH_DMA_CODE0);
 
 	if (status != OK) {
-		logError(1, "%s start_flash_dma: ERROR %08X\n", tag,
-			 ERROR_FLASH_NOT_READY);
+		pr_err("start_flash_dma: ERROR %08X\n", ERROR_FLASH_NOT_READY);
 		return status | ERROR_FLASH_NOT_READY;
 		/* Flash not ready within the chosen time, better exit! */
 	}
 
-	logError(0, "%s flash DMA DONE!\n", tag);
+	pr_info("flash DMA DONE!\n");
 
 	return OK;
 }
@@ -732,7 +706,7 @@ int fillFlash(u32 address, u8 *data, int size)
 
 	buff = (u8 *)kmalloc((DMA_CHUNK + 5) * sizeof(u8), GFP_KERNEL);
 	if (buff == NULL) {
-		logError(1, "%s fillFlash: ERROR %08X\n", tag, ERROR_ALLOC);
+		pr_err("fillFlash: ERROR %08X\n", ERROR_ALLOC);
 		return ERROR_ALLOC;
 	}
 
@@ -744,14 +718,12 @@ int fillFlash(u32 address, u8 *data, int size)
 			index = 0;
 			if (remaining >= DMA_CHUNK) {
 				if ((byteBlock + DMA_CHUNK) <= FLASH_CHUNK) {
-					/* logError(1, "%s fillFlash: 1\n",
-					 * tag); */
+					/* pr_err("fillFlash: 1\n"); */
 					toWrite = DMA_CHUNK;
 					remaining -= DMA_CHUNK;
 					byteBlock += DMA_CHUNK;
 				} else {
-					/* logError(1, "%s fillFlash: 2\n",
-					 * tag); */
+					/* pr_err("fillFlash: 2\n); */
 					delta = FLASH_CHUNK - byteBlock;
 					toWrite = delta;
 					remaining -= delta;
@@ -759,14 +731,12 @@ int fillFlash(u32 address, u8 *data, int size)
 				}
 			} else {
 				if ((byteBlock + remaining) <= FLASH_CHUNK) {
-					/* logError(1, "%s fillFlash: 3\n",
-					 * tag); */
+					/* pr_err("fillFlash: 3\n"); */
 					toWrite = remaining;
 					byteBlock += remaining;
 					remaining = 0;
 				} else {
-					/* logError(1, "%s fillFlash: 4\n",
-					 * tag); */
+					/* pr_err("fillFlash: 4\n"); */
 					delta = FLASH_CHUNK - byteBlock;
 					toWrite = delta;
 					remaining -= delta;
@@ -781,14 +751,13 @@ int fillFlash(u32 address, u8 *data, int size)
 			buff[index++] = (u8)(addr & 0x000000FF);
 
 			memcpy(&buff[index], data, toWrite);
-			/* logError(0, "%s Command = %02X , address = %02X %02X
+			/* pr_err("Command = %02X , address = %02X %02X
 			 * , bytes = %d, data =  %02X %02X, %02X %02X\n",
-			 * tag, buff[0], buff[1], buff[2], toWrite, buff[3],
+			 * buff[0], buff[1], buff[2], toWrite, buff[3],
 			 * buff[4], buff[3 + toWrite-2],
 			 * buff[3 + toWrite-1]); */
 			if (fts_write(buff, index + toWrite) < OK) {
-				logError(1, "%s fillFlash: ERROR %08X\n", tag,
-					 ERROR_BUS_W);
+				pr_err("fillFlash: ERROR %08X\n", ERROR_BUS_W);
 				kfree(buff);
 				return ERROR_BUS_W;
 			}
@@ -818,26 +787,19 @@ int fillFlash(u32 address, u8 *data, int size)
 		buff2[index++] = (u8)((byteBlock & 0x0000FF00) >> 8);
 		buff2[index++] = 0x00;
 
-		logError(0,
-			 "%s DMA Command = %02X , address = %02X %02X, words =  %02X %02X\n",
-			 tag, buff2[0], buff2[8], buff2[7], buff2[10],
-			 buff2[9]);
+		pr_info("DMA Command = %02X , address = %02X %02X, words =  %02X %02X\n",
+			buff2[0], buff2[8], buff2[7], buff2[10], buff2[9]);
 
 		if (fts_write(buff2, index) < OK) {
-			logError(1,
-				 "%s   Error during filling Flash! ERROR %08X\n",
-				 tag,
-				 ERROR_BUS_W);
+			pr_err("Error during filling Flash! ERROR %08X\n",
+				ERROR_BUS_W);
 			kfree(buff);
 			return ERROR_BUS_W;
 		}
 
 		res = start_flash_dma();
 		if (res < OK) {
-			logError(1,
-				 "%s   Error during flashing DMA! ERROR %08X\n",
-				 tag,
-				 res);
+			pr_err("Error during flashing DMA! ERROR %08X\n", res);
 			kfree(buff);
 			return res;
 		}
@@ -879,9 +841,8 @@ int flash_burn(Firmware fw, int force_burn, int keep_cx)
 				goto start;
 		}
 
-		logError(1,
-			 "%s flash_burn: Firmware in the chip matches the firmware to flash! NO UPDATE ERROR %08X\n",
-			 tag, ERROR_FW_NO_UPDATE);
+		pr_info("flash_burn: Firmware in the chip matches the firmware to flash! NO UPDATE ERROR %08X\n",
+			ERROR_FW_NO_UPDATE);
 		return ERROR_FW_NO_UPDATE | ERROR_FLASH_BURN_FAILED;
 	} else if (force_burn == CRC_CX && fw.sec2_size == 0) {
 		/* burn procedure to update the CX memory, if not present just
@@ -897,20 +858,19 @@ int flash_burn(Firmware fw, int force_burn, int keep_cx)
 				goto start;
 			}
 		}
-		logError(1,
-			 "%s flash_burn: CRC in CX but fw does not contain CX data! NO UPDATE ERROR %08X\n",
-			 tag, ERROR_FW_NO_UPDATE);
+		pr_info("flash_burn: CRC in CX but fw does not contain CX data! NO UPDATE ERROR %08X\n",
+			ERROR_FW_NO_UPDATE);
 		return ERROR_FW_NO_UPDATE | ERROR_FLASH_BURN_FAILED;
 	}
 
 	/* Programming procedure start */
 start:
-	logError(0, "%s Programming Procedure for flashing started:\n", tag);
+	pr_info("Programming Procedure for flashing started:\n");
 
-	logError(0, "%s 1) SYSTEM RESET:\n", tag);
+	pr_info(" 1) SYSTEM RESET:\n");
 	res = fts_system_reset();
 	if (res < 0) {
-		logError(1, "%s    system reset FAILED!\n", tag);
+		pr_err("    system reset FAILED!\n");
 		/* If there is no firmware, there is no controller ready event
 		 * and there will be a timeout, we can keep going. But if
 		 * there is an I2C error, we must exit.
@@ -918,37 +878,38 @@ start:
 		if (res != (ERROR_SYSTEM_RESET_FAIL | ERROR_TIMEOUT))
 			return res | ERROR_FLASH_BURN_FAILED;
 	} else
-		logError(0, "%s   system reset COMPLETED!\n", tag);
+		pr_info("   system reset COMPLETED!\n");
 
 	msleep(100); /* required by HW for safe flash procedure */
 
-	logError(0, "%s 2) HOLD M3 :\n", tag);
+	pr_info(" 2) HOLD M3 :\n");
+
 	res = hold_m3();
 	if (res < OK) {
-		logError(1, "%s    hold_m3 FAILED!\n", tag);
+		pr_err("    hold_m3 FAILED!\n");
 		return res | ERROR_FLASH_BURN_FAILED;
 	}
-	logError(0, "%s    hold_m3 COMPLETED!\n", tag);
+	pr_info("    hold_m3 COMPLETED!\n");
 
-	logError(0, "%s 3) FLASH UNLOCK:\n", tag);
+	pr_info(" 3) FLASH UNLOCK:\n");
 	res = flash_unlock();
 	if (res < OK) {
-		logError(1, "%s   flash unlock FAILED! ERROR %08X\n", tag,
+		pr_err("   flash unlock FAILED! ERROR %08X\n",
 			 ERROR_FLASH_BURN_FAILED);
 		return res | ERROR_FLASH_BURN_FAILED;
 	}
-	logError(0, "%s   flash unlock COMPLETED!\n", tag);
+	pr_info("   flash unlock COMPLETED!\n");
 
-	logError(0, "%s 4) FLASH ERASE UNLOCK:\n", tag);
+	pr_info(" 4) FLASH ERASE UNLOCK:\n");
 	res = flash_erase_unlock();
 	if (res < 0) {
-		logError(1, "%s   flash unlock FAILED! ERROR %08X\n", tag,
+		pr_err("   flash unlock FAILED! ERROR %08X\n",
 			 ERROR_FLASH_BURN_FAILED);
 		return res | ERROR_FLASH_BURN_FAILED;
 	}
-	logError(0, "%s   flash unlock COMPLETED!\n", tag);
+	pr_info("   flash unlock COMPLETED!\n");
 
-	logError(0, "%s 5) FLASH ERASE:\n", tag);
+	pr_info(" 5) FLASH ERASE:\n");
 	if (keep_cx > 0) {
 		if (fw.sec2_size != 0)
 			res = flash_erase_page_by_page(SKIP_PANEL_INIT);
@@ -957,81 +918,76 @@ start:
 	} else {
 		res = flash_erase_page_by_page(SKIP_PANEL_INIT);
 		if (fw.sec2_size == 0)
-			logError(1,
-				 "%s WARNING!!! Erasing CX memory but no CX in fw file! touch will not work right after fw update!\n",
-				 tag);
+			pr_err("WARNING!!! Erasing CX memory but no CX in fw file! touch will not work right after fw update!\n");
 	}
 
 	if (res < OK) {
-		logError(1, "%s   flash erase FAILED! ERROR %08X\n", tag,
+		pr_err("   flash erase FAILED! ERROR %08X\n",
 			 ERROR_FLASH_BURN_FAILED);
 		return res | ERROR_FLASH_BURN_FAILED;
 	}
-	logError(0, "%s   flash erase COMPLETED!\n", tag);
+	pr_info("   flash erase COMPLETED!\n");
 
-	logError(0, "%s 6) LOAD PROGRAM:\n", tag);
+	pr_info(" 6) LOAD PROGRAM:\n");
 	res = fillFlash(FLASH_ADDR_CODE, &fw.data[0], fw.sec0_size);
 	if (res < OK) {
-		logError(1, "%s   load program ERROR %08X\n", tag,
+		pr_err("   load program ERROR %08X\n",
 			 ERROR_FLASH_BURN_FAILED);
 		return res | ERROR_FLASH_BURN_FAILED;
 	}
-	logError(1, "%s   load program DONE!\n", tag);
+	pr_info("   load program DONE!\n");
 
-	logError(0, "%s 7) LOAD CONFIG:\n", tag);
+	pr_info(" 7) LOAD CONFIG:\n");
 	res = fillFlash(FLASH_ADDR_CONFIG, &(fw.data[fw.sec0_size]),
 			fw.sec1_size);
 	if (res < OK) {
-		logError(1, "%s   load config ERROR %08X\n", tag,
+		pr_err("   load config ERROR %08X\n",
 			 ERROR_FLASH_BURN_FAILED);
 		return res | ERROR_FLASH_BURN_FAILED;
 	}
-	logError(1, "%s   load config DONE!\n", tag);
+	pr_info("   load config DONE!\n");
 
 	if (fw.sec2_size != 0 && (force_burn == CRC_CX || keep_cx <= 0)) {
-		logError(0, "%s 7.1) LOAD CX:\n", tag);
+		pr_info(" 7.1) LOAD CX:\n");
 		res = fillFlash(FLASH_ADDR_CX,
 				&(fw.data[fw.sec0_size + fw.sec1_size]),
 				fw.sec2_size);
 		if (res < OK) {
-			logError(1, "%s   load cx ERROR %08X\n", tag,
+			pr_err("   load cx ERROR %08X\n",
 				 ERROR_FLASH_BURN_FAILED);
 			return res | ERROR_FLASH_BURN_FAILED;
 		}
-		logError(1, "%s   load cx DONE!\n", tag);
+		pr_info("   load cx DONE!\n");
 	}
 
-	logError(0, "%s   Flash burn COMPLETED!\n", tag);
+	pr_info("   Flash burn COMPLETED!\n");
 
-	logError(0, "%s 8) SYSTEM RESET:\n", tag);
+	pr_info(" 8) SYSTEM RESET:\n");
 	res = fts_system_reset();
 	if (res < 0) {
-		logError(1, "%s    system reset FAILED! ERROR %08X\n", tag,
+		pr_err("    system reset FAILED! ERROR %08X\n",
 			 ERROR_FLASH_BURN_FAILED);
 		return res | ERROR_FLASH_BURN_FAILED;
 	}
-	logError(0, "%s   system reset COMPLETED!\n", tag);
+	pr_info("   system reset COMPLETED!\n");
 
-	logError(0, "%s 9) FINAL CHECK:\n", tag);
+	pr_info(" 9) FINAL CHECK:\n");
 	res = readSysInfo(0);
 	if (res < 0) {
-		logError(1,
-			 "%s flash_burn: Unable to retrieve Chip INFO! ERROR %08X\n",
-			 tag, ERROR_FLASH_BURN_FAILED);
+		pr_err("flash_burn: Unable to retrieve Chip INFO! ERROR %08X\n",
+			ERROR_FLASH_BURN_FAILED);
 		return res | ERROR_FLASH_BURN_FAILED;
 	}
 
 	for (res = 0; res < EXTERNAL_RELEASE_INFO_SIZE; res++) {
 		if (fw.externalRelease[res] != systemInfo.u8_releaseInfo[res]) {
 			/* External release is printed during readSysInfo */
-			logError(1,
-				 "%s  Firmware in the chip different from the one that was burn!\n",
-				 tag);
+			pr_info("  Firmware in the chip different from the one that was burn!\n");
 			return ERROR_FLASH_BURN_FAILED;
 		}
 	}
 
-	logError(0, "%s   Final check OK!\n", tag);
+	pr_info("   Final check OK!\n");
 
 	return OK;
 }

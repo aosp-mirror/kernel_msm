@@ -220,8 +220,6 @@ typedef struct {
 			 * last error event! */
 } ErrorList;
 
-
-void logError(int force, const char *msg, ...);
 int isI2cError(int error);
 int dumpErrorInfo(u8 *outBuf, int size);
 int errorHandler(u8 *event, int size);

@@ -54,8 +54,12 @@
 							 * */
 #define FTS_TS_DRV_VER		0x05020A00	/* driver version u32 format */
 
-#define DEBUG	/* /< define to print more logs in the kernel log
-		  * and better follow the code flow */
+/* #define DEBUG */	/* /< define to print more logs in the kernel log
+			 * and better follow the code flow */
+#ifdef pr_fmt
+#undef pr_fmt
+#define pr_fmt(fmt) "[ FTS ] " fmt
+#endif
 
 #define DRIVER_TEST	/* /< if defined allow to use and test special functions
 			  * of the driver and fts_lib from command shell
@@ -257,8 +261,6 @@ enum {
   * Forward declaration
   */
 struct fts_ts_info;
-extern char tag[8];	/* /< forward the definition of the label used
-			  * to print the log in the kernel log */
 
 /*
   * Dispatch event handler

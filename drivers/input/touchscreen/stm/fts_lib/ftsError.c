@@ -36,29 +36,6 @@
 static ErrorList errors;/* /< private variable which implement the Error List */
 
 /**
-  * Print messages in the kernel log
-  * @param force if 1, the log is printed always otherwise only if DEBUG is
-  * defined,
-  * the log will be printed
-  * @param msg string containing the message to print
-  * @param ... additional parameters that are used in msg according the format
-  * of printf
-  */
-void logError(int force, const char *msg, ...)
-{
-	if (force == 1
-#ifdef DEBUG
-	    || 1
-#endif
-	    ) {
-		va_list args;
-		va_start(args, msg);
-		vprintk(msg, args);
-		va_end(args);
-	}
-}
-
-/**
   * Check if an error code is related to an I2C failure
   * @param error error code to check
   * @return 1 if the first level error code is I2C related otherwise 0
@@ -88,49 +65,58 @@ int dumpErrorInfo(u8 *outBuf, int size)
 	u8 data[ERROR_DUMP_ROW_SIZE * ERROR_DUMP_COL_SIZE] = { 0 };
 	u32 sign = 0;
 
-	logError(0, "%s %s: Starting dump of error info...\n", tag, __func__);
+	pr_err("%s: Starting dump of error info...\n", __func__);
 
 	ret = fts_writeReadU8UX(FTS_CMD_FRAMEBUFFER_R, BITS_16, ADDR_ERROR_DUMP,
 				data, ERROR_DUMP_ROW_SIZE * ERROR_DUMP_COL_SIZE,
 				DUMMY_FRAMEBUFFER);
 	if (ret < OK) {
-		logError(1, "%s %s: reading data ERROR %08X\n", tag, __func__,
+		pr_err("%s: reading data ERROR %08X\n", __func__,
 			 ret);
 		return ret;
 	} else {
+		int buff_len, index = 0;
+		char *buff;
+
+		buff_len = (2 + 1) * ERROR_DUMP_COL_SIZE + 1;
+		buff = kzalloc(buff_len, GFP_KERNEL);
+		if (buff == NULL) {
+			pr_err("%s: fail to allocate buffer\n", __func__);
+			return -ENOMEM;
+		}
+
 		if (outBuf != NULL) {
 			sign = size > ERROR_DUMP_ROW_SIZE *
 			       ERROR_DUMP_COL_SIZE ? ERROR_DUMP_ROW_SIZE *
 			       ERROR_DUMP_COL_SIZE : size;
 			memcpy(outBuf, data, sign);
-			logError(0,
-				 "%s %s: error info copied in the buffer!\n",
-				 tag,
+			pr_err("%s: error info copied in the buffer!\n",
 				 __func__);
 		}
-		logError(1, "%s %s: Error Info =\n", tag, __func__);
+		pr_err("%s: Error Info =\n", __func__);
 		u8ToU32(data, &sign);
 		if (sign != ERROR_DUMP_SIGNATURE)
-			logError(1,
-				 "%s %s: Wrong Error Signature! Data may be invalid!\n",
-				 tag, __func__);
+			pr_err("%s: Wrong Error Signature! Data may be invalid!\n",
+				__func__);
 		else
-			logError(1,
-				 "%s %s: Error Signature OK! Data are valid!\n",
-				 tag,
-				 __func__);
+			pr_err("%s: Error Signature OK! Data are valid!\n",
+				__func__);
 
 		for (i = 0; i < ERROR_DUMP_ROW_SIZE * ERROR_DUMP_COL_SIZE;
 		     i++) {
-			if (i % ERROR_DUMP_COL_SIZE == 0)
-				logError(1, KERN_ERR "\n%s %s: %d) ", tag,
-					 __func__, i / ERROR_DUMP_COL_SIZE);
-			logError(1, "%02X ", data[i]);
+			index += scnprintf(buff + index, buff_len - index,
+					"%02X ", data[i]);
+			if (i % ERROR_DUMP_COL_SIZE ==
+				(ERROR_DUMP_COL_SIZE - 1)) {
+				pr_err("%s: %d) %s\n", __func__,
+					i / ERROR_DUMP_COL_SIZE,
+					buff);
+				index = 0;
+			}
 		}
-		logError(1, "\n");
 
-		logError(0, "%s %s: dump of error info FINISHED!\n", tag,
-			 __func__);
+		kfree(buff);
+		pr_err("%s: dump of error info FINISHED!\n", __func__);
 		return OK;
 	}
 }
@@ -157,22 +143,20 @@ int errorHandler(u8 *event, int size)
 
 	if (info != NULL && event != NULL && size > 1 &&
 	    event[0] == EVT_ID_ERROR) {
-		logError(1, "%s errorHandler: Starting handling...\n", tag);
+		pr_debug("errorHandler: Starting handling...\n");
 		addErrorIntoList(event, size);
 		switch (event[1]) {	/* TODO: write an error log for
 					 * undefined command subtype 0xBA */
 		case EVT_TYPE_ERROR_ESD:	/* esd */
 			res = fts_chip_powercycle(info);
 			if (res < OK)
-				logError(1,
-					 "%s errorHandler: Error performing powercycle ERROR %08X\n",
-					 tag, res);
+				pr_err("errorHandler: Error performing powercycle ERROR %08X\n",
+					res);
 
 			res = fts_system_reset();
 			if (res < OK)
-				logError(1,
-					 "%s errorHandler: Cannot reset the device ERROR %08X\n",
-					 tag, res);
+				pr_err("errorHandler: Cannot reset the device ERROR %08X\n",
+					res);
 			res = (ERROR_HANDLER_STOP_PROC | res);
 			break;
 
@@ -180,67 +164,54 @@ int errorHandler(u8 *event, int size)
 			dumpErrorInfo(NULL, 0);
 			res = fts_system_reset();
 			if (res < OK)
-				logError(1,
-					 "%s errorHandler: Cannot reset the device ERROR %08X\n",
-					 tag, res);
+				pr_err("errorHandler: Cannot reset the device ERROR %08X\n",
+					res);
 			res = (ERROR_HANDLER_STOP_PROC | res);
 			break;
 
 		case EVT_TYPE_ERROR_ITO_FORCETOGND:
-			logError(1, "%s errorHandler: Force Short to GND!\n",
-				 tag);
+			pr_err("errorHandler: Force Short to GND!\n");
 			break;
 		case EVT_TYPE_ERROR_ITO_SENSETOGND:
-			logError(1, "%s errorHandler: Sense short to GND!\n",
-				 tag);
+			pr_err("errorHandler: Sense short to GND!\n");
 			break;
 		case EVT_TYPE_ERROR_ITO_FORCETOVDD:
-			logError(1, "%s errorHandler: Force short to VDD!\n",
-				 tag);
+			pr_err("errorHandler: Force short to VDD!\n");
 			break;
 		case EVT_TYPE_ERROR_ITO_SENSETOVDD:
-			logError(1, "%s errorHandler: Sense short to VDD!\n",
-				 tag);
+			pr_err("errorHandler: Sense short to VDD!\n");
 			break;
 		case EVT_TYPE_ERROR_ITO_FORCE_P2P:
-			logError(1,
-				 "%s errorHandler: Force Pin to Pin Short!\n",
-				 tag);
+			pr_err("errorHandler: Force Pin to Pin Short!\n");
 			break;
 		case EVT_TYPE_ERROR_ITO_SENSE_P2P:
-			logError(1,
-				 "%s errorHandler: Sense Pin to Pin Short!\n",
-				 tag);
+			pr_err("errorHandler: Sense Pin to Pin Short!\n");
 			break;
 		case EVT_TYPE_ERROR_ITO_FORCEOPEN:
-			logError(1, "%s errorHandler: Force Open !\n", tag);
+			pr_err("errorHandler: Force Open !\n");
 			break;
 		case EVT_TYPE_ERROR_ITO_SENSEOPEN:
-			logError(1, "%s errorHandler: Sense Open !\n", tag);
+			pr_err("errorHandler: Sense Open !\n");
 			break;
 		case EVT_TYPE_ERROR_ITO_KEYOPEN:
-			logError(1, "%s errorHandler: Key Open !\n", tag);
+			pr_err("errorHandler: Key Open !\n");
 			break;
 
 		case EVT_TYPE_ERROR_FLASH_FAILED:
-			logError(1,
-				 "%s errorHandler: Previous flash failed!\n",
-				 tag);
+			pr_err("errorHandler: Previous flash failed!\n");
 			info->reflash_fw = 1;
 			break;
 
 		default:
-			logError(1, "%s errorHandler: No Action taken!\n",
-				 tag);
+			pr_debug("errorHandler: No Action taken!\n");
 			break;
 		}
-		logError(1, "%s errorHandler: handling Finished! res = %08X\n",
-			 tag, res);
+		pr_debug("errorHandler: handling Finished! res = %08X\n",
+			res);
 		return res;
 	} else {
-		logError(1,
-			 "%s errorHandler: event Null or not correct size! ERROR %08X\n",
-			 tag, ERROR_OP_NOT_ALLOW);
+		pr_err("errorHandler: event Null or not correct size! ERROR %08X\n",
+			ERROR_OP_NOT_ALLOW);
 		return ERROR_OP_NOT_ALLOW;
 	}
 }
@@ -256,24 +227,21 @@ int addErrorIntoList(u8 *event, int size)
 {
 	int i = 0;
 
-	logError(0, "%s Adding error in to ErrorList...\n", tag);
+	pr_debug("Adding error in to ErrorList...\n");
 
 	memcpy(&errors.list[errors.last_index * FIFO_EVENT_SIZE], event, size);
 	i = FIFO_EVENT_SIZE - size;
 	if (i > 0) {
-		logError(0,
-			 "%s Filling last %d bytes of the event with zero...\n",
-			 tag, i);
+		pr_info("Filling last %d bytes of the event with zero...\n", i);
 		memset(&errors.list[errors.last_index * FIFO_EVENT_SIZE + size],
 		       0, i);
 	}
-	logError(0, "%s Adding error in to ErrorList... FINISHED!\n", tag);
+	pr_debug("Adding error in to ErrorList... FINISHED!\n");
 
 	errors.count += 1;
 	if (errors.count > FIFO_DEPTH)
-		logError(1,
-			 "%s ErrorList is going in overflow... the first %d event(s) were override!\n",
-			 tag, errors.count - FIFO_DEPTH);
+		pr_err("ErrorList is going in overflow... the first %d event(s) were override!\n",
+			errors.count - FIFO_DEPTH);
 	errors.last_index = (errors.last_index + 1) % FIFO_DEPTH;
 
 	return OK;
@@ -321,7 +289,7 @@ int pollErrorList(int *event_to_search, int event_bytes)
 	int i = 0, j = 0, find = 0;
 	int count = getErrorListCount();
 
-	logError(1, "%s Starting to poll ErrorList...\n", tag);
+	pr_debug("Starting to poll ErrorList...\n");
 	while (find != 1 && i < count) {
 		find = 1;
 		for (j = 0; j < event_bytes; j++) {
@@ -335,11 +303,11 @@ int pollErrorList(int *event_to_search, int event_bytes)
 		i++;
 	}
 	if (find == 1) {
-		logError(1, "%s Error Found into ErrorList!\n", tag);
+		pr_debug("Error Found into ErrorList!\n");
 		return i - 1;	/* there is i++ at the end of the while */
 	} else {
-		logError(1, "%s Error Not Found into ErrorList! ERROR %08X\n",
-			 tag, ERROR_TIMEOUT);
+		pr_err("Error Not Found into ErrorList! ERROR %08X\n",
+			ERROR_TIMEOUT);
 		return ERROR_TIMEOUT;
 	}
 }
@@ -358,8 +326,8 @@ int pollForErrorType(u8 *list, int size)
 	int i = 0, j = 0, find = 0;
 	int count = getErrorListCount();
 
-	logError(1, "%s %s: Starting to poll ErrorList... count = %d\n", tag,
-		 __func__, count);
+	pr_info("%s: Starting to poll ErrorList... count = %d\n",
+		__func__, count);
 	while (find != 1 && i < count) {
 		for (j = 0; j < size; j++) {
 			if (list[j] == errors.list[i * FIFO_EVENT_SIZE + 1]) {
@@ -370,13 +338,12 @@ int pollForErrorType(u8 *list, int size)
 		i++;
 	}
 	if (find == 1) {
-		logError(1, "%s %s: Error Type %02X into ErrorList!\n", tag,
-			 __func__, list[j]);
+		pr_info("%s: Error Type %02X into ErrorList!\n",
+			__func__, list[j]);
 		return list[j];
 	} else {
-		logError(1,
-			 "%s %s: Error Type Not Found into ErrorList! ERROR %08X\n",
-			 tag, __func__, ERROR_TIMEOUT);
+		pr_err("%s: Error Type Not Found into ErrorList! ERROR %08X\n",
+			__func__, ERROR_TIMEOUT);
 		return ERROR_TIMEOUT;
 	}
 }
