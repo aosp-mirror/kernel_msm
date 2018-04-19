@@ -29,6 +29,8 @@
 #include <linux/irq.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/msm_drm_notify.h>
+#include <linux/notifier.h>
 #include <linux/of_gpio.h>
 #include <linux/platform_device.h>
 #include <linux/regulator/consumer.h>
@@ -404,6 +406,7 @@ enum grip_set_data {
 
 typedef enum {
 	SEC_TS_STATE_POWER_OFF = 0,
+	SEC_TS_STATE_SUSPEND,
 	SEC_TS_STATE_LPM,
 	SEC_TS_STATE_POWER_ON
 } TOUCH_POWER_MODE;
@@ -632,7 +635,6 @@ struct sec_ts_coordinate {
 	u8 left_event;
 };
 
-
 struct sec_ts_data {
 	u32 isr_pin;
 
@@ -681,12 +683,16 @@ struct sec_ts_data {
 	struct mutex i2c_mutex;
 	struct mutex eventlock;
 
+	struct notifier_block notifier;
+
 	struct delayed_work work_read_info;
 #ifdef USE_POWER_RESET_WORK
 	struct delayed_work reset_work;
 	volatile bool reset_is_on_going;
 #endif
 	struct delayed_work work_fw_update;
+	struct delayed_work suspend_work;
+	struct delayed_work resume_work;
 	struct completion resume_done;
 	struct wakeup_source wakesrc;
 	struct sec_cmd_data sec;

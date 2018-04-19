@@ -26,6 +26,8 @@ static void sec_ts_reset_work(struct work_struct *work);
 #endif
 static void sec_ts_read_info_work(struct work_struct *work);
 static void sec_ts_fw_update_work(struct work_struct *work);
+static void sec_ts_suspend_work(struct work_struct *work);
+static void sec_ts_resume_work(struct work_struct *work);
 
 #ifdef USE_OPEN_CLOSE
 static int sec_ts_input_open(struct input_dev *dev);
@@ -1575,6 +1577,8 @@ static void sec_ts_set_input_prop(struct sec_ts_data *ts, struct input_dev *dev,
 	input_set_drvdata(dev, ts);
 }
 
+static struct notifier_block sec_ts_screen_nb;
+
 static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
 	struct sec_ts_data *ts;
@@ -1646,6 +1650,8 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	INIT_DELAYED_WORK(&ts->reset_work, sec_ts_reset_work);
 #endif
 	INIT_DELAYED_WORK(&ts->work_read_info, sec_ts_read_info_work);
+	INIT_DELAYED_WORK(&ts->suspend_work, sec_ts_suspend_work);
+	INIT_DELAYED_WORK(&ts->resume_work, sec_ts_resume_work);
 
 	i2c_set_clientdata(client, ts);
 
@@ -1831,6 +1837,15 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 		goto err_irq;
 	}
 
+	ts->notifier = sec_ts_screen_nb;
+	ret = msm_drm_register_client(&ts->notifier);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev,
+			  "%s: msm_drm_register_client failed. ret = 0x%08X\n",
+			  __func__, ret);
+		goto err_register_drm_client;
+	}
+
 #ifndef CONFIG_SEC_SYSFS
 	sec_class = class_create(THIS_MODULE, "sec");
 #endif
@@ -1871,6 +1886,8 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	sec_ts_fn_remove(ts);
 	free_irq(client->irq, ts);
 */
+err_register_drm_client:
+	free_irq(client->irq, ts);
 err_irq:
 	if (ts->plat_data->support_dex) {
 		input_unregister_device(ts->input_dev_pad);
@@ -2246,6 +2263,9 @@ static void sec_ts_input_close(struct input_dev *dev)
 
 	input_info(true, &ts->client->dev, "%s\n", __func__);
 
+	cancel_delayed_work(&ts->suspend_work);
+	cancel_delayed_work(&ts->resume_work);
+
 #ifdef USE_POWER_RESET_WORK
 	cancel_delayed_work(&ts->reset_work);
 #endif
@@ -2268,6 +2288,13 @@ static int sec_ts_remove(struct i2c_client *client)
 	struct sec_ts_data *ts = i2c_get_clientdata(client);
 
 	input_info(true, &ts->client->dev, "%s\n", __func__);
+
+	msm_drm_unregister_client(&ts->notifier);
+
+	cancel_delayed_work(&ts->suspend_work);
+	flush_delayed_work(&ts->suspend_work);
+	cancel_delayed_work(&ts->resume_work);
+	flush_delayed_work(&ts->resume_work);
 
 #ifdef SEC_TS_FW_UPDATE_ON_PROBE
 	cancel_delayed_work_sync(&ts->work_fw_update);
@@ -2475,6 +2502,163 @@ static const struct dev_pm_ops sec_ts_dev_pm_ops = {
 	.resume = sec_ts_pm_resume,
 };
 #endif
+
+static void sec_ts_suspend_work(struct work_struct *work)
+{
+	struct sec_ts_data *ts = container_of(work, struct sec_ts_data,
+					      suspend_work.work);
+	int ret = 0;
+
+	input_info(true, &ts->client->dev, "%s\n", __func__);
+
+	mutex_lock(&ts->device_mutex);
+
+	if (ts->power_status == SEC_TS_STATE_SUSPEND) {
+		input_err(true, &ts->client->dev, "%s: already suspended.\n",
+			  __func__);
+		mutex_unlock(&ts->device_mutex);
+		return;
+	}
+
+	/* Sense_off */
+	ret = sec_ts_i2c_write(ts, SEC_TS_CMD_SENSE_OFF, NULL, 0);
+	if (ret < 0)
+		input_err(true, &ts->client->dev,
+			  "%s: failed to write Sense_off.\n", __func__);
+
+	disable_irq(ts->client->irq);
+	sec_ts_locked_release_all_finger(ts);
+
+	if (ts->plat_data->enable_sync)
+		ts->plat_data->enable_sync(false);
+
+	ts->power_status = SEC_TS_STATE_SUSPEND;
+
+	mutex_unlock(&ts->device_mutex);
+}
+
+static void sec_ts_resume_work(struct work_struct *work)
+{
+	struct sec_ts_data *ts = container_of(work, struct sec_ts_data,
+					      resume_work.work);
+	int ret = 0;
+
+	input_info(true, &ts->client->dev, "%s\n", __func__);
+
+	mutex_lock(&ts->device_mutex);
+
+	if (ts->power_status == SEC_TS_STATE_POWER_ON) {
+		input_err(true, &ts->client->dev, "%s: already resumed.\n",
+			  __func__);
+		mutex_unlock(&ts->device_mutex);
+		return;
+	}
+
+	sec_ts_locked_release_all_finger(ts);
+
+	ts->power_status = SEC_TS_STATE_POWER_ON;
+
+	if (ts->plat_data->enable_sync)
+		ts->plat_data->enable_sync(true);
+
+	ts->touch_functions =
+	    ts->touch_functions | SEC_TS_DEFAULT_ENABLE_BIT_SETFUNC;
+	ret = sec_ts_i2c_write(ts, SEC_TS_CMD_SET_TOUCHFUNCTION,
+			       (u8 *)&ts->touch_functions, 2);
+	if (ret < 0)
+		input_err(true, &ts->client->dev,
+			  "%s: Failed to send touch function command.",
+			  __func__);
+
+#ifdef SEC_TS_SUPPORT_CUSTOMLIB
+	if (ts->use_customlib)
+		sec_ts_set_custom_library(ts);
+#endif
+
+	sec_ts_set_grip_type(ts, ONLY_EDGE_HANDLER);
+
+	if (ts->dex_mode) {
+		input_info(true, &ts->client->dev, "%s: set dex mode.\n",
+			   __func__);
+		ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SET_DEX_MODE,
+					   &ts->dex_mode, 1);
+		if (ret < 0)
+			input_err(true, &ts->client->dev,
+				  "%s: failed to set dex mode %x.\n", __func__,
+				  ts->dex_mode);
+	}
+
+	if (ts->brush_mode) {
+		input_info(true, &ts->client->dev, "%s: set brush mode.\n",
+			   __func__);
+		ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SET_BRUSH_MODE,
+					   &ts->brush_mode, 1);
+		if (ret < 0)
+			input_err(true, &ts->client->dev,
+				  "%s: failed to set brush mode.\n", __func__);
+	}
+
+	if (ts->touchable_area) {
+		input_info(true, &ts->client->dev, "%s: set 16:9 mode.\n",
+			   __func__);
+		ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SET_TOUCHABLE_AREA,
+					   &ts->touchable_area, 1);
+		if (ret < 0)
+			input_err(true, &ts->client->dev,
+				  "%s: failed to set 16:9 mode.\n", __func__);
+	}
+
+	/* Sense_on */
+	ret = sec_ts_i2c_write(ts, SEC_TS_CMD_SENSE_ON, NULL, 0);
+	if (ret < 0)
+		input_err(true, &ts->client->dev,
+			  "%s: failed to write Sense_on.\n", __func__);
+
+	enable_irq(ts->client->irq);
+
+	mutex_unlock(&ts->device_mutex);
+}
+
+static int sec_ts_screen_state_chg_callback(struct notifier_block *nb,
+					    unsigned long val, void *data)
+{
+	struct sec_ts_data *ts = container_of(nb, struct sec_ts_data,
+					      notifier);
+	struct msm_drm_notifier *evdata = (struct msm_drm_notifier *)data;
+	unsigned int blank;
+
+	input_dbg(true, &ts->client->dev, "%s: enter.\n", __func__);
+
+	if (val != MSM_DRM_EVENT_BLANK)
+		return NOTIFY_DONE;
+
+	if (!ts || !evdata || !evdata->data) {
+		input_err(true, &ts->client->dev,
+			  "%s: Bad screen state change notifier call.\n",
+			  __func__);
+		return NOTIFY_DONE;
+	}
+
+	blank = *((unsigned int *)evdata->data);
+	switch (blank) {
+	case MSM_DRM_BLANK_POWERDOWN:
+		input_dbg(true, &ts->client->dev,
+			  "%s: MSM_DRM_BLANK_POWERDOWN.\n", __func__);
+		schedule_delayed_work(&ts->suspend_work, msecs_to_jiffies(HZ));
+		break;
+	case MSM_DRM_BLANK_UNBLANK:
+		input_dbg(true, &ts->client->dev,
+			  "%s: MSM_DRM_BLANK_UNBLANK.\n", __func__);
+		schedule_delayed_work(&ts->resume_work, msecs_to_jiffies(HZ));
+		break;
+	}
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block sec_ts_screen_nb = {
+	.notifier_call = sec_ts_screen_state_chg_callback,
+};
 
 #ifdef CONFIG_OF
 static const struct of_device_id sec_ts_match_table[] = {
