@@ -2643,7 +2643,8 @@ VOS_STATUS vos_nv_setNVEncodedBuffer(v_U8_t *pNvBuffer, v_SIZE_t size)
  *  DFS
  * Return - Void
  */
-void vos_nv_set_channel_state(v_U32_t rfChannel, int channel_state)
+void vos_nv_set_channel_state(v_U32_t rfChannel,
+			      eNVChannelEnabledType channel_state)
 {
 	v_U32_t	channelLoop;
 	eRfChannels channelEnum = INVALID_RF_CHANNEL;

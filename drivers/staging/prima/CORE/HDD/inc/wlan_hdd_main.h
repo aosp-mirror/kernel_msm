@@ -1562,7 +1562,7 @@ struct hdd_offloaded_packets_ctx
 
 struct hdd_cache_channel_info {
 	int channel_num;
-	int reg_status;
+	eNVChannelEnabledType reg_status;
 	int wiphy_status;
 };
 
@@ -1859,7 +1859,7 @@ struct hdd_context_s
 
     uint32_t track_arp_ip;
 
-    struct hdd_cache_channels *orginal_channels;
+    struct hdd_cache_channels *original_channels;
     struct mutex cache_channel_lock;
 };
 
@@ -2372,7 +2372,7 @@ int hdd_parse_disable_chan_cmd(hdd_adapter_t *adapter, tANI_U8 *ptr);
  * @return: length of data copied to buf
  */
 int hdd_get_disable_ch_list(hdd_context_t *hdd_ctx, tANI_U8 *buf,
-                            tANI_U8 buf_len);
+                            uint32_t buf_len);
 
 /**
  * hdd_is_memdump_supported() - to check if memdump feature support

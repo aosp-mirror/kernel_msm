@@ -745,7 +745,8 @@ eNVChannelEnabledType vos_nv_getChannelEnabledState
  *  DFS
  * Return - Void
  */
-void vos_nv_set_channel_state(v_U32_t rfChannel, int channel_state);
+void vos_nv_set_channel_state(v_U32_t rfChannel,
+                              eNVChannelEnabledType channel_state);
 
 VOS_STATUS vos_init_wiphy_from_nv_bin(void);
 

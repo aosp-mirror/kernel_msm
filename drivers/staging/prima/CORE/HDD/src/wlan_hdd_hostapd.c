@@ -4524,7 +4524,7 @@ static int __iw_get_ap_freq(struct net_device *dev,
        else
        {
           status = hdd_wlan_get_freq(channel, &freq);
-          if( TRUE == status)
+          if( 0 == status)
           {
               /* Set Exponent parameter as 6 (MHZ) in struct iw_freq
                * iwlist & iwconfig command shows frequency into proper
@@ -4538,7 +4538,7 @@ static int __iw_get_ap_freq(struct net_device *dev,
     {
        channel = pHddApCtx->operatingChannel;
        status = hdd_wlan_get_freq(channel, &freq);
-       if( TRUE == status)
+       if( 0 == status)
        {
           /* Set Exponent parameter as 6 (MHZ) in struct iw_freq
            * iwlist & iwconfig command shows frequency into proper

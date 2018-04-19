@@ -10817,7 +10817,7 @@ int wlan_hdd_restore_channels(hdd_context_t *hdd_ctx)
 
 	mutex_lock(&hdd_ctx->cache_channel_lock);
 
-	cache_chann = hdd_ctx->orginal_channels;
+	cache_chann = hdd_ctx->original_channels;
 
 	if (!cache_chann || !cache_chann->num_channels) {
 		hddLog(VOS_TRACE_LEVEL_INFO,
@@ -10896,7 +10896,7 @@ static int wlan_hdd_disable_channels(hdd_context_t *hdd_ctx)
 	wiphy = hdd_ctx->wiphy;
 
 	mutex_lock(&hdd_ctx->cache_channel_lock);
-	cache_chann = hdd_ctx->orginal_channels;
+	cache_chann = hdd_ctx->original_channels;
 
 	if (!cache_chann || !cache_chann->num_channels) {
 		hddLog(VOS_TRACE_LEVEL_INFO,
