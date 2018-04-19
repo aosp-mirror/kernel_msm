@@ -15,6 +15,7 @@
  */
 
 #include <linux/atomic.h>
+#include <linux/debugfs.h>
 #include <linux/device.h>
 #include <linux/delay.h>
 #include <linux/firmware.h>
@@ -140,6 +141,13 @@ enum fw_update_status {
 	FW_UPD_VERIFIED /* fw signature check successful */
 };
 
+struct mnh_sm_state_stat {
+	uint32_t counter; /* accumulative */
+	ktime_t duration; /* accumulative */
+	ktime_t last_entry;
+	ktime_t last_exit;
+};
+
 struct mnh_sm_device {
 	struct platform_device *pdev;
 	struct miscdevice *misc_dev;
@@ -211,6 +219,12 @@ struct mnh_sm_device {
 
 	/* serialize fw update requests */
 	struct mutex fw_update_lock;
+
+	/* debugfs */
+	struct dentry *dbgfs_dir;
+
+	/* power state stats */
+	struct mnh_sm_state_stat state_stats[MNH_STATE_MAX];
 };
 
 static struct mnh_sm_device *mnh_sm_dev;
@@ -1472,6 +1486,117 @@ static struct attribute *mnh_sm_attrs[] = {
 };
 ATTRIBUTE_GROUPS(mnh_sm);
 
+static void mnh_sm_state_stats_init(void)
+{
+	mnh_sm_dev->state_stats[mnh_sm_dev->state].counter++;
+	mnh_sm_dev->state_stats[mnh_sm_dev->state].last_entry = ktime_get();
+}
+
+static void mnh_sm_record_state_change(int prev_state, int new_state)
+{
+	ktime_t time;
+
+	if (new_state != prev_state) {
+		time = ktime_get();
+		mnh_sm_dev->state_stats[new_state].counter++;
+		mnh_sm_dev->state_stats[new_state].last_entry = time;
+		mnh_sm_dev->state_stats[prev_state].last_exit = time;
+		time = ktime_sub(mnh_sm_dev->state_stats[prev_state].last_exit,
+			mnh_sm_dev->state_stats[prev_state].last_entry);
+		mnh_sm_dev->state_stats[prev_state].duration = ktime_add(
+			mnh_sm_dev->state_stats[prev_state].duration, time);
+	}
+}
+
+static ssize_t mnh_sm_dbgfs_read_powerstats(struct file *fp, char __user *ubuf,
+				size_t cnt, loff_t *ppos)
+{
+	const char * const states[MNH_STATE_MAX] = {"OFF", "ACTIVE", "SUSPEND"};
+	char *buf;
+	int pos = 0;
+	int ret, i;
+
+#define BUFFER_MAX_LEN (4096)
+#define POWER_DEBUGFS_HEADER "Easel Subsystem Power Stats\n"
+#define PRINT_FORMAT  "%s\n"\
+				"\tCumulative count: %d\n"\
+				"\tCumulative duration msec:  %lld\n"\
+				"\tLast entry timestamp msec: %lld\n"\
+				"\tLast exit timestamp msec:  %lld\n"
+
+
+	buf = kzalloc(BUFFER_MAX_LEN, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	pos += scnprintf(buf + pos, BUFFER_MAX_LEN - pos, POWER_DEBUGFS_HEADER);
+
+	mutex_lock(&mnh_sm_dev->lock);
+
+	for (i = 0; i < MNH_STATE_MAX; i++) {
+		pos += scnprintf(buf + pos, BUFFER_MAX_LEN - pos,
+			PRINT_FORMAT, states[i],
+			mnh_sm_dev->state_stats[i].counter,
+			ktime_to_ms(mnh_sm_dev->state_stats[i].duration),
+			ktime_to_ms(mnh_sm_dev->state_stats[i].last_entry),
+			ktime_to_ms(mnh_sm_dev->state_stats[i].last_exit));
+	}
+
+	mutex_unlock(&mnh_sm_dev->lock);
+#undef BUFFER_MAX_LEN
+#undef POWER_DEBUGFS_HEADER
+#undef PRINT_FORMAT
+
+	ret = simple_read_from_buffer(ubuf, cnt, ppos, buf, pos);
+	kfree(buf);
+
+	return ret;
+}
+
+static const struct file_operations mnh_sm_dbgfs_fops_powerstats = {
+	.open = simple_open,
+	.read = mnh_sm_dbgfs_read_powerstats,
+};
+
+static void mnh_sm_dbgfs_deregister(void)
+{
+	if (!mnh_sm_dev->dbgfs_dir)
+		return;
+
+	debugfs_remove_recursive(mnh_sm_dev->dbgfs_dir);
+	mnh_sm_dev->dbgfs_dir = NULL;
+}
+
+static int mnh_sm_dbgfs_register(const char *name)
+{
+	struct dentry *dir, *f;
+
+	dir = debugfs_create_dir(name, NULL);
+
+	if (!dir) {
+		dev_err(mnh_sm_dev->dev,
+			"%s: failed to create debug dir\n",
+			__func__);
+		return -ENOMEM;
+	}
+
+	mnh_sm_dev->dbgfs_dir = dir;
+
+	f = debugfs_create_file("power_stats", 0400, dir,
+				NULL, &mnh_sm_dbgfs_fops_powerstats);
+
+	if (!f) {
+		dev_err(mnh_sm_dev->dev,
+			"%s: failed to create powerstats\n",
+			__func__);
+
+		mnh_sm_dbgfs_deregister();
+		return -ENODEV;
+	} else {
+		return 0;
+	}
+}
+
 /*******************************************************************************
  *
  *      APIs
@@ -1991,6 +2116,7 @@ static int mnh_sm_set_state_locked(int state)
 int mnh_sm_set_state(int state)
 {
 	int ret;
+	int prev_state;
 
 	if (!mnh_sm_dev)
 		return -ENODEV;
@@ -2006,7 +2132,12 @@ int mnh_sm_set_state(int state)
 
 	mutex_lock(&mnh_sm_dev->lock);
 
+	prev_state = mnh_sm_dev->state;
+
 	ret = mnh_sm_set_state_locked(state);
+
+	/* record state change */
+	mnh_sm_record_state_change(prev_state, mnh_sm_dev->state);
 
 	mutex_unlock(&mnh_sm_dev->lock);
 
@@ -2499,6 +2630,16 @@ static int mnh_sm_probe(struct platform_device *pdev)
 		dev_err(dev, "failed to initialize mnh-ddr (%d)\n", error);
 		goto fail_probe_2;
 	}
+
+	/* register debug fs */
+	error = mnh_sm_dbgfs_register(DEVICE_NAME);
+	if (error) {
+		dev_err(dev, "failed to register debugfs (%d)\n", error);
+		goto fail_probe_2;
+	}
+
+	/* init state stats */
+	mnh_sm_state_stats_init();
 
 	mnh_sm_dev->initialized = true;
 	dev_info(dev, "MNH SM initialized successfully\n");
