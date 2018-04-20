@@ -848,6 +848,9 @@ static int tcpm_set_cc(struct tcpc_dev *dev, enum typec_cc_status cc)
 	case TYPEC_CC_RP_DEF:
 		val.intval = POWER_SUPPLY_TYPEC_PR_SOURCE;
 		break;
+	case TYPEC_CC_RP_1_5:
+		val.intval = POWER_SUPPLY_TYPEC_PR_SOURCE_1_5;
+		break;
 	default:
 		pd_engine_log(pd, "tcpm_set_cc: invalid cc %s",
 			      get_typec_cc_status_name(cc));
