@@ -888,13 +888,14 @@ int flash_burn(Firmware fw, int force_burn, int keep_cx)
 		 * skip it!
 		 */
 		for (res = EXTERNAL_RELEASE_INFO_SIZE - 1; res >= 0; res--) {
-			if (fw.externalRelease[res] >
-			    systemInfo.u8_releaseInfo[res])
+			if (fw.externalRelease[res] !=
+			    systemInfo.u8_releaseInfo[res]) {
 				/* Avoid loading the CX because it is missing
 				 * in the bin file, it just need to update
 				 * to last fw+cfg because a new release */
 				force_burn = 0;
-			goto start;
+				goto start;
+			}
 		}
 		logError(1,
 			 "%s flash_burn: CRC in CX but fw does not contain CX data! NO UPDATE ERROR %08X\n",
@@ -918,6 +919,8 @@ start:
 			return res | ERROR_FLASH_BURN_FAILED;
 	} else
 		logError(0, "%s   system reset COMPLETED!\n", tag);
+
+	msleep(100); /* required by HW for safe flash procedure */
 
 	logError(0, "%s 2) HOLD M3 :\n", tag);
 	res = hold_m3();

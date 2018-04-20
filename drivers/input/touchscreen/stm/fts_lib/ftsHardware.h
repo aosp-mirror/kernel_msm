@@ -216,8 +216,7 @@
 /* REMAP REGISTER */
 #define ADDR_BOOT_OPTION	((u64)0x0000000020000025)	/* /< address of
 								 * Boot option
-								 * register in
-								 * SONIA */
+								 * register */
 
 /* INTERRUPT INFO */
 #define ADDR_IER		((u64)0x0000000020000029)	/* /< address of

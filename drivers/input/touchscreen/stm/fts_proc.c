@@ -653,7 +653,7 @@ static void fts_seq_stop(struct seq_file *s, void *v)
   * Struct where define and specify the functions which implements the flow for
   * writing on a sequential file
   */
-static struct seq_operations fts_seq_ops = {
+static const struct seq_operations fts_seq_ops = {
 	.start	= fts_seq_start,
 	.next	= fts_seq_next,
 	.stop	= fts_seq_stop,
