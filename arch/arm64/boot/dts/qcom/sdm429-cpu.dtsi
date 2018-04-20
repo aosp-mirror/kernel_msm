@@ -13,16 +13,13 @@
 
 / {
 	/delete-node/ cpus;
+	/delete-node/ energy-costs;
 
 	cpus {
 		#address-cells = <1>;
 		#size-cells = <0>;
 		cpu-map {
-
 			cluster0 {
-			};
-
-			cluster1 {
 				core0 {
 					cpu = <&CPU0>;
 				};
@@ -44,7 +41,10 @@
 			reg = <0x100>;
 			enable-method = "psci";
 			cpu-release-addr = <0x0 0x90000000>;
+			efficiency = <1024>;
+			sched-energy-costs = <&CPU_COST_0 &CLUSTER_COST_0>;
 			next-level-cache = <&L2_1>;
+			#cooling-cells = <2>;
 			L2_1: l2-cache {
 			      compatible = "arm,arch-cache";
 			      cache-level = <2>;
@@ -67,7 +67,10 @@
 			reg = <0x101>;
 			enable-method = "psci";
 			cpu-release-addr = <0x0 0x90000000>;
+			efficiency = <1024>;
+			sched-energy-costs = <&CPU_COST_0 &CLUSTER_COST_0>;
 			next-level-cache = <&L2_1>;
+			#cooling-cells = <2>;
 			L1_I_101: l1-icache {
 				compatible = "arm,arch-cache";
 				qcom,dump-size = <0x8800>;
@@ -84,7 +87,10 @@
 			reg = <0x102>;
 			enable-method = "psci";
 			cpu-release-addr = <0x0 0x90000000>;
+			efficiency = <1024>;
+			sched-energy-costs = <&CPU_COST_0 &CLUSTER_COST_0>;
 			next-level-cache = <&L2_1>;
+			#cooling-cells = <2>;
 			L1_I_102: l1-icache {
 				compatible = "arm,arch-cache";
 				qcom,dump-size = <0x8800>;
@@ -101,7 +107,10 @@
 			reg = <0x103>;
 			enable-method = "psci";
 			cpu-release-addr = <0x0 0x90000000>;
+			efficiency = <1024>;
+			sched-energy-costs = <&CPU_COST_0 &CLUSTER_COST_0>;
 			next-level-cache = <&L2_1>;
+			#cooling-cells = <2>;
 			L1_I_103: l1-icache {
 				compatible = "arm,arch-cache";
 				qcom,dump-size = <0x8800>;
@@ -114,4 +123,34 @@
 
 	};
 
+	energy_costs: energy-costs {
+		compatible = "sched-energy";
+
+		CPU_COST_0: core-cost0 {
+			busy-cost-data = <
+				 800000	137
+				1001600	165
+				1305600	207
+				1497600	256
+				1708800	327
+				1958400	445
+			>;
+			idle-cost-data = <
+				100 80 60 40
+			>;
+		};
+		CLUSTER_COST_0: cluster-cost0 {
+			busy-cost-data = <
+				 800000	49
+				1001600	53
+				1305600	61
+				1497600	71
+				1708800	85
+				1958400	110
+			>;
+			idle-cost-data = <
+				4 3 2 1
+			>;
+		};
+	};
 };

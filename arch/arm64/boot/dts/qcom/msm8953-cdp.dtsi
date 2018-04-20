@@ -14,6 +14,7 @@
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/clock/msm-clocks-8953.h>
 #include "msm8953-audio-cdp.dtsi"
+#include "msm8953-camera-sensor-cdp.dtsi"
 
 &blsp1_uart0 {
 	status = "ok";
@@ -169,9 +170,8 @@
 	gpio_keys {
 		compatible = "gpio-keys";
 		input-name = "gpio-keys";
-		pinctrl-names = "tlmm_gpio_key_active","tlmm_gpio_key_suspend";
+		pinctrl-names = "default";
 		pinctrl-0 = <&gpio_key_active>;
-		pinctrl-1 = <&gpio_key_suspend>;
 
 		camera_focus {
 			label = "camera_focus";
@@ -179,6 +179,8 @@
 			linux,input-type = <1>;
 			linux,code = <0x210>;
 			debounce-interval = <15>;
+			linux,can-disable;
+			gpio-key,wakeup;
 		};
 
 		camera_snapshot {
@@ -187,6 +189,8 @@
 			linux,input-type = <1>;
 			linux,code = <0x2fe>;
 			debounce-interval = <15>;
+			linux,can-disable;
+			gpio-key,wakeup;
 		};
 
 		vol_up {
@@ -195,6 +199,8 @@
 			linux,input-type = <1>;
 			linux,code = <115>;
 			debounce-interval = <15>;
+			linux,can-disable;
+			gpio-key,wakeup;
 		};
 
 		home {
@@ -203,6 +209,8 @@
 			linux,input-type = <1>;
 			linux,code = <102>;
 			debounce-interval = <15>;
+			linux,can-disable;
+			gpio-key,wakeup;
 		};
 	};
 };

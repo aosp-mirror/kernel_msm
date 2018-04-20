@@ -219,8 +219,8 @@ struct tcp_sock {
 	} rack;
 	u16	advmss;		/* Advertised MSS			*/
 	u8	rate_app_limited:1,  /* rate_{delivered,interval_us} limited? */
-		is_sack_reneg:1,    /* in recovery from loss with SACK reneg? */
 		fastopen_connect:1, /* FASTOPEN_CONNECT sockopt */
+		is_sack_reneg:1,    /* in recovery from loss with SACK reneg? */
 		unused:5;
 	u8	nonagle     : 4,/* Disable Nagle algorithm?             */
 		thin_lto    : 1,/* Use linear timeouts for thin streams */

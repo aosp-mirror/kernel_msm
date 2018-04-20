@@ -16,6 +16,7 @@
 #include "sdm632.dtsi"
 #include "sdm450-qrd-sku4.dtsi"
 #include "sdm450-pmi632.dtsi"
+#include "msm8953-camera-sensor-qrd.dtsi"
 
 / {
 	model = "Qualcomm Technologies, Inc. SDM632 + PMI632 + PMI8004 QRD SKU4";
@@ -48,4 +49,18 @@
 			debounce-interval = <15>;
 		};
 	};
+};
+
+&pm8953_vadc {
+	pinctrl-0 = <&pa_therm1_default>;
+	/delete-node/ chan@13;
+};
+
+&pm8953_mpps {
+	/delete-node/ case_therm;
+};
+
+&thermal_zones {
+	/delete-node/ case-therm-adc;
+	/delete-node/ case-therm-step;
 };

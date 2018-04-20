@@ -172,7 +172,7 @@ struct tmc_drvdata {
 	void			*vaddr;
 	u32			size;
 	u32			len;
-	local_t			mode;
+	u32			mode;
 	enum tmc_config_type	config_type;
 	enum tmc_mem_intf_width	memwidth;
 	struct mutex		mem_lock;
@@ -192,6 +192,7 @@ struct tmc_drvdata {
 	struct coresight_csr	*csr;
 	const char		*csr_name;
 	struct byte_cntr	*byte_cntr;
+	bool			force_reg_dump;
 };
 
 /* Generic functions */

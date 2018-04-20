@@ -11,6 +11,7 @@ obj-$(CONFIG_QPNP_QNOVO)	+= qpnp-qnovo.o battery.o
 obj-$(CONFIG_CHARGER_P9221)	+= p9221_charger.o
 obj-$(CONFIG_QPNP_TYPEC)	+= qpnp-typec.o
 obj-$(CONFIG_QPNP_SMB5)		+= step-chg-jeita.o battery.o qpnp-smb5.o smb5-lib.o pmic-voter.o storm-watch.o schgm-flash.o
+obj-$(CONFIG_SMB1390_CHARGE_PUMP)	+= smb1390-charger.o pmic-voter.o
 
 # TODO: remove me b/62058353
 subdir-ccflags-y += \

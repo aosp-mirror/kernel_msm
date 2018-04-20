@@ -405,7 +405,7 @@ int dwc3_event_buffers_setup(struct dwc3 *dwc)
 
 	evt = dwc->ev_buf;
 	dwc3_trace(trace_dwc3_core,
-			"Event buf %p dma %08llx length %d\n",
+			"Event buf %pK dma %08llx length %d\n",
 			evt->buf, (unsigned long long) evt->dma,
 			evt->length);
 
@@ -1248,6 +1248,10 @@ static int dwc3_probe(struct platform_device *pdev)
 				"snps,disable-clk-gating");
 	dwc->enable_bus_suspend = device_property_read_bool(dev,
 					"snps,bus-suspend-enable");
+	dwc->usb3_u1u2_disable = device_property_read_bool(dev,
+					"snps,usb3-u1u2-disable");
+	dwc->usb2_l1_disable = device_property_read_bool(dev,
+					"snps,usb2-l1-disable");
 	if (dwc->enable_bus_suspend) {
 		pm_runtime_set_autosuspend_delay(dev, 500);
 		pm_runtime_use_autosuspend(dev);

@@ -81,11 +81,6 @@ static int dummycon_font_set(struct vc_data *vc, struct console_font *f, unsigne
     return 0;
 }
 
-static int dummycon_font_get(struct vc_data *vc, struct console_font *f)
-{
-    return 0;
-}
-
 static int dummycon_font_default(struct vc_data *vc, struct console_font *f, char *c)
 {
     return 0;
@@ -115,7 +110,6 @@ const struct consw dummy_con = {
     .con_switch =	dummycon_switch,
     .con_blank =	dummycon_blank,
     .con_font_set =	dummycon_font_set,
-    .con_font_get =	dummycon_font_get,
     .con_font_default =	dummycon_font_default,
     .con_font_copy =	dummycon_font_copy,
 };

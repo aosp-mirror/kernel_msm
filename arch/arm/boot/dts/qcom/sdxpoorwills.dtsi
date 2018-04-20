@@ -43,6 +43,16 @@
 			label = "sbl_mem";
 		};
 
+		flex_sec_apps_mem: flex_sec_apps_regions@8fcfd000 {
+			no-map;
+			reg = <0x8fcfd000 0x3000>;
+		};
+
+		access_control_mem: access_control_mem@8fc80000 {
+			no-map;
+			reg = <0x8fc80000 0x40000>;
+		};
+
 		hyp_region: hyp_region@8fc00000 {
 			no-map;
 			reg = <0x8fc00000 0x80000>;
@@ -823,6 +833,8 @@
 		qcom,mhi-event-ring-id-limits = <9 10>; /* start and end */
 		qcom,modem-cfg-emb-pipe-flt;
 		qcom,use-ipa-pm;
+		qcom,arm-smmu;
+		qcom,smmu-fast-map;
 		qcom,bandwidth-vote-for-ipa;
 		qcom,msm-bus,name = "ipa";
 		qcom,msm-bus,num-cases = <5>;
@@ -858,6 +870,9 @@
 		qcom,throughput-threshold = <310 600 1000>;
 		qcom,scaling-exceptions = <>;
 
+		/* ipa tz unlock registers */
+		qcom,ipa-tz-unlock-reg =
+			<0x4043583c 0x1000>; /* 32-bit reg addr and size*/
 
 		/* IPA RAM mmap */
 		qcom,ipa-ram-mmap = <
@@ -960,6 +975,32 @@
 		qcom,smp2pgpio_map_ipa_1_in {
 			compatible = "qcom,smp2pgpio-map-ipa-1-in";
 			gpios = <&smp2pgpio_ipa_1_in 0 0>;
+		};
+
+		ipa_smmu_ap: ipa_smmu_ap {
+			compatible = "qcom,ipa-smmu-ap-cb";
+			qcom,smmu-s1-bypass;
+			iommus = <&apps_smmu 0x5E0 0x0>;
+			qcom,iova-mapping = <0x20000000 0x40000000>;
+			qcom,additional-mapping =
+				/* modem tables in IMEM */
+				<0x14686000 0x14686000 0x3000>;
+		};
+
+		ipa_smmu_wlan: ipa_smmu_wlan {
+			compatible = "qcom,ipa-smmu-wlan-cb";
+			qcom,smmu-s1-bypass;
+			iommus = <&apps_smmu 0x5E1 0x0>;
+			qcom,additional-mapping =
+				/* ipa-uc ram */
+				<0x1E60000 0x1E60000 0xA000>;
+		};
+
+		ipa_smmu_uc: ipa_smmu_uc {
+			compatible = "qcom,ipa-smmu-uc-cb";
+			qcom,smmu-s1-bypass;
+			iommus = <&apps_smmu 0x5E2 0x0>;
+			qcom,iova-mapping = <0x40000000 0x20000000>;
 		};
 	};
 
