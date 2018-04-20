@@ -34,15 +34,18 @@ struct device_node;
  * @number: unique pin number from the global pin number space
  * @name: a name for this pin
  * @drv_data: driver-defined per-pin data. pinctrl core does not touch this
+ * @no_read: the registers of this pin can't be read by userspace process
  */
 struct pinctrl_pin_desc {
 	unsigned number;
 	const char *name;
 	void *drv_data;
+	bool no_read;
 };
 
 /* Convenience macro to define a single named or anonymous pin descriptor */
 #define PINCTRL_PIN(a, b) { .number = a, .name = b }
+#define PINCTRL_PIN_NR(a, b) { .number = a, .name = b, .no_read = true }
 #define PINCTRL_PIN_ANON(a) { .number = a }
 
 /**

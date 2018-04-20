@@ -14,6 +14,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/err.h>
 #include <linux/pinctrl/pinctrl.h>
 
 #include "pinctrl-msm.h"
@@ -203,10 +204,10 @@ static const struct pinctrl_pin_desc sdm845_pins[] = {
 	PINCTRL_PIN(78, "GPIO_78"),
 	PINCTRL_PIN(79, "GPIO_79"),
 	PINCTRL_PIN(80, "GPIO_80"),
-	PINCTRL_PIN(81, "GPIO_81"),
-	PINCTRL_PIN(82, "GPIO_82"),
-	PINCTRL_PIN(83, "GPIO_83"),
-	PINCTRL_PIN(84, "GPIO_84"),
+	PINCTRL_PIN_NR(81, "GPIO_81"),
+	PINCTRL_PIN_NR(82, "GPIO_82"),
+	PINCTRL_PIN_NR(83, "GPIO_83"),
+	PINCTRL_PIN_NR(84, "GPIO_84"),
 	PINCTRL_PIN(85, "GPIO_85"),
 	PINCTRL_PIN(86, "GPIO_86"),
 	PINCTRL_PIN(87, "GPIO_87"),

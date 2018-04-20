@@ -484,6 +484,12 @@ static void msm_gpio_dbg_show_one(struct seq_file *s,
 	};
 
 	g = &pctrl->soc->groups[offset];
+
+	if (pctrl->pctrl->desc->pins[offset].no_read) {
+		seq_printf(s, "%s not readable", g->name);
+		return;
+	}
+
 	ctl_reg = readl(pctrl->regs + g->ctl_reg);
 
 	is_out = !!(ctl_reg & BIT(g->oe_bit));
