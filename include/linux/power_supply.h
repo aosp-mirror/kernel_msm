@@ -307,6 +307,7 @@ enum power_supply_typec_power_role {
 	POWER_SUPPLY_TYPEC_PR_DUAL,
 	POWER_SUPPLY_TYPEC_PR_SINK,
 	POWER_SUPPLY_TYPEC_PR_SOURCE,
+	POWER_SUPPLY_TYPEC_PR_SOURCE_1_5,
 };
 
 enum power_supply_notifier_events {
