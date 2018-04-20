@@ -19,7 +19,6 @@
 
 #include <linux/module.h>
 #include <linux/reboot.h>
-#include <linux/vmalloc.h>
 
 #define DM_MSG_PREFIX			"verity"
 
@@ -396,19 +395,6 @@ static int verity_bv_zero(struct dm_verity *v, struct dm_verity_io *io,
 }
 
 /*
- * Moves the bio iter one data block forward.
- */
-static inline void verity_bv_skip_block(struct dm_verity *v,
-					struct dm_verity_io *io,
-					struct bvec_iter *iter)
-{
-	struct bio *bio = dm_bio_from_per_bio_data(io,
-						   v->ti->per_bio_data_size);
-
-	bio_advance_iter(bio, iter, 1 << v->data_dev_block_bits);
-}
-
-/*
  * Verify one "dm_verity_io" structure.
  */
 static int verity_verify_io(struct dm_verity_io *io)
@@ -420,17 +406,9 @@ static int verity_verify_io(struct dm_verity_io *io)
 
 	for (b = 0; b < io->n_blocks; b++) {
 		int r;
-		sector_t cur_block = io->block + b;
 		struct shash_desc *desc = verity_io_hash_desc(v, io);
 
-		if (v->validated_blocks &&
-		    test_bit(cur_block, v->validated_blocks)) {
-			/* don't validate anything */
-			verity_bv_skip_block(v, io, &io->iter);
-			continue;
-		}
-
-		r = verity_hash_for_block(v, io, cur_block,
+		r = verity_hash_for_block(v, io, io->block + b,
 					  verity_io_want_digest(v, io),
 					  &is_zero);
 		if (unlikely(r < 0))
@@ -463,12 +441,8 @@ static int verity_verify_io(struct dm_verity_io *io)
 			return r;
 
 		if (likely(memcmp(verity_io_real_digest(v, io),
-				  verity_io_want_digest(v, io),
-				  v->digest_size) == 0)) {
-			if (v->validated_blocks)
-				set_bit(cur_block, v->validated_blocks);
+				  verity_io_want_digest(v, io), v->digest_size) == 0))
 			continue;
-		}
 		else if (verity_fec_decode(v, io, DM_VERITY_BLOCK_TYPE_DATA,
 					   io->block + b, NULL, &start) == 0)
 			continue;
@@ -756,7 +730,6 @@ void verity_dtr(struct dm_target *ti)
 	if (v->bufio)
 		dm_bufio_client_destroy(v->bufio);
 
-	vfree(v->validated_blocks);
 	kfree(v->salt);
 	kfree(v->root_digest);
 	kfree(v->zero_digest);
@@ -808,29 +781,6 @@ out:
 
 	return r;
 }
-
-
-#ifdef CONFIG_DM_ANDROID_VERITY_AT_MOST_ONCE_DEFAULT_ENABLED
-static int verity_alloc_most_once(struct dm_verity *v)
-{
-	struct dm_target *ti = v->ti;
-
-	/* the bitset can only handle INT_MAX blocks */
-	if (v->data_blocks > INT_MAX) {
-		ti->error = "device too large to use check_most_once";
-		return -E2BIG;
-	}
-
-	v->validated_blocks = vzalloc(BITS_TO_LONGS(v->data_blocks)
-				     * sizeof(unsigned long));
-	if (!v->validated_blocks) {
-		ti->error = "failed to allocate bitset for check_most_once";
-		return -ENOMEM;
-	}
-
-	return 0;
-}
-#endif
 
 static int verity_parse_opt_args(struct dm_arg_set *as, struct dm_verity *v)
 {
@@ -1109,13 +1059,6 @@ int verity_ctr(struct dm_target *ti, unsigned argc, char **argv)
 		goto bad;
 	}
 
-#ifdef CONFIG_DM_ANDROID_VERITY_AT_MOST_ONCE_DEFAULT_ENABLED
-	if (!v->validated_blocks) {
-		r = verity_alloc_most_once(v);
-		if (r)
-			goto bad;
-	}
-#endif
 	/* WQ_UNBOUND greatly improves performance when running on ramdisk */
 	v->verify_wq = alloc_workqueue("kverityd",
 				       WQ_HIGHPRI | WQ_MEM_RECLAIM | WQ_UNBOUND,
