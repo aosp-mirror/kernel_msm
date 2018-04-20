@@ -16,6 +16,7 @@
 #include "sdm845-c1-common.dtsi"
 #include "sdm845-b1c1-audio-cal.dtsi"
 #include "sdm845-patherm.dtsi"
+#include "sdm845-b1c1-thermal-v2.dtsi"
 
 / {
 	model = "Google Inc. MSM sdm845 C1 EVT v1.0";

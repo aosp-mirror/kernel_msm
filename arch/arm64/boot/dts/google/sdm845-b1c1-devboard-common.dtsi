@@ -128,6 +128,9 @@
 	sdm-therm-adc {
 		status = "disabled";
 	};
+	fps-therm-adc {
+		status = "disabled";
+	};
 	usbc-therm-adc {
 		status = "disabled";
 	};

@@ -409,3 +409,9 @@
 		citadel,ctdl_ap_irq = <&tlmm 96 0x0>;
 	};
 };
+
+&thermal_zones {
+	fps-therm-adc {
+		status = "disabled";
+	};
+};

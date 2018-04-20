@@ -15,6 +15,7 @@
 
 #include "sdm845-c1-common.dtsi"
 #include "sdm845-patherm.dtsi"
+#include "sdm845-usbctherm.dtsi"
 
 / {
 	model = "Google Inc. MSM sdm845 C1 EVT v1.1";

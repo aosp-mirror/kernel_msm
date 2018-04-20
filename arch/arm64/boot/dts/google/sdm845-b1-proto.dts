@@ -471,3 +471,9 @@
 		st,firmware_name = "ftm5_p1_fw.ftb";
 	};
 };
+
+&thermal_zones {
+	fps-therm-adc {
+		status = "disabled";
+	};
+};
