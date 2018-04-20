@@ -181,12 +181,18 @@
 		polling-delay = <0>;
 		thermal-sensors = <&pm8998_adc_tm 0x4e>;
 		thermal-governor = "user_space";
+		disable-thermal-zone;
 
 		trips {
 			active-config0 {
 				temperature = <125000>;
 				hysteresis = <10000>;
 				type = "passive";
+			};
+			shutdown-config {
+				temperature = <62000>;
+				hysteresis = <1000>;
+				type = "critical";
 			};
 		};
 	};
