@@ -16,6 +16,7 @@
 #include "sdm845-b1-common-v2.1.dtsi"
 #include "sdm845-b1c1-proto-evt-audio.dtsi"
 #include "sdm845-b1c1-audio-cal.dtsi"
+#include "sdm845-b1-evt1-panel.dtsi"
 
 / {
 	model = "Google Inc. MSM sdm845 B1C1 Dev v2.0 board";
