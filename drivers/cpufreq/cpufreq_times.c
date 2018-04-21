@@ -32,6 +32,8 @@ static DECLARE_HASHTABLE(uid_hash_table, UID_HASH_BITS);
 static DEFINE_SPINLOCK(task_time_in_state_lock); /* task->time_in_state */
 static DEFINE_SPINLOCK(task_concurrent_active_time_lock);
 	/* task->concurrent_active_time */
+static DEFINE_SPINLOCK(task_concurrent_policy_time_lock);
+	/* task->concurrent_policy_time */
 static DEFINE_SPINLOCK(uid_lock); /* uid_hash_table */
 
 struct uid_entry {
@@ -245,6 +247,10 @@ void cpufreq_task_times_init(struct task_struct *p)
 	spin_lock_irqsave(&task_concurrent_active_time_lock, flags);
 	p->concurrent_active_time = NULL;
 	spin_unlock_irqrestore(&task_concurrent_active_time_lock, flags);
+
+	spin_lock_irqsave(&task_concurrent_policy_time_lock, flags);
+	p->concurrent_policy_time = NULL;
+	spin_unlock_irqrestore(&task_concurrent_policy_time_lock, flags);
 }
 
 void cpufreq_task_times_alloc(struct task_struct *p)
@@ -270,6 +276,14 @@ void cpufreq_task_times_alloc(struct task_struct *p)
 	spin_lock_irqsave(&task_concurrent_active_time_lock, flags);
 	p->concurrent_active_time = temp;
 	spin_unlock_irqrestore(&task_concurrent_active_time_lock, flags);
+
+	temp = kcalloc(num_possible_cpus(),
+		       sizeof(p->concurrent_policy_time[0]),
+		       GFP_ATOMIC);
+
+	spin_lock_irqsave(&task_concurrent_policy_time_lock, flags);
+	p->concurrent_policy_time = temp;
+	spin_unlock_irqrestore(&task_concurrent_policy_time_lock, flags);
 }
 
 /* Caller must hold task_time_in_state_lock */
@@ -303,6 +317,12 @@ void cpufreq_task_times_exit(struct task_struct *p)
 	temp = p->concurrent_active_time;
 	p->concurrent_active_time = NULL;
 	spin_unlock_irqrestore(&task_concurrent_active_time_lock, flags);
+	kfree(temp);
+
+	spin_lock_irqsave(&task_concurrent_policy_time_lock, flags);
+	temp = p->concurrent_policy_time;
+	p->concurrent_policy_time = NULL;
+	spin_unlock_irqrestore(&task_concurrent_policy_time_lock, flags);
 	kfree(temp);
 }
 
@@ -359,13 +379,49 @@ int proc_concurrent_active_time_show(struct seq_file *m,
 	return 0;
 }
 
+int proc_concurrent_policy_time_show(struct seq_file *m,
+	struct pid_namespace *ns, struct pid *pid, struct task_struct *p)
+{
+	struct cpu_freqs *freqs;
+	struct cpu_freqs *last_freqs = NULL;
+	int cpu, cnt = 0;
+	cputime_t cputime;
+	unsigned long flags;
+
+	spin_lock_irqsave(&task_concurrent_policy_time_lock, flags);
+	for (cpu = 0; cpu < num_possible_cpus(); ++cpu) {
+		freqs = all_freqs[cpu];
+		if (!freqs)
+			continue;
+		if (freqs != last_freqs) {
+			cnt = 0;
+			last_freqs = freqs;
+			seq_printf(m, "policy%i\n", cpu);
+		}
+		cnt++;
+
+		cputime = 0;
+		if (p->concurrent_policy_time)
+			cputime = p->concurrent_policy_time[cpu];
+
+		seq_printf(m, "%d %lu\n", cnt,
+			   (unsigned long)cputime_to_clock_t(cputime));
+	}
+	spin_unlock_irqrestore(&task_concurrent_policy_time_lock, flags);
+
+	return 0;
+}
+
 void cpufreq_acct_update_power(struct task_struct *p, cputime_t cputime)
 {
 	unsigned long flags;
 	unsigned int state;
 	unsigned int active_cpu_cnt = 0;
+	unsigned int policy_cpu_cnt = 0;
+	unsigned int policy_first_cpu;
 	struct uid_entry *uid_entry;
 	struct cpu_freqs *freqs = all_freqs[task_cpu(p)];
+	struct cpufreq_policy *policy;
 	uid_t uid = from_kuid_munged(current_user_ns(), task_uid(p));
 	int cpu = 0;
 
@@ -395,6 +451,30 @@ void cpufreq_acct_update_power(struct task_struct *p, cputime_t cputime)
 	if (p->concurrent_active_time)
 		p->concurrent_active_time[active_cpu_cnt - 1] += cputime;
 	spin_unlock_irqrestore(&task_concurrent_active_time_lock, flags);
+
+	policy = cpufreq_cpu_get(task_cpu(p));
+	if (!policy) {
+		/*
+		 * This CPU may have just come up and not have a cpufreq policy
+		 * yet.
+		 */
+		rcu_read_unlock();
+		return;
+	}
+
+	for_each_cpu(cpu, policy->related_cpus)
+		if (!idle_cpu(cpu))
+			++policy_cpu_cnt;
+
+	policy_first_cpu = cpumask_first(policy->related_cpus);
+	cpufreq_cpu_put(policy);
+
+	spin_lock_irqsave(&task_concurrent_policy_time_lock, flags);
+	if (p->concurrent_policy_time) {
+		p->concurrent_policy_time[policy_first_cpu
+					  + policy_cpu_cnt - 1] += cputime;
+	}
+	spin_unlock_irqrestore(&task_concurrent_policy_time_lock, flags);
 }
 
 void cpufreq_times_create_policy(struct cpufreq_policy *policy)
