@@ -46,7 +46,6 @@ int device_is_charging = 0;
 #define BQ27200_FLAG_CHGS       BIT(7) /*Charge state flag*/
 
 #define SPM_TIMEOUT             (10*60) /* 10minutes */
-#define BQ27XXX_TEMP_DELTA	100 /* unit 0.1 celsius degree */
 #define REQUEST_TIMEOUT		20
 
 struct FuelGaugeCfgData {
@@ -92,10 +91,6 @@ void bq27x00_update(struct Nanohub_FuelGauge_Info *fg_info)
 #if FUEL_GAUGE_USE_FAKE_CAPACITY
 	static uint32_t timer_counter;
 #endif
-
-	if (fg_info->charger_online) {
-		fg_info->cache.temperature -= BQ27XXX_TEMP_DELTA;
-	}
 
 	do_gettimeofday(&cur);
 
