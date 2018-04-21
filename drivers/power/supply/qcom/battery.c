@@ -676,7 +676,7 @@ static int pl_disable_vote_callback(struct votable *votable,
 	struct pl_data *chip = data;
 	union power_supply_propval pval = {0, };
 	int master_fcc_ua = 0, total_fcc_ua = 0, slave_fcc_ua = 0;
-	int rc = 0;
+	int rc = 0, charge_type, taper_control_enabled = 1;
 	bool disable = false;
 
 	if (!is_main_available(chip))
@@ -788,12 +788,21 @@ static int pl_disable_vote_callback(struct votable *votable,
 		 *  start the taper work if so
 		 */
 		rc = power_supply_get_property(chip->batt_psy,
+				POWER_SUPPLY_PROP_TAPER_CONTROL_ENABLED, &pval);
+		if (rc < 0)
+			pr_err("Couldn't get taper control state rc=%d\n", rc);
+		else
+			taper_control_enabled = pval.intval;
+
+		rc = power_supply_get_property(chip->batt_psy,
 				       POWER_SUPPLY_PROP_CHARGE_TYPE, &pval);
+		charge_type = pval.intval;
 		if (rc < 0) {
 			pr_err("Couldn't get batt charge type rc=%d\n", rc);
 		} else {
-			if (pval.intval == POWER_SUPPLY_CHARGE_TYPE_TAPER
-				&& !chip->taper_work_running) {
+			if (charge_type == POWER_SUPPLY_CHARGE_TYPE_TAPER
+			    && !chip->taper_work_running
+			    && taper_control_enabled) {
 				pl_dbg(chip, PR_PARALLEL,
 					"pl enabled in Taper scheduing work\n");
 				vote(chip->pl_awake_votable, TAPER_END_VOTER,
@@ -951,7 +960,7 @@ static bool is_parallel_available(struct pl_data *chip)
 static void handle_main_charge_type(struct pl_data *chip)
 {
 	union power_supply_propval pval = {0, };
-	int rc;
+	int rc, charge_type, taper_control_enabled = 1;
 
 	rc = power_supply_get_property(chip->batt_psy,
 			       POWER_SUPPLY_PROP_CHARGE_TYPE, &pval);
@@ -959,19 +968,29 @@ static void handle_main_charge_type(struct pl_data *chip)
 		pr_err("Couldn't get batt charge type rc=%d\n", rc);
 		return;
 	}
+	charge_type = pval.intval;
+
+	rc = power_supply_get_property(chip->batt_psy,
+			POWER_SUPPLY_PROP_TAPER_CONTROL_ENABLED, &pval);
+	if (rc < 0) {
+		pr_err("Couldn't get taper control state rc=%d\n", rc);
+		return;
+	}
+	taper_control_enabled = pval.intval;
 
 	/* not fast/not taper state to disables parallel */
-	if ((pval.intval != POWER_SUPPLY_CHARGE_TYPE_FAST)
-		&& (pval.intval != POWER_SUPPLY_CHARGE_TYPE_TAPER)) {
+	if ((charge_type != POWER_SUPPLY_CHARGE_TYPE_FAST)
+		&& (charge_type != POWER_SUPPLY_CHARGE_TYPE_TAPER)) {
 		vote(chip->pl_disable_votable, CHG_STATE_VOTER, true, 0);
-		chip->charge_type = pval.intval;
+		chip->charge_type = charge_type;
 		return;
 	}
 
 	/* handle taper charge entry */
 	if (chip->charge_type == POWER_SUPPLY_CHARGE_TYPE_FAST
-		&& (pval.intval == POWER_SUPPLY_CHARGE_TYPE_TAPER)) {
-		chip->charge_type = pval.intval;
+	    && charge_type == POWER_SUPPLY_CHARGE_TYPE_TAPER
+	    && taper_control_enabled) {
+		chip->charge_type = charge_type;
 		if (!chip->taper_work_running) {
 			pl_dbg(chip, PR_PARALLEL, "taper entry scheduling work\n");
 			vote(chip->pl_awake_votable, TAPER_END_VOTER, true, 0);
@@ -981,16 +1000,16 @@ static void handle_main_charge_type(struct pl_data *chip)
 	}
 
 	/* handle fast/taper charge entry */
-	if (pval.intval == POWER_SUPPLY_CHARGE_TYPE_TAPER
-			|| pval.intval == POWER_SUPPLY_CHARGE_TYPE_FAST) {
+	if (charge_type == POWER_SUPPLY_CHARGE_TYPE_TAPER
+			|| charge_type == POWER_SUPPLY_CHARGE_TYPE_FAST) {
 		pl_dbg(chip, PR_PARALLEL, "chg_state enabling parallel\n");
 		vote(chip->pl_disable_votable, CHG_STATE_VOTER, false, 0);
-		chip->charge_type = pval.intval;
+		chip->charge_type = charge_type;
 		return;
 	}
 
 	/* remember the new state only if it isn't any of the above */
-	chip->charge_type = pval.intval;
+	chip->charge_type = charge_type;
 }
 
 #define MIN_ICL_CHANGE_DELTA_UA		300000
