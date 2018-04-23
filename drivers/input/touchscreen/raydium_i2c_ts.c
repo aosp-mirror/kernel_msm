@@ -111,6 +111,8 @@ struct raydium_ts_data {
     struct work_struct  work;
     struct workqueue_struct *workqueue;
     struct irq_desc *irq_desc;
+    bool irq_enabled;
+    bool irq_wake;
 
     #if defined(CONFIG_FB)
     struct notifier_block fb_notif;
@@ -623,26 +625,34 @@ static int raydium_i2c_pda2_write(struct i2c_client *client,
     return retval;
 }
 
-static void raydium_irq_control(struct raydium_ts_data *ts, char mode)
+static void raydium_irq_control(struct raydium_ts_data *ts, bool enable)
 {
-    unsigned int irq_depth = ts->irq_desc->depth;
-
-    switch (mode)
+    if (enable)
     {
-        case DISABLE: /* Disable INT */
-            if (irq_depth == 0)
-            {
-                disable_irq(ts->irq);
-                printk("[touch]%s, disable INT, disable depth : %u\n", __func__, ts->irq_desc->depth);
-            }
-            break;
-        case ENABLE: /* Enable INT */
-            if (irq_depth != 0)
-            {
-                enable_irq(ts->irq);
-                printk("[touch]%s, enable INT, disable depth : %u\n", __func__, ts->irq_desc->depth);
-            }
-            break;
+        if (ts->irq_enabled)
+        {
+            return;
+        }
+
+        /* Clear interrupts first */
+        mutex_lock(&ts->lock);
+        if (raydium_i2c_pda2_set_page(ts->client, RAYDIUM_PDA2_PAGE_0) < 0)
+        {
+            dev_err(&ts->client->dev, "[touch]failed to set page %s\n", __func__);
+        }
+        mutex_unlock(&ts->lock);
+        mdelay(1);
+        enable_irq(ts->irq);
+        ts->irq_enabled = true;
+        printk(KERN_INFO "[touch]irq enable\n");
+    } else
+    {
+        if (ts->irq_enabled)
+        {
+            disable_irq(ts->irq);
+            ts->irq_enabled = false;
+            printk(KERN_INFO "[touch]irq disable\n");
+        }
     }
 }
 
@@ -1362,7 +1372,6 @@ static int raydium_boot_upgrade(struct i2c_client * client)
     g_uc_raydium_flag = RAYDIUM_BOOTLOADER_FLAG;
     printk(KERN_INFO "[touch]ready to software reset => enable INT\n");
     raydium_irq_control(ts, ENABLE);
-    printk(KERN_INFO "[touch]%s, disable depth : %u\n", __func__, ts->irq_desc->depth);
 
     /* Return to Bootloader */
     memset(buf, 0, sizeof(buf));
@@ -3986,17 +3995,6 @@ static int raydium_read_touchdata(struct raydium_ts_data *data)
 
     if (data->blank == FB_BLANK_VSYNC_SUSPEND || data->blank == FB_BLANK_POWERDOWN)
     {
-        mutex_lock(&data->lock);
-        //clear seq_num
-        tp_status[POS_SEQ] = 0;
-        ret = raydium_i2c_pda2_write(data->client, RAYDIUM_PDA2_TCH_RPT_STATUS_ADDR, tp_status, 1);
-        if (ret < 0)
-        {
-            dev_err(&data->client->dev, "[touch]%s: failed to write data: %d\n",__func__, ret);
-            mutex_unlock(&data->lock);
-            return ret;
-        }
-        mutex_unlock(&data->lock);
         //need check small area
         input_mt_slot(data->input_dev, 0);
         input_mt_report_slot_state(data->input_dev, MT_TOOL_FINGER, 1);
@@ -4016,13 +4014,6 @@ static int raydium_read_touchdata(struct raydium_ts_data *data)
     {
     #endif
         mutex_lock(&data->lock);
-        ret = raydium_i2c_pda2_set_page(data->client, RAYDIUM_PDA2_PAGE_0);
-        if (ret < 0)
-        {
-            dev_err(&data->client->dev, "[touch]%s: failed to set page for reading point report: %d\n",__func__, ret);
-            mutex_unlock(&data->lock);
-            return ret;
-        }
 
         memset(buf, 0, MAX_REPORT_PAKAGE_SIZE);
         memset(tp_status, 0, MAX_TCH_STATUS_PAKAGE_SIZE);
@@ -4104,6 +4095,9 @@ static int raydium_read_touchdata(struct raydium_ts_data *data)
                         gst_slot_status[j].occupied_pt_id = u8_point_id;
                         gst_slot_status[j].need_update = 1;
                         gst_slot_status[j].pt_report_offset = i;
+                        printk(KERN_INFO "[touch]x:%d,y:%d\n",
+                            buf[POS_X_L + offset] | buf[POS_X_H + offset] << SHORT_HIGH_BYTE_SHIFT,
+                            buf[POS_Y_L + offset] | buf[POS_Y_H + offset] << SHORT_HIGH_BYTE_SHIFT);
                         break;
                     }
                 }
@@ -4225,6 +4219,8 @@ static void raydium_work_handler(struct work_struct *work)
             input_report_key(raydium_ts->input_dev, KEY_SLEEP, false); //release sleep key
             input_sync(raydium_ts->input_dev);
 
+            raydium_irq_control(raydium_ts, DISABLE);
+
             g_uc_pre_palm_status = RAYDIUM_PALM_MODE_DISABLE;
             raydium_ts->is_palm = 0;
             goto exit;
@@ -4244,10 +4240,7 @@ static void raydium_work_handler(struct work_struct *work)
 #ifdef GESTURE_EN
 exit:
 #endif
-    if (raydium_ts->irq_desc->depth != 0)
-    {
-        enable_irq(raydium_ts->irq);
-    }
+    return;
 }
 
 /*The raydium device will signal the host about TRIGGER_FALLING.
@@ -4258,43 +4251,48 @@ static irqreturn_t raydium_ts_interrupt(int irq, void *dev_id)
     struct raydium_ts_data *raydium_ts = dev_id;
     bool result = false;
 
-    disable_irq_nosync(raydium_ts->irq);
-
     if (g_uc_raydium_selftest_flag == 1)
     {
+        disable_irq_nosync(raydium_ts->irq);
+        raydium_ts->irq_enabled = false;
         printk(KERN_INFO "[touch]g_uc_raydium_selftest_flag = 1\n");
         g_uc_raydium_int_flag = 1;
-        if (raydium_ts->irq_desc->depth != 0)
-        {
-            enable_irq(raydium_ts->irq);
-        }
-
     }
     //For bootloader wrt/erase flash and software reset interrupt
     else if ((g_uc_raydium_flag & RAYDIUM_BOOTLOADER_FLAG) != 0)
     {
-        printk("[touch]g_uc_raydium_flag = %d\n", g_uc_raydium_flag);
+        disable_irq_nosync(raydium_ts->irq);
+        raydium_ts->irq_enabled = false;
+        printk(KERN_INFO "[touch]g_uc_raydium_flag = %d\n", g_uc_raydium_flag);
         g_uc_raydium_flag = RAYDIUM_INTERRUPT_FLAG;
     } else
     {
         if (!work_pending(&raydium_ts->work))
         {
             result = queue_work(raydium_ts->workqueue, &raydium_ts->work);
-            if (result == false) //queue_work fail, enable_irq in fts_touch_irq_work() not work
+            if (result == false) //queue_work fail
             {
                 printk(KERN_ERR "[touch]queue_work fail.\n");
-                if(raydium_ts->irq_desc->depth != 0)
+            } else
+            {
+                if (raydium_ts->blank == FB_BLANK_POWERDOWN)
                 {
-                    enable_irq(raydium_ts->irq);
+                    disable_irq_nosync(raydium_ts->irq);
+                    raydium_ts->irq_enabled = false;
+                } else
+                {
+                    /* Clear interrupts*/
+                    mutex_lock(&raydium_ts->lock);
+                    if (raydium_i2c_pda2_set_page(raydium_ts->client, RAYDIUM_PDA2_PAGE_0) < 0)
+                    {
+                        dev_err(&raydium_ts->client->dev, "[touch]%s: failed to set page for reading gesture report\n",__func__);
+                    }
+                    mutex_unlock(&raydium_ts->lock);
                 }
             }
-        } else //pending re-enable irq
+        } else //work pending
         {
             printk(KERN_INFO "[touch]work_pending\n");
-            if (raydium_ts->irq_desc->depth != 0)
-            {
-                enable_irq(raydium_ts->irq);
-            }
         }
     }
 
@@ -4439,15 +4437,18 @@ static void raydium_ts_do_suspend(struct raydium_ts_data *ts)
     input_sync(ts->input_dev);
 
     #ifdef GESTURE_EN
-    //advoid irq disable for tap to wakeup
-    if (ts->is_sleep == 0)//touch lock disable
+    if (device_may_wakeup(&ts->client->dev))
     {
-        if (ts->irq_desc->depth > 0)
+        printk(KERN_INFO "[touch]Device may wakeup\n");
+        if (!enable_irq_wake(ts->irq))
         {
-            printk(KERN_INFO "[touch]%s, enable irq, disable depth : %u\n", __func__, ts->irq_desc->depth);
-            raydium_irq_control(ts, ENABLE);
+            ts->irq_wake = 1;
         }
+    } else
+    {
+        printk(KERN_INFO "[touch]Device not wakeup\n");
     }
+    raydium_irq_control(ts, ENABLE);
     #endif
 
     ts->is_suspend = 1;
@@ -4461,16 +4462,20 @@ static void raydium_ts_do_resume(struct raydium_ts_data *ts)
         return;
     }
 
-    #ifndef GESTURE_EN
     raydium_irq_control(ts, ENABLE);
-    #endif
 
     #ifdef GESTURE_EN
-    //advoid irq disable for normal touch
-    if (ts->irq_desc->depth > 0)
+    if (device_may_wakeup(&ts->client->dev))
     {
-        printk(KERN_INFO "[touch]%s, enable irq, disable depth : %u\n", __func__, ts->irq_desc->depth);
-        raydium_irq_control(ts, ENABLE);
+        printk(KERN_INFO "[touch]Device may wakeup\n");
+        if (ts->irq_wake)
+        {
+            disable_irq_wake(ts->irq);
+            ts->irq_wake = 0;
+        }
+    } else
+    {
+        printk(KERN_INFO "[touch]Device not wakeup\n");
     }
     #endif
 
@@ -4949,6 +4954,10 @@ static int raydium_ts_probe(struct i2c_client *client,
 
     i2c_set_clientdata(client, raydium_ts);
     raydium_ts->irq = client->irq;
+    raydium_ts->irq_enabled = false;
+    raydium_ts->irq_wake = false;
+
+    //raydium_ts->irq = pdata->irq_gpio;
     raydium_ts->rst = pdata->reset_gpio;
     raydium_ts->client = client;
     raydium_ts->pdata = pdata;
@@ -4960,6 +4969,8 @@ static int raydium_ts_probe(struct i2c_client *client,
     raydium_ts->is_palm = 0;
     #endif
     raydium_ts->fw_version = 0;
+
+    device_init_wakeup(&client->dev,1);
 
     ret = raydium_power_init(raydium_ts, true);
     if (ret)
@@ -5055,9 +5066,6 @@ static int raydium_ts_probe(struct i2c_client *client,
 
     dev_err(&client->dev, "[touch]pdata irq : %d \n", raydium_ts->pdata->irq_gpio);//13
     dev_err(&client->dev, "[touch]client irq : %d, pdata flags : %d \n", client->irq, pdata->irqflags);//108
-    #ifdef FTS_GESTRUE_EN
-        irq_set_irq_wake(client->irq, 1);
-    #endif
 
     ret = request_threaded_irq(gpio_to_irq(raydium_ts->pdata->irq_gpio), NULL, raydium_ts_interrupt,
                     pdata->irqflags | IRQF_TRIGGER_LOW | IRQF_ONESHOT | IRQF_NO_SUSPEND, client->dev.driver->name,
