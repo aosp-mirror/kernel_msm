@@ -36,13 +36,32 @@ struct fsverity_footer {
 	__le32 flags;		/* flags */
 	__le32 reserved1;	/* must be 0 */
 	__le64 size;		/* size of the original, unpadded data */
-	u8 reserved2[2];	/* must be 0 */
+	u8 authenticated_ext_count; /* number of authenticated extensions */
+	u8 unauthenticated_ext_count; /* number of unauthenticated extensions */
 	u8 salt[FS_VERITY_SALT_SIZE]; /* used to salt the hashes */
-	u8 reserved3[22];	/* must be 0 */
+	u8 reserved2[22];	/* must be 0 */
 	/* This structure is 64 bytes long */
 } __packed;
 
 #define FS_VERITY_FLAG_INTEGRITY_ONLY	0x00000001
+
+/* extension types */
+#define FS_VERITY_EXT_ELIDE		1
+#define FS_VERITY_EXT_PATCH		2
+#define FS_VERITY_EXT_SALT		3
+#define FS_VERITY_EXT_PKCS7_SIGNATURE	4
+
+/* Header of each variable-length metadata item following the footer */
+struct fsverity_extension {
+	/*
+	 * Length of this extension in bytes, including this footer.  Must be
+	 * rounded up to an 8-byte boundary when advancing to the next
+	 * extension.
+	 */
+	__le32 length;
+	__le16 type;		/* Type of this extension (see codes above) */
+	__le16 reserved;	/* Reserved, must be 0 */
+} __packed;
 
 /*
  * Up to 64 levels are theoretically possible with a very small block size, but

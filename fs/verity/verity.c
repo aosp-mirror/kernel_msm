@@ -157,19 +157,105 @@ static void dump_fsverity_footer(const struct fsverity_footer *ftr)
 	pr_debug("data_algorithm = %u\n", le16_to_cpu(ftr->data_algorithm));
 	pr_debug("flags = %#x\n", le32_to_cpu(ftr->flags));
 	pr_debug("size = %llu\n", le64_to_cpu(ftr->size));
+	pr_debug("authenticated_ext_count = %u\n",
+		 ftr->authenticated_ext_count);
+	pr_debug("unauthenticated_ext_count = %u\n",
+		 ftr->unauthenticated_ext_count);
 	pr_debug("salt = %*phN\n", (int)sizeof(ftr->salt), ftr->salt);
 }
 
+static const struct extension_type {
+	int (*parse)(struct fsverity_info *vi, const void *_ext,
+		     size_t extra_len);
+	size_t base_len;
+	bool unauthenticated;
+} extension_types[] = {
+};
+
+/*
+ * Parse the extension items, if any, following the fixed-size portion of the
+ * fs-verity footer.  The fsverity_info is updated accordingly.
+ *
+ * Return: On success, the size of the authenticated portion of the footer (the
+ *         fixed-size portion plus the authenticated extensions).
+ *         Otherwise, a -errno value.
+ */
+static int parse_extensions(struct fsverity_info *vi,
+			    const struct fsverity_footer *ftr, size_t limit)
+{
+	const struct fsverity_extension *ext_hdr = (const void *)(ftr + 1);
+	const void * const end = (const void *)ftr + limit;
+	const void *auth_end = ext_hdr;
+	int i;
+	int err;
+	int num_extensions = ftr->authenticated_ext_count +
+			     ftr->unauthenticated_ext_count;
+
+	for (i = 0; i < num_extensions; i++) {
+		const struct extension_type *type;
+		u32 len, rounded_len;
+		u16 type_code;
+		bool unauthenticated = (i >= ftr->authenticated_ext_count);
+
+		if (end - (const void *)ext_hdr < sizeof(*ext_hdr)) {
+			pr_warn("Extension list overflows buffer\n");
+			return -EINVAL;
+		}
+		type_code = le16_to_cpu(ext_hdr->type);
+		if (type_code >= ARRAY_SIZE(extension_types) ||
+		    !extension_types[type_code].parse) {
+			pr_warn("Unknown extension type: %u\n", type_code);
+			return -EINVAL;
+		}
+		type = &extension_types[type_code];
+		if (unauthenticated != type->unauthenticated) {
+			pr_warn("Extension type %u must be %sauthenticated\n",
+				type_code, type->unauthenticated ? "un" : "");
+			return -EINVAL;
+		}
+		if (ext_hdr->reserved) {
+			pr_warn("Reserved bits set in extension header\n");
+			return -EINVAL;
+		}
+		len = le32_to_cpu(ext_hdr->length);
+		if (len < sizeof(*ext_hdr)) {
+			pr_warn("Invalid length in extension header\n");
+			return -EINVAL;
+		}
+		rounded_len = round_up(len, 8);
+		if (rounded_len == 0 ||
+		    rounded_len > end - (const void *)ext_hdr) {
+			pr_warn("Extension item overflows buffer\n");
+			return -EINVAL;
+		}
+		if (len < sizeof(*ext_hdr) + type->base_len) {
+			pr_warn("Extension length too small for type\n");
+			return -EINVAL;
+		}
+		err = type->parse(vi, ext_hdr + 1,
+				  len - sizeof(*ext_hdr) - type->base_len);
+		if (err)
+			return err;
+		ext_hdr = (const void *)ext_hdr + rounded_len;
+		if (!unauthenticated)
+			auth_end = ext_hdr;
+	}
+
+	return auth_end - (const void *)ftr;
+}
 /*
  * Parse an fs-verity footer, loading information into the fsverity_info.
  *
- * Return: 0 on success, -errno on failure
+ * Return: On success, the size of the authenticated portion of the footer (the
+ *         fixed-size portion plus the authenticated extensions).
+ *         Otherwise, a -errno value.
  */
 static int parse_footer(struct fsverity_info *vi,
-			const struct fsverity_footer *ftr)
+			const struct fsverity_footer *ftr, size_t limit)
 {
 	unsigned int alg_num;
 	u32 flags;
+	int ftr_auth_len;
 
 	/* magic */
 	if (memcmp(ftr->magic, FS_VERITY_MAGIC, sizeof(ftr->magic))) {
@@ -235,8 +321,7 @@ static int parse_footer(struct fsverity_info *vi,
 
 	/* reserved fields */
 	if (ftr->reserved1 ||
-	    memchr_inv(ftr->reserved2, 0, sizeof(ftr->reserved2)) ||
-	    memchr_inv(ftr->reserved3, 0, sizeof(ftr->reserved3))) {
+	    memchr_inv(ftr->reserved2, 0, sizeof(ftr->reserved2))) {
 		pr_warn("Reserved bits set in footer\n");
 		return -EINVAL;
 	}
@@ -257,7 +342,11 @@ static int parse_footer(struct fsverity_info *vi,
 	/* salt */
 	memcpy(vi->salt, ftr->salt, FS_VERITY_SALT_SIZE);
 
-	return 0;
+	/* extensions */
+	ftr_auth_len = parse_extensions(vi, ftr, limit);
+	if (ftr_auth_len < 0)
+		pr_warn("Invalid or unsupported extensions list\n");
+	return ftr_auth_len;
 }
 
 /*
@@ -360,7 +449,8 @@ static int compute_root_hash(struct inode *inode, struct fsverity_info *vi)
 
 /* Compute the file's measurement and store it in vi->measurement */
 static int compute_measurement(struct fsverity_info *vi,
-			       const struct fsverity_footer *ftr)
+			       const struct fsverity_footer *ftr,
+			       int ftr_auth_len)
 {
 	SHASH_DESC_ON_STACK(desc, vi->hash_alg->tfm);
 	int err;
@@ -370,7 +460,7 @@ static int compute_measurement(struct fsverity_info *vi,
 
 	err = crypto_shash_init(desc);
 	if (!err)
-		err = crypto_shash_update(desc, (const u8 *)ftr, sizeof(*ftr));
+		err = crypto_shash_update(desc, (const u8 *)ftr, ftr_auth_len);
 	if (!err)
 		err = crypto_shash_update(desc, vi->root_hash,
 					  vi->hash_alg->digest_size);
@@ -380,8 +470,9 @@ static int compute_measurement(struct fsverity_info *vi,
 	if (err)
 		pr_warn("Error computing fs-verity measurement: %d\n", err);
 	else
-		pr_debug("Computed measurement: %*phN\n",
-			 vi->hash_alg->digest_size, vi->measurement);
+		pr_debug("Computed measurement: %*phN (used ftr_auth_len %d)\n",
+			 vi->hash_alg->digest_size, vi->measurement,
+			 ftr_auth_len);
 	return err;
 }
 
@@ -422,6 +513,7 @@ static struct fsverity_info *create_fsverity_info(struct inode *inode)
 	u32 ftr_reverse_offset;
 	unsigned int ftr_loc;
 	const struct fsverity_footer *ftr;
+	int ftr_auth_len;
 	int err;
 
 	pr_debug("full_isize = %lld\n", full_isize);
@@ -481,9 +573,11 @@ static struct fsverity_info *create_fsverity_info(struct inode *inode)
 	}
 	ftr = ftr_virt + ftr_loc;
 	dump_fsverity_footer(ftr);
-	err = parse_footer(vi, ftr);
-	if (err)
+	ftr_auth_len = parse_footer(vi, ftr, ftr_reverse_offset_loc - ftr_loc);
+	if (ftr_auth_len < 0) {
+		err = ftr_auth_len;
 		goto out;
+	}
 
 	err = compute_tree_depth_and_offsets(vi);
 	if (err)
@@ -492,7 +586,7 @@ static struct fsverity_info *create_fsverity_info(struct inode *inode)
 	err = compute_root_hash(inode, vi);
 	if (err)
 		goto out;
-	err = compute_measurement(vi, ftr);
+	err = compute_measurement(vi, ftr, ftr_auth_len);
 out:
 	if (ftr_page) {
 		kunmap(ftr_page);
