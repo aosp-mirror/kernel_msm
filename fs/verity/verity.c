@@ -164,12 +164,191 @@ static void dump_fsverity_footer(const struct fsverity_footer *ftr)
 	pr_debug("salt = %*phN\n", (int)sizeof(ftr->salt), ftr->salt);
 }
 
+static int parse_elide_extension(struct fsverity_info *vi,
+				 const void *_ext, size_t extra_len)
+{
+	const struct fsverity_extension_elide *ext = _ext;
+	u64 offset = le64_to_cpu(ext->offset);
+	u64 length = le64_to_cpu(ext->length);
+	struct fsverity_elision *elision;
+
+	pr_debug("Found elide extension: offset=%llu, length=%llu\n",
+		 offset, length);
+
+	if ((offset | length) & ~PAGE_MASK) {
+		pr_warn("Misaligned elision (offset=%llu, length=%llu)\n",
+			offset, length);
+		return -EINVAL;
+	}
+
+	if (length < 1) {
+		pr_warn("Empty elision\n");
+		return -EINVAL;
+	}
+
+	if (offset >= vi->data_i_size || length > vi->data_i_size - offset) {
+		pr_warn("Elision offset and/or length too large (offset=%llu, length=%llu)\n",
+			offset, length);
+		return -EINVAL;
+	}
+
+	if (length >= vi->elided_i_size) {
+		pr_warn("Entire file is elided!\n");
+		return -EINVAL;
+	}
+
+	elision = kmalloc(sizeof(*elision), GFP_NOFS);
+	if (!elision)
+		return -ENOMEM;
+
+	elision->index = offset >> PAGE_SHIFT;
+	elision->nr_pages = length >> PAGE_SHIFT;
+	list_add_tail(&elision->link, &vi->elisions);
+	vi->elided_i_size -= length;
+	return 0;
+}
+
+static int cmp_elisions(void *priv, struct list_head *_a, struct list_head *_b)
+{
+	const struct fsverity_elision *a, *b;
+
+	a = list_entry(_a, struct fsverity_elision, link);
+	b = list_entry(_b, struct fsverity_elision, link);
+	if (a->index > b->index)
+		return 1;
+	if (a->index < b->index)
+		return -1;
+	return 0;
+}
+
+/*
+ * Sort the elisions (if any) in order of increasing offset, then verify they
+ * don't overlap.
+ */
+static int sort_and_check_elisions(struct fsverity_info *vi)
+{
+	const struct fsverity_elision *elision;
+	pgoff_t next_unelided_index = 0;
+
+	list_sort(NULL, &vi->elisions, cmp_elisions);
+
+	list_for_each_entry(elision, &vi->elisions, link) {
+		if (elision->index < next_unelided_index) {
+			pr_warn("Elisions overlap\n");
+			return -EINVAL;
+		}
+		next_unelided_index = elision->index + elision->nr_pages;
+	}
+	return 0;
+}
+
+static int parse_patch_extension(struct fsverity_info *vi,
+				 const void *_ext, size_t extra_len)
+{
+	const struct fsverity_extension_patch *ext = _ext;
+	u64 offset = le64_to_cpu(ext->offset);
+	struct fsverity_patch *patch;
+
+	pr_debug("Found patch extension: offset=%llu, length=%zu\n",
+		 offset, extra_len);
+
+	if (extra_len < 1) {
+		pr_warn("Patch is empty\n");
+		return -EINVAL;
+	}
+
+	if (extra_len > FS_VERITY_MAX_PATCH_SIZE) {
+		pr_warn("Patch is too long (got %zu, limit is %d)\n",
+			extra_len, FS_VERITY_MAX_PATCH_SIZE);
+		return -EINVAL;
+	}
+
+	if (offset >= vi->data_i_size || extra_len > vi->data_i_size - offset) {
+		pr_warn("Patch offset is too large (%llu)\n", offset);
+		return -EINVAL;
+	}
+
+	pr_debug("databytes=%*phN\n", (int)extra_len, ext->databytes);
+
+	patch = kmalloc(sizeof(*patch) + extra_len, GFP_NOFS);
+	if (!patch)
+		return -ENOMEM;
+	patch->index = offset >> PAGE_SHIFT;
+	patch->offset = offset & ~PAGE_MASK;
+	patch->length = extra_len;
+	memcpy(patch->patch, ext->databytes, extra_len);
+	list_add_tail(&patch->link, &vi->patches);
+	return 0;
+}
+
+static inline u64 patch_begin_byte(const struct fsverity_patch *patch)
+{
+	return ((u64)patch->index << PAGE_SHIFT) + patch->offset;
+}
+
+static inline u64 patch_end_byte(const struct fsverity_patch *patch)
+{
+	return patch_begin_byte(patch) + patch->length;
+}
+
+static int cmp_patches(void *priv, struct list_head *_a, struct list_head *_b)
+{
+	const struct fsverity_patch *a, *b;
+
+	a = list_entry(_a, struct fsverity_patch, link);
+	b = list_entry(_b, struct fsverity_patch, link);
+	if (a->index > b->index)
+		return 1;
+	if (a->index < b->index)
+		return -1;
+	return 0;
+}
+
+/*
+ * Sort the patches (if any) in order of increasing offset, then verify they
+ * don't overlap and that no page has multiple patches.
+ */
+static int sort_and_check_patches(struct fsverity_info *vi)
+{
+	const struct fsverity_patch *patch;
+	u64 next_unpatched_byte = 0;
+	pgoff_t prev_patched_index = 0;
+
+	list_sort(NULL, &vi->patches, cmp_patches);
+
+	list_for_each_entry(patch, &vi->patches, link) {
+		u64 begin = patch_begin_byte(patch);
+		u64 end = patch_end_byte(patch);
+
+		if (begin < next_unpatched_byte) {
+			pr_warn("Patches overlap\n");
+			return -EINVAL;
+		}
+		if (next_unpatched_byte != 0 &&
+		    patch->index <= prev_patched_index) {
+			pr_warn("Multiple patches per page\n");
+			return -EINVAL;
+		}
+		next_unpatched_byte = end;
+		prev_patched_index = (end - 1) >> PAGE_SHIFT;
+	}
+	return 0;
+}
+
 static const struct extension_type {
 	int (*parse)(struct fsverity_info *vi, const void *_ext,
 		     size_t extra_len);
 	size_t base_len;
 	bool unauthenticated;
 } extension_types[] = {
+	[FS_VERITY_EXT_ELIDE] = {
+		.parse = parse_elide_extension,
+		.base_len = sizeof(struct fsverity_extension_elide),
+	},
+	[FS_VERITY_EXT_PATCH] = {
+		.parse = parse_patch_extension,
+		.base_len = sizeof(struct fsverity_extension_patch),
+	},
 };
 
 /*
@@ -240,6 +419,14 @@ static int parse_extensions(struct fsverity_info *vi,
 		if (!unauthenticated)
 			auth_end = ext_hdr;
 	}
+
+	err = sort_and_check_elisions(vi);
+	if (err)
+		return err;
+
+	err = sort_and_check_patches(vi);
+	if (err)
+		return err;
 
 	return auth_end - (const void *)ftr;
 }
@@ -389,6 +576,19 @@ static int compute_tree_depth_and_offsets(struct fsverity_info *vi)
 	return 0;
 }
 
+static pgoff_t first_unelided_page(struct fsverity_info *vi)
+{
+	pgoff_t index = 0;
+	const struct fsverity_elision *elision;
+
+	list_for_each_entry(elision, &vi->elisions, link) {
+		if (index != elision->index)
+			break;
+		index += elision->nr_pages;
+	}
+	return index;
+}
+
 /*
  * Compute the hash of the root of the Merkle tree (or of the lone data block
  * for files <= blocksize in length) and store it in vi->root_hash.
@@ -406,7 +606,7 @@ static int compute_root_hash(struct inode *inode, struct fsverity_info *vi)
 	if (vi->depth)
 		root_idx = vi->hash_lvl_region_idx[vi->depth - 1];
 	else
-		root_idx = 0;
+		root_idx = first_unelided_page(vi);
 
 	root_page = inode->i_sb->s_vop->read_metadata_page(inode, root_idx);
 	if (IS_ERR(root_page)) {
@@ -484,6 +684,8 @@ static struct fsverity_info *alloc_fsverity_info(void)
 	if (!vi)
 		return NULL;
 	vi->mode = FS_VERITY_MODE_NEED_AUTHENTICATION;
+	INIT_LIST_HEAD(&vi->elisions);
+	INIT_LIST_HEAD(&vi->patches);
 	return vi;
 }
 
@@ -754,7 +956,8 @@ static void extract_hash(struct page *hpage, unsigned int hoffset,
 	kunmap_atomic(virt);
 }
 
-static int hash_page(struct fsverity_info *vi, struct page *page, u8 *out)
+static int hash_page(struct fsverity_info *vi, struct page *page,
+		     const struct fsverity_patch *patch, u8 *out)
 {
 	SHASH_DESC_ON_STACK(desc, vi->hash_alg->tfm);
 	void *virt;
@@ -772,12 +975,81 @@ static int hash_page(struct fsverity_info *vi, struct page *page, u8 *out)
 		return err;
 
 	virt = kmap_atomic(page);
-	err = crypto_shash_update(desc, virt, PAGE_SIZE);
+	if (patch) {
+		unsigned int patch_offset = patch->offset;
+		unsigned int patch_length = patch->length;
+		unsigned int patch_skip = 0;
+
+		if (patch->index != page->index) {
+			/* Patch started on a prior page */
+			BUG_ON(patch->index > page->index);
+			patch_skip = (PAGE_SIZE - patch_offset) +
+				     ((page->index - patch->index - 1) <<
+				      PAGE_SHIFT);
+			patch_offset = 0;
+			patch_length -= patch_skip;
+		}
+		patch_length = min_t(unsigned int, patch_length,
+				     PAGE_SIZE - patch_offset);
+
+		err = crypto_shash_update(desc, virt, patch_offset);
+		if (!err)
+			err = crypto_shash_update(desc,
+						  patch->patch + patch_skip,
+						  patch_length);
+		if (!err)
+			err = crypto_shash_update(desc,
+				virt + patch_offset + patch_length,
+				PAGE_SIZE - patch_offset - patch_length);
+	} else {
+		/* Normal case: no patch, just hash the page */
+		err = crypto_shash_update(desc, virt, PAGE_SIZE);
+	}
 	kunmap_atomic(virt);
 	if (err)
 		return err;
 
 	return finalize_hash(vi, desc, out);
+}
+
+/*
+ * Find the patch, if any, that needs to be applied to the page at the specified
+ * index when verifying.
+ */
+static const struct fsverity_patch *find_patch(struct fsverity_info *vi,
+					       pgoff_t index)
+{
+	const struct fsverity_patch *patch;
+
+	list_for_each_entry(patch, &vi->patches, link) {
+		if (index < patch->index)
+			break; /* list is sorted, so can stop here */
+		if (index <= (patch_end_byte(patch) - 1) >> PAGE_SHIFT)
+			return patch;
+	}
+	return NULL;
+}
+
+/*
+ * Determine whether the given page index is elided (bypasses verification).  If
+ * so, return true.  Else, return false and adjust the page index to account for
+ * any previous elisions.
+ */
+static bool page_elided(struct fsverity_info *vi, pgoff_t *index_p)
+{
+	const struct fsverity_elision *elision;
+	pgoff_t orig_idx = *index_p;
+	pgoff_t elided_idx = *index_p;
+
+	list_for_each_entry(elision, &vi->elisions, link) {
+		if (orig_idx < elision->index)
+			break; /* list is sorted, so can stop here */
+		if (orig_idx < elision->index + elision->nr_pages)
+			return true;
+		elided_idx -= elision->nr_pages;
+	}
+	*index_p = elided_idx;
+	return false;
 }
 
 static int compare_hashes(const u8 *want_hash, const u8 *real_hash,
@@ -813,6 +1085,7 @@ bool fsverity_verify_page(struct page *data_page)
 	u8 real_hash[FS_VERITY_MAX_DIGEST_SIZE];
 	struct page *hpages[FS_VERITY_MAX_LEVELS];
 	unsigned int hoffsets[FS_VERITY_MAX_LEVELS];
+	const struct fsverity_patch *patch;
 	int err;
 
 	/*
@@ -855,6 +1128,19 @@ bool fsverity_verify_page(struct page *data_page)
 		pr_debug("Page %lu is in metadata region\n", index);
 		return true;
 	}
+
+	patch = find_patch(vi, index);
+	if (patch)
+		pr_debug("Selected patch: index=%lu, offset=%u, length=%u for page index %lu\n",
+			 patch->index, patch->offset, patch->length, index);
+
+	if (page_elided(vi, &index)) {
+		pr_debug("Page %lu is elided, not verifying!\n", index);
+		return true;
+	}
+	if (index != data_page->index)
+		pr_debug_ratelimited("Adjusted index because of elisions: %lu => %lu\n",
+				     data_page->index, index);
 
 	pr_debug_ratelimited("Verifying data page %lu...\n", index);
 
@@ -905,7 +1191,7 @@ bool fsverity_verify_page(struct page *data_page)
 		struct page *hpage = hpages[level - 1];
 		unsigned int hoffset = hoffsets[level - 1];
 
-		err = hash_page(vi, hpage, real_hash);
+		err = hash_page(vi, hpage, NULL, real_hash);
 		if (err)
 			goto out;
 		err = compare_hashes(want_hash, real_hash,
@@ -923,7 +1209,7 @@ bool fsverity_verify_page(struct page *data_page)
 	}
 
 	/* Finally, verify the data page */
-	err = hash_page(vi, data_page, real_hash);
+	err = hash_page(vi, data_page, patch, real_hash);
 	if (err)
 		goto out;
 	err = compare_hashes(want_hash, real_hash, vi->hash_alg->digest_size,

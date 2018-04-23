@@ -63,6 +63,36 @@ struct fsverity_extension {
 	__le16 reserved;	/* Reserved, must be 0 */
 } __packed;
 
+/* On-disk format */
+struct fsverity_extension_elide {
+	__le64 offset;
+	__le64 length;
+} __packed;
+
+/* In-kernel struct */
+struct fsverity_elision {
+	struct list_head link;
+	pgoff_t index;
+	pgoff_t nr_pages;
+};
+
+/* On-disk format */
+struct fsverity_extension_patch {
+	__le64 offset;
+	u8 databytes[];
+} __packed;
+
+#define FS_VERITY_MAX_PATCH_SIZE 255
+
+/* In-kernel struct */
+struct fsverity_patch {
+	struct list_head link;
+	pgoff_t index;
+	unsigned int offset;
+	unsigned int length;
+	u8 patch[];
+};
+
 /*
  * Up to 64 levels are theoretically possible with a very small block size, but
  * we'd like to limit stack usage, and in practice this is plenty.  E.g., with
@@ -114,6 +144,10 @@ struct fsverity_info {
 
 	/* Starting blocks for each tree level. 'depth-1' is the root level. */
 	u64 hash_lvl_region_idx[FS_VERITY_MAX_LEVELS];
+
+	/* Optional elide and patch extensions, sorted by increasing offset */
+	struct list_head elisions;
+	struct list_head patches;
 };
 
 #endif /* _FSVERITY_PRIVATE_H */
