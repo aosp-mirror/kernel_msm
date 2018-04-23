@@ -39,5 +39,4 @@
 
 &google_charger {
 	google,chg-battery-capacity = <2915>;
-	maxim,battery-cutoff-voltage = <3300000>;
 };
