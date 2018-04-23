@@ -9,6 +9,7 @@ config TYPEC_TCPM
 	depends on USB
 	select TYPEC
 	select USB_ROLE_SWITCH
+	select POWER_SUPPLY
 	help
 	  The Type-C Port Controller Manager provides a USB PD and USB Type-C
 	  state machine for use with Type-C Port Controllers.
