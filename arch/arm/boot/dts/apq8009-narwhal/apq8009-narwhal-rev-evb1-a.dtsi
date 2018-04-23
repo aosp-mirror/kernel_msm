@@ -165,10 +165,6 @@
 	allow-random-addr;
 };
 
-&pm8916_vib {
-	qcom,vib-vtg-level-mV = <2900>;
-};
-
 &audio_codec_narwhal {
 	/delete-property/ qcom,msm-micbias1-ext-cap;
 };

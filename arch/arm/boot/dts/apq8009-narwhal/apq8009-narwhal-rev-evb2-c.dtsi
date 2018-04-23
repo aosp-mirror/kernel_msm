@@ -41,10 +41,6 @@
 	status = "ok";
 };
 
-&pm8916_vib {
-	qcom,vib-vtg-level-mV = <2900>;
-};
-
 &load_sw_control {
 	status = "disabled";
 };
