@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -4004,10 +4004,12 @@ int msm_isp_update_axi_stream(struct vfe_device *vfe_dev, void *arg)
 				&update_cmd->update_info[i];
 			stream_info = msm_isp_get_stream_common_data(vfe_dev,
 				HANDLE_TO_IDX(update_info->stream_handle));
+			mutex_lock(&vfe_dev->buf_mgr->lock);
 			rc = msm_isp_request_frame(vfe_dev, stream_info,
 				update_info->user_stream_id,
 				update_info->frame_id,
 				MSM_ISP_INVALID_BUF_INDEX);
+			mutex_unlock(&vfe_dev->buf_mgr->lock);
 			if (rc)
 				pr_err("%s failed to request frame!\n",
 					__func__);
@@ -4053,10 +4055,12 @@ int msm_isp_update_axi_stream(struct vfe_device *vfe_dev, void *arg)
 			rc = -EINVAL;
 			break;
 		}
+		mutex_lock(&vfe_dev->buf_mgr->lock);
 		rc = msm_isp_request_frame(vfe_dev, stream_info,
 			req_frm->user_stream_id,
 			req_frm->frame_id,
 			req_frm->buf_index);
+		mutex_unlock(&vfe_dev->buf_mgr->lock);
 		if (rc)
 			pr_err("%s failed to request frame!\n",
 				__func__);
@@ -4255,11 +4259,11 @@ void msm_isp_process_axi_irq_stream(struct vfe_device *vfe_dev,
 
 void msm_isp_process_axi_irq(struct vfe_device *vfe_dev,
 	uint32_t irq_status0, uint32_t irq_status1,
-	struct msm_isp_timestamp *ts)
+	uint32_t pingpong_status, struct msm_isp_timestamp *ts)
 {
 	int i, rc = 0;
 	uint32_t comp_mask = 0, wm_mask = 0;
-	uint32_t pingpong_status, stream_idx;
+	uint32_t stream_idx;
 	struct msm_vfe_axi_stream *stream_info;
 	struct msm_vfe_axi_composite_info *comp_info;
 	struct msm_vfe_axi_shared_data *axi_data = &vfe_dev->axi_data;
@@ -4273,8 +4277,6 @@ void msm_isp_process_axi_irq(struct vfe_device *vfe_dev,
 		return;
 
 	ISP_DBG("%s: status: 0x%x\n", __func__, irq_status0);
-	pingpong_status =
-		vfe_dev->hw_info->vfe_ops.axi_ops.get_pingpong_status(vfe_dev);
 
 	for (i = 0; i < axi_data->hw_info->num_comp_mask; i++) {
 		rc = 0;
