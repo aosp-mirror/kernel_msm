@@ -76,6 +76,8 @@
 			 0x03 0x250 /* TUNE5 */
 			 0x00 0x23c /* CHG_CTRL2 */
 			 0x22 0x210>; /* PWR_CTRL1 */
+
+	google,skip_efuse_reg;
 };
 
 &pmi8998_pdphy {
