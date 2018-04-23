@@ -58,6 +58,7 @@ enum sensor_connection_types {
  * user space will provide new value upon tz app load
  */
 static uint32_t g_app_buf_size = SZ_256K;
+static char const *const FP_APP_NAME = "fingerpr";
 
 struct qbt1000_drvdata {
 	struct class	*qbt1000_class;
@@ -750,13 +751,13 @@ static long qbt1000_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 	void __user *priv_arg = (void __user *)arg;
 	struct qbt1000_drvdata *drvdata;
 
+	drvdata = file->private_data;
+
 	if (IS_ERR(priv_arg)) {
 		dev_err(drvdata->dev, "%s: invalid user space pointer %lu\n",
 			__func__, arg);
 		return -EINVAL;
 	}
-
-	drvdata = file->private_data;
 
 	mutex_lock(&drvdata->mutex);
 	if (((drvdata->sensor_conn_type == SPI) && (!drvdata->clock_state)) ||
@@ -784,6 +785,13 @@ static long qbt1000_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 
 		if (!app.app_handle) {
 			dev_err(drvdata->dev, "%s: LOAD app_handle is null\n",
+				__func__);
+			rc = -EINVAL;
+			goto end;
+		}
+
+		if (strcmp(app.name, FP_APP_NAME)) {
+			dev_err(drvdata->dev, "%s: Invalid app name\n",
 				__func__);
 			rc = -EINVAL;
 			goto end;
