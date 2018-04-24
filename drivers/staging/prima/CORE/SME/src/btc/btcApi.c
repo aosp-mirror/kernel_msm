@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -98,6 +98,7 @@ VOS_STATUS btcOpen (tHalHandle hHal)
    pMac->btc.btcHBActive = VOS_TRUE;
    pMac->btc.btc_scan_compromise_esco = false;
    pMac->btc.btc_scan_compromise_sco = false;
+   pMac->btc.agg_disabled = false;
 
    for (i = 0; i < MWS_COEX_MAX_VICTIM_TABLE; i++)
    {

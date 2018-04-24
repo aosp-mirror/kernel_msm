@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2012-2013, 2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013, 2016, 2018 The Linux Foundation. All rights
+ * reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -372,6 +373,7 @@ typedef struct sSmeBtcInfo
    bool          btc_scan_compromise_sco;
    v_U8_t        btcBssfordisableaggr[VOS_MAC_ADDRESS_LEN];
    vos_timer_t   enableUapsdTimer;
+   bool          agg_disabled;
 } tSmeBtcInfo, *tpSmeBtcInfo;
 
 

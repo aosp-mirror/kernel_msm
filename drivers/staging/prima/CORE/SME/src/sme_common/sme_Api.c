@@ -2737,6 +2737,7 @@ eHalStatus sme_ProcessMsg(tHalHandle hHal, vos_msg_t* pMsg)
 
                    if (pSmeCoexInd->coexIndType == SIR_COEX_IND_TYPE_DISABLE_AGGREGATION_IN_2p4)
                    {
+                       pMac->btc.agg_disabled = true;
                        smsLog( pMac, LOG1, FL("SIR_COEX_IND_TYPE_DISABLE_AGGREGATION_IN_2p4"));
                        sme_RequestFullPower(hHal, NULL, NULL, eSME_REASON_OTHER);
                        pMac->isCoexScoIndSet = 1;
@@ -2748,6 +2749,7 @@ eHalStatus sme_ProcessMsg(tHalHandle hHal, vos_msg_t* pMsg)
                    }
                    else if (pSmeCoexInd->coexIndType == SIR_COEX_IND_TYPE_ENABLE_AGGREGATION_IN_2p4)
                    {
+                       pMac->btc.agg_disabled = false;
                        smsLog( pMac, LOG1, FL("SIR_COEX_IND_TYPE_ENABLE_AGGREGATION_IN_2p4"));
                        pMac->isCoexScoIndSet = 0;
                        sme_RequestBmps(hHal, NULL, NULL);
