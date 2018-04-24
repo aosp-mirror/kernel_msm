@@ -230,6 +230,12 @@ static int bgcom_transfer(void *handle, uint8_t *tx_buf,
 	spi = bg_spi->spi;
 
 	mutex_lock(&bg_spi->xfer_mutex);
+	if (BGCOM_SPI_BUSY == spi_state)
+	{
+		printk_ratelimited("SPI is held by TZ\n");
+		mutex_unlock(&bg_spi->xfer_mutex);
+		return -EBUSY;
+	}
 	bg_spi_reinit_xfer(tx_xfer);
 	tx_xfer->tx_buf = tx_buf;
 	if (rx_buf)
