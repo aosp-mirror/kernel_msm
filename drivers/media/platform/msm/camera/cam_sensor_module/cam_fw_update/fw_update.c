@@ -9,10 +9,20 @@
 #define OIS_COMPONENT_I2C_ADDR_WRITE 0x7C
 #define VCM_COMPONENT_I2C_ADDR_WRITE 0xE4
 #define VCM_EEPROM_I2C_ADDR_WRITE 0xE6
+#define VCM_COMPONENT_I2C_ADDR_WRITE_FRONT_N 0x18
 #define MK_SHARP   0x04170000
 #define MK_LGIT    0x09170000
 #define RETRY_MAX 3
 #define LUT_MAX 3
+
+#define VCM_AK7375_EEPROM_WRITE_MODE_ADDR    0xAE
+#define VCM_AK7375_EEPROM_WRITE_MODE_DATA    0x3B
+
+#define VCM_AK7375_EEPROM_STORE_ADDR         0x03
+#define VCM_AK7375_EEPROM_STORE_STATUS_ADDR  0x4B
+#define VCM_AK7375_EEPROM_STORE_MEM1_DATA    0x01
+#define VCM_AK7375_EEPROM_STORE_MEM2_DATA    0x02
+#define VCM_AK7375_EEPROM_STORE_MEM3_DATA    0x04
 
 static struct camera_io_master *g_io_master_info;
 bool g_first = true;
@@ -529,6 +539,190 @@ int ValidateRearVCMFW(struct camera_io_master *io_info,
 		}
 	}
 	CAM_INFO(CAM_SENSOR, "[VCMFW]%s: complete.", __func__);
+
+	return rc;
+}
+
+int checkFrontVCMFWUpdate(struct cam_sensor_ctrl_t *s_ctrl)
+{
+	int rc;
+	int update_retry_cnt = 0;
+	UINT_16 cci_client_sid_backup;
+	struct camera_io_master *io_master_info = &(s_ctrl->io_master_info);
+	UINT_32 ReadData = 0;
+	int i;
+	struct cam_sensor_i2c_reg_array *fwtable;
+	UINT_32 size;
+
+	/* Bcakup the I2C slave address */
+	cci_client_sid_backup = s_ctrl->io_master_info.cci_client->sid;
+
+	/* Replace the I2C slave address with VCM component */
+	s_ctrl->io_master_info.cci_client->sid =
+		VCM_COMPONENT_I2C_ADDR_WRITE_FRONT_N >> 1;
+
+	CAM_INFO(CAM_SENSOR, "[VCMFW]%s: change sid to 0x%02x",
+		 __func__, io_master_info->cci_client->sid);
+
+	fwtable = VCM_AK7375_DVT_R08;
+	size = ARRAY_SIZE(VCM_AK7375_DVT_R08);
+
+	/* Check Version:
+	 * There is no one register data for version, so compares
+	 * the first few entries defined as LUT_MAX instead.
+	 */
+	for (i = 0; i < LUT_MAX; i++) {
+		rc = RamRead8A(io_master_info,
+			       fwtable[i].reg_addr,
+			       &ReadData);
+		if (rc < 0 || ReadData != fwtable[i].reg_data) {
+			CAM_INFO(CAM_SENSOR,
+				 "[VCMFW]%s: Need to run FW update",
+				 __func__);
+			update_retry_cnt = RETRY_MAX;
+			break;
+		}
+	}
+
+	/* b/78207248: Force it off and force rc = 0 until R14 FW validated */
+	update_retry_cnt = 0;
+	rc = 0;
+
+	if (!update_retry_cnt) {
+		s_ctrl->io_master_info.cci_client->sid = cci_client_sid_backup;
+		CAM_INFO(CAM_SENSOR,
+			 "[VCMFW]%s: No need to update, rollback sid to 0x%02x",
+			 __func__, s_ctrl->io_master_info.cci_client->sid);
+		return rc;
+	}
+
+	/* FW Upgrade starting */
+	while (update_retry_cnt) {
+		rc = DownloadFrontVCMFW(io_master_info, fwtable, size);
+
+		if (rc != 0) {
+			update_retry_cnt--;
+			CAM_ERR(CAM_SENSOR,
+				"[VCMFW]%s: write fail and retry %d",
+				__func__, update_retry_cnt);
+			continue;
+		}
+
+		rc = ValidateFrontVCMFW(io_master_info, fwtable, size);
+
+		if (rc == 0) {
+			CAM_INFO(CAM_SENSOR,
+				 "[VCMFW]%s: update successfully",
+				 __func__);
+			break;
+		}
+
+		update_retry_cnt--;
+		CAM_ERR(CAM_SENSOR,
+			"[VCMFW]%s: verify fail and retry %d",
+			__func__, update_retry_cnt);
+	}
+
+	/* Restore the I2C slave address */
+	s_ctrl->io_master_info.cci_client->sid = cci_client_sid_backup;
+
+	CAM_INFO(CAM_SENSOR, "[VCMFW]%s: rollback sid to 0x%02x rc %d",
+		 __func__, s_ctrl->io_master_info.cci_client->sid, rc);
+
+	return rc;
+}
+
+/* Refer to the below document for function DownloadFrontVCMFW.           */
+/* https://drive.google.com/file/d/1IsTbGh5EJ0VIC21l-2JDP5W9PcP6MOze/view */
+int DownloadFrontVCMFW(struct camera_io_master *io_info,
+		       struct cam_sensor_i2c_reg_array *fwtable, UINT_32 tbsize)
+{
+	int rc;
+	struct cam_sensor_i2c_reg_setting i2c_reg_settings;
+	UINT_32 ReadData = 0;
+	int i;
+
+	i2c_reg_settings.reg_setting = fwtable;
+	i2c_reg_settings.size = tbsize;
+	i2c_reg_settings.addr_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+	i2c_reg_settings.data_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+	i2c_reg_settings.delay = 0;
+
+	/* Change mode to write */
+	rc = RamWrite8A(io_info,
+			VCM_AK7375_EEPROM_WRITE_MODE_ADDR,
+			VCM_AK7375_EEPROM_WRITE_MODE_DATA);
+
+	if (rc != 0) {
+		CAM_ERR(CAM_SENSOR,
+			"[VCMFW]%s: change to write mode failed",
+			__func__);
+		return rc;
+	}
+
+	/* Write all data */
+	rc = camera_io_dev_write(io_info, &i2c_reg_settings);
+
+	if (rc != 0) {
+		CAM_ERR(CAM_SENSOR,
+			"[VCMFW]%s: update vcm firmware failed",
+			__func__);
+		return rc;
+	}
+
+	/* Store in EEPROM */
+	for (i = 0; i < RETRY_MAX; i++) {
+		rc = RamWrite8A(io_info,
+				VCM_AK7375_EEPROM_STORE_ADDR,
+				VCM_AK7375_EEPROM_STORE_MEM1_DATA);
+		msleep(72);
+
+		rc |= RamWrite8A(io_info,
+				 VCM_AK7375_EEPROM_STORE_ADDR,
+				 VCM_AK7375_EEPROM_STORE_MEM2_DATA);
+		msleep(216);
+
+		rc |= RamWrite8A(io_info,
+				 VCM_AK7375_EEPROM_STORE_ADDR,
+				 VCM_AK7375_EEPROM_STORE_MEM3_DATA);
+		msleep(108);
+
+		rc |= RamRead8A(io_info,
+				VCM_AK7375_EEPROM_STORE_STATUS_ADDR,
+				&ReadData);
+
+		/* Bit2 of regist status should be 0 if store successfully. */
+		rc |= (ReadData & (1 << 2));
+
+		if (rc == 0)
+			break;
+	}
+
+	return rc;
+}
+
+int ValidateFrontVCMFW(struct camera_io_master *io_info,
+		       struct cam_sensor_i2c_reg_array *fwtable, UINT_32 tbsize)
+{
+	int rc = 0;
+	int i;
+
+	/* Poll all write data */
+	for (i = 0; i < tbsize; i++) {
+		rc = camera_io_dev_poll(io_info,
+					fwtable[i].reg_addr,
+					fwtable[i].reg_data,
+					0,
+					CAMERA_SENSOR_I2C_TYPE_BYTE,
+					CAMERA_SENSOR_I2C_TYPE_BYTE,
+					5);
+		if (rc < 0) {
+			CAM_ERR(CAM_SENSOR,
+				"[VCMFW]%s: poll addr 0x%02x failed",
+				__func__, fwtable[i].reg_addr);
+			break;
+		}
+	}
 
 	return rc;
 }
