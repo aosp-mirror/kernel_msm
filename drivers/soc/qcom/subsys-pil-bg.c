@@ -91,8 +91,12 @@ static void bg_app_shutdown_notify(const struct subsys_desc *subsys)
 {
 	struct pil_bg_data *bg_data = subsys_to_data(subsys);
 	/* Toggle AP2BG err fatal gpio here to inform apps err fatal event */
-	if (gpio_is_valid(bg_data->gpios[2]))
+	disable_irq(bg_data->status_irq);
+	disable_irq(bg_data->errfatal_irq);
+	if (gpio_is_valid(bg_data->gpios[2])) {
+		pr_debug("Sending Apps shutdown signal\n");
 		gpio_set_value(bg_data->gpios[2], 1);
+	}
 }
 
 /**
@@ -106,9 +110,14 @@ static int bg_app_reboot_notify(struct notifier_block *nb,
 {
 	struct pil_bg_data *bg_data = container_of(nb,
 					struct pil_bg_data, reboot_blk);
+
+	disable_irq(bg_data->status_irq);
+	disable_irq(bg_data->errfatal_irq);
 	/* Toggle AP2BG err fatal gpio here to inform apps err fatal event */
-	if (gpio_is_valid(bg_data->gpios[2]))
+	if (gpio_is_valid(bg_data->gpios[2])) {
+		pr_debug("Sending reboot signal\n");
 		gpio_set_value(bg_data->gpios[2], 1);
+	}
 	return NOTIFY_DONE;
 }
 
