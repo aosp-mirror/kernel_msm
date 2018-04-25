@@ -124,6 +124,7 @@ static int modem_shutdown(const struct subsys_desc *subsys, bool force_stop)
 static int modem_powerup(const struct subsys_desc *subsys)
 {
 	struct modem_data *drv = subsys_to_drv(subsys);
+	int ret, retry_count = 0;
 
 	if (subsys->is_not_loadable)
 		return 0;
@@ -136,7 +137,11 @@ static int modem_powerup(const struct subsys_desc *subsys)
 	drv->subsys_desc.ramdump_disable = 0;
 	drv->ignore_errors = false;
 	drv->q6->desc.fw_name = subsys->fw_name;
-	return pil_boot(&drv->q6->desc);
+	while ((ret = pil_boot(&drv->q6->desc)) &&
+		retry_count < PERIPHERAL_LOADER_MAX_RETRY)
+		pr_err("Modem powerup failed ret:%d, retry %d times\n",
+			ret, retry_count++);
+	return ret;
 }
 
 static void modem_crash_shutdown(const struct subsys_desc *subsys)
