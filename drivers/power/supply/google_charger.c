@@ -26,6 +26,9 @@
 #define CHG_VOLT_NB_LIMITS_MAX 5
 #define CHG_DELAY_INIT_MS 250
 
+#define DEFAULT_CHARGE_STOP_LEVEL 100
+#define DEFAULT_CHARGE_START_LEVEL 0
+
 struct chg_profile {
 	u32 update_interval;
 	u32 battery_capacity;
@@ -63,6 +66,11 @@ struct chg_drv {
 	int vbatt_idx;
 	int checked_cv_cnt;
 	int fv_uv;
+	int disable_charging;
+	int disable_pwrsrc;
+	bool lowerdb_reached;
+	int charge_stop_level;
+	int charge_start_level;
 };
 
 /* Used as left operand also */
@@ -145,12 +153,15 @@ static inline int psy_set_prop(struct power_supply *psy,
 	return 0;
 }
 
-static inline void init_chg_drv(struct chg_drv *chg_drv)
+static inline void reset_chg_drv_state(struct chg_drv *chg_drv)
 {
 	chg_drv->temp_idx = -1;
 	chg_drv->vbatt_idx = -1;
 	chg_drv->checked_cv_cnt = 0;
 	chg_drv->fv_uv = -1;
+	chg_drv->disable_charging = 0;
+	chg_drv->disable_pwrsrc = 0;
+	chg_drv->lowerdb_reached = true;
 	PSY_SET_PROP(chg_drv->chg_psy,
 		     POWER_SUPPLY_PROP_TAPER_CONTROL_ENABLED, 0);
 }
@@ -194,6 +205,44 @@ static void pr_info_states(struct power_supply *chg_psy,
 			PSY_GET_PROP(wlc_psy, POWER_SUPPLY_PROP_TEMP));
 }
 
+/* returns 1 if charging should be disabled given the current battery capacity
+ * given in percent, return 0 if charging should happen
+ */
+static int is_charging_disabled(struct chg_drv *chg_drv, int capacity)
+{
+	int disable_charging = 0;
+	int upperbd = chg_drv->charge_stop_level;
+	int lowerbd = chg_drv->charge_start_level;
+
+	if ((upperbd == DEFAULT_CHARGE_STOP_LEVEL) &&
+	    (lowerbd == DEFAULT_CHARGE_START_LEVEL))
+		return 0;
+
+	if ((upperbd > lowerbd) &&
+	    (upperbd <= DEFAULT_CHARGE_STOP_LEVEL) &&
+	    (lowerbd >= DEFAULT_CHARGE_START_LEVEL)) {
+		if (chg_drv->lowerdb_reached && upperbd <= capacity) {
+			pr_info("%s: lowerbd=%d, upperbd=%d, capacity=%d, lowerdb_reached=1->0, charging off\n",
+				__func__, lowerbd, upperbd, capacity);
+			disable_charging = 1;
+			chg_drv->lowerdb_reached = false;
+		} else if (!chg_drv->lowerdb_reached && lowerbd < capacity) {
+			pr_info("%s: lowerbd=%d, upperbd=%d, capacity=%d, charging off\n",
+				__func__, lowerbd, upperbd, capacity);
+			disable_charging = 1;
+		} else if (!chg_drv->lowerdb_reached && capacity <= lowerbd) {
+			pr_info("%s: lowerbd=%d, upperbd=%d, capacity=%d, lowerdb_reached=0->1, charging on\n",
+				__func__, lowerbd, upperbd, capacity);
+			chg_drv->lowerdb_reached = true;
+		} else {
+			pr_info("%s: lowerbd=%d, upperbd=%d, capacity=%d, charging on\n",
+				__func__, lowerbd, upperbd, capacity);
+		}
+	}
+
+	return disable_charging;
+}
+
 #define CHG_WORK_ERROR_RETRY_MS 1000
 static void chg_work(struct work_struct *work)
 {
@@ -211,6 +260,8 @@ static void chg_work(struct work_struct *work)
 	int batt_status, cv_delta;
 	bool rerun_work = false;
 	int vcell_delta = 0;
+	int disable_charging;
+	int disable_pwrsrc;
 
 	__pm_stay_awake(&chg_drv->chg_ws);
 	pr_debug("battery charging work item\n");
@@ -240,9 +291,9 @@ static void chg_work(struct work_struct *work)
 		if (!chg_drv->stop_charging) {
 			pr_info("batt. temp. off limits, disabling charging\n");
 			PSY_SET_PROP(chg_psy,
-				     POWER_SUPPLY_PROP_INPUT_SUSPEND, 1);
+				     POWER_SUPPLY_PROP_CHARGE_DISABLE, 1);
 			chg_drv->stop_charging = true;
-			init_chg_drv(chg_drv);
+			reset_chg_drv_state(chg_drv);
 		}
 		/* status will be discharging when disabled but we want to keep
 		 * monitoring temperature to re-enable charging
@@ -251,8 +302,34 @@ static void chg_work(struct work_struct *work)
 		goto handle_rerun;
 	} else if (chg_drv->stop_charging) {
 		pr_info("batt. temp. ok, enabling charging\n");
-		PSY_SET_PROP(chg_psy, POWER_SUPPLY_PROP_INPUT_SUSPEND, 0);
+		PSY_SET_PROP(chg_psy, POWER_SUPPLY_PROP_CHARGE_DISABLE, 0);
 		chg_drv->stop_charging = false;
+	}
+
+	disable_charging = is_charging_disabled(chg_drv, soc);
+	if (disable_charging && soc > chg_drv->charge_stop_level)
+		disable_pwrsrc = 1;
+	else
+		disable_pwrsrc = 0;
+
+	if (disable_charging != chg_drv->disable_charging) {
+		pr_info("set disable_charging(%d)", disable_charging);
+		PSY_SET_PROP(chg_psy, POWER_SUPPLY_PROP_CHARGE_DISABLE,
+			     disable_charging);
+	}
+	chg_drv->disable_charging = disable_charging;
+
+	if (disable_pwrsrc != chg_drv->disable_pwrsrc) {
+		pr_info("set disable_pwrsrc(%d)", disable_pwrsrc);
+		PSY_SET_PROP(chg_psy, POWER_SUPPLY_PROP_INPUT_SUSPEND,
+			     disable_pwrsrc);
+	}
+	chg_drv->disable_pwrsrc = disable_pwrsrc;
+
+	/* no need to reschedule, battery psy event will reschedule work item */
+	if (chg_drv->disable_charging || chg_drv->disable_pwrsrc) {
+		rerun_work = false;
+		goto exit_chg_work;
 	}
 
 	/* 1. charge profile idx based on the battery temperature */
@@ -364,7 +441,7 @@ handle_rerun:
 	} else {
 		pr_info("stop battery charging work: batt_status=%d\n",
 			batt_status);
-		init_chg_drv(chg_drv);
+		reset_chg_drv_state(chg_drv);
 	}
 	goto exit_chg_work;
 
@@ -528,6 +605,71 @@ static int chg_init_chg_profile(struct chg_drv *chg_drv)
 	return ret;
 }
 
+static ssize_t show_charge_stop_level(struct device *dev,
+				      struct device_attribute *attr, char *buf)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", chg_drv->charge_stop_level);
+}
+
+static ssize_t set_charge_stop_level(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf, size_t count)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+	int ret = 0, val;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	if ((val == chg_drv->charge_stop_level) ||
+	    (val <= chg_drv->charge_start_level) ||
+	    (val < 0))
+		return count;
+
+	chg_drv->charge_stop_level = val;
+	power_supply_changed(chg_drv->bat_psy);
+	return count;
+}
+
+static DEVICE_ATTR(charge_stop_level, 0660,
+		   show_charge_stop_level, set_charge_stop_level);
+
+static ssize_t
+show_charge_start_level(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", chg_drv->charge_start_level);
+}
+
+static ssize_t set_charge_start_level(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t count)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+	int ret = 0, val;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	if ((val == chg_drv->charge_start_level) ||
+	    (val >= chg_drv->charge_stop_level) ||
+	    (val < 0))
+		return count;
+
+	chg_drv->charge_start_level = val;
+	power_supply_changed(chg_drv->bat_psy);
+	return count;
+}
+
+static DEVICE_ATTR(charge_start_level, 0660,
+		   show_charge_start_level, set_charge_start_level);
+
 static void google_charger_init_work(struct work_struct *work)
 {
 	struct chg_drv *chg_drv = container_of(work, struct chg_drv,
@@ -575,7 +717,10 @@ static void google_charger_init_work(struct work_struct *work)
 	chg_drv->usb_psy = usb_psy;
 	chg_drv->bat_psy = bat_psy;
 
-	init_chg_drv(chg_drv);
+	chg_drv->charge_stop_level = DEFAULT_CHARGE_STOP_LEVEL;
+	chg_drv->charge_start_level = DEFAULT_CHARGE_START_LEVEL;
+
+	reset_chg_drv_state(chg_drv);
 
 	chg_drv->psy_nb.notifier_call = psy_changed;
 	ret = power_supply_reg_notifier(&chg_drv->psy_nb);
@@ -642,6 +787,20 @@ static int google_charger_probe(struct platform_device *pdev)
 	ret = chg_init_chg_profile(chg_drv);
 	if (ret < 0) {
 		pr_err("cannot read charging profile from dt, ret=%d\n", ret);
+		return ret;
+	}
+
+	ret = device_create_file(&pdev->dev, &dev_attr_charge_stop_level);
+	if (ret != 0) {
+		pr_err("Failed to create charge_stop_level files, ret=%d\n",
+		       ret);
+		return ret;
+	}
+
+	ret = device_create_file(&pdev->dev, &dev_attr_charge_start_level);
+	if (ret != 0) {
+		pr_err("Failed to create charge_start_level files, ret=%d\n",
+		       ret);
 		return ret;
 	}
 
