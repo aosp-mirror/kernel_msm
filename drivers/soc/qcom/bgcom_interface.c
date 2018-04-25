@@ -45,7 +45,6 @@
 
 #define MPPS_DOWN_EVENT_TO_BG_TIMEOUT 100
 #define SLEEP_FOR_SPI_BUS 2000
-#define SLEEP_FOR_BG_CLEANUP 700
 
 enum {
 	SSR_DOMAIN_BG,
@@ -554,9 +553,6 @@ static int ssr_modem_cb(struct notifier_block *this,
 			msecs_to_jiffies(MPPS_DOWN_EVENT_TO_BG_TIMEOUT));
 		if (!ret)
 			pr_err("Time out on modem down event\n");
-		break;
-	case SUBSYS_BEFORE_POWERUP:
-		msleep(SLEEP_FOR_BG_CLEANUP);
 		break;
 	case SUBSYS_AFTER_POWERUP:
 		modeme.e_type = MODEM_AFTER_POWER_UP;
