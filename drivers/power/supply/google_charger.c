@@ -54,7 +54,6 @@ struct chg_drv {
 	struct delayed_work chg_work;
 	struct wakeup_source chg_ws;
 
-	bool chg_work_running;
 	bool stop_charging;
 	int temp_idx;
 	int vbatt_idx;
@@ -209,12 +208,8 @@ static void chg_work(struct work_struct *work)
 	bool rerun_work = false;
 	int vcell_delta = 0;
 
+	__pm_stay_awake(&chg_drv->chg_ws);
 	pr_debug("battery charging work item\n");
-
-	if (!chg_drv->chg_work_running) {
-		chg_drv->chg_work_running = true;
-		__pm_stay_awake(&chg_drv->chg_ws);
-	}
 
 	temp = PSY_GET_PROP(bat_psy, POWER_SUPPLY_PROP_TEMP);
 	ibatt = PSY_GET_PROP(bat_psy, POWER_SUPPLY_PROP_CURRENT_NOW);
@@ -366,17 +361,17 @@ handle_rerun:
 		pr_info("stop battery charging work: batt_status=%d\n",
 			batt_status);
 		init_chg_drv(chg_drv);
-		chg_drv->chg_work_running = false;
-		__pm_relax(&chg_drv->chg_ws);
 	}
-
-	return;
+	goto exit_chg_work;
 
 error_rerun:
 	pr_err("error occurred, rerun battery charging work in %d ms\n",
 	       CHG_WORK_ERROR_RETRY_MS);
 	schedule_delayed_work(&chg_drv->chg_work,
 			      msecs_to_jiffies(CHG_WORK_ERROR_RETRY_MS));
+
+exit_chg_work:
+	__pm_relax(&chg_drv->chg_ws);
 }
 
 static void dump_profile(struct chg_profile *profile)
@@ -617,7 +612,6 @@ static int google_charger_probe(struct platform_device *pdev)
 		goto error_out;
 	}
 	init_chg_drv(chg_drv);
-	chg_drv->chg_work_running = false;
 
 	ret = chg_init_chg_profile(chg_drv);
 	if (ret < 0) {
