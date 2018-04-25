@@ -16,14 +16,19 @@
 #define __P9221_CHARGER_H__
 
 #define P9221_WLC_VOTER				"WLC_VOTER"
+#define P9221_DC_ICL_BPP_UA			1000000
+#define P9221_DC_ICL_EPP_THRESHOLD_UV		7000000
+#define P9221_DC_ICL_EPP_UA			1100000
 
 /*
  * P9221 common registers
  */
 #define P9221_CHIP_ID_REG			0x00
+#define P9221_CHIP_ID				0x9220
 #define P9221_CHIP_REVISION_REG			0x02
 #define P9221_CUSTOMER_ID_REG			0x03
 #define P9221R5_CUSTOMER_ID_VAL			0x05
+#define P9221R7_CUSTOMER_ID_VAL			0x07
 #define P9221_OTP_FW_MAJOR_REV_REG		0x04
 #define P9221_OTP_FW_MINOR_REV_REG		0x06
 #define P9221_OTP_FW_DATE_REG			0x08
@@ -143,12 +148,19 @@
 #define P9221R5_GP1_RESET_VOLT_REG		0xAE
 #define P9221R5_GP2_RESET_VOLT_REG		0xB0
 #define P9221R5_GP3_RESET_VOLT_REG		0xB2
-#define P9221R5_PROPRIETARY_TX_ID_REG		0xB4
+#define P9221R5_PROP_TX_ID_REG			0xB4
+#define P9221R5_PROP_TX_ID_SIZE			4
 #define P9221R5_DATA_SEND_BUF_START		0x100
 #define P9221R5_DATA_SEND_BUF_SIZE		0x80
 #define P9221R5_DATA_RECV_BUF_START		0x180
 #define P9221R5_DATA_RECV_BUF_SIZE		0x80
 #define P9221R5_LAST_REG			0x1FF
+
+/*
+ * Com Channel Commands
+ */
+#define P9221R5_COM_CHAN_CCRESET		BIT(7)
+#define P9221_COM_CHAN_RETRIES			5
 
 /*
  * End of Power packet types
@@ -212,6 +224,7 @@
 #define P9221R5_STAT_OVC			BIT(0)
 #define P9221R5_STAT_MASK			0x1FFF
 #define P9221R5_STAT_CC_MASK			(P9221R5_STAT_CCRESET | \
+						 P9221R5_STAT_PPRCVD | \
 						 P9221R5_STAT_CCERROR | \
 						 P9221R5_STAT_CCDATARCVD | \
 						 P9221R5_STAT_CCSENDBUSY)
@@ -223,6 +236,8 @@
 struct p9221_charger_platform_data {
 	int				irq_gpio;
 	int				irq_int;
+	int				irq_det_gpio;
+	int				irq_det_int;
 	int				max_vout_mv;
 	u8				fod[P9221_NUM_FOD];
 	bool				fod_set;
@@ -236,15 +251,28 @@ struct p9221_charger_data {
 	struct votable			*dc_icl_votable;
 	struct notifier_block		nb;
 	struct mutex			io_lock;
+	struct mutex			cmd_lock;
 	struct device			*dev;
 	struct delayed_work		notifier_work;
+	struct timer_list		timer;
 	struct bin_attribute		bin;
 	int				online;
+	int				next_online;
 	u16				addr;
 	u8				count;
 	u8				cust_id;
 	u8				rx_buf[P9221R5_DATA_RECV_BUF_SIZE];
+	u16				rx_len;
+	bool				rx_done;
 	u8				tx_buf[P9221R5_DATA_SEND_BUF_SIZE];
+	u32				tx_id;
+	u8				tx_id_str[(sizeof(u32) * 2) + 1];
+	u16				tx_len;
+	bool				tx_done;
+	bool				tx_busy;
+	bool				check_dc;
+	bool				check_det;
+	int				last_capacity;
 };
 
 struct p9221_prop_reg_map_entry {
