@@ -132,6 +132,7 @@
 
 &qcom_seecom {
 	status = "okay";
+	reg = <0x87a00000 0x200000>;
 };
 
 &qcom_tzlog {
