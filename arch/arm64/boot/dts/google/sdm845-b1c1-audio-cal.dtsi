@@ -1,0 +1,5 @@
+&soc {
+	msm_cirrus_playback {
+		cirrus,swap_calibration;
+	};
+};
