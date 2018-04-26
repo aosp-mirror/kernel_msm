@@ -243,6 +243,7 @@ struct max1720x_chip {
 	int history_count;
 	int history_index;
 	u16 status;
+	int fake_capacity;
 };
 
 #define REGMAP_READ(regmap, what, dst)				\
@@ -610,6 +611,9 @@ static int max1720x_get_battery_soc(struct max1720x_chip *chip)
 {
 	u16 data;
 
+	if (chip->fake_capacity >= 0 && chip->fake_capacity <= 100)
+		return chip->fake_capacity;
+
 	if (chip->status & MAX1720X_STATUS_VMN) {
 		dev_info(chip->dev, "minimal voltage has been breached");
 		return 0;
@@ -664,6 +668,17 @@ static int max1720x_get_battery_health(struct max1720x_chip *chip)
 	}
 
 	return POWER_SUPPLY_HEALTH_GOOD;
+}
+
+static int max1720x_set_battery_soc(struct max1720x_chip *chip,
+				    const union power_supply_propval *val)
+{
+	chip->fake_capacity = val->intval;
+
+	if (chip->psy)
+		power_supply_changed(chip->psy);
+
+	return 0;
 }
 
 static int max1720x_get_property(struct power_supply *psy,
@@ -772,12 +787,37 @@ static int max1720x_set_property(struct power_supply *psy,
 				 enum power_supply_property psp,
 				 const union power_supply_propval *val)
 {
-	return -EINVAL;
+	struct max1720x_chip *chip = power_supply_get_drvdata(psy);
+	int rc = 0;
+
+	pm_runtime_get_sync(chip->dev);
+	if (!chip->init_complete || !chip->resume_complete) {
+		pm_runtime_put_sync(chip->dev);
+		return -EAGAIN;
+	}
+	pm_runtime_put_sync(chip->dev);
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_CAPACITY:
+		rc = max1720x_set_battery_soc(chip, val);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
 }
 
 static int max1720x_property_is_writeable(struct power_supply *psy,
 					  enum power_supply_property psp)
 {
+	switch (psp) {
+	case POWER_SUPPLY_PROP_CAPACITY:
+		return 1;
+	default:
+		break;
+	}
+
 	return 0;
 }
 
@@ -1171,6 +1211,7 @@ static void max1720x_init_work(struct work_struct *work)
 		enable_irq_wake(chip->primary->irq);
 	}
 exit_init_work:
+	chip->fake_capacity = -EINVAL;
 	chip->init_complete = true;
 	chip->resume_complete = true;
 }
