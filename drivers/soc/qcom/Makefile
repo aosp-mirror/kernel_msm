@@ -98,6 +98,7 @@ obj-$(CONFIG_QSEE_IPC_IRQ_BRIDGE) += qsee_ipc_irq_bridge.o
 obj-$(CONFIG_QCOM_QDSS_BRIDGE) += qdss_bridge.o
 obj-$(CONFIG_MSM_BAM_DMUX) += bam_dmux.o
 obj-$(CONFIG_WCNSS_CORE) += wcnss/
+obj-$(CONFIG_MODEMSMEM) += modemsmem/
 
 # TODO: remove me b/62058353
 subdir-ccflags-y += \
