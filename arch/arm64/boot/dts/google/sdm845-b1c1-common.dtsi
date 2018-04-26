@@ -91,6 +91,10 @@
 			reg = <0xa94 100>;
 		};
 	};
+
+	modemsmem {
+		compatible = "modemsmem";
+	};
 };
 
 &ufsphy_mem {
