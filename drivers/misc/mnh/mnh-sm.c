@@ -1515,6 +1515,11 @@ static ssize_t mnh_sm_dbgfs_read_powerstats(struct file *fp, char __user *ubuf,
 	char *buf;
 	int pos = 0;
 	int ret, i;
+	ktime_t last_entry;
+	ktime_t last_exit;
+	ktime_t adjusted_duration;
+	ktime_t partial_duration;
+
 
 #define BUFFER_MAX_LEN (4096)
 #define POWER_DEBUGFS_HEADER "Easel Subsystem Power Stats\n"
@@ -1534,12 +1539,24 @@ static ssize_t mnh_sm_dbgfs_read_powerstats(struct file *fp, char __user *ubuf,
 	mutex_lock(&mnh_sm_dev->lock);
 
 	for (i = 0; i < MNH_STATE_MAX; i++) {
+		adjusted_duration = mnh_sm_dev->state_stats[i].duration;
+		last_entry = mnh_sm_dev->state_stats[i].last_entry;
+		last_exit = mnh_sm_dev->state_stats[i].last_exit;
+
+		/* adjust duration for current state */
+		if (mnh_sm_dev->state == i &&
+			ktime_after(last_entry, last_exit)) {
+			partial_duration = ktime_sub(ktime_get(), last_entry);
+			adjusted_duration = ktime_add(adjusted_duration,
+				partial_duration);
+		}
+
 		pos += scnprintf(buf + pos, BUFFER_MAX_LEN - pos,
 			PRINT_FORMAT, states[i],
 			mnh_sm_dev->state_stats[i].counter,
-			ktime_to_ms(mnh_sm_dev->state_stats[i].duration),
-			ktime_to_ms(mnh_sm_dev->state_stats[i].last_entry),
-			ktime_to_ms(mnh_sm_dev->state_stats[i].last_exit));
+			ktime_to_ms(adjusted_duration),
+			ktime_to_ms(last_entry),
+			ktime_to_ms(last_exit));
 	}
 
 	mutex_unlock(&mnh_sm_dev->lock);
