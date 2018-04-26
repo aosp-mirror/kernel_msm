@@ -126,9 +126,15 @@ static const unsigned long aon_clk_regs[] = {
 	CLK_CON_GAT_GOUT_BLK_AON_UID_DAP_ABC_AON_IPCLKPORT_DAP_CLK
 };
 
+/* PLL rate table for CMU_AON */
+static const struct airbrush_pll_rate_table pll_aon_tbl[] = {
+	PLL_F081XX_RATE(933000000, 146, 3, 0),
+	PLL_F081XX_RATE(19200000, 288, 9, 5),
+};
+
 /* List of PLL clocks in CMU_AON */
 static const struct airbrush_pll_clock aon_pll_clks[] = {
-	PLL(pll_f0816x, 0, "fout_pll_aon", "fin_pll_ab", PLL_LOCKTIME_PLL_AON, PLL_CON0_PLL_AON, NULL)
+	PLL(pll_f0816x, 0, "fout_pll_aon", "fin_pll_ab", PLL_LOCKTIME_PLL_AON, PLL_CON0_PLL_AON, pll_aon_tbl)
 };
 
 /* list of parent clocks for muxes in cmu_aon */
@@ -582,9 +588,19 @@ static const unsigned long ipu_clk_regs[] = {
 	CLK_CON_GAT_GOUT_BLK_IPU_UID_IPU_2_CORE_LH_IPCLKPORT_I_SCAN_CLK_ETC,
 };
 
+/* PLL rate table for CMU_IPU */
+static const struct airbrush_pll_rate_table pll_ipu_tbl[] = {
+	PLL_F081XX_RATE(850000000, 531, 3, 2),
+	PLL_F081XX_RATE(720000000, 300, 2, 2),
+	PLL_F081XX_RATE(576000000, 360, 3, 2),
+	PLL_F081XX_RATE(432000000, 360, 2, 3),
+	PLL_F081XX_RATE(288000000, 360, 3, 3),
+	PLL_F081XX_RATE(50000000, 500, 3, 6),
+};
+
 /* PLL Clocks */
 static const struct airbrush_pll_clock ipu_pll_clks[] = {
-	PLL(pll_f0816x, 0, "fout_pll_ipu", "fin_pll_ab", PLL_LOCKTIME_PLL_IPU, PLL_CON0_PLL_IPU, NULL)
+	PLL(pll_f0816x, FOUT_PLL_IPU, "fout_pll_ipu", "fin_pll_ab", PLL_LOCKTIME_PLL_IPU, PLL_CON0_PLL_IPU, pll_ipu_tbl)
 };
 
 /* list of parent clocks for muxes in cmu_ipu */
@@ -717,9 +733,16 @@ static const struct airbrush_fixed_rate_clock mif_fixed_clks[] = {
 	FRATE(0, "clk_dfi", NULL, 0, 466134002),
 };
 
+/* PLL rate table for CMU_MIF */
+static const struct airbrush_pll_rate_table pll_mif_tbl[] = {
+	PLL_F081XX_RATE(3733000000, 778, 4, 0),
+	PLL_F081XX_RATE(1866000000, 778, 4, 1),
+};
+
+
 /* PLL Clocks */
 static const struct airbrush_pll_clock mif_pll_clks[] = {
-	PLL(pll_f0816x, 0, "fout_pll_phy_mif", "fin_pll_ab", PLL_LOCKTIME_PLL_PHY_MIF, PLL_CON0_PLL_PHY_MIF, NULL),
+	PLL(pll_f0816x, 0, "fout_pll_phy_mif", "fin_pll_ab", PLL_LOCKTIME_PLL_PHY_MIF, PLL_CON0_PLL_PHY_MIF, pll_mif_tbl),
 };
 
 /* list of parent clocks for muxes in cmu_mif */
@@ -842,9 +865,19 @@ static const unsigned long tpu_clk_regs[] = {
 	CLK_CON_GAT_GOUT_BLK_TPU_UID_TPU_2_CORE_LH_IPCLKPORT_I_SCAN_CLK_ETC,
 };
 
+/* PLL rate table for CMU_TPU */
+static const struct airbrush_pll_rate_table pll_tpu_tbl[] = {
+	PLL_F081XX_RATE(1000000000, 625, 3, 2),
+	PLL_F081XX_RATE(840000000, 525, 3, 2),
+	PLL_F081XX_RATE(672000000, 400, 3, 2),
+	PLL_F081XX_RATE(504000000, 420, 2, 3),
+	PLL_F081XX_RATE(336000000, 280, 2, 3),
+	PLL_F081XX_RATE(50000000, 500, 3, 6),
+};
+
 /* PLL Clocks*/
 static const struct airbrush_pll_clock tpu_pll_clks[] = {
-	PLL(pll_f0816x, 0, "fout_pll_tpu", "fin_pll_ab", PLL_LOCKTIME_PLL_TPU, PLL_CON0_PLL_TPU, NULL),
+	PLL(pll_f0816x, FOUT_PLL_TPU, "fout_pll_tpu", "fin_pll_ab", PLL_LOCKTIME_PLL_TPU, PLL_CON0_PLL_TPU, pll_tpu_tbl),
 };
 
 /* list of parent clocks for muxes in cmu_mif */
