@@ -43,7 +43,7 @@
 		qcom,mdss-dsi-border-color = <0>;
 		qcom,mdss-dsi-pixel-packing = "tight";
 		qcom,mdss-dsi-pixel-alignment = <0>;
-		qcom,mdss-dsi-on-command-recovery = [05 01 00 00 03 00 02 00 00
+		qcom,mdss-dsi-on-command = [05 01 00 00 03 00 02 00 00
 				15 01 00 00 00 00 02 FE 01
 				15 01 00 00 00 00 02 0A F0
 				15 01 00 00 00 00 02 FE 0A
@@ -56,12 +56,10 @@
 				05 01 00 00 00 00 02 12 00
 				15 01 00 00 00 00 02 35 00
 				15 01 00 00 00 00 02 53 20
-				05 01 00 00 C8 00 02 11 00
-				05 01 00 00 00 00 02 29 00];
-		qcom,mdss-dsi-on-command = [05 01 00 00 C8 00 02 11 00
-				05 01 00 00 00 00 02 29 00];
+				05 01 00 00 C8 00 02 11 00];
+		qcom,mdss-dsi-post-panel-on-command = [05 01 00 00 00 00 02 29 00];
 		qcom,mdss-dsi-off-command = [05 01 00 00 00 00 02 28 00
-				05 01 00 00 00 00 02 10 00];
+				05 01 00 00 96 00 02 10 00];
 		qcom,mdss-dsi-on-command-state = "dsi_hs_mode";
 		qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
 		qcom,mdss-dsi-idle-on-command = [
