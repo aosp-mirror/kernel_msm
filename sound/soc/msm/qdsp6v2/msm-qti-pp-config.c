@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -25,6 +25,7 @@
 #include "msm-qti-pp-config.h"
 #include "msm-pcm-routing-v2.h"
 
+#define MAX_MIXER_CTL_BUF_SIZE 512
 /* EQUALIZER */
 /* Equal to Frontend after last of the MULTIMEDIA SESSIONS */
 #define MAX_EQ_SESSIONS		MSM_FRONTEND_DAI_CS_VOICE
@@ -877,7 +878,7 @@ int msm_adsp_stream_cmd_info(struct snd_kcontrol *kcontrol,
 			struct snd_ctl_elem_info *uinfo)
 {
 	uinfo->type = SNDRV_CTL_ELEM_TYPE_BYTES;
-	uinfo->count = 512;
+	uinfo->count = MAX_MIXER_CTL_BUF_SIZE;
 
 	return 0;
 }
@@ -889,6 +890,12 @@ int msm_adsp_stream_callback_put(struct snd_kcontrol *kcontrol,
 
 	/* fetch payload size in first four bytes */
 	memcpy(&payload_size, ucontrol->value.bytes.data, sizeof(uint32_t));
+
+	if (payload_size > MAX_MIXER_CTL_BUF_SIZE - sizeof(payload_size)) {
+		pr_err("%s: payload_size=%d is over mixer ctl buffer limit.",
+			__func__, payload_size);
+		return -EINVAL;
+	}
 
 	if (kcontrol->private_data == NULL) {
 		/* buffer is empty */
@@ -942,7 +949,7 @@ int msm_adsp_stream_callback_info(struct snd_kcontrol *kcontrol,
 			struct snd_ctl_elem_info *uinfo)
 {
 	uinfo->type = SNDRV_CTL_ELEM_TYPE_BYTES;
-	uinfo->count = 512;
+	uinfo->count = MAX_MIXER_CTL_BUF_SIZE;
 
 	return 0;
 }
