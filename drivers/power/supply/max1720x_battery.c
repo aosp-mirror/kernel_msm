@@ -786,16 +786,11 @@ static int max1720x_property_is_writeable(struct power_supply *psy,
  * hardware. This is useful for testing different configurations without writing
  * nonvolatile memory.
  */
-static int max1720x_fg_reset(struct max1720x_chip *chip)
+static void max1720x_fg_reset(struct max1720x_chip *chip)
 {
-	u16 data;
-
-	REGMAP_READ(chip->regmap, MAX1720X_Config2, data);
 	REGMAP_WRITE(chip->regmap, MAX1720X_Config2,
-		     data | MAX1720X_COMMAND_FUEL_GAUGE_RESET);
+		     MAX1720X_COMMAND_FUEL_GAUGE_RESET);
 	msleep(MAX1720X_TPOR_MS);
-
-	return 0;
 }
 
 static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
