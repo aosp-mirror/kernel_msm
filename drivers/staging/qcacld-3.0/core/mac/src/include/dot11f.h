@@ -57,6 +57,10 @@ typedef uint32_t tDOT11F_U64[2];
 #define __must_check
 #endif
 
+#if !defined unlikely
+#define unlikely(x)    (x)
+#endif
+
 /*
  * Frames Return Codes:
  *
