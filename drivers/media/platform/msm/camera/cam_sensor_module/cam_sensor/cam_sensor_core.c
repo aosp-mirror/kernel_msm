@@ -711,9 +711,14 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 			s_ctrl->sensordata->slave_info.sensor_id);
 
 #ifdef CONFIG_CAMERA_FW_UPDATE
-		if(s_ctrl->fw_update_flag) {
+		if (s_ctrl->fw_update_flag & (1 << 0)) {
 			CAM_INFO(CAM_SENSOR, "[OISFW]Check OIS FW update");
-			rc = checkFWUpdate(s_ctrl);
+			rc = checkOISFWUpdate(s_ctrl);
+		}
+
+		if (s_ctrl->fw_update_flag & (1 << 1)) {
+			CAM_INFO(CAM_SENSOR, "[VCMFW]Check rear actuator FW");
+			rc = checkRearVCMFWUpdate(s_ctrl);
 		}
 #endif
 
