@@ -920,12 +920,12 @@ static int max1720x_handle_dt_batt_id(struct max1720x_chip *chip)
 {
 	int ret, batt_id;
 	u32 batt_id_range = 20, batt_id_kohm;
-	const char *iio_ch_name;
+	const char *dt_iio_ch_name, *iio_ch_name;
 	struct device_node *node = chip->dev->of_node;
 	struct device_node *config_node, *child_node;
 
 	ret = of_property_read_string(node, "io-channel-names",
-				      &iio_ch_name);
+				      &dt_iio_ch_name);
 	if (ret == -EINVAL)
 		return 0;
 
@@ -934,6 +934,11 @@ static int max1720x_handle_dt_batt_id(struct max1720x_chip *chip)
 		/* Don't fail probe on that, just ignore error */
 		return 0;
 	}
+
+	iio_ch_name = devm_kstrdup(chip->dev, dt_iio_ch_name, GFP_KERNEL);
+	if (!iio_ch_name)
+		/* Don't fail probe on that, just ignore error */
+		return 0;
 
 	chip->iio_ch = iio_channel_get(chip->dev, iio_ch_name);
 	if (PTR_ERR(chip->iio_ch) == -EPROBE_DEFER) {
@@ -999,7 +1004,7 @@ static int max1720x_apply_regval_shadow(struct max1720x_chip *chip,
 		return -EINVAL;
 	}
 
-	regs = devm_kcalloc(chip->dev, nb, sizeof(u16), GFP_KERNEL);
+	regs = kmalloc_array(nb, sizeof(u16), GFP_KERNEL);
 	if (!regs)
 		return -ENOMEM;
 
@@ -1008,8 +1013,6 @@ static int max1720x_apply_regval_shadow(struct max1720x_chip *chip,
 		dev_warn(chip->dev, "failed to read maxim,n_regval: %d\n", ret);
 		goto shadow_out;
 	}
-
-	dev_dbg(chip->dev, "%s maxim,n_regval: %d entries\n", node->name, nb);
 
 	for (idx = 0; idx < nb; idx += 2) {
 		if ((regs[idx] >= MAX1720X_NVRAM_START) &&
@@ -1091,7 +1094,7 @@ error_out:
 static int max1720x_apply_regval_register(struct max1720x_chip *chip,
 					struct device_node *node)
 {
-	int cnt, ret, idx;
+	int cnt, ret = 0, idx;
 	u16 *regs, data;
 
 	cnt =  of_property_count_elems_of_size(node, "maxim,r_regval",
@@ -1105,23 +1108,19 @@ static int max1720x_apply_regval_register(struct max1720x_chip *chip,
 		return -EINVAL;
 	}
 
-	regs = devm_kcalloc(chip->dev, cnt, sizeof(u16), GFP_KERNEL);
+	regs = devm_kmalloc_array(chip->dev, cnt, sizeof(u16), GFP_KERNEL);
 	if (!regs)
 		return -ENOMEM;
 
 	ret = of_property_read_u16_array(node, "maxim,r_regval", regs, cnt);
 	if (ret) {
-		dev_warn(chip->dev, "failed to read %s maxim,n_regval: %d\n",
+		dev_warn(chip->dev, "failed to read %s maxim,r_regval: %d\n",
 			 node->name, ret);
 		goto register_out;
 	}
 
-	dev_dbg(chip->dev, "%s maxim,r_regval: %d entries\n", node->name, cnt);
-
 	for (idx = 0; idx < cnt; idx += 2) {
-		switch (regs[idx]) {
-		case 0x00 ... 0x4F:
-		case 0xB0 ... 0xDF:
+		if (max1720x_is_reg(chip->dev, regs[idx])) {
 			REGMAP_READ(chip->regmap, regs[idx], data);
 			if (data != regs[idx + 1])
 				REGMAP_WRITE(chip->regmap, regs[idx],
@@ -1135,11 +1134,17 @@ register_out:
 
 static int max1720x_handle_dt_register_config(struct max1720x_chip *chip)
 {
-	if (chip->batt_node)
-		max1720x_apply_regval_register(chip, chip->batt_node);
-	max1720x_apply_regval_register(chip, chip->dev->of_node);
+	int ret = 0;
 
-	return 0;
+	if (chip->batt_node)
+		ret = max1720x_apply_regval_register(chip, chip->batt_node);
+
+	if (ret)
+		return ret;
+
+	ret = max1720x_apply_regval_register(chip, chip->dev->of_node);
+
+	return ret;
 }
 
 static int max1720x_init_chip(struct max1720x_chip *chip)
@@ -1186,10 +1191,22 @@ static int max1720x_init_chip(struct max1720x_chip *chip)
 	return 0;
 }
 
+static struct power_supply_desc max1720x_psy_desc = {
+	.name = "maxfg",
+	.type = POWER_SUPPLY_TYPE_BATTERY,
+	.get_property = max1720x_get_property,
+	.set_property = max1720x_set_property,
+	.property_is_writeable = max1720x_property_is_writeable,
+	.properties = max1720x_battery_props,
+	.num_properties = ARRAY_SIZE(max1720x_battery_props),
+};
+
 static void max1720x_init_work(struct work_struct *work)
 {
 	struct max1720x_chip *chip = container_of(work, struct max1720x_chip,
 						  init_work.work);
+	struct device *dev = chip->dev;
+	struct power_supply_config psy_cfg = { };
 	int ret;
 
 	ret = max1720x_init_chip(chip);
@@ -1206,32 +1223,46 @@ static void max1720x_init_work(struct work_struct *work)
 					   MAX1720X_I2C_DRIVER_NAME, chip);
 		if (ret != 0) {
 			dev_err(chip->dev, "Unable to register IRQ handler\n");
-			goto exit_init_work;
+			return;
 		}
 		enable_irq_wake(chip->primary->irq);
 	}
-exit_init_work:
+
+	if (of_property_read_bool(dev->of_node, "maxim,psy-type-unknown"))
+		max1720x_psy_desc.type = POWER_SUPPLY_TYPE_UNKNOWN;
+
+	psy_cfg.drv_data = chip;
+	chip->psy = devm_power_supply_register(dev,
+					       &max1720x_psy_desc, &psy_cfg);
+	if (IS_ERR(chip->psy)) {
+		dev_err(dev, "Couldn't register as power supply\n");
+		ret = PTR_ERR(chip->psy);
+		return;
+	}
+
+	chip->history_index = 0;
+	ret = device_create_file(&chip->psy->dev, &dev_attr_history_count);
+	if (ret) {
+		dev_err(dev, "Failed to create history_count attribute\n");
+		return;
+	}
+
+	ret = device_create_file(&chip->psy->dev, &dev_attr_history);
+	if (ret) {
+		dev_err(dev, "Failed to create history attribute\n");
+		return;
+	}
+
 	chip->fake_capacity = -EINVAL;
 	chip->init_complete = true;
 	chip->resume_complete = true;
 }
-
-static struct power_supply_desc max1720x_psy_desc = {
-	.name = "maxfg",
-	.type = POWER_SUPPLY_TYPE_BATTERY,
-	.get_property = max1720x_get_property,
-	.set_property = max1720x_set_property,
-	.property_is_writeable = max1720x_property_is_writeable,
-	.properties = max1720x_battery_props,
-	.num_properties = ARRAY_SIZE(max1720x_battery_props),
-};
 
 static int max1720x_probe(struct i2c_client *client,
 			  const struct i2c_device_id *id)
 {
 	struct max1720x_chip *chip;
 	struct device *dev = &client->dev;
-	struct power_supply_config psy_cfg = { };
 	int ret = 0;
 
 	chip = devm_kzalloc(dev, sizeof(*chip), GFP_KERNEL);
@@ -1262,32 +1293,9 @@ static int max1720x_probe(struct i2c_client *client,
 		goto i2c_unregister;
 	}
 
-	if (of_property_read_bool(dev->of_node, "maxim,psy-type-unknown"))
-		max1720x_psy_desc.type = POWER_SUPPLY_TYPE_UNKNOWN;
-
-	psy_cfg.drv_data = chip;
-	chip->psy = devm_power_supply_register(dev,
-					       &max1720x_psy_desc, &psy_cfg);
-	if (IS_ERR(chip->psy)) {
-		dev_err(dev, "Couldn't register as power supply\n");
-		ret = PTR_ERR(chip->psy);
-		goto i2c_unregister;
-	}
-
-	chip->history_index = 0;
-	ret = device_create_file(&chip->psy->dev, &dev_attr_history_count);
-	if (ret) {
-		dev_err(dev, "Failed to create history_count attribute\n");
-		goto i2c_unregister;
-	}
-
-	ret = device_create_file(&chip->psy->dev, &dev_attr_history);
-	if (ret) {
-		dev_err(dev, "Failed to create history attribute\n");
-		goto i2c_unregister;
-	}
 	INIT_DELAYED_WORK(&chip->init_work, max1720x_init_work);
 	schedule_delayed_work(&chip->init_work, 0);
+
 	return 0;
 
 i2c_unregister:
