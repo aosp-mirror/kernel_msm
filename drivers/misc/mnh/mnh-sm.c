@@ -1599,7 +1599,7 @@ static int mnh_sm_dbgfs_register(const char *name)
 
 	mnh_sm_dev->dbgfs_dir = dir;
 
-	f = debugfs_create_file("power_stats", 0400, dir,
+	f = debugfs_create_file("power_stats", 0444, dir,
 				NULL, &mnh_sm_dbgfs_fops_powerstats);
 
 	if (!f) {
