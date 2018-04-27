@@ -5,23 +5,28 @@ Required properties:
  - compatible : "google,charger"
  - google,chg-power-supply: name of the charge control power supply
  - google,bat-power-supply: name of the Fuel Gauge power supply
- - google,chg-update-interval: delay in ms to wait before re-running the work item
- - google,chg-battery-capacity: the nominal capacity used to compute the effective
-     1C charge rate
- - google,chg-temp-limits: the temperature buckets limits defining the indexes of
-     the constant charge limits (row index in google,chg-cc-limits)
- - google,chg-cv-limits: steps voltage limits (column index in google,chg-cc-limits)
- - google,chg-cc-limits: the array of constant current charge rates given in % of
-     google,chg-battery-capacity
+ - google,chg-update-interval: delay in ms to wait before re-running the work
+     item
+ - google,chg-battery-capacity: the nominal capacity used to compute the
+     effective 1C charge rate
+ - google,chg-temp-limits: the temperature buckets limits defining the indexes
+     of the constant charge limits (row index in google,chg-cc-limits)
+ - google,chg-cv-limits: steps voltage limits (column index in
+     google,chg-cc-limits)
+ - google,chg-cc-limits: the array of constant current charge rates given in %
+     of google,chg-battery-capacity
 
 Optional properties:
  - google,wlc-power-supply: name of wireless charing input power supply
- - google,cv-hw-resolution: the constant voltage setting resolution in micro volt
-     defaults to 25000
+ - google,cv-hw-resolution: the constant voltage setting resolution in micro
+     volt defaults to 25000
  - google,cc-hw-resolution: the constant current setting resolution in micro amp
      defaults to 25000
- - google,cv-range-accuracy: the voltage margin in micro volt to consider a given
-     CV step has been reached. Defaults to 15000.
+ - google,cv-range-accuracy: the voltage margin in micro volt to consider a
+     given CV step has been reached. Defaults to 15000.
  - google,cv-range-accuracy-cnt: the number of update-interval delay the battery
      voltage needs to consecutively be within the google,cv-range-accuracy
      accuracy to coinsider CV step to be reached.
+ - google,chg-tolerance: the deci-percent tolerance we need to give the PMIC to
+     ensure actual current is below chg-cc-limits (divide by 10 to get
+     percentage points). Max allowed tolerance is 25%.

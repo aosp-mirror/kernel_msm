@@ -14,6 +14,7 @@
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
+#include <linux/kernel.h>
 #include <linux/printk.h>
 #include <linux/module.h>
 #include <linux/of.h>
@@ -37,6 +38,7 @@ struct chg_profile {
 	u32 cc_hw_resolution;
 	u32 cv_range_accuracy;
 	u32 cv_range_accuracy_cnt;
+	u32 chg_cc_tolerance;
 };
 
 struct chg_drv {
@@ -497,13 +499,23 @@ static int chg_init_chg_profile(struct chg_drv *chg_drv)
 		pr_err("cannot read chg-cc-limits table, ret=%d\n", ret);
 		return ret;
 	}
+
+	ret = of_property_read_u32(node, "google,chg-cc-tolerance",
+				   &profile->chg_cc_tolerance);
+	if (ret < 0)
+		profile->chg_cc_tolerance = 0;
+	else if (profile->chg_cc_tolerance > 250)
+		profile->chg_cc_tolerance = 250;
+
 	/* chg-battery-capacity is in mAh, chg-cc-limits relative to 100 */
 	for (ti = 0; ti < profile->temp_nb_limits - 1; ti++) {
 		for (vi = 0; vi < profile->volt_nb_limits; vi++) {
 			ccm = CCCM_LIMITS(profile, ti, vi);
 			ccm *= profile->battery_capacity * 10;
-			ccm = (ccm / profile->cc_hw_resolution) *
-			    profile->cc_hw_resolution;
+			ccm = ccm * (1000 - profile->chg_cc_tolerance) / 1000;
+			// round to the nearest resolution the PMIC can handle
+			ccm = DIV_ROUND_CLOSEST(ccm, profile->cc_hw_resolution)
+					* profile->cc_hw_resolution;
 			CCCM_LIMITS(profile, ti, vi) = ccm;
 		}
 	}
