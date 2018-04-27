@@ -4147,6 +4147,14 @@ static int fts_remove(struct spi_device *client)
 	fts_enable_reg(info, false);
 	fts_get_reg(info, false);
 
+	/* free gpio */
+	if (gpio_is_valid(info->board->irq_gpio))
+		gpio_free(info->board->irq_gpio);
+	if (gpio_is_valid(info->board->switch_gpio))
+		gpio_free(info->board->switch_gpio);
+	if (gpio_is_valid(info->board->reset_gpio))
+		gpio_free(info->board->reset_gpio);
+
 	/* free all */
 	kfree(info);
 
