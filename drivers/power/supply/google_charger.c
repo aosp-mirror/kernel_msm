@@ -24,6 +24,7 @@
 
 #define CHG_TEMP_NB_LIMITS_MAX 10
 #define CHG_VOLT_NB_LIMITS_MAX 5
+#define CHG_DELAY_INIT_MS 250
 
 struct chg_profile {
 	u32 update_interval;
@@ -53,6 +54,7 @@ struct chg_drv {
 	struct chg_profile chg_profile;
 	struct notifier_block psy_nb;
 
+	struct delayed_work init_work;
 	struct delayed_work chg_work;
 	struct wakeup_source chg_ws;
 
@@ -526,133 +528,131 @@ static int chg_init_chg_profile(struct chg_drv *chg_drv)
 	return ret;
 }
 
+static void google_charger_init_work(struct work_struct *work)
+{
+	struct chg_drv *chg_drv = container_of(work, struct chg_drv,
+					       init_work.work);
+	struct power_supply *chg_psy, *usb_psy, *wlc_psy = NULL, *bat_psy;
+	int ret = 0;
+
+	chg_psy = power_supply_get_by_name(chg_drv->chg_psy_name);
+	if (!chg_psy) {
+		pr_info("failed to get \"%s\" power supply\n",
+			chg_drv->chg_psy_name);
+		goto retry_init_work;
+	}
+
+	bat_psy = power_supply_get_by_name(chg_drv->bat_psy_name);
+	if (!bat_psy) {
+		pr_info("failed to get \"%s\" power supply\n",
+			chg_drv->bat_psy_name);
+		power_supply_put(chg_psy);
+		goto retry_init_work;
+	}
+
+	usb_psy = power_supply_get_by_name("usb");
+	if (!usb_psy) {
+		pr_info("failed to get \"usb\" power supply\n");
+		power_supply_put(chg_psy);
+		power_supply_put(bat_psy);
+		goto retry_init_work;
+	}
+
+	if (chg_drv->wlc_psy_name) {
+		wlc_psy = power_supply_get_by_name(chg_drv->wlc_psy_name);
+		if (!wlc_psy) {
+			pr_info("failed to get \"%s\" power supply\n",
+				chg_drv->wlc_psy_name);
+			power_supply_put(chg_psy);
+			power_supply_put(bat_psy);
+			power_supply_put(usb_psy);
+			goto retry_init_work;
+		}
+	}
+
+	chg_drv->chg_psy = chg_psy;
+	chg_drv->wlc_psy = wlc_psy;
+	chg_drv->usb_psy = usb_psy;
+	chg_drv->bat_psy = bat_psy;
+
+	init_chg_drv(chg_drv);
+
+	chg_drv->psy_nb.notifier_call = psy_changed;
+	ret = power_supply_reg_notifier(&chg_drv->psy_nb);
+	if (ret < 0)
+		pr_err("Cannot register power supply notifer, ret=%d\n", ret);
+
+	wakeup_source_init(&chg_drv->chg_ws, "google-charger");
+	pr_info("google_charger_init_work done\n");
+	return;
+
+retry_init_work:
+	schedule_delayed_work(&chg_drv->init_work,
+			      msecs_to_jiffies(CHG_DELAY_INIT_MS));
+}
+
 static int google_charger_probe(struct platform_device *pdev)
 {
-	int ret = 0;
-	struct chg_drv *chg_drv;
-	struct power_supply *chg_psy, *usb_psy, *wlc_psy = NULL, *bat_psy;
 	const char *chg_psy_name, *bat_psy_name, *wlc_psy_name = NULL;
+	struct chg_drv *chg_drv;
+	int ret;
+
+	chg_drv = devm_kzalloc(&pdev->dev, sizeof(*chg_drv), GFP_KERNEL);
+	if (!chg_drv)
+		return -ENOMEM;
+
+	chg_drv->device = &pdev->dev;
 
 	ret = of_property_read_string(pdev->dev.of_node,
 				      "google,chg-power-supply",
 				      &chg_psy_name);
 	if (ret != 0) {
 		pr_err("cannot read google,chg-power-supply, ret=%d\n", ret);
-		return ret;
+		return -EINVAL;
 	}
+	chg_drv->chg_psy_name =
+	    devm_kstrdup(&pdev->dev, chg_psy_name, GFP_KERNEL);
+	if (!chg_drv->chg_psy_name)
+		return -ENOMEM;
 
 	ret = of_property_read_string(pdev->dev.of_node,
 				      "google,bat-power-supply",
 				      &bat_psy_name);
 	if (ret != 0) {
 		pr_err("cannot read google,bat-power-supply, ret=%d\n", ret);
-		return ret;
+		return -EINVAL;
 	}
+	chg_drv->bat_psy_name =
+	    devm_kstrdup(&pdev->dev, bat_psy_name, GFP_KERNEL);
+	if (!chg_drv->bat_psy_name)
+		return -ENOMEM;
 
 	ret = of_property_read_string(pdev->dev.of_node,
 				      "google,wlc-power-supply",
 				      &wlc_psy_name);
 	if (ret != 0)
 		pr_warn("google,wlc-power-supply not defined\n");
-
-	chg_psy = power_supply_get_by_name(chg_psy_name);
-	if (!chg_psy) {
-		dev_info(&pdev->dev,
-			 "failed to get \"%s\" power supply\n",
-			 chg_psy_name);
-		return -EPROBE_DEFER;
-	}
-
-	bat_psy = power_supply_get_by_name(bat_psy_name);
-	if (!bat_psy) {
-		dev_info(&pdev->dev, "failed to get \"%s\" power supply\n",
-			 bat_psy_name);
-		power_supply_put(chg_psy);
-		return -EPROBE_DEFER;
-	}
-
-	usb_psy = power_supply_get_by_name("usb");
-	if (!usb_psy) {
-		dev_info(&pdev->dev, "failed to get \"usb\" power supply\n");
-		power_supply_put(chg_psy);
-		power_supply_put(bat_psy);
-		return -EPROBE_DEFER;
-	}
-
-	if (wlc_psy_name) {
-		wlc_psy = power_supply_get_by_name(wlc_psy_name);
-		if (!wlc_psy) {
-			dev_info(&pdev->dev,
-				 "failed to get \"%s\" power supply\n",
-				 wlc_psy_name);
-			power_supply_put(chg_psy);
-			power_supply_put(bat_psy);
-			power_supply_put(usb_psy);
-			return -EPROBE_DEFER;
-		}
-	}
-
-	chg_drv = devm_kzalloc(&pdev->dev, sizeof(*chg_drv), GFP_KERNEL);
-	if (!chg_drv) {
-		ret = -ENOMEM;
-		goto error_out;
-	}
-
-	chg_drv->device = &pdev->dev;
-	chg_drv->chg_psy = chg_psy;
-	chg_drv->chg_psy_name =
-	    devm_kstrdup(&pdev->dev, chg_psy_name, GFP_KERNEL);
-	if (!chg_drv->chg_psy_name) {
-		ret = -ENOMEM;
-		goto error_out;
-	}
-	chg_drv->wlc_psy = wlc_psy;
 	if (wlc_psy_name) {
 		chg_drv->wlc_psy_name =
 		    devm_kstrdup(&pdev->dev, wlc_psy_name, GFP_KERNEL);
-		if (!chg_drv->wlc_psy_name) {
-			ret = -ENOMEM;
-			goto error_out;
-		}
+		if (!chg_drv->wlc_psy_name)
+			return -ENOMEM;
 	}
-	chg_drv->usb_psy = usb_psy;
-	chg_drv->bat_psy = bat_psy;
-	chg_drv->bat_psy_name =
-	    devm_kstrdup(&pdev->dev, bat_psy_name, GFP_KERNEL);
-	if (!chg_drv->bat_psy_name) {
-		ret = -ENOMEM;
-		goto error_out;
-	}
-	init_chg_drv(chg_drv);
 
 	ret = chg_init_chg_profile(chg_drv);
 	if (ret < 0) {
 		pr_err("cannot read charging profile from dt, ret=%d\n", ret);
-		goto error_out;
+		return ret;
 	}
 
-	chg_drv->psy_nb.notifier_call = psy_changed;
-	ret = power_supply_reg_notifier(&chg_drv->psy_nb);
-	if (ret < 0) {
-		pr_err("Cannot register power supply notifer, ret=%d\n", ret);
-		goto error_out;
-	}
-
+	INIT_DELAYED_WORK(&chg_drv->init_work, google_charger_init_work);
 	INIT_DELAYED_WORK(&chg_drv->chg_work, chg_work);
-	wakeup_source_init(&chg_drv->chg_ws, "google-charger");
 	platform_set_drvdata(pdev, chg_drv);
 
-	dev_info(&pdev->dev, "probe done\n");
+	schedule_delayed_work(&chg_drv->init_work,
+			      msecs_to_jiffies(CHG_DELAY_INIT_MS));
 
 	return 0;
-
-error_out:
-	power_supply_put(chg_psy);
-	power_supply_put(bat_psy);
-	power_supply_put(usb_psy);
-	if (wlc_psy)
-		power_supply_put(wlc_psy);
-	return ret;
 }
 
 static int google_charger_remove(struct platform_device *pdev)
