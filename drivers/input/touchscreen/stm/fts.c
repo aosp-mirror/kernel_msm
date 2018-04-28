@@ -2983,7 +2983,10 @@ static irqreturn_t fts_interrupt_handler(int irq, void *handle)
 {
 	struct fts_ts_info *info = handle;
 
+	/* prevent CPU from entering deep sleep */
+	pm_qos_update_request(&info->pm_qos_req, 100);
 	fts_event_handler(info);
+	pm_qos_update_request(&info->pm_qos_req, PM_QOS_DEFAULT_VALUE);
 
 	return IRQ_HANDLED;
 }
@@ -4078,6 +4081,9 @@ static int fts_probe(struct spi_device *client)
 			   msecs_to_jiffies(EXP_FN_WORK_DELAY_MS));
 #endif
 
+	pm_qos_add_request(&info->pm_qos_req, PM_QOS_CPU_DMA_LATENCY,
+			PM_QOS_DEFAULT_VALUE);
+
 	logError(1, "%s Probe Finished!\n", tag);
 	return OK;
 
@@ -4130,6 +4136,7 @@ static int fts_remove(struct spi_device *client)
 
 	struct fts_ts_info *info = dev_get_drvdata(&(client->dev));
 
+	pm_qos_remove_request(&info->pm_qos_req);
 
 #ifdef CONFIG_TOUCHSCREEN_TBN
 	tbn_cleanup(info->tbn);

@@ -33,6 +33,7 @@
 #define _LINUX_FTS_I2C_H_
 
 #include <linux/device.h>
+#include <linux/pm_qos.h>
 #include "fts_lib/ftsSoftware.h"
 #include "fts_lib/ftsHardware.h"
 
@@ -297,6 +298,8 @@ struct fts_ts_info {
 	struct work_struct resume_work;	/* Resume work thread */
 	struct workqueue_struct *event_wq;	/* Used for event handler, */
 						/* suspend, resume threads */
+
+	struct pm_qos_request pm_qos_req;
 
 #ifndef FW_UPDATE_ON_PROBE
 	struct delayed_work fwu_work;	/* Work for fw update */
