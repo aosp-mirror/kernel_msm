@@ -126,7 +126,6 @@ static u8 key_mask;	/* /< store the last update of the key mask
 
 extern spinlock_t fts_int;
 
-static void fts_interrupt_enable(struct fts_ts_info *info);
 static int fts_init_sensing(struct fts_ts_info *info);
 static int fts_mode_handler(struct fts_ts_info *info, int force);
 
@@ -2712,9 +2711,8 @@ static void fts_user_report_event_handler(struct fts_ts_info *info, unsigned
   * the FIFO and dispatch them to the proper event handler according the event
   * ID
   */
-static void fts_event_handler(struct work_struct *work)
+static void fts_event_handler(struct fts_ts_info *info)
 {
-	struct fts_ts_info *info;
 	int error = 0, count = 0;
 	unsigned char regAdd = FIFO_CMD_READALL;
 	unsigned char data[FIFO_EVENT_SIZE * FIFO_DEPTH];
@@ -2725,8 +2723,6 @@ static void fts_event_handler(struct work_struct *work)
 	unsigned char *evt_data;
 
 	event_dispatch_handler_t event_handler;
-
-	info = container_of(work, struct fts_ts_info, work);
 
 	__pm_wakeup_event(&info->wakesrc, jiffies_to_msecs(HZ));
 
@@ -2764,10 +2760,8 @@ static void fts_event_handler(struct work_struct *work)
 			}
 		}
 	}
-	input_sync(info->input_dev);
 
-	/* Re-enable interrupts */
-	fts_interrupt_enable(info);
+	input_sync(info->input_dev);
 }
 /** @}*/
 
@@ -2981,18 +2975,15 @@ static int fts_chip_initialization(struct fts_ts_info *info, int init_type)
   * @{
   */
 /**
-  * Top half Interrupt handler function
-  * Respond to the interrupt and schedule the bottom half interrupt handler
-  * in its work queue
+  * Bottom half Interrupt handler function
+  * Process the touch events: read data over i2c bus, report input_event's
   * @see fts_event_handler()
   */
 static irqreturn_t fts_interrupt_handler(int irq, void *handle)
 {
 	struct fts_ts_info *info = handle;
 
-	disable_irq_nosync(info->client->irq);
-
-	queue_work(info->event_wq, &info->work);
+	fts_event_handler(info);
 
 	return IRQ_HANDLED;
 }
@@ -3030,13 +3021,19 @@ static int fts_interrupt_install(struct fts_ts_info *info)
 
 	/* disable interrupts in any case */
 	error = fts_disableInterrupt();
+	if (error) {
+		logError(1, "%s %s Failed to disable interrupts.\n", tag,
+			 __func__);
+		return error;
+	}
 
-	logError(1, "%s Interrupt Mode\n", tag);
-	if (request_irq(info->client->irq, fts_interrupt_handler,
-			IRQF_TRIGGER_LOW, FTS_TS_DRV_NAME, info)) {
+	error = request_threaded_irq(info->client->irq, NULL,
+			fts_interrupt_handler, IRQF_ONESHOT | IRQF_TRIGGER_LOW,
+			FTS_TS_DRV_NAME, info);
+
+	if (error) {
 		logError(1, "%s Request irq failed\n", tag);
 		kfree(info->event_dispatch_table);
-		error = -EBUSY;
 	}
 
 	return error;
@@ -3053,15 +3050,6 @@ static void fts_interrupt_uninstall(struct fts_ts_info *info)
 	kfree(info->event_dispatch_table);
 
 	free_irq(info->client->irq, info);
-}
-
-/**
-  * Enable the host side interrupt
-  */
-static void fts_interrupt_enable(struct fts_ts_info *info)
-{
-	/* logError(0, "%s %s : enable interrupts!\n",tag,__func__); */
-	enable_irq(info->client->irq);
 }
 
 /**@}*/
@@ -3912,8 +3900,6 @@ static int fts_probe(struct spi_device *client)
 		error = -ENOMEM;
 		goto ProbeErrorExit_4;
 	}
-
-	INIT_WORK(&info->work, fts_event_handler);
 
 	INIT_WORK(&info->resume_work, fts_resume_work);
 	INIT_WORK(&info->suspend_work, fts_suspend_work);

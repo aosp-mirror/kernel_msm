@@ -293,7 +293,6 @@ struct fts_ts_info {
 #endif
 	struct input_dev        *input_dev;	/* Input device structure */
 
-	struct work_struct work;	/* Event work thread */
 	struct work_struct suspend_work;	/* Suspend work thread */
 	struct work_struct resume_work;	/* Resume work thread */
 	struct workqueue_struct *event_wq;	/* Used for event handler, */
