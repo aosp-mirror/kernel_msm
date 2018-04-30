@@ -3412,6 +3412,9 @@ static void fts_resume_work(struct work_struct *work)
 
 	info = container_of(work, struct fts_ts_info, resume_work);
 
+	if (!info->sensor_sleep)
+		return;
+
 #ifdef CONFIG_TOUCHSCREEN_TBN
 	if (info->tbn)
 		tbn_request_bus(info->tbn);
@@ -3441,6 +3444,9 @@ static void fts_suspend_work(struct work_struct *work)
 	struct fts_ts_info *info;
 
 	info = container_of(work, struct fts_ts_info, suspend_work);
+
+	if (info->sensor_sleep)
+		return;
 
 	__pm_wakeup_event(&info->wakesrc, jiffies_to_msecs(HZ));
 
@@ -3485,9 +3491,13 @@ static int fts_screen_state_chg_callback(struct notifier_block *nb,
 
 	logError(0, "%s %s: fts notifier begin!\n", tag, __func__);
 
+	/* finish processing any events on queue */
+	flush_workqueue(info->event_wq);
+
 	blank = *(int *) (evdata->data);
 	switch (blank) {
 	case MSM_DRM_BLANK_POWERDOWN:
+	case MSM_DRM_BLANK_LP:
 		if (info->sensor_sleep)
 			break;
 		logError(0, "%s %s: BLANK\n", tag, __func__);
