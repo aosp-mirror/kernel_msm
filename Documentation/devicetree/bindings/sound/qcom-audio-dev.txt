@@ -2392,6 +2392,9 @@ Optional properties:
 - qcom,usbc-analog-en1_gpio : EN1 GPIO to enable USB type-C analog audio
 - qcom,usbc-analog-en2_n_gpio : EN2 GPIO to enable USB type-C analog audio
 - qcom,usbc-analog-force_detect_gpio : Force detect GPIO to enable USB type-C analog audio
+- qcom,mbhc-insert-remove-debounce : Debounce time in milliseconds for headset
+            insertion detection. Default if unspecified is 96ms for 3.5mm jacks,
+            and 48ms for USB type-C analog.
 
 Example:
 
