@@ -611,6 +611,9 @@ static void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 
 	WCD_MBHC_RSC_ASSERT_LOCKED(mbhc);
 
+	if (mbhc->mbhc_cfg->headphones_only && jack_type == SND_JACK_HEADSET)
+		jack_type = SND_JACK_HEADPHONE;
+
 	pr_debug("%s: enter insertion %d hph_status %x\n",
 		 __func__, insertion, mbhc->hph_status);
 	if (!insertion) {
