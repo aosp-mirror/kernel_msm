@@ -700,6 +700,8 @@ void __msm_fence_worker(struct work_struct *work);
 
 int msm_atomic_commit(struct drm_device *dev,
 		struct drm_atomic_state *state, bool nonblock);
+int msm_drm_notifier_call_chain(unsigned long val, void *v);
+
 struct drm_atomic_state *msm_atomic_state_alloc(struct drm_device *dev);
 void msm_atomic_state_clear(struct drm_atomic_state *state);
 void msm_atomic_state_free(struct drm_atomic_state *state);
