@@ -277,6 +277,7 @@ struct wcd_mbhc_config {
 	uint32_t linein_th;
 	bool moisture_en;
 	int mbhc_micbias;
+	bool headphones_only;
 	int anc_micbias;
 	bool enable_anc_mic_detect;
 	u32 enable_usbc_analog;
