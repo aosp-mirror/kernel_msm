@@ -2639,14 +2639,27 @@ static int sec_ts_screen_state_chg_callback(struct notifier_block *nb,
 	blank = *((unsigned int *)evdata->data);
 	switch (blank) {
 	case MSM_DRM_BLANK_POWERDOWN:
+	case MSM_DRM_BLANK_LP:
 		input_dbg(true, &ts->client->dev,
 			  "%s: MSM_DRM_BLANK_POWERDOWN.\n", __func__);
-		schedule_delayed_work(&ts->suspend_work, msecs_to_jiffies(HZ));
+
+		cancel_delayed_work_sync(&ts->resume_work);
+
+		if ((ts->power_status != SEC_TS_STATE_SUSPEND) &&
+		    !delayed_work_pending(&ts->suspend_work))
+			schedule_delayed_work(&ts->suspend_work,
+					      msecs_to_jiffies(HZ));
 		break;
 	case MSM_DRM_BLANK_UNBLANK:
 		input_dbg(true, &ts->client->dev,
 			  "%s: MSM_DRM_BLANK_UNBLANK.\n", __func__);
-		schedule_delayed_work(&ts->resume_work, msecs_to_jiffies(HZ));
+
+		cancel_delayed_work_sync(&ts->suspend_work);
+
+		if ((ts->power_status != SEC_TS_STATE_POWER_ON) &&
+		    !delayed_work_pending(&ts->resume_work))
+			schedule_delayed_work(&ts->resume_work,
+					      msecs_to_jiffies(HZ));
 		break;
 	}
 
