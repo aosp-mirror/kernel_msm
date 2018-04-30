@@ -108,12 +108,8 @@ static enum bgcom_spi_state spi_state;
 
 static struct workqueue_struct *wq;
 static DECLARE_WORK(input_work , send_input_events);
-static DECLARE_WAIT_QUEUE_HEAD(wait_event);
-
 
 static struct mutex bg_resume_mutex;
-
-atomic_t  is_active;
 
 static void augmnt_fifo(uint8_t *data, int pos)
 {
@@ -234,15 +230,12 @@ static int bgcom_transfer(void *handle, uint8_t *tx_buf,
 	spi = bg_spi->spi;
 
 	mutex_lock(&bg_spi->xfer_mutex);
-
-	ret = wait_event_timeout(wait_event, atomic_read(&is_active),
-				msecs_to_jiffies(100));
-	if (!ret) {
-		pr_err("BGCOM could not resumed\n");
+	if (BGCOM_SPI_BUSY == spi_state)
+	{
+		printk_ratelimited("SPI is held by TZ\n");
 		mutex_unlock(&bg_spi->xfer_mutex);
-		return -ETIMEDOUT;
+		return -EBUSY;
 	}
-
 	bg_spi_reinit_xfer(tx_xfer);
 	tx_xfer->tx_buf = tx_buf;
 	if (rx_buf)
@@ -984,7 +977,6 @@ static int bg_spi_probe(struct spi_device *spi)
 	if (ret)
 		goto err_ret;
 
-	atomic_set(&is_active, 1);
 	pr_info("Bgcom Probed successfully\n");
 	return ret;
 
@@ -1006,24 +998,6 @@ static int bg_spi_remove(struct spi_device *spi)
 	return 0;
 }
 
-static int bgcom_pm_suspend(struct device *dev)
-{
-	atomic_set(&is_active, 0);
-	return 0;
-}
-
-static int bgcom_pm_resume(struct device *dev)
-{
-	atomic_set(&is_active, 1);
-	wake_up_all(&wait_event);
-	return 0;
-}
-
-static const struct dev_pm_ops bgcom_pm = {
-	.suspend = bgcom_pm_suspend,
-	.resume = bgcom_pm_resume,
-};
-
 static const struct of_device_id bg_spi_of_match[] = {
 	{ .compatible = "qcom,bg-spi", },
 	{ }
@@ -1034,7 +1008,6 @@ static struct spi_driver bg_spi_driver = {
 	.driver = {
 		.name = "bg-spi",
 		.of_match_table = bg_spi_of_match,
-		.pm = &bgcom_pm,
 	},
 	.probe = bg_spi_probe,
 	.remove = bg_spi_remove,
