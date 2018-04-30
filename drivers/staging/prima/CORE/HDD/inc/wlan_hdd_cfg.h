@@ -54,7 +54,7 @@
 #endif /* DHCP_SERVER_OFFLOAD */
 
 //Number of items that can be configured
-#define MAX_CFG_INI_ITEMS   512
+#define MAX_CFG_INI_ITEMS   1024
 
 #ifdef SAP_AUTH_OFFLOAD
 /* 802.11 pre-share key length */

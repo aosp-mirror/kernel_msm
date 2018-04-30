@@ -4892,6 +4892,7 @@ static VOS_STATUS hdd_apply_cfg_ini( hdd_context_t *pHddCtx, tCfgIniEntry* iniTa
    {
       hddLog(LOGE, "%s: MAX_CFG_INI_ITEMS too small, must be at least %ld",
              __func__, cRegTableEntries);
+      VOS_ASSERT(1);
    }
 
    for ( idx = 0; idx < cRegTableEntries; idx++, pRegEntry++ )
