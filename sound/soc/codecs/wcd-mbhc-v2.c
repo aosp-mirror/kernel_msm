@@ -2233,7 +2233,12 @@ static int wcd_mbhc_initialise(struct wcd_mbhc *mbhc)
 	WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_HS_L_DET_PULL_UP_COMP_CTRL, 1);
 	WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_L_DET_EN, 1);
 
-	if (mbhc->mbhc_cfg->enable_usbc_analog) {
+	if (mbhc->insert_remove_debounce != WCD_MBHC_INVALID_DEBOUNCE) {
+		/* Use the DTS-supplied debounce time. */
+		WCD_MBHC_REG_UPDATE_BITS(
+				WCD_MBHC_INSREM_DBNC,
+				mbhc->insert_remove_debounce);
+	} else if (mbhc->mbhc_cfg->enable_usbc_analog) {
 		/* Insertion debounce set to 48ms */
 		WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_INSREM_DBNC, 4);
 	} else {
@@ -2776,6 +2781,45 @@ void wcd_mbhc_stop(struct wcd_mbhc *mbhc)
 EXPORT_SYMBOL(wcd_mbhc_stop);
 
 /*
+ * Determine the value for WCD_MBHC_INSREM_DBNC given milliseconds.
+ */
+static u8 wcd_mbhc_insrem_dbnc_value_from_ms(u32 milliseconds)
+{
+	if (milliseconds <= 2)
+		return 0x0; /* 0ms */
+	else if (milliseconds <= 10)
+		return 0x1; /* 8ms */
+	else if (milliseconds <= 20)
+		return 0x2; /* 16ms */
+	else if (milliseconds <= 36)
+		return 0x3; /* 32ms */
+	else if (milliseconds <= 52)
+		return 0x4; /* 48ms */
+	else if (milliseconds <= 72)
+		return 0x5; /* 64ms */
+	else if (milliseconds <= 104)
+		return 0x6; /* 96ms */
+	else if (milliseconds <= 144)
+		return 0x7; /* 128ms */
+	else if (milliseconds <= 208)
+		return 0x8; /* 192ms */
+	else if (milliseconds <= 288)
+		return 0x9; /* 256ms */
+	else if (milliseconds <= 416)
+		return 0xa; /* 384ms */
+	else if (milliseconds <= 576)
+		return 0xb; /* 512ms */
+	else if (milliseconds <= 832)
+		return 0xc; /* 768ms */
+	else if (milliseconds <= 1152)
+		return 0xd; /* 1024ms */
+	else if (milliseconds <= 1664)
+		return 0xe; /* 1536ms */
+	else
+		return 0xf; /* 2048ms */
+}
+
+/*
  * wcd_mbhc_init : initialize MBHC internal structures.
  *
  * NOTE: mbhc->mbhc_cfg is not YET configure so shouldn't be used
@@ -2790,6 +2834,7 @@ int wcd_mbhc_init(struct wcd_mbhc *mbhc, struct snd_soc_codec *codec,
 	int hph_swh = 0;
 	int gnd_swh = 0;
 	u32 hph_moist_config[3];
+	u32 insert_remove_debounce_ms;
 	struct snd_soc_card *card = codec->component.card;
 	const char *hph_switch = "qcom,msm-mbhc-hphl-swh";
 	const char *gnd_switch = "qcom,msm-mbhc-gnd-swh";
@@ -2835,6 +2880,16 @@ int wcd_mbhc_init(struct wcd_mbhc *mbhc, struct snd_soc_codec *codec,
 		mbhc->moist_iref = hph_moist_config[1];
 		mbhc->moist_rref = hph_moist_config[2];
 	}
+
+	ret = of_property_read_u32(card->dev->of_node,
+				   "qcom,mbhc-insert-remove-debounce",
+				   &insert_remove_debounce_ms);
+	if (!ret)
+		mbhc->insert_remove_debounce =
+			wcd_mbhc_insrem_dbnc_value_from_ms(
+					insert_remove_debounce_ms);
+	else
+		mbhc->insert_remove_debounce = WCD_MBHC_INVALID_DEBOUNCE;
 
 	mbhc->in_swch_irq_handler = false;
 	mbhc->current_plug = MBHC_PLUG_TYPE_NONE;
