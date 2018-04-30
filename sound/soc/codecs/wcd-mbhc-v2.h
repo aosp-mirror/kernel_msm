@@ -26,6 +26,7 @@
 /* z value defined in Ohms */
 #define WCD_MONO_HS_MIN_THR	2
 #define WCD_MBHC_STRINGIFY(s)  __stringify(s)
+#define WCD_MBHC_INVALID_DEBOUNCE 0xff
 
 enum {
 	WCD_MBHC_ELEC_HS_INS,
@@ -425,6 +426,7 @@ struct wcd_mbhc {
 	bool is_extn_cable;
 	bool skip_imped_detection;
 	bool is_btn_already_regd;
+	u8 insert_remove_debounce;
 
 	struct snd_soc_codec *codec;
 	/* Work to perform MBHC Firmware Read */
