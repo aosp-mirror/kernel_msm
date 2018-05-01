@@ -1655,6 +1655,16 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 
 	i2c_set_clientdata(client, ts);
 
+#ifdef CONFIG_TOUCHSCREEN_TBN
+	ts->tbn = tbn_init(&ts->client->dev);
+	if (!ts->tbn) {
+		input_err(true, &ts->client->dev,
+			  "%s: TBN initialization error\n", __func__);
+		ret = -ENODEV;
+		goto err_init_tbn;
+	}
+#endif
+
 	if (gpio_is_valid(ts->plat_data->tsp_id))
 		ts->tspid_val = gpio_get_value(ts->plat_data->tsp_id);
 
@@ -1909,6 +1919,10 @@ err_allocate_input_dev_pad:
 	if (ts->input_dev)
 		input_free_device(ts->input_dev);
 err_allocate_input_dev:
+#ifdef CONFIG_TOUCHSCREEN_TBN
+	tbn_cleanup(ts->tbn);
+err_init_tbn:
+#endif
 	kfree(ts);
 
 error_allocate_mem:
@@ -2339,6 +2353,10 @@ static int sec_ts_remove(struct i2c_client *client)
 	ts_dup = NULL;
 	ts->plat_data->power(ts, false);
 
+#ifdef CONFIG_TOUCHSCREEN_TBN
+	tbn_cleanup(ts->tbn);
+#endif
+
 	kfree(ts);
 	return 0;
 }
@@ -2531,6 +2549,11 @@ static void sec_ts_suspend_work(struct work_struct *work)
 
 	ts->power_status = SEC_TS_STATE_SUSPEND;
 
+#ifdef CONFIG_TOUCHSCREEN_TBN
+	if (ts->tbn)
+		tbn_release_bus(ts->tbn);
+#endif
+
 	mutex_unlock(&ts->device_mutex);
 }
 
@@ -2543,6 +2566,11 @@ static void sec_ts_resume_work(struct work_struct *work)
 	input_info(true, &ts->client->dev, "%s\n", __func__);
 
 	mutex_lock(&ts->device_mutex);
+
+#ifdef CONFIG_TOUCHSCREEN_TBN
+	if (ts->tbn)
+		tbn_request_bus(ts->tbn);
+#endif
 
 	if (ts->power_status == SEC_TS_STATE_POWER_ON) {
 		input_err(true, &ts->client->dev, "%s: already resumed.\n",
