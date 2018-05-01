@@ -48,6 +48,10 @@
 #include <linux/input/input_booster.h>
 #endif
 
+#ifdef CONFIG_TOUCHSCREEN_TBN
+#include "../touch_bus_negotiator.h"
+#endif
+
 #define SEC_TS_I2C_NAME		"sec_ts"
 #define SEC_TS_DEVICE_NAME	"SEC_TS"
 
@@ -762,6 +766,10 @@ struct sec_ts_data {
 	int temp;
 
 	int fs_postcal_mean;
+
+#ifdef CONFIG_TOUCHSCREEN_TBN
+	struct tbn_context *tbn;
+#endif
 
 	int (*sec_ts_i2c_write)(struct sec_ts_data *ts, u8 reg, u8 *data, int len);
 	int (*sec_ts_i2c_read)(struct sec_ts_data *ts, u8 reg, u8 *data, int len);
