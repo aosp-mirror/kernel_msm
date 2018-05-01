@@ -49,7 +49,7 @@ maxim,n_regval = /bits/ 16 <
 	0xB5 0x9C01	/* nPackCfg                                 */
 	0xB6 0x0000	/* nRelaxCfg                                */
 	0xB7 0x2241	/* nConvgCfg                                */
-	0xB8 0xC990	/* nNVCfg0                                  */
+	0xB8 0xC9D0	/* nNVCfg0                                  */
 	0xB9 0xA00E	/* nNVCfg1                                  */
 	0xBA 0xFE0A	/* nNVCfg2                                  */
 	0xBB 0x0002	/* nSBSCfg                                  */
