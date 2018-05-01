@@ -9,7 +9,6 @@
 #include <linux/perf_event.h>
 #include <linux/tracepoint.h>
 #include <linux/coresight-stm.h>
-#include <linux/build_bug.h>
 
 struct trace_array;
 struct trace_buffer;
@@ -473,7 +472,6 @@ do {									\
 	__trace_printk_check_format(fmt, ##args);			\
 	tracing_record_cmdline(current);				\
 	if (__builtin_constant_p(fmt)) {				\
-		BUILD_BUG();						\
 		static const char *trace_printk_fmt			\
 		  __attribute__((section("__trace_printk_fmt"))) =	\
 			__builtin_constant_p(fmt) ? fmt : NULL;		\
