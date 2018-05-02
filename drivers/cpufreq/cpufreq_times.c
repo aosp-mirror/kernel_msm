@@ -36,12 +36,17 @@ static DEFINE_SPINLOCK(task_concurrent_policy_time_lock);
 	/* task->concurrent_policy_time */
 static DEFINE_SPINLOCK(uid_lock); /* uid_hash_table */
 
+struct concurrent_times {
+	atomic64_t active[NR_CPUS];
+	atomic64_t policy[NR_CPUS];
+};
+
 struct uid_entry {
 	uid_t uid;
 	unsigned int max_state;
 	struct hlist_node hash;
 	struct rcu_head rcu;
-	atomic64_t *concurrent_active_time;
+	struct concurrent_times *concurrent_times;
 	u64 time_in_state[0];
 };
 
@@ -92,7 +97,7 @@ static struct uid_entry *find_uid_entry_locked(uid_t uid)
 static struct uid_entry *find_or_register_uid_locked(uid_t uid)
 {
 	struct uid_entry *uid_entry, *temp;
-	atomic64_t *times;
+	struct concurrent_times *times;
 	unsigned int max_state = READ_ONCE(next_offset);
 	size_t alloc_size = sizeof(*uid_entry) + max_state *
 		sizeof(uid_entry->time_in_state[0]);
@@ -121,7 +126,7 @@ static struct uid_entry *find_or_register_uid_locked(uid_t uid)
 	uid_entry = kzalloc(alloc_size, GFP_ATOMIC);
 	if (!uid_entry)
 		return NULL;
-	times = kcalloc(num_possible_cpus(), sizeof(atomic64_t), GFP_ATOMIC);
+	times = kzalloc(sizeof(*times), GFP_ATOMIC);
 	if (!times) {
 		kfree(uid_entry);
 		return NULL;
@@ -129,7 +134,7 @@ static struct uid_entry *find_or_register_uid_locked(uid_t uid)
 
 	uid_entry->uid = uid;
 	uid_entry->max_state = max_state;
-	uid_entry->concurrent_active_time = times;
+	uid_entry->concurrent_times = times;
 
 	hash_add_rcu(uid_hash_table, &uid_entry->hash, uid);
 
@@ -321,11 +326,65 @@ static int concurrent_active_time_seq_show(struct seq_file *m, void *v)
 		for (i = 0; i < num_possible_cpus; ++i) {
 			time = (u32) cputime_to_clock_t(
 				atomic64_read(
-					&uid_entry->concurrent_active_time[i]));
+					&uid_entry->concurrent_times->active[i])
+				);
 			seq_write(m, &time, sizeof(time));
 		}
 	}
 
+	rcu_read_unlock();
+	return 0;
+}
+
+/*
+ * concurrent_policy_time is an array of u32's in the following format:
+ * [n, x1, ..., xn, uid0, time0_1_1, ..., time0_1_x1,
+ *                        ...,
+ *                        time0_n_1, ..., time0_n_xn,
+ *                  uid1, time1_1_1, ..., time1_1_x1,
+ *                        ...,
+ *                        time1_n_1, ..., time1_n_xn, etc.]
+ * where n is the number of policies
+ * xi is the number cpus on a particular policy
+ * timea_b_c is uid a's time running on policy b as one of c concurrent tasks
+ */
+static int concurrent_policy_time_seq_show(struct seq_file *m, void *v)
+{
+	struct uid_entry *uid_entry;
+	struct cpu_freqs *freqs;
+	struct cpu_freqs *last_freqs = NULL;
+	u32 buf[num_possible_cpus() + 1];
+	u32 uid, time;
+	int i, cnt = 0, num_possible_cpus = num_possible_cpus();
+
+	if (v == uid_hash_table) {
+		for_each_possible_cpu(i) {
+			freqs = all_freqs[i];
+			if (!freqs)
+				continue;
+			if (freqs != last_freqs) {
+				cnt++;
+				last_freqs = freqs;
+				buf[cnt] = 0;
+			}
+			++buf[cnt];
+		}
+		buf[0] = (u32) cnt;
+		seq_write(m, buf, (cnt + 1) * sizeof(*buf));
+	}
+	rcu_read_lock();
+	hlist_for_each_entry_rcu(uid_entry, (struct hlist_head *)v, hash) {
+		uid = (u32) uid_entry->uid;
+		seq_write(m, &uid, sizeof(uid));
+
+		for (i = 0; i < num_possible_cpus; ++i) {
+			time = (u32) cputime_to_clock_t(
+				atomic64_read(
+					&uid_entry->concurrent_times->policy[i])
+				);
+			seq_write(m, &time, sizeof(time));
+		}
+	}
 	rcu_read_unlock();
 	return 0;
 }
@@ -553,9 +612,8 @@ void cpufreq_acct_update_power(struct task_struct *p, cputime_t cputime)
 
 	if (uid_entry) {
 		atomic64_add(cputime,
-			     &uid_entry->concurrent_active_time[index]);
+			     &uid_entry->concurrent_times->active[index]);
 	}
-	rcu_read_unlock();
 
 	policy = cpufreq_cpu_get(task_cpu(p));
 	if (!policy) {
@@ -574,12 +632,18 @@ void cpufreq_acct_update_power(struct task_struct *p, cputime_t cputime)
 	policy_first_cpu = cpumask_first(policy->related_cpus);
 	cpufreq_cpu_put(policy);
 
+	index = policy_first_cpu + policy_cpu_cnt - 1;
 	spin_lock_irqsave(&task_concurrent_policy_time_lock, flags);
-	if (p->concurrent_policy_time) {
-		p->concurrent_policy_time[policy_first_cpu
-					  + policy_cpu_cnt - 1] += cputime;
-	}
+	if (p->concurrent_policy_time)
+		p->concurrent_policy_time[index] += cputime;
 	spin_unlock_irqrestore(&task_concurrent_policy_time_lock, flags);
+
+	if (uid_entry) {
+		atomic64_add(cputime,
+			     &uid_entry->concurrent_times->policy[index]);
+	}
+
+	rcu_read_unlock();
 }
 
 void cpufreq_times_create_policy(struct cpufreq_policy *policy)
@@ -625,7 +689,7 @@ static void uid_entry_reclaim(struct rcu_head *rcu)
 {
 	struct uid_entry *uid_entry = container_of(rcu, struct uid_entry, rcu);
 
-	kfree(uid_entry->concurrent_active_time);
+	kfree(uid_entry->concurrent_times);
 	kfree(uid_entry);
 }
 
@@ -733,6 +797,25 @@ static const struct file_operations concurrent_active_time_fops = {
 	.release	= seq_release,
 };
 
+static const struct seq_operations concurrent_policy_time_seq_ops = {
+	.start = uid_seq_start,
+	.next = uid_seq_next,
+	.stop = uid_seq_stop,
+	.show = concurrent_policy_time_seq_show,
+};
+
+static int concurrent_policy_time_open(struct inode *inode, struct file *file)
+{
+	return seq_open(file, &concurrent_policy_time_seq_ops);
+}
+
+static const struct file_operations concurrent_policy_time_fops = {
+	.open		= concurrent_policy_time_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= seq_release,
+};
+
 static int __init cpufreq_times_init(void)
 {
 	struct proc_dir_entry *uid_cpupower;
@@ -750,6 +833,9 @@ static int __init cpufreq_times_init(void)
 
 		proc_create_data("concurrent_active_time", 0444, uid_cpupower,
 				 &concurrent_active_time_fops, NULL);
+
+		proc_create_data("concurrent_policy_time", 0444, uid_cpupower,
+				 &concurrent_policy_time_fops, NULL);
 	}
 
 	return 0;
