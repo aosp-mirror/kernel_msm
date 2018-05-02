@@ -6536,6 +6536,7 @@ static VOS_STATUS wlan_hdd_get_current_antenna_index(hdd_adapter_t *pAdapter,
    else
    {
        /* request was sent -- wait for the response */
+       ret = hdd_request_wait_for_response(request);
        if (ret)
        {
            hddLog(VOS_TRACE_LEVEL_ERROR,
