@@ -342,13 +342,21 @@ int dsi_backlight_early_dpms(struct dsi_backlight_config *bl, int power_mode)
 	state = get_state_after_dpms(bl, power_mode);
 
 	if (bl->lab_vreg) {
-		if (is_lp_mode(bl->last_state) && !is_lp_mode(state)) {
-			/* LP -> no LP */
-			pr_debug("enabling lab vreg\n");
-			regulator_set_mode(bl->lab_vreg, REGULATOR_MODE_NORMAL);
-		} else if (!is_lp_mode(bl->last_state) && is_lp_mode(state)) {
+		if (is_lp_mode(bl->last_state)) {
+			if (state & BL_CORE_FBBLANK) {
+				/* LP -> OFF */
+				pr_debug("set lab vreg mode: standby\n");
+				regulator_set_mode(bl->lab_vreg,
+						   REGULATOR_MODE_STANDBY);
+			} else if (!is_lp_mode(state)) {
+				/* LP -> ON */
+				pr_debug("set lab vreg mode: normal\n");
+				regulator_set_mode(bl->lab_vreg,
+						   REGULATOR_MODE_NORMAL);
+			}
+		} else if (is_lp_mode(state)) {
 			/* no LP -> LP */
-			pr_debug("disabling lab vreg\n");
+			pr_debug("set lab vreg mode: idle\n");
 			regulator_set_mode(bl->lab_vreg, REGULATOR_MODE_IDLE);
 		}
 	}
