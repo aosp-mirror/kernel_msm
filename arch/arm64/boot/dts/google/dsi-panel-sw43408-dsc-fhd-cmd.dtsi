@@ -64,6 +64,18 @@
 		qcom,mdss-dsi-bl-hbm-enable;
 		qcom,mdss-dsi-bl-hbm-max-level = <0x3ff>;
 
+		qcom,esd-check-enabled;
+		/* select one from te_signal_check, reg_read, and irq_check */
+		qcom,mdss-dsi-panel-status-check-mode = "irq_check";
+		/* reg_read setting */
+		qcom,mdss-dsi-panel-status-command = [06 01 00 01 00 00 01 0a];
+		qcom,mdss-dsi-panel-status-command-state = "dsi_hs_mode";
+		qcom,mdss-dsi-panel-status-value = <0x9c>;
+		qcom,mdss-dsi-panel-on-check-value = <0x9c>;
+		qcom,mdss-dsi-panel-status-read-length = <1>;
+		/* irq_check setting */
+		google,dsi-esd-irq = <&dsi_esd_irq_sw43408>;
+
 		qcom,mdss-dsi-display-timings {
 			timing@0 {
 				qcom,mdss-dsi-panel-framerate = <60>;
@@ -93,6 +105,8 @@
 					39 01 00 00 00 00 13 CD 00 00 00 19 19 19
 						19 19 19 19 19 19 19 19 19 19 16 16
 					39 01 00 00 00 00 06 CB 80 5C 07 03 28
+					/* ERR_FG TH settings */
+					39 01 00 00 00 00 04 C5 99 09 00
 					39 01 00 00 00 00 04 C0 02 02 0F
 					39 01 00 00 00 00 07 55 04 61 DB 04 70 DB
 					15 01 00 00 00 00 02 B0 CA

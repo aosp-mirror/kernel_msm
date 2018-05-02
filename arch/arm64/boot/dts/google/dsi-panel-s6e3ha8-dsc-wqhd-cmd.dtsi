@@ -52,8 +52,18 @@
 
 		qcom,mdss-dsi-te-check-enable;
 		qcom,mdss-dsi-te-using-te-pin;
-		/* qcom,esd-check-enabled; */
-		qcom,mdss-dsi-panel-status-check-mode = "te_signal_check";
+
+		qcom,esd-check-enabled;
+		/* select one from te_signal_check, reg_read, and irq_check */
+		qcom,mdss-dsi-panel-status-check-mode = "irq_check";
+		/* reg_read setting */
+		qcom,mdss-dsi-panel-status-command = [06 01 00 01 00 00 01 0a];
+		qcom,mdss-dsi-panel-status-command-state = "dsi_hs_mode";
+		qcom,mdss-dsi-panel-status-value = <0x9c>;
+		qcom,mdss-dsi-panel-on-check-value = <0x9c>;
+		qcom,mdss-dsi-panel-status-read-length = <1>;
+		/* irq_check setting */
+		google,dsi-esd-irq = <&dsi_esd_irq_s6e3ha8>;
 
 		qcom,mdss-dsi-init-delay-us = <5000>;
 
@@ -121,6 +131,8 @@
 					05 01 00 00 00 00 02 35 00 /* TE on */
 					39 01 00 00 00 00 03 F0 5A 5A /* Unlock */
 					39 01 00 00 00 00 0A B9 01 B0 81 09 00 00 00 11 03 /* Sync display with touch */
+					/* ERR_FG VLIN monitoring ON */
+					15 01 00 00 00 00 02 ED 4C
 					39 01 00 00 00 00 03 F0 A5 A5 /* Lock */
 					05 01 00 00 00 00 01 29    /* display on */
 				];
