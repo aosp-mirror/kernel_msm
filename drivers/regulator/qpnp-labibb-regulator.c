@@ -2669,7 +2669,7 @@ static int qpnp_lab_regulator_set_mode(struct regulator_dev *rdev,
 		return 0;
 
 	/* AVDD_MIN voltage = 5.65 + code * 0.15 V */
-	if (mode == REGULATOR_MODE_NORMAL)
+	if (mode == REGULATOR_MODE_NORMAL || mode == REGULATOR_MODE_STANDBY)
 		val = 0xD;
 	else if (mode == REGULATOR_MODE_IDLE)
 		val = 0x1;
@@ -2698,6 +2698,19 @@ static int qpnp_lab_regulator_set_mode(struct regulator_dev *rdev,
 			goto out;
 
 		rc = qpnp_lab_scp_control(labibb, false);
+		if (rc < 0)
+			goto out;
+	} else if (mode == REGULATOR_MODE_STANDBY) {
+		cancel_work_sync(&labibb->aod_lab_vreg_ok_work);
+		rc = qpnp_ibb_pd_control(labibb, true);
+		if (rc < 0)
+			goto out;
+
+		rc = qpnp_lab_pd_control(labibb, true);
+		if (rc < 0)
+			goto out;
+
+		rc = qpnp_lab_scp_control(labibb, true);
 		if (rc < 0)
 			goto out;
 	}
@@ -3330,7 +3343,8 @@ static int register_qpnp_lab_regulator(struct qpnp_labibb *labibb,
 			init_data->constraints.valid_ops_mask |=
 				REGULATOR_CHANGE_MODE;
 			init_data->constraints.valid_modes_mask |=
-				REGULATOR_MODE_NORMAL | REGULATOR_MODE_IDLE;
+				REGULATOR_MODE_NORMAL | REGULATOR_MODE_IDLE |
+				REGULATOR_MODE_STANDBY;
 			labibb->lab_vreg.mode = REGULATOR_MODE_NORMAL;
 		}
 
