@@ -152,6 +152,11 @@ alternative_cb_end
 1:
 
 	mov	x29, xzr			// fp pointed to user-space
+
+#ifdef CONFIG_SHADOW_CALL_STACK
+	ldr	x18, [tsk, #TSK_TI_SCS]		// Restore shadow call stack
+	str	xzr, [tsk, #TSK_TI_SCS]
+#endif
 	.else
 	add	x21, sp, #S_FRAME_SIZE
 	get_thread_info tsk
@@ -230,6 +235,12 @@ alternative_else_nop_endif
 	.if	\el == 0
 	ct_user_enter
 	.endif
+
+#ifdef CONFIG_SHADOW_CALL_STACK
+	.if	\el == 0
+	str	x18, [tsk, #TSK_TI_SCS]		// Save shadow call stack
+	.endif
+#endif
 
 #ifdef CONFIG_ARM64_SW_TTBR0_PAN
 	/*
@@ -319,18 +330,22 @@ alternative_insn eret, nop, ARM64_UNMAP_KERNEL_AT_EL0
 	.endif
 	.endm
 
+	.macro jmp_if_not_task_stack ptr, label, tmp
+	/*
+	 * Compare \ptr with the base of the task stack.
+	 * If the top ~(THREAD_SIZE - 1) bits match, we are on a task stack.
+	 */
+	ldr     \tmp, [tsk, TSK_STACK]
+	eor     \tmp, \tmp, \ptr
+	and     \tmp, \tmp, #~(THREAD_SIZE - 1)
+	cbnz    \tmp, \label
+	.endm
+
 	.macro	irq_stack_entry
 	mov	x19, sp			// preserve the original sp
 
-	/*
-	 * Compare sp with the base of the task stack.
-	 * If the top ~(THREAD_SIZE - 1) bits match, we are on a task stack,
-	 * and should switch to the irq stack.
-	 */
-	ldr	x25, [tsk, TSK_STACK]
-	eor	x25, x25, x19
-	and	x25, x25, #~(THREAD_SIZE - 1)
-	cbnz	x25, 9998f
+	/* if sp points to task stack, switch to the irq stack */
+	jmp_if_not_task_stack x19, 9998f, x25
 
 	adr_this_cpu x25, irq_stack, x26
 	mov	x26, #IRQ_STACK_START_SP
@@ -346,6 +361,12 @@ alternative_insn eret, nop, ARM64_UNMAP_KERNEL_AT_EL0
 	stp     x29, x19, [sp, #-16]!
 	mov	x29, sp
 
+#ifdef CONFIG_SHADOW_CALL_STACK
+	/* Switch to IRQ shadow call stack */
+	str	x18, [tsk, #TSK_TI_SCS]
+	adr_this_cpu x18, irq_shadow_call_stack, x26
+#endif
+
 9998:
 	.endm
 
@@ -354,6 +375,13 @@ alternative_insn eret, nop, ARM64_UNMAP_KERNEL_AT_EL0
 	 * irq_stack_exit.
 	 */
 	.macro	irq_stack_exit
+#ifdef CONFIG_SHADOW_CALL_STACK
+	jmp_if_not_task_stack x19, 9999f, x25
+	/* Restore task shadow call stack */
+	ldr	x18, [tsk, #TSK_TI_SCS]
+	str	xzr, [tsk, #TSK_TI_SCS]
+9999:
+#endif
 	mov	sp, x19
 	.endm
 
