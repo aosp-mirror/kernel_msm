@@ -955,7 +955,8 @@ static int sec_ts_set_gain_table(struct sec_ts_data *ts, u8 *gainTable)
 			}
 
 			temp = (fs_target[i][j] * 1000) / (tmp_dv) * 64;
-			temp = temp / 1000;
+			/* Add 500 to round the result */
+			temp = (temp + 500) / 1000;
 			if (temp > 255)
 				temp = 255;
 			gainTable[j * ts->rx_count + i] = (temp & 0xFF);
