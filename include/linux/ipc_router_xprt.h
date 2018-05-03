@@ -108,6 +108,7 @@ struct rr_packet {
 	struct sk_buff_head *pkt_fragment_q;
 	uint32_t length;
 	struct kref ref;
+	bool ws_need;
 };
 
 /**
