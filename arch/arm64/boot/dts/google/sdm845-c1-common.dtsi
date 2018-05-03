@@ -30,6 +30,17 @@
 	sound-tavil {
 		qcom,model = "sdm845-tavil-c1-snd-card";
 	};
+
+	msm_cirrus_playback {
+		/* the resistance is 7.8698 ohm */
+		cirrus,top-speaker-mean = <11007>;
+
+		/* the resistance is 6.1996 ohm */
+		cirrus,bottom-speaker-impedance = <8671>;
+
+		/* the resistance is 6.276 ohm */
+		cirrus,bottom-speaker-mean = <8783>;
+	};
 };
 
 &routing {
