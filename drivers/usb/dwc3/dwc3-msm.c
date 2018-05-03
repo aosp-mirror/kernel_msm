@@ -3705,7 +3705,10 @@ static int dwc3_msm_remove(struct platform_device *pdev)
 	int ret_pm;
 
 	device_remove_file(&pdev->dev, &dev_attr_mode);
+	device_remove_file(&pdev->dev, &dev_attr_speed);
+	device_remove_file(&pdev->dev, &dev_attr_usb_compliance_mode);
 	device_remove_file(&pdev->dev, &dev_attr_auto_vbus_src_sel_threshold);
+
 	if (mdwc->usb_psy)
 		power_supply_put(mdwc->usb_psy);
 
