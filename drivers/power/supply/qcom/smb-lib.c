@@ -2581,6 +2581,42 @@ int smblib_get_prop_use_external_vbus_output(struct smb_charger *chg,
 	return 0;
 }
 
+int smblib_get_prop_vbus_output_status(struct smb_charger *chg,
+				       union power_supply_propval *val)
+{
+	int internal_rc = 0;
+	int external_rc = 0;
+	u8 status = 0;
+
+	mutex_lock(&chg->vbus_output_lock);
+	mutex_lock(&chg->otg_oc_lock);
+
+	internal_rc = smblib_otg_is_enabled_locked(chg);
+	if (internal_rc < 0) {
+		val->intval = internal_rc;
+		goto unlock;
+	}
+	status |= (internal_rc == 1) ? INTERNAL_OTG_BIT : 0;
+
+	if (!chg->external_vbus_reg) {
+		val->intval = status;
+		goto unlock;
+	}
+
+	external_rc = regulator_is_enabled(chg->external_vbus_reg);
+	if (external_rc < 0) {
+		val->intval = external_rc;
+		goto unlock;
+	}
+	status |= (external_rc == 1) ? EXTERNAL_OTG_BIT : 0;
+	val->intval = status;
+
+unlock:
+	mutex_unlock(&chg->otg_oc_lock);
+	mutex_unlock(&chg->vbus_output_lock);
+	return 0;
+}
+
 int smblib_get_prop_usb_port_temp(struct smb_charger *chg,
 				  union power_supply_propval *val)
 {
