@@ -206,6 +206,77 @@ int tpu_config_write(u32 offset, u32 len, u32 data)
 	return 0;
 }
 
+/* memory_config_read can be used to read from
+ * SRAM and DRAM of ABC.
+ */
+int memory_config_read(u32 offset, u32 len, u32 *data){
+	void __iomem *base_offset;
+	struct inb_region   ir;
+	u32 region_offset;
+
+	if(!abc_dev || !abc_dev->memory_config)
+		return -EFAULT;
+
+	region_offset = offset & ~(ABC_MEMORY_REGION_MASK);
+
+	/* Check whether mapping is required or not */
+	if (abc_dev->memory_map != region_offset) {
+		ir.target_pcie_address = region_offset;
+		ir.u_target_pcie_address = 0x0;
+		ir.mode =  MEM_MATCH;
+		ir.region = 4;
+#ifdef CONFIG_MULTIPLE_BAR_MAP_FOR_ABC_SFR
+		ir.bar = 3;
+#else
+		ir.bar = 2;
+#endif
+		ir.memmode = 0;
+		set_inbound_iatu(ir);
+		abc_dev->memory_map = region_offset;
+	}
+
+	region_offset = offset & ABC_MEMORY_REGION_MASK;
+	base_offset = abc_dev->memory_config + region_offset;
+	*data = readl(base_offset);
+	return 0;
+}
+
+/* memory_config_write can be used to write to
+ * SRAM and DRAM of ABC.
+ */
+int memory_config_write(u32 offset, u32 len, u32 data){
+	void __iomem *base_offset;
+	struct inb_region   ir;
+	u32 region_offset;
+
+	if(!abc_dev || !abc_dev->memory_config)
+		return -EFAULT;
+
+
+	region_offset = offset & ~(ABC_MEMORY_REGION_MASK);
+
+	/* Check whether mapping is required or not */
+	if (abc_dev->memory_map != region_offset) {
+		ir.target_pcie_address = region_offset;
+		ir.u_target_pcie_address = 0x0;
+		ir.mode =  MEM_MATCH;
+		ir.region = 4;
+#ifdef CONFIG_MULTIPLE_BAR_MAP_FOR_ABC_SFR
+		ir.bar = 3;
+#else
+		ir.bar = 2;
+#endif
+		ir.memmode = 0;
+		set_inbound_iatu(ir);
+		abc_dev->memory_map = region_offset;
+	}
+
+	region_offset = offset & ABC_MEMORY_REGION_MASK;
+	base_offset = abc_dev->memory_config + region_offset;
+	writel(data, base_offset);
+	return 0;
+}
+
 int abc_set_pcie_pm_ctrl(struct abc_pcie_pm_ctrl *pmctrl)
 {
 	u32 aspm_l11_l12;
@@ -1107,7 +1178,7 @@ static int abc_pcie_probe(struct pci_dev *pdev,
 			abc_dev->aon_config = base;
 		}
 		if (bar == 3)
-			abc_dev->sfr_misc_config = base;
+			abc_dev->memory_config = base;
 #else
 		if (bar == 0) {
 			/* Mapping complete SFR region into single BAR */
@@ -1125,15 +1196,21 @@ static int abc_pcie_probe(struct pci_dev *pdev,
 				abc_pcie_bar0[i].pdata_size = sizeof(*abc_dev);
 			}
 		}
-		if (bar == 2)
+		if (bar == 2) {
 			abc_dev->bar2_base = base;
+			abc_dev->memory_config = base;
+		}
 		if (bar == 4)
 			abc_dev->bar4_base = base;
 #endif
 		pcibios_resource_to_bus(pdev->bus, &region, res);
 		abc_dev->bar_base[bar].start = region.start;
 		abc_dev->bar_base[bar].end   = region.end;
-		bar+=2;
+#ifdef CONFIG_MULTIPLE_BAR_MAP_FOR_ABC_SFR
+		bar++;
+#else
+		bar +=2;
+#endif
 	}
 
 exit_loop:

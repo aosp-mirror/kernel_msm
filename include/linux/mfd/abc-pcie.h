@@ -125,6 +125,7 @@ enum abc_address_map {
 
 #define ABC_SFR_BASE	0x10000000
 #define ABC_MISC_SFR_REGION_MASK	0xFFFF
+#define ABC_MEMORY_REGION_MASK		0xFFFF
 
 enum abc_dma_trans_status {
 	DMA_DONE = 0, /* DONE: DMA DONE interrupt */
@@ -140,10 +141,12 @@ struct abc_device {
 	struct device	*dev;
 	struct pci_dev	*pdev;
 	struct cdev c_dev;
+	u32 memory_map;
 	void __iomem	*pcie_config;
 	void __iomem	*ipu_config;
 	void __iomem	*tpu_config;
 	void __iomem	*fsys_config;
+	void __iomem	*memory_config;
 	void __iomem	*aon_config;
 	void __iomem	*sfr_misc_config;
 	void __iomem	*base_config;
@@ -252,8 +255,8 @@ int ipu_config_read(u32 offset, u32 len, u32 *data);
 int ipu_config_write(u32 offset, u32 len, u32 data);
 int tpu_config_read(u32 offset, u32 len, u32 *data);
 int tpu_config_write(u32 offset, u32 len, u32 data);
-int ddr_config_read(u32 offset, u32 len, u32 *data);
-int ddr_config_write(u32 offset, u32 len, u32 data);
+int memory_config_read(u32 offset, u32 len, u32 *data);
+int memory_config_write(u32 offset, u32 len, u32 data);
 int abc_reg_dma_irq_callback(irq_dma_cb_t dma_cb, int dma_chan);
 int abc_reg_irq_callback(irq_cb_t sys_cb, int irq_no);
 void *abc_alloc_coherent(size_t size, dma_addr_t *dma_addr);
