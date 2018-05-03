@@ -576,6 +576,7 @@ static void __ufshcd_cmd_log(struct ufs_hba *hba, char *str, char *cmd_type,
 
 	entry.str = str;
 	entry.lba = lba;
+	entry.cmd_id = cmd_id;
 	entry.transfer_len = transfer_len;
 	entry.doorbell = ufshcd_readl(hba, REG_UTP_TRANSFER_REQ_DOOR_BELL);
 	entry.tag = tag;
@@ -601,9 +602,9 @@ static inline void ufshcd_cond_add_cmd_trace(struct ufs_hba *hba,
 					unsigned int tag, const char *str)
 {
 	struct ufshcd_lrb *lrbp;
-	char *cmd_type;
+	char *cmd_type = "nop";
 	u8 opcode = 0;
-	u8 cmd_id, idn = 0;
+	u8 cmd_id = 0, idn = 0;
 	sector_t lba = 0;
 	int transfer_len = 0;
 
