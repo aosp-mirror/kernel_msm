@@ -2040,7 +2040,7 @@ static void fts_enter_pointer_event_handler(struct fts_ts_info *info, unsigned
 {
 	unsigned char touchId;
 	unsigned int touch_condition = 1, tool = MT_TOOL_FINGER;
-	int x, y, z, major, minor, distance;
+	int x, y, z, distance;
 	u8 touchType;
 
 	if (!info->resume_bit)
@@ -2052,11 +2052,7 @@ static void fts_enter_pointer_event_handler(struct fts_ts_info *info, unsigned
 	x = (((int)event[3] & 0x0F) << 8) | (event[2]);
 	y = ((int)event[4] << 4) | ((event[3] & 0xF0) >> 4);
 	/* TODO: check with fw how they will report distance and pressure */
-	z = (int)event[5];
-	if (z == 0)
-		z = PRESSURE_MAX;
-	major = (int)(((event[0] & 0x0C) << 2) | ((event[6] & 0xF0) >> 4));
-	minor = (int)(((event[7] & 0xC0) >> 2) | (event[6] & 0x0F));
+	z = PRESSURE_MAX;
 	distance = 0;	/* if the tool is touching the display
 			  * the distance should be 0 */
 
@@ -2119,8 +2115,8 @@ static void fts_enter_pointer_event_handler(struct fts_ts_info *info, unsigned
 	/* input_report_abs(info->input_dev, ABS_MT_TRACKING_ID, touchId); */
 	input_report_abs(info->input_dev, ABS_MT_POSITION_X, x);
 	input_report_abs(info->input_dev, ABS_MT_POSITION_Y, y);
-	input_report_abs(info->input_dev, ABS_MT_TOUCH_MAJOR, major);
-	input_report_abs(info->input_dev, ABS_MT_TOUCH_MINOR, minor);
+	input_report_abs(info->input_dev, ABS_MT_TOUCH_MAJOR, z);
+	input_report_abs(info->input_dev, ABS_MT_TOUCH_MINOR, z);
 #ifndef SKIP_PRESSURE
 	input_report_abs(info->input_dev, ABS_MT_PRESSURE, z);
 #endif
