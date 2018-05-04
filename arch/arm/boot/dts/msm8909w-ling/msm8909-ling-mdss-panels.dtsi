@@ -23,6 +23,7 @@
 #include "ling-dsi-panel-auo-qvga-cmd.dtsi"
 #include "ling-dsi-panel-auo-cx-qvga-cmd.dtsi"
 #include "ling-dsi-panel-390p-auo-cmd.dtsi"
+#include "ling-dsi-panel-auo-400p-cmd.dtsi"
 
 &soc {
 	dsi_panel_pwr_supply: dsi_panel_pwr_supply {
