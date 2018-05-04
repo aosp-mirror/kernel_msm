@@ -2090,6 +2090,8 @@ error_allocate_mem:
 		gpio_free(pdata->tsp_id);
 	if (gpio_is_valid(pdata->tsp_icid))
 		gpio_free(pdata->tsp_icid);
+	if (gpio_is_valid(pdata->switch_gpio))
+		gpio_free(pdata->switch_gpio);
 
 error_allocate_pdata:
 	if (ret == -ECONNREFUSED)
@@ -2460,8 +2462,8 @@ static void sec_ts_input_close(struct input_dev *dev)
 
 	sec_ts_set_bus_ref(ts, SEC_TS_BUS_REF_INPUT_DEV, true);
 
-	cancel_work(&ts->suspend_work);
-	cancel_work(&ts->resume_work);
+	cancel_work_sync(&ts->suspend_work);
+	cancel_work_sync(&ts->resume_work);
 
 #ifdef USE_POWER_RESET_WORK
 	cancel_delayed_work(&ts->reset_work);
@@ -2492,10 +2494,8 @@ static int sec_ts_remove(struct i2c_client *client)
 
 	msm_drm_unregister_client(&ts->notifier);
 
-	cancel_work(&ts->suspend_work);
-	flush_work(&ts->suspend_work);
-	cancel_work(&ts->resume_work);
-	flush_work(&ts->resume_work);
+	cancel_work_sync(&ts->suspend_work);
+	cancel_work_sync(&ts->resume_work);
 
 #ifdef SEC_TS_FW_UPDATE_ON_PROBE
 	cancel_delayed_work_sync(&ts->work_fw_update);
@@ -2540,12 +2540,28 @@ static int sec_ts_remove(struct i2c_client *client)
 	ts->input_dev = NULL;
 	ts->input_dev_touch = NULL;
 	ts_dup = NULL;
+
+	/* need to do software reset for next sec_ts_probe() without error */
+	ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SW_RESET, NULL, 0);
+
 	ts->plat_data->power(ts, false);
 
 #ifdef CONFIG_TOUCHSCREEN_TBN
 	tbn_cleanup(ts->tbn);
 #endif
 
+	if (gpio_is_valid(ts->plat_data->irq_gpio))
+		gpio_free(ts->plat_data->irq_gpio);
+	if (gpio_is_valid(ts->plat_data->switch_gpio))
+		gpio_free(ts->plat_data->switch_gpio);
+
+	sec_ts_raw_device_exit(ts);
+#ifndef CONFIG_SEC_SYSFS
+	class_destroy(sec_class);
+#endif
+
+	kfree(ts->gainTable);
+	kfree(ts->pFrame);
 	kfree(ts);
 	return 0;
 }

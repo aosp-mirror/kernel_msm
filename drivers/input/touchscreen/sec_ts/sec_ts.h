@@ -916,6 +916,7 @@ int sec_ts_read_raw_data(struct sec_ts_data *ts,
 #if (1)//!defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
 int sec_ts_raw_device_init(struct sec_ts_data *ts);
 #endif
+void sec_ts_raw_device_exit(struct sec_ts_data *ts);
 
 extern struct class *sec_class;
 
