@@ -2713,6 +2713,8 @@ static const struct mmc_bus_ops mmc_ops = {
 	.change_bus_speed = mmc_change_bus_speed,
 };
 
+static void ClearMMC_Ready(void);
+static void SetMMC_Ready(void);
 /*
  * Starting point for MMC card init.
  */
@@ -2724,6 +2726,7 @@ int mmc_attach_mmc(struct mmc_host *host)
 	BUG_ON(!host);
 	WARN_ON(!host->claimed);
 
+	ClearMMC_Ready();
 	/* Set correct bus mode for MMC before attempting attach */
 	if (!mmc_host_is_spi(host))
 		mmc_set_bus_mode(host, MMC_BUSMODE_OPENDRAIN);
@@ -2774,6 +2777,8 @@ int mmc_attach_mmc(struct mmc_host *host)
 	if (err)
 		goto remove_card;
 
+	msleep(80); // Wait MMC driver and partition are ready.
+	SetMMC_Ready();
 	register_reboot_notifier(&host->card->reboot_notify);
 
 	return 0;
@@ -2790,4 +2795,20 @@ err:
 		mmc_hostname(host), err);
 
 	return err;
+}
+
+static bool gMMC_Ready=0;
+static void ClearMMC_Ready(void)
+{
+	gMMC_Ready = 0;
+}
+
+static void SetMMC_Ready(void)
+{
+	gMMC_Ready = 1;
+}
+
+bool GetMMC_Ready(void)
+{
+	return gMMC_Ready;
 }
