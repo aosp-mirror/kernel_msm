@@ -72,6 +72,9 @@
 #include "fts_lib/ftsTool.h"
 
 
+/* Switch GPIO values */
+#define FTS_SWITCH_GPIO_VALUE_SLPI_MASTER 	0
+#define FTS_SWITCH_GPIO_VALUE_AP_MASTER 	1
 
 /**
   * Event handler installer helpers
@@ -3469,6 +3472,28 @@ static int fts_mode_handler(struct fts_ts_info *info, int force)
 }
 
 /**
+  * Configure the switch GPIO to toggle bus master between AP and SLPI.
+  * gpio_value takes one of
+  * { FTS_SWITCH_GPIO_VALUE_SLPI_MASTER, FTS_SWITCH_GPIO_VALUE_AP_MASTER }
+  */
+static void fts_set_switch_gpio(struct fts_ts_info *info, int gpio_value)
+{
+	int retval;
+	unsigned int gpio = info->board->switch_gpio;
+
+	if (!gpio_is_valid(gpio))
+		return;
+
+	logError(1, "%s %s: toggling i2c switch to %s\n", tag, __func__,
+		 gpio_value == FTS_SWITCH_GPIO_VALUE_AP_MASTER ? "AP" : "SLPI");
+
+	retval = gpio_direction_output(gpio, gpio_value);
+	if (retval < 0)
+		logError(1, "%s %s: Failed to toggle switch_gpio, err = %d\n",
+			 tag, __func__, retval);
+}
+
+/**
   * Resume work function which perform a system reset, clean all the touches
   * from the linux input system and prepare the ground for enabling the sensing
   */
@@ -3489,6 +3514,8 @@ static void fts_resume_work(struct work_struct *work)
 	if (info->tbn)
 		tbn_request_bus(info->tbn);
 #endif
+
+	fts_set_switch_gpio(info, FTS_SWITCH_GPIO_VALUE_AP_MASTER);
 
 	__pm_wakeup_event(&info->wakesrc, jiffies_to_msecs(HZ));
 
@@ -3535,6 +3562,8 @@ static void fts_suspend_work(struct work_struct *work)
 	info->sensor_sleep = true;
 
 	fts_disableInterrupt();
+
+	fts_set_switch_gpio(info, FTS_SWITCH_GPIO_VALUE_SLPI_MASTER);
 
 #ifdef CONFIG_TOUCHSCREEN_TBN
 	if (info->tbn)
