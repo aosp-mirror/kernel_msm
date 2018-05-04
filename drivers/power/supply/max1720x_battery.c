@@ -1108,7 +1108,7 @@ static int max1720x_apply_regval_register(struct max1720x_chip *chip,
 		return -EINVAL;
 	}
 
-	regs = devm_kmalloc_array(chip->dev, cnt, sizeof(u16), GFP_KERNEL);
+	regs = kmalloc_array(cnt, sizeof(u16), GFP_KERNEL);
 	if (!regs)
 		return -ENOMEM;
 
