@@ -23,6 +23,7 @@
 #include "triton-dsi-panel-auo-qvga-cmd.dtsi"
 #include "triton-dsi-panel-auo-cx-qvga-cmd.dtsi"
 #include "triton-dsi-panel-390p-auo-cmd.dtsi"
+#include "triton-dsi-panel-auo-400p-cmd.dtsi"
 
 &soc {
 	dsi_panel_pwr_supply: dsi_panel_pwr_supply {
