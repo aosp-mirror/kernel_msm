@@ -163,7 +163,7 @@
 		maxim,cycles = <0x0060>;
 		maxim,dpacc = <0x0C80>;
 		maxim,param-version = <0x4>;
-		maxim,batt-life-cycle-set = <0 200 300 400>;
+		maxim,batt-life-cycle-set = <0 400 600 800>;
 		maxim,batt-life-cycle-soc;
 		maxim,batt-life-cycle-offset = <0 5 8 10>;
 	};
