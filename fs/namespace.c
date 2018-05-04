@@ -24,6 +24,7 @@
 #include <linux/magic.h>
 #include <linux/bootmem.h>
 #include <linux/task_work.h>
+#include <linux/delay.h>
 #include "pnode.h"
 #include "internal.h"
 
@@ -2593,6 +2594,8 @@ char *copy_mount_string(const void __user *data)
 	return data ? strndup_user(data, PAGE_SIZE) : NULL;
 }
 
+extern bool GetMMC_Ready(void);
+
 /*
  * Flags is a 32-bit value that allows up to 31 non-fs dependent flags to
  * be given to the mount() call (ie: read-only, no-dev, no-suid etc).
@@ -2613,6 +2616,7 @@ long do_mount(const char *dev_name, const char __user *dir_name,
 	struct path path;
 	int retval = 0;
 	int mnt_flags = 0;
+	int retry;
 
 	/* Discard magic */
 	if ((flags & MS_MGC_MSK) == MS_MGC_VAL)
@@ -2675,9 +2679,14 @@ long do_mount(const char *dev_name, const char __user *dir_name,
 		retval = do_change_type(&path, flags);
 	else if (flags & MS_MOVE)
 		retval = do_move_mount(&path, dev_name);
-	else
+	else {
+		for(retry=60;!GetMMC_Ready() && retry>0;retry--) {
+			pr_err("CEI_TEST:%s, wait 50ms for MMC ready\n",__func__);
+			msleep(50);
+		}
 		retval = do_new_mount(&path, type_page, flags, mnt_flags,
 				      dev_name, data_page);
+	}
 dput_out:
 	path_put(&path);
 	return retval;
