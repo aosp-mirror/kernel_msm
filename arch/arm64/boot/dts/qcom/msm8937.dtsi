@@ -53,7 +53,7 @@
 		};
 	};
 
-	reserved-memory {
+	reserved_memory: reserved-memory {
 		#address-cells = <2>;
 		#size-cells = <2>;
 		ranges;
@@ -887,6 +887,10 @@
 			qcom,irq-no-suspend;
 			qcom,not-loadable;
 		};
+	};
+
+	qcom,iris-fm {
+		compatible = "qcom,iris_fm";
 	};
 
 	rpm_bus: qcom,rpm-smd {

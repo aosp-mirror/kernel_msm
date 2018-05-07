@@ -3949,10 +3949,10 @@ static int dwc3_otg_start_host(struct dwc3_msm *mdwc, int on)
 	if (on) {
 		dev_dbg(mdwc->dev, "%s: turn on host\n", __func__);
 
+		mdwc->hs_phy->flags |= PHY_HOST_MODE;
 		pm_runtime_get_sync(mdwc->dev);
 		dbg_event(0xFF, "StrtHost gync",
 			atomic_read(&mdwc->dev->power.usage_count));
-		mdwc->hs_phy->flags |= PHY_HOST_MODE;
 		if (dwc->maximum_speed == USB_SPEED_SUPER) {
 			mdwc->ss_phy->flags |= PHY_HOST_MODE;
 			usb_phy_notify_connect(mdwc->ss_phy,
@@ -4162,6 +4162,10 @@ static int dwc3_restart_usb_host_mode(struct notifier_block *nb,
 
 	dbg_event(0xFF, "fw_restarthost", 0);
 	flush_delayed_work(&mdwc->sm_work);
+
+	if (!mdwc->in_host_mode)
+		goto err;
+
 	dbg_event(0xFF, "stop_host_mode", dwc->maximum_speed);
 	ret = dwc3_otg_start_host(mdwc, 0);
 	if (ret)

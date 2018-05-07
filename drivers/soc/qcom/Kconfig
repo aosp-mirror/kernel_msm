@@ -386,7 +386,7 @@ config MSM_GLINK
 	  configured separately.
 
 config MSM_TZ_SMMU
-	depends on ARCH_MSM8953
+	depends on ARCH_MSM8953 || ARCH_MSM8909
 	bool "Helper functions for SMMU configuration through TZ"
 	help
 	  Say 'Y' here for targets that need to call into TZ to configure
@@ -557,6 +557,14 @@ config MSM_SUBSYSTEM_RESTART
          shutdown, and restart subsystems with a reference counted API.
          It also notifies userspace of transitions between these states via
          sysfs.
+
+config MSM_SYSMON_COMM
+	bool "MSM System Monitor communication support"
+	depends on MSM_SMD && MSM_SUBSYSTEM_RESTART
+	help
+	  This option adds support for MSM System Monitor library, which
+	  provides an API that may be used for notifying subsystems within
+	  the SoC about other subsystems' power-up/down state-changes.
 
 config MSM_PIL
        bool "Peripheral image loading"

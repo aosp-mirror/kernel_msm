@@ -211,6 +211,13 @@
 		cont_splash_mem: splash_region@83000000 {
 			reg = <0x0 0x83000000 0x0 0xc00000>;
 		};
+
+		dump_mem: mem_dump_region {
+			compatible = "shared-dma-pool";
+			reusable;
+			size = <0 0x100000>;
+		};
+
 	};
 
 	soc: soc { };
@@ -220,6 +227,8 @@
 #include "msm8909-smp2p.dtsi"
 #include "msm8909-ipcrouter.dtsi"
 #include "msm-gdsc-8916.dtsi"
+#include "msm-arm-smmu-8909.dtsi"
+#include "msm8909-gpu.dtsi"
 #include "msm8909-coresight.dtsi"
 #include "msm8909-bus.dtsi"
 #include "msm8909-mdss.dtsi"
@@ -334,7 +343,7 @@
 		compatible = "qcom,gcc-mdss-8909";
 		clocks = <&mdss_dsi0_pll clk_dsi_pll0_pixel_clk_src>,
 			 <&mdss_dsi0_pll clk_dsi_pll0_byte_clk_src>;
-		clock-names = "pixel_src", "byte_src";
+		clock-names = "pclk0_src", "byte0_src";
 		#clock-cells = <1>;
 	};
 
@@ -480,6 +489,47 @@
 	};
 
 	thermal_zones: thermal-zones {};
+
+	mem_dump {
+		compatible = "qcom,mem-dump";
+		memory-region = <&dump_mem>;
+
+		rpm_sw_dump {
+			qcom,dump-size = <0x28000>;
+			qcom,dump-id = <0xea>;
+		};
+
+		pmic_dump {
+			qcom,dump-size = <0x10000>;
+			qcom,dump-id = <0xe4>;
+		};
+
+		vsense_dump {
+			qcom,dump-size = <0x1000>;
+			qcom,dump-id = <0xe9>;
+		};
+
+		tmc_etf_dump {
+			qcom,dump-size = <0x10000>;
+			qcom,dump-id = <0xf0>;
+		};
+
+		tmc_etr_reg_dump {
+			qcom,dump-size = <0x1000>;
+			qcom,dump-id = <0x100>;
+		};
+
+		tmc_etf_reg_dump {
+			qcom,dump-size = <0x1000>;
+			qcom,dump-id = <0x101>;
+		};
+
+		misc_data_dump {
+			qcom,dump-size = <0x1000>;
+			qcom,dump-id = <0xe8>;
+		};
+
+	};
 
 	qcom,sensor-information {
 		compatible = "qcom,sensor-information";
@@ -1363,6 +1413,7 @@
 		qcom,scm_core_clk_src-freq = <80000000>;
 
 		qcom,pas-id = <9>;
+		qcom,mas-crypto = <&mas_crypto>;
 		qcom,proxy-timeout-ms = <100>;
 		qcom,firmware-name = "venus";
 		memory-region = <&venus_qseecom_mem>;
@@ -1622,6 +1673,16 @@
 		memory-region = <&adsp_mem>;
 	};
 
+	qcom,msm-adsprpc-mem {
+		compatible = "qcom,msm-adsprpc-mem-region";
+		memory-region = <&adsp_mem>;
+		restrict-access;
+	};
+
+	qcom,msm_fastrpc {
+		compatible = "qcom,msm-fastrpc-legacy-compute";
+	};
+
 	qcom,msm-adsp-loader {
 		compatible = "qcom,adsp-loader";
 		qcom,adsp-state = <0>;
@@ -1792,6 +1853,7 @@
 		qcom,sysmon-id = <6>;
 		qcom,ssctl-instance-id = <0x13>;
 		qcom,firmware-name = "wcnss";
+		qcom,mas-crypto = <&mas_crypto>;
 
 		/* GPIO inputs from wcnss */
 		qcom,gpio-err-fatal = <&smp2pgpio_ssr_smp2p_4_in 0 0>;
@@ -1835,6 +1897,7 @@
 		qcom,pil-self-auth;
 		qcom,sysmon-id = <0>;
 		qcom,ssctl-instance-id = <0x12>;
+		qcom,reset-clk;
 
 		/* GPIO inputs from mss */
 		qcom,gpio-err-fatal = <&smp2pgpio_ssr_smp2p_1_in 0 0>;
