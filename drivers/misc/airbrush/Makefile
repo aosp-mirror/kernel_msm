@@ -7,3 +7,4 @@ airbrush-y :=	\
 		airbrush-M0-interrupt.o \
 		airbrush-spi.o \
 		airbrush-pmu.o \
+		airbrush-ddr.o
