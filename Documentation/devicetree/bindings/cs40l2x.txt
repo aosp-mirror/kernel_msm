@@ -31,6 +31,47 @@ Optional properties:
     ASP_BCLK/REFCLK pin. This property is ignored for CS40L25A and CS40L25B
     devices as reference clock selection is configured automatically.
 
+  - cirrus,f0-default : Default LRA resonant frequency (f0), expressed as
+    follows: cirrus,f0-default = f0 (Hz) * 2^14. This value represents the
+    frequency used during playback of PWLE segments specified with frequency
+    equal to f0; it also serves as the unit-specific f0 input to the click
+    compensation algorithm. It can be overwritten at a later time by writing
+    to the f0_stored sysfs control.
+
+    If this value is omitted or specified as zero, the measurement recorded in
+    the f0_measured sysfs control is used. If LRA diagnostics has not been
+    administered and f0_measured is uninitialized, 2621440 (160 Hz) is used.
+
+  - cirrus,f0-min : Minimum LRA resonant frequency (f0) that may be written to
+    the f0_stored sysfs control, expressed using the same numerical format as
+    cirrus,f0-default. If this value is omitted or specified as zero, no lower-
+    bound validation is performed.
+
+  - cirrus,f0-max : Maximum LRA resonant frequency (f0) that may be written to
+    the f0_stored sysfs control, expressed using the same numerical format as
+    cirrus,f0-default. If this value is omitted or specified as zero, no upper-
+    bound validation is performed.
+
+  - cirrus,redc-default : Default LRA series resistance (ReDC), expressed as
+    follows: cirrus,redc-default = ReDC (ohms) / 5.857 * 2^17. This value
+    represents the unit-specific ReDC input to the click compensation algorithm.
+    It can be overwritten at a later time by writing to the redc_stored sysfs
+    control.
+
+    If this value is omitted or specified as zero, the measurement recorded in
+    the redc_measured sysfs control is used. If LRA diagnostics has not been
+    administered and redc_measured is uninitialized, 340787 (15.2 ohms) is used.
+
+  - cirrus,redc-min : Minimum LRA series resistance (ReDC) that may be written
+    to the redc_stored sysfs control, expressed using the same numerical format
+    as cirrus,redc-default. If this value is omitted or specified as zero, no
+    lower-bound validation is performed.
+
+  - cirrus,redc-max : Maximum LRA series resistance (ReDC) that may be written
+    to the redc_stored sysfs control, expressed using the same numerical format
+    as cirrus,redc-default. If this value is omitted or specified as zero, no
+    upper-bound validation is performed.
+
 Example:
 
   cs40l20: cs40l20@43 {
