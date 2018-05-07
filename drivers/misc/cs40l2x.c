@@ -567,6 +567,12 @@ static ssize_t cs40l2x_f0_stored_store(struct device *dev,
 	if (ret)
 		return -EINVAL;
 
+	if (cs40l2x->pdata.f0_min > 0 && val < cs40l2x->pdata.f0_min)
+		return -EINVAL;
+
+	if (cs40l2x->pdata.f0_max > 0 && val > cs40l2x->pdata.f0_max)
+		return -EINVAL;
+
 	mutex_lock(&cs40l2x->lock);
 	ret = regmap_write(cs40l2x->regmap,
 			cs40l2x_dsp_reg(cs40l2x, "F0_STORED",
@@ -632,6 +638,12 @@ static ssize_t cs40l2x_redc_stored_store(struct device *dev,
 
 	ret = kstrtou32(buf, 10, &val);
 	if (ret)
+		return -EINVAL;
+
+	if (cs40l2x->pdata.redc_min > 0 && val < cs40l2x->pdata.redc_min)
+		return -EINVAL;
+
+	if (cs40l2x->pdata.redc_max > 0 && val > cs40l2x->pdata.redc_max)
 		return -EINVAL;
 
 	mutex_lock(&cs40l2x->lock);
@@ -1523,6 +1535,28 @@ static void cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
 		return;
 	}
 
+	if (cs40l2x->pdata.f0_default) {
+		ret = regmap_write(regmap,
+				cs40l2x_dsp_reg(cs40l2x, "F0_STORED",
+						CS40L2X_XM_UNPACKED_TYPE),
+				cs40l2x->pdata.f0_default);
+		if (ret) {
+			dev_err(dev, "Failed to write default f0\n");
+			return;
+		}
+	}
+
+	if (cs40l2x->pdata.redc_default) {
+		ret = regmap_write(regmap,
+				cs40l2x_dsp_reg(cs40l2x, "REDC_STORED",
+						CS40L2X_XM_UNPACKED_TYPE),
+				cs40l2x->pdata.redc_default);
+		if (ret) {
+			dev_err(dev, "Failed to write default ReDC\n");
+			return;
+		}
+	}
+
 	dev_info(dev, "Normal-mode haptics successfully started\n");
 
 	cs40l2x_vibe_init(cs40l2x);
@@ -2204,6 +2238,30 @@ static int cs40l2x_handle_of_data(struct i2c_client *i2c_client,
 	pdata->boost_ipk = out_val;
 
 	pdata->refclk_gpio2 = of_property_read_bool(np, "cirrus,refclk-gpio2");
+
+	ret = of_property_read_u32(np, "cirrus,f0-default", &out_val);
+	if (!ret)
+		pdata->f0_default = out_val;
+
+	ret = of_property_read_u32(np, "cirrus,f0-min", &out_val);
+	if (!ret)
+		pdata->f0_min = out_val;
+
+	ret = of_property_read_u32(np, "cirrus,f0-max", &out_val);
+	if (!ret)
+		pdata->f0_max = out_val;
+
+	ret = of_property_read_u32(np, "cirrus,redc-default", &out_val);
+	if (!ret)
+		pdata->redc_default = out_val;
+
+	ret = of_property_read_u32(np, "cirrus,redc-min", &out_val);
+	if (!ret)
+		pdata->redc_min = out_val;
+
+	ret = of_property_read_u32(np, "cirrus,redc-max", &out_val);
+	if (!ret)
+		pdata->redc_max = out_val;
 
 	return 0;
 }

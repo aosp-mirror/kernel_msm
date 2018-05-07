@@ -17,6 +17,12 @@ struct cs40l2x_platform_data {
 	unsigned int boost_cap;
 	unsigned int boost_ipk;
 	bool refclk_gpio2;
+	unsigned int f0_default;
+	unsigned int f0_min;
+	unsigned int f0_max;
+	unsigned int redc_default;
+	unsigned int redc_min;
+	unsigned int redc_max;
 };
 
 #endif /* __CS40L2X_H */
