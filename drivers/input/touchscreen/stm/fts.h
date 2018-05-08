@@ -320,6 +320,7 @@ struct fts_ts_info {
 	struct regulator        *vdd_reg;	/* DVDD power regulator */
 	struct regulator        *avdd_reg;	/* AVDD power regulator */
 
+	struct mutex bus_mutex;	/* Protect access to the bus */
 	int resume_bit;	/* Indicate if screen off/on */
 	int fwupdate_stat;	/* Result of a fw update */
 	int reflash_fw;	/* Attempt to reflash fw */

@@ -215,13 +215,22 @@ static ssize_t fts_fwupdate_store(struct device *dev,
 	sscanf(buf, "%100s %d %d", path, &mode[0], &mode[1]);
 	logError(1, "%s fts_fwupdate_store: mode = %s\n", tag, path);
 
+	mutex_lock(&info->bus_mutex);
 
-	ret = flashProcedure(path, mode[0], mode[1]);
+	if (info->sensor_sleep)
+		ret = ERROR_BUS_WR;
+	else
+		ret = flashProcedure(path, mode[0], mode[1]);
 
 	info->fwupdate_stat = ret;
 
-	if (ret < OK)
-		logError(1, "%s  %s Unable to upgrade firmware! ERROR %08X\n",
+	mutex_unlock(&info->bus_mutex);
+
+	if (ret == ERROR_BUS_WR)
+		logError(1, "%s %s: bus is not accessible. ERROR %s08X\n",
+			 tag, __func__, ret);
+	else if (ret < OK)
+		logError(1, "%s %s Unable to upgrade firmware! ERROR %08X\n",
 			 tag, __func__, ret);
 	return count;
 }
@@ -540,6 +549,14 @@ static ssize_t fts_feature_enable_store(struct device *dev,
 	unsigned int temp;
 	int res = OK;
 
+	mutex_lock(&info->bus_mutex);
+	if (info->sensor_sleep) {
+		res = ERROR_BUS_WR;
+		logError(1, "%s %s: bus is not accessible.", tag, __func__);
+		mutex_unlock(&info->bus_mutex);
+		return count;
+	}
+
 	if ((count - 2 + 1) / 3 != 1)
 		logError(1,
 			 "%s fts_feature_enable: Number of parameter wrong! %d > %d\n",
@@ -626,6 +643,8 @@ static ssize_t fts_feature_enable_store(struct device *dev,
 				 "%s %s: Call echo XX 00/01 > feature_enable with a correct feature value (XX)! ERROR %08X\n",
 				 tag, __func__, res);
 	}
+
+	mutex_unlock(&info->bus_mutex);
 	return count;
 }
 
@@ -693,6 +712,13 @@ static ssize_t fts_grip_mode_store(struct device *dev,
 	int res;
 	struct fts_ts_info *info = dev_get_drvdata(dev);
 
+	mutex_lock(&info->bus_mutex);
+	if (info->sensor_sleep) {
+		res = ERROR_BUS_WR;
+		logError(1, "%s %s: bus is not accessible.", tag, __func__);
+		mutex_unlock(&info->bus_mutex);
+		return count;
+	}
 
 	/* in case of a different elaboration of the input, just modify
 	  * this initial part of the code according to customer needs */
@@ -719,6 +745,7 @@ static ssize_t fts_grip_mode_store(struct device *dev,
 		}
 	}
 
+	mutex_unlock(&info->bus_mutex);
 	return count;
 }
 #endif
@@ -763,6 +790,13 @@ static ssize_t fts_charger_mode_store(struct device *dev,
 	int res;
 	struct fts_ts_info *info = dev_get_drvdata(dev);
 
+	mutex_lock(&info->bus_mutex);
+	if (info->sensor_sleep) {
+		res = ERROR_BUS_WR;
+		logError(1, "%s %s: bus is not accessible.\n", tag, __func__);
+		mutex_unlock(&info->bus_mutex);
+		return count;
+	}
 
 /* in case of a different elaboration of the input, just modify this
   * initial part of the code according to customer needs */
@@ -790,6 +824,7 @@ static ssize_t fts_charger_mode_store(struct device *dev,
 		}
 	}
 
+	mutex_unlock(&info->bus_mutex);
 	return count;
 }
 #endif
@@ -833,6 +868,13 @@ static ssize_t fts_glove_mode_store(struct device *dev,
 	int res;
 	struct fts_ts_info *info = dev_get_drvdata(dev);
 
+	mutex_lock(&info->bus_mutex);
+	if (info->sensor_sleep) {
+		res = ERROR_BUS_WR;
+		logError(1, "%s %s: bus is not accessible.\n", tag, __func__);
+		mutex_unlock(&info->bus_mutex);
+		return count;
+	}
 
 /* in case of a different elaboration of the input, just modify this
   * initial part of the code according to customer needs */
@@ -859,6 +901,7 @@ static ssize_t fts_glove_mode_store(struct device *dev,
 		}
 	}
 
+	mutex_unlock(&info->bus_mutex);
 	return count;
 }
 #endif
@@ -913,6 +956,13 @@ static ssize_t fts_cover_mode_store(struct device *dev,
 	int res;
 	struct fts_ts_info *info = dev_get_drvdata(dev);
 
+	mutex_lock(&info->bus_mutex);
+	if (info->sensor_sleep) {
+		res = ERROR_BUS_WR;
+		logError(1, "%s %s: bus is not accessible.\n", tag, __func__);
+		mutex_unlock(&info->bus_mutex);
+		return count;
+	}
 
 /* in case of a different elaboration of the input, just modify this
   * initial part of the code according to customer needs */
@@ -939,6 +989,7 @@ static ssize_t fts_cover_mode_store(struct device *dev,
 		}
 	}
 
+	mutex_unlock(&info->bus_mutex);
 	return count;
 }
 #endif
@@ -1051,6 +1102,15 @@ static ssize_t fts_gesture_mask_show(struct device *dev,
 	int count = 0, res, temp;
 	struct fts_ts_info *info = dev_get_drvdata(dev);
 
+	mutex_lock(&info->bus_mutex);
+	if (info->sensor_sleep) {
+		res = ERROR_BUS_WR;
+		logError(1, "%s %s: bus is not accessible.\n", tag, __func__);
+		scnprintf(buf, PAGE_SIZE, "{ %08X }\n", res);
+		mutex_unlock(&info->bus_mutex);
+		return count;
+	}
+
 	if (mask[0] == 0) {
 		res = ERROR_OP_NOT_ALLOW;
 		logError(1,
@@ -1077,6 +1137,8 @@ static ssize_t fts_gesture_mask_show(struct device *dev,
 	count += scnprintf(buf + count,
 			   PAGE_SIZE - count, "{ %08X }\n", res);
 	mask[0] = 0;
+
+	mutex_unlock(&info->bus_mutex);
 	return count;
 }
 
@@ -1169,6 +1231,14 @@ static ssize_t fts_gesture_mask_store(struct device *dev,
 	int res;
 	struct fts_ts_info *info = dev_get_drvdata(dev);
 
+	mutex_lock(&info->bus_mutex);
+	if (info->sensor_sleep) {
+		res = ERROR_BUS_WR;
+		logError(1, "%s %s: bus is not accessible.\n", tag, __func__);
+		mutex_unlock(&info->bus_mutex);
+		return count;
+	}
+
 	if ((count + 1) / 3 < 2 || (count + 1) / 3 > GESTURE_MASK_SIZE + 1) {
 		logError(1,
 			 "%s fts_gesture_mask_store: Number of bytes of parameter wrong! %d < or > (enable/disable + at least one gestureID or max %d bytes)\n",
@@ -1213,6 +1283,7 @@ static ssize_t fts_gesture_mask_store(struct device *dev,
 		info->gesture_enabled = temp;
 	res = fts_mode_handler(info, 0);
 
+	mutex_unlock(&info->bus_mutex);
 	return count;
 }
 
@@ -1361,6 +1432,14 @@ static ssize_t stm_fts_cmd_show(struct device *dev,
 	MutualSenseFrame frameMS;
 	SelfSenseFrame frameSS;
 
+	mutex_lock(&info->bus_mutex);
+	if (info->sensor_sleep) {
+		res = ERROR_BUS_WR;
+		logError(1, "%s %s: bus is not accessible.\n", tag, __func__);
+		scnprintf(buf, PAGE_SIZE, "{ %08X }\n", res);
+		mutex_unlock(&info->bus_mutex);
+		return 0;
+	}
 
 	if (numberParameters >= 1) {
 		res = fts_disableInterrupt();
@@ -1893,6 +1972,7 @@ END:
 	  * just doing a cat */
 	/* logError(0,"%s numberParameters = %d\n",tag, numberParameters); */
 
+	mutex_unlock(&info->bus_mutex);
 	return index;
 }
 
@@ -2711,8 +2791,9 @@ static void fts_user_report_event_handler(struct fts_ts_info *info, unsigned
   * the FIFO and dispatch them to the proper event handler according the event
   * ID
   */
-static void fts_event_handler(struct fts_ts_info *info)
+static irqreturn_t fts_interrupt_handler(int irq, void *handle)
 {
+	struct fts_ts_info *info = handle;
 	int error = 0, count = 0;
 	unsigned char regAdd = FIFO_CMD_READALL;
 	unsigned char data[FIFO_EVENT_SIZE * FIFO_DEPTH];
@@ -2721,8 +2802,20 @@ static void fts_event_handler(struct fts_ts_info *info)
 	const unsigned char EVENTS_REMAINING_MASK = 0x1F;
 	unsigned char events_remaining = 0;
 	unsigned char *evt_data;
-
 	event_dispatch_handler_t event_handler;
+
+	mutex_lock(&info->bus_mutex);
+
+	/* It is possible that interrupts were disabled while the handler is
+	 * executing, before acquiring the mutex. If so, simply return.
+	 */
+	if (info->sensor_sleep) {
+		mutex_unlock(&info->bus_mutex);
+		return IRQ_HANDLED;
+	}
+
+	/* prevent CPU from entering deep sleep */
+	pm_qos_update_request(&info->pm_qos_req, 100);
 
 	__pm_wakeup_event(&info->wakesrc, jiffies_to_msecs(HZ));
 
@@ -2762,6 +2855,10 @@ static void fts_event_handler(struct fts_ts_info *info)
 	}
 
 	input_sync(info->input_dev);
+
+	pm_qos_update_request(&info->pm_qos_req, PM_QOS_DEFAULT_VALUE);
+	mutex_unlock(&info->bus_mutex);
+	return IRQ_HANDLED;
 }
 /** @}*/
 
@@ -2967,28 +3064,6 @@ static int fts_chip_initialization(struct fts_ts_info *info, int init_type)
 
 
 	return ret2;
-}
-
-
-/**
-  * @addtogroup isr
-  * @{
-  */
-/**
-  * Bottom half Interrupt handler function
-  * Process the touch events: read data over i2c bus, report input_event's
-  * @see fts_event_handler()
-  */
-static irqreturn_t fts_interrupt_handler(int irq, void *handle)
-{
-	struct fts_ts_info *info = handle;
-
-	/* prevent CPU from entering deep sleep */
-	pm_qos_update_request(&info->pm_qos_req, 100);
-	fts_event_handler(info);
-	pm_qos_update_request(&info->pm_qos_req, PM_QOS_DEFAULT_VALUE);
-
-	return IRQ_HANDLED;
 }
 
 
@@ -3403,8 +3478,12 @@ static void fts_resume_work(struct work_struct *work)
 
 	info = container_of(work, struct fts_ts_info, resume_work);
 
-	if (!info->sensor_sleep)
+	mutex_lock(&info->bus_mutex);
+
+	if (!info->sensor_sleep) {
+		mutex_unlock(&info->bus_mutex);
 		return;
+	}
 
 #ifdef CONFIG_TOUCHSCREEN_TBN
 	if (info->tbn)
@@ -3424,6 +3503,8 @@ static void fts_resume_work(struct work_struct *work)
 	info->sensor_sleep = false;
 
 	fts_enableInterrupt();
+
+	mutex_unlock(&info->bus_mutex);
 }
 
 /**
@@ -3436,8 +3517,12 @@ static void fts_suspend_work(struct work_struct *work)
 
 	info = container_of(work, struct fts_ts_info, suspend_work);
 
-	if (info->sensor_sleep)
+	mutex_lock(&info->bus_mutex);
+
+	if (info->sensor_sleep) {
+		mutex_unlock(&info->bus_mutex);
 		return;
+	}
 
 	__pm_wakeup_event(&info->wakesrc, jiffies_to_msecs(HZ));
 
@@ -3455,6 +3540,7 @@ static void fts_suspend_work(struct work_struct *work)
 	if (info->tbn)
 		tbn_release_bus(info->tbn);
 #endif
+	mutex_unlock(&info->bus_mutex);
 }
 /** @}*/
 
@@ -3991,7 +4077,7 @@ static int fts_probe(struct spi_device *client)
 #endif
 
 	mutex_init(&(info->input_report_mutex));
-
+	mutex_init(&info->bus_mutex);
 
 #ifdef GESTURE_MODE
 	mutex_init(&gestureMask_mutex);
@@ -4136,6 +4222,11 @@ static int fts_remove(struct spi_device *client)
 
 	struct fts_ts_info *info = dev_get_drvdata(&(client->dev));
 
+	/* Lock the bus until the interrupt handler, event queue, and
+	 * proc/sysfs nodes are removed.
+	 */
+	mutex_lock(&info->bus_mutex);
+
 	pm_qos_remove_request(&info->pm_qos_req);
 
 #ifdef CONFIG_TOUCHSCREEN_TBN
@@ -4163,6 +4254,8 @@ static int fts_remove(struct spi_device *client)
 #ifndef FW_UPDATE_ON_PROBE
 	destroy_workqueue(info->fwu_workqueue);
 #endif
+
+	mutex_unlock(&info->bus_mutex);
 
 	fts_enable_reg(info, false);
 	fts_get_reg(info, false);

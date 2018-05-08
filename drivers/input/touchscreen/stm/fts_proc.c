@@ -732,6 +732,14 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 	mess.action = 0;
 	mess.msg_size = 0;
 
+	mutex_lock(&info->bus_mutex);
+	if (info->sensor_sleep) {
+		res = ERROR_BUS_WR;
+		logError(1, "%s %s: bus is not accessible.\n", tag, __func__);
+		limit = scnprintf(driver_test_buff, size, "{ %08X }\n", res);
+		goto ERROR;
+	}
+
 	/*for(temp = 0; temp<count; temp++){
 	  *      logError(0,"%s p[%d] = %02X\n",tag, temp, p[temp]);
 	  * }*/
@@ -3400,8 +3408,10 @@ ERROR:
 			 * wait the next command, comment if you want to repeat
 			 * the last command sent just doing a cat */
 	/* logError(0,"%s numberParameters = %d\n",tag, numberParam); */
-	if (readData != NULL)
-		kfree(readData);
+
+	kfree(readData);
+
+	mutex_unlock(&info->bus_mutex);
 
 	return count;
 }
