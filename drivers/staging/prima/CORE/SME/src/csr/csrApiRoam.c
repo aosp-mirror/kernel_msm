@@ -2731,12 +2731,11 @@ void csr_roam_remove_duplicate_cmd_from_list(tpAniSirGlobal pMac,
         pNextEntry = csrLLNext(pList, pEntry, LL_ACCESS_NOLOCK);
         pDupCommand = GET_BASE_ADDR(pEntry, tSmeCmd, Link);
         /*
-         * Remove the previous command if..
-         * - the new roam command is for the same RoamReason...
-         * - the new roam command is a NewProfileList.
-         * - the new roam command is a Forced Dissoc
-         * - the new roam command is from an 802.11 OID
-         *   (OID_SSID or OID_BSSID).
+         * If pCommand is not NULL remove the similar duplicate cmd for same
+         * reason as pCommand. If pCommand is NULL then check if eRoamReason is
+         * eCsrForcedDisassoc (disconnect) and remove all roam command for the
+         * sessionId, else if eRoamReason is eCsrHddIssued (connect) remove all
+         * connect (non disconenct) commands.
          */
         if ((pCommand && (pCommand->sessionId == pDupCommand->sessionId) &&
               ((pCommand->command == pDupCommand->command) &&
@@ -2755,7 +2754,8 @@ void csr_roam_remove_duplicate_cmd_from_list(tpAniSirGlobal pMac,
             ((sessionId == pDupCommand->sessionId) &&
              (eSmeCommandRoam == pDupCommand->command) &&
              ((eCsrForcedDisassoc == eRoamReason) ||
-              (eCsrHddIssued == eRoamReason))))
+              (eCsrHddIssued == eRoamReason &&
+               !CSR_IS_DISCONNECT_COMMAND(pDupCommand)))))
         {
             smsLog(pMac, LOGW, FL("RoamReason = %d"),
                            pDupCommand->u.roamCmd.roamReason);

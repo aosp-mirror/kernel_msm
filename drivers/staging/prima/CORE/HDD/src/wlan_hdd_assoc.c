@@ -1678,7 +1678,8 @@ static eHalStatus hdd_DisConnectHandler( hdd_adapter_t *pAdapter, tCsrRoamInfo *
      * to cfg80211_disconnected
      */
     if ((eConnectionState_Disconnecting == pHddStaCtx->conn_info.connState) ||
-        (eConnectionState_NotConnected == pHddStaCtx->conn_info.connState))
+        (eConnectionState_NotConnected == pHddStaCtx->conn_info.connState) ||
+        (eConnectionState_Connecting == pHddStaCtx->conn_info.connState))
     {
        VOS_TRACE( VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
                    FL(" HDD has initiated a disconnect, no need to send"
@@ -1909,10 +1910,15 @@ static eHalStatus hdd_DisConnectHandler( hdd_adapter_t *pAdapter, tCsrRoamInfo *
 
     // Clear saved connection information in HDD
     hdd_connRemoveConnectInfo( pHddStaCtx );
-    VOS_TRACE( VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
-                   "%s: Set HDD connState to eConnectionState_NotConnected",
-                   __func__);
-    hdd_connSetConnectionState( pHddStaCtx, eConnectionState_NotConnected );
+
+    /*
+     * eConnectionState_Connecting state mean that connection is in progress so
+     * no need to set state to eConnectionState_NotConnected
+     */
+    if ((eConnectionState_Connecting != pHddStaCtx->conn_info.connState)) {
+         hddLog(LOG1, FL("Set HDD connState to eConnectionState_NotConnected"));
+         hdd_connSetConnectionState(pHddStaCtx, eConnectionState_NotConnected);
+    }
 #ifdef WLAN_FEATURE_GTK_OFFLOAD
     if ((WLAN_HDD_INFRA_STATION == pAdapter->device_mode) ||
         (WLAN_HDD_P2P_CLIENT == pAdapter->device_mode))
