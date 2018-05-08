@@ -15,6 +15,22 @@ function update_debug_config() {
          -e CONFIG_DEBUG_MEMORY_INIT \
          -e CONFIG_DEBUG_STACK_USAGE \
          -e CONFIG_DEBUG_PAGEALLOC \
+         -e CONFIG_DEBUG_PAGEALLOC_ENABLE_DEFAULT \
+         -e CONFIG_SCHED_STACK_END_CHECK \
+         -e CONFIG_SLUB_DEBUG \
+         -e CONFIG_SLUB_DEBUG_PANIC_ON \
+         -e CONFIG_PAGE_OWNER \
+         -e CONFIG_PAGE_OWNER_ENABLE_DEFAULT \
+         -e CONFIG_PAGE_POISONING \
+         -e CONFIG_PAGE_POISONING_ENABLE_DEFAULT \
+         -e CONFIG_DEBUG_SPINLOCK \
+         -e CONFIG_DEBUG_SPINLOCK_PANIC_ON_BUG \
+         -e CONFIG_DEBUG_MUTEXES \
+         -e CONFIG_DEBUG_ATOMIC_SLEEP \
+         -e CONFIG_DEBUG_LIST \
+         -e CONFIG_QCOM_RTB \
+         -e CONFIG_QCOM_RTB_SEPARATE_CPUS \
+         -e CONFIG_PANIC_ON_DATA_CORRUPTION \
          -d LTO \
          -d LTO_CLANG \
          -d CFI \
