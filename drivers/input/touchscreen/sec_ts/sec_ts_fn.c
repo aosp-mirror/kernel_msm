@@ -1525,6 +1525,42 @@ out_read_channel:
 	return ret;
 }
 
+static int sec_ts_read_gain_table(struct sec_ts_data *ts)
+{
+	int readbytes = ts->tx_count * ts->rx_count;
+	unsigned char *pRead = NULL;
+	short min = 0;
+	short max = 0;
+	int ret;
+	int i;
+
+	/* readbytes : 1 byte for enable/disable info + 1 byte per node */
+	pRead = kzalloc(1 + readbytes, GFP_KERNEL);
+	if (!pRead)
+		return -ENOMEM;
+
+	ret = ts->sec_ts_i2c_read(ts, SEC_TS_CMD_READ_NORM_TABLE, pRead,
+				  1 + readbytes);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev, "%s: read rawdata failed!\n",
+			  __func__);
+		goto ErrorRead;
+	}
+
+	input_info(true, &ts->client->dev, "%s: gain table is %s\n",
+		   __func__, pRead[0] ? "On." : "Off.");
+
+	for (i = 0; i < readbytes; i++)
+		ts->pFrame[i] = (short)pRead[i + 1];
+
+	sec_ts_print_frame(ts, &min, &max);
+
+ErrorRead:
+	kfree(pRead);
+
+	return ret;
+}
+
 int sec_ts_read_raw_data(struct sec_ts_data *ts,
 		struct sec_cmd_data *sec, struct sec_ts_test_mode *mode)
 {
@@ -6563,6 +6599,17 @@ void sec_ts_run_rawdata_all(struct sec_ts_data *ts, bool full_read)
 #endif
 	sec_ts_release_tmode(ts);
 
+	ret = sec_ts_fix_tmode(ts, TOUCH_SYSTEM_MODE_TOUCH,
+			       TOUCH_MODE_STATE_TOUCH);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev, "%s: failed to fix tmode.\n",
+			  __func__);
+		goto out;
+	}
+
+	sec_ts_read_gain_table(ts);
+
+	sec_ts_release_tmode(ts);
 out:
 	input_info(true, &ts->client->dev, "%s: ito : %02X %02X %02X %02X\n",
 			__func__, ts->ito_test[0], ts->ito_test[1]
