@@ -188,6 +188,7 @@ struct dsi_display {
 	/* panel info */
 	struct dsi_panel *panel;
 	struct device_node *panel_of;
+	struct device *panel_info_dev;
 
 	struct dsi_display_mode *modes;
 

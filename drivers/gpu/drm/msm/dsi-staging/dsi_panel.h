@@ -164,6 +164,19 @@ enum dsi_panel_type {
 	DSI_PANEL_TYPE_MAX,
 };
 
+struct dsi_panel_sn_location {
+	u32 start_byte;
+	u32 sn_length;
+	u8 addr;
+};
+
+struct dsi_panel_vendor_info {
+	struct dsi_panel_sn_location location;
+	bool is_sn;
+	u8 *sn;
+	const char *name;
+};
+
 struct dsi_panel {
 	const char *name;
 	enum dsi_panel_type type;
@@ -193,6 +206,7 @@ struct dsi_panel {
 	struct drm_panel_hdr_properties hdr_props;
 	struct dsi_panel_debug debug;
 	struct drm_panel_esd_config esd_config;
+	struct dsi_panel_vendor_info vendor_info;
 
 	u32 init_delay_us;
 	bool hs_pps;
@@ -334,5 +348,7 @@ int dsi_panel_bl_parse_config(struct device *parent,
 
 int dsi_panel_update_vr_mode(struct dsi_panel *panel, bool enable);
 bool dsi_panel_get_vr_mode(struct dsi_panel *panel);
+
+int dsi_panel_get_sn(struct dsi_panel *panel);
 
 #endif /* _DSI_PANEL_H_ */
