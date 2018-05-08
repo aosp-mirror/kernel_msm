@@ -65,7 +65,11 @@
 #define ES_OFF_DYN		2
 #define ES_OFF_STAMP		3
 
-#define MAX_CYCLE_STEP		4
+#define CYCLE_COUNT_MAX		50000
+#define CYCLE_COUNT_HYSTERISYS	1000
+#define CYCLE_COUNT_UNIT	100
+#define CYCLE_COUNT_STEP	4
+#define CYCLE_REG_MAX		0xFE
 
 /* Modelgauge M3 save/restore values */
 struct max17050_learned_params {
@@ -122,9 +126,10 @@ struct max17050_chip {
 	int charge_status;
 
 	/* offset based on battery cycle */
-	u32 batt_life_cycle_set[MAX_CYCLE_STEP];
-	u32 batt_life_cycle_offset[MAX_CYCLE_STEP];
+	u32 batt_life_cycle_set[CYCLE_COUNT_STEP];
+	u32 batt_life_cycle_offset[CYCLE_COUNT_STEP];
 	int cycle_state;
+	int saved_cycle;
 	bool support_battery_cycle_soc;
 };
 
@@ -703,6 +708,15 @@ static int adjust_soc(struct max17050_chip *chip)
 	return soc;
 }
 
+static int max17050_cycle_count(struct max17050_chip *chip)
+{
+	pr_debug("%s: saved = %d, learned = %d\n", __func__,
+		 chip->saved_cycle, chip->learned.cycles / CYCLE_COUNT_UNIT);
+
+	return (((chip->saved_cycle * CYCLE_COUNT_MAX) +
+		chip->learned.cycles) / CYCLE_COUNT_UNIT);
+}
+
 static enum power_supply_property max17050_battery_props[] = {
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
@@ -747,7 +761,7 @@ static int max17050_get_property(struct power_supply *psy,
 			val->intval = 1;
 		break;
 	case POWER_SUPPLY_PROP_CYCLE_COUNT:
-		val->intval = chip->learned.cycles / 100;
+		val->intval = max17050_cycle_count(chip);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
 		val->intval = chip->vcell * 625 / 8;
@@ -1091,28 +1105,79 @@ static void max17050_complete_init(struct max17050_chip *chip)
 
 	if (chip->support_battery_cycle_soc) {
 		int i;
-		u32 cycles;
+		int rc;
+		u8 header;
+		int cycles = 0;
+		int total_cycles = 0;
 
 		mutex_lock(&chip->mutex);
 		chip->learned.cycles = max17050_read_reg(client,
 				MAX17050_CYCLES);
-		cycles = chip->learned.cycles / 100;
 		mutex_unlock(&chip->mutex);
 
-		for (i = 0; i < MAX_CYCLE_STEP; i++) {
-			if (cycles > chip->batt_life_cycle_set[i])
+		header = max17050_read_reg(client, MAX17050_CYCLE_HEAD);
+		if (header != NORMAL_HEADER_DATA) {
+			pr_debug("%s: don't need to restore cycle,"
+					" header = 0x%x\n",
+					__func__, header);
+
+			max17050_write_reg(client, MAX17050_VFSOC0_LOCK,
+					   0x0080);
+			max17050_write_reg(client, MAX17050_CYCLE_HEAD, 0);
+			max17050_write_reg(client, MAX17050_CYCLE_DATA, 0);
+			max17050_write_reg(client, MAX17050_VFSOC0_LOCK, 0);
+		} else {
+			cycles = (u8)max17050_read_reg(client,
+						       MAX17050_CYCLE_DATA);
+
+			if (cycles <= 0) {
+				pr_debug("%s: don't restore cycle data\n",
+						__func__);
+			} else if (cycles > CYCLE_REG_MAX) {
+				pr_info("%s: cycle data is overflow\n",
+						__func__);
+				cycles = CYCLE_REG_MAX;
+			}
+		}
+
+		if (chip->learned.cycles >=
+				CYCLE_COUNT_MAX+CYCLE_COUNT_HYSTERISYS) {
+			cycles++;
+
+			mutex_lock(&chip->mutex);
+			chip->learned.cycles -= CYCLE_COUNT_MAX;
+			max17050_write_reg(client, MAX17050_CYCLES,
+					chip->learned.cycles);
+			mutex_unlock(&chip->mutex);
+
+			max17050_write_reg(client, MAX17050_VFSOC0_LOCK,
+					   0x0080);
+			rc = max17050_write_reg(client, MAX17050_CYCLE_DATA,
+						cycles);
+			if (rc < 0)
+				header = ABNORMAL_HEADER_DATA;
+			else
+				header = NORMAL_HEADER_DATA;
+			max17050_write_reg(client, MAX17050_CYCLE_HEAD, header);
+			max17050_write_reg(client, MAX17050_VFSOC0_LOCK, 0);
+		}
+
+		chip->saved_cycle = cycles;
+		total_cycles = max17050_cycle_count(chip);
+
+		for (i = 0; i < CYCLE_COUNT_STEP; i++) {
+			if (total_cycles > chip->batt_life_cycle_set[i])
 				chip->cycle_state = i;
 		}
 
 		if (chip->support_battery_cycle_soc) {
 			chip->pdata->empty_soc +=
 				chip->batt_life_cycle_offset[chip->cycle_state];
-			pr_info("cycle state: %d empty soc: %d\n",
-					chip->cycle_state,
+			pr_info("%s: cycle state: %d empty soc: %d\n",
+					__func__, chip->cycle_state,
 					chip->pdata->empty_soc);
 		}
 	}
-
 	chip->init_done = true;
 }
 
@@ -1257,7 +1322,7 @@ static int max17050_batt_cycle_offset_dt_init(struct max17050_chip *chip)
 	}
 
 	size = prop->length / sizeof(u32);
-	if (size != MAX_CYCLE_STEP) {
+	if (size != CYCLE_COUNT_STEP) {
 		pr_err("%s: Battery Life Cycle Set specified is of \
 				incorrect size\n",
 				__func__);
@@ -1275,7 +1340,7 @@ static int max17050_batt_cycle_offset_dt_init(struct max17050_chip *chip)
 		goto out;
 	}
 
-	for (i = 0; i < MAX_CYCLE_STEP; i++) {
+	for (i = 0; i < CYCLE_COUNT_STEP; i++) {
 		if (chip->batt_life_cycle_set[i] < 0 ||
 				chip->batt_life_cycle_set[i] > 1000) {
 			pr_err("%s: Incorrect batt-life-cycle-set\n",
@@ -1296,7 +1361,7 @@ static int max17050_batt_cycle_offset_dt_init(struct max17050_chip *chip)
 		}
 
 		size = prop->length / sizeof(u32);
-		if (size != MAX_CYCLE_STEP) {
+		if (size != CYCLE_COUNT_STEP) {
 			pr_err("%s: batt-life-cycle-offset specified is of \
 					incorrect size\n",
 					__func__);
@@ -1315,7 +1380,7 @@ static int max17050_batt_cycle_offset_dt_init(struct max17050_chip *chip)
 			goto out;
 		}
 
-		for (i = 0; i < MAX_CYCLE_STEP; i++) {
+		for (i = 0; i < CYCLE_COUNT_STEP; i++) {
 			if (chip->batt_life_cycle_offset[i] < 0 ||
 					chip->batt_life_cycle_offset[i] > 100) {
 				pr_err("%s: Incorrect batt-life-cycle-offset\n",
@@ -1326,7 +1391,7 @@ static int max17050_batt_cycle_offset_dt_init(struct max17050_chip *chip)
 		}
 	}
 
-	for (i = 0; i < MAX_CYCLE_STEP; i++) {
+	for (i = 0; i < CYCLE_COUNT_STEP; i++) {
 		pr_debug("Cycle %d - Offset: %d\n",
 				chip->batt_life_cycle_set[i],
 				chip->batt_life_cycle_offset[i]);
@@ -1335,7 +1400,7 @@ static int max17050_batt_cycle_offset_dt_init(struct max17050_chip *chip)
 	return 0;
 out:
 	/* Write default cycle step & offset value */
-	for (i = 0; i < MAX_CYCLE_STEP; i++) {
+	for (i = 0; i < CYCLE_COUNT_STEP; i++) {
 		chip->batt_life_cycle_set[i] = 0;
 		chip->batt_life_cycle_offset[i] = 0;
 	}
