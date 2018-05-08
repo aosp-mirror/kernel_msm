@@ -545,6 +545,12 @@ Optional properties:
 					display. The first set is indexed by the
 					value 0.
 - qcom,mdss-dsi-ext-bridge-mode:	External bridge chip is connected instead of panel.
+- google,mdss-dsi-panel-vendor		string: panel vendor name
+- google,mdss-dsi-panel-sn-location	Panel serial number is read by MIPI command. And it is defined by a
+					set of 3 values in the order:
+					- address of DDIC's register
+					- number of start byte. example: 0 means start from byte 0.
+					- length of the SN
 
 Required properties for sub-nodes:	None
 Optional properties:

@@ -57,6 +57,8 @@
 #define MEM_PROTECT_SD_CTRL_SWITCH 0x18
 #define MDP_DEVICE_ID            0x1A
 
+#define PANEL_INFO_CLASS_NAME "panel_info"
+
 static const char * const iommu_ports[] = {
 		"mdp_0",
 };
@@ -98,6 +100,11 @@ static int _sde_kms_mmu_destroy(struct sde_kms *sde_kms);
 static int _sde_kms_mmu_init(struct sde_kms *sde_kms);
 static int _sde_kms_register_events(struct msm_kms *kms,
 		struct drm_mode_object *obj, u32 event, bool en);
+
+static int panel_info_dev_create(struct sde_kms *sde_kms);
+static void panel_info_dev_release(struct sde_kms *sde_kms);
+static struct class *panel_info_class;
+
 bool sde_is_custom_client(void)
 {
 	return sdecustom;
@@ -1428,9 +1435,123 @@ static void _sde_kms_release_displays(struct sde_kms *sde_kms)
 	sde_kms->wb_displays = NULL;
 	sde_kms->wb_display_count = 0;
 
+	panel_info_dev_release(sde_kms);
 	kfree(sde_kms->dsi_displays);
 	sde_kms->dsi_displays = NULL;
 	sde_kms->dsi_display_count = 0;
+}
+
+static ssize_t panel_vendor_name_show(struct device *dev,
+				      struct device_attribute *attr,
+				      char *buf)
+{
+	struct dsi_display *display;
+	struct dsi_panel *panel;
+
+	display = dev_get_drvdata(dev);
+	panel = display->panel;
+
+	if (!display || !panel || !panel->vendor_info.name || !buf) {
+		pr_err("Failed to show vendor name\n");
+		return 0;
+	}
+
+	return scnprintf(buf, PAGE_SIZE, "%s\n", panel->vendor_info.name);
+}
+
+static ssize_t serial_number_show(struct device *dev,
+				  struct device_attribute *attr,
+				  char *buf)
+{
+	struct dsi_display *display;
+	struct dsi_panel *panel;
+
+	display = dev_get_drvdata(dev);
+	panel = display->panel;
+
+	if (!display || !panel || !panel->vendor_info.is_sn || !buf) {
+		pr_err("Failed to show SN\n");
+		return 0;
+	}
+
+	return scnprintf(buf, PAGE_SIZE, "%s\n", panel->vendor_info.sn);
+}
+
+struct device_attribute dev_attr_panel_vendor_name =
+			__ATTR_RO_MODE(panel_vendor_name, 0400);
+struct device_attribute dev_attr_serial_number =
+			__ATTR_RO_MODE(serial_number, 0400);
+
+static struct attribute *panel_info_dev_attrs[] = {
+	&dev_attr_panel_vendor_name.attr,
+	&dev_attr_serial_number.attr,
+	NULL
+};
+
+
+static const struct attribute_group panel_info_dev_group = {
+	.attrs = panel_info_dev_attrs,
+};
+
+static const struct attribute_group *panel_info_dev_groups[] = {
+	&panel_info_dev_group,
+	NULL
+};
+
+static int panel_info_dev_create(struct sde_kms *sde_kms)
+{
+	struct dsi_display *display;
+	int i;
+
+	if (panel_info_class && !IS_ERR(panel_info_class))
+		return 0;
+
+	panel_info_class = class_create(THIS_MODULE, PANEL_INFO_CLASS_NAME);
+	if (!panel_info_class || IS_ERR(panel_info_class))
+		return -EINVAL;
+
+	for (i = 0; i < sde_kms->dsi_display_count; ++i) {
+		display = (struct dsi_display *)sde_kms->dsi_displays[i];
+		display->panel_info_dev =
+			device_create_with_groups(panel_info_class,
+						  &display->pdev->dev,
+						  0,
+						  display,
+						  panel_info_dev_groups,
+						  "panel%d",
+						  i);
+		if (!display->panel_info_dev || IS_ERR(display->panel_info_dev))
+			goto error;
+	}
+	return 0;
+error:
+	while (--i >= 0) {
+		display = (struct dsi_display *)sde_kms->dsi_displays[i];
+		device_unregister(display->panel_info_dev);
+		display->panel_info_dev = NULL;
+	}
+
+	class_destroy(panel_info_class);
+	panel_info_class = NULL;
+
+	return -EINVAL;
+}
+
+static void panel_info_dev_release(struct sde_kms *sde_kms)
+{
+	struct dsi_display *display;
+	int i;
+
+	if (!panel_info_class || IS_ERR(panel_info_class))
+		return;
+
+	for (i = 0; i < sde_kms->dsi_display_count; ++i) {
+		display = (struct dsi_display *)sde_kms->dsi_displays[i];
+		device_unregister(display->panel_info_dev);
+		display->panel_info_dev = NULL;
+	}
+	class_destroy(panel_info_class);
+	panel_info_class = NULL;
 }
 
 /**
@@ -1514,6 +1635,7 @@ static int _sde_kms_setup_displays(struct drm_device *dev,
 	}
 
 	/* dsi */
+	panel_info_dev_create(sde_kms);
 	for (i = 0; i < sde_kms->dsi_display_count &&
 		priv->num_encoders < max_encoders; ++i) {
 		display = sde_kms->dsi_displays[i];

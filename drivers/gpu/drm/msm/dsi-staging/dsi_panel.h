@@ -160,6 +160,19 @@ struct drm_panel_esd_config {
 	u32 groups;
 };
 
+struct dsi_panel_sn_location {
+	u32 start_byte;
+	u32 sn_length;
+	u8 addr;
+};
+
+struct dsi_panel_vendor_info {
+	struct dsi_panel_sn_location location;
+	bool is_sn;
+	u8 *sn;
+	const char *name;
+};
+
 struct dsi_panel {
 	const char *name;
 	struct device_node *panel_of_node;
@@ -191,6 +204,7 @@ struct dsi_panel {
 	struct dsi_panel_debug debug;
 
 	struct dsi_parser_utils utils;
+	struct dsi_panel_vendor_info vendor_info;
 
 	u32 init_delay_us;
 	bool lp11_init;
@@ -337,5 +351,7 @@ int dsi_panel_bl_parse_config(struct device *parent,
 
 int dsi_panel_update_vr_mode(struct dsi_panel *panel, bool enable);
 bool dsi_panel_get_vr_mode(struct dsi_panel *panel);
+
+int dsi_panel_get_sn(struct dsi_panel *panel);
 
 #endif /* _DSI_PANEL_H_ */

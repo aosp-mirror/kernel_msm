@@ -199,6 +199,7 @@ struct dsi_display {
 	struct device_node *panel_of;
 	struct device_node *parser_node;
 	struct device_node *ext_bridge_of;
+	struct device *panel_info_dev;
 
 	struct dsi_display_mode *modes;
 
