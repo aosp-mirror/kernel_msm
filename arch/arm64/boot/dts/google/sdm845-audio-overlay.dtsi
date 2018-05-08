@@ -123,6 +123,10 @@
 			qcom,chip-select = <0>;
 			qcom,max-frequency = <24000000>;
 			qcom,mem-base-addr = <0x100000>;
+
+			wcd_spi_ac {
+				compatible = "qcom,wcd-spi-ac";
+			};
 		};
 
 	};
