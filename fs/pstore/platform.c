@@ -44,6 +44,7 @@
 #include <linux/hardirq.h>
 #include <linux/jiffies.h>
 #include <linux/workqueue.h>
+#include <linux/vmalloc.h>
 
 #include "internal.h"
 
@@ -787,7 +788,7 @@ void pstore_get_records(int quiet)
 				if (ecc_notice_size)
 					memcpy(big_oops_buf + unzipped_len,
 					       buf + size, ecc_notice_size);
-				kfree(buf);
+				vfree(buf);
 				buf = big_oops_buf;
 				size = unzipped_len;
 				compressed = false;
@@ -802,7 +803,7 @@ void pstore_get_records(int quiet)
 				   time, psi);
 		if (unzipped_len < 0) {
 			/* Free buffer other than big oops */
-			kfree(buf);
+			vfree(buf);
 			buf = NULL;
 		} else
 			unzipped_len = -1;
