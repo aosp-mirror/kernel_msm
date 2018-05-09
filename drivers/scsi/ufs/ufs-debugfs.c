@@ -1476,7 +1476,7 @@ static int ufsdbg_req_stats_show(struct seq_file *file, void *data)
 
 	/* Header */
 	seq_printf(file, "\t%-10s %-10s %-10s %-10s %-10s %-10s %-10s",
-		"All", "Write", "Read", "Read(urg)", "Write(urg)", "Flush",
+		"All", "Read", "Write", "Read(urg)", "Write(urg)", "Flush",
 		"Discard");
 
 	spin_lock_irqsave(hba->host->host_lock, flags);
