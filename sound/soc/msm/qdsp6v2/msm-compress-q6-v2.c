@@ -1015,7 +1015,7 @@ static int msm_compr_open(struct snd_compr_stream *cstream)
 
 	pr_debug("%s\n", __func__);
 	if (pdata->is_in_use[rtd->dai_link->be_id] == true) {
-		pr_err("%s: %s is already in use,err: %d ",
+		pr_err("%s: %s is already in use, err: %d\n",
 			__func__, rtd->dai_link->cpu_dai_name, -EBUSY);
 		return -EBUSY;
 	}
@@ -1052,8 +1052,9 @@ static int msm_compr_open(struct snd_compr_stream *cstream)
 	if (prtd->audio_client == NULL) {
 		pr_err("%s: Could not allocate memory for client\n", __func__);
 		kfree(pdata->audio_effects[rtd->dai_link->be_id]);
-                pdata->audio_effects[rtd->dai_link->be_id] = NULL;
+		pdata->audio_effects[rtd->dai_link->be_id] = NULL;
 		kfree(pdata->dec_params[rtd->dai_link->be_id]);
+		pdata->dec_params[rtd->dai_link->be_id] = NULL;
 		pdata->cstream[rtd->dai_link->be_id] = NULL;
 		kfree(prtd);
                 runtime->private_data = NULL;
@@ -1102,6 +1103,7 @@ static int msm_compr_open(struct snd_compr_stream *cstream)
 
 	runtime->private_data = prtd;
 	populate_codec_list(prtd);
+	pdata->is_in_use[rtd->dai_link->be_id] = true;
 
 	return 0;
 }
@@ -1191,6 +1193,7 @@ static int msm_compr_free(struct snd_compr_stream *cstream)
 	q6asm_audio_client_buf_free_contiguous(dir, ac);
 
 	q6asm_audio_client_free(ac);
+
 	if (pdata->audio_effects[soc_prtd->dai_link->be_id] != NULL) {
 		kfree(pdata->audio_effects[soc_prtd->dai_link->be_id]);
 		pdata->audio_effects[soc_prtd->dai_link->be_id] = NULL;
