@@ -4134,14 +4134,16 @@ static void run_fs_cal_get_data(void *device_data)
 		if ((mean > fs_mean_target_h) || (mean < fs_mean_target_l)) {
 			buff_len += scnprintf(buff + buff_len,
 					      buff_size - buff_len,
-					      "NG %d %d\n",
-					      ts->rx_count, ts->tx_count);
+					      "NG %d %d\n%d\n",
+					      ts->rx_count, ts->tx_count,
+					      ts->fs_postcal_mean);
 			sec->cmd_state = SEC_CMD_STATUS_FAIL;
 		} else {
 			buff_len += scnprintf(buff + buff_len,
 					      buff_size - buff_len,
-					      "OK %d %d\n",
-					      ts->rx_count, ts->tx_count);
+					      "OK %d %d\n%d\n",
+					      ts->rx_count, ts->tx_count,
+					      ts->fs_postcal_mean);
 			sec->cmd_state = SEC_CMD_STATUS_OK;
 		}
 
