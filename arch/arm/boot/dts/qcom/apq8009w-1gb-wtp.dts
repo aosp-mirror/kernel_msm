@@ -87,3 +87,7 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&uart_console_sleep>;
 };
+
+&qcom_seecom {
+	reg = <0x87a00000 0x200000>;
+};

@@ -229,6 +229,7 @@ static int msm_vfe32_init_hardware(struct vfe_device *vfe_dev)
 		goto bus_scale_register_failed;
 	}
 
+	pr_err("%s: SRCNA#######\n", __func__);
 	if (vfe_dev->fs_vfe) {
 		rc = regulator_enable(vfe_dev->fs_vfe);
 		if (rc) {
@@ -1534,7 +1535,7 @@ static struct msm_vfe_stats_hardware_info msm_vfe32_stats_hw_info = {
 };
 
 static struct v4l2_subdev_core_ops msm_vfe32_subdev_core_ops = {
-	.ioctl = msm_isp_ioctl,
+	.ioctl = NULL,
 	.subscribe_event = msm_isp_subscribe_event,
 	.unsubscribe_event = msm_isp_unsubscribe_event,
 };
