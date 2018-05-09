@@ -584,6 +584,12 @@ config AIRBRUSH_DRAM
 	---help---
 	  This option enables the Airbrush DRAM manager
 
+config ACCESS_RAMOOPS
+	tristate "Driver to allow access for decrypting encrypted ramoops"
+	depends on PSTORE_CONSOLE
+	help
+	  Say 'y' if ramoops is encrypted.
+
 config FACEAUTH
 	tristate "EL1 Driver for Google Face Authentication"
 	depends on MFD_ABC_PCIE
