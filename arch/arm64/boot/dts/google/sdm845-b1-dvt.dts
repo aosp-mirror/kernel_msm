@@ -1,0 +1,49 @@
+/* Copyright (c) 2018 Google, Inc.
+ *
+ * This software is licensed under the terms of the GNU General Public
+ * License version 2, as published by the Free Software Foundation, and
+ * may be copied, distributed, and modified under those terms.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ */
+
+/dts-v1/;
+
+#include "sdm845-b1-common-v2.1.dtsi"
+#include "sdm845-patherm.dtsi"
+#include "sdm845-usbctherm.dtsi"
+
+/ {
+	model = "Google Inc. MSM sdm845 B1 DVT";
+	compatible = "google,b1c1-sdm845", "qcom,sdm845";
+	qcom,board-id = <0x00021405 0>;
+};
+
+&p9221 {
+	fod = [b0 24 90 46 88 52 88 53 90 34 9a f7 14 00 01 64];
+};
+
+/* We need override the display on sequence for EVT2+ devices. */
+&dsi_sw43408_dsc_fhd_cmd {
+	qcom,mdss-dsi-display-timings {
+		timing@0 {
+			qcom,mdss-dsi-on-command = [
+				15 01 00 00 00 00 02 26 02
+				15 01 00 00 00 00 02 35 00
+				39 01 00 00 00 00 03 53 0C 30
+				39 01 00 00 00 00 07 55 34 61 CB 04 70 DB
+				05 01 00 00 05 00 01 11
+				07 01 00 00 00 00 01 11
+				15 01 00 00 00 00 02 B0 AC
+				39 01 00 00 00 00 13 CD 00 00 00 19 19 19
+					19 19 19 19 19 19 19 19 19 19 16 16
+				39 01 00 00 82 00 06 CB 80 5C 07 03 28
+				05 01 00 00 32 00 01 29
+			];
+		};
+	};
+};
