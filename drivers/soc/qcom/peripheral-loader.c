@@ -840,7 +840,7 @@ static int pil_load_seg(struct pil_desc *desc, struct pil_seg *seg)
 
 		while ((ret == -EAGAIN) &&
 			(pil_retry_count < PERIPHERAL_LOADER_MAX_RETRY)) {
-			pil_err(desc, "Failed to locate blob %s, retry: %d \n",
+			pil_err(desc, "Failed to locate blob %s, retry: %d\n",
 				fw_name, pil_retry_count++);
 			ret = request_firmware_into_buf(&fw, fw_name, desc->dev,
 						firmware_buf, seg->filesz);
@@ -985,7 +985,7 @@ int pil_boot(struct pil_desc *desc)
 	ret = request_firmware(&fw, fw_name, desc->dev);
 	while ((ret == -EAGAIN) &&
 		(pil_retry_count < PERIPHERAL_LOADER_MAX_RETRY)) {
-		pil_err(desc,"request_firmware:%s failed, retry: %d \n",
+		pil_err(desc, "request_firmware:%s failed, retry: %d\n",
 					fw_name, pil_retry_count++);
 		ret = request_firmware(&fw, fw_name, desc->dev);
 	}
@@ -1065,6 +1065,18 @@ int pil_boot(struct pil_desc *desc)
 			if (ret)
 				pil_err(desc, "Failed to assign to linux, ret- %d\n",
 								ret);
+			else {
+				/*
+				 * In design, modem ssr flag is used to
+				 * distinguish between modem 1st boot-up and
+				 * restart cases. For modem pil_boot retry
+				 * cases, the memory is already assigned back to
+				 * linux. There is no need to assgin memory to
+				 * linux again. Clear modem ssr flag to prevent
+				 * memory re-assignment in pil_boot retry cases.
+				 */
+				desc->modem_ssr = false;
+			}
 		}
 		ret = pil_assign_mem_to_subsys_and_linux(desc,
 				priv->region_start,
@@ -1124,6 +1136,17 @@ release_fw:
 out:
 	up_read(&pil_pm_rwsem);
 	if (ret) {
+		/* * * * * * * * * * DEBUG ONLY * * * * * * * * * * *
+		 * Trigger panic to capture RAM dump to clarify the *
+		 * reason of pil_boot modem failed.                 *
+		 * This panic will be removed as shipping ROM or    *
+		 * root cause found.                                *
+		 */
+		if (desc->subsys_vmid == VMID_MSS_MSA &&
+			pil_boot_retry_count >= PERIPHERAL_LOADER_MAX_RETRY)
+			panic("Retry %d times pil_boot modem failed\n",
+				pil_boot_retry_count);
+
 		if (priv->region) {
 			if (desc->subsys_vmid > 0 && !mem_protect &&
 					hyp_assign) {

@@ -40,6 +40,8 @@
 
 #define subsys_to_drv(d) container_of(d, struct modem_data, subsys_desc)
 
+int pil_boot_retry_count;
+
 static void log_modem_sfr(struct modem_data *drv)
 {
 	u32 size;
@@ -124,7 +126,7 @@ static int modem_shutdown(const struct subsys_desc *subsys, bool force_stop)
 static int modem_powerup(const struct subsys_desc *subsys)
 {
 	struct modem_data *drv = subsys_to_drv(subsys);
-	int ret, retry_count = 0;
+	int ret;
 
 	if (subsys->is_not_loadable)
 		return 0;
@@ -137,10 +139,12 @@ static int modem_powerup(const struct subsys_desc *subsys)
 	drv->subsys_desc.ramdump_disable = 0;
 	drv->ignore_errors = false;
 	drv->q6->desc.fw_name = subsys->fw_name;
+	pil_boot_retry_count = 0;
 	while ((ret = pil_boot(&drv->q6->desc)) &&
-		retry_count < PERIPHERAL_LOADER_MAX_RETRY)
+		pil_boot_retry_count <= PERIPHERAL_LOADER_MAX_RETRY)
 		pr_err("Modem powerup failed ret:%d, retry %d times\n",
-			ret, retry_count++);
+			ret, pil_boot_retry_count++);
+
 	return ret;
 }
 
