@@ -106,6 +106,7 @@ struct cam_vfe_bus_ver2_common_data {
 	struct cam_vfe_bus_irq_evt_payload          evt_payload[
 		CAM_VFE_BUS_VER2_PAYLOAD_MAX];
 	struct list_head                            free_payload_list;
+	spinlock_t                                  spin_lock;
 	struct mutex                                bus_mutex;
 	uint32_t                                    secure_mode;
 	uint32_t                                    num_sec_out;
@@ -214,16 +215,23 @@ static int cam_vfe_bus_get_evt_payload(
 	struct cam_vfe_bus_ver2_common_data  *common_data,
 	struct cam_vfe_bus_irq_evt_payload  **evt_payload)
 {
+	int rc;
+
+	spin_lock(&common_data->spin_lock);
 	if (list_empty(&common_data->free_payload_list)) {
 		*evt_payload = NULL;
 		CAM_ERR_RATE_LIMIT(CAM_ISP, "No free payload");
-		return -ENODEV;
+		rc = -ENODEV;
+		goto done;
 	}
 
 	*evt_payload = list_first_entry(&common_data->free_payload_list,
 		struct cam_vfe_bus_irq_evt_payload, list);
 	list_del_init(&(*evt_payload)->list);
-	return 0;
+	rc = 0;
+done:
+	spin_unlock(&common_data->spin_lock);
+	return rc;
 }
 
 static enum cam_vfe_bus_comp_grp_id
@@ -254,6 +262,7 @@ static int cam_vfe_bus_put_evt_payload(void     *core_info,
 	struct cam_vfe_bus_ver2_common_data *common_data = NULL;
 	uint32_t  *ife_irq_regs = NULL;
 	uint32_t   status_reg0, status_reg1, status_reg2;
+	unsigned long flags;
 
 	if (!core_info) {
 		CAM_ERR(CAM_ISP, "Invalid param core_info NULL");
@@ -276,8 +285,12 @@ static int cam_vfe_bus_put_evt_payload(void     *core_info,
 	}
 
 	common_data = core_info;
+
+	spin_lock_irqsave(&common_data->spin_lock, flags);
 	list_add_tail(&(*evt_payload)->list,
 		&common_data->free_payload_list);
+	spin_unlock_irqrestore(&common_data->spin_lock, flags);
+
 	*evt_payload = NULL;
 
 	CAM_DBG(CAM_ISP, "Done");
@@ -863,33 +876,15 @@ static int cam_vfe_bus_acquire_wm(
 			rsrc_data->stride = rsrc_data->width;
 			break;
 		case CAM_FORMAT_PLAIN16_10:
+		case CAM_FORMAT_PLAIN16_12:
+		case CAM_FORMAT_PLAIN16_14:
+		case CAM_FORMAT_PLAIN16_16:
+		case CAM_FORMAT_PLAIN32_20:
 			rsrc_data->width = CAM_VFE_RDI_BUS_DEFAULT_WIDTH;
 			rsrc_data->height = 0;
 			rsrc_data->stride = CAM_VFE_RDI_BUS_DEFAULT_STRIDE;
 			rsrc_data->pack_fmt = 0x0;
 			rsrc_data->en_cfg = 0x3;
-			break;
-		case CAM_FORMAT_PLAIN16_12:
-			rsrc_data->en_cfg = 0x1;
-			rsrc_data->pack_fmt = 0x3;
-			rsrc_data->width = rsrc_data->width * 2;
-			rsrc_data->stride = rsrc_data->width;
-			break;
-		case CAM_FORMAT_PLAIN16_14:
-			rsrc_data->en_cfg = 0x1;
-			rsrc_data->pack_fmt = 0x4;
-			rsrc_data->width = rsrc_data->width * 2;
-			rsrc_data->stride = rsrc_data->width;
-			break;
-		case CAM_FORMAT_PLAIN16_16:
-			rsrc_data->en_cfg = 0x1;
-			rsrc_data->pack_fmt = 0x5;
-			rsrc_data->width = rsrc_data->width * 2;
-			rsrc_data->stride = rsrc_data->width;
-			break;
-		case CAM_FORMAT_PLAIN32_20:
-			rsrc_data->en_cfg = 0x1;
-			rsrc_data->pack_fmt = 0x9;
 			break;
 		case CAM_FORMAT_PLAIN64:
 			rsrc_data->en_cfg = 0x1;
@@ -2961,6 +2956,7 @@ int cam_vfe_bus_ver2_init(
 		}
 	}
 
+	spin_lock_init(&bus_priv->common_data.spin_lock);
 	INIT_LIST_HEAD(&bus_priv->common_data.free_payload_list);
 	for (i = 0; i < CAM_VFE_BUS_VER2_PAYLOAD_MAX; i++) {
 		INIT_LIST_HEAD(&bus_priv->common_data.evt_payload[i].list);
