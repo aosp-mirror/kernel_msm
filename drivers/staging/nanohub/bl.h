@@ -46,8 +46,6 @@ struct nanohub_bl {
 int nanohub_bl_open(struct nanohub_data *);
 uint8_t nanohub_bl_sync(struct nanohub_data *);
 void nanohub_bl_close(struct nanohub_data *);
-uint8_t nanohub_bl_get_custom_flash_to_file(struct nanohub_data *,
-			    uint32_t, size_t);
 uint8_t nanohub_bl_download(struct nanohub_data *, uint32_t addr,
 			    const uint8_t *data, size_t length);
 uint8_t nanohub_bl_erase_shared(struct nanohub_data *);

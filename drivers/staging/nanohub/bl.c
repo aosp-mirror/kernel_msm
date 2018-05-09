@@ -26,33 +26,6 @@
 #define MAX_FLASH_BANKS		16
 #define READ_ACK_TIMEOUT	100000
 
-#define NANOHUB_CUSTOM_FILE "/data/nanohub/custom_data"
-
-static uint8_t write_buffer_to_file(char *path, uint8_t *buf, size_t length)
-{
-	struct file *file = NULL;
-	mm_segment_t old_fs;
-
-	if (file == NULL)
-		file = filp_open(path, O_RDWR | O_CREAT, 0644);
-	if (IS_ERR(file)) {
-		pr_err("nanohub: error occured while opening file %s, exiting...\n",
-			path);
-		return -ENOENT;
-	}
-
-	old_fs = get_fs();
-	set_fs(KERNEL_DS);
-	file->f_op->write(file, (char *)buf, length, &file->f_pos);
-	set_fs(old_fs);
-
-	if (file != NULL)
-		filp_close(file, NULL);
-
-	return 0;
-
-}
-
 static uint8_t write_len(struct nanohub_data *data, int len)
 {
 	uint8_t buffer[sizeof(uint8_t) + 1];
@@ -186,36 +159,6 @@ static uint8_t write_bank(struct nanohub_data *data, int bank, uint32_t addr,
 			    nanohub_bl_write_memory(data, addr, length, buf);
 	}
 
-	return status;
-}
-
-uint8_t nanohub_bl_get_custom_flash_to_file(struct nanohub_data *data,
-			    uint32_t addr, size_t length)
-{
-	uint8_t *custom_data;
-	uint8_t status;
-
-	status = nanohub_bl_sync(data);
-
-	if (status != CMD_ACK) {
-		pr_err("nanohub_bl_get_custom_flash_to_file: sync=%02x\n",
-			status);
-		goto out;
-	}
-
-	custom_data = vmalloc(length);
-	if (!custom_data) {
-		status = CMD_NACK;
-		goto out;
-	}
-	status = nanohub_bl_read_memory(data, addr, length, custom_data);
-	pr_info(
-	    "nanohub: nanohub_bl_read_memory: status=%02x, addr=%08x, length=%zd\n",
-	    status, addr, length);
-	write_buffer_to_file(NANOHUB_CUSTOM_FILE, custom_data, length);
-	vfree(custom_data);
-
-out:
 	return status;
 }
 
