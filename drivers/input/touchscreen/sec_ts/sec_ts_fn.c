@@ -916,26 +916,16 @@ static int sec_ts_cs_spec_over_check(struct sec_ts_data *ts, short *gap)
 
 	return specover_count;
 }
-static int sec_ts_set_gain_table(struct sec_ts_data *ts, u8 *gainTable)
+
+static int sec_ts_get_gain_table(struct sec_ts_data *ts)
 {
 	int i, j;
-	const unsigned int node_cnt = ts->tx_count * ts->rx_count;
 	int temp;
 	int tmp_dv;
-	int ret = 0;
 	unsigned int str_size, str_len = 0;
 	unsigned char *pStr = NULL;
-	u8 *tCmd = NULL;
-	int copy_max, copy_left, copy_size, copy_cur;
 
 	input_info(true, &ts->client->dev, "%s\n", __func__);
-
-	ret = -1;
-	if (gainTable == NULL) {
-		input_err(true, &ts->client->dev, "%s: gainTable null\n",
-				__func__);
-		return ret;
-	}
 
 	for (i = 0; i < ts->rx_count; i++) {
 		for (j = 0; j < ts->tx_count; j++) {
@@ -943,7 +933,7 @@ static int sec_ts_set_gain_table(struct sec_ts_data *ts, u8 *gainTable)
 
 			/* skip notch area */
 			if (cm_region[i][j] == REGION_NOTCH) {
-				gainTable[j * ts->rx_count + i] = 0;
+				ts->gainTable[j * ts->rx_count + i] = 0;
 				continue;
 			}
 
@@ -959,14 +949,14 @@ static int sec_ts_set_gain_table(struct sec_ts_data *ts, u8 *gainTable)
 			temp = (temp + 500) / 1000;
 			if (temp > 255)
 				temp = 255;
-			gainTable[j * ts->rx_count + i] = (temp & 0xFF);
+			ts->gainTable[j * ts->rx_count + i] = (temp & 0xFF);
 		}
 	}
 
 	str_size = 6 * (ts->tx_count + 1);
 	pStr = kzalloc(str_size, GFP_KERNEL);
 	if (pStr == NULL)
-		goto ErrorAlloc;
+		return -ENOMEM;
 
 	input_info(true, &ts->client->dev, "%s: Gain Table\n", __func__);
 
@@ -975,16 +965,33 @@ static int sec_ts_set_gain_table(struct sec_ts_data *ts, u8 *gainTable)
 		str_len = 0;
 		for (j = 0; j < ts->tx_count; j++) {
 			str_len += scnprintf(pStr + str_len, str_size - str_len,
-					     " %3d",
-					     gainTable[(j * ts->rx_count) + i]);
+					" %3d",
+					ts->gainTable[(j * ts->rx_count) + i]);
 		}
 		input_info(true, &ts->client->dev, "%s\n", pStr);
 	}
+
+	kfree(pStr);
+
+	return 0;
+}
+
+static int sec_ts_write_gain_table(struct sec_ts_data *ts)
+{
+	int node_cnt = ts->tx_count * ts->rx_count;
+	u8 *gainTable = NULL;
+	u8 *tCmd = NULL;
+	int copy_max, copy_left, copy_size, copy_cur;
+	int ret = -1;
+
+	input_info(true, &ts->client->dev, "%s\n", __func__);
 
 	/* Write norm table to ic
 	 * divide data into 256 bytes:
 	 * i2c buffer size limit 256 bytes
 	 */
+	gainTable = ts->gainTable;
+
 	copy_max = ts->i2c_burstmax - 3;
 	copy_left = node_cnt;
 	copy_size = 0;
@@ -1017,7 +1024,6 @@ static int sec_ts_set_gain_table(struct sec_ts_data *ts, u8 *gainTable)
 
 ErrorAlloc:
 	kfree(tCmd);
-	kfree(pStr);
 
 	return ret;
 }
@@ -3998,7 +4004,6 @@ static void run_fs_cal_get_data(void *device_data)
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
 	struct sec_ts_data *ts = container_of(sec, struct sec_ts_data, sec);
 	struct sec_ts_test_mode mode;
-	u8 *gainTable = NULL;
 	short *diff_table = NULL;
 	const bool only_average = true;
 	char *buff;
@@ -4074,22 +4079,12 @@ static void run_fs_cal_get_data(void *device_data)
 						      buff_size - buff_len,
 						      "\n");
 		}
+		/* calculate gain table, and store it to ts->gainTable */
+		sec_ts_get_gain_table(ts);
+
 	} else if (sec->cmd_param[0] == 1) {
-		/* calculate gain table, send to ic */
-
-		/* gain table size = 1 byte per node */
-		gainTable = kzalloc(ts->tx_count * ts->rx_count, GFP_KERNEL);
-		if (gainTable == NULL) {
-			input_err(true, &ts->client->dev,
-				  "%s: fail to alloc gainTable\n", __func__);
-			buff_len += scnprintf(buff + buff_len,
-					      buff_size - buff_len, "NG %d %d",
-					      ts->rx_count, ts->tx_count);
-			sec->cmd_state = SEC_CMD_STATUS_FAIL;
-			goto SetCmdResult;
-		}
-
-		ret = sec_ts_set_gain_table(ts, gainTable);
+		/* write gaintable(ts->gainTable) to ic */
+		ret = sec_ts_write_gain_table(ts);
 		if (ret < 0) {
 			buff_len += scnprintf(buff + buff_len,
 					      buff_size - buff_len,
@@ -4109,7 +4104,8 @@ static void run_fs_cal_get_data(void *device_data)
 				buff_len += scnprintf(buff + buff_len,
 						buff_size - buff_len,
 						"%4d,",
-						gainTable[i*ts->rx_count + j]);
+						ts->gainTable[i*ts->rx_count
+								+ j]);
 			}
 			buff_len += scnprintf(buff + buff_len,
 					      buff_size - buff_len, "\n");
@@ -4209,7 +4205,6 @@ SetCmdResult:
 	sec_cmd_set_cmd_result(sec, buff, buff_len);
 
 	kfree(diff_table);
-	kfree(gainTable);
 	kfree(buff);
 
 	sec_ts_set_bus_ref(ts, SEC_TS_BUS_REF_SYSFS, false);

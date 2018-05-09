@@ -715,6 +715,7 @@ struct sec_ts_data {
 	struct completion resume_done;
 	struct sec_cmd_data sec;
 	short *pFrame;
+	u8 *gainTable;
 
 	bool probe_done;
 	bool reinit_done;

@@ -1821,6 +1821,12 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 		goto err_allocate_frame;
 	}
 
+	ts->gainTable = kzalloc(ts->tx_count * ts->rx_count, GFP_KERNEL);
+	if (!ts->gainTable) {
+		ret = -ENOMEM;
+		goto err_allocate_gaintable;
+	}
+
 	if (ts->plat_data->support_dex) {
 		ts->input_dev_pad->name = "sec_touchpad";
 		sec_ts_set_input_prop(ts, ts->input_dev_pad, INPUT_PROP_POINTER);
@@ -1918,6 +1924,8 @@ err_input_pad_register_device:
 	ts->input_dev = NULL;
 	ts->input_dev_touch = NULL;
 err_input_register_device:
+	kfree(ts->gainTable);
+err_allocate_gaintable:
 	kfree(ts->pFrame);
 err_allocate_frame:
 err_init:
