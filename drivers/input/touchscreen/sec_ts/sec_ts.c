@@ -14,6 +14,10 @@ struct sec_ts_data *tsp_info;
 
 #include "sec_ts.h"
 
+/* Switch GPIO values */
+#define SEC_SWITCH_GPIO_VALUE_SLPI_MASTER 	0
+#define SEC_SWITCH_GPIO_VALUE_AP_MASTER 	1
+
 struct sec_ts_data *ts_dup;
 
 #ifndef CONFIG_SEC_SYSFS
@@ -2518,6 +2522,30 @@ static const struct dev_pm_ops sec_ts_dev_pm_ops = {
 };
 #endif
 
+/*
+ * Configure the switch GPIO to toggle bus master between AP and SLPI.
+ * gpio_value takes one of
+ * { SEC_SWITCH_GPIO_VALUE_SLPI_MASTER, SEC_SWITCH_GPIO_VALUE_AP_MASTER }
+ */
+static void sec_set_switch_gpio(struct sec_ts_data *ts, int gpio_value)
+{
+	int retval;
+	unsigned int gpio = ts->plat_data->switch_gpio;
+
+	if (!gpio_is_valid(gpio))
+		return;
+
+	input_info(true, &ts->client->dev, "%s: toggling i2c switch to %s\n",
+		   __func__, gpio_value == SEC_SWITCH_GPIO_VALUE_AP_MASTER ?
+		   "AP" : "SLPI");
+
+	retval = gpio_direction_output(gpio, gpio_value);
+	if (retval < 0)
+		input_err(true, &ts->client->dev,
+			  "%s: Failed to toggle switch_gpio, err = %d\n",
+			  __func__, retval);
+}
+
 static void sec_ts_suspend_work(struct work_struct *work)
 {
 	struct sec_ts_data *ts = container_of(work, struct sec_ts_data,
@@ -2549,6 +2577,8 @@ static void sec_ts_suspend_work(struct work_struct *work)
 
 	ts->power_status = SEC_TS_STATE_SUSPEND;
 
+	sec_set_switch_gpio(ts, SEC_SWITCH_GPIO_VALUE_SLPI_MASTER);
+
 #ifdef CONFIG_TOUCHSCREEN_TBN
 	if (ts->tbn)
 		tbn_release_bus(ts->tbn);
@@ -2571,6 +2601,8 @@ static void sec_ts_resume_work(struct work_struct *work)
 	if (ts->tbn)
 		tbn_request_bus(ts->tbn);
 #endif
+
+	sec_set_switch_gpio(ts, SEC_SWITCH_GPIO_VALUE_AP_MASTER);
 
 	if (ts->power_status == SEC_TS_STATE_POWER_ON) {
 		input_err(true, &ts->client->dev, "%s: already resumed.\n",
