@@ -1625,6 +1625,12 @@ static int __wlan_hdd_cfg80211_do_acs(struct wiphy *wiphy,
 	if (ret)
 		goto out;
 
+	if (!((adapter->device_mode == QDF_SAP_MODE) ||
+	      (adapter->device_mode == QDF_P2P_GO_MODE))) {
+		hdd_err("Invalid device mode %d", adapter->device_mode);
+		return -EINVAL;
+	}
+
 	if (cds_is_sub_20_mhz_enabled()) {
 		hdd_err("ACS not supported in sub 20 MHz ch wd.");
 		ret = -EINVAL;
