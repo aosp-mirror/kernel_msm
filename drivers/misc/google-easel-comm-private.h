@@ -44,11 +44,21 @@ enum easelcomm_msg_type {
  * transfer have default values for these.
  */
 struct easelcomm_dma_xfer_info {
-	/* The local MNH driver scatter-gather list, or NULL if discarding */
+	/*
+	 * The local MNH driver scatter-gather list, or NULL if discarding.
+	 * This points to an array of mnh_sg_entry.  Content of this is
+	 * to be used to combine with remote scatter-gather list to be a
+	 * DMA Linked List.
+	 */
 	void *sg_local;
 	/* Size in bytes of the local scatter-gather list, zero if discard */
 	uint32_t sg_local_size;
-	/* Local data private to the MNH layer associated with the SG list */
+	/*
+	 * Local data private to the MNH layer associated with the SG list.
+	 * This points to mnh_sg_list.  It marks information of
+	 * the buffer for DMA transfer, and is used to collect local MNH
+	 * driver scatter-gather list (sg_local).
+	 */
 	void *sg_local_localdata;
 	/*
 	 * Easel/server keeps the remote scatter-gather list received from the

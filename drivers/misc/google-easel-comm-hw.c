@@ -534,6 +534,7 @@ void easelcomm_hw_destroy_scatterlist(void *sglocaldata)
 			/* Release sgl retrieved from dma_buf framework */
 			mnh_sg_release_from_dma_buf(sg_local_data);
 		}
+		kfree(sg_local_data);
 	}
 }
 EXPORT_SYMBOL(easelcomm_hw_destroy_scatterlist);
