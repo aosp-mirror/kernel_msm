@@ -582,7 +582,9 @@ EXPORT_SYMBOL(easelcomm_hw_easel_ll_addr);
 int easelcomm_hw_easel_destroy_ll(void *ll_data)
 {
 #ifdef EASELCOMM_EASEL
-	return mnh_ll_destroy((struct mnh_dma_ll *)ll_data);
+	mnh_ll_destroy((struct mnh_dma_ll *)ll_data);
+	kfree(ll_data);
+	return 0;
 #else
 	return -EIO;
 #endif
