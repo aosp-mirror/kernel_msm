@@ -915,7 +915,6 @@ static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 	return IRQ_HANDLED;
 }
 
-
 static int max1720x_handle_dt_batt_id(struct max1720x_chip *chip)
 {
 	int ret, batt_id;
@@ -1127,6 +1126,7 @@ static int max1720x_apply_regval_register(struct max1720x_chip *chip,
 					     regs[idx + 1]);
 		}
 	}
+
 register_out:
 	kfree(regs);
 	return ret;
@@ -1187,6 +1187,10 @@ static int max1720x_init_chip(struct max1720x_chip *chip)
 	REGMAP_READ(chip->regmap, MAX1720X_VEmpty, data);
 	dev_info(chip->dev, "VEmpty: VE=%dmV VR=%dmV\n",
 		 ((data >> 7) & 0x1ff) * 10, (data & 0x7f) * 40);
+
+	REGMAP_READ(chip->regmap, MAX1720X_CGain, data);
+	if (data == 0)
+		REGMAP_WRITE(chip->regmap, MAX1720X_CGain, 0x0400);
 
 	return 0;
 }
