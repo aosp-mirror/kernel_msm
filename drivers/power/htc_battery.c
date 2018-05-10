@@ -698,9 +698,11 @@ static void batt_worker(struct work_struct *work)
 		 htc_batt_info.rep.chg_src ?
 		 get_property(htc_batt_info.batt_psy,
 			      POWER_SUPPLY_PROP_CHARGER_TEMP) : -1);
-	BATT_LOG(" CC_uAh=%d\n",
+	BATT_LOG(" CC_uAh=%d, otg=%d\n",
 		 get_property(htc_batt_info.bms_psy,
-			      POWER_SUPPLY_PROP_CHARGE_NOW_RAW)
+			      POWER_SUPPLY_PROP_CHARGE_NOW_RAW),
+		 get_property(htc_batt_info.usb_psy,
+			      POWER_SUPPLY_PROP_VBUS_OUTPUT_STATUS)
 		);
 
 	/* WA for display flickering */
