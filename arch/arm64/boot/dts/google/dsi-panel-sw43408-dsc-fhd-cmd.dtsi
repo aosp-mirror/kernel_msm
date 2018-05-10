@@ -118,6 +118,32 @@
 					15 01 00 00 00 00 02 CA 08
 				];
 
+				qcom,mdss-dsi-vr-command = [
+					05 01 00 00 64 00 01 28
+					/* display off; wait 100ms */
+					39 01 00 00 00 00 07 55 04 70 DB 04 70 DB
+					/* Write ACL - turn off edge rounding */
+					39 01 00 00 00 00 03 51 01 FF
+					/* vr mode band1 (70nit, duty 30%) */
+					39 01 00 00 00 00 03 53 2C 30
+					/* vr mode enable */
+					05 01 00 00 00 00 01 29
+					/* display on */
+				];
+
+				qcom,mdss-dsi-novr-command = [
+					05 01 00 00 64 00 01 28
+					/* display off; wait 100ms */
+					39 01 00 00 00 00 03 53 0C 30
+					/* vr mode disable */
+					39 01 00 00 00 00 03 51 03 FF
+					/* normal band 0 (450nit, duty 99.5%) */
+					39 01 00 00 00 00 07 55 34 70 CB 04 70 DB
+					/* Write ACL - turn on edge rounding */
+					05 01 00 00 00 00 01 29
+					/* display on */
+				];
+
 				qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
 				qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
 				qcom,mdss-dsi-h-sync-pulse = <0>;

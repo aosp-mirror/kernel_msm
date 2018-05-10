@@ -29,7 +29,8 @@
 		qcom,mdss-dsi-reset-sequence = <1 5>, <0 5>, <1 5>;
 
 		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
-		qcom,mdss-dsi-bl-min-level = <0x50>; /* equivalent to 2 nits */
+		qcom,mdss-dsi-bl-min-level = <0x50>;
+		/* equivalent to 2 nits.  >= 0x0a for PMIC safety in VR mode. */
 		qcom,mdss-dsi-bl-max-level = <0x3ff>;
 		qcom,mdss-dsi-panel-hdr-enabled;
 		qcom,mdss-dsi-panel-hdr-color-primaries = <14500 15500 32000
@@ -85,6 +86,38 @@
 				qcom,mdss-dsi-off-command = [
 					05 01 00 00 0A 00 02 28 00 /* display off */
 					05 01 00 00 78 00 02 10 00 /* sleep in */
+				];
+
+				qcom,mdss-dsi-vr-command = [
+					39 01 00 00 00 00 03 F0 5A 5A
+					15 01 00 00 00 00 02 B8 11
+					39 01 00 00 00 00 05 B1 02 54 0C 00
+					15 01 00 00 00 00 02 B0 10
+					39 01 00 00 00 00 03 CB 03 0E
+					15 01 00 00 00 00 02 B0 25
+					15 01 00 00 00 00 02 CB 15
+					15 01 00 00 00 00 02 B0 43
+					15 01 00 00 00 00 02 CB 8F
+					15 01 00 00 00 00 02 F7 03
+					15 01 00 00 00 00 02 B0 08
+					15 01 00 00 00 00 02 B1 4D
+					39 01 00 00 00 00 03 F0 A5 A5
+					39 01 00 00 00 00 03 51 01 D7
+				];
+
+				qcom,mdss-dsi-novr-command = [
+					39 01 00 00 00 00 03 F0 5A 5A
+					15 01 00 00 00 00 02 B0 08
+					15 01 00 00 00 00 02 B1 2D
+					15 01 00 00 00 00 02 B0 10
+					39 01 00 00 00 00 03 CB 0B 06
+					15 01 00 00 00 00 02 B0 25
+					15 01 00 00 00 00 02 CB 09
+					15 01 00 00 00 00 02 B0 43
+					15 01 00 00 00 00 02 CB 0F
+					39 01 00 00 00 00 03 B1 00 0C
+					15 01 00 00 00 00 02 F7 03
+					39 01 00 00 00 00 03 F0 A5 A5
 				];
 				qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
 
