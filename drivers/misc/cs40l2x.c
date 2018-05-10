@@ -809,6 +809,172 @@ static ssize_t cs40l2x_dig_scale_store(struct device *dev,
 	return count;
 }
 
+static int cs40l2x_gpio1_dig_scale_get(struct cs40l2x_private *cs40l2x,
+			unsigned int *dig_scale)
+{
+	int ret;
+	unsigned int val;
+
+	if (!mutex_is_locked(&cs40l2x->lock))
+		return -EACCES;
+
+	ret = regmap_read(cs40l2x->regmap,
+			cs40l2x_dsp_reg(cs40l2x, "GAIN_CONTROL",
+					CS40L2X_XM_UNPACKED_TYPE), &val);
+	if (ret)
+		return ret;
+
+	*dig_scale = (val & CS40L2X_GAIN_CTRL_GPIO_MASK)
+			>> CS40L2X_GAIN_CTRL_GPIO_SHIFT;
+
+	return 0;
+}
+
+static int cs40l2x_gpio1_dig_scale_set(struct cs40l2x_private *cs40l2x,
+			unsigned int dig_scale)
+{
+	if (!mutex_is_locked(&cs40l2x->lock))
+		return -EACCES;
+
+	if (dig_scale == CS40L2X_DIG_SCALE_RESET)
+		return -EINVAL;
+
+	return regmap_update_bits(cs40l2x->regmap,
+			cs40l2x_dsp_reg(cs40l2x, "GAIN_CONTROL",
+					CS40L2X_XM_UNPACKED_TYPE),
+			CS40L2X_GAIN_CTRL_GPIO_MASK,
+			dig_scale << CS40L2X_GAIN_CTRL_GPIO_SHIFT);
+}
+
+static ssize_t cs40l2x_gpio1_dig_scale_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int dig_scale;
+
+	mutex_lock(&cs40l2x->lock);
+	ret = cs40l2x_gpio1_dig_scale_get(cs40l2x, &dig_scale);
+	mutex_unlock(&cs40l2x->lock);
+
+	if (ret) {
+		pr_err("Failed to read digital scale\n");
+		return ret;
+	}
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", dig_scale);
+}
+
+static ssize_t cs40l2x_gpio1_dig_scale_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int dig_scale;
+
+	ret = kstrtou32(buf, 10, &dig_scale);
+	if (ret)
+		return -EINVAL;
+
+	if (dig_scale > CS40L2X_DIG_SCALE_MAX)
+		return -EINVAL;
+
+	mutex_lock(&cs40l2x->lock);
+	ret = cs40l2x_gpio1_dig_scale_set(cs40l2x, dig_scale);
+	mutex_unlock(&cs40l2x->lock);
+
+	if (ret) {
+		pr_err("Failed to write digital scale\n");
+		return ret;
+	}
+
+	return count;
+}
+
+static int cs40l2x_cp_dig_scale_get(struct cs40l2x_private *cs40l2x,
+			unsigned int *dig_scale)
+{
+	int ret;
+	unsigned int val;
+
+	if (!mutex_is_locked(&cs40l2x->lock))
+		return -EACCES;
+
+	ret = regmap_read(cs40l2x->regmap,
+			cs40l2x_dsp_reg(cs40l2x, "GAIN_CONTROL",
+					CS40L2X_XM_UNPACKED_TYPE), &val);
+	if (ret)
+		return ret;
+
+	*dig_scale = (val & CS40L2X_GAIN_CTRL_TRIG_MASK)
+			>> CS40L2X_GAIN_CTRL_TRIG_SHIFT;
+
+	return 0;
+}
+
+static int cs40l2x_cp_dig_scale_set(struct cs40l2x_private *cs40l2x,
+			unsigned int dig_scale)
+{
+	if (!mutex_is_locked(&cs40l2x->lock))
+		return -EACCES;
+
+	if (dig_scale == CS40L2X_DIG_SCALE_RESET)
+		return -EINVAL;
+
+	return regmap_update_bits(cs40l2x->regmap,
+			cs40l2x_dsp_reg(cs40l2x, "GAIN_CONTROL",
+					CS40L2X_XM_UNPACKED_TYPE),
+			CS40L2X_GAIN_CTRL_TRIG_MASK,
+			dig_scale << CS40L2X_GAIN_CTRL_TRIG_SHIFT);
+}
+
+static ssize_t cs40l2x_cp_dig_scale_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int dig_scale;
+
+	mutex_lock(&cs40l2x->lock);
+	ret = cs40l2x_cp_dig_scale_get(cs40l2x, &dig_scale);
+	mutex_unlock(&cs40l2x->lock);
+
+	if (ret) {
+		pr_err("Failed to read digital scale\n");
+		return ret;
+	}
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", dig_scale);
+}
+
+static ssize_t cs40l2x_cp_dig_scale_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int dig_scale;
+
+	ret = kstrtou32(buf, 10, &dig_scale);
+	if (ret)
+		return -EINVAL;
+
+	if (dig_scale > CS40L2X_DIG_SCALE_MAX)
+		return -EINVAL;
+
+	mutex_lock(&cs40l2x->lock);
+	ret = cs40l2x_cp_dig_scale_set(cs40l2x, dig_scale);
+	mutex_unlock(&cs40l2x->lock);
+
+	if (ret) {
+		pr_err("Failed to write digital scale\n");
+		return ret;
+	}
+
+	return count;
+}
+
 static ssize_t cs40l2x_heartbeat_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
@@ -916,6 +1082,10 @@ static DEVICE_ATTR(comp_enable, 0660, cs40l2x_comp_enable_show,
 		cs40l2x_comp_enable_store);
 static DEVICE_ATTR(dig_scale, 0660, cs40l2x_dig_scale_show,
 		cs40l2x_dig_scale_store);
+static DEVICE_ATTR(gpio1_dig_scale, 0660, cs40l2x_gpio1_dig_scale_show,
+		cs40l2x_gpio1_dig_scale_store);
+static DEVICE_ATTR(cp_dig_scale, 0660, cs40l2x_cp_dig_scale_show,
+		cs40l2x_cp_dig_scale_store);
 static DEVICE_ATTR(heartbeat, 0660, cs40l2x_heartbeat_show, NULL);
 static DEVICE_ATTR(num_waves, 0660, cs40l2x_num_waves_show, NULL);
 static DEVICE_ATTR(aoh_auto_enable, 0660, cs40l2x_aoh_auto_enable_show,
@@ -934,6 +1104,8 @@ static struct attribute *cs40l2x_dev_attrs[] = {
 	&dev_attr_redc_stored.attr,
 	&dev_attr_comp_enable.attr,
 	&dev_attr_dig_scale.attr,
+	&dev_attr_gpio1_dig_scale.attr,
+	&dev_attr_cp_dig_scale.attr,
 	&dev_attr_heartbeat.attr,
 	&dev_attr_num_waves.attr,
 	&dev_attr_aoh_auto_enable.attr,
