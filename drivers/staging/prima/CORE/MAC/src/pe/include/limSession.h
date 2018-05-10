@@ -371,6 +371,7 @@ typedef struct sPESession           // Added to Support BT-AMP
     tDot11fIEHTInfo ht_operation;
     tDot11fIEVHTOperation vht_operation;
     bool force_24ghz_in_ht20;
+    int8_t def_max_tx_pwr;
 }tPESession, *tpPESession;
 
 #define LIM_MAX_ACTIVE_SESSIONS 4
