@@ -64,3 +64,10 @@
 	maxim,config = <&c1_maxim_config>;
 };
 
+&soc {
+	google,overheat_mitigation {
+		google,begin-mitigation-temp = <500>;
+		google,end-mitigation-temp = <400>;
+	};
+};
+

@@ -65,3 +65,10 @@
 &max1720x_fg {
 	maxim,config = <&b1_maxim_config>;
 };
+
+&soc {
+	google,overheat_mitigation {
+		google,begin-mitigation-temp = <550>;
+		google,end-mitigation-temp = <450>;
+	};
+};
