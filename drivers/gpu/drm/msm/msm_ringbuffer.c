@@ -23,7 +23,8 @@ struct msm_ringbuffer *msm_ringbuffer_new(struct msm_gpu *gpu, int size)
 	struct msm_ringbuffer *ring;
 	int ret;
 
-	size = ALIGN(size, 4);   /* size should be dword aligned */
+	if (WARN_ON(!is_power_of_2(size)))
+		return ERR_PTR(-EINVAL);
 
 	ring = kzalloc(sizeof(*ring), GFP_KERNEL);
 	if (!ring) {
@@ -56,6 +57,6 @@ fail:
 void msm_ringbuffer_destroy(struct msm_ringbuffer *ring)
 {
 	if (ring->bo)
-		drm_gem_object_unreference(ring->bo);
+		drm_gem_object_unreference_unlocked(ring->bo);
 	kfree(ring);
 }

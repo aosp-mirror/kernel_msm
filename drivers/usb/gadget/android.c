@@ -36,6 +36,10 @@
 
 #include "gadget_chips.h"
 
+#ifdef CONFIG_MEDIA_SUPPORT
+#include "f_uvc.h"
+#include "u_uvc.h"
+#endif
 #include "u_fs.h"
 #include "u_ecm.h"
 #include "u_ncm.h"
@@ -71,6 +75,9 @@
 #include "f_mass_storage.h"
 
 USB_ETHERNET_MODULE_PARAMETERS();
+#ifdef CONFIG_MEDIA_SUPPORT
+USB_VIDEO_MODULE_PARAMETERS();
+#endif
 #include "debug.h"
 
 MODULE_AUTHOR("Mike Lockwood");
@@ -237,6 +244,8 @@ static struct android_configuration *alloc_android_config
 						(struct android_dev *dev);
 static void free_android_config(struct android_dev *dev,
 				struct android_configuration *conf);
+
+static bool video_enabled;
 
 /* string IDs are assigned dynamically */
 #define STRING_MANUFACTURER_IDX		0
@@ -520,7 +529,11 @@ static int android_enable(struct android_dev *dev)
 		if (ktime_to_ms(diff) < MIN_DISCONNECT_DELAY_MS)
 			msleep(MIN_DISCONNECT_DELAY_MS - ktime_to_ms(diff));
 
-		usb_gadget_connect(cdev->gadget);
+		/* Userspace UVC driver will trigger connect for video */
+		if (!video_enabled)
+			usb_gadget_connect(cdev->gadget);
+		else
+			pr_debug("defer gadget connect until usersapce opens video device\n");
 	}
 
 	return err;
@@ -530,15 +543,33 @@ static void android_disable(struct android_dev *dev)
 {
 	struct usb_composite_dev *cdev = dev->cdev;
 	struct android_configuration *conf;
+	bool do_put = false;
 
 	if (dev->disable_depth++ == 0) {
-		/* Cancel pending control requests */
-		usb_ep_dequeue(cdev->gadget->ep0, cdev->req);
+		if (cdev->suspended && cdev->config) {
+			usb_gadget_autopm_get(cdev->gadget);
+			do_put = true;
+		}
+		if (gadget_is_dwc3(cdev->gadget)) {
+			/* Cancel pending control requests */
+			usb_ep_dequeue(cdev->gadget->ep0, cdev->req);
 
-		list_for_each_entry(conf, &dev->configs, list_item)
-			usb_remove_config(cdev, &conf->usb_config);
-		usb_gadget_disconnect(cdev->gadget);
-		dev->last_disconnect = ktime_get();
+			list_for_each_entry(conf, &dev->configs, list_item)
+				usb_remove_config(cdev, &conf->usb_config);
+			usb_gadget_disconnect(cdev->gadget);
+			dev->last_disconnect = ktime_get();
+		} else {
+			usb_gadget_disconnect(cdev->gadget);
+			dev->last_disconnect = ktime_get();
+
+			/* Cancel pnding control requests */
+			usb_ep_dequeue(cdev->gadget->ep0, cdev->req);
+
+			list_for_each_entry(conf, &dev->configs, list_item)
+				usb_remove_config(cdev, &conf->usb_config);
+		}
+		if (do_put)
+			usb_gadget_autopm_put_async(cdev->gadget);
 	}
 }
 
@@ -697,18 +728,17 @@ static int functionfs_ready_callback(struct ffs_data *ffs)
 	struct android_dev *dev = ffs_function.android_dev;
 	struct functionfs_config *config = ffs_function.config;
 
-	if (dev)
-		mutex_lock(&dev->mutex);
+	if (!dev)
+		return -ENODEV;
 
+	mutex_lock(&dev->mutex);
 	config->data = ffs;
 	config->opened = true;
 
 	if (config->enabled && dev)
 		android_enable(dev);
 
-	if (dev)
-		mutex_unlock(&dev->mutex);
-
+	mutex_unlock(&dev->mutex);
 	return 0;
 }
 
@@ -1034,6 +1064,32 @@ static struct android_usb_function rmnet_function = {
 	.attributes	= rmnet_function_attributes,
 };
 
+static char gps_transport[MAX_XPORT_STR_LEN];
+
+static ssize_t gps_transport_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%s\n", gps_transport);
+}
+
+static ssize_t gps_transport_store(
+		struct device *device, struct device_attribute *attr,
+		const char *buff, size_t size)
+{
+	strlcpy(gps_transport, buff, sizeof(gps_transport));
+
+	return size;
+}
+
+static struct device_attribute dev_attr_gps_transport =
+					__ATTR(transport, S_IRUGO | S_IWUSR,
+							gps_transport_show,
+							gps_transport_store);
+
+static struct device_attribute *gps_function_attrbitutes[] = {
+					&dev_attr_gps_transport,
+					NULL };
+
 static void gps_function_cleanup(struct android_usb_function *f)
 {
 	gps_cleanup();
@@ -1044,10 +1100,13 @@ static int gps_function_bind_config(struct android_usb_function *f,
 {
 	int err;
 	static int gps_initialized;
+	char buf[MAX_XPORT_STR_LEN], *b;
 
 	if (!gps_initialized) {
+		strlcpy(buf, gps_transport, sizeof(buf));
+		b = strim(buf);
 		gps_initialized = 1;
-		err = gps_init_port();
+		err = gps_init_port(b);
 		if (err) {
 			pr_err("gps: Cannot init gps port");
 			return err;
@@ -1072,6 +1131,7 @@ static struct android_usb_function gps_function = {
 	.name		= "gps",
 	.cleanup	= gps_function_cleanup,
 	.bind_config	= gps_function_bind_config,
+	.attributes	= gps_function_attrbitutes,
 };
 
 /* ncm */
@@ -1484,6 +1544,185 @@ static struct android_usb_function audio_function = {
 };
 #endif
 
+/* PERIPHERAL uac2 */
+struct uac2_function_config {
+	struct usb_function *func;
+	struct usb_function_instance *fi;
+};
+
+static int uac2_function_init(struct android_usb_function *f,
+			       struct usb_composite_dev *cdev)
+{
+	struct uac2_function_config *config;
+
+	f->config = kzalloc(sizeof(*config), GFP_KERNEL);
+	if (!f->config)
+		return -ENOMEM;
+
+	config = f->config;
+
+	config->fi = usb_get_function_instance("uac2");
+	if (IS_ERR(config->fi))
+		return PTR_ERR(config->fi);
+
+	config->func = usb_get_function(config->fi);
+	if (IS_ERR(config->func)) {
+		usb_put_function_instance(config->fi);
+		return PTR_ERR(config->func);
+	}
+
+	return 0;
+}
+
+static void uac2_function_cleanup(struct android_usb_function *f)
+{
+	struct uac2_function_config *config = f->config;
+
+	if (config) {
+		usb_put_function(config->func);
+		usb_put_function_instance(config->fi);
+	}
+
+	kfree(f->config);
+	f->config = NULL;
+}
+
+static int uac2_function_bind_config(struct android_usb_function *f,
+					  struct usb_configuration *c)
+{
+	struct uac2_function_config *config = f->config;
+
+	return usb_add_function(c, config->func);
+}
+
+static struct android_usb_function uac2_function = {
+	.name		= "uac2_func",
+	.init		= uac2_function_init,
+	.cleanup	= uac2_function_cleanup,
+	.bind_config	= uac2_function_bind_config,
+};
+
+#ifdef CONFIG_MEDIA_SUPPORT
+/* PERIPHERAL VIDEO */
+struct video_function_config {
+	struct usb_function *func;
+	struct usb_function_instance *fi;
+};
+
+static int video_function_init(struct android_usb_function *f,
+			       struct usb_composite_dev *cdev)
+{
+	struct f_uvc_opts *uvc_opts;
+	struct video_function_config *config;
+
+	f->config = kzalloc(sizeof(*config), GFP_KERNEL);
+	if (!f->config)
+		return -ENOMEM;
+
+	config = f->config;
+
+	config->fi = usb_get_function_instance("uvc");
+	if (IS_ERR(config->fi))
+		return PTR_ERR(config->fi);
+
+	uvc_opts = container_of(config->fi, struct f_uvc_opts, func_inst);
+
+	uvc_opts->streaming_interval = streaming_interval;
+	uvc_opts->streaming_maxpacket = streaming_maxpacket;
+	uvc_opts->streaming_maxburst = streaming_maxburst;
+	uvc_set_trace_param(trace);
+
+	uvc_opts->fs_control = uvc_fs_control_cls;
+	uvc_opts->ss_control = uvc_ss_control_cls;
+	uvc_opts->fs_streaming = uvc_fs_streaming_cls;
+	uvc_opts->hs_streaming = uvc_hs_streaming_cls;
+	uvc_opts->ss_streaming = uvc_ss_streaming_cls;
+
+	config->func = usb_get_function(config->fi);
+	if (IS_ERR(config->func)) {
+		usb_put_function_instance(config->fi);
+		return PTR_ERR(config->func);
+	}
+
+	return 0;
+}
+
+static void video_function_cleanup(struct android_usb_function *f)
+{
+	struct video_function_config *config = f->config;
+
+	if (config) {
+		usb_put_function(config->func);
+		usb_put_function_instance(config->fi);
+	}
+
+	kfree(f->config);
+	f->config = NULL;
+}
+
+static int video_function_bind_config(struct android_usb_function *f,
+					  struct usb_configuration *c)
+{
+	struct video_function_config *config = f->config;
+
+	return usb_add_function(c, config->func);
+}
+
+static void video_function_enable(struct android_usb_function *f)
+{
+	video_enabled = true;
+}
+
+static void video_function_disable(struct android_usb_function *f)
+{
+	video_enabled = false;
+}
+
+static struct android_usb_function video_function = {
+	.name		= "video",
+	.init		= video_function_init,
+	.cleanup	= video_function_cleanup,
+	.bind_config	= video_function_bind_config,
+	.enable		= video_function_enable,
+	.disable	= video_function_disable,
+};
+
+int video_ready_callback(struct usb_function *function)
+{
+	struct android_dev *dev = video_function.android_dev;
+	struct usb_composite_dev *cdev;
+
+	if (!dev) {
+		pr_err("%s: dev is NULL\n", __func__);
+		return -ENODEV;
+	}
+
+	cdev = dev->cdev;
+
+	pr_debug("%s: connect\n", __func__);
+	usb_gadget_connect(cdev->gadget);
+
+	return 0;
+}
+
+int video_closed_callback(struct usb_function *function)
+{
+	struct android_dev *dev = video_function.android_dev;
+	struct usb_composite_dev *cdev;
+
+	if (!dev) {
+		pr_err("%s: dev is NULL\n", __func__);
+		return -ENODEV;
+	}
+
+	cdev = dev->cdev;
+
+	pr_debug("%s: disconnect\n", __func__);
+	usb_gadget_disconnect(cdev->gadget);
+
+	return 0;
+}
+#endif
 
 /* DIAG */
 static char diag_clients[32];	    /*enabled DIAG clients- "diag[,diag_mdm]" */
@@ -1889,6 +2128,19 @@ static int serial_function_bind_config(struct android_usb_function *f,
 			}
 		}
 	}
+	/*
+	 * Make sure we always have two serials ports initialized to allow
+	 * switching composition from 1 serial function to 2 serial functions.
+	 * Mark 2nd port to use tty if user didn't specify transport.
+	 */
+	if ((config->instances_on == 1) && !serial_initialized) {
+		err = gserial_init_port(ports, "tty", "serial_tty");
+		if (err) {
+			pr_err("serial: Cannot open port '%s'", "tty");
+			goto out;
+		}
+		config->instances_on++;
+	}
 
 	/* limit the serial ports init only for boot ports */
 	if (ports > config->instances_on)
@@ -1900,11 +2152,11 @@ static int serial_function_bind_config(struct android_usb_function *f,
 	err = gport_setup(c);
 	if (err) {
 		pr_err("serial: Cannot setup transports");
+		gserial_deinit_port();
 		goto out;
 	}
 
-	config->instances_on = ports;
-	for (i = 0; i < ports; i++) {
+	for (i = 0; i < config->instances_on; i++) {
 		config->f_serial_inst[i] = usb_get_function_instance("gser");
 		if (IS_ERR(config->f_serial_inst[i])) {
 			err = PTR_ERR(config->f_serial_inst[i]);
@@ -3059,6 +3311,10 @@ static struct android_usb_function *default_functions[] = {
 	&ecm_qc_function,
 #ifdef CONFIG_SND_PCM
 	&audio_function,
+	&uac2_function,
+#endif
+#ifdef CONFIG_MEDIA_SUPPORT
+	&video_function,
 #endif
 	&rmnet_function,
 	&gps_function,
@@ -3146,6 +3402,7 @@ static int android_init_functions(struct android_usb_function **functions,
 			* index 1 is for android1 device
 			*/
 
+	cdev->use_os_string = true;
 	for (; (f = *functions++); index++) {
 		f->dev_name = kasprintf(GFP_KERNEL, "f_%s", f->name);
 		f->android_dev = NULL;
@@ -3247,20 +3504,6 @@ android_unbind_enabled_functions(struct android_dev *dev,
 		f_holder->f->bound = false;
 	}
 }
-static inline void check_streaming_func(struct usb_gadget *gadget,
-		struct android_usb_platform_data *pdata,
-		char *name)
-{
-	int i;
-
-	for (i = 0; i < pdata->streaming_func_count; i++) {
-		if (!strcmp(name, pdata->streaming_func[i])) {
-			pr_debug("set streaming_enabled to true\n");
-			gadget->streaming_enabled = true;
-			break;
-		}
-	}
-}
 static int android_enable_function(struct android_dev *dev,
 				   struct android_configuration *conf,
 				   char *name)
@@ -3268,8 +3511,6 @@ static int android_enable_function(struct android_dev *dev,
 	struct android_usb_function **functions = dev->functions;
 	struct android_usb_function *f;
 	struct android_usb_function_holder *f_holder;
-	struct android_usb_platform_data *pdata = dev->pdata;
-	struct usb_gadget *gadget = dev->cdev->gadget;
 
 	while ((f = *functions++)) {
 		if (!strcmp(name, f->name)) {
@@ -3289,11 +3530,6 @@ static int android_enable_function(struct android_dev *dev,
 				list_add_tail(&f_holder->enabled_list,
 					      &conf->enabled_functions);
 				pr_debug("func:%s is enabled.\n", f->name);
-				/*
-				 * compare enable function with streaming func
-				 * list and based on the same request streaming.
-				 */
-				check_streaming_func(gadget, pdata, f->name);
 
 				return 0;
 			}
@@ -3415,7 +3651,6 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 	strlcpy(buf, buff, sizeof(buf));
 	b = strim(buf);
 
-	dev->cdev->gadget->streaming_enabled = false;
 	while (b) {
 		conf_str = strsep(&b, ":");
 		if (!conf_str)
@@ -3537,7 +3772,7 @@ static ssize_t enable_store(struct device *pdev, struct device_attribute *attr,
 		if (err < 0) {
 			pr_err("%s: android_enable failed\n", __func__);
 			dev->connected = 0;
-			dev->enabled = false;
+			dev->enabled = true;
 			mutex_unlock(&dev->mutex);
 			return size;
 		}
@@ -4100,34 +4335,6 @@ static int android_probe(struct platform_device *pdev)
 		if (!ret)
 			pdata->usb_core_id = usb_core_id;
 
-		len = of_property_count_strings(pdev->dev.of_node,
-				"qcom,streaming-func");
-		if (len > MAX_STREAMING_FUNCS) {
-			pr_err("Invalid number of functions used.\n");
-			return -EINVAL;
-		}
-
-		for (i = 0; i < len; i++) {
-			const char *name = NULL;
-
-			of_property_read_string_index(pdev->dev.of_node,
-				"qcom,streaming-func", i, &name);
-
-			if (!name)
-				continue;
-
-			if (sizeof(name) > FUNC_NAME_LEN) {
-				pr_err("Function name is bigger than allowed.\n");
-				continue;
-			}
-
-			strlcpy(pdata->streaming_func[i], name,
-				sizeof(pdata->streaming_func[i]));
-			pr_debug("name of streaming function:%s\n",
-				pdata->streaming_func[i]);
-		}
-
-		pdata->streaming_func_count = len;
 	} else {
 		pdata = pdev->dev.platform_data;
 	}

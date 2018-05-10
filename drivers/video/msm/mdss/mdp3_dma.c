@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, 2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2014, 2016, 2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -34,11 +34,13 @@ static void mdp3_vsync_intr_handler(int type, void *arg)
 {
 	struct mdp3_dma *dma = (struct mdp3_dma *)arg;
 	struct mdp3_notification vsync_client;
+	struct mdp3_notification retire_client;
 	unsigned int wait_for_next_vs;
 
 	pr_debug("mdp3_vsync_intr_handler\n");
 	spin_lock(&dma->dma_lock);
 	vsync_client = dma->vsync_client;
+	retire_client = dma->retire_client;
 	wait_for_next_vs = !dma->vsync_status;
 	dma->vsync_status = 0;
 	if (wait_for_next_vs)
@@ -50,6 +52,9 @@ static void mdp3_vsync_intr_handler(int type, void *arg)
 		if (wait_for_next_vs)
 			mdp3_irq_disable_nosync(type);
 	}
+
+	if (retire_client.handler)
+		retire_client.handler(retire_client.arg);
 }
 
 static void mdp3_dma_done_intr_handler(int type, void *arg)
@@ -85,6 +90,7 @@ static void mdp3_hist_done_intr_handler(int type, void *arg)
 		dma->histo_state = MDP3_DMA_HISTO_STATE_READY;
 		complete(&dma->histo_comp);
 		spin_unlock(&dma->histo_lock);
+		mdp3_hist_intr_notify(dma);
 	}
 	if (isr & MDP3_DMA_P_HIST_INTR_RESET_DONE_BIT) {
 		spin_lock(&dma->histo_lock);
@@ -109,7 +115,8 @@ void mdp3_dma_callback_enable(struct mdp3_dma *dma, int type)
 	}
 
 	if (dma->output_config.out_sel == MDP3_DMA_OUTPUT_SEL_DSI_VIDEO ||
-		dma->output_config.out_sel == MDP3_DMA_OUTPUT_SEL_LCDC) {
+		dma->output_config.out_sel == MDP3_DMA_OUTPUT_SEL_LCDC ||
+		dma->output_config.out_sel == MDP3_DMA_OUTPUT_SEL_SPI_CMD) {
 		if (type & MDP3_DMA_CALLBACK_TYPE_VSYNC)
 			mdp3_irq_enable(MDP3_INTR_LCDC_START_OF_FRAME);
 	} else if (dma->output_config.out_sel == MDP3_DMA_OUTPUT_SEL_DSI_CMD) {
@@ -193,7 +200,8 @@ static int mdp3_dma_callback_setup(struct mdp3_dma *dma)
 		rc = mdp3_set_intr_callback(MDP3_INTR_DMA_P_HISTO, &hist_cb);
 
 	if (dma->output_config.out_sel == MDP3_DMA_OUTPUT_SEL_DSI_VIDEO ||
-		dma->output_config.out_sel == MDP3_DMA_OUTPUT_SEL_LCDC)
+		dma->output_config.out_sel == MDP3_DMA_OUTPUT_SEL_LCDC ||
+		dma->output_config.out_sel == MDP3_DMA_OUTPUT_SEL_SPI_CMD)
 		rc |= mdp3_set_intr_callback(MDP3_INTR_LCDC_START_OF_FRAME,
 					&vsync_cb);
 	else if (dma->output_config.out_sel == MDP3_DMA_OUTPUT_SEL_DSI_CMD) {
@@ -270,7 +278,7 @@ int mdp3_dma_sync_config(struct mdp3_dma *dma,
 
 	vsync_clk_speed_hz = MDP_VSYNC_CLK_RATE;
 
-	cfg = te->sync_cfg_height << VSYNC_TOTAL_LINES_SHIFT;
+	cfg = total_lines << VSYNC_TOTAL_LINES_SHIFT;
 	total_lines *= te->frame_rate;
 
 	vclks_line = (total_lines) ? vsync_clk_speed_hz / total_lines : 0;
@@ -647,8 +655,7 @@ int dma_bpp(int format)
 }
 
 static int mdp3_dmap_update(struct mdp3_dma *dma, void *buf,
-				struct mdp3_intf *intf, int first_commit,
-				void *data)
+				struct mdp3_intf *intf, void *data)
 {
 	unsigned long flag;
 	int cb_type = MDP3_DMA_CALLBACK_TYPE_VSYNC;
@@ -659,9 +666,10 @@ static int mdp3_dmap_update(struct mdp3_dma *dma, void *buf,
 	ATRACE_BEGIN(__func__);
 	pr_debug("mdp3_dmap_update\n");
 
+	MDSS_XLOG(XLOG_FUNC_ENTRY, __LINE__);
 	if (dma->output_config.out_sel == MDP3_DMA_OUTPUT_SEL_DSI_CMD) {
 		cb_type = MDP3_DMA_CALLBACK_TYPE_DMA_DONE;
-		if ((intf->active) && !(first_commit)) {
+		if (intf->active) {
 			ATRACE_BEGIN("mdp3_wait_for_dma_comp");
 retry_dma_done:
 			rc = wait_for_completion_timeout(&dma->dma_comp,
@@ -747,12 +755,12 @@ retry_vsync:
 }
 
 static int mdp3_dmas_update(struct mdp3_dma *dma, void *buf,
-				struct mdp3_intf *intf, int first_commit,
-				void *data)
+				struct mdp3_intf *intf, void *data)
 {
 	unsigned long flag;
 	int cb_type = MDP3_DMA_CALLBACK_TYPE_VSYNC;
 
+	MDSS_XLOG(XLOG_FUNC_ENTRY, __LINE__);
 	if (dma->output_config.out_sel == MDP3_DMA_OUTPUT_SEL_DSI_CMD) {
 		cb_type = MDP3_DMA_CALLBACK_TYPE_DMA_DONE;
 		if (intf->active)
@@ -961,6 +969,8 @@ bool mdp3_dmap_busy(void)
 	val = MDP3_REG_READ(MDP3_REG_DISPLAY_STATUS);
 	pr_err("%s DMAP Status %s\n", __func__,
 		(val & MDP3_DMA_P_BUSY_BIT) ? "BUSY":"IDLE");
+	MDSS_XLOG(XLOG_FUNC_ENTRY, __LINE__,
+		  (val & MDP3_DMA_P_BUSY_BIT) ? 1:0);
 	return val & MDP3_DMA_P_BUSY_BIT;
 }
 
@@ -1052,7 +1062,7 @@ static int mdp3_dma_stop(struct mdp3_dma *dma, struct mdp3_intf *intf)
 	MDP3_REG_WRITE(MDP3_REG_INTR_ENABLE, 0);
 	MDP3_REG_WRITE(MDP3_REG_INTR_CLEAR, 0xfffffff);
 
-	init_completion(&dma->dma_comp);
+	reinit_completion(&dma->dma_comp);
 	dma->vsync_client.handler = NULL;
 	return ret;
 }
@@ -1259,6 +1269,22 @@ int dsi_cmd_stop(struct mdp3_intf *intf)
 	return 0;
 }
 
+static int spi_cmd_config(struct mdp3_intf *intf, struct mdp3_intf_cfg *cfg)
+{
+	return 0;
+}
+
+static int spi_cmd_start(struct mdp3_intf *intf)
+{
+	intf->active = true;
+	return 0;
+}
+
+static int spi_cmd_stop(struct mdp3_intf *intf)
+{
+	intf->active = false;
+	return 0;
+}
 int mdp3_intf_init(struct mdp3_intf *intf)
 {
 	switch (intf->cfg.type) {
@@ -1277,7 +1303,11 @@ int mdp3_intf_init(struct mdp3_intf *intf)
 		intf->start = dsi_cmd_start;
 		intf->stop = dsi_cmd_stop;
 		break;
-
+	case MDP3_DMA_OUTPUT_SEL_SPI_CMD:
+		intf->config = spi_cmd_config;
+		intf->start = spi_cmd_start;
+		intf->stop = spi_cmd_stop;
+		break;
 	default:
 		return -EINVAL;
 	}

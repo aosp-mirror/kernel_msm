@@ -5,7 +5,7 @@
  *
  * Copyright (C) 2012 Alexandra Chin <alexandra.chin@tw.synaptics.com>
  * Copyright (C) 2012 Scott Lin <scott.lin@tw.synaptics.com>
- *
+ * Copyright (C) 2016, The Linux Foundation.  All rights reserved.
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -40,7 +40,7 @@
 #include <linux/types.h>
 #include <linux/of_gpio.h>
 #include <linux/platform_device.h>
-#include <linux/input/synaptics_dsx.h>
+#include <linux/input/synaptics_dsx_v2_6.h>
 #include "synaptics_dsx_core.h"
 
 #define SYN_I2C_RETRY_TIMES 10
@@ -77,6 +77,15 @@ static int parse_dt(struct device *dev, struct synaptics_dsx_board_data *bdata)
 		bdata->irq_on_state = 0;
 	else
 		bdata->irq_on_state = value;
+
+	bdata->resume_in_workqueue = of_property_read_bool(np,
+			"synaptics,resume-in-workqueue");
+
+	bdata->wakeup_gesture_en = of_property_read_bool(np,
+			"synaptics,wakeup-gestures-en");
+
+	bdata->dont_disable_regs = of_property_read_bool(np,
+			"synaptics,do-not-disable-regulators");
 
 	retval = of_property_read_string(np, "synaptics,pwr-reg-name", &name);
 	if (retval < 0)
@@ -177,6 +186,10 @@ static int parse_dt(struct device *dev, struct synaptics_dsx_board_data *bdata)
 	} else {
 		bdata->max_y_for_2d = -1;
 	}
+
+	retval = of_property_read_u32(np, "synaptics,bus-lpm-cur-uA",
+			&value);
+	bdata->bus_lpm_cur_uA = retval < 0 ? 0 : value;
 
 	prop = of_find_property(np, "synaptics,swap-axes", NULL);
 	bdata->swap_axes = prop > 0 ? true : false;
@@ -288,7 +301,7 @@ static void synaptics_rmi4_i2c_check_addr(struct synaptics_rmi4_data *rmi4_data,
 static int synaptics_rmi4_i2c_set_page(struct synaptics_rmi4_data *rmi4_data,
 		unsigned short addr)
 {
-	int retval;
+	int retval = 0;
 	unsigned char retry;
 	unsigned char buf[PAGE_SELECT_LEN];
 	unsigned char page;
@@ -497,10 +510,73 @@ exit:
 	return retval;
 }
 
+#if defined(CONFIG_SECURE_TOUCH_SYNAPTICS_DSX_V26)
+static int synaptics_rmi4_clk_prepare_enable(
+		struct synaptics_rmi4_data *rmi4_data)
+{
+	int ret;
+
+	ret = clk_prepare_enable(rmi4_data->iface_clk);
+	if (ret) {
+		dev_err(rmi4_data->pdev->dev.parent,
+			"error on clk_prepare_enable(iface_clk):%d\n", ret);
+		return ret;
+	}
+
+	ret = clk_prepare_enable(rmi4_data->core_clk);
+	if (ret) {
+		clk_disable_unprepare(rmi4_data->iface_clk);
+		dev_err(rmi4_data->pdev->dev.parent,
+			"error clk_prepare_enable(core_clk):%d\n", ret);
+	}
+	return ret;
+}
+
+static void synaptics_rmi4_clk_disable_unprepare(
+		struct synaptics_rmi4_data *rmi4_data)
+{
+	clk_disable_unprepare(rmi4_data->core_clk);
+	clk_disable_unprepare(rmi4_data->iface_clk);
+}
+
+static int synaptics_rmi4_i2c_get(struct synaptics_rmi4_data *rmi4_data)
+{
+	int retval;
+	struct i2c_client *i2c = to_i2c_client(rmi4_data->pdev->dev.parent);
+
+	mutex_lock(&rmi4_data->rmi4_io_ctrl_mutex);
+	retval = pm_runtime_get_sync(i2c->adapter->dev.parent);
+	if (retval >= 0 && rmi4_data->core_clk != NULL &&
+				rmi4_data->iface_clk != NULL) {
+		retval = synaptics_rmi4_clk_prepare_enable(rmi4_data);
+		if (retval)
+			pm_runtime_put_sync(i2c->adapter->dev.parent);
+	}
+	mutex_unlock(&rmi4_data->rmi4_io_ctrl_mutex);
+
+	return retval;
+}
+
+static void synaptics_rmi4_i2c_put(struct synaptics_rmi4_data *rmi4_data)
+{
+	struct i2c_client *i2c = to_i2c_client(rmi4_data->pdev->dev.parent);
+
+	mutex_lock(&rmi4_data->rmi4_io_ctrl_mutex);
+	if (rmi4_data->core_clk != NULL && rmi4_data->iface_clk != NULL)
+		synaptics_rmi4_clk_disable_unprepare(rmi4_data);
+	pm_runtime_put_sync(i2c->adapter->dev.parent);
+	mutex_unlock(&rmi4_data->rmi4_io_ctrl_mutex);
+}
+#endif
+
 static struct synaptics_dsx_bus_access bus_access = {
 	.type = BUS_I2C,
 	.read = synaptics_rmi4_i2c_read,
 	.write = synaptics_rmi4_i2c_write,
+#if defined(CONFIG_SECURE_TOUCH_SYNAPTICS_DSX_V26)
+	.get = synaptics_rmi4_i2c_get,
+	.put = synaptics_rmi4_i2c_put,
+#endif
 };
 
 static void synaptics_rmi4_i2c_dev_release(struct device *dev)
@@ -625,13 +701,13 @@ static struct i2c_driver synaptics_rmi4_i2c_driver = {
 	.id_table = synaptics_rmi4_id_table,
 };
 
-int synaptics_rmi4_bus_init(void)
+int synaptics_rmi4_bus_init_v26(void)
 {
 	return i2c_add_driver(&synaptics_rmi4_i2c_driver);
 }
-EXPORT_SYMBOL(synaptics_rmi4_bus_init);
+EXPORT_SYMBOL(synaptics_rmi4_bus_init_v26);
 
-void synaptics_rmi4_bus_exit(void)
+void synaptics_rmi4_bus_exit_v26(void)
 {
 	kfree(wr_buf);
 
@@ -639,7 +715,7 @@ void synaptics_rmi4_bus_exit(void)
 
 	return;
 }
-EXPORT_SYMBOL(synaptics_rmi4_bus_exit);
+EXPORT_SYMBOL(synaptics_rmi4_bus_exit_v26);
 
 MODULE_AUTHOR("Synaptics, Inc.");
 MODULE_DESCRIPTION("Synaptics DSX I2C Bus Support Module");

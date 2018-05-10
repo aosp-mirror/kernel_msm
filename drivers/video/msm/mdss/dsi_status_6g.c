@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -14,6 +14,7 @@
 #include <linux/delay.h>
 #include <linux/kobject.h>
 #include <linux/sysfs.h>
+#include <linux/interrupt.h>
 
 #include "mdss_dsi.h"
 #include "mdss_mdp.h"
@@ -22,7 +23,7 @@
  * mdss_check_te_status() - Check the status of panel for TE based ESD.
  * @ctrl_pdata   : dsi controller data
  * @pstatus_data : dsi status data
- * @interval     : duration in milliseconds to schedule work queue
+ * @interval     : duration in milliseconds for panel TE wait
  *
  * This function is called when the TE signal from the panel doesn't arrive
  * after 'interval' milliseconds. If the TE IRQ is not ready, the workqueue
@@ -33,21 +34,14 @@ static bool mdss_check_te_status(struct mdss_dsi_ctrl_pdata *ctrl_pdata,
 {
 	bool ret;
 
-	/*
-	 * During resume, the panel status will be ON but due to race condition
-	 * between ESD thread and display UNBLANK (or rather can be put as
-	 * asynchronuous nature between these two threads), the ESD thread might
-	 * reach this point before the TE IRQ line is enabled or before the
-	 * first TE interrupt arrives after the TE IRQ line is enabled. For such
-	 * cases, re-schedule the ESD thread.
-	 */
-	ret = !atomic_read(&ctrl_pdata->te_irq_ready);
-	if (ret) {
-		schedule_delayed_work(&pstatus_data->check_status,
+	atomic_set(&ctrl_pdata->te_irq_ready, 0);
+	reinit_completion(&ctrl_pdata->te_irq_comp);
+	enable_irq(gpio_to_irq(ctrl_pdata->disp_te_gpio));
+	/* Define TE interrupt timeout value as 3x(1/fps) */
+	ret = wait_for_completion_timeout(&ctrl_pdata->te_irq_comp,
 			msecs_to_jiffies(interval));
-		pr_debug("%s: TE IRQ line not enabled yet\n", __func__);
-	}
-
+	disable_irq(gpio_to_irq(ctrl_pdata->disp_te_gpio));
+	pr_debug("%s: Panel TE check done with ret = %d\n", __func__, ret);
 	return ret;
 }
 
@@ -110,12 +104,16 @@ void mdss_check_dsi_ctrl_status(struct work_struct *work, uint32_t interval)
 	}
 
 	if (ctrl_pdata->status_mode == ESD_TE) {
-		if (mdss_check_te_status(ctrl_pdata, pstatus_data, interval))
-			return;
+		uint32_t fps = mdss_panel_get_framerate(&pdata->panel_info,
+							FPS_RESOLUTION_HZ);
+		uint32_t timeout = ((1000 / fps) + 1) *
+					MDSS_STATUS_TE_WAIT_MAX;
+
+		if (mdss_check_te_status(ctrl_pdata, pstatus_data, timeout))
+			goto sim;
 		else
 			goto status_dead;
 	}
-
 
 	/*
 	 * TODO: Because mdss_dsi_cmd_mdp_busy has made sure DMA to
@@ -123,18 +121,20 @@ void mdss_check_dsi_ctrl_status(struct work_struct *work, uint32_t interval)
 	 * to acquire ov_lock in case of video mode. Removing this
 	 * lock to fix issues so that ESD thread would not block other
 	 * overlay operations. Need refine this lock for command mode
+	 *
+	 * If Burst mode is enabled then we dont have to acquire ov_lock as
+	 * command and data arbitration is possible in h/w
 	 */
 
-	if (mipi->mode == DSI_CMD_MODE)
+	if ((mipi->mode == DSI_CMD_MODE) && !ctrl_pdata->burst_mode_enabled)
 		mutex_lock(&mdp5_data->ov_lock);
 	mutex_lock(&ctl->offlock);
-	mutex_lock(&ctrl_pdata->mutex);
 
 	if (mdss_panel_is_power_off(pstatus_data->mfd->panel_power_state) ||
 			pstatus_data->mfd->shutdown_pending) {
-		mutex_unlock(&ctrl_pdata->mutex);
 		mutex_unlock(&ctl->offlock);
-		if (mipi->mode == DSI_CMD_MODE)
+		if ((mipi->mode == DSI_CMD_MODE) &&
+		    !ctrl_pdata->burst_mode_enabled)
 			mutex_unlock(&mdp5_data->ov_lock);
 		pr_err("%s: DSI turning off, avoiding panel status check\n",
 							__func__);
@@ -151,7 +151,7 @@ void mdss_check_dsi_ctrl_status(struct work_struct *work, uint32_t interval)
 	 * display reset not to be proper. Hence, wait for DMA_P done
 	 * for command mode panels before triggering BTA.
 	 */
-	if (ctl->ops.wait_pingpong)
+	if (ctl->ops.wait_pingpong && !ctrl_pdata->burst_mode_enabled)
 		ctl->ops.wait_pingpong(ctl, NULL);
 
 	pr_debug("%s: DSI ctrl wait for ping pong done\n", __func__);
@@ -160,9 +160,8 @@ void mdss_check_dsi_ctrl_status(struct work_struct *work, uint32_t interval)
 	ret = ctrl_pdata->check_status(ctrl_pdata);
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF);
 
-	mutex_unlock(&ctrl_pdata->mutex);
 	mutex_unlock(&ctl->offlock);
-	if (mipi->mode == DSI_CMD_MODE)
+	if ((mipi->mode == DSI_CMD_MODE) && !ctrl_pdata->burst_mode_enabled)
 		mutex_unlock(&mdp5_data->ov_lock);
 
 	if ((pstatus_data->mfd->panel_power_state == MDSS_PANEL_POWER_ON)) {
@@ -172,7 +171,7 @@ void mdss_check_dsi_ctrl_status(struct work_struct *work, uint32_t interval)
 		else
 			goto status_dead;
 	}
-
+sim:
 	if (pdata->panel_info.panel_force_dead) {
 		pr_debug("force_dead=%d\n", pdata->panel_info.panel_force_dead);
 		pdata->panel_info.panel_force_dead--;

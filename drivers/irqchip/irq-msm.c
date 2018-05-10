@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -59,14 +59,16 @@ IRQCHIP_DECLARE(tlmm_irq, "qcom,msm-gpio", irq_msm_gpio_init);
 #endif
 IRQCHIP_DECLARE(8996_pinctrl, "qcom,msm8996-pinctrl", pinctrl_irq_dummy);
 IRQCHIP_DECLARE(9640_pinctrl, "qcom,mdm9640-pinctrl", pinctrl_irq_dummy);
-IRQCHIP_DECLARE(californium_pinctrl, "qcom,mdmcalifornium-pinctrl",
+IRQCHIP_DECLARE(9650_pinctrl, "qcom,mdm9650-pinctrl",
+		pinctrl_irq_dummy);
+IRQCHIP_DECLARE(sdx20_pinctrl, "qcom,sdx20-pinctrl",
 		pinctrl_irq_dummy);
 IRQCHIP_DECLARE(9607_pinctrl, "qcom,mdm9607-pinctrl", pinctrl_irq_dummy);
 IRQCHIP_DECLARE(qpnp_irq, "qcom,spmi-pmic-arb", qpnpint_of_init);
 IRQCHIP_DECLARE(wcd9xxx_irq, "qcom,wcd9xxx-irq", wcd9xxx_irq_of_init);
-IRQCHIP_DECLARE(gold_pinctrl, "qcom,msmgold-pinctrl", pinctrl_irq_dummy);
+IRQCHIP_DECLARE(8917_pinctrl, "qcom,msm8917-pinctrl", pinctrl_irq_dummy);
 IRQCHIP_DECLARE(8952_pinctrl, "qcom,msm8952-pinctrl", pinctrl_irq_dummy);
 IRQCHIP_DECLARE(8937_pinctrl, "qcom,msm8937-pinctrl", pinctrl_irq_dummy);
-IRQCHIP_DECLARE(titanium_pinctrl, "qcom,msmtitanium-pinctrl",
+IRQCHIP_DECLARE(8953_pinctrl, "qcom,msm8953-pinctrl",
 						pinctrl_irq_dummy);
 IRQCHIP_DECLARE(8909_pinctrl, "qcom,msm8909-pinctrl", pinctrl_irq_dummy);

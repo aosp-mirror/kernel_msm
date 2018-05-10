@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -129,15 +129,15 @@ enum mdp_mmap_type {
  * enum dyn_mode_switch_state - Lists next stage for dynamic mode switch work
  *
  * @MDSS_MDP_NO_UPDATE_REQUESTED: incoming frame is processed normally
- * @MDSS_MDP_WAIT_FOR_PREP: Waiting for OVERLAY_PREPARE to be called
- * @MDSS_MDP_WAIT_FOR_SYNC: Waiting for BUFFER_SYNC to be called
- * @MDSS_MDP_WAIT_FOR_COMMIT: Waiting for COMMIT to be called
+ * @MDSS_MDP_WAIT_FOR_VALIDATE: Waiting for ATOMIC_COMMIT-validate to be called
+ * @MDSS_MDP_WAIT_FOR_COMMIT: Waiting for ATOMIC_COMMIT-commit to be called
+ * @MDSS_MDP_WAIT_FOR_KICKOFF: Waiting for KICKOFF to be called
  */
 enum dyn_mode_switch_state {
 	MDSS_MDP_NO_UPDATE_REQUESTED,
-	MDSS_MDP_WAIT_FOR_PREP,
-	MDSS_MDP_WAIT_FOR_SYNC,
+	MDSS_MDP_WAIT_FOR_VALIDATE,
 	MDSS_MDP_WAIT_FOR_COMMIT,
+	MDSS_MDP_WAIT_FOR_KICKOFF,
 };
 
 /**
@@ -228,13 +228,14 @@ struct msm_mdp_interface {
 	u32 (*fb_stride)(u32 fb_index, u32 xres, int bpp);
 	struct mdss_mdp_format_params *(*get_format_params)(u32 format);
 	int (*splash_init_fnc)(struct msm_fb_data_type *mfd);
-	struct msm_sync_pt_data *(*get_sync_fnc)(struct msm_fb_data_type *mfd,
-				const struct mdp_buf_sync *buf_sync);
 	void (*check_dsi_status)(struct work_struct *work, uint32_t interval);
 	int (*configure_panel)(struct msm_fb_data_type *mfd, int mode,
 				int dest_ctrl);
 	int (*input_event_handler)(struct msm_fb_data_type *mfd);
 	int (*pp_release_fnc)(struct msm_fb_data_type *mfd);
+	void (*signal_retire_fence)(struct msm_fb_data_type *mfd,
+					int retire_cnt);
+	bool (*is_twm_en)(void);
 	void *private1;
 };
 
@@ -255,6 +256,12 @@ struct msm_fb_backup_type {
 	bool   atomic_commit;
 };
 
+struct msm_fb_fps_info {
+	u32 frame_count;
+	ktime_t last_sampled_time_us;
+	u32 measured_fps;
+};
+
 struct msm_fb_data_type {
 	u32 key;
 	u32 index;
@@ -273,6 +280,7 @@ struct msm_fb_data_type {
 
 	int idle_time;
 	u32 idle_state;
+	struct msm_fb_fps_info fps_info;
 	struct delayed_work idle_notify_work;
 	struct delayed_work idle_3bit_work;
 
@@ -307,6 +315,7 @@ struct msm_fb_data_type {
 	bool allow_bl_update;
 	u32 bl_level_scaled;
 	struct mutex bl_lock;
+	struct mutex mdss_sysfs_lock;
 	bool ipc_resume;
 
 	struct platform_device *pdev;
@@ -350,6 +359,7 @@ struct msm_fb_data_type {
 	bool mdss_fb_split_stored;
 
 	u32 wait_for_kickoff;
+	u32 skip_koff_wait;
 	u32 thermal_level;
 
 	int fb_mmap_type;
@@ -435,6 +445,10 @@ static inline bool mdss_fb_is_hdmi_primary(struct msm_fb_data_type *mfd)
 		(mfd->panel_info->type == DTV_PANEL));
 }
 
+static inline void mdss_fb_init_fps_info(struct msm_fb_data_type *mfd)
+{
+	memset(&mfd->fps_info, 0, sizeof(mfd->fps_info));
+}
 int mdss_fb_get_phys_info(dma_addr_t *start, unsigned long *len, int fb_num);
 void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl);
 void mdss_fb_update_backlight(struct msm_fb_data_type *mfd);
@@ -458,4 +472,5 @@ u32 mdss_fb_get_mode_switch(struct msm_fb_data_type *mfd);
 void mdss_fb_report_panel_dead(struct msm_fb_data_type *mfd);
 void mdss_panelinfo_to_fb_var(struct mdss_panel_info *pinfo,
 						struct fb_var_screeninfo *var);
+void mdss_fb_calc_fps(struct msm_fb_data_type *mfd);
 #endif /* MDSS_FB_H */

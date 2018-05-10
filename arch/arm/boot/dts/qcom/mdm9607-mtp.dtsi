@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -13,6 +13,8 @@
 
 #include "mdm9607.dtsi"
 #include "mdm9607-pinctrl.dtsi"
+#include "mdm9607-display.dtsi"
+#include "qpic-panel-ili-hvga.dtsi"
 
 / {
 	bluetooth: bt_qca6174 {
@@ -27,6 +29,17 @@
 };
 
 &soc {
+	qcom,ntn_hsic {
+		compatible = "qcom,ntn-hsic";
+		vdd-ntn-hsic-supply = <&mdm9607_l11>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&ntn_rst_gpio_default>;
+		ntn-rst-gpio = <&tlmm_pinmux 30 1>;
+		ntn-phy-id = <7>;
+		ntn-timestamp-valid-window = <4>; /* Each unit is 16.75ms */
+		ntn-timestamp-valid-window-disable = <1>; /* 1: To Disable */
+	};
+
 };
 
 &blsp1_uart5 {
@@ -41,6 +54,18 @@
 
 &spi_1 {
 	status = "ok";
+
+	can-controller@0 {
+		compatible = "fsl,k61";
+		spi-max-frequency = <4800000>;
+		reg = <0>;
+		interrupt-parent = <&tlmm_pinmux>;
+		interrupts = <25 0>;
+		reset-gpio = <&tlmm_pinmux 11 0x1>;
+		pinctrl-names = "active", "sleep";
+		pinctrl-0 = <&can_rst_on>;
+		pinctrl-1 = <&can_rst_off>;
+	};
 };
 
 &blsp1_uart3 {
@@ -118,18 +143,6 @@
 	status = "ok";
 };
 
-&pm8019_gpios {
-	gpio@c300 { /* GPIO 4 */
-		qcom,mode = <1>;		/* Digital output */
-		qcom,output-type = <0>;		/* CMOS logic */
-		qcom,invert = <0>;		/* Output high */
-		qcom,vin-sel = <0>;		/* VPH_PWR */
-		qcom,src-sel = <0>;		/* GPIO */
-		qcom,out-strength = <1>;	/* Low drive strength */
-		qcom,master-en = <1>;		/* Enable GPIO */
-	};
-};
-
 /* MPP pin 4 configs for SGMII */
 &pm8019_mpps {
 	mpp@a300 { /* MPP 4 */
@@ -181,5 +194,15 @@
 	pinctrl-0 = <&sdc2_clk_on &sdc2_cmd_on &sdc2_data_on &sdc2_cd_on>;
 	pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off>;
 
+	status = "disabled";
+};
+
+/* Display */
+&mdss_qpic {
+	pinctrl-names= "mdss_default", "mdss_sleep";
+	pinctrl-0 = <&mdss_ldo_active &mdss_cs_active &mdss_te_active
+		&mdss_rs_active &mdss_ad_active &mdss_bl_active>;
+	pinctrl-1 = <&mdss_ldo_sleep &mdss_cs_sleep &mdss_te_sleep
+		&mdss_rs_sleep &mdss_ad_sleep &mdss_bl_sleep>;
 	status = "disabled";
 };

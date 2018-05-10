@@ -5,6 +5,7 @@
  *
  * Copyright (C) 2012 Alexandra Chin <alexandra.chin@tw.synaptics.com>
  * Copyright (C) 2012 Scott Lin <scott.lin@tw.synaptics.com>
+ * Copyright (C) 2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -34,13 +35,13 @@
 #ifndef _SYNAPTICS_DSX_H_
 #define _SYNAPTICS_DSX_H_
 
-#define PLATFORM_DRIVER_NAME "synaptics_dsx"
-#define STYLUS_DRIVER_NAME "synaptics_dsx_stylus"
-#define ACTIVE_PEN_DRIVER_NAME "synaptics_dsx_active_pen"
-#define PROXIMITY_DRIVER_NAME "synaptics_dsx_proximity"
-#define GESTURE_DRIVER_NAME "synaptics_dsx_gesture"
-#define I2C_DRIVER_NAME "synaptics_dsx_i2c"
-#define SPI_DRIVER_NAME "synaptics_dsx_spi"
+#define PLATFORM_DRIVER_NAME "synaptics_dsxv26"
+#define STYLUS_DRIVER_NAME "synaptics_dsxv26_stylus"
+#define ACTIVE_PEN_DRIVER_NAME "synaptics_dsxv26_active_pen"
+#define PROXIMITY_DRIVER_NAME "synaptics_dsxv26_proximity"
+#define GESTURE_DRIVER_NAME "synaptics_dsxv26_gesture"
+#define I2C_DRIVER_NAME "synaptics_dsxv26"
+#define SPI_DRIVER_NAME "synaptics_dsxv26"
 
 /*
  * struct synaptics_dsx_button_map - button map
@@ -57,6 +58,8 @@ struct synaptics_dsx_button_map {
  * @x_flip: x flip flag
  * @y_flip: y flip flag
  * @swap_axes: swap axes flag
+ * @resume_in_workqueue: defer resume function to workqueue
+ * @resume_in_workqueue: do not disable/enable regulators in suspend/resume
  * @irq_gpio: attention interrupt GPIO
  * @irq_on_state: attention interrupt active state
  * @power_gpio: power switch GPIO
@@ -73,23 +76,29 @@ struct synaptics_dsx_button_map {
  * @power_delay_ms: delay time to wait after powering up device
  * @reset_delay_ms: delay time to wait after resetting device
  * @reset_active_ms: reset active time
+ * @bus_lpm_cur_uA: low power mode current setting for bus
  * @byte_delay_us: delay time between two bytes of SPI data
  * @block_delay_us: delay time between two SPI transfers
  * @pwr_reg_name: pointer to name of regulator for power control
  * @bus_reg_name: pointer to name of regulator for bus pullup control
  * @cap_button_map: pointer to 0D button map
  * @vir_button_map: pointer to virtual button map
+ * @resume_in_workqueue: defer resume function to workqueue
  */
 struct synaptics_dsx_board_data {
 	bool x_flip;
 	bool y_flip;
 	bool swap_axes;
+	bool resume_in_workqueue;
+	bool wakeup_gesture_en;
+	bool dont_disable_regs;
 	int irq_gpio;
 	int irq_on_state;
 	int power_gpio;
 	int power_on_state;
 	int reset_gpio;
 	int reset_on_state;
+	int bus_lpm_cur_uA;
 	int max_y_for_2d;
 	unsigned long irq_flags;
 	unsigned short i2c_addr;

@@ -99,14 +99,11 @@ sesInfoFree(struct cifs_ses *buf_to_free)
 	kfree(buf_to_free->serverOS);
 	kfree(buf_to_free->serverDomain);
 	kfree(buf_to_free->serverNOS);
-	if (buf_to_free->password) {
-		memset(buf_to_free->password, 0, strlen(buf_to_free->password));
-		kfree(buf_to_free->password);
-	}
+	kzfree(buf_to_free->password);
 	kfree(buf_to_free->user_name);
 	kfree(buf_to_free->domainName);
-	kfree(buf_to_free->auth_key.response);
-	kfree(buf_to_free);
+	kzfree(buf_to_free->auth_key.response);
+	kzfree(buf_to_free);
 }
 
 struct cifs_tcon *
@@ -136,10 +133,7 @@ tconInfoFree(struct cifs_tcon *buf_to_free)
 	}
 	atomic_dec(&tconInfoAllocCount);
 	kfree(buf_to_free->nativeFileSystem);
-	if (buf_to_free->password) {
-		memset(buf_to_free->password, 0, strlen(buf_to_free->password));
-		kfree(buf_to_free->password);
-	}
+	kzfree(buf_to_free->password);
 	kfree(buf_to_free);
 }
 
@@ -513,39 +507,11 @@ is_valid_oplock_break(char *buffer, struct TCP_Server_Info *srv)
 void
 dump_smb(void *buf, int smb_buf_length)
 {
-	int i, j;
-	char debug_line[17];
-	unsigned char *buffer = buf;
-
 	if (traceSMB == 0)
 		return;
 
-	for (i = 0, j = 0; i < smb_buf_length; i++, j++) {
-		if (i % 8 == 0) {
-			/* have reached the beginning of line */
-			printk(KERN_DEBUG "| ");
-			j = 0;
-		}
-		printk("%0#4x ", buffer[i]);
-		debug_line[2 * j] = ' ';
-		if (isprint(buffer[i]))
-			debug_line[1 + (2 * j)] = buffer[i];
-		else
-			debug_line[1 + (2 * j)] = '_';
-
-		if (i % 8 == 7) {
-			/* reached end of line, time to print ascii */
-			debug_line[16] = 0;
-			printk(" | %s\n", debug_line);
-		}
-	}
-	for (; j < 8; j++) {
-		printk("     ");
-		debug_line[2 * j] = ' ';
-		debug_line[1 + (2 * j)] = ' ';
-	}
-	printk(" | %s\n", debug_line);
-	return;
+	print_hex_dump(KERN_DEBUG, "", DUMP_PREFIX_NONE, 8, 2, buf,
+		       smb_buf_length, true);
 }
 
 void

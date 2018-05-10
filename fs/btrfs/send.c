@@ -1461,7 +1461,21 @@ static int read_symlink(struct btrfs_root *root,
 	ret = btrfs_search_slot(NULL, root, &key, path, 0, 0);
 	if (ret < 0)
 		goto out;
-	BUG_ON(ret);
+	if (ret) {
+		/*
+		 * An empty symlink inode. Can happen in rare error paths when
+		 * creating a symlink (transaction committed before the inode
+		 * eviction handler removed the symlink inode items and a crash
+		 * happened in between or the subvol was snapshoted in between).
+		 * Print an informative message to dmesg/syslog so that the user
+		 * can delete the symlink.
+		 */
+		btrfs_err(root->fs_info,
+			  "Found empty symlink inode %llu at root %llu",
+			  ino, root->root_key.objectid);
+		ret = -EIO;
+		goto out;
+	}
 
 	ei = btrfs_item_ptr(path->nodes[0], path->slots[0],
 			struct btrfs_file_extent_item);
@@ -1625,6 +1639,9 @@ out:
 static int is_inode_existent(struct send_ctx *sctx, u64 ino, u64 gen)
 {
 	int ret;
+
+	if (ino == BTRFS_FIRST_FREE_OBJECTID)
+		return 1;
 
 	ret = get_cur_inode_state(sctx, ino, gen);
 	if (ret < 0)
@@ -1811,7 +1828,7 @@ static int will_overwrite_ref(struct send_ctx *sctx, u64 dir, u64 dir_gen,
 	 * not delted and then re-created, if it was then we have no overwrite
 	 * and we can just unlink this entry.
 	 */
-	if (sctx->parent_root) {
+	if (sctx->parent_root && dir != BTRFS_FIRST_FREE_OBJECTID) {
 		ret = get_inode_info(sctx->parent_root, dir, NULL, &gen, NULL,
 				     NULL, NULL, NULL);
 		if (ret < 0 && ret != -ENOENT)
@@ -4646,13 +4663,19 @@ static int is_extent_unchanged(struct send_ctx *sctx,
 	while (key.offset < ekey->offset + left_len) {
 		ei = btrfs_item_ptr(eb, slot, struct btrfs_file_extent_item);
 		right_type = btrfs_file_extent_type(eb, ei);
-		if (right_type != BTRFS_FILE_EXTENT_REG) {
+		if (right_type != BTRFS_FILE_EXTENT_REG &&
+		    right_type != BTRFS_FILE_EXTENT_INLINE) {
 			ret = 0;
 			goto out;
 		}
 
 		right_disknr = btrfs_file_extent_disk_bytenr(eb, ei);
-		right_len = btrfs_file_extent_num_bytes(eb, ei);
+		if (right_type == BTRFS_FILE_EXTENT_INLINE) {
+			right_len = btrfs_file_extent_inline_len(eb, slot, ei);
+			right_len = PAGE_ALIGN(right_len);
+		} else {
+			right_len = btrfs_file_extent_num_bytes(eb, ei);
+		}
 		right_offset = btrfs_file_extent_offset(eb, ei);
 		right_gen = btrfs_file_extent_generation(eb, ei);
 
@@ -4663,6 +4686,19 @@ static int is_extent_unchanged(struct send_ctx *sctx,
 		if (found_key.offset + right_len <= ekey->offset) {
 			/* If we're a hole just pretend nothing changed */
 			ret = (left_disknr) ? 0 : 1;
+			goto out;
+		}
+
+		/*
+		 * We just wanted to see if when we have an inline extent, what
+		 * follows it is a regular extent (wanted to check the above
+		 * condition for inline extents too). This should normally not
+		 * happen but it's possible for example when we have an inline
+		 * compressed extent representing data with a size matching
+		 * the page size (currently the same as sector size).
+		 */
+		if (right_type == BTRFS_FILE_EXTENT_INLINE) {
+			ret = 0;
 			goto out;
 		}
 

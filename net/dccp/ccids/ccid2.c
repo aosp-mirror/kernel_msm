@@ -140,6 +140,9 @@ static void ccid2_hc_tx_rto_expire(unsigned long data)
 
 	ccid2_pr_debug("RTO_EXPIRE\n");
 
+	if (sk->sk_state == DCCP_CLOSED)
+		goto out;
+
 	/* back-off timer */
 	hc->tx_rto <<= 1;
 	if (hc->tx_rto > DCCP_RTO_MAX)
@@ -749,6 +752,7 @@ static void ccid2_hc_tx_exit(struct sock *sk)
 	for (i = 0; i < hc->tx_seqbufc; i++)
 		kfree(hc->tx_seqbuf[i]);
 	hc->tx_seqbufc = 0;
+	dccp_ackvec_parsed_cleanup(&hc->tx_av_chunks);
 }
 
 static void ccid2_hc_rx_packet_recv(struct sock *sk, struct sk_buff *skb)

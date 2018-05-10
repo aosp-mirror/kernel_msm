@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, 2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -13,6 +13,7 @@
 #ifndef __Q6CORE_H__
 #define __Q6CORE_H__
 #include <linux/qdsp6v2/apr.h>
+#include <sound/apr_audio-v2.h>
 
 
 
@@ -20,6 +21,9 @@
 #define AVCS_CMDRSP_ADSP_EVENT_GET_STATE	0x0001290D
 
 bool q6core_is_adsp_ready(void);
+
+int q6core_get_avcs_fwk_ver_info(uint32_t service_id,
+				 struct avcs_fwk_ver_info *ver_info);
 
 #define ADSP_CMD_SET_DTS_EAGLE_DATA_ID 0x00012919
 #define DTS_EAGLE_LICENSE_ID           0x00028346
@@ -142,34 +146,15 @@ struct avcs_cmd_deregister_topologies {
 	/* Size in bytes of the valid data in the topology buffer. */
 
 	uint32_t                  mode;
-	/* 0: Deregister selected topologies
-	 * 1: Deregister all topologies
+	/* 1: Deregister selected topologies
+	 * 2: Deregister all topologies
 	 */
 } __packed;
 
-#define AVCS_MODE_DEREGISTER_ALL_CUSTOM_TOPOLOGIES	1
+#define AVCS_MODE_DEREGISTER_ALL_CUSTOM_TOPOLOGIES	2
 
 
 int32_t core_set_license(uint32_t key, uint32_t module_id);
 int32_t core_get_license_status(uint32_t module_id);
 
-#define AVCS_GET_VERSIONS	0x00012905
-struct avcs_cmd_get_version_result {
-	struct apr_hdr hdr;
-	uint32_t id;
-};
-#define AVCS_GET_VERSIONS_RSP	0x00012906
-
-#define AVCS_CMDRSP_Q6_ID_2_6	0x00040000
-#define AVCS_CMDRSP_Q6_ID_2_7	0x00040001
-#define AVCS_CMDRSP_Q6_ID_2_8   0x00040002
-
-enum q6_subsys_image {
-	Q6_SUBSYS_AVS2_6 = 1,
-	Q6_SUBSYS_AVS2_7,
-	Q6_SUBSYS_AVS2_8,
-	Q6_SUBSYS_INVALID,
-};
-enum q6_subsys_image q6core_get_avs_version(void);
-int core_get_adsp_ver(void);
 #endif /* __Q6CORE_H__ */

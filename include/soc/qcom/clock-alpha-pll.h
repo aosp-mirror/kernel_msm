@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -48,6 +48,7 @@ struct alpha_pll_clk {
 	struct alpha_pll_masks *masks;
 	void *const __iomem *base;
 	u32 offset;
+	u32 fabia_frac_offset;
 
 	/* if fsm_en_mask is set, config PLL to FSM mode */
 	u32 fsm_reg_offset;
@@ -66,6 +67,12 @@ struct alpha_pll_clk {
 	bool slew;
 	bool no_prepared_reconfig;
 
+	/* some PLLs support dynamically updating their rate
+	 * without disabling the PLL first. Set this flag
+	 * to enable this support.
+	 */
+	bool dynamic_update;
+
 	/*
 	 * Some chipsets need the offline request bit to be
 	 * cleared on a second write to the register, even though
@@ -73,6 +80,7 @@ struct alpha_pll_clk {
 	 * that the workaround is required.
 	 */
 	bool offline_bit_workaround;
+	bool no_irq_dis;
 	bool is_fabia;
 	unsigned long min_supported_freq;
 	struct clk c;

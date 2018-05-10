@@ -388,7 +388,14 @@ nf_nat_setup_info(struct nf_conn *ct,
 
 	NF_CT_ASSERT(maniptype == NF_NAT_MANIP_SRC ||
 		     maniptype == NF_NAT_MANIP_DST);
+#if defined(CONFIG_IP_NF_TARGET_NATTYPE_MODULE)
+	if (nf_nat_initialized(ct, maniptype)) {
+		WARN_ON_ONCE(1);
+		return NF_ACCEPT;
+	}
+#else
 	BUG_ON(nf_nat_initialized(ct, maniptype));
+#endif
 
 	/* What we've got will look like inverse of reply. Normally
 	 * this is what is in the conntrack, except for prior
@@ -888,6 +895,8 @@ static void __exit nf_nat_cleanup(void)
 #ifdef CONFIG_XFRM
 	RCU_INIT_POINTER(nf_nat_decode_session_hook, NULL);
 #endif
+	synchronize_rcu();
+
 	for (i = 0; i < NFPROTO_NUMPROTO; i++)
 		kfree(nf_nat_l4protos[i]);
 	synchronize_net();

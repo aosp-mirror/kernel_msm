@@ -345,6 +345,9 @@ static int raw_send_hdrinc(struct sock *sk, struct flowi4 *fl4,
 			       rt->dst.dev->mtu);
 		return -EMSGSIZE;
 	}
+	if (length < sizeof(struct iphdr))
+		return -EINVAL;
+
 	if (flags&MSG_PROBE)
 		goto out;
 
@@ -489,7 +492,7 @@ static int raw_sendmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
 	/* hdrincl should be READ_ONCE(inet->hdrincl)
 	 * but READ_ONCE() doesn't work with bit fields
 	 */
-	 hdrincl = inet->hdrincl;
+	hdrincl = inet->hdrincl;
 	/*
 	 *	Check the flags.
 	 */

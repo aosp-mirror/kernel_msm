@@ -5,6 +5,10 @@ DWC3- USB3 CONTROLLER
 Required properties:
  - compatible: must be "snps,dwc3"
  - reg : Address and length of the register set for the device
+   Required regs are:
+   - "core_base" : USB DWC3 controller register set.
+   - "ahb2phy_base" : AHB2PHY register base. It is used to update read/write
+                      wait cycle for accessing PHY.
  - interrupts: Interrupts used by the dwc3 controller.
 
 Optional properties:
@@ -28,15 +32,20 @@ Optional properties:
  - snps,num-normal-evt-buffs: If present, specifies number of normal event buffers. Default is 1.
  - snps,num-gsi-evt-buffs: If present, specifies number of GSI based hardware accelerated event buffers.
 	1 event buffer is needed per h/w accelerated endpoint.
+ - xhci-imod-value: Interrupt moderation interval for host mode (in increments of 250nsec).
 
 This is usually a subnode to DWC3 glue to which it is connected.
 
 dwc3@4a030000 {
 	compatible = "snps,dwc3";
-	reg = <0x4a030000 0xcfff>;
+	reg = <0x07600000 0xfc000>,
+		<0x7416000 0x400>;
+	reg-names = "core_base",
+		    "ahb2phy_base";
 	interrupts = <0 92 4>
 	usb-phy = <&usb2_phy>, <&usb3,phy>;
 	tx-fifo-resize;
 	snps,usb3-u1u2-disable;
 	snps,num-gsi-evt-buffs = <0x2>;
+	xhci-imod-value = <4000>;
 };

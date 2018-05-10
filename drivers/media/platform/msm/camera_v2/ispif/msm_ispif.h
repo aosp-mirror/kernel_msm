@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -19,7 +19,11 @@
 #include <media/msmb_ispif.h>
 #include "msm_sd.h"
 
-#define ISPIF_CLK_INFO_MAX 24
+/* Maximum number of voltage supply for ispif and vfe */
+#define ISPIF_VDD_INFO_MAX 2
+#define ISPIF_VFE_VDD_INFO_MAX 2
+
+#define ISPIF_CLK_INFO_MAX 27
 
 struct ispif_irq_status {
 	uint32_t ispifIrqStatus0;
@@ -43,11 +47,7 @@ struct ispif_intf_cmd {
 struct ispif_device {
 	struct platform_device *pdev;
 	struct msm_sd_subdev msm_sd;
-	struct resource *mem;
-	struct resource *clk_mux_mem;
 	struct resource *irq;
-	struct resource *io;
-	struct resource *clk_mux_io;
 	void __iomem *base;
 	void __iomem *clk_mux_base;
 	struct mutex mutex;
@@ -59,11 +59,24 @@ struct ispif_device {
 	struct ispif_intf_cmd applied_intf_cmd[VFE_MAX];
 	enum msm_ispif_state_t ispif_state;
 	struct msm_ispif_vfe_info vfe_info;
-	struct clk *ahb_clk[ISPIF_CLK_INFO_MAX];
+	struct clk **ahb_clk;
+	struct msm_cam_clk_info *ahb_clk_info;
+	struct clk **clks;
+	struct msm_cam_clk_info *clk_info;
 	struct completion reset_complete[VFE_MAX];
+	atomic_t reset_trig[VFE_MAX];
 	uint32_t hw_num_isps;
 	uint32_t num_ahb_clk;
+	uint32_t num_clk;
 	uint32_t clk_idx;
 	uint32_t ispif_sof_debug;
+	uint32_t ispif_rdi0_debug;
+	uint32_t ispif_rdi1_debug;
+	uint32_t ispif_rdi2_debug;
+	struct regulator *ispif_vdd[ISPIF_VDD_INFO_MAX];
+	int ispif_vdd_count;
+	struct regulator *vfe_vdd[ISPIF_VFE_VDD_INFO_MAX];
+	int vfe_vdd_count;
+	int stereo_configured[VFE_MAX];
 };
 #endif

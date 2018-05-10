@@ -5,7 +5,6 @@ config SND_SOC_MSM_HOSTLESS_PCM
 
 config SND_SOC_MSM_QDSP6V2_INTF
 	bool "SoC Q6 audio driver for APQ8084"
-	depends on MSM_QDSP6_APRV2
 	help
 	 To add support for SoC audio on APQ8084.
 	 This will enable all the platform specific
@@ -20,6 +19,16 @@ config SND_SOC_QDSP6V2
 	 This will enable sound soc platform specific
 	 audio drivers. This includes q6asm, q6adm,
 	 q6afe interfaces to DSP using apr.
+
+config SND_SOC_QDSP6V2_VM
+	tristate "SoC ALSA audio driver for QDSP6V2 virtualization"
+	depends on MSM_QDSP6_APRV2_VM
+	help
+	 To add support for MSM QDSP6V2 virtualization
+	 Soc Audio.
+	 This will enable sound soc platform specific
+	 audio drivers. This includes q6asm, q6adm,
+	 q6afe interfaces to DSP using virtualized apr.
 
 config SND_SOC_QDSP_DEBUG
 	bool "QDSP Audio Driver Debug Feature"
@@ -70,7 +79,7 @@ config DTS_SRS_TM
 
 config QTI_PP
 	bool "Enable QTI PP"
-	depends on SND_SOC_MSM_QDSP6V2_INTF
+	depends on SND_SOC_MSM_QDSP6V2_INTF || SND_SOC_QDSP6V2_VM
 	help
 	 To add support for default QTI post processing.
 	 This support is to configure the post processing
@@ -162,9 +171,26 @@ config SND_SOC_MSM8996
 	 the machine driver and the corresponding
 	 DAI-links
 
+config SND_SOC_MSM8996_VM
+	tristate "SoC Machine driver for MSM8996 virtualization"
+	select SND_SOC_QDSP6V2_VM
+	select SND_SOC_MSM_STUB
+	select SND_SOC_MSM_HOSTLESS_PCM
+	select SND_DYNAMIC_MINORS
+	select MSM_QDSP6_APRV2_VM
+	select MSM_QDSP6V2_CODECS
+	select QTI_PP
+	help
+	 To add support for SoC audio on MSM8996
+	 virtualization platform.
+	 This will enable sound soc drivers which
+	 interfaces with DSP using virtualized apr,
+	 also it will enable the machine driver and
+	 the corresponding DAI-links
+
 config SND_SOC_MSM8X16
 	tristate "SoC Machine driver for MSM8916"
-	depends on ARCH_MSMTITANIUM || ARCH_MSM8937
+	depends on ARCH_MSM8953 || ARCH_MSM8937
 	select SND_SOC_QDSP6V2
 	select SND_SOC_MSM_STUB
 	select SND_SOC_MSM_HOSTLESS_PCM
@@ -193,20 +219,21 @@ config SND_SOC_MSM8X16
 	 the machine driver and the corresponding
 	 DAI-links
 
-config SND_SOC_MDMCALIFORNIUM
-        tristate "SoC Machine driver for MDMCALIFORNIUM boards"
-        depends on ARCH_MDMCALIFORNIUM
+config SND_SOC_MDM9650
+        tristate "SoC Machine driver for MDM9650 or SDX20 boards"
+        depends on ARCH_MDM9650 || ARCH_SDX20
         select SND_SOC_QDSP6V2
         select SND_SOC_MSM_STUB
         select SND_SOC_MSM_HOSTLESS_PCM
         select SND_DYNAMIC_MINORS
-        select MSM_QDSP6_APRV3
+        select MSM_QDSP6_APRV3_GLINK
         select MSM_QDSP6V2_CODECS
         select SND_SOC_WCD9335
         select SND_SOC_WSA881X
+        select SND_SOC_TLV320AIC3X
         select SND_HWDEP
         help
-         To add support for SoC audio on MDMCALIFORNIUM.
+         To add support for SoC audio on MDM9650 or SDX20.
          This will enable sound soc drivers which
          interfaces with DSP, also it will enable
          the machine driver and the corresponding
@@ -218,6 +245,7 @@ config SND_SOC_MDM9607
 	select SND_SOC_QDSP6V2
 	select SND_SOC_MSM_STUB
 	select SND_SOC_WCD9330
+	select SND_SOC_WCD9306
 	select SND_SOC_MSM_HOSTLESS_PCM
 	select SND_DYNAMIC_MINORS
 	select MSM_QDSP6_APRV3
@@ -240,10 +268,38 @@ config SND_SOC_MSM8909
 	select MSM_QDSP6_APRV3
 	select MSM_QDSP6V2_CODECS
 	select SND_SOC_MSM8X16_WCD
+	select SND_SOC_DIGITAL_CDC
 	select SND_SOC_WSA881X_ANALOG
+	select SND_SOC_WSA881X
+	select SND_SOC_WCD9335
+	select WCD9335_CODEC
+	select SLIMBUS
+	select SOUNDWIRE
+        select SND_SOC_CPE
 	select SND_HWDEP
+	select MSM_BG_GLINK
+	select MSM_BG_CODEC
+	select QTI_PP
 	help
 	 To add support for SoC audio on MSM8909 boards.
+	 This will enable sound soc drivers which
+	 interfaces with DSP, also it will enable
+	 the machine drivers and the corresponding
+	 DAI-links.
+
+config SND_SOC_MDM9640
+	tristate "SoC Machine driver for MDM9640 boards"
+	depends on ARCH_MDM9640
+	select SND_SOC_QDSP6V2
+	select SND_SOC_MSM_STUB
+	select SND_SOC_WCD9330
+	select SND_SOC_MSM_HOSTLESS_PCM
+	select SND_DYNAMIC_MINORS
+	select MSM_QDSP6_APRV3
+	select MSM_QDSP6V2_CODECS
+	select SND_HWDEP
+        help
+	 To add support for SoC audio on MDM9640 boards.
 	 This will enable sound soc drivers which
 	 interfaces with DSP, also it will enable
 	 the machine drivers and the corresponding

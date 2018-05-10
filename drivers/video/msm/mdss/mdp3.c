@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2018, The Linux Foundation. All rights reserved.
  * Copyright (C) 2007 Google Incorporated
  *
  * This software is licensed under the terms of the GNU General Public
@@ -46,6 +46,7 @@
 #include <linux/msm-bus-board.h>
 #include <linux/qcom_iommu.h>
 #include <linux/msm_iommu_domains.h>
+#include <linux/vmalloc.h>
 
 #include <linux/msm_dma_iommu_mapping.h>
 
@@ -57,6 +58,7 @@
 #include "mdss_debug.h"
 #include "mdss_smmu.h"
 #include "mdss.h"
+#include "mdss_spi_panel.h"
 
 #ifndef EXPORT_COMPAT
 #define EXPORT_COMPAT(x)
@@ -77,6 +79,13 @@ struct mdp3_hw_resource *mdp3_res;
 		.ab = (ab_val),				\
 		.ib = (ib_val),				\
 	}
+
+#define SET_BIT(value, bit_num) \
+{ \
+	value[bit_num >> 3] |= (1 << (bit_num & 7)); \
+}
+
+#define MAX_BPP_SUPPORTED 4
 
 static struct msm_bus_vectors mdp_bus_vectors[] = {
 	MDP_BUS_VECTOR_ENTRY(0, 0),
@@ -103,6 +112,7 @@ struct mdp3_bus_handle_map mdp3_bus_handle[MDP3_BUS_HANDLE_MAX] = {
 
 static struct mdss_panel_intf pan_types[] = {
 	{"dsi", MDSS_PANEL_INTF_DSI},
+	{"spi", MDSS_PANEL_INTF_SPI},
 };
 static char mdss_mdp3_panel[MDSS_MAX_PANEL_LEN];
 
@@ -145,6 +155,13 @@ struct mdp3_iommu_ctx_map mdp3_iommu_contexts[MDP3_IOMMU_CTX_MAX] = {
 		.attached = 0,
 	},
 };
+
+#ifndef CONFIG_FB_MSM_MDSS_SPI_PANEL
+void mdss_spi_panel_bl_ctrl_update(struct mdss_panel_data *pdata, u32 bl_level)
+{
+
+}
+#endif
 
 static irqreturn_t mdp3_irq_handler(int irq, void *ptr)
 {
@@ -1827,9 +1844,17 @@ int mdp3_put_img(struct mdp3_img_data *data, int client)
 			return -ENOMEM;
 		}
 		if (data->mapped) {
-			mdss_smmu_unmap_dma_buf(data->srcp_table,
-						dom, dir,
-					data->srcp_dma_buf);
+			if (client == MDP3_CLIENT_PPP ||
+						client == MDP3_CLIENT_DMA_P)
+				mdss_smmu_unmap_dma_buf(data->tab_clone,
+					dom, dir, data->srcp_dma_buf);
+			else if (client == MDP3_CLIENT_SPI) {
+				ion_unmap_kernel(iclient, data->srcp_ihdl);
+				ion_free(iclient, data->srcp_ihdl);
+				data->srcp_ihdl = NULL;
+			} else
+				mdss_smmu_unmap_dma_buf(data->srcp_table,
+					dom, dir, data->srcp_dma_buf);
 			data->mapped = false;
 		}
 		if (!data->skip_detach) {
@@ -1843,6 +1868,10 @@ int mdp3_put_img(struct mdp3_img_data *data, int client)
 		}
 	} else {
 		return -EINVAL;
+	}
+	if (client == MDP3_CLIENT_PPP || client == MDP3_CLIENT_DMA_P) {
+		vfree(data->tab_clone->sgl);
+		kfree(data->tab_clone);
 	}
 	return 0;
 }
@@ -1882,12 +1911,21 @@ int mdp3_get_img(struct msmfb_data *img, struct mdp3_img_data *data, int client)
 		if (!ret)
 			goto done;
 	} else if (iclient) {
-		data->srcp_dma_buf = dma_buf_get(img->memory_id);
+			data->srcp_dma_buf = dma_buf_get(img->memory_id);
 			if (IS_ERR(data->srcp_dma_buf)) {
 				pr_err("DMA : error on ion_import_fd\n");
 				ret = PTR_ERR(data->srcp_dma_buf);
 				data->srcp_dma_buf = NULL;
 				return ret;
+			}
+			if (client == MDP3_CLIENT_SPI) {
+				data->srcp_ihdl = ion_import_dma_buf(iclient,
+					img->memory_id);
+				if (IS_ERR_OR_NULL(data->srcp_ihdl)) {
+					pr_err("error on ion_import_fd\n");
+					data->srcp_ihdl = NULL;
+					return -EIO;
+				}
 			}
 
 			data->srcp_attachment =
@@ -1906,9 +1944,46 @@ int mdp3_get_img(struct msmfb_data *img, struct mdp3_img_data *data, int client)
 				goto err_detach;
 			}
 
-			ret = mdss_smmu_map_dma_buf(data->srcp_dma_buf,
-					data->srcp_table, dom,
-				&data->addr, &data->len, DMA_BIDIRECTIONAL);
+			if (client == MDP3_CLIENT_PPP ||
+						client == MDP3_CLIENT_DMA_P) {
+				data->tab_clone =
+				mdss_smmu_sg_table_clone(data->srcp_table,
+							GFP_KERNEL, true);
+				if (IS_ERR_OR_NULL(data->tab_clone)) {
+					if (!(data->tab_clone))
+						ret = -EINVAL;
+					else
+						ret = PTR_ERR(data->tab_clone);
+					goto clone_err;
+				}
+				ret = mdss_smmu_map_dma_buf(data->srcp_dma_buf,
+					data->tab_clone, dom,
+					&data->addr, &data->len,
+					DMA_BIDIRECTIONAL);
+			} else if (client == MDP3_CLIENT_SPI) {
+					void *vaddr;
+
+					if (ion_handle_get_size(iclient,
+						data->srcp_ihdl,
+						(size_t *)&data->len) < 0) {
+						pr_err("get size failed\n");
+						return -EINVAL;
+					}
+					vaddr = ion_map_kernel(iclient,
+						data->srcp_ihdl);
+					if (IS_ERR_OR_NULL(vaddr)) {
+						pr_err("Mapping failed\n");
+						mdp3_put_img(data, client);
+						return -EINVAL;
+					}
+					data->addr = (dma_addr_t) vaddr;
+					data->len -= img->offset;
+					return 0;
+			} else {
+				ret = mdss_smmu_map_dma_buf(data->srcp_dma_buf,
+					data->srcp_table, dom, &data->addr,
+					&data->len, DMA_BIDIRECTIONAL);
+			}
 
 			if (IS_ERR_VALUE(ret)) {
 				pr_err("smmu map dma buf failed: (%d)\n", ret);
@@ -1919,6 +1994,10 @@ int mdp3_get_img(struct msmfb_data *img, struct mdp3_img_data *data, int client)
 		data->skip_detach = false;
 	}
 done:
+	if (client ==  MDP3_CLIENT_PPP || client == MDP3_CLIENT_DMA_P) {
+		data->addr  += data->tab_clone->sgl->length;
+		data->len   -= data->tab_clone->sgl->length;
+	}
 	if (!ret && (img->offset < data->len)) {
 		data->addr += img->offset;
 		data->len -= img->offset;
@@ -1933,6 +2012,9 @@ done:
 	}
 	return ret;
 
+clone_err:
+	dma_buf_unmap_attachment(data->srcp_attachment, data->srcp_table,
+		mdss_smmu_dma_data_direction(DMA_BIDIRECTIONAL));
 err_detach:
 	dma_buf_detach(data->srcp_dma_buf, data->srcp_attachment);
 err_put:
@@ -1943,6 +2025,11 @@ err_unmap:
 			mdss_smmu_dma_data_direction(DMA_BIDIRECTIONAL));
 	dma_buf_detach(data->srcp_dma_buf, data->srcp_attachment);
 	dma_buf_put(data->srcp_dma_buf);
+
+	if (client ==  MDP3_CLIENT_PPP || client == MDP3_CLIENT_DMA_P) {
+		vfree(data->tab_clone->sgl);
+		kfree(data->tab_clone);
+	}
 	return ret;
 
 }
@@ -2139,6 +2226,12 @@ void mdp3_release_splash_memory(struct msm_fb_data_type *mfd)
 {
 	/* Give back the reserved memory to the system */
 	if (mdp3_res->splash_mem_addr) {
+		if ((mfd->panel.type == MIPI_VIDEO_PANEL) &&
+				(mdp3_res->cont_splash_en)) {
+			mdss_smmu_unmap(MDSS_IOMMU_DOMAIN_UNSECURE,
+				mdp3_res->splash_mem_addr,
+				mdp3_res->splash_mem_size);
+		}
 		mdp3_free(mfd);
 		pr_debug("mdp3_release_splash_memory\n");
 		memblock_free(mdp3_res->splash_mem_addr,
@@ -2202,6 +2295,8 @@ static int mdp3_is_display_on(struct mdss_panel_data *pdata)
 	if (pdata->panel_info.type == MIPI_VIDEO_PANEL) {
 		status = MDP3_REG_READ(MDP3_REG_DSI_VIDEO_EN);
 		rc = status & 0x1;
+	} else if (pdata->panel_info.type == SPI_PANEL) {
+		rc = is_spi_panel_continuous_splash_on(pdata);
 	} else {
 		status = MDP3_REG_READ(MDP3_REG_DMA_P_CONFIG);
 		status &= 0x180000;
@@ -2209,11 +2304,9 @@ static int mdp3_is_display_on(struct mdss_panel_data *pdata)
 	}
 
 	mdp3_res->splash_mem_addr = MDP3_REG_READ(MDP3_REG_DMA_P_IBUF_ADDR);
-	
-	if ((pdata->panel_info.type == MIPI_CMD_PANEL) ||(!rc)) {
-		if (mdp3_clk_enable(0, 0))
-			pr_err("fail to turn off MDP core clks\n");
-	}
+
+	if (mdp3_clk_enable(0, 0))
+		pr_err("fail to turn off MDP core clks\n");
 	return rc;
 }
 
@@ -2233,14 +2326,19 @@ static int mdp3_continuous_splash_on(struct mdss_panel_data *pdata)
 		pr_err("invalid bus handle %d\n", bus_handle->handle);
 		return -EINVAL;
 	}
-	mdp3_calc_dma_res(panel_info, &mdp_clk_rate, &ab, &ib, panel_info->bpp);
+	mdp3_calc_dma_res(panel_info, &mdp_clk_rate, &ab,
+					&ib, MAX_BPP_SUPPORTED);
 
 	mdp3_clk_set_rate(MDP3_CLK_VSYNC, MDP_VSYNC_CLK_RATE,
 			MDP3_CLIENT_DMA_P);
 	mdp3_clk_set_rate(MDP3_CLK_MDP_SRC, mdp_clk_rate,
 			MDP3_CLIENT_DMA_P);
 
-	rc = mdp3_bus_scale_set_quota(MDP3_CLIENT_DMA_P, ab, ib);
+	/*DMA not used on SPI interface, remove DMA bus voting*/
+	if (panel_info->type == SPI_PANEL)
+		rc = mdp3_bus_scale_set_quota(MDP3_CLIENT_DMA_P, 0, 0);
+	else
+		rc = mdp3_bus_scale_set_quota(MDP3_CLIENT_DMA_P, ab, ib);
 	bus_handle->restore_ab[MDP3_CLIENT_DMA_P] = ab;
 	bus_handle->restore_ib[MDP3_CLIENT_DMA_P] = ib;
 
@@ -2258,6 +2356,8 @@ static int mdp3_continuous_splash_on(struct mdss_panel_data *pdata)
 
 	if (panel_info->type == MIPI_VIDEO_PANEL)
 		mdp3_res->intf[MDP3_DMA_OUTPUT_SEL_DSI_VIDEO].active = 1;
+	else if (panel_info->type == SPI_PANEL)
+		mdp3_res->intf[MDP3_DMA_OUTPUT_SEL_SPI_CMD].active = 1;
 	else
 		mdp3_res->intf[MDP3_DMA_OUTPUT_SEL_DSI_CMD].active = 1;
 
@@ -2275,6 +2375,14 @@ splash_on_err:
 static int mdp3_panel_register_done(struct mdss_panel_data *pdata)
 {
 	int rc = 0;
+	u64 ab = 0; u64 ib = 0;
+	u64 mdp_clk_rate = 0;
+
+	/* Store max bandwidth supported in mdp res */
+	mdp3_calc_dma_res(&pdata->panel_info, &mdp_clk_rate, &ab, &ib,
+			MAX_BPP_SUPPORTED);
+	do_div(ab, 1024);
+	mdp3_res->max_bw = ab+1;
 
 	/*
 	* If idle pc feature is not enabled, then get a reference to the
@@ -2305,6 +2413,7 @@ static int mdp3_panel_register_done(struct mdss_panel_data *pdata)
 	if (pdata->panel_info.cont_splash_enabled == false)
 		mdp3_res->allow_iommu_update = true;
 
+	mdss_res->pdata = pdata;
 	return rc;
 }
 
@@ -2390,6 +2499,7 @@ static int mdp3_debug_init(struct platform_device *pdev)
 	mdss_res->mdss_util = mdp3_res->mdss_util;
 
 	mdata->debug_inf.debug_enable_clock = mdp3_debug_enable_clock;
+	mdata->mdp_rev = mdp3_res->mdp_rev;
 
 	rc = mdss_debugfs_init(mdata);
 	if (rc)
@@ -2432,6 +2542,61 @@ static void mdp3_dma_underrun_intr_handler(int type, void *arg)
 	}
 }
 
+uint32_t ppp_formats_supported[] = {
+	MDP_RGB_565,
+	MDP_BGR_565,
+	MDP_RGB_888,
+	MDP_BGR_888,
+	MDP_XRGB_8888,
+	MDP_ARGB_8888,
+	MDP_RGBA_8888,
+	MDP_BGRA_8888,
+	MDP_RGBX_8888,
+	MDP_Y_CBCR_H2V1,
+	MDP_Y_CBCR_H2V2,
+	MDP_Y_CBCR_H2V2_ADRENO,
+	MDP_Y_CBCR_H2V2_VENUS,
+	MDP_Y_CRCB_H2V1,
+	MDP_Y_CRCB_H2V2,
+	MDP_YCRYCB_H2V1,
+	MDP_BGRX_8888,
+};
+
+uint32_t dma_formats_supported[] = {
+	MDP_RGB_565,
+	MDP_RGB_888,
+	MDP_XRGB_8888,
+};
+
+static void __mdp3_set_supported_formats(void)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(ppp_formats_supported); i++)
+		SET_BIT(mdp3_res->ppp_formats, ppp_formats_supported[i]);
+
+	for (i = 0; i < ARRAY_SIZE(dma_formats_supported); i++)
+		SET_BIT(mdp3_res->dma_formats, dma_formats_supported[i]);
+}
+
+static void __update_format_supported_info(char *buf, int *cnt)
+{
+	int j;
+	size_t len = PAGE_SIZE;
+	int num_bytes = BITS_TO_BYTES(MDP_IMGTYPE_LIMIT1);
+#define SPRINT(fmt, ...) \
+	(*cnt += scnprintf(buf + *cnt, len - *cnt, fmt, ##__VA_ARGS__))
+
+	SPRINT("ppp_input_fmts=");
+	for (j = 0; j < num_bytes; j++)
+		SPRINT("%d,", mdp3_res->ppp_formats[j]);
+	SPRINT("\ndma_output_fmts=");
+	for (j = 0; j < num_bytes; j++)
+		SPRINT("%d,", mdp3_res->dma_formats[j]);
+	SPRINT("\n");
+#undef SPRINT
+}
+
 static ssize_t mdp3_show_capabilities(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -2441,10 +2606,32 @@ static ssize_t mdp3_show_capabilities(struct device *dev,
 #define SPRINT(fmt, ...) \
 		(cnt += scnprintf(buf + cnt, len - cnt, fmt, ##__VA_ARGS__))
 
+	SPRINT("dma_pipes=%d\n", 1);
 	SPRINT("mdp_version=3\n");
 	SPRINT("hw_rev=%d\n", 305);
+	SPRINT("pipe_count:%d\n", 1);
+	SPRINT("pipe_num:%d pipe_type:dma pipe_ndx:%d rects:%d ", 0, 1, 1);
+	SPRINT("pipe_is_handoff:%d display_id:%d\n", 0, 0);
+	__update_format_supported_info(buf, &cnt);
+	SPRINT("rgb_pipes=%d\n", 0);
+	SPRINT("vig_pipes=%d\n", 0);
 	SPRINT("dma_pipes=%d\n", 1);
-	SPRINT("\n");
+	SPRINT("blending_stages=%d\n", 1);
+	SPRINT("cursor_pipes=%d\n", 0);
+	SPRINT("max_cursor_size=%d\n", 0);
+	SPRINT("smp_count=%d\n", 0);
+	SPRINT("smp_size=%d\n", 0);
+	SPRINT("smp_mb_per_pipe=%d\n", 0);
+	SPRINT("max_downscale_ratio=%d\n", PPP_DOWNSCALE_MAX);
+	SPRINT("max_upscale_ratio=%d\n", PPP_UPSCALE_MAX);
+	SPRINT("max_pipe_bw=%u\n", mdp3_res->max_bw);
+	SPRINT("max_bandwidth_low=%u\n", mdp3_res->max_bw);
+	SPRINT("max_bandwidth_high=%u\n", mdp3_res->max_bw);
+	SPRINT("max_mdp_clk=%u\n", MDP_CORE_CLK_RATE_MAX);
+	SPRINT("clk_fudge_factor=%u,%u\n", CLK_FUDGE_NUM, CLK_FUDGE_DEN);
+	SPRINT("features=has_ppp\n");
+
+#undef SPRINT
 
 	return cnt;
 }
@@ -2488,9 +2675,41 @@ static ssize_t mdp3_show_smart_blit(struct device *dev,
 static DEVICE_ATTR(smart_blit, S_IRUGO | S_IWUSR | S_IWGRP,
 			mdp3_show_smart_blit, mdp3_store_smart_blit);
 
+static ssize_t mdp3_store_twm(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t len)
+{
+	u32 data = -1;
+	ssize_t rc = 0;
+
+	rc = kstrtoint(buf, 10, &data);
+	if (rc) {
+		pr_err("kstrtoint failed. rc=%d\n", rc);
+		return rc;
+	}
+	mdp3_res->twm_en = data ? true : false;
+	pr_err("TWM :  %s\n",	(mdp3_res->twm_en) ?
+		"ENABLED" : "DISABLED");
+	return len;
+}
+
+static ssize_t mdp3_show_twm(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	ssize_t ret = 0;
+
+	pr_err("TWM :  %s\n",	(mdp3_res->twm_en) ?
+		"ENABLED" : "DISABLED");
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", mdp3_res->twm_en);
+	return ret;
+}
+
+static DEVICE_ATTR(twm_enable, S_IRUGO | S_IWUSR | S_IWGRP,
+			mdp3_show_twm, mdp3_store_twm);
+
 static struct attribute *mdp3_fs_attrs[] = {
 	&dev_attr_caps.attr,
 	&dev_attr_smart_blit.attr,
+	&dev_attr_twm_enable.attr,
 	NULL
 };
 
@@ -2690,11 +2909,8 @@ int mdp3_panel_get_intf_status(u32 disp_num, u32 intf_type)
 	/* DSI video mode or command mode */
 	rc = (status == 0x180000) || (status == 0x080000);
 
-	/* For Video mode panel do not disable clock */
-	if (!(status == 0x180000)) {
-		if (mdp3_clk_enable(0, 0))
-			pr_err("fail to turn off MDP core clks\n");
-	}
+	if (mdp3_clk_enable(0, 0))
+		pr_err("fail to turn off MDP core clks\n");
 	return rc;
 }
 
@@ -2755,6 +2971,14 @@ static int mdp3_probe(struct platform_device *pdev)
 		mdp3_dynamic_clock_gating_ctrl;
 	mdp3_res->mdss_util->panel_intf_type = mdp3_panel_intf_type;
 	mdp3_res->mdss_util->panel_intf_status = mdp3_panel_get_intf_status;
+	mdp3_res->twm_en = false;
+
+	if (mdp3_res->mdss_util->param_check(mdss_mdp3_panel)) {
+		mdp3_res->mdss_util->display_disabled = true;
+		mdp3_res->mdss_util->mdp_probe_done = true;
+		return 0;
+	}
+
 	rc = mdp3_parse_dt(pdev);
 	if (rc)
 		goto probe_done;
@@ -2817,8 +3041,13 @@ static int mdp3_probe(struct platform_device *pdev)
 	if (rc)
 		pr_err("mdss smmu init failed\n");
 
+	__mdp3_set_supported_formats();
+
 	mdp3_res->mdss_util->mdp_probe_done = true;
 	pr_debug("%s: END\n", __func__);
+
+	if (mdp3_res->pan_cfg.pan_intf == MDSS_PANEL_INTF_SPI)
+		mdp3_interface.check_dsi_status = mdp3_check_spi_panel_status;
 
 probe_done:
 	if (IS_ERR_VALUE(rc))

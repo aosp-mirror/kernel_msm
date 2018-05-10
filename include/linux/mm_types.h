@@ -470,6 +470,10 @@ struct mm_struct {
 	bool tlb_flush_pending;
 #endif
 	struct uprobes_state uprobes_state;
+#ifdef CONFIG_MSM_APP_SETTINGS
+	int app_setting;
+#endif
+
 	struct work_struct async_put_work;
 };
 

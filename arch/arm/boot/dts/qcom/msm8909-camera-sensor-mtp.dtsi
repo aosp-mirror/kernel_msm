@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -89,6 +89,7 @@
 		clocks = <&clock_gcc clk_mclk0_clk_src>,
 			<&clock_gcc clk_gcc_camss_mclk0_clk>;
 		clock-names = "cam_src_clk", "cam_clk";
+		qcom,clock-rates = <19200000 0>;
 	};
 
 	led_flash0: qcom,led-flash@60 {
@@ -104,13 +105,15 @@
 		pinctrl-0 = <&cam_sensor_flash_default>;
 		pinctrl-1 = <&cam_sensor_flash_sleep>;
 		gpios = <&msm_gpio 31 0>,
-			<&msm_gpio 32 0>;
+			<&msm_gpio 32 0>,
+			<&msm_gpio 36 0>;
 		qcom,gpio-flash-en = <0>;
 		qcom,gpio-flash-now = <1>;
-		qcom,gpio-req-tbl-num = <0 1>;
-		qcom,gpio-req-tbl-flags = <0 0>;
+		qcom,gpio-flash-rst = <2>;
+		qcom,gpio-req-tbl-num = <0 1 2>;
+		qcom,gpio-req-tbl-flags = <0 0 0>;
 		qcom,gpio-req-tbl-label = "FLASH_EN",
-			"FLASH_NOW";
+			"FLASH_NOW", "FLASH_RST";
 		qcom,cci-master = <0>;
 	};
 
@@ -155,9 +158,10 @@
 		clocks = <&clock_gcc clk_mclk0_clk_src>,
 				<&clock_gcc clk_gcc_camss_mclk0_clk>;
 		clock-names = "cam_src_clk", "cam_clk";
+		qcom,clock-rates = <24000000 0>;
 	};
 
-	qcom,camera@1 {
+	qcom_camera1: qcom,camera@1 {
 		cell-index = <1>;
 		compatible = "qcom,camera";
 		reg = <0x1>;
@@ -185,9 +189,12 @@
 			"CAM_RESET",
 			"CAM_STANDBY";
 		qcom,cci-master = <0>;
+		qcom,sensor-position = <1>;
+		qcom,sensor-mode = <0>;
 		status = "ok";
 		clocks = <&clock_gcc clk_mclk1_clk_src>,
 				<&clock_gcc clk_gcc_camss_mclk1_clk>;
 		clock-names = "cam_src_clk", "cam_clk";
+		qcom,clock-rates = <24000000 0>;
 	};
 };

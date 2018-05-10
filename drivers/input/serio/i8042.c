@@ -397,8 +397,10 @@ static int i8042_start(struct serio *serio)
 {
 	struct i8042_port *port = serio->port_data;
 
+	spin_lock_irq(&i8042_lock);
 	port->exists = true;
-	mb();
+	spin_unlock_irq(&i8042_lock);
+
 	return 0;
 }
 
@@ -411,16 +413,20 @@ static void i8042_stop(struct serio *serio)
 {
 	struct i8042_port *port = serio->port_data;
 
+	spin_lock_irq(&i8042_lock);
 	port->exists = false;
+	port->serio = NULL;
+	spin_unlock_irq(&i8042_lock);
 
 	/*
+	 * We need to make sure that interrupt handler finishes using
+	 * our serio port before we return from this function.
 	 * We synchronize with both AUX and KBD IRQs because there is
 	 * a (very unlikely) chance that AUX IRQ is raised for KBD port
 	 * and vice versa.
 	 */
 	synchronize_irq(I8042_AUX_IRQ);
 	synchronize_irq(I8042_KBD_IRQ);
-	port->serio = NULL;
 }
 
 /*
@@ -537,7 +543,7 @@ static irqreturn_t i8042_interrupt(int irq, void *dev_id)
 
 	spin_unlock_irqrestore(&i8042_lock, flags);
 
-	if (likely(port->exists && !filtered))
+	if (likely(serio && !filtered))
 		serio_interrupt(serio, data, dfl);
 
  out:
@@ -1230,6 +1236,7 @@ static int __init i8042_create_kbd_port(void)
 	serio->start		= i8042_start;
 	serio->stop		= i8042_stop;
 	serio->close		= i8042_port_close;
+	serio->ps2_cmd_mutex	= &i8042_mutex;
 	serio->port_data	= port;
 	serio->dev.parent	= &i8042_platform_device->dev;
 	strlcpy(serio->name, "i8042 KBD port", sizeof(serio->name));
@@ -1257,6 +1264,7 @@ static int __init i8042_create_aux_port(int idx)
 	serio->write		= i8042_aux_write;
 	serio->start		= i8042_start;
 	serio->stop		= i8042_stop;
+	serio->ps2_cmd_mutex	= &i8042_mutex;
 	serio->port_data	= port;
 	serio->dev.parent	= &i8042_platform_device->dev;
 	if (idx < 0) {
@@ -1322,21 +1330,6 @@ static void i8042_unregister_ports(void)
 		}
 	}
 }
-
-/*
- * Checks whether port belongs to i8042 controller.
- */
-bool i8042_check_port_owner(const struct serio *port)
-{
-	int i;
-
-	for (i = 0; i < I8042_NUM_PORTS; i++)
-		if (i8042_ports[i].serio == port)
-			return true;
-
-	return false;
-}
-EXPORT_SYMBOL(i8042_check_port_owner);
 
 static void i8042_free_irqs(void)
 {

@@ -1,0 +1,308 @@
+/*
+ * Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&soc {
+	qcom,csid@1b08000 {
+		/delete-property/ qcom,mipi-csi-vdd-supply;
+	};
+
+	qcom,csid@1b08400 {
+		/delete-property/ qcom,mipi-csi-vdd-supply;
+	};
+
+	i2c@78b9000 {
+		synaptics@20 {
+			/delete-property/ avdd-supply;
+			/delete-property/ vdd-supply;
+		};
+	};
+
+	qcom,wcnss-wlan@a000000 {
+		/delete-property/ qcom,iris-vddpa-voltage-level;
+		/delete-property/ qcom,iris-vddpa-supply;
+		/delete-property/ qcom,wcnss-adc_tm;
+		/delete-property/ qcom,is-dual-band-disabled;
+		/delete-property/ qcom,iris-vddpa-current;
+		qcom,pronto-vddmx-supply = <&pm660_s2_corner_ao>;
+		qcom,pronto-vddcx-supply = <&pm660_s3_corner>;
+		qcom,pronto-vddpx-supply = <&pm660_l13>;
+		qcom,iris-vddxo-supply   = <&pm660_l12>;
+		qcom,iris-vddrfa-supply  = <&pm660_l6>;
+		qcom,iris-vdddig-supply  = <&pm660_l13>;
+		qcom,wcn-external-gpio-support;
+	};
+
+	qcom,pronto@a21b000 {
+		vdd_pronto_pll-supply = <&pm660_l12>;
+	};
+
+	qcom,mss@4080000 {
+		vdd_cx-supply = <&pm660_s2_corner>;
+		vdd_mx-supply = <&pm660_s3_corner_ao>;
+		vdd_pll-supply = <&pm660_l12>;
+	};
+
+	tpiu@820000 {
+		/delete-property/ vdd-supply;
+		/delete-property/ vdd-io-supply;
+	};
+
+	qpdi@1941000 {
+		/delete-property/ vdd-supply;
+		/delete-property/ vdd-io-supply;
+	};
+
+	qcom,msm-thermal {
+		/delete-property/ vdd-dig-supply;
+	};
+
+	msm8x16_wcd_codec@f000 {
+		/delete-property/ cdc-vdda-cp-supply;
+		/delete-property/ cdc-vdda-h-supply;
+		/delete-property/ cdc-vdd-px-supply;
+		/delete-property/ cdc-vdd-pa-supply;
+		/delete-property/ cdc-vdd-mic-bias-supply;
+	};
+};
+
+&i2c_1 {
+	/delete-node/ mpu6050@68;
+	/delete-node/ avago@39;
+	/delete-node/ akm@c;
+};
+
+&msm_gpio {
+	/delete-node/ mpu6050_int_pin;
+	/delete-node/ apds99xx_int_pin;
+	/delete-node/ ak8963_int_pin;
+
+	pmx_mdss {
+		mdss_dsi_active: mdss_dsi_active {
+			mux {
+				pins = "gpio25", "gpio37", "gpio59";
+			};
+			config {
+				pins = "gpio25", "gpio37", "gpio59";
+			};
+		};
+		mdss_dsi_suspend: mdss_dsi_suspend {
+			mux {
+				pins = "gpio25", "gpio37", "gpio59";
+			};
+			config {
+				pins = "gpio25", "gpio37", "gpio59";
+			};
+		};
+	};
+};
+
+&i2c_3 {
+	qcom,actuator@0 {
+		/delete-property/ cam_vaf-supply;
+	};
+
+	qcom,eeprom@6c {
+		/delete-property/ cam_vdig-supply;
+		/delete-property/ cam_vana-supply;
+		/delete-property/ cam_vio-supply;
+		/delete-property/ cam_vaf-supply;
+	};
+
+	qcom,camera@0 {
+		/delete-property/ cam_vdig-supply;
+		/delete-property/ cam_vana-supply;
+		/delete-property/ cam_vio-supply;
+		/delete-property/ cam_vaf-supply;
+	};
+
+	qcom,camera@1 {
+		/delete-property/ cam_vana-supply;
+		/delete-property/ cam_vio-supply;
+	};
+};
+
+
+&sdhc_2 {
+	/delete-property/ vdd-supply;
+	/delete-property/ vdd-io-supply;
+};
+
+&dsi_auo_qvga_cmd {
+	/delete-property/ qcom,mdss-dsi-pwm-gpio;
+};
+
+&dsi_auo_cx_qvga_cmd {
+	/delete-property/ qcom,mdss-dsi-pwm-gpio;
+};
+&dsi_hx8394d_480_vid {
+	/delete-property/ qcom,mdss-dsi-pwm-gpio;
+};
+
+&dsi_hx8394d_720_vid {
+	/delete-property/ qcom,mdss-dsi-pwm-gpio;
+};
+
+&dsi_hx8394d_qhd_vid {
+	/delete-property/ qcom,mdss-dsi-pwm-gpio;
+};
+
+&soc {
+	/delete-node/ qcom,rpm-smd;
+	rpm_bus: qcom,rpm-smd {
+		compatible = "qcom,rpm-smd";
+		rpm-channel-name = "rpm_requests";
+		rpm-channel-type = <15>;
+	};
+};
+
+#include "msm-pm660.dtsi"
+#include "msm-pm660-rpm-regulator.dtsi"
+#include "msm8909w-pm660-regulator.dtsi"
+#include "msm8909-pm660-pm.dtsi"
+
+&soc {
+	qcom,gcc@1800000 {
+		vdd_dig-supply = <&pm660_s2_corner>;
+		vdd_sr2_dig-supply = <&pm660_s2_corner_ao>;
+		vdd_sr2_pll-supply = <&pm660_l12_ao>;
+
+	};
+
+	usb@78d9000 {
+		hsusb_vdd_dig-supply = <&pm660_l5>;
+		HSUSB_1p8-supply = <&pm660_l12>;
+		HSUSB_3p3-supply = <&pm660_l16>;
+	};
+
+	qcom,clock-a7@0b011050 {
+		cpu-vdd-supply = <&apc_vreg_corner>;
+	};
+
+	qcom,rpmcc@1800000 {
+		compatible = "qcom,rpmcc-8909-pm660";
+	};
+
+	qcom,sensor-information {
+		sensor_information9: qcom,sensor-information-9 {
+			qcom,sensor-type = "adc";
+			qcom,sensor-name = "emmc_therm";
+		};
+
+		sensor_information10: qcom,sensor-information-10 {
+			qcom,sensor-type = "adc";
+			qcom,sensor-name = "msm_therm";
+		};
+
+		sensor_information11: qcom,sensor-information-11 {
+			qcom,sensor-type = "adc";
+			qcom,sensor-name = "quiet_therm";
+		};
+	};
+};
+
+&sdhc_1 {
+	vdd-supply = <&pm660_l19>;
+	vdd-io-supply = <&pm660_l13>;
+};
+
+&pm660_haptics {
+	qcom,actuator-type = "erm";
+};
+
+&pm660_vadc {
+	/delete-node/ chan@1d;
+};
+
+&dsi_auo_390p_cmd {
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+	qcom,panel-supply-entries = <&dsi_pm660_panel_pwr_supply>;
+};
+
+&mdss_dsi{
+	vdda-supply = <&pm660_l5>; /*1.2V*/
+	vddio-supply = <&pm660_l12>; /*1.8V*/
+	qcom,mdss_dsi_ctrl0@1ac8000 {
+		bklt-supply = <&bob_vreg>;
+		vdd-supply = <&pm660_l18>; /*1.8*/
+		vddio-supply = <&pm660_l11>;
+	};
+};
+
+&mdss_dsi0{
+	qcom,dsi-pref-prim-pan = <&dsi_auo_390p_cmd>;
+	qcom,platform-bklight-en-gpio = <&msm_gpio 52 0>;
+	qcom,platform-enable-gpio = <&msm_gpio 59 0>;
+};
+
+&mdss_dsi0_pll {
+	vddio-supply = <&pm660_l12>; /*1.8V*/
+};
+
+&pm660_gpios {
+	/* GPIO 4 (NFC_CLK_REQ) */
+	gpio@c300 {
+		qcom,mode = <0>;
+		qcom,vin-sel = <1>;
+		qcom,src-sel = <0>;
+		qcom,master-en = <1>;
+		status = "okay";
+	};
+
+	gpio@cb00 {
+		status = "ok";
+		qcom,mode = <1>;
+		qcom,vin-sel = <0>;
+		qcom,src-sel = <0>;
+		qcom,master-en = <1>;
+		qcom,out-strength = <2>;
+	};
+
+	gpio@c400 {
+		status = "ok";
+		qcom,mode = <1>;
+		qcom,pull = <5>;
+		qcom,vin-sel = <0>;
+		qcom,src-sel = <2>;
+		qcom,master-en = <1>;
+		qcom,out-strength = <2>;
+	};
+};
+
+&pm660_misc {
+	qcom,support-twm-config;
+};
+
+&pm660_pbs {
+	status = "okay";
+};
+
+&pm660_pon {
+	qcom,support-twm-config;
+	qcom,pbs-client = <&pm660_pbs>;
+};
+
+/ {
+	/delete-node/ qcom,battery-data;
+	mtp_batterydata: qcom,battery-data {
+		qcom,batt-id-range-pct = <15>;
+		#include "fg-gen3-batterydata-palladium-1500mah.dtsi"
+	};
+};
+
+&pm660_charger {
+	qcom,pd-not-supported;
+};
+
+&pm660_fg {
+	qcom,battery-data = <&mtp_batterydata>;
+};

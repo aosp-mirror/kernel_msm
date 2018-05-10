@@ -740,7 +740,7 @@ xlog_find_head(
 	 * in the in-core log.  The following number can be made tighter if
 	 * we actually look at the block size of the filesystem.
 	 */
-	num_scan_bblks = XLOG_TOTAL_REC_SHIFT(log);
+	num_scan_bblks = min_t(int, log_bbnum, XLOG_TOTAL_REC_SHIFT(log));
 	if (head_blk >= num_scan_bblks) {
 		/*
 		 * We are guaranteed that the entire check can be performed
@@ -3151,6 +3151,7 @@ xlog_recover_dquot_ra_pass2(
 	struct xfs_disk_dquot	*recddq;
 	struct xfs_dq_logformat	*dq_f;
 	uint			type;
+	int			len;
 
 
 	if (mp->m_qflags == 0)
@@ -3171,8 +3172,12 @@ xlog_recover_dquot_ra_pass2(
 	ASSERT(dq_f);
 	ASSERT(dq_f->qlf_len == 1);
 
-	xfs_buf_readahead(mp->m_ddev_targp, dq_f->qlf_blkno,
-			  XFS_FSB_TO_BB(mp, dq_f->qlf_len), NULL);
+	len = XFS_FSB_TO_BB(mp, dq_f->qlf_len);
+	if (xlog_peek_buffer_cancelled(log, dq_f->qlf_blkno, len, 0))
+		return;
+
+	xfs_buf_readahead(mp->m_ddev_targp, dq_f->qlf_blkno, len,
+			  &xfs_dquot_buf_ra_ops);
 }
 
 STATIC void
@@ -3856,6 +3861,7 @@ xlog_recover_clear_agi_bucket(
 	agi->agi_unlinked[bucket] = cpu_to_be32(NULLAGINO);
 	offset = offsetof(xfs_agi_t, agi_unlinked) +
 		 (sizeof(xfs_agino_t) * bucket);
+	xfs_trans_buf_set_type(tp, agibp, XFS_BLFT_AGI_BUF);
 	xfs_trans_log_buf(tp, agibp, offset,
 			  (offset + sizeof(xfs_agino_t) - 1));
 

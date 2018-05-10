@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -269,16 +269,16 @@ static int mdss_pll_util_parse_dt_supply(struct platform_device *pdev,
 		mp->vreg_config[i].post_off_sleep = (!rc ? tmp : 0);
 
 		pr_debug("%s min=%d, max=%d, enable=%d, disable=%d, ulp=%d, preonsleep=%d, postonsleep=%d, preoffsleep=%d, postoffsleep=%d\n",
-					mp->vreg_config[i].vreg_name,
-					mp->vreg_config[i].min_voltage,
-					mp->vreg_config[i].max_voltage,
-					mp->vreg_config[i].load[DSS_REG_MODE_ENABLE],
-					mp->vreg_config[i].load[DSS_REG_MODE_DISABLE],
-					mp->vreg_config[i].load[DSS_REG_MODE_ULP],
-					mp->vreg_config[i].pre_on_sleep,
-					mp->vreg_config[i].post_on_sleep,
-					mp->vreg_config[i].pre_off_sleep,
-					mp->vreg_config[i].post_off_sleep);
+			mp->vreg_config[i].vreg_name,
+			mp->vreg_config[i].min_voltage,
+			mp->vreg_config[i].max_voltage,
+			mp->vreg_config[i].load[DSS_REG_MODE_ENABLE],
+			mp->vreg_config[i].load[DSS_REG_MODE_DISABLE],
+			mp->vreg_config[i].load[DSS_REG_MODE_ULP],
+			mp->vreg_config[i].pre_on_sleep,
+			mp->vreg_config[i].post_on_sleep,
+			mp->vreg_config[i].pre_off_sleep,
+			mp->vreg_config[i].post_off_sleep);
 		++i;
 
 		rc = 0;

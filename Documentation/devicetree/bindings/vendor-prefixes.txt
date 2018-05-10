@@ -10,6 +10,7 @@ adapteva	Adapteva, Inc.
 adi	Analog Devices, Inc.
 aeroflexgaisler	Aeroflex Gaisler AB
 ak	Asahi Kasei Corp.
+akm	Asahi Kasei Microdevices.
 allwinner	Allwinner Technology Co., Ltd.
 altr	Altera Corp.
 amcc	Applied Micro Circuits Corporation (APM, formally AMCC)
@@ -17,6 +18,7 @@ amd	Advanced Micro Devices (AMD), Inc.
 amlogic	Amlogic, Inc.
 ams	AMS AG
 amstaos	AMS-Taos Inc.
+android	Google Inc.
 apm	Applied Micro Circuits Corporation (APM)
 arm	ARM Ltd.
 armadeus	ARMadeus Systems SARL
@@ -90,6 +92,7 @@ karo	Ka-Ro electronics GmbH
 keymile	Keymile GmbH
 lacie	LaCie
 lantiq	Lantiq Semiconductor
+lego	LEGO Systems A/S
 lenovo	Lenovo Group Ltd.
 invn	InvenSense Inc.
 isl	Intersil
@@ -141,6 +144,7 @@ powervr	PowerVR (deprecated, use img)
 qca	Qualcomm Atheros, Inc.
 qcom	Qualcomm Technologies, Inc
 qnap	QNAP Systems, Inc.
+qvm	BlackBerry Ltd
 radxa	Radxa
 raidsonic	RaidSonic Technology GmbH
 ralink	Mediatek/Ralink Technology Corp.
@@ -195,3 +199,7 @@ xillybus	Xillybus Ltd.
 xlnx	Xilinx
 zyxel	ZyXEL Communications Corp.
 zarlink	Zarlink Semiconductor
+bosch-sensortec»    Bosch Sensortec GmbH
+lontium Lontium Semiconductor
+himax	Himax Technologies, Inc.
+hxcommon	Himax Technologies, Inc.

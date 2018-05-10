@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -109,7 +109,6 @@ bool emac_hw_read_tx_tstamp(struct emac_hw *hw, struct emac_hwtxtstamp *ts);
 #define DMAW_DLY_CNT_DEF                4
 
 #define MDIO_CLK_25_4                   0
-#define MDIO_CLK_25_28                  7
 
 #define RXQ0_RSS_HSTYP_IPV6_TCP_EN      0x20
 #define RXQ0_RSS_HSTYP_IPV6_EN          0x10
@@ -124,6 +123,8 @@ bool emac_hw_read_tx_tstamp(struct emac_hw *hw, struct emac_hwtxtstamp *ts);
 #define MII_PSSR                        0x11 /* PHY Specific Status Reg */
 #define MII_DBG_ADDR                    0x1D /* PHY Debug Address Reg */
 #define MII_DBG_DATA                    0x1E /* PHY Debug Data Reg */
+#define MII_INT_ENABLE			0x12 /* PHY Interrupt Enable Reg */
+#define MII_INT_STATUS			0x13 /* PHY Interrupt Status Reg */
 
 /* MII_BMCR (0x00) */
 #define BMCR_SPEED10                    0x0000
@@ -144,4 +145,8 @@ bool emac_hw_read_tx_tstamp(struct emac_hw *hw, struct emac_hwtxtstamp *ts);
 /* HIBERNATE_CTRL_REG */
 #define HIBERNATE_EN                    0x8000
 
+/* MII_INT_ENABLE/MII_INT_STATUS */
+#define LINK_SUCCESS_INTERRUPT			BIT(10)
+#define LINK_SUCCESS_BX			BIT(7)
+#define WOL_INT				BIT(0)
 #endif /*_EMAC_HW_H_*/

@@ -222,7 +222,7 @@ static int restore_sigregs32(struct pt_regs *regs,_sigregs32 __user *sregs)
 	int i;
 
 	/* Alwys make any pending restarted system call return -EINTR */
-	current_thread_info()->restart_block.fn = do_no_restart_syscall;
+	current->restart_block.fn = do_no_restart_syscall;
 
 	if (__copy_from_user(&user_sregs, &sregs->regs, sizeof(user_sregs)))
 		return -EFAULT;
@@ -293,7 +293,7 @@ static int restore_sigregs_ext32(struct pt_regs *regs,
 
 	/* Restore high gprs from signal stack */
 	if (__copy_from_user(&gprs_high, &sregs_ext->gprs_high,
-			     sizeof(&sregs_ext->gprs_high)))
+			     sizeof(sregs_ext->gprs_high)))
 		return -EFAULT;
 	for (i = 0; i < NUM_GPRS; i++)
 		*(__u32 *)&regs->gprs[i] = gprs_high[i];

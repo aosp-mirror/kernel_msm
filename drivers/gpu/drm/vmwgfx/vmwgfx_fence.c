@@ -1,6 +1,6 @@
 /**************************************************************************
  *
- * Copyright © 2011 VMware, Inc., Palo Alto, CA., USA
+ * Copyright © 2011-2014 VMware, Inc., Palo Alto, CA., USA
  * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -142,8 +142,8 @@ static bool vmw_fence_enable_signaling(struct fence *f)
 	struct vmw_fence_manager *fman = fman_from_fence(fence);
 	struct vmw_private *dev_priv = fman->dev_priv;
 
-	__le32 __iomem *fifo_mem = dev_priv->mmio_virt;
-	u32 seqno = ioread32(fifo_mem + SVGA_FIFO_FENCE);
+	u32 *fifo_mem = dev_priv->mmio_virt;
+	u32 seqno = vmw_mmio_read(fifo_mem + SVGA_FIFO_FENCE);
 	if (seqno - fence->base.seqno < VMW_FENCE_WRAP)
 		return false;
 
@@ -386,14 +386,14 @@ static bool vmw_fence_goal_new_locked(struct vmw_fence_manager *fman,
 				      u32 passed_seqno)
 {
 	u32 goal_seqno;
-	__le32 __iomem *fifo_mem;
+	u32 *fifo_mem;
 	struct vmw_fence_obj *fence;
 
 	if (likely(!fman->seqno_valid))
 		return false;
 
 	fifo_mem = fman->dev_priv->mmio_virt;
-	goal_seqno = ioread32(fifo_mem + SVGA_FIFO_FENCE_GOAL);
+	goal_seqno = vmw_mmio_read(fifo_mem + SVGA_FIFO_FENCE_GOAL);
 	if (likely(passed_seqno - goal_seqno >= VMW_FENCE_WRAP))
 		return false;
 
@@ -401,8 +401,8 @@ static bool vmw_fence_goal_new_locked(struct vmw_fence_manager *fman,
 	list_for_each_entry(fence, &fman->fence_list, head) {
 		if (!list_empty(&fence->seq_passed_actions)) {
 			fman->seqno_valid = true;
-			iowrite32(fence->base.seqno,
-				  fifo_mem + SVGA_FIFO_FENCE_GOAL);
+			vmw_mmio_write(fence->base.seqno,
+				       fifo_mem + SVGA_FIFO_FENCE_GOAL);
 			break;
 		}
 	}
@@ -430,18 +430,18 @@ static bool vmw_fence_goal_check_locked(struct vmw_fence_obj *fence)
 {
 	struct vmw_fence_manager *fman = fman_from_fence(fence);
 	u32 goal_seqno;
-	__le32 __iomem *fifo_mem;
+	u32 *fifo_mem;
 
 	if (fence_is_signaled_locked(&fence->base))
 		return false;
 
 	fifo_mem = fman->dev_priv->mmio_virt;
-	goal_seqno = ioread32(fifo_mem + SVGA_FIFO_FENCE_GOAL);
+	goal_seqno = vmw_mmio_read(fifo_mem + SVGA_FIFO_FENCE_GOAL);
 	if (likely(fman->seqno_valid &&
 		   goal_seqno - fence->base.seqno < VMW_FENCE_WRAP))
 		return false;
 
-	iowrite32(fence->base.seqno, fifo_mem + SVGA_FIFO_FENCE_GOAL);
+	vmw_mmio_write(fence->base.seqno, fifo_mem + SVGA_FIFO_FENCE_GOAL);
 	fman->seqno_valid = true;
 
 	return true;
@@ -453,9 +453,9 @@ static void __vmw_fences_update(struct vmw_fence_manager *fman)
 	struct list_head action_list;
 	bool needs_rerun;
 	uint32_t seqno, new_seqno;
-	__le32 __iomem *fifo_mem = fman->dev_priv->mmio_virt;
+	u32 *fifo_mem = fman->dev_priv->mmio_virt;
 
-	seqno = ioread32(fifo_mem + SVGA_FIFO_FENCE);
+	seqno = vmw_mmio_read(fifo_mem + SVGA_FIFO_FENCE);
 rerun:
 	list_for_each_entry_safe(fence, next_fence, &fman->fence_list, head) {
 		if (seqno - fence->base.seqno < VMW_FENCE_WRAP) {
@@ -477,7 +477,7 @@ rerun:
 
 	needs_rerun = vmw_fence_goal_new_locked(fman, seqno);
 	if (unlikely(needs_rerun)) {
-		new_seqno = ioread32(fifo_mem + SVGA_FIFO_FENCE);
+		new_seqno = vmw_mmio_read(fifo_mem + SVGA_FIFO_FENCE);
 		if (new_seqno != seqno) {
 			seqno = new_seqno;
 			goto rerun;
@@ -539,7 +539,7 @@ int vmw_fence_create(struct vmw_fence_manager *fman,
 		     struct vmw_fence_obj **p_fence)
 {
 	struct vmw_fence_obj *fence;
-	int ret;
+ 	int ret;
 
 	fence = kzalloc(sizeof(*fence), GFP_KERNEL);
 	if (unlikely(fence == NULL))
@@ -702,6 +702,41 @@ void vmw_fence_fifo_up(struct vmw_fence_manager *fman)
 }
 
 
+/**
+ * vmw_fence_obj_lookup - Look up a user-space fence object
+ *
+ * @tfile: A struct ttm_object_file identifying the caller.
+ * @handle: A handle identifying the fence object.
+ * @return: A struct vmw_user_fence base ttm object on success or
+ * an error pointer on failure.
+ *
+ * The fence object is looked up and type-checked. The caller needs
+ * to have opened the fence object first, but since that happens on
+ * creation and fence objects aren't shareable, that's not an
+ * issue currently.
+ */
+static struct ttm_base_object *
+vmw_fence_obj_lookup(struct ttm_object_file *tfile, u32 handle)
+{
+	struct ttm_base_object *base = ttm_base_object_lookup(tfile, handle);
+
+	if (!base) {
+		pr_err("Invalid fence object handle 0x%08lx.\n",
+		       (unsigned long)handle);
+		return ERR_PTR(-EINVAL);
+	}
+
+	if (base->refcount_release != vmw_user_fence_base_release) {
+		pr_err("Invalid fence object handle 0x%08lx.\n",
+		       (unsigned long)handle);
+		ttm_base_object_unref(&base);
+		return ERR_PTR(-EINVAL);
+	}
+
+	return base;
+}
+
+
 int vmw_fence_obj_wait_ioctl(struct drm_device *dev, void *data,
 			     struct drm_file *file_priv)
 {
@@ -727,13 +762,9 @@ int vmw_fence_obj_wait_ioctl(struct drm_device *dev, void *data,
 		arg->kernel_cookie = jiffies + wait_timeout;
 	}
 
-	base = ttm_base_object_lookup(tfile, arg->handle);
-	if (unlikely(base == NULL)) {
-		printk(KERN_ERR "Wait invalid fence object handle "
-		       "0x%08lx.\n",
-		       (unsigned long)arg->handle);
-		return -EINVAL;
-	}
+	base = vmw_fence_obj_lookup(tfile, arg->handle);
+	if (IS_ERR(base))
+		return PTR_ERR(base);
 
 	fence = &(container_of(base, struct vmw_user_fence, base)->fence);
 
@@ -772,13 +803,9 @@ int vmw_fence_obj_signaled_ioctl(struct drm_device *dev, void *data,
 	struct ttm_object_file *tfile = vmw_fpriv(file_priv)->tfile;
 	struct vmw_private *dev_priv = vmw_priv(dev);
 
-	base = ttm_base_object_lookup(tfile, arg->handle);
-	if (unlikely(base == NULL)) {
-		printk(KERN_ERR "Fence signaled invalid fence object handle "
-		       "0x%08lx.\n",
-		       (unsigned long)arg->handle);
-		return -EINVAL;
-	}
+	base = vmw_fence_obj_lookup(tfile, arg->handle);
+	if (IS_ERR(base))
+		return PTR_ERR(base);
 
 	fence = &(container_of(base, struct vmw_user_fence, base)->fence);
 	fman = fman_from_fence(fence);
@@ -1093,6 +1120,7 @@ int vmw_fence_event_ioctl(struct drm_device *dev, void *data,
 		(struct drm_vmw_fence_event_arg *) data;
 	struct vmw_fence_obj *fence = NULL;
 	struct vmw_fpriv *vmw_fp = vmw_fpriv(file_priv);
+	struct ttm_object_file *tfile = vmw_fp->tfile;
 	struct drm_vmw_fence_rep __user *user_fence_rep =
 		(struct drm_vmw_fence_rep __user *)(unsigned long)
 		arg->fence_rep;
@@ -1106,24 +1134,18 @@ int vmw_fence_event_ioctl(struct drm_device *dev, void *data,
 	 */
 	if (arg->handle) {
 		struct ttm_base_object *base =
-			ttm_base_object_lookup_for_ref(dev_priv->tdev,
-						       arg->handle);
+			vmw_fence_obj_lookup(tfile, arg->handle);
 
-		if (unlikely(base == NULL)) {
-			DRM_ERROR("Fence event invalid fence object handle "
-				  "0x%08lx.\n",
-				  (unsigned long)arg->handle);
-			return -EINVAL;
-		}
+		if (IS_ERR(base))
+			return PTR_ERR(base);
+
 		fence = &(container_of(base, struct vmw_user_fence,
 				       base)->fence);
 		(void) vmw_fence_obj_reference(fence);
 
 		if (user_fence_rep != NULL) {
-			bool existed;
-
 			ret = ttm_ref_object_add(vmw_fp->tfile, base,
-						 TTM_REF_USAGE, &existed);
+						 TTM_REF_USAGE, NULL, false);
 			if (unlikely(ret != 0)) {
 				DRM_ERROR("Failed to reference a fence "
 					  "object.\n");
@@ -1166,8 +1188,7 @@ int vmw_fence_event_ioctl(struct drm_device *dev, void *data,
 	return 0;
 out_no_create:
 	if (user_fence_rep != NULL)
-		ttm_ref_object_base_unref(vmw_fpriv(file_priv)->tfile,
-					  handle, TTM_REF_USAGE);
+		ttm_ref_object_base_unref(tfile, handle, TTM_REF_USAGE);
 out_no_ref_obj:
 	vmw_fence_obj_unreference(&fence);
 	return ret;

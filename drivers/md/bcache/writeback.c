@@ -21,7 +21,8 @@
 static void __update_writeback_rate(struct cached_dev *dc)
 {
 	struct cache_set *c = dc->disk.c;
-	uint64_t cache_sectors = c->nbuckets * c->sb.bucket_size;
+	uint64_t cache_sectors = c->nbuckets * c->sb.bucket_size -
+				bcache_flash_devs_sectors_dirty(c);
 	uint64_t cache_dirty_target =
 		div_u64(cache_sectors * dc->writeback_percent, 100);
 
@@ -190,7 +191,7 @@ static void write_dirty(struct closure *cl)
 
 	closure_bio_submit(&io->bio, cl, &io->dc->disk);
 
-	continue_at(cl, write_dirty_finish, system_wq);
+	continue_at(cl, write_dirty_finish, io->dc->writeback_write_wq);
 }
 
 static void read_dirty_endio(struct bio *bio, int error)
@@ -210,7 +211,7 @@ static void read_dirty_submit(struct closure *cl)
 
 	closure_bio_submit(&io->bio, cl, &io->dc->disk);
 
-	continue_at(cl, write_dirty, system_wq);
+	continue_at(cl, write_dirty, io->dc->writeback_write_wq);
 }
 
 static void read_dirty(struct cached_dev *dc)
@@ -323,6 +324,10 @@ void bcache_dev_sectors_dirty_add(struct cache_set *c, unsigned inode,
 
 static bool dirty_pred(struct keybuf *buf, struct bkey *k)
 {
+	struct cached_dev *dc = container_of(buf, struct cached_dev, writeback_keys);
+
+	BUG_ON(KEY_INODE(k) != dc->disk.id);
+
 	return KEY_DIRTY(k);
 }
 
@@ -372,11 +377,24 @@ next:
 	}
 }
 
+/*
+ * Returns true if we scanned the entire disk
+ */
 static bool refill_dirty(struct cached_dev *dc)
 {
 	struct keybuf *buf = &dc->writeback_keys;
+	struct bkey start = KEY(dc->disk.id, 0, 0);
 	struct bkey end = KEY(dc->disk.id, MAX_KEY_OFFSET, 0);
-	bool searched_from_start = false;
+	struct bkey start_pos;
+
+	/*
+	 * make sure keybuf pos is inside the range for this disk - at bringup
+	 * we might not be attached yet so this disk's inode nr isn't
+	 * initialized then
+	 */
+	if (bkey_cmp(&buf->last_scanned, &start) < 0 ||
+	    bkey_cmp(&buf->last_scanned, &end) > 0)
+		buf->last_scanned = start;
 
 	if (dc->partial_stripes_expensive) {
 		refill_full_stripes(dc);
@@ -384,14 +402,20 @@ static bool refill_dirty(struct cached_dev *dc)
 			return false;
 	}
 
-	if (bkey_cmp(&buf->last_scanned, &end) >= 0) {
-		buf->last_scanned = KEY(dc->disk.id, 0, 0);
-		searched_from_start = true;
-	}
-
+	start_pos = buf->last_scanned;
 	bch_refill_keybuf(dc->disk.c, buf, &end, dirty_pred);
 
-	return bkey_cmp(&buf->last_scanned, &end) >= 0 && searched_from_start;
+	if (bkey_cmp(&buf->last_scanned, &end) < 0)
+		return false;
+
+	/*
+	 * If we get to the end start scanning again from the beginning, and
+	 * only scan up to where we initially started scanning from:
+	 */
+	buf->last_scanned = start;
+	bch_refill_keybuf(dc->disk.c, buf, &start_pos, dirty_pred);
+
+	return bkey_cmp(&buf->last_scanned, &start_pos) >= 0;
 }
 
 static int bch_writeback_thread(void *arg)
@@ -465,17 +489,17 @@ static int sectors_dirty_init_fn(struct btree_op *_op, struct btree *b,
 	return MAP_CONTINUE;
 }
 
-void bch_sectors_dirty_init(struct cached_dev *dc)
+void bch_sectors_dirty_init(struct bcache_device *d)
 {
 	struct sectors_dirty_init op;
 
 	bch_btree_op_init(&op.op, -1);
-	op.inode = dc->disk.id;
+	op.inode = d->id;
 
-	bch_btree_map_keys(&op.op, dc->disk.c, &KEY(op.inode, 0, 0),
+	bch_btree_map_keys(&op.op, d->c, &KEY(op.inode, 0, 0),
 			   sectors_dirty_init_fn, 0);
 
-	dc->disk.sectors_dirty_last = bcache_dev_sectors_dirty(&dc->disk);
+	d->sectors_dirty_last = bcache_dev_sectors_dirty(d);
 }
 
 void bch_cached_dev_writeback_init(struct cached_dev *dc)
@@ -499,6 +523,11 @@ void bch_cached_dev_writeback_init(struct cached_dev *dc)
 
 int bch_cached_dev_writeback_start(struct cached_dev *dc)
 {
+	dc->writeback_write_wq = alloc_workqueue("bcache_writeback_wq",
+						WQ_MEM_RECLAIM, 0);
+	if (!dc->writeback_write_wq)
+		return -ENOMEM;
+
 	dc->writeback_thread = kthread_create(bch_writeback_thread, dc,
 					      "bcache_writeback");
 	if (IS_ERR(dc->writeback_thread))

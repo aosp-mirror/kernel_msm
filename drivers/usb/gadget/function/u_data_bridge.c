@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, 2013-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011, 2013-2017, The Linux Foundation. All rights reserved.
  * Linux Foundation chooses to take subject only to the GPLv2 license terms,
  * and distributes only under these terms.
  *
@@ -633,6 +633,9 @@ static int gbridge_port_tiocmget(struct gbridge_port *port)
 
 	if (gser->serial_state & TIOCM_RI)
 		result |= TIOCM_RI;
+
+	if (gser->serial_state & TIOCM_DSR)
+		result |= TIOCM_DSR;
 fail:
 	spin_unlock_irqrestore(&port->port_lock, flags);
 	return result;
@@ -682,6 +685,10 @@ static int gbridge_port_tiocmset(struct gbridge_port *port,
 			status = gser->send_carrier_detect(gser, 0);
 		}
 	}
+	if (set & TIOCM_DSR)
+		gser->serial_state |= TIOCM_DSR;
+	if (clear & TIOCM_DSR)
+		gser->serial_state &= ~TIOCM_DSR;
 fail:
 	spin_unlock_irqrestore(&port->port_lock, flags);
 	return status;
@@ -755,6 +762,18 @@ static void gbridge_notify_modem(void *gptr, u8 portno, int ctrl_bits)
 	port->cbits_to_modem = temp;
 	port->cbits_updated = true;
 	spin_unlock_irqrestore(&port->port_lock, flags);
+	/* if DTR is high, update latest modem info to laptop */
+	if (port->cbits_to_modem & TIOCM_DTR) {
+		unsigned int result;
+		unsigned cbits_to_laptop;
+
+		result = gbridge_port_tiocmget(port);
+		cbits_to_laptop = convert_uart_sigs_to_acm(result);
+		if (gser->send_modem_ctrl_bits)
+			gser->send_modem_ctrl_bits(
+					port->port_usb, cbits_to_laptop);
+	}
+
 	wake_up(&port->read_wq);
 }
 
@@ -818,6 +837,40 @@ static ssize_t debug_gbridge_reset_stats(struct file *file,
 	return count;
 }
 
+static ssize_t gbridge_rw_write(struct file *file, const char __user *ubuf,
+					size_t count, loff_t *ppos)
+{
+	struct gbridge_port *ui_dev = ports[0];
+	struct gserial *gser;
+	struct usb_function *func;
+	struct usb_gadget   *gadget;
+
+	if (!ui_dev) {
+		pr_err("%s ui_dev is NULL\n", __func__);
+		return -EINVAL;
+	}
+
+	gser = ui_dev->port_usb;
+	if (!gser) {
+		pr_err("%s gser is NULL\n", __func__);
+		return -EINVAL;
+	}
+
+	func = &gser->func;
+	if (!func) {
+		pr_err("%s func is NULL\n", __func__);
+		return -EINVAL;
+	}
+
+	gadget = gser->func.config->cdev->gadget;
+	if ((gadget->speed == USB_SPEED_SUPER) && (func->func_is_suspended)) {
+		pr_debug("%s Calling usb_func_wakeup\n", __func__);
+		usb_func_wakeup(func);
+	}
+
+	return count;
+}
+
 static int debug_gbridge_open(struct inode *inode, struct file *file)
 {
 	return 0;
@@ -829,6 +882,11 @@ static const struct file_operations debug_gbridge_ops = {
 	.write = debug_gbridge_reset_stats,
 };
 
+const struct file_operations gbridge_rem_wakeup_fops = {
+	.open = debug_gbridge_open,
+	.write = gbridge_rw_write,
+};
+
 static void gbridge_debugfs_init(void)
 {
 	struct dentry *dent;
@@ -838,7 +896,10 @@ static void gbridge_debugfs_init(void)
 		return;
 
 	debugfs_create_file("status", 0444, dent, 0, &debug_gbridge_ops);
+	debugfs_create_file("remote_wakeup", S_IWUSR,
+				dent, 0, &gbridge_rem_wakeup_fops);
 }
+
 #else
 static void gbridge_debugfs_init(void) {}
 #endif
@@ -846,7 +907,7 @@ static void gbridge_debugfs_init(void) {}
 int gbridge_setup(void *gptr, u8 no_ports)
 {
 	pr_debug("gptr:%pK, no_bridge_ports:%d\n", gptr, no_ports);
-	if (no_ports >= num_of_instance) {
+	if (no_ports > num_of_instance) {
 		pr_err("More ports are requested\n");
 		return -EINVAL;
 	}
@@ -932,6 +993,7 @@ void gbridge_disconnect(void *gptr, u8 portno)
 
 	spin_lock_irqsave(&port->port_lock, flags);
 	port->is_connected = false;
+	gser->notify_modem = NULL;
 	port->port_usb = NULL;
 	port->nbytes_from_host = port->nbytes_to_host = 0;
 	port->nbytes_to_port_bridge = 0;

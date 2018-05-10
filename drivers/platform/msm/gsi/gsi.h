@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -18,18 +18,57 @@
 #include <linux/mutex.h>
 #include <linux/spinlock.h>
 #include <linux/msm_gsi.h>
+#include <linux/ipc_logging.h>
 
-#define GSI_MAX_CHAN      31
-#define GSI_MAX_EVT_RING  23
+#define GSI_CHAN_MAX      31
+#define GSI_EVT_RING_MAX  23
 #define GSI_NO_EVT_ERINDEX 31
 
 #define gsi_readl(c)	({ u32 __v = readl_relaxed(c); __iormb(); __v; })
 #define gsi_writel(v, c)	({ __iowmb(); writel_relaxed((v), (c)); })
 
-#define GSIERR(fmt, args...) \
-		dev_err(gsi_ctx->dev, "%s:%d " fmt, __func__, __LINE__, ## args)
+#define GSI_IPC_LOGGING(buf, fmt, args...) \
+	do { \
+		if (buf) \
+			ipc_log_string((buf), fmt, __func__, __LINE__, \
+				## args); \
+	} while (0)
+
 #define GSIDBG(fmt, args...) \
-		dev_dbg(gsi_ctx->dev, "%s:%d " fmt, __func__, __LINE__, ## args)
+	do { \
+		dev_dbg(gsi_ctx->dev, "%s:%d " fmt, __func__, __LINE__, \
+		## args);\
+		if (gsi_ctx) { \
+			GSI_IPC_LOGGING(gsi_ctx->ipc_logbuf, \
+				"%s:%d " fmt, ## args); \
+			GSI_IPC_LOGGING(gsi_ctx->ipc_logbuf_low, \
+				"%s:%d " fmt, ## args); \
+		} \
+	} while (0)
+
+#define GSIDBG_LOW(fmt, args...) \
+	do { \
+		dev_dbg(gsi_ctx->dev, "%s:%d " fmt, __func__, __LINE__, \
+		## args);\
+		if (gsi_ctx) { \
+			GSI_IPC_LOGGING(gsi_ctx->ipc_logbuf_low, \
+				"%s:%d " fmt, ## args); \
+		} \
+	} while (0)
+
+#define GSIERR(fmt, args...) \
+	do { \
+		dev_err(gsi_ctx->dev, "%s:%d " fmt, __func__, __LINE__, \
+		## args);\
+		if (gsi_ctx) { \
+			GSI_IPC_LOGGING(gsi_ctx->ipc_logbuf, \
+				"%s:%d " fmt, ## args); \
+			GSI_IPC_LOGGING(gsi_ctx->ipc_logbuf_low, \
+				"%s:%d " fmt, ## args); \
+		} \
+	} while (0)
+
+#define GSI_IPC_LOG_PAGES 50
 
 enum gsi_evt_ring_state {
 	GSI_EVT_RING_STATE_NOT_ALLOCATED = 0x0,
@@ -115,9 +154,12 @@ struct gsi_evt_ctx {
 struct gsi_ee_scratch {
 	union __packed {
 		struct {
-			uint32_t resvd1:15;
+			uint32_t inter_ee_cmd_return_code:3;
+			uint32_t resvd1:2;
+			uint32_t generic_ee_cmd_return_code:3;
+			uint32_t resvd2:7;
 			uint32_t max_usb_pkt_size:1;
-			uint32_t resvd2:8;
+			uint32_t resvd3:8;
 			uint32_t mhi_base_chan_idx:8;
 		} s;
 		uint32_t val;
@@ -125,13 +167,29 @@ struct gsi_ee_scratch {
 	uint32_t word1;
 };
 
+struct ch_debug_stats {
+	unsigned long ch_allocate;
+	unsigned long ch_start;
+	unsigned long ch_stop;
+	unsigned long ch_reset;
+	unsigned long ch_de_alloc;
+	unsigned long ch_db_stop;
+	unsigned long cmd_completed;
+};
+
+struct gsi_generic_ee_cmd_debug_stats {
+	unsigned long halt_channel;
+};
+
 struct gsi_ctx {
 	void __iomem *base;
 	struct device *dev;
 	struct gsi_per_props per;
 	bool per_registered;
-	struct gsi_chan_ctx chan[GSI_MAX_CHAN];
-	struct gsi_evt_ctx evtr[GSI_MAX_EVT_RING];
+	struct gsi_chan_ctx chan[GSI_CHAN_MAX];
+	struct ch_debug_stats ch_dbg[GSI_CHAN_MAX];
+	struct gsi_evt_ctx evtr[GSI_EVT_RING_MAX];
+	struct gsi_generic_ee_cmd_debug_stats gen_ee_cmd_dbg;
 	struct mutex mlock;
 	spinlock_t slock;
 	unsigned long evt_bmap;
@@ -141,11 +199,17 @@ struct gsi_ctx {
 	struct gsi_ee_scratch scratch;
 	int num_ch_dp_stats;
 	struct workqueue_struct *dp_stat_wq;
+	u32 max_ch;
+	u32 max_ev;
+	struct completion gen_ee_cmd_compl;
+	void *ipc_logbuf;
+	void *ipc_logbuf_low;
 };
 
 enum gsi_re_type {
 	GSI_RE_XFER = 0x2,
 	GSI_RE_IMMD_CMD = 0x3,
+	GSI_RE_NOP = 0x4,
 };
 
 struct __packed gsi_tre {
@@ -212,6 +276,18 @@ enum gsi_evt_ch_cmd_opcode {
 	GSI_EVT_ALLOCATE = 0x0,
 	GSI_EVT_RESET = 0x9,  /* TODO: is this valid? */
 	GSI_EVT_DE_ALLOC = 0xa,
+};
+
+enum gsi_generic_ee_cmd_opcode {
+	GSI_GEN_EE_CMD_HALT_CHANNEL = 0x1,
+};
+
+enum gsi_generic_ee_cmd_return_code {
+	GSI_GEN_EE_CMD_RETURN_CODE_SUCCESS = 0x1,
+	GSI_GEN_EE_CMD_RETURN_CODE_CHANNEL_NOT_RUNNING = 0x2,
+	GSI_GEN_EE_CMD_RETURN_CODE_INCORRECT_DIRECTION = 0x3,
+	GSI_GEN_EE_CMD_RETURN_CODE_INCORRECT_CHANNEL_TYPE = 0x4,
+	GSI_GEN_EE_CMD_RETURN_CODE_INCORRECT_CHANNEL_INDEX = 0x5,
 };
 
 extern struct gsi_ctx *gsi_ctx;

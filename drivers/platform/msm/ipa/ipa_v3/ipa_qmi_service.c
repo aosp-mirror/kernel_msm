@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -114,6 +114,12 @@ static struct msg_desc ipa3_init_modem_driver_cmplt_resp_desc = {
 	.ei_array = ipa3_init_modem_driver_cmplt_resp_msg_data_v01_ei,
 };
 
+static struct msg_desc ipa3_install_fltr_rule_req_ex_desc = {
+	.max_msg_len = QMI_IPA_INSTALL_FILTER_RULE_EX_REQ_MAX_MSG_LEN_V01,
+	.msg_id = QMI_IPA_INSTALL_FILTER_RULE_EX_REQ_V01,
+	.ei_array = ipa3_install_fltr_rule_req_ex_msg_data_v01_ei,
+};
+
 static int ipa3_handle_indication_req(void *req_h, void *req)
 {
 	struct ipa_indication_reg_req_msg_v01 *indication_req;
@@ -221,7 +227,7 @@ static int handle_ipa_config_req(void *req_h, void *req)
 	memset(&resp, 0, sizeof(struct ipa_config_resp_msg_v01));
 	resp.resp.result = IPA_QMI_RESULT_SUCCESS_V01;
 	IPAWANDBG("Received IPA CONFIG Request\n");
-	rc = ipa3_mhi_handle_ipa_config_req(
+	rc = ipa_mhi_handle_ipa_config_req(
 		(struct ipa_config_req_msg_v01 *)req);
 	if (rc) {
 		IPAERR("ipa3_mhi_handle_ipa_config_req failed %d\n", rc);
@@ -302,6 +308,10 @@ static int ipa3_a5_svc_req_desc_cb(unsigned int msg_id,
 		*req_desc = &ipa3_install_fltr_rule_req_desc;
 		rc = sizeof(struct ipa_install_fltr_rule_req_msg_v01);
 		break;
+	case QMI_IPA_INSTALL_FILTER_RULE_EX_REQ_V01:
+		*req_desc = &ipa3_install_fltr_rule_req_ex_desc;
+		rc = sizeof(struct ipa_install_fltr_rule_req_ex_msg_v01);
+		break;
 	case QMI_IPA_FILTER_INSTALLED_NOTIF_REQ_V01:
 		*req_desc = &ipa3_filter_installed_notif_req_desc;
 		rc = sizeof(struct ipa_fltr_installed_notif_req_msg_v01);
@@ -358,7 +368,7 @@ static void ipa3_a5_svc_recv_msg(struct work_struct *work)
 	int rc;
 
 	do {
-		IPAWANDBG("Notified about a Receive Event");
+		IPAWANDBG_LOW("Notified about a Receive Event");
 		rc = qmi_recv_msg(ipa3_svc_handle);
 	} while (rc == 0);
 	if (rc != -ENOMSG)
@@ -416,7 +426,7 @@ static int ipa3_check_qmi_response(int rc,
 			"Timeout for qmi request id %d\n", req_id);
 			return rc;
 		}
-		if (rc == -ENETRESET) {
+		if ((rc == -ENETRESET) || (rc == -ENODEV)) {
 			IPAWANERR(
 			"SSR while waiting for qmi request id %d\n", req_id);
 			return rc;
@@ -432,7 +442,7 @@ static int ipa3_check_qmi_response(int rc,
 		req_id, result, error);
 		return result;
 	}
-	IPAWANDBG("Received %s successfully\n", resp_type);
+	IPAWANDBG_LOW("Received %s successfully\n", resp_type);
 	return 0;
 }
 
@@ -590,13 +600,47 @@ int ipa3_qmi_filter_request_send(struct ipa_install_fltr_rule_req_msg_v01 *req)
 	struct ipa_install_fltr_rule_resp_msg_v01 resp;
 	struct msg_desc req_desc, resp_desc;
 	int rc;
+	int i;
 
 	/* check if the filter rules from IPACM is valid */
-	if (req->filter_spec_ex_list_len == 0) {
+	if (req->filter_spec_list_len == 0) {
 		IPAWANDBG("IPACM pass zero rules to Q6\n");
 	} else {
 		IPAWANDBG("IPACM pass %u rules to Q6\n",
-		req->filter_spec_ex_list_len);
+		req->filter_spec_list_len);
+	}
+
+	if (req->filter_spec_list_len >= QMI_IPA_MAX_FILTERS_V01) {
+		IPAWANDBG(
+		"IPACM passes the number of filtering rules exceed limit\n");
+		return -EINVAL;
+	} else if (req->source_pipe_index_valid != 0) {
+		IPAWANDBG(
+		"IPACM passes source_pipe_index_valid not zero 0 != %d\n",
+			req->source_pipe_index_valid);
+		return -EINVAL;
+	} else if (req->source_pipe_index >= ipa3_ctx->ipa_num_pipes) {
+		IPAWANDBG(
+		"IPACM passes source pipe index not valid ID = %d\n",
+		req->source_pipe_index);
+		return -EINVAL;
+	}
+	for (i = 0; i < req->filter_spec_list_len; i++) {
+		if ((req->filter_spec_list[i].ip_type !=
+			QMI_IPA_IP_TYPE_V4_V01) &&
+			(req->filter_spec_list[i].ip_type !=
+			QMI_IPA_IP_TYPE_V6_V01))
+			return -EINVAL;
+		if (req->filter_spec_list[i].is_mux_id_valid == false)
+			return -EINVAL;
+		if (req->filter_spec_list[i].is_routing_table_index_valid
+			== false)
+			return -EINVAL;
+		if ((req->filter_spec_list[i].filter_action <=
+			QMI_IPA_FILTER_ACTION_INVALID_V01) &&
+			(req->filter_spec_list[i].filter_action >
+			QMI_IPA_FILTER_ACTION_EXCEPTION_V01))
+			return -EINVAL;
 	}
 
 	mutex_lock(&ipa3_qmi_lock);
@@ -629,6 +673,141 @@ int ipa3_qmi_filter_request_send(struct ipa_install_fltr_rule_req_msg_v01 *req)
 	return ipa3_check_qmi_response(rc,
 		QMI_IPA_INSTALL_FILTER_RULE_REQ_V01, resp.resp.result,
 		resp.resp.error, "ipa_install_filter");
+}
+
+/* sending filter-install-request to modem*/
+int ipa3_qmi_filter_request_ex_send(
+	struct ipa_install_fltr_rule_req_ex_msg_v01 *req)
+{
+	struct ipa_install_fltr_rule_resp_ex_msg_v01 resp;
+	struct msg_desc req_desc, resp_desc;
+	int rc;
+	int i;
+
+	/* check if the filter rules from IPACM is valid */
+	if (req->filter_spec_ex_list_len == 0) {
+		IPAWANDBG("IPACM pass zero rules to Q6\n");
+	} else {
+		IPAWANDBG("IPACM pass %u rules to Q6\n",
+		req->filter_spec_ex_list_len);
+	}
+
+	if (req->filter_spec_ex_list_len >= QMI_IPA_MAX_FILTERS_EX_V01) {
+		IPAWANDBG(
+		"IPACM pass the number of filtering rules exceed limit\n");
+		return -EINVAL;
+	} else if (req->source_pipe_index_valid != 0) {
+		IPAWANDBG(
+		"IPACM passes source_pipe_index_valid not zero 0 != %d\n",
+			req->source_pipe_index_valid);
+		return -EINVAL;
+	}
+
+	for (i = 0; i < req->filter_spec_ex_list_len; i++) {
+		if ((req->filter_spec_ex_list[i].ip_type !=
+			QMI_IPA_IP_TYPE_V4_V01) &&
+			(req->filter_spec_ex_list[i].ip_type !=
+			QMI_IPA_IP_TYPE_V6_V01))
+			return -EINVAL;
+		if (req->filter_spec_ex_list[i].is_mux_id_valid == false)
+			return -EINVAL;
+		if (req->filter_spec_ex_list[i].is_routing_table_index_valid
+			== false)
+			return -EINVAL;
+		if ((req->filter_spec_ex_list[i].filter_action <=
+			QMI_IPA_FILTER_ACTION_INVALID_V01) &&
+			(req->filter_spec_ex_list[i].filter_action >
+			QMI_IPA_FILTER_ACTION_EXCEPTION_V01))
+			return -EINVAL;
+	}
+	mutex_lock(&ipa3_qmi_lock);
+	if (ipa3_qmi_ctx != NULL) {
+		/* cache the qmi_filter_request */
+		memcpy(&(ipa3_qmi_ctx->ipa_install_fltr_rule_req_ex_msg_cache[
+			ipa3_qmi_ctx->num_ipa_install_fltr_rule_req_ex_msg]),
+			req,
+			sizeof(struct ipa_install_fltr_rule_req_ex_msg_v01));
+		ipa3_qmi_ctx->num_ipa_install_fltr_rule_req_ex_msg++;
+		ipa3_qmi_ctx->num_ipa_install_fltr_rule_req_ex_msg %= 10;
+	}
+	mutex_unlock(&ipa3_qmi_lock);
+
+	req_desc.max_msg_len =
+		QMI_IPA_INSTALL_FILTER_RULE_EX_REQ_MAX_MSG_LEN_V01;
+	req_desc.msg_id = QMI_IPA_INSTALL_FILTER_RULE_EX_REQ_V01;
+	req_desc.ei_array = ipa3_install_fltr_rule_req_ex_msg_data_v01_ei;
+
+	memset(&resp, 0, sizeof(struct ipa_install_fltr_rule_resp_ex_msg_v01));
+	resp_desc.max_msg_len =
+		QMI_IPA_INSTALL_FILTER_RULE_EX_RESP_MAX_MSG_LEN_V01;
+	resp_desc.msg_id = QMI_IPA_INSTALL_FILTER_RULE_EX_RESP_V01;
+	resp_desc.ei_array = ipa3_install_fltr_rule_resp_ex_msg_data_v01_ei;
+
+	rc = qmi_send_req_wait(ipa_q6_clnt, &req_desc,
+			req,
+			sizeof(struct ipa_install_fltr_rule_req_ex_msg_v01),
+			&resp_desc, &resp, sizeof(resp),
+			QMI_SEND_REQ_TIMEOUT_MS);
+	return ipa3_check_qmi_response(rc,
+		QMI_IPA_INSTALL_FILTER_RULE_EX_REQ_V01, resp.resp.result,
+		resp.resp.error, "ipa_install_filter");
+}
+
+/* sending ul-filter-install-request to modem*/
+int ipa3_qmi_ul_filter_request_send(
+	struct ipa_configure_ul_firewall_rules_req_msg_v01 *req)
+{
+	struct ipa_configure_ul_firewall_rules_resp_msg_v01 resp;
+	struct msg_desc req_desc, resp_desc;
+	int rc;
+
+	/* check if the filter rules from IPACM is valid */
+	if (req->firewall_rules_list_len < 0) {
+		IPAWANERR("Ul filter rules are not valid\n");
+		return -EINVAL;
+	}
+
+	IPAWANDBG("IPACM pass %u rules to Q6\n",
+		req->firewall_rules_list_len);
+
+	mutex_lock(&ipa3_qmi_lock);
+	if (ipa3_qmi_ctx != NULL) {
+		/* cache the qmi_filter_request */
+		memcpy(
+		&(ipa3_qmi_ctx->ipa_configure_ul_firewall_rules_req_msg_cache[
+		ipa3_qmi_ctx->num_ipa_configure_ul_firewall_rules_req_msg]),
+		req,
+		sizeof(struct
+		ipa_configure_ul_firewall_rules_req_msg_v01));
+		ipa3_qmi_ctx->num_ipa_configure_ul_firewall_rules_req_msg++;
+		ipa3_qmi_ctx->num_ipa_configure_ul_firewall_rules_req_msg %=
+			MAX_NUM_QMI_RULE_CACHE;
+	}
+	mutex_unlock(&ipa3_qmi_lock);
+
+	req_desc.max_msg_len =
+		QMI_IPA_INSTALL_UL_FIREWALL_RULES_REQ_MAX_MSG_LEN_V01;
+	req_desc.msg_id = QMI_IPA_INSTALL_UL_FIREWALL_RULES_REQ_V01;
+	req_desc.ei_array =
+		ipa3_configure_ul_firewall_rules_req_msg_data_v01_ei;
+
+	memset(&resp, 0,
+		sizeof(struct ipa_configure_ul_firewall_rules_resp_msg_v01));
+	resp_desc.max_msg_len =
+		QMI_IPA_INSTALL_UL_FIREWALL_RULES_RESP_MAX_MSG_LEN_V01;
+	resp_desc.msg_id = QMI_IPA_INSTALL_UL_FIREWALL_RULES_RESP_V01;
+	resp_desc.ei_array =
+		ipa3_configure_ul_firewall_rules_resp_msg_data_v01_ei;
+
+	rc = qmi_send_req_wait(ipa_q6_clnt, &req_desc,
+		req,
+		sizeof(
+		struct ipa_configure_ul_firewall_rules_req_msg_v01),
+		&resp_desc, &resp, sizeof(resp),
+		QMI_SEND_REQ_TIMEOUT_MS);
+	return ipa3_check_qmi_response(rc,
+		QMI_IPA_INSTALL_UL_FIREWALL_RULES_REQ_V01, resp.resp.result,
+		resp.resp.error, "ipa_received_ul_firewall_filter");
 }
 
 int ipa3_qmi_enable_force_clear_datapath_send(
@@ -739,6 +918,37 @@ int ipa3_qmi_filter_notify_send(
 		return -EINVAL;
 	}
 
+	if (req->install_status != IPA_QMI_RESULT_SUCCESS_V01) {
+		IPAWANERR(" UL filter rule for pipe %d install_status = %d\n",
+			req->source_pipe_index, req->install_status);
+		return -EINVAL;
+	} else if (req->rule_id_valid != 1) {
+		IPAWANERR(" UL filter rule for pipe %d rule_id_valid = %d\n",
+			req->source_pipe_index, req->rule_id_valid);
+		return -EINVAL;
+	} else if (req->source_pipe_index >= ipa3_ctx->ipa_num_pipes) {
+		IPAWANDBG(
+		"IPACM passes source pipe index not valid ID = %d\n",
+		req->source_pipe_index);
+		return -EINVAL;
+	} else if (((req->embedded_pipe_index_valid != true) ||
+			(req->embedded_call_mux_id_valid != true)) &&
+			((req->embedded_pipe_index_valid != false) ||
+			(req->embedded_call_mux_id_valid != false))) {
+		IPAWANERR(
+			"IPACM passes embedded pipe and mux valid not valid\n");
+		return -EINVAL;
+	} else if (req->embedded_pipe_index >= ipa3_ctx->ipa_num_pipes) {
+		IPAWANERR("IPACM passes source pipe index not valid ID = %d\n",
+		req->source_pipe_index);
+		return -EINVAL;
+	}
+
+	if (req->source_pipe_index == -1) {
+		IPAWANERR("Source pipe index invalid\n");
+		return -EINVAL;
+	}
+
 	mutex_lock(&ipa3_qmi_lock);
 	if (ipa3_qmi_ctx != NULL) {
 		/* cache the qmi_filter_request */
@@ -778,7 +988,7 @@ static void ipa3_q6_clnt_recv_msg(struct work_struct *work)
 	int rc;
 
 	do {
-		IPAWANDBG("Notified about a Receive Event");
+		IPAWANDBG_LOW("Notified about a Receive Event");
 		rc = qmi_recv_msg(ipa_q6_clnt);
 	} while (rc == 0);
 	if (rc != -ENOMSG)
@@ -790,7 +1000,7 @@ static void ipa3_q6_clnt_notify(struct qmi_handle *handle,
 {
 	switch (event) {
 	case QMI_RECV_MSG:
-		IPAWANDBG("client qmi recv message called");
+		IPAWANDBG_LOW("client qmi recv message called");
 		if (!workqueues_stopped)
 			queue_delayed_work(ipa_clnt_resp_workqueue,
 					   &ipa3_work_recv_msg_client, 0);
@@ -805,6 +1015,7 @@ static void ipa3_q6_clnt_ind_cb(struct qmi_handle *handle, unsigned int msg_id,
 			       void *ind_cb_priv)
 {
 	struct ipa_data_usage_quota_reached_ind_msg_v01 qmi_ind;
+	struct ipa_configure_ul_firewall_rules_ind_msg_v01 qmi_ul_firewall_ind;
 	struct msg_desc qmi_ind_desc;
 	int rc = 0;
 
@@ -831,6 +1042,36 @@ static void ipa3_q6_clnt_ind_cb(struct qmi_handle *handle, unsigned int msg_id,
 			  qmi_ind.apn.mux_id,
 			  (unsigned long int) qmi_ind.apn.num_Mbytes);
 		ipa3_broadcast_quota_reach_ind(qmi_ind.apn.mux_id);
+	}
+
+	if (QMI_IPA_INSTALL_UL_FIREWALL_RULES_IND_V01 == msg_id) {
+		memset(&qmi_ul_firewall_ind, 0, sizeof(
+			struct ipa_configure_ul_firewall_rules_ind_msg_v01));
+		qmi_ind_desc.max_msg_len =
+			QMI_IPA_INSTALL_UL_FIREWALL_RULES_IND_MAX_MSG_LEN_V01;
+		qmi_ind_desc.msg_id = QMI_IPA_INSTALL_UL_FIREWALL_RULES_IND_V01;
+		qmi_ind_desc.ei_array =
+			ipa3_configure_ul_firewall_rules_ind_msg_data_v01_ei;
+
+		rc = qmi_kernel_decode(
+			&qmi_ind_desc, &qmi_ul_firewall_ind, msg, msg_len);
+		if (rc < 0) {
+			IPAWANERR("Error decoding msg_id %d\n", msg_id);
+			return;
+		}
+
+		IPAWANDBG("UL firewall rules install indication on Q6");
+		if (qmi_ul_firewall_ind.result.is_success ==
+				QMI_IPA_UL_FIREWALL_STATUS_SUCCESS_V01) {
+			IPAWANDBG(" : Success\n");
+			IPAWANDBG
+			("Mux ID : %d\n", qmi_ul_firewall_ind.result.mux_id);
+		} else if (qmi_ul_firewall_ind.result.is_success ==
+				QMI_IPA_UL_FIREWALL_STATUS_FAILURE_V01){
+			IPAWANERR(": Failure\n");
+		} else {
+			IPAWANERR(": Unexpected Result");
+		}
 	}
 }
 
@@ -868,7 +1109,7 @@ static void ipa3_q6_clnt_svc_arrive(struct work_struct *work)
 	/* Initialize modem IPA-driver */
 	IPAWANDBG("send ipa3_qmi_init_modem_send_sync_msg to modem\n");
 	rc = ipa3_qmi_init_modem_send_sync_msg();
-	if (rc == -ENETRESET) {
+	if ((rc == -ENETRESET) || (rc == -ENODEV)) {
 		IPAWANERR(
 			"ipa3_qmi_init_modem_send_sync_msg failed due to SSR!\n");
 		/* Cleanup will take place when ipa3_wwan_remove is called */
@@ -1173,7 +1414,7 @@ int ipa3_qmi_get_data_stats(struct ipa_get_data_stats_req_msg_v01 *req,
 	resp_desc.msg_id = QMI_IPA_GET_DATA_STATS_RESP_V01;
 	resp_desc.ei_array = ipa3_get_data_stats_resp_msg_data_v01_ei;
 
-	IPAWANDBG("Sending QMI_IPA_GET_DATA_STATS_REQ_V01\n");
+	IPAWANDBG_LOW("Sending QMI_IPA_GET_DATA_STATS_REQ_V01\n");
 
 	rc = qmi_send_req_wait(ipa_q6_clnt, &req_desc, req,
 			sizeof(struct ipa_get_data_stats_req_msg_v01),
@@ -1181,7 +1422,7 @@ int ipa3_qmi_get_data_stats(struct ipa_get_data_stats_req_msg_v01 *req,
 			sizeof(struct ipa_get_data_stats_resp_msg_v01),
 			QMI_SEND_STATS_REQ_TIMEOUT_MS);
 
-	IPAWANDBG("QMI_IPA_GET_DATA_STATS_RESP_V01 received\n");
+	IPAWANDBG_LOW("QMI_IPA_GET_DATA_STATS_RESP_V01 received\n");
 
 	return ipa3_check_qmi_response(rc,
 		QMI_IPA_GET_DATA_STATS_REQ_V01, resp->resp.result,
@@ -1202,7 +1443,7 @@ int ipa3_qmi_get_network_stats(struct ipa_get_apn_data_stats_req_msg_v01 *req,
 	resp_desc.msg_id = QMI_IPA_GET_APN_DATA_STATS_RESP_V01;
 	resp_desc.ei_array = ipa3_get_apn_data_stats_resp_msg_data_v01_ei;
 
-	IPAWANDBG("Sending QMI_IPA_GET_APN_DATA_STATS_REQ_V01\n");
+	IPAWANDBG_LOW("Sending QMI_IPA_GET_APN_DATA_STATS_REQ_V01\n");
 
 	rc = qmi_send_req_wait(ipa_q6_clnt, &req_desc, req,
 			sizeof(struct ipa_get_apn_data_stats_req_msg_v01),
@@ -1210,7 +1451,7 @@ int ipa3_qmi_get_network_stats(struct ipa_get_apn_data_stats_req_msg_v01 *req,
 			sizeof(struct ipa_get_apn_data_stats_resp_msg_v01),
 			QMI_SEND_STATS_REQ_TIMEOUT_MS);
 
-	IPAWANDBG("QMI_IPA_GET_APN_DATA_STATS_RESP_V01 received\n");
+	IPAWANDBG_LOW("QMI_IPA_GET_APN_DATA_STATS_RESP_V01 received\n");
 
 	return ipa3_check_qmi_response(rc,
 		QMI_IPA_GET_APN_DATA_STATS_REQ_V01, resp->resp.result,
@@ -1234,14 +1475,14 @@ int ipa3_qmi_set_data_quota(struct ipa_set_data_usage_quota_req_msg_v01 *req)
 	resp_desc.msg_id = QMI_IPA_SET_DATA_USAGE_QUOTA_RESP_V01;
 	resp_desc.ei_array = ipa3_set_data_usage_quota_resp_msg_data_v01_ei;
 
-	IPAWANDBG("Sending QMI_IPA_SET_DATA_USAGE_QUOTA_REQ_V01\n");
+	IPAWANDBG_LOW("Sending QMI_IPA_SET_DATA_USAGE_QUOTA_REQ_V01\n");
 
 	rc = qmi_send_req_wait(ipa_q6_clnt, &req_desc, req,
 			sizeof(struct ipa_set_data_usage_quota_req_msg_v01),
 			&resp_desc, &resp, sizeof(resp),
 			QMI_SEND_STATS_REQ_TIMEOUT_MS);
 
-	IPAWANDBG("QMI_IPA_SET_DATA_USAGE_QUOTA_RESP_V01 received\n");
+	IPAWANDBG_LOW("QMI_IPA_SET_DATA_USAGE_QUOTA_RESP_V01 received\n");
 
 	return ipa3_check_qmi_response(rc,
 		QMI_IPA_SET_DATA_USAGE_QUOTA_REQ_V01, resp.resp.result,
@@ -1268,17 +1509,85 @@ int ipa3_qmi_stop_data_qouta(void)
 	resp_desc.msg_id = QMI_IPA_STOP_DATA_USAGE_QUOTA_RESP_V01;
 	resp_desc.ei_array = ipa3_stop_data_usage_quota_resp_msg_data_v01_ei;
 
-	IPAWANDBG("Sending QMI_IPA_STOP_DATA_USAGE_QUOTA_REQ_V01\n");
+	IPAWANDBG_LOW("Sending QMI_IPA_STOP_DATA_USAGE_QUOTA_REQ_V01\n");
 
 	rc = qmi_send_req_wait(ipa_q6_clnt, &req_desc, &req, sizeof(req),
 		&resp_desc, &resp, sizeof(resp),
 		QMI_SEND_STATS_REQ_TIMEOUT_MS);
 
-	IPAWANDBG("QMI_IPA_STOP_DATA_USAGE_QUOTA_RESP_V01 received\n");
+	IPAWANDBG_LOW("QMI_IPA_STOP_DATA_USAGE_QUOTA_RESP_V01 received\n");
 
 	return ipa3_check_qmi_response(rc,
 		QMI_IPA_STOP_DATA_USAGE_QUOTA_REQ_V01, resp.resp.result,
 		resp.resp.error, "ipa_stop_data_usage_quota_req_msg_v01");
+}
+
+int ipa3_qmi_enable_per_client_stats(
+	struct ipa_enable_per_client_stats_req_msg_v01 *req,
+	struct ipa_enable_per_client_stats_resp_msg_v01 *resp)
+{
+	struct msg_desc req_desc, resp_desc;
+	int rc;
+
+	req_desc.max_msg_len =
+		QMI_IPA_ENABLE_PER_CLIENT_STATS_REQ_MAX_MSG_LEN_V01;
+	req_desc.msg_id =
+		QMI_IPA_ENABLE_PER_CLIENT_STATS_REQ_V01;
+	req_desc.ei_array =
+		ipa3_enable_per_client_stats_req_msg_data_v01_ei;
+
+	resp_desc.max_msg_len =
+		QMI_IPA_ENABLE_PER_CLIENT_STATS_RESP_MAX_MSG_LEN_V01;
+	resp_desc.msg_id =
+		QMI_IPA_ENABLE_PER_CLIENT_STATS_RESP_V01;
+	resp_desc.ei_array =
+		ipa3_enable_per_client_stats_resp_msg_data_v01_ei;
+
+	IPAWANDBG("Sending QMI_IPA_ENABLE_PER_CLIENT_STATS_REQ_V01\n");
+
+	rc = qmi_send_req_wait(ipa_q6_clnt, &req_desc, req,
+		sizeof(struct ipa_enable_per_client_stats_req_msg_v01),
+		&resp_desc, resp,
+		sizeof(struct ipa_enable_per_client_stats_resp_msg_v01),
+		QMI_SEND_STATS_REQ_TIMEOUT_MS);
+
+	IPAWANDBG("QMI_IPA_ENABLE_PER_CLIENT_STATS_RESP_V01 received\n");
+
+	return ipa3_check_qmi_response(rc,
+		QMI_IPA_ENABLE_PER_CLIENT_STATS_REQ_V01, resp->resp.result,
+		resp->resp.error, "ipa3_qmi_enable_per_client_stats");
+}
+
+int ipa3_qmi_get_per_client_packet_stats(
+	struct ipa_get_stats_per_client_req_msg_v01 *req,
+	struct ipa_get_stats_per_client_resp_msg_v01 *resp)
+{
+	struct msg_desc req_desc, resp_desc;
+	int rc;
+
+	req_desc.max_msg_len = QMI_IPA_GET_STATS_PER_CLIENT_REQ_MAX_MSG_LEN_V01;
+	req_desc.msg_id = QMI_IPA_GET_STATS_PER_CLIENT_REQ_V01;
+	req_desc.ei_array = ipa3_get_stats_per_client_req_msg_data_v01_ei;
+
+	resp_desc.max_msg_len =
+		QMI_IPA_GET_STATS_PER_CLIENT_RESP_MAX_MSG_LEN_V01;
+	resp_desc.msg_id = QMI_IPA_GET_STATS_PER_CLIENT_RESP_V01;
+	resp_desc.ei_array = ipa3_get_stats_per_client_resp_msg_data_v01_ei;
+
+	IPAWANDBG("Sending QMI_IPA_GET_STATS_PER_CLIENT_REQ_V01\n");
+
+	rc = qmi_send_req_wait(ipa_q6_clnt, &req_desc, req,
+			sizeof(struct ipa_get_stats_per_client_req_msg_v01),
+			&resp_desc, resp,
+			sizeof(struct ipa_get_stats_per_client_resp_msg_v01),
+			QMI_SEND_STATS_REQ_TIMEOUT_MS);
+
+	IPAWANDBG("QMI_IPA_GET_STATS_PER_CLIENT_RESP_V01 received\n");
+
+	return ipa3_check_qmi_response(rc,
+		QMI_IPA_GET_STATS_PER_CLIENT_REQ_V01, resp->resp.result,
+		resp->resp.error,
+		"struct ipa_get_stats_per_client_req_msg_v01");
 }
 
 void ipa3_qmi_init(void)

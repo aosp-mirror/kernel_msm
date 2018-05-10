@@ -43,13 +43,13 @@
 /* This is a cmdbatch exclusive flag - use the CMDBATCH equivalent instead */
 #define KGSL_CONTEXT_SYNC               0x00000400
 #define KGSL_CONTEXT_PWR_CONSTRAINT     0x00000800
-
 #define KGSL_CONTEXT_PRIORITY_MASK      0x0000F000
 #define KGSL_CONTEXT_PRIORITY_SHIFT     12
 #define KGSL_CONTEXT_PRIORITY_UNDEF     0
 
 #define KGSL_CONTEXT_IFH_NOP            0x00010000
 #define KGSL_CONTEXT_SECURE             0x00020000
+#define KGSL_CONTEXT_NO_SNAPSHOT        0x00040000
 
 #define KGSL_CONTEXT_PREEMPT_STYLE_MASK       0x0E000000
 #define KGSL_CONTEXT_PREEMPT_STYLE_SHIFT      25
@@ -66,6 +66,8 @@
 #define KGSL_CONTEXT_TYPE_RS		4
 #define KGSL_CONTEXT_TYPE_UNKNOWN	0x1E
 
+#define KGSL_CONTEXT_INVALIDATE_ON_FAULT 0x10000000
+
 #define KGSL_CONTEXT_INVALID 0xffffffff
 
 /*
@@ -81,6 +83,10 @@
 #define KGSL_CMDBATCH_SUBMIT_IB_LIST	KGSL_CONTEXT_SUBMIT_IB_LIST /* 0x004 */
 #define KGSL_CMDBATCH_CTX_SWITCH	KGSL_CONTEXT_CTX_SWITCH     /* 0x008 */
 #define KGSL_CMDBATCH_PROFILING		0x00000010
+/*
+ * KGSL_CMDBATCH_PROFILING must also be set for KGSL_CMDBATCH_PROFILING_KTIME
+ * to take effect, as the latter only affects the time data returned.
+ */
 #define KGSL_CMDBATCH_PROFILING_KTIME	0x00000020
 #define KGSL_CMDBATCH_END_OF_FRAME	KGSL_CONTEXT_END_OF_FRAME   /* 0x100 */
 #define KGSL_CMDBATCH_SYNC		KGSL_CONTEXT_SYNC           /* 0x400 */
@@ -303,11 +309,18 @@ enum kgsl_timestamp_type {
 #define KGSL_PROP_UCODE_VERSION		0x15
 #define KGSL_PROP_GPMU_VERSION		0x16
 #define KGSL_PROP_HIGHEST_BANK_BIT	0x17
+#define KGSL_PROP_DEVICE_BITNESS	0x18
+#define KGSL_PROP_DEVICE_QDSS_STM	0x19
 
 struct kgsl_shadowprop {
 	unsigned long gpuaddr;
 	size_t size;
 	unsigned int flags; /* contains KGSL_FLAGS_ values */
+};
+
+struct kgsl_qdss_stm_prop {
+	uint64_t gpuaddr;
+	uint64_t size;
 };
 
 struct kgsl_version {

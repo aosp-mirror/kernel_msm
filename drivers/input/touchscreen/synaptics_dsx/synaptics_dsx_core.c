@@ -492,33 +492,25 @@ static int synaptics_i2c_change_pipe_owner(
 
 static void synaptics_secure_touch_init(struct synaptics_rmi4_data *data)
 {
-	int ret = 0;
 	data->st_initialized = 0;
 	init_completion(&data->st_powerdown);
 	init_completion(&data->st_irq_processed);
 	/* Get clocks */
 	data->core_clk = clk_get(data->pdev->dev.parent, "core_clk");
 	if (IS_ERR(data->core_clk)) {
-		ret = PTR_ERR(data->core_clk);
-		dev_err(data->pdev->dev.parent,
-			"%s: error on clk_get(core_clk):%d\n", __func__, ret);
-		return;
+		data->core_clk = NULL;
+		dev_warn(data->pdev->dev.parent,
+			"%s: core_clk is not defined\n", __func__);
 	}
 
 	data->iface_clk = clk_get(data->pdev->dev.parent, "iface_clk");
 	if (IS_ERR(data->iface_clk)) {
-		ret = PTR_ERR(data->iface_clk);
-		dev_err(data->pdev->dev.parent,
-			"%s: error on clk_get(iface_clk):%d\n", __func__, ret);
-		goto err_iface_clk;
+		data->iface_clk = NULL;
+		dev_warn(data->pdev->dev.parent,
+			"%s: iface_clk is not defined\n", __func__);
 	}
 
 	data->st_initialized = 1;
-	return;
-
-err_iface_clk:
-		clk_put(data->core_clk);
-		data->core_clk = NULL;
 }
 static void synaptics_secure_touch_notify(struct synaptics_rmi4_data *rmi4_data)
 {
@@ -3615,6 +3607,13 @@ static int synaptics_rmi4_probe(struct platform_device *pdev)
 	rmi4_data->fingers_on_2d = false;
 	rmi4_data->update_coords = true;
 
+	rmi4_data->write_buf = kzalloc(I2C_WRITE_BUF_MAX_LEN, GFP_KERNEL);
+	if (!rmi4_data->write_buf) {
+		retval = -ENOMEM;
+		goto err_write_buf_alloc;
+	}
+	rmi4_data->write_buf_len = I2C_WRITE_BUF_MAX_LEN;
+
 	rmi4_data->irq_enable = synaptics_rmi4_irq_enable;
 	rmi4_data->reset_device = synaptics_rmi4_reset_device;
 
@@ -3832,6 +3831,8 @@ err_regulator_enable:
 	regulator_put(rmi4_data->regulator_vdd);
 	regulator_put(rmi4_data->regulator_avdd);
 err_regulator_configure:
+	kfree(rmi4_data->write_buf);
+err_write_buf_alloc:
 	kfree(rmi4_data);
 
 	return retval;
@@ -3926,6 +3927,7 @@ static int synaptics_rmi4_remove(struct platform_device *pdev)
 		regulator_put(rmi4_data->regulator_avdd);
 	}
 
+	kfree(rmi4_data->write_buf);
 	kfree(rmi4_data);
 
 	return 0;
