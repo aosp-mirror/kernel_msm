@@ -415,3 +415,7 @@
 		status = "disabled";
 	};
 };
+
+&google_charger {
+	/delete-property/ google,wlc-power-supply;
+};

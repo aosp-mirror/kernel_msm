@@ -35,6 +35,7 @@
 
 &google_charger {
 	google,chg-battery-capacity = <2915>;
+	google,wlc-power-supply = "wireless";
 };
 
 &vendor {

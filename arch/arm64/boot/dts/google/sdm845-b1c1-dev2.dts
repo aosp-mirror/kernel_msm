@@ -16,12 +16,17 @@
 #include "sdm845-b1-common-v2.1.dtsi"
 #include "sdm845-b1c1-proto-evt-audio.dtsi"
 #include "sdm845-b1c1-audio-cal.dtsi"
+#include "sdm845-b1c1-thermal-v2.dtsi"
 #include "sdm845-b1-evt1-panel.dtsi"
 
 / {
 	model = "Google Inc. MSM sdm845 B1C1 Dev v2.0 board";
 	compatible = "google,b1c1-sdm845", "qcom,sdm845";
 	qcom,board-id = <0x00020205 0>;
+};
+
+&p9221 {
+	fod = [b0 24 90 46 88 52 88 53 90 34 9a f7 14 00 01 64];
 };
 
 &vd6281 {
