@@ -170,14 +170,14 @@ static void pr_info_states(struct power_supply *chg_psy,
 			   struct power_supply *usb_psy,
 			   struct power_supply *wlc_psy,
 			   int temp, int ibatt, int vbatt, int vchrg,
+			   int chg_type, int fv_uv,
 			   int soc, int usb_present, int wlc_online)
 {
 	int usb_type = PSY_GET_PROP(usb_psy, POWER_SUPPLY_PROP_REAL_TYPE);
-	int chg_type = PSY_GET_PROP(chg_psy, POWER_SUPPLY_PROP_CHARGE_TYPE);
 
-	pr_info("l=%d vb=%d vc=%d c=%d t=%d s=%s usb=%d wlc=%d\n",
+	pr_info("l=%d vb=%d vc=%d c=%d fv=%d t=%d s=%s usb=%d wlc=%d\n",
 		soc, vbatt / 1000, vchrg / 1000, ibatt / 1000,
-		temp, psy_chgt_str[chg_type],
+		fv_uv, temp, psy_chgt_str[chg_type],
 		usb_present, wlc_online);
 
 	if (usb_present)
@@ -254,12 +254,11 @@ static void chg_work(struct work_struct *work)
 	struct power_supply *usb_psy = chg_drv->usb_psy;
 	struct power_supply *wlc_psy = chg_drv->wlc_psy;
 	struct power_supply *bat_psy = chg_drv->bat_psy;
-	int temp, ibatt, vbatt, vchrg, soc;
+	int temp, ibatt, vbatt, vchrg, soc, chg_type;
 	int usb_present, wlc_online = 0;
 	int vbatt_idx = 0, temp_idx = 0, fv_uv, cc_max, cc_next_max;
-	int batt_status, cv_delta;
+	int batt_status;
 	bool rerun_work = false;
-	int vcell_delta = 0;
 	int disable_charging;
 	int disable_pwrsrc;
 
@@ -269,8 +268,9 @@ static void chg_work(struct work_struct *work)
 	temp = PSY_GET_PROP(bat_psy, POWER_SUPPLY_PROP_TEMP);
 	ibatt = PSY_GET_PROP(bat_psy, POWER_SUPPLY_PROP_CURRENT_NOW);
 	vbatt = PSY_GET_PROP(bat_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW);
-	vchrg = PSY_GET_PROP(chg_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW);
 	soc = PSY_GET_PROP(bat_psy, POWER_SUPPLY_PROP_CAPACITY);
+	vchrg = PSY_GET_PROP(chg_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW);
+	chg_type = PSY_GET_PROP(chg_psy, POWER_SUPPLY_PROP_CHARGE_TYPE);
 
 	usb_present = PSY_GET_PROP(usb_psy, POWER_SUPPLY_PROP_PRESENT);
 	if (wlc_psy)
@@ -281,7 +281,9 @@ static void chg_work(struct work_struct *work)
 		goto error_rerun;
 
 	pr_info_states(chg_psy, usb_psy, wlc_psy,
-		       temp, ibatt, vbatt, vchrg, soc, usb_present, wlc_online);
+		       temp, ibatt, vbatt, vchrg,
+		       chg_type, chg_drv->fv_uv,
+		       soc, usb_present, wlc_online);
 
 	if (!usb_present && !wlc_online)
 		goto check_rerun;
@@ -341,6 +343,7 @@ static void chg_work(struct work_struct *work)
 	while (vbatt_idx < profile->volt_nb_limits - 1 &&
 	       vbatt > profile->volt_limits[vbatt_idx])
 		vbatt_idx++;
+
 	/* voltage index cannot go down once a CV step is crossed */
 	if (vbatt_idx < chg_drv->vbatt_idx)
 		vbatt_idx = chg_drv->vbatt_idx;
@@ -354,17 +357,28 @@ static void chg_work(struct work_struct *work)
 		cc_next_max = 0;
 		PSY_SET_PROP(chg_drv->chg_psy,
 			     POWER_SUPPLY_PROP_TAPER_CONTROL_ENABLED, 1);
-	} else
+	} else {
 		cc_next_max = CCCM_LIMITS(profile, temp_idx, vbatt_idx + 1);
+	}
 
-	/* 5. check if CV step limit has been reached from a charger POV
-	 *    we compare vchrg and not batt to float voltage to raise
-	 *    sooner the FV otherwise taper phase current is quickly
-	 *    lower than next CC phase current
+	/* 5 check if CV step limit has been reached (default 5.a)
+	 * use taper condition from the charger and check on voltage.
+	 * NOTE: probably checking for taper in the charger is enough, set
+	 *       google,cv-range-accuracy to zero in DT to use only taper
+	 *
+	 * 5.a from battery POV: compare vbatt to tier float voltage fv_uv
+	 * 5.b from charger POV: compare vchrg to tier fv_uv which might cause
+	 *     to anticipate the transition to next tier and increase the time
+	 *     it takes to reach the last tier (hence longer charge time).
+	 * note: @ step 7 we add headroom=(vchrg-vbatt) to charger fv so when
+	 * code behaves as 5.b vchrg (measured before irdrop) might read higher
+	 * than fv_uv
 	 */
 	if (chg_drv->vbatt_idx != -1) {
-		cv_delta = abs(fv_uv - vchrg);
-		if (cv_delta <= profile->cv_range_accuracy)
+		const int cv_delta = (vbatt < fv_uv) ? fv_uv - vbatt : 0;
+		const bool taper = (chg_type == POWER_SUPPLY_CHARGE_TYPE_TAPER);
+
+		if (taper || cv_delta <= profile->cv_range_accuracy)
 			chg_drv->checked_cv_cnt++;
 		else
 			chg_drv->checked_cv_cnt = 0;
@@ -382,13 +396,39 @@ static void chg_work(struct work_struct *work)
 		fv_uv = profile->volt_limits[vbatt_idx];
 	}
 
-	/* 7. adjust float voltage but not for last CV step */
-	if (vbatt_idx < profile->volt_nb_limits - 1) {
-		if (vchrg > vbatt)
-			vcell_delta = vchrg - vbatt;
-		fv_uv += vcell_delta;
-		fv_uv = fv_uv / profile->cv_hw_resolution *
-		    profile->cv_hw_resolution;
+	/* 7. compensate for irdrop */
+	if (vbatt_idx != chg_drv->vbatt_idx) {
+	/* 7.a fv take next on tier cross to avoid dips (tier only increase) */
+		pr_info("FV_adjust: skip vbatt_idx %d -> %d fv_uv=%d\n",
+			chg_drv->vbatt_idx, vbatt_idx, fv_uv);
+	} else if (temp_idx != chg_drv->temp_idx) {
+	/* 7.b do not adjust fv on temperature change */
+		pr_info("FV_adjust: skip temp_idx %d -> %d fv_uv=%d\n",
+			chg_drv->temp_idx, temp_idx, fv_uv);
+	} else if (vbatt_idx == profile->volt_nb_limits - 1) {
+	/* 7.c do not adjust fv in last tier */
+		pr_info("FV_adjust: skip tier=%d fv_uv=%d\n",
+			vbatt_idx, fv_uv);
+	} else if (vchrg > vbatt) {
+	/* 7.d adjust fv to compensate for irdrop */
+
+		if (chg_type != POWER_SUPPLY_CHARGE_TYPE_TAPER) {
+			/* coarse adjustment when not tapering */
+			const int vdelta = vchrg - vbatt;
+
+			fv_uv = (fv_uv + vdelta) / profile->cv_hw_resolution
+				* profile->cv_hw_resolution;
+
+			pr_info("FV_adjust: coarse fv_uv %d -> %d (%d)\n",
+				chg_drv->fv_uv, fv_uv, vdelta);
+		} else {
+			/* keep fv_uv steady while in taper
+			 * TODO: if vbatt<tier_vlimit we need to compensate
+			 * fv_uv to get vbatt as close as possible to the tier
+			 * voltage.
+			 */
+			fv_uv = chg_drv->fv_uv;
+		}
 	}
 
 	if (chg_drv->vbatt_idx != vbatt_idx ||
@@ -398,13 +438,14 @@ static void chg_work(struct work_struct *work)
 		chg_drv->temp_idx, temp_idx, chg_drv->vbatt_idx, vbatt_idx,
 		chg_drv->fv_uv, fv_uv, cc_max, cc_next_max);
 
-		if (PSY_SET_PROP(chg_psy, POWER_SUPPLY_PROP_VOLTAGE_MAX, fv_uv))
-			goto error_rerun;
-
 		if (PSY_SET_PROP(chg_psy,
 				 POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
 				 cc_max))
 			goto error_rerun;
+
+		if (PSY_SET_PROP(chg_psy, POWER_SUPPLY_PROP_VOLTAGE_MAX, fv_uv))
+			goto error_rerun;
+
 		chg_drv->temp_idx = temp_idx;
 		chg_drv->vbatt_idx = vbatt_idx;
 		chg_drv->checked_cv_cnt = 0;
