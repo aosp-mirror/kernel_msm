@@ -2958,8 +2958,85 @@ static int fg_set_resume_soc(struct fg_chip *chip, u8 threshold)
 	return rc;
 }
 
-#define BATT_CYCLE_NUMBER_REG		0x5E8
-#define BATT_CYCLE_OFFSET		0
+#define BATT_CYCLE_NUMBER_REG           0x5E8
+#define BATT_CYCLE_OFFSET               0
+
+static ssize_t fg_get_cycle_counts_bins(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct fg_chip *chip = dev_get_drvdata(dev);
+	int rc = 0, i, address;
+	u8 data[2];
+	int length = 0;
+
+	fg_mem_lock(chip);
+	for (i = 0; i < BUCKET_COUNT; i++) {
+		address = BATT_CYCLE_NUMBER_REG + i * 2;
+		rc = fg_mem_read(chip, (u8 *)&data, address, 2,
+				 BATT_CYCLE_OFFSET, 0);
+		if (rc) {
+			pr_err("failed to read bucket %d rc=%d\n", i, rc);
+			chip->cyc_ctr.count[i] = 0;
+		} else
+			chip->cyc_ctr.count[i] = data[0] | data[1] << 8;
+
+		length += scnprintf(buf + length,
+				    PAGE_SIZE - length, "%d",
+				    chip->cyc_ctr.count[i]);
+
+		if (i == BUCKET_COUNT-1)
+			length += scnprintf(buf + length,
+					    PAGE_SIZE - length, "\n");
+		else
+			length += scnprintf(buf + length,
+					    PAGE_SIZE - length, " ");
+	}
+	fg_mem_release(chip);
+	return length;
+}
+
+static ssize_t fg_set_cycle_counts_bins(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t count)
+{
+	struct fg_chip *chip = dev_get_drvdata(dev);
+	int rc = 0, strval[BUCKET_COUNT], bucket, address;
+	u16 cyc_count;
+	u8 data[2];
+
+	if (sscanf(buf, "%d %d %d %d %d %d %d %d",
+		   &strval[0], &strval[1], &strval[2], &strval[3],
+		   &strval[4], &strval[5], &strval[6], &strval[7])
+	    != BUCKET_COUNT)
+		return -EINVAL;
+	fg_mem_lock(chip);
+	for (bucket = 0; bucket < BUCKET_COUNT; bucket++) {
+		if (strval[bucket] > chip->cyc_ctr.count[bucket]) {
+			cyc_count = strval[bucket];
+			data[0] = cyc_count & 0xFF;
+			data[1] = cyc_count >> 8;
+
+			address = BATT_CYCLE_NUMBER_REG + bucket * 2;
+
+			rc = fg_mem_write(chip, data, address, 2,
+					  BATT_CYCLE_OFFSET, 0);
+			if (rc) {
+				pr_err("failed to write BATT_CYCLE[%d] rc=%d\n",
+				       bucket, rc);
+				fg_mem_release(chip);
+				return rc;
+			}
+			chip->cyc_ctr.count[bucket] = cyc_count;
+		}
+	}
+	fg_mem_release(chip);
+	return count;
+}
+
+static DEVICE_ATTR(cycle_counts_bins, 0660,
+		   fg_get_cycle_counts_bins, fg_set_cycle_counts_bins);
+
 static void restore_cycle_counter(struct fg_chip *chip)
 {
 	int rc = 0, i, address;
@@ -3093,12 +3170,25 @@ static int fg_get_cycle_count(struct fg_chip *chip)
 	if (!chip->cyc_ctr.en)
 		return 0;
 
+#ifdef CONFIG_QPNP_LEGACY_CYCLE_COUNT
 	if ((chip->cyc_ctr.id <= 0) || (chip->cyc_ctr.id > BUCKET_COUNT))
 		return -EINVAL;
 
 	mutex_lock(&chip->cyc_ctr.lock);
 	count = chip->cyc_ctr.count[chip->cyc_ctr.id - 1];
 	mutex_unlock(&chip->cyc_ctr.lock);
+#else
+	mutex_lock(&chip->cyc_ctr.lock);
+	{
+		int i;
+
+		count = 0;
+		for (i = 0 ; i < BUCKET_COUNT; i++)
+			count += chip->cyc_ctr.count[i];
+		count = DIV_ROUND_CLOSEST(count, 8);
+	}
+	mutex_unlock(&chip->cyc_ctr.lock);
+#endif
 	return count;
 }
 
@@ -3396,7 +3486,9 @@ static enum power_supply_property fg_power_props[] = {
 	POWER_SUPPLY_PROP_ESR_COUNT,
 	POWER_SUPPLY_PROP_VOLTAGE_MIN,
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
+#ifdef CONFIG_QPNP_LEGACY_CYCLE_COUNT
 	POWER_SUPPLY_PROP_CYCLE_COUNT_ID,
+#endif
 	POWER_SUPPLY_PROP_HI_POWER,
 	POWER_SUPPLY_PROP_SOC_REPORTING_READY,
 	POWER_SUPPLY_PROP_IGNORE_FALSE_NEGATIVE_ISENSE,
@@ -3464,9 +3556,11 @@ static int fg_power_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CYCLE_COUNT:
 		val->intval = fg_get_cycle_count(chip);
 		break;
+#ifdef CONFIG_QPNP_LEGACY_CYCLE_COUNT
 	case POWER_SUPPLY_PROP_CYCLE_COUNT_ID:
 		val->intval = chip->cyc_ctr.id;
 		break;
+#endif
 	case POWER_SUPPLY_PROP_RESISTANCE_ID:
 		val->intval = get_sram_prop_now(chip, FG_DATA_BATT_ID);
 		break;
@@ -4584,6 +4678,7 @@ static int fg_power_set_property(struct power_supply *psy,
 			schedule_work(&chip->set_resume_soc_work);
 		}
 		break;
+#ifdef CONFIG_QPNP_LEGACY_CYCLE_COUNT
 	case POWER_SUPPLY_PROP_CYCLE_COUNT_ID:
 		if ((val->intval > 0) && (val->intval <= BUCKET_COUNT)) {
 			chip->cyc_ctr.id = val->intval;
@@ -4593,6 +4688,7 @@ static int fg_power_set_property(struct power_supply *psy,
 			rc = -EINVAL;
 		}
 		break;
+#endif
 	case POWER_SUPPLY_PROP_SAFETY_TIMER_EXPIRED:
 		chip->safety_timer_expired = val->intval;
 		schedule_work(&chip->status_change_work);
@@ -4602,6 +4698,18 @@ static int fg_power_set_property(struct power_supply *psy,
 			chip->bcl_lpm_disabled = !!val->intval;
 			schedule_work(&chip->bcl_hi_power_work);
 		}
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_FULL:
+		if (chip->learning_data.active) {
+			pr_warn("Capacity learning active!\n");
+			return 0;
+		}
+		if (val->intval <= 0 || val->intval > chip->nom_cap_uah) {
+			pr_err("charge_full is out of bounds\n");
+			return -EINVAL;
+		}
+		chip->learning_data.learned_cc_uah = val->intval;
+		fg_cap_learning_save_data(chip);
 		break;
 	default:
 		return -EINVAL;
@@ -4616,7 +4724,10 @@ static int fg_property_is_writeable(struct power_supply *psy,
 	switch (psp) {
 	case POWER_SUPPLY_PROP_COOL_TEMP:
 	case POWER_SUPPLY_PROP_WARM_TEMP:
+#ifdef CONFIG_QPNP_LEGACY_CYCLE_COUNT
 	case POWER_SUPPLY_PROP_CYCLE_COUNT_ID:
+#endif
+	case POWER_SUPPLY_PROP_CHARGE_FULL:
 		return 1;
 	default:
 		break;
@@ -8816,6 +8927,11 @@ static int fg_probe(struct spmi_device *spmi)
 
 	chip->spmi = spmi;
 	chip->dev = &(spmi->dev);
+
+	rc = device_create_file(chip->dev, &dev_attr_cycle_counts_bins);
+	if (rc != 0)
+		dev_err(chip->dev,
+			"Failed to create cycle_counts_bins files: %d\n", rc);
 
 	wakeup_source_init(&chip->empty_check_wakeup_source.source,
 			"qpnp_fg_empty_check");

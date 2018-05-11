@@ -1500,6 +1500,27 @@ static void msm_ipc_router_free_resume_tx_port(
 }
 
 /**
+ * msm_ipc_router_free_conn_info() - Free the local ports
+ * @rport_ptr: Pointer to the remote port.
+ *
+ * This function deletes all the local ports associated with a remote port
+ * and frees the memory allocated to each local port.
+ *
+ * Must be called with rport_ptr->rport_lock_lhb2 locked.
+ */
+static void msm_ipc_router_free_conn_info(
+	struct msm_ipc_router_remote_port *rport_ptr)
+{
+	struct ipc_router_conn_info *conn_info, *tmp_conn_info;
+
+	list_for_each_entry_safe(conn_info, tmp_conn_info,
+			&rport_ptr->conn_info_list, list) {
+		list_del(&conn_info->list);
+		kfree(conn_info);
+	}
+}
+
+/**
  * msm_ipc_router_lookup_resume_tx_port() - Lookup resume_tx port list
  * @rport_ptr: Remote port whose resume_tx port list needs to be looked.
  * @port_id: Port ID which needs to be looked from the list.
@@ -1625,6 +1646,7 @@ static void ipc_router_release_rport(struct kref *ref)
 
 	mutex_lock(&rport_ptr->rport_lock_lhb2);
 	msm_ipc_router_free_resume_tx_port(rport_ptr);
+	msm_ipc_router_free_conn_info(rport_ptr);
 	mutex_unlock(&rport_ptr->rport_lock_lhb2);
 	kfree(rport_ptr);
 }

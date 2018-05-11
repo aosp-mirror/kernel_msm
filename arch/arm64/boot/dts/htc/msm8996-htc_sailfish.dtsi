@@ -28,6 +28,20 @@
 				0x00 0x18>;
 };
 
+&i2c_9 {
+	fusb302@22 {
+		src-pdo = <PDO_TYPE_FIXED 5000 900 0>;		/* FIXED 5V-0.9A */
+		snk-pdo = <PDO_TYPE_FIXED 5000 3000 0>,		/* FIXED 5V-3A */
+			  <PDO_TYPE_BATT 4000 10000 18000>;	/* BATT [4-10]V-18W */
+		max-snk-mv = <5000>;
+		max-snk-ma = <3000>;
+		max-snk-mw = <15000>;
+		op-snk-mw = <7600>;
+		port-type = <TYPEC_PORT_DRP>;
+		default-role = <TYPEC_SINK>;
+	};
+};
+
 &pmi8994_charger {
         qcom,hvdcp-not-support;
         qcom,iterm-ma = <50>;

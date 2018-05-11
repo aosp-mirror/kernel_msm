@@ -143,6 +143,8 @@ enum pd_pdo_type {
 	(PDO_TYPE(PDO_TYPE_FIXED) | (flags) |		\
 	 PDO_FIXED_VOLT(mv) | PDO_FIXED_CURR(ma))
 
+#define VSAFE5V 5000 /* mv units */
+
 #define PDO_BATT_MAX_VOLT_SHIFT	20	/* 50mV units */
 #define PDO_BATT_MIN_VOLT_SHIFT	10	/* 50mV units */
 #define PDO_BATT_MAX_PWR_SHIFT	0	/* 250mW units */
@@ -278,6 +280,8 @@ static inline unsigned int rdo_max_power(u32 rdo)
 #define PD_T_VCONN_SOURCE_ON	100
 #define PD_T_SINK_REQUEST	100	/* 100 ms minimum */
 #define PD_T_ERROR_RECOVERY	100	/* minimum 25 is insufficient */
+#define PD_T_SRCSWAPSTDBY	625     /* Maximum of 650ms */
+#define PD_T_NEWSRC		250	/* Maximum of 275ms */
 
 #define PD_T_DRP_TRY		140	/* 75 - 150 ms */
 #define PD_T_DRP_TRYWAIT	600	/* 400 - 800 ms */

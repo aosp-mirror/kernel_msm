@@ -32,6 +32,12 @@ static struct htc_battery_timer htc_batt_timer;
 #define HTC_BATT_NAME "htc_battery"
 #define HTC_STATISTICS "htc_batt_stats_1.1"
 
+#define DEFAULT_CHARGE_STOP_LEVEL 100
+#define DEFAULT_CHARGE_START_LEVEL 0
+static int charge_stop_level = DEFAULT_CHARGE_STOP_LEVEL;
+static int charge_start_level = DEFAULT_CHARGE_START_LEVEL;
+static bool g_is_support_charge_stop_start_algorithm = false;
+
 /* disable pwrsrc reason */
 #define HTC_BATT_PWRSRC_DIS_BIT_MFG		(1)
 #define HTC_BATT_PWRSRC_DIS_BIT_API		(1<<1)
@@ -185,12 +191,17 @@ static int is_bounding_fully_charged_level(void)
 	int is_batt_chg_off_by_bounding = 0;
 	int upperbd = htc_batt_info.rep.full_level;
 	int current_level = htc_batt_info.rep.level;
-	/* Default 5% range, set 30% when 6 4000000 is set*/
-	int lowerbd = g_flag_force_ac_chg ? (upperbd-30) : (upperbd-5);
+	int lowerbd = g_is_support_charge_stop_start_algorithm ? charge_start_level : \
+		      /* Default 5% range, set 30% when 6 4000000 is set */
+		      (g_flag_force_ac_chg ? (upperbd-30) : (upperbd-5));
 
-	if (0 < htc_batt_info.rep.full_level &&
-			htc_batt_info.rep.full_level < 100) {
+	if ((upperbd == DEFAULT_CHARGE_STOP_LEVEL) &&
+	    (lowerbd == DEFAULT_CHARGE_START_LEVEL))
+		return 0;
 
+	if ((upperbd > lowerbd) &&
+	    (upperbd <= DEFAULT_CHARGE_STOP_LEVEL) &&
+	    (lowerbd >= DEFAULT_CHARGE_START_LEVEL)) {
 		if (lowerbd < 0)
 			lowerbd = 0;
 
@@ -1496,9 +1507,9 @@ static void batt_worker(struct work_struct *work)
 			g_pwrsrc_dis_reason &= ~HTC_BATT_PWRSRC_DIS_BIT_FTM;
 
 		if (is_bounding_fully_charged_level())
-			g_pwrsrc_dis_reason |= HTC_BATT_PWRSRC_DIS_BIT_MFG;
+			g_chg_dis_reason |= HTC_BATT_CHG_DIS_BIT_MFG;
 		else
-			g_pwrsrc_dis_reason &= ~HTC_BATT_PWRSRC_DIS_BIT_MFG;
+			g_chg_dis_reason &= ~HTC_BATT_CHG_DIS_BIT_MFG;
 
 		if (g_usb_overheat){
 			g_pwrsrc_dis_reason |= HTC_BATT_PWRSRC_DIS_BIT_USB_OVERHEAT;
@@ -1596,10 +1607,7 @@ static void batt_worker(struct work_struct *work)
 			set_batt_psy_property(POWER_SUPPLY_PROP_BATTERY_CHARGING_ENABLED, charging_enabled);
 		}
 
-		if (htc_batt_info.rep.full_level != 100) {
-			BATT_EMBEDDED("set full level pwrsrc_enable(%d)", pwrsrc_enabled);
-			set_batt_psy_property(POWER_SUPPLY_PROP_CHARGING_ENABLED, pwrsrc_enabled);
-		} else if (pwrsrc_enabled != s_prev_pwrsrc_enabled) {
+		if (pwrsrc_enabled != s_prev_pwrsrc_enabled) {
 			BATT_EMBEDDED("set pwrsrc_enable(%d)", pwrsrc_enabled);
 			set_batt_psy_property(POWER_SUPPLY_PROP_CHARGING_ENABLED, pwrsrc_enabled);
 		}
@@ -2750,6 +2758,59 @@ htc_attrs_failed:
 succeed:
     return rc;
 }
+
+static int set_charge_stop_level(const char *val,
+				 const struct kernel_param *kp)
+{
+	int rc;
+	int old_val = charge_stop_level;
+
+	rc = param_set_int(val, kp);
+	if (rc) {
+		BATT_ERR("Unable to set charge_stop_level: %d\n", rc);
+		return rc;
+	}
+	g_is_support_charge_stop_start_algorithm = true;
+	htc_batt_info.rep.full_level = charge_stop_level;
+
+	if (charge_stop_level != old_val)
+		htc_batt_schedule_batt_info_update();
+
+	return 0;
+}
+
+static struct kernel_param_ops charge_stop_ops = {
+	.set = set_charge_stop_level,
+	.get = param_get_int,
+};
+module_param_cb(charge_stop_level, &charge_stop_ops,
+		&charge_stop_level, 0644);
+
+static int set_charge_start_level(const char *val,
+				  const struct kernel_param *kp)
+{
+	int rc;
+	int old_val = charge_start_level;
+
+	rc = param_set_int(val, kp);
+	if (rc) {
+		BATT_ERR("Unable to set charge_start_level: %d\n", rc);
+		return rc;
+	}
+	g_is_support_charge_stop_start_algorithm = true;
+
+	if (charge_start_level != old_val)
+		htc_batt_schedule_batt_info_update();
+
+	return 0;
+}
+
+static struct kernel_param_ops charge_start_ops = {
+	.set = set_charge_start_level,
+	.get = param_get_int,
+};
+module_param_cb(charge_start_level, &charge_start_ops,
+		&charge_start_level, 0644);
 
 void htc_battery_probe_process(enum htc_batt_probe probe_type) {
 	static int s_probe_finish_process = 0;

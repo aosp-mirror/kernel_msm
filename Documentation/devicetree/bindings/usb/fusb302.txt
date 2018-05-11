@@ -1,0 +1,84 @@
+ON Semiconductor FUSB302 Type-C Controller
+
+Required properties:
+
+- compatible	: "fairchild,fusb302"
+- reg		: I2C slave address
+- vdd-supply	: Input supply voltage
+- interrupt	: Interrupt specifier
+- port-type	: should be set to one of following values:
+		  <TYPEC_PORT_DFP>
+		  <TYPEC_PORT_UFP>
+		  <TYPEC_PORT_DRP>
+
+Optional properties:
+
+- src-pdo	: (Required when port-type is set to <TYPEC_PORT_DFP> or
+		  <TYPEC_PORT_DRP>)
+		  It is a set of 32-bit unsigned integer cells representing the
+		  Source Capabilities of the board. The number of the cells
+		  should be multiple of 4, at least 4 cells, and at most 28
+		  cells. Every 4-tuple-cell represents one Capability.
+
+		  Format of each 4-tuple:
+		  < pdo_type power_attr1 power_attr2 power_attr3 >
+		  where pdo_type should be set to one of the following:
+		  1. PDO_TYPE_FIXED
+		  2. PDO_TYPE_BATT
+		  3. PDO_TYPE_VAR
+		  And power_attrX varies from pdo_type
+
+		  When pdo_type is PDO_TYPE_FIXED:
+		  power_attr1 is Voltage (mv)
+		  power_attr2 is Maximum Current (ma)
+		  power_attr3 should be set to 0
+
+		  When pdo_type is PDO_TYPE_BATT:
+		  power_attr1 is Minimum Voltage (mv)
+		  power_attr2 is Maximum Voltage (mv)
+		  power_attr3 is Maximum Allowable Power (mw)
+
+		  When pdo_type is PDO_TYPE_VAR:
+		  power_attr1 is Minimum Voltage (mv)
+		  power_attr2 is Maximum Voltage (mv)
+		  power_attr3 is Maximum Current (ma)
+
+- snk-pdo	: (Required when port-type is set to <TYPEC_PORT_UFP> or
+		  <TYPEC_PORT_DRP>)
+		  It represents the Sink Capabilities of the board with the
+		  same format as that of src-pdo
+- max-snk-mv	: Maximum acceptable sinking voltage when selecting PDO in
+		  power negotiation
+- max-snk-ma	: Maximum acceptable sinking current when selecting PDO in
+		  power negotiation
+- max-snk-mw	: Maximum acceptable power limit when specifying available
+		  current in power negotiation
+- op-snk-mw	: (Required when port-type is set to <TYPEC_PORT_UFP> or
+		  <TYPEC_PORT_DRP>)
+		  Minimum operating power
+		  Capability Mismatch flag will be set if this value is bigger
+		  than the calculated power in selected PDO.
+- default-role	: Specifying Type-C try role
+		  This value should be set to one of the following:
+		  <TYPEC_SINK>
+		  <TYPEC_SOURCE>
+
+Example:
+
+fusb302@22 {
+	compatible = "fairchild,fusb302";
+	reg = <0x22>;
+	interrupt-parent = <&tlmm>;
+	vdd-supply = <&pm8994_l23>;
+	interrupt = <124 0>;
+	src-pdo = <PDO_TYPE_FIXED 5000 900 0>;		/* FIXED 5V-0.9A */
+	snk-pdo = <PDO_TYPE_FIXED 5000 3000 0>,		/* FIXED 5V-3A */
+		  <PDO_TYPE_FIXED 9000 2000 0>,		/* FIXED 9V-2A */
+		  <PDO_TYPE_BATT 4000 10000 18000>;	/* BATT [4-10]V-18W */
+	max-snk-mv = <9000>;
+	max-snk-ma = <3000>;
+	max-snk-mw = <18000>;
+	op-snk-mw = <2500>;
+	port-type = <TYPEC_PORT_DRP>;
+	default-role = <TYPEC_SINK>;
+};

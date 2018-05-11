@@ -519,7 +519,7 @@ static long msm_core_ioctl(struct file *file, unsigned int cmd,
 				node->sp->voltage,
 				sizeof(uint32_t) * node->sp->num_of_freqs);
 		if (ret)
-			break;
+			goto unlock;
 		for (i = 0; i < node->sp->num_of_freqs; i++) {
 			ret = copy_to_user((void __user *)&argp->freq[i],
 					&node->sp->table[i].frequency,
