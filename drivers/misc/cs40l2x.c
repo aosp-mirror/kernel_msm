@@ -60,9 +60,9 @@ struct cs40l2x_private {
 	struct cs40l2x_platform_data pdata;
 	struct list_head coeff_desc_head;
 	unsigned char diag_state;
+	unsigned int diag_dig_scale;
 	unsigned int f0_measured;
 	unsigned int redc_measured;
-	unsigned int dig_scale;
 	struct cs40l2x_pbq_pair pbq_pairs[CS40L2X_PBQ_DEPTH_MAX];
 	struct hrtimer pbq_timer;
 	unsigned int pbq_depth;
@@ -758,12 +758,33 @@ static ssize_t cs40l2x_comp_enable_store(struct device *dev,
 	return count;
 }
 
+static int cs40l2x_dig_scale_get(struct cs40l2x_private *cs40l2x,
+			unsigned int *dig_scale)
+{
+	int ret;
+	unsigned int val;
+
+	if (!mutex_is_locked(&cs40l2x->lock))
+		return -EACCES;
+
+	ret = regmap_read(cs40l2x->regmap, CS40L2X_AMP_DIG_VOL_CTRL, &val);
+	if (ret)
+		return ret;
+
+	*dig_scale = (CS40L2X_DIG_SCALE_ZERO - ((val & CS40L2X_AMP_VOL_PCM_MASK)
+			>> CS40L2X_AMP_VOL_PCM_SHIFT)) & CS40L2X_DIG_SCALE_MASK;
+
+	return 0;
+}
+
 static int cs40l2x_dig_scale_set(struct cs40l2x_private *cs40l2x,
 			unsigned int dig_scale)
 {
-	/* this function expects to be called while mutex is locked */
 	if (!mutex_is_locked(&cs40l2x->lock))
 		return -EACCES;
+
+	if (dig_scale == CS40L2X_DIG_SCALE_RESET)
+		return -EINVAL;
 
 	return regmap_update_bits(cs40l2x->regmap,
 			CS40L2X_AMP_DIG_VOL_CTRL,
@@ -777,8 +798,19 @@ static ssize_t cs40l2x_dig_scale_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int dig_scale;
 
-	return snprintf(buf, PAGE_SIZE, "%d\n", cs40l2x->dig_scale);
+	mutex_lock(&cs40l2x->lock);
+	ret = cs40l2x_dig_scale_get(cs40l2x, &dig_scale);
+	mutex_unlock(&cs40l2x->lock);
+
+	if (ret) {
+		pr_err("Failed to read digital scale\n");
+		return ret;
+	}
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", dig_scale);
 }
 
 static ssize_t cs40l2x_dig_scale_store(struct device *dev,
@@ -797,15 +829,13 @@ static ssize_t cs40l2x_dig_scale_store(struct device *dev,
 		return -EINVAL;
 
 	mutex_lock(&cs40l2x->lock);
-	cs40l2x_dig_scale_set(cs40l2x, dig_scale);
+	ret = cs40l2x_dig_scale_set(cs40l2x, dig_scale);
 	mutex_unlock(&cs40l2x->lock);
 
 	if (ret) {
-		pr_err("Failed to store digital scale\n");
+		pr_err("Failed to write digital scale\n");
 		return ret;
 	}
-
-	cs40l2x->dig_scale = dig_scale;
 
 	return count;
 }
@@ -1405,6 +1435,13 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 
 	case CS40L2X_INDEX_DIAG:
 		cs40l2x->diag_state = CS40L2X_DIAG_STATE_INIT;
+		cs40l2x->diag_dig_scale = CS40L2X_DIG_SCALE_RESET;
+
+		ret = cs40l2x_dig_scale_get(cs40l2x, &cs40l2x->diag_dig_scale);
+		if (ret) {
+			dev_err(dev, "Failed to read digital scale\n");
+			goto err_mutex;
+		}
 
 		ret = cs40l2x_dig_scale_set(cs40l2x, 0);
 		if (ret) {
@@ -1468,7 +1505,7 @@ static void cs40l2x_vibe_stop_worker(struct work_struct *work)
 		if (ret)
 			dev_err(dev, "Failed to disable stimulus mode\n");
 
-		ret = cs40l2x_dig_scale_set(cs40l2x, cs40l2x->dig_scale);
+		ret = cs40l2x_dig_scale_set(cs40l2x, cs40l2x->diag_dig_scale);
 		if (ret)
 			dev_err(dev, "Failed to restore digital scale\n");
 		break;
