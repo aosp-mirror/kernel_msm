@@ -346,6 +346,7 @@ static struct platform_driver stmvl53l0_platform_driver = {
 		.name = STMVL53L0_DRV_NAME,
 		.owner = THIS_MODULE,
 		.of_match_table = st_stmvl53l0_dt_match,
+                .probe_type = PROBE_PREFER_ASYNCHRONOUS,
 	},
 };
 

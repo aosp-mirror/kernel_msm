@@ -100,6 +100,20 @@
 				QDF_FILE_GRP_READ |	\
 				QDF_FILE_OTH_READ)
 
+#define DPT_DEBUGFS_NUMBER_BASE	10
+/**
+ * enum dpt_set_param_debugfs - dpt set params
+ * @DPT_SET_PARAM_PROTO_BITMAP : set proto bitmap
+ * @DPT_SET_PARAM_NR_RECORDS: set num of records
+ * @DPT_SET_PARAM_VERBOSITY: set verbosity
+ */
+enum dpt_set_param_debugfs {
+	DPT_SET_PARAM_PROTO_BITMAP = 1,
+	DPT_SET_PARAM_NR_RECORDS = 2,
+	DPT_SET_PARAM_VERBOSITY = 3,
+	DPT_SET_PARAM_MAX,
+};
+
 /* These macros are expected to be used only for data path.
  * Existing APIs cannot be used since they log every time
  * they are used. Other modules, outside of data path should
@@ -1264,6 +1278,89 @@ static QDF_STATUS ol_txrx_read_dpt_buff_debugfs(qdf_debugfs_file_t file,
 }
 
 /**
+ * ol_txrx_conv_str_to_int_debugfs() - convert string to int
+ * @buf: buffer containing string
+ * @len: buffer len
+ * @proto_bitmap: defines the protocol to be tracked
+ * @nr_records: defines the nth packet which is traced
+ * @verbosity: defines the verbosity level
+ *
+ * This function expects char buffer to be null terminated.
+ * Otherwise results could be unexpected values.
+ *
+ * Return: 0 on success
+ */
+static int ol_txrx_conv_str_to_int_debugfs(char *buf, qdf_size_t len,
+					   int *proto_bitmap,
+					   int *nr_records,
+					   int *verbosity)
+{
+	int num_value = DPT_SET_PARAM_PROTO_BITMAP;
+	int ret, param_value = 0;
+	char *buf_param = buf;
+	int i;
+
+	for (i = 1; i < DPT_SET_PARAM_MAX; i++) {
+		/* Loop till you reach space as kstrtoint operates till
+		 * null character. Replace space with null character
+		 * to read each value.
+		 * terminate the loop either at null terminated char or
+		 * len is 0.
+		 */
+		while (*buf && len) {
+			if (*buf == ' ') {
+				*buf = '\0';
+				buf++;
+				len--;
+				break;
+			}
+			buf++;
+			len--;
+		}
+		/* get the parameter */
+		ret = qdf_kstrtoint(buf_param,
+				    DPT_DEBUGFS_NUMBER_BASE,
+				    &param_value);
+		if (ret) {
+			QDF_TRACE(QDF_MODULE_ID_TXRX,
+				  QDF_TRACE_LEVEL_ERROR,
+				  "%s: Error while parsing buffer. ret %d",
+				  __func__, ret);
+			return ret;
+		}
+		switch (num_value) {
+		case DPT_SET_PARAM_PROTO_BITMAP:
+			*proto_bitmap = param_value;
+			break;
+		case DPT_SET_PARAM_NR_RECORDS:
+			*nr_records = param_value;
+			break;
+		case DPT_SET_PARAM_VERBOSITY:
+			*verbosity = param_value;
+			break;
+		default:
+			QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
+				"%s %d: :Set command needs exactly 3 arguments in format <proto_bitmap> <number of record> <Verbosity>.",
+				__func__, __LINE__);
+			break;
+		}
+		num_value++;
+		/*buf_param should now point to the next param value. */
+		buf_param = buf;
+	}
+
+	/* buf is not yet NULL implies more than 3 params are passed. */
+	if (*buf) {
+		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
+			"%s %d: :Set command needs exactly 3 arguments in format <proto_bitmap> <number of record> <Verbosity>.",
+			__func__, __LINE__);
+		return -EINVAL;
+	}
+	return 0;
+}
+
+
+/**
  * ol_txrx_write_dpt_buff_debugfs() - set dp trace parameters
  * @priv: pdev object
  * @buf: buff to get value for dpt parameters
@@ -1275,6 +1372,36 @@ static QDF_STATUS ol_txrx_write_dpt_buff_debugfs(void *priv,
 					      const char *buf,
 					      qdf_size_t len)
 {
+	int ret;
+	int proto_bitmap = 0;
+	int nr_records = 0;
+	int verbosity = 0;
+	char *buf1 = NULL;
+
+	if (!buf || !len) {
+		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
+				"%s: null buffer or len. len %u",
+				__func__, (uint8_t)len);
+		return QDF_STATUS_E_FAULT;
+	}
+
+	buf1 = (char *)qdf_mem_malloc(len);
+	if (!buf1) {
+		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_ERROR,
+				"%s: qdf_mem_malloc failure",
+				__func__);
+		return QDF_STATUS_E_FAULT;
+	}
+	qdf_mem_copy(buf1, buf, len);
+	ret = ol_txrx_conv_str_to_int_debugfs(buf1, len, &proto_bitmap,
+					      &nr_records, &verbosity);
+	if (ret) {
+		qdf_mem_free(buf1);
+		return QDF_STATUS_E_INVAL;
+	}
+
+	qdf_dpt_set_value_debugfs(proto_bitmap, nr_records, verbosity);
+	qdf_mem_free(buf1);
 	return QDF_STATUS_SUCCESS;
 }
 
@@ -2178,30 +2305,6 @@ void ol_txrx_pdev_detach(ol_txrx_pdev_handle pdev)
 
 	qdf_spinlock_destroy(&pdev->req_list_spinlock);
 
-	qdf_spin_lock_bh(&pdev->req_list_spinlock);
-	if (pdev->req_list_depth > 0)
-		ol_txrx_err(
-			"Warning: the txrx req list is not empty, depth=%d\n",
-			pdev->req_list_depth
-			);
-	TAILQ_FOREACH(req, &pdev->req_list, req_list_elem) {
-		TAILQ_REMOVE(&pdev->req_list, req, req_list_elem);
-		pdev->req_list_depth--;
-		ol_txrx_err(
-			"%d: %p,verbose(%d), concise(%d), up_m(0x%x), reset_m(0x%x)\n",
-			i++,
-			req,
-			req->base.print.verbose,
-			req->base.print.concise,
-			req->base.stats_type_upload_mask,
-			req->base.stats_type_reset_mask
-			);
-		qdf_mem_free(req);
-	}
-	qdf_spin_unlock_bh(&pdev->req_list_spinlock);
-
-	qdf_spinlock_destroy(&pdev->req_list_spinlock);
-
 	OL_RX_REORDER_TIMEOUT_CLEANUP(pdev);
 
 	if (pdev->cfg.is_high_latency)
@@ -2420,7 +2523,7 @@ void ol_txrx_set_drop_unenc(ol_txrx_vdev_handle vdev, uint32_t val)
 	vdev->drop_unenc = val;
 }
 
-#if defined(CONFIG_HL_SUPPORT)
+#if defined(CONFIG_HL_SUPPORT) || defined(QCA_LL_LEGACY_TX_FLOW_CONTROL)
 
 static void
 ol_txrx_tx_desc_reset_vdev(ol_txrx_vdev_handle vdev)
@@ -2439,14 +2542,31 @@ ol_txrx_tx_desc_reset_vdev(ol_txrx_vdev_handle vdev)
 }
 
 #else
-
-static void
-ol_txrx_tx_desc_reset_vdev(ol_txrx_vdev_handle vdev)
+#ifdef QCA_LL_TX_FLOW_CONTROL_V2
+static void ol_txrx_tx_desc_reset_vdev(ol_txrx_vdev_handle vdev)
 {
+	struct ol_txrx_pdev_t *pdev = vdev->pdev;
+	struct ol_tx_flow_pool_t *pool;
+	int i;
+	struct ol_tx_desc_t *tx_desc;
 
+	qdf_spin_lock_bh(&pdev->tx_desc.flow_pool_list_lock);
+	for (i = 0; i < pdev->tx_desc.pool_size; i++) {
+		tx_desc = ol_tx_desc_find(pdev, i);
+		if (!qdf_atomic_read(&tx_desc->ref_cnt))
+			/* not in use */
+			continue;
+
+		pool = tx_desc->pool;
+		qdf_spin_lock_bh(&pool->flow_pool_lock);
+		if (tx_desc->vdev == vdev)
+			tx_desc->vdev = NULL;
+		qdf_spin_unlock_bh(&pool->flow_pool_lock);
+	}
+	qdf_spin_unlock_bh(&pdev->tx_desc.flow_pool_list_lock);
 }
-
-#endif
+#endif /* QCA_LL_TX_FLOW_CONTROL_V2 */
+#endif /* CONFIG_HL_SUPPORT */
 
 /**
  * ol_txrx_vdev_detach - Deallocate the specified data virtual

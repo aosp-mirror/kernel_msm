@@ -10,6 +10,7 @@
  * GNU General Public License for more details.
  */
 
+#include <dt-bindings/usb/typec.h>
 
 &qusb_phy0 {
 	qcom,qusb-phy-init-seq =
@@ -166,4 +167,17 @@
 		0x4dc 0x13 0x00 /* rx_a equalization 0x03 | 0x10 */
 		0x8dc 0x13 0x00 /* rx_a equalization 0x03 | 0x10 */
 		0xffffffff 0xffffffff 0x00>;
+};
+
+&pmi8998_pdphy {
+	src-pdo = <PDO_TYPE_FIXED 5000 900 0>;  /* 5V-0.9A */
+	snk-pdo = <PDO_TYPE_FIXED 5000 3000 0>, /* 5V-3A */
+		<PDO_TYPE_FIXED 9000 3000 0>; /* 9V-3A */
+	max-snk-mv = <9000>;
+	max-snk-ma = <3000>;
+	max-snk-mw = <27000>;
+	op-snk-mw = <7600>;
+	port-type = <TYPEC_PORT_DRP>;
+	default-role = <TYPEC_SINK>;
+	try-role-hw;
 };

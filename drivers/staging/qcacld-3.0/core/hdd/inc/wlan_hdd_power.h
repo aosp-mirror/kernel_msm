@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, 2014-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012, 2014-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -42,6 +42,12 @@
 
 #define HDD_WAKELOCK_TIMEOUT_CONNECT 1000
 #define HDD_WAKELOCK_TIMEOUT_RESUME 1000
+/*
+ * HDD_WAKELOCK_CONNECT_COMPLETE = CSR_JOIN_FAILURE_TIMEOUT_DEFAULT (3000) +
+ *                      WNI_CFG_AUTHENTICATE_FAILURE_TIMEOUT_STADEF (1000) +
+ *                      WNI_CFG_ASSOCIATION_FAILURE_TIMEOUT_STADEF  (2000)
+ */
+#define HDD_WAKELOCK_CONNECT_COMPLETE 6000
 
 /**
  * enum pkt_filter_protocol_layer - packet filter protocol layer
@@ -157,10 +163,12 @@ void hdd_conf_hostoffload(hdd_adapter_t *pAdapter, bool fenable);
  * hdd_conf_hw_filter_mode() - configure the given mode for the given adapter
  * @adapter: the adapter to configure the hw filter for
  * @mode: the hw filter mode to configure
+ * @filter_enable: True: Enable HW filter, False: Disable
  *
  * Return: Errno
  */
-int hdd_conf_hw_filter_mode(hdd_adapter_t *adapter, enum hw_filter_mode mode);
+int hdd_conf_hw_filter_mode(hdd_adapter_t *adapter, enum hw_filter_mode mode,
+			    bool filter_enable);
 
 #ifdef WLAN_FEATURE_PACKET_FILTERING
 int wlan_hdd_set_mc_addr_list(hdd_adapter_t *pAdapter, uint8_t set);

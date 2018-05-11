@@ -203,6 +203,7 @@ int hdd_sap_context_init(hdd_context_t *hdd_ctx)
 	qdf_spinlock_create(&hdd_ctx->sap_update_info_lock);
 
 	qdf_atomic_init(&hdd_ctx->dfs_radar_found);
+	qdf_atomic_init(&hdd_ctx->is_acs_allowed);
 
 	return 0;
 }
@@ -561,6 +562,7 @@ static int __hdd_hostapd_set_mac_address(struct net_device *dev, void *addr)
 	hdd_adapter_t *adapter;
 	hdd_context_t *hdd_ctx;
 	int ret = 0;
+	struct qdf_mac_addr mac_addr;
 
 	ENTER_DEV(dev);
 
@@ -569,6 +571,23 @@ static int __hdd_hostapd_set_mac_address(struct net_device *dev, void *addr)
 	ret = wlan_hdd_validate_context(hdd_ctx);
 	if (0 != ret)
 		return ret;
+
+	qdf_mem_copy(&mac_addr, psta_mac_addr->sa_data, QDF_MAC_ADDR_SIZE);
+
+	if (qdf_is_macaddr_zero(&mac_addr)) {
+		hdd_err("MAC is all zero");
+		return -EINVAL;
+	}
+
+	if (qdf_is_macaddr_broadcast(&mac_addr)) {
+		hdd_err("MAC is Broadcast");
+		return -EINVAL;
+	}
+
+	if (ETHER_IS_MULTICAST(psta_mac_addr->sa_data)) {
+		hdd_err("MAC is Multicast");
+		return -EINVAL;
+	}
 
 	memcpy(dev->dev_addr, psta_mac_addr->sa_data, ETH_ALEN);
 	EXIT();
@@ -1717,7 +1736,7 @@ QDF_STATUS hdd_hostapd_sap_event_cb(tpSap_Event pSapEvent,
 					HDD_IPA_AP_CONNECT,
 					pHostapdAdapter->dev->dev_addr);
 			if (status) {
-				hdd_err("WLAN_AP_CONNECT event failed!!");
+				hdd_err("WLAN_AP_CONNECT event failed");
 				/*
 				 * Make sure to set the event before proceeding
 				 * for error handling otherwise caller thread
@@ -1725,7 +1744,6 @@ QDF_STATUS hdd_hostapd_sap_event_cb(tpSap_Event pSapEvent,
 				 * connection will go through before that.
 				 */
 				qdf_event_set(&pHostapdState->qdf_event);
-				goto stopbss;
 			}
 		}
 
@@ -1859,16 +1877,6 @@ QDF_STATUS hdd_hostapd_sap_event_cb(tpSap_Event pSapEvent,
 
 		/* Invalidate the channel info. */
 		pHddApCtx->operatingChannel = 0;
-		if (hdd_ipa_is_enabled(pHddCtx)) {
-			status = hdd_ipa_wlan_evt(pHostapdAdapter,
-					pHddApCtx->uBCStaId,
-					HDD_IPA_AP_DISCONNECT,
-					pHostapdAdapter->dev->dev_addr);
-			if (status) {
-				hdd_err("WLAN_AP_DISCONNECT event failed!!");
-				goto stopbss;
-			}
-		}
 
 		/* reset the dfs_cac_status and dfs_cac_block_tx flag only when
 		 * the last BSS is stopped
@@ -2107,10 +2115,8 @@ QDF_STATUS hdd_hostapd_sap_event_cb(tpSap_Event pSapEvent,
 			status = hdd_ipa_wlan_evt(pHostapdAdapter,
 					event->staId, HDD_IPA_CLIENT_CONNECT_EX,
 					event->staMac.bytes);
-			if (status) {
+			if (status)
 				hdd_err("WLAN_CLIENT_CONNECT_EX event failed");
-				goto stopbss;
-			}
 		}
 
 		DPTRACE(qdf_dp_trace_mgmt_pkt(QDF_DP_TRACE_MGMT_PACKET_RECORD,
@@ -2571,6 +2577,7 @@ QDF_STATUS hdd_hostapd_sap_event_cb(tpSap_Event pSapEvent,
 		/* send vendor event to hostapd only for hostapd based acs*/
 		if (!pHddCtx->config->force_sap_acs)
 			wlan_hdd_cfg80211_acs_ch_select_evt(pHostapdAdapter);
+		qdf_atomic_set(&pHddCtx->is_acs_allowed, 0);
 		return QDF_STATUS_SUCCESS;
 	case eSAP_ECSA_CHANGE_CHAN_IND:
 		hdd_debug("Channel change indication from peer for channel %d",
@@ -2687,8 +2694,8 @@ int hdd_softap_unpack_ie(tHalHandle halHandle,
 	uint32_t ret;
 	uint8_t *pRsnIe;
 	uint16_t RSNIeLen;
-	tDot11fIERSN dot11RSNIE;
-	tDot11fIEWPA dot11WPAIE;
+	tDot11fIERSN dot11RSNIE = {0};
+	tDot11fIEWPA dot11WPAIE = {0};
 
 	if (NULL == halHandle) {
 		hdd_err("Error haHandle returned NULL");
@@ -2711,10 +2718,9 @@ int hdd_softap_unpack_ie(tHalHandle halHandle,
 		RSNIeLen = gen_ie_len - 2;
 		/* Unpack the RSN IE */
 		memset(&dot11RSNIE, 0, sizeof(tDot11fIERSN));
-		ret = dot11f_unpack_ie_rsn((tpAniSirGlobal) halHandle,
-					   pRsnIe, RSNIeLen, &dot11RSNIE,
-					   false);
-		if (DOT11F_FAILED(ret)) {
+		ret = sme_unpack_rsn_ie(halHandle, pRsnIe, RSNIeLen,
+					&dot11RSNIE, false);
+		if (!DOT11F_SUCCEEDED(ret)) {
 			hdd_err("unpack failed, ret: 0x%x", ret);
 			return -EINVAL;
 		}
@@ -2722,14 +2728,14 @@ int hdd_softap_unpack_ie(tHalHandle halHandle,
 		hdd_debug("pairwise cipher suite count: %d",
 		       dot11RSNIE.pwise_cipher_suite_count);
 		hdd_debug("authentication suite count: %d",
-		       dot11RSNIE.akm_suite_count);
+		       dot11RSNIE.akm_suite_cnt);
 		/* Here we have followed the apple base code,
 		 * but probably I suspect we can do something different
-		 * dot11RSNIE.akm_suite_count
+		 * dot11RSNIE.akm_suite_cnt
 		 * Just translate the FIRST one
 		 */
 		*pAuthType =
-			hdd_translate_rsn_to_csr_auth_type(dot11RSNIE.akm_suites[0]);
+		    hdd_translate_rsn_to_csr_auth_type(dot11RSNIE.akm_suite[0]);
 		/* dot11RSNIE.pwise_cipher_suite_count */
 		*pEncryptType =
 			hdd_translate_rsn_to_csr_encryption_type(dot11RSNIE.
@@ -4696,7 +4702,7 @@ static int __iw_get_channel_list(struct net_device *dev,
 		if (hdd_ctx->config->dot11p_mode)
 			band_end_channel = CHAN_ENUM_184;
 		else
-			band_end_channel = CHAN_ENUM_165;
+			band_end_channel = CHAN_ENUM_173;
 	}
 
 	if (hostapd_adapter->device_mode == QDF_STA_MODE &&
@@ -6627,7 +6633,7 @@ QDF_STATUS hdd_init_ap_mode(hdd_adapter_t *pAdapter, bool reinit)
 
 	if (!reinit) {
 		pAdapter->sessionCtx.ap.sapConfig.acs_cfg.acs_mode = false;
-		qdf_mem_free(pAdapter->sessionCtx.ap.sapConfig.acs_cfg.ch_list);
+		wlan_hdd_undo_acs(pAdapter);
 		qdf_mem_zero(&pAdapter->sessionCtx.ap.sapConfig.acs_cfg,
 			     sizeof(struct sap_acs_cfg));
 	}
@@ -7879,6 +7885,38 @@ static inline int wlan_hdd_set_udp_resp_offload(hdd_adapter_t *padapter,
 }
 #endif
 
+static void hdd_check_and_disconnect_sta_on_invalid_channel(
+		hdd_context_t *hdd_ctx)
+{
+	hdd_adapter_t *sta_adapter;
+	uint8_t sta_chan;
+
+	sta_chan = hdd_get_operating_channel(hdd_ctx, QDF_STA_MODE);
+
+	if (!sta_chan) {
+		hdd_err("STA not connected");
+		return;
+	}
+
+	hdd_err("STA connected on chan %d", sta_chan);
+
+	if (sme_is_channel_valid(hdd_ctx->hHal, sta_chan)) {
+		hdd_err("STA connected on chan %d and it is valid", sta_chan);
+		return;
+	}
+
+	sta_adapter = hdd_get_adapter(hdd_ctx, QDF_STA_MODE);
+
+	if (!sta_adapter) {
+		hdd_err("STA adapter does not exist");
+		return;
+	}
+
+	hdd_err("chan %d not valid, issue disconnect", sta_chan);
+	/* Issue Disconnect request */
+	wlan_hdd_disconnect(sta_adapter, eCSR_DISCONNECT_REASON_DEAUTH);
+}
+
 /**
  * wlan_hdd_cfg80211_start_bss() - start bss
  * @pHostapdAdapter: Pointer to hostapd adapter
@@ -7984,6 +8022,11 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 			qdf_mem_free(sme_config);
 			return -EINVAL;
 		}
+
+		/* check if STA is on indoor channel*/
+		if (cds_is_force_scc())
+			hdd_check_and_disconnect_sta_on_invalid_channel(
+								       pHddCtx);
 	}
 
 	pConfig = &pHostapdAdapter->sessionCtx.ap.sapConfig;
@@ -8126,8 +8169,6 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 	wlansap_set_tx_leakage_threshold(hHal,
 		iniConfig->sap_tx_leakage_threshold);
 
-	wlansap_set_etsi_srd_chan_support(hHal,
-			iniConfig->etsi_srd_chan_in_master_mode);
 	capab_info = pMgmt_frame->u.beacon.capab_info;
 
 	pConfig->privacy = (pMgmt_frame->u.beacon.capab_info &
@@ -8602,11 +8643,7 @@ error:
 	if (sme_config)
 		qdf_mem_free(sme_config);
 	clear_bit(SOFTAP_INIT_DONE, &pHostapdAdapter->event_flags);
-	if (pHostapdAdapter->sessionCtx.ap.sapConfig.acs_cfg.ch_list) {
-		qdf_mem_free(pHostapdAdapter->sessionCtx.ap.sapConfig.
-			acs_cfg.ch_list);
-		pHostapdAdapter->sessionCtx.ap.sapConfig.acs_cfg.ch_list = NULL;
-	}
+	wlan_hdd_undo_acs(pHostapdAdapter);
 
 ret_status:
 	if (disable_fw_tdls_state)
@@ -8638,7 +8675,7 @@ static int __wlan_hdd_cfg80211_stop_ap(struct wiphy *wiphy,
 	hdd_adapter_list_node_t *pNext = NULL;
 	tsap_Config_t *pConfig;
 
-	ENTER();
+	hdd_info("enter(%s)", netdev_name(dev));
 
 	if (QDF_GLOBAL_FTM_MODE == hdd_get_conparam()) {
 		hdd_err("Command not allowed in FTM mode");
@@ -8676,6 +8713,18 @@ static int __wlan_hdd_cfg80211_stop_ap(struct wiphy *wiphy,
 	ret = wlan_hdd_validate_context(pHddCtx);
 	if (0 != ret)
 		return ret;
+
+	/*
+	 * If a STA connection is in progress in another adapter, disconnect
+	 * the STA and complete the SAP operation. STA will reconnect
+	 * after SAP stop is done.
+	 */
+	staAdapter = hdd_get_sta_connection_in_progress(pHddCtx);
+	if (staAdapter) {
+		hdd_debug("Disconnecting STA with session id: %d",
+			  staAdapter->sessionId);
+		wlan_hdd_disconnect(staAdapter, eCSR_DISCONNECT_REASON_DEAUTH);
+	}
 
 	if (pAdapter->device_mode == QDF_SAP_MODE) {
 		wlan_hdd_del_station(pAdapter);
@@ -8754,6 +8803,10 @@ static int __wlan_hdd_cfg80211_stop_ap(struct wiphy *wiphy,
 		hdd_hostapd_state_t *pHostapdState =
 			WLAN_HDD_GET_HOSTAP_STATE_PTR(pAdapter);
 
+		/* Set the stop_bss_in_progress flag */
+		wlansap_set_stop_bss_inprogress(
+			WLAN_HDD_GET_SAP_CTX_PTR(pAdapter), true);
+
 		qdf_event_reset(&pHostapdState->qdf_stop_bss_event);
 		status = wlansap_stop_bss(WLAN_HDD_GET_SAP_CTX_PTR(pAdapter));
 		if (QDF_IS_STATUS_SUCCESS(status)) {
@@ -8772,6 +8825,11 @@ static int __wlan_hdd_cfg80211_stop_ap(struct wiphy *wiphy,
 			}
 		}
 		clear_bit(SOFTAP_BSS_STARTED, &pAdapter->event_flags);
+
+		/* Clear the stop_bss_in_progress flag */
+		wlansap_set_stop_bss_inprogress(
+			WLAN_HDD_GET_SAP_CTX_PTR(pAdapter), false);
+
 		/*BSS stopped, clear the active sessions for this device mode*/
 		cds_decr_session_set_pcl(pAdapter->device_mode,
 						pAdapter->sessionId);
@@ -8971,7 +9029,7 @@ static int __wlan_hdd_cfg80211_start_ap(struct wiphy *wiphy,
 	bool sta_sap_scc_on_dfs_chan;
 	uint16_t sta_cnt;
 
-	ENTER();
+	hdd_info("enter(%s)", netdev_name(dev));
 
 	clear_bit(SOFTAP_INIT_DONE, &pAdapter->event_flags);
 	if (QDF_GLOBAL_FTM_MODE == hdd_get_conparam()) {

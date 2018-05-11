@@ -131,10 +131,8 @@ v_CONTEXT_t cds_init(void)
 	QDF_STATUS ret;
 
 	ret = qdf_debugfs_init();
-	if (ret != QDF_STATUS_SUCCESS) {
+	if (ret != QDF_STATUS_SUCCESS)
 		cds_err("Failed to init debugfs");
-		goto err_ret;
-	}
 
 	qdf_lock_stats_init();
 	qdf_mem_init();
@@ -170,7 +168,7 @@ deinit:
 	gp_cds_context->qdf_ctx = NULL;
 	gp_cds_context = NULL;
 	qdf_mem_zero(&g_cds_context, sizeof(g_cds_context));
-err_ret:
+
 	return NULL;
 }
 
@@ -699,6 +697,7 @@ QDF_STATUS cds_pre_enable(v_CONTEXT_t cds_context)
 		if ((!cds_is_fw_down()) && (!cds_is_self_recovery_enabled()))
 			QDF_BUG(0);
 
+		wma_wmi_stop();
 		htc_stop(gp_cds_context->htc_ctx);
 		return QDF_STATUS_E_FAILURE;
 	}
@@ -706,6 +705,7 @@ QDF_STATUS cds_pre_enable(v_CONTEXT_t cds_context)
 	if (ol_txrx_pdev_post_attach(gp_cds_context->pdev_txrx_ctx)) {
 		QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_FATAL,
 			"Failed to attach pdev");
+		wma_wmi_stop();
 		htc_stop(gp_cds_context->htc_ctx);
 		QDF_ASSERT(0);
 		return QDF_STATUS_E_FAILURE;
@@ -915,6 +915,10 @@ QDF_STATUS cds_post_disable(void)
 		return QDF_STATUS_E_INVAL;
 	}
 
+	/* Clean up all MC thread message queues */
+	if (gp_cds_sched_context)
+		cds_sched_flush_mc_mqs(gp_cds_sched_context);
+
 	/*
 	 * With new state machine changes cds_close can be invoked without
 	 * cds_disable. So, send the following clean up prerequisites to fw,
@@ -931,6 +935,7 @@ QDF_STATUS cds_post_disable(void)
 	hif_reset_soc(hif_ctx);
 
 	if (gp_cds_context->htc_ctx) {
+		wma_wmi_stop();
 		htc_stop(gp_cds_context->htc_ctx);
 	}
 
@@ -2768,12 +2773,15 @@ uint32_t cds_get_connectivity_stats_pkt_bitmap(void *context)
 {
 	hdd_adapter_t *adapter = NULL;
 
+	if (!context)
+		return 0;
+
 	adapter = (hdd_adapter_t *)context;
 	if (unlikely(adapter->magic != WLAN_HDD_ADAPTER_MAGIC)) {
 		QDF_TRACE(QDF_MODULE_ID_HDD_DATA, QDF_TRACE_LEVEL_ERROR,
 			  "Magic cookie(%x) for adapter sanity verification is invalid",
 			  adapter->magic);
-		return QDF_STATUS_E_FAILURE;
+		return 0;
 	}
 	return adapter->pkt_type_bitmap;
 }
@@ -2785,7 +2793,12 @@ uint32_t cds_get_connectivity_stats_pkt_bitmap(void *context)
  */
 uint32_t cds_get_arp_stats_gw_ip(void *context)
 {
-	hdd_adapter_t *adapter = (hdd_adapter_t *)context;
+	hdd_adapter_t *adapter = NULL;
+
+	if (!context)
+		return 0;
+
+	adapter = (hdd_adapter_t *)context;
 
 	if (unlikely(adapter->magic != WLAN_HDD_ADAPTER_MAGIC)) {
 		QDF_TRACE(QDF_MODULE_ID_HDD_DATA, QDF_TRACE_LEVEL_ERROR,
@@ -2876,40 +2889,49 @@ cds_print_htc_credit_history(uint32_t count, qdf_abstract_print *print,
 #endif
 
 #ifdef ENABLE_SMMU_S1_TRANSLATION
-QDF_STATUS cds_smmu_mem_map_setup(qdf_device_t osdev)
+QDF_STATUS cds_smmu_mem_map_setup(qdf_device_t osdev, bool ipa_present)
 {
 	int attr = 0;
-	bool ipa_smmu_enable;
+	bool ipa_smmu_enable = false;
 	struct dma_iommu_mapping *mapping = pld_smmu_get_mapping(osdev->dev);
 
 	osdev->smmu_s1_enabled = false;
 
-	ipa_smmu_enable = qdf_get_ipa_smmu_status();
-	if (ipa_smmu_enable)
-		cds_info("SMMU enabled from IPA side");
-	else
-		cds_info("SMMU not enabled from IPA side");
+	if (ipa_present) {
+		ipa_smmu_enable = qdf_get_ipa_smmu_status();
+		if (ipa_smmu_enable)
+			cds_info("SMMU enabled from IPA side");
+		else
+			cds_info("SMMU not enabled from IPA side");
+	}
 
 	if (mapping && ((iommu_domain_get_attr(mapping->domain,
 			 DOMAIN_ATTR_S1_BYPASS, &attr) == 0) &&
 			 !attr)) {
 		cds_info("SMMU enabled from WLAN side");
-		if (ipa_smmu_enable) {
-			cds_info("SMMU enabled from both IPA and WLAN side");
-			osdev->smmu_s1_enabled = true;
-			return QDF_STATUS_SUCCESS;
+
+		if (ipa_present) {
+			if (ipa_smmu_enable) {
+				cds_info("SMMU enabled from both IPA and WLAN side");
+				osdev->smmu_s1_enabled = true;
+			} else {
+				cds_err("SMMU mismatch: IPA: disable, WLAN: enable");
+				return QDF_STATUS_E_FAILURE;
+			}
 		} else {
-			cds_err("SMMU mismatch: IPA: disable, WLAN: enable");
-			return QDF_STATUS_E_FAILURE;
+			osdev->smmu_s1_enabled = true;
 		}
+
 	} else {
 		cds_info("No SMMU mapping present or SMMU disabled from WLAN side");
-		if (ipa_smmu_enable) {
-			cds_err("SMMU mismatch: IPA: enable, WLAN: disable");
-			return QDF_STATUS_E_FAILURE;
-		} else {
-			cds_info("SMMU diabled from both IPA and WLAN side");
-			return QDF_STATUS_SUCCESS;
+
+		if (ipa_present) {
+			if (ipa_smmu_enable) {
+				cds_err("SMMU mismatch: IPA: enable, WLAN: disable");
+				return QDF_STATUS_E_FAILURE;
+			} else {
+				cds_info("SMMU diabled from both IPA and WLAN side");
+			}
 		}
 	}
 
@@ -2929,7 +2951,7 @@ int cds_smmu_map_unmap(bool map, uint32_t num_buf, qdf_mem_info_t *buf_arr)
 #endif
 
 #else
-QDF_STATUS cds_smmu_mem_map_setup(qdf_device_t osdev)
+QDF_STATUS cds_smmu_mem_map_setup(qdf_device_t osdev, bool ipa_present)
 {
 	osdev->smmu_s1_enabled = false;
 	return QDF_STATUS_SUCCESS;

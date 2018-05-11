@@ -358,7 +358,8 @@ __cds_cpu_hotplug_notify(struct notifier_block *block,
 	if ((NULL == pSchedContext) || (NULL == pSchedContext->ol_rx_thread))
 		return NOTIFY_OK;
 
-	if (cds_is_load_or_unload_in_progress())
+	if (cds_is_load_or_unload_in_progress() ||
+	    cds_is_module_stop_in_progress() || cds_is_driver_recovering())
 		return NOTIFY_OK;
 
 	num_cpus = num_possible_cpus();
@@ -409,7 +410,8 @@ __cds_cpu_hotplug_notify(struct notifier_block *block,
 	if (pref_cpu == 0)
 		return NOTIFY_OK;
 
-	if (!cds_set_cpus_allowed_ptr(pSchedContext->ol_rx_thread, pref_cpu))
+	if (pSchedContext->ol_rx_thread &&
+	    !cds_set_cpus_allowed_ptr(pSchedContext->ol_rx_thread, pref_cpu))
 		affine_cpu = pref_cpu;
 
 	return NOTIFY_OK;
@@ -1237,6 +1239,49 @@ static int cds_ol_rx_thread(void *arg)
 	return 0;
 }
 #endif
+
+void cds_remove_timer_from_sys_msg(uint32_t timer_cookie)
+{
+	p_cds_msg_wrapper msg_wrapper = NULL;
+	struct list_head *pos, *q;
+	unsigned long flags;
+	p_cds_mq_type sys_msgq;
+
+	if (!gp_cds_sched_context) {
+		cds_err("gp_cds_sched_context is null");
+		return;
+	}
+
+	if (!gp_cds_sched_context->McThread) {
+		cds_err("Cannot post message because MC thread is stopped");
+		return;
+	}
+
+	sys_msgq = &gp_cds_sched_context->sysMcMq;
+	/* No msg present in sys queue */
+	if (cds_is_mq_empty(sys_msgq))
+		return;
+
+	spin_lock_irqsave(&sys_msgq->mqLock, flags);
+	list_for_each_safe(pos, q, &sys_msgq->mqList) {
+		msg_wrapper = list_entry(pos, cds_msg_wrapper, msgNode);
+
+		if ((msg_wrapper->pVosMsg->type == SYS_MSG_ID_MC_TIMER) &&
+		    (msg_wrapper->pVosMsg->bodyval == timer_cookie)) {
+			/* return message to the Core */
+			list_del(pos);
+			spin_unlock_irqrestore(&sys_msgq->mqLock, flags);
+			QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_DEBUG,
+				  "%s: removing timer message with cookie %d",
+				  __func__, timer_cookie);
+			cds_core_return_msg(gp_cds_sched_context->pVContext,
+					    msg_wrapper);
+			return;
+		}
+
+	}
+	spin_unlock_irqrestore(&sys_msgq->mqLock, flags);
+}
 
 /**
  * cds_sched_close() - close the cds scheduler

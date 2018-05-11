@@ -2871,10 +2871,11 @@ static bool csr_get_rsn_information(tHalHandle hal, tCsrAuthList *auth_type,
 			CSR_RSN_OUI_SIZE);
 	c_ucast_cipher =
 		(uint8_t) (rsn_ie->pwise_cipher_suite_count);
-	c_auth_suites = (uint8_t) (rsn_ie->akm_suite_count);
+
+	c_auth_suites = (uint8_t) (rsn_ie->akm_suite_cnt);
 	for (i = 0; i < c_auth_suites && i < CSR_RSN_MAX_AUTH_SUITES; i++) {
 		qdf_mem_copy((void *)&authsuites[i],
-			(void *)&rsn_ie->akm_suites[i], CSR_RSN_OUI_SIZE);
+			(void *)&rsn_ie->akm_suite[i], CSR_RSN_OUI_SIZE);
 	}
 
 	/* Check - Is requested unicast Cipher supported by the BSS. */
@@ -3341,7 +3342,7 @@ uint8_t csr_construct_rsn_ie(tHalHandle hHal, uint32_t sessionId,
 #endif
 	tDot11fBeaconIEs *pIesLocal = pIes;
 	eCsrAuthType negAuthType = eCSR_AUTH_TYPE_UNKNOWN;
-	tDot11fIERSN rsn_ie;
+	tDot11fIERSN rsn_ie = {0};
 
 	qdf_mem_zero(&pmkid_cache, sizeof(pmkid_cache));
 	do {
@@ -3365,7 +3366,7 @@ uint8_t csr_construct_rsn_ie(tHalHandle hHal, uint32_t sessionId,
 						   pProfile->pRSNReqIE + 2,
 						   pProfile->nRSNReqIELength -2,
 						   &rsn_ie, false);
-			if (!DOT11F_FAILED(ret)) {
+			if (DOT11F_SUCCEEDED(ret)) {
 				pIesLocal->RSN.RSN_Cap[0] =
 						pIesLocal->RSN.RSN_Cap[0] &
 						rsn_ie.RSN_Cap[0];
@@ -4097,6 +4098,22 @@ uint8_t csr_retrieve_rsn_ie(tHalHandle hHal, uint32_t sessionId,
 	do {
 		if (!csr_is_profile_rsn(pProfile))
 			break;
+		/* copy RSNIE from user as it is if test mode is enabled */
+		if (pProfile->force_rsne_override &&
+		    pProfile->nRSNReqIELength && pProfile->pRSNReqIE) {
+			sme_debug("force_rsne_override, copy RSN IE provided by user");
+			if (pProfile->nRSNReqIELength <=
+					DOT11F_IE_RSN_MAX_LEN) {
+				cbRsnIe = (uint8_t) pProfile->nRSNReqIELength;
+				qdf_mem_copy(pRsnIe, pProfile->pRSNReqIE,
+					     cbRsnIe);
+			} else {
+				sme_warn("csr_retrieve_rsn_ie detect invalid RSN IE length (%d)",
+					pProfile->nRSNReqIELength);
+			}
+			break;
+		}
+
 		if (csr_roam_is_fast_roam_enabled(pMac, sessionId)) {
 			/* If "Legacy Fast Roaming" is enabled ALWAYS rebuild
 			 * the RSN IE from scratch. So it contains the current

@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1730,6 +1730,7 @@ static int ipa3_wwan_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 				IPAWANERR("Failed to allocate memory.\n");
 				return -ENOMEM;
 			}
+			extend_ioctl_data.u.if_name[IFNAMSIZ-1] = '\0';
 			len = sizeof(wan_msg->upstream_ifname) >
 			sizeof(extend_ioctl_data.u.if_name) ?
 				sizeof(extend_ioctl_data.u.if_name) :
@@ -2772,7 +2773,7 @@ static int rmnet_ipa3_set_data_quota_modem(
 	if (index == MAX_NUM_OF_MUX_CHANNEL) {
 		IPAWANERR("%s is an invalid iface name\n",
 			  data->interface_name);
-		return -EFAULT;
+		return -ENODEV;
 	}
 
 	mux_id = rmnet_ipa3_ctx->mux_channel[index].mux_id;
@@ -2931,7 +2932,8 @@ static int rmnet_ipa3_query_tethering_stats_wifi(
 		IPAWANERR("can't get ipa3_get_wlan_stats\n");
 		kfree(sap_stats);
 		return rc;
-	} else if (reset) {
+	} else if (data == NULL) {
+		IPAWANDBG("only reset wlan stats\n");
 		kfree(sap_stats);
 		return 0;
 	}
@@ -3001,6 +3003,11 @@ static int rmnet_ipa3_query_tethering_stats_modem(
 		kfree(req);
 		kfree(resp);
 		return rc;
+	} else if (data == NULL) {
+		IPAWANDBG("only reset modem stats\n");
+		kfree(req);
+		kfree(resp);
+		return 0;
 	}
 
 	if (resp->dl_dst_pipe_stats_list_valid) {
@@ -3185,6 +3192,9 @@ int rmnet_ipa3_reset_tethering_stats(struct wan_ioctl_reset_tether_stats *data)
 {
 	enum ipa_upstream_type upstream_type;
 	int rc = 0;
+
+	/* prevent string buffer overflows */
+	data->upstreamIface[IFNAMSIZ-1] = '\0';
 
 	/* get IPA backhaul type */
 	upstream_type = find_upstream_type(data->upstreamIface);

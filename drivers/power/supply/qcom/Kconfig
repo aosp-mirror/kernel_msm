@@ -9,6 +9,17 @@ config QPNP_FG_GEN3
 	  the fuel gauge. The state of charge is reported through a BMS power
 	  supply property and also sends uevents when the capacity is updated.
 
+config QPNP_FG_GEN3_LEGACY_CYCLE_COUNT
+	tristate "QPNP GEN3 fuel gauge cycle count bins"
+	depends on QPNP_FG_GEN3
+        default y
+	help
+	  Say Y here to enable the GEN3 FG initial QCOM cycle count implementation.
+          When not selected then POWER_SUPPLY_PROP_CYCLE_COUNT exposes the linux
+          power supply battery cycle count which is not based on cycle bins.
+	  When selected only 'bms' will expose POWER_SUPPLY_PROP_CYCLE_COUNT
+          reporting the bucket based value.
+
 config SMB135X_CHARGER
 	tristate "SMB135X Battery Charger"
 	depends on I2C

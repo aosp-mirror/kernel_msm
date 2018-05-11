@@ -857,10 +857,10 @@ static int smb138x_init_slave_hw(struct smb138x *chip)
 		}
 	}
 
-	/* configure to a fixed 700khz freq to avoid tdie errors */
-	rc = smblib_set_charge_param(chg, &chg->param.freq_buck, 700);
+	/* configure to a fixed 900khz freq to avoid tdie errors */
+	rc = smblib_set_charge_param(chg, &chg->param.freq_buck, 900);
 	if (rc < 0) {
-		pr_err("Couldn't configure 700Khz switch freq rc=%d\n", rc);
+		pr_err("Couldn't configure 900Khz switch freq rc=%d\n", rc);
 		return rc;
 	}
 

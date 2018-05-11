@@ -26,6 +26,7 @@
  */
 
 #include "wmi_unified_tlv.h"
+#include "wmi_unified_apf_tlv.h"
 #include "wmi_unified_api.h"
 #include "wmi.h"
 #include "wmi_version.h"
@@ -1984,7 +1985,7 @@ QDF_STATUS send_mgmt_cmd_tlv(wmi_unified_t wmi_handle,
 				     QDF_DMA_TO_DEVICE);
 	if (status != QDF_STATUS_SUCCESS) {
 		WMI_LOGE("%s: wmi buf map failed", __func__);
-		goto err1;
+		goto free_buf;
 	}
 
 	dma_addr = qdf_nbuf_get_frag_paddr(param->tx_frame, 0);
@@ -2005,7 +2006,7 @@ QDF_STATUS send_mgmt_cmd_tlv(wmi_unified_t wmi_handle,
 		if (status != QDF_STATUS_SUCCESS) {
 			WMI_LOGE("%s: Populate TX send params failed",
 				 __func__);
-			goto err1;
+			goto unmap_tx_frame;
 		}
 		cmd_len += sizeof(wmi_tx_send_params);
 	}
@@ -2013,11 +2014,14 @@ QDF_STATUS send_mgmt_cmd_tlv(wmi_unified_t wmi_handle,
 	if (wmi_unified_cmd_send(wmi_handle, buf, cmd_len,
 				      WMI_MGMT_TX_SEND_CMDID)) {
 		WMI_LOGE("%s: Failed to send mgmt Tx", __func__);
-		goto err1;
+		goto unmap_tx_frame;
 	}
 	return QDF_STATUS_SUCCESS;
 
-err1:
+unmap_tx_frame:
+	qdf_nbuf_unmap_single(qdf_ctx, param->tx_frame,
+				     QDF_DMA_TO_DEVICE);
+free_buf:
 	wmi_buf_free(buf);
 	return QDF_STATUS_E_FAILURE;
 }
@@ -11370,8 +11374,8 @@ QDF_STATUS send_enable_arp_ns_offload_cmd_tlv(wmi_unified_t wmi_handle,
 	return QDF_STATUS_SUCCESS;
 }
 
-QDF_STATUS send_conf_hw_filter_cmd_tlv(wmi_unified_t wmi, uint8_t vdev_id,
-				       uint8_t mode_bitmap)
+QDF_STATUS send_conf_hw_filter_cmd_tlv(wmi_unified_t wmi,
+				       struct wmi_hw_filter_req_params *req)
 {
 	QDF_STATUS status;
 	wmi_hw_data_filter_cmd_fixed_param *cmd;
@@ -11387,11 +11391,12 @@ QDF_STATUS send_conf_hw_filter_cmd_tlv(wmi_unified_t wmi, uint8_t vdev_id,
 	WMITLV_SET_HDR(&cmd->tlv_header,
 		  WMITLV_TAG_STRUC_wmi_hw_data_filter_cmd_fixed_param,
 		  WMITLV_GET_STRUCT_TLVLEN(wmi_hw_data_filter_cmd_fixed_param));
-	cmd->vdev_id = vdev_id;
-	cmd->enable = mode_bitmap != 0;
-	cmd->hw_filter_bitmap = mode_bitmap;
+	cmd->vdev_id = req->vdev_id;
+	cmd->enable = req->enable;
+	cmd->hw_filter_bitmap = req->mode_bitmap;
 
-	WMI_LOGD("conf hw filter vdev_id: %d, mode: %u", vdev_id, mode_bitmap);
+	WMI_LOGD("conf hw filter vdev_id: %d, mode: %u", req->vdev_id,
+							req->mode_bitmap);
 	status = wmi_unified_cmd_send(wmi, wmi_buf, sizeof(*cmd),
 				      WMI_HW_DATA_FILTER_CMDID);
 	if (QDF_IS_STATUS_ERROR(status)) {
@@ -12528,53 +12533,6 @@ QDF_STATUS send_get_buf_extscan_hotlist_cmd_tlv(wmi_unified_t wmi_handle,
 		num_entries = numap - min_entries;
 		len = cmd_len;
 	}
-	return QDF_STATUS_SUCCESS;
-}
-
-QDF_STATUS send_set_active_bpf_mode_cmd_tlv(wmi_unified_t wmi_handle,
-					    uint8_t vdev_id,
-					    FW_ACTIVE_BPF_MODE ucast_mode,
-					    FW_ACTIVE_BPF_MODE mcast_bcast_mode)
-{
-	const WMITLV_TAG_ID tag_id =
-		WMITLV_TAG_STRUC_wmi_bpf_set_vdev_active_mode_cmd_fixed_param;
-	const uint32_t tlv_len = WMITLV_GET_STRUCT_TLVLEN(
-				wmi_bpf_set_vdev_active_mode_cmd_fixed_param);
-	QDF_STATUS status;
-	wmi_bpf_set_vdev_active_mode_cmd_fixed_param *cmd;
-	wmi_buf_t buf;
-
-	WMI_LOGD("Sending WMI_BPF_SET_VDEV_ACTIVE_MODE_CMDID(%u, %d, %d)",
-		 vdev_id, ucast_mode, mcast_bcast_mode);
-
-	/* allocate command buffer */
-	buf = wmi_buf_alloc(wmi_handle, sizeof(*cmd));
-	if (!buf) {
-		WMI_LOGE("%s: wmi_buf_alloc failed", __func__);
-		return QDF_STATUS_E_NOMEM;
-	}
-
-	/* set TLV header */
-	cmd = (wmi_bpf_set_vdev_active_mode_cmd_fixed_param *)wmi_buf_data(buf);
-	WMITLV_SET_HDR(&cmd->tlv_header, tag_id, tlv_len);
-
-	/* populate data */
-	cmd->vdev_id = vdev_id;
-	cmd->uc_mode = ucast_mode;
-	cmd->mcbc_mode = mcast_bcast_mode;
-
-	/* send to FW */
-	status = wmi_unified_cmd_send(wmi_handle, buf, sizeof(*cmd),
-				      WMI_BPF_SET_VDEV_ACTIVE_MODE_CMDID);
-	if (QDF_IS_STATUS_ERROR(status)) {
-		WMI_LOGE("Failed to send WMI_BPF_SET_VDEV_ACTIVE_MODE_CMDID:%d",
-			 status);
-		wmi_buf_free(buf);
-		return status;
-	}
-
-	WMI_LOGD("Sent WMI_BPF_SET_VDEV_ACTIVE_MODE_CMDID successfully");
-
 	return QDF_STATUS_SUCCESS;
 }
 
@@ -14464,6 +14422,39 @@ send_cmd:
 	return status;
 }
 
+static QDF_STATUS
+send_roam_scan_stats_cmd_tlv(wmi_unified_t wmi_handle,
+			     struct wmi_roam_scan_stats_req *params)
+{
+	wmi_buf_t buf;
+	wmi_request_roam_scan_stats_cmd_fixed_param *cmd;
+	uint8_t len = sizeof(*cmd);
+
+	buf = wmi_buf_alloc(wmi_handle, len);
+	if (!buf) {
+		WMI_LOGE(FL("Failed to allocate wmi buffer"));
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	cmd = (wmi_request_roam_scan_stats_cmd_fixed_param *)wmi_buf_data(buf);
+	WMITLV_SET_HDR(&cmd->tlv_header,
+	 WMITLV_TAG_STRUC_wmi_request_roam_scan_stats_cmd_fixed_param,
+	 WMITLV_GET_STRUCT_TLVLEN(wmi_request_roam_scan_stats_cmd_fixed_param));
+
+	cmd->vdev_id = params->vdev_id;
+
+	WMI_LOGD(FL("Roam Scan Stats Req vdev_id: %u"), cmd->vdev_id);
+	if (wmi_unified_cmd_send(wmi_handle, buf, len,
+				 WMI_REQUEST_ROAM_SCAN_STATS_CMDID)) {
+		WMI_LOGE("%s: Failed to send WMI_REQUEST_ROAM_SCAN_STATS_CMDID",
+			 __func__);
+		wmi_buf_free(buf);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	return QDF_STATUS_SUCCESS;
+}
+
 /**
  * send_offload_11k_cmd_tlv() - send wmi cmd with 11k offload params
  * @wmi_handle: wmi handler
@@ -14832,7 +14823,12 @@ struct wmi_ops tlv_ops =  {
 		 send_roam_scan_offload_rssi_change_cmd_tlv,
 	.send_get_buf_extscan_hotlist_cmd =
 		 send_get_buf_extscan_hotlist_cmd_tlv,
-	.send_set_active_bpf_mode_cmd = send_set_active_bpf_mode_cmd_tlv,
+	.send_set_active_apf_mode_cmd = send_set_active_apf_mode_cmd_tlv,
+	.send_apf_enable_cmd = send_apf_enable_cmd_tlv,
+	.send_apf_write_work_memory_cmd = send_apf_write_work_memory_cmd_tlv,
+	.send_apf_read_work_memory_cmd = send_apf_read_work_memory_cmd_tlv,
+	.extract_apf_read_memory_resp_event =
+		extract_apf_read_memory_resp_event_tlv,
 	.send_adapt_dwelltime_params_cmd =
 		send_adapt_dwelltime_params_cmd_tlv,
 	.send_dbs_scan_sel_params_cmd =
@@ -14899,6 +14895,7 @@ struct wmi_ops tlv_ops =  {
 				send_roam_scan_send_hlp_cmd_tlv,
 #endif
 	.send_wow_timer_pattern_cmd = send_wow_timer_pattern_cmd_tlv,
+	.send_roam_scan_stats_cmd = send_roam_scan_stats_cmd_tlv,
 	.send_offload_11k_cmd = send_offload_11k_cmd_tlv,
 	.send_invoke_neighbor_report_cmd = send_invoke_neighbor_report_cmd_tlv,
 };
@@ -15247,6 +15244,7 @@ static void populate_tlv_events_id(uint32_t *event_ids)
 	event_ids[wmi_update_rcpi_event_id] = WMI_UPDATE_RCPI_EVENTID;
 	event_ids[wmi_get_arp_stats_req_id] = WMI_VDEV_GET_ARP_STATS_EVENTID;
 	event_ids[wmi_sar_get_limits_event_id] = WMI_SAR_GET_LIMITS_EVENTID;
+	event_ids[wmi_roam_scan_stats_event_id] = WMI_ROAM_SCAN_STATS_EVENTID;
 }
 }
 

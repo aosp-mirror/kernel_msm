@@ -207,6 +207,19 @@
 #define WMA_BEACON_TX_RATE_48_M           480
 #define WMA_BEACON_TX_RATE_54_M           540
 
+#define WMA_FW_MODE_STA_STA_BIT_POS       0
+#define WMA_FW_MODE_STA_P2P_BIT_POS       1
+
+#define WMA_FW_MODE_STA_STA_BIT_MASK      (0x1 << WMA_FW_MODE_STA_STA_BIT_POS)
+#define WMA_FW_MODE_STA_P2P_BIT_MASK      (0x1 << WMA_FW_MODE_STA_P2P_BIT_POS)
+
+#define WMA_CHANNEL_SELECT_LOGIC_STA_STA_GET(channel_select_logic_conc)  \
+	((channel_select_logic_conc & WMA_FW_MODE_STA_STA_BIT_MASK) >>   \
+	 WMA_FW_MODE_STA_STA_BIT_POS)
+#define WMA_CHANNEL_SELECT_LOGIC_STA_P2P_GET(channel_select_logic_conc)  \
+	((channel_select_logic_conc & WMA_FW_MODE_STA_P2P_BIT_MASK) >>   \
+	 WMA_FW_MODE_STA_P2P_BIT_POS)
+
 /**
  * ds_mode: distribution system mode
  * @IEEE80211_NO_DS: NO DS at either side
@@ -1070,6 +1083,7 @@ struct roam_synch_frame_ind {
  * @vdev_start_wakelock: wakelock to protect vdev start op with firmware
  * @vdev_stop_wakelock: wakelock to protect vdev stop op with firmware
  * @vdev_set_key_wakelock: wakelock to protect vdev set key op with firmware
+ * @channel: channel
  */
 struct wma_txrx_node {
 	uint8_t addr[IEEE80211_ADDR_LEN];
@@ -1160,6 +1174,7 @@ struct wma_txrx_node {
 	qdf_wake_lock_t vdev_set_key_wakelock;
 	struct roam_synch_frame_ind roam_synch_frame_ind;
 	bool is_waiting_for_key;
+	uint8_t channel;
 };
 
 #if defined(QCA_WIFI_FTM)
@@ -1519,10 +1534,10 @@ struct peer_debug_info {
  * It contains global wma module parameters and
  * handle of other modules.
  * @saved_wmi_init_cmd: Saved WMI INIT command
- * @bpf_packet_filter_enable: BPF filter enabled or not
- * @active_uc_bpf_mode: Setting that determines how BPF is applied in active
+ * @apf_packet_filter_enable: APF filter enabled or not
+ * @active_uc_apf_mode: Setting that determines how APF is applied in active
  * mode for uc packets
- * @active_mc_bc_bpf_mode: Setting that determines how BPF is applied in
+ * @active_mc_bc_apf_mode: Setting that determines how APF is applied in
  * active mode for MC/BC packets
  * @service_ready_ext_evt: Wait event for service ready ext
  * @wmi_cmd_rsp_wake_lock: wmi command response wake lock
@@ -1718,15 +1733,16 @@ typedef struct {
 		enum sir_roam_op_code reason);
 	QDF_STATUS (*pe_roam_synch_cb)(tpAniSirGlobal mac,
 		roam_offload_synch_ind *roam_synch_data,
-		tpSirBssDescription  bss_desc_ptr);
+		tpSirBssDescription  bss_desc_ptr,
+		enum sir_roam_op_code reason);
 	qdf_wake_lock_t wmi_cmd_rsp_wake_lock;
 	qdf_runtime_lock_t wmi_cmd_rsp_runtime_lock;
 	qdf_runtime_lock_t wma_runtime_resume_lock;
 	uint32_t fine_time_measurement_cap;
-	bool bpf_enabled;
-	bool bpf_packet_filter_enable;
-	enum active_bpf_mode active_uc_bpf_mode;
-	enum active_bpf_mode active_mc_bc_bpf_mode;
+	bool apf_enabled;
+	bool apf_packet_filter_enable;
+	enum active_apf_mode active_uc_apf_mode;
+	enum active_apf_mode active_mc_bc_apf_mode;
 	struct wma_ini_config ini_config;
 	struct wma_valid_channels saved_chan;
 	/* NAN datapath support enabled in firmware */
@@ -2442,13 +2458,82 @@ void wma_process_fw_test_cmd(WMA_HANDLE handle,
 QDF_STATUS wma_send_ht40_obss_scanind(tp_wma_handle wma,
 	struct obss_ht40_scanind *req);
 
-int wma_get_bpf_caps_event_handler(void *handle,
+uint32_t wma_get_num_of_setbits_from_bitmask(uint32_t mask);
+
+/**
+ *  wma_get_apf_caps_event_handler() - Event handler for get apf capability
+ *  @handle: WMA global handle
+ *  @cmd_param_info: command event data
+ *  @len: Length of @cmd_param_info
+ *
+ *  Return: 0 on Success or Errno on failure
+ */
+int wma_get_apf_caps_event_handler(void *handle,
 				u_int8_t *cmd_param_info,
 				u_int32_t len);
-uint32_t wma_get_num_of_setbits_from_bitmask(uint32_t mask);
-QDF_STATUS wma_get_bpf_capabilities(tp_wma_handle wma);
-QDF_STATUS wma_set_bpf_instructions(tp_wma_handle wma,
-			struct sir_bpf_set_offload *bpf_set_offload);
+
+/**
+ * wma_get_apf_capabilities - Send get apf capability to firmware
+ * @wma_handle: wma handle
+ *
+ * Return: QDF_STATUS enumeration.
+ */
+QDF_STATUS wma_get_apf_capabilities(tp_wma_handle wma);
+
+/**
+ *  wma_set_apf_instructions - Set apf instructions to firmware
+ *  @wma: wma handle
+ *  @apf_set_offload: APF offload information to set to firmware
+ *
+ *  Return: QDF_STATUS enumeration
+ */
+QDF_STATUS wma_set_apf_instructions(tp_wma_handle wma,
+			struct sir_apf_set_offload *apf_set_offload);
+
+/**
+ * wma_send_apf_enable_cmd - Send apf enable/disable cmd
+ * @wma_handle: wma handle
+ * @vdev_id: vdev id
+ * @apf_enable: true: Enable APF Int., false: Disable APF Int.
+ *
+ * Return: QDF_STATUS enumeration.
+ */
+QDF_STATUS wma_send_apf_enable_cmd(WMA_HANDLE handle, uint8_t vdev_id,
+				   bool apf_enable);
+
+/**
+ * wma_send_apf_write_work_memory_cmd - Command to write into the apf work memory
+ * @wma_handle: wma handle
+ * @write_params: APF parameters for the write operation
+ *
+ * Return: QDF_STATUS enumeration.
+ */
+QDF_STATUS wma_send_apf_write_work_memory_cmd(WMA_HANDLE handle,
+			struct wmi_apf_write_memory_params *write_params);
+
+/**
+ * wma_send_apf_read_work_memory_cmd - Command to get part of apf work memory
+ * @wma_handle: wma handle
+ * @callback: HDD callback to receive apf get mem event
+ * @context: Context for the HDD callback
+ * @read_params: APF parameters for the get operation
+ *
+ * Return: QDF_STATUS enumeration.
+ */
+QDF_STATUS wma_send_apf_read_work_memory_cmd(WMA_HANDLE handle,
+			 struct wmi_apf_read_memory_params *read_params);
+
+/**
+ * wma_apf_read_work_memory_event_handler - Event handler for get apf mem operation
+ * @handle: wma handle
+ * @evt_buf: Buffer pointer to the event
+ * @len: Length of the event buffer
+ *
+ * Return: status.
+ */
+int wma_apf_read_work_memory_event_handler(void *handle, uint8_t *evt_buf,
+				       uint32_t len);
+
 void wma_process_set_pdev_ie_req(tp_wma_handle wma,
 		struct set_ie_param *ie_params);
 void wma_process_set_pdev_ht_ie_req(tp_wma_handle wma,

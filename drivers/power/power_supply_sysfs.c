@@ -81,7 +81,7 @@ static ssize_t power_supply_show_property(struct device *dev,
 		"Non compliant",
 	};
 	static char *typec_pr_text[] = {
-		"none", "dual power role", "sink", "source"
+		"none", "dual power role", "sink", "source", "source_1_5"
 	};
 	ssize_t ret = 0;
 	struct power_supply *psy = dev_get_drvdata(dev);

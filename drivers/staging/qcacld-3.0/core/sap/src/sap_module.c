@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -855,6 +855,7 @@ QDF_STATUS wlansap_start_bss(void *pCtx,     /* pwextCtx */
 	pSapCtx->acs_cfg = &pConfig->acs_cfg;
 	pSapCtx->isCacEndNotified = false;
 	pSapCtx->is_chan_change_inprogress = false;
+	pSapCtx->stop_bss_in_progress = false;
 	/* Set the BSSID to your "self MAC Addr" read the mac address
 		from Configuation ITEM received from HDD */
 	pSapCtx->csr_roamProfile.BSSIDs.numOfBSSIDs = 1;
@@ -996,6 +997,29 @@ QDF_STATUS wlansap_set_mac_acl(void *pCtx,    /* pwextCtx */
 
 	return qdf_status;
 } /* wlansap_set_mac_acl */
+
+void wlansap_set_stop_bss_inprogress(void *ctx, bool in_progress)
+{
+	ptSapContext sap_ctx = NULL;
+
+	if (!ctx) {
+		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_ERROR,
+			  "%s: Invalid Global CDS handle", __func__);
+		return;
+	}
+
+	sap_ctx = CDS_GET_SAP_CB(ctx);
+	if (!sap_ctx) {
+		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_ERROR,
+			  "%s: Invalid SAP pointer from ctx", __func__);
+		return;
+	}
+
+	QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_DEBUG,
+		  "%s: Set stop_bss_in_progress to %d",
+		  __func__, in_progress);
+	sap_ctx->stop_bss_in_progress = in_progress;
+}
 
 /**
  * wlansap_stop_bss() - stop BSS.
@@ -2656,6 +2680,12 @@ wlansap_channel_change_request(void *pSapCtx, uint8_t target_channel)
 
 	sapContext = (ptSapContext) pSapCtx;
 
+	if (!target_channel) {
+		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_ERROR,
+			  "%s: channel 0 requested", __func__);
+		return QDF_STATUS_E_FAULT;
+	}
+
 	if (NULL == sapContext) {
 		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_ERROR,
 			  "%s: Invalid SAP pointer", __func__);
@@ -3287,14 +3317,14 @@ void wlansap_extend_to_acs_range(uint8_t *startChannelNum,
 				 (*endChannelNum + ACS_2G_EXTEND) : 14;
 	} else if (*startChannelNum >= 36 && *endChannelNum >= 36) {
 		*bandStartChannel = CHAN_ENUM_36;
-		*bandEndChannel = CHAN_ENUM_165;
+		*bandEndChannel = CHAN_ENUM_173;
 		tmp_startChannelNum = (*startChannelNum - ACS_5G_EXTEND) > 36 ?
 				   (*startChannelNum - ACS_5G_EXTEND) : 36;
 		tmp_endChannelNum = (*endChannelNum + ACS_5G_EXTEND) <= 165 ?
 				 (*endChannelNum + ACS_5G_EXTEND) : 165;
 	} else {
 		*bandStartChannel = CHAN_ENUM_1;
-		*bandEndChannel = CHAN_ENUM_165;
+		*bandEndChannel = CHAN_ENUM_173;
 		tmp_startChannelNum = *startChannelNum > 5 ?
 			(*startChannelNum - ACS_2G_EXTEND) : 1;
 		tmp_endChannelNum = (*endChannelNum + ACS_5G_EXTEND) <= 165 ?
@@ -3752,32 +3782,6 @@ QDF_STATUS wlansap_set_tx_leakage_threshold(tHalHandle hal,
 	return QDF_STATUS_SUCCESS;
 }
 
-/**
- * wlansap_set_etsi_srd_chan_support() - set UNI-III band channel support
- * @hal: HAL pointer
- * @srd_chan_support: ETSI SRD channel support
- *
- * This function set sap ETSI SRD channel support
- *
- * Return: None
- */
-void wlansap_set_etsi_srd_chan_support(tHalHandle hal,
-		bool etsi_srd_chan_support)
-{
-	tpAniSirGlobal mac;
-
-	if (NULL == hal) {
-		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_ERROR,
-			"%s: Invalid hal pointer", __func__);
-		return;
-	}
-
-	mac = PMAC_STRUCT(hal);
-	mac->sap.enable_etsi_srd_chan_support = etsi_srd_chan_support;
-	QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_DEBUG,
-			"%s: srd_ch_support %d", __func__,
-			mac->sap.enable_etsi_srd_chan_support);
-}
 /*
  * wlansap_set_invalid_session() - set session ID to invalid
  * @cds_ctx: pointer of global context

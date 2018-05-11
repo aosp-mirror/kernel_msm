@@ -55,13 +55,13 @@ enum tcpm_transmit_type {
 };
 
 struct tcpc_config {
-	const u32 *src_pdo;
+	u32 *src_pdo;
 	unsigned int nr_src_pdo;
 
-	const u32 *snk_pdo;
+	u32 *snk_pdo;
 	unsigned int nr_snk_pdo;
 
-	const u32 *snk_vdo;
+	u32 *snk_vdo;
 	unsigned int nr_snk_vdo;
 
 	unsigned int max_snk_mv;
@@ -105,7 +105,7 @@ struct tcpc_mux_dev {
 };
 
 struct tcpc_dev {
-	const struct tcpc_config *config;
+	struct tcpc_config *config;
 
 	int (*init)(struct tcpc_dev *dev);
 	int (*get_vbus)(struct tcpc_dev *dev);
@@ -126,6 +126,8 @@ struct tcpc_dev {
 	int (*pd_transmit)(struct tcpc_dev *dev, enum tcpm_transmit_type type,
 			   const struct pd_message *msg);
 	int (*set_in_pr_swap)(struct tcpc_dev *dev, bool pr_swap);
+	int (*set_suspend_supported)(struct tcpc_dev *dev,
+				     bool suspend_supported);
 	struct tcpc_mux_dev *mux;
 };
 

@@ -41,7 +41,7 @@
 #define MAX_NUMBER_OF_CONC_CONNECTIONS    3
 #define DBS_OPPORTUNISTIC_TIME            10
 #define CONNECTION_UPDATE_TIMEOUT         3000
-#define CHANNEL_SWITCH_COMPLETE_TIMEOUT   1000
+#define CHANNEL_SWITCH_COMPLETE_TIMEOUT   2000
 
 /* Some max value greater than the max length of the channel list */
 #define MAX_WEIGHT_OF_PCL_CHANNELS 255
@@ -1052,4 +1052,25 @@ bool cds_is_sta_connected_in_2g(void);
  * Return: Connection count
  */
 uint32_t cds_get_connection_info(struct connection_info *info);
+
+/**
+ * cds_trim_acs_channel_list() - Trim the ACS channel list based
+ * on the number of active station connections
+ * @sap_cfg: SAP configuration info
+ *
+ * Return: None
+ */
+void cds_trim_acs_channel_list(tsap_Config_t *sap_cfg);
+
+/**
+ * cds_allow_multi_sap_go_concurrency() - check whether multiple SAP/GO
+ * interfaces are allowed
+ * @cds_con_mode: operating mode of the new interface
+ * @channel: operating channel of the new interface
+ * This function checks whether second SAP/GO interface is allowed on the same
+ * MAC.
+ *
+ * Return: true or false
+ */
+bool cds_allow_sap_go_concurrency(enum cds_con_mode mode, uint8_t channel);
 #endif /* __CDS_CONCURRENCY_H */

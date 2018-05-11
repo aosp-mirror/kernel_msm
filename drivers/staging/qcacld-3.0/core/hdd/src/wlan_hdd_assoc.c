@@ -320,7 +320,8 @@ hdd_adapter_t *hdd_get_sta_connection_in_progress(hdd_context_t *hdd_ctx)
 				return adapter;
 			} else if ((eConnectionState_Associated ==
 				   hdd_sta_ctx->conn_info.connState) &&
-				   !hdd_sta_ctx->conn_info.uIsAuthenticated) {
+				   sme_is_sta_key_exchange_in_progress(
+				   hdd_ctx->hHal, adapter->sessionId)) {
 				hdd_debug("session_id %d: Key exchange is in progress",
 					  adapter->sessionId);
 				return adapter;
@@ -2244,8 +2245,9 @@ bool hdd_is_roam_sync_in_progress(tCsrRoamInfo *roaminfo)
 static int hdd_change_sta_state_authenticated(hdd_adapter_t *adapter,
 						 tCsrRoamInfo *roaminfo)
 {
-	int ret;
 	uint32_t timeout;
+	QDF_STATUS status;
+	uint8_t staid = HDD_WLAN_INVALID_STA_ID;
 	hdd_station_ctx_t *hddstactx = WLAN_HDD_GET_STATION_CTX_PTR(adapter);
 	hdd_context_t *hdd_ctx = WLAN_HDD_GET_CTX(adapter);
 
@@ -2253,13 +2255,27 @@ static int hdd_change_sta_state_authenticated(hdd_adapter_t *adapter,
 		AUTO_PS_ENTRY_TIMER_DEFAULT_VALUE :
 		hdd_ctx->config->auto_bmps_timer_val * 1000;
 
-	hdd_debug("Changing TL state to AUTHENTICATED for StaId= %d",
-		 hddstactx->conn_info.staId[0]);
+	if (QDF_IBSS_MODE == adapter->device_mode) {
+		if (qdf_is_macaddr_broadcast(&roaminfo->peerMac)) {
+			staid = 0;
+		} else {
+			 status = hdd_get_peer_sta_id(hddstactx,
+					&roaminfo->peerMac, &staid);
+			if (status != QDF_STATUS_SUCCESS) {
+				hdd_err("Unable to find staid for %pM",
+					roaminfo->peerMac.bytes);
+				return qdf_status_to_os_return(status);
+			}
+		}
+	} else {
+		staid = hddstactx->conn_info.staId[0];
+	}
+	hdd_debug("Changing TL state to AUTHENTICATED for StaId= %d", staid);
 
 	/* Connections that do not need Upper layer authentication,
 	 * transition TL to 'Authenticated' state after the keys are set
 	 */
-	ret = hdd_change_peer_state(adapter,
+	status = hdd_change_peer_state(adapter,
 			hddstactx->conn_info.staId[0],
 			OL_TXRX_PEER_STATE_AUTH,
 			hdd_is_roam_sync_in_progress(roaminfo));
@@ -2272,9 +2288,86 @@ static int hdd_change_sta_state_authenticated(hdd_adapter_t *adapter,
 			timeout);
 	}
 
-	return ret;
+	return qdf_status_to_os_return(status);
 }
 
+
+static void hdd_peer_state_transition(hdd_adapter_t *adapter,
+				tCsrRoamInfo *roam_info,
+				eCsrRoamResult roam_status)
+{
+	hdd_station_ctx_t *hdd_sta_ctx = WLAN_HDD_GET_STATION_CTX_PTR(adapter);
+	QDF_STATUS qdf_status = QDF_STATUS_E_FAILURE;
+	eCsrEncryptionType encr_type = hdd_sta_ctx->conn_info.ucEncryptionType;
+
+	/*
+	 * If the security mode is one of the following, IBSS peer will be
+	 * waiting in CONN state and we will move the peer state to AUTH
+	 * here. For non-secure connection, no need to wait for set-key complete
+	 * peer will be moved to AUTH in hdd_roam_register_sta.
+	 */
+	if (QDF_IBSS_MODE == adapter->device_mode) {
+		if ((encr_type == eCSR_ENCRYPT_TYPE_TKIP) ||
+		    (encr_type == eCSR_ENCRYPT_TYPE_AES) ||
+		    (encr_type == eCSR_ENCRYPT_TYPE_WEP40_STATICKEY) ||
+		    (encr_type == eCSR_ENCRYPT_TYPE_WEP104_STATICKEY)) {
+			hdd_debug("IBSS mode: moving to authenticated state-%d",
+				  encr_type);
+			hdd_change_sta_state_authenticated(adapter, roam_info);
+		}
+		return;
+	}
+
+	if (eCSR_ROAM_RESULT_AUTHENTICATED == roam_status) {
+		hdd_sta_ctx->conn_info.gtk_installed = true;
+		/*
+		 * PTK exchange happens in preauthentication
+		 * itself if key_mgmt is FT-PSK, ptk_installed
+		 * was false as there is no set PTK after
+		 * roaming. STA TL state moves to authenticated
+		 * only if ptk_installed is true. So, make
+		 * ptk_installed to true in case of 11R roaming.
+		 */
+		if (sme_neighbor_roam_is11r_assoc(
+					WLAN_HDD_GET_HAL_CTX(adapter),
+					adapter->sessionId))
+			hdd_sta_ctx->conn_info.ptk_installed =
+				true;
+	} else {
+		hdd_sta_ctx->conn_info.ptk_installed = true;
+	}
+
+	/* In WPA case move STA to authenticated when
+	 * ptk is installed.Earlier in WEP case STA
+	 * was moved to AUTHENTICATED prior to setting
+	 * the unicast key and it was resulting in sending
+	 * few un-encrypted packet. Now in WEP case
+	 * STA state will be moved to AUTHENTICATED
+	 * after we set the unicast and broadcast key.
+	 */
+	if ((encr_type == eCSR_ENCRYPT_TYPE_WEP40) ||
+	    (encr_type == eCSR_ENCRYPT_TYPE_WEP104) ||
+	    (encr_type == eCSR_ENCRYPT_TYPE_WEP40_STATICKEY) ||
+	    (encr_type == eCSR_ENCRYPT_TYPE_WEP104_STATICKEY)) {
+		if (hdd_sta_ctx->conn_info.gtk_installed &&
+				hdd_sta_ctx->conn_info.ptk_installed)
+			qdf_status =
+				hdd_change_sta_state_authenticated(adapter,
+						roam_info);
+	} else if (hdd_sta_ctx->conn_info.ptk_installed) {
+		qdf_status =
+			hdd_change_sta_state_authenticated(adapter,
+					roam_info);
+	}
+
+	if (hdd_sta_ctx->conn_info.gtk_installed &&
+			hdd_sta_ctx->conn_info.ptk_installed) {
+		hdd_sta_ctx->conn_info.gtk_installed = false;
+		hdd_sta_ctx->conn_info.ptk_installed = false;
+	}
+
+	hdd_sta_ctx->roam_info.roamingState = HDD_ROAM_STATE_NONE;
+}
 /**
  * hdd_roam_set_key_complete_handler() - Update the security parameters
  * @pAdapter: pointer to adapter
@@ -2293,7 +2386,6 @@ static QDF_STATUS hdd_roam_set_key_complete_handler(hdd_adapter_t *pAdapter,
 {
 	eCsrEncryptionType connectedCipherAlgo;
 	bool fConnected = false;
-	QDF_STATUS qdf_status = QDF_STATUS_E_FAILURE;
 	hdd_station_ctx_t *pHddStaCtx = WLAN_HDD_GET_STATION_CTX_PTR(pAdapter);
 
 	ENTER();
@@ -2315,80 +2407,7 @@ static QDF_STATUS hdd_roam_set_key_complete_handler(hdd_adapter_t *pAdapter,
 	fConnected = hdd_conn_get_connected_cipher_algo(pHddStaCtx,
 						   &connectedCipherAlgo);
 	if (fConnected) {
-		if (QDF_IBSS_MODE == pAdapter->device_mode) {
-			uint8_t staId;
-
-			if (qdf_is_macaddr_broadcast(&pRoamInfo->peerMac)) {
-				pHddStaCtx->roam_info.roamingState =
-					HDD_ROAM_STATE_NONE;
-			} else {
-				qdf_status = hdd_get_peer_sta_id(
-							pHddStaCtx,
-							&pRoamInfo->peerMac,
-							&staId);
-				if (QDF_STATUS_SUCCESS == qdf_status) {
-					hdd_debug("WLAN TL STA Ptk Installed for STAID=%d",
-						staId);
-					pHddStaCtx->roam_info.roamingState =
-						HDD_ROAM_STATE_NONE;
-				}
-			}
-		} else {
-			if (eCSR_ROAM_RESULT_AUTHENTICATED == roamResult) {
-				pHddStaCtx->conn_info.gtk_installed = true;
-				/*
-				 * PTK exchange happens in preauthentication
-				 * itself if key_mgmt is FT-PSK, ptk_installed
-				 * was false as there is no set PTK after
-				 * roaming. STA TL state moves to authenticated
-				 * only if ptk_installed is true. So, make
-				 * ptk_installed to true in case of 11R roaming.
-				 */
-				if (sme_neighbor_roam_is11r_assoc(
-				    WLAN_HDD_GET_HAL_CTX(pAdapter),
-				    pAdapter->sessionId))
-					pHddStaCtx->conn_info.ptk_installed =
-						true;
-			} else {
-				pHddStaCtx->conn_info.ptk_installed = true;
-			}
-
-			/* In WPA case move STA to authenticated when
-			 * ptk is installed.Earlier in WEP case STA
-			 * was moved to AUTHENTICATED prior to setting
-			 * the unicast key and it was resulting in sending
-			 * few un-encrypted packet. Now in WEP case
-			 * STA state will be moved to AUTHENTICATED
-			 * after we set the unicast and broadcast key.
-			 */
-			if ((pHddStaCtx->conn_info.ucEncryptionType ==
-			  eCSR_ENCRYPT_TYPE_WEP40) ||
-			  (pHddStaCtx->conn_info.ucEncryptionType ==
-			  eCSR_ENCRYPT_TYPE_WEP104) ||
-			  (pHddStaCtx->conn_info.ucEncryptionType ==
-			  eCSR_ENCRYPT_TYPE_WEP40_STATICKEY) ||
-			  (pHddStaCtx->conn_info.ucEncryptionType ==
-			  eCSR_ENCRYPT_TYPE_WEP104_STATICKEY)) {
-				if (pHddStaCtx->conn_info.gtk_installed &&
-					pHddStaCtx->conn_info.ptk_installed)
-					qdf_status =
-					    hdd_change_sta_state_authenticated(pAdapter,
-						pRoamInfo);
-			} else if (pHddStaCtx->conn_info.ptk_installed) {
-				qdf_status =
-				    hdd_change_sta_state_authenticated(pAdapter,
-					pRoamInfo);
-			}
-
-			if (pHddStaCtx->conn_info.gtk_installed &&
-				pHddStaCtx->conn_info.ptk_installed) {
-				pHddStaCtx->conn_info.gtk_installed = false;
-				pHddStaCtx->conn_info.ptk_installed = false;
-			}
-
-			pHddStaCtx->roam_info.roamingState =
-						HDD_ROAM_STATE_NONE;
-		}
+		hdd_peer_state_transition(pAdapter, pRoamInfo, roamResult);
 	} else {
 		/*
 		 * possible disassoc after issuing set key and waiting
@@ -3529,6 +3548,7 @@ roam_roam_connect_status_update_handler(hdd_adapter_t *pAdapter,
 	{
 		hdd_station_ctx_t *pHddStaCtx =
 			WLAN_HDD_GET_STATION_CTX_PTR(pAdapter);
+		eCsrEncryptionType enc_type = pHddStaCtx->ibss_enc_key.encType;
 		struct station_info *stainfo;
 
 		hdd_debug("IBSS New Peer indication from SME "
@@ -3550,6 +3570,14 @@ roam_roam_connect_status_update_handler(hdd_adapter_t *pAdapter,
 			pHddCtx->sta_to_adapter[pRoamInfo->staId] = pAdapter;
 		else
 			hdd_debug("invalid sta_id %d", pRoamInfo->staId);
+		if ((eCSR_ENCRYPT_TYPE_WEP40_STATICKEY == enc_type) ||
+		    (eCSR_ENCRYPT_TYPE_WEP104_STATICKEY == enc_type) ||
+		    (eCSR_ENCRYPT_TYPE_TKIP == enc_type) ||
+		    (eCSR_ENCRYPT_TYPE_AES == enc_type)) {
+			hdd_debug("IBSS sta-id:%d, auth req set to true",
+				  pRoamInfo->staId);
+			pRoamInfo->fAuthRequired = true;
+		}
 
 		/* Register the Station with TL for the new peer. */
 		qdf_status = hdd_roam_register_sta(pAdapter,
@@ -4893,6 +4921,7 @@ hdd_sme_roam_callback(void *pContext, tCsrRoamInfo *pRoamInfo, uint32_t roamId,
 	hdd_station_ctx_t *pHddStaCtx = NULL;
 	QDF_STATUS status = QDF_STATUS_SUCCESS;
 	struct cfg80211_bss *bss_status;
+	hdd_context_t *pHddCtx;
 
 	if (eCSR_ROAM_UPDATE_SCAN_RESULT != roamStatus)
 		hdd_debug("CSR Callback: status= %d result= %d roamID=%d",
@@ -4905,6 +4934,7 @@ hdd_sme_roam_callback(void *pContext, tCsrRoamInfo *pRoamInfo, uint32_t roamId,
 
 	pWextState = WLAN_HDD_GET_WEXT_STATE_PTR(pAdapter);
 	pHddStaCtx = WLAN_HDD_GET_STATION_CTX_PTR(pAdapter);
+	pHddCtx = WLAN_HDD_GET_CTX(pAdapter);
 
 	/* Omitting eCSR_ROAM_UPDATE_SCAN_RESULT as this is too frequent */
 	if (eCSR_ROAM_UPDATE_SCAN_RESULT != roamStatus)
@@ -5242,6 +5272,7 @@ hdd_sme_roam_callback(void *pContext, tCsrRoamInfo *pRoamInfo, uint32_t roamId,
 		pAdapter->roam_ho_fail = false;
 		pHddStaCtx->ft_carrier_on = false;
 		complete(&pAdapter->roaming_comp_var);
+		schedule_delayed_work(&pHddCtx->roc_req_work, 0);
 		break;
 
 	default:
@@ -5453,8 +5484,8 @@ static int32_t hdd_process_genie(hdd_adapter_t *pAdapter,
 	uint32_t ret;
 	uint8_t *pRsnIe;
 	uint16_t RSNIeLen;
-	tDot11fIERSN dot11RSNIE;
-	tDot11fIEWPA dot11WPAIE;
+	tDot11fIERSN dot11RSNIE = {0};
+	tDot11fIEWPA dot11WPAIE = {0};
 	tHalHandle halHandle = WLAN_HDD_GET_HAL_CTX(pAdapter);
 
 	/*
@@ -5477,21 +5508,23 @@ static int32_t hdd_process_genie(hdd_adapter_t *pAdapter,
 		pRsnIe = gen_ie + 2;
 		RSNIeLen = gen_ie_len - 2;
 		/* Unpack the RSN IE */
-		ret = dot11f_unpack_ie_rsn((tpAniSirGlobal) halHandle,
-					   pRsnIe, RSNIeLen, &dot11RSNIE,
-					   false);
-		if (DOT11F_FAILED(ret)) {
-			hdd_err("unpack failed, ret: 0x%x", ret);
+		ret = sme_unpack_rsn_ie(halHandle, pRsnIe, RSNIeLen,
+					&dot11RSNIE, false);
+		if (!DOT11F_SUCCEEDED(ret)) {
+			hdd_err("Invalid RSN IE: parse status %d",
+				ret);
 			return -EINVAL;
 		}
+		hdd_debug("gp_cipher_suite_present: %d",
+			  dot11RSNIE.gp_cipher_suite_present);
 		/* Copy out the encryption and authentication types */
 		hdd_debug("pairwise cipher suite count: %d",
 			 dot11RSNIE.pwise_cipher_suite_count);
 		hdd_debug("authentication suite count: %d",
-			 dot11RSNIE.akm_suite_count);
+			 dot11RSNIE.akm_suite_cnt);
 		*pAuthType =
 			hdd_translate_rsn_to_csr_auth_type(
-					dot11RSNIE.akm_suites[0]);
+					dot11RSNIE.akm_suite[0]);
 		/* dot11RSNIE.pwise_cipher_suite_count */
 		*pEncryptType =
 			hdd_translate_rsn_to_csr_encryption_type(
@@ -5548,6 +5581,37 @@ static int32_t hdd_process_genie(hdd_adapter_t *pAdapter,
 }
 
 /**
+ * hdd_set_def_rsne_override() - set default encryption type and auth type
+ * in profile.
+ * @roam_profile: pointer to adapter
+ * @auth_type: pointer to auth type
+ *
+ * Set default value of encryption type and auth type in profile to
+ * search the AP using filter, as in force_rsne_override the RSNIE can be
+ * currupt and we might not get the proper encryption type and auth type
+ * while parsing the RSNIE.
+ *
+ * Return: void
+ */
+static void hdd_set_def_rsne_override(
+	tCsrRoamProfile *roam_profile, eCsrAuthType *auth_type)
+{
+
+	hdd_debug("Set def values in roam profile");
+	roam_profile->MFPCapable = roam_profile->MFPEnabled;
+	roam_profile->EncryptionType.numEntries = 2;
+	roam_profile->mcEncryptionType.numEntries = 2;
+	/* Use the cipher type in the RSN IE */
+	roam_profile->EncryptionType.encryptionType[0] = eCSR_ENCRYPT_TYPE_AES;
+	roam_profile->EncryptionType.encryptionType[1] = eCSR_ENCRYPT_TYPE_TKIP;
+	roam_profile->mcEncryptionType.encryptionType[0] =
+		eCSR_ENCRYPT_TYPE_AES;
+	roam_profile->mcEncryptionType.encryptionType[1] =
+		eCSR_ENCRYPT_TYPE_TKIP;
+	*auth_type = eCSR_AUTH_TYPE_RSN_PSK;
+}
+
+/**
  * hdd_set_genie_to_csr() - set genie to csr
  * @pAdapter: pointer to adapter
  * @RSNAuthType: pointer to auth type
@@ -5560,6 +5624,7 @@ int hdd_set_genie_to_csr(hdd_adapter_t *pAdapter, eCsrAuthType *RSNAuthType)
 	uint32_t status = 0;
 	eCsrEncryptionType RSNEncryptType;
 	eCsrEncryptionType mcRSNEncryptType;
+	hdd_context_t *hdd_ctx;
 #ifdef WLAN_FEATURE_11W
 	uint8_t RSNMfpRequired = 0;
 	uint8_t RSNMfpCapable = 0;
@@ -5576,6 +5641,7 @@ int hdd_set_genie_to_csr(hdd_adapter_t *pAdapter, eCsrAuthType *RSNAuthType)
 	} else {
 		return 0;
 	}
+
 	/* The actual processing may eventually be more extensive than this. */
 	/* Right now, just consume any PMKIDs that are  sent in by the app. */
 	status = hdd_process_genie(pAdapter, bssid,
@@ -5586,6 +5652,7 @@ int hdd_set_genie_to_csr(hdd_adapter_t *pAdapter, eCsrAuthType *RSNAuthType)
 #endif
 				   pWextState->WPARSNIE[1] + 2,
 				   pWextState->WPARSNIE);
+
 	if (status == 0) {
 		/*
 		 * Now copy over all the security attributes
@@ -5624,7 +5691,23 @@ int hdd_set_genie_to_csr(hdd_adapter_t *pAdapter, eCsrAuthType *RSNAuthType)
 		hdd_debug("CSR AuthType = %d, EncryptionType = %d mcEncryptionType = %d",
 			 *RSNAuthType, RSNEncryptType, mcRSNEncryptType);
 	}
-	return 0;
+
+	hdd_ctx = WLAN_HDD_GET_CTX(pAdapter);
+	if (hdd_ctx->force_rsne_override &&
+	    (pWextState->WPARSNIE[0] == DOT11F_EID_RSN)) {
+		hdd_warn("Test mode enabled set def Auth and enc type. RSN IE passed in connect req: ");
+		qdf_trace_hex_dump(QDF_MODULE_ID_HDD, QDF_TRACE_LEVEL_WARN,
+				   pWextState->roamProfile.pRSNReqIE,
+				   pWextState->roamProfile.nRSNReqIELength);
+
+		pWextState->roamProfile.force_rsne_override = true;
+		/* If parsing failed set the def value for the roam profile */
+		if (status)
+			hdd_set_def_rsne_override(&pWextState->roamProfile,
+					    RSNAuthType);
+		return 0;
+	}
+	return status;
 }
 
 #ifdef WLAN_FEATURE_FILS_SK
@@ -6084,12 +6167,12 @@ static int __iw_get_essid(struct net_device *dev,
  */
 int iw_get_essid(struct net_device *dev,
 		 struct iw_request_info *info,
-		 struct iw_point *wrqu, char *extra)
+		 union iwreq_data *wrqu, char *extra)
 {
 	int ret;
 
 	cds_ssr_protect(__func__);
-	ret = __iw_get_essid(dev, info, wrqu, extra);
+	ret = __iw_get_essid(dev, info, &wrqu->essid, extra);
 	cds_ssr_unprotect(__func__);
 
 	return ret;

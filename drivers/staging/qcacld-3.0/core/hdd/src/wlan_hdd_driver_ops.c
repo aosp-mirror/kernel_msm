@@ -47,6 +47,7 @@
 #include "pld_common.h"
 #include "wlan_hdd_driver_ops.h"
 #include "wlan_hdd_scan.h"
+#include "wlan_hdd_ipa.h"
 
 #ifdef MODULE
 #define WLAN_MODULE_NAME  module_name(THIS_MODULE)
@@ -318,7 +319,8 @@ static int hdd_init_qdf_ctx(struct device *dev, void *bdev,
 	qdf_dev->drv_hdl = bdev;
 	qdf_dev->bus_type = bus_type;
 	qdf_dev->bid = bid;
-	if (cds_smmu_mem_map_setup(qdf_dev) !=
+
+	if (cds_smmu_mem_map_setup(qdf_dev, hdd_ipa_is_present()) !=
 		QDF_STATUS_SUCCESS) {
 		hdd_err("cds_smmu_mem_map_setup() failed");
 		return -EFAULT;
@@ -543,12 +545,6 @@ static void wlan_hdd_shutdown(void)
 {
 	void *hif_ctx = cds_get_context(QDF_MODULE_ID_HIF);
 
-	if (hdd_get_conparam() == QDF_GLOBAL_FTM_MODE) {
-		hdd_err("Crash recovery is not allowed in FTM mode");
-		QDF_BUG(0);
-		return;
-	}
-
 	if (!hif_ctx) {
 		hdd_err("Failed to get HIF context, ignore SSR shutdown");
 		return;
@@ -559,6 +555,18 @@ static void wlan_hdd_shutdown(void)
 		hdd_err("Load/unload in progress, ignore SSR shutdown");
 		return;
 	}
+
+	/*
+	 * Force Complete all the wait events before shutdown.
+	 * This is done at "hdd_cleanup_on_fw_down" api also to clean up the
+	 * wait events of north bound apis.
+	 * In case of SSR there is significant dely between FW down event and
+	 * wlan_hdd_shutdown, there is a possibility of race condition that
+	 * these wait events gets complete at "hdd_cleanup_on_fw_down" and
+	 * some new event is added before shutdown.
+	 */
+	qdf_complete_wait_events();
+
 	/* this is for cases, where shutdown invoked from platform */
 	cds_set_recovery_in_progress(true);
 	hdd_wlan_ssr_shutdown_event();

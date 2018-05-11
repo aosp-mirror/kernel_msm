@@ -5299,6 +5299,7 @@ typedef enum {
 	wmi_update_rcpi_event_id,
 	wmi_get_arp_stats_req_id,
 	wmi_sar_get_limits_event_id,
+	wmi_roam_scan_stats_event_id,
 
 	wmi_events_max,
 } wmi_conv_event_id;
@@ -7601,5 +7602,144 @@ struct wmi_invoke_neighbor_report_params {
 	struct mac_ssid ssid;
 };
 
+/**
+ * struct wmi_apf_write_memory_params - Android Packet Filter write memory
+ * params
+ * @vdev_id: VDEV on which APF memory is to be written
+ * @apf_version: APF version number
+ * @program_len: Length reserved for program in the APF work memory
+ * @addr_offset: Relative address in APF work memory to start writing
+ * @length: Size of the write
+ * @buf: Pointer to the buffer
+ */
+struct wmi_apf_write_memory_params {
+	uint8_t vdev_id;
+	uint32_t apf_version;
+	uint32_t program_len;
+	uint32_t addr_offset;
+	uint32_t length;
+	uint8_t *buf;
+};
+
+/**
+ * struct wmi_apf_read_memory_params - Android Packet Filter read memory params
+ * @vdev_id: vdev id
+ * @addr_offset: Relative address in APF work memory to read from
+ * @length: Size of the memory fetch
+ */
+struct wmi_apf_read_memory_params {
+	uint8_t vdev_id;
+	uint32_t addr_offset;
+	uint32_t length;
+};
+
+/**
+ * struct wmi_apf_read_memory_resp_event_params - Event containing read Android
+ *	Packet Filter memory response
+ * @vdev_id: vdev id
+ * @offset: Read memory offset
+ * @length: Read memory length
+ * @more_data: Indicates more data to come
+ * @data: Pointer to the data
+ */
+struct wmi_apf_read_memory_resp_event_params {
+	uint32_t vdev_id;
+	uint32_t offset;
+	uint32_t length;
+	bool more_data;
+	uint8_t *data;
+};
+
+/* Begin of roam scan stats definitions */
+
+#define WMI_ROAM_SCAN_STATS_MAX             5
+#define WMI_ROAM_SCAN_STATS_CANDIDATES_MAX  4
+#define WMI_ROAM_SCAN_STATS_CHANNELS_MAX    50
+
+/**
+ * struct wmi_roam_scan_stats_req - Structure to hold roam scan stats request
+ * @vdev_id: interface id
+ */
+struct wmi_roam_scan_stats_req {
+	uint32_t vdev_id;
+};
+
+/**
+ * struct wmi_roam_scan_stats_candidate - Roam scan candidates
+ * @score: score of AP
+ * @rssi: rssi of the AP
+ * @freq: center frequency
+ * @bssid: bssid of AP
+ */
+struct wmi_roam_scan_stats_candidate {
+	uint32_t score;
+	uint32_t rssi;
+	uint32_t freq;
+	uint8_t  bssid[QDF_MAC_ADDR_SIZE];
+};
+
+/**
+ * struct wmi_roam_scan_stats_params - Roam scan details
+ * @time_stamp: time at which this roam scan happened
+ * @client_id: id of client which triggered this scan
+ * @num_scan_chans: number of channels that were scanned as part of this scan
+ * @scan_freqs: frequencies of the channels that were scanned
+ * @is_roam_successful: whether a successful roaming happened after this scan
+ * @old_bssid: bssid to which STA is connected just before this scan
+ * @new_bssid: bssid to which STA is roamed to in case of successful roaming
+ * @num_roam_candidates: no.of roam candidates that are being reported
+ * @roam_candidate: roam scan candidate details
+ * @trigger_id: reason for triggering this roam or roam scan
+ * @trigger_value: threshold value related to trigger_id
+ */
+struct wmi_roam_scan_stats_params {
+	uint64_t time_stamp;
+	uint32_t client_id;
+	uint32_t num_scan_chans;
+	uint32_t scan_freqs[WMI_ROAM_SCAN_STATS_CHANNELS_MAX];
+	uint32_t is_roam_successful;
+
+	/* Bssid to which STA is connected when the roam scan is triggered */
+	uint8_t  old_bssid[QDF_MAC_ADDR_SIZE];
+
+	/*
+	 * Bssid to which STA is connected after roaming. Will be valid only
+	 * if is_roam_successful is true.
+	 */
+	uint8_t  new_bssid[QDF_MAC_ADDR_SIZE];
+
+	/* Number of roam candidates that are being reported in the stats */
+	uint32_t num_roam_candidates;
+	struct wmi_roam_scan_stats_candidate roam_candidate[WMI_ROAM_SCAN_STATS_CANDIDATES_MAX];
+	uint32_t trigger_id;
+	uint32_t trigger_value;
+};
+
+/**
+ * struct wmi_roam_scan_stats_res - Roam scan stats response from firmware
+ * @num_roam_scan: number of roam scans triggered
+ * @roam_scan: place holder to indicate the array of
+ *             wmi_roam_scan_stats_params followed by this structure
+ */
+struct wmi_roam_scan_stats_res {
+	uint32_t num_roam_scans;
+	struct wmi_roam_scan_stats_params roam_scan[0];
+};
+
+/* End of roam scan stats definitions */
+
+/**
+ * struct wmi_hw_filter_req_params - HW Filter mode parameters
+ * @vdev: VDEV id
+ * @enable: True: Enable HW filter, False: Disable
+ * @mode_bitmap: the hardware filter mode to configure
+ * @bssid: bss_id for get session.
+ */
+struct wmi_hw_filter_req_params {
+	uint8_t vdev_id;
+	bool enable;
+	uint8_t mode_bitmap;
+	struct qdf_mac_addr bssid;
+};
 #endif /* _WMI_UNIFIED_PARAM_H_ */
 

@@ -48,6 +48,9 @@ qdf_export_symbol(qdf_debugfs_init);
 
 QDF_STATUS qdf_debugfs_exit(void)
 {
+	if (!qdf_debugfs_root)
+		return QDF_STATUS_SUCCESS;
+
 	debugfs_remove_recursive(qdf_debugfs_root);
 	qdf_debugfs_root = NULL;
 
@@ -313,7 +316,7 @@ qdf_dentry_t qdf_debugfs_create_file(const char *name, uint16_t mode,
 
 	if (IS_ERR_OR_NULL(file)) {
 		QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_ERROR,
-			  "%s creation failed %p", name, file);
+			  "%s creation failed 0x%pK", name, file);
 		file = NULL;
 	}
 

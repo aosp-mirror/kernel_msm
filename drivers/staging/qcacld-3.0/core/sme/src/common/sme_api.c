@@ -3303,13 +3303,15 @@ QDF_STATUS sme_scan_request(tHalHandle hal, uint8_t session_id,
 	}
 
 	if (!mac_ctx->scan.fScanEnable) {
-		sme_err("fScanEnable false");
+		sme_err_rate_limited(SME_SCAN_REJECT_RATE_LIMIT,
+				     "fScanEnable false");
 		return status;
 	}
 
 	scan_count = csr_ll_count(&mac_ctx->sme.smeScanCmdActiveList);
 	if (scan_count >= mac_ctx->scan.max_scan_count) {
-		sme_err("Max scan reached");
+		sme_err_rate_limited(SME_SCAN_REJECT_RATE_LIMIT,
+				     "Max scan reached");
 		return QDF_STATUS_E_FAILURE;
 	}
 
@@ -6354,12 +6356,12 @@ QDF_STATUS sme_set_host_offload(tHalHandle hHal, uint8_t sessionId,
 }
 
 QDF_STATUS sme_conf_hw_filter_mode(tHalHandle hal, uint8_t session_id,
-				   uint8_t mode_bitmap)
+				   uint8_t mode_bitmap, bool filter_enable)
 {
 	tpAniSirGlobal pMac = PMAC_STRUCT(hal);
 	QDF_STATUS status;
 	tCsrRoamSession *session;
-	struct hw_filter_request *req;
+	struct wmi_hw_filter_req_params *req;
 	cds_msg_t msg;
 
 	status = sme_acquire_global_lock(&pMac->sme);
@@ -6382,6 +6384,8 @@ QDF_STATUS sme_conf_hw_filter_mode(tHalHandle hal, uint8_t session_id,
 		return QDF_STATUS_E_NOMEM;
 	}
 
+	req->vdev_id = session_id;
+	req->enable = filter_enable;
 	req->mode_bitmap = mode_bitmap;
 	qdf_copy_macaddr(&req->bssid, &session->connectedProfile.bssid);
 
@@ -9272,7 +9276,7 @@ QDF_STATUS sme_stop_roaming(tHalHandle hal, uint8_t session_id, uint8_t reason)
 	if (reason == eCsrForcedDisassoc)
 		req->reason = REASON_ROAM_STOP_ALL;
 	else
-		req->reason = REASON_ROAM_SYNCH_FAILED;
+		req->reason = REASON_SME_ISSUED;
 	req->sessionId = session_id;
 	if (csr_neighbor_middle_of_roaming(mac_ctx, session_id))
 		req->middle_of_roaming = 1;
@@ -11689,6 +11693,22 @@ void sme_set_prefer_80MHz_over_160MHz(tHalHandle hal,
 	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal);
 
 	mac_ctx->sta_prefer_80MHz_over_160MHz = sta_prefer_80MHz_over_160MHz;
+}
+
+void sme_set_etsi_srd_ch_in_master_mode(tHalHandle hal,
+					bool etsi_srd_chan_support)
+{
+	tpAniSirGlobal mac;
+
+	if (NULL == hal) {
+		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_ERROR,
+			"%s: Invalid hal pointer", __func__);
+		return;
+	}
+
+	mac = PMAC_STRUCT(hal);
+	mac->sap.enable_etsi_srd_chan_support = etsi_srd_chan_support;
+	sme_debug("srd_ch_support %d", mac->sap.enable_etsi_srd_chan_support);
 }
 
 /**
@@ -16714,14 +16734,7 @@ void sme_send_disassoc_req_frame(tHalHandle hal, uint8_t session_id,
 			FL("cds_send_mb_message Failed"));
 }
 
-/**
- * sme_get_bpf_offload_capabilities() - Get length for BPF offload
- * @hal: Global HAL handle
- * This function constructs the cds message and fill in message type,
- * post the same to WDA.
- * Return: QDF_STATUS enumeration
- */
-QDF_STATUS sme_get_bpf_offload_capabilities(tHalHandle hal)
+QDF_STATUS sme_get_apf_capabilities(tHalHandle hal)
 {
 	QDF_STATUS          status     = QDF_STATUS_SUCCESS;
 	tpAniSirGlobal      mac_ctx      = PMAC_STRUCT(hal);
@@ -16733,11 +16746,11 @@ QDF_STATUS sme_get_bpf_offload_capabilities(tHalHandle hal)
 	if (QDF_STATUS_SUCCESS == status) {
 		/* Serialize the req through MC thread */
 		cds_msg.bodyptr = NULL;
-		cds_msg.type = WDA_BPF_GET_CAPABILITIES_REQ;
+		cds_msg.type = WDA_APF_GET_CAPABILITIES_REQ;
 		status = cds_mq_post_message(QDF_MODULE_ID_WMA, &cds_msg);
 		if (!QDF_IS_STATUS_SUCCESS(status)) {
 			QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
-					FL("Post bpf get offload msg fail"));
+					FL("Post apf get offload msg fail"));
 			status = QDF_STATUS_E_FAILURE;
 		}
 		sme_release_global_lock(&mac_ctx->sme);
@@ -16750,21 +16763,13 @@ QDF_STATUS sme_get_bpf_offload_capabilities(tHalHandle hal)
 	return status;
 }
 
-
-/**
- * sme_set_bpf_instructions() - Set BPF bpf filter instructions.
- * @hal: HAL handle
- * @bpf_set_offload: struct to set bpf filter instructions.
- *
- * Return: QDF_STATUS enumeration.
- */
-QDF_STATUS sme_set_bpf_instructions(tHalHandle hal,
-				    struct sir_bpf_set_offload *req)
+QDF_STATUS sme_set_apf_instructions(tHalHandle hal,
+				    struct sir_apf_set_offload *req)
 {
 	QDF_STATUS          status     = QDF_STATUS_SUCCESS;
 	tpAniSirGlobal      mac_ctx    = PMAC_STRUCT(hal);
 	cds_msg_t           cds_msg;
-	struct sir_bpf_set_offload *set_offload;
+	struct sir_apf_set_offload *set_offload;
 
 	set_offload = qdf_mem_malloc(sizeof(*set_offload) +
 					req->current_length);
@@ -16790,12 +16795,12 @@ QDF_STATUS sme_set_bpf_instructions(tHalHandle hal,
 	if (QDF_STATUS_SUCCESS == status) {
 		/* Serialize the req through MC thread */
 		cds_msg.bodyptr = set_offload;
-		cds_msg.type = WDA_BPF_SET_INSTRUCTIONS_REQ;
+		cds_msg.type = WDA_APF_SET_INSTRUCTIONS_REQ;
 		status = cds_mq_post_message(QDF_MODULE_ID_WMA, &cds_msg);
 
 		if (!QDF_IS_STATUS_SUCCESS(status)) {
 			QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
-				FL("Post BPF set offload msg fail"));
+				FL("Post APF set offload msg fail"));
 			status = QDF_STATUS_E_FAILURE;
 			qdf_mem_free(set_offload);
 		}
@@ -16808,26 +16813,105 @@ QDF_STATUS sme_set_bpf_instructions(tHalHandle hal,
 	return status;
 }
 
-/**
- * sme_bpf_offload_register_callback() - Register get bpf offload callbacK
- *
- * @hal - MAC global handle
- * @callback_routine - callback routine from HDD
- *
- * This API is invoked by HDD to register its callback in SME
- *
- * Return: QDF_STATUS
- */
-QDF_STATUS sme_bpf_offload_register_callback(tHalHandle hal,
-				void (*pbpf_get_offload_cb)(void *context,
-					struct sir_bpf_get_offload *))
+QDF_STATUS sme_set_apf_enable_disable(tHalHandle hal, uint8_t vdev_id,
+				      bool apf_enable)
+{
+	void *wma_handle;
+
+	wma_handle = cds_get_context(QDF_MODULE_ID_WMA);
+	if (!wma_handle) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+				"wma handle is NULL");
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	return wma_send_apf_enable_cmd(wma_handle, vdev_id, apf_enable);
+}
+
+QDF_STATUS
+sme_apf_write_work_memory(tHalHandle hal,
+			struct wmi_apf_write_memory_params *write_params)
+{
+	void *wma_handle;
+
+	wma_handle = cds_get_context(QDF_MODULE_ID_WMA);
+	if (!wma_handle) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+				"wma handle is NULL");
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	return wma_send_apf_write_work_memory_cmd(wma_handle, write_params);
+}
+
+QDF_STATUS
+sme_apf_read_work_memory(tHalHandle hal,
+			struct wmi_apf_read_memory_params *read_params)
+{
+	void *wma_handle;
+
+	wma_handle = cds_get_context(QDF_MODULE_ID_WMA);
+	if (!wma_handle) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+				"wma handle is NULL");
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	return wma_send_apf_read_work_memory_cmd(wma_handle, read_params);
+}
+
+QDF_STATUS sme_apf_read_memory_register_callback(tHalHandle hal,
+			void (*apf_read_mem_cb)(void *context,
+			struct wmi_apf_read_memory_resp_event_params *))
 {
 	QDF_STATUS status   = QDF_STATUS_SUCCESS;
 	tpAniSirGlobal mac  = PMAC_STRUCT(hal);
 
 	status = sme_acquire_global_lock(&mac->sme);
 	if (QDF_IS_STATUS_SUCCESS(status)) {
-		mac->sme.pbpf_get_offload_cb = pbpf_get_offload_cb;
+		mac->sme.apf_read_mem_cb = apf_read_mem_cb;
+		sme_release_global_lock(&mac->sme);
+	} else {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+			FL("sme_acquire_global_lock failed"));
+	}
+	return status;
+}
+
+QDF_STATUS sme_apf_read_memory_deregister_callback(tHalHandle h_hal)
+{
+	QDF_STATUS status = QDF_STATUS_SUCCESS;
+	tpAniSirGlobal mac;
+
+	if (!h_hal) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+				  FL("hHal is not valid"));
+		return QDF_STATUS_E_INVAL;
+	}
+
+	mac = PMAC_STRUCT(h_hal);
+
+	status = sme_acquire_global_lock(&mac->sme);
+	if (QDF_IS_STATUS_SUCCESS(status)) {
+		mac->sme.apf_read_mem_cb = NULL;
+		sme_release_global_lock(&mac->sme);
+	} else {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+			FL("sme_acquire_global_lock failed"));
+	}
+	return status;
+}
+
+QDF_STATUS sme_apf_offload_register_callback(tHalHandle hal,
+				void (*papf_get_offload_cb)(void *context,
+					struct sir_apf_get_offload *))
+{
+	QDF_STATUS status   = QDF_STATUS_SUCCESS;
+	tpAniSirGlobal mac  = PMAC_STRUCT(hal);
+
+	status = sme_acquire_global_lock(&mac->sme);
+	if (QDF_IS_STATUS_SUCCESS(status)) {
+		mac->sme.papf_get_offload_cb = papf_get_offload_cb;
 		sme_release_global_lock(&mac->sme);
 	} else {
 		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
@@ -16851,7 +16935,7 @@ uint32_t sme_get_wni_dot11_mode(tHalHandle hal)
 }
 
 /**
- * sme_bpf_offload_deregister_callback() - Register get bpf offload callbacK
+ * sme_apf_offload_deregister_callback() - Register get apf offload callbacK
  *
  * @h_hal - MAC global handle
  * @callback_routine - callback routine from HDD
@@ -16860,7 +16944,7 @@ uint32_t sme_get_wni_dot11_mode(tHalHandle hal)
  *
  * Return: QDF_STATUS Enumeration
  */
-QDF_STATUS sme_bpf_offload_deregister_callback(tHalHandle h_hal)
+QDF_STATUS sme_apf_offload_deregister_callback(tHalHandle h_hal)
 {
 	QDF_STATUS status = QDF_STATUS_SUCCESS;
 	tpAniSirGlobal mac;
@@ -16875,7 +16959,7 @@ QDF_STATUS sme_bpf_offload_deregister_callback(tHalHandle h_hal)
 
 	status = sme_acquire_global_lock(&mac->sme);
 	if (QDF_IS_STATUS_SUCCESS(status)) {
-		mac->sme.pbpf_get_offload_cb = NULL;
+		mac->sme.papf_get_offload_cb = NULL;
 		sme_release_global_lock(&mac->sme);
 	} else {
 		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
@@ -18956,6 +19040,15 @@ free_action_oui:
 	action_oui = NULL;
 }
 
+uint32_t sme_unpack_rsn_ie(tHalHandle hal, uint8_t *buf,
+				  uint8_t buf_len, tDot11fIERSN *rsn_ie,
+				  bool append_ie)
+{
+	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal);
+
+	return dot11f_unpack_ie_rsn(mac_ctx, buf, buf_len, rsn_ie, append_ie);
+}
+
 /**
  * sme_destroy_action_oui_info() - destroy all action ouis info
  * @pmac: pointer to mac context
@@ -19090,5 +19183,17 @@ void sme_enable_roaming_on_connected_sta(tHalHandle hal)
 		sme_release_global_lock(&mac_ctx->sme);
 	}
 
+}
+
+bool sme_is_sta_key_exchange_in_progress(tHalHandle hal, uint8_t session_id)
+{
+	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal);
+
+	if (!CSR_IS_SESSION_VALID(mac_ctx, session_id)) {
+		sme_err("Invalid session id: %d", session_id);
+		return false;
+	}
+
+	return CSR_IS_WAIT_FOR_KEY(mac_ctx, session_id);
 }
 

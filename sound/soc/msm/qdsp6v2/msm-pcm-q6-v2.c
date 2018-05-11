@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1101,7 +1101,9 @@ static int msm_pcm_adsp_stream_cmd_put(struct snd_kcontrol *kcontrol,
 	struct msm_plat_data *pdata = dev_get_drvdata(platform->dev);
 	struct snd_pcm_substream *substream;
 	struct msm_audio *prtd;
-	int ret = 0, param_length = 0;
+	int ret = 0;
+	uint32_t param_length = 0;
+	uint64_t actual_payload_len = 0;
 
 	if (!pdata) {
 		pr_err("%s pdata is NULL\n", __func__);
@@ -1131,6 +1133,16 @@ static int msm_pcm_adsp_stream_cmd_put(struct snd_kcontrol *kcontrol,
 
 	memcpy(&param_length, ucontrol->value.bytes.data,
 		sizeof(param_length));
+
+	actual_payload_len = param_length + sizeof(param_length);
+
+	if (actual_payload_len > U32_MAX) {
+		pr_err("%s param length=0x%X exceeds limit",
+		__func__, param_length);
+		ret = -EINVAL;
+		goto done;
+	}
+
 	if ((param_length + sizeof(param_length))
 		>= sizeof(ucontrol->value.bytes.data)) {
 		pr_err("%s param length=%d  exceeds limit",

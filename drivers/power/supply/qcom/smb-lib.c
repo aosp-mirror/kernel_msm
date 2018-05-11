@@ -1948,6 +1948,21 @@ int smblib_get_prop_batt_charge_counter(struct smb_charger *chg,
 	return rc;
 }
 
+#ifndef CONFIG_QPNP_FG_GEN3_LEGACY_CYCLE_COUNT
+int smblib_get_cycle_count(struct smb_charger *chg,
+			   union power_supply_propval *val)
+{
+	int rc;
+
+	if (!chg->bms_psy)
+		return -EINVAL;
+
+	rc = power_supply_get_property(chg->bms_psy,
+				       POWER_SUPPLY_PROP_CYCLE_COUNT, val);
+	return rc;
+}
+#endif
+
 /***********************
  * BATTERY PSY SETTERS *
  ***********************/
@@ -2432,7 +2447,7 @@ int smblib_get_prop_typec_power_role(struct smb_charger *chg,
 				     union power_supply_propval *val)
 {
 	int rc = 0;
-	u8 ctrl;
+	u8 ctrl, isrc;
 
 	rc = smblib_read(chg, TYPE_C_INTRPT_ENB_SOFTWARE_CTRL_REG, &ctrl);
 	if (rc < 0) {
@@ -2442,6 +2457,12 @@ int smblib_get_prop_typec_power_role(struct smb_charger *chg,
 	}
 	smblib_dbg(chg, PR_REGISTER, "TYPE_C_INTRPT_ENB_SOFTWARE_CTRL = 0x%02x\n",
 		   ctrl);
+
+	rc = smblib_read(chg, TYPE_C_CFG_2_REG, &isrc);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't read TYPE_C_CFG_2_REG rc=%d\n", rc);
+		return rc;
+	}
 
 	if (ctrl & TYPEC_DISABLE_CMD_BIT) {
 		val->intval = POWER_SUPPLY_TYPEC_PR_NONE;
@@ -2453,7 +2474,9 @@ int smblib_get_prop_typec_power_role(struct smb_charger *chg,
 		val->intval = POWER_SUPPLY_TYPEC_PR_DUAL;
 		break;
 	case DFP_EN_CMD_BIT:
-		val->intval = POWER_SUPPLY_TYPEC_PR_SOURCE;
+		val->intval = isrc & EN_80UA_180UA_CUR_SOURCE_BIT ?
+			POWER_SUPPLY_TYPEC_PR_SOURCE_1_5 :
+			POWER_SUPPLY_TYPEC_PR_SOURCE;
 		break;
 	case UFP_EN_CMD_BIT:
 		val->intval = POWER_SUPPLY_TYPEC_PR_SINK;
@@ -2664,14 +2687,23 @@ int smblib_set_prop_pd_current_max(struct smb_charger *chg,
 int smblib_set_prop_usb_current_max(struct smb_charger *chg,
 				    const union power_supply_propval *val)
 {
-	int rc;
+	int rc = 0;
 	int icl_ua = val->intval;
 
 	if (icl_ua < 0)
 		return -EINVAL;
 
 	/* cancel vote when icl_ua is voted 0 */
-	rc = vote(chg->usb_icl_votable, USB_PSY_VOTER, icl_ua != 0, icl_ua);
+	if (val->intval > USBIN_25MA) {
+		rc = vote(chg->usb_icl_votable, USB_PSY_VOTER,
+			  true, val->intval);
+	} else if (chg->system_suspend_supported) {
+		rc = vote(chg->usb_icl_votable, USB_PSY_VOTER,
+				  false, 0);
+	} else {
+		smblib_dbg(chg, PR_MISC, "suspend not supported\n");
+		return rc;
+	}
 
 	if (rc < 0) {
 		smblib_err(chg, "Couldn't vote USB ICL %d, rc=%d\n",
@@ -2721,6 +2753,7 @@ static int smblib_set_prop_typec_power_role_locked(
 		reg = UFP_EN_CMD_BIT | EXIT_SNK_BASED_ON_CC_BIT;
 		break;
 	case POWER_SUPPLY_TYPEC_PR_SOURCE:
+	case POWER_SUPPLY_TYPEC_PR_SOURCE_1_5:
 		reg = DFP_EN_CMD_BIT;
 		break;
 	default:
@@ -2743,6 +2776,14 @@ static int smblib_set_prop_typec_power_role_locked(
 				rc);
 		}
 	}
+
+	rc = smblib_masked_write(chg, TYPE_C_CFG_2_REG,
+				 EN_80UA_180UA_CUR_SOURCE_BIT,
+				 pr_role == POWER_SUPPLY_TYPEC_PR_SOURCE_1_5
+				 ? EN_80UA_180UA_CUR_SOURCE_BIT : 0);
+
+	if (rc < 0)
+		smblib_err(chg, "Couldnt update EN_ISRC_180UA_BIT rc=%d\n", rc);
 
 	rc = smblib_masked_write(chg, TYPE_C_INTRPT_ENB_SOFTWARE_CTRL_REG,
 				 TYPEC_POWER_ROLE_CMD_MASK |
@@ -4234,10 +4275,15 @@ static void smblib_handle_typec_removal(struct smb_charger *chg)
 			rc);
 
 	/* enable DRP */
-	rc = smblib_masked_write(chg, TYPE_C_INTRPT_ENB_SOFTWARE_CTRL_REG,
-				 TYPEC_POWER_ROLE_CMD_MASK, 0);
-	if (rc < 0)
-		smblib_err(chg, "Couldn't enable DRP rc=%d\n", rc);
+	if (chg->typec_pr_disabled)
+		smblib_err(chg, "Skip enable DRP due to typec_pr_disabled=true\n");
+	else {
+		rc = smblib_masked_write(chg,
+					 TYPE_C_INTRPT_ENB_SOFTWARE_CTRL_REG,
+					 TYPEC_POWER_ROLE_CMD_MASK, 0);
+		if (rc < 0)
+			smblib_err(chg, "Couldn't enable DRP rc=%d\n", rc);
+	}
 
 	/* HW controlled CC_OUT */
 	rc = smblib_masked_write(chg, TAPER_TIMER_SEL_CFG_REG,

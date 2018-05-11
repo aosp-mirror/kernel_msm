@@ -20,6 +20,7 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/power_supply.h>
+#include <linux/property.h>
 #include <linux/regulator/consumer.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
@@ -75,6 +76,7 @@ struct usbpd {
 	int logbuffer_tail;
 	u8 *logbuffer[LOG_BUFFER_ENTRIES];
 	bool in_pr_swap;
+	bool suspend_supported;
 };
 
 /*
@@ -521,9 +523,9 @@ static void psy_changed_handler(struct work_struct *work)
 	apsd_done = !!val.intval;
 
 	ret = power_supply_get_property(pd->usb_psy,
-					POWER_SUPPLY_PROP_ONLINE, &val);
+					POWER_SUPPLY_PROP_PRESENT, &val);
 	if (ret < 0) {
-		pd_engine_log(pd, "Unable to read ONLINE, ret=%d",
+		pd_engine_log(pd, "Unable to read PRESENT, ret=%d",
 			      ret);
 		return;
 	}
@@ -658,6 +660,9 @@ static int tcpm_set_cc(struct tcpc_dev *dev, enum typec_cc_status cc)
 		break;
 	case TYPEC_CC_RP_DEF:
 		val.intval = POWER_SUPPLY_TYPEC_PR_SOURCE;
+		break;
+	case TYPEC_CC_RP_1_5:
+		val.intval = POWER_SUPPLY_TYPEC_PR_SOURCE_1_5;
 		break;
 	default:
 		pd_engine_log(pd, "tcpm_set_cc: invalid cc %s",
@@ -1077,6 +1082,35 @@ unlock:
 	return ret;
 }
 
+static int tcpm_set_suspend_supported(struct tcpc_dev *dev,
+				      bool suspend_supported)
+{
+	union power_supply_propval val = {0};
+	struct usbpd *pd = container_of(dev, struct usbpd, tcpc_dev);
+	int ret = 0;
+
+	mutex_lock(&pd->lock);
+
+	if (suspend_supported == pd->suspend_supported)
+		goto unlock;
+
+	/* Attempt once */
+	pd->suspend_supported = suspend_supported;
+	val.intval = suspend_supported ? 1 : 0;
+	pd_engine_log(pd, "usb suspend %d", suspend_supported ? 1 : 0);
+	ret = power_supply_set_property(pd->usb_psy,
+				POWER_SUPPLY_PROP_PD_USB_SUSPEND_SUPPORTED,
+				&val);
+	if (ret < 0) {
+		pd_engine_log(pd,
+			      "unable to set suspend flag to %d, ret=%d",
+			      suspend_supported ? 1 : 0, ret);
+	}
+
+unlock:
+	mutex_unlock(&pd->lock);
+	return ret;
+}
 
 enum power_role get_pdphy_power_role(enum typec_role role)
 {
@@ -1299,12 +1333,40 @@ static void pd_phy_message_rx(struct usbpd *pd, enum pd_msg_type type,
 
 static void pd_phy_shutdown(struct usbpd *pd)
 {
+	int rc = 0;
+	mutex_lock(&pd->lock);
+	if (regulator_is_enabled(pd->vbus)) {
+		rc = regulator_disable(pd->vbus);
+		if (rc < 0)
+			pr_err("unable to disable vbus\n");
+		else
+			pd->vbus_output = false;
+	}
+	if (regulator_is_enabled(pd->vconn)) {
+		rc = regulator_disable(pd->vconn);
+		if (rc < 0)
+			pr_err("unable to disable vconn\n");
+		else
+			pd->vconn_output = false;
+	}
+	mutex_unlock(&pd->lock);
+
 	pd_engine_log(pd, "pd phy shutdown");
 }
 
+enum pdo_role {
+	SNK_PDO,
+	SRC_PDO,
+};
+
+static const char * const pdo_prop_name[] = {
+	[SNK_PDO]	= "snk-pdo",
+	[SRC_PDO]	= "src-pdo",
+};
+
 #define PDO_FIXED_FLAGS \
 	(PDO_FIXED_DUAL_ROLE | PDO_FIXED_DATA_SWAP | PDO_FIXED_USB_COMM)
-
+/*
 static const u32 src_pdo[] = {
 	PDO_FIXED(5000, 900, PDO_FIXED_FLAGS),
 };
@@ -1328,10 +1390,140 @@ static const struct tcpc_config pd_tcpc_config = {
 	.try_role_hw = true,
 	.alt_modes = NULL,
 };
+*/
 
-static void init_tcpc_dev(struct tcpc_dev *pd_tcpc_dev)
+static u32 *parse_pdo(struct usbpd *pd, enum pdo_role role,
+		      unsigned int *nr_pdo)
 {
-	pd_tcpc_dev->config = &pd_tcpc_config;
+	struct device *dev = &pd->dev;
+	u32 *dt_array;
+	u32 *pdo;
+	int i, count, rc;
+
+	count = device_property_read_u32_array(dev->parent, pdo_prop_name[role],
+					       NULL, 0);
+	if (count > 0) {
+		if (count % 4)
+			return ERR_PTR(-EINVAL);
+
+		*nr_pdo = count / 4;
+		dt_array = devm_kcalloc(dev, count, sizeof(*dt_array),
+					GFP_KERNEL);
+		if (!dt_array)
+			return ERR_PTR(-ENOMEM);
+
+		rc = device_property_read_u32_array(dev->parent,
+						    pdo_prop_name[role],
+						    dt_array, count);
+		if (rc)
+			return ERR_PTR(rc);
+
+		pdo = devm_kcalloc(dev, *nr_pdo, sizeof(*pdo), GFP_KERNEL);
+		if (!pdo)
+			return ERR_PTR(-ENOMEM);
+
+		for (i = 0; i < *nr_pdo; i++) {
+			switch (dt_array[i * 4]) {
+			case PDO_TYPE_FIXED:
+				pdo[i] = PDO_FIXED(dt_array[i * 4 + 1],
+						   dt_array[i * 4 + 2],
+						   PDO_FIXED_FLAGS);
+				break;
+			case PDO_TYPE_BATT:
+				pdo[i] = PDO_BATT(dt_array[i * 4 + 1],
+						  dt_array[i * 4 + 2],
+						  dt_array[i * 4 + 3]);
+				break;
+			case PDO_TYPE_VAR:
+				pdo[i] = PDO_VAR(dt_array[i * 4 + 1],
+						 dt_array[i * 4 + 2],
+						 dt_array[i * 4 + 3]);
+				break;
+			/*case PDO_TYPE_AUG:*/
+			default:
+				return ERR_PTR(-EINVAL);
+			}
+		}
+		return pdo;
+	}
+
+	return ERR_PTR(-EINVAL);
+}
+
+static int init_tcpc_config(struct tcpc_dev *pd_tcpc_dev)
+{
+	struct usbpd *pd = container_of(pd_tcpc_dev, struct usbpd, tcpc_dev);
+	struct device *dev = &pd->dev;
+	struct tcpc_config *config;
+	int ret;
+
+	pd_tcpc_dev->config = devm_kzalloc(dev, sizeof(*config), GFP_KERNEL);
+	if (!pd_tcpc_dev->config)
+		return -ENOMEM;
+
+	config = pd_tcpc_dev->config;
+
+	ret = device_property_read_u32(dev->parent, "port-type", &config->type);
+	if (ret < 0)
+		return ret;
+
+	switch (config->type) {
+	case TYPEC_PORT_UFP:
+		config->snk_pdo = parse_pdo(pd, SNK_PDO, &config->nr_snk_pdo);
+		if (IS_ERR(config->snk_pdo))
+			return PTR_ERR(config->snk_pdo);
+		break;
+	case TYPEC_PORT_DFP:
+		config->src_pdo = parse_pdo(pd, SRC_PDO, &config->nr_src_pdo);
+		if (IS_ERR(config->src_pdo))
+			return PTR_ERR(config->src_pdo);
+		break;
+	case TYPEC_PORT_DRP:
+		config->snk_pdo = parse_pdo(pd, SNK_PDO, &config->nr_snk_pdo);
+		if (IS_ERR(config->snk_pdo))
+			return PTR_ERR(config->snk_pdo);
+		config->src_pdo = parse_pdo(pd, SRC_PDO, &config->nr_src_pdo);
+		if (IS_ERR(config->src_pdo))
+			return PTR_ERR(config->src_pdo);
+
+		ret = device_property_read_u32(dev->parent, "default-role",
+					       &config->default_role);
+		if (ret < 0)
+			return ret;
+
+		config->try_role_hw = device_property_read_bool(dev->parent,
+								"try-role-hw");
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	if (config->type == TYPEC_PORT_UFP || config->type == TYPEC_PORT_DRP) {
+		ret = device_property_read_u32(dev->parent, "max-snk-mv",
+					       &config->max_snk_mv);
+		ret = device_property_read_u32(dev->parent, "max-snk-ma",
+					       &config->max_snk_ma);
+		ret = device_property_read_u32(dev->parent, "max-snk-mw",
+					       &config->max_snk_mw);
+		ret = device_property_read_u32(dev->parent, "op-snk-mw",
+					       &config->operating_snk_mw);
+		if (ret < 0)
+			return ret;
+	}
+
+	/* TODO: parse alt mode from DT */
+	config->alt_modes = NULL;
+
+	return 0;
+}
+
+static int init_tcpc_dev(struct tcpc_dev *pd_tcpc_dev)
+{
+	int ret;
+
+	ret = init_tcpc_config(pd_tcpc_dev);
+	if (ret < 0)
+		return ret;
 	pd_tcpc_dev->init = tcpm_init;
 	pd_tcpc_dev->get_vbus = tcpm_get_vbus;
 	pd_tcpc_dev->set_cc = tcpm_set_cc;
@@ -1346,7 +1538,9 @@ static void init_tcpc_dev(struct tcpc_dev *pd_tcpc_dev)
 	pd_tcpc_dev->pd_transmit = tcpm_pd_transmit;
 	pd_tcpc_dev->start_drp_toggling = tcpm_start_drp_toggling;
 	pd_tcpc_dev->set_in_pr_swap = tcpm_set_in_pr_swap;
+	pd_tcpc_dev->set_suspend_supported = tcpm_set_suspend_supported;
 	pd_tcpc_dev->mux = NULL;
+	return 0;
 }
 
 static void init_pd_phy_params(struct pd_phy_params *pdphy_params)
@@ -1455,7 +1649,9 @@ struct usbpd *usbpd_create(struct device *parent)
 	 * TCPM callbacks may access pd->usb_psy. Therefore, tcpm_register_port
 	 * must be called after pd->usb_psy is initialized.
 	 */
-	init_tcpc_dev(&pd->tcpc_dev);
+	ret = init_tcpc_dev(&pd->tcpc_dev);
+	if (ret < 0)
+		goto put_psy;
 	pd->tcpm_port = tcpm_register_port(&pd->dev, &pd->tcpc_dev);
 	if (IS_ERR(pd->tcpm_port)) {
 		ret = PTR_ERR(pd->tcpm_port);
@@ -1470,6 +1666,8 @@ struct usbpd *usbpd_create(struct device *parent)
 		goto unreg_tcpm;
 
 	init_pd_phy_params(&pd->pdphy_params);
+
+	pd->suspend_supported = true;
 
 	return pd;
 

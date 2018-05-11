@@ -1526,8 +1526,8 @@ static int wma_unified_radio_tx_power_level_stats_event_handler(void *handle,
 		return -EINVAL;
 	}
 
-	if (fixed_param->radio_id > link_stats_results->num_radio) {
-		WMA_LOGD("%s: Invalid radio_id %d num_radio %d",
+	if (fixed_param->radio_id >= link_stats_results->num_radio) {
+		WMA_LOGE("%s: Invalid radio_id %d num_radio %d",
 			 __func__, fixed_param->radio_id,
 			 link_stats_results->num_radio);
 		return -EINVAL;
@@ -1691,6 +1691,13 @@ static int wma_unified_link_radio_stats_event_handler(void *handle,
 	}
 	link_stats_results_size = sizeof(*link_stats_results) +
 				  fixed_param->num_radio * radio_stats_size;
+
+	if (radio_stats->radio_id >= fixed_param->num_radio) {
+		WMA_LOGE("%s: Invalid radio_id %d num_radio %d",
+			 __func__, radio_stats->radio_id,
+			 fixed_param->num_radio);
+		return -EINVAL;
+	}
 
 	if (!wma_handle->link_stats_results) {
 		wma_handle->link_stats_results = qdf_mem_malloc(
@@ -2201,28 +2208,6 @@ int wma_unified_link_iface_stats_event_handler(void *handle,
 		return -EINVAL;
 	}
 
-	if (link_stats->num_ac > WIFI_AC_MAX) {
-		WMA_LOGE("%s: Excess data received from firmware num_ac %d",
-			 __func__, link_stats->num_ac);
-		return -EINVAL;
-	}
-	if (fixed_param->num_offload_stats > WMI_OFFLOAD_STATS_TYPE_MAX) {
-		WMA_LOGE("%s: Excess num offload stats recvd from fw: %d",
-			__func__, fixed_param->num_offload_stats);
-		return -EINVAL;
-	}
-
-	if (link_stats->num_ac > WIFI_AC_MAX) {
-		WMA_LOGE("%s: Excess data received from firmware num_ac %d",
-			 __func__, link_stats->num_ac);
-		return -EINVAL;
-	}
-	if (fixed_param->num_offload_stats > WMI_OFFLOAD_STATS_TYPE_MAX) {
-		WMA_LOGE("%s: Excess num offload stats recvd from fw: %d",
-			__func__, fixed_param->num_offload_stats);
-		return -EINVAL;
-	}
-
 	link_stats_size = sizeof(tSirWifiIfaceStat);
 	iface_info_size = sizeof(tSirWifiInterfaceInfo);
 
@@ -2542,6 +2527,12 @@ static void wma_vdev_stats_lost_link_helper(tp_wma_handle wma,
 	static const uint8_t zero_mac[QDF_MAC_ADDR_SIZE] = {0};
 	int32_t bcn_snr, dat_snr;
 
+	if (vdev_stats->vdev_id >= wma->max_bssid) {
+		WMA_LOGE("%s: Invalid vdev_id %hu",
+			__func__, vdev_stats->vdev_id);
+		return;
+	}
+
 	node = &wma->interfaces[vdev_stats->vdev_id];
 	if (node->vdev_up &&
 	    !qdf_mem_cmp(node->bssid, zero_mac, QDF_MAC_ADDR_SIZE)) {
@@ -2590,6 +2581,12 @@ static void wma_update_vdev_stats(tp_wma_handle wma,
 	tAniGetRssiReq *pGetRssiReq = (tAniGetRssiReq *) wma->pGetRssiReq;
 	cds_msg_t sme_msg = { 0 };
 	int32_t bcn_snr, dat_snr;
+
+	if (vdev_stats->vdev_id >= wma->max_bssid) {
+		WMA_LOGE("%s: Invalid vdev_id %hu",
+			__func__, vdev_stats->vdev_id);
+		return;
+	}
 
 	bcn_snr = vdev_stats->vdev_snr.bcn_snr;
 	dat_snr = vdev_stats->vdev_snr.dat_snr;
@@ -2862,6 +2859,12 @@ static void wma_update_rssi_stats(tp_wma_handle wma,
 	uint8_t *stats_buf;
 	uint32_t temp_mask;
 	uint8_t vdev_id;
+
+	if (rssi_stats->vdev_id >= wma->max_bssid) {
+		WMA_LOGE("%s: Invalid vdev_id %hu",
+			__func__, rssi_stats->vdev_id);
+		return;
+	}
 
 	vdev_id = rssi_stats->vdev_id;
 	node = &wma->interfaces[vdev_id];
@@ -3601,31 +3604,44 @@ int wma_unified_debug_print_event_handler(void *handle, uint8_t *datap,
 	WMI_DEBUG_PRINT_EVENTID_param_tlvs *param_buf;
 	uint8_t *data;
 	uint32_t datalen;
+	char dbgbuf[WMI_SVC_MSG_MAX_SIZE] = { 0 };
 
 	param_buf = (WMI_DEBUG_PRINT_EVENTID_param_tlvs *) datap;
-	if (!param_buf) {
+	if (!param_buf || !param_buf->data) {
 		WMA_LOGE("Get NULL point message from FW");
 		return -ENOMEM;
 	}
 	data = param_buf->data;
 	datalen = param_buf->num_data;
+	if (datalen > WMI_SVC_MSG_MAX_SIZE) {
+		WMA_LOGE("Received data len %d exceeds max value %d",
+				datalen, WMI_SVC_MSG_MAX_SIZE);
+		return QDF_STATUS_E_FAILURE;
+	}
+	data[datalen - 1] = '\0';
 
 #ifdef BIG_ENDIAN_HOST
 	{
-		if (datalen > BIG_ENDIAN_MAX_DEBUG_BUF) {
+		if (datalen >= BIG_ENDIAN_MAX_DEBUG_BUF) {
 			WMA_LOGE("%s Invalid data len %d, limiting to max",
 				 __func__, datalen);
-			datalen = BIG_ENDIAN_MAX_DEBUG_BUF;
+			datalen = BIG_ENDIAN_MAX_DEBUG_BUF - 1;
 		}
-		char dbgbuf[BIG_ENDIAN_MAX_DEBUG_BUF] = { 0 };
 
-		memcpy(dbgbuf, data, datalen);
+		strlcpy(dbgbuf, data, datalen);
 		SWAPME(dbgbuf, datalen);
 		WMA_LOGD("FIRMWARE:%s", dbgbuf);
 		return 0;
 	}
 #else
-	WMA_LOGD("FIRMWARE:%s", data);
+	if (datalen == WMI_SVC_MSG_MAX_SIZE) {
+		WMA_LOGE("%s Invalid data len %d, limiting to max",
+				__func__, datalen);
+		datalen = WMI_SVC_MSG_MAX_SIZE -1 ;
+	}
+
+	strlcpy(dbgbuf, data, datalen);
+	WMA_LOGD("FIRMWARE:%s", dbgbuf);
 	return 0;
 #endif /* BIG_ENDIAN_HOST */
 }
@@ -5104,7 +5120,8 @@ QDF_STATUS wma_get_updated_scan_config(uint32_t *scan_config,
 }
 
 QDF_STATUS wma_get_updated_scan_and_fw_mode_config(uint32_t *scan_config,
-			uint32_t *fw_mode_config, uint32_t dual_mac_disable_ini)
+			uint32_t *fw_mode_config, uint32_t dual_mac_disable_ini,
+			uint32_t channel_select_logic_conc)
 {
 	tp_wma_handle wma;
 
@@ -5143,6 +5160,11 @@ QDF_STATUS wma_get_updated_scan_and_fw_mode_config(uint32_t *scan_config,
 	default:
 		break;
 	}
+
+	WMI_DBS_FW_MODE_CFG_DBS_FOR_STA_PLUS_STA_SET(*fw_mode_config,
+	       WMA_CHANNEL_SELECT_LOGIC_STA_STA_GET(channel_select_logic_conc));
+	WMI_DBS_FW_MODE_CFG_DBS_FOR_STA_PLUS_P2P_SET(*fw_mode_config,
+	       WMA_CHANNEL_SELECT_LOGIC_STA_P2P_GET(channel_select_logic_conc));
 	WMA_LOGD("%s: *scan_config:%x ", __func__, *scan_config);
 	WMA_LOGD("%s: *fw_mode_config:%x ", __func__, *fw_mode_config);
 

@@ -2206,6 +2206,9 @@ static int tcpm_snk_attach(struct tcpm_port *port)
 
 static void tcpm_snk_detach(struct tcpm_port *port)
 {
+	/* Conservatively reset back to suspend should be honored */
+	if (port->tcpc->set_suspend_supported)
+		port->tcpc->set_suspend_supported(port->tcpc, true);
 	tcpm_detach(port);
 
 	/* XXX: (Dis)connect SuperSpeed mux? */
@@ -2448,6 +2451,9 @@ static void run_state_machine(struct tcpm_port *port)
 
 		tcpm_swap_complete(port, 0);
 		tcpm_typec_connect(port);
+		if (port->explicit_contract && tcpm_rp_cc(port)
+				== TYPEC_CC_RP_DEF)
+			tcpm_set_cc(port, TYPEC_CC_RP_1_5);
 		tcpm_check_send_discover(port);
 		/*
 		 * 6.3.5
@@ -2617,6 +2623,11 @@ static void run_state_machine(struct tcpm_port *port)
 		} else {
 			tcpm_set_state_cond(port, hard_reset_state(port),
 					    PD_T_SENDER_RESPONSE);
+		}
+		if (port->tcpc->set_suspend_supported) {
+			port->tcpc->set_suspend_supported(port->tcpc,
+							  port->source_caps[0] &
+							  PDO_FIXED_SUSPEND);
 		}
 		break;
 	case SNK_TRANSITION_SINK:

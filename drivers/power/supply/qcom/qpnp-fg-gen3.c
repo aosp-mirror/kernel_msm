@@ -2437,6 +2437,86 @@ out:
 	pm_relax(chip->dev);
 }
 
+static ssize_t fg_get_cycle_counts_bins(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct fg_chip *chip = dev_get_drvdata(dev);
+	int rc = 0, i;
+	u8 data[2];
+	int length = 0;
+
+	mutex_lock(&chip->cyc_ctr.lock);
+	for (i = 0; i < BUCKET_COUNT; i++) {
+		rc = fg_sram_read(chip, CYCLE_COUNT_WORD + (i / 2),
+				  CYCLE_COUNT_OFFSET + (i % 2) * 2, data, 2,
+				  FG_IMA_DEFAULT);
+
+		if (rc < 0) {
+			pr_err("failed to read bucket %d rc=%d\n", i, rc);
+			chip->cyc_ctr.count[i] = 0;
+		} else
+			chip->cyc_ctr.count[i] = data[0] | data[1] << 8;
+
+		length += scnprintf(buf + length,
+				    PAGE_SIZE - length, "%d",
+				    chip->cyc_ctr.count[i]);
+
+		if (i == BUCKET_COUNT-1)
+			length += scnprintf(buf + length,
+					    PAGE_SIZE - length, "\n");
+		else
+			length += scnprintf(buf + length,
+					    PAGE_SIZE - length, " ");
+	}
+	mutex_unlock(&chip->cyc_ctr.lock);
+
+	return length;
+}
+
+static ssize_t fg_set_cycle_counts_bins(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t count)
+{
+	struct fg_chip *chip = dev_get_drvdata(dev);
+	int rc = 0, strval[BUCKET_COUNT], bucket;
+	u16 cyc_count;
+	u8 data[2];
+
+	if (sscanf(buf, "%d %d %d %d %d %d %d %d",
+		   &strval[0], &strval[1], &strval[2], &strval[3],
+		   &strval[4], &strval[5], &strval[6], &strval[7])
+	    != BUCKET_COUNT)
+		return -EINVAL;
+
+	mutex_lock(&chip->cyc_ctr.lock);
+	for (bucket = 0; bucket < BUCKET_COUNT; bucket++) {
+		if (strval[bucket] > chip->cyc_ctr.count[bucket]) {
+			cyc_count = strval[bucket];
+			data[0] = cyc_count & 0xFF;
+			data[1] = cyc_count >> 8;
+
+			rc = fg_sram_write(chip,
+					CYCLE_COUNT_WORD + (bucket / 2),
+					CYCLE_COUNT_OFFSET + (bucket % 2) * 2,
+					data, 2, FG_IMA_DEFAULT);
+			if (rc < 0) {
+				pr_err("failed to write BATT_CYCLE[%d] rc=%d\n",
+				       bucket, rc);
+				mutex_unlock(&chip->cyc_ctr.lock);
+				return rc;
+			}
+			chip->cyc_ctr.count[bucket] = cyc_count;
+		}
+	}
+	mutex_unlock(&chip->cyc_ctr.lock);
+
+	return count;
+}
+
+static DEVICE_ATTR(cycle_counts_bins, 0660,
+		   fg_get_cycle_counts_bins, fg_set_cycle_counts_bins);
+
 static void restore_cycle_counter(struct fg_chip *chip)
 {
 	int rc = 0, i;
@@ -2570,12 +2650,25 @@ static int fg_get_cycle_count(struct fg_chip *chip)
 	if (!chip->cyc_ctr.en)
 		return 0;
 
+#ifdef CONFIG_QPNP_FG_GEN3_LEGACY_CYCLE_COUNT
 	if ((chip->cyc_ctr.id <= 0) || (chip->cyc_ctr.id > BUCKET_COUNT))
 		return -EINVAL;
 
 	mutex_lock(&chip->cyc_ctr.lock);
 	count = chip->cyc_ctr.count[chip->cyc_ctr.id - 1];
 	mutex_unlock(&chip->cyc_ctr.lock);
+#else
+	mutex_lock(&chip->cyc_ctr.lock);
+	{
+		int i;
+
+		count = 0;
+		for (i = 0 ; i < BUCKET_COUNT; i++)
+			count += chip->cyc_ctr.count[i];
+		count = DIV_ROUND_CLOSEST(count, 8);
+	}
+	mutex_unlock(&chip->cyc_ctr.lock);
+#endif
 	return count;
 }
 
@@ -3293,9 +3386,11 @@ static int fg_psy_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CYCLE_COUNT:
 		pval->intval = fg_get_cycle_count(chip);
 		break;
+#ifdef CONFIG_QPNP_FG_GEN3_LEGACY_CYCLE_COUNT
 	case POWER_SUPPLY_PROP_CYCLE_COUNT_ID:
 		pval->intval = chip->cyc_ctr.id;
 		break;
+#endif
 	case POWER_SUPPLY_PROP_CHARGE_NOW_RAW:
 		rc = fg_get_charge_raw(chip, &pval->intval);
 		break;
@@ -3343,9 +3438,10 @@ static int fg_psy_set_property(struct power_supply *psy,
 				  const union power_supply_propval *pval)
 {
 	struct fg_chip *chip = power_supply_get_drvdata(psy);
-	int rc = 0;
+	int rc = -EINVAL;
 
 	switch (psp) {
+#ifdef CONFIG_QPNP_FG_GEN3_LEGACY_CYCLE_COUNT
 	case POWER_SUPPLY_PROP_CYCLE_COUNT_ID:
 		if ((pval->intval > 0) && (pval->intval <= BUCKET_COUNT)) {
 			chip->cyc_ctr.id = pval->intval;
@@ -3355,8 +3451,23 @@ static int fg_psy_set_property(struct power_supply *psy,
 			return -EINVAL;
 		}
 		break;
+#endif
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE:
 		rc = fg_set_constant_chg_voltage(chip, pval->intval);
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_FULL:
+		if (chip->cl.active) {
+			pr_warn("Capacity learning active!\n");
+			return 0;
+		}
+		if (pval->intval <= 0 || pval->intval > chip->cl.nom_cap_uah) {
+			pr_err("charge_full is out of bounds\n");
+			return -EINVAL;
+		}
+		chip->cl.learned_cc_uah = pval->intval;
+		rc = fg_save_learned_cap_to_sram(chip);
+		if (rc < 0)
+			pr_err("Error in saving learned_cc_uah, rc=%d\n", rc);
 		break;
 	default:
 		break;
@@ -3369,8 +3480,11 @@ static int fg_property_is_writeable(struct power_supply *psy,
 						enum power_supply_property psp)
 {
 	switch (psp) {
+#ifdef CONFIG_QPNP_FG_GEN3_LEGACY_CYCLE_COUNT
 	case POWER_SUPPLY_PROP_CYCLE_COUNT_ID:
+#endif
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE:
+	case POWER_SUPPLY_PROP_CHARGE_FULL:
 		return 1;
 	default:
 		break;
@@ -3422,7 +3536,9 @@ static enum power_supply_property fg_psy_props[] = {
 	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
 	POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN,
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
+#ifdef CONFIG_QPNP_FG_GEN3_LEGACY_CYCLE_COUNT
 	POWER_SUPPLY_PROP_CYCLE_COUNT_ID,
+#endif
 	POWER_SUPPLY_PROP_CHARGE_NOW_RAW,
 	POWER_SUPPLY_PROP_CHARGE_NOW,
 	POWER_SUPPLY_PROP_CHARGE_FULL,
@@ -4778,6 +4894,12 @@ static int fg_gen3_probe(struct platform_device *pdev)
 		dev_err(chip->dev, "Error in reading DT parameters, rc:%d\n",
 			rc);
 		goto exit;
+	}
+
+	rc = device_create_file(chip->dev, &dev_attr_cycle_counts_bins);
+	if (rc != 0) {
+		dev_err(chip->dev,
+			"Failed to create cycle_counts_bins files: %d\n", rc);
 	}
 
 	mutex_init(&chip->bus_lock);

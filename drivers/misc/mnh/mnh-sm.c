@@ -2456,6 +2456,7 @@ static struct platform_driver mnh_sm = {
 	.driver = {
 		.name = DEVICE_NAME,
 		.of_match_table = mnh_sm_ids,
+		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 	},
 };
 

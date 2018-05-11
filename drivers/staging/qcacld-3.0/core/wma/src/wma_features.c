@@ -4872,17 +4872,11 @@ int wma_wow_wakeup_host_event(void *handle, uint8_t *event,
 		 * WMI_ROAM_REASON_HO_FAILED event and it will be handled by
 		 * wma_roam_event_callback().
 		 */
-		WMA_LOGD("Host woken up because of roam event");
-		if (wake_info->vdev_id >= wma->max_bssid) {
-			WMA_LOGE("%s: received invalid vdev_id %d",
-				 __func__, wake_info->vdev_id);
-			return -EINVAL;
-		}
-
 		wma_peer_debug_log(wake_info->vdev_id,
 				DEBUG_WOW_ROAM_EVENT, DEBUG_INVALID_PEER_ID,
 				NULL, NULL, wake_info->wake_reason,
 				wow_buf_pkt_len);
+		WMA_LOGD("Host woken up because of roam event");
 		if (param_buf->wow_packet_buffer) {
 			/* Roam event is embedded in wow_packet_buffer */
 			WMA_LOGD("wow_packet_buffer dump");
@@ -7394,28 +7388,18 @@ QDF_STATUS wma_enable_arp_ns_offload(tp_wma_handle wma,
 }
 
 QDF_STATUS wma_conf_hw_filter_mode(tp_wma_handle wma,
-				   struct hw_filter_request *req)
+				   struct wmi_hw_filter_req_params *req)
 {
 	QDF_STATUS status;
-	uint8_t vdev_id;
 
-	/* Get the vdev id */
-	if (!wma_find_vdev_by_bssid(wma, req->bssid.bytes, &vdev_id)) {
-		WMA_LOGE("vdev handle is invalid for %pM",
-			 req->bssid.bytes);
-		qdf_mem_free(req);
-		return QDF_STATUS_E_INVAL;
-	}
-
-	if (!wma->interfaces[vdev_id].vdev_up) {
+	if (!wma->interfaces[req->vdev_id].vdev_up) {
 		WMA_LOGE("vdev %d is not up skipping enable Broadcast Filter",
-			 vdev_id);
+			 req->vdev_id);
 		qdf_mem_free(req);
 		return QDF_STATUS_E_FAILURE;
 	}
 
-	status = wmi_unified_conf_hw_filter_mode_cmd(wma->wmi_handle, vdev_id,
-						     req->mode_bitmap);
+	status = wmi_unified_conf_hw_filter_mode_cmd(wma->wmi_handle, req);
 	if (QDF_IS_STATUS_ERROR(status))
 		WMA_LOGE("Failed to enable/disable Broadcast Filter");
 
@@ -9789,21 +9773,13 @@ QDF_STATUS wma_process_set_ie_info(tp_wma_handle wma,
 	return ret;
 }
 
-/**
- *  wma_get_bpf_caps_event_handler() - Event handler for get bpf capability
- *  @handle: WMA global handle
- *  @cmd_param_info: command event data
- *  @len: Length of @cmd_param_info
- *
- *  Return: 0 on Success or Errno on failure
- */
-int wma_get_bpf_caps_event_handler(void *handle,
+int wma_get_apf_caps_event_handler(void *handle,
 			u_int8_t *cmd_param_info,
 			u_int32_t len)
 {
 	WMI_BPF_CAPABILIY_INFO_EVENTID_param_tlvs  *param_buf;
 	wmi_bpf_capability_info_evt_fixed_param *event;
-	struct sir_bpf_get_offload *bpf_get_offload;
+	struct sir_apf_get_offload *apf_get_offload;
 	tpAniSirGlobal pmac = (tpAniSirGlobal)cds_get_context(
 				QDF_MODULE_ID_PE);
 
@@ -9811,41 +9787,35 @@ int wma_get_bpf_caps_event_handler(void *handle,
 		WMA_LOGE("%s: Invalid pmac", __func__);
 		return -EINVAL;
 	}
-	if (!pmac->sme.pbpf_get_offload_cb) {
+	if (!pmac->sme.papf_get_offload_cb) {
 		WMA_LOGE("%s: Callback not registered", __func__);
 		return -EINVAL;
 	}
 
 	param_buf = (WMI_BPF_CAPABILIY_INFO_EVENTID_param_tlvs *)cmd_param_info;
 	event = param_buf->fixed_param;
-	bpf_get_offload = qdf_mem_malloc(sizeof(*bpf_get_offload));
+	apf_get_offload = qdf_mem_malloc(sizeof(*apf_get_offload));
 
-	if (!bpf_get_offload) {
+	if (!apf_get_offload) {
 		WMA_LOGP("%s: Memory allocation failed.", __func__);
 		return -ENOMEM;
 	}
 
-	bpf_get_offload->bpf_version = event->bpf_version;
-	bpf_get_offload->max_bpf_filters = event->max_bpf_filters;
-	bpf_get_offload->max_bytes_for_bpf_inst =
+	apf_get_offload->apf_version = event->bpf_version;
+	apf_get_offload->max_apf_filters = event->max_bpf_filters;
+	apf_get_offload->max_bytes_for_apf_inst =
 			event->max_bytes_for_bpf_inst;
-	WMA_LOGD("%s: BPF capabilities version: %d max bpf filter size: %d",
-			__func__, bpf_get_offload->bpf_version,
-	bpf_get_offload->max_bytes_for_bpf_inst);
+	WMA_LOGD("%s: APF capabilities version: %d max apf filter size: %d",
+			__func__, apf_get_offload->apf_version,
+	apf_get_offload->max_bytes_for_apf_inst);
 
-	WMA_LOGD("%s: sending bpf capabilities event to hdd", __func__);
-	pmac->sme.pbpf_get_offload_cb(pmac->hHdd, bpf_get_offload);
-	qdf_mem_free(bpf_get_offload);
+	WMA_LOGD("%s: sending apf capabilities event to hdd", __func__);
+	pmac->sme.papf_get_offload_cb(pmac->hHdd, apf_get_offload);
+	qdf_mem_free(apf_get_offload);
 	return 0;
 }
 
-/**
- * wma_get_bpf_capabilities - Send get bpf capability to firmware
- * @wma_handle: wma handle
- *
- * Return: QDF_STATUS enumeration.
- */
-QDF_STATUS wma_get_bpf_capabilities(tp_wma_handle wma)
+QDF_STATUS wma_get_apf_capabilities(tp_wma_handle wma)
 {
 	QDF_STATUS status = QDF_STATUS_SUCCESS;
 	wmi_bpf_get_capability_cmd_fixed_param *cmd;
@@ -9854,13 +9824,13 @@ QDF_STATUS wma_get_bpf_capabilities(tp_wma_handle wma)
 	u_int8_t *buf_ptr;
 
 	if (!wma || !wma->wmi_handle) {
-		WMA_LOGE(FL("WMA is closed, can not issue get BPF capab"));
+		WMA_LOGE(FL("WMA is closed, can not issue get APF capab"));
 		return QDF_STATUS_E_INVAL;
 	}
 
 	if (!WMI_SERVICE_IS_ENABLED(wma->wmi_service_bitmap,
 		WMI_SERVICE_BPF_OFFLOAD)) {
-		WMA_LOGE(FL("BPF cababilities feature bit not enabled"));
+		WMA_LOGE(FL("APF cababilities feature bit not enabled"));
 		return QDF_STATUS_E_FAILURE;
 	}
 
@@ -9880,22 +9850,15 @@ QDF_STATUS wma_get_bpf_capabilities(tp_wma_handle wma)
 
 	if (wmi_unified_cmd_send(wma->wmi_handle, wmi_buf, len,
 		WMI_BPF_GET_CAPABILITY_CMDID)) {
-		WMA_LOGE(FL("Failed to send BPF capability command"));
+		WMA_LOGE(FL("Failed to send APF capability command"));
 		wmi_buf_free(wmi_buf);
 		return QDF_STATUS_E_FAILURE;
 	}
 	return status;
 }
 
-/**
- *  wma_set_bpf_instructions - Set bpf instructions to firmware
- *  @wma: wma handle
- *  @bpf_set_offload: Bpf offload information to set to firmware
- *
- *  Return: QDF_STATUS enumeration
- */
-QDF_STATUS wma_set_bpf_instructions(tp_wma_handle wma,
-				struct sir_bpf_set_offload *bpf_set_offload)
+QDF_STATUS wma_set_apf_instructions(tp_wma_handle wma,
+				struct sir_apf_set_offload *apf_set_offload)
 {
 	wmi_bpf_set_vdev_instructions_cmd_fixed_param *cmd;
 	wmi_buf_t wmi_buf;
@@ -9903,36 +9866,36 @@ QDF_STATUS wma_set_bpf_instructions(tp_wma_handle wma,
 	u_int8_t *buf_ptr;
 
 	if (!wma || !wma->wmi_handle) {
-		WMA_LOGE("%s: WMA is closed, can not issue set BPF capability",
+		WMA_LOGE("%s: WMA is closed, can not issue set APF capability",
 			__func__);
 		return QDF_STATUS_E_INVAL;
 	}
 
 	if (!WMI_SERVICE_IS_ENABLED(wma->wmi_service_bitmap,
 		WMI_SERVICE_BPF_OFFLOAD)) {
-		WMA_LOGE(FL("BPF offload feature Disabled"));
+		WMA_LOGE(FL("APF offload feature Disabled"));
 		return QDF_STATUS_E_NOSUPPORT;
 	}
 
-	if (!bpf_set_offload) {
-		WMA_LOGE("%s: Invalid BPF instruction request", __func__);
+	if (!apf_set_offload) {
+		WMA_LOGE("%s: Invalid APF instruction request", __func__);
 		return QDF_STATUS_E_INVAL;
 	}
 
-	if (bpf_set_offload->session_id >= wma->max_bssid) {
+	if (apf_set_offload->session_id >= wma->max_bssid) {
 		WMA_LOGE(FL("Invalid vdev_id: %d"),
-			bpf_set_offload->session_id);
+			apf_set_offload->session_id);
 		return QDF_STATUS_E_INVAL;
 	}
 
-	if (!wma->interfaces[bpf_set_offload->session_id].vdev_up) {
-		WMA_LOGE("vdev %d is not up skipping BPF offload",
-			bpf_set_offload->session_id);
+	if (!wma->interfaces[apf_set_offload->session_id].vdev_up) {
+		WMA_LOGE("vdev %d is not up skipping APF offload",
+			apf_set_offload->session_id);
 		return QDF_STATUS_E_INVAL;
 	}
 
-	if (bpf_set_offload->total_length) {
-		len_aligned = roundup(bpf_set_offload->current_length,
+	if (apf_set_offload->total_length) {
+		len_aligned = roundup(apf_set_offload->current_length,
 					sizeof(A_UINT32));
 		len = len_aligned + WMI_TLV_HDR_SIZE;
 	}
@@ -9951,30 +9914,163 @@ QDF_STATUS wma_set_bpf_instructions(tp_wma_handle wma,
 		WMITLV_TAG_STRUC_wmi_bpf_set_vdev_instructions_cmd_fixed_param,
 		WMITLV_GET_STRUCT_TLVLEN(
 			wmi_bpf_set_vdev_instructions_cmd_fixed_param));
-	cmd->vdev_id = bpf_set_offload->session_id;
-	cmd->filter_id = bpf_set_offload->filter_id;
-	cmd->total_length = bpf_set_offload->total_length;
-	cmd->current_offset = bpf_set_offload->current_offset;
-	cmd->current_length = bpf_set_offload->current_length;
+	cmd->vdev_id = apf_set_offload->session_id;
+	cmd->filter_id = apf_set_offload->filter_id;
+	cmd->total_length = apf_set_offload->total_length;
+	cmd->current_offset = apf_set_offload->current_offset;
+	cmd->current_length = apf_set_offload->current_length;
 
-	if (bpf_set_offload->total_length) {
+	if (apf_set_offload->total_length) {
 		buf_ptr +=
 			sizeof(wmi_bpf_set_vdev_instructions_cmd_fixed_param);
 		WMITLV_SET_HDR(buf_ptr, WMITLV_TAG_ARRAY_BYTE, len_aligned);
 		buf_ptr += WMI_TLV_HDR_SIZE;
-		qdf_mem_copy(buf_ptr, bpf_set_offload->program,
-					bpf_set_offload->current_length);
+		qdf_mem_copy(buf_ptr, apf_set_offload->program,
+					apf_set_offload->current_length);
 	}
 
 	if (wmi_unified_cmd_send(wma->wmi_handle, wmi_buf, len,
 		WMI_BPF_SET_VDEV_INSTRUCTIONS_CMDID)) {
-		WMA_LOGE(FL("Failed to send config bpf instructions command"));
+		WMA_LOGE(FL("Failed to send config apf instructions command"));
 		wmi_buf_free(wmi_buf);
 		return QDF_STATUS_E_FAILURE;
 	}
-	WMA_LOGD(FL("BPF offload enabled in fw"));
+	WMA_LOGD(FL("APF offload enabled in fw"));
 
 	return QDF_STATUS_SUCCESS;
+}
+
+QDF_STATUS wma_send_apf_enable_cmd(WMA_HANDLE handle, uint8_t vdev_id,
+				   bool apf_enable)
+{
+	QDF_STATUS status = QDF_STATUS_SUCCESS;
+	tp_wma_handle wma = (tp_wma_handle) handle;
+
+	if (!wma || !wma->wmi_handle) {
+		WMA_LOGE(FL("WMA is closed, can not issue get APF capab"));
+		return QDF_STATUS_E_INVAL;
+	}
+
+	if (!WMI_SERVICE_IS_ENABLED(wma->wmi_service_bitmap,
+		WMI_SERVICE_BPF_OFFLOAD)) {
+		WMA_LOGE(FL("APF cababilities feature bit not enabled"));
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	status = wmi_unified_send_apf_enable_cmd(wma->wmi_handle, vdev_id,
+						 apf_enable);
+	if (QDF_IS_STATUS_ERROR(status)) {
+		WMA_LOGE("Failed to send apf enable/disable cmd");
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	if (apf_enable)
+		WMA_LOGD("Sent APF Enable on vdevid: %d", vdev_id);
+	else
+		WMA_LOGD("Sent APF Disable on vdevid: %d", vdev_id);
+
+	return status;
+}
+
+QDF_STATUS
+wma_send_apf_write_work_memory_cmd(WMA_HANDLE handle,
+			struct wmi_apf_write_memory_params *write_params)
+{
+	QDF_STATUS status = QDF_STATUS_SUCCESS;
+	tp_wma_handle wma = (tp_wma_handle) handle;
+
+	if (!wma || !wma->wmi_handle) {
+		WMA_LOGE(FL("WMA is closed, can not issue write APF mem"));
+		return QDF_STATUS_E_INVAL;
+	}
+
+	if (!WMI_SERVICE_IS_ENABLED(wma->wmi_service_bitmap,
+		WMI_SERVICE_BPF_OFFLOAD)) {
+		WMA_LOGE(FL("APF cababilities feature bit not enabled"));
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	if (wmi_unified_send_apf_write_work_memory_cmd(wma->wmi_handle,
+						       write_params)) {
+		WMA_LOGE(FL("Failed to send APF write mem command"));
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	WMA_LOGD("Sent APF wite mem on vdevid: %d", write_params->vdev_id);
+	return status;
+}
+
+int wma_apf_read_work_memory_event_handler(void *handle, uint8_t *evt_buf,
+					   uint32_t len)
+{
+	tp_wma_handle wma_handle;
+	wmi_unified_t wmi_handle;
+	struct wmi_apf_read_memory_resp_event_params evt_params = {0};
+	QDF_STATUS status;
+	tpAniSirGlobal pmac = cds_get_context(QDF_MODULE_ID_PE);
+
+	WMA_LOGI(FL("handle:%pK event:%pK len:%u"), handle, evt_buf, len);
+
+	wma_handle = handle;
+	if (!wma_handle) {
+		WMA_LOGE(FL("NULL wma_handle"));
+		return -EINVAL;
+	}
+
+	wmi_handle = wma_handle->wmi_handle;
+	if (!wmi_handle) {
+		WMA_LOGE(FL("NULL wmi_handle"));
+		return -EINVAL;
+	}
+
+	if (!pmac) {
+		WMA_LOGE(FL("Invalid pmac"));
+		return -EINVAL;
+	}
+
+	if (!pmac->sme.apf_read_mem_cb) {
+		WMA_LOGE(FL("Callback not registered"));
+		return -EINVAL;
+	}
+
+	status = wmi_extract_apf_read_memory_resp_event(wmi_handle,
+						evt_buf, &evt_params);
+	if (QDF_IS_STATUS_ERROR(status)) {
+		WMA_LOGE(FL("Event extract failure: %d"), status);
+		return -EINVAL;
+	}
+
+	pmac->sme.apf_read_mem_cb(pmac->hHdd, &evt_params);
+
+	return 0;
+}
+
+QDF_STATUS wma_send_apf_read_work_memory_cmd(WMA_HANDLE handle,
+					    struct wmi_apf_read_memory_params
+								*read_params)
+{
+	QDF_STATUS status = QDF_STATUS_SUCCESS;
+	tp_wma_handle wma = (tp_wma_handle) handle;
+
+	if (!wma || !wma->wmi_handle) {
+		WMA_LOGE(FL("WMA is closed, can not issue read APF memory"));
+		return QDF_STATUS_E_INVAL;
+	}
+
+	if (!WMI_SERVICE_IS_ENABLED(wma->wmi_service_bitmap,
+		WMI_SERVICE_BPF_OFFLOAD)) {
+		WMA_LOGE(FL("APF cababilities feature bit not enabled"));
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	if (wmi_unified_send_apf_read_work_memory_cmd(wma->wmi_handle,
+						      read_params)) {
+		WMA_LOGE(FL("Failed to send APF read memory command"));
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	WMA_LOGD("Sent APF read memory on vdevid: %d", read_params->vdev_id);
+	return status;
 }
 
 /**

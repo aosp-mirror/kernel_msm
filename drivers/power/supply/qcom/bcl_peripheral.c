@@ -107,11 +107,12 @@
 	} while (0)
 
 #define READ_OPTIONAL_PROP(_node, _key, _val, _ret, _dest) do { \
-		_ret = of_property_read_u32(_node, _key, &_val); \
-		if (_ret && _ret != -EINVAL) { \
+		int __ret = of_property_read_u32(_node, _key, &_val); \
+		if (__ret && __ret != -EINVAL) { \
+			_ret = __ret; \
 			pr_err("Error reading key:%s. err:%d\n", _key, _ret); \
 			goto bcl_dev_exit; \
-		} else if (!_ret) { \
+		} else if (!__ret) { \
 			_dest = _val; \
 		} \
 	} while (0)

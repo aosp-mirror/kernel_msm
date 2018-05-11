@@ -185,8 +185,9 @@ QDF_STATUS (*send_vdev_delete_cmd)(wmi_unified_t wmi_handle,
 QDF_STATUS (*send_vdev_stop_cmd)(wmi_unified_t wmi,
 					uint8_t vdev_id);
 
-QDF_STATUS (*send_conf_hw_filter_mode_cmd)(wmi_unified_t wmi, uint8_t vdev_id,
-					   uint8_t mode_bitmap);
+QDF_STATUS
+(*send_conf_hw_filter_mode_cmd)(wmi_unified_t wmi,
+				struct wmi_hw_filter_req_params *req);
 
 QDF_STATUS (*send_vdev_down_cmd)(wmi_unified_t wmi,
 			uint8_t vdev_id);
@@ -759,10 +760,23 @@ QDF_STATUS (*send_get_buf_extscan_hotlist_cmd)(wmi_unified_t wmi_handle,
 				   struct ext_scan_setbssi_hotlist_params *
 				   photlist, int *buf_len);
 
-QDF_STATUS (*send_set_active_bpf_mode_cmd)(wmi_unified_t wmi_handle,
+QDF_STATUS (*send_set_active_apf_mode_cmd)(wmi_unified_t wmi_handle,
 					   uint8_t vdev_id,
 					   FW_ACTIVE_BPF_MODE ucast_mode,
 					   FW_ACTIVE_BPF_MODE mcast_bcast_mode);
+
+QDF_STATUS (*send_apf_enable_cmd)(wmi_unified_t wmi_handle, uint32_t vdev_id,
+				  bool enable);
+
+QDF_STATUS (*send_apf_write_work_memory_cmd)(wmi_unified_t wmi_handle,
+			struct wmi_apf_write_memory_params *apf_write_params);
+
+QDF_STATUS (*send_apf_read_work_memory_cmd)(wmi_unified_t wmi_handle,
+			struct wmi_apf_read_memory_params *apf_read_params);
+
+QDF_STATUS (*extract_apf_read_memory_resp_event)(wmi_unified_t wmi_handle,
+			void *evt_buf,
+			struct wmi_apf_read_memory_resp_event_params *resp);
 
 QDF_STATUS (*send_pdev_get_tpc_config_cmd)(wmi_unified_t wmi_handle,
 		uint32_t param);
@@ -1218,6 +1232,9 @@ QDF_STATUS (*send_limit_off_chan_cmd)(wmi_unified_t wmi_handle,
 
 QDF_STATUS (*send_wow_timer_pattern_cmd)(wmi_unified_t wmi_handle,
 			uint8_t vdev_id, uint32_t cookie, uint32_t time);
+
+QDF_STATUS (*send_roam_scan_stats_cmd)(wmi_unified_t wmi_handle,
+				       struct wmi_roam_scan_stats_req *params);
 
 QDF_STATUS (*send_offload_11k_cmd)(wmi_unified_t wmi_handle,
 		struct wmi_11k_offload_params *params);

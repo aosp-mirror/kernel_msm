@@ -169,6 +169,8 @@ sapSafeChannelType safe_channels[NUM_CHANNELS] = {
 	{157, true},
 	{161, true},
 	{165, true},
+	{169, true},
+	{173, true},
 };
 #endif
 
@@ -1080,6 +1082,24 @@ uint32_t sap_weight_channel_status(ptSapContext sap_ctx,
 }
 
 /**
+ * sap_check_channels_same_band() - Check if two channels belong to same band
+ * @ch_num1: channel number
+ * @ch_num2: channel number
+ *
+ * Return: true if both channels belong to same band else false
+ */
+static bool sap_check_channels_same_band(uint16_t ch_num1, uint16_t ch_num2)
+{
+	if ((ch_num1 <= SIR_11B_CHANNEL_END &&
+	     ch_num2 <= SIR_11B_CHANNEL_END) ||
+	    (ch_num1 >= SIR_11A_CHANNEL_BEGIN &&
+	     ch_num2 >= SIR_11A_CHANNEL_BEGIN))
+	    return true;
+
+	return false;
+}
+
+/**
  * sap_update_rssi_bsscount() - updates bss count and rssi effect.
  *
  * @pSpectCh:     Channel Information
@@ -1105,6 +1125,9 @@ static void sap_update_rssi_bsscount(tSapSpectChInfo *pSpectCh, int32_t offset,
 	if (pExtSpectCh != NULL &&
 	    pExtSpectCh >= spectch_start &&
 	    pExtSpectCh < spectch_end) {
+		if (!sap_check_channels_same_band(pSpectCh->chNum,
+		    pExtSpectCh->chNum))
+			return;
 		++pExtSpectCh->bssCount;
 		switch (offset) {
 		case -1:
@@ -1656,16 +1679,21 @@ static void sap_compute_spect_weight(tSapChSelSpectInfo *pSpectInfoParams,
 					break;
 
 				case eCSR_DOT11_MODE_abg:
-					sap_interference_rssi_count_5G(
-					    pSpectCh, channelWidth,
-					    secondaryChannelOffset,
-					    centerFreq,
-					    centerFreq_2,
-					    channel_id,
-					    spectch_start,
-					    spectch_end);
-					sap_interference_rssi_count(pSpectCh,
-						spectch_start, spectch_end);
+					if (pSpectCh->chNum >=
+					    SIR_11A_CHANNEL_BEGIN)
+						sap_interference_rssi_count_5G(
+						    pSpectCh, channelWidth,
+						    secondaryChannelOffset,
+						    centerFreq,
+						    centerFreq_2,
+						    channel_id,
+						    spectch_start,
+						    spectch_end);
+					else
+						sap_interference_rssi_count(
+						    pSpectCh,
+						    spectch_start,
+						    spectch_end);
 					break;
 				}
 
@@ -1793,6 +1821,11 @@ static void sap_sort_chl_weight(tSapChSelSpectInfo *pSpectInfoParams)
 			if (pSpectCh[j].weight <
 			    pSpectCh[minWeightIndex].weight) {
 				minWeightIndex = j;
+			} else if (pSpectCh[j].weight ==
+				   pSpectCh[minWeightIndex].weight) {
+				if (pSpectCh[j].bssCount <
+				    pSpectCh[minWeightIndex].bssCount)
+					minWeightIndex = j;
 			}
 		}
 		if (minWeightIndex != i) {
@@ -2127,6 +2160,56 @@ static void sap_sort_chl_weight_vht160(tSapChSelSpectInfo *pSpectInfoParams)
 }
 
 /**
+ * sap_allocate_max_weight_ht40_24_g() - allocate max weight for 40Mhz
+ *                                       to all 2.4Ghz channels
+ * @spect_info_params: Pointer to the tSapChSelSpectInfo structure
+ *
+ * Return: none
+ */
+static void sap_allocate_max_weight_ht40_24_g(
+			tSapChSelSpectInfo *spect_info_params)
+{
+	tSapSpectChInfo *spect_info;
+	uint8_t j;
+
+	/*
+	 * Assign max weight for 40Mhz (SAP_ACS_WEIGHT_MAX * 2) to all
+	 * 2.4 Ghz channels
+	 */
+	spect_info = spect_info_params->pSpectCh;
+	for (j = 0; j < spect_info_params->numSpectChans; j++) {
+		if ((spect_info[j].chNum >= CDS_CHANNEL_NUM(CHAN_ENUM_1) &&
+		     spect_info[j].chNum <= CDS_CHANNEL_NUM(CHAN_ENUM_14)))
+			spect_info[j].weight = SAP_ACS_WEIGHT_MAX * 2;
+	}
+}
+
+/**
+ * sap_allocate_max_weight_ht40_5_g() - allocate max weight for 40Mhz
+ *                                      to all 5Ghz channels
+ * @spect_info_params: Pointer to the tSapChSelSpectInfo structure
+ *
+ * Return: none
+ */
+static void sap_allocate_max_weight_ht40_5_g(
+			tSapChSelSpectInfo *spect_info_params)
+{
+	tSapSpectChInfo *spect_info;
+	uint8_t j;
+
+	/*
+	 * Assign max weight for 40Mhz (SAP_ACS_WEIGHT_MAX * 2) to all
+	 * 5 Ghz channels
+	 */
+	spect_info = spect_info_params->pSpectCh;
+	for (j = 0; j < spect_info_params->numSpectChans; j++) {
+		if ((spect_info[j].chNum >= CDS_CHANNEL_NUM(CHAN_ENUM_36) &&
+		     spect_info[j].chNum <= CDS_CHANNEL_NUM(CHAN_ENUM_165)))
+			spect_info[j].weight = SAP_ACS_WEIGHT_MAX * 2;
+	}
+}
+
+/**
  * sap_sort_chl_weight_ht40_24_g() - to sort channel with the least weight
  * @pSpectInfoParams: Pointer to the tSapChSelSpectInfo structure
  *
@@ -2250,6 +2333,16 @@ static void sap_sort_chl_weight_ht40_24_g(tSapChSelSpectInfo *pSpectInfoParams)
 				pSpectInfo[j].weight = SAP_ACS_WEIGHT_MAX * 2;
 		}
 	}
+
+	pSpectInfo = pSpectInfoParams->pSpectCh;
+	for (j = 0; j < (pSpectInfoParams->numSpectChans); j++) {
+		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_HIGH,
+			  "In %s, Channel=%d Weight= %d rssi=%d bssCount=%d",
+			  __func__, pSpectInfo->chNum, pSpectInfo->weight,
+			  pSpectInfo->rssiAgr, pSpectInfo->bssCount);
+		pSpectInfo++;
+	}
+
 	sap_sort_chl_weight(pSpectInfoParams);
 }
 
@@ -2385,12 +2478,16 @@ static void sap_sort_chl_weight_all(ptSapContext pSapCtx,
 
 	switch (pSapCtx->acs_cfg->ch_width) {
 	case CH_WIDTH_40MHZ:
-		if (eCSR_DOT11_MODE_11g == operatingBand)
+		/*
+		 * Assign max weight to all 5Ghz channels when operating band
+		 * is 11g and to all 2.4Ghz channels when operating band is 11a
+		 * or 11abg to avoid selection in ACS algorithm for starting SAP
+		 */
+		if (eCSR_DOT11_MODE_11g == operatingBand) {
 			sap_sort_chl_weight_ht40_24_g(pSpectInfoParams);
-		else if (eCSR_DOT11_MODE_11a == operatingBand)
-			sap_sort_chl_weight_ht40_5_g(pSpectInfoParams);
-		else {
-			sap_sort_chl_weight_ht40_24_g(pSpectInfoParams);
+			sap_allocate_max_weight_ht40_5_g(pSpectInfoParams);
+		} else {
+			sap_allocate_max_weight_ht40_24_g(pSpectInfoParams);
 			sap_sort_chl_weight_ht40_5_g(pSpectInfoParams);
 		}
 		break;

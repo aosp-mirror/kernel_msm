@@ -45,6 +45,10 @@
 #define HDD_ETHERTYPE_802_1_X_FRAME_OFFSET 12
 #ifdef FEATURE_WLAN_WAPI
 #define HDD_ETHERTYPE_WAI                  0x88b4
+#define IS_HDD_ETHERTYPE_WAI(_skb) (ntohs(_skb->protocol) == \
+					HDD_ETHERTYPE_WAI)
+#else
+#define IS_HDD_ETHERTYPE_WAI(_skb) (false)
 #endif
 
 #define HDD_PSB_CFG_INVALID                   0xFF
@@ -54,12 +58,20 @@
 #define SME_QOS_UAPSD_CFG_VI_CHANGED_MASK     0xF4
 #define SME_QOS_UAPSD_CFG_VO_CHANGED_MASK     0xF8
 
-int hdd_hard_start_xmit(struct sk_buff *skb, struct net_device *dev);
+netdev_tx_t hdd_hard_start_xmit(struct sk_buff *skb, struct net_device *dev);
 void hdd_tx_timeout(struct net_device *dev);
 
 QDF_STATUS hdd_init_tx_rx(hdd_adapter_t *pAdapter);
 QDF_STATUS hdd_deinit_tx_rx(hdd_adapter_t *pAdapter);
 QDF_STATUS hdd_rx_packet_cbk(void *context, qdf_nbuf_t rxBuf);
+
+/**
+ * hdd_reset_all_adapters_connectivity_stats() - reset connectivity stats
+ * @hdd_ctx: pointer to HDD Station Context
+ *
+ * Return: None
+ */
+void hdd_reset_all_adapters_connectivity_stats(hdd_context_t *hdd_ctx);
 
 /**
  * hdd_tx_rx_collect_connectivity_stats_info() - collect connectivity stats

@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -618,8 +618,9 @@ static void ipa_save_uc_smmu_mapping_pa(int res_idx, phys_addr_t pa,
 		unsigned long iova, size_t len)
 {
 	IPADBG("--res_idx=%d pa=0x%pa iova=0x%lx sz=0x%zx\n", res_idx,
-			&pa, iova, len);
-	wdi_res[res_idx].res = kzalloc(sizeof(struct ipa_wdi_res), GFP_KERNEL);
+		&pa, iova, len);
+	wdi_res[res_idx].res = kzalloc(sizeof(*wdi_res[res_idx].res),
+		GFP_KERNEL);
 	if (!wdi_res[res_idx].res)
 		BUG();
 	wdi_res[res_idx].nents = 1;
@@ -645,7 +646,8 @@ static void ipa_save_uc_smmu_mapping_sgt(int res_idx, struct sg_table *sgt,
 		return;
 	}
 
-	wdi_res[res_idx].res = kcalloc(sgt->nents, sizeof(struct ipa_wdi_res),
+	wdi_res[res_idx].res = kcalloc(sgt->nents,
+		sizeof(*wdi_res[res_idx].res),
 			GFP_KERNEL);
 	if (!wdi_res[res_idx].res)
 		BUG();
@@ -1662,7 +1664,7 @@ int ipa3_write_qmapid_wdi_pipe(u32 clnt_hdl, u8 qmap_id)
 
 	if (clnt_hdl >= ipa3_ctx->ipa_num_pipes ||
 	    ipa3_ctx->ep[clnt_hdl].valid == 0) {
-		IPAERR("bad parm, %d\n", clnt_hdl);
+		IPAERR_RL("bad parm, %d\n", clnt_hdl);
 		return -EINVAL;
 	}
 
@@ -1675,7 +1677,7 @@ int ipa3_write_qmapid_wdi_pipe(u32 clnt_hdl, u8 qmap_id)
 	ep = &ipa3_ctx->ep[clnt_hdl];
 
 	if (!(ep->uc_offload_state & IPA_WDI_CONNECTED)) {
-		IPAERR("WDI channel bad state %d\n", ep->uc_offload_state);
+		IPAERR_RL("WDI channel bad state %d\n", ep->uc_offload_state);
 		return -EFAULT;
 	}
 	IPA_ACTIVE_CLIENTS_INC_EP(ipa3_get_client_mapping(clnt_hdl));

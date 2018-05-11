@@ -1025,17 +1025,6 @@ QDF_STATUS wlansap_set_invalid_session(void *cds_ctx);
 QDF_STATUS sap_roam_session_close_callback(void *pContext);
 
 /**
- * wlansap_set_etsi_srd_chan_support() - set SRD channel support.
- * @hal: HAL pointer
- * @srd_chan_support: SRD channel support
- *
- * This function set sap SRD channel support
- *
- * Return: None
- */
-void wlansap_set_etsi_srd_chan_support(tHalHandle hal, bool srd_chan_support);
-
-/**
  * wlansap_cleanup_cac_timer() - Force cleanup DFS CAC timer
  * @sap_ctx: sap context
  *
@@ -1045,6 +1034,20 @@ void wlansap_set_etsi_srd_chan_support(tHalHandle hal, bool srd_chan_support);
  * Return: None
  */
 void wlansap_cleanup_cac_timer(void *sap_ctx);
+
+/**
+ * wlansap_set_stop_bss_inprogress - sets the stop_bss_in_progress flag
+ *
+ * @ctx: Pointer to the global cds context from which the handle to the SAP
+ *     ctx can be extracted.
+ * @in_progress: the value to be set to the stop_bss_in_progress_flag
+ *
+ * This function sets the value in in_progress parameter to the
+ * stop_bss_in_progress flag in sap_context.
+ *
+ * Return: None
+ */
+void wlansap_set_stop_bss_inprogress(void *ctx, bool in_progress);
 
 #ifdef __cplusplus
 }

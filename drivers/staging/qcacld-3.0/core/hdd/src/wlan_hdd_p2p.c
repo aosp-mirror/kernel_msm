@@ -1183,17 +1183,19 @@ static int wlan_hdd_execute_remain_on_channel(hdd_adapter_t *pAdapter,
 			return -EINVAL;
 		}
 
-		if (REMAIN_ON_CHANNEL_REQUEST ==
-		    pRemainChanCtx->rem_on_chan_request) {
+		mutex_lock(&cfgState->remain_on_chan_ctx_lock);
+		pRemainChanCtx = cfgState->remain_on_chan_ctx;
+		if ((pRemainChanCtx) && (REMAIN_ON_CHANNEL_REQUEST ==
+		    pRemainChanCtx->rem_on_chan_request)) {
+			mutex_unlock(&cfgState->remain_on_chan_ctx_lock);
 			if (QDF_STATUS_SUCCESS != sme_register_mgmt_frame(
-						WLAN_HDD_GET_HAL_CTX(pAdapter),
-						sessionId,
-						(SIR_MAC_MGMT_FRAME << 2) |
-						(SIR_MAC_MGMT_PROBE_REQ << 4),
-						NULL, 0))
+			    WLAN_HDD_GET_HAL_CTX(pAdapter), sessionId,
+			    (SIR_MAC_MGMT_FRAME << 2) |
+			    (SIR_MAC_MGMT_PROBE_REQ << 4), NULL, 0))
 				hdd_err("sme_register_mgmt_frame failed");
+		} else {
+			mutex_unlock(&cfgState->remain_on_chan_ctx_lock);
 		}
-
 	} else if ((QDF_SAP_MODE == pAdapter->device_mode) ||
 		   (QDF_P2P_GO_MODE == pAdapter->device_mode)) {
 		/* call sme API to start remain on channel. */
@@ -1486,6 +1488,10 @@ static int wlan_hdd_request_remain_on_channel(struct wiphy *wiphy,
 	}
 	if (cds_is_connection_in_progress(NULL, NULL)) {
 		hdd_debug("Connection is in progress");
+		if (request_type == OFF_CHANNEL_ACTION_TX) {
+			hdd_debug("Reject Offchannel action frame tx as conection in progress");
+			return -EAGAIN;
+		}
 		isBusy = true;
 	}
 	pRemainChanCtx = qdf_mem_malloc(sizeof(hdd_remain_on_chan_ctx_t));

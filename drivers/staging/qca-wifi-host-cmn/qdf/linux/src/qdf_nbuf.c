@@ -1022,9 +1022,6 @@ __qdf_nbuf_data_get_icmp_subtype(uint8_t *data)
 	subtype = (uint8_t)(*(uint8_t *)
 			(data + ICMP_SUBTYPE_OFFSET));
 
-	QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_DEBUG,
-		"ICMP proto type: 0x%02x", subtype);
-
 	switch (subtype) {
 	case ICMP_REQUEST:
 		proto_subtype = QDF_PROTO_ICMP_REQ;
@@ -1056,9 +1053,6 @@ __qdf_nbuf_data_get_icmpv6_subtype(uint8_t *data)
 
 	subtype = (uint8_t)(*(uint8_t *)
 			(data + ICMPV6_SUBTYPE_OFFSET));
-
-	QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_DEBUG,
-		"ICMPv6 proto type: 0x%02x", subtype);
 
 	switch (subtype) {
 	case ICMPV6_REQUEST:
@@ -2340,9 +2334,20 @@ void qdf_net_buf_debug_release_skb(qdf_nbuf_t net_buf)
 		qdf_nbuf_t next;
 
 		next = qdf_nbuf_queue_next(ext_list);
+
+		if (qdf_nbuf_is_tso(ext_list) &&
+			qdf_nbuf_get_users(ext_list) > 1) {
+			ext_list = next;
+			continue;
+		}
+
 		qdf_net_buf_debug_delete_node(ext_list);
 		ext_list = next;
 	}
+
+	if (qdf_nbuf_is_tso(net_buf) && qdf_nbuf_get_users(net_buf) > 1)
+		return;
+
 	qdf_net_buf_debug_delete_node(net_buf);
 }
 qdf_export_symbol(qdf_net_buf_debug_release_skb);

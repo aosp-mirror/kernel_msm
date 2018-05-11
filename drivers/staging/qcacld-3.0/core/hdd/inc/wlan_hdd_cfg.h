@@ -5329,8 +5329,8 @@ enum hdd_link_speed_rpt_type {
  * <ini>
  * gSetTxChainmask1x1 - sets Transmit chain mask.
  * @Min: 1
- * @Max: 2
- * @Default: 1
+ * @Max: 3
+ * @Default: 0
  *
  * This ini sets Transmit chain mask.
  *
@@ -5340,6 +5340,7 @@ enum hdd_link_speed_rpt_type {
  * chain0 is selected for both Tx and Rx.
  * gSetTxChainmask1x1=1 or gSetRxChainmask1x1=1 to select chain0.
  * gSetTxChainmask1x1=2 or gSetRxChainmask1x1=2 to select chain1.
+ * gSetTxChainmask1x1=3 or gSetRxChainmask1x1=3 to select both chains.
  *
  * Supported Feature: 11AC
  *
@@ -5350,15 +5351,15 @@ enum hdd_link_speed_rpt_type {
 
 #define CFG_VHT_ENABLE_1x1_TX_CHAINMASK         "gSetTxChainmask1x1"
 #define CFG_VHT_ENABLE_1x1_TX_CHAINMASK_MIN     (0)
-#define CFG_VHT_ENABLE_1x1_TX_CHAINMASK_MAX     (2)
+#define CFG_VHT_ENABLE_1x1_TX_CHAINMASK_MAX     (3)
 #define CFG_VHT_ENABLE_1x1_TX_CHAINMASK_DEFAULT (0)
 
 /*
  * <ini>
  * gSetRxChainmask1x1 - Sets Receive chain mask.
  * @Min: 1
- * @Max: 2
- * @Default: 1
+ * @Max: 3
+ * @Default: 0
  *
  * This ini is  used to set Receive chain mask.
  *
@@ -5368,6 +5369,7 @@ enum hdd_link_speed_rpt_type {
  * chain0 is selected for both Tx and Rx.
  * gSetTxChainmask1x1=1 or gSetRxChainmask1x1=1 to select chain0.
  * gSetTxChainmask1x1=2 or gSetRxChainmask1x1=2 to select chain1.
+ * gSetTxChainmask1x1=3 or gSetRxChainmask1x1=3 to select both chains.
  *
  * Supported Feature: 11AC
  *
@@ -5378,7 +5380,7 @@ enum hdd_link_speed_rpt_type {
 
 #define CFG_VHT_ENABLE_1x1_RX_CHAINMASK         "gSetRxChainmask1x1"
 #define CFG_VHT_ENABLE_1x1_RX_CHAINMASK_MIN     (0)
-#define CFG_VHT_ENABLE_1x1_RX_CHAINMASK_MAX     (2)
+#define CFG_VHT_ENABLE_1x1_RX_CHAINMASK_MAX     (3)
 #define CFG_VHT_ENABLE_1x1_RX_CHAINMASK_DEFAULT (0)
 
 /*
@@ -8225,6 +8227,29 @@ enum hdd_link_speed_rpt_type {
 #define CFG_BUS_BANDWIDTH_COMPUTE_INTERVAL_DEFAULT (100)
 #define CFG_BUS_BANDWIDTH_COMPUTE_INTERVAL_MIN     (0)
 #define CFG_BUS_BANDWIDTH_COMPUTE_INTERVAL_MAX     (10000)
+
+/*
+ * <ini>
+ * gEnableTcpLimitOutput - Control to enable TCP limit output byte
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to enable dynamic configuration of TCP limit output bytes
+ * tcp_limit_output_bytes param. Enabling this will let driver post message to
+ * cnss-daemon, accordingly cnss-daemon will modify the tcp_limit_output_bytes.
+ *
+ * Supported Feature: Tcp limit output bytes
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
+#define CFG_ENABLE_TCP_LIMIT_OUTPUT                      "gTcpLimitOutputEnable"
+#define CFG_ENABLE_TCP_LIMIT_OUTPUT_DEFAULT              (1)
+#define CFG_ENABLE_TCP_LIMIT_OUTPUT_MIN                  (0)
+#define CFG_ENABLE_TCP_LIMIT_OUTPUT_MAX                  (1)
+
 /*
  * <ini>
  * gTcpAdvWinScaleEnable - Control to enable  TCP adv window scaling
@@ -8969,13 +8994,13 @@ enum hdd_link_speed_rpt_type {
 #endif
 
 /*
- * 0: Disable BPF packet filter
- * 1: Enable BPF packet filter
+ * 0: Disable APF packet filter
+ * 1: Enable APF packet filter
  */
-#define CFG_BPF_PACKET_FILTER_OFFLOAD           "gBpfFilterEnable"
-#define CFG_BPF_PACKET_FILTER_OFFLOAD_MIN       (0)
-#define CFG_BPF_PACKET_FILTER_OFFLOAD_MAX       (1)
-#define CFG_BPF_PACKET_FILTER_OFFLOAD_DEFAULT   (1)
+#define CFG_APF_PACKET_FILTER_OFFLOAD           "gBpfFilterEnable"
+#define CFG_APF_PACKET_FILTER_OFFLOAD_MIN       (0)
+#define CFG_APF_PACKET_FILTER_OFFLOAD_MAX       (1)
+#define CFG_APF_PACKET_FILTER_OFFLOAD_DEFAULT   (1)
 
 /*
  * <ini>
@@ -11303,53 +11328,53 @@ enum restart_beaconing_on_ch_avoid_rule {
 
 /*
  * <ini>
- * gActiveUcBpfMode - Control UC active BPF mode
+ * gActiveUcBpfMode - Control UC active APF mode
  * @Min: 0 (disabled)
  * @Max: 2 (adaptive)
  * @Default: 0 (disabled)
  *
- * This config item is used to control UC BPF in active mode. There are 3 modes:
- *	0) disabled - BPF is disabled in active mode
- *	1) enabled - BPF is enabled for all packets in active mode
- *	2) adaptive - BPF is enabled for packets up to some throughput threshold
+ * This config item is used to control UC APF in active mode. There are 3 modes:
+ *	0) disabled - APF is disabled in active mode
+ *	1) enabled - APF is enabled for all packets in active mode
+ *	2) adaptive - APF is enabled for packets up to some throughput threshold
  *
  * Related: N/A
  *
- * Supported Feature: Active Mode BPF
+ * Supported Feature: Active Mode APF
  *
  * Usage: Internal/External
  * </ini>
  */
-#define CFG_ACTIVE_UC_BPF_MODE_NAME    "gActiveUcBpfMode"
-#define CFG_ACTIVE_UC_BPF_MODE_MIN     (ACTIVE_BPF_DISABLED)
-#define CFG_ACTIVE_UC_BPF_MODE_MAX     (ACTIVE_BPF_MODE_COUNT - 1)
-#define CFG_ACTIVE_UC_BPF_MODE_DEFAULT (ACTIVE_BPF_DISABLED)
+#define CFG_ACTIVE_UC_APF_MODE_NAME    "gActiveUcBpfMode"
+#define CFG_ACTIVE_UC_APF_MODE_MIN     (ACTIVE_APF_DISABLED)
+#define CFG_ACTIVE_UC_APF_MODE_MAX     (ACTIVE_APF_MODE_COUNT - 1)
+#define CFG_ACTIVE_UC_APF_MODE_DEFAULT (ACTIVE_APF_DISABLED)
 
 /*
  * <ini>
- * g_mc_bc_active_bpf_mode - Control MC/BC active BPF mode
+ * g_mc_bc_active_apf_mode - Control MC/BC active APF mode
  * @Min: 0 (disabled)
  * @Max: 1 (enabled)
  * @Default: 0 (disabled)
  *
- * This config item is used to control MC/BC BPF mode.
- * g_mc_bc_active_bpf_mode=disabled(0): BPF is disabled in active mode
- * g_mc_bc_active_bpf_mode=enabled(1): BPF is enabled for all packets in active
+ * This config item is used to control MC/BC APF mode.
+ * g_mc_bc_active_apf_mode=disabled(0): APF is disabled in active mode
+ * g_mc_bc_active_apf_mode=enabled(1): APF is enabled for all packets in active
  * mode
- * g_mc_bc_active_bpf_mode=adaptive(2): BPF is enabled for packets up to some
+ * g_mc_bc_active_apf_mode=adaptive(2): APF is enabled for packets up to some
  * throughput threshold
  *
  * Related: N/A
  *
- * Supported Feature: Active Mode BPF
+ * Supported Feature: Active Mode APF
  *
  * Usage: Internal/External
  * </ini>
  */
-#define CFG_ACTIVE_MC_BC_BPF_MODE_NAME    "gActiveMcBcBpfMode"
-#define CFG_ACTIVE_MC_BC_BPF_MODE_MIN     (ACTIVE_BPF_DISABLED)
-#define CFG_ACTIVE_MC_BC_BPF_MODE_MAX     (ACTIVE_BPF_ENABLED)
-#define CFG_ACTIVE_MC_BC_BPF_MODE_DEFAULT (ACTIVE_BPF_DISABLED)
+#define CFG_ACTIVE_MC_BC_APF_MODE_NAME    "gActiveMcBcBpfMode"
+#define CFG_ACTIVE_MC_BC_APF_MODE_MIN     (ACTIVE_APF_DISABLED)
+#define CFG_ACTIVE_MC_BC_APF_MODE_MAX     (ACTIVE_APF_ENABLED)
+#define CFG_ACTIVE_MC_BC_APF_MODE_DEFAULT (ACTIVE_APF_DISABLED)
 
 enum hw_filter_mode {
 	HW_FILTER_DISABLED = 0,
@@ -13898,6 +13923,30 @@ enum hw_filter_mode {
 
 /*
  * <ini>
+ * force_rsne_override - force rsnie override from user
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to enable/disable test mode to force rsne override used in
+ * security enhancement test cases to pass the RSNIE sent by user in
+ * assoc request.
+ *
+ * Related: None
+ *
+ * Supported Feature: STA
+ *
+ * Usage: internal
+ *
+ * </ini>
+ */
+#define CFG_FORCE_RSNE_OVERRIDE_NAME    "force_rsne_override"
+#define CFG_FORCE_RSNE_OVERRIDE_MIN     (0)
+#define CFG_FORCE_RSNE_OVERRIDE_MAX     (1)
+#define CFG_FORCE_RSNE_OVERRIDE_DEFAULT (0)
+
+/*
+ * <ini>
  * enable_mac_provision - Enable/disable MAC address provisioning feature
  * @Min: 0
  * @Max: 1
@@ -14070,7 +14119,7 @@ enum hw_filter_mode {
  * nr_offload_time_offset - time interval in seconds after the
  * neighbor report offload command to send the first neighbor report request
  * frame
- * @Min: 30
+ * @Min: 0
  * @Max: 3600
  * @Default: 30
  *
@@ -14153,7 +14202,7 @@ enum hw_filter_mode {
  * nr_offload_cache_timeout - time in seconds after which the
  * neighbor report cache is marked as timed out and any of the triggers would
  * cause a neighbor report request frame to be sent.
- * @Min: 300
+ * @Min: 5
  * @Max: 86400
  * @Default: 1200
  *
@@ -14165,7 +14214,7 @@ enum hw_filter_mode {
  */
 #define CFG_OFFLOAD_NEIGHBOR_REPORT_CACHE_TIMEOUT_NAME \
 	"nr_offload_cache_timeout"
-#define CFG_OFFLOAD_NEIGHBOR_REPORT_CACHE_TIMEOUT_MIN     (300)
+#define CFG_OFFLOAD_NEIGHBOR_REPORT_CACHE_TIMEOUT_MIN     (5)
 #define CFG_OFFLOAD_NEIGHBOR_REPORT_CACHE_TIMEOUT_MAX     (86400)
 #define CFG_OFFLOAD_NEIGHBOR_REPORT_CACHE_TIMEOUT_DEFAULT (1200)
 
@@ -14175,7 +14224,7 @@ enum hw_filter_mode {
  * report requests that can be sent to a connected peer in the current session.
  * This counter is reset once a successful roam happens or at cache timeout
  * @Min: 3
- * @Max: 10
+ * @Max: 300
  * @Default: 3
  *
  * Related : nr_offload_params_bitmask
@@ -14189,6 +14238,66 @@ enum hw_filter_mode {
 #define CFG_OFFLOAD_NEIGHBOR_REPORT_MAX_REQ_CAP_MIN     (3)
 #define CFG_OFFLOAD_NEIGHBOR_REPORT_MAX_REQ_CAP_MAX     (300)
 #define CFG_OFFLOAD_NEIGHBOR_REPORT_MAX_REQ_CAP_DEFAULT (3)
+
+/*
+ * <ini>
+ * channel_select_logic_conc - Set channel selection logic
+ * for different concurrency combinations to DBS or inter band
+ * MCC. Default is DBS for STA+STA and STA+P2P.
+ * @Min: 0x00000000
+ * @Max: 0xFFFFFFFF
+ * @Default: 0x00000000
+ *
+ * 0 - inter-band MCC
+ * 1 - DBS
+ *
+ * BIT 0: STA+STA
+ * BIT 1: STA+P2P
+ * BIT 2-31: Reserved
+ *
+ * Supported Feature: STA+STA, STA+P2P
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_CHANNEL_SELECT_LOGIC_CONC_NAME    "channel_select_logic_conc"
+#define CFG_CHANNEL_SELECT_LOGIC_CONC_MIN     (0x00000000)
+#define CFG_CHANNEL_SELECT_LOGIC_CONC_MAX     (0xFFFFFFFF)
+#define CFG_CHANNEL_SELECT_LOGIC_CONC_DEFAULT (0x00000003)
+
+/*
+ * <ini>
+ * gEnableDTIMSelectionDiversity - Enable/Disable chain
+ * selection optimization for one chain dtim
+ * @Min: 0
+ * @Max: 30
+ * @Default: 5
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_DTIM_SELECTION_DIVERSITY_NAME    "gEnableDTIMSelectionDiversity"
+#define CFG_DTIM_SELECTION_DIVERSITY_MIN     (0)
+#define CFG_DTIM_SELECTION_DIVERSITY_MAX     (30)
+#define CFG_DTIM_SELECTION_DIVERSITY_DEFAULT (5)
+
+/*
+ * <ini>
+ * enable_rtt_mac_randomization - Enable/Disable rtt mac randomization
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ENABLE_RTT_MAC_RANDOMIZATION_NAME    "enable_rtt_mac_randomization"
+#define CFG_ENABLE_RTT_MAC_RANDOMIZATION_MIN     (0)
+#define CFG_ENABLE_RTT_MAC_RANDOMIZATION_MAX     (1)
+#define CFG_ENABLE_RTT_MAC_RANDOMIZATION_DEFAULT (0)
 
 /*---------------------------------------------------------------------------
    Type declarations
@@ -14684,6 +14793,7 @@ struct hdd_config {
 	uint32_t busBandwidthLowThreshold;
 	uint32_t busBandwidthComputeInterval;
 	uint32_t enable_tcp_delack;
+	bool     enable_tcp_limit_output;
 	uint32_t enable_tcp_adv_win_scale;
 	uint32_t tcpDelackThresholdHigh;
 	uint32_t tcpDelackThresholdLow;
@@ -14797,7 +14907,7 @@ struct hdd_config {
 	bool flow_steering_enable;
 	uint8_t max_msdus_per_rxinorderind;
 	bool active_mode_offload;
-	bool bpf_packet_filter_enable;
+	bool apf_packet_filter_enable;
 	/* parameter for defer timer for enabling TDLS on p2p listen */
 	uint16_t tdls_enable_defer_time;
 	uint32_t fine_time_meas_cap;
@@ -14889,7 +14999,7 @@ struct hdd_config {
 	uint8_t  tx_sched_wrr_bk[TX_SCHED_WRR_PARAM_STRING_LENGTH];
 
 	bool enable_fatal_event;
-	bool bpf_enabled;
+	bool apf_enabled;
 	bool enable_dp_trace;
 	uint8_t dp_trace_config[DP_TRACE_CONFIG_STRING_LENGTH];
 	bool adaptive_dwell_mode_enabled;
@@ -14949,8 +15059,8 @@ struct hdd_config {
 	uint32_t max_sched_scan_plan_interval;
 	uint32_t max_sched_scan_plan_iterations;
 	uint8_t enable_phy_reg_retention;
-	enum active_bpf_mode active_uc_bpf_mode;
-	enum active_bpf_mode active_mc_bc_bpf_mode;
+	enum active_apf_mode active_uc_apf_mode;
+	enum active_apf_mode active_mc_bc_apf_mode;
 	enum hw_filter_mode hw_filter_mode;
 	bool sap_internal_restart;
 	enum restart_beaconing_on_ch_avoid_rule
@@ -15078,6 +15188,7 @@ struct hdd_config {
 	uint8_t rx_chain_mask_2g;
 	uint8_t tx_chain_mask_5g;
 	uint8_t rx_chain_mask_5g;
+	bool force_rsne_override;
 	bool mac_provision;
 	uint32_t provisioned_intf_pool;
 	uint32_t derived_intf_pool;
@@ -15091,6 +15202,9 @@ struct hdd_config {
 	uint32_t neighbor_report_offload_per_threshold_offset;
 	uint32_t neighbor_report_offload_cache_timeout;
 	uint32_t neighbor_report_offload_max_req_cap;
+	uint32_t channel_select_logic_conc;
+	bool enable_dtim_selection_diversity;
+	bool enable_rtt_mac_randomization;
 };
 
 #define VAR_OFFSET(_Struct, _Var) (offsetof(_Struct, _Var))

@@ -74,6 +74,10 @@ enum GEN_PARAM {
  * @vht_5g: entire VHT cap for 5G band in terms of 32 bit flag
  * @he_2g: entire HE cap for 2G band in terms of 32 bit flag
  * @he_5g: entire HE cap for 5G band in terms of 32 bit flag
+ * @tx_chain_mask_2G: tx chain mask for 2g
+ * @rx_chain_mask_2G: rx chain mask for 2g
+ * @tx_chain_mask_5G: tx chain mask for 5g
+ * @rx_chain_mask_5G: rx chain mask for 5g
  */
 struct wma_caps_per_phy {
 	uint32_t ht_2g;
@@ -82,6 +86,10 @@ struct wma_caps_per_phy {
 	uint32_t vht_5g;
 	uint32_t he_2g;
 	uint32_t he_5g;
+	uint32_t tx_chain_mask_2G;
+	uint32_t rx_chain_mask_2G;
+	uint32_t tx_chain_mask_5G;
+	uint32_t rx_chain_mask_5G;
 };
 
 
@@ -252,7 +260,8 @@ QDF_STATUS wma_get_updated_fw_mode_config(uint32_t *fw_mode_config,
 		bool dbs,
 		bool agile_dfs);
 QDF_STATUS wma_get_updated_scan_and_fw_mode_config(uint32_t *scan_config,
-		uint32_t *fw_mode_config, uint32_t dual_mac_disable_ini);
+		uint32_t *fw_mode_config, uint32_t dual_mac_disable_ini,
+		uint32_t channel_select_logic_conc);
 bool wma_get_dbs_scan_config(void);
 bool wma_get_dbs_plus_agile_scan_config(void);
 bool wma_get_single_mac_scan_with_dfs_config(void);
@@ -518,5 +527,12 @@ QDF_STATUS wma_crash_inject(WMA_HANDLE wma_handle, uint32_t type,
  */
 QDF_STATUS wma_wow_set_wake_time(WMA_HANDLE wma_handle, uint8_t vdev_id,
 				 uint32_t cookie, uint32_t time);
+
+/**
+ * wma_wmi_stop() - send wmi stop cmd
+ *
+ *  Return: None
+ */
+void wma_wmi_stop(void);
 
 #endif

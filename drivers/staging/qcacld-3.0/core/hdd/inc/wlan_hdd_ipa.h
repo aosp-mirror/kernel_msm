@@ -105,6 +105,8 @@ void hdd_ipa_uc_set_quota(hdd_adapter_t *adapter, uint8_t set_quota,
 			  uint64_t quota_bytes);
 bool hdd_ipa_is_enabled(hdd_context_t *pHddCtx);
 bool hdd_ipa_uc_is_enabled(hdd_context_t *pHddCtx);
+bool hdd_ipa_is_fw_wdi_actived(hdd_context_t *hdd_ctx);
+
 #ifndef QCA_LL_TX_FLOW_CONTROL_V2
 int hdd_ipa_send_mcc_scc_msg(hdd_context_t *hdd_ctx, bool mcc_mode);
 void hdd_ipa_set_mcc_mode(bool mcc_mode);
@@ -128,7 +130,7 @@ int hdd_ipa_uc_ssr_deinit(void);
 void hdd_ipa_uc_force_pipe_shutdown(hdd_context_t *hdd_ctx);
 struct sk_buff *hdd_ipa_tx_packet_ipa(hdd_context_t *hdd_ctx,
 	struct sk_buff *skb, uint8_t session_id);
-bool hdd_ipa_is_present(hdd_context_t *hdd_ctx);
+bool hdd_ipa_is_present(void);
 void hdd_ipa_dump_info(hdd_context_t *hdd_ctx);
 QDF_STATUS hdd_ipa_uc_ol_init(hdd_context_t *hdd_ctx);
 int hdd_ipa_uc_ol_deinit(hdd_context_t *hdd_ctx);
@@ -256,6 +258,11 @@ static inline bool hdd_ipa_uc_is_enabled(hdd_context_t *pHddCtx)
 	return false;
 }
 
+static inline bool hdd_ipa_is_fw_wdi_actived(hdd_context_t *hdd_ctx)
+{
+	return false;
+}
+
 static inline void hdd_ipa_dump_info(hdd_context_t *hdd_ctx)
 {
 }
@@ -293,7 +300,6 @@ static inline struct sk_buff *hdd_ipa_tx_packet_ipa(hdd_context_t *hdd_ctx,
 
 /**
  * hdd_ipa_is_present() - get IPA hw status
- * @hdd_ctx: pointer to hdd context
  *
  * ipa_uc_reg_rdyCB is not directly designed to check
  * ipa hw status. This is an undocumented function which
@@ -302,7 +308,7 @@ static inline struct sk_buff *hdd_ipa_tx_packet_ipa(hdd_context_t *hdd_ctx,
  * Return: true - ipa hw present
  *         false - ipa hw not present
  */
-static inline bool hdd_ipa_is_present(hdd_context_t *hdd_ctx)
+static inline bool hdd_ipa_is_present(void)
 {
 	return false;
 }

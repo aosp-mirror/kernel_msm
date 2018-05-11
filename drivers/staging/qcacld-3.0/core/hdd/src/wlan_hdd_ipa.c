@@ -932,6 +932,22 @@ static inline bool hdd_ipa_is_clk_scaling_enabled(hdd_context_t *hdd_ctx)
 }
 
 /**
+ * hdd_ipa_is_fw_wdi_actived() - Are FW WDI pipes activated?
+ * @hdd_ipa: Global HDD IPA context
+ *
+ * Return: true if FW WDI pipes activated, otherwise false
+ */
+bool hdd_ipa_is_fw_wdi_actived(hdd_context_t *hdd_ctx)
+{
+	struct hdd_ipa_priv *hdd_ipa = hdd_ctx->hdd_ipa;
+
+	if (!hdd_ipa)
+		return false;
+
+	return (HDD_IPA_UC_NUM_WDI_PIPE == hdd_ipa->activated_fw_pipe);
+}
+
+/**
  * hdd_ipa_uc_rt_debug_host_fill - fill rt debug buffer
  * @ctext: pointer to hdd context.
  *
@@ -1511,7 +1527,7 @@ static void __hdd_ipa_uc_stat_query(hdd_context_t *hdd_ctx,
 	}
 
 	qdf_mutex_acquire(&hdd_ipa->ipa_lock);
-	if ((HDD_IPA_UC_NUM_WDI_PIPE == hdd_ipa->activated_fw_pipe) &&
+	if (hdd_ipa_is_fw_wdi_actived(hdd_ctx) &&
 		(false == hdd_ipa->resource_loading)) {
 		*ipa_tx_diff = hdd_ipa->ipa_tx_packets_diff;
 		*ipa_rx_diff = hdd_ipa->ipa_rx_packets_diff;
@@ -1563,9 +1579,8 @@ static void __hdd_ipa_uc_stat_request(hdd_adapter_t *adapter, uint8_t reason)
 		return;
 	}
 
-	hdd_debug("STAT REQ Reason %d", reason);
 	qdf_mutex_acquire(&hdd_ipa->ipa_lock);
-	if ((HDD_IPA_UC_NUM_WDI_PIPE == hdd_ipa->activated_fw_pipe) &&
+	if (hdd_ipa_is_fw_wdi_actived(hdd_ctx) &&
 		(false == hdd_ipa->resource_loading)) {
 		hdd_ipa->stat_req_reason = reason;
 		qdf_mutex_release(&hdd_ipa->ipa_lock);
@@ -1969,8 +1984,9 @@ hdd_ipa_uc_rm_notify_handler(void *context, enum ipa_rm_event event)
 		/* Differed RM Granted */
 		qdf_mutex_acquire(&hdd_ipa->ipa_lock);
 		if ((false == hdd_ipa->resource_unloading) &&
-			(!hdd_ipa->activated_fw_pipe)) {
+		    (!hdd_ipa->activated_fw_pipe)) {
 			hdd_ipa_uc_enable_pipes(hdd_ipa);
+			hdd_ipa->resource_loading = false;
 		}
 		qdf_mutex_release(&hdd_ipa->ipa_lock);
 		break;
@@ -2614,6 +2630,11 @@ static void hdd_ipa_uc_op_cb(struct op_msg_type *op_msg, void *usr_ctxt)
 	struct ol_txrx_pdev_t *pdev = cds_get_context(QDF_MODULE_ID_TXRX);
 	QDF_STATUS status = QDF_STATUS_SUCCESS;
 
+	if (!pdev) {
+		HDD_IPA_LOG(QDF_TRACE_LEVEL_FATAL, "pdev is NULL");
+		return;
+	}
+
 	if (!op_msg || !usr_ctxt) {
 		HDD_IPA_LOG(QDF_TRACE_LEVEL_ERROR, "INVALID ARG");
 		return;
@@ -2646,7 +2667,7 @@ static void hdd_ipa_uc_op_cb(struct op_msg_type *op_msg, void *usr_ctxt)
 	    (HDD_IPA_UC_OPCODE_RX_RESUME == msg->op_code)) {
 		qdf_mutex_acquire(&hdd_ipa->ipa_lock);
 		hdd_ipa->activated_fw_pipe++;
-		if (HDD_IPA_UC_NUM_WDI_PIPE == hdd_ipa->activated_fw_pipe) {
+		if (hdd_ipa_is_fw_wdi_actived(hdd_ctx)) {
 			hdd_ipa->resource_loading = false;
 			complete(&hdd_ipa->ipa_resource_comp);
 			if (hdd_ipa->wdi_enabled == false) {
@@ -3793,7 +3814,7 @@ static struct sk_buff *__hdd_ipa_tx_packet_ipa(hdd_context_t *hdd_ctx,
 	if (!hdd_ipa)
 		return skb;
 
-	if (HDD_IPA_UC_NUM_WDI_PIPE != hdd_ipa->activated_fw_pipe)
+	if (!hdd_ipa_is_fw_wdi_actived(hdd_ctx))
 		return skb;
 
 	if (skb_headroom(skb) <
@@ -4837,7 +4858,6 @@ static void hdd_ipa_send_pkt_to_tl(
 
 /**
  * hdd_ipa_is_present() - get IPA hw status
- * @hdd_ctx: pointer to hdd context
  *
  * ipa_uc_reg_rdyCB is not directly designed to check
  * ipa hw status. This is an undocumented function which
@@ -4846,7 +4866,7 @@ static void hdd_ipa_send_pkt_to_tl(
  * Return: true - ipa hw present
  *         false - ipa hw not present
  */
-bool hdd_ipa_is_present(hdd_context_t *hdd_ctx)
+bool hdd_ipa_is_present(void)
 {
 	/* Check if ipa hw is enabled */
 	if (HDD_IPA_CHECK_HW() != -EPERM)
@@ -5688,17 +5708,30 @@ static void hdd_ipa_cleanup_iface(struct hdd_ipa_iface_context *iface_context)
 	hdd_ipa_clean_hdr(iface_context->adapter);
 
 	qdf_spin_lock_bh(&iface_context->interface_lock);
+	/*
+	 * Possible race condtion between supplicant and MC thread
+	 * and check if the address has been already cleared by the
+	 * other thread
+	 */
+	if (!iface_context->adapter) {
+		qdf_spin_unlock_bh(&iface_context->interface_lock);
+		HDD_IPA_LOG(QDF_TRACE_LEVEL_INFO, "Already cleared");
+		goto end;
+	}
 	iface_context->adapter->ipa_context = NULL;
 	iface_context->adapter = NULL;
 	iface_context->tl_context = NULL;
-	qdf_spin_unlock_bh(&iface_context->interface_lock);
 	iface_context->ifa_address = 0;
+	qdf_spin_unlock_bh(&iface_context->interface_lock);
 	if (!iface_context->hdd_ipa->num_iface) {
 		HDD_IPA_LOG(QDF_TRACE_LEVEL_ERROR,
 			"NUM INTF 0, Invalid");
 		QDF_ASSERT(0);
+		goto end;
 	}
 	iface_context->hdd_ipa->num_iface--;
+
+end:
 	HDD_IPA_LOG(QDF_TRACE_LEVEL_DEBUG, "exit: num_iface=%d",
 		    iface_context->hdd_ipa->num_iface);
 }
@@ -6154,8 +6187,7 @@ static int __hdd_ipa_wlan_evt(hdd_adapter_t *adapter, uint8_t sta_id,
 		} else {
 			/* Disable IPA UC TX PIPE when STA disconnected */
 			if ((1 == hdd_ipa->num_iface) &&
-			    (HDD_IPA_UC_NUM_WDI_PIPE ==
-			     hdd_ipa->activated_fw_pipe) &&
+			    hdd_ipa_is_fw_wdi_actived(hdd_ipa->hdd_ctx) &&
 			    !hdd_ipa->ipa_pipes_down)
 				hdd_ipa_uc_handle_last_discon(hdd_ipa);
 		}
@@ -6189,7 +6221,7 @@ static int __hdd_ipa_wlan_evt(hdd_adapter_t *adapter, uint8_t sta_id,
 		}
 
 		if ((1 == hdd_ipa->num_iface) &&
-		    (HDD_IPA_UC_NUM_WDI_PIPE == hdd_ipa->activated_fw_pipe) &&
+		    hdd_ipa_is_fw_wdi_actived(hdd_ipa->hdd_ctx) &&
 		    !hdd_ipa->ipa_pipes_down) {
 			if (cds_is_driver_unloading()) {
 				/*
@@ -6349,10 +6381,9 @@ static int __hdd_ipa_wlan_evt(hdd_adapter_t *adapter, uint8_t sta_id,
 		/* Disable IPA UC TX PIPE when last STA disconnected */
 		if (!hdd_ipa->sap_num_connected_sta &&
 				hdd_ipa->uc_loaded == true) {
-			if ((false == hdd_ipa->resource_unloading)
-			    && (HDD_IPA_UC_NUM_WDI_PIPE ==
-				hdd_ipa->activated_fw_pipe) &&
-				!hdd_ipa->ipa_pipes_down) {
+			if ((false == hdd_ipa->resource_unloading) &&
+			    hdd_ipa_is_fw_wdi_actived(hdd_ipa->hdd_ctx) &&
+			    !hdd_ipa->ipa_pipes_down) {
 				hdd_ipa_uc_handle_last_discon(hdd_ipa);
 			}
 

@@ -553,6 +553,7 @@ struct ol_txrx_stats_req_internal {
     int offset;
 };
 
+
 /*
  * As depicted in the diagram below, the pdev contains an array of
  * NUM_EXT_TID ol_tx_active_queues_in_tid_t elements.
@@ -1393,6 +1394,11 @@ struct ol_error_info {
 struct ol_rx_remote_data {
 	qdf_nbuf_t msdu;
 	uint8_t mac_id;
+};
+
+struct ol_fw_data {
+	void *data;
+	uint32_t len;
 };
 
 #define INVALID_REORDER_INDEX 0xFFFF
