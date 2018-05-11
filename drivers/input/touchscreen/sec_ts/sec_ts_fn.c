@@ -3943,6 +3943,13 @@ static void run_fs_cal_pre_press(void *device_data)
 		goto ErrorPowerOff;
 	}
 
+	ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_DISABLE_GAIN_LIMIT, off, 1);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev,
+			   "%s: fail to disable gain limit\n", __func__);
+		goto ErrorSendingCmd;
+	}
+
 	ret = sec_ts_fix_tmode(ts, TOUCH_SYSTEM_MODE_TOUCH,
 			       TOUCH_MODE_STATE_TOUCH);
 	if (ret < 0) {
@@ -4251,6 +4258,13 @@ static void run_fs_cal_post_press(void *device_data)
 	if (ret < 0) {
 		input_err(true, &ts->client->dev,
 			  "%s: fail to enable baselineAdapt\n", __func__);
+		goto ErrorSendingCmd;
+	}
+
+	ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_DISABLE_GAIN_LIMIT, on, 1);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev,
+			  "%s: fail to enable gain limit\n", __func__);
 		goto ErrorSendingCmd;
 	}
 
