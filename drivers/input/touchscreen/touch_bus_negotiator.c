@@ -105,13 +105,6 @@ int tbn_request_bus(struct tbn_context *tbn)
 		return err;
 	}
 
-	if (rsp.resp.result != QMI_RESULT_SUCCESS_V01) {
-		dev_warn(tbn->dev, "response indicates error: result = %d, "
-				"error_type = %d\n", rsp.resp.result,
-				rsp.resp.error);
-		return -EIO;
-	}
-
 	return 0;
 }
 
@@ -145,13 +138,6 @@ int tbn_release_bus(struct tbn_context *tbn)
 	if (err) {
 		dev_err(tbn->dev, "qmi_send_req_wait() failed with: %d\n", err);
 		return err;
-	}
-
-	if (rsp.resp.result != QMI_RESULT_SUCCESS_V01) {
-		dev_warn(tbn->dev, "response indicates error: result = %d, "
-				"error_type = %d\n", rsp.resp.result,
-				rsp.resp.error);
-		return -EIO;
 	}
 
 	return 0;
