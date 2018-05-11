@@ -913,31 +913,6 @@ static ssize_t nanohub_download_bl_status(struct device *dev,
 		"%s\n", status[data->download_bl_status.counter]);
 }
 
-static ssize_t nanohub_read_custom_flash_to_file(struct device *dev,
-				   struct device_attribute *attr,
-				   const char *buf, size_t count)
-{
-	struct nanohub_data *data = dev_get_nanohub_data(dev);
-	const struct nanohub_platform_data *pdata = data->pdata;
-	int ret;
-	uint8_t status = CMD_ACK;
-
-	ret = nanohub_wakeup_lock(data, LOCK_MODE_IO);
-	if (ret < 0)
-		return ret;
-
-	__nanohub_hw_reset(data, 1);
-
-	status = nanohub_bl_get_custom_flash_to_file(
-				data, pdata->custom_flash_addr,
-				pdata->custom_flash_len);
-
-	__nanohub_hw_reset(data, 0);
-	nanohub_wakeup_unlock(data);
-
-	return ret < 0 ? ret : count;
-}
-
 static ssize_t nanohub_download_kernel(struct device *dev,
 				       struct device_attribute *attr,
 				       const char *buf, size_t count)
@@ -1163,7 +1138,6 @@ static struct device_attribute attributes[] = {
 	__ATTR(lock, 0220, NULL, nanohub_lock_bl),
 	__ATTR(unlock, 0220, NULL, nanohub_unlock_bl),
 	__ATTR(mode, 0220, NULL, nanohub_mode_set),
-	__ATTR(get_custom_flash, 0220, NULL, nanohub_read_custom_flash_to_file),
 	__ATTR(download_bl_status, 0444, nanohub_download_bl_status, NULL),
 	__ATTR(lcd_mutex, 0220, NULL, nanohub_lcd_mutex),
 };
@@ -1575,7 +1549,7 @@ static void nanohub_wakeup_trace_dump_list(
 
 	pr_info(
 		"nanohub: wakeup trace: dump_reason: %s,"
-		"irq_nums: irq1 %u, irq2 %u, ir13 %u\n",
+		"irq_nums: irq1 %u, irq2 %u, irq3 %u\n",
 		dump_reason_name[call_reason%4],
 		data->wakeup_trace_irqs.nums_irq1,
 		data->wakeup_trace_irqs.nums_irq2,
