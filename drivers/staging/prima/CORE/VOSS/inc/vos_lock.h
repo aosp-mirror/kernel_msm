@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2015, 2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -306,5 +306,13 @@ VOS_STATUS vos_wake_lock_release(vos_wake_lock_t *pLock, uint32_t reason);
 
   ------------------------------------------------------------------------*/
 VOS_STATUS vos_wake_lock_destroy(vos_wake_lock_t *pLock);
+
+/**
+ * vos_wake_lock_active() - Check for wake lock state
+ * @lock: lock to be checked
+ *
+ * Return: If active return true else false
+ */
+bool vos_wake_lock_active(vos_wake_lock_t *lock);
 
 #endif // __VOSS_LOCK_H

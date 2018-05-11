@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -74,12 +74,12 @@ typedef struct
 } vos_event_wlan_security_payload_type;
 
 /*------------------------------------------------------------------------- 
-  Event ID: EVENT_WLAN_STATUS
+  Event ID: EVENT_WLAN_STATUS_V2
   ------------------------------------------------------------------------*/
 typedef struct
 {
    v_U8_t eventId;
-   v_U8_t ssid[6];
+   v_U8_t ssid[32];
    v_U8_t bssType;
    v_U8_t rssi;
    v_U8_t channel;
@@ -282,8 +282,150 @@ struct vos_event_wlan_wake_lock
        char     name[WAKE_LOCK_NAME_LEN];
 };
 
+/**
+ * struct vos_event_tdls_teardown - tdls teardown diag event
+ * @reason: reason for tear down
+ * @peer_mac: peer mac
+ *
+ * This structure contain tdls teardown diag event info
+ */
+
+struct vos_event_tdls_teardown {
+   uint32_t reason;
+   uint8_t peer_mac[6];
+};
+
+/**
+ * struct vos_event_tdls_enable_link - tdls enable link event
+ * @peer_mac: peer mac
+ * @is_off_chan_supported: if off channel supported
+ * @is_off_chan_configured: if off channel configured
+ * @is_off_chan_established: if off channel established
+ *
+ * This structure contain tdls enable link diag event info
+ */
+struct vos_event_tdls_enable_link {
+   uint8_t   peer_mac[6];
+   uint8_t   is_off_chan_supported;
+   uint8_t   is_off_chan_configured;
+   uint8_t   is_off_chan_established;
+};
+
+/**
+ * struct vos_event_suspend - suspend/resume state
+ * @state: suspend/resume state
+ *
+ * This structure contains suspend resume diag event info
+ */
+
+struct vos_event_suspend {
+   uint8_t state;
+};
+
+/**
+ * struct vos_event_offload_req - offload state
+ * @offload_type: offload type
+ * @state: enabled or disabled state
+ *
+ * This structure contains offload diag event info
+ */
+
+struct vos_event_offload_req {
+   uint8_t offload_type;
+   uint8_t state;
+};
+
+/**
+ * struct vos_event_tdls_scan_rejected - scan
+ * rejected due to tdls
+ * @status: rejected status
+ *
+ * This structure contains scan rejected due to
+ * tdls event info
+ */
+struct vos_event_tdls_scan_rejected {
+    uint8_t status;
+};
+
+/**
+ * struct vos_event_tx_rx_mgmt - for TX RX management frame
+ * @event_id: event ID
+ * @tx_rx: tx or rx
+ * @type: type of frame
+ * @action_sub_type: action frame type
+ * @peer_mac: peer mac
+ *
+ * This structure contains tdls TX RX management frame info
+ */
+struct vos_event_tx_rx_mgmt {
+   uint8_t   event_id;
+   uint8_t   tx_rx;
+   uint8_t   type;
+   uint8_t   action_sub_type;
+   uint8_t   peer_mac[6];
+};
 
 
+/*-------------------------------------------------------------------------
+  Event ID: EVENT_WLAN_LOG_COMPLETE
+  ------------------------------------------------------------------------*/
+/**
+ * struct vos_event_wlan_log_complete - Holds log completion details
+ * @is_fatal: Indicates if the event is fatal or not
+ * @indicator: Source of the bug report - Framework/Host/Firmware
+ * @reason_code: Reason for triggering bug report
+ * @reserved: Reserved field
+ *
+ * This structure holds the log completion related information
+ */
+struct vos_event_wlan_log_complete {
+    uint32_t is_fatal;
+    uint32_t indicator;
+    uint32_t reason_code;
+    uint32_t reserved;
+};
+
+/*-------------------------------------------------------------------------
+  Event ID: EVENT_WLAN_SSR_REINIT_SUBSYSTEM
+  ------------------------------------------------------------------------*/
+/**
+ * struct host_event_wlan_css - Holds diag event details
+ * @status: Indicates the status of event
+ *
+ * This structure holds the host diag event related information
+ */
+
+struct host_event_wlan_ssr_reinit {
+	uint32_t status;
+};
+
+/*-------------------------------------------------------------------------
+  Event ID: EVENT_WLAN_SSR_SHUTDOWN_SUBSYSTEM
+  ------------------------------------------------------------------------*/
+/**
+ * struct host_event_wlan_ssr_shutdown - Holds diag event details
+ * @status: Indicates the status of event
+ *
+ * This structure holds the host diag event related information
+ */
+
+struct host_event_wlan_ssr_shutdown {
+	uint32_t status;
+};
+
+/*-------------------------------------------------------------------------
+  Function declarations and documenation
+  ------------------------------------------------------------------------*/
+/**
+ * enum host_ssr_events - Enum containing ssr subtype
+ * @SSR_SUB_SYSTEM_REINIT: Indicate ssr reinit state
+ * @SSR_SUB_SYSTEM_SHUTDOWN: Indicate ssr shutdown state
+ *
+ */
+enum host_ssr_events {
+	SSR_SUB_SYSTEM_REINIT,
+	SSR_SUB_SYSTEM_SHUTDOWN,
+};
 
 /*------------------------------------------------------------------------- 
   Function declarations and documenation
@@ -312,6 +454,7 @@ enum wake_lock_reason {
        WIFI_POWER_EVENT_WAKELOCK_ROC,
        WIFI_POWER_EVENT_WAKELOCK_HOLD_RX,
        WIFI_POWER_EVENT_WAKELOCK_SAP,
+       WIFI_POWER_EVENT_WAKELOCK_FIND_AP_INDICATION,
 };
 
 #ifdef __cplusplus

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -207,6 +207,8 @@ typedef struct tagSmeCmd
         tAniGetFrameLogReq getFramelogCmd;
         struct s_ani_set_tx_max_pwr set_tx_max_pwr;
         tpNanRequest pNanReq;
+        struct csr_set_tx_max_pwr_per_band set_tx_max_pwr_per_band;
+        tpSirUpdateChanList chan_list;
     }u;
 }tSmeCmd;
 
@@ -223,7 +225,8 @@ void smePushCommand( tpAniSirGlobal pMac, tSmeCmd *pCmd, tANI_BOOLEAN fHighPrior
 void smeProcessPendingQueue( tpAniSirGlobal pMac );
 void smeReleaseCommand(tpAniSirGlobal pMac, tSmeCmd *pCmd);
 void purgeSmeSessionCmdList(tpAniSirGlobal pMac, tANI_U32 sessionId,
-        tDblLinkList *pList);
+        tDblLinkList *pList, bool flush_all);
+tANI_U32 sme_get_sessionid_from_activeList(tpAniSirGlobal pMac);
 tANI_BOOLEAN smeCommandPending(tpAniSirGlobal pMac);
 tANI_BOOLEAN pmcProcessCommand( tpAniSirGlobal pMac, tSmeCmd *pCommand );
 //this function is used to abort a command where the normal processing of the command
@@ -249,6 +252,7 @@ eHalStatus csrRoamIssueRemoveKeyCommand( tpAniSirGlobal pMac, tANI_U32 sessionId
                                          tCsrRoamRemoveKey *pRemoveKey, tANI_U32 roamId );
 eHalStatus csrIsFullPowerNeeded( tpAniSirGlobal pMac, tSmeCmd *pCommand, tRequestFullPowerReason *pReason,
                                  tANI_BOOLEAN *pfNeedPower);
+bool csr_is_disconnect_full_power_cmd(tSmeCmd *command);
 void csrAbortCommand( tpAniSirGlobal pMac, tSmeCmd *pCommand, tANI_BOOLEAN fStopping );
 
 eHalStatus sme_AcquireGlobalLock( tSmeStruct *psSme);
@@ -324,7 +328,7 @@ eHalStatus csrTdlsChangePeerSta(tHalHandle hHal, tANI_U8 sessionId,
                                 tCsrStaParams *pstaParams);
 eHalStatus csrTdlsDelPeerSta(tHalHandle hHal, tANI_U8 sessionId,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,18,0))
-                            const tSirMacAddr peerMac
+                             const tSirMacAddr peerMac
 #else
                              tSirMacAddr peerMac
 #endif
@@ -358,5 +362,32 @@ eHalStatus csrCreateRoamScanChannelList(tpAniSirGlobal pMac,
 void activeListCmdTimeoutHandle(void *userData);
 
 void csrGetStaticUapsdMask(tpAniSirGlobal pMac, tANI_U8 *staticUapsdMask);
+/**
+ * csr_roam_send_chan_sw_ie_request() - Request to transmit CSA IE
+ * @mac_ctx:        Global MAC context
+ * @bssid:          BSSID
+ * @new_chan: Channel on which to send the IE
+ * @cb_mode: cb mode
+ *
+ * This function sends request to transmit channel switch announcement
+ * IE to lower layers
+ *
+ * Return: success or failure
+ **/
+VOS_STATUS csr_roam_send_chan_sw_ie_request(tpAniSirGlobal mac_ctx,
+                          tCsrBssid bssid, uint8_t new_chan, uint8_t cb_mode);
+
+/**
+ * csr_roam_channel_change_req() - Post channel change request to LIM
+ * @mac_ctx:        Global MAC context
+ * @bssid:          BSSID
+ * @new_chan: Channel on which to send the IE
+ * @cb_mode: cb mode
+ * @profile: ap profile
+ *
+ * Return: VOS_STATUS
+ **/
+VOS_STATUS csr_roam_channel_change_req(tpAniSirGlobal mac_ctx,
+  tCsrBssid bssid, uint8_t new_chan, uint8_t cb_mode ,tCsrRoamProfile *profile);
 
 #endif //#if !defined( __SMEINSIDE_H )

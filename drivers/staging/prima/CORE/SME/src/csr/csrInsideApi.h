@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -48,8 +48,11 @@
 #define CSR_ACTIVE_MAX_CHANNEL_TIME    40
 #define CSR_ACTIVE_MIN_CHANNEL_TIME    20
 
-#define CSR_ACTIVE_MAX_CHANNEL_TIME_BTC    120
-#define CSR_ACTIVE_MIN_CHANNEL_TIME_BTC    60
+#define CSR_ACTIVE_MAX_CHANNEL_TIME_ESCO_BTC    120
+#define CSR_ACTIVE_MIN_CHANNEL_TIME_ESCO_BTC    60
+
+#define CSR_ACTIVE_MIN_CHANNEL_TIME_SCO_BTC    20
+#define CSR_ACTIVE_MAX_CHANNEL_TIME_SCO_BTC    40
 
 #ifdef WLAN_AP_STA_CONCURRENCY
 #define CSR_PASSIVE_MAX_CHANNEL_TIME_CONC   110
@@ -68,8 +71,11 @@
 
 #define CSR_MAX_2_4_GHZ_SUPPORTED_CHANNELS 14
 
-#define CSR_MAX_BSS_SUPPORT            250
+#define DEFAULT_NUM_BUFF_BTC_SCO 3
+
+#define CSR_MAX_BSS_SUPPORT            512
 #define SYSTEM_TIME_MSEC_TO_USEC      1000
+#define SYSTEM_TIME_SEC_TO_MSEC       1000
 
 //This number minus 1 means the number of times a channel is scanned before a BSS is remvoed from
 //cache scan result
@@ -90,8 +96,8 @@
 #define CSR_SCAN_AGING_TIME_NOT_CONNECT_W_PS 300     //300 seconds
 #define CSR_SCAN_AGING_TIME_CONNECT_NO_PS 150        //150 seconds
 #define CSR_SCAN_AGING_TIME_CONNECT_W_PS 600         //600 seconds
-#define CSR_JOIN_FAILURE_TIMEOUT_DEFAULT ( 3000 )
-#define CSR_JOIN_FAILURE_TIMEOUT_MIN   (1000)  //minimal value
+#define CSR_JOIN_FAILURE_TIMEOUT_DEFAULT ( 300 )
+#define CSR_JOIN_FAILURE_TIMEOUT_MIN   (300)  //minimal value
 //These are going against the signed RSSI (tANI_S8) so it is between -+127
 #define CSR_BEST_RSSI_VALUE         (-30)   //RSSI >= this is in CAT4
 #define CSR_DEFAULT_RSSI_DB_GAP     30 //every 30 dbm for one category
@@ -112,6 +118,45 @@
 #endif
 
 #define CSR_DISABLE_SCAN_DURING_SCO          100 //100 milliseconds
+
+
+#ifdef WLAN_FEATURE_ROAM_SCAN_OFFLOAD
+#define ROAMING_RSSI_WEIGHT 50
+#define MIN_RSSI (-100)
+#define MAX_RSSI 0
+#define ROAM_AP_COUNT_WEIGHT 50
+#define ROAM_MAX_COUNT 30
+#define ROAM_MIN_COUNT 0
+#define ROAM_MAX_WEIGHT 100
+
+#define RSSI_WEIGHTAGE 25
+#define HT_CAPABILITY_WEIGHTAGE 10
+#define VHT_CAP_WEIGHTAGE 6
+#define BEAMFORMING_CAP_WEIGHTAGE 2
+#define CHAN_WIDTH_WEIGHTAGE 10
+#define CHAN_BAND_WEIGHTAGE 5
+#define WMM_WEIGHTAGE 2
+#define CCA_WEIGHTAGE 10
+#define OTHER_AP_WEIGHT 30
+
+#define MAX_AP_LOAD 255
+#define PENALTY_TIMEOUT (30 * 60 * 1000)
+#define PENALTY_REMAINING_SCORE (7)
+#define PENALTY_TOTAL_SCORE (10)
+#define PER_EXCELENT_RSSI -40
+#define PER_GOOD_RSSI -55
+#define PER_POOR_RSSI -65
+#define PER_BAD_RSSI  -80
+#define PER_ROAM_EXCELLENT_RSSI_WEIGHT 100
+#define PER_ROAM_GOOD_RSSI_WEIGHT 80
+#define PER_ROAM_BAD_RSSI_WEIGHT 60
+#define PER_ROAM_MAX_WEIGHT 100
+#define PER_ROAM_80MHZ 100
+#define PER_ROAM_40MHZ 70
+#define PER_ROAM_20MHZ 30
+#define PER_ROAM_PENALTY (3/10)
+#define PER_ROAM_MAX_BSS_SCORE 10000
+#endif
 
 typedef enum 
 {
@@ -165,14 +210,20 @@ typedef struct tagCsrScanResult
     tANI_S32 AgingCount;    //This BSS is removed when it reaches 0 or less
     tANI_U32 preferValue;   //The bigger the number, the better the BSS. This value override capValue
     tANI_U32 capValue;  //The biggger the better. This value is in use only if we have equal preferValue
-    //This member must be the last in the structure because the end of tSirBssDescription (inside) is an
-    //    array with nonknown size at this time
     
     eCsrEncryptionType ucEncryptionType; //Preferred Encryption type that matched with profile.
     eCsrEncryptionType mcEncryptionType; 
     eCsrAuthType authType; //Preferred auth type that matched with the profile.
-
+#ifdef WLAN_FEATURE_ROAM_SCAN_OFFLOAD
+    int congestionScore;
+#endif
     tCsrScanResultInfo Result;
+    /*
+     * WARNING - Do not add any element here
+     * This member Result must be the last in the structure because the end
+     * of tSirBssDescription (inside) is an array with nonknown size at
+     * this time.
+     */
 }tCsrScanResult;
 
 typedef struct
@@ -212,13 +263,15 @@ struct csr_scan_for_ssid_context
                                       ( eCSR_ENCRYPT_TYPE_WEP40 != (encType) ) && \
                                       ( eCSR_ENCRYPT_TYPE_WEP104 != (encType) ) )
 
-#define CSR_IS_DISCONNECT_COMMAND(pCommand) ( ( eSmeCommandRoam == (pCommand)->command ) &&\
-                                              ( ( eCsrForcedDisassoc == (pCommand)->u.roamCmd.roamReason ) ||\
-                                                ( eCsrForcedDeauth == (pCommand)->u.roamCmd.roamReason ) ||\
-                                                ( eCsrSmeIssuedDisassocForHandoff ==\
-                                                                        (pCommand)->u.roamCmd.roamReason ) ||\
-                                                ( eCsrForcedDisassocMICFailure ==\
-                                                                          (pCommand)->u.roamCmd.roamReason ) ) )
+#define CSR_IS_DISCONNECT_COMMAND(pCommand) ((eSmeCommandRoam == \
+              (pCommand)->command) &&\
+        ((eCsrForcedDisassoc == (pCommand)->u.roamCmd.roamReason) ||\
+         (eCsrForcedIbssLeave == (pCommand)->u.roamCmd.roamReason) ||\
+         (eCsrForcedDeauth == (pCommand)->u.roamCmd.roamReason) ||\
+         (eCsrSmeIssuedDisassocForHandoff ==\
+             (pCommand)->u.roamCmd.roamReason) ||\
+         (eCsrForcedDisassocMICFailure ==\
+             (pCommand)->u.roamCmd.roamReason)))
 
 eCsrRoamState csrRoamStateChange( tpAniSirGlobal pMac, eCsrRoamState NewRoamState, tANI_U8 sessionId);
 eHalStatus csrScanningStateMsgProcessor( tpAniSirGlobal pMac, void *pMsgBuf );
@@ -226,6 +279,10 @@ void csrRoamingStateMsgProcessor( tpAniSirGlobal pMac, void *pMsgBuf );
 void csrRoamJoinedStateMsgProcessor( tpAniSirGlobal pMac, void *pMsgBuf );
 tANI_BOOLEAN csrScanComplete( tpAniSirGlobal pMac, tSirSmeScanRsp *pScanRsp );
 void csrReleaseCommandRoam(tpAniSirGlobal pMac, tSmeCmd *pCommand);
+tpCsrNeighborRoamBSSInfo csrNeighborRoamGetRoamableAPListNextEntry(tpAniSirGlobal pMac,
+                                        tDblLinkList *pList, tpCsrNeighborRoamBSSInfo pNeighborEntry);
+v_U8_t *csrNeighborRoamStateToString(v_U8_t state);
+void csrReleaseCommandPreauth(tpAniSirGlobal pMac, tSmeCmd *pCommand);
 void csrReleaseCommandScan(tpAniSirGlobal pMac, tSmeCmd *pCommand);
 void csrReleaseCommandWmStatusChange(tpAniSirGlobal pMac, tSmeCmd *pCommand);
 //pIes2 can be NULL
@@ -355,6 +412,10 @@ void csrRoamRemoveDuplicateCommand(tpAniSirGlobal pMac, tANI_U32 sessionId, tSme
 eHalStatus csrSendJoinReqMsg( tpAniSirGlobal pMac, tANI_U32 sessionId, tSirBssDescription *pBssDescription, 
                               tCsrRoamProfile *pProfile, tDot11fBeaconIEs *pIes, tANI_U16 messageType );
 eHalStatus csrSendMBDisassocReqMsg( tpAniSirGlobal pMac, tANI_U32 sessionId, tSirMacAddr bssId, tANI_U16 reasonCode );
+#ifdef WLAN_FEATURE_LFR_MBB
+eHalStatus csr_fill_reassoc_req(tpAniSirGlobal pMac, tANI_U32 sessionId, tSirBssDescription *pBssDescription,
+                                  tDot11fBeaconIEs *pIes, tSirSmeJoinReq **reassoc_req);
+#endif
 eHalStatus csrSendMBDeauthReqMsg( tpAniSirGlobal pMac, tANI_U32 sessionId, tSirMacAddr bssId, tANI_U16 reasonCode );
 eHalStatus csrSendMBDisassocCnfMsg( tpAniSirGlobal pMac, tpSirSmeDisassocInd pDisassocInd );
 eHalStatus csrSendMBDeauthCnfMsg( tpAniSirGlobal pMac, tpSirSmeDeauthInd pDeauthInd );
@@ -433,7 +494,8 @@ eHalStatus csrRoamCloseSession( tpAniSirGlobal pMac, tANI_U32 sessionId,
                                 tANI_BOOLEAN fSync, tANI_U8 bPurgeList,
                                 csrRoamSessionCloseCallback callback,
                                 void *pContext );
-void csrPurgeSmeCmdList(tpAniSirGlobal pMac, tANI_U32 sessionId);
+void csrPurgeSmeCmdList(tpAniSirGlobal pMac, tANI_U32 sessionId,
+                        bool flush_all);
 void csrCleanupSession(tpAniSirGlobal pMac, tANI_U32 sessionId);
 eHalStatus csrRoamGetSessionIdFromBSSID( tpAniSirGlobal pMac, tCsrBssid *bssid, tANI_U32 *pSessionId );
 eCsrCfgDot11Mode csrFindBestPhyMode( tpAniSirGlobal pMac, tANI_U32 phyMode );
@@ -655,6 +717,11 @@ tANI_BOOLEAN csrIsProfileWapi( tCsrRoamProfile *pProfile );
 #define WLAN_SECURITY_EVENT_PMKID_CANDIDATE_FOUND  7
 #define WLAN_SECURITY_EVENT_PMKID_UPDATE    8
 #define WLAN_SECURITY_EVENT_MIC_ERROR       9   
+#define WLAN_SECURITY_EVENT_SET_UNICAST_REQ  10
+#define WLAN_SECURITY_EVENT_SET_UNICAST_RSP  11
+#define WLAN_SECURITY_EVENT_SET_BCAST_REQ    12
+#define WLAN_SECURITY_EVENT_SET_BCAST_RSP    13
+
 
 #define AUTH_OPEN       0
 #define AUTH_SHARED     1
@@ -1050,8 +1117,13 @@ eHalStatus csrRoamDelPMKIDfromCache( tpAniSirGlobal pMac, tANI_U32 sessionId,
 tANI_BOOLEAN csrElectedCountryInfo(tpAniSirGlobal pMac);
 void csrAddVoteForCountryInfo(tpAniSirGlobal pMac, tANI_U8 *pCountryCode);
 void csrClearVotesForCountryInfo(tpAniSirGlobal pMac);
+void csr_remove_bssid_from_scan_list(tpAniSirGlobal pMac,
+       tSirMacAddr bssid);
+
 #ifdef WLAN_FEATURE_AP_HT40_24G
 eHalStatus csrSetHT2040Mode(tpAniSirGlobal pMac, tANI_U32 sessionId, tANI_U8 cbMode);
 #endif
+void csrValidateScanChannels(tpAniSirGlobal pMac, tCsrScanRequest *pDstReq,
+               tCsrScanRequest *pSrcReq, tANI_U32 *new_index, tANI_U8 ch144_support);
 #endif
 

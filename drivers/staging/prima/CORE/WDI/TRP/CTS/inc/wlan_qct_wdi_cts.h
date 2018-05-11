@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013,2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -96,6 +96,16 @@ typedef enum
    WCTS_EVENT_CLOSE,
    WCTS_EVENT_MAX
 } WCTS_NotifyEventType;
+
+struct WdiSmdStats
+{
+  int smd_event_data;
+  int smd_event_open;
+  int smd_event_close;
+  int smd_event_status;
+  int smd_event_reopen_ready;
+  int smd_event_err;
+};
 
 /*----------------------------------------------------------------------------
  *   WDI callback types
@@ -253,4 +263,6 @@ WCTS_ClearPendingQueue
 (
    WCTS_HandleType      wctsHandle
 );
+
+void WCTS_Dump_Smd_status(void);
 #endif /* #ifndef WLAN_QCT_WDI_CTS_H */

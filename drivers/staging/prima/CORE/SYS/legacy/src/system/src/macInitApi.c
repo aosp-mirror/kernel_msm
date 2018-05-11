@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -154,7 +154,11 @@ tSirRetStatus macStop(tHalHandle hHal, tHalStopType stopType)
 {
     tANI_U8 i;
     tpAniSirGlobal pMac = (tpAniSirGlobal) hHal;
-    peStop(pMac);
+
+    //In FTM mode,  peStart is not called during driver load.
+    if (pMac->gDriverType != eDRIVER_TYPE_MFG)
+        peStop(pMac);
+
     cfgCleanup( pMac );
     // need to free memory if not called in reset context.
     // in reset context this memory will be freed by HDD.

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013,2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -31,6 +31,8 @@
 #if !defined( HDD_CONNECTION_H__ ) 
 #define HDD_CONNECTION_H__
 #include <wlan_hdd_mib.h>
+#include <net/cfg80211.h>
+#include <linux/ieee80211.h>
 #define HDD_MAX_NUM_IBSS_STA ( 32 )
 #ifdef FEATURE_WLAN_TDLS
 #define HDD_MAX_NUM_TDLS_STA ( 8 )
@@ -42,6 +44,62 @@
 /* Timeout (in ms) for Link to Up before Registering Station */
 #define ASSOC_LINKUP_TIMEOUT 60
 #define IBSS_BROADCAST_STAID 0
+
+#ifdef WLAN_FEATURE_RMC
+/* Timeout in ms for peer info request commpletion */
+#define IBSS_PEER_INFO_REQ_TIMOEUT 1000
+#endif
+
+/**
+ * struct hdd_conn_flag - connection flags
+ * @ht_present: ht element present or not
+ * @vht_present: vht element present or not
+ * @hs20_present: hs20 element present or not
+ */
+struct hdd_conn_flag {
+    uint8_t ht_present:1;
+    uint8_t vht_present:1;
+    uint8_t hs20_present:1;
+    uint8_t ht_op_present:1;
+    uint8_t vht_op_present:1;
+    uint8_t reserved:3;
+};
+
+/*defines for tx_BF_cap_info */
+#define TX_BF_CAP_INFO_TX_BF			0x00000001
+#define TX_BF_CAP_INFO_RX_STAG_RED_SOUNDING	0x00000002
+#define TX_BF_CAP_INFO_TX_STAG_RED_SOUNDING	0x00000004
+#define TX_BF_CAP_INFO_RX_ZFL			0x00000008
+#define TX_BF_CAP_INFO_TX_ZFL			0x00000010
+#define TX_BF_CAP_INFO_IMP_TX_BF		0x00000020
+#define TX_BF_CAP_INFO_CALIBRATION		0x000000c0
+#define TX_BF_CAP_INFO_CALIBRATION_SHIFT		 6
+#define TX_BF_CAP_INFO_EXP_CSIT_BF		0x00000100
+#define TX_BF_CAP_INFO_EXP_UNCOMP_STEER_MAT	0x00000200
+#define TX_BF_CAP_INFO_EXP_BF_CSI_FB		0x00001c00
+#define TX_BF_CAP_INFO_EXP_BF_CSI_FB_SHIFT		10
+#define TX_BF_CAP_INFO_EXP_UNCMP_STEER_MAT	0x0000e000
+#define TX_BF_CAP_INFO_EXP_UNCMP_STEER_MAT_SHIFT	13
+#define TX_BF_CAP_INFO_EXP_CMP_STEER_MAT_FB	0x00070000
+#define TX_BF_CAP_INFO_EXP_CMP_STEER_MAT_FB_SHIFT	16
+#define TX_BF_CAP_INFO_CSI_NUM_BF_ANT		0x00180000
+#define TX_BF_CAP_INFO_CSI_NUM_BF_ANT_SHIFT		18
+#define TX_BF_CAP_INFO_UNCOMP_STEER_MAT_BF_ANT	0x00600000
+#define TX_BF_CAP_INFO_UNCOMP_STEER_MAT_BF_ANT_SHIFT	20
+#define TX_BF_CAP_INFO_COMP_STEER_MAT_BF_ANT	0x01800000
+#define TX_BF_CAP_INFO_COMP_STEER_MAT_BF_ANT_SHIFT	22
+#define TX_BF_CAP_INFO_RSVD			0xfe000000
+
+/* defines for antenna selection info */
+#define ANTENNA_SEL_INFO			0x01
+#define ANTENNA_SEL_INFO_EXP_CSI_FB_TX		0x02
+#define ANTENNA_SEL_INFO_ANT_ID_FB_TX		0x04
+#define ANTENNA_SEL_INFO_EXP_CSI_FB		0x08
+#define ANTENNA_SEL_INFO_ANT_ID_FB		0x10
+#define ANTENNA_SEL_INFO_RX_AS			0x20
+#define ANTENNA_SEL_INFO_TX_SOUNDING_PPDU	0x40
+#define ANTENNA_SEL_INFO_RSVD			0x80
+
 typedef enum 
 {
    /** Not associated in Infra or participating in an IBSS / Ad-hoc network.*/
@@ -105,7 +163,44 @@ typedef struct connection_info_s
 
    /** Dot11Mode */
    tANI_U32 dot11Mode;
-   
+
+   uint32_t  rate_flags;
+
+   /** channel frequency */
+   uint32_t freq;
+
+   /** txrate structure holds nss & datarate info */
+   struct rate_info txrate;
+
+   /** noise information */
+   int8_t noise;
+
+   /** ht capabilities info */
+   struct ieee80211_ht_cap ht_caps;
+
+   /** vht capabilities info */
+   struct ieee80211_vht_cap vht_caps;
+
+   /** passpoint/hs20 info */
+   tDot11fIEhs20vendor_ie hs20vendor_ie;
+
+   /** conn info params is present or not */
+   struct hdd_conn_flag conn_flag;
+
+   /** ht operation info */
+   struct ieee80211_ht_operation ht_operation;
+
+   /** ht operation info */
+   struct ieee80211_vht_operation vht_operation;
+
+   /** roaming counter */
+   uint32_t roam_count;
+
+   /** rssi info */
+   int8_t signal;
+
+   /** assoc fail reason */
+   int32_t assoc_status_code;
 }connection_info_t;
 /*Forward declaration of Adapter*/
 typedef struct hdd_adapter_s hdd_adapter_t;
@@ -128,6 +223,9 @@ v_BOOL_t hdd_connGetConnectedBssType( hdd_station_ctx_t *pHddCtx,
 int hdd_SetGENIEToCsr( hdd_adapter_t *pAdapter, eCsrAuthType *RSNAuthType );
 
 int hdd_set_csr_auth_type( hdd_adapter_t *pAdapter, eCsrAuthType RSNAuthType );
+
+void hdd_assoc_registerFwdEapolCB(void *pContext);
+
 VOS_STATUS hdd_roamRegisterTDLSSTA( hdd_adapter_t *pAdapter,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,18,0))
                                     const tANI_U8 *peerMac,
@@ -144,5 +242,12 @@ void hdd_indicateEseBcnReportNoResults(const hdd_adapter_t *pAdapter,
                                        const tANI_BOOLEAN flag,
                                        const tANI_U8 numBss);
 #endif /* FEATURE_WLAN_ESE && FEATURE_WLAN_ESE_UPLOAD */
+
+void iw_full_power_cbfn (void *pContext, eHalStatus status);
+
+void hdd_copy_ht_caps(struct ieee80211_ht_cap *hdd_ht_cap,
+                      tDot11fIEHTCaps *roam_ht_cap);
+void hdd_copy_vht_caps(struct ieee80211_vht_cap *hdd_vht_cap,
+                       tDot11fIEVHTCaps *roam_vht_cap);
 
 #endif

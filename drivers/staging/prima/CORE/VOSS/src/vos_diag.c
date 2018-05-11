@@ -211,10 +211,18 @@ void vos_log_submit(v_VOID_t *plog_hdr_ptr)
 void vos_log_wlock_diag(uint32_t reason, const char *wake_lock_name,
                               uint32_t timeout, uint32_t status)
 {
+     VosContextType *vos_context;
      WLAN_VOS_DIAG_EVENT_DEF(wlan_diag_event,
      struct vos_event_wlan_wake_lock);
 
-     if (nl_srv_is_initialized() != 0)
+    vos_context = vos_get_global_context(VOS_MODULE_ID_SYS, NULL);
+    if (!vos_context) {
+      VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
+            "vos context is Invald");
+       return;
+    }
+     if (nl_srv_is_initialized() != 0 ||
+         vos_context->wakelock_log_level == WLAN_LOG_LEVEL_OFF)
           return;
 
      wlan_diag_event.status = status;

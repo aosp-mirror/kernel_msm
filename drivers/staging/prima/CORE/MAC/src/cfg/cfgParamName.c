@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2014, 2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -341,12 +341,12 @@ unsigned char *gCfgParamName[] = {
     (unsigned char *)"FLEX_CONNECT_POWER_FACTOR",
     (unsigned char *)"ANTENNA_DIVESITY",
     (unsigned char *)"GO_LINK_MONITOR_TIMEOUT",
+    (unsigned char *)"RMC_ACTION_PERIOD_FREQUENCY",
     (unsigned char *)"ATH_DISABLE",
     (unsigned char *)"BTC_ACTIVE_WLAN_LEN",
     (unsigned char *)"BTC_ACTIVE_BT_LEN",
     (unsigned char *)"BTC_SAP_ACTIVE_WLAN_LEN",
     (unsigned char *)"BTC_SAP_ACTIVE_BT_LEN",
-    (unsigned char *)"RMC_ACTION_PERIOD_FREQUENCY",
     (unsigned char *)"ASD_PROBE_INTERVAL",
     (unsigned char *)"ASD_TRIGGER_THRESHOLD",
     (unsigned char *)"ASD_RTT_RSSI_HYST_THRESHOLD",
@@ -371,6 +371,7 @@ unsigned char *gCfgParamName[] = {
     (unsigned char *)"BTC_DYN_OPP_TX_QUEUE_THOLD",
     (unsigned char *)"TDLS_WMM_MODE_ENABLED",
     (unsigned char *)"BURST_MODE_BE_TXOP_VALUE",
+    (unsigned char *)"EXT_SCAN_CONC_MODE",
 };
 
 

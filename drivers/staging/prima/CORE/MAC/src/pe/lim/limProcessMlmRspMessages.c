@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -60,6 +60,10 @@
 #endif
 #include "wlan_qct_wda.h"
 #include "vos_utils.h"
+
+#ifdef WLAN_FEATURE_LFR_MBB
+#include "lim_mbb.h"
+#endif
 
 static void limHandleSmeJoinResult(tpAniSirGlobal, tSirResultCodes, tANI_U16,tpPESession);
 static void limHandleSmeReaasocResult(tpAniSirGlobal, tSirResultCodes, tANI_U16, tpPESession);
@@ -547,8 +551,14 @@ limProcessMlmAuthCnf(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
                psessionEntry->peSessionId,psessionEntry->limSmeState);)
         return;
     }
+#ifdef FEATURE_WLAN_DIAG_SUPPORT
+    limDiagEventReport(pMac, WLAN_PE_DIAG_AUTH_COMP_EVENT, psessionEntry,
+                       pMlmAuthCnf->resultCode,
+                       pMlmAuthCnf->protStatusCode);
+#endif
+
     /// Process AUTH confirm from MLM
-    if (((tLimMlmAuthCnf *) pMsgBuf)->resultCode != eSIR_SME_SUCCESS)
+    if (pMlmAuthCnf->resultCode != eSIR_SME_SUCCESS)
     {
         if (psessionEntry->limSmeState == eLIM_SME_WT_AUTH_STATE)
                 {
@@ -567,14 +577,16 @@ limProcessMlmAuthCnf(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
             cfgAuthType = pMac->lim.gLimPreAuthType;
         
         if ((cfgAuthType == eSIR_AUTO_SWITCH) &&
-                (((tLimMlmAuthCnf *) pMsgBuf)->authType == eSIR_OPEN_SYSTEM)
-                && (eSIR_MAC_AUTH_ALGO_NOT_SUPPORTED_STATUS == ((tLimMlmAuthCnf *) pMsgBuf)->protStatusCode))
+             (pMlmAuthCnf->authType == eSIR_SHARED_KEY)
+             && ((eSIR_MAC_AUTH_ALGO_NOT_SUPPORTED_STATUS ==
+             pMlmAuthCnf->protStatusCode) ||
+             (pMlmAuthCnf->resultCode == eSIR_SME_AUTH_TIMEOUT_RESULT_CODE)))
         {
             /**
-             * When Open authentication fails with reason code "13" and
-             * authType set to 'auto switch', Try with Shared Authentication
+             * When Shared authentication fails with reason code "13" and
+             * authType set to 'auto switch', Try with Open Authentication
              */
-            authMode = eSIR_SHARED_KEY;
+            authMode = eSIR_OPEN_SYSTEM;
             // Trigger MAC based Authentication
             pMlmAuthReq = vos_mem_malloc(sizeof(tLimMlmAuthReq));
             if ( NULL == pMlmAuthReq )
@@ -628,8 +640,8 @@ limProcessMlmAuthCnf(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
                  * Need to send Join response with
                  * auth failure to Host.
                  */
-                limHandleSmeJoinResult(pMac,
-                              ((tLimMlmAuthCnf *) pMsgBuf)->resultCode, ((tLimMlmAuthCnf *) pMsgBuf)->protStatusCode,psessionEntry);
+                limHandleSmeJoinResult(pMac, pMlmAuthCnf->resultCode,
+                              pMlmAuthCnf->protStatusCode, psessionEntry);
             }
             else
             {
@@ -640,11 +652,11 @@ limProcessMlmAuthCnf(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
                 psessionEntry->limSmeState = psessionEntry->limPrevSmeState;
                 MTRACE(macTrace(pMac, TRACE_CODE_SME_STATE, psessionEntry->peSessionId, psessionEntry->limSmeState));
                 limSendSmeAuthRsp(
-                            pMac,
-                            ((tLimMlmAuthCnf *) pMsgBuf)->resultCode,
-                            ((tLimMlmAuthCnf *) pMsgBuf)->peerMacAddr,
-                            ((tLimMlmAuthCnf *) pMsgBuf)->authType,
-                            ((tLimMlmAuthCnf *) pMsgBuf)->protStatusCode,psessionEntry,psessionEntry->smeSessionId,psessionEntry->transactionId);
+                            pMac, pMlmAuthCnf->resultCode,
+                            pMlmAuthCnf->peerMacAddr, pMlmAuthCnf->authType,
+                            pMlmAuthCnf->protStatusCode, psessionEntry,
+                            psessionEntry->smeSessionId,
+                            psessionEntry->transactionId);
             }
         } // end if (cfgAuthType == eAUTO_SWITCH)
     } // if (((tLimMlmAuthCnf *) pMsgBuf)->resultCode != ...
@@ -787,12 +799,11 @@ limProcessMlmAuthCnf(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
              */
             psessionEntry->limSmeState = psessionEntry->limPrevSmeState;
             MTRACE(macTrace(pMac, TRACE_CODE_SME_STATE, psessionEntry->peSessionId, psessionEntry->limSmeState));
-            limSendSmeAuthRsp(
-                        pMac,
-                        ((tLimMlmAuthCnf *) pMsgBuf)->resultCode,
-                        ((tLimMlmAuthCnf *) pMsgBuf)->peerMacAddr,
-                        ((tLimMlmAuthCnf *) pMsgBuf)->authType,
-                        ((tLimMlmAuthCnf *) pMsgBuf)->protStatusCode,psessionEntry,psessionEntry->smeSessionId,psessionEntry->transactionId);
+            limSendSmeAuthRsp(pMac, pMlmAuthCnf->resultCode,
+                            pMlmAuthCnf->peerMacAddr, pMlmAuthCnf->authType,
+                            pMlmAuthCnf->protStatusCode, psessionEntry,
+                            psessionEntry->smeSessionId,
+                            psessionEntry->transactionId);
         }
     } // end if (((tLimMlmAuthCnf *) pMsgBuf)->resultCode != ...
 } /*** end limProcessMlmAuthCnf() ***/
@@ -950,7 +961,7 @@ limProcessMlmReassocCnf(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
      */
     if (pMac->ft.ftPEContext.pFTPreAuthReq)
     {
-        limLog(pMac, LOG1, "%s: Freeing pFTPreAuthReq= %p", __func__,
+        limLog(pMac, LOG1, "%s: Freeing pFTPreAuthReq= %pK", __func__,
                pMac->ft.ftPEContext.pFTPreAuthReq);
         if (pMac->ft.ftPEContext.pFTPreAuthReq->pbssDescription)
         {
@@ -1061,8 +1072,15 @@ limProcessMlmReassocInd(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
     }
     sirStoreU16N((tANI_U8 *) &pSirSmeReassocInd->messageType,
                  eWNI_SME_REASSOC_IND);
-    limReassocIndSerDes(pMac, (tpLimMlmReassocInd) pMsgBuf,
-                        (tANI_U8 *) &(pSirSmeReassocInd->length), psessionEntry);
+    if (limReassocIndSerDes(pMac, (tpLimMlmReassocInd) pMsgBuf,
+                        (tANI_U8 *) &(pSirSmeReassocInd->length),
+                         psessionEntry, sizeof(tSirSmeReassocInd))
+                        != eSIR_SUCCESS)
+    {
+        limLog(pMac, LOGE,FL(" Received SME message with invalid rem length"));
+        vos_mem_free(pSirSmeReassocInd);
+        return;
+    }
 
     // Required for indicating the frames to upper layer
     pSirSmeReassocInd->assocReqLength = ((tpLimMlmReassocInd) pMsgBuf)->assocReqLength;
@@ -1131,10 +1149,17 @@ limProcessMlmAuthInd(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
         // Log error
         limLog(pMac, LOGP,
            FL("call to AllocateMemory failed for eWNI_SME_AUTH_IND"));
+        return;
     }
     limCopyU16((tANI_U8 *) &pSirSmeAuthInd->messageType, eWNI_SME_AUTH_IND);
-    limAuthIndSerDes(pMac, (tpLimMlmAuthInd) pMsgBuf,
-                        (tANI_U8 *) &(pSirSmeAuthInd->length));
+    if (limAuthIndSerDes(pMac, (tpLimMlmAuthInd) pMsgBuf,
+                        (tANI_U8 *) &(pSirSmeAuthInd->length),
+                         sizeof(tSirSmeAuthInd)) != eSIR_SUCCESS)
+    {
+        limLog(pMac, LOGE,FL(" Received SME message with invalid rem length"));
+        vos_mem_free(pSirSmeAuthInd);
+        return;
+    }
     msgQ.type = eWNI_SME_AUTH_IND;
     msgQ.bodyptr = pSirSmeAuthInd;
     msgQ.bodyval = 0;
@@ -1206,6 +1231,15 @@ limFillAssocIndParams(tpAniSirGlobal pMac, tpLimMlmAssocInd pAssocInd,
     limLog(pMac, LOGW, FL("HT40MHzIntoPresent: %d"),
                  pSirSmeAssocInd->HT40MHzIntoEnabledSta);
 #endif
+    // Fill in rate flags
+    pSirSmeAssocInd->rate_flags = pAssocInd->rate_flags;
+
+    pSirSmeAssocInd->ch_width = pAssocInd->ch_width;
+    pSirSmeAssocInd->chan_info = pAssocInd->chan_info;
+    if (pAssocInd->HTCaps.present)
+        pSirSmeAssocInd->HTCaps = pAssocInd->HTCaps;
+    if (pAssocInd->VHTCaps.present)
+        pSirSmeAssocInd->VHTCaps = pAssocInd->VHTCaps;
 } /*** end limAssocIndSerDes() ***/
 
 
@@ -1256,6 +1290,7 @@ limProcessMlmAssocInd(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
                FL("call to AllocateMemory failed for eWNI_SME_ASSOC_IND"));
         return;
     }
+    vos_mem_zero(pSirSmeAssocInd, len);
 
     pSirSmeAssocInd->messageType = eWNI_SME_ASSOC_IND;
     limFillAssocIndParams(pMac, (tpLimMlmAssocInd) pMsgBuf, pSirSmeAssocInd, psessionEntry);
@@ -1958,6 +1993,12 @@ void limProcessMlmAddStaRsp( tpAniSirGlobal pMac, tpSirMsgQ limMsgQ,tpPESession 
         limProcessBtAmpApMlmAddStaRsp(pMac, limMsgQ,psessionEntry);
         return;
     }
+#ifdef WLAN_FEATURE_LFR_MBB
+        if (pMac->ft.ftSmeContext.is_preauth_lfr_mbb) {
+            lim_process_sta_mlm_add_sta_rsp_mbb(pMac, limMsgQ, psessionEntry);
+            return;
+        }
+#endif
     limProcessStaMlmAddStaRsp(pMac, limMsgQ,psessionEntry);
 }
 void limProcessStaMlmAddStaRsp( tpAniSirGlobal pMac, tpSirMsgQ limMsgQ ,tpPESession psessionEntry)
@@ -2062,8 +2103,14 @@ void limProcessStaMlmAddStaRsp( tpAniSirGlobal pMac, tpSirMsgQ limMsgQ ,tpPESess
     {
         limLog( pMac, LOGE, FL( "ADD_STA failed!"));
         if(psessionEntry->limSmeState == eLIM_SME_WT_REASSOC_STATE)
+        {
            mesgType = LIM_MLM_REASSOC_CNF;
-        mlmAssocCnf.resultCode = (tSirResultCodes) eSIR_SME_REFUSED;
+           mlmAssocCnf.resultCode = (tSirResultCodes)eSIR_SME_FT_REASSOC_FAILURE;
+        }
+        else
+        {
+           mlmAssocCnf.resultCode = (tSirResultCodes) eSIR_SME_REFUSED;
+        }
         mlmAssocCnf.protStatusCode = eSIR_MAC_UNSPEC_FAILURE_STATUS;
     }
 end:
@@ -2128,6 +2175,13 @@ void limProcessStaMlmDelBssRsp( tpAniSirGlobal pMac, tpSirMsgQ limMsgQ,tpPESessi
     tpDeleteBssParams pDelBssParams =   (tpDeleteBssParams) limMsgQ->bodyptr;
     tpDphHashNode pStaDs =              dphGetHashEntry(pMac, DPH_STA_HASH_INDEX_PEER, &psessionEntry->dph.dphHashTable);
     tSirResultCodes statusCode =        eSIR_SME_SUCCESS;
+
+#ifdef WLAN_FEATURE_LFR_MBB
+        if (pMac->ft.ftSmeContext.is_preauth_lfr_mbb) {
+            lim_process_sta_mlm_del_bss_rsp_mbb(pMac, limMsgQ, psessionEntry);
+            return;
+        }
+#endif
 
     if (NULL == pDelBssParams)
     {
@@ -2401,6 +2455,13 @@ void limProcessStaMlmDelStaRsp( tpAniSirGlobal pMac, tpSirMsgQ limMsgQ,tpPESessi
     tSirResultCodes   statusCode    = eSIR_SME_SUCCESS;
     tpDeleteStaParams pDelStaParams = (tpDeleteStaParams) limMsgQ->bodyptr;
     tpDphHashNode     pStaDs        = NULL;
+
+#ifdef WLAN_FEATURE_LFR_MBB
+    if (pMac->ft.ftSmeContext.is_preauth_lfr_mbb) {
+        lim_process_sta_mlm_del_sta_rsp_mbb(pMac, limMsgQ, psessionEntry);
+        return;
+    }
+#endif
 
     if(NULL == pDelStaParams )
     {
@@ -2810,7 +2871,7 @@ limProcessStaMlmAddBssRspPreAssoc( tpAniSirGlobal pMac, tpSirMsgQ limMsgQ, tpPES
                        FL("could not retrieve AuthType"));
             }
             if (cfgAuthType == eSIR_AUTO_SWITCH) 
-                authMode = eSIR_OPEN_SYSTEM; // Try Open Authentication first
+                authMode = eSIR_SHARED_KEY; // Try Shared Authentication first
             else
                 authMode = cfgAuthType;
 
@@ -3401,9 +3462,16 @@ void limProcessMlmAddBssRsp( tpAniSirGlobal pMac, tpSirMsgQ limMsgQ )
             else
             limProcessApMlmAddBssRsp( pMac,limMsgQ);
         }
-        else
+        else {
+#ifdef WLAN_FEATURE_LFR_MBB
+        if (pMac->ft.ftSmeContext.is_preauth_lfr_mbb) {
+            lim_process_sta_mlm_add_bss_rsp_mbb(pMac, limMsgQ, psessionEntry);
+            return;
+        }
+#endif
             /* Called while processing assoc response */
             limProcessStaMlmAddBssRsp( pMac, limMsgQ,psessionEntry);
+        }
     }
 
     if(limIsInMCC(pMac))
@@ -4080,7 +4148,7 @@ void limProcessSwitchChannelRsp(tpAniSirGlobal pMac,  void *body)
     channelChangeReasonCode = psessionEntry->channelChangeReasonCode;
     // initialize it back to invalid id
     psessionEntry->channelChangeReasonCode = 0xBAD;
-    limLog(pMac, LOG1, FL("channelChangeReasonCode %d"),channelChangeReasonCode);
+    limLog(pMac, LOGE, FL("channelChangeReasonCode %d status %d"),channelChangeReasonCode, pChnlParams->status);
     switch(channelChangeReasonCode)
     {
         case LIM_SWITCH_CHANNEL_REASSOC:
@@ -4120,6 +4188,10 @@ void limProcessSwitchChannelRsp(tpAniSirGlobal pMac,  void *body)
                 }
                 pMac->lim.gpchangeChannelCallback(pMac, status, pMac->lim.gpchangeChannelData, psessionEntry);
             }
+            break;
+        case LIM_SWITCH_CHANNEL_SAP_ECSA:
+            lim_send_sme_ap_channel_switch_resp(pMac,
+                                                psessionEntry, pChnlParams);
             break;
         default:
             break;
@@ -4312,6 +4384,10 @@ void limProcessFinishScanRsp(tpAniSirGlobal pMac,  void *body)
     switch(pMac->lim.gLimHalScanState)
     {
         case eLIM_HAL_FINISH_SCAN_WAIT_STATE:
+#ifdef FEATURE_WLAN_DIAG_SUPPORT
+            limDiagEventReport(pMac, WLAN_PE_DIAG_SCAN_COMP_EVENT, NULL,
+                               status, eSIR_SUCCESS);
+#endif
             pMac->lim.gLimHalScanState = eLIM_HAL_IDLE_SCAN_STATE;
             if (pMac->lim.abortScan)
                 pMac->lim.abortScan = 0;
@@ -4399,9 +4475,6 @@ void limProcessMlmHalAddBARsp( tpAniSirGlobal pMac,
         limMsgQ->bodyptr = NULL;
         return;
     }
-#ifdef FEATURE_WLAN_DIAG_SUPPORT_LIM //FEATURE_WLAN_DIAG_SUPPORT 
-    limDiagEventReport(pMac, WLAN_PE_DIAG_HAL_ADDBA_RSP_EVENT, psessionEntry, 0, 0);
-#endif //FEATURE_WLAN_DIAG_SUPPORT
 
     // Allocate for LIM_MLM_ADDBA_CNF
     pMlmAddBACnf = vos_mem_malloc(sizeof(tLimMlmAddBACnf));
@@ -4427,6 +4500,12 @@ void limProcessMlmHalAddBARsp( tpAniSirGlobal pMac,
         pMlmAddBACnf->addBAResultCode = eSIR_MAC_SUCCESS_STATUS;
      else
         pMlmAddBACnf->addBAResultCode = eSIR_MAC_UNSPEC_FAILURE_STATUS;
+
+#ifdef FEATURE_WLAN_DIAG_SUPPORT_LIM //FEATURE_WLAN_DIAG_SUPPORT
+    limDiagEventReport(pMac, WLAN_PE_DIAG_HAL_ADDBA_RSP_EVENT, psessionEntry,
+                       pAddBAParams->status, pMlmAddBACnf->addBAResultCode);
+#endif //FEATURE_WLAN_DIAG_SUPPORT
+
      vos_mem_free(limMsgQ->bodyptr);
      limMsgQ->bodyptr = NULL;
      // Send ADDBA CNF to LIM
@@ -4797,9 +4876,11 @@ limHandleDelBssInReAssocContext(tpAniSirGlobal pMac, tpDphHashNode pStaDs,tpPESe
             limUpdateAssocStaDatas(pMac, pStaDs, assocRsp,psessionEntry);
             limUpdateReAssocGlobals(pMac, assocRsp,psessionEntry);
             limExtractApCapabilities( pMac,
-                  (tANI_U8 *) psessionEntry->pLimReAssocReq->bssDescription.ieFields,
-                  limGetIElenFromBssDescription( &psessionEntry->pLimReAssocReq->bssDescription ),
-                    pBeaconStruct );
+              (tANI_U8 *)
+              psessionEntry->pLimReAssocReq->bssDescription.ieFields,
+              GET_IE_LEN_IN_BSS(
+              psessionEntry->pLimReAssocReq->bssDescription.length),
+              pBeaconStruct);
             if(pMac->lim.gLimProtectionControl != WNI_CFG_FORCE_POLICY_PROTECTION_DISABLE)
                 limDecideStaProtectionOnAssoc(pMac, pBeaconStruct, psessionEntry);
                 if(pBeaconStruct->erpPresent) {
@@ -4973,10 +5054,12 @@ limHandleAddBssInReAssocContext(tpAniSirGlobal pMac, tpDphHashNode pStaDs, tpPES
             assocRsp = (tpSirAssocRsp)psessionEntry->limAssocResponseData;
             limUpdateAssocStaDatas(pMac, pStaDs, assocRsp, psessionEntry);
             limUpdateReAssocGlobals(pMac, assocRsp, psessionEntry);
-            limExtractApCapabilities( pMac,
-                  (tANI_U8 *) psessionEntry->pLimReAssocReq->bssDescription.ieFields,
-                  limGetIElenFromBssDescription( &psessionEntry->pLimReAssocReq->bssDescription ),
-                    pBeaconStruct );
+            limExtractApCapabilities(pMac,
+              (tANI_U8 *)
+              psessionEntry->pLimReAssocReq->bssDescription.ieFields,
+              GET_IE_LEN_IN_BSS(
+              psessionEntry->pLimReAssocReq->bssDescription.length),
+              pBeaconStruct);
             if(pMac->lim.gLimProtectionControl != WNI_CFG_FORCE_POLICY_PROTECTION_DISABLE)
                 limDecideStaProtectionOnAssoc(pMac, pBeaconStruct, psessionEntry);
 

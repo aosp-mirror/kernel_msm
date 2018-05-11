@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2014, 2016-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -120,9 +120,9 @@ when        who    what, where, why
 #define HAL_TDLS_PEER_STA_MASK              0x80 //bit 7 set for TDLS peer station
 #endif
 
-/* Bit 8 is used to route reliable multicast data frames from QID 1.
-   This dynamically changes ACK_POLICY = TRUE for multicast frames */
-#define WDI_RELIABLE_MCAST_REQUESTED_MASK 0x100
+#ifdef WLAN_FEATURE_RMC
+#define WDI_RMC_REQUESTED_MASK 0x100
+#endif
 
 #define WDI_USE_BD_RATE_1_MASK            0x1000
 #define WDI_USE_BD_RATE_2_MASK            0x2000
@@ -138,6 +138,9 @@ when        who    what, where, why
 #define WDI_RX_BD_HEADER_OFFSET       0
 
 #define WDI_DPU_FEEDBACK_OFFSET       1
+
+#define WDI_MAC_LLC_HEADER_SIZE       8
+
 
 // Frame Type definitions
 
@@ -223,6 +226,8 @@ when        who    what, where, why
 
 #endif
 
+#define WDI_RXBD_MLME_STA_STATUS 0x1
+#define WDI_RXBD_SAP_TX_STATS  0x2
 /*--------------------------------------------------------------------------
    BD header macros - used by the data path to get or set various values
    inside the packet BD 
@@ -303,10 +308,13 @@ when        who    what, where, why
 //LFR scan related
 #define WDI_RX_BD_GET_OFFLOADSCANLEARN( _pvBDHeader )         (((WDI_RxBdType*)_pvBDHeader)->offloadScanLearn)
 #define WDI_RX_BD_GET_ROAMCANDIDATEIND( _pvBDHeader )         (((WDI_RxBdType*)_pvBDHeader)->roamCandidateInd)
+#define WDI_RX_BD_GET_PER_ROAMCANDIDATEIND( _pvBDHeader )     (((WDI_RxBdType*)_pvBDHeader)->perRoamCndInd)
 #endif
 #ifdef WLAN_FEATURE_EXTSCAN
 #define WDI_RX_BD_GET_EXTSCANFULLSCANRESIND( _pvBDHeader ) (((WDI_RxBdType*)_pvBDHeader)->extscanBuffer)
 #endif
+
+#define WDI_RX_BD_GET_PER_SAPOFFLOAD( _pvBDHeader )     (((WDI_RxBdType*)_pvBDHeader)->indType)
 
 /*------------ RSSI and SNR Information extraction -------------*/
 #define WDI_RX_BD_GET_RSSI0( _pvBDHeader )  \
@@ -335,6 +343,9 @@ when        who    what, where, why
 #define WDI_TX_BD_SET_MPDU_HEADER_OFFSET( _bd, _off )    (((WDI_TxBdType*)_bd)->mpduHeaderOffset = _off)
 
 #define WDI_TX_BD_SET_MPDU_HEADER_LEN( _bd, _len )       (((WDI_TxBdType*)_bd)->mpduHeaderLength = _len)
+
+#define WDI_TX_BD_GET_MPDU_HEADER_LEN( _bd )               (((WDI_TxBdType*)_bd)->mpduHeaderLength)
+
 
 #define WDI_TX_BD_SET_MPDU_LEN( _bd, _len )              (((WDI_TxBdType*)_bd)->mpduLength = _len)
 
@@ -428,6 +439,7 @@ WDI_FillTxBd
     wpt_uint8              ucProtMgmtFrame,
     wpt_uint32             uTimeStamp,
     wpt_uint8              isEapol,
+    wpt_uint8              isArp,
     wpt_uint8*             staIndex,
     wpt_uint32             txBdToken
 );

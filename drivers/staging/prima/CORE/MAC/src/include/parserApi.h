@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2014, 2016-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -97,7 +97,8 @@ typedef struct sSirProbeRespBeacon
     tDot11fIEPowerConstraints localPowerConstraint;
     tDot11fIETPCReport        tpcReport;
     tDot11fIEChanSwitchAnn    channelSwitchIE;
-    tDot11fIEExtChanSwitchAnn extChannelSwitchIE;
+    tDot11fIEsec_chan_offset sec_chan_offset;
+    tDot11fIEext_chan_switch_ann  ext_chan_switch_ann;
     tSirMacAddr               bssid;
     tDot11fIEQuiet            quietIE;
     tDot11fIEHTCaps           HTCaps;
@@ -106,8 +107,10 @@ typedef struct sSirProbeRespBeacon
 #ifdef WLAN_FEATURE_VOWIFI_11R
     tANI_U8                   mdie[SIR_MDIE_SIZE];
 #endif
+#if defined(FEATURE_WLAN_ESE) || defined(WLAN_FEATURE_ROAM_SCAN_OFFLOAD)
 #ifdef FEATURE_WLAN_ESE
     tDot11fIEESETxmitPower    eseTxPwr;
+#endif
     tDot11fIEQBSSLoad         QBSSLoad;
 #endif
     tANI_U8                   ssidPresent;
@@ -128,7 +131,8 @@ typedef struct sSirProbeRespBeacon
     tANI_U8                   rsnPresent;
     tANI_U8                   erpPresent;
     tANI_U8                   channelSwitchPresent;
-    tANI_U8                   extChannelSwitchPresent;
+    tANI_U8                   sec_chan_offset_present;
+    tANI_U8                   ecsa_present;
     tANI_U8                   quietIEPresent;
     tANI_U8                   tpcReportPresent;
     tANI_U8                   powerConstraintPresent;
@@ -147,6 +151,8 @@ typedef struct sSirProbeRespBeacon
     tDot11fIEWiderBWChanSwitchAnn WiderBWChanSwitchAnn;
 #endif
     tDot11fIEOBSSScanParameters OBSSScanParameters;
+    tDot11fIEhs20vendor_ie  hs20vendor_ie;
+
 } tSirProbeRespBeacon, *tpSirProbeRespBeacon;
 
 // probe Request structure
@@ -218,6 +224,7 @@ typedef struct sSirAssocReq
     tDot11fIEVHTCaps          VHTCaps;
     tDot11fIEOperatingMode    operMode;
 #endif
+    tDot11fIEhs20vendor_ie hs20vendor_ie;
 } tSirAssocReq, *tpSirAssocReq;
 
 
@@ -297,6 +304,79 @@ typedef struct sSirEseBcnReportMandatoryIe
     tANI_U8               rrmPresent;
 } tSirEseBcnReportMandatoryIe, *tpSirEseBcnReportMandatoryIe;
 #endif /* FEATURE_WLAN_ESE_UPLOAD */
+
+struct s_ext_cap {
+    uint8_t bssCoexistMgmtSupport: 1;
+    uint8_t        reserved1: 1;
+    uint8_t    extChanSwitch: 1;
+    uint8_t        reserved2: 1;
+    uint8_t          psmpCap: 1;
+    uint8_t        reserved3: 1;
+    uint8_t         spsmpCap: 1;
+    uint8_t            event: 1;
+    uint8_t      diagnostics: 1;
+    uint8_t multiDiagnostics: 1;
+    uint8_t      locTracking: 1;
+    uint8_t              FMS: 1;
+    uint8_t  proxyARPService: 1;
+    uint8_t coLocIntfReporting: 1;
+    uint8_t         civicLoc: 1;
+    uint8_t    geospatialLoc: 1;
+    uint8_t              TFS: 1;
+    uint8_t     wnmSleepMode: 1;
+    uint8_t     timBroadcast: 1;
+    uint8_t    bssTransition: 1;
+    uint8_t    qosTrafficCap: 1;
+    uint8_t         acStaCnt: 1;
+    uint8_t       multiBSSID: 1;
+    uint8_t       timingMeas: 1;
+    uint8_t        chanUsage: 1;
+    uint8_t         ssidList: 1;
+    uint8_t              DMS: 1;
+    uint8_t     UTCTSFOffset: 1;
+    uint8_t TDLSPeerUAPSDBufferSTA: 1;
+    uint8_t  TDLSPeerPSMSupp: 1;
+    uint8_t TDLSChannelSwitching: 1;
+    uint8_t interworkingService: 1;
+    uint8_t           qosMap: 1;
+    uint8_t              EBR: 1;
+    uint8_t    sspnInterface: 1;
+    uint8_t        reserved4: 1;
+    uint8_t         msgCFCap: 1;
+    uint8_t      TDLSSupport: 1;
+    uint8_t   TDLSProhibited: 1;
+    uint8_t TDLSChanSwitProhibited: 1;
+    uint8_t rejectUnadmittedTraffic: 1;
+    uint8_t serviceIntervalGranularity: 3;
+    uint8_t    identifierLoc: 1;
+    uint8_t uapsdCoexistence: 1;
+    uint8_t  wnmNotification: 1;
+    uint8_t     QABcapbility: 1;
+    uint8_t         UTF8SSID: 1;
+    uint8_t     QMFActivated: 1;
+    uint8_t      QMFreconAct: 1;
+    uint8_t RobustAVStreaming: 1;
+    uint8_t      AdvancedGCR: 1;
+    uint8_t          MeshGCR: 1;
+    uint8_t              SCS: 1;
+    uint8_t      QLoadReport: 1;
+    uint8_t    AlternateEDCA: 1;
+    uint8_t    UnprotTXOPneg: 1;
+    uint8_t      ProtTXOPneg: 1;
+    uint8_t        reserved6: 1;
+    uint8_t  ProtQLoadReport: 1;
+    uint8_t      TDLSWiderBW: 1;
+    uint8_t operModeNotification: 1;
+    uint8_t maxNumOfMSDU_bit1: 1;
+    uint8_t maxNumOfMSDU_bit2: 1;
+    uint8_t      ChanSchMgmt: 1;
+    uint8_t GeoDBInbandEnSignal: 1;
+    uint8_t    NwChanControl: 1;
+    uint8_t    WhiteSpaceMap: 1;
+    uint8_t   ChanAvailQuery: 1;
+    uint8_t   fineTimingMeas: 1;
+    uint8_t        reserved7: 1;
+};
 
 tANI_U8
 sirIsPropCapabilityEnabled(struct sAniSirGlobal *pMac, tANI_U32 bitnum);
@@ -496,6 +576,19 @@ PopulateDot11fCapabilities2(tpAniSirGlobal         pMac,
                             struct sDphHashNode   *pSta,
                             tpPESession            psessionEntry);
 
+/**
+ * populate_dot11f_ext_chann_switch_ann() - Function to populate ECS
+ * @mac_ptr:            Pointer to PMAC structure
+ * @dot_11_ptr:         ECS element
+ * @session_entry:      PE session entry
+ *
+ * This function is used to populate the extended channel switch element
+ *
+ * Return: None
+ */
+void populate_dot11f_ext_chann_switch_ann(tpAniSirGlobal mac_ctx,
+        tDot11fIEext_chan_switch_ann *dot_11_ptr, tpPESession session_entry);
+
 /// Populate a tDot11fIEChanSwitchAnn
 void
 PopulateDot11fChanSwitchAnn(tpAniSirGlobal          pMac,
@@ -504,8 +597,8 @@ PopulateDot11fChanSwitchAnn(tpAniSirGlobal          pMac,
 
 /// Populate a tDot11fIEChanSwitchAnn
 void
-PopulateDot11fExtChanSwitchAnn(tpAniSirGlobal          pMac,
-                             tDot11fIEExtChanSwitchAnn *pDot11f,
+PopulateDot11fsecChanOffset(tpAniSirGlobal          pMac,
+                             tDot11fIEsec_chan_offset *pDot11f,
                              tpPESession psessionEntry);
 
 /// Populate a tDot11fIECountry
@@ -734,7 +827,8 @@ PopulateDot11fSuppRates(tpAniSirGlobal      pMac,
 tSirRetStatus
 PopulateDot11fRatesTdls(tpAniSirGlobal p_mac,
                            tDot11fIESuppRates *p_supp_rates,
-                           tDot11fIEExtSuppRates *p_ext_supp_rates);
+                           tDot11fIEExtSuppRates *p_ext_supp_rates,
+                           tANI_U8 curr_oper_channel);
 
 tSirRetStatus PopulateDot11fTPCReport(tpAniSirGlobal      pMac,
                                       tDot11fIETPCReport *pDot11f,
@@ -884,7 +978,6 @@ void PopulateDot11fAssocRspRates ( tpAniSirGlobal pMac, tDot11fIESuppRates *pSup
 int FindIELocation( tpAniSirGlobal pMac,
                            tpSirRSNie pRsnIe,
                            tANI_U8 EID);
-#endif
 
 #ifdef WLAN_FEATURE_11AC
 tSirRetStatus
@@ -919,3 +1012,21 @@ tSirRetStatus ValidateAndRectifyIEs(tpAniSirGlobal pMac,
                                     tANI_U8 *pMgmtFrame,
                                     tANI_U32 nFrameBytes,
                                     tANI_U32 *nMissingRsnBytes);
+#ifdef SAP_AUTH_OFFLOAD
+void
+sap_auth_offload_update_rsn_ie(tpAniSirGlobal pmac,
+        tDot11fIERSNOpaque *pdot11f);
+#endif /* SAP_AUTH_OFFLOAD */
+
+/**
+ * sir_copy_hs20_ie() - Update HS 2.0 Information Element.
+ * @dest: dest HS IE buffer to be updated
+ * @src: src HS IE buffer
+ *
+ * Update HS2.0 IE info from src to dest
+ *
+ * Return: void
+ */
+void sir_copy_hs20_ie(tDot11fIEhs20vendor_ie *dest,
+                      tDot11fIEhs20vendor_ie *src);
+#endif /* __PARSE_H__ */

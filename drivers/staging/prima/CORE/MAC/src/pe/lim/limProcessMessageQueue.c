@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -75,6 +75,10 @@
 #include "wmmApsd.h"
 #endif
 
+#ifdef WLAN_FEATURE_RMC
+#include "limRMC.h"
+#endif
+
 #include "vos_types.h"
 #include "vos_packet.h"
 #include "vos_memory.h"
@@ -85,6 +89,8 @@
 #ifdef WLAN_FEATURE_EXTSCAN
 #define  SIZE_OF_FIXED_PARAM 12
 #endif
+
+#define CHECK_BIT(value, mask)    ((value) & (1 << (mask)))
 
 void limLogSessionStates(tpAniSirGlobal pMac);
 
@@ -510,7 +516,7 @@ limCheckMgmtRegisteredFrames(tpAniSirGlobal pMac, tANI_U8 *pBd,
 
         /* Indicate this to SME */
         limSendSmeMgmtFrameInd( pMac, pLimMgmtRegistration->sessionId,
-                                pBd, psessionEntry, 0);
+                                pBd, psessionEntry, WDA_GET_RX_RSSI_DB(pBd));
     
         if ( (type == SIR_MAC_MGMT_FRAME) && (fc.type == SIR_MAC_MGMT_FRAME)
               && (subType == SIR_MAC_MGMT_RESERVED15) )
@@ -645,7 +651,7 @@ limProcessEXTScanRealTimeData(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo)
         tEXTScanFullScanResult.ap.capability =
                             *(((tANI_U16 *)&pProbeResponse->Capabilities));
 
-        vos_mem_free(pBeacon);
+        vos_mem_free(pProbeResponse);
     }
     else
     {
@@ -673,6 +679,71 @@ limProcessEXTScanRealTimeData(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo)
 } /*** end limProcessEXTScanRealTimeData() ***/
 #endif /* WLAN_FEATURE_EXTSCAN */
 
+#ifdef SAP_AUTH_OFFLOAD
+/*
+ * lim_process_sap_offload_indication: function to process add sta/ del sta
+ *                   indication for SAP auth offload.
+ *
+ * @pMac: mac context
+ * @pRxPacketInfo: rx buffer
+ *
+ * This Function will go through buffer and if
+ * indication type is ADD_STA_IND, function will extract all data related to
+ * client and will call limAddSta
+ * and if indication type is DEL_STA_IND, function will call
+ * limSendSmeDisassocInd to do cleanup for station.
+ *
+ * Return : none
+ */
+static void lim_process_sap_offload_indication(tpAniSirGlobal pMac,
+        tANI_U8 *pRxPacketInfo)
+{
+    int i = 0;
+    tSapOfldIndications *sap_offload_indication_rx_buf =
+        (tSapOfldIndications *)WDA_GET_RX_MPDU_DATA(pRxPacketInfo);
+    tSapOfldInd *sap_offload_ind =
+        (tSapOfldInd*)sap_offload_indication_rx_buf->indications;
+
+    limLog( pMac, LOG1,
+            FL("Notify SME with Sap Offload ind and indication type is %d  num_indication %d \n"),
+            sap_offload_ind->indType,
+            (tANI_U8) sap_offload_indication_rx_buf->num_indications);
+
+    for (i=1; i <= (tANI_U8)(sap_offload_indication_rx_buf->num_indications);
+            i++)
+    {
+        if (sap_offload_ind->indType == SAP_OFFLOAD_ADD_STA_IND)
+        {
+            tSapOfldAddStaIndMsg *add_sta;
+            limLog( pMac, LOG1,
+                FL("Indication type is SAP_OFFLOAD_ADD_STA_IND"));
+            add_sta = (tSapOfldAddStaIndMsg *)sap_offload_ind->indication;
+            lim_sap_offload_add_sta(pMac, add_sta);
+            if (sap_offload_indication_rx_buf->num_indications > 1)
+                sap_offload_ind =
+                    (tSapOfldInd *)((tANI_U8 *)sap_offload_ind +
+                        sizeof(tSapOfldAddStaIndMsg) - sizeof(tANI_U8)+
+                        add_sta->data_len + sizeof(tANI_U32));
+        }
+        else if (sap_offload_ind->indType == SAP_OFFLOAD_DEL_STA_IND)
+        {
+            tSapOfldDelStaIndMsg *del_sta;
+            limLog( pMac, LOG1,
+                FL("Indication type is SAP_OFFLOAD_DEL_STA_IND"));
+            del_sta = (tSapOfldDelStaIndMsg *)sap_offload_ind->indication;
+            lim_sap_offload_del_sta(pMac, del_sta);
+            sap_offload_ind = (tSapOfldInd *)((tANI_U8 *)sap_offload_ind +
+                    sizeof(tSapOfldDelStaIndMsg) + sizeof(tANI_U32));
+        }
+        else
+        {
+            limLog(pMac, LOGE, FL("No Valid indication for connected station"));
+        }
+    }
+
+}
+#endif
+
 /**
  * limHandle80211Frames()
  *
@@ -695,6 +766,7 @@ limProcessEXTScanRealTimeData(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo)
  */
 
 static void 
+
 limHandle80211Frames(tpAniSirGlobal pMac, tpSirMsgQ limMsg, tANI_U8 *pDeferMsg)
 {
     tANI_U8          *pRxPacketInfo = NULL;
@@ -704,9 +776,19 @@ limHandle80211Frames(tpAniSirGlobal pMac, tpSirMsgQ limMsg, tANI_U8 *pDeferMsg)
     tANI_U8             sessionId;
     tAniBool            isFrmFt = FALSE;
     tANI_U16            fcOffset = WLANHAL_RX_BD_HEADER_SIZE;
+    tANI_S8             pe_sessionid = -1;
 
     *pDeferMsg= false;
     limGetBDfromRxPacket(pMac, limMsg->bodyptr, (tANI_U32 **)&pRxPacketInfo);
+
+#ifdef SAP_AUTH_OFFLOAD
+    if ((WDA_GET_SAP_AUTHOFFLOADIND(pRxPacketInfo)  == 1) &&
+         pMac->sap_auth_offload)
+    {
+        lim_process_sap_offload_indication(pMac, pRxPacketInfo);
+        goto end;
+    }
+#endif
 
 #ifdef WLAN_FEATURE_EXTSCAN
 
@@ -734,14 +816,89 @@ limHandle80211Frames(tpAniSirGlobal pMac, tpSirMsgQ limMsg, tANI_U8 *pDeferMsg)
         if ((fc.type == SIR_MAC_MGMT_FRAME) &&
                 (fc.subType != SIR_MAC_MGMT_BEACON))
         {
-            limLog(pMac, LOG1, FL("RX MGMT - Type %hu, SubType %hu, Seq.no %d"),
-                    fc.type, fc.subType,
-                    ((pHdr->seqControl.seqNumHi << 4) | (pHdr->seqControl.seqNumLo)));
+            limLog(pMac, LOG1, FL("RX MGMT - Type %hu, SubType %hu,"
+                                  "Seq.no %d, Source mac-addr "
+                                  MAC_ADDRESS_STR), fc.type, fc.subType,
+                                  ((pHdr->seqControl.seqNumHi << 4) |
+                                   (pHdr->seqControl.seqNumLo)),
+                                  MAC_ADDR_ARRAY(pHdr->sa));
         }
 #ifdef WLAN_FEATURE_ROAM_SCAN_OFFLOAD
-    if ( WDA_GET_ROAMCANDIDATEIND(pRxPacketInfo))
+    if (WDA_GET_ROAMCANDIDATEIND(pRxPacketInfo))
     {
-        limLog( pMac, LOG2, FL("Notify SME with candidate ind"));
+        if (vos_check_monitor_state())
+        {
+            limLog( pMac, LOGW, FL("Ignore raom candidate when roam started"));
+            goto end;
+        }
+        limLog( pMac, LOGW, FL("Notify SME with candidate ind"));
+
+        if (WDA_IF_PER_ROAMCANDIDATEIND(pRxPacketInfo) &&
+            IS_FEATURE_SUPPORTED_BY_FW(PER_BASED_ROAMING) &&
+            pMac->roam.configParam.isPERRoamEnabled)
+        {
+            tSirPerRoamScanResult *candidateChanInfo =
+                (tSirPerRoamScanResult *)WDA_GET_RX_MPDU_DATA(pRxPacketInfo);
+            int chanInfoLen = WDA_GET_RX_PAYLOAD_LEN(pRxPacketInfo)
+                                      - sizeof(tANI_U32);
+
+            /* Translate network buffer into system buffer */
+            vos_buff_to_hl_buff((v_U8_t *)candidateChanInfo,
+                          WDA_GET_RX_PAYLOAD_LEN(pRxPacketInfo));
+
+            /* Max candidates allowed */
+            if (candidateChanInfo->candidateCount >
+                SIR_PER_ROAM_MAX_CANDIDATE_CNT)
+            {
+                limLog(pMac, LOGE,
+                       FL("Got maximum candidates as %d, setting count as %d"),
+                       candidateChanInfo->candidateCount,
+                       SIR_PER_ROAM_MAX_CANDIDATE_CNT);
+                candidateChanInfo->candidateCount =
+                        SIR_PER_ROAM_MAX_CANDIDATE_CNT;
+            }
+
+            vos_mem_set(&pMac->candidateChannelInfo,
+                        sizeof(tSirCandidateChanInfo) *
+                        SIR_PER_ROAM_MAX_CANDIDATE_CNT, 0);
+
+            vos_mem_copy(&pMac->candidateChannelInfo,
+                         candidateChanInfo->channelInfo,
+                         (sizeof(tSirCandidateChanInfo) *
+                         SIR_PER_ROAM_MAX_CANDIDATE_CNT) < chanInfoLen ?
+                         (sizeof(tSirCandidateChanInfo) *
+                         SIR_PER_ROAM_MAX_CANDIDATE_CNT):
+                         chanInfoLen);
+
+            limLog(pMac, LOG1,
+                   FL("PER based Roam candidates %d"),
+                   candidateChanInfo->candidateCount);
+
+            pMac->PERroamCandidatesCnt = candidateChanInfo->candidateCount;
+        } else
+        {
+            /* Normal RSSI based roaming */
+            pMac->PERroamCandidatesCnt = 0;
+        }
+
+        pe_sessionid = limGetInfraSessionId(pMac);
+        if (pe_sessionid != -1) {
+            psessionEntry = peFindSessionBySessionId(pMac, pe_sessionid);
+            if (psessionEntry != NULL)
+            {
+                if ((psessionEntry->limSmeState == eLIM_SME_WT_DEAUTH_STATE) ||
+                    (psessionEntry->limSmeState == eLIM_SME_WT_DISASSOC_STATE))
+                {
+                     limLog(pMac, LOG1,
+                       FL("Drop candidate ind as deauth/disassoc in progress"));
+                     goto end;
+                }
+            }
+        }
+        else
+         limLog(pMac, LOGE,
+               FL("session id doesn't exist for infra"));
+
         //send a session 0 for now - TBD
         limSendSmeCandidateFoundInd(pMac, 0);
         goto end;
@@ -1548,6 +1705,9 @@ limProcessMessages(tpAniSirGlobal pMac, tpSirMsgQ  limMsg)
         case eWNI_SME_FT_PRE_AUTH_REQ:
         case eWNI_SME_FT_AGGR_QOS_REQ:
 #endif
+#ifdef WLAN_FEATURE_LFR_MBB
+        case eWNI_SME_MBB_PRE_AUTH_REASSOC_REQ:
+#endif
         case eWNI_SME_ADD_STA_SELF_REQ:
         case eWNI_SME_DEL_STA_SELF_REQ:
         case eWNI_SME_REGISTER_MGMT_FRAME_REQ:
@@ -1566,6 +1726,8 @@ limProcessMessages(tpAniSirGlobal pMac, tpSirMsgQ  limMsg)
 #endif /* FEATURE_WLAN_ESE && FEATURE_WLAN_ESE_UPLOAD */
         case eWNI_SME_MAC_SPOOF_ADDR_IND:
         case eWNI_SME_REGISTER_MGMT_FRAME_CB:
+        case eWNI_SME_SET_CHAN_SW_IE_REQ:
+        case eWNI_SME_ECSA_CHAN_CHANGE_REQ:
             // These messages are from HDD
             limProcessNormalHddMsg(pMac, limMsg, false);   //no need to response to hdd
             break;
@@ -1603,6 +1765,17 @@ limProcessMessages(tpAniSirGlobal pMac, tpSirMsgQ  limMsg)
             vos_mem_free(limMsg->bodyptr);
             limMsg->bodyptr = NULL;
             break;
+
+#ifdef WLAN_FEATURE_RMC
+        case eWNI_SME_ENABLE_RMC_REQ:
+        case eWNI_SME_DISABLE_RMC_REQ:
+            /*
+             * These messages are from HDD
+             * No need to response to hdd
+             */
+            limProcessSmeReqMessages(pMac,limMsg);
+            break;
+#endif /* WLAN_FEATURE_RMC */
 
         case SIR_HAL_P2P_NOA_START_IND:
         {
@@ -1756,6 +1929,11 @@ limProcessMessages(tpAniSirGlobal pMac, tpSirMsgQ  limMsg)
             limHandleBmpsStatusInd(pMac);
             break;
 
+#ifdef WLAN_FEATURE_APFIND
+        case WDA_AP_FIND_IND:
+            limHandleAPFindInd(pMac);
+            break;
+#endif
         case WDA_MISSED_BEACON_IND:
             limHandleMissedBeaconInd(pMac, limMsg);
             vos_mem_free(limMsg->bodyptr);
@@ -1837,6 +2015,11 @@ limProcessMessages(tpAniSirGlobal pMac, tpSirMsgQ  limMsg)
         case SIR_LIM_DEAUTH_ACK_TIMEOUT:
         case SIR_LIM_CONVERT_ACTIVE_CHANNEL_TO_PASSIVE:
         case SIR_LIM_AUTH_RETRY_TIMEOUT:
+        case SIR_LIM_SAP_ECSA_TIMEOUT:
+#ifdef WLAN_FEATURE_LFR_MBB
+        case SIR_LIM_PREAUTH_MBB_RSP_TIMEOUT:
+        case SIR_LIM_REASSOC_MBB_RSP_TIMEOUT:
+#endif
             // These timeout messages are handled by MLM sub module
 
             limProcessMlmReqMessages(pMac,
@@ -2095,8 +2278,11 @@ limProcessMessages(tpAniSirGlobal pMac, tpSirMsgQ  limMsg)
         {
 #ifdef WLAN_ACTIVEMODE_OFFLOAD_FEATURE
             tpPESession     psessionEntry;
-            tANI_U8 sessionId = (tANI_U8)limMsg->bodyval ;
-            psessionEntry = &pMac->lim.gpSession[sessionId];
+            tANI_U8 sessionId;
+            tSirSetActiveModeSetBncFilterReq *bcnFilterReq =
+                (tSirSetActiveModeSetBncFilterReq *)limMsg->bodyptr;
+            psessionEntry = peFindSessionByBssid(pMac, bcnFilterReq->bssid,
+                                                 &sessionId);
             if(psessionEntry != NULL && IS_ACTIVEMODE_OFFLOAD_FEATURE_ENABLE)
             {
                // sending beacon filtering information down to HAL
@@ -2152,17 +2338,22 @@ limProcessMessages(tpAniSirGlobal pMac, tpSirMsgQ  limMsg)
     case eWNI_SME_HT40_STOP_OBSS_SCAN_IND:
         {
            tpPESession     psessionEntry = NULL;
-           tANI_U8 sessionId = (tANI_U8)limMsg->bodyval ;
+           tANI_U8 sessionId;
+           tSirSmeHT40OBSSStopScanInd *ht40StopScanInd =
+               (tSirSmeHT40OBSSStopScanInd *)limMsg->bodyptr;
 
-           psessionEntry = &pMac->lim.gpSession[sessionId];
+           psessionEntry = peFindSessionByBssid(pMac,
+                   ht40StopScanInd->bssid, &sessionId);;
            /* Sending LIM STOP OBSS SCAN Indication
                      Stop command support is only for debugging purpose */
-           if ( IS_HT40_OBSS_SCAN_FEATURE_ENABLE )
+           if (psessionEntry && IS_HT40_OBSS_SCAN_FEATURE_ENABLE)
               limSendHT40OBSSStopScanInd(pMac, psessionEntry);
            else
               VOS_TRACE(VOS_MODULE_ID_PE,VOS_TRACE_LEVEL_ERROR,
                    "OBSS Scan Stop not started ");
         }
+        vos_mem_free(limMsg->bodyptr);
+        limMsg->bodyptr = NULL;
         break;
 #ifdef WLAN_FEATURE_AP_HT40_24G
     case eWNI_SME_SET_HT_2040_MODE:
@@ -2177,6 +2368,8 @@ limProcessMessages(tpAniSirGlobal pMac, tpSirMsgQ  limMsg)
         {
             tpPESession     psessionEntry;
             tANI_U8         sessionId;
+            tDphHashNode   *pStaDs = NULL;
+            int i, aid;
             tTdlsLinkEstablishParams *pTdlsLinkEstablishParams;
             pTdlsLinkEstablishParams = (tTdlsLinkEstablishParams*) limMsg->bodyptr;
 
@@ -2196,10 +2389,32 @@ limProcessMessages(tpAniSirGlobal pMac, tpSirMsgQ  limMsg)
             }
             else
             {
-                limSendSmeTdlsLinkEstablishReqRsp(pMac,
+                for (i = 0;
+                     i < sizeof(psessionEntry->peerAIDBitmap)/sizeof(tANI_U32);
+                                                                i++) {
+                    for (aid = 0; aid < (sizeof(tANI_U32) << 3); aid++) {
+                        if (CHECK_BIT(psessionEntry->peerAIDBitmap[i], aid)) {
+                            pStaDs = dphGetHashEntry(pMac,
+                                           (aid + i*(sizeof(tANI_U32) << 3)),
+                                            &psessionEntry->dph.dphHashTable);
+                              if ((NULL != pStaDs) &&
+                                   (pTdlsLinkEstablishParams->staIdx ==
+                                                       pStaDs->staIndex))
+                                  goto send_link_resp;
+                        }
+                    }
+                }
+send_link_resp:
+                if (pStaDs)
+                   limSendSmeTdlsLinkEstablishReqRsp(pMac,
                                                   psessionEntry->smeSessionId,
-                                                  NULL,
-                                                  NULL,
+                                                  pStaDs->staAddr,
+                                                  pStaDs,
+                                                  pTdlsLinkEstablishParams->status) ;
+                else
+                   limSendSmeTdlsLinkEstablishReqRsp(pMac,
+                                                  psessionEntry->smeSessionId,
+                                                  NULL, NULL,
                                                   pTdlsLinkEstablishParams->status) ;
             }
             vos_mem_free((v_VOID_t *)(limMsg->bodyptr));
@@ -2211,6 +2426,8 @@ limProcessMessages(tpAniSirGlobal pMac, tpSirMsgQ  limMsg)
         {
             tpPESession     psessionEntry;
             tANI_U8         sessionId;
+            tDphHashNode   *pStaDs = NULL;
+            int i, aid;
             tTdlsChanSwitchParams *pTdlsChanSwitchParams;
             pTdlsChanSwitchParams = (tTdlsChanSwitchParams*) limMsg->bodyptr;
 
@@ -2230,11 +2447,33 @@ limProcessMessages(tpAniSirGlobal pMac, tpSirMsgQ  limMsg)
             }
             else
             {
-                limSendSmeTdlsChanSwitchReqRsp(pMac,
+                for (i = 0;
+                     i < sizeof(psessionEntry->peerAIDBitmap)/sizeof(tANI_U32);
+                                                                i++) {
+                    for (aid = 0; aid < (sizeof(tANI_U32) << 3); aid++) {
+                        if (CHECK_BIT(psessionEntry->peerAIDBitmap[i], aid)) {
+                            pStaDs = dphGetHashEntry(pMac,
+                                           (aid + i*(sizeof(tANI_U32) << 3)),
+                                            &psessionEntry->dph.dphHashTable);
+                              if ((NULL != pStaDs) &&
+                                   (pTdlsChanSwitchParams->staIdx ==
+                                                       pStaDs->staIndex))
+                                  goto send_chan_switch_resp;
+                        }
+                    }
+                }
+send_chan_switch_resp:
+                if (pStaDs)
+                    limSendSmeTdlsChanSwitchReqRsp(pMac,
                                                   psessionEntry->smeSessionId,
-                                                  NULL,
-                                                  NULL,
-                                                  pTdlsChanSwitchParams->status) ;
+                                                  pStaDs->staAddr,
+                                                  pStaDs,
+                                                  pTdlsChanSwitchParams->status);
+               else
+                    limSendSmeTdlsChanSwitchReqRsp(pMac,
+                                                  psessionEntry->smeSessionId,
+                                                  NULL, NULL,
+                                                  pTdlsChanSwitchParams->status);
             }
             vos_mem_free((v_VOID_t *)(limMsg->bodyptr));
             limMsg->bodyptr = NULL;
@@ -2253,6 +2492,28 @@ limProcessMessages(tpAniSirGlobal pMac, tpSirMsgQ  limMsg)
        limMsg->bodyptr = NULL;
        break;
     }
+#ifdef WLAN_FEATURE_RMC
+    case WDA_RMC_BECOME_RULER:
+        limProcessRMCMessages(pMac, eLIM_RMC_BECOME_RULER_RESP,
+                          (void *)limMsg->bodyptr);
+        vos_mem_free((v_VOID_t*)limMsg->bodyptr);
+        limMsg->bodyptr = NULL;
+        break ;
+
+    case WDA_RMC_RULER_SELECT_RESP:
+        limProcessRMCMessages(pMac, eLIM_RMC_RULER_SELECT_RESP,
+                          (void *)limMsg->bodyptr);
+        vos_mem_free((v_VOID_t*)limMsg->bodyptr);
+        limMsg->bodyptr = NULL;
+        break ;
+
+    case WDA_RMC_UPDATE_IND:
+        limProcessRMCMessages(pMac, eLIM_RMC_RULER_PICK_NEW,
+                          (void *)limMsg->bodyptr);
+        vos_mem_free((v_VOID_t*)limMsg->bodyptr);
+        limMsg->bodyptr = NULL;
+        break ;
+#endif /* WLAN_FEATURE_RMC */
 
     case WDA_SPOOF_MAC_ADDR_RSP:
        limProcessMlmSpoofMacAddrRsp(pMac, (tSirRetStatus)limMsg->bodyval);
@@ -2270,6 +2531,25 @@ limProcessMessages(tpAniSirGlobal pMac, tpSirMsgQ  limMsg)
          limMsg->bodyptr = NULL;
          break;
 
+    case eWNI_SME_CAP_TSF_REQ:
+        lim_process_sme_cap_tsf_req(pMac, limMsg->bodyptr);
+        vos_mem_free((v_VOID_t*)limMsg->bodyptr);
+        limMsg->bodyptr = NULL;
+        break;
+
+    case eWNI_SME_GET_TSF_REQ:
+        lim_process_sme_get_tsf_req(pMac, limMsg->bodyptr);
+        vos_mem_free((v_VOID_t*)limMsg->bodyptr);
+        limMsg->bodyptr = NULL;
+        break;
+    case eWNI_SME_DEL_BA_SES_REQ:
+        lim_process_sme_del_ba_ses_req(pMac, limMsg->bodyptr);
+        vos_mem_free((v_VOID_t*)limMsg->bodyptr);
+        limMsg->bodyptr = NULL;
+        break;
+    case eWNI_SME_STA_DEL_BA_REQ:
+        limStaDelBASession(pMac);
+        break;
     default:
         vos_mem_free((v_VOID_t*)limMsg->bodyptr);
         limMsg->bodyptr = NULL;

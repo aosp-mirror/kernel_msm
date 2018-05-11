@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -1304,6 +1304,8 @@ get_eRoamCmdStatus_str(eRoamCmdStatus val)
 #endif /* FEATURE_WLAN_ESE && FEATURE_WLAN_ESE_UPLOAD */
         CASE_RETURN_STR(eCSR_ROAM_UPDATE_MAX_RATE_IND);
         CASE_RETURN_STR(eCSR_ROAM_LOST_LINK_PARAMS_IND);
+        CASE_RETURN_STR(eCSR_ROAM_ECSA_BCN_TX_IND);
+        CASE_RETURN_STR(eCSR_ROAM_ECSA_CHAN_CHANGE_RSP);
     default:
         return "unknown";
     }
@@ -2064,7 +2066,7 @@ eHalStatus csrParseBssDescriptionIEs(tHalHandle hHal, tSirBssDescription *pBssDe
 {
     eHalStatus status = eHAL_STATUS_FAILURE;
     tpAniSirGlobal pMac = PMAC_STRUCT( hHal );
-    int ieLen = (int)(pBssDesc->length + sizeof( pBssDesc->length ) - GET_FIELD_OFFSET( tSirBssDescription, ieFields ));
+    int ieLen = (int)GET_IE_LEN_IN_BSS(pBssDesc->length);
 
     if(ieLen > 0 && pIEStruct)
     {

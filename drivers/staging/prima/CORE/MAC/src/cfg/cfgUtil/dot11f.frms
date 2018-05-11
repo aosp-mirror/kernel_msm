@@ -94,8 +94,9 @@ const EID_FT_INFO                    =  55;
 const EID_TIMEOUT_INTERVAL           =  56;
 const EID_FT_RIC_DATA                =  57;
 const EID_SUPPORTED_OPER_CLASSES     =  59;
+const EID_EXT_CHAN_SWITCH            =  60;
 const EID_HT_INFO                    =  61;
-const EID_EXT_CHANNEL_SWITCH_ANN     =  62;
+const EID_SEC_CHAN_OFFSET            =  62;
 const EID_RSNI                       =  65;
 const EID_RRM_MEAS_PILOT_TX_INFO     =  66;
 const EID_WAPI                       =  68;
@@ -419,6 +420,31 @@ FF P2POUISubType (1)
     ouiSubtype, 1;
 }
 
+FF RMCOUI (3)
+{
+     oui[3];
+}
+
+FF MagicCode (6)
+{
+     magic[6];
+}
+
+FF RMCVersion (1)
+{
+     version, 1;
+}
+
+FF RMCDialogToken (4)
+{
+     token, 4;
+}
+
+FF Ruler (6)
+{
+     mac[6];
+}
+
 FF VhtMembershipStatusArray(8)                    // 8.4.1.51
 {
     membershipStatusArray[8];
@@ -429,6 +455,15 @@ FF VhtUserPositionArray(16)                    // 8.4.1.52
     userPositionArray[16];
 }
 
+FF ext_chan_switch_ann_action(4)
+{
+   {
+     switch_mode: 8;
+     op_class: 8;
+     new_channel: 8;
+     switch_count: 8;
+   }
+}
 
 /////////////////////////////////////////////////////////////////////////////
 //                                  TLVs                                   //
@@ -1342,7 +1377,15 @@ IE ChanSwitchAnn (EID_CHANNEL_SWITCH_ANN) // 7.3.2.20
     switchCount, 1;
 }
 
-IE ExtChanSwitchAnn (EID_EXT_CHANNEL_SWITCH_ANN) // 7.3.2.20a
+IE ext_chan_switch_ann (EID_EXT_CHAN_SWITCH) //9.4.2.53
+{
+    switch_mode,   1;
+    new_reg_class, 1;
+    new_channel,   1;
+    switch_count,  1;
+}
+
+IE sec_chan_offset (EID_SEC_CHAN_OFFSET) //9.4.2.20
 {
 	secondaryChannelOffset, 1;
 }
@@ -2022,6 +2065,28 @@ IE ESERadMgmtCap (EID_VENDOR_SPECIFIC) OUI (0x00, 0x40, 0x96, 0x01)
 
 }
 
+IE hs20vendor_ie (EID_VENDOR_SPECIFIC) OUI (0x50, 0x6F, 0x9A, 0x10)
+{
+    /* hotspot_configurations */
+    {
+        dgaf_dis:               1;
+        hs_id_present:          2;
+        reserved:               1;
+        release_num:            4;
+    }
+    OPTIONAL UNION hs_id (DISCRIMINATOR hs_id_present)
+    {
+        pps_mo (hs_id_present IS 1)
+        {
+            pps_mo_id,          2;
+        }
+        anqp_domain (hs_id_present IS 2)
+        {
+            anqp_domain_id,     2;
+        }
+    };
+}
+
 IE ESETrafStrmMet (EID_VENDOR_SPECIFIC) OUI (0x00, 0x40, 0x96, 0x07)
 {
     tsid,           1;
@@ -2673,63 +2738,7 @@ IE WiderBWChanSwitchAnn (EID_WIDER_BW_CHANNEL_SWITCH_ANN)
 
 IE ExtCap (EID_EXT_CAP)
 {
-    {
-        bssCoexistMgmtSupport:          1;
-        reserved1:                      1;
-        extChanSwitch:                  1;
-        reserved2:                      1;
-        psmpCap:                        1;
-        reserved3:                      1;
-        spsmpCap:                       1;
-        event:                          1;
-        diagnostics:                    1;
-        multiDiagnostics:               1;
-        locTracking:                    1;
-        FMS:                            1;
-        proxyARPService:                1;
-        coLocIntfReporting:             1;
-        civicLoc:                       1;
-        geospatialLoc:                  1;
-        TFS:                            1;
-        wnmSleepMode:                   1;
-        timBroadcast:                   1;
-        bssTransition:                  1;
-        qosTrafficCap:                  1;
-        acStaCnt:                       1;
-        multiBSSID:                     1;
-        timingMeas:                     1;
-        chanUsage:                      1;
-        ssidList:                       1;
-        DMS:                            1;
-        UTCTSFOffset:                   1;
-        TDLSPeerUAPSDBufferSTA:         1;
-        TDLSPeerPSMSupp:                1;
-        TDLSChannelSwitching:           1;
-        interworkingService:            1;
-    }
-    {
-        qosMap:                         1;
-        EBR:                            1;
-        sspnInterface:                  1;
-        reserved4:                      1;
-        msgCFCap:                       1;
-        TDLSSupport:                    1;
-        TDLSProhibited:                 1;
-        TDLSChanSwitProhibited:         1;
-        rejectUnadmittedTraffic:        1;
-        serviceIntervalGranularity:     3;
-        identifierLoc:                  1;
-        uapsdCoexistence:               1;
-        wnmNotification:                1;
-        reserved5:                      1;
-    }
-    {
-        UTF8SSID:                       1;
-        reserved6:                      12;
-        TDLSWiderBW:                    1;
-        operModeNotification:           1;
-        reserved7:                      1;
-    }
+   bytes[1..9];
 }
 
 IE HTCaps (EID_HT_CAPABILITIES)
@@ -3332,6 +3341,7 @@ FRAME Beacon                              // C.f. Sec. 7.2.3.1
     OPTIE  FHPattTable;
     OPTIE  PowerConstraints;
     OPTIE  ChanSwitchAnn;
+    OPTIE  ext_chan_switch_ann;
     OPTIE  Quiet;
     OPTIE  TPCReport;
     OPTIE  ERPInfo;
@@ -3346,7 +3356,7 @@ FRAME Beacon                              // C.f. Sec. 7.2.3.1
     OPTIE  WPA;
     OPTIE  HTCaps;
     OPTIE  HTInfo;
-    OPTIE  ExtChanSwitchAnn;
+    OPTIE  sec_chan_offset;
     OPTIE  WMMInfoAp;
     OPTIE  WMMParams;
     OPTIE  WMMCaps;
@@ -3365,6 +3375,7 @@ FRAME Beacon                              // C.f. Sec. 7.2.3.1
     OPTIE  OperatingMode;
     OPTIE  WiderBWChanSwitchAnn;
     OPTIE  OBSSScanParameters;
+    OPTIE  hs20vendor_ie;
 } // End frame Beacon.
 
 // Ok, here's  the story on  Beacon1 & Beacon2.   We presumably beacon  a lot
@@ -3415,6 +3426,7 @@ FRAME Beacon2
     OPTIE  Country;
     OPTIE  PowerConstraints;
     OPTIE  ChanSwitchAnn;
+    OPTIE  ext_chan_switch_ann;
     OPTIE  Quiet;
     OPTIE  TPCReport;
     OPTIE  ERPInfo;
@@ -3427,7 +3439,7 @@ FRAME Beacon2
     OPTIE  WPA;
     OPTIE  HTCaps;
     OPTIE  HTInfo;
-    OPTIE  ExtChanSwitchAnn;
+    OPTIE  sec_chan_offset;
     OPTIE  WMMInfoAp;
     OPTIE  WMMParams;
     OPTIE  WMMCaps;
@@ -3445,6 +3457,7 @@ FRAME Beacon2
     OPTIE  OperatingMode;
     OPTIE  WiderBWChanSwitchAnn;
     OPTIE  OBSSScanParameters;
+    OPTIE  hs20vendor_ie;
 }
 
 // This frame is just Beacon with its Fixed Fields stripped out.  It's handy
@@ -3468,6 +3481,7 @@ FRAME BeaconIEs
     OPTIE  FHPattTable;
     OPTIE  PowerConstraints;
     OPTIE  ChanSwitchAnn;
+    OPTIE  ext_chan_switch_ann;
     OPTIE  Quiet;
     OPTIE  TPCReport;
     OPTIE  ERPInfo;
@@ -3482,7 +3496,7 @@ FRAME BeaconIEs
     OPTIE  WPA;
     OPTIE  HTCaps;
     OPTIE  HTInfo;
-    OPTIE  ExtChanSwitchAnn;
+    OPTIE  sec_chan_offset;
     OPTIE  WMMInfoAp;
     OPTIE  WMMParams;
     OPTIE  WMMCaps;
@@ -3502,6 +3516,7 @@ FRAME BeaconIEs
     OPTIE  OperatingMode;
     OPTIE  WiderBWChanSwitchAnn;
     OPTIE  OBSSScanParameters;
+    OPTIE  hs20vendor_ie;
 
 } // End frame BeaconIEs.
 
@@ -3539,6 +3554,7 @@ FRAME AssocRequest                        // 7.2.3.4
     OPTIE  ExtCap;
     OPTIE  OperatingMode;
     OPTIE  QosMapSet;
+    OPTIE  hs20vendor_ie;
 } // End frame AssocRequest.
 
 FRAME AssocResponse                       // 7.2.3.5
@@ -3609,6 +3625,7 @@ FRAME ReAssocRequest                      // 7.2.3.6
     OPTIE  ExtCap;
     OPTIE  OperatingMode;
     OPTIE  QosMapSet;
+    OPTIE  hs20vendor_ie;
 } // End frame ReAssocRequest.
 
 FRAME ReAssocResponse                     // 7.2.3.7
@@ -3676,6 +3693,7 @@ FRAME ProbeResponse                       // 7.2.3.9
     OPTIE  FHPattTable;
     OPTIE  PowerConstraints;
     OPTIE  ChanSwitchAnn;
+    OPTIE  ext_chan_switch_ann;
     OPTIE  Quiet;
     OPTIE  TPCReport;
     OPTIE  ERPInfo;
@@ -3689,7 +3707,7 @@ FRAME ProbeResponse                       // 7.2.3.9
     OPTIE  WPA;
     OPTIE  HTCaps;
     OPTIE  HTInfo;
-    OPTIE  ExtChanSwitchAnn;
+    OPTIE  sec_chan_offset;
     OPTIE  WMMInfoAp;
     OPTIE  WMMParams;
     OPTIE  WMMCaps;
@@ -3707,6 +3725,8 @@ FRAME ProbeResponse                       // 7.2.3.9
     OPTIE  VHTExtBssLoad;
     OPTIE  ExtCap;
     OPTIE  OBSSScanParameters;
+    OPTIE  hs20vendor_ie;
+    OPTIE  WiderBWChanSwitchAnn;
 } // End frame ProbeResponse.
 
 FRAME Authentication                      // 7.2.3.10
@@ -3832,8 +3852,15 @@ FRAME ChannelSwitch
     FF     Category;
     FF     Action;
     MANDIE ChanSwitchAnn;
-    OPTIE  ExtChanSwitchAnn;
+    OPTIE  sec_chan_offset;
     OPTIE  WiderBWChanSwitchAnn;
+}
+
+FRAME ext_channel_switch_action_frame
+{
+    FF     Category;
+    FF     Action;
+    FF     ext_chan_switch_ann_action;
 }
 
 FRAME MeasurementRequest
@@ -4240,6 +4267,17 @@ FRAME QosMapConfigure
     FF     Category;
     FF     Action;
     MANDIE  QosMapSet;
+}
+
+FRAME RMC
+{
+    FF     Category;
+    FF     RMCOUI;
+    FF     MagicCode;
+    FF     RMCVersion;
+    FF     Action;
+    FF     RMCDialogToken;
+    FF     Ruler;
 }
 
 FRAME VHTGidManagementActionFrame

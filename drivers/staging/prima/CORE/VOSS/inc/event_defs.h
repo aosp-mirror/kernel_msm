@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -1903,7 +1903,16 @@ typedef enum
   EVENT_SNS_DRV_OPMODE_CHANGE = 0x768,
   EVENT_WLAN_EAPOL = 0xA8D,/* 18 bytes payload */
   EVENT_WLAN_WAKE_LOCK = 0xAA2, /* 96 bytes payload */
-
+  EVENT_WLAN_LOG_COMPLETE = 0xAA7, /* 16 bytes payload */
+  EVENT_WLAN_STATUS_V2 = 0xAB3,
+  EVENT_WLAN_TDLS_TEARDOWN = 0xAB5,
+  EVENT_WLAN_TDLS_ENABLE_LINK = 0XAB6,
+  EVENT_WLAN_SUSPEND_RESUME = 0xAB7,
+  EVENT_OFFLOAD_REQ = 0xAB8,
+  EVENT_TDLS_SCAN_BLOCK = 0xAB9,
+  EVENT_WLAN_TX_RX_MGMT = 0xABA,
+  EVENT_WLAN_SSR_REINIT_SUBSYSTEM = 0xB3C,
+  EVENT_WLAN_SSR_SHUTDOWN_SUBSYSTEM = 0xB3D,
   EVENT_NEXT_UNUSED_EVENT,
   EVENT_RSVD_START = 0x0800,
   EVENT_RSVD_END   = 0x083F,

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -123,11 +123,64 @@ typedef struct
 // loaded on driver initialization if available
 
 #ifdef CONFIG_ENABLE_LINUX_REG
+static struct
+chan_to_ht_40_index_map chan_to_ht_40_index[NUM_20MHZ_RF_CHANNELS] =
+{
+  /* ht_40_minus_index, ht_40_plus_index */
+  {INVALID_RF_CHANNEL, RF_CHAN_BOND_3},    //RF_CHAN_1,
+  {INVALID_RF_CHANNEL, RF_CHAN_BOND_4},    //RF_CHAN_2,
+  {INVALID_RF_CHANNEL, RF_CHAN_BOND_5},    //RF_CHAN_3,
+  {INVALID_RF_CHANNEL, RF_CHAN_BOND_6},    //RF_CHAN_4,
+  {RF_CHAN_BOND_3, RF_CHAN_BOND_7},        //RF_CHAN_5,
+  {RF_CHAN_BOND_4, RF_CHAN_BOND_8},        //RF_CHAN_6,
+  {RF_CHAN_BOND_5, RF_CHAN_BOND_9},        //RF_CHAN_7,
+  {RF_CHAN_BOND_6, RF_CHAN_BOND_10},       //RF_CHAN_8,
+  {RF_CHAN_BOND_7, RF_CHAN_BOND_11},       //RF_CHAN_9,
+  {RF_CHAN_BOND_8, INVALID_RF_CHANNEL},    //RF_CHAN_10,
+  {RF_CHAN_BOND_9, INVALID_RF_CHANNEL},    //RF_CHAN_11,
+  {RF_CHAN_BOND_10, INVALID_RF_CHANNEL},   //RF_CHAN_12,
+  {RF_CHAN_BOND_11, INVALID_RF_CHANNEL},   //RF_CHAN_13,
+  {INVALID_RF_CHANNEL, INVALID_RF_CHANNEL},//RF_CHAN_14,
+  {INVALID_RF_CHANNEL, RF_CHAN_BOND_242},  //RF_CHAN_240,
+  {RF_CHAN_BOND_242, RF_CHAN_BOND_246},    //RF_CHAN_244,
+  {RF_CHAN_BOND_246, RF_CHAN_BOND_250},    //RF_CHAN_248,
+  {RF_CHAN_BOND_250, INVALID_RF_CHANNEL},  //RF_CHAN_252,
+  {INVALID_RF_CHANNEL, RF_CHAN_BOND_210},  //RF_CHAN_208,
+  {RF_CHAN_BOND_210, RF_CHAN_BOND_214},    //RF_CHAN_212,
+  {RF_CHAN_BOND_214, INVALID_RF_CHANNEL},  //RF_CHAN_216,
+  {INVALID_RF_CHANNEL, RF_CHAN_BOND_38},   //RF_CHAN_36,
+  {RF_CHAN_BOND_38, RF_CHAN_BOND_42},      //RF_CHAN_40,
+  {RF_CHAN_BOND_42, RF_CHAN_BOND_46},      //RF_CHAN_44,
+  {RF_CHAN_BOND_46, RF_CHAN_BOND_50},      //RF_CHAN_48,
+  {RF_CHAN_BOND_50, RF_CHAN_BOND_54},      //RF_CHAN_52,
+  {RF_CHAN_BOND_54, RF_CHAN_BOND_58},      //RF_CHAN_56,
+  {RF_CHAN_BOND_58, RF_CHAN_BOND_62},      //RF_CHAN_60,
+  {RF_CHAN_BOND_62, INVALID_RF_CHANNEL},   //RF_CHAN_64,
+  {INVALID_RF_CHANNEL, RF_CHAN_BOND_102},  //RF_CHAN_100,
+  {RF_CHAN_BOND_102, RF_CHAN_BOND_106},    //RF_CHAN_104,
+  {RF_CHAN_BOND_106, RF_CHAN_BOND_110},    //RF_CHAN_108,
+  {RF_CHAN_BOND_110, RF_CHAN_BOND_114},    //RF_CHAN_112,
+  {RF_CHAN_BOND_114, RF_CHAN_BOND_118},    //RF_CHAN_116,
+  {RF_CHAN_BOND_118, RF_CHAN_BOND_122},    //RF_CHAN_120,
+  {RF_CHAN_BOND_122, RF_CHAN_BOND_126},    //RF_CHAN_124,
+  {RF_CHAN_BOND_126, RF_CHAN_BOND_130},    //RF_CHAN_128,
+  {RF_CHAN_BOND_130, RF_CHAN_BOND_134},    //RF_CHAN_132,
+  {RF_CHAN_BOND_134, RF_CHAN_BOND_138},    //RF_CHAN_136,
+  {RF_CHAN_BOND_138, RF_CHAN_BOND_142},    //RF_CHAN_140,
+#ifdef FEATURE_WLAN_CH144
+  {RF_CHAN_BOND_142, INVALID_RF_CHANNEL},  //RF_CHAN_144,
+#endif /* FEATURE_WLAN_CH144 */
+  {INVALID_RF_CHANNEL, RF_CHAN_BOND_151},  //RF_CHAN_149,
+  {RF_CHAN_BOND_151, RF_CHAN_BOND_155},    //RF_CHAN_153,
+  {RF_CHAN_BOND_155, RF_CHAN_BOND_159},    //RF_CHAN_157,
+  {RF_CHAN_BOND_159, RF_CHAN_BOND_163},    //RF_CHAN_161,
+  {RF_CHAN_BOND_163, INVALID_RF_CHANNEL},  //RF_CHAN_165,
+};
 
 static CountryInfoTable_t countryInfoTable =
 {
     /* the first entry in the table is always the world domain */
-    138,
+    139,
     {
       {REGDOMAIN_WORLD, {'0', '0'}}, // WORLD DOMAIN
       {REGDOMAIN_ETSI, {'A', 'D'}}, // ANDORRA
@@ -184,7 +237,7 @@ static CountryInfoTable_t countryInfoTable =
       {REGDOMAIN_APAC, {'G', 'T'}},  //GUATEMALA
       {REGDOMAIN_FCC, {'G', 'U'}},  //GUAM
       {REGDOMAIN_ETSI, {'H', 'U'}}, //HUNGARY
-      {REGDOMAIN_FCC, {'I', 'D'}},  //INDONESIA
+      {REGDOMAIN_ETSI, {'I', 'D'}},  //INDONESIA
       {REGDOMAIN_ETSI, {'I', 'E'}}, //IRELAND
       {REGDOMAIN_ETSI, {'I', 'L'}}, //ISRAEL
       {REGDOMAIN_APAC, {'I', 'N'}}, //INDIA
@@ -254,19 +307,20 @@ static CountryInfoTable_t countryInfoTable =
       {REGDOMAIN_ETSI, {'T', 'R'}}, //TURKEY
       {REGDOMAIN_WORLD, {'T', 'T'}}, //TRINIDAD AND TOBAGO
       {REGDOMAIN_FCC, {'T', 'W'}}, //TAIWAN, PRIVINCE OF CHINA
-      {REGDOMAIN_FCC, {'T', 'Z'}}, //TANZANIA, UNITED REPUBLIC OF
+      {REGDOMAIN_ETSI, {'T', 'Z'}}, //TANZANIA, UNITED REPUBLIC OF
       {REGDOMAIN_WORLD, {'U', 'A'}}, //UKRAINE
       {REGDOMAIN_KOREA, {'U', 'G'}}, //UGANDA
       {REGDOMAIN_FCC, {'U', 'S'}}, //USA
       {REGDOMAIN_WORLD, {'U', 'Y'}}, //URUGUAY
-      {REGDOMAIN_FCC, {'U', 'Z'}}, //UZBEKISTAN
+      {REGDOMAIN_ETSI, {'U', 'Z'}}, //UZBEKISTAN
       {REGDOMAIN_ETSI, {'V', 'E'}}, //VENEZUELA
       {REGDOMAIN_FCC, {'V', 'I'}}, //VIRGIN ISLANDS, US
-      {REGDOMAIN_FCC, {'V', 'N'}}, //VIETNAM
+      {REGDOMAIN_ETSI, {'V', 'N'}}, //VIETNAM
       {REGDOMAIN_ETSI, {'Y', 'E'}}, //YEMEN
       {REGDOMAIN_ETSI, {'Y', 'T'}}, //MAYOTTE
       {REGDOMAIN_ETSI, {'Z', 'A'}}, //SOUTH AFRICA
       {REGDOMAIN_ETSI, {'Z', 'W'}}, //ZIMBABWE
+      {REGDOMAIN_JAPAN, {'X', 'A'}}, //JAPAN PASSIVE
     }
 };
 
@@ -1566,6 +1620,14 @@ VOS_STATUS vos_nv_close(void)
     vos_mem_vfree(pEncodedBuf);
     vos_mem_free(pDictFile);
     vos_mem_vfree(pnvEncodedBuf);
+   /*
+    * Reset the linux_reg identifier to allow
+    * driver to send fresh regulatory hint to
+    * the kernel in case of a static driver reload
+    * under strict regulatory domain.
+    */
+    linux_reg_cc[0] = '0';
+    linux_reg_cc[1] = '0';
 
     gnvEFSTable=NULL;
     return VOS_STATUS_SUCCESS;
@@ -1698,8 +1760,10 @@ VOS_STATUS vos_nv_readMultiMacAddress( v_U8_t *pMacAddress,
       (NULL == pMacAddress))
    {
       VOS_TRACE( VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-          " Invalid Parameter from NV Client macCount %d, pMacAddress %p",
+          " Invalid Parameter from NV Client macCount %d, pMacAddress %pK",
           macCount, pMacAddress);
+
+      return VOS_STATUS_E_INVAL;
    }
 
    status = vos_nv_read( VNV_FIELD_IMAGE, &fieldImage, NULL,
@@ -2570,6 +2634,39 @@ VOS_STATUS vos_nv_setNVEncodedBuffer(v_U8_t *pNvBuffer, v_SIZE_t size)
     return VOS_STATUS_SUCCESS;
 }
 
+/*
+ *vos_nv_set_Channel_state - API to set the channel state in NV table
+ *@rfChannel  - input channel enum
+ *@channel_state - state of the channel to be set
+ *  enabled
+ *  disabled
+ *  DFS
+ * Return - Void
+ */
+void vos_nv_set_channel_state(v_U32_t rfChannel, int channel_state)
+{
+	v_U32_t	channelLoop;
+	eRfChannels channelEnum = INVALID_RF_CHANNEL;
+
+	for (channelLoop = 0; channelLoop <= RF_CHAN_165; channelLoop++) {
+		if (rfChannels[channelLoop].channelNum == rfChannel) {
+			channelEnum = (eRfChannels)channelLoop;
+			break;
+		}
+	}
+
+	if (INVALID_RF_CHANNEL == channelEnum) {
+		VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
+			  "vos_nv_set_channel_state, invalid channel %d",
+			  rfChannel);
+		return;
+	}
+
+	pnvEFSTable->
+	halnv.tables.regDomains[temp_reg_domain].channels[channelEnum].enabled =
+		channel_state;
+}
+
 /**------------------------------------------------------------------------
   \brief vos_nv_getChannelEnabledState -
   \param rfChannel  - input channel enum to know evabled state
@@ -2758,11 +2855,11 @@ static int create_crda_regulatory_entry(struct wiphy *wiphy,
    /* 20MHz channels */
    if (nBandCapability == eCSR_BAND_24)
        pr_info("BandCapability is set to 2G only.\n");
-   for (i=0,m=0;i<IEEE80211_NUM_BANDS;i++)
+   for (i=0,m=0;i<HDD_NUM_NL80211_BANDS;i++)
    {
-       if (i == IEEE80211_BAND_2GHZ && nBandCapability == eCSR_BAND_5G) // 5G only
+       if (i == HDD_NL80211_BAND_2GHZ && nBandCapability == eCSR_BAND_5G) // 5G only
           continue;
-       else if (i == IEEE80211_BAND_5GHZ && nBandCapability == eCSR_BAND_24) // 2G only
+       else if (i == HDD_NL80211_BAND_5GHZ && nBandCapability == eCSR_BAND_24) // 2G only
           continue;
        if (wiphy->bands[i] == NULL)
        {
@@ -3234,7 +3331,7 @@ v_BOOL_t vos_is_channel_valid_for_vht80(v_U32_t chan)
     if (chan <= RF_CHAN_14)
         return VOS_FALSE;
 
-    band = IEEE80211_BAND_5GHZ;
+    band = HDD_NL80211_BAND_5GHZ;
     freq = vos_chan_to_freq(chan);
     wiphy = pHddCtx->wiphy;
 
@@ -3256,81 +3353,19 @@ v_BOOL_t vos_is_channel_valid_for_vht80(v_U32_t chan)
 
 #ifdef CONFIG_ENABLE_LINUX_REG
 
-static int bw20_ch_index_to_bw40_plus_minus_ch_index(int k,
+static inline int bw20_ch_index_to_bw40_plus_minus_ch_index(int k,
                                     eChannnelBondingTypes cbflag )
 {
-   int m = INVALID_RF_CHANNEL;
-   if (k >= RF_CHAN_1 && k <= RF_CHAN_14)
-   {
-      if(RF_CHAN_BOND_HT40_PLUS == cbflag)
-         m = k - RF_CHAN_1 + RF_CHAN_BOND_3 ;
-      else
-         m = k - RF_CHAN_1 + RF_CHAN_BOND_3 - HT_40MINUS_INDEX ;
+   if (k >= NUM_20MHZ_RF_CHANNELS) {
+     VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
+           "%s invlaid channel index %d",__func__, k);
+     return INVALID_RF_CHANNEL;
+   }
 
-      if (m > RF_CHAN_BOND_11)
-         m = INVALID_RF_CHANNEL;
-      if (m < RF_CHAN_BOND_3)
-         m = INVALID_RF_CHANNEL;
-   }
-   else if (k >= RF_CHAN_240 && k <= RF_CHAN_216)
-   {
-      if(RF_CHAN_BOND_HT40_PLUS == cbflag)
-         m = k - RF_CHAN_240 + RF_CHAN_BOND_242 ;
-      else
-         m = k - RF_CHAN_240 + RF_CHAN_BOND_242 - HT_40MINUS_INDEX;
-
-      if (m > RF_CHAN_BOND_214)
-         m = INVALID_RF_CHANNEL;
-      if (m < RF_CHAN_BOND_242)
-         m = INVALID_RF_CHANNEL;
-   }
-   else if (k >= RF_CHAN_36 && k <= RF_CHAN_64)
-   {
-      if(RF_CHAN_BOND_HT40_PLUS == cbflag)
-         m = k - RF_CHAN_36 + RF_CHAN_BOND_38;
-      else
-         m = k - RF_CHAN_36 + RF_CHAN_BOND_38 - HT_40MINUS_INDEX;
-
-      if (m > RF_CHAN_BOND_62)
-         m = INVALID_RF_CHANNEL;
-      if (m < RF_CHAN_BOND_38)
-         m = INVALID_RF_CHANNEL;
-   }
-#ifdef FEATURE_WLAN_CH144
-   else if (k >= RF_CHAN_100 && k <= RF_CHAN_144)
-#else
-   else if (k >= RF_CHAN_100 && k <= RF_CHAN_140)
-#endif /* FEATURE_WLAN_CH144 */
-   {
-      if(RF_CHAN_BOND_HT40_PLUS == cbflag)
-         m = k - RF_CHAN_100 + RF_CHAN_BOND_102;
-      else
-         m = k - RF_CHAN_100 + RF_CHAN_BOND_102 -  HT_40MINUS_INDEX;
-#ifdef FEATURE_WLAN_CH144
-      if (m > RF_CHAN_BOND_142)
-         m = INVALID_RF_CHANNEL;
-      if (m < RF_CHAN_BOND_102)
-         m = INVALID_RF_CHANNEL;
-#else
-      if (m > RF_CHAN_BOND_138)
-         m = INVALID_RF_CHANNEL;
-      if (m < RF_CHAN_BOND_102)
-         m = INVALID_RF_CHANNEL;
-#endif /* FEATURE_WLAN_CH144 */
-   }
-   else if (k >= RF_CHAN_149 && k <= RF_CHAN_165)
-   {
-      if(RF_CHAN_BOND_HT40_PLUS == cbflag)
-         m = k - RF_CHAN_149 + RF_CHAN_BOND_151;
-      else
-         m = k - RF_CHAN_149 + RF_CHAN_BOND_151 - HT_40MINUS_INDEX;
-
-      if (m > RF_CHAN_BOND_163)
-         m = INVALID_RF_CHANNEL;
-      if (m < RF_CHAN_BOND_151)
-         m = INVALID_RF_CHANNEL;
-   }
-   return m;
+   if (RF_CHAN_BOND_HT40_PLUS == cbflag)
+     return chan_to_ht_40_index[k].ht_40_plus_index;
+   else
+     return chan_to_ht_40_index[k].ht_40_minus_index;
 }
 /**------------------------------------------------------------------------
   \brief vos_nv_setRegDomain -
@@ -3587,7 +3622,7 @@ int vos_update_nv_table_from_wiphy_band(void *hdd_ctx,
    hdd_context_t *pHddCtx = (hdd_context_t *)hdd_ctx;
    struct wiphy *wiphy = (struct wiphy *)pwiphy;
 
-   for (i = 0, m = 0; i<IEEE80211_NUM_BANDS; i++)
+   for (i = 0, m = 0; i<HDD_NUM_NL80211_BANDS; i++)
    {
 
         if (wiphy->bands[i] == NULL)
@@ -3608,9 +3643,9 @@ int vos_update_nv_table_from_wiphy_band(void *hdd_ctx,
 
         for (j = 0; j < wiphy->bands[i]->n_channels; j++)
         {
-             if (IEEE80211_BAND_2GHZ == i && eCSR_BAND_5G == nBandCapability)
+             if (HDD_NL80211_BAND_2GHZ == i && eCSR_BAND_5G == nBandCapability)
                   wiphy->bands[i]->channels[j].flags |= IEEE80211_CHAN_DISABLED;
-             else if (IEEE80211_BAND_5GHZ == i && eCSR_BAND_24 == nBandCapability)
+             else if (HDD_NL80211_BAND_5GHZ == i && eCSR_BAND_24 == nBandCapability)
                   wiphy->bands[i]->channels[j].flags |= IEEE80211_CHAN_DISABLED;
 
             /* k = (m + j) is internal current channel index for 20MHz channel
@@ -3687,8 +3722,13 @@ int vos_update_nv_table_from_wiphy_band(void *hdd_ctx,
             }
             /* nv cannot distinguish between DFS and passive channels */
             else if (wiphy->bands[i]->channels[j].flags &
-                    (IEEE80211_CHAN_RADAR | IEEE80211_CHAN_PASSIVE_SCAN))
+                    (IEEE80211_CHAN_RADAR | IEEE80211_CHAN_PASSIVE_SCAN |
+                     IEEE80211_CHAN_INDOOR_ONLY))
             {
+                if (wiphy->bands[i]->channels[j].flags &
+                        IEEE80211_CHAN_INDOOR_ONLY)
+                    wiphy->bands[i]->channels[j].flags |=
+                        IEEE80211_CHAN_PASSIVE_SCAN;
 #ifdef FEATURE_WLAN_CH144
                 if ((RF_CHAN_144 == k) && (E_NV_V3 != vos_nv_getNvVersion()))
                 {
@@ -3960,6 +4000,34 @@ static int create_linux_regulatory_entry(struct wiphy *wiphy,
 
 }
 
+static void
+wlan_hdd_disable_fcc_5600_5640(hdd_context_t *hdd_ctx, struct wiphy *wiphy,
+			       struct regulatory_request *request)
+{
+	struct ieee80211_channel *channels;
+	uint32_t no_channels;
+	uint32_t i;
+
+	if (cur_reg_domain != REGDOMAIN_FCC ||
+	    !hdd_ctx->cfg_ini->gEnableStrictRegulatoryForFCC ||
+	    !wiphy->bands[HDD_NL80211_BAND_5GHZ])
+		return;
+
+	channels = wiphy->bands[HDD_NL80211_BAND_5GHZ]->channels;
+	no_channels = wiphy->bands[HDD_NL80211_BAND_5GHZ]->n_channels;
+
+	for (i = 0; i < no_channels; i++) {
+		if (channels[i].center_freq != 5600 &&
+		    channels[i].center_freq != 5620 &&
+		    channels[i].center_freq != 5640)
+			continue;
+
+		channels[i].flags |= IEEE80211_CHAN_DISABLED;
+		if (request->initiator == NL80211_REGDOM_SET_BY_DRIVER)
+			channels[i].orig_flags |= IEEE80211_CHAN_DISABLED;
+	}
+}
+
 /*
  * Function: wlan_hdd_linux_reg_notifier
  * This function is called from cfg80211 core to provide regulatory settings
@@ -4019,6 +4087,27 @@ int __wlan_hdd_linux_reg_notifier(struct wiphy *wiphy,
     if (request->initiator == NL80211_REGDOM_SET_BY_DRIVER)
     {
 
+        if (vos_is_load_unload_in_progress(VOS_MODULE_ID_VOSS, NULL)) {
+            temp_reg_domain = REGDOMAIN_COUNT;
+            /* lookup the country in the local database */
+            for (i = 0; i < countryInfoTable.countryCount &&
+                         REGDOMAIN_COUNT == temp_reg_domain; i++)
+            {
+                if (memcmp(request->alpha2, countryInfoTable.countryInfo[i].countryCode,
+                           VOS_COUNTRY_CODE_LEN) == 0)
+                {
+                /* country code is found */
+                /* record the temporary regulatory_domain as well */
+                temp_reg_domain = countryInfoTable.countryInfo[i].regDomain;
+                break;
+                }
+            }
+            if (REGDOMAIN_COUNT == temp_reg_domain)
+                temp_reg_domain = REGDOMAIN_WORLD;
+
+            cur_reg_domain = temp_reg_domain;
+        }
+
         isVHT80Allowed = pHddCtx->isVHT80Allowed;
         if (create_linux_regulatory_entry(wiphy, request, nBandCapability) == 0)
         {
@@ -4047,6 +4136,7 @@ int __wlan_hdd_linux_reg_notifier(struct wiphy *wiphy,
 
         if (!(pnvEFSTable->halnv.tables.defaultCountryTable.countryCode[0] == '0' &&
              pnvEFSTable->halnv.tables.defaultCountryTable.countryCode[1] == '0') &&
+            (request->initiator ==  NL80211_REGDOM_SET_BY_CORE) &&
             (vos_is_load_unload_in_progress( VOS_MODULE_ID_VOSS, NULL)))
         {
            VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO,
@@ -4098,14 +4188,13 @@ int __wlan_hdd_linux_reg_notifier(struct wiphy *wiphy,
         if (request->alpha2[0] == '0' && request->alpha2[1] == '0')
         {
            sme_GenericChangeCountryCode(pHddCtx->hHal, country_code,
-                                           REGDOMAIN_COUNT);
+                                       REGDOMAIN_COUNT);
         }
         else
         {
            sme_GenericChangeCountryCode(pHddCtx->hHal, country_code,
-                                        temp_reg_domain);
+                                    temp_reg_domain);
         }
-
     }
 
     /* Mark channels 36-48 as passive for US CC */
@@ -4115,22 +4204,24 @@ int __wlan_hdd_linux_reg_notifier(struct wiphy *wiphy,
        (request->initiator == NL80211_REGDOM_SET_BY_USER))
     {
        if ( pHddCtx->cfg_ini->gEnableStrictRegulatoryForFCC &&
-            wiphy->bands[IEEE80211_BAND_5GHZ])
+            wiphy->bands[HDD_NL80211_BAND_5GHZ])
        {
-          for (j=0; j<wiphy->bands[IEEE80211_BAND_5GHZ]->n_channels; j++)
+          for (j=0; j<wiphy->bands[HDD_NL80211_BAND_5GHZ]->n_channels; j++)
           {
               // UNII-1 band channels are passive when domain is FCC.
-             if ((wiphy->bands[IEEE80211_BAND_5GHZ ]->channels[j].center_freq == 5180 ||
-                  wiphy->bands[IEEE80211_BAND_5GHZ]->channels[j].center_freq == 5200 ||
-                  wiphy->bands[IEEE80211_BAND_5GHZ]->channels[j].center_freq == 5220 ||
-                  wiphy->bands[IEEE80211_BAND_5GHZ]->channels[j].center_freq == 5240) &&
+             if ((wiphy->bands[HDD_NL80211_BAND_5GHZ ]->channels[j].center_freq == 5180 ||
+                  wiphy->bands[HDD_NL80211_BAND_5GHZ]->channels[j].center_freq == 5200 ||
+                  wiphy->bands[HDD_NL80211_BAND_5GHZ]->channels[j].center_freq == 5220 ||
+                  wiphy->bands[HDD_NL80211_BAND_5GHZ]->channels[j].center_freq == 5240) &&
                   ((request->alpha2[0]== 'U'&& request->alpha2[1]=='S') &&
                                 pHddCtx->nEnableStrictRegulatoryForFCC))
              {
-                 wiphy->bands[IEEE80211_BAND_5GHZ]->channels[j].flags |= IEEE80211_CHAN_PASSIVE_SCAN;
+                 wiphy->bands[HDD_NL80211_BAND_5GHZ]->channels[j].flags |= IEEE80211_CHAN_PASSIVE_SCAN;
              }
           }
        }
+
+       wlan_hdd_disable_fcc_5600_5640(pHddCtx, wiphy, request);
     }
 do_comp:
     if ((request->initiator == NL80211_REGDOM_SET_BY_DRIVER) ||
@@ -4223,7 +4314,7 @@ VOS_STATUS vos_init_wiphy_from_nv_bin(void)
     temp_reg_domain = cur_reg_domain = reg_domain;
 
     m = 0;
-    for (i = 0; i < IEEE80211_NUM_BANDS; i++)
+    for (i = 0; i < HDD_NUM_NL80211_BANDS; i++)
     {
 
         if (wiphy->bands[i] == NULL)
@@ -4629,7 +4720,7 @@ int __wlan_hdd_crda_reg_notifier(struct wiphy *wiphy,
             settings. iwiphy->bands doesn't seem to set ht40 flags in kernel
             correctly, this may be fixed by later kernel */
 
-         for (i = 0, m = 0; i < IEEE80211_NUM_BANDS; i++)
+         for (i = 0, m = 0; i < HDD_NUM_NL80211_BANDS; i++)
          {
              if (NULL == wiphy->bands[i])
              {
@@ -4654,7 +4745,7 @@ int __wlan_hdd_crda_reg_notifier(struct wiphy *wiphy,
                  // k = (m + j) is internal current channel index for 20MHz channel
                  // n is internal channel index for corresponding 40MHz channel
                  k = m + j;
-                 if (IEEE80211_BAND_2GHZ == i && eCSR_BAND_5G == nBandCapability) // 5G only
+                 if (HDD_NL80211_BAND_2GHZ == i && eCSR_BAND_5G == nBandCapability) // 5G only
                  {
                      // Enable social channels for P2P
                      if ((2412 == wiphy->bands[i]->channels[j].center_freq ||
@@ -4670,7 +4761,7 @@ int __wlan_hdd_crda_reg_notifier(struct wiphy *wiphy,
                      }
                      continue;
                  }
-                 else if (IEEE80211_BAND_5GHZ == i && eCSR_BAND_24 == nBandCapability) // 2G only
+                 else if (HDD_NL80211_BAND_5GHZ == i && eCSR_BAND_24 == nBandCapability) // 2G only
                  {
                      wiphy->bands[i]->channels[j].flags |= IEEE80211_CHAN_DISABLED;
                      continue;
@@ -4726,43 +4817,43 @@ int __wlan_hdd_crda_reg_notifier(struct wiphy *wiphy,
             IOCTL operation is inactive                              */
 
          if ( pHddCtx->cfg_ini->gEnableStrictRegulatoryForFCC &&
-              wiphy->bands[IEEE80211_BAND_5GHZ])
+              wiphy->bands[HDD_NL80211_BAND_5GHZ])
          {
-             for (j=0; j<wiphy->bands[IEEE80211_BAND_5GHZ]->n_channels; j++)
+             for (j=0; j<wiphy->bands[HDD_NL80211_BAND_5GHZ]->n_channels; j++)
              {
                  // UNII-1 band channels are passive when domain is FCC.
-                 if ((wiphy->bands[IEEE80211_BAND_5GHZ ]->channels[j].center_freq == 5180 ||
-                      wiphy->bands[IEEE80211_BAND_5GHZ]->channels[j].center_freq == 5200 ||
-                      wiphy->bands[IEEE80211_BAND_5GHZ]->channels[j].center_freq == 5220 ||
-                      wiphy->bands[IEEE80211_BAND_5GHZ]->channels[j].center_freq == 5240) &&
+                 if ((wiphy->bands[HDD_NL80211_BAND_5GHZ ]->channels[j].center_freq == 5180 ||
+                      wiphy->bands[HDD_NL80211_BAND_5GHZ]->channels[j].center_freq == 5200 ||
+                      wiphy->bands[HDD_NL80211_BAND_5GHZ]->channels[j].center_freq == 5220 ||
+                      wiphy->bands[HDD_NL80211_BAND_5GHZ]->channels[j].center_freq == 5240) &&
                      ((domainIdCurrent == REGDOMAIN_FCC) &&
                                        pHddCtx->nEnableStrictRegulatoryForFCC))
                  {
-                     wiphy->bands[IEEE80211_BAND_5GHZ]->channels[j].flags |= IEEE80211_CHAN_PASSIVE_SCAN;
+                     wiphy->bands[HDD_NL80211_BAND_5GHZ]->channels[j].flags |= IEEE80211_CHAN_PASSIVE_SCAN;
                  }
-                 else if ((wiphy->bands[IEEE80211_BAND_5GHZ]->channels[j].center_freq == 5180 ||
-                           wiphy->bands[IEEE80211_BAND_5GHZ]->channels[j].center_freq == 5200 ||
-                           wiphy->bands[IEEE80211_BAND_5GHZ]->channels[j].center_freq == 5220 ||
-                           wiphy->bands[IEEE80211_BAND_5GHZ]->channels[j].center_freq == 5240) &&
+                 else if ((wiphy->bands[HDD_NL80211_BAND_5GHZ]->channels[j].center_freq == 5180 ||
+                           wiphy->bands[HDD_NL80211_BAND_5GHZ]->channels[j].center_freq == 5200 ||
+                           wiphy->bands[HDD_NL80211_BAND_5GHZ]->channels[j].center_freq == 5220 ||
+                           wiphy->bands[HDD_NL80211_BAND_5GHZ]->channels[j].center_freq == 5240) &&
                           ((domainIdCurrent != REGDOMAIN_FCC) ||
                                       !pHddCtx->nEnableStrictRegulatoryForFCC))
                  {
-                     wiphy->bands[IEEE80211_BAND_5GHZ]->channels[j].flags &= ~IEEE80211_CHAN_PASSIVE_SCAN;
+                     wiphy->bands[HDD_NL80211_BAND_5GHZ]->channels[j].flags &= ~IEEE80211_CHAN_PASSIVE_SCAN;
                  }
 
                  //Marking channels 52-144 as Radar channels if they are enabled
-                 k = wiphy->bands[IEEE80211_BAND_2GHZ]->n_channels + j;
+                 k = wiphy->bands[HDD_NL80211_BAND_2GHZ]->n_channels + j;
 
-                 if ((wiphy->bands[IEEE80211_BAND_5GHZ]->channels[j].center_freq == 5260 ||
-                      wiphy->bands[IEEE80211_BAND_5GHZ]->channels[j].center_freq == 5280 ||
-                      wiphy->bands[IEEE80211_BAND_5GHZ]->channels[j].center_freq == 5300 ||
-                      wiphy->bands[IEEE80211_BAND_5GHZ]->channels[j].center_freq == 5320 ||
-                      wiphy->bands[IEEE80211_BAND_5GHZ]->channels[j].center_freq == 5500 ||
-                      wiphy->bands[IEEE80211_BAND_5GHZ]->channels[j].center_freq == 5520) &&
+                 if ((wiphy->bands[HDD_NL80211_BAND_5GHZ]->channels[j].center_freq == 5260 ||
+                      wiphy->bands[HDD_NL80211_BAND_5GHZ]->channels[j].center_freq == 5280 ||
+                      wiphy->bands[HDD_NL80211_BAND_5GHZ]->channels[j].center_freq == 5300 ||
+                      wiphy->bands[HDD_NL80211_BAND_5GHZ]->channels[j].center_freq == 5320 ||
+                      wiphy->bands[HDD_NL80211_BAND_5GHZ]->channels[j].center_freq == 5500 ||
+                      wiphy->bands[HDD_NL80211_BAND_5GHZ]->channels[j].center_freq == 5520) &&
                      ((regChannels[k].enabled == NV_CHANNEL_ENABLE) ||
                       (regChannels[k].enabled == NV_CHANNEL_DFS)))
                  {
-                     wiphy->bands[IEEE80211_BAND_5GHZ]->channels[j].flags |= IEEE80211_CHAN_RADAR;
+                     wiphy->bands[HDD_NL80211_BAND_5GHZ]->channels[j].flags |= IEEE80211_CHAN_RADAR;
                  }
              }
          }

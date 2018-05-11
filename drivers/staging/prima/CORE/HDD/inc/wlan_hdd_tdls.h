@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -73,6 +73,14 @@ should not be more than 2000 */
 #define TDLS_CHANNEL_SWITCH_ENABLE  1
 #define TDLS_CHANNEL_SWITCH_DISABLE 2
 
+enum tdls_disable_source {
+    HDD_SET_TDLS_MODE_SOURCE_USER = 1,
+    HDD_SET_TDLS_MODE_SOURCE_SCAN = 2,
+    HDD_SET_TDLS_MODE_SOURCE_OFFCHANNEL = 4,
+    HDD_SET_TDLS_MODE_SOURCE_BTC = 8,
+    HDD_SET_TDLS_MODE_SOURCE_P2P = 16
+};
+
 typedef struct
 {
     tANI_U32    tdls;
@@ -86,19 +94,6 @@ typedef struct
     tANI_S32    rssi_trigger_threshold;
     tANI_S32    rssi_teardown_threshold;
 } tdls_config_params_t;
-
-typedef struct
-{
-    struct wiphy *wiphy;
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(3,6,0))
-    struct net_device *dev;
-#endif
-    struct cfg80211_scan_request *scan_request;
-    int magic;
-    int attempt;
-    int reject;
-    struct delayed_work tdls_scan_work;
-} tdls_scan_context_t;
 
 typedef enum {
     eTDLS_SUPPORT_NOT_ENABLED = 0,
@@ -122,6 +117,28 @@ typedef enum eTDLSLinkStatus {
     eTDLS_LINK_TEARING,
 } tTDLSLinkStatus;
 
+/**
+ * enum tdls_teardown_reason - Reason for TDLS teardown
+ * @eTDLS_TEARDOWN_EXT_CTRL: Reason ext ctrl.
+ * @eTDLS_TEARDOWN_CONCURRENCY: Reason concurrency.
+ * @eTDLS_TEARDOWN_RSSI_THRESHOLD: Reason rssi threashold.
+ * @eTDLS_TEARDOWN_TXRX_THRESHOLD: Reason txrx threashold.
+ * @eTDLS_TEARDOWN_BTCOEX: Reason BTCOEX.
+ * @eTDLS_TEARDOWN_SCAN: Reason scan.
+ * @eTDLS_TEARDOWN_BSS_DISCONNECT: Reason bss disconnected.
+ *
+ * Reason to indicate in diag event of tdls teardown.
+ */
+
+enum tdls_teardown_reason {
+    eTDLS_TEARDOWN_EXT_CTRL,
+    eTDLS_TEARDOWN_CONCURRENCY,
+    eTDLS_TEARDOWN_RSSI_THRESHOLD,
+    eTDLS_TEARDOWN_TXRX_THRESHOLD,
+    eTDLS_TEARDOWN_BTCOEX,
+    eTDLS_TEARDOWN_SCAN,
+    eTDLS_TEARDOWN_BSS_DISCONNECT,
+};
 
 typedef enum {
     eTDLS_LINK_SUCCESS,                              /* Success */
@@ -192,6 +209,7 @@ typedef struct {
     tANI_S8         ap_rssi;
     struct _hddTdlsPeer_t  *curr_candidate;
     struct work_struct implicit_setup;
+    bool is_tdls_disabled_bmps;
     v_U32_t            magic;
 } tdlsCtx_t;
 
@@ -248,14 +266,6 @@ void wlan_hdd_tdls_extract_da(struct sk_buff *skb, u8 *mac);
 
 void wlan_hdd_tdls_extract_sa(struct sk_buff *skb, u8 *mac);
 
-int wlan_hdd_tdls_increment_pkt_count(hdd_adapter_t *pAdapter,
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,18,0))
-                                      const u8 *mac,
-#else
-                                      u8 *mac,
-#endif
-                                      u8 tx);
-
 int wlan_hdd_tdls_set_sta_id(hdd_adapter_t *pAdapter,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,18,0))
                              const u8 *mac,
@@ -265,11 +275,7 @@ int wlan_hdd_tdls_set_sta_id(hdd_adapter_t *pAdapter,
                              u8 staId);
 
 hddTdlsPeer_t *wlan_hdd_tdls_find_peer(hdd_adapter_t *pAdapter,
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,18,0))
                                        const u8 *mac,
-#else
-                                       u8 *mac,
-#endif
                                        tANI_BOOLEAN mutexLock);
 
 hddTdlsPeer_t *wlan_hdd_tdls_find_all_peer(hdd_context_t *pHddCtx,
@@ -325,7 +331,8 @@ int wlan_hdd_tdls_set_peer_caps(hdd_adapter_t *pAdapter,
 #endif
                                 tCsrStaParams *StaParams,
                                 tANI_BOOLEAN isBufSta,
-                                tANI_BOOLEAN isOffChannelSupported);
+                                tANI_BOOLEAN isOffChannelSupported,
+                                tANI_BOOLEAN isQosWmmSta);
 
 int wlan_hdd_tdls_set_rssi(hdd_adapter_t *pAdapter,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,18,0))
@@ -342,8 +349,6 @@ int wlan_hdd_tdls_set_responder(hdd_adapter_t *pAdapter,
                                 u8 *mac,
 #endif
                                 tANI_U8 responder);
-
-int wlan_hdd_tdls_get_responder(hdd_adapter_t *pAdapter, u8 *mac);
 
 int wlan_hdd_tdls_set_signature(hdd_adapter_t *pAdapter,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,18,0))
@@ -379,8 +384,6 @@ void wlan_hdd_tdls_decrement_peer_count(hdd_adapter_t *pAdapter);
 
 void wlan_hdd_tdls_check_bmps(hdd_adapter_t *pAdapter);
 
-u8 wlan_hdd_tdls_is_peer_progress(hdd_adapter_t *pAdapter, u8 *mac);
-
 hddTdlsPeer_t *wlan_hdd_tdls_is_progress(hdd_context_t *pHddCtx,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,18,0))
                                          const u8 *mac,
@@ -391,20 +394,12 @@ hddTdlsPeer_t *wlan_hdd_tdls_is_progress(hdd_context_t *pHddCtx,
 
 void wlan_hdd_tdls_set_mode(hdd_context_t *pHddCtx,
                             eTDLSSupportMode tdls_mode,
-                            v_BOOL_t bUpdateLast);
+                            v_BOOL_t bUpdateLast,
+                            enum tdls_disable_source source);
 
 tANI_U32 wlan_hdd_tdls_discovery_sent_cnt(hdd_context_t *pHddCtx);
 
 void wlan_hdd_tdls_check_power_save_prohibited(hdd_adapter_t *pAdapter);
-
-void wlan_hdd_tdls_free_scan_request (tdls_scan_context_t *tdls_scan_ctx);
-
-int wlan_hdd_tdls_copy_scan_context(hdd_context_t *pHddCtx,
-                            struct wiphy *wiphy,
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(3,6,0))
-                            struct net_device *dev,
-#endif
-                            struct cfg80211_scan_request *request);
 
 int wlan_hdd_tdls_scan_callback (hdd_adapter_t *pAdapter,
                                 struct wiphy *wiphy,
@@ -421,6 +416,36 @@ void wlan_hdd_tdls_timer_restart(hdd_adapter_t *pAdapter,
 void wlan_hdd_tdls_indicate_teardown(hdd_adapter_t *pAdapter,
                                      hddTdlsPeer_t *curr_peer,
                                      tANI_U16 reason);
+#ifdef FEATURE_WLAN_DIAG_SUPPORT
+void hdd_send_wlan_tdls_teardown_event(uint32_t reason,
+                                      uint8_t *peer_mac);
+void hdd_wlan_tdls_enable_link_event(const uint8_t *peer_mac,
+                           uint8_t is_off_chan_supported,
+                           uint8_t is_off_chan_configured,
+                           uint8_t is_off_chan_established);
+void hdd_wlan_block_scan_by_tdls(void);
+
+#else
+static inline
+void hdd_send_wlan_tdls_teardown_event(uint32_t reason,
+                                      uint8_t *peer_mac)
+{
+    return;
+}
+static inline
+void hdd_wlan_tdls_enable_link_event(const uint8_t *peer_mac,
+                           uint8_t is_off_chan_supported,
+                           uint8_t is_off_chan_configured,
+                           uint8_t is_off_chan_established)
+{
+    return;
+}
+static inline
+void hdd_wlan_block_scan_by_tdls(void)
+{
+    return;
+}
+#endif /* FEATURE_WLAN_DIAG_SUPPORT */
 
 int wlan_hdd_tdls_set_force_peer(hdd_adapter_t *pAdapter,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,18,0))
@@ -470,6 +495,13 @@ hddTdlsPeer_t *wlan_hdd_tdls_get_connected_peer(hdd_adapter_t *pAdapter);
 int wlan_hdd_validate_tdls_context(hdd_context_t *pHddCtx, tdlsCtx_t *pTdlsCtx);
 
 void wlan_hdd_tdls_reenable(hdd_context_t *pHddCtx);
+
+void wlan_hdd_tdls_notify_packet(hdd_adapter_t *adapter, struct sk_buff *skb);
+
+void wlan_hdd_change_tdls_mode(void *hdd_ctx);
+
+void wlan_hdd_start_stop_tdls_source_timer(hdd_context_t *pHddCtx,
+                                           eTDLSSupportMode tdls_mode);
 #else
 static inline void hdd_tdls_notify_mode_change(hdd_adapter_t *pAdapter,
                                                hdd_context_t *pHddCtx)
@@ -483,6 +515,20 @@ static inline void
 wlan_hdd_tdls_reenable(hdd_context_t *pHddCtx)
 {
 }
+static inline void
+wlan_hdd_tdls_notify_packet(hdd_adapter_t *adapter, struct sk_buff *skb)
+{
+}
+static inline void
+wlan_hdd_change_tdls_mode(void *hdd_ctx)
+{
+}
+
+static inline void
+wlan_hdd_start_stop_tdls_source_timer(hdd_context_t *pHddCtx,
+                                      eTDLSSupportMode tdls_mode)
+{
+}
 #endif
 void wlan_hdd_tdls_update_rx_pkt_cnt_n_rssi(hdd_adapter_t *pAdapter,
         u8 *mac, v_S7_t rssiAvg);
@@ -492,5 +538,7 @@ tdlsConnInfo_t *wlan_hdd_get_conn_info(hdd_context_t *pHddCtx,
                                        tANI_U8 idx);
 
 v_VOID_t wlan_hdd_tdls_initiator_wait_cb(v_PVOID_t userData);
+
+void wlan_hdd_get_tdls_stats(hdd_adapter_t *pAdapter);
 
 #endif // __HDD_TDSL_H

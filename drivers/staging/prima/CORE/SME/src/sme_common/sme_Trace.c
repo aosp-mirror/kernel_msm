@@ -38,6 +38,8 @@
 #include "macTrace.h"
 #include "sme_Trace.h"
 #include "smeInternal.h"
+#include "smeInside.h"
+
 #ifndef SME_TRACE_RECORD
 void smeTraceInit(tpAniSirGlobal pMac)
 {
@@ -147,13 +149,10 @@ static tANI_U8* smeTraceGetRxMsgString( tANI_U32 code )
 #ifdef FEATURE_WLAN_LPHB
         CASE_RETURN_STRING(TRACE_CODE_SME_RX_HDD_LPHB_CONFIG_REQ);
 #endif /* FEATURE_WLAN_LPHB */
-        CASE_RETURN_STRING(TRACE_CODE_SME_RX_HDD_EXTSCAN_GET_CAPABILITIES);
         CASE_RETURN_STRING(TRACE_CODE_SME_RX_HDD_EXTSCAN_START);
         CASE_RETURN_STRING(TRACE_CODE_SME_RX_HDD_EXTSCAN_STOP);
         CASE_RETURN_STRING(TRACE_CODE_SME_RX_HDD_EXTSCAN_SET_BSS_HOTLIST);
         CASE_RETURN_STRING(TRACE_CODE_SME_RX_HDD_EXTSCAN_RESET_BSS_HOTLIST);
-        CASE_RETURN_STRING(TRACE_CODE_SME_RX_HDD_EXTSCAN_SET_SIGNF_CHANGE);
-        CASE_RETURN_STRING(TRACE_CODE_SME_RX_HDD_EXTSCAN_RESET_SIGNF_CHANGE);
         CASE_RETURN_STRING(TRACE_CODE_SME_RX_HDD_EXTSCAN_GET_CACHED_RESULTS);
         default:
             return( "UNKNOWN" );
@@ -218,7 +217,7 @@ static void smeTraceDump(tpAniSirGlobal pMac, tpvosTraceRecord pRecord,
                  smeTraceGetCommandString(pRecord->data), pRecord->data);
             break;
         case TRACE_CODE_SME_TX_WDA_MSG:
-           smsLog(pMac, LOG1, "%04d %012u S%d %-14s %-30s(0x%x)",
+            smsLog(pMac, LOG1, "%04d %012u S%d %-14s %-30s(0x%x)",
                 recIndex, pRecord->time, pRecord->session, "TX WDA Msg:",
                 macTraceGetWdaMsgString((tANI_U16)pRecord->data),
                                               pRecord->data);
@@ -240,5 +239,51 @@ static void smeTraceDump(tpAniSirGlobal pMac, tpvosTraceRecord pRecord,
 void smeTraceInit(tpAniSirGlobal pMac)
 {
     vosTraceRegister(VOS_MODULE_ID_SME, (tpvosTraceCb)&smeTraceDump);
+}
+
+/**
+ * sme_state_info_dump() - prints state information of sme layer
+ */
+static void sme_state_info_dump(void)
+{
+    tANI_U32  session_id = 0;
+    tHalHandle hal;
+    tpAniSirGlobal mac;
+    v_CONTEXT_t vos_ctx_ptr;
+
+    /* get the global voss context */
+    vos_ctx_ptr = vos_get_global_context(VOS_MODULE_ID_VOSS, NULL);
+
+    if (NULL == vos_ctx_ptr) {
+        VOS_ASSERT(0);
+        return;
+    }
+
+    hal = vos_get_context(VOS_MODULE_ID_SME, vos_ctx_ptr);
+    if (NULL == hal) {
+        VOS_ASSERT(0);
+        return;
+    }
+
+    mac = PMAC_STRUCT(hal);
+
+    session_id = sme_get_sessionid_from_activeList(mac);
+    smsLog( mac, LOG1, FL(" SessionId %d for active command"), session_id);
+
+    smsLog(mac, LOG1, FL("NeighborRoamState: %d RoamState: %d"
+           "RoamSubState: %d ConnectState: %d pmcState: %d PmmState: %d"),
+           mac->roam.neighborRoamInfo.neighborRoamState,
+           mac->roam.curState[session_id], mac->roam.curSubState[session_id],
+           mac->roam.roamSession[session_id].connectState, mac->pmc.pmcState,
+           mac->pmm.gPmmState);
+}
+
+/**
+ * sme_register_debug_callback() - registration function sme layer
+ * to print sme state information
+ */
+void sme_register_debug_callback()
+{
+    vos_register_debug_callback(VOS_MODULE_ID_SME, &sme_state_info_dump);
 }
 #endif

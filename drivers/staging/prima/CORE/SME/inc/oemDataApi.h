@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -52,6 +52,14 @@
 
 #ifndef OEM_DATA_RSP_SIZE
 #define OEM_DATA_RSP_SIZE 1968
+#endif
+
+#ifndef NEW_OEM_DATA_REQ_SIZE
+#define NEW_OEM_DATA_REQ_SIZE 292
+#endif
+
+#ifndef NEW_OEM_DATA_RSP_SIZE
+#define NEW_OEM_DATA_RSP_SIZE 2100
 #endif
 
 /*************************************************************************************************************
@@ -132,6 +140,30 @@ eHalStatus sme_HandleOemDataRsp(tHalHandle hHal, tANI_U8*);
     \return eHalStatus     
   -------------------------------------------------------------------------------*/
 eHalStatus oemData_IsOemDataReqAllowed(tHalHandle hHal);
+
+
+/* ---------------------------------------------------------------------------
+  OEM DATA REQ NEW - DATA STRUCTURES
+  -------------------------------------------------------------------------------*/
+/* Structure for defining req sent to the PE */
+typedef struct tagOemDataReqNew
+{
+    tSirMacAddr selfMacAddr;
+    tANI_U8 reserved[2];
+    tANI_U8   oemDataReqNew[NEW_OEM_DATA_REQ_SIZE];
+} tOemDataReqNew, tOemDataReqNewConfig;
+
+/* ---------------------------------------------------------------------------
+  OEM DATA RESPONSE - DATA STRUCTURES
+  -------------------------------------------------------------------------------*/
+typedef struct tagOemDataRspNew
+{
+    tANI_U8   oemDataRspNew[NEW_OEM_DATA_RSP_SIZE];
+} tOemDataRspNew;
+
+/*************************************************************************************************************/
+
+void send_oem_data_rsp_msg(tANI_U32 length, tANI_U8 *oemDataRsp);
 
 #endif //_OEM_DATA_API_H__
 

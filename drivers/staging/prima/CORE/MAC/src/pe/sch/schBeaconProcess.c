@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -337,7 +337,7 @@ static void __schBeaconProcessForSession( tpAniSirGlobal      pMac,
     tUpdateBeaconParams beaconParams;
     tANI_U8 sendProbeReq = FALSE;
     tpDphHashNode pStaDs = NULL;
-    tANI_U32   channelBondingMode;
+    tANI_U32   channelBondingMode = 0;
 #ifdef WLAN_FEATURE_11AC
     tpSirMacMgmtHdr    pMh = WDA_GET_RX_MAC_HEADER(pRxPacketInfo);
     tANI_U16  aid;
@@ -380,9 +380,14 @@ static void __schBeaconProcessForSession( tpAniSirGlobal      pMac,
            goto fail;
         }
 
-        if( RF_CHAN_14 >= psessionEntry->currentOperChannel )
+        if(RF_CHAN_14 >= psessionEntry->currentOperChannel)
         {
-           channelBondingMode = pMac->roam.configParam.channelBondingMode24GHz;
+            if (psessionEntry->force_24ghz_in_ht20)
+                channelBondingMode =
+                     WNI_CFG_CHANNEL_BONDING_MODE_DISABLE;
+            else
+                channelBondingMode =
+                     pMac->roam.configParam.channelBondingMode24GHz;
         }
         else
         {
@@ -480,7 +485,8 @@ static void __schBeaconProcessForSession( tpAniSirGlobal      pMac,
     {
         /* Channel Switch information element updated */
         if(pBeacon->channelSwitchPresent ||
-            pBeacon->propIEinfo.propChannelSwitchPresent)
+            pBeacon->propIEinfo.propChannelSwitchPresent ||
+            pBeacon->ecsa_present)
         {
             limUpdateChannelSwitch(pMac, pBeacon, psessionEntry);
         }
@@ -656,7 +662,8 @@ static void __schBeaconProcessForSession( tpAniSirGlobal      pMac,
         {
             localRRMConstraint = 0;
         }
-        maxTxPower = VOS_MIN(regMax,(regMax - localRRMConstraint));
+        maxTxPower =  limGetMaxTxPower(regMax, regMax - localRRMConstraint,
+                                     pMac->roam.configParam.nTxPowerCap);
     }
 #elif defined FEATURE_WLAN_ESE
     maxTxPower = regMax;
@@ -830,14 +837,43 @@ tSirRetStatus schBeaconEdcaProcess(tpAniSirGlobal pMac, tSirMacEdcaParamSetIE *e
     vos_log_qos_edca_pkt_type *log_ptr = NULL;
 #endif //FEATURE_WLAN_DIAG_SUPPORT 
 
-    PELOG1(schLog(pMac, LOG1, FL("Updating parameter set count: Old %d ---> new %d"),
-           psessionEntry->gLimEdcaParamSetCount, edca->qosInfo.count);)
+    schLog(pMac, LOG2, FL("Updating parameter set count: Old %d ---> new %d"),
+           psessionEntry->gLimEdcaParamSetCount, edca->qosInfo.count);
 
     psessionEntry->gLimEdcaParamSetCount = edca->qosInfo.count;
     psessionEntry->gLimEdcaParams[EDCA_AC_BE] = edca->acbe;
     psessionEntry->gLimEdcaParams[EDCA_AC_BK] = edca->acbk;
     psessionEntry->gLimEdcaParams[EDCA_AC_VI] = edca->acvi;
     psessionEntry->gLimEdcaParams[EDCA_AC_VO] = edca->acvo;
+
+    if (pMac->roam.configParam.enable_edca_params) {
+        psessionEntry->gLimEdcaParams[EDCA_AC_VO].aci.aifsn =
+               pMac->roam.configParam.edca_vo_aifs;
+        psessionEntry->gLimEdcaParams[EDCA_AC_VI].aci.aifsn =
+               pMac->roam.configParam.edca_vi_aifs;
+        psessionEntry->gLimEdcaParams[EDCA_AC_BK].aci.aifsn =
+               pMac->roam.configParam.edca_bk_aifs;
+        psessionEntry->gLimEdcaParams[EDCA_AC_BE].aci.aifsn =
+               pMac->roam.configParam.edca_be_aifs;
+
+        psessionEntry->gLimEdcaParams[EDCA_AC_VO].cw.min =
+               pMac->roam.configParam.edca_vo_cwmin;
+        psessionEntry->gLimEdcaParams[EDCA_AC_VI].cw.min =
+               pMac->roam.configParam.edca_vi_cwmin;
+        psessionEntry->gLimEdcaParams[EDCA_AC_BK].cw.min =
+               pMac->roam.configParam.edca_bk_cwmin;
+        psessionEntry->gLimEdcaParams[EDCA_AC_BE].cw.min =
+               pMac->roam.configParam.edca_be_cwmin;
+
+        psessionEntry->gLimEdcaParams[EDCA_AC_VO].cw.max =
+               pMac->roam.configParam.edca_vo_cwmax;
+        psessionEntry->gLimEdcaParams[EDCA_AC_VI].cw.max =
+               pMac->roam.configParam.edca_vi_cwmax;
+        psessionEntry->gLimEdcaParams[EDCA_AC_BK].cw.max =
+               pMac->roam.configParam.edca_bk_cwmax;
+        psessionEntry->gLimEdcaParams[EDCA_AC_BE].cw.max =
+               pMac->roam.configParam.edca_be_cwmax;
+    }
 //log: LOG_WLAN_QOS_EDCA_C
 #ifdef FEATURE_WLAN_DIAG_SUPPORT
     WLAN_VOS_DIAG_LOG_ALLOC(log_ptr, vos_log_qos_edca_pkt_type, LOG_WLAN_QOS_EDCA_C);
@@ -862,16 +898,18 @@ tSirRetStatus schBeaconEdcaProcess(tpAniSirGlobal pMac, tSirMacEdcaParamSetIE *e
     }
     WLAN_VOS_DIAG_LOG_REPORT(log_ptr);
 #endif //FEATURE_WLAN_DIAG_SUPPORT
-    PELOG1(schLog(pMac, LOGE, FL("Updating Local EDCA Params(gLimEdcaParams) to: "));)
+    schLog(pMac, LOG1,
+           FL("edsa param enabled in ini %d. Updating Local EDCA Params(gLimEdcaParams) to: "),
+           pMac->roam.configParam.enable_edca_params);
     for(i=0; i<MAX_NUM_AC; i++)
     {
-        PELOG1(schLog(pMac, LOG1, FL("AC[%d]:  AIFSN: %d, ACM %d, CWmin %d, CWmax %d, TxOp %d"),
+        schLog(pMac, LOG1, FL("AC[%d]:  AIFSN: %d, ACM %d, CWmin %d, CWmax %d, TxOp %d"),
             i,
             psessionEntry->gLimEdcaParams[i].aci.aifsn, 
             psessionEntry->gLimEdcaParams[i].aci.acm,
             psessionEntry->gLimEdcaParams[i].cw.min,
             psessionEntry->gLimEdcaParams[i].cw.max,
-            psessionEntry->gLimEdcaParams[i].txoplimit);)
+            psessionEntry->gLimEdcaParams[i].txoplimit);
     }
 
     return eSIR_SUCCESS;

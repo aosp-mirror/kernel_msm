@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -169,6 +169,15 @@ WLANSAP_Open
     {
         VOS_TRACE( VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_ERROR,
                  "WLANSAP_Start failed init staInfo_lock");
+        vos_free_context(pvosGCtx, VOS_MODULE_ID_SAP, pSapCtx);
+        return VOS_STATUS_E_FAULT;
+    }
+
+    if (!VOS_IS_STATUS_SUCCESS(
+         vos_spin_lock_init(&pSapCtx->ecsa_info.ecsa_lock)))
+    {
+        VOS_TRACE( VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_ERROR,
+                 "WLANSAP_Start failed init ecsa_lock");
         vos_free_context(pvosGCtx, VOS_MODULE_ID_SAP, pSapCtx);
         return VOS_STATUS_E_FAULT;
     }
@@ -452,7 +461,7 @@ WLANSAP_CleanCB
 
     pSapCtx->sapsMachine= eSAP_DISCONNECTED;
 
-    VOS_TRACE( VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO_HIGH, "%s: Initializing State: %d, sapContext value = %p",
+    VOS_TRACE( VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO_HIGH, "%s: Initializing State: %d, sapContext value = %pK",
             __func__, pSapCtx->sapsMachine, pSapCtx);
     pSapCtx->sessionId = 0;
     pSapCtx->channel = 0;
@@ -532,7 +541,47 @@ v_U8_t WLANSAP_getState
     }
     return pSapCtx->sapsMachine;
 }
+/*==========================================================================
+  FUNCTION    WLANSAP_get_sessionId
 
+  DESCRIPTION
+    This api returns the current SAP sessionId to the caller.
+
+  DEPENDENCIES
+
+  PARAMETERS
+
+    IN
+    pContext            : Pointer to Sap Context structure
+    v_U8_t              : Pointer to sessionID
+
+  RETURN VALUE
+    VOS_STATUS_SUCCESS on success.
+
+    VOS_STATUS_E_INVAL: Pointer to SAP cb is NULL ; access would cause a page
+                         fault
+============================================================================*/
+VOS_STATUS WLANSAP_get_sessionId
+(
+    v_PVOID_t  pvosGCtx, v_U8_t *sessionId
+)
+{
+    ptSapContext  pSapCtx = NULL;
+    pSapCtx = VOS_GET_SAP_CB(pvosGCtx);
+
+    if ( NULL == pSapCtx )
+    {
+        VOS_TRACE( VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO_HIGH,
+                   "%s: Invalid SAP pointer from pvosGCtx", __func__);
+        return VOS_STATUS_E_INVAL;
+    }
+
+    if (pSapCtx->sapsMachine != eSAP_STARTED)
+        return VOS_STATUS_E_FAILURE;
+
+    *sessionId = pSapCtx->sessionId;
+    return VOS_STATUS_SUCCESS;
+}
 /*==========================================================================
   FUNCTION    WLANSAP_StartBss
 
@@ -599,6 +648,7 @@ WLANSAP_StartBss
         pSapCtx->scanBandPreference = pConfig->scanBandPreference;
         pSapCtx->acsBandSwitchThreshold = pConfig->acsBandSwitchThreshold;
         pSapCtx->pUsrContext = pUsrContext;
+        init_completion(&pSapCtx->ecsa_info.chan_switch_comp);
 
         //Set the BSSID to your "self MAC Addr" read the mac address from Configuation ITEM received from HDD
         pSapCtx->csrRoamProfile.BSSIDs.numOfBSSIDs = 1;
@@ -1147,6 +1197,8 @@ WLANSAP_ModifyACL
                             MAC_ADDR_ARRAY(pPeerStaMac));
                 } else
                 {
+                    struct tagCsrDelStaParams delStaParams;
+
                     if (staInWhiteList)
                     {
                         //remove it from white list before adding to the white list
@@ -1154,6 +1206,15 @@ WLANSAP_ModifyACL
                                 "Present in white list so first remove from it");
                         sapRemoveMacFromACL(pSapCtx->acceptMacList, &pSapCtx->nAcceptMac, staWLIndex);
                     }
+                    /*
+                     * If we are adding a client to the black list;
+                     * if its connected, send deauth
+                     */
+                    WLANSAP_PopulateDelStaParams(pPeerStaMac,
+                            eSIR_MAC_DEAUTH_LEAVING_BSS_REASON,
+                            SIR_MAC_MGMT_DEAUTH >> 4,
+                            &delStaParams);
+                    WLANSAP_DeauthSta(pSapCtx->pvosGCtx, &delStaParams);
                     VOS_TRACE( VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO,
                             "... Now add to black list");
                     sapAddMacToACL(pSapCtx->denyMacList, &pSapCtx->nDenyMac, pPeerStaMac);
@@ -2095,7 +2156,7 @@ VOS_STATUS WLANSAP_SendAction( v_PVOID_t pvosGCtx, const tANI_U8 *pBuf,
         if( ( NULL == hHal ) || ( eSAP_TRUE != pSapCtx->isSapSessionOpen ) )
         {
             VOS_TRACE( VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_ERROR,
-                       "%s: HAL pointer (%p) NULL OR SME session is not open (%d)",
+                       "%s: HAL pointer (%pK) NULL OR SME session is not open (%d)",
                        __func__, hHal, pSapCtx->isSapSessionOpen );
             return VOS_STATUS_E_FAULT;
         }
@@ -2163,7 +2224,7 @@ VOS_STATUS WLANSAP_RemainOnChannel( v_PVOID_t pvosGCtx,
         if( ( NULL == hHal ) || ( eSAP_TRUE != pSapCtx->isSapSessionOpen ) )
         {
             VOS_TRACE( VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_ERROR,
-                       "%s: HAL pointer (%p) NULL OR SME session is not open (%d)",
+                       "%s: HAL pointer (%pK) NULL OR SME session is not open (%d)",
                        __func__, hHal, pSapCtx->isSapSessionOpen );
             return VOS_STATUS_E_FAULT;
         }
@@ -2211,36 +2272,31 @@ VOS_STATUS WLANSAP_CancelRemainOnChannel( v_PVOID_t pvosGCtx )
     v_PVOID_t hHal = NULL;
     eHalStatus halStatus = eHAL_STATUS_FAILURE;
 
-    if( VOS_STA_SAP_MODE == vos_get_conparam ( ) )
+    pSapCtx = VOS_GET_SAP_CB(pvosGCtx);
+    if (NULL == pSapCtx)
     {
-        pSapCtx = VOS_GET_SAP_CB( pvosGCtx );
-        if (NULL == pSapCtx)
-        {
-            VOS_TRACE( VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_ERROR,
-                       "%s: Invalid SAP pointer from pvosGCtx", __func__);
-            return VOS_STATUS_E_FAULT;
-        }
-        hHal = VOS_GET_HAL_CB(pSapCtx->pvosGCtx);
-        if( ( NULL == hHal ) || ( eSAP_TRUE != pSapCtx->isSapSessionOpen ) )
-        {
-            VOS_TRACE( VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_ERROR,
-                       "%s: HAL pointer (%p) NULL OR SME session is not open (%d)",
-                       __func__, hHal, pSapCtx->isSapSessionOpen );
-            return VOS_STATUS_E_FAULT;
-        }
-
-        halStatus = sme_CancelRemainOnChannel( hHal, pSapCtx->sessionId );
-
-        if( eHAL_STATUS_SUCCESS == halStatus )
-        {
-            return VOS_STATUS_SUCCESS;
-        }
+        VOS_TRACE( VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_ERROR,
+                "%s: Invalid SAP pointer from pvosGCtx", __func__);
+        return VOS_STATUS_E_FAULT;
+    }
+    hHal = VOS_GET_HAL_CB(pSapCtx->pvosGCtx);
+    if ((NULL == hHal) || (eSAP_TRUE != pSapCtx->isSapSessionOpen))
+    {
+        VOS_TRACE( VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_ERROR,
+                "%s: HAL pointer (%pK) NULL OR SME session is not open (%d)",
+                __func__, hHal, pSapCtx->isSapSessionOpen );
+        return VOS_STATUS_E_FAULT;
     }
 
-    VOS_TRACE( VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_ERROR,
-                    "Failed to Cancel Remain on Channel");
+    halStatus = sme_CancelRemainOnChannel(hHal, pSapCtx->sessionId);
 
-    return VOS_STATUS_E_FAULT;
+    if (eHAL_STATUS_SUCCESS != halStatus)
+    {
+        VOS_TRACE( VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_ERROR,
+                "Failed to Cancel Remain on Channel");
+        return VOS_STATUS_E_FAULT;
+    }
+    return VOS_STATUS_SUCCESS;
 }
 
 /*==========================================================================
@@ -2289,7 +2345,7 @@ VOS_STATUS WLANSAP_RegisterMgmtFrame( v_PVOID_t pvosGCtx, tANI_U16 frameType,
         if( ( NULL == hHal ) || ( eSAP_TRUE != pSapCtx->isSapSessionOpen ) )
         {
             VOS_TRACE( VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_ERROR,
-                       "%s: HAL pointer (%p) NULL OR SME session is not open (%d)",
+                       "%s: HAL pointer (%pK) NULL OR SME session is not open (%d)",
                        __func__, hHal, pSapCtx->isSapSessionOpen );
             return VOS_STATUS_E_FAULT;
         }
@@ -2354,7 +2410,7 @@ VOS_STATUS WLANSAP_DeRegisterMgmtFrame( v_PVOID_t pvosGCtx, tANI_U16 frameType,
         if( ( NULL == hHal ) || ( eSAP_TRUE != pSapCtx->isSapSessionOpen ) )
         {
             VOS_TRACE( VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_ERROR,
-                       "%s: HAL pointer (%p) NULL OR SME session is not open (%d)",
+                       "%s: HAL pointer (%pK) NULL OR SME session is not open (%d)",
                        __func__, hHal, pSapCtx->isSapSessionOpen );
             return VOS_STATUS_E_FAULT;
         }
@@ -2419,3 +2475,135 @@ void WLANSAP_PopulateDelStaParams(const v_U8_t *mac,
                    pDelStaParams->reason_code, pDelStaParams->subtype,
                    MAC_ADDR_ARRAY(pDelStaParams->peerMacAddr));
 }
+
+/**
+ * wlansap_validate_phy_mode() -
+ * validate if the phymode allow the channel to set.
+ *
+ * @phy_mode: current phymode
+ * @channel: target channel number.
+ *
+ * Return: true if channel is allowed else false
+ */
+static bool wlansap_validate_phy_mode(uint32_t phy_mode, uint32_t channel)
+{
+  switch (phy_mode) {
+  case eSAP_DOT11_MODE_11a:
+     if (channel <= SIR_11B_CHANNEL_END)
+         return false;
+  case eSAP_DOT11_MODE_11b:
+  case eSAP_DOT11_MODE_11g:
+  case eSAP_DOT11_MODE_11g_ONLY:
+  case eSAP_DOT11_MODE_11b_ONLY:
+    if (channel > SIR_11B_CHANNEL_END)
+        return false;
+  default:
+    return true;
+  }
+
+  return true;
+}
+
+int wlansap_chk_n_set_chan_change_in_progress(ptSapContext sap_ctx)
+{
+   vos_spin_lock_acquire(&sap_ctx->ecsa_info.ecsa_lock);
+   if (sap_ctx->ecsa_info.channel_switch_in_progress) {
+       vos_spin_lock_release(&sap_ctx->ecsa_info.ecsa_lock);
+       hddLog(LOGE, FL("channel switch already in progress"));
+       return -EALREADY;
+   }
+   sap_ctx->ecsa_info.channel_switch_in_progress = true;
+   vos_spin_lock_release(&sap_ctx->ecsa_info.ecsa_lock);
+
+   return 0;
+}
+
+int wlansap_reset_chan_change_in_progress(ptSapContext sap_ctx)
+{
+   vos_spin_lock_acquire(&sap_ctx->ecsa_info.ecsa_lock);
+   sap_ctx->ecsa_info.channel_switch_in_progress = false;
+   vos_spin_lock_release(&sap_ctx->ecsa_info.ecsa_lock);
+
+   return 0;
+}
+
+bool wlansap_get_change_in_progress(ptSapContext sap_ctx)
+{
+   bool value;
+
+   vos_spin_lock_acquire(&sap_ctx->ecsa_info.ecsa_lock);
+   value = sap_ctx->ecsa_info.channel_switch_in_progress;
+   vos_spin_lock_release(&sap_ctx->ecsa_info.ecsa_lock);
+
+   return value;
+}
+
+
+int wlansap_set_channel_change(v_PVOID_t vos_ctx,
+    uint32_t new_channel, bool allow_dfs_chan)
+{
+   ptSapContext sap_ctx;
+   tWLAN_SAPEvent sap_event = {0};
+   v_PVOID_t hal;
+   tpAniSirGlobal mac_ctx;
+   eNVChannelEnabledType chan_state;
+
+   sap_ctx = VOS_GET_SAP_CB(vos_ctx);
+
+   if (!sap_ctx) {
+        hddLog(LOGE, FL("sap_ctx is NULL"));
+        return -EINVAL;
+   }
+
+   hal = VOS_GET_HAL_CB(sap_ctx->pvosGCtx);
+   if (!hal) {
+        hddLog(LOGE, FL("hal is NULL"));
+        return -EINVAL;
+   }
+   mac_ctx = PMAC_STRUCT(hal);
+
+   if (eSAP_STARTED != sap_ctx->sapsMachine) {
+        hddLog(LOGE, FL("SAP is not in eSAP_STARTED state "));
+        return -EINVAL;
+   }
+
+   if (sap_ctx->channel == new_channel) {
+        hddLog(LOGE, FL("channel %d already set"), new_channel);
+        return -EALREADY;
+   }
+
+   if(!wlansap_get_change_in_progress(sap_ctx)) {
+       hddLog(LOGE, FL("channel_switch_in_progress should be set before calling channel change"));
+       return -EINVAL;
+   }
+
+   chan_state = vos_nv_getChannelEnabledState(new_channel);
+   if ((chan_state == NV_CHANNEL_DISABLE) ||
+       (chan_state == NV_CHANNEL_INVALID)) {
+        hddLog(LOGE,
+               FL("Channel is disabled, Ignore channel switch "));
+        return -EINVAL;
+   } else if (!allow_dfs_chan && (chan_state == NV_CHANNEL_DFS)) {
+        hddLog(LOGE,
+               FL("DFS channel ignore channel switch as allow_dfs_chan is false"));
+        return -EINVAL;
+   }
+   if (!wlansap_validate_phy_mode(sap_ctx->csrRoamProfile.phyMode,
+       new_channel)) {
+        hddLog(LOGE, FL("Channel %d not valid for phyMode %d"), new_channel,
+               sap_ctx->csrRoamProfile.phyMode);
+        return -EINVAL;
+   }
+
+   sap_ctx->ecsa_info.new_channel = new_channel;
+   /*
+    * Post the eSAP_CHANNEL_SWITCH_ANNOUNCEMENT_START
+    * to SAP state machine to process the channel
+    * request with CSA IE set in the beacons.
+    */
+   sap_event.event = eSAP_CHANNEL_SWITCH_ANNOUNCEMENT_START;
+   sapFsm(sap_ctx, &sap_event);
+
+   return 0;
+}
+

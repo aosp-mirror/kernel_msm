@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013, 2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -64,6 +64,7 @@
 #define WE_ENABLE_DPD        12
 #define WE_SET_CB            13
 #define WE_TX_CW_RF_GEN      14
+#define WE_SET_POWER_INDEX   15
 
 /* Private ioctls and their sub-ioctls */
 #define WLAN_FTM_PRIV_SET_NONE_GET_INT    (SIOCIWFIRSTPRIV + 1)
@@ -97,6 +98,7 @@
 
 #define WLAN_FTM_PRIV_SET_VAR_INT_GET_NONE   (SIOCIWFIRSTPRIV + 7)
 #define WE_SET_TX_WF_GAIN  1
+#define WE_SET_DUMP        2
 
 #define WE_FTM_MAX_STR_LEN 1024
 #define MAX_FTM_VAR_ARGS  7

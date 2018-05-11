@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -58,6 +58,9 @@
 #endif
 #ifdef FEATURE_WLAN_DIAG_SUPPORT_LIM
 #include "vos_diag_core_log.h"
+#endif
+#ifdef WLAN_FEATURE_LFR_MBB
+#include "lim_mbb.h"
 #endif
 
 
@@ -155,6 +158,14 @@ limProcessMlmReqMessages(tpAniSirGlobal pMac, tpSirMsgQ Msg)
 #ifdef WLAN_FEATURE_VOWIFI_11R
         case SIR_LIM_FT_PREAUTH_RSP_TIMEOUT:limProcessFTPreauthRspTimeout(pMac); break;
 #endif
+#ifdef WLAN_FEATURE_LFR_MBB
+        case SIR_LIM_PREAUTH_MBB_RSP_TIMEOUT:
+             lim_process_preauth_mbb_rsp_timeout(pMac);
+             break;
+        case SIR_LIM_REASSOC_MBB_RSP_TIMEOUT:
+             lim_process_reassoc_mbb_rsp_timeout(pMac);
+             break;
+#endif
         case SIR_LIM_REMAIN_CHN_TIMEOUT:    limProcessRemainOnChnTimeout(pMac); break;
         case SIR_LIM_INSERT_SINGLESHOT_NOA_TIMEOUT:   
                                             limProcessInsertSingleShotNOATimeout(pMac); break;
@@ -165,6 +176,7 @@ limProcessMlmReqMessages(tpAniSirGlobal pMac, tpSirMsgQ Msg)
                                             break;
         case SIR_LIM_DISASSOC_ACK_TIMEOUT:  limProcessDisassocAckTimeout(pMac); break;
         case SIR_LIM_DEAUTH_ACK_TIMEOUT:    limProcessDeauthAckTimeout(pMac); break;
+        case SIR_LIM_SAP_ECSA_TIMEOUT:      lim_process_ap_ecsa_timeout(pMac);break;
         case LIM_MLM_ADDBA_REQ:             limProcessMlmAddBAReq( pMac, Msg->bodyptr ); break;
         case LIM_MLM_ADDBA_RSP:             limProcessMlmAddBARsp( pMac, Msg->bodyptr ); break;
         case LIM_MLM_DELBA_REQ:             limProcessMlmDelBAReq( pMac, Msg->bodyptr ); break;
@@ -274,7 +286,7 @@ limSuspendLink(tpAniSirGlobal pMac, tSirLinkTrafficCheck trafficCheck,  SUSPEND_
    if( pMac->lim.gpLimSuspendCallback ||
        pMac->lim.gLimSystemInScanLearnMode )
    {
-      limLog( pMac, LOGE, FL("Something is wrong, SuspendLinkCbk:%p "
+      limLog( pMac, LOGE, FL("Something is wrong, SuspendLinkCbk:%pK "
               "IsSystemInScanLearnMode:%d"), pMac->lim.gpLimSuspendCallback,
                pMac->lim.gLimSystemInScanLearnMode );
       callback( pMac, eHAL_STATUS_FAILURE, data ); 
@@ -512,6 +524,16 @@ void limContinuePostChannelScan(tpAniSirGlobal pMac)
 
             // Initialize max timer too
             limDeactivateAndChangeTimer(pMac, eLIM_MAX_CHANNEL_TIMER);
+            if (tx_timer_activate(&pMac->lim.limTimers.gLimMaxChannelTimer) !=
+                                                                     TX_SUCCESS)
+            {
+                limLog(pMac, LOGE, FL("could not start max channel timer"));
+                limDeactivateAndChangeTimer(pMac, eLIM_MIN_CHANNEL_TIMER);
+                limDeactivateAndChangeTimer(pMac, eLIM_MAX_CHANNEL_TIMER);
+                limSendHalEndScanReq(pMac, channelNum,
+                                     eLIM_HAL_END_SCAN_WAIT_STATE);
+                return;
+            }
 #if defined WLAN_FEATURE_VOWIFI
         }
            else
@@ -643,6 +665,7 @@ void limCovertChannelScanType(tpAniSirGlobal pMac,tANI_U8 channelNum, tANI_BOOLE
     tANI_U32 i;
     tANI_U8  channelPair[WNI_CFG_SCAN_CONTROL_LIST_LEN];
     tANI_U32 len = WNI_CFG_SCAN_CONTROL_LIST_LEN;
+
     if (wlan_cfgGetStr(pMac, WNI_CFG_SCAN_CONTROL_LIST, channelPair, &len)
                     != eSIR_SUCCESS)
     {
@@ -713,6 +736,16 @@ void limSetDFSChannelList(tpAniSirGlobal pMac,tANI_U8 channelNum, tSirDFSChannel
 {
 
     tANI_BOOLEAN passiveToActive = TRUE;
+    tANI_U32 cfgVal;
+
+    if (eSIR_SUCCESS == wlan_cfgGetInt(pMac, WNI_CFG_ACTIVE_PASSIVE_CON,
+                                        &cfgVal))
+    {
+        limLog(pMac, LOG1,  FL("WNI_CFG_ACTIVE_PASSIVE_CON: %d"), cfgVal);
+        if (!cfgVal)
+           return;
+    }
+
     if ((1 <= channelNum) && (165 >= channelNum))
     {
        if (eANI_BOOLEAN_TRUE == limIsconnectedOnDFSChannel(channelNum))
@@ -723,6 +756,14 @@ void limSetDFSChannelList(tpAniSirGlobal pMac,tANI_U8 channelNum, tSirDFSChannel
              limLog(pMac, LOG1, FL("Received first beacon on DFS channel: %d"), channelNum);
              limCovertChannelScanType(pMac,channelNum, passiveToActive);
           }
+
+          if (!pMac->fActiveScanOnDFSChannels &&
+             dfsChannelList->timeStamp[channelNum] &&
+             !limActiveScanAllowed(pMac, channelNum))
+               limLog(pMac, LOGE,
+                 FL("Received beacon on DFS channel %d with dfs time stamp %lu, but channel is still DFS"),
+                 channelNum, dfsChannelList->timeStamp[channelNum]);
+
           dfsChannelList->timeStamp[channelNum] = vos_timer_get_system_time();
        }
        else
@@ -743,8 +784,41 @@ void limSetDFSChannelList(tpAniSirGlobal pMac,tANI_U8 channelNum, tSirDFSChannel
     return;
 }
 
+void limDoSendAuthMgmtFrame(tpAniSirGlobal pMac, tpPESession psessionEntry)
+{
+        tSirMacAuthFrameBody    authFrameBody;
 
-
+        //Prepare & send Authentication frame
+        authFrameBody.authAlgoNumber =
+                        (tANI_U8) pMac->lim.gpLimMlmAuthReq->authType;
+        authFrameBody.authTransactionSeqNumber = SIR_MAC_AUTH_FRAME_1;
+        authFrameBody.authStatusCode = 0;
+        pMac->authAckStatus = LIM_AUTH_ACK_NOT_RCD;
+        limSendAuthMgmtFrame(pMac,
+                        &authFrameBody,
+                        pMac->lim.gpLimMlmAuthReq->peerMacAddr,
+                        LIM_NO_WEP_IN_FC, psessionEntry, eSIR_TRUE);
+        if (tx_timer_activate(&pMac->lim.limTimers.gLimAuthFailureTimer)
+                        != TX_SUCCESS) {
+                //Could not start Auth failure timer.
+                //Log error
+                limLog(pMac, LOGP,
+                FL("could not start Auth failure timer"));
+                //Cleanup as if auth timer expired
+                limProcessAuthFailureTimeout(pMac);
+        } else {
+                MTRACE(macTrace(pMac, TRACE_CODE_TIMER_ACTIVATE,
+                        psessionEntry->peSessionId, eLIM_AUTH_RETRY_TIMER));
+                //Activate Auth Retry timer
+                if (tx_timer_activate
+                        (&pMac->lim.limTimers.gLimPeriodicAuthRetryTimer)
+                                            != TX_SUCCESS) {
+                        limLog(pMac, LOGP,
+                                  FL("could not activate Auth Retry timer"));
+                }
+        }
+        return;
+}
 
 /*
 * Creates a Raw frame to be sent before every Scan, if required.
@@ -1086,6 +1160,27 @@ void limSendHalEndScanReq(tpAniSirGlobal pMac, tANI_U8 channelNum, tLimLimHalSca
         PELOGW(limLog(pMac, LOGW, FL("Invalid state for END_SCAN_REQ message=%d"), pMac->lim.gLimHalScanState);)
     }
 
+
+    return;
+}
+
+
+void limSendTLPauseInd(tpAniSirGlobal pMac, uint16_t staId)
+{
+    tSirMsgQ            msg;
+    tSirRetStatus       rc = eSIR_SUCCESS;
+
+    msg.type = WDA_PAUSE_TL_IND;
+    msg.bodyval = staId;
+
+    MTRACE(macTraceMsgTx(pMac, NO_SESSION, msg.type));
+
+    rc = wdaPostCtrlMsg(pMac, &msg);
+    if (rc == eSIR_SUCCESS) {
+            return;
+    }
+
+    limLog(pMac, LOGW, FL("wdaPostCtrlMsg failed, error code %d"), rc);
 
     return;
 }
@@ -2185,6 +2280,12 @@ limProcessMlmPostJoinSuspendLink(tpAniSirGlobal pMac, eHalStatus status, tANI_U3
 #if  defined (WLAN_FEATURE_VOWIFI_11R) || defined (FEATURE_WLAN_ESE) || defined(FEATURE_WLAN_LFR)
     psessionEntry->pLimMlmReassocRetryReq = NULL;
 #endif
+
+#ifdef FEATURE_WLAN_DIAG_SUPPORT
+    limDiagEventReport(pMac, WLAN_PE_DIAG_CHANNEL_SWITCH_ANOUNCEMENT,
+                       psessionEntry, eSIR_SUCCESS, LIM_SWITCH_CHANNEL_JOIN);
+#endif
+
     limLog(pMac, LOG1, FL("[limProcessMlmJoinReq]: suspend link success(%d) "
              "on sessionid: %d setting channel to: %d with secChanOffset:%d "
              "and maxtxPower: %d"), status, psessionEntry->peSessionId,
@@ -2340,7 +2441,6 @@ limProcessMlmAuthReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
 {
     tANI_U32                numPreAuthContexts;
     tSirMacAddr             currentBssId;
-    tSirMacAuthFrameBody    authFrameBody;
     tLimMlmAuthCnf          mlmAuthCnf;
     struct tLimPreAuthNode  *preAuthNode;
     tpDphHashNode           pStaDs;
@@ -2467,17 +2567,6 @@ limProcessMlmAuthReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
         psessionEntry->limMlmState = eLIM_MLM_WT_AUTH_FRAME2_STATE;
         MTRACE(macTrace(pMac, TRACE_CODE_MLM_STATE, psessionEntry->peSessionId, psessionEntry->limMlmState));
 
-        /// Prepare & send Authentication frame
-        authFrameBody.authAlgoNumber =
-                                  (tANI_U8) pMac->lim.gpLimMlmAuthReq->authType;
-        authFrameBody.authTransactionSeqNumber = SIR_MAC_AUTH_FRAME_1;
-        authFrameBody.authStatusCode = 0;
-        pMac->authAckStatus = LIM_AUTH_ACK_NOT_RCD;
-        limSendAuthMgmtFrame(pMac,
-                             &authFrameBody,
-                             pMac->lim.gpLimMlmAuthReq->peerMacAddr,
-                             LIM_NO_WEP_IN_FC, psessionEntry, eSIR_TRUE);
-
         //assign appropriate sessionId to the timer object
         pMac->lim.limTimers.gLimAuthFailureTimer.sessionId = sessionId;
         /* assign appropriate sessionId to the timer object */
@@ -2485,27 +2574,8 @@ limProcessMlmAuthReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
         limDeactivateAndChangeTimer(pMac, eLIM_AUTH_RETRY_TIMER);
         // Activate Auth failure timer
         MTRACE(macTrace(pMac, TRACE_CODE_TIMER_ACTIVATE, psessionEntry->peSessionId, eLIM_AUTH_FAIL_TIMER));
-        if (tx_timer_activate(&pMac->lim.limTimers.gLimAuthFailureTimer)
-                                       != TX_SUCCESS)
-        {
-            /// Could not start Auth failure timer.
-            // Log error
-            limLog(pMac, LOGP,
-                   FL("could not start Auth failure timer"));
-            // Cleanup as if auth timer expired
-            limProcessAuthFailureTimeout(pMac);
-        }
-        else
-        {
-            MTRACE(macTrace(pMac, TRACE_CODE_TIMER_ACTIVATE,
-                    psessionEntry->peSessionId, eLIM_AUTH_RETRY_TIMER));
-            // Activate Auth Retry timer
-            if (tx_timer_activate(&pMac->lim.limTimers.gLimPeriodicAuthRetryTimer)
-                                                                   != TX_SUCCESS)
-            {
-               limLog(pMac, LOGP, FL("could not activate Auth Retry timer"));
-            }
-        }
+
+        limDoSendAuthMgmtFrame(pMac, psessionEntry);
         return;
     }
     else
@@ -2610,6 +2680,11 @@ limProcessMlmAssocReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
  
         /// Prepare and send Association request frame
         limSendAssocReqMgmtFrame(pMac, pMlmAssocReq,psessionEntry);
+#ifdef FEATURE_WLAN_DIAG_SUPPORT
+        limDiagEventReport(pMac, WLAN_PE_DIAG_ASSOC_REQ_EVENT, psessionEntry,
+                           eSIR_SUCCESS, eSIR_SUCCESS);
+#endif
+
 
   //Set the link state to postAssoc, so HW can start receiving frames from AP.
     if ((psessionEntry->bssType == eSIR_BTAMP_STA_MODE)||
@@ -2787,6 +2862,12 @@ limProcessMlmReassocReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
         psessionEntry->channelChangeReasonCode = LIM_SWITCH_CHANNEL_REASSOC;
 
         /** Switch channel to the new Operating channel for Reassoc*/
+
+#ifdef FEATURE_WLAN_DIAG_SUPPORT
+        limDiagEventReport(pMac, WLAN_PE_DIAG_CHANNEL_SWITCH_ANOUNCEMENT,
+                   psessionEntry, eSIR_SUCCESS, LIM_SWITCH_CHANNEL_REASSOC);
+#endif
+
         limSetChannel(pMac, chanNum, secChannelOffset, psessionEntry->maxTxPower, psessionEntry->peSessionId);
 
         return;
@@ -2984,28 +3065,17 @@ limProcessMlmDisassocReqNtf(tpAniSirGlobal pMac, eHalStatus suspendStatus, tANI_
     if (sendDisassocFrame && (pMlmDisassocReq->reasonCode != eSIR_MAC_DISASSOC_DUE_TO_FTHANDOFF_REASON))
     {
         pMac->lim.limDisassocDeauthCnfReq.pMlmDisassocReq = pMlmDisassocReq;
-
-
-        /* If the reason for disassociation is inactivity of STA, then
-           dont wait for acknowledgement. Also, if FW_IN_TX_PATH feature
-           is enabled do not wait for ACK */
-        if (((pMlmDisassocReq->reasonCode == eSIR_MAC_DISASSOC_DUE_TO_INACTIVITY_REASON) &&
-            (psessionEntry->limSystemRole == eLIM_AP_ROLE)) ||
-            IS_FW_IN_TX_PATH_FEATURE_ENABLE )
+        if (IS_FW_IN_TX_PATH_FEATURE_ENABLE)
         {
-
-             limSendDisassocMgmtFrame(pMac,
-                                 pMlmDisassocReq->reasonCode,
+            limSendDisassocMgmtFrame(pMac, pMlmDisassocReq->reasonCode,
                                  pMlmDisassocReq->peerMacAddr,
                                  psessionEntry, FALSE);
-
-             /* Send Disassoc CNF and receive path cleanup */
-             limSendDisassocCnf(pMac);
+            /* Send Disassoc CNF and receive path cleanup */
+            limSendDisassocCnf(pMac);
         }
         else
         {
-             limSendDisassocMgmtFrame(pMac,
-                                 pMlmDisassocReq->reasonCode,
+            limSendDisassocMgmtFrame(pMac, pMlmDisassocReq->reasonCode,
                                  pMlmDisassocReq->peerMacAddr,
                                  psessionEntry, TRUE);
         }
@@ -3458,6 +3528,96 @@ void limProcessDeauthAckTimeout(tpAniSirGlobal pMac)
     limSendDeauthCnf(pMac);
 }
 
+void lim_process_ap_ecsa_timeout(tpAniSirGlobal mac_ctx)
+{
+    tSirMsgQ msg = {0};
+    struct sir_ecsa_ie_complete_ind *ecsa_ie_cmp_ind;
+    tpPESession session;
+
+    session = peFindSessionBySessionId(mac_ctx,
+                        mac_ctx->lim.limTimers.g_lim_ap_ecsa_timer.sessionId);
+
+    if(!session)
+    {
+      limLog(mac_ctx, LOGE, FL("session does not exist for given sessionId %d"),
+             mac_ctx->lim.limTimers.g_lim_ap_ecsa_timer.sessionId);
+      return;
+    }
+    limLog(mac_ctx, LOG1, FL("session id %d switch count %d"),
+           mac_ctx->lim.limTimers.g_lim_ap_ecsa_timer.sessionId,
+           session->gLimChannelSwitch.switchCount);
+    /*
+     * For each beacon interval decrement switch count to use proper value
+     * in probe resp sent by host. Once it becomes 0 send tx complete
+     * indication to SME.
+     */
+    if (session->gLimChannelSwitch.switchCount > 0) {
+        session->gLimChannelSwitch.switchCount--;
+        lim_send_chan_switch_action_frame(mac_ctx,
+                 session->gLimChannelSwitch.primaryChannel, session);
+        mac_ctx->lim.limTimers.g_lim_ap_ecsa_timer.sessionId =
+                                             session->peSessionId;
+        limDeactivateAndChangeTimer(mac_ctx, eLIM_AP_ECSA_TIMER);
+
+        if (tx_timer_activate(&mac_ctx->lim.limTimers.g_lim_ap_ecsa_timer) !=
+            TX_SUCCESS)
+        {
+           limLog(mac_ctx, LOGE, FL("Couldn't activate g_lim_ap_ecsa_timer"));
+           lim_process_ap_ecsa_timeout(mac_ctx);
+        }
+        return;
+    }
+
+    session->include_ecsa_ie = false;
+    session->include_wide_ch_bw_ie = false;
+
+    ecsa_ie_cmp_ind = vos_mem_malloc(sizeof(*ecsa_ie_cmp_ind));
+    if(!ecsa_ie_cmp_ind)
+    {
+      limLog(mac_ctx, LOGE, FL("failed to allocate ecsa_ie_cmp_ind"));
+      return;
+    }
+    ecsa_ie_cmp_ind->session_id = session->smeSessionId;
+
+    msg.type = eWNI_SME_ECSA_IE_BEACON_COMP_IND;
+    msg.bodyptr = ecsa_ie_cmp_ind;
+    limSysProcessMmhMsgApi(mac_ctx, &msg, ePROT);
+    return;
+}
+
+void lim_send_sme_ap_channel_switch_resp(tpAniSirGlobal mac_ctx,
+          tpPESession session, tpSwitchChannelParams chan_params)
+{
+   tSirMsgQ msg = {0};
+   struct sir_channel_chanege_rsp *params;
+
+   params = vos_mem_malloc(sizeof(*params));
+   if (!params) {
+       limLog(mac_ctx, LOGE, FL("AllocateMemory failed for pSmeSwithChnlParams"));
+       return;
+   }
+
+   params->sme_session_id = session->smeSessionId;
+   params->new_channel = chan_params->channelNumber;
+   params->status = chan_params->status;
+
+   msg.type = eWNI_SME_ECSA_CHAN_CHANGE_RSP;
+   msg.bodyptr = params;
+   msg.bodyval = 0;
+   limSysProcessMmhMsgApi(mac_ctx, &msg, ePROT);
+
+   if (chan_params->channelNumber == session->currentOperChannel) {
+       limApplyConfiguration(mac_ctx, session);
+       limSendBeaconInd(mac_ctx, session);
+   } else {
+       limLog(mac_ctx, LOGE, FL("channel switch resp chan %d and session channel doesnt match %d"),
+              chan_params->channelNumber, session->currentOperChannel);
+   }
+
+   return;
+}
+
+
 /**
  * limProcessMlmDeauthReq()
  *
@@ -3890,6 +4050,11 @@ limProcessMinChannelTimeout(tpAniSirGlobal pMac)
         pMac->lim.limTimers.gLimPeriodicProbeReqTimer.sessionId = 0xff;
         limDeactivateAndChangeTimer(pMac, eLIM_MIN_CHANNEL_TIMER);
         limDeactivateAndChangeTimer(pMac, eLIM_PERIODIC_PROBE_REQ_TIMER);
+        /*
+         * Deactivate Max Channel timer as well since no probe resp/beacons
+         * are received.
+         */
+        limDeactivateAndChangeTimer(pMac, eLIM_MAX_CHANNEL_TIMER);
         pMac->lim.probeCounter = 0;
         if (pMac->lim.gLimCurrentScanChannelId <=
                 (tANI_U32)(pMac->lim.gpLimMlmScanReq->channelList.numChannels - 1))
@@ -4420,6 +4585,8 @@ limProcessAuthFailureTimeout(tpAniSirGlobal pMac)
 
             break;
     }
+    /* Reinit scan results to remove the unreachable BSS */
+    limReInitScanResults(pMac);
 } /*** limProcessAuthFailureTimeout() ***/
 
 
@@ -4559,17 +4726,36 @@ limProcessAssocFailureTimeout(tpAniSirGlobal pMac, tANI_U32 MsgType)
 
 
 
-    /* CR: vos packet memory is leaked when assoc rsp timeouted/failed. */
-    /* notify TL that association is failed so that TL can flush the cached frame  */
+    /*
+     * CR: vos packet memory is leaked when assoc rsp timeouted/failed.
+     * notify TL that association is failed so that TL can flush the
+     * cached frame
+     */
     WLANTL_AssocFailed (psessionEntry->staId);
 
-    // Log error
+    /* Log error */
     limLog(pMac, LOG1,
        FL("Re/Association Response not received before timeout "));
 
-    if (( (psessionEntry->limSystemRole == eLIM_AP_ROLE) || (psessionEntry->limSystemRole == eLIM_BT_AMP_AP_ROLE) )||
-        ( (psessionEntry->limMlmState != eLIM_MLM_WT_ASSOC_RSP_STATE) &&
-          (psessionEntry->limMlmState != eLIM_MLM_WT_REASSOC_RSP_STATE)  && 
+    /*
+     * Send Deauth to handle the scenareo where association timeout happened
+     * when device has missed the assoc resp sent by peer.
+     * By sending deauth try to clear the session created on peer device.
+     */
+    limLog(pMac, LOGE,
+           FL("Sessionid: %d try sending Send deauth on channel %d to BSSID: "
+           MAC_ADDRESS_STR ), psessionEntry->peSessionId,
+           psessionEntry->currentOperChannel,
+           MAC_ADDR_ARRAY(psessionEntry->bssId));
+
+    limSendDeauthMgmtFrame(pMac, eSIR_MAC_UNSPEC_FAILURE_REASON,
+                 psessionEntry->bssId,
+                 psessionEntry, FALSE);
+
+    if (((psessionEntry->limSystemRole == eLIM_AP_ROLE) ||
+          (psessionEntry->limSystemRole == eLIM_BT_AMP_AP_ROLE) )||
+        ((psessionEntry->limMlmState != eLIM_MLM_WT_ASSOC_RSP_STATE) &&
+          (psessionEntry->limMlmState != eLIM_MLM_WT_REASSOC_RSP_STATE)  &&
           (psessionEntry->limMlmState != eLIM_MLM_WT_FT_REASSOC_RSP_STATE)))
     {
         /**
@@ -4643,6 +4829,8 @@ limProcessAssocFailureTimeout(tpAniSirGlobal pMac, tANI_U32 MsgType)
                 eSIR_SME_REASSOC_TIMEOUT_RESULT_CODE, eSIR_MAC_UNSPEC_FAILURE_STATUS,psessionEntry);
         }
     }
+    /* Reinit scan results to remove the unreachable BSS */
+    limReInitScanResults(pMac);
 } /*** limProcessAssocFailureTimeout() ***/
 
 

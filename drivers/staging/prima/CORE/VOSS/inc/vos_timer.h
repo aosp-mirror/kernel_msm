@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, 2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -326,6 +326,20 @@ VOS_STATUS vos_timer_stop( vos_timer_t *timer );
   ------------------------------------------------------------------------*/
 v_TIME_t vos_timer_get_system_ticks( v_VOID_t );
 
+/**
+ * vos_system_time_after() - Check if a is later than b
+ * @a: Time stamp value a
+ * @b: Time stamp value b
+ *
+ * Return:
+ * true if a is after b else false
+ */
+static inline bool vos_system_time_after(v_TIME_t a, v_TIME_t b)
+{
+	return (long)(b) - (long)(a) < 0;
+}
+
+
 
 /*--------------------------------------------------------------------------
  
@@ -343,4 +357,7 @@ v_TIME_t vos_timer_get_system_time( v_VOID_t );
 
 v_BOOL_t vos_timer_is_initialized(vos_timer_t *timer);
 
+void vos_process_wd_timer(void);
+void vos_wdthread_init_timer_work(void *callbackptr);
+void vos_wdthread_flush_timer_work(void);
 #endif // #if !defined __VOSS_TIMER_H

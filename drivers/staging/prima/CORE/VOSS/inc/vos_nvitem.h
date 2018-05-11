@@ -736,6 +736,17 @@ eNVChannelEnabledType vos_nv_getChannelEnabledState
    v_U32_t    rfChannel
 );
 
+/*
+ *vos_nv_set_Channel_state - API to set the channel state in NV table
+ *@rfChannel  - input channel enum
+ *@channel_state - state of the channel to be set
+ *  enabled
+ *  disabled
+ *  DFS
+ * Return - Void
+ */
+void vos_nv_set_channel_state(v_U32_t rfChannel, int channel_state);
+
 VOS_STATUS vos_init_wiphy_from_nv_bin(void);
 
 /**------------------------------------------------------------------------

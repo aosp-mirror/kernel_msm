@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -2176,14 +2176,22 @@ void pmmEnterWowlRequestHandler(tpAniSirGlobal pMac, tpSirMsgQ pMsg)
         goto end;
     }
 #endif
-
-
-    if ((pMac->pmm.gPmmState != ePMM_STATE_BMPS_SLEEP) && (pMac->pmm.gPmmState != ePMM_STATE_WOWLAN))
+    /**
+     * In SAP mode BMPS is not supported skip bmps validation and
+     * send command directly.
+     */
+    if (pSessionEntry->operMode != BSS_OPERATIONAL_MODE_AP)
     {
-        pmmLog(pMac, LOGE, FL("Rcvd PMC_ENTER_WOWL_REQ in invalid Power Save state "));
-        limSendSmeRsp(pMac, eWNI_PMC_ENTER_WOWL_RSP, eSIR_SME_INVALID_PMM_STATE, 0, 0);
-        goto end;
-    }
+       if ((pMac->pmm.gPmmState != ePMM_STATE_BMPS_SLEEP) &&
+           (pMac->pmm.gPmmState != ePMM_STATE_WOWLAN))
+       {
+          pmmLog(pMac, LOGE, FL("Rcvd PMC_ENTER_WOWL_REQ in invalid Power Save state "));
+          limSendSmeRsp(pMac, eWNI_PMC_ENTER_WOWL_RSP,
+                        eSIR_SME_INVALID_PMM_STATE, 0, 0);
+          goto end;
+        }
+    } else
+         pmmLog(pMac,LOG1, FL("SAP dosn't support BMPS mode directly post wowl request"));
 
     pHalWowlParams = vos_mem_malloc(sizeof(*pHalWowlParams));
     if ( NULL == pHalWowlParams )
@@ -2363,6 +2371,7 @@ void pmmExitWowlanRequestHandler(tpAniSirGlobal pMac)
     tpPESession pSessionEntry;
     tpSirHalWowlExitParams  pHalWowlMsg = NULL;
     tANI_U8            PowersavesessionId = 0;
+    tANI_U8 smeSessionId = 0;
 
     PowersavesessionId = pMac->pmm.sessionId;
 
@@ -2372,6 +2381,8 @@ void pmmExitWowlanRequestHandler(tpAniSirGlobal pMac)
         smeRspCode = eSIR_SME_WOWL_EXIT_REQ_FAILED;
         goto failure;
     }
+
+    smeSessionId = pSessionEntry->smeSessionId;
 
     pHalWowlMsg = vos_mem_malloc(sizeof(*pHalWowlMsg));
     if ( NULL == pHalWowlMsg )
@@ -2410,7 +2421,7 @@ void pmmExitWowlanRequestHandler(tpAniSirGlobal pMac)
 failure:
     if (pHalWowlMsg != NULL)
        vos_mem_free(pHalWowlMsg);
-    limSendSmeRsp(pMac, eWNI_PMC_EXIT_WOWL_RSP, smeRspCode, 0, 0);
+    limSendSmeRsp(pMac, eWNI_PMC_EXIT_WOWL_RSP, smeRspCode, smeSessionId, 0);
     return;
 }
 
@@ -2461,6 +2472,8 @@ void pmmExitWowlanResponseHandler(tpAniSirGlobal pMac, tpSirMsgQ limMsg)
 
     tpSirHalWowlExitParams  pHalWowlRspMsg;
     eHalStatus   rspStatus = eHAL_STATUS_FAILURE;
+    tpPESession psessionEntry = NULL;
+    tANI_U8 smeSessionId = 0;
 
     /* we need to process all the deferred messages enqueued
      * since the initiating the WDA_WOWL_EXIT_REQ.
@@ -2477,17 +2490,23 @@ void pmmExitWowlanResponseHandler(tpAniSirGlobal pMac, tpSirMsgQ limMsg)
         // restore PMM state to BMPS mode
         pMac->pmm.gPmmState = ePMM_STATE_BMPS_SLEEP;
         rspStatus = pHalWowlRspMsg->status;
+        psessionEntry = peFindSessionByBssIdx(pMac, pHalWowlRspMsg->bssIdx);
+        if (psessionEntry) {
+            smeSessionId = psessionEntry->smeSessionId;
+            if (LIM_IS_AP_ROLE(psessionEntry))
+                pMac->pmm.gPmmState = ePMM_STATE_READY;
+        }
     }
 
     if( rspStatus == eHAL_STATUS_SUCCESS)
     {
         pmmLog(pMac, LOGW, FL("Rcvd successful rsp from HAL to exit WOWLAN "));
-        limSendSmeRsp(pMac, eWNI_PMC_EXIT_WOWL_RSP, eSIR_SME_SUCCESS, 0, 0);
+        limSendSmeRsp(pMac, eWNI_PMC_EXIT_WOWL_RSP, eSIR_SME_SUCCESS, smeSessionId, 0);
     }
     else
     {
         pmmLog(pMac, LOGE, FL("Rcvd failure rsp from HAL to exit WOWLAN "));
-        limSendSmeRsp(pMac, eWNI_PMC_EXIT_WOWL_RSP, eSIR_SME_WOWL_EXIT_REQ_FAILED, 0, 0);
+        limSendSmeRsp(pMac, eWNI_PMC_EXIT_WOWL_RSP, eSIR_SME_WOWL_EXIT_REQ_FAILED, smeSessionId, 0);
     }
     return;
 }
@@ -2699,6 +2718,7 @@ tSirRetStatus pmmUapsdSendChangePwrSaveMsg (tpAniSirGlobal pMac, tANI_U8 mode)
         {
             limLog(pMac, LOGW, FL("No Need to enter UAPSD since Trigger "
                  "Enabled and Delivery Enabled Mask is zero for all ACs"));
+            vos_mem_free(pUapsdParams);
             retStatus = eSIR_PMM_INVALID_REQ;
             return retStatus;
         }
