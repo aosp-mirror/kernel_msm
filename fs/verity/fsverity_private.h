@@ -106,7 +106,7 @@ struct fsverity_hash_alg;
 
 /* Mode of an fs-verity file */
 enum fsverity_mode {
-	/* Waiting for root of trust to be provided, reads will fail */
+	/* Root of trust not provided yet, reads will succeed with warnings */
 	FS_VERITY_MODE_NEED_AUTHENTICATION,
 
 	/* File contents don't match root of trust, reads will fail */

@@ -1099,14 +1099,23 @@ bool fsverity_verify_page(struct page *data_page)
 	if (WARN_ON_ONCE(!PageLocked(data_page)))
 		return false;
 
-	/* Fail the read if the data needs to be authenticated but isn't */
+	/*
+	 * Reads are forbidden if the measurement being enforced doesn't match
+	 * the expected one.  Otherwise reads are allowed, but we warn if they
+	 * are unauthenticated, i.e. if FS_IOC_SET_VERITY_MEASUREMENT hasn't
+	 * been called yet.  (Some users need to use unauthenticated reads to
+	 * find a signature stored in the file.  Allowing these doesn't actually
+	 * decrease security, since an attacker could just replace the file with
+	 * a non-verity one anyway.)
+	 */
 	switch (vi->mode) {
-	case FS_VERITY_MODE_AUTHENTICATION_FAILED:
 	case FS_VERITY_MODE_NEED_AUTHENTICATION:
-		pr_warn("%s (ino %lu), failing read; index=%lu\n",
-			(vi->mode == FS_VERITY_MODE_NEED_AUTHENTICATION ?
-			 "No root of trust provided yet" :
-			 "Root authentication failed"), inode->i_ino, index);
+		pr_warn_ratelimited("Unauthenticated read; ino=%lu, index=%lu\n",
+				    inode->i_ino, index);
+		break;
+	case FS_VERITY_MODE_AUTHENTICATION_FAILED:
+		pr_warn("Root authentication failed, failing read; inode=%lu, index=%lu\n",
+			inode->i_ino, index);
 		return false;
 	case FS_VERITY_MODE_AUTHENTICATED:
 	case FS_VERITY_MODE_INTEGRITY_ONLY:
@@ -1285,10 +1294,10 @@ EXPORT_SYMBOL_GPL(fsverity_full_isize);
  * The FS_IOC_SET_VERITY_MEASUREMENT ioctl informs the kernel which
  * "measurement" (hash of the Merkle tree root hash and the fsverity footer) is
  * expected for an fs-verity file.  If the actual measurement matches the
- * expected one, then reads from the file are allowed and the ioctl succeeds;
- * additionally, the inode is pinned in memory so that the "authenticated"
- * status doesn't get lost on eviction.  Otherwise, reads from the file are
- * forbidden and the ioctl fails.
+ * expected one, then the ioctl succeeds and further reads from the file are
+ * allowed without warnings.  Additionally, the inode is pinned in memory so
+ * that the "authenticated" status doesn't get lost on eviction.  Otherwise,
+ * reads from the file are forbidden and the ioctl fails.
  *
  * TODO(mhalcrow): In the future, we're going to want to have a signature
  * attached to the files that we validate whenever we load the authenticated
@@ -1391,6 +1400,13 @@ int fsverity_ioctl_set_measurement(struct file *filp, const void __user *_uarg)
 		pr_debug("Measurement validated: %*phN\n",
 			 hash_alg->digest_size, vi->measurement);
 		vi->mode = FS_VERITY_MODE_AUTHENTICATED;
+
+		/*
+		 * No need to truncate pages here.  Any pages that were read
+		 * without authentication still had their integrity verified up
+		 * to ->root_hash, so now we know they are authentic as we've
+		 * just authenticated ->root_hash.
+		 */
 
 		/* Pin the inode so that the measurement doesn't go away */
 		ihold(inode);
