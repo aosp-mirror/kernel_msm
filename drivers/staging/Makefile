@@ -46,3 +46,4 @@ obj-$(CONFIG_GS_FPGABOOT)	+= gs_fpgaboot/
 obj-$(CONFIG_CRYPTO_SKEIN)	+= skein/
 obj-$(CONFIG_UNISYSSPAR)	+= unisys/
 obj-$(CONFIG_PRIMA_WLAN)	+= prima/
+obj-$(CONFIG_PRONTO_WLAN)	+= prima/

@@ -29,12 +29,24 @@ config PRIMA_WLAN_LFR
 	bool "Enable the Prima WLAN Legacy Fast Roaming feature"
 	default n
 
+config PRIMA_WLAN_LFR_MBB
+	bool "Enable Legacy Fast Roaming(LFR) Make Before Break"
+	default n
+
 config PRIMA_WLAN_OKC
 	bool "Enable the Prima WLAN Opportunistic Key Caching feature"
 	default n
 
 config PRIMA_WLAN_11AC_HIGH_TP
 	bool "Enable the Prima WLAN 802.11ac High Throughput option (depends upon kernel support)"
+	default n
+
+config MDNS_OFFLOAD_SUPPORT
+	bool "Enable mDNS feature"
+	default n
+
+config QCOM_TDLS
+	bool "Enable TDLS feature"
 	default n
 
 config WLAN_FEATURE_11W
