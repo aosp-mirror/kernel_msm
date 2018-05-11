@@ -1489,7 +1489,8 @@ ATTRIBUTE_GROUPS(mnh_sm);
 static void mnh_sm_state_stats_init(void)
 {
 	mnh_sm_dev->state_stats[mnh_sm_dev->state].counter++;
-	mnh_sm_dev->state_stats[mnh_sm_dev->state].last_entry = ktime_get();
+	mnh_sm_dev->state_stats[mnh_sm_dev->state].last_entry =
+		ktime_get_boottime();
 }
 
 static void mnh_sm_record_state_change(int prev_state, int new_state)
@@ -1497,7 +1498,7 @@ static void mnh_sm_record_state_change(int prev_state, int new_state)
 	ktime_t time;
 
 	if (new_state != prev_state) {
-		time = ktime_get();
+		time = ktime_get_boottime();
 		mnh_sm_dev->state_stats[new_state].counter++;
 		mnh_sm_dev->state_stats[new_state].last_entry = time;
 		mnh_sm_dev->state_stats[prev_state].last_exit = time;
@@ -1546,7 +1547,8 @@ static ssize_t mnh_sm_dbgfs_read_powerstats(struct file *fp, char __user *ubuf,
 		/* adjust duration for current state */
 		if (mnh_sm_dev->state == i &&
 			ktime_after(last_entry, last_exit)) {
-			partial_duration = ktime_sub(ktime_get(), last_entry);
+			partial_duration = ktime_sub(ktime_get_boottime(),
+				last_entry);
 			adjusted_duration = ktime_add(adjusted_duration,
 				partial_duration);
 		}
