@@ -12,7 +12,8 @@
 
 &mdss_mdp {
 	dsi_s6e3ha8_dsc_wqhd_cmd: qcom,mdss_dsi_s6e3ha8 {
-		compatible = "google,s6e3ha8_panel";
+		compatible = "google,dsi_binned_lp";
+
 		qcom,mdss-dsi-panel-name = "S6E3HA8 6.3 command mode panel";
 		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
 		qcom,mdss-dsi-virtual-channel-id = <0>;
@@ -121,6 +122,10 @@
 				];
 				qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
 
+				qcom,mdss-dsi-nolp-command = [
+					15 01 00 00 00 00 02 53 20
+				];
+
 				qcom,compression-mode = "dsc";
 				qcom,mdss-dsc-slice-height = <40>;
 				qcom,mdss-dsc-slice-width = <720>;
@@ -132,6 +137,48 @@
 				/* 2xLM, 2xDSC Enc, 1xDSI Intf */
 				qcom,display-topology = <2 2 1>;
 				qcom,default-topology-index = <0>;
+			};
+		};
+
+		google,lp-modes {
+			lp-mode@0 {
+				label = "off";
+
+				google,dsi-lp-brightness-threshold = <0>;
+				google,dsi-lp-command = [
+					39 01 00 00 00 00 03 51 00 00 /* turn screen dark */
+					15 01 00 00 00 00 02 53 20    /* disable HLPM */
+				];
+				google,dsi-lp-command-state = "dsi_lp_mode";
+			};
+
+			lp-mode@1 {
+				label = "low";
+
+				google,dsi-lp-brightness-threshold = <70>;
+				google,dsi-lp-command = [
+					39 01 00 00 00 00 03 F0 5A 5A /* Unlock */
+					15 01 00 00 00 00 02 B0 05
+					15 01 00 00 00 00 02 BB 84
+					15 01 00 00 00 00 02 53 03
+					15 01 00 00 00 00 02 F7 03
+					39 01 00 00 00 00 03 F0 A5 A5 /* Lock */
+				];
+				google,dsi-lp-command-state = "dsi_lp_mode";
+			};
+
+			lp-mode@2 {
+				label = "high";
+				google,dsi-lp-brightness-threshold = <255>;
+				google,dsi-lp-command = [
+					39 01 00 00 00 00 03 F0 5A 5A /* Unlock */
+					15 01 00 00 00 00 02 B0 05
+					15 01 00 00 00 00 02 BB 04
+					15 01 00 00 00 00 02 53 02
+					15 01 00 00 00 00 02 F7 03
+					39 01 00 00 00 00 03 F0 A5 A5 /* Lock */
+				];
+				google,dsi-lp-command-state = "dsi_lp_mode";
 			};
 		};
 	};
