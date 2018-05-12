@@ -16,6 +16,8 @@
 #include <linux/backlight.h>
 #include <linux/of_gpio.h>
 #include <linux/sysfs.h>
+#include <linux/list.h>
+#include <linux/list_sort.h>
 #include <video/mipi_display.h>
 
 #include "dsi_panel.h"
@@ -38,6 +40,11 @@ static inline bool is_lp_mode(unsigned long state)
 }
 
 static int dsi_panel_pwm_bl_register(struct dsi_backlight_config *bl);
+
+static void dsi_panel_bl_free_unregister(struct dsi_backlight_config *bl)
+{
+	kfree(bl->priv);
+}
 
 static int dsi_backlight_update_dcs(struct dsi_backlight_config *bl, u32 bl_lvl)
 {
@@ -533,7 +540,161 @@ static int dsi_panel_s6e3ha8_bl_register(struct dsi_backlight_config *bl)
 	return 0;
 }
 
+#define MAX_BINNED_BL_MODES 10
+
+struct binned_lp_node {
+	struct list_head head;
+	const char *name;
+	u32 bl_threshold;
+	struct dsi_panel_cmd_set dsi_cmd;
+};
+
+struct binned_lp_data {
+	struct list_head mode_list;
+	struct binned_lp_node *last_lp_mode;
+	struct binned_lp_node priv_pool[MAX_BINNED_BL_MODES];
+};
+
+static int dsi_panel_binned_bl_update(struct dsi_backlight_config *bl,
+				      u32 bl_lvl)
+{
+	struct dsi_panel *panel = container_of(bl, struct dsi_panel, bl_config);
+	struct binned_lp_data *lp_data = bl->priv;
+	struct binned_lp_node *node = NULL;
+	struct backlight_properties *props = &bl->bl_device->props;
+
+	if (is_lp_mode(props->state)) {
+		struct binned_lp_node *tmp;
+
+		list_for_each_entry(tmp, &lp_data->mode_list, head) {
+			if (props->brightness <= tmp->bl_threshold) {
+				node = tmp;
+				break;
+			}
+		}
+		WARN(!node, "unable to find lp node for bl_lvl: %d\n",
+		     props->brightness);
+	}
+
+	if (node != lp_data->last_lp_mode) {
+		lp_data->last_lp_mode = node;
+		if (node) {
+			pr_debug("switching display lp mode: %s (%d)\n",
+				node->name, props->brightness);
+			mutex_lock(&panel->panel_lock);
+			dsi_panel_cmd_set_transfer(panel, &node->dsi_cmd);
+			mutex_unlock(&panel->panel_lock);
+		} else {
+			/* ensure update after lpm */
+			bl->bl_actual = -1;
+		}
+	}
+
+	/* no need to send backlight command if HLPM active */
+	if (node)
+		return 0;
+
+	return dsi_backlight_update_dcs(bl, bl_lvl);
+}
+
+static int _dsi_panel_binned_lp_parse(struct device_node *np,
+				      struct binned_lp_node *node)
+{
+	int rc;
+	u32 val = 0;
+
+	rc = of_property_read_u32(np, "google,dsi-lp-brightness-threshold",
+				  &val);
+	/* treat lack of property as max threshold */
+	node->bl_threshold = !rc ? val : UINT_MAX;
+
+	rc = dsi_panel_parse_dt_cmd_set(np, "google,dsi-lp-command",
+					"google,dsi-lp-command-state",
+					&node->dsi_cmd);
+	if (rc) {
+		pr_err("Unable to parse dsi-lp-command\n");
+		return rc;
+	}
+
+	of_property_read_string(np, "label", &node->name);
+
+	pr_debug("Successfully parsed lp mode: %s threshold: %d\n",
+		node->name, node->bl_threshold);
+
+	return 0;
+}
+
+static int _dsi_panel_binned_bl_cmp(void *priv, struct list_head *lha,
+				    struct list_head *lhb)
+{
+	struct binned_lp_node *a = list_entry(lha, struct binned_lp_node, head);
+	struct binned_lp_node *b = list_entry(lhb, struct binned_lp_node, head);
+
+	return a->bl_threshold - b->bl_threshold;
+}
+
+static int dsi_panel_binned_lp_register(struct dsi_backlight_config *bl)
+{
+	struct dsi_panel *panel = container_of(bl, struct dsi_panel, bl_config);
+	struct binned_lp_data *lp_data;
+	struct device_node *lp_modes_np, *child_np;
+	struct binned_lp_node *lp_node;
+	int num_modes;
+	int rc = -ENOTSUPP;
+
+	lp_data = kzalloc(sizeof(*lp_data), GFP_KERNEL);
+	if (!lp_data)
+		return -ENOMEM;
+
+	lp_modes_np = of_get_child_by_name(panel->panel_of_node,
+					   "google,lp-modes");
+
+	if (!lp_modes_np) {
+		kfree(lp_data);
+		return rc;
+	}
+
+	num_modes = of_get_child_count(lp_modes_np);
+	if (!num_modes || (num_modes > MAX_BINNED_BL_MODES)) {
+		pr_err("Invalid binned brightness modes: %d\n", num_modes);
+		goto exit;
+	}
+
+	INIT_LIST_HEAD(&lp_data->mode_list);
+	lp_node = lp_data->priv_pool;
+
+	for_each_child_of_node(lp_modes_np, child_np) {
+		rc = _dsi_panel_binned_lp_parse(child_np, lp_node);
+		if (rc)
+			goto exit;
+
+		list_add_tail(&lp_node->head, &lp_data->mode_list);
+		lp_node++;
+		if (lp_node > &lp_data->priv_pool[MAX_BINNED_BL_MODES - 1]) {
+			pr_err("Too many LP modes\n");
+			rc = -ENOTSUPP;
+			goto exit;
+		}
+	}
+	list_sort(NULL, &lp_data->mode_list, _dsi_panel_binned_bl_cmp);
+
+	bl->update_bl = dsi_panel_binned_bl_update;
+	bl->unregister = dsi_panel_bl_free_unregister;
+	bl->priv = lp_data;
+
+exit:
+	of_node_put(lp_modes_np);
+	if (rc)
+		kfree(lp_data);
+
+	return rc;
+}
+
 static const struct of_device_id dsi_backlight_dt_match[] = {
+	{
+		.compatible = "google,dsi_binned_lp",
+		.data = dsi_panel_binned_lp_register,
+	},
 	{
 		.compatible = "google,s6e3ha8_panel",
 		.data = dsi_panel_s6e3ha8_bl_register,
@@ -551,7 +712,10 @@ int dsi_panel_bl_register(struct dsi_panel *panel)
 	match = of_match_node(dsi_backlight_dt_match, panel->panel_of_node);
 	if (match && match->data) {
 		register_func = match->data;
-	} else {
+		rc = register_func(bl);
+	}
+
+	if (!register_func || (rc == -ENOTSUPP)) {
 		switch (bl->type) {
 		case DSI_BACKLIGHT_WLED:
 			register_func = dsi_panel_led_bl_register;
@@ -567,10 +731,11 @@ int dsi_panel_bl_register(struct dsi_panel *panel)
 			rc = -ENOTSUPP;
 			break;
 		}
+
+		if (register_func)
+			rc = register_func(bl);
 	}
 
-	if (register_func)
-		rc = register_func(bl);
 	if (!rc)
 		rc = dsi_backlight_register(bl);
 
@@ -628,11 +793,6 @@ error:
 	return rc;
 }
 
-static void dsi_panel_pwm_bl_unregister(struct dsi_backlight_config *bl)
-{
-	kfree(bl->priv);
-}
-
 static int dsi_panel_pwm_bl_register(struct dsi_backlight_config *bl)
 {
 	struct dsi_panel *panel = container_of(bl, struct dsi_panel, bl_config);
@@ -651,7 +811,7 @@ static int dsi_panel_pwm_bl_register(struct dsi_backlight_config *bl)
 	}
 
 	bl->priv = pwm_cfg;
-	bl->unregister = dsi_panel_pwm_bl_unregister;
+	bl->unregister = dsi_panel_bl_free_unregister;
 
 	return 0;
 }
