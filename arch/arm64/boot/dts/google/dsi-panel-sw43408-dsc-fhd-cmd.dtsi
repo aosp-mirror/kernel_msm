@@ -12,6 +12,8 @@
 
 &mdss_mdp {
 	dsi_sw43408_dsc_fhd_cmd: qcom,mdss_dsi_sw43408_dsc_fhd_cmd {
+		compatible = "google,dsi_binned_lp";
+
 		qcom,mdss-dsi-panel-name = "sw43408 cmd mode dsc dsi panel";
 		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
 		qcom,mdss-dsi-virtual-channel-id = <0>;
@@ -161,6 +163,49 @@
 			};
 		};
 
+		google,lp-modes {
+			lp-mode@0 {
+				label = "off";
+
+				google,dsi-lp-brightness-threshold = <0>;
+				google,dsi-lp-command = [
+					05 01 00 00 00 00 01 22
+				];
+				google,dsi-lp-command-state = "dsi_lp_mode";
+			};
+
+			lp-mode@1 {
+				label = "dim";
+
+				google,dsi-lp-brightness-threshold = <5>;
+				google,dsi-lp-command = [
+					39 01 00 00 00 00 03 51 01 20
+					05 01 00 00 00 00 01 12
+				];
+				google,dsi-lp-command-state = "dsi_lp_mode";
+			};
+			lp-mode@2 {
+				label = "low";
+
+				google,dsi-lp-brightness-threshold = <10>;
+				google,dsi-lp-command = [
+					39 01 00 00 00 00 03 51 01 64
+					05 01 00 00 00 00 01 12
+				];
+				google,dsi-lp-command-state = "dsi_lp_mode";
+			};
+
+			lp-mode@3 {
+				label = "high";
+
+				google,dsi-lp-brightness-threshold = <255>;
+				google,dsi-lp-command = [
+					39 01 00 00 00 00 03 51 01 FF
+					05 01 00 00 00 00 01 12
+				];
+				google,dsi-lp-command-state = "dsi_lp_mode";
+			};
+		};
 	};
 };
 
