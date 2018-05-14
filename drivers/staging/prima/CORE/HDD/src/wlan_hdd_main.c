@@ -9053,7 +9053,8 @@ static hdd_adapter_t* hdd_alloc_station_adapter( hdd_context_t *pHddCtx, tSirMac
       vos_mem_copy(pWlanDev->dev_addr, (void *)macAddr, sizeof(tSirMacAddr));
       vos_mem_copy( pAdapter->macAddressCurrent.bytes, macAddr, sizeof(tSirMacAddr));
       pWlanDev->watchdog_timeo = HDD_TX_TIMEOUT;
-      pWlanDev->hard_header_len += LIBRA_HW_NEEDED_HEADROOM;
+
+      pWlanDev->needed_headroom = LIBRA_HW_NEEDED_HEADROOM;
 
       hdd_set_station_ops( pAdapter->dev );
 
