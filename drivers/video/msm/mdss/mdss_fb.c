@@ -77,6 +77,7 @@
 
 static struct fb_info *fbi_list[MAX_FBI_LIST];
 static int fbi_list_index;
+static int lcd_loadswitch_flag;
 
 static u32 mdss_fb_pseudo_palette[16] = {
 	0x00000000, 0xffffffff, 0xffffffff, 0xffffffff,
@@ -760,7 +761,18 @@ static ssize_t mdss_fb_get_dfps_mode(struct device *dev,
 
 	return ret;
 }
+static ssize_t msm_fb_lcd_loadswitch_off(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t len)
+{
 
+	gpio_direction_output(75, 0);
+	lcd_loadswitch_flag = 1;
+
+	return len;
+}
+
+static DEVICE_ATTR(msm_fb_lcd_loadswitch, S_IRUGO | S_IWUSR, NULL,
+					msm_fb_lcd_loadswitch_off);
 static DEVICE_ATTR(msm_fb_type, S_IRUGO, mdss_fb_get_type, NULL);
 static DEVICE_ATTR(msm_fb_split, S_IRUGO | S_IWUSR, mdss_fb_show_split,
 					mdss_fb_store_split);
@@ -778,6 +790,7 @@ static DEVICE_ATTR(msm_fb_panel_status, S_IRUGO | S_IWUSR,
 static DEVICE_ATTR(msm_fb_dfps_mode, S_IRUGO | S_IWUSR,
 	mdss_fb_get_dfps_mode, mdss_fb_change_dfps_mode);
 static struct attribute *mdss_fb_attrs[] = {
+	&dev_attr_msm_fb_lcd_loadswitch.attr,
 	&dev_attr_msm_fb_type.attr,
 	&dev_attr_msm_fb_split.attr,
 	&dev_attr_show_blank_event.attr,
@@ -1834,9 +1847,9 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 
 	switch (blank_mode) {
 	case FB_BLANK_UNBLANK:
-		if (gpio_direction_output(75, 1)) {
-			pr_err("%s: invalid gpio_direction_output\n", __func__);
-		}
+		if (!lcd_loadswitch_flag)
+			if (gpio_direction_output(75, 1))
+				pr_err("%s:gpio75 set error\n", __func__);
 		pr_debug("unblank called. cur pwr state=%d\n", cur_power_state);
 		ret = mdss_fb_blank_unblank(mfd);
 		break;
