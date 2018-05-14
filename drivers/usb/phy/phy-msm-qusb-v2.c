@@ -104,6 +104,7 @@ enum qusb_phy_reg {
 	INTR_CTRL,
 	PLL_CORE_INPUT_OVERRIDE,
 	TEST1,
+	BIAS_CTRL_1,
 	BIAS_CTRL_2,
 	SQ_CTRL1,
 	SQ_CTRL2,
@@ -169,6 +170,8 @@ struct qusb_phy {
 	/* override TUNEX registers value */
 	struct dentry		*root;
 	u8			tune[5];
+
+	u8			bias_ctrl[2];
 
 	struct hrtimer		timer;
 	int			soc_min_rev;
@@ -600,6 +603,7 @@ static int qusb_phy_init(struct usb_phy *phy)
 				qphy->base + qphy->phy_reg[PORT_TUNE1] +
 							(4 * p_index));
 	}
+
 	if (phy_tune2) {
 		pr_debug("%s(): (modparam) TUNE2 val:0x%02x\n",
 						__func__, phy_tune2);
@@ -629,6 +633,13 @@ static int qusb_phy_init(struct usb_phy *phy)
 		if (readl_relaxed(qphy->refgen_north_bg_reg) & BANDGAP_BYPASS)
 			writel_relaxed(BIAS_CTRL_2_OVERRIDE_VAL,
 				qphy->base + qphy->phy_reg[BIAS_CTRL_2]);
+
+	for (p_index = 0; p_index < 2; p_index++) {
+		if (qphy->bias_ctrl[p_index])
+			writel_relaxed(qphy->bias_ctrl[p_index],
+				qphy->base + qphy->phy_reg[BIAS_CTRL_1] +
+				(4 * p_index));
+	}
 
 	/* ensure above writes are completed before re-enabling PHY */
 	wmb();
@@ -972,7 +983,7 @@ static int qusb_phy_create_debugfs(struct qusb_phy *qphy)
 {
 	struct dentry *file;
 	int ret = 0, i;
-	char name[6];
+	char name[15];
 
 	qphy->root = debugfs_create_dir(dev_name(qphy->phy.dev), NULL);
 	if (IS_ERR_OR_NULL(qphy->root)) {
@@ -991,7 +1002,20 @@ static int qusb_phy_create_debugfs(struct qusb_phy *qphy)
 			dev_err(qphy->phy.dev,
 				"can't create debugfs entry for %s\n", name);
 			debugfs_remove_recursive(qphy->root);
-			ret = ENOMEM;
+			ret = -ENOMEM;
+			goto create_err;
+		}
+	}
+
+	for (i = 0; i < 2; i++) {
+		snprintf(name, sizeof(name), "bias_ctrl_%d", (i + 1));
+		file = debugfs_create_x8(name, 0644, qphy->root,
+						&qphy->bias_ctrl[i]);
+		if (IS_ERR_OR_NULL(file)) {
+			dev_err(qphy->phy.dev,
+				"can't create debugfs entry for %s\n", name);
+			debugfs_remove_recursive(qphy->root);
+			ret = -ENOMEM;
 			goto create_err;
 		}
 	}
