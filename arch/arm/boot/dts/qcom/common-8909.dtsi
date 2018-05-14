@@ -407,3 +407,6 @@
 &dsi_rm69080_wqvga_cmd{
 	qcom,cont-splash-enabled;
 };
+&qcom_seecom {
+        reg = <0x87a00000 0x200000>;
+};
