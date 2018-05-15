@@ -38,7 +38,6 @@
 				qcom,supply-max-voltage = <0>;
 				qcom,supply-enable-load = <0>;
 				qcom,supply-disable-load = <0>;
-				qcom,supply-ulp-load = <0>;
 			};
 
 			qcom,platform-supply-entry@1 {
@@ -48,7 +47,6 @@
 				qcom,supply-max-voltage = <1800000>;
 				qcom,supply-enable-load = <100000>;
 				qcom,supply-disable-load = <100>;
-				qcom,supply-ulp-load = <100>;
 			};
 		};
 	};
