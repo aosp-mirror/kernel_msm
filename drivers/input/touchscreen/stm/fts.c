@@ -2772,6 +2772,8 @@ static irqreturn_t fts_interrupt_handler(int irq, void *handle)
 	if (info->touch_id == 0)
 		input_report_key(info->input_dev, BTN_TOUCH, 0);
 
+	input_event(info->input_dev, EV_MSC, MSC_TIMESTAMP,
+			info->timestamp / 1000);
 	input_sync(info->input_dev);
 
 	pm_qos_update_request(&info->pm_qos_req, PM_QOS_DEFAULT_VALUE);
@@ -2976,6 +2978,15 @@ static int fts_chip_initialization(struct fts_ts_info *info, int init_type)
 }
 
 
+static irqreturn_t fts_isr(int irq, void *handle)
+{
+	struct fts_ts_info *info = handle;
+
+	info->timestamp = ktime_get_ns();
+
+	return IRQ_WAKE_THREAD;
+}
+
 /**
   * Initialize the dispatch table with the event handlers for any possible event
   * ID
@@ -3014,7 +3025,7 @@ static int fts_interrupt_install(struct fts_ts_info *info)
 		return error;
 	}
 
-	error = request_threaded_irq(info->client->irq, NULL,
+	error = request_threaded_irq(info->client->irq, fts_isr,
 			fts_interrupt_handler, IRQF_ONESHOT | IRQF_TRIGGER_LOW,
 			FTS_TS_DRV_NAME, info);
 
@@ -3997,6 +4008,7 @@ static int fts_probe(struct spi_device *client)
 	input_set_abs_params(info->input_dev, ABS_MT_DISTANCE, DISTANCE_MIN,
 			     DISTANCE_MAX, 0, 0);
 #endif
+	input_set_capability(info->input_dev, EV_MSC, MSC_TIMESTAMP);
 
 #ifdef GESTURE_MODE
 	input_set_capability(info->input_dev, EV_KEY, KEY_WAKEUP);

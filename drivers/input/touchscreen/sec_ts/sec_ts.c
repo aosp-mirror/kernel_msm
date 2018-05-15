@@ -1018,7 +1018,18 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 		remain_event_count--;
 	} while (remain_event_count >= 0);
 
+	input_event(ts->input_dev, EV_MSC, MSC_TIMESTAMP,
+		ts->timestamp / 1000);
 	input_sync(ts->input_dev);
+}
+
+static irqreturn_t sec_ts_isr(int irq, void *handle)
+{
+	struct sec_ts_data *ts = (struct sec_ts_data *)handle;
+
+	ts->timestamp = ktime_get_ns();
+
+	return IRQ_WAKE_THREAD;
 }
 
 static irqreturn_t sec_ts_irq_thread(int irq, void *ptr)
@@ -1678,6 +1689,8 @@ static void sec_ts_set_input_prop(struct sec_ts_data *ts, struct input_dev *dev,
 		input_set_abs_params(dev, ABS_MT_PRESSURE, 0,
 				     SEC_TS_PRESSURE_MAX, 0, 0);
 
+	input_set_capability(ts->input_dev, EV_MSC, MSC_TIMESTAMP);
+
 	if (propbit == INPUT_PROP_POINTER)
 		input_mt_init_slots(dev, MAX_SUPPORT_TOUCH_COUNT, INPUT_MT_POINTER);
 	else
@@ -2026,7 +2039,7 @@ static int sec_ts_probe(struct i2c_client *client,
 	pm_qos_add_request(&ts->pm_qos_req, PM_QOS_CPU_DMA_LATENCY,
 		PM_QOS_DEFAULT_VALUE);
 
-	ret = request_threaded_irq(client->irq, NULL, sec_ts_irq_thread,
+	ret = request_threaded_irq(client->irq, sec_ts_isr, sec_ts_irq_thread,
 			ts->plat_data->irq_type, SEC_TS_I2C_NAME, ts);
 	if (ret < 0) {
 		input_err(true, &ts->client->dev, "%s: Unable to request threaded irq\n", __func__);
@@ -2184,6 +2197,8 @@ void sec_ts_unlocked_release_all_finger(struct sec_ts_data *ts)
 	}
 
 	input_report_key(ts->input_dev, KEY_HOMEPAGE, 0);
+	input_event(ts->input_dev, EV_MSC, MSC_TIMESTAMP,
+		ts->timestamp / 1000);
 	input_sync(ts->input_dev);
 
 }
