@@ -333,6 +333,8 @@ struct fts_ts_info {
 	unsigned long stylus_id;	/* Bitmask for the stylus */
 #endif
 
+	u64 timestamp; /* nanoseconds, acquired during hard interrupt */
+
 	struct fts_hw_platform_data     *board;	/* HW info from device tree */
 	struct regulator        *vdd_reg;	/* DVDD power regulator */
 	struct regulator        *avdd_reg;	/* AVDD power regulator */
