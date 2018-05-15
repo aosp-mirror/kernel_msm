@@ -15,6 +15,8 @@
 		compatible = "google,dsi_binned_lp";
 
 		qcom,mdss-dsi-panel-name = "sw43408 cmd mode dsc dsi panel";
+		google,mdss-dsi-panel-vendor = "LG";
+		google,mdss-dsi-panel-sn-location = <0xA9 0 9>;
 		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
 		qcom,mdss-dsi-virtual-channel-id = <0>;
 		qcom,mdss-dsi-stream = <0>;
