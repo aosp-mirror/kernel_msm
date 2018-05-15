@@ -1223,7 +1223,7 @@ static void max1720x_init_work(struct work_struct *work)
 	if (chip->primary->irq) {
 		ret = request_threaded_irq(chip->primary->irq, NULL,
 					   max1720x_fg_irq_thread_fn,
-					   IRQF_TRIGGER_LOW | IRQF_ONESHOT,
+					   IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
 					   MAX1720X_I2C_DRIVER_NAME, chip);
 		if (ret != 0) {
 			dev_err(chip->dev, "Unable to register IRQ handler\n");
