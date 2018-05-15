@@ -65,6 +65,21 @@
 
 &max1720x_fg {
 	maxim,config = <&b1_maxim_config>;
+	maxim,n_regval =  /bits/ 16 <
+	    0xA5 0X0B80 /* nFullCapNom = 2944 mAh */
+	    0xA9 0X0B80 /* nFullCapRep = 2944 mAh */
+	    0X9C 0x0300 /* nIChgTerm = 240 mA */
+	    0xB7 0x2FC1	/* NConvgCfg: VoltLowOff = 620 mV */
+	    0x9F 0x2602 /* nLearnCfg */
+	    /* TAlrtEn required to route dSOC to ALRT1 pin */
+	    0xB0 0x7217 /* nConfig: SS TS VS Tex Aen dSOCen TAlrtEn */
+	    0xC0 0xFF00	/* nVAlrtTh: disabled */
+	    0xC1 0x7F80 /* nTAlrtTh: disabled */
+	    0xC2 0xFF00	/* nSAlrtTh: disabled */
+	    0x9D 0x0EB4 /* nFilterCfg: Volt = 90 sec */
+	    0xC6 0x5A05 /* nFullSOCThr = 90% */
+	    0XB8 0xCDD0 /* nNVCfg0 */
+	>;
 };
 
 &soc {

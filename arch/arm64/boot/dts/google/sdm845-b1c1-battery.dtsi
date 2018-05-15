@@ -98,12 +98,3 @@
 		google,polling-freq = <3>;
 	};
 };
-
-&max1720x_fg {
-	maxim,r_regval = /bits/ 16 <
-	    0x01 0xFF00	/* VAlrtTh: disabled */
-	    0x02 0x7F80 /* TAlrtTh: disabled */
-	    0x03 0xFF00	/* SAlrtTh: disabled */
-	    0xBB 0x0090	/* dSOCen */
-	>;
-};
