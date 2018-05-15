@@ -8,6 +8,7 @@ struct device;
 /**
  * struct gpio_keys_button - configuration parameters
  * @code:		input event code (KEY_*, SW_*)
+ * @code_alt:		alternative input event code
  * @gpio:		%-1 if this key does not support gpio
  * @active_low:		%true indicates that button is considered
  *			depressed when gpio is low
@@ -22,6 +23,7 @@ struct device;
  */
 struct gpio_keys_button {
 	unsigned int code;
+	unsigned int code_alt;
 	int gpio;
 	int active_low;
 	const char *desc;

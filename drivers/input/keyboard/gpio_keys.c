@@ -189,6 +189,8 @@ static ssize_t gpio_keys_attr_show_helper(struct gpio_keys_drvdata *ddata,
 			continue;
 
 		__set_bit(bdata->button->code, bits);
+		if (bdata->button->code_alt)
+			__set_bit(bdata->button->code_alt, bits);
 	}
 
 	ret = bitmap_scnlistprintf(buf, PAGE_SIZE - 2, bits, n_events);
@@ -345,9 +347,20 @@ static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 			(state == 1) ? "pressed" : "released");
 
 	if (type == EV_ABS) {
-		if (state)
+		if (state) {
 			input_event(input, type, button->code, button->value);
+			if (button->code_alt)
+				input_event(input, type, button->code_alt,
+						button->value);
+		}
 	} else {
+		if (button->code_alt && state) {
+			input_event(input, type, button->code_alt, 1);
+			input_event(input, type, button->code_alt, 0);
+			input_sync(input);
+			msleep(100);
+		}
+
 		input_event(input, type, button->code, !!state);
 	}
 	input_sync(input);
@@ -397,6 +410,8 @@ static void gpio_keys_irq_timer(unsigned long _data)
 	spin_lock_irqsave(&bdata->lock, flags);
 	if (bdata->key_pressed) {
 		input_event(input, EV_KEY, bdata->button->code, 0);
+		if (bdata->button->code_alt)
+			input_event(input, EV_KEY, bdata->button->code_alt, 0);
 		input_sync(input);
 		bdata->key_pressed = false;
 	}
@@ -419,10 +434,14 @@ static irqreturn_t gpio_keys_irq_isr(int irq, void *dev_id)
 			pm_wakeup_event(bdata->input->dev.parent, 0);
 
 		input_event(input, EV_KEY, button->code, 1);
+		if (bdata->button->code_alt)
+			input_event(input, EV_KEY, button->code_alt, 1);
 		input_sync(input);
 
 		if (!bdata->timer_debounce) {
 			input_event(input, EV_KEY, button->code, 0);
+			if (bdata->button->code_alt)
+				input_event(input, EV_KEY, button->code_alt, 0);
 			input_sync(input);
 			goto out;
 		}
@@ -521,6 +540,9 @@ static int gpio_keys_setup_key(struct platform_device *pdev,
 	}
 
 	input_set_capability(input, button->type ?: EV_KEY, button->code);
+	if (button->code_alt)
+		input_set_capability(input,
+				button->type ?: EV_KEY, button->code_alt);
 
 	/*
 	 * Install custom action to cancel debounce timer and
@@ -697,6 +719,7 @@ gpio_keys_get_devtree_pdata(struct device *dev)
 				button->gpio);
 			return ERR_PTR(-EINVAL);
 		}
+		of_property_read_u32(pp, "linux,code_alt", &button->code_alt);
 
 		button->desc = of_get_property(pp, "label", NULL);
 
