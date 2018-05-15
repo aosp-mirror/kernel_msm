@@ -389,6 +389,7 @@ struct mmc_card {
 #define MMC_QUIRK_CMDQ_EMPTY_BEFORE_DCMD (1 << 17)
 
 #define MMC_QUIRK_DISABLE_UHS (1<<18)		/* Disable UHS */
+#define MMC_QUIRK_BROKEN_RPMB (1<<19)		/* Broken due to cache overflow */
 
 	unsigned int		erase_size;	/* erase size in sectors */
  	unsigned int		erase_shift;	/* if erase unit is power 2 */

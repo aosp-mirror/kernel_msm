@@ -1062,6 +1062,21 @@ static inline int mmc_blk_part_switch(struct mmc_card *card,
 	if (mmc_card_mmc(card)) {
 		u8 part_config = card->ext_csd.part_config;
 
+		/*
+		 * On some devices, RPMB access may result in
+		 * unrecovable corruption due to a firmware bug.
+		 */
+		if (card->quirks & MMC_QUIRK_BROKEN_RPMB) {
+			if (md->part_type == EXT_CSD_PART_CONFIG_ACC_RPMB) {
+				pr_debug("%s: Force cache flush before "
+				       "RPMB access\n",
+				       mmc_hostname(card->host));
+				ret = mmc_flush_cache(card);
+				if (ret)
+					return ret;
+			}
+		}
+
 		if (md->part_type) {
 			/* disable CQ mode for non-user data partitions */
 			ret = mmc_blk_cmdq_switch(card, md, false);
@@ -4057,6 +4072,13 @@ static const struct mmc_fixup blk_fixups[] =
 		  MMC_QUIRK_SEC_ERASE_TRIM_BROKEN),
 	MMC_FIXUP("VZL00M", CID_MANFID_SAMSUNG, CID_OEMID_ANY, add_quirk_mmc,
 		  MMC_QUIRK_SEC_ERASE_TRIM_BROKEN),
+
+	/*
+	 * On Samsung eMMC parts, performing partition switch can result in
+	 * unrecoverable corruption due to a firmware bug.
+	 */
+	MMC_FIXUP("FJ27BA", CID_MANFID_SAMSUNG, CID_OEMID_ANY, add_quirk_mmc,
+		  MMC_QUIRK_BROKEN_RPMB),
 
 	END_FIXUP
 };
