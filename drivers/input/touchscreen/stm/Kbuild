@@ -9,6 +9,4 @@ ftm5-objs += \
 # TODO: remove me b/62057517
 subdir-ccflags-y += \
 	-Wno-strncat-size \
-	-Wno-typedef-redefinition \
-	-Wno-parentheses-equality \
 
