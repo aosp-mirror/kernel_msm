@@ -54,6 +54,7 @@
 			gpios = <&msm_gpio 90 0x1>;
 			linux,input-type = <1>;
 			linux,code = <115>;
+			linux,code_alt = <128>;
 			gpio-key,wakeup;
 			debounce-interval = <15>;
 		};
