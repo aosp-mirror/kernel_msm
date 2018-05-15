@@ -36,6 +36,9 @@
 #define SCM_EBUSY		-55
 #define SCM_V2_EBUSY		-12
 
+/* in ms */
+#define SCM_PANIC_TIMEOUT 600000
+
 static DEFINE_MUTEX(scm_lock);
 
 /*
@@ -383,6 +386,7 @@ int scm_call_noalloc(u32 svc_id, u32 cmd_id, const void *cmd_buf,
 static int __scm_call_armv8_64(u64 x0, u64 x1, u64 x2, u64 x3, u64 x4, u64 x5,
 				u64 *ret1, u64 *ret2, u64 *ret3)
 {
+	unsigned long timeout;
 	register u64 r0 asm("x0") = x0;
 	register u64 r1 asm("x1") = x1;
 	register u64 r2 asm("x2") = x2;
@@ -390,6 +394,8 @@ static int __scm_call_armv8_64(u64 x0, u64 x1, u64 x2, u64 x3, u64 x4, u64 x5,
 	register u64 r4 asm("x4") = x4;
 	register u64 r5 asm("x5") = x5;
 	register u64 r6 asm("x6") = 0;
+
+	timeout = jiffies + msecs_to_jiffies(SCM_PANIC_TIMEOUT);
 
 	do {
 		asm volatile(
@@ -414,6 +420,9 @@ static int __scm_call_armv8_64(u64 x0, u64 x1, u64 x2, u64 x3, u64 x4, u64 x5,
 			  "r" (r5), "r" (r6)
 			: "x7", "x8", "x9", "x10", "x11", "x12", "x13",
 			  "x14", "x15", "x16", "x17");
+		if (!time_after(timeout, jiffies)) {
+			panic("[DEBUG] SCM call took too long.\n");
+		}
 	} while (r0 == SCM_INTERRUPTED);
 
 	if (ret1)
