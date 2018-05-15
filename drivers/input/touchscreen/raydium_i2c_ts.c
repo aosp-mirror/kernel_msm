@@ -4218,9 +4218,6 @@ static void raydium_work_handler(struct work_struct *work)
             printk(KERN_INFO "[touch]leave palm mode.\n");
             input_report_key(raydium_ts->input_dev, KEY_SLEEP, false); //release sleep key
             input_sync(raydium_ts->input_dev);
-
-            raydium_irq_control(raydium_ts, DISABLE);
-
             g_uc_pre_palm_status = RAYDIUM_PALM_MODE_DISABLE;
             raydium_ts->is_palm = 0;
             goto exit;
@@ -4954,7 +4951,7 @@ static int raydium_ts_probe(struct i2c_client *client,
 
     i2c_set_clientdata(client, raydium_ts);
     raydium_ts->irq = client->irq;
-    raydium_ts->irq_enabled = false;
+    raydium_ts->irq_enabled = true;
     raydium_ts->irq_wake = false;
 
     //raydium_ts->irq = pdata->irq_gpio;
