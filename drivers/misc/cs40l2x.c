@@ -1035,62 +1035,6 @@ static ssize_t cs40l2x_num_waves_show(struct device *dev,
 	return snprintf(buf, PAGE_SIZE, "%d\n", cs40l2x->num_waves);
 }
 
-static ssize_t cs40l2x_aoh_auto_enable_show(struct device *dev,
-			struct device_attribute *attr, char *buf)
-{
-	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
-	bool aoh_auto_enable;
-	int ret;
-	unsigned int val;
-
-	mutex_lock(&cs40l2x->lock);
-	ret = regmap_read(cs40l2x->regmap, CS40L2X_PLL_CLK_CTRL, &val);
-	mutex_unlock(&cs40l2x->lock);
-
-	if (ret) {
-		pr_err("Failed to read AoH auto-enable\n");
-		return ret;
-	}
-
-	aoh_auto_enable = (val & CS40L2X_PLL_FORCE_EN_MASK)
-					!= CS40L2X_PLL_FORCE_EN_MASK;
-
-	return snprintf(buf, PAGE_SIZE, "%d\n", aoh_auto_enable);
-}
-
-static ssize_t cs40l2x_aoh_auto_enable_store(struct device *dev,
-			struct device_attribute *attr,
-			const char *buf, size_t count)
-{
-	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
-	int ret;
-	unsigned int val;
-
-	ret = kstrtou32(buf, 10, &val);
-	if (ret)
-		return -EINVAL;
-
-	mutex_lock(&cs40l2x->lock);
-	if (val)
-		ret = regmap_update_bits(cs40l2x->regmap,
-				CS40L2X_PLL_CLK_CTRL,
-				CS40L2X_PLL_FORCE_EN_MASK,
-				0 << CS40L2X_PLL_FORCE_EN_SHIFT);
-	else
-		ret = regmap_update_bits(cs40l2x->regmap,
-				CS40L2X_PLL_CLK_CTRL,
-				CS40L2X_PLL_FORCE_EN_MASK,
-				1 << CS40L2X_PLL_FORCE_EN_SHIFT);
-	mutex_unlock(&cs40l2x->lock);
-
-	if (ret) {
-		pr_err("Failed to write AoH auto-enable\n");
-		return ret;
-	}
-
-	return count;
-}
-
 static DEVICE_ATTR(cp_trigger_index, 0660, cs40l2x_cp_trigger_index_show,
 		cs40l2x_cp_trigger_index_store);
 static DEVICE_ATTR(cp_trigger_queue, 0660, cs40l2x_cp_trigger_queue_show,
@@ -1119,8 +1063,6 @@ static DEVICE_ATTR(cp_dig_scale, 0660, cs40l2x_cp_dig_scale_show,
 		cs40l2x_cp_dig_scale_store);
 static DEVICE_ATTR(heartbeat, 0660, cs40l2x_heartbeat_show, NULL);
 static DEVICE_ATTR(num_waves, 0660, cs40l2x_num_waves_show, NULL);
-static DEVICE_ATTR(aoh_auto_enable, 0660, cs40l2x_aoh_auto_enable_show,
-		cs40l2x_aoh_auto_enable_store);
 
 static struct attribute *cs40l2x_dev_attrs[] = {
 	&dev_attr_cp_trigger_index.attr,
@@ -1139,7 +1081,6 @@ static struct attribute *cs40l2x_dev_attrs[] = {
 	&dev_attr_cp_dig_scale.attr,
 	&dev_attr_heartbeat.attr,
 	&dev_attr_num_waves.attr,
-	&dev_attr_aoh_auto_enable.attr,
 	NULL,
 };
 
@@ -1168,32 +1109,6 @@ static int cs40l2x_pbq_cancel(struct cs40l2x_private *cs40l2x)
 		return ret;
 
 	cs40l2x->pbq_state = CS40L2X_PBQ_STATE_IDLE;
-
-	return 0;
-}
-
-static int cs40l2x_pbq_poll(struct cs40l2x_private *cs40l2x)
-{
-	bool aoh_auto_enable;
-	unsigned int val;
-	int ret;
-
-	/* this function expects to be called while mutex is locked */
-	if (!mutex_is_locked(&cs40l2x->lock))
-		return -EACCES;
-
-	ret = regmap_read(cs40l2x->regmap, CS40L2X_PLL_CLK_CTRL, &val);
-	if (ret)
-		return ret;
-
-	aoh_auto_enable = (val & CS40L2X_PLL_FORCE_EN_MASK)
-					!= CS40L2X_PLL_FORCE_EN_MASK;
-
-	hrtimer_start(&cs40l2x->pbq_timer,
-			ktime_set(0, aoh_auto_enable ?
-					CS40L2X_PBQ_POLL_SLOW_NS :
-					CS40L2X_PBQ_POLL_FAST_NS),
-			HRTIMER_MODE_REL);
 
 	return 0;
 }
@@ -1271,9 +1186,9 @@ static int cs40l2x_pbq_pair_launch(struct cs40l2x_private *cs40l2x)
 			if (ret)
 				return ret;
 
-			ret = cs40l2x_pbq_poll(cs40l2x);
-			if (ret)
-				return ret;
+			hrtimer_start(&cs40l2x->pbq_timer,
+					ktime_set(0, CS40L2X_PBQ_POLL_NS),
+					HRTIMER_MODE_REL);
 
 			cs40l2x->pbq_state = CS40L2X_PBQ_STATE_PLAYING;
 			cs40l2x->pbq_index++;
@@ -1308,11 +1223,14 @@ static void cs40l2x_vibe_pbq_worker(struct work_struct *work)
 			goto err_mutex;
 		}
 
-		if (val == CS40L2X_STATUS_IDLE)
-			ret = cs40l2x_pbq_pair_launch(cs40l2x);
-		else
-			ret = cs40l2x_pbq_poll(cs40l2x);
+		if (val != CS40L2X_STATUS_IDLE) {
+			hrtimer_start(&cs40l2x->pbq_timer,
+					ktime_set(0, CS40L2X_PBQ_POLL_NS),
+					HRTIMER_MODE_REL);
+			goto err_mutex;
+		}
 
+		ret = cs40l2x_pbq_pair_launch(cs40l2x);
 		if (ret)
 			dev_err(dev, "Failed to continue playback queue\n");
 		break;
