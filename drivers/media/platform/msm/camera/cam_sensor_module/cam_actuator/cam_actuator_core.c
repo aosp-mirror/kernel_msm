@@ -209,6 +209,27 @@ static int32_t cam_actuator_i2c_modes_util(
 				return rc;
 			}
 		}
+	} else if (i2c_list->op_code == CAM_SENSOR_I2C_READ) {
+		size = i2c_list->i2c_settings.size;
+		for (i = 0; i < size; i++) {
+			rc = camera_io_dev_read(
+			io_master_info,
+			i2c_list->i2c_settings.
+				reg_setting[i].reg_addr,
+			&(i2c_list->i2c_settings.
+				reg_setting[i].reg_data),
+			i2c_list->i2c_settings.addr_type,
+				i2c_list->i2c_settings.data_type);
+			if (rc < 0) {
+				CAM_ERR(CAM_ACTUATOR,
+					"i2c read Fail: %d", rc);
+				return rc;
+			}
+			CAM_INFO(CAM_ACTUATOR,
+				"i2c read addr: 0x%x, data: 0x%x",
+				i2c_list->i2c_settings.reg_setting[i].reg_addr,
+				i2c_list->i2c_settings.reg_setting[i].reg_data);
+		}
 	}
 
 	return rc;
@@ -582,6 +603,35 @@ int32_t cam_actuator_i2c_pkt_parse(struct cam_actuator_ctrl_t *a_ctrl,
 			return rc;
 		}
 		break;
+
+	case CAM_ACTUATOR_PACKET_REG_READ:
+		if (a_ctrl->cam_act_state < CAM_ACTUATOR_CONFIG) {
+			rc = -EINVAL;
+			CAM_WARN(CAM_ACTUATOR,
+				"Not in right state to read actuator reg: %d",
+				a_ctrl->cam_act_state);
+			return rc;
+		}
+		a_ctrl->setting_apply_state = ACT_APPLY_SETTINGS_NOW;
+
+		i2c_data = &(a_ctrl->i2c_data);
+		i2c_reg_settings = &i2c_data->init_settings;
+
+		i2c_data->init_settings.request_id =
+			csl_packet->header.request_id;
+		i2c_reg_settings->is_settings_valid = 1;
+		offset = (uint32_t *)&csl_packet->payload;
+		offset += csl_packet->cmd_buf_offset / sizeof(uint32_t);
+		cmd_desc = (struct cam_cmd_buf_desc *)(offset);
+		rc = cam_sensor_i2c_command_parser(i2c_reg_settings,
+			cmd_desc, 1);
+		if (rc < 0) {
+			CAM_ERR(CAM_ACTUATOR,
+				"read actuator reg parsing failed: %d", rc);
+			return rc;
+		}
+		break;
+
 	}
 
 	if ((csl_packet->header.op_code & 0xFFFFFF) !=

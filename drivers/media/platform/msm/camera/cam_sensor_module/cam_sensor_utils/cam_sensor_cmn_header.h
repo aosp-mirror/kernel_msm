@@ -164,7 +164,8 @@ enum cam_sensor_packet_opcodes {
 enum cam_actuator_packet_opcodes {
 	CAM_ACTUATOR_PACKET_OPCODE_INIT,
 	CAM_ACTUATOR_PACKET_AUTO_MOVE_LENS,
-	CAM_ACTUATOR_PACKET_MANUAL_MOVE_LENS
+	CAM_ACTUATOR_PACKET_MANUAL_MOVE_LENS,
+	CAM_ACTUATOR_PACKET_REG_READ
 };
 
 enum cam_eeprom_packet_opcodes {
