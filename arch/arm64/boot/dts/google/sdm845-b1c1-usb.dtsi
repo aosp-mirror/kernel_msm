@@ -56,6 +56,19 @@
 	pinctrl-0 = <&atest_usb13_suspend>;
 	pinctrl-1 = <&atest_usb13_active>;
 
+	qcom,qusb-phy-reg-offset =
+		<0x240 /* QUSB2PHY_PORT_TUNE1 */
+		 0x1a0 /* QUSB2PHY_PLL_COMMON_STATUS_ONE */
+		 0x210 /* QUSB2PHY_PWR_CTRL1 */
+		 0x230 /* QUSB2PHY_INTR_CTRL */
+		 0x0a8 /* QUSB2PHY_PLL_CORE_INPUT_OVERRIDE */
+		 0x254 /* QUSB2PHY_TEST1 */
+		 0x194 /* PLL_BIAS_CONTROL_1 */
+		 0x198 /* PLL_BIAS_CONTROL_2 */
+		 0x228 /* QUSB2PHY_SQ_CTRL1 */
+		 0x22c /* QUSB2PHY_SQ_CTRL2 */
+		 0x27c>; /* QUSB2PHY_DEBUG_CTRL1 */
+
 	qcom,qusb-phy-init-seq =
 			/* <value reg_offset> */
 			<0x23 0x210 /* PWR_CTRL1 */
