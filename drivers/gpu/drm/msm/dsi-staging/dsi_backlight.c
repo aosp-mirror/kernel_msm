@@ -438,6 +438,10 @@ static int dsi_panel_s6e3ha8_bl_update(struct dsi_backlight_config *bl,
 		mutex_unlock(&panel->panel_lock);
 		if (rc < 0)
 			return rc;
+
+		/* ensure backlight update after lpm exit */
+		if (target_mode == DSI_PANEL_S6E3HA8_HLPM_OFF)
+			bl->bl_actual = -1;
 	}
 
 	/* no need to send backlight command if HLPM active */
