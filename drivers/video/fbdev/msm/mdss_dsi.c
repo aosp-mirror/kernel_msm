@@ -759,6 +759,7 @@ struct mdss_dsi_debugfs_info {
 	struct dentry *root;
 	struct mdss_dsi_ctrl_pdata ctrl_pdata;
 	struct buf_data on_cmd;
+	struct buf_data post_on_cmd;
 	struct buf_data off_cmd;
 	struct buf_data alpm_cmd[ALPM_MODE_MAX];
 	u32 override_flag;
@@ -1082,9 +1083,14 @@ static int mdss_dsi_debugfs_setup(struct mdss_panel_data *pdata,
 		&dfs_ctrl->on_cmds.link_state, &mdss_dsi_cmd_state_fop);
 	debugfs_create_file("dsi_off_cmd_state", 0644, dfs->root,
 		&dfs_ctrl->off_cmds.link_state, &mdss_dsi_cmd_state_fop);
+	debugfs_create_file("dsi_post_on_cmd_state", 0644, dfs->root,
+			    &dfs_ctrl->post_panel_on_cmds.link_state,
+			    &mdss_dsi_cmd_state_fop);
 
 	DEBUGFS_CREATE_DCS_CMD("dsi_on_cmd", dfs->root, &dfs->on_cmd,
 				ctrl_pdata->on_cmds);
+	DEBUGFS_CREATE_DCS_CMD("dsi_post_on_cmd", dfs->root, &dfs->post_on_cmd,
+				ctrl_pdata->post_panel_on_cmds);
 	DEBUGFS_CREATE_DCS_CMD("dsi_off_cmd", dfs->root, &dfs->off_cmd,
 				ctrl_pdata->off_cmds);
 
@@ -1246,6 +1252,8 @@ static void mdss_dsi_debugfsinfo_to_dsictrl_info(
 			dfs->ctrl_pdata.cmd_sync_wait_trigger;
 
 	_mdss_dsi_refresh_cmd(&dfs->on_cmd, &ctrl_pdata->on_cmds);
+	_mdss_dsi_refresh_cmd(&dfs->post_on_cmd,
+			      &ctrl_pdata->post_panel_on_cmds);
 	_mdss_dsi_refresh_cmd(&dfs->off_cmd, &ctrl_pdata->off_cmds);
 	for (i = 0; i < ALPM_MODE_MAX; i++)
 		_mdss_dsi_refresh_cmd(&dfs->alpm_cmd[i],
