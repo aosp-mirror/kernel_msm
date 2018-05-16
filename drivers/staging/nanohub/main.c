@@ -59,8 +59,8 @@ enum APP_TO_HOST_EVENT_SUBID {
 
 #define OS_LOG_EVENTID		0x3B474F4C
 #define WAKEUP_INTERRUPT	1
-#define WAKEUP_TIMEOUT_MS	1000
-#define SUSPEND_TIMEOUT_MS	100
+#define WAKEUP_TIMEOUT_MS	2000
+#define SUSPEND_TIMEOUT_MS	200
 #define KTHREAD_ERR_TIME_NS	(60LL * NSEC_PER_SEC)
 #define KTHREAD_ERR_CNT		70
 #define KTHREAD_WARN_CNT	10
@@ -589,7 +589,7 @@ static ssize_t nanohub_firmware_query(struct device *dev,
 	struct nanohub_data *data = dev_get_nanohub_data(dev);
 	uint16_t buffer[6];
 
-	if (request_wakeup(data))
+	if (request_wakeup_timeout(data, WAKEUP_TIMEOUT_MS))
 		return -ERESTARTSYS;
 
 	if (nanohub_comms_tx_rx_retrans
@@ -874,8 +874,14 @@ static ssize_t nanohub_download_bl(struct device *dev,
 	uint8_t status = CMD_ACK;
 
 	ret = nanohub_wakeup_lock(data, LOCK_MODE_IO);
-	if (ret < 0)
+	if (ret < 0) {
+		atomic_set(&data->download_bl_status,
+						DOWNLOAD_BL_TIMEOUT);
 		return ret;
+	}
+
+	atomic_set(&data->download_bl_status,
+				DOWNLOAD_BL_RUNNING);
 
 	__nanohub_hw_reset(data, 1);
 
@@ -906,6 +912,7 @@ static ssize_t nanohub_download_bl_status(struct device *dev,
 {
 	struct nanohub_data *data = dev_get_nanohub_data(dev);
 	char status[][10] = {"Not Start",
+						"Running",
 						"Success",
 						"Failed",
 						"Time Out"};
@@ -1666,8 +1673,8 @@ static int nanohub_kthread(void *arg)
 						"%s: failed to reset nanohub: ret=%d\n",
 						__func__, ret);
 				}
-			} else {
-				atomic_set(&data->download_bl_status,
+				if (DOWNLOAD_BL_SUCCESS == atomic_read(&data->download_bl_status))
+					atomic_set(&data->download_bl_status,
 						DOWNLOAD_BL_FAILED);
 			}
 			msleep_interruptible(WAKEUP_TIMEOUT_MS);

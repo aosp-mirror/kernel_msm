@@ -28,7 +28,7 @@
 
 #define NANOHUB_NAME "nanohub"
 
-#define NANOHUB_WAKEUP_TRACE_ENABLE  (1)
+#define NANOHUB_WAKEUP_TRACE_ENABLE  (0)
 
 struct nanohub_buf {
 	struct list_head list;
@@ -179,6 +179,7 @@ enum AP_GPIO_CMD {
 
 enum DOWNLOAD_BL_STATUS {
 	DOWNLOAD_BL_NOT_START = 0,
+	DOWNLOAD_BL_RUNNING,
 	DOWNLOAD_BL_SUCCESS,
 	DOWNLOAD_BL_FAILED,
 	DOWNLOAD_BL_TIMEOUT,

@@ -29,7 +29,7 @@
 
 int device_is_charging = 0;
 #define DBG_ENABLE 1
-#define WAKEUP_TIMEOUT_MS       1000
+#define WAKEUP_TIMEOUT_MS       2000
 
 #define BQ27XXX_FLAG_DSC        BIT(0)
 #define BQ27XXX_FLAG_SOCF       BIT(1) /*State-of-Charge threshold final*/
@@ -617,7 +617,7 @@ int bq27x00_powersupply_init(struct device *dev,
 	struct Nanohub_FuelGauge_Info *fg_info;
 	struct bq27x00_reg_cache default_cache_data = {
 		2, 1, 8330, 365, 3710, 136, 380, 300, 402, 0,
-		263, 291, 292, 77, 29100, 75, 0, 1, 415, 26800};
+		263, 291, 292, 77, 29100, 50, 0, 1, 415, 26800};
 	struct power_supply *usb_psy;
 
 	usb_psy = power_supply_get_by_name("usb");
