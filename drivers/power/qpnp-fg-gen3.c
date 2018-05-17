@@ -402,6 +402,7 @@ module_param_named(
 
 static int fg_restart;
 static bool fg_sram_dump;
+static u8 device_board_id;
 
 /* All getters HERE */
 
@@ -4106,6 +4107,41 @@ static int fg_parse_ki_coefficients(struct fg_chip *chip)
 	return 0;
 }
 
+#define PHASE_ID_EVT		0
+#define PHASE_ID_EVT1	1
+#define PHASE_ID_DVT1	2
+#define PHASE_ID_DVT2	3
+#define PHASE_ID_PVT		4
+#define PHASE_ID_MP		5
+static const char * const device_buildphase[] = {
+	"EVT", "EVT1", "DVT1", "DVT2", "PVT","MP"
+};
+static const char * const ibat_sensing_cfg[] = {
+	"BATFET", "SENSERESISTOR", "BATFET_W_SMB", "RESERVED"
+};
+static void fg_get_ibatt_sensing_cfg(u8 phase_id, u32 *temp)
+{
+	if (phase_id >= PHASE_ID_EVT && phase_id <= PHASE_ID_MP) {
+		switch(phase_id) {
+			case PHASE_ID_EVT:
+			case PHASE_ID_EVT1:
+				*temp = SRC_SEL_BATFET_SMB;
+				break;
+			case PHASE_ID_DVT1:
+			case PHASE_ID_DVT2:
+			case PHASE_ID_PVT:
+			case PHASE_ID_MP:
+			default:
+				*temp = SRC_SEL_SENSERESISTOR;
+		}
+		pr_info("%s(%s)\n", ibat_sensing_cfg[*temp], device_buildphase[phase_id]);
+	} else {
+		pr_err("Can't find the proper phase ID, use default BATFET_SMB \n");
+		*temp = SRC_SEL_BATFET_SMB;
+	}
+	return;
+}
+
 #define DEFAULT_CUTOFF_VOLT_MV		3200
 #define DEFAULT_EMPTY_VOLT_MV		2850
 #define DEFAULT_RECHARGE_VOLT_MV	4250
@@ -4299,6 +4335,11 @@ static int fg_parse_dt(struct fg_chip *chip)
 		chip->dt.rsense_sel = SRC_SEL_BATFET_SMB;
 	else
 		chip->dt.rsense_sel = (u8)temp & SOURCE_SELECT_MASK;
+
+	if (temp == SRC_SEL_SENSERESISTOR) {
+		fg_get_ibatt_sensing_cfg(device_board_id, &temp);
+		chip->dt.rsense_sel = (u8)temp & SOURCE_SELECT_MASK;
+	}
 
 	chip->dt.jeita_thresholds[JEITA_COLD] = DEFAULT_BATT_TEMP_COLD;
 	chip->dt.jeita_thresholds[JEITA_COOL] = DEFAULT_BATT_TEMP_COOL;
@@ -4767,6 +4808,15 @@ static int fg_gen3_remove(struct spmi_device *spmi)
 	fg_cleanup(chip);
 	return 0;
 }
+
+static int __init get_board_id(char *buf)
+{
+	device_board_id = 0;
+	device_board_id = simple_strtol(buf, NULL, 10);
+	return 0;
+}
+
+early_param("BuildPhase", get_board_id);
 
 static const struct of_device_id fg_gen3_match_table[] = {
 	{.compatible = FG_GEN3_DEV_NAME},
