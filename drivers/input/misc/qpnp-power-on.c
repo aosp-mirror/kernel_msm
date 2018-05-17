@@ -899,8 +899,10 @@ static int qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 		return -EINVAL;
 	}
 
-	pr_debug("PMIC input: code=%d, status=0x%02X\n", cfg->key_code,
-		pon_rt_sts);
+	pr_info("PMIC input: code=%d, sts=0x%hhx, bit=0x%hhx, type=%d, os=%d\n",
+		cfg->key_code, pon_rt_sts, pon_rt_bit, cfg->pon_type,
+		cfg->old_state);
+
 	key_status = pon_rt_sts & pon_rt_bit;
 
 	if (pon->kpdpwr_dbc_enable && cfg->pon_type == PON_KPDPWR) {
