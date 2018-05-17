@@ -140,6 +140,10 @@
 #define RECHARGE_VBATT_THR_v2_OFFSET	1
 #define FLOAT_VOLT_v2_WORD		16
 #define FLOAT_VOLT_v2_OFFSET		2
+#define DEFAULT_COLD_FV 4200
+#define DEFAULT_COLD_CC 100
+#define DEFAULT_HOT_FV 4305
+#define DEFAULT_HOT_CC 100
 
 static int fg_decode_voltage_15b(struct fg_sram_param *sp,
 	enum fg_sram_param_id id, int val);
@@ -573,6 +577,86 @@ static int fg_get_charge_counter(struct fg_chip *chip, int *val)
 	return 0;
 }
 
+#define JEITA_DYNAMIC_HOT_THRES		350
+#define JEITA_DYNAMIC_COLD_THRES		250
+#define CHGR_FLOAT_VOLTAGE_CFG_REG	0x1070
+#define CHGR_FAST_CHARGE_CURRENT_CFG_REG	 0x1061
+#define CHGR_JEITA_EN_CFG			0x1090
+#define CHGR_JEITA_FVCOMP_CFG_REG		0x1091
+#define CHGR_JEITA_CCCOMP_CFG_REG		0x1092
+#define FV_STEP 75
+#define CC_STEP 25
+//JEITA FV = Float Voltage - (DATA x 7.5mV)
+static void fg_set_fv_compensation(struct fg_chip *chip, int vfloat_comp)
+{
+	u8 stat = 0, delta = 0;
+	int rc = 0, vfloat = 0;
+
+	rc = fg_read(chip, CHGR_FLOAT_VOLTAGE_CFG_REG, &stat, 1);
+	if (rc < 0) {
+		pr_err("failed to read FLOAT_VOLTAGE_CFG_REG \n");
+		return;
+	}
+
+	// float voltage unit is 0.1 mV
+	vfloat = 34875 + stat * FV_STEP;
+	pr_info("vfloat_cfg: 0x%x (%d mv), vfloat_comp: %d \n", stat, vfloat, vfloat_comp);
+
+	vfloat_comp = vfloat_comp * 10;
+	if (vfloat - vfloat_comp >= 0) {
+		delta = (vfloat - vfloat_comp) / FV_STEP;
+		if (((vfloat - vfloat_comp) % FV_STEP) != 0)
+			delta++;
+		pr_debug("delta = %d, fv_comp_formula: %d - %d = %d \n", delta, vfloat, vfloat_comp, vfloat - vfloat_comp);
+
+		rc = fg_write(chip, CHGR_JEITA_FVCOMP_CFG_REG, &delta, 1);
+		if (rc < 0)
+			pr_err("Couldn't write CHGR_JEITA_FVCOMP_CFG_REG \n");
+	}
+}
+
+//JEITA CC = Fast Charge Current - DATA x 25mA
+static void fg_set_cc_compensation(struct fg_chip *chip, int current_comp)
+{
+	u8 stat = 0, delta = 0;
+	int rc = 0, fast_curret = 0;
+
+	rc = fg_read(chip, CHGR_FAST_CHARGE_CURRENT_CFG_REG, &stat, 1);
+	if (rc < 0) {
+		pr_err("failed to read FAST_CHARGE_CURRENT_CFG_REG \n");
+		return;
+	}
+
+	// fast current comp ( mA)
+	fast_curret = stat * CC_STEP;
+	pr_info("fast_current_cfg: 0x%x (%d mA), current_comp: %d mA \n", stat, fast_curret, current_comp);
+
+	if (fast_curret - current_comp >= 0) {
+		delta = (fast_curret - current_comp) / (CC_STEP);
+		if (((fast_curret - current_comp) % CC_STEP) != 0)
+			delta++;
+		pr_debug("delta = %d, cc_comp_formula: %d - %d = %d \n", delta, fast_curret, current_comp, fast_curret - current_comp);
+
+		rc = fg_write(chip, CHGR_JEITA_CCCOMP_CFG_REG, &delta, 1);
+		if (rc < 0)
+			pr_err("Couldn't write CHGR_JEITA_CCCOMP_CFG_REG \n");
+	}
+}
+
+static void fg_set_jeita_fv_cc_compensation(struct fg_chip *chip, int temp)
+{
+	pr_debug("smblib_set_jeita_fv_cc: temp = %d, model = %d \n", temp,  chip->dt.jeita_dynamic_model);
+	if ((temp > JEITA_DYNAMIC_HOT_THRES) && (chip->dt.jeita_dynamic_model == MODEL_COLD)) {
+		chip->dt.jeita_dynamic_model = MODEL_HOT;
+		fg_set_fv_compensation(chip, chip->dt.jeita_soft_hot_fv_cc[JEITA_FV]);
+		fg_set_cc_compensation(chip, chip->dt.jeita_soft_hot_fv_cc[JEITA_CC]);
+	} else if ((temp < JEITA_DYNAMIC_COLD_THRES) && (chip->dt.jeita_dynamic_model == MODEL_HOT)) {
+		chip->dt.jeita_dynamic_model = MODEL_COLD;
+		fg_set_fv_compensation(chip, chip->dt.jeita_soft_cold_fv_cc[JEITA_FV]);
+		fg_set_cc_compensation(chip, chip->dt.jeita_soft_cold_fv_cc[JEITA_CC]);
+	}
+}
+
 #define BATT_TEMP_NUMR		1
 #define BATT_TEMP_DENR		1
 static int fg_get_battery_temp(struct fg_chip *chip, int *val)
@@ -594,6 +678,11 @@ static int fg_get_battery_temp(struct fg_chip *chip, int *val)
 	/* Value is in Kelvin; Convert it to deciDegC */
 	temp = (temp - 273) * 10;
 	*val = temp;
+
+	//check the jeita model or not
+	if (chip->dt.jeita_dynamic_model != MODEL_DISABLE)
+		fg_set_jeita_fv_cc_compensation(chip, temp);
+
 	return 0;
 }
 
@@ -3401,6 +3490,22 @@ static int fg_hw_init(struct fg_chip *chip)
 		return rc;
 	}
 
+	if (chip->dt.jeita_en)
+		val = 0x1f;
+	else
+		val = 0;
+	rc = fg_write(chip, CHGR_JEITA_EN_CFG, &val, 1);
+	if (rc < 0)
+		pr_err("Error in writing CHGR_JEITA_EN_CFG \n");
+
+	if (chip->dt.jeita_dynamic_model == MODEL_COLD) {
+		fg_set_fv_compensation(chip, chip->dt.jeita_soft_cold_fv_cc[JEITA_FV]);
+		fg_set_cc_compensation(chip, chip->dt.jeita_soft_cold_fv_cc[JEITA_CC]);
+	} else if (chip->dt.jeita_dynamic_model == MODEL_HOT) {
+		fg_set_fv_compensation(chip, chip->dt.jeita_soft_hot_fv_cc[JEITA_FV]);
+		fg_set_cc_compensation(chip, chip->dt.jeita_soft_hot_fv_cc[JEITA_CC]);
+	}
+
 	if (chip->pmic_rev_id->pmic_subtype == PMI8998_SUBTYPE) {
 		chip->esr_timer_charging_default[TIMER_RETRY] =
 			DEFAULT_ESR_CHG_TIMER_RETRY;
@@ -4296,6 +4401,40 @@ static int fg_parse_dt(struct fg_chip *chip)
 		chip->dt.jeita_hyst_temp = -EINVAL;
 	else
 		chip->dt.jeita_hyst_temp = temp;
+
+	rc = of_property_read_u32(node, "qcom,fg-jeita-en", &temp);
+	if (rc < 0)
+		chip->dt.jeita_en = 0;
+	else
+		chip->dt.jeita_en = temp;
+
+	rc = of_property_read_u32(node, "qcom,fg-jeita-dynamic-model", &temp);
+	if (rc < 0)
+		chip->dt.jeita_dynamic_model = MODEL_DISABLE;
+	else
+		chip->dt.jeita_dynamic_model = temp;
+
+	chip->dt.jeita_soft_hot_fv_cc[JEITA_FV] = DEFAULT_HOT_FV;
+	chip->dt.jeita_soft_hot_fv_cc[JEITA_CC] = DEFAULT_HOT_CC;
+	chip->dt.jeita_soft_cold_fv_cc[JEITA_FV] = DEFAULT_COLD_FV;
+	chip->dt.jeita_soft_cold_fv_cc[JEITA_CC] = DEFAULT_COLD_CC;
+	if (of_property_count_elems_of_size(node, "qcom,fg-jeita-soft-hot-fv-cc",
+		sizeof(u32)) == JEITA_FV_CC_COUNT) {
+		rc = of_property_read_u32_array(node,
+				"qcom,fg-jeita-soft-hot-fv-cc",
+				chip->dt.jeita_soft_hot_fv_cc, JEITA_FV_CC_COUNT);
+		if (rc < 0)
+			pr_err("Error reading fg-jeita-soft-hot-fv-cc, use default value\n");
+	}
+	
+	if (of_property_count_elems_of_size(node, "qcom,fg-jeita-soft-cold-fv-cc",
+		sizeof(u32)) == JEITA_FV_CC_COUNT) {
+		rc = of_property_read_u32_array(node,
+				"qcom,fg-jeita-soft-cold-fv-cc",
+				chip->dt.jeita_soft_cold_fv_cc, JEITA_FV_CC_COUNT);
+		if (rc < 0)
+			pr_err("Error reading fg-jeita-soft-cold-fv-cc, use default value\n");
+	}
 
 	rc = of_property_read_u32(node, "qcom,fg-batt-temp-delta", &temp);
 	if (rc < 0)

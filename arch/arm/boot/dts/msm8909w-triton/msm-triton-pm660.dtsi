@@ -460,6 +460,12 @@
 			qcom,fg-esr-timer-awake = <96 96>;
 			qcom,fg-esr-timer-asleep = <256 256>;
 			qcom,fg-esr-timer-charging = <0 96>;
+			qcom,fg-jeita-thresholds = <2 16 44 58>;
+			qcom,fg-jeita-hyst-temp = <2>;
+			qcom,fg-jeita-en = <1>;
+			qcom,fg-jeita-dynamic-model = <1>;
+			qcom,fg-jeita-soft-hot-fv-cc = <4300 100>;
+			qcom,fg-jeita-soft-cold-fv-cc = <4200 150>;
 			qcom,battery-data = <&qrd_batterydata>;
 			qcom,fg-chg-term-current = <25>;
 			qcom,battery-thermal-coefficients = [d2 50 ff];
