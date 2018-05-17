@@ -71,6 +71,8 @@ struct pd_phy_params {
 	void		(*msg_rx_cb)(struct usbpd *pd, enum pd_sop_type sop,
 					u8 *buf, size_t len);
 	void		(*shutdown_cb)(struct usbpd *pd);
+	void		(*suspend_cb)(struct usbpd *pd);
+	void		(*resume_cb)(struct usbpd *pd);
 	enum data_role	data_role;
 	enum power_role power_role;
 	u8		frame_filter_val;
