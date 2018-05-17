@@ -184,6 +184,7 @@ struct tcpc_dev {
 	int (*set_in_pr_swap)(struct tcpc_dev *dev, bool pr_swap);
 	void (*set_pd_capable)(struct tcpc_dev *dev, bool capable);
 	void (*set_in_hard_reset)(struct tcpc_dev *dev, bool status);
+	void (*log_rtc)(struct tcpc_dev *dev);
 	struct tcpc_mux_dev *mux;
 };
 
