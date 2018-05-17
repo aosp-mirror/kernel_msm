@@ -228,6 +228,18 @@ enum esr_timer_config {
 	NUM_ESR_TIMERS,
 };
 
+enum jeita_model {
+	MODEL_DISABLE = 0,
+	MODEL_COLD,
+	MODEL_HOT,
+};
+
+enum jeita_comp_parameter{
+	JEITA_FV = 0,
+	JEITA_CC,
+	JEITA_FV_CC_COUNT,
+};
+
 /* DT parameters for FG device */
 struct fg_dt_props {
 	bool	force_load_profile;
@@ -256,6 +268,10 @@ struct fg_dt_props {
 	int	cl_max_cap_limit;
 	int	cl_min_cap_limit;
 	int	jeita_hyst_temp;
+	u8	jeita_en;
+	u8	jeita_dynamic_model;
+	int	jeita_soft_cold_fv_cc[JEITA_FV_CC_COUNT];
+	int	jeita_soft_hot_fv_cc[JEITA_FV_CC_COUNT];
 	int	batt_temp_delta;
 	int	esr_flt_switch_temp;
 	int	esr_tight_flt_upct;
