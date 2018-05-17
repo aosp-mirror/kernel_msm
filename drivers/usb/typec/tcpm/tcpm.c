@@ -477,6 +477,9 @@ static void tcpm_log(struct tcpm_port *port, const char *fmt, ...)
 	     port->state == TOGGLING))
 		return;
 
+	if (port->tcpc->log_rtc)
+		port->tcpc->log_rtc(port->tcpc);
+
 	va_start(args, fmt);
 	_tcpm_log(port, fmt, args);
 	va_end(args);
