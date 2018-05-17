@@ -94,6 +94,10 @@ struct msm_watchdog_data {
 	bool timer_expired;
 	bool user_pet_complete;
 	unsigned int scandump_size;
+	unsigned long long timer_fired;
+	unsigned long long thread_start;
+	unsigned long long ping_start[NR_CPUS];
+	unsigned long long ping_end[NR_CPUS];
 };
 
 /*
@@ -378,6 +382,7 @@ static void keep_alive_response(void *info)
 	struct msm_watchdog_data *wdog_dd = (struct msm_watchdog_data *)info;
 
 	cpumask_set_cpu(cpu, &wdog_dd->alive_mask);
+	wdog_dd->ping_end[cpu] = sched_clock();
 	/* Make sure alive mask is cleared and set in order */
 	smp_mb();
 }
@@ -394,9 +399,11 @@ static void ping_other_cpus(struct msm_watchdog_data *wdog_dd)
 	/* Make sure alive mask is cleared and set in order */
 	smp_mb();
 	for_each_cpu(cpu, cpu_online_mask) {
-		if (!cpu_idle_pc_state[cpu] && !cpu_isolated(cpu))
+		if (!cpu_idle_pc_state[cpu] && !cpu_isolated(cpu)) {
+			wdog_dd->ping_start[cpu] = sched_clock();
 			smp_call_function_single(cpu, keep_alive_response,
 						 wdog_dd, 1);
+		}
 	}
 }
 
@@ -405,6 +412,7 @@ static void pet_task_wakeup(unsigned long data)
 	struct msm_watchdog_data *wdog_dd =
 		(struct msm_watchdog_data *)data;
 	wdog_dd->timer_expired = true;
+	wdog_dd->timer_fired = sched_clock();
 	wake_up(&wdog_dd->pet_complete);
 }
 
@@ -414,6 +422,7 @@ static __ref int watchdog_kthread(void *arg)
 		(struct msm_watchdog_data *)arg;
 	unsigned long delay_time = 0;
 	struct sched_param param = {.sched_priority = MAX_RT_PRIO-1};
+	int cpu;
 
 	sched_setscheduler(current, SCHED_FIFO, &param);
 	while (!kthread_should_stop()) {
@@ -421,6 +430,10 @@ static __ref int watchdog_kthread(void *arg)
 			wdog_dd->pet_complete,
 			wdog_dd->timer_expired) != 0)
 			;
+
+		wdog_dd->thread_start = sched_clock();
+		for_each_cpu(cpu, cpu_present_mask)
+			wdog_dd->ping_start[cpu] = wdog_dd->ping_end[cpu] = 0;
 
 		if (wdog_dd->do_ipi_ping)
 			ping_other_cpus(wdog_dd);
