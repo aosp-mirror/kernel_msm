@@ -35,7 +35,7 @@ void RamWrite32A( UINT_16 RamAddr, UINT_32 RamData )
 
 	rc = camera_io_dev_write(io_master_info, &i2c_reg_settings);
 	if (rc < 0) {
-		CAM_ERR(CAM_SENSOR, "[OISFW] %s : write failed\n", __func__);
+		CAM_ERR(CAM_SENSOR, "[OISFW] %s : write failed", __func__);
 	}
 }
 
@@ -47,7 +47,7 @@ void RamRead32A( UINT_16 RamAddr, UINT_32 *ReadData )
 		ReadData, CAMERA_SENSOR_I2C_TYPE_WORD,
 		CAMERA_SENSOR_I2C_TYPE_DWORD);
 	if (rc < 0)
-		CAM_ERR(CAM_SENSOR, "[OISFW]:%s read i2c failed\n", __func__);
+		CAM_ERR(CAM_SENSOR, "[OISFW]:%s read i2c failed", __func__);
 }
 
 int RamWrite8A( struct camera_io_master *io_info,
@@ -69,7 +69,7 @@ int RamWrite8A( struct camera_io_master *io_info,
 	rc = camera_io_dev_write(io_info, &i2c_reg_settings);
 	if (rc < 0) {
 		CAM_ERR(CAM_SENSOR,
-			"%s: write 0x%x failed\n", __func__, RamAddr);
+			"%s: write 0x%x failed", __func__, RamAddr);
 	}
 
 	return rc;
@@ -85,7 +85,7 @@ int RamRead8A( struct camera_io_master *io_info,
 		CAMERA_SENSOR_I2C_TYPE_BYTE);
 	if (rc < 0)
 		CAM_ERR(CAM_SENSOR,
-			"%s: read 0x%x failed\n", __func__, RamAddr);
+			"%s: read 0x%x failed", __func__, RamAddr);
 
 	return rc;
 }
@@ -125,7 +125,8 @@ int CntWrt( UINT_8 *PcSetDat, UINT_16 UsDatNum)
 
 	rc = camera_io_dev_write_continuous(io_master_info, &i2c_reg_setting, 1);
 	if (rc < 0) {
-		CAM_ERR(CAM_SENSOR, "[OISFW]:%s i2c write sequence error:%d\n", __func__, rc);
+		CAM_ERR(CAM_SENSOR, "[OISFW]:%s i2c write sequence error:%d",
+				__func__, rc);
 	}
 	kfree(i2c_reg_setting.reg_setting);
 	return rc;
@@ -137,7 +138,7 @@ int CntRd3( UINT_32 addr, void *PcSetDat, UINT_16 UsDatNum )
 
 	rc = camera_io_dev_read_seq(g_io_master_info, addr, PcSetDat, CAMERA_SENSOR_I2C_TYPE_WORD, UsDatNum);
 	if (rc < 0)
-		CAM_ERR(CAM_SENSOR, "[OISFW]:%s read i2c failed\n", __func__);
+		CAM_ERR(CAM_SENSOR, "[OISFW]:%s read i2c failed", __func__);
 	return rc;
 }
 
@@ -200,7 +201,7 @@ int doFWupdate(UINT_16 CAL_ID, UINT_32 MODULE_MAKER)
 		/*Wait for FW update finish.*/
 		rc = checkHighLevelCommand(20);
 	} else {
-		CAM_ERR(CAM_SENSOR, "[OISFW]%s:OIS FW update failed rc = %d.\n",
+		CAM_ERR(CAM_SENSOR, "[OISFW]%s:OIS FW update failed rc = %d.",
 			__func__, rc);
 		rc = -EINVAL;
 	}
@@ -216,32 +217,35 @@ bool checkOISFWversion(UINT_16 *cal_id, UINT_32 *module_maker)
 	UINT_16 FW_version;
 	bool need_update = false;
 
-	CAM_INFO(CAM_SENSOR, "[OISFW]:%s\n", __func__);
+	CAM_INFO(CAM_SENSOR, "[OISFW]:%s", __func__);
 
 	RamAddr = 0x8000;
 	RamRead32A(RamAddr, &UlReadVal);
 	FW_version = UlReadVal & 0xFF;
 	*module_maker = UlReadVal & 0xFFFF0000;
-	CAM_INFO(CAM_SENSOR, "[OISFW]:%s module_version =  0x%02x.\n", __func__, UlReadVal);
+	CAM_INFO(CAM_SENSOR, "[OISFW]:%s module_version =  0x%02x",
+			__func__, UlReadVal);
 
 	RamAddr = 0x8004;
 	RamRead32A(RamAddr, &UlReadVal);
 	*cal_id = UlReadVal & 0xFF;
-	CAM_INFO(CAM_SENSOR, "[OISFW]:%s CAL_ID = 0x%04x, MODULE_MAKER = 0x%x\n", __func__, *cal_id, *module_maker);
+	CAM_INFO(CAM_SENSOR, "[OISFW]:%s CAL_ID = 0x%04x, MODULE_MAKER = 0x%x",
+			__func__, *cal_id, *module_maker);
 
 	if (FW_version >= OIS_CUR_FW_VERSION) {
-		CAM_INFO(CAM_SENSOR, "[OISFW]%s: No need to update.\n", __func__);
+		CAM_INFO(CAM_SENSOR, "[OISFW]%s: No need to update.", __func__);
 		return false;
 	} else {
 		rc = checkHighLevelCommand(100);
 		if (rc != 0) {
-			CAM_ERR(CAM_SENSOR, "[OISFW]:%s checkHighLevelCommand failed = %d\n",
+			CAM_ERR(CAM_SENSOR,
+				"[OISFW]:%s checkHighLevelCommand failed: %d",
 				__func__, rc);
 			need_update = false;
 			return -EINVAL;
 		}
 
-		CAM_INFO(CAM_SENSOR, "[OISFW]:%s checkHighLevelCommand = %d\n",
+		CAM_INFO(CAM_SENSOR, "[OISFW]:%s checkHighLevelCommand = %d",
 			__func__, rc);
 
 		need_update = true;
@@ -261,12 +265,12 @@ int checkOISFWUpdate(struct cam_sensor_ctrl_t *s_ctrl)
 	UINT_32 module_maker;
 
 	if (g_first != true) {
-		CAM_INFO(CAM_SENSOR, "[OISFW]%s: No need.\n", __func__);
+		CAM_INFO(CAM_SENSOR, "[OISFW]%s: No need.", __func__);
 		return 0;
 	}
 	g_first = false;
 
-	CAM_INFO(CAM_SENSOR, "[OISFW]:%s 1. sid = %d\n", __func__,
+	CAM_INFO(CAM_SENSOR, "[OISFW]:%s 1. sid = %d", __func__,
 		s_ctrl->io_master_info.cci_client->sid);
 
 	/* Bcakup the I2C slave address */
@@ -287,10 +291,12 @@ int checkOISFWUpdate(struct cam_sensor_ctrl_t *s_ctrl)
 			FW_version = FWRead & 0xFF;
 			CAM_INFO(CAM_SENSOR, "[OISFW]:%s 0x8000 =  0x%08x", __func__, FWRead);
 			if (FW_version != OIS_CUR_FW_VERSION) {
-				CAM_ERR(CAM_SENSOR, "[OISFW]:FW version check failed after update. retry.\n");
+				CAM_ERR(CAM_SENSOR,
+					"[OISFW]:FW version check failed after update. retry.");
 				rc = doFWupdate(cal_id, module_maker);
 			} else {
-				CAM_INFO(CAM_SENSOR, "[OISFW]: FW vserion verify pass.\n");
+				CAM_INFO(CAM_SENSOR,
+					"[OISFW]: FW vserion verify pass.");
 				break;
 			}
 		}
@@ -299,7 +305,7 @@ int checkOISFWUpdate(struct cam_sensor_ctrl_t *s_ctrl)
 	/* Restore the I2C slave address */
 	s_ctrl->io_master_info.cci_client->sid =
 		cci_client_sid_backup;
-	CAM_INFO(CAM_SENSOR, "[OISFW]:%s 2. sid = %d\n", __func__,
+	CAM_INFO(CAM_SENSOR, "[OISFW]:%s 2. sid = %d", __func__,
 		s_ctrl->io_master_info.cci_client->sid);
 
 	return rc;
@@ -318,7 +324,9 @@ int checkRearVCMFWUpdate(struct cam_sensor_ctrl_t *s_ctrl)
 	unsigned short cci_client_sid_backup;
 	struct cam_sensor_i2c_reg_array *fwtable = NULL;
 
-	CAM_INFO(CAM_SENSOR, "[VCMFW]%s: original sid = %d\n", __func__,
+	WitTim(300);
+
+	CAM_INFO(CAM_SENSOR, "[VCMFW]%s: original sid = %d", __func__,
 		s_ctrl->io_master_info.cci_client->sid);
 
 	cci_client_sid_backup = s_ctrl->io_master_info.cci_client->sid;
@@ -332,7 +340,7 @@ int checkRearVCMFWUpdate(struct cam_sensor_ctrl_t *s_ctrl)
 	RamWrite32A(0xF01B, 0x1A02);
 	RamRead32A(0xF01B, &UlReadVal);
 	VCM_rev = (UlReadVal & 0xFF000000) >> 24;
-	CAM_INFO(CAM_SENSOR, "[VCMFW]%s: 0x1A02 = 0x%08x, ACM rev = 0x%x\n",
+	CAM_INFO(CAM_SENSOR, "[VCMFW]%s: 0x1A02 = 0x%08x, ACM rev = 0x%x",
 		__func__, UlReadVal, VCM_rev);
 
 	switch (VCM_rev) {
@@ -340,7 +348,7 @@ int checkRearVCMFWUpdate(struct cam_sensor_ctrl_t *s_ctrl)
 	case 1:
 	case 2:
 		CAM_INFO(CAM_SENSOR,
-			"[VCMFW]%s: No need to update\n", __func__);
+			"[VCMFW]%s: No need to update", __func__);
 		break;
 	case 3:
 		fwtable = VCM_LC898219_EVT_2_1;
@@ -349,7 +357,7 @@ int checkRearVCMFWUpdate(struct cam_sensor_ctrl_t *s_ctrl)
 		break;
 	default:
 		CAM_INFO(CAM_SENSOR,
-			"[VCMFW]%s: Unsupported rev\n", __func__);
+			"[VCMFW]%s: Unsupported rev", __func__);
 		break;
 	}
 
@@ -362,7 +370,7 @@ int checkRearVCMFWUpdate(struct cam_sensor_ctrl_t *s_ctrl)
 				fwtable[i].reg_addr, &regdata);
 			if (rc < 0 || regdata != fwtable[i].reg_data) {
 				CAM_INFO(CAM_SENSOR,
-					"[VCMFW]%s: run FW update\n", __func__);
+					"[VCMFW]%s: run FW update", __func__);
 				needupdate = true;
 				break;
 			}
@@ -370,7 +378,7 @@ int checkRearVCMFWUpdate(struct cam_sensor_ctrl_t *s_ctrl)
 	}
 	if(needupdate == false) {
 		CAM_INFO(CAM_SENSOR,
-			"[VCMFW]%s: By pass fw update\n", __func__);
+			"[VCMFW]%s: By pass fw update", __func__);
 		s_ctrl->io_master_info.cci_client->sid =
 			cci_client_sid_backup;
 		return 0;
@@ -415,7 +423,7 @@ int checkRearVCMFWUpdate(struct cam_sensor_ctrl_t *s_ctrl)
 			break;
 		} else {
 			CAM_ERR(CAM_SENSOR,
-				"[VCMFW]%s: NG module !\n", __func__);
+				"[VCMFW]%s: NG module !", __func__);
 			break;
 		}
 	}
@@ -423,10 +431,10 @@ int checkRearVCMFWUpdate(struct cam_sensor_ctrl_t *s_ctrl)
 	/* 5. Restore the I2C slave address */
 	s_ctrl->io_master_info.cci_client->sid =
 		cci_client_sid_backup;
-	CAM_INFO(CAM_SENSOR, "[VCMFW]%s: restore sid = %d\n", __func__,
+	CAM_INFO(CAM_SENSOR, "[VCMFW]%s: restore sid = %d", __func__,
 		s_ctrl->io_master_info.cci_client->sid);
 
-	CAM_INFO(CAM_SENSOR, "[VCMFW]%s; rc = %d\n", __func__, rc);
+	CAM_INFO(CAM_SENSOR, "[VCMFW]%s; rc = %d", __func__, rc);
 
 	return rc;
 }
@@ -465,7 +473,7 @@ int DownloadRearVCMFW(struct camera_io_master *io_info,
 	WitTim(1);
 
 	/* EEPROM data writing */
-	CAM_INFO(CAM_SENSOR, "[VCMFW]%s: flash firmware, size %d\n",
+	CAM_INFO(CAM_SENSOR, "[VCMFW]%s: flash firmware, size %d",
 		__func__, tbsize);
 	for (i = 0; i < tbsize; i++) {
 		checkbusy_cnt = 0;
