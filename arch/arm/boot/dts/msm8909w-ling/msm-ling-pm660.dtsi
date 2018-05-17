@@ -469,6 +469,7 @@
 			qcom,battery-data = <&qrd_batterydata>;
 			qcom,fg-chg-term-current = <25>;
 			qcom,battery-thermal-coefficients = [d2 50 ff];
+			qcom,fg-rsense-sel = <1>;
 			qcom,fg-auto-recharge-soc;
 			qcom,fg-recharge-soc-thr = <99>;
 			qcom,cycle-counter-en;
