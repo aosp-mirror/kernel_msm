@@ -70,13 +70,8 @@
 
 #define MAX_FBI_LIST 32
 
-#ifndef TARGET_HW_MDSS_MDP3
 #define BLANK_FLAG_LP	FB_BLANK_NORMAL
 #define BLANK_FLAG_ULP	FB_BLANK_VSYNC_SUSPEND
-#else
-#define BLANK_FLAG_LP	FB_BLANK_VSYNC_SUSPEND
-#define BLANK_FLAG_ULP	FB_BLANK_NORMAL
-#endif
 
 /*
  * Time period for fps calulation in micro seconds.
