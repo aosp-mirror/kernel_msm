@@ -23,6 +23,7 @@
 #include <linux/power_supply.h>
 #include <linux/property.h>
 #include <linux/regulator/consumer.h>
+#include <linux/rtc.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/types.h>
@@ -95,19 +96,55 @@ struct usbpd {
 	/* Ext vbus management */
 	struct delayed_work ext_vbus_work;
 	struct notifier_block ext_vbus_nb;
+
+	bool suspend_since_last_logged;
+	bool first_suspend;
 };
 
 /*
  * Logging
  */
 
-static void _pd_engine_log(struct usbpd *pd, const char *fmt, va_list args)
+static void __pd_engine_log(struct usbpd *pd, const char *tmpbuffer,
+			   bool record_utc) {
+	u64 ts_nsec = local_clock();
+	unsigned long rem_nsec = do_div(ts_nsec, 1000000000);
+
+	if (record_utc) {
+		struct timespec ts;
+		struct rtc_time tm;
+
+		getnstimeofday(&ts);
+		rtc_time_to_tm(ts.tv_sec, &tm);
+		scnprintf(pd->logbuffer + (pd->logbuffer_head *
+					   LOG_BUFFER_ENTRY_SIZE),
+			  LOG_BUFFER_ENTRY_SIZE,
+			  "[%5lu.%06lu] %d-%02d-%02d %02d:%02d:%02d.%09lu UTC",
+			  (unsigned long)ts_nsec, rem_nsec / 1000,
+			  tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+			  tm.tm_hour, tm.tm_min, tm.tm_sec, ts.tv_nsec);
+	} else {
+		scnprintf(pd->logbuffer + (pd->logbuffer_head *
+					   LOG_BUFFER_ENTRY_SIZE),
+			  LOG_BUFFER_ENTRY_SIZE, "[%5lu.%06lu] %s",
+			  (unsigned long)ts_nsec, rem_nsec / 1000,
+			  tmpbuffer);
+	}
+
+	pd->logbuffer_head = (pd->logbuffer_head + 1) % LOG_BUFFER_ENTRIES;
+	if (pd->logbuffer_head == pd->logbuffer_tail) {
+		pd->logbuffer_tail = (pd->logbuffer_tail + 1)
+				     % LOG_BUFFER_ENTRIES;
+	}
+}
+
+static void _pd_engine_log(struct usbpd *pd, const char *fmt, va_list args,
+			   bool force_print_utc)
 {
 	char tmpbuffer[LOG_BUFFER_ENTRY_SIZE];
-	u64 ts_nsec = local_clock();
-	unsigned long rem_nsec;
 
-	vsnprintf(tmpbuffer, sizeof(tmpbuffer), fmt, args);
+	if (!force_print_utc)
+		vsnprintf(tmpbuffer, sizeof(tmpbuffer), fmt, args);
 
 	spin_lock(&pd->logbuffer_lock);
 	if (pd->logbuffer_head < 0 ||
@@ -117,16 +154,14 @@ static void _pd_engine_log(struct usbpd *pd, const char *fmt, va_list args)
 		goto abort;
 	}
 
-	rem_nsec = do_div(ts_nsec, 1000000000);
-	scnprintf(pd->logbuffer + (pd->logbuffer_head * LOG_BUFFER_ENTRY_SIZE),
-		  LOG_BUFFER_ENTRY_SIZE, "[%5lu.%06lu] %s",
-		  (unsigned long)ts_nsec, rem_nsec / 1000,
-		  tmpbuffer);
-	pd->logbuffer_head = (pd->logbuffer_head + 1) % LOG_BUFFER_ENTRIES;
-	if (pd->logbuffer_head == pd->logbuffer_tail) {
-		pd->logbuffer_tail = (pd->logbuffer_tail + 1)
-				     % LOG_BUFFER_ENTRIES;
+	if (pd->suspend_since_last_logged) {
+		__pd_engine_log(pd, tmpbuffer, true);
+		pd->suspend_since_last_logged = false;
 	}
+
+	if (!force_print_utc)
+		__pd_engine_log(pd, tmpbuffer, false);
+
 abort:
 	spin_unlock(&pd->logbuffer_lock);
 }
@@ -136,7 +171,7 @@ static void pd_engine_log(struct usbpd *pd, const char *fmt, ...)
 	va_list args;
 
 	va_start(args, fmt);
-	_pd_engine_log(pd, fmt, args);
+	_pd_engine_log(pd, fmt, args, false);
 	va_end(args);
 }
 
@@ -1467,6 +1502,19 @@ static void pd_phy_shutdown(struct usbpd *pd)
 	pd_engine_log(pd, "pd phy shutdown");
 }
 
+static void pd_phy_suspend(struct usbpd *pd)
+{
+	if (pd->first_suspend) {
+		/* Set to print UTC right away*/
+		pd->suspend_since_last_logged = true;
+		pd_engine_log(pd, "first suspend");
+		pd->first_suspend = false;
+	}
+
+	/* UTC gets printed for the next pd_engine_log */
+	pd->suspend_since_last_logged = true;
+}
+
 static void set_pd_capable(struct tcpc_dev *dev, bool capable)
 {
 	union power_supply_propval val = {0};
@@ -1706,6 +1754,7 @@ static void init_pd_phy_params(struct pd_phy_params *pdphy_params)
 	pdphy_params->signal_cb = pd_phy_signal_rx;
 	pdphy_params->msg_rx_cb = pd_phy_message_rx;
 	pdphy_params->shutdown_cb = pd_phy_shutdown;
+	pdphy_params->suspend_cb = pd_phy_suspend;
 	pdphy_params->data_role = DR_UFP;
 	pdphy_params->power_role = PR_SINK;
 	pdphy_params->frame_filter_val = FRAME_FILTER_EN_SOP |
@@ -1792,6 +1841,8 @@ struct usbpd *usbpd_create(struct device *parent)
 	ret = pd_engine_debugfs_init(pd);
 	if (ret < 0)
 		goto del_pd;
+
+	pd->first_suspend = true;
 
 	pd->vbus = devm_regulator_get(parent, "vbus");
 	if (IS_ERR(pd->vbus)) {
