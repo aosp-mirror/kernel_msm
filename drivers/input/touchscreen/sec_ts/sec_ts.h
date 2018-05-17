@@ -471,6 +471,17 @@ typedef enum {
 	CUSTOMLIB_EVENT_TYPE_AOD_HOMEKEY_RELEASE_NO_HAPTIC	= 0x0E
 } CUSTOMLIB_EVENT_TYPE;
 
+enum {
+	SEC_TS_BUS_REF_SCREEN_ON	= 0x01,
+	SEC_TS_BUS_REF_IRQ		= 0x02,
+	SEC_TS_BUS_REF_RESET		= 0x04,
+	SEC_TS_BUS_REF_FW_UPDATE	= 0x08,
+	SEC_TS_BUS_REF_INPUT_DEV	= 0x10,
+	SEC_TS_BUS_REF_READ_INFO	= 0x20,
+	SEC_TS_BUS_REF_SYSFS		= 0x40,
+	SEC_TS_BUS_REF_FORCE_ACTIVE	= 0x80
+};
+
 #define CMD_RESULT_WORD_LEN		10
 
 #define SEC_TS_I2C_RETRY_CNT		3
@@ -668,6 +679,9 @@ struct sec_ts_data {
 	u8 touchable_area;
 	volatile bool input_closed;
 
+	struct mutex bus_mutex;
+	u16 bus_refmask;
+
 	int touch_count;
 	int tx_count;
 	int rx_count;
@@ -828,6 +842,9 @@ int sec_ts_firmware_update_on_hidden_menu(struct sec_ts_data *ts, int update_typ
 int sec_ts_glove_mode_enables(struct sec_ts_data *ts, int mode);
 int sec_ts_set_cover_type(struct sec_ts_data *ts, bool enable);
 int sec_ts_wait_for_ready(struct sec_ts_data *ts, unsigned int ack);
+int sec_ts_try_wake(struct sec_ts_data *ts, bool wake_setting);
+int sec_ts_set_bus_ref(struct sec_ts_data *ts, u16 ref, bool enable);
+
 int sec_ts_function(int (*func_init)(void *device_data), void (*func_remove)(void));
 int sec_ts_fn_init(struct sec_ts_data *ts);
 int sec_ts_read_calibration_report(struct sec_ts_data *ts);

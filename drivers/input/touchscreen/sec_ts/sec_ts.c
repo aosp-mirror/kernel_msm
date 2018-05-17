@@ -945,11 +945,13 @@ static irqreturn_t sec_ts_irq_thread(int irq, void *ptr)
 {
 	struct sec_ts_data *ts = (struct sec_ts_data *)ptr;
 
+	sec_ts_set_bus_ref(ts, SEC_TS_BUS_REF_IRQ, true);
 	mutex_lock(&ts->eventlock);
 
 	sec_ts_read_event(ts);
 
 	mutex_unlock(&ts->eventlock);
+	sec_ts_set_bus_ref(ts, SEC_TS_BUS_REF_IRQ, false);
 
 	return IRQ_HANDLED;
 }
@@ -1401,13 +1403,15 @@ int sec_ts_read_information(struct sec_ts_data *ts)
 	unsigned char data[13] = { 0 };
 	int ret;
 
+	sec_ts_set_bus_ref(ts, SEC_TS_BUS_REF_READ_INFO, true);
+
 	memset(data, 0x0, 3);
 	ret = sec_ts_i2c_read(ts, SEC_TS_READ_ID, data, 3);
 	if (ret < 0) {
 		input_err(true, &ts->client->dev,
 					"%s: failed to read device id(%d)\n",
 					__func__, ret);
-		return ret;
+		goto out;
 	}
 
 	input_info(true, &ts->client->dev,
@@ -1419,7 +1423,7 @@ int sec_ts_read_information(struct sec_ts_data *ts)
 		input_err(true, &ts->client->dev,
 					"%s: failed to read sub id(%d)\n",
 					__func__, ret);
-		return ret;
+		goto out;
 	}
 
 	input_info(true, &ts->client->dev,
@@ -1443,7 +1447,7 @@ int sec_ts_read_information(struct sec_ts_data *ts)
 		input_err(true, &ts->client->dev,
 					"%s: failed to read sub id(%d)\n",
 					__func__, ret);
-		return ret;
+		goto out;
 	}
 
 	input_info(true, &ts->client->dev,
@@ -1456,7 +1460,7 @@ int sec_ts_read_information(struct sec_ts_data *ts)
 		input_err(true, &ts->client->dev,
 					"%s: failed to read sub id(%d)\n",
 					__func__, ret);
-		return ret;
+		goto out;
 	}
 
 	input_info(true, &ts->client->dev,
@@ -1467,13 +1471,15 @@ int sec_ts_read_information(struct sec_ts_data *ts)
 		input_err(true, &ts->client->dev,
 					"%s: failed to read touch functions(%d)\n",
 					__func__, ret);
-		return ret;
+		goto out;
 	}
 
 	input_info(true, &ts->client->dev,
 				"%s: Functions : %02X\n",
 				__func__, ts->touch_functions);
 
+out:
+	sec_ts_set_bus_ref(ts, SEC_TS_BUS_REF_READ_INFO, false);
 	return ret;
 }
 
@@ -1700,6 +1706,7 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	ts->min_z_value = 0xFFFFFFFF;
 	ts->sum_z_value = 0;
 
+	mutex_init(&ts->bus_mutex);
 	mutex_init(&ts->lock);
 	mutex_init(&ts->device_mutex);
 	mutex_init(&ts->i2c_mutex);
@@ -2065,6 +2072,8 @@ static void sec_ts_reset_work(struct work_struct *work)
 	ts->reset_is_on_going = true;
 	input_info(true, &ts->client->dev, "%s\n", __func__);
 
+	sec_ts_set_bus_ref(ts, SEC_TS_BUS_REF_RESET, true);
+
 	sec_ts_stop_device(ts);
 
 	sec_ts_delay(30);
@@ -2097,6 +2106,8 @@ static void sec_ts_reset_work(struct work_struct *work)
 		}
 	}
 	ts->reset_is_on_going = false;
+
+	sec_ts_set_bus_ref(ts, SEC_TS_BUS_REF_RESET, false);
 }
 #endif
 
@@ -2172,11 +2183,16 @@ static void sec_ts_fw_update_work(struct work_struct *work)
 
 	input_info(true, &ts->client->dev,
 		   "%s: Beginning firmware update after probe.\n", __func__);
+
+	sec_ts_set_bus_ref(ts, SEC_TS_BUS_REF_FW_UPDATE, true);
+
 	ret = sec_ts_firmware_update_on_probe(ts, false);
 	if (ret < 0)
 		input_info(true, &ts->client->dev,
 			   "%s: firmware update was unsuccessful.\n",
 			   __func__);
+
+	sec_ts_set_bus_ref(ts, SEC_TS_BUS_REF_FW_UPDATE, false);
 }
 
 int sec_ts_set_lowpowermode(struct sec_ts_data *ts, u8 mode)
@@ -2252,6 +2268,8 @@ static int sec_ts_input_open(struct input_dev *dev)
 
 	input_info(true, &ts->client->dev, "%s\n", __func__);
 
+	sec_ts_set_bus_ref(ts, SEC_TS_BUS_REF_INPUT_DEV, true);
+
 	if (ts->lowpower_status) {
 #ifdef USE_RESET_EXIT_LPM
 		schedule_delayed_work(&ts->reset_work, msecs_to_jiffies(TOUCH_RESET_DWORK_TIME));
@@ -2268,6 +2286,8 @@ static int sec_ts_input_open(struct input_dev *dev)
 	/* because edge and dead zone will recover soon */
 	sec_ts_set_grip_type(ts, ONLY_EDGE_HANDLER);
 
+	sec_ts_set_bus_ref(ts, SEC_TS_BUS_REF_INPUT_DEV, false);
+
 	return 0;
 }
 
@@ -2278,6 +2298,8 @@ static void sec_ts_input_close(struct input_dev *dev)
 	ts->input_closed = true;
 
 	input_info(true, &ts->client->dev, "%s\n", __func__);
+
+	sec_ts_set_bus_ref(ts, SEC_TS_BUS_REF_INPUT_DEV, true);
 
 	cancel_delayed_work(&ts->suspend_work);
 	cancel_delayed_work(&ts->resume_work);
@@ -2296,6 +2318,7 @@ static void sec_ts_input_close(struct input_dev *dev)
 		sec_ts_stop_device(ts);
 	}
 
+	sec_ts_set_bus_ref(ts, SEC_TS_BUS_REF_INPUT_DEV, false);
 }
 #endif
 
@@ -2304,6 +2327,9 @@ static int sec_ts_remove(struct i2c_client *client)
 	struct sec_ts_data *ts = i2c_get_clientdata(client);
 
 	input_info(true, &ts->client->dev, "%s\n", __func__);
+
+	/* Force the bus active throughout removal of the client */
+	sec_ts_set_bus_ref(ts, SEC_TS_BUS_REF_FORCE_ACTIVE, true);
 
 	msm_drm_unregister_client(&ts->notifier);
 
@@ -2676,6 +2702,71 @@ static void sec_ts_resume_work(struct work_struct *work)
 	mutex_unlock(&ts->device_mutex);
 }
 
+static void sec_ts_aggregate_bus_state(struct sec_ts_data *ts)
+{
+	input_dbg(true, &ts->client->dev, "%s: bus_refmask = 0x%02X.\n",
+		  __func__, ts->bus_refmask);
+
+	if ((ts->bus_refmask == 0 &&
+		ts->power_status == SEC_TS_STATE_SUSPEND) ||
+	    (ts->bus_refmask != 0 &&
+		ts->power_status != SEC_TS_STATE_SUSPEND))
+		return;
+
+	if (ts->bus_refmask == 0) {
+		cancel_delayed_work_sync(&ts->resume_work);
+
+		if (!delayed_work_pending(&ts->suspend_work))
+			schedule_delayed_work(&ts->suspend_work,
+					      msecs_to_jiffies(HZ));
+	} else {
+		cancel_delayed_work_sync(&ts->suspend_work);
+
+		if (!delayed_work_pending(&ts->resume_work))
+			schedule_delayed_work(&ts->resume_work,
+					      msecs_to_jiffies(HZ));
+	}
+}
+
+int sec_ts_set_bus_ref(struct sec_ts_data *ts, u16 ref, bool enable)
+{
+	int attempts = 0;
+	int result = 0;
+
+	mutex_lock(&ts->bus_mutex);
+
+	if ((enable && (ts->bus_refmask & ref)) ||
+	    (!enable && !(ts->bus_refmask & ref)))
+		input_info(true, &ts->client->dev,
+			"%s: reference is unexpectedly set: mask=0x%04X, ref=0x%04X, enable=%d.\n",
+			__func__, ts->bus_refmask, ref, enable);
+
+	if (enable)
+		ts->bus_refmask |= ref;
+	else
+		ts->bus_refmask &= ~ref;
+	sec_ts_aggregate_bus_state(ts);
+
+	mutex_unlock(&ts->bus_mutex);
+
+	/* When triggering a wake, wait up to 1.5 seconds to resume */
+	if (enable) {
+		for (attempts = 0;
+		     attempts < 15 && ts->power_status != SEC_TS_STATE_POWER_ON;
+		     attempts++) {
+			msleep(100);
+		}
+		if (ts->power_status != SEC_TS_STATE_POWER_ON) {
+			input_info(true, &ts->client->dev,
+				   "%s: Failed to wake the touch bus.\n",
+				   __func__);
+			result = -1;
+		}
+	}
+
+	return result;
+}
+
 static int sec_ts_screen_state_chg_callback(struct notifier_block *nb,
 					    unsigned long val, void *data)
 {
@@ -2702,24 +2793,12 @@ static int sec_ts_screen_state_chg_callback(struct notifier_block *nb,
 	case MSM_DRM_BLANK_LP:
 		input_dbg(true, &ts->client->dev,
 			  "%s: MSM_DRM_BLANK_POWERDOWN.\n", __func__);
-
-		cancel_delayed_work_sync(&ts->resume_work);
-
-		if ((ts->power_status != SEC_TS_STATE_SUSPEND) &&
-		    !delayed_work_pending(&ts->suspend_work))
-			schedule_delayed_work(&ts->suspend_work,
-					      msecs_to_jiffies(HZ));
+		sec_ts_set_bus_ref(ts, SEC_TS_BUS_REF_SCREEN_ON, false);
 		break;
 	case MSM_DRM_BLANK_UNBLANK:
 		input_dbg(true, &ts->client->dev,
 			  "%s: MSM_DRM_BLANK_UNBLANK.\n", __func__);
-
-		cancel_delayed_work_sync(&ts->suspend_work);
-
-		if ((ts->power_status != SEC_TS_STATE_POWER_ON) &&
-		    !delayed_work_pending(&ts->resume_work))
-			schedule_delayed_work(&ts->resume_work,
-					      msecs_to_jiffies(HZ));
+		sec_ts_set_bus_ref(ts, SEC_TS_BUS_REF_SCREEN_ON, true);
 		break;
 	}
 
