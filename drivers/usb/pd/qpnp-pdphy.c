@@ -104,6 +104,8 @@ struct usb_pdphy {
 	void (*msg_rx_cb)(struct usbpd *pd, enum pd_sop_type sop,
 			  u8 *buf, size_t len);
 	void (*shutdown_cb)(struct usbpd *pd);
+	void (*suspend_cb)(struct usbpd *pd);
+	void (*resume_cb)(struct usbpd *pd);
 
 	/* write waitq */
 	wait_queue_head_t tx_waitq;
@@ -356,6 +358,8 @@ int pd_phy_open(struct pd_phy_params *params)
 	pdphy->signal_cb = params->signal_cb;
 	pdphy->msg_rx_cb = params->msg_rx_cb;
 	pdphy->shutdown_cb = params->shutdown_cb;
+	pdphy->suspend_cb = params->suspend_cb;
+	pdphy->resume_cb = params->resume_cb;
 	pdphy->data_role = params->data_role;
 	pdphy->power_role = params->power_role;
 	pdphy->frame_filter_val = params->frame_filter_val;
@@ -889,6 +893,32 @@ static void pdphy_shutdown(struct platform_device *pdev)
 		pdphy->shutdown_cb(pdphy->usbpd);
 }
 
+#ifdef CONFIG_PM_SLEEP
+static int pdphy_pm_resume(struct device *dev)
+{
+	struct usb_pdphy *pdphy = dev_get_drvdata(dev);
+
+	if (pdphy->resume_cb)
+		pdphy->resume_cb(pdphy->usbpd);
+
+	return 0;
+}
+
+static int pdphy_pm_suspend(struct device *dev)
+{
+	struct usb_pdphy *pdphy = dev_get_drvdata(dev);
+
+	if (pdphy->suspend_cb)
+		pdphy->suspend_cb(pdphy->usbpd);
+
+	return 0;
+}
+
+static const struct dev_pm_ops pdphy_dev_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(pdphy_pm_suspend, pdphy_pm_resume)
+};
+#endif
+
 static const struct of_device_id pdphy_match_table[] = {
 	{
 		.compatible	 = "qcom,qpnp-pdphy",
@@ -901,6 +931,9 @@ static struct platform_driver pdphy_driver = {
 	 .driver	 = {
 		 .name			= "qpnp-pdphy",
 		 .of_match_table	= pdphy_match_table,
+#ifdef CONFIG_PM_SLEEP
+		 .pm			= &pdphy_dev_pm_ops,
+#endif
 	 },
 	 .probe		= pdphy_probe,
 	 .remove	= pdphy_remove,
