@@ -1515,6 +1515,17 @@ static void pd_phy_suspend(struct usbpd *pd)
 	pd->suspend_since_last_logged = true;
 }
 
+static void log_rtc(struct tcpc_dev *dev)
+{
+	struct usbpd *pd = container_of(dev, struct usbpd, tcpc_dev);
+
+	if (pd->suspend_since_last_logged) {
+		va_list args;
+
+		_pd_engine_log(pd, NULL, args, true);
+	}
+}
+
 static void set_pd_capable(struct tcpc_dev *dev, bool capable)
 {
 	union power_supply_propval val = {0};
@@ -1745,6 +1756,7 @@ static int init_tcpc_dev(struct tcpc_dev *pd_tcpc_dev)
 	pd_tcpc_dev->set_in_pr_swap = tcpm_set_in_pr_swap;
 	pd_tcpc_dev->set_pd_capable = set_pd_capable;
 	pd_tcpc_dev->set_in_hard_reset = set_in_hard_reset;
+	pd_tcpc_dev->log_rtc = log_rtc;
 	pd_tcpc_dev->mux = NULL;
 	return 0;
 }
