@@ -2447,6 +2447,13 @@ static int cs40l2x_dsp_load(struct cs40l2x_private *cs40l2x)
 	}
 }
 
+static const struct reg_sequence cs40l2x_pcm_routing[] = {
+	{CS40L2X_DAC_PCM1_SRC,		CS40L2X_DAC_PCM1_SRC_DSP1TX1},
+	{CS40L2X_DSP1_RX2_SRC,		CS40L2X_DSP1_RXn_SRC_VMON},
+	{CS40L2X_DSP1_RX3_SRC,		CS40L2X_DSP1_RXn_SRC_IMON},
+	{CS40L2X_DSP1_RX4_SRC,		CS40L2X_DSP1_RXn_SRC_VPMON},
+};
+
 static int cs40l2x_init(struct cs40l2x_private *cs40l2x)
 {
 	int ret;
@@ -2482,39 +2489,10 @@ static int cs40l2x_init(struct cs40l2x_private *cs40l2x)
 	if (ret)
 		return ret;
 
-	ret = regmap_update_bits(regmap, CS40L2X_DAC_PCM1_SRC,
-			CS40L2X_DAC_PCM1_SRC_MASK,
-			CS40L2X_DAC_PCM1_SRC_DSP1TX1
-				<< CS40L2X_DAC_PCM1_SRC_SHIFT);
+	ret = regmap_multi_reg_write(regmap, cs40l2x_pcm_routing,
+			ARRAY_SIZE(cs40l2x_pcm_routing));
 	if (ret) {
-		dev_err(dev, "Failed to route DSP to amplifier\n");
-		return ret;
-	}
-
-	ret = regmap_update_bits(regmap, CS40L2X_DSP1_RX2_SRC,
-			CS40L2X_DSP1_RXn_SRC_MASK,
-			CS40L2X_DSP1_RXn_SRC_VMON
-				<< CS40L2X_DSP1_RXn_SRC_SHIFT);
-	if (ret) {
-		dev_err(dev, "Failed to route voltage monitor to DSP\n");
-		return ret;
-	}
-
-	ret = regmap_update_bits(regmap, CS40L2X_DSP1_RX3_SRC,
-			CS40L2X_DSP1_RXn_SRC_MASK,
-			CS40L2X_DSP1_RXn_SRC_IMON
-				<< CS40L2X_DSP1_RXn_SRC_SHIFT);
-	if (ret) {
-		dev_err(dev, "Failed to route current monitor to DSP\n");
-		return ret;
-	}
-
-	ret = regmap_update_bits(regmap, CS40L2X_DSP1_RX4_SRC,
-			CS40L2X_DSP1_RXn_SRC_MASK,
-			CS40L2X_DSP1_RXn_SRC_VPMON
-				<< CS40L2X_DSP1_RXn_SRC_SHIFT);
-	if (ret) {
-		dev_err(dev, "Failed to route battery monitor to DSP\n");
+		dev_err(dev, "Failed to configure PCM channel routing\n");
 		return ret;
 	}
 
