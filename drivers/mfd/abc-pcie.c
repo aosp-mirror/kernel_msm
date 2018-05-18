@@ -288,6 +288,46 @@ int memory_config_write(u32 offset, u32 len, u32 data){
 	return 0;
 }
 
+int abc_set_aspm_state(bool state)
+{
+	u32 aspm_sts;
+	u32 aspm_l1_sub_states;
+
+	if (state) {
+		/* Enabling ASPM L0s, L1 support [1:0] = 0x3 */
+		aspm_sts = readl(abc_dev->pcie_config +
+				 LINK_CONTROL_LINK_STATUS_REG);
+		aspm_sts &= CLEAR_ASPM;
+		aspm_sts |= ENABLE_ASPM;
+		writel(aspm_sts, abc_dev->pcie_config +
+		       LINK_CONTROL_LINK_STATUS_REG);
+
+		/* Enabling ASPM L1 substates L1.1 [3:3] = 0x1, [2:2] = 0x1 */
+		aspm_l1_sub_states = readl(abc_dev->pcie_config +
+					   L1SUB_CONTROL1_REG);
+		aspm_l1_sub_states &= CLEAR_L1_SUBSTATES;
+		aspm_l1_sub_states |= ENABLE_L1_SUBSTATES;
+		writel(aspm_l1_sub_states, abc_dev->pcie_config +
+		       L1SUB_CONTROL1_REG);
+	} else {
+		/* Disabling ASPM L0s, L1 support [1:0] = 0x0 */
+		aspm_sts = readl(abc_dev->pcie_config +
+				 LINK_CONTROL_LINK_STATUS_REG);
+		aspm_sts &= CLEAR_ASPM;
+		writel(aspm_sts, abc_dev->pcie_config +
+		       LINK_CONTROL_LINK_STATUS_REG);
+
+		/* Disabling ASPM L1 substates L1.1 [3:3] = 0x0, [2:2] = 0x0 */
+		aspm_l1_sub_states = readl(abc_dev->pcie_config +
+					   L1SUB_CONTROL1_REG);
+		aspm_l1_sub_states &= CLEAR_L1_SUBSTATES;
+		writel(aspm_l1_sub_states, abc_dev->pcie_config +
+		       L1SUB_CONTROL1_REG);
+	}
+
+	return 0;
+}
+
 int abc_set_pcie_pm_ctrl(struct abc_pcie_pm_ctrl *pmctrl)
 {
 	u32 aspm_l11_l12;

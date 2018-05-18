@@ -103,6 +103,11 @@
 #define PME_EN						0x44
 #define CLOCK_REQ_EN					0x80024
 
+#define CLEAR_ASPM					0xFFFFFFFC
+#define ENABLE_ASPM					0x3
+#define CLEAR_L1_SUBSTATES				0xFFFFFFF3
+#define ENABLE_L1_SUBSTATES				0xC
+
 #define MSI_CAP_OFF_10H_REG				0x60
 
 #define MSI_CAP_MASK_31					(0x1 << 31)
