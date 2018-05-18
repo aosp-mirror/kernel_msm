@@ -209,6 +209,7 @@
 	qcom,fcc-max-ua = <500000>;
 	qcom,hvdcp-disable;
 	qcom,auto-recharge-soc;
+	qcom,low-batt-threshold = <2>;
 };
 
 &pmi8998_fg {
