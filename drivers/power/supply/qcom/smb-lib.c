@@ -5398,6 +5398,24 @@ static void smblib_iio_deinit(struct smb_charger *chg)
 		iio_channel_release(chg->iio.batt_i_chan);
 }
 
+static void smblib_set_low_batt_threshold(struct smb_charger *chg)
+{
+	u32 val;
+	int rc;
+
+	if (!of_property_read_u32(chg->dev->of_node,
+				  "qcom,low-batt-threshold", &val)) {
+		if (val > 0xf)
+			smblib_err(chg, "invalid qcom,low-batt-threshold value\n");
+		else {
+			rc = smblib_write(chg, LOW_BATT_THRESHOLD_CFG_REG, val);
+			if (rc < 0)
+				smblib_err(chg, "Couldn't write 0x%02x to LOW_BATT_THRESHOLD_CFG_REG rc=%d\n",
+					   val, rc);
+		}
+	}
+}
+
 int smblib_init(struct smb_charger *chg)
 {
 	int rc = 0;
@@ -5470,6 +5488,8 @@ int smblib_init(struct smb_charger *chg)
 			return rc;
 
 		smblib_init_port_overheat_mitigation(chg);
+
+		smblib_set_low_batt_threshold(chg);
 
 		chg->bms_psy = power_supply_get_by_name("bms");
 		chg->pl.psy = power_supply_get_by_name("parallel");
