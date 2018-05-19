@@ -1228,6 +1228,64 @@ static ssize_t boot_trace_show(struct device *dev,
 
 static DEVICE_ATTR_RO(boot_trace);
 
+static ssize_t config_read_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf,
+			       size_t count)
+{
+	unsigned long addr = 0;
+	uint32_t data;
+	int ret;
+
+	dev_dbg(mnh_sm_dev->dev, "Entering config_read_store...\n");
+
+	ret = mnh_sm_get_val_from_buf(buf, &addr);
+	if (ret)
+		return ret;
+
+	/* reads 4 bytes config register at a time */
+	ret = mnh_config_read(addr, 4, &data);
+	if (ret) {
+		dev_err(mnh_sm_dev->dev, "Cannot read offset 0x%lx\n", addr);
+	} else {
+		dev_info(mnh_sm_dev->dev, "Config [0x%lx] = 0x%08x\n",
+			 addr, data);
+	}
+
+	return -EINVAL;
+}
+
+static DEVICE_ATTR_WO(config_read);
+
+static ssize_t mem_read_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf,
+			       size_t count)
+{
+	unsigned long addr = 0;
+	uint32_t data;
+	int ret;
+
+	dev_dbg(mnh_sm_dev->dev, "Entering mem_read_store...\n");
+
+	ret = mnh_sm_get_val_from_buf(buf, &addr);
+	if (ret)
+		return ret;
+
+	/* reads 1 byte memory at a time */
+	ret = mnh_ddr_read(addr, 1, &data);
+	if (ret) {
+		dev_err(mnh_sm_dev->dev, "Cannot read offset 0x%lx\n", addr);
+	} else {
+		dev_info(mnh_sm_dev->dev, "Offset [0x%lx] = 0x%08x\n",
+			 addr, data);
+	}
+
+	return -EINVAL;
+}
+
+static DEVICE_ATTR_WO(mem_read);
+
 static ssize_t enable_uart_show(struct device *dev,
 				struct device_attribute *attr,
 				char *buf)
@@ -1475,6 +1533,8 @@ static struct attribute *mnh_sm_attrs[] = {
 	&dev_attr_mipi_int.attr,
 	&dev_attr_spi_boot_mode.attr,
 	&dev_attr_boot_trace.attr,
+	&dev_attr_config_read.attr,
+	&dev_attr_mem_read.attr,
 	&dev_attr_error_event.attr,
 	&dev_attr_fw_ver.attr,
 	&dev_attr_mipi_config.attr,
