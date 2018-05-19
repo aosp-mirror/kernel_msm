@@ -799,6 +799,22 @@ enum ufshcd_card_state {
 	UFS_CARD_STATE_OFFLINE	= 2,
 };
 
+/* UFS Slow I/O operation types */
+enum ufshcd_slowio_optype {
+	UFSHCD_SLOWIO_READ = 0,
+	UFSHCD_SLOWIO_WRITE = 1,
+	UFSHCD_SLOWIO_UNMAP = 2,
+	UFSHCD_SLOWIO_SYNC = 3,
+	UFSHCD_SLOWIO_OP_MAX = 4,
+};
+
+/* UFS Slow I/O sysfs entry types */
+enum ufshcd_slowio_systype {
+	UFSHCD_SLOWIO_US = 0,
+	UFSHCD_SLOWIO_CNT = 1,
+	UFSHCD_SLOWIO_SYS_MAX = 2,
+};
+
 /**
  * struct ufs_hba - per adapter private structure
  * @mmio_base: UFSHCI base register address
@@ -1163,8 +1179,8 @@ struct ufs_hba {
 	struct ufs_manual_gc manual_gc;
 
 	/* To monitor slow UFS I/O requests. */
-	u64 slowio_us;
-	u64 slowio_cnt;
+	u64 slowio_min_us;
+	u64 slowio[UFSHCD_SLOWIO_OP_MAX][UFSHCD_SLOWIO_SYS_MAX];
 };
 
 static inline void ufshcd_mark_shutdown_ongoing(struct ufs_hba *hba)
@@ -1718,7 +1734,12 @@ static inline u8 ufshcd_scsi_to_upiu_lun(unsigned int scsi_lun)
 int ufshcd_dump_regs(struct ufs_hba *hba, size_t offset, size_t len,
 		     const char *prefix);
 
-#define UFSHCD_MIN_SLOWIO_US		(1000)     /* 1 ms */
-#define UFSHCD_DEFAULT_SLOWIO_US	(10000000) /* 10 seconds */
+void ufshcd_update_slowio_min_us(struct ufs_hba *hba);
+
+#define UFSHCD_MIN_SLOWIO_US		(1000)     /*  1 ms      */
+#define UFSHCD_DEFAULT_SLOWIO_READ_US	(5000000)  /*  5 seconds */
+#define UFSHCD_DEFAULT_SLOWIO_WRITE_US	(10000000) /* 10 seconds */
+#define UFSHCD_DEFAULT_SLOWIO_UNMAP_US	(30000000) /* 30 seconds */
+#define UFSHCD_DEFAULT_SLOWIO_SYNC_US	(10000000) /* 10 seconds */
 
 #endif /* End of Header */
