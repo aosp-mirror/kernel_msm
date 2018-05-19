@@ -51,6 +51,32 @@
 #include "ufs-debugfs.h"
 #include "ufs-qcom.h"
 
+static void ufshcd_update_slowio_min_us(struct ufs_hba *hba)
+{
+	enum ufshcd_slowio_optype i;
+	u64 us;
+
+	hba->slowio_min_us = hba->slowio[UFSHCD_SLOWIO_READ][UFSHCD_SLOWIO_US];
+	for (i = UFSHCD_SLOWIO_WRITE; i < UFSHCD_SLOWIO_OP_MAX; i++) {
+		us = hba->slowio[i][UFSHCD_SLOWIO_US];
+		if (us < hba->slowio_min_us)
+			hba->slowio_min_us = us;
+	}
+}
+
+static enum ufshcd_slowio_optype ufshcd_get_slowio_optype(u8 opcode)
+{
+	if (opcode == READ_10 || opcode == READ_16)
+		return UFSHCD_SLOWIO_READ;
+	else if (opcode == WRITE_10 || opcode == WRITE_16)
+		return UFSHCD_SLOWIO_WRITE;
+	else if (opcode == UNMAP)
+		return UFSHCD_SLOWIO_UNMAP;
+	else if (opcode == SYNCHRONIZE_CACHE)
+		return UFSHCD_SLOWIO_SYNC;
+	return UFSHCD_SLOWIO_OP_MAX;
+}
+
 static void ufshcd_log_slowio(struct ufs_hba *hba,
 		struct ufshcd_lrb *lrbp, s64 iotime_us)
 {
@@ -58,14 +84,21 @@ static void ufshcd_log_slowio(struct ufs_hba *hba,
 	int transfer_len = -1;
 	u8 opcode = 0xff;
 	char opcode_str[16];
+	u64 slowio_cnt = 0;
+	enum ufshcd_slowio_optype optype;
 
-	if (likely(iotime_us < hba->slowio_us))
+	/* For common case */
+	if (likely(iotime_us < hba->slowio_min_us))
 		return;
-
-	hba->slowio_cnt++;
 
 	if (lrbp->cmd) {
 		opcode = (u8)(*lrbp->cmd->cmnd);
+		optype = ufshcd_get_slowio_optype(opcode);
+		if (optype < UFSHCD_SLOWIO_OP_MAX) {
+			if (iotime_us < hba->slowio[optype][UFSHCD_SLOWIO_US])
+				return;
+			slowio_cnt = ++hba->slowio[optype][UFSHCD_SLOWIO_CNT];
+		}
 		if (is_read_opcode(opcode) || is_write_opcode(opcode) ||
 						is_unmap_opcode(opcode)) {
 			if (lrbp->cmd->request && lrbp->cmd->request->bio)
@@ -78,7 +111,7 @@ static void ufshcd_log_slowio(struct ufs_hba *hba,
 	dev_err_ratelimited(hba->dev,
 		"Slow UFS (%lld): time = %lld us, opcode = %16s, lba = %ld, "
 		"len = %d\n",
-		hba->slowio_cnt, iotime_us, opcode_str, la, transfer_len);
+		slowio_cnt, iotime_us, opcode_str, la, transfer_len);
 }
 
 #ifdef CONFIG_DEBUG_FS
@@ -10722,55 +10755,66 @@ latency_hist_show(struct device *dev, struct device_attribute *attr,
 	return written_bytes;
 }
 
-/**
- * Two sysfs entries for slow I/O monitoring:
- *  - slowio_us:  watermark time in us. Can be updated by writing.
- *  - slowio_cnt: number of I/O count. Can be reseted by writing any value.
-*/
+struct slowio_attr {
+	struct device_attribute attr;
+	enum ufshcd_slowio_optype optype;
+	enum ufshcd_slowio_systype systype;
+};
+
 static ssize_t
-slowio_us_store(struct device *dev, struct device_attribute *attr,
-		   const char *buf, size_t count)
+slowio_store(struct device *dev, struct device_attribute *_attr,
+		const char *buf, size_t count)
 {
+	struct slowio_attr *attr = (struct slowio_attr *)_attr;
 	struct ufs_hba *hba = dev_get_drvdata(dev);
 	unsigned long flags, value;
 
 	if (kstrtol(buf, 0, &value))
 		return -EINVAL;
 
-	if (value < UFSHCD_MIN_SLOWIO_US)
+	if (attr->systype == UFSHCD_SLOWIO_CNT)
+		value = 0;
+	else if (value < UFSHCD_MIN_SLOWIO_US)
 		return -EINVAL;
+
 	spin_lock_irqsave(hba->host->host_lock, flags);
-	hba->slowio_us = value;
+	hba->slowio[attr->optype][attr->systype] = value;
 	spin_unlock_irqrestore(hba->host->host_lock, flags);
+
+	if (attr->systype == UFSHCD_SLOWIO_US)
+		ufshcd_update_slowio_min_us(hba);
 	return count;
 }
 
 static ssize_t
-slowio_us_show(struct device *dev, struct device_attribute *attr, char *buf)
+slowio_show(struct device *dev, struct device_attribute *_attr, char *buf)
 {
+	struct slowio_attr *attr = (struct slowio_attr *)_attr;
 	struct ufs_hba *hba = dev_get_drvdata(dev);
-	return snprintf(buf, PAGE_SIZE, "%lld\n", hba->slowio_us);
+	return snprintf(buf, PAGE_SIZE, "%lld\n",
+			hba->slowio[attr->optype][attr->systype]);
 }
 
-static ssize_t
-slowio_cnt_store(struct device *dev, struct device_attribute *attr,
-		   const char *buf, size_t count)
-{
-	struct ufs_hba *hba = dev_get_drvdata(dev);
-	unsigned long flags;
+#define __SLOWIO_ATTR(_name)                                    \
+	__ATTR(slowio_##_name, 0644, slowio_show, slowio_store)
 
-	spin_lock_irqsave(hba->host->host_lock, flags);
-	hba->slowio_cnt = 0;
-	spin_unlock_irqrestore(hba->host->host_lock, flags);
-	return count;
+#define SLOWIO_ATTR_RW(_name, _optype)                          \
+static struct slowio_attr ufs_slowio_##_name##_us = {		\
+	.attr = __SLOWIO_ATTR(_name##_us),			\
+	.optype = _optype,					\
+	.systype = UFSHCD_SLOWIO_US,				\
+};								\
+								\
+static struct slowio_attr ufs_slowio_##_name##_cnt = {		\
+	.attr = __SLOWIO_ATTR(_name##_cnt),			\
+	.optype = _optype,					\
+	.systype = UFSHCD_SLOWIO_CNT,				\
 }
 
-static ssize_t
-slowio_cnt_show(struct device *dev, struct device_attribute *attr, char *buf)
-{
-	struct ufs_hba *hba = dev_get_drvdata(dev);
-	return snprintf(buf, PAGE_SIZE, "%lld\n", hba->slowio_cnt);
-}
+SLOWIO_ATTR_RW(read, UFSHCD_SLOWIO_READ);
+SLOWIO_ATTR_RW(write, UFSHCD_SLOWIO_WRITE);
+SLOWIO_ATTR_RW(unmap, UFSHCD_SLOWIO_UNMAP);
+SLOWIO_ATTR_RW(sync, UFSHCD_SLOWIO_SYNC);
 
 static ssize_t
 erasesize_show(struct device *dev,
@@ -10994,8 +11038,6 @@ static void ufshcd_exit_manual_gc(struct ufs_hba *hba)
 static DEVICE_ATTR_RW(rpm_lvl);
 static DEVICE_ATTR_RW(spm_lvl);
 static DEVICE_ATTR_RW(latency_hist);
-static DEVICE_ATTR_RW(slowio_us);
-static DEVICE_ATTR_RW(slowio_cnt);
 static DEVICE_ATTR_RO(erasesize);
 static DEVICE_ATTR_RO(vendor);
 static DEVICE_ATTR_RO(model);
@@ -11008,8 +11050,6 @@ static struct attribute *ufshcd_attrs[] = {
 	&dev_attr_rpm_lvl.attr,
 	&dev_attr_spm_lvl.attr,
 	&dev_attr_latency_hist.attr,
-	&dev_attr_slowio_us.attr,
-	&dev_attr_slowio_cnt.attr,
 	&dev_attr_erasesize.attr,
 	&dev_attr_vendor.attr,
 	&dev_attr_model.attr,
@@ -11017,6 +11057,14 @@ static struct attribute *ufshcd_attrs[] = {
 	&dev_attr_version.attr,
 	&dev_attr_manual_gc.attr,
 	&dev_attr_manual_gc_hold.attr,
+	&ufs_slowio_read_us.attr.attr,
+	&ufs_slowio_read_cnt.attr.attr,
+	&ufs_slowio_write_us.attr.attr,
+	&ufs_slowio_write_cnt.attr.attr,
+	&ufs_slowio_unmap_us.attr.attr,
+	&ufs_slowio_unmap_cnt.attr.attr,
+	&ufs_slowio_sync_us.attr.attr,
+	&ufs_slowio_sync_cnt.attr.attr,
 	NULL
 };
 
@@ -11362,7 +11410,15 @@ int ufshcd_init(struct ufs_hba *hba, void __iomem *mmio_base, unsigned int irq)
 	hba->max_pwr_info.is_valid = false;
 
 	/* Set default slow io value. */
-	hba->slowio_us = UFSHCD_DEFAULT_SLOWIO_US;
+	hba->slowio[UFSHCD_SLOWIO_READ][UFSHCD_SLOWIO_US] =
+		UFSHCD_DEFAULT_SLOWIO_READ_US;
+	hba->slowio[UFSHCD_SLOWIO_WRITE][UFSHCD_SLOWIO_US] =
+		UFSHCD_DEFAULT_SLOWIO_WRITE_US;
+	hba->slowio[UFSHCD_SLOWIO_UNMAP][UFSHCD_SLOWIO_US] =
+		UFSHCD_DEFAULT_SLOWIO_UNMAP_US;
+	hba->slowio[UFSHCD_SLOWIO_SYNC][UFSHCD_SLOWIO_US] =
+		UFSHCD_DEFAULT_SLOWIO_SYNC_US;
+	ufshcd_update_slowio_min_us(hba);
 
 	/* Initailize wait queue for task management */
 	init_waitqueue_head(&hba->tm_wq);
