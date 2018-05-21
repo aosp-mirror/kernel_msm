@@ -82,6 +82,7 @@ struct bcl_peripheral_data {
 	bool			irq_enabled;
 	struct thermal_zone_of_device_ops ops;
 	struct thermal_zone_device *tz_dev;
+	const char		*bat_psy_name;
 };
 
 struct bcl_device {
@@ -519,10 +520,12 @@ static int bcl_read_soc(void *data, int *val)
 	static struct power_supply *batt_psy;
 	union power_supply_propval ret = {0,};
 	int err = 0;
+	struct bcl_peripheral_data *perph_data =
+		&bcl_perph->param[BCL_SOC_MONITOR];
 
 	*val = 100;
 	if (!batt_psy)
-		batt_psy = power_supply_get_by_name("battery");
+		batt_psy = power_supply_get_by_name(perph_data->bat_psy_name);
 	if (batt_psy) {
 		err = power_supply_get_property(batt_psy,
 				POWER_SUPPLY_PROP_CAPACITY, &ret);
@@ -619,6 +622,13 @@ static void bcl_probe_soc(struct platform_device *pdev)
 {
 	int ret = 0;
 	struct bcl_peripheral_data *soc_data;
+	const char *bat_psy_name = NULL;
+
+	ret = of_property_read_string(pdev->dev.of_node,
+				"google,bat-power-supply",
+				&bat_psy_name);
+	if (ret)
+		bat_psy_name = "battery";
 
 	soc_data = &bcl_perph->param[BCL_SOC_MONITOR];
 	mutex_init(&soc_data->state_trans_lock);
@@ -626,6 +636,10 @@ static void bcl_probe_soc(struct platform_device *pdev)
 	soc_data->ops.set_trips = bcl_set_soc;
 	INIT_WORK(&bcl_perph->soc_eval_work, bcl_evaluate_soc);
 	bcl_perph->psy_nb.notifier_call = battery_supply_callback;
+
+	soc_data->bat_psy_name =
+		devm_kstrdup(&pdev->dev, bat_psy_name, GFP_KERNEL);
+
 	ret = power_supply_reg_notifier(&bcl_perph->psy_nb);
 	if (ret < 0) {
 		pr_err("Unable to register soc notifier. err:%d\n", ret);
