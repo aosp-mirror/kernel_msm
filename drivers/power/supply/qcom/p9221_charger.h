@@ -273,6 +273,7 @@ struct p9221_charger_data {
 	bool				check_dc;
 	bool				check_det;
 	int				last_capacity;
+	bool				resume_complete;
 };
 
 struct p9221_prop_reg_map_entry {
