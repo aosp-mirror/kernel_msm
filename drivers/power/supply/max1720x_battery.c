@@ -173,6 +173,23 @@ enum MAX1720X_Config_bits {
 	MAX1720X_CONFIG_SS = BIT(14),
 };
 
+enum MAX1720X_nNVCfg0_bits {
+	MAX1720X_NNVCFG0_ENSBS = BIT(0),
+	MAX1720X_NNVCFG0_ENHCFG = BIT(1),
+	MAX1720X_NNVCFG0_ENAF = BIT(2),
+	MAX1720X_NNVCFG0_ENMC = BIT(3),
+	MAX1720X_NNVCFG0_ENDC = BIT(4),
+	MAX1720X_NNVCFG0_ENVE = BIT(5),
+	MAX1720X_NNVCFG0_ENCG = BIT(6),
+	MAX1720X_NNVCFG0_ENICT = BIT(7),
+	MAX1720X_NNVCFG0_ENLCFG = BIT(8),
+	MAX1720X_NNVCFG0_ENRCFG = BIT(9),
+	MAX1720X_NNVCFG0_ENFCFG = BIT(10),
+	MAX1720X_NNVCFG0_ENCFG = BIT(11),
+	MAX1720X_NNVCFG0_ENX = BIT(14),
+	MAX1720X_NNVCFG0_ENOCV = BIT(15),
+};
+
 enum MAX1720X_COMMAND_bits {
 	MAX1720X_COMMAND_FUEL_GAUGE_RESET = 0x0001,
 	MAX1720X_COMMAND_HARDWARE_RESET = 0x000F,
@@ -1063,9 +1080,6 @@ static int max1720x_handle_dt_shadow_config(struct max1720x_chip *chip)
 						   "maxim,n_regval",
 						   sizeof(u16));
 
-	if (batt_cnt <= 0 && glob_cnt <= 0)
-		return 0;
-
 	nRAM_current = kmalloc_array(MAX1720X_NVRAM_U16_SIZE,
 				     sizeof(u16), GFP_KERNEL);
 	if (!nRAM_current)
@@ -1091,6 +1105,13 @@ static int max1720x_handle_dt_shadow_config(struct max1720x_chip *chip)
 					     nRAM_updated, batt_cnt);
 	max1720x_apply_regval_shadow(chip, chip->dev->of_node,
 				     nRAM_updated, glob_cnt);
+
+	/* Ensure nCGain is not 0 if nNVCfg0.enCG is set */
+	if ((nRAM_updated[NVRAM_U16_INDEX(MAX1720X_NVRAM_NVCFG0)] &
+	     MAX1720X_NNVCFG0_ENCG) &&
+	    !nRAM_updated[NVRAM_U16_INDEX(MAX1720X_NVRAM_CGAIN)])
+		nRAM_updated[NVRAM_U16_INDEX(MAX1720X_NVRAM_CGAIN)] = 0x0400;
+
 	if (memcmp(nRAM_updated, nRAM_current, MAX1720X_NVRAM_SIZE)) {
 		ret = regmap_raw_write(chip->regmap_nvram, MAX1720X_NVRAM_START,
 				       nRAM_updated, MAX1720X_NVRAM_SIZE);
