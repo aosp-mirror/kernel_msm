@@ -14,7 +14,7 @@
  * GNU General Public License for more details.
  */
 
-#define pr_fmt(fmt) KBUILD_MODNAME ":%s " fmt, __func__
+#define pr_fmt(fmt) KBUILD_MODNAME ": %s " fmt, __func__
 
 #include <linux/err.h>
 #include <linux/i2c.h>
@@ -893,57 +893,57 @@ static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 	chip->status |= fg_status;
 	if (fg_status & MAX1720X_STATUS_POR) {
 		fg_status &= ~MAX1720X_STATUS_POR;
-		pr_debug("POR is set");
+		pr_debug("POR is set\n");
 	}
 	if (fg_status & MAX1720X_STATUS_IMN)
-		pr_debug("IMN is set");
+		pr_debug("IMN is set\n");
 
 	if (fg_status & MAX1720X_STATUS_BST)
-		pr_debug("BST is set");
+		pr_debug("BST is set\n");
 
 	if (fg_status & MAX1720X_STATUS_IMX)
-		pr_debug("IMX is set");
+		pr_debug("IMX is set\n");
 
 	if (fg_status & MAX1720X_STATUS_DSOCI) {
 		fg_status &= ~MAX1720X_STATUS_DSOCI;
-		pr_debug("DSOCI is set");
+		pr_debug("DSOCI is set\n");
 	}
 	if (fg_status & MAX1720X_STATUS_VMN) {
 		if (chip->RConfig & MAX1720X_CONFIG_VS)
 			fg_status &= ~MAX1720X_STATUS_VMN;
-		pr_debug("VMN is set");
+		pr_debug("VMN is set\n");
 	}
 	if (fg_status & MAX1720X_STATUS_TMN) {
 		if (chip->RConfig & MAX1720X_CONFIG_TS)
 			fg_status &= ~MAX1720X_STATUS_TMN;
-		pr_debug("TMN is set");
+		pr_debug("TMN is set\n");
 	}
 	if (fg_status & MAX1720X_STATUS_SMN) {
 		if (chip->RConfig & MAX1720X_CONFIG_SS)
 			fg_status &= ~MAX1720X_STATUS_SMN;
-		pr_debug("SMN is set");
+		pr_debug("SMN is set\n");
 	}
 	if (fg_status & MAX1720X_STATUS_BI)
-		pr_debug("BI is set");
+		pr_debug("BI is set\n");
 
 	if (fg_status & MAX1720X_STATUS_VMX) {
 		if (chip->RConfig & MAX1720X_CONFIG_VS)
 			fg_status &= ~MAX1720X_STATUS_VMX;
-		pr_debug("VMX is set");
+		pr_debug("VMX is set\n");
 	}
 	if (fg_status & MAX1720X_STATUS_TMX) {
 		if (chip->RConfig & MAX1720X_CONFIG_TS)
 			fg_status &= ~MAX1720X_STATUS_TMX;
-		pr_debug("TMX is set");
+		pr_debug("TMX is set\n");
 	}
 	if (fg_status & MAX1720X_STATUS_SMX) {
 		if (chip->RConfig & MAX1720X_CONFIG_SS)
 			fg_status &= ~MAX1720X_STATUS_SMX;
-		pr_debug("SMX is set");
+		pr_debug("SMX is set\n");
 	}
 
 	if (fg_status & MAX1720X_STATUS_BR)
-		pr_debug("BR is set");
+		pr_debug("BR is set\n");
 
 	REGMAP_WRITE(chip->regmap, MAX1720X_Status, fg_status);
 	if (chip->psy)
