@@ -74,6 +74,14 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 	uint32_t *image_dw_buf;
 	int image_size_dw;
 	int fw_status;
+	struct pci_bus *pbus = pci_find_bus(0, 1);
+	struct pci_dev *pdev = pbus->self;
+	int ret;
+
+	while (!pci_is_root_bus(pbus)) {
+		pdev= pbus->self;
+		pbus = pbus->self->bus;
+	}
 
 	fw_status = request_firmware(&fw_entry, M0_FIRMWARE_PATH1, ab_ctx->dev);
 	if (fw_status != 0) {
@@ -82,7 +90,6 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 		return -EIO;
 	}
 	image_size_dw = fw_entry->size / 4;
-
 	image_dw_buf = vmalloc(image_size_dw * sizeof(uint32_t));
 	parse_fw(image_dw_buf, fw_entry->data, image_size_dw);
 	release_firmware(fw_entry);
@@ -206,10 +213,24 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 		//while (!gpiod_get_value(ab_ctx->ab_ready));
 		pr_info("New Airbrush Firmware is Loaded\n");
 		/* [TBD] PCIE Enumeration should be called here */
+		pci_lock_rescan_remove();
+		pci_stop_and_remove_bus_device(pdev);
+		pci_unlock_rescan_remove();
+		udelay(100);
+		pci_lock_rescan_remove();
+		ret = pci_rescan_bus(pbus);
+		pci_unlock_rescan_remove();
+
+		if (!abc_pcie_enumerated()) {
+			printk("ABC PCIe Not Enumerated\n");
+			return -ENODEV;
+		}
+
 	}
 
 	/* [TBD] DDR Related code will be added later */
 	vfree(image_dw_buf);
+
 	return 0;
 }
 EXPORT_SYMBOL(ab_bootsequence);

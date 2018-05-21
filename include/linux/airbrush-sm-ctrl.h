@@ -23,6 +23,7 @@
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 #include <linux/types.h>
+#include <linux/mfd/abc-pcie.h>
 
 #include "airbrush-clk.h"
 
