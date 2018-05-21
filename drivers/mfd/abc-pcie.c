@@ -39,6 +39,17 @@
 #define LOWER(address) ((unsigned int)(address & 0x00000000FFFFFFFF))
 static struct abc_device *abc_dev;
 
+void __iomem *get_tpu_virt(void)
+{
+	return abc_dev->tpu_config;
+}
+
+bool abc_pcie_enumerated(void)
+{
+	if (!abc_dev || !abc_dev->pcie_config)
+		return false;
+	return true;
+}
 
 int abc_pcie_config_read(u32 offset, u32 len, u32 *data)
 {

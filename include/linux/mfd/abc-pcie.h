@@ -271,4 +271,5 @@ void abc_dma_unmap_single(dma_addr_t addr,  size_t size,
 		enum dma_data_direction dir);
 int abc_set_pcie_pm_ctrl(struct abc_pcie_pm_ctrl *pmctrl);
 int abc_set_pcie_link_l1(bool enabled);
+bool abc_pcie_enumerated(void);
 #endif
