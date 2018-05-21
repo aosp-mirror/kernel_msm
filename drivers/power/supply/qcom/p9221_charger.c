@@ -619,7 +619,7 @@ struct p9221_prop_reg_map_entry p9221_prop_reg_map[] = {
 	{POWER_SUPPLY_PROP_VOLTAGE_NOW,	P9221_VOUT_ADC_REG,		1, 0},
 	{POWER_SUPPLY_PROP_VOLTAGE_MAX, P9221_VOUT_SET_REG,		1, 1},
 	{POWER_SUPPLY_PROP_TEMP,	P9221_DIE_TEMP_ADC_REG,		1, 0},
-	{POWER_SUPPLY_PROP_CAPACITY,	0,				0, 1},
+	{POWER_SUPPLY_PROP_CAPACITY,	0,				1, 1},
 };
 
 struct p9221_prop_reg_map_entry p9221_prop_reg_map_r5[] = {
@@ -629,7 +629,7 @@ struct p9221_prop_reg_map_entry p9221_prop_reg_map_r5[] = {
 	{POWER_SUPPLY_PROP_VOLTAGE_NOW,	P9221R5_VOUT_REG,		1, 0},
 	{POWER_SUPPLY_PROP_VOLTAGE_MAX, P9221R5_VOUT_SET_REG,		1, 1},
 	{POWER_SUPPLY_PROP_TEMP,	P9221R5_DIE_TEMP_ADC_REG,	1, 0},
-	{POWER_SUPPLY_PROP_CAPACITY,	0,				0, 1},
+	{POWER_SUPPLY_PROP_CAPACITY,	0,				1, 1},
 };
 
 static struct p9221_prop_reg_map_entry *p9221_get_map_entry(
@@ -677,8 +677,12 @@ static int p9221_get_property_reg(struct p9221_charger_data *charger,
 	if (p == NULL)
 		return -EINVAL;
 
-	if (!charger->online)
-		return -ENODEV;
+	if (!charger->online) {
+		if (charger->early_det)
+			return -ENODATA;
+		else
+			return -ENODEV;
+	}
 
 	ret = p9221_reg_read_cooked(charger, p->reg, &data);
 	if (ret)
@@ -698,8 +702,13 @@ static int p9221_set_property_reg(struct p9221_charger_data *charger,
 	if (p == NULL)
 		return -EINVAL;
 
-	if (!charger->online)
-		return -ENODEV;
+	if (!charger->online) {
+		if (charger->early_det)
+			return -EAGAIN;
+		else
+			return -ENODEV;
+	}
+
 
 	return p9221_reg_write_cooked(charger, p->reg, val->intval);
 }
@@ -707,6 +716,9 @@ static int p9221_set_property_reg(struct p9221_charger_data *charger,
 static void p9221_set_offline(struct p9221_charger_data *charger)
 {
 	int ret;
+
+	charger->online = false;
+	charger->early_det = false;
 
 	/* Abort all transfers */
 	charger->tx_busy = false;
@@ -735,7 +747,6 @@ static void p9221_timer_handler(unsigned long data)
 		return;
 
 	dev_info(&charger->client->dev, "timeout waiting for dc, go offline\n");
-	charger->online = 0;
 	p9221_set_offline(charger);
 	power_supply_changed(charger->wc_psy);
 }
@@ -776,12 +787,18 @@ static int p9221_get_property(struct power_supply *psy,
 		val->intval = 1;
 		break;
 	case POWER_SUPPLY_PROP_ONLINE:
-		val->intval = charger->online;
+		val->intval = charger->online || charger->early_det;
 		break;
 	case POWER_SUPPLY_PROP_SERIAL_NUMBER:
 		val->strval = p9221_get_tx_id_str(charger);
 		if (val->strval == NULL)
-			return -EAGAIN;
+			return -ENODATA;
+		break;
+	case POWER_SUPPLY_PROP_CAPACITY:
+		if (charger->last_capacity > 0)
+			val->intval = charger->last_capacity;
+		else
+			val->intval = 0;
 		break;
 	default:
 		ret = p9221_get_property_reg(charger, prop, val);
@@ -959,6 +976,8 @@ static void p9221_set_online(struct p9221_charger_data *charger)
 	int ret;
 	u8 cid = 0;
 
+	charger->online = true;
+	charger->early_det = false;
 	charger->tx_busy = false;
 	charger->tx_done = true;
 	charger->rx_done = false;
@@ -987,7 +1006,7 @@ static void p9221_notifier_check_dc(struct p9221_charger_data *charger)
 	int ret;
 	union power_supply_propval prop;
 
-	charger->check_dc = 0;
+	charger->check_dc = false;
 
 	if (!charger->dc_psy)
 		return;
@@ -1015,8 +1034,7 @@ static void p9221_notifier_check_dc(struct p9221_charger_data *charger)
 	if (charger->online == prop.intval)
 		return;
 
-	charger->online = prop.intval;
-	if (charger->online)
+	if (prop.intval)
 		p9221_set_online(charger);
 	else
 		p9221_set_offline(charger);
@@ -1028,19 +1046,25 @@ static void p9221_notifier_check_dc(struct p9221_charger_data *charger)
 
 static void p9221_notifier_check_det(struct p9221_charger_data *charger)
 {
-	charger->check_det = 0;
-
 	if (charger->online)
-		return;
+		goto done;
 
-	charger->online = 1;
-	p9221_set_online(charger);
+	charger->early_det = charger->check_early;
 
+	/* Only perform online actions when we have received the VRECTON IRQ */
+	if (charger->check_det)
+		p9221_set_online(charger);
+
+	/* Notify power supply changed on VRECTON or DET IRQ */
 	dev_info(&charger->client->dev, "detected wlc, trigger wc changed\n");
 	power_supply_changed(charger->wc_psy);
 
-	/* Give the dc-in 2 seconds to come up */
-	mod_timer(&charger->timer, jiffies + msecs_to_jiffies(2 * 1000));
+	/* Give the dc-in 5 seconds to come up */
+	mod_timer(&charger->timer, jiffies + msecs_to_jiffies(5 * 1000));
+
+done:
+	charger->check_early = false;
+	charger->check_det = false;
 }
 
 static void p9221_notifier_work(struct work_struct *work)
@@ -1049,10 +1073,11 @@ static void p9221_notifier_work(struct work_struct *work)
 			struct p9221_charger_data, notifier_work.work);
 
 	dev_info(&charger->client->dev,
-		 "Notifier work: on:%d dc:%d det:%d\n",
-		 charger->online, charger->check_dc, charger->check_det);
+		 "Notifier work: on:%d dc:%d det:%d early:%d\n",
+		 charger->online, charger->check_dc, charger->check_det,
+		 charger->check_early);
 
-	if (charger->check_det)
+	if (charger->check_det || charger->check_early)
 		p9221_notifier_check_det(charger);
 
 	if (charger->check_dc)
@@ -1647,7 +1672,7 @@ static irqreturn_t p9221_irq_thread(int irq, void *irq_data)
 {
 	struct p9221_charger_data *charger = irq_data;
 	int ret;
-	u16 irq_src;
+	u16 irq_src = 0;
 
 	pm_runtime_get_sync(charger->dev);
 	if (!charger->resume_complete) {
@@ -1676,7 +1701,7 @@ static irqreturn_t p9221_irq_thread(int irq, void *irq_data)
 
 	if (irq_src & P9221_STAT_VRECT) {
 		dev_info(&charger->client->dev, "Received VRECTON");
-		charger->check_det = 1;
+		charger->check_det = true;
 		pm_stay_awake(charger->dev);
 		if (!schedule_delayed_work(&charger->notifier_work,
 					   msecs_to_jiffies(50))) {
@@ -1693,6 +1718,33 @@ out:
 	return IRQ_HANDLED;
 }
 
+static irqreturn_t p9221_irq_det_thread(int irq, void *irq_data)
+{
+	struct p9221_charger_data *charger = irq_data;
+	int det;
+
+	det = gpio_get_value(charger->pdata->irq_det_gpio);
+	dev_info(&charger->client->dev,
+		 "online=%d gpio=%d check_det=%d check_early=%d early=%d\n",
+		 charger->online, det, charger->check_det, charger->check_early,
+		 charger->early_det);
+
+	if (!det || charger->online || charger->check_early ||
+	    charger->check_det)
+		return IRQ_HANDLED;
+
+	charger->check_early = true;
+
+	pm_stay_awake(charger->dev);
+
+	if (!schedule_delayed_work(&charger->notifier_work,
+				   msecs_to_jiffies(50))) {
+		pm_relax(charger->dev);
+	}
+
+	return IRQ_HANDLED;
+}
+
 static int p9221_parse_dt(struct device *dev,
 			  struct p9221_charger_platform_data *pdata)
 {
@@ -1700,6 +1752,7 @@ static int p9221_parse_dt(struct device *dev,
 	u32 data;
 	struct device_node *node = dev->of_node;
 	enum of_gpio_flags irq_gpio_flags;
+	enum of_gpio_flags irq_det_flags;
 
 	/* Main IRQ */
 	ret = of_get_named_gpio_flags(node, "idt,irq_gpio", 0, &irq_gpio_flags);
@@ -1711,6 +1764,19 @@ static int p9221_parse_dt(struct device *dev,
 	pdata->irq_int = gpio_to_irq(pdata->irq_gpio);
 	dev_info(dev, "gpio:%d, gpio_irq:%d\n", pdata->irq_gpio,
 		 pdata->irq_int);
+
+	/* Optional Detect IRQ */
+	ret = of_get_named_gpio_flags(node, "idt,irq_det_gpio", 0,
+				      &irq_det_flags);
+	pdata->irq_det_gpio = ret;
+	if (ret < 0) {
+		dev_warn(dev, "unable to read idt,irq_det_gpio from dt: %d\n",
+			 ret);
+	} else {
+		pdata->irq_det_int = gpio_to_irq(pdata->irq_det_gpio);
+		dev_info(dev, "det gpio:%d, det gpio_irq:%d\n",
+			 pdata->irq_det_gpio, pdata->irq_det_int);
+	}
 
 	/* Optional VOUT max */
 	pdata->max_vout_mv = P9221_MAX_VOUT_SET_MV_DEFAULT;
@@ -1821,7 +1887,6 @@ static int p9221_charger_probe(struct i2c_client *client,
 	ret = p9221_reg_read_16(charger, P9221_CHIP_ID_REG, &chip_id);
 	if (ret == 0 && chip_id == P9221_CHIP_ID) {
 		dev_info(&client->dev, "Charger online id:%04x\n", chip_id);
-		charger->online = 1;
 		p9221_set_online(charger);
 	}
 
@@ -1835,6 +1900,27 @@ static int p9221_charger_probe(struct i2c_client *client,
 	}
 	device_init_wakeup(charger->dev, true);
 	enable_irq_wake(charger->pdata->irq_int);
+
+	if (gpio_is_valid(charger->pdata->irq_det_gpio)) {
+		ret = devm_request_threaded_irq(
+			&client->dev, charger->pdata->irq_det_int, NULL,
+			p9221_irq_det_thread,
+			IRQF_TRIGGER_RISING | IRQF_ONESHOT, "p9221-irq-det",
+			charger);
+		if (ret) {
+			dev_err(&client->dev, "Failed to request IRQ_DET\n");
+			return ret;
+		}
+
+		ret = devm_gpio_request_one(&client->dev,
+					    charger->pdata->irq_det_gpio,
+					    GPIOF_DIR_IN, "p9221-det-gpio");
+		if (ret) {
+			dev_err(&client->dev, "Failed to request GPIO_DET\n");
+			return ret;
+		}
+		enable_irq_wake(charger->pdata->irq_det_int);
+	}
 
 	charger->last_capacity = -1;
 	charger->count = 1;
