@@ -185,7 +185,7 @@ struct inb_region {
 	uint32_t target_pcie_address;
 	uint32_t u_target_pcie_address;
 };
-int set_inbound_iatu(struct inb_region inb);
+int set_inbound_iatu(struct inb_region ir);
 
 struct outb_region {
 	uint32_t region;
@@ -196,7 +196,17 @@ struct outb_region {
 	uint32_t target_pcie_address;
 	uint32_t u_target_pcie_address;
 };
-int set_outbound_iatu(struct outb_region outb);
+int set_outbound_iatu(struct outb_region outreg);
+
+struct bar_mapping {
+	int iatu;
+	int bar;
+	size_t mapping_size;
+	void __iomem *bar_vaddr;
+};
+int abc_pcie_map_bar_region(struct device *dev, uint32_t bar, size_t size,
+		uint64_t ab_paddr, struct bar_mapping *mapping);
+int abc_pcie_unmap_bar_region(struct device *dev, struct bar_mapping *mapping);
 
 struct config_write {
 	u32 offset;

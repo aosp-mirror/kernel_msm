@@ -12,8 +12,34 @@
 #ifndef __ABC_PCIE_PRIVATE_H
 #define __ABC_PCIE_PRIVATE_H
 
+#include <linux/genalloc.h>
 #include <linux/mfd/abc-pcie.h>
 #include <linux/cdev.h>
+
+#define IATU_CTRL_2_REGION_EN_MASK 0x1
+#define IATU_CTRL_2_REGION_EN_SHIFT 31
+
+#define IATU_CTRL_2_MATCH_MODE_MASK 0x1
+#define IATU_CTRL_2_MATCH_MODE_SHIFT 30
+
+#define IATU_CTRL_2_BAR_NUM_MASK 0x7
+#define IATU_CTRL_2_BAR_NUM_SHIFT 8
+
+#define NUM_IATU_REGIONS 16
+#define IATU_REGION_ALIGNMENT (4 * 1024) /* 4kB */
+
+struct iatu_status {
+	bool is_used;
+	uint32_t bar;
+	uint32_t bar_offset;
+	uint32_t ab_paddr;
+	size_t size;
+};
+
+struct iatu_bar_mapping {
+	struct iatu_status iatus[NUM_IATU_REGIONS];
+	struct gen_pool *bar2_pool;
+};
 
 struct abc_pcie_devdata {
 	struct abc_device   *abc_dev;
@@ -22,6 +48,7 @@ struct abc_pcie_devdata {
 	void __iomem	*bar[6];
 	uint32_t        msi;
 	struct mutex	mutex;
+	struct iatu_bar_mapping iatu_mappings;
 };
 
 #endif

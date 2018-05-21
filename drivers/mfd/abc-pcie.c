@@ -556,14 +556,12 @@ int set_inbound_iatu(struct inb_region ir)
 	u32 config = ir.memmode;
 	int bar = ir.bar;
 	u32 iatu_offset = (ir.region * IATU_REGION_OFFSET);
-	u32 size;
+	u32 ctrl_2_set_val;
 
 	if (bar > BAR_4) {
 		pr_err("Exceeding BAR number\n");
 		return -EIO;
 	}
-
-	size = abc_dev->bar_base[bar].end - abc_dev->bar_base[bar].start;
 
 	spin_lock_irqsave(&abc_dev->fsys_reg_lock, flags);
 
@@ -579,41 +577,56 @@ int set_inbound_iatu(struct inb_region ir)
 	writel_relaxed(set_val,
 		abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
 
-	/* Lower Base address */
-	writel_relaxed(abc_dev->bar_base[bar].start,
-	       (abc_dev->pcie_config + iatu_offset +
-		PF0_ATU_CAP_IATU_LWR_BASE_ADDR_OFF_INBOUND));
+	/* enable iATU region by setting ctrl to 0x8000000 */
+	ctrl_2_set_val = IATU_CTRL_2_REGION_EN_MASK <<
+		IATU_CTRL_2_REGION_EN_SHIFT;
 
-	/* Upper Base address */
-	writel_relaxed(0x0,
-	       (abc_dev->pcie_config + iatu_offset +
-		PF0_ATU_CAP_IATU_UPPER_BASE_ADDR_OFF_INBOUND));
+	if (ir.mode == BAR_MATCH) {
+		/* Set MATCH_MODE to BAR_match mode: 1 */
+		ctrl_2_set_val |= IATU_CTRL_2_MATCH_MODE_MASK <<
+			IATU_CTRL_2_MATCH_MODE_SHIFT;
+		/* Set BAR_NUM field */
+		ctrl_2_set_val |= (bar & IATU_CTRL_2_BAR_NUM_MASK) <<
+			IATU_CTRL_2_BAR_NUM_SHIFT;
+	} else if (ir.mode == MEM_MATCH) {
+		/* Lower Base address */
+		writel_relaxed(ir.base_address,
+				(abc_dev->pcie_config + iatu_offset +
+				 PF0_ATU_CAP_IATU_LWR_BASE_ADDR_OFF_INBOUND));
 
-	/* Limit */
-	writel_relaxed(abc_dev->bar_base[bar].start + size,
-	       (abc_dev->pcie_config + iatu_offset +
-		PF0_ATU_CAP_IATU_LIMIT_ADDR_OFF_INBOUND));
+		/* Upper Base address */
+		writel_relaxed(ir.u_base_address,
+				(abc_dev->pcie_config + iatu_offset +
+				 PF0_ATU_CAP_IATU_UPPER_BASE_ADDR_OFF_INBOUND));
+
+		/* Limit */
+		writel_relaxed(ir.limit_address,
+				(abc_dev->pcie_config + iatu_offset +
+				 PF0_ATU_CAP_IATU_LIMIT_ADDR_OFF_INBOUND));
+	}
 
 	/* Lower Target address */
 	writel_relaxed(ir.target_pcie_address,
-	       (abc_dev->pcie_config + iatu_offset +
-		PF0_ATU_CAP_IATU_LWR_TARGET_ADDR_OFF_INBOUND));
+		(abc_dev->pcie_config + iatu_offset +
+		 PF0_ATU_CAP_IATU_LWR_TARGET_ADDR_OFF_INBOUND));
 
 	/* Upper Target address */
 	writel_relaxed(ir.u_target_pcie_address,
-	       (abc_dev->pcie_config + iatu_offset +
-		PF0_ATU_CAP_IATU_UPPER_TARGET_ADDR_OFF_INBOUND));
+		(abc_dev->pcie_config + iatu_offset +
+		 PF0_ATU_CAP_IATU_UPPER_TARGET_ADDR_OFF_INBOUND));
 
 	/* Configuring Region control */
 	writel_relaxed(config,
 	       (abc_dev->pcie_config + iatu_offset +
 		PF0_ATU_CAP_IATU_REGION_CTRL_1_OFF_INBOUND));
 
+	__iowmb();
 	/* Enable region */
-	writel_relaxed(0x80000000,
+	writel_relaxed(ctrl_2_set_val,
 	       (abc_dev->pcie_config + iatu_offset +
 		PF0_ATU_CAP_IATU_REGION_CTRL_2_OFF_INBOUND));
 
+	__iowmb();
 	writel_relaxed(val,
 			abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
 
@@ -735,6 +748,174 @@ static void setup_smmu(struct pci_dev *pdev)
 	dev_info(&pdev->dev, "attached to IOMMU\n");
 }
 #endif
+
+static int allocate_bar_range(struct device *dev, uint32_t bar,
+		size_t size_aligned, uint64_t *bar_offset)
+{
+	struct abc_pcie_devdata *abc = dev_get_drvdata(dev);
+	unsigned long bar_addr;
+
+	if (bar != BAR_2) {
+		dev_err(dev, "%s: unable to allocate on BAR %d\n", __func__,
+				bar);
+		return -EINVAL;
+	}
+
+	bar_addr = gen_pool_alloc(abc->iatu_mappings.bar2_pool,
+			size_aligned);
+	if (!bar_addr) {
+		dev_err(dev, "%s: allocation failed\n", __func__);
+		return -ENOMEM;
+	}
+
+	*bar_offset = bar_addr - abc->abc_dev->bar_base[BAR_2].start;
+	return 0;
+}
+
+/* Function placeholder: to be implemented when deallocate is supported. */
+static int free_bar_range(struct device *dev, uint32_t bar,
+		size_t size_aligned, uint64_t bar_offset)
+{
+	struct abc_pcie_devdata *abc = dev_get_drvdata(dev);
+
+	if (bar != BAR_2) {
+		dev_err(dev, "%s: selecting BAR %d is invalid\n", __func__,
+				bar);
+		return -EINVAL;
+	}
+
+	gen_pool_free(abc->iatu_mappings.bar2_pool,
+			bar_offset + abc->abc_dev->bar_base[BAR_2].start,
+			size_aligned);
+
+	return 0;
+}
+
+int abc_pcie_map_bar_region(struct device *dev, uint32_t bar, size_t size,
+		uint64_t ab_paddr, struct bar_mapping *mapping)
+{
+	struct abc_pcie_devdata *abc = dev_get_drvdata(dev);
+	int iatu_id = -1;
+	int ret;
+	int i;
+	size_t size_aligned;
+	struct inb_region ir;
+	uint64_t bar_range_offset;
+	uint64_t host_addr;
+	struct iatu_status *iatu;
+
+	mutex_lock(&abc->mutex);
+
+	/* set size to be 4kB aligned */
+	size_aligned = ALIGN(size, IATU_REGION_ALIGNMENT);
+
+	/* Find first free iATU region. Skipping iATU0 for it is reserved for
+	 * BAR0 mapping
+	 */
+	for (i = 0; i < NUM_IATU_REGIONS; ++i) {
+		if (abc->iatu_mappings.iatus[i].is_used == false) {
+			iatu_id = i;
+			break;
+		}
+	}
+
+	/* If no iatu is avaialble return EBUSY error */
+	if (iatu_id == -1) {
+		mutex_unlock(&abc->mutex);
+		dev_err(dev, "All iATU are currently in use.\n");
+		return -EBUSY;
+	}
+
+	/* allocate a range in the target bar */
+	ret = allocate_bar_range(dev, bar, size_aligned, &bar_range_offset);
+	if (ret < 0) {
+		mutex_unlock(&abc->mutex);
+		dev_err(dev, "BAR range allocation failed.\n");
+		return ret;
+	}
+	iatu = &abc->iatu_mappings.iatus[iatu_id];
+
+	host_addr = abc->abc_dev->bar_base[bar].start +
+			bar_range_offset;
+
+	if (host_addr >> 32) {
+		mutex_unlock(&abc->mutex);
+		dev_err(dev, "Invalid host_addr: address higher than 4GB\n");
+		return -EINVAL;
+	}
+
+	ir.region = iatu_id;
+	ir.mode = MEM_MATCH;
+	ir.memmode = 0;
+	ir.bar = bar;
+	ir.base_address = (uint32_t)(host_addr & 0xFFFFFFFF);
+	ir.u_base_address = (uint32_t)(host_addr >> 32);
+	ir.limit_address = (uint32_t)((host_addr + size_aligned - 1) &
+			0xFFFFFFFF);
+	ir.target_pcie_address = (uint32_t)(ab_paddr & 0xFFFFFFFF);
+	ir.u_target_pcie_address = (uint32_t)(ab_paddr >> 32);
+
+	ret = set_inbound_iatu(ir);
+	if (ret < 0) {
+		free_bar_range(dev, bar, size_aligned, bar_range_offset);
+		mutex_unlock(&abc->mutex);
+		dev_err(dev, "set_inbound_iatu failed.\n");
+		return ret;
+	}
+
+	iatu->is_used = true;
+	iatu->bar = bar;
+	iatu->bar_offset = bar_range_offset;
+	iatu->ab_paddr = ab_paddr;
+	iatu->size = size_aligned;
+
+	/* Set returning struct */
+	mapping->iatu = iatu_id;
+	mapping->bar = bar;
+	mapping->mapping_size = size_aligned;
+	mapping->bar_vaddr = abc->bar[bar] + bar_range_offset;
+
+	mutex_unlock(&abc->mutex);
+	return 0;
+}
+
+int abc_pcie_unmap_bar_region(struct device *dev, struct bar_mapping *mapping)
+{
+	int iatu_id = mapping->iatu;
+	int ret;
+	struct abc_pcie_devdata *abc = dev_get_drvdata(dev);
+	struct iatu_status *iatu = &abc->iatu_mappings.iatus[iatu_id];
+
+	if (iatu_id >= NUM_IATU_REGIONS) {
+		dev_err(dev, "%s: incorrect state: invalid iatu id: %d",
+				__func__, iatu_id);
+		return -EINVAL;
+	}
+
+	mutex_lock(&abc->mutex);
+	if (!iatu->is_used) {
+		mutex_unlock(&abc->mutex);
+		dev_err(dev, "%s: inconsistent state: select iatu is not used",
+				__func__);
+		return -EINVAL;
+	}
+
+	ret = free_bar_range(dev, iatu->bar, iatu->size, iatu->bar_offset);
+	if (ret < 0) {
+		mutex_unlock(&abc->mutex);
+		dev_err(dev, "%s: freeing bar allocation failed\n", __func__);
+		return ret;
+	}
+
+	iatu->is_used = false;
+	iatu->bar = 0;
+	iatu->bar_offset = 0;
+	iatu->ab_paddr = 0;
+	iatu->size = 0;
+
+	mutex_unlock(&abc->mutex);
+	return 0;
+}
 
 dma_addr_t abc_dma_map_single(void *ptr,  size_t size,
 		enum dma_data_direction dir)
@@ -1425,6 +1606,7 @@ static int abc_pcie_probe(struct pci_dev *pdev,
 
 	pci_set_master(pdev);
 
+	mutex_init(&abc->mutex);
 	spin_lock_init(&abc_dev->lock);
 	spin_lock_init(&abc_dev->fsys_reg_lock);
 	spin_lock_init(&abc_dev->dma_callback_lock);
@@ -1505,6 +1687,26 @@ static int abc_pcie_probe(struct pci_dev *pdev,
 	pci_enable_pcie_error_reporting(pdev);
 	pci_save_state(pdev);
 exit_loop:
+	/* iatu 1 is used by firmware for BAR_0 mapping, it is in use by
+	 * default
+	 */
+	abc->iatu_mappings.iatus[1].is_used = true;
+
+	abc->iatu_mappings.bar2_pool =
+		devm_gen_pool_create(dev, fls(IATU_REGION_ALIGNMENT) - 1, -1,
+				NULL);
+	if (IS_ERR(abc->iatu_mappings.bar2_pool)) {
+		err = PTR_ERR(abc->iatu_mappings.bar2_pool);
+		goto err4;
+	}
+
+	err = gen_pool_add(abc->iatu_mappings.bar2_pool,
+			abc_dev->bar_base[BAR_2].start,
+			abc_dev->bar_base[BAR_2].end -
+			abc_dev->bar_base[BAR_2].start + 1, -1);
+	if (err < 0)
+		goto err4;
+
 	/* IRQ handling */
 #if CONFIG_PCI_MSI
 	err = abc_pcie_irq_init(pdev);
@@ -1577,7 +1779,7 @@ static void abc_dev_disable(struct pci_dev *pdev)
 }
 
 /* TODO(b/117430457):  PCIe errors need to be communicated to the MFD children.
-*/
+ */
 
 static pci_ers_result_t abc_error_detected(struct pci_dev *pdev,
 						pci_channel_state_t state)
