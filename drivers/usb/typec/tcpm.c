@@ -3250,8 +3250,6 @@ static void run_state_machine(struct tcpm_port *port)
 			       PD_T_PS_TRANSITION);
 		break;
 	case SNK_READY:
-		tcpm_log(port, "in PR_SWAP := false");
-		port->tcpc->set_in_pr_swap(port->tcpc, false);
 		port->try_snk_count = 0;
 		port->update_sink_caps = false;
 		if (port->explicit_contract) {
@@ -3401,21 +3399,34 @@ static void run_state_machine(struct tcpm_port *port)
 
 	/* PR_Swap states */
 	case PR_SWAP_ACCEPT:
+		if (port->pwr_role == TYPEC_SOURCE)
+			tcpm_set_cc(port, tcpm_rp_cc(port));
+		else
+			tcpm_set_cc(port, TYPEC_CC_RD);
+		tcpm_log(port, "in PR_SWAP := true");
+		port->tcpc->set_in_pr_swap(port->tcpc, true);
 		tcpm_pd_send_control(port, PD_CTRL_ACCEPT);
 		tcpm_set_state(port, PR_SWAP_START, 0);
 		break;
 	case PR_SWAP_SEND:
+		if (port->pwr_role == TYPEC_SOURCE)
+			tcpm_set_cc(port, tcpm_rp_cc(port));
+		else
+			tcpm_set_cc(port, TYPEC_CC_RD);
+		tcpm_log(port, "in PR_SWAP := true");
+		port->tcpc->set_in_pr_swap(port->tcpc, true);
 		tcpm_pd_send_control(port, PD_CTRL_PR_SWAP);
 		tcpm_set_state_cond(port, PR_SWAP_SEND_TIMEOUT,
 				    PD_T_SENDER_RESPONSE);
 		break;
 	case PR_SWAP_SEND_TIMEOUT:
+		tcpm_log(port, "in PR_SWAP := false");
+		port->tcpc->set_in_pr_swap(port->tcpc, false);
 		tcpm_swap_complete(port, -ETIMEDOUT);
 		tcpm_set_state(port, ready_state(port), 0);
 		break;
 	case PR_SWAP_START:
 		tcpm_log(port, "in PR_SWAP := true");
-		port->tcpc->set_in_pr_swap(port->tcpc, true);
 		if (port->pwr_role == TYPEC_SOURCE)
 			tcpm_set_state(port, PR_SWAP_SRC_SNK_TRANSITION_OFF,
 				       PD_T_SRC_TRANSITION);
@@ -3427,7 +3438,7 @@ static void run_state_machine(struct tcpm_port *port)
 		port->explicit_contract = false;
 		/* allow time for Vbus discharge, must be < tSrcSwapStdby */
 		tcpm_set_state(port, PR_SWAP_SRC_SNK_SOURCE_OFF,
-			       PD_T_SRCSWAPSTDBY);
+			       PD_T_SRCSWAPSTDBY - PD_T_CC_DEBOUNCE);
 		break;
 	case PR_SWAP_SRC_SNK_SOURCE_OFF:
 		tcpm_set_cc(port, TYPEC_CC_RD);
@@ -3451,6 +3462,8 @@ static void run_state_machine(struct tcpm_port *port)
 		tcpm_set_state_cond(port, SNK_UNATTACHED, PD_T_PS_SOURCE_ON);
 		break;
 	case PR_SWAP_SRC_SNK_SINK_ON:
+		tcpm_log(port, "in PR_SWAP := false");
+		port->tcpc->set_in_pr_swap(port->tcpc, false);
 		tcpm_set_state(port, SNK_STARTUP, 0);
 		break;
 	case PR_SWAP_SNK_SRC_SINK_OFF:
@@ -3479,9 +3492,8 @@ static void run_state_machine(struct tcpm_port *port)
 		 */
 		tcpm_set_pwr_role(port, TYPEC_SOURCE);
 		tcpm_pd_send_control(port, PD_CTRL_PS_RDY);
-		tcpm_set_state(port, SRC_STARTUP, 0);
+		tcpm_set_state(port, SRC_STARTUP, PD_T_CC_DEBOUNCE);
 		break;
-
 	case VCONN_SWAP_ACCEPT:
 		tcpm_pd_send_control(port, PD_CTRL_ACCEPT);
 		tcpm_set_state(port, VCONN_SWAP_START, 0);
@@ -3515,8 +3527,10 @@ static void run_state_machine(struct tcpm_port *port)
 		tcpm_set_state(port, ready_state(port), 0);
 		break;
 
-	case DR_SWAP_CANCEL:
 	case PR_SWAP_CANCEL:
+		tcpm_log(port, "in PR_SWAP := false");
+		port->tcpc->set_in_pr_swap(port->tcpc, false);
+	case DR_SWAP_CANCEL:
 	case VCONN_SWAP_CANCEL:
 		tcpm_swap_complete(port, port->swap_status);
 		if (port->pwr_role == TYPEC_SOURCE)
@@ -3759,6 +3773,7 @@ static void _tcpm_cc_change(struct tcpm_port *port, enum typec_cc_status cc1,
 	case PR_SWAP_SRC_SNK_SOURCE_OFF:
 	case PR_SWAP_SRC_SNK_SOURCE_OFF_CC_DEBOUNCED:
 	case PR_SWAP_SNK_SRC_SOURCE_ON:
+	case PR_SWAP_SNK_SRC_SOURCE_ON_VBUS_RAMPED_UP:
 		/*
 		 * CC state change is expected in PR_SWAP
 		 * Ignore it.
