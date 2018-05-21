@@ -666,6 +666,13 @@ static int p9221_get_property_reg(struct p9221_charger_data *charger,
 	struct p9221_prop_reg_map_entry *p;
 	u32 data;
 
+	pm_runtime_get_sync(charger->dev);
+	if (!charger->resume_complete) {
+		pm_runtime_put_sync(charger->dev);
+		return -EAGAIN;
+	}
+	pm_runtime_put_sync(charger->dev);
+
 	p = p9221_get_map_entry(charger, prop, false);
 	if (p == NULL)
 		return -EINVAL;
@@ -739,6 +746,13 @@ static const char *p9221_get_tx_id_str(struct p9221_charger_data *charger)
 	uint32_t tx_id = 0;
 
 	if (p9221_is_r5(charger)) {
+		pm_runtime_get_sync(charger->dev);
+		if (!charger->resume_complete) {
+			pm_runtime_put_sync(charger->dev);
+			return NULL;
+		}
+		pm_runtime_put_sync(charger->dev);
+
 		ret = p9221_reg_read_n(charger, P9221R5_PROP_TX_ID_REG, &tx_id,
 				       sizeof(tx_id));
 		if (ret)
@@ -766,6 +780,8 @@ static int p9221_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_SERIAL_NUMBER:
 		val->strval = p9221_get_tx_id_str(charger);
+		if (val->strval == NULL)
+			return -EAGAIN;
 		break;
 	default:
 		ret = p9221_get_property_reg(charger, prop, val);
@@ -1633,6 +1649,13 @@ static irqreturn_t p9221_irq_thread(int irq, void *irq_data)
 	int ret;
 	u16 irq_src;
 
+	pm_runtime_get_sync(charger->dev);
+	if (!charger->resume_complete) {
+		pm_runtime_put_sync(charger->dev);
+		return -EAGAIN;
+	}
+	pm_runtime_put_sync(charger->dev);
+
 	ret = p9221_reg_read_16(charger, P9221_INT_REG, &irq_src);
 	if (ret) {
 		dev_err(&charger->client->dev,
@@ -1778,6 +1801,7 @@ static int p9221_charger_probe(struct i2c_client *client,
 	charger->dev = &client->dev;
 	charger->client = client;
 	charger->pdata = pdata;
+	charger->resume_complete = true;
 	mutex_init(&charger->io_lock);
 	mutex_init(&charger->cmd_lock);
 	setup_timer(&charger->timer, p9221_timer_handler,
@@ -1861,11 +1885,41 @@ static struct of_device_id p9221_charger_match_table[] = {
 #define p9221_charger_match_table NULL
 #endif
 
+#ifdef CONFIG_PM_SLEEP
+static int p9221_pm_suspend(struct device *dev)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct p9221_charger_data *charger = i2c_get_clientdata(client);
+
+	pm_runtime_get_sync(charger->dev);
+	charger->resume_complete = false;
+	pm_runtime_put_sync(charger->dev);
+
+	return 0;
+}
+
+static int p9221_pm_resume(struct device *dev)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct p9221_charger_data *charger = i2c_get_clientdata(client);
+
+	pm_runtime_get_sync(charger->dev);
+	charger->resume_complete = true;
+	pm_runtime_put_sync(charger->dev);
+
+	return 0;
+}
+#endif
+static const struct dev_pm_ops p9221_pm_ops = {
+	SET_LATE_SYSTEM_SLEEP_PM_OPS(p9221_pm_suspend, p9221_pm_resume)
+};
+
 static struct i2c_driver p9221_charger_driver = {
 	.driver = {
 		.name		= "p9221",
 		.owner		= THIS_MODULE,
 		.of_match_table = p9221_charger_match_table,
+		.pm		= &p9221_pm_ops,
 	},
 	.probe		= p9221_charger_probe,
 	.remove		= p9221_charger_remove,
