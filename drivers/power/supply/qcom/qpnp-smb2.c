@@ -904,7 +904,7 @@ static int smb2_dc_get_prop(struct power_supply *psy,
 #ifdef CONFIG_QPNP_SMB2_WIPOWER
 		val->intval = POWER_SUPPLY_TYPE_WIPOWER;
 #else
-		val->intval = POWER_SUPPLY_TYPE_WIRELESS;
+		val->intval = POWER_SUPPLY_TYPE_UNKNOWN;
 #endif
 		break;
 	default:
@@ -959,7 +959,7 @@ static int smb2_dc_prop_is_writeable(struct power_supply *psy,
 
 static const struct power_supply_desc dc_psy_desc = {
 	.name = "dc",
-	.type = POWER_SUPPLY_TYPE_WIRELESS,
+	.type = POWER_SUPPLY_TYPE_UNKNOWN,
 	.properties = smb2_dc_props,
 	.num_properties = ARRAY_SIZE(smb2_dc_props),
 	.get_property = smb2_dc_get_prop,
