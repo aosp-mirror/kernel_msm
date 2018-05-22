@@ -306,7 +306,7 @@ int cam_soc_util_get_option_clk_by_name(struct cam_hw_soc_info *soc_info,
 
 	*clk = cam_soc_util_option_clk_get(of_node, index);
 	if (IS_ERR(*clk)) {
-		CAM_ERR(CAM_UTIL, "No clk named %s found. Dev %s", clk_name,
+		CAM_WARN(CAM_UTIL, "No clk named %s found. Dev %s", clk_name,
 			soc_info->dev_name);
 		*clk_index = -1;
 		return -EFAULT;

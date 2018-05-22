@@ -158,7 +158,7 @@ static int cam_tasklet_dequeue_cmd(
 	*tasklet_cmd = NULL;
 
 	if (!atomic_read(&tasklet->tasklet_active)) {
-		CAM_ERR(CAM_ISP, "Tasklet is not active!");
+		CAM_INFO(CAM_ISP, "Tasklet is not active!");
 		rc = -EPIPE;
 		return rc;
 	}
