@@ -20,6 +20,22 @@
 		interrupt-controller;
 		#interrupt-cells = <2>;
 
+		pinctrl-names = "default";
+		pinctrl-0 = <&pmx_hog_default>;
+
+		pmx_hog_default: pmx_hog_default {
+			mux {
+				pins = "gpio28", "gpio49";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio28", "gpio49";
+				driver-strength = <2>;
+				bias-pull-up;
+				output-high;
+			};
+		};
+
 		gauge_alarm {
 			gauge_alarm_default: default {
 				mux {
