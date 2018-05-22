@@ -404,6 +404,12 @@
 							 * frames, need to pass:
 							 * numFrames */
 
+#define CMD_FORCE_TOUCH_ACTIVE			0xA0	/* /< Prevent the driver
+							 * from transitioning
+							 * the ownership of the
+							 * bus to SLPI
+							 */
+
 static u8 bin_output;		/* /< Select the output type of the scriptless
 				 * protocol (binary = 1  or hex string = 0) */
 /** @}*/
@@ -732,11 +738,13 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 	mess.action = 0;
 	mess.msg_size = 0;
 
-	mutex_lock(&info->bus_mutex);
-	if (info->sensor_sleep) {
+	if (fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, true) < 0) {
 		res = ERROR_BUS_WR;
 		logError(1, "%s %s: bus is not accessible.\n", tag, __func__);
-		limit = scnprintf(driver_test_buff, size, "{ %08X }\n", res);
+		if (driver_test_buff)
+			limit = scnprintf(driver_test_buff, size, "{ %08X }\n",
+					  res);
+		fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
 		goto ERROR;
 	}
 
@@ -2738,6 +2746,27 @@ END_DIAGNOSTIC:
 			}
 			break;
 
+		case CMD_FORCE_TOUCH_ACTIVE:
+			/* Single parameter indicates force touch state */
+			if (numberParam == 2) {
+				if (cmd[1] > 1) {
+					logError(1,
+						 "%s Parameter should be 1 or 0\n",
+						 tag);
+					res = ERROR_OP_NOT_ALLOW;
+				} else {
+					fts_set_bus_ref(info,
+						FTS_BUS_REF_FORCE_ACTIVE,
+						cmd[1]);
+					res = OK;
+				}
+			} else {
+				logError(1, "%s Wrong number of parameters!\n",
+					 tag);
+				res = ERROR_OP_NOT_ALLOW;
+			}
+			break;
+
 		default:
 			logError(1, "%s COMMAND ID NOT VALID!!!\n", tag);
 			res = ERROR_OP_NOT_ALLOW;
@@ -3411,7 +3440,7 @@ ERROR:
 
 	kfree(readData);
 
-	mutex_unlock(&info->bus_mutex);
+	fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
 
 	return count;
 }

@@ -244,6 +244,15 @@ struct fts_hw_platform_data {
 	int y_axis_max;
 };
 
+/* Bits for the bus reference mask */
+enum {
+	FTS_BUS_REF_SCREEN_ON		= 0x01,
+	FTS_BUS_REF_IRQ			= 0x02,
+	FTS_BUS_REF_FW_UPDATE		= 0x04,
+	FTS_BUS_REF_SYSFS		= 0x08,
+	FTS_BUS_REF_FORCE_ACTIVE	= 0x10
+};
+
 /*
   * Forward declaration
   */
@@ -299,6 +308,8 @@ struct fts_ts_info {
 	struct workqueue_struct *event_wq;	/* Used for event handler, */
 						/* suspend, resume threads */
 
+	struct completion bus_resumed;		/* resume_work complete */
+
 	struct pm_qos_request pm_qos_req;
 
 #ifndef FW_UPDATE_ON_PROBE
@@ -321,6 +332,8 @@ struct fts_ts_info {
 	struct regulator        *avdd_reg;	/* AVDD power regulator */
 
 	struct mutex bus_mutex;	/* Protect access to the bus */
+	unsigned int bus_refmask; /* References to the bus */
+
 	int resume_bit;	/* Indicate if screen off/on */
 	int fwupdate_stat;	/* Result of a fw update */
 	int reflash_fw;	/* Attempt to reflash fw */
@@ -353,5 +366,8 @@ extern int input_unregister_notifier_client(struct notifier_block *nb);
 /* export declaration of functions in fts_proc.c */
 extern int fts_proc_init(void);
 extern int fts_proc_remove(void);
+
+/* Bus reference tracking */
+int fts_set_bus_ref(struct fts_ts_info *info, u16 ref, bool enable);
 
 #endif

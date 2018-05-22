@@ -218,7 +218,7 @@ static ssize_t fts_fwupdate_store(struct device *dev,
 	sscanf(buf, "%100s %d %d", path, &mode[0], &mode[1]);
 	logError(1, "%s fts_fwupdate_store: mode = %s\n", tag, path);
 
-	mutex_lock(&info->bus_mutex);
+	fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, true);
 
 	if (info->sensor_sleep)
 		ret = ERROR_BUS_WR;
@@ -227,7 +227,7 @@ static ssize_t fts_fwupdate_store(struct device *dev,
 
 	info->fwupdate_stat = ret;
 
-	mutex_unlock(&info->bus_mutex);
+	fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
 
 	if (ret == ERROR_BUS_WR)
 		logError(1, "%s %s: bus is not accessible. ERROR %s08X\n",
@@ -552,11 +552,10 @@ static ssize_t fts_feature_enable_store(struct device *dev,
 	unsigned int temp;
 	int res = OK;
 
-	mutex_lock(&info->bus_mutex);
-	if (info->sensor_sleep) {
+	if (fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, true) < 0) {
 		res = ERROR_BUS_WR;
 		logError(1, "%s %s: bus is not accessible.", tag, __func__);
-		mutex_unlock(&info->bus_mutex);
+		fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
 		return count;
 	}
 
@@ -647,7 +646,7 @@ static ssize_t fts_feature_enable_store(struct device *dev,
 				 tag, __func__, res);
 	}
 
-	mutex_unlock(&info->bus_mutex);
+	fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
 	return count;
 }
 
@@ -715,11 +714,10 @@ static ssize_t fts_grip_mode_store(struct device *dev,
 	int res;
 	struct fts_ts_info *info = dev_get_drvdata(dev);
 
-	mutex_lock(&info->bus_mutex);
-	if (info->sensor_sleep) {
+	if (fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, true) < 0) {
 		res = ERROR_BUS_WR;
 		logError(1, "%s %s: bus is not accessible.", tag, __func__);
-		mutex_unlock(&info->bus_mutex);
+		fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
 		return count;
 	}
 
@@ -748,7 +746,7 @@ static ssize_t fts_grip_mode_store(struct device *dev,
 		}
 	}
 
-	mutex_unlock(&info->bus_mutex);
+	fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
 	return count;
 }
 #endif
@@ -793,11 +791,10 @@ static ssize_t fts_charger_mode_store(struct device *dev,
 	int res;
 	struct fts_ts_info *info = dev_get_drvdata(dev);
 
-	mutex_lock(&info->bus_mutex);
-	if (info->sensor_sleep) {
+	if (fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, true) < 0) {
 		res = ERROR_BUS_WR;
 		logError(1, "%s %s: bus is not accessible.\n", tag, __func__);
-		mutex_unlock(&info->bus_mutex);
+		fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
 		return count;
 	}
 
@@ -827,7 +824,7 @@ static ssize_t fts_charger_mode_store(struct device *dev,
 		}
 	}
 
-	mutex_unlock(&info->bus_mutex);
+	fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
 	return count;
 }
 #endif
@@ -871,11 +868,10 @@ static ssize_t fts_glove_mode_store(struct device *dev,
 	int res;
 	struct fts_ts_info *info = dev_get_drvdata(dev);
 
-	mutex_lock(&info->bus_mutex);
-	if (info->sensor_sleep) {
+	if (fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, true) < 0) {
 		res = ERROR_BUS_WR;
 		logError(1, "%s %s: bus is not accessible.\n", tag, __func__);
-		mutex_unlock(&info->bus_mutex);
+		fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
 		return count;
 	}
 
@@ -904,7 +900,7 @@ static ssize_t fts_glove_mode_store(struct device *dev,
 		}
 	}
 
-	mutex_unlock(&info->bus_mutex);
+	fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
 	return count;
 }
 #endif
@@ -959,11 +955,10 @@ static ssize_t fts_cover_mode_store(struct device *dev,
 	int res;
 	struct fts_ts_info *info = dev_get_drvdata(dev);
 
-	mutex_lock(&info->bus_mutex);
-	if (info->sensor_sleep) {
+	if (fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, true) < 0) {
 		res = ERROR_BUS_WR;
 		logError(1, "%s %s: bus is not accessible.\n", tag, __func__);
-		mutex_unlock(&info->bus_mutex);
+		fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
 		return count;
 	}
 
@@ -992,7 +987,7 @@ static ssize_t fts_cover_mode_store(struct device *dev,
 		}
 	}
 
-	mutex_unlock(&info->bus_mutex);
+	fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
 	return count;
 }
 #endif
@@ -1105,12 +1100,11 @@ static ssize_t fts_gesture_mask_show(struct device *dev,
 	int count = 0, res, temp;
 	struct fts_ts_info *info = dev_get_drvdata(dev);
 
-	mutex_lock(&info->bus_mutex);
-	if (info->sensor_sleep) {
+	if (fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, true) < 0) {
 		res = ERROR_BUS_WR;
 		logError(1, "%s %s: bus is not accessible.\n", tag, __func__);
 		scnprintf(buf, PAGE_SIZE, "{ %08X }\n", res);
-		mutex_unlock(&info->bus_mutex);
+		fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
 		return count;
 	}
 
@@ -1141,7 +1135,7 @@ static ssize_t fts_gesture_mask_show(struct device *dev,
 			   PAGE_SIZE - count, "{ %08X }\n", res);
 	mask[0] = 0;
 
-	mutex_unlock(&info->bus_mutex);
+	fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
 	return count;
 }
 
@@ -1234,11 +1228,10 @@ static ssize_t fts_gesture_mask_store(struct device *dev,
 	int res;
 	struct fts_ts_info *info = dev_get_drvdata(dev);
 
-	mutex_lock(&info->bus_mutex);
-	if (info->sensor_sleep) {
+	if (fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, true) < 0) {
 		res = ERROR_BUS_WR;
 		logError(1, "%s %s: bus is not accessible.\n", tag, __func__);
-		mutex_unlock(&info->bus_mutex);
+		fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
 		return count;
 	}
 
@@ -1286,7 +1279,7 @@ static ssize_t fts_gesture_mask_store(struct device *dev,
 		info->gesture_enabled = temp;
 	res = fts_mode_handler(info, 0);
 
-	mutex_unlock(&info->bus_mutex);
+	fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
 	return count;
 }
 
@@ -1435,12 +1428,11 @@ static ssize_t stm_fts_cmd_show(struct device *dev,
 	MutualSenseFrame frameMS;
 	SelfSenseFrame frameSS;
 
-	mutex_lock(&info->bus_mutex);
-	if (info->sensor_sleep) {
+	if (fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, true) < 0) {
 		res = ERROR_BUS_WR;
 		logError(1, "%s %s: bus is not accessible.\n", tag, __func__);
 		scnprintf(buf, PAGE_SIZE, "{ %08X }\n", res);
-		mutex_unlock(&info->bus_mutex);
+		fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
 		return 0;
 	}
 
@@ -1975,7 +1967,7 @@ END:
 	  * just doing a cat */
 	/* logError(0,"%s numberParameters = %d\n",tag, numberParameters); */
 
-	mutex_unlock(&info->bus_mutex);
+	fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
 	return index;
 }
 
@@ -2807,13 +2799,11 @@ static irqreturn_t fts_interrupt_handler(int irq, void *handle)
 	unsigned char *evt_data;
 	event_dispatch_handler_t event_handler;
 
-	mutex_lock(&info->bus_mutex);
-
 	/* It is possible that interrupts were disabled while the handler is
 	 * executing, before acquiring the mutex. If so, simply return.
 	 */
-	if (info->sensor_sleep) {
-		mutex_unlock(&info->bus_mutex);
+	if (fts_set_bus_ref(info, FTS_BUS_REF_IRQ, true) < 0) {
+		fts_set_bus_ref(info, FTS_BUS_REF_IRQ, false);
 		return IRQ_HANDLED;
 	}
 
@@ -2860,7 +2850,7 @@ static irqreturn_t fts_interrupt_handler(int irq, void *handle)
 	input_sync(info->input_dev);
 
 	pm_qos_update_request(&info->pm_qos_req, PM_QOS_DEFAULT_VALUE);
-	mutex_unlock(&info->bus_mutex);
+	fts_set_bus_ref(info, FTS_BUS_REF_IRQ, false);
 	return IRQ_HANDLED;
 }
 /** @}*/
@@ -3033,7 +3023,9 @@ static void fts_fw_update_auto(struct work_struct *work)
 	struct fts_ts_info *info = container_of(fwu_work, struct fts_ts_info,
 						fwu_work);
 
+	fts_set_bus_ref(info, FTS_BUS_REF_FW_UPDATE, true);
 	fts_fw_update(info);
+	fts_set_bus_ref(info, FTS_BUS_REF_FW_UPDATE, false);
 }
 #endif
 
@@ -3503,12 +3495,8 @@ static void fts_resume_work(struct work_struct *work)
 
 	info = container_of(work, struct fts_ts_info, resume_work);
 
-	mutex_lock(&info->bus_mutex);
-
-	if (!info->sensor_sleep) {
-		mutex_unlock(&info->bus_mutex);
+	if (!info->sensor_sleep)
 		return;
-	}
 
 #ifdef CONFIG_TOUCHSCREEN_TBN
 	if (info->tbn)
@@ -3531,7 +3519,7 @@ static void fts_resume_work(struct work_struct *work)
 
 	fts_enableInterrupt();
 
-	mutex_unlock(&info->bus_mutex);
+	complete_all(&info->bus_resumed);
 }
 
 /**
@@ -3544,12 +3532,10 @@ static void fts_suspend_work(struct work_struct *work)
 
 	info = container_of(work, struct fts_ts_info, suspend_work);
 
-	mutex_lock(&info->bus_mutex);
-
-	if (info->sensor_sleep) {
-		mutex_unlock(&info->bus_mutex);
+	if (info->sensor_sleep)
 		return;
-	}
+
+	reinit_completion(&info->bus_resumed);
 
 	__pm_wakeup_event(&info->wakesrc, jiffies_to_msecs(HZ));
 
@@ -3569,9 +3555,73 @@ static void fts_suspend_work(struct work_struct *work)
 	if (info->tbn)
 		tbn_release_bus(info->tbn);
 #endif
-	mutex_unlock(&info->bus_mutex);
 }
 /** @}*/
+
+
+static void fts_aggregate_bus_state(struct fts_ts_info *info)
+{
+	pr_debug("%s %s: bus_refmask = 0x%02X.\n", tag, __func__,
+		 info->bus_refmask);
+
+	/* Complete or cancel any outstanding transitions */
+	cancel_work_sync(&info->suspend_work);
+	cancel_work_sync(&info->resume_work);
+
+	if ((info->bus_refmask == 0 && info->sensor_sleep) ||
+	    (info->bus_refmask != 0 && !info->sensor_sleep))
+		return;
+
+	if (info->bus_refmask == 0)
+		queue_work(info->event_wq, &info->suspend_work);
+	else
+		queue_work(info->event_wq, &info->resume_work);
+}
+
+int fts_set_bus_ref(struct fts_ts_info *info, u16 ref, bool enable)
+{
+	int result = OK;
+
+	mutex_lock(&info->bus_mutex);
+
+	if ((enable && (info->bus_refmask & ref)) ||
+	    (!enable && !(info->bus_refmask & ref))) {
+		logError(1,
+			"%s %s: reference is unexpectedly set: mask=0x%04X, ref=0x%04X, enable=%d.\n",
+			tag, __func__, info->bus_refmask, ref, enable);
+		mutex_unlock(&info->bus_mutex);
+		return ERROR_OP_NOT_ALLOW;
+	}
+
+	if (enable) {
+		/* IRQs can only keep the bus active. IRQs received while the
+		 * bus is transferred to SLPI should be ignored.
+		 */
+		if (ref == FTS_BUS_REF_IRQ && info->bus_refmask == 0)
+			result = ERROR_OP_NOT_ALLOW;
+		else
+			info->bus_refmask |= ref;
+	} else
+		info->bus_refmask &= ~ref;
+	fts_aggregate_bus_state(info);
+
+	mutex_unlock(&info->bus_mutex);
+
+	/* When triggering a wake, wait up to one second to resume. SCREEN_ON
+	 * and IRQ references do not need to wait.
+	 */
+	if (enable && ref != FTS_BUS_REF_SCREEN_ON && ref != FTS_BUS_REF_IRQ) {
+		wait_for_completion_timeout(&info->bus_resumed, HZ);
+		if (info->sensor_sleep) {
+			logError(1,
+				 "%s %s: Failed to wake the touch bus.\n",
+				 tag, __func__);
+			result = ERROR_TIMEOUT;
+		}
+	}
+
+	return result;
+}
 
 /**
   * Callback function used to detect the suspend/resume events generated by
@@ -3604,16 +3654,12 @@ static int fts_screen_state_chg_callback(struct notifier_block *nb,
 	switch (blank) {
 	case MSM_DRM_BLANK_POWERDOWN:
 	case MSM_DRM_BLANK_LP:
-		if (info->sensor_sleep)
-			break;
 		logError(0, "%s %s: BLANK\n", tag, __func__);
-		queue_work(info->event_wq, &info->suspend_work);
+		fts_set_bus_ref(info, FTS_BUS_REF_SCREEN_ON, false);
 		break;
 	case MSM_DRM_BLANK_UNBLANK:
-		if (!info->sensor_sleep)
-			break;
 		logError(0, "%s %s: UNBLANK\n", tag, __func__);
-		queue_work(info->event_wq, &info->resume_work);
+		fts_set_bus_ref(info, FTS_BUS_REF_SCREEN_ON, true);
 		break;
 	}
 	return NOTIFY_OK;
@@ -4022,6 +4068,9 @@ static int fts_probe(struct spi_device *client)
 	INIT_WORK(&info->resume_work, fts_resume_work);
 	INIT_WORK(&info->suspend_work, fts_suspend_work);
 
+	init_completion(&info->bus_resumed);
+	complete_all(&info->bus_resumed);
+
 	logError(1, "%s SET Input Device Property:\n", tag);
 	info->dev = &info->client->dev;
 	info->input_dev = input_allocate_device();
@@ -4107,6 +4156,9 @@ static int fts_probe(struct spi_device *client)
 
 	mutex_init(&(info->input_report_mutex));
 	mutex_init(&info->bus_mutex);
+
+	/* Assume screen is on throughout probe */
+	info->bus_refmask = FTS_BUS_REF_SCREEN_ON;
 
 #ifdef GESTURE_MODE
 	mutex_init(&gestureMask_mutex);
@@ -4251,10 +4303,8 @@ static int fts_remove(struct spi_device *client)
 
 	struct fts_ts_info *info = dev_get_drvdata(&(client->dev));
 
-	/* Lock the bus until the interrupt handler, event queue, and
-	 * proc/sysfs nodes are removed.
-	 */
-	mutex_lock(&info->bus_mutex);
+	/* Force the bus active throughout removal of the client */
+	fts_set_bus_ref(info, FTS_BUS_REF_FORCE_ACTIVE, true);
 
 	pm_qos_remove_request(&info->pm_qos_req);
 
@@ -4283,8 +4333,6 @@ static int fts_remove(struct spi_device *client)
 #ifndef FW_UPDATE_ON_PROBE
 	destroy_workqueue(info->fwu_workqueue);
 #endif
-
-	mutex_unlock(&info->bus_mutex);
 
 	fts_enable_reg(info, false);
 	fts_get_reg(info, false);
