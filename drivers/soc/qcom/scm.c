@@ -37,7 +37,7 @@
 #define SCM_V2_EBUSY		-12
 
 /* in ms */
-#define SCM_PANIC_TIMEOUT 600000
+#define SCM_PANIC_TIMEOUT 10000
 
 static DEFINE_MUTEX(scm_lock);
 
