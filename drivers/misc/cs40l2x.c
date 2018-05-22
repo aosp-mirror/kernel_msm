@@ -2337,13 +2337,18 @@ static int cs40l2x_otp_unpack(struct cs40l2x_private *cs40l2x)
 	struct cs40l2x_trim trim;
 	unsigned char row_offset, col_offset;
 	unsigned int val, otp_map;
-	unsigned int otp_mem[CS40L2X_NUM_OTP_WORDS];
+	unsigned int *otp_mem;
 	int ret, i;
+
+	otp_mem = kmalloc_array(CS40L2X_NUM_OTP_WORDS,
+				sizeof(*otp_mem), GFP_KERNEL);
+	if (!otp_mem)
+		return -ENOMEM;
 
 	ret = regmap_read(cs40l2x->regmap, CS40L2X_OTPID, &val);
 	if (ret) {
 		dev_err(dev, "Failed to read OTP ID\n");
-		return ret;
+		goto err_otp_unpack;
 	}
 
 	/* hard matching against known OTP IDs */
@@ -2357,7 +2362,8 @@ static int cs40l2x_otp_unpack(struct cs40l2x_private *cs40l2x)
 	/* reject unrecognized IDs, including untrimmed devices (OTP ID = 0) */
 	if (i == CS40L2X_NUM_OTP_MAPS) {
 		dev_err(dev, "Unrecognized OTP ID: 0x%01X\n", val);
-		return -ENODEV;
+		ret = -ENODEV;
+		goto err_otp_unpack;
 	}
 
 	dev_dbg(dev, "Found OTP ID: 0x%01X\n", val);
@@ -2366,21 +2372,21 @@ static int cs40l2x_otp_unpack(struct cs40l2x_private *cs40l2x)
 			CS40L2X_NUM_OTP_WORDS);
 	if (ret) {
 		dev_err(dev, "Failed to read OTP contents\n");
-		return ret;
+		goto err_otp_unpack;
 	}
 
 	ret = regmap_write(regmap, CS40L2X_TEST_KEY_CTL,
 			CS40L2X_TEST_KEY_UNLOCK_CODE1);
 	if (ret) {
 		dev_err(dev, "Failed to unlock test space (step 1 of 2)\n");
-		return ret;
+		goto err_otp_unpack;
 	}
 
 	ret = regmap_write(regmap, CS40L2X_TEST_KEY_CTL,
 			CS40L2X_TEST_KEY_UNLOCK_CODE2);
 	if (ret) {
 		dev_err(dev, "Failed to unlock test space (step 2 of 2)\n");
-		return ret;
+		goto err_otp_unpack;
 	}
 
 	row_offset = cs40l2x_otp_map[otp_map].row_start;
@@ -2419,7 +2425,7 @@ static int cs40l2x_otp_unpack(struct cs40l2x_private *cs40l2x)
 				val << trim.shift);
 		if (ret) {
 			dev_err(dev, "Failed to write trim %d\n", i + 1);
-			return ret;
+			goto err_otp_unpack;
 		}
 
 		dev_dbg(dev, "Trim %d: wrote 0x%X to 0x%08X bits [%d:%d]\n",
@@ -2431,17 +2437,22 @@ static int cs40l2x_otp_unpack(struct cs40l2x_private *cs40l2x)
 			CS40L2X_TEST_KEY_RELOCK_CODE1);
 	if (ret) {
 		dev_err(dev, "Failed to lock test space (step 1 of 2)\n");
-		return ret;
+		goto err_otp_unpack;
 	}
 
 	ret = regmap_write(regmap, CS40L2X_TEST_KEY_CTL,
 			CS40L2X_TEST_KEY_RELOCK_CODE2);
 	if (ret) {
 		dev_err(dev, "Failed to lock test space (step 2 of 2)\n");
-		return ret;
+		goto err_otp_unpack;
 	}
 
-	return 0;
+	ret = 0;
+
+err_otp_unpack:
+	kfree(otp_mem);
+
+	return ret;
 }
 
 static int cs40l2x_handle_of_data(struct i2c_client *i2c_client,
