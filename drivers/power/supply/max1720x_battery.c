@@ -1190,7 +1190,6 @@ static int max1720x_handle_dt_register_config(struct max1720x_chip *chip)
 
 static int max1720x_init_chip(struct max1720x_chip *chip)
 {
-	u16 data;
 	int ret;
 
 	ret = max1720x_handle_dt_shadow_config(chip);
@@ -1200,6 +1199,18 @@ static int max1720x_init_chip(struct max1720x_chip *chip)
 	ret = max1720x_handle_dt_register_config(chip);
 	if (ret)
 		return ret;
+
+	return 0;
+}
+
+static void max1720x_complete_init(struct max1720x_chip *chip)
+{
+	u16 data;
+
+	chip->fake_capacity = -EINVAL;
+	chip->fake_temperature = -EINVAL;
+	chip->init_complete = true;
+	chip->resume_complete = true;
 
 	REGMAP_READ(chip->regmap, MAX1720X_Status, data);
 	if (data & MAX1720X_STATUS_BR) {
@@ -1229,7 +1240,8 @@ static int max1720x_init_chip(struct max1720x_chip *chip)
 	dev_info(chip->dev, "VEmpty: VE=%dmV VR=%dmV\n",
 		 ((data >> 7) & 0x1ff) * 10, (data & 0x7f) * 40);
 
-	return 0;
+	/* Handle any IRQ that might have been set before init */
+	max1720x_fg_irq_thread_fn(chip->primary->irq, chip);
 }
 
 static struct power_supply_desc max1720x_psy_desc = {
@@ -1294,10 +1306,7 @@ static void max1720x_init_work(struct work_struct *work)
 		return;
 	}
 
-	chip->fake_capacity = -EINVAL;
-	chip->fake_temperature = -EINVAL;
-	chip->init_complete = true;
-	chip->resume_complete = true;
+	max1720x_complete_init(chip);
 }
 
 static int max1720x_probe(struct i2c_client *client,
