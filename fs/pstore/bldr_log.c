@@ -20,6 +20,9 @@
 #include <linux/of_fdt.h>
 #include <linux/bldr_debug_tools.h>
 #include <linux/uaccess.h>
+#include <linux/init.h>
+#include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 
 
 #define RAMLOG_COMPATIBLE_NAME "qcom,bldr_log"
@@ -199,7 +202,7 @@ int bldr_log_setup(phys_addr_t bldr_phy_addr, size_t bldr_log_size,
 	}
 
 	if (is_last_bldr) {
-		bl_last_log_buf = kmalloc(bldr_log_size, GFP_KERNEL);
+		bl_last_log_buf = kzalloc(bldr_log_size, GFP_KERNEL);
 		if (!bl_last_log_buf) {
 			pr_warn("%s: failed to alloc last bootloader log buffer\n",
 				__func__);
@@ -211,7 +214,7 @@ int bldr_log_setup(phys_addr_t bldr_phy_addr, size_t bldr_log_size,
 				bldr_log_size, &bl_last_log_buf_size);
 		}
 	} else {
-		bl_cur_log_buf = kmalloc(bldr_log_size, GFP_KERNEL);
+		bl_cur_log_buf = kzalloc(bldr_log_size, GFP_KERNEL);
 		if (!bl_cur_log_buf) {
 			pr_warn("%s: failed to alloc last bootloader log buffer\n",
 				__func__);
@@ -268,3 +271,40 @@ void bldr_log_release(void)
 	kfree(bl_last_log_buf);
 	kfree(bl_cur_log_buf);
 }
+
+static int bldrlog_proc_show(struct seq_file *m, void *v)
+{
+	if (!bl_cur_log_buf) {
+		seq_printf(m, "%s: failed to alloc current bootloader log buffer\n",
+				__func__);
+		return 0;
+	}
+
+	if (bl_cur_log_buf_size <= 0) {
+		seq_printf(m, "%s: failed to determine current bootloader log size\n",
+				__func__);
+		return 0;
+	}
+
+	seq_printf(m, "%s\n", bl_cur_log_buf);
+	return 0;
+}
+
+static int bldrlog_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, bldrlog_proc_show, NULL);
+}
+
+static const struct file_operations bldrlog_proc_fops = {
+	.open		= bldrlog_proc_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
+
+static int __init proc_bldrlog_init(void)
+{
+	proc_create("bldrlog", 0400, NULL, &bldrlog_proc_fops);
+	return 0;
+}
+fs_initcall(proc_bldrlog_init);
