@@ -101,6 +101,7 @@ struct usbpd {
 	bool first_suspend;
 	/* Indicates whether the device has to honor usb suspend power limits*/
 	bool suspend_supported;
+	bool usb_comm_capable;
 };
 
 /*
@@ -477,7 +478,9 @@ static int update_usb_data_role(struct usbpd *pd)
 	 * update_usb_data_role() is called when APSD is done, thus here
 	 * pd->psy_type is a valid detection result.
 	 */
-	extcon_usb = pd->extcon_usb && psy_support_usb_data(pd->psy_type);
+	extcon_usb = pd->extcon_usb &&
+		     (psy_support_usb_data(pd->psy_type) ||
+		      pd->usb_comm_capable);
 
 	/*
 	 * EXTCON_USB_HOST and EXTCON_USB is mutually exlusive.
@@ -1377,7 +1380,8 @@ static int set_pd_header(struct usbpd *pd, enum typec_role role,
 #define EXTCON_USB_SUPER_SPEED	true
 static int set_usb_data_role(struct usbpd *pd, bool attached,
 			     enum typec_role role,
-			     enum typec_data_role data)
+			     enum typec_data_role data,
+			     bool usb_comm_capable)
 {
 	int ret;
 
@@ -1394,15 +1398,18 @@ static int set_usb_data_role(struct usbpd *pd, bool attached,
 		pd->extcon_usb_host = false;
 	}
 
+	pd->usb_comm_capable = usb_comm_capable;
 
 	pd_engine_log(pd,
-		      "set usb_data_role: power [%s], data [%s], apsd_done [%s], attached [%s]",
+		      "set usb_data_role: power [%s], data [%s], apsd_done [%s], attached [%s], comm [%s]",
 		      get_typec_role_name(role),
 		      get_typec_data_role_name(data),
 		      pd->apsd_done ? "Y" : "N",
-		      attached ? "Y" : "N");
+		      attached ? "Y" : "N",
+		      usb_comm_capable ? "Y" : "N");
 
-	if (attached && role == TYPEC_SINK && !pd->apsd_done) {
+	if (attached && role == TYPEC_SINK &&
+	    !(pd->apsd_done || usb_comm_capable)) {
 		/* wait for APSD done */
 		pd_engine_log(pd,
 			      "APSD is not done, delay update usb data role");
@@ -1418,7 +1425,8 @@ static int set_usb_data_role(struct usbpd *pd, bool attached,
 }
 
 static int tcpm_set_roles(struct tcpc_dev *dev, bool attached,
-			  enum typec_role role, enum typec_data_role data)
+			  enum typec_role role, enum typec_data_role data,
+			  bool usb_comm_capable)
 {
 	struct usbpd *pd = container_of(dev, struct usbpd, tcpc_dev);
 	int ret;
@@ -1429,7 +1437,7 @@ static int tcpm_set_roles(struct tcpc_dev *dev, bool attached,
 	if (ret < 0)
 		goto unlock;
 
-	ret = set_usb_data_role(pd, attached, role, data);
+	ret = set_usb_data_role(pd, attached, role, data, usb_comm_capable);
 
 	if (!ret) {
 		pd->cur_pwr_role = role;
