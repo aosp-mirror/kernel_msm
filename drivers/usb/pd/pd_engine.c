@@ -1992,6 +1992,7 @@ struct usbpd *usbpd_create(struct device *parent)
 		goto unreg_tcpm;
 
 	init_pd_phy_params(&pd->pdphy_params);
+	pd_phy_assign_pm_callbacks(&pd->pdphy_params);
 
 	pd->suspend_supported = true;
 
