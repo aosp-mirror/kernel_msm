@@ -774,18 +774,12 @@ struct cs40l2x_pbq_pair {
 	unsigned int remain;
 };
 
-struct cs40l2x_dig_scale_map {
-	unsigned int encoded;
-	unsigned int dig_scale;
-};
-
 extern const unsigned char cs40l2x_bst_k1_table[4][5];
 extern const unsigned char cs40l2x_bst_k2_table[4][5];
 extern const unsigned char cs40l2x_bst_slope_table[4];
 
 extern const struct cs40l2x_otp_desc cs40l2x_otp_map[CS40L2X_NUM_OTP_MAPS];
 
-extern const struct cs40l2x_dig_scale_map
-			cs40l2x_pbq_scale[CS40L2X_PBQ_SCALE_MAX + 1];
+extern const unsigned int cs40l2x_pbq_dig_scale[CS40L2X_PBQ_SCALE_MAX + 1];
 
 #endif /*__CS40L2X_H__*/
