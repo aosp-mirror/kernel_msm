@@ -175,7 +175,8 @@ struct tcpc_dev {
 				 u32 max_mv);
 	int (*set_pd_rx)(struct tcpc_dev *dev, bool on);
 	int (*set_roles)(struct tcpc_dev *dev, bool attached,
-			 enum typec_role role, enum typec_data_role data);
+			 enum typec_role role, enum typec_data_role data,
+			 bool usb_comm_capable);
 	int (*start_drp_toggling)(struct tcpc_dev *dev,
 				  enum typec_cc_status cc);
 	int (*try_role)(struct tcpc_dev *dev, int role);
