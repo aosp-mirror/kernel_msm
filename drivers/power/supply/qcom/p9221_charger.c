@@ -717,6 +717,8 @@ static void p9221_set_offline(struct p9221_charger_data *charger)
 {
 	int ret;
 
+	dev_info(&charger->client->dev, "Set offline\n");
+
 	charger->online = false;
 	charger->early_det = false;
 
@@ -743,12 +745,21 @@ static void p9221_timer_handler(unsigned long data)
 {
 	struct p9221_charger_data *charger = (struct p9221_charger_data *)data;
 
-	if (!charger->online)
-		return;
+	dev_info(&charger->client->dev,
+		 "timeout waiting for dc, go offline early=%d online=%d\n",
+		 charger->early_det, charger->online);
 
-	dev_info(&charger->client->dev, "timeout waiting for dc, go offline\n");
-	p9221_set_offline(charger);
+	/*
+	 * Only set offline if the charger is online, but not when we only
+	 * have early_det.
+	 */
+	charger->early_det = false;
+	if (charger->online)
+		p9221_set_offline(charger);
+
 	power_supply_changed(charger->wc_psy);
+
+	pm_relax(charger->dev);
 }
 
 static const char *p9221_get_tx_id_str(struct p9221_charger_data *charger)
@@ -976,6 +987,8 @@ static void p9221_set_online(struct p9221_charger_data *charger)
 	int ret;
 	u8 cid = 0;
 
+	dev_info(&charger->client->dev, "Set online\n");
+
 	charger->online = true;
 	charger->early_det = false;
 	charger->tx_busy = false;
@@ -1019,6 +1032,8 @@ static void p9221_notifier_check_dc(struct p9221_charger_data *charger)
 		return;
 	}
 
+	dev_info(&charger->client->dev, "dc status is %d\n", prop.intval);
+
 	/*
 	 * We now have confirmation from DC_IN, kill the timer, charger->online
 	 * will be set by this function.
@@ -1031,6 +1046,7 @@ static void p9221_notifier_check_dc(struct p9221_charger_data *charger)
 	if (prop.intval)
 		p9221_set_dc_icl(charger);
 
+	/* We may have already gone online during check_det */
 	if (charger->online == prop.intval)
 		return;
 
@@ -1039,13 +1055,14 @@ static void p9221_notifier_check_dc(struct p9221_charger_data *charger)
 	else
 		p9221_set_offline(charger);
 
-	dev_info(&charger->client->dev,
-		 "dc status is %d, trigger wc changed\n", prop.intval);
+	dev_info(&charger->client->dev, "trigger wc changed\n");
 	power_supply_changed(charger->wc_psy);
 }
 
-static void p9221_notifier_check_det(struct p9221_charger_data *charger)
+bool p9221_notifier_check_det(struct p9221_charger_data *charger)
 {
+	bool relax = true;
+
 	if (charger->online)
 		goto done;
 
@@ -1060,17 +1077,22 @@ static void p9221_notifier_check_det(struct p9221_charger_data *charger)
 	power_supply_changed(charger->wc_psy);
 
 	/* Give the dc-in 5 seconds to come up */
+	dev_info(&charger->client->dev, "start dc-in timer\n");
 	mod_timer(&charger->timer, jiffies + msecs_to_jiffies(5 * 1000));
+	relax = false;
 
 done:
 	charger->check_early = false;
 	charger->check_det = false;
+
+	return relax;
 }
 
 static void p9221_notifier_work(struct work_struct *work)
 {
 	struct p9221_charger_data *charger = container_of(work,
 			struct p9221_charger_data, notifier_work.work);
+	bool relax = true;
 
 	dev_info(&charger->client->dev,
 		 "Notifier work: on:%d dc:%d det:%d early:%d\n",
@@ -1078,12 +1100,13 @@ static void p9221_notifier_work(struct work_struct *work)
 		 charger->check_early);
 
 	if (charger->check_det || charger->check_early)
-		p9221_notifier_check_det(charger);
+		relax = p9221_notifier_check_det(charger);
 
 	if (charger->check_dc)
 		p9221_notifier_check_dc(charger);
 
-	pm_relax(charger->dev);
+	if (relax)
+		pm_relax(charger->dev);
 }
 
 static size_t p9221_hex_str(u8 *data, size_t len, char *buf, size_t max_buf,
@@ -1949,6 +1972,7 @@ static int p9221_charger_remove(struct i2c_client *client)
 {
 	struct p9221_charger_data *charger = i2c_get_clientdata(client);
 
+	del_timer_sync(&charger->timer);
 	device_init_wakeup(charger->dev, false);
 	cancel_delayed_work_sync(&charger->notifier_work);
 	power_supply_unreg_notifier(&charger->nb);
