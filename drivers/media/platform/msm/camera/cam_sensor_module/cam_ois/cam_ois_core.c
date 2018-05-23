@@ -18,9 +18,32 @@
 #include "cam_sensor_util.h"
 #include "cam_debug_util.h"
 #include "cam_res_mgr_api.h"
+#include "../cam_fw_update/fw_update.h"
 
 static struct cam_ois_timer_t ois_timer;
 DEFINE_MSM_MUTEX(ois_shift_mutex);
+
+int cam_ois_calibration(struct cam_ois_ctrl_t *o_ctrl,
+	stReCalib *cal_result)
+{
+	int rc;
+
+	rc = GyroReCalib(&o_ctrl->io_master_info, cal_result);
+	if (rc != 0)
+		CAM_ERR(CAM_OIS,
+			"[OISCali] ReCalib FAIL, rc = %d", rc);
+	else {
+		rc = WrGyroOffsetData();
+		if (rc != 0)
+			CAM_ERR(CAM_OIS,
+				"[OISCali] WrGyro FAIL, rc = %d", rc);
+		else
+			CAM_INFO(CAM_OIS,
+				"[OISCali] SUCCESS");
+	}
+
+	return rc;
+}
 
 int32_t cam_ois_construct_default_power_setting(
 	struct cam_sensor_power_ctrl_t *power_info)
@@ -723,6 +746,8 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 		(struct cam_ois_soc_private *)o_ctrl->soc_info.soc_private;
 	struct cam_sensor_power_ctrl_t  *power_info = &soc_private->power_info;
 	struct cam_cmd_get_ois_data     *cmd_get_ois = NULL;
+	int32_t                         *cal_rc;
+	stReCalib                       *cal_result;
 
 	ioctl_ctrl = (struct cam_control *)arg;
 	if (copy_from_user(&dev_config, (void __user *) ioctl_ctrl->handle,
@@ -956,6 +981,26 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 			CAM_OIS_PACKET_OPCODE_READ) {
 			rc = cam_ois_read_reg(o_ctrl, cmd_get_ois);
 		}
+		break;
+	case CAM_OIS_PACKET_OPCODE_CALIBRATION:
+		offset = (uint32_t *)&csl_packet->payload;
+		offset += (csl_packet->cmd_buf_offset / sizeof(uint32_t));
+		cmd_desc = (struct cam_cmd_buf_desc *)(offset);
+		rc = cam_mem_get_cpu_buf(cmd_desc[0].mem_handle,
+			(uint64_t *)&generic_ptr, &len_of_buff);
+		if (rc < 0) {
+			CAM_ERR(CAM_OIS, "Failed to get cpu buf");
+			return rc;
+		}
+		cmd_buf = (uint32_t *)generic_ptr;
+		if (!cmd_buf) {
+			CAM_ERR(CAM_OIS, "invalid cmd buf");
+			return -EINVAL;
+		}
+		cmd_buf += cmd_desc->offset / sizeof(uint32_t);
+		cal_rc = (int32_t *)cmd_buf;
+		cal_result = (stReCalib *)(cmd_buf + 1);
+		*cal_rc = cam_ois_calibration(o_ctrl, cal_result);
 		break;
 	default:
 		break;

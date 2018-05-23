@@ -30,3 +30,6 @@ int DownloadFrontVCMFW(struct camera_io_master *io_info,
 int ValidateFrontVCMFW(struct camera_io_master *io_info,
 	struct cam_sensor_i2c_reg_array *fwtable,
 	UINT_32 tbsize);
+int GyroReCalib(struct camera_io_master *io_master_info,
+	stReCalib *cal_result);
+int WrGyroOffsetData(void);
