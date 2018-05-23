@@ -700,6 +700,9 @@
 #define CS40L2X_PBQ_STATE_IDLE		0x00
 #define CS40L2X_PBQ_STATE_PLAYING	0x01
 #define CS40L2X_PBQ_STATE_SILENT	0x02
+#define CS40L2X_PBQ_TAG_SILENCE		0x0000
+#define CS40L2X_PBQ_TAG_START		0x8000
+#define CS40L2X_PBQ_TAG_STOP		0x8001
 
 #define CS40L2X_DIAG_STATE_INIT		0x00
 #define CS40L2X_DIAG_STATE_RUN		0x01
@@ -760,6 +763,8 @@ struct cs40l2x_coeff_desc {
 struct cs40l2x_pbq_pair {
 	unsigned int tag;
 	unsigned int mag;
+	unsigned int repeat;
+	unsigned int remain;
 };
 
 struct cs40l2x_dig_scale_map {

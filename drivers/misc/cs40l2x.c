@@ -125,7 +125,6 @@ static ssize_t cs40l2x_cp_trigger_queue_show(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	ssize_t len = 0;
-	unsigned int tag, mag;
 	int i;
 
 	if (cs40l2x->pbq_depth == 0)
@@ -133,24 +132,28 @@ static ssize_t cs40l2x_cp_trigger_queue_show(struct device *dev,
 
 	mutex_lock(&cs40l2x->lock);
 
-	for (i = 0; i < cs40l2x->pbq_depth - 1; i++) {
-		tag = cs40l2x->pbq_pairs[i].tag;
-		mag = cs40l2x->pbq_pairs[i].mag;
+	for (i = 0; i < cs40l2x->pbq_depth; i++) {
+		switch (cs40l2x->pbq_pairs[i].tag) {
+		case CS40L2X_PBQ_TAG_SILENCE:
+			len += snprintf(buf + len, PAGE_SIZE - len, "%d",
+					cs40l2x->pbq_pairs[i].mag);
+			break;
+		case CS40L2X_PBQ_TAG_START:
+			len += snprintf(buf + len, PAGE_SIZE - len, "!!");
+			break;
+		case CS40L2X_PBQ_TAG_STOP:
+			len += snprintf(buf + len, PAGE_SIZE - len, "%d!!",
+					cs40l2x->pbq_pairs[i].repeat);
+			break;
+		default:
+			len += snprintf(buf + len, PAGE_SIZE - len, "%d.%d",
+					cs40l2x->pbq_pairs[i].tag,
+					cs40l2x->pbq_pairs[i].mag);
+		}
 
-		if (tag)
-			len += snprintf(buf + len, PAGE_SIZE - len, "%d.%d, ",
-					tag, mag);
-		else
-			len += snprintf(buf + len, PAGE_SIZE - len, "%d, ",
-					mag);
+		if (i < (cs40l2x->pbq_depth - 1))
+			len += snprintf(buf + len, PAGE_SIZE - len, ", ");
 	}
-
-	tag = cs40l2x->pbq_pairs[i].tag;
-	mag = cs40l2x->pbq_pairs[i].mag;
-	if (tag)
-		len += snprintf(buf + len, PAGE_SIZE - len, "%d.%d", tag, mag);
-	else
-		len += snprintf(buf + len, PAGE_SIZE - len, "%d", mag);
 
 	switch (cs40l2x->pbq_repeat) {
 	case -1:
@@ -176,8 +179,10 @@ static ssize_t cs40l2x_cp_trigger_queue_store(struct device *dev,
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	char *pbq_str_alloc, *pbq_str, *pbq_str_tok;
 	char *pbq_seg_alloc, *pbq_seg, *pbq_seg_tok;
+	size_t pbq_seg_len;
 	unsigned int pbq_depth = 0;
-	unsigned int val;
+	unsigned int val, num_empty;
+	int pbq_marker = -1;
 	int ret;
 
 	pbq_str_alloc = kzalloc(count, GFP_KERNEL);
@@ -196,21 +201,21 @@ static ssize_t cs40l2x_cp_trigger_queue_store(struct device *dev,
 	cs40l2x->pbq_repeat = 0;
 
 	pbq_str = pbq_str_alloc;
-	strlcpy(pbq_str, buf, count - 1);
+	strlcpy(pbq_str, buf, count);
 
 	pbq_str_tok = strsep(&pbq_str, ",");
 
 	while (pbq_str_tok) {
-		if (strlen(strim(pbq_str_tok)) > CS40L2X_PBQ_SEG_LEN_MAX) {
+		pbq_seg = pbq_seg_alloc;
+		pbq_seg_len = strlcpy(pbq_seg, strim(pbq_str_tok),
+				CS40L2X_PBQ_SEG_LEN_MAX + 1);
+		if (pbq_seg_len > CS40L2X_PBQ_SEG_LEN_MAX) {
 			ret = -E2BIG;
 			goto err_mutex;
 		}
 
-		pbq_seg = pbq_seg_alloc;
-		strlcpy(pbq_seg, strim(pbq_str_tok), CS40L2X_PBQ_SEG_LEN_MAX);
-
 		/* waveform specifier */
-		if (strnchr(pbq_seg, '.', CS40L2X_PBQ_SEG_LEN_MAX)) {
+		if (strnchr(pbq_seg, CS40L2X_PBQ_SEG_LEN_MAX, '.')) {
 			/* index */
 			pbq_seg_tok = strsep(&pbq_seg, ".");
 
@@ -240,26 +245,70 @@ static ssize_t cs40l2x_cp_trigger_queue_store(struct device *dev,
 			cs40l2x->pbq_pairs[pbq_depth++].mag = val;
 
 		/* repetition specifier */
-		} else if (strnchr(pbq_seg, '!', CS40L2X_PBQ_SEG_LEN_MAX)) {
-			if (cs40l2x->pbq_repeat) {
-				ret = -EINVAL;
-				goto err_mutex;
-			}
+		} else if (strnchr(pbq_seg, CS40L2X_PBQ_SEG_LEN_MAX, '!')) {
+			val = 0;
+			num_empty = 0;
 			pbq_seg_tok = strsep(&pbq_seg, "!");
 
-			ret = kstrtou32(pbq_seg_tok, 10, &val);
-			if (ret) {
+			while (pbq_seg_tok) {
+				if (strnlen(pbq_seg_tok,
+						CS40L2X_PBQ_SEG_LEN_MAX)) {
+					ret = kstrtou32(pbq_seg_tok, 10, &val);
+					if (ret) {
+						ret = -EINVAL;
+						goto err_mutex;
+					}
+					if (val > CS40L2X_PBQ_REPEAT_MAX) {
+						ret = -EINVAL;
+						goto err_mutex;
+					}
+				} else {
+					num_empty++;
+				}
+
+				pbq_seg_tok = strsep(&pbq_seg, "!");
+			}
+			/* number of empty tokens reveals specifier type */
+			switch (num_empty) {
+			case 1:	/* outer loop: "n!" or "!n" */
+				if (cs40l2x->pbq_repeat) {
+					ret = -EINVAL;
+					goto err_mutex;
+				}
+				cs40l2x->pbq_repeat = val;
+				break;
+
+			case 2:	/* inner loop stop: "n!!" or "!!n" */
+				if (pbq_marker < 0) {
+					ret = -EINVAL;
+					goto err_mutex;
+				}
+
+				cs40l2x->pbq_pairs[pbq_depth].tag =
+						CS40L2X_PBQ_TAG_STOP;
+				cs40l2x->pbq_pairs[pbq_depth].mag = pbq_marker;
+				cs40l2x->pbq_pairs[pbq_depth++].repeat = val;
+				pbq_marker = -1;
+				break;
+
+			case 3:	/* inner loop start: "!!" */
+				if (pbq_marker >= 0) {
+					ret = -EINVAL;
+					goto err_mutex;
+				}
+
+				cs40l2x->pbq_pairs[pbq_depth].tag =
+						CS40L2X_PBQ_TAG_START;
+				pbq_marker = pbq_depth++;
+				break;
+
+			default:
 				ret = -EINVAL;
 				goto err_mutex;
 			}
-			if (val > CS40L2X_PBQ_REPEAT_MAX) {
-				ret = -EINVAL;
-				goto err_mutex;
-			}
-			cs40l2x->pbq_repeat = val;
 
 		/* loop specifier */
-		} else if (strnchr(pbq_seg, '~', CS40L2X_PBQ_SEG_LEN_MAX)) {
+		} else if (strnchr(pbq_seg, CS40L2X_PBQ_SEG_LEN_MAX, '~')) {
 			if (cs40l2x->pbq_repeat) {
 				ret = -EINVAL;
 				goto err_mutex;
@@ -268,7 +317,8 @@ static ssize_t cs40l2x_cp_trigger_queue_store(struct device *dev,
 
 		/* duration specifier */
 		} else {
-			cs40l2x->pbq_pairs[pbq_depth].tag = 0;
+			cs40l2x->pbq_pairs[pbq_depth].tag =
+					CS40L2X_PBQ_TAG_SILENCE;
 
 			ret = kstrtou32(pbq_seg, 10, &val);
 			if (ret) {
@@ -950,62 +1000,83 @@ static int cs40l2x_pbq_pair_launch(struct cs40l2x_private *cs40l2x)
 	struct regmap *regmap = cs40l2x->regmap;
 	unsigned int dig_scale = cs40l2x->dig_scale;
 	unsigned int tag, mag;
-	int ret;
+	int ret, i;
 
 	/* this function expects to be called from a locked worker function */
 	if (!mutex_is_locked(&cs40l2x->lock))
 		return -EACCES;
 
-	if (cs40l2x->pbq_index == cs40l2x->pbq_depth) {
-		cs40l2x->pbq_index = 0;
+	do {
+		/* restart queue as necessary */
+		if (cs40l2x->pbq_index == cs40l2x->pbq_depth) {
+			cs40l2x->pbq_index = 0;
+			for (i = 0; i < cs40l2x->pbq_depth; i++)
+				cs40l2x->pbq_pairs[i].remain =
+						cs40l2x->pbq_pairs[i].repeat;
 
-		switch (cs40l2x->pbq_remain) {
-		case -1:
-			/* loop until stopped */
+			switch (cs40l2x->pbq_remain) {
+			case -1:
+				/* loop until stopped */
+				break;
+			case 0:
+				/* queue is finished */
+				cs40l2x->cp_trailer_index = 0;
+				cs40l2x->pbq_state = CS40L2X_PBQ_STATE_IDLE;
+
+				ret = cs40l2x_dig_scale_set(cs40l2x, dig_scale);
+				return ret;
+			default:
+				/* loop once more */
+				cs40l2x->pbq_remain--;
+			}
+		}
+
+		tag = cs40l2x->pbq_pairs[cs40l2x->pbq_index].tag;
+		mag = cs40l2x->pbq_pairs[cs40l2x->pbq_index].mag;
+
+		switch (tag) {
+		case CS40L2X_PBQ_TAG_SILENCE:
+			hrtimer_start(&cs40l2x->pbq_timer,
+					ktime_set(mag / 1000,
+							(mag % 1000) * 1000000),
+					HRTIMER_MODE_REL);
+			cs40l2x->pbq_state = CS40L2X_PBQ_STATE_SILENT;
+			cs40l2x->pbq_index++;
 			break;
-		case 0:
-			/* queue is finished */
-			cs40l2x->cp_trailer_index = 0;
-			cs40l2x->pbq_state = CS40L2X_PBQ_STATE_IDLE;
+		case CS40L2X_PBQ_TAG_START:
+			cs40l2x->pbq_index++;
+			break;
+		case CS40L2X_PBQ_TAG_STOP:
+			if (cs40l2x->pbq_pairs[cs40l2x->pbq_index].remain) {
+				cs40l2x->pbq_pairs[cs40l2x->pbq_index].remain--;
+				cs40l2x->pbq_index = mag;
+			} else {
+				cs40l2x->pbq_index++;
+			}
+			break;
+		default:
+			dig_scale += cs40l2x_pbq_scale[mag].dig_scale;
+			if (dig_scale > CS40L2X_DIG_SCALE_MAX)
+				dig_scale = CS40L2X_DIG_SCALE_MAX;
 
 			ret = cs40l2x_dig_scale_set(cs40l2x, dig_scale);
-			return ret;
-		default:
-			/* loop once more */
-			cs40l2x->pbq_remain--;
+			if (ret)
+				return ret;
+
+			ret = regmap_write(regmap, CS40L2X_MBOX_TRIGGERINDEX,
+					tag);
+			if (ret)
+				return ret;
+
+			ret = cs40l2x_pbq_poll(cs40l2x);
+			if (ret)
+				return ret;
+
+			cs40l2x->pbq_state = CS40L2X_PBQ_STATE_PLAYING;
+			cs40l2x->pbq_index++;
 		}
-	}
 
-	tag = cs40l2x->pbq_pairs[cs40l2x->pbq_index].tag;
-	mag = cs40l2x->pbq_pairs[cs40l2x->pbq_index].mag;
-
-	/* zero tag indicates a period of silence */
-	if (tag) {
-		dig_scale += cs40l2x_pbq_scale[mag].dig_scale;
-		if (dig_scale > CS40L2X_DIG_SCALE_MAX)
-			dig_scale = CS40L2X_DIG_SCALE_MAX;
-
-		ret = cs40l2x_dig_scale_set(cs40l2x, dig_scale);
-		if (ret)
-			return ret;
-
-		ret = regmap_write(regmap, CS40L2X_MBOX_TRIGGERINDEX, tag);
-		if (ret)
-			return ret;
-
-		ret = cs40l2x_pbq_poll(cs40l2x);
-		if (ret)
-			return ret;
-
-		cs40l2x->pbq_state = CS40L2X_PBQ_STATE_PLAYING;
-	} else {
-		hrtimer_start(&cs40l2x->pbq_timer,
-				ktime_set(mag / 1000, (mag % 1000) * 1000000),
-				HRTIMER_MODE_REL);
-		cs40l2x->pbq_state = CS40L2X_PBQ_STATE_SILENT;
-	}
-
-	cs40l2x->pbq_index++;
+	} while (tag == CS40L2X_PBQ_TAG_START || tag == CS40L2X_PBQ_TAG_STOP);
 
 	return 0;
 }
@@ -1101,7 +1172,7 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 		container_of(work, struct cs40l2x_private, vibe_start_work);
 	struct regmap *regmap = cs40l2x->regmap;
 	struct device *dev = cs40l2x->dev;
-	int ret;
+	int ret, i;
 
 	mutex_lock(&cs40l2x->lock);
 
@@ -1143,6 +1214,9 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 	case CS40L2X_INDEX_PBQ:
 		cs40l2x->pbq_index = 0;
 		cs40l2x->pbq_remain = cs40l2x->pbq_repeat;
+		for (i = 0; i < cs40l2x->pbq_depth; i++)
+			cs40l2x->pbq_pairs[i].remain =
+					cs40l2x->pbq_pairs[i].repeat;
 		ret = cs40l2x_pbq_pair_launch(cs40l2x);
 		if (ret)
 			dev_err(dev, "Failed to launch playback queue\n");
