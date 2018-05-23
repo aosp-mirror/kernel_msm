@@ -12,3 +12,6 @@ void WitTim(UINT_16);
 void WPBCtrl(UINT_8 UcCtrl);
 bool checkOISFWversion(UINT_16 *cal_id, UINT_32 *module_maker);
 int checkOISFWUpdate(struct cam_sensor_ctrl_t *s_ctrl);
+int GyroReCalib(struct camera_io_master *io_master_info,
+	stReCalib *cal_result);
+int WrGyroOffsetData(void);

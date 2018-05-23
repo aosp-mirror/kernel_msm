@@ -18,6 +18,29 @@
 #include "cam_ois_soc.h"
 #include "cam_packet_util.h"
 #include "cam_res_mgr_api.h"
+#include "../cam_fw_update/fw_update.h"
+
+int cam_ois_calibration(struct cam_ois_ctrl_t *o_ctrl,
+	stReCalib *cal_result)
+{
+	int rc;
+
+	rc = GyroReCalib(&o_ctrl->io_master_info, cal_result);
+	if (rc != 0)
+		CAM_ERR(CAM_OIS,
+			"[OISCali] ReCalib FAIL, rc = %d", rc);
+	else {
+		rc = WrGyroOffsetData();
+		if (rc != 0)
+			CAM_ERR(CAM_OIS,
+				"[OISCali] WrGyro FAIL, rc = %d", rc);
+		else
+			CAM_INFO(CAM_OIS,
+				"[OISCali] SUCCESS");
+	}
+
+	return rc;
+}
 
 int32_t cam_ois_construct_default_power_setting(
 	struct cam_sensor_power_ctrl_t *power_info)
@@ -740,6 +763,8 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 		(struct cam_ois_soc_private *)o_ctrl->soc_info.soc_private;
 	struct cam_sensor_power_ctrl_t  *power_info = &soc_private->power_info;
 	struct cam_cmd_get_ois_data     *cmd_get_ois = NULL;
+	int32_t                         *cal_rc;
+	stReCalib                       *cal_result;
 
 	ioctl_ctrl = (struct cam_control *)arg;
 	if (copy_from_user(&dev_config, (void __user *) ioctl_ctrl->handle,
@@ -977,6 +1002,28 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 			CAM_OIS_PACKET_OPCODE_READ) {
 			rc = cam_ois_read_reg(o_ctrl, cmd_get_ois);
 		}
+		break;
+	case CAM_OIS_PACKET_OPCODE_CALIBRATION:
+		if (cam_ois_util_validate_packet(csl_packet))
+			return -EINVAL;
+		offset = (uint32_t *)((uint8_t *)&csl_packet->payload +
+			csl_packet->cmd_buf_offset);
+		cmd_desc = (struct cam_cmd_buf_desc *)offset;
+		rc = cam_mem_get_cpu_buf(cmd_desc[0].mem_handle,
+			&generic_ptr, &len_of_buff);
+		if (rc < 0) {
+			CAM_ERR(CAM_OIS, "Failed to get cpu buf");
+			return rc;
+		}
+		if (!generic_ptr) {
+			CAM_ERR(CAM_OIS, "invalid generic_ptr");
+			return -EINVAL;
+		}
+		offset = (uint32_t *)((uint8_t *)generic_ptr +
+			cmd_desc->offset);
+		cal_rc = (int32_t *)offset;
+		cal_result = (stReCalib *)(offset + 1);
+		*cal_rc = cam_ois_calibration(o_ctrl, cal_result);
 		break;
 	default:
 		break;
