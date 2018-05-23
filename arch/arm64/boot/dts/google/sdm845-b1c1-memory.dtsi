@@ -55,6 +55,12 @@
 		label = "easel_mem";
 	};
 
+	debug_info: debug_info@0 {
+		compatible = "removed-dma-pool";
+		no-map;
+		reg = <0 0xa1800000 0 0x00010000>;
+	};
+
 	ramoops@a3800000 {
 		compatible = "ramoops";
 		reg = <0 0xa3800000 0 0x200000>;
