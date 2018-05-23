@@ -37,6 +37,7 @@
 #include <linux/spinlock.h>
 #include <linux/uaccess.h>
 #include <linux/syslog.h>
+#include <linux/bldr_debug_tools.h>
 
 #include "internal.h"
 
@@ -138,10 +139,14 @@ static ssize_t pstore_file_read(struct file *file, char __user *userbuf,
 {
 	struct seq_file *sf = file->private_data;
 	struct pstore_private *ps = sf->private;
+	ssize_t len = 0;
 
 	if (ps->type == PSTORE_TYPE_FTRACE)
 		return seq_read(file, userbuf, count, ppos);
-	return simple_read_from_buffer(userbuf, count, ppos, ps->data, ps->size);
+	if (ps->type == PSTORE_TYPE_CONSOLE)
+		len = bldr_log_read(ps->data, ps->size, userbuf, count, ppos);
+	return (len > 0) ? len : simple_read_from_buffer(userbuf,
+		count, ppos, ps->data, ps->size);
 }
 
 static int pstore_file_open(struct inode *inode, struct file *file)
@@ -384,6 +389,9 @@ int pstore_mkfile(enum pstore_type_id type, char *psname, u64 id, int count,
 
 	memcpy(private->data, data, size);
 	inode->i_size = private->size = size;
+
+	if (type == PSTORE_TYPE_CONSOLE)
+		inode->i_size += bldr_log_total_size();
 
 	inode->i_private = private;
 
