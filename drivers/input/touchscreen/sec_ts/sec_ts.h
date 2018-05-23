@@ -711,8 +711,8 @@ struct sec_ts_data {
 	volatile bool reset_is_on_going;
 #endif
 	struct delayed_work work_fw_update;
-	struct delayed_work suspend_work;
-	struct delayed_work resume_work;
+	struct work_struct suspend_work;
+	struct work_struct resume_work;
 	struct completion resume_done;
 	struct sec_cmd_data sec;
 	short *pFrame;
