@@ -273,6 +273,7 @@ struct fg_dt_props {
 	bool	hold_soc_while_full;
 	bool	linearize_soc;
 	bool	auto_recharge_soc;
+	bool	soc_irq_disable;
 	int	cutoff_volt_mv;
 	int	empty_volt_mv;
 	int	vbatt_low_thr_mv;

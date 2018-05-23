@@ -5434,6 +5434,9 @@ static int fg_parse_dt(struct fg_chip *chip)
 			chip->dt.bmd_en_delay_ms = temp;
 	}
 
+	chip->dt.soc_irq_disable =
+		of_property_read_bool(node, "google,fg-soc-irq-disable");
+
 	return 0;
 }
 
@@ -5646,6 +5649,21 @@ static int fg_gen3_probe(struct platform_device *pdev)
 	/* Keep SOC_UPDATE irq disabled until we require it */
 	if (fg_irqs[SOC_UPDATE_IRQ].irq)
 		disable_irq_nosync(fg_irqs[SOC_UPDATE_IRQ].irq);
+
+	if (chip->dt.soc_irq_disable) {
+		if (fg_irqs[MSOC_EMPTY_IRQ].irq)
+			disable_irq_nosync(fg_irqs[MSOC_EMPTY_IRQ].irq);
+		if (fg_irqs[MSOC_FULL_IRQ].irq)
+			disable_irq_nosync(fg_irqs[MSOC_FULL_IRQ].irq);
+		if (fg_irqs[MSOC_HIGH_IRQ].irq)
+			disable_irq_nosync(fg_irqs[MSOC_HIGH_IRQ].irq);
+		if (fg_irqs[MSOC_LOW_IRQ].irq)
+			disable_irq_nosync(fg_irqs[MSOC_LOW_IRQ].irq);
+		if (fg_irqs[MSOC_DELTA_IRQ].irq)
+			disable_irq_nosync(fg_irqs[MSOC_DELTA_IRQ].irq);
+		if (fg_irqs[BSOC_DELTA_IRQ].irq)
+			disable_irq_nosync(fg_irqs[BSOC_DELTA_IRQ].irq);
+	}
 
 	/* Keep BSOC_DELTA_IRQ disabled until we require it */
 	vote(chip->delta_bsoc_irq_en_votable, DELTA_BSOC_IRQ_VOTER, false, 0);
