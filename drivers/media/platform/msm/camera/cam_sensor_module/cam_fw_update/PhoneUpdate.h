@@ -56,6 +56,15 @@ typedef struct {
 	UINT_16             SizeFromCode;
 } DOWNLOAD_TBL;
 
+typedef struct STRECALIB {
+	INT_16	SsFctryOffX;
+	INT_16	SsFctryOffY;
+	INT_16	SsRecalOffX;
+	INT_16	SsRecalOffY;
+	INT_16	SsDiffX;
+	INT_16	SsDiffY;
+}	stReCalib;
+
 #define	WPB_OFF 0x01
 #define WPB_ON  0x00
 
@@ -105,5 +114,10 @@ extern void   F40_FlashSectorRead(UINT_32, UINT_8 *);
 extern UINT_8 F40_FlashInt32Read(UINT_32, UINT_32 *);
 extern void   F40_CalcChecksum(const UINT_8 *, UINT_32, UINT_32 *, UINT_32 *);
 extern void   F40_CalcBlockChksum(UINT_8, UINT_32 *, UINT_32 *);
+extern void   F40_ReadCalData(UINT_32 *, UINT_32 *);
+extern UINT_8 F40_GyroReCalib(stReCalib *);
+extern UINT_8 F40_WrGyroOffsetData(void);
+extern UINT_8 F40_RdStatus(UINT_8);
+extern UINT_8 F40_WriteCalData(UINT_32 *, UINT_32 *);
 
 #endif /* #ifndef OIS_H_ */

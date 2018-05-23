@@ -282,3 +282,50 @@ int checkOISFWUpdate(struct cam_sensor_ctrl_t *s_ctrl)
 
 	return rc;
 }
+
+int GyroReCalib(struct camera_io_master *io_master_info,
+	stReCalib *cal_result)
+{
+	int rc;
+	stReCalib pReCalib;
+
+	g_io_master_info = io_master_info;
+	if (g_io_master_info == NULL)
+		return -EINVAL;
+
+	rc = F40_GyroReCalib(&pReCalib);
+	memcpy(cal_result, &pReCalib, sizeof(stReCalib));
+	if (rc != 0)
+		return rc;
+
+	CAM_INFO(CAM_SENSOR,
+		"[OISCali]%d, FctryOffX = %d(0x%x), FctryOffY = %d(0x%x)",
+		rc, cal_result->SsFctryOffX, cal_result->SsFctryOffX,
+		cal_result->SsFctryOffY, cal_result->SsFctryOffY);
+	CAM_INFO(CAM_SENSOR,
+		"[OISCali]%d, RecalOffX = %d(0x%x), RecalOffY = %d(0x%x)",
+		rc, cal_result->SsRecalOffX, cal_result->SsRecalOffX,
+		cal_result->SsRecalOffY, cal_result->SsRecalOffY);
+	CAM_INFO(CAM_SENSOR,
+		"[OISCali]%d, DiffX = %d(0x%x), DiffY = %d(0x%x)",
+		rc, cal_result->SsDiffX, cal_result->SsDiffX,
+		cal_result->SsDiffY, cal_result->SsDiffY);
+
+	if (abs(cal_result->SsRecalOffX) >= 0x600 ||
+		abs(cal_result->SsRecalOffY) >= 0x600 ||
+		abs(cal_result->SsDiffX) >= 0x1000 ||
+		abs(cal_result->SsDiffY) >= 0x1000) {
+		CAM_ERR(CAM_SENSOR,
+			"[OISCali] Check failed.");
+		return -EINVAL;
+	}
+	return rc;
+}
+
+int WrGyroOffsetData(void)
+{
+	int rc;
+
+	rc = F40_WrGyroOffsetData();
+	return rc;
+}

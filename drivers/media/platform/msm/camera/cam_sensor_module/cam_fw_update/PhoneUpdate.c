@@ -22,6 +22,9 @@
 #define FLASH_ACCESS_SIZE       32
 #define USER_AREA_START         (BLOCK_UNIT * ERASE_BLOCKS)
 
+#define CNT100MS                1352
+#define CNT200MS                2703
+
 //===============================================
 //  CUSTOMER NECESSARY CREATING FUNCTION LIST
 //===============================================
@@ -36,6 +39,11 @@ extern void CntRd3(UINT_32, void *, UINT_16);
 extern void WPBCtrl(UINT_8);
 /* for Wait timer [Need to adjust for your system] */
 extern void WitTim(UINT_16);
+
+//==========================
+//  extern  Function LIST
+//==========================
+UINT_32 UlBufDat[64];
 
 //==========================
 //  Table of download file
@@ -497,4 +505,204 @@ UINT_8 F40_FlashUpdate(UINT_8 flag, DOWNLOAD_TBL *ptr)
 
 	F40_IOWrite32A(SYSDSP_REMAP, 0x00001000);
 	return 0;
+}
+
+void F40_ReadCalData(UINT_32 *BufDat, UINT_32 *ChkSum)
+{
+	UINT_16 UsSize = 0, UsNum;
+
+	*ChkSum = 0;
+
+	while (UsSize < 64) {
+		F40_IOWrite32A(FLASHROM_F40_ACSCNT, (FLASH_ACCESS_SIZE - 1));
+		F40_IOWrite32A(FLASHROM_F40_ADR, 0x00010040 + UsSize);
+		F40_IOWrite32A(FLASHROM_F40_CMD, 1);
+
+		RamWrite32A(F40_IO_ADR_ACCESS, FLASHROM_F40_RDATL);
+
+		for (UsNum = 0; UsNum < FLASH_ACCESS_SIZE; UsNum++) {
+			RamRead32A(F40_IO_DAT_ACCESS, &(BufDat[UsSize]));
+			*ChkSum += BufDat[UsSize++];
+		}
+	}
+}
+
+UINT_8 F40_GyroReCalib(stReCalib *pReCalib)
+{
+	UINT_8  UcSndDat;
+	UINT_32 UlRcvDat;
+	UINT_32 UlGofX, UlGofY;
+	UINT_32 UiChkSum;
+	UINT_32 UlStCnt = 0;
+
+	F40_ReadCalData(UlBufDat, &UiChkSum);
+
+	RamWrite32A(0xF014, 0x00000000);
+
+	do {
+		UcSndDat = F40_RdStatus(1);
+	} while (UcSndDat != 0 && (UlStCnt++ < CNT100MS));
+
+	RamRead32A(0xF014, &UlRcvDat);
+	UcSndDat = (unsigned char)(UlRcvDat >> 24);
+
+	if (UlBufDat[49] == 0xFFFFFFFF)
+		pReCalib->SsFctryOffX = (UlBufDat[19] >> 16);
+	else
+		pReCalib->SsFctryOffX = (UlBufDat[49] >> 16);
+
+	if (UlBufDat[50] == 0xFFFFFFFF)
+		pReCalib->SsFctryOffY = (UlBufDat[20] >> 16);
+	else
+		pReCalib->SsFctryOffY = (UlBufDat[50] >> 16);
+
+	RamRead32A(0x0278, &UlGofX);
+	RamRead32A(0x027C, &UlGofY);
+
+	pReCalib->SsRecalOffX = (UlGofX >> 16);
+	pReCalib->SsRecalOffY = (UlGofY >> 16);
+	pReCalib->SsDiffX =
+		pReCalib->SsFctryOffX - pReCalib->SsRecalOffX;
+	pReCalib->SsDiffY =
+		pReCalib->SsFctryOffY - pReCalib->SsRecalOffY;
+
+	return UcSndDat;
+}
+
+UINT_8 F40_EraseCalData(void)
+{
+	UINT_32 UlReadVal, UlCnt;
+	UINT_8  ans;
+
+	ans = F40_UnlockCodeSet();
+	if (ans != 0)
+		return ans;
+
+	F40_IOWrite32A(FLASHROM_F40_ADR, 0x00010040);
+	F40_IOWrite32A(FLASHROM_F40_CMD, 4);
+
+	WitTim(5);
+	UlCnt = 0;
+	do {
+		if (UlCnt++ > 100) {
+			ans = 2;
+			break;
+		}
+		F40_IORead32A(FLASHROM_F40_INT, &UlReadVal);
+	} while ((UlReadVal & 0x00000080) != 0);
+
+	ans = F40_UnlockCodeClear();
+
+	return ans;
+}
+
+UINT_8 F40_WrGyroOffsetData(void)
+{
+	UINT_32 UlFctryX, UlFctryY;
+	UINT_32 UlCurrX, UlCurrY;
+	UINT_32 UlGofX, UlGofY;
+	UINT_32 UiChkSum1, UiChkSum2;
+	UINT_32 UlSrvStat, UlOisStat;
+	UINT_8  ans;
+	UINT_32 UlStCnt = 0;
+	UINT_8  UcSndDat;
+
+	RamRead32A(0xF010, &UlSrvStat);
+	RamRead32A(0xF012, &UlOisStat);
+	RamWrite32A(0xF010, 0x00000000);
+
+	F40_ReadCalData(UlBufDat, &UiChkSum2);
+
+	ans = F40_EraseCalData();
+	if (ans == 0) {
+		RamRead32A(0x0278, &UlGofX);
+		RamRead32A(0x027C, &UlGofY);
+
+		UlCurrX = UlBufDat[19];
+		UlCurrY = UlBufDat[20];
+		UlFctryX = UlBufDat[49];
+		UlFctryY = UlBufDat[50];
+
+		if (UlFctryX == 0xFFFFFFFF)
+			UlBufDat[49] = UlCurrX;
+
+		if (UlFctryY == 0xFFFFFFFF)
+			UlBufDat[50] = UlCurrY;
+
+		UlBufDat[19] = UlGofX;
+		UlBufDat[20] = UlGofY;
+
+		F40_WriteCalData(UlBufDat, &UiChkSum1);
+
+		F40_ReadCalData(UlBufDat, &UiChkSum2);
+		if (UiChkSum1 != UiChkSum2)
+			ans = 0x10;
+	}
+
+	if (!UlSrvStat)
+		RamWrite32A(0xF010, 0x00000000);
+	else if (UlSrvStat == 3)
+		RamWrite32A(0xF010, 0x00000003);
+	else
+		RamWrite32A(0xF010, UlSrvStat);
+
+	do {
+		UcSndDat = F40_RdStatus(1);
+	} while (UcSndDat != 0 && (UlStCnt++ < CNT200MS));
+
+	if (UlOisStat != 0) {
+		RamWrite32A(0xF012, 0x00000001);
+		UlStCnt = 0;
+		do {
+			UcSndDat = F40_RdStatus(1);
+		} while (UcSndDat != 0 && (UlStCnt++ < CNT100MS));
+	}
+
+	return ans;
+}
+
+UINT_8 F40_RdStatus(UINT_8 UcStBitChk)
+{
+	UINT_32 UlReadVal;
+
+	RamRead32A(0xF100, &UlReadVal);
+	if (UcStBitChk)
+		UlReadVal &= 0x01000000;
+
+	if (!UlReadVal)
+		return 0x00;
+	else
+		return 0x01;
+}
+
+UINT_8 F40_WriteCalData(UINT_32 *BufDat, UINT_32 *ChkSum)
+{
+	UINT_16 UsSize = 0, UsNum;
+	UINT_8  ans;
+	UINT_32 UlReadVal;
+
+	*ChkSum = 0;
+
+	ans = F40_UnlockCodeSet();
+	if (ans != 0)
+		return ans;
+
+	F40_IOWrite32A(FLASHROM_F40_WDATH, 0x000000FF);
+
+	while (UsSize < 64) {
+		F40_IOWrite32A(FLASHROM_F40_ACSCNT, (FLASH_ACCESS_SIZE - 1));
+		F40_IOWrite32A(FLASHROM_F40_ADR, 0x00010040 + UsSize);
+		F40_IOWrite32A(FLASHROM_F40_CMD, 2);
+		for (UsNum = 0; UsNum < FLASH_ACCESS_SIZE; UsNum++) {
+			F40_IOWrite32A(FLASHROM_F40_WDATL, BufDat[UsSize]);
+			do {
+				F40_IORead32A(FLASHROM_F40_INT, &UlReadVal);
+			} while ((UlReadVal & 0x00000020) != 0);
+			*ChkSum += BufDat[UsSize++];
+		}
+	}
+
+	ans = F40_UnlockCodeClear();
+
+	return ans;
 }
