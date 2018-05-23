@@ -75,7 +75,8 @@
 	    0xC2 0xFF00	/* nSAlrtTh: disabled */
 	    0x9D 0x0EB4 /* nFilterCfg: Volt = 90 sec */
 	    0xC6 0x5A05 /* nFullSOCThr = 90% */
-	    0XB8 0xCDD0 /* nNVCfg0 */
+	    0xB8 0xCDF0 /* nNVCfg0 */
+	    0xBa 0xFE0A /* nNVCfg2 */
 	>;
 };
 

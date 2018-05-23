@@ -27,37 +27,16 @@ maxim,n_regval = /bits/ 16 <
 	0x99 0xC80D	/* nOCVTable9                               */
 	0x9A 0xCB04	/* nOCVTable10                              */
 	0x9B 0xCDF1	/* nOCVTable11                              */
-	0x9C 0x01DC	/* nIChgTerm                                */
-	0x9D 0x0000	/* nFilterCfg                               */
 	0x9E 0xA561	/* nVEmpty: VE=3300 VR=3880                 */
-	0x9F 0x2672	/* nLearnCfg                                */
-	0xA0 0x4180	/* nQRTable00                               */
-	0xA1 0x1F00	/* nQRTable10                               */
-	0xA2 0x0D80	/* nQRTable20                               */
-	0xA3 0x0D03	/* nQRTable30                               */
-	0xA4 0x0000	/* nCycles                                  */
-	0xA5 0x0B66	/* nFullCapNom: 2918 mAh                    */
-	0xA6 0x203B	/* nRComp0                                  */
-	0xA7 0x1133	/* nTempCo                                  */
-	0xA8 0x0000	/* nIAvgEmpty                               */
-	0xA9 0x0B66	/* nFullCapRep                              */
-	0xB0 0x7215	/* nConfig: SS TS VS Ten Aen TAlrtEn        */
 	0xB1 0x0204	/* nRippleCfg                               */
 	0xB2 0x0000	/* nMiscCfg                                 */
 	0xB3 0x0B66	/* nDesignCap: 2918 mAh                     */
 	0xB4 0x0000	/* nHibCfg                                  */
 	0xB5 0x9C01	/* nPackCfg                                 */
 	0xB6 0x0000	/* nRelaxCfg                                */
-	0xB7 0x2241	/* nConvgCfg                                */
-	0xB8 0xC9D0	/* nNVCfg0                                  */
 	0xB9 0xA00E	/* nNVCfg1                                  */
-	0xBA 0xFE0A	/* nNVCfg2                                  */
 	0xBB 0x0002	/* nSBSCfg                                  */
-	0xC0 0xDC94	/* nVAlrtTh: VMAX=4400 VMIN=2960            */
-	0xC1 0x7F80	/* nTAlrtTh: Disabled                       */
-	0xC2 0x6301	/* nSAlrtTh: SMAX=99 SMIN=1                 */
 	0xC3 0x7F80	/* nIAlrtTh: Disabled                       */
-	0xC6 0x5F05	/* nFullSOCThr: 95%                         */
 	0xC7 0x0000	/* nTTFCfg                                  */
 	0xC9 0x002F	/* nTCurve                                  */
 	0xCA 0xF1F1	/* nTGain                                   */
