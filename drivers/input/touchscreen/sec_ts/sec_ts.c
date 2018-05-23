@@ -1660,8 +1660,8 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	INIT_DELAYED_WORK(&ts->reset_work, sec_ts_reset_work);
 #endif
 	INIT_DELAYED_WORK(&ts->work_read_info, sec_ts_read_info_work);
-	INIT_DELAYED_WORK(&ts->suspend_work, sec_ts_suspend_work);
-	INIT_DELAYED_WORK(&ts->resume_work, sec_ts_resume_work);
+	INIT_WORK(&ts->suspend_work, sec_ts_suspend_work);
+	INIT_WORK(&ts->resume_work, sec_ts_resume_work);
 
 	i2c_set_clientdata(client, ts);
 
@@ -2309,8 +2309,8 @@ static void sec_ts_input_close(struct input_dev *dev)
 
 	sec_ts_set_bus_ref(ts, SEC_TS_BUS_REF_INPUT_DEV, true);
 
-	cancel_delayed_work(&ts->suspend_work);
-	cancel_delayed_work(&ts->resume_work);
+	cancel_work(&ts->suspend_work);
+	cancel_work(&ts->resume_work);
 
 #ifdef USE_POWER_RESET_WORK
 	cancel_delayed_work(&ts->reset_work);
@@ -2341,10 +2341,10 @@ static int sec_ts_remove(struct i2c_client *client)
 
 	msm_drm_unregister_client(&ts->notifier);
 
-	cancel_delayed_work(&ts->suspend_work);
-	flush_delayed_work(&ts->suspend_work);
-	cancel_delayed_work(&ts->resume_work);
-	flush_delayed_work(&ts->resume_work);
+	cancel_work(&ts->suspend_work);
+	flush_work(&ts->suspend_work);
+	cancel_work(&ts->resume_work);
+	flush_work(&ts->resume_work);
 
 #ifdef SEC_TS_FW_UPDATE_ON_PROBE
 	cancel_delayed_work_sync(&ts->work_fw_update);
@@ -2583,7 +2583,7 @@ static void sec_set_switch_gpio(struct sec_ts_data *ts, int gpio_value)
 static void sec_ts_suspend_work(struct work_struct *work)
 {
 	struct sec_ts_data *ts = container_of(work, struct sec_ts_data,
-					      suspend_work.work);
+					      suspend_work);
 	int ret = 0;
 
 	input_info(true, &ts->client->dev, "%s\n", __func__);
@@ -2624,7 +2624,7 @@ static void sec_ts_suspend_work(struct work_struct *work)
 static void sec_ts_resume_work(struct work_struct *work)
 {
 	struct sec_ts_data *ts = container_of(work, struct sec_ts_data,
-					      resume_work.work);
+					      resume_work);
 	int ret = 0;
 
 	input_info(true, &ts->client->dev, "%s\n", __func__);
@@ -2722,17 +2722,9 @@ static void sec_ts_aggregate_bus_state(struct sec_ts_data *ts)
 		return;
 
 	if (ts->bus_refmask == 0) {
-		cancel_delayed_work_sync(&ts->resume_work);
-
-		if (!delayed_work_pending(&ts->suspend_work))
-			schedule_delayed_work(&ts->suspend_work,
-					      msecs_to_jiffies(HZ));
+		schedule_work(&ts->suspend_work);
 	} else {
-		cancel_delayed_work_sync(&ts->suspend_work);
-
-		if (!delayed_work_pending(&ts->resume_work))
-			schedule_delayed_work(&ts->resume_work,
-					      msecs_to_jiffies(HZ));
+		schedule_work(&ts->resume_work);
 	}
 }
 
