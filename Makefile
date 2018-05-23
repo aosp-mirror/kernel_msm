@@ -1,7 +1,6 @@
 VERSION = 4
 PATCHLEVEL = 9
-# STOPSHIP TODO(cfries)- revert sublevel hack b/72409164
-SUBLEVEL = 96
+SUBLEVEL = 84
 EXTRAVERSION =
 NAME = Roaring Lionus
 
