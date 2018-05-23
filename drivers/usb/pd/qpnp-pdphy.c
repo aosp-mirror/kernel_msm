@@ -340,6 +340,17 @@ int pd_phy_update_roles(enum data_role dr, enum power_role pr)
 }
 EXPORT_SYMBOL(pd_phy_update_roles);
 
+int pd_phy_assign_pm_callbacks(struct pd_phy_params *params)
+{
+	struct usb_pdphy *pdphy = __pdphy;
+
+	pdphy->suspend_cb = params->suspend_cb;
+	pdphy->resume_cb =  params->resume_cb;
+
+	return 0;
+}
+EXPORT_SYMBOL(pd_phy_assign_pm_callbacks);
+
 int pd_phy_open(struct pd_phy_params *params)
 {
 	int ret;
@@ -358,8 +369,6 @@ int pd_phy_open(struct pd_phy_params *params)
 	pdphy->signal_cb = params->signal_cb;
 	pdphy->msg_rx_cb = params->msg_rx_cb;
 	pdphy->shutdown_cb = params->shutdown_cb;
-	pdphy->suspend_cb = params->suspend_cb;
-	pdphy->resume_cb = params->resume_cb;
 	pdphy->data_role = params->data_role;
 	pdphy->power_role = params->power_role;
 	pdphy->frame_filter_val = params->frame_filter_val;

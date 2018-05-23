@@ -85,6 +85,7 @@ extern void ext_vbus_unregister_notify(struct notifier_block *nb);
 
 #if IS_ENABLED(CONFIG_QPNP_USB_PDPHY)
 int pd_phy_open(struct pd_phy_params *params);
+int pd_phy_assign_pm_callbacks(struct pd_phy_params *params);
 int pd_phy_signal(enum pd_sig_type sig);
 int pd_phy_write(u16 hdr, const u8 *data, size_t data_len,
 		enum pd_sop_type sop);
