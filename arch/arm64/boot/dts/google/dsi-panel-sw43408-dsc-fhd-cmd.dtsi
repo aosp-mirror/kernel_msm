@@ -50,8 +50,8 @@
 		qcom,mdss-dsi-init-delay-us = <10000>;
 
 		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
-		qcom,mdss-dsi-bl-min-level = <0x8>;
-		qcom,mdss-dsi-bl-max-level = <0x3ff>;
+		qcom,mdss-dsi-bl-min-level = <0x8>; /* 2.74 nits */
+		qcom,mdss-dsi-bl-max-level = <0x3b7>; /* 420.12 nits */
 		qcom,mdss-dsi-panel-hdr-enabled;
 		qcom,mdss-dsi-panel-hdr-color-primaries = <14500 15500 32000
 			17000 15500 30000 8000 3000>;
