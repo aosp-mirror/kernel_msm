@@ -1663,6 +1663,9 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	INIT_WORK(&ts->suspend_work, sec_ts_suspend_work);
 	INIT_WORK(&ts->resume_work, sec_ts_resume_work);
 
+	/* Assume screen is on throughout probe */
+	ts->bus_refmask = SEC_TS_BUS_REF_SCREEN_ON;
+
 	i2c_set_clientdata(client, ts);
 
 #ifdef CONFIG_TOUCHSCREEN_TBN
