@@ -120,9 +120,11 @@ static ssize_t sec_ts_regread_show(struct device *dev, struct device_attribute *
 			length = remain;
 
 		if (offset == 0)
-			ret = ts->sec_ts_i2c_read(ts, lv1cmd, &read_lv1_buff[offset], length);
+			ret = ts->sec_ts_i2c_read_heap(ts, lv1cmd,
+					&read_lv1_buff[offset], length);
 		else
-			ret = ts->sec_ts_i2c_read_bulk (ts, &read_lv1_buff[offset], length);
+			ret = ts->sec_ts_i2c_read_bulk_heap(ts,
+					&read_lv1_buff[offset], length);
 
 		if (ret < 0) {
 			input_err(true, &ts->client->dev, "%s: i2c read %x command, remain =%d\n", __func__, lv1cmd, remain);

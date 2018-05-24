@@ -43,12 +43,12 @@ int sec_ts_read_information(struct sec_ts_data *ts);
 
 int sec_ts_i2c_write(struct sec_ts_data *ts, u8 reg, u8 *data, int len)
 {
-	u8 buf[I2C_WRITE_BUFFER_SIZE + 1];
+	u8 *buf;
 	int ret;
 	unsigned char retry;
 	struct i2c_msg msg;
 
-	if (len > I2C_WRITE_BUFFER_SIZE) {
+	if (len + 1 > sizeof(ts->i2c_write_buf)) {
 		input_err(true, &ts->client->dev, "%s: len is larger than buffer size\n", __func__);
 		return -EINVAL;
 	}
@@ -58,6 +58,9 @@ int sec_ts_i2c_write(struct sec_ts_data *ts, u8 reg, u8 *data, int len)
 		goto err;
 	}
 
+	mutex_lock(&ts->i2c_mutex);
+
+	buf = ts->i2c_write_buf;
 	buf[0] = reg;
 	memcpy(buf + 1, data, len);
 
@@ -65,7 +68,7 @@ int sec_ts_i2c_write(struct sec_ts_data *ts, u8 reg, u8 *data, int len)
 	msg.flags = 0;
 	msg.len = len + 1;
 	msg.buf = buf;
-	mutex_lock(&ts->i2c_mutex);
+
 	for (retry = 0; retry < SEC_TS_I2C_RETRY_CNT; retry++) {
 		if ((ret = i2c_transfer(ts->client->adapter, &msg, 1)) == 1)
 			break;
@@ -101,9 +104,10 @@ err:
 	return -EIO;
 }
 
-int sec_ts_i2c_read(struct sec_ts_data *ts, u8 reg, u8 *data, int len)
+static int sec_ts_i2c_read_internal(struct sec_ts_data *ts, u8 reg,
+			     u8 *data, int len, bool dma_safe)
 {
-	u8 buf[4];
+	u8 *buf;
 	int ret;
 	unsigned char retry;
 	struct i2c_msg msg[2];
@@ -114,6 +118,15 @@ int sec_ts_i2c_read(struct sec_ts_data *ts, u8 reg, u8 *data, int len)
 		goto err;
 	}
 
+	if (len > sizeof(ts->i2c_read_buf) && dma_safe == false) {
+		input_err(true, &ts->client->dev, "%s: len %d over pre-allocated size %d\n",
+			__func__, len, I2C_PREALLOC_READ_BUF_SZ);
+		return -ENOSPC;
+	}
+
+	mutex_lock(&ts->i2c_mutex);
+
+	buf = ts->i2c_write_buf;
 	buf[0] = reg;
 
 	msg[0].addr = ts->client->addr;
@@ -124,9 +137,10 @@ int sec_ts_i2c_read(struct sec_ts_data *ts, u8 reg, u8 *data, int len)
 	msg[1].addr = ts->client->addr;
 	msg[1].flags = I2C_M_RD;
 	msg[1].len = len;
-	msg[1].buf = data;
-
-	mutex_lock(&ts->i2c_mutex);
+	if (dma_safe == false)
+		msg[1].buf = ts->i2c_read_buf;
+	else
+		msg[1].buf = data;
 
 	if (len <= ts->i2c_burstmax) {
 
@@ -146,6 +160,9 @@ int sec_ts_i2c_read(struct sec_ts_data *ts, u8 reg, u8 *data, int len)
 				ts->comm_err_count++;
 			}
 		}
+
+		if (ret == 2 && dma_safe == false)
+			memcpy(data, ts->i2c_read_buf, len);
 
 	} else {
 		/*
@@ -199,6 +216,8 @@ int sec_ts_i2c_read(struct sec_ts_data *ts, u8 reg, u8 *data, int len)
 
 		} while (remain > 0);
 
+		if (ret == 1 && dma_safe == false)
+			memcpy(data, ts->i2c_read_buf, len);
 	}
 
 	mutex_unlock(&ts->i2c_mutex);
@@ -219,12 +238,25 @@ err:
 	return -EIO;
 }
 
-static int sec_ts_i2c_write_burst(struct sec_ts_data *ts, u8 *data, int len)
+static int sec_ts_i2c_write_burst_internal(struct sec_ts_data *ts,
+					   u8 *data, int len, bool dma_safe)
 {
 	int ret;
 	int retry;
 
+	if (len > sizeof(ts->i2c_write_buf) && dma_safe == false) {
+		input_err(true, &ts->client->dev, "%s: len %d over pre-allocated size %d\n",
+			__func__, len, sizeof(ts->i2c_write_buf));
+		return -ENOSPC;
+	}
+
 	mutex_lock(&ts->i2c_mutex);
+
+	if (dma_safe == false) {
+		memcpy(ts->i2c_write_buf, data, len);
+		data = ts->i2c_write_buf;
+	}
+
 	for (retry = 0; retry < SEC_TS_I2C_RETRY_CNT; retry++) {
 		if ((ret = i2c_master_send(ts->client, data, len)) == len)
 			break;
@@ -246,19 +278,30 @@ static int sec_ts_i2c_write_burst(struct sec_ts_data *ts, u8 *data, int len)
 	return ret;
 }
 
-static int sec_ts_i2c_read_bulk(struct sec_ts_data *ts, u8 *data, int len)
+static int sec_ts_i2c_read_bulk_internal(struct sec_ts_data *ts,
+					 u8 *data, int len, bool dma_safe)
 {
 	int ret;
 	unsigned char retry;
 	int remain = len;
 	struct i2c_msg msg;
 
+	if (len > sizeof(ts->i2c_read_buf) && dma_safe == false) {
+		input_err(true, &ts->client->dev,
+			  "%s: len %d over pre-allocated size %d\n", __func__,
+			  len, sizeof(ts->i2c_read_buf));
+		return -ENOSPC;
+	}
+
+	mutex_lock(&ts->i2c_mutex);
+
 	msg.addr = ts->client->addr;
 	msg.flags = I2C_M_RD;
 	msg.len = len;
-	msg.buf = data;
-
-	mutex_lock(&ts->i2c_mutex);
+	if (dma_safe == false)
+		msg.buf = ts->i2c_read_buf;
+	else
+		msg.buf = data;
 
 	do {
 		if (remain > ts->i2c_burstmax)
@@ -280,15 +323,19 @@ static int sec_ts_i2c_read_bulk(struct sec_ts_data *ts, u8 *data, int len)
 			}
 		}
 
-	if (retry == SEC_TS_I2C_RETRY_CNT) {
-		input_err(true, &ts->client->dev, "%s: I2C read over retry limit\n", __func__);
-		ret = -EIO;
+		if (retry == SEC_TS_I2C_RETRY_CNT) {
+			input_err(true, &ts->client->dev,
+				  "%s: I2C read over retry limit\n", __func__);
+			ret = -EIO;
+			break;
+		}
 
-		break;
-	}
 		msg.buf += msg.len;
 
 	} while (remain > 0);
+
+	if (ret == 1 && dma_safe == false)
+		memcpy(data, ts->i2c_read_buf, len);
 
 	mutex_unlock(&ts->i2c_mutex);
 
@@ -297,6 +344,38 @@ static int sec_ts_i2c_read_bulk(struct sec_ts_data *ts, u8 *data, int len)
 
 	return -EIO;
 }
+
+/* Wrapper API for i2c read and write */
+int sec_ts_i2c_read(struct sec_ts_data *ts, u8 reg, u8 *data, int len)
+{
+	return sec_ts_i2c_read_internal(ts, reg, data, len, false);
+}
+
+int sec_ts_i2c_read_heap(struct sec_ts_data *ts, u8 reg, u8 *data, int len)
+{
+	return sec_ts_i2c_read_internal(ts, reg, data, len, true);
+}
+
+int sec_ts_i2c_write_burst(struct sec_ts_data *ts, u8 *data, int len)
+{
+	return sec_ts_i2c_write_burst_internal(ts, data, len, false);
+}
+
+int sec_ts_i2c_write_burst_heap(struct sec_ts_data *ts, u8 *data, int len)
+{
+	return sec_ts_i2c_write_burst_internal(ts, data, len, true);
+}
+
+int sec_ts_i2c_read_bulk(struct sec_ts_data *ts, u8 *data, int len)
+{
+	return sec_ts_i2c_read_bulk_internal(ts, data, len, false);
+}
+
+int sec_ts_i2c_read_bulk_heap(struct sec_ts_data *ts, u8 *data, int len)
+{
+	return sec_ts_i2c_read_bulk_internal(ts, data, len, true);
+}
+
 static int sec_ts_read_from_customlib(struct sec_ts_data *ts, u8 *data, int len)
 {
 	int ret;
@@ -1260,6 +1339,13 @@ static int sec_ts_parse_dt(struct i2c_client *client)
 		input_dbg(false, &client->dev, "%s: Failed to get i2c_burstmax property\n", __func__);
 		pdata->i2c_burstmax = 256;
 	}
+	if (pdata->i2c_burstmax > I2C_PREALLOC_READ_BUF_SZ ||
+	    pdata->i2c_burstmax > I2C_PREALLOC_WRITE_BUF_SZ) {
+		input_err(true, &client->dev,
+			  "%s: i2c_burstmax is larger than i2c_read_buf and/or i2c_write_buf.\n",
+			  __func__);
+		return -EINVAL;
+	}
 
 	if (of_property_read_u32_array(np, "sec,max_coords", coords, 2)) {
 		input_err(true, &client->dev, "%s: Failed to get max_coords property\n", __func__);
@@ -1789,9 +1875,12 @@ static int sec_ts_probe(struct i2c_client *client,
 	ts->para_addr = 0x18000;
 	ts->flash_page_size = SEC_TS_FW_BLK_SIZE_DEFAULT;
 	ts->sec_ts_i2c_read = sec_ts_i2c_read;
+	ts->sec_ts_i2c_read_heap = sec_ts_i2c_read_heap;
 	ts->sec_ts_i2c_write = sec_ts_i2c_write;
 	ts->sec_ts_i2c_write_burst = sec_ts_i2c_write_burst;
+	ts->sec_ts_i2c_write_burst_heap = sec_ts_i2c_write_burst_heap;
 	ts->sec_ts_i2c_read_bulk = sec_ts_i2c_read_bulk;
+	ts->sec_ts_i2c_read_bulk_heap = sec_ts_i2c_read_bulk_heap;
 	ts->i2c_burstmax = pdata->i2c_burstmax;
 #ifdef USE_POWER_RESET_WORK
 	INIT_DELAYED_WORK(&ts->reset_work, sec_ts_reset_work);
@@ -1852,6 +1941,7 @@ static int sec_ts_probe(struct i2c_client *client,
 	ts->touch_count = 0;
 	ts->sec_ts_i2c_write = sec_ts_i2c_write;
 	ts->sec_ts_i2c_read = sec_ts_i2c_read;
+	ts->sec_ts_i2c_read_heap = sec_ts_i2c_read_heap;
 	ts->sec_ts_read_customlib = sec_ts_read_from_customlib;
 
 	ts->max_z_value = 0;
