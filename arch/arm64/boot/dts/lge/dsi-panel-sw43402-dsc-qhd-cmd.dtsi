@@ -89,8 +89,12 @@
 			00 0D 76 23 00 00 0D 44
 			0D 76 0D 0D 00 0D 0D 0D
 			4A 00
+		];
+
+		qcom,mdss-dsi-post-panel-on-command = [
 			05 01 00 00 00 00 01 29
 		];
+
 		qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
 
 		qcom,mdss-dsi-off-command = [
