@@ -3597,6 +3597,9 @@ static inline void hdd_assign_reassoc_handoff(tCsrHandoffRequest *handoffInfo)
 
 static void wlan_hdd_free_cache_channels(hdd_context_t *hdd_ctx)
 {
+	if(!hdd_ctx || !hdd_ctx->original_channels)
+		return;
+
 	mutex_lock(&hdd_ctx->cache_channel_lock);
 	hdd_ctx->original_channels->num_channels = 0;
 	vos_mem_free(hdd_ctx->original_channels->channel_info);
