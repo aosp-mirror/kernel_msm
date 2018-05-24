@@ -47,11 +47,20 @@ struct device *getDev(void);
 /*************** NEW I2C API ****************/
 int changeSAD(u8 sad);
 int fts_read(u8 *outBuf, int byteToRead);
+int fts_read_heap(u8 *outBuf, int byteToRead);
 int fts_writeRead(u8 *cmd, int cmdLength, u8 *outBuf, int byteToRead);
+int fts_writeRead_heap(u8 *cmd, int cmdLength, u8 *outBuf, int byteToRead);
 int fts_write(u8 *cmd, int cmdLength);
-int fts_writeFwCmd(u8 *cmd, int cmdLenght);
-int fts_writeThenWriteRead(u8 *writeCmd1, int writeCmdLength, u8 *readCmd1,
-			   int readCmdLength, u8 *outBuf, int byteToRead);
+int fts_write_heap(u8 *cmd, int cmdLength);
+int fts_writeFwCmd(u8 *cmd, int cmdLength);
+int fts_writeFwCmd_heap(u8 *cmd, int cmdLength);
+int fts_writeThenWriteRead(u8 *writeCmd1, int writeCmdLength,
+			   u8 *readCmd1, int readCmdLength,
+			   u8 *outBuf, int byteToRead);
+int fts_writeThenWriteRead_heap(u8 *writeCmd1, int writeCmdLength,
+				u8 *readCmd1, int readCmdLength,
+				u8 *outBuf, int byteToRead);
+
 /* chunked version of fts_write */
 int fts_writeU8UX(u8 cmd, AddrSize addrSize, u64 address, u8 *data,
 		  int dataSize);

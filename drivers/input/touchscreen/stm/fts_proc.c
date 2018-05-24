@@ -708,7 +708,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 	u16 byteToRead = 0;
 	u32 fileSize = 0;
 	u8 *readData = NULL;
-	u8 cmd[count];	/* worst case needs count bytes */
+	u8 *cmd = NULL;	/* worst case needs count bytes */
 	u32 funcToTest[((count + 1) / 3)];
 	u64 addr = 0;
 	MutualSenseFrame frameMS;
@@ -750,6 +750,14 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 	    copy_from_user(pbuf, buf, count) != 0) {
 		res = ERROR_ALLOC;
 		goto END;
+	}
+
+	cmd = (u8 *)kmalloc_array(count, sizeof(u8), GFP_KERNEL);
+	if (cmd == NULL) {
+		res = ERROR_ALLOC;
+		pr_err("%s: Impossible allocate memory... ERROR %08X!\n",
+			__func__, res);
+		goto ERROR;
 	}
 
 	p = pbuf;
@@ -1000,8 +1008,8 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 							  mess.dummy) *
 							 sizeof(u8),
 							 GFP_KERNEL);
-				res = fts_writeRead(&cmd[1], temp, readData,
-						    byteToRead + mess.dummy);
+				res = fts_writeRead_heap(&cmd[1], temp,
+					readData, byteToRead + mess.dummy);
 				size += (byteToRead * sizeof(u8));
 			} else {
 				pr_err("Wrong number of parameters!\n");
@@ -1015,7 +1023,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 						 * … cmd[cmdLength-1] */
 				temp = numberParam - 1;
 
-				res = fts_write(&cmd[1], temp);
+				res = fts_write_heap(&cmd[1], temp);
 			} else {
 				pr_err("Wrong number of parameters!\n");
 				res = ERROR_OP_NOT_ALLOW;
@@ -1038,8 +1046,8 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 							  mess.dummy) *
 							 sizeof(u8),
 							 GFP_KERNEL);
-				res = fts_read(readData, byteToRead +
-					       mess.dummy);
+				res = fts_read_heap(readData, byteToRead +
+						mess.dummy);
 				size += (byteToRead * sizeof(u8));
 			} else {
 				pr_err("Wrong number of parameters!\n");
@@ -1057,11 +1065,10 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 				readData = (u8 *)kmalloc(byteToRead *
 							 sizeof(u8),
 							 GFP_KERNEL);
-				res = fts_writeThenWriteRead(&cmd[3], cmd[1],
-							     &cmd[3 +
-								  (int)cmd[1]],
-							     cmd[2], readData,
-							     byteToRead);
+				res = fts_writeThenWriteRead_heap(
+						&cmd[3], cmd[1],
+						&cmd[3 + (int)cmd[1]], cmd[2],
+						readData, byteToRead);
 				size += (byteToRead * sizeof(u8));
 			} else {
 				pr_err("Wrong number of parameters!\n");
@@ -1202,7 +1209,8 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 						 * … cmd[cmdLength-1] */
 				if (numberParam >= 2) {
 					temp = numberParam - 1;
-					res = fts_writeFwCmd(&cmd[1], temp);
+					res = fts_writeFwCmd_heap(&cmd[1],
+								temp);
 				} else {
 					pr_err("Wrong parameters!\n");
 					res = ERROR_OP_NOT_ALLOW;
@@ -1975,7 +1983,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 			readData[0] = FTS_CMD_SCAN_MODE;
 			readData[1] = SCAN_MODE_ACTIVE;
 			readData[2] = 0x1;
-			fts_write(readData, 3);
+			fts_write_heap(readData, 3);
 			res = checkEcho(readData, 3);
 			if (res < OK) {
 				pr_err("No Echo received.. ERROR %08X !\n",
@@ -3249,6 +3257,7 @@ ERROR:
 	/* pr_err(0,"numberParameters = %d\n", numberParam); */
 
 	kfree(readData);
+	kfree(cmd);
 
 	fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
 

@@ -701,10 +701,8 @@ int fillFlash(u32 address, u8 *data, int size)
 	int res;
 	int delta;
 	u8 *buff = NULL;
-	u8 buff2[12] = { 0 };
 
-
-	buff = (u8 *)kmalloc((DMA_CHUNK + 5) * sizeof(u8), GFP_KERNEL);
+	buff = kmalloc(max(DMA_CHUNK + 5, 12), GFP_KERNEL);
 	if (buff == NULL) {
 		pr_err("fillFlash: ERROR %08X\n", ERROR_ALLOC);
 		return ERROR_ALLOC;
@@ -756,7 +754,7 @@ int fillFlash(u32 address, u8 *data, int size)
 			 * buff[0], buff[1], buff[2], toWrite, buff[3],
 			 * buff[4], buff[3 + toWrite-2],
 			 * buff[3 + toWrite-1]); */
-			if (fts_write(buff, index + toWrite) < OK) {
+			if (fts_write_heap(buff, index + toWrite) < OK) {
 				pr_err("fillFlash: ERROR %08X\n", ERROR_BUS_W);
 				kfree(buff);
 				return ERROR_BUS_W;
@@ -772,25 +770,25 @@ int fillFlash(u32 address, u8 *data, int size)
 		byteBlock = byteBlock / 4 - 1;
 		index = 0;
 
-		buff2[index++] = FLASH_CMD_WRITE_REGISTER;
-		buff2[index++] = 0x20;
-		buff2[index++] = 0x00;
-		buff2[index++] = 0x00;
-		buff2[index++] = FLASH_DMA_CONFIG;
-		buff2[index++] = 0x00;
-		buff2[index++] = 0x00;
+		buff[index++] = FLASH_CMD_WRITE_REGISTER;
+		buff[index++] = 0x20;
+		buff[index++] = 0x00;
+		buff[index++] = 0x00;
+		buff[index++] = FLASH_DMA_CONFIG;
+		buff[index++] = 0x00;
+		buff[index++] = 0x00;
 
 		addr = address + ((wheel * FLASH_CHUNK) / 4);
-		buff2[index++] = (u8)((addr & 0x000000FF));
-		buff2[index++] = (u8)((addr & 0x0000FF00) >> 8);
-		buff2[index++] = (u8)(byteBlock & 0x000000FF);
-		buff2[index++] = (u8)((byteBlock & 0x0000FF00) >> 8);
-		buff2[index++] = 0x00;
+		buff[index++] = (u8)((addr & 0x000000FF));
+		buff[index++] = (u8)((addr & 0x0000FF00) >> 8);
+		buff[index++] = (u8)(byteBlock & 0x000000FF);
+		buff[index++] = (u8)((byteBlock & 0x0000FF00) >> 8);
+		buff[index++] = 0x00;
 
 		pr_info("DMA Command = %02X , address = %02X %02X, words =  %02X %02X\n",
-			buff2[0], buff2[8], buff2[7], buff2[10], buff2[9]);
+			buff[0], buff[8], buff[7], buff[10], buff[9]);
 
-		if (fts_write(buff2, index) < OK) {
+		if (fts_write_heap(buff, index) < OK) {
 			pr_err("Error during filling Flash! ERROR %08X\n",
 				ERROR_BUS_W);
 			kfree(buff);

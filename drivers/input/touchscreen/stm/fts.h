@@ -359,6 +359,13 @@ struct fts_ts_info {
 	struct tbn_context	*tbn;
 #endif
 
+	/* Preallocated i/o read buffer */
+	u8 io_read_buf[READ_CHUNK + DUMMY_FIFO];
+	/* Preallocated i/o write buffer */
+	u8 io_write_buf[WRITE_CHUNK + BITS_64 + DUMMY_FIFO];
+	/* Preallocated i/o extra write buffer */
+	u8 io_extra_write_buf[WRITE_CHUNK + BITS_64 + DUMMY_FIFO];
+
 };
 
 int fts_chip_powercycle(struct fts_ts_info *info);
