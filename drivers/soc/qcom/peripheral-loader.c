@@ -331,7 +331,7 @@ int pil_do_ramdump(struct pil_desc *desc,
 }
 EXPORT_SYMBOL(pil_do_ramdump);
 
-int __nosafestack pil_assign_mem_to_subsys(struct pil_desc *desc, phys_addr_t addr,
+int pil_assign_mem_to_subsys(struct pil_desc *desc, phys_addr_t addr,
 							size_t size)
 {
 	int ret;
@@ -347,7 +347,7 @@ int __nosafestack pil_assign_mem_to_subsys(struct pil_desc *desc, phys_addr_t ad
 }
 EXPORT_SYMBOL(pil_assign_mem_to_subsys);
 
-int __nosafestack pil_assign_mem_to_linux(struct pil_desc *desc, phys_addr_t addr,
+int pil_assign_mem_to_linux(struct pil_desc *desc, phys_addr_t addr,
 							size_t size)
 {
 	int ret;
@@ -364,7 +364,7 @@ int __nosafestack pil_assign_mem_to_linux(struct pil_desc *desc, phys_addr_t add
 }
 EXPORT_SYMBOL(pil_assign_mem_to_linux);
 
-int __nosafestack pil_assign_mem_to_subsys_and_linux(struct pil_desc *desc,
+int pil_assign_mem_to_subsys_and_linux(struct pil_desc *desc,
 						phys_addr_t addr, size_t size)
 {
 	int ret;
@@ -381,7 +381,7 @@ int __nosafestack pil_assign_mem_to_subsys_and_linux(struct pil_desc *desc,
 }
 EXPORT_SYMBOL(pil_assign_mem_to_subsys_and_linux);
 
-int __nosafestack pil_reclaim_mem(struct pil_desc *desc, phys_addr_t addr, size_t size,
+int pil_reclaim_mem(struct pil_desc *desc, phys_addr_t addr, size_t size,
 						int VMid)
 {
 	int ret;
