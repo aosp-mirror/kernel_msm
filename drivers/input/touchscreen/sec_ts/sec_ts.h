@@ -115,6 +115,11 @@
 
 #define I2C_WRITE_BUFFER_SIZE		(256 - 1)//10
 
+/* max read size: from sec_ts_read_event() at sec_ts.c */
+#define I2C_PREALLOC_READ_BUF_SZ	(32 * SEC_TS_EVENT_BUFF_SIZE)
+/* max write size: from sec_ts_flashpagewrite() at sec_ts_fw.c */
+#define I2C_PREALLOC_WRITE_BUF_SZ	(1 + 2 + SEC_TS_FW_BLK_SIZE_MAX + 1)
+
 #define SEC_TS_FW_HEADER_SIGN		0x53494654
 #define SEC_TS_FW_CHUNK_SIGN		0x53434654
 
@@ -800,11 +805,31 @@ struct sec_ts_data {
 	struct tbn_context *tbn;
 #endif
 
-	int (*sec_ts_i2c_write)(struct sec_ts_data *ts, u8 reg, u8 *data, int len);
-	int (*sec_ts_i2c_read)(struct sec_ts_data *ts, u8 reg, u8 *data, int len);
-	int (*sec_ts_i2c_write_burst)(struct sec_ts_data *ts, u8 *data, int len);
-	int (*sec_ts_i2c_read_bulk)(struct sec_ts_data *ts, u8 *data, int len);
-	int (*sec_ts_read_customlib)(struct sec_ts_data *ts, u8 *data, int len);
+	int (*sec_ts_i2c_write)(struct sec_ts_data *ts, u8 reg,
+				u8 *data, int len);
+
+	int (*sec_ts_i2c_read)(struct sec_ts_data *ts, u8 reg,
+				    u8 *data, int len);
+	int (*sec_ts_i2c_read_heap)(struct sec_ts_data *ts, u8 reg,
+				    u8 *data, int len);
+
+	int (*sec_ts_i2c_write_burst)(struct sec_ts_data *ts,
+					   u8 *data, int len);
+	int (*sec_ts_i2c_write_burst_heap)(struct sec_ts_data *ts,
+					   u8 *data, int len);
+
+	int (*sec_ts_i2c_read_bulk)(struct sec_ts_data *ts,
+					 u8 *data, int len);
+	int (*sec_ts_i2c_read_bulk_heap)(struct sec_ts_data *ts,
+					 u8 *data, int len);
+
+	int (*sec_ts_read_customlib)(struct sec_ts_data *ts,
+				     u8 *data, int len);
+
+	/* alloc for i2c read buffer */
+	u8 i2c_read_buf[I2C_PREALLOC_READ_BUF_SZ];
+	/* alloc for i2c write buffer */
+	u8 i2c_write_buf[I2C_PREALLOC_WRITE_BUF_SZ];
 };
 
 struct sec_ts_plat_data {

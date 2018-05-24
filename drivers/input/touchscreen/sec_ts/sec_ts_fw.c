@@ -347,7 +347,7 @@ static bool sec_ts_limited_flashpagewrite(struct sec_ts_data *ts, u32 page_idx, 
 
 		memcpy(&tCmd[1], &copy_data[copy_size], copy_cur);
 
-		ret = ts->sec_ts_i2c_write_burst(ts, tCmd, 1 + copy_cur);
+		ret = ts->sec_ts_i2c_write_burst_heap(ts, tCmd, 1 + copy_cur);
 		if (ret < 0)
 			input_err(true, &ts->client->dev,
 						"%s: failed, ret:%d\n", __func__, ret);
@@ -489,14 +489,14 @@ static int sec_ts_memoryblockread(struct sec_ts_data *ts, u32 mem_addr, int mem_
 	data = buf;
 
 
-	ret = ts->sec_ts_i2c_read(ts, cmd[0], data, mem_size);
+	ret = ts->sec_ts_i2c_read_heap(ts, cmd[0], data, mem_size);
 	if (ret < 0) {
 		input_err(true, &ts->client->dev, "%s: memory read failed\n", __func__);
 		return -EIO;
 	}
 /*
 	ret = ts->sec_ts_i2c_write(ts, cmd[0], NULL, 0);
-	ret = ts->sec_ts_i2c_read_bulk(ts, data, mem_size);
+	ret = ts->sec_ts_i2c_read_bulk_heap(ts, data, mem_size);
 */
 	return 0;
 }

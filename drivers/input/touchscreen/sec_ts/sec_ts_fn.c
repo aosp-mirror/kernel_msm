@@ -1016,7 +1016,7 @@ static int sec_ts_write_gain_table(struct sec_ts_data *ts)
 			   "%s: left = %d, cur = %d, size = %d\n",
 			   __func__, copy_left, copy_cur, copy_size);
 
-		ret = ts->sec_ts_i2c_write_burst(ts, tCmd, 3 + copy_cur);
+		ret = ts->sec_ts_i2c_write_burst_heap(ts, tCmd, 3 + copy_cur);
 		if (ret < 0)
 			input_err(true, &ts->client->dev,
 					"%s: table write failed\n", __func__);
@@ -1229,7 +1229,8 @@ static int sec_ts_read_frame(struct sec_ts_data *ts, u8 type, short *min,
 	}
 
 	/* read data */
-	ret = ts->sec_ts_i2c_read(ts, SEC_TS_READ_TOUCH_RAWDATA, pRead, readbytes);
+	ret = ts->sec_ts_i2c_read_heap(ts, SEC_TS_READ_TOUCH_RAWDATA, pRead,
+				readbytes);
 	if (ret < 0) {
 		input_err(true, &ts->client->dev, "%s: read rawdata failed!\n", __func__);
 		goto ErrorRelease;
@@ -1463,7 +1464,8 @@ static int sec_ts_read_channel(struct sec_ts_data *ts, u8 type, short *min,
 	}
 
 	/* read data */
-	ret = ts->sec_ts_i2c_read(ts, SEC_TS_READ_TOUCH_SELF_RAWDATA, pRead, data_length);
+	ret = ts->sec_ts_i2c_read_heap(ts, SEC_TS_READ_TOUCH_SELF_RAWDATA,
+				pRead, data_length);
 	if (ret < 0) {
 		input_err(true, &ts->client->dev, "%s: read rawdata failed!\n", __func__);
 		goto err_read_data;
@@ -1549,8 +1551,8 @@ static int sec_ts_read_gain_table(struct sec_ts_data *ts)
 	if (!pRead)
 		return -ENOMEM;
 
-	ret = ts->sec_ts_i2c_read(ts, SEC_TS_CMD_READ_NORM_TABLE, pRead,
-				  1 + readbytes);
+	ret = ts->sec_ts_i2c_read_heap(ts, SEC_TS_CMD_READ_NORM_TABLE, pRead,
+				1 + readbytes);
 	if (ret < 0) {
 		input_err(true, &ts->client->dev, "%s: read rawdata failed!\n",
 			  __func__);
@@ -2646,8 +2648,8 @@ static int sec_ts_read_frame_stdev(struct sec_ts_data *ts,
 
 	for (frame_cnt = 0; frame_cnt < frame_tot; frame_cnt++) {
 		/* read data */
-		ret = ts->sec_ts_i2c_read(ts, SEC_TS_READ_TOUCH_RAWDATA, pRead,
-					  frame_len_byte);
+		ret = ts->sec_ts_i2c_read_heap(ts, SEC_TS_READ_TOUCH_RAWDATA,
+					pRead, frame_len_byte);
 		if (ret < 0) {
 			input_err(true, &ts->client->dev,
 				  "%s: read rawdata failed!\n", __func__);
@@ -3297,7 +3299,7 @@ int get_tsp_nvm_data_by_size(struct sec_ts_data *ts, u8 offset, int length, u8 *
 	/* read NV data
 	 * Use TSP NV area : in this model, use only one byte
 	 */
-	ret = ts->sec_ts_i2c_read_bulk(ts, buff, length);
+	ret = ts->sec_ts_i2c_read_bulk_heap(ts, buff, length);
 	if (ret < 0) {
 		input_err(true, &ts->client->dev, "%s: nvm send command failed. ret: %d\n", __func__, ret);
 		goto out_nvm;
@@ -3860,7 +3862,8 @@ int execute_selftest(struct sec_ts_data *ts, bool save_result)
 
 	input_info(true, &ts->client->dev, "%s: Self test done!\n", __func__);
 
-	rc = ts->sec_ts_i2c_read(ts, SEC_TS_READ_SELFTEST_RESULT, rBuff, result_size);
+	rc = ts->sec_ts_i2c_read_heap(ts, SEC_TS_READ_SELFTEST_RESULT, rBuff,
+				result_size);
 	if (rc < 0) {
 		input_err(true, &ts->client->dev, "%s: Selftest execution time out!\n", __func__);
 		goto err_exit;
