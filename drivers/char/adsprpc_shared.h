@@ -66,6 +66,7 @@
 #define FASTRPC_INIT_ATTACH      0
 #define FASTRPC_INIT_CREATE      1
 #define FASTRPC_INIT_CREATE_STATIC  2
+#define FASTRPC_INIT_ATTACH_SENSORS 3
 
 /* Retrives number of input buffers from the scalars parameter */
 #define REMOTE_SCALARS_INBUFS(sc)        (((sc) >> 16) & 0x0ff)
@@ -199,16 +200,16 @@ struct fastrpc_ioctl_init_attrs {
 };
 
 struct fastrpc_ioctl_munmap {
-	uint64_t vaddrout;	/* address to unmap */
+	uintptr_t vaddrout;	/* address to unmap */
 	size_t size;		/* size */
 };
 
 struct fastrpc_ioctl_mmap {
 	int fd;				/* ion fd */
 	uint32_t flags;			/* flags for dsp to map with */
-	uint64_t vaddrin;		/* optional virtual address */
+	uintptr_t vaddrin;		/* optional virtual address */
 	size_t size;			/* size */
-	uint64_t vaddrout;		/* dsps virtual address */
+	uintptr_t vaddrout;		/* dsps virtual address */
 };
 
 struct fastrpc_ioctl_munmap_fd {
@@ -229,11 +230,15 @@ struct fastrpc_ctrl_latency {
 	uint32_t enable;	//!latency control enable
 	uint32_t level;		//!level of control
 };
-
+#define FASTRPC_CONTROL_SMMU   (2)
+struct fastrpc_ctrl_smmu {
+	uint32_t sharedcb;
+};
 struct fastrpc_ioctl_control {
 	uint32_t req;
 	union {
 		struct fastrpc_ctrl_latency lp;
+		struct fastrpc_ctrl_smmu smmu;
 	};
 };
 

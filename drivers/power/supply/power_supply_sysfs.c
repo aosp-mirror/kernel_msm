@@ -330,6 +330,8 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(recharge_soc),
 	POWER_SUPPLY_ATTR(toggle_stat),
 	POWER_SUPPLY_ATTR(allow_hvdcp3),
+	POWER_SUPPLY_ATTR(hvdcp_opti_allowed),
+	POWER_SUPPLY_ATTR(max_pulse_allowed),
 	POWER_SUPPLY_ATTR(otg_fastroleswap),
 	POWER_SUPPLY_ATTR(charge_disable),
 	/* Local extensions of type int64_t */
@@ -339,6 +341,7 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(manufacturer),
 	POWER_SUPPLY_ATTR(serial_number),
 	POWER_SUPPLY_ATTR(battery_type),
+	POWER_SUPPLY_ATTR(cycle_counts),
 };
 
 static struct attribute *

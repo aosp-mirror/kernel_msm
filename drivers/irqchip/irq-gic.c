@@ -42,12 +42,15 @@
 #include <linux/irqchip/chained_irq.h>
 #include <linux/irqchip/arm-gic.h>
 #include <linux/wakeup_reason.h>
+#include <linux/msm_rtb.h>
+
 #include <asm/cputype.h>
 #include <asm/irq.h>
 #include <asm/exception.h>
 #include <asm/smp_plat.h>
 #include <asm/virt.h>
 
+#include <linux/syscore_ops.h>
 #include "irq-gic-common.h"
 
 #ifdef CONFIG_ARM64
@@ -363,6 +366,7 @@ static void __exception_irq_entry gic_handle_irq(struct pt_regs *regs)
 				writel_relaxed_no_log(irqstat,
 						cpu_base + GIC_CPU_EOI);
 			handle_domain_irq(gic->domain, irqnr, regs);
+			uncached_logk(LOGK_IRQ, (void *)(uintptr_t)irqnr);
 			continue;
 		}
 		if (irqnr < 16) {
@@ -381,6 +385,7 @@ static void __exception_irq_entry gic_handle_irq(struct pt_regs *regs)
 			smp_rmb();
 			handle_IPI(irqnr, regs);
 #endif
+			uncached_logk(LOGK_IRQ, (void *)(uintptr_t)irqnr);
 			continue;
 		}
 		break;
@@ -1233,6 +1238,70 @@ static int __init __gic_init_bases(struct gic_chip_data *gic,
 
 	return ret;
 }
+
+#ifdef CONFIG_PM
+static int gic_suspend(void)
+{
+	return 0;
+}
+
+static void gic_show_resume_irq(struct gic_chip_data *gic)
+{
+	unsigned int i;
+	u32 enabled;
+	u32 pending[32];
+	void __iomem *base = gic_data_dist_base(gic);
+
+	if (!msm_show_resume_irq_mask)
+		return;
+
+	for (i = 0; i * 32 < gic->gic_irqs; i++) {
+		enabled = readl_relaxed(base + GIC_DIST_ENABLE_CLEAR + i * 4);
+		pending[i] = readl_relaxed(base + GIC_DIST_PENDING_SET + i * 4);
+		pending[i] &= enabled;
+	}
+
+	for (i = find_first_bit((unsigned long *)pending, gic->gic_irqs);
+	i < gic->gic_irqs;
+	i = find_next_bit((unsigned long *)pending, gic->gic_irqs, i+1)) {
+		unsigned int irq = irq_find_mapping(gic->domain, i);
+		struct irq_desc *desc = irq_to_desc(irq);
+		const char *name = "null";
+
+		if (desc == NULL)
+			name = "stray irq";
+		else if (desc->action && desc->action->name)
+			name = desc->action->name;
+
+		pr_warn("%s: %d triggered %s\n", __func__, i, name);
+	}
+}
+
+static void gic_resume_one(struct gic_chip_data *gic)
+{
+	gic_show_resume_irq(gic);
+}
+
+static void gic_resume(void)
+{
+	int i;
+
+	for (i = 0; i < CONFIG_ARM_GIC_MAX_NR; i++)
+		gic_resume_one(&gic_data[i]);
+}
+
+static struct syscore_ops gic_syscore_ops = {
+	.suspend = gic_suspend,
+	.resume = gic_resume,
+};
+
+static int __init gic_init_sys(void)
+{
+	register_syscore_ops(&gic_syscore_ops);
+	return 0;
+}
+arch_initcall(gic_init_sys);
+#endif
 
 void __init gic_init(unsigned int gic_nr, int irq_start,
 		     void __iomem *dist_base, void __iomem *cpu_base)

@@ -985,13 +985,17 @@ static void gsi_ring_db(struct usb_ep *ep, struct usb_gsi_request *request)
 
 	gsi_dbl_address_lsb = devm_ioremap_nocache(mdwc->dev,
 				request->db_reg_phs_addr_lsb, sizeof(u32));
-	if (!gsi_dbl_address_lsb)
-		dev_dbg(mdwc->dev, "Failed to get GSI DBL address LSB\n");
+	if (!gsi_dbl_address_lsb) {
+		dev_err(mdwc->dev, "Failed to get GSI DBL address LSB\n");
+		return;
+	}
 
 	gsi_dbl_address_msb = devm_ioremap_nocache(mdwc->dev,
 			request->db_reg_phs_addr_msb, sizeof(u32));
-	if (!gsi_dbl_address_msb)
-		dev_dbg(mdwc->dev, "Failed to get GSI DBL address MSB\n");
+	if (!gsi_dbl_address_msb) {
+		dev_err(mdwc->dev, "Failed to get GSI DBL address MSB\n");
+		return;
+	}
 
 	offset = dwc3_trb_dma_offset(dep, &dep->trb_pool[num_trbs-1]);
 	dev_dbg(mdwc->dev, "Writing link TRB addr: %pa to %pK (%x) for ep:%s\n",
@@ -3625,6 +3629,8 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	mutex_init(&mdwc->suspend_resume_mutex);
 	/* Mark type-C as true by default */
 	mdwc->type_c = true;
+	if (of_property_read_bool(node, "qcom,connector-type-uAB"))
+		mdwc->type_c = false;
 
 	mdwc->usb_psy = power_supply_get_by_name("usb");
 	if (!mdwc->usb_psy) {
@@ -4190,7 +4196,7 @@ static int dwc3_restart_usb_host_mode(struct notifier_block *nb,
 
 	usb_speed = (event == 0 ? USB_SPEED_HIGH : USB_SPEED_SUPER);
 	if (dwc->maximum_speed == usb_speed)
-		goto err;
+		return 0;
 
 	dbg_event(0xFF, "fw_restarthost", 0);
 	flush_delayed_work(&mdwc->sm_work);

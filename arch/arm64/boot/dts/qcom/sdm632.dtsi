@@ -13,8 +13,6 @@
 
 #include "msm8953.dtsi"
 #include "sdm632-cpu.dtsi"
-#include "pm8004.dtsi"
-#include "pm8004-rpm-regulator.dtsi"
 #include "sdm632-regulator.dtsi"
 
 / {
@@ -83,6 +81,10 @@
 	/delete-node/ apc1-cpu3-usr;
 
 	case-therm-step {
+		status = "disabled";
+	};
+
+	quiet-therm-step {
 		status = "disabled";
 	};
 

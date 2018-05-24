@@ -29,7 +29,9 @@
 		pmi632_pon: qcom,power-on@800 {
 			compatible = "qcom,qpnp-power-on";
 			reg = <0x800 0x100>;
+
 			qcom,secondary-pon-reset;
+			qcom,s3-src = "kpdpwr";
 		};
 
 		pmi632_vadc: vadc@3100 {
@@ -464,9 +466,6 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 
-			qcom,vbatt-empty-mv = <3300>;
-			qcom,vbatt-low-mv = <3500>;
-			qcom,vbatt-cutoff-mv = <3400>;
 			qcom,qg-iterm-ma = <100>;
 			qcom,hold-soc-while-full;
 			qcom,linearize-soc;
@@ -476,11 +475,12 @@
 			qcom,qgauge@4800 {
 				status = "okay";
 				reg = <0x4800 0x100>;
-				interrupts = <0x2 0x48 0x0 IRQ_TYPE_EDGE_BOTH>,
-					     <0x2 0x48 0x1 IRQ_TYPE_EDGE_BOTH>,
-					     <0x2 0x48 0x2 IRQ_TYPE_EDGE_BOTH>,
-					     <0x2 0x48 0x3 IRQ_TYPE_EDGE_BOTH>,
-					     <0x2 0x48 0x4 IRQ_TYPE_EDGE_BOTH>;
+				interrupts =
+					<0x2 0x48 0x0 IRQ_TYPE_EDGE_BOTH>,
+					<0x2 0x48 0x1 IRQ_TYPE_EDGE_BOTH>,
+					<0x2 0x48 0x2 IRQ_TYPE_EDGE_RISING>,
+					<0x2 0x48 0x3 IRQ_TYPE_EDGE_RISING>,
+					<0x2 0x48 0x4 IRQ_TYPE_EDGE_RISING>;
 				interrupt-names = "qg-batt-missing",
 						  "qg-vbat-low",
 						  "qg-vbat-empty",
@@ -684,14 +684,14 @@
 
 &thermal_zones {
 	pmi-ibat-lvl0 {
-		polling-delay-passive = <0>;
+		polling-delay-passive = <100>;
 		polling-delay = <0>;
 		thermal-governor = "step_wise";
 		thermal-sensors = <&bcl_sensor 0>;
 
 		trips {
-			pmi632_ibat:ibat-lvl0 {
-				temperature = <3500>;
+			pmi632_ibat_lvl0: ibat-lvl0 {
+				temperature = <4000>;
 				hysteresis = <200>;
 				type = "passive";
 			};
@@ -706,7 +706,7 @@
 
 		trips {
 			ibat-lvl1 {
-				temperature = <4000>;
+				temperature = <4200>;
 				hysteresis = <200>;
 				type = "passive";
 			};
