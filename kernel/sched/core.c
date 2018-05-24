@@ -76,7 +76,6 @@
 #include <linux/frame.h>
 #include <linux/prefetch.h>
 #include <linux/irq.h>
-#include <linux/safestack.h>
 #include <linux/cpufreq_times.h>
 
 #include <asm/switch_to.h>
@@ -5455,7 +5454,6 @@ static const char stat_nam[] = TASK_STATE_TO_CHAR_STR;
 void sched_show_task(struct task_struct *p)
 {
 	unsigned long free = 0;
-	unsigned long unsafe_free = 0;
 	int ppid;
 	unsigned long state = p->state;
 
@@ -5469,21 +5467,15 @@ void sched_show_task(struct task_struct *p)
 		printk(KERN_CONT "  running task    ");
 #ifdef CONFIG_DEBUG_STACK_USAGE
 	free = stack_not_used(p);
-	unsafe_free = unsafe_stack_not_used(p);
 #endif
 	ppid = 0;
 	rcu_read_lock();
 	if (pid_alive(p))
 		ppid = task_pid_nr(rcu_dereference(p->real_parent));
 	rcu_read_unlock();
-	if (IS_ENABLED(CONFIG_SAFESTACK))
-		printk(KERN_CONT "%5lu %5lu %5d %6d 0x%08lx\n", free, unsafe_free,
-			task_pid_nr(p), ppid,
-			(unsigned long)task_thread_info(p)->flags);
-	else
-		printk(KERN_CONT "%5lu %5d %6d 0x%08lx\n", free,
-			task_pid_nr(p), ppid,
-			(unsigned long)task_thread_info(p)->flags);
+	printk(KERN_CONT "%5lu %5d %6d 0x%08lx\n", free,
+		task_pid_nr(p), ppid,
+		(unsigned long)task_thread_info(p)->flags);
 
 	print_worker_info(KERN_INFO, p);
 	show_stack(p, NULL);
@@ -5494,22 +5486,12 @@ void show_state_filter(unsigned long state_filter)
 {
 	struct task_struct *g, *p;
 
-#ifdef CONFIG_SAFESTACK
-#if BITS_PER_LONG == 32
-	printk(KERN_INFO
-		"  task                PC stack   unsafe  pid father\n");
-#else
-	printk(KERN_INFO
-		"  task                        PC stack   unsafe  pid father\n");
-#endif
-#else
 #if BITS_PER_LONG == 32
 	printk(KERN_INFO
 		"  task                PC stack   pid father\n");
 #else
 	printk(KERN_INFO
 		"  task                        PC stack   pid father\n");
-#endif
 #endif
 	rcu_read_lock();
 	for_each_process_thread(g, p) {

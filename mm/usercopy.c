@@ -61,35 +61,6 @@ static noinline int check_stack_object(const void *obj, unsigned long len)
 	return GOOD_STACK;
 }
 
-#ifdef CONFIG_SAFESTACK
-static noinline int check_unsafe_stack_object(const void *obj,
-					      unsigned long len)
-{
-	const void * const stack = current->unsafe_stack;
-	const void * const stackend = stack + UNSAFE_STACK_SIZE;
-
-	/* Object is not on the stack at all. */
-	if (obj + len <= stack || stackend <= obj)
-		return NOT_STACK;
-
-	/*
-	 * Reject: object partially overlaps the stack (passing the
-	 * the check above means at least one end is within the stack,
-	 * so if this check fails, the other end is outside the stack).
-	 */
-	if (obj < stack || stackend < obj + len)
-		return BAD_STACK;
-
-	return GOOD_STACK;
-}
-#else
-static inline int check_unsafe_stack_object(const void *obj,
-					    unsigned long len)
-{
-	return NOT_STACK;
-}
-#endif
-
 static void report_usercopy(const void *ptr, unsigned long len,
 			    bool to_user, const char *type)
 {
@@ -295,17 +266,6 @@ void __check_object_size(const void *ptr, unsigned long n, bool to_user)
 		return;
 	default:
 		err = "<process stack>";
-		goto report;
-	}
-
-	/* Check for bad unsafe stack object. */
-	switch (check_unsafe_stack_object(ptr, n)) {
-	case NOT_STACK:
-		break;
-	case GOOD_STACK:
-		return;
-	default:
-		err = "<unsafe stack>";
 		goto report;
 	}
 
