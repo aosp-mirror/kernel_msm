@@ -1110,7 +1110,7 @@ static int max1720x_handle_dt_shadow_config(struct max1720x_chip *chip)
 	if ((nRAM_updated[NVRAM_U16_INDEX(MAX1720X_NVRAM_NVCFG0)] &
 	     MAX1720X_NNVCFG0_ENCG) &&
 	    !nRAM_updated[NVRAM_U16_INDEX(MAX1720X_NVRAM_CGAIN)])
-		nRAM_updated[NVRAM_U16_INDEX(MAX1720X_NVRAM_CGAIN)] = 0x0400;
+		nRAM_updated[NVRAM_U16_INDEX(MAX1720X_NVRAM_CGAIN)] = 0x4000;
 
 	if (memcmp(nRAM_updated, nRAM_current, MAX1720X_NVRAM_SIZE)) {
 		ret = regmap_raw_write(chip->regmap_nvram, MAX1720X_NVRAM_START,
