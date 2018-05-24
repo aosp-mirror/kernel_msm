@@ -1454,7 +1454,6 @@ static int qcom_ice_config_start(struct platform_device *pdev,
 		/* It is not an error to have a request with no  bio */
 		return 0;
 	}
-    //pr_err("%s bio is %pK\n", __func__, req->bio);
 
 	ret = pfk_load_key_start(req->bio, &pfk_crypto_data, &is_pfe, async);
 	if (is_pfe) {
