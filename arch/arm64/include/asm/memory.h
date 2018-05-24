@@ -92,14 +92,7 @@
 #define KASAN_THREAD_SHIFT	0
 #endif
 
-#ifdef CONFIG_SAFESTACK
-/* The stack is split into two parts, allocate half for the safe stack */
-#define SAFESTACK_THREAD_SHIFT	(-1)
-#else
-#define SAFESTACK_THREAD_SHIFT	0
-#endif
-
-#define THREAD_SHIFT		(14 + SAFESTACK_THREAD_SHIFT + KASAN_THREAD_SHIFT)
+#define THREAD_SHIFT	(14 + KASAN_THREAD_SHIFT)
 
 #if THREAD_SHIFT >= PAGE_SHIFT
 #define THREAD_SIZE_ORDER	(THREAD_SHIFT - PAGE_SHIFT)
