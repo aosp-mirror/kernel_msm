@@ -2451,8 +2451,7 @@ int __xfrm_decode_session(struct sk_buff *skb, struct flowi *fl,
 		return -EAFNOSUPPORT;
 
 	afinfo->decode_session(skb, fl, reverse);
-	xi = skb->dev ? xfrmi_lookup_byindex(dev_net(skb->dev),
-					     skb->dev->ifindex) : NULL;
+	xi = xfrmi_lookup_byindex(dev_net(skb->dev), skb->dev->ifindex);
 	if (xi)
 		fl->flowi_xfrm.if_id = xi->p.if_id;
 
