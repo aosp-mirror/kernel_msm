@@ -683,6 +683,7 @@ struct sec_ts_data {
 
 	struct mutex bus_mutex;
 	u16 bus_refmask;
+	struct completion bus_resumed;
 
 	int touch_count;
 	int tx_count;

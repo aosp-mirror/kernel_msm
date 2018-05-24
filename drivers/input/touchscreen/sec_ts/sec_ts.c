@@ -945,7 +945,13 @@ static irqreturn_t sec_ts_irq_thread(int irq, void *ptr)
 {
 	struct sec_ts_data *ts = (struct sec_ts_data *)ptr;
 
-	sec_ts_set_bus_ref(ts, SEC_TS_BUS_REF_IRQ, true);
+	if (sec_ts_set_bus_ref(ts, SEC_TS_BUS_REF_IRQ, true) < 0) {
+		/* Interrupt during bus suspend */
+		input_info(true, &ts->client->dev,
+			   "%s: Skipping stray interrupt since bus is suspended.\n",
+			   __func__);
+		return IRQ_HANDLED;
+	}
 	mutex_lock(&ts->eventlock);
 
 	sec_ts_read_event(ts);
@@ -1662,6 +1668,9 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	INIT_DELAYED_WORK(&ts->work_read_info, sec_ts_read_info_work);
 	INIT_WORK(&ts->suspend_work, sec_ts_suspend_work);
 	INIT_WORK(&ts->resume_work, sec_ts_resume_work);
+
+	init_completion(&ts->bus_resumed);
+	complete_all(&ts->bus_resumed);
 
 #ifdef SEC_TS_FW_UPDATE_ON_PROBE
 	INIT_DELAYED_WORK(&ts->work_fw_update, sec_ts_fw_update_work);
@@ -2597,6 +2606,8 @@ static void sec_ts_suspend_work(struct work_struct *work)
 
 	mutex_lock(&ts->device_mutex);
 
+	reinit_completion(&ts->bus_resumed);
+
 	if (ts->power_status == SEC_TS_STATE_SUSPEND) {
 		input_err(true, &ts->client->dev, "%s: already suspended.\n",
 			  __func__);
@@ -2610,7 +2621,7 @@ static void sec_ts_suspend_work(struct work_struct *work)
 		input_err(true, &ts->client->dev,
 			  "%s: failed to write Sense_off.\n", __func__);
 
-	disable_irq(ts->client->irq);
+	disable_irq_nosync(ts->client->irq);
 	sec_ts_locked_release_all_finger(ts);
 
 	if (ts->plat_data->enable_sync)
@@ -2719,6 +2730,8 @@ static void sec_ts_resume_work(struct work_struct *work)
 
 	enable_irq(ts->client->irq);
 
+	complete_all(&ts->bus_resumed);
+
 	mutex_unlock(&ts->device_mutex);
 }
 
@@ -2727,52 +2740,65 @@ static void sec_ts_aggregate_bus_state(struct sec_ts_data *ts)
 	input_dbg(true, &ts->client->dev, "%s: bus_refmask = 0x%02X.\n",
 		  __func__, ts->bus_refmask);
 
+	/* Complete or cancel any outstanding transitions */
+	cancel_work_sync(&ts->suspend_work);
+	cancel_work_sync(&ts->resume_work);
+
 	if ((ts->bus_refmask == 0 &&
 		ts->power_status == SEC_TS_STATE_SUSPEND) ||
 	    (ts->bus_refmask != 0 &&
 		ts->power_status != SEC_TS_STATE_SUSPEND))
 		return;
 
-	if (ts->bus_refmask == 0) {
+	if (ts->bus_refmask == 0)
 		schedule_work(&ts->suspend_work);
-	} else {
+	else
 		schedule_work(&ts->resume_work);
-	}
 }
 
 int sec_ts_set_bus_ref(struct sec_ts_data *ts, u16 ref, bool enable)
 {
-	int attempts = 0;
 	int result = 0;
 
 	mutex_lock(&ts->bus_mutex);
 
+	input_dbg(true, &ts->client->dev, "%s: bus_refmask = 0x%02X.\n",
+		  __func__, ref);
+
 	if ((enable && (ts->bus_refmask & ref)) ||
-	    (!enable && !(ts->bus_refmask & ref)))
+	    (!enable && !(ts->bus_refmask & ref))) {
 		input_info(true, &ts->client->dev,
 			"%s: reference is unexpectedly set: mask=0x%04X, ref=0x%04X, enable=%d.\n",
 			__func__, ts->bus_refmask, ref, enable);
+		mutex_unlock(&ts->bus_mutex);
+		return -EINVAL;
+	}
 
-	if (enable)
-		ts->bus_refmask |= ref;
-	else
+	if (enable) {
+		/* IRQs can only keep the bus active. IRQs received while the
+		 * bus is transferred to SLPI should be ignored.
+		 */
+		if (ref == SEC_TS_BUS_REF_IRQ && ts->bus_refmask == 0)
+			result = -EAGAIN;
+		else
+			ts->bus_refmask |= ref;
+	} else
 		ts->bus_refmask &= ~ref;
 	sec_ts_aggregate_bus_state(ts);
 
 	mutex_unlock(&ts->bus_mutex);
 
-	/* When triggering a wake, wait up to 1.5 seconds to resume */
-	if (enable) {
-		for (attempts = 0;
-		     attempts < 15 && ts->power_status != SEC_TS_STATE_POWER_ON;
-		     attempts++) {
-			msleep(100);
-		}
+	/* When triggering a wake, wait up to one second to resume. SCREEN_ON
+	 * and IRQ references do not need to wait.
+	 */
+	if (enable &&
+	    ref != SEC_TS_BUS_REF_SCREEN_ON && ref != SEC_TS_BUS_REF_IRQ) {
+		wait_for_completion_timeout(&ts->bus_resumed, HZ);
 		if (ts->power_status != SEC_TS_STATE_POWER_ON) {
 			input_info(true, &ts->client->dev,
 				   "%s: Failed to wake the touch bus.\n",
 				   __func__);
-			result = -1;
+			result = -ETIMEDOUT;
 		}
 	}
 
