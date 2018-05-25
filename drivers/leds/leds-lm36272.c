@@ -64,7 +64,6 @@ struct lm36272_device {
 	bool direct_control; /* allow the backlight control directly */
 
 	struct work_struct bl_work;
-	atomic_t bl_work_exit;
 	int level_saved;
 	int level_target;
 	struct wakeup_source ws_dev;
@@ -81,12 +80,6 @@ static int lm36272_write_reg(struct i2c_client *client,
 		unsigned char reg, unsigned char val);
 static void lm36272_backlight_ctrl_internal(struct lm36272_device *ldev,
 		int level);
-
-static inline void lm3672_cancel_bl_work(struct lm36272_device *ldev)
-{
-	atomic_set(&ldev->bl_work_exit, 1);
-	cancel_work_sync(&ldev->bl_work);
-}
 
 int lm36272_dsv_ctrl(int dsv_en)
 {
@@ -120,7 +113,7 @@ int lm36272_dsv_ctrl(int dsv_en)
 		usleep_range(pdata->dsv_off_delay[1], pdata->dsv_off_delay[1]);
 
 		/* cancel the pending bl work */
-		lm3672_cancel_bl_work(ldev);
+		cancel_work_sync(&ldev->bl_work);
 
 		/* backlight off */
 		mutex_lock(&ldev->bl_mutex);
@@ -231,7 +224,7 @@ void lm36272_backlight_ctrl(int level)
 	new_level = clamp(level, pdata->min_brightness, pdata->max_brightness);
 
 	/* cancel the pending bl work */
-	lm3672_cancel_bl_work(ldev);
+	cancel_work_sync(&ldev->bl_work);
 
 	mutex_lock(&ldev->bl_mutex);
 	if (ldev->direct_control) {
@@ -402,7 +395,7 @@ static int fb_notifier_callback(struct notifier_block *self,
 	pdata = ldev->pdata;
 
 	/* cancel the pending bl work */
-	lm3672_cancel_bl_work(ldev);
+	cancel_work_sync(&ldev->bl_work);
 
 	mutex_lock(&ldev->bl_mutex);
 	fb_blank = *(int *)evdata->data;
@@ -438,7 +431,7 @@ static int reboot_notifier_callback(struct notifier_block *self,
 			struct lm36272_device, reboot_notifier);
 
 	/* cancel the pending bl work */
-	lm3672_cancel_bl_work(ldev);
+	cancel_work_sync(&ldev->bl_work);
 
 	/* Ensure the backlight OFF before fb_release on power cycle */
 	if (BL_OFF_PENDING == ldev->status)
@@ -455,7 +448,6 @@ static void lm36272_bl_work(struct work_struct *work)
 	bool exit = false;
 
 	mutex_lock(&ldev->bl_mutex);
-	atomic_set(&ldev->bl_work_exit, 0);
 	__pm_stay_awake(&ldev->ws_dev);
 	level = ldev->level_saved;
 
@@ -467,7 +459,7 @@ static void lm36272_bl_work(struct work_struct *work)
 		}
 
 		lm36272_backlight_ctrl_internal(ldev, level);
-		if (exit || atomic_read(&ldev->bl_work_exit))
+		if (exit)
 			break;
 		usleep_range(9000,10000);
 	}
