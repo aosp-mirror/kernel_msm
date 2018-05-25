@@ -171,6 +171,9 @@
 /* Factory END*/
 
 #define TP_ID_0 0x82
+#define TP_ID_1 0x83
+#define TP_ID_2 0x84
+#define TP_ID_3 0x85
 #define TP_INI_FILE "FT3207_20170123_HOST_F02_V02_OnlyTest.ini"
 #define FTS_GESTURE_SETTING_ADRESS	0xD0
 #define FTS_GESTURE_OUTPUT_ADRESS	0xD3
