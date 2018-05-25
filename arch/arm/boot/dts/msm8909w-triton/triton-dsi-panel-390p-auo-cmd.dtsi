@@ -13,7 +13,9 @@
 &mdss_mdp {
 	dsi_auo_390p_cmd: qcom,mdss_dsi_auo_390p_cmd {
 		qcom,mdss-dsi-panel-name = "AUO 390p command mode dsi panel";
+		qcom,mdss-dsi-panel-controller = <&mdss_dsi0>;
 		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
+		qcom,mdss-dsi-panel-destination = "display_1";
 		qcom,mdss-dsi-panel-framerate = <45>;
 		qcom,mdss-dsi-virtual-channel-id = <0>;
 		qcom,mdss-dsi-stream = <0>;
@@ -36,6 +38,8 @@
 		qcom,mdss-dsi-color-order = "rgb_swap_rgb";
 		qcom,mdss-dsi-underflow-color = <0xff>;
 		qcom,mdss-dsi-border-color = <0>;
+		qcom,mdss-dsi-pixel-packing = "tight";
+		qcom,mdss-dsi-pixel-alignment = <0>;
 		qcom,mdss-dsi-on-command = [
 			05 01 00 00 01 00 02 00 00
 			15 01 00 00 00 00 02 FE 01
@@ -59,6 +63,7 @@
 			];
 		qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
 		qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
+		qcom,mdss-dsi-h-sync-pulse = <1>;
 
 		qcom,mdss-dsi-idle-on-command = [
 			15 01 00 00 00 00 02 FE 00
@@ -76,6 +81,9 @@
 		qcom,mdss-dsi-lane-0-state;
 		qcom,mdss-dsi-te-pin-select = <1>;
 		qcom,mdss-dsi-te-dcs-command = <1>;
+		qcom,mdss-tear-check-frame-rate = <4500>;
+		/* clk = totlaH * totalV * bpp* 60fps */
+		qcom,mdss-dsi-panel-clockrate = <229213440>;
 		qcom,mdss-dsi-te-using-te-pin;
 		qcom,mdss-dsi-te-check-enable;
 		qcom,mdss-dsi-panel-timings = [44 10 06 00 28 2A 0A 12 06 03 04 00];
