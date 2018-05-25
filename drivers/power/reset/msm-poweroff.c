@@ -109,6 +109,10 @@ struct reset_attribute {
 module_param_call(download_mode, dload_set, param_get_int,
 			&download_mode, 0644);
 
+static bool warm_reset;
+module_param(warm_reset, bool, 0644);
+MODULE_PARM_DESC(warm_reset, "Set 1 to override default cold-reset");
+
 static struct die_args *tombstone;
 
 static inline void set_restart_msg(const char *msg)
@@ -310,7 +314,7 @@ static void halt_spmi_pmic_arbiter(void)
 
 static void msm_restart_prepare(const char *cmd)
 {
-	bool need_warm_reset = false;
+	bool need_warm_reset = warm_reset;
 #ifdef CONFIG_QCOM_DLOAD_MODE
 	/* Write download mode flags if we're panic'ing
 	 * Write download mode flags if restart_mode says so
@@ -327,9 +331,8 @@ static void msm_restart_prepare(const char *cmd)
 			((cmd != NULL && cmd[0] != '\0') &&
 			!strcmp(cmd, "edl")))
 			need_warm_reset = true;
-	} else {
-		need_warm_reset = (get_dload_mode() ||
-				(cmd != NULL && cmd[0] != '\0'));
+	} else if (get_dload_mode() || (cmd != NULL && cmd[0] != '\0')) {
+		need_warm_reset = true;
 	}
 
 	/* Hard reset the PMIC unless memory contents must be maintained. */
