@@ -1663,6 +1663,13 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	INIT_WORK(&ts->suspend_work, sec_ts_suspend_work);
 	INIT_WORK(&ts->resume_work, sec_ts_resume_work);
 
+#ifdef SEC_TS_FW_UPDATE_ON_PROBE
+	INIT_DELAYED_WORK(&ts->work_fw_update, sec_ts_fw_update_work);
+#else
+	input_info(true, &ts->client->dev, "%s: fw update on probe disabled!\n",
+		   __func__);
+#endif
+
 	/* Assume screen is on throughout probe */
 	ts->bus_refmask = SEC_TS_BUS_REF_SCREEN_ON;
 
@@ -1793,13 +1800,6 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	else
 		force_update = false;
 
-#ifdef SEC_TS_FW_UPDATE_ON_PROBE
-	INIT_DELAYED_WORK(&ts->work_fw_update, sec_ts_fw_update_work);
-	schedule_delayed_work(&ts->work_fw_update, msecs_to_jiffies(10000));
-#else
-	input_info(true, &ts->client->dev, "%s: fw update on probe disabled!\n", __func__);
-#endif
-
 	ret = sec_ts_read_information(ts);
 	if (ret < 0) {
 		input_err(true, &ts->client->dev, "%s: fail to read information 0x%x\n", __func__, ret);
@@ -1895,6 +1895,10 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 #endif
 
 	schedule_delayed_work(&ts->work_read_info, msecs_to_jiffies(5000));
+
+#ifdef SEC_TS_FW_UPDATE_ON_PROBE
+	schedule_delayed_work(&ts->work_fw_update, msecs_to_jiffies(10000));
+#endif
 
 #if defined(CONFIG_TOUCHSCREEN_DUMP_MODE)
 	dump_callbacks.inform_dump = dump_tsp_log;
