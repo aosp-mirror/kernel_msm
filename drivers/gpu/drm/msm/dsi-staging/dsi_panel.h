@@ -93,6 +93,7 @@ struct dsi_backlight_config {
 	u32 bl_scale;
 	u32 bl_scale_ad;
 	u32 bl_actual;
+	u16 *bl_lut;
 	unsigned int last_state;
 
 	int en_gpio;
@@ -331,7 +332,8 @@ int dsi_backlight_get_dpms(struct dsi_backlight_config *bl);
 
 int dsi_panel_bl_register(struct dsi_panel *panel);
 int dsi_panel_bl_unregister(struct dsi_panel *panel);
-int dsi_panel_bl_parse_config(struct dsi_backlight_config *bl);
+int dsi_panel_bl_parse_config(struct device *parent,
+			      struct dsi_backlight_config *bl);
 
 int dsi_panel_update_vr_mode(struct dsi_panel *panel, bool enable);
 bool dsi_panel_get_vr_mode(struct dsi_panel *panel);
