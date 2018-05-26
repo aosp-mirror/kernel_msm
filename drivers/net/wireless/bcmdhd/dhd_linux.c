@@ -165,7 +165,6 @@ static uint32 htsf_seqnum = 0;
 uint32 tsfsync;
 struct timeval tsync;
 static uint32 tsport = 5010;
-
 typedef struct histo_ {
 	uint32 bin[NUMBIN];
 } histo_t;
@@ -524,6 +523,7 @@ typedef struct dhd_info {
 	struct wake_lock wl_ctrlwake; /* Wifi ctrl wakelock */
 	struct wake_lock wl_wdwake; /* Wifi wd wakelock */
 	struct wake_lock wl_evtwake; /* Wifi event wakelock */
+	struct wake_lock wake_lock_dhd;
 #ifdef BCMPCIE_OOB_HOST_WAKE
 	struct wake_lock wl_intrwake; /* Host wakeup wakelock */
 #endif /* BCMPCIE_OOB_HOST_WAKE */
@@ -6127,6 +6127,7 @@ dhd_open(struct net_device *net)
 	uint32 rpc_agg = BCM_RPC_TP_DNGL_AGG_DPC; /* host aggr not enabled yet */
 #endif /* BCM_FD_AGGR */
 	int ifidx;
+	unsigned long flags;
 	int32 ret = 0;
 
 	if (!dhd_download_fw_on_driverload && !dhd_driver_init_done) {
@@ -6150,6 +6151,16 @@ dhd_open(struct net_device *net)
 		dhd->dhd_state |= DHD_ATTACH_STATE_WAKELOCKS_INIT;
 	}
 
+/*Add wake_lock_dhd for 3s*/
+	if (dhd) {
+                spin_lock_irqsave(&dhd->wakelock_spinlock, flags);
+#ifdef CONFIG_HAS_WAKELOCK
+                wake_lock_timeout(&dhd->wake_lock_dhd, msecs_to_jiffies(3000));
+                DHD_INFO(("%s: wake_lock_dhd 3000\n", __FUNCTION__));
+#endif
+                dhd->wakelock_counter++;
+                spin_unlock_irqrestore(&dhd->wakelock_spinlock, flags);
+        }
 #ifdef PREVENT_REOPEN_DURING_HANG
 	/* WAR : to prevent calling dhd_open abnormally in quick succession after hang event */
 	if (dhd->pub.hang_was_sent == 1) {
@@ -12344,6 +12355,7 @@ void dhd_os_wake_lock_init(struct dhd_info *dhd)
 	wake_lock_init(&dhd->wl_rxwake, WAKE_LOCK_SUSPEND, "wlan_rx_wake");
 	wake_lock_init(&dhd->wl_ctrlwake, WAKE_LOCK_SUSPEND, "wlan_ctrl_wake");
 	wake_lock_init(&dhd->wl_evtwake, WAKE_LOCK_SUSPEND, "wlan_evt_wake");
+	wake_lock_init(&dhd->wake_lock_dhd, WAKE_LOCK_SUSPEND, "wake_lock_dhd");
 #ifdef BCMPCIE_OOB_HOST_WAKE
 	wake_lock_init(&dhd->wl_intrwake, WAKE_LOCK_SUSPEND, "wlan_oob_irq_wake");
 #endif /* BCMPCIE_OOB_HOST_WAKE */
@@ -12368,6 +12380,7 @@ void dhd_os_wake_lock_destroy(struct dhd_info *dhd)
 	wake_lock_destroy(&dhd->wl_rxwake);
 	wake_lock_destroy(&dhd->wl_ctrlwake);
 	wake_lock_destroy(&dhd->wl_evtwake);
+	wake_lock_destroy(&dhd->wake_lock_dhd);
 #ifdef BCMPCIE_OOB_HOST_WAKE
 	wake_lock_destroy(&dhd->wl_intrwake);
 #endif /* BCMPCIE_OOB_HOST_WAKE */
