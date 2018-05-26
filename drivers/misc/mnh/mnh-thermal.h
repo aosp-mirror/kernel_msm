@@ -6,6 +6,7 @@
 #include <linux/device.h>
 
 #define MNH_NUM_PVT_SENSORS 4
+#define MNH_MAX_THROTTLE_STATE 4
 
 /* Thermal characterization data */
 #define API_TRIM_CODE		0xF
@@ -67,7 +68,9 @@ struct mnh_thermal_device {
 	uint32_t regs;
 	uint32_t wait_time_us;
 	uint32_t mnh_trim_init_done;
+	uint32_t throttle_state;
 	struct mnh_thermal_sensor *sensors[MNH_NUM_PVT_SENSORS];
+	struct thermal_cooling_device *cooling_dev;
 };
 
 struct mnh_thermal_sensor {

@@ -295,8 +295,56 @@ static int mnh_thermal_get_temp(void *data, int *temp_out)
 	return 0;
 }
 
+static int mnh_get_cur_state(struct thermal_cooling_device *cooling_dev,
+							unsigned long *state)
+{
+	struct mnh_thermal_device *mnh_dev = cooling_dev->devdata;
+
+	if (!mnh_dev)
+		return -EINVAL;
+
+	*state = mnh_dev->throttle_state;
+
+	return 0;
+}
+
+static int mnh_get_max_state(struct thermal_cooling_device *cooling_dev,
+							unsigned long *state)
+{
+	struct mnh_thermal_device *mnh_dev = cooling_dev->devdata;
+
+	if (!mnh_dev)
+		return -EINVAL;
+
+	*state = MNH_MAX_THROTTLE_STATE;
+
+	return 0;
+}
+
+static int mnh_set_cur_state(struct thermal_cooling_device *cooling_dev,
+							unsigned long state)
+{
+	struct mnh_thermal_device *mnh_dev = cooling_dev->devdata;
+
+	if (!mnh_dev)
+		return -EINVAL;
+
+	if (state > MNH_MAX_THROTTLE_STATE)
+		state = MNH_MAX_THROTTLE_STATE;
+
+	mnh_dev->throttle_state = state;
+
+	return 0;
+}
+
 static const struct thermal_zone_of_device_ops mnh_of_thermal_ops = {
 	.get_temp = mnh_thermal_get_temp,
+};
+
+static const struct thermal_cooling_device_ops mnh_cooling_ops = {
+	.get_max_state = mnh_get_max_state,
+	.get_cur_state = mnh_get_cur_state,
+	.set_cur_state = mnh_set_cur_state,
 };
 
 static int mnh_thermal_probe(struct platform_device *pdev)
@@ -317,6 +365,18 @@ static int mnh_thermal_probe(struct platform_device *pdev)
 	mnh_dev->regs = HWIO_SCU_BASE_ADDR;
 	mnh_dev->wait_time_us = PVT_WAIT_US(MNH_PRECISION);
 	platform_set_drvdata(pdev, mnh_dev);
+
+	/* Register cooling device */
+	mnh_dev->cooling_dev = thermal_of_cooling_device_register(
+			dev_of_node(mnh_dev->dev), "mnh", mnh_dev,
+			&mnh_cooling_ops);
+
+	if (IS_ERR(mnh_dev->cooling_dev)) {
+		err = PTR_ERR(mnh_dev->cooling_dev);
+		dev_err(mnh_dev->dev, "%s: failed to register cooling device: %d\n",
+				__func__, err);
+		return err;
+	}
 
 	/* Initialize thermctl sensors */
 	for (i = 0; i < ARRAY_SIZE(mnh_dev->sensors); ++i) {
@@ -348,6 +408,8 @@ unregister_sensors:
 		thermal_zone_of_sensor_unregister(&pdev->dev,
 			mnh_dev->sensors[i]->tzd);
 
+	thermal_cooling_device_unregister(mnh_dev->cooling_dev);
+
 	return err;
 }
 
@@ -360,6 +422,8 @@ static int mnh_thermal_remove(struct platform_device *pdev)
 		thermal_zone_of_sensor_unregister(&pdev->dev,
 			mnh_dev->sensors[i]->tzd);
 	}
+
+	thermal_cooling_device_unregister(mnh_dev->cooling_dev);
 
 	return 0;
 }
