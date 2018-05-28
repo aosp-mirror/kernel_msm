@@ -816,6 +816,14 @@ static ssize_t nanohub_lcd_mutex(struct device *dev,
 	return count;
 }
 
+static ssize_t nanohub_lcd_mutex_status(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct nanohub_data *data = dev_get_nanohub_data(dev);
+	return scnprintf(buf, PAGE_SIZE,
+		"%d\n", atomic_read(&data->lcd_mutex));
+}
+
 static ssize_t nanohub_erase_shared(struct device *dev,
 				    struct device_attribute *attr,
 				    const char *buf, size_t count)
@@ -1146,7 +1154,7 @@ static struct device_attribute attributes[] = {
 	__ATTR(unlock, 0220, NULL, nanohub_unlock_bl),
 	__ATTR(mode, 0220, NULL, nanohub_mode_set),
 	__ATTR(download_bl_status, 0444, nanohub_download_bl_status, NULL),
-	__ATTR(lcd_mutex, 0220, NULL, nanohub_lcd_mutex),
+	__ATTR(lcd_mutex, 0660, nanohub_lcd_mutex_status, nanohub_lcd_mutex),
 };
 
 static inline int nanohub_create_sensor(struct nanohub_data *data)
