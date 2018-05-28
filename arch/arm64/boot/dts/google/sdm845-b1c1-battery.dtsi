@@ -100,3 +100,7 @@
 		google,polling-freq = <3>;
 	};
 };
+
+&bcl_sensor {
+	google,bat-power-supply = "maxfg";
+};
