@@ -71,7 +71,7 @@ struct smb23x_chip {
 		int float_voltage;
 		int chg_current;
 		int tracking;
-		int temp_d;        // delta to hysteresis temperature
+		int temp_d;        /* delta to hysteresis temperature */
 	}				temp_zone[MAX_TEMP_ZONE];
 	int				current_temp_zone;
 	int				max_temp_zone;
@@ -228,7 +228,7 @@ static int hot_bat_decidegc_table[] = {
 	730,
 };
 
-static unsigned int debug_enable_log = 0;
+static unsigned int debug_enable_log;
 
 #define MIN_FLOAT_MV	3480
 #define MAX_FLOAT_MV	4720
@@ -425,7 +425,7 @@ enum {
 	ZONE4,
 	ZONE5,
 	ZONE6,
-	ZONE_UNKNOW,
+	ZONE_UNKNOWN,
 
 	NORMAL = 0,
 	LOW1,
@@ -663,7 +663,7 @@ static int smb23x_parse_dt(struct smb23x_chip *chip)
 
 	{
 		unsigned int idx = 0;
-		char * zone_name[] = {
+		static const char const *zone_name[] = {
 			"temp-zone-0",
 			"temp-zone-1",
 			"temp-zone-2",
@@ -677,11 +677,12 @@ static int smb23x_parse_dt(struct smb23x_chip *chip)
 				&chip->max_temp_zone);
 		if (rc < 0)
 			chip->max_temp_zone = -EINVAL;
-		//pr_info("max-temp-zone:%d\n", chip->max_temp_zone);
+		/* pr_info("max-temp-zone:%d\n", chip->max_temp_zone); */
 		if (MAX_TEMP_ZONE < (chip->max_temp_zone+1)) {
 			chip->max_temp_zone = MAX_TEMP_ZONE - 1;
 			pr_err("Please check define for MAX_TEMP_ZONE\n");
-			pr_err("Modify max_temp_zone to %d\n", (MAX_TEMP_ZONE-1));
+			pr_err("Modify max_temp_zone to %d\n",
+			(MAX_TEMP_ZONE-1));
 		}
 		for (idx = ZONE0; idx < (chip->max_temp_zone + 1); idx++) {
 			rc = of_property_read_u32_index(node, zone_name[idx],
@@ -704,7 +705,7 @@ static int smb23x_parse_dt(struct smb23x_chip *chip)
 					4, &chip->temp_zone[idx].temp_d);
 			if (rc < 0)
 				chip->temp_zone[idx].temp_d = -EINVAL;
-			#if 0
+			/*
 			pr_info("%s:<%d %d %d %d %d>\n",
 					zone_name[idx],
 					chip->temp_zone[idx].temp,
@@ -712,7 +713,7 @@ static int smb23x_parse_dt(struct smb23x_chip *chip)
 					chip->temp_zone[idx].chg_current,
 					chip->temp_zone[idx].tracking,
 					chip->temp_zone[idx].temp_d);
-			#endif
+			*/
 		}
 	}
 
@@ -1126,8 +1127,11 @@ static int check_charger_thermal_state(struct smb23x_chip *chip, int batt_temp)
 		}
 
 		chip->index_soft_temp_comp_mv = HIGH;
-	} else if ((LOW2 != chip->index_soft_temp_comp_mv) && (batt_temp < 150)) {
-		//The cool float voltage is too low that can't use the "Float voltage compensation" setting
+	} else if ((LOW2 != chip->index_soft_temp_comp_mv) &&
+		(batt_temp < 150)) {
+		/* The cool float voltage is too low
+		that can't use the "Float voltage compensation" setting
+		*/
 		rc = smb23x_enable_volatile_writes(chip);
 		if (rc < 0) {
 			pr_err("Enable volatile writes failed, rc=%d\n", rc);
@@ -1146,35 +1150,44 @@ static int check_charger_thermal_state(struct smb23x_chip *chip, int batt_temp)
 			return rc;
 		}
 
-		tmp = (chip->cfg_cool_temp_vfloat_mv - MIN_FLOAT_MV) / FLOAT_STEP_MV;
-		rc = smb23x_masked_write(chip, CFG_REG_3, FLOAT_VOLTAGE_MASK, tmp);
+		tmp =
+		(chip->cfg_cool_temp_vfloat_mv - MIN_FLOAT_MV) / FLOAT_STEP_MV;
+		rc = smb23x_masked_write(chip,
+		CFG_REG_3, FLOAT_VOLTAGE_MASK, tmp);
 		if (rc < 0) {
 			pr_err("Set float voltage failed, rc=%d\n", rc);
 			return rc;
 		}
 
 		chip->index_soft_temp_comp_mv = LOW2;
-	} else if ((LOW1 != chip->index_soft_temp_comp_mv) && (batt_temp < 250)) {
+	} else if ((LOW1 != chip->index_soft_temp_comp_mv) &&
+		(batt_temp < 250)) {
 		rc = smb23x_enable_volatile_writes(chip);
 		if (rc < 0) {
 			pr_err("Enable volatile writes failed, rc=%d\n", rc);
 			return rc;
 		}
 
-		rc = smb23x_soft_temp_behavior(chip, chip->cfg_cool_temp_comp_mv, chip->cfg_cool_temp_comp_ma);
+		rc = smb23x_soft_temp_behavior(chip,
+			chip->cfg_cool_temp_comp_mv,
+			chip->cfg_cool_temp_comp_ma);
 		if (rc < 0) {
-			pr_err("Set soft temp limit behavior failed, rc=%d\n", rc);
+			pr_err("Set soft temp limit behavior failed, rc=%d\n",
+			rc);
 			return rc;
 		}
 
-		rc = smb23x_fastchg_current_compensation(chip, chip->cfg_cool_temp_comp_ma);
+		rc = smb23x_fastchg_current_compensation(chip,
+		chip->cfg_cool_temp_comp_ma);
 		if (rc < 0) {
-			pr_err("Set fast charge current in soft-limit mode failed, rc=%d\n", rc);
+			pr_err("Set fast charge current in soft-limit mode failed, rc=%d\n",
+			rc);
 			return rc;
 		}
 
 		tmp = (chip->cfg_vfloat_mv - MIN_FLOAT_MV) / FLOAT_STEP_MV;
-		rc = smb23x_masked_write(chip, CFG_REG_3, FLOAT_VOLTAGE_MASK, tmp);
+		rc = smb23x_masked_write(chip,
+		CFG_REG_3, FLOAT_VOLTAGE_MASK, tmp);
 		if (rc < 0) {
 			pr_err("Set float voltage failed, rc=%d\n", rc);
 			return rc;
@@ -1200,9 +1213,8 @@ static int update_fast_charging_current(struct smb23x_chip *chip, int cur)
 	tmp = i;
 	rc = smb23x_masked_write(chip, CFG_REG_2,
 			FASTCHG_CURR_MASK, tmp);
-	if (rc < 0) {
+	if (rc < 0)
 		pr_err("Set fastchg current failed, rc=%d\n", rc);
-	}
 	return rc;
 }
 
@@ -1216,16 +1228,16 @@ static int update_system_float_voltage(struct smb23x_chip *chip, int flv)
 
 	tmp = (flv - MIN_FLOAT_MV) / FLOAT_STEP_MV;
 	rc = smb23x_masked_write(chip, CFG_REG_3, FLOAT_VOLTAGE_MASK, tmp);
-	if (rc < 0) {
+	if (rc < 0)
 		pr_err("Set float voltage failed, rc=%d\n", rc);
-	}
 	return rc;
 }
 
-static int check_charger_thermal_state_sw(struct smb23x_chip *chip, int batt_temp)
+static int check_charger_thermal_state_sw(
+	struct smb23x_chip *chip, int batt_temp)
 {
 	int rc, idx, current_temp_zone;
-	int target_temp_zone = ZONE_UNKNOW;
+	int target_temp_zone = ZONE_UNKNOWN;
 
 	if (chip->charger_plugin == 0)
 		return (-EINVAL);
@@ -1234,19 +1246,22 @@ static int check_charger_thermal_state_sw(struct smb23x_chip *chip, int batt_tem
 	pr_info("current_temp_zone:%d, batt_temp=%d\n",
 			current_temp_zone, batt_temp);
 
-	//smb23x_print_register(chip);
+	/* smb23x_print_register(chip); */
 
-	if (current_temp_zone == ZONE_UNKNOW) {
+	if (current_temp_zone == ZONE_UNKNOWN) {
 		int temp_high, temp_low;
+
 		if (batt_temp < chip->temp_zone[ZONE1].temp) {
 			target_temp_zone = ZONE0;
-		} else if (batt_temp >= chip->temp_zone[chip->max_temp_zone].temp) {
+		} else if (batt_temp >=
+		chip->temp_zone[chip->max_temp_zone].temp) {
 			target_temp_zone = chip->max_temp_zone;
 		} else {
 			for (idx = ZONE1; idx < chip->max_temp_zone; idx++) {
 				temp_high = chip->temp_zone[idx+1].temp;
 				temp_low = chip->temp_zone[idx].temp;
-				if (batt_temp < temp_high && batt_temp >= temp_low) {
+				if (batt_temp < temp_high &&
+				batt_temp >= temp_low) {
 					target_temp_zone = idx;
 					break;
 				}
@@ -1258,7 +1273,8 @@ static int check_charger_thermal_state_sw(struct smb23x_chip *chip, int batt_tem
 			if (idx < chip->max_temp_zone &&
 				batt_temp >= chip->temp_zone[idx+1].temp) {
 				idx++;
-			} else if (idx > ZONE0 && batt_temp < chip->temp_zone[idx].temp) {
+			} else if (idx > ZONE0 &&
+			batt_temp < chip->temp_zone[idx].temp) {
 				idx--;
 			} else {
 				break;
@@ -1270,8 +1286,8 @@ static int check_charger_thermal_state_sw(struct smb23x_chip *chip, int batt_tem
 	if (target_temp_zone == current_temp_zone)
 		return 0;
 
-	// tracking hysteresis
-	if (current_temp_zone != ZONE_UNKNOW) {
+	/* tracking hysteresis */
+	if (current_temp_zone != ZONE_UNKNOWN) {
 		int tracking;
 		int temp_d;
 
@@ -1281,7 +1297,7 @@ static int check_charger_thermal_state_sw(struct smb23x_chip *chip, int batt_tem
 			if (target_temp_zone < current_temp_zone)
 				break;
 			temp_d = chip->temp_zone[target_temp_zone].temp
-				+ tracking * chip->temp_zone[current_temp_zone].temp_d;
+			+ tracking * chip->temp_zone[current_temp_zone].temp_d;
 			pr_info("temp_d=%d\n", temp_d/10);
 			if (batt_temp <= temp_d)
 				return 0;
@@ -1307,7 +1323,7 @@ static int check_charger_thermal_state_sw(struct smb23x_chip *chip, int batt_tem
 
 	if (chip->max_temp_zone == target_temp_zone) {
 		update_system_float_voltage(chip,
-				chip->temp_zone[target_temp_zone].float_voltage);
+			chip->temp_zone[target_temp_zone].float_voltage);
 		chip->charge_disable_reason |= THERMAL;
 		smb23x_charging_enable(chip, 0);
 	} else if (ZONE0 == target_temp_zone) {
@@ -1347,7 +1363,7 @@ static int check_charger_thermal(struct smb23x_chip *chip)
 	} else {
 		pr_info("write normal setting\n");
 		smb23x_print_register(chip);
-		// Here for normal operation
+		/* Here for normal operation */
 		update_fast_charging_current(chip, chip->cfg_fastchg_ma);
 		update_system_float_voltage(chip, chip->cfg_vfloat_mv);
 	}
@@ -1435,71 +1451,72 @@ static int smb23x_hw_init(struct smb23x_chip *chip)
 
 	/* hard JEITA settings */
 	if (!chip->cfg_thermal_monitor_disabled) {
-	if (chip->cfg_cold_bat_decidegc != -EINVAL ||
-		chip->cfg_hot_bat_decidegc != -EINVAL) {
-		u8 mask = 0;
+		if (chip->cfg_cold_bat_decidegc != -EINVAL ||
+			chip->cfg_hot_bat_decidegc != -EINVAL) {
+			u8 mask = 0;
 
-		rc = smb23x_masked_write(chip, CFG_REG_5,
+			rc = smb23x_masked_write(chip, CFG_REG_5,
 				BAT_THERM_DIS_BIT | HARD_THERM_NOT_SUSPEND, 0);
-		if (rc < 0) {
-			pr_err("Enable thermal monitor failed, rc=%d\n", rc);
-			return rc;
-		}
-		if (chip->cfg_cold_bat_decidegc != -EINVAL) {
-			i = find_closest_in_descendant_list(
-				chip->cfg_cold_bat_decidegc,
-				cold_bat_decidegc_table,
-				ARRAY_SIZE(cold_bat_decidegc_table));
-			mask |= HARD_COLD_TEMP_MASK;
-			tmp = i << HARD_COLD_TEMP_OFFSET;
-		}
-
-		if (chip->cfg_hot_bat_decidegc != -EINVAL) {
-			i = find_closest_in_ascendant_list(
-				chip->cfg_hot_bat_decidegc,
-				hot_bat_decidegc_table,
-				ARRAY_SIZE(hot_bat_decidegc_table));
-			mask |= HARD_HOT_TEMP_MASK;
-			tmp |= i << HARD_HOT_TEMP_OFFSET;
-		}
-		rc = smb23x_masked_write(chip, CFG_REG_8, mask, tmp);
-		if (rc < 0) {
-			pr_err("Set hard cold/hot temperature failed, rc=%d\n",
+			if (rc < 0) {
+				pr_err("Enable thermal monitor failed, rc=%d\n",
 				rc);
-			return rc;
-		}
-	}
+				return rc;
+			}
+			if (chip->cfg_cold_bat_decidegc != -EINVAL) {
+				i = find_closest_in_descendant_list(
+					chip->cfg_cold_bat_decidegc,
+					cold_bat_decidegc_table,
+					ARRAY_SIZE(cold_bat_decidegc_table));
+				mask |= HARD_COLD_TEMP_MASK;
+				tmp = i << HARD_COLD_TEMP_OFFSET;
+			}
 
-	/* soft JEITA settings */
-	if (chip->cfg_cool_bat_decidegc != -EINVAL ||
-		chip->cfg_warm_bat_decidegc != -EINVAL) {
-		u8 mask = 0;
-
-		if (chip->cfg_cool_bat_decidegc != -EINVAL) {
-			i = find_closest_in_descendant_list(
-				chip->cfg_cool_bat_decidegc,
-				cool_bat_decidegc_table,
-				ARRAY_SIZE(cool_bat_decidegc_table));
-			mask |= SOFT_COLD_TEMP_MASK;
-			tmp = i << SOFT_COLD_TEMP_OFFSET;
+			if (chip->cfg_hot_bat_decidegc != -EINVAL) {
+				i = find_closest_in_ascendant_list(
+					chip->cfg_hot_bat_decidegc,
+					hot_bat_decidegc_table,
+					ARRAY_SIZE(hot_bat_decidegc_table));
+				mask |= HARD_HOT_TEMP_MASK;
+				tmp |= i << HARD_HOT_TEMP_OFFSET;
+			}
+			rc = smb23x_masked_write(chip, CFG_REG_8, mask, tmp);
+			if (rc < 0) {
+				pr_err("Set hard cold/hot temperature failed, rc=%d\n",
+					rc);
+				return rc;
+			}
 		}
 
-		if (chip->cfg_warm_bat_decidegc != -EINVAL) {
-			i = find_closest_in_ascendant_list(
-				chip->cfg_warm_bat_decidegc,
-				warm_bat_decidegc_table,
-				ARRAY_SIZE(warm_bat_decidegc_table));
-			mask |= SOFT_HOT_TEMP_MASK;
-			tmp |= i << SOFT_HOT_TEMP_OFFSET;
-		}
+		/* soft JEITA settings */
+		if (chip->cfg_cool_bat_decidegc != -EINVAL ||
+			chip->cfg_warm_bat_decidegc != -EINVAL) {
+			u8 mask = 0;
 
-		rc = smb23x_masked_write(chip, CFG_REG_8, mask, tmp);
-		if (rc < 0) {
-			pr_err("Set soft cold/hot temperature failed, rc=%d\n",
-				rc);
-			return rc;
+			if (chip->cfg_cool_bat_decidegc != -EINVAL) {
+				i = find_closest_in_descendant_list(
+					chip->cfg_cool_bat_decidegc,
+					cool_bat_decidegc_table,
+					ARRAY_SIZE(cool_bat_decidegc_table));
+				mask |= SOFT_COLD_TEMP_MASK;
+				tmp = i << SOFT_COLD_TEMP_OFFSET;
+			}
+
+			if (chip->cfg_warm_bat_decidegc != -EINVAL) {
+				i = find_closest_in_ascendant_list(
+					chip->cfg_warm_bat_decidegc,
+					warm_bat_decidegc_table,
+					ARRAY_SIZE(warm_bat_decidegc_table));
+				mask |= SOFT_HOT_TEMP_MASK;
+				tmp |= i << SOFT_HOT_TEMP_OFFSET;
+			}
+
+			rc = smb23x_masked_write(chip, CFG_REG_8, mask, tmp);
+			if (rc < 0) {
+				pr_err("Set soft cold/hot temperature failed, rc=%d\n",
+					rc);
+				return rc;
+			}
 		}
-	}
 	}
 
 	/* float voltage and fastchg current compensation for soft JEITA */
@@ -2434,7 +2451,8 @@ static int smb23x_get_prop_batt_temp(struct smb23x_chip *chip)
 	}
 
 	if (fake_temp == FAKE_TEMP_DISABLE)
-		chip->bms_psy->get_property(chip->bms_psy, POWER_SUPPLY_PROP_TEMP, &ret);
+		chip->bms_psy->get_property(chip->bms_psy,
+			POWER_SUPPLY_PROP_TEMP, &ret);
 	else
 		ret.intval = fake_temp;
 	chip->last_temp = ret.intval;
@@ -2442,18 +2460,19 @@ static int smb23x_get_prop_batt_temp(struct smb23x_chip *chip)
 	check_charger_thermal(chip);
 
 	if (!chip->cfg_thermal_monitor_disabled) {
-		//Stop charging if temp >= 47 degC; start charging if temp <= 45 degC
+		/* Stop charging if temp >= 47 degC;
+		start charging if temp <= 45 degC */
 		if (chip->last_temp >= BATT_STOP_CHARGE_TEMP
 				&& !(chip->charge_disable_reason & THERMAL)) {
 			chip->charge_disable_reason |= THERMAL;
-			pr_info("batt_temp=%d, stop charging. disable_reason=0x%x \n",
-					chip->last_temp, chip->charge_disable_reason);
+			pr_info("batt_temp=%d, stop charging. disable_reason=0x%x\n",
+				chip->last_temp, chip->charge_disable_reason);
 			smb23x_charging_enable(chip, 0);
 		} else if ((chip->last_temp <= BATT_RESUME_CHARGE_TEMP)
 				&& (chip->charge_disable_reason & THERMAL)) {
 			chip->charge_disable_reason &= ~THERMAL;
-			pr_info("batt_temp=%d, start charging. disable_reason=0x%x \n",
-					chip->last_temp, chip->charge_disable_reason);
+			pr_info("batt_temp=%d, start charging. disable_reason=0x%x\n",
+				chip->last_temp, chip->charge_disable_reason);
 			smb23x_charging_enable(chip, 1);
 		}
 	}
@@ -2464,12 +2483,15 @@ static int smb23x_get_prop_batt_temp(struct smb23x_chip *chip)
 		charge_current = smb23x_get_prop_batt_current(chip);
 
 		if (chip->cfg_jeita_check_enabled) {
-			max_chg_voltage = chip->temp_zone[chip->current_temp_zone].float_voltage;
-			max_chg_voltage = (max_chg_voltage == 4400)?((4400-50)*1000):max_chg_voltage*1000;
+			max_chg_voltage =
+			chip->temp_zone[chip->current_temp_zone].float_voltage;
+			max_chg_voltage =
+				(max_chg_voltage == 4400)?((4400-50)*1000) :
+				max_chg_voltage*1000;
 		} else {
 			max_chg_voltage = (4400-50)*1000;
 		}
-		//pr_info("max_chg_voltage:%d\n", max_chg_voltage);
+		/* pr_info("max_chg_voltage:%d\n", max_chg_voltage); */
 		if ((charge_current > 0) && 
 					(charge_current <= 20000) && 
 					!(chip->charge_disable_reason & BATT_FULL)) {
@@ -2478,13 +2500,16 @@ static int smb23x_get_prop_batt_temp(struct smb23x_chip *chip)
 			} else {
 				charge_disable_count = 0;
 				chip->charge_disable_reason |= BATT_FULL;
-				pr_info("batt full, stop charging. disable_reason=0x%x \n", chip->charge_disable_reason);
+				pr_info("batt full, stop charging. disable_reason=0x%x\n",
+					chip->charge_disable_reason);
 				smb23x_charging_enable(chip, 0);
 			}
-		} else if ((smb23x_get_prop_batt_voltage(chip) < max_chg_voltage) &&
-					(chip->charge_disable_reason & BATT_FULL)) {
+		} else if ((smb23x_get_prop_batt_voltage(chip) <
+			max_chg_voltage) &&
+			(chip->charge_disable_reason & BATT_FULL)) {
 			chip->charge_disable_reason &= ~BATT_FULL;
-			pr_info("batt not full, start charging. disable_reason=0x%x \n", chip->charge_disable_reason);
+			pr_info("batt not full, start charging. disable_reason=0x%x\n",
+				chip->charge_disable_reason);
 			smb23x_charging_enable(chip, 1);
 		} else
 			charge_disable_count = 0;
@@ -2926,9 +2951,8 @@ static int smb23x_battery_set_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_TEMP:
 		if (val->intval < -40 || val->intval >= 100)
 			fake_temp = -410;
-		else {
+		else
 			fake_temp = val->intval*10;
-		}
 		break;
 #endif //QTI_SMB231
 	default:
@@ -2982,7 +3006,7 @@ static ssize_t enable_jeita_show(struct device *dev,
 		type = JEITA_SW;
 	else
 		type = JEITA_DISABLE;
-	return sprintf(buf, "Type:%d\n", type);
+	return snprintf(buf, PAGE_SIZE, "Type:%d\n", type);
 }
 
 static ssize_t enable_jeita_store(struct device *dev,
@@ -3015,13 +3039,14 @@ static ssize_t enable_jeita_store(struct device *dev,
 	};
 	return count;
 }
-static DEVICE_ATTR(enable_jeita, (S_IRUSR|S_IWUSR), enable_jeita_show, enable_jeita_store);
+static DEVICE_ATTR(enable_jeita, (S_IRUSR|S_IWUSR),
+	enable_jeita_show, enable_jeita_store);
 
 static ssize_t enable_debug_log_show(struct device *dev,
 		struct device_attribute *attr,
 		char *buf)
 {
-	return sprintf(buf, "debug_log=%d\n", debug_enable_log);
+	return snprintf(buf, PAGE_SIZE, "debug_log=%d\n", debug_enable_log);
 }
 static ssize_t enable_debug_log_store(struct device *dev,
 		struct device_attribute *attr,
@@ -3053,11 +3078,13 @@ static const struct attribute_group smb23x_sysfs_attr_group = {
 static int create_sysfs_entries(struct smb23x_chip *chip)
 {
 	struct device *dev = chip->batt_psy.dev;
+
 	return sysfs_create_group(&dev->kobj, &smb23x_sysfs_attr_group);
 }
 static void destroy_sysfs_entries(struct smb23x_chip *chip)
 {
 	struct device *dev = chip->batt_psy.dev;
+
 	sysfs_remove_group(&dev->kobj, &smb23x_sysfs_attr_group);
 }
 #endif
@@ -3382,7 +3409,7 @@ static int smb23x_probe(struct i2c_client *client,
 	chip->dev = &client->dev;
 	chip->usb_psy = usb_psy;
 	chip->fake_battery_soc = -EINVAL;
-	chip->current_temp_zone = ZONE_UNKNOW;
+	chip->current_temp_zone = ZONE_UNKNOWN;
 	i2c_set_clientdata(client, chip);
 
 	wake_lock_init(&chip->reginit_wlock, WAKE_LOCK_SUSPEND, "smb23x");

@@ -31,7 +31,7 @@
 			qcom,recharge-thresh-mv = <80>;
 			qcom,aicl-disabled;
 			thermal-monitor-disabled;
-			//jeita-check-enabled;
+			jeita-check-enabled;
 			max-temp-zone = <6>;
 			/*
 			<[start_temp_for_zone] [voltage] [current] [hysteresis direction] [hysteresis delta temp]>
