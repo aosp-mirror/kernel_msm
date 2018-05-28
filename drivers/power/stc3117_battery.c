@@ -408,46 +408,53 @@ static struct stc311x_platform_data stc3117_data = {
 	.power_supply_unregister = NULL,
 
 	.Vmode = 0,/*REG_MODE, BIT_VMODE 1=Voltage mode, 0=mixed mode */
-	.Alm_SOC = 15,/* SOC alm level %*/
+	.Alm_SOC = 10,/* SOC alm level %*/
 	.Alm_Vbat = 3600,/* Vbat alm level mV*/
 	/* nominal CC_cnf, coming from battery characterisation*/
-	.CC_cnf = 73,
+	.CC_cnf = 85,
 	/* nominal VM cnf , coming from battery characterisation*/
-	.VM_cnf = 304,
+	.VM_cnf = 197,
 	/* nominal internal impedance*/
-	.Rint = 816,
+	.Rint = 457,
 	/* nominal capacity in mAh, coming from battery characterisation*/
-	.Cnom = 345,
+	.Cnom = 415,
 	.Rsense = 10, /* sense resistor mOhms*/
-	.RelaxCurrent = 15, /* current for relaxation in mA (< C/20) */
+	.RelaxCurrent = 20, /* current for relaxation in mA (< C/20) */
 	.Adaptive = 1, /* 1=Adaptive mode enabled, 0=Adaptive mode disabled */
 
 	/* Elentec Co Ltd Battery pack - 80 means 8% */
-        .CapDerating[6] = 575,            /* capacity derating in 0.1%, for temp = -20 degC */
-        .CapDerating[5] = 178,            /* capacity derating in 0.1%, for temp = -10 degC */
-        .CapDerating[4] = 55,             /* capacity derating in 0.1%, for temp = 0 degC */
-        .CapDerating[3] = 27,             /* capacity derating in 0.1%, for temp = 10 degC */
-        .CapDerating[2] = 0,              /* capacity derating in 0.1%, for temp = 25 degC */
-        .CapDerating[1] = 0,           /* capacity derating in 0.1%, for temp = 40 degC */
-        .CapDerating[0] = 0,           /* capacity derating in 0.1%, for temp = 60 degC */
+	/* capacity derating in 0.1%, for temp = -20°C */
+	.CapDerating[6] = 212,
+	/* capacity derating in 0.1%, for temp = -10°C */
+	.CapDerating[5] = 71,
+	/* capacity derating in 0.1%, for temp = 0°C */
+	.CapDerating[4] = 35,
+	/* capacity derating in 0.1%, for temp = 10°C */
+	.CapDerating[3] = 35,
+	/* capacity derating in 0.1%, for temp = 25°C */
+	.CapDerating[2] = 0,
+	/* capacity derating in 0.1%, for temp = 40°C */
+	.CapDerating[1] = 0,
+	/* capacity derating in 0.1%, for temp = 60°C */
+	.CapDerating[0] = 0,
 
-	/*OCV curve example for a 4.35V li-ion battery*/
-        .OCVValue[15] = 4259,             /* OCV curve value */
-        .OCVValue[14] = 4150,             /* OCV curve value */
-        .OCVValue[13] = 4063,             /* OCV curve value */
-        .OCVValue[12] = 3950,             /* OCV curve value */
-        .OCVValue[11] = 3929,             /* OCV curve value */
-        .OCVValue[10] = 3879,             /* OCV curve value */
-        .OCVValue[9] = 3823,              /* OCV curve value */
-        .OCVValue[8] = 3790,              /* OCV curve value */
-        .OCVValue[7] = 3763,              /* OCV curve value */
-        .OCVValue[6] = 3746,              /* OCV curve value */
-        .OCVValue[5] = 3729,              /* OCV curve value */
-        .OCVValue[4] = 3701,              /* OCV curve value */
-        .OCVValue[3] = 3683,              /* OCV curve value */
-        .OCVValue[2] = 3672,              /* OCV curve value */
-        .OCVValue[1] = 3561,              /* OCV curve value */
-        .OCVValue[0] = 3450,              /* OCV curve value */
+	/*OCV curve example for a 4.4V li-ion battery*/
+	.OCVValue[15] = 4374,             /* OCV curve value */
+	.OCVValue[14] = 4257,             /* OCV curve value */
+	.OCVValue[13] = 4142,             /* OCV curve value */
+	.OCVValue[12] = 4043,             /* OCV curve value */
+	.OCVValue[11] = 3985,             /* OCV curve value */
+	.OCVValue[10] = 3937,             /* OCV curve value */
+	.OCVValue[9] = 3855,              /* OCV curve value */
+	.OCVValue[8] = 3811,              /* OCV curve value */
+	.OCVValue[7] = 3776,              /* OCV curve value */
+	.OCVValue[6] = 3755,              /* OCV curve value */
+	.OCVValue[5] = 3737,              /* OCV curve value */
+	.OCVValue[4] = 3710,              /* OCV curve value */
+	.OCVValue[3] = 3686,              /* OCV curve value */
+	.OCVValue[2] = 3680,              /* OCV curve value */
+	.OCVValue[1] = 3573,              /* OCV curve value */
+	.OCVValue[0] = 3300,              /* OCV curve value */
 
 	/* SOC_TAB data */
 	.SOCValue[15] = 100,

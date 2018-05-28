@@ -677,7 +677,7 @@ static int smb23x_parse_dt(struct smb23x_chip *chip)
 				&chip->max_temp_zone);
 		if (rc < 0)
 			chip->max_temp_zone = -EINVAL;
-		/*pr_info("max-temp-zone:%d\n", chip->max_temp_zone);*/
+		/* pr_info("max-temp-zone:%d\n", chip->max_temp_zone); */
 		if (MAX_TEMP_ZONE < (chip->max_temp_zone+1)) {
 			chip->max_temp_zone = MAX_TEMP_ZONE - 1;
 			pr_err("Please check define for MAX_TEMP_ZONE\n");
@@ -1130,7 +1130,8 @@ static int check_charger_thermal_state(struct smb23x_chip *chip, int batt_temp)
 	} else if ((LOW2 != chip->index_soft_temp_comp_mv) &&
 		(batt_temp < 150)) {
 		/* The cool float voltage is too low
-		that can't use the "Float voltage compensation" setting*/
+		that can't use the "Float voltage compensation" setting
+		*/
 		rc = smb23x_enable_volatile_writes(chip);
 		if (rc < 0) {
 			pr_err("Enable volatile writes failed, rc=%d\n", rc);
@@ -1245,7 +1246,7 @@ static int check_charger_thermal_state_sw(
 	pr_info("current_temp_zone:%d, batt_temp=%d\n",
 			current_temp_zone, batt_temp);
 
-	/*smb23x_print_register(chip);*/
+	/* smb23x_print_register(chip); */
 
 	if (current_temp_zone == ZONE_UNKNOWN) {
 		int temp_high, temp_low;
@@ -2490,7 +2491,7 @@ static int smb23x_get_prop_batt_temp(struct smb23x_chip *chip)
 		} else {
 			max_chg_voltage = (4400-50)*1000;
 		}
-		/*pr_info("max_chg_voltage:%d\n", max_chg_voltage);*/
+		/* pr_info("max_chg_voltage:%d\n", max_chg_voltage); */
 		if ((charge_current > 0) && 
 					(charge_current <= 20000) && 
 					!(chip->charge_disable_reason & BATT_FULL)) {
