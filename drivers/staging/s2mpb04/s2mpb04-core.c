@@ -584,9 +584,11 @@ static int s2mpb04_core_fixup(struct s2mpb04_core *ddata)
 	s2mpb04_write_byte(ddata, S2MPB04_REG_BUCK2_OUT, 0x88);
 
 	/* set LDO1 output voltage to 1.87V */
+	/* also modify s2mpb04_regulator_enable to match LDO1 fixup */
 	s2mpb04_write_byte(ddata, S2MPB04_REG_LDO1_CTRL, 0x2F);
 
 	/* set LDO2 output voltage to 1.87V */
+	/* also modify s2mpb04_regulator_enable to match LDO2 fixup */
 	s2mpb04_write_byte(ddata, S2MPB04_REG_LDO2_CTRL, 0x2F);
 
 	return 0;

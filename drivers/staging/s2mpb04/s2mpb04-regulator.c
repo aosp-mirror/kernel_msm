@@ -215,11 +215,11 @@ static int s2mpb04_regulator_enable(struct regulator_dev *rdev)
 		break;
 	case S2MPB04_ID_LDO1:
 		ret = s2mpb04_write_byte(s2mpb04_core, S2MPB04_REG_LDO1_CTRL,
-					 0xEC);
+					 0xEF);
 		break;
 	case S2MPB04_ID_LDO2:
 		ret = s2mpb04_write_byte(s2mpb04_core, S2MPB04_REG_LDO2_CTRL,
-					 0xEC);
+					 0xEF);
 		break;
 	default:
 		return -EINVAL;
