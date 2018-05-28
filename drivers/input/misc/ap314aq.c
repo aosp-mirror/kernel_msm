@@ -85,6 +85,7 @@
 static void pl_timer_callback(unsigned long pl_data);
 static int ap314aq_power_ctl(struct ap314aq_data *data, bool on);
 static int ap314aq_power_init(struct ap314aq_data*data, bool on);
+static int ap314aq_read_cal_data(char *file_path);
 
 static struct ap314aq_data *private_pl_data = NULL;
 // AP314AQ register
@@ -257,6 +258,40 @@ static int ap314aq_set_phthres(struct i2c_client *client, int val)
 
     return err;
 }
+/* reset p sensor pthreshold include calibration data */
+static int ap314aq_set_ps_thres(struct i2c_client *client)
+{
+    int bias, n2f, value_l, value_h;
+    const int max_limit=1000;
+    const int min_limit=800;
+
+    bias = ap314aq_read_cal_data(AP314AQ_CLAIBRATION_BIAS_PATH);
+    n2f = ap314aq_read_cal_data(AP314AQ_CLAIBRATION_N2F_PATH);
+    LDBG("bias = %d, n2f = %d, THRESHOLD_LOW = %d, THRESHOLD_HIGH= %d\n",
+		bias, n2f, AP314AQ_PS_THRESHOLD_LOW, AP314AQ_PS_THRESHOLD_HIGH);
+    if(AP314AQ_ALGO_TYPE == 1){
+	value_l = AP314AQ_PS_THRESHOLD_LOW + bias;
+	value_h = AP314AQ_PS_THRESHOLD_HIGH + bias;
+    }
+    else if (AP314AQ_ALGO_TYPE == 2 && n2f > 0){
+	value_l = n2f;
+	value_h = AP314AQ_PS_THRESHOLD_HIGH;
+    }
+    else{
+	value_l = AP314AQ_PS_THRESHOLD_LOW;
+	value_h = AP314AQ_PS_THRESHOLD_HIGH;
+    }
+    if (value_l > min_limit)
+	value_l = min_limit;
+    if (value_h > max_limit)
+	value_h = max_limit;
+
+    ap314aq_set_plthres(client, value_l);
+    ap314aq_set_phthres(client, value_h);
+    LDBG("ALGO_TYPE = %d, plthres = %d, phthres = %d\n", AP314AQ_ALGO_TYPE, value_l, value_h);
+
+    return 0;
+}
 
 static int ap314aq_get_object(struct i2c_client *client)
 {
@@ -289,13 +324,12 @@ static int ap314aq_get_px_value(struct i2c_client *client)
     if (lsb < 0)
 	return lsb;
 
-    LDBG("%s, IR(lsb) = %d\n", __func__, (u32)(lsb));
     msb = i2c_smbus_read_byte_data(client, AP314AQ_REG_PS_DATA_HIGH);
 
     if (msb < 0)
 	return msb;
 
-    LDBG("%s, IR(msb) = %d\n", __func__, (u32)(msb));
+    LDBG("%s, IR(lsb) = %d, IR(msb) = %d\n", __func__, (u32)(lsb), (u32)(msb));
     return (u32)(((msb & AL314AQ_REG_PS_DATA_HIGH_MASK) << 8) | (lsb & AL314AQ_REG_PS_DATA_LOW_MASK));
 }
 
@@ -307,6 +341,11 @@ static int ap314aq_ps_enable(struct ap314aq_data *ps_data,int enable)
 #endif
     if(misc_ps_opened == enable)
                 return 0;
+    if(enable && !(ps_data->load_cal))
+    {
+	ap314aq_set_ps_thres(ps_data->client);
+	ps_data->load_cal = true;
+    }
     misc_ps_opened = enable;
     ret = __ap314aq_write_reg(ps_data->client,
         AP314AQ_REG_SYS_CONF, AP314AQ_REG_SYS_INT_PMASK, 1, enable);
@@ -682,14 +721,16 @@ static ssize_t ap314aq_show_ping(struct device *dev,
 {
     struct input_dev *input = to_input_dev(dev);
     struct ap314aq_data *data = input_get_drvdata(input);
-    int val,pass;
+    int val,bias,n2f,pass;
 
+    bias = ap314aq_read_cal_data(AP314AQ_CLAIBRATION_BIAS_PATH);
+    n2f = ap314aq_read_cal_data(AP314AQ_CLAIBRATION_N2F_PATH);
     val = ap314aq_get_plthres(data->client);
-    if(val==AP314AQ_PS_THRESHOLD_LOW)
+    if(val==AP314AQ_PS_THRESHOLD_LOW || val==(AP314AQ_PS_THRESHOLD_LOW+bias) || (val==n2f && n2f>0) )
 	pass=1;
     else
 	pass=0;
-    LDBG("val=%d, PS_THRESHOLD_LOW=%d : pass=%d\n",val,AP314AQ_PS_THRESHOLD_LOW,pass);
+    LDBG("val=%d, PS_THRESHOLD_LOW=%d, bias=%d, n2f=%d : pass=%d\n",val,AP314AQ_PS_THRESHOLD_LOW,bias,n2f,pass);
 
     return sprintf(buf, "Ping : %d\n",pass );
 }
@@ -756,6 +797,188 @@ static ssize_t ap314aq_store_phthres(struct device *dev,
 static DEVICE_ATTR(phthres, S_IWUSR | S_IRUGO,
 	ap314aq_show_phthres, ap314aq_store_phthres);
 
+/* read p sensor calibration data */
+static int ap314aq_read_cal_data(char *file_path)
+{
+    struct file *cal_filp = NULL;
+    mm_segment_t old_fs;
+    char buf[128];
+    int val = 0;
+
+    old_fs = get_fs();
+    set_fs(KERNEL_DS);
+    cal_filp = filp_open(file_path, O_RDONLY, 0666);
+
+    if (IS_ERR(cal_filp))
+    {
+	LDBG(" : Can't open calibration file (%s)\n", file_path);
+	set_fs(old_fs);
+	return AP314AQ_PS_THRESHOLD_BIAS;
+    }
+
+    memset(buf,'\0',sizeof(buf));
+    cal_filp->f_op->read(cal_filp, buf, sizeof(buf), &cal_filp->f_pos);
+
+    if (kstrtouint(buf, 10, &val) < 0){
+	LDBG(" : read calibration file error (%s)!\n", file_path);
+	return AP314AQ_PS_THRESHOLD_BIAS;
+    }
+
+    filp_close(cal_filp, current->files);
+    set_fs(old_fs);
+
+    return val;
+}
+/* Write p sensor calibration data */
+static int ap314aq_write_cal_data(char *file_path, uint32_t adc_value)
+{
+    struct file *cal_filp = NULL;
+    mm_segment_t old_fs;
+    char result_buf[128];
+    int w_len=0;
+    int ret = 0;
+    old_fs = get_fs();
+    set_fs(KERNEL_DS);
+    cal_filp = filp_open(file_path, O_CREAT | O_TRUNC | O_WRONLY, 0666);
+
+    if (IS_ERR(cal_filp))
+    {
+	LDBG(" : Can't create calibration file (%s)\n", file_path);
+	set_fs(old_fs);
+	return -1;
+    }
+
+    memset(result_buf,'\0',sizeof(result_buf));
+    w_len = sprintf(result_buf, "%d", adc_value);
+    ret = cal_filp->f_op->write(cal_filp, result_buf, w_len, &cal_filp->f_pos);
+
+    if (ret != w_len)
+    {
+	LDBG(" : write calibration file error (%s)!\n", file_path);
+	return -2;
+    }
+
+    filp_close(cal_filp, current->files);
+    set_fs(old_fs);
+    return 0;
+}
+/* Get P sensor average adc */
+static int ap314aq_read_ps_adc_value(struct i2c_client *client, uint32_t *adc_value)
+{
+    static const int count = 5;
+    int total_adc = 0 ;
+    int i = 0 ;
+    //Reset the wait time to 0 & disable INT
+    i2c_smbus_write_byte_data(client,AP314AQ_REG_SYS_WAITTIME,0);
+    i2c_smbus_write_byte_data(client,AP314AQ_REG_SYS_INTCTRL,AP314AQ_SYS_DEV_INT_DISABLE);
+    //enable p
+    i2c_smbus_write_byte_data(client,AP314AQ_REG_SYS_CONF,AP314AQ_SYS_PS_ENABLE);
+
+    for(i = 0 ; i < count ; i++)
+    {
+	int tmp_adc = 0;
+	msleep(10);
+	tmp_adc = ap314aq_get_px_value(client);
+        if(tmp_adc < 0){
+		LDBG(" : get px value Fail = %d \n", tmp_adc);
+		return -1;
+	}
+	total_adc += tmp_adc;
+	LDBG(" : count = %d  , adc = %d, total_adc = %d\n", i, tmp_adc,total_adc);
+    }
+    //Recover the wait time to default & enable P INT
+    i2c_smbus_write_byte_data(client,AP314AQ_REG_SYS_WAITTIME,AP314AQ_WAITING_TIME);
+    i2c_smbus_write_byte_data(client,AP314AQ_REG_SYS_INTCTRL,AP314AQ_SYS_PS_INT_ENABLE);
+    //disable p
+    i2c_smbus_write_byte_data(client,AP314AQ_REG_SYS_CONF,AP314AQ_SYS_DEV_DOWN);
+    misc_ps_opened = 0;
+    *adc_value = (int)total_adc/count;
+    return 0;
+}
+
+/* P sensor calibration bias*/
+static ssize_t ap314aq_show_pxcal(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+    struct input_dev *input = to_input_dev(dev);
+    struct ap314aq_data *data = input_get_drvdata(input);
+    uint32_t adc_value =0;
+    int ret = 0;
+
+    ret = ap314aq_read_ps_adc_value(data->client,&adc_value);
+    if (ret < 0)
+    {
+	LDBG(" : read ps adc value Fail = %d \n", adc_value);
+	ret = sprintf(buf, "Fail : %d\n", adc_value);
+	return ret;
+    }
+    ret = ap314aq_write_cal_data(AP314AQ_CLAIBRATION_BIAS_PATH,adc_value);
+    LDBG(" K1 criteria rule : %d need < %d\n", adc_value, AP314AQ_K1_CRITERIA);
+    if (ret < 0 || adc_value >= AP314AQ_K1_CRITERIA){
+	ret = sprintf(buf, "Fail : %d\n", adc_value);
+    }
+    else{
+	ret = sprintf(buf, "Pass : %d\n", adc_value);
+    }
+    return ret;
+}
+
+static DEVICE_ATTR(pxcal, S_IWUSR | S_IRUGO,
+	ap314aq_show_pxcal, NULL);
+
+/* P sensor calibration near to far */
+static ssize_t ap314aq_show_pxcal2(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+    struct input_dev *input = to_input_dev(dev);
+    struct ap314aq_data *data = input_get_drvdata(input);
+    uint32_t adc_value =0;
+    int ret = 0;
+    int k1 = ap314aq_read_cal_data(AP314AQ_CLAIBRATION_BIAS_PATH);
+
+    ret = ap314aq_read_ps_adc_value(data->client,&adc_value);
+    if (ret < 0)
+    {
+	LDBG(" : read ps adc value Fail = %d \n", adc_value);
+	ret = sprintf(buf, "Fail : %d\n", adc_value);
+	return ret;
+    }
+
+    ret = ap314aq_write_cal_data(AP314AQ_CLAIBRATION_N2F_PATH,adc_value);
+    LDBG(" K2 criteria rule : ( %d - %d ) = %d need > %d\n", adc_value, k1, (adc_value-k1), AP314AQ_K2_CRITERIA);
+    if (ret < 0 || ((int)(adc_value - k1) <= AP314AQ_K2_CRITERIA)){
+	ret = sprintf(buf, "Fail : %d\n", adc_value);
+    }
+    else{
+	ret = sprintf(buf, "Pass : %d\n", adc_value);
+    }
+    msleep(10);
+    ap314aq_set_ps_thres(data->client);
+    return ret;
+}
+
+static DEVICE_ATTR(pxcal2, S_IWUSR | S_IRUGO,
+	ap314aq_show_pxcal2, NULL);
+
+/* P sensor get avg raw */
+static ssize_t ap314aq_show_pxavgerage(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+    struct input_dev *input = to_input_dev(dev);
+    struct ap314aq_data *data = input_get_drvdata(input);
+    uint32_t adc_value =0;
+    int ret = 0;
+
+    ret = ap314aq_read_ps_adc_value(data->client,&adc_value);
+    if (ret < 0)
+	LDBG(" : read ps adc value Fail = %d \n", adc_value);
+    ret = sprintf(buf, "%d\n",adc_value);
+    return ret;
+}
+
+static DEVICE_ATTR(pxavg, S_IWUSR | S_IRUGO,
+	ap314aq_show_pxavgerage, NULL);
+
 #ifdef LSC_DBG
 /* engineer mode */
 static ssize_t ap314aq_em_read(struct device *dev,
@@ -811,6 +1034,9 @@ static struct attribute *ap314aq_attributes[] = {
     &dev_attr_pxvalue.attr,
     &dev_attr_plthres.attr,
     &dev_attr_phthres.attr,
+    &dev_attr_pxcal.attr,
+    &dev_attr_pxcal2.attr,
+    &dev_attr_pxavg.attr,
 #ifdef LSC_DBG
     &dev_attr_em.attr,
 #endif
@@ -829,7 +1055,7 @@ static int ap314aq_init_client(struct i2c_client *client)
     LDBG("%s: start..\n", __func__);
 #endif
 		/*Init control : Only PS INT enable*/
-    i2c_smbus_write_byte_data(client,AP314AQ_REG_SYS_INTCTRL,0x80);
+    i2c_smbus_write_byte_data(client,AP314AQ_REG_SYS_INTCTRL,AP314AQ_SYS_PS_INT_ENABLE);
 		/*Set wait time*/
     i2c_smbus_write_byte_data(client,AP314AQ_REG_SYS_WAITTIME,AP314AQ_WAITING_TIME);
 		/*lsensor high low thread*/
@@ -1014,7 +1240,7 @@ static int ap314aq_probe(struct i2c_client *client,
     data->irq = client->irq;
 #endif
 
-
+    data->load_cal = false;
     data->client = client;
     i2c_set_clientdata(client, data);
 
