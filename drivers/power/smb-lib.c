@@ -1555,6 +1555,7 @@ int smblib_debug_info(struct smb_charger *chg)
 	rc = smblib_read(chg, 0x00001370, &data2);
 	rc = smblib_read(chg, 0x00001607, &data3);
 	smblib_err(chg, "fast charge current=%d mA, USB current limit=%d , MISC ICL=%d mA \n", data1*25, data2*25, data3*25);
+/*
 	rc = smblib_read(chg, 0x00001366, &data1);
 	switch ((data1 & 0x06)>>1) {
 	case 0x00:
@@ -1572,7 +1573,7 @@ int smblib_debug_info(struct smb_charger *chg)
 	}
 	rc = smblib_read(chg, 0x00004582, &data1);
 	smblib_err(chg, "RR_THERM_STS:0x%x, STS_avail:%d, skin_temp_too_hot:%d, skin_temp_hot:%d \n", data1, (data1&0x40)>>6, (data1&0x20)>>5, (data1&0x10)>>4);
-
+*/
 	return rc;
 }
 
