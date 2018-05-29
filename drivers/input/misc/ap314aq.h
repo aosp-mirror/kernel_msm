@@ -48,8 +48,20 @@
 
 #define AP314AQ_NUM_CACHABLE_REGS	28
 
-#define AP314AQ_PS_THRESHOLD_HIGH 	275
-#define AP314AQ_PS_THRESHOLD_LOW 	150
+#define AP314AQ_CLAIBRATION_BIAS_PATH "/persist/ap314aq_cal_bias"
+#define AP314AQ_CLAIBRATION_N2F_PATH "/persist/ap314aq_cal_n2f"
+
+#define AP314AQ_K1_CRITERIA		700
+#define AP314AQ_K2_CRITERIA		30
+/*
+AP314AQ_ALGO_TYPE : decide the high/low threshold for p sensor
+1: bias+thres, 2: low=n2f, high=default high thres, others: default thres
+*/
+#define AP314AQ_ALGO_TYPE		2
+
+#define AP314AQ_PS_THRESHOLD_BIAS 	0
+#define AP314AQ_PS_THRESHOLD_HIGH 	800 // default high thres
+#define AP314AQ_PS_THRESHOLD_LOW 	500 // default low thres
 #define AP314AQ_WAITING_TIME 		100 // 5xN ms (500ms), n=0~255
 
 #ifndef SENSORS_OFFBODY_DETEC_HANDLE
@@ -145,7 +157,7 @@
 #define AP314AQ_REG_PS_THDL_L_MASK		0xFF
 
 #define AP314AQ_REG_PS_THDL_H       0x2B
-#define AP314AQ_REG_PS_THDL_H_SHIFT	(2)
+#define AP314AQ_REG_PS_THDL_H_SHIFT	(0)
 #define AP314AQ_REG_PS_THDL_H_MASK		0x03
 
 #define AP314AQ_REG_PS_THDH_L       0x2C
@@ -153,7 +165,7 @@
 #define AP314AQ_REG_PS_THDH_L_MASK		0xFF
 
 #define AP314AQ_REG_PS_THDH_H       0x2D
-#define AP314AQ_REG_PS_THDH_H_SHIFT	(2)
+#define AP314AQ_REG_PS_THDH_H_SHIFT	(0)
 #define AP314AQ_REG_PS_THDH_H_MASK		0x03
 
 #define AP314AQ_MAX_REG_NUM  (AP314AQ_REG_PS_THDH_H + 1)
@@ -170,6 +182,11 @@
 #define	AP314AQ_SYS_PS_INT_TRI      0x02
 #define	AP314AQ_SYS_PS_INT_OBJ      0x10
 #define	AP314AQ_SYS_PS_INT_IROV     0x20
+/*----------------------------------------------------------------------------*/
+//INT CONTROL (AP314AQ_REG_SYS_INTCTRL)
+#define	AP314AQ_SYS_DEV_INT_DISABLE 0x00
+#define	AP314AQ_SYS_ALS_INT_ENABLE  0x08
+#define	AP314AQ_SYS_PS_INT_ENABLE   0x80
 /*----------------------------------------------------------------------------*/
 //INT CLEAN Mode
 #define	AP314AQ_SYS_ICLEAN_AUTO     0x00
@@ -241,6 +258,7 @@ struct ap314aq_data {
     bool als_enabled;
     bool ps_enabled;
     bool rels_enable;
+    bool load_cal;
 };
 
 #endif
