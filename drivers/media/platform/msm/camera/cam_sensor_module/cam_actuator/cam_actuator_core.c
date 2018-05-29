@@ -151,11 +151,13 @@ static int32_t cam_actuator_power_down(struct cam_actuator_ctrl_t *a_ctrl)
 }
 
 static int32_t cam_actuator_i2c_modes_util(
-	struct camera_io_master *io_master_info,
+	struct cam_actuator_ctrl_t *a_ctrl,
 	struct i2c_settings_list *i2c_list)
 {
 	int32_t rc = 0;
 	uint32_t i, size;
+	struct camera_io_master *io_master_info =
+		&(a_ctrl->io_master_info);
 
 	if (i2c_list->op_code == CAM_SENSOR_I2C_WRITE_RANDOM) {
 		rc = camera_io_dev_write(io_master_info,
@@ -230,6 +232,13 @@ static int32_t cam_actuator_i2c_modes_util(
 				i2c_list->i2c_settings.reg_setting[i].reg_addr,
 				i2c_list->i2c_settings.reg_setting[i].reg_data);
 		}
+
+		/* Store the read out reg_data */
+		if (a_ctrl->cmd_buf_regread != NULL && i > 0) {
+			*(a_ctrl->cmd_buf_regread) =
+				i2c_list->i2c_settings.
+				reg_setting[i - 1].reg_data;
+		}
 	}
 
 	return rc;
@@ -287,7 +296,7 @@ int32_t cam_actuator_apply_settings(struct cam_actuator_ctrl_t *a_ctrl,
 	list_for_each_entry(i2c_list,
 		&(i2c_set->list_head), list) {
 		rc = cam_actuator_i2c_modes_util(
-			&(a_ctrl->io_master_info),
+			a_ctrl,
 			i2c_list);
 		if (rc < 0) {
 			CAM_ERR(CAM_ACTUATOR,
@@ -423,6 +432,9 @@ int32_t cam_actuator_i2c_pkt_parse(struct cam_actuator_ctrl_t *a_ctrl,
 		CAM_ERR(CAM_ACTUATOR, "Invalid Args");
 		return -EINVAL;
 	}
+
+	/* To reset the pointer of reg_data */
+	a_ctrl->cmd_buf_regread = NULL;
 
 	soc_private =
 		(struct cam_actuator_soc_private *)a_ctrl->soc_info.soc_private;
@@ -623,6 +635,22 @@ int32_t cam_actuator_i2c_pkt_parse(struct cam_actuator_ctrl_t *a_ctrl,
 		offset = (uint32_t *)&csl_packet->payload;
 		offset += csl_packet->cmd_buf_offset / sizeof(uint32_t);
 		cmd_desc = (struct cam_cmd_buf_desc *)(offset);
+
+		// To keep the pointer of reg_data
+		rc = cam_mem_get_cpu_buf(cmd_desc[0].mem_handle,
+			&generic_ptr, &len_of_buff);
+		if (rc < 0) {
+			CAM_ERR(CAM_ACTUATOR, "Failed to get cpu buf");
+			return rc;
+		}
+		cmd_buf = (uint32_t *)generic_ptr;
+		if (!cmd_buf) {
+			CAM_ERR(CAM_ACTUATOR, "invalid cmd buf");
+			return -EINVAL;
+		}
+		cmd_buf += cmd_desc->offset / sizeof(uint32_t);
+		a_ctrl->cmd_buf_regread = cmd_buf + 2;
+
 		rc = cam_sensor_i2c_command_parser(i2c_reg_settings,
 			cmd_desc, 1);
 		if (rc < 0) {
