@@ -173,6 +173,8 @@ WLANSAP_Open
         return VOS_STATUS_E_FAULT;
     }
 
+    init_completion(&pSapCtx->ecsa_info.chan_switch_comp);
+
     if (!VOS_IS_STATUS_SUCCESS(
          vos_spin_lock_init(&pSapCtx->ecsa_info.ecsa_lock)))
     {
@@ -648,7 +650,6 @@ WLANSAP_StartBss
         pSapCtx->scanBandPreference = pConfig->scanBandPreference;
         pSapCtx->acsBandSwitchThreshold = pConfig->acsBandSwitchThreshold;
         pSapCtx->pUsrContext = pUsrContext;
-        init_completion(&pSapCtx->ecsa_info.chan_switch_comp);
 
         //Set the BSSID to your "self MAC Addr" read the mac address from Configuation ITEM received from HDD
         pSapCtx->csrRoamProfile.BSSIDs.numOfBSSIDs = 1;
