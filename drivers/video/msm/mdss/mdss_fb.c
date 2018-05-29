@@ -3428,30 +3428,10 @@ int mdss_fb_atomic_commit(struct fb_info *info,
 						output_layer.buffer.format);
 				}
 			}
+			ret = mfd->mdp.atomic_validate(mfd, file, commit_v1);
+			if (!ret)
+				mfd->atomic_commit_pending = true;
 		}
-		__ioctl_transition_dyn_mode_state(mfd,
-			MSMFB_ATOMIC_COMMIT, true, false);
-		if (mfd->panel.type == WRITEBACK_PANEL) {
-			output_layer = commit_v1->output_layer;
-			if (!output_layer) {
-				pr_err("Output layer is null\n");
-				goto end;
-			}
-			wb_change = !mdss_fb_is_wb_config_same(mfd,
-					commit_v1->output_layer);
-			if (wb_change) {
-				old_xres = pinfo->xres;
-				old_yres = pinfo->yres;
-				old_format = mfd->fb_imgType;
-				mdss_fb_update_resolution(mfd,
-					output_layer->buffer.width,
-					output_layer->buffer.height,
-					output_layer->buffer.format);
-			}
-		}
-		ret = mfd->mdp.atomic_validate(mfd, file, commit_v1);
-		if (!ret)
-			mfd->atomic_commit_pending = true;
 		goto end;
 	} else {
 		ret = mdss_fb_pan_idle(mfd);
@@ -5185,3 +5165,4 @@ void mdss_fb_calc_fps(struct msm_fb_data_type *mfd)
 		mfd->fps_info.frame_count = 0;
 	}
 }
+
