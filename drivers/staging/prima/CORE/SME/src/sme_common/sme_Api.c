@@ -15283,7 +15283,7 @@ VOS_STATUS sme_roam_csa_ie_request(tHalHandle hal, tCsrBssid bssid,
    if (VOS_IS_STATUS_SUCCESS(status)) {
        if (CSR_IS_CHANNEL_5GHZ(new_chan)) {
            sme_SelectCBMode(hal, phy_mode, new_chan,
-                            session->bssParams.orig_ch_width);
+                            eHT_MAX_CHANNEL_WIDTH);
            cb_mode = mac_ctx->roam.configParam.channelBondingMode5GHz;
        }
        status = csr_roam_send_chan_sw_ie_request(mac_ctx, bssid,
@@ -15314,7 +15314,7 @@ VOS_STATUS sme_roam_channel_change_req(tHalHandle hal, tCsrBssid bssid,
    if (VOS_IS_STATUS_SUCCESS(status)) {
        if (CSR_IS_CHANNEL_5GHZ(new_chan)) {
            sme_SelectCBMode(hal, profile->phyMode, new_chan,
-                            session->bssParams.orig_ch_width);
+                            eHT_MAX_CHANNEL_WIDTH);
            cb_mode = mac_ctx->roam.configParam.channelBondingMode5GHz;
        }
        status = csr_roam_channel_change_req(mac_ctx, bssid, new_chan, cb_mode,
