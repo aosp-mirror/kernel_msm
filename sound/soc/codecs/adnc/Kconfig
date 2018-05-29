@@ -1,0 +1,32 @@
+#
+# iaxxx codec driver
+#
+if MFD_IAXXX
+config SND_SOC_IAXXX
+	tristate "Knowles IAxxx Audio Device"
+	---help---
+	  Enable codec driver for IAxxx
+
+config IAXXX_PCM_MODE
+	bool "Enable PCM DAI"
+	---help---
+	This config enables IAXXX PCM
+
+config IAXXX_ACLK_338640
+	bool "Enable for ACLK 338640"
+	---help---
+	This config enables IAXXX ACLK 338640
+
+config IAXXX_PDM_DMIC_MODE
+	bool "Enable if PDM in DUAL MIC mode"
+	---help---
+	This config enables PDM dual mic
+	configuration
+
+config IAXXX_PCM_DAI_FORMAT_DSP_A
+	bool "Set Default PCM DAI Format"
+	---help---
+	This config sets default PCM DAI
+	Format to DSP_A instead of I2S.
+
+endif

@@ -74,6 +74,7 @@ source "sound/soc/zte/Kconfig"
 
 # Supported codecs
 source "sound/soc/codecs/Kconfig"
+source "sound/soc/codecs/adnc/Kconfig"
 
 # generic frame-work
 source "sound/soc/generic/Kconfig"
