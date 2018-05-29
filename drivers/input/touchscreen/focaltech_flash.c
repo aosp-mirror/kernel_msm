@@ -102,6 +102,18 @@ static unsigned char CTPM_FW_TP_ID_0[] = {
 	#include "FTS_FW/CEI_DLW2_3207_0x81_app.i"
 };
 
+static unsigned char CTPM_FW_TP_ID_1[] = {
+	#include "FTS_FW/CEI_DLW2_3207_0x86_app.i"
+};
+
+static unsigned char CTPM_FW_TP_ID_2[] = {
+	#include "FTS_FW/CEI_DLW2_3207_0x88_app.i"
+};
+
+static unsigned char CTPM_FW_TP_ID_3[] = {
+	#include "FTS_FW/CEI_DLW2_3207_0x8A_app.i"
+};
+
  struct fts_Upgrade_Info fts_updateinfo[] =
 {
 	{0x55,FTS_MAX_POINTS_5,AUTO_CLB_NEED,50, 30, 0x79, 0x03, 10, 2000}, //,"FT5x06"
@@ -3222,6 +3234,18 @@ int fts_ctpm_auto_upgrade_for_cci(struct i2c_client *client, const u8 tp_id, boo
 		case TP_ID_0:
 			CTPM_FW = CTPM_FW_TP_ID_0;
 			fw_size = sizeof(CTPM_FW_TP_ID_0);
+			break;
+		case TP_ID_1:
+			CTPM_FW = CTPM_FW_TP_ID_1;
+			fw_size = sizeof(CTPM_FW_TP_ID_1);
+			break;
+		case TP_ID_2:
+			CTPM_FW = CTPM_FW_TP_ID_2;
+			fw_size = sizeof(CTPM_FW_TP_ID_2);
+			break;
+		case TP_ID_3:
+			CTPM_FW = CTPM_FW_TP_ID_3;
+			fw_size = sizeof(CTPM_FW_TP_ID_3);
 			break;
 		default:
 			FTS_DBG("[FTS] TP ID 0x%x isn't correct\n",tp_id);
