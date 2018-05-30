@@ -29,6 +29,7 @@
 #define BOOTMODE_LENGTH			20
 #define FACTORY_STR			"factory"
 #define FFBM00_STR			"ffbm-00"
+#define FFBM01_STR			"ffbm-01"
 
 static char bootmode[BOOTMODE_LENGTH];
 
@@ -137,9 +138,10 @@ static int modem_smem_probe(struct platform_device *pdev)
 	modem_smem_set_u32(modem_smem, subtype, socinfo_get_platform_subtype());
 
 	if ((!strncmp(bootmode, FACTORY_STR, sizeof(FACTORY_STR))) ||
-	(!strncmp(bootmode, FFBM00_STR, sizeof(FFBM00_STR)))) {
+	(!strncmp(bootmode, FFBM00_STR, sizeof(FFBM00_STR))) ||
+	(!strncmp(bootmode, FFBM01_STR, sizeof(FFBM01_STR)))) {
 		modem_smem_set_u32(modem_smem, ftm_magic, MODEM_FTM_MAGIC);
-		dev_info(dev, "Set FTM mode\n");
+		dev_info(dev, "Set FTM mode due to %s\n", bootmode);
 	}
 
 	dev_dbg(dev, "End probe\n");
