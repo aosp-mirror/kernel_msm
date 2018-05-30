@@ -2052,6 +2052,7 @@ static int mnh_sm_set_state_locked(int state)
 
 		/* use max CPU frequency for fast boot */
 		mnh_cpu_freq_change(CPU_FREQ_950);
+		mnh_ipu_freq_change(IPU_FREQ_425);
 
 		/* have we downloaded firmware already? */
 		if (mnh_sm_dev->firmware_downloaded)
