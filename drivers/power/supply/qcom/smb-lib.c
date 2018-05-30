@@ -2227,16 +2227,35 @@ int smblib_set_prop_system_temp_level(struct smb_charger *chg,
 
 	chg->system_temp_level = val->intval;
 
-	if (chg->system_temp_level == chg->thermal_levels)
-		return vote(chg->chg_disable_votable,
-			THERMAL_DAEMON_VOTER, true, 0);
+	if (chg->system_temp_level == chg->thermal_levels) {
+		if (chg->thermal_mitigation)
+			vote(chg->chg_disable_votable,
+			     THERMAL_DAEMON_VOTER, true, 0);
+		if (chg->wlc_thermal_mitigation)
+			vote(chg->dc_icl_votable,
+			     THERMAL_DAEMON_VOTER, true, 0);
+		return 0;
+	}
 
 	vote(chg->chg_disable_votable, THERMAL_DAEMON_VOTER, false, 0);
-	if (chg->system_temp_level == 0)
-		return vote(chg->fcc_votable, THERMAL_DAEMON_VOTER, false, 0);
+	if (chg->system_temp_level == 0) {
+		if (chg->thermal_mitigation)
+			vote(chg->fcc_votable,
+			     THERMAL_DAEMON_VOTER, false, 0);
+		if (chg->wlc_thermal_mitigation)
+			vote(chg->dc_icl_votable,
+			     THERMAL_DAEMON_VOTER, false, 0);
+		return 0;
+	}
 
-	vote(chg->fcc_votable, THERMAL_DAEMON_VOTER, true,
-			chg->thermal_mitigation[chg->system_temp_level]);
+	if (chg->thermal_mitigation)
+		vote(chg->fcc_votable, THERMAL_DAEMON_VOTER, true,
+		     chg->thermal_mitigation[chg->system_temp_level]);
+
+	if (chg->wlc_thermal_mitigation)
+		vote(chg->dc_icl_votable, THERMAL_DAEMON_VOTER, true,
+		     chg->wlc_thermal_mitigation[chg->system_temp_level]);
+
 	return 0;
 }
 

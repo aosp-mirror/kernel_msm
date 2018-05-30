@@ -295,7 +295,33 @@ static int smb2_parse_dt(struct smb2 *chip)
 				chg->thermal_levels);
 		if (rc < 0) {
 			dev_err(chg->dev,
-				"Couldn't read threm limits rc = %d\n", rc);
+				"Couldn't read therm limits rc = %d\n", rc);
+			return rc;
+		}
+	}
+
+	if (of_find_property(node, "google,wlc-thermal-mitigation",
+			     &byte_len)) {
+		if (chg->thermal_levels &&
+		    chg->thermal_levels != byte_len / sizeof(u32)) {
+			dev_err(chg->dev,
+				"google,wlc-thermal-mitigation size != qcom,thermal-mitigation\n");
+			return -EINVAL;
+		}
+
+		chg->wlc_thermal_mitigation = devm_kzalloc(chg->dev, byte_len,
+							   GFP_KERNEL);
+		if (chg->wlc_thermal_mitigation == NULL)
+			return -ENOMEM;
+
+		chg->thermal_levels = byte_len / sizeof(u32);
+		rc = of_property_read_u32_array(node,
+				"google,wlc-thermal-mitigation",
+				chg->wlc_thermal_mitigation,
+				chg->thermal_levels);
+		if (rc < 0) {
+			dev_err(chg->dev,
+				"Couldn't read wlc therm limits rc = %d\n", rc);
 			return rc;
 		}
 	}

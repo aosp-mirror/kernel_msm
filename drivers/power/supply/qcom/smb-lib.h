@@ -325,6 +325,7 @@ struct smb_charger {
 	int			system_temp_level;
 	int			thermal_levels;
 	int			*thermal_mitigation;
+	int			*wlc_thermal_mitigation;
 	int			dcp_icl_ua;
 	int			fake_capacity;
 	int			fake_batt_status;

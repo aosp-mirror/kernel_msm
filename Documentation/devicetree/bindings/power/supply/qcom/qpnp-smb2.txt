@@ -92,6 +92,15 @@ Charger specific properties:
 		maximum charge current in mA for each thermal
 		level.
 
+- google,wlc-thermal-mitigation
+  Usage:      optional
+  Value type: Array of <u32>
+  Definition: Array of DC input current limit values for
+		different system thermal mitigation levels.
+		This should be a flat array that denotes the
+		maximum DC input current in micro-amps for each
+                thermal level.
+
 - io-channels
   Usage:      optional
   Value type: List of <phandle u32>
