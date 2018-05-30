@@ -1283,9 +1283,6 @@ static int check_charger_thermal_state_sw(
 		target_temp_zone = idx;
 	}
 
-	if (target_temp_zone == current_temp_zone)
-		return 0;
-
 	/* tracking hysteresis */
 	if (current_temp_zone != ZONE_UNKNOWN) {
 		int tracking;
