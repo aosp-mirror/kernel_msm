@@ -900,6 +900,7 @@ EXPORT_SYMBOL_GPL(fsverity_prepare_getattr);
 void fsverity_cleanup_inode(struct inode *inode)
 {
 	free_fsverity_info(inode->i_verity_info);
+	inode->i_verity_info = NULL;
 }
 EXPORT_SYMBOL_GPL(fsverity_cleanup_inode);
 
