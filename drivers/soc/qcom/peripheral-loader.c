@@ -1136,17 +1136,6 @@ release_fw:
 out:
 	up_read(&pil_pm_rwsem);
 	if (ret) {
-		/* * * * * * * * * * DEBUG ONLY * * * * * * * * * * *
-		 * Trigger panic to capture RAM dump to clarify the *
-		 * reason of pil_boot modem failed.                 *
-		 * This panic will be removed as shipping ROM or    *
-		 * root cause found.                                *
-		 */
-		if (desc->subsys_vmid == VMID_MSS_MSA &&
-			pil_boot_retry_count >= PERIPHERAL_LOADER_MAX_RETRY)
-			panic("Retry %d times pil_boot modem failed\n",
-				pil_boot_retry_count);
-
 		if (priv->region) {
 			if (desc->subsys_vmid > 0 && !mem_protect &&
 					hyp_assign) {
