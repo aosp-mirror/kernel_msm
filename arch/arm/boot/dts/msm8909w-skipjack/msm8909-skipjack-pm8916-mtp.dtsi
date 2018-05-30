@@ -28,7 +28,7 @@
 			vdd-supply = <&pm8916_l11>;
 			vcc_i2c-supply = <&pm8916_l16>;
 			focaltech,name = "fts";
-			focaltech,family-id = <0x33>;
+			focaltech,family-id = <0x64>;
 			focaltech,reset-gpio = <&msm_gpio 12 0x00>;
 			focaltech,irq-gpio =<&msm_gpio 13 0x00>;
 			//focaltech,id1-gpio = <&msm_gpio 109 0x00>;
@@ -39,8 +39,8 @@
 			pinctrl-0 = <&ts_int_active &ts_reset_active>;
 			pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
 			pinctrl-2 = <&ts_release>;
-			focaltech,display-coords = <0 0 400 400>;       //for android wear
-			focaltech,panel-coords = <0 0 400 400>;
+			focaltech,display-coords = <0 0 360 360>;       //for android wear
+			focaltech,panel-coords = <0 0 360 360>;
 			focaltech,button-map= <70 150 907>;
 			focaltech,no-force-update;
 			focaltech,i2c-pull-up;
