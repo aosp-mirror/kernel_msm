@@ -19,6 +19,7 @@
 	qcom,dc-icl-ua = <1200000>;
 	google,batt_psy_is_bms;
 	google,usb-port-tz-name = "usbc-therm-adc";
+	google,wlc-thermal-mitigation = <1100000 500000 250000 110000>;
 };
 
 &pmi8998_fg {
