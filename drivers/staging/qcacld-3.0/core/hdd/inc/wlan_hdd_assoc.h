@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -241,6 +241,15 @@ bool hdd_conn_is_connected(hdd_station_ctx_t *pHddStaCtx);
 eCsrBand hdd_conn_get_connected_band(hdd_station_ctx_t *pHddStaCtx);
 
 /**
+ * hdd_get_sta_connection_in_progress() - get STA for which connection
+ *                                        is in progress
+ * @hdd_ctx: hdd context
+ *
+ * Return: hdd adpater for which connection is in progress
+ */
+hdd_adapter_t *hdd_get_sta_connection_in_progress(hdd_context_t *hdd_ctx);
+
+/**
  * hdd_sme_roam_callback() - hdd sme roam callback
  * @pContext: pointer to adapter context
  * @pRoamInfo: pointer to roam info
@@ -370,5 +379,27 @@ static inline void hdd_save_gtk_params(hdd_adapter_t *adapter,
 {
 }
 #endif
+
+/**
+ * hdd_copy_ht_caps()- copy ht caps info from roam info to
+ *  hdd station context.
+ * @hdd_ht_cap: pointer to Source ht_cap info of type ieee80211_ht_cap
+ * @roam_ht_cap: pointer to roam ht_caps info
+ *
+ * Return: None
+ */
+void hdd_copy_ht_caps(struct ieee80211_ht_cap *hdd_ht_cap,
+		      tDot11fIEHTCaps *roam_ht_cap);
+
+/**
+ * hdd_copy_vht_caps()- copy vht caps info from roam info to
+ *  hdd station context.
+ * @hdd_vht_cap: pointer to Source vht_cap info of type ieee80211_vht_cap
+ * @roam_vht_cap: pointer to roam vht_caps info
+ *
+ * Return: None
+ */
+void hdd_copy_vht_caps(struct ieee80211_vht_cap *hdd_vht_cap,
+		       tDot11fIEVHTCaps *roam_vht_cap);
 
 #endif
