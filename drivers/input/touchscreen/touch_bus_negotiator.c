@@ -107,6 +107,7 @@ int tbn_request_bus(struct tbn_context *tbn)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(tbn_request_bus);
 
 int tbn_release_bus(struct tbn_context *tbn)
 {
@@ -142,6 +143,7 @@ int tbn_release_bus(struct tbn_context *tbn)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(tbn_release_bus);
 
 static void tbn_connect_to_remote_server(struct tbn_context *tbn)
 {
@@ -241,6 +243,7 @@ fail_create_workqueue:
 fail_allocate_tbn_context:
 	return NULL;
 }
+EXPORT_SYMBOL_GPL(tbn_init);
 
 void tbn_cleanup(struct tbn_context *tbn)
 {
@@ -267,6 +270,7 @@ void tbn_cleanup(struct tbn_context *tbn)
 
 	kfree(tbn);
 }
+EXPORT_SYMBOL_GPL(tbn_cleanup);
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("QMI based Touch Bus Negotiator");
