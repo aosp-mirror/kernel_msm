@@ -1802,6 +1802,58 @@ static void cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
 		}
 	}
 
+	if (cs40l2x->pdata.gpio1_rise_index > 0
+			&& cs40l2x->pdata.gpio1_rise_index
+				< cs40l2x->num_waves) {
+		ret = regmap_write(regmap,
+				cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
+						CS40L2X_XM_UNPACKED_TYPE),
+				cs40l2x->pdata.gpio1_rise_index);
+		if (ret) {
+			dev_err(dev,
+				"Failed to write default gpio1_rise_index\n");
+			return;
+		}
+	} else if (cs40l2x->pdata.gpio1_rise_index >= cs40l2x->num_waves) {
+		dev_warn(dev, "Ignored default gpio1_rise_index\n");
+	}
+
+	if (cs40l2x->pdata.gpio1_fall_index > 0
+			&& cs40l2x->pdata.gpio1_fall_index
+				< cs40l2x->num_waves) {
+		ret = regmap_write(regmap,
+				cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
+						CS40L2X_XM_UNPACKED_TYPE),
+				cs40l2x->pdata.gpio1_fall_index);
+		if (ret) {
+			dev_err(dev,
+				"Failed to write default gpio1_fall_index\n");
+			return;
+		}
+	} else if (cs40l2x->pdata.gpio1_fall_index >= cs40l2x->num_waves) {
+		dev_warn(dev, "Ignored default gpio1_fall_index\n");
+	}
+
+	if (cs40l2x->pdata.gpio1_fall_timeout > 0
+			&& (cs40l2x->pdata.gpio1_fall_timeout
+				& CS40L2X_PDATA_MASK)
+					<= CS40L2X_PR_TIMEOUT_MAX) {
+		ret = regmap_write(regmap,
+				cs40l2x_dsp_reg(cs40l2x,
+						"PRESS_RELEASE_TIMEOUT",
+						CS40L2X_XM_UNPACKED_TYPE),
+				cs40l2x->pdata.gpio1_fall_timeout
+					& CS40L2X_PDATA_MASK);
+		if (ret) {
+			dev_err(dev,
+				"Failed to write default gpio1_fall_timeout\n");
+			return;
+		}
+	} else if ((cs40l2x->pdata.gpio1_fall_timeout
+			& CS40L2X_PDATA_MASK) > CS40L2X_PR_TIMEOUT_MAX) {
+		dev_warn(dev, "Ignored default gpio1_fall_timeout\n");
+	}
+
 	dev_info(dev, "Normal-mode haptics successfully started\n");
 
 	cs40l2x_vibe_init(cs40l2x);
@@ -2518,6 +2570,18 @@ static int cs40l2x_handle_of_data(struct i2c_client *i2c_client,
 	ret = of_property_read_u32(np, "cirrus,redc-max", &out_val);
 	if (!ret)
 		pdata->redc_max = out_val;
+
+	ret = of_property_read_u32(np, "cirrus,gpio1-rise-index", &out_val);
+	if (!ret)
+		pdata->gpio1_rise_index = out_val;
+
+	ret = of_property_read_u32(np, "cirrus,gpio1-fall-index", &out_val);
+	if (!ret)
+		pdata->gpio1_fall_index = out_val;
+
+	ret = of_property_read_u32(np, "cirrus,gpio1-fall-timeout", &out_val);
+	if (!ret)
+		pdata->gpio1_fall_timeout = out_val | CS40L2X_PDATA_PRESENT;
 
 	return 0;
 }

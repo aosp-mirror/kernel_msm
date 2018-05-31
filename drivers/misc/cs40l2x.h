@@ -743,6 +743,9 @@
 
 #define CS40L2X_WT_NAME			"cs40l20.bin"
 
+#define CS40L2X_PDATA_PRESENT		0x80000000
+#define CS40L2X_PDATA_MASK		~CS40L2X_PDATA_PRESENT
+
 bool cs40l2x_readable_reg(struct device *dev, unsigned int reg);
 bool cs40l2x_precious_reg(struct device *dev, unsigned int reg);
 
