@@ -1550,10 +1550,16 @@ static void build_connector_control(struct mixer_build *state,
 	if (!cval)
 		return;
 	snd_usb_mixer_elem_init_std(&cval->head, state->mixer, term->id);
+	/*
+	 * The first byte from reading the UAC2_TE_CONNECTOR control returns the
+	 * number of channels connected.  This boolean ctl will simply report
+	 * if any channels are connected or not.
+	 * (Audio20_final.pdf Table 5-10: Connector Control CUR Parameter Block)
+	 */
 	cval->control = UAC2_TE_CONNECTOR;
 	cval->val_type = USB_MIXER_BOOLEAN;
-	cval->channels = term->channels;
-	cval->cmask = term->chconfig;
+	cval->channels = 1; /* report true if any channel is connected */
+	cval->master_readonly = 1;
 	cval->min = 0;
 	cval->max = 1;
 	kctl = snd_ctl_new1(&usb_connector_ctl_ro, cval);
