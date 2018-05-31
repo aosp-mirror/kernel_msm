@@ -3964,15 +3964,6 @@ eHalStatus sme_UpdateDFSScanMode(tHalHandle hHal,
 v_BOOL_t sme_GetDFSScanMode(tHalHandle hHal);
 
 /* ---------------------------------------------------------------------------
-    \fn sme_staInMiddleOfRoaming
-    \brief  This function returns TRUE if STA is in the middle of roaming state
-    \param  hHal - HAL handle for device
-    \param  sessionId - Session identifier
-    \- return TRUE or FALSE
-    -------------------------------------------------------------------------*/
-tANI_BOOLEAN sme_staInMiddleOfRoaming(tHalHandle hHal, tANI_U8 sessionId);
-
-/* ---------------------------------------------------------------------------
     \fn sme_PsOffloadIsStaInPowerSave
     \brief  This function returns TRUE if STA is in power save
     \param  hHal - HAL handle for device

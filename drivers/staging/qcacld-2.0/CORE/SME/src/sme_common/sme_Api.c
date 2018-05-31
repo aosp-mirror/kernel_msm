@@ -15336,26 +15336,6 @@ eHalStatus sme_UpdateAddIE(tHalHandle hHal,
 }
 
 /* ---------------------------------------------------------------------------
-    \fn sme_staInMiddleOfRoaming
-    \brief  This function returns TRUE if STA is in the middle of roaming state
-    \param  hHal - HAL handle for device
-    \param  sessionId - Session Identifier
-    \- return TRUE or FALSE
-    -------------------------------------------------------------------------*/
-tANI_BOOLEAN sme_staInMiddleOfRoaming(tHalHandle hHal, tANI_U8 sessionId)
-{
-    tpAniSirGlobal pMac   = PMAC_STRUCT( hHal );
-    eHalStatus     status = eHAL_STATUS_SUCCESS;
-    tANI_BOOLEAN   ret    = FALSE;
-
-    if (eHAL_STATUS_SUCCESS == (status = sme_AcquireGlobalLock(&pMac->sme))) {
-        ret = csrNeighborMiddleOfRoaming(hHal, sessionId);
-        sme_ReleaseGlobalLock(&pMac->sme);
-    }
-    return ret;
-}
-
-/* ---------------------------------------------------------------------------
     \fn sme_PsOffloadIsStaInPowerSave
     \brief  This function returns TRUE if STA is in power save
     \param  hHal - HAL handle for device
