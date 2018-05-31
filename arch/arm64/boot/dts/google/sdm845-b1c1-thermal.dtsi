@@ -1,4 +1,8 @@
 
+&bcl_sensor {
+	label = "bcl_sensor";
+};
+
 &pm8998_vadc {
 	chan@83 {
 		label = "vph_pwr";
@@ -146,6 +150,100 @@
 };
 
 &thermal_zones {
+	vbat {
+		trips {
+			low_vbat {
+				temperature = <3200>;
+				hysteresis = <100>;
+				type = "passive";
+			};
+		};
+		cooling-maps {
+			vbat_cpu4 {
+				trip = <&low_vbat>;
+				cooling-device =
+					<&CPU4 18 18>;
+			};
+			vbat_cpu5 {
+				trip = <&low_vbat>;
+				cooling-device =
+					<&CPU5 18 18>;
+			};
+			vbat_map6 {
+				trip = <&low_vbat>;
+				cooling-device =
+					<&CPU6 18 18>;
+			};
+			vbat_map7 {
+				trip = <&low_vbat>;
+				cooling-device =
+					<&CPU7 18 18>;
+			};
+		};
+	};
+	soc {
+		trips {
+			low_soc {
+				temperature = <10>;
+				hysteresis = <0>;
+				type = "passive";
+			};
+		};
+		cooling-maps {
+			soc_cpu4 {
+				trip = <&low_soc>;
+				cooling-device =
+					<&CPU4 18 18>;
+			};
+			soc_cpu5 {
+				trip = <&low_soc>;
+				cooling-device =
+					<&CPU5 18 18>;
+			};
+			soc_map6 {
+				trip = <&low_soc>;
+				cooling-device =
+					<&CPU6 18 18>;
+			};
+			soc_map7 {
+				trip = <&low_soc>;
+				cooling-device =
+					<&CPU7 18 18>;
+			};
+		};
+	};
+	ibat-high {
+		trips {
+			ibat_high {
+				temperature = <5000>;
+				hysteresis = <200>;
+				type = "passive";
+			};
+		};
+		cooling-maps {
+			ibat_cpu4 {
+				trip = <&ibat_high>;
+				cooling-device =
+					<&CPU4 18 18>;
+			};
+			ibat_cpu5 {
+				trip = <&ibat_high>;
+				cooling-device =
+					<&CPU5 18 18>;
+			};
+			ibat_cpu6 {
+				trip = <&ibat_high>;
+				cooling-device =
+					<&CPU6 18 18>;
+			};
+			ibat_cpu7 {
+				trip = <&ibat_high>;
+				cooling-device =
+					<&CPU7 18 18>;
+			};
+		};
+	};
+
 	xo-therm-adc {
 		polling-delay-passive = <0>;
 		polling-delay = <0>;
