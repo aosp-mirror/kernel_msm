@@ -209,6 +209,10 @@ enum MAX1720X_COMMAND_bits {
  */
 enum max1720x_nvram {
 	MAX1720X_NVRAM_START = 0x80,
+	/* NUSER18C used to save/restore capacity across boots */
+	MAX1720X_NVRAM_NUSER18C = 0x8C,
+	/* NUSER18D used to save/restore QH across boots */
+	MAX1720X_NVRAM_NUSER18D = 0x8D,
 	MAX1720X_NVRAM_LEARNCFG = 0x9F,
 	MAX1720X_NVRAM_QRTABLE00 = 0xA0,
 	MAX1720X_NVRAM_CONFIG = 0xB0,
@@ -262,6 +266,9 @@ struct max1720x_chip {
 	u16 status;
 	int fake_capacity;
 	int fake_temperature;
+	int previous_qh;
+	int current_capacity;
+	int prev_charge_state;
 };
 
 #define REGMAP_READ(regmap, what, dst)				\
@@ -331,6 +338,12 @@ static inline int reg_to_percentage(u16 val)
 {
 	/* LSB: 1/256% */
 	return val >> 8;
+}
+
+static inline int reg_to_twos_comp_int(u16 val)
+{
+	/* Convert u16 to twos complement  */
+	return -(val & 0x8000) + (val & 0x7FFF);
 }
 
 static inline int reg_to_micro_amp_h(u16 val, u16 rsense)
@@ -640,6 +653,23 @@ static int max1720x_get_battery_soc(struct max1720x_chip *chip)
 	return reg_to_percentage(data);
 }
 
+static void max1720x_prime_battery_qh_capacity(struct max1720x_chip *chip)
+{
+	u16 data;
+
+	REGMAP_READ(chip->regmap, MAX1720X_MixCap, data);
+	chip->current_capacity = data;
+
+	REGMAP_WRITE(chip->regmap_nvram, MAX1720X_NVRAM_NUSER18C, ~data);
+	pr_debug("Capacity primed. Storing value %d into NVRAM\n", data);
+
+	REGMAP_READ(chip->regmap, MAX1720X_QH, data);
+	chip->previous_qh = reg_to_twos_comp_int(data);
+
+	REGMAP_WRITE(chip->regmap_nvram, MAX1720X_NVRAM_NUSER18D, data);
+	pr_debug("QH primed. Storing value %d into NVRAM\n", data);
+}
+
 static int max1720x_get_battery_status(struct max1720x_chip *chip)
 {
 	u16 data;
@@ -655,13 +685,21 @@ static int max1720x_get_battery_status(struct max1720x_chip *chip)
 	REGMAP_READ(chip->regmap, MAX1720X_FullSocThr, data);
 	fullsocthr = reg_to_percentage(data);
 
-	if (current_now < -ichgterm)
+	if (current_now < -ichgterm) {
 		status = POWER_SUPPLY_STATUS_CHARGING;
-	else if (current_now <= 0 &&
-		 max1720x_get_battery_soc(chip) >= fullsocthr)
+		if (chip->prev_charge_state == POWER_SUPPLY_STATUS_DISCHARGING)
+			max1720x_prime_battery_qh_capacity(chip);
+		chip->prev_charge_state = POWER_SUPPLY_STATUS_CHARGING;
+	} else if (current_now <= 0 &&
+		 max1720x_get_battery_soc(chip) >= fullsocthr) {
 		status = POWER_SUPPLY_STATUS_FULL;
-	else
+		if (chip->prev_charge_state != POWER_SUPPLY_STATUS_FULL)
+			max1720x_prime_battery_qh_capacity(chip);
+		chip->prev_charge_state = POWER_SUPPLY_STATUS_FULL;
+	} else {
 		status = POWER_SUPPLY_STATUS_DISCHARGING;
+		chip->prev_charge_state = POWER_SUPPLY_STATUS_DISCHARGING;
+	}
 
 	return status;
 }
@@ -710,6 +748,44 @@ static int max1720x_set_battery_temp(struct max1720x_chip *chip,
 	return 0;
 }
 
+static int max1720x_get_battery_qh_based_capacity(struct max1720x_chip *chip)
+{
+	u16 data;
+	int current_qh;
+
+	REGMAP_READ(chip->regmap, MAX1720X_QH, data);
+	current_qh = reg_to_twos_comp_int(data);
+
+	/* QH value accumulates as battery charges */
+	chip->current_capacity -= (chip->previous_qh - current_qh);
+	chip->previous_qh = current_qh;
+
+	return chip->current_capacity;
+}
+
+static void max1720x_restore_battery_qh_capacity(struct max1720x_chip *chip)
+{
+	u16 data, nvram_capacity;
+	int current_qh, nvram_qh;
+
+	REGMAP_READ(chip->regmap_nvram, MAX1720X_NVRAM_NUSER18C, data);
+	nvram_capacity = ~data;
+
+	REGMAP_READ(chip->regmap_nvram, MAX1720X_NVRAM_NUSER18D, data);
+	nvram_qh = reg_to_twos_comp_int(data);
+
+	REGMAP_READ(chip->regmap, MAX1720X_QH, data);
+	current_qh = reg_to_twos_comp_int(data);
+
+	/* QH value accumulates as battery discharges */
+	chip->current_capacity = (int) nvram_capacity - (nvram_qh - current_qh);
+	pr_debug("Capacity restored from NVRAM. Value is %d\n",
+		 chip->current_capacity);
+	chip->previous_qh = current_qh;
+	pr_debug("QH value restored from NVRAM. Value is %d\n",
+		 chip->previous_qh);
+}
+
 static int max1720x_get_property(struct power_supply *psy,
 				 enum power_supply_property psp,
 				 union power_supply_propval *val)
@@ -736,7 +812,7 @@ static int max1720x_get_property(struct power_supply *psy,
 		val->intval = max1720x_get_battery_soc(chip);
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
-		REGMAP_READ(map, MAX1720X_RepCap, data);
+		data = max1720x_get_battery_qh_based_capacity(chip);
 		val->intval = reg_to_micro_amp_h(data, chip->RSense);
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL:
@@ -1240,6 +1316,18 @@ static void max1720x_complete_init(struct max1720x_chip *chip)
 	REGMAP_READ(chip->regmap, MAX1720X_VEmpty, data);
 	dev_info(chip->dev, "VEmpty: VE=%dmV VR=%dmV\n",
 		 ((data >> 7) & 0x1ff) * 10, (data & 0x7f) * 40);
+
+	/*
+	 * Capacity data is stored as complement so it will not be zero. Using
+	 * zero case to detect new un-primed pack
+	 */
+	REGMAP_READ(chip->regmap_nvram, MAX1720X_NVRAM_NUSER18C, data);
+	if (data == 0)
+		max1720x_prime_battery_qh_capacity(chip);
+	else
+		max1720x_restore_battery_qh_capacity(chip);
+
+	chip->prev_charge_state = POWER_SUPPLY_STATUS_UNKNOWN;
 
 	/* Handle any IRQ that might have been set before init */
 	max1720x_fg_irq_thread_fn(chip->primary->irq, chip);
