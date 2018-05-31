@@ -438,7 +438,7 @@ int checkRearVCMFWUpdate(struct cam_sensor_ctrl_t *s_ctrl)
 
 dump_fw:
 	s_ctrl->io_master_info.cci_client->sid =
-		VCM_COMPONENT_I2C_ADDR_WRITE >> 1;
+		VCM_EEPROM_I2C_ADDR_WRITE >> 1;
 
 	for (i = 0x00; i <= 0x7F; i++) {
 		rc = RamRead8A(&(s_ctrl->io_master_info), i, &regdata);
