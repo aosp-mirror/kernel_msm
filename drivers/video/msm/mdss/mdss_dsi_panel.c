@@ -35,8 +35,6 @@
 
 DEFINE_LED_TRIGGER(bl_led_trigger);
 
-static int is_recovery = BOOTMODE_NORMAL;
-
 void mdss_dsi_panel_pwm_cfg(struct mdss_dsi_ctrl_pdata *ctrl)
 {
 	if (ctrl->pwm_pmi)
@@ -2033,7 +2031,7 @@ static int mdss_dsi_panel_timing_from_dt(struct device_node *np,
 	return 0;
 }
 
-static int  mdss_dsi_panel_config_res_properties(struct device_node *np,
+static int mdss_dsi_panel_config_res_properties(struct device_node *np,
 		struct dsi_panel_timing *pt,
 		struct mdss_panel_data *panel_data)
 {
@@ -2430,18 +2428,3 @@ int mdss_dsi_panel_init(struct device_node *node,
 
 	return 0;
 }
-
-static int __init get_bootmode_cmdline(char *buf)
-{
-	int bootmode_num = 0;
-
-	bootmode_num = simple_strtol(buf, NULL, 10);
-	
-	if (bootmode_num == 1){
-		is_recovery = BOOTMODE_RECOVERY;
-	}
-
-	return 0;
-}
-
-early_param("IsRecovery", get_bootmode_cmdline);
