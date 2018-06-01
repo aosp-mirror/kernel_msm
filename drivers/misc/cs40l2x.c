@@ -504,6 +504,9 @@ static ssize_t cs40l2x_gpio1_fall_timeout_store(struct device *dev,
 	if (ret)
 		return -EINVAL;
 
+	if (val > CS40L2X_PR_TIMEOUT_MAX)
+		return -EINVAL;
+
 	mutex_lock(&cs40l2x->lock);
 	ret = regmap_write(cs40l2x->regmap,
 			cs40l2x_dsp_reg(cs40l2x, "PRESS_RELEASE_TIMEOUT",
@@ -549,6 +552,9 @@ static ssize_t cs40l2x_standby_timeout_store(struct device *dev,
 
 	ret = kstrtou32(buf, 10, &val);
 	if (ret)
+		return -EINVAL;
+
+	if (val > CS40L2X_EVENT_TIMEOUT_MAX)
 		return -EINVAL;
 
 	mutex_lock(&cs40l2x->lock);
