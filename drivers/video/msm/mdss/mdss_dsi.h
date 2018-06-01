@@ -230,6 +230,8 @@ extern struct device dsi_dev;
 extern u32 dsi_irq;
 extern struct mdss_dsi_ctrl_pdata *ctrl_list[];
 
+extern int is_recovery;
+
 enum {
 	DSI_CTRL_0,
 	DSI_CTRL_1,

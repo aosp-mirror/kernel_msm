@@ -37,6 +37,8 @@
 #define XO_CLK_RATE	19200000
 #define CMDLINE_DSI_CTL_NUM_STRING_LEN 2
 
+int is_recovery = BOOTMODE_NORMAL;
+
 /* Master structure to hold all the information about the DSI/panel */
 static struct mdss_dsi_data *mdss_dsi_res;
 
@@ -264,6 +266,11 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 
 	if (mdss_dsi_pinctrl_set_state(ctrl_pdata, false))
 		pr_debug("reset disable: pinctrl not enabled\n");
+
+	if(is_recovery)
+	{
+		return 0;
+	}
 
 	ret = msm_dss_enable_vreg(
 		ctrl_pdata->panel_power_data.vreg_config,
@@ -4022,6 +4029,21 @@ static void mdss_dsi_set_prim_panel(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 		}
 	}
 }
+
+static int __init get_bootmode_cmdline(char *buf)
+{
+	int bootmode_num = 0;
+
+	bootmode_num = simple_strtol(buf, NULL, 10);
+
+	if (bootmode_num == 1){
+		is_recovery = BOOTMODE_RECOVERY;
+	}
+
+	return 0;
+}
+
+early_param("IsRecovery", get_bootmode_cmdline);
 
 int dsi_panel_device_register(struct platform_device *ctrl_pdev,
 	struct device_node *pan_node, struct mdss_dsi_ctrl_pdata *ctrl_pdata)
