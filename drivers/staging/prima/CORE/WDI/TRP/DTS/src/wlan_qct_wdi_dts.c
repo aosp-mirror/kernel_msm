@@ -1002,16 +1002,10 @@ wpt_status WDTS_RxPacket (void *pContext, wpt_packet *pFrame, WDTS_ChannelType c
   }
   else
   {
-      wpalPacketSetRxLength(pFrame, usMPDULen+ucMPDUHOffset);
-      wpalPacketRawTrimHead(pFrame, ucMPDUHOffset);
-
-      /* flow control related */
-      pRxMetadata->fc = isFcBd;
-      pRxMetadata->mclkRxTimestamp = WDI_RX_BD_GET_TIMESTAMP(pBDHeader);
-      pRxMetadata->fcStaTxDisabledBitmap = WDI_RX_FC_BD_GET_STA_TX_DISABLED_BITMAP(pBDHeader);
-      pRxMetadata->fcSTAValidMask = WDI_RX_FC_BD_GET_STA_VALID_MASK(pBDHeader);
-      /* Invoke Rx complete callback */
-      pClientData->receiveFrameCB(pClientData->pCallbackContext, pFrame);  
+      /* Discard the frame as FC BD not supoorted any more */
+      DTI_TRACE(DTI_TRACE_LEVEL_ERROR, "FC bit is set in BD");
+      wpalPacketFree(pFrame);
+      return eWLAN_PAL_STATUS_SUCCESS;
   }
 
   /* Log the RX Stats */
