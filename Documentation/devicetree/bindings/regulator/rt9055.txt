@@ -1,0 +1,35 @@
+Richtek RT9055 Dual LDO regulator
+
+Required properties:
+- compatible: "richtek,rt9055"
+- regulators: A node that houses two sub-nodes for output 1 and output 2 of
+  RT9055. Each sub-node is identified using the node's name with available
+  voltage versions. The content of each sub-node is defined by the standard
+  binding for regulators, and an additional GPIO enable pin.
+
+Optional properties:
+- none
+
+Example
+	rt9055 {
+		compatible = "richtek,rt9055";
+		pinctrl-names = "default", "sleep";
+		pinctrl-0 = <&rt9055_en_active>;
+		pinctrl-1 = <&rt9055_en_suspend>;
+
+		regulators {
+			rt9055_gg_vout1: rt9055_gg_vout1 {
+				regulator-name = "pp1800_tp";
+				regulator-min-microvolt = <1800000>;
+				regulator-max-microvolt = <1800000>;
+				richtek,en-gpio = <&tlmm 51 0>;
+			};
+
+			rt9055_gg_vout2: rt9055_gg_vout2 {
+				regulator-name = "pp1800_panel";
+				regulator-min-microvolt = <1800000>;
+				regulator-max-microvolt = <1800000>;
+				richtek,en-gpio = <&tlmm 50 0>;
+			};
+		};
+	};
