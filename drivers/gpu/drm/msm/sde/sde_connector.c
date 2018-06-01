@@ -554,6 +554,7 @@ void sde_connector_helper_bridge_disable(struct drm_connector *connector)
 		c_conn->bl_device->props.state |= BL_CORE_FBBLANK;
 		backlight_update_status(c_conn->bl_device);
 	}
+	c_conn->last_panel_power_mode = SDE_MODE_DPMS_OFF;
 }
 
 void sde_connector_helper_bridge_enable(struct drm_connector *connector)
@@ -572,6 +573,8 @@ void sde_connector_helper_bridge_enable(struct drm_connector *connector)
 		backlight_update_status(c_conn->bl_device);
 		c_conn->panel_dead = false;
 	}
+
+	c_conn->last_panel_power_mode = SDE_MODE_DPMS_ON;
 }
 
 int sde_connector_clk_ctrl(struct drm_connector *connector, bool enable)
