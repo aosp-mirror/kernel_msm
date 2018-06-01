@@ -72,6 +72,26 @@ Optional properties:
     as cirrus,redc-default. If this value is omitted or specified as zero, no
     upper-bound validation is performed.
 
+  - cirrus,gpio1-rise-index : Specifies the wavetable index mapped to GPIO1
+    rising edges. If this value is omitted, specified as zero or exceeds the
+    maximum available index in the wavetable, GPIO1 rising edges are mapped to
+    index 1.
+
+  - cirrus,gpio1-fall-index : Specifies the wavetable index mapped to GPIO1
+    falling edges. If this value is omitted, specified as zero or exceeds the
+    maximum available index in the wavetable, GPIO1 falling edges are mapped to
+    index 2.
+
+  - cirrus,gpio1-fall-timeout : Specifies the number of 48-kHz periods for
+    which the device remains in the active state in search of a GPIO1 falling
+    edge, following a GPIO1 rising edge (the latter of which renders the device
+    active). If a GPIO1 falling edge does not arrive within this timeout, the
+    device automatically returns to the standby state and the subsequent GPIO1
+    falling edge is ignored. If this value is omitted or exceeds the maximum
+    timeout (8388607) then a default of 240000 is assumed (corresponding to
+    240000 / 48000 = 5 seconds). If this value is specified as zero, the timeout
+    is effectively disabled.
+
 Example:
 
   cs40l20: cs40l20@43 {
