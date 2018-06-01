@@ -209,6 +209,9 @@ static void dsi_bridge_pre_enable(struct drm_bridge *bridge)
 	if (rc)
 		pr_err("Continuous splash pipeline cleanup failed, rc=%d\n",
 									rc);
+
+	if (c_bridge->display && c_bridge->display->drm_conn)
+		sde_connector_helper_bridge_enable(c_bridge->display->drm_conn);
 }
 
 static void dsi_bridge_enable(struct drm_bridge *bridge)
@@ -234,9 +237,6 @@ static void dsi_bridge_enable(struct drm_bridge *bridge)
 	if (rc)
 		pr_err("[%d] DSI display post enabled failed, rc=%d\n",
 		       c_bridge->id, rc);
-
-	if (display && display->drm_conn)
-		sde_connector_helper_bridge_enable(display->drm_conn);
 }
 
 static void dsi_bridge_disable(struct drm_bridge *bridge)
