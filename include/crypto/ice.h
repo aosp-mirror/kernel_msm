@@ -56,8 +56,16 @@ struct platform_device *qcom_ice_get_pdevice(struct device_node *node);
 
 #ifdef CONFIG_CRYPTO_DEV_QCOM_ICE
 int qcom_ice_setup_ice_hw(const char *storage_type, int enable);
+void qcom_ice_set_fde_flag(int flag);
+int qcom_ice_set_fde_conf(sector_t strt, sector_t size, int idx, int mode);
 #else
 static inline int qcom_ice_setup_ice_hw(const char *storage_type, int enable)
+{
+	return 0;
+}
+static inline void qcom_ice_set_fde_flag(int flag) {}
+static inline int qcom_ice_set_fde_conf(sector_t strt, sector_t size, int idx,
+					int mode)
 {
 	return 0;
 }

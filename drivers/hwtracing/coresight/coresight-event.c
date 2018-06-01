@@ -25,7 +25,8 @@ module_param_call(event_abort_enable, event_abort_set, param_get_int,
 		  &event_abort_enable, 0644);
 
 static int event_abort_early_panic = 1;
-static int event_abort_on_panic_set(const char *val, const struct kernel_param *kp);
+static int event_abort_on_panic_set(const char *val,
+				    const struct kernel_param *kp);
 module_param_call(event_abort_early_panic, event_abort_on_panic_set,
 		  param_get_int, &event_abort_early_panic, 0644);
 
@@ -114,7 +115,8 @@ static int event_abort_set(const char *val, const struct kernel_param *kp)
 	return ret;
 }
 
-static int event_abort_on_panic_set(const char *val, const struct kernel_param *kp)
+static int event_abort_on_panic_set(const char *val,
+				    const struct kernel_param *kp)
 {
 	int ret;
 
