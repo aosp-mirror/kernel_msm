@@ -32,7 +32,7 @@
 		qcom,mdss-dsi-lane-1-state;
 		qcom,mdss-dsi-lane-2-state;
 		qcom,mdss-dsi-lane-3-state;
-		qcom,mdss-dsi-reset-sequence = <1 10>, <0 10>, <1 10>;
+		qcom,mdss-dsi-reset-sequence = <1 9>, <0 1>, <1 10>;
 		qcom,mdss-dsi-dma-trigger = "trigger_sw";
 		qcom,mdss-dsi-mdp-trigger = "none";
 		qcom,mdss-dsi-te-pin-select = <1>;
@@ -41,7 +41,6 @@
 		qcom,mdss-dsi-te-dcs-command = <1>;
 		qcom,mdss-dsi-te-check-enable;
 		qcom,mdss-dsi-te-using-te-pin;
-		// todo: salidoa qcom,mdss-dsi-lp11-init;
 		qcom,mdss-dsi-tx-eot-append;
 		qcom,mdss-dsi-force-clock-lane-hs = <1>;
 
@@ -49,7 +48,8 @@
 		qcom,mdss-pan-physical-height-dimension = <124>;
 
 		qcom,mdss-dsi-hs-pps;
-		qcom,mdss-dsi-init-delay-us = <10000>;
+		qcom,mdss-dsi-init-delay-us = <5000>;
+		qcom,mdss-dsi-lp11-init;
 
 		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 		qcom,mdss-dsi-bl-min-level = <0x8>; /* 2.74 nits */
@@ -76,9 +76,6 @@
 				qcom,mdss-dsi-h-right-border = <0>;
 				qcom,mdss-dsi-v-top-border = <0>;
 				qcom,mdss-dsi-v-bottom-border = <0>;
-				/* TODO salidoa: please implement mdss-dsi-init-delay-us
-				 * per Documentation.
-				 */
 				qcom,mdss-dsi-init-delay-us = <10000>;
 				qcom,mdss-dsi-on-command = [
 					15 01 00 00 00 00 02 26 02

@@ -104,8 +104,8 @@
 
 		qcom,dsi-panel = <&dsi_sw43408_dsc_fhd_cmd>;
 
-		vddio-supply = <&pm8998_l14>;
-		vdd-supply = <&pm8998_l28>;
+		vddi-supply = <&pm8998_l14>;
+		vpnl-supply = <&pm8998_l28>;
 		lab-supply = <&lab_regulator>;
 	};
 
@@ -186,7 +186,7 @@
 };
 
 &dsi_sw43408_dsc_fhd_cmd {
-	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_vdd_no_labibb_delay>;
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_sw43408>;
 	qcom,mdss-dsi-t-clk-post = <0x09>;
 	qcom,mdss-dsi-t-clk-pre = <0x1A>;
 
@@ -276,28 +276,28 @@
 		};
 	};
 
-	dsi_panel_pwr_supply_vdd_no_labibb_delay: dsi_panel_pwr_supply_vdd_no_labibb_delay {
+	dsi_panel_pwr_supply_sw43408: dsi_panel_pwr_supply_sw43408 {
 		#address-cells = <1>;
 		#size-cells = <0>;
 
 		qcom,panel-supply-entry@0 {
 			reg = <0>;
-			qcom,supply-name = "vddio";
+			qcom,supply-name = "vddi";
 			qcom,supply-min-voltage = <1800000>;
 			qcom,supply-max-voltage = <1800000>;
 			qcom,supply-enable-load = <62000>;
 			qcom,supply-disable-load = <80>;
-			qcom,supply-post-on-sleep = <20>;
+			qcom,supply-post-on-sleep = <0>;
 		};
 
 		qcom,panel-supply-entry@1 {
 			reg = <1>;
-			qcom,supply-name = "vdd";
+			qcom,supply-name = "vpnl";
 			qcom,supply-min-voltage = <3000000>;
 			qcom,supply-max-voltage = <3000000>;
 			qcom,supply-enable-load = <857000>;
 			qcom,supply-disable-load = <0>;
-			qcom,supply-post-on-sleep = <10>;
+			qcom,supply-post-on-sleep = <1>;
 		};
 	};
 
