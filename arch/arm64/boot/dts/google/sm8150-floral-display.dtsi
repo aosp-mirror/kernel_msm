@@ -1,0 +1,65 @@
+/* Copyright (c) 2018, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+#include "dsi-panel-s6e3ha8-dsc-wqhd-cmd.dtsi"
+
+#include <dt-bindings/clock/mdss-10nm-pll-clk.h>
+
+&sde_dsi {
+	vdd-supply = <&display_panel_avdd_eldo>;
+	vddio-supply = <&pm8150_l14>;
+	vci-supply = <&pm8150l_l9>;
+
+	qcom,platform-reset-gpio = <&tlmm 67 0>;
+	qcom,platform-mode-gpio = <>;
+	qcom,panel-mode-gpio = <>;
+
+	qcom,dsi-display-list = <&dsi_s6e3ha8_cmd_display>;
+};
+
+// Without the line below, display corruption occurs.
+&mdss_dsi0 {
+	qcom,null-insertion-enabled;
+};
+
+&soc {
+	dsi_s6e3ha8_cmd_display: qcom,dsi-display@0 {
+		label = "dsi_s6e3ha8_cmd_display";
+		qcom,display-type = "primary";
+		qcom,dsi-display-active;
+
+		qcom,dsi-ctrl-num = <0>;
+		qcom,dsi-phy-num = <0>;
+		qcom,dsi-select-clocks = "src_byte_clk0", "src_pixel_clk0";
+
+		qcom,dsi-panel = <&dsi_s6e3ha8_dsc_wqhd_cmd>;
+	};
+};
+
+&dsi_s6e3ha8_dsc_wqhd_cmd {
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+	qcom,platform-te-gpio = <&tlmm 8 0>;
+	qcom,platform-reset-gpio = <&tlmm 67 0>;
+	qcom,panel-mode-gpio = <>;
+
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_s6e3ha8>;
+
+
+	qcom,mdss-dsi-t-clk-post = <0x17>;
+	qcom,mdss-dsi-t-clk-pre = <0X19>;
+	qcom,mdss-dsi-display-timings {
+		timing@0 {
+			qcom,mdss-dsi-panel-phy-timings =
+					[00 1E 08 07 24 22 08 08 05 03 04 19 17 00];
+		};
+	};
+};
+

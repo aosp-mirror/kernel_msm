@@ -1,0 +1,31 @@
+/* Copyright (c) 2018, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+#include <dt-bindings/regulator/qcom,rpmh-regulator.h>
+
+/* VDDI = 1.8v, AVDD = 3.0v */
+&pm8150_l17 {
+	regulator-min-microvolt = <2856000>;
+	regulator-max-microvolt = <3008000>;
+	qcom,init-voltage = <2856000>;
+	qcom,init-mode = <RPMH_REGULATOR_MODE_HPM>;
+	status = "okay";
+};
+
+&pm8150_l14 {
+	regulator-min-microvolt = <1800000>;
+	regulator-max-microvolt = <1800000>;
+	qcom,init-voltage = <1800000>;
+	qcom,init-mode = <RPMH_REGULATOR_MODE_HPM>;
+	status = "okay";
+};
+
+
