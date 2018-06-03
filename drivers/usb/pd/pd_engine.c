@@ -52,6 +52,7 @@ struct usbpd {
 	struct extcon_dev	*extcon;
 
 	struct power_supply	*usb_psy;
+	struct power_supply	*wireless_psy;
 	struct notifier_block	psy_nb;
 
 	struct regulator	*vbus;
@@ -97,6 +98,10 @@ struct usbpd {
 	struct delayed_work ext_vbus_work;
 	struct notifier_block ext_vbus_nb;
 
+	/* Acutual regulator status */
+	bool smb2_vbus_reg;
+	bool ext_vbus_reg;
+
 	bool suspend_since_last_logged;
 	bool first_suspend;
 	/* Indicates whether the device has to honor usb suspend power limits*/
@@ -104,6 +109,7 @@ struct usbpd {
 	bool usb_comm_capable;
 
 	bool apsd_done;
+	bool wireless_online;
 };
 
 /*
@@ -444,7 +450,6 @@ static int update_extcon_prop(struct usbpd *pd, int extcon_type)
 	int ret;
 	union extcon_property_value val;
 
-
 	val.intval = pd->extcon_usb_cc ? 1 : 0;
 	ret = extcon_set_property(pd->extcon, extcon_type,
 				  EXTCON_PROP_USB_TYPEC_POLARITY,
@@ -456,7 +461,15 @@ static int update_extcon_prop(struct usbpd *pd, int extcon_type)
 		return ret;
 	}
 
-	val.intval = 1;
+	/*
+	 * When wirless charging is on and attempting to start host mode,
+	 * degrade to HS as internal pmic cannot be on.
+	 */
+	if (pd->wireless_online && extcon_type == EXTCON_USB_HOST)
+		val.intval = 0;
+	else
+		val.intval = 1;
+
 	ret = extcon_set_property(pd->extcon, extcon_type,
 				  EXTCON_PROP_USB_SS,
 				  val);
@@ -549,6 +562,49 @@ struct psy_changed_event {
 	struct usbpd *pd;
 };
 
+static int pd_regulator_update(struct usbpd *pd, bool external_reg, bool on)
+{
+	int ret = 0;
+
+	if (on) {
+		ret = regulator_enable(external_reg ? pd->ext_vbus
+				       : pd->vbus);
+		if (ret) {
+			pd_engine_log(pd,
+				      "pd_regulator_update: unable to turn on %s vbus ret = %d"
+				      , external_reg ? "external" : "pmic"
+				      , ret);
+			return ret;
+		} else {
+			pd_engine_log(pd,
+				      "pd_regulator_update: turned on %s vbus ret = %d"
+				      , external_reg ? "external" : "pmic"
+				      , ret);
+		}
+	} else {
+		ret = regulator_disable(external_reg ? pd->ext_vbus
+					: pd->vbus);
+		if (ret) {
+			pd_engine_log(pd,
+				      "pd_regulator_update: unable to turn off %s vbus ret = %d"
+				      , external_reg ? "external" : "pmic"
+				      , ret);
+			return ret;
+		} else {
+			pd_engine_log(pd,
+				      "pd_regulator_update: turned off %s vbus ret = %d"
+				      , external_reg ? "external" : "pmic"
+				      , ret);
+		}
+	}
+
+	if (external_reg)
+		pd->ext_vbus_reg = on;
+	else
+		pd->smb2_vbus_reg = on;
+
+	return ret;
+}
 
 static int update_vbus_locked(struct usbpd *pd, bool vbus_output)
 {
@@ -557,35 +613,28 @@ static int update_vbus_locked(struct usbpd *pd, bool vbus_output)
 	if (pd->vbus_output == vbus_output)
 		return ret;
 
+	pd->external_vbus = pd->wireless_online ? true : false;
+
+	pd_engine_log(pd,
+		      "update_vbus_locked: vbus_output: %c wireless_online: %c"
+		      , vbus_output ? 'Y' : 'N', pd->wireless_online ?
+		      'Y' : 'N');
+
 	if (vbus_output) {
-		ret = regulator_enable(pd->external_vbus ?
-					pd->ext_vbus : pd->vbus);
-		if (ret) {
-			pd_engine_log(pd,
-				      "update_vbus_locked: unable to turn on %s vbus ret = %d"
-				      , pd->external_vbus ? "external" : "pmic"
-				      , ret);
+		ret = pd_regulator_update(pd, pd->external_vbus, true);
+		if (ret)
 			return ret;
-		} else {
-			pd_engine_log(pd,
-				      "update_vbus_locked: turned on %s vbus ret = %d"
-				      , pd->external_vbus ? "external" : "pmic"
-				      , ret);
-		}
 	} else {
-		ret = regulator_disable(pd->external_vbus ?
-					pd->ext_vbus : pd->vbus);
-		if (ret) {
-			pd_engine_log(pd,
-				      "update_vbus_locked: unable to turn off %s vbus ret = %d"
-				      , pd->external_vbus ? "external" : "pmic"
-				      , ret);
-			return ret;
-		} else {
-			pd_engine_log(pd,
-				      "update_vbus_locked: turned off %s vbus ret = %d"
-				      , pd->external_vbus ? "external" : "pmic"
-				      , ret);
+		if (pd->ext_vbus_reg) {
+			ret = pd_regulator_update(pd, true, false);
+			if (ret)
+				return ret;
+		}
+
+		if (pd->smb2_vbus_reg) {
+			ret = pd_regulator_update(pd, false, false);
+			if (ret)
+				return ret;
 		}
 	}
 	pd->vbus_output = vbus_output;
@@ -608,8 +657,18 @@ void update_external_vbus(struct work_struct *work)
 	/* Exit when the old value is same as the new value or
 	 * update the value and exit when vbus is not on.
 	 */
-	if (pd->external_vbus == pd->external_vbus_update || !pd->vbus_output)
+	if (pd->external_vbus == pd->external_vbus_update || !pd->vbus_output) {
+		pd_engine_log(pd,
+			      "skipping update value changed: %c vbus_output: %c"
+			      , pd->external_vbus == pd->external_vbus_update ?
+			       'Y' : 'N', pd->vbus_output ? 'Y' : 'N');
 		goto exit;
+	}
+
+	if (pd->wireless_online) {
+		pd_engine_log(pd, "skipping update as wireless charger online");
+		goto err;
+	}
 
 	val.intval = 1;
 	ret = power_supply_set_property(pd->usb_psy,
@@ -624,37 +683,15 @@ void update_external_vbus(struct work_struct *work)
 	/*
 	 * Turn on the other regulator before turning off the other one.
 	 */
-	ret = regulator_enable(pd->external_vbus_update ? pd->ext_vbus
-			       : pd->vbus);
-	if (ret) {
-		pd_engine_log(pd,
-			      "update_external_vbus: unable to turn on %s vbus ret = %d"
-			      , pd->external_vbus_update ? "external" : "pmic"
-			      , ret);
+	ret = pd_regulator_update(pd, pd->external_vbus_update, true);
+	if (ret)
 		goto err;
-	} else {
-		pd_engine_log(pd,
-			      "update_external_vbus: turned on %s vbus ret = %d"
-			      , pd->external_vbus_update ? "external" : "pmic"
-			      , ret);
-	}
 
 	/* Regulator overlap according to hardware recommendation */
 	msleep(EXT_VBUS_OVERLAP_MS);
-	ret = regulator_disable(pd->external_vbus_update ? pd->vbus
-				: pd->ext_vbus);
-	if (ret) {
-		pd_engine_log(pd,
-			      "update_external_vbus: unable to turn off %s vbus ret = %d"
-			      , pd->external_vbus_update ? "pmic" : "external"
-			      , ret);
+	ret = pd_regulator_update(pd, !pd->external_vbus_update, false);
+	if (ret)
 		goto err;
-	} else {
-		pd_engine_log(pd,
-			      "update_external_vbus: turned off %s vbus ret = %d"
-			      , pd->external_vbus_update ? "pmic" : "external"
-			      , ret);
-	}
 
 	val.intval = 0;
 	ret = power_supply_set_property(pd->usb_psy,
@@ -709,7 +746,7 @@ static void psy_changed_handler(struct work_struct *work)
 	enum power_supply_typec_mode typec_mode;
 	enum typec_cc_orientation typec_cc_orientation;
 
-	bool pe_start;
+	bool pe_start, wireless_online;
 
 	union power_supply_propval val;
 	int ret = 0;
@@ -761,10 +798,21 @@ static void psy_changed_handler(struct work_struct *work)
 	}
 	typec_cc_orientation = val.intval;
 
+	ret = power_supply_get_property(pd->wireless_psy,
+					POWER_SUPPLY_PROP_ONLINE,
+					&val);
+	if (ret < 0) {
+		pd_engine_log(pd,
+			      "Unable to read wireless online property, ret=%d",
+			      ret);
+		return;
+	}
+	wireless_online = val.intval ? true : false;
+
 	parse_cc_status(typec_mode, typec_cc_orientation, &cc1, &cc2);
 
 	pd_engine_log(pd,
-		      "type [%s], pe_start [%s], vbus_present [%s], mode [%s], orientation [%s], cc1 [%s], cc2 [%s] ext_vbus [%s]",
+		      "type [%s], pe_start [%s], vbus_present [%s], mode [%s], orientation [%s], cc1 [%s], cc2 [%s] ext_vbus [%s] wireless_online [%s]",
 		      get_psy_type_name(psy_type),
 		      pe_start ? "Y" : "N",
 		      vbus_present ? "Y" : "N",
@@ -772,9 +820,39 @@ static void psy_changed_handler(struct work_struct *work)
 		      get_typec_cc_orientation_name(typec_cc_orientation),
 		      get_typec_cc_status_name(cc1),
 		      get_typec_cc_status_name(cc2),
-		      pd->external_vbus_update ? "Y" : "N");
+		      pd->external_vbus_update ? "Y" : "N",
+		      wireless_online ? "Y" : "N");
 
 	mutex_lock(&pd->lock);
+	if (wireless_online != pd->wireless_online) {
+		pd->wireless_online = wireless_online;
+		pd_engine_log(pd, "pd->vbus_output: %c pd->external_vbus: %c",
+			      pd->vbus_output ? 'Y' : 'N',
+			      pd->external_vbus ? 'Y' : 'N');
+		if (pd->vbus_output && !pd->external_vbus) {
+			/* Turn off internal vbus */
+			if (pd_regulator_update(pd, false, false))
+				goto unlock;
+
+			/* disable host mode */
+			pd->extcon_usb_host = false;
+			if (update_usb_data_role(pd))
+				goto unlock;
+
+			/* Turn on external vbus */
+			if (pd_regulator_update(pd, true, true))
+				goto unlock;
+			pd->external_vbus = true;
+
+			/* enable host mode */
+			pd->extcon_usb_host = true;
+			if (update_usb_data_role(pd))
+				goto unlock;
+
+			pd_engine_log(pd,
+				      "psy_changed: swiched to external vbus");
+		}
+	}
 
 	/* Dont proceed as pmi might still be evaluating connections */
 	if (!pe_start && (typec_mode != POWER_SUPPLY_TYPEC_NONE)) {
@@ -819,7 +897,11 @@ static int psy_changed(struct notifier_block *nb, unsigned long evt, void *ptr)
 	struct psy_changed_event *event;
 
 	pd = container_of(nb, struct usbpd, psy_nb);
-	if (ptr != pd->usb_psy || evt != PSY_EVENT_PROP_CHANGED)
+	if (ptr == pd->wireless_psy)
+		pd_engine_log(pd, "wireless supply changed\n");
+
+	if (!((ptr == pd->usb_psy || ptr == pd->wireless_psy)
+	    && evt == PSY_EVENT_PROP_CHANGED))
 		return 0;
 
 	event = kzalloc(sizeof(*event), GFP_ATOMIC);
@@ -2004,6 +2086,14 @@ struct usbpd *usbpd_create(struct device *parent)
 		goto del_wq;
 	}
 
+	pd->wireless_psy = power_supply_get_by_name("wireless");
+	if (!pd->wireless_psy) {
+		pd_engine_log(pd,
+			      "Could not get wireless power_supply, deferring probe");
+		ret = -EPROBE_DEFER;
+		goto put_psy_usb;
+	}
+
 	pd->ext_vbus_nb.notifier_call = update_ext_vbus;
 	ext_vbus_register_notify(&pd->ext_vbus_nb);
 
@@ -2013,11 +2103,11 @@ struct usbpd *usbpd_create(struct device *parent)
 	 */
 	ret = init_tcpc_dev(&pd->tcpc_dev);
 	if (ret < 0)
-		goto put_psy;
+		goto put_psy_wireless;
 	pd->tcpm_port = tcpm_register_port(&pd->dev, &pd->tcpc_dev);
 	if (IS_ERR(pd->tcpm_port)) {
 		ret = PTR_ERR(pd->tcpm_port);
-		goto put_psy;
+		goto put_psy_wireless;
 	}
 
 	psy_changed(&pd->psy_nb, PSY_EVENT_PROP_CHANGED, pd->usb_psy);
@@ -2036,8 +2126,10 @@ struct usbpd *usbpd_create(struct device *parent)
 
 unreg_tcpm:
 	tcpm_unregister_port(pd->tcpm_port);
-put_psy:
+put_psy_wireless:
 	ext_vbus_unregister_notify(&pd->ext_vbus_nb);
+	power_supply_put(pd->wireless_psy);
+put_psy_usb:
 	power_supply_put(pd->usb_psy);
 del_wq:
 	destroy_workqueue(pd->wq);
@@ -2066,6 +2158,7 @@ void usbpd_destroy(struct usbpd *pd)
 	power_supply_unreg_notifier(&pd->psy_nb);
 	tcpm_unregister_port(pd->tcpm_port);
 	ext_vbus_unregister_notify(&pd->ext_vbus_nb);
+	power_supply_put(pd->wireless_psy);
 	power_supply_put(pd->usb_psy);
 	destroy_workqueue(pd->wq);
 	pd_engine_debugfs_exit(pd);
