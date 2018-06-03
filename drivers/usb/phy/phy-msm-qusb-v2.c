@@ -1010,6 +1010,70 @@ static int qusb_phy_regulator_init(struct qusb_phy *qphy)
 	return 0;
 }
 
+#define PHY_REG_SET(reg, index)						\
+static int phy_##reg##_##index##_set(void *data, u64 val)		\
+{									\
+	struct qusb_phy *qusb = (struct qusb_phy *)data;		\
+									\
+	qusb->reg[index - 1] = val;					\
+	return 0;							\
+}
+
+PHY_REG_SET(tune, 1);
+PHY_REG_SET(tune, 2);
+PHY_REG_SET(tune, 3);
+PHY_REG_SET(tune, 4);
+PHY_REG_SET(tune, 5);
+PHY_REG_SET(bias_ctrl, 1);
+PHY_REG_SET(bias_ctrl, 2);
+
+#define PHY_REG_GET(reg, index, offset)					\
+static int phy_##reg##_##index##_get(void *data, u64 *val)		\
+{									\
+	struct qusb_phy *qusb = (struct qusb_phy *)data;		\
+									\
+	*val = readl_relaxed(						\
+			qusb->base + qusb->phy_reg[offset] +		\
+			(4 * (index - 1)));				\
+	return 0;							\
+}
+
+PHY_REG_GET(tune, 1, PORT_TUNE1);
+PHY_REG_GET(tune, 2, PORT_TUNE1);
+PHY_REG_GET(tune, 3, PORT_TUNE1);
+PHY_REG_GET(tune, 4, PORT_TUNE1);
+PHY_REG_GET(tune, 5, PORT_TUNE1);
+PHY_REG_GET(bias_ctrl, 1, BIAS_CTRL_1);
+PHY_REG_GET(bias_ctrl, 2, BIAS_CTRL_1);
+
+DEFINE_SIMPLE_ATTRIBUTE(tune_1_fops, phy_tune_1_get, phy_tune_1_set,
+			"0x%llx\n");
+DEFINE_SIMPLE_ATTRIBUTE(tune_2_fops, phy_tune_2_get, phy_tune_2_set,
+			"0x%llx\n");
+DEFINE_SIMPLE_ATTRIBUTE(tune_3_fops, phy_tune_3_get, phy_tune_3_set,
+			"0x%llx\n");
+DEFINE_SIMPLE_ATTRIBUTE(tune_4_fops, phy_tune_4_get, phy_tune_4_set,
+			"0x%llx\n");
+DEFINE_SIMPLE_ATTRIBUTE(tune_5_fops, phy_tune_5_get, phy_tune_5_set,
+			"0x%llx\n");
+DEFINE_SIMPLE_ATTRIBUTE(bias_ctrl_1_fops, phy_bias_ctrl_1_get,
+			phy_bias_ctrl_1_set, "0x%llx\n");
+DEFINE_SIMPLE_ATTRIBUTE(bias_ctrl_2_fops, phy_bias_ctrl_2_get,
+			phy_bias_ctrl_2_set, "0x%llx\n");
+
+static struct reg_node {
+	char *name;
+	const struct file_operations *fops;
+} regs[] = {
+	{ .name = "tune1",		.fops = &tune_1_fops},
+	{ .name = "tune2",		.fops = &tune_2_fops},
+	{ .name = "tune3",		.fops = &tune_3_fops},
+	{ .name = "tune4",		.fops = &tune_4_fops},
+	{ .name = "tune5",		.fops = &tune_5_fops},
+	{ .name = "bias_ctrl_1",	.fops = &bias_ctrl_1_fops},
+	{ .name = "bias_ctrl_2",	.fops = &bias_ctrl_2_fops},
+};
+
 static int qusb_phy_create_debugfs(struct qusb_phy *qphy)
 {
 	struct dentry *file;
@@ -1025,10 +1089,13 @@ static int qusb_phy_create_debugfs(struct qusb_phy *qphy)
 		goto create_err;
 	}
 
-	for (i = 0; i < 5; i++) {
-		snprintf(name, sizeof(name), "tune%d", (i + 1));
-		file = debugfs_create_x8(name, 0644, qphy->root,
-						&qphy->tune[i]);
+	for (i = 0; i < ARRAY_SIZE(regs); i++) {
+		file = debugfs_create_file(regs[i].name,
+						    0644,
+						    qphy->root,
+						    qphy,
+						    regs[i].fops);
+
 		if (IS_ERR_OR_NULL(file)) {
 			dev_err(qphy->phy.dev,
 				"can't create debugfs entry for %s\n", name);
@@ -1037,20 +1104,6 @@ static int qusb_phy_create_debugfs(struct qusb_phy *qphy)
 			goto create_err;
 		}
 	}
-
-	for (i = 0; i < 2; i++) {
-		snprintf(name, sizeof(name), "bias_ctrl_%d", (i + 1));
-		file = debugfs_create_x8(name, 0644, qphy->root,
-						&qphy->bias_ctrl[i]);
-		if (IS_ERR_OR_NULL(file)) {
-			dev_err(qphy->phy.dev,
-				"can't create debugfs entry for %s\n", name);
-			debugfs_remove_recursive(qphy->root);
-			ret = -ENOMEM;
-			goto create_err;
-		}
-	}
-
 create_err:
 	return ret;
 }
