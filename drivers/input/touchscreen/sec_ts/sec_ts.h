@@ -484,6 +484,15 @@ enum {
 	SEC_TS_BUS_REF_FORCE_ACTIVE	= 0x80
 };
 
+enum {
+	SEC_TS_ERR_NA = 0,
+	SEC_TS_ERR_INIT,
+	SEC_TS_ERR_ALLOC_FRAME,
+	SEC_TS_ERR_ALLOC_GAINTABLE,
+	SEC_TS_ERR_REG_INPUT_DEV,
+	SEC_TS_ERR_REG_INPUT_PAD_DEV
+};
+
 #define CMD_RESULT_WORD_LEN		10
 
 #define SEC_TS_I2C_RETRY_CNT		3
@@ -784,6 +793,8 @@ struct sec_ts_data {
 	int temp;
 
 	int fs_postcal_mean;
+
+	bool is_fw_corrupted;
 
 #ifdef CONFIG_TOUCHSCREEN_TBN
 	struct tbn_context *tbn;
