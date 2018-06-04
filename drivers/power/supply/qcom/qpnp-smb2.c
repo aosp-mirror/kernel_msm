@@ -561,6 +561,7 @@ static int smb2_usb_set_prop(struct power_supply *psy,
 			     val->intval > 0, 0);
 			break;
 		case POWER_SUPPLY_PROP_TYPEC_POWER_ROLE:
+			rc = smblib_set_prop_typec_power_role(chg, val);
 			break;
 		default:
 			rc = -EINVAL;
