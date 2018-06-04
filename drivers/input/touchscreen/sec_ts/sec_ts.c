@@ -1593,18 +1593,149 @@ static void sec_ts_set_input_prop(struct sec_ts_data *ts, struct input_dev *dev,
 	input_set_drvdata(dev, ts);
 }
 
-static struct notifier_block sec_ts_screen_nb;
-
-static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *id)
+static int sec_ts_fw_init(struct sec_ts_data *ts)
 {
-	struct sec_ts_data *ts;
-	struct sec_ts_plat_data *pdata;
-	int ret = 0;
+	int ret = SEC_TS_ERR_NA;
 	bool force_update = false;
 	bool valid_firmware_integrity = false;
 	unsigned char data[5] = { 0 };
 	unsigned char deviceID[5] = { 0 };
 	unsigned char result = 0;
+
+	ret = sec_ts_i2c_read(ts, SEC_TS_READ_DEVICE_ID, deviceID, 5);
+	if (ret < 0)
+		input_err(true, &ts->client->dev, "%s: failed to read device ID(%d)\n",
+			  __func__, ret);
+	else
+		input_info(true, &ts->client->dev,
+			"%s: TOUCH DEVICE ID : %02X, %02X, %02X, %02X, %02X\n",
+			__func__, deviceID[0], deviceID[1], deviceID[2],
+			deviceID[3], deviceID[4]);
+
+	ret = sec_ts_i2c_read(ts, SEC_TS_READ_FIRMWARE_INTEGRITY, &result, 1);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev, "%s: failed to integrity check (%d)\n",
+			  __func__, ret);
+	} else {
+		if (result & 0x80)
+			valid_firmware_integrity = true;
+		else
+			input_err(true, &ts->client->dev, "%s: invalid integrity result (0x%x)\n",
+				  __func__, result);
+	}
+
+	ret = sec_ts_i2c_read(ts, SEC_TS_READ_BOOT_STATUS, &data[0], 1);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev,
+			  "%s: failed to read sub id(%d)\n", __func__, ret);
+	} else {
+		ret = sec_ts_i2c_read(ts, SEC_TS_READ_TS_STATUS, &data[1], 4);
+		if (ret < 0)
+			input_err(true, &ts->client->dev,
+				  "%s: failed to touch status(%d)\n",
+				  __func__, ret);
+	}
+	input_info(true, &ts->client->dev,
+		"%s: TOUCH STATUS : %02X || %02X, %02X, %02X, %02X\n",
+		__func__, data[0], data[1], data[2], data[3], data[4]);
+
+	if (data[0] == SEC_TS_STATUS_BOOT_MODE)
+		ts->checksum_result = 1;
+
+	if (((data[0] == SEC_TS_STATUS_APP_MODE &&
+	      data[2] == TOUCH_SYSTEM_MODE_FLASH) || ret < 0) &&
+	    (valid_firmware_integrity == false))
+		force_update = true;
+
+	ret = sec_ts_read_information(ts);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev, "%s: fail to read information 0x%x\n",
+			  __func__, ret);
+		return SEC_TS_ERR_INIT;
+	}
+
+	ts->touch_functions |= SEC_TS_DEFAULT_ENABLE_BIT_SETFUNC;
+	ret = sec_ts_i2c_write(ts, SEC_TS_CMD_SET_TOUCHFUNCTION,
+			       (u8 *)&ts->touch_functions, 2);
+	if (ret < 0)
+		input_err(true, &ts->client->dev, "%s: Failed to send touch func_mode command",
+			  __func__);
+
+	/* Sense_on */
+	ret = sec_ts_i2c_write(ts, SEC_TS_CMD_SENSE_ON, NULL, 0);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev, "%s: fail to write Sense_on 0x%x\n",
+			  __func__, ret);
+		return SEC_TS_ERR_INIT;
+	}
+
+	ts->pFrame = kzalloc(ts->tx_count * ts->rx_count * 2, GFP_KERNEL);
+	if (!ts->pFrame)
+		return SEC_TS_ERR_ALLOC_FRAME;
+
+	ts->gainTable = kzalloc(ts->tx_count * ts->rx_count, GFP_KERNEL);
+	if (!ts->gainTable) {
+		kfree(ts->pFrame);
+		ts->pFrame = NULL;
+		return SEC_TS_ERR_ALLOC_GAINTABLE;
+	}
+
+	if (ts->plat_data->support_dex) {
+		ts->input_dev_pad->name = "sec_touchpad";
+		sec_ts_set_input_prop(ts, ts->input_dev_pad,
+				      INPUT_PROP_POINTER);
+	}
+	ts->dex_name = "";
+
+	ts->input_dev->name = "sec_touchscreen";
+	sec_ts_set_input_prop(ts, ts->input_dev, INPUT_PROP_DIRECT);
+#ifdef USE_OPEN_CLOSE
+	ts->input_dev->open = sec_ts_input_open;
+	ts->input_dev->close = sec_ts_input_close;
+#endif
+	ts->input_dev_touch = ts->input_dev;
+
+	ret = input_register_device(ts->input_dev);
+	if (ret) {
+		input_err(true, &ts->client->dev, "%s: Unable to register %s input device 0x%x\n",
+			  __func__, ts->input_dev->name, ret);
+		return SEC_TS_ERR_REG_INPUT_DEV;
+	}
+
+	if (ts->plat_data->support_dex) {
+		ret = input_register_device(ts->input_dev_pad);
+		if (ret) {
+			input_err(true, &ts->client->dev, "%s: Unable to register %s input device 0x%x\n",
+				  __func__, ts->input_dev_pad->name, ret);
+			return SEC_TS_ERR_REG_INPUT_PAD_DEV;
+		}
+	}
+
+	return SEC_TS_ERR_NA;
+}
+
+static void sec_ts_device_init(struct sec_ts_data *ts)
+{
+#if (1) //!defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
+	sec_ts_raw_device_init(ts);
+#endif
+	sec_ts_fn_init(ts);
+
+#ifdef SEC_TS_SUPPORT_CUSTOMLIB
+	sec_ts_check_custom_library(ts);
+	if (ts->use_customlib)
+		sec_ts_set_custom_library(ts);
+#endif
+}
+
+static struct notifier_block sec_ts_screen_nb;
+
+static int sec_ts_probe(struct i2c_client *client,
+			const struct i2c_device_id *id)
+{
+	struct sec_ts_data *ts;
+	struct sec_ts_plat_data *pdata;
+	int ret = 0;
 
 	input_info(true, &client->dev, "%s\n", __func__);
 
@@ -1678,6 +1809,8 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	input_info(true, &ts->client->dev, "%s: fw update on probe disabled!\n",
 		   __func__);
 #endif
+
+	ts->is_fw_corrupted = false;
 
 	/* Assume screen is on throughout probe */
 	ts->bus_refmask = SEC_TS_BUS_REF_SCREEN_ON;
@@ -1753,115 +1886,24 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	ret = sec_ts_wait_for_ready(ts, SEC_TS_ACK_BOOT_COMPLETE);
 	if (ret < 0) {
 		input_err(true, &ts->client->dev,
-			  "%s: failed to communicate with touch controller.\n");
-		ret = -ENODEV;
-		goto err_init;
+			  "%s: failed to communicate with touch controller. Try to update FW to recover!\n",
+			  __func__);
+		ts->is_fw_corrupted = true;
 	}
 
 	input_info(true, &client->dev, "%s: power enable\n", __func__);
 
-	ret = sec_ts_i2c_read(ts, SEC_TS_READ_DEVICE_ID, deviceID, 5);
-	if (ret < 0)
-		input_err(true, &ts->client->dev, "%s: failed to read device ID(%d)\n", __func__, ret);
-	else
-		input_info(true, &ts->client->dev,
-			"%s: TOUCH DEVICE ID : %02X, %02X, %02X, %02X, %02X\n", __func__,
-			deviceID[0], deviceID[1], deviceID[2], deviceID[3], deviceID[4]);
-
-	ret = sec_ts_i2c_read(ts, SEC_TS_READ_FIRMWARE_INTEGRITY, &result, 1);
-	if (ret < 0) {
-		input_err(true, &ts->client->dev, "%s: failed to integrity check (%d)\n", __func__, ret);
-	} else {
-		if (result & 0x80) {
-			valid_firmware_integrity = true;
-		} else if (result & 0x40) {
-			valid_firmware_integrity = false;
-			input_err(true, &ts->client->dev, "%s: invalid firmware (0x%x)\n", __func__, result);
-		} else {
-			valid_firmware_integrity = false;
-			input_err(true, &ts->client->dev, "%s: invalid integrity result (0x%x)\n", __func__, result);
-		}
-	}
-
-	ret = sec_ts_i2c_read(ts, SEC_TS_READ_BOOT_STATUS, &data[0], 1);
-	if (ret < 0) {
-		input_err(true, &ts->client->dev,
-					"%s: failed to read sub id(%d)\n",
-					__func__, ret);
-	} else {
-		ret = sec_ts_i2c_read(ts, SEC_TS_READ_TS_STATUS, &data[1], 4);
-		if (ret < 0) {
-			input_err(true, &ts->client->dev,
-						"%s: failed to touch status(%d)\n",
-						__func__, ret);
-		}
-	}
-	input_info(true, &ts->client->dev,
-		"%s: TOUCH STATUS : %02X || %02X, %02X, %02X, %02X\n",
-		__func__, data[0], data[1], data[2], data[3], data[4]);
-
-	if (data[0] == SEC_TS_STATUS_BOOT_MODE)
-		ts->checksum_result = 1;
-	
-	if ((((data[0] == SEC_TS_STATUS_APP_MODE) && (data[2] == TOUCH_SYSTEM_MODE_FLASH)) ||
-		(ret < 0)) && (valid_firmware_integrity == false))
-		force_update = true;
-	else
-		force_update = false;
-
-	ret = sec_ts_read_information(ts);
-	if (ret < 0) {
-		input_err(true, &ts->client->dev, "%s: fail to read information 0x%x\n", __func__, ret);
-		goto err_init;
-	}
-
-	ts->touch_functions |= SEC_TS_DEFAULT_ENABLE_BIT_SETFUNC;
-	ret = sec_ts_i2c_write(ts, SEC_TS_CMD_SET_TOUCHFUNCTION, (u8 *)&ts->touch_functions, 2);
-	if (ret < 0)
-		input_err(true, &ts->client->dev, "%s: Failed to send touch func_mode command", __func__);
-
-	/* Sense_on */
-	ret = sec_ts_i2c_write(ts, SEC_TS_CMD_SENSE_ON, NULL, 0);
-	if (ret < 0) {
-		input_err(true, &ts->client->dev, "%s: fail to write Sense_on\n", __func__);
-		goto err_init;
-	}
-
-	ts->pFrame = kzalloc(ts->tx_count * ts->rx_count * 2, GFP_KERNEL);
-	if (!ts->pFrame) {
-		ret = -ENOMEM;
-		goto err_allocate_frame;
-	}
-
-	ts->gainTable = kzalloc(ts->tx_count * ts->rx_count, GFP_KERNEL);
-	if (!ts->gainTable) {
-		ret = -ENOMEM;
-		goto err_allocate_gaintable;
-	}
-
-	if (ts->plat_data->support_dex) {
-		ts->input_dev_pad->name = "sec_touchpad";
-		sec_ts_set_input_prop(ts, ts->input_dev_pad, INPUT_PROP_POINTER);
-	}
-	ts->dex_name = "";
-
-	ts->input_dev->name = "sec_touchscreen";
-	sec_ts_set_input_prop(ts, ts->input_dev, INPUT_PROP_DIRECT);
-#ifdef USE_OPEN_CLOSE
-	ts->input_dev->open = sec_ts_input_open;
-	ts->input_dev->close = sec_ts_input_close;
-#endif
-	ts->input_dev_touch = ts->input_dev;
-
-	ret = input_register_device(ts->input_dev);
-	if (ret) {
-		input_err(true, &ts->client->dev, "%s: Unable to register %s input device\n", __func__, ts->input_dev->name);
-		goto err_input_register_device;
-	}
-	if (ts->plat_data->support_dex) {
-		ret = input_register_device(ts->input_dev_pad);
-		if (ret) {
-			input_err(true, &ts->client->dev, "%s: Unable to register %s input device\n", __func__, ts->input_dev_pad->name);
+	if (ts->is_fw_corrupted == false) {
+		switch (sec_ts_fw_init(ts)) {
+		case SEC_TS_ERR_INIT:
+			goto err_init;
+		case SEC_TS_ERR_ALLOC_FRAME:
+			goto err_allocate_frame;
+		case SEC_TS_ERR_ALLOC_GAINTABLE:
+			goto err_allocate_gaintable;
+		case SEC_TS_ERR_REG_INPUT_DEV:
+			goto err_input_register_device;
+		case SEC_TS_ERR_REG_INPUT_PAD_DEV:
 			goto err_input_pad_register_device;
 		}
 	}
@@ -1888,22 +1930,13 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	sec_class = class_create(THIS_MODULE, "sec");
 #endif
 
-	/* need remove below resource @ remove driver */
-#if (1) //!defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
-	sec_ts_raw_device_init(ts);
-#endif
-	sec_ts_fn_init(ts);
-
 	device_init_wakeup(&client->dev, true);
 
-#ifdef SEC_TS_SUPPORT_CUSTOMLIB
-	sec_ts_check_custom_library(ts);
-	if (ts->use_customlib)
-		sec_ts_set_custom_library(ts);
-
-#endif
-
-	schedule_delayed_work(&ts->work_read_info, msecs_to_jiffies(5000));
+	if (ts->is_fw_corrupted == false) {
+		sec_ts_device_init(ts);
+		schedule_delayed_work(&ts->work_read_info,
+				      msecs_to_jiffies(5000));
+	}
 
 #ifdef SEC_TS_FW_UPDATE_ON_PROBE
 	schedule_delayed_work(&ts->work_fw_update, msecs_to_jiffies(10000));
@@ -2215,6 +2248,18 @@ static void sec_ts_fw_update_work(struct work_struct *work)
 		input_info(true, &ts->client->dev,
 			   "%s: firmware update was unsuccessful.\n",
 			   __func__);
+
+	if (ts->is_fw_corrupted == true && ret == 0) {
+		ret = sec_ts_fw_init(ts);
+		if (ret == SEC_TS_ERR_NA) {
+			ts->is_fw_corrupted = false;
+			sec_ts_device_init(ts);
+			sec_ts_read_info_work(&ts->work_read_info.work);
+		} else
+			input_info(true, &ts->client->dev,
+				"%s: fail to sec_ts_fw_init 0x%x\n",
+				__func__, ret);
+	}
 
 	sec_ts_set_bus_ref(ts, SEC_TS_BUS_REF_FW_UPDATE, false);
 }
