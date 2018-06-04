@@ -174,6 +174,7 @@ static void mdp3_dispatch_clk_off(struct work_struct *work)
 		return;
 
 	mutex_lock(&session->lock);
+	MDSS_XLOG(0x111);
 	if (session->vsync_enabled ||
 		atomic_read(&session->vsync_countdown) > 0) {
 		mutex_unlock(&session->lock);
@@ -182,10 +183,17 @@ static void mdp3_dispatch_clk_off(struct work_struct *work)
 		return;
 	}
 
+	if (!session->clk_on) {
+		mutex_unlock(&session->lock);
+		pr_debug("%s: Clk shut down is done\n", __func__);
+		MDSS_XLOG(XLOG_FUNC_EXIT, __LINE__);
+		return;
+	}
 	if (session->intf->active) {
 retry_dma_done:
 		rc = wait_for_completion_timeout(&session->dma_completion,
 							WAIT_DMA_TIMEOUT);
+		MDSS_XLOG(0x222);
 		if (rc <= 0) {
 			struct mdss_panel_data *panel;
 
@@ -196,6 +204,7 @@ retry_dma_done:
 				if (--retry_count) {
 					pr_err("dmap is busy, retry %d\n",
 						retry_count);
+					MDSS_XLOG(__LINE__, retry_count);
 					goto retry_dma_done;
 				}
 				pr_err("dmap is still busy, bug_on\n");
@@ -380,7 +389,7 @@ static int mdp3_ctrl_async_blit_req(struct msm_fb_data_type *mfd,
 		return -EFAULT;
 	p_req = p + sizeof(req_list_header);
 	count = req_list_header.count;
-	if (count < 0 || count >= MAX_BLIT_REQ)
+	if (count < 0 || count > MAX_BLIT_REQ)
 		return -EINVAL;
 	rc = mdp3_ppp_parse_req(p_req, &req_list_header, 1);
 	if (!rc)
@@ -399,7 +408,7 @@ static int mdp3_ctrl_blit_req(struct msm_fb_data_type *mfd, void __user *p)
 		return -EFAULT;
 	p_req = p + sizeof(struct mdp_blit_req_list);
 	count = req_list_header.count;
-	if (count < 0 || count >= MAX_BLIT_REQ)
+	if (count < 0 || count > MAX_BLIT_REQ)
 		return -EINVAL;
 	req_list_header.sync.acq_fen_fd_cnt = 0;
 	rc = mdp3_ppp_parse_req(p_req, &req_list_header, 0);
@@ -661,8 +670,11 @@ int mdp3_ctrl_get_source_format(u32 imgType)
 	case MDP_RGB_888:
 		format = MDP3_DMA_IBUF_FORMAT_RGB888;
 		break;
+	case MDP_XRGB_8888:
 	case MDP_ARGB_8888:
 	case MDP_RGBA_8888:
+	case MDP_BGRA_8888:
+	case MDP_RGBX_8888:
 		format = MDP3_DMA_IBUF_FORMAT_XRGB8888;
 		break;
 	default:
@@ -983,6 +995,11 @@ end:
 	return rc;
 }
 
+static bool mdp3_is_twm_en(void)
+{
+	return mdp3_res->twm_en;
+}
+
 static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 {
 	int rc = 0;
@@ -1009,8 +1026,10 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 	MDSS_XLOG(XLOG_FUNC_ENTRY, __LINE__, mdss_fb_is_power_on_ulp(mfd),
 		mfd->panel_power_state);
 	panel = mdp3_session->panel;
-	mutex_lock(&mdp3_session->lock);
 
+	cancel_work_sync(&mdp3_session->clk_off_work);
+	mutex_lock(&mdp3_session->lock);
+	MDSS_XLOG(0x111);
 	pr_debug("Requested power state = %d\n", mfd->panel_power_state);
 	if (mdss_fb_is_power_on_lp(mfd)) {
 		/*
@@ -1025,8 +1044,10 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 			pr_debug("fb%d is off already", mfd->index);
 			goto off_error;
 		}
-		if (panel && panel->set_backlight)
+		if (panel && panel->set_backlight) {
+			if (!mdp3_is_twm_en())
 			panel->set_backlight(panel, 0);
+		}
 	}
 
 	/*
@@ -1034,12 +1055,13 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 	 * events need to be sent to the interface so that the
 	 * panel can be configured in low power mode
 	 */
-	if (panel->event_handler)
-		rc = panel->event_handler(panel, MDSS_EVENT_BLANK,
-			(void *) (long int)mfd->panel_power_state);
-	if (rc)
-		pr_err("EVENT_BLANK error (%d)\n", rc);
-
+	if (!mdp3_is_twm_en()) {
+		if (panel->event_handler)
+			rc = panel->event_handler(panel, MDSS_EVENT_BLANK,
+				(void *) (long int)mfd->panel_power_state);
+		if (rc)
+			pr_err("EVENT_BLANK error (%d)\n", rc);
+	}
 	if (intf_stopped) {
 		if (!mdp3_session->clk_on)
 			mdp3_ctrl_clk_enable(mfd, 1);
@@ -1065,9 +1087,27 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 		mdp3_irq_deregister();
 	}
 
-	if (panel->event_handler)
-		rc = panel->event_handler(panel, MDSS_EVENT_PANEL_OFF,
-			(void *) (long int)mfd->panel_power_state);
+	if (panel->event_handler) {
+		if (mdp3_is_twm_en()) {
+			pr_info("TWM active skip panel off, disable disp_en\n");
+			if (gpio_is_valid(panel->panel_en_gpio)) {
+				rc = gpio_direction_output(
+					panel->panel_en_gpio, 1);
+			if (rc) {
+				pr_err("%s:set dir for gpio(%d) FAIL\n",
+					__func__, panel->panel_en_gpio);
+			} else {
+				gpio_set_value((panel->panel_en_gpio), 0);
+				usleep_range(100, 110);
+				pr_debug("%s:set disp_en_gpio_%d Low\n",
+					__func__, panel->panel_en_gpio);
+				}
+			}
+		} else {
+			rc = panel->event_handler(panel, MDSS_EVENT_PANEL_OFF,
+				(void *) (long int)mfd->panel_power_state);
+		}
+	}
 	if (rc)
 		pr_err("EVENT_PANEL_OFF error (%d)\n", rc);
 
@@ -1456,6 +1496,7 @@ static int mdp3_ctrl_display_commit_kickoff(struct msm_fb_data_type *mfd,
 	}
 	mutex_unlock(&mdp3_res->fs_idle_pc_lock);
 
+	cancel_work_sync(&mdp3_session->clk_off_work);
 	mutex_lock(&mdp3_session->lock);
 
 	if (!mdp3_session->status) {
@@ -1463,7 +1504,7 @@ static int mdp3_ctrl_display_commit_kickoff(struct msm_fb_data_type *mfd,
 		mutex_unlock(&mdp3_session->lock);
 		return -EPERM;
 	}
-
+	MDSS_XLOG(0x111);
 	mdp3_ctrl_notify(mdp3_session, MDP_NOTIFY_FRAME_BEGIN);
 	data = mdp3_bufq_pop(&mdp3_session->bufq_in);
 	if (data) {
@@ -1495,7 +1536,7 @@ static int mdp3_ctrl_display_commit_kickoff(struct msm_fb_data_type *mfd,
 			}
 		}
 		mdp3_session->dma_active = 1;
-		init_completion(&mdp3_session->dma_completion);
+		reinit_completion(&mdp3_session->dma_completion);
 		mdp3_ctrl_notify(mdp3_session, MDP_NOTIFY_FRAME_FLUSHED);
 		mdp3_bufq_push(&mdp3_session->bufq_out, data);
 	}
@@ -1644,7 +1685,7 @@ static void mdp3_ctrl_pan_display(struct msm_fb_data_type *mfd)
 			}
 		}
 		mdp3_session->dma_active = 1;
-		init_completion(&mdp3_session->dma_completion);
+		reinit_completion(&mdp3_session->dma_completion);
 		mdp3_ctrl_notify(mdp3_session, MDP_NOTIFY_FRAME_FLUSHED);
 	} else {
 		pr_debug("mdp3_ctrl_pan_display no memory, stop interface");
@@ -2685,6 +2726,8 @@ static int mdp3_ctrl_ioctl_handler(struct msm_fb_data_type *mfd,
 		}
 		mutex_unlock(&mdp3_res->fs_idle_pc_lock);
 		rc = mdp3_ctrl_async_blit_req(mfd, argp);
+		if (!rc)
+			cancel_work_sync(&mdp3_session->clk_off_work);
 		break;
 	case MSMFB_BLIT:
 		mutex_lock(&mdp3_res->fs_idle_pc_lock);
@@ -2692,6 +2735,8 @@ static int mdp3_ctrl_ioctl_handler(struct msm_fb_data_type *mfd,
 			mdp3_ctrl_reset(mfd);
 		mutex_unlock(&mdp3_res->fs_idle_pc_lock);
 		rc = mdp3_ctrl_blit_req(mfd, argp);
+		if (!rc)
+			cancel_work_sync(&mdp3_session->clk_off_work);
 		break;
 	case MSMFB_METADATA_GET:
 		rc = copy_from_user(&metadata, argp, sizeof(metadata));
@@ -2870,6 +2915,7 @@ int mdp3_ctrl_init(struct msm_fb_data_type *mfd)
 	mdp3_interface->configure_panel = mdp3_update_panel_info;
 	mdp3_interface->input_event_handler = NULL;
 	mdp3_interface->signal_retire_fence = NULL;
+	mdp3_interface->is_twm_en = mdp3_is_twm_en;
 
 	mdp3_session = kzalloc(sizeof(struct mdp3_session_data), GFP_KERNEL);
 	if (!mdp3_session)

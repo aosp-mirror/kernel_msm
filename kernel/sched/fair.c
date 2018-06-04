@@ -6155,7 +6155,8 @@ static inline bool task_fits_max(struct task_struct *p, int cpu)
 
 bool __cpu_overutilized(int cpu, int delta)
 {
-	return (capacity_of(cpu) * 1024) < ((cpu_util(cpu) + delta) * capacity_margin);
+	return (capacity_orig_of(cpu) * 1024) <
+			((cpu_util(cpu) + delta) * capacity_margin);
 }
 
 bool cpu_overutilized(int cpu)
@@ -6871,6 +6872,13 @@ static inline bool skip_sg(struct task_struct *p, struct sched_group *sg,
 	/* Are all CPUs isolated in this group? */
 	if (!sg->group_weight)
 		return true;
+
+	/*
+	 * Don't skip a group if a task affinity allows it
+	 * to run only on that group.
+	 */
+	if (cpumask_subset(tsk_cpus_allowed(p), sched_group_cpus(sg)))
+		return false;
 
 	if (!task_fits_max(p, fcpu))
 		return true;
@@ -8804,12 +8812,11 @@ static void update_cpu_capacity(struct sched_domain *sd, int cpu)
 	int max_cap_cpu;
 	unsigned long flags;
 
-	capacity = min(capacity, thermal_cap(cpu));
-
-	cpu_rq(cpu)->cpu_capacity_orig = capacity;
-
 	capacity *= arch_scale_max_freq_capacity(sd, cpu);
 	capacity >>= SCHED_CAPACITY_SHIFT;
+
+	capacity = min(capacity, thermal_cap(cpu));
+	cpu_rq(cpu)->cpu_capacity_orig = capacity;
 
 	mcc = &cpu_rq(cpu)->rd->max_cpu_capacity;
 
