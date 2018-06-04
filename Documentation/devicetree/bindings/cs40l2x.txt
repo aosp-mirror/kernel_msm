@@ -92,6 +92,18 @@ Optional properties:
     240000 / 48000 = 5 seconds). If this value is specified as zero, the timeout
     is effectively disabled.
 
+  - cirrus,gpio1-mode : Specifies the operating mode of the GPIO1 pin, equal to
+    one of the following.
+
+    0 = enabled by default
+    1 = disabled by default
+    2 = disabled by default, but automatically enabled and disabled upon suspend
+        and resume, respectively
+
+    If this value is omitted or given an invalid value, mode 0 (enabled by
+    default) is assumed. Regardless of mode, the GPIO1 pin can be enabled or
+    disabled at will from user space using the gpio1_enable sysfs control.
+
 Example:
 
   cs40l20: cs40l20@43 {
