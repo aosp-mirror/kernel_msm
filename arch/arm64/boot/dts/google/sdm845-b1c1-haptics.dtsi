@@ -40,6 +40,9 @@
 		cirrus,redc-default = <327728>; /* 15 Ohm */
 		cirrus,redc-min = <302112>; /* 13.5 Ohm */
 		cirrus,redc-max = <369248>; /* 16.5 Ohm */
+		cirrus,gpio1-rise-index = <5>; /* 100% HEAVY_CLICK */
+		cirrus,gpio1-fall-index = <4>; /* 75% HEAVY_CLICK */
+		cirrus,gpio1-fall-timeout = <47278>; /* 985 ms */
 		status = "ok";
 	};
 };
