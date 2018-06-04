@@ -371,6 +371,54 @@ static unsigned int cs40l2x_dsp_reg(struct cs40l2x_private *cs40l2x,
 	return CS40L2X_DEVID;
 }
 
+static ssize_t cs40l2x_gpio1_enable_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int val;
+
+	mutex_lock(&cs40l2x->lock);
+	ret = regmap_read(cs40l2x->regmap,
+			cs40l2x_dsp_reg(cs40l2x, "GPIO_ENABLE",
+					CS40L2X_XM_UNPACKED_TYPE), &val);
+	mutex_unlock(&cs40l2x->lock);
+
+	if (ret) {
+		pr_err("Failed to read GPIO1 configuration\n");
+		return ret;
+	}
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", val);
+}
+
+static ssize_t cs40l2x_gpio1_enable_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int val;
+
+	ret = kstrtou32(buf, 10, &val);
+	if (ret)
+		return -EINVAL;
+
+	mutex_lock(&cs40l2x->lock);
+	ret = regmap_write(cs40l2x->regmap,
+			cs40l2x_dsp_reg(cs40l2x, "GPIO_ENABLE",
+					CS40L2X_XM_UNPACKED_TYPE),
+			val ? CS40L2X_GPIO1_ENABLED : CS40L2X_GPIO1_DISABLED);
+	mutex_unlock(&cs40l2x->lock);
+
+	if (ret) {
+		pr_err("Failed to write GPIO1 configuration\n");
+		return ret;
+	}
+
+	return count;
+}
+
 static ssize_t cs40l2x_gpio1_rise_index_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
@@ -1045,6 +1093,8 @@ static DEVICE_ATTR(cp_trigger_index, 0660, cs40l2x_cp_trigger_index_show,
 		cs40l2x_cp_trigger_index_store);
 static DEVICE_ATTR(cp_trigger_queue, 0660, cs40l2x_cp_trigger_queue_show,
 		cs40l2x_cp_trigger_queue_store);
+static DEVICE_ATTR(gpio1_enable, 0660, cs40l2x_gpio1_enable_show,
+		cs40l2x_gpio1_enable_store);
 static DEVICE_ATTR(gpio1_rise_index, 0660, cs40l2x_gpio1_rise_index_show,
 		cs40l2x_gpio1_rise_index_store);
 static DEVICE_ATTR(gpio1_fall_index, 0660, cs40l2x_gpio1_fall_index_show,
@@ -1073,6 +1123,7 @@ static DEVICE_ATTR(num_waves, 0660, cs40l2x_num_waves_show, NULL);
 static struct attribute *cs40l2x_dev_attrs[] = {
 	&dev_attr_cp_trigger_index.attr,
 	&dev_attr_cp_trigger_queue.attr,
+	&dev_attr_gpio1_enable.attr,
 	&dev_attr_gpio1_rise_index.attr,
 	&dev_attr_gpio1_fall_index.attr,
 	&dev_attr_gpio1_fall_timeout.attr,
@@ -1701,6 +1752,17 @@ static void cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
 	struct device *dev = cs40l2x->dev;
 	unsigned int val;
 	int dsp_timeout = CS40L2X_DSP_TIMEOUT_COUNT;
+
+	if (cs40l2x->pdata.gpio1_mode != CS40L2X_GPIO1_MODE_DEF_ON) {
+		ret = regmap_write(cs40l2x->regmap,
+				cs40l2x_dsp_reg(cs40l2x, "GPIO_ENABLE",
+						CS40L2X_XM_UNPACKED_TYPE),
+				CS40L2X_GPIO1_DISABLED);
+		if (ret) {
+			dev_err(dev, "Failed to pre-configure GPIO1\n");
+			return;
+		}
+	}
 
 	switch (cs40l2x->revid) {
 	case CS40L2X_REVID_A0:
@@ -2583,6 +2645,14 @@ static int cs40l2x_handle_of_data(struct i2c_client *i2c_client,
 	if (!ret)
 		pdata->gpio1_fall_timeout = out_val | CS40L2X_PDATA_PRESENT;
 
+	ret = of_property_read_u32(np, "cirrus,gpio1-mode", &out_val);
+	if (!ret) {
+		if (out_val > CS40L2X_GPIO1_MODE_MAX)
+			dev_warn(dev, "Ignored default gpio1_mode\n");
+		else
+			pdata->gpio1_mode = out_val;
+	}
+
 	return 0;
 }
 
@@ -2938,6 +3008,50 @@ static int cs40l2x_i2c_remove(struct i2c_client *i2c_client)
 	return 0;
 }
 
+static int __maybe_unused cs40l2x_suspend(struct device *dev)
+{
+	struct cs40l2x_private *cs40l2x = dev_get_drvdata(dev);
+	int ret = 0;
+
+	mutex_lock(&cs40l2x->lock);
+
+	if (cs40l2x->pdata.gpio1_mode == CS40L2X_GPIO1_MODE_AUTO) {
+		ret = regmap_write(cs40l2x->regmap,
+				cs40l2x_dsp_reg(cs40l2x, "GPIO_ENABLE",
+						CS40L2X_XM_UNPACKED_TYPE),
+				CS40L2X_GPIO1_ENABLED);
+		if (ret)
+			dev_err(dev, "Failed to enable GPIO1 upon suspend\n");
+	}
+
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
+static int __maybe_unused cs40l2x_resume(struct device *dev)
+{
+	struct cs40l2x_private *cs40l2x = dev_get_drvdata(dev);
+	int ret = 0;
+
+	mutex_lock(&cs40l2x->lock);
+
+	if (cs40l2x->pdata.gpio1_mode == CS40L2X_GPIO1_MODE_AUTO) {
+		ret = regmap_write(cs40l2x->regmap,
+				cs40l2x_dsp_reg(cs40l2x, "GPIO_ENABLE",
+						CS40L2X_XM_UNPACKED_TYPE),
+				CS40L2X_GPIO1_DISABLED);
+		if (ret)
+			dev_err(dev, "Failed to disable GPIO1 upon resume\n");
+	}
+
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
+static SIMPLE_DEV_PM_OPS(cs40l2x_pm_ops, cs40l2x_suspend, cs40l2x_resume);
+
 static const struct of_device_id cs40l2x_of_match[] = {
 	{ .compatible = "cirrus,cs40l20" },
 	{ .compatible = "cirrus,cs40l25" },
@@ -2962,6 +3076,7 @@ static struct i2c_driver cs40l2x_i2c_driver = {
 	.driver = {
 		.name = "cs40l2x",
 		.of_match_table = cs40l2x_of_match,
+		.pm = &cs40l2x_pm_ops,
 	},
 	.id_table = cs40l2x_id,
 	.probe = cs40l2x_i2c_probe,

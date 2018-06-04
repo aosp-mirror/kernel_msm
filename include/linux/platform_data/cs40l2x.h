@@ -26,6 +26,7 @@ struct cs40l2x_platform_data {
 	unsigned int gpio1_rise_index;
 	unsigned int gpio1_fall_index;
 	unsigned int gpio1_fall_timeout;
+	unsigned int gpio1_mode;
 };
 
 #endif /* __CS40L2X_H */

@@ -671,7 +671,7 @@
 #define CS40L2X_ALGO_REV_MASK		0xFF0000
 
 #define CS40L2X_NUM_ALGOS_MAX		16
-#define CS40L2X_FW_REV_MIN		0x040100
+#define CS40L2X_FW_REV_MIN		0x040200
 
 #define CS40L2X_ALGO_ID_SIZE		4
 #define CS40L2X_COEFF_COUNT_SIZE	4
@@ -745,6 +745,14 @@
 
 #define CS40L2X_PDATA_PRESENT		0x80000000
 #define CS40L2X_PDATA_MASK		~CS40L2X_PDATA_PRESENT
+
+#define CS40L2X_GPIO1_MODE_DEF_ON	0
+#define CS40L2X_GPIO1_MODE_DEF_OFF	1
+#define CS40L2X_GPIO1_MODE_AUTO		2
+#define CS40L2X_GPIO1_MODE_MAX		CS40L2X_GPIO1_MODE_AUTO
+
+#define CS40L2X_GPIO1_ENABLED		1
+#define CS40L2X_GPIO1_DISABLED		0
 
 bool cs40l2x_readable_reg(struct device *dev, unsigned int reg);
 bool cs40l2x_precious_reg(struct device *dev, unsigned int reg);
