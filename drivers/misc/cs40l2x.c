@@ -2730,6 +2730,12 @@ static const struct reg_sequence cs40l2x_rev_a0_errata[] = {
 static const struct reg_sequence cs40l2x_rev_b0_errata[] = {
 	{CS40L2X_PLL_LOOP_PARAM,	0x000C1837},
 	{CS40L2X_PLL_MISC_CTRL,		0x03008E0E},
+	{CS40L2X_TEST_KEY_CTL,		CS40L2X_TEST_KEY_UNLOCK_CODE1},
+	{CS40L2X_TEST_KEY_CTL,		CS40L2X_TEST_KEY_UNLOCK_CODE2},
+	{CS40L2X_OTP_TRIM_12,		0x002F0065},
+	{CS40L2X_OTP_TRIM_13,		0x00002B4F},
+	{CS40L2X_TEST_KEY_CTL,		CS40L2X_TEST_KEY_RELOCK_CODE1},
+	{CS40L2X_TEST_KEY_CTL,		CS40L2X_TEST_KEY_RELOCK_CODE2},
 };
 
 static const struct reg_sequence cs40l2x_basic_mode_revert[] = {
