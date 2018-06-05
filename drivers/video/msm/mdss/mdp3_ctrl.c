@@ -706,8 +706,11 @@ int mdp3_ctrl_get_source_format(u32 imgType)
 	case MDP_RGB_888:
 		format = MDP3_DMA_IBUF_FORMAT_RGB888;
 		break;
+	case MDP_XRGB_8888:
 	case MDP_ARGB_8888:
 	case MDP_RGBA_8888:
+	case MDP_BGRA_8888:
+	case MDP_RGBX_8888:
 		format = MDP3_DMA_IBUF_FORMAT_XRGB8888;
 		break;
 	default:
@@ -3045,7 +3048,6 @@ int mdp3_ctrl_init(struct msm_fb_data_type *mfd)
 		goto init_done;
 	}
 
-	mfd->skip_koff_wait = true;
 	mdp3_session->dma->output_config.out_sel = intf_type;
 	mdp3_session->mfd = mfd;
 	mdp3_session->panel = dev_get_platdata(&mfd->pdev->dev);
