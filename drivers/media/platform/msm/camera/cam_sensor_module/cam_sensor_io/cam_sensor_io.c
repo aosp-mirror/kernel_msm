@@ -14,12 +14,12 @@
 #include "cam_sensor_i2c.h"
 
 int32_t camera_io_dev_poll(struct camera_io_master *io_master_info,
-	uint32_t addr, uint16_t data, uint32_t data_mask,
+	uint32_t addr, uint32_t data, uint32_t data_mask,
 	enum camera_sensor_i2c_type addr_type,
 	enum camera_sensor_i2c_type data_type,
 	uint32_t delay_ms)
 {
-	int16_t mask = data_mask & 0xFF;
+	uint32_t mask = data_mask & 0xFFFFFFFF;
 
 	if (!io_master_info) {
 		CAM_ERR(CAM_SENSOR, "Invalid Args");
