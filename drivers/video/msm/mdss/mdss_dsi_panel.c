@@ -2340,6 +2340,13 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->idle_off_cmds,
 		"qcom,mdss-dsi-idle-off-command", "qcom,mdss-dsi-idle-off-command-state");
 
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->hbm0_on_cmds,
+		"qcom,mdss-dsi-hbm0-on-command", NULL);
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->hbm1_on_cmds,
+		"qcom,mdss-dsi-hbm1-on-command", NULL);
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->hbm_off_cmds,
+		"qcom,mdss-dsi-hbm-off-command", NULL);
+
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-idle-fps", &tmp);
 	pinfo->mipi.frame_rate_idle = (!rc ? tmp : 60);
 
