@@ -167,7 +167,7 @@ int32_t cam_cci_i2c_write_continuous_table(
 }
 
 static int32_t cam_cci_i2c_compare(struct cam_sensor_cci_client *client,
-	uint32_t addr, uint16_t data, uint16_t data_mask,
+	uint32_t addr, uint32_t data, uint32_t data_mask,
 	enum camera_sensor_i2c_type data_type,
 	enum camera_sensor_i2c_type addr_type)
 {
@@ -179,14 +179,27 @@ static int32_t cam_cci_i2c_compare(struct cam_sensor_cci_client *client,
 	if (rc < 0)
 		return rc;
 
-	reg_data = reg_data & 0xFFFF;
+	switch (data_type) {
+	case CAMERA_SENSOR_I2C_TYPE_BYTE:
+		reg_data = reg_data & 0xFF;
+		break;
+	case CAMERA_SENSOR_I2C_TYPE_3B:
+		reg_data = reg_data & 0xFFFFFF;
+		break;
+	case CAMERA_SENSOR_I2C_TYPE_DWORD:
+		break;
+	default:
+		reg_data = reg_data & 0xFFFF;
+		break;
+	}
+
 	if (data == (reg_data & ~data_mask))
 		return I2C_COMPARE_MATCH;
 	return I2C_COMPARE_MISMATCH;
 }
 
 int32_t cam_cci_i2c_poll(struct cam_sensor_cci_client *client,
-	uint32_t addr, uint16_t data, uint16_t data_mask,
+	uint32_t addr, uint32_t data, uint32_t data_mask,
 	enum camera_sensor_i2c_type data_type,
 	enum camera_sensor_i2c_type addr_type,
 	uint32_t delay_ms)
