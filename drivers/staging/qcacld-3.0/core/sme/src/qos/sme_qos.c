@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -4111,7 +4111,6 @@ static QDF_STATUS sme_qos_del_ts_req(tpAniSirGlobal pMac,
 	struct sme_qos_acinfo *pACInfo;
 	tSirDeltsReq *pMsg;
 	sme_QosWmmTspecInfo *pTspecInfo;
-	QDF_STATUS status = QDF_STATUS_E_FAILURE;
 
 #ifdef FEATURE_WLAN_DIAG_SUPPORT
 	WLAN_HOST_DIAG_EVENT_DEF(qos, host_event_wlan_qos_payload_type);
@@ -4181,23 +4180,23 @@ static QDF_STATUS sme_qos_del_ts_req(tpAniSirGlobal pMac,
 		  pTspecInfo->ts_info.up, pTspecInfo->ts_info.tid);
 	qdf_mem_zero(&pACInfo->curr_QoSInfo[tspec_mask - 1],
 		     sizeof(sme_QosWmmTspecInfo));
-	if (QDF_IS_STATUS_SUCCESS(cds_send_mb_message_to_mac(pMsg))) {
-		status = QDF_STATUS_SUCCESS;
-		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
-			  "%s: %d: sme_qos_del_ts_req:Test: sent down a DELTS req to PE",
-			  __func__, __LINE__);
-		/* event: EVENT_WLAN_QOS */
-#ifdef FEATURE_WLAN_DIAG_SUPPORT
-		qos.eventId = SME_QOS_DIAG_DELTS;
-		qos.reasonCode = SME_QOS_DIAG_USER_REQUESTED;
-		WLAN_HOST_DIAG_EVENT_REPORT(&qos, EVENT_WLAN_QOS);
-#endif /* FEATURE_WLAN_DIAG_SUPPORT */
-	}
-	sme_set_tspec_uapsd_mask_per_session(pMac,
-			&pMsg->req.tspec.tsinfo,
-			sessionId);
 
-	return status;
+	if (!QDF_IS_STATUS_SUCCESS(cds_send_mb_message_to_mac(pMsg))) {
+		sme_err("DELTS req to PE failed");
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	sme_debug("sent down a DELTS req to PE");
+#ifdef FEATURE_WLAN_DIAG_SUPPORT
+	qos.eventId = SME_QOS_DIAG_DELTS;
+	qos.reasonCode = SME_QOS_DIAG_USER_REQUESTED;
+	WLAN_HOST_DIAG_EVENT_REPORT(&qos, EVENT_WLAN_QOS);
+#endif
+
+	sme_set_tspec_uapsd_mask_per_session(pMac, &pMsg->req.tspec.tsinfo,
+					     sessionId);
+
+	return QDF_STATUS_SUCCESS;
 }
 
 /*
@@ -4939,8 +4938,12 @@ static QDF_STATUS sme_qos_process_handoff_assoc_req_ev(tpAniSirGlobal pMac,
 	if (csr_roam_is11r_assoc(pMac, sessionId))
 		pSession->ftHandoffInProgress = true;
 #endif
-	/* If FT handoff is in progress, legacy handoff need not be enabled */
-	if (!pSession->ftHandoffInProgress)
+	/* If FT handoff/ESE in progress, legacy handoff need not be enabled */
+	if (!pSession->ftHandoffInProgress
+#ifdef FEATURE_WLAN_ESE
+	    && !csr_roam_is_ese_assoc(pMac, sessionId)
+#endif
+	   )
 		pSession->handoffRequested = true;
 
 	/* this session no longer needs UAPSD */
