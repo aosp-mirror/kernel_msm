@@ -2460,6 +2460,9 @@ QDF_STATUS sme_process_msg(tHalHandle hHal, cds_msg_t *pMsg)
 {
 	QDF_STATUS status = QDF_STATUS_E_FAILURE;
 	tpAniSirGlobal pMac = PMAC_STRUCT(hHal);
+	struct sir_peer_info *peer_stats;
+	struct sir_peer_info_resp *peer_info_rsp;
+
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD
 	tSmeCmd *sme_cmd = NULL;
 #endif
@@ -2782,6 +2785,17 @@ QDF_STATUS sme_process_msg(tHalHandle hHal, cds_msg_t *pMsg)
 		if (pMac->sme.pget_peer_info_ind_cb)
 			pMac->sme.pget_peer_info_ind_cb(pMsg->bodyptr,
 				pMac->sme.pget_peer_info_cb_context);
+		if (pMsg->bodyptr) {
+			peer_info_rsp = (struct sir_peer_info_resp *)
+							(pMsg->bodyptr);
+			peer_stats = (struct sir_peer_info *)
+							(peer_info_rsp->info);
+			if (peer_stats) {
+				pMac->peer_rssi = peer_stats[0].rssi;
+				pMac->peer_txrate = peer_stats[0].tx_rate;
+				pMac->peer_rxrate = peer_stats[0].rx_rate;
+			}
+		}
 		qdf_mem_free(pMsg->bodyptr);
 		break;
 	case eWNI_SME_GET_PEER_INFO_EXT_IND:
@@ -10895,6 +10909,38 @@ QDF_STATUS sme_get_link_speed(tHalHandle hHal, tSirLinkSpeedInfo *lsReq,
 	return status;
 }
 
+QDF_STATUS sme_get_peer_stats(tpAniSirGlobal mac, struct sir_peer_info_req req)
+{
+	QDF_STATUS qdf_status;
+	cds_msg_t message;
+
+	qdf_status = sme_acquire_global_lock(&mac->sme);
+	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
+		sme_debug("Failed to get Lock");
+		return qdf_status;
+	}
+	/* serialize the req through MC thread */
+	message.bodyptr = qdf_mem_malloc(sizeof(req));
+	if (NULL == message.bodyptr) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+			  "%s: Memory allocation failed.", __func__);
+		sme_release_global_lock(&mac->sme);
+		return QDF_STATUS_E_NOMEM;
+	}
+	qdf_mem_copy(message.bodyptr, &req, sizeof(req));
+	message.type = WMA_GET_PEER_INFO;
+	message.reserved = 0;
+	qdf_status = cds_mq_post_message(QDF_MODULE_ID_WMA, &message);
+	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
+		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
+			  "%s: Post get peer info msg fail", __func__);
+		qdf_mem_free(message.bodyptr);
+		qdf_status = QDF_STATUS_E_FAILURE;
+	}
+		sme_release_global_lock(&mac->sme);
+		return qdf_status;
+}
+
 QDF_STATUS sme_get_peer_info(tHalHandle hal, struct sir_peer_info_req req,
 			void *context,
 			void (*callbackfn)(struct sir_peer_info_resp *param,
@@ -18755,6 +18801,85 @@ QDF_STATUS sme_destroy_config(tHalHandle hal)
 
 	mac_ctx->enable_action_oui = false;
 	status = sme_destroy_action_oui_info(mac_ctx);
+
+	return status;
+}
+
+bool sme_is_sta_key_exchange_in_progress(tHalHandle hal, uint8_t session_id)
+{
+	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal);
+
+	if (!CSR_IS_SESSION_VALID(mac_ctx, session_id)) {
+		sme_err("Invalid session id: %d", session_id);
+		return false;
+	}
+
+	return CSR_IS_WAIT_FOR_KEY(mac_ctx, session_id);
+}
+
+QDF_STATUS sme_fast_reassoc(tHalHandle hal, tCsrRoamProfile *profile,
+			    const tSirMacAddr bssid, int channel,
+			    uint8_t vdev_id, const tSirMacAddr connected_bssid)
+{
+	QDF_STATUS status;
+	struct wma_roam_invoke_cmd *fastreassoc;
+	cds_msg_t msg = {0};
+	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal);
+
+	fastreassoc = qdf_mem_malloc(sizeof(*fastreassoc));
+	if (NULL == fastreassoc) {
+		sme_err("qdf_mem_malloc failed for fastreassoc");
+		return QDF_STATUS_E_NOMEM;
+	}
+	/* if both are same then set the flag */
+	if (!qdf_mem_cmp(connected_bssid, bssid, ETH_ALEN)) {
+		fastreassoc->is_same_bssid = true;
+		sme_debug("bssid same, bssid[%pM]", bssid);
+	}
+	fastreassoc->vdev_id = vdev_id;
+	fastreassoc->bssid[0] = bssid[0];
+	fastreassoc->bssid[1] = bssid[1];
+	fastreassoc->bssid[2] = bssid[2];
+	fastreassoc->bssid[3] = bssid[3];
+	fastreassoc->bssid[4] = bssid[4];
+	fastreassoc->bssid[5] = bssid[5];
+
+	status = sme_get_beacon_frm(hal, profile, bssid,
+				    &fastreassoc->frame_buf,
+				    &fastreassoc->frame_len,
+				    &channel);
+
+	if (!channel) {
+		sme_err("channel retrieval from BSS desc fails!");
+		qdf_mem_free(fastreassoc);
+		return QDF_STATUS_E_FAULT;
+	}
+
+	fastreassoc->channel = channel;
+	if (QDF_STATUS_SUCCESS != status) {
+		sme_warn("sme_get_beacon_frm failed");
+		fastreassoc->frame_buf = NULL;
+		fastreassoc->frame_len = 0;
+	}
+
+	if (csr_is_auth_type_ese(mac_ctx->roam.roamSession[vdev_id].
+				connectedProfile.AuthType)) {
+		sme_err("Beacon is not required for ESE");
+		if (fastreassoc->frame_len) {
+			qdf_mem_free(fastreassoc->frame_buf);
+			fastreassoc->frame_buf = NULL;
+			fastreassoc->frame_len = 0;
+		}
+	}
+
+	msg.type = SIR_HAL_ROAM_INVOKE;
+	msg.reserved = 0;
+	msg.bodyptr = fastreassoc;
+	status = cds_mq_post_message(QDF_MODULE_ID_WMA, &msg);
+	if (QDF_STATUS_SUCCESS != status) {
+		sme_err("Not able to post ROAM_INVOKE_CMD message to WMA");
+		qdf_mem_free(fastreassoc);
+	}
 
 	return status;
 }

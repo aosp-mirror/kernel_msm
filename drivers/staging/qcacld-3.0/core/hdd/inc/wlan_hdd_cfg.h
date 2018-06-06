@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -11495,6 +11495,8 @@ enum hw_filter_mode {
  * <ini>
  * gActionOUIConnect1x1 - Used to specify action OUIs for 1x1 connection
  * @Default: 000C43 00 25 42 001018 06 02FFF02C0000 BC 25 42 001018 06 02FF040C0000 BC 25 42 00037F 00 35 6C
+ * Note: User should strictly add new action OUIs at the end of this
+ * default value.
  *
  * Default OUIs: (All values in Hex)
  * OUI 1 : 000C43
@@ -11535,7 +11537,22 @@ enum hw_filter_mode {
 /*
  * <ini>
  * gActionOUIITOExtension - Used to extend in-activity time for specified APs
- * @Default: Empty string
+ * @Default: 00037F 06 01010000FF7F FC 01 000AEB 02 0100 C0 01
+ * Note: User should strictly add new action OUIs at the end of this
+ * default value.
+ *
+ * Default OUIs: (All values in Hex)
+ * OUI 1: 00037F
+ *   OUI data Len: 06
+ *   OUI Data: 01010000FF7F
+ *   OUI data Mask: FC - 11111100
+ *   Info Mask : 01 - only OUI present in Info mask
+ *
+ * OUI 2: 000AEB
+ *   OUI data Len: 02
+ *   OUI Data: 0100
+ *   OUI data Mask: C0 - 11000000
+ *   Info Mask : 01 - only OUI present in Info mask
  *
  * This ini is used to specify AP OUIs using which station's in-activity time
  * can be extended with the respective APs
@@ -11549,7 +11566,7 @@ enum hw_filter_mode {
  * </ini>
  */
 #define CFG_ACTION_OUI_ITO_EXTENSION_NAME    "gActionOUIITOExtension"
-#define CFG_ACTION_OUI_ITO_EXTENSION_DEFAULT ""
+#define CFG_ACTION_OUI_ITO_EXTENSION_DEFAULT "00037F 06 01010000FF7F FC 01 000AEB 02 0100 C0 01"
 
 /*
  * <ini>
@@ -13181,6 +13198,23 @@ enum hw_filter_mode {
 #define CFG_OFFLOAD_NEIGHBOR_REPORT_MAX_REQ_CAP_MAX     (300)
 #define CFG_OFFLOAD_NEIGHBOR_REPORT_MAX_REQ_CAP_DEFAULT (3)
 
+/*
+ * <ini>
+ * gTxSchDelay - Enable/Disable Tx sch delay
+ * @Min: 0
+ * @Max: 5
+ * @Default: 2
+ *
+ * Usage: Internal/External
+ *
+ * </ini>
+ */
+
+#define CFG_TX_SCH_DELAY_NAME          "gTxSchDelay"
+#define CFG_TX_SCH_DELAY_MIN           (0)
+#define CFG_TX_SCH_DELAY_MAX           (5)
+#define CFG_TX_SCH_DELAY_DEFAULT       (2)
+
 /*---------------------------------------------------------------------------
    Type declarations
    -------------------------------------------------------------------------*/
@@ -14041,6 +14075,7 @@ struct hdd_config {
 	uint32_t neighbor_report_offload_per_threshold_offset;
 	uint32_t neighbor_report_offload_cache_timeout;
 	uint32_t neighbor_report_offload_max_req_cap;
+	uint8_t enable_tx_sch_delay;
 };
 
 #define VAR_OFFSET(_Struct, _Var) (offsetof(_Struct, _Var))
