@@ -54,6 +54,7 @@
 #include "mdss_debug.h"
 #include "mdss_smmu.h"
 #include "mdss_mdp.h"
+#include "mdss_dsi.h"
 
 #ifdef CONFIG_FB_MSM_TRIPLE_BUFFER
 #define MDSS_FB_NUM 3
@@ -86,6 +87,8 @@ static u32 mdss_fb_pseudo_palette[16] = {
 };
 
 static struct msm_mdp_interface *mdp_instance;
+
+static bool g_boost_mode = 0;
 
 static int mdss_fb_register(struct msm_fb_data_type *mfd);
 static int mdss_fb_open(struct fb_info *info, int user);
@@ -761,6 +764,65 @@ static ssize_t mdss_fb_get_dfps_mode(struct device *dev,
 	return ret;
 }
 
+static ssize_t mdss_fb_get_boost_mode(struct device *dev,
+    struct device_attribute *attr, char *buf)
+{
+    int ret;
+
+    ret = scnprintf(buf, PAGE_SIZE, "boost = %d\n", g_boost_mode);
+
+    return ret;
+}
+
+static ssize_t mdss_fb_set_boost_mode(struct device *dev,
+    struct device_attribute *attr, const char *buf, size_t count)
+{
+    int rc = 0;
+    int boost_mode = 0;
+
+    struct fb_info *fbi = dev_get_drvdata(dev);
+    struct msm_fb_data_type *mfd = fbi->par;
+
+    struct mdss_panel_data *pdata;
+    struct mdss_dsi_ctrl_pdata *ctrl = NULL;
+
+    pdata = dev_get_platdata(&mfd->pdev->dev);
+    if(!pdata)
+    {
+        pr_err("no panel connected!\n");
+        return -EINVAL;
+    }
+
+    ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata, panel_data);
+
+    rc = kstrtoint(buf, 10, &boost_mode);
+    if(rc)
+    {
+        pr_err("kstrtoint failed. rc=%d\n", rc);
+        return rc;
+    }
+
+    if(mfd->panel_info->type !=  MIPI_CMD_PANEL)
+    {
+        pr_err("support for command mode panel only\n");
+    }
+    else
+    {
+        if(boost_mode != 0)
+        {
+            mdss_dsi_brightness_boost_on(ctrl);
+            g_boost_mode = 1;
+        }
+        else
+        {
+            mdss_dsi_brightness_boost_off(ctrl);
+            g_boost_mode = 0;
+        }
+    }
+
+    return count;
+}
+
 static DEVICE_ATTR(msm_fb_type, S_IRUGO, mdss_fb_get_type, NULL);
 static DEVICE_ATTR(msm_fb_split, S_IRUGO | S_IWUSR, mdss_fb_show_split,
 					mdss_fb_store_split);
@@ -777,6 +839,9 @@ static DEVICE_ATTR(msm_fb_panel_status, S_IRUGO | S_IWUSR,
 	mdss_fb_get_panel_status, mdss_fb_force_panel_dead);
 static DEVICE_ATTR(msm_fb_dfps_mode, S_IRUGO | S_IWUSR,
 	mdss_fb_get_dfps_mode, mdss_fb_change_dfps_mode);
+static DEVICE_ATTR(msm_fb_boost_mode, S_IRUGO | S_IWUSR,
+	mdss_fb_get_boost_mode, mdss_fb_set_boost_mode);
+
 static struct attribute *mdss_fb_attrs[] = {
 	&dev_attr_msm_fb_type.attr,
 	&dev_attr_msm_fb_split.attr,
@@ -788,6 +853,7 @@ static struct attribute *mdss_fb_attrs[] = {
 	&dev_attr_msm_fb_thermal_level.attr,
 	&dev_attr_msm_fb_panel_status.attr,
 	&dev_attr_msm_fb_dfps_mode.attr,
+	&dev_attr_msm_fb_boost_mode.attr,
 	NULL,
 };
 

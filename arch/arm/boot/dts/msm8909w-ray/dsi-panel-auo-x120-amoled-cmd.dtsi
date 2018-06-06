@@ -63,11 +63,68 @@
 		qcom,mdss-dsi-on-command-state = "dsi_hs_mode";
 		qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
 		qcom,mdss-dsi-idle-on-command = [
-			05 01 00 00 00 00 01 39 /* Idle-Mode On */
-			];
+			05 01 00 00 1F 00 01 39 /* Idle-Mode On */
+		];
 		qcom,mdss-dsi-idle-off-command = [
-			05 01 00 00 00 00 01 38 /* Idle-Mode Off  */
-			];
+			05 01 00 00 1F 00 01 38 /* Idle-Mode Off */
+		];
+		qcom,mdss-dsi-hbm0-on-command = [
+			15 01 00 00 00 00 02 FE 06
+			15 01 00 00 00 00 02 AC 02
+			15 01 00 00 00 00 02 AB 88
+			15 01 00 00 00 00 02 B6 01
+			15 01 00 00 00 00 02 FE 00
+			15 01 00 00 65 00 02 55 01
+			15 01 00 00 00 00 02 FE 01
+			15 01 00 00 00 00 02 29 42
+			15 01 00 00 00 00 02 FE 05
+			15 01 00 00 00 00 02 00 12
+			15 01 00 00 00 00 02 2A 08
+			15 01 00 00 00 00 02 2F 04
+			15 01 00 00 00 00 02 36 33
+			15 01 00 00 00 00 02 FE 00
+			15 01 00 00 1F 00 02 B0 06
+			15 01 00 00 00 00 02 FE 01
+			15 01 00 00 00 00 02 29 40
+			15 01 00 00 00 00 02 11 93
+			15 01 00 00 00 00 02 19 44
+			15 01 00 00 00 00 02 FE 00
+		];
+		qcom,mdss-dsi-hbm1-on-command = [
+			15 01 00 00 00 00 02 FE 00
+			15 01 00 00 65 00 02 55 00
+			15 01 00 00 00 00 02 FE 01
+			15 01 00 00 00 00 02 29 42
+			15 01 00 00 00 00 02 FE 05
+			15 01 00 00 00 00 02 00 12
+			15 01 00 00 00 00 02 2A 08
+			15 01 00 00 00 00 02 2F 04
+			15 01 00 00 00 00 02 36 33
+			15 01 00 00 00 00 02 FE 00
+			15 01 00 00 1F 00 02 B0 06
+			15 01 00 00 00 00 02 FE 01
+			15 01 00 00 00 00 02 29 40
+			15 01 00 00 00 00 02 11 93
+			15 01 00 00 1F 00 02 19 44
+			15 01 00 00 00 00 02 FE 00
+		];
+		qcom,mdss-dsi-hbm-off-command = [
+			15 01 00 00 00 00 02 FE 01
+			15 01 00 00 00 00 02 29 42
+			15 01 00 00 00 00 02 FE 00
+			15 01 00 00 1F 00 02 B0 04
+			15 01 00 00 00 00 02 FE 05
+			15 01 00 00 00 00 02 00 12
+			15 01 00 00 00 00 02 2A 08
+			15 01 00 00 00 00 02 2F 04
+			15 01 00 00 00 00 02 36 41
+			15 01 00 00 00 00 02 FE 01
+			15 01 00 00 00 00 02 29 40
+			15 01 00 00 00 00 02 11 80
+			15 01 00 00 00 00 02 19 00
+			15 01 00 00 00 00 02 FE 00
+			15 01 00 00 00 00 02 55 00
+		];
 		qcom,mdss-dsi-h-sync-pulse = <1>;
 		qcom,mdss-dsi-traffic-mode = "burst_mode";
 		qcom,mdss-dsi-lane-map = "lane_map_0123";
@@ -75,7 +132,7 @@
 		qcom,mdss-dsi-bllp-power-mode;
 		qcom,mdss-dsi-lane-0-state;
 		qcom,mdss-tear-check-frame-rate = <4500>;
-		qcom,mdss-dsi-panel-clockrate = <229213400>;
+		qcom,mdss-dsi-panel-clockrate = <229213440>;
 		qcom,mdss-dsi-te-pin-select = <1>;
 		qcom,mdss-dsi-te-dcs-command = <1>;
 		qcom,mdss-dsi-te-check-enable;
