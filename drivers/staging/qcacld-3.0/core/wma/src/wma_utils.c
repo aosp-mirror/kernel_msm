@@ -1476,6 +1476,8 @@ static int wma_unified_radio_tx_power_level_stats_event_handler(void *handle,
 	uint8_t *tx_power_level_values;
 	tSirLLStatsResults *link_stats_results;
 	tSirWifiRadioStat *rs_results;
+	uint32_t max_total_num_tx_power_levels = MAX_TPC_LEVELS * NUM_OF_BANDS *
+						MAX_SPATIAL_STREAM_ANY_V3;
 
 	tpAniSirGlobal mac = cds_get_context(QDF_MODULE_ID_PE);
 
@@ -1519,6 +1521,20 @@ static int wma_unified_radio_tx_power_level_stats_event_handler(void *handle,
 	    sizeof(*fixed_param)) / sizeof(uint32_t))) {
 		WMA_LOGE("%s: excess tx_power buffers:%d", __func__,
 			fixed_param->num_tx_power_levels);
+		return -EINVAL;
+	}
+
+	if (fixed_param->radio_id >= link_stats_results->num_radio) {
+		WMA_LOGE("%s: Invalid radio_id %d num_radio %d",
+			 __func__, fixed_param->radio_id,
+			 link_stats_results->num_radio);
+		return -EINVAL;
+	}
+
+	if (fixed_param->total_num_tx_power_levels >
+	    max_total_num_tx_power_levels) {
+		WMA_LOGD("Invalid total_num_tx_power_levels %d",
+			 fixed_param->total_num_tx_power_levels);
 		return -EINVAL;
 	}
 
@@ -1672,6 +1688,13 @@ static int wma_unified_link_radio_stats_event_handler(void *handle,
 	}
 	link_stats_results_size = sizeof(*link_stats_results) +
 				  fixed_param->num_radio * radio_stats_size;
+
+	if (radio_stats->radio_id >= fixed_param->num_radio) {
+		WMA_LOGE("%s: Invalid radio_id %d num_radio %d",
+			 __func__, radio_stats->radio_id,
+			 fixed_param->num_radio);
+		return -EINVAL;
+	}
 
 	if (!wma_handle->link_stats_results) {
 		wma_handle->link_stats_results = qdf_mem_malloc(
