@@ -100,11 +100,11 @@
 *******************************************************************************/
 
 static unsigned char CTPM_FW_TP_ID_T[] = {
-#include "FTS_FW/CEI_ESW1_3267_0x91_V0x08_20180323_app.i"
+#include "FTS_FW/CEI_TULIP_FZW6_3267_0x98_V0x03_20180515_app.i"
 };
 
 static unsigned char CTPM_FW_TP_ID_S[] = {
-#include "FTS_FW/MOBVOI_TIC3_FT3267_JINLONG_Ver0x_20180321_app.i"
+#include "FTS_FW/CEI_Sakura_FZW7_3267_0x99_V0x03_20180515_app.i"
 };
 
 static unsigned char CTPM_FW_TP_ID_S_TRULY[] = {
@@ -754,19 +754,19 @@ int fts_wait_tp_to_valid(struct i2c_client *client)
 	int ret = 0;
 	int cnt = 0;
 	u8 reg_value = 0;
-	/* struct fts_ts_data *fts_data  = (struct fts_ts_data *)i2c_get_clientdata(client); */
+	/* struct fts_ts_data *fts_data  =
+		(struct fts_ts_data *)i2c_get_clientdata(client); */
 
-	/* u8 chip_id = fts_data->ic_info.ids.chip_idh; */
-	u8 chip_id = 0x33;
+	u8 chip_id = fts_updateinfo_curr.CHIP_ID;
 
 	do {
 		ret = fts_i2c_read_reg(client, FTS_REG_CHIP_ID, &reg_value);
 
 		if ((ret < 0) || (reg_value != chip_id))
-			printk(KERN_INFO "TP Not Ready, ReadData = 0x%x\n",
+			pr_info("[fts]TP Not Ready, ReadData = 0x%x\n",
 			       reg_value);
 		else if (reg_value == chip_id) {
-			printk(KERN_INFO "TP Ready, Device ID = 0x%x\n",
+			pr_info("[fts]TP Ready, Device ID = 0x%x\n",
 			       reg_value);
 			return 0;
 		}
@@ -3182,7 +3182,7 @@ int fts_ctpm_fw_upgrade_with_app_file(struct i2c_client *client,
 	} else if ((fts_updateinfo_curr.CHIP_ID == 0x36)) {
 		i_ret = fts_6x36_ctpm_fw_upgrade(client, pbt_buf, fwsize);
 	} else if ((fts_updateinfo_curr.CHIP_ID == 0x64)) {
-		i_ret = fts_6336GU_ctpm_fw_upgrade(client, pbt_buf, fwsize);
+		i_ret = fts_ft6336gu_upgrade(client, pbt_buf, fwsize);
 	} else if ((fts_updateinfo_curr.CHIP_ID == 0x54)) {
 		i_ret = fts_5x46_ctpm_fw_upgrade(client, pbt_buf, fwsize);
 	} else if ((fts_updateinfo_curr.CHIP_ID == 0x58)) {
@@ -3234,7 +3234,8 @@ int fts_ctpm_get_i_file_ver(void)
 	ui_sz = sizeof(CTPM_FW);
 
 	if (ui_sz > 2) {
-		if (fts_updateinfo_curr.CHIP_ID == 0x33)
+		if (fts_updateinfo_curr.CHIP_ID == 0x33 ||
+			fts_updateinfo_curr.CHIP_ID == 0x64)
 			return CTPM_FW[0x10a];
 		else if (fts_updateinfo_curr.CHIP_ID == 0x58)
 			return CTPM_FW[0x1D0A];
@@ -3249,14 +3250,10 @@ int fts_ctpm_get_i_file_ver_for_cci(void)
 {
 	u16 ui_sz = fw_size;
 
-	if (ui_sz > 2) {
-		if (fts_updateinfo_curr.CHIP_ID == 0x33)
-			return CTPM_FW[0xB4EC];
-		else
-			return CTPM_FW[0x10a];
-	}
-
-	return 0x00;
+	if (ui_sz > 2)
+		return CTPM_FW[0xB4EC];
+	else
+		return 0x00;
 }
 
 /************************************************************************
@@ -3453,7 +3450,7 @@ int fts_ctpm_fw_upgrade_with_i_file(struct i2c_client *client)
 		}
 		pbt_buf = CTPM_FW;
 		i_ret =
-		    fts_6336GU_ctpm_fw_upgrade(client, pbt_buf,
+		    fts_ft6336gu_upgrade(client, pbt_buf,
 					       sizeof(CTPM_FW));
 		if (i_ret != 0)
 			dev_err(&client->dev, "%s:upgrade failed. err.\n",
@@ -3565,8 +3562,7 @@ int fts_ctpm_fw_upgrade_with_i_file_for_cci_3207(struct i2c_client *client)
 	/*judge the fw that will be upgraded
 	 * if illegal, then stop upgrade and return.
 	 */
-
-	if (fts_updateinfo_curr.CHIP_ID == 0x33) {
+	if (fts_updateinfo_curr.CHIP_ID == 0x64) {
 		i_ret = fts_ft6336gu_upgrade(client, CTPM_FW, fw_size);
 		if (i_ret != 0)
 			dev_err(&client->dev, "%s:upgrade failed. err.\n",
@@ -3628,6 +3624,7 @@ int fts_ctpm_auto_upgrade_for_cci(struct i2c_client *client, const u8 tp_id,
 	u8 uc_tp_fm_ver;
 	int i_ret;
 
+	pr_info("[fts] %s TP ID = 0x%x\n", __func__, tp_id);
 	switch (tp_id) {
 	case TP_ID_T:
 		CTPM_FW = CTPM_FW_TP_ID_T;

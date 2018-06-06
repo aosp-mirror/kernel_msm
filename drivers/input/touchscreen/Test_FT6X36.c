@@ -940,8 +940,8 @@ unsigned char FT6X36_TestItem_CbTest(bool * bTestResult)
 		
 	memset(m_CbData, 0, sizeof(m_CbData));
 	readlen = g_ScreenSetParam.iChannelsNum + g_ScreenSetParam.iKeyNum;
-	iCbMin = g_stCfg_SCap_DetailThreshold.CbTest_Min[0];
-	iCbMax = g_stCfg_SCap_DetailThreshold.CbTest_Max[0];	
+	iCbMin = g_stCfg_FT6X36_BasicThreshold.CbTest_Min;
+	iCbMax = g_stCfg_FT6X36_BasicThreshold.CbTest_Max;
 		
 	FTSPrintMsg("====================== Test Item : CB Test\n");
 	FTSPrintMsg("TP CB Data, Criteria Range=(%d ~ %d):\n", iCbMin, iCbMax);

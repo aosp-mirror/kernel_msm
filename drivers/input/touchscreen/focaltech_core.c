@@ -173,7 +173,7 @@ static struct sensors_classdev __maybe_unused sensors_proximity_cdev = {
 /*******************************************************************************
 * Static function prototypes
 *******************************************************************************/
-int fts_ts_start(struct device *dev);
+
 
 #ifdef CONFIG_TOUCHSCREEN_FTS_PSENSOR
 /*******************************************************************************
@@ -304,73 +304,6 @@ int fts_write_reg(struct i2c_client *client, u8 addr, const u8 val)
 int fts_read_reg(struct i2c_client *client, u8 addr, u8 *val)
 {
 	return fts_i2c_read(client, &addr, 1, val, 1);
-}
-
-/*******************************************************************************
-*  Name: checkTPSource
-*  Brief:
-*  Input:
-*  Output:
-*  Return:
-*******************************************************************************/
-#define FTS_ALL_PACKET_LENGTH                256
-static int checkTPSource(struct fts_ts_data *data)
-{
-	struct i2c_client *client = data->client;
-	unsigned char cmd[6] = { 0 };
-	u8 tmpBuf[FTS_ALL_PACKET_LENGTH] = { 0 };
-	int err = 0;
-
-	/* first, let touch ic enter read mode */
-	cmd[0] = 0x55;
-	cmd[1] = 0xAA;
-
-	err = fts_i2c_write(client, cmd, 2);
-	if (err < 0)
-		dev_err(&client->dev, "TP vendor id read failed 1\n");
-
-	msleep(2);
-
-	fts_reset_chip();
-
-	err = fts_i2c_write(client, cmd, 2);
-	if (err < 0)
-		dev_err(&client->dev, "TP vendor id read failed 2\n");
-
-	msleep(2);
-
-	/* start to read touch F/W's TP vendor ID */
-	cmd[0] = 0x02;
-	cmd[1] = 0xFD;
-	cmd[2] = (u8) ((7 * FTS_ALL_PACKET_LENGTH) >> 8);
-	cmd[3] = (u8) (7 * FTS_ALL_PACKET_LENGTH);
-	cmd[4] = (u8) ((FTS_ALL_PACKET_LENGTH - 1) >> 8);
-	cmd[5] = (u8) (FTS_ALL_PACKET_LENGTH - 1);
-	err = fts_i2c_read(client, cmd, 6, tmpBuf, FTS_ALL_PACKET_LENGTH);
-	if (err < 0)
-		dev_err(&client->dev, "TP vendor id read failed 3\n");
-
-	msleep(2);
-
-	/* lock flash cptm */
-	cmd[0] = 0x0A;
-	cmd[1] = 0xF5;
-	err = fts_i2c_write(client, cmd, 2);
-	if (err < 0)
-		dev_err(&client->dev, "TP vendor id read failed 4\n");
-
-	msleep(100);
-
-	fts_reset_chip();
-	msleep(300);
-
-	data->tp_vendor_id = tmpBuf[0xB4];
-
-	/* read TP vendor ID form Project UC81 */
-	/* fts_read_reg(client, 0xA8, tmpBuf); */
-	/* dev_err(&client->dev, "TP vid 0x%x\n", tmpBuf[0]); */
-
-	return err;
 }
 
 #ifdef CONFIG_TOUCHSCREEN_FTS_PSENSOR
@@ -716,7 +649,7 @@ static void fts_report_value(struct fts_ts_data *data)
 			input_mt_report_slot_state(data->input_dev,
 						   MT_TOOL_FINGER, false);
 			data->touchs &= ~BIT(event->au8_finger_id[i]);
-			printk(KERN_DEBUG
+			pr_info(
 			       "[fts] finger id=%d x=%d y=%d release\n", i,
 			       event->au16_x[i], event->au16_y[i]);
 		}
@@ -2334,9 +2267,6 @@ static int fts_ts_probe(struct i2c_client *client,
 		goto free_debug_dir;
 	}
 
-	/* get TP Source ID number */
-	err = checkTPSource(data);
-
 	/*get some register information */
 	reg_addr = FTS_REG_POINT_RATE;
 	fts_i2c_read(client, &reg_addr, 1, &reg_value, 1);
@@ -2355,9 +2285,9 @@ static int fts_ts_probe(struct i2c_client *client,
 	fts_update_fw_ver(data);
 	fts_update_fw_vendor_id(data);
 
-	printk(KERN_INFO
-		"[fts] The touch F/W has problem fw_vendor_id : %x , tp_vendor_id : %x\n",
-	       data->fw_vendor_id, data->tp_vendor_id);
+	pr_info(
+		"[fts] The touch F/W fw_vendor_id : %x\n",
+	       data->fw_vendor_id);
 	/* checking bootloader TP vendor id and FW venfor id is same or not. */
 
 	FTS_STORE_TS_INFO(data->ts_info, data->family_id, data->pdata->name,
@@ -2387,22 +2317,22 @@ static int fts_ts_probe(struct i2c_client *client,
 #endif
 
 #ifdef FTS_AUTO_UPGRADE
-	if (data->tp_vendor_id >= 0) {
+	if (data->fw_vendor_id >= 0) {
 		printk(KERN_INFO "[fts] Enter CTP Auto Upgrade\n");
 		if (data->fw_ver[0] == 0)	/* recovery */
 			printk(KERN_INFO
 				"[fts] FW ver is 0x00, Enter Recovery mode\n");
 
 		err =
-		    fts_ctpm_auto_upgrade_for_cci(client, data->tp_vendor_id,
+		    fts_ctpm_auto_upgrade_for_cci(client, data->fw_vendor_id,
 						  false);
 		if (err == 0) {
 			fts_update_fw_ver(data);
 			fts_update_fw_vendor_id(data);
 		}
 	} else {
-		printk(KERN_ERR "[fts] tp_vendor_id is woring : %d\n",
-				data->tp_vendor_id);
+		pr_err("[fts] fw_vendor_id is woring : %d\n",
+				data->fw_vendor_id);
 	}
 #endif
 
