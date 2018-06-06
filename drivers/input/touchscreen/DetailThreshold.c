@@ -1,22 +1,22 @@
-/* 
-* Copyright © 2016 FocalTech Systems Co., Ltd.  All Rights Reserved. 
-* 
-* This program is free software; you may redistribute it and/or modify 
-* it under the terms of the GNU General Public License as published by 
-* the Free Software Foundation; version 2 of the License. 
-* 
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, 
-* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
-* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND 
-* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS 
-* BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN 
-* ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
-* CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE 
-* SOFTWARE. 
+/*
+* Copyright © 2016 FocalTech Systems Co., Ltd.  All Rights Reserved.
+*
+* This program is free software; you may redistribute it and/or modify
+* it under the terms of the GNU General Public License as published by
+* the Free Software Foundation; version 2 of the License.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+* BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+* ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+* CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+* SOFTWARE.
 */
 #include <linux/kernel.h>
 #include <linux/string.h>
-
+#include <linux/bug.h>
 #include "ini.h"
 #include "DetailThreshold.h"
 #include "test_lib.h"
@@ -72,11 +72,11 @@ void OnInit_SCap_DetailThreshold(char *strIniFile)
 
 	//6x36
 	//OnGetTestItemParam("CbTest_Max", strIniFile);
-	OnGetTestItemParam("CBTest_Max", strIniFile, 0);
+	OnGetTestItemParam_CB("CBTest_Max", "CbTest_Max", strIniFile, 0);
 	memcpy(g_stCfg_SCap_DetailThreshold.CbTest_Max, g_stCfg_SCap_DetailThreshold.TempData, MAX_CHANNEL_NUM*sizeof(int));
-	
+
 	//OnGetTestItemParam("CbTest_Min", strIniFile);
-	OnGetTestItemParam("CBTest_Min", strIniFile, 0);
+	OnGetTestItemParam_CB("CBTest_Min", "CbTest_Min", strIniFile, 0);
 	memcpy(g_stCfg_SCap_DetailThreshold.CbTest_Min, g_stCfg_SCap_DetailThreshold.TempData, MAX_CHANNEL_NUM*sizeof(int));
 
 	//OnGetTestItemParam("DeltaCbTest_Base", strIniFile);
@@ -96,42 +96,83 @@ void OnInit_SCap_DetailThreshold(char *strIniFile)
 	memcpy(g_stCfg_SCap_DetailThreshold.K1DifferTest_Base, g_stCfg_SCap_DetailThreshold.TempData, MAX_CHANNEL_NUM*sizeof(int));
 }
 
+void OnGetTestItemParam_CB(char *strBasicThreshold, char *strSpecialSet,
+	char *strIniFile, int iDefautValue)
+{
+	char strValue[800];
+	char str_tmp[128];
+	int iValue = 0, dividerPos = 0;
+	int index = 0;
+	int i = 0, j = 0, k = 0;
+
+	memset(g_stCfg_SCap_DetailThreshold.TempData, 0,
+		sizeof(g_stCfg_SCap_DetailThreshold.TempData));
+	snprintf(str_tmp, ARRAY_SIZE(str_tmp), "%d", iDefautValue);
+	GetPrivateProfileString("Basic_Threshold",
+		strBasicThreshold, str_tmp, strValue, strIniFile);
+
+	iValue = atoi(strValue);
+	for (i = 0; i < MAX_CHANNEL_NUM; i++)
+		g_stCfg_SCap_DetailThreshold.TempData[i] = iValue;
+
+	dividerPos = GetPrivateProfileString("SpecialSet",
+		strSpecialSet, "", strValue, strIniFile);
+	if (dividerPos > 0) {
+		index = 0;
+		k = 0;
+		memset(str_tmp, 0x00, sizeof(str_tmp));
+		for (j = 0; j < dividerPos; j++) {
+			if (',' == strValue[j]) {
+				g_stCfg_SCap_DetailThreshold.TempData[k] =
+					(short)(atoi(str_tmp));
+				index = 0;
+				memset(str_tmp, 0x00, sizeof(str_tmp));
+				k++;
+			} else {
+				if (' ' == strValue[j])
+					continue;
+				str_tmp[index] = strValue[j];
+				index++;
+			}
+		}
+	}
+}
+
 void OnGetTestItemParam(char *strItemName, char *strIniFile, int iDefautValue)
 {
 	//char str[430];
 	char strValue[800];
 	char str_tmp[128];
 	int iValue = 0;
-	int dividerPos=0; 
+	int dividerPos = 0;
 	int index = 0;
 	int i = 0, j=0, k = 0;
 	memset(g_stCfg_SCap_DetailThreshold.TempData, 0, sizeof(g_stCfg_SCap_DetailThreshold.TempData));
 	sprintf(str_tmp, "%d", iDefautValue);
-	GetPrivateProfileString( "Basic_Threshold", strItemName, str_tmp, strValue, strIniFile); 
+	GetPrivateProfileString("Basic_Threshold",
+		strItemName, str_tmp, strValue, strIniFile);
 	iValue = atoi(strValue);
 	for(i = 0; i < MAX_CHANNEL_NUM; i++)
 	{
 		g_stCfg_SCap_DetailThreshold.TempData[i] = iValue;
 	}
-	
-	dividerPos = GetPrivateProfileString( "SpecialSet", strItemName, "", strValue, strIniFile); 
-	//sprintf(strValue, "%s", str);	
-	if(dividerPos > 0)	
-	{		
+
+	dividerPos = GetPrivateProfileString("SpecialSet",
+		strItemName, "", strValue, strIniFile);
+
+	if (dividerPos > 0) {
 		index = 0;
 		k = 0;
 		memset(str_tmp, 0x00, sizeof(str_tmp));
-		for(j=0; j<dividerPos; j++) 
+		for (j = 0; j < dividerPos; j++)
 		{
-			if(',' == strValue[j]) 
+			if (',' == strValue[j])
 			{
 				g_stCfg_SCap_DetailThreshold.TempData[k] = (short)(atoi(str_tmp));
 				index = 0;
 				memset(str_tmp, 0x00, sizeof(str_tmp));
 				k++;
-			} 
-			else 
-			{
+			} else {
 				if(' ' == strValue[j])
 					continue;
 				str_tmp[index] = strValue[j];
@@ -148,12 +189,12 @@ void OnGetTestItemParam(char *strItemName, char *strIniFile, int iDefautValue)
 void OnInit_MCap_DetailThreshold(char *strIniFile)
 {
 	set_max_channel_num();//set used TxRx
-	
+
 	OnInit_InvalidNode(strIniFile);
 	OnInit_DThreshold_RawDataTest(strIniFile);
 	OnInit_DThreshold_SCapRawDataTest(strIniFile);
 	OnInit_DThreshold_SCapCbTest(strIniFile);
-	
+
 /*	OnInit_DThreshold_RxCrosstalkTest(strIniFile);
 	OnInit_DThreshold_PanelDifferTest(strIniFile);*/
 	OnInit_DThreshold_RxLinearityTest(strIniFile);
@@ -178,17 +219,17 @@ void OnInit_MCap_DetailThreshold(char *strIniFile)
 }
 void OnInit_InvalidNode(char *strIniFile)
 {
-	
+
 	char str[MAX_PATH] = {0},strTemp[MAX_PATH] = {0};
 	int i = 0, j=0;
 	//memset(str , 0x00, sizeof(str));
-	//memset(strTemp , 0x00, sizeof(strTemp));	
+	/* memset(strTemp , 0x00, sizeof(strTemp)); */
 	for(i = 0; i < g_ScreenSetParam.iUsedMaxTxNum; i++)
 	{
 		for(j = 0; j < g_ScreenSetParam.iUsedMaxRxNum; j++)
 		{
 			sprintf(strTemp, "InvalidNode[%d][%d]", (i+1), (j+1));
-			
+
 			GetPrivateProfileString("INVALID_NODE",strTemp,"1",str, strIniFile);
 			if(atoi(str) == 0)
 			{
@@ -220,7 +261,7 @@ void OnInit_InvalidNode(char *strIniFile)
 			else
 				g_stCfg_MCap_DetailThreshold.InvalidNode_SC[i][j] = 1;
 		}
-		
+
 	}
 }
 
@@ -228,7 +269,7 @@ void OnInit_DThreshold_RawDataTest(char *strIniFile)
 {
 	char str[128], strTemp[MAX_PATH],strValue[MAX_PATH];
 	int MaxValue, MinValue;
-	int   dividerPos=0; 
+	int  dividerPos = 0;
 	char str_tmp[128];
 	int index = 0;
 	int  k = 0, i = 0, j = 0;
@@ -236,8 +277,6 @@ void OnInit_DThreshold_RawDataTest(char *strIniFile)
 	GetPrivateProfileString( "Basic_Threshold","RawDataTest_Max","10000",str, strIniFile);
 	MaxValue = atoi(str);
 
-	//printk("MaxValue = %d  \n", MaxValue);
-		
 	for(i = 0; i < g_ScreenSetParam.iUsedMaxTxNum; i++)
 	{
 		for(j = 0; j < g_ScreenSetParam.iUsedMaxRxNum; j++)
@@ -245,7 +284,7 @@ void OnInit_DThreshold_RawDataTest(char *strIniFile)
 			g_stCfg_MCap_DetailThreshold.RawDataTest_Max[i][j] = MaxValue;
 		}
 	}
-	
+
 	for(i = 0; i < g_ScreenSetParam.iUsedMaxTxNum; i++)
 	{
 		sprintf(str, "RawData_Max_Tx%d", (i + 1));
@@ -257,24 +296,22 @@ void OnInit_DThreshold_RawDataTest(char *strIniFile)
 		index = 0;
 		k = 0;
 		memset(str_tmp, 0, sizeof(str_tmp));
-		for(j=0; j<dividerPos; j++) 
+		for (j = 0; j < dividerPos; j++)
 		{
-			if(',' == strValue[j]) 
+			if (',' == strValue[j])
 			{
 				g_stCfg_MCap_DetailThreshold.RawDataTest_Max[i][k] = (short)(atoi(str_tmp));
 				index = 0;
 				memset(str_tmp, 0x00, sizeof(str_tmp));
 				k++;
-			} 
-			else 
-			{
+			} else {
 				if(' ' == strValue[j])
 					continue;
 				str_tmp[index] = strValue[j];
 				index++;
 			}
 		}
-		
+
 	}
 
 	GetPrivateProfileString("Basic_Threshold","RawDataTest_Min","7000",str, strIniFile);
@@ -296,18 +333,16 @@ void OnInit_DThreshold_RawDataTest(char *strIniFile)
 		index = 0;
 		k = 0;
 		memset(str_tmp, 0x00, sizeof(str_tmp));
-		for(j=0; j<dividerPos; j++) 
+		for (j = 0; j < dividerPos; j++)
 		{
-			if(',' == strValue[j]) 
+			if (',' == strValue[j])
 			{
 				g_stCfg_MCap_DetailThreshold.RawDataTest_Min[i][k] = (short)(atoi(str_tmp));
 				index = 0;
 				memset(str_tmp, 0x00, sizeof(str_tmp));
 				k++;
-			} 
-			else 
-			{
-				if(' ' == strValue[j])
+			} else {
+				if (' ' == strValue[j])
 					continue;
 				str_tmp[index] = strValue[j];
 				index++;
@@ -335,23 +370,21 @@ void OnInit_DThreshold_RawDataTest(char *strIniFile)
 		index = 0;
 		k = 0;
 		memset(str_tmp, 0x00, sizeof(str_tmp));
-		for(j=0; j<dividerPos; j++) 
+		for (j = 0; j < dividerPos; j++)
 		{
-			if(',' == strValue[j]) 
+			if (',' == strValue[j])
 			{
 				g_stCfg_MCap_DetailThreshold.RawDataTest_Low_Max[i][k] = (short)(atoi(str_tmp));
 				index = 0;
 				memset(str_tmp, 0x00, sizeof(str_tmp));
 				k++;
-			} 
-			else 
-			{
-				if(' ' == strValue[j])
+			} else {
+				if (' ' == strValue[j])
 					continue;
 				str_tmp[index] = strValue[j];
 				index++;
 			}
-		}	
+		}
 	}
 
 	GetPrivateProfileString("Basic_Threshold","RawDataTest_Low_Min","3000",str, strIniFile);
@@ -373,17 +406,15 @@ void OnInit_DThreshold_RawDataTest(char *strIniFile)
 		index = 0;
 		k = 0;
 		memset(str_tmp, 0x00, sizeof(str_tmp));
-		for(j=0; j<dividerPos; j++) 
+		for (j = 0; j < dividerPos; j++)
 		{
-			if(',' == strValue[j]) 
+			if (',' == strValue[j])
 			{
 				g_stCfg_MCap_DetailThreshold.RawDataTest_Low_Min[i][k] = (short)(atoi(str_tmp));
 				index = 0;
 				memset(str_tmp, 0x00, sizeof(str_tmp));
 				k++;
-			} 
-			else 
-			{
+			} else {
 				if(' ' == strValue[j])
 					continue;
 				str_tmp[index] = strValue[j];
@@ -412,17 +443,15 @@ void OnInit_DThreshold_RawDataTest(char *strIniFile)
 		index = 0;
 		k = 0;
 		memset(str_tmp, 0x00, sizeof(str_tmp));
-		for(j=0; j<dividerPos; j++) 
+		for (j = 0; j < dividerPos; j++)
 		{
-			if(',' == strValue[j]) 
+			if (',' == strValue[j])
 			{
 				g_stCfg_MCap_DetailThreshold.RawDataTest_High_Max[i][k] = (short)(atoi(str_tmp));
 				index = 0;
 				memset(str_tmp, 0x00, sizeof(str_tmp));
 				k++;
-			} 
-			else 
-			{
+			} else {
 				if(' ' == strValue[j])
 					continue;
 				str_tmp[index] = strValue[j];
@@ -450,17 +479,15 @@ void OnInit_DThreshold_RawDataTest(char *strIniFile)
 		index = 0;
 		k = 0;
 		memset(str_tmp, 0x00, sizeof(str_tmp));
-		for(j=0; j<dividerPos; j++) 
+		for (j = 0; j < dividerPos; j++)
 		{
-			if(',' == strValue[j]) 
+			if (',' == strValue[j])
 			{
 				g_stCfg_MCap_DetailThreshold.RawDataTest_High_Min[i][k] = (short)(atoi(str_tmp));
 				index = 0;
 				memset(str_tmp, 0x00, sizeof(str_tmp));
 				k++;
-			} 
-			else 
-			{
+			} else {
 				if(' ' == strValue[j])
 					continue;
 				str_tmp[index] = strValue[j];
@@ -485,30 +512,30 @@ void OnInit_DThreshold_RawDataTest(char *strIniFile)
 		index = 0;
 		k = 0;
 		memset(str_tmp, 0x00, sizeof(str_tmp));
-		for(j=0; j<dividerPos; j++) 
+		for(j=0; j<dividerPos; j++)
 		{
-			if(',' == strValue[j]) 
+			if(',' == strValue[j])
 			{
 				g_stCfg_MCap_DetailThreshold.TxShortAdvance[i][k] = (short)(atoi(str_tmp));
 				index = 0;
 				memset(str_tmp, 0x00, sizeof(str_tmp));
 				k++;
-			} 
-			else 
+			}
+			else
 			{
 				if(' ' == strValue[j])
 					continue;
 				str_tmp[index] = strValue[j];
 				index++;
 			}
-		}		
-	}*/	
+		}
+	}*/
 }
 void OnInit_DThreshold_SCapRawDataTest(char *strIniFile)
 {
 	char str[128], strTemp[MAX_PATH],strValue[MAX_PATH];
 	int MaxValue, MinValue;
-	int   dividerPos=0; 
+	int dividerPos = 0;
 	char str_tmp[128];
 	int index = 0;
 	int  k = 0, i = 0, j = 0;
@@ -518,7 +545,7 @@ void OnInit_DThreshold_SCapRawDataTest(char *strIniFile)
 	MinValue = atoi(str);
 	GetPrivateProfileString("Basic_Threshold","SCapRawDataTest_OFF_Max","1000",str,strIniFile);
 	MaxValue = atoi(str);
-	
+
 	///Max
 	for(i = 0; i < 2; i++)
 	{
@@ -536,23 +563,21 @@ void OnInit_DThreshold_SCapRawDataTest(char *strIniFile)
 		index = 0;
 		k = 0;
 		memset(str_tmp, 0x00, sizeof(str_tmp));
-		for(j=0; j<dividerPos; j++) 
+		for (j = 0; j < dividerPos; j++)
 		{
-			if(',' == strValue[j]) 
+			if (',' == strValue[j])
 			{
 				g_stCfg_MCap_DetailThreshold.SCapRawDataTest_OFF_Max[i][k] = (short)(atoi(str_tmp));
 				index = 0;
 				memset(str_tmp, 0x00, sizeof(str_tmp));
 				k++;
-			} 
-			else 
-			{
+			} else {
 				if(' ' == strValue[j])
 					continue;
 				str_tmp[index] = strValue[j];
 				index++;
 			}
-		}		
+		}
 	}
 	////Min
 	for(i = 0; i < 2; i++)
@@ -571,91 +596,23 @@ void OnInit_DThreshold_SCapRawDataTest(char *strIniFile)
 		index = 0;
 		k = 0;
 		memset(str_tmp, 0x00, sizeof(str_tmp));
-		for(j=0; j<dividerPos; j++) 
+		for (j = 0; j < dividerPos; j++)
 		{
-			if(',' == strValue[j]) 
+			if (',' == strValue[j])
 			{
 				g_stCfg_MCap_DetailThreshold.SCapRawDataTest_OFF_Min[i][k] = (short)(atoi(str_tmp));
 				index = 0;
 				memset(str_tmp, 0x00, sizeof(str_tmp));
 				k++;
-			} 
-			else 
-			{
-				if(' ' == strValue[j])
+			} else {
+				if (' ' == strValue[j])
 					continue;
 				str_tmp[index] = strValue[j];
 				index++;
 			}
-		}		
-	}	
-/*
-	for(int i = 0; i < 2; i++)
-	{
-		if(0 == i)iLenght = g_ScreenSetParam.iUsedMaxRxNum;
-		if(1 == i)iLenght = g_ScreenSetParam.iUsedMaxTxNum;
-
-		str.Format("ScapRawData_OFF_Max_%d", i + 1);
-		GetPrivateProfileString( "SpecialSet", str, "NULL",strTemp.GetBuffer(BUFFER_LENGTH),BUFFER_LENGTH, strIniFile);
-		strValue.Format("%s",strTemp);		
-		dividerPos = strValue.Find(',',0); 
-		if(dividerPos > 0)
-		{
-			for(int j = 0; j < iLenght; j++)
-			{
-				AfxExtractSubString(SingleItem, strValue, j ,  cDivider);
-				if(!SingleItem.IsEmpty())
-				{
-					g_stCfg_MCap_DetailThreshold.SCapRawDataTest_OFF_Max[i][j] = atoi(SingleItem);
-				}
-				else
-				{
-					g_stCfg_MCap_DetailThreshold.SCapRawDataTest_OFF_Max[i][j] = iBasicMax;
-				}
-			}
-		}
-		else
-		{
-			for(int j = 0; j < iLenght; j++)
-			{
-				g_stCfg_MCap_DetailThreshold.SCapRawDataTest_OFF_Max[i][j] = iBasicMax;
-			}
 		}
 	}
 
-	for(int i = 0; i < 2; i++)
-	{						
-		if(0 == i)iLenght = g_ScreenSetParam.iUsedMaxRxNum;
-		if(1 == i)iLenght = g_ScreenSetParam.iUsedMaxTxNum;
-
-		str.Format("ScapRawData_OFF_Min_%d", i + 1);
-		GetPrivateProfileString( "SpecialSet", str, "NULL",strTemp.GetBuffer(BUFFER_LENGTH),BUFFER_LENGTH, strIniFile);
-		strValue.Format("%s",strTemp);		
-		dividerPos = strValue.Find(',',0); 
-		if(dividerPos > 0)
-		{
-			for(int j = 0; j < iLenght; j++)
-			{
-				AfxExtractSubString(SingleItem, strValue, j ,  cDivider);
-				if(!SingleItem.IsEmpty())
-				{
-					g_stCfg_MCap_DetailThreshold.SCapRawDataTest_OFF_Min[i][j] = atoi(SingleItem);
-				}
-				else
-				{
-					g_stCfg_MCap_DetailThreshold.SCapRawDataTest_OFF_Min[i][j] = iBasicMin;
-				}
-			}
-		}
-		else
-		{
-			for(int j = 0; j < iLenght; j++)
-			{
-				g_stCfg_MCap_DetailThreshold.SCapRawDataTest_OFF_Min[i][j] = iBasicMin;
-			}
-		}
-	}
-*/
 	//////////////////ON
 	GetPrivateProfileString("Basic_Threshold","SCapRawDataTest_ON_Min","150",str,strIniFile);
 	MinValue = atoi(str);
@@ -679,23 +636,21 @@ void OnInit_DThreshold_SCapRawDataTest(char *strIniFile)
 		index = 0;
 		k = 0;
 		memset(str_tmp, 0x00, sizeof(str_tmp));
-		for(j=0; j<dividerPos; j++) 
+		for (j = 0; j < dividerPos; j++)
 		{
-			if(',' == strValue[j]) 
+			if (',' == strValue[j])
 			{
 				g_stCfg_MCap_DetailThreshold.SCapRawDataTest_ON_Max[i][k] = (short)(atoi(str_tmp));
 				index = 0;
 				memset(str_tmp, 0x00, sizeof(str_tmp));
 				k++;
-			} 
-			else 
-			{
+			} else {
 				if(' ' == strValue[j])
 					continue;
 				str_tmp[index] = strValue[j];
 				index++;
 			}
-		}		
+		}
 	}
 	////Min
 	for(i = 0; i < 2; i++)
@@ -710,101 +665,34 @@ void OnInit_DThreshold_SCapRawDataTest(char *strIniFile)
 		sprintf(str, "ScapRawData_ON_Min_%d", (i + 1));
 		dividerPos = GetPrivateProfileString( "SpecialSet", str, "NULL",strTemp, strIniFile);
 		sprintf(strValue, "%s",strTemp);
-		if(0 == dividerPos) continue;
+		if (0 == dividerPos)
+			continue;
+
 		index = 0;
 		k = 0;
 		memset(str_tmp, 0x00, sizeof(str_tmp));
-		for(j=0; j<dividerPos; j++) 
+		for (j = 0; j < dividerPos; j++)
 		{
-			if(',' == strValue[j]) 
+			if (',' == strValue[j])
 			{
 				g_stCfg_MCap_DetailThreshold.SCapRawDataTest_ON_Min[i][k] = (short)(atoi(str_tmp));
 				index = 0;
 				memset(str_tmp, 0x00, sizeof(str_tmp));
 				k++;
-			} 
-			else 
-			{
+			} else {
 				if(' ' == strValue[j])
 					continue;
 				str_tmp[index] = strValue[j];
 				index++;
 			}
-		}		
-	}
-	/*
-	for(int i = 0; i < 2; i++)
-	{
-		if(0 == i)iLenght = g_ScreenSetParam.iUsedMaxRxNum;
-		if(1 == i)iLenght = g_ScreenSetParam.iUsedMaxTxNum;
-
-		str.Format("ScapRawData_ON_Max_%d", i + 1);
-		GetPrivateProfileString( "SpecialSet", str, "NULL",strTemp.GetBuffer(BUFFER_LENGTH),BUFFER_LENGTH, strIniFile);
-		strValue.Format("%s",strTemp);		
-		dividerPos = strValue.Find(',',0); 
-		if(dividerPos > 0)
-		{
-			for(int j = 0; j < iLenght; j++)
-			{
-				AfxExtractSubString(SingleItem, strValue, j ,  cDivider);
-				if(!SingleItem.IsEmpty())
-				{
-					g_stCfg_MCap_DetailThreshold.SCapRawDataTest_ON_Max[i][j] = atoi(SingleItem);
-				}
-				else
-				{
-					g_stCfg_MCap_DetailThreshold.SCapRawDataTest_ON_Max[i][j] = iBasicMax;
-				}
-			}
-		}
-		else
-		{
-			for(int j = 0; j < iLenght; j++)
-			{
-				g_stCfg_MCap_DetailThreshold.SCapRawDataTest_ON_Max[i][j] = iBasicMax;
-			}
 		}
 	}
-
-	for(int i = 0; i < 2; i++)
-	{
-		if(0 == i)iLenght = g_ScreenSetParam.iUsedMaxRxNum;
-		if(1 == i)iLenght = g_ScreenSetParam.iUsedMaxTxNum;
-
-		str.Format("ScapRawData_ON_Min_%d", i + 1);
-		GetPrivateProfileString( "SpecialSet", str, "NULL",strTemp.GetBuffer(BUFFER_LENGTH),BUFFER_LENGTH, strIniFile);
-		strValue.Format("%s",strTemp);		
-		dividerPos = strValue.Find(',',0); 
-		if(dividerPos > 0)
-		{
-			for(int j = 0; j < iLenght; j++)
-			{
-				AfxExtractSubString(SingleItem, strValue, j ,  cDivider);
-				if(!SingleItem.IsEmpty())
-				{
-					g_stCfg_MCap_DetailThreshold.SCapRawDataTest_ON_Min[i][j] = atoi(SingleItem);
-				}
-				else
-				{
-					g_stCfg_MCap_DetailThreshold.SCapRawDataTest_ON_Min[i][j] = iBasicMin;
-				}
-			}
-		}
-		else
-		{
-			for(int j = 0; j < iLenght; j++)
-			{
-				g_stCfg_MCap_DetailThreshold.SCapRawDataTest_ON_Min[i][j] = iBasicMin;
-			}
-		}
-	}
-*/
 }
 void OnInit_DThreshold_SCapCbTest(char *strIniFile)
 {
 	char str[128], strTemp[MAX_PATH],strValue[MAX_PATH];
 	int MaxValue, MinValue;
-	int   dividerPos=0; 
+	int dividerPos = 0;
 	char str_tmp[128];
 	int index = 0;
 	int  k = 0, i = 0, j = 0;
@@ -830,23 +718,21 @@ void OnInit_DThreshold_SCapCbTest(char *strIniFile)
 		index = 0;
 		k = 0;
 		memset(str_tmp, 0x00, sizeof(str_tmp));
-		for(j=0; j<dividerPos; j++) 
+		for (j = 0; j < dividerPos; j++)
 		{
-			if(',' == strValue[j]) 
+			if (',' == strValue[j])
 			{
 				g_stCfg_MCap_DetailThreshold.SCapCbTest_ON_Max[i][k] = (short)(atoi(str_tmp));
 				index = 0;
 				memset(str_tmp, 0x00, sizeof(str_tmp));
 				k++;
-			} 
-			else 
-			{
-				if(' ' == strValue[j])
+			} else {
+				if (' ' == strValue[j])
 					continue;
 				str_tmp[index] = strValue[j];
 				index++;
 			}
-		}		
+		}
 	}
 	////Min
 	for(i = 0; i < 2; i++)
@@ -865,17 +751,15 @@ void OnInit_DThreshold_SCapCbTest(char *strIniFile)
 		index = 0;
 		k = 0;
 		memset(str_tmp, 0x00, sizeof(str_tmp));
-		for(j=0; j<dividerPos; j++) 
+		for (j = 0; j < dividerPos; j++)
 		{
-			if(',' == strValue[j]) 
+			if (',' == strValue[j])
 			{
 				g_stCfg_MCap_DetailThreshold.SCapCbTest_ON_Min[i][k] = (short)(atoi(str_tmp));
 				index = 0;
 				memset(str_tmp, 0x00, sizeof(str_tmp));
 				k++;
-			} 
-			else 
-			{
+			} else {
 				if(' ' == strValue[j])
 					continue;
 				str_tmp[index] = strValue[j];
@@ -904,23 +788,21 @@ void OnInit_DThreshold_SCapCbTest(char *strIniFile)
 		index = 0;
 		k = 0;
 		memset(str_tmp, 0x00, sizeof(str_tmp));
-		for(j=0; j<dividerPos; j++) 
+		for (j = 0; j < dividerPos; j++)
 		{
-			if(',' == strValue[j]) 
+			if (',' == strValue[j])
 			{
 				g_stCfg_MCap_DetailThreshold.SCapCbTest_OFF_Max[i][k] = (short)(atoi(str_tmp));
 				index = 0;
 				memset(str_tmp, 0x00, sizeof(str_tmp));
 				k++;
-			} 
-			else 
-			{
+			} else {
 				if(' ' == strValue[j])
 					continue;
 				str_tmp[index] = strValue[j];
 				index++;
 			}
-		}		
+		}
 	}
 	////Min
 	for(i = 0; i < 2; i++)
@@ -939,167 +821,28 @@ void OnInit_DThreshold_SCapCbTest(char *strIniFile)
 		index = 0;
 		k = 0;
 		memset(str_tmp, 0x00, sizeof(str_tmp));
-		for(j=0; j<dividerPos; j++) 
+		for (j = 0; j < dividerPos; j++)
 		{
-			if(',' == strValue[j]) 
+			if (',' == strValue[j])
 			{
 				g_stCfg_MCap_DetailThreshold.SCapCbTest_OFF_Min[i][k] = (short)(atoi(str_tmp));
 				index = 0;
 				memset(str_tmp, 0x00, sizeof(str_tmp));
 				k++;
-			} 
-			else 
-			{
+			} else {
 				if(' ' == strValue[j])
 					continue;
 				str_tmp[index] = strValue[j];
 				index++;
 			}
-		}		
-	}	
-/*
-	int iLenght = 0;
-
-	for(int i = 0; i < 2; i++)
-	{
-		if(0 == i)iLenght = g_ScreenSetParam.iUsedMaxRxNum;
-		if(1 == i)iLenght = g_ScreenSetParam.iUsedMaxTxNum;
-
-		str.Format("ScapCB_ON_Max_%d", i + 1);
-		GetPrivateProfileString( "SpecialSet", str, "NULL",strTemp.GetBuffer(BUFFER_LENGTH),BUFFER_LENGTH, strIniFile);
-		strValue.Format("%s",strTemp);		
-		dividerPos = strValue.Find(',',0); 
-		if(dividerPos > 0)
-		{
-			for(int j = 0; j < iLenght; j++)
-			{
-				AfxExtractSubString(SingleItem, strValue, j ,  cDivider);
-				if(!SingleItem.IsEmpty())
-				{
-					g_stCfg_MCap_DetailThreshold.SCapCbTest_ON_Max[i][j] = atoi(SingleItem);
-				}
-				else
-				{
-					g_stCfg_MCap_DetailThreshold.SCapCbTest_ON_Max[i][j] = iBasicMax_on;
-				}
-			}
-		}
-		else
-		{
-			for(int j = 0; j < iLenght; j++)
-			{
-				g_stCfg_MCap_DetailThreshold.SCapCbTest_ON_Max[i][j] = iBasicMax_on;
-			}
 		}
 	}
-
-	for(int i = 0; i < 2; i++)
-	{
-		if(0 == i)iLenght = g_ScreenSetParam.iUsedMaxRxNum;
-		if(1 == i)iLenght = g_ScreenSetParam.iUsedMaxTxNum;
-
-		str.Format("ScapCB_ON_Min_%d", i + 1);
-		GetPrivateProfileString( "SpecialSet", str, "NULL",strTemp.GetBuffer(BUFFER_LENGTH),BUFFER_LENGTH, strIniFile);
-		strValue.Format("%s",strTemp);		
-		dividerPos = strValue.Find(',',0); 
-		if(dividerPos > 0)
-		{
-			for(int j = 0; j < iLenght; j++)
-			{
-				AfxExtractSubString(SingleItem, strValue, j ,  cDivider);
-				if(!SingleItem.IsEmpty())
-				{
-					g_stCfg_MCap_DetailThreshold.SCapCbTest_ON_Min[i][j] = atoi(SingleItem);
-				}
-				else
-				{
-					g_stCfg_MCap_DetailThreshold.SCapCbTest_ON_Min[i][j] = iBasicMin_on;
-				}
-			}
-		}
-		else
-		{
-			for(int j = 0; j < iLenght; j++)
-			{
-				g_stCfg_MCap_DetailThreshold.SCapCbTest_ON_Min[i][j] = iBasicMin_on;
-			}
-		}
-	}
-
-	for(int i = 0; i < 2; i++)
-	{
-		if(0 == i)iLenght = g_ScreenSetParam.iUsedMaxRxNum;
-		if(1 == i)iLenght = g_ScreenSetParam.iUsedMaxTxNum;
-
-		str.Format("ScapCB_OFF_Max_%d", i + 1);
-		GetPrivateProfileString( "SpecialSet", str, "NULL",strTemp.GetBuffer(BUFFER_LENGTH),BUFFER_LENGTH, strIniFile);
-		strValue.Format("%s",strTemp);		
-		dividerPos = strValue.Find(',',0); 
-		if(dividerPos > 0)
-		{
-			for(int j = 0; j < iLenght; j++)
-			{
-				AfxExtractSubString(SingleItem, strValue, j ,  cDivider);
-				if(!SingleItem.IsEmpty())
-				{
-					g_stCfg_MCap_DetailThreshold.SCapCbTest_OFF_Max[i][j] = atoi(SingleItem);
-				}
-				else
-				{
-					g_stCfg_MCap_DetailThreshold.SCapCbTest_OFF_Max[i][j] = iBasicMax_off;
-				}
-			}
-		}
-		else
-		{
-			for(int j = 0; j < iLenght; j++)
-			{
-				g_stCfg_MCap_DetailThreshold.SCapCbTest_OFF_Max[i][j] = iBasicMax_off;
-			}
-		}
-	}
-
-	for(int i = 0; i < 2; i++)
-	{
-		if(0 == i)iLenght = g_ScreenSetParam.iUsedMaxRxNum;
-		if(1 == i)iLenght = g_ScreenSetParam.iUsedMaxTxNum;
-
-		str.Format("ScapCB_OFF_Min_%d", i + 1);
-		GetPrivateProfileString( "SpecialSet", str, "NULL",strTemp.GetBuffer(BUFFER_LENGTH),BUFFER_LENGTH, strIniFile);
-		strValue.Format("%s",strTemp);		
-		dividerPos = strValue.Find(',',0); 
-		if(dividerPos > 0)
-		{
-			for(int j = 0; j < iLenght; j++)
-			{
-				AfxExtractSubString(SingleItem, strValue, j ,  cDivider);
-				if(!SingleItem.IsEmpty())
-				{
-					g_stCfg_MCap_DetailThreshold.SCapCbTest_OFF_Min[i][j] = atoi(SingleItem);
-				}
-				else
-				{
-					g_stCfg_MCap_DetailThreshold.SCapCbTest_OFF_Min[i][j] = iBasicMin_off;
-				}
-			}
-		}
-		else
-		{
-			for(int j = 0; j < iLenght; j++)
-			{
-				g_stCfg_MCap_DetailThreshold.SCapCbTest_OFF_Min[i][j] = iBasicMin_off;
-			}
-		}
-	}
-*/
-
 }
 
 void OnInit_DThreshold_RxLinearityTest(char *strIniFile)
 {
 	char str[128], strTemp[MAX_PATH],strValue[MAX_PATH];
-	int MaxValue = 0;
-	int   dividerPos=0; 
+	int MaxValue = 0, dividerPos = 0;
 	char str_tmp[128];
 	int index = 0;
 	int  k = 0, i = 0, j = 0;
@@ -1107,16 +850,12 @@ void OnInit_DThreshold_RxLinearityTest(char *strIniFile)
 	GetPrivateProfileString( "Basic_Threshold","RxLinearityTest_Max", "50",str, strIniFile);
 	MaxValue = atoi(str);
 
-	//printk("MaxValue = %d  \n", MaxValue);
-		
 	for(i = 0; i < g_ScreenSetParam.iUsedMaxTxNum; i++)
 	{
 		for(j = 0; j < g_ScreenSetParam.iUsedMaxRxNum; j++)
-		{
 			g_stCfg_MCap_DetailThreshold.RxLinearityTest_Max[i][j] = MaxValue;
-		}
 	}
-	
+
 	for(i = 0; i < g_ScreenSetParam.iUsedMaxTxNum; i++)
 	{
 		sprintf(str, "Rx_Linearity_Max_Tx%d", (i + 1));
@@ -1126,34 +865,31 @@ void OnInit_DThreshold_RxLinearityTest(char *strIniFile)
 		sprintf(strValue, "%s",strTemp);
 		if(0 == dividerPos) continue;
 		index = 0;
-		k = 0;		
+		k = 0;
 		memset(str_tmp, 0, sizeof(str_tmp));
-		for(j=0; j<dividerPos; j++) 
+		for (j = 0; j < dividerPos; j++)
 		{
-			if(',' == strValue[j]) 
+			if (',' == strValue[j])
 			{
 				g_stCfg_MCap_DetailThreshold.RxLinearityTest_Max[i][k] = (short)(atoi(str_tmp));
 				index = 0;
 				memset(str_tmp, 0x00, sizeof(str_tmp));
 				k++;
-			} 
-			else 
-			{
+			} else {
 				if(' ' == strValue[j])
 					continue;
 				str_tmp[index] = strValue[j];
 				index++;
 			}
 		}
-		
+
 	}
 }
 
 void OnInit_DThreshold_TxLinearityTest(char *strIniFile)
 {
 	char str[128], strTemp[MAX_PATH],strValue[MAX_PATH];
-	int MaxValue = 0;
-	int   dividerPos=0; 
+	int MaxValue = 0, dividerPos = 0;
 	char str_tmp[128];
 	int index = 0;
 	int  k = 0, i = 0, j = 0;
@@ -1161,8 +897,6 @@ void OnInit_DThreshold_TxLinearityTest(char *strIniFile)
 	GetPrivateProfileString( "Basic_Threshold","TxLinearityTest_Max", "50",str, strIniFile);
 	MaxValue = atoi(str);
 
-	//printk("MaxValue = %d  \n", MaxValue);
-		
 	for(i = 0; i < g_ScreenSetParam.iUsedMaxTxNum; i++)
 	{
 		for(j = 0; j < g_ScreenSetParam.iUsedMaxRxNum; j++)
@@ -1170,7 +904,7 @@ void OnInit_DThreshold_TxLinearityTest(char *strIniFile)
 			g_stCfg_MCap_DetailThreshold.TxLinearityTest_Max[i][j] = MaxValue;
 		}
 	}
-	
+
 	for(i = 0; i < g_ScreenSetParam.iUsedMaxTxNum; i++)
 	{
 		sprintf(str, "Tx_Linearity_Max_Tx%d", (i + 1));
@@ -1180,25 +914,23 @@ void OnInit_DThreshold_TxLinearityTest(char *strIniFile)
 		sprintf(strValue, "%s",strTemp);
 		if(0 == dividerPos) continue;
 		index = 0;
-		k = 0;		
+		k = 0;
 		memset(str_tmp, 0, sizeof(str_tmp));
-		for(j=0; j<dividerPos; j++) 
+		for (j = 0; j < dividerPos; j++)
 		{
-			if(',' == strValue[j]) 
+			if (',' == strValue[j])
 			{
 				g_stCfg_MCap_DetailThreshold.TxLinearityTest_Max[i][k] = (short)(atoi(str_tmp));
 				index = 0;
 				memset(str_tmp, 0x00, sizeof(str_tmp));
 				k++;
-			} 
-			else 
-			{
-				if(' ' == strValue[j])
+			} else {
+				if (' ' == strValue[j])
 					continue;
 				str_tmp[index] = strValue[j];
 				index++;
 			}
 		}
-		
+
 	}
 }

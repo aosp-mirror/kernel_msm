@@ -1289,20 +1289,23 @@ static ssize_t fts_selftest_show(struct device *dev, struct device_attribute *at
 
 	disable_irq(client->irq);
 	memset(config_file, 0, sizeof(config_file));
-	switch(fts_wq_data->tp_vendor_id){
-		case TP_ID_T:
-			snprintf(config_file, 128, TP_INI_FILE);
-			printk("[fts]%s : file name : %s \n", __func__, config_file);
-			break;
-		case TP_ID_S:
-			snprintf(config_file, 128, TP_INI_FILE_T);
-			printk("[fts]%s : file name : %s \n", __func__, config_file);
-			break;
-		default:
-			pr_err("[fts]%s, no config file for this TP!!!\n", __func__);
-			err_tp_id_config = true;
-			break;
+	switch (fts_wq_data->fw_vendor_id) {
+	case TP_ID_T:
+		snprintf(config_file, ARRAY_SIZE(config_file), TP_INI_FILE_T);
+		break;
+	case TP_ID_S:
+		snprintf(config_file, ARRAY_SIZE(config_file), TP_INI_FILE_S);
+		break;
+	case TP_ID_S_TRULY:
+		snprintf(config_file, ARRAY_SIZE(config_file),
+			TP_INI_FILE_S_TRULY);
+		break;
+	default:
+		pr_err("[fts]%s, no config file for this TP!!!\n", __func__);
+		err_tp_id_config = true;
+		break;
 	}
+	pr_info("[fts]%s : file name : %s\n", __func__, config_file);
 
 	if (err_tp_id_config) {
 		selft_test_result = 1;
@@ -1342,24 +1345,30 @@ static ssize_t fts_selftest_show(struct device *dev, struct device_attribute *at
 				w_len = sprintf(result_buf, "Selftest %s\n=====END=====\n",selft_test_result ? "FAIL" : "PASS");
 				fts_selftest_file_write(w_file, result_buf, w_len);
 
-				switch(fts_wq_data->tp_vendor_id){
+				switch (fts_wq_data->fw_vendor_id) {
 					case TP_ID_T:
-						w_len = sprintf(result_buf, "KOTL\n");
-						fts_selftest_file_write(w_file, result_buf, w_len);
+						w_len = snprintf(result_buf,
+							ARRAY_SIZE(result_buf),
+							"KOTL_T\n");
 						break;
 					case TP_ID_S:
-						w_len = sprintf(result_buf, "TRULY\n");
-						fts_selftest_file_write(w_file, result_buf, w_len);
+						w_len = snprintf(result_buf,
+							ARRAY_SIZE(result_buf),
+							"KOTL_S\n");
 						break;
 					case TP_ID_S_TRULY:
-						w_len = sprintf(result_buf, "TRULY\n");
-						fts_selftest_file_write(w_file, result_buf, w_len);
+						w_len = snprintf(result_buf,
+							ARRAY_SIZE(result_buf),
+							"TRULY_S\n");
 						break;
 					default:
-						w_len = sprintf(result_buf, "No Such TP\n");
-						fts_selftest_file_write(w_file, result_buf, w_len);
+						w_len = snprintf(result_buf,
+							ARRAY_SIZE(result_buf),
+							"No Such TP\n");
 						break;
 				}
+				fts_selftest_file_write(w_file,
+					result_buf, w_len);
 				fts_selftest_file_close(w_file);
 			}
 			free_test_param_data();
@@ -1418,96 +1427,39 @@ static ssize_t fts_fw_check_show(struct device *dev, struct device_attribute *at
 	}
 	else {
 		count += sprintf(buf + count, "Pass, (fw_ver : 0x%x, fw_id : 0x%x, tp_id : 0x%x)\n",
-		fts_wq_data->fw_ver[0], fts_wq_data->fw_vendor_id, fts_wq_data->tp_vendor_id);
+		fts_wq_data->fw_ver[0], fts_wq_data->fw_vendor_id,
+		fts_wq_data->fw_vendor_id);
 	}
 	return count;
 }
 
-#define FTS_ALL_PACKET_LENGTH	256
-static int getTPid(void)
-{
-	struct i2c_client *client = fts_i2c_client;
-	unsigned char cmd[6] = {0};
-	u8 tmpBuf[FTS_ALL_PACKET_LENGTH] = {0};
-	int err = 0;
-
-	//first, let touch ic enter read mode
-	cmd[0] = 0x55;
-	cmd[1] = 0xAA;
-	err = fts_i2c_write(client, cmd, 2);
-	if (err < 0) {
-		dev_err(&client->dev, "TP vendor id read failed 1 \n");
-		goto tp_id_err;
-	}
-	msleep(2);
-	fts_reset_chip();
-	err = fts_i2c_write(client, cmd, 2);
-	if (err < 0) {
-		dev_err(&client->dev, "TP vendor id read failed 2 \n");
-		goto tp_id_err;
-	}
-	msleep(2);
-
-	//start to read touch F/W's TP vendor ID
-	cmd[0] = 0x02;
-	cmd[1] = 0xFD;
-	cmd[2] = (u8)((7 * FTS_ALL_PACKET_LENGTH)>>8);
-	cmd[3] = (u8)(7 * FTS_ALL_PACKET_LENGTH);
-	cmd[4] = (u8)((FTS_ALL_PACKET_LENGTH-1)>>8);
-	cmd[5] = (u8)(FTS_ALL_PACKET_LENGTH-1);
-	err = fts_i2c_read(client, cmd, 6, tmpBuf, FTS_ALL_PACKET_LENGTH);
-	if (err < 0) {
-		dev_err(&client->dev, "TP vendor id read failed 3 \n");
-		goto tp_id_err;
-	}
-
-	msleep(2);
-
-	//lock flash cptm
-	cmd[0] = 0x0A;
-	cmd[1] = 0xF5;
-	err = fts_i2c_write(client, cmd, 2);
-	if (err < 0) {
-		dev_err(&client->dev, "TP vendor id read failed 4 \n");
-		goto tp_id_err;
-	}
-
-	msleep(100);
-
-	fts_reset_chip();
-	msleep(300);
-
-	return tmpBuf[0xB4];
-
-tp_id_err:
-
-	fts_reset_chip();
-	msleep(300);
-	return -1;
-}
-
 int check_TP_ID(char *buf, ssize_t buf_len, u8 tp_id) {
-
 	switch(tp_id) {
-		case TP_ID_T:
-			buf_len += sprintf(buf + buf_len, "TP is FZWx GIS\n");
-			break;
-		case TP_ID_S:
-			buf_len += sprintf(buf + buf_len, "TP is FZWx Truly\n");
-			break;
-		default:
-			buf_len += sprintf(buf + buf_len, "TP isn't correct\n");
-			break;
+	case TP_ID_T:
+		buf_len += snprintf(buf + buf_len,
+			STR_SIZE, "TP is FZW6 KOTL\n");
+		break;
+	case TP_ID_S:
+		buf_len += snprintf(buf + buf_len,
+			STR_SIZE, "TP is FZW7 KOTL\n");
+		break;
+	case TP_ID_S_TRULY:
+		buf_len += snprintf(buf + buf_len,
+			STR_SIZE, "TP is FZW7 TRULY\n");
+		break;
+	default:
+		buf_len += snprintf(buf + buf_len,
+			STR_SIZE, "TP isn't correct\n");
+		break;
 	}
-	return buf_len;
 
+	return buf_len;
 }
 
-//dean add get TP infomation include fw ver, tp id from chip by i2c
 static ssize_t fts_getTPinfo_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	ssize_t num_read_chars = 0;
-	u8 fwver = 0, tp_id = 0;
+	u8 fwver = 0;
 	u8 err = -1;
 	u8 reg_addr = FTS_REG_FW_VER;
 
@@ -1516,21 +1468,24 @@ static ssize_t fts_getTPinfo_show(struct device *dev, struct device_attribute *a
 	err = fts_i2c_read(fts_i2c_client, &reg_addr, 1, &fwver, 1);
 
 	if (fwver == 255 || err < 0)
-		num_read_chars += sprintf(buf + num_read_chars,"get tp fw version fail!\n");
+		num_read_chars += snprintf(buf,
+			STR_SIZE, "get tp fw version fail!\n");
 	else
-		num_read_chars += sprintf(buf + num_read_chars, "FW Ver : 0x%02X\n", fwver);
+		num_read_chars += snprintf(buf,
+			STR_SIZE, "FW Ver : 0x%02X\n", fwver);
 
-	tp_id = getTPid();
-	num_read_chars += sprintf(buf + num_read_chars, "TP ID : 0x%02X\n", tp_id);
+	num_read_chars += snprintf(buf + num_read_chars,
+		STR_SIZE, "TP ID : 0x%02X\n",
+		fts_wq_data->fw_vendor_id);
 
-	num_read_chars = check_TP_ID(buf, num_read_chars, tp_id);
+	num_read_chars = check_TP_ID(buf, num_read_chars,
+		fts_wq_data->fw_vendor_id);
 
 	mutex_unlock(&fts_input_dev->mutex);
 
 	return num_read_chars;
 }
 
-//dean add get TP infomation include fw ver, tp id from chip by i2c
 static ssize_t fts_TPupgradeAPP_for_i_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	ssize_t num_read_chars = 0;
@@ -1541,19 +1496,21 @@ static ssize_t fts_TPupgradeAPP_for_i_show(struct device *dev, struct device_att
 
 	disable_irq(client->irq);
 
-	err = fts_ctpm_auto_upgrade_for_cci(fts_i2c_client, fts_wq_data->tp_vendor_id, true);
+	err = fts_ctpm_auto_upgrade_for_cci(fts_i2c_client,
+		fts_wq_data->fw_vendor_id, true);
 
 	if(err == 0) {
 		fts_update_fw_ver(fts_wq_data);
 		fts_update_fw_vendor_id(fts_wq_data);
 
 		num_read_chars += sprintf(buf + num_read_chars, "TP Upgrade is OK, FW ver : 0x%x, TP ID : 0x%x\n",
-		fts_wq_data->fw_ver[0], fts_wq_data->tp_vendor_id);
+		fts_wq_data->fw_ver[0], fts_wq_data->fw_vendor_id);
 	} else {
 		num_read_chars += sprintf(buf + num_read_chars, "TP Upgrade is Fail\n");
 	}
 
-	num_read_chars = check_TP_ID(buf, num_read_chars,  fts_wq_data->tp_vendor_id);
+	num_read_chars = check_TP_ID(buf, num_read_chars,
+		fts_wq_data->fw_vendor_id);
 
 	enable_irq(client->irq);
 	mutex_unlock(&fts_input_dev->mutex);

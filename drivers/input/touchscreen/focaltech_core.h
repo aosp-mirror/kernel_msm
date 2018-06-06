@@ -169,12 +169,14 @@
 #define F_TESTMODE_1		0x01
 #define F_TESTMODE_2		0x02
 /* Factory END*/
-#define TP_ID_T   0x98
+#define TP_ID_T	0x98
 #define TP_ID_S	0x99
 #define TP_ID_S_TRULY	0x9A
 
-#define TP_INI_FILE "FT3207_20170329_EFW_ABCD_HOST_F02_V01_OnlyTest.ini"
-#define TP_INI_FILE_T "FT3207_20170329_EFW_ABCD_HOST_F02_V01_OnlyTest_Truly.ini"
+#define TP_INI_FILE_T "FT3X67_CEI_FZW6_TULIP_0x98_V03_OnlyTest_20180521.ini"
+#define TP_INI_FILE_S "FT3X67_CEI_FZW7_SAKURA_0x99_V04_OnlyTest_20180530.ini"
+#define TP_INI_FILE_S_TRULY \
+			"FT3267_20180425_FZW7_HOST_Truly_0x9A_V01_OnlyTest.ini"
 #define FTS_GESTURE_SETTING_ADRESS	0xD0
 #define FTS_GESTURE_OUTPUT_ADRESS	0xD3
 #define GESTURE_UNKNOWN	0x00
@@ -387,7 +389,6 @@ struct fts_ts_data {
 	u32 tch_data_len;
 	u8 fw_ver[3];
 	u8 fw_vendor_id;
-	u8 tp_vendor_id;
 #ifdef FTS_GESTRUE_EN
 	int tp_gesture_id;
 #endif
@@ -429,7 +430,7 @@ struct fts_psensor_platform_data {
 #define FTS_APK_DEBUG
 #define FTS_SYSFS_DEBUG
 #define FTS_CTL_IIC
-/* #define FTS_AUTO_UPGRADE */
+#define FTS_AUTO_UPGRADE
 
 extern struct fts_Upgrade_Info fts_updateinfo_curr;
 extern struct i2c_client *fts_i2c_client;

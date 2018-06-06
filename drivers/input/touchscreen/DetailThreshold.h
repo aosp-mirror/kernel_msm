@@ -1,18 +1,18 @@
-/* 
-* Copyright © 2016 FocalTech Systems Co., Ltd.  All Rights Reserved. 
-* 
-* This program is free software; you may redistribute it and/or modify 
-* it under the terms of the GNU General Public License as published by 
-* the Free Software Foundation; version 2 of the License. 
-* 
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, 
-* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
-* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND 
-* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS 
-* BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN 
-* ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
-* CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE 
-* SOFTWARE. 
+/*
+* Copyright © 2016 FocalTech Systems Co., Ltd.  All Rights Reserved.
+*
+* This program is free software; you may redistribute it and/or modify
+* it under the terms of the GNU General Public License as published by
+* the Free Software Foundation; version 2 of the License.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+* BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+* ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+* CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+* SOFTWARE.
 */
 #ifndef _DETAIL_THRESHOLD_H
 #define _DETAIL_THRESHOLD_H
@@ -62,7 +62,7 @@ struct stCfg_SCap_DetailThreshold
 	int DeltaCiTest_AnotherBase1[MAX_CHANNEL_NUM];
 	int DeltaCiTest_AnotherBase2[MAX_CHANNEL_NUM];
 	int CiDeviationTest_Base[MAX_CHANNEL_NUM];
-	
+
 	int NoiseTest_Max[MAX_CHANNEL_NUM];
 	int DeltaCxTest_Sort[MAX_CHANNEL_NUM];         //Sort ¹ï6x06»P6x36³q¥Î
 	int DeltaCxTest_Area[MAX_CHANNEL_NUM];         //Sort ¹ï6x06»P6x36³q¥Î
@@ -80,6 +80,8 @@ void OnInit_MCap_DetailThreshold(char *strIniFile);
 void OnInit_SCap_DetailThreshold(char *strIniFile);
 
 void OnInit_InvalidNode(char *strIniFile);
+void OnGetTestItemParam_CB(char *strBasicThreshold,
+	char *strSpecialSet, char *strIniFile, int iDefautValue);
 void OnGetTestItemParam(char *strItemName, char *strIniFile, int iDefautValue);
 void OnInit_DThreshold_RawDataTest(char *strIniFile);
 void OnInit_DThreshold_SCapRawDataTest(char *strIniFile);

@@ -1,18 +1,18 @@
-/* 
-* Copyright © 2016 FocalTech Systems Co., Ltd.  All Rights Reserved. 
-* 
-* This program is free software; you may redistribute it and/or modify 
-* it under the terms of the GNU General Public License as published by 
-* the Free Software Foundation; version 2 of the License. 
-* 
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, 
-* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
-* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND 
-* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS 
-* BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN 
-* ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
-* CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE 
-* SOFTWARE. 
+/*
+* Copyright © 2016 FocalTech Systems Co., Ltd.  All Rights Reserved.
+*
+* This program is free software; you may redistribute it and/or modify
+* it under the terms of the GNU General Public License as published by
+* the Free Software Foundation; version 2 of the License.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+* BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+* ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+* CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+* SOFTWARE.
 */
 #ifndef _GLOBAL_H
 #define _GLOBAL_H
@@ -73,6 +73,7 @@ enum IC_Type
 	IC_FT3X07 = 0x41,
 	IC_FT6416 = 0x42,
 	IC_FT6426 = 0x43,
+	IC_FT3267  = 0x48,
 	IC_FT5X16 = 0x50,
 	IC_FT5X12 = 0x51,
 	IC_FT5506 = 0x60,
@@ -88,8 +89,9 @@ enum IC_Type
 	IC_FT8606  = 0x90,
 };
 #define MAX_IC_TYPE	32
+#define STR_NAME 20
 
-struct StruScreenSeting 
+struct StruScreenSeting
 {
 	int iSelectedIC;
 	int iTxNum;
@@ -119,9 +121,9 @@ enum NORMALIZE_Type
 
 enum PROOF_TYPE
 {
-	Proof_Normal,            
-	Proof_Level0,            
-	Proof_NoWaterProof,      
+	Proof_Normal,
+	Proof_Level0,
+	Proof_NoWaterProof,
 };
 
 extern struct stCfg_MCap_DetailThreshold g_stCfg_MCap_DetailThreshold;

@@ -1,18 +1,18 @@
-/* 
+/*
 * Copyright © 2016 FocalTech Systems Co., Ltd.  All Rights Reserved.
-* 
-* This program is free software; you may redistribute it and/or modify 
-* it under the terms of the GNU General Public License as published by 
-* the Free Software Foundation; version 2 of the License. 
-* 
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, 
-* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
-* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND 
-* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS 
-* BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN 
-* ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
-* CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE 
-* SOFTWARE. 
+*
+* This program is free software; you may redistribute it and/or modify
+* it under the terms of the GNU General Public License as published by
+* the Free Software Foundation; version 2 of the License.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+* BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+* ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+* CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+* SOFTWARE.
 */
 #include <linux/kernel.h>
 #include <linux/string.h>
@@ -61,28 +61,29 @@ int set_param_data(char * TestParamData)
 	//struct timeval time_end;
 
 	//gettimeofday(&time_start, NULL);//Start time
-	
-	printk("[fts]Enter  set_param_data \n");
+
+	pr_info("[fts]Enter set_param_data\n");
 	g_testparamstring = TestParamData;//get param of ini file
 	ini_get_key_data(g_testparamstring);//get param to struct
-	
+
 	//Set g_ScreenSetParam.iSelectedIC
 	OnInit_InterfaceCfg(g_testparamstring);
 
 	/*Get IC Name*/
 	get_ic_name(g_ScreenSetParam.iSelectedIC, g_strIcName);
+	pr_info("[fts] IC Name: %s, IC Code:  %d\n",
+		g_strIcName, g_ScreenSetParam.iSelectedIC);
 
 #if 1	//TODO checking: GC change here code.
 	//TODO: checking FT6X36 testing function is same with FT3x27
-	if(IC_FT6X36>>4 == g_ScreenSetParam.iSelectedIC>>4)
+	if ((IC_FT6X36 >> 4 == g_ScreenSetParam.iSelectedIC >> 4) ||
+		(IC_FT3267 >> 4 == g_ScreenSetParam.iSelectedIC >> 4))
 	{
 		OnInit_FT6X36_TestItem(g_testparamstring);
 		OnInit_FT6X36_BasicThreshold(g_testparamstring);
 		OnInit_SCap_DetailThreshold(g_testparamstring);
 		SetTestItem_FT6X36();
-	}
-	else 
-	{
+	} else {
 		printk("[fts]%s The IC type error in this testing\n", __func__);
 		return -1;
 	}
@@ -116,7 +117,7 @@ int set_param_data(char * TestParamData)
 		OnInit_SCap_DetailThreshold(g_testparamstring);
 		SetTestItem_FT6X36();
 	}
-#endif	
+#endif
 	return 0;
 }
 
@@ -128,13 +129,12 @@ int set_param_data(char * TestParamData)
 * Return: Test Result, PASS or FAIL
 ***********************************************************************/
 
-boolean start_test_tp(void) 
+boolean start_test_tp(void)
 {
 	boolean bTestResult = false;
-	printk("[fts] %s \n", FTS_DRIVER_LIB_INFO);	//show lib version
-	printk("[fts] %s start \n", __func__);
-	printk("[fts] IC_%s Test\n", g_strIcName);
-	
+	pr_info("[fts] %s\n", FTS_DRIVER_LIB_INFO);
+	pr_info("[fts] IC_%s Test\n", g_strIcName);
+
 	switch(g_ScreenSetParam.iSelectedIC>>4)
 	{
 	//TODO: need checking FT6x36 testing function is same with FT3x27
@@ -159,7 +159,7 @@ boolean start_test_tp(void)
 int get_test_data(char *pTestData)
 {
 	int iLen = 0;
-	printk("[fts] %s start \n", __func__);	
+	pr_info("[fts] %s start\n", __func__);
 	switch(g_ScreenSetParam.iSelectedIC>>4)
 	{
 		case IC_FT6X36>>4:
@@ -170,14 +170,14 @@ int get_test_data(char *pTestData)
 			break;
 	}
 
-	return iLen;	
+	return iLen;
 }
 /************************************************************************
 * Name: free_test_param_data
 * Brief:  release printer memory
 * Input: none
 * Output: none
-* Return: none. 
+* Return: none.
 ***********************************************************************/
 void free_test_param_data(void)
 {
@@ -192,13 +192,13 @@ void free_test_param_data(void)
 * Brief:  get lib version
 * Input: none
 * Output: pLibVer
-* Return: the length of lib version. 
+* Return: the length of lib version.
 ***********************************************************************/
 int show_lib_ver(char *pLibVer)
 {
 	int num_read_chars = 0;
-	
-	num_read_chars = snprintf(pLibVer, 128,"%s \n", FTS_DRIVER_LIB_INFO);
+
+	num_read_chars = snprintf(pLibVer, 128, "%s\n", FTS_DRIVER_LIB_INFO);
 
 	return num_read_chars;
 }

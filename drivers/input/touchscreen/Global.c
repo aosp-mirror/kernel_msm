@@ -17,12 +17,11 @@
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/printk.h>
-
-#include <linux/delay.h>//msleep
+#include <linux/bug.h>
+#include <linux/delay.h>
 
 #include "ini.h"
 #include "Global.h"
-
 #include "test_lib.h"
 
 #define DEVIDE_MODE_ADDR	0x00
@@ -31,7 +30,7 @@ struct StruScreenSeting g_ScreenSetParam; //«Ì¹õ³]¸m°Ñ¼Æ
 struct stTestItem g_stTestItem[1][MAX_TEST_ITEM];
 //struct structSCapConf g_stSCapConf;
 int g_TestItemNum = 0;
-char g_strIcName[20] ={0};
+char g_strIcName[STR_NAME] = {0};
 
 int GetPrivateProfileString(char *section, char *ItemName, char *defaultvalue, char *returnValue, char *IniFile){
 	char value[512] = {0};
@@ -73,110 +72,181 @@ int focal_abs(int value)
 /////////////////////////////////////////////////////////////////////////////
 ////Àò¨úIC¹ïÀ³½X
 /////////////////////////////////////////////////////////////////////////////
-unsigned char get_ic_code(char * strIcName)
+unsigned char get_ic_code(char *strIcName)
 {
+	if (strncmp(strIcName, "FT5X36", strlen("FT5X36")) == 0)
+		return IC_FT5X36;
+	if (strncmp(strIcName, "FT5X36i", strlen("FT5X36i")) == 0)
+		return IC_FT5X36i;
+	if (strncmp(strIcName, "FT3X16", strlen("FT3X16")) == 0)
+		return IC_FT3X16;
+	if (strncmp(strIcName, "FT3X26", strlen("FT3X26")) == 0)
+		return IC_FT3X26;
+	if (strncmp(strIcName, "FT3267", strlen("FT3267")) == 0)
+		return IC_FT3267;
 
-	if(strncmp(strIcName,"FT5X36",6) == 0) return IC_FT5X36;
-	if(strncmp(strIcName, "FT5X36i",7) == 0) return IC_FT5X36i;
-	if(strncmp(strIcName, "FT3X16",6) == 0) return IC_FT3X16;
-	if(strncmp(strIcName, "FT3X26",6) == 0) return IC_FT3X26;
+	if (strncmp(strIcName, "FT5X46", strlen("FT5X46")) == 0)
+		return IC_FT5X46;
+	if (strncmp(strIcName, "FT5X46i", strlen("FT5X46i")) == 0)
+		return IC_FT5X46i;
+	if (strncmp(strIcName, "FT5526", strlen("FT5526")) == 0)
+		return IC_FT5526;
+	if (strncmp(strIcName, "FT3X17", strlen("FT3X17")) == 0)
+		return IC_FT3X17;
+	if (strncmp(strIcName, "FT5436", strlen("FT5436")) == 0)
+		return IC_FT5436;
+	if (strncmp(strIcName, "FT3X27", strlen("FT3X27")) == 0)
+		return IC_FT3X27;
+	if (strncmp(strIcName, "FT5526i", strlen("FT5526i")) == 0)
+		return IC_FT5526I;
+	if (strncmp(strIcName, "FT5416", strlen("FT5416")) == 0)
+		return IC_FT5416;
+	if (strncmp(strIcName, "FT5426", strlen("FT5426")) == 0)
+		return IC_FT5426;
+	if (strncmp(strIcName, "FT5435", strlen("FT5435")) == 0)
+		return IC_FT5435;
 
-	if(strncmp(strIcName, "FT5X46",6) == 0) return IC_FT5X46;
-	if(strncmp(strIcName, "FT5X46i",7) == 0) return IC_FT5X46i;
-	if(strncmp(strIcName, "FT5526",6) == 0) return IC_FT5526;
-	if(strncmp(strIcName, "FT3X17",6) == 0) return IC_FT3X17;
-	if(strncmp(strIcName, "FT5436",6) == 0) return IC_FT5436;
-	if(strncmp(strIcName, "FT3X27",6) == 0) return IC_FT3X27;
-	if(strncmp(strIcName, "FT5526i",7) == 0) return IC_FT5526I;
-	if(strncmp(strIcName, "FT5416",6) == 0) return IC_FT5416;
-	if(strncmp(strIcName, "FT5426",6) == 0) return IC_FT5426;
-	if(strncmp(strIcName, "FT5435",6) == 0) return IC_FT5435;
+	if (strncmp(strIcName, "FT6X06", strlen("FT6X06")) == 0)
+		return IC_FT6X06;
+	if (strncmp(strIcName, "FT3X06", strlen("FT3X06")) == 0)
+		return IC_FT3X06;
 
-	if(strncmp(strIcName, "FT6X06",6) == 0) return IC_FT6X06;
-	if(strncmp(strIcName, "FT3X06",6) == 0) return IC_FT3X06;
+	if (strncmp(strIcName, "FT6X36", strlen("FT6X36")) == 0)
+		return IC_FT6X36;
+	if (strncmp(strIcName, "FT3X07", strlen("FT3X07")) == 0)
+		return IC_FT3X07;
+	if (strncmp(strIcName, "FT6416", strlen("FT6416")) == 0)
+		return IC_FT6416;
+	if (strncmp(strIcName, "FT6336G/U", strlen("FT6336G/U")) == 0)
+		return IC_FT6426;
 
-	if(strncmp(strIcName, "FT6X36",6) == 0) return IC_FT6X36;
-	if(strncmp(strIcName, "FT3X07",6) == 0) return IC_FT3X07;
-	if(strncmp(strIcName, "FT6416",6) == 0) return IC_FT6416;
-	if(strncmp(strIcName, "FT6336G/U",9) == 0) return IC_FT6426;
+	if (strncmp(strIcName, "FT5X16", strlen("FT5X16")) == 0)
+		return IC_FT5X16;
+	if (strncmp(strIcName, "FT5X12", strlen("FT5X12")) == 0)
+		return IC_FT5X12;
 
-	if(strncmp(strIcName, "FT5X16",6) == 0) return IC_FT5X16;
-	if(strncmp(strIcName, "FT5X12",6) == 0) return IC_FT5X12;
+	if (strncmp(strIcName, "FT5506", strlen("FT5506")) == 0)
+		return IC_FT5506;
+	if (strncmp(strIcName, "FT5606", strlen("FT5606")) == 0)
+		return IC_FT5606;
+	if (strncmp(strIcName, "FT5816", strlen("FT5816")) == 0)
+		return IC_FT5816;
 
-	if(strncmp(strIcName, "FT5506",6) == 0) return IC_FT5506;
-	if(strncmp(strIcName, "FT5606",6) == 0) return IC_FT5606;
-	if(strncmp(strIcName, "FT5816",6) == 0) return IC_FT5816;
+	if (strncmp(strIcName, "FT5822", strlen("FT5822")) == 0)
+		return IC_FT5822;
+	if (strncmp(strIcName, "FT5626", strlen("FT5626")) == 0)
+		return IC_FT5626;
+	if (strncmp(strIcName, "FT5726", strlen("FT5726")) == 0)
+		return IC_FT5726;
+	if (strncmp(strIcName, "FT5826B", strlen("FT5826B")) == 0)
+		return IC_FT5826B;
+	if (strncmp(strIcName, "FT5826S", strlen("FT5826S")) == 0)
+		return IC_FT5826S;
 
-	if(strncmp(strIcName, "FT5822",6) == 0) return IC_FT5822;
-	if(strncmp(strIcName, "FT5626",6) == 0) return IC_FT5626;
-	if(strncmp(strIcName, "FT5726",6) == 0) return IC_FT5726;
-	if(strncmp(strIcName, "FT5826B",7) == 0) return IC_FT5826B;
-	if(strncmp(strIcName, "FT5826S",7) == 0) return IC_FT5826S;
+	if (strncmp(strIcName, "FT5306", strlen("FT5306")) == 0)
+		return IC_FT5306;
+	if (strncmp(strIcName, "FT5406", strlen("FT5406")) == 0)
+		return IC_FT5406;
 
-	if(strncmp(strIcName, "FT5306",6) == 0) return IC_FT5306;
-	if(strncmp(strIcName, "FT5406",6) == 0) return IC_FT5406;
-
-	if(strncmp(strIcName, "FT8606",6) == 0) return IC_FT8606;
-
-	//if(strIcName == "FT8606")return IC_FT8606;
-	if(strncmp(strIcName,"FT8606",6) == 0) return IC_FT8606;
+	if (strncmp(strIcName, "FT8606", strlen("FT8606")) == 0)
+		return IC_FT8606;
 
 	return 0xff;
 }
 /////////////////////////////////////////////////////////////////////////////
 ////Àò¨úIC¦W
 /////////////////////////////////////////////////////////////////////////////
-void get_ic_name(unsigned char ucIcCode, char * strIcName)
+void get_ic_name(unsigned char ucIcCode, char *strIcName)
 {
-	if(NULL == strIcName)return;
+	if (NULL == strIcName)
+		return;
 
-	sprintf(strIcName, "%s", "NA");/*if can't find IC , set 'NA'*/
+	/*if can't find IC , set 'NA' */
+	snprintf(strIcName, STR_NAME, "%s", "NA");
 
-	if(ucIcCode == IC_FT5X36)sprintf(strIcName, "%s", "FT5X36");
-	if(ucIcCode == IC_FT5X36i)sprintf(strIcName, "%s",  "FT5X36i");
-	if(ucIcCode == IC_FT3X16)sprintf(strIcName, "%s",  "FT3X16");
-	if(ucIcCode == IC_FT3X26)sprintf(strIcName, "%s",  "FT3X26");
+	if (ucIcCode == IC_FT5X36)
+		snprintf(strIcName, STR_NAME, "%s", "FT5X36");
+	if (ucIcCode == IC_FT5X36i)
+		snprintf(strIcName, STR_NAME, "%s", "FT5X36i");
+	if (ucIcCode == IC_FT3X16)
+		snprintf(strIcName, STR_NAME, "%s", "FT3X16");
+	if (ucIcCode == IC_FT3X26)
+		snprintf(strIcName, STR_NAME, "%s", "FT3X26");
 
-	if(ucIcCode == IC_FT5X46)sprintf(strIcName, "%s",  "FT5X22");
-	if(ucIcCode == IC_FT5X46) sprintf(strIcName, "%s",  "FT5X46");
-	if(ucIcCode == IC_FT5X46i) sprintf(strIcName, "%s",  "FT5X46i");
-	if(ucIcCode == IC_FT5526) sprintf(strIcName, "%s",  "FT5526");
-	if(ucIcCode == IC_FT3X17)  sprintf(strIcName, "%s",  "FT3X17");
-	if(ucIcCode == IC_FT5436) sprintf(strIcName, "%s",  "FT5436");
-	if(ucIcCode == IC_FT3X27)  sprintf(strIcName, "%s",  "FT3X27");
-	if(ucIcCode == IC_FT5526I) sprintf(strIcName, "%s",  "FT5526i");
-	if(ucIcCode == IC_FT5416) sprintf(strIcName, "%s",  "FT5416");
-	if(ucIcCode == IC_FT5426) sprintf(strIcName, "%s",  "FT5426");
-	if(ucIcCode == IC_FT5435) sprintf(strIcName, "%s",  "FT5435");
+	if (ucIcCode == IC_FT5X46)
+		snprintf(strIcName, STR_NAME, "%s", "FT5X22");
+	if (ucIcCode == IC_FT5X46)
+		snprintf(strIcName, STR_NAME, "%s", "FT5X46");
+	if (ucIcCode == IC_FT5X46i)
+		snprintf(strIcName, STR_NAME, "%s", "FT5X46i");
+	if (ucIcCode == IC_FT5526)
+		snprintf(strIcName, STR_NAME, "%s", "FT5526");
+	if (ucIcCode == IC_FT3X17)
+		snprintf(strIcName, STR_NAME, "%s", "FT3X17");
+	if (ucIcCode == IC_FT5436)
+		snprintf(strIcName, STR_NAME, "%s", "FT5436");
+	if (ucIcCode == IC_FT3X27)
+		snprintf(strIcName, STR_NAME, "%s", "FT3X27");
+	if (ucIcCode == IC_FT5526I)
+		snprintf(strIcName, STR_NAME, "%s", "FT5526i");
+	if (ucIcCode == IC_FT5416)
+		snprintf(strIcName, STR_NAME, "%s", "FT5416");
+	if (ucIcCode == IC_FT5426)
+		snprintf(strIcName, STR_NAME, "%s", "FT5426");
+	if (ucIcCode == IC_FT5435)
+		snprintf(strIcName, STR_NAME, "%s", "FT5435");
 
-	if(ucIcCode == IC_FT6X06)sprintf(strIcName, "%s",  "FT6X06");
-	if(ucIcCode == IC_FT3X06)sprintf(strIcName, "%s",  "FT3X06");
+	if (ucIcCode == IC_FT6X06)
+		snprintf(strIcName, STR_NAME, "%s", "FT6X06");
+	if (ucIcCode == IC_FT3X06)
+		snprintf(strIcName, STR_NAME, "%s", "FT3X06");
 
-	if(ucIcCode == IC_FT6X36)sprintf(strIcName, "%s",  "FT6X36");
-	if(ucIcCode == IC_FT3X07)sprintf(strIcName, "%s",  "FT3X07");
-	if(ucIcCode == IC_FT6416)sprintf(strIcName, "%s",  "FT6416");
-	if(ucIcCode == IC_FT6426)sprintf(strIcName, "%s",  "FT6336G/U");
+	if (ucIcCode == IC_FT6X36)
+		snprintf(strIcName, STR_NAME, "%s", "FT6X36");
+	if (ucIcCode == IC_FT3X07)
+		snprintf(strIcName, STR_NAME, "%s", "FT3X07");
+	if (ucIcCode == IC_FT6416)
+		snprintf(strIcName, STR_NAME, "%s", "FT6416");
+	if (ucIcCode == IC_FT6426)
+		snprintf(strIcName, STR_NAME, "%s", "FT6336G/U");
 
-	if(ucIcCode == IC_FT5X16)sprintf(strIcName, "%s",  "FT5X16");
-	if(ucIcCode == IC_FT5X12)sprintf(strIcName, "%s",  "FT5X12");
+	if (ucIcCode == IC_FT5X16)
+		snprintf(strIcName, STR_NAME, "%s", "FT5X16");
+	if (ucIcCode == IC_FT5X12)
+		snprintf(strIcName, STR_NAME, "%s", "FT5X12");
 
-	if(ucIcCode == IC_FT5506)sprintf(strIcName, "%s",  "FT5506");
-	if(ucIcCode == IC_FT5606)sprintf(strIcName, "%s",  "FT5606");
-	if(ucIcCode == IC_FT5816)sprintf(strIcName, "%s",  "FT5816");
+	if (ucIcCode == IC_FT5506)
+		snprintf(strIcName, STR_NAME, "%s", "FT5506");
+	if (ucIcCode == IC_FT5606)
+		snprintf(strIcName, STR_NAME, "%s", "FT5606");
+	if (ucIcCode == IC_FT5816)
+		snprintf(strIcName, STR_NAME, "%s", "FT5816");
 
-	if(ucIcCode == IC_FT5822)sprintf(strIcName, "%s",  "FT5822");
-	if(ucIcCode == IC_FT5626)sprintf(strIcName, "%s",  "FT5626");
-	if(ucIcCode == IC_FT5726)sprintf(strIcName, "%s",  "FT5726");
-	if(ucIcCode == IC_FT5826B)sprintf(strIcName, "%s",  "FT5826B");
-	if(ucIcCode == IC_FT5826S)sprintf(strIcName, "%s",  "FT5826S");
+	if (ucIcCode == IC_FT5822)
+		snprintf(strIcName, STR_NAME, "%s", "FT5822");
+	if (ucIcCode == IC_FT5626)
+		snprintf(strIcName, STR_NAME, "%s", "FT5626");
+	if (ucIcCode == IC_FT5726)
+		snprintf(strIcName, STR_NAME, "%s", "FT5726");
+	if (ucIcCode == IC_FT5826B)
+		snprintf(strIcName, STR_NAME, "%s", "FT5826B");
+	if (ucIcCode == IC_FT5826S)
+		snprintf(strIcName, STR_NAME, "%s", "FT5826S");
 
-	if(ucIcCode == IC_FT5306)sprintf(strIcName, "%s",  "FT5306");
-	if(ucIcCode == IC_FT5406)sprintf(strIcName, "%s",  "FT5406");
+	if (ucIcCode == IC_FT5306)
+		snprintf(strIcName, STR_NAME, "%s", "FT5306");
+	if (ucIcCode == IC_FT5406)
+		snprintf(strIcName, STR_NAME, "%s", "FT5406");
 
-	if(ucIcCode == IC_FT8606)sprintf(strIcName, "%s",  "FT8606");
-	//if(ucIcCode == IC_FT8716)sprintf(strIcName, "%s",  "FT8716");
+	if (ucIcCode == IC_FT8606)
+		snprintf(strIcName, STR_NAME, "%s", "FT8606");
+	/* if(ucIcCode == IC_FT8716)
+		snprintf(strIcName, STR_NAME, "%s",  "FT8716");*/
 
-	return ;
+	if (ucIcCode == IC_FT3267)
+		snprintf(strIcName, STR_NAME, "%s", "FT3267");
+
+	return;
 }
 void OnInit_InterfaceCfg(char * strIniFile)
 {

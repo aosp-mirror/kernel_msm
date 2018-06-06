@@ -1,18 +1,18 @@
-/* 
-* Copyright © 2016 FocalTech Systems Co., Ltd.  All Rights Reserved. 
-* 
-* This program is free software; you may redistribute it and/or modify 
-* it under the terms of the GNU General Public License as published by 
-* the Free Software Foundation; version 2 of the License. 
-* 
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, 
-* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
-* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND 
-* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS 
-* BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN 
-* ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
-* CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE 
-* SOFTWARE. 
+/*
+* Copyright © 2016 FocalTech Systems Co., Ltd.  All Rights Reserved.
+*
+* This program is free software; you may redistribute it and/or modify
+* it under the terms of the GNU General Public License as published by
+* the Free Software Foundation; version 2 of the License.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+* BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+* ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+* CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+* SOFTWARE.
 */
 #include <linux/kernel.h>
 #include <linux/string.h>
@@ -39,7 +39,7 @@ void OnInit_FT6X36_TestItem(char *strIniFile)
 
 	//////////////////////////////////////////////////////////// Project Code Test
 	GetPrivateProfileString("TestItem","PROJECT_CODE_TEST","0",str,strIniFile);
-	g_stCfg_FT6X36_TestItem.PROJECT_CODE_TEST = atoi(str);	
+	g_stCfg_FT6X36_TestItem.PROJECT_CODE_TEST = atoi(str);
 
 	//////////////////////////////////////////////////////////// IC Version
 	GetPrivateProfileString("TestItem","IC_VERSION_TEST","0",str,strIniFile);
@@ -53,17 +53,17 @@ void OnInit_FT6X36_TestItem(char *strIniFile)
 	GetPrivateProfileString("TestItem","CHANNEL_NUM_TEST","1",str,strIniFile);
 	g_stCfg_FT6X36_TestItem.CHANNEL_NUM_TEST = atoi(str);
 
-	//TODO:GC checking, test or not for this item  
+	/*TODO:GC checking, test or not for this item*/
 	/////////////////////////////////// CHANNEL_SHORT_TEST
 	GetPrivateProfileString("TestItem","CHANNEL_SHORT_TEST","1",str,strIniFile);
 	g_stCfg_FT6X36_TestItem.CHANNEL_SHORT_TEST = atoi(str);
 
-	//TODO:GC checking, test or not for this item  
+	/*TODO:GC checking, test or not for this item*/
 	/////////////////////////////////// INT_PIN_TEST
 	GetPrivateProfileString("TestItem","INT_PIN_TEST","0",str,strIniFile);
 	g_stCfg_FT6X36_TestItem.INT_PIN_TEST = atoi(str);
 
-	//TODO:GC checking, test or not for this item  
+	/*TODO:GC checking, test or not for this item*/
 	/////////////////////////////////// RESET_PIN_TEST
 	GetPrivateProfileString("TestItem","RESET_PIN_TEST","0",str,strIniFile);
 	g_stCfg_FT6X36_TestItem.RESET_PIN_TEST = atoi(str);
@@ -80,7 +80,7 @@ void OnInit_FT6X36_TestItem(char *strIniFile)
 	GetPrivateProfileString("TestItem","DELTA_CB_TEST","1",str,strIniFile);
 	g_stCfg_FT6X36_TestItem.DELTA_CB_TEST = atoi(str);
 
-	//TODO:GC checking, test or not for this item  
+	/*TODO:GC checking, test or not for this item*/
 	/////////////////////////////////// CHANNELS_DEVIATION_TEST
 	GetPrivateProfileString("TestItem","CHANNELS_DEVIATION_TEST","1",str,strIniFile);
 	g_stCfg_FT6X36_TestItem.CHANNELS_DEVIATION_TEST = atoi(str);
@@ -190,9 +190,11 @@ void OnInit_FT6X36_BasicThreshold(char *strIniFile)
 	GetPrivateProfileString("Basic_Threshold","NoiseTest_ShowTip","0",str,strIniFile);
 	g_stCfg_FT6X36_BasicThreshold.NoiseTest_ShowTip = atoi(str);
 
-	GetPrivateProfileString("Basic_Threshold","CbTest_Min","5",str,strIniFile);
+	GetPrivateProfileString("Basic_Threshold",
+		"CBTest_Min", "5", str, strIniFile);
 	g_stCfg_FT6X36_BasicThreshold.CbTest_Min = atoi(str);
-	GetPrivateProfileString("Basic_Threshold","CbTest_Max","250",str,strIniFile);
+	GetPrivateProfileString("Basic_Threshold",
+		"CBTest_Max", "250", str, strIniFile);
 	g_stCfg_FT6X36_BasicThreshold.CbTest_Max = atoi(str);
 
 	GetPrivateProfileString("Basic_Threshold","DeltaCbTest_Base","0",str,strIniFile);
@@ -246,7 +248,7 @@ void OnInit_FT6X36_BasicThreshold(char *strIniFile)
 	g_stCfg_FT6X36_BasicThreshold.DeltaCbTest_Critical_S5 = atoi(str);
 
 	GetPrivateProfileString("Basic_Threshold","DeltaCbTest_Critical_S6","20",str,strIniFile);
-	g_stCfg_FT6X36_BasicThreshold.DeltaCbTest_Critical_S6 = atoi(str);	
+	g_stCfg_FT6X36_BasicThreshold.DeltaCbTest_Critical_S6 = atoi(str);
 
 
 	GetPrivateProfileString("Basic_Threshold","ChannelsDeviationTest_Deviation_S1","8",str,strIniFile);
@@ -272,22 +274,27 @@ void OnInit_FT6X36_BasicThreshold(char *strIniFile)
 	g_stCfg_FT6X36_BasicThreshold.ChannelsDeviationTest_Set_Critical = atoi(str);
 
 	GetPrivateProfileString("Basic_Threshold","ChannelsDeviationTest_Critical_S1","13",str,strIniFile);
-	g_stCfg_FT6X36_BasicThreshold.ChannelsDeviationTest_Critical_S1 = atoi(str);	
+	g_stCfg_FT6X36_BasicThreshold.ChannelsDeviationTest_Critical_S1
+		= atoi(str);
 
 	GetPrivateProfileString("Basic_Threshold","ChannelsDeviationTest_Critical_S2","13",str,strIniFile);
 	g_stCfg_FT6X36_BasicThreshold.ChannelsDeviationTest_Critical_S2 = atoi(str);
 
 	GetPrivateProfileString("Basic_Threshold","ChannelsDeviationTest_Critical_S3","13",str,strIniFile);
-	g_stCfg_FT6X36_BasicThreshold.ChannelsDeviationTest_Critical_S3 = atoi(str);	
+	g_stCfg_FT6X36_BasicThreshold.ChannelsDeviationTest_Critical_S3
+		= atoi(str);
 
 	GetPrivateProfileString("Basic_Threshold","ChannelsDeviationTest_Critical_S4","13",str,strIniFile);
-	g_stCfg_FT6X36_BasicThreshold.ChannelsDeviationTest_Critical_S4 = atoi(str);	
+	g_stCfg_FT6X36_BasicThreshold.ChannelsDeviationTest_Critical_S4
+		= atoi(str);
 
 	GetPrivateProfileString("Basic_Threshold","ChannelsDeviationTest_Critical_S5","13",str,strIniFile);
-	g_stCfg_FT6X36_BasicThreshold.ChannelsDeviationTest_Critical_S5 = atoi(str);	
+	g_stCfg_FT6X36_BasicThreshold.ChannelsDeviationTest_Critical_S5
+		= atoi(str);
 
 	GetPrivateProfileString("Basic_Threshold","ChannelsDeviationTest_Critical_S6","13",str,strIniFile);
-	g_stCfg_FT6X36_BasicThreshold.ChannelsDeviationTest_Critical_S6 = atoi(str);	
+	g_stCfg_FT6X36_BasicThreshold.ChannelsDeviationTest_Critical_S6
+		= atoi(str);
 
 	GetPrivateProfileString("Basic_Threshold","TwoSidesDeviationTest_Deviation_S1","5",str,strIniFile);
 	g_stCfg_FT6X36_BasicThreshold.TwoSidesDeviationTest_Deviation_S1 = atoi(str);
@@ -329,7 +336,7 @@ void OnInit_FT6X36_BasicThreshold(char *strIniFile)
 	GetPrivateProfileString("Basic_Threshold","TwoSidesDeviationTest_Critical_S6","10",str,strIniFile);
 	g_stCfg_FT6X36_BasicThreshold.TwoSidesDeviationTest_Critical_S6 = atoi(str);
 
-	// fpc short 
+	/* fpc short */
 	GetPrivateProfileString("Basic_Threshold","FPCShortTest_Min_CB","5",str,strIniFile);
 	g_stCfg_FT6X36_BasicThreshold.FPCShort_CB_Min = atoi(str);
 	GetPrivateProfileString("Basic_Threshold","FPCShortTest_Max_CB","1015",str,strIniFile);
@@ -445,10 +452,8 @@ void SetTestItem_FT6X36()
 		g_stTestItem[0][g_TestItemNum].TestResult= RESULT_NULL;
 		g_TestItemNum++;
 	}
-	if(value == 5 || value == 6 || value == 8)//Only Download /Upgrade/write config
-	{	
+	if (value == 5 || value == 6 || value == 8)
 		return;
-	}
 
 	if( g_stCfg_SiuBoard.bVDDTest )
 	{
@@ -523,7 +528,7 @@ void SetTestItem_FT6X36()
 		g_stTestItem[0][g_TestItemNum].TestResult= RESULT_NULL;
 		g_TestItemNum++;
 	}
-	
+
 	//////////////////////////////////////////////////RawData Test
 	if( g_stCfg_FT6X36_TestItem.RAWDATA_TEST == 1)
 	{
@@ -653,7 +658,7 @@ void SetTestItem_FT6X36()
 		g_stTestItem[0][g_TestItemNum].TestResult= RESULT_NULL;
 		g_TestItemNum++;
 	}
-	   
+
 	//////////////////////////////////////////////////Weak Short Test
 	if( g_stCfg_FT6X36_TestItem.WEAK_SHORT_TEST == 1)
 	{

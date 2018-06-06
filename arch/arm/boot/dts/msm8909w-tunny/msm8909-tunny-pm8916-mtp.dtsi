@@ -28,7 +28,7 @@
 			vdd-supply = <&pm8916_l11>;
 			vcc_i2c-supply = <&pm8916_l16>;
 			focaltech,name = "fts";
-			focaltech,family-id = <0x33>;
+			focaltech,family-id = <0x64>;
 			focaltech,reset-gpio = <&msm_gpio 12 0x00>;
 			focaltech,irq-gpio =<&msm_gpio 13 0x00>;
 			//focaltech,id1-gpio = <&msm_gpio 109 0x00>;
@@ -164,7 +164,7 @@
 		qcom,vin-sel = <3>;		/* PM8926_L6 1.8v */
 		qcom,src-sel = <0>;		/* MPP Constant */
 		qcom,ain-route = <2>;	/* QPNP_PIN_AIN_AMUX_CH6 = 1 */
-		qcom,master-en = <1>;	/* Enable MPP */	
+		qcom,master-en = <1>;	/* Enable MPP */
 	};
 
 	mpp@a300 { /* MPP 4 */
