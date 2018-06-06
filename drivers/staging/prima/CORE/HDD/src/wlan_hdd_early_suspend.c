@@ -2284,6 +2284,10 @@ VOS_STATUS hdd_wlan_shutdown(void)
    /* set default value of Tcp delack and stop timer */
    hdd_set_default_stop_delack_timer(pHddCtx);
 
+   if (VOS_TIMER_STATE_RUNNING ==
+       vos_timer_getCurrentState(&pHddCtx->tdls_source_timer))
+       vos_timer_stop(&pHddCtx->tdls_source_timer);
+
    /* DeRegister with platform driver as client for Suspend/Resume */
    vosStatus = hddDeregisterPmOps(pHddCtx);
    if ( !VOS_IS_STATUS_SUCCESS( vosStatus ) )
@@ -2332,6 +2336,7 @@ VOS_STATUS hdd_wlan_shutdown(void)
    set_bit(MC_POST_EVENT, &vosSchedContext->mcEventFlag);
    wake_up_interruptible(&vosSchedContext->mcWaitQueue);
    wait_for_completion(&vosSchedContext->McShutdown);
+   vosSchedContext->McThread = NULL;
 
    /* Wait for TX to exit */
    hddLog(VOS_TRACE_LEVEL_FATAL, "%s: Shutting down TX thread",__func__);
@@ -2339,14 +2344,15 @@ VOS_STATUS hdd_wlan_shutdown(void)
    set_bit(TX_POST_EVENT, &vosSchedContext->txEventFlag);
    wake_up_interruptible(&vosSchedContext->txWaitQueue);
    wait_for_completion(&vosSchedContext->TxShutdown);
+   vosSchedContext->TxThread = NULL;
 
    /* Wait for RX to exit */
    hddLog(VOS_TRACE_LEVEL_FATAL, "%s: Shutting down RX thread",__func__);
    set_bit(RX_SHUTDOWN_EVENT, &vosSchedContext->rxEventFlag);
    set_bit(RX_POST_EVENT, &vosSchedContext->rxEventFlag);
    wake_up_interruptible(&vosSchedContext->rxWaitQueue);
-
    wait_for_completion(&vosSchedContext->RxShutdown);
+   vosSchedContext->RxThread = NULL;
 
 #ifdef WLAN_BTAMP_FEATURE
    vosStatus = WLANBAP_Stop(pVosContext);
