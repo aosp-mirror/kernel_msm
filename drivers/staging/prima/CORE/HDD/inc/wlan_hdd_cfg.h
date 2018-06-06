@@ -3167,7 +3167,7 @@ This feature requires the dependent cfg.ini "gRoamPrefer5GHz" set to 1 */
 #define CFG_FORCE_SCC_WITH_ECSA_NAME       "force_scc_with_ecsa"
 #define CFG_FORCE_SCC_WITH_ECSA_MIN        (0)
 #define CFG_FORCE_SCC_WITH_ECSA_MAX        (1)
-#define CFG_FORCE_SCC_WITH_ECSA_DEFAULT    (0)
+#define CFG_FORCE_SCC_WITH_ECSA_DEFAULT    (1)
 
 #define CFG_STA_SAP_SCC_ON_DFS_CHAN             "sta_sap_scc_on_dfs_chan"
 #define CFG_STA_SAP_SCC_ON_DFS_CHAN_MIN         (0)
