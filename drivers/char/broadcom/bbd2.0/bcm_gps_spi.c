@@ -745,32 +745,11 @@ static void bcm_spi_shutdown(struct spi_device *spi)
 
 static int bcm_spi_probe(struct spi_device *spi)
 {
-	int host_req, mcu_req, mcu_resp;
+	int host_req, mcu_req, mcu_resp, vdd_pmu_in, nstandby;
 	struct bcm_spi_priv *priv;
 	int pin_ttyBCM, pin_MCU_REQ, pin_MCU_RESP;
 	int ret;
-
-	long gpio = 74;
-	struct gpio_desc	*desc;
-	int status;
-
-	desc = gpio_to_desc(gpio);
-	if (!desc) {
-		pr_warn("%s: invalid gpio_todesc \n", __func__);
-	}
-	status = gpio_request(74, "spigpio74");
-	if (status) {
-		pr_warn("%s: invalid gpio_request\n", __func__);
-	}
-	status = gpiod_export(desc, true);
-	if (status) {
-		pr_warn("%s: invalid GPIO %ld\n", __func__, gpio);
-	}
-
-	status = gpio_direction_output(74, 1);
-	if (status) {
-		pr_warn("%s: invalid gpio_direction_output\n", __func__);
-	}
+	struct gpio_desc *desc;
 
 	/* Check GPIO# */
 #ifndef CONFIG_OF
@@ -781,18 +760,73 @@ static int bcm_spi_probe(struct spi_device *spi)
 		goto err_exit;
 	}
 
+	vdd_pmu_in = of_get_named_gpio(spi->dev.of_node, "ssp-vdd-pmu-in", 0);
+	nstandby = of_get_named_gpio(spi->dev.of_node, "ssp-nstandby", 0);
 	host_req = of_get_named_gpio(spi->dev.of_node, "ssp-host-req", 0);
 	mcu_req  = of_get_named_gpio(spi->dev.of_node, "ssp-mcu-req", 0);
 	mcu_resp = of_get_named_gpio(spi->dev.of_node, "ssp-mcu-resp", 0);
-	if (host_req<0 || mcu_req<0 || mcu_resp<0) {
+	if (vdd_pmu_in < 0 || nstandby < 0 || host_req < 0 ||
+	     mcu_req < 0 || mcu_resp < 0) {
 		pr_err("[SSPBBD]: GPIO value not correct\n");
 		goto err_exit;
 	}
 
+	/*loadswitch config start*/
+	desc = gpio_to_desc(vdd_pmu_in);
+	if (!desc) {
+		pr_err("[SSPBBD]: vdd_pmu_in invalid gpio_todesc!\n");
+		goto err_exit;
+	}
+
+	ret = gpio_request(vdd_pmu_in, "gpio30");
+	if (ret) {
+		pr_err("[SSPBBD]: vdd_pmu_in gpio_request failed!\n");
+		goto err_exit;
+	}
+	ret = gpiod_export(desc, true);
+	if (ret) {
+		pr_err("[SSPBBD]: vdd_pum_in gpoid_export failed!\n");
+		goto err_exit;
+	}
+	ret = gpio_direction_output(vdd_pmu_in, 1);
+	if (ret) {
+		pr_err("[SSPBBD]: vdd_pmu_in set direction failed!\n");
+		goto err_exit;
+	}
+	pr_info("GPS loadswitch enable!\n");
+	gpio_set_value(vdd_pmu_in, 1);
+	msleep(100);
+	/*loadswitch config end*/
+
+	/*nstandby config start*/
+	desc = gpio_to_desc(nstandby);
+	if (!desc) {
+		pr_warn("[SSPBBD]: nstandby invalid gpio_todesc!");
+		goto err_exit;
+	}
+	ret = gpio_request(nstandby, "gpio74");
+	if (ret) {
+		pr_warn("[SSPBBD]: nstandby gpio_request failed!\n");
+		goto err_exit;
+	}
+	ret = gpiod_export(desc, true);
+	if (ret) {
+		pr_warn("[SSPBBD]: nstandby gpoid_export failed!");
+		goto err_exit;
+	}
+
+	ret = gpio_direction_output(nstandby, 1);
+	if (ret) {
+		pr_warn("[SSPBBD]: nstandby set direction failed!\n");
+		goto err_exit;
+	}
+	/*nstandby config end*/
+
 	/* Check IRQ# */
 	spi->irq = gpio_to_irq(host_req);
 	if (spi->irq < 0) {
-		pr_err("[SSPBBD]: irq=%d for host_req=%d not correct\n", spi->irq, host_req);
+		pr_err("[SSPBBD]: irq=%d for host_req=%d not correct\n",
+		       spi->irq, host_req);
 		goto err_exit;
 	}
 
@@ -928,8 +962,11 @@ static int bcm_spi_remove(struct spi_device *spi)
 {
 	struct bcm_spi_priv *priv = (struct bcm_spi_priv*) spi_get_drvdata(spi);
 	unsigned long int flags;
+	int vdd_pmu_in;
 
-	pr_notice("[SSPBBD]:  %s : called\n", __func__);
+	pr_info("[SSPBBD]:  %s : called\n", __func__);
+
+	vdd_pmu_in = of_get_named_gpio(spi->dev.of_node, "ssp-vdd-pmu-in", 0);
 
 	atomic_set(&priv->suspending, 1);
 
@@ -949,6 +986,12 @@ static int bcm_spi_remove(struct spi_device *spi)
 	kfree(priv->tx_buf);
 	kfree(priv->rx_buf);
 	kfree( priv );
+
+	/*Disable GPS loadswitch*/
+	if (vdd_pmu_in > 0) {
+		pr_info("GPS loadswitch disable\n");
+		gpio_set_value(vdd_pmu_in, 0);
+	}
 
 	g_bcm_gps = NULL;
 
