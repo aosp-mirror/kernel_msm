@@ -156,6 +156,9 @@
 				ssp-host-req = <&msm_gpio 94 0x4>;
 				ssp-mcu-req = <&msm_gpio 27 0>;
 				ssp-mcu-resp = <&msm_gpio 28 0>;
+				ssp-vdd-pmu-in = <&msm_gpio 30 0>;
+				ssp-nstandby = <&msm_gpio 74 0>;
+
 			};
 		};
 	gpio_keys {
