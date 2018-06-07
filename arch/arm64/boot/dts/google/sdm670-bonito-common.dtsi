@@ -18,6 +18,7 @@
 #include "sdm670-bonito-display.dtsi"
 #include "sdm670-camera-sensor.dtsi"
 #include "sdm670-bonito-pinctrl.dtsi"
+#include "sdm670-bonito-citadel.dtsi"
 #include "sdm670-bonito-audio.dtsi"
 
 &qupv3_se10_i2c {
