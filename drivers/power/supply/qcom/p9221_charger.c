@@ -29,6 +29,8 @@
 #include <linux/pmic-voter.h>
 #include "p9221_charger.h"
 
+#define P9221_TX_TIMEOUT_MS (20 * 1000)
+
 static const u32 p9221_ov_set_lut[] = {
 	17000000, 20000000, 15000000, 13000000,
 	11000000, 11000000, 11000000, 11000000};
@@ -713,6 +715,18 @@ static int p9221_set_property_reg(struct p9221_charger_data *charger,
 	return p9221_reg_write_cooked(charger, p->reg, val->intval);
 }
 
+static void p9221_abort_transfers(struct p9221_charger_data *charger)
+{
+	/* Abort all transfers */
+	charger->tx_busy = false;
+	charger->tx_done = true;
+	charger->rx_done = true;
+	charger->rx_len = 0;
+	sysfs_notify(&charger->dev->kobj, NULL, "txbusy");
+	sysfs_notify(&charger->dev->kobj, NULL, "txdone");
+	sysfs_notify(&charger->dev->kobj, NULL, "rxdone");
+}
+
 static void p9221_set_offline(struct p9221_charger_data *charger)
 {
 	int ret;
@@ -722,14 +736,8 @@ static void p9221_set_offline(struct p9221_charger_data *charger)
 	charger->online = false;
 	charger->early_det = false;
 
-	/* Abort all transfers */
-	charger->tx_busy = false;
-	charger->tx_done = true;
-	charger->rx_done = true;
-	charger->rx_len = 0;
-	sysfs_notify(&charger->dev->kobj, NULL, "txbusy");
-	sysfs_notify(&charger->dev->kobj, NULL, "txdone");
-	sysfs_notify(&charger->dev->kobj, NULL, "rxdone");
+	p9221_abort_transfers(charger);
+	del_timer(&charger->tx_timer);
 
 	/* Put the default ICL back to BPP */
 	if (charger->dc_icl_votable) {
@@ -760,6 +768,18 @@ static void p9221_timer_handler(unsigned long data)
 	power_supply_changed(charger->wc_psy);
 
 	pm_relax(charger->dev);
+}
+
+static void p9221_tx_timer_handler(unsigned long data)
+{
+	struct p9221_charger_data *charger = (struct p9221_charger_data *)data;
+
+	dev_info(&charger->client->dev, "timeout waiting for tx complete\n");
+
+	charger->tx_busy = false;
+	charger->tx_done = true;
+	sysfs_notify(&charger->dev->kobj, NULL, "txbusy");
+	sysfs_notify(&charger->dev->kobj, NULL, "txdone");
 }
 
 static const char *p9221_get_tx_id_str(struct p9221_charger_data *charger)
@@ -1525,8 +1545,14 @@ static ssize_t p9221_store_txlen(struct device *dev,
 	charger->tx_len = len;
 	charger->tx_done = false;
 	ret = p9221_send_data(charger);
-	if (ret)
+	if (ret) {
+		charger->tx_done = true;
 		return ret;
+	}
+
+	mod_timer(&charger->tx_timer,
+		  jiffies + msecs_to_jiffies(P9221_TX_TIMEOUT_MS));
+
 	return count;
 }
 
@@ -1568,6 +1594,17 @@ static struct bin_attribute bin_attr_rxdata = {
 	.size = P9221R5_DATA_RECV_BUF_SIZE,
 };
 
+static ssize_t p9221_txdata_read(struct file *filp, struct kobject *kobj,
+				 struct bin_attribute *bin_attr,
+				 char *buf, loff_t pos, size_t size)
+{
+	struct p9221_charger_data *charger;
+	charger = dev_get_drvdata(container_of(kobj, struct device, kobj));
+
+	memcpy(buf, &charger->tx_buf[pos], size);
+	return size;
+}
+
 static ssize_t p9221_txdata_write(struct file *filp, struct kobject *kobj,
 				  struct bin_attribute *bin_attr,
 				  char *buf, loff_t pos, size_t size)
@@ -1582,8 +1619,9 @@ static ssize_t p9221_txdata_write(struct file *filp, struct kobject *kobj,
 static struct bin_attribute bin_attr_txdata = {
 	.attr = {
 		.name = "txdata",
-		.mode = 0200,
+		.mode = 0600,
 	},
+	.read = p9221_txdata_read,
 	.write = p9221_txdata_write,
 	.size  = P9221R5_DATA_SEND_BUF_SIZE,
 };
@@ -1676,19 +1714,14 @@ static void p9221r5_irq_handler(struct p9221_charger_data *charger, u16 irq_src)
 	if (irq_src & P9221R5_STAT_CCSENDBUSY) {
 		charger->tx_busy = false;
 		charger->tx_done = true;
+		del_timer(&charger->tx_timer);
 		sysfs_notify(&charger->dev->kobj, NULL, "txbusy");
 		sysfs_notify(&charger->dev->kobj, NULL, "txdone");
 	}
 
 	/* CC Reset complete */
-	if (irq_src & P9221R5_STAT_CCRESET) {
-		charger->tx_busy = false;
-		charger->tx_done = true;
-		charger->rx_done = true;
-		sysfs_notify(&charger->dev->kobj, NULL, "rxdone");
-		sysfs_notify(&charger->dev->kobj, NULL, "txbusy");
-		sysfs_notify(&charger->dev->kobj, NULL, "txdone");
-	}
+	if (irq_src & P9221R5_STAT_CCRESET)
+		p9221_abort_transfers(charger);
 }
 
 static irqreturn_t p9221_irq_thread(int irq, void *irq_data)
@@ -1895,6 +1928,8 @@ static int p9221_charger_probe(struct i2c_client *client,
 	mutex_init(&charger->cmd_lock);
 	setup_timer(&charger->timer, p9221_timer_handler,
 		    (unsigned long)charger);
+	setup_timer(&charger->tx_timer, p9221_tx_timer_handler,
+		    (unsigned long)charger);
 
 	psy_cfg.drv_data = charger;
 	psy_cfg.of_node = charger->dev->of_node;
@@ -1973,6 +2008,7 @@ static int p9221_charger_remove(struct i2c_client *client)
 	struct p9221_charger_data *charger = i2c_get_clientdata(client);
 
 	del_timer_sync(&charger->timer);
+	del_timer_sync(&charger->tx_timer);
 	device_init_wakeup(charger->dev, false);
 	cancel_delayed_work_sync(&charger->notifier_work);
 	power_supply_unreg_notifier(&charger->nb);
