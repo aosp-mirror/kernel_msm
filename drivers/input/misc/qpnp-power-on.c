@@ -34,6 +34,7 @@
 #include <linux/qpnp/qpnp-pbs.h>
 #include <linux/qpnp/qpnp-misc.h>
 #include <linux/power_supply.h>
+#include <soc/qcom/restart.h>
 
 #define PMIC_VER_8941           0x01
 #define PMIC_VERSION_REG        0x0105
@@ -1006,6 +1007,8 @@ static irqreturn_t qpnp_kpdpwr_irq(int irq, void *_pon)
 
 static irqreturn_t qpnp_kpdpwr_bark_irq(int irq, void *_pon)
 {
+	set_restart_msg("reboot_longkey");
+	qpnp_pon_set_restart_reason(PON_RESTART_REASON_REBOOT_LONGKEY);
 	return IRQ_HANDLED;
 }
 
