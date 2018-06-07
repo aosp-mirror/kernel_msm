@@ -13,15 +13,13 @@
 
 /dts-v1/;
 
-#include "apq8053-lite-harman-v1.0.dtsi"
+#include "msm8917.dtsi"
+#include "msm8917-cdp.dtsi"
+#include "msm8917-pmi8940.dtsi"
 
 / {
-	model = "Qualcomm Technologies, Inc. APQ8053 Lite Harman v1.0 Board";
-	compatible = "qcom,apq8053-lite-dragonboard", "qcom,apq8053",
-			"qcom,dragonboard";
-	qcom,board-id= <0x01020020 0>;
-};
-
-&blsp2_uart0 {
-	status = "okay";
+	model = "Qualcomm Technologies, Inc. MSM8917-PMI8940 RCM";
+	compatible = "qcom,msm8917-cdp", "qcom,msm8917", "qcom,cdp";
+	qcom,board-id = <21 0>;
+	qcom,pmic-id = <0x10019 0x020040 0x0 0x0>;
 };

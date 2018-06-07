@@ -584,10 +584,11 @@ static int setup_gsi_xfer(struct spi_transfer *xfer,
 	}
 
 	cs |= spi_slv->chip_select;
-	if (!list_is_last(&xfer->transfer_list, &spi->cur_msg->transfers) ==
-	    !xfer->cs_change)
-		go_flags |= FRAGMENTATION;
-
+	if (!xfer->cs_change) {
+		if (!list_is_last(&xfer->transfer_list,
+					&spi->cur_msg->transfers))
+			go_flags |= FRAGMENTATION;
+	}
 	go_tre = setup_go_tre(cmd, cs, rx_len, go_flags, mas);
 
 	sg_init_table(xfer_tx_sg, tx_nent);
@@ -940,9 +941,6 @@ static void setup_fifo_xfer(struct spi_transfer *xfer,
 		m_cmd = SPI_RX_ONLY;
 
 	spi_tx_cfg &= ~CS_TOGGLE;
-	if (!list_is_last(&xfer->transfer_list, &spi->cur_msg->transfers) ==
-	    !xfer->cs_change)
-		m_param |= FRAGMENTATION;
 	if (!(mas->cur_word_len % MIN_WORD_LEN)) {
 		trans_len =
 			((xfer->len << 3) / mas->cur_word_len) & TRANS_LEN_MSK;
@@ -950,6 +948,12 @@ static void setup_fifo_xfer(struct spi_transfer *xfer,
 		int bytes_per_word = (mas->cur_word_len / BITS_PER_BYTE) + 1;
 
 		trans_len = (xfer->len / bytes_per_word) & TRANS_LEN_MSK;
+	}
+
+	if (!xfer->cs_change) {
+		if (!list_is_last(&xfer->transfer_list,
+					&spi->cur_msg->transfers))
+			m_param |= FRAGMENTATION;
 	}
 
 	mas->cur_xfer = xfer;
@@ -965,8 +969,9 @@ static void setup_fifo_xfer(struct spi_transfer *xfer,
 	geni_write_reg(spi_tx_cfg, mas->base, SE_SPI_TRANS_CFG);
 	geni_setup_m_cmd(mas->base, m_cmd, m_param);
 	GENI_SE_DBG(mas->ipc, false, mas->dev,
-		"%s: trans_len %d xferlen%d tx_cfg 0x%x cmd 0x%x\n",
-		__func__, trans_len, xfer->len, spi_tx_cfg, m_cmd);
+		"%s: trans_len %d xferlen%d tx_cfg 0x%x cmd 0x%x cs %d\n",
+		__func__, trans_len, xfer->len, spi_tx_cfg, m_cmd,
+		xfer->cs_change);
 	if (m_cmd & SPI_TX_ONLY)
 		geni_write_reg(mas->tx_wm, mas->base, SE_GENI_TX_WATERMARK_REG);
 	/* Ensure all writes are done before the WM interrupt */

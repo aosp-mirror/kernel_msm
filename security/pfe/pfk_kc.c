@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -272,18 +272,18 @@ static struct kc_entry *kc_find_key_at_index(const unsigned char *key,
 	for (i = *starting_index; i < PFK_KC_TABLE_SIZE; i++) {
 		entry = kc_entry_at_index(i);
 
-		if (NULL != salt) {
+		if (salt != NULL) {
 			if (entry->salt_size != salt_size)
 				continue;
 
-			if (0 != memcmp(entry->salt, salt, salt_size))
+			if (memcmp(entry->salt, salt, salt_size) != 0)
 				continue;
 		}
 
 		if (entry->key_size != key_size)
 			continue;
 
-		if (0 == memcmp(entry->key, key, key_size)) {
+		if (memcmp(entry->key, key, key_size) == 0) {
 			*starting_index = i;
 			return entry;
 		}
@@ -372,6 +372,11 @@ static void kc_clear_entry(struct kc_entry *entry)
 
 	entry->time_stamp = 0;
 	entry->scm_error = 0;
+
+	entry->state = FREE;
+
+	entry->loaded_ref_cnt = 0;
+	entry->thread_pending = NULL;
 }
 
 /**
@@ -429,7 +434,6 @@ int pfk_kc_init(void)
 	}
 	kc_ready = true;
 	kc_spin_unlock();
-
 	return 0;
 }
 
@@ -441,8 +445,8 @@ int pfk_kc_init(void)
 int pfk_kc_deinit(void)
 {
 	int res = pfk_kc_clear();
-	kc_ready = false;
 
+	kc_ready = false;
 	return res;
 }
 
@@ -481,8 +485,10 @@ int pfk_kc_load_key_start(const unsigned char *key, size_t key_size,
 	if (!kc_is_ready())
 		return -ENODEV;
 
-	if (!key || !salt || !key_index)
+	if (!key || !salt || !key_index) {
+		pr_err("%s key/salt/key_index NULL\n", __func__);
 		return -EINVAL;
+	}
 
 	if (key_size != PFK_KC_KEY_SIZE) {
 		pr_err("unsupported key size %zu\n", key_size);
@@ -499,7 +505,7 @@ int pfk_kc_load_key_start(const unsigned char *key, size_t key_size,
 	entry = kc_find_key(key, key_size, salt, salt_size);
 	if (!entry) {
 		if (async) {
-			pr_debug("found empty entry, a separate task will populate it\n");
+			pr_debug("%s task will populate entry\n", __func__);
 			kc_spin_unlock();
 			return -EAGAIN;
 		}
@@ -526,10 +532,12 @@ int pfk_kc_load_key_start(const unsigned char *key, size_t key_size,
 			kc_update_timestamp(entry);
 			entry->state = ACTIVE_ICE_LOADED;
 
-			if (async && (!strcmp(s_type,
-					(char *)PFK_UFS)))
+			if (!strcmp(s_type, (char *)PFK_UFS)) {
+				if (async)
+					entry->loaded_ref_cnt++;
+			} else {
 				entry->loaded_ref_cnt++;
-
+			}
 			break;
 		}
 	case (FREE):
@@ -543,14 +551,16 @@ int pfk_kc_load_key_start(const unsigned char *key, size_t key_size,
 			entry->state = ACTIVE_ICE_LOADED;
 
 			/*
-			 * only increase ref cnt for async calls,
+			 * In case of UFS only increase ref cnt for async calls,
 			 * sync calls from within work thread do not pass
 			 * requests further to HW
 			 */
-			if (async && (!strcmp(s_type,
-					(char *)PFK_UFS)))
+			if (!strcmp(s_type, (char *)PFK_UFS)) {
+				if (async)
+					entry->loaded_ref_cnt++;
+			} else {
 				entry->loaded_ref_cnt++;
-
+			}
 		}
 		break;
 	case (ACTIVE_ICE_PRELOAD):
@@ -560,9 +570,12 @@ int pfk_kc_load_key_start(const unsigned char *key, size_t key_size,
 	case (ACTIVE_ICE_LOADED):
 		kc_update_timestamp(entry);
 
-		if (async && (!strcmp(s_type,
-				(char *)PFK_UFS)))
+		if (!strcmp(s_type, (char *)PFK_UFS)) {
+			if (async)
+				entry->loaded_ref_cnt++;
+		} else {
 			entry->loaded_ref_cnt++;
+		}
 		break;
 	case(SCM_ERROR):
 		ret = entry->scm_error;
@@ -620,36 +633,24 @@ void pfk_kc_load_key_end(const unsigned char *key, size_t key_size,
 
 		return;
 	}
-	if (!strcmp(s_type, (char *)PFK_UFS)) {
-		ref_cnt = --entry->loaded_ref_cnt;
+	ref_cnt = --entry->loaded_ref_cnt;
 
-		if (ref_cnt < 0)
-			pr_err("internal error, ref count should never be negative\n");
+	if (ref_cnt < 0)
+		pr_err("internal error, ref count should never be negative\n");
 
-		if (!ref_cnt) {
-			entry->state = INACTIVE;
-			/*
-			* wake-up invalidation if it's waiting
-			* for the entry to be released
-			*/
-			if (entry->thread_pending) {
-				tmp_pending = entry->thread_pending;
-				entry->thread_pending = NULL;
-
-				kc_spin_unlock();
-				wake_up_process(tmp_pending);
-				return;
-			}
-		}
-	} else {
+	if (!ref_cnt) {
 		entry->state = INACTIVE;
 		/*
 		 * wake-up invalidation if it's waiting
 		 * for the entry to be released
 		 */
 		if (entry->thread_pending) {
-			wake_up_process(entry->thread_pending);
+			tmp_pending = entry->thread_pending;
 			entry->thread_pending = NULL;
+
+			kc_spin_unlock();
+			wake_up_process(tmp_pending);
+			return;
 		}
 	}
 

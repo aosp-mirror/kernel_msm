@@ -196,12 +196,20 @@ int mdp3_ppp_verify_res(struct mdp_blit_req *req)
 
 	if (((req->src_rect.x + req->src_rect.w) > req->src.width) ||
 	    ((req->src_rect.y + req->src_rect.h) > req->src.height)) {
+		pr_err("%s: src roi (x=%d,y=%d,w=%d, h=%d) WxH(%dx%d)\n",
+			__func__, req->src_rect.x, req->src_rect.y,
+			 req->src_rect.w, req->src_rect.h, req->src.width,
+			 req->src.height);
 		pr_err("%s: src roi larger than boundary\n", __func__);
 		return -EINVAL;
 	}
 
 	if (((req->dst_rect.x + req->dst_rect.w) > req->dst.width) ||
 	    ((req->dst_rect.y + req->dst_rect.h) > req->dst.height)) {
+		pr_err("%s: dst roi (x=%d,y=%d,w=%d, h=%d) WxH(%dx%d)\n",
+			__func__, req->dst_rect.x, req->dst_rect.y,
+			req->dst_rect.w, req->dst_rect.h, req->dst.width,
+			req->dst.height);
 		pr_err("%s: dst roi larger than boundary\n", __func__);
 		return -EINVAL;
 	}
@@ -1453,6 +1461,18 @@ static bool is_blit_optimization_possible(struct blit_req_list *req, int indx)
 			(!(fg_req.flags & (MDP_ROT_90))) && (dst_roi_equal) &&
 			(!(check_if_rgb(bg_req.src.format))) &&
 			(!(hw_woraround_active))) {
+			/*
+			 * Disable SMART blit for BG(YUV) layer when
+			 * Scaling on BG layer
+			 * Rotation on BG layer
+			 * UD flip on BG layer
+			 */
+			if ((is_scaling_needed(bg_req)) && (
+				bg_req.flags & MDP_ROT_90) &&
+				(bg_req.flags & MDP_FLIP_UD)) {
+				pr_debug("YUV layer with ROT+UD_FLIP+Scaling Not supported\n");
+				return false;
+			}
 			/*
 			 * swap blit requests at index 0 and 1. YUV layer at
 			 * index 0 is replaced with UI layer request present

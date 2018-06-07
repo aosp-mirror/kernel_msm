@@ -7,7 +7,6 @@
 #include <linux/blkdev.h>
 #include <linux/scatterlist.h>
 #include <linux/pfk.h>
-
 #include <trace/events/block.h>
 
 #include "blk.h"
@@ -760,7 +759,6 @@ static int attempt_merge(struct request_queue *q, struct request *req,
 
 	if (crypto_not_mergeable(req->bio, next->bio))
 		return 0;
-
 	/*
 	 * If we are allowed to merge, then append bio list
 	 * from next to rq and release next. merge_requests_fn
@@ -873,7 +871,6 @@ bool blk_rq_merge_ok(struct request *rq, struct bio *bio)
 
 	if (crypto_not_mergeable(rq->bio, bio))
 		return false;
-
 	return true;
 }
 

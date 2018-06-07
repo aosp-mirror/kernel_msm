@@ -13,13 +13,13 @@
 
 /dts-v1/;
 
-#include "apq8053-lite-lenovo-v1.1.dtsi"
+#include "apq8053-lite-dragon-v2.4.dtsi"
 
 / {
-	model = "Qualcomm Technologies, Inc. APQ8053 Lite Lenovo v1.1 Board";
+	model = "Qualcomm Technologies, Inc. APQ8053 Lite DragonBoard V2.4";
 	compatible = "qcom,apq8053-lite-dragonboard", "qcom,apq8053",
 			"qcom,dragonboard";
-	qcom,board-id= <0x01010120 0>;
+	qcom,board-id= <0x01030020 0>;
 };
 
 &blsp2_uart0 {
