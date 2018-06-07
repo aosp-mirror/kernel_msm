@@ -29,7 +29,10 @@
 #include <linux/pmic-voter.h>
 #include "p9221_charger.h"
 
-#define P9221_TX_TIMEOUT_MS (20 * 1000)
+#define P9221_TX_TIMEOUT_MS	(20 * 1000)
+#define P9221_DCIN_TIMEOUT_MS	(2 * 1000)
+#define P9221_VRECT_TIMEOUT_MS	(2 * 1000)
+#define P9221_NOTIFIER_DELAY_MS	50
 
 static const u32 p9221_ov_set_lut[] = {
 	17000000, 20000000, 15000000, 13000000,
@@ -679,12 +682,8 @@ static int p9221_get_property_reg(struct p9221_charger_data *charger,
 	if (p == NULL)
 		return -EINVAL;
 
-	if (!charger->online) {
-		if (charger->early_det)
-			return -ENODATA;
-		else
-			return -ENODEV;
-	}
+	if (!charger->online)
+		return -ENODEV;
 
 	ret = p9221_reg_read_cooked(charger, p->reg, &data);
 	if (ret)
@@ -704,13 +703,8 @@ static int p9221_set_property_reg(struct p9221_charger_data *charger,
 	if (p == NULL)
 		return -EINVAL;
 
-	if (!charger->online) {
-		if (charger->early_det)
-			return -EAGAIN;
-		else
-			return -ENODEV;
-	}
-
+	if (!charger->online)
+		return -ENODEV;
 
 	return p9221_reg_write_cooked(charger, p->reg, val->intval);
 }
@@ -734,10 +728,11 @@ static void p9221_set_offline(struct p9221_charger_data *charger)
 	dev_info(&charger->client->dev, "Set offline\n");
 
 	charger->online = false;
-	charger->early_det = false;
 
 	p9221_abort_transfers(charger);
 	del_timer(&charger->tx_timer);
+	del_timer(&charger->dcin_timer);
+	del_timer(&charger->vrect_timer);
 
 	/* Put the default ICL back to BPP */
 	if (charger->dc_icl_votable) {
@@ -747,27 +742,6 @@ static void p9221_set_offline(struct p9221_charger_data *charger)
 			dev_err(&charger->client->dev,
 				"Could not vote DC_ICL %d\n", ret);
 	}
-}
-
-static void p9221_timer_handler(unsigned long data)
-{
-	struct p9221_charger_data *charger = (struct p9221_charger_data *)data;
-
-	dev_info(&charger->client->dev,
-		 "timeout waiting for dc, go offline early=%d online=%d\n",
-		 charger->early_det, charger->online);
-
-	/*
-	 * Only set offline if the charger is online, but not when we only
-	 * have early_det.
-	 */
-	charger->early_det = false;
-	if (charger->online)
-		p9221_set_offline(charger);
-
-	power_supply_changed(charger->wc_psy);
-
-	pm_relax(charger->dev);
 }
 
 static void p9221_tx_timer_handler(unsigned long data)
@@ -780,6 +754,30 @@ static void p9221_tx_timer_handler(unsigned long data)
 	charger->tx_done = true;
 	sysfs_notify(&charger->dev->kobj, NULL, "txbusy");
 	sysfs_notify(&charger->dev->kobj, NULL, "txdone");
+}
+
+static void p9221_vrect_timer_handler(unsigned long data)
+{
+	struct p9221_charger_data *charger = (struct p9221_charger_data *)data;
+
+	dev_info(&charger->client->dev,
+		 "timeout waiting for VRECT, online=%d\n", charger->online);
+	pm_relax(charger->dev);
+}
+
+static void p9221_dcin_timer_handler(unsigned long data)
+{
+	struct p9221_charger_data *charger = (struct p9221_charger_data *)data;
+
+	dev_info(&charger->client->dev,
+		 "timeout waiting for dc-in, online=%d\n", charger->online);
+
+	if (charger->online)
+		p9221_set_offline(charger);
+
+	power_supply_changed(charger->wc_psy);
+
+	pm_relax(charger->dev);
 }
 
 static const char *p9221_get_tx_id_str(struct p9221_charger_data *charger)
@@ -818,7 +816,7 @@ static int p9221_get_property(struct power_supply *psy,
 		val->intval = 1;
 		break;
 	case POWER_SUPPLY_PROP_ONLINE:
-		val->intval = charger->online || charger->early_det;
+		val->intval = charger->online;
 		break;
 	case POWER_SUPPLY_PROP_SERIAL_NUMBER:
 		val->strval = p9221_get_tx_id_str(charger);
@@ -903,7 +901,7 @@ static int p9221_notifier_cb(struct notifier_block *nb, unsigned long event,
 	pm_stay_awake(charger->dev);
 
 	if (!schedule_delayed_work(&charger->notifier_work,
-				   msecs_to_jiffies(50)))
+				   msecs_to_jiffies(P9221_NOTIFIER_DELAY_MS)))
 		pm_relax(charger->dev);
 
 out:
@@ -1010,7 +1008,6 @@ static void p9221_set_online(struct p9221_charger_data *charger)
 	dev_info(&charger->client->dev, "Set online\n");
 
 	charger->online = true;
-	charger->early_det = false;
 	charger->tx_busy = false;
 	charger->tx_done = true;
 	charger->rx_done = false;
@@ -1058,7 +1055,8 @@ static void p9221_notifier_check_dc(struct p9221_charger_data *charger)
 	 * We now have confirmation from DC_IN, kill the timer, charger->online
 	 * will be set by this function.
 	 */
-	del_timer(&charger->timer);
+	del_timer(&charger->dcin_timer);
+	del_timer(&charger->vrect_timer);
 
 	/*
 	 * Always check dc_icl
@@ -1083,26 +1081,22 @@ bool p9221_notifier_check_det(struct p9221_charger_data *charger)
 {
 	bool relax = true;
 
+	del_timer(&charger->vrect_timer);
+
 	if (charger->online)
 		goto done;
 
-	charger->early_det = charger->check_early;
-
-	/* Only perform online actions when we have received the VRECTON IRQ */
-	if (charger->check_det)
-		p9221_set_online(charger);
-
-	/* Notify power supply changed on VRECTON or DET IRQ */
 	dev_info(&charger->client->dev, "detected wlc, trigger wc changed\n");
+	p9221_set_online(charger);
 	power_supply_changed(charger->wc_psy);
 
-	/* Give the dc-in 5 seconds to come up */
+	/* Give the dc-in 2 seconds to come up. */
 	dev_info(&charger->client->dev, "start dc-in timer\n");
-	mod_timer(&charger->timer, jiffies + msecs_to_jiffies(5 * 1000));
+	mod_timer(&charger->dcin_timer,
+		  jiffies + msecs_to_jiffies(P9221_DCIN_TIMEOUT_MS));
 	relax = false;
 
 done:
-	charger->check_early = false;
 	charger->check_det = false;
 
 	return relax;
@@ -1114,12 +1108,10 @@ static void p9221_notifier_work(struct work_struct *work)
 			struct p9221_charger_data, notifier_work.work);
 	bool relax = true;
 
-	dev_info(&charger->client->dev,
-		 "Notifier work: on:%d dc:%d det:%d early:%d\n",
-		 charger->online, charger->check_dc, charger->check_det,
-		 charger->check_early);
+	dev_info(&charger->client->dev, "Notifier work: on:%d dc:%d det:%d\n",
+		 charger->online, charger->check_dc, charger->check_det);
 
-	if (charger->check_det || charger->check_early)
+	if (charger->check_det)
 		relax = p9221_notifier_check_det(charger);
 
 	if (charger->check_dc)
@@ -1756,12 +1748,15 @@ static irqreturn_t p9221_irq_thread(int irq, void *irq_data)
 	}
 
 	if (irq_src & P9221_STAT_VRECT) {
-		dev_info(&charger->client->dev, "Received VRECTON");
-		charger->check_det = true;
-		pm_stay_awake(charger->dev);
-		if (!schedule_delayed_work(&charger->notifier_work,
-					   msecs_to_jiffies(50))) {
-			pm_relax(charger->dev);
+		dev_info(&charger->client->dev,
+			"Received VRECTON, online=%d\n", charger->online);
+		if (!charger->online) {
+			charger->check_det = true;
+			pm_stay_awake(charger->dev);
+			if (!schedule_delayed_work(&charger->notifier_work,
+				msecs_to_jiffies(P9221_NOTIFIER_DELAY_MS))) {
+				pm_relax(charger->dev);
+			}
 		}
 	}
 
@@ -1777,26 +1772,20 @@ out:
 static irqreturn_t p9221_irq_det_thread(int irq, void *irq_data)
 {
 	struct p9221_charger_data *charger = irq_data;
-	int det;
 
-	det = gpio_get_value(charger->pdata->irq_det_gpio);
-	dev_info(&charger->client->dev,
-		 "online=%d gpio=%d check_det=%d check_early=%d early=%d\n",
-		 charger->online, det, charger->check_det, charger->check_early,
-		 charger->early_det);
-
-	if (!det || charger->online || charger->check_early ||
-	    charger->check_det)
+	/* If we are already online, just ignore the interrupt. */
+	if (charger->online)
 		return IRQ_HANDLED;
 
-	charger->check_early = true;
-
+	/*
+	 * This interrupt will wake the device if it's suspended,
+	 * but it is not reliable enough to trigger the charging indicator.
+	 * Give ourselves 2 seconds for the VRECTON interrupt to appear
+	 * before we put up the charging indicator.
+	 */
+	mod_timer(&charger->vrect_timer,
+		  jiffies + msecs_to_jiffies(P9221_VRECT_TIMEOUT_MS));
 	pm_stay_awake(charger->dev);
-
-	if (!schedule_delayed_work(&charger->notifier_work,
-				   msecs_to_jiffies(50))) {
-		pm_relax(charger->dev);
-	}
 
 	return IRQ_HANDLED;
 }
@@ -1926,7 +1915,9 @@ static int p9221_charger_probe(struct i2c_client *client,
 	charger->resume_complete = true;
 	mutex_init(&charger->io_lock);
 	mutex_init(&charger->cmd_lock);
-	setup_timer(&charger->timer, p9221_timer_handler,
+	setup_timer(&charger->dcin_timer, p9221_dcin_timer_handler,
+		    (unsigned long)charger);
+	setup_timer(&charger->vrect_timer, p9221_vrect_timer_handler,
 		    (unsigned long)charger);
 	setup_timer(&charger->tx_timer, p9221_tx_timer_handler,
 		    (unsigned long)charger);
@@ -2007,8 +1998,9 @@ static int p9221_charger_remove(struct i2c_client *client)
 {
 	struct p9221_charger_data *charger = i2c_get_clientdata(client);
 
-	del_timer_sync(&charger->timer);
+	del_timer_sync(&charger->dcin_timer);
 	del_timer_sync(&charger->tx_timer);
+	del_timer_sync(&charger->vrect_timer);
 	device_init_wakeup(charger->dev, false);
 	cancel_delayed_work_sync(&charger->notifier_work);
 	power_supply_unreg_notifier(&charger->nb);
