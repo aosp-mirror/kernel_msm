@@ -939,9 +939,14 @@ static ssize_t set_charge_stop_level(struct device *dev,
 	if (ret < 0)
 		return ret;
 
+	if (!chg_drv->bat_psy) {
+		pr_err("chg_drv->bat_psy is not ready");
+		return -ENODATA;
+	}
+
 	if ((val == chg_drv->charge_stop_level) ||
 	    (val <= chg_drv->charge_start_level) ||
-	    (val < 0))
+	    (val > DEFAULT_CHARGE_STOP_LEVEL))
 		return count;
 
 	chg_drv->charge_stop_level = val;
@@ -973,9 +978,14 @@ static ssize_t set_charge_start_level(struct device *dev,
 	if (ret < 0)
 		return ret;
 
+	if (!chg_drv->bat_psy) {
+		pr_err("chg_drv->bat_psy is not ready");
+		return -ENODATA;
+	}
+
 	if ((val == chg_drv->charge_start_level) ||
 	    (val >= chg_drv->charge_stop_level) ||
-	    (val < 0))
+	    (val < DEFAULT_CHARGE_START_LEVEL))
 		return count;
 
 	chg_drv->charge_start_level = val;
