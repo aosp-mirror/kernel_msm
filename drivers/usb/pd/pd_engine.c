@@ -666,6 +666,7 @@ void update_external_vbus(struct work_struct *work)
 exit:
 	pd->external_vbus = pd->external_vbus_update;
 err:
+	pm_relax(&pd->dev);
 	mutex_unlock(&pd->lock);
 }
 
@@ -1846,6 +1847,9 @@ static int update_ext_vbus(struct notifier_block *self, unsigned long action,
 	work_cancelled = cancel_delayed_work_sync(&pd->ext_vbus_work);
 	pd_engine_log(pd, "ext_vbus_work_cancelled: %s", work_cancelled ? "yes"
 		      : "no");
+	if (work_cancelled)
+		pm_relax(&pd->dev);
+
 	mutex_lock(&pd->lock);
 	pd->external_vbus_update = turn_on_ext_vbus;
 	work_queued = queue_delayed_work(pd->wq, &pd->ext_vbus_work,
@@ -1854,10 +1858,12 @@ static int update_ext_vbus(struct notifier_block *self, unsigned long action,
 				: 0);
 	if (!work_queued)
 		pd_engine_log(pd, "error: queueing ext_vbus_work failed");
-	else
+	else {
+		pm_stay_awake(&pd->dev);
 		pd_engine_log(pd, "queued work EXT_VBUS_%s",
 			      (action == EXT_VBUS_ON) ?
 			      "ON" : "OFF");
+	}
 	mutex_unlock(&pd->lock);
 	return NOTIFY_OK;
 }
@@ -1918,6 +1924,8 @@ struct usbpd *usbpd_create(struct device *parent)
 		goto del_pd;
 
 	pd->first_suspend = true;
+
+	device_init_wakeup(&pd->dev, true);
 
 	pd->vbus = devm_regulator_get(parent, "vbus");
 	if (IS_ERR(pd->vbus)) {
