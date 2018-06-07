@@ -1455,9 +1455,18 @@ static void batt_worker(struct work_struct *work)
 			htc_batt_info.rep.batt_temp > 0) {
 		BATT_LOG("critical shutdown criteria: %dmV (set level=0 to force shutdown)",
 				htc_batt_info.force_shutdown_batt_vol);
-		htc_batt_info.rep.level = 0;
 		gs_update_PSY = true;
-		wake_lock(&htc_batt_info.batt_shutdown_lock);
+		/* If the cable is exist, system won't shutdown by 0.
+		 * So, remove the flag and unlock the batt_shutdown_lock
+		 * And only set the level to 0 when the cable is not exist.*/
+		if ((int)htc_batt_info.rep.charging_source >
+					POWER_SUPPLY_TYPE_BATTERY) {
+			g_critical_shutdown = false;
+			wake_unlock(&htc_batt_info.batt_shutdown_lock);
+		} else {
+			htc_batt_info.rep.level = 0;
+			wake_lock(&htc_batt_info.batt_shutdown_lock);
+		}
 	}
 
 	/* STEP 8: Update limited charge
