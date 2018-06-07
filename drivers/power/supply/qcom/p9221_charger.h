@@ -255,6 +255,7 @@ struct p9221_charger_data {
 	struct device			*dev;
 	struct delayed_work		notifier_work;
 	struct timer_list		timer;
+	struct timer_list		tx_timer;
 	struct bin_attribute		bin;
 	int				online;
 	int				next_online;
