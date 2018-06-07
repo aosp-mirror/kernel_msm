@@ -754,6 +754,9 @@
 #define CS40L2X_GPIO1_ENABLED		1
 #define CS40L2X_GPIO1_DISABLED		0
 
+#define CS40L2X_COMP_ENABLED		1
+#define CS40L2X_COMP_DISABLED		0
+
 bool cs40l2x_readable_reg(struct device *dev, unsigned int reg);
 bool cs40l2x_precious_reg(struct device *dev, unsigned int reg);
 

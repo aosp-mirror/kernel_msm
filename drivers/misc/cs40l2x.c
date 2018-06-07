@@ -775,7 +775,7 @@ static ssize_t cs40l2x_comp_enable_show(struct device *dev,
 	mutex_lock(&cs40l2x->lock);
 	ret = regmap_read(cs40l2x->regmap,
 			cs40l2x_dsp_reg(cs40l2x, "COMPENSATION_ENABLE",
-				CS40L2X_XM_UNPACKED_TYPE), &val);
+					CS40L2X_XM_UNPACKED_TYPE), &val);
 	mutex_unlock(&cs40l2x->lock);
 
 	if (ret) {
@@ -801,7 +801,8 @@ static ssize_t cs40l2x_comp_enable_store(struct device *dev,
 	mutex_lock(&cs40l2x->lock);
 	ret = regmap_write(cs40l2x->regmap,
 			cs40l2x_dsp_reg(cs40l2x, "COMPENSATION_ENABLE",
-				CS40L2X_XM_UNPACKED_TYPE), val);
+					CS40L2X_XM_UNPACKED_TYPE),
+			val ? CS40L2X_COMP_ENABLED : CS40L2X_COMP_DISABLED);
 	mutex_unlock(&cs40l2x->lock);
 
 	if (ret) {
