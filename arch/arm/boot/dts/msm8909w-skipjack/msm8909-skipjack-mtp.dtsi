@@ -18,6 +18,21 @@
 	 * DT node to add support for SMB135x charger and integrate
 	 * with VM-BMS.
 	 */
+
+	i2c@78b7000 { /* BLSP1 QUP3 */
+		st_st21nfc@0x08 {
+			compatible = "st,st21nfc";
+			reg = <0x08>;
+			interrupt-parent = <&msm_gpio>;
+			interrupts = <&msm_gpio 35 0x0>;
+			st,reset_gpio =<&msm_gpio 33 0x0>;
+			st,irq_gpio = <&msm_gpio 35 0x0>;
+			pinctrl-names = "default", "suspend";
+			pinctrl-0 = <&nfc_int_active &nfc_enable_active>;
+			pinctrl-1 = <&nfc_int_suspend &nfc_enable_suspend>;
+		};
+	};
+
 	i2c@78b8000 {
 		smb231@12 {
 			compatible = "qcom,smb231-charger";
