@@ -18439,8 +18439,12 @@ static const struct kernel_param_ops fwpath_ops = {
 	.get = param_get_string,
 };
 
+#ifdef MODULE
+module_param(con_mode, int, 0);
+#else
 module_param_cb(con_mode, &con_mode_ops, &con_mode,
                     S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+#endif
 
 module_param_cb(fwpath, &fwpath_ops, &fwpath,
                     S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
