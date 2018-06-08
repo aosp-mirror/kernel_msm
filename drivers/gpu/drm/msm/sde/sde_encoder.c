@@ -2467,8 +2467,20 @@ static int sde_encoder_resource_control(struct drm_encoder *drm_enc,
 						IDLE_POWERCOLLAPSE_DURATION));
 		} else if (sde_enc->rc_state == SDE_ENC_RC_STATE_IDLE) {
 			/* enable all the clks and resources */
+			ret = _sde_encoder_resource_control_helper(drm_enc,
+					true);
+			if (ret) {
+				SDE_ERROR_ENC(sde_enc,
+						"sw_event:%d, rc in state %d\n",
+						sw_event, sde_enc->rc_state);
+				SDE_EVT32(DRMID(drm_enc), sw_event,
+						sde_enc->rc_state,
+						SDE_EVTLOG_ERROR);
+				mutex_unlock(&sde_enc->rc_lock);
+				return ret;
+			}
+
 			_sde_encoder_resource_control_rsc_update(drm_enc, true);
-			_sde_encoder_resource_control_helper(drm_enc, true);
 
 			kthread_mod_delayed_work(&disp_thread->worker,
 						&sde_enc->delayed_off_work,
@@ -2786,8 +2798,6 @@ static void sde_encoder_virt_enable(struct drm_encoder *drm_enc)
 		return;
 	}
 
-	memset(&sde_enc->cur_master->intf_cfg_v1, 0,
-			sizeof(sde_enc->cur_master->intf_cfg_v1));
 	ret = sde_encoder_resource_control(drm_enc, SDE_ENC_RC_EVENT_KICKOFF);
 	if (ret) {
 		SDE_ERROR_ENC(sde_enc, "sde resource control failed: %d\n",
@@ -2795,6 +2805,8 @@ static void sde_encoder_virt_enable(struct drm_encoder *drm_enc)
 		return;
 	}
 
+	memset(&sde_enc->cur_master->intf_cfg_v1, 0,
+			sizeof(sde_enc->cur_master->intf_cfg_v1));
 
 	for (i = 0; i < sde_enc->num_phys_encs; i++) {
 		struct sde_encoder_phys *phys = sde_enc->phys_encs[i];
@@ -2918,8 +2930,6 @@ static void sde_encoder_virt_disable(struct drm_encoder *drm_enc)
 		}
 	}
 
-	memset(&sde_enc->cur_master->intf_cfg_v1, 0,
-			sizeof(sde_enc->cur_master->intf_cfg_v1));
 	sde_enc->cur_master = NULL;
 	/*
 	 * clear the cached crtc in sde_enc on use case finish, after all the
@@ -3412,17 +3422,10 @@ static void _sde_encoder_kickoff_phys(struct sde_encoder_virt *sde_enc)
 			set_bit(i, sde_enc->frame_busy_mask);
 
 		if (!phys->ops.needs_single_flush ||
-				!phys->ops.needs_single_flush(phys)) {
-			pending_kickoff_cnt =
-				sde_encoder_phys_inc_pending(phys);
+				!phys->ops.needs_single_flush(phys))
 			_sde_encoder_trigger_flush(&sde_enc->base, phys, 0x0);
-			SDE_EVT32(pending_kickoff_cnt, SDE_EVTLOG_FUNC_CASE1);
-		} else if (ctl->ops.get_pending_flush) {
-			pending_kickoff_cnt =
-				sde_encoder_phys_inc_pending(phys);
+		else if (ctl->ops.get_pending_flush)
 			ctl->ops.get_pending_flush(ctl, &pending_flush);
-			SDE_EVT32(pending_kickoff_cnt, SDE_EVTLOG_FUNC_CASE2);
-		}
 	}
 
 	/* for split flush, combine pending flush masks and send to master */
@@ -3435,6 +3438,26 @@ static void _sde_encoder_kickoff_phys(struct sde_encoder_virt *sde_enc)
 
 	_sde_encoder_trigger_start(sde_enc->cur_master);
 
+	/* update pending_kickoff_cnt AFTER next frame is queued in HW */
+	for (i = 0; i < sde_enc->num_phys_encs; i++) {
+		struct sde_encoder_phys *phys = sde_enc->phys_encs[i];
+
+		if (!phys || phys->enable_state == SDE_ENC_DISABLED)
+			continue;
+
+		if (!phys->ops.needs_single_flush ||
+				!phys->ops.needs_single_flush(phys)) {
+			pending_kickoff_cnt =
+					sde_encoder_phys_inc_pending(phys);
+			SDE_EVT32(pending_kickoff_cnt, SDE_EVTLOG_FUNC_CASE1);
+		} else {
+			pending_kickoff_cnt =
+					sde_encoder_phys_inc_pending(phys);
+			SDE_EVT32(pending_kickoff_cnt,
+					pending_flush.pending_flush_mask,
+					SDE_EVTLOG_FUNC_CASE2);
+		}
+	}
 }
 
 static void _sde_encoder_ppsplit_swap_intf_for_right_only_update(
@@ -3532,7 +3555,7 @@ static void _sde_encoder_update_master(struct drm_encoder *drm_enc,
 		if (!phys || !phys->ops.update_split_role || !phys->hw_pp)
 			continue;
 
-		active = 1; //test_bit(i, &params->affected_displays);
+		active = test_bit(i, &params->affected_displays);
 		prv_role = phys->split_role;
 
 		if (active && num_active_phys == 1)
@@ -4745,7 +4768,6 @@ struct drm_encoder *sde_encoder_init(
 	kthread_init_delayed_work(&sde_enc->delayed_off_work,
 			sde_encoder_off_work);
 	sde_enc->vblank_enabled = false;
-	sde_enc->idle_pc_restore = false;
 
 	kthread_init_work(&sde_enc->vsync_event_work,
 			sde_encoder_vsync_event_work_handler);

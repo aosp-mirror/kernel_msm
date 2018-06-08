@@ -28,7 +28,7 @@
 		gdscr-supply = <&titan_top_gdsc>;
 		regulator-names = "gdscr";
 		csi-vdd-voltage = <1200000>;
-		mipi-csi-vdd-supply = <&pm855l_l3>;
+		mipi-csi-vdd-supply = <&pm8150l_l3>;
 		clocks = <&clock_camcc CAM_CC_CPHY_RX_CLK_SRC>,
 			<&clock_camcc CAM_CC_CSIPHY0_CLK>,
 			<&clock_camcc CAM_CC_CSI0PHYTIMER_CLK_SRC>,
@@ -54,7 +54,7 @@
 		gdscr-supply = <&titan_top_gdsc>;
 		regulator-names = "gdscr";
 		csi-vdd-voltage = <1200000>;
-		mipi-csi-vdd-supply = <&pm855l_l3>;
+		mipi-csi-vdd-supply = <&pm8150l_l3>;
 		clocks = <&clock_camcc CAM_CC_CPHY_RX_CLK_SRC>,
 			<&clock_camcc CAM_CC_CSIPHY1_CLK>,
 			<&clock_camcc CAM_CC_CSI1PHYTIMER_CLK_SRC>,
@@ -81,7 +81,7 @@
 		gdscr-supply = <&titan_top_gdsc>;
 		regulator-names = "gdscr";
 		csi-vdd-voltage = <1200000>;
-		mipi-csi-vdd-supply = <&pm855l_l3>;
+		mipi-csi-vdd-supply = <&pm8150l_l3>;
 		clocks = <&clock_camcc CAM_CC_CPHY_RX_CLK_SRC>,
 			<&clock_camcc CAM_CC_CSIPHY2_CLK>,
 			<&clock_camcc CAM_CC_CSI2PHYTIMER_CLK_SRC>,
@@ -107,7 +107,7 @@
 		gdscr-supply = <&titan_top_gdsc>;
 		regulator-names = "gdscr";
 		csi-vdd-voltage = <1200000>;
-		mipi-csi-vdd-supply = <&pm855l_l3>;
+		mipi-csi-vdd-supply = <&pm8150l_l3>;
 		clocks = <&clock_camcc CAM_CC_CPHY_RX_CLK_SRC>,
 			<&clock_camcc CAM_CC_CSIPHY3_CLK>,
 			<&clock_camcc CAM_CC_CSI3PHYTIMER_CLK_SRC>,
@@ -403,9 +403,19 @@
 				iova-mem-region-io {
 					/* IO region is approximately 3.3 GB */
 					iova-region-name = "io";
-					iova-region-start = <0xd900000>;
-					iova-region-len = <0xd2700000>;
+					iova-region-start = <0xd911000>;
+					iova-region-len = <0xd26ef000>;
 					iova-region-id = <0x3>;
+					status = "ok";
+				};
+
+				iova-mem-qdss-region {
+					/* QDSS region is appropriate 64K */
+					iova-region-name = "qdss";
+					iova-region-start = <0xd900000>;
+					iova-region-len = <0x10000>;
+					iova-region-id = <0x5>;
+					qdss-phy-addr = <0x16790000>;
 					status = "ok";
 				};
 			};
@@ -693,7 +703,7 @@
 
 	cam_csid0: qcom,csid0@acb3000 {
 		cell-index = <0>;
-		compatible = "qcom,csid170";
+		compatible = "qcom,csid175";
 		reg-names = "csid";
 		reg = <0xacb3000 0x1000>;
 		reg-cam-base = <0xb3000>;
@@ -729,7 +739,7 @@
 
 	cam_vfe0: qcom,vfe0@acaf000 {
 		cell-index = <0>;
-		compatible = "qcom,vfe170";
+		compatible = "qcom,vfe175";
 		reg-names = "ife";
 		reg = <0xacaf000 0x4000>;
 		reg-cam-base = <0xaf000>;
@@ -760,7 +770,7 @@
 
 	cam_csid1: qcom,csid1@acba000 {
 		cell-index = <1>;
-		compatible = "qcom,csid170";
+		compatible = "qcom,csid175";
 		reg-names = "csid";
 		reg = <0xacba000 0x1000>;
 		reg-cam-base = <0xba000>;
@@ -796,7 +806,7 @@
 
 	cam_vfe1: qcom,vfe1@acb6000 {
 		cell-index = <1>;
-		compatible = "qcom,vfe170";
+		compatible = "qcom,vfe175";
 		reg-names = "ife";
 		reg = <0xacb6000 0x4000>;
 		reg-cam-base = <0xb6000>;
@@ -827,7 +837,7 @@
 
 	cam_csid_lite0: qcom,csid-lite0@acc8000 {
 		cell-index = <2>;
-		compatible = "qcom,csid-lite170";
+		compatible = "qcom,csid-lite175";
 		reg-names = "csid-lite";
 		reg = <0xacc8000 0x1000>;
 		reg-cam-base = <0xc8000>;
@@ -860,7 +870,7 @@
 
 	cam_vfe_lite0: qcom,vfe-lite0@acc4000 {
 		cell-index = <2>;
-		compatible = "qcom,vfe-lite170";
+		compatible = "qcom,vfe-lite175";
 		reg-names = "ife-lite";
 		reg = <0xacc4000 0x4000>;
 		reg-cam-base = <0xc4000>;
@@ -885,7 +895,7 @@
 
 	cam_csid_lite1: qcom,csid-lite1@accf000 {
 		cell-index = <3>;
-		compatible = "qcom,csid-lite170";
+		compatible = "qcom,csid-lite175";
 		reg-names = "csid-lite";
 		reg = <0xaccf000 0x1000>;
 		reg-cam-base = <0xcf000>;
@@ -918,7 +928,7 @@
 
 	cam_vfe_lite1: qcom,vfe-lite1@accb000 {
 		cell-index = <3>;
-		compatible = "qcom,vfe-lite170";
+		compatible = "qcom,vfe-lite175";
 		reg-names = "ife-lite";
 		reg = <0xaccb000 0x4000>;
 		reg-cam-base = <0xcb000>;
@@ -981,7 +991,7 @@
 			<400000000 0 600000000 0>;
 		clock-cntl-level = "svs", "turbo";
 		fw_name = "CAMERA_ICP.elf";
-		ubwc-cfg = <0x7F 0x1FF>;
+		ubwc-cfg = <0x7B 0x1EF>;
 		status = "ok";
 	};
 

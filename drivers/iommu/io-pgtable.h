@@ -4,6 +4,7 @@
 #include <linux/bitops.h>
 
 #include <linux/scatterlist.h>
+#include <soc/qcom/msm_tz_smmu.h>
 
 /*
  * Public API for use by IOMMU drivers
@@ -15,6 +16,7 @@ enum io_pgtable_fmt {
 	ARM_64_LPAE_S2,
 	ARM_V7S,
 	ARM_V8L_FAST,
+	ARM_MSM_SECURE,
 	IO_PGTABLE_NUM_FMTS,
 };
 
@@ -81,6 +83,13 @@ struct io_pgtable_cfg {
 	 *	be accessed by a fully cache-coherent IOMMU or CPU (e.g. for a
 	 *	software-emulated IOMMU), such that pagetable updates need not
 	 *	be treated as explicit DMA data.
+	 *
+
+	 * IO_PGTABLE_QUIRK_QSMMUV500_NON_SHAREABLE:
+	 *	Having page tables which are non coherent, but cached in a
+	 *	system cache requires SH=Non-Shareable. This applies to the
+	 *	qsmmuv500 model. For data buffers SH=Non-Shareable is not
+	 *	required.
 
 	 * IO_PGTABLE_QUIRK_QCOM_USE_UPSTREAM_HINT: Override the attributes
 	 *	set in TCR for the page table walker. Use attributes specified
@@ -96,6 +105,7 @@ struct io_pgtable_cfg {
 	#define IO_PGTABLE_QUIRK_TLBI_ON_MAP	BIT(2)
 	#define IO_PGTABLE_QUIRK_ARM_MTK_4GB	BIT(3)
 	#define IO_PGTABLE_QUIRK_NO_DMA		BIT(4)
+	#define IO_PGTABLE_QUIRK_QSMMUV500_NON_SHAREABLE BIT(5)
 	#define IO_PGTABLE_QUIRK_QCOM_USE_UPSTREAM_HINT	BIT(6)
 	#define IO_PGTABLE_QUIRK_QCOM_USE_LLC_NWA	BIT(7)
 	unsigned long			quirks;
@@ -131,6 +141,11 @@ struct io_pgtable_cfg {
 			u64	mair[2];
 			void	*pmds;
 		} av8l_fast_cfg;
+
+		struct {
+			enum tz_smmu_device_id sec_id;
+			int cbndx;
+		} arm_msm_secure_cfg;
 	};
 };
 
@@ -215,17 +230,23 @@ struct io_pgtable {
 
 static inline void io_pgtable_tlb_flush_all(struct io_pgtable *iop)
 {
+	if (!iop->cfg.tlb)
+		return;
 	iop->cfg.tlb->tlb_flush_all(iop->cookie);
 }
 
 static inline void io_pgtable_tlb_add_flush(struct io_pgtable *iop,
 		unsigned long iova, size_t size, size_t granule, bool leaf)
 {
+	if (!iop->cfg.tlb)
+		return;
 	iop->cfg.tlb->tlb_add_flush(iova, size, granule, leaf, iop->cookie);
 }
 
 static inline void io_pgtable_tlb_sync(struct io_pgtable *iop)
 {
+	if (!iop->cfg.tlb)
+		return;
 	iop->cfg.tlb->tlb_sync(iop->cookie);
 }
 
@@ -247,6 +268,7 @@ extern struct io_pgtable_init_fns io_pgtable_arm_64_lpae_s1_init_fns;
 extern struct io_pgtable_init_fns io_pgtable_arm_64_lpae_s2_init_fns;
 extern struct io_pgtable_init_fns io_pgtable_arm_v7s_init_fns;
 extern struct io_pgtable_init_fns io_pgtable_av8l_fast_init_fns;
+extern struct io_pgtable_init_fns io_pgtable_arm_msm_secure_init_fns;
 
 /**
  * io_pgtable_alloc_pages_exact:

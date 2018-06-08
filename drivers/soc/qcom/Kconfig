@@ -67,11 +67,11 @@ config QCOM_SDMSHRIKE_LLCC
 	  data required to configure LLCC so that clients can start using the
 	  LLCC slices.
 
-config QCOM_SDM640_LLCC
-	tristate "Qualcomm Technologies, Inc. SDM640 LLCC driver"
+config QCOM_SM6150_LLCC
+	tristate "Qualcomm Technologies, Inc. SM6150 LLCC driver"
 	depends on QCOM_LLCC
 	help
-	  Say yes here to enable the LLCC driver for SDM640. This is provides
+	  Say yes here to enable the LLCC driver for SM6150. This is provides
 	  data required to configure LLCC so that clients can start using the
 	  LLCC slices.
 
@@ -135,6 +135,22 @@ config QCOM_SMD_RPM
 
 	  Say M here if you want to include support for the Qualcomm RPM as a
 	  module. This will build a module called "qcom-smd-rpm".
+
+config MSM_SPM
+        bool "Driver support for SPM and AVS wrapper hardware"
+        help
+          Enables the support for SPM and AVS wrapper hardware on MSMs. SPM
+          hardware is used to manage the processor power during sleep. The
+          driver allows configuring SPM to allow different low power modes for
+          both core and L2.
+
+config MSM_L2_SPM
+        bool "SPM support for L2 cache"
+        help
+          Enable SPM driver support for L2 cache. Some MSM chipsets allow
+          control of L2 cache low power mode with a Subsystem Power manager.
+          Enabling this driver allows configuring L2 SPM for low power modes
+          on supported chipsets.
 
 config QCOM_SCM
 	bool "Secure Channel Manager (SCM) support"
@@ -390,6 +406,31 @@ config QCOM_EUD
 	  Embedded USB Debugger (EUD).
 	  If unsure, say N.
 
+config QCOM_MINIDUMP
+	bool "QCOM Minidump Support"
+	depends on QCOM_SMEM && QCOM_DLOAD_MODE
+	help
+	  This enables minidump feature. It allows various clients to
+	  register to dump their state at system bad state (panic/WDT,etc.,).
+	  Minidump would dump all registered entries, only when DLOAD mode
+	  is enabled.
+
+config MINIDUMP_MAX_ENTRIES
+	int "Minidump Maximum num of entries"
+	default 200
+	depends on QCOM_MINIDUMP
+	help
+	  This defines maximum number of entries to be allocated for application
+	  subsytem in Minidump table.
+config MSM_RPM_SMD
+	bool "RPM driver using SMD protocol"
+	help
+	  RPM is the dedicated hardware engine for managing shared SoC
+	  resources. This config adds driver support for using SMD as a
+	  transport layer communication with RPM hardware. It also selects
+	  the MSM_MPM config that programs the MPM module to monitor interrupts
+	  during sleep modes.
+
 config QCOM_BUS_SCALING
 	bool "Bus scaling driver"
 	help
@@ -431,6 +472,29 @@ config MSM_SPSS_UTILS
 	  Different file name is used for differnt SPSS HW versions,
 	  because the SPSS firmware size is too small to support multiple
 	  HW versions.
+
+config MSM_SPCOM
+	depends on QCOM_GLINK
+	bool "Secure Processor Communication over GLINK"
+	help
+	  spcom driver allows loading Secure Processor Applications and
+	  sending messages to Secure Processor Applications.
+	  spcom provides interface to both user space app and kernel driver.
+	  It is using glink as the transport layer, which provides multiple
+	  logical channels over single physical channel.
+	  The physical layer is based on shared memory and interrupts.
+	  spcom provides clients/server API, although currently only one client
+	  or server is allowed per logical channel.
+
+config MSM_TZ_SMMU
+	depends on ARCH_MSM8953 || ARCH_QCS405
+	bool "Helper functions for SMMU configuration through TZ"
+	help
+	  Say 'Y' here for targets that need to call into TZ to configure
+	  SMMUs for any reason (for example, for errata workarounds or
+	  configuration of SMMU virtualization).
+
+	  If unsure, say N.
 
 config QTI_RPMH_API
 	bool "QTI RPMH (h/w accelerators) Communication API"
@@ -639,4 +703,12 @@ config QCOM_QHEE_ENABLE_MEM_PROTECTION
 	  When this option is enabled, an SCM call will be invoked to enable
 	  kernel memory protection in stage 2 memory mappings on kernel boot.
 	  This is part of a security feature enabled in QHEE.
+
+config QCOM_SMP2P_SLEEPSTATE
+	bool "SMP2P Sleepstate notifier"
+	depends on QCOM_SMP2P
+	help
+	  When this option is enabled, notifications are sent to remote procs
+	  for the power state changes on the local processor. The notifications
+	  are sent through the smp2p framework.
 endmenu

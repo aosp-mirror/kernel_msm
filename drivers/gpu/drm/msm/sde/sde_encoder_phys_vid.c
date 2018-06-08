@@ -475,8 +475,6 @@ not_flushed:
 	SDE_EVT32_IRQ(DRMID(phys_enc->parent), phys_enc->hw_intf->idx - INTF_0,
 			old_cnt, new_cnt, reset_status ? SDE_EVTLOG_ERROR : 0,
 			flush_register, event);
-	SDE_EVT32_IRQ(DRMID(phys_enc->parent), phys_enc->hw_intf->idx - INTF_0,
-			old_cnt, new_cnt, flush_register, event);
 
 	/* Signal any waiting atomic commit thread */
 	wake_up_all(&phys_enc->pending_kickoff_wq);
@@ -961,6 +959,20 @@ static void sde_encoder_phys_vid_disable(struct sde_encoder_phys *phys_enc)
 		}
 		sde_encoder_phys_vid_control_vblank_irq(phys_enc, false);
 	}
+
+	if (phys_enc->hw_intf->ops.bind_pingpong_blk)
+		phys_enc->hw_intf->ops.bind_pingpong_blk(phys_enc->hw_intf,
+				false, phys_enc->hw_pp->idx - PINGPONG_0);
+
+	if (phys_enc->hw_pp && phys_enc->hw_pp->ops.reset_3d_mode)
+		phys_enc->hw_pp->ops.reset_3d_mode(phys_enc->hw_pp);
+
+	if (phys_enc->hw_pp && phys_enc->hw_pp->merge_3d &&
+			phys_enc->hw_ctl->ops.reset_post_te_disable)
+		phys_enc->hw_ctl->ops.reset_post_te_disable(
+				phys_enc->hw_ctl, &phys_enc->intf_cfg_v1,
+				phys_enc->hw_pp->merge_3d->idx);
+
 exit:
 	phys_enc->enable_state = SDE_ENC_DISABLED;
 }

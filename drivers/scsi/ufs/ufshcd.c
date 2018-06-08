@@ -5190,6 +5190,8 @@ static int __ufshcd_uic_hibern8_enter(struct ufs_hba *hba)
 	trace_ufshcd_profile_hibern8(dev_name(hba->dev), "enter",
 			     ktime_to_us(ktime_sub(ktime_get(), start)), ret);
 
+	ufsdbg_error_inject_dispatcher(hba, ERR_INJECT_HIBERN8_ENTER, 0, &ret);
+
 	/*
 	 * Do full reinit if enter failed or if LINERESET was detected during
 	 * Hibern8 operation. After LINERESET, link moves to default PWM-G1
@@ -5254,6 +5256,8 @@ int ufshcd_uic_hibern8_exit(struct ufs_hba *hba)
 	ret = ufshcd_uic_pwr_ctrl(hba, &uic_cmd);
 	trace_ufshcd_profile_hibern8(dev_name(hba->dev), "exit",
 			     ktime_to_us(ktime_sub(ktime_get(), start)), ret);
+
+	ufsdbg_error_inject_dispatcher(hba, ERR_INJECT_HIBERN8_EXIT, 0, &ret);
 
 	/* Do full reinit if exit failed */
 	if (ret) {
@@ -5393,6 +5397,8 @@ int ufshcd_change_power_mode(struct ufs_hba *hba,
 	if (ret)
 		return ret;
 
+	/* set AC_JTAG = 0 */
+	ufshcd_vops_phy_wa(hba, 0);
 	/*
 	 * Configure attributes for power mode change with below.
 	 * - PA_RXGEAR, PA_ACTIVERXDATALANES, PA_RXTERMINATION,
@@ -5453,6 +5459,9 @@ int ufshcd_change_power_mode(struct ufs_hba *hba,
 			sizeof(struct ufs_pa_layer_attr));
 		hba->ufs_stats.power_mode_change_cnt++;
 	}
+
+	/* set AC_JTAG = 1 */
+	ufshcd_vops_phy_wa(hba, 1);
 
 	return ret;
 }

@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -674,6 +674,7 @@ static int subsystem_powerup(struct subsys_device *dev, void *data)
 	pr_info("[%s:%d]: Powering up %s\n", current->comm, current->pid, name);
 	init_completion(&dev->err_ready);
 
+	enable_all_irqs(dev);
 	ret = dev->desc->powerup(dev->desc);
 	if (ret < 0) {
 		notify_each_subsys_device(&dev, 1, SUBSYS_POWERUP_FAILURE,
@@ -689,7 +690,6 @@ static int subsystem_powerup(struct subsys_device *dev, void *data)
 			pr_err("Powerup failure on %s\n", name);
 		return ret;
 	}
-	enable_all_irqs(dev);
 
 	ret = wait_for_err_ready(dev);
 	if (ret) {
@@ -707,14 +707,14 @@ static int subsystem_powerup(struct subsys_device *dev, void *data)
 	return 0;
 }
 
-static int __find_subsys(struct device *dev, void *data)
+static int __find_subsys_device(struct device *dev, void *data)
 {
 	struct subsys_device *subsys = to_subsys(dev);
 
 	return !strcmp(subsys->desc->name, data);
 }
 
-static struct subsys_device *find_subsys(const char *str)
+struct subsys_device *find_subsys_device(const char *str)
 {
 	struct device *dev;
 
@@ -722,9 +722,10 @@ static struct subsys_device *find_subsys(const char *str)
 		return NULL;
 
 	dev = bus_find_device(&subsys_bus_type, NULL, (void *)str,
-			__find_subsys);
+			__find_subsys_device);
 	return dev ? to_subsys(dev) : NULL;
 }
+EXPORT_SYMBOL(find_subsys_device);
 
 static int subsys_start(struct subsys_device *subsys)
 {
@@ -734,13 +735,13 @@ static int subsys_start(struct subsys_device *subsys)
 								NULL);
 
 	init_completion(&subsys->err_ready);
+	enable_all_irqs(subsys);
 	ret = subsys->desc->powerup(subsys->desc);
 	if (ret) {
 		notify_each_subsys_device(&subsys, 1, SUBSYS_POWERUP_FAILURE,
 									NULL);
 		return ret;
 	}
-	enable_all_irqs(subsys);
 
 	if (subsys->desc->is_not_loadable) {
 		subsys_set_state(subsys, SUBSYS_ONLINE);
@@ -796,7 +797,7 @@ int subsystem_set_fwname(const char *name, const char *fw_name)
 	if (!fw_name)
 		return -EINVAL;
 
-	subsys = find_subsys(name);
+	subsys = find_subsys_device(name);
 	if (!subsys)
 		return -EINVAL;
 
@@ -813,10 +814,10 @@ int wait_for_shutdown_ack(struct subsys_desc *desc)
 	int ret;
 	struct subsys_device *dev;
 
-	if (!desc || !desc->shutdown_ack_irq)
+	if (!desc)
 		return 0;
 
-	dev = find_subsys(desc->name);
+	dev = find_subsys_device(desc->name);
 	if (!dev)
 		return 0;
 
@@ -842,7 +843,7 @@ void *__subsystem_get(const char *name, const char *fw_name)
 	if (!name)
 		return NULL;
 
-	subsys = retval = find_subsys(name);
+	subsys = retval = find_subsys_device(name);
 	if (!subsys)
 		return ERR_PTR(-ENODEV);
 	if (!try_module_get(subsys->owner)) {
@@ -942,7 +943,7 @@ void subsystem_put(void *subsystem)
 	}
 	mutex_unlock(&track->lock);
 
-	subsys_d = find_subsys(subsys->desc->depends_on);
+	subsys_d = find_subsys_device(subsys->desc->depends_on);
 	if (subsys_d) {
 		subsystem_put(subsys_d);
 		put_device(&subsys_d->dev);
@@ -1156,7 +1157,7 @@ EXPORT_SYMBOL(subsystem_restart_dev);
 int subsystem_restart(const char *name)
 {
 	int ret;
-	struct subsys_device *dev = find_subsys(name);
+	struct subsys_device *dev = find_subsys_device(name);
 
 	if (!dev)
 		return -ENODEV;
@@ -1169,7 +1170,7 @@ EXPORT_SYMBOL(subsystem_restart);
 
 int subsystem_crashed(const char *name)
 {
-	struct subsys_device *dev = find_subsys(name);
+	struct subsys_device *dev = find_subsys_device(name);
 	struct subsys_tracking *track;
 
 	if (!dev)

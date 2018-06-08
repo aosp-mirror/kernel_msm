@@ -20,14 +20,15 @@
 #include <linux/qpnp/qpnp-revid.h>
 #include "fg-core.h"
 #include "fg-reg.h"
+#include "fg-alg.h"
 
 #define FG_GEN4_DEV_NAME	"qcom,fg-gen4"
 
 #define PERPH_SUBTYPE_REG		0x05
-#define FG_BATT_SOC_PM855B		0x10
-#define FG_BATT_INFO_PM855B		0x11
-#define FG_MEM_IF_PM855B		0x0D
-#define FG_ADC_RR_PM855B		0x13
+#define FG_BATT_SOC_PM8150B		0x10
+#define FG_BATT_INFO_PM8150B		0x11
+#define FG_MEM_IF_PM8150B		0x0D
+#define FG_ADC_RR_PM8150B		0x13
 
 #define FG_SRAM_LEN			960
 #define PROFILE_LEN			416
@@ -142,6 +143,8 @@ struct fg_dt_props {
 struct fg_gen4_chip {
 	struct fg_dev		fg;
 	struct fg_dt_props	dt;
+	struct cycle_counter	*counter;
+	struct cap_learning	*cl;
 	struct ttf		ttf;
 	struct delayed_work	ttf_work;
 	char			batt_profile[PROFILE_LEN];
@@ -173,7 +176,7 @@ module_param_named(
 static int fg_restart_mp;
 static bool fg_sram_dump;
 
-static struct fg_sram_param pm855_sram_params[] = {
+static struct fg_sram_param pm8150_sram_params[] = {
 	PARAM(BATT_SOC, BATT_SOC_WORD, BATT_SOC_OFFSET, 4, 1, 1, 0, NULL,
 		fg_decode_default),
 	PARAM(FULL_SOC, FULL_SOC_WORD, FULL_SOC_OFFSET, 2, 1, 1, 0, NULL,
@@ -321,7 +324,7 @@ static int fg_gen4_get_learned_capacity(void *data, int64_t *learned_cap_uah)
 	int rc, act_cap_mah;
 
 	if (!chip)
-		return -ENODATA;
+		return -ENODEV;
 
 	fg = &chip->fg;
 	rc = fg_get_sram_prop(fg, FG_SRAM_ACT_BATT_CAP, &act_cap_mah);
@@ -442,7 +445,7 @@ static int fg_gen4_get_debug_batt_id(struct fg_dev *fg, int *batt_id)
 
 	batt_id[0] = (30000 * tmp) / (MAX_BIAS_CODE - tmp);
 
-	rc = fg_read(fg, ADC_RR_FAKE_BATT_LOW_LSB(fg), (u8 *)&tmp, 2);
+	rc = fg_read(fg, ADC_RR_FAKE_BATT_HIGH_LSB(fg), (u8 *)&tmp, 2);
 	if (rc < 0) {
 		pr_err("failed to read addr=0x%04x, rc=%d\n",
 			ADC_RR_FAKE_BATT_HIGH_LSB(fg), rc);
@@ -540,6 +543,128 @@ static inline void get_esr_meas_current(int curr_ma, u8 *val)
 	};
 
 	*val <<= ESR_PULL_DOWN_IVAL_SHIFT;
+}
+
+/* ALG callback functions below */
+
+static int fg_gen4_store_learned_capacity(void *data, int64_t learned_cap_uah)
+{
+	struct fg_gen4_chip *chip = data;
+	struct fg_dev *fg;
+	int16_t cc_mah;
+	int rc;
+
+	if (!chip)
+		return -ENODEV;
+
+	fg = &chip->fg;
+	if (fg->battery_missing || !learned_cap_uah)
+		return -EPERM;
+
+	cc_mah = div64_s64(learned_cap_uah, 1000);
+	rc = fg_sram_write(fg, fg->sp[FG_SRAM_ACT_BATT_CAP].addr_word,
+			fg->sp[FG_SRAM_ACT_BATT_CAP].addr_byte, (u8 *)&cc_mah,
+			fg->sp[FG_SRAM_ACT_BATT_CAP].len, FG_IMA_DEFAULT);
+	if (rc < 0) {
+		pr_err("Error in writing act_batt_cap_bkup, rc=%d\n", rc);
+		return rc;
+	}
+
+	fg_dbg(fg, FG_CAP_LEARN, "learned capacity %llduah/%dmah stored\n",
+		chip->cl->learned_cap_uah, cc_mah);
+	return 0;
+}
+
+static int fg_gen4_prime_cc_soc_sw(void *data, u32 batt_soc)
+{
+	struct fg_gen4_chip *chip = data;
+	struct fg_dev *fg;
+	int rc, cc_soc_sw;
+
+	if (!chip)
+		return -ENODEV;
+
+	fg = &chip->fg;
+	if (batt_soc == CC_SOC_30BIT)
+		cc_soc_sw = batt_soc;
+	else
+		cc_soc_sw = div64_s64((int64_t)batt_soc * CC_SOC_30BIT,
+				BATT_SOC_32BIT);
+
+	rc = fg_sram_write(fg, fg->sp[FG_SRAM_CC_SOC_SW].addr_word,
+		fg->sp[FG_SRAM_CC_SOC_SW].addr_byte, (u8 *)&cc_soc_sw,
+		fg->sp[FG_SRAM_CC_SOC_SW].len, FG_IMA_ATOMIC);
+	if (rc < 0)
+		pr_err("Error in writing cc_soc_sw, rc=%d\n", rc);
+	else
+		fg_dbg(fg, FG_STATUS, "cc_soc_sw: %x\n", cc_soc_sw);
+
+	return rc;
+}
+
+static int fg_gen4_get_cc_soc_sw(void *data, int *cc_soc_sw)
+{
+	struct fg_gen4_chip *chip = data;
+	struct fg_dev *fg;
+	int rc, temp;
+
+	if (!chip)
+		return -ENODEV;
+
+	fg = &chip->fg;
+	rc = fg_get_sram_prop(fg, FG_SRAM_CC_SOC_SW, &temp);
+	if (rc < 0) {
+		pr_err("Error in getting CC_SOC_SW, rc=%d\n", rc);
+		return rc;
+	}
+
+	*cc_soc_sw = temp;
+	return rc;
+}
+
+static int fg_gen4_restore_count(void *data, u16 *buf, int length)
+{
+	struct fg_gen4_chip *chip = data;
+	int id, rc = 0;
+	u8 tmp[2];
+
+	if (!chip)
+		return -ENODEV;
+
+	if (!buf || length > BUCKET_COUNT)
+		return -EINVAL;
+
+	for (id = 0; id < length; id++) {
+		rc = fg_sram_read(&chip->fg, CYCLE_COUNT_WORD + id,
+				CYCLE_COUNT_OFFSET, (u8 *)tmp, 2,
+				FG_IMA_DEFAULT);
+		if (rc < 0)
+			pr_err("failed to read bucket %d rc=%d\n", id, rc);
+		else
+			*buf++ = tmp[0] | tmp[1] << 8;
+	}
+
+	return rc;
+}
+
+static int fg_gen4_store_count(void *data, u16 *buf, int id, int length)
+{
+	struct fg_gen4_chip *chip = data;
+	int rc;
+
+	if (!chip)
+		return -ENODEV;
+
+	if (!buf || length > BUCKET_COUNT * 2 || id < 0 ||
+		id > BUCKET_COUNT - 1 || ((id * 2) + length) > BUCKET_COUNT * 2)
+		return -EINVAL;
+
+	rc = fg_sram_write(&chip->fg, CYCLE_COUNT_WORD + id, CYCLE_COUNT_OFFSET,
+			(u8 *)buf, length, FG_IMA_DEFAULT);
+	if (rc < 0)
+		pr_err("failed to write bucket %d rc=%d\n", rc);
+
+	return rc;
 }
 
 /* All worker and helper functions below */
@@ -828,6 +953,7 @@ static void profile_load_work(struct work_struct *work)
 				profile_load_work.work);
 	struct fg_gen4_chip *chip = container_of(fg,
 				struct fg_gen4_chip, fg);
+	int64_t nom_cap_uah;
 	u8 val;
 	int rc;
 
@@ -852,6 +978,8 @@ static void profile_load_work(struct work_struct *work)
 
 	if (!is_profile_load_required(chip))
 		goto done;
+
+	clear_cycle_count(chip->counter);
 
 	fg_dbg(fg, FG_STATUS, "profile loading started\n");
 	rc = fg_masked_write(fg, BATT_SOC_RESTART(fg), RESTART_GO_BIT, 0);
@@ -891,6 +1019,14 @@ done:
 	if (rc < 0)
 		pr_err("Error in configuring battery profile params, rc:%d\n",
 			rc);
+
+	rc = fg_gen4_get_nominal_capacity(chip, &nom_cap_uah);
+	if (!rc) {
+		rc = cap_learning_post_profile_init(chip->cl, nom_cap_uah);
+		if (rc < 0)
+			pr_err("Error in cap_learning_post_profile_init rc=%d\n",
+				rc);
+	}
 
 	batt_psy_initialized(fg);
 	fg_notify_charger(fg);
@@ -1233,7 +1369,9 @@ static irqreturn_t fg_delta_bsoc_irq_handler(int irq, void *data)
 static irqreturn_t fg_delta_msoc_irq_handler(int irq, void *data)
 {
 	struct fg_dev *fg = data;
+	struct fg_gen4_chip *chip = container_of(fg, struct fg_gen4_chip, fg);
 	int rc, batt_soc, batt_temp;
+	bool input_present = is_input_present(fg);
 
 	fg_dbg(fg, FG_IRQ, "irq %d triggered\n", irq);
 
@@ -1242,10 +1380,17 @@ static irqreturn_t fg_delta_msoc_irq_handler(int irq, void *data)
 	rc = fg_get_sram_prop(fg, FG_SRAM_BATT_SOC, &batt_soc);
 	if (rc < 0)
 		pr_err("Failed to read battery soc rc: %d\n", rc);
+	else
+		cycle_count_update(chip->counter, (u32)batt_soc >> 24,
+			fg->charge_status, fg->charge_done, input_present);
 
 	rc = fg_gen4_get_battery_temp(fg, &batt_temp);
 	if (rc < 0)
 		pr_err("Failed to read battery temp rc: %d\n", rc);
+	else if (chip->cl->active)
+		cap_learning_update(chip->cl, batt_temp, batt_soc,
+			fg->charge_status, fg->charge_done, input_present,
+			is_qnovo_en(fg));
 
 	rc = fg_gen4_charge_full_update(fg);
 	if (rc < 0)
@@ -1485,7 +1630,9 @@ static void status_change_work(struct work_struct *work)
 {
 	struct fg_dev *fg = container_of(work,
 			struct fg_dev, status_change_work);
+	struct fg_gen4_chip *chip = container_of(fg, struct fg_gen4_chip, fg);
 	int rc, batt_soc, batt_temp;
+	bool input_present, qnovo_en;
 
 	if (!batt_psy_initialized(fg)) {
 		fg_dbg(fg, FG_STATUS, "Charger not available?!\n");
@@ -1510,6 +1657,16 @@ static void status_change_work(struct work_struct *work)
 		pr_err("Failed to read battery temp rc: %d\n", rc);
 		goto out;
 	}
+
+	input_present = is_input_present(fg);
+	qnovo_en = is_qnovo_en(fg);
+	cycle_count_update(chip->counter, (u32)batt_soc >> 24,
+		fg->charge_status, fg->charge_done, input_present);
+
+	if (fg->charge_status != fg->prev_charge_status)
+		cap_learning_update(chip->cl, batt_temp, batt_soc,
+			fg->charge_status, fg->charge_done, input_present,
+			qnovo_en);
 
 	rc = fg_gen4_charge_full_update(fg);
 	if (rc < 0)
@@ -1879,6 +2036,7 @@ static int fg_get_time_to_empty(struct fg_dev *fg, int *val)
 	return 0;
 }
 
+
 static void sram_dump_work(struct work_struct *work)
 {
 	struct fg_dev *fg = container_of(work, struct fg_dev,
@@ -2056,6 +2214,14 @@ static int fg_psy_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CHARGE_COUNTER_SHADOW:
 		rc = fg_gen4_get_charge_counter_shadow(chip, &pval->intval);
 		break;
+	case POWER_SUPPLY_PROP_CYCLE_COUNT:
+		rc = get_cycle_count(chip->counter, &pval->intval);
+		break;
+	case POWER_SUPPLY_PROP_CYCLE_COUNTS:
+		rc = get_cycle_counts(chip->counter, &pval->strval);
+		if (rc < 0)
+			pval->strval = NULL;
+		break;
 	case POWER_SUPPLY_PROP_SOC_REPORTING_READY:
 		pval->intval = fg->soc_reporting_ready;
 		break;
@@ -2087,9 +2253,25 @@ static int fg_psy_set_property(struct power_supply *psy,
 				  enum power_supply_property psp,
 				  const union power_supply_propval *pval)
 {
+	struct fg_gen4_chip *chip = power_supply_get_drvdata(psy);
 	int rc = 0;
 
 	switch (psp) {
+	case POWER_SUPPLY_PROP_CHARGE_FULL:
+		if (chip->cl->active) {
+			pr_warn("Capacity learning active!\n");
+			return 0;
+		}
+		if (pval->intval <= 0 || pval->intval > chip->cl->nom_cap_uah) {
+			pr_err("charge_full is out of bounds\n");
+			return -EINVAL;
+		}
+		mutex_lock(&chip->cl->lock);
+		rc = fg_gen4_store_learned_capacity(chip, pval->intval);
+		if (!rc)
+			chip->cl->learned_cap_uah = pval->intval;
+		mutex_unlock(&chip->cl->lock);
+		break;
 	default:
 		break;
 	}
@@ -2101,6 +2283,8 @@ static int fg_property_is_writeable(struct power_supply *psy,
 						enum power_supply_property psp)
 {
 	switch (psp) {
+	case POWER_SUPPLY_PROP_CHARGE_FULL:
+		return 1;
 	default:
 		break;
 	}
@@ -2124,6 +2308,7 @@ static enum power_supply_property fg_psy_props[] = {
 	POWER_SUPPLY_PROP_CHARGE_FULL,
 	POWER_SUPPLY_PROP_CHARGE_COUNTER,
 	POWER_SUPPLY_PROP_CHARGE_COUNTER_SHADOW,
+	POWER_SUPPLY_PROP_CYCLE_COUNTS,
 	POWER_SUPPLY_PROP_SOC_REPORTING_READY,
 	POWER_SUPPLY_PROP_DEBUG_BATTERY,
 	POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE,
@@ -2203,6 +2388,59 @@ static int fg_delta_bsoc_irq_en_cb(struct votable *votable, void *data,
 }
 
 /* All init functions below this */
+
+static int fg_alg_init(struct fg_gen4_chip *chip)
+{
+	struct fg_dev *fg = &chip->fg;
+	struct cycle_counter *counter;
+	struct cap_learning *cl;
+	int rc;
+
+	counter = devm_kzalloc(fg->dev, sizeof(*counter), GFP_KERNEL);
+	if (!counter)
+		return -ENOMEM;
+
+	counter->restore_count = fg_gen4_restore_count;
+	counter->store_count = fg_gen4_store_count;
+	counter->data = chip;
+
+	rc = cycle_count_init(counter);
+	if (rc < 0) {
+		dev_err(fg->dev, "Error in initializing cycle counter, rc:%d\n",
+			rc);
+		counter->data = NULL;
+		devm_kfree(fg->dev, counter);
+		return rc;
+	}
+
+	chip->counter = counter;
+
+	cl = devm_kzalloc(fg->dev, sizeof(*cl), GFP_KERNEL);
+	if (!cl)
+		return -ENOMEM;
+
+	cl->cc_soc_max = CC_SOC_30BIT;
+	cl->get_cc_soc = fg_gen4_get_cc_soc_sw;
+	cl->prime_cc_soc = fg_gen4_prime_cc_soc_sw;
+	cl->get_learned_capacity = fg_gen4_get_learned_capacity;
+	cl->store_learned_capacity = fg_gen4_store_learned_capacity;
+	cl->data = chip;
+
+	rc = cap_learning_init(cl);
+	if (rc < 0) {
+		dev_err(fg->dev, "Error in initializing capacity learning, rc:%d\n",
+			rc);
+		counter->data = NULL;
+		cl->data = NULL;
+		devm_kfree(fg->dev, counter);
+		devm_kfree(fg->dev, cl);
+		return rc;
+	}
+
+	chip->cl = cl;
+
+	return 0;
+}
 
 #define BATT_TEMP_HYST_MASK	GENMASK(3, 0)
 #define BATT_TEMP_DELTA_MASK	GENMASK(7, 4)
@@ -2419,6 +2657,12 @@ static int fg_gen4_hw_init(struct fg_gen4_chip *chip)
 		}
 	}
 
+	rc = restore_cycle_count(chip->counter);
+	if (rc < 0) {
+		pr_err("Error in restoring cycle_count, rc=%d\n", rc);
+		return rc;
+	}
+
 	return 0;
 }
 
@@ -2580,12 +2824,12 @@ static int fg_gen4_parse_dt(struct fg_gen4_chip *chip)
 		fg->pmic_rev_id->pmic_subtype, fg->pmic_rev_id->rev4);
 
 	switch (fg->pmic_rev_id->pmic_subtype) {
-	case PM855B_SUBTYPE:
+	case PM8150B_SUBTYPE:
 		fg->version = GEN4_FG;
 		fg->use_dma = true;
-		fg->sp = pm855_sram_params;
-		if (fg->pmic_rev_id->rev4 == PM855B_V1P0_REV4)
-			fg->wa_flags |= PM855B_V1_DMA_WA;
+		fg->sp = pm8150_sram_params;
+		if (fg->pmic_rev_id->rev4 == PM8150B_V1P0_REV4)
+			fg->wa_flags |= PM8150B_V1_DMA_WA;
 		break;
 	default:
 		return -EINVAL;
@@ -2612,16 +2856,16 @@ static int fg_gen4_parse_dt(struct fg_gen4_chip *chip)
 		}
 
 		switch (subtype) {
-		case FG_BATT_SOC_PM855B:
+		case FG_BATT_SOC_PM8150B:
 			fg->batt_soc_base = base;
 			break;
-		case FG_BATT_INFO_PM855B:
+		case FG_BATT_INFO_PM8150B:
 			fg->batt_info_base = base;
 			break;
-		case FG_MEM_IF_PM855B:
+		case FG_MEM_IF_PM8150B:
 			fg->mem_if_base = base;
 			break;
-		case FG_ADC_RR_PM855B:
+		case FG_ADC_RR_PM8150B:
 			fg->rradc_base = base;
 			break;
 		default:
@@ -2694,6 +2938,48 @@ static int fg_gen4_parse_dt(struct fg_gen4_chip *chip)
 
 	chip->dt.force_load_profile = of_property_read_bool(node,
 					"qcom,fg-force-load-profile");
+
+	rc = of_property_read_u32(node, "qcom,cl-start-capacity", &temp);
+	if (rc < 0)
+		chip->cl->dt.start_soc = DEFAULT_CL_START_SOC;
+	else
+		chip->cl->dt.start_soc = temp;
+
+	rc = of_property_read_u32(node, "qcom,cl-min-temp", &temp);
+	if (rc < 0)
+		chip->cl->dt.min_temp = DEFAULT_CL_MIN_TEMP_DECIDEGC;
+	else
+		chip->cl->dt.min_temp = temp;
+
+	rc = of_property_read_u32(node, "qcom,cl-max-temp", &temp);
+	if (rc < 0)
+		chip->cl->dt.max_temp = DEFAULT_CL_MAX_TEMP_DECIDEGC;
+	else
+		chip->cl->dt.max_temp = temp;
+
+	rc = of_property_read_u32(node, "qcom,cl-max-increment", &temp);
+	if (rc < 0)
+		chip->cl->dt.max_cap_inc = DEFAULT_CL_MAX_INC_DECIPERC;
+	else
+		chip->cl->dt.max_cap_inc = temp;
+
+	rc = of_property_read_u32(node, "qcom,cl-max-decrement", &temp);
+	if (rc < 0)
+		chip->cl->dt.max_cap_dec = DEFAULT_CL_MAX_DEC_DECIPERC;
+	else
+		chip->cl->dt.max_cap_dec = temp;
+
+	rc = of_property_read_u32(node, "qcom,cl-min-limit", &temp);
+	if (rc < 0)
+		chip->cl->dt.min_cap_limit = DEFAULT_CL_MIN_LIM_DECIPERC;
+	else
+		chip->cl->dt.min_cap_limit = temp;
+
+	rc = of_property_read_u32(node, "qcom,cl-max-limit", &temp);
+	if (rc < 0)
+		chip->cl->dt.max_cap_limit = DEFAULT_CL_MAX_LIM_DECIPERC;
+	else
+		chip->cl->dt.max_cap_limit = temp;
 
 	rc = of_property_read_u32(node, "qcom,fg-batt-temp-hot", &temp);
 	if (rc < 0)
@@ -2819,6 +3105,13 @@ static int fg_gen4_probe(struct platform_device *pdev)
 		goto exit;
 	}
 
+	rc = fg_alg_init(chip);
+	if (rc < 0) {
+		dev_err(fg->dev, "Error in alg_init, rc:%d\n",
+			rc);
+		goto exit;
+	}
+
 	rc = fg_gen4_parse_dt(chip);
 	if (rc < 0) {
 		dev_err(fg->dev, "Error in reading DT parameters, rc:%d\n",
@@ -2829,6 +3122,7 @@ static int fg_gen4_probe(struct platform_device *pdev)
 	mutex_init(&fg->bus_lock);
 	mutex_init(&fg->sram_rw_lock);
 	mutex_init(&fg->charge_full_lock);
+	mutex_init(&chip->ttf.lock);
 	init_completion(&fg->soc_update);
 	init_completion(&fg->soc_ready);
 	INIT_WORK(&fg->status_change_work, status_change_work);
@@ -2930,13 +3224,13 @@ static void fg_gen4_shutdown(struct platform_device *pdev)
 	struct fg_dev *fg = &chip->fg;
 	int rc, bsoc;
 
-	if (fg->charge_full) {
-		rc = fg_get_sram_prop(fg, FG_SRAM_BATT_SOC, &bsoc);
-		if (rc < 0) {
-			pr_err("Error in getting BATT_SOC, rc=%d\n", rc);
-			return;
-		}
+	rc = fg_get_sram_prop(fg, FG_SRAM_BATT_SOC, &bsoc);
+	if (rc < 0) {
+		pr_err("Error in getting BATT_SOC, rc=%d\n", rc);
+		return;
+	}
 
+	if (fg->charge_full) {
 		/* We need 2 most significant bytes here */
 		bsoc = (u32)bsoc >> 16;
 
@@ -2946,6 +3240,13 @@ static void fg_gen4_shutdown(struct platform_device *pdev)
 			return;
 		}
 	}
+
+	/*
+	 * Charging status doesn't matter when the device shuts down and we
+	 * have to treat this as charge done. Hence pass charge_done as true.
+	 */
+	cycle_count_update(chip->counter, (u32)bsoc >> 24,
+		POWER_SUPPLY_STATUS_NOT_CHARGING, true, is_input_present(fg));
 }
 
 static int fg_gen4_suspend(struct device *dev)

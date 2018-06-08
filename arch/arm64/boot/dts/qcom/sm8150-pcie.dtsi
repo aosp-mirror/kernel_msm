@@ -198,8 +198,8 @@
 		wake-gpio = <&tlmm 37 0>;
 
 		gdsc-vdd-supply = <&pcie_0_gdsc>;
-		vreg-1.8-supply = <&pm855l_l3>;
-		vreg-0.9-supply = <&pm855_l5>;
+		vreg-1.8-supply = <&pm8150l_l3>;
+		vreg-0.9-supply = <&pm8150_l5>;
 		vreg-cx-supply = <&VDD_CX_LEVEL>;
 
 		qcom,vreg-1.8-voltage-level = <1200000 1200000 24000>;
@@ -214,6 +214,7 @@
 		qcom,slv-addr-space-size = <0x4000000>;
 
 		qcom,phy-status-offset = <0x814>;
+		qcom,phy-power-down-offset = <0x840>;
 
 		qcom,boot-option = <0x1>;
 
@@ -270,7 +271,7 @@
 				"pcie_tbu_clk", "pcie_phy_refgen_clk",
 				"pcie_phy_aux_clk";
 
-		max-clock-frequency-hz = <0>, <0>, <19200000>, <0>, <0>,
+		max-clock-frequency-hz = <0>, <0>, <19200000>, <0>, <0>, <0>,
 					<0>, <0>, <0>, <0>, <100000000>, <0>;
 
 		resets = <&clock_gcc GCC_PCIE_0_BCR>,
@@ -514,8 +515,8 @@
 		wake-gpio = <&tlmm 104 0>;
 
 		gdsc-vdd-supply = <&pcie_1_gdsc>;
-		vreg-1.8-supply = <&pm855l_l3>;
-		vreg-0.9-supply = <&pm855_l5>;
+		vreg-1.8-supply = <&pm8150l_l3>;
+		vreg-0.9-supply = <&pm8150_l5>;
 		vreg-cx-supply = <&VDD_CX_LEVEL>;
 
 		qcom,vreg-1.8-voltage-level = <1200000 1200000 24000>;
@@ -530,6 +531,7 @@
 		qcom,slv-addr-space-size = <0x20000000>;
 
 		qcom,phy-status-offset = <0xa14>;
+		qcom,phy-power-down-offset = <0xa40>;
 
 		qcom,boot-option = <0x1>;
 
@@ -543,22 +545,22 @@
 
 		qcom,smmu-sid-base = <0x1e00>;
 
-		iommu-map = <0x0 &apps_smmu 0x1e10 0x1>,
-			<0x100 &apps_smmu 0x1e11 0x1>,
-			<0x200 &apps_smmu 0x1e12 0x1>,
-			<0x300 &apps_smmu 0x1e13 0x1>,
-			<0x400 &apps_smmu 0x1e14 0x1>,
-			<0x500 &apps_smmu 0x1e15 0x1>,
-			<0x600 &apps_smmu 0x1e16 0x1>,
-			<0x700 &apps_smmu 0x1e17 0x1>,
-			<0x800 &apps_smmu 0x1e18 0x1>,
-			<0x900 &apps_smmu 0x1e19 0x1>,
-			<0xa00 &apps_smmu 0x1e1a 0x1>,
-			<0xb00 &apps_smmu 0x1e1b 0x1>,
-			<0xc00 &apps_smmu 0x1e1c 0x1>,
-			<0xd00 &apps_smmu 0x1e1d 0x1>,
-			<0xe00 &apps_smmu 0x1e1e 0x1>,
-			<0xf00 &apps_smmu 0x1e1f 0x1>;
+		iommu-map = <0x0 &apps_smmu 0x1e00 0x1>,
+			<0x100 &apps_smmu 0x1e01 0x1>,
+			<0x200 &apps_smmu 0x1e02 0x1>,
+			<0x300 &apps_smmu 0x1e03 0x1>,
+			<0x400 &apps_smmu 0x1e04 0x1>,
+			<0x500 &apps_smmu 0x1e05 0x1>,
+			<0x600 &apps_smmu 0x1e06 0x1>,
+			<0x700 &apps_smmu 0x1e07 0x1>,
+			<0x800 &apps_smmu 0x1e08 0x1>,
+			<0x900 &apps_smmu 0x1e09 0x1>,
+			<0xa00 &apps_smmu 0x1e0a 0x1>,
+			<0xb00 &apps_smmu 0x1e0b 0x1>,
+			<0xc00 &apps_smmu 0x1e0c 0x1>,
+			<0xd00 &apps_smmu 0x1e0d 0x1>,
+			<0xe00 &apps_smmu 0x1e0e 0x1>,
+			<0xf00 &apps_smmu 0x1e0f 0x1>;
 
 		qcom,msm-bus,name = "pcie1";
 		qcom,msm-bus,num-cases = <2>;
@@ -586,7 +588,7 @@
 				"pcie_tbu_clk", "pcie_phy_refgen_clk",
 				"pcie_phy_aux_clk";
 
-		max-clock-frequency-hz = <0>, <0>, <19200000>, <0>, <0>,
+		max-clock-frequency-hz = <0>, <0>, <19200000>, <0>, <0>, <0>,
 					<0>, <0>, <0>, <0>, <100000000>, <0>;
 
 		resets = <&clock_gcc GCC_PCIE_1_BCR>,

@@ -1211,11 +1211,11 @@ static u32 _sde_rm_poll_intr_status_for_cont_splash(struct sde_hw_intr *intr,
 	}
 
 	SDE_EVT32(status, irq_idx_pp_done, SDE_EVTLOG_ERROR);
-	SDE_ERROR("polling timed out. status = 0x%x\n", status);
+	SDE_DEBUG("polling timed out. status = 0x%x\n", status);
 	return -ETIMEDOUT;
 }
 
-static inline int _sde_rm_autorefresh_validate(struct sde_hw_pingpong *pp,
+static inline bool _sde_rm_autorefresh_validate(struct sde_hw_pingpong *pp,
 		struct sde_hw_intf *intf,
 		bool hw_intf_te)
 {
@@ -1223,7 +1223,7 @@ static inline int _sde_rm_autorefresh_validate(struct sde_hw_pingpong *pp,
 	if ((hw_intf_te && !intf) ||
 		(!hw_intf_te && !pp)) {
 		SDE_ERROR("autorefresh wrong params!\n");
-		return 1;
+		return true;
 	}
 
 	if (hw_intf_te) {
@@ -1232,7 +1232,7 @@ static inline int _sde_rm_autorefresh_validate(struct sde_hw_pingpong *pp,
 				!intf->ops.connect_external_te ||
 				!intf->ops.get_vsync_info) {
 			SDE_ERROR("intf autorefresh apis not supported\n");
-			return 1;
+			return true;
 		}
 	} else {
 		if (!pp->ops.get_autorefresh ||
@@ -1240,11 +1240,11 @@ static inline int _sde_rm_autorefresh_validate(struct sde_hw_pingpong *pp,
 				!pp->ops.connect_external_te ||
 				!pp->ops.get_vsync_info) {
 			SDE_ERROR("pp autorefresh apis not supported\n");
-			return 1;
+			return true;
 		}
 	}
 
-	return 0;
+	return false;
 }
 
 static inline void _sde_rm_autorefresh_get_cfg(
@@ -1442,15 +1442,14 @@ static int _sde_rm_get_pp_dsc_for_cont_splash(struct sde_rm *rm,
 				hw_intf_te_supported);
 	}
 
-	if (hw_intf_te_supported) {
-		sde_rm_init_hw_iter(&intf_iter, 0, SDE_HW_BLK_INTF);
-		while (_sde_rm_get_hw_locked(rm, &intf_iter)) {
-			struct sde_hw_intf *intf =
-				to_sde_hw_intf(intf_iter.blk->hw);
+	sde_rm_init_hw_iter(&intf_iter, 0, SDE_HW_BLK_INTF);
+	while (_sde_rm_get_hw_locked(rm, &intf_iter)) {
+		struct sde_hw_intf *intf =
+			to_sde_hw_intf(intf_iter.blk->hw);
 
+		if (hw_intf_te_supported)
 			_sde_rm_autorefresh_disable(NULL, intf, hw_intr,
 				hw_intf_te_supported);
-		}
 	}
 
 	return dsc_cnt;

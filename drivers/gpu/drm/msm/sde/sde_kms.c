@@ -801,18 +801,22 @@ no_ops:
 }
 
 static int _sde_kms_release_splash_buffer(unsigned int mem_addr,
-							unsigned int size)
+					unsigned int splash_buffer_size,
+					unsigned int ramdump_buffer_size)
 {
 	unsigned long pfn_start, pfn_end, pfn_idx;
 	int ret = 0;
 
-	if (!mem_addr || !size)
+	if (!mem_addr || !splash_buffer_size)
 		SDE_ERROR("invalid params\n");
 
-	pfn_start = mem_addr >> PAGE_SHIFT;
-	pfn_end = (mem_addr + size) >> PAGE_SHIFT;
+	mem_addr +=  ramdump_buffer_size;
+	splash_buffer_size -= ramdump_buffer_size;
 
-	ret = memblock_free(mem_addr, size);
+	pfn_start = mem_addr >> PAGE_SHIFT;
+	pfn_end = (mem_addr + splash_buffer_size) >> PAGE_SHIFT;
+
+	ret = memblock_free(mem_addr, splash_buffer_size);
 	if (ret) {
 		SDE_ERROR("continuous splash memory free failed:%d\n", ret);
 		return ret;
@@ -993,7 +997,8 @@ static void _sde_kms_release_splash_resource(struct sde_kms *sde_kms,
 
 		rc = _sde_kms_release_splash_buffer(
 			sde_kms->splash_data.splash_base,
-			sde_kms->splash_data.splash_size);
+			sde_kms->splash_data.splash_size,
+			sde_kms->splash_data.ramdump_size);
 		if (rc)
 			pr_err("failed to release splash memory\n");
 		sde_kms->splash_data.splash_base = 0;
@@ -1255,6 +1260,7 @@ static int _sde_kms_setup_displays(struct drm_device *dev,
 		.check_status = dsi_display_check_status,
 		.enable_event = dsi_conn_enable_event,
 		.cmd_transfer = dsi_display_cmd_transfer,
+		.cont_splash_config = dsi_display_cont_splash_config,
 	};
 	static const struct sde_connector_ops wb_ops = {
 		.post_init =    sde_wb_connector_post_init,
@@ -1268,6 +1274,7 @@ static int _sde_kms_setup_displays(struct drm_device *dev,
 		.get_dst_format = NULL,
 		.check_status = NULL,
 		.cmd_transfer = NULL,
+		.cont_splash_config = NULL,
 	};
 	static const struct sde_connector_ops dp_ops = {
 		.post_init  = dp_connector_post_init,
@@ -1280,6 +1287,7 @@ static int _sde_kms_setup_displays(struct drm_device *dev,
 		.check_status = NULL,
 		.config_hdr = dp_connector_config_hdr,
 		.cmd_transfer = NULL,
+		.cont_splash_config = NULL,
 	};
 	struct msm_display_info info;
 	struct drm_encoder *encoder;
@@ -1691,7 +1699,8 @@ static void _sde_kms_hw_destroy(struct sde_kms *sde_kms,
 	_sde_kms_release_displays(sde_kms);
 	(void)_sde_kms_release_splash_buffer(
 				sde_kms->splash_data.splash_base,
-				sde_kms->splash_data.splash_size);
+				sde_kms->splash_data.splash_size,
+				sde_kms->splash_data.ramdump_size);
 
 	/* safe to call these more than once during shutdown */
 	_sde_debugfs_destroy(sde_kms);
@@ -2266,6 +2275,7 @@ static int sde_kms_cont_splash_config(struct msm_kms *kms)
 	struct list_head *connector_list = NULL;
 	struct drm_connector *conn_iter = NULL;
 	struct drm_connector *connector = NULL;
+	struct sde_connector *sde_conn = NULL;
 
 	if (!kms) {
 		SDE_ERROR("invalid kms\n");
@@ -2376,6 +2386,10 @@ static int sde_kms_cont_splash_config(struct msm_kms *kms)
 	sde_encoder_update_caps_for_cont_splash(encoder);
 
 	sde_crtc_update_cont_splash_mixer_settings(crtc);
+
+	sde_conn = to_sde_connector(connector);
+	if (sde_conn && sde_conn->ops.cont_splash_config)
+		sde_conn->ops.cont_splash_config(sde_conn->display);
 
 	return rc;
 }
@@ -2803,8 +2817,8 @@ static int sde_kms_pd_disable(struct generic_pm_domain *genpd)
 static int _sde_kms_get_splash_data(struct sde_splash_data *data)
 {
 	int ret = 0;
-	struct device_node *parent, *node;
-	struct resource r;
+	struct device_node *parent, *node, *node1;
+	struct resource r, r1;
 
 	if (!data)
 		return -EINVAL;
@@ -2829,9 +2843,29 @@ static int _sde_kms_get_splash_data(struct sde_splash_data *data)
 	data->splash_base = (unsigned long)r.start;
 	data->splash_size = (r.end - r.start) + 1;
 
-	pr_info("found continuous splash base address:%lx size:%x\n",
-						data->splash_base,
-						data->splash_size);
+	node1 = of_find_node_by_name(parent, "disp_rdump_region");
+	if (!node1)
+		SDE_DEBUG("failed to find disp ramdump memory reservation\n");
+
+	if (!node1 || of_address_to_resource(node1, 0, &r1)) {
+		SDE_DEBUG("failed to find data for  disp ramdump memory\n");
+		data->ramdump_base = 0;
+		data->ramdump_size = 0;
+	} else {
+		data->ramdump_base = (unsigned long)r1.start;
+		data->ramdump_size = (r1.end - r1.start) + 1;
+	}
+
+	if ((data->ramdump_base && data->ramdump_base != data->splash_base) ||
+			(data->ramdump_size > data->splash_size)) {
+		SDE_ERROR("ramdump/splash buffer addr/size mismatched\n");
+		data->ramdump_base = 0;
+		data->ramdump_size = 0;
+	}
+
+	pr_info("cont spla base adds:%lx size:%x rdump adds=:%lx size:%x\n",
+			data->splash_base, data->splash_size,
+			data->ramdump_base, data->ramdump_size);
 	return ret;
 }
 

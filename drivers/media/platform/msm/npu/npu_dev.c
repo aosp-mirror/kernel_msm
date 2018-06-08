@@ -37,6 +37,8 @@
 #define DDR_MAPPED_START_ADDR   0x80000000
 #define DDR_MAPPED_SIZE         0x60000000
 
+#define PERF_MODE_DEFAULT 0
+
 #define POWER_LEVEL_MIN_SVS 0
 #define POWER_LEVEL_LOW_SVS 1
 #define POWER_LEVEL_NOMINAL 4
@@ -49,8 +51,7 @@ static int npu_enable_regulators(struct npu_device *npu_dev);
 static void npu_disable_regulators(struct npu_device *npu_dev);
 static int npu_enable_core_clocks(struct npu_device *npu_dev, bool post_pil);
 static void npu_disable_core_clocks(struct npu_device *npu_dev);
-static int npu_calc_power_level(struct npu_device *npu_dev,
-	uint32_t perf_mode);
+static uint32_t npu_calc_power_level(struct npu_device *npu_dev);
 static ssize_t npu_show_capabilities(struct device *dev,
 		struct device_attribute *attr, char *buf);
 static ssize_t npu_show_pwr_state(struct device *dev,
@@ -143,6 +144,15 @@ static const char * const npu_exclude_rate_clocks[] = {
 	"qtimer_core_clk",
 	"bwmon_clk",
 	"bto_core_clk"
+};
+
+static struct npu_reg npu_saved_bw_registers[] = {
+	{ BWMON2_SAMPLING_WINDOW, 0, false },
+	{ BWMON2_BYTE_COUNT_THRESHOLD_HIGH, 0, false },
+	{ BWMON2_BYTE_COUNT_THRESHOLD_MEDIUM, 0, false },
+	{ BWMON2_BYTE_COUNT_THRESHOLD_LOW, 0, false },
+	{ BWMON2_ZONE_ACTIONS, 0, false },
+	{ BWMON2_ZONE_COUNT_THRESHOLD, 0, false },
 };
 
 /* -------------------------------------------------------------------------
@@ -292,6 +302,11 @@ void npu_disable_core_power(struct npu_device *npu_dev)
 		npu_disable_core_clocks(npu_dev);
 		npu_disable_regulators(npu_dev);
 	}
+	/* init the power levels back to default */
+	pwr->active_pwrlevel = pwr->default_pwrlevel;
+	pwr->uc_pwrlevel = pwr->default_pwrlevel;
+	pr_debug("setting back to default power level=%d\n",
+		pwr->default_pwrlevel);
 }
 
 int npu_enable_post_pil_clocks(struct npu_device *npu_dev)
@@ -299,26 +314,58 @@ int npu_enable_post_pil_clocks(struct npu_device *npu_dev)
 	return npu_enable_core_clocks(npu_dev, true);
 }
 
-int npu_set_power_level(struct npu_device *npu_dev,
-	uint32_t pwr_level)
+
+static uint32_t npu_calc_power_level(struct npu_device *npu_dev)
+{
+	uint32_t ret_level;
+	uint32_t therm_pwr_level = npu_dev->thermalctrl.pwr_level;
+	uint32_t active_pwr_level = npu_dev->pwrctrl.active_pwrlevel;
+	uint32_t uc_pwr_level = npu_dev->pwrctrl.uc_pwrlevel;
+
+	/* if thermal power is higher than usecase power
+	 * leave level at use case.  Otherwise go down to
+	 * thermal power level
+	 */
+	if (therm_pwr_level > uc_pwr_level)
+		ret_level = uc_pwr_level;
+	else
+		ret_level = therm_pwr_level;
+
+	/* adjust the power level */
+	/* force to lowsvs, minsvs not supported */
+	if (ret_level == POWER_LEVEL_MIN_SVS)
+		ret_level = POWER_LEVEL_LOW_SVS;
+
+	pr_debug("%s therm=%d active=%d uc=%d set level=%d\n", __func__,
+		therm_pwr_level, active_pwr_level, uc_pwr_level, ret_level);
+
+	return ret_level;
+}
+
+static int npu_set_power_level(struct npu_device *npu_dev)
 {
 	struct npu_pwrctrl *pwr = &npu_dev->pwrctrl;
 	struct npu_pwrlevel *pwrlevel;
 	int i, ret = 0;
 	long clk_rate = 0;
+	uint32_t pwr_level_to_set;
 
 	if (!pwr->pwr_vote_num) {
 		pr_err("power is not enabled during set request\n");
 		return -EINVAL;
 	}
 
-	if (pwr_level == pwr->active_pwrlevel)
+	/* get power level to set */
+	pwr_level_to_set = npu_calc_power_level(npu_dev);
+
+	/* if the same as current, dont do anything */
+	if (pwr_level_to_set == pwr->active_pwrlevel)
 		return 0;
 
-	pr_debug("%s to [%d]\n", __func__, pwr_level);
+	pr_debug("setting power level to [%d]\n", pwr_level_to_set);
 
-	pwr->active_pwrlevel = pwr_level;
-	pwrlevel = &npu_dev->pwrctrl.pwrlevels[pwr_level];
+	pwr->active_pwrlevel = pwr_level_to_set;
+	pwrlevel = &npu_dev->pwrctrl.pwrlevels[pwr->active_pwrlevel];
 
 	for (i = 0; i < npu_dev->core_clk_num; i++) {
 		if (npu_is_exclude_rate_clock(
@@ -338,6 +385,7 @@ int npu_set_power_level(struct npu_device *npu_dev,
 			pwrlevel->clk_freq[i]);
 
 		pr_debug("actual round clk rate [%ld]\n", clk_rate);
+
 		ret = clk_set_rate(npu_dev->core_clks[i].clk, clk_rate);
 		if (ret) {
 			pr_err("clk_set_rate %s to %ld failed with %d\n",
@@ -350,26 +398,47 @@ int npu_set_power_level(struct npu_device *npu_dev,
 	return ret;
 }
 
-static int npu_calc_power_level(struct npu_device *npu_dev,
+int npu_set_uc_power_level(struct npu_device *npu_dev,
 	uint32_t perf_mode)
 {
-	int ret_level;
+	struct npu_pwrctrl *pwr = &npu_dev->pwrctrl;
 
-	if (perf_mode == 0)
-		ret_level = POWER_LEVEL_NOMINAL;
-	else if (perf_mode == POWER_LEVEL_MIN_SVS)
-		/* force to lowsvs, minsvs not supported */
-		ret_level = POWER_LEVEL_LOW_SVS;
+	if (perf_mode == PERF_MODE_DEFAULT)
+		pwr->uc_pwrlevel = POWER_LEVEL_NOMINAL;
 	else
-		ret_level = perf_mode-1;
+		pwr->uc_pwrlevel = perf_mode - 1;
 
-	return ret_level;
+	return npu_set_power_level(npu_dev);
 }
 
 /* -------------------------------------------------------------------------
  * Bandwidth Related
  * -------------------------------------------------------------------------
  */
+static void npu_save_bw_registers(struct npu_device *npu_dev)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(npu_saved_bw_registers); i++) {
+		npu_saved_bw_registers[i].val = REGR(npu_dev,
+			npu_saved_bw_registers[i].off);
+		npu_saved_bw_registers[i].valid = true;
+	}
+}
+
+static void npu_restore_bw_registers(struct npu_device *npu_dev)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(npu_saved_bw_registers); i++) {
+		if (npu_saved_bw_registers[i].valid) {
+			REGW(npu_dev, npu_saved_bw_registers[i].off,
+				npu_saved_bw_registers[i].val);
+			npu_saved_bw_registers[i].valid = false;
+		}
+	}
+}
+
 static void npu_suspend_devbw(struct npu_device *npu_dev)
 {
 	struct npu_pwrctrl *pwr = &npu_dev->pwrctrl;
@@ -381,6 +450,7 @@ static void npu_suspend_devbw(struct npu_device *npu_dev)
 		if (ret)
 			pr_err("devfreq_suspend_devbw failed rc:%d\n",
 				ret);
+		npu_save_bw_registers(npu_dev);
 	}
 }
 
@@ -391,6 +461,7 @@ static void npu_resume_devbw(struct npu_device *npu_dev)
 
 	if (!pwr->bwmon_enabled) {
 		pwr->bwmon_enabled = 1;
+		npu_restore_bw_registers(npu_dev);
 		ret = devfreq_resume_devbw(pwr->devbw);
 
 		if (ret)
@@ -500,6 +571,11 @@ static void npu_disable_core_clocks(struct npu_device *npu_dev)
 	for (i = (npu_dev->core_clk_num)-1; i >= 0 ; i--) {
 		if (npu_is_exclude_clock(core_clks[i].clk_name))
 			continue;
+		if (!npu_dev->host_ctx.fw_enabled) {
+			if (npu_is_post_clock(npu_dev->core_clks[i].clk_name))
+				continue;
+		}
+
 		pr_debug("disabling clock [%s]\n", core_clks[i].clk_name);
 		clk_disable_unprepare(core_clks[i].clk);
 	}
@@ -513,11 +589,12 @@ static int npu_get_max_state(struct thermal_cooling_device *cdev,
 				 unsigned long *state)
 {
 	struct npu_device *npu_dev = cdev->devdata;
-	struct npu_pwrctrl *pwr = &npu_dev->pwrctrl;
+	struct npu_thermalctrl *thermalctrl = &npu_dev->thermalctrl;
 
-	pr_debug("enter %s\n", __func__);
+	pr_debug("enter %s thermal max state=%lu\n", __func__,
+		thermalctrl->max_state);
 
-	*state = pwr->max_pwrlevel;
+	*state = thermalctrl->max_state;
 
 	return 0;
 }
@@ -526,11 +603,12 @@ static int npu_get_cur_state(struct thermal_cooling_device *cdev,
 				 unsigned long *state)
 {
 	struct npu_device *npu_dev = cdev->devdata;
-	struct npu_pwrctrl *pwr = &npu_dev->pwrctrl;
+	struct npu_thermalctrl *thermal = &npu_dev->thermalctrl;
 
-	pr_debug("enter %s\n", __func__);
+	pr_debug("enter %s thermal current state=%lu\n", __func__,
+		thermal->current_state);
 
-	*state = pwr->max_pwrlevel - pwr->active_pwrlevel;
+	*state = thermal->current_state;
 
 	return 0;
 }
@@ -539,17 +617,17 @@ static int
 npu_set_cur_state(struct thermal_cooling_device *cdev, unsigned long state)
 {
 	struct npu_device *npu_dev = cdev->devdata;
+	struct npu_thermalctrl *thermal = &npu_dev->thermalctrl;
 	struct npu_pwrctrl *pwr = &npu_dev->pwrctrl;
-	uint32_t next_pwr_level;
 
-	pr_debug("enter %s %lu\n", __func__, state);
-
-	if (state > pwr->max_pwrlevel)
+	pr_debug("enter %s request state=%lu\n", __func__, state);
+	if (state > thermal->max_state)
 		return -EINVAL;
 
-	next_pwr_level = pwr->max_pwrlevel - state;
+	thermal->current_state = state;
+	thermal->pwr_level =  pwr->max_pwrlevel - state;
 
-	return npu_set_power_level(npu_dev, next_pwr_level);
+	return npu_set_power_level(npu_dev);
 }
 
 /* -------------------------------------------------------------------------
@@ -624,7 +702,7 @@ int npu_enable_sys_cache(struct npu_device *npu_dev)
 	int rc = 0;
 	uint32_t reg_val = 0;
 
-	if (!npu_dev->debugfs_ctx.sys_cache_disable) {
+	if (!npu_dev->host_ctx.sys_cache_disable) {
 		npu_dev->sys_cache = llcc_slice_getd(&(npu_dev->pdev->dev),
 			"npu");
 		if (IS_ERR_OR_NULL(npu_dev->sys_cache)) {
@@ -657,7 +735,7 @@ void npu_disable_sys_cache(struct npu_device *npu_dev)
 {
 	int rc = 0;
 
-	if (!npu_dev->debugfs_ctx.sys_cache_disable) {
+	if (!npu_dev->host_ctx.sys_cache_disable) {
 		if (npu_dev->sys_cache) {
 			rc = llcc_slice_deactivate(npu_dev->sys_cache);
 			if (rc) {
@@ -786,7 +864,6 @@ static int npu_load_network(struct npu_device *npu_dev, unsigned long arg)
 	struct msm_npu_load_network_ioctl req;
 	void __user *argp = (void __user *)arg;
 	int ret = 0;
-	uint32_t pwr_level_to_set;
 
 	ret = copy_from_user(&req, argp, sizeof(req));
 
@@ -795,22 +872,13 @@ static int npu_load_network(struct npu_device *npu_dev, unsigned long arg)
 		return -EFAULT;
 	}
 
-	pr_debug("network load with perf request %d\n", req.flags);
+	pr_debug("network load with perf request %d\n", req.perf_mode);
 
 	ret = npu_host_load_network(npu_dev, &req);
 	if (ret) {
-		pr_err("npu_host_load_network failed\n");
-		return ret;
+		pr_err("network load failed: %d\n", ret);
+		return -EFAULT;
 	}
-
-	/* get the power level to set */
-	pwr_level_to_set = npu_calc_power_level(npu_dev, req.flags);
-
-	/* set the power level */
-	ret = npu_set_power_level(npu_dev, pwr_level_to_set);
-	if (!ret)
-		pr_debug("network load pwr level set at %d\n",
-			pwr_level_to_set);
 
 	ret = copy_to_user(argp, &req, sizeof(req));
 	if (ret) {
@@ -1071,6 +1139,7 @@ static int npu_of_parse_pwrlevels(struct npu_device *npu_dev,
 	pr_debug("init power level %d\n", init_level);
 	pwr->active_pwrlevel = init_level;
 	pwr->default_pwrlevel = init_level;
+	pwr->uc_pwrlevel = init_level;
 	pwr->min_pwrlevel = 0;
 	pwr->max_pwrlevel = pwr->num_pwrlevels - 1;
 
@@ -1121,6 +1190,17 @@ static int npu_pwrctrl_init(struct npu_device *npu_dev)
 	return ret;
 }
 
+static int npu_thermalctrl_init(struct npu_device *npu_dev)
+{
+	struct npu_pwrctrl *pwr = &npu_dev->pwrctrl;
+	struct npu_thermalctrl *thermalctrl = &npu_dev->thermalctrl;
+	int ret = 0;
+
+	thermalctrl->max_state = pwr->max_pwrlevel;
+	thermalctrl->current_state = 0;
+	return ret;
+}
+
 /* -------------------------------------------------------------------------
  * Probe/Remove
  * -------------------------------------------------------------------------
@@ -1158,6 +1238,10 @@ static int npu_probe(struct platform_device *pdev)
 		goto error_get_dev_num;
 
 	rc = npu_pwrctrl_init(npu_dev);
+	if (rc)
+		goto error_get_dev_num;
+
+	rc = npu_thermalctrl_init(npu_dev);
 	if (rc)
 		goto error_get_dev_num;
 

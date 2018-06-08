@@ -375,6 +375,23 @@
 		};
 	};
 
+	firmware: firmware {
+		android {
+			compatible = "android,firmware";
+			fstab {
+				compatible = "android,fstab";
+				vendor {
+					compatible = "android,vendor";
+					dev = "/dev/block/platform/soc/8804000.sdhci/by-name/vendor";
+					type = "ext4";
+					mnt_flags = "ro,barrier=1,discard";
+					fsmgr_flags = "wait,slotselect";
+					status = "ok";
+				};
+			};
+		};
+	};
+
 	reserved-memory {
 		#address-cells = <2>;
 		#size-cells = <2>;
@@ -450,31 +467,31 @@
 		pil_modem_mem: modem_region@8d800000 {
 			compatible = "removed-dma-pool";
 			no-map;
-			reg = <0x0 0x8d800000 0x0 0x7d00000>;
+			reg = <0x0 0x8d800000 0x0 0x8f00000>;
 		};
 
 		pil_video_mem: pil_video_region@95500000 {
 			compatible = "removed-dma-pool";
 			no-map;
-			reg = <0x0 0x95500000 0x0 0x500000>;
+			reg = <0x0 0x96700000 0x0 0x500000>;
 		};
 
 		pil_cdsp_mem: cdsp_regions@95a00000 {
 			compatible = "removed-dma-pool";
 			no-map;
-			reg = <0x0 0x95a00000 0x0 0x800000>;
+			reg = <0x0 0x96C00000 0x0 0x800000>;
 		};
 
 		pil_slpi_mem: pil_slpi_region@96200000 {
 			compatible = "removed-dma-pool";
 			no-map;
-			reg = <0x0 0x96200000 0x0 0x1400000>;
+			reg = <0x0 0x97400000 0x0 0x1400000>;
 		};
 
 		pil_spss_mem: pil_spss_region@97600000 {
 			compatible = "removed-dma-pool";
 			no-map;
-			reg = <0x0 0x97600000 0x0 0x100000>;
+			reg = <0x0 0x98800000 0x0 0x100000>;
 		};
 
 		qseecom_mem: qseecom_region@0x9e400000 {
@@ -499,6 +516,8 @@
 };
 
 #include "sdmshrike-gdsc.dtsi"
+#include "sdmshrike-sde-pll.dtsi"
+#include "sdmshrike-sde.dtsi"
 
 &soc {
 	#address-cells = <1>;
@@ -1017,8 +1036,8 @@
 		compatible = "qcom,camcc-sdmshrike";
 		reg = <0xad00000 0x20000>;
 		reg-names = "cc_base";
-		vdd_mx-supply = <&pm855p_s3_level>;
-		vdd_mm-supply = <&pm855p_s1_level>;
+		vdd_mx-supply = <&pm8150c_s3_level>;
+		vdd_mm-supply = <&pm8150c_s1_level>;
 		clock-names = "cfg_ahb_clk";
 		clocks = <&clock_gcc GCC_CAMERA_AHB_CLK>;
 		#clock-cells = <1>;
@@ -1084,7 +1103,7 @@
 		compatible = "qcom,pil-tz-generic";
 		reg = <0x17300000 0x00100>;
 
-		vdd_cx-supply = <&pm855_2_s3_level>;
+		vdd_cx-supply = <&pm8150_2_s3_level>;
 		qcom,proxy-reg-names = "vdd_cx";
 
 		clocks = <&clock_rpmh RPMH_CXO_CLK>;
@@ -1114,6 +1133,91 @@
 
 		/* Outputs to lpass */
 		qcom,smem-states = <&adsp_smp2p_out 0>;
+		qcom,smem-state-names = "qcom,force-stop";
+	};
+
+	qcom,ssc@5c00000 {
+		compatible = "qcom,pil-tz-generic";
+		reg = <0x5c00000 0x4000>;
+
+		vdd_cx-supply = <&L8E_LEVEL>;
+		vdd_mx-supply = <&L4E_LEVEL>;
+
+		qcom,proxy-reg-names = "vdd_cx", "vdd_mx";
+		qcom,keep-proxy-regs-on;
+
+		clocks = <&clock_rpmh RPMH_CXO_CLK>;
+		clock-names = "xo";
+		qcom,proxy-clock-names = "xo";
+
+		qcom,pas-id = <12>;
+		qcom,proxy-timeout-ms = <10000>;
+		qcom,smem-id = <424>;
+		qcom,sysmon-id = <3>;
+		qcom,ssctl-instance-id = <0x16>;
+		qcom,firmware-name = "slpi";
+		status = "ok";
+		memory-region = <&pil_slpi_mem>;
+
+		/* Inputs from ssc */
+		interrupts-extended = <&pdc 0 494 1>,
+			<&dsps_smp2p_in 0 0>,
+			<&dsps_smp2p_in 2 0>,
+			<&dsps_smp2p_in 1 0>,
+			<&dsps_smp2p_in 3 0>;
+
+		interrupt-names = "qcom,wdog",
+			"qcom,err-fatal",
+			"qcom,proxy-unvote",
+			"qcom,err-ready",
+			"qcom,stop-ack";
+
+		/* Outputs to ssc */
+		qcom,smem-states = <&dsps_smp2p_out 0>;
+		qcom,smem-state-names = "qcom,force-stop";
+	};
+
+	qcom,turing@8300000 {
+		compatible = "qcom,pil-tz-generic";
+		reg = <0x8300000 0x100000>;
+
+		vdd_cx-supply = <&VDD_CX_LEVEL>;
+		qcom,proxy-reg-names = "vdd_cx";
+
+		clocks = <&clock_rpmh RPMH_CXO_CLK>;
+		clock-names = "xo";
+		qcom,proxy-clock-names = "xo";
+
+		qcom,pas-id = <18>;
+		qcom,proxy-timeout-ms = <10000>;
+		qcom,smem-id = <601>;
+		qcom,sysmon-id = <7>;
+		qcom,ssctl-instance-id = <0x17>;
+		qcom,firmware-name = "cdsp";
+		memory-region = <&pil_cdsp_mem>;
+
+		qcom,msm-bus,name = "pil-cdsp";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+			<154 10070 0 0>,
+			<154 10070 0 1>;
+
+		/* Inputs from turing */
+		interrupts-extended = <&pdc 0 578 1>,
+				<&cdsp_smp2p_in 0 0>,
+				<&cdsp_smp2p_in 2 0>,
+				<&cdsp_smp2p_in 1 0>,
+				<&cdsp_smp2p_in 3 0>;
+
+		interrupt-names = "qcom,wdog",
+				"qcom,err-fatal",
+				"qcom,proxy-unvote",
+				"qcom,err-ready",
+				"qcom,stop-ack";
+
+		/* Outputs to turing */
+		qcom,smem-states = <&cdsp_smp2p_out 0>;
 		qcom,smem-state-names = "qcom,force-stop";
 	};
 
@@ -1337,8 +1441,8 @@
 };
 
 &gpu_gx_gdsc {
-	parent-supply = <&pm855_1_s10_level>;
-	vdd_parent-supply = <&pm855_1_s10_level>;
+	parent-supply = <&pm8150_1_s10_level>;
+	vdd_parent-supply = <&pm8150_1_s10_level>;
 	status = "ok";
 };
 
@@ -1380,3 +1484,5 @@
 #include "msm-arm-smmu-sdmshrike.dtsi"
 #include "sdmshrike-usb.dtsi"
 #include "sdmshrike-qupv3.dtsi"
+#include "sm8150-audio.dtsi"
+#include "sdmshrike-gpu.dtsi"

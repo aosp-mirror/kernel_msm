@@ -48,6 +48,8 @@ struct npu_network {
 	uint32_t first_block_size;
 	uint32_t network_hdl;
 	uint32_t ipc_trans_id;
+	uint32_t priority;
+	uint32_t perf_mode;
 };
 
 struct npu_host_ctx {
@@ -62,6 +64,7 @@ struct npu_host_ctx {
 	struct completion unload_done;
 	int32_t network_num;
 	struct npu_network networks[MAX_LOADED_NETWORK];
+	bool sys_cache_disable;
 };
 
 struct npu_device;

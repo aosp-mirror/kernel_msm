@@ -131,6 +131,8 @@ struct tsens_data {
 	u32				wd_bark_mask;
 	bool				mtc;
 	bool				valid_status_check;
+	u32				ver_major;
+	u32				ver_minor;
 };
 
 struct tsens_mtc_sysfs {
@@ -155,8 +157,8 @@ struct tsens_device {
 	spinlock_t			tsens_crit_lock;
 	spinlock_t			tsens_upp_low_lock;
 	const struct tsens_data		*ctrl_data;
+	struct tsens_mtc_sysfs  mtcsys;
 	struct tsens_sensor		sensor[0];
-	struct tsens_mtc_sysfs	mtcsys;
 };
 
 extern const struct tsens_data data_tsens2xxx, data_tsens23xx, data_tsens24xx;

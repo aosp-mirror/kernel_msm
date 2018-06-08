@@ -26,8 +26,9 @@
 #include "kgsl.h"
 #include "kgsl_pwrscale.h"
 #include "kgsl_device.h"
-#include "kgsl_gmu.h"
 #include "kgsl_trace.h"
+#include "kgsl_gmu_core.h"
+#include "kgsl_gmu.h"
 
 #define KGSL_PWRFLAGS_POWER_ON 0
 #define KGSL_PWRFLAGS_CLK_ON   1
@@ -222,14 +223,18 @@ static void kgsl_pwrctrl_vbif_update(unsigned long ab)
 static int kgsl_bus_scale_request(struct kgsl_device *device,
 		unsigned int buslevel)
 {
+	struct gmu_device *gmu = KGSL_GMU_DEVICE(device);
 	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
 	int ret = 0;
 
 	/* GMU scales BW */
-	if (kgsl_gmu_gpmu_isenabled(device))
-		return 0;
+	if (gmu_core_gpmu_isenabled(device)) {
+		/* Zero bus level is invalid for GMU DCVS */
+		if (!test_bit(GMU_HFI_ON, &gmu->flags) || !buslevel)
+			return 0;
 
-	if (pwr->pcl) {
+		ret = gmu_core_dcvs_set(device, INVALID_DCVS_IDX, buslevel);
+	} else if (pwr->pcl) {
 		/* Linux bus driver scales BW */
 		ret = msm_bus_scale_client_update_request(pwr->pcl, buslevel);
 	}
@@ -248,28 +253,32 @@ static int kgsl_bus_scale_request(struct kgsl_device *device,
 int kgsl_clk_set_rate(struct kgsl_device *device,
 		unsigned int pwrlevel)
 {
-	struct gmu_device *gmu = &device->gmu;
 	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
 	struct kgsl_pwrlevel *pl = &pwr->pwrlevels[pwrlevel];
 	int ret = 0;
 
 	/* GMU scales GPU freq */
-	if (kgsl_gmu_gpmu_isenabled(device)) {
+	if (gmu_core_gpmu_isenabled(device)) {
+		int num_gpupwrlevels = pwr->num_pwrlevels;
+
 		/* If GMU has not been started, save it */
-		if (!test_bit(GMU_HFI_ON, &gmu->flags)) {
+		if (!gmu_core_testbit(device, GMU_HFI_ON)) {
 			/* store clock change request */
-			set_bit(GMU_DCVS_REPLAY, &gmu->flags);
+			gmu_core_setbit(device, GMU_DCVS_REPLAY);
 			return 0;
 		}
 
+		if (num_gpupwrlevels < 0)
+			return -EINVAL;
+
 		/* If the GMU is on we cannot vote for the lowest level */
-		if (pwrlevel == (gmu->num_gpupwrlevels - 1)) {
+		if (pwrlevel == (num_gpupwrlevels - 1)) {
 			WARN(1, "Cannot set 0 GPU frequency with GMU\n");
 			return -EINVAL;
 		}
-		ret = gmu_dcvs_set(gmu, pwrlevel, INVALID_DCVS_IDX);
+		ret = gmu_core_dcvs_set(device, pwrlevel, INVALID_DCVS_IDX);
 		/* indicate actual clock  change */
-		clear_bit(GMU_DCVS_REPLAY, &gmu->flags);
+		gmu_core_clearbit(device, GMU_DCVS_REPLAY);
 	} else
 		/* Linux clock driver scales GPU freq */
 		ret = kgsl_pwrctrl_clk_set_rate(pwr->grp_clks[0],
@@ -295,7 +304,8 @@ void kgsl_pwrctrl_buslevel_update(struct kgsl_device *device,
 	unsigned long ab;
 
 	/* the bus should be ON to update the active frequency */
-	if (on && !(test_bit(KGSL_PWRFLAGS_AXI_ON, &pwr->power_flags)))
+	if (!gmu_core_gpmu_isenabled(device) && on &&
+			!(test_bit(KGSL_PWRFLAGS_AXI_ON, &pwr->power_flags)))
 		return;
 	/*
 	 * If the bus should remain on calculate our request and submit it,
@@ -442,7 +452,7 @@ void kgsl_pwrctrl_pwrlevel_change(struct kgsl_device *device,
 	kgsl_pwrctrl_set_thermal_cycle(device, new_level);
 
 	if (new_level == old_level &&
-		!test_bit(GMU_DCVS_REPLAY, &device->gmu.flags))
+		!gmu_core_testbit(device, GMU_DCVS_REPLAY))
 		return;
 
 	kgsl_pwrscale_update_stats(device);
@@ -1701,7 +1711,7 @@ static void kgsl_pwrctrl_clk(struct kgsl_device *device, int state,
 	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
 	int i = 0;
 
-	if (kgsl_gmu_gpmu_isenabled(device))
+	if (gmu_core_gpmu_isenabled(device))
 		return;
 	if (test_bit(KGSL_PWRFLAGS_CLK_ON, &pwr->ctrl_flags))
 		return;
@@ -1877,7 +1887,7 @@ static int kgsl_pwrctrl_pwrrail(struct kgsl_device *device, int state)
 	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
 	int status = 0;
 
-	if (kgsl_gmu_gpmu_isenabled(device))
+	if (gmu_core_gpmu_isenabled(device))
 		return 0;
 	/*
 	 * Disabling the regulator means also disabling dependent clocks.
@@ -2576,7 +2586,7 @@ void kgsl_pre_hwaccess(struct kgsl_device *device)
 	 * A register access without device power will cause a fatal timeout.
 	 * This is not valid for targets with a GMU.
 	 */
-	if (!kgsl_gmu_gpmu_isenabled(device))
+	if (!gmu_core_gpmu_isenabled(device))
 		WARN_ON(!kgsl_pwrctrl_isenabled(device));
 }
 EXPORT_SYMBOL(kgsl_pre_hwaccess);
@@ -2597,8 +2607,8 @@ static int kgsl_pwrctrl_enable(struct kgsl_device *device)
 
 	kgsl_pwrctrl_pwrlevel_change(device, level);
 
-	if (kgsl_gmu_gpmu_isenabled(device)) {
-		int ret = gmu_start(device);
+	if (gmu_core_gpmu_isenabled(device)) {
+		int ret = gmu_core_start(device);
 
 		if (!ret)
 			kgsl_pwrctrl_axi(device, KGSL_PWRFLAGS_ON);
@@ -2616,9 +2626,9 @@ static int kgsl_pwrctrl_enable(struct kgsl_device *device)
 
 static void kgsl_pwrctrl_disable(struct kgsl_device *device)
 {
-	if (kgsl_gmu_gpmu_isenabled(device)) {
+	if (gmu_core_gpmu_isenabled(device)) {
 		kgsl_pwrctrl_axi(device, KGSL_PWRFLAGS_OFF);
-		return gmu_stop(device);
+		return gmu_core_stop(device);
 	}
 
 	/* Order pwrrail/clk sequence based upon platform */
@@ -2761,14 +2771,13 @@ static int
 _aware(struct kgsl_device *device)
 {
 	int status = 0;
-	struct gmu_device *gmu = &device->gmu;
 	unsigned int state = device->state;
 
 	switch (device->state) {
 	case KGSL_STATE_RESET:
-		if (!kgsl_gmu_gpmu_isenabled(device))
+		if (!gmu_core_gpmu_isenabled(device))
 			break;
-		status = gmu_start(device);
+		status = gmu_core_start(device);
 		break;
 	case KGSL_STATE_INIT:
 		status = kgsl_pwrctrl_enable(device);
@@ -2783,8 +2792,8 @@ _aware(struct kgsl_device *device)
 		break;
 	case KGSL_STATE_SLUMBER:
 		/* if GMU already in FAULT */
-		if (kgsl_gmu_isenabled(device) &&
-			test_bit(GMU_FAULT, &gmu->flags)) {
+		if (gmu_core_isenabled(device) &&
+			gmu_core_testbit(device, GMU_FAULT)) {
 			status = -EINVAL;
 			break;
 		}
@@ -2796,10 +2805,10 @@ _aware(struct kgsl_device *device)
 	}
 
 	if (status) {
-		if (kgsl_gmu_isenabled(device)) {
+		if (gmu_core_isenabled(device)) {
 			/* GMU hang recovery */
 			kgsl_pwrctrl_set_state(device, KGSL_STATE_RESET);
-			set_bit(GMU_FAULT, &gmu->flags);
+			gmu_core_setbit(device, GMU_FAULT);
 			status = kgsl_pwrctrl_enable(device);
 			if (status) {
 				/*
@@ -2817,7 +2826,7 @@ _aware(struct kgsl_device *device)
 					KGSL_STATE_AWARE);
 			}
 
-			clear_bit(GMU_FAULT, &gmu->flags);
+			gmu_core_clearbit(device, GMU_FAULT);
 			return status;
 		}
 

@@ -648,12 +648,6 @@
 			seconds. Defaults to 10*60 = 10mins. A value of 0
 			disables the blank timer.
 
-	core_ctl_disable_cpumask= [SMP]
-			Exempt the CPUs from being managed by core_ctl.
-			core_ctl operates on a cluster basis. So all the
-			CPUs in a given cluster must be specified to disable
-			core_ctl for that cluster.
-
 	coredump_filter=
 			[KNL] Change the default value for
 			/proc/<pid>/coredump_filter.
@@ -2555,6 +2549,9 @@
 			but will impact performance.
 
 	noalign		[KNL,ARM]
+
+	noaltinstr	[S390] Disables alternative instructions patching
+			(CPU alternatives feature).
 
 	noapic		[SMP,APIC] Tells the kernel to not make use of any
 			IOAPICs that may be present in the system.

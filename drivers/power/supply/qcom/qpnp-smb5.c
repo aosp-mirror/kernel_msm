@@ -24,6 +24,7 @@
 #include <linux/regulator/driver.h>
 #include <linux/regulator/of_regulator.h>
 #include <linux/regulator/machine.h>
+#include <linux/iio/consumer.h>
 #include <linux/pmic-voter.h>
 #include "smb5-reg.h"
 #include "smb5-lib.h"
@@ -47,6 +48,13 @@ static struct smb_params smb5_pmi632_params = {
 	.usb_icl		= {
 		.name   = "usb input current limit",
 		.reg    = USBIN_CURRENT_LIMIT_CFG_REG,
+		.min_u  = 0,
+		.max_u  = 3000000,
+		.step_u = 50000,
+	},
+	.icl_max_stat		= {
+		.name   = "dcdc icl max status",
+		.reg    = ICL_MAX_STATUS_REG,
 		.min_u  = 0,
 		.max_u  = 3000000,
 		.step_u = 50000,
@@ -89,13 +97,13 @@ static struct smb_params smb5_pmi632_params = {
 	},
 };
 
-static struct smb_params smb5_pmi855_params = {
+static struct smb_params smb5_pm8150b_params = {
 	.fcc			= {
 		.name   = "fast charge current",
 		.reg    = CHGR_FAST_CHARGE_CURRENT_CFG_REG,
 		.min_u  = 0,
 		.max_u  = 8000000,
-		.step_u = 25000,
+		.step_u = 50000,
 	},
 	.fv			= {
 		.name   = "float voltage",
@@ -111,8 +119,15 @@ static struct smb_params smb5_pmi855_params = {
 		.max_u  = 5000000,
 		.step_u = 50000,
 	},
+	.icl_max_stat		= {
+		.name   = "dcdc icl max status",
+		.reg    = ICL_MAX_STATUS_REG,
+		.min_u  = 0,
+		.max_u  = 5000000,
+		.step_u = 50000,
+	},
 	.icl_stat		= {
-		.name   = "input current limit status",
+		.name   = "aicl icl status",
 		.reg    = AICL_ICL_STATUS_REG,
 		.min_u  = 0,
 		.max_u  = 5000000,
@@ -144,10 +159,10 @@ static struct smb_params smb5_pmi855_params = {
 	.freq_switcher		= {
 		.name	= "switching frequency",
 		.reg	= DCDC_FSW_SEL_REG,
-		.min_u	= 1200,
-		.max_u	= 2400,
+		.min_u	= 600,
+		.max_u	= 1200,
 		.step_u	= 400,
-		.set_proc = NULL,
+		.set_proc = smblib_set_chg_freq,
 	},
 };
 
@@ -158,6 +173,7 @@ struct smb_dt_props {
 	int			chg_inhibit_thr_mv;
 	bool			no_battery;
 	bool			hvdcp_disable;
+	int			sec_charger_config;
 	int			auto_recharge_soc;
 	int			auto_recharge_vbat_mv;
 	int			wd_bark_time;
@@ -213,10 +229,10 @@ static int smb5_chg_config_init(struct smb5 *chip)
 	}
 
 	switch (pmic_rev_id->pmic_subtype) {
-	case PM855B_SUBTYPE:
-		chip->chg.smb_version = PM855B_SUBTYPE;
-		chg->param = smb5_pmi855_params;
-		chg->name = "pm855b_charger";
+	case PM8150B_SUBTYPE:
+		chip->chg.smb_version = PM8150B_SUBTYPE;
+		chg->param = smb5_pm8150b_params;
+		chg->name = "pm8150b_charger";
 		break;
 	case PMI632_SUBTYPE:
 		chip->chg.smb_version = PMI632_SUBTYPE;
@@ -226,18 +242,21 @@ static int smb5_chg_config_init(struct smb5 *chip)
 		chg->hw_max_icl_ua =
 			(chip->dt.usb_icl_ua > 0) ? chip->dt.usb_icl_ua
 						: PMI632_MAX_ICL_UA;
-		chg->chg_freq.freq_5V			= 600;
-		chg->chg_freq.freq_6V_8V		= 800;
-		chg->chg_freq.freq_9V			= 1050;
-		chg->chg_freq.freq_removal		= 1050;
-		chg->chg_freq.freq_below_otg_threshold	= 800;
-		chg->chg_freq.freq_above_otg_threshold	= 800;
 		break;
 	default:
 		pr_err("PMIC subtype %d not supported\n",
 				pmic_rev_id->pmic_subtype);
 		rc = -EINVAL;
+		goto out;
 	}
+
+	chg->chg_freq.freq_5V			= 600;
+	chg->chg_freq.freq_6V_8V		= 800;
+	chg->chg_freq.freq_9V			= 1050;
+	chg->chg_freq.freq_12V                  = 1200;
+	chg->chg_freq.freq_removal		= 1050;
+	chg->chg_freq.freq_below_otg_threshold	= 800;
+	chg->chg_freq.freq_above_otg_threshold	= 800;
 
 out:
 	of_node_put(revid_dev_node);
@@ -262,6 +281,9 @@ static int smb5_parse_dt(struct smb5 *chip)
 		pr_err("device tree node missing\n");
 		return -EINVAL;
 	}
+
+	of_property_read_u32(node, "qcom,sec-charger-config",
+					&chip->dt.sec_charger_config);
 
 	chg->step_chg_enabled = of_property_read_bool(node,
 				"qcom,step-charging-enable");
@@ -363,6 +385,50 @@ static int smb5_parse_dt(struct smb5 *chip)
 	if (rc < 0)
 		chg->otg_delay_ms = OTG_DEFAULT_DEGLITCH_TIME_MS;
 
+	rc = of_property_match_string(node, "io-channel-names",
+			"usb_in_voltage");
+	if (rc >= 0) {
+		chg->iio.usbin_v_chan = iio_channel_get(chg->dev,
+				"usb_in_voltage");
+		if (IS_ERR(chg->iio.usbin_v_chan)) {
+			rc = PTR_ERR(chg->iio.usbin_v_chan);
+			if (rc != -EPROBE_DEFER)
+				dev_err(chg->dev, "USBIN_V channel unavailable, %ld\n",
+						rc);
+			chg->iio.usbin_v_chan = NULL;
+			return rc;
+		}
+	}
+
+	rc = of_property_match_string(node, "io-channel-names",
+			"chg_temp");
+	if (rc >= 0) {
+		chg->iio.temp_chan = iio_channel_get(chg->dev, "chg_temp");
+		if (IS_ERR(chg->iio.temp_chan)) {
+			rc = PTR_ERR(chg->iio.temp_chan);
+			if (rc != -EPROBE_DEFER)
+				dev_err(chg->dev, "CHG_TEMP channel unavailable, %ld\n",
+						rc);
+			chg->iio.temp_chan = NULL;
+			return rc;
+		}
+	}
+
+	rc = of_property_match_string(node, "io-channel-names",
+			"usb_in_current");
+	if (rc >= 0) {
+		chg->iio.usbin_i_chan = iio_channel_get(chg->dev,
+				"usb_in_current");
+		if (IS_ERR(chg->iio.usbin_i_chan)) {
+			rc = PTR_ERR(chg->iio.usbin_i_chan);
+			if (rc != -EPROBE_DEFER)
+				dev_err(chg->dev, "USBIN_I channel unavailable, %ld\n",
+						rc);
+			chg->iio.usbin_i_chan = NULL;
+			return rc;
+		}
+	}
+
 	return 0;
 }
 
@@ -372,6 +438,7 @@ static int smb5_parse_dt(struct smb5 *chip)
 static enum power_supply_property smb5_usb_props[] = {
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_ONLINE,
+	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_PD_CURRENT_MAX,
 	POWER_SUPPLY_PROP_CURRENT_MAX,
 	POWER_SUPPLY_PROP_TYPE,
@@ -426,6 +493,9 @@ static int smb5_usb_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 		rc = smblib_get_prop_usb_voltage_max(chg, val);
 		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
+		rc = smblib_get_prop_usb_voltage_now(chg, val);
+		break;
 	case POWER_SUPPLY_PROP_PD_CURRENT_MAX:
 		val->intval = get_client_vote(chg->usb_icl_votable, PD_VOTER);
 		break;
@@ -461,6 +531,9 @@ static int smb5_usb_get_prop(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_SETTLED:
 		rc = smblib_get_prop_input_current_settled(chg, val);
+		break;
+	case POWER_SUPPLY_PROP_INPUT_CURRENT_NOW:
+		rc = smblib_get_prop_usb_current_now(chg, val);
 		break;
 	case POWER_SUPPLY_PROP_BOOST_CURRENT:
 		val->intval = chg->boost_current_ua;
@@ -947,6 +1020,7 @@ static enum power_supply_property smb5_batt_props[] = {
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_CHARGE_TYPE,
 	POWER_SUPPLY_PROP_CAPACITY,
+	POWER_SUPPLY_PROP_CHARGER_TEMP,
 	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMITED,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_VOLTAGE_MAX,
@@ -965,6 +1039,7 @@ static enum power_supply_property smb5_batt_props[] = {
 	POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT_MAX,
 	POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT,
 	POWER_SUPPLY_PROP_CHARGE_COUNTER,
+	POWER_SUPPLY_PROP_CYCLE_COUNT,
 	POWER_SUPPLY_PROP_RECHARGE_SOC,
 };
 
@@ -973,6 +1048,8 @@ static int smb5_batt_get_prop(struct power_supply *psy,
 		union power_supply_propval *val)
 {
 	struct smb_charger *chg = power_supply_get_drvdata(psy);
+	union power_supply_propval pval = {0, };
+
 	int rc = 0;
 
 	switch (psp) {
@@ -999,6 +1076,15 @@ static int smb5_batt_get_prop(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT_MAX:
 		rc = smblib_get_prop_system_temp_level_max(chg, val);
+		break;
+	case POWER_SUPPLY_PROP_CHARGER_TEMP:
+		rc = smblib_get_prop_usb_present(chg, &pval);
+		if (rc < 0) {
+			pr_err("Couldn't get usb present rc=%d\n", rc);
+			break;
+		}
+		if (pval.intval)
+			rc = smblib_get_prop_charger_temp(chg, val);
 		break;
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMITED:
 		rc = smblib_get_prop_input_current_limited(chg, val);
@@ -1054,6 +1140,9 @@ static int smb5_batt_get_prop(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
 		rc = smblib_get_prop_batt_charge_counter(chg, val);
+		break;
+	case POWER_SUPPLY_PROP_CYCLE_COUNT:
+		rc = smblib_get_prop_batt_cycle_count(chg, val);
 		break;
 	case POWER_SUPPLY_PROP_RECHARGE_SOC:
 		val->intval = chg->auto_recharge_soc;
@@ -1361,6 +1450,12 @@ static int smb5_init_hw(struct smb5 *chip)
 
 	smblib_get_charge_param(chg, &chg->param.usb_icl,
 				&chg->default_icl_ua);
+
+	chg->sec_cp_present = chip->dt.sec_charger_config == SEC_CHG_CP_ONLY
+			|| chip->dt.sec_charger_config == SEC_CHG_CP_AND_PL;
+
+	chg->sec_pl_present = chip->dt.sec_charger_config == SEC_CHG_PL_ONLY
+			|| chip->dt.sec_charger_config == SEC_CHG_CP_AND_PL;
 
 	/* Use SW based VBUS control, disable HW autonomous mode */
 	rc = smblib_masked_write(chg, USBIN_OPTIONS_1_CFG_REG,
@@ -1716,30 +1811,25 @@ static struct smb_irq_info smb5_irqs[] = {
 	[CHG_STATE_CHANGE_IRQ] = {
 		.name		= "chg-state-change",
 		.handler	= chg_state_change_irq_handler,
+		.wake		= true,
 	},
 	[STEP_CHG_STATE_CHANGE_IRQ] = {
 		.name		= "step-chg-state-change",
-		.handler	= default_irq_handler,
 	},
 	[STEP_CHG_SOC_UPDATE_FAIL_IRQ] = {
 		.name		= "step-chg-soc-update-fail",
-		.handler	= default_irq_handler,
 	},
 	[STEP_CHG_SOC_UPDATE_REQ_IRQ] = {
 		.name		= "step-chg-soc-update-req",
-		.handler	= default_irq_handler,
 	},
 	[FG_FVCAL_QUALIFIED_IRQ] = {
 		.name		= "fg-fvcal-qualified",
-		.handler	= default_irq_handler,
 	},
 	[VPH_ALARM_IRQ] = {
 		.name		= "vph-alarm",
-		.handler	= default_irq_handler,
 	},
 	[VPH_DROP_PRECHG_IRQ] = {
 		.name		= "vph-drop-prechg",
-		.handler	= default_irq_handler,
 	},
 	/* DCDC IRQs */
 	[OTG_FAIL_IRQ] = {
@@ -1748,19 +1838,17 @@ static struct smb_irq_info smb5_irqs[] = {
 	},
 	[OTG_OC_DISABLE_SW_IRQ] = {
 		.name		= "otg-oc-disable-sw",
-		.handler	= default_irq_handler,
 	},
 	[OTG_OC_HICCUP_IRQ] = {
 		.name		= "otg-oc-hiccup",
-		.handler	= default_irq_handler,
 	},
 	[BSM_ACTIVE_IRQ] = {
 		.name		= "bsm-active",
-		.handler	= default_irq_handler,
 	},
 	[HIGH_DUTY_CYCLE_IRQ] = {
 		.name		= "high-duty-cycle",
 		.handler	= high_duty_cycle_irq_handler,
+		.wake		= true,
 	},
 	[INPUT_CURRENT_LIMITING_IRQ] = {
 		.name		= "input-current-limiting",
@@ -1768,7 +1856,6 @@ static struct smb_irq_info smb5_irqs[] = {
 	},
 	[CONCURRENT_MODE_DISABLE_IRQ] = {
 		.name		= "concurrent-mode-disable",
-		.handler	= default_irq_handler,
 	},
 	[SWITCHER_POWER_OK_IRQ] = {
 		.name		= "switcher-power-ok",
@@ -1778,10 +1865,10 @@ static struct smb_irq_info smb5_irqs[] = {
 	[BAT_TEMP_IRQ] = {
 		.name		= "bat-temp",
 		.handler	= batt_temp_changed_irq_handler,
+		.wake		= true,
 	},
 	[ALL_CHNL_CONV_DONE_IRQ] = {
 		.name		= "all-chnl-conv-done",
-		.handler	= default_irq_handler,
 	},
 	[BAT_OV_IRQ] = {
 		.name		= "bat-ov",
@@ -1801,11 +1888,9 @@ static struct smb_irq_info smb5_irqs[] = {
 	},
 	[BUCK_OC_IRQ] = {
 		.name		= "buck-oc",
-		.handler	= default_irq_handler,
 	},
 	[VPH_OV_IRQ] = {
 		.name		= "vph-ov",
-		.handler	= default_irq_handler,
 	},
 	/* USB INPUT IRQs */
 	[USBIN_COLLAPSE_IRQ] = {
@@ -1827,23 +1912,24 @@ static struct smb_irq_info smb5_irqs[] = {
 	[USBIN_PLUGIN_IRQ] = {
 		.name		= "usbin-plugin",
 		.handler	= usb_plugin_irq_handler,
+		.wake           = true,
 	},
 	[USBIN_REVI_CHANGE_IRQ] = {
 		.name		= "usbin-revi-change",
-		.handler	= default_irq_handler,
 	},
 	[USBIN_SRC_CHANGE_IRQ] = {
 		.name		= "usbin-src-change",
 		.handler	= usb_source_change_irq_handler,
+		.wake           = true,
 	},
 	[USBIN_ICL_CHANGE_IRQ] = {
 		.name		= "usbin-icl-change",
 		.handler	= icl_change_irq_handler,
+		.wake           = true,
 	},
 	/* DC INPUT IRQs */
 	[DCIN_VASHDN_IRQ] = {
 		.name		= "dcin-vashdn",
-		.handler	= default_irq_handler,
 	},
 	[DCIN_UV_IRQ] = {
 		.name		= "dcin-uv",
@@ -1860,7 +1946,6 @@ static struct smb_irq_info smb5_irqs[] = {
 	},
 	[DCIN_REVI_IRQ] = {
 		.name		= "dcin-revi",
-		.handler	= default_irq_handler,
 	},
 	[DCIN_PON_IRQ] = {
 		.name		= "dcin-pon",
@@ -1874,14 +1959,15 @@ static struct smb_irq_info smb5_irqs[] = {
 	[TYPEC_OR_RID_DETECTION_CHANGE_IRQ] = {
 		.name		= "typec-or-rid-detect-change",
 		.handler	= typec_or_rid_detection_change_irq_handler,
+		.wake           = true,
 	},
 	[TYPEC_VPD_DETECT_IRQ] = {
 		.name		= "typec-vpd-detect",
-		.handler	= default_irq_handler,
 	},
 	[TYPEC_CC_STATE_CHANGE_IRQ] = {
 		.name		= "typec-cc-state-change",
 		.handler	= typec_state_change_irq_handler,
+		.wake           = true,
 	},
 	[TYPEC_VCONN_OC_IRQ] = {
 		.name		= "typec-vconn-oc",
@@ -1889,11 +1975,11 @@ static struct smb_irq_info smb5_irqs[] = {
 	},
 	[TYPEC_VBUS_CHANGE_IRQ] = {
 		.name		= "typec-vbus-change",
-		.handler	= default_irq_handler,
 	},
 	[TYPEC_ATTACH_DETACH_IRQ] = {
 		.name		= "typec-attach-detach",
 		.handler	= typec_attach_detach_irq_handler,
+		.wake		= true,
 	},
 	[TYPEC_LEGACY_CABLE_DETECT_IRQ] = {
 		.name		= "typec-legacy-cable-detect",
@@ -1901,12 +1987,10 @@ static struct smb_irq_info smb5_irqs[] = {
 	},
 	[TYPEC_TRY_SNK_SRC_DETECT_IRQ] = {
 		.name		= "typec-try-snk-src-detect",
-		.handler	= default_irq_handler,
 	},
 	/* MISCELLANEOUS IRQs */
 	[WDOG_SNARL_IRQ] = {
 		.name		= "wdog-snarl",
-		.handler	= NULL,
 	},
 	[WDOG_BARK_IRQ] = {
 		.name		= "wdog-bark",
@@ -1914,7 +1998,6 @@ static struct smb_irq_info smb5_irqs[] = {
 	},
 	[AICL_FAIL_IRQ] = {
 		.name		= "aicl-fail",
-		.handler	= default_irq_handler,
 	},
 	[AICL_DONE_IRQ] = {
 		.name		= "aicl-done",
@@ -1922,24 +2005,19 @@ static struct smb_irq_info smb5_irqs[] = {
 	},
 	[SMB_EN_IRQ] = {
 		.name		= "smb-en",
-		.handler	= default_irq_handler,
 	},
 	[IMP_TRIGGER_IRQ] = {
 		.name		= "imp-trigger",
-		.handler	= default_irq_handler,
 	},
 	[TEMP_CHANGE_IRQ] = {
 		.name		= "temp-change",
-		.handler	= default_irq_handler,
 	},
 	[TEMP_CHANGE_SMB_IRQ] = {
 		.name		= "temp-change-smb",
-		.handler	= default_irq_handler,
 	},
 	/* FLASH */
 	[VREG_OK_IRQ] = {
 		.name		= "vreg-ok",
-		.handler	= schgm_flash_default_irq_handler,
 	},
 	[ILIM_S2_IRQ] = {
 		.name		= "ilim2-s2",
@@ -1947,15 +2025,12 @@ static struct smb_irq_info smb5_irqs[] = {
 	},
 	[ILIM_S1_IRQ] = {
 		.name		= "ilim1-s1",
-		.handler	= schgm_flash_default_irq_handler,
 	},
 	[VOUT_DOWN_IRQ] = {
 		.name		= "vout-down",
-		.handler	= schgm_flash_default_irq_handler,
 	},
 	[VOUT_UP_IRQ] = {
 		.name		= "vout-up",
-		.handler	= schgm_flash_default_irq_handler,
 	},
 	[FLASH_STATE_CHANGE_IRQ] = {
 		.name		= "flash-state-change",
@@ -1963,11 +2038,9 @@ static struct smb_irq_info smb5_irqs[] = {
 	},
 	[TORCH_REQ_IRQ] = {
 		.name		= "torch-req",
-		.handler	= schgm_flash_default_irq_handler,
 	},
 	[FLASH_EN_IRQ] = {
 		.name		= "flash-en",
-		.handler	= schgm_flash_default_irq_handler,
 	},
 };
 
@@ -2272,7 +2345,7 @@ static int smb5_probe(struct platform_device *pdev)
 		goto cleanup;
 	}
 
-	if (chg->smb_version == PM855B_SUBTYPE) {
+	if (chg->smb_version == PM8150B_SUBTYPE) {
 		rc = smb5_init_dc_psy(chip);
 		if (rc < 0) {
 			pr_err("Couldn't initialize dc psy rc=%d\n", rc);
