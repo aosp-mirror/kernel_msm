@@ -28,7 +28,7 @@ struct bq27x00_reg_cache {
 	uint8_t present;
 
 	uint16_t control;
-	uint16_t temperature;
+	int16_t temperature;
 	uint16_t voltage;
 	uint16_t flags;
 	uint16_t FullAvailableCapacity;
