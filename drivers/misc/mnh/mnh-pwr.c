@@ -248,13 +248,6 @@ static int mnh_pwr_pcie_suspend(void)
 	if (!pcidev)
 		return -ENODEV;
 
-	/* suspend the driver state */
-	ret = mnh_pci_suspend();
-	if (ret) {
-		dev_err(mnh_pwr->dev, "%s: mnh_pci_suspend failed (%d)\n",
-			__func__, ret);
-	}
-
 	if (mnh_pwr->pcie_failure) {
 		/* call the platform driver to update link status */
 		ret = msm_pcie_pm_control(MSM_PCIE_SUSPEND, pcidev->bus->number,
@@ -267,8 +260,25 @@ static int mnh_pwr_pcie_suspend(void)
 			return ret;
 		}
 
+		/*
+		 * Due to pcie failure, suspend the driver state only after
+		 * updating link status.
+		 */
+		ret = mnh_pci_suspend();
+		if (ret)
+			dev_warn(mnh_pwr->dev,
+				 "%s: mnh_pci_suspend failed (%d)\n",
+				 __func__, ret);
+
 		mnh_pwr->pcie_failure = false;
 	} else {
+		/* suspend the driver state */
+		ret = mnh_pci_suspend();
+		if (ret)
+			dev_warn(mnh_pwr->dev,
+				 "%s: mnh_pci_suspend failed (%d)\n",
+				 __func__, ret);
+
 		/* prepare the root complex and endpoint for going to suspend */
 		ret = pci_prepare_to_sleep(pcidev);
 		if (ret) {
