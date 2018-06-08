@@ -25,6 +25,7 @@
 #define BL_NODE_NAME_SIZE 32
 #define BL_BRIGHTNESS_BUF_SIZE 2
 
+#define BL_STATE_STANDBY	BL_CORE_FBBLANK
 #define BL_STATE_LP		BL_CORE_DRIVER1
 #define BL_STATE_LP2		BL_CORE_DRIVER2
 
@@ -38,9 +39,24 @@ struct dsi_backlight_pwm_config {
 static void dsi_panel_bl_hbm_free(struct device *dev,
 	struct hbm_data **hbm_data);
 
+static inline bool is_standby_mode(unsigned long state)
+{
+	return (state & BL_STATE_STANDBY) != 0;
+}
+
 static inline bool is_lp_mode(unsigned long state)
 {
 	return (state & (BL_STATE_LP | BL_STATE_LP2)) != 0;
+}
+
+static inline unsigned int regulator_mode_from_state(unsigned long state)
+{
+	if (is_standby_mode(state))
+		return REGULATOR_MODE_STANDBY;
+	else if (is_lp_mode(state))
+		return REGULATOR_MODE_IDLE;
+	else
+		return REGULATOR_MODE_NORMAL;
 }
 
 static int dsi_panel_pwm_bl_register(struct dsi_backlight_config *bl);
@@ -500,6 +516,7 @@ int dsi_backlight_early_dpms(struct dsi_backlight_config *bl, int power_mode)
 {
 	struct backlight_device *bd = bl->bl_device;
 	unsigned long state;
+	unsigned int last_mode, mode;
 
 	if (!bd)
 		return 0;
@@ -510,16 +527,15 @@ int dsi_backlight_early_dpms(struct dsi_backlight_config *bl, int power_mode)
 	state = get_state_after_dpms(bl, power_mode);
 
 	if (bl->lab_vreg) {
-		if (is_lp_mode(bl->last_state) && !is_lp_mode(state)) {
-			/* LP -> no LP */
-			pr_debug("enabling lab vreg\n");
-			regulator_set_mode(bl->lab_vreg, REGULATOR_MODE_NORMAL);
-		} else if (!is_lp_mode(bl->last_state) && is_lp_mode(state)) {
-			/* no LP -> LP */
-			pr_debug("disabling lab vreg\n");
-			regulator_set_mode(bl->lab_vreg, REGULATOR_MODE_IDLE);
+		last_mode = regulator_mode_from_state(bl->last_state);
+		mode = regulator_mode_from_state(state);
+
+		if (last_mode != mode) {
+			pr_debug("set lab vreg mode: 0x%0x\n", mode);
+			regulator_set_mode(bl->lab_vreg, mode);
 		}
 	}
+
 	mutex_unlock(&bd->ops_lock);
 
 	return 0;
