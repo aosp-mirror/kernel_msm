@@ -67,8 +67,10 @@ $(obj)/Image.gz-dtb: $(obj)/Image.gz $(DTB_OBJS) FORCE
 $(obj)/Image.lz4-dtb: $(obj)/Image.lz4 $(DTB_OBJS) FORCE
 	$(call if_changed,cat)
 
-$(obj)/dtbo.img: $(obj)/dts/dtboimg.cfg $(DTBO_OBJS) FORCE
-	$(call if_changed,mkdtimg,4096) # align dtbo.img to 4kB
+ifeq ($(CONFIG_BUILD_ARM64_APPLY_DTBO),y)
+	$(obj)/dtbo.img: $(obj)/dts/dtboimg.cfg $(DTBO_OBJS) FORCE
+		$(call if_changed,mkdtimg,4096) # align dtbo.img to 4kB
+endif
 
 install:
 	$(CONFIG_SHELL) $(srctree)/$(src)/install.sh $(KERNELRELEASE) \
