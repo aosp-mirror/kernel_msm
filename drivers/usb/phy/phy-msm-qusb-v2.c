@@ -67,6 +67,7 @@
 #define LINESTATE_DM			BIT(1)
 
 #define BIAS_CTRL_2_OVERRIDE_VAL	0x28
+#define BIAS_CTRL_2_POR_VAL	0x20
 
 #define SQ_CTRL1_CHIRP_DISABLE		0x20
 #define SQ_CTRL2_CHIRP_DISABLE		0x80
@@ -177,6 +178,9 @@ struct qusb_phy {
 	int			soc_min_rev;
 	bool			host_chirp_erratum;
 	bool			skip_efuse_reg;
+
+	unsigned int		override_bias_ctrl2;
+	u8			default_bias_ctrl2;
 };
 
 #ifdef CONFIG_NVMEM
@@ -477,6 +481,28 @@ static void qusb_phy_write_seq(void __iomem *base, u32 *seq, int cnt,
 	}
 }
 
+static void qusb_phy_check_bias_ctrl2_override(struct qusb_phy *qphy, u32 *seq,
+						int cnt)
+{
+	int i;
+	bool override = false;
+
+	for (i = 0; i < cnt; i = i + 2) {
+		if(seq[i + 1] == qphy->phy_reg[BIAS_CTRL_2]) {
+			pr_info("using PLL BIAS CTRL2 override 0x%02x\n",
+				seq[i]);
+			override = true;
+			break;
+		}
+	}
+
+	if(override && seq[i] < BIAS_CTRL_2_OVERRIDE_VAL) {
+		qphy->override_bias_ctrl2 = BIAS_CTRL_2_OVERRIDE_VAL - seq[i];
+		pr_info("override BIAS_CTRL_2 has offest of %d\n",
+			qphy->override_bias_ctrl2);
+	}
+}
+
 static void qusb_phy_reset(struct qusb_phy *qphy)
 {
 	int ret;
@@ -491,6 +517,43 @@ static void qusb_phy_reset(struct qusb_phy *qphy)
 	if (ret)
 		dev_err(qphy->phy.dev, "%s: phy_reset deassert failed\n",
 							__func__);
+}
+
+static void qusb_phy_set_pll_bias_ctrl2(struct qusb_phy *qphy)
+{
+	if (qphy->refgen_north_bg_reg){
+		if (readl_relaxed(qphy->refgen_north_bg_reg) & BANDGAP_BYPASS) {
+			writel_relaxed(BIAS_CTRL_2_OVERRIDE_VAL -
+				       qphy->override_bias_ctrl2,
+				       qphy->base +
+				       qphy->phy_reg[BIAS_CTRL_2]);
+		} else {
+			u8 ctrl2_val;
+			if (qphy->override_bias_ctrl2 < 3)
+				ctrl2_val = qphy->override_bias_ctrl2;
+			else if (qphy->override_bias_ctrl2 >= 3 &&
+				qphy->override_bias_ctrl2 < 10)
+				ctrl2_val = qphy->override_bias_ctrl2 - 1;
+			else if (qphy->override_bias_ctrl2 >= 10 &&
+				qphy->override_bias_ctrl2 < 17)
+				ctrl2_val = qphy->override_bias_ctrl2 - 2;
+			else if (qphy->override_bias_ctrl2 >= 17 &&
+				qphy->override_bias_ctrl2 < 23)
+				ctrl2_val = qphy->override_bias_ctrl2 - 3;
+			else if (qphy->override_bias_ctrl2 >= 23 &&
+				qphy->override_bias_ctrl2 < 30)
+				ctrl2_val = qphy->override_bias_ctrl2 - 4;
+			else
+				ctrl2_val = qphy->override_bias_ctrl2 - 5;
+
+			pr_debug("%s(): programming BIAS CTRL2 as:%x\n",
+				 __func__,
+				 qphy->default_bias_ctrl2 - ctrl2_val);
+			writel_relaxed(qphy->default_bias_ctrl2 - ctrl2_val,
+				qphy->base + qphy->phy_reg[BIAS_CTRL_2]);
+		}
+	}
+
 }
 
 static void qusb_phy_host_init(struct usb_phy *phy)
@@ -513,11 +576,7 @@ static void qusb_phy_host_init(struct usb_phy *phy)
 				qphy->base + qphy->phy_reg[DEBUG_CTRL1]);
 	}
 
-	if (qphy->refgen_north_bg_reg)
-		if (readl_relaxed(qphy->refgen_north_bg_reg) & BANDGAP_BYPASS)
-			writel_relaxed(BIAS_CTRL_2_OVERRIDE_VAL,
-				qphy->base + qphy->phy_reg[BIAS_CTRL_2]);
-
+	qusb_phy_set_pll_bias_ctrl2(qphy);
 	/* Ensure above write is completed before turning ON ref clk */
 	wmb();
 
@@ -596,6 +655,8 @@ static int qusb_phy_init(struct usb_phy *phy)
 				qphy->base + qphy->phy_reg[PORT_TUNE1]);
 	}
 
+	qusb_phy_set_pll_bias_ctrl2(qphy);
+
 	/* if debugfs based tunex params are set, use that value. */
 	for (p_index = 0; p_index < 5; p_index++) {
 		if (qphy->tune[p_index])
@@ -603,36 +664,6 @@ static int qusb_phy_init(struct usb_phy *phy)
 				qphy->base + qphy->phy_reg[PORT_TUNE1] +
 							(4 * p_index));
 	}
-
-	if (phy_tune2) {
-		pr_debug("%s(): (modparam) TUNE2 val:0x%02x\n",
-						__func__, phy_tune2);
-		writel_relaxed(phy_tune2,
-				qphy->base + qphy->phy_reg[PORT_TUNE1] + 0x4);
-	}
-	if (phy_tune3) {
-		pr_debug("%s(): (modparam) TUNE3 val:0x%02x\n",
-						__func__, phy_tune3);
-		writel_relaxed(phy_tune3,
-				qphy->base + qphy->phy_reg[PORT_TUNE1] + 0x8);
-	}
-	if (phy_tune4) {
-		pr_debug("%s(): (modparam) TUNE4 val:0x%02x\n",
-						__func__, phy_tune4);
-		writel_relaxed(phy_tune4,
-				qphy->base + qphy->phy_reg[PORT_TUNE1] + 0xC);
-	}
-	if (phy_tune5) {
-		pr_debug("%s(): (modparam) TUNE5 val:0x%02x\n",
-						__func__, phy_tune5);
-		writel_relaxed(phy_tune5,
-				qphy->base + qphy->phy_reg[PORT_TUNE1] + 0x10);
-	}
-
-	if (qphy->refgen_north_bg_reg)
-		if (readl_relaxed(qphy->refgen_north_bg_reg) & BANDGAP_BYPASS)
-			writel_relaxed(BIAS_CTRL_2_OVERRIDE_VAL,
-				qphy->base + qphy->phy_reg[BIAS_CTRL_2]);
 
 	for (p_index = 0; p_index < 2; p_index++) {
 		if (qphy->bias_ctrl[p_index])
@@ -1235,11 +1266,20 @@ static int qusb_phy_probe(struct platform_device *pdev)
 				"qcom,qusb-phy-init-seq",
 				qphy->qusb_phy_init_seq,
 				qphy->init_seq_len);
+
+			qusb_phy_check_bias_ctrl2_override(qphy,
+							qphy->qusb_phy_init_seq,
+							qphy->init_seq_len);
 		} else {
 			dev_err(dev,
 			"error allocating memory for phy_init_seq\n");
 		}
 	}
+
+	of_property_read_u8(dev->of_node, "qcom,qusb-bias-ctrl2-default",
+			    &qphy->default_bias_ctrl2);
+	if (!qphy->default_bias_ctrl2)
+		qphy->default_bias_ctrl2 = BIAS_CTRL_2_POR_VAL;
 
 	qphy->host_init_seq_len = of_property_count_elems_of_size(dev->of_node,
 				"qcom,qusb-phy-host-init-seq",
