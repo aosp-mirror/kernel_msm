@@ -1,8 +1,8 @@
 ARCH=arm64
-BRANCH=android-msm-bluecross-4.9
+BRANCH=android-msm-bonito-4.9
 CROSS_COMPILE=aarch64-linux-android-
 CROSS_COMPILE_ARM32=arm-linux-androideabi-
-DEFCONFIG=b1c1_defconfig
+DEFCONFIG=bonito_defconfig
 EXTRA_CMDS=''
 CLANG_PREBUILT_BIN=prebuilts-master/clang/host/linux-x86/clang-4393122/bin/
 LD_LIBRARY_PATH=${ROOT_DIR}/prebuilts-master/clang/host/linux-x86/clang-4393122/lib64:$LD_LIBRARY_PATH
@@ -15,6 +15,7 @@ LIBUFDT_PREBUILTS_BIN=prebuilts-master/misc/linux-x86/libufdt
 FILES="
 arch/arm64/boot/dtbo.img
 arch/arm64/boot/Image.lz4-dtb
+arch/arm64/boot/Image.gz-dtb
 vmlinux
 System.map
 .config
