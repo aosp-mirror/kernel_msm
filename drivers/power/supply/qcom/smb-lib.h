@@ -356,6 +356,7 @@ struct smb_charger {
 	bool			use_extcon;
 	bool			otg_present;
 	bool			is_audio_adapter;
+	bool			hvdcp_disable;
 
 	/* workaround flag */
 	u32			wa_flags;
