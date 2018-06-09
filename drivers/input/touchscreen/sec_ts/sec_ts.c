@@ -1386,7 +1386,7 @@ static int sec_ts_parse_dt(struct i2c_client *client)
 			return -EINVAL;
 		}
 
-		ret = gpio_direction_output(pdata->switch_gpio, 1);
+		ret = gpio_direction_output(pdata->switch_gpio, 0);
 		if (ret) {
 			input_err(true, dev,
 				  "%s: Failed to set gpio %d direction\n",
@@ -1964,7 +1964,6 @@ static int sec_ts_probe(struct i2c_client *client,
 
 	input_info(true, &client->dev, "%s: init resource\n", __func__);
 
-	sec_ts_pinctrl_configure(ts, true);
 
 	/* power enable */
 	sec_ts_power(ts, true);
@@ -1973,6 +1972,20 @@ static int sec_ts_probe(struct i2c_client *client,
 	ts->power_status = SEC_TS_STATE_POWER_ON;
 	ts->external_factory = false;
 
+	/*
+	 * Ensure a clean start by pulsing reset.
+	 * reset off -> reset on -> reset off -> I2C
+	 * The first pinctrl_configure ensures reset starts off.
+	 */
+	sec_ts_pinctrl_configure(ts, true);
+	/* wait 10ms, then reset on. */
+	sec_ts_delay(10);
+	sec_ts_pinctrl_configure(ts, false);
+	/* wait 10ms then reset off. */
+	sec_ts_delay(10);
+	sec_ts_pinctrl_configure(ts, true);
+	/* wait 10ms, then I2C. */
+	sec_ts_delay(10);
 	ret = sec_ts_wait_for_ready(ts, SEC_TS_ACK_BOOT_COMPLETE);
 	if (ret < 0) {
 		input_err(true, &ts->client->dev,
