@@ -246,6 +246,7 @@ static struct easelcomm_message_metadata *easelcomm_add_metadata(
 	INIT_LIST_HEAD(&msg_metadata->list);
 	msg_metadata->dma_xfer.sg_local = NULL;
 	msg_metadata->dma_xfer.sg_local_size = 0;
+	msg_metadata->dma_xfer.sg_local_localdata = NULL;
 	msg_metadata->dma_xfer.sg_remote = NULL;
 	msg_metadata->dma_xfer.sg_remote_size = 0;
 	init_completion(&msg_metadata->dma_xfer.sg_remote_ready);
