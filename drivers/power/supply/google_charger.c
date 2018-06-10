@@ -37,9 +37,9 @@
 struct chg_profile {
 	u32 update_interval;
 	u32 battery_capacity;
-	u32 temp_nb_limits;
+	int temp_nb_limits;
 	s32 temp_limits[CHG_TEMP_NB_LIMITS_MAX];
-	u32 volt_nb_limits;
+	int volt_nb_limits;
 	s32 volt_limits[CHG_VOLT_NB_LIMITS_MAX];
 	/* Array of constant current limits */
 	s32 *cccm_limits;
@@ -663,7 +663,8 @@ static int chg_init_chg_profile(struct chg_drv *chg_drv)
 	profile->temp_nb_limits =
 	    of_property_count_elems_of_size(node, "google,chg-temp-limits",
 					    sizeof(u32));
-	if (profile->temp_nb_limits < 0) {
+	if (profile->temp_nb_limits <= 0) {
+		ret = profile->temp_nb_limits;
 		pr_err("cannot read chg-temp-limits, ret=%d\n", ret);
 		return ret;
 	}
@@ -683,7 +684,8 @@ static int chg_init_chg_profile(struct chg_drv *chg_drv)
 	profile->volt_nb_limits =
 	    of_property_count_elems_of_size(node, "google,chg-cv-limits",
 					    sizeof(u32));
-	if (profile->volt_nb_limits < 0) {
+	if (profile->volt_nb_limits <= 0) {
+		ret = profile->volt_nb_limits;
 		pr_err("cannot read chg-cv-limits, ret=%d\n", ret);
 		return ret;
 	}
