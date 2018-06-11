@@ -174,7 +174,8 @@ static inline void reset_chg_drv_state(struct chg_drv *chg_drv)
 	chg_drv->disable_pwrsrc = 0;
 	chg_drv->lowerdb_reached = true;
 	PSY_SET_PROP(chg_drv->chg_psy,
-		     POWER_SUPPLY_PROP_TAPER_CONTROL_ENABLED, 0);
+		     POWER_SUPPLY_PROP_TAPER_CONTROL,
+		     POWER_SUPPLY_TAPER_CONTROL_OFF);
 }
 static void pr_info_states(struct power_supply *chg_psy,
 			   struct power_supply *usb_psy,
@@ -516,8 +517,8 @@ static void chg_work(struct work_struct *work)
 		if (vbatt_idx == (profile->volt_nb_limits - 1) ||
 			CCCM_LIMITS(profile, temp_idx, vbatt_idx + 1) == 0) {
 			PSY_SET_PROP(chg_drv->chg_psy,
-				POWER_SUPPLY_PROP_TAPER_CONTROL_ENABLED,
-				1);
+				POWER_SUPPLY_PROP_TAPER_CONTROL,
+				POWER_SUPPLY_TAPER_CONTROL_MODE_IMMEDIATE);
 		}
 
 		rc = PSY_SET_PROP(chg_psy,
