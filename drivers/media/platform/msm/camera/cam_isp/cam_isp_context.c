@@ -1229,10 +1229,12 @@ static int __cam_isp_ctx_flush_req(struct cam_context *ctx,
 	}
 
 	if (flush_req->type == CAM_REQ_MGR_FLUSH_TYPE_CANCEL_REQ &&
-		!cancel_req_id_found)
-		CAM_DBG(CAM_ISP,
+		!cancel_req_id_found) {
+		CAM_INFO(CAM_ISP,
 			"Flush request id:%lld is not found in the list",
 			flush_req->req_id);
+		return -EINVAL;
+	}
 
 	return 0;
 }
@@ -1258,13 +1260,16 @@ static int __cam_isp_ctx_flush_req_in_activated(
 	struct cam_isp_context *ctx_isp;
 
 	ctx_isp = (struct cam_isp_context *) ctx->ctx_priv;
-	spin_lock_bh(&ctx->lock);
-	ctx_isp->substate_activated = CAM_ISP_CTX_ACTIVATED_FLUSH;
-	ctx_isp->frame_skip_count = 2;
-	spin_unlock_bh(&ctx->lock);
 
 	CAM_DBG(CAM_ISP, "Flush request in state %d", ctx->state);
 	rc = __cam_isp_ctx_flush_req(ctx, &ctx->pending_req_list, flush_req);
+	/* only if request is found in pending queue, move to flush state*/
+	if (!rc) {
+		spin_lock_bh(&ctx->lock);
+		ctx_isp->substate_activated = CAM_ISP_CTX_ACTIVATED_FLUSH;
+		ctx_isp->frame_skip_count = 2;
+		spin_unlock_bh(&ctx->lock);
+	}
 	return rc;
 }
 
