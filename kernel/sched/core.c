@@ -2130,6 +2130,10 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 	memset(&p->se.statistics, 0, sizeof(p->se.statistics));
 #endif
 
+#ifdef CONFIG_CPU_FREQ_STAT
+	cpufreq_task_stats_init(p);
+#endif
+
 	RB_CLEAR_NODE(&p->dl.rb_node);
 	init_dl_task_timer(&p->dl);
 	__dl_clear_params(p);
@@ -2215,11 +2219,12 @@ int sched_fork(unsigned long clone_flags, struct task_struct *p)
 	unsigned long flags;
 	int cpu = get_cpu();
 
+	__sched_fork(clone_flags, p);
+
 #ifdef CONFIG_CPU_FREQ_STAT
-	cpufreq_task_stats_init(p);
+	cpufreq_task_stats_alloc(p);
 #endif
 
-	__sched_fork(clone_flags, p);
 	/*
 	 * We mark the process as running here. This guarantees that
 	 * nobody will actually run it, and a signal or other external
