@@ -1,4 +1,5 @@
 #include "../qcom/sdm670-lpi.dtsi"
+#include "../qcom/sdm670-audio-overlay.dtsi"
 
 &tlmm {
 	cs35l36_pins {
@@ -73,12 +74,12 @@
 	pri_tdm {
 		pri_tdm_sleep: pri_tdm_sleep {
 			mux {
-				pins = "gpio65", "gpio66";
+				pins = "gpio65";
 				function = "pri_mi2s";
 			};
 
 			config {
-				pins = "gpio58", "gpio59";
+				pins = "gpio65";
 				drive-strength = <2>;   /* 2 mA */
 				bias-pull-down;         /* PULL DOWN */
 			};
@@ -86,14 +87,40 @@
 
 		pri_tdm_active: pri_tdm_active {
 			mux {
-				pins = "gpio65", "gpio66";
+				pins = "gpio65";
 				function = "pri_mi2s";
 			};
 
 			config {
-				pins = "gpio65", "gpio66";
+				pins = "gpio65";
 				drive-strength = <8>;   /* 8 mA */
-				bias-disable;           /* NO PULL */
+			};
+		};
+	};
+
+	pri_tdm_ws {
+		pri_tdm_ws_sleep: pri_tdm_ws_sleep {
+			mux {
+				pins = "gpio66";
+				function = "pri_mi2s_ws";
+			};
+
+			config {
+				pins = "gpio66";
+				drive-strength = <2>;   /* 2 mA */
+				bias-pull-down;         /* PULL DOWN */
+			};
+		};
+
+		pri_tdm_ws_active: pri_tdm_ws_active {
+			mux {
+				pins = "gpio66";
+				function = "pri_mi2s_ws";
+			};
+
+			config {
+				pins = "gpio66";
+				drive-strength = <8>;   /* 8 mA */
 			};
 		};
 	};
@@ -120,8 +147,7 @@
 
 			config {
 				pins = "gpio67";
-				drive-strength = <2>;   /* 2 mA */
-				bias-disable;           /* NO PULL */
+				drive-strength = <8>;   /* 2 mA */
 			};
 		};
 	};
@@ -148,8 +174,7 @@
 
 			config {
 				pins = "gpio68";
-				drive-strength = <2>;   /* 2 mA */
-				bias-disable;           /* NO PULL */
+				drive-strength = <8>;   /* 2 mA */
 			};
 		};
 	};
@@ -316,10 +341,65 @@
 	};
 };
 
-&qupv3_se2_spi_pins {
-	status = "okay";
+&msm_dai_tdm_pri_tx {
+	qcom,msm-cpudai-tdm-clk-rate = <12288000>;
+	qcom,msm-cpudai-tdm-sync-mode = <0>;
+	qcom,msm-cpudai-tdm-invert-sync = <0>;
+};
+
+&dai_pri_tdm_tx_0 {
+	pinctrl-names = "default", "sleep";
+	pinctrl-0 = <&pri_tdm_active &pri_tdm_ws_active
+		&pri_tdm_dout_active &pri_tdm_din_active>;
+	pinctrl-1 = <&pri_tdm_sleep &pri_tdm_ws_sleep
+		&pri_tdm_dout_sleep &pri_tdm_din_sleep>;
+};
+
+&int_codec {
+	vdd_mic-supply = <&pm660_l11>;
+	qcom,audio-routing =
+		"RX_BIAS", "INT_MCLK0",
+		"SPK_RX_BIAS", "INT_MCLK0",
+		"INT_LDO_H", "INT_MCLK0",
+		"RX_I2S_CLK", "INT_MCLK0",
+		"TX_I2S_CLK", "INT_MCLK0",
+		"MIC BIAS External", "Handset Mic",
+		"MIC BIAS External2", "Headset Mic",
+		"MIC BIAS External", "Secondary Mic",
+		"AMIC1", "MIC BIAS External",
+		"AMIC2", "MIC BIAS External2",
+		"AMIC3", "MIC BIAS External",
+		"DMIC1", "MIC BIAS External",
+		"MIC BIAS External", "Digital Mic1",
+		"DMIC2", "MIC BIAS External",
+		"MIC BIAS External", "Digital Mic2",
+		"DMIC3", "MIC BIAS External",
+		"MIC BIAS External", "Digital Mic3",
+		"DMIC4", "MIC BIAS External",
+		"MIC BIAS External", "Digital Mic4",
+		"SpkrLeft IN", "SPK1 OUT",
+		"SpkrRight IN", "SPK2 OUT",
+		"PDM_IN_RX1", "PDM_OUT_RX1",
+		"PDM_IN_RX2", "PDM_OUT_RX2",
+		"PDM_IN_RX3", "PDM_OUT_RX3",
+		"ADC1_IN", "ADC1_OUT",
+		"ADC2_IN", "ADC2_OUT",
+		"ADC3_IN", "ADC3_OUT",
+		"MIC BIAS Internal1", "Handset Mic",
+		"Stereo1 DMIC Mux", "MIC BIAS Internal1",
+		"Stereo2 DMIC Mux", "Mic2_3 REGULATOR";
+	qcom,wsa-disable;
+	qcom,wsa-max-devs = <0>;
+};
+
+&msm_sdw_codec {
+	status = "disabled";
+};
+
+&qupv3_se2_spi {
+	status = "disabled";
 	mnh-spi@0 {
-		compatible = "realtek,rt5514";
+		compatible = "realtek,rt5514-spi";
 		reg = <0>;
 		interrupt-parent = <&tlmm>;
 		interrupts = <126 0>;
@@ -329,5 +409,31 @@
 		spi-max-frequency = <20000000>;
 		spi-cpol;
 		spi-cpha;
+	};
+};
+
+&cdc_sdw_gpios {
+	status = "disabled";
+};
+
+&wsa_spkr_en1 {
+	status = "disabled";
+};
+
+&wsa_spkr_en2 {
+	status = "disabled";
+};
+
+&pm660_gpios {
+	gpio@c100 {
+		reg = <0xc100 0x100>;
+		qcom,pin-num = <2>;
+		qcom,mode = <1>;
+		qcom,vin-sel = <0>;
+		qcom,src-sel = <2>;
+		qcom,pull = <5>;
+		qcom,out-strength = <2>;
+		qcom,master-en = <1>;
+		status = "okay";
 	};
 };
