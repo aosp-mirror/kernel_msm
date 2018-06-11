@@ -6,7 +6,7 @@
  * 2 : Corner
  * 3 : Notch
  */
-const unsigned int cm_region[37][18] = {
+const int cm_region[37][18] = {
 	{2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2},
 	{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
 	{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
@@ -54,7 +54,7 @@ const short cm_max[4] = { 701, 713, 664, 0 };
 const short cm_min[4] = { 415, 410, 336, 0 };
 const short cm_mm[4]  = { 200, 303, 328, 0 };
 
-const unsigned int cm_gap[37][18] = {
+const int cm_gap[37][18] = {
 	{40, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 40, 40},
 	{20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20},
 	{20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20},
@@ -94,7 +94,7 @@ const unsigned int cm_gap[37][18] = {
 	{40, 40, 20, 20, 90, 90, 90, 90, 90, 90, 90, 90, 90, 20, 20, 20, 40, 40},
 };
 
-const signed int noi_min[37][18] = {
+const int noi_min[37][18] = {
 	{-30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30},
 	{-30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30},
 	{-30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30},
@@ -134,7 +134,7 @@ const signed int noi_min[37][18] = {
 	{-30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30, -30},
 };
 
-const unsigned int noi_max[37][18] = {
+const int noi_max[37][18] = {
 	{30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30},
 	{30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30},
 	{30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30},
@@ -174,24 +174,24 @@ const unsigned int noi_max[37][18] = {
 	{30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30},
 };
 
-const unsigned int noi_mm = 60;
+const int noi_mm = 60;
 
-const unsigned int cm_stdev_max = 15000;
+const int cm_stdev_max = 15000;
 
-const signed int cs_tx_max = -12692;
+const int cs_tx_max = -12692;
 
-const signed int cs_tx_min = -22897;
+const int cs_tx_min = -22897;
 
-const unsigned int cs_tx_mm = 10205;
+const int cs_tx_mm = 10205;
 
-const signed int cs_rx_max = -9638;
+const int cs_rx_max = -9638;
 
-const signed int cs_rx_min = -25296;
+const int cs_rx_min = -25296;
 
-const unsigned int cs_rx_mm = 15658;
+const int cs_rx_mm = 15658;
 
 /* fs_precal high limit : +20% of fs target */
-const unsigned int fs_precal_h[37][18] = {
+const int fs_precal_h[37][18] = {
 	{336, 336, 336, 336, 336, 336, 336, 336, 336, 336, 336, 336, 336, 336, 336, 336, 336, 336},
 	{336, 336, 336, 336, 336, 336, 336, 336, 336, 336, 336, 336, 336, 336, 336, 336, 336, 336},
 	{336, 336, 336, 336, 336, 336, 336, 336, 336, 336, 336, 336, 336, 336, 336, 336, 336, 336},
@@ -232,15 +232,15 @@ const unsigned int fs_precal_h[37][18] = {
 };
 
 /* fs_mean high limit : +4% of fs_mean target */
-const unsigned int fs_mean_target_h = 269;
+const int fs_mean_target_h = 269;
 
 /* fs_mean low limit : -4% of fs_mean target */
-const unsigned int fs_mean_target_l = 291;
+const int fs_mean_target_l = 291;
 
-const unsigned int fs_postcal_uniform_spec = 4;
+const int fs_postcal_uniform_spec = 4;
 
 /* fs_precal low limit : -20% of fs target */
-const unsigned int fs_precal_l[37][18] = {
+const int fs_precal_l[37][18] = {
 	{224, 224, 224, 224, 224, 224, 224, 224, 224, 224, 224, 224, 224, 224, 224, 224, 224, 224},
 	{224, 224, 224, 224, 224, 224, 224, 224, 224, 224, 224, 224, 224, 224, 224, 224, 224, 224},
 	{224, 224, 224, 224, 224, 224, 224, 224, 224, 224, 224, 224, 224, 224, 224, 224, 224, 224},
@@ -280,7 +280,7 @@ const unsigned int fs_precal_l[37][18] = {
 	{224, 224, 224, 224, 224, 224,   0,   0,   0,   0,   0,   0, 224, 224, 224, 224, 224, 224},
 };
 
-const unsigned int fs_target[37][18] = {
+const int fs_target[37][18] = {
 	{280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280},
 	{280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280},
 	{280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280},
@@ -320,6 +320,6 @@ const unsigned int fs_target[37][18] = {
 	{280, 280, 280, 280, 280, 280,   0,   0,   0,   0,   0,   0, 280, 280, 280, 280, 280, 280},
 };
 
-const unsigned int cs_tx_gap = 2000;
+const int cs_tx_gap = 2000;
 
-const unsigned int cs_rx_gap = 7000;
+const int cs_rx_gap = 7000;
