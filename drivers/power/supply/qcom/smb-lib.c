@@ -1457,6 +1457,23 @@ static int smblib_disable_power_role_switch_callback(struct votable *votable,
 	return rc;
 }
 
+static int smblib_disable_prebias_resistor_callback(struct votable *votable,
+				void *data, int disable, const char *client)
+{
+	struct smb_charger *chg = data;
+	int rc = 0;
+
+	rc = smblib_masked_write(chg, DC_ENG_SSUPPLY_CFG2_REG,
+				DISABLE_PREBIAS_RESISTOR,
+				disable ? 0 : DISABLE_PREBIAS_RESISTOR);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't write prebias resister rc=%d\n", rc);
+		return rc;
+	}
+
+	return rc;
+}
+
 /*******************
  * VCONN REGULATOR *
  * *****************/
@@ -3760,6 +3777,13 @@ void smblib_usb_plugin_locked(struct smb_charger *chg)
 	if (chg->connector_type == POWER_SUPPLY_CONNECTOR_MICRO_USB)
 		smblib_micro_usb_plugin(chg, vbus_rising);
 
+	if (vbus_rising)
+		vote(chg->disable_prebias_resistor, USBIN_PLUGIN_VOTER,
+							true, 0);
+	else
+		vote(chg->disable_prebias_resistor, USBIN_PLUGIN_VOTER,
+							false, 0);
+
 	power_supply_changed(chg->usb_psy);
 	smblib_dbg(chg, PR_INTERRUPT, "IRQ: usbin-plugin %s\n",
 					vbus_rising ? "attached" : "detached");
@@ -4620,11 +4644,15 @@ static void smblib_handle_typec_cc_state_change(struct smb_charger *chg)
 		smblib_dbg(chg, PR_MISC, "TypeC %s insertion\n",
 			smblib_typec_mode_name[chg->typec_mode]);
 		smblib_handle_typec_insertion(chg);
+		vote(chg->disable_prebias_resistor, CC_DETACHED_VOTER,
+							true, 0);
 	} else if (chg->typec_present &&
 				chg->typec_mode == POWER_SUPPLY_TYPEC_NONE) {
 		chg->typec_present = false;
 		smblib_dbg(chg, PR_MISC, "TypeC removal\n");
 		smblib_handle_typec_removal(chg);
+		vote(chg->disable_prebias_resistor, CC_DETACHED_VOTER,
+							false, 0);
 	}
 
 	/* suspend usb if sink */
@@ -5385,6 +5413,16 @@ static int smblib_create_votables(struct smb_charger *chg)
 		return rc;
 	}
 
+	chg->disable_prebias_resistor
+			= create_votable("USBIN_PLUGIN_VOTER",
+				VOTE_SET_ANY,
+				smblib_disable_prebias_resistor_callback,
+				chg);
+	if (IS_ERR(chg->disable_prebias_resistor)) {
+		rc = PTR_ERR(chg->disable_prebias_resistor);
+		return rc;
+	}
+
 	return rc;
 }
 
@@ -5412,6 +5450,8 @@ static void smblib_destroy_votables(struct smb_charger *chg)
 		destroy_votable(chg->typec_irq_disable_votable);
 	if (chg->disable_power_role_switch)
 		destroy_votable(chg->disable_power_role_switch);
+	if (chg->disable_prebias_resistor)
+		destroy_votable(chg->disable_prebias_resistor);
 }
 
 static void smblib_iio_deinit(struct smb_charger *chg)
