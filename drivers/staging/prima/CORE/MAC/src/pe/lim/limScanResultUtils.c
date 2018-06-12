@@ -379,6 +379,7 @@ limCheckAndAddBssDescription(tpAniSirGlobal pMac,
     tANI_U8               dontUpdateAll = 0;
     tANI_U8               rfBand = 0;
     tANI_U8               rxChannelInBD = 0;
+    bool chan_info_present = true;
 
     tSirMacAddr bssid = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
     tSirMacAddr bssid_zero =  {0x0, 0x0, 0x0, 0x0, 0x0, 0x0};
@@ -510,6 +511,10 @@ limCheckAndAddBssDescription(tpAniSirGlobal pMac,
            }
         }
     }
+    else
+    {
+        chan_info_present = false;
+    }
 
     /**
      * Allocate buffer to hold BSS description from
@@ -578,12 +583,14 @@ limCheckAndAddBssDescription(tpAniSirGlobal pMac,
     if (pMac->lim.gLimReturnUniqueResults || (!fScanning))
     {
         status = limLookupNaddHashEntry(pMac, pBssDescr, LIM_HASH_UPDATE,
-                                        dontUpdateAll, ieLen - 2);
+                                        dontUpdateAll, ieLen - 2,
+                                        chan_info_present);
     }
     else
     {
         status = limLookupNaddHashEntry(pMac, pBssDescr, LIM_HASH_ADD,
-                                        dontUpdateAll, ieLen - 2);
+                                        dontUpdateAll, ieLen - 2,
+                                        chan_info_present);
     }
 
     if(fScanning)
@@ -692,39 +699,11 @@ limInitHashTable(tpAniSirGlobal pMac)
         pMac->lim.gLimCachedScanHashTable[i] = NULL;
 } /****** end limInitHashTable() ******/
 
-
-
-/**
- * limLookupNaddHashEntry()
- *
- *FUNCTION:
- * This function is called upon receiving a Beacon or
- * Probe Response frame during scan phase to store
- * received BSS description into scan result hash table.
- *
- *LOGIC:
- *
- *ASSUMPTIONS:
- * NA
- *
- *NOTE:
- * NA
- *
- * @param  pMac - Pointer to Global MAC structure
- * @param  pBssDescr - Pointer to BSS description to be
- *         added to the scan result hash table.
- * @param  action - Indicates action to be performed
- *         when same BSS description is found. This is
- *         dependent on whether unique scan result to
- *         be stored or not.
- *
- * @return None
- */
-
 eHalStatus
 limLookupNaddHashEntry(tpAniSirGlobal pMac,
                        tLimScanResultNode *pBssDescr, tANI_U8 action,
-                       tANI_U8 dontUpdateAll, tANI_U32 ie_len)
+                       tANI_U8 dontUpdateAll, tANI_U32 ie_len,
+                       bool chan_info_present)
 {
     tANI_U8                  index, ssidLen = 0;
     tANI_U8                found = false;
@@ -805,6 +784,33 @@ limLookupNaddHashEntry(tpAniSirGlobal pMac,
                         pbIe += pbIe[1] + 2;
                     }
                 }
+                /*
+                 * Due to Rx sensitivity issue, sometime beacons are seen on
+                 * adjacent channel so workaround in software is needed. If DS
+                 * params or HT info are present driver can get proper channel
+                 * info from these IEs and the older RSSI values are used in new
+                 * entry.
+                 *
+                 * For the cases where DS params and HT info is not present,
+                 * driver needs to check below conditions to update proper
+                 * channel so that the older RSSI and channel values are used in
+                 * new entry:
+                 *  -- The old entry channel and new entry channel are not same
+                 *  -- RSSI is below 15db or more from old value, this indicate
+                 *     that the signal has leaked in adjacent channel
+                 */
+                 if (!pBssDescr->bssDescription.fProbeRsp &&
+                     !chan_info_present &&
+                     (pBssDescr->bssDescription.channelId !=
+                      ptemp->bssDescription.channelId) &&
+                     ((ptemp->bssDescription.rssi -
+                       pBssDescr->bssDescription.rssi) >
+                      SIR_ADJACENT_CHANNEL_RSSI_DIFF_THRESHOLD)) {
+                      pBssDescr->bssDescription.channelId =
+                                 ptemp->bssDescription.channelId;
+                      pBssDescr->bssDescription.rssi =
+                                      ptemp->bssDescription.rssi;
+                 }
 
 
                 if(NULL != pMac->lim.gpLimMlmScanReq)

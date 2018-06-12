@@ -92,6 +92,11 @@ typedef struct sAniSirGlobal *tpAniSirGlobal;
 #define SIR_MAX_24G_5G_CHANNEL_RANGE      166
 #define SIR_BCN_REPORT_MAX_BSS_DESC       4
 
+/*
+ * RSSI diff threshold to fix rssi and channel in beacon for the cases where
+ * DS params and HT info is not present.
+ */
+#define SIR_ADJACENT_CHANNEL_RSSI_DIFF_THRESHOLD 15
 
 #ifdef FEATURE_WLAN_BATCH_SCAN
 #define SIR_MAX_SSID_SIZE (32)

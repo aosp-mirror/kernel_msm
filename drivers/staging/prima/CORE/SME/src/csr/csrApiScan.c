@@ -3397,6 +3397,10 @@ tANI_BOOLEAN csrRemoveDupBssDescription( tpAniSirGlobal pMac, tSirBssDescription
 
     tCsrScanResult *pBssDesc;
     tANI_BOOLEAN fRC = FALSE;
+    tDot11fBeaconIEs *temp_ie = pIes;
+
+    if (!temp_ie)
+        csrGetParsedBssDescriptionIEs(pMac, pSirBssDescr, &temp_ie);
 
     // Walk through all the chained BssDescriptions.  If we find a chained BssDescription that
     // matches the BssID of the BssDescription passed in, then these must be duplicate scan
@@ -3409,9 +3413,36 @@ tANI_BOOLEAN csrRemoveDupBssDescription( tpAniSirGlobal pMac, tSirBssDescription
 
         // we have a duplicate scan results only when BSSID, SSID, Channel and NetworkType
         // matches
-        if ( csrIsDuplicateBssDescription( pMac, &pBssDesc->Result.BssDescriptor, 
-                                                        pSirBssDescr, pIes, fForced ) )
+        if (csrIsDuplicateBssDescription(pMac, &pBssDesc->Result.BssDescriptor,
+                                          pSirBssDescr, temp_ie, fForced))
         {
+            /*
+             * Due to Rx sensitivity issue, sometime beacons are seen on
+             * adjacent channel so workaround in software is needed. If DS
+             * params or HT info are present driver can get proper channel
+             * info from these IEs and the older RSSI values are used in new
+             * entry.
+             *
+             * For the cases where DS params and HT info is not present,
+             * driver needs to check below conditions to update proper
+             * channel so that the older RSSI and channel values are used in
+             * new entry:
+             *  -- The old entry channel and new entry channel are not same
+             *  -- RSSI is below 15db or more from old value, this indicate
+             *     that the signal has leaked in adjacent channel
+             */
+            if (!pSirBssDescr->fProbeRsp &&
+                (temp_ie && !temp_ie->DSParams.present &&
+                !temp_ie->HTInfo.present) &&
+                (pSirBssDescr->channelId !=
+                 pBssDesc->Result.BssDescriptor.channelId) &&
+                ((pBssDesc->Result.BssDescriptor.rssi - pSirBssDescr->rssi) >
+                 SIR_ADJACENT_CHANNEL_RSSI_DIFF_THRESHOLD)) {
+                 pSirBssDescr->channelId =
+                            pBssDesc->Result.BssDescriptor.channelId;
+                pSirBssDescr->rssi =
+                                 pBssDesc->Result.BssDescriptor.rssi;
+            }
             pSirBssDescr->rssi = (tANI_S8)( (((tANI_S32)pSirBssDescr->rssi * CSR_SCAN_RESULT_RSSI_WEIGHT ) +
                                              ((tANI_S32)pBssDesc->Result.BssDescriptor.rssi * (100 - CSR_SCAN_RESULT_RSSI_WEIGHT) )) / 100 );
             // Remove the 'old' entry from the list....
@@ -3437,6 +3468,9 @@ tANI_BOOLEAN csrRemoveDupBssDescription( tpAniSirGlobal pMac, tSirBssDescription
 
         pEntry = csrLLNext( &pMac->scan.scanResultList, pEntry, LL_ACCESS_LOCK );
     }
+
+    if (!pIes && temp_ie)
+       vos_mem_free(temp_ie);
 
     return fRC;
 }
@@ -5323,13 +5357,16 @@ tANI_BOOLEAN csrScanComplete( tpAniSirGlobal pMac, tSirSmeScanRsp *pScanRsp )
 }
 
 
-
 static void csrScanRemoveDupBssDescriptionFromInterimList( tpAniSirGlobal pMac, 
                                                            tSirBssDescription *pSirBssDescr,
                                                            tDot11fBeaconIEs *pIes)
 {
     tListElem *pEntry;
     tCsrScanResult *pCsrBssDescription;
+    tDot11fBeaconIEs *temp_ie = pIes;
+
+    if (!temp_ie)
+        csrGetParsedBssDescriptionIEs(pMac, pSirBssDescr, &temp_ie);
 
     // Walk through all the chained BssDescriptions.  If we find a chained BssDescription that
     // matches the BssID of the BssDescription passed in, then these must be duplicate scan
@@ -5342,9 +5379,39 @@ static void csrScanRemoveDupBssDescriptionFromInterimList( tpAniSirGlobal pMac,
         // we have a duplicate scan results only when BSSID, SSID, Channel and NetworkType
         // matches
 
-        if ( csrIsDuplicateBssDescription( pMac, &pCsrBssDescription->Result.BssDescriptor, 
-                                             pSirBssDescr, pIes, FALSE ) )
+        if (csrIsDuplicateBssDescription(pMac,
+                                     &pCsrBssDescription->Result.BssDescriptor,
+                                     pSirBssDescr, temp_ie, FALSE))
         {
+            /*
+             * Due to Rx sensitivity issue, sometime beacons are seen on
+             * adjacent channel so workaround in software is needed. If DS
+             * params or HT info are present driver can get proper channel
+             * info from these IEs and the older RSSI values are used in new
+             * entry.
+             *
+             * For the cases where DS params and HT info is not present,
+             * driver needs to check below conditions to update proper
+             * channel so that the older RSSI and channel values are used in
+             * new entry:
+             *  -- The old entry channel and new entry channel are not same
+             *  -- RSSI is below 15db or more from old value, this indicate
+             *     that the signal has leaked in adjacent channel
+             */
+            if (!pSirBssDescr->fProbeRsp &&
+                (temp_ie && !temp_ie->DSParams.present &&
+                !temp_ie->HTInfo.present) &&
+                (pSirBssDescr->channelId !=
+                 pCsrBssDescription->Result.BssDescriptor.channelId) &&
+                ((pCsrBssDescription->Result.BssDescriptor.rssi -
+                  pSirBssDescr->rssi) >
+                 SIR_ADJACENT_CHANNEL_RSSI_DIFF_THRESHOLD)) {
+                 pSirBssDescr->channelId =
+                            pCsrBssDescription->Result.BssDescriptor.channelId;
+                pSirBssDescr->rssi =
+                                 pCsrBssDescription->Result.BssDescriptor.rssi;
+            }
+
             pSirBssDescr->rssi = (tANI_S8)( (((tANI_S32)pSirBssDescr->rssi * CSR_SCAN_RESULT_RSSI_WEIGHT ) +
                                     ((tANI_S32)pCsrBssDescription->Result.BssDescriptor.rssi * (100 - CSR_SCAN_RESULT_RSSI_WEIGHT) )) / 100 );
 
@@ -5362,6 +5429,9 @@ static void csrScanRemoveDupBssDescriptionFromInterimList( tpAniSirGlobal pMac,
 
         pEntry = csrLLNext( &pMac->scan.tempScanResults, pEntry, LL_ACCESS_LOCK );
     }
+
+    if (!pIes && temp_ie)
+       vos_mem_free(temp_ie);
 }
 
 
