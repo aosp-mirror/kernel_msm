@@ -217,6 +217,7 @@ enum max1720x_nvram {
 	MAX1720X_NVRAM_QRTABLE00 = 0xA0,
 	MAX1720X_NVRAM_CONFIG = 0xB0,
 	MAX1720X_NVRAM_PACKCFG = 0xB5,
+	MAX1720X_NVRAM_CONVGCFG = 0xB7,
 	MAX1720X_NVRAM_NVCFG0 = 0xB8,
 	MAX1720X_NVRAM_SBSCFG = 0xBB,
 	MAX1720X_NVRAM_CGAIN = 0xC8,
@@ -1197,9 +1198,14 @@ static int max1720x_handle_dt_shadow_config(struct max1720x_chip *chip)
 				"Failed to write config from shadow RAM\n");
 			goto error_out;
 		}
-		dev_info(chip->dev,
-			 "DT config differs from shadow, resetting\n");
-		max1720x_fg_reset(chip);
+		/* nConvgCfg change take effect without resetting the gauge */
+		nRAM_current[NVRAM_U16_INDEX(MAX1720X_NVRAM_CONVGCFG)] =
+		    nRAM_updated[NVRAM_U16_INDEX(MAX1720X_NVRAM_CONVGCFG)];
+		if (memcmp(nRAM_updated, nRAM_current, MAX1720X_NVRAM_SIZE)) {
+			dev_info(chip->dev,
+				 "DT config differs from shadow, resetting\n");
+			max1720x_fg_reset(chip);
+		}
 	}
 
 error_out:
