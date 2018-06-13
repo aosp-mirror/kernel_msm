@@ -53,18 +53,19 @@ struct citadel_data {
 static struct class *citadel_class;
 static dev_t citadel_devt;
 
-static int citadel_wait_cmd_done(struct spi_device *spi)
+static int citadel_wait_cmd_done(struct citadel_data *citadel)
 {
+	struct spi_device *spi = citadel->spi;
 	struct spi_message m;
 	int ret;
-	u8 val;
 	unsigned long to = jiffies + 1 +	/* at least one jiffy */
 		msecs_to_jiffies(CITADEL_TPM_TIMEOUT_MS);
 	struct spi_transfer spi_xfer = {
-		.rx_buf = &val,
+		.rx_buf = citadel->rx_buf,
 		.len = 1,
 		.cs_change = 1,
 	};
+	uint8_t *val = citadel->rx_buf;
 
 	/*
 	 * We have sent the initial four-byte command to Citadel on MOSI, and
@@ -92,10 +93,10 @@ static int citadel_wait_cmd_done(struct spi_device *spi)
 		ret = spi_sync_locked(spi, &m);
 		if (ret)
 			return ret;
-	} while (!val);
+	} while (!*val);
 
 	/* Return EAGAIN if unexpected bytes were received. */
-	return val & 0x01 ? 0 : -EAGAIN;
+	return *val & 0x01 ? 0 : -EAGAIN;
 }
 
 static int citadel_tpm_datagram(struct citadel_data *citadel,
@@ -106,15 +107,15 @@ static int citadel_tpm_datagram(struct citadel_data *citadel,
 	int ret;
 	int ignore_result = 0;
 	struct spi_device *spi = citadel->spi;
-	u32 command;
-	u32 response;
 	struct spi_message m;
 	struct spi_transfer spi_xfer = {
-		.tx_buf = &command,
-		.rx_buf = &response,
+		.tx_buf = citadel->tx_buf,
+		.rx_buf = citadel->rx_buf,
 		.len = 4,
 		.cs_change = 1,
 	};
+	uint32_t *command = citadel->tx_buf;
+	uint32_t *response = citadel->rx_buf;
 
 	/* Read == from SPI, to userland. */
 	is_read = dg->command & CITADEL_TPM_READ;
@@ -123,7 +124,7 @@ static int citadel_tpm_datagram(struct citadel_data *citadel,
 	spi_bus_lock(spi->master);
 
 	/* The command must be big-endian */
-	command = cpu_to_be32(dg->command);
+	*command = cpu_to_be32(dg->command);
 
 	/* Prepare to send the command */
 	spi_message_init(&m);
@@ -141,11 +142,11 @@ static int citadel_tpm_datagram(struct citadel_data *citadel,
 	 * response. This typically happens by a 0x01 byte, but may be
 	 * preceded by several 0x00 bytes while Citadel does any necessary
 	 * work. */
-	citadel_is_awake = response == be32_to_cpu(0xdfdfdfde);
+	citadel_is_awake = *response == be32_to_cpu(0xdfdfdfde);
 
 	if (citadel_is_awake) {
 		/* Wait for the reply bit to go high */
-		ret = citadel_wait_cmd_done(spi);
+		ret = citadel_wait_cmd_done(citadel);
 		/* Reset CS in the case of unexpected bytes. */
 		if (ret)
 			citadel_is_awake = 0;
