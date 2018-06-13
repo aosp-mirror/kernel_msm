@@ -236,42 +236,6 @@ static int uid_time_in_state_seq_show(struct seq_file *m, void *v)
 	return 0;
 }
 
-/*
- * time_in_state is an array of u64's in the following format:
- * [n, uid0, time0a, time0b, ..., time0n,
- *     uid1, time1a, time1b, ..., time1n,
- *     uid2, time2a, time2b, ..., time2n, etc.]
- * where n is the total number of frequencies
- */
-static int time_in_state_seq_show(struct seq_file *m, void *v)
-{
-	struct uid_entry *uid_entry;
-	u32 max_state = READ_ONCE(next_offset);
-	u32 uid, time;
-	int i;
-
-	if (v == uid_hash_table)
-		seq_write(m, &max_state, sizeof(max_state));
-
-	rcu_read_lock();
-
-	hlist_for_each_entry_rcu(uid_entry, (struct hlist_head *)v, hash) {
-		if (uid_entry->max_state) {
-			uid = (u32) uid_entry->uid;
-			seq_write(m, &uid, sizeof(uid));
-		}
-
-		for (i = 0; i < uid_entry->max_state; ++i) {
-			time = (u32)
-				cputime_to_clock_t(uid_entry->time_in_state[i]);
-			seq_write(m, &time, sizeof(time));
-		}
-	}
-
-	rcu_read_unlock();
-	return 0;
-}
-
 void cpufreq_task_times_init(struct task_struct *p)
 {
 	void *temp;
@@ -598,40 +562,10 @@ static const struct file_operations uid_time_in_state_fops = {
 	.release	= seq_release,
 };
 
-static const struct seq_operations time_in_state_seq_ops = {
-	.start = uid_seq_start,
-	.next = uid_seq_next,
-	.stop = uid_seq_stop,
-	.show = time_in_state_seq_show,
-};
-
-int time_in_state_open(struct inode *inode, struct file *file)
-{
-	return seq_open(file, &time_in_state_seq_ops);
-}
-
-const struct file_operations time_in_state_fops = {
-	.open		= time_in_state_open,
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.release	= seq_release,
-};
-
 static int __init cpufreq_times_init(void)
 {
-	struct proc_dir_entry *uid_cpupower;
-
 	proc_create_data("uid_time_in_state", 0444, NULL,
 			 &uid_time_in_state_fops, NULL);
-
-	uid_cpupower = proc_mkdir("uid_cpupower", NULL);
-	if (!uid_cpupower) {
-		pr_warn("%s: failed to create uid_cputime proc entry\n",
-			__func__);
-	} else {
-		proc_create_data("time_in_state", 0444, uid_cpupower,
-				 &time_in_state_fops, NULL);
-	}
 
 	return 0;
 }
