@@ -4088,4 +4088,15 @@ void sme_request_imps(tHalHandle hal);
  *         false - if not in progress
  */
 bool sme_is_sta_key_exchange_in_progress(tHalHandle hal, uint8_t session_id);
+/**
+ * sme_process_msg_callback() - process callback message from LIM
+ * @hal: global hal handle
+ * @msg: vos message
+ *
+ * This function process the callback messages from LIM.
+ *
+ * Return: VOS_STATUS enumeration.
+ */
+VOS_STATUS sme_process_msg_callback(tHalHandle hal, vos_msg_t *msg);
+
 #endif //#if !defined( __SME_API_H )

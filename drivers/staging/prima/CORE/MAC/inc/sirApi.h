@@ -552,7 +552,8 @@ typedef struct sSirSmeReadyReq
 {
     tANI_U16   messageType; // eWNI_SME_SYS_READY_IND
     tANI_U16   length;
-    tANI_U16   transactionId;     
+    tANI_U16   transactionId;
+    void *sme_msg_cb;
 } tSirSmeReadyReq, *tpSirSmeReadyReq;
 
 /// Definition for response message to previously issued start request

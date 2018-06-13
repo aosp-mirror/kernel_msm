@@ -902,6 +902,8 @@ tLimMlmOemDataRsp       *gpLimMlmOemDataRsp;
     tANI_U8 gLimIbssStaLimit;
     tANI_U8 probeCounter;
     tANI_U8 maxProbe;
+    VOS_STATUS(*sme_msg_callback)
+            (tHalHandle hal, vos_msg_t *msg);
     tANI_U8 retryPacketCnt;
 
     // Flag to debug remain on channel
