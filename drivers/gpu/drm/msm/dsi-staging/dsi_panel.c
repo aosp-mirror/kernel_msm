@@ -108,6 +108,7 @@ static char dsi_dsc_rc_range_bpg_offset[] = {2, 0, 0, -2, -4, -6, -8, -8,
  */
 
 static int dsi_panel_clear_vr_locked(struct dsi_panel *panel);
+static int dsi_panel_update_hbm_locked(struct dsi_panel *panel, bool enable);
 
 int dsi_dsc_create_pps_buf_cmd(struct msm_display_dsc_info *dsc, char *buf,
 				int pps_id)
@@ -1508,6 +1509,8 @@ const char *cmd_set_prop_map[DSI_CMD_SET_MAX] = {
 	"qcom,mdss-dsi-nolp-command",
 	"qcom,mdss-dsi-vr-command",
 	"qcom,mdss-dsi-novr-command",
+	"qcom,mdss-dsi-hbm-command",
+	"qcom,mdss-dsi-nohbm-command",
 	"PPS not parsed from DTSI, generated dynamically",
 	"ROI not parsed from DTSI, generated dynamically",
 	"qcom,mdss-dsi-timing-switch-command",
@@ -1534,6 +1537,8 @@ const char *cmd_set_state_map[DSI_CMD_SET_MAX] = {
 	"qcom,mdss-dsi-nolp-command-state",
 	"qcom,mdss-dsi-vr-command-state",
 	"qcom,mdss-dsi-novr-command-state",
+	"qcom,mdss-dsi-hbm-command-state",
+	"qcom,mdss-dsi-nohbm-command-state",
 	"PPS not parsed from DTSI, generated dynamically",
 	"ROI not parsed from DTSI, generated dynamically",
 	"qcom,mdss-dsi-timing-switch-command-state",
@@ -3095,6 +3100,8 @@ struct {
 	{ "no_lp",		DSI_CMD_SET_NOLP },
 	{ "vr",			DSI_CMD_SET_VR },
 	{ "novr",		DSI_CMD_SET_NOVR },
+	{ "hbm",		DSI_CMD_SET_HBM },
+	{ "nohbm",		DSI_CMD_SET_NOHBM },
 };
 
 static inline ssize_t parse_cmdset(struct dsi_panel_cmd_set *set, char *buf,
@@ -3704,6 +3711,14 @@ int dsi_panel_set_lp1(struct dsi_panel *panel)
 		}
 	}
 
+	rc = dsi_panel_update_hbm_locked(panel, false);
+	if (rc) {
+		pr_err("[%s] couldn't disable HBM mode for LP1 transition\n",
+			panel->name);
+		mutex_unlock(&panel->panel_lock);
+		return rc;
+	}
+
 	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_LP1);
 	if (rc)
 		pr_err("[%s] failed to send DSI_CMD_SET_LP1 cmd, rc=%d\n",
@@ -3741,6 +3756,14 @@ int dsi_panel_set_lp2(struct dsi_panel *panel)
 			mutex_unlock(&panel->panel_lock);
 			return rc;
 		}
+	}
+
+	rc = dsi_panel_update_hbm_locked(panel, false);
+	if (rc) {
+		pr_err("[%s] couldn't disable HBM mode for LP2 transition\n",
+			panel->name);
+		mutex_unlock(&panel->panel_lock);
+		return rc;
 	}
 
 	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_LP2);
@@ -3789,6 +3812,13 @@ static int dsi_panel_set_vr_locked(struct dsi_panel *panel)
 
 	if (dsi_backlight_get_dpms(&panel->bl_config) != SDE_MODE_DPMS_ON) {
 		pr_err("[%s] DSI_CMD_SET_VR wasn't allowed\n", panel->name);
+		return -EINVAL;
+	}
+
+	rc = dsi_panel_update_hbm_locked(panel, false);
+	if (rc) {
+		pr_err("[%s] couldn't disable HBM mode before VR entry, aborting VR entry\n",
+			panel->name);
 		return -EINVAL;
 	}
 
@@ -3878,11 +3908,67 @@ bool dsi_panel_get_vr_mode(struct dsi_panel *panel)
 		return false;
 	}
 
-	mutex_lock(&panel->panel_lock);
-	vr_mode = panel->vr_mode;
-	mutex_unlock(&panel->panel_lock);
+	return vr_mode = panel->vr_mode;
+}
 
-	return vr_mode;
+static int dsi_panel_update_hbm_locked(struct dsi_panel *panel,
+	bool enable)
+{
+	struct dsi_backlight_config *bl = &panel->bl_config;
+	int rc = 0;
+
+	if (!bl->bl_hbm_supported || (panel->hbm_mode == enable))
+		return 0;
+
+	if ((dsi_backlight_get_dpms(bl) != SDE_MODE_DPMS_ON) ||
+		panel->vr_mode) {
+		pr_err("[%s] Backlight in incompatible state, HBM changes not allowed\n",
+			panel->name);
+		return -EINVAL;
+	}
+
+	rc = dsi_panel_tx_cmd_set(panel, enable ? DSI_CMD_SET_HBM :
+		DSI_CMD_SET_NOHBM);
+	if (rc) {
+		pr_err("[%s] failed to send HBM DSI cmd, rc=%d\n",
+			panel->name, rc);
+		return rc;
+	}
+
+	bl->bl_active_params = enable ? &bl->bl_hbm_params :
+		&bl->bl_normal_params;
+	panel->hbm_mode = enable;
+
+	return 0;
+}
+
+int dsi_panel_update_hbm(struct dsi_panel *panel, bool enable)
+{
+	int rc = 0;
+
+	if (!panel)
+		return -EINVAL;
+
+	if ((panel->type == EXT_BRIDGE) || !panel->bl_config.bl_hbm_supported)
+		return 0;
+
+	mutex_lock(&panel->panel_lock);
+	rc = dsi_panel_update_hbm_locked(panel, enable);
+	mutex_unlock(&panel->panel_lock);
+	if (rc)
+		return rc;
+
+	return backlight_update_status(panel->bl_config.bl_device);
+}
+
+bool dsi_panel_get_hbm(struct dsi_panel *panel)
+{
+	if (!panel) {
+		pr_err("invalid params\n");
+		return false;
+	}
+
+	return panel->hbm_mode;
 }
 
 int dsi_panel_prepare(struct dsi_panel *panel)
@@ -4190,6 +4276,11 @@ int dsi_panel_disable(struct dsi_panel *panel)
 				panel->name);
 		}
 	}
+
+	rc = dsi_panel_update_hbm_locked(panel, false);
+	if (rc)
+		pr_warn("[%s] couldn't disable HBM mode to unprepare display\n",
+			panel->name);
 
 	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_OFF);
 	if (rc) {

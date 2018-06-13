@@ -81,7 +81,7 @@ static int dsi_backlight_update_dcs(struct dsi_backlight_config *bl, u32 bl_lvl)
 
 	dsi = &panel->mipi_device;
 
-	num_params = bl->bl_max_level > 0xFF ? 2 : 1;
+	num_params = bl->bl_active_params->max_level > 0xFF ? 2 : 1;
 	rc = mipi_dsi_dcs_set_display_brightness(dsi, bl_lvl, num_params);
 	if (rc < 0)
 		pr_err("failed to update dcs backlight:%d\n", bl_lvl);
@@ -105,19 +105,20 @@ static u32 dsi_backlight_calculate(struct dsi_backlight_config *bl,
 	bl_temp = mult_frac(bl_temp, bl->bl_scale_ad,
 			MAX_AD_BL_SCALE_LEVEL);
 
-	if (bl->bl_lut) {
+	if (bl->bl_active_params->lut) {
 		/*
 		 * look up panel brightness; the first entry in the LUT
 		 corresponds to userspace brightness level 1
 		 */
 		if (WARN_ON(bl_temp > bl->brightness_max_level))
-			bl_lvl = bl->bl_lut[bl->brightness_max_level];
+			bl_lvl = bl->bl_active_params->
+				lut[bl->brightness_max_level];
 		else
-			bl_lvl = bl->bl_lut[bl_temp];
+			bl_lvl = bl->bl_active_params->lut[bl_temp];
 	} else {
 		/* map UI brightness into driver backlight level rounding it */
-		const u32 bl_min = bl->bl_min_level ? : 1;
-		const u32 bl_range = bl->bl_max_level - bl_min;
+		const u32 bl_min = bl->bl_active_params->min_level ? : 1;
+		const u32 bl_range = bl->bl_active_params->max_level - bl_min;
 
 		if (bl_temp > 1)
 			bl_lvl =
@@ -128,7 +129,8 @@ static u32 dsi_backlight_calculate(struct dsi_backlight_config *bl,
 
 	pr_debug("brightness=%d, bl_scale=%d, ad=%d, bl_lvl=%d, bl_lut %sused\n",
 			brightness, bl->bl_scale,
-			bl->bl_scale_ad, bl_lvl, bl->bl_lut ? "" : "un");
+			bl->bl_scale_ad, bl_lvl,
+			bl->bl_active_params->lut ? "" : "un");
 
 	return bl_lvl;
 }
@@ -145,11 +147,11 @@ static int dsi_backlight_update_status(struct backlight_device *bd)
 			(bd->props.power != FB_BLANK_UNBLANK))
 		brightness = 0;
 
+	mutex_lock(&panel->panel_lock);
 	bl_lvl = dsi_backlight_calculate(bl, brightness);
 	if (bl_lvl == bl->bl_actual && bl->last_state == bd->props.state)
-		return rc;
+		goto done;
 
-	mutex_lock(&panel->panel_lock);
 	if (dsi_panel_initialized(panel) && bl->update_bl) {
 		pr_info("req:%d bl:%d state:0x%x\n",
 			bd->props.brightness, bl_lvl, bd->props.state);
@@ -279,9 +281,62 @@ static ssize_t vr_mode_show(struct device *dev,
 
 static DEVICE_ATTR_RW(vr_mode);
 
+static ssize_t hbm_mode_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf, size_t count)
+{
+	struct backlight_device *bd = NULL;
+	struct dsi_backlight_config *bl = NULL;
+	struct dsi_panel *panel = NULL;
+	int rc = 0;
+	bool hbm_mode = false;
+
+	/* dev is non-NULL, enforced by sysfs_create_file_ns */
+	bd = to_backlight_device(dev);
+	bl = bl_get_data(bd);
+
+	if (!bl->bl_hbm_supported)
+		return -ENOTSUPP;
+
+	rc = kstrtobool(buf, &hbm_mode);
+	if (rc)
+		return rc;
+
+	panel = container_of(bl, struct dsi_panel, bl_config);
+	rc = dsi_panel_update_hbm(panel, hbm_mode);
+	if (rc)
+		return rc;
+
+	return count;
+}
+
+static ssize_t hbm_mode_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct backlight_device *bd = NULL;
+	struct dsi_backlight_config *bl = NULL;
+	struct dsi_panel *panel = NULL;
+	bool hbm_mode = false;
+
+	/* dev is non-NULL, enforced by sysfs_create_file_ns */
+	bd = to_backlight_device(dev);
+	bl = bl_get_data(bd);
+
+	if (!bl->bl_hbm_supported)
+		return snprintf(buf, PAGE_SIZE, "unsupported\n");
+
+	panel = container_of(bl, struct dsi_panel, bl_config);
+	hbm_mode = dsi_panel_get_hbm(panel);
+
+	return snprintf(buf, PAGE_SIZE, "%s\n", hbm_mode ? "on" : "off");
+}
+
+static DEVICE_ATTR_RW(hbm_mode);
+
 static struct attribute *bl_device_attrs[] = {
 	&dev_attr_alpm_mode.attr,
 	&dev_attr_vr_mode.attr,
+	&dev_attr_hbm_mode.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(bl_device);
@@ -759,40 +814,103 @@ static int dsi_panel_pwm_bl_register(struct dsi_backlight_config *bl)
 }
 
 static int dsi_panel_bl_parse_lut(struct device *parent,
-		struct dsi_backlight_config *bl, struct device_node *of_node)
+	struct device_node *of_node, const char *bl_lut_prop_name,
+	u32 brightness_max_level, struct dsi_backlight_calc_params *bl_params)
 {
 	u32 len = 0;
 	u32 i = 0;
 	u32 rc = 0;
 	const __be32 *val = 0;
 	struct property *prop = NULL;
-	struct dsi_panel *panel = container_of(bl, struct dsi_panel, bl_config);
-	u32 lut_length = bl->brightness_max_level + 1;
+	u32 lut_length = brightness_max_level + 1;
+	u16 *bl_lut_tmp = NULL;
 
-	bl->bl_lut = NULL;
+	if (!of_node || !bl_lut_prop_name || !bl_params)
+		return -EINVAL;
 
-	prop = of_find_property(of_node, "qcom,mdss-dsi-bl-lut", &len);
+	if (bl_params->lut) {
+		pr_warn("LUT for %s already exists, freeing before reparsing\n",
+			bl_lut_prop_name);
+		devm_kfree(parent, bl_params->lut);
+		bl_params->lut = NULL;
+	}
+
+	prop = of_find_property(of_node, bl_lut_prop_name, &len);
 	if (!prop)
 		goto done; /* LUT is unspecified */
 
 	len /= sizeof(u32);
 	if (len != lut_length) {
-		pr_warn("[%s] bl-lut length %d doesn't match brightness_max_level + 1 %d\n",
-			panel->name, len, lut_length);
+		pr_warn("%s length %d doesn't match brightness_max_level + 1 %d\n",
+			bl_lut_prop_name, len, lut_length);
 		goto done;
 	}
 
-	pr_debug("[%s] bl-lut length %d\n", panel->name, lut_length);
-	bl->bl_lut = devm_kmalloc(parent,
-		sizeof(u16) * lut_length, GFP_KERNEL);
-	if (bl->bl_lut == NULL) {
+	pr_debug("%s length %d\n", bl_lut_prop_name, lut_length);
+	bl_lut_tmp = devm_kmalloc(parent, sizeof(u16) * lut_length, GFP_KERNEL);
+	if (bl_lut_tmp == NULL) {
 		rc = -ENOMEM;
 		goto done;
 	}
 
 	val = prop->value;
 	for (i = 0; i < len; i++)
-		bl->bl_lut[i] = (u16)(be32_to_cpup(val++) & 0xffff);
+		bl_lut_tmp[i] = (u16)(be32_to_cpup(val++) & 0xffff);
+
+	bl_params->lut = bl_lut_tmp;
+
+done:
+	return rc;
+}
+
+/*
+ * Helper function to parse high brightness mode (HBM) data. HBM entry/exit
+ * commands are parsed separately, along with other panel timing commands.
+ */
+static int dsi_panel_bl_parse_hbm(struct device *parent,
+		struct dsi_backlight_config *bl, struct device_node *of_node)
+{
+	u32 rc = 0;
+	u32 val = 0;
+	struct dsi_panel *panel = container_of(bl, struct dsi_panel, bl_config);
+
+	panel->hbm_mode = false;
+	bl->bl_hbm_supported = false;
+
+	if (!of_property_read_bool(of_node, "qcom,mdss-dsi-bl-hbm-enable"))
+		goto done;
+
+	pr_debug("found hbm enable\n");
+
+	/* default to non-HBM parameters*/
+	bl->bl_hbm_params = bl->bl_normal_params;
+
+	rc = of_property_read_u32(of_node, "qcom,mdss-dsi-bl-hbm-min-level",
+		&val);
+	if (rc)
+		pr_debug("[%s] bl-hbm-min-level unspecified, defaulting to non-HBM setting\n",
+			panel->name);
+	else
+		bl->bl_hbm_params.min_level = val;
+
+
+	rc = of_property_read_u32(of_node, "qcom,mdss-dsi-bl-hbm-max-level",
+		&val);
+	if (rc)
+		pr_debug("[%s] bl-hbm-max-level unspecified, defaulting to non-HBM setting\n",
+			 panel->name);
+	else
+		bl->bl_hbm_params.max_level = val;
+
+	rc = dsi_panel_bl_parse_lut(parent, of_node, "qcom,mdss-dsi-bl-hbm-lut",
+		bl->brightness_max_level, &bl->bl_hbm_params);
+	if (rc) {
+		pr_err("[%s] failed to create HBM backlight LUT, rc=%d\n",
+			panel->name, rc);
+		goto done;
+	}
+
+	bl->bl_hbm_supported = true;
 
 done:
 	return rc;
@@ -805,6 +923,8 @@ int dsi_panel_bl_parse_config(struct device *parent,
 	int rc = 0;
 	const char *bl_type;
 	u32 val = 0;
+
+	bl->bl_active_params = &bl->bl_normal_params;
 
 	bl_type = of_get_property(of_node,
 				  "qcom,mdss-dsi-bl-pmic-control-type",
@@ -830,18 +950,18 @@ int dsi_panel_bl_parse_config(struct device *parent,
 	if (rc) {
 		pr_debug("[%s] bl-min-level unspecified, defaulting to zero\n",
 			 panel->name);
-		bl->bl_min_level = 0;
+		bl->bl_normal_params.min_level = 0;
 	} else {
-		bl->bl_min_level = val;
+		bl->bl_normal_params.min_level = val;
 	}
 
 	rc = of_property_read_u32(of_node, "qcom,mdss-dsi-bl-max-level", &val);
 	if (rc) {
 		pr_debug("[%s] bl-max-level unspecified, defaulting to max level\n",
 			 panel->name);
-		bl->bl_max_level = MAX_BL_LEVEL;
+		bl->bl_normal_params.max_level = MAX_BL_LEVEL;
 	} else {
-		bl->bl_max_level = val;
+		bl->bl_normal_params.max_level = val;
 	}
 
 	rc = of_property_read_u32(of_node, "qcom,mdss-brightness-max-level",
@@ -854,13 +974,22 @@ int dsi_panel_bl_parse_config(struct device *parent,
 		bl->brightness_max_level = val;
 	}
 
-	rc = dsi_panel_bl_parse_lut(parent, bl, of_node);
-	if(rc) {
+	rc = dsi_panel_bl_parse_lut(parent, of_node, "qcom,mdss-dsi-bl-lut",
+		bl->brightness_max_level, &bl->bl_normal_params);
+	if (rc) {
 		pr_err("[%s] failed to create backlight LUT, rc=%d\n",
 			panel->name, rc);
 		goto error;
 	}
-	pr_debug("[%s] bl-lut %sused\n", panel->name, bl->bl_lut ? "" : "un");
+	pr_debug("[%s] bl-lut %sused\n", panel->name,
+		bl->bl_normal_params.lut ? "" : "un");
+
+	rc = dsi_panel_bl_parse_hbm(parent, bl, of_node);
+	if (rc)
+		pr_err("[%s] error while parsing high brightness mode (hbm) details, rc=%d\n",
+			panel->name, rc);
+	pr_debug("[%s] bl-hbm-lut %sused\n", panel->name,
+		bl->bl_hbm_params.lut ? "" : "un");
 
 	bl->en_gpio = of_get_named_gpio(of_node,
 					      "qcom,platform-bklight-en-gpio",

@@ -83,17 +83,29 @@ struct dsi_panel_phy_props {
 	enum dsi_panel_rotation rotation;
 };
 
+struct dsi_backlight_calc_params {
+	u32 min_level;
+	u32 max_level;
+	u16 *lut;
+};
+
 struct dsi_backlight_config {
 	enum dsi_backlight_type type;
 
-	u32 bl_min_level;
-	u32 bl_max_level;
 	u32 brightness_max_level;
 	u32 bl_scale;
 	u32 bl_scale_ad;
 	u32 bl_actual;
-	u16 *bl_lut;
 	unsigned int last_state;
+	struct dsi_backlight_calc_params bl_normal_params;
+
+	/* High brightness mode parameters */
+	bool bl_hbm_supported;
+	struct dsi_backlight_calc_params bl_hbm_params;
+
+
+	/* The active backlight parameters, depending on HBM state */
+	struct dsi_backlight_calc_params *bl_active_params;
 
 	int en_gpio;
 
@@ -224,7 +236,9 @@ struct dsi_panel {
 
 	bool sync_broadcast_en;
 
-	bool vr_mode;	      /* guarded by panel_lock */
+	/* the following set of members are guarded by panel_lock */
+	bool vr_mode;
+	bool hbm_mode;
 };
 
 static inline bool dsi_panel_ulps_feature_enabled(struct dsi_panel *panel)
@@ -351,5 +365,9 @@ int dsi_panel_update_vr_mode(struct dsi_panel *panel, bool enable);
 bool dsi_panel_get_vr_mode(struct dsi_panel *panel);
 
 int dsi_panel_get_sn(struct dsi_panel *panel);
+
+/* Set/get high brightness mode */
+int dsi_panel_update_hbm(struct dsi_panel *panel, bool enable);
+bool dsi_panel_get_hbm(struct dsi_panel *panel);
 
 #endif /* _DSI_PANEL_H_ */
