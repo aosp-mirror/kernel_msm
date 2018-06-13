@@ -38,6 +38,11 @@
 		qcom,mdss-dsi-panel-peak-brightness = <5530000>;
 		qcom,mdss-dsi-panel-blackness-level = <40>;
 
+		/* High brightness mode */
+		qcom,mdss-dsi-bl-hbm-enable;
+		qcom,mdss-dsi-bl-hbm-min-level = <0x3ff>;
+		qcom,mdss-dsi-bl-hbm-max-level = <0x3ff>;
+
 		qcom,mdss-dsi-dma-trigger = "trigger_sw";
 		qcom,mdss-dsi-mdp-trigger = "none";
 		qcom,mdss-dsi-wr-mem-start = <0x2c>;
@@ -159,6 +164,16 @@
 				qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
 
 				qcom,mdss-dsi-nolp-command = [
+					15 01 00 00 00 00 02 53 20
+				];
+
+				qcom,mdss-dsi-hbm-command = [
+					/* Enable high brightness */
+					15 01 00 00 00 00 02 53 E0
+				];
+
+				qcom,mdss-dsi-nohbm-command = [
+					/* Disable high brightness */
 					15 01 00 00 00 00 02 53 20
 				];
 

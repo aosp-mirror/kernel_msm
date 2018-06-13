@@ -60,6 +60,16 @@
 		qcom,mdss-dsi-panel-peak-brightness = <6200000>;
 		qcom,mdss-dsi-panel-blackness-level = <42>;
 
+		/* High brightness mode */
+		qcom,mdss-dsi-bl-hbm-enable;
+		/*
+		 * This panel maintains its full brightness range when in HBM,
+		 * but, for now, max out brightness when in this mode to match
+		 * s6e3ha8 behavior.
+		 */
+		qcom,mdss-dsi-bl-hbm-min-level = <0x3ff>;
+		qcom,mdss-dsi-bl-hbm-max-level = <0x3ff>;
+
 		qcom,mdss-dsi-display-timings {
 			timing@0 {
 				qcom,mdss-dsi-panel-framerate = <60>;
