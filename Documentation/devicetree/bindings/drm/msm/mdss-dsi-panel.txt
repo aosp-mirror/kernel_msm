@@ -191,9 +191,9 @@ Optional properties:
 					qcom,mdss-brightness-max-level to panel brightness levels. Specifying
 					this LUT overrides qcom,mdss-dsi-bl-min-level and
 					qcom,mdss-dsi-bl-max-level.
-					If unspecified, this LUT is populated with a linear mapping of
-					userspace to panel brightness levels, where panel brightness range is
-					inferred from qcom,mdss-dsi-bl-min-level and qcom,mdss-dsi-bl-max-level.
+					If unspecified, this LUT is unused and unallocated. Instead, userspace
+					brightness gets mapped linearly, during runtime, to the range defined by
+					qcom,mdss-dsi-bl-min-level and qcom,mdss-dsi-bl-max-level.
 - qcom,mdss-dsi-interleave-mode:	Specifies interleave mode.
 					0 = default value.
 - qcom,mdss-dsi-panel-type:		Specifies the panel operating mode.

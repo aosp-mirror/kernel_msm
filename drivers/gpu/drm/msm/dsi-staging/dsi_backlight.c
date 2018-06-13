@@ -93,31 +93,42 @@ static u32 dsi_backlight_calculate(struct dsi_backlight_config *bl,
 				   int brightness)
 {
 	u32 bl_lvl = 0;
+	u32 bl_temp;
 
-	if (brightness) {
-		u32 bl_temp;
+	if (brightness <= 0)
+		return 0;
 
-		/* scale backlight */
-		bl_temp = mult_frac(brightness, bl->bl_scale,
-				    MAX_BL_SCALE_LEVEL);
+	/* scale backlight */
+	bl_temp = mult_frac(brightness, bl->bl_scale,
+			MAX_BL_SCALE_LEVEL);
 
-		bl_temp = mult_frac(bl_temp, bl->bl_scale_ad,
-				    MAX_AD_BL_SCALE_LEVEL);
+	bl_temp = mult_frac(bl_temp, bl->bl_scale_ad,
+			MAX_AD_BL_SCALE_LEVEL);
 
+	if (bl->bl_lut) {
 		/*
-		 * look up panel brightness; the first entry in the LUT corresponds to
-		 * userspace brightness level 1
+		 * look up panel brightness; the first entry in the LUT
+		 corresponds to userspace brightness level 1
 		 */
-		if (WARN_ON(bl_temp > bl->brightness_max_level)) {
+		if (WARN_ON(bl_temp > bl->brightness_max_level))
 			bl_lvl = bl->bl_lut[bl->brightness_max_level];
-		} else {
+		else
 			bl_lvl = bl->bl_lut[bl_temp];
-		}
+	} else {
+		/* map UI brightness into driver backlight level rounding it */
+		const u32 bl_min = bl->bl_min_level ? : 1;
+		const u32 bl_range = bl->bl_max_level - bl_min;
 
-		pr_debug("brightness=%d, bl_scale=%d, ad=%d, bl_lvl=%d\n",
-			 brightness, bl->bl_scale,
-			 bl->bl_scale_ad, bl_lvl);
+		if (bl_temp > 1)
+			bl_lvl =
+				DIV_ROUND_CLOSEST((bl_temp - 1) * bl_range,
+					bl->brightness_max_level - 1);
+		bl_lvl += bl_min;
 	}
+
+	pr_debug("brightness=%d, bl_scale=%d, ad=%d, bl_lvl=%d, bl_lut %sused\n",
+			brightness, bl->bl_scale,
+			bl->bl_scale_ad, bl_lvl, bl->bl_lut ? "" : "un");
 
 	return bl_lvl;
 }
@@ -747,31 +758,6 @@ static int dsi_panel_pwm_bl_register(struct dsi_backlight_config *bl)
 	return 0;
 }
 
-static int dsi_panel_bl_default_lut(struct device *parent,
-		struct dsi_backlight_config *bl)
-{
-	u32 i = 0;
-	u16 bl_min = (u16)bl->bl_min_level ? : 1;
-	u16 bl_range = (u16)bl->bl_max_level - bl_min;
-	u32 lut_length = bl->brightness_max_level + 1;
-
-	bl->bl_lut = devm_kmalloc(parent,
-		sizeof(u16) * lut_length, GFP_KERNEL);
-	if (bl->bl_lut == NULL)
-		return -ENOMEM;
-
-	/*
-	 * Leave brightness level 0 mapped to panel brightness level 0.
-	 * Create a linear mapping between indices 1-max and panel brightness range.
-	 */
-	bl->bl_lut[0] = 0;
-	for (i = 1; i < lut_length; i++)
-		bl->bl_lut[i] = DIV_ROUND_CLOSEST((i - 1) * bl_range,
-				bl->brightness_max_level - 1) + bl_min;
-
-	return 0;
-}
-
 static int dsi_panel_bl_parse_lut(struct device *parent,
 		struct dsi_backlight_config *bl, struct device_node *of_node)
 {
@@ -779,22 +765,20 @@ static int dsi_panel_bl_parse_lut(struct device *parent,
 	u32 i = 0;
 	u32 rc = 0;
 	const __be32 *val = 0;
+	struct property *prop = NULL;
 	struct dsi_panel *panel = container_of(bl, struct dsi_panel, bl_config);
 	u32 lut_length = bl->brightness_max_level + 1;
 
-	struct property *prop = of_find_property(of_node,
-			"qcom,mdss-dsi-bl-lut", &len);
-	if (!prop) {
-		/* LUT is unspecified */
-		rc = dsi_panel_bl_default_lut(parent, bl);
-		goto done;
-	}
+	bl->bl_lut = NULL;
+
+	prop = of_find_property(of_node, "qcom,mdss-dsi-bl-lut", &len);
+	if (!prop)
+		goto done; /* LUT is unspecified */
 
 	len /= sizeof(u32);
 	if (len != lut_length) {
 		pr_warn("[%s] bl-lut length %d doesn't match brightness_max_level + 1 %d\n",
 			panel->name, len, lut_length);
-		rc = dsi_panel_bl_default_lut(parent, bl);
 		goto done;
 	}
 
@@ -876,6 +860,7 @@ int dsi_panel_bl_parse_config(struct device *parent,
 			panel->name, rc);
 		goto error;
 	}
+	pr_debug("[%s] bl-lut %sused\n", panel->name, bl->bl_lut ? "" : "un");
 
 	bl->en_gpio = of_get_named_gpio(of_node,
 					      "qcom,platform-bklight-en-gpio",
