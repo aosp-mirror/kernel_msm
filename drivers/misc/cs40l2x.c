@@ -469,6 +469,143 @@ static int cs40l2x_wseq_replace(struct cs40l2x_private *cs40l2x,
 	return 0;
 }
 
+static int cs40l2x_hiber_cmd_send(struct cs40l2x_private *cs40l2x,
+			unsigned int hiber_cmd)
+{
+	int ret, i;
+	unsigned int val;
+
+	if (!mutex_is_locked(&cs40l2x->lock))
+		return -EACCES;
+
+	switch (hiber_cmd) {
+	case CS40L2X_POWERCONTROL_NONE:
+	case CS40L2X_POWERCONTROL_HIBERNATE:
+		return regmap_write(cs40l2x->regmap,
+				CS40L2X_MBOX_POWERCONTROL,
+				hiber_cmd);
+
+	case CS40L2X_POWERCONTROL_WAKEUP:
+		for (i = 0; i < CS40L2X_WAKEUP_RETRIES; i++) {
+			/*
+			 * the first several transactions are expected to be
+			 * NAK'd, so retry multiple times in rapid succession
+			 */
+			ret = regmap_write(cs40l2x->regmap,
+					CS40L2X_MBOX_POWERCONTROL,
+					hiber_cmd);
+			if (!ret)
+				break;
+
+			usleep_range(1000, 1100);
+		}
+		if (i == CS40L2X_WAKEUP_RETRIES)
+			return -EIO;
+
+		for (i = 0; i < CS40L2X_WAKEUP_RETRIES; i++) {
+			usleep_range(5000, 5100);
+
+			ret = regmap_read(cs40l2x->regmap,
+					cs40l2x_dsp_reg(cs40l2x, "POWERSTATE",
+						CS40L2X_XM_UNPACKED_TYPE),
+					&val);
+			if (ret)
+				return ret;
+
+			if (val != CS40L2X_POWERSTATE_HIBERNATE)
+				return 0;
+		}
+		return -ETIME;
+
+	default:
+		return -EINVAL;
+	}
+}
+
+static ssize_t cs40l2x_hiber_cmd_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int hiber_cmd;
+
+	/*
+	 * hibernation is supported by revision B1 firmware only, and
+	 * entry/exit is exposed to user space only for test purposes
+	 */
+	if (cs40l2x->revid < CS40L2X_REVID_B1)
+		return -EPERM;
+
+	ret = kstrtou32(buf, 10, &hiber_cmd);
+	if (ret)
+		return -EINVAL;
+
+	mutex_lock(&cs40l2x->lock);
+	ret = cs40l2x_hiber_cmd_send(cs40l2x, hiber_cmd);
+	mutex_unlock(&cs40l2x->lock);
+
+	if (ret) {
+		pr_err("Failed to send hibernation command\n");
+		return ret;
+	}
+
+	return count;
+}
+
+static ssize_t cs40l2x_hiber_timeout_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int val;
+
+	mutex_lock(&cs40l2x->lock);
+	ret = regmap_read(cs40l2x->regmap,
+			cs40l2x_dsp_reg(cs40l2x, "FALSEI2CTIMEOUT",
+				CS40L2X_XM_UNPACKED_TYPE), &val);
+	mutex_unlock(&cs40l2x->lock);
+
+	if (ret) {
+		pr_err("Failed to read hibernation timeout\n");
+		return ret;
+	}
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", val);
+}
+
+static ssize_t cs40l2x_hiber_timeout_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int val;
+
+	ret = kstrtou32(buf, 10, &val);
+	if (ret)
+		return -EINVAL;
+
+	if (val < CS40L2X_FALSEI2CTIMEOUT_MIN)
+		return -EINVAL;
+
+	if (val > CS40L2X_FALSEI2CTIMEOUT_MAX)
+		return -EINVAL;
+
+	mutex_lock(&cs40l2x->lock);
+	ret = regmap_write(cs40l2x->regmap,
+			cs40l2x_dsp_reg(cs40l2x, "FALSEI2CTIMEOUT",
+				CS40L2X_XM_UNPACKED_TYPE), val);
+	mutex_unlock(&cs40l2x->lock);
+
+	if (ret) {
+		pr_err("Failed to write hibernation timeout\n");
+		return ret;
+	}
+
+	return count;
+}
+
 static ssize_t cs40l2x_gpio1_enable_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
@@ -1233,6 +1370,9 @@ static DEVICE_ATTR(cp_trigger_index, 0660, cs40l2x_cp_trigger_index_show,
 		cs40l2x_cp_trigger_index_store);
 static DEVICE_ATTR(cp_trigger_queue, 0660, cs40l2x_cp_trigger_queue_show,
 		cs40l2x_cp_trigger_queue_store);
+static DEVICE_ATTR(hiber_cmd, 0660, NULL, cs40l2x_hiber_cmd_store);
+static DEVICE_ATTR(hiber_timeout, 0660, cs40l2x_hiber_timeout_show,
+		cs40l2x_hiber_timeout_store);
 static DEVICE_ATTR(gpio1_enable, 0660, cs40l2x_gpio1_enable_show,
 		cs40l2x_gpio1_enable_store);
 static DEVICE_ATTR(gpio1_rise_index, 0660, cs40l2x_gpio1_rise_index_show,
@@ -1264,6 +1404,8 @@ static DEVICE_ATTR(num_waves, 0660, cs40l2x_num_waves_show, NULL);
 static struct attribute *cs40l2x_dev_attrs[] = {
 	&dev_attr_cp_trigger_index.attr,
 	&dev_attr_cp_trigger_queue.attr,
+	&dev_attr_hiber_cmd.attr,
+	&dev_attr_hiber_timeout.attr,
 	&dev_attr_gpio1_enable.attr,
 	&dev_attr_gpio1_rise_index.attr,
 	&dev_attr_gpio1_fall_index.attr,
@@ -2615,6 +2757,7 @@ static int cs40l2x_init(struct cs40l2x_private *cs40l2x)
 	int ret;
 	struct regmap *regmap = cs40l2x->regmap;
 	struct device *dev = cs40l2x->dev;
+	unsigned int wksrc_en = CS40L2X_WKSRC_EN_SDA | CS40L2X_WKSRC_EN_GPIO1;
 
 	/* REFCLK configuration is handled by revision B1 ROM */
 	if (cs40l2x->pdata.refclk_gpio2 &&
@@ -2690,6 +2833,32 @@ static int cs40l2x_init(struct cs40l2x_private *cs40l2x)
 	if (ret) {
 		dev_err(dev, "Failed to sequence amplifier volume control\n");
 		return ret;
+	}
+
+	/* hibernation is supported by revision B1 firmware only */
+	if (cs40l2x->revid == CS40L2X_REVID_B1) {
+		if (cs40l2x->devid == CS40L2X_DEVID_L25B)
+			wksrc_en |= CS40L2X_WKSRC_EN_GPIO2;
+
+		ret = regmap_update_bits(regmap,
+				CS40L2X_WAKESRC_CTL,
+				CS40L2X_WKSRC_EN_MASK,
+				wksrc_en << CS40L2X_WKSRC_EN_SHIFT);
+		if (ret) {
+			dev_err(dev, "Failed to enable wake sources\n");
+			return ret;
+		}
+
+		ret = cs40l2x_wseq_add_reg(cs40l2x, CS40L2X_WAKESRC_CTL,
+				((wksrc_en << CS40L2X_WKSRC_EN_SHIFT)
+					& CS40L2X_WKSRC_EN_MASK) |
+						((CS40L2X_WKSRC_POL_SDA
+						<< CS40L2X_WKSRC_POL_SHIFT)
+						& CS40L2X_WKSRC_POL_MASK));
+		if (ret) {
+			dev_err(dev, "Failed to sequence wake sources\n");
+			return ret;
+		}
 	}
 
 	return 0;
@@ -2918,6 +3087,8 @@ static int cs40l2x_handle_of_data(struct i2c_client *i2c_client,
 		else
 			pdata->gpio1_mode = out_val;
 	}
+
+	pdata->hiber_enable = of_property_read_bool(np, "cirrus,hiber-enable");
 
 	return 0;
 }
@@ -3310,10 +3481,20 @@ static int __maybe_unused cs40l2x_suspend(struct device *dev)
 				cs40l2x_dsp_reg(cs40l2x, "GPIO_ENABLE",
 						CS40L2X_XM_UNPACKED_TYPE),
 				CS40L2X_GPIO1_ENABLED);
-		if (ret)
+		if (ret) {
 			dev_err(dev, "Failed to enable GPIO1 upon suspend\n");
+			goto err_mutex;
+		}
 	}
 
+	if (cs40l2x->pdata.hiber_enable && cs40l2x->revid == CS40L2X_REVID_B1) {
+		ret = cs40l2x_hiber_cmd_send(cs40l2x,
+				CS40L2X_POWERCONTROL_HIBERNATE);
+		if (ret)
+			dev_err(dev, "Failed to hibernate upon suspend\n");
+	}
+
+err_mutex:
 	mutex_unlock(&cs40l2x->lock);
 
 	return ret;
@@ -3331,10 +3512,20 @@ static int __maybe_unused cs40l2x_resume(struct device *dev)
 				cs40l2x_dsp_reg(cs40l2x, "GPIO_ENABLE",
 						CS40L2X_XM_UNPACKED_TYPE),
 				CS40L2X_GPIO1_DISABLED);
-		if (ret)
+		if (ret) {
 			dev_err(dev, "Failed to disable GPIO1 upon resume\n");
+			goto err_mutex;
+		}
 	}
 
+	if (cs40l2x->pdata.hiber_enable && cs40l2x->revid == CS40L2X_REVID_B1) {
+		ret = cs40l2x_hiber_cmd_send(cs40l2x,
+				CS40L2X_POWERCONTROL_WAKEUP);
+		if (ret)
+			dev_err(dev, "Failed to wake up upon resume\n");
+	}
+
+err_mutex:
 	mutex_unlock(&cs40l2x->lock);
 
 	return ret;

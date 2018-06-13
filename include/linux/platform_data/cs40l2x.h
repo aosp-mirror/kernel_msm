@@ -30,6 +30,7 @@ struct cs40l2x_platform_data {
 	unsigned int gpio1_fall_index;
 	unsigned int gpio1_fall_timeout;
 	unsigned int gpio1_mode;
+	bool hiber_enable;
 };
 
 #endif /* __CS40L2X_H */
