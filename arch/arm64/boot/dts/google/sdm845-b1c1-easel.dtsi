@@ -205,6 +205,7 @@
 	mnh_thermal: mnh_thermal {
 		compatible = "intel,mnh_thermal";
 		#thermal-sensor-cells = <1>;
+		#cooling-cells = <2>;
 	};
 
 	thermal-zones {

@@ -179,6 +179,11 @@
 				cooling-device =
 					<&CPU7 18 18>;
 			};
+			mnh_thermal {
+				trip = <&low_vbat>;
+				cooling-device =
+					<&mnh_thermal 0 0>;
+			};
 		};
 	};
 	soc {
@@ -211,6 +216,11 @@
 				cooling-device =
 					<&CPU7 18 18>;
 			};
+			mnh_thermal {
+				trip = <&low_soc>;
+				cooling-device =
+					<&mnh_thermal 0 0>;
+			};
 		};
 	};
 	ibat-high {
@@ -241,6 +251,11 @@
 				trip = <&ibat_high>;
 				cooling-device =
 					<&CPU7 18 18>;
+			};
+			mnh_thermal {
+				trip = <&ibat_high>;
+				cooling-device =
+					<&mnh_thermal 0 0>;
 			};
 		};
 	};

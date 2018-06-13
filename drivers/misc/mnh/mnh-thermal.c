@@ -367,8 +367,9 @@ static int mnh_thermal_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, mnh_dev);
 
 	/* Register cooling device */
-	mnh_dev->cooling_dev = thermal_cooling_device_register("mnh",
-				mnh_dev, &mnh_cooling_ops);
+	mnh_dev->cooling_dev = thermal_of_cooling_device_register(
+			dev_of_node(mnh_dev->dev), "mnh", mnh_dev,
+			&mnh_cooling_ops);
 
 	if (IS_ERR(mnh_dev->cooling_dev)) {
 		err = PTR_ERR(mnh_dev->cooling_dev);
