@@ -51,6 +51,8 @@ struct cs40l2x_private {
 	unsigned int cp_trigger_index;
 	unsigned int cp_trailer_index;
 	unsigned int num_waves;
+	unsigned int fw_id_match;
+	unsigned int fw_rev_min;
 	unsigned int vibegen_id;
 	unsigned int vibegen_rev;
 	unsigned int wt_limit_xm;
@@ -1681,6 +1683,12 @@ static int cs40l2x_coeff_init(struct cs40l2x_private *cs40l2x)
 			return ret;
 		}
 
+		/* discern firmware ID from system algorithm */
+		if (i == 0 && algo_id != cs40l2x->fw_id_match) {
+			dev_err(dev, "Invalid firmware ID: 0x%06X\n", algo_id);
+			return -EINVAL;
+		}
+
 		ret = regmap_read(regmap,
 				reg + CS40L2X_ALGO_REV_OFFSET, &algo_rev);
 		if (ret) {
@@ -1690,7 +1698,7 @@ static int cs40l2x_coeff_init(struct cs40l2x_private *cs40l2x)
 
 		/* discern firmware revision from system algorithm */
 		if (i == 0) {
-			if (algo_rev < CS40L2X_FW_REV_MIN) {
+			if (algo_rev < cs40l2x->fw_rev_min) {
 				dev_err(dev,
 					"Invalid firmware revision: %d.%d.%d\n",
 					(algo_rev & 0xFF0000) >> 16,
@@ -2432,11 +2440,17 @@ static int cs40l2x_dsp_load(struct cs40l2x_private *cs40l2x)
 			return ret;
 		}
 
+		cs40l2x->fw_id_match = CS40L2X_FW_ID_MATCH_A0;
+		cs40l2x->fw_rev_min = CS40L2X_FW_REV_MIN_A0;
+
 		request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
 				CS40L2X_FW_NAME_A0, dev, GFP_KERNEL, cs40l2x,
 				cs40l2x_firmware_load);
 		return 0;
 	case CS40L2X_REVID_B1:
+		cs40l2x->fw_id_match = CS40L2X_FW_ID_MATCH_B1;
+		cs40l2x->fw_rev_min = CS40L2X_FW_REV_MIN_B1;
+
 		request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
 				CS40L2X_FW_NAME_B1, dev, GFP_KERNEL, cs40l2x,
 				cs40l2x_firmware_load);
