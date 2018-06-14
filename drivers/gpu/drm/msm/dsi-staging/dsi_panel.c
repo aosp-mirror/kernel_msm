@@ -45,6 +45,9 @@
 #define MAX_PANEL_JITTER		10
 #define DEFAULT_PANEL_PREFILL_LINES	25
 
+#define LONG_READ_RESPONSE_BUFFER_SIZE		16
+#define LONG_READ_RESPONSE_HEADER_CRC_SIZE	6
+
 enum dsi_dsc_ratio_type {
 	DSC_8BPC_8BPP,
 	DSC_10BPC_8BPP,
@@ -1015,7 +1018,7 @@ int dsi_panel_get_sn(struct dsi_panel *panel)
 	struct dsi_panel_vendor_info *const vendor_info = &panel->vendor_info;
 	struct dsi_panel_sn_location *const location = &vendor_info->location;
 	ssize_t rc = 0;
-	u32 read_size, read_back_size, sn_str_size;
+	u32 read_size, read_back_size, sn_str_size, buf_size;
 	u8 *buf;
 
 	if (!panel || !panel->panel_initialized) {
@@ -1023,17 +1026,21 @@ int dsi_panel_get_sn(struct dsi_panel *panel)
 		return -EINVAL;
 	}
 
+	read_size = location->start_byte + location->sn_length;
+	/*
+	 * Note:
+	 * the buffer size needs read_size + 6 >= 16 for long read response.
+	 */
+	buf_size = max_t(u32, read_size + LONG_READ_RESPONSE_HEADER_CRC_SIZE,
+				LONG_READ_RESPONSE_BUFFER_SIZE);
+	buf = kmalloc(buf_size, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
 	mutex_lock(&panel->panel_lock);
 
 	if (!panel->vendor_info.sn) {
 		rc = -EINVAL;
-		goto out_mutex;
-	}
-
-	read_size = location->start_byte + location->sn_length;
-	buf = kmalloc(read_size, GFP_KERNEL);
-	if (!buf) {
-		rc = -ENOMEM;
 		goto out_mutex;
 	}
 
@@ -1051,10 +1058,9 @@ int dsi_panel_get_sn(struct dsi_panel *panel)
 		pr_err("failed to read: addr=0x%X, read_back_size=%d, read_size=%d\n",
 		      location->addr, read_back_size, read_size);
 	}
-
-	kfree(buf);
 out_mutex:
 	mutex_unlock(&panel->panel_lock);
+	kfree(buf);
 	return rc;
 }
 
