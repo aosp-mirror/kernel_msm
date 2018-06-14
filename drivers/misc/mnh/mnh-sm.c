@@ -2747,12 +2747,46 @@ static const struct of_device_id mnh_sm_ids[] = {
 };
 
 MODULE_DEVICE_TABLE(of, esm_dt_ids);
+
+#ifdef CONFIG_SUSPEND
+
+static int mnh_sm_pm_ops_suspend(struct device *dev)
+{
+	dev_dbg(dev, "%s: enter\n", __func__);
+	if (mnh_sm_get_state() == MNH_STATE_ACTIVE) {
+		dev_info(dev, "system about to suspend; power off now\n");
+		mnh_sm_pwr_error_cb();
+	}
+	return 0;
+}
+
+static int mnh_sm_pm_ops_resume(struct device *dev)
+{
+	dev_dbg(dev, "%s: enter\n", __func__);
+	return 0;
+}
+
+#else /* CONFIG_SUSPEND */
+
+#define mnh_sm_pm_ops_suspend NULL
+#define mnh_sm_pm_ops_resume NULL
+
+#endif /* CONFIG_SUSPEND */
+
+static const struct dev_pm_ops mnh_sm_dev_pm_ops = {
+	.suspend = mnh_sm_pm_ops_suspend,
+	.resume = mnh_sm_pm_ops_resume,
+};
+
 static struct platform_driver mnh_sm = {
 	.probe = mnh_sm_probe,
 	.driver = {
 		.name = DEVICE_NAME,
 		.of_match_table = mnh_sm_ids,
 		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
+#ifdef CONFIG_PM
+		.pm = &mnh_sm_dev_pm_ops,
+#endif /* CONFIG_PM */
 	},
 };
 
