@@ -152,9 +152,11 @@ void release_all_touches(struct fts_ts_info *info)
 			type = MT_TOOL_FINGER;
 #endif
 		input_mt_slot(info->input_dev, i);
+		input_report_abs(info->input_dev, ABS_MT_PRESSURE, 0);
 		input_mt_report_slot_state(info->input_dev, type, 0);
 		input_report_abs(info->input_dev, ABS_MT_TRACKING_ID, -1);
 	}
+	input_report_key(info->input_dev, BTN_TOUCH, 0);
 	input_sync(info->input_dev);
 	info->touch_id = 0;
 #ifdef STYLUS_MODE
@@ -2042,15 +2044,15 @@ static void fts_nop_event_handler(struct fts_ts_info *info, unsigned
 /**
   * Event handler for enter and motion events (EVT_ID_ENTER_POINT,
   * EVT_ID_MOTION_POINT )
-  * report to the linux input system touches with their coordinated and
-  * additional information
+  * report touch coordinates and additional information
+  * to the linux input system
   */
 static void fts_enter_pointer_event_handler(struct fts_ts_info *info, unsigned
 					    char *event)
 {
 	unsigned char touchId;
 	unsigned int touch_condition = 1, tool = MT_TOOL_FINGER;
-	int x, y, z, distance;
+	int x, y, z, major, minor, distance;
 	u8 touchType;
 
 	if (!info->resume_bit)
@@ -2061,8 +2063,20 @@ static void fts_enter_pointer_event_handler(struct fts_ts_info *info, unsigned
 
 	x = (((int)event[3] & 0x0F) << 8) | (event[2]);
 	y = ((int)event[4] << 4) | ((event[3] & 0xF0) >> 4);
-	/* TODO: check with fw how they will report distance and pressure */
-	z = PRESSURE_MAX;
+	z = (int)event[5];
+	if (z <= 0) {
+		/* Should not happen, because zero pressure implies contact has
+		 * left, so this function should not be invoked. For safety, to
+		 * prevent this touch from being dropped, set to smallest
+		 * pressure value instead
+		 */
+		pr_err("%s: Pressure is %i, but pointer is not leaving\n",
+		       __func__, z);
+		z = 1; /* smallest non-zero pressure value */
+	}
+	major = (int)(((event[0] & 0x0C) << 2) | ((event[6] & 0xF0) >> 4));
+	minor = (int)(((event[7] & 0xC0) >> 2) | (event[6] & 0x0F));
+	/* TODO: check with fw how they will report distance */
 	distance = 0;	/* if the tool is touching the display
 			  * the distance should be 0 */
 
@@ -2114,20 +2128,18 @@ static void fts_enter_pointer_event_handler(struct fts_ts_info *info, unsigned
 		goto no_report;
 	}
 
+	input_report_key(info->input_dev, BTN_TOUCH, touch_condition);
 	input_mt_report_slot_state(info->input_dev, tool, 1);
 
 	/* pr_info("%s : TouchID = %d,Touchcount = %d\n", __func__,
 	  *	touchId,touchcount); */
-	input_report_key(info->input_dev, BTN_TOUCH, touch_condition);
 
-	/* input_report_abs(info->input_dev, ABS_MT_TRACKING_ID, touchId); */
 	input_report_abs(info->input_dev, ABS_MT_POSITION_X, x);
 	input_report_abs(info->input_dev, ABS_MT_POSITION_Y, y);
-	input_report_abs(info->input_dev, ABS_MT_TOUCH_MAJOR, z);
-	input_report_abs(info->input_dev, ABS_MT_TOUCH_MINOR, z);
-#ifndef SKIP_PRESSURE
+	input_report_abs(info->input_dev, ABS_MT_TOUCH_MAJOR, major);
+	input_report_abs(info->input_dev, ABS_MT_TOUCH_MINOR, minor);
 	input_report_abs(info->input_dev, ABS_MT_PRESSURE, z);
-#endif
+
 #ifndef SKIP_DISTANCE
 	input_report_abs(info->input_dev, ABS_MT_DISTANCE, distance);
 #endif
@@ -2153,9 +2165,9 @@ static void fts_leave_pointer_event_handler(struct fts_ts_info *info, unsigned
 	touchType = event[1] & 0x0F;
 	touchId = (event[1] & 0xF0) >> 4;
 
-
-
 	input_mt_slot(info->input_dev, touchId);
+
+	input_report_abs(info->input_dev, ABS_MT_PRESSURE, 0);
 	switch (touchType) {
 #ifdef STYLUS_MODE
 	case TOUCH_TYPE_STYLUS:
@@ -2707,6 +2719,9 @@ static irqreturn_t fts_interrupt_handler(int irq, void *handle)
 			}
 		}
 	}
+
+	if (info->touch_id == 0)
+		input_report_key(info->input_dev, BTN_TOUCH, 0);
 
 	input_sync(info->input_dev);
 
@@ -3916,10 +3931,8 @@ static int fts_probe(struct spi_device *client)
 			     AREA_MAX, 0, 0);
 	input_set_abs_params(info->input_dev, ABS_MT_TOUCH_MINOR, AREA_MIN,
 			     AREA_MAX, 0, 0);
-#ifndef SKIP_PRESSURE
 	input_set_abs_params(info->input_dev, ABS_MT_PRESSURE, PRESSURE_MIN,
-			     PRESSURE_MAX, 0, 0);
-#endif
+		PRESSURE_MAX, 0, 0);
 #ifndef SKIP_DISTANCE
 	input_set_abs_params(info->input_dev, ABS_MT_DISTANCE, DISTANCE_MIN,
 			     DISTANCE_MAX, 0, 0);
