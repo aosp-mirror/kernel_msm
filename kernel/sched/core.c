@@ -2510,6 +2510,9 @@ int sched_fork(unsigned long clone_flags, struct task_struct *p)
 	cpu = get_cpu();
 
 	__sched_fork(clone_flags, p);
+#ifdef CONFIG_CPU_FREQ_TIMES
+	cpufreq_task_times_alloc(p);
+#endif
 	/*
 	 * We mark the process as NEW here. This guarantees that
 	 * nobody will actually run it, and a signal or other external
