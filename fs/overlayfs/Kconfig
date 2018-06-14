@@ -8,3 +8,23 @@ config OVERLAY_FS
 	  merged with the 'upper' object.
 
 	  For more information see Documentation/filesystems/overlayfs.txt
+
+config OVERLAY_FS_OVERRIDE_CREDS
+	bool "Overlay filesystem override credentials"
+	depends on OVERLAY_FS
+	default y
+	help
+	  If set, all access to the upper, lower and work directories is the
+	  recorded mounter's MAC and DAC credentials.  The incoming accesses
+	  are checked against the caller's credentials.
+
+	  If the principles of least privilege are applied, the mounter's
+	  credentials might not overlap the credentials of the caller's when
+	  accessing the overlayfs filesystem.  The mount option
+	  "override_creds=off" drops the mounter's credential check, so that
+	  all subsequent operations, after mount, on the filesystem will only
+	  be the caller's credentials.  This option sets the default for the
+	  module option override_creds, and thus the default for all mounts
+	  that do not specify this option.
+
+	  For more information see Documentation/filesystems/overlayfs.txt
