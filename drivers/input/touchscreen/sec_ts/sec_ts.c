@@ -2656,6 +2656,11 @@ static void sec_ts_resume_work(struct work_struct *work)
 
 	ts->power_status = SEC_TS_STATE_POWER_ON;
 
+	ret = sec_ts_sw_reset(ts);
+	if (ret < 0)
+		input_err(true, &ts->client->dev,
+			  "%s: software reset failed!\n", __func__);
+
 	if (ts->plat_data->enable_sync)
 		ts->plat_data->enable_sync(true);
 

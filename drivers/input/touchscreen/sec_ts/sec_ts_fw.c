@@ -97,7 +97,7 @@ static int sec_ts_enter_fw_mode(struct sec_ts_data *ts)
 	return 1;
 }
 
-static int sec_ts_sw_reset(struct sec_ts_data *ts)
+int sec_ts_sw_reset(struct sec_ts_data *ts)
 {
 	int ret;
 
