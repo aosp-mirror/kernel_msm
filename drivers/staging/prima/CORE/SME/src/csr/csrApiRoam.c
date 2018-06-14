@@ -11378,7 +11378,6 @@ eHalStatus csrRoamLostLink( tpAniSirGlobal pMac, tANI_U32 sessionId, tANI_U32 ty
     tSirSmeDisassocInd *pDisassocIndMsg = NULL;
     eCsrRoamResult result = eCSR_ROAM_RESULT_LOSTLINK;
     tCsrRoamInfo roamInfo;
-    tANI_BOOLEAN fToRoam;
     tCsrRoamSession *pSession = CSR_GET_SESSION( pMac, sessionId );
     /* To silence the KW tool Null chaeck is added */
     if(!pSession)
@@ -11386,8 +11385,6 @@ eHalStatus csrRoamLostLink( tpAniSirGlobal pMac, tANI_U32 sessionId, tANI_U32 ty
         smsLog(pMac, LOGE, FL("  session %d not found "), sessionId);
         return eHAL_STATUS_FAILURE;
     }
-    //Only need to roam for infra station. In this case P2P client will roam as well
-    fToRoam = CSR_IS_INFRASTRUCTURE(&pSession->connectedProfile);
     pSession->fCancelRoaming = eANI_BOOLEAN_FALSE;
     vos_mem_set(&roamInfo, sizeof(tCsrRoamInfo), 0);
     if ( eWNI_SME_DISASSOC_IND == type )
@@ -11436,66 +11433,7 @@ eHalStatus csrRoamLostLink( tpAniSirGlobal pMac, tANI_U32 sessionId, tANI_U32 ty
     {
         status = csrSendMBDeauthCnfMsg(pMac, pDeauthIndMsg);
     }
-    if(!HAL_STATUS_SUCCESS(status))
-    {
-        //If fail to send confirmation to PE, not to trigger roaming
-        fToRoam = eANI_BOOLEAN_FALSE;
-    }
 
-
-    /* See if we can possibly roam.  If so, start the roaming process and notify HDD
-       that we are roaming.  But if we cannot possibly roam, or if we are unable to
-       currently roam, then notify HDD of the lost link */
-    if(fToRoam)
-    {
-        //Only remove the connected BSS in infrastructure mode
-        csrRoamRemoveConnectedBssFromScanCache(pMac, &pSession->connectedProfile);
-        //Not to do anying for lostlink with WDS
-        if( pMac->roam.configParam.nRoamingTime )
-        {
-            if(HAL_STATUS_SUCCESS(status = csrRoamStartRoaming(pMac, sessionId,
-                        ( eWNI_SME_DEAUTH_IND == type ) ? 
-                        eCsrLostlinkRoamingDeauth : eCsrLostlinkRoamingDisassoc)))
-            {
-                vos_mem_set(&roamInfo, sizeof(tCsrRoamInfo), 0);
-                //For IBSS, we need to give some more info to HDD
-                if(csrIsBssTypeIBSS(pSession->connectedProfile.BSSType))
-                {
-                    roamInfo.u.pConnectedProfile = &pSession->connectedProfile;
-                    roamInfo.statusCode = (tSirResultCodes)pSession->roamingStatusCode;
-                    roamInfo.reasonCode = pSession->joinFailStatusCode.reasonCode;
-                }
-                else
-                {
-                   roamInfo.reasonCode = eCsrRoamReasonSmeIssuedForLostLink;
-                }
-                pSession->roamingReason = ( eWNI_SME_DEAUTH_IND == type ) ? 
-                        eCsrLostlinkRoamingDeauth : eCsrLostlinkRoamingDisassoc;
-                pSession->roamingStartTime = (tANI_TIMESTAMP)palGetTickCount(pMac->hHdd);
-                csrRoamCallCallback(pMac, sessionId, &roamInfo, 0, eCSR_ROAM_ROAMING_START, eCSR_ROAM_RESULT_LOSTLINK);
-            }
-            else
-            {
-                smsLog(pMac, LOGW, " %s Fail to start roaming, status = %d", __func__, status);
-                fToRoam = eANI_BOOLEAN_FALSE;
-            }
-        }
-        else
-        {
-            //We are told not to roam, indicate lostlink
-            fToRoam = eANI_BOOLEAN_FALSE;
-        }
-    }
-    if(!fToRoam)
-    {
-       /*No need to start idle scan in case of IBSS/SAP 
-         Still enable idle scan for polling in case concurrent sessions are running */
-        if(CSR_IS_INFRASTRUCTURE(&pSession->connectedProfile))
-        {
-            csrScanStartIdleScan(pMac);
-        }
-    }
-    
     return (status);
 }
 
