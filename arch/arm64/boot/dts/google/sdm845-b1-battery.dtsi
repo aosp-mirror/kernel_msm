@@ -75,7 +75,9 @@
 	    0xC2 0xFF00 /* nSAlrtTh: disabled */
 	    0x9D 0x0EB4 /* nFilterCfg: TEMP=90.0s MIX=12.8h VOLT=90.0s CURR=5.625s */
 	    0xC6 0x5A05 /* nFullSOCThr = 90% */
+	    0xD5 0x2D7D /* nRFastVShdn: rFast=87mohm VShdn=2.5V */
 	    0xB8 0xCDF0 /* nNVCfg0: enOCV enX enCfg enFCfg enLCfg enICT enCG enVE enDC */
+	    0xB9 0xB00E /* nNVCfg1: enTGO enFTh enRFVSH enAT enCRV enCTE */
 	    0xBA 0xFE0A /* nNVCfg2: enT enSOC enMMT enMMV enMMC enVT enFC CYCLESpSAVE=5.0 */
 	>;
 };
