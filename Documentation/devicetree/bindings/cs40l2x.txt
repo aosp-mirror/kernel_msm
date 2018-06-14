@@ -28,8 +28,8 @@ Optional properties:
   - cirrus,refclk-gpio2 : Boolean for configuring the device to expect its
     32.768-kHz reference clock on the REFCLK/GPIO2 pin. If this property is
     omitted, the device expects its 32.768-kHz reference clock on the
-    ASP_BCLK/REFCLK pin. This property is ignored for CS40L25A and CS40L25B
-    devices as reference clock selection is configured automatically.
+    ASP_BCLK/REFCLK pin. This property is ignored for silicon revision B1 as
+    reference clock selection is configured automatically in that case.
 
   - cirrus,f0-default : Default LRA resonant frequency (f0), expressed as
     follows: cirrus,f0-default = f0 (Hz) * 2^14. This value represents the
@@ -103,6 +103,12 @@ Optional properties:
     If this value is omitted or given an invalid value, mode 0 (enabled by
     default) is assumed. Regardless of mode, the GPIO1 pin can be enabled or
     disabled at will from user space using the gpio1_enable sysfs control.
+
+  - cirrus,hiber-enable : Boolean for instructing the device to enter and exit
+    hibernation mode upon suspend and resume, respectively. Hibernation mode is
+    supported by silicon revision B1 only. If this property is omitted, the
+    device remains in standby and automatic entry into hibernation mode is
+    effectively disabled.
 
 Example:
 
