@@ -41,7 +41,7 @@ static inline bool arm64_kernel_unmapped_at_el0(void)
 	       cpus_have_cap(ARM64_UNMAP_KERNEL_AT_EL0);
 }
 
-typedef u32 (*bp_hardening_cb_t)(void);
+typedef void (*bp_hardening_cb_t)(void);
 
 struct bp_hardening_data {
 	int			hyp_vectors_slot;

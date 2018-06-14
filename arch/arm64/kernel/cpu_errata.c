@@ -137,13 +137,18 @@ static void  install_bp_hardening_cb(const struct arm64_cpu_capabilities *entry,
 #include <linux/psci.h>
 
 #ifdef CONFIG_PSCI_BP_HARDENING
+static void psci_ops_get_version(void)
+{
+	psci_ops.get_version();
+}
+
 static int enable_psci_bp_hardening(void *data)
 {
 	const struct arm64_cpu_capabilities *entry = data;
 
 	if (psci_ops.get_version)
 		install_bp_hardening_cb(entry,
-				       psci_ops.get_version,
+				       psci_ops_get_version,
 				       __psci_hyp_bp_inval_start,
 				       __psci_hyp_bp_inval_end);
 	return 0;
