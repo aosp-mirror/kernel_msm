@@ -36,106 +36,106 @@
 
 enum max1720x_register {
 	/* ModelGauge m5 Register */
-	MAX1720X_Status = 0x00,
-	MAX1720X_VAlrtTh = 0x01,
-	MAX1720X_TAlrtTh = 0x02,
-	MAX1720X_SAlrtTh = 0x03,
-	MAX1720X_AtRate = 0x04,
-	MAX1720X_RepCap = 0x05,
-	MAX1720X_RepSOC = 0x06,
-	MAX1720X_Age = 0x07,
-	MAX1720X_Temp = 0x08,
-	MAX1720X_VCell = 0x09,
-	MAX1720X_Current = 0x0A,
-	MAX1720X_AvgCurrent = 0x0B,
-	MAX1720X_QResidual = 0x0C,
-	MAX1720X_MixSOC = 0x0D,
-	MAX1720X_AvSOC = 0x0E,
-	MAX1720X_MixCap = 0x0F,
+	MAX1720X_STATUS = 0x00,
+	MAX1720X_VALRTTH = 0x01,
+	MAX1720X_TALRTTH = 0x02,
+	MAX1720X_SALRTTH = 0x03,
+	MAX1720X_ATRATE = 0x04,
+	MAX1720X_REPCAP = 0x05,
+	MAX1720X_REPSOC = 0x06,
+	MAX1720X_AGE = 0x07,
+	MAX1720X_TEMP = 0x08,
+	MAX1720X_VCELL = 0x09,
+	MAX1720X_CURRENT = 0x0A,
+	MAX1720X_AVGCURRENT = 0x0B,
+	MAX1720X_QRESIDUAL = 0x0C,
+	MAX1720X_MIXSOC = 0x0D,
+	MAX1720X_AVSOC = 0x0E,
+	MAX1720X_MIXCAP = 0x0F,
 
-	MAX1720X_FullCAP = 0x10,
+	MAX1720X_FULLCAP = 0x10,
 	MAX1720X_TTE = 0x11,
-	MAX1720X_QRTable00 = 0x12,
-	MAX1720X_FullSocThr = 0x13,
-	MAX1720X_RCell = 0x14,
-	MAX1720X_RFast = 0x15,
-	MAX1720X_AvgTA = 0x16,
-	MAX1720X_Cycles = 0x17,
-	MAX1720X_DesignCap = 0x18,
-	MAX1720X_AvgVCell = 0x19,
-	MAX1720X_MaxMinTemp = 0x1A,
-	MAX1720X_MaxMinVolt = 0x1B,
-	MAX1720X_MaxMinCurr = 0x1C,
-	MAX1720X_Config = 0x1D,
-	MAX1720X_IChgTerm = 0x1E,
-	MAX1720X_AvCap = 0x1F,
+	MAX1720X_QRTABLE00 = 0x12,
+	MAX1720X_FULLSOCTHR = 0x13,
+	MAX1720X_RCELL = 0x14,
+	MAX1720X_RFAST = 0x15,
+	MAX1720X_AVGTA = 0x16,
+	MAX1720X_CYCLES = 0x17,
+	MAX1720X_DESIGNCAP = 0x18,
+	MAX1720X_AVGVCELL = 0x19,
+	MAX1720X_MAXMINTEMP = 0x1A,
+	MAX1720X_MAXMINVOLT = 0x1B,
+	MAX1720X_MAXMINCURR = 0x1C,
+	MAX1720X_CONFIG = 0x1D,
+	MAX1720X_ICHGTERM = 0x1E,
+	MAX1720X_AVCAP = 0x1F,
 
 	MAX1720X_TTF = 0x20,
-	MAX1720X_DevName = 0x21,
-	MAX1720X_QRTable10 = 0x22,
-	MAX1720X_FullCAPNom = 0x23,
+	MAX1720X_DEVNAME = 0x21,
+	MAX1720X_QRTABLE10 = 0x22,
+	MAX1720X_FULLCAPNOM = 0x23,
 	MAX1720X_AIN0 = 0x27,
-	MAX1720X_LearnCfg = 0x28,
-	MAX1720X_FilterCfg = 0x29,
-	MAX1720X_RelaxCfg = 0x2A,
-	MAX1720X_MiscCfg = 0x2B,
-	MAX1720X_TGain = 0x2C,
+	MAX1720X_LEARNCFG = 0x28,
+	MAX1720X_FILTERCFG = 0x29,
+	MAX1720X_RELAXCFG = 0x2A,
+	MAX1720X_MISCCFG = 0x2B,
+	MAX1720X_TGAIN = 0x2C,
 	Max1720x_TOff = 0x2D,
-	MAX1720X_CGain = 0x2E,
-	MAX1720X_COff = 0x2F,
+	MAX1720X_CGAIN = 0x2E,
+	MAX1720X_COFF = 0x2F,
 
-	MAX1720X_QRTable20 = 0x32,
-	MAX1720X_FullCapRep = 0x35,
-	MAX1720X_IAvgEmpty = 0x36,
-	MAX1720X_RComp0 = 0x38,
-	MAX1720X_TempCo = 0x39,
-	MAX1720X_VEmpty = 0x3A,
-	MAX1720X_FStat = 0x3D,
-	MAX1720X_Timer = 0x3E,
-	MAX1720X_ShdnTimer = 0x3F,
+	MAX1720X_QRTABLE20 = 0x32,
+	MAX1720X_FULLCAPREP = 0x35,
+	MAX1720X_IAVGEMPTY = 0x36,
+	MAX1720X_RCOMP0 = 0x38,
+	MAX1720X_TEMPCO = 0x39,
+	MAX1720X_VEMPTY = 0x3A,
+	MAX1720X_FSTAT = 0x3D,
+	MAX1720X_TIMER = 0x3E,
+	MAX1720X_SHDNTIMER = 0x3F,
 
-	MAX1720X_QRTable30 = 0x42,
-	MAX1720X_dQAcc = 0x45,
-	MAX1720X_dPAcc = 0x46,
-	MAX1720X_VFRemCap = 0x4A,
+	MAX1720X_QRTABLE30 = 0x42,
+	MAX1720X_DQACC = 0x45,
+	MAX1720X_DPACC = 0x46,
+	MAX1720X_VFREMCAP = 0x4A,
 	MAX1720X_QH = 0x4D,
 
-	MAX1720X_Status2 = 0xB0,
-	MAX1720X_IAlrtTh = 0xB4,
-	MAX1720X_VShdnCfg = 0xB8,
-	MAX1720X_AgeForecast = 0xB9,
-	MAX1720X_HibCfg = 0xBA,
-	MAX1720X_Config2 = 0xBB,
-	MAX1720X_VRipple = 0xBC,
-	MAX1720X_PackCfg = 0xBD,
-	MAX1720X_TimerH = 0xBE,
+	MAX1720X_STATUS2 = 0xB0,
+	MAX1720X_IALRTTH = 0xB4,
+	MAX1720X_VSHDNCFG = 0xB8,
+	MAX1720X_AGEFORECAST = 0xB9,
+	MAX1720X_HIBCFG = 0xBA,
+	MAX1720X_CONFIG2 = 0xBB,
+	MAX1720X_VRIPPLE = 0xBC,
+	MAX1720X_PACKCFG = 0xBD,
+	MAX1720X_TIMERH = 0xBE,
 
-	MAX1720X_AvgCell4 = 0xD1,
-	MAX1720X_AvgCell3 = 0xD2,
-	MAX1720X_AvgCell2 = 0xD3,
-	MAX1720X_AvgCell1 = 0xD4,
-	MAX1720X_Cell4 = 0xD5,
-	MAX1720X_Cell3 = 0xD6,
-	MAX1720X_Cell2 = 0xD7,
-	MAX1720X_Cell1 = 0xD8,
-	MAX1720X_CellX = 0xD9,
-	MAX1720X_Batt = 0xDA,
-	MAX1720X_AtQResidual = 0xDC,
-	MAX1720X_AtTTE = 0xDD,
-	MAX1720X_AtAvSOC = 0xDE,
-	MAX1720X_AtAvCap = 0xDF,
+	MAX1720X_AVGCELL4 = 0xD1,
+	MAX1720X_AVGCELL3 = 0xD2,
+	MAX1720X_AVGCELL2 = 0xD3,
+	MAX1720X_AVGCELL1 = 0xD4,
+	MAX1720X_CELL4 = 0xD5,
+	MAX1720X_CELL3 = 0xD6,
+	MAX1720X_CELL2 = 0xD7,
+	MAX1720X_CELL1 = 0xD8,
+	MAX1720X_CELLX = 0xD9,
+	MAX1720X_BATT = 0xDA,
+	MAX1720X_ATQRESIDUAL = 0xDC,
+	MAX1720X_ATTTE = 0xDD,
+	MAX1720X_ATAVSOC = 0xDE,
+	MAX1720X_ATAVCAP = 0xDF,
 
 	/* Individual Registers */
 	MAX1720X_COMMAND = 0x60,
-	MAX1720X_CommStat = 0x61,
-	MAX1720X_Lock = 0x7F,
-	MAX1720X_ODSCTh = 0xF2,
-	MAX1720X_ODSCCfg = 0xF3,
+	MAX1720X_COMMSTAT = 0x61,
+	MAX1720X_LOCK = 0x7F,
+	MAX1720X_ODSCTH = 0xF2,
+	MAX1720X_ODSCCFG = 0xF3,
 	MAX1720X_VFOCV = 0xFB,
 	MAX1720X_VFSOC = 0xFF,
 };
 
-enum MAX1720X_Status_bits {
+enum max1720x_status_bits {
 	MAX1720X_STATUS_POR = BIT(1),
 	MAX1720X_STATUS_IMN = BIT(2),
 	MAX1720X_STATUS_BST = BIT(3),
@@ -151,12 +151,12 @@ enum MAX1720X_Status_bits {
 	MAX1720X_STATUS_BR = BIT(15),
 };
 
-enum MAX1720X_CommStat_bits {
+enum max1720x_commstat_bits {
 	MAX1720X_COMMSTAT_NVBUSY = BIT(1),
 	MAX1720X_COMMSTAT_NVERROR = BIT(2),
 };
 
-enum MAX1720X_Config_bits {
+enum max1720x_config_bits {
 	MAX1720X_CONFIG_BER = BIT(0),
 	MAX1720X_CONFIG_BEI = BIT(1),
 	MAX1720X_CONFIG_AEN = BIT(2),
@@ -173,7 +173,7 @@ enum MAX1720X_Config_bits {
 	MAX1720X_CONFIG_SS = BIT(14),
 };
 
-enum MAX1720X_nNVCfg0_bits {
+enum max1720x_nnvcfg0_bits {
 	MAX1720X_NNVCFG0_ENSBS = BIT(0),
 	MAX1720X_NNVCFG0_ENHCFG = BIT(1),
 	MAX1720X_NNVCFG0_ENAF = BIT(2),
@@ -190,7 +190,7 @@ enum MAX1720X_nNVCfg0_bits {
 	MAX1720X_NNVCFG0_ENOCV = BIT(15),
 };
 
-enum MAX1720X_COMMAND_bits {
+enum max1720x_command_bits {
 	MAX1720X_COMMAND_FUEL_GAUGE_RESET = 0x0001,
 	MAX1720X_COMMAND_HARDWARE_RESET = 0x000F,
 	MAX1720X_COMMAND_QUERY_REMAINING_UPDATES = 0xE2FA,
@@ -209,20 +209,31 @@ enum MAX1720X_COMMAND_bits {
  */
 enum max1720x_nvram {
 	MAX1720X_NVRAM_START = 0x80,
-	/* NUSER18C used to save/restore capacity across boots */
-	MAX1720X_NVRAM_NUSER18C = 0x8C,
-	/* NUSER18D used to save/restore QH across boots */
-	MAX1720X_NVRAM_NUSER18D = 0x8D,
-	MAX1720X_NVRAM_LEARNCFG = 0x9F,
-	MAX1720X_NVRAM_QRTABLE00 = 0xA0,
-	MAX1720X_NVRAM_CONFIG = 0xB0,
-	MAX1720X_NVRAM_PACKCFG = 0xB5,
-	MAX1720X_NVRAM_CONVGCFG = 0xB7,
-	MAX1720X_NVRAM_NVCFG0 = 0xB8,
-	MAX1720X_NVRAM_SBSCFG = 0xBB,
-	MAX1720X_NVRAM_CGAIN = 0xC8,
-	MAX1720X_NVRAM_RSENSE = 0xCF,
-	MAX1720X_NVRAM_DEVICENAME4 = 0xDF,
+	MAX1720X_NUSER18C = 0x8C,
+	MAX1720X_NUSER18D = 0x8D,
+	MAX1720X_NLEARNCFG = 0x9F,
+	MAX1720X_NCONVGCFG = 0xB7,
+	MAX1720X_NNVCFG0 = 0xB8,
+	MAX1720X_NUSER1C4 = 0xC4,
+	MAX1720X_NUSER1C5 = 0xC5,
+	MAX1720X_NCGAIN = 0xC8,
+	MAX1720X_NMANFCTRNAME0 = 0xCC,
+	MAX1720X_NMANFCTRNAME1 = 0xCD,
+	MAX1720X_NMANFCTRNAME2 = 0xCE,
+	MAX1720X_NRSENSE = 0xCF,
+	MAX1720X_NUSER1D0 = 0xD0,
+	MAX1720X_NUSER1D1 = 0xD1,
+	MAX1720X_NUSER1D4 = 0xD4,
+	MAX1720X_NMANFCTRDATE = 0xD6,
+	MAX1720X_NFIRSTUSED = 0xD7,
+	MAX1720X_NSERIALNUMBER0 = 0xD8,
+	MAX1720X_NSERIALNUMBER1 = 0xD9,
+	MAX1720X_NSERIALNUMBER2 = 0xDA,
+	MAX1720X_NDEVICENAME0 = 0xDB,
+	MAX1720X_NDEVICENAME1 = 0xDC,
+	MAX1720X_NDEVICENAME2 = 0xDD,
+	MAX1720X_NDEVICENAME3 = 0xDE,
+	MAX1720X_NDEVICENAME4 = 0xDF,
 	MAX1720X_NVRAM_END = 0xE0,
 	MAX1720X_NVRAM_HISTORY_WRITE_STATUS_START = 0xE1,
 	MAX1720X_NVRAM_HISTORY_WRITE_STATUS_END = 0xEA,
@@ -296,15 +307,15 @@ struct max1720x_chip {
 bool max1720x_is_reg(struct device *dev, unsigned int reg)
 {
 	switch (reg) {
-	case 0x00 ... 0x4F:
-	case 0xB0 ... 0xDF:
 	case MAX1720X_COMMAND:
-	case MAX1720X_CommStat:
-	case MAX1720X_Lock:
-	case MAX1720X_ODSCTh:
-	case MAX1720X_ODSCCfg:
+	case MAX1720X_COMMSTAT:
+	case MAX1720X_LOCK:
+	case MAX1720X_ODSCTH:
+	case MAX1720X_ODSCCFG:
 	case MAX1720X_VFOCV:
 	case MAX1720X_VFSOC:
+	case 0x00 ... 0x4F:
+	case 0xB0 ... 0xDF:
 		return true;
 	}
 	return false;
@@ -650,7 +661,7 @@ static int max1720x_get_battery_soc(struct max1720x_chip *chip)
 		dev_info(chip->dev, "minimal voltage has been breached");
 		return 0;
 	}
-	REGMAP_READ(chip->regmap, MAX1720X_RepSOC, data);
+	REGMAP_READ(chip->regmap, MAX1720X_REPSOC, data);
 	return reg_to_percentage(data);
 }
 
@@ -658,16 +669,16 @@ static void max1720x_prime_battery_qh_capacity(struct max1720x_chip *chip)
 {
 	u16 data;
 
-	REGMAP_READ(chip->regmap, MAX1720X_MixCap, data);
+	REGMAP_READ(chip->regmap, MAX1720X_MIXCAP, data);
 	chip->current_capacity = data;
 
-	REGMAP_WRITE(chip->regmap_nvram, MAX1720X_NVRAM_NUSER18C, ~data);
+	REGMAP_WRITE(chip->regmap_nvram, MAX1720X_NUSER18C, ~data);
 	pr_debug("Capacity primed. Storing value %d into NVRAM\n", data);
 
 	REGMAP_READ(chip->regmap, MAX1720X_QH, data);
 	chip->previous_qh = reg_to_twos_comp_int(data);
 
-	REGMAP_WRITE(chip->regmap_nvram, MAX1720X_NVRAM_NUSER18D, data);
+	REGMAP_WRITE(chip->regmap_nvram, MAX1720X_NUSER18D, data);
 	pr_debug("QH primed. Storing value %d into NVRAM\n", data);
 }
 
@@ -677,13 +688,13 @@ static int max1720x_get_battery_status(struct max1720x_chip *chip)
 	int current_now, ichgterm, fullsocthr;
 	int status = POWER_SUPPLY_STATUS_UNKNOWN;
 
-	REGMAP_READ(chip->regmap, MAX1720X_Current, data);
+	REGMAP_READ(chip->regmap, MAX1720X_CURRENT, data);
 	current_now = -reg_to_micro_amp(data, chip->RSense);
 
-	REGMAP_READ(chip->regmap, MAX1720X_IChgTerm, data);
+	REGMAP_READ(chip->regmap, MAX1720X_ICHGTERM, data);
 	ichgterm = reg_to_micro_amp(data, chip->RSense);
 
-	REGMAP_READ(chip->regmap, MAX1720X_FullSocThr, data);
+	REGMAP_READ(chip->regmap, MAX1720X_FULLSOCTHR, data);
 	fullsocthr = reg_to_percentage(data);
 
 	if (current_now < -ichgterm) {
@@ -769,10 +780,10 @@ static void max1720x_restore_battery_qh_capacity(struct max1720x_chip *chip)
 	u16 data, nvram_capacity;
 	int current_qh, nvram_qh;
 
-	REGMAP_READ(chip->regmap_nvram, MAX1720X_NVRAM_NUSER18C, data);
+	REGMAP_READ(chip->regmap_nvram, MAX1720X_NUSER18C, data);
 	nvram_capacity = ~data;
 
-	REGMAP_READ(chip->regmap_nvram, MAX1720X_NVRAM_NUSER18D, data);
+	REGMAP_READ(chip->regmap_nvram, MAX1720X_NUSER18D, data);
 	nvram_qh = reg_to_twos_comp_int(data);
 
 	REGMAP_READ(chip->regmap, MAX1720X_QH, data);
@@ -817,40 +828,40 @@ static int max1720x_get_property(struct power_supply *psy,
 		val->intval = reg_to_micro_amp_h(data, chip->RSense);
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL:
-		REGMAP_READ(map, MAX1720X_FullCapRep, data);
+		REGMAP_READ(map, MAX1720X_FULLCAPREP, data);
 		val->intval = reg_to_micro_amp_h(data, chip->RSense);
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
-		REGMAP_READ(map, MAX1720X_DesignCap, data);
+		REGMAP_READ(map, MAX1720X_DESIGNCAP, data);
 		val->intval = reg_to_micro_amp_h(data, chip->RSense);
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_AVG:
-		REGMAP_READ(map, MAX1720X_AvgCurrent, data);
+		REGMAP_READ(map, MAX1720X_AVGCURRENT, data);
 		/* current is positive value when flowing to device */
 		val->intval = -reg_to_micro_amp(data, chip->RSense);
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
-		REGMAP_READ(map, MAX1720X_Current, data);
+		REGMAP_READ(map, MAX1720X_CURRENT, data);
 		/* current is positive value when flowing to device */
 		val->intval = -reg_to_micro_amp(data, chip->RSense);
 		break;
 	case POWER_SUPPLY_PROP_CYCLE_COUNT:
-		REGMAP_READ(map, MAX1720X_Cycles, data);
+		REGMAP_READ(map, MAX1720X_CYCLES, data);
 		val->intval = reg_to_cycles(data);
 		break;
 	case POWER_SUPPLY_PROP_PRESENT:
-		REGMAP_READ(map, MAX1720X_Status, data);
+		REGMAP_READ(map, MAX1720X_STATUS, data);
 		val->intval = (((u16) data) & MAX1720X_STATUS_BST) ? 0 : 1;
 		break;
 	case POWER_SUPPLY_PROP_RESISTANCE:
-		REGMAP_READ(map, MAX1720X_RCell, data);
+		REGMAP_READ(map, MAX1720X_RCELL, data);
 		val->intval = reg_to_resistance_micro_ohms(data, chip->RSense);
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
 		if (chip->fake_temperature != -EINVAL)
 			val->intval = chip->fake_temperature;
 		else {
-			REGMAP_READ(map, MAX1720X_Temp, data);
+			REGMAP_READ(map, MAX1720X_TEMP, data);
 			val->intval = reg_to_deci_deg_cel(data);
 		}
 		break;
@@ -863,21 +874,21 @@ static int max1720x_get_property(struct power_supply *psy,
 		val->intval = reg_to_seconds(data);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_AVG:
-		REGMAP_READ(map, MAX1720X_AvgVCell, data);
+		REGMAP_READ(map, MAX1720X_AVGVCELL, data);
 		val->intval = reg_to_micro_volt(data);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN:
-		REGMAP_READ(map, MAX1720X_MaxMinVolt, data);
+		REGMAP_READ(map, MAX1720X_MAXMINVOLT, data);
 		/* LSB: 20mV */
 		val->intval = ((data >> 8) & 0xFF) * 20000;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN:
-		REGMAP_READ(map, MAX1720X_MaxMinVolt, data);
+		REGMAP_READ(map, MAX1720X_MAXMINVOLT, data);
 		/* LSB: 20mV */
 		val->intval = (data & 0xFF) * 20000;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-		REGMAP_READ(map, MAX1720X_VCell, data);
+		REGMAP_READ(map, MAX1720X_VCELL, data);
 		val->intval = reg_to_micro_volt(data);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_OCV:
@@ -942,7 +953,7 @@ static int max1720x_property_is_writeable(struct power_supply *psy,
  */
 static void max1720x_fg_reset(struct max1720x_chip *chip)
 {
-	REGMAP_WRITE(chip->regmap, MAX1720X_Config2,
+	REGMAP_WRITE(chip->regmap, MAX1720X_CONFIG2,
 		     MAX1720X_COMMAND_FUEL_GAUGE_RESET);
 	msleep(MAX1720X_TPOR_MS);
 }
@@ -963,7 +974,7 @@ static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 		return -EAGAIN;
 	}
 	pm_runtime_put_sync(chip->dev);
-	REGMAP_READ(chip->regmap, MAX1720X_Status, fg_status);
+	REGMAP_READ(chip->regmap, MAX1720X_STATUS, fg_status);
 	if (fg_status == -1)
 		return IRQ_NONE;
 
@@ -1022,7 +1033,7 @@ static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 	if (fg_status & MAX1720X_STATUS_BR)
 		pr_debug("BR is set\n");
 
-	REGMAP_WRITE(chip->regmap, MAX1720X_Status, fg_status);
+	REGMAP_WRITE(chip->regmap, MAX1720X_STATUS, fg_status);
 	if (chip->psy)
 		power_supply_changed(chip->psy);
 
@@ -1184,11 +1195,11 @@ static int max1720x_handle_dt_shadow_config(struct max1720x_chip *chip)
 				     nRAM_updated, glob_cnt);
 
 	/* Ensure nCGain is not 0 if nNVCfg0.enCG is set */
-	if ((nRAM_updated[NVRAM_U16_INDEX(MAX1720X_NVRAM_NVCFG0)] &
+	if ((nRAM_updated[NVRAM_U16_INDEX(MAX1720X_NNVCFG0)] &
 	     MAX1720X_NNVCFG0_ENCG) &&
-	    ((nRAM_updated[NVRAM_U16_INDEX(MAX1720X_NVRAM_CGAIN)] == 0) ||
-	     (nRAM_updated[NVRAM_U16_INDEX(MAX1720X_NVRAM_CGAIN)] == 0x0400)))
-		nRAM_updated[NVRAM_U16_INDEX(MAX1720X_NVRAM_CGAIN)] = 0x4000;
+	    ((nRAM_updated[NVRAM_U16_INDEX(MAX1720X_NCGAIN)] == 0) ||
+	     (nRAM_updated[NVRAM_U16_INDEX(MAX1720X_NCGAIN)] == 0x0400)))
+		nRAM_updated[NVRAM_U16_INDEX(MAX1720X_NCGAIN)] = 0x4000;
 
 	if (memcmp(nRAM_updated, nRAM_current, MAX1720X_NVRAM_SIZE)) {
 		ret = regmap_raw_write(chip->regmap_nvram, MAX1720X_NVRAM_START,
@@ -1199,8 +1210,8 @@ static int max1720x_handle_dt_shadow_config(struct max1720x_chip *chip)
 			goto error_out;
 		}
 		/* nConvgCfg change take effect without resetting the gauge */
-		nRAM_current[NVRAM_U16_INDEX(MAX1720X_NVRAM_CONVGCFG)] =
-		    nRAM_updated[NVRAM_U16_INDEX(MAX1720X_NVRAM_CONVGCFG)];
+		nRAM_current[NVRAM_U16_INDEX(MAX1720X_NCONVGCFG)] =
+		    nRAM_updated[NVRAM_U16_INDEX(MAX1720X_NCONVGCFG)];
 		if (memcmp(nRAM_updated, nRAM_current, MAX1720X_NVRAM_SIZE)) {
 			dev_info(chip->dev,
 				 "DT config differs from shadow, resetting\n");
@@ -1295,31 +1306,31 @@ static void max1720x_complete_init(struct max1720x_chip *chip)
 	chip->init_complete = true;
 	chip->resume_complete = true;
 
-	REGMAP_READ(chip->regmap, MAX1720X_Status, data);
+	REGMAP_READ(chip->regmap, MAX1720X_STATUS, data);
 	if (data & MAX1720X_STATUS_BR) {
 		dev_info(chip->dev, "Clearing Battery Removal bit\n");
-		regmap_update_bits(chip->regmap, MAX1720X_Status,
+		regmap_update_bits(chip->regmap, MAX1720X_STATUS,
 				   MAX1720X_STATUS_BR, 0x0);
 	}
 	if (data & MAX1720X_STATUS_BI) {
 		dev_info(chip->dev, "Clearing Battery Insertion bit\n");
-		regmap_update_bits(chip->regmap, MAX1720X_Status,
+		regmap_update_bits(chip->regmap, MAX1720X_STATUS,
 				   MAX1720X_STATUS_BI, 0x0);
 	}
 	if (data & MAX1720X_STATUS_POR) {
 		dev_info(chip->dev, "Clearing Power-On Reset bit\n");
-		regmap_update_bits(chip->regmap, MAX1720X_Status,
+		regmap_update_bits(chip->regmap, MAX1720X_STATUS,
 				   MAX1720X_STATUS_POR, 0x0);
 	}
 
-	REGMAP_READ(chip->regmap_nvram, MAX1720X_NVRAM_RSENSE, chip->RSense);
+	REGMAP_READ(chip->regmap_nvram, MAX1720X_NRSENSE, chip->RSense);
 	dev_info(chip->dev, "RSense value %d micro Ohm\n", chip->RSense * 10);
-	REGMAP_READ(chip->regmap, MAX1720X_Config, chip->RConfig);
+	REGMAP_READ(chip->regmap, MAX1720X_CONFIG, chip->RConfig);
 	dev_info(chip->dev, "Config: 0x%04x\n", chip->RConfig);
-	REGMAP_READ(chip->regmap, MAX1720X_IChgTerm, data);
+	REGMAP_READ(chip->regmap, MAX1720X_ICHGTERM, data);
 	dev_info(chip->dev, "IChgTerm: %d\n",
 		 reg_to_micro_amp(data, chip->RSense));
-	REGMAP_READ(chip->regmap, MAX1720X_VEmpty, data);
+	REGMAP_READ(chip->regmap, MAX1720X_VEMPTY, data);
 	dev_info(chip->dev, "VEmpty: VE=%dmV VR=%dmV\n",
 		 ((data >> 7) & 0x1ff) * 10, (data & 0x7f) * 40);
 
@@ -1327,7 +1338,7 @@ static void max1720x_complete_init(struct max1720x_chip *chip)
 	 * Capacity data is stored as complement so it will not be zero. Using
 	 * zero case to detect new un-primed pack
 	 */
-	REGMAP_READ(chip->regmap_nvram, MAX1720X_NVRAM_NUSER18C, data);
+	REGMAP_READ(chip->regmap_nvram, MAX1720X_NUSER18C, data);
 	if (data == 0)
 		max1720x_prime_battery_qh_capacity(chip);
 	else
