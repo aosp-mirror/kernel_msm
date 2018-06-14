@@ -15125,7 +15125,8 @@ v_BOOL_t hdd_isConnectionInProgress(hdd_context_t *pHddCtx, v_U8_t *session_id,
             {
                 pHddStaCtx = WLAN_HDD_GET_STATION_CTX_PTR(pAdapter);
                 if ((eConnectionState_Associated == pHddStaCtx->conn_info.connState) &&
-                    (VOS_FALSE == pHddStaCtx->conn_info.uIsAuthenticated))
+                    sme_is_sta_key_exchange_in_progress(pHddCtx->hHal,
+                    pAdapter->sessionId))
                 {
                     staMac = (v_U8_t *) &(pAdapter->macAddressCurrent.bytes[0]);
                     hddLog(LOG1,

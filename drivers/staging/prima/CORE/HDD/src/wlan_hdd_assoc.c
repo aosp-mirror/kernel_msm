@@ -6130,7 +6130,8 @@ hdd_adapter_t *hdd_get_sta_connection_in_progress(hdd_context_t *hdd_ctx)
                     return adapter;
             } else if ((eConnectionState_Associated ==
                 hdd_sta_ctx->conn_info.connState) &&
-                !hdd_sta_ctx->conn_info.uIsAuthenticated) {
+                sme_is_sta_key_exchange_in_progress(
+                hdd_ctx->hHal, adapter->sessionId)) {
                     hddLog(LOG1, FL("session_id %d: Key exchange is in progress"),
                            adapter->sessionId);
                     return adapter;

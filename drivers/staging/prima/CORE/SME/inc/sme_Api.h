@@ -4076,4 +4076,16 @@ sme_get_cb_phy_mode_from_cb_ini_mode(uint32_t cb_ini_value)
  */
 void sme_request_imps(tHalHandle hal);
 
+
+/**
+ * sme_is_sta_key_exchange_in_progress() - checks whether the STA/P2P client
+ * session has key exchange in progress
+ *
+ * @hal: global hal handle
+ * @session_id: session id
+ *
+ * Return: true - if key exchange in progress
+ *         false - if not in progress
+ */
+bool sme_is_sta_key_exchange_in_progress(tHalHandle hal, uint8_t session_id);
 #endif //#if !defined( __SME_API_H )
