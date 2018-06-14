@@ -1877,4 +1877,15 @@ VOS_STATUS wlan_hdd_send_sta_authorized_event(hdd_adapter_t *adapter,
                                               hdd_context_t *hdd_ctx,
                                               const v_MACADDR_t *mac_addr);
 
+/**
+ * wlan_hdd_disconnect() - hdd disconnect api
+ * @pAdapter: Pointer to adapter
+ * @reason: Disconnect reason code
+ *
+ * This function is used to issue a disconnect request to SME
+ *
+ * Return: 0 for success, non-zero for failure
+ */
+int wlan_hdd_disconnect(hdd_adapter_t *pAdapter, u16 reason);
+
 #endif
