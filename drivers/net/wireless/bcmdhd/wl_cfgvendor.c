@@ -47,6 +47,7 @@
 #include <asm/uaccess.h>
 #include <dngl_stats.h>
 #include <dhd.h>
+#include <dhd_debug.h>
 #include <dhdioctl.h>
 #include <wlioctl.h>
 #include <wlioctl_utils.h>
@@ -1056,6 +1057,137 @@ exit:
 
 #endif /* RTT_SUPPORT */
 
+#if defined(KEEP_ALIVE)
+static int wl_cfgvendor_start_mkeep_alive(struct wiphy *wiphy, struct wireless_dev *wdev,
+	const void *data, int len)
+{
+	/* max size of IP packet for keep alive */
+	const int MKEEP_ALIVE_IP_PKT_MAX = 256;
+
+	int ret = BCME_OK, rem, type;
+	u8 mkeep_alive_id = 0;
+	u8 *ip_pkt = NULL;
+	u16 ip_pkt_len = 0;
+	u8 src_mac[ETHER_ADDR_LEN];
+	u8 dst_mac[ETHER_ADDR_LEN];
+	u32 period_msec = 0;
+	const struct nlattr *iter;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	dhd_pub_t *dhd_pub = cfg->pub;
+	gfp_t kflags = in_atomic() ? GFP_ATOMIC : GFP_KERNEL;
+
+	nla_for_each_attr(iter, data, len, rem) {
+		type = nla_type(iter);
+		switch (type) {
+			case MKEEP_ALIVE_ATTRIBUTE_ID:
+				mkeep_alive_id = nla_get_u8(iter);
+				break;
+			case MKEEP_ALIVE_ATTRIBUTE_IP_PKT_LEN:
+				ip_pkt_len = nla_get_u16(iter);
+				if (ip_pkt_len > MKEEP_ALIVE_IP_PKT_MAX) {
+					ret = BCME_BADARG;
+					goto exit;
+				}
+				break;
+			case MKEEP_ALIVE_ATTRIBUTE_IP_PKT:
+				ip_pkt = (u8 *)kzalloc(ip_pkt_len, kflags);
+				if (ip_pkt == NULL) {
+					ret = BCME_NOMEM;
+					WL_ERR(("Failed to allocate mem for ip packet\n"));
+					goto exit;
+				}
+				memcpy(ip_pkt, (u8*)nla_data(iter), ip_pkt_len);
+				break;
+			case MKEEP_ALIVE_ATTRIBUTE_SRC_MAC_ADDR:
+				memcpy(src_mac, nla_data(iter), ETHER_ADDR_LEN);
+				break;
+			case MKEEP_ALIVE_ATTRIBUTE_DST_MAC_ADDR:
+				memcpy(dst_mac, nla_data(iter), ETHER_ADDR_LEN);
+				break;
+			case MKEEP_ALIVE_ATTRIBUTE_PERIOD_MSEC:
+				period_msec = nla_get_u32(iter);
+				break;
+			default:
+				WL_ERR(("Unknown type: %d\n", type));
+				ret = BCME_BADARG;
+				goto exit;
+		}
+	}
+
+	ret = dhd_dev_start_mkeep_alive(dhd_pub, mkeep_alive_id, ip_pkt, ip_pkt_len, src_mac,
+		dst_mac, period_msec);
+	if (ret < 0) {
+		WL_ERR(("start_mkeep_alive is failed ret: %d\n", ret));
+	}
+
+exit:
+	if (ip_pkt) {
+		kfree(ip_pkt);
+	}
+
+	return ret;
+}
+
+static int wl_cfgvendor_stop_mkeep_alive(struct wiphy *wiphy, struct wireless_dev *wdev,
+	const void *data, int len)
+{
+	int ret = BCME_OK, rem, type;
+	u8 mkeep_alive_id = 0;
+	const struct nlattr *iter;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	dhd_pub_t *dhd_pub = cfg->pub;
+
+	nla_for_each_attr(iter, data, len, rem) {
+		type = nla_type(iter);
+		switch (type) {
+			case MKEEP_ALIVE_ATTRIBUTE_ID:
+				mkeep_alive_id = nla_get_u8(iter);
+				break;
+			default:
+				WL_ERR(("Unknown type: %d\n", type));
+				ret = BCME_BADARG;
+				break;
+		}
+	}
+
+	ret = dhd_dev_stop_mkeep_alive(dhd_pub, mkeep_alive_id);
+	if (ret < 0) {
+		WL_ERR(("stop_mkeep_alive is failed ret: %d\n", ret));
+	}
+
+	return ret;
+}
+#endif /* defined(KEEP_ALIVE) */
+
+static int wl_cfgvendor_set_rssi_monitor(struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void  *data, int len)
+{
+	int err = 0, tmp, type, start = 0;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	int8 max_rssi = 0, min_rssi = 0;
+	const struct nlattr *iter;
+	nla_for_each_attr(iter, data, len, tmp) {
+		type = nla_type(iter);
+		switch (type) {
+			case RSSI_MONITOR_ATTRIBUTE_MAX_RSSI:
+				max_rssi = (int8) nla_get_u32(iter);
+				break;
+			case RSSI_MONITOR_ATTRIBUTE_MIN_RSSI:
+				min_rssi = (int8) nla_get_u32(iter);
+				break;
+			case RSSI_MONITOR_ATTRIBUTE_START:
+				start = nla_get_u32(iter);
+		}
+	}
+
+	if (dhd_dev_set_rssi_monitor_cfg(bcmcfg_to_prmry_ndev(cfg),
+	       start, max_rssi, min_rssi) < 0) {
+		WL_ERR(("Could not set rssi monitor cfg\n"));
+		err = -EINVAL;
+	}
+	return err;
+}
+
 #ifdef LINKSTAT_SUPPORT
 #define NUM_RATE 32
 #define NUM_PEER 1
@@ -1200,6 +1332,356 @@ static int wl_cfgvendor_lstats_get_info(struct wiphy *wiphy,
 }
 #endif /* LINKSTAT_SUPPORT */
 
+static int wl_cfgvendor_dbg_start_logging(struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void  *data, int len)
+{
+	int ret = BCME_OK, rem, type;
+	char ring_name[DBGRING_NAME_MAX] = {0};
+	int log_level = 0, flags = 0, time_intval = 0, threshold = 0;
+	const struct nlattr *iter;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	dhd_pub_t *dhd_pub = cfg->pub;
+	nla_for_each_attr(iter, data, len, rem) {
+		type = nla_type(iter);
+		switch (type) {
+			case DEBUG_ATTRIBUTE_RING_NAME:
+				strncpy(ring_name, nla_data(iter),
+					MIN(sizeof(ring_name) -1, nla_len(iter)));
+				break;
+			case DEBUG_ATTRIBUTE_LOG_LEVEL:
+				log_level = nla_get_u32(iter);
+				break;
+			case DEBUG_ATTRIBUTE_RING_FLAGS:
+				flags = nla_get_u32(iter);
+				break;
+			case DEBUG_ATTRIBUTE_LOG_TIME_INTVAL:
+				time_intval = nla_get_u32(iter);
+				break;
+			case DEBUG_ATTRIBUTE_LOG_MIN_DATA_SIZE:
+				threshold = nla_get_u32(iter);
+				break;
+			default:
+				WL_ERR(("Unknown type: %d\n", type));
+				ret = BCME_BADADDR;
+				goto exit;
+		}
+	}
+
+	ret = dhd_os_start_logging(dhd_pub, ring_name, log_level, flags, time_intval, threshold);
+	if (ret < 0) {
+		WL_ERR(("start_logging is failed ret: %d\n", ret));
+	}
+exit:
+	return ret;
+}
+
+
+static int wl_cfgvendor_dbg_reset_logging(struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void  *data, int len)
+{
+	int ret = BCME_OK;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	dhd_pub_t *dhd_pub = cfg->pub;
+
+	ret = dhd_os_reset_logging(dhd_pub);
+	if (ret < 0) {
+		WL_ERR(("reset logging is failed ret: %d\n", ret));
+	}
+
+	return ret;
+}
+
+static int wl_cfgvendor_dbg_get_ring_status(struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void  *data, int len)
+{
+	int ret = BCME_OK;
+	int ring_id, i;
+	int ring_cnt;
+	struct sk_buff *skb;
+	dhd_dbg_ring_status_t dbg_ring_status[DEBUG_RING_ID_MAX];
+	dhd_dbg_ring_status_t ring_status;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	dhd_pub_t *dhd_pub = cfg->pub;
+	memset(dbg_ring_status, 0, DBG_RING_STATUS_SIZE * DEBUG_RING_ID_MAX);
+	ring_cnt = 0;
+	for (ring_id = DEBUG_RING_ID_INVALID + 1; ring_id < DEBUG_RING_ID_MAX; ring_id++) {
+		ret = dhd_os_get_ring_status(dhd_pub, ring_id, &ring_status);
+		if (ret == BCME_NOTFOUND) {
+			WL_DBG(("The ring (%d) is not found \n", ring_id));
+		} else if (ret == BCME_OK) {
+			dbg_ring_status[ring_cnt++] = ring_status;
+		}
+	}
+	/* Alloc the SKB for vendor_event */
+	skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy,
+		(DBG_RING_STATUS_SIZE * ring_cnt) + 100);
+	if (!skb) {
+		WL_ERR(("skb allocation is failed\n"));
+		ret = BCME_NOMEM;
+		goto exit;
+	}
+
+	nla_put_u32(skb, DEBUG_ATTRIBUTE_RING_NUM, ring_cnt);
+	for (i = 0; i < ring_cnt; i++) {
+		nla_put(skb, DEBUG_ATTRIBUTE_RING_STATUS, DBG_RING_STATUS_SIZE,
+				&dbg_ring_status[i]);
+	}
+	ret = cfg80211_vendor_cmd_reply(skb);
+
+	if (ret) {
+		WL_ERR(("Vendor Command reply failed ret:%d \n", ret));
+	}
+exit:
+	return ret;
+}
+
+static int wl_cfgvendor_dbg_get_ring_data(struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void  *data, int len)
+{
+	int ret = BCME_OK, rem, type;
+	char ring_name[DBGRING_NAME_MAX] = {0};
+	const struct nlattr *iter;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	dhd_pub_t *dhd_pub = cfg->pub;
+
+	nla_for_each_attr(iter, data, len, rem) {
+		type = nla_type(iter);
+		switch (type) {
+			case DEBUG_ATTRIBUTE_RING_NAME:
+				strncpy(ring_name, nla_data(iter),
+					MIN(sizeof(ring_name) -1, nla_len(iter)));
+				break;
+			default:
+				WL_ERR(("Unknown type: %d\n", type));
+				return ret;
+		}
+	}
+
+	ret = dhd_os_trigger_get_ring_data(dhd_pub, ring_name);
+	if (ret < 0) {
+		WL_ERR(("trigger_get_data failed ret:%d\n", ret));
+	}
+
+	return ret;
+}
+
+static int wl_cfgvendor_dbg_get_feature(struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void  *data, int len)
+{
+	int ret = BCME_OK;
+	u32 supported_features;
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	dhd_pub_t *dhd_pub = cfg->pub;
+
+	ret = dhd_os_dbg_get_feature(dhd_pub, &supported_features);
+	if (ret < 0) {
+		WL_ERR(("dbg_get_feature failed ret:%d\n", ret));
+		goto exit;
+	}
+	ret = wl_cfgvendor_send_cmd_reply(wiphy, bcmcfg_to_prmry_ndev(cfg),
+	        &supported_features, sizeof(supported_features));
+exit:
+	return ret;
+}
+
+
+static int wl_cfgvendor_dbg_start_pkt_fate_monitoring(struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void  *data, int len)
+{
+    int ret;
+    struct sk_buff *skb;
+
+    /* Add codes to start packet fate monitor */
+
+    skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, VENDOR_REPLY_OVERHEAD);
+    if (unlikely(!skb)) {
+        WL_ERR(("skb alloc failed"));
+        return -ENOMEM;
+    }
+
+    ret =  cfg80211_vendor_cmd_reply(skb);
+
+    if (unlikely(ret)) {
+        WL_ERR(("Vendor Command reply failed ret:%d \n", ret));
+    }
+
+    return ret;
+}
+
+static int wl_cfgvendor_dbg_get_tx_pkt_fates(struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void  *data, int len)
+{
+    int ret;
+	const struct nlattr *iter;
+    int type;
+    int remain;
+    uint32 req_fates_num;
+	void __user *report_buf = NULL;
+    struct sk_buff *skb;
+    uint32 reply_len = 0;
+    uint32 provided_fates_num = 0;
+
+	nla_for_each_attr(iter, data, len, remain) {
+		type = nla_type(iter);
+		switch (type) {
+			case DEBUG_ATTRIBUTE_PKT_FATE_NUM:
+                req_fates_num = nla_get_u32(iter);
+				WL_DBG(("%s, req_fates_num = %d\n", __func__, req_fates_num));
+				break;
+            case DEBUG_ATTRIBUTE_PKT_FATE_DATA:
+                report_buf = (void __user *)(unsigned long)nla_get_u64(iter);
+                break;
+			default:
+				WL_ERR(("Unknown type: %d\n", type));
+				return BCME_ERROR;
+		}
+	}
+
+    reply_len = VENDOR_REPLY_OVERHEAD + ATTRIBUTE_U32_LEN;
+
+    skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, reply_len);
+    if (unlikely(!skb)) {
+        WL_ERR(("skb alloc failed"));
+        return -ENOMEM;
+    }
+
+    /* Add codes to get TX packet fates */
+
+    nla_put_u32(skb, DEBUG_ATTRIBUTE_PKT_FATE_NUM, provided_fates_num);
+
+    ret =  cfg80211_vendor_cmd_reply(skb);
+
+    if (unlikely(ret)) {
+        WL_ERR(("Vendor Command reply failed ret:%d \n", ret));
+    }
+
+    return ret;
+}
+
+static int wl_cfgvendor_dbg_get_rx_pkt_fates(struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void  *data, int len)
+{
+    int ret;
+    const struct nlattr *iter;
+    int type;
+    int remain;
+    uint32 req_fates_num;
+    void __user *report_buf = NULL;
+    struct sk_buff *skb;
+    uint32 reply_len = 0;
+    uint32 provided_fates_num = 0;
+
+    nla_for_each_attr(iter, data, len, remain) {
+        type = nla_type(iter);
+        switch (type) {
+            case DEBUG_ATTRIBUTE_PKT_FATE_NUM:
+                req_fates_num = nla_get_u32(iter);
+                WL_DBG(("%s, req_fates_num = %d\n", __func__, req_fates_num));
+                break;
+            case DEBUG_ATTRIBUTE_PKT_FATE_DATA:
+                report_buf = (void __user *)(unsigned long)nla_get_u64(iter);
+                break;
+            default:
+                WL_ERR(("Unknown type: %d\n", type));
+                return BCME_ERROR;
+        }
+    }
+
+    reply_len = VENDOR_REPLY_OVERHEAD + ATTRIBUTE_U32_LEN;
+
+    skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, reply_len);
+    if (unlikely(!skb)) {
+        WL_ERR(("skb alloc failed"));
+        return -ENOMEM;
+    }
+
+    /* Add codes to get RX packet fates */
+
+    nla_put_u32(skb, DEBUG_ATTRIBUTE_PKT_FATE_NUM, provided_fates_num);
+
+    ret =  cfg80211_vendor_cmd_reply(skb);
+
+    if (unlikely(ret)) {
+        WL_ERR(("Vendor Command reply failed ret:%d \n", ret));
+    }
+
+    return ret;
+}
+
+static int wl_cfgvendor_apf_get_capabilities(struct wiphy *wiphy,
+    struct wireless_dev *wdev, const void  *data, int len)
+{
+    int ret;
+    struct sk_buff *skb;
+    uint32 reply_len;
+    uint32 version = 0;
+    uint32 max_len = 0;
+
+    reply_len = VENDOR_REPLY_OVERHEAD + (ATTRIBUTE_U32_LEN * 2);
+
+    skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, reply_len);
+    if (unlikely(!skb)) {
+        WL_ERR(("skb alloc failed"));
+        return -ENOMEM;
+    }
+
+    /* Add codes to get version and max length */
+
+    nla_put_u32(skb, APF_ATTRIBUTE_VERSION, version);
+    nla_put_u32(skb, APF_ATTRIBUTE_MAX_LEN, max_len);
+
+    ret =  cfg80211_vendor_cmd_reply(skb);
+
+    if (unlikely(ret)) {
+        WL_ERR(("Vendor Command reply failed ret:%d \n", ret));
+    }
+
+    return ret;
+}
+
+static int wl_cfgvendor_apf_set_filter(struct wiphy *wiphy,
+    struct wireless_dev *wdev, const void  *data, int len)
+{
+    int ret = BCME_ERROR;
+    struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+    const struct nlattr *iter;
+    int type;
+    int remain;
+    uint32 program_len = 0;
+    uint8 *program = NULL;
+
+    nla_for_each_attr(iter, data, len, remain) {
+        type = nla_type(iter);
+        switch (type) {
+            case APF_ATTRIBUTE_PROGRAM_LEN:
+                program_len = nla_get_u32(iter);
+                WL_DBG(("%s, program_len = %d\n", __func__, program_len));
+                break;
+            case APF_ATTRIBUTE_PROGRAM:
+                if (program_len > 0) {
+                    program = (uint8*)kmalloc(program_len, GFP_KERNEL);
+
+                    if (program != NULL) {
+                        memcpy(program, nla_data(iter), program_len);
+                    }
+                }
+                break;
+            default:
+                WL_ERR(("Unknown type: %d\n", type));
+                goto exit;
+        }
+    }
+
+    if (program != NULL) {
+        ret = wl_cfgvendor_send_cmd_reply(wiphy, bcmcfg_to_prmry_ndev(cfg),
+                    program, program_len);
+    }
+
+exit:
+    kfree(program);
+    return ret;
+}
+
 static const struct wiphy_vendor_command wl_vendor_cmds [] = {
 #ifdef GSCAN_SUPPORT
 	{
@@ -1293,6 +1775,24 @@ static const struct wiphy_vendor_command wl_vendor_cmds [] = {
 		.doit = wl_cfgvendor_rtt_get_capability
 	},
 #endif /* RTT_SUPPORT */
+#ifdef KEEP_ALIVE
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = WIFI_OFFLOAD_SUBCMD_START_MKEEP_ALIVE
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = wl_cfgvendor_start_mkeep_alive
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = WIFI_OFFLOAD_SUBCMD_STOP_MKEEP_ALIVE
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = wl_cfgvendor_stop_mkeep_alive
+	},
+#endif /* KEEP_ALIVE */
 	{
 		{
 			.vendor_id = OUI_GOOGLE,
@@ -1338,6 +1838,94 @@ static const struct wiphy_vendor_command wl_vendor_cmds [] = {
 		.doit = wl_cfgvendor_lstats_get_info
 	},
 #endif /* LINKSTAT_SUPPORT */
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = WIFI_SUBCMD_SET_RSSI_MONITOR
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = wl_cfgvendor_set_rssi_monitor
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = DEBUG_START_LOGGING
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = wl_cfgvendor_dbg_start_logging
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = DEBUG_RESET_LOGGING
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = wl_cfgvendor_dbg_reset_logging
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = DEBUG_GET_RING_STATUS
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = wl_cfgvendor_dbg_get_ring_status
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = DEBUG_GET_RING_DATA
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = wl_cfgvendor_dbg_get_ring_data
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = DEBUG_GET_FEATURE
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = wl_cfgvendor_dbg_get_feature
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = DEBUG_START_PKT_FATE_MONITORING
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = wl_cfgvendor_dbg_start_pkt_fate_monitoring
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = DEBUG_GET_TX_PKT_FATES
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = wl_cfgvendor_dbg_get_tx_pkt_fates
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = DEBUG_GET_RX_PKT_FATES
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = wl_cfgvendor_dbg_get_rx_pkt_fates
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = APF_SUBCMD_GET_CAPABILITIES
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = wl_cfgvendor_apf_get_capabilities
+	},
+	{
+		{
+			.vendor_id = OUI_GOOGLE,
+			.subcmd = APF_SUBCMD_SET_FILTER
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = wl_cfgvendor_apf_set_filter
+	},
 };
 
 static const struct  nl80211_vendor_cmd_info wl_vendor_events [] = {

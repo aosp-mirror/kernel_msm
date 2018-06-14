@@ -100,6 +100,7 @@ enum {
 #define DHD_FWLOG_VAL		0x400000
 #define DHD_RTT_VAL		0x200000
 #define DHD_IOV_INFO_VAL	0x800000
+#define DHD_DBGIF_VAL		0x1000000
 
 #ifdef SDTEST
 /* For pktgen iovar */

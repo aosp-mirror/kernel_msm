@@ -186,7 +186,7 @@ DHDOFILES := dhd_pno.o dhd_common.o dhd_ip.o dhd_custom_gpio.o \
 	bcmutils.o bcmwifi_channels.o hndpmu.o linux_osl.o sbutils.o siutils.o \
 	wl_android.o wl_roam.o wl_cfg80211.o wl_cfgp2p.o wl_cfg_btcoex.o wldev_common.o wl_linux_mon.o  \
 	dhd_linux_platdev.o dhd_pno.o dhd_rtt.o dhd_linux_wq.o wl_cfg_btcoex.o \
-	hnd_pktq.o hnd_pktpool.o wl_cfgvendor.o bcmxtlv.o  bcm_app_utils.o
+	hnd_pktq.o hnd_pktpool.o wl_cfgvendor.o bcmxtlv.o  bcm_app_utils.o dhd_debug_linux.o dhd_debug.o
 ifneq ($(CONFIG_DHD_OF_SUPPORT),)
   DHDOFILES += dhd_custom_platdev.o
 endif

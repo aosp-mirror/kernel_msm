@@ -4017,6 +4017,21 @@ typedef struct wl_rssi_event {
 						 */
 } wl_rssi_event_t;
 
+#define RSSI_MONITOR_VERSION    1
+#define RSSI_MONITOR_STOP       (1 << 0)
+typedef struct wl_rssi_monitor_cfg {
+	uint8 version;
+	uint8 flags;
+	int8 max_rssi;
+	int8 min_rssi;
+} wl_rssi_monitor_cfg_t;
+
+typedef struct wl_rssi_monitor_evt {
+	uint8 version;
+	int8 cur_rssi;
+	uint16 pad;
+} wl_rssi_monitor_evt_t;
+
 /* CCA based channel quality event configuration */
 #define WL_CHAN_QUAL_CCA	0
 #define WL_CHAN_QUAL_NF		1

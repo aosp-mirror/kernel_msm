@@ -87,6 +87,7 @@ do {	\
 #define DHD_FWLOG(args)		do {if (dhd_msg_level & DHD_FWLOG_VAL) printf args;} while (0)
 #define DHD_RTT(args)		do {if (dhd_msg_level & DHD_RTT_VAL) printf args;} while (0)
 #define DHD_IOV_INFO(args)	do {if (dhd_msg_level & DHD_IOV_INFO_VAL) printf args;} while (0)
+#define DHD_DBGIF(args)		do {if (dhd_msg_level & DHD_DBGIF_VAL) printf args;} while (0)
 
 #ifdef DHD_LOG_DUMP
 #define DHD_ERROR_EX(args)                  \

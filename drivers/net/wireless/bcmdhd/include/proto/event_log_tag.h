@@ -127,7 +127,18 @@
 #define EVENT_LOG_TAG_LQM		103
 #define EVENT_LOG_TAG_TRACE_WL_INFO	104
 #define EVENT_LOG_TAG_TRACE_BTCOEX_INFO	105
-#define EVENT_LOG_TAG_MAX		105 /* Set to the same value of last tag, not last tag + 1 */
+#define EVENT_LOG_TAG_ECOUNTERS_TIME_DATA	106
+#define EVENT_LOG_TAG_NAN_ERROR		107
+#define EVENT_LOG_TAG_NAN_INFO		108
+#define EVENT_LOG_TAG_NAN_DBG		109
+#define EVENT_LOG_TAG_STF_ARBITRATOR_ERROR	110
+#define EVENT_LOG_TAG_STF_ARBITRATOR_TRACE	111
+#define EVENT_LOG_TAG_STF_ARBITRATOR_WARN	112
+#define EVENT_LOG_TAG_SCAN_SUMMARY		113
+#define EVENT_LOG_TAG_PROXD_SAMPLE_COLLECT	114
+#define EVENT_LOG_TAG_OCL_INFO			115
+/* EVENT_LOG_TAG_MAX	= Set to the same value of last tag, not last tag + 1 */
+#define EVENT_LOG_TAG_MAX			115
 /* Note: New event should be added/reserved in trunk before adding it to branches */
 
 

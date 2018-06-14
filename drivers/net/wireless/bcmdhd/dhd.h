@@ -401,6 +401,7 @@ typedef struct dhd_pub {
 	struct dhd_bus *bus;	/* Bus module handle */
 	struct dhd_prot *prot;	/* Protocol module handle */
 	struct dhd_info  *info; /* Info module handle */
+	struct dhd_dbg *dbg;	/* Debugability module handle */
 
 	/* to NDIS developer, the structure dhd_common is redundant,
 	 * please do NOT merge it back from other branches !!!
@@ -945,6 +946,16 @@ extern int *dhd_dev_get_feature_set_matrix(struct net_device *dev,      int *num
 #ifdef CUSTOM_FORCE_NODFS_FLAG
 extern int dhd_dev_set_nodfs(struct net_device *dev, uint nodfs);
 #endif /* CUSTOM_FORCE_NODFS_FLAG */
+extern int dhd_dev_set_rssi_monitor_cfg(struct net_device *dev, int start,
+             int8 max_rssi, int8 min_rssi);
+
+#define DHD_RSSI_MONITOR_EVT_VERSION   1
+typedef struct {
+	uint8 version;
+	int8 cur_rssi;
+	struct ether_addr BSSID;
+} dhd_rssi_monitor_evt_t;
+
 /* OS independent layer functions */
 extern void dhd_os_dhdiovar_lock(dhd_pub_t *pub);
 extern void dhd_os_dhdiovar_unlock(dhd_pub_t *pub);
@@ -1062,6 +1073,12 @@ typedef struct {
 } dhd_event_log_t;
 #endif /* SHOW_LOGTRACE */
 
+#if defined(KEEP_ALIVE)
+extern int dhd_dev_start_mkeep_alive(dhd_pub_t *dhd_pub, u8 mkeep_alive_id, u8 *ip_pkt,
+	u16 ip_pkt_len, u8* src_mac_addr, u8* dst_mac_addr, u32 period_msec);
+extern int dhd_dev_stop_mkeep_alive(dhd_pub_t *dhd_pub, u8 mkeep_alive_id);
+#endif /* defined(KEEP_ALIVE) */
+
 extern void dhd_timeout_start(dhd_timeout_t *tmo, uint usec);
 extern int dhd_timeout_expired(dhd_timeout_t *tmo);
 
@@ -1148,6 +1165,7 @@ extern int dhd_set_dev_def(dhd_pub_t *dhdp, uint32 idx, int val);
 extern int dhd_bssidx2idx(dhd_pub_t *dhdp, uint32 bssidx);
 extern int dhd_os_d3ack_wait(dhd_pub_t * pub, uint * condition);
 extern int dhd_os_d3ack_wake(dhd_pub_t * pub);
+extern struct net_device *dhd_linux_get_primary_netdev(dhd_pub_t *dhdp);
 extern int dhd_os_busbusy_wait_negation(dhd_pub_t * pub, uint * condition);
 extern int dhd_os_busbusy_wake(dhd_pub_t * pub);
 
