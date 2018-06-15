@@ -281,6 +281,7 @@ struct max1720x_chip {
 	int previous_qh;
 	int current_capacity;
 	int prev_charge_state;
+	char serial_number[25];
 };
 
 #define REGMAP_READ(regmap, what, dst)				\
@@ -648,6 +649,7 @@ static enum power_supply_property max1720x_battery_props[] = {
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_VOLTAGE_OCV,
 	POWER_SUPPLY_PROP_TECHNOLOGY,
+	POWER_SUPPLY_PROP_SERIAL_NUMBER,
 };
 
 static int max1720x_get_battery_soc(struct max1720x_chip *chip)
@@ -897,6 +899,9 @@ static int max1720x_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_TECHNOLOGY:
 		val->intval = POWER_SUPPLY_TECHNOLOGY_LION;
+		break;
+	case POWER_SUPPLY_PROP_SERIAL_NUMBER:
+		val->strval = chip->serial_number;
 		break;
 	default:
 		return -EINVAL;
@@ -1350,6 +1355,67 @@ static void max1720x_complete_init(struct max1720x_chip *chip)
 	max1720x_fg_irq_thread_fn(chip->primary->irq, chip);
 }
 
+
+static void max1720x_set_serial_number(struct max1720x_chip *chip)
+{
+	u16 data0, data1, data2;
+	int date, count = 0;
+
+	REGMAP_READ(chip->regmap_nvram, MAX1720X_NSERIALNUMBER0, data0);
+	REGMAP_READ(chip->regmap_nvram, MAX1720X_NSERIALNUMBER1, data1);
+	REGMAP_READ(chip->regmap_nvram, MAX1720X_NSERIALNUMBER2, data2);
+	count += scnprintf(chip->serial_number + count,
+			   sizeof(chip->serial_number) - count,
+			   "%02X%02X%02X",
+			   data0 >> 8, data1 >> 8, data2 >> 8);
+
+	REGMAP_READ(chip->regmap_nvram, MAX1720X_NMANFCTRDATE, data0);
+	date = (((((data0 >> 9) & 0x3f) + 1980) * 10000) +
+		((data0 >> 5) & 0xf) * 100 + (data0 & 0x1F));
+	count += scnprintf(chip->serial_number + count,
+		 sizeof(chip->serial_number) - count,
+		 "%d", date);
+
+	REGMAP_READ(chip->regmap_nvram, MAX1720X_NMANFCTRNAME0, data0);
+	count += scnprintf(chip->serial_number + count,
+		 sizeof(chip->serial_number) - count,
+		 "%c%c", data0 >> 8, data0 & 0xFF);
+
+	REGMAP_READ(chip->regmap_nvram, MAX1720X_NDEVICENAME0, data0);
+	REGMAP_READ(chip->regmap_nvram, MAX1720X_NDEVICENAME1, data1);
+	REGMAP_READ(chip->regmap_nvram, MAX1720X_NDEVICENAME2, data2);
+	count += scnprintf(chip->serial_number + count,
+			   sizeof(chip->serial_number) - count,
+			   "%c%c%c",
+			   data0 >> 8, data1 >> 8, data2 >> 8);
+
+	REGMAP_READ(chip->regmap_nvram, MAX1720X_NDEVICENAME3, data0);
+	if (data0 >> 8 == 0)
+		data0 = ('?' << 8) | (data0 & 0xFF);
+	if ((data0 & 0xFF) == 0)
+		data0 = (data0 & 0xFF00) | '?';
+	count += scnprintf(chip->serial_number + count,
+		 sizeof(chip->serial_number) - count,
+		 "%c%c", data0 >> 8, data0 & 0xFF);
+
+	REGMAP_READ(chip->regmap_nvram, MAX1720X_NUSER1D1, data0);
+	count += scnprintf(chip->serial_number + count,
+		 sizeof(chip->serial_number) - count,
+		 "%c", data0 >> 8);
+
+	REGMAP_READ(chip->regmap_nvram, MAX1720X_NUSER1D0, data0);
+	if (data0 >> 8 == 0xb1) {
+		count += scnprintf(chip->serial_number + count,
+				   sizeof(chip->serial_number) - count, "B1");
+	} else if (data0 >> 8 == 0xc1) {
+		count += scnprintf(chip->serial_number + count,
+				   sizeof(chip->serial_number) - count, "C1");
+	} else {
+		count += scnprintf(chip->serial_number + count,
+				   sizeof(chip->serial_number) - count, "??");
+	}
+}
+
 static struct power_supply_desc max1720x_psy_desc = {
 	.name = "maxfg",
 	.type = POWER_SUPPLY_TYPE_BATTERY,
@@ -1412,6 +1478,7 @@ static void max1720x_init_work(struct work_struct *work)
 		return;
 	}
 
+	max1720x_set_serial_number(chip);
 	max1720x_complete_init(chip);
 }
 
