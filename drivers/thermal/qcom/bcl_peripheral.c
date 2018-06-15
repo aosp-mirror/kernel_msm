@@ -570,8 +570,10 @@ static int battery_supply_callback(struct notifier_block *nb,
 			unsigned long event, void *data)
 {
 	struct power_supply *psy = data;
+	struct bcl_peripheral_data *perph_data =
+		&bcl_perph->param[BCL_SOC_MONITOR];
 
-	if (strcmp(psy->desc->name, "battery"))
+	if (strcmp(psy->desc->name, perph_data->bat_psy_name))
 		return NOTIFY_OK;
 	schedule_work(&bcl_perph->soc_eval_work);
 
