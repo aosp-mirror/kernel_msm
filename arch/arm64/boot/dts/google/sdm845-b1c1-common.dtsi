@@ -194,3 +194,20 @@
 		};
 	};
 };
+
+&spmi_bus {
+	qcom,pm8998@0 {
+		qcom,power-on@800 {
+			interrupts = <0x0 0x8 0x0 IRQ_TYPE_NONE>,
+				     <0x0 0x8 0x1 IRQ_TYPE_NONE>,
+				     <0x0 0x8 0x3 IRQ_TYPE_NONE>,
+				     <0x0 0x8 0x4 IRQ_TYPE_NONE>,
+				     <0x0 0x8 0x5 IRQ_TYPE_NONE>;
+			interrupt-names = "kpdpwr", "resin", "kpdpwr-bark",
+					"resin-bark", "kpdpwr-resin-bark";
+			qcom,pon_1 {
+				qcom,use-bark;
+			};
+		};
+	};
+};
