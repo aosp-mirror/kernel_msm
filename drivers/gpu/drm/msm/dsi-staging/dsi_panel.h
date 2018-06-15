@@ -103,7 +103,8 @@ struct dsi_backlight_config {
 	void *priv;
 
 	/**
-	 * update_bl - function used to update backlight
+	 * update_bl - function used to update backlight. Called with panel_lock
+	 * locked.
 	 * @bl_cfg - ptr to backlight config struct
 	 * @bl_lvl - backlight level set
 	 *

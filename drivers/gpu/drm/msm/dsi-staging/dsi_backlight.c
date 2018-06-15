@@ -81,13 +81,11 @@ static int dsi_backlight_update_dcs(struct dsi_backlight_config *bl, u32 bl_lvl)
 
 	dsi = &panel->mipi_device;
 
-	mutex_lock(&panel->panel_lock);
 	num_params = bl->bl_max_level > 0xFF ? 2 : 1;
 	rc = mipi_dsi_dcs_set_display_brightness(dsi, bl_lvl, num_params);
 	if (rc < 0)
 		pr_err("failed to update dcs backlight:%d\n", bl_lvl);
 
-	mutex_unlock(&panel->panel_lock);
 	return rc;
 }
 
@@ -138,8 +136,9 @@ static int dsi_backlight_update_status(struct backlight_device *bd)
 
 	bl_lvl = dsi_backlight_calculate(bl, brightness);
 	if (bl_lvl == bl->bl_actual && bl->last_state == bd->props.state)
-		goto done;
+		return rc;
 
+	mutex_lock(&panel->panel_lock);
 	if (dsi_panel_initialized(panel) && bl->update_bl) {
 		pr_info("req:%d bl:%d state:0x%x\n",
 			bd->props.brightness, bl_lvl, bd->props.state);
@@ -154,6 +153,7 @@ static int dsi_backlight_update_status(struct backlight_device *bd)
 	bl->last_state = bd->props.state;
 
 done:
+	mutex_unlock(&panel->panel_lock);
 	return rc;
 }
 
@@ -518,9 +518,7 @@ static int dsi_panel_binned_bl_update(struct dsi_backlight_config *bl,
 		if (node) {
 			pr_debug("switching display lp mode: %s (%d)\n",
 				node->name, props->brightness);
-			mutex_lock(&panel->panel_lock);
 			dsi_panel_cmd_set_transfer(panel, &node->dsi_cmd);
-			mutex_unlock(&panel->panel_lock);
 		} else {
 			/* ensure update after lpm */
 			bl->bl_actual = -1;
