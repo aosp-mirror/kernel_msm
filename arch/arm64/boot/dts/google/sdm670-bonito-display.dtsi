@@ -12,6 +12,7 @@
 
 #include "../qcom/dsi-panel-sim-video.dtsi"
 #include "dsi-panel-sofef00-1080p-cmd.dtsi"
+#include "dsi-panel-s6e3fa7-1080p-cmd.dtsi"
 #include <dt-bindings/clock/mdss-10nm-pll-clk.h>
 
 &tlmm {
@@ -132,6 +133,32 @@
 		};
 	};
 
+		dsi_panel_pwr_supply_s6e3fa7: dsi_panel_pwr_supply_s6e3fa7 {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		/* TBD: rt9055 fail */
+		/* qcom,panel-supply-entry@0 { */
+			/* reg = <0>; */
+			/* qcom,supply-name = "vddi"; */
+			/* qcom,supply-min-voltage = <1800000>; */
+			/* qcom,supply-max-voltage = <1800000>; */
+			/* qcom,supply-enable-load = <62000>; */
+			/* qcom,supply-disable-load = <80>; */
+			/* qcom,supply-post-on-sleep = <10>; */
+		/* }; */
+
+		qcom,panel-supply-entry@0 { /* change to 1 */
+			reg = <0>;
+			qcom,supply-name = "vci";
+			qcom,supply-min-voltage = <3000000>;
+			qcom,supply-max-voltage = <3000000>;
+			qcom,supply-enable-load = <857000>;
+			qcom,supply-disable-load = <0>;
+			qcom,supply-post-on-sleep = <10>;
+		};
+	};
+
 	dsi_sim_vid_display: qcom,dsi-display@4 {
 		compatible = "qcom,dsi-display";
 		label = "dsi_sim_vid_display";
@@ -167,6 +194,27 @@
 		qcom,platform-te-gpio = <&tlmm 10 0>;
 
 		qcom,dsi-panel = <&dsi_sofef00_samsung_cmd>;
+		vddi-supply = <&rt9055_gg_vout2>;
+		vci-supply = <&pm660l_l6>; /* 3008mV */
+	};
+
+	dsi_s6e3fa7_samsung_cmd_display: qcom,dsi-display@51 {
+		compatible = "qcom,dsi-display";
+		label = "dsi_s6e3fa7_samsung_cmd_display";
+		qcom,display-type = "primary";
+
+		qcom,dsi-ctrl = <&mdss_dsi0>;
+		qcom,dsi-phy = <&mdss_dsi_phy0>;
+		clocks = <&mdss_dsi0_pll BYTECLK_MUX_0_CLK>,
+			<&mdss_dsi0_pll PCLK_MUX_0_CLK>;
+		clock-names = "src_byte_clk", "src_pixel_clk";
+
+		pinctrl-names = "panel_active", "panel_suspend";
+		pinctrl-0 = <&sde_dsi_active &sde_te_active>;
+		pinctrl-1 = <&sde_dsi_suspend &sde_te_suspend>;
+		qcom,platform-te-gpio = <&tlmm 10 0>;
+
+		qcom,dsi-panel = <&dsi_s6e3fa7_samsung_cmd>;
 		vddi-supply = <&rt9055_gg_vout2>;
 		vci-supply = <&pm660l_l6>; /* 3008mV */
 	};
@@ -218,6 +266,22 @@
 
 &dsi_sofef00_samsung_cmd {
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_sofef00>;
+	qcom,mdss-dsi-t-clk-post = <0x09>;
+	qcom,mdss-dsi-t-clk-pre = <0x1A>;
+
+	qcom,platform-reset-gpio = <&tlmm 75 0>;
+	qcom,mdss-dsi-display-timings {
+		timing@0 {
+			qcom,mdss-dsi-panel-phy-timings =
+					[00 0E 03 03 1E 1D 04 04 02 03 04 00];
+			qcom,display-topology = <1 0 1>;
+			qcom,default-topology-index = <0>;
+		};
+	};
+};
+
+&dsi_s6e3fa7_samsung_cmd {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_s6e3fa7>;
 	qcom,mdss-dsi-t-clk-post = <0x09>;
 	qcom,mdss-dsi-t-clk-pre = <0x1A>;
 
