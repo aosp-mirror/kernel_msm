@@ -1575,8 +1575,6 @@ static int max1720x_pm_resume(struct device *dev)
 	chip->resume_complete = true;
 	pm_runtime_put_sync(chip->dev);
 
-	max1720x_fg_irq_thread_fn(chip->primary->irq, chip);
-
 	return 0;
 }
 static SIMPLE_DEV_PM_OPS(max1720x_pm_ops,
