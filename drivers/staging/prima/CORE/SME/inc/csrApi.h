@@ -406,6 +406,7 @@ typedef struct tagCsrScanResultFilter
     tANI_BOOLEAN isPERRoamScan;
 #endif
     tCsrBssid bssid_hint;
+    bool ignore_pmf_cap;
 }tCsrScanResultFilter;
 
 

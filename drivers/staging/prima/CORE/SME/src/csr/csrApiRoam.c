@@ -9536,6 +9536,7 @@ eHalStatus csrRoamPrepareFilterFromProfile(tpAniSirGlobal pMac, tCsrRoamProfile 
     eHalStatus status = eHAL_STATUS_SUCCESS;
     tANI_U32 size = 0;
     tANI_U8  index = 0;
+    uint8_t i;
     
     do
     {
@@ -9623,9 +9624,31 @@ eHalStatus csrRoamPrepareFilterFromProfile(tpAniSirGlobal pMac, tCsrRoamProfile 
             break;
         }
         pScanFilter->uapsd_mask = pProfile->uapsd_mask;
-        pScanFilter->authType = pProfile->AuthType;
-        pScanFilter->EncryptionType = pProfile->EncryptionType;
-        pScanFilter->mcEncryptionType = pProfile->mcEncryptionType;
+        if (pProfile->force_rsne_override) {
+                smsLog(pMac, LOG1, FL("force_rsne_override enabled fill all auth type and enctype"));
+
+                pScanFilter->authType.numEntries = eCSR_NUM_OF_SUPPORT_AUTH_TYPE;
+                for (i = 0; i < pScanFilter->authType.numEntries; i++)
+                        pScanFilter->authType.authType[i] = i;
+                index = 0;
+                for (i = 0; i < eCSR_NUM_OF_ENCRYPT_TYPE; i++) {
+                        if (i == eCSR_ENCRYPT_TYPE_TKIP ||
+                            i == eCSR_ENCRYPT_TYPE_AES) {
+                                pScanFilter->
+                                   EncryptionType.encryptionType[index] = i;
+                                pScanFilter->
+                                   mcEncryptionType.encryptionType[index] = i;
+                                index++;
+                        }
+                }
+                pScanFilter->EncryptionType.numEntries = index;
+                pScanFilter->mcEncryptionType.numEntries = index;
+                pScanFilter->ignore_pmf_cap = true;
+        } else {
+                pScanFilter->authType = pProfile->AuthType;
+                pScanFilter->EncryptionType = pProfile->EncryptionType;
+                pScanFilter->mcEncryptionType = pProfile->mcEncryptionType;
+        }
         pScanFilter->BSSType = pProfile->BSSType;
         pScanFilter->phyMode = pProfile->phyMode;
 #ifdef FEATURE_WLAN_WAPI
