@@ -1146,9 +1146,32 @@ static struct attribute_group cs40l2x_dev_attr_group = {
 	.attrs = cs40l2x_dev_attrs,
 };
 
+static int cs40l2x_stop_playback(struct cs40l2x_private *cs40l2x)
+{
+	int ret, i;
+
+	if (!mutex_is_locked(&cs40l2x->lock))
+		return -EACCES;
+
+	for (i = 0; i < CS40L2X_ENDPLAYBACK_RETRIES; i++) {
+		ret = regmap_write(cs40l2x->regmap,
+				cs40l2x_dsp_reg(cs40l2x, "ENDPLAYBACK",
+						CS40L2X_XM_UNPACKED_TYPE),
+				CS40L2X_ENDPLAYBACK_REQ);
+		if (!ret)
+			return 0;
+
+		usleep_range(10000, 10100);
+	}
+
+	dev_err(cs40l2x->dev, "Parking device in reset\n");
+	gpiod_set_value_cansleep(cs40l2x->reset_gpio, 0);
+
+	return -EIO;
+}
+
 static int cs40l2x_pbq_cancel(struct cs40l2x_private *cs40l2x)
 {
-	struct regmap *regmap = cs40l2x->regmap;
 	int ret;
 
 	/* this function expects to be called from a locked worker function */
@@ -1157,8 +1180,7 @@ static int cs40l2x_pbq_cancel(struct cs40l2x_private *cs40l2x)
 
 	hrtimer_cancel(&cs40l2x->pbq_timer);
 
-	ret = regmap_write(regmap, cs40l2x_dsp_reg(cs40l2x, "ENDPLAYBACK",
-			CS40L2X_XM_UNPACKED_TYPE), 1);
+	ret = cs40l2x_stop_playback(cs40l2x);
 	if (ret)
 		return ret;
 
@@ -1481,18 +1503,14 @@ static void cs40l2x_vibe_stop_worker(struct work_struct *work)
 	switch (cs40l2x->cp_trailer_index) {
 	case CS40L2X_INDEX_VIBE:
 	case CS40L2X_INDEX_CONT_MIN ... CS40L2X_INDEX_CONT_MAX:
-		ret = regmap_write(regmap,
-				cs40l2x_dsp_reg(cs40l2x, "ENDPLAYBACK",
-					CS40L2X_XM_UNPACKED_TYPE), 1);
+		ret = cs40l2x_stop_playback(cs40l2x);
 		if (ret)
 			dev_err(dev, "Failed to stop playback\n");
 		pm_relax(dev);
 		break;
 
 	case CS40L2X_INDEX_CLICK_MIN ... CS40L2X_INDEX_CLICK_MAX:
-		ret = regmap_write(regmap,
-				cs40l2x_dsp_reg(cs40l2x, "ENDPLAYBACK",
-					CS40L2X_XM_UNPACKED_TYPE), 1);
+		ret = cs40l2x_stop_playback(cs40l2x);
 		if (ret)
 			dev_err(dev, "Failed to stop playback\n");
 		break;

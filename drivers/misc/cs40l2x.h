@@ -757,6 +757,10 @@
 #define CS40L2X_COMP_ENABLED		1
 #define CS40L2X_COMP_DISABLED		0
 
+#define CS40L2X_ENDPLAYBACK_RETRIES	10
+#define CS40L2X_ENDPLAYBACK_REQ		1
+#define CS40L2X_ENDPLAYBACK_ACK		0
+
 bool cs40l2x_readable_reg(struct device *dev, unsigned int reg);
 bool cs40l2x_precious_reg(struct device *dev, unsigned int reg);
 
