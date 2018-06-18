@@ -857,7 +857,8 @@ static ssize_t set_charge_stop_level(struct device *dev,
 		return count;
 
 	chg_drv->charge_stop_level = val;
-	power_supply_changed(chg_drv->bat_psy);
+	if (chg_drv->bat_psy)
+		power_supply_changed(chg_drv->bat_psy);
 	return count;
 }
 
@@ -890,7 +891,8 @@ static ssize_t set_charge_start_level(struct device *dev,
 		return count;
 
 	chg_drv->charge_start_level = val;
-	power_supply_changed(chg_drv->bat_psy);
+	if (chg_drv->bat_psy)
+		power_supply_changed(chg_drv->bat_psy);
 	return count;
 }
 
@@ -1106,9 +1108,12 @@ static int google_charger_remove(struct platform_device *pdev)
 	struct chg_drv *chg_drv = platform_get_drvdata(pdev);
 
 	if (chg_drv) {
-		power_supply_put(chg_drv->chg_psy);
-		power_supply_put(chg_drv->bat_psy);
-		power_supply_put(chg_drv->usb_psy);
+		if (chg_drv->chg_psy)
+			power_supply_put(chg_drv->chg_psy);
+		if (chg_drv->bat_psy)
+			power_supply_put(chg_drv->bat_psy);
+		if (chg_drv->usb_psy)
+			power_supply_put(chg_drv->usb_psy);
 		if (chg_drv->wlc_psy)
 			power_supply_put(chg_drv->wlc_psy);
 		wakeup_source_trash(&chg_drv->chg_ws);
