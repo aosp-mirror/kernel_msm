@@ -56,8 +56,46 @@ enum easelcomm_dma_buffer_type {
  * message for which the message data is being written or the DMA source
  * buffer is being set, or a remote incoming message for which the message
  * data is being read or the DMA destination buffer is being set.
+ * The amount and location of the data being transferred is affected by
+ * the following parameters:
+ * offset: Refers to the byte offset where data starts.
+ * size:   Refers to the total byte size of actual data.
+ * width:  Refers to the a contiguous set of bytes.
+ *         In general: 1 <= width <= size
+ * stride: Refers to the byte offset from the beginning of a contiguous set of
+ *         data specified by "width" to the next contiguous set of data.
+ *         At the moment: stride >= width.
+ * Parameter examples (assume a 10x10 byte buffer):
+ *   1) Transfer a rectangular 3x3 sub-region from a 10x10 buffer, starting at
+ *      offset 5:
+ *      CFG: offset=5, size=9, width=3, stride=10
+ *   2) Transfer a full 10x10 buffer (sub-region is same size as buffer):
+ *      CFG: offset=0, size=100, width=100, stride=100
+ *   3) Transfer every even row in a 10x10 buffer:
+ *      CFG: offset=0, size=50, width=10, stride=20
+ *   4) Transfer every even column in a 10x10 buffer:
+ *      CFG: offset=0, size=50, width=1, stride=2
+ *
+ * Note that when using a dma buf:
+ *   offset + [ceil(size/width)*stride - (stride-width)] <= buf_size
  */
 struct easelcomm_kbuf_desc {
+	easelcomm_msgid_t message_id;  /* ID of message for this transfer */
+	void __user *buf;              /* local buffer source or dest */
+	int dma_buf_fd;                /* fd of local dma_buf */
+	int buf_type;                  /* use enum easelcomm_dma_buffer_type */
+	__u32 buf_size;                /* size of the local buffer */
+	struct easelcomm_wait wait;
+	__u32 dma_buf_off;             /* offset into the local dma_buf */
+	__u32 dma_buf_width;           /* width of region */
+	__u32 dma_buf_stride;          /* stride width */
+};
+
+/*
+ * Legacy local buffer descriptor for backwards compatibility with clients which
+ * haven't migrated to the new descriptor/ioctls.
+ */
+struct easelcomm_kbuf_desc_legacy {
 	easelcomm_msgid_t message_id;  /* ID of message for this transfer */
 	void __user *buf;              /* local buffer source or dest */
 	int dma_buf_fd;                /* fd of local dma_buf */
@@ -102,8 +140,10 @@ struct easelcomm_kbuf_desc {
  * associated message then successful completion of this ioctl frees the
  * local kernel copy of the message.
  */
-#define EASELCOMM_IOC_READDATA      _IOW(EASELCOMM_IOC_MAGIC, 2, \
-					struct easelcomm_kbuf_desc *)
+#define EASELCOMM_IOC_READDATA  	_IOW(EASELCOMM_IOC_MAGIC, 10, \
+					struct easelcomm_kbuf_desc)
+#define EASELCOMM_IOC_READDATA_LEGACY  _IOW(EASELCOMM_IOC_MAGIC, 2, \
+					struct easelcomm_kbuf_desc_legacy *)
 /*
  * Write the message data for an outgoing message being sent to the
  * remote.  The supplied remote message ID was returned by a previous
@@ -114,8 +154,10 @@ struct easelcomm_kbuf_desc {
  * DMA transfer is requested by the associated message then successful
  * completion of this ioctl frees the local kernel copy of the message.
  */
-#define EASELCOMM_IOC_WRITEDATA     _IOW(EASELCOMM_IOC_MAGIC, 3, \
-					struct easelcomm_kbuf_desc *)
+#define EASELCOMM_IOC_WRITEDATA     _IOW(EASELCOMM_IOC_MAGIC, 11, \
+					struct easelcomm_kbuf_desc)
+#define EASELCOMM_IOC_WRITEDATA_LEGACY _IOW(EASELCOMM_IOC_MAGIC, 3, \
+					struct easelcomm_kbuf_desc_legacy *)
 /*
  * Initiate a DMA write for an outgoing message that includes a DMA
  * transfer.  The supplied local message ID was returned by a previous
@@ -124,8 +166,10 @@ struct easelcomm_kbuf_desc {
  * skipped due to being discarded by the remote).  Successful completion of
  * this ioctl frees the local kernel copy of the message.
  */
-#define EASELCOMM_IOC_SENDDMA       _IOW(EASELCOMM_IOC_MAGIC, 4, \
-					struct easelcomm_kbuf_desc *)
+#define EASELCOMM_IOC_SENDDMA       _IOW(EASELCOMM_IOC_MAGIC, 12, \
+					struct easelcomm_kbuf_desc)
+#define EASELCOMM_IOC_SENDDMA_LEGACY   _IOW(EASELCOMM_IOC_MAGIC, 4, \
+					struct easelcomm_kbuf_desc_legacy *)
 /*
  * Specify the local destination for a DMA transfer requested by an incoming
  * message.  The supplied remote message ID was returned by a previous
@@ -135,8 +179,10 @@ struct easelcomm_kbuf_desc {
  * complete (or discarded per the preceding).  Successful completion of this
  * ioctl frees the local kernel copy of the message.
  */
-#define EASELCOMM_IOC_RECVDMA       _IOW(EASELCOMM_IOC_MAGIC, 5, \
-					struct easelcomm_kbuf_desc *)
+#define EASELCOMM_IOC_RECVDMA       _IOW(EASELCOMM_IOC_MAGIC, 13, \
+					struct easelcomm_kbuf_desc)
+#define EASELCOMM_IOC_RECVDMA_LEGACY   _IOW(EASELCOMM_IOC_MAGIC, 5, \
+					struct easelcomm_kbuf_desc_legacy *)
 /*
  * Wait for and return a descriptor for a reply from the remote to a
  * local message that requests a reply.  The message ID in the supplied

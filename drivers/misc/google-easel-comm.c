@@ -93,12 +93,40 @@ static long easelcomm_ioctl(
 
 #ifdef CONFIG_COMPAT
 /* 32-bit userspace on 64-bit OS conversion defines */
+struct easelcomm_compat_kbuf_desc_legacy {
+	easelcomm_msgid_t message_id;  /* ID of message for this transfer */
+	compat_uptr_t __user buf;      /* local buffer source or dest */
+	int dma_buf_fd;                /* fd of local dma_buf */
+	int buf_type;                  /* e.g. EASELCOMM_DMA_BUFFER_DMA_BUF */
+	uint32_t buf_size;             /* size of the local buffer */
+};
+
+/*
+ *   dma_buf* specification example:
+ *   ADDR  CONTENTS
+ *         -------
+ *   0x00 |  0xFF  |
+ *   0x01 |  0x0A  |
+ *   0x02 |  0x0A  |
+ *   0x03 |  0xFF  |
+ *   0x04 |  0x0B  |
+ *   0x05 |  0x0B  |
+ *   0x06 |  0xFF  |
+ *   0x07 |  0xFF  |
+ *        ---------
+ *  offset=1 size=4 width=2 stride=3 will transfer: 0A 0A 0B 0B
+ *  Note that if we are transferring a simple contiguous block of memory,
+ *  then stride == size == width.
+ */
 struct easelcomm_compat_kbuf_desc {
 	easelcomm_msgid_t message_id;  /* ID of message for this transfer */
 	compat_uptr_t __user buf;      /* local buffer source or dest */
 	int dma_buf_fd;                /* fd of local dma_buf */
 	int buf_type;                  /* e.g. EASELCOMM_DMA_BUFFER_DMA_BUF */
 	uint32_t buf_size;             /* size of the local buffer */
+	uint32_t dma_buf_off;          /* offset into the local dma_buf */
+	uint32_t dma_buf_width;        /* width of region */
+	uint32_t dma_buf_stride;       /* stride width */
 };
 
 static long easelcomm_compat_ioctl(
@@ -1854,12 +1882,42 @@ EXPORT_SYMBOL(easelcomm_client_remote_cmdchan_ready_handler);
  * Handle ioctls that take a struct easelcomm_kbuf_desc * argument, convert
  * field layout and buf field pointer for 32-bit compat if needed.
  */
+static int __easelcomm_ioctl_kbuf_desc(
+	struct easelcomm_service *service, unsigned int cmd,
+	struct easelcomm_kbuf_desc *kbuf_desc) {
+	int ret;
+
+	switch (cmd) {
+	case EASELCOMM_IOC_WRITEDATA:
+	case EASELCOMM_IOC_WRITEDATA_LEGACY:
+		ret = easelcomm_write_msgdata(service, kbuf_desc);
+		break;
+	case EASELCOMM_IOC_READDATA:
+	case EASELCOMM_IOC_READDATA_LEGACY:
+		ret = easelcomm_read_msgdata(service, kbuf_desc);
+		break;
+	case EASELCOMM_IOC_SENDDMA:
+	case EASELCOMM_IOC_SENDDMA_LEGACY:
+		ret = easelcomm_send_dma(service, kbuf_desc);
+		break;
+	case EASELCOMM_IOC_RECVDMA:
+	case EASELCOMM_IOC_RECVDMA_LEGACY:
+		ret = easelcomm_receive_dma(service, kbuf_desc);
+		break;
+	default:
+		ret = -EINVAL;
+	}
+
+	return ret;
+}
+
 static int easelcomm_ioctl_kbuf_desc(
 	struct easelcomm_service *service, unsigned int cmd,
 	unsigned long arg, bool compat)
 {
 	struct easelcomm_kbuf_desc kbuf_desc;
-	int ret;
+
+	memset(&kbuf_desc, 0, sizeof(kbuf_desc));
 
 	if (compat) {
 #ifdef CONFIG_COMPAT
@@ -1875,6 +1933,9 @@ static int easelcomm_ioctl_kbuf_desc(
 		kbuf_desc.buf_size = compat_kbuf_desc.buf_size;
 		kbuf_desc.buf_type = compat_kbuf_desc.buf_type;
 		kbuf_desc.dma_buf_fd = compat_kbuf_desc.dma_buf_fd;
+		kbuf_desc.dma_buf_off = compat_kbuf_desc.dma_buf_off;
+		kbuf_desc.dma_buf_width = compat_kbuf_desc.dma_buf_width;
+		kbuf_desc.dma_buf_stride = compat_kbuf_desc.dma_buf_stride;
 #else
 		return -EINVAL;
 #endif
@@ -1885,24 +1946,54 @@ static int easelcomm_ioctl_kbuf_desc(
 			return -EFAULT;
 	}
 
-	switch (cmd) {
-	case EASELCOMM_IOC_WRITEDATA:
-		ret = easelcomm_write_msgdata(service, &kbuf_desc);
-		break;
-	case EASELCOMM_IOC_READDATA:
-		ret = easelcomm_read_msgdata(service, &kbuf_desc);
-		break;
-	case EASELCOMM_IOC_SENDDMA:
-		ret = easelcomm_send_dma(service, &kbuf_desc);
-		break;
-	case EASELCOMM_IOC_RECVDMA:
-		ret = easelcomm_receive_dma(service, &kbuf_desc);
-		break;
-	default:
-		ret = -EINVAL;
+	return __easelcomm_ioctl_kbuf_desc(service, cmd, &kbuf_desc);
+}
+
+static int easelcomm_ioctl_kbuf_desc_legacy(
+	struct easelcomm_service *service, unsigned int cmd,
+	unsigned long arg, bool compat)
+{
+	struct easelcomm_kbuf_desc kbuf_desc;
+
+	memset(&kbuf_desc, 0, sizeof(kbuf_desc));
+
+	if (compat) {
+#ifdef CONFIG_COMPAT
+		struct easelcomm_compat_kbuf_desc_legacy
+			compat_kbuf_desc_legacy;
+
+		if (copy_from_user(&compat_kbuf_desc_legacy,
+					(void __user *) arg,
+					sizeof(compat_kbuf_desc_legacy)))
+			return -EFAULT;
+
+		kbuf_desc.message_id = compat_kbuf_desc_legacy.message_id;
+		kbuf_desc.buf = compat_ptr(compat_kbuf_desc_legacy.buf);
+		kbuf_desc.buf_size = compat_kbuf_desc_legacy.buf_size;
+		kbuf_desc.buf_type = compat_kbuf_desc_legacy.buf_type;
+		kbuf_desc.dma_buf_fd = compat_kbuf_desc_legacy.dma_buf_fd;
+		kbuf_desc.dma_buf_width = compat_kbuf_desc_legacy.buf_size;
+		kbuf_desc.dma_buf_stride = compat_kbuf_desc_legacy.buf_size;
+#else
+		return -EINVAL;
+#endif
+	} else {
+		struct easelcomm_kbuf_desc_legacy kbuf_desc_legacy;
+
+		if (copy_from_user(&kbuf_desc_legacy, (void __user *) arg,
+					sizeof(kbuf_desc_legacy)))
+			return -EFAULT;
+
+		kbuf_desc.message_id = kbuf_desc_legacy.message_id;
+		kbuf_desc.buf = kbuf_desc_legacy.buf;
+		kbuf_desc.buf_size = kbuf_desc_legacy.buf_size;
+		kbuf_desc.buf_type = kbuf_desc_legacy.buf_type;
+		kbuf_desc.dma_buf_fd = kbuf_desc_legacy.dma_buf_fd;
+		kbuf_desc.dma_buf_width = kbuf_desc_legacy.buf_size;
+		kbuf_desc.dma_buf_stride = kbuf_desc_legacy.buf_size;
 	}
 
-	return ret;
+	return __easelcomm_ioctl_kbuf_desc(service, cmd, &kbuf_desc);
 }
 
 /* 32-bit and 64-bit userspace ioctl handling, dispatch. */
@@ -1944,6 +2035,14 @@ static long easelcomm_ioctl_common(
 	case EASELCOMM_IOC_RECVDMA:
 		/* Convert 32-bit kbuf_desc argument if needed and dispatch. */
 		ret = easelcomm_ioctl_kbuf_desc(service, cmd, arg, compat);
+		break;
+	case EASELCOMM_IOC_WRITEDATA_LEGACY:
+	case EASELCOMM_IOC_READDATA_LEGACY:
+	case EASELCOMM_IOC_SENDDMA_LEGACY:
+	case EASELCOMM_IOC_RECVDMA_LEGACY:
+		/* Convert 32-bit kbuf_desc argument if needed and dispatch. */
+		ret = easelcomm_ioctl_kbuf_desc_legacy(service, cmd, arg,
+							compat);
 		break;
 	case EASELCOMM_IOC_WAITMSG:
 		ret = easelcomm_wait_message(
@@ -1997,6 +2096,10 @@ static long easelcomm_compat_ioctl(
 	case EASELCOMM_IOC_READDATA:
 	case EASELCOMM_IOC_SENDDMA:
 	case EASELCOMM_IOC_RECVDMA:
+	case EASELCOMM_IOC_WRITEDATA_LEGACY:
+	case EASELCOMM_IOC_READDATA_LEGACY:
+	case EASELCOMM_IOC_SENDDMA_LEGACY:
+	case EASELCOMM_IOC_RECVDMA_LEGACY:
 		/* pointer argument, fixup */
 		ret = easelcomm_ioctl_common(file, cmd,
 					(unsigned long)compat_ptr(arg), true);

@@ -396,6 +396,10 @@ int mnh_sg_verify(struct mnh_sg_entry *sg, size_t size,
  * API to build a scatter-gather list for multi-block DMA transfer for a
  * dma_buf
  * @param[in] fd   Handle of dma_buf passed from user
+ * @param[in] off    Offset within DMA buffer from which transfer should start.
+ * @param[in] size   Size, in bytes, of transfer.
+ * @param[in] width  Width in bytes of transfer.
+ * @param[in] stride Stride in bytes. Must be greater or equal to width.
  * @param[out] sg  Array of maxsg pointers to struct mnh_sg_entry, allocated
  *			and filled out by this routine.
  * @param[out] sgl pointer of Scatter gather list which has information of
@@ -403,7 +407,8 @@ int mnh_sg_verify(struct mnh_sg_entry *sg, size_t size,
  * @return 0        on SUCCESS
  *         negative on failure
  */
-int mnh_sg_retrieve_from_dma_buf(int fd, struct mnh_sg_entry **sg,
+int mnh_sg_retrieve_from_dma_buf(int fd,  uint32_t off, uint32_t size,
+		uint32_t width, uint32_t stride, struct mnh_sg_entry **sg,
 		struct mnh_sg_list *sgl);
 
 /**
@@ -463,7 +468,7 @@ void mnh_free_coherent(size_t size, void *cpu_addr, dma_addr_t dma_addr);
  * @return DMA address returned by dma_map_single(), or zero for error
  */
 dma_addr_t mnh_map_mem(
-        void *cpu_addr, size_t size, enum dma_data_direction direction);
+	void *cpu_addr, size_t size, enum dma_data_direction direction);
 
 /**
  * Unmap host memory from MNH PCIe host access
@@ -472,7 +477,7 @@ dma_addr_t mnh_map_mem(
  * @param[in] direction DMA direction DMA_TO_DEVICE, etc.
  */
 void mnh_unmap_mem(
-        dma_addr_t dma_addr, size_t size, enum dma_data_direction direction);
+	dma_addr_t dma_addr, size_t size, enum dma_data_direction direction);
 
 int mnh_pci_suspend(void);
 int mnh_pci_resume(void);

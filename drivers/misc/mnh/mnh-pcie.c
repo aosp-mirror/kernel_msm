@@ -739,16 +739,42 @@ static enum dma_data_direction mnh_to_dma_dir(enum mnh_dma_chan_dir_t mnh_dir)
  * Convert Linux scatterlist to array of entries used by PCIe EP DMA engine
  * @param[in] sc_list   Scatter gather list for DMA buffer
  * @param[in] count  Number of entries in scatterlist
+ * @param[in] off  Offset, in bytes, from which to start transfer.
+ * @param[in] size  Size, in bytes, of transfer. This represents actual data.
+ * @param[in] width Width, in bytes. Represents a line of data.
+ * @param[in] stride Stride, in bytes. Must be equal or greater to width.
  * @param[out] sg  Array generated dma addresses and length.
  * @param[in] maxsg  Allocated max array number of the sg
  * @return a count of sg entries used on success
  *         -EINVAL if exceeding maxsg
  */
 static int scatterlist_to_mnh_sg(struct scatterlist *sc_list, int count,
+	uint32_t off, uint32_t size, uint32_t width, uint32_t stride,
 	struct mnh_sg_entry *sg, size_t maxsg)
 {
 	struct scatterlist *in_sg;
 	int i, u;
+	uint32_t sc_base = 0; /* Base of an sc segment */
+	uint32_t sc_end = 0; /* End of the sc segment */
+	uint32_t sc_off = off; /* Offset where data is written */
+	uint32_t size_rem = size; /* Overall remaining size */
+	uint32_t width_rem = width; /* Current line remaining width */
+	uint32_t in_sc_off = 0; /* Used to calculate paddr */
+	uint32_t in_sc_rem = 0; /* Leftover size in an sc segment */
+
+	if (stride < width) {
+		dev_err(&mnh_dev->pdev->dev,
+			"stride (%0d )must be greater or equal to width (%0d)\n",
+			stride, width);
+		return -EINVAL;
+	}
+
+	if (width > size) {
+		dev_err(&mnh_dev->pdev->dev,
+			"width(%0d) must be less or equal to size(%0d)\n",
+			width, size);
+		return -EINVAL;
+	}
 
 	i = 0;	/* iterator of *sc_list */
 	u = 0;	/* iterator of *sg */
@@ -759,25 +785,51 @@ static int scatterlist_to_mnh_sg(struct scatterlist *sc_list, int count,
 			dev_err(&mnh_dev->pdev->dev, "maxsg exceeded\n");
 			return -EINVAL;
 		}
-		sg[u].paddr = sg_dma_address(in_sg);
-		sg[u].size = sg_dma_len(in_sg);
 
-		dev_dbg(&mnh_dev->pdev->dev,
-			"sg[%d] : Address %pa , length %zu\n",
-			u, &sg[u].paddr, sg[u].size);
+		sc_end = sc_base + sg_dma_len(in_sg);
+		while ((sc_off < sc_end) && size_rem) {
+			in_sc_off = sc_off - sc_base;
+			in_sc_rem = sc_end - sc_off;
+			sg[u].paddr = sg_dma_address(in_sg) + in_sc_off;
+			sg[u].size = width_rem < in_sc_rem ? width_rem :
+								in_sc_rem;
+			width_rem -= sg[u].size;
+			size_rem -= sg[u].size;
+			sc_off += sg[u].size;
+
+			if (width_rem == 0) {
+				width_rem = size_rem > width ? width : size_rem;
+				sc_off += stride - width;
+			}
+			dev_dbg(&mnh_dev->pdev->dev, "sg[%d] : Address %pa , length %zu\n",
+				u, &sg[u].paddr, sg[u].size);
+
 #ifdef COMBINE_SG
-		if ((u > 0) && (sg[u-1].paddr + sg[u-1].size ==
-			sg[u].paddr)) {
-			sg[u-1].size = sg[u-1].size
-				+ sg[u].size;
-			sg[u].size = 0;
-		} else {
-			u++;
-		}
+			if ((u > 0) && (sg[u-1].paddr + sg[u-1].size ==
+				sg[u].paddr)) {
+				sg[u-1].size = sg[u-1].size + sg[u].size;
+				sg[u].size = 0;
+			} else {
+				u++;
+			}
 #else
-		u++;
+			u++;
 #endif
+		}
+
+		sc_base = sc_end;
+
+		if (!size_rem)
+			break;
 	}
+
+	if (size_rem) {
+		dev_err(&mnh_dev->pdev->dev,
+			"%s: transfer oob: off %u, size %u, sc list size %u\n",
+			__func__, off, size, sc_end);
+		return -EINVAL;
+	}
+
 	/* Zero out the list terminator entry.
 	 * mnh dma engine looks at sg.paddr=0 for end of chain */
 	memset(&sg[u], 0, sizeof(sg[0]));
@@ -841,6 +893,8 @@ err_put:
  * API to build a scatter-gather list for multi-block DMA transfer for a
  * dma_buf
  * @param[in] fd   Handle of dma_buf passed from user
+ * @param[in] off  Offset within DMA buffer from which transfer should start.
+ * @param[in] size Size, in bytes, of transfer.
  * @param[out] sg  Array of maxsg pointers to struct mnh_sg_entry, allocated
  *			and filled out by this routine.
  * @param[out] sgl pointer of Scatter gather list which has information of
@@ -848,7 +902,8 @@ err_put:
  * @return 0        on SUCCESS
  *         negative on failure
  */
-int mnh_sg_retrieve_from_dma_buf(int fd, struct mnh_sg_entry **sg,
+int mnh_sg_retrieve_from_dma_buf(int fd, uint32_t off, uint32_t size,
+		uint32_t width, uint32_t stride, struct mnh_sg_entry **sg,
 		struct mnh_sg_list *sgl)
 {
 	int ret;
@@ -872,8 +927,18 @@ int mnh_sg_retrieve_from_dma_buf(int fd, struct mnh_sg_entry **sg,
 
 	/*
 	 * Allocate enough for one entry per sc_list entry, plus end of list.
+	 * Normally the maximum number of DMA entries would be simply,
+	 * equal or less than "sgl->num+1" (including null entry). However we
+	 * add the term "(size-1)/width" to account that striding may introduce
+	 * more DMA entries per sgl segment. Consider the following example:
+	 * sgl->n_num=1 sgl->len=1024 size=16 width=4 stride=8 offset=0
+	 * Theoretically would need max_sg = 5 (4 dma entries + 1 null)
+	 * With the (size-1)/width the formula now gives us:
+	 * max_sg=1+(15/4)+1=5 which is the correct number of entries.
+	 * On extreme cases the formula will allocate almost twice the elements,
+	 * needed, but this is not a common case.
 	 */
-	maxsg = sgl->n_num + 1;
+	maxsg = sgl->n_num + ((size-1)/width) + 1;
 	*sg = vmalloc(maxsg * sizeof(struct mnh_sg_entry));
 	if (!(*sg)) {
 		mnh_sg_release_from_dma_buf(sgl);
@@ -881,11 +946,12 @@ int mnh_sg_retrieve_from_dma_buf(int fd, struct mnh_sg_entry **sg,
 	}
 
 	dev_dbg(&mnh_dev->pdev->dev,
-		"Enter %s: n_num:%d maxsg:%zu\n", __func__, sgl->n_num, maxsg);
+		"Enter %s: n_num:%d maxsg:%zu off:%d size:%d width:%d stride:%d\n",
+		__func__, sgl->n_num, maxsg, off, size, width, stride);
 
 	/* Convert sc_list to a Synopsys compatible linked-list */
-	sgl->length = scatterlist_to_mnh_sg(sgl->sc_list, sgl->n_num,
-								*sg, maxsg);
+	sgl->length = scatterlist_to_mnh_sg(sgl->sc_list, sgl->n_num, off, size,
+						width, stride, *sg, maxsg);
 	if (IS_ERR(&sgl->length)) {
 		vfree((*sg));
 		*sg = NULL;
@@ -1005,7 +1071,9 @@ int mnh_sg_build(void *dmadest, size_t size, struct mnh_sg_entry **sg,
 		count = dma_map_sg(&mnh_dev->pdev->dev, sgl->sc_list,
 				n_num, mnh_to_dma_dir(sgl->dir));
 
-		u = scatterlist_to_mnh_sg(sgl->sc_list, count, *sg, maxsg);
+		u = scatterlist_to_mnh_sg(sgl->sc_list, count, /*off*/0,
+			/*size*/size, /*width*/size, /*stride*/size,
+			*sg, maxsg);
 		if (u < 0)
 			goto unmap_sg;
 	} else {
@@ -2005,7 +2073,7 @@ release_regions:
 disable_device:
 	pci_disable_device(pdev);
 free_device:
-        pci_set_drvdata(pdev, NULL);
+	pci_set_drvdata(pdev, NULL);
 	kfree(mnh_dev);
 end:
 	dev_err(&pdev->dev, "initialization failed.\n");

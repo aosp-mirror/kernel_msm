@@ -466,6 +466,10 @@ void *easelcomm_hw_build_scatterlist(struct easelcomm_kbuf_desc *buf_desc,
 		break;
 	case EASELCOMM_DMA_BUFFER_DMA_BUF:
 		ret = mnh_sg_retrieve_from_dma_buf(buf_desc->dma_buf_fd,
+					buf_desc->dma_buf_off,
+					buf_desc->buf_size,
+					buf_desc->dma_buf_width,
+					buf_desc->dma_buf_stride,
 					&sg_ents, local_sg_info);
 		break;
 	default:
