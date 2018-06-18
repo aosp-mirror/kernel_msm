@@ -43,6 +43,7 @@
 		cirrus,gpio1-rise-index = <5>; /* 100% HEAVY_CLICK */
 		cirrus,gpio1-fall-index = <4>; /* 75% HEAVY_CLICK */
 		cirrus,gpio1-fall-timeout = <47278>; /* 985 ms */
+		cirrus,gpio1-mode = <2>; /* enabled only in suspend mode */
 		status = "ok";
 	};
 };
