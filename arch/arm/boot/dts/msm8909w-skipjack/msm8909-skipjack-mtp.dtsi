@@ -60,11 +60,11 @@
 				It will stay at zone-5 until decreasing to 43 deg-C and switch to zone-4.
 			*/
 			temp-zone-0 = <(-40) 4400 0 1 20>;
-			temp-zone-1 = <0 4400 42 1 20>;
-			temp-zone-2 = <60 4400 125 1 20>;
-			temp-zone-3 = <110 4400 207 1 20>;
-			temp-zone-4 = <210 4400 415 0 0>;
-			temp-zone-5 = <460 4100 207 (-1) 20>;
+			temp-zone-1 = <0 4400 100 1 20>;
+			temp-zone-2 = <60 4400 100 1 20>;
+			temp-zone-3 = <110 4400 250 1 20>;
+			temp-zone-4 = <210 4400 370 0 0>;
+			temp-zone-5 = <460 4100 250 (-1) 20>;
 			temp-zone-6 = <600 4100 0 (-1) 20>;
 			qcom,hot-bat-decidegc = <560>;
 			qcom,warm-bat-decidegc = <450>;
@@ -73,7 +73,7 @@
 			qcom,fastchg-ma = <250>;
 			qcom,soft-temp-vfloat-comp-mv = <80>;
 			qcom,soft-temp-current-comp-ma = <250>;
-			cei,max-ac-current-ma = <1000>;
+			cei,max-ac-current-ma = <900>;
 			cei,prechg-current-ma = <20>;
 			cei,chg-en-active = <0>;
 			cei,sys-voltage = <2>;
