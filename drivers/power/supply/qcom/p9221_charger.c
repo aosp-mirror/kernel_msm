@@ -475,21 +475,51 @@ static int p9221_reg_write_cooked(struct p9221_charger_data *charger, u16 reg,
 		return p9221_reg_write_cooked_rx(charger, reg, val);
 }
 
-static int p9221_write_fod(struct p9221_charger_data *charger)
+static void p9221_write_fod(struct p9221_charger_data *charger)
 {
 	int ret;
 	u16 fod_reg = P9221_FOD_REG;
+	u8 *fod = NULL;
+	int fod_count = charger->pdata->fod_num;
 
-	if (p9221_is_r5(charger))
+	if (!charger->pdata->fod_num && !charger->pdata->fod_epp_num)
+		goto no_fod;
+
+	/* Default to BPP FOD */
+	if (charger->pdata->fod_num)
+		fod = charger->pdata->fod;
+
+	if (p9221_is_r5(charger)) {
+		u8 reg;
+
 		fod_reg = P9221R5_FOD_REG;
+		ret = p9221_reg_read_8(charger, P9221R5_SYSTEM_MODE_REG, &reg);
+		if (ret) {
+			dev_err(&charger->client->dev,
+				"Could not read mode: %d\n", ret);
+		} else {
+			if ((reg & P9221R5_SYSTEM_MODE_EXTENDED_MASK) &&
+			    charger->pdata->fod_epp_num) {
+				dev_info(&charger->client->dev,
+					 "Using epp fod\n");
+				fod = charger->pdata->fod_epp;
+				fod_count = charger->pdata->fod_epp_num;
+			}
+		}
+	}
 
-	ret = p9221_reg_write_n(charger, fod_reg, charger->pdata->fod,
-				P9221_NUM_FOD);
+	if (!fod)
+		goto no_fod;
 
+	ret = p9221_reg_write_n(charger, fod_reg, fod, fod_count);
 	if (ret)
 		dev_err(&charger->client->dev,
 			"Could not write FOD: %d\n", ret);
-	return ret;
+	return;
+
+no_fod:
+	dev_warn(&charger->client->dev, "No FOD set! bpp:%d epp:%d\n",
+		 charger->pdata->fod_num, charger->pdata->fod_epp_num);
 }
 
 static int p9221_set_cmd_reg(struct p9221_charger_data *charger, u8 cmd)
@@ -1026,9 +1056,7 @@ static void p9221_set_online(struct p9221_charger_data *charger)
 		dev_err(&charger->client->dev,
 			"Could not enable interrupts: %d\n", ret);
 
-	if (charger->pdata->fod_set)
-		p9221_write_fod(charger);
-
+	p9221_write_fod(charger);
 	p9221_set_dc_icl(charger);
 }
 
@@ -1248,6 +1276,9 @@ static ssize_t p9221_show_status(struct device *dev,
 	struct i2c_client *client = to_i2c_client(dev);
 	struct p9221_charger_data *charger = i2c_get_clientdata(client);
 	int count = 0;
+	int ret;
+	u8 tmp[P9221_NUM_FOD];
+	int fod_reg = P9221_FOD_REG;
 
 	if (!charger->online)
 		return -ENODEV;
@@ -1267,6 +1298,12 @@ static ssize_t p9221_show_status(struct device *dev,
 	if (p9221_is_r5(charger)) {
 		uint32_t tx_id = 0;
 
+		fod_reg = P9221R5_FOD_REG;
+
+		count += p9221_add_reg_buffer(charger, buf, count,
+					      P9221R5_SYSTEM_MODE_REG, 8, 0,
+					      "mode        : ", "%02x\n");
+
 		count += p9221_add_reg_buffer(charger, buf, count,
 					      P9221R5_VOUT_REG, 16, 1,
 					      "vout        : ", "%d uV\n");
@@ -1278,6 +1315,10 @@ static ssize_t p9221_show_status(struct device *dev,
 		count += p9221_add_reg_buffer(charger, buf, count,
 					      P9221R5_IOUT_REG, 16, 1,
 					      "iout        : ", "%d uA\n");
+
+		count += p9221_add_reg_buffer(charger, buf, count,
+					      P9221R5_ILIM_SET_REG, 16, 1,
+					      "ilim        : ", "%d uA\n");
 
 		count += p9221_add_reg_buffer(charger, buf, count,
 					      P9221R5_OP_FREQ_REG, 16, 1,
@@ -1297,6 +1338,13 @@ static ssize_t p9221_show_status(struct device *dev,
 		count += scnprintf(buf + count, PAGE_SIZE - count,
 				   "tx_id       : %08x\n", tx_id);
 
+		count += p9221_add_reg_buffer(charger, buf, count,
+					      P9221R5_ALIGN_X_ADC_REG, 8, 1,
+					      "align_x     : ", "%d\n");
+
+		count += p9221_add_reg_buffer(charger, buf, count,
+					      P9221R5_ALIGN_Y_ADC_REG, 8, 1,
+					      "align_y     : ", "%d\n");
 	} else {
 		count += p9221_add_reg_buffer(charger, buf, count,
 					      P9221_VOUT_ADC_REG, 16, 1,
@@ -1310,12 +1358,41 @@ static ssize_t p9221_show_status(struct device *dev,
 					      P9221_RX_IOUT_REG, 16, 1,
 					      "iout        : ", "%d uA\n");
 
+		count += p9221_add_reg_buffer(charger, buf, count,
+					      P9221_ILIM_SET_REG, 16, 1,
+					      "ilim        : ", "%d uA\n");
 
 		count += p9221_add_reg_buffer(charger, buf, count,
 					      P9221_OP_FREQ_REG, 16, 1,
 					      "freq        : ", "%d hz\n");
 	}
 
+	/* FOD Register */
+	ret = p9221_reg_read_n(charger, fod_reg, tmp, P9221_NUM_FOD);
+	count += scnprintf(buf + count, PAGE_SIZE - count, "fod         : ");
+	if (ret)
+		count += scnprintf(buf + count, PAGE_SIZE - count,
+				   "err %d\n", ret);
+	else {
+		count += p9221_hex_str(tmp, P9221_NUM_FOD, buf + count, count,
+				       false);
+		count += scnprintf(buf + count, PAGE_SIZE - count, "\n");
+	}
+
+	/* Device tree FOD entries */
+	count += scnprintf(buf + count, PAGE_SIZE - count,
+			   "dt fod      : (n=%d) ", charger->pdata->fod_num);
+	count += p9221_hex_str(charger->pdata->fod, charger->pdata->fod_num,
+			       buf + count, PAGE_SIZE - count, false);
+
+	count += scnprintf(buf + count, PAGE_SIZE - count,
+			   "\ndt fod-epp  : (n=%d) ",
+			   charger->pdata->fod_epp_num);
+	count += p9221_hex_str(charger->pdata->fod_epp,
+			       charger->pdata->fod_epp_num,
+			       buf + count, PAGE_SIZE - count, false);
+
+	count += scnprintf(buf + count, PAGE_SIZE - count, "\n");
 	return count;
 }
 
@@ -1838,15 +1915,52 @@ static int p9221_parse_dt(struct device *dev,
 	}
 
 	/* Optional FOD data */
-	pdata->fod_set = false;
-	ret = of_property_read_u8_array(node, "fod", pdata->fod, P9221_NUM_FOD);
-	if (ret == 0) {
-		char buf[P9221_NUM_FOD * 3 + 1];
+	pdata->fod_num =
+	    of_property_count_elems_of_size(node, "fod", sizeof(u8));
+	if (pdata->fod_num <= 0) {
+		dev_err(dev, "No dt fod provided (%d)\n", pdata->fod_num);
+		pdata->fod_num = 0;
+	} else {
+		if (pdata->fod_num > P9221_NUM_FOD) {
+			dev_err(dev,
+			    "Incorrect num of FOD %d, using first %d\n",
+			    pdata->fod_num, P9221_NUM_FOD);
+			pdata->fod_num = P9221_NUM_FOD;
+		}
+		ret = of_property_read_u8_array(node, "fod", pdata->fod,
+						pdata->fod_num);
+		if (ret == 0) {
+			char buf[pdata->fod_num * 3 + 1];
 
-		pdata->fod_set = true;
-		p9221_hex_str(pdata->fod, P9221_NUM_FOD, buf,
-			      P9221_NUM_FOD * 3 + 1, false);
-		dev_info(dev, "dt fod: %s\n", buf);
+			p9221_hex_str(pdata->fod, pdata->fod_num, buf,
+				      pdata->fod_num * 3 + 1, false);
+			dev_info(dev, "dt fod: %s (%d)\n", buf, pdata->fod_num);
+		}
+	}
+
+	pdata->fod_epp_num =
+	    of_property_count_elems_of_size(node, "fod_epp", sizeof(u8));
+	if (pdata->fod_epp_num <= 0) {
+		dev_err(dev, "No dt fod epp provided (%d)\n",
+			pdata->fod_epp_num);
+		pdata->fod_epp_num = 0;
+	} else {
+		if (pdata->fod_epp_num > P9221_NUM_FOD) {
+			dev_err(dev,
+			    "Incorrect num of EPP FOD %d, using first %d\n",
+			    pdata->fod_epp_num, P9221_NUM_FOD);
+			pdata->fod_epp_num = P9221_NUM_FOD;
+		}
+		ret = of_property_read_u8_array(node, "fod_epp", pdata->fod_epp,
+						pdata->fod_epp_num);
+		if (ret == 0) {
+			char buf[pdata->fod_epp_num * 3 + 1];
+
+			p9221_hex_str(pdata->fod_epp, pdata->fod_epp_num, buf,
+				      pdata->fod_epp_num * 3 + 1, false);
+			dev_info(dev, "dt fod_epp: %s (%d)\n", buf,
+				 pdata->fod_epp_num);
+		}
 	}
 
 	return 0;

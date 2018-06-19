@@ -157,6 +157,11 @@
 #define P9221R5_LAST_REG			0x1FF
 
 /*
+ * System Mode Mask (R5+/0x4C)
+ */
+#define P9221R5_SYSTEM_MODE_EXTENDED_MASK	(1 << 3)
+
+/*
  * Com Channel Commands
  */
 #define P9221R5_COM_CHAN_CCRESET		BIT(7)
@@ -240,7 +245,9 @@ struct p9221_charger_platform_data {
 	int				irq_det_int;
 	int				max_vout_mv;
 	u8				fod[P9221_NUM_FOD];
-	bool				fod_set;
+	u8				fod_epp[P9221_NUM_FOD];
+	int				fod_num;
+	int				fod_epp_num;
 };
 
 struct p9221_charger_data {
