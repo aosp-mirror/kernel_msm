@@ -21,6 +21,7 @@
 #include "sdm670-bonito-citadel.dtsi"
 #include "sdm670-bonito-audio.dtsi"
 #include "sdm670-bonito-memory.dtsi"
+#include "sdm670-bonito-fingerprint.dtsi"
 #include "sdm670-bonito-touch.dtsi"
 
 &qupv3_se10_i2c {
