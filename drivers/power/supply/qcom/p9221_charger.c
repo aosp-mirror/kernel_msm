@@ -29,10 +29,11 @@
 #include <linux/pmic-voter.h>
 #include "p9221_charger.h"
 
-#define P9221_TX_TIMEOUT_MS	(20 * 1000)
-#define P9221_DCIN_TIMEOUT_MS	(2 * 1000)
-#define P9221_VRECT_TIMEOUT_MS	(2 * 1000)
-#define P9221_NOTIFIER_DELAY_MS	50
+#define P9221_TX_TIMEOUT_MS		(20 * 1000)
+#define P9221_DCIN_TIMEOUT_MS		(2 * 1000)
+#define P9221_VRECT_TIMEOUT_MS		(2 * 1000)
+#define P9221_NOTIFIER_DELAY_MS		50
+#define P9221R5_OVER_CHECK_NUM		3
 
 static const u32 p9221_ov_set_lut[] = {
 	17000000, 20000000, 15000000, 13000000,
@@ -1733,31 +1734,75 @@ static void p9221_irq_handler(struct p9221_charger_data *charger,
 			"Failed to send EOP %d: %d\n", reason, ret);
 }
 
+/*
+ * Number of times to poll the status to see if the current limit condition
+ * was transient or not.
+ */
+static void p9221_over_handle_r5(struct p9221_charger_data *charger,
+				 u16 irq_src)
+{
+	u8 reason = 0;
+	int i;
+	int ret;
+
+	dev_err(&charger->client->dev, "Received OVER INT: %02x\n", irq_src);
+
+	if (irq_src & P9221R5_STAT_OVV) {
+		reason = P9221_EOP_OVER_VOLT;
+		goto send_eop;
+	}
+
+	if (irq_src & P9221R5_STAT_OVT) {
+		reason = P9221_EOP_OVER_TEMP;
+		goto send_eop;
+	}
+
+	if ((irq_src & P9221R5_STAT_UV) && !(irq_src & P9221R5_STAT_OVC))
+		return;
+
+	/* Overcurrent, poll to absorb any transients */
+	reason = P9221_EOP_OVER_CURRENT;
+	for (i = 0; i < P9221R5_OVER_CHECK_NUM; i++) {
+		ret = p9221_clear_interrupts(charger,
+					     irq_src & P9221R5_STAT_LIMIT_MASK);
+		msleep(50);
+		if (ret)
+			continue;
+
+		ret = p9221_reg_read_16(charger, P9221_STATUS_REG, &irq_src);
+		if (ret) {
+			dev_err(&charger->client->dev,
+				"Failed to read status: %d\n", ret);
+			continue;
+		}
+
+		if ((irq_src & P9221R5_STAT_OVC) == 0) {
+			dev_info(&charger->client->dev,
+				 "OVER condition %04x cleared after %d tries\n",
+				 irq_src, i);
+			return;
+		}
+		dev_err(&charger->client->dev,
+			"OVER status is still %04x, retry\n", irq_src);
+	}
+
+send_eop:
+	dev_err(&charger->client->dev,
+		"OVER is %04x, sending EOP %d\n", irq_src, reason);
+
+	ret = p9221_send_eop(charger, reason);
+	if (ret)
+		dev_err(&charger->client->dev,
+			"Failed to send EOP %d: %d\n", reason, ret);
+}
+
 /* Handler for R5 and R7 chips */
 static void p9221r5_irq_handler(struct p9221_charger_data *charger, u16 irq_src)
 {
 	int res;
 
-	if (irq_src & P9221R5_STAT_LIMIT_MASK) {
-		u8 reason = 0;
-
-		dev_err(&charger->client->dev, "Received OVER INT: %02x\n",
-			irq_src);
-		if (irq_src & P9221R5_STAT_OVT)
-			reason = P9221_EOP_OVER_TEMP;
-		else if (irq_src & P9221R5_STAT_OVV)
-			reason = P9221_EOP_OVER_VOLT;
-		else if (irq_src & P9221R5_STAT_OVC)
-			reason = P9221_EOP_OVER_CURRENT;
-
-		if (reason) {
-			res = p9221_send_eop(charger, reason);
-			if (res)
-				dev_err(&charger->client->dev,
-					"Failed to send EOP %d: %d\n", reason,
-					res);
-		}
-	}
+	if (irq_src & P9221R5_STAT_LIMIT_MASK)
+		p9221_over_handle_r5(charger, irq_src);
 
 	/* Receive complete */
 	if (irq_src & P9221R5_STAT_CCDATARCVD) {
