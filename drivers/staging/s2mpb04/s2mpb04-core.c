@@ -48,6 +48,7 @@
 #define S2MPB04_ADC_CONV_TIMEOUT  msecs_to_jiffies(100)
 
 static int s2mpb04_chip_init(struct s2mpb04_core *ddata);
+static int s2mpb04_core_fixup(struct s2mpb04_core *ddata);
 static void s2mpb04_print_status(struct s2mpb04_core *ddata);
 
 static const struct mfd_cell s2mpb04_devs[] = {
@@ -112,19 +113,11 @@ int s2mpb04_dump_regs(struct s2mpb04_core *ddata)
 }
 EXPORT_SYMBOL_GPL(s2mpb04_dump_regs);
 
-static inline bool s2mpb04_is_ready(struct s2mpb04_core *ddata)
-{
-	return (gpio_get_value(ddata->pdata->resetb_gpio) == 1);
-}
-
 int s2mpb04_read_byte(struct s2mpb04_core *ddata, u8 addr, u8 *data)
 {
 	int ret;
 	unsigned int val;
 	int retry_cnt = 0;
-
-	if (!s2mpb04_is_ready(ddata))
-		return -EBUSY;
 
 	do {
 		ret = regmap_read(ddata->regmap, addr, &val);
@@ -152,9 +145,6 @@ int s2mpb04_read_bytes(struct s2mpb04_core *ddata, u8 addr, u8 *data,
 	int ret;
 	int retry_cnt = 0;
 
-	if (!s2mpb04_is_ready(ddata))
-		return -EBUSY;
-
 	do {
 		ret = regmap_bulk_read(ddata->regmap, addr, data, count);
 		if (!ret)
@@ -176,9 +166,6 @@ int s2mpb04_write_byte(struct s2mpb04_core *ddata, u8 addr, u8 data)
 {
 	int ret;
 	int retry_cnt = 0;
-
-	if (!s2mpb04_is_ready(ddata))
-		return -EBUSY;
 
 	do {
 		ret = regmap_write(ddata->regmap, addr, data);
@@ -204,9 +191,6 @@ int s2mpb04_write_bytes(struct s2mpb04_core *ddata, u8 addr, u8 *data,
 	int ret;
 	int retry_cnt = 0;
 
-	if (!s2mpb04_is_ready(ddata))
-		return -EBUSY;
-
 	do {
 		ret = regmap_bulk_write(ddata->regmap, addr, data, count);
 		if (!ret)
@@ -230,9 +214,6 @@ int s2mpb04_update_bits(struct s2mpb04_core *ddata, u8 addr,
 {
 	int ret;
 	int retry_cnt = 0;
-
-	if (!s2mpb04_is_ready(ddata))
-		return -EBUSY;
 
 	do {
 		ret = regmap_update_bits(ddata->regmap, addr, mask, data);
@@ -337,13 +318,18 @@ static void s2mpb04_print_id(struct s2mpb04_core *ddata)
 static void s2mpb04_print_status(struct s2mpb04_core *ddata)
 {
 	struct device *dev = ddata->dev;
-	u8 status[2];
+	u8 flags[3], status[2];
 	int ret;
+
+	ret = s2mpb04_read_bytes(ddata, S2MPB04_REG_INT1, flags, 3);
+	if (!ret)
+		dev_info(dev, "%s: Flags: 0x%02x, 0x%02x, 0x%02x\n",
+			 __func__, flags[0], flags[1], flags[2]);
 
 	ret = s2mpb04_read_bytes(ddata, S2MPB04_REG_STATUS1, status, 2);
 	if (!ret)
-		dev_err(dev, "%s: Status: 0x%02x, 0x%02x\n", __func__,
-			status[0], status[1]);
+		dev_info(dev, "%s: Status: 0x%02x, 0x%02x\n", __func__,
+			 status[0], status[1]);
 }
 
 /* handle an interrupt flag */
@@ -487,6 +473,9 @@ static void s2mpb04_reset_work(struct work_struct *data)
 	dev_err(ddata->dev,
 		"%s: waiting for chip to come out of reset\n", __func__);
 
+	/* initialize chip */
+	s2mpb04_chip_init(ddata);
+
 	/* wait for chip to come out of reset, signaled by resetb interrupt */
 	timeout = wait_for_completion_timeout(&ddata->reset_complete,
 					      S2MPB04_SHUTDOWN_RESET_TIMEOUT);
@@ -495,7 +484,7 @@ static void s2mpb04_reset_work(struct work_struct *data)
 			"%s: timeout waiting for device to return from reset\n",
 			__func__);
 	else
-		s2mpb04_chip_init(ddata);
+		s2mpb04_core_fixup(ddata);
 
 	complete(&ddata->init_complete);
 }
@@ -577,6 +566,8 @@ static int s2mpb04_core_fixup(struct s2mpb04_core *ddata)
 {
 	dev_dbg(ddata->dev, "%s: rev %d\n", __func__, ddata->rev_id);
 
+	s2mpb04_config_ints(ddata);
+
 	/* set SMPS1 output voltage to 0.95V */
 	s2mpb04_write_byte(ddata, S2MPB04_REG_BUCK1_OUT, 0x68);
 
@@ -591,6 +582,9 @@ static int s2mpb04_core_fixup(struct s2mpb04_core *ddata)
 	/* also modify s2mpb04_regulator_enable to match LDO2 fixup */
 	s2mpb04_write_byte(ddata, S2MPB04_REG_LDO2_CTRL, 0x2F);
 
+	/* disable watchdog timer */
+	s2mpb04_write_byte(ddata, S2MPB04_REG_WTSR_CTRL, 0x1D);
+
 	return 0;
 }
 
@@ -599,10 +593,6 @@ static int s2mpb04_chip_init(struct s2mpb04_core *ddata)
 {
 	s2mpb04_print_id(ddata);
 	s2mpb04_print_status(ddata);
-
-	s2mpb04_core_fixup(ddata);
-
-	s2mpb04_config_ints(ddata);
 
 	return 0;
 }
@@ -678,6 +668,9 @@ static int s2mpb04_probe(struct i2c_client *client,
 	/* disable the irq while doing initial power on */
 	disable_irq(pdata->resetb_irq);
 
+	/* initialize chip */
+	s2mpb04_chip_init(ddata);
+
 	for (i = 0; i < S2MPB04_PON_RETRY_CNT; i++) {
 		dev_dbg(dev, "%s: powering on s2mpb04\n", __func__);
 		gpio_set_value_cansleep(pdata->pon_gpio, 1);
@@ -715,8 +708,8 @@ static int s2mpb04_probe(struct i2c_client *client,
 	/* enable the irq after power on */
 	enable_irq(pdata->resetb_irq);
 
-	/* initialize chip */
-	s2mpb04_chip_init(ddata);
+	/* fixup some chip settings that are different than reset values */
+	s2mpb04_core_fixup(ddata);
 
 	return mfd_add_devices(dev, -1, s2mpb04_devs, ARRAY_SIZE(s2mpb04_devs),
 			       NULL, 0, NULL);
