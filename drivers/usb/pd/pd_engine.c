@@ -74,6 +74,8 @@ struct usbpd {
 	int logbuffer_tail;
 	u8 *logbuffer[LOG_BUFFER_ENTRIES];
 	bool in_pr_swap;
+
+	bool apsd_done;
 };
 
 /*
@@ -238,6 +240,8 @@ static const char * const get_psy_type_name(enum power_supply_type psy_type)
 		return "HVDCP2";
 	case POWER_SUPPLY_TYPE_USB_HVDCP_3:
 		return "HVDCP3";
+	case POWER_SUPPLY_TYPE_USB_PD:
+		return "PD";
 	default:
 		return "UNDEFINED";
 	}
@@ -518,7 +522,7 @@ static void psy_changed_handler(struct work_struct *work)
 	enum power_supply_typec_mode typec_mode;
 	enum typec_cc_orientation typec_cc_orientation;
 
-	bool apsd_done;
+	bool pe_start;
 
 	union power_supply_propval val;
 	int ret = 0;
@@ -539,7 +543,7 @@ static void psy_changed_handler(struct work_struct *work)
 			      ret);
 		return;
 	}
-	apsd_done = !!val.intval;
+	pe_start = !!val.intval;
 
 	ret = power_supply_get_property(pd->usb_psy,
 					POWER_SUPPLY_PROP_REAL_TYPE, &val);
@@ -572,23 +576,22 @@ static void psy_changed_handler(struct work_struct *work)
 	parse_cc_status(typec_mode, typec_cc_orientation, &cc1, &cc2);
 
 	pd_engine_log(pd,
-		      "type [%s], apsd done [%s], vbus present [%s], typec_mode [%s], typec_orientation [%s], cc1 [%s], cc2 [%s]",
+		      "type [%s], pe_start [%s], vbus_present [%s], mode [%s], orientation [%s], cc1 [%s], cc2 [%s]",
 		      get_psy_type_name(psy_type),
-		      apsd_done ? "Y" : "N",
+		      pe_start ? "Y" : "N",
 		      vbus_present ? "Y" : "N",
 		      get_typec_mode_name(typec_mode),
 		      get_typec_cc_orientation_name(typec_cc_orientation),
 		      get_typec_cc_status_name(cc1),
 		      get_typec_cc_status_name(cc2));
 
-	/* Dont proceed as pmi might still be evaluating connecttions */
-	if (!apsd_done && (typec_mode != POWER_SUPPLY_TYPEC_NONE)) {
+	if (!pe_start && (typec_mode != POWER_SUPPLY_TYPEC_NONE)) {
 		pd_engine_log(pd, "Skipping update as PE_START not set yet");
 		return;
 	}
 
 	mutex_lock(&pd->lock);
-
+	pd->apsd_done = !!psy_type;
 	pd->psy_type = psy_type;
 	pd->is_cable_flipped = typec_cc_orientation == TYPEC_CC_ORIENTATION_CC2;
 	pd->extcon_usb_cc = pd->is_cable_flipped;
@@ -612,7 +615,7 @@ static void psy_changed_handler(struct work_struct *work)
 		tcpm_cc_change(pd->tcpm_port);
 	}
 
-	if (apsd_done && pd->pending_update_usb_data) {
+	if (pd->apsd_done && pd->pending_update_usb_data) {
 		pd_engine_log(pd,
 			      "APSD is done now, update pending usb data role");
 		ret = update_usb_data_role(pd);
@@ -1218,8 +1221,6 @@ static int set_usb_data_role(struct usbpd *pd, bool attached,
 			     enum typec_data_role data)
 {
 	int ret;
-	union power_supply_propval val = {0};
-	bool apsd_done;
 
 	pd->extcon_usb_cc = pd->is_cable_flipped;
 
@@ -1234,27 +1235,15 @@ static int set_usb_data_role(struct usbpd *pd, bool attached,
 		pd->extcon_usb_host = false;
 	}
 
-	ret = power_supply_get_property(pd->usb_psy,
-					POWER_SUPPLY_PROP_PE_START,
-					&val);
-	if (ret < 0) {
-		pd_engine_log(pd, "Unable to read PE_START, ret=%d", ret);
-		return ret;
-	}
-
-	if (val.intval == 0)
-		apsd_done = false;
-	else
-		apsd_done = true;
 
 	pd_engine_log(pd,
 		      "set usb_data_role: power [%s], data [%s], apsd_done [%s], attached [%s]",
 		      get_typec_role_name(role),
 		      get_typec_data_role_name(data),
-		      apsd_done ? "Y" : "N",
+		      pd->apsd_done ? "Y" : "N",
 		      attached ? "Y" : "N");
 
-	if (attached && role == TYPEC_SINK && !apsd_done) {
+	if (attached && role == TYPEC_SINK && !pd->apsd_done) {
 		/* wait for APSD done */
 		pd_engine_log(pd,
 			      "APSD is not done, delay update usb data role");
