@@ -23,7 +23,6 @@
 	google,usb-port-tz-name = "usbc-therm-adc";
 	google,wlc-thermal-mitigation = <1100000 500000 250000 110000>;
 	google,low-batt-threshold = <2>;
-	qcom,hvdcp-disable;
 };
 
 &pmi8998_fg {
