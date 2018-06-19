@@ -365,4 +365,60 @@
 			};
 		};
 	};
+
+	aoss0-usr {
+		status = "disabled";
+	};
+
+	aoss1-usr {
+		status = "disabled";
+	};
+
+	camera-usr {
+		status = "disabled";
+	};
+
+	compute-hvx-usr {
+		status = "disabled";
+	};
+
+	ddr-usr {
+		status = "disabled";
+	};
+
+	gold-virt-max-step {
+		status = "disabled";
+	};
+
+	gpu-virt-max-step {
+		status = "disabled";
+	};
+
+	kryo-l3-0-usr {
+		status = "disabled";
+	};
+
+	kryo-l3-1-usr {
+		status = "disabled";
+	};
+
+	mdm-core-usr {
+		status = "disabled";
+	};
+
+	mdm-dsp-usr {
+		status = "disabled";
+	};
+
+	mmss-usr {
+		status = "disabled";
+	};
+
+	silv-virt-max-step {
+		status = "disabled";
+	};
+
+	wlan-usr {
+		status = "disabled";
+	};
 };
