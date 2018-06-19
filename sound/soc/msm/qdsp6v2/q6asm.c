@@ -1456,7 +1456,7 @@ static int32_t q6asm_srvc_callback(struct apr_client_data *data, void *priv)
 	uint32_t i = IN;
 	uint32_t *payload;
 	unsigned long dsp_flags;
-	unsigned long flags;
+	unsigned long flags = 0;
 	struct asm_buffer_node *buf_node = NULL;
 	struct list_head *ptr, *next;
 
@@ -1685,7 +1685,7 @@ static int32_t q6asm_callback(struct apr_client_data *data, void *priv)
 	uint32_t *payload;
 	uint32_t wakeup_flag = 1;
 	int32_t  ret = 0;
-	unsigned long flags;
+	unsigned long flags = 0;
 	int session_id;
 
 	if (ac == NULL) {
@@ -2213,7 +2213,7 @@ int q6asm_is_dsp_buf_avail(int dir, struct audio_client *ac)
 static void __q6asm_add_hdr(struct audio_client *ac, struct apr_hdr *hdr,
 			uint32_t pkt_size, uint32_t cmd_flg, uint32_t stream_id)
 {
-	unsigned long flags;
+	unsigned long flags = 0;
 
 	dev_vdbg(ac->dev, "%s: pkt_size=%d cmd_flg=%d session=%d stream_id=%d\n",
 			__func__, pkt_size, cmd_flg, ac->session, stream_id);
