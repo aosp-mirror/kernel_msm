@@ -1227,6 +1227,8 @@ static int tcpm_set_in_pr_swap(struct tcpc_dev *dev, bool pr_swap)
 			/* Required for the PMIC to recover */
 			pd_engine_log(pd, "sleeping for 20mec");
 			msleep(20);
+			psy_changed(&pd->psy_nb, PSY_EVENT_PROP_CHANGED,
+				    pd->usb_psy);
 		}
 		val.intval = pr_swap ? 1 : 0;
 		ret = power_supply_set_property(pd->usb_psy,
