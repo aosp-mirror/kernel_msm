@@ -86,4 +86,5 @@ obj-$(CONFIG_INPUT_IDEAPAD_SLIDEBAR)	+= ideapad_slidebar.o
 obj-$(CONFIG_INPUT_PIXART_OTS_PAT9125_SWITCH)	+= ots_pat9125/
 obj-$(CONFIG_STMVL53L0X)	+= vl53l0x/
 obj-$(CONFIG_INPUT_VD6281)		+= vd6281/
+obj-$(CONFIG_FPC_FINGERPRINT)		+= fpc_fingerprint/
 obj-$(CONFIG_FPR_FPC)			+= fpr_FingerprintCard/

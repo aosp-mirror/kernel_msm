@@ -1,0 +1,7 @@
+#-----------------------------------#
+#    Kconfig for FingerprintCard    #
+#-----------------------------------#
+
+config FPC_FINGERPRINT
+	default n
+	tristate "fpc1020 fingerprint driver"
