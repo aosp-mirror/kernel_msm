@@ -33,6 +33,7 @@
 #define P9221_DCIN_TIMEOUT_MS		(2 * 1000)
 #define P9221_VRECT_TIMEOUT_MS		(2 * 1000)
 #define P9221_NOTIFIER_DELAY_MS		50
+#define P9221R5_ILIM_MAX_UA		(1600 * 1000)
 #define P9221R5_OVER_CHECK_NUM		3
 
 static const u32 p9221_ov_set_lut[] = {
@@ -380,7 +381,7 @@ static int p9221_reg_write_cooked_r5(struct p9221_charger_data *charger,
 	switch (reg) {
 	case P9221R5_ILIM_SET_REG:
 		/* uA -> 0.1A, offset 0.2A */
-		if ((val < 2000000) || (val > 1600000))
+		if ((val < 200000) || (val > 1600000))
 			return -EINVAL;
 		data = (val / (100 * 1000)) - 2;
 		break;
@@ -1029,6 +1030,16 @@ static int p9221_set_dc_icl(struct p9221_charger_data *charger)
 	if (ret)
 		dev_err(&charger->client->dev,
 			"Could not vote DC_ICL %d\n", ret);
+
+	/* Increase the IOUT limit */
+	if (p9221_is_r5(charger)) {
+		ret = p9221_reg_write_cooked_r5(charger, P9221R5_ILIM_SET_REG,
+						P9221R5_ILIM_MAX_UA);
+		if (ret)
+			dev_err(&charger->client->dev,
+				"Could not set rx_iout limit reg: %d\n", ret);
+	}
+
 	return ret;
 }
 
