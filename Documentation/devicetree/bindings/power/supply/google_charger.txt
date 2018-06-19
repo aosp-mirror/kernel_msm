@@ -31,10 +31,16 @@ Optional properties:
      cv-update-interval).
  - google,cv-update-interval: delay in ms to wait before re-running the work
      item while in taper. Defaults to 2000 (2 seconds)
- - google,cv-tier-ov-delay: the number of cv-update-interval to wait after
-     battery voltage has raised above tier limit during ir drop compensation
-     before a new attempt to raise voltage. Defaults to 10 (eg 20 seconds for
-     default cv-update-interval).
+ - google,cv-tier-ov-delay: the number of cv-update-interval to wait (penalty)
+     during ir drop compensation before a new attempt to raise voltage when
+     battery voltage is found above tier limit. Defaults to 10 cycles (20
+     seconds for default cv-update-interval).
  - google,chg-tolerance: the deci-percent tolerance we need to give the PMIC to
      ensure actual current is below chg-cc-limits (divide by 10 to get
      percentage points). Max allowed tolerance is 25%.
+- google,fv-uv-margin-dpct: the deci-percent margin on vtier that charger float
+     voltage must not exceed when calculating target voltage during IRDROP
+     compensation. Default 0 (disabled), set to 1030 for 3%.
+- google,cv-tier-switch-cnt: the number of consecutive poll cyles with current
+     under next tier that are needed before switching charge tier.
+     Default 3 poll cycles.
