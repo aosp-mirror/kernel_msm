@@ -20,6 +20,31 @@
 			};
 		};
 	};
+
+	backup-charge {
+		thermal-sensors = <&pm8998_adc_tm 0x4e>;
+
+		trips {
+			batt-charging_lv1 {
+				temperature = <42000>;
+			};
+			batt-charging_lv2 {
+				temperature = <44000>;
+			};
+			batt-charging_lv3 {
+				temperature = <46000>;
+			};
+		};
+	};
+	quiet-therm-adc {
+		trips {
+			shutdown-config {
+				temperature = <62000>;
+				hysteresis = <1000>;
+				type = "critical";
+			};
+		};
+	};
 };
 
 &pm8998_vadc {
