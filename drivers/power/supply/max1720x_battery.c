@@ -830,7 +830,7 @@ static int max1720x_get_property(struct power_supply *psy,
 		val->intval = reg_to_micro_amp_h(data, chip->RSense);
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL:
-		REGMAP_READ(map, MAX1720X_FULLCAPREP, data);
+		REGMAP_READ(map, MAX1720X_FULLCAPNOM, data);
 		val->intval = reg_to_micro_amp_h(data, chip->RSense);
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
