@@ -2878,13 +2878,6 @@ int smblib_get_pe_start(struct smb_charger *chg,
 	val->intval
 		= !get_client_vote_locked(chg->pd_disallowed_votable_indirect,
 			HVDCP_TIMEOUT_VOTER);
-
-	/* if hvdcp is disabled, the cc detached voter is the last one */
-	if (chg->hvdcp_disable) {
-		val->intval =
-		    !get_client_vote_locked(chg->pd_disallowed_votable_indirect,
-					CC_DETACHED_VOTER);
-	}
 	return 0;
 }
 
@@ -4424,9 +4417,6 @@ static void smblib_handle_typec_removal(struct smb_charger *chg)
 	vote(chg->pd_allowed_votable, PD_VOTER, false, 0);
 	vote(chg->pd_disallowed_votable_indirect, CC_DETACHED_VOTER, true, 0);
 	vote(chg->pd_disallowed_votable_indirect, HVDCP_TIMEOUT_VOTER, true, 0);
-	if (chg->hvdcp_disable)
-		vote(chg->pd_disallowed_votable_indirect, HVDCP_TIMEOUT_VOTER,
-					false, 0);
 
 	/* reset usb irq voters */
 	vote(chg->usb_irq_enable_votable, PD_VOTER, false, 0);
