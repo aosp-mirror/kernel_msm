@@ -91,7 +91,8 @@ static int p9221_reg_read_16(struct p9221_charger_data *charger, u16 reg,
 	int ret;
 
 	ret = p9221_reg_read_n(charger, reg, buf, 2);
-	*val = (buf[1] << 8) | buf[0];
+	if (ret == 0)
+		*val = (buf[1] << 8) | buf[0];
 	return ret;
 }
 
@@ -299,7 +300,7 @@ static int p9221_reg_read_cooked(struct p9221_charger_data *charger,
 				 u16 reg, u32 *val)
 {
 	int ret = 0;
-	u16 data;
+	u16 data = 0;
 
 	if (p9221_reg_is_8_bit(charger, reg)) {
 		u8 data8 = 0;
@@ -1145,6 +1146,7 @@ static ssize_t p9221_add_reg_buffer(struct p9221_charger_data *charger,
 {
 	u32 val;
 	int ret;
+	int added = 0;
 
 	if (cooked)
 		ret = p9221_reg_read_cooked(charger, reg, &val);
@@ -1158,14 +1160,15 @@ static ssize_t p9221_add_reg_buffer(struct p9221_charger_data *charger,
 		val = val8;
 	}
 
-	count += scnprintf(buf + count, PAGE_SIZE - count, "%s", name);
+	added += scnprintf(buf + count, PAGE_SIZE - count, "%s", name);
+	count += added;
 	if (ret)
-		count += scnprintf(buf + count, PAGE_SIZE - count,
+		added += scnprintf(buf + count, PAGE_SIZE - count,
 				   "err %d\n", ret);
 	else
-		count += scnprintf(buf + count, PAGE_SIZE - count, fmt, val);
+		added += scnprintf(buf + count, PAGE_SIZE - count, fmt, val);
 
-	return count;
+	return added;
 }
 
 static ssize_t p9221_show_version(struct device *dev,
@@ -1182,20 +1185,20 @@ static ssize_t p9221_show_version(struct device *dev,
 	if (!charger->online)
 		return -ENODEV;
 
-	count = p9221_add_reg_buffer(charger, buf, count, P9221_CHIP_ID_REG, 16,
-				     0, "chip id    : ", "%04x\n");
-	count = p9221_add_reg_buffer(charger, buf, count,
-				     P9221_CHIP_REVISION_REG, 8, 0,
-				     "chip rev   : ", "%02x\n");
-	count = p9221_add_reg_buffer(charger, buf, count,
-				     P9221_CUSTOMER_ID_REG, 8, 0,
-				     "cust id    : ", "%02x\n");
-	count = p9221_add_reg_buffer(charger, buf, count,
-				     P9221_OTP_FW_MAJOR_REV_REG, 16, 0,
-				     "otp fw maj : ", "%04x\n");
-	count = p9221_add_reg_buffer(charger, buf, count,
-				     P9221_OTP_FW_MINOR_REV_REG, 16, 0,
-				     "otp fw min : ", "%04x\n");
+	count += p9221_add_reg_buffer(charger, buf, count, P9221_CHIP_ID_REG,
+				      16, 0, "chip id    : ", "%04x\n");
+	count += p9221_add_reg_buffer(charger, buf, count,
+				      P9221_CHIP_REVISION_REG, 8, 0,
+				      "chip rev   : ", "%02x\n");
+	count += p9221_add_reg_buffer(charger, buf, count,
+				      P9221_CUSTOMER_ID_REG, 8, 0,
+				      "cust id    : ", "%02x\n");
+	count += p9221_add_reg_buffer(charger, buf, count,
+				      P9221_OTP_FW_MAJOR_REV_REG, 16, 0,
+				      "otp fw maj : ", "%04x\n");
+	count += p9221_add_reg_buffer(charger, buf, count,
+				      P9221_OTP_FW_MINOR_REV_REG, 16, 0,
+				      "otp fw min : ", "%04x\n");
 
 	count += scnprintf(buf + count, PAGE_SIZE - count, "otp fw date: ");
 	for (i = 0; i < P9221_OTP_FW_DATE_SIZE; i++) {
@@ -1211,12 +1214,12 @@ static ssize_t p9221_show_version(struct device *dev,
 		count += scnprintf(buf + count, PAGE_SIZE - count, "%c", val8);
 	}
 
-	count = p9221_add_reg_buffer(charger, buf, count,
-				     P9221_SRAM_FW_MAJOR_REV_REG, 16, 0,
-				     "\nram fw maj : ", "%04x\n");
-	count = p9221_add_reg_buffer(charger, buf, count,
-				     P9221_SRAM_FW_MINOR_REV_REG, 16, 0,
-				     "ram fw min : ", "%04x\n");
+	count += p9221_add_reg_buffer(charger, buf, count,
+				      P9221_SRAM_FW_MAJOR_REV_REG, 16, 0,
+				      "\nram fw maj : ", "%04x\n");
+	count += p9221_add_reg_buffer(charger, buf, count,
+				      P9221_SRAM_FW_MINOR_REV_REG, 16, 0,
+				      "ram fw min : ", "%04x\n");
 
 	count += scnprintf(buf + count, PAGE_SIZE - count, "ram fw date: ");
 	for (i = 0; i < P9221_SRAM_FW_DATE_SIZE; i++) {
@@ -1249,67 +1252,68 @@ static ssize_t p9221_show_status(struct device *dev,
 	if (!charger->online)
 		return -ENODEV;
 
-	count = p9221_add_reg_buffer(charger, buf, count,
-				     P9221_STATUS_REG, 16, 0,
-				     "status      : ", "%04x\n");
+	count += p9221_add_reg_buffer(charger, buf, count,
+				      P9221_STATUS_REG, 16, 0,
+				      "status      : ", "%04x\n");
 
-	count = p9221_add_reg_buffer(charger, buf, count,
-				     P9221_INT_REG, 16, 0,
-				     "int         : ", "%04x\n");
+	count += p9221_add_reg_buffer(charger, buf, count,
+				      P9221_INT_REG, 16, 0,
+				      "int         : ", "%04x\n");
 
-	count = p9221_add_reg_buffer(charger, buf, count,
-				     P9221_INT_ENABLE_REG, 16, 0,
-				     "int_enable  : ", "%04x\n");
+	count += p9221_add_reg_buffer(charger, buf, count,
+				      P9221_INT_ENABLE_REG, 16, 0,
+				      "int_enable  : ", "%04x\n");
 
 	if (p9221_is_r5(charger)) {
 		uint32_t tx_id = 0;
 
-		count = p9221_add_reg_buffer(charger, buf, count,
-					     P9221R5_VOUT_REG, 16, 1,
-					     "vout        : ", "%d uV\n");
+		count += p9221_add_reg_buffer(charger, buf, count,
+					      P9221R5_VOUT_REG, 16, 1,
+					      "vout        : ", "%d uV\n");
 
-		count = p9221_add_reg_buffer(charger, buf, count,
-					     P9221R5_VRECT_REG, 16, 1,
-					     "vrect       : ", "%d uV\n");
+		count += p9221_add_reg_buffer(charger, buf, count,
+					      P9221R5_VRECT_REG, 16, 1,
+					      "vrect       : ", "%d uV\n");
 
-		count = p9221_add_reg_buffer(charger, buf, count,
-					     P9221R5_IOUT_REG, 16, 1,
-					     "iout        : ", "%d uA\n");
+		count += p9221_add_reg_buffer(charger, buf, count,
+					      P9221R5_IOUT_REG, 16, 1,
+					      "iout        : ", "%d uA\n");
 
-		count = p9221_add_reg_buffer(charger, buf, count,
-					     P9221R5_OP_FREQ_REG, 16, 1,
-					     "freq        : ", "%d hz\n");
-		count += scnprintf(buf + count, count, "tx_busy     : %d\n",
-				   charger->tx_busy);
-		count += scnprintf(buf + count, count, "tx_done     : %d\n",
-				   charger->tx_done);
-		count += scnprintf(buf + count, count, "rx_done     : %d\n",
-				   charger->rx_done);
-		count += scnprintf(buf + count, count, "tx_len      : %d\n",
-				   charger->tx_len);
-		count += scnprintf(buf + count, count, "rx_len      : %d\n",
-				   charger->rx_len);
+		count += p9221_add_reg_buffer(charger, buf, count,
+					      P9221R5_OP_FREQ_REG, 16, 1,
+					      "freq        : ", "%d hz\n");
+		count += scnprintf(buf + count, PAGE_SIZE - count,
+				   "tx_busy     : %d\n", charger->tx_busy);
+		count += scnprintf(buf + count, PAGE_SIZE - count,
+				   "tx_done     : %d\n", charger->tx_done);
+		count += scnprintf(buf + count, PAGE_SIZE - count,
+				   "rx_done     : %d\n", charger->rx_done);
+		count += scnprintf(buf + count, PAGE_SIZE - count,
+				   "tx_len      : %d\n", charger->tx_len);
+		count += scnprintf(buf + count, PAGE_SIZE - count,
+				   "rx_len      : %d\n", charger->rx_len);
 		p9221_reg_read_n(charger, P9221R5_PROP_TX_ID_REG, &tx_id,
 				 sizeof(tx_id));
-		count += scnprintf(buf + count, count, "tx_id       : %08x\n",
-				   tx_id);
+		count += scnprintf(buf + count, PAGE_SIZE - count,
+				   "tx_id       : %08x\n", tx_id);
 
 	} else {
-		count = p9221_add_reg_buffer(charger, buf, count,
-					     P9221_VOUT_ADC_REG, 16, 1,
-					     "vout        : ", "%d uV\n");
+		count += p9221_add_reg_buffer(charger, buf, count,
+					      P9221_VOUT_ADC_REG, 16, 1,
+					      "vout        : ", "%d uV\n");
 
-		count = p9221_add_reg_buffer(charger, buf, count,
-					     P9221_VRECT_ADC_REG, 16, 1,
-					     "vrect       : ", "%d uV\n");
+		count += p9221_add_reg_buffer(charger, buf, count,
+					      P9221_VRECT_ADC_REG, 16, 1,
+					      "vrect       : ", "%d uV\n");
 
-		count = p9221_add_reg_buffer(charger, buf, count,
-					     P9221_RX_IOUT_REG, 16, 1,
-					     "iout        : ", "%d uA\n");
+		count += p9221_add_reg_buffer(charger, buf, count,
+					      P9221_RX_IOUT_REG, 16, 1,
+					      "iout        : ", "%d uA\n");
 
-		count = p9221_add_reg_buffer(charger, buf, count,
-					     P9221_OP_FREQ_REG, 16, 1,
-					     "freq        : ", "%d hz\n");
+
+		count += p9221_add_reg_buffer(charger, buf, count,
+					      P9221_OP_FREQ_REG, 16, 1,
+					      "freq        : ", "%d hz\n");
 	}
 
 	return count;
