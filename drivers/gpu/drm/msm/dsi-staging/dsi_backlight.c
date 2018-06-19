@@ -883,7 +883,8 @@ static int dsi_panel_bl_parse_hbm(struct device *parent,
 	pr_debug("found hbm enable\n");
 
 	/* default to non-HBM parameters*/
-	bl->bl_hbm_params = bl->bl_normal_params;
+	bl->bl_hbm_params.min_level = bl->bl_normal_params.min_level;
+	bl->bl_hbm_params.max_level = bl->bl_normal_params.max_level;
 
 	rc = of_property_read_u32(of_node, "qcom,mdss-dsi-bl-hbm-min-level",
 		&val);
