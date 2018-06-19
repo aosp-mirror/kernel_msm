@@ -279,6 +279,8 @@ static const char * const get_psy_type_name(enum power_supply_type psy_type)
 		return "HVDCP2";
 	case POWER_SUPPLY_TYPE_USB_HVDCP_3:
 		return "HVDCP3";
+	case POWER_SUPPLY_TYPE_USB_PD:
+		return "PD";
 	default:
 		return "UNDEFINED";
 	}
@@ -707,7 +709,7 @@ static void psy_changed_handler(struct work_struct *work)
 	enum power_supply_typec_mode typec_mode;
 	enum typec_cc_orientation typec_cc_orientation;
 
-	bool apsd_done;
+	bool pe_start;
 
 	union power_supply_propval val;
 	int ret = 0;
@@ -728,7 +730,7 @@ static void psy_changed_handler(struct work_struct *work)
 			      ret);
 		goto ret;
 	}
-	apsd_done = !!val.intval;
+	pe_start = !!val.intval;
 
 	ret = power_supply_get_property(pd->usb_psy,
 					POWER_SUPPLY_PROP_REAL_TYPE, &val);
@@ -737,6 +739,7 @@ static void psy_changed_handler(struct work_struct *work)
 		goto ret;
 	}
 	psy_type = val.intval;
+	pd->apsd_done = !!psy_type;
 
 	ret = power_supply_get_property(pd->usb_psy,
 					POWER_SUPPLY_PROP_PRESENT, &val);
@@ -761,9 +764,9 @@ static void psy_changed_handler(struct work_struct *work)
 	parse_cc_status(typec_mode, typec_cc_orientation, &cc1, &cc2);
 
 	pd_engine_log(pd,
-		      "type [%s], apsd done [%s], vbus present [%s], typec_mode [%s], typec_orientation [%s], cc1 [%s], cc2 [%s] external_vbus [%s]",
+		      "type [%s], pe_start [%s], vbus_present [%s], mode [%s], orientation [%s], cc1 [%s], cc2 [%s] ext_vbus [%s]",
 		      get_psy_type_name(psy_type),
-		      apsd_done ? "Y" : "N",
+		      pe_start ? "Y" : "N",
 		      vbus_present ? "Y" : "N",
 		      get_typec_mode_name(typec_mode),
 		      get_typec_cc_orientation_name(typec_cc_orientation),
@@ -772,10 +775,9 @@ static void psy_changed_handler(struct work_struct *work)
 		      pd->external_vbus_update ? "Y" : "N");
 
 	mutex_lock(&pd->lock);
-	pd->apsd_done = apsd_done;
 
 	/* Dont proceed as pmi might still be evaluating connections */
-	if (!apsd_done && (typec_mode != POWER_SUPPLY_TYPEC_NONE)) {
+	if (!pe_start && (typec_mode != POWER_SUPPLY_TYPEC_NONE)) {
 		pd_engine_log(pd, "Skipping update as PE_START not set yet");
 		goto unlock;
 	}
