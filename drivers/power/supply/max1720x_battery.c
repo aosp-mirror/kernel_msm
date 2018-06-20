@@ -32,7 +32,7 @@
 #define MAX1720X_TPOR_MS 150
 #define MAX1720X_I2C_DRIVER_NAME "max1720x_fg_irq"
 #define MAX1720X_N_OF_HISTORY_PAGES 203
-#define MAX1720X_DELAY_INIT_MS 100
+#define MAX1720X_DELAY_INIT_MS 500
 
 enum max1720x_register {
 	/* ModelGauge m5 Register */
@@ -1518,7 +1518,8 @@ static int max1720x_probe(struct i2c_client *client,
 	}
 
 	INIT_DELAYED_WORK(&chip->init_work, max1720x_init_work);
-	schedule_delayed_work(&chip->init_work, 0);
+	schedule_delayed_work(&chip->init_work,
+			      msecs_to_jiffies(MAX1720X_DELAY_INIT_MS));
 
 	return 0;
 
