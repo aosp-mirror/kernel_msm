@@ -24,10 +24,6 @@
 	qcom,board-id = <0x00021005 0>;
 };
 
-&p9221 {
-	fod = [b0 24 90 46 88 52 88 53 90 34 9a f7 14 00 01 64];
-};
-
 /* We need override the display on sequence for EVT2 devices. */
 &dsi_sw43408_dsc_fhd_cmd {
 	qcom,mdss-dsi-display-timings {
