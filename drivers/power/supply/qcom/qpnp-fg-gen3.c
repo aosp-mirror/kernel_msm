@@ -5502,6 +5502,7 @@ static struct thermal_zone_of_device_ops fg_gen3_tz_ops = {
 	.get_temp = fg_tz_get_temp,
 };
 
+#define FG_DELAY_BATT_ID_MS 1000
 static int fg_gen3_probe(struct platform_device *pdev)
 {
 	struct fg_chip *chip;
@@ -5715,7 +5716,8 @@ static int fg_gen3_probe(struct platform_device *pdev)
 	}
 
 	device_init_wakeup(chip->dev, true);
-	schedule_delayed_work(&chip->profile_load_work, 0);
+	schedule_delayed_work(&chip->profile_load_work,
+			      msecs_to_jiffies(FG_DELAY_BATT_ID_MS));
 
 	pr_debug("FG GEN3 driver probed successfully\n");
 	return 0;
