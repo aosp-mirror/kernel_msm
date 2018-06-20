@@ -182,6 +182,7 @@
 		};
 	};
 	soc {
+		polling-delay-passive = <0>;
 		trips {
 			low_soc {
 				temperature = <10>;
