@@ -878,6 +878,7 @@ static ssize_t nanohub_download_bl(struct device *dev,
 	struct nanohub_data *data = dev_get_nanohub_data(dev);
 	const struct nanohub_platform_data *pdata = data->pdata;
 	const struct firmware *fw_entry;
+	const char *firmware_name;
 	int ret;
 	uint8_t status = CMD_ACK;
 
@@ -893,10 +894,18 @@ static ssize_t nanohub_download_bl(struct device *dev,
 
 	__nanohub_hw_reset(data, 1);
 
-	ret = request_firmware(&fw_entry, "nanohub.full.bin", dev);
+	if (!strncmp(buf, "nanohub.full.", 13))
+		firmware_name = buf;
+	else
+		firmware_name = "nanohub.full.bin";
+
+	ret = request_firmware(&fw_entry, firmware_name, dev);
 	if (ret) {
-		dev_err(dev, "%s: err=%d\n", __func__, ret);
+		dev_err(dev, "%s: request fw for nanohub: %s failed. err=%d\n",
+			__func__, firmware_name, ret);
 	} else {
+		dev_info(dev, "%s: request fw for nanohub: %s successfully.\n",
+			__func__, firmware_name);
 		status = nanohub_bl_download(data, pdata->bl_addr,
 					     fw_entry->data, fw_entry->size);
 		dev_info(dev, "%s: status=%02x\n", __func__, status);
