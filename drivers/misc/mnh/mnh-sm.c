@@ -117,6 +117,25 @@ HW_OUTx(HWIO_PCIE_SS_BASE_ADDR, PCIE_SS, reg, inst, val)
 
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
+/*
+ * The maximum timeout value to stay awake.
+ *
+ * For most use cases, this will not be the only wakeup source,
+ * because when Easel not used, application should have suspended Easel.
+ *
+ * For some rare background tasks, such as firmware update, or killing
+ * Easel services in background, we want to stay awake for no more than
+ * the timeout value, because at that time we may be the only wakeup
+ * source.
+ *
+ * Driver automatically releases wakelock after timeout value, or
+ * releases wakelock whenever Easel is not active.
+ *
+ * All power states change goes through mnh_sm_set_state(), so
+ * it will be the central place to request to stay awake.
+ */
+#define MNH_SM_WAKEUP_SOURCE_TIMEOUT_PRODUCTION (10000)
+
 enum fw_image_state {
 	FW_IMAGE_NONE = 0,
 	FW_IMAGE_DOWNLOADING,
@@ -2217,7 +2236,16 @@ int mnh_sm_set_state(int state)
 
 	prev_state = mnh_sm_dev->state;
 
+	/* on boot/resume, hold wakelock with timeout */
+	if (state == MNH_STATE_ACTIVE)
+		pm_wakeup_event(mnh_sm_dev->dev,
+				MNH_SM_WAKEUP_SOURCE_TIMEOUT_PRODUCTION);
+
 	ret = mnh_sm_set_state_locked(state);
+
+	/* release wakelock immediately if ended up not active */
+	if (mnh_sm_dev->state != MNH_STATE_ACTIVE)
+		pm_relax(mnh_sm_dev->dev);
 
 	/* record state change */
 	mnh_sm_record_state_change(prev_state, mnh_sm_dev->state);
@@ -2723,6 +2751,9 @@ static int mnh_sm_probe(struct platform_device *pdev)
 
 	/* init state stats */
 	mnh_sm_state_stats_init();
+
+	/* initialize device wakeup source */
+	device_init_wakeup(mnh_sm_dev->dev, /*enable=*/true);
 
 	mnh_sm_dev->initialized = true;
 	dev_info(dev, "MNH SM initialized successfully\n");
