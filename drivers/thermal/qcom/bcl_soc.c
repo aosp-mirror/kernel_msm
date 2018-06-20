@@ -89,9 +89,10 @@ static void bcl_evaluate_soc(struct work_struct *work)
 		return;
 
 	mutex_lock(&bcl_perph->state_trans_lock);
-	if (!bcl_perph->irq_enabled)
-		goto eval_exit;
-	if (battery_percentage > bcl_perph->trip_temp)
+	if (!bcl_perph->irq_enabled) {
+		if (battery_percentage <= bcl_perph->trip_temp)
+			goto eval_exit;
+	} else if (battery_percentage > bcl_perph->trip_temp)
 		goto eval_exit;
 
 	bcl_perph->trip_val = battery_percentage;
