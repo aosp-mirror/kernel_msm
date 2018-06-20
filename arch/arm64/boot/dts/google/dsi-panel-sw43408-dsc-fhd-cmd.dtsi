@@ -62,12 +62,6 @@
 
 		/* High brightness mode */
 		qcom,mdss-dsi-bl-hbm-enable;
-		/*
-		 * This panel maintains its full brightness range when in HBM,
-		 * but, for now, max out brightness when in this mode to match
-		 * s6e3ha8 behavior.
-		 */
-		qcom,mdss-dsi-bl-hbm-min-level = <0x3ff>;
 		qcom,mdss-dsi-bl-hbm-max-level = <0x3ff>;
 
 		qcom,mdss-dsi-display-timings {
