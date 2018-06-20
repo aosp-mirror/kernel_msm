@@ -87,4 +87,3 @@ config NFC_NQ_PN81A
 	help
 	  This enables the SPI driver for the NXP PN81A-based embedded
 	  secure element using the NFC_NQ driver to control the power.
-
