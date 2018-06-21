@@ -14901,6 +14901,21 @@ VOS_STATUS WDA_TxPacket(tWDA_CbContext *pWDA,
       return VOS_STATUS_E_FAILURE;
    }
 
+  /*
+   * Return if SSR is in progress as TL won't send any frame if SSR is in
+   * progress and also not invokes TX completion callback, which sets
+   * completion variable, leading this function to wait on completion
+   * variable(txFrameEvent) till timeout.
+   *
+   * TBD: As a clean fix it's better to invoke TX completion callback on fail
+   * to send a TX frame.
+   */
+   if(vos_is_logp_in_progress(VOS_MODULE_ID_WDA, NULL)) {
+       VOS_TRACE(VOS_MODULE_ID_WDA, VOS_TRACE_LEVEL_ERROR,
+                 FL("SSR is in progress"));
+       return VOS_STATUS_E_FAILURE;
+   }
+
    VOS_TRACE( VOS_MODULE_ID_WDA, VOS_TRACE_LEVEL_INFO_HIGH, 
                "Tx Mgmt Frame Subtype: %d alloc(%pK) txBdToken = %u",
                pFc->subType, pFrmBuf, txBdToken);
