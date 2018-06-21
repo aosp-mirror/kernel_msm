@@ -4057,10 +4057,19 @@ static void smblib_force_legacy_icl(struct smb_charger *chg, int pst)
 		break;
 	case POWER_SUPPLY_TYPE_USB_FLOAT:
 		/*
-		 * limit ICL to 100mA, the USB driver will enumerate to check
+		 * limit ICL to 500mA, the USB driver will enumerate to check
 		 * if this is a SDP and appropriately set the current
+		 * and set rp current for rp non-default case
 		 */
-		vote(chg->usb_icl_votable, LEGACY_UNKNOWN_VOTER, true, 100000);
+		if (chg->typec_mode == POWER_SUPPLY_TYPEC_SOURCE_DEFAULT)
+			vote(chg->usb_icl_votable, LEGACY_UNKNOWN_VOTER,
+			     true, 500000);
+		else {
+			typec_mode = smblib_get_prop_typec_mode(chg);
+			rp_ua = get_rp_based_dcp_current(chg, typec_mode);
+			vote(chg->usb_icl_votable, LEGACY_UNKNOWN_VOTER,
+			     true, rp_ua);
+		}
 		break;
 	case POWER_SUPPLY_TYPE_USB_HVDCP:
 	case POWER_SUPPLY_TYPE_USB_HVDCP_3:
