@@ -1405,13 +1405,6 @@ static ssize_t stm_fts_cmd_show(struct device *dev,
 			goto END;
 		}
 
-		res = msm_drm_unregister_client(&info->notifier);
-		if (res < 0) {
-			pr_err("ERROR: unregister notifier failed!\n");
-			goto END;
-		}
-
-
 		switch (typeOfComand[0]) {
 		/*ITO TEST*/
 		case 0x01:
@@ -1690,10 +1683,6 @@ static ssize_t stm_fts_cmd_show(struct device *dev,
 		pr_err("NO COMMAND SPECIFIED!!! do: 'echo [cmd_code] [args] > stm_fts_cmd' before looking for result!\n");
 		res = ERROR_OP_NOT_ALLOW;
 	}
-
-	if (msm_drm_register_client(&info->notifier) < 0)
-		pr_err("ERROR: register notifier failed!\n");
-
 
 END:
 	/* here start the reporting phase, assembling the data
