@@ -10,20 +10,24 @@
  * GNU General Public License for more details.
  */
 
-/* Common BONITO includes go here (i.e. not display) */
+/* Common BONITO, SARGO includes go here (i.e. not display) */
 /* TODO: Split this file into bluetooth/keys/display/memory/power/thermal */
 
 #include <dt-bindings/gpio/gpio.h>
 #include "../qcom/sdm670-pmic-overlay.dtsi"
-#include "sdm670-bonito-display.dtsi"
+#include "sdm670-b4s4-display.dtsi"
 #include "sdm670-camera-sensor.dtsi"
-#include "sdm670-bonito-pinctrl.dtsi"
-#include "sdm670-bonito-citadel.dtsi"
-#include "sdm670-bonito-audio.dtsi"
-#include "sdm670-bonito-memory.dtsi"
-#include "sdm670-bonito-fingerprint.dtsi"
-#include "sdm670-bonito-touch.dtsi"
-#include "sdm670-bonito-nfc.dtsi"
+#include "sdm670-b4s4-pinctrl.dtsi"
+#include "sdm670-b4s4-citadel.dtsi"
+#include "sdm670-b4s4-audio.dtsi"
+#include "sdm670-b4s4-memory.dtsi"
+#include "sdm670-b4s4-fingerprint.dtsi"
+#include "sdm670-b4s4-touch.dtsi"
+#include "sdm670-b4s4-nfc.dtsi"
+
+/ {
+       qcom,msm-id = <0x150 0x0>;
+};
 
 &qupv3_se10_i2c {
 #include "../qcom/smb1355.dtsi"

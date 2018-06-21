@@ -35,7 +35,8 @@ sdm845-c1-dvt.dtbo-base			:= ../qcom/sdm845-v2.1.dtb
 else
 
 dtb-$(CONFIG_BOARD_BONITO) += \
-	sdm670-bonito-dev.dtb
+	sdm670-b4-dev.dtb \
+	sdm670-s4-dev.dtb
 
 endif
 
