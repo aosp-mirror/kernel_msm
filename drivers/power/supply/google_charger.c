@@ -447,7 +447,7 @@ static void chg_work(struct work_struct *work)
 
 			/* pullback, fast poll, penalty on TAPER_RAISE and
 			 * no cv debounce (so will consider switching voltage
-			 * tiers id the current is right)
+			 * tiers if the current is right)
 			 */
 			fv_uv = msc_round_fv_uv(profile, vtier,
 				fv_uv - profile->cv_hw_resolution);
@@ -456,9 +456,7 @@ static void chg_work(struct work_struct *work)
 			chg_drv->checked_cv_cnt = 0;
 
 			if (-ibatt == cc_max) {
-			/* double penalty if we over tier vbat at full current
-			 * TODO: add margin?
-			 */
+			/* double penalty if at full current (add margin?) */
 				chg_drv->checked_ov_cnt *= 2;
 				pr_info("MSC_VOVER vbatt=%d ibatt=%d vtier=%d fv_uv=%d\n",
 					vbatt, ibatt, vtier, chg_drv->fv_uv);
@@ -489,14 +487,9 @@ static void chg_work(struct work_struct *work)
 				fv_uv = msc_round_fv_uv(profile, vtier,
 					vtier + (vchrg - vbatt));
 			} else {
+				/* could keep it steady instead */
 				fv_uv = vtier;
 			}
-
-			/* NOTE: checked_cv_cnt>0 will debounce taper entry so
-			 * we will remain at least cv_debounce_cnt samples in
-			 * taper before trying to switch.
-			 */
-			chg_drv->checked_cv_cnt = profile->cv_debounce_cnt;
 
 			pr_info("MSC_FAST vtier=%d vbatt=%d vchrg=%d fv_uv=%d->%d\n",
 				vtier, vbatt, vchrg, chg_drv->fv_uv, fv_uv);
