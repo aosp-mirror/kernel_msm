@@ -11,8 +11,8 @@
  */
 
 &mdss_mdp {
-	dsi_sofef00_samsung_cmd: qcom,mdss_dsi_sofef00_1080p_cmd_samsung {
-		qcom,mdss-dsi-panel-name = "sofef00 cmd mode dsi samsung panel";
+	dsi_sofef00_sdc_1080p_cmd: qcom,mdss_dsi_sofef00_1080p_cmd_sdc {
+		qcom,mdss-dsi-panel-name = "sofef00 cmd mode dsi sdc panel";
 		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
 		qcom,mdss-dsi-virtual-channel-id = <0>;
 		qcom,mdss-dsi-stream = <0>;

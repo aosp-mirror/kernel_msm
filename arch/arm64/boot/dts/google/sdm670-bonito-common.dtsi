@@ -227,7 +227,7 @@
 	qcom,platform-reset-gpio = <&tlmm 75 0>;
 };
 
-&dsi_sofef00_samsung_cmd_display {
+&dsi_sofef00_sdc_1080p_cmd_display {
 	qcom,dsi-display-active;
 };
 

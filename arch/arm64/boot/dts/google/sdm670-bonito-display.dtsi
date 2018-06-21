@@ -177,9 +177,9 @@
 		qcom,dsi-panel = <&dsi_sim_vid>;
 	};
 
-	dsi_sofef00_samsung_cmd_display: qcom,dsi-display@50 {
+	dsi_sofef00_sdc_1080p_cmd_display: qcom,dsi-display@50 {
 		compatible = "qcom,dsi-display";
-		label = "dsi_sofef00_samsung_cmd_display";
+		label = "dsi_sofef00_sdc_1080p_cmd_display";
 		qcom,display-type = "primary";
 
 		qcom,dsi-ctrl = <&mdss_dsi0>;
@@ -193,7 +193,7 @@
 		pinctrl-1 = <&sde_dsi_suspend &sde_te_suspend>;
 		qcom,platform-te-gpio = <&tlmm 10 0>;
 
-		qcom,dsi-panel = <&dsi_sofef00_samsung_cmd>;
+		qcom,dsi-panel = <&dsi_sofef00_sdc_1080p_cmd>;
 		vddi-supply = <&rt9055_gg_vout2>;
 		vci-supply = <&pm660l_l6>; /* 3008mV */
 	};
@@ -264,7 +264,7 @@
 	};
 };
 
-&dsi_sofef00_samsung_cmd {
+&dsi_sofef00_sdc_1080p_cmd {
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_sofef00>;
 	qcom,mdss-dsi-t-clk-post = <0x09>;
 	qcom,mdss-dsi-t-clk-pre = <0x1A>;
