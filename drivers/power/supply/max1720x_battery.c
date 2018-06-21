@@ -330,6 +330,10 @@ struct max1720x_chip {
 		}						\
 	} while (0)
 
+static char *psy_status_str[] = {
+	"Unknown", "Charging", "Discharging", "NotCharging", "Full"
+};
+
 bool max1720x_is_reg(struct device *dev, unsigned int reg)
 {
 	switch (reg) {
@@ -808,7 +812,8 @@ static int max1720x_get_battery_soc(struct max1720x_chip *chip)
 	return reg_to_percentage(data);
 }
 
-static void max1720x_prime_battery_qh_capacity(struct max1720x_chip *chip)
+static void max1720x_prime_battery_qh_capacity(struct max1720x_chip *chip,
+					       int status)
 {
 	u16 data;
 
@@ -816,13 +821,15 @@ static void max1720x_prime_battery_qh_capacity(struct max1720x_chip *chip)
 	chip->current_capacity = data;
 
 	REGMAP_WRITE(chip->regmap_nvram, MAX1720X_NUSER18C, ~data);
-	pr_debug("Capacity primed. Storing value %d into NVRAM\n", data);
+	dev_info(chip->dev, "Capacity primed to %d on %s\n",
+		 data, psy_status_str[status]);
 
 	REGMAP_READ(chip->regmap, MAX1720X_QH, data);
 	chip->previous_qh = reg_to_twos_comp_int(data);
 
 	REGMAP_WRITE(chip->regmap_nvram, MAX1720X_NUSER18D, data);
-	pr_debug("QH primed. Storing value %d into NVRAM\n", data);
+	dev_info(chip->dev, "QH primed to %d on %s\n",
+		 data, psy_status_str[status]);
 }
 
 static int max1720x_get_battery_status(struct max1720x_chip *chip)
@@ -843,13 +850,13 @@ static int max1720x_get_battery_status(struct max1720x_chip *chip)
 	if (current_now < -ichgterm) {
 		status = POWER_SUPPLY_STATUS_CHARGING;
 		if (chip->prev_charge_state == POWER_SUPPLY_STATUS_DISCHARGING)
-			max1720x_prime_battery_qh_capacity(chip);
+			max1720x_prime_battery_qh_capacity(chip, status);
 		chip->prev_charge_state = POWER_SUPPLY_STATUS_CHARGING;
 	} else if (current_now <= 0 &&
 		 max1720x_get_battery_soc(chip) >= fullsocthr) {
 		status = POWER_SUPPLY_STATUS_FULL;
 		if (chip->prev_charge_state != POWER_SUPPLY_STATUS_FULL)
-			max1720x_prime_battery_qh_capacity(chip);
+			max1720x_prime_battery_qh_capacity(chip, status);
 		chip->prev_charge_state = POWER_SUPPLY_STATUS_FULL;
 	} else {
 		status = POWER_SUPPLY_STATUS_DISCHARGING;
@@ -934,10 +941,10 @@ static void max1720x_restore_battery_qh_capacity(struct max1720x_chip *chip)
 
 	/* QH value accumulates as battery discharges */
 	chip->current_capacity = (int) nvram_capacity - (nvram_qh - current_qh);
-	pr_debug("Capacity restored from NVRAM. Value is %d\n",
+	dev_info(chip->dev, "Capacity restored to %d\n",
 		 chip->current_capacity);
 	chip->previous_qh = current_qh;
-	pr_debug("QH value restored from NVRAM. Value is %d\n",
+	dev_info(chip->dev, "QH value restored to %d\n",
 		 chip->previous_qh);
 }
 
@@ -1487,7 +1494,8 @@ static void max1720x_complete_init(struct max1720x_chip *chip)
 	 */
 	REGMAP_READ(chip->regmap_nvram, MAX1720X_NUSER18C, data);
 	if (data == 0)
-		max1720x_prime_battery_qh_capacity(chip);
+		max1720x_prime_battery_qh_capacity(chip,
+						   POWER_SUPPLY_STATUS_UNKNOWN);
 	else
 		max1720x_restore_battery_qh_capacity(chip);
 
